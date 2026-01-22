@@ -216,6 +216,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/mcxw-tz.config
 
+  nxp_mcxn_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn.config
+
+  nxp_mcxn_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-tz.config
+
   nxp_s32k142_test:
     uses: ./.github/workflows/test-build.yml
     with:
