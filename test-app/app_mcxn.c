@@ -1,7 +1,5 @@
 /* app_mcxn.c
  *
- * Minimal test application scaffold for NXP MCXN targets.
- *
  * Copyright (C) 2025 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
