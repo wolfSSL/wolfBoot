@@ -116,9 +116,12 @@ int wolfBoot_initialize_encryption(void)
 #endif /* EXT_FLASH && EXT_ENCRYPTED */
 
 #if !defined(__WOLFBOOT) && !defined(UNIT_TEST)
-    #define XMEMSET memset
-    #define XMEMCPY memcpy
-    #define XMEMCMP memcmp
+    /* Avoid redefining if already defined by wolfSSL headers */
+    #if !defined(XMEMSET)
+        #define XMEMSET memset
+        #define XMEMCPY memcpy
+        #define XMEMCMP memcmp
+    #endif
 #endif
 
 #ifndef NULL

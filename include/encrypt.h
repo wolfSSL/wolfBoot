@@ -24,7 +24,7 @@
 #ifndef ENCRYPT_H_INCLUDED
 #define ENCRYPT_H_INCLUDED
 
-#if defined(__WOLFBOOT) || defined(UNIT_TEST)
+#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(MMU)
 
 #include <stdint.h>
 #include "wolfssl/wolfcrypt/settings.h"
@@ -89,5 +89,5 @@ int wolfBoot_enable_fallback_iv(int enable);
 void wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counter);
 #endif
 
-#endif /* __WOLFBOOT || UNIT_TEST */
+#endif /* __WOLFBOOT || UNIT_TEST || MMU */
 #endif /* ENCRYPT_H_INCLUDED */
