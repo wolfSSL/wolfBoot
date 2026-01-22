@@ -1,0 +1,44 @@
+/dts-v1/;
+
+/ {
+    description = "Xilinx Versal VMK180 - wolfBoot Linux";
+    #address-cells = <1>;
+
+    images {
+        kernel-1 {
+            description = "Linux Kernel";
+            data = /incbin/("../Image");
+            type = "kernel";
+            arch = "arm64";
+            os = "linux";
+            compression = "none";
+            load = <0x00200000>;
+            entry = <0x00200000>;
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+        fdt-1 {
+            description = "Flattened Device Tree blob";
+            data = /incbin/("../system-default.dtb");
+            type = "flat_dt";
+            arch = "arm64";
+            compression = "none";
+            load = <0x00001000>;
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+    };
+    configurations {
+        default = "conf1";
+        conf1 {
+            description = "Linux kernel and FDT blob";
+            kernel = "kernel-1";
+            fdt = "fdt-1";
+            hash-1 {
+                algo = "sha256";
+            };
+        };
+    };
+};

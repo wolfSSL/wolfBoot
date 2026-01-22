@@ -2156,6 +2156,154 @@ Application running successfully!
 Entering idle loop...
 ```
 
+### Booting PetaLinux
+
+wolfBoot can boot a signed Linux kernel on the Versal VMK180. This replaces U-Boot entirely for a secure boot chain.
+
+#### Prerequisites
+
+1. **PetaLinux 2024.2** (or compatible version) built for VMK180
+2. **Pre-built Linux images** from your PetaLinux build:
+   - `Image` - Uncompressed Linux kernel (ARM64)
+   - `system-default.dtb` - Device tree blob for VMK180
+   - `bl31.elf` - ARM Trusted Firmware
+   - `plm.elf` - Platform Loader & Manager
+   - `psmfw.elf` - PSM firmware
+
+3. **SD card** with root filesystem (PetaLinux rootfs.ext4 written to partition 2)
+
+#### Boot Flow
+
+```
+PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
+```
+
+wolfBoot:
+1. Loads the signed FIT image from QSPI flash
+2. Verifies the cryptographic signature (ECC384/SHA384)
+3. Parses the FIT image to extract kernel and DTB
+4. Applies DTB fixups (bootargs for root filesystem)
+5. Transitions from EL2 to EL1 and jumps to the kernel
+
+#### Creating the FIT Image
+
+wolfBoot uses a FIT (Flattened Image Tree) image containing the kernel and device tree. Create the FIT image using the provided ITS file:
+
+```sh
+# Copy Linux images to wolfBoot root directory
+cp /path/to/petalinux/images/linux/Image .
+cp /path/to/petalinux/images/linux/system-default.dtb .
+
+# Create FIT image using mkimage
+mkimage -f hal/versal.its fitImage
+```
+
+The ITS file (`hal/versal.its`) specifies:
+- Kernel load address: `0x00200000`
+- DTB load address: `0x00001000`
+- SHA256 hashes for integrity
+
+#### Signing the FIT Image
+
+Sign the FIT image with wolfBoot tools:
+
+```sh
+# Sign with ECC384 (default for Versal config)
+./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
+```
+
+This creates `fitImage_v1_signed.bin`.
+
+#### DTB Fixup for Root Filesystem
+
+wolfBoot automatically modifies the device tree to set the kernel command line (`bootargs`). The default configuration mounts the root filesystem from SD card partition 2:
+
+```
+earlycon root=/dev/mmcblk0p2 rootwait
+```
+
+To customize the root device, add to your config:
+
+```makefile
+# Mount root from SD card partition 4
+CFLAGS_EXTRA+=-DLINUX_BOOTARGS_ROOT=\"/dev/mmcblk0p4\"
+```
+
+#### Flashing to QSPI
+
+Flash the signed FIT image to the boot partition at `0x800000`:
+
+```sh
+# From U-Boot (via SD card boot)
+tftp ${loadaddr} fitImage_v1_signed.bin
+sf probe 0
+sf erase 0x800000 +${filesize}
+sf write ${loadaddr} 0x800000 ${filesize}
+```
+
+#### Automated Testing
+
+The test script supports Linux boot testing:
+
+```sh
+# Set path to PetaLinux images
+export LINUX_IMAGES_DIR=/path/to/petalinux/images/linux
+
+# Build wolfBoot, create signed FIT, flash to QSPI, and boot
+./tools/scripts/versal_test.sh --linux
+```
+
+#### Example Linux Boot Output
+
+```
+========================================
+wolfBoot Secure Boot - AMD Versal
+========================================
+Current EL: 2
+QSPI: Lower ID: 20 BB 21
+QSPI: Upper ID: 20 BB 21
+QSPI: 75MHz, Quad mode, DMA
+Versions: Boot 1, Update 0
+Trying Boot partition at 0x800000
+Loading header 512 bytes from 0x800000 to 0xFFFFE00
+Loading image 24658696 bytes from 0x800200 to 0x10000000...done (701 ms)
+Boot partition: 0xFFFFE00 (sz 24658696, ver 0x1, type 0x601)
+Checking integrity...done (167 ms)
+Verifying signature...done (3 ms)
+Successfully selected image in part: 0
+Firmware Valid
+Loading elf at 0x10000000
+Invalid elf, falling back to raw binary
+Flattened uImage Tree: Version 17, Size 24658696
+Loading Image kernel-1: 0x100000D8 -> 0x200000 (24617472 bytes)
+Image kernel-1: 0x200000 (24617472 bytes)
+Loading Image fdt-1: 0x1177A3DC -> 0x1000 (39384 bytes)
+Image fdt-1: 0x1000 (39384 bytes)
+Loading DTS: 0x1000 -> 0x1000 (39384 bytes)
+FDT: Version 17, Size 39384
+FDT: Setting bootargs: earlycon root=/dev/mmcblk0p2 rootwait
+FDT: Set chosen (28076), bootargs=earlycon root=/dev/mmcblk0p2 rootwait
+Booting at 0x200000
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    0.000000] Linux version 6.6.40-xilinx-g2b7f6f70a62a ...
+[    0.000000] Machine model: Xilinx Versal vmk180 Eval board revA
+...
+PetaLinux 2024.2 xilinx-vmk180 ttyAMA0
+
+xilinx-vmk180 login:
+```
+
+#### Boot Performance
+
+Typical boot timing with ECC384/SHA384 signing:
+
+| Operation | Time |
+|-----------|------|
+| Load 24MB FIT from QSPI | ~700ms |
+| SHA384 integrity check | ~167ms |
+| ECC384 signature verify | ~3ms |
+| **Total wolfBoot overhead** | **~870ms** |
+
 
 ## Cypress PSoC-6
 
