@@ -83,12 +83,16 @@ jobs:
 
       - name: Install software
         run: |
-          sudo apt-get install -y gcc-arm-none-eabi west
+          sudo apt-get install -y gcc-arm-none-eabi
 
       - name: Setup MCUXpresso SDK
         run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install west
           west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
           cd mcuxpresso-sdk
+          sed -i '/se_hostlib\|emwin/d' manifests/boards/${{inputs.board-name}}.yml
           west update_board --set board ${{inputs.board-name}}
 
       - name: make distclean
