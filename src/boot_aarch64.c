@@ -199,19 +199,8 @@ void RAMFUNCTION arch_reboot(void)
 }
 #endif
 
-void SynchronousInterrupt(void)
-{
-
-}
-void IRQInterrupt(void)
-{
-
-}
-void FIQInterrupt(void)
-{
-
-}
-void SErrorInterrupt(void)
-{
-
-}
+/* Exception handler stubs - bootloader does not handle interrupts */
+void SynchronousInterrupt(void) { }
+void IRQInterrupt(void) { }
+void FIQInterrupt(void) { }
+void SErrorInterrupt(void) { }

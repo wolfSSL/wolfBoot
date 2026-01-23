@@ -607,9 +607,19 @@ endif
 ifeq ($(SKIP_GIC_INIT),1)
   CFLAGS+=-D"SKIP_GIC_INIT"
 endif
+
+# Boot Exception Level (mutually exclusive)
 ifeq ($(BOOT_EL1),1)
+  ifeq ($(BOOT_EL2),1)
+    $(error BOOT_EL1 and BOOT_EL2 are mutually exclusive. Choose one.)
+  endif
   CFLAGS+=-D"BOOT_EL1"
 endif
+
+ifeq ($(BOOT_EL2),1)
+  CFLAGS+=-D"BOOT_EL2"
+endif
+
 ifeq ($(BOOT_BENCHMARK),1)
   CFLAGS+=-D"BOOT_BENCHMARK"
 endif

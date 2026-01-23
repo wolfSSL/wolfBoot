@@ -76,14 +76,25 @@
  * ============================================================================
  * SKIP_GIC_INIT: Versal uses GICv3 (not GICv2 like ZynqMP).
  *                BL31 handles GIC initialization, so skip gicv2_init_secure().
- * BOOT_EL1:      wolfBoot runs at EL2, but applications (Linux, test-app)
- *                expect EL1. Transition from EL2 to EL1 before jumping to app.
+ *
+ * Boot Exception Level Configuration (mutually exclusive):
+ *   BOOT_EL1:    wolfBoot runs at EL2, but applications (Linux, most bare-metal)
+ *                are transitioned to EL1 before jumping (default)
+ *   BOOT_EL2:    Applications boot at EL2 (for hypervisors/RTOSes that
+ *                expect to run at EL2)
+ *
+ * Default: BOOT_EL1 (most applications expect EL1)
  */
 #ifndef SKIP_GIC_INIT
 #define SKIP_GIC_INIT 1
 #endif
-#ifndef BOOT_EL1
-#define BOOT_EL1 1
+
+#if !defined(BOOT_EL1) && !defined(BOOT_EL2)
+    #define BOOT_EL1 1
+#endif
+
+#if defined(BOOT_EL1) && defined(BOOT_EL2)
+    #error "BOOT_EL1 and BOOT_EL2 are mutually exclusive"
 #endif
 
 
@@ -101,6 +112,13 @@
 #define VERSAL_DDR_0_HIGH       0x7FFFFFFFUL
 #define VERSAL_DDR_1_BASE       0x800000000ULL
 #define VERSAL_DDR_1_HIGH       0x87FFFFFFFULL
+
+/* Application load address and cache flush size for hal_prepare_boot() */
+#ifndef WOLFBOOT_LOAD_ADDRESS
+#define WOLFBOOT_LOAD_ADDRESS   0x10000000UL
+#endif
+#define CACHE_LINE_SIZE         64
+#define APP_CACHE_FLUSH_SIZE    (1 * 1024 * 1024)  /* 1MB */
 
 /* DDR defines for MMU table setup (used by boot_aarch64_start.S)
  * These macros enable proper DDR mapping in the page tables.
@@ -299,10 +317,9 @@
 
 
 /* ============================================================================
- * Clock and Reset (CRL/CRF)
+ * Clock and Reset (CRF - FPD only, CRL defined above)
  * ============================================================================
  */
-#define VERSAL_CRL_BASE         0xFF5E0000UL  /* Clock and Reset LPD */
 #define VERSAL_CRF_BASE         0xFD1A0000UL  /* Clock and Reset FPD */
 
 
