@@ -117,7 +117,6 @@ void uart_init(void)
     /* When booting via PLM -> BL31 -> wolfBoot (EL2), UART is already
      * fully configured by PLM. Do NOT reinitialize - just use it as-is.
      * Any reconfiguration at EL2 may fail or corrupt the UART state. */
-    (void)0; /* UART already configured by PLM - nothing to do */
 #else
     /* Full UART initialization for JTAG boot mode or EL3 boot */
     uint32_t ibrd, fbrd;
@@ -237,9 +236,7 @@ void uart_write(const char *buf, uint32_t len)
  * ============================================================================
  */
 
-/**
- * Get current timer count (physical counter)
- */
+/* Get current timer count (physical counter) */
 static inline uint64_t timer_get_count(void)
 {
     uint64_t cntpct;
@@ -247,62 +244,34 @@ static inline uint64_t timer_get_count(void)
     return cntpct;
 }
 
-/**
- * Get timer frequency
- */
+/* Get timer frequency with fallback to TIMER_CLK_FREQ if not configured */
 static inline uint64_t timer_get_freq(void)
 {
     uint64_t cntfrq;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r" (cntfrq));
-    return cntfrq;
+    return cntfrq ? cntfrq : TIMER_CLK_FREQ;
 }
 
-/**
- * Get current time in milliseconds
- */
+/* Get current time in milliseconds */
 uint64_t hal_timer_ms(void)
 {
-    uint64_t cntpct = timer_get_count();
-    uint64_t cntfrq = timer_get_freq();
-
-    if (cntfrq == 0)
-        cntfrq = TIMER_CLK_FREQ;
-
-    /* Convert to milliseconds: (count * 1000) / freq */
-    return (cntpct * 1000ULL) / cntfrq;
+    return (timer_get_count() * 1000ULL) / timer_get_freq();
 }
 
-/**
- * Delay for specified number of microseconds
- */
+/* Delay for specified number of microseconds */
 void hal_delay_us(uint32_t us)
 {
-    uint64_t cntfrq = timer_get_freq();
-    uint64_t start, target;
-
-    if (cntfrq == 0)
-        cntfrq = TIMER_CLK_FREQ;
-
-    start = timer_get_count();
-    target = start + ((uint64_t)us * cntfrq) / 1000000ULL;
+    uint64_t freq = timer_get_freq();
+    uint64_t target = timer_get_count() + ((uint64_t)us * freq) / 1000000ULL;
 
     while (timer_get_count() < target)
         ;
 }
 
-/**
- * Get current time in microseconds (for benchmarking)
- */
+/* Get current time in microseconds (for benchmarking) */
 uint64_t hal_get_timer_us(void)
 {
-    uint64_t cntpct = timer_get_count();
-    uint64_t cntfrq = timer_get_freq();
-
-    if (cntfrq == 0)
-        cntfrq = TIMER_CLK_FREQ;
-
-    /* Convert to microseconds: (count * 1000000) / freq */
-    return (cntpct * 1000000ULL) / cntfrq;
+    return (timer_get_count() * 1000000ULL) / timer_get_freq();
 }
 
 
@@ -350,6 +319,19 @@ typedef struct {
     uint32_t cs;     /* GQSPI_GEN_FIFO_CS_LOWER/UPPER/BOTH */
     uint32_t stripe; /* 0 or GQSPI_GEN_FIFO_STRIPE for dual parallel */
 } QspiDev_t;
+
+/* Macros to configure QspiDev_t for single-chip access in dual-parallel mode */
+#define QSPI_DEV_LOWER(tmpDev, srcDev) do { \
+    (tmpDev) = *(srcDev); \
+    (tmpDev).bus = GQSPI_GEN_FIFO_BUS_LOW; \
+    (tmpDev).cs = GQSPI_GEN_FIFO_CS_LOWER; \
+    (tmpDev).stripe = 0; \
+} while(0)
+
+#define QSPI_DEV_UPPER(tmpDev) do { \
+    (tmpDev).bus = GQSPI_GEN_FIFO_BUS_UP; \
+    (tmpDev).cs = GQSPI_GEN_FIFO_CS_UPPER; \
+} while(0)
 
 static QspiDev_t qspiDev;
 static int qspi_initialized = 0;
@@ -439,16 +421,6 @@ static int qspi_gen_fifo_start_and_wait(void)
     return 0;
 }
 
-/* Legacy wrapper for compatibility */
-static int qspi_gen_fifo_write(uint32_t entry)
-{
-    int ret = qspi_gen_fifo_push(entry);
-    if (ret == 0) {
-        ret = qspi_gen_fifo_start_and_wait();
-    }
-    return ret;
-}
-
 /* Calculate EXP mode for large transfers (returns actual transfer size)
  * For transfers > 255 bytes, use exponent mode where IMM = power of 2
  * Pattern from zynq.c qspi_calc_exp() */
@@ -480,6 +452,7 @@ static uint32_t qspi_calc_exp(uint32_t xferSz, uint32_t *reg_genfifo)
 static int qspi_cs(QspiDev_t *dev, int assert)
 {
     uint32_t entry;
+    int ret;
 
     entry = (dev->bus & GQSPI_GEN_FIFO_BUS_MASK) | GQSPI_GEN_FIFO_MODE_SPI;
     if (assert) {
@@ -488,7 +461,11 @@ static int qspi_cs(QspiDev_t *dev, int assert)
     /* Idle clocks for CS setup/hold */
     entry |= GQSPI_GEN_FIFO_IMM(2);
 
-    return qspi_gen_fifo_write(entry);
+    ret = qspi_gen_fifo_push(entry);
+    if (ret == 0) {
+        ret = qspi_gen_fifo_start_and_wait();
+    }
+    return ret;
 }
 
 /* DMA temporary buffer for unaligned transfers (DMA is default, IO is optional) */
@@ -843,7 +820,7 @@ static int qspi_read_id(QspiDev_t *dev, uint8_t *id, uint32_t len)
 static int qspi_read_register(QspiDev_t *dev, uint8_t cmd, uint8_t *status)
 {
     uint8_t cmdByte[1];
-    uint8_t data[4];  /* Space for 2 bytes from each chip */
+    uint8_t data[2];
     int ret;
     QspiDev_t tmpDev;
 
@@ -851,21 +828,14 @@ static int qspi_read_register(QspiDev_t *dev, uint8_t cmd, uint8_t *status)
 
     /* For dual parallel, read from each chip separately and AND the results */
     if (dev->stripe) {
-        /* Read from lower chip */
-        tmpDev = *dev;
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
-        tmpDev.stripe = 0;
+        QSPI_DEV_LOWER(tmpDev, dev);
         ret = qspi_transfer(&tmpDev, cmdByte, 1, &data[0], 1, 0, NULL, 0);
         if (ret != 0) return ret;
 
-        /* Read from upper chip */
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        QSPI_DEV_UPPER(tmpDev);
         ret = qspi_transfer(&tmpDev, cmdByte, 1, &data[1], 1, 0, NULL, 0);
         if (ret != 0) return ret;
 
-        /* AND the status from both chips */
         *status = data[0] & data[1];
         return 0;
     }
@@ -912,17 +882,11 @@ static int qspi_write_enable(QspiDev_t *dev)
 
     /* For dual parallel, send write enable to both chips separately */
     if (dev->stripe) {
-        /* Send to lower chip */
-        tmpDev = *dev;
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
-        tmpDev.stripe = 0;
+        QSPI_DEV_LOWER(tmpDev, dev);
         ret = qspi_transfer(&tmpDev, cmd, sizeof(cmd), NULL, 0, 0, NULL, 0);
         if (ret != 0) return ret;
 
-        /* Send to upper chip */
-        tmpDev.bus = GQSPI_GEN_FIFO_BUS_UP;
-        tmpDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+        QSPI_DEV_UPPER(tmpDev);
         ret = qspi_transfer(&tmpDev, cmd, sizeof(cmd), NULL, 0, 0, NULL, 0);
         if (ret != 0) return ret;
     } else {
@@ -1001,13 +965,12 @@ static int qspi_exit_4byte_addr(QspiDev_t *dev)
 #define TEST_EXT_SIZE (FLASH_PAGE_SIZE * 4)
 #endif
 
-static int test_ext_flash(QspiDev_t* dev)
+static int test_ext_flash(void)
 {
     int ret;
     uint32_t i;
     uint8_t pageData[TEST_EXT_SIZE];
 
-    (void)dev;
     wolfBoot_printf("Testing ext flash at 0x%x...\n", TEST_EXT_ADDRESS);
 
 #ifndef TEST_FLASH_READONLY
@@ -1121,7 +1084,7 @@ static void qspi_init(void)
     qspiDev.stripe = 0;
 
     memset(id, 0, sizeof(id));
-    ret = qspi_read_id(&qspiDev, id, 3);
+    (void)qspi_read_id(&qspiDev, id, 3);
     wolfBoot_printf("QSPI: Lower ID: %02x %02x %02x\n", id[0], id[1], id[2]);
 
 #if GQPI_USE_4BYTE_ADDR == 1
@@ -1138,7 +1101,7 @@ static void qspi_init(void)
     qspiDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
 
     memset(id, 0, sizeof(id));
-    ret = qspi_read_id(&qspiDev, id, 3);
+    (void)qspi_read_id(&qspiDev, id, 3);
     wolfBoot_printf("QSPI: Upper ID: %02x %02x %02x\n", id[0], id[1], id[2]);
 
 #if GQPI_USE_4BYTE_ADDR == 1
@@ -1157,27 +1120,27 @@ static void qspi_init(void)
 #endif
 
     /* QSPI bare-metal driver info */
-    wolfBoot_printf("QSPI: %dMHz, %s mode, %s\n",
-        (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) / 1000000,
+    {
     #if GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_QSPI
-        "Quad"
+        const char *mode_str = "Quad";
     #elif GQSPI_QSPI_MODE == GQSPI_GEN_FIFO_MODE_DSPI
-        "Dual"
+        const char *mode_str = "Dual";
     #else
-        "SPI"
+        const char *mode_str = "SPI";
     #endif
-        ,
     #ifdef GQSPI_MODE_IO
-        "Poll"
+        const char *xfer_str = "Poll";
     #else
-        "DMA"
+        const char *xfer_str = "DMA";
     #endif
-    );
+        wolfBoot_printf("QSPI: %dMHz, %s, %s\n",
+            (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) / 1000000, mode_str, xfer_str);
+    }
 
     qspi_initialized = 1;
 
 #ifdef TEST_EXT_FLASH
-    test_ext_flash(&qspiDev);
+    test_ext_flash();
 #endif
 }
 
@@ -1238,11 +1201,11 @@ void hal_prepare_boot(void)
     /* Clean entire D-cache to Point of Coherency */
     __asm__ volatile("dsb sy");
 
-    /* Clean D-cache for application region (0x10000000, 1MB should be enough) */
+    /* Clean D-cache for application region */
     {
         uintptr_t addr;
-        uintptr_t end = 0x10000000 + (1 * 1024 * 1024);
-        for (addr = 0x10000000; addr < end; addr += 64) {
+        uintptr_t end = WOLFBOOT_LOAD_ADDRESS + APP_CACHE_FLUSH_SIZE;
+        for (addr = WOLFBOOT_LOAD_ADDRESS; addr < end; addr += CACHE_LINE_SIZE) {
             /* DC CVAC - Clean data cache line by VA to PoC */
             __asm__ volatile("dc cvac, %0" : : "r"(addr));
         }
