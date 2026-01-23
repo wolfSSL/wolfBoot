@@ -2967,7 +2967,7 @@ cd ../NXP
 
 # Install west
 python -m venv west-venv
-west-venv/bin/activate
+source west-venv/bin/activate
 pip install west
 
 # Set up the repository
