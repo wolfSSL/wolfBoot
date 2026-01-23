@@ -55,6 +55,7 @@ SKIP_BUILD=0
 SKIP_FLASH=0
 TEST_UPDATE=0
 TEST_SELFUPDATE=0
+TRIGGER_MAGIC=0
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -62,6 +63,7 @@ usage() {
     echo "Options:"
     echo "  --test-update      Build test-update.srec with v2 image in update partition (use 'trigger' command to start update)"
     echo "  --test-selfupdate  Build test-selfupdate.srec with bootloader v1 + v2 bootloader update (use 'trigger' command to start update)"
+    echo "  --trigger-magic    Include trigger magic bytes to auto-start update on boot (use with --test-update)"
     echo "  --skip-build       Skip the build step (use existing .srec)"
     echo "  --skip-flash       Skip flashing (just build)"
     echo "  -h, --help         Show this help message"
@@ -70,10 +72,11 @@ usage() {
     echo "  MOUNT_PATH         Override mount path (default: auto-detect)"
     echo ""
     echo "Examples:"
-    echo "  $0                      # Build and flash factory.srec (v1 only)"
-    echo "  $0 --test-update        # Build with v2 in update partition, use 'trigger' cmd"
-    echo "  $0 --test-selfupdate    # Build with bootloader v2 update, tests self-update"
-    echo "  $0 --skip-flash         # Build without flashing"
+    echo "  $0                              # Build and flash factory.srec (v1 only)"
+    echo "  $0 --test-update                # Build with v2 in update partition, use 'trigger' cmd"
+    echo "  $0 --test-update --trigger-magic  # Build with v2 and auto-trigger update on boot"
+    echo "  $0 --test-selfupdate            # Build with bootloader v2 update, tests self-update"
+    echo "  $0 --skip-flash                 # Build without flashing"
     exit 0
 }
 
@@ -87,6 +90,10 @@ while [[ $# -gt 0 ]]; do
         --test-selfupdate)
             TEST_SELFUPDATE=1
             SREC_FILE="test-selfupdate.srec"
+            shift
+            ;;
+        --trigger-magic)
+            TRIGGER_MAGIC=1
             shift
             ;;
         --skip-build)
@@ -293,7 +300,11 @@ if [ $SKIP_BUILD -eq 0 ]; then
         echo -e "${GREEN}Build successful: test-selfupdate.srec${NC}"
 
     elif [ $TEST_UPDATE -eq 1 ]; then
-        echo -e "${GREEN}[2/3] Building test-update.srec (v1 boot + v2 update, no trigger)...${NC}"
+        if [ $TRIGGER_MAGIC -eq 1 ]; then
+            echo -e "${GREEN}[2/3] Building test-update.srec (v1 boot + v2 update + trigger magic)...${NC}"
+        else
+            echo -e "${GREEN}[2/3] Building test-update.srec (v1 boot + v2 update, no trigger)...${NC}"
+        fi
         make clean
         make factory.srec
 
@@ -307,14 +318,38 @@ if [ $SKIP_BUILD -eq 0 ]; then
         echo "  wolfboot.bin          @ 0x0"
         echo "  image_v1_signed.bin   @ ${WOLFBOOT_PARTITION_BOOT_ADDRESS} (boot partition)"
         echo "  image_v2_signed.bin   @ ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} (update partition)"
-        echo ""
-        echo -e "${YELLOW}NOTE: No trigger magic - use test-app 'trigger' command to start update${NC}"
 
-        ./tools/bin-assemble/bin-assemble \
-            test-update.bin \
-            0x0                             wolfboot.bin \
-            ${WOLFBOOT_PARTITION_BOOT_ADDRESS}   test-app/image_v1_signed_backup.bin \
-            ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} test-app/image_v2_signed.bin
+        if [ $TRIGGER_MAGIC -eq 1 ]; then
+            # Calculate trigger magic address: end of update partition - 5 bytes
+            # Update partition end = UPDATE_ADDRESS + PARTITION_SIZE
+            # Trigger magic "pBOOT" (5 bytes) goes at end - 5
+            TRIGGER_ADDRESS=$(printf "0x%X" $(( ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} + ${WOLFBOOT_PARTITION_SIZE} - 5 )))
+            echo "  trigger_magic.bin     @ ${TRIGGER_ADDRESS} (auto-trigger update)"
+            echo ""
+            echo -e "${CYAN}NOTE: Update will start automatically on first boot${NC}"
+
+            # Create trigger magic file
+            echo -n "pBOOT" > trigger_magic.bin
+
+            ./tools/bin-assemble/bin-assemble \
+                test-update.bin \
+                0x0                                  wolfboot.bin \
+                ${WOLFBOOT_PARTITION_BOOT_ADDRESS}   test-app/image_v1_signed_backup.bin \
+                ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} test-app/image_v2_signed.bin \
+                ${TRIGGER_ADDRESS}                   trigger_magic.bin
+
+            # Cleanup trigger magic file
+            rm -f trigger_magic.bin
+        else
+            echo ""
+            echo -e "${YELLOW}NOTE: No trigger magic - use test-app 'trigger' command to start update${NC}"
+
+            ./tools/bin-assemble/bin-assemble \
+                test-update.bin \
+                0x0                             wolfboot.bin \
+                ${WOLFBOOT_PARTITION_BOOT_ADDRESS}   test-app/image_v1_signed_backup.bin \
+                ${WOLFBOOT_PARTITION_UPDATE_ADDRESS} test-app/image_v2_signed.bin
+        fi
 
         # Convert to srec
         echo -e "${CYAN}Converting to test-update.srec...${NC}"
@@ -325,10 +360,14 @@ if [ $SKIP_BUILD -eq 0 ]; then
 
         echo -e "${GREEN}Build successful: test-update.srec${NC}"
         echo ""
-        echo -e "${CYAN}After boot, use these test-app commands:${NC}"
-        echo "  status   - Show partition info (should show v1 boot, v2 update)"
-        echo "  trigger  - Set update flag and reboot"
-        echo "  reboot   - Reboot to start update"
+        if [ $TRIGGER_MAGIC -eq 1 ]; then
+            echo -e "${CYAN}Update will start automatically on boot.${NC}"
+        else
+            echo -e "${CYAN}After boot, use these test-app commands:${NC}"
+            echo "  status   - Show partition info (should show v1 boot, v2 update)"
+            echo "  trigger  - Set update flag and reboot"
+            echo "  reboot   - Reboot to start update"
+        fi
     else
         echo -e "${GREEN}[2/3] Building factory.srec...${NC}"
         make clean

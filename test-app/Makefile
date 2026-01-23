@@ -361,7 +361,9 @@ endif
 
 ifeq ($(TARGET),s32k1xx)
     LSCRIPT_TEMPLATE=ARM-s32k1xx.ld
-    APP_OBJS+=../src/keystore.o
+    ifneq ($(SIGN),NONE)
+        APP_OBJS+=../src/keystore.o
+    endif
     CFLAGS+=-DAPP_HAS_SYSTICK
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
 endif
