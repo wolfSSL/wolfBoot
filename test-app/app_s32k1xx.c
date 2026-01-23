@@ -369,11 +369,11 @@ static void print_partition_info(void)
 
 static void print_keystore_info(void)
 {
+#ifndef WOLFBOOT_NO_SIGN
     uint32_t n_keys;
     int i;
 
     printf("\r\n=== Keystore Information ===\r\n");
-
 
     n_keys = keystore_num_pubkeys();
     printf("Number of public keys: %lu\r\n", (unsigned long)n_keys);
@@ -390,6 +390,10 @@ static void print_keystore_info(void)
         printf("  Data:\r\n");
         print_hex(keybuf, size, 0);
     }
+#else
+    printf("\r\n=== Keystore Information ===\r\n");
+    printf("Signing disabled (SIGN=NONE)\r\n");
+#endif /* !WOLFBOOT_NO_SIGN */
 }
 
 /* ============== XMODEM Transfer ============== */

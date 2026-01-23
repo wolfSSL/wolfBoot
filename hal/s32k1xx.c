@@ -487,6 +487,12 @@ void hal_prepare_boot(void)
 #ifdef DEBUG_UART
     /* Wait for any pending UART transmission to complete */
     while (!(LPUART_STAT & LPUART_STAT_TC)) {}
+
+    /* Disable UART before jumping to application.
+     * This gives the application a clean UART state to initialize from.
+     * Without this, the application may have issues reinitializing the UART.
+     */
+    LPUART_CTRL = 0;
 #endif
 
 #ifdef WOLFBOOT_RESTORE_CLOCK
