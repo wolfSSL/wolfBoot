@@ -85,7 +85,17 @@ jobs:
         run: |
           sudo apt-get install -y gcc-arm-none-eabi
 
+      - name: Cache MCUXpresso SDK
+        id: cache-mcuxpresso
+        uses: actions/cache@v4
+        with:
+          path: |
+            mcuxpresso-sdk
+            venv
+          key: mcuxpresso-sdk-${{inputs.board-name}}-${{hashFiles('.github/workflows/test-build-mcux-sdk-manifests.yml')}}
+
       - name: Setup MCUXpresso SDK
+        if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
         run: |
           python -m venv venv
           source venv/bin/activate
