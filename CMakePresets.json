@@ -292,7 +292,6 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-stm32h5",
       "cacheVariables": {
-        "BUILD_TEST_APPS": "OFF",
         "ARCH": "ARM",
         "TZEN": "ON",
         "WOLFBOOT_TARGET": "stm32h5",
@@ -309,7 +308,7 @@
         "WOLFBOOT_VERSION": "ON",
         "V": "OFF",
         "SPMATH": "ON",
-        "RAM_CODE": "OFF",
+        "RAM_CODE": "ON",
         "DUALBANK_SWAP": "OFF",
         "WOLFBOOT_PARTITION_SIZE": "0xA0000",
         "WOLFBOOT_SECTOR_SIZE": "0x2000",
@@ -318,12 +317,14 @@
         "WOLFBOOT_NSC_ADDRESS": "0x0C05C000",
         "WOLFBOOT_NSC_SIZE": "0x4000",
         "WOLFBOOT_PARTITION_BOOT_ADDRESS": "0x08060000",
-        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x08100000",
-        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x081A0000",
+        "WOLFBOOT_PARTITION_UPDATE_ADDRESS": "0x0C100000",
+        "WOLFBOOT_PARTITION_SWAP_ADDRESS": "0x0C1A0000",
         "FLAGS_HOME": "OFF",
         "DISABLE_BACKUP": "OFF",
         "IMAGE_HEADER_SIZE": "1024",
-        "ARMORED": "ON"
+        "ARMORED": "ON",
+        "WOLFCRYPT_TZ": "ON",
+        "WOLFCRYPT_TZ_PKCS11": "ON"
       }
     },
     {

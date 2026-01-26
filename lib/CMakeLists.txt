@@ -174,6 +174,36 @@ if(NOT WOLFBOOT_SMALL_STACK AND WOLFBOOT_TARGET STREQUAL "unit_test")
     list(REMOVE_DUPLICATES WOLFCRYPT_SOURCES)
 endif()
 
+if(WOLFCRYPT_TZ_PKCS11)
+    list(APPEND WOLFCRYPT_SOURCES
+        wolfssl/wolfcrypt/src/asn.c
+        wolfssl/wolfcrypt/src/memory.c
+        wolfssl/wolfcrypt/src/random.c
+        wolfssl/wolfcrypt/src/pwdbased.c
+        wolfssl/wolfcrypt/src/hmac.c
+        wolfssl/wolfcrypt/src/dh.c)
+
+    if(NOT ENCRYPT_WITH_AES128 AND NOT ENCRYPT_WITH_AES256)
+        list(APPEND WOLFCRYPT_SOURCES wolfssl/wolfcrypt/src/aes.c)
+    endif()
+
+    set(_sign "${SIGN}")
+    set(_sign2 "${SIGN_SECONDARY}")
+
+    if(NOT _sign MATCHES "RSA" AND NOT _sign2 MATCHES "RSA")
+        list(APPEND WOLFCRYPT_SOURCES ${RSA_EXTRA_SOURCES} wolfssl/wolfcrypt/src/rsa.c)
+    endif()
+
+    if(NOT _sign MATCHES "ECC" AND NOT _sign2 MATCHES "ECC")
+        list(APPEND WOLFCRYPT_SOURCES wolfssl/wolfcrypt/src/ecc.c)
+    endif()
+
+    if(NOT _sign MATCHES "ECC" AND NOT _sign2 MATCHES "ECC" AND
+       NOT _sign MATCHES "RSA" AND NOT _sign2 MATCHES "RSA")
+        list(APPEND WOLFCRYPT_SOURCES ${MATH_SOURCES})
+    endif()
+endif()
+
 # Include SHA256 module because it's implicitly needed by RSA
 list(APPEND WOLFCRYPT_SOURCES wolfssl/wolfcrypt/src/sha256.c)
 

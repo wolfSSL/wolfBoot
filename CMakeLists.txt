@@ -659,6 +659,65 @@ if(ARCH STREQUAL "ARM")
         set(WOLFBOOT_ORIGIN ${ARCH_FLASH_OFFSET})
     endif()
 
+    if(${WOLFBOOT_TARGET} STREQUAL "stm32h5")
+        set(ARCH_FLASH_OFFSET 0x08000000)
+        if(TZEN)
+            set(WOLFBOOT_ORIGIN 0x0C000000)
+        else()
+            set(WOLFBOOT_ORIGIN ${ARCH_FLASH_OFFSET})
+        endif()
+    endif()
+
+    if(${WOLFBOOT_TARGET} STREQUAL "stm32l5")
+        set(ARCH_FLASH_OFFSET 0x08000000)
+        if(TZEN)
+            set(WOLFBOOT_ORIGIN 0x0C000000)
+        else()
+            set(WOLFBOOT_ORIGIN ${ARCH_FLASH_OFFSET})
+        endif()
+    endif()
+
+    # TrustZone support for Cortex-M33 targets
+    if(TZEN)
+        list(APPEND WOLFBOOT_DEFS TZEN)
+        if(CMAKE_SYSTEM_PROCESSOR STREQUAL "cortex-m33")
+            list(APPEND WOLFBOOT_COMPILE_OPTIONS -mcmse)
+            list(APPEND WOLFBOOT_LINK_OPTIONS -mcmse)
+        endif()
+
+        # wolfCrypt TrustZone secure mode
+        if(WOLFCRYPT_TZ)
+            list(APPEND WOLFBOOT_DEFS WOLFCRYPT_SECURE_MODE)
+            list(APPEND WOLFBOOT_SOURCES src/wc_callable.c)
+            list(APPEND WOLFBOOT_LINK_OPTIONS
+                -Wl,--cmse-implib
+                -Wl,--out-implib=${CMAKE_CURRENT_BINARY_DIR}/wc_secure_calls.o)
+
+            # PKCS11 TrustZone interface
+            if(WOLFCRYPT_TZ_PKCS11)
+                if(WOLFCRYPT_TZ_PSA)
+                    message(FATAL_ERROR "WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_PSA are mutually exclusive")
+                endif()
+
+                list(APPEND WOLFBOOT_DEFS
+                    SECURE_PKCS11
+                    WOLFSSL_PKCS11_RW_TOKENS
+                    WP11_HASH_PIN_COST=3)
+                list(APPEND WOLFBOOT_DEFS "CK_CALLABLE=__attribute__\\(\\(cmse_nonsecure_entry\\)\\)")
+
+                list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT}/lib/wolfPKCS11)
+
+                list(APPEND WOLFBOOT_SOURCES
+                    src/pkcs11_store.c
+                    src/pkcs11_callable.c
+                    lib/wolfPKCS11/src/crypto.c
+                    lib/wolfPKCS11/src/internal.c
+                    lib/wolfPKCS11/src/slot.c
+                    lib/wolfPKCS11/src/wolfpkcs11.c)
+            endif()
+        endif()
+    endif()
+
 endif()
 
 if(ARCH STREQUAL "AARCH64")
@@ -1054,8 +1113,17 @@ add_library(user_settings INTERFACE)
 target_compile_definitions(user_settings INTERFACE ${USER_SETTINGS} ${SIGN_OPTIONS})
 
 add_library(wolfboothal)
+
+# TrustZone HAL sources for STM32 targets
+set(WOLFBOOT_TZ_HAL_SOURCES "")
+if(TZEN)
+    if(${WOLFBOOT_TARGET} MATCHES "^stm32")
+        set(WOLFBOOT_TZ_HAL_SOURCES hal/stm32_tz.c)
+    endif()
+endif()
+
 target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLFBOOT_FLASH_SOURCES}
-                                   ${PARTITION_SOURCE})
+                                   ${PARTITION_SOURCE} ${WOLFBOOT_TZ_HAL_SOURCES})
 
 
 #---------------------------------------------------------------------------------------------
@@ -1352,11 +1420,14 @@ set(WOLFBOOT_VERSION
     ${WOLFBOOT_VERSION}
     CACHE INTERNAL "")
 
+set(WOLFBOOT_DEFS_PUBLIC ${WOLFBOOT_DEFS})
+list(REMOVE_ITEM WOLFBOOT_DEFS_PUBLIC __WOLFBOOT)
+
 # generate target.h
 configure_file(include/target.h.in ${CMAKE_CURRENT_BINARY_DIR}/target.h @ONLY)
 
 add_library(target INTERFACE)
-target_compile_definitions(target INTERFACE ${WOLFBOOT_DEFS})
+target_compile_definitions(target INTERFACE ${WOLFBOOT_DEFS_PUBLIC})
 target_include_directories(target BEFORE INTERFACE
                                     ${CMAKE_CURRENT_BINARY_DIR}
                                     ${CMAKE_CURRENT_SOURCE_DIR}/lib/wolfssl)
@@ -1401,8 +1472,9 @@ endif()
 # generate libwolfboot
 add_library(wolfboot)
 target_sources(wolfboot PRIVATE src/libwolfboot.c ${WOLFBOOT_FLASH_SOURCES})
-target_compile_definitions(wolfboot PUBLIC ${WOLFBOOT_DEFS})
-target_compile_options(wolfboot PUBLIC ${EXTRA_COMPILE_OPTIONS})
+target_compile_definitions(wolfboot PUBLIC ${WOLFBOOT_DEFS_PUBLIC})
+target_compile_definitions(wolfboot PRIVATE __WOLFBOOT)
+target_compile_options(wolfboot PUBLIC ${WOLFBOOT_COMPILE_OPTIONS} ${EXTRA_COMPILE_OPTIONS})
 target_include_directories(wolfboot PUBLIC ${WOLFBOOT_INCLUDE_DIRS})
 target_link_libraries(wolfboot wolfboothal target ${WOLFSSL_TGT})
 
