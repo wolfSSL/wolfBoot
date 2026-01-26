@@ -23,6 +23,7 @@ This README describes configuration of supported targets.
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
+* [NXP MCXN947](#nxp-mcxn947)
 * [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
@@ -3318,6 +3319,8 @@ cp config/examples/mcxw.config .config`
 make
 ```
 
+We also provide a TrustZone configuration at `config/examples/mcxw-tz.config`.
+
 ### MCX W: Loading the firmware
 
 The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
@@ -3382,6 +3385,117 @@ Debugging with JLink:
 Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
 
 In one terminal: `JLinkGDBServer -if swd -Device MCXW716 -port 3333`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
+```
+
+
+## NXP MCXN947
+
+The NXP MCXN947 is a dual-core Cortex-M33 microcontroller. The support has been
+tested on the FRDM-MCXN947 board, with the on-board MCU-Link configured in
+JLink mode.
+
+This requires the NXP MCUXpresso SDK. We tested using
+[mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
+[CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
+
+To set up the MCUXpresso SDK:
+
+```
+cd ../NXP
+
+# Install west
+python -m venv west-venv
+source west-venv/bin/activate
+pip install west
+
+# Set up the repository
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update_board --set board frdmmcxn947
+
+deactivate
+```
+
+### MCX N: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/mcxn.config .config`
+make
+```
+
+We also provide a TrustZone configuration at `config/examples/mcxn-tz.config`.
+
+### MCX N: Loading the firmware
+
+The NXP Freedom MCX N board debugger comes loaded with MCU Link, but it can be updated to JLink.
+- Download and install the tool to update MCU Link to support jlink:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+- put the rom bootloader in 'dfu' mode by adding a jumper in J21
+
+- run `scripts/program_JLINK` to update the onboard debugger
+
+- when the update is complete, remove the jumper in J21
+
+Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXN947_M33_0`
+
+At the Jlink prompt, type:
+
+```
+loadbin factory.bin 0
+```
+
+Reset or power cycle the board.
+
+The RGB will light up blue to indicate version 1 of the firmware has been
+staged.
+
+### MCX N: Testing firmware update
+
+1) Sign the test-app with version 2:
+
+```sh
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+2) Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+
+```sh
+echo -n "pBOOT" > trigger_magic.bin
+```
+
+3) Assembly new factory update.bin (replace `0xAFFB` with the appropriate
+address, which should be your `.config`'s `WOLFBOOT_PARTITION_SIZE` minus `5`):
+
+```sh
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0    test-app/image_v2_signed.bin \
+    0xAFFB trigger_magic.bin
+```
+
+4) Flash update.bin to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
+(e.g. `loadbin update.bin 0x15000`).
+
+Once wolfBoot has performed validation of the partition and staged a firmware
+with version > 1, the RGB LED will light up green.
+
+### MCX N: Debugging
+
+Debugging with JLink:
+
+Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
+
+In one terminal: `JLinkGDBServer -if swd -Device MCXN947_M33_0 -port 3333`
 
 In another terminal use `gdb`:
 
