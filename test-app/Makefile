@@ -97,7 +97,7 @@ ifeq ($(TZEN),1)
     CFLAGS+=-I./
     APP_OBJS+=../hal/$(TARGET)_ns.o
     ifeq ($(WOLFCRYPT_TZ),1)
-        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)" -I../lib/wolfssl
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
         APP_OBJS+=../src/wc_secure_calls.o
         WOLFCRYPT_APP_OBJS+=\
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o \
@@ -168,7 +168,7 @@ ifeq ($(TZEN),1)
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
         CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA
         CFLAGS+=-I../zephyr/include -I../lib/wolfPSA/wolfpsa
-        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)" -I../lib/wolfssl/wolfssl
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)" -I"$(WOLFBOOT_LIB_WOLFSSL)/wolfssl"
         APP_OBJS+=hal_trng_psa.o
         APP_OBJS+=../zephyr/src/wolfboot_psa_ns_api.o
         APP_OBJS+=arm_tee_ns_interface_stub.o
