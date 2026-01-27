@@ -35,6 +35,7 @@
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/integer.h>
+#include <wolfssl/wolfcrypt/memory.h>
 
 #if defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
@@ -585,13 +586,14 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
     uint8_t seed[WOLFBOOT_DICE_CDI_LEN];
     uint8_t priv[WOLFBOOT_DICE_KEY_LEN];
     size_t i;
+    int ret = -1;
 
     XMEMSET(cdi, 0, sizeof(cdi));
     XMEMSET(seed, 0, sizeof(seed));
     XMEMSET(priv, 0, sizeof(priv));
 
     if (claims->component_count == 0) {
-        return -1;
+        goto cleanup;
     }
 
     if (wolfboot_dice_hkdf(uds, uds_len,
@@ -599,7 +601,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
                            claims->components[0].measurement_len,
                            (const uint8_t *)"WOLFBOOT-CDI-0", 14,
                            cdi, sizeof(cdi)) != 0) {
-        return -1;
+        goto cleanup;
     }
 
     for (i = 1; i < claims->component_count; i++) {
@@ -608,7 +610,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
                                claims->components[i].measurement_len,
                                (const uint8_t *)"WOLFBOOT-CDI", 12,
                                cdi, sizeof(cdi)) != 0) {
-            return -1;
+            goto cleanup;
         }
     }
 
@@ -616,26 +618,36 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
                            (const uint8_t *)"WOLFBOOT-IAK", 12,
                            (const uint8_t *)"WOLFBOOT-IAK", 12,
                            seed, sizeof(seed)) != 0) {
-        return -1;
+        goto cleanup;
     }
+    /* CDI is no longer needed once the seed has been derived. */
+    wc_ForceZero(cdi, sizeof(cdi));
 
     if (wolfboot_dice_hkdf(seed, sizeof(seed),
                            (const uint8_t *)"WOLFBOOT-IAK", 12,
                            (const uint8_t *)"WOLFBOOT-IAK-KEY", 16,
                            priv, sizeof(priv)) != 0) {
-        return -1;
+        goto cleanup;
     }
+    /* Seed is no longer needed once the private key material is derived. */
+    wc_ForceZero(seed, sizeof(seed));
 
     if (wolfboot_dice_fixup_priv(priv, sizeof(priv)) != 0) {
-        return -1;
+        goto cleanup;
     }
 
     if (wc_ecc_import_private_key_ex(priv, sizeof(priv), NULL, 0,
                                      key, ECC_SECP256R1) != 0) {
-        return -1;
+        goto cleanup;
     }
 
-    return 0;
+    ret = 0;
+
+cleanup:
+    wc_ForceZero(priv, sizeof(priv));
+    wc_ForceZero(seed, sizeof(seed));
+    wc_ForceZero(cdi, sizeof(cdi));
+    return ret;
 }
 
 static int wolfboot_attest_get_private_key(ecc_key *key,

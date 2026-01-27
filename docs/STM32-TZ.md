@@ -35,7 +35,7 @@ keystore backend as PKCS11, exposed through the wolfPSA store API.
 
 ### PSA Initial Attestation (DICE)
 
-When `WOLFBOOT_TZ_PSA=1` is enabled, wolfBoot exposes the PSA Initial
+When `WOLFCRYPT_TZ_PSA=1` is enabled, wolfBoot exposes the PSA Initial
 Attestation API to non-secure applications. The attestation token is built
 using the DICE flow in `src/dice/` and returned as a COSE_Sign1 token.
 

@@ -52,7 +52,7 @@ int benchmark_test(void *args);
 int wolfcrypt_test(void *args);
 #endif
 
-#ifdef WOLFBOOT_TZ_PSA
+#ifdef WOLFCRYPT_TZ_PSA
 #include "psa/crypto.h"
 #include "psa/error.h"
 #include "psa/initial_attestation.h"
@@ -573,7 +573,7 @@ static int cmd_success(const char *args)
 
 static int cmd_random(const char *args)
 {
-#ifdef WOLFBOOT_TZ_PSA
+#ifdef WOLFCRYPT_TZ_PSA
     uint32_t rand = 0;
     psa_status_t status = psa_generate_random((uint8_t *)&rand, sizeof(rand));
     if (status != PSA_SUCCESS) {
@@ -619,7 +619,7 @@ static int cmd_timestamp(const char *args)
     return 0;
 }
 
-#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFBOOT_TZ_PSA)
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
 static int run_attestation_test(void)
 {
     uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64];
@@ -652,7 +652,7 @@ static int run_attestation_test(void)
 }
 #endif
 
-#ifdef WOLFBOOT_TZ_PSA
+#ifdef WOLFCRYPT_TZ_PSA
 /* Hash helpers for app-side measurement printing. */
 #if defined(WOLFBOOT_HASH_SHA256)
 #define APP_HASH_HDR HDR_SHA256
@@ -1305,7 +1305,7 @@ void main(void)
     printf("Version : 0x%lx\r\n", app_version);
     printf("========================\r\n");
 
-#ifdef WOLFBOOT_TZ_PSA
+#ifdef WOLFCRYPT_TZ_PSA
     ret = psa_crypto_init();
     if (ret == PSA_SUCCESS) {
         printf("PSA crypto init ok\r\n");
@@ -1319,11 +1319,11 @@ void main(void)
     cmd_tpm_info(NULL);
 #endif
 
-#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFBOOT_TZ_PSA)
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
     (void)run_attestation_test();
 #endif
 
-#ifdef WOLFBOOT_TZ_PSA
+#ifdef WOLFCRYPT_TZ_PSA
     (void)run_psa_boot_attestation();
 #endif
 

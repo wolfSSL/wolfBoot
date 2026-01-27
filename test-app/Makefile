@@ -76,7 +76,7 @@ endif
 include ../arch.mk
 
 # Optional alias for clearer TZ PSA selection in app builds.
-ifeq ($(WOLFBOOT_TZ_PSA),1)
+ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_TZ=1
   WOLFCRYPT_TZ_PSA=1
 endif
@@ -166,7 +166,7 @@ ifeq ($(TZEN),1)
         LDFLAGS+=--specs=nosys.specs -u _printf_float
     endif
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
-        CFLAGS+=-DWOLFBOOT_TZ_PSA -DWOLFSSL_HAVE_PSA
+        CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA
         CFLAGS+=-I../zephyr/include -I../lib/wolfPSA/wolfpsa
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)" -I../lib/wolfssl/wolfssl
         APP_OBJS+=hal_trng_psa.o

@@ -557,7 +557,7 @@ set(WOLFBOOT_SOURCES "include/loader.h"
                      "src/image.c"
                      "src/loader.c")
 
-if(DEFINED WOLFBOOT_TZ_PSA AND NOT WOLFBOOT_TZ_PSA STREQUAL "0")
+if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
     list(APPEND WOLFBOOT_SOURCES "src/dice/dice.c")
 endif()
 

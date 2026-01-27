@@ -81,7 +81,7 @@ The non-secure application calls the PSA Initial Attestation API wrappers:
 These are provided in `zephyr/include/psa/initial_attestation.h` and are
 implemented as NSC calls in `zephyr/src/arm_tee_attest_api.c`.
 
-When `WOLFBOOT_TZ_PSA=1`, the NS application can also use PSA Crypto through
+When `WOLFCRYPT_TZ_PSA=1`, the NS application can also use PSA Crypto through
 `zephyr/include/psa/crypto.h` via the NSC dispatch path
 (`zephyr/src/arm_tee_crypto_api.c`). PSA Protected Storage uses
 `zephyr/include/psa/protected_storage.h` in the same fashion.
