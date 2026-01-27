@@ -115,7 +115,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #define STM32L5_UID1 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x4))
 #define STM32L5_UID2 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x8))
 
-int hal_uds_derive_key(uint8_t *out, size_t out_len)
+static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
 #if defined(WOLFBOOT_HASH_SHA256)
@@ -161,6 +161,19 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     }
     memcpy(out, digest, copy_len);
     return 0;
+}
+
+int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+    if (out == NULL || out_len == 0) {
+        return -1;
+    }
+
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+    return uds_from_uid(out, out_len);
+#else
+    return -1;
+#endif
 }
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)

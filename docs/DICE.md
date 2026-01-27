@@ -62,6 +62,9 @@ families must implement the appropriate subset based on hardware support.
 
 - `hal_uds_derive_key(uint8_t *out, size_t out_len)`
   - Returns a device-unique secret (UDS/HUK-derived) for DICE key derivation.
+  - Test-only fallback: when `WOLFBOOT_UDS_UID_FALLBACK_FORTEST=1`, targets
+    may derive UDS from the device UID for demo purposes. This should not be
+    used in production builds.
 - `hal_attestation_get_ueid(uint8_t *buf, size_t *len)`
   - Returns a stable UEID. If unavailable, the UEID is derived from UDS.
 - `hal_attestation_get_implementation_id(uint8_t *buf, size_t *len)`

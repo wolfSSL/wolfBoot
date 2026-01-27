@@ -30,6 +30,10 @@
 
 #include "uart_drv.h"
 
+#if defined(FLASH_OTP_KEYSTORE)
+#include "otp_keystore.h"
+#endif
+
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
 #elif defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384)
@@ -164,7 +168,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #define STM32H5_BSEC_UID1 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x18))
 #define STM32H5_BSEC_UID2 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x1C))
 
-int hal_uds_derive_key(uint8_t *out, size_t out_len)
+static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
 #if defined(WOLFBOOT_HASH_SHA256)
@@ -175,10 +179,6 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     wc_Sha384 hash;
 #endif
     size_t copy_len;
-
-    if (out == NULL || out_len == 0) {
-        return -1;
-    }
 
     uid[0] = (uint8_t)(STM32H5_BSEC_UID0 >> 0);
     uid[1] = (uint8_t)(STM32H5_BSEC_UID0 >> 8);
@@ -210,6 +210,50 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     }
     memcpy(out, digest, copy_len);
     return 0;
+}
+
+static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++) {
+        if (buf[i] != value) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+#if defined(FLASH_OTP_KEYSTORE)
+    uint8_t uds[OTP_UDS_LEN];
+#endif
+
+    if (out == NULL || out_len == 0) {
+        return -1;
+    }
+
+#if defined(FLASH_OTP_KEYSTORE)
+    if (hal_flash_otp_read(FLASH_OTP_BASE + OTP_UDS_OFFSET,
+                           uds, sizeof(uds)) == 0) {
+        if (!buffer_is_all_value(uds, sizeof(uds), 0xFF) &&
+            !buffer_is_all_value(uds, sizeof(uds), 0x00)) {
+            size_t copy_len = sizeof(uds);
+            if (copy_len > out_len) {
+                copy_len = out_len;
+            }
+            memcpy(out, uds, copy_len);
+            return 0;
+        }
+    }
+#endif
+
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+    return uds_from_uid(out, out_len);
+#else
+    return -1;
+#endif
 }
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)

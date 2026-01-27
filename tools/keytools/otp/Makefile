@@ -13,7 +13,8 @@ TARGET?=none
 ARCH?=ARM
 CROSS_COMPILE?=arm-none-eabi-
 CFLAGS+=-O0 -ggdb
-CFLAGS+=-I. -I../../../ -I../../../include -I../../../lib/wolfssl
+CFLAGS+=-I. -I../../../ -I../../../include -I$(WOLFBOOT_LIB_WOLFSSL) \
+    -I$(WOLFBOOT_LIB_WOLFSSL)/wolfssl
 CFLAGS+=-I./wcs
 CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER -DWOLFSSL_USER_SETTINGS
 PRI_KS_OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
@@ -51,7 +52,9 @@ endif
 all: otp-keystore-primer.bin otp-keystore-gen
 
 otp-keystore-gen: otp-keystore-gen.c
-	gcc -o $@ otp-keystore-gen.c ../../../src/keystore.c -I. -I../../../ -I../../../include -DFLASH_OTP_KEYSTORE
+	gcc -o $@ otp-keystore-gen.c ../../../src/keystore.c -I. -I../../../ \
+        -I../../../include -I$(WOLFBOOT_LIB_WOLFSSL) \
+        -I$(WOLFBOOT_LIB_WOLFSSL)/wolfssl -DFLASH_OTP_KEYSTORE
 
 
 otp-keystore-primer.bin: otp-keystore-primer.elf
