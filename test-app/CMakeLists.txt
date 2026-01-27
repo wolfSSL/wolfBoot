@@ -124,10 +124,12 @@ if(BUILD_TEST_APPS)
 
     # stm32h5-specific sources
     if("${WOLFBOOT_TARGET}" STREQUAL "stm32h5")
+        set_source_files_properties(${CMAKE_BINARY_DIR}/keystore.c PROPERTIES GENERATED TRUE)
         target_sources(image PRIVATE
             ../hal/uart/uart_drv_stm32h5.c
-            ../src/keystore.c
+            ${CMAKE_BINARY_DIR}/keystore.c
         )
+        add_dependencies(image keystore)
         target_compile_definitions(image PRIVATE
             APP_HAS_SYSTICK
             RAMFUNCTION=__attribute__\(\(used,section\(".ramcode"\),long_call\)\)
