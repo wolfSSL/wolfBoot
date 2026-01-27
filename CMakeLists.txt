@@ -1369,6 +1369,9 @@ if(TARGET ${WOLFSSL_TGT})
     )
 endif() # TARGET ${WOLFSSL_TGT}
 
+set(WOLFBOOT_DEFS_PUBLIC ${WOLFBOOT_DEFS})
+list(REMOVE_ITEM WOLFBOOT_DEFS_PUBLIC __WOLFBOOT)
+
 if(BUILD_TEST_APPS OR BUILD_IMAGE)
     message(STATUS "Building wolfBoot image")
     add_subdirectory(test-app)
@@ -1419,9 +1422,6 @@ set(ARCH_FLASH_OFFSET
 set(WOLFBOOT_VERSION
     ${WOLFBOOT_VERSION}
     CACHE INTERNAL "")
-
-set(WOLFBOOT_DEFS_PUBLIC ${WOLFBOOT_DEFS})
-list(REMOVE_ITEM WOLFBOOT_DEFS_PUBLIC __WOLFBOOT)
 
 # generate target.h
 configure_file(include/target.h.in ${CMAKE_CURRENT_BINARY_DIR}/target.h @ONLY)

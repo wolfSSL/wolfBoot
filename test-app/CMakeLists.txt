@@ -124,12 +124,9 @@ if(BUILD_TEST_APPS)
 
     # stm32h5-specific sources
     if("${WOLFBOOT_TARGET}" STREQUAL "stm32h5")
-        set_source_files_properties(${CMAKE_BINARY_DIR}/keystore.c PROPERTIES GENERATED TRUE)
         target_sources(image PRIVATE
             ../hal/uart/uart_drv_stm32h5.c
-            ${CMAKE_BINARY_DIR}/keystore.c
         )
-        add_dependencies(image keystore)
         target_compile_definitions(image PRIVATE
             APP_HAS_SYSTICK
             RAMFUNCTION=__attribute__\(\(used,section\(".ramcode"\),long_call\)\)
@@ -177,6 +174,11 @@ if(BUILD_TEST_APPS)
     # For TrustZone builds, avoid linking the bootloader lib (it defines NSC stubs).
     if(TZEN AND WOLFCRYPT_TZ)
         target_sources(image PRIVATE ../src/libwolfboot.c)
+        if(NOT SIGN STREQUAL "NONE")
+            set_source_files_properties(${CMAKE_BINARY_DIR}/keystore.c PROPERTIES GENERATED TRUE)
+            target_sources(image PRIVATE ${CMAKE_BINARY_DIR}/keystore.c)
+            add_dependencies(image keystore)
+        endif()
         target_link_libraries(image PRIVATE wolfboothal target)
     else()
         target_link_libraries(image PRIVATE wolfboot wolfboothal public_key target)
