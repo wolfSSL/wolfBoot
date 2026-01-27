@@ -93,7 +93,7 @@
 #define WOLFBOOT_DICE_KDF_HASH_SIZE SHA384_DIGEST_SIZE
 #define WOLFBOOT_MEASUREMENT_HASH_NAME "sha-384"
 #elif defined(WOLFBOOT_HASH_SHA3_384)
-#define WOLFBOOT_DICE_KDF_HASH_TYPE WC_HASH_TYPE_SHA384
+#define WOLFBOOT_DICE_KDF_HASH_TYPE WC_HASH_TYPE_SHA3_384
 #define WOLFBOOT_DICE_KDF_HASH_SIZE 48
 #define WOLFBOOT_MEASUREMENT_HASH_NAME "sha3-384"
 #else
@@ -661,9 +661,6 @@ static int wolfboot_attest_get_private_key(ecc_key *key,
         uint8_t priv[WOLFBOOT_DICE_KEY_LEN];
         size_t priv_len = sizeof(priv);
 
-        if (hal_attestation_get_iak_private_key == NULL) {
-            return -1;
-        }
         if (hal_attestation_get_iak_private_key(priv, &priv_len) != 0) {
             return -1;
         }

@@ -132,7 +132,9 @@ extern int tolower(int c);
 #define NO_CERT
 #define NO_SESSION_CACHE
 #define NO_HC128
+#ifndef NO_DES3
 #define NO_DES3
+#endif
 #define NO_WRITEV
 #define NO_DEV_RANDOM
 #define NO_FILESYSTEM
