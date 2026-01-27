@@ -74,6 +74,27 @@ families must implement the appropriate subset based on hardware support.
 - `hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len)`
   - Optional provisioned IAK private key (used in IAK mode only).
 
+## STM32H5 OBKeys UDS (optional)
+
+STM32H5 devices provide OBKeys secure storage areas tied to temporal isolation
+levels (HDPL). The HDPL1 area is intended for iRoT keys and is the recommended
+location for a device-unique UDS when `WOLFBOOT_UDS_OBKEYS=1` is enabled. OBKeys
+secure storage is only available on STM32H5 lines except STM32H503.
+
+Provisioning uses STs secure data provisioning flow:
+
+1. Create an OBKeys provisioning file (`.obk`) using STM32TrustedPackageCreator
+   (CLI supports `-obk <xml>` input).
+2. Program the `.obk` file using STM32CubeProgrammer CLI with the `-sdp` option.
+
+3. After provisioning, move the device to the CLOSED state as appropriate for
+   production.
+
+When `WOLFBOOT_UDS_OBKEYS=1`, the STM32H5 HAL first attempts to read UDS from
+OBKeys using a platform hook (`stm32h5_obkeys_read_uds`). Integrate this hook
+with your RSSe/RSSLib provisioning flow (DataProvisioning API) as described in
+ST documentation.
+
 ## NSC access (non-secure API)
 
 The non-secure application calls the PSA Initial Attestation API wrappers:

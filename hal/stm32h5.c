@@ -168,6 +168,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #define STM32H5_BSEC_UID1 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x18))
 #define STM32H5_BSEC_UID2 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x1C))
 
+#ifdef WOLFBOOT_UDS_OBKEYS
+__attribute__((weak)) int stm32h5_obkeys_read_uds(uint8_t *out, size_t out_len)
+{
+    (void)out;
+    (void)out_len;
+    return -1;
+}
+#endif
+
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
@@ -233,6 +242,12 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     if (out == NULL || out_len == 0) {
         return -1;
     }
+
+#ifdef WOLFBOOT_UDS_OBKEYS
+    if (stm32h5_obkeys_read_uds(out, out_len) == 0) {
+        return 0;
+    }
+#endif
 
 #if defined(FLASH_OTP_KEYSTORE)
     if (hal_flash_otp_read(FLASH_OTP_BASE + OTP_UDS_OFFSET,

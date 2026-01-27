@@ -39,6 +39,13 @@ ifeq ($(WOLFBOOT_UDS_UID_FALLBACK_FORTEST),1)
   CFLAGS+=-D"WOLFBOOT_UDS_UID_FALLBACK_FORTEST"
 endif
 
+ifeq ($(WOLFBOOT_UDS_OBKEYS),1)
+  ifneq ($(TARGET),stm32h5)
+    $(error WOLFBOOT_UDS_OBKEYS is only supported on STM32H5 targets)
+  endif
+  CFLAGS+=-D"WOLFBOOT_UDS_OBKEYS"
+endif
+
 ## Sealing a secret into the TPM
 ifeq ($(WOLFBOOT_TPM_SEAL),1)
   WOLFTPM:=1
