@@ -431,7 +431,6 @@ psa_status_t psa_cipher_update(psa_cipher_operation_t *operation,
 {
     struct arm_tee_crypto_pack_iovec iov = {
         .function_id = ARM_TEE_CRYPTO_CIPHER_UPDATE_SID,
-        .op_handle = (uint32_t)operation->opaque,
     };
     psa_invec in_vec[] = {
         {.base = &iov, .len = sizeof(struct arm_tee_crypto_pack_iovec)},
@@ -448,6 +447,7 @@ psa_status_t psa_cipher_update(psa_cipher_operation_t *operation,
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
+    iov.op_handle = (uint32_t)operation->opaque;
     status = API_DISPATCH(in_vec, out_vec);
     if (status == PSA_SUCCESS) {
         *output_length = out_vec[0].len;
