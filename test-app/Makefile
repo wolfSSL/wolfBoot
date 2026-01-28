@@ -64,6 +64,13 @@ else
   endif
 endif
 
+ifeq ($(TARGET),wolfhal)
+	WOLFBOOT_LIB_WOLFHAL?=../lib/wolfHAL
+	CFLAGS += -I$(WOLFBOOT_LIB_WOLFHAL)
+	APP_OBJS += ../config/wolfHAL/$(WOLFHAL_BOARD).o
+	include ../config/wolfHAL/$(WOLFHAL_BOARD).mk
+endif
+
 include ../arch.mk
 
 # Setup default linker flags
