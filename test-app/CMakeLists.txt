@@ -53,6 +53,18 @@ if("${WOLFBOOT_TARGET}" STREQUAL "stm32h7")
     set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32h7.ld)
 elseif("${WOLFBOOT_TARGET}" STREQUAL "stm32u5")
     set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32u5.ld)
+elseif("${WOLFBOOT_TARGET}" STREQUAL "stm32h5")
+    if(TZEN)
+        set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32h5-ns.ld)
+    else()
+        set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32h5.ld)
+    endif()
+elseif("${WOLFBOOT_TARGET}" STREQUAL "stm32l5")
+    if(TZEN)
+        set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32l5-ns.ld)
+    else()
+        set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/ARM-stm32l5.ld)
+    endif()
 else()
     set(APP_LSCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/${ARCH}.ld)
 endif()
@@ -110,15 +122,112 @@ if(BUILD_TEST_APPS)
 
     target_sources(image PRIVATE ${APP_SOURCES})
 
+    # stm32h5-specific sources
+    if("${WOLFBOOT_TARGET}" STREQUAL "stm32h5")
+        target_sources(image PRIVATE
+            ../hal/uart/uart_drv_stm32h5.c
+        )
+        target_compile_definitions(image PRIVATE
+            APP_HAS_SYSTICK
+            RAMFUNCTION=__attribute__\(\(used,section\(".ramcode"\),long_call\)\)
+        )
+        target_compile_options(image PRIVATE
+            -ffunction-sections -fdata-sections -fno-common -mlong-calls
+        )
+        if(TZEN)
+            target_sources(image PRIVATE
+                wcs/wolfcrypt_secure.c
+            )
+            if(WOLFCRYPT_TZ)
+                target_sources(image PRIVATE
+                    ../lib/wolfssl/wolfcrypt/src/logging.c
+                    ../lib/wolfssl/wolfcrypt/test/test.c
+                    ../lib/wolfssl/wolfcrypt/benchmark/benchmark.c
+                )
+            endif()
+        endif()
+    endif()
+
+    # stm32l5-specific sources
+    if("${WOLFBOOT_TARGET}" STREQUAL "stm32l5")
+        target_sources(image PRIVATE
+            ../hal/uart/uart_drv_stm32l5.c
+        )
+        target_compile_options(image PRIVATE
+            -ffunction-sections -fdata-sections -fno-common
+        )
+    endif()
+
     target_include_directories(image PRIVATE
         ../
         ../include
         ${CMAKE_CURRENT_BINARY_DIR})
 
-    target_link_libraries(image wolfboot target)
+    if(TZEN)
+        target_include_directories(image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/wcs)
+    endif()
+
+    if(WOLFCRYPT_TZ_PKCS11)
+        target_include_directories(image PRIVATE ../lib/wolfPKCS11)
+    endif()
+
+    # For TrustZone builds, avoid linking the bootloader lib (it defines NSC stubs).
+    if(TZEN AND WOLFCRYPT_TZ)
+        target_sources(image PRIVATE ../src/libwolfboot.c)
+        if(NOT SIGN STREQUAL "NONE")
+            set_source_files_properties(${CMAKE_BINARY_DIR}/keystore.c PROPERTIES GENERATED TRUE)
+            target_sources(image PRIVATE ${CMAKE_BINARY_DIR}/keystore.c)
+            add_dependencies(image keystore)
+        endif()
+        target_link_libraries(image PRIVATE wolfboothal target)
+    else()
+        target_link_libraries(image PRIVATE wolfboot wolfboothal public_key target)
+    endif()
+
+    # For TrustZone builds, the test app is a non-secure application
+    if(TZEN AND WOLFCRYPT_TZ)
+        list(APPEND TEST_APP_COMPILE_DEFINITIONS NONSECURE_APP WOLFBOOT_SECURE_CALLS)
+        add_dependencies(image wolfboot_${PLATFORM_NAME})
+        target_link_libraries(image PRIVATE ${CMAKE_BINARY_DIR}/wc_secure_calls.o)
+    endif()
+
+    if(WOLFCRYPT_TZ_PKCS11)
+        list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_PKCS11_APP SECURE_PKCS11)
+        target_sources(image PRIVATE
+            wcs/pkcs11_stub.c
+            wcs/pkcs11_test_ecc.c
+            ../lib/wolfssl/wolfcrypt/src/ecc.c
+            ../lib/wolfssl/wolfcrypt/src/rsa.c
+            ../lib/wolfssl/wolfcrypt/src/asn.c
+            ../lib/wolfssl/wolfcrypt/src/aes.c
+            ../lib/wolfssl/wolfcrypt/src/hmac.c
+            ../lib/wolfssl/wolfcrypt/src/pwdbased.c
+            ../lib/wolfssl/wolfcrypt/src/hash.c
+            ../lib/wolfssl/wolfcrypt/src/sha256.c
+            ../lib/wolfssl/wolfcrypt/src/sha512.c
+            ../lib/wolfssl/wolfcrypt/src/sha3.c
+            ../lib/wolfssl/wolfcrypt/src/integer.c
+            ../lib/wolfssl/wolfcrypt/src/tfm.c
+            ../lib/wolfssl/wolfcrypt/src/sp_c32.c
+            ../lib/wolfssl/wolfcrypt/src/sp_int.c
+            ../lib/wolfssl/wolfcrypt/src/cryptocb.c
+            ../lib/wolfssl/wolfcrypt/src/wc_pkcs11.c
+            ../lib/wolfssl/wolfcrypt/src/memory.c
+            ../lib/wolfssl/wolfcrypt/src/wolfmath.c
+            ../lib/wolfssl/wolfcrypt/src/dh.c
+            ../lib/wolfssl/wolfcrypt/src/random.c
+            ../lib/wolfssl/wolfcrypt/src/coding.c
+            ../lib/wolfssl/wolfcrypt/src/wc_encrypt.c
+            ../lib/wolfssl/wolfcrypt/src/wc_port.c
+        )
+        if(SPMATH AND NOT NO_ASM)
+            list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFSSL_HAVE_SP_RSA WOLFSSL_HAVE_SP_ECC WOLFSSL_SP_ARM_CORTEX_M_ASM)
+            target_sources(image PRIVATE ../lib/wolfssl/wolfcrypt/src/sp_cortexm.c)
+        endif()
+    endif()
 
     target_compile_definitions(image PRIVATE TARGET_${WOLFBOOT_TARGET}
-                                                ${TEST_APP_COMPILE_DEFINITIONS} ${WOLFBOOT_DEFS})
+                                                ${TEST_APP_COMPILE_DEFINITIONS} ${WOLFBOOT_DEFS_PUBLIC})
 
     target_compile_options(image PRIVATE -Wall -Wstack-usage=1024 -ffreestanding -Wno-unused -fomit-frame-pointer
                                             -nostartfiles)
