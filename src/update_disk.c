@@ -472,7 +472,16 @@ void RAMFUNCTION wolfBoot_start(void)
 
     wolfBoot_printf("Firmware Valid.\r\n");
 
+#if !defined(WOLFBOOT_NO_LOAD_ADDRESS) && defined(WOLFBOOT_LOAD_ADDRESS)
+    /* Move firmware to WOLFBOOT_LOAD_ADDRESS to match the binary's link address.
+     * Disk boot loads header + firmware starting at WOLFBOOT_LOAD_ADDRESS, so
+     * fw_base is at WOLFBOOT_LOAD_ADDRESS + IMAGE_HEADER_SIZE. Strip the header
+     * by moving firmware to WOLFBOOT_LOAD_ADDRESS (same as update_ram.c). */
+    load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
+    memmove((void*)load_address, os_image.fw_base, os_image.fw_size);
+#else
     load_address = (uint32_t*)os_image.fw_base;
+#endif
 
 #ifdef WOLFBOOT_FDT
     /* Is this a Flattened uImage Tree (FIT) image (FDT format) */

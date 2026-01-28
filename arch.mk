@@ -1444,7 +1444,20 @@ BOOT_IMG?=test-app/image.bin
 ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
-  UPDATE_OBJS:=src/update_ram.o
+  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+    # Disk-based boot (SD card or eMMC)
+    CFLAGS+=-DWOLFBOOT_UPDATE_DISK
+    ifeq ($(MAX_DISKS),)
+      MAX_DISKS=1
+    endif
+    CFLAGS+=-DMAX_DISKS=$(MAX_DISKS)
+    UPDATE_OBJS:=src/update_disk.o
+    OBJS+=src/gpt.o
+    OBJS+=src/disk.o
+  else
+    # RAM-based boot from external flash (default)
+    UPDATE_OBJS:=src/update_ram.o
+  endif
 else
   ifeq ($(DUALBANK_SWAP),1)
     CFLAGS+=-DWOLFBOOT_DUALBOOT
