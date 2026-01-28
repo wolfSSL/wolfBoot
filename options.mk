@@ -618,10 +618,18 @@ ifeq ($(NO_XIP),1)
 endif
 
 ifeq ($(DEBUG_UART),1)
-  CFLAGS+=-DDEBUG_UART
-  UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
-  ifneq ($(findstring $(UART_DRV_OBJ),$(OBJS)),$(UART_DRV_OBJ))
-    OBJS+=$(UART_DRV_OBJ)
+  ifeq ($(strip $(UART_TARGET)),)
+    $(warning DEBUG_UART=1 but UART_TARGET is not set; DEBUG_UART disabled)
+  else
+    UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
+    ifneq ($(wildcard $(UART_DRV_OBJ)),)
+      CFLAGS+=-DDEBUG_UART
+      ifneq ($(findstring $(UART_DRV_OBJ),$(OBJS)),$(UART_DRV_OBJ))
+        OBJS+=$(UART_DRV_OBJ)
+      endif
+    else
+      $(warning DEBUG_UART=1 but $(UART_DRV_OBJ) not found; DEBUG_UART disabled)
+    endif
   endif
 endif
 ifeq ($(NO_QNX),1)
