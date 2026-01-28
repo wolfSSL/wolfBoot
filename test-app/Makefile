@@ -11,6 +11,9 @@ vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
+ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
+  TEST_APP_NO_RNG?=1
+endif
 ifeq ($(TZEN),1)
   # wcs directory contains a user_settings.h, which will conflict with
   # the one in the include directory if the test app needs it (e.g. wolfHSM)
@@ -109,7 +112,6 @@ ifeq ($(TZEN),1)
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pkcs12.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o \
@@ -123,6 +125,11 @@ ifeq ($(TZEN),1)
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfentropy.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
+        ifeq ($(TEST_APP_NO_RNG),1)
+            CFLAGS+=-DWC_NO_RNG
+        else
+            WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+        endif
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
             CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
             CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11 -DWOLFBOOT_TZ_PKCS11
