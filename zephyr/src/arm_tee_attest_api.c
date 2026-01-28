@@ -21,6 +21,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include <stdio.h>
+
 #include "psa/initial_attestation.h"
 #include "psa/client.h"
 #include "psa_manifest/sid.h"
@@ -42,10 +44,14 @@ psa_initial_attest_get_token(const uint8_t *auth_challenge,
         { token_buf, token_buf_size }
     };
 
+    printf("[ATTEST-NS] get_token: chal=%u buf=%u\r\n",
+           (unsigned)challenge_size, (unsigned)token_buf_size);
     status = psa_call(ARM_TEE_ATTESTATION_SERVICE_HANDLE,
                       ARM_TEE_ATTEST_GET_TOKEN,
                       in_vec, IOVEC_LEN(in_vec),
                       out_vec, IOVEC_LEN(out_vec));
+    printf("[ATTEST-NS] get_token: status=%ld len=%u\r\n",
+           (long)status, (unsigned)out_vec[0].len);
 
     if (status == PSA_SUCCESS && token_size != NULL) {
         *token_size = out_vec[0].len;
@@ -78,10 +84,14 @@ psa_initial_attest_get_token_size(size_t challenge_size,
         return PSA_ERROR_INVALID_ARGUMENT;
     }
 
+    printf("[ATTEST-NS] get_token_size: chal=%u\r\n",
+           (unsigned)challenge_size);
     status = psa_call(ARM_TEE_ATTESTATION_SERVICE_HANDLE,
                       ARM_TEE_ATTEST_GET_TOKEN_SIZE,
                       in_vec, IOVEC_LEN(in_vec),
                       out_vec, IOVEC_LEN(out_vec));
+    printf("[ATTEST-NS] get_token_size: status=%ld size=%u\r\n",
+           (long)status, (unsigned)token_size_param);
 
     *token_size = token_size_param;
 

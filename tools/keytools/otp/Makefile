@@ -8,6 +8,7 @@ ifeq ($(V),0)
 endif
 
 WOLFBOOT_LIB_WOLFSSL?=../../../lib/wolfssl
+OTP_GEN_DEFS=
 
 TARGET?=none
 ARCH?=ARM
@@ -16,7 +17,7 @@ CFLAGS+=-O0 -ggdb
 CFLAGS+=-I. -I../../../ -I../../../include -I$(WOLFBOOT_LIB_WOLFSSL) \
     -I$(WOLFBOOT_LIB_WOLFSSL)/wolfssl
 CFLAGS+=-I./wcs
-CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER -DWOLFSSL_USER_SETTINGS
+CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER -DWOLFSSL_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE
 PRI_KS_OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
 
 ifeq ($(HASH),SHA256)
@@ -35,11 +36,13 @@ ifeq ($(TARGET),stm32h7)
     CFLAGS+=-DTARGET_stm32h7
     CFLAGS+=-mcpu=cortex-m7 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
     PRI_KS_OBJS+=stm32h7.o
+    OTP_GEN_DEFS+=-DTARGET_stm32h7
 endif
 ifeq ($(TARGET),stm32h5)
     CFLAGS+=-DTARGET_stm32h5
     CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common -ffreestanding -nostartfiles
-    PRI_KS_OBJS+=stm32h5.o
+    PRI_KS_OBJS+=stm32h5.o stm32_tz.o
+    OTP_GEN_DEFS+=-DTARGET_stm32h5
 endif
 CC=$(CROSS_COMPILE)gcc
 OBJCOPY?=$(CROSS_COMPILE)objcopy
@@ -54,7 +57,7 @@ all: otp-keystore-primer.bin otp-keystore-gen
 otp-keystore-gen: otp-keystore-gen.c
 	gcc -o $@ otp-keystore-gen.c ../../../src/keystore.c -I. -I../../../ \
         -I../../../include -I$(WOLFBOOT_LIB_WOLFSSL) \
-        -I$(WOLFBOOT_LIB_WOLFSSL)/wolfssl -DFLASH_OTP_KEYSTORE
+        -I$(WOLFBOOT_LIB_WOLFSSL)/wolfssl -DFLASH_OTP_KEYSTORE $(OTP_GEN_DEFS)
 
 
 otp-keystore-primer.bin: otp-keystore-primer.elf
@@ -72,6 +75,9 @@ stm32h7.o: ../../../hal/stm32h7.c
 
 
 stm32h5.o: ../../../hal/stm32h5.c
+	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+stm32_tz.o: ../../../hal/stm32_tz.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 
 

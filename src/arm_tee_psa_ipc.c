@@ -31,6 +31,7 @@
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfboot/arm_tee_api.h>
 #include <wolfboot/dice.h>
+#include "printf.h"
 
 /* Service IDs/handles aligned with ARM TEE defaults. */
 #define ARM_TEE_CRYPTO_SID   (0x00000080U)
@@ -877,11 +878,15 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
 
+            wolfBoot_printf("[ATTEST] GET_TOKEN: challenge_len=%u out_len=%u\r\n",
+                            (unsigned)challenge_vec->len, (unsigned)out_vec[0].len);
             dice_rc = wolfBoot_dice_get_token((const uint8_t *)challenge_vec->base,
                                               challenge_vec->len,
                                               (uint8_t *)out_vec[0].base,
                                               out_vec[0].len,
                                               &token_len);
+            wolfBoot_printf("[ATTEST] GET_TOKEN: dice_rc=%d token_len=%u\r\n",
+                            dice_rc, (unsigned)token_len);
             status = wolfboot_attest_status(dice_rc);
             if (status == PSA_SUCCESS || status == PSA_ERROR_BUFFER_TOO_SMALL) {
                 out_vec[0].len = token_len;
@@ -906,8 +911,12 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
                 }
 
                 challenge_size = (const rot_size_t *)in_vec[0].base;
+                wolfBoot_printf("[ATTEST] GET_TOKEN_SIZE: challenge_size=%u\r\n",
+                                (unsigned)*challenge_size);
                 dice_rc = wolfBoot_dice_get_token_size(*challenge_size,
                                                        &token_size_native);
+                wolfBoot_printf("[ATTEST] GET_TOKEN_SIZE: dice_rc=%d size=%u\r\n",
+                                dice_rc, (unsigned)token_size_native);
                 status = wolfboot_attest_status(dice_rc);
                 if (status != PSA_SUCCESS) {
                     return status;

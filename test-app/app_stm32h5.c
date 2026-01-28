@@ -632,14 +632,6 @@ static int run_attestation_test(void)
         challenge[i] = (uint8_t)i;
     }
 
-    status = psa_initial_attest_get_token_size(sizeof(challenge), &token_size);
-    if (status != PSA_SUCCESS) {
-        printf("attest: token size query failed (%d)\r\n", status);
-        return -1;
-    }
-    printf("attest: token size is %lu bytes\r\n",
-           (unsigned long)token_size);
-
     status = psa_initial_attest_get_token(challenge, sizeof(challenge),
                                           token, sizeof(token), &token_size);
     if (status != PSA_SUCCESS) {
@@ -790,6 +782,13 @@ static int run_psa_boot_attestation(void)
     }
 
     printf("PSA boot attestation: %s\r\n", ret == 0 ? "success" : "failed");
+
+    if (ret == 0)
+        asm volatile ("bkpt #0x7f");
+    else 
+        asm volatile ("bkpt #0x7e");
+
+
     return ret;
 }
 #endif

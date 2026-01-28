@@ -164,12 +164,14 @@ extern int tolower(int c);
 #       define HAVE_ECC256
 #   endif
 #   if defined(WOLFBOOT_SIGN_ECC384) || \
-        defined(WOLFBOOT_SIGN_SECONDARY_ECC384)
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+        defined(WOLFCRYPT_SECURE_MODE)
 #       define HAVE_ECC384
 #       define WOLFSSL_SP_384
 #   endif
 #   if defined(WOLFBOOT_SIGN_ECC521) || \
-        defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC521) || \
+        defined(WOLFCRYPT_SECURE_MODE)
 #       define HAVE_ECC521
 #       define WOLFSSL_SP_521
 #   endif

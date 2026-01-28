@@ -616,6 +616,14 @@ endif
 ifeq ($(NO_XIP),1)
   CFLAGS+=-D"NO_XIP"
 endif
+
+ifeq ($(DEBUG_UART),1)
+  CFLAGS+=-DDEBUG_UART
+  UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
+  ifneq ($(findstring $(UART_DRV_OBJ),$(OBJS)),$(UART_DRV_OBJ))
+    OBJS+=$(UART_DRV_OBJ)
+  endif
+endif
 ifeq ($(NO_QNX),1)
   CFLAGS+=-D"NO_QNX"
 endif
@@ -767,6 +775,7 @@ endif
 
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
   CFLAGS+=-DWOLFCRYPT_TZ_PSA
+  CFLAGS+=-DWOLFCRYPT_SECURE_MODE
   CFLAGS+=-DWOLFSSL_PSA_ENGINE
   CFLAGS+=-DWOLFPSA_CUSTOM_STORE
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
