@@ -46,11 +46,14 @@ extern int tolower(int c);
 #define XTOLOWER(c)     tolower((c))
 
 /* PKCS11 */
-#define HAVE_PKCS11
-#define HAVE_WOLF_BIGINT
-#define HAVE_PKCS11_STATIC
-#define WOLF_CRYPTO_CB
-#define MAX_CRYPTO_DEVID_CALLBACKS 2
+#ifdef WOLFBOOT_TZ_PKCS11
+  #define HAVE_PKCS11
+  #define HAVE_WOLF_BIGINT
+  #define HAVE_PKCS11_STATIC
+  #define WOLF_CRYPTO_CB
+  #define MAX_CRYPTO_DEVID_CALLBACKS 2
+#endif
+
 
 
 /* ECC */
@@ -100,6 +103,9 @@ extern int tolower(int c);
 #ifndef WOLFSSL_AES_COUNTER
 #define WOLFSSL_AES_COUNTER
 #endif
+#ifndef WOLFSSL_AES_CBC
+#define WOLFSSL_AES_CBC
+#endif
 #ifndef WOLFSSL_AES_DIRECT
 #define WOLFSSL_AES_DIRECT
 #endif
@@ -126,7 +132,9 @@ extern int tolower(int c);
 #define NO_CERT
 #define NO_SESSION_CACHE
 #define NO_HC128
+#ifndef NO_DES3
 #define NO_DES3
+#endif
 #define NO_WRITEV
 #define NO_DEV_RANDOM
 #define NO_FILESYSTEM
@@ -141,6 +149,10 @@ extern int tolower(int c);
 
 #define WC_TEST_NO_CRYPTOCB_SW_TEST
 #define BENCH_EMBEDDED
+
+#define HAVE_ECC_KEY_EXPORT
+#define HAVE_PKCS8
+#define HAVE_PKCS12
 
 #ifdef SECURE_PKCS11
 

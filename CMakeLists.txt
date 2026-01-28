@@ -557,6 +557,10 @@ set(WOLFBOOT_SOURCES "include/loader.h"
                      "src/image.c"
                      "src/loader.c")
 
+if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
+    list(APPEND WOLFBOOT_SOURCES "src/dice/dice.c")
+endif()
+
 # build bin-assemble tool Windows
 set(BINASSEMBLE ${CMAKE_CURRENT_BINARY_DIR}/bin-assemble${HOST_EXE})
 set(BINASSEMBLE_OBJDIR "${CMAKE_CURRENT_BINARY_DIR}/obj_bin_assemble")

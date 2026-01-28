@@ -33,6 +33,15 @@ The `WOLFCRYPT_TZ_PSA` option provides a standard PSA Crypto interface using
 wolfPSA in the secure domain. The key storage uses the same secure flash
 keystore backend as PKCS11, exposed through the wolfPSA store API.
 
+### PSA Initial Attestation (DICE)
+
+When `WOLFCRYPT_TZ_PSA=1` is enabled, wolfBoot exposes the PSA Initial
+Attestation API to non-secure applications. The attestation token is built
+using the DICE flow in `src/dice/` and returned as a COSE_Sign1 token.
+
+See [DICE Attestation](DICE.md) for the full protocol description, HAL hooks
+(UDS, UEID, lifecycle, implementation ID), and provisioned IAK support.
+
 ### Image header size
 
 The `IMAGE_HEADER_SIZE` option has to be carefully tuned to accommodate for the

@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 #include "target.h"
+#include <stddef.h>
 #include <stdint.h>
 
 /* Architecture specific calls */
@@ -153,6 +154,13 @@ void hal_trng_fini(void);
 int hal_trng_get_entropy(unsigned char *out, unsigned len);
 
 #endif
+
+/* Attestation helpers (optional, weak stubs available). */
+int hal_uds_derive_key(uint8_t *out, size_t out_len);
+int hal_attestation_get_lifecycle(uint32_t *lifecycle);
+int hal_attestation_get_implementation_id(uint8_t *buf, size_t *len);
+int hal_attestation_get_ueid(uint8_t *buf, size_t *len);
+int hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len);
 
 #ifdef FLASH_OTP_KEYSTORE
 

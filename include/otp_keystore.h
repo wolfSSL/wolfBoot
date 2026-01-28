@@ -56,7 +56,13 @@ struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
 
 static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
 
-#define KEYSTORE_MAX_PUBKEYS ((OTP_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
+#define KEYSTORE_MAX_PUBKEYS \
+    ((OTP_SIZE - OTP_UDS_STORAGE_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
+
+#define OTP_UDS_LEN 32
+/* Reserve the upper 64 bytes of OTP for the attestation UDS. */
+#define OTP_UDS_STORAGE_SIZE 64
+#define OTP_UDS_OFFSET (OTP_SIZE - OTP_UDS_STORAGE_SIZE)
 
 #if (OTP_SIZE == 0)
 #error WRONG OTP SIZE
@@ -64,6 +70,10 @@ static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
 
 #if (KEYSTORE_MAX_PUBKEYS < 1)
     #error "No space for any keystores in OTP with current algorithm"
+#endif
+
+#if (OTP_UDS_OFFSET < OTP_HDR_SIZE)
+    #error "OTP UDS offset overlaps OTP keystore header"
 #endif
 
 #endif /* FLASH_OTP_KEYSTORE */ 

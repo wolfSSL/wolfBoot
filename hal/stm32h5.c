@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
 #include <image.h>
 #include <string.h>
 
@@ -28,6 +29,16 @@
 #include "hal/armv8m_tz.h"
 
 #include "uart_drv.h"
+
+#if defined(FLASH_OTP_KEYSTORE)
+#include "otp_keystore.h"
+#endif
+
+#if defined(WOLFBOOT_HASH_SHA256)
+#include <wolfssl/wolfcrypt/sha256.h>
+#elif defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384)
+#include <wolfssl/wolfcrypt/sha512.h>
+#endif
 
 #define PLL_SRC_HSE 1
 
@@ -149,6 +160,124 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         hal_tz_release_nonsecure_area();
     }
 #endif
+    return 0;
+}
+
+#define STM32H5_BSEC_BASE 0x46009000u
+#define STM32H5_BSEC_UID0 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x14))
+#define STM32H5_BSEC_UID1 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x18))
+#define STM32H5_BSEC_UID2 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x1C))
+
+#ifdef WOLFBOOT_UDS_OBKEYS
+__attribute__((weak)) int stm32h5_obkeys_read_uds(uint8_t *out, size_t out_len)
+{
+    (void)out;
+    (void)out_len;
+    return -1;
+}
+#endif
+
+static int uds_from_uid(uint8_t *out, size_t out_len)
+{
+    uint8_t uid[12];
+#if defined(WOLFBOOT_HASH_SHA256)
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    wc_Sha256 hash;
+#else
+    uint8_t digest[SHA384_DIGEST_SIZE];
+    wc_Sha384 hash;
+#endif
+    size_t copy_len;
+
+    uid[0] = (uint8_t)(STM32H5_BSEC_UID0 >> 0);
+    uid[1] = (uint8_t)(STM32H5_BSEC_UID0 >> 8);
+    uid[2] = (uint8_t)(STM32H5_BSEC_UID0 >> 16);
+    uid[3] = (uint8_t)(STM32H5_BSEC_UID0 >> 24);
+    uid[4] = (uint8_t)(STM32H5_BSEC_UID1 >> 0);
+    uid[5] = (uint8_t)(STM32H5_BSEC_UID1 >> 8);
+    uid[6] = (uint8_t)(STM32H5_BSEC_UID1 >> 16);
+    uid[7] = (uint8_t)(STM32H5_BSEC_UID1 >> 24);
+    uid[8] = (uint8_t)(STM32H5_BSEC_UID2 >> 0);
+    uid[9] = (uint8_t)(STM32H5_BSEC_UID2 >> 8);
+    uid[10] = (uint8_t)(STM32H5_BSEC_UID2 >> 16);
+    uid[11] = (uint8_t)(STM32H5_BSEC_UID2 >> 24);
+
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_InitSha256(&hash);
+    wc_Sha256Update(&hash, uid, sizeof(uid));
+    wc_Sha256Final(&hash, digest);
+    copy_len = sizeof(digest);
+#else
+    wc_InitSha384(&hash);
+    wc_Sha384Update(&hash, uid, sizeof(uid));
+    wc_Sha384Final(&hash, digest);
+    copy_len = sizeof(digest);
+#endif
+
+    if (copy_len > out_len) {
+        copy_len = out_len;
+    }
+    memcpy(out, digest, copy_len);
+    return 0;
+}
+
+static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++) {
+        if (buf[i] != value) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+#if defined(FLASH_OTP_KEYSTORE)
+    uint8_t uds[OTP_UDS_LEN];
+#endif
+
+    if (out == NULL || out_len == 0) {
+        return -1;
+    }
+
+#ifdef WOLFBOOT_UDS_OBKEYS
+    if (stm32h5_obkeys_read_uds(out, out_len) == 0) {
+        return 0;
+    }
+#endif
+
+#if defined(FLASH_OTP_KEYSTORE)
+    if (hal_flash_otp_read(FLASH_OTP_BASE + OTP_UDS_OFFSET,
+                           uds, sizeof(uds)) == 0) {
+        if (!buffer_is_all_value(uds, sizeof(uds), 0xFF) &&
+            !buffer_is_all_value(uds, sizeof(uds), 0x00)) {
+            size_t copy_len = sizeof(uds);
+            if (copy_len > out_len) {
+                copy_len = out_len;
+            }
+            memcpy(out, uds, copy_len);
+            return 0;
+        }
+    }
+#endif
+
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+    return uds_from_uid(out, out_len);
+#else
+    return -1;
+#endif
+}
+
+int hal_attestation_get_lifecycle(uint32_t *lifecycle)
+{
+    if (lifecycle == NULL) {
+        return -1;
+    }
+
+    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
     return 0;
 }
 

@@ -1,7 +1,6 @@
-/* arm_tee_ns_interface.h
+/* hal_trng_psa.c
  *
- * ARM TEE NS interface helpers for PSA client dispatch.
- *
+ * PSA-backed entropy for bare-metal test-app.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -21,25 +20,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef WOLFBOOT_ARM_TEE_NS_INTERFACE_H_
-#define WOLFBOOT_ARM_TEE_NS_INTERFACE_H_
-
 #include <stdint.h>
+#include "psa/crypto.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+int hal_trng_get_entropy(unsigned char *out, unsigned len)
+{
+    psa_status_t status;
 
-typedef int32_t (*arm_tee_veneer_fn)(uint32_t arg0, uint32_t arg1,
-    uint32_t arg2, uint32_t arg3);
+    if (out == NULL || len == 0) {
+        return -1;
+    }
 
-int32_t arm_tee_ns_interface_dispatch(arm_tee_veneer_fn fn,
-    uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t arg3);
-
-uint32_t arm_tee_ns_interface_init(void);
-
-#ifdef __cplusplus
+    status = psa_generate_random(out, len);
+    return (status == PSA_SUCCESS) ? 0 : -1;
 }
-#endif
-
-#endif /* WOLFBOOT_ARM_TEE_NS_INTERFACE_H_ */

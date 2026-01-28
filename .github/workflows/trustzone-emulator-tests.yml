@@ -8,7 +8,7 @@ jobs:
   trustzone-emulator-tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/danielinux/m33mu-ci:1.2
+      image: ghcr.io/danielinux/m33mu-ci:1.3
     steps:
       - uses: actions/checkout@v4
 
@@ -48,3 +48,20 @@ jobs:
         working-directory: test-app/emu-test-apps
         run: |
           TARGET=stm32l5 ./test.sh
+
+      - name: Clean and build test with DICE attestation (stm32h5)
+        run: |
+          make clean distclean
+          cp config/examples/stm32h5-tz-psa.config .config
+          make
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 300
+
+      - name: Clean and build test with DICE attestation + OTP (stm32h5)
+        run: |
+          make clean distclean
+          cp config/examples/stm32h5-tz-psa-otp.config .config
+          make
+          make -C tools/keytools/otp TARGET=stm32h5 otp-keystore-primer.bin otp-keystore-gen
+          ./tools/keytools/otp/otp-keystore-gen
+          m33mu tools/keytools/otp/otp-keystore-primer.bin --persist --timeout 10 || true
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 300 --persist

@@ -130,7 +130,6 @@ int uart_tx(const uint8_t c)
 int uart_rx(uint8_t *c)
 {
     volatile uint32_t reg;
-    int i = 0;
     reg = UART_ISR(USE_UART);
     if (reg & (UART_ENE | UART_EPE | UART_ORE | UART_EFE))
         uart_clear_errors(USE_UART);

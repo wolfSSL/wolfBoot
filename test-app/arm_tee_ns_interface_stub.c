@@ -1,7 +1,7 @@
-/* arm_tee_ns_interface.h
+/* arm_tee_ns_interface_stub.c
  *
- * ARM TEE NS interface helpers for PSA client dispatch.
- *
+ * Minimal non-Zephyr dispatcher for bare-metal test-app.
+ *  
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -21,25 +21,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef WOLFBOOT_ARM_TEE_NS_INTERFACE_H_
-#define WOLFBOOT_ARM_TEE_NS_INTERFACE_H_
-
-#include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-typedef int32_t (*arm_tee_veneer_fn)(uint32_t arg0, uint32_t arg1,
-    uint32_t arg2, uint32_t arg3);
+#include "arm_tee_ns_interface.h"
+#include "psa/error.h"
+#include <stddef.h>
 
 int32_t arm_tee_ns_interface_dispatch(arm_tee_veneer_fn fn,
-    uint32_t arg0, uint32_t arg1, uint32_t arg2, uint32_t arg3);
+                                      uint32_t arg0, uint32_t arg1,
+                                      uint32_t arg2, uint32_t arg3)
+{
+    if (fn == NULL) {
+        return (int32_t)PSA_ERROR_INVALID_ARGUMENT;
+    }
 
-uint32_t arm_tee_ns_interface_init(void);
-
-#ifdef __cplusplus
+    return fn(arg0, arg1, arg2, arg3);
 }
-#endif
 
-#endif /* WOLFBOOT_ARM_TEE_NS_INTERFACE_H_ */
+uint32_t arm_tee_ns_interface_init(void)
+{
+    return PSA_SUCCESS;
+}
