@@ -13,9 +13,9 @@ ENTRY( _reset )
 /* Memory areas */
 MEMORY
 {
-  /* TODO: Configure actual memory regions based on PolarFire SoC memory map */
-  /* Application typically runs from DDR or LSRAM */
-  IRAM  (rx)    :ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
+  /* For RAM boot (NO_XIP), use WOLFBOOT_LOAD_ADDRESS for execution
+   * For XIP boot, use WOLFBOOT_TEST_APP_ADDRESS (partition + header) */
+  IRAM  (rx)    :ORIGIN = @WOLFBOOT_LOAD_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
   DDR    (rwx)   :ORIGIN = 0x80000000, LENGTH = 1M
   LSRAM  (rwx)   :ORIGIN = 0x08000000, LENGTH = 128K
 }
@@ -52,7 +52,7 @@ SECTIONS
   /* used by the startup to initialize data */
   _stored_data = LOADADDR(.data);
 
-  /* Initialized data sections transported to RAM */
+  /* Initialized data sections - keep in same region as code for RAM boot */
   .data :
   {
     . = ALIGN(8);
@@ -64,7 +64,10 @@ SECTIONS
 
     . = ALIGN(8);
     _end_data = .;     /* define a global symbol at data end */
-  } >LSRAM AT> IRAM
+  } >IRAM
+
+  /* use from libwolfboot.c */
+  _stored_data = _start_data;
 
   /* Uninitialized data section */
   /* Mark as NOLOAD so it's not included in binary (zero-initialized at runtime) */
@@ -81,7 +84,7 @@ SECTIONS
     . = ALIGN(8);
     _end_bss = .;         /* define a global symbol at bss end */
     __bss_end__ = _end_bss;
-  } >LSRAM
+  } >IRAM
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   /* Mark as NOLOAD so it's not included in binary (zero-initialized at runtime) */
@@ -96,7 +99,7 @@ SECTIONS
     . = ALIGN(8);
     PROVIDE ( END_STACK = . );
     PROVIDE ( _end_stack = . );
-  } >LSRAM
+  } >IRAM
 
   /* Global pointer for RISC-V */
   . = ALIGN(8);

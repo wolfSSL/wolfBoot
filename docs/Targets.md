@@ -859,6 +859,46 @@ sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 
 Note:
 
+### PolarFire SoC QSPI
+
+PolarFire QSPI can be accessed in two ways. The selection is made at build time and affects how wolfBoot
+talks to the flash:
+
+```text
+            +-------------------+                         +----------------------+
+            |      U54 cores    |                         |      U54 cores       |
+            |      (wolfBoot)   |                         |      (wolfBoot)      |
+            +---------+---------+                         +----------+-----------+
+                      |                                              |
+                      | direct QSPI controller                       | SCB mailbox service
+                      | (MSS QSPI @ 0x2100_0000)                     | (System Controller)
+                      v                                              v
+            +-------------------+                         +----------------------+
+            |  MSS QSPI IP      |                         |  System Controller   |
+            +---------+---------+                         +----------+-----------+
+                      |                                              |
+                      v                                              v
+              External QSPI flash                           Fabric-connected flash
+```
+
+Build options:
+
+- MSS QSPI controller (direct, read/write/erase)
+  - `EXT_FLASH=1`
+  - Do not set `MPFS_SC_SPI`
+  - Example config: `config/examples/polarfire_mpfs250_qspi.config` with `CFLAGS_EXTRA` line removed.
+
+- System Controller SPI services (fabric flash via SCB mailbox, read-only)
+  - `EXT_FLASH=1`
+  - `CFLAGS_EXTRA+=-DMPFS_SC_SPI`
+  - Example config: `config/examples/polarfire_mpfs250_qspi.config` as-is.
+
+Notes:
+- For QSPI-based boot flows, disable SD/eMMC in the config (`DISK_SDCARD=0`, `DISK_EMMC=0`) unless you
+  explicitly want wolfBoot to load from disk and the application from QSPI.
+- The MSS QSPI path expects external flash on the MSS QSPI pins; the System Controller path matches
+  HSS access to the design flash via the SCB mailbox.
+
 ### PolarFire testing
 
 This section describes how to build the test-application, create a custom uSD with required partitions and copying signed test-application to uSD partitions.

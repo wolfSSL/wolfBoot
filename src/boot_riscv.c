@@ -301,7 +301,7 @@ void do_boot(const uint32_t *app_offset)
 #if __riscv_xlen == 64
 #ifdef MMU
     asm volatile(
-    #ifdef WOLFBOOT_RISCV_SMODE
+    #ifndef WOLFBOOT_RISCV_MMODE
         "csrw satp, zero\n"
         "sfence.vma\n"
     #endif
