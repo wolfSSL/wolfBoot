@@ -28,6 +28,7 @@ BIG_ENDIAN?=0
 USE_GCC?=1
 USE_GCC_HEADLESS?=1
 FLASH_OTP_KEYSTORE?=0
+SUPPORT_DEV_BOARD?=0
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 OBJS:= \
@@ -162,6 +163,12 @@ include arch.mk
 
 # Parse config options
 include options.mk
+
+ifeq ($(SUPPORT_DEV_BOARD),1)
+    ifeq ($(TARGET),nrf54lm20)
+	     OBJS+=./hal/nrf54lm20_dk.o
+    endif
+endif
 
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
