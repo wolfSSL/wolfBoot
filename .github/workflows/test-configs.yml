@@ -125,10 +125,11 @@ jobs:
       config-file: ./config/examples/library.config
 
   lpc54606j512_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/lpc54606j512.config
+      board-name: lpcxpresso55s06
 
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml
