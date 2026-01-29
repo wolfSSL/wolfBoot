@@ -425,9 +425,9 @@ ifeq ($(TARGET),imx_rt)
       $(MCUXPRESSO)/drivers/common/fsl_common.o \
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o \
-      $(MCUXPRESSO)/utilities/str/fsl_str.o \
       $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o \
-      $(MCUXPRESSO)/utilities/debug_console/fsl_debug_console.o
+      $(MCUXPRESSO)/components/str/fsl_str.o \
+      $(MCUXPRESSO)/components/debug_console/fsl_debug_console.o
   else
     APP_OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o \
@@ -441,27 +441,52 @@ ifeq ($(TARGET),imx_rt)
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1042XJM5B)
-    CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
-            -I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1040/project_template \
+              -I$(MCUXPRESSO)/examples/_boards/evkmimxrt1040/xip/
+    else
+      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+              -I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+    endif
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1042.o
   else ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
-    CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
-            -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbimxrt1050/project_template \
+              -I$(MCUXPRESSO)/examples/_boards/evkbimxrt1050/xip/
+    else
+      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+              -I$(MCUXPRESSO)/boards/evkmimxrt1050/xip/
+    endif
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1052.o
   else
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
-      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
-              -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+      ifeq ($(MCUXSDK),1)
+        CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1060/project_template \
+                -I$(MCUXPRESSO)/examples/_boards/evkmimxrt1060/xip/
+      else
+        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+                -I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+      endif
       APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
     endif
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6B)
-      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
-              -I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
+      ifeq ($(MCUXSDK),1)
+        CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/project_template \
+                -I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/xip/
+      else
+        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+                -I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
+      endif
       APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1062.o
     endif
     ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
-      CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
-              -I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+      ifeq ($(MCUXSDK),1)
+        CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1064/project_template \
+                -I$(MCUXPRESSO)/examples/_boards/evkmimxrt1064/xip/
+      else
+        CFLAGS+=-I$(MCUXPRESSO_DRIVERS)/project_template/ \
+                -I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+      endif
       APP_OBJS+=$(MCUXPRESSO_DRIVERS)/system_MIMXRT1064.o
     endif
   endif

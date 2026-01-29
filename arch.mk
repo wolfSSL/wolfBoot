@@ -821,8 +821,12 @@ ifeq ($(TARGET),imx_rt)
 
   ifeq ($(MCUXSDK),1)
     CFLAGS+=\
-      -I$(MCUXPRESSO)/utilities/str \
-      -I$(MCUXPRESSO)/utilities/debug_console
+      -I$(MCUXPRESSO_DRIVERS)/../periph \
+      -I$(MCUXPRESSO)/components/debug_console \
+      -I$(MCUXPRESSO)/components/debug_console/config \
+      -I$(MCUXPRESSO)/components/lists \
+      -I$(MCUXPRESSO)/components/str
+    CFLAGS+=-DDCB=CoreDebug -DDCB_DEMCR_TRCENA_Msk=CoreDebug_DEMCR_TRCENA_Msk
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO)/drivers/flexspi/fsl_flexspi.o \
@@ -851,32 +855,74 @@ ifeq ($(TARGET),imx_rt)
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
     ARCH_FLASH_OFFSET=0x70000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1064/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1064
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1064/project_template
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1064/xip/
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6A)
     ARCH_FLASH_OFFSET=0x60000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+    ifeq ($(MCUXSDK),1)
+      # Use evkbmimxrt1060 because evkmimxrt1060 is not supported by the SDK
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/project_template
+      CFLAGS+=-I$(MCUXPRESSO)/devices/RT/RT1050/MIMXRT1052
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1062DVL6B)
     ARCH_FLASH_OFFSET=0x60000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/project_template
+      CFLAGS+=-I$(MCUXPRESSO)/devices/RT/RT1050/MIMXRT1052
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkbmimxrt1060/xip/
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1061CVJ5B)
     ARCH_FLASH_OFFSET=0x60000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+    ifeq ($(MCUXSDK),1)
+      # Use evkbmimxrt1060 because evkmimxrt1060 is not supported by the SDK
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbmimxrt1060/project_template
+      CFLAGS+=-I$(MCUXPRESSO)/devices/RT/RT1050/MIMXRT1052
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1060/xip/
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1052DVJ6B)
     ARCH_FLASH_OFFSET=0x60000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkbimxrt1050/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbimxrt1050/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbimxrt1050
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkbimxrt1050/project_template
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkbimxrt1050/xip/
+    endif
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1042XJM5B)
     ARCH_FLASH_OFFSET=0x60000000
-    CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+    ifeq ($(MCUXSDK),1)
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1040/xip/
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1040
+      CFLAGS+=-I$(MCUXPRESSO)/examples/_boards/evkmimxrt1040/project_template
+      CFLAGS+=-I$(MCUXPRESSO)/devices/RT/RT1050/MIMXRT1052
+    else
+      CFLAGS+=-I$(MCUXPRESSO)/boards/evkmimxrt1040/xip/
+    endif
   endif
 
   ifeq ($(PKA),1)

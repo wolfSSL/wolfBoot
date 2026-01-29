@@ -40,7 +40,7 @@
 #define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1062DVL6A
-#include "evkmimxrt1060_flexspi_nor_config.h"
+#include "evkbmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1062DVL6B
@@ -48,7 +48,7 @@
 #define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1061CVJ5B
-#include "evkmimxrt1060_flexspi_nor_config.h"
+#include "evkbmimxrt1060_flexspi_nor_config.h"
 #define USE_GET_CONFIG
 #endif
 #ifdef CPU_MIMXRT1052DVJ6B

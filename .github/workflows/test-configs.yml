@@ -42,74 +42,85 @@ jobs:
       config-file: ./config/examples/same51-dualbank.config
 
   imx_rt1040_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1040.config
+      board-name: evkmimxrt1040
 
   imx_rt1050_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1050.config
+      board-name: evkbimxrt1050
 
   imx_rt1060_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1060.config
+      board-name: evkbmimxrt1060
 
   imx_rt1064_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1064.config
+      board-name: evkmimxrt1064
 
   imx_rt1040_test_pka:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1040.config
+      board-name: evkmimxrt1040
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1050_test_pka:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1050.config
+      board-name: evkbimxrt1050
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1060_test_pka:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1060.config
+      board-name: evkbmimxrt1060
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1064_test_pka:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1064.config
+      board-name: evkmimxrt1064
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1060_hab_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1060_hab.config
+      board-name: evkbmimxrt1060
 
   kinetis_k64f_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/kinetis-k64f.config
+      board-name: frdmk64f
 
   kinetis_k82f_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/kinetis-k82f.config
+      board-name: frdmk82f
 
   library_test:
     uses: ./.github/workflows/test-build.yml

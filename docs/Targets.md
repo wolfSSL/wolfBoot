@@ -2683,15 +2683,15 @@ wolfBoot support for iMX-RT1060/iMX-RT1050 has been tested using MCUXpresso SDK 
 DCP support (hardware acceleration for SHA256 operations) can be enabled by using PKA=1 in the configuration file.
 
 You can also get the SDK and CMSIS bundles using these repositories:
-* https://github.com/nxp-mcuxpresso/mcux-sdk
+* https://github.com/nxp-mcuxpresso/mcuxsdk-manifests
 * https://github.com/nxp-mcuxpresso/CMSIS_5
 Use MCUXSDK=1 with this option, since the pack paths are different.
 
 Example:
 ```
 MCUXSDK?=1
-MCUXPRESSO?=$(PWD)/../mcux-sdk
-MCUXPRESSO_DRIVERS?=$(MCUXPRESSO)/devices/MIMXRT1062
+MCUXPRESSO?=$(PWD)/../NXP/mcuxpresso-sdk/mcuxsdk
+MCUXPRESSO_DRIVERS?=$(MCUXPRESSO)/devices/RT/RT1060/MIMXRT1062
 MCUXPRESSO_CMSIS?="$(PWD)/../CMSIS_5/CMSIS"
 ```
 
