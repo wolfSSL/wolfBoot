@@ -3220,8 +3220,27 @@ thread break: Stopped, 0x0, 0x0, cpuPowerPCBig,  Connected (state, tid, pid, cpu
 NXP MCXA153 is a Cortex-M33 microcontroller running at 96MHz.
 The support has been tested using FRDM-MCXA153 with the onboard MCU-Link configured in JLink mode.
 
-This requires the MCXA SDK from the NXP MCUXpresso SDK Builder. We tested using `SDK_2.14.2_MCXA153` and placed into `../NXP/MCXA153` by default (see .config or set with `MCUXPRESSO`).
-MCUXpresso SDK Builder
+This requires the [NXP MCUXpresso SDK](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests),
+placed into `../NXP/mcuxpresso-sdk` by default (see .config or set with
+`MCUXPRESSO`).
+
+To set up the MCUXpresso SDK:
+
+```
+cd ../NXP
+
+# Install west
+python -m venv west-venv
+source west-venv/bin/activate
+pip install west
+
+# Set up the repository
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update_board --set board frdmmcxa153
+
+deactivate
+```
 
 ### MCX A: Configuring and compiling
 
@@ -3307,8 +3326,28 @@ c
 NXP MCXW716 is a Cortex-M33 microcontroller running at 96MHz.
 The support has been tested using FRDM-MCXW716 with the onboard MCU-Link configured in JLink mode.
 
-This requires the MCXW SDK from the NXP MCUXpresso SDK Builder. We tested using [mcux-sdk](https://github.com/nxp-mcuxpresso/mcux-sdk) and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5)
-placed under "../NXP". Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file according to your paths.
+This requires the NXP MCUXpresso SDK. We tested using [mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests)
+and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
+Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file
+according to your paths.
+
+To set up the MCUXpresso SDK:
+
+```
+cd ../NXP
+
+# Install west
+python -m venv west-venv
+source west-venv/bin/activate
+pip install west
+
+# Set up the repository
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update_board --set board frdmmcxw71
+
+deactivate
+```
 
 ### MCX W: Configuring and compiling
 

@@ -351,7 +351,7 @@ endif
 
 ifeq ($(TARGET),mcxa)
     LSCRIPT_TEMPLATE=ARM-mcxa.ld
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
+    APP_OBJS+=$(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
@@ -378,9 +378,9 @@ ifeq ($(TARGET),mcxw)
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/spc/fsl_spc.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
+    APP_OBJS+=$(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
     APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/romapi/fsl_romapi.o
     LDFLAGS+=--specs=nosys.specs
 endif
 

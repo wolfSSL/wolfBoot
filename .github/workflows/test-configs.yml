@@ -199,22 +199,25 @@ jobs:
       make-args: CROSS_COMPILE=aarch64-linux-gnu-
 
   nxp_mcxa_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/mcxa.config
+      board-name: frdmmcxa153
 
   nxp_mcxw_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/mcxw.config
+      board-name: frdmmcxw71
 
   nxp_mcxw_tz_test:
-    uses: ./.github/workflows/test-build-mcux-sdk.yml
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/mcxw-tz.config
+      board-name: frdmmcxw71
 
   nxp_mcxn_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml

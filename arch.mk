@@ -689,6 +689,8 @@ ifeq ($(TARGET),mcxa)
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
       -I$(MCUXPRESSO_DRIVERS)/drivers/common \
+      -I$(MCUXPRESSO_DRIVERS)/drivers/romapi \
+      -I$(MCUXPRESSO_DRIVERS)/../periph \
       -I$(MCUXPRESSO)/drivers \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO_CMSIS)/Include \
@@ -707,7 +709,7 @@ ifeq ($(TARGET),mcxa)
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO)/drivers/mcx_spc/fsl_spc.o \
-	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
 endif
 
 ifeq ($(TARGET),mcxw)
@@ -718,7 +720,8 @@ ifeq ($(TARGET),mcxw)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
-	  -I$(MCUXPRESSO_DRIVERS)/periph2 \
+      -I$(MCUXPRESSO_DRIVERS)/drivers/romapi \
+      -I$(MCUXPRESSO_DRIVERS)/../periph2 \
       -I$(MCUXPRESSO)/drivers \
       -I$(MCUXPRESSO)/drivers/flash_k4 \
       -I$(MCUXPRESSO)/drivers/ccm32k \
@@ -739,9 +742,9 @@ ifeq ($(TARGET),mcxw)
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO)/drivers/spc/fsl_spc.o \
-	  $(MCUXPRESSO_DRIVERS)/project_template/clock_config.o \
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
       $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_romapi.o
+      $(MCUXPRESSO_DRIVERS)/drivers/romapi/fsl_romapi.o
 endif
 
 ifeq ($(TARGET),mcxn)
@@ -987,22 +990,34 @@ ifeq ($(TARGET),ti_hercules)
 endif
 
 ifeq ($(TARGET),lpc)
-  CFLAGS+=\
-      -I$(MCUXPRESSO_DRIVERS) \
-      -I$(MCUXPRESSO_DRIVERS)/drivers \
-      -I$(MCUXPRESSO)/drivers \
-      -I$(MCUXPRESSO)/drivers/common \
-      -I$(MCUXPRESSO_CMSIS)/Include \
-      -I$(MCUXPRESSO_CMSIS)/Core/Include
-  CFLAGS+=\
-      -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  OBJS+=\
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
-  LIBS+=\
-      $(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a
   ifeq ($(MCUXSDK),1)
+    # Some targets in the SDK use drivers from a different target
+    MCUXPRESSO_DRIVERS_SHARED?=$(MCUXPRESSO_DRIVERS)
+    ifneq (,$(filter LPC54628%,$(MCUXPRESSO_CPU)))
+      MCUXPRESSO_DRIVERS_SHARED=$(MCUXPRESSO)/devices/LPC/LPC54000/LPC54628
+    else ifneq (,$(filter LPC54605% LPC54606% LPC54607% LPC54608% LPC54616% LPC54618%,$(MCUXPRESSO_CPU)))
+      MCUXPRESSO_DRIVERS_SHARED=$(MCUXPRESSO)/devices/LPC/LPC54000/LPC54608
+    else ifneq (,$(filter LPC54018M% LPC54S018M%,$(MCUXPRESSO_CPU)))
+      MCUXPRESSO_DRIVERS_SHARED=$(MCUXPRESSO)/devices/LPC/LPC54000/LPC54S018M
+    else ifneq (,$(filter LPC54005% LPC54016% LPC54018% LPC54S005% LPC54S016% LPC54S018%,$(MCUXPRESSO_CPU)))
+      MCUXPRESSO_DRIVERS_SHARED=$(MCUXPRESSO)/devices/LPC/LPC54000/LPC54S018
+    endif
+    CFLAGS+=\
+        -I$(MCUXPRESSO_DRIVERS) \
+        -I$(MCUXPRESSO_DRIVERS_SHARED)/drivers \
+        -I$(MCUXPRESSO_DRIVERS)/../periph \
+        -I$(MCUXPRESSO)/drivers \
+        -I$(MCUXPRESSO)/drivers/common \
+        -I$(MCUXPRESSO)/drivers/flashiap \
+        -I$(MCUXPRESSO_CMSIS)/Include \
+        -I$(MCUXPRESSO_CMSIS)/Core/Include
+    CFLAGS+=\
+        -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
+    CFLAGS+=-DDCB=CoreDebug -DDCB_DEMCR_TRCENA_Msk=CoreDebug_DEMCR_TRCENA_Msk
+    OBJS+=\
+        $(MCUXPRESSO_DRIVERS_SHARED)/drivers/fsl_clock.o \
+        $(MCUXPRESSO_DRIVERS_SHARED)/drivers/fsl_power.o \
+        $(MCUXPRESSO_DRIVERS_SHARED)/drivers/fsl_reset.o
     CFLAGS+=\
       -I$(MCUXPRESSO)/drivers/flashiap \
       -I$(MCUXPRESSO)/drivers/flexcomm
@@ -1013,11 +1028,26 @@ ifeq ($(TARGET),lpc)
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o \
       $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o
   else
+    CFLAGS+=\
+        -I$(MCUXPRESSO_DRIVERS) \
+        -I$(MCUXPRESSO_DRIVERS)/drivers \
+        -I$(MCUXPRESSO)/drivers \
+        -I$(MCUXPRESSO)/drivers/common \
+        -I$(MCUXPRESSO_CMSIS)/Include \
+        -I$(MCUXPRESSO_CMSIS)/Core/Include
+    CFLAGS+=\
+        -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
     OBJS+=\
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o \
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
+    LIBS+=\
+        $(MCUXPRESSO_DRIVERS)/mcuxpresso/libpower_softabi.a
+    OBJS+=\
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_common.o \
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_flashiap.o \
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_usart.o \
+        $(MCUXPRESSO_DRIVERS)/drivers/fsl_flexcomm.o
   endif
 endif
 
