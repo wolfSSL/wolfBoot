@@ -857,8 +857,6 @@ The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a
 sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 ```
 
-Note:
-
 ### PolarFire SoC QSPI
 
 PolarFire QSPI can be accessed in two ways. The selection is made at build time and affects how wolfBoot

@@ -118,6 +118,18 @@
 })
 
 /* ============================================================================
+ * Cache / I-Cache Sync Helpers
+ * ============================================================================ */
+#ifndef __ASSEMBLER__
+static inline void riscv_icache_sync(void)
+{
+#ifdef __riscv_zifencei
+    __asm__ __volatile__("fence.i" ::: "memory");
+#endif
+}
+#endif /* !__ASSEMBLER__ */
+
+/* ============================================================================
  * Interrupt Numbers (for SIE/SIP and MIE/MIP registers)
  * ============================================================================ */
 #define IRQ_U_SOFT   0   /* User software interrupt */
@@ -279,4 +291,3 @@ extern void plic_dispatch_irq(uint32_t irq);
 #endif /* PLIC_BASE && !__ASSEMBLER__ */
 
 #endif /* RISCV_H */
-

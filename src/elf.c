@@ -29,6 +29,10 @@
 #include "elf.h"
 #include "hal.h"
 
+#ifdef __riscv
+#include "hal/riscv.h"
+#endif
+
 #ifdef ARCH_PPC
 #include "hal/nxp_ppc.h"
 #endif
@@ -151,8 +155,8 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
         #ifdef ARCH_PPC
             flush_cache(paddr, mem_size);
         #endif
-        #ifdef __riscv_zifencei
-            asm volatile("fence.i" ::: "memory");
+        #ifdef __riscv
+            riscv_icache_sync();
         #endif
         }
     #ifdef DEBUG_ELF

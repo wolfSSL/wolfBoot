@@ -176,6 +176,27 @@
 #define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
 #define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
 
+/* ============================================================================
+ * System Controller Mailbox API (public)
+ * ============================================================================ */
+#ifndef __ASSEMBLER__
+/* Returns non-zero if mailbox is busy */
+int mpfs_scb_is_busy(void);
+
+/* Wait until mailbox is ready (busy cleared). Returns 0 on success. */
+int mpfs_scb_wait_ready(uint32_t timeout);
+
+/* Read mailbox bytes into buffer. Returns 0 on success. */
+int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len);
+
+/* Execute a system service command with optional mailbox payload. */
+int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data, uint32_t mb_len);
+/* Execute a system service command with explicit timeouts. */
+int mpfs_scb_service_call_timeout(uint8_t opcode, const uint8_t *mb_data,
+                                  uint32_t mb_len, uint32_t req_timeout,
+                                  uint32_t busy_timeout);
+#endif /* __ASSEMBLER__ */
+
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
@@ -376,4 +397,3 @@ int qspi_enter_4byte_mode(void);
 
 
 #endif /* MPFS250_DEF_INCLUDED */
-

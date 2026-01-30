@@ -74,16 +74,115 @@ void hal_init(void)
  * and responses are read from the mailbox RAM.
  * ============================================================================ */
 
-/**
- * mpfs_scb_mailbox_busy - Check if the system controller mailbox is busy
- *
- * Returns: non-zero if busy, 0 if ready
- */
-static int mpfs_scb_mailbox_busy(void)
+int mpfs_scb_is_busy(void)
 {
     return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
 }
 
+int mpfs_scb_wait_ready(uint32_t timeout)
+{
+    while (mpfs_scb_is_busy() && timeout > 0) {
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len)
+{
+    uint32_t i;
+
+    if (out == NULL) {
+        return -1;
+    }
+
+    for (i = 0; i < len; i++) {
+        out[i] = SCBMBOX_BYTE(i);
+    }
+
+    return 0;
+}
+
+static void mpfs_scb_write_mailbox(const uint8_t *data, uint32_t len)
+{
+    uint32_t i = 0;
+
+    if (data == NULL || len == 0) {
+        return;
+    }
+
+    /* Write full words (little-endian) */
+    while (i + 4 <= len) {
+        uint32_t word = ((uint32_t)data[i]) |
+                        ((uint32_t)data[i + 1] << 8) |
+                        ((uint32_t)data[i + 2] << 16) |
+                        ((uint32_t)data[i + 3] << 24);
+        SCBMBOX_REG(i) = word;
+        i += 4;
+    }
+
+    /* Write remaining bytes */
+    while (i < len) {
+        SCBMBOX_BYTE(i) = data[i];
+        i++;
+    }
+}
+
+static int mpfs_scb_wait_req_clear(uint32_t timeout)
+{
+    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) &&
+           timeout > 0) {
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        return -1;
+    }
+    return 0;
+}
+
+int mpfs_scb_service_call_timeout(uint8_t opcode, const uint8_t *mb_data,
+                                  uint32_t mb_len, uint32_t req_timeout,
+                                  uint32_t busy_timeout)
+{
+    uint32_t cmd;
+    uint32_t status;
+
+    if (mpfs_scb_is_busy()) {
+        return -1;
+    }
+
+    if (mb_data && mb_len > 0) {
+        mpfs_scb_write_mailbox(mb_data, mb_len);
+    }
+
+    cmd = ((opcode & 0x7F) << SERVICES_CR_COMMAND_SHIFT) |
+          SERVICES_CR_REQ_MASK;
+    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
+
+    if (mpfs_scb_wait_req_clear(req_timeout) < 0) {
+        return -2;
+    }
+
+    if (mpfs_scb_wait_ready(busy_timeout) < 0) {
+        return -3;
+    }
+
+    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
+    if (status != 0) {
+        return -4;
+    }
+
+    return 0;
+}
+
+int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data, uint32_t mb_len)
+{
+    return mpfs_scb_service_call_timeout(opcode, mb_data, mb_len, 10000, 10000);
+}
 /**
  * mpfs_read_serial_number - Read the device serial number via system services
  * @serial: Buffer to store the 16-byte device serial number
@@ -95,55 +194,22 @@ static int mpfs_scb_mailbox_busy(void)
  */
 static int mpfs_read_serial_number(uint8_t *serial)
 {
-    uint32_t cmd, status;
-    int i, timeout;
+    int ret;
 
     if (serial == NULL) {
         return -1;
     }
 
-    /* Check if mailbox is busy */
-    if (mpfs_scb_mailbox_busy()) {
-        wolfBoot_printf("SCB mailbox busy\n");
-        return -2;
+    ret = mpfs_scb_service_call(SYS_SERV_CMD_SERIAL_NUMBER, NULL, 0);
+    if (ret != 0) {
+        wolfBoot_printf("SCB mailbox error: %d\n", ret);
+        return ret;
     }
 
-    /* Send serial number request command (opcode 0x00)
-     * Command format: [31:16] = opcode, [0] = request bit */
-    cmd = (SYS_SERV_CMD_SERIAL_NUMBER << SERVICES_CR_COMMAND_SHIFT) |
-          SERVICES_CR_REQ_MASK;
-    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
-
-    /* Wait for request bit to clear (command accepted) */
-    timeout = 10000;
-    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && timeout > 0) {
-        timeout--;
-    }
-    if (timeout == 0) {
-        wolfBoot_printf("SCB mailbox request timeout\n");
-        return -3;
-    }
-
-    /* Wait for busy bit to clear (command completed) */
-    timeout = 10000;
-    while (mpfs_scb_mailbox_busy() && timeout > 0) {
-        timeout--;
-    }
-    if (timeout == 0) {
-        wolfBoot_printf("SCB mailbox busy timeout\n");
-        return -4;
-    }
-
-    /* Check status (upper 16 bits of status register) */
-    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
-    if (status != 0) {
-        wolfBoot_printf("SCB mailbox error: 0x%x\n", status);
-        return -5;
-    }
-
-    /* Read serial number from mailbox RAM (16 bytes) */
-    for (i = 0; i < DEVICE_SERIAL_NUMBER_SIZE; i++) {
-        serial[i] = SCBMBOX_BYTE(i);
+    /* Read serial number from mailbox RAM (16 bytes). */
+    ret = mpfs_scb_read_mailbox(serial, DEVICE_SERIAL_NUMBER_SIZE);
+    if (ret != 0) {
+        return ret;
     }
 
     return 0;
@@ -534,16 +600,33 @@ int qspi_enter_4byte_mode(void)
 /* Read from QSPI flash (4-byte addressing) */
 static int qspi_flash_read(uint32_t address, uint8_t *data, uint32_t len)
 {
+    const uint32_t max_chunk = 0xFFFF - 5; /* total_bytes is 16-bit, cmd is 5 */
     uint8_t cmd[5];
+    uint32_t remaining = len;
+    uint32_t chunk_len;
+    int ret;
 
-    /* Build 4-byte read command */
-    cmd[0] = QSPI_CMD_4BYTE_READ_OPCODE;
-    cmd[1] = (address >> 24) & 0xFF;
-    cmd[2] = (address >> 16) & 0xFF;
-    cmd[3] = (address >> 8) & 0xFF;
-    cmd[4] = address & 0xFF;
+    while (remaining > 0) {
+        chunk_len = (remaining > max_chunk) ? max_chunk : remaining;
 
-    return qspi_transfer_block(QSPI_MODE_READ, cmd, 5, data, len, 0);
+        /* Build 4-byte read command */
+        cmd[0] = QSPI_CMD_4BYTE_READ_OPCODE;
+        cmd[1] = (address >> 24) & 0xFF;
+        cmd[2] = (address >> 16) & 0xFF;
+        cmd[3] = (address >> 8) & 0xFF;
+        cmd[4] = address & 0xFF;
+
+        ret = qspi_transfer_block(QSPI_MODE_READ, cmd, 5, data, chunk_len, 0);
+        if (ret != 0) {
+            return ret;
+        }
+
+        address += chunk_len;
+        data += chunk_len;
+        remaining -= chunk_len;
+    }
+
+    return len;
 }
 
 /* Write to QSPI flash - single page (max 256 bytes) */
@@ -629,16 +712,7 @@ static int qspi_flash_sector_erase(uint32_t address)
  */
 static int sc_spi_copy(uint64_t dest_addr, uint32_t flash_addr, uint32_t len)
 {
-    uint32_t cmd;
-    uint32_t status;
-    int timeout;
     uint8_t mb_data[20];  /* 17 bytes needed, aligned to 20 */
-
-    /* Check if System Controller is busy */
-    if (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK) {
-        wolfBoot_printf("SC: Busy\n");
-        return -1;
-    }
 
     /* Prepare mailbox data for SPI_COPY service (17 bytes):
      * Bytes 0-7:   destination address (64-bit)
@@ -663,47 +737,8 @@ static int sc_spi_copy(uint64_t dest_addr, uint32_t flash_addr, uint32_t len)
     mb_data[14] = (len >> 16) & 0xFF;
     mb_data[15] = (len >> 24) & 0xFF;
     mb_data[16] = SPI_COPY_OPT_13MHZ;  /* Use 13.33MHz (safest) */
-
-    /* Write mailbox data (word-aligned writes) */
-    SCBMBOX_REG(0)  = *(uint32_t*)&mb_data[0];
-    SCBMBOX_REG(4)  = *(uint32_t*)&mb_data[4];
-    SCBMBOX_REG(8)  = *(uint32_t*)&mb_data[8];
-    SCBMBOX_REG(12) = *(uint32_t*)&mb_data[12];
-    SCBMBOX_REG(16) = mb_data[16];  /* Last byte (options) */
-
-    /* Build and send service command:
-     * Bits 0-6:   opcode (0x50 for SPI_COPY)
-     * Bits 7-15:  mailbox offset (0)
-     * Bit 0 of CR: REQ (request bit)
-     */
-    cmd = ((SYS_SERV_CMD_SPI_COPY & 0x7F) << SERVICES_CR_COMMAND_SHIFT) |
-          SERVICES_CR_REQ_MASK;
-    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
-
-    /* Wait for REQ bit to clear (command accepted) */
-    timeout = 100000;
-    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && --timeout);
-    if (timeout == 0) {
-        wolfBoot_printf("SC: REQ timeout\n");
-        return -2;
-    }
-
-    /* Wait for BUSY bit to clear (command completed) */
-    timeout = 10000000;  /* Long timeout for large transfers */
-    while ((SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK) && --timeout);
-    if (timeout == 0) {
-        wolfBoot_printf("SC: BUSY timeout\n");
-        return -3;
-    }
-
-    /* Check status (upper 16 bits of status register) */
-    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
-    if (status != 0) {
-        wolfBoot_printf("SC: Error 0x%x\n", status);
-        return -4;
-    }
-
-    return 0;
+    return mpfs_scb_service_call_timeout(SYS_SERV_CMD_SPI_COPY, mb_data, 17,
+                                         100000, 10000000);
 }
 #endif /* MPFS_SC_SPI */
 
@@ -732,18 +767,20 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     uint32_t page_offset;
     uint32_t chunk_len;
     int ret;
+    int remaining = len;
+    int total = len;
 
     #ifdef DEBUG_QSPI
     wolfBoot_printf("QSPI: Write 0x%x, len %d\n", (uint32_t)address, len);
     #endif
 
     /* Write data page by page */
-    while (len > 0) {
+    while (remaining > 0) {
         /* Calculate bytes to write in this page */
         page_offset = address & (FLASH_PAGE_SIZE - 1);
         chunk_len = FLASH_PAGE_SIZE - page_offset;
-        if (chunk_len > (uint32_t)len) {
-            chunk_len = len;
+        if (chunk_len > (uint32_t)remaining) {
+            chunk_len = remaining;
         }
 
         /* Write page */
@@ -755,10 +792,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         /* Update pointers */
         address += chunk_len;
         data += chunk_len;
-        len -= chunk_len;
+        remaining -= chunk_len;
     }
 
-    return 0;
+    return total;
 #endif /* MPFS_SC_SPI */
 }
 
@@ -796,6 +833,7 @@ int ext_flash_erase(uintptr_t address, int len)
     uint32_t sector_addr;
     uint32_t end_addr;
     int ret;
+    int total = len;
 
     #ifdef DEBUG_QSPI
     wolfBoot_printf("QSPI: Erase 0x%x, len %d\n", (uint32_t)address, len);
@@ -820,7 +858,7 @@ int ext_flash_erase(uintptr_t address, int len)
         sector_addr += FLASH_SECTOR_SIZE;
     }
 
-    return 0;
+    return total;
 #endif /* MPFS_SC_SPI */
 }
 

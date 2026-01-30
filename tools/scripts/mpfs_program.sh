@@ -7,9 +7,9 @@
 set -e
 
 # Configuration
-HSS_TTY="${HSS_TTY:-/dev/ttyUSB0}"
-WOLFBOOT_TTY="${WOLFBOOT_TTY:-/dev/ttyUSB1}"
-BLOCK_DEV="${BLOCK_DEV:-/dev/sda}"
+HSS_TTY="${HSS_TTY:-/dev/ttyUSB9}"
+WOLFBOOT_TTY="${WOLFBOOT_TTY:-/dev/ttyUSB10}"
+BLOCK_DEV="${BLOCK_DEV:-/dev/sde}"
 BAUD_RATE="${BAUD_RATE:-115200}"
 TIMEOUT_HSS="${TIMEOUT_HSS:-30}"
 TIMEOUT_BLOCK="${TIMEOUT_BLOCK:-15}"
@@ -18,6 +18,7 @@ WOLFBOOT_BIN="${WOLFBOOT_BIN:-wolfboot.bin}"
 CONFIG_FILE="${CONFIG_FILE:-./config/examples/polarfire_mpfs250.config}"
 STORAGE_MODE="${STORAGE_MODE:-}"  # Can be "emmc" or "sdcard"
 RESET_METHOD="${RESET_METHOD:-hss}"  # "hss" (HSS console reset) or "flashpro" (FlashPro6)
+RESET_DELAY="${RESET_DELAY:-0.2}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -99,7 +100,7 @@ reset_target_hss() {
     exec 3>&-
 
     log_success "Reset command sent via HSS"
-    sleep 2  # Give device time to reset
+    sleep "$RESET_DELAY"
 }
 
 reset_target_flashpro() {
@@ -113,7 +114,7 @@ reset_target_flashpro() {
         log_warn "FlashPro6 reset may have failed (check /tmp/flashpro_reset.log)"
     fi
 
-    sleep 2  # Give device time to reset
+    sleep "$RESET_DELAY"
 }
 
 reset_target() {
@@ -743,4 +744,3 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
-
