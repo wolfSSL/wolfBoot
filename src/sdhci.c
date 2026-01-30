@@ -116,7 +116,11 @@ void sdhci_irq_handler(void)
 
         /* Clear DMA interrupt status before restarting */
         SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_DMAINT);
+#ifdef __riscv
+        asm volatile("fence rw, rw" ::: "memory");
+#else
         asm volatile("dsb sy" ::: "memory");
+#endif
 
         /* Write SDMA address to resume transfer.
          * Per SDHCI v4 spec: write high 32 bits first, then low 32 bits.
