@@ -46,14 +46,14 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1040.config
-      board-name: evkmimxrt1040
+      board-name: evkbmimxrt1060
 
   imx_rt1050_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1050.config
-      board-name: evkbimxrt1050
+      board-name: evkbmimxrt1060
 
   imx_rt1060_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
@@ -74,7 +74,7 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1040.config
-      board-name: evkmimxrt1040
+      board-name: evkbmimxrt1060
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1050_test_pka:
@@ -82,7 +82,7 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/imx-rt1050.config
-      board-name: evkbimxrt1050
+      board-name: evkbmimxrt1060
       make-args: PKA=1 NO_ARM_ASM=1
 
   imx_rt1060_test_pka:
