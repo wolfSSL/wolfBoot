@@ -21,11 +21,15 @@
  */
 /**
  * @file disk.c
- * @brief GPT disk driver implementation.
+ * @brief Disk driver with GPT and MBR partition table support.
  *
- * This file contains the GPT disk driver that uses disk I/O operations.
- * It uses the generic GPT parsing functions from src/gpt.c for partition
- * table parsing.
+ * This file contains the disk driver that uses disk I/O operations.
+ * It supports both GPT and MBR partition tables:
+ *   - GPT: Uses protective MBR + GPT header (via src/gpt.c)
+ *   - MBR: Falls back to standard MBR partition entries
+ *
+ * MBR fallback is needed for platforms like Versal where the boot ROM
+ * requires MBR but wolfBoot needs to read data partitions.
  */
 #ifndef _WOLFBOOT_DISK_C_
 #define _WOLFBOOT_DISK_C_
@@ -55,13 +59,62 @@ static struct disk_drive Drives[MAX_DISKS] = {0};
  * @return The number of partitions found and initialized on success, or -1 if
  * the drive cannot be opened or no valid GPT partition table is found.
  */
+/**
+ * @brief Parse MBR partition table entries.
+ *
+ * Reads up to 4 primary MBR partition entries and populates the drive's
+ * partition array. Start/end are stored as byte offsets (LBA * sector size).
+ *
+ * @param[in,out] drive Pointer to the disk_drive structure to populate.
+ * @param[in] mbr_sector The 512-byte MBR sector data.
+ * @return The number of partitions found, or -1 on error.
+ */
+static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
+{
+    uint32_t i;
+    const struct gpt_mbr_part_entry *pte;
+
+    for (i = 0; i < 4; i++) {
+        pte = (const struct gpt_mbr_part_entry *)(mbr_sector +
+                GPT_MBR_ENTRY_START + (i * sizeof(struct gpt_mbr_part_entry)));
+
+        /* Skip empty entries (type 0) and extended partition types */
+        if (pte->ptype == 0x00 || pte->ptype == 0x05 || pte->ptype == 0x0F ||
+            pte->ptype == 0x85) {
+            continue;
+        }
+        if (pte->lba_first == 0 || pte->lba_size == 0) {
+            continue;
+        }
+
+        {
+            uint32_t n = drive->n_parts;
+            uint64_t start_bytes = (uint64_t)pte->lba_first * GPT_SECTOR_SIZE;
+            uint64_t end_bytes = start_bytes +
+                ((uint64_t)pte->lba_size * GPT_SECTOR_SIZE) - 1;
+
+            drive->part[n].drv = drive->drv;
+            drive->part[n].start = start_bytes;
+            drive->part[n].end = end_bytes;
+            memset(drive->part[n].name, 0, sizeof(drive->part[n].name));
+            drive->n_parts++;
+
+            wolfBoot_printf("  MBR part %u: type=0x%02x, start=0x%x, "
+                "size=%uMB\r\n", i + 1, pte->ptype,
+                (uint32_t)start_bytes,
+                (uint32_t)(pte->lba_size / 2048));
+        }
+    }
+
+    return drive->n_parts;
+}
+
 int disk_open(int drv)
 {
     int r;
     uint32_t i;
     uint32_t n_parts = 0;
     uint32_t gpt_lba = 0;
-    struct guid_ptable ptable;
     uint8_t sector[GPT_SECTOR_SIZE] XALIGNED(4);
 
     if ((drv < 0) || (drv > MAX_DISKS)) {
@@ -78,84 +131,83 @@ int disk_open(int drv)
         return -1;
     }
 
-    /* Check for protective MBR and get GPT header location */
-    if (gpt_check_mbr_protective((uint8_t*)sector, &gpt_lba) != 0) {
-        wolfBoot_printf("Cannot find valid partition table entry for GPT\r\n");
-        return -1;
-    }
-    wolfBoot_printf("Found GPT PTE at sector %u\r\n", gpt_lba);
-    wolfBoot_printf("Found valid boot signature in MBR\r\n");
-
     Drives[drv].is_open = 1;
     Drives[drv].drv = drv;
     Drives[drv].n_parts = 0;
 
-    /* Read GPT header */
-    r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
-    if (r < 0) {
-        wolfBoot_printf("Disk read failed\r\n");
-        return -1;
-    }
+    /* Try GPT first: check for protective MBR with type 0xEE */
+    if (gpt_check_mbr_protective((uint8_t*)sector, &gpt_lba) == 0) {
+        struct guid_ptable ptable;
 
-    /* Parse and validate GPT header */
-    if (gpt_parse_header((uint8_t*)sector, &ptable) != 0) {
-        wolfBoot_printf("Invalid partition table\r\n");
-        return -1;
-    }
+        wolfBoot_printf("Found GPT PTE at sector %u\r\n", gpt_lba);
 
-    wolfBoot_printf("Valid GPT partition table\r\n");
-    wolfBoot_printf("Current LBA: 0x%llx \r\n", ptable.main_lba);
-    wolfBoot_printf("Backup LBA: 0x%llx \r\n", ptable.backup_lba);
-    wolfBoot_printf("Max number of partitions: %d\r\n", ptable.n_part);
-
-    n_parts = ptable.n_part;
-    if (ptable.n_part > MAX_PARTITIONS) {
-        n_parts = MAX_PARTITIONS;
-        wolfBoot_printf("Software limited: only allowing up to %d partitions "
-                        "per disk.\r\n", n_parts);
-    }
-    wolfBoot_printf("Disk size: %d\r\n",
-        (1 + ptable.last_usable - ptable.first_usable) * GPT_SECTOR_SIZE);
-
-    /* Read and parse partition entries */
-    for (i = 0; i < n_parts; i++) {
-        struct gpt_part_info part_info;
-        uint64_t address = (ptable.start_array * GPT_SECTOR_SIZE) +
-            (i * ptable.array_sz);
-        uint8_t entry_buf[GPT_PART_ENTRY_SIZE] XALIGNED(4); /* Max partition entry size */
-
-        if (ptable.array_sz > sizeof(entry_buf)) {
-            wolfBoot_printf("Partition entry size too large\r\n");
-            break;
-        }
-
-        r = disk_read(drv, address, ptable.array_sz, entry_buf);
+        /* Read GPT header */
+        r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
         if (r < 0) {
+            wolfBoot_printf("Disk read failed\r\n");
             return -1;
         }
 
-        /* Parse partition entry using generic function */
-        if (gpt_parse_partition((uint8_t*)entry_buf, ptable.array_sz, &part_info) == 0) {
-            uint64_t size;
-            uint32_t part_count;
+        /* Parse and validate GPT header */
+        if (gpt_parse_header((uint8_t*)sector, &ptable) != 0) {
+            wolfBoot_printf("Invalid GPT header\r\n");
+            return -1;
+        }
 
-            size = part_info.end - part_info.start + 1;
-            part_count = Drives[drv].n_parts;
-            Drives[drv].n_parts++;
-            Drives[drv].part[part_count].drv = drv;
-            Drives[drv].part[part_count].start = part_info.start;
-            Drives[drv].part[part_count].end = part_info.end;
-            memcpy(&Drives[drv].part[part_count].name, part_info.name,
-                   sizeof(part_info.name));
+        wolfBoot_printf("Valid GPT partition table\r\n");
+        wolfBoot_printf("Max number of partitions: %d\r\n", ptable.n_part);
 
-            wolfBoot_printf("disk%d.p%u ", drv, part_count);
-            wolfBoot_printf("(%x_%xh", (uint32_t)(size >> 32), (uint32_t)size);
-            wolfBoot_printf("@ %x_%x)\r\n",
-                            (uint32_t)(part_info.start >> 32),
-                            (uint32_t)(part_info.start));
-        } else {
-            /* Empty partition entry - end of used entries */
-            break;
+        n_parts = ptable.n_part;
+        if (n_parts > MAX_PARTITIONS)
+            n_parts = MAX_PARTITIONS;
+
+        /* Read and parse GPT partition entries */
+        for (i = 0; i < n_parts; i++) {
+            struct gpt_part_info part_info;
+            uint64_t address = (ptable.start_array * GPT_SECTOR_SIZE) +
+                (i * ptable.array_sz);
+            uint8_t entry_buf[GPT_PART_ENTRY_SIZE] XALIGNED(4);
+
+            if (ptable.array_sz > sizeof(entry_buf))
+                break;
+
+            r = disk_read(drv, address, ptable.array_sz, entry_buf);
+            if (r < 0)
+                return -1;
+
+            if (gpt_parse_partition((uint8_t*)entry_buf, ptable.array_sz,
+                    &part_info) == 0) {
+                uint64_t size = part_info.end - part_info.start + 1;
+                uint32_t pc = Drives[drv].n_parts;
+                Drives[drv].n_parts++;
+                Drives[drv].part[pc].drv = drv;
+                Drives[drv].part[pc].start = part_info.start;
+                Drives[drv].part[pc].end = part_info.end;
+                memcpy(&Drives[drv].part[pc].name, part_info.name,
+                       sizeof(part_info.name));
+
+                wolfBoot_printf("  GPT part %u: %x_%xh @ %x_%x\r\n", pc,
+                    (uint32_t)(size >> 32), (uint32_t)size,
+                    (uint32_t)(part_info.start >> 32),
+                    (uint32_t)(part_info.start));
+            } else {
+                break; /* End of used entries */
+            }
+        }
+    } else {
+        const uint16_t *boot_sig = (const uint16_t *)(sector +
+            GPT_MBR_BOOTSIG_OFFSET);
+
+        /* Check MBR boot signature (0xAA55) */
+        if (*boot_sig != GPT_MBR_BOOTSIG_VALUE) {
+            wolfBoot_printf("No valid partition table found\r\n");
+            return -1;
+        }
+
+        wolfBoot_printf("Found MBR partition table\r\n");
+        if (disk_open_mbr(&Drives[drv], sector) < 0) {
+            wolfBoot_printf("Failed to parse MBR\r\n");
+            return -1;
         }
     }
 

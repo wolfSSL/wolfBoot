@@ -2306,6 +2306,108 @@ Typical boot timing with ECC384/SHA384 signing:
 | **Total wolfBoot overhead** | **~870ms** |
 
 
+### SD Card Boot
+
+wolfBoot supports booting from SD card on the VMK180 using the Cadence SDHCI controller. This enables A/B partition-based firmware updates from GPT partitions on the SD card.
+
+#### SD Card Partition Layout
+
+The SD card uses MBR partitioning to match the stock Versal SD card format:
+
+| Partition | Name | Size | Type | Contents |
+|-----------|------|------|------|----------|
+| 1 | boot | 128MB | FAT32 LBA (0x0c), bootable | BOOT.BIN (PLM + PSM + BL31 + wolfBoot) |
+| 2 | OFP_A | 200MB | Linux (0x83) | Primary signed firmware image |
+| 3 | OFP_B | 200MB | Linux (0x83) | Update signed firmware image |
+| 4 | rootfs | remainder | Linux (0x83) | Linux root filesystem |
+
+#### Configuration
+
+Use the SD card configuration file:
+
+```sh
+cp config/examples/versal_vmk180_sdcard.config .config
+make clean
+make
+```
+
+Key differences from QSPI configuration:
+- `DISK_SDCARD=1` - Enable SD card support via SDHCI driver
+- `EXT_FLASH=0` - Disable QSPI flash
+- `BOOT_PART_A=2` - Primary firmware on partition 2
+- `BOOT_PART_B=3` - Update firmware on partition 3
+
+#### Building and Provisioning
+
+1. **Build wolfBoot and create SD card image:**
+
+```sh
+./tools/scripts/versal_test.sh --sdcard
+```
+
+This creates:
+- `wolfboot.elf` - wolfBoot bootloader
+- `BOOT.BIN` - Complete boot image for partition 1
+- `sdcard.img` - GPT-partitioned SD card image with signed test apps
+- `test-app/image_v1_signed.bin` - Signed primary firmware
+- `test-app/image_v2_signed.bin` - Signed update firmware
+
+2. **Provision the SD card:**
+
+```sh
+sudo ./tools/scripts/versal_sdcard_provision.sh /dev/sdX
+```
+
+Or manually:
+
+```sh
+# Write partition image
+sudo dd if=sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
+sync
+
+# Format boot partition and copy BOOT.BIN
+sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1
+sudo mount /dev/sdX1 /mnt
+sudo cp BOOT.BIN /mnt/
+sudo umount /mnt
+```
+
+3. **Verify partitions:**
+
+```sh
+sudo sgdisk -p /dev/sdX
+```
+
+#### Boot Mode Selection
+
+Set the VMK180 boot mode switches for SD card boot:
+- MODE[3:0] = 0b1110 (SD1 boot)
+
+#### Expected Boot Output
+
+```
+========================================
+wolfBoot Secure Boot - AMD Versal
+========================================
+Current EL: 2
+SDHCI: SDCard mode
+...
+Boot partition: A (2)
+Firmware Valid
+Booting at 0x10000000
+```
+
+#### Firmware Updates
+
+To test A/B updates:
+
+1. Boot from partition A (OFP_A) with version 1
+2. Write new signed image to partition B (OFP_B)
+3. Trigger update via wolfBoot API
+4. On next boot, wolfBoot verifies and boots from partition B
+5. If verification fails, wolfBoot falls back to partition A
+
+
 ## Cypress PSoC-6
 
 The Cypress PSoC 62S2 is a dual-core Cortex-M4 & Cortex-M0+ MCU. The secure boot process is managed by the M0+.

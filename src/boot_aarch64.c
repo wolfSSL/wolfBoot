@@ -199,8 +199,105 @@ void RAMFUNCTION arch_reboot(void)
 }
 #endif
 
-/* Exception handler stubs - bootloader does not handle interrupts */
-void SynchronousInterrupt(void) { }
-void IRQInterrupt(void) { }
-void FIQInterrupt(void) { }
-void SErrorInterrupt(void) { }
+/* ============================================================================
+ * Exception Handlers for EL2 (DEBUG_HARDFAULT support)
+ * ============================================================================
+ * These handlers print diagnostic information when exceptions occur.
+ * ESR_EL2 - Exception Syndrome Register (cause of exception)
+ * ELR_EL2 - Exception Link Register (address that caused exception)
+ * FAR_EL2 - Fault Address Register (for data/instruction aborts)
+ */
+
+#if defined(DEBUG_UART) && defined(EL2_HYPERVISOR)
+
+/* Read EL2 exception registers */
+static inline uint64_t read_esr_el2(void) {
+    uint64_t val;
+    __asm__ volatile("mrs %0, ESR_EL2" : "=r"(val));
+    return val;
+}
+
+static inline uint64_t read_elr_el2(void) {
+    uint64_t val;
+    __asm__ volatile("mrs %0, ELR_EL2" : "=r"(val));
+    return val;
+}
+
+static inline uint64_t read_far_el2(void) {
+    uint64_t val;
+    __asm__ volatile("mrs %0, FAR_EL2" : "=r"(val));
+    return val;
+}
+
+/* Decode ESR exception class */
+static const char* decode_ec(uint32_t ec) {
+    switch (ec) {
+        case 0x00: return "Unknown";
+        case 0x01: return "WFI/WFE trapped";
+        case 0x07: return "SVE/SIMD/FP trapped";
+        case 0x0E: return "Illegal execution state";
+        case 0x15: return "SVC in AArch64";
+        case 0x16: return "HVC in AArch64";
+        case 0x17: return "SMC in AArch64";
+        case 0x20: return "Inst abort (lower EL)";
+        case 0x21: return "Inst abort (same EL)";
+        case 0x22: return "PC alignment fault";
+        case 0x24: return "Data abort (lower EL)";
+        case 0x25: return "Data abort (same EL)";
+        case 0x26: return "SP alignment fault";
+        case 0x2C: return "FP exception";
+        case 0x2F: return "SError";
+        case 0x30: return "Breakpoint (lower EL)";
+        case 0x31: return "Breakpoint (same EL)";
+        case 0x32: return "Software step (lower EL)";
+        case 0x33: return "Software step (same EL)";
+        case 0x34: return "Watchpoint (lower EL)";
+        case 0x35: return "Watchpoint (same EL)";
+        case 0x3C: return "BRK instruction";
+        default:   return "Other";
+    }
+}
+
+static void print_exception_info(const char *type) {
+    uint64_t esr = read_esr_el2();
+    uint64_t elr = read_elr_el2();
+    uint64_t far = read_far_el2();
+    uint32_t ec = (esr >> 26) & 0x3F;
+    uint32_t iss = esr & 0x1FFFFFF;
+
+    wolfBoot_printf("\n\n*** %s EXCEPTION ***\n", type);
+    wolfBoot_printf("ESR_EL2: 0x%08x%08x\n", (uint32_t)(esr >> 32), (uint32_t)esr);
+    wolfBoot_printf("  EC (Exception Class): 0x%x - %s\n", ec, decode_ec(ec));
+    wolfBoot_printf("  ISS (Syndrome): 0x%x\n", iss);
+    wolfBoot_printf("ELR_EL2 (fault addr): 0x%08x%08x\n", (uint32_t)(elr >> 32), (uint32_t)elr);
+    wolfBoot_printf("FAR_EL2 (access addr): 0x%08x%08x\n", (uint32_t)(far >> 32), (uint32_t)far);
+    wolfBoot_printf("*** SYSTEM HALTED ***\n");
+}
+
+void SynchronousInterrupt(void) {
+    print_exception_info("SYNCHRONOUS");
+    while(1) { __asm__ volatile("wfi"); }
+}
+
+void IRQInterrupt(void) {
+    print_exception_info("IRQ");
+    while(1) { __asm__ volatile("wfi"); }
+}
+
+void FIQInterrupt(void) {
+    print_exception_info("FIQ");
+    while(1) { __asm__ volatile("wfi"); }
+}
+
+void SErrorInterrupt(void) {
+    print_exception_info("SERROR");
+    while(1) { __asm__ volatile("wfi"); }
+}
+
+#else
+/* Simple stubs when debug not enabled */
+void SynchronousInterrupt(void) { while(1); }
+void IRQInterrupt(void) { while(1); }
+void FIQInterrupt(void) { while(1); }
+void SErrorInterrupt(void) { while(1); }
+#endif /* DEBUG_UART && EL2_HYPERVISOR */
