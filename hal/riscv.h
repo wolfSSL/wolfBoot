@@ -23,20 +23,23 @@
 #define RISCV_H
 
 
-/* TODO: Add support for machine mode wolfBoot */
-#if 1
-#define WOLFBOOT_RISCV_SMODE /* supervisor mode */
-#else
-#define WOLFBOOT_RISCV_MMODE /* machine mode */
-#endif
+/* ============================================================================
+ * RISC-V Privilege Mode Selection
+ *
+ *   - Machine mode (direct boot from eNVM) : WOLFBOOT_RISCV_MMODE
+ *   - Supervisor mode (running under HSS/SBI) : default
+ *
+ * ============================================================================ */
 
-/* Initial stack pointer address (stack grows downward from here) */
+ /* Initial stack pointer address (stack grows downward from here) */
 #ifndef WOLFBOOT_STACK_TOP
-#ifdef WOLFBOOT_RISCV_SMODE
-#define WOLFBOOT_STACK_TOP 0x80200000
-#else
-#define WOLFBOOT_STACK_TOP 0x80000000
-#endif
+    #ifdef WOLFBOOT_RISCV_MMODE
+        /* M-mode: Stack at end of L2 Scratchpad (256KB) */
+        #define WOLFBOOT_STACK_TOP 0x0A040000
+    #else
+        /* S-mode: Stack in DDR */
+        #define WOLFBOOT_STACK_TOP 0x80200000
+    #endif
 #endif
 
 /* ============================================================================
@@ -75,6 +78,12 @@
 #define CSR_MIMPID       0xF13  /* Implementation ID */
 #define CSR_MHARTID      0xF14  /* Hardware thread ID */
 
+#ifdef WOLFBOOT_RISCV_MMODE
+#define MODE_PREFIX(__suffix)    m##__suffix
+#else
+#define MODE_PREFIX(__suffix)    s##__suffix
+#endif
+
 /* ============================================================================
  * CSR Access Macros
  * ============================================================================ */
@@ -107,6 +116,18 @@
     unsigned long __v = (unsigned long)(val);                   \
     __asm__ __volatile__ ("csrc " #csr ", %0" : : "rK"(__v));   \
 })
+
+/* ============================================================================
+ * Cache / I-Cache Sync Helpers
+ * ============================================================================ */
+#ifndef __ASSEMBLER__
+static inline void riscv_icache_sync(void)
+{
+#ifdef __riscv_zifencei
+    __asm__ __volatile__("fence.i" ::: "memory");
+#endif
+}
+#endif /* !__ASSEMBLER__ */
 
 /* ============================================================================
  * Interrupt Numbers (for SIE/SIP and MIE/MIP registers)
@@ -270,4 +291,3 @@ extern void plic_dispatch_irq(uint32_t irq);
 #endif /* PLIC_BASE && !__ASSEMBLER__ */
 
 #endif /* RISCV_H */
-
