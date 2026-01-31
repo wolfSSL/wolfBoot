@@ -56,6 +56,10 @@
 #include "hal/spi/spi_drv_nrf52.h"
 #endif
 
+#if defined(TARGET_nrf54lm20)
+#include "hal/spi/spi_drv_nrf54lm20.h"
+#endif
+
 #if defined(TARGET_nrf5340)
 #include "hal/spi/spi_drv_nrf5340.h"
 #endif
