@@ -233,8 +233,8 @@ endif # TZEN=1
 ifeq ($(TARGET),wolfhal)
 	LSCRIPT_IN:=hal/$(WOLFHAL_TARGET).ld
 	CFLAGS+= -I$(WOLFBOOT_LIB_WOLFHAL)
-	OBJS+=config/wolfHAL/$(WOLFHAL_BOARD).o
-	include config/wolfHAL/$(WOLFHAL_BOARD).mk
+	OBJS+=hal/wolfHAL/$(WOLFHAL_BOARD).o
+	include hal/wolfHAL/$(WOLFHAL_BOARD).mk
 endif
 
 ifeq ($(TARGET),x86_64_efi)

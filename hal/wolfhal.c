@@ -23,67 +23,50 @@
 #include <wolfHAL/wolfHAL.h>
 #include "image.h"
 
-extern whal_Clock wbClock;
+extern whal_Clock wbClockController;
 extern whal_Gpio wbGpio;
-extern whal_Uart wbUart;
 extern whal_Flash wbFlash;
-
-#ifdef WOLFHAL_INIT_HOOKS
-extern void hal_pre_init();
-extern void hal_post_prepare_boot();
-#endif /* WOLFHAL_INIT_HOOKS */
-
-void RAMFUNCTION hal_flash_unlock(void)
-{
-    whal_Flash_Unlock(&wbFlash,
-                      0, WOLFHAL_FLASH_SIZE);
-}
-
-void RAMFUNCTION hal_flash_lock(void)
-{
-    whal_Flash_Lock(&wbFlash,
-                    0, WOLFHAL_FLASH_SIZE);
-}
-
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
-{
-    whal_Flash_Write(&wbFlash, address, data, len);
-    return 0;
-}
-
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
-{
-    if (len == 0)
-        return -1;
-
-    whal_Flash_Erase(&wbFlash, address, len);
-    return 0;
-}
+#if defined(DEBUG_UART) || defined(UART_FLASH)
+extern whal_Uart wbUart;
+#endif /* DEBUG_UART || UART_FLASH */
 
 void hal_init(void)
 {
-#ifdef WOLFHAL_INIT_HOOKS
-    hal_pre_init();
-#endif /* WOLFHAL_INIT_HOOKS */
+    whal_Error err;
 
-    whal_Clock_Init(&wbClock);
-    whal_Clock_Enable(&wbClock);
+    err = whal_Clock_Init(&wbClockController);
+    if (err) {
+        return;
+    }
 
-    whal_Gpio_Init(&wbGpio);
-    whal_Uart_Init(&wbUart);
-    whal_Flash_Init(&wbFlash);
+    err = whal_Gpio_Init(&wbGpio);
+    if (err) {
+        return;
+    }
+
+    err = whal_Flash_Init(&wbFlash);
+    if (err) {
+        return;
+    }
+
+#if defined(DEBUG_UART) || defined(UART_FLASH)
+    err = whal_Uart_Init(&wbUart);
+    if (err) {
+        return;
+    }
+#endif /* DEBUG_UART || UART_FLASH */
+
 }
 
 void hal_prepare_boot(void)
 {
-    whal_Flash_Deinit(&wbFlash);
+#if defined(DEBUG_UART) || defined(UART_FLASH)
     whal_Uart_Deinit(&wbUart);
+#endif /* DEBUG_UART || UART_FLASH */
+
+    whal_Flash_Deinit(&wbFlash);
+
     whal_Gpio_Deinit(&wbGpio);
 
-    whal_Clock_Disable(&wbClock);
-    whal_Clock_Deinit(&wbClock);
-
-#ifdef WOLFHAL_INIT_HOOKS
-    hal_post_prepare_boot();
-#endif /* WOLFHAL_INIT_HOOKS */
+    whal_Clock_Deinit(&wbClockController);
 }

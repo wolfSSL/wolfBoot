@@ -67,8 +67,8 @@ endif
 ifeq ($(TARGET),wolfhal)
 	WOLFBOOT_LIB_WOLFHAL?=../lib/wolfHAL
 	CFLAGS += -I$(WOLFBOOT_LIB_WOLFHAL)
-	APP_OBJS += ../config/wolfHAL/$(WOLFHAL_BOARD).o
-	include ../config/wolfHAL/$(WOLFHAL_BOARD).mk
+	APP_OBJS += ../hal/wolfHAL/$(WOLFHAL_BOARD).o
+	include ../hal/wolfHAL/$(WOLFHAL_BOARD).mk
 endif
 
 include ../arch.mk

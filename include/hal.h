@@ -31,6 +31,17 @@ extern "C" {
 #include "target.h"
 #include <stdint.h>
 
+#ifdef TARGET_wolfhal
+#include <wolfHAL/wolfHAL.h>
+extern whal_Clock wbClockController;
+extern whal_Flash wbFlash;
+extern whal_Flash wbFlash;
+extern whal_Gpio wbGpio;
+#if defined(DEBUG_UART) || defined(UART_FLASH)
+extern whal_Uart wbUart;
+#endif /* DEBUG_UART || UART_FLASH */
+#endif
+
 /* Architecture specific calls */
 #ifdef MMU
 extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
@@ -62,13 +73,23 @@ uint64_t hal_get_timer_us(void);
     typedef uintptr_t haladdr_t; /* 64-bit platforms */
     int hal_flash_write(uintptr_t address, const uint8_t *data, int len);
     int hal_flash_erase(uintptr_t address, int len);
+#elif TARGET_wolfhal
+    #define hal_flash_write(address, data, len) whal_Flash_Write(&wbFlash, address, data, len)
+    #define hal_flash_erase(address, len) whal_Flash_Erase(&wbFlash, address, len)
 #else
     typedef uint32_t haladdr_t; /* original 32-bit */
     int hal_flash_write(uint32_t address, const uint8_t *data, int len);
     int hal_flash_erase(uint32_t address, int len);
 #endif
+
+#ifdef TARGET_wolfhal
+    #define hal_flash_unlock() whal_Flash_Unlock(&wbFlash, WOLFHAL_FLASH_START, WOLFHAL_FLASH_SIZE)
+    #define hal_flash_lock() whal_Flash_Lock(&wbFlash, WOLFHAL_FLASH_START, WOLFHAL_FLASH_SIZE)
+#else
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
+#endif
+
 void hal_prepare_boot(void);
 
 #ifdef DUALBANK_SWAP

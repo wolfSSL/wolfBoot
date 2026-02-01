@@ -359,3 +359,5 @@ uint32_t HAL_GetTick(void)
 }
 
 #endif
+
+#endif

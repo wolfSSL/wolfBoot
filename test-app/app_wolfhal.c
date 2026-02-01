@@ -36,8 +36,10 @@
 
 extern whal_Clock wbClock;
 extern whal_Gpio wbGpio;
-extern whal_Uart wbUart;
 extern whal_Flash wbFlash;
+#if defined(DEBUG_UART) || defined(UART_FLASH)
+extern whal_Uart wbUart;
+#endif /* DEBUG_UART || UART_FLASH */
 
 /* Matches all keys:
  *    - chacha (32 + 12)
@@ -61,8 +63,10 @@ void main(void) {
     version = wolfBoot_current_firmware_version();
     updv = wolfBoot_update_firmware_version();
     
+#if defined(DEBUG_UART) || defined(UART_FLASH)
     whal_Uart_Send(&wbUart, "*", 1);
     whal_Uart_Send(&wbUart, (uint8_t *)&version, 4);
+#endif /* DEBUG_UART || UART_FLASH */
     
     if ((version == 1) && (updv != 8)) {
         uint32_t sz;
@@ -80,4 +84,4 @@ void main(void) {
     while(1)
         asm volatile("wfi");
 }
-#endif /** PLATFROM_stm32wb **/
+#endif /** PLATFROM_wolfhal **/

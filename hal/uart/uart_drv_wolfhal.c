@@ -1,10 +1,6 @@
-/* uart_drv_stm32wb.c
+/* uart_drv_wolfhal.c
  *
- * Driver for the back-end of the UART_FLASH module.
- *
- * Example implementation for stm32WB, using UART1.
- *
- * Pinout: RX=PB7, TX=PB6 (VCOM port UART1 -> STLINK USB)
+ * A generic UART driver using the wolfHAL API module.
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -34,14 +30,22 @@ extern whal_Uart wbUart;
 
 int uart_tx(const uint8_t c)
 {
-    whal_Uart_Send(&wbUart, &c, 1);
+    whal_Error err;
+    err = whal_Uart_Send(&wbUart, &c, 1);
+    if (err) {
+        return err;
+    }
     return 1;
 }
 
 int uart_rx(uint8_t *c)
 {
-    whal_Uart_Recv(&wbUart, c, 1);
+    whal_Error err;
     /* ALEX NOTE: this function also returns zero if no data is available... */
+    err = whal_Uart_Recv(&wbUart, c, 1);
+    if (err) {
+        return err;
+    }
     return 1;
 }
 
@@ -56,7 +60,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     whal_Error err;
     err = whal_Uart_Init(&wbUart);
     if (err) {
-        return 1;
+        return err;
     }
 
     return 0;
