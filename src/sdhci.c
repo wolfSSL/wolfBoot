@@ -108,18 +108,28 @@ void sdhci_irq_handler(void)
 {
     uint32_t status = SDHCI_REG(SDHCI_SRS12);
 
-    /* Check for DMA interrupt */
+    /* Check for DMA interrupt (SDMA boundary crossing) */
     if (status & SDHCI_SRS12_DMAINT) {
-        /* Read updated DMA address - engine will increment block */
-        uint32_t* addr = (uint32_t*)(uintptr_t)((((uint64_t)SDHCI_REG(SDHCI_SRS23)) << 32) |
-                                                            SDHCI_REG(SDHCI_SRS22));
-        /* Set new DMA address for next boundary */
-        SDHCI_REG_SET(SDHCI_SRS22, (uint32_t)(uintptr_t)addr);
-        SDHCI_REG_SET(SDHCI_SRS23, (uint32_t)(((uint64_t)(uintptr_t)addr) >> 32));
-        /* triggers next DMA block on write of top bit */
+        /* Read the next DMA address saved by the controller */
+        uint32_t addr_lo = SDHCI_REG(SDHCI_SRS22);
+        uint32_t addr_hi = SDHCI_REG(SDHCI_SRS23);
+
+        /* Clear DMA interrupt status before restarting */
+        SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_DMAINT);
+#if defined(__riscv)
+        asm volatile("fence rw, rw" ::: "memory");
+#elif defined(__aarch64__)
+        asm volatile("dsb sy" ::: "memory");
+#endif
+
+        /* Write SDMA address to resume transfer.
+         * Per SDHCI v4 spec: write high 32 bits first, then low 32 bits.
+         * Writing the low address (SRS22 / offset 0x058) triggers the
+         * DMA engine to resume. */
+        SDHCI_REG_SET(SDHCI_SRS23, addr_hi);
+        SDHCI_REG_SET(SDHCI_SRS22, addr_lo);
 
         g_mmc_irq_status |= SDHCI_IRQ_FLAG_DMAINT;
-        SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_DMAINT); /* Clear interrupt */
     }
 
     /* Check for transfer complete */
@@ -183,10 +193,21 @@ static void sdhci_disable_sdma_interrupts(void)
     SDHCI_REG_SET(SDHCI_SRS14, reg);
 }
 
-/* Wait for SDHCI interrupt with timeout */
+/* Wait for SDHCI interrupt with timeout.
+ * Supports both hardware interrupt and polling modes:
+ * - Interrupt mode: g_mmc_irq_pending set by sdhci_irq_handler() via platform ISR
+ * - Polling mode: directly reads SRS12 status register and calls handler */
 static int sdhci_wait_irq(uint32_t expected_flags, uint32_t timeout)
 {
     while (timeout-- > 0) {
+        /* Poll SRS12 directly for platforms without interrupt routing.
+         * In interrupt mode this is redundant (bits already cleared by ISR). */
+        uint32_t status = SDHCI_REG(SDHCI_SRS12);
+        if (status & (SDHCI_SRS12_TC | SDHCI_SRS12_CC | SDHCI_SRS12_DMAINT |
+                      SDHCI_SRS12_EDT | SDHCI_SRS12_EINT)) {
+            sdhci_irq_handler();
+        }
+
         if (g_mmc_irq_pending) {
             g_mmc_irq_pending = 0;
 
@@ -1152,18 +1173,20 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     else if (is_multi_block) {
         cmd_reg |= SDHCI_SRS03_MSBS; /* enable multi-block select */
 
+    #ifndef SDHCI_SDMA_DISABLED
         if (sz >= SDHCI_DMA_THRESHOLD) { /* use DMA for large transfers */
             cmd_reg |= SDHCI_SRS03_DMAE; /* enable DMA */
 
             bcr_reg = (block_count << SDHCI_SRS01_BCCT_SHIFT) |
                 SDHCI_DMA_BUFF_BOUNDARY | SDHCI_BLOCK_SIZE;
 
-            /* SDMA mode */
+            /* SDMA mode with Host Version 4 enable.
+             * HV4E is required for SDMA to use the 64-bit address registers
+             * (SRS22/SRS23) instead of the legacy 32-bit register (SRS00).
+             * A64S is cleared to use 32-bit DMA addressing. */
             sdhci_reg_or(SDHCI_SRS10, SDHCI_SRS10_DMA_SDMA);
-            if (dir == SDHCI_DIR_WRITE) {
-                sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_HV4E);
-                sdhci_reg_and(SDHCI_SRS16, ~SDHCI_SRS16_A64S);
-            }
+            sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_HV4E);
+            sdhci_reg_and(SDHCI_SRS16, ~SDHCI_SRS16_A64S);
             /* Set SDMA address */
             SDHCI_REG_SET(SDHCI_SRS22, (uint32_t)(uintptr_t)buf);
             SDHCI_REG_SET(SDHCI_SRS23, (uint32_t)(((uint64_t)(uintptr_t)buf) >> 32));
@@ -1171,7 +1194,9 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             /* Enable SDMA interrupts */
             sdhci_enable_sdma_interrupts();
         }
-        else {
+        else
+    #endif /* !SDHCI_SDMA_DISABLED */
+        {
             bcr_reg = (block_count << SDHCI_SRS01_BCCT_SHIFT) |
                 SDHCI_BLOCK_SIZE;
         }
@@ -1666,4 +1691,3 @@ void disk_close(int drv)
 }
 
 #endif /* DISK_SDCARD || DISK_EMMC */
-

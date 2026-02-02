@@ -1144,6 +1144,8 @@ static void qspi_init(void)
 #endif
 }
 
+#endif /* EXT_FLASH */
+
 /* ============================================================================
  * HAL Public Interface
  * ============================================================================
@@ -1151,17 +1153,16 @@ static void qspi_init(void)
 
 void hal_init(void)
 {
-#if defined(__WOLFBOOT) && defined(DEBUG_UART)
-    const char *banner = "\n"
-        "========================================\n"
-        "wolfBoot Secure Boot - AMD Versal\n"
-        "========================================\n";
-#endif
-
     uart_init();
 
-#ifdef __WOLFBOOT
-    wolfBoot_printf("%s", banner);
+#if defined(DEBUG_UART) && defined(__WOLFBOOT)
+    wolfBoot_printf(
+        "\n========================================\n"
+        "wolfBoot Secure Boot - AMD Versal\n"
+#ifndef WOLFBOOT_REPRODUCIBLE_BUILD
+        "Build: " __DATE__ " " __TIME__ "\n"
+#endif
+        "========================================\n");
     wolfBoot_printf("Current EL: %d\n", current_el());
 #endif
 
@@ -1169,8 +1170,6 @@ void hal_init(void)
     qspi_init();
 #endif
 }
-
-#endif /* EXT_FLASH */
 
 void hal_prepare_boot(void)
 {
@@ -1297,7 +1296,7 @@ int hal_dts_fixup(void* dts_addr)
 #endif /* __WOLFBOOT */
 #endif /* MMU */
 
-#ifdef WOLFBOOT_DUALBOOT
+#if defined(WOLFBOOT_DUALBOOT) && !defined(WOLFBOOT_NO_PARTITIONS)
 /**
  * Get the primary (boot) partition address in flash
  * Returns the flash address where the boot partition starts
@@ -1315,7 +1314,7 @@ void* hal_get_update_address(void)
 {
     return (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 }
-#endif /* WOLFBOOT_DUALBOOT */
+#endif /* WOLFBOOT_DUALBOOT && !WOLFBOOT_NO_PARTITIONS */
 
 /* ============================================================================
  * Flash Functions (STUBS)
@@ -1524,5 +1523,158 @@ int ext_flash_erase(uintptr_t address, int len)
 #endif /* EXT_FLASH */
 
 
-#endif /* TARGET_versal */
+/* ============================================================================
+ * SD Card Support (SDHCI)
+ * ============================================================================
+ * The Versal uses an Arasan SDHCI controller with standard register layout,
+ * unlike PolarFire which uses a Cadence SD4HC controller. The generic SDHCI
+ * driver (src/sdhci.c) expects Cadence register offsets (HRS at 0x000,
+ * SRS at 0x200), so we translate in the HAL register access functions.
+ *
+ * SD1 at 0xF1050000 is the external SD card slot on VMK180.
+ * PLM already initializes the SD controller, so platform init is minimal.
+ * Initial implementation uses polling mode (no GIC setup required).
+ */
 
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+#include "sdhci.h"
+
+/* Use SD1 for external SD card slot on VMK180 */
+#define VERSAL_SDHCI_BASE  VERSAL_SD1_BASE  /* 0xF1050000 */
+
+/* ============================================================================
+ * Register Translation: Cadence SD4HC -> Standard SDHCI (Arasan)
+ * ============================================================================
+ * The generic SDHCI driver (src/sdhci.c) uses Cadence SD4HC register offsets:
+ *   - HRS registers at 0x000-0x01F (Cadence-specific: reset, PHY, eMMC mode)
+ *   - SRS registers at 0x200-0x2FF (standard SDHCI mapped at offset +0x200)
+ *
+ * Versal uses the Arasan SDHCI controller with standard register layout:
+ *   - Standard SDHCI registers at 0x000-0x0FF (no 0x200 offset)
+ *
+ * Translation:
+ *   - SRS offsets (>= 0x200): subtract 0x200 to get standard offset
+ *   - HRS00 (0x000): map SWR bit to standard Software Reset All (SRA)
+ *   - HRS01, HRS04, HRS06: Cadence-specific, not applicable on Versal
+ */
+#define CADENCE_SRS_OFFSET      0x200
+
+/* Standard SDHCI Software Reset is in the Clock/Timeout/Reset register */
+#define STD_SDHCI_RESET_REG     0x2C  /* Clock Control / Timeout / SW Reset */
+#define STD_SDHCI_SRA           (1U << 24) /* Software Reset for All */
+
+/* Handle reads from Cadence HRS registers (0x000-0x1FF) */
+static uint32_t versal_sdhci_hrs_read(uint32_t hrs_offset)
+{
+    volatile uint8_t *base = (volatile uint8_t *)VERSAL_SDHCI_BASE;
+
+    switch (hrs_offset) {
+    case 0x000: /* HRS00 - Software Reset */
+    {
+        /* Map standard SRA (bit 24 of 0x2C) to Cadence SWR (bit 0) */
+        uint32_t val = *((volatile uint32_t *)(base + STD_SDHCI_RESET_REG));
+        return (val & STD_SDHCI_SRA) ? 1U : 0U;
+    }
+    case 0x010: /* HRS04 - PHY access (Cadence-specific) */
+        /* Return ACK set to prevent wait loops from hanging */
+        return (1U << 26); /* SDHCI_HRS04_UIS_ACK */
+    default:
+        /* HRS01 (debounce), HRS02, HRS06 (eMMC mode) - not applicable */
+        return 0;
+    }
+}
+
+/* Handle writes to Cadence HRS registers (0x000-0x1FF) */
+static void versal_sdhci_hrs_write(uint32_t hrs_offset, uint32_t val)
+{
+    volatile uint8_t *base = (volatile uint8_t *)VERSAL_SDHCI_BASE;
+
+    switch (hrs_offset) {
+    case 0x000: /* HRS00 - Software Reset */
+        if (val & 1U) { /* SWR bit -> standard SRA */
+            uint32_t reg = *((volatile uint32_t *)(base + STD_SDHCI_RESET_REG));
+            reg |= STD_SDHCI_SRA;
+            *((volatile uint32_t *)(base + STD_SDHCI_RESET_REG)) = reg;
+        }
+        break;
+    default:
+        /* HRS01, HRS04, HRS06 - not applicable on Versal, ignore */
+        break;
+    }
+}
+
+/* Register access functions for generic SDHCI driver.
+ * Translates Cadence SD4HC register offsets to standard Arasan SDHCI layout. */
+uint32_t sdhci_reg_read(uint32_t offset)
+{
+    volatile uint8_t *base = (volatile uint8_t *)VERSAL_SDHCI_BASE;
+
+    /* Cadence SRS registers (0x200+) -> standard SDHCI (subtract 0x200) */
+    if (offset >= CADENCE_SRS_OFFSET) {
+        return *((volatile uint32_t *)(base + offset - CADENCE_SRS_OFFSET));
+    }
+    /* Cadence HRS registers (0x000-0x1FF) -> translate to standard equivalents */
+    return versal_sdhci_hrs_read(offset);
+}
+
+void sdhci_reg_write(uint32_t offset, uint32_t val)
+{
+    volatile uint8_t *base = (volatile uint8_t *)VERSAL_SDHCI_BASE;
+
+    /* Cadence SRS registers (0x200+) -> standard SDHCI (subtract 0x200) */
+    if (offset >= CADENCE_SRS_OFFSET) {
+        *((volatile uint32_t *)(base + offset - CADENCE_SRS_OFFSET)) = val;
+        return;
+    }
+    /* Cadence HRS registers (0x000-0x1FF) -> translate to standard equivalents */
+    versal_sdhci_hrs_write(offset, val);
+}
+
+/* Platform initialization - called from sdhci_init()
+ * PLM already initializes the SD controller on Versal when booting from SD card,
+ * so we don't need to configure clocks/reset (CRL registers are protected at EL2).
+ * We verify the SDHCI controller is accessible via standard register reads. */
+void sdhci_platform_init(void)
+{
+#ifdef DEBUG_SDHCI
+    volatile uint8_t *base = (volatile uint8_t *)VERSAL_SDHCI_BASE;
+    uint32_t val;
+
+    wolfBoot_printf("sdhci_platform_init: SD1 at 0x%x\n",
+        (unsigned int)VERSAL_SDHCI_BASE);
+
+    /* Read standard SDHCI registers to verify controller access */
+    val = *((volatile uint32_t *)(base + 0x24));  /* Present State */
+    wolfBoot_printf("  Present State: 0x%x\n", (unsigned int)val);
+
+    val = *((volatile uint32_t *)(base + 0x40));  /* Capabilities */
+    wolfBoot_printf("  Capabilities:  0x%x\n", (unsigned int)val);
+    (void)val;
+#endif
+    /* PLM already configured SD1 - no clock/reset setup needed */
+}
+
+/* Platform interrupt setup - called from sdhci_init()
+ * Using polling mode for simplicity - no GIC setup needed */
+void sdhci_platform_irq_init(void)
+{
+    /* Polling mode: no interrupt setup required
+     * GIC interrupt support can be added later if needed */
+#ifdef DEBUG_SDHCI
+    wolfBoot_printf("sdhci_platform_irq_init: Using polling mode\n");
+#endif
+}
+
+/* Platform bus mode selection - called from sdhci_init() */
+void sdhci_platform_set_bus_mode(int is_emmc)
+{
+    (void)is_emmc;
+#ifdef DEBUG_SDHCI
+    wolfBoot_printf("sdhci_platform_set_bus_mode: is_emmc=%d\n", is_emmc);
+#endif
+    /* Nothing additional needed for Versal - mode is set in generic driver */
+}
+#endif /* DISK_SDCARD || DISK_EMMC */
+
+
+#endif /* TARGET_versal */

@@ -176,6 +176,83 @@ stop_uart_capture() {
 cleanup() { [ "$KEEP_UART_CAPTURE" = "false" ] && { log_info "Cleaning up..."; stop_uart_capture; kill_existing_uart_processes; }; }
 trap cleanup EXIT INT TERM
 
+# SD card image configuration
+SDCARD_IMG="${SDCARD_IMG:-${WOLFBOOT_ROOT}/sdcard.img}"
+SDCARD_SIZE_MB="${SDCARD_SIZE_MB:-1024}"
+SDCARD_BOOT_SIZE_MB="${SDCARD_BOOT_SIZE_MB:-128}"
+SDCARD_OFP_SIZE_MB="${SDCARD_OFP_SIZE_MB:-200}"
+
+# Helper: Create SD card image with MBR partitions
+# Layout:
+#   Partition 1: boot   (128MB, FAT32 LBA, bootable) - BOOT.BIN
+#   Partition 2: OFP_A  (200MB, Linux)               - Primary signed FIT image
+#   Partition 3: OFP_B  (200MB, Linux)               - Update signed FIT image
+#   Partition 4: rootfs (remainder)                  - Linux root filesystem
+# Note: Versal boot ROM requires MBR (does not support GPT)
+create_sdcard_image() {
+    local img="$1" size_mb="${2:-$SDCARD_SIZE_MB}"
+
+    log_info "Creating ${size_mb}MB SD card image: $img"
+    dd if=/dev/zero of="$img" bs=1M count="$size_mb" status=progress 2>/dev/null || { log_error "Failed to create image"; return 1; }
+
+    log_info "Creating MBR partition table..."
+    sfdisk "$img" <<EOF
+label: dos
+unit: sectors
+
+1 : start=2048, size=${SDCARD_BOOT_SIZE_MB}M, type=c, bootable
+2 : size=${SDCARD_OFP_SIZE_MB}M, type=83
+3 : size=${SDCARD_OFP_SIZE_MB}M, type=83
+4 : type=83
+EOF
+
+    if [ $? -ne 0 ]; then
+        log_error "Failed to create MBR partitions"
+        return 1
+    fi
+
+    log_ok "MBR partition table created"
+    fdisk -l "$img"
+}
+
+# Helper: Get partition offset in bytes from MBR
+get_partition_offset() {
+    local img="$1" part="$2"
+    local sector
+    # Parse sfdisk dump for partition start sector
+    sector=$(sfdisk -d "$img" 2>/dev/null | grep "^${img}${part}" | sed 's/.*start=\s*\([0-9]*\).*/\1/')
+    if [ -z "$sector" ]; then
+        # Fallback: parse fdisk output
+        sector=$(fdisk -l "$img" 2>/dev/null | grep "^${img}${part}" | awk '{print $2}')
+        [ "$sector" = "*" ] && sector=$(fdisk -l "$img" 2>/dev/null | grep "^${img}${part}" | awk '{print $3}')
+    fi
+    if [ -z "$sector" ] || [ "$sector" -eq 0 ] 2>/dev/null; then
+        log_error "Failed to read partition $part offset"
+        echo 0
+        return
+    fi
+    echo $((sector * 512))
+}
+
+# Helper: Write file to partition in SD card image
+write_to_partition() {
+    local img="$1" part="$2" file="$3"
+    local offset_bytes=$(get_partition_offset "$img" "$part")
+    local offset_blocks=$((offset_bytes / 512))
+
+    if [ -z "$offset_blocks" ] || [ "$offset_blocks" -eq 0 ]; then
+        log_error "Failed to get partition $part offset"
+        return 1
+    fi
+
+    log_info "Writing $file to partition $part (offset: ${offset_bytes} bytes, sector: ${offset_blocks})"
+    dd if="$file" of="$img" bs=512 seek="$offset_blocks" conv=notrunc status=progress 2>/dev/null || {
+        log_error "Failed to write $file to partition $part"
+        return 1
+    }
+    log_ok "Written $(stat -c%s "$file") bytes to partition $part"
+}
+
 # Helper: Check Linux images directory
 check_linux_images() {
     local required_files="$1"
@@ -298,8 +375,10 @@ Options:
   (none)              Full build, flash, and boot wolfBoot
   --test-app          Full build + flash test app to boot partition
   --test-update       Full build + flash test app v2 to update partition
-  --linux             Build wolfBoot + signed Linux FIT image and boot
+  --linux             Build wolfBoot + signed Linux FIT image and boot (QSPI)
+  --linux-sdcard      Build wolfBoot + signed Linux FIT image for SD card boot
   --linux-uboot       Build BOOT.BIN with U-Boot and flash Linux FIT image
+  --sdcard            Build wolfBoot with SD card config and create SD card image
   --boot-sdcard       Test SD card boot mode only (no build/flash)
   --boot-qspi         Test QSPI boot mode only (no build/flash)
   --skipuart          Skip UART capture (use with --boot-sdcard/--boot-qspi)
@@ -311,19 +390,23 @@ Environment Variables:
   BOARD_IP            Board IP address (default: 10.0.4.90)
   TFTP_DIR            TFTP directory path (default: /srv/tftp)
   VITIS_PATH          Xilinx Vitis installation path (default: /opt/Xilinx/Vitis/2024.2)
-  LINUX_IMAGES_DIR    Path to PetaLinux images directory (for --linux and --linux-uboot)
+  LINUX_IMAGES_DIR    Path to PetaLinux images directory (for --linux, --linux-sdcard, --linux-uboot)
+  SDCARD_IMG          SD card image output path (default: sdcard.img)
+  SDCARD_SIZE_MB      SD card image size in MB (default: 512)
 
 Examples:
   $0 --boot-sdcard --skipuart    # Reset to SD boot without UART capture
   $0 --boot-qspi --skipuart      # Reset to QSPI boot without UART capture
+  $0 --sdcard                    # Build with SD card config and create SD card image
+  LINUX_IMAGES_DIR=/path/to/images/linux $0 --linux-sdcard  # PetaLinux SD card boot
 EOF
 }
 
-# Check for --skipuart flag before starting UART capture
+# Check for --skipuart flag or modes that don't need UART before starting UART capture
 SKIP_UART=false
 for arg in "$@"; do
     case "$arg" in
-        --skipuart) SKIP_UART=true ;;
+        --skipuart|--sdcard|--linux-sdcard) SKIP_UART=true ;;
     esac
 done
 
@@ -429,6 +512,161 @@ case "${1:-}" in
         log_ok "Signed FIT size: $(stat -c%s fitImage_v1_signed.bin) bytes"
 
         flash_and_boot "BOOT.BIN:0x0 fitImage_v1_signed.bin:0x800000" 90 "wolfBoot + Linux boot"
+        exit 0
+        ;;
+    --linux-sdcard)
+        log_info "=== Linux SD Card Boot Mode ==="
+        check_linux_images "plm.elf psmfw.elf bl31.elf Image system-default.dtb" "--linux-sdcard"
+        command -v mkimage &>/dev/null || { log_error "mkimage not found - install with: sudo apt install u-boot-tools"; exit 1; }
+
+        log_info "Copying Linux boot files..."
+        for f in plm.elf psmfw.elf bl31.elf Image system-default.dtb; do cp "${LINUX_IMAGES_DIR}/${f}" .; done
+        copy_pdi
+
+        # Build wolfBoot with SD card configuration
+        log_info "Building wolfBoot with SD card config..."
+        cp config/examples/versal_vmk180_sdcard.config .config
+        make clean && make || { log_error "Failed to build wolfBoot"; exit 1; }
+        [ ! -f "wolfboot.elf" ] && { log_error "wolfboot.elf not found"; exit 1; }
+        load_config .config
+
+        # Create FIT image from Linux kernel + DTB
+        log_info "Creating FIT image..."
+        mkimage -f ./hal/versal.its fitImage || { log_error "mkimage failed"; exit 1; }
+        log_ok "FIT image created: fitImage ($(stat -c%s fitImage) bytes)"
+
+        # Sign FIT image
+        log_info "Signing FIT image..."
+        export IMAGE_HEADER_SIZE IMAGE_SIGNATURE_SIZE
+        PRIVATE_KEY="${PRIVATE_KEY:-wolfboot_signing_private_key.der}"
+        ./tools/keytools/sign $SIGN_OPTIONS fitImage "$PRIVATE_KEY" 1 || { log_error "Signing v1 failed"; exit 1; }
+        ./tools/keytools/sign $SIGN_OPTIONS fitImage "$PRIVATE_KEY" 2 || { log_error "Signing v2 failed"; exit 1; }
+        log_ok "Signed FIT images: fitImage_v1_signed.bin, fitImage_v2_signed.bin"
+
+        # Create SD card image with MBR partitions
+        create_sdcard_image "$SDCARD_IMG" "$SDCARD_SIZE_MB" || exit 1
+
+        # Write signed FIT images to partitions (OFP_A=2, OFP_B=3)
+        log_info "Writing signed FIT images to SD card partitions..."
+        write_to_partition "$SDCARD_IMG" 2 fitImage_v1_signed.bin || exit 1
+        write_to_partition "$SDCARD_IMG" 3 fitImage_v2_signed.bin || exit 1
+
+        # Write rootfs to partition 4 if available
+        ROOTFS_IMG=""
+        if [ -f "${LINUX_IMAGES_DIR}/rootfs.ext4" ]; then
+            ROOTFS_IMG="${LINUX_IMAGES_DIR}/rootfs.ext4"
+        elif [ -f "${LINUX_IMAGES_DIR}/rootfs.cpio.gz" ]; then
+            ROOTFS_IMG="${LINUX_IMAGES_DIR}/rootfs.cpio.gz"
+        fi
+        if [ -n "$ROOTFS_IMG" ]; then
+            log_info "Writing rootfs to partition 4..."
+            write_to_partition "$SDCARD_IMG" 4 "$ROOTFS_IMG" || exit 1
+            log_ok "rootfs written ($(stat -c%s "$ROOTFS_IMG") bytes)"
+        else
+            log_info "No rootfs found in $LINUX_IMAGES_DIR (looked for rootfs.ext4, rootfs.cpio.gz)"
+            log_info "You can write rootfs to partition 4 manually"
+        fi
+
+        log_ok "SD card image created: $SDCARD_IMG"
+
+        # Generate BOOT.BIN
+        log_info ""
+        log_info "Generating BOOT.BIN with wolfBoot..."
+        source "${VITIS_PATH}/settings64.sh" 2>/dev/null || true
+        if command -v bootgen &>/dev/null; then
+            rm -f BOOT.BIN
+            bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN || log_error "bootgen failed"
+            [ -f BOOT.BIN ] && {
+                log_ok "BOOT.BIN size: $(stat -c%s BOOT.BIN) bytes"
+                cp BOOT.BIN "${TFTP_DIR}/" 2>/dev/null && log_ok "BOOT.BIN copied to TFTP"
+            }
+        else
+            log_error "bootgen not found - source Vitis settings or set VITIS_PATH"
+        fi
+
+        log_info ""
+        log_info "SD Card Partition Layout:"
+        log_info "  Partition 1 (boot):   FAT32 - BOOT.BIN (PLM + PSM + BL31 + wolfBoot)"
+        log_info "  Partition 2 (OFP_A):  Signed Linux FIT image v1 (primary)"
+        log_info "  Partition 3 (OFP_B):  Signed Linux FIT image v2 (update)"
+        log_info "  Partition 4 (rootfs): Linux root filesystem"
+        log_info ""
+        log_info "Provision SD card:"
+        log_info "  sudo ./tools/scripts/versal_sdcard_provision.sh /dev/sdX"
+        log_info ""
+        log_info "Or manually:"
+        log_info "  sudo dd if=$SDCARD_IMG of=/dev/sdX bs=4M status=progress conv=fsync"
+        log_info "  sync"
+        log_info "  sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1"
+        log_info "  sudo mount /dev/sdX1 /mnt && sudo cp BOOT.BIN /mnt/ && sudo umount /mnt"
+
+        exit 0
+        ;;
+    --sdcard)
+        log_info "=== SD Card Boot Mode ==="
+
+        # Build wolfBoot with SD card configuration
+        log_info "Building wolfBoot with SD card config..."
+        cp config/examples/versal_vmk180_sdcard.config .config
+        make clean && make || { log_error "Failed to build wolfBoot"; exit 1; }
+        [ ! -f "wolfboot.elf" ] && { log_error "wolfboot.elf not found"; exit 1; }
+        load_config .config
+
+        # Build and sign test application
+        log_info "Building and signing test application..."
+        make test-app/image.bin || { log_error "Failed to build test app"; exit 1; }
+        export IMAGE_HEADER_SIZE IMAGE_SIGNATURE_SIZE
+        PRIVATE_KEY="${PRIVATE_KEY:-wolfboot_signing_private_key.der}"
+        ./tools/keytools/sign $SIGN_OPTIONS test-app/image.bin "$PRIVATE_KEY" 1 || { log_error "Signing v1 failed"; exit 1; }
+        ./tools/keytools/sign $SIGN_OPTIONS test-app/image.bin "$PRIVATE_KEY" 2 || { log_error "Signing v2 failed"; exit 1; }
+        log_ok "Signed test applications: image_v1_signed.bin, image_v2_signed.bin"
+
+        # Create SD card image with GPT partitions
+        create_sdcard_image "$SDCARD_IMG" "$SDCARD_SIZE_MB" || exit 1
+
+        # Write signed images to partitions (OFP_A=2, OFP_B=3)
+        log_info "Writing signed images to SD card partitions..."
+        write_to_partition "$SDCARD_IMG" 2 test-app/image_v1_signed.bin || exit 1
+        write_to_partition "$SDCARD_IMG" 3 test-app/image_v2_signed.bin || exit 1
+
+        log_ok "SD card image created: $SDCARD_IMG"
+
+        # Generate BOOT.BIN if prebuilt files are available
+        export PREBUILT_DIR="${WOLFBOOT_ROOT}/../soc-prebuilt-firmware/vmk180-versal"
+        if [ -d "${PREBUILT_DIR}" ]; then
+            log_info ""
+            log_info "Generating BOOT.BIN with wolfBoot..."
+            for f in project_1.pdi plm.elf psmfw.elf bl31.elf system-default.dtb; do
+                [ -f "${PREBUILT_DIR}/${f}" ] && cp "${PREBUILT_DIR}/${f}" .
+            done
+            source "${VITIS_PATH}/settings64.sh" 2>/dev/null || true
+            if command -v bootgen &>/dev/null; then
+                rm -f BOOT.BIN
+                bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN || log_error "bootgen failed"
+                [ -f BOOT.BIN ] && {
+                    log_ok "BOOT.BIN size: $(stat -c%s BOOT.BIN) bytes"
+                    cp BOOT.BIN "${TFTP_DIR}/" 2>/dev/null && log_ok "BOOT.BIN copied to TFTP"
+                }
+            fi
+        fi
+
+        log_info ""
+        log_info "SD Card Partition Layout:"
+        log_info "  Partition 1 (boot):   FAT32 - BOOT.BIN goes here"
+        log_info "  Partition 2 (OFP_A):  Primary signed FIT image (written)"
+        log_info "  Partition 3 (OFP_B):  Update signed FIT image (written)"
+        log_info "  Partition 4 (rootfs): Linux root filesystem"
+        log_info ""
+        log_info "To write to physical SD card (replace /dev/sdX):"
+        log_info "  sudo dd if=$SDCARD_IMG of=/dev/sdX bs=4M status=progress conv=fsync"
+        log_info "  sync"
+        log_info ""
+        log_info "Then format partition 1 as FAT32 and copy BOOT.BIN:"
+        log_info "  sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1"
+        log_info "  sudo mount /dev/sdX1 /mnt"
+        log_info "  sudo cp BOOT.BIN /mnt/"
+        log_info "  sudo umount /mnt"
+
         exit 0
         ;;
     "")

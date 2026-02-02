@@ -199,8 +199,45 @@ void RAMFUNCTION arch_reboot(void)
 }
 #endif
 
-/* Exception handler stubs - bootloader does not handle interrupts */
-void SynchronousInterrupt(void) { }
-void IRQInterrupt(void) { }
-void FIQInterrupt(void) { }
-void SErrorInterrupt(void) { }
+/* ============================================================================
+ * Exception Handlers for EL2 (optional DEBUG_HARDFAULT)
+ * ============================================================================
+ */
+
+#if defined(DEBUG_HARDFAULT) && defined(DEBUG_UART) && defined(EL2_HYPERVISOR)
+
+#define READ_SYSREG(_out, _reg) __asm__ volatile("mrs %0, " #_reg : "=r"(_out))
+
+static void print_exception_info(const char *type)
+{
+    uint64_t esr, elr, far;
+
+    READ_SYSREG(esr, ESR_EL2);
+    READ_SYSREG(elr, ELR_EL2);
+    READ_SYSREG(far, FAR_EL2);
+
+    wolfBoot_printf("\n\n*** %s EXCEPTION ***\n", type);
+    wolfBoot_printf("ESR_EL2: 0x%08x%08x\n", (uint32_t)(esr >> 32), (uint32_t)esr);
+    wolfBoot_printf("ELR_EL2: 0x%08x%08x\n", (uint32_t)(elr >> 32), (uint32_t)elr);
+    wolfBoot_printf("FAR_EL2: 0x%08x%08x\n", (uint32_t)(far >> 32), (uint32_t)far);
+    wolfBoot_printf("*** SYSTEM HALTED ***\n");
+}
+
+static void hardfault_halt(const char *type)
+{
+    print_exception_info(type);
+    while (1) { __asm__ volatile("wfi"); }
+}
+
+void SynchronousInterrupt(void) { hardfault_halt("SYNCHRONOUS"); }
+void IRQInterrupt(void) { hardfault_halt("IRQ"); }
+void FIQInterrupt(void) { hardfault_halt("FIQ"); }
+void SErrorInterrupt(void) { hardfault_halt("SERROR"); }
+
+#else
+/* Simple stubs when debug not enabled */
+void SynchronousInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
+void IRQInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
+void FIQInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
+void SErrorInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
+#endif /* DEBUG_HARDFAULT && DEBUG_UART && EL2_HYPERVISOR */
