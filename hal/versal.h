@@ -279,11 +279,20 @@
 #define CRL_UART0_REF_CTRL      (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0128)))
 #define CRL_UART1_REF_CTRL      (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x012C)))
 
+/* SD/SDIO Reference Clock Control */
+#define CRL_SDIO0_REF_CTRL      (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0104)))
+#define CRL_SDIO1_REF_CTRL      (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0108)))
+
 /* UART Reset Control - from lpd_data.cdo line 258 */
 #define CRL_RST_UART0           (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0318)))
 #define CRL_RST_UART1           (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x031C)))
 #define CRL_RST_UART0_BIT       (1UL << 0)
 #define CRL_RST_UART1_BIT       (1UL << 0)  /* Each UART has its own register */
+
+/* SD/SDIO Reset Control */
+#define CRL_RST_SDIO0           (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0324)))
+#define CRL_RST_SDIO1           (*((volatile uint32_t*)(VERSAL_CRL_BASE + 0x0328)))
+#define CRL_RST_SDIO_BIT        (1UL << 0)
 
 /* Backward compatibility alias */
 #define CRL_RST_UART            CRL_RST_UART0

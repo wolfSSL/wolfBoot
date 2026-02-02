@@ -30,13 +30,11 @@
 
 void main(void)
 {
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     uint32_t boot_version, update_version;
+#endif
 
     hal_init();
-
-    /* Get versions from both partitions */
-    boot_version = wolfBoot_get_image_version(PART_BOOT);
-    update_version = wolfBoot_get_image_version(PART_UPDATE);
 
     wolfBoot_printf("\n\n");
     wolfBoot_printf("===========================================\n");
@@ -45,9 +43,17 @@ void main(void)
 
     wolfBoot_printf("Current EL: %d\n", current_el());
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    /* Get versions from both partitions (only available with fixed partitions) */
+    boot_version = wolfBoot_get_image_version(PART_BOOT);
+    update_version = wolfBoot_get_image_version(PART_UPDATE);
+
     /* Print firmware versions */
     wolfBoot_printf("BOOT: Version: %d (0x%08x)\n", boot_version, boot_version);
     wolfBoot_printf("UPDATE: Version: %d (0x%08x)\n", update_version, update_version);
+#else
+    wolfBoot_printf("Boot mode: Disk-based (GPT/MBR partitions)\n");
+#endif
 
     wolfBoot_printf("Application running successfully!\n");
     wolfBoot_printf("\nEntering idle loop...\n");

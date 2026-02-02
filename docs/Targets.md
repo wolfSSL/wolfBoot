@@ -1982,25 +1982,33 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 
 ## Versal Gen 1 VMK180
 
-AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA2197 Adaptive SoC - Dual ARM Cortex-A72
+AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA2197 Adaptive SoC - Dual ARM Cortex-A72.
 
 wolfBoot replaces U-Boot in the Versal boot flow:
 ```
 PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
 ```
 
-wolfBoot runs from DDR at address `0x8000000` at EL2 (non-secure). All clock, MIO, and DDR initialization is handled by PLM/PSM before wolfBoot starts.
+wolfBoot runs from DDR at `0x8000000` (EL2, non-secure). All clock, MIO, and DDR initialization is handled by PLM/PSM before wolfBoot starts.
 
-See example configuration file at `config/examples/versal_vmk180.config`.
+This target supports **two boot paths**:
+- **QSPI boot** (primary, production-style): `config/examples/versal_vmk180.config`
+- **SD card boot** (MBR, A/B images): `config/examples/versal_vmk180_sdcard.config`
 
 ### Prerequisites
 
-1. **Xilinx Vitis 2024.1 or 2024.2** (required for bootgen - 2025.1 or later has QSPI boot issues)
+1. **Xilinx Vitis 2024.1 or newer**
+
+Note: If using QSPI there are bootgen issues with 2025.1+, so recommend 2024.1 or 2024.2
+
    - Set `VITIS_PATH` environment variable: `export VITIS_PATH=/opt/Xilinx/Vitis/2024.1`
+2. **Toolchain**: `aarch64-none-elf-gcc`
 
-2. **Toolchain**
-   - ARM GCC toolchain: `aarch64-none-elf-gcc`
+### Common Notes
 
+- Debugging with OCRAM (OCM): set `WOLFBOOT_ORIGIN=0xFFFC0000` (OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`).
+- Test application uses generic `boot_arm64_start.S` and `AARCH64.ld` and prints EL + version.
+  - Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
 
 ### Configuration Options
 
@@ -2014,8 +2022,11 @@ Key configuration options in `config/examples/versal_vmk180.config`:
 - `EXT_FLASH=1` - External flash support
 - `ELF=1` - ELF loading support
 
-### Memory Layout
+### QSPI Boot (default)
 
+Use `config/examples/versal_vmk180.config`.
+
+**QSPI layout**
 | Partition   | Size   | Address | Description |
 |-------------|--------|---------|-------------|
 | Bootloader  | -      | 0x8000000 | wolfBoot in DDR (loaded by BL31) |
@@ -2023,51 +2034,41 @@ Key configuration options in `config/examples/versal_vmk180.config`:
 | Update      | 44MB   | 0x3400000 | Update partition in QSPI |
 | Swap        | -      | 0x6000000 | Swap area in QSPI |
 
-### Debugging
+**QSPI Flash**
 
-For debugging with OCRAM (OCM), set `WOLFBOOT_ORIGIN=0xFFFC0000` in the config file. Versal Gen 1 OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`.
+VMK180 uses dual parallel MT25QU01GBBB flash (128MB each, 256MB total). The QSPI driver supports:
+- DMA mode (default) or IO polling mode (`GQSPI_MODE_IO`)
+- Quad SPI (4-bit) for faster reads
+- 4-byte addressing for full flash access
+- Hardware striping for dual parallel operation
+- 75MHz default clock (configurable via `GQSPI_CLK_DIV`)
 
-### Building wolfBoot
-
-Build wolfBoot from the wolfBoot root directory:
-
+**Build wolfBoot**
 ```sh
 cp config/examples/versal_vmk180.config .config
 make clean
 make
 ```
 
-### Building BOOT.BIN
-
-If you don't already have prebuilt firmware, clone the Xilinx prebuilt firmware repository:
-
+**Build BOOT.BIN**
 ```sh
 git clone --branch xlnx_rel_v2024.2 https://github.com/Xilinx/soc-prebuilt-firmware.git
 export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/vmk180-versal
-```
-
-Copy the required files into wolfboot root directory:
-
-```sh
 cp ${PREBUILT_DIR}/project_1.pdi .
 cp ${PREBUILT_DIR}/plm.elf .
 cp ${PREBUILT_DIR}/psmfw.elf .
 cp ${PREBUILT_DIR}/bl31.elf .
 cp ${PREBUILT_DIR}/system-default.dtb .
-```
 
-Source the Vitis environment and generate BOOT.BIN using bootgen:
-
-```sh
 source ${VITIS_PATH}/settings64.sh
 bootgen -arch versal -image ./tools/scripts/vmk180/boot_wolfboot.bif -w -o BOOT.BIN
 ```
 
-The BIF file (`boot_wolfboot.bif`) references files using relative paths in the same directory. After successful generation, `BOOT.BIN` will be created in `tools/scripts/vmk180/`.
+The BIF file (`boot_wolfboot.bif`) references files using relative paths in the same directory.
 
-### Flashing QSPI
+**Flash QSPI**
 
-Flash `BOOT.BIN` to QSPI flash using your preferred method. For example:
+Flash `BOOT.BIN` to QSPI flash using your preferred method:
 
 - **Vitis**: Use the Hardware Manager to program the QSPI flash via JTAG. Load `BOOT.BIN` and program to QSPI32 flash memory.
 
@@ -2081,48 +2082,23 @@ Flash `BOOT.BIN` to QSPI flash using your preferred method. For example:
   sf write ${loadaddr} 0 ${filesize}
   ```
 
-### QSPI Flash
-
-VMK180 uses dual parallel MT25QU01GBBB flash (128MB each, 256MB total). The QSPI driver supports:
-- DMA mode (default) or IO polling mode (`GQSPI_MODE_IO`)
-- Quad SPI (4-bit) for faster reads
-- 4-byte addressing for full flash access
-- Hardware striping for dual parallel operation
-- 75MHz default clock (configurable via `GQSPI_CLK_DIV`)
-
-### Building and Signing Test Application
-
-```sh
-# Build and sign the test application
-make test-app/image_v1_signed.bin
-```
-
-The signed test application will be at `test-app/image_v1_signed.bin`.
-
-**Test Application Details:**
-- Uses generic `boot_arm64_start.S` startup code (shared with other AArch64 platforms)
-- Uses generic `AARCH64.ld` linker script with `@WOLFBOOT_LOAD_ADDRESS@` placeholder
-- Displays current exception level (EL) and firmware version
-- Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
-
-### Firmware Update Testing
+**Firmware Update Testing**
 
 wolfBoot supports firmware updates using the UPDATE partition. The bootloader automatically selects the image with the higher version number from either the BOOT or UPDATE partition.
 
-**Partition Layout:**
 - BOOT partition: `0x800000`
 - UPDATE partition: `0x3400000`
 - For RAM-based boot (Versal), images are loaded to `WOLFBOOT_LOAD_ADDRESS` (`0x10000000`)
 
-**Update Behavior:**
+Update behavior:
 - wolfBoot checks both BOOT and UPDATE partitions on boot
 - Selects the partition with the higher version number
 - Falls back to the other partition if verification fails
 - The test application displays the firmware version it was signed with
 
-To test firmware updates, build and sign the test application with different version numbers, then flash them to the appropriate partitions using your preferred method.
+To test firmware updates, build and sign the test application with different version numbers, then flash them to the appropriate partitions.
 
-### Example Boot Output
+**Example Boot Output**
 
 ```
 ========================================
@@ -2157,65 +2133,37 @@ Application running successfully!
 Entering idle loop...
 ```
 
-### Booting PetaLinux
+**Booting PetaLinux (QSPI)**
 
-wolfBoot can boot a signed Linux kernel on the Versal VMK180. This replaces U-Boot entirely for a secure boot chain.
+wolfBoot can boot a signed Linux kernel on the Versal VMK180, replacing U-Boot entirely for a secure boot chain.
 
-#### Prerequisites
-
+Prerequisites:
 1. **PetaLinux 2024.2** (or compatible version) built for VMK180
 2. **Pre-built Linux images** from your PetaLinux build:
    - `Image` - Uncompressed Linux kernel (ARM64)
    - `system-default.dtb` - Device tree blob for VMK180
-   - `bl31.elf` - ARM Trusted Firmware
-   - `plm.elf` - Platform Loader & Manager
-   - `psmfw.elf` - PSM firmware
-
 3. **SD card** with root filesystem (PetaLinux rootfs.ext4 written to partition 2)
 
-#### Boot Flow
-
-```
-PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
-```
-
-wolfBoot:
-1. Loads the signed FIT image from QSPI flash
-2. Verifies the cryptographic signature (ECC384/SHA384)
-3. Parses the FIT image to extract kernel and DTB
-4. Applies DTB fixups (bootargs for root filesystem)
-5. Transitions from EL2 to EL1 and jumps to the kernel
-
-#### Creating the FIT Image
-
-wolfBoot uses a FIT (Flattened Image Tree) image containing the kernel and device tree. Create the FIT image using the provided ITS file:
-
-```sh
-# Copy Linux images to wolfBoot root directory
-cp /path/to/petalinux/images/linux/Image .
-cp /path/to/petalinux/images/linux/system-default.dtb .
-
-# Create FIT image using mkimage
-mkimage -f hal/versal.its fitImage
-```
-
-The ITS file (`hal/versal.its`) specifies:
+wolfBoot uses a FIT (Flattened Image Tree) image containing the kernel and device tree. The ITS file (`hal/versal.its`) specifies:
 - Kernel load address: `0x00200000`
 - DTB load address: `0x00001000`
 - SHA256 hashes for integrity
 
-#### Signing the FIT Image
-
-Sign the FIT image with wolfBoot tools:
+Create and sign the FIT image, then flash to QSPI:
 
 ```sh
-# Sign with ECC384 (default for Versal config)
+cp /path/to/petalinux/images/linux/Image .
+cp /path/to/petalinux/images/linux/system-default.dtb .
+mkimage -f hal/versal.its fitImage
 ./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
+
+tftp ${loadaddr} fitImage_v1_signed.bin
+sf probe 0
+sf erase 0x800000 +${filesize}
+sf write ${loadaddr} 0x800000 ${filesize}
 ```
 
-This creates `fitImage_v1_signed.bin`.
-
-#### DTB Fixup for Root Filesystem
+**DTB Fixup for Root Filesystem**
 
 wolfBoot automatically modifies the device tree to set the kernel command line (`bootargs`). The default configuration mounts the root filesystem from SD card partition 2:
 
@@ -2230,31 +2178,14 @@ To customize the root device, add to your config:
 CFLAGS_EXTRA+=-DLINUX_BOOTARGS_ROOT=\"/dev/mmcblk0p4\"
 ```
 
-#### Flashing to QSPI
-
-Flash the signed FIT image to the boot partition at `0x800000`:
+**Automated Testing**
 
 ```sh
-# From U-Boot (via SD card boot)
-tftp ${loadaddr} fitImage_v1_signed.bin
-sf probe 0
-sf erase 0x800000 +${filesize}
-sf write ${loadaddr} 0x800000 ${filesize}
-```
-
-#### Automated Testing
-
-The test script supports Linux boot testing:
-
-```sh
-# Set path to PetaLinux images
 export LINUX_IMAGES_DIR=/path/to/petalinux/images/linux
-
-# Build wolfBoot, create signed FIT, flash to QSPI, and boot
 ./tools/scripts/versal_test.sh --linux
 ```
 
-#### Example Linux Boot Output
+**Example Linux Boot Output**
 
 ```
 ========================================
@@ -2294,7 +2225,7 @@ PetaLinux 2024.2 xilinx-vmk180 ttyAMA0
 xilinx-vmk180 login:
 ```
 
-#### Boot Performance
+**Boot Performance**
 
 Typical boot timing with ECC384/SHA384 signing:
 
@@ -2304,6 +2235,69 @@ Typical boot timing with ECC384/SHA384 signing:
 | SHA384 integrity check | ~167ms |
 | ECC384 signature verify | ~3ms |
 | **Total wolfBoot overhead** | **~870ms** |
+
+---
+
+### SD Card Boot (MBR + A/B)
+
+Use `config/examples/versal_vmk180_sdcard.config`. This uses the Arasan SDHCI controller and an **MBR** partitioned SD card.
+
+**Partition layout**
+| Partition | Name | Size | Type | Contents |
+|-----------|------|------|------|----------|
+| 1 | boot | 128MB | FAT32 LBA (0x0c), bootable | BOOT.BIN (PLM + PSM + BL31 + wolfBoot) |
+| 2 | OFP_A | 200MB | Linux (0x83) | Primary signed firmware image |
+| 3 | OFP_B | 200MB | Linux (0x83) | Update signed firmware image |
+| 4 | rootfs | remainder | Linux (0x83) | Linux root filesystem |
+
+**Build wolfBoot + sign test images**
+```sh
+cp config/examples/versal_vmk180_sdcard.config .config
+make clean
+make
+
+make test-app/image.bin
+./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 1
+./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+**Create SD image**
+```sh
+dd if=/dev/zero of=sdcard.img bs=1M count=1024
+sfdisk sdcard.img <<EOF
+label: dos
+unit: sectors
+
+1 : start=2048, size=128M, type=c, bootable
+2 : size=200M, type=83
+3 : size=200M, type=83
+4 : type=83
+EOF
+
+SECTOR2=$(sfdisk -d sdcard.img | awk '/sdcard.img2/ {for (i=1;i<=NF;i++) if ($i ~ /start=/) {gsub(/start=|,/, "", $i); print $i}}')
+SECTOR3=$(sfdisk -d sdcard.img | awk '/sdcard.img3/ {for (i=1;i<=NF;i++) if ($i ~ /start=/) {gsub(/start=|,/, "", $i); print $i}}')
+dd if=test-app/image_v1_signed.bin of=sdcard.img bs=512 seek=$SECTOR2 conv=notrunc
+dd if=test-app/image_v2_signed.bin of=sdcard.img bs=512 seek=$SECTOR3 conv=notrunc
+```
+
+**Provision SD card**
+```sh
+sudo dd if=sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
+sync
+sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1
+sudo mount /dev/sdX1 /mnt
+sudo cp BOOT.BIN /mnt/
+sudo umount /mnt
+sudo fdisk -l /dev/sdX
+```
+
+**Boot Mode**
+
+| Boot Mode | MODE Pins 3:0 | Mode SW1[4:1]  |
+| --------- | ------------- | -------------- |
+| JTAG      | 0 0 0 0       | on, on, on, on |
+| QSPI32    | 0 0 1 0       | on, on, off,on |
+| SD1       | 1 1 1 0       | off,off,off,on |
 
 
 ## Cypress PSoC-6

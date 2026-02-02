@@ -207,27 +207,6 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
     return 0;
 }
 
-/**
- * @brief Decrypt an image in RAM.
- *
- * This function decrypts the full image (header + firmware) using the
- * configured encryption algorithm. The decryption is done in-place.
- *
- * @param data Pointer to the encrypted image data.
- * @param size Size of the image (header + firmware).
- *
- * @return 0 if successful, -1 on failure.
- */
-static int decrypt_image(uint8_t *data, uint32_t size)
-{
-    /* Reset IV to start of image (block 0) */
-    disk_crypto_set_iv(0);
-
-    /* Decrypt entire image - CTR mode handles counter increment internally */
-    crypto_decrypt(data, data, size);
-
-    return 0;
-}
 #endif /* DISK_ENCRYPT */
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
@@ -261,6 +240,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t *load_address;
     int failures = 0;
     uint32_t load_off;
+    const uint8_t *hdr_ptr = NULL;
 #ifdef MMU
     uint8_t *dts_addr = NULL;
     uint32_t dts_size = 0;
@@ -365,6 +345,7 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
 
+        hdr_ptr = p_hdr;
 #ifdef DISK_ENCRYPT
         /* Decrypt header to parse image size */
         if (decrypt_header(p_hdr, dec_hdr) != 0) {
@@ -372,12 +353,10 @@ void RAMFUNCTION wolfBoot_start(void)
             selected ^= 1;
             continue;
         }
-        memset(&os_image, 0, sizeof(os_image));
-        ret = wolfBoot_open_image_address(&os_image, (void*)dec_hdr);
-#else
-        memset(&os_image, 0, sizeof(os_image));
-        ret = wolfBoot_open_image_address(&os_image, (void*)p_hdr);
+        hdr_ptr = dec_hdr;
 #endif
+        memset(&os_image, 0, sizeof(os_image));
+        ret = wolfBoot_open_image_address(&os_image, (void*)hdr_ptr);
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
             selected ^= 1;
@@ -398,17 +377,18 @@ void RAMFUNCTION wolfBoot_start(void)
                             part_name);
 #endif
 
-        /* Read the image into RAM */
+        /* Read the payload into RAM (skip header) */
         wolfBoot_printf("Loading image from disk...");
         BENCHMARK_START();
         load_off = 0;
         do {
-            ret = disk_part_read(BOOT_DISK, cur_part, load_off,
-                DISK_BLOCK_SIZE, ((uint8_t *)load_address) + load_off);
+            ret = disk_part_read(BOOT_DISK, cur_part,
+                IMAGE_HEADER_SIZE + load_off, DISK_BLOCK_SIZE,
+                ((uint8_t *)load_address) + load_off);
             if (ret < 0)
                 break;
             load_off += ret;
-        } while (load_off < os_image.fw_size + IMAGE_HEADER_SIZE);
+        } while (load_off < os_image.fw_size);
 
         if (ret < 0) {
             wolfBoot_printf("Error reading image from disk: p%d\r\n",
@@ -419,26 +399,27 @@ void RAMFUNCTION wolfBoot_start(void)
         BENCHMARK_END("done");
 
 #ifdef DISK_ENCRYPT
-        /* Decrypt the image in RAM */
+        /* Decrypt the payload in RAM */
         wolfBoot_printf("Decrypting image...");
         BENCHMARK_START();
-        ret = decrypt_image((uint8_t*)load_address,
-                os_image.fw_size + IMAGE_HEADER_SIZE);
-        if (ret != 0) {
-            wolfBoot_printf("Error decrypting image\r\n");
-            selected ^= 1;
-            continue;
+        if ((IMAGE_HEADER_SIZE % ENCRYPT_BLOCK_SIZE) != 0) {
+            wolfBoot_printf("Encrypted disk images require aligned header size\r\n");
+            wolfBoot_panic();
         }
+        disk_crypto_set_iv(IMAGE_HEADER_SIZE / ENCRYPT_BLOCK_SIZE);
+        crypto_decrypt((uint8_t*)load_address, (uint8_t*)load_address,
+            os_image.fw_size);
         BENCHMARK_END("done");
 #endif
 
         memset(&os_image, 0, sizeof(os_image));
-        ret = wolfBoot_open_image_address(&os_image, (void*)load_address);
+        ret = wolfBoot_open_image_address(&os_image, (void*)hdr_ptr);
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
             selected ^= 1;
             continue;
         }
+        os_image.fw_base = (uint8_t*)load_address;
 
         wolfBoot_printf("Checking image integrity...");
         BENCHMARK_START();

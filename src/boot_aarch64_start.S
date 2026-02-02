@@ -467,6 +467,7 @@ InitEL1:
 
 /* Assembly startup error handler */
 error:
+    wfi
     b      error
 
 

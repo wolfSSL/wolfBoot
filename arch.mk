@@ -87,6 +87,12 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS+=-DWOLFBOOT_DUALBOOT
     # Support detection and skip of U-Boot legacy header
     CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+    # PLM owns RVBAR on Versal in JTAG boot; skip RVBAR writes
+    CFLAGS+=-DSKIP_RVBAR=1
+    # Disable SDMA for multi-block transfers - use PIO instead.
+    # The Versal Arasan SDHCI controller does not restart SDMA after
+    # boundary crossings via SRS22/SRS23 writes (Cadence-specific behavior).
+    CFLAGS_EXTRA+=-DSDHCI_SDMA_DISABLED
   endif
 
   ifeq ($(TARGET),nxp_ls1028a)
@@ -1520,7 +1526,20 @@ BOOT_IMG?=test-app/image.bin
 ifeq ($(ARCH),AARCH64)
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
-  UPDATE_OBJS:=src/update_ram.o
+  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+    # Disk-based boot (SD card or eMMC)
+    CFLAGS+=-DWOLFBOOT_UPDATE_DISK
+    ifeq ($(MAX_DISKS),)
+      MAX_DISKS=1
+    endif
+    CFLAGS+=-DMAX_DISKS=$(MAX_DISKS)
+    UPDATE_OBJS:=src/update_disk.o
+    OBJS+=src/gpt.o
+    OBJS+=src/disk.o
+  else
+    # RAM-based boot from external flash (default)
+    UPDATE_OBJS:=src/update_ram.o
+  endif
 else
   ifeq ($(DUALBANK_SWAP),1)
     CFLAGS+=-DWOLFBOOT_DUALBOOT
