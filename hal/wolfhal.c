@@ -24,7 +24,9 @@
 #include "image.h"
 
 extern whal_Clock wbClockController;
+#ifndef WOLFHAL_NO_GPIO
 extern whal_Gpio wbGpio;
+#endif
 extern whal_Flash wbFlash;
 #if defined(DEBUG_UART) || defined(UART_FLASH)
 extern whal_Uart wbUart;
@@ -39,10 +41,12 @@ void hal_init(void)
         return;
     }
 
+#ifndef WOLFHAL_NO_GPIO
     err = whal_Gpio_Init(&wbGpio);
     if (err) {
         return;
     }
+#endif
 
     err = whal_Flash_Init(&wbFlash);
     if (err) {
@@ -66,7 +70,9 @@ void hal_prepare_boot(void)
 
     whal_Flash_Deinit(&wbFlash);
 
+#ifndef WOLFHAL_NO_GPIO
     whal_Gpio_Deinit(&wbGpio);
+#endif
 
     whal_Clock_Deinit(&wbClockController);
 }

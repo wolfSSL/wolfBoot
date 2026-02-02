@@ -35,7 +35,9 @@
 #define BOOT_LED_PIN 0
 
 extern whal_Clock wbClock;
+#ifndef WOLFHAL_NO_GPIO
 extern whal_Gpio wbGpio;
+#endif
 extern whal_Flash wbFlash;
 #if defined(DEBUG_UART) || defined(UART_FLASH)
 extern whal_Uart wbUart;
@@ -58,7 +60,9 @@ void main(void) {
 
     hal_init();
 
+#ifndef WOLFHAL_NO_GPIO
     whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 1);
+#endif
 
     version = wolfBoot_current_firmware_version();
     updv = wolfBoot_update_firmware_version();
@@ -70,12 +74,16 @@ void main(void) {
     
     if ((version == 1) && (updv != 8)) {
         uint32_t sz;
+#ifndef WOLFHAL_NO_GPIO
         whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 0);
+#endif
 #if EXT_ENCRYPTED
         wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
 #endif
         wolfBoot_update_trigger();
+#ifndef WOLFHAL_NO_GPIO
         whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 1);
+#endif
     } else {
         if (version != 7)
             wolfBoot_success();
