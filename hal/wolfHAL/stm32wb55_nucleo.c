@@ -11,7 +11,6 @@
 whal_Clock wbClockController;
 whal_Flash wbFlash;
 
-
 /* Core clock controller (MSI -> PLL -> SYSCLK at 64 MHz). */
 whal_Clock wbClockController = {
     WHAL_STM32WB55_RCC_PLL_DEVICE,

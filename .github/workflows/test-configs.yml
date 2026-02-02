@@ -546,6 +546,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32wb.config
 
+  stm32wb_wolfhal_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32wb-wolfhal.config
+
   # TODO: ti-tms570lc435.config requires F021 Flash API (Windows installer only)
   # ti_tms570lc435_test:
   #   uses: ./.github/workflows/test-build-ti-hercules.yml

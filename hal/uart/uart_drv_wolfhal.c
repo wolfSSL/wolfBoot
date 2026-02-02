@@ -41,7 +41,6 @@ int uart_tx(const uint8_t c)
 int uart_rx(uint8_t *c)
 {
     whal_Error err;
-    /* ALEX NOTE: this function also returns zero if no data is available... */
     err = whal_Uart_Recv(&wbUart, c, 1);
     if (err) {
         return err;
