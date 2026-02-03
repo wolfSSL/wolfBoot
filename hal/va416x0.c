@@ -426,7 +426,6 @@ static int test_ext_flash(void)
     int ret;
     uint32_t i;
     uint8_t pageData[WOLFBOOT_SECTOR_SIZE];
-    uint32_t wait = 0;
 
 #ifndef READONLY
     /* Erase sector */
@@ -547,6 +546,20 @@ void hal_prepare_boot(void)
 {
 #ifdef DEBUG_UART
     uart_flush();
+
+    /* Disable UART to give app a clean state */
+    DEBUG_UART_BASE->IRQ_ENB = 0;
+    DEBUG_UART_BASE->ENABLE = 0;
+    #if defined(DEBUG_UART_NUM) && DEBUG_UART_NUM == 1
+        NVIC_DisableIRQ(UART1_RX_IRQn);
+        NVIC_ClearPendingIRQ(UART1_RX_IRQn);
+    #elif defined(DEBUG_UART_NUM) && DEBUG_UART_NUM == 2
+        NVIC_DisableIRQ(UART2_RX_IRQn);
+        NVIC_ClearPendingIRQ(UART2_RX_IRQn);
+    #else /* default: UART0 */
+        NVIC_DisableIRQ(UART0_RX_IRQn);
+        NVIC_ClearPendingIRQ(UART0_RX_IRQn);
+    #endif
 #endif
 
 #ifdef WOLFBOOT_RESTORE_CLOCK
@@ -554,4 +567,17 @@ void hal_prepare_boot(void)
     (void)HAL_Clkgen_Init(CLK_CFG_HBO);
     SystemCoreClockUpdate();
 #endif
+
+    /* Disable SysTick - enabled by Vorago SDK HAL_Init() */
+    SysTick->CTRL = 0;
+    SCB->ICSR = SCB_ICSR_PENDSTCLR_Msk;
+
+    /* Disable EDAC interrupts - enabled by ConfigEdac() */
+    NVIC_DisableIRQ(EDAC_MBE_IRQn);
+    NVIC_DisableIRQ(EDAC_SBE_IRQn);
+    NVIC_ClearPendingIRQ(EDAC_MBE_IRQn);
+    NVIC_ClearPendingIRQ(EDAC_SBE_IRQn);
+
+    /* Disable system config IRQs */
+    VOR_SYSCONFIG->IRQ_ENB = 0;
 }
