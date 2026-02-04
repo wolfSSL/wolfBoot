@@ -65,7 +65,7 @@
     STORE x29, 29 * REGBYTES(sp)
     STORE x30, 30 * REGBYTES(sp)
     STORE x31, 31 * REGBYTES(sp)
-#ifdef WOLFBOOT_RISCV_SMODE
+#ifndef WOLFBOOT_RISCV_MMODE
     csrr a0, scause
     csrr a1, sepc
     csrr a2, stval
@@ -76,7 +76,7 @@
 #endif
     mv a3, sp
     jal handle_trap
-#ifdef WOLFBOOT_RISCV_SMODE
+#ifndef WOLFBOOT_RISCV_MMODE
     csrw sepc, a0
 #else
     csrw mepc, a0
@@ -116,7 +116,7 @@
     LOAD x31, 31 * REGBYTES(sp)
     LOAD x2,   2 * REGBYTES(sp)
     addi sp, sp, 32 * REGBYTES
-#ifdef WOLFBOOT_RISCV_SMODE
+#ifndef WOLFBOOT_RISCV_MMODE
     sret
 #else
     mret

@@ -582,10 +582,19 @@ endif
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
-  CFLAGS+=-DWOLFBOOT_UPDATE_DISK -DMAX_DISKS=1
-  UPDATE_OBJS:=src/update_disk.o
-  OBJS += src/gpt.o
-  OBJS += src/disk.o
+
+  # If SD card or eMMC is enabled use update_disk loader with GPT support
+  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+    CFLAGS+=-DWOLFBOOT_UPDATE_DISK -DMAX_DISKS=1
+    UPDATE_OBJS:=src/update_disk.o
+    OBJS += src/gpt.o
+    OBJS += src/disk.o
+  else
+    # Use RAM-based update path for non-memory-mapped flash (SC SPI)
+    # Images are loaded into RAM before execution
+    UPDATE_OBJS?=src/update_ram.o
+  endif
+
   ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV -DARCH_RISCV64
   CFLAGS+=$(ARCH_FLAGS)
@@ -1521,6 +1530,11 @@ endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
 BOOT_IMG?=test-app/image.bin
+
+# When ELF loading is enabled, sign the ELF file (not the flat binary)
+ifeq ($(ELF),1)
+  BOOT_IMG=test-app/image.elf
+endif
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)

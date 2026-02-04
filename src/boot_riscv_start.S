@@ -25,12 +25,7 @@
 #include "hal/mpfs250.h"
 #endif
 
-#ifdef WOLFBOOT_RISCV_SMODE
-#define MODE_PREFIX(__suffix)    s##__suffix
-#else
-#define MODE_PREFIX(__suffix)    m##__suffix
-#endif
-
+/* MODE_PREFIX is now defined in hal/riscv.h */
 
 /* ============================================================================
  * RISC-V Boot Entry Point
@@ -100,7 +95,7 @@ _reset:
      * M-mode: MSIE (Software) + MEIE (External)
      * S-mode: SSIE (Software) + SEIE (External)
      */
-#ifdef WOLFBOOT_RISCV_SMODE
+#ifndef WOLFBOOT_RISCV_MMODE
     li    t0, (SIE_SSIE | SIE_SEIE)
 #else
     li    t0, (MIE_MSIE | MIE_MEIE)
@@ -115,7 +110,7 @@ _reset:
      * M-mode: mstatus.MIE (bit 3)
      * S-mode: sstatus.SIE (bit 1)
      */
-#ifdef WOLFBOOT_RISCV_SMODE
+#ifndef WOLFBOOT_RISCV_MMODE
     li    t0, SSTATUS_SIE
 #else
     li    t0, MSTATUS_MIE

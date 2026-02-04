@@ -857,7 +857,51 @@ The HSS tinyCLI supports the `USBDMSC` command to mount the eMMC or SD card as a
 sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 ```
 
-Note:
+### PolarFire SoC QSPI
+
+PolarFire SoC has two CoreQSPI v2 controllers with identical register layouts. The selection
+is made at build time via `MPFS_SC_SPI` and affects which QSPI base address wolfBoot uses:
+
+```text
+            +-------------------+                         +----------------------+
+            |      U54 cores    |                         |      U54 cores       |
+            |      (wolfBoot)   |                         |      (wolfBoot)      |
+            +---------+---------+                         +----------+-----------+
+                      |                                              |
+                      | direct register access                       | direct register access
+                      | (MSS QSPI @ 0x2100_0000)                    | (SC QSPI @ 0x3702_0100)
+                      v                                              v
+            +-------------------+                         +----------------------+
+            |  MSS QSPI IP      |                         |  SC QSPI IP          |
+            |  (CoreQSPI v2)    |                         |  (CoreQSPI v2)       |
+            +---------+---------+                         +----------+-----------+
+                      |                                              |
+                      v                                              v
+              External QSPI flash                           Fabric-connected flash
+```
+
+Build options:
+
+- MSS QSPI controller (direct register access at 0x21000000, read/write/erase)
+  - `EXT_FLASH=1`
+  - Do not set `MPFS_SC_SPI`
+  - Example config: `config/examples/polarfire_mpfs250_qspi.config` with `CFLAGS_EXTRA` line removed.
+
+- SC QSPI controller (direct register access at 0x37020100, read/write/erase)
+  - `EXT_FLASH=1`
+  - `CFLAGS_EXTRA+=-DMPFS_SC_SPI`
+  - Example config: `config/examples/polarfire_mpfs250_qspi.config` as-is.
+  - Both controllers share the same CoreQSPI v2 register interface.
+    The only difference is that SC QSPI does not need MSS clock/reset setup.
+
+Example single-shot build: `cp config/examples/polarfire_mpfs250_qspi.config .config && make clean && make wolfboot.bin && hss-payload-generator -vvv -c ./hal/mpfs.yaml wolfboot.bin && make test-app/image.elf && ./tools/keytools/sign --ecc384 --sha384 test-app/image.elf wolfboot_signing_private_key.der 1`
+
+Notes:
+- Both modes support full read, write, and erase operations.
+- For QSPI-based boot flows, disable SD/eMMC in the config (`DISK_SDCARD=0`, `DISK_EMMC=0`) unless you
+  explicitly want wolfBoot to load from disk and the application from QSPI.
+- The MSS QSPI path expects external flash on the MSS QSPI pins; the SC QSPI path is for
+  fabric-connected flash (design flash) accessed via the System Controller's QSPI instance.
 
 ### PolarFire testing
 
@@ -1321,7 +1365,6 @@ Benchmark complete
 
 ### PolarFire TODO
 
-* Add support for QSPI NOR flash
 * Add support for full HSS replacement using wolfboot
   - Machine level assembly startup
   - DDR driver

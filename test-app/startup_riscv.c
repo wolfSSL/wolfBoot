@@ -20,6 +20,7 @@
  */
 
 #include <stdint.h>
+#include "hal/riscv.h"
 
 extern void trap_entry(void);
 extern void trap_exit(void);
@@ -42,7 +43,11 @@ void __attribute__((naked,section(".init"))) _reset(void) {
     asm volatile("la sp, _end_stack");
 
     /* Set up vectored interrupt, with IV starting at offset 0x100 */
+#ifndef WOLFBOOT_RISCV_MMODE
+    asm volatile("csrw stvec, %0":: "r"((uint8_t *)(&_start_vector) + 1));
+#else
     asm volatile("csrw mtvec, %0":: "r"((uint8_t *)(&_start_vector) + 1));
+#endif
 
     src = (uint32_t *) &_stored_data;
     dst = (uint32_t *) &_start_data;
@@ -74,8 +79,11 @@ void do_boot(const uint32_t *app_offset)
 static uint32_t synctrap_cause = 0;
 void __attribute__((naked)) isr_synctrap(void)
 {
-    asm volatile("csrr %0,mcause" : "=r"(synctrap_cause));
-    //asm volatile("ebreak");
+#ifndef WOLFBOOT_RISCV_MMODE
+    asm volatile("csrr %0, scause" : "=r"(synctrap_cause));
+#else
+    asm volatile("csrr %0, mcause" : "=r"(synctrap_cause));
+#endif
 }
 
 void isr_empty(void)
