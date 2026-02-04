@@ -1539,8 +1539,11 @@ int ext_flash_erase(uintptr_t address, int len)
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 #include "sdhci.h"
 
-/* Use SD1 for external SD card slot on VMK180 */
-#define VERSAL_SDHCI_BASE  VERSAL_SD1_BASE  /* 0xF1050000 */
+/* SD controller base address selection:
+ *   SD0 (VERSAL_SD0_BASE = 0xF1040000) - internal, typically eMMC
+ *   SD1 (VERSAL_SD1_BASE = 0xF1050000) - external SD card slot on VMK180
+ * Note: VMK180 board does not have eMMC hardware, only SD1 is used. */
+#define VERSAL_SDHCI_BASE  VERSAL_SD1_BASE
 
 /* ============================================================================
  * Register Translation: Cadence SD4HC -> Standard SDHCI (Arasan)

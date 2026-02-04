@@ -1183,10 +1183,10 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             /* SDMA mode with Host Version 4 enable.
              * HV4E is required for SDMA to use the 64-bit address registers
              * (SRS22/SRS23) instead of the legacy 32-bit register (SRS00).
-             * A64S is cleared to use 32-bit DMA addressing. */
+             * A64 is cleared in SRS15 to use 32-bit DMA addressing. */
             sdhci_reg_or(SDHCI_SRS10, SDHCI_SRS10_DMA_SDMA);
             sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_HV4E);
-            sdhci_reg_and(SDHCI_SRS16, ~SDHCI_SRS16_A64S);
+            sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_A64);
             /* Set SDMA address */
             SDHCI_REG_SET(SDHCI_SRS22, (uint32_t)(uintptr_t)buf);
             SDHCI_REG_SET(SDHCI_SRS23, (uint32_t)(((uint64_t)(uintptr_t)buf) >> 32));

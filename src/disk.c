@@ -48,18 +48,6 @@
 static struct disk_drive Drives[MAX_DISKS] = {0};
 
 /**
- * @brief Opens a disk drive and initializes its partitions.
- *
- * This function opens a disk drive with the specified drive number, reads its
- * MBR (Master Boot Record) to identify GPT partitions, and initializes the
- * disk_drive structure for further operations.
- *
- * @param[in] drv The drive number to open (0 to `MAX_DISKS - 1`).
- *
- * @return The number of partitions found and initialized on success, or -1 if
- * the drive cannot be opened or no valid GPT partition table is found.
- */
-/**
  * @brief Parse MBR partition table entries.
  *
  * Reads up to 4 primary MBR partition entries and populates the drive's
@@ -109,6 +97,18 @@ static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
     return drive->n_parts;
 }
 
+/**
+ * @brief Opens a disk drive and initializes its partitions.
+ *
+ * This function opens a disk drive with the specified drive number, reads its
+ * MBR (Master Boot Record) to identify GPT partitions, and initializes the
+ * disk_drive structure for further operations.
+ *
+ * @param[in] drv The drive number to open (0 to `MAX_DISKS - 1`).
+ *
+ * @return The number of partitions found and initialized on success, or -1 if
+ * the drive cannot be opened or no valid GPT partition table is found.
+ */
 int disk_open(int drv)
 {
     int r;

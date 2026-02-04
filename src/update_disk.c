@@ -382,10 +382,13 @@ void RAMFUNCTION wolfBoot_start(void)
         BENCHMARK_START();
         load_off = 0;
         do {
+            uint32_t chunk = os_image.fw_size - load_off;
+            if (chunk > DISK_BLOCK_SIZE)
+                chunk = DISK_BLOCK_SIZE;
             ret = disk_part_read(BOOT_DISK, cur_part,
-                IMAGE_HEADER_SIZE + load_off, DISK_BLOCK_SIZE,
+                IMAGE_HEADER_SIZE + load_off, chunk,
                 ((uint8_t *)load_address) + load_off);
-            if (ret < 0)
+            if (ret <= 0)
                 break;
             load_off += ret;
         } while (load_off < os_image.fw_size);
