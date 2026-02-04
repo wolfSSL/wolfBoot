@@ -36,7 +36,13 @@
 /* Write "0xDEAD" to cause a full MSS reset*/
 #define SYSREG_MSS_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x18)))
 
-/* Peripheral Soft Reset Control Register */
+/* Peripheral Subblock Clock Control Register (offset 0x84) */
+#define SYSREG_SUBBLK_CLOCK_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x84)))
+#define SYSREG_SUBBLK_CLOCK_CR_ENVM (1U << 0)
+#define SYSREG_SUBBLK_CLOCK_CR_MMC  (1U << 3)
+#define SYSREG_SUBBLK_CLOCK_CR_QSPI (1U << 19)
+
+/* Peripheral Soft Reset Control Register (offset 0x88) */
 #define SYSREG_SOFT_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x88)))
 #define SYSREG_SOFT_RESET_CR_ENVM (1U << 0)
 #define SYSREG_SOFT_RESET_CR_MMC  (1U << 3)
@@ -155,6 +161,7 @@
 
 /* System Service command opcodes */
 #define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
+#define SYS_SERV_CMD_SPI_COPY      0x50u
 
 /* Device serial number size in bytes */
 #define DEVICE_SERIAL_NUMBER_SIZE 16
@@ -163,7 +170,6 @@
 #define SCBCTRL_REG(off) (*((volatile uint32_t*)(SCBCTRL_BASE + (off))))
 #define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
 #define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
-
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
@@ -209,5 +215,153 @@
 #define PLIC_CONTEXT_U54_4_S    8
 
 
-#endif /* MPFS250_DEF_INCLUDED */
+#ifdef EXT_FLASH
+/* ==========================================================================
+ * QSPI Flash Controller Definitions
+ *
+ * PolarFire SoC has two CoreQSPI v2 controllers with identical registers:
+ *
+ * 1. System Controller QSPI (MPFS_SC_SPI=1, default):
+ *    - SC QSPI at 0x37020100 (size 0x100)
+ *    - For fabric-connected flash (design flash)
+ *    - Direct register access (same register layout as MSS QSPI)
+ *    - Supports read, write, and erase operations
+ *    - Does NOT require MSS clock enable or soft reset
+ *
+ * 2. MSS QSPI Controller (MPFS_SC_SPI=0):
+ *    - MSS QSPI at 0x21000000 (size 0x1000)
+ *    - For external flash connected to MSS QSPI pins
+ *    - Requires MSS QSPI clock enable and soft reset release
+ *    - Supports read, write, and erase operations
+ *
+ * ========================================================================== */
 
+/* QSPI Controller Base Address */
+#ifndef QSPI_BASE
+#ifdef MPFS_SC_SPI
+#define QSPI_BASE 0x37020100u /* SC QSPI Controller (fabric-connected flash) */
+#else
+#define QSPI_BASE 0x21000000u /* MSS QSPI Controller (external flash) */
+#endif
+#endif
+
+/* QSPI Register Offsets */
+#define QSPI_CONTROL    (*(volatile uint32_t *)(QSPI_BASE + 0x00))
+#define QSPI_FRAMES     (*(volatile uint32_t *)(QSPI_BASE + 0x04))
+#define QSPI_IEN        (*(volatile uint32_t *)(QSPI_BASE + 0x0C))
+#define QSPI_STATUS     (*(volatile uint32_t *)(QSPI_BASE + 0x10))
+#define QSPI_DIRECT     (*(volatile uint32_t *)(QSPI_BASE + 0x14))
+#define QSPI_ADDRUP     (*(volatile uint32_t *)(QSPI_BASE + 0x18))
+#define QSPI_RX_DATA    (*(volatile uint8_t  *)(QSPI_BASE + 0x40))
+#define QSPI_TX_DATA    (*(volatile uint8_t  *)(QSPI_BASE + 0x44))
+#define QSPI_X4_RX_DATA (*(volatile uint32_t *)(QSPI_BASE + 0x48))
+#define QSPI_X4_TX_DATA (*(volatile uint32_t *)(QSPI_BASE + 0x4C))
+#define QSPI_FRAMESUP   (*(volatile uint32_t *)(QSPI_BASE + 0x50))
+
+/* QSPI Control Register Bits */
+#define QSPI_CTRL_EN_OFFSET      0
+#define QSPI_CTRL_XIP_OFFSET     2
+#define QSPI_CTRL_XIPADDR_OFFSET 3
+#define QSPI_CTRL_CLKIDLE_OFFSET 10
+#define QSPI_CTRL_SAMPLE_OFFSET  11
+#define QSPI_CTRL_QMODE0_OFFSET  13
+#define QSPI_CTRL_QMODE12_OFFSET 14
+#define QSPI_CTRL_FLAGSX4_OFFSET 16
+#define QSPI_CTRL_CLKRATE_OFFSET 24
+
+#define QSPI_CTRL_EN           (1u << QSPI_CTRL_EN_OFFSET)
+#define QSPI_CTRL_XIP          (1u << QSPI_CTRL_XIP_OFFSET)
+#define QSPI_CTRL_CLKIDLE      (1u << QSPI_CTRL_CLKIDLE_OFFSET)
+#define QSPI_CTRL_SAMPLE_MASK  (0x3u << QSPI_CTRL_SAMPLE_OFFSET)
+#define QSPI_CTRL_SAMPLE_SCK   (0x0u << QSPI_CTRL_SAMPLE_OFFSET)
+#define QSPI_CTRL_SAMPLE_HCLKF (0x1u << QSPI_CTRL_SAMPLE_OFFSET)
+#define QSPI_CTRL_SAMPLE_HCLKR (0x2u << QSPI_CTRL_SAMPLE_OFFSET)
+#define QSPI_CTRL_QMODE0       (1u << QSPI_CTRL_QMODE0_OFFSET)
+#define QSPI_CTRL_QMODE12_MASK (0x3u << QSPI_CTRL_QMODE12_OFFSET)
+#define QSPI_CTRL_CLKRATE_MASK (0xFu << QSPI_CTRL_CLKRATE_OFFSET)
+
+/* QSPI Frames Register Bits */
+#define QSPI_FRAMES_TOTALBYTES_OFFSET 0
+#define QSPI_FRAMES_CMDBYTES_OFFSET   16
+#define QSPI_FRAMES_QSPI_OFFSET       25
+#define QSPI_FRAMES_IDLE_OFFSET       26
+#define QSPI_FRAMES_FBYTE_OFFSET      30
+#define QSPI_FRAMES_FWORD_OFFSET      31
+
+#define QSPI_FRAMES_TOTALBYTES_MASK (0xFFFFu << QSPI_FRAMES_TOTALBYTES_OFFSET)
+#define QSPI_FRAMES_CMDBYTES_MASK   (0x1FFu << QSPI_FRAMES_CMDBYTES_OFFSET)
+#define QSPI_FRAMES_QSPI            (1u << QSPI_FRAMES_QSPI_OFFSET)
+#define QSPI_FRAMES_IDLE_MASK       (0xFu << QSPI_FRAMES_IDLE_OFFSET)
+
+/* QSPI Status Register Bits */
+#define QSPI_STATUS_TXDONE  (1u << 0)
+#define QSPI_STATUS_RXDONE  (1u << 1)
+#define QSPI_STATUS_RXAVAIL (1u << 2)
+#define QSPI_STATUS_TXAVAIL (1u << 3)
+#define QSPI_STATUS_RXEMPTY (1u << 4)
+/* Bit 5 is reserved in CoreQSPI v2 */
+#define QSPI_STATUS_READY   (1u << 7)
+#define QSPI_STATUS_FLAGSX4 (1u << 8)
+
+/* QSPI Clock Configuration */
+#define QSPI_CLK_DIV_2  0x01u
+#define QSPI_CLK_DIV_4  0x02u
+#define QSPI_CLK_DIV_6  0x03u
+#define QSPI_CLK_DIV_8  0x04u
+#define QSPI_CLK_DIV_10 0x05u
+#define QSPI_CLK_DIV_12 0x06u
+#define QSPI_CLK_DIV_30 0x0Fu  /* Conservative: ~5MHz from 150MHz APB */
+
+/* QSPI SPI Modes */
+#define QSPI_SPI_MODE0 0  /* CPOL=0, CPHA=0 */
+#define QSPI_SPI_MODE3 1  /* CPOL=1, CPHA=1 */
+
+/* QSPI IO Formats */
+#define QSPI_IO_FORMAT_NORMAL    0  /* 1-bit SPI */
+#define QSPI_IO_FORMAT_DUAL_EX0  1  /* 2-bit with extended mode 0 */
+#define QSPI_IO_FORMAT_QUAD_EX0  2  /* 4-bit with extended mode 0 */
+#define QSPI_IO_FORMAT_DUAL_EX1  3  /* 2-bit with extended mode 1 */
+#define QSPI_IO_FORMAT_QUAD_EX1  4  /* 4-bit with extended mode 1 */
+#define QSPI_IO_FORMAT_DUAL_FULL 5  /* Full 2-bit mode */
+#define QSPI_IO_FORMAT_QUAD_FULL 6  /* Full 4-bit mode */
+
+/* Micron MT25QL01G Flash Commands */
+#define QSPI_CMD_READ_ID_OPCODE         0x9Fu   /* JEDEC ID Read */
+#define QSPI_CMD_MIO_READ_ID_OPCODE     0xAFu   /* Multiple IO Read ID */
+#define QSPI_CMD_READ_STATUS_OPCODE     0x05u   /* Read Status Register */
+#define QSPI_CMD_WRITE_ENABLE_OPCODE    0x06u   /* Write Enable */
+#define QSPI_CMD_WRITE_DISABLE_OPCODE   0x04u   /* Write Disable */
+#define QSPI_CMD_4BYTE_READ_OPCODE      0x13u   /* 4-byte address read */
+#define QSPI_CMD_4BYTE_FAST_READ_OPCODE 0x0Cu   /* 4-byte fast read */
+#define QSPI_CMD_4BYTE_QUAD_READ_OPCODE 0xECu   /* 4-byte quad I/O read */
+#define QSPI_CMD_4BYTE_PAGE_PROG_OPCODE 0x12u   /* 4-byte page program */
+#define QSPI_CMD_4BYTE_SECTOR_ERASE     0xDCu   /* 4-byte 64KB sector erase */
+#define QSPI_CMD_ENTER_4BYTE_MODE       0xB7u   /* Enter 4-byte address mode */
+#define QSPI_CMD_EXIT_4BYTE_MODE        0xE9u   /* Exit 4-byte address mode */
+
+/* Flash Geometry - Micron MT25QL01GBBB (128MB) */
+#ifndef FLASH_DEVICE_SIZE
+#define FLASH_DEVICE_SIZE   (128 * 1024 * 1024)  /* 128MB (1Gb) */
+#endif
+
+#ifndef FLASH_PAGE_SIZE
+#define FLASH_PAGE_SIZE     256                   /* 256 bytes */
+#endif
+
+#ifndef FLASH_SECTOR_SIZE
+#define FLASH_SECTOR_SIZE   (64 * 1024)          /* 64KB sectors */
+#endif
+
+/* QSPI Transfer Modes */
+#define QSPI_MODE_WRITE     0
+#define QSPI_MODE_READ      1
+
+/* Function declarations for QSPI (when EXT_FLASH enabled) */
+#ifndef __ASSEMBLER__
+void qspi_init(void);
+#endif /* __ASSEMBLER__ */
+
+#endif /* EXT_FLASH */
+
+
+#endif /* MPFS250_DEF_INCLUDED */

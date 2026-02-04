@@ -29,6 +29,10 @@
 #include "elf.h"
 #include "hal.h"
 
+#ifdef __riscv
+#include "hal/riscv.h"
+#endif
+
 #ifdef ARCH_PPC
 #include "hal/nxp_ppc.h"
 #endif
@@ -136,17 +140,23 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
             }
         }
 
-        /* confirm the entry won't clobber any of the headers */
-        if ((uint8_t*)vaddr + file_size < image ||
+        /* Confirm the entry won't clobber remaining unread program headers.
+         * Only protect headers [i+1, entry_count) not yet parsed.
+         * Use memmove for safe in-place ELF loading (e.g., RAM boot). */
+        if (i + 1 >= entry_count || /* last header, nothing left to protect */
+            (uint8_t*)vaddr + file_size <= (entry_off + ((i + 1) * entry_size)) ||
             (uint8_t*)vaddr > (entry_off + entry_count * entry_size))
         {
-            memcpy((void*)vaddr, image + offset, file_size);
+            memmove((void*)vaddr, image + offset, file_size);
             if (mem_size > file_size) {
                 memset((void*)(uintptr_t)(vaddr + file_size), 0,
                     mem_size - file_size);
             }
         #ifdef ARCH_PPC
             flush_cache(paddr, mem_size);
+        #endif
+        #ifdef __riscv
+            riscv_icache_sync();
         #endif
         }
     #ifdef DEBUG_ELF
