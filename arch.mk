@@ -633,6 +633,13 @@ ifeq ($(ARCH),PPC)
     CFLAGS+=-fno-builtin-printf
   endif
 
+  # Target-specific CPU flags
+  ifeq ($(TARGET),nxp_t2080)
+    CFLAGS+=-mcpu=e6500 -mno-altivec
+  else ifeq ($(TARGET),nxp_t1024)
+    CFLAGS+=-mcpu=e5500
+  endif
+
   # Prune unused functions and data
   CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,--gc-sections
