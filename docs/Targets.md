@@ -2061,10 +2061,10 @@ cp ${PREBUILT_DIR}/bl31.elf .
 cp ${PREBUILT_DIR}/system-default.dtb .
 
 source ${VITIS_PATH}/settings64.sh
-bootgen -arch versal -image ./tools/scripts/vmk180/boot_wolfboot.bif -w -o BOOT.BIN
+bootgen -arch versal -image ./tools/scripts/versal_boot.bif -w -o BOOT.BIN
 ```
 
-The BIF file (`boot_wolfboot.bif`) references files using relative paths in the same directory.
+The BIF file (`versal_boot.bif`) references files using relative paths in the same directory.
 
 **Flash QSPI**
 

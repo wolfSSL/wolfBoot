@@ -220,7 +220,7 @@ get_partition_offset() {
     local img="$1" part="$2"
     local sector
     # Parse sfdisk dump for partition start sector
-    sector=$(sfdisk -d "$img" 2>/dev/null | grep "^${img}${part}" | sed 's/.*start=\s*\([0-9]*\).*/\1/')
+    sector=$(sfdisk -d "$img" 2>/dev/null | grep "^${img}${part}" | sed 's/.*start=[[:space:]]*\([0-9]*\).*/\1/')
     if [ -z "$sector" ]; then
         # Fallback: parse fdisk output
         sector=$(fdisk -l "$img" 2>/dev/null | grep "^${img}${part}" | awk '{print $2}')
@@ -244,6 +244,10 @@ write_to_partition() {
         log_error "Failed to get partition $part offset"
         return 1
     fi
+
+    local file_size=$(stat -c%s "$file")
+    local part_size=$(sfdisk -d "$img" 2>/dev/null | grep "^${img}${part}" | sed 's/.*size=[[:space:]]*\([0-9]*\).*/\1/')
+    [ -n "$part_size" ] && [ "$file_size" -gt $((part_size * 512)) ] && { log_error "File $file (${file_size}B) exceeds partition $part size ($((part_size * 512))B)"; return 1; }
 
     log_info "Writing $file to partition $part (offset: ${offset_bytes} bytes, sector: ${offset_blocks})"
     dd if="$file" of="$img" bs=512 seek="$offset_blocks" conv=notrunc status=progress 2>/dev/null || {
@@ -392,7 +396,7 @@ Environment Variables:
   VITIS_PATH          Xilinx Vitis installation path (default: /opt/Xilinx/Vitis/2024.2)
   LINUX_IMAGES_DIR    Path to PetaLinux images directory (for --linux, --linux-sdcard, --linux-uboot)
   SDCARD_IMG          SD card image output path (default: sdcard.img)
-  SDCARD_SIZE_MB      SD card image size in MB (default: 512)
+  SDCARD_SIZE_MB      SD card image size in MB (default: 1024)
 
 Examples:
   $0 --boot-sdcard --skipuart    # Reset to SD boot without UART capture
@@ -551,20 +555,14 @@ case "${1:-}" in
         write_to_partition "$SDCARD_IMG" 2 fitImage_v1_signed.bin || exit 1
         write_to_partition "$SDCARD_IMG" 3 fitImage_v2_signed.bin || exit 1
 
-        # Write rootfs to partition 4 if available
-        ROOTFS_IMG=""
+        # Write rootfs filesystem image to partition 4 if available
         if [ -f "${LINUX_IMAGES_DIR}/rootfs.ext4" ]; then
-            ROOTFS_IMG="${LINUX_IMAGES_DIR}/rootfs.ext4"
-        elif [ -f "${LINUX_IMAGES_DIR}/rootfs.cpio.gz" ]; then
-            ROOTFS_IMG="${LINUX_IMAGES_DIR}/rootfs.cpio.gz"
-        fi
-        if [ -n "$ROOTFS_IMG" ]; then
             log_info "Writing rootfs to partition 4..."
-            write_to_partition "$SDCARD_IMG" 4 "$ROOTFS_IMG" || exit 1
-            log_ok "rootfs written ($(stat -c%s "$ROOTFS_IMG") bytes)"
+            write_to_partition "$SDCARD_IMG" 4 "${LINUX_IMAGES_DIR}/rootfs.ext4" || exit 1
+            log_ok "rootfs written ($(stat -c%s "${LINUX_IMAGES_DIR}/rootfs.ext4") bytes)"
         else
-            log_info "No rootfs found in $LINUX_IMAGES_DIR (looked for rootfs.ext4, rootfs.cpio.gz)"
-            log_info "You can write rootfs to partition 4 manually"
+            log_info "No rootfs.ext4 found in $LINUX_IMAGES_DIR"
+            log_info "You can write a rootfs filesystem image to partition 4 manually"
         fi
 
         log_ok "SD card image created: $SDCARD_IMG"
@@ -591,10 +589,7 @@ case "${1:-}" in
         log_info "  Partition 3 (OFP_B):  Signed Linux FIT image v2 (update)"
         log_info "  Partition 4 (rootfs): Linux root filesystem"
         log_info ""
-        log_info "Provision SD card:"
-        log_info "  sudo ./tools/scripts/versal_sdcard_provision.sh /dev/sdX"
-        log_info ""
-        log_info "Or manually:"
+        log_info "Provision SD card manually:"
         log_info "  sudo dd if=$SDCARD_IMG of=/dev/sdX bs=4M status=progress conv=fsync"
         log_info "  sync"
         log_info "  sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1"
@@ -621,7 +616,7 @@ case "${1:-}" in
         ./tools/keytools/sign $SIGN_OPTIONS test-app/image.bin "$PRIVATE_KEY" 2 || { log_error "Signing v2 failed"; exit 1; }
         log_ok "Signed test applications: image_v1_signed.bin, image_v2_signed.bin"
 
-        # Create SD card image with GPT partitions
+        # Create SD card image with MBR (DOS) partition table
         create_sdcard_image "$SDCARD_IMG" "$SDCARD_SIZE_MB" || exit 1
 
         # Write signed images to partitions (OFP_A=2, OFP_B=3)
