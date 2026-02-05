@@ -161,15 +161,34 @@
 
 /* System Service command opcodes */
 #define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
-#define SYS_SERV_CMD_SPI_COPY      0x50u
+#define SYS_SERV_CMD_SPI_COPY      0x50u /* SCB mailbox SPI copy service */
 
 /* Device serial number size in bytes */
 #define DEVICE_SERIAL_NUMBER_SIZE 16
+
+/* Timeout loop iteration counts (override at build time via CFLAGS) */
+#ifndef MPFS_SCB_TIMEOUT
+#define MPFS_SCB_TIMEOUT          10000     /* SCB mailbox polling */
+#endif
+#ifndef QSPI_TIMEOUT_TRIES
+#define QSPI_TIMEOUT_TRIES       100000    /* QSPI controller/TX polling */
+#endif
+#ifndef QSPI_RX_TIMEOUT_TRIES
+#define QSPI_RX_TIMEOUT_TRIES    1000000   /* QSPI RX polling (longer) */
+#endif
 
 /* System Controller register access */
 #define SCBCTRL_REG(off) (*((volatile uint32_t*)(SCBCTRL_BASE + (off))))
 #define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
 #define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
+
+/* System Controller Mailbox API */
+#ifndef __ASSEMBLER__
+int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data,
+    uint32_t mb_len, uint32_t timeout);
+int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len);
+int mpfs_read_serial_number(uint8_t *serial);
+#endif /* __ASSEMBLER__ */
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
@@ -356,9 +375,13 @@
 #define QSPI_MODE_WRITE     0
 #define QSPI_MODE_READ      1
 
+/* I/O fence: ensure MMIO store reaches the peripheral before the next read.
+ * Required on RISC-V RVWMO to prevent stale TXAVAIL reads after TX writes. */
+#define QSPI_IO_FENCE() __asm__ __volatile__("fence iorw, iorw" ::: "memory")
+
 /* Function declarations for QSPI (when EXT_FLASH enabled) */
 #ifndef __ASSEMBLER__
-void qspi_init(void);
+int qspi_init(void);
 #endif /* __ASSEMBLER__ */
 
 #endif /* EXT_FLASH */
