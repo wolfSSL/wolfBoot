@@ -487,7 +487,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #if defined(WOLFBOOT_ELF) && !defined(WOLFBOOT_FSP)
     /* Load elf sections and return the new entry point */
     /* Skip for FSP, since it expects ELF image directly */
-    if (elf_load_image_mmu((uint8_t*)load_address, (uintptr_t*)&load_address, NULL) != 0){
+    if (elf_load_image_mmu((uint8_t*)load_address, os_image.fw_size,
+            (uintptr_t*)&load_address, NULL) != 0){
         wolfBoot_printf("Invalid elf, falling back to raw binary\n");
     }
 #endif

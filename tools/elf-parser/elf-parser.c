@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     fclose(f);
 
     if (ret == 0) {
-        ret = elf_load_image_mmu(image, &entry, NULL);
+        ret = elf_load_image_mmu(image, (uint32_t)imageSz, &entry, NULL);
     }
 
     printf("Return %d, Load %p\n", ret, (void*)entry);
