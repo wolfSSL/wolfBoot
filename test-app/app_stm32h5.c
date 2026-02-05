@@ -628,18 +628,18 @@ static int cmd_login_pkcs11(const char *args)
 
     if (ret == 0) {
         printf("Done.\r\n");
-        printf("Retrieving crypto engine function list...");
-        fflush(stdout);
-        ret = wolfpkcs11nsFunctionList.C_OpenSession(1,
-                CKF_SERIAL_SESSION | CKF_RW_SESSION,
-                NULL, NULL, &session);
-    }
-    if (ret == 0) {
-        printf("Done.\r\n");
         printf("Initializing token...");
         fflush(stdout);
         ret = wolfpkcs11nsFunctionList.C_InitToken(1,
                 (byte *)TokenPin, strlen(TokenPin), (byte *)SoPinName);
+    }
+    if (ret == 0) {
+        printf("Done.\r\n");
+        printf("Opening session...");
+        fflush(stdout);
+        ret = wolfpkcs11nsFunctionList.C_OpenSession(1,
+                CKF_SERIAL_SESSION | CKF_RW_SESSION,
+                NULL, NULL, &session);
     }
 
     if (ret == 0) {
