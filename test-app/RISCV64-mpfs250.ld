@@ -15,7 +15,7 @@ MEMORY
 {
   /* For RAM boot (NO_XIP), use WOLFBOOT_LOAD_ADDRESS for execution
    * For XIP boot, use WOLFBOOT_TEST_APP_ADDRESS (partition + header) */
-  IRAM  (rx)    :ORIGIN = @WOLFBOOT_LOAD_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
+  IRAM   (rwx)   :ORIGIN = @WOLFBOOT_LOAD_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
   DDR    (rwx)   :ORIGIN = 0x80000000, LENGTH = 1M
   LSRAM  (rwx)   :ORIGIN = 0x08000000, LENGTH = 128K
 }
@@ -50,10 +50,10 @@ SECTIONS
   } >IRAM
 
   /* used by the startup to initialize data */
-  _stored_data = LOADADDR(.data);
+  _stored_data = .;
 
   /* Initialized data sections - keep in same region as code for RAM boot */
-  .data :
+  .data : AT (_stored_data)
   {
     . = ALIGN(8);
     _start_data = .;   /* create a global symbol at data start */
@@ -65,9 +65,6 @@ SECTIONS
     . = ALIGN(8);
     _end_data = .;     /* define a global symbol at data end */
   } >IRAM
-
-  /* use from libwolfboot.c */
-  _stored_data = _start_data;
 
   /* Uninitialized data section */
   /* Mark as NOLOAD so it's not included in binary (zero-initialized at runtime) */

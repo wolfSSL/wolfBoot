@@ -66,10 +66,13 @@ void hal_init(void)
 #endif
 
 #ifdef EXT_FLASH
-    qspi_init();
-
+    if (qspi_init() != 0) {
+        wolfBoot_printf("QSPI: Init failed\n");
+    }
 #if defined(TEST_EXT_FLASH) && defined(__WOLFBOOT)
-    test_ext_flash();
+    else {
+        test_ext_flash();
+    }
 #endif
 #endif /* EXT_FLASH */
 }
@@ -82,24 +85,16 @@ void hal_init(void)
  * and responses are read from the mailbox RAM.
  * ============================================================================ */
 
-static int mpfs_scb_is_busy(void)
+/* Wait for SCB register bits to clear, with timeout */
+static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
+    uint32_t timeout)
 {
-    return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
+    while ((SCBCTRL_REG(reg_offset) & mask) && --timeout)
+        ;
+    return (timeout == 0) ? -1 : 0;
 }
 
-static int mpfs_scb_wait_ready(uint32_t timeout)
-{
-    while (mpfs_scb_is_busy() && timeout > 0) {
-        timeout--;
-    }
-
-    if (timeout == 0) {
-        return -1;
-    }
-    return 0;
-}
-
-static int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len)
+int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len)
 {
     uint32_t i;
 
@@ -139,27 +134,13 @@ static void mpfs_scb_write_mailbox(const uint8_t *data, uint32_t len)
     }
 }
 
-static int mpfs_scb_wait_req_clear(uint32_t timeout)
-{
-    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) &&
-           timeout > 0) {
-        timeout--;
-    }
-
-    if (timeout == 0) {
-        return -1;
-    }
-    return 0;
-}
-
-static int mpfs_scb_service_call_timeout(uint8_t opcode, const uint8_t *mb_data,
-                                         uint32_t mb_len, uint32_t req_timeout,
-                                         uint32_t busy_timeout)
+int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data,
+    uint32_t mb_len, uint32_t timeout)
 {
     uint32_t cmd;
     uint32_t status;
 
-    if (mpfs_scb_is_busy()) {
+    if (mpfs_scb_wait_clear(SERVICES_SR_OFFSET, SERVICES_SR_BUSY_MASK, 1)) {
         return -1;
     }
 
@@ -171,15 +152,18 @@ static int mpfs_scb_service_call_timeout(uint8_t opcode, const uint8_t *mb_data,
           SERVICES_CR_REQ_MASK;
     SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
 
-    if (mpfs_scb_wait_req_clear(req_timeout) < 0) {
+    if (mpfs_scb_wait_clear(SERVICES_CR_OFFSET, SERVICES_CR_REQ_MASK,
+            timeout) < 0) {
         return -2;
     }
 
-    if (mpfs_scb_wait_ready(busy_timeout) < 0) {
+    if (mpfs_scb_wait_clear(SERVICES_SR_OFFSET, SERVICES_SR_BUSY_MASK,
+            timeout) < 0) {
         return -3;
     }
 
-    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
+    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT)
+        & 0xFFFF;
     if (status != 0) {
         return -4;
     }
@@ -187,10 +171,6 @@ static int mpfs_scb_service_call_timeout(uint8_t opcode, const uint8_t *mb_data,
     return 0;
 }
 
-static int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data, uint32_t mb_len)
-{
-    return mpfs_scb_service_call_timeout(opcode, mb_data, mb_len, 10000, 10000);
-}
 /**
  * mpfs_read_serial_number - Read the device serial number via system services
  * @serial: Buffer to store the 16-byte device serial number
@@ -200,7 +180,7 @@ static int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data, uint32_
  *
  * Returns: 0 on success, negative error code on failure
  */
-static int mpfs_read_serial_number(uint8_t *serial)
+int mpfs_read_serial_number(uint8_t *serial)
 {
     int ret;
 
@@ -208,7 +188,8 @@ static int mpfs_read_serial_number(uint8_t *serial)
         return -1;
     }
 
-    ret = mpfs_scb_service_call(SYS_SERV_CMD_SERIAL_NUMBER, NULL, 0);
+    ret = mpfs_scb_service_call(SYS_SERV_CMD_SERIAL_NUMBER, NULL, 0,
+        MPFS_SCB_TIMEOUT);
     if (ret != 0) {
         wolfBoot_printf("SCB mailbox error: %d\n", ret);
         return ret;
@@ -335,10 +316,9 @@ int hal_dts_fixup(void* dts_addr)
 
     return 0;
 }
+
 void hal_prepare_boot(void)
 {
-    /* reset the eMMC/SD card? */
-
 
 }
 
@@ -400,16 +380,18 @@ static void qspi_flash_wakeup(void)
     udelay(10);
 }
 
-void qspi_init(void)
+int qspi_init(void)
 {
     uint8_t id[3];
+    uint32_t timeout;
 
 #ifdef MPFS_SC_SPI
     wolfBoot_printf("QSPI: Using SC QSPI Controller (0x%x)\n", QSPI_BASE);
 
     /* Wait for system controller to finish any pending operations before
      * taking direct control of the SC QSPI peripheral */
-    mpfs_scb_wait_ready(100000);
+    mpfs_scb_wait_clear(SERVICES_SR_OFFSET, SERVICES_SR_BUSY_MASK,
+        QSPI_TIMEOUT_TRIES);
 
 #ifdef DEBUG_QSPI
     wolfBoot_printf("QSPI: Initial CTRL=0x%x, STATUS=0x%x, DIRECT=0x%x\n",
@@ -449,7 +431,12 @@ void qspi_init(void)
         QSPI_CTRL_EN;
 
     /* Wait for controller to be ready */
-    while (!(QSPI_STATUS & QSPI_STATUS_READY));
+    timeout = QSPI_TIMEOUT_TRIES;
+    while (!(QSPI_STATUS & QSPI_STATUS_READY) && --timeout);
+    if (timeout == 0) {
+        wolfBoot_printf("QSPI: Controller not ready\n");
+        return -1;
+    }
 
     /* Wake up flash from deep power-down (if applicable) */
     qspi_flash_wakeup();
@@ -462,6 +449,8 @@ void qspi_init(void)
 
     /* Enter 4-byte addressing mode for >16MB flash */
     qspi_enter_4byte_mode();
+
+    return 0;
 }
 
 /* QSPI Block Transfer Function
@@ -482,9 +471,10 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
     uint32_t frames;
     uint32_t i;
     uint32_t timeout;
+    uint32_t frame_cmd;
 
     /* Wait for controller to be ready before starting */
-    timeout = 100000;
+    timeout = QSPI_TIMEOUT_TRIES;
     while (!(QSPI_STATUS & QSPI_STATUS_READY) && --timeout);
     if (timeout == 0) {
         wolfBoot_printf("QSPI: Timeout waiting for READY\n");
@@ -492,9 +482,16 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
     }
 
     /* Drain RX FIFO of any stale data from previous transfers. */
-    while (QSPI_STATUS & QSPI_STATUS_RXAVAIL) {
+    timeout = QSPI_TIMEOUT_TRIES;
+    while ((QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout) {
         (void)QSPI_RX_DATA;
     }
+#ifdef DEBUG_QSPI
+    if (timeout == 0) {
+        /* log warning and continue trying to transfer data */
+        wolfBoot_printf("QSPI: Timeout draining RX FIFO\n");
+    }
+#endif
 
     /* Configure FRAMES register:
      * - Total bytes: command + data (idle cycles handled by hardware)
@@ -508,37 +505,35 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
      * data rotation in the programmed page. Keeping everything in the
      * command phase avoids this. The flash determines command vs data
      * boundaries from the opcode, not the controller's phase. */
-    {
-        uint32_t frame_cmd = read_mode ? cmd_len : total_bytes;
-        frames = ((total_bytes & 0xFFFF) << QSPI_FRAMES_TOTALBYTES_OFFSET) |
-                 ((frame_cmd & 0x1FF) << QSPI_FRAMES_CMDBYTES_OFFSET) |
-                 ((dummy_cycles & 0xF) << QSPI_FRAMES_IDLE_OFFSET) |
-                 (1u << QSPI_FRAMES_FBYTE_OFFSET);
-    }
+    frame_cmd = read_mode ? cmd_len : total_bytes;
+    frames = ((total_bytes & 0xFFFF) << QSPI_FRAMES_TOTALBYTES_OFFSET) |
+                ((frame_cmd & 0x1FF) << QSPI_FRAMES_CMDBYTES_OFFSET) |
+                ((dummy_cycles & 0xF) << QSPI_FRAMES_IDLE_OFFSET) |
+                (1u << QSPI_FRAMES_FBYTE_OFFSET);
 
     QSPI_FRAMES = frames;
 
     /* Send command bytes (opcode + address).
      * Use TXAVAIL (bit 3) to check for FIFO space -- CoreQSPI v2 does NOT
      * have a TXFULL status bit (bit 5 is reserved/always 0).
-     * A fence after each TX write ensures the store reaches the peripheral
-     * before we read STATUS again (RISC-V RVWMO allows posted stores that
-     * could cause stale TXAVAIL reads and FIFO overflow). */
+     * A fence (iorw, iorw) after each TX write ensures the store reaches the
+     * peripheral before we read STATUS again (RISC-V RVWMO allows posted
+     * stores that could cause stale TXAVAIL reads and FIFO overflow). */
     for (i = 0; i < cmd_len; i++) {
-        timeout = 100000;
+        timeout = QSPI_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_TXAVAIL) && --timeout);
         if (timeout == 0) {
             wolfBoot_printf("QSPI: TX FIFO full timeout\n");
             return -2;
         }
         QSPI_TX_DATA = cmd[i];
-        __asm__ __volatile__("fence o,i" ::: "memory");
+        QSPI_IO_FENCE();
     }
 
     if (read_mode) {
         /* Read mode: poll RXAVAIL for each data byte. */
         for (i = 0; i < data_len; i++) {
-            timeout = 1000000;
+            timeout = QSPI_RX_TIMEOUT_TRIES;
             while (!(QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout);
             if (timeout == 0) {
                 wolfBoot_printf("QSPI: RX timeout at byte %d, status=0x%x\n",
@@ -548,29 +543,39 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
             data[i] = QSPI_RX_DATA;
         }
         /* Wait for receive complete */
-        timeout = 1000000;
+        timeout = QSPI_RX_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_RXDONE) && --timeout);
+        if (timeout == 0) {
+            wolfBoot_printf("QSPI: RXDONE timeout\n");
+            return -5;
+        }
     } else {
         /* Write mode: send data bytes.
          * Must push bytes without delay -- any gap causes FIFO underflow
          * since CoreQSPI continues clocking with empty FIFO.
-         * Fence after each write ensures the store reaches the FIFO before
-         * we re-read STATUS (prevents FIFO overflow from posted stores). */
+         * Fence (iorw, iorw) after each write ensures the store reaches the
+         * FIFO before we re-read STATUS (prevents FIFO overflow from posted
+         * stores). */
         if (data && data_len > 0) {
             for (i = 0; i < data_len; i++) {
-                timeout = 100000;
+                timeout = QSPI_TIMEOUT_TRIES;
                 while (!(QSPI_STATUS & QSPI_STATUS_TXAVAIL) && --timeout);
                 if (timeout == 0) {
                     wolfBoot_printf("QSPI: TX data timeout\n");
                     return -4;
                 }
                 QSPI_TX_DATA = data[i];
-                __asm__ __volatile__("fence o,i" ::: "memory");
+                QSPI_IO_FENCE();
             }
         }
         /* Wait for transmit complete */
-        timeout = 100000;
+        timeout = QSPI_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_TXDONE) && --timeout);
+        if (timeout == 0) {
+            wolfBoot_printf("QSPI: TXDONE timeout, status=0x%x\n",
+                QSPI_STATUS);
+            return -5;
+        }
     }
 
 #ifdef DEBUG_QSPI
@@ -650,7 +655,7 @@ static int qspi_flash_read(uint32_t address, uint8_t *data, uint32_t len)
         remaining -= chunk_len;
     }
 
-    return len;
+    return (int)len;
 }
 
 /* Write to QSPI flash - single page (max 256 bytes) */
@@ -829,7 +834,11 @@ static int test_ext_flash(void)
 
     /* Verify erase (should be all 0xFF) */
     memset(pageData, 0, sizeof(pageData));
-    ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    ret = ext_flash_read(TEST_EXT_ADDRESS, pageData, sizeof(pageData));
+    if (ret < 0) {
+        wolfBoot_printf("Erase verify read failed: Ret %d\n", ret);
+        return ret;
+    }
     wolfBoot_printf("Erase verify: ");
     for (i = 0; i < 16; i++) {
         wolfBoot_printf("%02x ", pageData[i]);
