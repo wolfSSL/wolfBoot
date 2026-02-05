@@ -607,9 +607,13 @@ static int qspi_wait_ready(uint32_t timeout_ms)
     uint8_t status;
     uint32_t count = 0;
     uint32_t max_count = timeout_ms * 1000;  /* Rough timing */
+    int ret;
 
     do {
-        qspi_transfer_block(QSPI_MODE_READ, &cmd, 1, &status, 1, 0);
+        ret = qspi_transfer_block(QSPI_MODE_READ, &cmd, 1, &status, 1, 0);
+        if (ret != 0) {
+            return ret;  /* Propagate transfer error */
+        }
         if (!(status & 0x01)) {  /* Bit 0 = WIP (Write In Progress) */
             return 0;  /* Ready */
         }
@@ -788,9 +792,14 @@ int ext_flash_erase(uintptr_t address, int len)
     wolfBoot_printf("QSPI: Erase 0x%x, len %d\n", (uint32_t)address, len);
     #endif
 
+    /* Check for invalid length or integer overflow */
+    if (len <= 0 || (uint32_t)len > UINT32_MAX - (uint32_t)address) {
+        return -1;
+    }
+
     /* Align to sector boundaries */
     sector_addr = address & ~(FLASH_SECTOR_SIZE - 1);
-    end_addr = address + len;
+    end_addr = (uint32_t)address + (uint32_t)len;
 
     /* Erase sectors */
     while (sector_addr < end_addr) {
