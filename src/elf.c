@@ -58,17 +58,24 @@ static int check_scatter_format(const unsigned char* ehdr, int is_elf32);
 /* Loader for elf32 or elf64 format program headers
  * Returns the entry point function
  */
-int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
+int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
+    elf_mmu_map_cb mmu_cb)
 {
     elf32_header* h32 = (elf32_header*)image;
     elf64_header* h64 = (elf64_header*)image;
     uint16_t entry_count, entry_size;
     uint8_t *entry_off;
+    uint32_t ph_offset;
     int is_elf32, is_le, i;
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Loading elf at %p\r\n", (void*)image);
 #endif
+
+    /* Verify image is large enough for the smallest ELF header */
+    if (image_sz < sizeof(elf32_header)) {
+        return -1; /* image too small */
+    }
 
     /* Verify ELF header */
     if (memcmp(h32->ident, ELF_IDENT_STR, 4) != 0) {
@@ -79,6 +86,11 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
     is_elf32 = (h32->ident[4] == ELF_CLASS_32);
     is_le = (h32->ident[5] == ELF_ENDIAN_LITTLE);
     (void)is_le;
+
+    /* Verify image is large enough for the actual ELF header type */
+    if (!is_elf32 && image_sz < sizeof(elf64_header)) {
+        return -1; /* image too small for elf64 header */
+    }
 
     /* Verify this is an executable */
     if (GET_H16(type) != ELF_HET_EXEC) {
@@ -94,9 +106,19 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
     *pentry = GET_H64(entry);
 
     /* programs */
-    entry_off = image + GET_H32(ph_offset);
+    ph_offset = GET_H32(ph_offset);
     entry_size = GET_H16(ph_entry_size);
     entry_count = GET_H16(ph_entry_count);
+
+    /* Validate program header table is within image bounds */
+    if (ph_offset >= image_sz ||
+        entry_size == 0 ||
+        entry_count > (image_sz / entry_size) ||
+        ph_offset + ((uint32_t)entry_count * entry_size) > image_sz) {
+        return -3; /* program header table out of bounds */
+    }
+    entry_off = image + ph_offset;
+
 #ifdef DEBUG_ELF
     wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count, entry_size);
 #endif
@@ -113,6 +135,12 @@ int elf_load_image_mmu(uint8_t *image, uintptr_t *pentry, elf_mmu_map_cb mmu_cb)
 
         if (type != ELF_PT_LOAD || mem_size == 0) {
             continue;
+        }
+
+        /* Validate segment data is within image bounds */
+        if (file_size > 0 &&
+            (offset >= image_sz || file_size > image_sz - offset)) {
+            return -4; /* segment offset/size out of bounds */
         }
 
 #ifdef DEBUG_ELF
