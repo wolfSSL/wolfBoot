@@ -119,7 +119,13 @@ void do_boot(const uint32_t *app)
     /* TODO: to remove */
     mptable_setup();
     x86_paging_dump_info();
-    r = elf_load_image_mmu((uint8_t *)app, WOLFBOOT_PARTITION_SIZE, &e, mmu_cb);
+    /* Use available low memory as upper bound for ELF image size */
+    if (stage2_params->tolum <= (uint32_t)(uintptr_t)app) {
+        wolfBoot_printf("ELF: app address beyond TOLUM\r\n");
+        panic();
+    }
+    r = elf_load_image_mmu((uint8_t *)app,
+            stage2_params->tolum - (uint32_t)(uintptr_t)app, &e, mmu_cb);
     wolfBoot_printf("Elf loaded (ret %d), entry 0x%x_%x\r\n", r,
                     (uint32_t)(e >> 32),
                     (uint32_t)(e));
