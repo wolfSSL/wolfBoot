@@ -31,6 +31,21 @@ ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
   endif
 endif
 
+ifeq ($(WOLFBOOT_ATTESTATION_IAK),1)
+  CFLAGS+=-D"WOLFBOOT_ATTESTATION_IAK"
+endif
+
+ifeq ($(WOLFBOOT_UDS_UID_FALLBACK_FORTEST),1)
+  CFLAGS+=-D"WOLFBOOT_UDS_UID_FALLBACK_FORTEST"
+endif
+
+ifeq ($(WOLFBOOT_UDS_OBKEYS),1)
+  ifneq ($(TARGET),stm32h5)
+    $(error WOLFBOOT_UDS_OBKEYS is only supported on STM32H5 targets)
+  endif
+  CFLAGS+=-D"WOLFBOOT_UDS_OBKEYS"
+endif
+
 ## Sealing a secret into the TPM
 ifeq ($(WOLFBOOT_TPM_SEAL),1)
   WOLFTPM:=1
@@ -601,6 +616,19 @@ endif
 ifeq ($(NO_XIP),1)
   CFLAGS+=-D"NO_XIP"
 endif
+
+ifeq ($(DEBUG_UART),1)
+  ifeq ($(strip $(UART_TARGET)),)
+  else
+    UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
+    ifneq ($(wildcard $(UART_DRV_OBJ)),)
+      CFLAGS+=-DDEBUG_UART
+      ifneq ($(findstring $(UART_DRV_OBJ),$(OBJS)),$(UART_DRV_OBJ))
+        OBJS+=$(UART_DRV_OBJ)
+      endif
+    endif
+  endif
+endif
 ifeq ($(NO_QNX),1)
   CFLAGS+=-D"NO_QNX"
 endif
@@ -752,8 +780,10 @@ endif
 
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
   CFLAGS+=-DWOLFCRYPT_TZ_PSA
+  CFLAGS+=-DWOLFCRYPT_SECURE_MODE
   CFLAGS+=-DWOLFSSL_PSA_ENGINE
   CFLAGS+=-DWOLFPSA_CUSTOM_STORE
+  CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
   LDFLAGS+=--specs=nano.specs
@@ -763,6 +793,7 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.o
   ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   endif

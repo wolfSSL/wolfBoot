@@ -164,12 +164,14 @@ extern int tolower(int c);
 #       define HAVE_ECC256
 #   endif
 #   if defined(WOLFBOOT_SIGN_ECC384) || \
-        defined(WOLFBOOT_SIGN_SECONDARY_ECC384)
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+        defined(WOLFCRYPT_SECURE_MODE)
 #       define HAVE_ECC384
 #       define WOLFSSL_SP_384
 #   endif
 #   if defined(WOLFBOOT_SIGN_ECC521) || \
-        defined(WOLFBOOT_SIGN_SECONDARY_ECC521)
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC521) || \
+        defined(WOLFCRYPT_SECURE_MODE)
 #       define HAVE_ECC521
 #       define WOLFSSL_SP_521
 #   endif
@@ -378,8 +380,12 @@ extern int tolower(int c);
 #   define HAVE_AES_ECB
 #   define WOLFSSL_AES_CFB
 #   define WOLFSSL_AES_OFB
-#   define WOLFSSL_DES3
-#   define WOLFSSL_DES_ECB
+#   ifndef NO_DES3
+#       define NO_DES3
+#   endif
+#   ifndef NO_DES3_TLS_SUITES
+#       define NO_DES3_TLS_SUITES
+#   endif
 #   define HAVE_CHACHA
 #   define HAVE_POLY1305
 #   define WOLFSSL_CMAC
@@ -510,7 +516,9 @@ extern int tolower(int c);
 #define NO_CERT
 #define NO_SESSION_CACHE
 #define NO_HC128
+#ifndef NO_DES3
 #define NO_DES3
+#endif
 #define NO_WRITEV
 #ifndef WOLFBOOT_PARTITION_FILENAME
 #define NO_FILESYSTEM
@@ -532,7 +540,6 @@ extern int tolower(int c);
 
 #if defined(WOLFCRYPT_TZ_PSA)
 #undef NO_CMAC
-#undef NO_DES3
 #undef NO_KDF
 #endif
 

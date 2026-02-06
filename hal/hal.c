@@ -25,6 +25,7 @@
 #include "hal.h"
 #include "string.h"
 #include "printf.h"
+#include "wolfboot/wolfboot.h"
 
 /* Test for internal flash erase/write */
 /* Use TEST_EXT_FLASH to test ext flash (see spi_flash.c or qspi_flash.c) */
@@ -279,3 +280,37 @@ int hal_flash_test_dualbank(void)
 #endif /* DUALBANK_SWAP */
 
 #endif /* TEST_FLASH */
+
+WEAKFUNCTION int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+    (void)out;
+    (void)out_len;
+    return -1;
+}
+
+WEAKFUNCTION int hal_attestation_get_lifecycle(uint32_t *lifecycle)
+{
+    (void)lifecycle;
+    return -1;
+}
+
+WEAKFUNCTION int hal_attestation_get_implementation_id(uint8_t *buf, size_t *len)
+{
+    (void)buf;
+    (void)len;
+    return -1;
+}
+
+WEAKFUNCTION int hal_attestation_get_ueid(uint8_t *buf, size_t *len)
+{
+    (void)buf;
+    (void)len;
+    return -1;
+}
+
+WEAKFUNCTION int hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len)
+{
+    (void)buf;
+    (void)len;
+    return -1;
+}

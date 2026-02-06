@@ -1543,6 +1543,10 @@ non-secure callables (NSC).
 
 The example configuration for this scenario is available in [/config/examples/stm32h5-tz.config](/config/examples/stm32h5-tz.config).
 
+When `WOLFCRYPT_TZ_PSA=1` is enabled, the STM32H5 test application exercises PSA
+Crypto, PSA Protected Storage, and PSA Initial Attestation from the non-secure
+side. See [DICE Attestation](/docs/DICE.md) for details on the attestation flow
+and APIs.
 For more information, see [/docs/STM32-TZ.md](/docs/STM32-TZ.md).
 
 ### Scenario 3: DUALBANK mode

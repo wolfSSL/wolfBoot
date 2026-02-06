@@ -33,21 +33,35 @@
 #include "wolfboot/wolfboot.h"
 #include "keystore.h"
 #include "target.h"
-#include "image.h"
 
 #ifdef WOLFBOOT_TPM
 #include "tpm.h"
 #endif
 
-#ifdef SECURE_PKCS11
+#ifdef WOLFBOOT_TZ_PKCS11
 #include "wcs/user_settings.h"
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/wc_pkcs11.h"
 #include "wolfssl/wolfcrypt/random.h"
-#include "wolfcrypt/benchmark/benchmark.h"
-#include "wolfcrypt/test/test.h"
 extern const char pkcs11_library_name[];
 extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
+#endif
+
+#ifdef WOLFCRYPT_SECURE_MODE
+int benchmark_test(void *args);
+int wolfcrypt_test(void *args);
+#include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
+#ifdef WOLFCRYPT_TZ_PSA
+#include "psa/crypto.h"
+#include "psa/error.h"
+#include "psa/initial_attestation.h"
+#include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/sha256.h"
+#include "wolfssl/wolfcrypt/sha512.h"
+#include "wolfssl/wolfcrypt/sha3.h"
 #endif
 
 volatile unsigned int jiffies = 0;
@@ -156,7 +170,9 @@ extern int ecdsa_sign_verify(int devId);
 static int cmd_help(const char *args);
 static int cmd_info(const char *args);
 static int cmd_success(const char *args);
+#ifdef WOLFBOOT_TZ_PKCS11
 static int cmd_login_pkcs11(const char *args);
+#endif
 static int cmd_random(const char *args);
 static int cmd_benchmark(const char *args);
 static int cmd_test(const char *args);
@@ -192,7 +208,9 @@ struct console_command COMMANDS[] =
     {cmd_help, "help", "shows this help message"},
     {cmd_info, "info", "display information about the system and partitions"},
     {cmd_success, "success", "confirm a successful update"},
+#ifdef WOLFBOOT_TZ_PKCS11
     {cmd_login_pkcs11, "pkcs11", "enable and test crypto calls with PKCS11 in secure mode" },
+#endif
     {cmd_random, "random", "generate a random number"},
     {cmd_timestamp, "timestamp", "print the current systick/timestamp"},
     {cmd_benchmark, "benchmark", "run the wolfCrypt benchmark"},
@@ -234,7 +252,7 @@ int cmd_reboot(const char *args)
 static uint8_t crc8(uint8_t *data, size_t len)
 {
     uint8_t checksum = 0;
-    for (int i = 0; i < len; i++) {
+    for (size_t i = 0; i < len; i++) {
         checksum += data[i];
     }
     return checksum;
@@ -246,7 +264,7 @@ static uint8_t crc8(uint8_t *data, size_t len)
 
 static void xcancel(void)
 {
-    int i;
+    uint32_t i;
     for (i = 0; i < 10; i++)
         uart_tx(XCAN);
 }
@@ -557,7 +575,17 @@ static int cmd_success(const char *args)
 
 static int cmd_random(const char *args)
 {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef WOLFCRYPT_TZ_PSA
+    uint32_t rand = 0;
+    psa_status_t status = psa_generate_random((uint8_t *)&rand, sizeof(rand));
+    if (status != PSA_SUCCESS) {
+        printf("Failed to generate PSA random number (%ld)\r\n",
+               (long)status);
+        return -1;
+    }
+    printf("Today's lucky number: 0x%08lX\r\n", rand);
+    printf("Brought to you by PSA crypto + HW TRNG in Secure world\r\n");
+#elif defined(WOLFCRYPT_SECURE_MODE)
     WC_RNG rng;
     int ret;
     uint32_t rand;
@@ -593,10 +621,190 @@ static int cmd_timestamp(const char *args)
     return 0;
 }
 
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+static int run_attestation_test(void)
+{
+    uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64];
+    uint8_t token[1024];
+    size_t token_size = 0;
+    psa_status_t status;
+    size_t i;
+
+    for (i = 0; i < sizeof(challenge); i++) {
+        challenge[i] = (uint8_t)i;
+    }
+
+    status = psa_initial_attest_get_token(challenge, sizeof(challenge),
+                                          token, sizeof(token), &token_size);
+    if (status != PSA_SUCCESS) {
+        printf("attest: get token failed (%d)\r\n", status);
+        return -1;
+    }
+    printf("attest: token size %lu bytes\r\n", (unsigned long)token_size);
+    print_hex(token, (uint32_t)token_size, 1);
+    return 0;
+}
+#endif
+
+#ifdef WOLFCRYPT_TZ_PSA
+/* Hash helpers for app-side measurement printing. */
+#if defined(WOLFBOOT_HASH_SHA256)
+#define APP_HASH_HDR HDR_SHA256
+#define APP_HASH_SIZE (32u)
+typedef wc_Sha256 app_hash_t;
+#define app_hash_init(h) wc_InitSha256((h))
+#define app_hash_update(h, data, len) \
+    wc_Sha256Update((h), (const byte *)(data), (word32)(len))
+#define app_hash_final(h, out) wc_Sha256Final((h), (byte *)(out))
+#elif defined(WOLFBOOT_HASH_SHA384)
+#define APP_HASH_HDR HDR_SHA384
+#define APP_HASH_SIZE (48u)
+typedef wc_Sha384 app_hash_t;
+#define app_hash_init(h) wc_InitSha384((h))
+#define app_hash_update(h, data, len) \
+    wc_Sha384Update((h), (const byte *)(data), (word32)(len))
+#define app_hash_final(h, out) wc_Sha384Final((h), (byte *)(out))
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#define APP_HASH_HDR HDR_SHA3_384
+#define APP_HASH_SIZE (48u)
+typedef wc_Sha3 app_hash_t;
+#define app_hash_init(h) wc_InitSha3_384((h), NULL, INVALID_DEVID)
+#define app_hash_update(h, data, len) \
+    wc_Sha3_384_Update((h), (const byte *)(data), (word32)(len))
+#define app_hash_final(h, out) wc_Sha3_384_Final((h), (byte *)(out))
+#else
+#define APP_HASH_HDR 0
+#define APP_HASH_SIZE (0u)
+typedef int app_hash_t;
+#define app_hash_init(h) (void)(h)
+#define app_hash_update(h, data, len) (void)(h), (void)(data), (void)(len)
+#define app_hash_final(h, out) (void)(h), (void)(out)
+#endif
+
+static int hash_region(uintptr_t address, uint32_t size, uint8_t *out)
+{
+    app_hash_t hash;
+    const uint8_t *ptr = (const uint8_t *)address;
+    uint32_t pos = 0;
+
+    if (out == NULL || size == 0 || APP_HASH_SIZE == 0u) {
+        return -1;
+    }
+
+    app_hash_init(&hash);
+
+    while (pos < size) {
+        uint32_t chunk = size - pos;
+        if (chunk > 256) {
+            chunk = 256;
+        }
+        app_hash_update(&hash, ptr + pos, chunk);
+        pos += chunk;
+    }
+
+    app_hash_final(&hash, out);
+    return 0;
+}
+
+static int run_psa_boot_attestation(void)
+{
+    psa_status_t status;
+    uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64];
+    uint8_t token[1024];
+#if (APP_HASH_SIZE > 0u)
+    uint8_t hash_buf[APP_HASH_SIZE];
+#endif
+    size_t token_size = 0;
+    int ret = 0;
+    size_t i;
+
+    printf("PSA boot attestation: start\r\n");
+
+    printf("  step 1: TODO verify boot image post-boot\r\n");
+    printf("  step 2: TODO read boot image measurement (HDR_HASH)\r\n");
+
+    printf("  step 3: compute wolfBoot measurement\r\n");
+#if defined(WOLFBOOT_PARTITION_BOOT_ADDRESS) && defined(ARCH_FLASH_OFFSET)
+#if (APP_HASH_SIZE > 0u)
+    if (ret == 0) {
+        uintptr_t start = (uintptr_t)ARCH_FLASH_OFFSET;
+        uintptr_t end = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+        if (end <= start) {
+            printf("  step 3: invalid wolfBoot region\r\n");
+            ret = -1;
+        } else if (hash_region(start, (uint32_t)(end - start), hash_buf) != 0) {
+            printf("  step 3: wolfBoot hash failed\r\n");
+            ret = -1;
+        } else {
+            printf("  step 3: wolfBoot hash (%u bytes)\r\n",
+                   (unsigned int)APP_HASH_SIZE);
+            print_hex(hash_buf, APP_HASH_SIZE, 0);
+        }
+    }
+#else
+    printf("  step 3: hash algorithm not enabled\r\n");
+#endif
+#else
+    printf("  step 3: wolfBoot region unavailable for hashing\r\n");
+#endif
+
+    printf("  step 4: generate attestation challenge\r\n");
+    status = psa_generate_random(challenge, sizeof(challenge));
+    if (status != PSA_SUCCESS) {
+        printf("  step 4: PSA RNG failed (%ld), using deterministic nonce\r\n",
+               (long)status);
+        for (i = 0; i < sizeof(challenge); i++) {
+            challenge[i] = (uint8_t)i;
+        }
+    } else {
+        printf("  step 4: challenge ready (%u bytes)\r\n",
+               (unsigned int)sizeof(challenge));
+    }
+
+    printf("  step 5: request IAT token size\r\n");
+    status = psa_initial_attest_get_token_size(sizeof(challenge), &token_size);
+    if (status != PSA_SUCCESS) {
+        printf("  step 5: token size failed (%ld)\r\n", (long)status);
+        ret = -1;
+    } else {
+        printf("  step 5: token size %lu bytes\r\n",
+               (unsigned long)token_size);
+    }
+
+    printf("  step 6: request IAT token\r\n");
+    if (ret == 0 && token_size <= sizeof(token)) {
+        status = psa_initial_attest_get_token(challenge, sizeof(challenge),
+                                              token, sizeof(token), &token_size);
+        if (status != PSA_SUCCESS) {
+            printf("  step 6: token failed (%ld)\r\n", (long)status);
+            ret = -1;
+        } else {
+            printf("  step 6: token received (%lu bytes)\r\n",
+                   (unsigned long)token_size);
+            print_hex(token, (uint32_t)token_size, 1);
+        }
+    } else if (ret == 0) {
+        printf("  step 6: token buffer too small (%lu > %lu)\r\n",
+               (unsigned long)token_size, (unsigned long)sizeof(token));
+        ret = -1;
+    }
+
+    printf("PSA boot attestation: %s\r\n", ret == 0 ? "success" : "failed");
+
+    if (ret == 0)
+        asm volatile ("bkpt #0x7f");
+    else 
+        asm volatile ("bkpt #0x7e");
+
+
+    return ret;
+}
+#endif
+
+#ifdef WOLFBOOT_TZ_PKCS11
 static int cmd_login_pkcs11(const char *args)
 {
     int ret = -1;
-#ifdef SECURE_PKCS11
     unsigned int devId = 0;
     Pkcs11Token token;
     Pkcs11Dev PKCS11_d;
@@ -687,11 +895,9 @@ static int cmd_login_pkcs11(const char *args)
         printf("PKCS11 initialization completed successfully.\r\n");
         pkcs11_initialized = 1;
     }
-#else
-    printf("Feature only supported with WOLFCRYPT_TZ=1\n");
-#endif /* SECURE_PKCS11 */
     return ret;
 }
+#endif /* WOLFBOOT_TZ_PKCS11 */
 
 static int cmd_benchmark(const char *args)
 {
@@ -1054,9 +1260,15 @@ void isr_usart3(void)
 
 static int uart_rx_isr(unsigned char *c, int len)
 {
+    uint32_t avail;
     UART_CR1(UART3) &= ~UART_ISR_RX_NOTEMPTY;
-    if (len > (uart_rx_bytes - uart_processed))
-        len = (uart_rx_bytes - uart_processed);
+    if (len < 0) {
+        len = 0;
+    }
+    avail = uart_rx_bytes - uart_processed;
+    if ((uint32_t)len > avail) {
+        len = (int)avail;
+    }
     if (len > 0) {
         memcpy(c, uart_buf_rx + uart_processed, len);
         uart_processed += len;
@@ -1106,9 +1318,26 @@ void main(void)
     printf("Version : 0x%lx\r\n", app_version);
     printf("========================\r\n");
 
+#ifdef WOLFCRYPT_TZ_PSA
+    ret = psa_crypto_init();
+    if (ret == PSA_SUCCESS) {
+        printf("PSA crypto init ok\r\n");
+    } else {
+        printf("PSA crypto init failed (%d)\r\n", ret);
+    }
+#endif
+
     cmd_info(NULL);
 #ifdef WOLFBOOT_TPM
     cmd_tpm_info(NULL);
+#endif
+
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+    (void)run_attestation_test();
+#endif
+
+#ifdef WOLFCRYPT_TZ_PSA
+    (void)run_psa_boot_attestation();
 #endif
 
     console_loop();

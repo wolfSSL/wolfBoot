@@ -139,11 +139,16 @@ if(BUILD_TEST_APPS)
                 wcs/wolfcrypt_secure.c
             )
             if(WOLFCRYPT_TZ)
-                target_sources(image PRIVATE
+                set(WOLFSSL_TZ_TEST_SOURCES
                     ../lib/wolfssl/wolfcrypt/src/logging.c
                     ../lib/wolfssl/wolfcrypt/test/test.c
                     ../lib/wolfssl/wolfcrypt/benchmark/benchmark.c
                 )
+                target_sources(image PRIVATE ${WOLFSSL_TZ_TEST_SOURCES})
+                if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+                    set_source_files_properties(${WOLFSSL_TZ_TEST_SOURCES}
+                        PROPERTIES COMPILE_OPTIONS "-Wno-stack-usage")
+                endif()
             endif()
         endif()
     endif()
@@ -193,7 +198,7 @@ if(BUILD_TEST_APPS)
 
     if(WOLFCRYPT_TZ_PKCS11)
         list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_PKCS11_APP SECURE_PKCS11)
-        target_sources(image PRIVATE
+        set(WOLFSSL_PKCS11_SOURCES
             wcs/pkcs11_stub.c
             wcs/pkcs11_test_ecc.c
             ../lib/wolfssl/wolfcrypt/src/ecc.c
@@ -220,6 +225,11 @@ if(BUILD_TEST_APPS)
             ../lib/wolfssl/wolfcrypt/src/wc_encrypt.c
             ../lib/wolfssl/wolfcrypt/src/wc_port.c
         )
+        target_sources(image PRIVATE ${WOLFSSL_PKCS11_SOURCES})
+        if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            set_source_files_properties(${WOLFSSL_PKCS11_SOURCES}
+                PROPERTIES COMPILE_OPTIONS "-Wno-stack-usage")
+        endif()
         if(SPMATH AND NOT NO_ASM)
             list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFSSL_HAVE_SP_RSA WOLFSSL_HAVE_SP_ECC WOLFSSL_SP_ARM_CORTEX_M_ASM)
             target_sources(image PRIVATE ../lib/wolfssl/wolfcrypt/src/sp_cortexm.c)

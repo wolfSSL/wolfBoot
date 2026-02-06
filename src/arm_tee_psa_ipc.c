@@ -2,7 +2,7 @@
  *
  * PSA IPC hooks for ARM TEE style veneers.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -10,6 +10,15 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
 #include <stddef.h>
@@ -21,6 +30,8 @@
 
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfboot/arm_tee_api.h>
+#include <wolfboot/dice.h>
+#include "printf.h"
 
 /* Service IDs/handles aligned with ARM TEE defaults. */
 #define ARM_TEE_CRYPTO_SID   (0x00000080U)
@@ -43,8 +54,15 @@
 #define ARM_TEE_CRYPTO_HASH_COMPUTE_SID             (0x0300U)
 #define ARM_TEE_CRYPTO_HASH_SETUP_SID               (0x0302U)
 #define ARM_TEE_CRYPTO_HASH_UPDATE_SID              (0x0303U)
+#define ARM_TEE_CRYPTO_HASH_CLONE_SID               (0x0304U)
 #define ARM_TEE_CRYPTO_HASH_FINISH_SID              (0x0305U)
 #define ARM_TEE_CRYPTO_HASH_ABORT_SID               (0x0307U)
+#define ARM_TEE_CRYPTO_CIPHER_ENCRYPT_SETUP_SID     (0x0400U)
+#define ARM_TEE_CRYPTO_CIPHER_DECRYPT_SETUP_SID     (0x0401U)
+#define ARM_TEE_CRYPTO_CIPHER_SET_IV_SID            (0x0402U)
+#define ARM_TEE_CRYPTO_CIPHER_UPDATE_SID            (0x0403U)
+#define ARM_TEE_CRYPTO_CIPHER_FINISH_SID            (0x0404U)
+#define ARM_TEE_CRYPTO_CIPHER_ABORT_SID             (0x0405U)
 #define ARM_TEE_CRYPTO_ASYMMETRIC_SIGN_HASH_SID     (0x0702U)
 #define ARM_TEE_CRYPTO_ASYMMETRIC_VERIFY_HASH_SID   (0x0703U)
 
@@ -106,6 +124,19 @@ struct wolfboot_hash_slot {
 static struct wolfboot_hash_slot g_hash_slots[WOLFBOOT_ARM_TEE_HASH_SLOTS];
 static uint32_t g_hash_next_handle = 1;
 
+struct wolfboot_cipher_slot {
+    uint32_t handle;
+    psa_cipher_operation_t op;
+    int in_use;
+};
+
+#ifndef WOLFBOOT_ARM_TEE_CIPHER_SLOTS
+#define WOLFBOOT_ARM_TEE_CIPHER_SLOTS 4
+#endif
+
+static struct wolfboot_cipher_slot g_cipher_slots[WOLFBOOT_ARM_TEE_CIPHER_SLOTS];
+static uint32_t g_cipher_next_handle = 1;
+
 #ifndef WOLFBOOT_PS_MAX_DATA
 #define WOLFBOOT_PS_MAX_DATA 512
 #endif
@@ -122,6 +153,24 @@ struct wolfboot_ps_entry {
 };
 
 static struct wolfboot_ps_entry g_ps_entries[WOLFBOOT_PS_MAX_ENTRIES];
+
+static psa_status_t wolfboot_attest_status(int dice_rc)
+{
+    switch (dice_rc) {
+        case 0:
+            return PSA_SUCCESS;
+        case -1:
+            return PSA_ERROR_INVALID_ARGUMENT;
+        case -2:
+            return PSA_ERROR_BUFFER_TOO_SMALL;
+        case -3:
+            return PSA_ERROR_HARDWARE_FAILURE;
+        case -4:
+            return PSA_ERROR_GENERIC_ERROR;
+        default:
+            return PSA_ERROR_GENERIC_ERROR;
+    }
+}
 
 /* Minimal newlib syscall stubs to avoid link errors in bare-metal builds. */
 #ifndef WOLFBOOT_NO_SYSCALL_STUBS
@@ -250,6 +299,43 @@ static void wolfboot_hash_free(uint32_t handle)
     struct wolfboot_hash_slot *slot = wolfboot_hash_find(handle);
     if (slot != NULL) {
         (void)psa_hash_abort(&slot->op);
+        slot->in_use = 0;
+        slot->handle = 0;
+    }
+}
+
+static struct wolfboot_cipher_slot *wolfboot_cipher_find(uint32_t handle)
+{
+    if (handle == 0) {
+        return NULL;
+    }
+    for (size_t i = 0; i < WOLFBOOT_ARM_TEE_CIPHER_SLOTS; i++) {
+        if (g_cipher_slots[i].in_use && g_cipher_slots[i].handle == handle) {
+            return &g_cipher_slots[i];
+        }
+    }
+    return NULL;
+}
+
+static struct wolfboot_cipher_slot *wolfboot_cipher_alloc(uint32_t *handle)
+{
+    for (size_t i = 0; i < WOLFBOOT_ARM_TEE_CIPHER_SLOTS; i++) {
+        if (!g_cipher_slots[i].in_use) {
+            g_cipher_slots[i].in_use = 1;
+            g_cipher_slots[i].handle = g_cipher_next_handle++;
+            g_cipher_slots[i].op = psa_cipher_operation_init();
+            *handle = g_cipher_slots[i].handle;
+            return &g_cipher_slots[i];
+        }
+    }
+    return NULL;
+}
+
+static void wolfboot_cipher_free(uint32_t handle)
+{
+    struct wolfboot_cipher_slot *slot = wolfboot_cipher_find(handle);
+    if (slot != NULL) {
+        (void)psa_cipher_abort(&slot->op);
         slot->in_use = 0;
         slot->handle = 0;
     }
@@ -422,6 +508,32 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
                                in_vec[1].len);
     }
 
+    case ARM_TEE_CRYPTO_HASH_CLONE_SID: {
+        struct wolfboot_hash_slot *src_slot;
+        struct wolfboot_hash_slot *dst_slot;
+        uint32_t handle = 0;
+        psa_status_t status;
+        if (out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        src_slot = wolfboot_hash_find(iov->op_handle);
+        if (src_slot == NULL) {
+            return PSA_ERROR_BAD_STATE;
+        }
+        dst_slot = wolfboot_hash_alloc(&handle);
+        if (dst_slot == NULL) {
+            return PSA_ERROR_INSUFFICIENT_MEMORY;
+        }
+        status = psa_hash_clone(&src_slot->op, &dst_slot->op);
+        if (status != PSA_SUCCESS) {
+            wolfboot_hash_free(handle);
+            return status;
+        }
+        *(uint32_t *)out_vec[0].base = handle;
+        out_vec[0].len = sizeof(uint32_t);
+        return PSA_SUCCESS;
+    }
+
     case ARM_TEE_CRYPTO_HASH_FINISH_SID: {
         struct wolfboot_hash_slot *slot;
         size_t hash_len = 0;
@@ -457,10 +569,103 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
             out_vec[0].len = sizeof(uint32_t);
             return PSA_SUCCESS;
         }
-        (void)psa_hash_abort(&slot->op);
         wolfboot_hash_free(iov->op_handle);
         *(uint32_t *)out_vec[0].base = 0;
         out_vec[0].len = sizeof(uint32_t);
+        return PSA_SUCCESS;
+    }
+
+    case ARM_TEE_CRYPTO_CIPHER_ENCRYPT_SETUP_SID:
+    case ARM_TEE_CRYPTO_CIPHER_DECRYPT_SETUP_SID: {
+        struct wolfboot_cipher_slot *slot;
+        uint32_t handle = 0;
+        psa_status_t status;
+        if (out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        slot = wolfboot_cipher_alloc(&handle);
+        if (slot == NULL) {
+            return PSA_ERROR_INSUFFICIENT_MEMORY;
+        }
+        if (iov->function_id == ARM_TEE_CRYPTO_CIPHER_ENCRYPT_SETUP_SID) {
+            status = psa_cipher_encrypt_setup(&slot->op, iov->key_id, iov->alg);
+        } else {
+            status = psa_cipher_decrypt_setup(&slot->op, iov->key_id, iov->alg);
+        }
+        if (status != PSA_SUCCESS) {
+            wolfboot_cipher_free(handle);
+            return status;
+        }
+        *(uint32_t *)out_vec[0].base = handle;
+        out_vec[0].len = sizeof(uint32_t);
+        return PSA_SUCCESS;
+    }
+
+    case ARM_TEE_CRYPTO_CIPHER_SET_IV_SID: {
+        struct wolfboot_cipher_slot *slot;
+        if (in_len < 2) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        slot = wolfboot_cipher_find(iov->op_handle);
+        if (slot == NULL) {
+            return PSA_ERROR_BAD_STATE;
+        }
+        return psa_cipher_set_iv(&slot->op,
+                                 (const uint8_t *)in_vec[1].base,
+                                 in_vec[1].len);
+    }
+
+    case ARM_TEE_CRYPTO_CIPHER_UPDATE_SID: {
+        struct wolfboot_cipher_slot *slot;
+        size_t out_len_local = 0;
+        psa_status_t status;
+        if (in_len < 2 || out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        slot = wolfboot_cipher_find(iov->op_handle);
+        if (slot == NULL) {
+            return PSA_ERROR_BAD_STATE;
+        }
+        status = psa_cipher_update(&slot->op,
+                                   (const uint8_t *)in_vec[1].base,
+                                   in_vec[1].len,
+                                   (uint8_t *)out_vec[0].base,
+                                   out_vec[0].len,
+                                   &out_len_local);
+        if (status == PSA_SUCCESS) {
+            out_vec[0].len = out_len_local;
+        }
+        return status;
+    }
+
+    case ARM_TEE_CRYPTO_CIPHER_FINISH_SID: {
+        struct wolfboot_cipher_slot *slot;
+        size_t out_len_local = 0;
+        psa_status_t status;
+        if (out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        slot = wolfboot_cipher_find(iov->op_handle);
+        if (slot == NULL) {
+            return PSA_ERROR_BAD_STATE;
+        }
+        status = psa_cipher_finish(&slot->op,
+                                   (uint8_t *)out_vec[0].base,
+                                   out_vec[0].len,
+                                   &out_len_local);
+        if (status == PSA_SUCCESS) {
+            out_vec[0].len = out_len_local;
+            wolfboot_cipher_free(iov->op_handle);
+        }
+        return status;
+    }
+
+    case ARM_TEE_CRYPTO_CIPHER_ABORT_SID: {
+        struct wolfboot_cipher_slot *slot;
+        slot = wolfboot_cipher_find(iov->op_handle);
+        if (slot != NULL) {
+            wolfboot_cipher_free(iov->op_handle);
+        }
         return PSA_SUCCESS;
     }
 
@@ -658,11 +863,33 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
 
     if (handle == (psa_handle_t)ARM_TEE_ATTESTATION_HANDLE) {
         if (type == ARM_TEE_ATTEST_GET_TOKEN) {
-            if (out_vec == NULL || out_len < 1) {
+            const psa_invec *challenge_vec;
+            size_t token_len = 0;
+            int dice_rc;
+            psa_status_t status;
+
+            if (in_vec == NULL || in_len < 1 || out_vec == NULL || out_len < 1) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
-            out_vec[0].len = 0;
-            return PSA_SUCCESS;
+            challenge_vec = &in_vec[0];
+            if (challenge_vec->base == NULL || out_vec[0].base == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+
+            wolfBoot_printf("[ATTEST] GET_TOKEN: challenge_len=%u out_len=%u\r\n",
+                            (unsigned)challenge_vec->len, (unsigned)out_vec[0].len);
+            dice_rc = wolfBoot_dice_get_token((const uint8_t *)challenge_vec->base,
+                                              challenge_vec->len,
+                                              (uint8_t *)out_vec[0].base,
+                                              out_vec[0].len,
+                                              &token_len);
+            wolfBoot_printf("[ATTEST] GET_TOKEN: dice_rc=%d token_len=%u\r\n",
+                            dice_rc, (unsigned)token_len);
+            status = wolfboot_attest_status(dice_rc);
+            if (status == PSA_SUCCESS || status == PSA_ERROR_BUFFER_TOO_SMALL) {
+                out_vec[0].len = token_len;
+            }
+            return status;
         }
         if (type == ARM_TEE_ATTEST_GET_TOKEN_SIZE) {
             if (out_vec == NULL || out_len < 1 || out_vec[0].base == NULL ||
@@ -670,7 +897,29 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             {
+                const rot_size_t *challenge_size = NULL;
                 rot_size_t token_size = 0;
+                size_t token_size_native = 0;
+                psa_status_t status;
+                int dice_rc;
+
+                if (in_vec == NULL || in_len < 1 || in_vec[0].base == NULL ||
+                    in_vec[0].len < sizeof(rot_size_t)) {
+                    return PSA_ERROR_INVALID_ARGUMENT;
+                }
+
+                challenge_size = (const rot_size_t *)in_vec[0].base;
+                wolfBoot_printf("[ATTEST] GET_TOKEN_SIZE: challenge_size=%u\r\n",
+                                (unsigned)*challenge_size);
+                dice_rc = wolfBoot_dice_get_token_size(*challenge_size,
+                                                       &token_size_native);
+                wolfBoot_printf("[ATTEST] GET_TOKEN_SIZE: dice_rc=%d size=%u\r\n",
+                                dice_rc, (unsigned)token_size_native);
+                status = wolfboot_attest_status(dice_rc);
+                if (status != PSA_SUCCESS) {
+                    return status;
+                }
+                token_size = (rot_size_t)token_size_native;
                 XMEMCPY(out_vec[0].base, &token_size, sizeof(token_size));
                 out_vec[0].len = sizeof(token_size);
             }

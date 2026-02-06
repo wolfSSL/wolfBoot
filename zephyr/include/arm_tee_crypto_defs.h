@@ -10,6 +10,15 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 3 of the License, or
  * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
 #ifndef WOLFBOOT_ARM_TEE_CRYPTO_DEFS_H_
@@ -64,8 +73,15 @@ struct arm_tee_crypto_pack_iovec {
 #define ARM_TEE_CRYPTO_HASH_COMPUTE_SID             (0x0300U)
 #define ARM_TEE_CRYPTO_HASH_SETUP_SID               (0x0302U)
 #define ARM_TEE_CRYPTO_HASH_UPDATE_SID              (0x0303U)
+#define ARM_TEE_CRYPTO_HASH_CLONE_SID               (0x0304U)
 #define ARM_TEE_CRYPTO_HASH_FINISH_SID              (0x0305U)
 #define ARM_TEE_CRYPTO_HASH_ABORT_SID               (0x0307U)
+#define ARM_TEE_CRYPTO_CIPHER_ENCRYPT_SETUP_SID     (0x0400U)
+#define ARM_TEE_CRYPTO_CIPHER_DECRYPT_SETUP_SID     (0x0401U)
+#define ARM_TEE_CRYPTO_CIPHER_SET_IV_SID            (0x0402U)
+#define ARM_TEE_CRYPTO_CIPHER_UPDATE_SID            (0x0403U)
+#define ARM_TEE_CRYPTO_CIPHER_FINISH_SID            (0x0404U)
+#define ARM_TEE_CRYPTO_CIPHER_ABORT_SID             (0x0405U)
 #define ARM_TEE_CRYPTO_ASYMMETRIC_SIGN_HASH_SID     (0x0702U)
 #define ARM_TEE_CRYPTO_ASYMMETRIC_VERIFY_HASH_SID   (0x0703U)
 

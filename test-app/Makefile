@@ -3,13 +3,21 @@
 -include ../options.mk
 -include ./wcs/pkcs11.mk
 
+WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
+WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
+vpath %.c $(WOLFBOOT_LIB_WOLFSSL)
+vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
+
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
+ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
+  TEST_APP_NO_RNG?=1
+endif
 ifeq ($(TZEN),1)
   # wcs directory contains a user_settings.h, which will conflict with
   # the one in the include directory if the test app needs it (e.g. wolfHSM)
-  CFLAGS+=-I./wcs
+  CFLAGS:=-I./wcs $(CFLAGS)
 endif
 CFLAGS+=-I. -I..
 DEBUG?=1
@@ -20,6 +28,10 @@ BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLAS
 
 # For test-applications we should only use user_settings.h
 CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
+
+ifeq ($(WOLFBOOT_ATTESTATION_TEST),1)
+  CFLAGS+=-DWOLFBOOT_ATTESTATION_TEST
+endif
 
 ifeq ($(HASH),SHA256)
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
@@ -66,6 +78,12 @@ endif
 
 include ../arch.mk
 
+# Optional alias for clearer TZ PSA selection in app builds.
+ifeq ($(WOLFCRYPT_TZ_PSA),1)
+  WOLFCRYPT_TZ=1
+  WOLFCRYPT_TZ_PSA=1
+endif
+
 # Setup default linker flags
 LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
 
@@ -82,10 +100,39 @@ ifeq ($(TZEN),1)
     CFLAGS+=-I./
     APP_OBJS+=../hal/$(TARGET)_ns.o
     ifeq ($(WOLFCRYPT_TZ),1)
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
         APP_OBJS+=../src/wc_secure_calls.o
+        WOLFCRYPT_APP_OBJS+=\
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pkcs12.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfentropy.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
+        ifeq ($(TEST_APP_NO_RNG),1)
+            CFLAGS+=-DWC_NO_RNG
+        else
+            WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+        endif
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
             CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
-            CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11
+            CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11 -DWOLFBOOT_TZ_PKCS11
             CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFPKCS11)"
             APP_OBJS+=./wcs/pkcs11_test_ecc.o
             APP_OBJS+=./wcs/pkcs11_stub.o
@@ -124,6 +171,26 @@ ifeq ($(TZEN),1)
         endif
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
         LDFLAGS+=--specs=nosys.specs -u _printf_float
+    endif
+    ifeq ($(WOLFCRYPT_TZ_PSA),1)
+        CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA
+        CFLAGS+=-I../zephyr/include -I../lib/wolfPSA/wolfpsa
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)" -I"$(WOLFBOOT_LIB_WOLFSSL)/wolfssl"
+        APP_OBJS+=hal_trng_psa.o
+        APP_OBJS+=../zephyr/src/wolfboot_psa_ns_api.o
+        APP_OBJS+=arm_tee_ns_interface_stub.o
+        APP_OBJS+=../zephyr/src/arm_tee_attest_api.o
+        APP_OBJS+=../zephyr/src/arm_tee_crypto_api.o
+        WOLFCRYPT_APP_OBJS+=\
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_aes.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_hash.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_pkcbs.o
+    endif
+    WOLFCRYPT_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
+        $(WOLFSSL_LOCAL_OBJDIR)/%, $(WOLFCRYPT_APP_OBJS))
+    ifneq ($(WOLFCRYPT_TZ_PKCS11),1)
+        APP_OBJS+=$(sort $(WOLFCRYPT_APP_OBJS))
     endif
 else
     APP_OBJS+=../hal/$(TARGET).o
@@ -611,6 +678,9 @@ ifeq ($(TARGET),aurix_tc3xx)
   endif
 endif
 
+# Capture final flags for locally built wolfSSL objects.
+WOLFSSL_CFLAGS:=$(CFLAGS)
+
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
@@ -641,6 +711,9 @@ image.hex: image.elf
 image.srec: image.elf
 	@echo "\t[SREC] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
+
+APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
+    $(WOLFSSL_LOCAL_OBJDIR)/%, $(APP_OBJS))
 
 ifeq ($(ELF_FLASH_SCATTER),1)
 # When ELF_FLASH_SCATTER=1, preprocess the ELF file with the squashelf tool
@@ -684,8 +757,14 @@ delta-extra-data: image.bin
 	@echo "\t[AS-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 
+$(WOLFSSL_LOCAL_OBJDIR)/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFSSL_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
+	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
