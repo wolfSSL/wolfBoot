@@ -28,6 +28,46 @@
 /* generic shared NXP QorIQ driver code */
 #include "nxp_ppc.c"
 
+/* AMD CFI Commands (Spansion/Cypress) */
+#define AMD_CMD_RESET                0xF0
+#define AMD_CMD_WRITE                0xA0
+#define AMD_CMD_ERASE_START          0x80
+#define AMD_CMD_ERASE_SECTOR         0x30
+#define AMD_CMD_UNLOCK_START         0xAA
+#define AMD_CMD_UNLOCK_ACK           0x55
+#define AMD_CMD_WRITE_TO_BUFFER      0x25
+#define AMD_CMD_WRITE_BUFFER_CONFIRM 0x29
+#define AMD_CMD_SET_PPB_ENTRY        0xC0
+#define AMD_CMD_SET_PPB_EXIT_BC1     0x90
+#define AMD_CMD_SET_PPB_EXIT_BC2     0x00
+#define AMD_CMD_PPB_UNLOCK_BC1       0x80
+#define AMD_CMD_PPB_UNLOCK_BC2       0x30
+#define AMD_CMD_PPB_LOCK_BC1         0xA0
+#define AMD_CMD_PPB_LOCK_BC2         0x00
+
+#define AMD_STATUS_TOGGLE            0x40
+#define AMD_STATUS_ERROR             0x20
+
+/* Flash unlock addresses */
+#if FLASH_CFI_WIDTH == 16
+#define FLASH_UNLOCK_ADDR1 0x555
+#define FLASH_UNLOCK_ADDR2 0x2AA
+#else
+#define FLASH_UNLOCK_ADDR1 0xAAA
+#define FLASH_UNLOCK_ADDR2 0x555
+#endif
+
+/* Flash IO Helpers */
+#if FLASH_CFI_WIDTH == 16
+#define FLASH_IO8_WRITE(sec, n, val)  *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (((val) << 8) | (val))
+#define FLASH_IO16_WRITE(sec, n, val) *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (val)
+#define FLASH_IO8_READ(sec, n)  (uint8_t)(*((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))))
+#define FLASH_IO16_READ(sec, n)           *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2)))
+#else
+#define FLASH_IO8_WRITE(sec, n, val)      *((volatile uint8_t*)(FLASH_BASE_ADDR  + (FLASH_SECTOR_SIZE * (sec)) + (n))) = (val)
+#define FLASH_IO8_READ(sec, n)            *((volatile uint8_t*)(FLASH_BASE_ADDR  + (FLASH_SECTOR_SIZE * (sec)) + (n)))
+#endif
+
 
 #ifdef DEBUG_UART
 void uart_init(void)
@@ -87,7 +127,7 @@ static void hal_flash_init(void)
 {
     /* IFC - NOR Flash */
     /* LAW is also set in boot_ppc_start.S:flash_law */
-    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
+    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE_ADDR, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
 
     /* NOR IFC Flash Timing Parameters */
     set32(IFC_FTIM0(0), (IFC_FTIM0_NOR_TACSE(4) |
@@ -103,7 +143,7 @@ static void hal_flash_init(void)
     set32(IFC_FTIM3(0), 0);
     /* NOR IFC Definitions (CS0) */
     set32(IFC_CSPR_EXT(0), 0xF);
-    set32(IFC_CSPR(0),     (IFC_CSPR_PHYS_ADDR(FLASH_BASE) |
+    set32(IFC_CSPR(0),     (IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR) |
                             IFC_CSPR_PORT_SIZE_16 |
                             IFC_CSPR_MSEL_NOR |
                             IFC_CSPR_V));
@@ -289,20 +329,135 @@ void hal_init(void)
 #endif /* ENABLE_CPLD */
 }
 
+static void hal_flash_unlock_sector(uint32_t sector)
+{
+    /* AMD unlock sequence */
+    FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+}
+
+/* wait for toggle to stop and status mask to be met within microsecond timeout */
+static int hal_flash_status_wait(uint32_t sector, uint16_t mask,
+    uint32_t timeout_us)
+{
+    int ret = 0;
+    uint32_t timeout = 0;
+    uint16_t read1, read2;
+
+    do {
+        /* detection of completion happens when reading status bits
+         * DQ6 and DQ2 stop toggling (0x44) */
+        read1 = FLASH_IO8_READ(sector, 0);
+        if ((read1 & AMD_STATUS_TOGGLE) == 0)
+            read1 = FLASH_IO8_READ(sector, 0);
+        read2 = FLASH_IO8_READ(sector, 0);
+        if ((read2 & AMD_STATUS_TOGGLE) == 0)
+            read2 = FLASH_IO8_READ(sector, 0);
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Wait toggle %x -> %x\n", read1, read2);
+    #endif
+        if (read1 == read2 && ((read1 & mask) == mask))
+            break;
+        udelay(1);
+    } while (timeout++ < timeout_us);
+    if (timeout >= timeout_us) {
+        ret = -1; /* timeout */
+    }
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Wait done (%d tries): %x -> %x\n",
+        timeout, read1, read2);
+#endif
+    return ret;
+}
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    (void)address;
-    (void)data;
-    (void)len;
-    /* TODO: Implement NOR flash write using IFC */
+    uint32_t i, pos, sector, offset, xfer, nwords;
+
+    /* adjust for flash base */
+    if (address >= FLASH_BASE_ADDR)
+        address -= FLASH_BASE_ADDR;
+
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Flash Write: Ptr %p -> Addr 0x%x (len %d)\n",
+        data, address, len);
+#endif
+
+    pos = 0;
+    while (len > 0) {
+        /* determine sector address */
+        sector = (address / FLASH_SECTOR_SIZE);
+        offset = address - (sector * FLASH_SECTOR_SIZE);
+        offset /= (FLASH_CFI_WIDTH/8);
+        xfer = len;
+        if (xfer > FLASH_PAGE_SIZE)
+            xfer = FLASH_PAGE_SIZE;
+        nwords = xfer / (FLASH_CFI_WIDTH/8);
+
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Flash Write: Sector %d, Offset %d, Len %d, Pos %d\n",
+            sector, offset, xfer, pos);
+    #endif
+
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_TO_BUFFER);
+    #if FLASH_CFI_WIDTH == 16
+        FLASH_IO16_WRITE(sector, offset, (nwords-1));
+    #else
+        FLASH_IO8_WRITE(sector, offset, (nwords-1));
+    #endif
+
+        for (i=0; i<nwords; i++) {
+            const uint8_t* ptr = &data[pos];
+        #if FLASH_CFI_WIDTH == 16
+            FLASH_IO16_WRITE(sector, i, *((const uint16_t*)ptr));
+        #else
+            FLASH_IO8_WRITE(sector, i, *ptr);
+        #endif
+            pos += (FLASH_CFI_WIDTH/8);
+        }
+        FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_BUFFER_CONFIRM);
+        /* Typical 410us */
+
+        /* poll for program completion - max 200ms */
+        hal_flash_status_wait(sector, 0x44, 200*1000);
+
+        address += xfer;
+        len -= xfer;
+    }
     return 0;
 }
 
 int hal_flash_erase(uint32_t address, int len)
 {
-    (void)address;
-    (void)len;
-    /* TODO: Implement NOR flash erase using IFC */
+    uint32_t sector;
+
+    /* adjust for flash base */
+    if (address >= FLASH_BASE_ADDR)
+        address -= FLASH_BASE_ADDR;
+
+    while (len > 0) {
+        /* determine sector address */
+        sector = (address / FLASH_SECTOR_SIZE);
+
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Flash Erase: Sector %d, Addr 0x%x, Len %d\n",
+            sector, address, len);
+    #endif
+
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_ERASE_START);
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, 0, AMD_CMD_ERASE_SECTOR);
+        /* block erase timeout = 50us - for additional sectors */
+        /* Typical is 200ms (max 1100ms) */
+
+        /* poll for erase completion - max 1.1 sec */
+        hal_flash_status_wait(sector, 0x4C, 1100*1000);
+
+        address += FLASH_SECTOR_SIZE;
+        len -= FLASH_SECTOR_SIZE;
+    }
     return 0;
 }
 
@@ -310,30 +465,30 @@ void hal_flash_unlock(void)
 {
     /* Disable all flash protection bits */
     /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xAAAA;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x554)) = 0x5555;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xC0C0;
     /* clear all protection bit (80h/30h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x8080;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x3030;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x8080;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x3030;
     /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x9090;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
 }
 
 void hal_flash_lock(void)
 {
     /* Enable all flash protection bits */
     /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xAAAA;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x554)) = 0x5555;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xC0C0;
     /* set all protection bit (A0h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0xA0A0;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0xA0A0;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
     /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x9090;
+    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
 }
 
 void hal_prepare_boot(void)
