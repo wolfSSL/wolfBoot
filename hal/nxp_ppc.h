@@ -691,22 +691,28 @@ extern void dcache_disable(void);
 #else
 /* Assembly version */
 #ifdef CORE_E6500
-/* e6500 has 64-bit MAS registers - must clear upper 32 bits */
+/* e6500 has 64-bit MAS registers - must clear upper 32 bits.
+ * Using lis would sign-extend values with bit 15 set (e.g., 0xC000xxxx).
+ * Use li 0; oris; ori pattern for all MAS registers. */
 #define set_tlb(tlb, esel, epn, rpn, urpn, perms, winge, ts, tsize, iprot, reg) \
-    lis   reg, BOOKE_MAS0(tlb, esel, 0)@h; \
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS0(tlb, esel, 0)@h; \
     ori   reg, reg, BOOKE_MAS0(tlb, esel, 0)@l; \
     mtspr MAS0, reg;\
-    lis   reg, BOOKE_MAS1(1, iprot, 0, ts, tsize)@h; \
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS1(1, iprot, 0, ts, tsize)@h; \
     ori   reg, reg, BOOKE_MAS1(1, iprot, 0, ts, tsize)@l; \
     mtspr MAS1, reg; \
     li    reg, 0; \
     oris  reg, reg, BOOKE_MAS2(epn, winge)@h; \
     ori   reg, reg, BOOKE_MAS2(epn, winge)@l; \
     mtspr MAS2, reg; \
-    lis   reg, BOOKE_MAS3(rpn, 0, perms)@h; \
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS3(rpn, 0, perms)@h; \
     ori   reg, reg, BOOKE_MAS3(rpn, 0, perms)@l; \
     mtspr MAS3, reg; \
-    lis   reg, urpn@h; \
+    li    reg, 0; \
+    oris  reg, reg, urpn@h; \
     ori   reg, reg, urpn@l; \
     mtspr MAS7, reg; \
     isync; \

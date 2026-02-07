@@ -569,10 +569,9 @@ init_sram_law:
                                   INITIAL_SRAM_LAW_SZ)
         LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(2))
         li      r0,     0 /* UPPER=0 */
-        lis     r1,     INITIAL_SRAM_ADDR@h
-        ori     r1, r1, INITIAL_SRAM_ADDR@l
-        lis     r2,     INITIAL_SRAM_LAW@h
-        ori     r2, r2, INITIAL_SRAM_LAW@l
+        /* Use LOAD_ADDR32 on e6500 to avoid sign-extension for addresses >= 0x80000000 */
+        LOAD_ADDR32(r1, INITIAL_SRAM_ADDR)
+        LOAD_ADDR32(r2, INITIAL_SRAM_LAW)
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
         sync
@@ -585,7 +584,7 @@ init_sram_law:
 init_sram_tlb:
         /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT
          * CPC SRAM uses cacheable memory-coherent (M) access.
-         * SRAM is zeroed via dcbz to avoid reading uninitialized ECC data. */
+         * TLB is created BEFORE l2_setup_sram per old working code. */
         set_tlb(1, 9,
                 INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
@@ -598,7 +597,6 @@ init_sram_tlb:
 #ifdef L2SRAM_ADDR
 l2_setup_sram:
         /* T2080RM: 8.4.2.2 - CPC initialization
-         * Restored working configuration from pre-T1024 codebase:
          * Configure SRAM control registers, then enable CPC with parity.
          * The LAW (DDR_1) provides CoreNet routing; CPC intercepts before DDR.
          * SRAM is zeroed later via dcbz through cacheable TLB (MAS2_M). */
