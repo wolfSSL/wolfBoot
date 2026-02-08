@@ -34,13 +34,13 @@
 
 #define BOOT_LED_PIN 0
 
-extern whal_Clock wbClock;
+extern whal_Clock g_whalClock;
+extern whal_Flash g_whalFlash;
 #ifndef WOLFHAL_NO_GPIO
-extern whal_Gpio wbGpio;
+extern whal_Gpio g_whalGpio;
 #endif
-extern whal_Flash wbFlash;
 #if defined(DEBUG_UART) || defined(UART_FLASH)
-extern whal_Uart wbUart;
+extern whal_Uart g_whalUart;
 #endif /* DEBUG_UART || UART_FLASH */
 
 /* Matches all keys:
@@ -61,28 +61,28 @@ void main(void) {
     hal_init();
 
 #ifndef WOLFHAL_NO_GPIO
-    whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 1);
+    whal_Gpio_Set(&g_whalGpio, BOOT_LED_PIN, 1);
 #endif
 
     version = wolfBoot_current_firmware_version();
     updv = wolfBoot_update_firmware_version();
     
 #if defined(DEBUG_UART) || defined(UART_FLASH)
-    whal_Uart_Send(&wbUart, "*", 1);
-    whal_Uart_Send(&wbUart, (uint8_t *)&version, 4);
+    whal_Uart_Send(&g_whalUart, "*", 1);
+    whal_Uart_Send(&g_whalUart, (uint8_t *)&version, 4);
 #endif /* DEBUG_UART || UART_FLASH */
     
     if ((version == 1) && (updv != 8)) {
         uint32_t sz;
 #ifndef WOLFHAL_NO_GPIO
-        whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 0);
+        whal_Gpio_Set(&g_whalGpio, BOOT_LED_PIN, 0);
 #endif
 #if EXT_ENCRYPTED
         wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
 #endif
         wolfBoot_update_trigger();
 #ifndef WOLFHAL_NO_GPIO
-        whal_Gpio_Set(&wbGpio, BOOT_LED_PIN, 1);
+        whal_Gpio_Set(&g_whalGpio, BOOT_LED_PIN, 1);
 #endif
     } else {
         if (version != 7)

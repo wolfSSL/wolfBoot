@@ -26,12 +26,12 @@
 #include <stdint.h>
 #include <wolfHAL/wolfHAL.h>
 
-extern whal_Uart wbUart;
+extern whal_Uart g_whalUart;
 
 int uart_tx(const uint8_t c)
 {
     whal_Error err;
-    err = whal_Uart_Send(&wbUart, &c, 1);
+    err = whal_Uart_Send(&g_whalUart, &c, 1);
     if (err) {
         return err;
     }
@@ -41,7 +41,7 @@ int uart_tx(const uint8_t c)
 int uart_rx(uint8_t *c)
 {
     whal_Error err;
-    err = whal_Uart_Recv(&wbUart, c, 1);
+    err = whal_Uart_Recv(&g_whalUart, c, 1);
     if (err) {
         return err;
     }
@@ -57,7 +57,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     (void)stop;
 
     whal_Error err;
-    err = whal_Uart_Init(&wbUart);
+    err = whal_Uart_Init(&g_whalUart);
     if (err) {
         return err;
     }
@@ -68,7 +68,7 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 #ifdef DEBUG_UART
 void uart_write(const char *buf, unsigned int len)
 {
-    whal_Uart_Send(&wbUart, (uint8_t *)buf, len);
+    whal_Uart_Send(&g_whalUart, (uint8_t *)buf, len);
 }
 #endif
 

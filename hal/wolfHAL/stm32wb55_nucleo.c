@@ -8,15 +8,15 @@
  * build-time defines (e.g., DEBUG_UART/UART_FLASH) as needed.
  */
 
-whal_Clock wbClockController;
-whal_Flash wbFlash;
+whal_Clock g_whalClock;
+whal_Flash g_whalFlash;
 
 /* Core clock controller (MSI -> PLL -> SYSCLK at 64 MHz). */
-whal_Clock wbClockController = {
+whal_Clock g_whalClock = {
     WHAL_STM32WB55_RCC_PLL_DEVICE,
 
     .cfg = &(whal_Stm32wbRcc_Cfg) {
-        .flash = &wbFlash,
+        .flash = &g_whalFlash,
         .flashLatency = WHAL_STM32WB_FLASH_LATENCY_3,
 
         .sysClkSrc = WHAL_STM32WB_RCC_SYSCLK_SRC_PLL,
@@ -34,11 +34,11 @@ whal_Clock wbClockController = {
 };
 
 /* Internal flash mapping used by wolfBoot. */
-whal_Flash wbFlash = {
+whal_Flash g_whalFlash = {
     WHAL_STM32WB55_FLASH_DEVICE,
 
     .cfg = &(whal_Stm32wbFlash_Cfg) {
-        .clkCtrl = &wbClockController,
+        .clkCtrl = &g_whalClock,
         .clk = &(whal_Stm32wbRcc_Clk){WHAL_STM32WB55_FLASH_CLOCK},
 
         .startAddr = 0x08000000,
@@ -48,7 +48,7 @@ whal_Flash wbFlash = {
 
 #ifndef WOLFHAL_NO_GPIO
 /* GPIO pin configuration: LED on PB5 and optional UART1 pins. */
-whal_Stm32wbGpio_PinCfg pinCfg[] = {
+whal_Stm32wbGpio_PinCfg g_whalPinCfg[] = {
         { /* LED */
             .port = WHAL_STM32WB_GPIO_PORT_B,
             .pin = 5,
@@ -81,26 +81,26 @@ whal_Stm32wbGpio_PinCfg pinCfg[] = {
 };
 
 /* GPIO controller for configured pins. */
-whal_Gpio wbGpio = {
+whal_Gpio g_whalGpio = {
     WHAL_STM32WB55_GPIO_DEVICE,
 
     .cfg = &(whal_Stm32wbGpio_Cfg) {
-        .clkCtrl = &wbClockController,
+        .clkCtrl = &g_whalClock,
         .clk = &(whal_Stm32wbRcc_Clk) {WHAL_STM32WB55_GPIOB_CLOCK},
 
-        .pinCfg = pinCfg,
-        .pinCount = sizeof(pinCfg) / sizeof(whal_Stm32wbGpio_PinCfg),
+        .pinCfg = g_whalPinCfg,
+        .pinCount = sizeof(g_whalPinCfg) / sizeof(whal_Stm32wbGpio_PinCfg),
     },
 };
 #endif
 
 #if defined(DEBUG_UART) || defined(UART_FLASH)
 /* UART1 configuration for debug/flash operations. */
-whal_Uart wbUart = {
+whal_Uart g_whalUart = {
     WHAL_STM32WB55_UART1_DEVICE,
 
     .cfg = &(whal_Stm32wbUart_Cfg){
-        .clkCtrl = &wbClockController,
+        .clkCtrl = &g_whalClock,
         .clk = &(whal_Stm32wbRcc_Clk) {WHAL_STM32WB55_UART1_CLOCK},
 
         .baud = 115200,
