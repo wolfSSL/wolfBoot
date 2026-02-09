@@ -52,6 +52,9 @@ extern "C" {
 #define ML_DSA_IMAGE_SIGNATURE_SIZE (3309)
 #endif
 
+#ifdef TARGET_nrf54lm20
+extern void hal_monitor(void);
+#endif
 
 void wolfBoot_start(void);
 
@@ -84,6 +87,10 @@ static inline void wolfBoot_panic(void)
 #include "printf.h"
 static inline void wolfBoot_panic(void)
 {
+#ifdef TARGET_nrf54lm20
+    hal_monitor();
+#endif
+
     wolfBoot_printf("wolfBoot: PANIC!\n");
 #ifdef WOLFBOOT_FSP
     extern void panic(void);
