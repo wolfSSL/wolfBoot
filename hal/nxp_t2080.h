@@ -172,6 +172,14 @@ enum ifc_amask_sizes {
 #define SATA_ENBL ((volatile uint32_t*)0xB1003F4C) /* also saw 0xB4003F4C */
 
 
+/* ---- Boot Page Translation - T2080RM 4.4.9 ---- */
+#define LCC_BSTRH            ((volatile uint32_t*)(CCSRBAR + 0x20)) /* Boot space translation register high */
+#define LCC_BSTRL            ((volatile uint32_t*)(CCSRBAR + 0x24)) /* Boot space translation register low */
+#define LCC_BSTAR            ((volatile uint32_t*)(CCSRBAR + 0x28)) /* Boot space translation attribute register */
+#define LCC_BSTAR_EN         0x80000000
+#define LCC_BSTAR_LAWTRGT(n) ((n) << 20)
+#define LCC_BSTAR_LAWSZ(n)   ((n) & 0x3F)
+
 /* ---- DCFG (Device Configuration) - T2080RM 6.3 ---- */
 #define DCFG_BASE       (CCSRBAR + 0xE0000)
 #define DCFG_DCSR       ((volatile uint32_t*)(DCFG_BASE + 0x704)) /* Debug Configuration and Status */
@@ -180,10 +188,21 @@ enum ifc_amask_sizes {
 #define DCFG_DEVDISR3   ((volatile uint32_t*)(DCFG_BASE + 0x078)) /* Device Disable Control 3 */
 #define DCFG_DEVDISR4   ((volatile uint32_t*)(DCFG_BASE + 0x07C)) /* Device Disable Control 4 */
 #define DCFG_DEVDISR5   ((volatile uint32_t*)(DCFG_BASE + 0x080)) /* Device Disable Control 5 */
+#define DCFG_BRR        ((volatile uint32_t*)(DCFG_BASE + 0xE4))  /* Boot Release Register */
 
 /* ---- RCPM (Run Control and Power Management) - T2080RM 6.4 ---- */
 #define RCPM_BASE       (CCSRBAR + 0xE2000)
 #define RCPM_PCTBENR    ((volatile uint32_t*)(RCPM_BASE + 0x1A0)) /* Physical Core Timebase Enable */
+
+/* ---- Clocking - T2080RM 5.3 ---- */
+#define CLOCKING_BASE           (CCSRBAR + 0xE1000)
+#define CLOCKING_CLKCCSR(n)     ((volatile uint32_t*)(CLOCKING_BASE + 0x000UL + ((n) * 0x20)))
+#define CLOCKING_PLLCNGSR(n)    ((volatile uint32_t*)(CLOCKING_BASE + 0x800UL + ((n) * 0x20))) /* PLL cluster n general status */
+#define CLOCKING_PLLPGSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xC00UL)) /* Platform PLL general status */
+
+/* ---- MPIC - T2080RM 24.3 ---- */
+#define PIC_BASE    (CCSRBAR + 0x40000)
+#define PIC_WHOAMI  ((volatile uint32_t*)(PIC_BASE + 0x0090UL))
 
 
 /* ---- DDR (T2080RM 12.4) ---- */

@@ -28,7 +28,21 @@
 /* generic shared NXP QorIQ driver code */
 #include "nxp_ppc.c"
 
+#define ENABLE_IFC
+#define ENABLE_BUS_CLK_CALC
+
+#ifndef BUILD_LOADER_STAGE1
+    #define ENABLE_MP   /* multi-core support */
+#endif
+
+/* Forward declarations */
+static void hal_flash_unlock_sector(uint32_t sector);
+#ifdef ENABLE_MP
+static void hal_mp_init(void);
+#endif
+
 /* AMD CFI Commands (Spansion/Cypress) */
+#define FLASH_CMD_READ_ID            0x90
 #define AMD_CMD_RESET                0xF0
 #define AMD_CMD_WRITE                0xA0
 #define AMD_CMD_ERASE_START          0x80
@@ -116,15 +130,76 @@ void law_init(void)
     set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
 }
 
-/* Delay helper using timebase */
-#define DELAY_US (SYS_CLK / 1000000)
+/* Clock helpers */
+#ifdef ENABLE_BUS_CLK_CALC
+static uint32_t hal_get_core_clk(void)
+{
+    /* compute core clock (system input * ratio) */
+    uint32_t core_clk;
+    uint32_t core_ratio = get32(CLOCKING_PLLCNGSR(0)); /* see CGA_PLL1_RAT in RCW */
+    /* shift by 1 and mask */
+    core_ratio = ((core_ratio >> 1) & 0x3F);
+    core_clk = SYS_CLK * core_ratio;
+    return core_clk;
+}
+static uint32_t hal_get_plat_clk(void)
+{
+    /* compute platform clock (system input * ratio) */
+    uint32_t plat_clk;
+    uint32_t plat_ratio = get32(CLOCKING_PLLPGSR); /* see SYS_PLL_RAT in RCW */
+    /* shift by 1 and mask */
+    plat_ratio = ((plat_ratio >> 1) & 0x1F);
+    plat_clk = SYS_CLK * plat_ratio;
+    return plat_clk;
+}
+static uint32_t hal_get_bus_clk(void)
+{
+    /* compute bus clock (platform clock / 2) */
+    uint32_t bus_clk = hal_get_plat_clk() / 2;
+    return bus_clk;
+}
+#else
+#define hal_get_core_clk() (uint32_t)(SYS_CLK * 14)
+#define hal_get_plat_clk() (uint32_t)(SYS_CLK * 4)
+#define hal_get_bus_clk()  (uint32_t)(hal_get_plat_clk() / 2)
+#endif
+
+#define TIMEBASE_CLK_DIV 16
+#define TIMEBASE_HZ (hal_get_plat_clk() / TIMEBASE_CLK_DIV)
+#define DELAY_US  (TIMEBASE_HZ / 1000000)
 static void udelay(uint32_t delay_us)
 {
     wait_ticks(delay_us * DELAY_US);
 }
 
+#if defined(ENABLE_IFC) && !defined(BUILD_LOADER_STAGE1)
+static int hal_flash_getid(void)
+{
+    uint8_t manfid[4];
+
+    hal_flash_unlock_sector(0);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, FLASH_CMD_READ_ID);
+    udelay(1000);
+
+    manfid[0] = FLASH_IO8_READ(0, 0);  /* Manufacture Code */
+    manfid[1] = FLASH_IO8_READ(0, 1);  /* Device Code 1 */
+    manfid[2] = FLASH_IO8_READ(0, 14); /* Device Code 2 */
+    manfid[3] = FLASH_IO8_READ(0, 15); /* Device Code 3 */
+
+    /* Exit read info */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    udelay(1);
+
+    wolfBoot_printf("Flash: Mfg 0x%x, Device Code 0x%x/0x%x/0x%x\n",
+        manfid[0], manfid[1], manfid[2], manfid[3]);
+
+    return 0;
+}
+#endif /* ENABLE_IFC && !BUILD_LOADER_STAGE1 */
+
 static void hal_flash_init(void)
 {
+#ifdef ENABLE_IFC
     /* IFC - NOR Flash */
     /* LAW is also set in boot_ppc_start.S:flash_law */
     set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE_ADDR, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
@@ -142,13 +217,22 @@ static void hal_flash_init(void)
                          IFC_FTIM2_NOR_TWP(28)));
     set32(IFC_FTIM3(0), 0);
     /* NOR IFC Definitions (CS0) */
-    set32(IFC_CSPR_EXT(0), 0xF);
+    set32(IFC_CSPR_EXT(0), FLASH_BASE_PHYS_HIGH);
     set32(IFC_CSPR(0),     (IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR) |
+                        #if FLASH_CFI_WIDTH == 16
                             IFC_CSPR_PORT_SIZE_16 |
+                        #else
+                            IFC_CSPR_PORT_SIZE_8 |
+                        #endif
                             IFC_CSPR_MSEL_NOR |
                             IFC_CSPR_V));
     set32(IFC_AMASK(0), IFC_AMASK_128MB);
     set32(IFC_CSOR(0), 0x0000000C); /* TRHZ (80 clocks for read enable high) */
+
+    #ifndef BUILD_LOADER_STAGE1
+    hal_flash_getid();
+    #endif
+#endif /* ENABLE_IFC */
 }
 
 static void hal_ddr_init(void)
@@ -327,6 +411,10 @@ void hal_init(void)
     wolfBoot_printf("CPLD FW Rev: 0x%x\n", fw);
 #endif
 #endif /* ENABLE_CPLD */
+
+#ifdef ENABLE_MP
+    hal_mp_init();
+#endif
 }
 
 static void hal_flash_unlock_sector(uint32_t sector)
@@ -372,6 +460,7 @@ static int hal_flash_status_wait(uint32_t sector, uint16_t mask,
 
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
+    int ret = 0;
     uint32_t i, pos, sector, offset, xfer, nwords;
 
     /* adjust for flash base */
@@ -420,16 +509,21 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
         /* Typical 410us */
 
         /* poll for program completion - max 200ms */
-        hal_flash_status_wait(sector, 0x44, 200*1000);
+        ret = hal_flash_status_wait(sector, 0x44, 200*1000);
+        if (ret != 0) {
+            wolfBoot_printf("Flash Write: Timeout at sector %d\n", sector);
+            break;
+        }
 
         address += xfer;
         len -= xfer;
     }
-    return 0;
+    return ret;
 }
 
 int hal_flash_erase(uint32_t address, int len)
 {
+    int ret = 0;
     uint32_t sector;
 
     /* adjust for flash base */
@@ -453,43 +547,140 @@ int hal_flash_erase(uint32_t address, int len)
         /* Typical is 200ms (max 1100ms) */
 
         /* poll for erase completion - max 1.1 sec */
-        hal_flash_status_wait(sector, 0x4C, 1100*1000);
+        ret = hal_flash_status_wait(sector, 0x4C, 1100*1000);
+        if (ret != 0) {
+            wolfBoot_printf("Flash Erase: Timeout at sector %d\n", sector);
+            break;
+        }
 
         address += FLASH_SECTOR_SIZE;
         len -= FLASH_SECTOR_SIZE;
     }
-    return 0;
+    return ret;
 }
 
 void hal_flash_unlock(void)
 {
-    /* Disable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xC0C0;
-    /* clear all protection bit (80h/30h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x8080;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x3030;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
+    /* Per-sector unlock is done in hal_flash_write/erase before each operation.
+     * The previous non-volatile PPB protection mode (C0h) approach caused
+     * unnecessary wear on PPB cells since it was called on every boot. */
+    hal_flash_unlock_sector(0);
 }
 
 void hal_flash_lock(void)
 {
-    /* Enable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0xAAA)) = 0xC0C0;
-    /* set all protection bit (A0h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0xA0A0;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE_ADDR + 0x000)) = 0x0000;
+
 }
+
+/* SMP Multi-Processor Driver */
+#ifdef ENABLE_MP
+
+/* from boot_ppc_mp.S */
+extern uint32_t _secondary_start_page;
+extern uint32_t _second_half_boot_page;
+extern uint32_t _spin_table;
+extern uint32_t _spin_table_addr;
+extern uint32_t _bootpg_addr;
+
+/* Startup additional cores with spin table and synchronize the timebase */
+static void hal_mp_up(uint32_t bootpg)
+{
+    uint32_t all_cores, active_cores, whoami;
+    int timeout = 50, i;
+
+    whoami = get32(PIC_WHOAMI); /* Get current running core number */
+    all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
+    active_cores = (1 << whoami); /* current running cores */
+
+    wolfBoot_printf("MP: Starting cores (boot page %p, spin table %p)\n",
+        bootpg, (uint32_t)&_spin_table);
+
+    /* Set the boot page translation register */
+    set32(LCC_BSTRH, 0);
+    set32(LCC_BSTRL, bootpg);
+    set32(LCC_BSTAR, (LCC_BSTAR_EN |
+                      LCC_BSTAR_LAWTRGT(LAW_TRGT_DDR_1) |
+                      LAW_SIZE_4KB));
+    (void)get32(LCC_BSTAR); /* read back to sync */
+
+    /* Enable time base on current core only */
+    set32(RCPM_PCTBENR, (1 << whoami));
+
+    /* Release the CPU core(s) */
+    set32(DCFG_BRR, all_cores);
+    __asm__ __volatile__("sync; isync; msync");
+
+    /* wait for other core(s) to start */
+    while (timeout) {
+        for (i = 0; i < CPU_NUMCORES; i++) {
+            uint32_t* entry = (uint32_t*)(
+                  (uint8_t*)&_spin_table + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+            if (*entry) {
+                active_cores |= (1 << i);
+            }
+        }
+        if ((active_cores & all_cores) == all_cores) {
+            break;
+        }
+
+        udelay(100);
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        wolfBoot_printf("MP: Timeout enabling additional cores!\n");
+    }
+
+    /* Disable all timebases */
+    set32(RCPM_PCTBENR, 0);
+
+    /* Reset our timebase */
+    mtspr(SPRN_TBWU, 0);
+    mtspr(SPRN_TBWL, 0);
+
+    /* Enable timebase for all cores */
+    set32(RCPM_PCTBENR, all_cores);
+}
+
+static void hal_mp_init(void)
+{
+    uint32_t *fixup = (uint32_t*)&_secondary_start_page;
+    uint32_t bootpg;
+    int i_tlb = 0; /* always 0 */
+    size_t i;
+    const volatile uint32_t *s;
+    volatile uint32_t *d;
+
+    /* Assign virtual boot page at end of DDR */
+    bootpg = DDR_ADDRESS + DDR_SIZE - BOOT_ROM_SIZE;
+
+    /* Store the boot page address for use by additional CPU cores */
+    _bootpg_addr = (uint32_t)&_second_half_boot_page;
+
+    /* Store location of spin table for other cores */
+    _spin_table_addr = (uint32_t)&_spin_table;
+
+    /* Flush bootpg before copying to invalidate any stale cache lines */
+    flush_cache(bootpg, BOOT_ROM_SIZE);
+
+    /* Map reset page to bootpg so we can copy code there */
+    disable_tlb1(i_tlb);
+    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn, urpn */
+        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), /* perms, wimge */
+        0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
+
+    /* copy startup code to virtually mapped boot address */
+    /* do not use memcpy due to compiler array bounds report (not valid) */
+    s = (const uint32_t*)fixup;
+    d = (uint32_t*)BOOT_ROM_ADDR;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+
+    /* start core and wait for it to be enabled */
+    hal_mp_up(bootpg);
+}
+#endif /* ENABLE_MP */
 
 void hal_prepare_boot(void)
 {
@@ -501,4 +692,90 @@ void* hal_get_dts_address(void)
 {
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
-#endif
+
+int hal_dts_fixup(void* dts_addr)
+{
+#ifndef BUILD_LOADER_STAGE1
+    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    int off;
+    uint32_t *reg;
+
+    /* verify the FDT is valid */
+    off = fdt_check_header(dts_addr);
+    if (off != 0) {
+        wolfBoot_printf("FDT: Invalid header! %d\n", off);
+        return off;
+    }
+
+    /* display FDT information */
+    wolfBoot_printf("FDT: Version %d, Size %d\n",
+        fdt_version(fdt), fdt_totalsize(fdt));
+
+    /* expand total size */
+    fdt->totalsize += 2048; /* expand by 2KB */
+    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", fdt->totalsize);
+
+    /* fixup the memory region - single bank */
+    off = fdt_find_devtype(fdt, -1, "memory");
+    if (off != -FDT_ERR_NOTFOUND) {
+        /* build addr/size as 64-bit */
+        uint8_t ranges[sizeof(uint64_t) * 2], *p = ranges;
+        *(uint64_t*)p = cpu_to_fdt64(DDR_ADDRESS);
+        p += sizeof(uint64_t);
+        *(uint64_t*)p = cpu_to_fdt64(DDR_SIZE);
+        p += sizeof(uint64_t);
+        wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
+            DDR_ADDRESS, (uint32_t)DDR_SIZE);
+        fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
+    }
+
+    /* fixup CPU status and release address and enable method */
+    off = fdt_find_devtype(fdt, -1, "cpu");
+    while (off != -FDT_ERR_NOTFOUND) {
+        int core;
+    #ifdef ENABLE_MP
+        uint64_t core_spin_table;
+    #endif
+
+        reg = (uint32_t*)fdt_getprop(fdt, off, "reg", NULL);
+        if (reg == NULL)
+            break;
+        core = (int)fdt32_to_cpu(*reg);
+        if (core >= CPU_NUMCORES) {
+            break; /* invalid core index */
+        }
+
+    #ifdef ENABLE_MP
+        /* calculate location of spin table for core */
+        core_spin_table = (uint64_t)((uintptr_t)(
+                  (uint8_t*)&_spin_table + (core * ENTRY_SIZE)));
+
+        fdt_fixup_str(fdt, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
+        fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table);
+        fdt_fixup_str(fdt, off, "cpu", "enable-method", "spin-table");
+    #endif
+        fdt_fixup_val(fdt, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
+        fdt_fixup_val(fdt, off, "cpu", "clock-frequency", hal_get_core_clk());
+        fdt_fixup_val(fdt, off, "cpu", "bus-frequency", hal_get_plat_clk());
+
+        off = fdt_find_devtype(fdt, off, "cpu");
+    }
+
+    /* fixup the soc clock */
+    off = fdt_find_devtype(fdt, -1, "soc");
+    if (off != -FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "soc", "bus-frequency", hal_get_plat_clk());
+    }
+
+    /* fixup the serial clocks */
+    off = fdt_find_devtype(fdt, -1, "serial");
+    while (off != -FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "serial", "clock-frequency", hal_get_bus_clk());
+        off = fdt_find_devtype(fdt, off, "serial");
+    }
+
+#endif /* !BUILD_LOADER_STAGE1 */
+    (void)dts_addr;
+    return 0;
+}
+#endif /* MMU */

@@ -1001,6 +1001,7 @@ ifeq ($(TARGET),nxp_t2080)
   LDFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  OBJS+=src/boot_ppc_mp.o # support for spin table
   UPDATE_OBJS:=src/update_ram.o
   OBJS+=src/fdt.o
 endif
