@@ -363,8 +363,10 @@ void uart_print(const char *s)
     }
 }
 
-#define FILLER_SIZE (100 * 1024)
+#ifdef WOLFBOOT_TEST_FILLER
+#define FILLER_SIZE (64 * 1024)
 static volatile uint8_t filler_data[FILLER_SIZE] = { 0x01, 0x02, 0x03 };
+#endif
 
 void main(void)
 {
@@ -377,7 +379,9 @@ void main(void)
     if (FIRMWARE_A)
         ld3_write(LED_INIT);
 
+#ifdef WOLFBOOT_TEST_FILLER
     filler_data[FILLER_SIZE - 1] = 0xAA;
+#endif
     /* LED Indicator of successful UART initialization. SUCCESS = ON, FAIL = OFF */
     if (uart_setup(115200) < 0)
         ld2_write(LED_OFF);

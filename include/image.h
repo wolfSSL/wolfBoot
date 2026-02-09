@@ -444,6 +444,7 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         asm volatile("bne hnope"); \
         /* Repeat memcmp call */ \
         compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        compare_res; \
         /* Redundant checks that ensure the function actually returned 0 */ \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \

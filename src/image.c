@@ -2202,6 +2202,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             wolfBoot_printf("Verification of hybrid signature\n");
             wolfBoot_verify_signature_secondary(key_slot, img,
                     stored_secondary_signature);
+	    (void)stored_secondary_signature_size;
             wolfBoot_printf("Done.\n");
         }
     }

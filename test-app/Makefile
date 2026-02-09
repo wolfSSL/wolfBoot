@@ -289,10 +289,12 @@ ifeq ($(TARGET),stm32h5)
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
   CFLAGS+=-I..
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
-  ifeq ($(FLASH_OTP_KEYSTORE),1)
-    APP_OBJS+=../src/flash_otp_keystore.o
-  else
-    APP_OBJS+=../src/keystore.o
+  ifneq ($(SIGN),NONE)
+    ifeq ($(FLASH_OTP_KEYSTORE),1)
+      APP_OBJS+=../src/flash_otp_keystore.o
+    else
+      APP_OBJS+=../src/keystore.o
+    endif
   endif
 endif
 
@@ -330,7 +332,9 @@ endif
 ifeq ($(TARGET),va416x0)
   APP_OBJS+=$(SDK_OBJS)
   LSCRIPT_TEMPLATE=ARM-va416x0.ld
-  APP_OBJS+=../src/keystore.o
+  ifneq ($(SIGN),NONE)
+    APP_OBJS+=../src/keystore.o
+  endif
 endif
 
 ifeq ($(TARGET),sim)

@@ -1,9 +1,19 @@
 WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
 USE_GCC?=1
+WOLFBOOT_TEST_FILLER?=0
+WOLFBOOT_TIME_TEST?=0
 
 # Support for Built-in ROT into OTP flash memory
 ifeq ($(FLASH_OTP_KEYSTORE),1)
     CFLAGS+=-D"FLASH_OTP_KEYSTORE"
+endif
+
+ifeq ($(WOLFBOOT_TEST_FILLER),1)
+    CFLAGS+=-D"WOLFBOOT_TEST_FILLER"
+endif
+
+ifeq ($(WOLFBOOT_TIME_TEST),1)
+    CFLAGS+=-D"WOLFBOOT_TIME_TEST"
 endif
 
 # Support for TPM signature verification
@@ -200,7 +210,7 @@ ifeq ($(SIGN),ECC521)
       ifneq ($(SPMATH),1)
         STACK_USAGE=11256
       else
-        STACK_USAGE=8288
+        STACK_USAGE=8480
       endif
     endif
   endif
