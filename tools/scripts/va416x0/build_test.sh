@@ -16,6 +16,20 @@ MODE=$1
 # Set version: default to 1 for clean, default to 2 for update
 VERSION=$([ "$MODE" = "clean" ] && echo "${2:-1}" || echo "${2:-2}")
 
+# Find JLinkExe (in PATH on Linux, /Applications/SEGGER on macOS)
+if command -v JLinkExe &> /dev/null; then
+    JLINK="JLinkExe"
+else
+    # Check for versioned JLink directory on macOS (e.g., JLink_V812g)
+    JLINK_PATH=$(find /Applications/SEGGER -name "JLinkExe" 2>/dev/null | head -n1)
+    if [ -n "$JLINK_PATH" ] && [ -x "$JLINK_PATH" ]; then
+        JLINK="$JLINK_PATH"
+    else
+        echo "Error: JLinkExe not found. Please install SEGGER J-Link software."
+        exit 1
+    fi
+fi
+
 # Function to get value from .config file
 get_config_value() {
     grep "^${1}" .config | sed -E "s/^${1}[?]?=//" | head -n1
@@ -27,8 +41,8 @@ UPDATE_ADDRESS=$(get_config_value "WOLFBOOT_PARTITION_UPDATE_ADDRESS")
 IMAGE_HEADER_SIZE=$(get_config_value "IMAGE_HEADER_SIZE")
 SIGN=$(get_config_value "SIGN")
 HASH=$(get_config_value "HASH")
-SIGN_ARG="--${SIGN,,}"
-HASH_ARG="--${HASH,,}"
+SIGN_ARG="--$(echo "${SIGN}" | tr '[:upper:]' '[:lower:]')"
+HASH_ARG="--$(echo "${HASH}" | tr '[:upper:]' '[:lower:]')"
 
 # Common build steps
 make clean && make wolfboot.bin && make test-app/image.bin
@@ -57,7 +71,7 @@ if [ "$MODE" = "clean" ]; then
     ./tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \
         ${BOOT_ADDRESS} test-app/image_v${VERSION}_signed.bin \
         ${UPDATE_ADDRESS} blank_update.bin
-    JLinkExe -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
+    ${JLINK} -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
     print_summary
 else
     PARTITION_SIZE=$(get_config_value "WOLFBOOT_PARTITION_SIZE")
@@ -69,6 +83,6 @@ else
         ${BOOT_ADDRESS} test-app/image_v${PREV_VERSION}_signed.bin \
         ${UPDATE_ADDRESS} test-app/image_v${VERSION}_signed.bin \
         ${TRIGGER_ADDRESS} trigger_magic.bin
-    JLinkExe -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
+    ${JLINK} -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
     print_summary "${TRIGGER_ADDRESS}" "${PREV_VERSION}"
 fi
