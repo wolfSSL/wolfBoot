@@ -38,6 +38,8 @@ get_config_value() {
 # Extract values from .config
 BOOT_ADDRESS=$(get_config_value "WOLFBOOT_PARTITION_BOOT_ADDRESS")
 UPDATE_ADDRESS=$(get_config_value "WOLFBOOT_PARTITION_UPDATE_ADDRESS")
+PARTITION_SIZE=$(get_config_value "WOLFBOOT_PARTITION_SIZE")
+SECTOR_SIZE=$(get_config_value "WOLFBOOT_SECTOR_SIZE")
 IMAGE_HEADER_SIZE=$(get_config_value "IMAGE_HEADER_SIZE")
 SIGN=$(get_config_value "SIGN")
 HASH=$(get_config_value "HASH")
@@ -49,7 +51,10 @@ make clean && make wolfboot.bin && make test-app/image.bin
 
 # Function to sign image
 sign_image() {
-    IMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE} ./tools/keytools/sign ${SIGN_ARG} ${HASH_ARG} test-app/image.bin wolfboot_signing_private_key.der "$1"
+    IMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE} \
+    WOLFBOOT_PARTITION_SIZE=${PARTITION_SIZE} \
+    WOLFBOOT_SECTOR_SIZE=${SECTOR_SIZE} \
+    ./tools/keytools/sign ${SIGN_ARG} ${HASH_ARG} test-app/image.bin wolfboot_signing_private_key.der "$1"
 }
 
 # Function to print summary
@@ -74,7 +79,6 @@ if [ "$MODE" = "clean" ]; then
     ${JLINK} -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
     print_summary
 else
-    PARTITION_SIZE=$(get_config_value "WOLFBOOT_PARTITION_SIZE")
     TRIGGER_ADDRESS=$(printf "0x%X" $((${UPDATE_ADDRESS} + ${PARTITION_SIZE} - 5)))
     PREV_VERSION=$((${VERSION} - 1))
     sign_image ${PREV_VERSION} && sign_image ${VERSION}
