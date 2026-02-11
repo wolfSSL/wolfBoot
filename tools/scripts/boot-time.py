@@ -34,9 +34,9 @@ def dump_vals(req, offs):
 
 def drain_events(req):
     try:
-        evs = req.read_edge_events()
-    except Exception:
-        pass
+        req.read_edge_events()
+    except Exception as e:
+        print(f"Warning: failed to read edge events: {e}")
 
 def main():
 
@@ -92,4 +92,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

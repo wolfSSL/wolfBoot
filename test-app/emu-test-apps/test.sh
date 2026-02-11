@@ -134,7 +134,7 @@ get_check_config_val() {
   local key="$1"
   local val
   make -C "$WOLFBOOT_ROOT" include/target.h >/dev/null
-  make -C "$WOLFBOOT_ROOT/tools/check_config" check_config CROSS_COMPILE=arm-none-eabi- RAM_CODE=0 >/dev/null
+  make -C "$WOLFBOOT_ROOT/tools/check_config" check_config RAM_CODE=0 >/dev/null
   val="$("$WOLFBOOT_ROOT/tools/check_config/check_config" | grep -m1 "^${key}" | sed 's/.*: *//')"
   [[ -n "$val" ]] || die "missing ${key} from tools/check_config output"
   echo "0x$val"

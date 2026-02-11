@@ -144,7 +144,7 @@ void boot_time_pin_on_early(void)
     reg = GPIOA_MODER & ~(0x03 << (pin * 2));
     GPIOA_MODER = reg | (1 << (pin * 2));
     GPIOA_PUPDR &= ~(0x03 << (pin * 2));
-    GPIOA_BSRR |= (1 << (pin));
+    GPIOA_BSRR = (1 << (pin));
 }
 
 static void boot_led_off(void)

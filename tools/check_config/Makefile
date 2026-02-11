@@ -3,8 +3,7 @@
 include ../config.mk
 include ../../options.mk
 
-CROSS_COMPILE?=
-CC?=$(CROSS_COMPILE)gcc
+HOSTCC?=gcc
 CFLAGS+=-I. -I../../ -I../../include
 
 .PHONY: run clean
@@ -14,11 +13,11 @@ run:
 	$(Q)$(MAKE) check_config
 
 check_config: check_config.o
-	$(Q)$(CC) -o $@ $^ $(CFLAGS)
+	$(Q)$(HOSTCC) -o $@ $^ $(CFLAGS)
 	$(Q)./$@
 
 %.o:%.c
-	$(Q)$(CC) -c -o $@ $^ $(CFLAGS)
+	$(Q)$(HOSTCC) -c -o $@ $^ $(CFLAGS)
 
 clean:
 	$(Q)rm -f check_config *.o
