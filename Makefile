@@ -429,7 +429,7 @@ nvm-image: $(PRIVATE_KEY) whnvmtool
 	@echo "NVM images generated: $(WH_NVM_BIN) and $(WH_NVM_HEX)"
 endif
 
-test-app/image_v1_signed.bin: $(BOOT_IMG)
+test-app/image_v1_signed.bin: $(BOOT_IMG) keytools_check
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"

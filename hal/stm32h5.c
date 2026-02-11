@@ -34,10 +34,14 @@
 #include "otp_keystore.h"
 #endif
 
+#if defined(WOLFCRYPT_TZ_PSA)
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
-#elif defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384)
+#elif defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+#include <wolfssl/wolfcrypt/sha3.h>
+#endif
 #endif
 
 #define PLL_SRC_HSE 1
@@ -177,12 +181,16 @@ __attribute__((weak)) int stm32h5_obkeys_read_uds(uint8_t *out, size_t out_len)
 }
 #endif
 
+#if defined(WOLFCRYPT_TZ_PSA)
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
 #if defined(WOLFBOOT_HASH_SHA256)
     uint8_t digest[SHA256_DIGEST_SIZE];
     wc_Sha256 hash;
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    uint8_t digest[SHA3_384_DIGEST_SIZE];
+    wc_Sha3 hash;
 #else
     uint8_t digest[SHA384_DIGEST_SIZE];
     wc_Sha384 hash;
@@ -206,6 +214,11 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
     wc_InitSha256(&hash);
     wc_Sha256Update(&hash, uid, sizeof(uid));
     wc_Sha256Final(&hash, digest);
+    copy_len = sizeof(digest);
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
+    wc_Sha3_384_Update(&hash, uid, sizeof(uid));
+    wc_Sha3_384_Final(&hash, digest);
     copy_len = sizeof(digest);
 #else
     wc_InitSha384(&hash);
@@ -270,6 +283,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     return -1;
 #endif
 }
+#endif /* WOLFCRYPT_TZ_PSA */
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {

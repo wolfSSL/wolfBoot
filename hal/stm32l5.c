@@ -24,12 +24,14 @@
 #include <image.h>
 #include <string.h>
 
+#if defined(WOLFCRYPT_TZ_PSA)
 #if defined(WOLFBOOT_HASH_SHA256)
 #include <wolfssl/wolfcrypt/sha256.h>
 #elif defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
 #elif defined(WOLFBOOT_HASH_SHA3_384)
 #include <wolfssl/wolfcrypt/sha3.h>
+#endif
 #endif
 
 #include "hal.h"
@@ -117,6 +119,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #define STM32L5_UID1 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x4))
 #define STM32L5_UID2 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x8))
 
+#if defined(WOLFCRYPT_TZ_PSA)
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
@@ -185,6 +188,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
     return -1;
 #endif
 }
+#endif /* WOLFCRYPT_TZ_PSA */
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {
