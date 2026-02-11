@@ -491,7 +491,7 @@ static int wolfboot_dice_fixup_priv(uint8_t *priv, size_t priv_len)
         ret = mp_mod(&k, &order, &mod);
     }
     if (ret == MP_OKAY && mp_iszero(&mod) == MP_YES) {
-        ret = mp_set_int(&mod, 1);
+        ret = mp_set(&mod, 1);
     }
     if (ret == MP_OKAY) {
         XMEMSET(priv, 0, priv_len);

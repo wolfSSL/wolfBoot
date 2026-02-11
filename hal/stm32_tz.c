@@ -311,7 +311,7 @@ void hal_tz_sau_init(void)
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
     /* Non-secure RAM region */
-    sau_init_region(2, 0x20050000, 0x2008FFFF, 0);
+    sau_init_region(2, 0x20050000, 0x2009FFFF, 0);
 
     /* Non-secure: internal peripherals */
     sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
