@@ -133,7 +133,8 @@ UPDATE_OFFSET_HEX=$(printf "0x%x" "$UPDATE_OFFSET")
 get_check_config_val() {
   local key="$1"
   local val
-  make -C "$WOLFBOOT_ROOT/tools/check_config" check_config RAM_CODE=0 >/dev/null
+  make -C "$WOLFBOOT_ROOT" include/target.h >/dev/null
+  make -C "$WOLFBOOT_ROOT/tools/check_config" check_config CROSS_COMPILE=arm-none-eabi- RAM_CODE=0 >/dev/null
   val="$("$WOLFBOOT_ROOT/tools/check_config/check_config" | grep -m1 "^${key}" | sed 's/.*: *//')"
   [[ -n "$val" ]] || die "missing ${key} from tools/check_config output"
   echo "0x$val"
@@ -187,6 +188,7 @@ REBOOT_TIMEOUT="${REBOOT_TIMEOUT:-10}"
 write_target_ld() {
   local tpl=""
   local base=""
+  local emu_tpl=""
   local addr
   local size
   addr=$((BOOT_ADDR + IMAGE_HEADER_SIZE))
@@ -200,6 +202,13 @@ write_target_ld() {
     mcxw|mcxw71) base="ARM-mcxw" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
+
+  emu_tpl="$EMU_PATH/target.ld.in"
+  if [[ -f "$emu_tpl" ]]; then
+    sed -e "s/@FLASH_ORIGIN@/0x$(printf '%x' "$addr")/g" \
+        "$emu_tpl" > "$EMU_PATH/target.ld"
+    return 0
+  fi
 
   if [[ "${TZEN}" == "1" && -f "$WOLFBOOT_ROOT/test-app/${base}-ns.ld" ]]; then
     tpl="$WOLFBOOT_ROOT/test-app/${base}-ns.ld"
