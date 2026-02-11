@@ -3,6 +3,7 @@
 include ../config.mk
 include ../../options.mk
 
+HOSTCC?=gcc
 CFLAGS+=-I. -I../../ -I../../include
 
 .PHONY: run clean
@@ -12,11 +13,11 @@ run:
 	$(Q)$(MAKE) check_config
 
 check_config: check_config.o
-	$(Q)gcc -o $@ $^ $(CFLAGS)
+	$(Q)$(HOSTCC) -o $@ $^ $(CFLAGS)
 	$(Q)./$@
 
 %.o:%.c
-	$(Q)gcc -c -o $@ $^ $(CFLAGS)
+	$(Q)$(HOSTCC) -c -o $@ $^ $(CFLAGS)
 
 clean:
 	$(Q)rm -f check_config *.o

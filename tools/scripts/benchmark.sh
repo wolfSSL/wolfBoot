@@ -1,34 +1,12 @@
 #!/bin/bash
 #
 function run_on_board() {
-    # GPIO2: RST
-    # GPIO3: BOOT (input)
+    # GPIO2 (pin 27): RST (output) -- connected to STM32H5 NRST
+    # GPIO4 (pin 16): BOOT (input) -- connected to STM32H5 PA14
 
-    if ! (st-flash reset &>/dev/null); then
-        echo -n "No data."
-    else
+    openocd  -f board/st_nucleo_h5.cfg -c "reset_config connect_assert_srst; init; program wolfboot.bin 0x08000000; program test-app/image_v1_signed.bin 0x08060000; shutdown" &>/dev/null
     sleep 1
-        st-flash --connect-under-reset write factory.bin 0x8000000 &>/dev/null
-        sleep .2
-    echo "2" > /sys/class/gpio/export 2>/dev/null
-    echo "out" > /sys/class/gpio/gpio2/direction
-        echo "1" > /sys/class/gpio/gpio2/value # Release reset
-        echo "0" > /sys/class/gpio/gpio2/value # Keep reset low
-        sleep 1
-    echo -n " | "
-        echo "1" > /sys/class/gpio/gpio2/value # Release reset
-    START=`date +%s.%N`
-    while (test `cat /sys/class/gpio/gpio4/value` -eq 0); do
-       sleep .01
-    done
-    while (test `cat /sys/class/gpio/gpio4/value` -eq 0); do
-       sleep .01
-    done
-    END=`date +%s.%N`
-    echo "scale=3; $END/1 - $START/1 "| bc
-    echo "in" > /sys/class/gpio/gpio2/direction
-    echo "2" >/sys/class/gpio/unexport 2>/dev/null
-    fi
+    python3 tools/scripts/boot-time.py
 }
 
 function set_benchmark {
@@ -37,16 +15,16 @@ function set_benchmark {
     CONFIG=$@
     # Name
     echo -n "| "
-    echo -n $NAME
+    echo -n "$NAME"
     echo -n " | "
     # Configuration
     echo -n $CONFIG | tr -d '\n'
     echo -n " | "
     make clean &>/dev/null
     make keysclean &>/dev/null
-    make $@ &>/dev/null || make $@ factory.bin
-    make $@ stack-usage &>/dev/null
-    make $@ image-header-size &>/dev/null
+    make WOLFBOOT_TEST_FILLER=1 WOLFBOOT_TIME_TEST=1 $@ &>/dev/null
+    make WOLFBOOT_TEST_FILLER=1 WOLFBOOT_TIME_TEST=1 $@ stack-usage &>/dev/null
+    make WOLFBOOT_TEST_FILLER=1 WOLFBOOT_TIME_TEST=1 $@ image-header-size &>/dev/null
     # Bootloader size
     echo -n `ls -l wolfboot.bin | cut -d " " -f 5 | tr -d '\n'`
     echo -n " | "
@@ -55,20 +33,21 @@ function set_benchmark {
     echo -n " | "
     # Image header size
     cat .image_header_size | tr -d '\n'
+    # Application size
+    echo -n " | "
+    echo -n `ls -l test-app/image.bin | cut -d " " -f 5 | tr -d '\n'`
     # Boot time
+    echo -n " | "
     run_on_board 2>&1 | tr -d '\n'
     echo " |"
 }
 
-echo "4" > /sys/class/gpio/export 2>/dev/null
-echo "2" > /sys/class/gpio/unexport 2>/dev/null
 make keytools &>/dev/null
-cp config/examples/stm32h7.config .config
-echo "in" > /sys/class/gpio/gpio4/direction
-# Output benchmark results in a Markdown table
-echo "| Name | Configuration | Bootloader size | Stack size | Image header size | Boot time |"
-echo "|------|---------------|-----------------|------------|-------------------|-----------|"
+cp config/examples/stm32h5-no-tz.config .config
 
+# Output benchmark results in a Markdown table
+echo "| Name | Configuration | Bootloader size | Stack size | Image header size | Application size | Boot time |"
+echo "|------|---------------|-----------------|------------|-------------------|------------------|-----------|"
 
 set_benchmark "SHA2 only" SIGN=NONE
 set_benchmark "SHA384 only" SIGN=NONE HASH=SHA384
@@ -97,4 +76,3 @@ set_benchmark "LMS 1-10-8" SIGN=LMS LMS_LEVELS=1 LMS_HEIGHT=10 LMS_WINTERNITZ=8 
 set_benchmark "XMSS-SHA2_10_256'" XMSS_PARAMS='XMSS-SHA2_10_256' SIGN=XMSS IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE=8192
 set_benchmark "ML_DSA-65 hybrid with ECDSA384" SIGN=ML_DSA ML_DSA_LEVEL=3 IMAGE_SIGNATURE_SIZE=3309 IMAGE_HEADER_SIZE=8192 SIGN_SECONDARY=ECC384 WOLFBOOT_UNIVERSAL_KEYSTORE=1
 set_benchmark "ML_DSA-87 hybrid with ECDSA521" SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 SIGN_SECONDARY=ECC521 WOLFBOOT_UNIVERSAL_KEYSTORE=1
-

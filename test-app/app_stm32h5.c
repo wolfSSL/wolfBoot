@@ -31,7 +31,9 @@
 #include "hal/stm32h5.h"
 #include "uart_drv.h"
 #include "wolfboot/wolfboot.h"
+#ifndef WOLFBOOT_NO_SIGN
 #include "keystore.h"
+#endif
 #include "target.h"
 
 #ifdef WOLFBOOT_TPM
@@ -76,9 +78,20 @@ static int uart_poll(void);
 #define LED_BOOT_PIN  (4) /* PG4 - Nucleo - Red Led */
 #define LED_USR_PIN   (0) /* PB0 - Nucleo - Green Led */
 #define LED_EXTRA_PIN (4) /* PF4 - Nucleo - Orange Led */
+#define BOOT_TIME_PIN (13) /* PA13 - scope trigger */
+
+#ifdef WOLFBOOT_TEST_FILLER
+#define FILLER_SIZE (64 * 1024)
+static volatile uint8_t filler_data[FILLER_SIZE] = { 0x01, 0x02, 0x03 };
+#endif
 
 #define NVIC_USART3_IRQN (60)
 
+#ifndef GPIOA_MODER
+#define GPIOA_MODER (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_PUPDR (*(volatile uint32_t *)(GPIOA_BASE + 0x0C))
+#define GPIOA_BSRR  (*(volatile uint32_t *)(GPIOA_BASE + 0x18))
+#endif
 
 /* SysTick */
 static uint32_t cpu_freq = 250000000;
@@ -117,6 +130,21 @@ static void boot_led_on(void)
     GPIOG_MODER = reg | (1 << (pin * 2));
     GPIOG_PUPDR &= ~(0x03 << (pin * 2));
     GPIOG_BSRR |= (1 << (pin));
+}
+
+void boot_time_pin_on_early(void)
+{
+    uint32_t reg;
+    uint32_t pin = BOOT_TIME_PIN;
+
+    RCC_AHB2ENR_CLOCK_ER |= GPIOA_AHB2ENR1_CLOCK_ER;
+    /* Delay after an RCC peripheral clock enabling */
+    reg = RCC_AHB2ENR_CLOCK_ER;
+
+    reg = GPIOA_MODER & ~(0x03 << (pin * 2));
+    GPIOA_MODER = reg | (1 << (pin * 2));
+    GPIOA_PUPDR &= ~(0x03 << (pin * 2));
+    GPIOA_BSRR = (1 << (pin));
 }
 
 static void boot_led_off(void)
@@ -542,6 +570,7 @@ static int cmd_info(const char *args)
         printf("No image in update partition.\r\n");
     }
 
+#ifndef WOLFBOOT_NO_SIGN
     printf("\r\n");
     printf("Bootloader OTP keystore information\r\n");
     printf("====================================\r\n");
@@ -559,6 +588,10 @@ static int cmd_info(const char *args)
         printf("  ====================================\r\n  ");
         print_hex(keybuf, size, 0);
     }
+#else
+    printf("\r\n");
+    printf("Signing disabled (SIGN=NONE)\r\n");
+#endif
     return 0;
 }
 
@@ -1294,6 +1327,10 @@ void main(void)
 
     /* Turn on boot LED */
     boot_led_on();
+
+#ifdef WOLFBOOT_TEST_FILLER
+    filler_data[FILLER_SIZE - 1] = 0xAA;
+#endif
 
     /* Enable SysTick */
     systick_enable();

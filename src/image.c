@@ -2183,6 +2183,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     if (SIG_OK(img)) {
         uint8_t *stored_secondary_signature;
         uint16_t stored_secondary_signature_size;
+        uint16_t expected_secondary_signature_size = 0;
         /* Invalidate the signature_ok flag */
         wolfBoot_image_clear_signature_ok(img);
         /* Load the pubkey hint for the secondary key */
@@ -2199,6 +2200,37 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             CONFIRM_MASK_VALID(image_part, key_mask);
             stored_secondary_signature_size = get_header(img,
                     HDR_SECONDARY_SIGNATURE, &stored_secondary_signature);
+            if (stored_secondary_signature_size == 0 ||
+                    stored_secondary_signature == NULL) {
+                return -1;
+            }
+#if defined(WOLFBOOT_SIGN_SECONDARY_ED25519)
+            expected_secondary_signature_size = ED25519_IMAGE_SIGNATURE_SIZE;
+#elif defined(WOLFBOOT_SIGN_SECONDARY_ED448)
+            expected_secondary_signature_size = ED448_IMAGE_SIGNATURE_SIZE;
+#elif defined (WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA2048ENC) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA3072ENC) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA4096ENC)
+            expected_secondary_signature_size = RSA_IMAGE_SIGNATURE_SIZE;
+#elif defined (WOLFBOOT_SIGN_SECONDARY_ECC256) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_ECC384) || \
+      defined (WOLFBOOT_SIGN_SECONDARY_ECC521)
+            expected_secondary_signature_size = ECC_IMAGE_SIGNATURE_SIZE;
+#elif defined(WOLFBOOT_SIGN_SECONDARY_LMS)
+            expected_secondary_signature_size = LMS_IMAGE_SIGNATURE_SIZE;
+#elif defined(WOLFBOOT_SIGN_SECONDARY_XMSS)
+            expected_secondary_signature_size = XMSS_IMAGE_SIGNATURE_SIZE;
+#elif defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
+            expected_secondary_signature_size = ML_DSA_IMAGE_SIGNATURE_SIZE;
+#endif
+            if (expected_secondary_signature_size == 0 ||
+                    stored_secondary_signature_size !=
+                    expected_secondary_signature_size) {
+                return -1;
+            }
             wolfBoot_printf("Verification of hybrid signature\n");
             wolfBoot_verify_signature_secondary(key_slot, img,
                     stored_secondary_signature);

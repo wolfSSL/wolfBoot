@@ -63,6 +63,12 @@ extern void main(void);
 
 void isr_reset(void) {
     register unsigned int *src, *dst;
+
+#if defined(WOLFBOOT_TIME_TEST) && defined(TARGET_stm32h5)
+    extern void boot_time_pin_on_early(void);
+    boot_time_pin_on_early();
+#endif
+
     src = (unsigned int *) &_stored_data;
     dst = (unsigned int *) &_start_data;
     while (dst < (unsigned int *)&_end_data) {

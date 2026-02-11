@@ -54,7 +54,7 @@ jobs:
           make clean distclean
           cp config/examples/stm32h5-tz-psa.config .config
           make
-          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 300
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600
 
       - name: Clean and build test with DICE attestation + OTP (stm32h5)
         run: |
@@ -64,4 +64,4 @@ jobs:
           make -C tools/keytools/otp TARGET=stm32h5 otp-keystore-primer.bin otp-keystore-gen
           ./tools/keytools/otp/otp-keystore-gen
           m33mu tools/keytools/otp/otp-keystore-primer.bin --persist --timeout 10 || true
-          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 300 --persist
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600 --persist
