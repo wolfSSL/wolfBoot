@@ -133,7 +133,7 @@
 
     #define ENABLE_DDR
     #ifndef DDR_SIZE
-    #define DDR_SIZE (8192UL * 1024UL * 1024UL)
+    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL)
     #endif
 
     #define FLASH_BASE_ADDR      0xE8000000UL

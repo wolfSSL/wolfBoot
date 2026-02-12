@@ -63,6 +63,10 @@ SECTIONS
     {
         _start_data = .;
         KEEP(*(.data*))
+        *(.got*)
+        *(.got2*)
+        *(.plt*)
+        *(.dynamic)
         . = ALIGN(4);
         KEEP(*(.ramcode))
         . = ALIGN(4);

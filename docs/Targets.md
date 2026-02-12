@@ -3061,9 +3061,8 @@ Flash factory_custom.bin to NOR base 0xEC00_0000
 
 The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Support has been tested with the NAII 68PPC2.
 
-Example configurations for this target are provided in:
-* NXP T2080: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
-* NAII 68PPC2: [/config/examples/nxp-t2080-68ppc2.config](/config/examples/nxp-t2080-68ppc2.config).
+Example configuration: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
+Stock layout is default; for NAII 68PPC2, uncomment the "# NAII 68PPC2:" lines and comment the stock lines.
 
 ### Design NXP T2080 PPC
 
@@ -3080,9 +3079,10 @@ RM 4.3.3 Boot Space Translation
 By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
 
 The `make` creates a `factory.bin` image that can be programmed at `0xE8080000`
+(For NAII 68PPC2, first edit `nxp-t2080.config` to uncomment the NAII 68PPC2 lines.)
 
 ```
-cp ./config/examples/nxp-t2080-68ppc2.config .config
+cp ./config/examples/nxp-t2080.config .config
 make clean
 make keytools
 make

@@ -627,7 +627,7 @@ endif
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
   LDFLAGS+=-Wl,--build-id=none
-  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY
+  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
@@ -635,7 +635,7 @@ ifeq ($(ARCH),PPC)
 
   # Target-specific CPU flags
   ifeq ($(TARGET),nxp_t2080)
-    CFLAGS+=-mcpu=e6500 -mno-altivec
+    CFLAGS+=-mcpu=e6500 -mno-altivec -mbss-plt
   else ifeq ($(TARGET),nxp_t1024)
     CFLAGS+=-mcpu=e5500
   endif

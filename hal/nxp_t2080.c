@@ -200,38 +200,24 @@ static int hal_flash_getid(void)
 static void hal_flash_init(void)
 {
 #ifdef ENABLE_IFC
-    /* IFC - NOR Flash */
-    /* LAW is also set in boot_ppc_start.S:flash_law */
-    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE_ADDR, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
+    /* IFC CS0 - NOR Flash
+     * Do NOT reprogram IFC CS0 (CSPR, AMASK, CSOR, FTIM) while executing
+     * from flash (XIP) with cache-inhibited TLB (MAS2_I|MAS2_G). The boot
+     * ROM already configured CS0 correctly. Reprogramming CSPR while XIP
+     * can cause instruction fetch failures because there is no cache to
+     * serve fetches during the chip-select decode transition.
+     *
+     * U-Boot avoids this by using MAS2_W|MAS2_G (write-through, cached)
+     * during XIP, only switching to MAS2_I|MAS2_G after relocating to RAM.
+     *
+     * The LAW is also already set in boot_ppc_start.S:flash_law.
+     */
 
-    /* NOR IFC Flash Timing Parameters */
-    set32(IFC_FTIM0(0), (IFC_FTIM0_NOR_TACSE(4) |
-                         IFC_FTIM0_NOR_TEADC(5) |
-                         IFC_FTIM0_NOR_TEAHC(5)));
-    set32(IFC_FTIM1(0), (IFC_FTIM1_NOR_TACO(53) |
-                         IFC_FTIM1_NOR_TRAD(26) |
-                         IFC_FTIM1_NOR_TSEQ(19)));
-    set32(IFC_FTIM2(0), (IFC_FTIM2_NOR_TCS(4) |
-                         IFC_FTIM2_NOR_TCH(4) |
-                         IFC_FTIM2_NOR_TWPH(14) |
-                         IFC_FTIM2_NOR_TWP(28)));
-    set32(IFC_FTIM3(0), 0);
-    /* NOR IFC Definitions (CS0) */
-    set32(IFC_CSPR_EXT(0), FLASH_BASE_PHYS_HIGH);
-    set32(IFC_CSPR(0),     (IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR) |
-                        #if FLASH_CFI_WIDTH == 16
-                            IFC_CSPR_PORT_SIZE_16 |
-                        #else
-                            IFC_CSPR_PORT_SIZE_8 |
-                        #endif
-                            IFC_CSPR_MSEL_NOR |
-                            IFC_CSPR_V));
-    set32(IFC_AMASK(0), IFC_AMASK_128MB);
-    set32(IFC_CSOR(0), 0x0000000C); /* TRHZ (80 clocks for read enable high) */
-
-    #ifndef BUILD_LOADER_STAGE1
-    hal_flash_getid();
-    #endif
+    /* Note: hal_flash_getid() is disabled because AMD Autoselect mode
+     * affects the entire flash bank. Since wolfBoot runs XIP from the same
+     * bank (CS0), entering Autoselect mode crashes instruction fetch.
+     * Flash write/erase operations will need RAMFUNCTION support.
+     * TODO: Implement RAMFUNCTION for flash operations on T2080. */
 #endif /* ENABLE_IFC */
 }
 
@@ -578,7 +564,7 @@ void hal_flash_lock(void)
 /* from boot_ppc_mp.S */
 extern uint32_t _secondary_start_page;
 extern uint32_t _second_half_boot_page;
-extern uint32_t _spin_table;
+extern uint32_t _spin_table[];
 extern uint32_t _spin_table_addr;
 extern uint32_t _bootpg_addr;
 
@@ -593,7 +579,7 @@ static void hal_mp_up(uint32_t bootpg)
     active_cores = (1 << whoami); /* current running cores */
 
     wolfBoot_printf("MP: Starting cores (boot page %p, spin table %p)\n",
-        bootpg, (uint32_t)&_spin_table);
+        bootpg, (uint32_t)_spin_table);
 
     /* Set the boot page translation register */
     set32(LCC_BSTRH, 0);
@@ -614,7 +600,7 @@ static void hal_mp_up(uint32_t bootpg)
     while (timeout) {
         for (i = 0; i < CPU_NUMCORES; i++) {
             uint32_t* entry = (uint32_t*)(
-                  (uint8_t*)&_spin_table + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+                  (uint8_t*)_spin_table + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
             if (*entry) {
                 active_cores |= (1 << i);
             }
@@ -651,14 +637,17 @@ static void hal_mp_init(void)
     const volatile uint32_t *s;
     volatile uint32_t *d;
 
-    /* Assign virtual boot page at end of DDR */
-    bootpg = DDR_ADDRESS + DDR_SIZE - BOOT_ROM_SIZE;
+    /* Assign virtual boot page at end of LAW-mapped DDR region.
+     * DDR LAW maps 2GB (LAW_SIZE_2GB) starting at DDR_ADDRESS.
+     * DDR_SIZE may exceed 32-bit range (e.g. 8GB), so use the LAW-mapped
+     * size to ensure bootpg fits in 32 bits and is accessible. */
+    bootpg = DDR_ADDRESS + 0x80000000UL - BOOT_ROM_SIZE;
 
     /* Store the boot page address for use by additional CPU cores */
     _bootpg_addr = (uint32_t)&_second_half_boot_page;
 
     /* Store location of spin table for other cores */
-    _spin_table_addr = (uint32_t)&_spin_table;
+    _spin_table_addr = (uint32_t)_spin_table;
 
     /* Flush bootpg before copying to invalidate any stale cache lines */
     flush_cache(bootpg, BOOT_ROM_SIZE);
@@ -748,7 +737,7 @@ int hal_dts_fixup(void* dts_addr)
     #ifdef ENABLE_MP
         /* calculate location of spin table for core */
         core_spin_table = (uint64_t)((uintptr_t)(
-                  (uint8_t*)&_spin_table + (core * ENTRY_SIZE)));
+                  (uint8_t*)_spin_table + (core * ENTRY_SIZE)));
 
         fdt_fixup_str(fdt, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
         fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table);

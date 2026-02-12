@@ -182,12 +182,6 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t1024.config
 
-  nxp_t2080_68ppc2_test:
-    uses: ./.github/workflows/test-build.yml
-    with:
-      arch: ppc
-      config-file: ./config/examples/nxp-t2080-68ppc2.config
-
   nxp_t2080_test:
     uses: ./.github/workflows/test-build.yml
     with:
