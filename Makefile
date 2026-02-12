@@ -146,6 +146,7 @@ WOLFBOOT_LIB_WOLFTPM?=lib/wolfTPM
 WOLFBOOT_LIB_WOLFPKCS11?=lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=lib/wolfPSA
 WOLFBOOT_LIB_WOLFHSM?=lib/wolfHSM
+WOLFBOOT_LIB_WOLFHAL?=lib/wolfHAL
 
 # Convert to absolute paths using abspath function
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
@@ -153,6 +154,7 @@ WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
+WOLFBOOT_LIB_WOLFHAL:=$(abspath $(WOLFBOOT_LIB_WOLFHAL))
 
 # Export variables so they are available to sub-makefiles
 export WOLFBOOT_LIB_WOLFSSL
@@ -160,6 +162,7 @@ export WOLFBOOT_LIB_WOLFTPM
 export WOLFBOOT_LIB_WOLFPKCS11
 export WOLFBOOT_LIB_WOLFPSA
 export WOLFBOOT_LIB_WOLFHSM
+export WOLFBOOT_LIB_WOLFHAL
 
 ## Architecture/CPU configuration
 include arch.mk
@@ -230,6 +233,13 @@ ifeq ($(TARGET),stm32h5)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 endif # TZEN=1
+
+ifeq ($(TARGET),wolfhal)
+	LSCRIPT_IN:=hal/$(WOLFHAL_TARGET).ld
+	CFLAGS+= -I$(WOLFBOOT_LIB_WOLFHAL)
+	OBJS+=hal/wolfHAL/$(WOLFHAL_BOARD).o
+	include hal/wolfHAL/$(WOLFHAL_BOARD).mk
+endif
 
 ifeq ($(TARGET),x86_64_efi)
     MAIN_TARGET:=wolfboot.efi

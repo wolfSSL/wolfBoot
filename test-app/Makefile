@@ -76,6 +76,13 @@ else
   endif
 endif
 
+ifeq ($(TARGET),wolfhal)
+	WOLFBOOT_LIB_WOLFHAL?=../lib/wolfHAL
+	CFLAGS += -I$(WOLFBOOT_LIB_WOLFHAL)
+	APP_OBJS += ../hal/wolfHAL/$(WOLFHAL_BOARD).o
+	include ../hal/wolfHAL/$(WOLFHAL_BOARD).mk
+endif
+
 include ../arch.mk
 
 # Optional alias for clearer TZ PSA selection in app builds.
