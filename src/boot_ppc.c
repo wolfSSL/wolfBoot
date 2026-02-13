@@ -113,25 +113,46 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 }
 #endif
 
+/* forward declaration */
+#ifndef BUILD_LOADER_STAGE1
+void flush_cache(uint32_t start_addr, uint32_t size);
+#endif
+
 void boot_entry_C(void)
 {
-    register unsigned int *dst, *src, *end;
+    volatile unsigned int *dst;
+    volatile const unsigned int *src;
+    volatile unsigned int *end;
 
     hal_early_init();
 
-    /* Copy the .data section from flash to RAM */
-    src = (unsigned int*)&_stored_data;
-    dst = (unsigned int*)&_start_data;
-    end = (unsigned int*)&_end_data;
+    /* Copy the .data section from flash to RAM.
+     * Use volatile to prevent the compiler from transforming this loop
+     * into a memcpy() call — memcpy is RAMFUNCTION in .data and hasn't
+     * been copied to DDR yet at this point. */
+    src = (volatile const unsigned int*)&_stored_data;
+    dst = (volatile unsigned int*)&_start_data;
+    end = (volatile unsigned int*)&_end_data;
     while (dst < end) {
         *dst = *src;
         dst++;
         src++;
     }
 
-    /* Initialize the BSS section to 0 */
-    dst = (unsigned int*)&__bss_start__;
-    end = (unsigned int*)&__bss_end__;
+#ifndef BUILD_LOADER_STAGE1
+    /* Flush D-cache and invalidate I-cache for .data region.
+     * The .ramcode section (RAMFUNCTION code like memcpy) is within .data
+     * and was just copied to DDR through D-cache. Without this flush, the
+     * I-cache will fetch stale/uninitialized DDR content when calling
+     * RAMFUNCTION code, causing instruction fetch failures.
+     * PowerPC I/D caches are not coherent — explicit dcbst+icbi required. */
+    flush_cache((uint32_t)&_start_data,
+        (uint32_t)&_end_data - (uint32_t)&_start_data);
+#endif
+
+    /* Initialize the BSS section to 0 (volatile prevents memset transform) */
+    dst = (volatile unsigned int*)&__bss_start__;
+    end = (volatile unsigned int*)&__bss_end__;
     while (dst < end) {
         *dst = 0U;
         dst++;
