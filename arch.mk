@@ -581,6 +581,18 @@ endif
 ## RISCV64 (64-bit)
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
+
+  # M-mode vs S-mode configuration
+  ifeq ($(RISCV_MMODE),1)
+    # Machine Mode: Running directly from eNVM/L2 SRAM
+    # Boots from SD card after initializing DDR
+    CFLAGS+=-DWOLFBOOT_RISCV_MMODE
+    # Use M-mode specific linker script
+    LSCRIPT_IN:=hal/$(TARGET)-m.ld
+  else
+    # Supervisor Mode (default): Running under HSS with DDR available
+  endif
+
   CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
 
   # If SD card or eMMC is enabled use update_disk loader with GPT support
@@ -607,6 +619,7 @@ ifeq ($(ARCH),RISCV64)
   # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
   OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
 
+  # FDT support required
   CFLAGS+=-DWOLFBOOT_FDT
   OBJS+=src/fdt.o
 

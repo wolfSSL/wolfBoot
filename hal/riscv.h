@@ -22,7 +22,6 @@
 #ifndef RISCV_H
 #define RISCV_H
 
-
 /* ============================================================================
  * RISC-V Privilege Mode Selection
  *
@@ -83,6 +82,8 @@
 #else
 #define MODE_PREFIX(__suffix)    s##__suffix
 #endif
+
+
 
 /* ============================================================================
  * CSR Access Macros
@@ -145,10 +146,40 @@ static inline void riscv_icache_sync(void)
 /* ============================================================================
  * Status Register Bits (mstatus/sstatus)
  * ============================================================================ */
-#define MSTATUS_MIE  (1 << 3)   /* Machine-mode global interrupt enable */
-#define MSTATUS_MPIE (1 << 7)   /* Machine-mode previous interrupt enable */
-#define SSTATUS_SIE  (1 << 1)   /* Supervisor-mode global interrupt enable */
-#define SSTATUS_SPIE (1 << 5)   /* Supervisor-mode previous interrupt enable */
+/* Privilege Levels */
+#define PRV_U        0   /* User mode */
+#define PRV_S        1   /* Supervisor mode */
+#define PRV_M        3   /* Machine mode */
+
+/* MSTATUS Register Bits */
+#define MSTATUS_UIE  (1UL << 0)    /* User interrupt enable */
+#define MSTATUS_SIE  (1UL << 1)    /* Supervisor interrupt enable */
+#define MSTATUS_MIE  (1UL << 3)    /* Machine interrupt enable */
+#define MSTATUS_UPIE (1UL << 4)    /* User previous interrupt enable */
+#define MSTATUS_SPIE (1UL << 5)    /* Supervisor previous interrupt enable */
+#define MSTATUS_MPIE (1UL << 7)    /* Machine previous interrupt enable */
+#define MSTATUS_SPP  (1UL << 8)    /* Supervisor previous privilege (1 bit) */
+#define MSTATUS_MPP_SHIFT 11
+#define MSTATUS_MPP_MASK (3UL << MSTATUS_MPP_SHIFT)
+#define MSTATUS_MPP_M    (PRV_M << MSTATUS_MPP_SHIFT)  /* MPP = Machine */
+#define MSTATUS_MPP_S    (PRV_S << MSTATUS_MPP_SHIFT)  /* MPP = Supervisor */
+#define MSTATUS_MPP_U    (PRV_U << MSTATUS_MPP_SHIFT)  /* MPP = User */
+#define MSTATUS_FS_SHIFT 13
+#define MSTATUS_FS_MASK  (3UL << MSTATUS_FS_SHIFT)
+#define MSTATUS_FS_OFF   (0UL << MSTATUS_FS_SHIFT)    /* FPU off */
+#define MSTATUS_FS_INIT  (1UL << MSTATUS_FS_SHIFT)    /* FPU initial */
+#define MSTATUS_FS_CLEAN (2UL << MSTATUS_FS_SHIFT)    /* FPU clean */
+#define MSTATUS_FS_DIRTY (3UL << MSTATUS_FS_SHIFT)    /* FPU dirty */
+#define MSTATUS_MPRV (1UL << 17)   /* Modify privilege */
+#define MSTATUS_SUM  (1UL << 18)   /* Supervisor user memory access */
+#define MSTATUS_MXR  (1UL << 19)   /* Make executable readable */
+#define MSTATUS_TVM  (1UL << 20)   /* Trap virtual memory */
+#define MSTATUS_TW   (1UL << 21)   /* Timeout wait */
+#define MSTATUS_TSR  (1UL << 22)   /* Trap SRET */
+
+/* SSTATUS Register Bits (subset visible to S-mode) */
+#define SSTATUS_SIE  (1UL << 1)   /* Supervisor-mode global interrupt enable */
+#define SSTATUS_SPIE (1UL << 5)   /* Supervisor-mode previous interrupt enable */
 
 /* ============================================================================
  * Machine Interrupt Enable (MIE) Register Bits
@@ -158,11 +189,26 @@ static inline void riscv_icache_sync(void)
 #define MIE_MEIE     (1 << IRQ_M_EXT)    /* Machine external interrupt enable */
 
 /* ============================================================================
+ * Machine Interrupt Pending (MIP) Register Bits
+ * Same bit positions as MIE, used to check/set pending interrupts
+ * ============================================================================ */
+#define MIP_MSIP     (1 << IRQ_M_SOFT)   /* Machine software interrupt pending */
+#define MIP_MTIP     (1 << IRQ_M_TIMER)  /* Machine timer interrupt pending */
+#define MIP_MEIP     (1 << IRQ_M_EXT)    /* Machine external interrupt pending */
+
+/* ============================================================================
  * Supervisor Interrupt Enable (SIE) Register Bits
  * ============================================================================ */
 #define SIE_SSIE     (1 << IRQ_S_SOFT)   /* Supervisor software interrupt enable */
 #define SIE_STIE     (1 << IRQ_S_TIMER)  /* Supervisor timer interrupt enable */
 #define SIE_SEIE     (1 << IRQ_S_EXT)    /* Supervisor external interrupt enable */
+
+/* ============================================================================
+ * Supervisor Interrupt Pending (SIP) Register Bits
+ * ============================================================================ */
+#define SIP_SSIP     (1 << IRQ_S_SOFT)   /* Supervisor software interrupt pending */
+#define SIP_STIP     (1 << IRQ_S_TIMER)  /* Supervisor timer interrupt pending */
+#define SIP_SEIP     (1 << IRQ_S_EXT)    /* Supervisor external interrupt pending */
 
 /* ============================================================================
  * Exception Cause Register (MCAUSE/SCAUSE) Definitions
@@ -289,5 +335,78 @@ void plic_complete(uint32_t irq);
 extern void plic_dispatch_irq(uint32_t irq);
 
 #endif /* PLIC_BASE && !__ASSEMBLER__ */
+
+/* ============================================================================
+ * CLINT - Core Local Interruptor (M-mode only)
+ *
+ * The CLINT provides software interrupts (IPI) and timer functionality
+ * for machine mode. Used for inter-hart communication and timer-based delays.
+ *
+ * CLINT Memory Map (standard offsets from CLINT_BASE):
+ *   0x0000-0x3FFF: MSIP registers (1 word per hart, software interrupt pending)
+ *   0x4000-0xBFF7: MTIMECMP registers (8 bytes per hart, timer compare)
+ *   0xBFF8-0xBFFF: MTIME register (8 bytes, global timer counter)
+ * ============================================================================ */
+#ifdef WOLFBOOT_RISCV_MMODE
+
+#ifndef CLINT_BASE
+#define CLINT_BASE          0x02000000UL
+#endif
+
+#define CLINT_MSIP_OFFSET   0x0000UL
+#define CLINT_MTIMECMP_OFFSET 0x4000UL
+#define CLINT_MTIME_OFFSET  0xBFF8UL
+
+#ifndef __ASSEMBLER__
+
+/* MSIP (Machine Software Interrupt Pending) - one per hart */
+#define CLINT_MSIP(hart) \
+    (*((volatile uint32_t*)(CLINT_BASE + CLINT_MSIP_OFFSET + ((hart) * 4))))
+
+/* MTIMECMP - 64-bit timer compare value, one per hart */
+#define CLINT_MTIMECMP_LO(hart) \
+    (*((volatile uint32_t*)(CLINT_BASE + CLINT_MTIMECMP_OFFSET + ((hart) * 8))))
+#define CLINT_MTIMECMP_HI(hart) \
+    (*((volatile uint32_t*)(CLINT_BASE + CLINT_MTIMECMP_OFFSET + ((hart) * 8) + 4)))
+
+/* MTIME - 64-bit global timer counter (shared across all harts) */
+#define CLINT_MTIME_LO \
+    (*((volatile uint32_t*)(CLINT_BASE + CLINT_MTIME_OFFSET)))
+#define CLINT_MTIME_HI \
+    (*((volatile uint32_t*)(CLINT_BASE + CLINT_MTIME_OFFSET + 4)))
+
+#endif /* !__ASSEMBLER__ */
+
+#endif /* WOLFBOOT_RISCV_MMODE */
+
+/* ============================================================================
+ * L2 Cache Controller (M-mode only)
+ *
+ * The L2 cache controller manages the shared L2 cache and LIM (Loosely
+ * Integrated Memory) / Scratchpad configuration.
+ * ============================================================================ */
+#ifdef WOLFBOOT_RISCV_MMODE
+
+#ifndef L2_CACHE_CTRL_BASE
+#define L2_CACHE_CTRL_BASE  0x02010000UL
+#endif
+
+/* L2 Cache Controller register offsets */
+#define L2_CONFIG_OFFSET    0x000UL
+#define L2_WAYENABLE_OFFSET 0x008UL
+#define L2_FLUSH64_OFFSET   0x200UL
+
+#ifndef __ASSEMBLER__
+
+#define L2_CONFIG_REG \
+    (*((volatile uint32_t*)(L2_CACHE_CTRL_BASE + L2_CONFIG_OFFSET)))
+#define L2_WAYENABLE_REG \
+    (*((volatile uint32_t*)(L2_CACHE_CTRL_BASE + L2_WAYENABLE_OFFSET)))
+#define L2_FLUSH64_REG \
+    (*((volatile uint64_t*)(L2_CACHE_CTRL_BASE + L2_FLUSH64_OFFSET)))
+
+#endif /* !__ASSEMBLER__ */
+
+#endif /* WOLFBOOT_RISCV_MMODE */
 
 #endif /* RISCV_H */
