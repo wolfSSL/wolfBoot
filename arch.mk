@@ -1364,9 +1364,6 @@ ifeq ($(ARCH), AURIX_TC3)
     USE_GCC?=1
     ARCH_FLASH_OFFSET=0x00000000
 
-    # No asm for you!
-    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
-
     CFLAGS += -I$(TC3_DIR) -Ihal
 
     CFLAGS += -Werror
@@ -1419,8 +1416,23 @@ ifeq ($(ARCH), AURIX_TC3)
       endif
 
       # Compiler flags
+      ifeq ($(NO_ASM),1)
+        ifeq ($(SPMATH),1)
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+        endif
+      else
+        ifeq ($(SPMATH),1)
+          CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_CORTEX_M_ASM -DWOLFSSL_SP_NO_UMAAL
+          MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
+          CFLAGS+=$(CORTEXM_ARM_EXTRA_CFLAGS) -DWOLFSSL_ARM_ARCH=7
+        endif
+      endif
+
       CFLAGS += -march=armv7-m -mcpu=cortex-m3 -mthumb -mlittle-endian \
                 -fno-builtin -DWOLFBOOT_AURIX_TC3XX_HSM
+
+      # Temporary fix masking wolfCrypt unused function warning with RSA_LOW_MEM
+      CFLAGS += -Wno-unused-function
 
       LDFLAGS += -march=armv7-m -mcpu=cortex-m3 -mthumb -mlittle-endian -g \
                 --specs=nano.specs -Wl,--gc-sections -static -Wl,--cref -Wl,-n \
@@ -1477,6 +1489,9 @@ ifeq ($(ARCH), AURIX_TC3)
         OBJCOPY=tricore-objcopy
         SIZE=$(CROSS_COMPILE)/llvm-size
       endif
+
+      # No asm for you!
+      MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
       # Arch settings for tricore
       ifeq ($(USE_GCC),1)
