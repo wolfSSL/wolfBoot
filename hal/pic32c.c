@@ -31,35 +31,18 @@
 #endif
 
 #define FCW_CTRLA (*(volatile uint32_t *)(FCW_BASE + 0x00U))
-#define FCW_CTRLB (*(volatile uint32_t *)(FCW_BASE + 0x04U))
 #define FCW_MUTEX (*(volatile uint32_t *)(FCW_BASE + 0x08U))
-#define FCW_INTENCLR (*(volatile uint32_t *)(FCW_BASE + 0x0CU))
-#define FCW_INTENSET (*(volatile uint32_t *)(FCW_BASE + 0x10U))
 #define FCW_INTFLAG (*(volatile uint32_t *)(FCW_BASE + 0x14U))
 #define FCW_STATUS (*(volatile uint32_t *)(FCW_BASE + 0x18U))
 #define FCW_KEY (*(volatile uint32_t *)(FCW_BASE + 0x1CU))
 #define FCW_ADDR (*(volatile uint32_t *)(FCW_BASE + 0x20U))
-#define FCW_SRCADDR (*(volatile uint32_t *)(FCW_BASE + 0x24U))
 #define FCW_DATA ((volatile uint32_t *)(FCW_BASE + 0x28U))
 #define FCW_SWAP (*(volatile uint32_t *)(FCW_BASE + 0x48U))
-#define FCW_PWP ((volatile uint32_t *)(FCW_BASE + 0x4CU))
-#define FCW_LBWP (*(volatile uint32_t *)(FCW_BASE + 0x6CU))
-#define FCW_UBWP (*(volatile uint32_t *)(FCW_BASE + 0x70U))
-#define FCW_UOWP (*(volatile uint32_t *)(FCW_BASE + 0x74U))
-#define FCW_CWP (*(volatile uint32_t *)(FCW_BASE + 0x78U))
-#define FCW_HSMINTENCLR (*(volatile uint32_t *)(FCW_BASE + 0x80U))
-#define FCW_HSMINTENSET (*(volatile uint32_t *)(FCW_BASE + 0x84U))
-#define FCW_HSMINTFLAG (*(volatile uint32_t *)(FCW_BASE + 0x88U))
-#define FCW_HSMCWP (*(volatile uint32_t *)(FCW_BASE + 0x8CU))
-#define FCW_HSMLDAT ((volatile uint32_t *)(FCW_BASE + 0x90U))
-#define FCW_HSMUDAT ((volatile uint32_t *)(FCW_BASE + 0xB0U))
 
 #define FCW_UNLOCK_WRKEY 0x91C32C01
 #define FCW_UNLOCK_SWAPKEY 0x91C32C02
-#define FCW_UNLOCK_CFGKEY 0x91C32C04
 #define FCW_OP_ERASE_SECTOR 0x4
 #define FCW_OP_QUAD_DOUBLE_WORD_WRITE 0x2
-#define FCW_OP_NOOP 0x0
 
 #define FCW_BUSY_MASK (1 << 0)
 #define FCW_CTRLA_PREPG_BIT (1 << 7)
@@ -106,15 +89,6 @@ static uint32_t pic32_last_err = 0;
 #define OSCCTRL_STATUS_PLL0LOCK (1 << 24)
 #define OSCCTRL_INTFLAG_PLL0LOCKR (1 << 24)
 
-#define OSCCTRL_FRACDIV0 (*(volatile uint32_t *)(OSCCTRL_BASE + 0x6CU))
-#define OSCCTRL_FRACDIV0_REMDIV_SHIFT (7)
-#define OSCCTRL_FRACDIV0_REMDIV(X) ((X) << OSCCTRL_FRACDIV0_REMDIV_SHIFT)
-#define OSCCTRL_FRACDIV0_INTDIV_SHIFT (16)
-#define OSCCTRL_FRACDIV0_INTDIV(X) ((X) << OSCCTRL_FRACDIV0_INTDIV_SHIFT)
-
-#define OSCCTRL_SYNCBUSY (*(volatile uint32_t *)(OSCCTRL_BASE + 0x78U))
-#define OSCCTRL_SYNCBUSY_FRACDIV0_MASK (1 << 6)
-
 #define GCLK_CTRLA (*(volatile uint32_t *)(GCLK_BASE + 0x00U))
 #define GCLK_SYNCBUSY (*(volatile uint32_t *)(GCLK_BASE + 0x4U))
 #define GCLK_GENCTRL ((volatile uint32_t *)(GCLK_BASE + 0x20U))
@@ -127,7 +101,6 @@ static uint32_t pic32_last_err = 0;
 #define GCLK_CTRLA_SWRST (1)
 
 #define MCLK_INTFLAG (*(volatile uint32_t *)(MCLK_BASE + 0x08U))
-#define MCLK_DIV0 (*(volatile uint32_t *)(MCLK_BASE + 0x0CU))
 #define MCLK_DIV1 (*(volatile uint32_t *)(MCLK_BASE + 0x10U))
 #define MCLK_INTFLAG_CKRDY (1)
 
