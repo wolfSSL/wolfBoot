@@ -280,8 +280,13 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
         .sflashA1Size     = CONFIG_FLASH_SIZE,
         .lookupTable = {
+#if defined(CONFIG_IMX_FCB_LUT_SINGLE_READ_DATA)
+            FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x03, RADDR_SDR, FLEXSPI_1PAD, 0x18),
+            FLEXSPI_LUT_SEQ(READ_SDR, FLEXSPI_1PAD, 0x04, STOP, FLEXSPI_1PAD, 0),
+#else /* Default assumes flash chip supports Fast Read Quad (command 0xEB) out-of-the-box (has QE-bit enabled) */
             FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
             FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
+#endif
         },
     },
     .pageSize           = CONFIG_FLASH_PAGE_SIZE,
@@ -340,8 +345,13 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
         .serialClkFreq    = CONFIG_SERIAL_CLK_FREQ,
         .sflashA1Size     = CONFIG_FLASH_SIZE,
         .lookupTable = {
+#if defined(CONFIG_IMX_FCB_LUT_SINGLE_READ_DATA)
+            FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x03, RADDR_SDR, FLEXSPI_1PAD, 0x18),
+            FLEXSPI_LUT_SEQ(READ_SDR, FLEXSPI_1PAD, 0x04, STOP, FLEXSPI_1PAD, 0),
+#else /* Default assumes flash chip supports Fast Read Quad (command 0xEB) out-of-the-box (has QE-bit enabled) */
             FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0xEB, RADDR_SDR, FLEXSPI_4PAD, 0x18),
             FLEXSPI_LUT_SEQ(DUMMY_SDR, FLEXSPI_4PAD, 0x06, READ_SDR, FLEXSPI_4PAD, 0x04),
+#endif
         },
     },
     .pageSize           = CONFIG_FLASH_PAGE_SIZE,
@@ -581,6 +591,10 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
                     READ_SDR,  FLEXSPI_4PAD, 0x04  /* any non-zero value */,
                     JMP_ON_CS, FLEXSPI_1PAD, 0x01),
             #else
+                #if defined(CONFIG_IMX_FCB_LUT_SINGLE_READ_DATA)
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(CMD_SDR, FLEXSPI_1PAD, 0x03, RADDR_SDR, FLEXSPI_1PAD, 0x18),
+                [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(READ_SDR, FLEXSPI_1PAD, 0x04, STOP, FLEXSPI_1PAD, 0),
+                #else /* Default assumes flash chip supports Fast Read Quad (command 0xEB) out-of-the-box (has QE-bit enabled) */
                 /* Quad Input/output read sequence */
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
                     CMD_SDR,   FLEXSPI_1PAD, 0xEB,
@@ -588,6 +602,7 @@ const flexspi_nor_config_t FLASH_CONFIG_SECTION qspiflash_config = {
                 [LUT_SEQ_IDX_0 + LUT_SEQ_INS_2_3] = FLEXSPI_LUT_SEQ(
                     DUMMY_SDR, FLEXSPI_4PAD, 0x06  /* 6 dummy cycles */,
                     READ_SDR,  FLEXSPI_4PAD, 0x04  /* any non-zero value */ ),
+                #endif
             #endif
                 /* Read Status */
                 [LUT_SEQ_IDX_1 + LUT_SEQ_INS_0_1] = FLEXSPI_LUT_SEQ(
