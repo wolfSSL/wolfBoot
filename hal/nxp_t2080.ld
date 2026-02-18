@@ -13,8 +13,9 @@ MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
 
-    /* CPC as SRAM - 1MB */
-    RAM (rwx) : ORIGIN = 0xF8F00000, LENGTH = 0x100000
+    /* CPC as SRAM - 512KB (T2080 supports up to 2MB, using 512KB)
+     * Layout: .ramcode at bottom, stack grows down from top */
+    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x80000
 
     /* DDR - 2GB */
     DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF
@@ -57,7 +58,21 @@ SECTIONS
     .gnu.hash       : { *(.gnu.hash) }
     .rela.dyn       : { *(.rela.dyn) }
 
-    _stored_data = .;
+    /* Store flash location for .ramcode copy */
+    _stored_ramcode = .;
+
+    /* RAMFUNCTION code in CPC SRAM - copied before DDR is used
+     * This ensures memcpy/memmove are available early */
+    .ramcode : AT (_stored_ramcode)
+    {
+        _start_ramcode = .;
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
+        _end_ramcode = .;
+    } > RAM
+
+    /* Calculate where .data starts in flash (after .ramcode) */
+    _stored_data = _stored_ramcode + (_end_ramcode - _start_ramcode);
 
     .data : AT (_stored_data)
     {
@@ -67,8 +82,6 @@ SECTIONS
         *(.got2*)
         *(.plt*)
         *(.dynamic)
-        . = ALIGN(4);
-        KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
     } > DRAM
@@ -88,5 +101,7 @@ SECTIONS
 
 }
 
-PROVIDE(_start_heap = ORIGIN(RAM));
+/* Heap starts after .ramcode in CPC SRAM */
+PROVIDE(_start_heap = _end_ramcode);
+/* Stack at top of CPC SRAM, grows down */
 PROVIDE(_end_stack  = ORIGIN(RAM) + (LENGTH(RAM)) );

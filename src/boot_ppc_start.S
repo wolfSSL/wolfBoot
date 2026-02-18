@@ -560,57 +560,90 @@ flash_tlb:
     #endif
 #endif /* ENABLE_DDR */
 
+/* =========================================================================
+ * CPC SRAM Initialization
+ * Order: 1) CPC invalidate, 2) CPCSRCR config, 3) LAW, 4) TLB, 5) CPC enable
+ * Note: TLB must be created BEFORE CPC enable (original working sequence)
+ * ========================================================================= */
+#if defined(ENABLE_L2_CACHE) && defined(L2SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
+cpc_setup_sram:
+        /* T2080RM: 8.4.2.2 - CPC initialization sequence:
+         * Step 1: Flash invalidate CPC and clear locks (CPCFI | CPCLFC)
+         * Step 2: Poll until invalidate completes
+         * Step 3: Configure SRAM control registers (CPCSRCR1, CPCSRCR0)
+         * Step 4: Configure LAW for SRAM routing (done after this block)
+         * Step 5: Enable CPC with parity (CPCE | CPCPE)
+         * Step 6: Create TLB for SRAM access
+         * The LAW (DDR_1) provides CoreNet routing; CPC intercepts before DDR. */
+
+        /* R1 = CPC base - preserve across LAW setup */
+        LOAD_ADDR32(r1, CPC_BASE)
+
+        /* Step 1: Flash invalidate CPC and clear all locks */
+        lis     r0, (CPCCSR0_CPCFI | CPCCSR0_CPCLFC)@h
+        ori     r0, r0, (CPCCSR0_CPCFI | CPCCSR0_CPCLFC)@l
+        stw     r0, CPCCSR0(r1)
+
+        /* Step 2: Poll until CPCFI and CPCLFC clear */
+cpc_poll_invalidate:
+        lwz     r2, CPCCSR0(r1)
+        and.    r2, r2, r0
+        bne     cpc_poll_invalidate
+        isync
+
+        /* Step 3: Configure CPC SRAM control registers */
+        li      r0, 0
+        stw     r0, CPCSRCR1(r1) /* SRAM high address = 0 */
+        /* SRAM low address - use LOAD_ADDR32 on e6500 to avoid sign extension */
+        LOAD_ADDR32(r0, L2SRAM_ADDR)
+        /* Enable SRAM and set size (must match L2SRAM_SIZE = 512KB) */
+        ori     r0, r0, (CPCSRCR0_SRAMSZ_512 | CPCSRCR0_SRAMEN)
+        stw     r0, CPCSRCR0(r1)
+        mbar
+        isync
+#endif /* ENABLE_L2_CACHE && L2SRAM_ADDR */
+
+/* Step 3: Configure LAW for SRAM */
 #ifdef INITIAL_SRAM_ADDR
 #ifndef INITIAL_SRAM_NO_LAW
 init_sram_law:
-        /* Intial SRAM LAW 2 */
+        /* CPC SRAM uses LAW 2 - DO NOT reuse this LAW index elsewhere!
+         * The stack resides in CPC SRAM; overwriting this LAW causes crashes. */
         #define INITIAL_SRAM_LAW (LAWAR_ENABLE | \
                                   LAWAR_TRGT_ID(INITIAL_SRAM_LAW_TRGT) | \
                                   INITIAL_SRAM_LAW_SZ)
         LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(2))
         li      r0,     0 /* UPPER=0 */
         /* Use LOAD_ADDR32 on e6500 to avoid sign-extension for addresses >= 0x80000000 */
-        LOAD_ADDR32(r1, INITIAL_SRAM_ADDR)
+        LOAD_ADDR32(r3, INITIAL_SRAM_ADDR)
         LOAD_ADDR32(r2, INITIAL_SRAM_LAW)
         stw     r0, 0(r9) /* LAWBARH */
-        stw     r1, 4(r9) /* LAWBARL */
+        stw     r3, 4(r9) /* LAWBARL */
         sync
         stw     r2, 8(r9) /* LAWAR */
         /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         lwz     r2, 8(r9)
         isync
 #endif /* !INITIAL_SRAM_NO_LAW */
+#endif /* INITIAL_SRAM_ADDR */
 
+/* Step 4: Create TLB for SRAM - BEFORE CPC enable (original working order)
+ * This is for e5500/e6500 CPC SRAM only. e500 has its own init_sram_tlb below. */
+#if defined(INITIAL_SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
 init_sram_tlb:
         /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT
-         * CPC SRAM uses cacheable memory-coherent (M) access.
-         * TLB is created BEFORE l2_setup_sram per old working code. */
+         * Original working T2080 code (commit 11f46a51) used MAS2_M. */
         set_tlb(1, 9,
                 INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
                 INITIAL_SRAM_BOOKE_SZ, 1, r3);
-#endif
+#endif /* INITIAL_SRAM_ADDR && (CORE_E5500 || CORE_E6500) */
 
-#ifdef ENABLE_L2_CACHE
-
-#if defined(CORE_E5500) || defined(CORE_E6500) /* --- L2 E5500/E6500 --- */
-#ifdef L2SRAM_ADDR
-l2_setup_sram:
-        /* T2080RM: 8.4.2.2 - CPC initialization
-         * Configure SRAM control registers, then enable CPC with parity.
-         * The LAW (DDR_1) provides CoreNet routing; CPC intercepts before DDR.
-         * SRAM is zeroed later via dcbz through cacheable TLB (MAS2_M). */
+/* Step 5: Enable CPC after TLB is configured */
+#if defined(ENABLE_L2_CACHE) && defined(L2SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
+cpc_enable:
         /* R1 = CPC base */
         LOAD_ADDR32(r1, CPC_BASE)
-
-        /* Configure CPC SRAM control registers */
-        li      r0, 0
-        stw     r0, CPCSRCR1(r1) /* SRAM high address = 0 */
-        /* SRAM low address - use LOAD_ADDR32 on e6500 to avoid sign extension */
-        LOAD_ADDR32(r0, L2SRAM_ADDR)
-        /* Enable SRAM and set size (must match L2SRAM_SIZE) */
-        ori     r0, r0, (CPCSRCR0_SRAMSZ_1024 | CPCSRCR0_SRAMEN)
-        stw     r0, CPCSRCR0(r1)
 
         /* Enable CPC with parity */
         lis     r0, (CPCCSR0_CPCE | CPCCSR0_CPCPE)@h
@@ -619,11 +652,24 @@ l2_setup_sram:
         stw     r0, CPCCSR0(r1)
         mbar
 
+        /* Verify CPC is enabled by reading back CPCCSR0 */
+cpc_poll_enable:
+        lwz     r2, CPCCSR0(r1)
+        andis.  r2, r2, CPCCSR0_CPCE@h  /* check CPCE bit */
+        beq     cpc_poll_enable
+        isync
+
         /* Disable speculation (Errata A-006593) */
         lwz     r0, CPCHDBCR0(r1)
         oris    r0, r0, CPCHDBCR0_SPEC_DIS@h
         stw     r0, CPCHDBCR0(r1)
-#endif /* L2SRAM_ADDR */
+        mbar
+        isync
+#endif /* ENABLE_L2_CACHE && L2SRAM_ADDR */
+
+#ifdef ENABLE_L2_CACHE
+#if defined(CORE_E5500) || defined(CORE_E6500) /* --- L2 E5500/E6500 --- */
+/* Note: CPC SRAM setup moved above for correct T2080RM sequence */
 
 #if defined(CORE_E6500) /* --- L2 E6500 --- */
 l2_setup_cache:
@@ -653,6 +699,13 @@ l2_poll_invclear:
         isync
         LOAD_ADDR32(r4, (L2CSR0_L2E | L2CSR0_L2PE))
         stw     r4, L2CSR0(r5)
+        mbar
+
+        /* Verify L2 is enabled by reading back L2CSR0 */
+l2_poll_enable:
+        lwz     r3, L2CSR0(r5)
+        andis.  r3, r3, L2CSR0_L2E@h  /* check bit 31 (L2E) */
+        beq     l2_poll_enable        /* loop until enabled */
         isync
 
 #elif defined(CORE_E5500) /* --- L2 E5500 --- */
@@ -714,6 +767,17 @@ l2_setup_sram:
         stw     r1, L2SRBAR0(r5)
         mbar
 #endif /* L2SRAM_ADDR */
+
+#ifdef INITIAL_SRAM_ADDR
+init_sram_tlb:
+        /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT
+         * For e500, L2 SRAM uses cacheable memory-coherent (M) access.
+         * TLB is created AFTER l2_setup_sram configures L2 as SRAM. */
+        set_tlb(1, 9,
+                INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+                INITIAL_SRAM_BOOKE_SZ, 1, r3);
+#endif /* INITIAL_SRAM_ADDR */
 #endif /* CORE_E500 */
 #endif /* ENABLE_L2_CACHE */
 
@@ -776,9 +840,9 @@ cache_sram_init_loop:
         bdnz    cache_sram_init_loop
 #elif defined(L2SRAM_ADDR)
 cache_sram_init:
-        /* Zero CPC SRAM via cache (MAS2_M = cacheable, memory coherent).
-         * dcbz allocates zeroed cache lines without reading from CPC,
-         * avoiding ECC/parity issues from uninitialized SRAM. */
+        /* Zero CPC SRAM via dcbz.
+         * With MAS2_M (memory-coherent), dcbz allocates zeroed cache lines.
+         * This initializes SRAM and avoids ECC/parity issues from uninitialized data. */
         LOAD_ADDR32(r3, L2SRAM_ADDR)
         li      r0, 0
         LOAD_ADDR32(r2, (L2SRAM_SIZE / CACHE_LINE_SIZE))

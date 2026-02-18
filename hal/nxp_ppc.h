@@ -118,16 +118,17 @@
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
 
-    #define L2SRAM_ADDR   (0xF8F00000UL) /* CPC as SRAM (1MB) */
-    #define L2SRAM_SIZE   (1024UL * 1024UL)
+    /* T2080 CPC SRAM config - 512KB per T2080RM */
+    #define L2SRAM_ADDR   (0xF8F80000UL) /* CPC as SRAM (512KB) */
+    #define L2SRAM_SIZE   (512UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
     /* CPC SRAM transactions traverse the CoreNet interconnect, which
-     * requires a LAW to route them. LAW_TRGT_DDR_1 is used as a routing
-     * target; the CPC intercepts the transaction before it reaches DDR. */
-    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_1MB
+     * requires a LAW to route them. LAW_TRGT_DDR_1 (0x10) is the CPC
+     * target per T2080RM Table 2-2 (Target ID Assignments). */
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_512KB
     #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_DDR_1
-    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_1M
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_512K
 
     #define ENABLE_INTERRUPTS
 
@@ -303,6 +304,7 @@
     #ifdef CORE_E6500
         /* T2080: 2MB CPC, 16 ways, 128KB per way */
         #define CPCSRCR0_SRAMSZ_256  (0x1 << 1) /* ways 14-15, 256KB */
+        #define CPCSRCR0_SRAMSZ_512  (0x2 << 1) /* ways 12-15, 512KB */
         #define CPCSRCR0_SRAMSZ_1024 (0x3 << 1) /* ways 8-15, 1MB */
         #define CPCSRCR0_SRAMSZ_2048 (0x4 << 1) /* ways 0-15, 2MB */
     #else /* CORE E5500 */
@@ -691,12 +693,12 @@ extern void dcache_disable(void);
 #else
 /* Assembly version */
 #ifdef CORE_E6500
-/* e6500 has 64-bit MAS registers - must clear upper 32 bits.
- * Using lis would sign-extend values with bit 15 set (e.g., 0xC000xxxx).
- * Use li 0; oris; ori pattern for all MAS registers. */
+/* e6500 has 64-bit MAS registers. On 64-bit PPC, lis sign-extends to 64 bits.
+ * Any MAS value with bit 31 set (MAS1=0xC..., MAS2/MAS3 high addresses) gets
+ * upper 32 bits = 0xFFFFFFFF. Hardware may require reserved upper bits = 0.
+ * Use "li 0; oris; ori" pattern for MAS1, MAS2, MAS3 to avoid sign-extension. */
 #define set_tlb(tlb, esel, epn, rpn, urpn, perms, winge, ts, tsize, iprot, reg) \
-    li    reg, 0; \
-    oris  reg, reg, BOOKE_MAS0(tlb, esel, 0)@h; \
+    lis   reg, BOOKE_MAS0(tlb, esel, 0)@h; \
     ori   reg, reg, BOOKE_MAS0(tlb, esel, 0)@l; \
     mtspr MAS0, reg;\
     li    reg, 0; \

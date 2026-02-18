@@ -31,6 +31,10 @@ extern unsigned int __bss_end__;
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
+/* .ramcode section (RAMFUNCTION) - may be in separate memory region */
+extern unsigned int _stored_ramcode;
+extern unsigned int _start_ramcode;
+extern unsigned int _end_ramcode;
 
 extern void main(void);
 extern void hal_early_init(void);
@@ -124,12 +128,33 @@ void boot_entry_C(void)
     volatile const unsigned int *src;
     volatile unsigned int *end;
 
+    /* Copy .ramcode section FIRST - to CPC SRAM which is already available.
+     * This makes RAMFUNCTION code (memcpy, memmove) available before DDR.
+     * Use volatile to prevent compiler from transforming to memcpy call. */
+    src = (volatile const unsigned int*)&_stored_ramcode;
+    dst = (volatile unsigned int*)&_start_ramcode;
+    end = (volatile unsigned int*)&_end_ramcode;
+    while (dst < end) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+
+#ifndef BUILD_LOADER_STAGE1
+    /* Flush D-cache and invalidate I-cache for .ramcode in CPC SRAM.
+     * PowerPC I/D caches are not coherent — explicit dcbst+icbi required. */
+    if ((uint32_t)&_end_ramcode > (uint32_t)&_start_ramcode) {
+        flush_cache((uint32_t)&_start_ramcode,
+            (uint32_t)&_end_ramcode - (uint32_t)&_start_ramcode);
+    }
+#endif
+
+    /* Now initialize DDR and other hardware */
     hal_early_init();
 
-    /* Copy the .data section from flash to RAM.
+    /* Copy the .data section from flash to DDR.
      * Use volatile to prevent the compiler from transforming this loop
-     * into a memcpy() call — memcpy is RAMFUNCTION in .data and hasn't
-     * been copied to DDR yet at this point. */
+     * into a memcpy() call. */
     src = (volatile const unsigned int*)&_stored_data;
     dst = (volatile unsigned int*)&_start_data;
     end = (volatile unsigned int*)&_end_data;
@@ -140,12 +165,7 @@ void boot_entry_C(void)
     }
 
 #ifndef BUILD_LOADER_STAGE1
-    /* Flush D-cache and invalidate I-cache for .data region.
-     * The .ramcode section (RAMFUNCTION code like memcpy) is within .data
-     * and was just copied to DDR through D-cache. Without this flush, the
-     * I-cache will fetch stale/uninitialized DDR content when calling
-     * RAMFUNCTION code, causing instruction fetch failures.
-     * PowerPC I/D caches are not coherent — explicit dcbst+icbi required. */
+    /* Flush D-cache and invalidate I-cache for .data region in DDR. */
     flush_cache((uint32_t)&_start_data,
         (uint32_t)&_end_data - (uint32_t)&_start_data);
 #endif

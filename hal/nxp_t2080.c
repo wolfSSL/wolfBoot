@@ -221,7 +221,7 @@ static void hal_flash_init(void)
 #endif /* ENABLE_IFC */
 }
 
-static void hal_ddr_init(void)
+void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
     uint32_t reg;
@@ -358,8 +358,8 @@ static void hal_cpld_init(void)
     set32(IFC_AMASK(3), IFC_AMASK_64KB);
     set32(IFC_CSOR(3), 0);
 
-    /* IFC - CPLD */
-    set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
+    /* IFC - CPLD (use LAW 5; LAW 2 is used for CPC SRAM) */
+    set_law(5, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
         LAW_TRGT_IFC, LAW_SIZE_4KB, 1);
 
     /* CPLD - TBL=1, Entry 17 */
