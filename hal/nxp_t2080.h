@@ -233,6 +233,7 @@ enum ifc_amask_sizes {
 #define DDR_TRTP_PS     7500
 #define DDR_REF_RATE_PS 7800000
 
+/* DDR values from working U-Boot on NAII 68PPC2 board */
 #define DDR_CS0_BNDS_VAL       0x000000FF
 #define DDR_CS1_BNDS_VAL       0x010001FF
 #define DDR_CS2_BNDS_VAL       0x0300033F
@@ -243,29 +244,30 @@ enum ifc_amask_sizes {
 #define DDR_CS3_CONFIG_VAL     0x00040202
 #define DDR_CS_CONFIG_2_VAL    0x00000000
 
-#define DDR_TIMING_CFG_0_VAL   0xFF550004
-#define DDR_TIMING_CFG_1_VAL   0xBCB48C56
-#define DDR_TIMING_CFG_2_VAL   0x0040C114
-#define DDR_TIMING_CFG_3_VAL   0x010C1000
+#define DDR_TIMING_CFG_0_VAL   0xFF530004
+#define DDR_TIMING_CFG_1_VAL   0x98906345
+#define DDR_TIMING_CFG_2_VAL   0x0040A114
+#define DDR_TIMING_CFG_3_VAL   0x010A1100
 #define DDR_TIMING_CFG_4_VAL   0x00000001
-#define DDR_TIMING_CFG_5_VAL   0x03402400
+#define DDR_TIMING_CFG_5_VAL   0x04402400
 
 #define DDR_SDRAM_MODE_VAL     0x00441C70
 #define DDR_SDRAM_MODE_2_VAL   0x00980000
 #define DDR_SDRAM_MODE_3_8_VAL 0x00000000
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
-#define DDR_SDRAM_CFG_VAL      0xE7044000
-#define DDR_SDRAM_CFG_2_VAL    0x00401050
+#define DDR_SDRAM_CFG_VAL      0xE7040000
+#define DDR_SDRAM_CFG_2_VAL    0x00401000
 
 #define DDR_SDRAM_INTERVAL_VAL 0x0C300100
 #define DDR_DATA_INIT_VAL      0xDEADBEEF
 #define DDR_SDRAM_CLK_CNTL_VAL 0x02400000
 #define DDR_ZQ_CNTL_VAL        0x89080600
 
-#define DDR_WRLVL_CNTL_VAL     0x8675F608
-#define DDR_WRLVL_CNTL_2_VAL   0x080A0A0C
-#define DDR_WRLVL_CNTL_3_VAL   0x0C0E0E0D
+/* Write leveling - CRITICAL: board-specific values from U-Boot */
+#define DDR_WRLVL_CNTL_VAL     0x8675F604
+#define DDR_WRLVL_CNTL_2_VAL   0x05060607
+#define DDR_WRLVL_CNTL_3_VAL   0x080A0A0B
 
 #define DDR_SDRAM_RCW_1_VAL    0x00000000
 #define DDR_SDRAM_RCW_2_VAL    0x00000000
@@ -317,6 +319,7 @@ enum ifc_amask_sizes {
 #define DDR_DDRCDR_2       ((volatile uint32_t*)(DDR_BASE + 0xB2C)) /* DDR Control Driver Register 2 */
 #define DDR_DDRDSR_1       ((volatile uint32_t*)(DDR_BASE + 0xB20)) /* DDR Debug Status Register 1 */
 #define DDR_DDRDSR_2       ((volatile uint32_t*)(DDR_BASE + 0xB24)) /* DDR Debug Status Register 2 */
+#define DDR_ERR_DETECT     ((volatile uint32_t*)(DDR_BASE + 0xE40)) /* Memory error detect */
 #define DDR_ERR_DISABLE    ((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
 #define DDR_ERR_INT_EN     ((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
 #define DDR_ERR_SBE        ((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */

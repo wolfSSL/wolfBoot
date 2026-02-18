@@ -118,17 +118,17 @@
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
 
-    /* T2080 CPC SRAM config - 512KB per T2080RM */
-    #define L2SRAM_ADDR   (0xF8F80000UL) /* CPC as SRAM (512KB) */
-    #define L2SRAM_SIZE   (512UL * 1024UL)
+    /* T2080 CPC SRAM config - 1MB for ECC P384 stack requirements */
+    #define L2SRAM_ADDR   (0xF8F00000UL) /* CPC as SRAM (1MB) */
+    #define L2SRAM_SIZE   (1024UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
     /* CPC SRAM transactions traverse the CoreNet interconnect, which
      * requires a LAW to route them. LAW_TRGT_DDR_1 (0x10) is the CPC
      * target per T2080RM Table 2-2 (Target ID Assignments). */
-    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_512KB
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_1MB
     #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_DDR_1
-    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_512K
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_1M
 
     #define ENABLE_INTERRUPTS
 
@@ -593,6 +593,10 @@
 #endif
 
 #define mtspr(rn, v) __asm__ __volatile__("mtspr " WC_STRINGIFY(rn) ",%0" : : "r" (v))
+#define mfspr(rn) ({ \
+    unsigned int rval; \
+    __asm__ __volatile__("mfspr %0," WC_STRINGIFY(rn) : "=r" (rval)); rval; \
+})
 
 #define mfmsr() ({ \
     unsigned int rval; \

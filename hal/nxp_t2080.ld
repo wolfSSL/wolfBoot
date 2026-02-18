@@ -13,9 +13,9 @@ MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
 
-    /* CPC as SRAM - 512KB (T2080 supports up to 2MB, using 512KB)
+    /* CPC as SRAM - 1MB (T2080 supports up to 2MB, using 1MB for P384 stack)
      * Layout: .ramcode at bottom, stack grows down from top */
-    RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x80000
+    RAM (rwx) : ORIGIN = 0xF8F00000, LENGTH = 0x100000
 
     /* DDR - 2GB */
     DRAM (rwx) : ORIGIN = 0x00000000, LENGTH = 0x7FFFFFFF

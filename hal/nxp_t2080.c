@@ -230,7 +230,8 @@ void hal_ddr_init(void)
     set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
 
     /* If DDR is already enabled then just return */
-    if (get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN) {
+    reg = get32(DDR_SDRAM_CFG);
+    if (reg & DDR_SDRAM_CFG_MEM_EN) {
         return;
     }
 
@@ -369,6 +370,129 @@ static void hal_cpld_init(void)
 #endif
 }
 
+#if defined(DEBUG_UART) && defined(ENABLE_DDR)
+/* DDR memory test - writes patterns and verifies readback */
+static int hal_ddr_test(void)
+{
+    volatile uint32_t *ddr = (volatile uint32_t *)DDR_ADDRESS;
+    uint32_t patterns[] = {0x55555555, 0xAAAAAAAA, 0x12345678, 0xDEADBEEF};
+    uint32_t test_offsets[] = {0, 0x100, 0x1000, 0x10000, 0x100000, 0x1000000};
+    int i, j;
+    int errors = 0;
+    uint32_t reg;
+
+    /* Show DDR controller status */
+    reg = get32(DDR_SDRAM_CFG);
+    wolfBoot_printf("DDR: SDRAM_CFG=0x%x (MEM_EN=%d)\n", reg,
+        (reg & DDR_SDRAM_CFG_MEM_EN) ? 1 : 0);
+    reg = get32(DDR_SDRAM_CFG_2);
+    wolfBoot_printf("DDR: SDRAM_CFG_2=0x%x (D_INIT=%d)\n", reg,
+        (reg & DDR_SDRAM_CFG_2_D_INIT) ? 1 : 0);
+
+    /* Show DDR LAW configuration (LAW 4) */
+    wolfBoot_printf("DDR LAW4: H=0x%x L=0x%x AR=0x%x\n",
+        get32(LAWBARH(4)), get32(LAWBARL(4)), get32(LAWAR(4)));
+
+    /* Read DDR TLB entry 12 using tlbre */
+    {
+        uint32_t mas0, mas1, mas2, mas3, mas7;
+        /* Select TLB1, entry 12 */
+        mas0 = (1 << 28) | (12 << 16); /* TLBSEL=1, ESEL=12 */
+        mtspr(MAS0, mas0);
+        __asm__ __volatile__("isync; tlbre; isync");
+        mas1 = mfspr(MAS1);
+        mas2 = mfspr(MAS2);
+        mas3 = mfspr(MAS3);
+        mas7 = mfspr(MAS7);
+        wolfBoot_printf("DDR TLB12: MAS1=0x%x MAS2=0x%x MAS3=0x%x MAS7=0x%x\n",
+            mas1, mas2, mas3, mas7);
+        /* Check if TLB entry is valid */
+        if (!(mas1 & 0x80000000)) {
+            wolfBoot_printf("DDR: ERROR - TLB12 not valid!\n");
+            return -1;
+        }
+    }
+
+    /* Check if DDR is enabled */
+    if (!(get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
+        wolfBoot_printf("DDR: ERROR - Memory not enabled!\n");
+        return -1;
+    }
+
+    /* Check if DDR LAW is enabled */
+    reg = get32(LAWAR(4));
+    if (!(reg & LAWAR_ENABLE)) {
+        wolfBoot_printf("DDR: ERROR - LAW4 not enabled!\n");
+        return -1;
+    }
+
+    /* Show DDR chip select configuration */
+    wolfBoot_printf("DDR CS0: BNDS=0x%x CFG=0x%x\n",
+        get32(DDR_CS_BNDS(0)), get32(DDR_CS_CONFIG(0)));
+    wolfBoot_printf("DDR CS1: BNDS=0x%x CFG=0x%x\n",
+        get32(DDR_CS_BNDS(1)), get32(DDR_CS_CONFIG(1)));
+
+    /* Show DDR debug status registers */
+    wolfBoot_printf("DDR DDRDSR_1=0x%x DDRDSR_2=0x%x\n",
+        get32(DDR_DDRDSR_1), get32(DDR_DDRDSR_2));
+    wolfBoot_printf("DDR DDRCDR_1=0x%x DDRCDR_2=0x%x\n",
+        get32(DDR_DDRCDR_1), get32(DDR_DDRCDR_2));
+
+    /* Check for pre-existing DDR errors */
+    reg = get32(DDR_ERR_DETECT);
+    wolfBoot_printf("DDR ERR_DETECT=0x%x\n", reg);
+    if (reg != 0) {
+        wolfBoot_printf("DDR: ERROR - Pre-existing DDR errors!\n");
+        wolfBoot_printf("  Bit 31 (MME): %d - Multiple errors\n", (reg >> 31) & 1);
+        wolfBoot_printf("  Bit 7  (APE): %d - Address parity\n", (reg >> 7) & 1);
+        wolfBoot_printf("  Bit 3  (ACE): %d - Auto calibration\n", (reg >> 3) & 1);
+        wolfBoot_printf("  Bit 2  (CDE): %d - Correctable data\n", (reg >> 2) & 1);
+        wolfBoot_printf("DDR: Skipping memory test due to errors\n");
+        return -1;
+    }
+
+    wolfBoot_printf("DDR Test: base=0x%x\n", DDR_ADDRESS);
+    wolfBoot_printf("DDR: Attempting simple read at 0x%x...\n", DDR_ADDRESS);
+
+    /* First just try to read - don't write yet */
+    {
+        volatile uint32_t val = *ddr;
+        wolfBoot_printf("DDR: Read returned 0x%x\n", val);
+    }
+
+    for (i = 0; i < (int)(sizeof(test_offsets)/sizeof(test_offsets[0])); i++) {
+        uint32_t offset = test_offsets[i];
+        volatile uint32_t *addr = ddr + (offset / sizeof(uint32_t));
+
+        for (j = 0; j < (int)(sizeof(patterns)/sizeof(patterns[0])); j++) {
+            uint32_t pattern = patterns[j];
+            uint32_t readback;
+
+            /* Write pattern */
+            *addr = pattern;
+            __asm__ __volatile__("sync" ::: "memory");
+
+            /* Read back */
+            readback = *addr;
+
+            if (readback != pattern) {
+                wolfBoot_printf("  FAIL: @0x%x wrote 0x%x read 0x%x\n",
+                    (uint32_t)addr, pattern, readback);
+                errors++;
+            }
+        }
+    }
+
+    if (errors == 0) {
+        wolfBoot_printf("DDR Test: PASSED\n");
+    } else {
+        wolfBoot_printf("DDR Test: FAILED (%d errors)\n", errors);
+    }
+
+    return errors;
+}
+#endif /* DEBUG_UART && ENABLE_DDR */
+
 void hal_init(void)
 {
 #if defined(DEBUG_UART) && defined(ENABLE_CPLD)
@@ -400,6 +524,10 @@ void hal_init(void)
 
 #ifdef ENABLE_MP
     hal_mp_init();
+#endif
+
+#if defined(DEBUG_UART) && defined(ENABLE_DDR)
+    hal_ddr_test();
 #endif
 }
 
