@@ -3129,12 +3129,22 @@ Example Boot Debug Output:
 
 ```
 wolfBoot Init
-Part: Active 0, Address E8080000
-Image size 1028
+Build: Feb 19 2026 13:24:56
+DDR Test: PASSED
+Ramcode: copied 2852 bytes to DDR, TLB9 remapped
+CPC: Released SRAM, full 2MB L2 cache enabled
+Flash: caching enabled (L1+L2+CPC)
+Versions: Boot 1, Update 0
+Trying Boot partition at 0xEFFC0000
+Boot partition: 0xEFFC0000 (sz 3164, ver 0x1, type 0x601)
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
 Firmware Valid
-Loading 1028 bytes to RAM at 19000
-Failed parsing DTB to load.
-Booting at 19000
+Copying image from 0xEFFC0200 to RAM at 0x19000 (3164 bytes)
+Failed parsing DTB to load
+Booting at 0x19000
+FDT: Invalid header! -1
 Test App
 
 0x00000001

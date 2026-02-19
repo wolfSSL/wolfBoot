@@ -19,7 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <stdint.h>
-#include <string.h>
 #include "target.h"
 #include "printf.h"
 #include "image.h" /* for RAMFUNCTION */
@@ -374,59 +373,105 @@ static void hal_cpld_init(void)
 }
 
 #ifdef ENABLE_DDR
-/* Relocate stack from CPC SRAM to DDR for more stack space.
- * Call this after DDR is initialized and verified working.
- * This allows signature verification (ECC P384) which needs ~20-30KB stack. */
-static void hal_relocate_stack_to_ddr(void)
-{
-    uint32_t new_sp = DDR_STACK_TOP - 64; /* 64-byte alignment, room for frame */
-
-    /* Zero the DDR stack area for clean operation */
-    memset((void*)DDR_STACK_BASE, 0, DDR_STACK_SIZE);
-
-    /* Switch stack pointer from CPC SRAM to DDR.
-     * r1 is the stack pointer in PowerPC ABI. */
-    __asm__ __volatile__(
-        "mr 1, %0\n"         /* Move new stack address to r1 */
-        "sync\n"
-        :
-        : "r" (new_sp)
-        : "memory"
-    );
-
-#ifdef DEBUG_UART
-    wolfBoot_printf("Stack relocated to DDR (SP=0x%x)\n", new_sp);
-#endif
-}
-
-/* Release CPC SRAM back to L2 cache mode after stack is relocated to DDR.
- * This gives us the full 2MB CPC as instruction/data cache for better performance. */
+/* Release CPC SRAM back to L2 cache mode.
+ * Call after stack is relocated to DDR (done in boot_entry_C).
+ * This gives us the full 2MB CPC as L3 cache for better performance.
+ *
+ * Before releasing CPC SRAM, .ramcode (RAMFUNCTION) is copied to DDR
+ * and TLB9 is remapped: VA 0xF8F00000 -> PA DDR_RAMCODE_ADDR so that
+ * RAMFUNCTION code (memcpy, wolfBoot_start, etc.) continues to work. */
 static void hal_reconfigure_cpc_as_cache(void)
 {
     volatile uint32_t *cpc_csr0 = (volatile uint32_t *)(CPC_BASE + CPCCSR0);
     volatile uint32_t *cpc_srcr0 = (volatile uint32_t *)(CPC_BASE + CPCSRCR0);
     uint32_t reg;
 
-    /* Step 1: Flush the CPC to ensure no stale SRAM data.
-     * IMPORTANT: Read-modify-write to preserve CPCE/CPCPE enable bits! */
+    /* Linker symbols for .ramcode section boundaries */
+    extern unsigned int _start_ramcode;
+    extern unsigned int _end_ramcode;
+    uint32_t ramcode_size = (uint32_t)&_end_ramcode - (uint32_t)&_start_ramcode;
+
+    /* Step 1: Copy .ramcode from CPC SRAM to DDR.
+     * Must use volatile loop — memcpy itself is in .ramcode! */
+    if (ramcode_size > 0) {
+        volatile const uint32_t *src = (volatile const uint32_t *)&_start_ramcode;
+        volatile uint32_t *dst = (volatile uint32_t *)DDR_RAMCODE_ADDR;
+        volatile uint32_t *end = (volatile uint32_t *)(DDR_RAMCODE_ADDR +
+                                                        ramcode_size);
+        while (dst < end) {
+            *dst++ = *src++;
+        }
+
+        /* Flush D-cache and invalidate I-cache for the DDR copy */
+        flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
+
+        /* Step 2: Remap TLB9: same VA (0xF8F00000) -> DDR physical address.
+         * All .ramcode references use VA 0xF8F00000, so this makes them
+         * transparently access the DDR copy instead of CPC SRAM. */
+        set_tlb(1, 9,
+            L2SRAM_ADDR, DDR_RAMCODE_ADDR, 0,
+            MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+            INITIAL_SRAM_BOOKE_SZ, 1);
+
+        /* Ensure TLB update and I-cache pick up new mapping */
+        invalidate_icache();
+    }
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("Ramcode: copied %d bytes to DDR, TLB9 remapped\n",
+        ramcode_size);
+#endif
+
+    /* Step 3: Flush the CPC to push any dirty SRAM data out.
+     * Read-modify-write to preserve CPCE/CPCPE enable bits. */
     reg = *cpc_csr0;
     reg |= CPCCSR0_CPCFL;
     *cpc_csr0 = reg;
     __asm__ __volatile__("sync; isync" ::: "memory");
 
-    /* Step 2: Poll until flush completes (CPCFL clears) */
-    do {
-        reg = *cpc_csr0;
-    } while (reg & CPCCSR0_CPCFL);
+    /* Step 4: Poll until flush completes (CPCFL clears) */
+    while (*cpc_csr0 & CPCCSR0_CPCFL);
 
-    /* Step 3: Disable SRAM mode - release ways back to cache */
-    *cpc_srcr0 = 0;  /* Clear SRAMEN and SRAMSZ */
+    /* Step 5: Disable SRAM mode - release all ways back to cache */
+    *cpc_srcr0 = 0;
     __asm__ __volatile__("sync; isync" ::: "memory");
 
-    /* CPC remains enabled (CPCE/CPCPE preserved), now with all ways as cache */
+    /* Step 6: Disable CPC SRAM LAW (no longer needed — TLB9 now routes
+     * to DDR via LAW4, not CPC SRAM via LAW2).
+     * Keep TLB9 — it's remapped to DDR and still in use. */
+    set32(LAWAR(2), 0);
+
+    /* Step 7: Flash invalidate CPC to start fresh as cache */
+    reg = *cpc_csr0;
+    reg |= CPCCSR0_CPCFI;
+    *cpc_csr0 = reg;
+    __asm__ __volatile__("sync; isync" ::: "memory");
+    while (*cpc_csr0 & CPCCSR0_CPCFI);
+
+    /* CPC remains enabled (CPCE/CPCPE preserved), now all 2MB as cache */
 
 #ifdef DEBUG_UART
-    wolfBoot_printf("CPC: Released SRAM, full L2 cache enabled\n");
+    wolfBoot_printf("CPC: Released SRAM, full 2MB L2 cache enabled\n");
+#endif
+}
+
+/* Make flash TLB cacheable for XIP code performance.
+ * Changes TLB Entry 2 (flash) from MAS2_I|MAS2_G to MAS2_M.
+ * This enables L1 I-cache + L2 + CPC to cache flash instructions. */
+static void hal_flash_enable_caching(void)
+{
+    /* Rewrite flash TLB entry with cacheable attributes.
+     * MAS2_M = memory coherent, enables caching */
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+        FLASH_TLB_PAGESZ, 1);
+
+    /* Invalidate L1 I-cache so new TLB attributes take effect */
+    invalidate_icache();
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("Flash: caching enabled (L1+L2+CPC)\n");
 #endif
 }
 #endif /* ENABLE_DDR */
@@ -594,22 +639,17 @@ void hal_init(void)
 #ifdef DEBUG_UART
     hal_ddr_test();
 #endif
-    /* TODO: Implement proper assembly-based stack relocation to DDR.
-     * The current C-based approach corrupts return addresses because:
-     * 1. hal_init's return address is saved on CPC SRAM stack
-     * 2. Stack switch changes SP to DDR (zeroed area)
-     * 3. CPC release makes old stack contents invalid
-     * 4. Function returns read garbage addresses
+
+    /* Stack is already in DDR (relocated in boot_entry_C via
+     * ddr_call_with_stack trampoline before main() was called).
      *
-     * For now, keep using CPC SRAM stack (1MB should be enough for P384).
-     * Stack relocation needs to be done in assembly with proper LR handling.
-     */
-#if 0 /* Disabled until proper assembly implementation */
-    {
-        hal_relocate_stack_to_ddr();
-        hal_reconfigure_cpc_as_cache();
-    }
-#endif
+     * Now release CPC SRAM back to L2 cache and enable flash caching.
+     * This dramatically improves ECC signature verification performance:
+     * - CPC (2MB) becomes L3 cache for all memory accesses
+     * - Flash code is cached by L1 I-cache + L2 + CPC
+     * - Stack/data in DDR is cached by L1 D-cache + L2 + CPC */
+    hal_reconfigure_cpc_as_cache();
+    hal_flash_enable_caching();
 #endif
 }
 

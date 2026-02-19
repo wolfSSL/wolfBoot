@@ -144,6 +144,11 @@
     #define DDR_STACK_TOP     0x02000000UL       /* Top of first 32MB */
     #define DDR_STACK_BASE    (DDR_STACK_TOP - DDR_STACK_SIZE)
 
+    /* DDR address where .ramcode is copied before CPC SRAM is released.
+     * TLB9 is remapped: VA 0xF8F00000 -> PA DDR_RAMCODE_ADDR so that
+     * RAMFUNCTION code continues to work after CPC becomes L2 cache. */
+    #define DDR_RAMCODE_ADDR  0x03000000UL       /* 48MB into DDR */
+
     #define FLASH_BASE_ADDR      0xE8000000UL
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB

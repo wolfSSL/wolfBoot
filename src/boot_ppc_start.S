@@ -1001,6 +1001,30 @@ dcache_disable:
         blr
 #endif
 
+/* void ddr_call_with_stack(uint32_t func_ptr, uint32_t new_sp)
+ * Switches stack pointer to DDR and calls the given function.
+ * Used by boot_entry_C to transition from CPC SRAM stack to DDR stack
+ * before calling main(). Does not return.
+ * r3 = function pointer to call
+ * r4 = new stack pointer (top of DDR stack area) */
+.global ddr_call_with_stack
+ddr_call_with_stack:
+        mr      r1, r4          /* Set stack pointer to DDR */
+        /* Create minimal PPC ABI stack frame with terminated back chain */
+        li      r0, 0
+        stwu    r0, -4(r1)     /* Terminate back chain */
+        stwu    r0, -4(r1)
+        stwu    r1, -8(r1)    /* Save back chain and move SP */
+        lis     r0,     RESET_VECTOR@h
+        ori     r0, r0, RESET_VECTOR@l
+        stwu    r1, -8(r1)    /* Save back chain and move SP */
+        stw     r0, +12(r1)   /* Save return addr (underflow vector) */
+        /* Call the function */
+        mtctr   r3
+        bctrl
+        /* Should never reach here */
+1:      b       1b
+
 #ifdef USE_GOT
 
 /* function to relocate code, handling cache flushing and continue to

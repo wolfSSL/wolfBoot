@@ -179,7 +179,25 @@ void boot_entry_C(void)
     }
 
     /* Run wolfBoot! */
+#ifdef ENABLE_DDR
+    /* DDR is initialized, .data and .bss are set up.
+     * Switch stack from CPC SRAM to DDR for:
+     * 1. Better performance (DDR stack is cacheable by L1/L2/CPC)
+     * 2. More stack space (64KB vs shared CPC SRAM)
+     * Uses assembly trampoline since we can't return after stack switch.
+     * The CPC SRAM will be released back to L2 cache in hal_init(). */
+    {
+        extern void ddr_call_with_stack(uint32_t func, uint32_t sp);
+        /* Zero DDR stack area using volatile to prevent memset transform */
+        volatile uint32_t *p = (volatile uint32_t *)DDR_STACK_BASE;
+        volatile uint32_t *e = (volatile uint32_t *)DDR_STACK_TOP;
+        while (p < e) { *p++ = 0; }
+        ddr_call_with_stack((uint32_t)main, DDR_STACK_TOP - 64);
+        /* Does not return */
+    }
+#else
     main();
+#endif
 }
 
 #ifndef BUILD_LOADER_STAGE1
