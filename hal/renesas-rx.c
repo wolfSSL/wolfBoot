@@ -485,8 +485,23 @@ void hal_prepare_boot(void)
 
 }
 
+#ifdef __CCRX__
+/* copy RAM functions from ROM to RAM */
+static void copyfuncs(void)
+{
+	unsigned char *dst, *src;
+	src = __sectop("PFRAM");
+	dst = __sectop("RPFRAM");
+	while(src < __secend("PFRAM")) {
+		*dst++ = *src++;
+	}
+}
+#endif
 int hal_flash_init(void)
 {
+#ifdef __CCRX__
+	copyfuncs();
+#endif
     /* Flash Write Enable */
     FLASH_FWEPROR = FLASH_FWEPROR_FLWE;
 
@@ -506,23 +521,41 @@ int hal_flash_init(void)
 /* write up to 128 bytes at a time */
 #define FLASH_FACI_CODE_BLOCK_SZ \
     (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH)
+#define FLASH_OK              0
+#define FLASH_ERR_ALIGN      -1
+#define FLASH_ERR_PRG        -2
+#define FLASH_ERR_ILGL       -3
+#define FLASH_ERR_ERS        -4
+#ifdef __CCRX__
+#pragma section FRAM
+#define MEMCPY ram_memcpy
+#else
+#define MEMCPY memcpy
+#endif
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
-    int ret, i, chunk;
-    uint8_t codeblock[FLASH_FACI_CODE_BLOCK_SZ];
+    int i;
+    uint8_t codeblock[FLASH_FACI_CODE_BLOCK_SZ] = {0};
     uint16_t* data16 = (uint16_t*)data;
+    uint32_t block_base;
+    uint32_t offset;
+    int      write_size;
 
     while (len > 0) {
-        /* handle partial remainder */
-        if (len < FLASH_FACI_CODE_BLOCK_SZ) {
-            uint8_t *src = (uint8_t*)addr;
-            int remain = FLASH_FACI_CODE_BLOCK_SZ - len;
-            memcpy(codeblock, data16, len);
-            memcpy(codeblock + len, src + len, remain);
-            data16 = (uint16_t*)codeblock;
-        }
+    	/* Align address to 128-byte boundary */
+    	block_base = addr & ~(FLASH_FACI_CODE_BLOCK_SZ - 1);
+    	offset = addr - block_base;
 
-        FLASH_FSADDR = addr;
+    	MEMCPY(codeblock, (uint8_t*)block_base, FLASH_FACI_CODE_BLOCK_SZ);
+    	write_size = FLASH_FACI_CODE_BLOCK_SZ - offset;
+    	if (write_size > len)
+    		write_size = len;
+
+    	MEMCPY(&codeblock[offset], data, write_size);
+    	data16 = (uint16_t*)codeblock;
+
+
+        FLASH_FSADDR = block_base;
         /* flash program command */
         FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM;
         /* number of 16-bit blocks: for code blocks is always 0x40 (64) */
@@ -539,9 +572,18 @@ int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 
         /* Wait for FCU operation to complete */
         while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
-
-        len -= FLASH_FACI_CODE_BLOCK_SZ;
-        addr += FLASH_FACI_CODE_BLOCK_SZ;
+        if (FLASH_FSTATR & FLASH_FSTATR_ILGLERR) {
+        	return FLASH_ERR_ILGL;
+        }
+        if (FLASH_FSTATR & FLASH_FSTATR_PRGERR) {
+        	return FLASH_ERR_PRG;
+        }
+        if (FLASH_FSTATR & FLASH_FSTATR_ERSERR) {
+        	return FLASH_ERR_PRG;
+        }
+        len -= write_size;
+        addr += write_size;
+        data += write_size;
     }
     return 0;
 }
@@ -639,7 +681,9 @@ void RAMFUNCTION hal_flash_lock(void)
         FLASH_FENTRYR_CODE_READ | FLASH_FENTRYR_DATA_READ);
     return;
 }
-
+#ifdef __CCRX__
+#pragma section
+#endif
 #if !defined(WOLFBOOT_NO_PARTITIONS) && !defined(TARGET_library)
 void* hal_get_primary_address(void)
 {

@@ -256,10 +256,15 @@ size_t strlen(const char *s)
     return i;
 }
 #endif
-
+#endif /* CCRX */
 #if  !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 /* some of the hal_flash_ functions need this during updates */
+#ifdef __CCRX__
+#pragma section FRAM
+void RAMFUNCTION *ram_memcpy(void *dst, const void *src, size_t n)
+#else
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
+#endif
 {
     size_t i;
     const char *s = (const char *)src;
@@ -286,7 +291,7 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 }
 #endif /* IAR */
 
-#ifndef __IAR_SYSTEMS_ICC__
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(__CCRX__)
 void *memmove(void *dst, const void *src, size_t n)
 {
     int i;
@@ -304,7 +309,6 @@ void *memmove(void *dst, const void *src, size_t n)
     }
 }
 #endif
-#endif /* __CCRX__ Renesas CCRX */
 #endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
