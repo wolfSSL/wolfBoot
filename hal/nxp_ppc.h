@@ -137,6 +137,13 @@
     #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL)
     #endif
 
+    /* DDR stack configuration - relocate from CPC SRAM after DDR init
+     * Stack is at top of first 32MB of DDR, with 64KB reserved for stack
+     * Stack grows downward from DDR_STACK_TOP */
+    #define DDR_STACK_SIZE    (64 * 1024)        /* 64KB stack in DDR */
+    #define DDR_STACK_TOP     0x02000000UL       /* Top of first 32MB */
+    #define DDR_STACK_BASE    (DDR_STACK_TOP - DDR_STACK_SIZE)
+
     #define FLASH_BASE_ADDR      0xE8000000UL
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB

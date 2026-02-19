@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <stdint.h>
+#include <string.h>
 #include "target.h"
 #include "printf.h"
 #include "image.h" /* for RAMFUNCTION */
@@ -32,7 +33,9 @@
 #define ENABLE_BUS_CLK_CALC
 
 #ifndef BUILD_LOADER_STAGE1
-    #define ENABLE_MP   /* multi-core support */
+    /* TODO: Fix e6500 MP initialization - secondary cores not responding.
+     * Disable MP for now to focus on getting basic boot working. */
+    /* #define ENABLE_MP */   /* multi-core support */
 #endif
 
 /* Forward declarations */
@@ -370,6 +373,64 @@ static void hal_cpld_init(void)
 #endif
 }
 
+#ifdef ENABLE_DDR
+/* Relocate stack from CPC SRAM to DDR for more stack space.
+ * Call this after DDR is initialized and verified working.
+ * This allows signature verification (ECC P384) which needs ~20-30KB stack. */
+static void hal_relocate_stack_to_ddr(void)
+{
+    uint32_t new_sp = DDR_STACK_TOP - 64; /* 64-byte alignment, room for frame */
+
+    /* Zero the DDR stack area for clean operation */
+    memset((void*)DDR_STACK_BASE, 0, DDR_STACK_SIZE);
+
+    /* Switch stack pointer from CPC SRAM to DDR.
+     * r1 is the stack pointer in PowerPC ABI. */
+    __asm__ __volatile__(
+        "mr 1, %0\n"         /* Move new stack address to r1 */
+        "sync\n"
+        :
+        : "r" (new_sp)
+        : "memory"
+    );
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("Stack relocated to DDR (SP=0x%x)\n", new_sp);
+#endif
+}
+
+/* Release CPC SRAM back to L2 cache mode after stack is relocated to DDR.
+ * This gives us the full 2MB CPC as instruction/data cache for better performance. */
+static void hal_reconfigure_cpc_as_cache(void)
+{
+    volatile uint32_t *cpc_csr0 = (volatile uint32_t *)(CPC_BASE + CPCCSR0);
+    volatile uint32_t *cpc_srcr0 = (volatile uint32_t *)(CPC_BASE + CPCSRCR0);
+    uint32_t reg;
+
+    /* Step 1: Flush the CPC to ensure no stale SRAM data.
+     * IMPORTANT: Read-modify-write to preserve CPCE/CPCPE enable bits! */
+    reg = *cpc_csr0;
+    reg |= CPCCSR0_CPCFL;
+    *cpc_csr0 = reg;
+    __asm__ __volatile__("sync; isync" ::: "memory");
+
+    /* Step 2: Poll until flush completes (CPCFL clears) */
+    do {
+        reg = *cpc_csr0;
+    } while (reg & CPCCSR0_CPCFL);
+
+    /* Step 3: Disable SRAM mode - release ways back to cache */
+    *cpc_srcr0 = 0;  /* Clear SRAMEN and SRAMSZ */
+    __asm__ __volatile__("sync; isync" ::: "memory");
+
+    /* CPC remains enabled (CPCE/CPCPE preserved), now with all ways as cache */
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("CPC: Released SRAM, full L2 cache enabled\n");
+#endif
+}
+#endif /* ENABLE_DDR */
+
 #if defined(DEBUG_UART) && defined(ENABLE_DDR)
 /* DDR memory test - writes patterns and verifies readback */
 static int hal_ddr_test(void)
@@ -381,6 +442,7 @@ static int hal_ddr_test(void)
     int errors = 0;
     uint32_t reg;
 
+#ifdef DEBUG_DDR
     /* Show DDR controller status */
     reg = get32(DDR_SDRAM_CFG);
     wolfBoot_printf("DDR: SDRAM_CFG=0x%x (MEM_EN=%d)\n", reg,
@@ -412,6 +474,7 @@ static int hal_ddr_test(void)
             return -1;
         }
     }
+#endif /* DEBUG_DDR */
 
     /* Check if DDR is enabled */
     if (!(get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
@@ -426,6 +489,7 @@ static int hal_ddr_test(void)
         return -1;
     }
 
+#ifdef DEBUG_DDR
     /* Show DDR chip select configuration */
     wolfBoot_printf("DDR CS0: BNDS=0x%x CFG=0x%x\n",
         get32(DDR_CS_BNDS(0)), get32(DDR_CS_CONFIG(0)));
@@ -437,28 +501,24 @@ static int hal_ddr_test(void)
         get32(DDR_DDRDSR_1), get32(DDR_DDRDSR_2));
     wolfBoot_printf("DDR DDRCDR_1=0x%x DDRCDR_2=0x%x\n",
         get32(DDR_DDRCDR_1), get32(DDR_DDRCDR_2));
+#endif /* DEBUG_DDR */
 
     /* Check for pre-existing DDR errors */
     reg = get32(DDR_ERR_DETECT);
-    wolfBoot_printf("DDR ERR_DETECT=0x%x\n", reg);
     if (reg != 0) {
-        wolfBoot_printf("DDR: ERROR - Pre-existing DDR errors!\n");
+        wolfBoot_printf("DDR: ERR_DETECT=0x%x (errors present)\n", reg);
+#ifdef DEBUG_DDR
         wolfBoot_printf("  Bit 31 (MME): %d - Multiple errors\n", (reg >> 31) & 1);
         wolfBoot_printf("  Bit 7  (APE): %d - Address parity\n", (reg >> 7) & 1);
         wolfBoot_printf("  Bit 3  (ACE): %d - Auto calibration\n", (reg >> 3) & 1);
         wolfBoot_printf("  Bit 2  (CDE): %d - Correctable data\n", (reg >> 2) & 1);
-        wolfBoot_printf("DDR: Skipping memory test due to errors\n");
+#endif
         return -1;
     }
 
+#ifdef DEBUG_DDR
     wolfBoot_printf("DDR Test: base=0x%x\n", DDR_ADDRESS);
-    wolfBoot_printf("DDR: Attempting simple read at 0x%x...\n", DDR_ADDRESS);
-
-    /* First just try to read - don't write yet */
-    {
-        volatile uint32_t val = *ddr;
-        wolfBoot_printf("DDR: Read returned 0x%x\n", val);
-    }
+#endif
 
     for (i = 0; i < (int)(sizeof(test_offsets)/sizeof(test_offsets[0])); i++) {
         uint32_t offset = test_offsets[i];
@@ -476,7 +536,7 @@ static int hal_ddr_test(void)
             readback = *addr;
 
             if (readback != pattern) {
-                wolfBoot_printf("  FAIL: @0x%x wrote 0x%x read 0x%x\n",
+                wolfBoot_printf("DDR FAIL: @0x%x wrote 0x%x read 0x%x\n",
                     (uint32_t)addr, pattern, readback);
                 errors++;
             }
@@ -507,6 +567,9 @@ void hal_init(void)
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot Init\n", 14);
+#ifndef WOLFBOOT_REPRODUCIBLE_BUILD
+    wolfBoot_printf("Build: %s %s\n", __DATE__, __TIME__);
+#endif
 #endif
 
     hal_flash_init();
@@ -526,8 +589,27 @@ void hal_init(void)
     hal_mp_init();
 #endif
 
-#if defined(DEBUG_UART) && defined(ENABLE_DDR)
+#ifdef ENABLE_DDR
+    /* Test DDR (when DEBUG_UART enabled) */
+#ifdef DEBUG_UART
     hal_ddr_test();
+#endif
+    /* TODO: Implement proper assembly-based stack relocation to DDR.
+     * The current C-based approach corrupts return addresses because:
+     * 1. hal_init's return address is saved on CPC SRAM stack
+     * 2. Stack switch changes SP to DDR (zeroed area)
+     * 3. CPC release makes old stack contents invalid
+     * 4. Function returns read garbage addresses
+     *
+     * For now, keep using CPC SRAM stack (1MB should be enough for P384).
+     * Stack relocation needs to be done in assembly with proper LR handling.
+     */
+#if 0 /* Disabled until proper assembly implementation */
+    {
+        hal_relocate_stack_to_ddr();
+        hal_reconfigure_cpc_as_cache();
+    }
+#endif
 #endif
 }
 

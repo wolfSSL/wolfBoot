@@ -27,6 +27,9 @@
 
 #include "nxp_ppc.h"
 
+/* Uncomment to enable verbose DDR debugging output */
+/* #define DEBUG_DDR */
+
 /* T2080 System Clock */
 #define SYS_CLK (600000000) /* 100MHz PLL with 6:1 = 600 MHz */
 
