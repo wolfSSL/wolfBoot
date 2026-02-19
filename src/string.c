@@ -44,7 +44,7 @@ size_t strlen(const char *s); /* forward declaration */
 #endif
 
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI) && \
-	!defined(_RENESAS_RA_)
+    !defined(__CCRX__) && !defined(_RENESAS_RA_)
 /* for RAMFUNCTION */
 #include "image.h"
 #endif
@@ -80,7 +80,6 @@ int isalpha(int c)
     return (isupper(c) || islower(c));
 }
 
-#if !defined(__CCRX__) /* Renesas CCRX */
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 void *memset(void *s, int c, size_t n)
 {
@@ -116,9 +115,9 @@ int strcmp(const char *s1, const char *s2)
         if (c1 != c2)
             return c1 - c2;
     }
+
     return ((unsigned char)*s1) - ((unsigned char)*s2);
 }
-#endif /* Renesas CCRX */
 
 int strcasecmp(const char *s1, const char *s2)
 {
@@ -147,7 +146,6 @@ int strncasecmp(const char *s1, const char *s2, size_t n)
     return 0;
 }
 
-#if !defined(__CCRX__) /* Renesas CCRX */
 char *strncat(char *dest, const char *src, size_t n)
 {
     size_t i;
@@ -235,11 +233,8 @@ void* memchr(void const *s, int c_in, size_t n)
     }
     return NULL;
 }
-
-#endif /* __CCRX__ Renesas CCRX */
 #endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
 
-#if !defined(__CCRX__) /* Renesas CCRX */
 #if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || defined(DEBUG_UART)
 size_t strlen(const char *s)
 {
@@ -254,6 +249,10 @@ size_t strlen(const char *s)
 
 #if  !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 /* some of the hal_flash_ functions need this during updates */
+#ifdef __CCRX__
+ #define RAMFUNCTION
+ #pragma section FRAM
+#endif
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
@@ -279,9 +278,13 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 
     return dst;
 }
+#ifdef __CCRX__
+ #pragma section
+#endif
 #endif /* IAR */
 
-#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI) && \
+    !defined(__CCRX__)
 void *memmove(void *dst, const void *src, size_t n)
 {
     int i;
@@ -298,8 +301,7 @@ void *memmove(void *dst, const void *src, size_t n)
         return memcpy(dst, src, n);
     }
 }
-#endif /* !IAR && !X86_64_EFI */
-#endif /* __CCRX__ Renesas CCRX */
+#endif /* !IAR && !X86_64_EFI && !__CCRX__ */
 #endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
