@@ -220,6 +220,12 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+  ifeq ($(TARGET),wolfhal)
+	ifeq ($(WOLFHAL_TARGET),stm32wb)
+		ARCH_FLASH_OFFSET=0x08000000
+		SPI_TARGET=stm32
+	endif
+  endif
 
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1

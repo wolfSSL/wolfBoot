@@ -13,3 +13,6 @@
 [submodule "lib/wolfPSA"]
 	path = lib/wolfPSA
 	url = https://github.com/wolfSSL/wolfPSA.git
+[submodule "lib/wolfHAL"]
+	path = lib/wolfHAL
+	url = https://github.com/wolfSSL/wolfHAL.git
