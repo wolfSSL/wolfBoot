@@ -32,13 +32,11 @@
 #define ENABLE_BUS_CLK_CALC
 
 #ifndef BUILD_LOADER_STAGE1
-    /* TODO: Fix e6500 MP initialization - secondary cores not responding.
-     * Disable MP for now to focus on getting basic boot working. */
-    /* #define ENABLE_MP */   /* multi-core support */
+    #define ENABLE_MP   /* multi-core support */
 #endif
 
 /* Forward declarations */
-static void hal_flash_unlock_sector(uint32_t sector);
+static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector);
 #ifdef ENABLE_MP
 static void hal_mp_init(void);
 #endif
@@ -202,24 +200,32 @@ static int hal_flash_getid(void)
 static void hal_flash_init(void)
 {
 #ifdef ENABLE_IFC
+    uint32_t cspr;
+
     /* IFC CS0 - NOR Flash
-     * Do NOT reprogram IFC CS0 (CSPR, AMASK, CSOR, FTIM) while executing
-     * from flash (XIP) with cache-inhibited TLB (MAS2_I|MAS2_G). The boot
-     * ROM already configured CS0 correctly. Reprogramming CSPR while XIP
-     * can cause instruction fetch failures because there is no cache to
-     * serve fetches during the chip-select decode transition.
+     * Do NOT reprogram IFC CS0 base address, port size, AMASK, CSOR, or
+     * FTIM while executing from flash (XIP). The boot ROM already
+     * configured CS0 correctly.
      *
-     * U-Boot avoids this by using MAS2_W|MAS2_G (write-through, cached)
-     * during XIP, only switching to MAS2_I|MAS2_G after relocating to RAM.
-     *
-     * The LAW is also already set in boot_ppc_start.S:flash_law.
-     */
+     * However, the boot ROM may set IFC_CSPR_WP (write-protect), which
+     * blocks all write cycles to the flash. This prevents AMD command
+     * sequences (erase/program) from reaching the chips. Clearing just
+     * the WP bit is safe during XIP — it doesn't change chip-select
+     * decode, only enables write forwarding. */
+    cspr = get32(IFC_CSPR(0));
+#ifdef DEBUG_UART
+    wolfBoot_printf("IFC CSPR0: 0x%x%s\n", cspr,
+        (cspr & IFC_CSPR_WP) ? " (WP set)" : "");
+#endif
+    if (cspr & IFC_CSPR_WP) {
+        set32(IFC_CSPR(0), cspr & ~IFC_CSPR_WP);
+    }
 
     /* Note: hal_flash_getid() is disabled because AMD Autoselect mode
      * affects the entire flash bank. Since wolfBoot runs XIP from the same
      * bank (CS0), entering Autoselect mode crashes instruction fetch.
-     * Flash write/erase operations will need RAMFUNCTION support.
-     * TODO: Implement RAMFUNCTION for flash operations on T2080. */
+     * Flash write/erase use RAMFUNCTION to execute from DDR during
+     * flash command mode (after .ramcode relocation in hal_init). */
 #endif /* ENABLE_IFC */
 }
 
@@ -630,10 +636,6 @@ void hal_init(void)
 #endif
 #endif /* ENABLE_CPLD */
 
-#ifdef ENABLE_MP
-    hal_mp_init();
-#endif
-
 #ifdef ENABLE_DDR
     /* Test DDR (when DEBUG_UART enabled) */
 #ifdef DEBUG_UART
@@ -651,17 +653,78 @@ void hal_init(void)
     hal_reconfigure_cpc_as_cache();
     hal_flash_enable_caching();
 #endif
+
+#ifdef ENABLE_MP
+    /* Start secondary cores AFTER CPC release and flash caching.
+     * Secondary cores' L2 flash-invalidate on the shared cluster L2
+     * must not disrupt the CPC SRAM→cache transition. Starting them
+     * after ensures the cache hierarchy is fully stable. */
+    hal_mp_init();
+#endif
 }
 
-static void hal_flash_unlock_sector(uint32_t sector)
+/* RAM-resident microsecond delay using inline timebase reads.
+ * Cannot call wait_ticks() (in flash .text) from RAMFUNCTION code
+ * while flash is in command mode — instruction fetch would return garbage. */
+static void RAMFUNCTION ram_udelay(uint32_t delay_us)
+{
+    uint32_t tbl_start, tbl_now;
+    uint32_t ticks = delay_us * DELAY_US;
+    __asm__ __volatile__("mfspr %0,268" : "=r"(tbl_start));
+    do {
+        __asm__ __volatile__("mfspr %0,268" : "=r"(tbl_now));
+    } while ((tbl_now - tbl_start) < ticks);
+}
+
+/* Switch flash TLB to cache-inhibited for direct flash chip access.
+ * AMD flash commands require writes to reach the chip immediately and
+ * status reads to come directly from the chip. With MAS2_M (cacheable),
+ * writes are cached and never reach the flash, reads return stale data.
+ * Uses direct SPR manipulation to avoid calling .text functions. */
+static void RAMFUNCTION hal_flash_cache_disable(void)
+{
+    uint32_t mas2;
+    /* Select TLB1, entry 2 (flash) */
+    mtspr(MAS0, BOOKE_MAS0(1, 2, 0));
+    __asm__ __volatile__("isync; tlbre; isync");
+    /* Change WIMGE from M to I|G */
+    mas2 = mfspr(MAS2);
+    mas2 &= ~0x1F; /* clear WIMGE bits */
+    mas2 |= (MAS2_I | MAS2_G);
+    mtspr(MAS2, mas2);
+    __asm__ __volatile__("isync; msync; tlbwe; isync");
+}
+
+/* Restore flash TLB to cacheable mode after flash operation.
+ * Flash is back in read-array mode, safe to cache again. */
+static void RAMFUNCTION hal_flash_cache_enable(void)
+{
+    uint32_t mas2;
+    /* Select TLB1, entry 2 (flash) */
+    mtspr(MAS0, BOOKE_MAS0(1, 2, 0));
+    __asm__ __volatile__("isync; tlbre; isync");
+    /* Change WIMGE from I|G to M (cacheable) */
+    mas2 = mfspr(MAS2);
+    mas2 &= ~0x1F;
+    mas2 |= MAS2_M;
+    mtspr(MAS2, mas2);
+    __asm__ __volatile__("isync; msync; tlbwe; isync");
+    /* Invalidate D-cache and I-cache — stale entries from before
+     * the flash operation must be discarded */
+    invalidate_dcache();
+    invalidate_icache();
+}
+
+static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector)
 {
     /* AMD unlock sequence */
     FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
     FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
 }
 
-/* wait for toggle to stop and status mask to be met within microsecond timeout */
-static int hal_flash_status_wait(uint32_t sector, uint16_t mask,
+/* wait for toggle to stop and status mask to be met within microsecond timeout.
+ * RAMFUNCTION: executes from DDR while flash is in program/erase command mode. */
+static int RAMFUNCTION hal_flash_status_wait(uint32_t sector, uint16_t mask,
     uint32_t timeout_us)
 {
     int ret = 0;
@@ -682,7 +745,7 @@ static int hal_flash_status_wait(uint32_t sector, uint16_t mask,
     #endif
         if (read1 == read2 && ((read1 & mask) == mask))
             break;
-        udelay(1);
+        ram_udelay(1);
     } while (timeout++ < timeout_us);
     if (timeout >= timeout_us) {
         ret = -1; /* timeout */
@@ -694,7 +757,7 @@ static int hal_flash_status_wait(uint32_t sector, uint16_t mask,
     return ret;
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int ret = 0;
     uint32_t i, pos, sector, offset, xfer, nwords;
@@ -707,6 +770,9 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     wolfBoot_printf("Flash Write: Ptr %p -> Addr 0x%x (len %d)\n",
         data, address, len);
 #endif
+
+    /* Disable flash caching — AMD commands must reach the chip directly */
+    hal_flash_cache_disable();
 
     pos = 0;
     while (len > 0) {
@@ -754,10 +820,13 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
         address += xfer;
         len -= xfer;
     }
+
+    /* Restore flash caching — flash is back in read-array mode */
+    hal_flash_cache_enable();
     return ret;
 }
 
-int hal_flash_erase(uint32_t address, int len)
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret = 0;
     uint32_t sector;
@@ -765,6 +834,9 @@ int hal_flash_erase(uint32_t address, int len)
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
         address -= FLASH_BASE_ADDR;
+
+    /* Disable flash caching — AMD commands must reach the chip directly */
+    hal_flash_cache_disable();
 
     while (len > 0) {
         /* determine sector address */
@@ -792,10 +864,13 @@ int hal_flash_erase(uint32_t address, int len)
         address += FLASH_SECTOR_SIZE;
         len -= FLASH_SECTOR_SIZE;
     }
+
+    /* Restore flash caching — flash is back in read-array mode */
+    hal_flash_cache_enable();
     return ret;
 }
 
-void hal_flash_unlock(void)
+void RAMFUNCTION hal_flash_unlock(void)
 {
     /* Per-sector unlock is done in hal_flash_write/erase before each operation.
      * The previous non-volatile PPB protection mode (C0h) approach caused
@@ -818,8 +893,9 @@ extern uint32_t _spin_table[];
 extern uint32_t _spin_table_addr;
 extern uint32_t _bootpg_addr;
 
-/* Startup additional cores with spin table and synchronize the timebase */
-static void hal_mp_up(uint32_t bootpg)
+/* Startup additional cores with spin table and synchronize the timebase.
+ * spin_table_ddr: DDR address of the spin table (for checking status) */
+static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
 {
     uint32_t all_cores, active_cores, whoami;
     int timeout = 50, i;
@@ -829,7 +905,7 @@ static void hal_mp_up(uint32_t bootpg)
     active_cores = (1 << whoami); /* current running cores */
 
     wolfBoot_printf("MP: Starting cores (boot page %p, spin table %p)\n",
-        bootpg, (uint32_t)_spin_table);
+        bootpg, spin_table_ddr);
 
     /* Set the boot page translation register */
     set32(LCC_BSTRH, 0);
@@ -849,8 +925,8 @@ static void hal_mp_up(uint32_t bootpg)
     /* wait for other core(s) to start */
     while (timeout) {
         for (i = 0; i < CPU_NUMCORES; i++) {
-            uint32_t* entry = (uint32_t*)(
-                  (uint8_t*)_spin_table + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+            volatile uint32_t* entry = (volatile uint32_t*)(
+                  spin_table_ddr + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
             if (*entry) {
                 active_cores |= (1 << i);
             }
@@ -881,7 +957,7 @@ static void hal_mp_up(uint32_t bootpg)
 static void hal_mp_init(void)
 {
     uint32_t *fixup = (uint32_t*)&_secondary_start_page;
-    uint32_t bootpg;
+    uint32_t bootpg, second_half_ddr, spin_table_ddr;
     int i_tlb = 0; /* always 0 */
     size_t i;
     const volatile uint32_t *s;
@@ -893,31 +969,60 @@ static void hal_mp_init(void)
      * size to ensure bootpg fits in 32 bits and is accessible. */
     bootpg = DDR_ADDRESS + 0x80000000UL - BOOT_ROM_SIZE;
 
-    /* Store the boot page address for use by additional CPU cores */
-    _bootpg_addr = (uint32_t)&_second_half_boot_page;
+    /* Second half boot page (spin loop + spin table) goes just below.
+     * For XIP flash builds, .bootmp is in flash — secondary cores can't
+     * write to flash, so the spin table MUST be in DDR. */
+    second_half_ddr = bootpg - BOOT_ROM_SIZE;
 
-    /* Store location of spin table for other cores */
-    _spin_table_addr = (uint32_t)_spin_table;
+    /* DDR addresses for second half symbols */
+    spin_table_ddr = second_half_ddr +
+        ((uint32_t)_spin_table - (uint32_t)&_second_half_boot_page);
 
-    /* Flush bootpg before copying to invalidate any stale cache lines */
+    /* Flush DDR destination before copying */
     flush_cache(bootpg, BOOT_ROM_SIZE);
+    flush_cache(second_half_ddr, BOOT_ROM_SIZE);
 
-    /* Map reset page to bootpg so we can copy code there */
+    /* Map reset page to bootpg so we can copy code there.
+     * Boot page translation will redirect secondary core fetches from
+     * 0xFFFFF000 to bootpg in DDR. */
     disable_tlb1(i_tlb);
     set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn, urpn */
         (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), /* perms, wimge */
         0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
 
-    /* copy startup code to virtually mapped boot address */
-    /* do not use memcpy due to compiler array bounds report (not valid) */
+    /* Copy first half (startup code) to DDR via BOOT_ROM_ADDR mapping.
+     * Uses cache-inhibited TLB to ensure data reaches DDR immediately. */
     s = (const uint32_t*)fixup;
     d = (uint32_t*)BOOT_ROM_ADDR;
     for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
         d[i] = s[i];
     }
 
-    /* start core and wait for it to be enabled */
-    hal_mp_up(bootpg);
+    /* Write _bootpg_addr and _spin_table_addr into the DDR first-half copy.
+     * These variables are .long 0 in the linked .bootmp (flash), and direct
+     * stores to their flash addresses silently fail on XIP builds.
+     * Calculate offsets within the boot page and write via BOOT_ROM_ADDR. */
+    {
+        volatile uint32_t *bp = (volatile uint32_t*)(BOOT_ROM_ADDR +
+            ((uint32_t)&_bootpg_addr - (uint32_t)&_secondary_start_page));
+        volatile uint32_t *st = (volatile uint32_t*)(BOOT_ROM_ADDR +
+            ((uint32_t)&_spin_table_addr - (uint32_t)&_secondary_start_page));
+        *bp = second_half_ddr;
+        *st = spin_table_ddr;
+    }
+
+    /* Copy second half (spin loop + spin table) directly to DDR.
+     * Master has DDR TLB (entry 12, MAS2_M). Flush cache after copy
+     * to ensure secondary cores see the data. */
+    s = (const uint32_t*)&_second_half_boot_page;
+    d = (uint32_t*)second_half_ddr;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+    flush_cache(second_half_ddr, BOOT_ROM_SIZE);
+
+    /* start cores and wait for them to be enabled */
+    hal_mp_up(bootpg, spin_table_ddr);
 }
 #endif /* ENABLE_MP */
 

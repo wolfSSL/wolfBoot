@@ -110,8 +110,8 @@ branch_prediction:
         srwi    r10, r0, 5       /* r10 = cluster */
 
         mulli   r5, r10, CORES_PER_CLUSTER
-        add     r5, r5, r8
-        mulli   r4, r5, CORES_PER_CLUSTER
+        add     r5, r5, r8       /* r5 = linear core ID */
+        mr      r4, r5           /* r4 = PIR = linear core ID */
 #elif defined(CORE_E500MC) /* BOOKE e500mc family */
         rlwinm  r4, r0, 27, 27, 31
         mr      r5, r4
@@ -132,6 +132,15 @@ branch_prediction:
         mtspr   L1CSR2, r8
 
 #if defined(CORE_E6500) /* --- L2 E6500 --- */
+ccsr_tlb_mp:
+        /* e6500 L2 uses memory-mapped CCSR registers (L2_CLUSTER_BASE).
+         * Secondary cores have no TLBs on entry — only the boot page
+         * translation provides initial access. Add a temporary CCSR
+         * mapping (TLB1 entry 2) so L2 setup can access the registers. */
+        set_tlb(1, 2,
+                CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
+                MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+                CCSRBAR_SIZE, 0, r11)
 l2_setup_cache:
         /* E6500CORERM: 11.7 L2 cache state */
         /* R5 = L2 cluster 1 base */
