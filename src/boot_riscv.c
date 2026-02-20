@@ -239,8 +239,152 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 }
 #endif
 
+#ifdef WOLFBOOT_RISCV_MMODE
+/* ============================================================================
+ * M-mode to S-mode Transition Support
+ *
+ * When booting Linux from M-mode, we need to:
+ * 1. Configure PMP to allow S-mode full memory access
+ * 2. Delegate appropriate traps to S-mode
+ * 3. Set up MSTATUS.MPP = S-mode
+ * 4. Use MRET to atomically switch to S-mode
+ * ============================================================================ */
+
+/**
+ * setup_pmp_for_smode - Configure PMP for S-mode full access
+ *
+ * Sets up PMP entry 0 to allow S-mode full read/write/execute access
+ * to all of physical memory (0x0 to 0xFFFFFFFFFFFFFFFF for RV64).
+ */
+static void setup_pmp_for_smode(void)
+{
+    /* PMP configuration:
+     * - pmpcfg0[7:0] controls pmpaddr0
+     * - A = 3 (NAPOT - naturally aligned power-of-2)
+     * - R=1, W=1, X=1 (full access)
+     *
+     * For NAPOT with all 1s in pmpaddr, we get full address space coverage.
+     * pmpaddr = (address >> 2) | ((size >> 3) - 1)
+     * For full 64-bit space: pmpaddr = 0x1FFFFFFFFFFFFFFF (all ones, shifted)
+     */
+    unsigned long pmpaddr_val = -1UL;  /* All 1s = cover entire address space */
+    unsigned long pmpcfg_val;
+
+    /* A=NAPOT(3), R=1, W=1, X=1 = 0b00011111 = 0x1F */
+    pmpcfg_val = 0x1F;
+
+    /* Write pmpaddr0 first, then pmpcfg0 */
+    csr_write(pmpaddr0, pmpaddr_val);
+    csr_write(pmpcfg0, pmpcfg_val);
+
+    /* Memory barrier */
+    __asm__ volatile("sfence.vma" ::: "memory");
+}
+
+/**
+ * delegate_traps_to_smode - Delegate exceptions and interrupts to S-mode
+ *
+ * This allows S-mode (Linux) to handle its own traps without M-mode
+ * involvement for most cases.
+ */
+static void delegate_traps_to_smode(void)
+{
+    unsigned long medeleg_val;
+    unsigned long mideleg_val;
+
+    /* Delegate these exceptions to S-mode:
+     * - Instruction misaligned (0)
+     * - Instruction access fault (1)
+     * - Illegal instruction (2)
+     * - Breakpoint (3)
+     * - Load address misaligned (4)
+     * - Load access fault (5)
+     * - Store address misaligned (6)
+     * - Store access fault (7)
+     * - Environment call from U-mode (8)
+     * - Environment call from S-mode (9) - NO, this goes to M-mode for SBI
+     * - Instruction page fault (12)
+     * - Load page fault (13)
+     * - Store page fault (15)
+     */
+    medeleg_val = (1 << 0) |   /* Instruction address misaligned */
+                  (1 << 1) |   /* Instruction access fault */
+                  (1 << 2) |   /* Illegal instruction */
+                  (1 << 3) |   /* Breakpoint */
+                  (1 << 4) |   /* Load address misaligned */
+                  (1 << 5) |   /* Load access fault */
+                  (1 << 6) |   /* Store address misaligned */
+                  (1 << 7) |   /* Store access fault */
+                  (1 << 8) |   /* Environment call from U-mode */
+                  (1 << 12) |  /* Instruction page fault */
+                  (1 << 13) |  /* Load page fault */
+                  (1 << 15);   /* Store page fault */
+
+    /* Delegate these interrupts to S-mode:
+     * - S-mode software interrupt (1)
+     * - S-mode timer interrupt (5)
+     * - S-mode external interrupt (9)
+     */
+    mideleg_val = (1 << IRQ_S_SOFT) |
+                  (1 << IRQ_S_TIMER) |
+                  (1 << IRQ_S_EXT);
+
+    csr_write(medeleg, medeleg_val);
+    csr_write(mideleg, mideleg_val);
+}
+
+/**
+ * enter_smode - Transition from M-mode to S-mode and jump to entry point
+ *
+ * @entry: Entry point address (will be loaded into MEPC)
+ * @hartid: Hart ID (passed to kernel in a0)
+ * @dtb: DTB address (passed to kernel in a1)
+ *
+ * This function never returns. It uses MRET to atomically:
+ * 1. Switch privilege level from M to S
+ * 2. Jump to the entry point
+ */
+static void __attribute__((noreturn)) enter_smode(unsigned long entry,
+                                                  unsigned long hartid,
+                                                  unsigned long dtb)
+{
+    unsigned long mstatus_val;
+
+    /* Set up MEPC with entry point */
+    csr_write(mepc, entry);
+
+    /* Configure MSTATUS:
+     * - MPP = 01 (S-mode) - when MRET executes, we'll be in S-mode
+     * - MPIE = 1 - interrupts will be enabled after MRET
+     * - Clear MIE to disable interrupts during transition
+     */
+    mstatus_val = csr_read(mstatus);
+    mstatus_val &= ~MSTATUS_MPP_MASK;     /* Clear MPP field */
+    mstatus_val |= MSTATUS_MPP_S;         /* Set MPP = S-mode */
+    mstatus_val |= MSTATUS_MPIE;          /* Set MPIE */
+    mstatus_val &= ~MSTATUS_MIE;          /* Clear MIE */
+    csr_write(mstatus, mstatus_val);
+
+    /* Disable virtual memory (satp = 0) */
+    csr_write(satp, 0);
+
+    /* Execute MRET with a0=hartid, a1=dtb */
+    __asm__ volatile(
+        "mv a0, %0\n"       /* hartid in a0 */
+        "mv a1, %1\n"       /* dtb in a1 */
+        "mret\n"
+        : : "r"(hartid), "r"(dtb) : "a0", "a1"
+    );
+
+    __builtin_unreachable();
+}
+#endif /* WOLFBOOT_RISCV_MMODE */
+
 #if __riscv_xlen == 64
-/* Get the hartid saved by boot_riscv_start.S in the tp register */
+/* Get the hartid saved by boot_riscv_start.S in the tp register
+ * Note: In M-mode, hartid was read from mhartid CSR and stored in tp.
+ *       In S-mode, hartid was passed by the boot stage in a0 and saved to tp.
+ */
 unsigned long get_boot_hartid(void)
 {
     unsigned long hartid;
@@ -260,6 +404,8 @@ void do_boot(const uint32_t *app_offset)
 #endif
 #ifdef MMU
     unsigned long dts_addr;
+#else
+    unsigned long dts_addr = 0;
 #endif
 
 #ifdef MMU
@@ -298,10 +444,35 @@ void do_boot(const uint32_t *app_offset)
      * enters the kernel. Secondary harts are started via SBI HSM extension.
      */
 
-#if __riscv_xlen == 64
-#ifdef MMU
+#ifdef WOLFBOOT_RISCV_MMODE
+    /*
+     * M-mode to S-mode transition for booting Linux:
+     * 1. Set up PMP to allow S-mode full memory access
+     * 2. Delegate traps/interrupts to S-mode
+     * 3. Use MRET to switch to S-mode and jump to kernel
+     */
+#ifdef DEBUG_BOOT
+    wolfBoot_printf("Setting up M-mode to S-mode transition...\n");
+    wolfBoot_printf("  PMP: Configuring for S-mode access\n");
+#endif
+    setup_pmp_for_smode();
+
+#ifdef DEBUG_BOOT
+    wolfBoot_printf("  Delegating traps to S-mode\n");
+#endif
+    delegate_traps_to_smode();
+
+#ifdef DEBUG_BOOT
+    wolfBoot_printf("  Entering S-mode: entry=0x%lx, hartid=%lu, dtb=0x%lx\n",
+        (unsigned long)app_offset, hartid, dts_addr);
+#endif
+    /* This never returns */
+    enter_smode((unsigned long)app_offset, hartid, dts_addr);
+
+#elif __riscv_xlen == 64
     asm volatile(
-    #ifndef WOLFBOOT_RISCV_MMODE
+    #if defined(MMU) && !defined(WOLFBOOT_RISCV_MMODE)
+        /* S-mode boot (e.g., when running under HSS/OpenSBI) */
         "csrw satp, zero\n"
         "sfence.vma\n"
     #endif
@@ -310,14 +481,7 @@ void do_boot(const uint32_t *app_offset)
         "jr %2\n"
         : : "r"(hartid), "r"(dts_addr), "r"(app_offset) : "a0", "a1"
     );
-#else
-    asm volatile(
-        "mv a0, %0\n"
-        "mv a1, zero\n"
-        "jr %1\n"
-        : : "r"(hartid), "r"(app_offset) : "a0", "a1"
-    );
-#endif
+
 #else /* RV32 */
     /* RV32: typically bare-metal without Linux, simpler boot */
     asm volatile("jr %0" : : "r"(app_offset));
@@ -360,8 +524,6 @@ void RAMFUNCTION arch_reboot(void)
     AON_WDOGKEY = AON_WDOGKEY_VALUE;
     AON_WDOGFEED = 1;
 
-    while(1)
-        ;
     wolfBoot_panic();
 }
 
@@ -373,8 +535,6 @@ void WEAKFUNCTION arch_reboot(void)
     SYSREG_MSS_RESET_CR = 0xDEAD;
 #endif
 
-    while(1)
-        ;
     wolfBoot_panic();
 }
 

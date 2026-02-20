@@ -27,8 +27,17 @@
 
 /* PolarFire SoC MPFS250T board specific configuration */
 
-/* APB/AHB Clock Frequency */
-#define MSS_APB_AHB_CLK    150000000
+/* APB/AHB Clock Frequency
+ * M-mode (out of reset): 40 MHz
+ * S-mode (after HSS): 150 MHz
+ */
+#ifndef MSS_APB_AHB_CLK
+    #ifdef WOLFBOOT_RISCV_MMODE
+        #define MSS_APB_AHB_CLK    40000000
+    #else
+        #define MSS_APB_AHB_CLK    150000000
+    #endif
+#endif
 
 /* Hardware Base Address */
 #define SYSREG_BASE 0x20002000
@@ -44,21 +53,23 @@
 
 /* Peripheral Soft Reset Control Register (offset 0x88) */
 #define SYSREG_SOFT_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x88)))
-#define SYSREG_SOFT_RESET_CR_ENVM (1U << 0)
-#define SYSREG_SOFT_RESET_CR_MMC  (1U << 3)
-#define SYSREG_SOFT_RESET_CR_MMUART0 (1U << 5)
-#define SYSREG_SOFT_RESET_CR_MMUART1 (1U << 6)
-#define SYSREG_SOFT_RESET_CR_MMUART2 (1U << 7)
-#define SYSREG_SOFT_RESET_CR_MMUART3 (1U << 8)
-#define SYSREG_SOFT_RESET_CR_MMUART4 (1U << 9)
-#define SYSREG_SOFT_RESET_CR_SPI0 (1U << 10)
-#define SYSREG_SOFT_RESET_CR_SPI1 (1U << 11)
-#define SYSREG_SOFT_RESET_CR_QSPI (1U << 19)
-#define SYSREG_SOFT_RESET_CR_GPIO0 (1U << 20)
-#define SYSREG_SOFT_RESET_CR_GPIO1 (1U << 21)
-#define SYSREG_SOFT_RESET_CR_GPIO2 (1U << 22)
-#define SYSREG_SOFT_RESET_CR_DDRC (1U << 23)
-#define SYSREG_SOFT_RESET_CR_ATHENA (1U << 28) /* Crypto hardware accelerator */
+
+/* MSS Peripheral control bits (shared by SUBBLK_CLOCK_CR and SOFT_RESET_CR) */
+#define MSS_PERIPH_ENVM     (1U << 0)
+#define MSS_PERIPH_MMC      (1U << 3)
+#define MSS_PERIPH_MMUART0  (1U << 5)
+#define MSS_PERIPH_MMUART1  (1U << 6)
+#define MSS_PERIPH_MMUART2  (1U << 7)
+#define MSS_PERIPH_MMUART3  (1U << 8)
+#define MSS_PERIPH_MMUART4  (1U << 9)
+#define MSS_PERIPH_SPI0     (1U << 10)
+#define MSS_PERIPH_SPI1     (1U << 11)
+#define MSS_PERIPH_QSPI     (1U << 19)
+#define MSS_PERIPH_GPIO0    (1U << 20)
+#define MSS_PERIPH_GPIO1    (1U << 21)
+#define MSS_PERIPH_GPIO2    (1U << 22)
+#define MSS_PERIPH_DDRC     (1U << 23)
+#define MSS_PERIPH_ATHENA   (1U << 28)  /* Crypto hardware accelerator */
 
 
 /* UART */
@@ -73,6 +84,42 @@
 #define MSS_UART2_HI_BASE  0x28102000UL
 #define MSS_UART3_HI_BASE  0x28104000UL
 #define MSS_UART4_HI_BASE  0x28106000UL
+
+/* UART base address array for per-hart access (LO addresses for M-mode) */
+#ifndef __ASSEMBLER__
+static const unsigned long MSS_UART_BASE_ADDR[] = {
+    MSS_UART0_LO_BASE,  /* Hart 0 (E51) -> MMUART0 */
+    MSS_UART1_LO_BASE,  /* Hart 1 (U54_1) -> MMUART1 */
+    MSS_UART2_LO_BASE,  /* Hart 2 (U54_2) -> MMUART2 */
+    MSS_UART3_LO_BASE,  /* Hart 3 (U54_3) -> MMUART3 */
+    MSS_UART4_LO_BASE   /* Hart 4 (U54_4) -> MMUART4 */
+};
+#define UART_BASE_FOR_HART(hart) (MSS_UART_BASE_ADDR[(hart) < 5 ? (hart) : 0])
+#endif /* __ASSEMBLER__ */
+
+/* Debug UART port selection (0-4): M-mode defaults to UART0, S-mode to UART1 */
+#ifndef DEBUG_UART_PORT
+    #ifdef WOLFBOOT_RISCV_MMODE
+        #define DEBUG_UART_PORT 0
+    #else
+        #define DEBUG_UART_PORT 1
+    #endif
+#endif
+
+/* Derive base address from port number */
+#if DEBUG_UART_PORT == 0
+    #define DEBUG_UART_BASE MSS_UART0_LO_BASE
+#elif DEBUG_UART_PORT == 1
+    #define DEBUG_UART_BASE MSS_UART1_LO_BASE
+#elif DEBUG_UART_PORT == 2
+    #define DEBUG_UART_BASE MSS_UART2_LO_BASE
+#elif DEBUG_UART_PORT == 3
+    #define DEBUG_UART_BASE MSS_UART3_LO_BASE
+#elif DEBUG_UART_PORT == 4
+    #define DEBUG_UART_BASE MSS_UART4_LO_BASE
+#else
+    #error "Invalid DEBUG_UART_PORT (must be 0-4)"
+#endif
 
 #define MMUART_RBR(base) *((volatile uint8_t*)((base)) + 0x00) /* Receiver buffer register */
 #define MMUART_IER(base) *((volatile uint8_t*)((base)) + 0x04) /* Interrupt enable register */
@@ -192,6 +239,139 @@ int mpfs_read_serial_number(uint8_t *serial);
 
 /* Crypto Engine: Athena F5200 TeraFire Crypto Processor (1x), 200 MHz */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
+
+
+/* ============================================================================
+ * L2 Cache Controller (CACHE_CTRL @ 0x02010000)
+ * Controls cache ways, way masks, and scratchpad configuration
+ * ============================================================================ */
+#define L2_CACHE_BASE               0x02010000UL
+
+/* L2 Cache Control Registers */
+#define L2_CONFIG                   (*(volatile uint64_t*)(L2_CACHE_BASE + 0x000))
+#define L2_WAY_ENABLE               (*(volatile uint64_t*)(L2_CACHE_BASE + 0x008))
+#define L2_FLUSH64                  (*(volatile uint64_t*)(L2_CACHE_BASE + 0x200))
+#define L2_FLUSH32                  (*(volatile uint32_t*)(L2_CACHE_BASE + 0x240))
+
+/* Way Mask Registers - control which cache ways each master can access
+ * Value 0xFF = access to ways 0-7 (cache ways)
+ * Scratchpad ways (8-11) require explicit enabling */
+#define L2_WAY_MASK_DMA             (*(volatile uint64_t*)(L2_CACHE_BASE + 0x800))
+#define L2_WAY_MASK_AXI4_PORT0      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x808))
+#define L2_WAY_MASK_AXI4_PORT1      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x810))
+#define L2_WAY_MASK_AXI4_PORT2      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x818))
+#define L2_WAY_MASK_AXI4_PORT3      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x820))
+#define L2_WAY_MASK_E51_DCACHE      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x828))
+#define L2_WAY_MASK_E51_ICACHE      (*(volatile uint64_t*)(L2_CACHE_BASE + 0x830))
+#define L2_WAY_MASK_U54_1_DCACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x838))
+#define L2_WAY_MASK_U54_1_ICACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x840))
+#define L2_WAY_MASK_U54_2_DCACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x848))
+#define L2_WAY_MASK_U54_2_ICACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x850))
+#define L2_WAY_MASK_U54_3_DCACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x858))
+#define L2_WAY_MASK_U54_3_ICACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x860))
+#define L2_WAY_MASK_U54_4_DCACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x868))
+#define L2_WAY_MASK_U54_4_ICACHE    (*(volatile uint64_t*)(L2_CACHE_BASE + 0x870))
+
+/* L2 Shutdown Control Register */
+#define SYSREG_L2_SHUTDOWN_CR       (*(volatile uint32_t*)(SYSREG_BASE + 0x174))
+
+/* L2 Cache/Scratchpad constants */
+#define L2_NUM_CACHE_WAYS           8       /* Ways 0-7 are cache */
+#define L2_NUM_SCRATCH_WAYS         4       /* Ways 8-11 are scratchpad */
+#define L2_WAY_BYTE_LENGTH          0x20000 /* 128KB per way */
+#define L2_SCRATCH_BASE             0x0A000000UL
+#define L2_SCRATCH_SIZE             (L2_NUM_SCRATCH_WAYS * L2_WAY_BYTE_LENGTH) /* 512KB */
+
+/* Way enable values */
+#define L2_WAY_ENABLE_RESET         0x01    /* Only way 0 at reset */
+#define L2_WAY_ENABLE_ALL_CACHE     0xFF    /* Ways 0-7 (all cache ways) */
+#define L2_WAY_ENABLE_WITH_SCRATCH  0x0FFF  /* Ways 0-11 (cache + scratchpad) */
+
+/* Way mask for cache-only access (no scratchpad) */
+#define L2_WAY_MASK_CACHE_ONLY      0xFF
+
+
+/* ============================================================================
+ * NWC (Northwest Corner) - Clock and System Configuration
+ *
+ * The NWC contains clocks, PLLs, SGMII, and DDR PHY configuration.
+ * These registers must be configured for proper system operation.
+ * ============================================================================ */
+
+/* SCB Configuration Block (SCBCFG @ 0x37080000) */
+#define SCBCFG_BASE                 0x37080000UL
+#define SCBCFG_TIMER                (*(volatile uint32_t*)(SCBCFG_BASE + 0x08))
+
+/* MSS_SCB_ACCESS_CONFIG value for proper SCB access timing */
+#define MSS_SCB_ACCESS_CONFIG       0x0008A080UL
+
+/* DDR SGMII PHY Configuration (CFG_DDR_SGMII_PHY @ 0x20007000) */
+#define CFG_DDR_SGMII_PHY_BASE      0x20007000UL
+#define DDRPHY_STARTUP              (*(volatile uint32_t*)(CFG_DDR_SGMII_PHY_BASE + 0x008))
+#define DDRPHY_DYN_CNTL             (*(volatile uint32_t*)(CFG_DDR_SGMII_PHY_BASE + 0xC1C))
+
+/* DDR PHY startup configuration value (from working DDR demo) */
+#define DDRPHY_STARTUP_CONFIG       0x003F1F00UL
+#define DDRPHY_DYN_CNTL_CONFIG      0x0000047FUL
+
+/* DFI APB interface control (enables DDR PHY APB access) */
+#define SYSREG_DFIAPB_CR            (*(volatile uint32_t*)(SYSREG_BASE + 0x98))
+
+/* CLINT - Core Local Interruptor (for timer and software interrupts)
+ * Note: CLINT macros are defined in hal/riscv.h, only define base if not present */
+#ifndef CLINT_BASE
+#define CLINT_BASE                  0x02000000UL
+#endif
+
+/* RTC Clock Frequency (1 MHz after divisor) */
+#define RTC_CLOCK_FREQ              1000000UL
+
+
+/* ============================================================================
+ * Hart Local Storage (HLS) - Per-hart communication structure
+ *
+ * Used for inter-hart communication during boot.
+ * Located at top of each hart's stack (sp - 64).
+ * ============================================================================ */
+#define HLS_DEBUG_AREA_SIZE         64
+
+#ifndef __ASSEMBLER__
+typedef struct {
+    volatile uint32_t in_wfi_indicator;  /* 0x00: Hart status indicator */
+    volatile uint32_t my_hart_id;        /* 0x04: Hart ID */
+    volatile uint32_t shared_mem_marker; /* 0x08: Init marker */
+    volatile uint32_t shared_mem_status; /* 0x0C: Status */
+    volatile uint64_t* shared_mem;       /* 0x10: Shared memory pointer */
+    volatile uint64_t reserved[2];       /* 0x18: Reserved/padding */
+} HLS_DATA;  /* Size: 64 bytes (HLS_DEBUG_AREA_SIZE) */
+#endif /* __ASSEMBLER__ */
+
+/* HLS status indicator values */
+#define HLS_MAIN_HART_STARTED       0x12344321UL
+#define HLS_OTHER_HART_IN_WFI       0x12345678UL
+#define HLS_OTHER_HART_PASSED_WFI   0x87654321UL
+#define HLS_MAIN_HART_FIN_INIT      0x55555555UL
+
+/* Number of harts on MPFS */
+#define MPFS_NUM_HARTS              5
+#define MPFS_FIRST_HART             0   /* E51 is hart 0 */
+#define MPFS_FIRST_U54_HART         1   /* First U54 is hart 1 */
+#define MPFS_LAST_U54_HART          4   /* Last U54 is hart 4 */
+
+/* Stack configuration per hart */
+#ifndef STACK_SIZE_PER_HART
+#define STACK_SIZE_PER_HART         8192
+#endif
+
+/* Multi-hart function declarations */
+#ifndef __ASSEMBLER__
+#ifdef WOLFBOOT_RISCV_MMODE
+int mpfs_wake_secondary_harts(void);
+void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
+void uart_init_hart(unsigned long hartid);
+void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz);
+#endif
+#endif /* __ASSEMBLER__ */
 
 
 

@@ -65,22 +65,15 @@
     STORE x29, 29 * REGBYTES(sp)
     STORE x30, 30 * REGBYTES(sp)
     STORE x31, 31 * REGBYTES(sp)
-#ifndef WOLFBOOT_RISCV_MMODE
-    csrr a0, scause
-    csrr a1, sepc
-    csrr a2, stval
-#else
-    csrr a0, mcause
-    csrr a1, mepc
-    csrr a2, mtval
-#endif
+
+    csrr a0, MODE_PREFIX(cause)
+    csrr a1, MODE_PREFIX(epc)
+    csrr a2, MODE_PREFIX(tval)
+
     mv a3, sp
     jal handle_trap
-#ifndef WOLFBOOT_RISCV_MMODE
-    csrw sepc, a0
-#else
-    csrw mepc, a0
-#endif
+    csrw MODE_PREFIX(epc), a0
+
 .endm
 
 .macro trap_exit
@@ -116,11 +109,9 @@
     LOAD x31, 31 * REGBYTES(sp)
     LOAD x2,   2 * REGBYTES(sp)
     addi sp, sp, 32 * REGBYTES
-#ifndef WOLFBOOT_RISCV_MMODE
-    sret
-#else
-    mret
-#endif
+
+    MODE_PREFIX(ret)
+
 .endm
 
 #else /* __riscv_xlen == 32 */

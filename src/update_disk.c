@@ -243,7 +243,9 @@ void RAMFUNCTION wolfBoot_start(void)
     const uint8_t *hdr_ptr = NULL;
 #ifdef MMU
     uint8_t *dts_addr = NULL;
+    #ifdef WOLFBOOT_FDT
     uint32_t dts_size = 0;
+    #endif
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
     BENCHMARK_DECLARE();
