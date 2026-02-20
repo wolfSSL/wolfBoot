@@ -86,6 +86,10 @@ SECTIONS
         _global_pointer = . + 0x800;
         *(.sdata*)
         . = ALIGN(4);
+        /* Public key store - must be in a copied section so it's available
+         * in L2 SRAM after startup copies .data from eNVM */
+        KEEP(*(.keystore*))
+        . = ALIGN(4);
         _end_data = .;
     } > L2_SCRATCH AT > FLASH_ENVM
 
