@@ -217,9 +217,10 @@ static void hal_flash_init(void)
     wolfBoot_printf("IFC CSPR0: 0x%x%s\n", cspr,
         (cspr & IFC_CSPR_WP) ? " (WP set)" : "");
 #endif
-    if (cspr & IFC_CSPR_WP) {
-        set32(IFC_CSPR(0), cspr & ~IFC_CSPR_WP);
-    }
+    /* WP clearing is done in hal_flash_clear_wp() from RAMFUNCTION code.
+     * T2080RM requires V=0 before modifying IFC_CSPR, which is not safe
+     * during XIP. The RAMFUNCTION code runs from DDR with flash TLB
+     * guarded, so it can safely toggle V=0 -> modify -> V=1. */
 
     /* Note: hal_flash_getid() is disabled because AMD Autoselect mode
      * affects the entire flash bank. Since wolfBoot runs XIP from the same
@@ -676,43 +677,52 @@ static void RAMFUNCTION ram_udelay(uint32_t delay_us)
     } while ((tbl_now - tbl_start) < ticks);
 }
 
-/* Switch flash TLB to cache-inhibited for direct flash chip access.
- * AMD flash commands require writes to reach the chip immediately and
- * status reads to come directly from the chip. With MAS2_M (cacheable),
- * writes are cached and never reach the flash, reads return stale data.
- * Uses direct SPR manipulation to avoid calling .text functions. */
+/* Switch flash TLB to cache-inhibited + guarded for direct flash chip access.
+ * AMD flash commands require writes to reach the chip immediately and status
+ * reads to come directly from the chip. With MAS2_M (cacheable), stores go
+ * through the CPC coherency fabric; IFC does not support coherent writes and
+ * returns a bus error (DSI). tlbre/tlbwe only modifies MAS2 and is unreliable
+ * when the entry has IPROT=1; use set_tlb() to rewrite all MAS fields.
+ * Must be called while flash is still in read-array mode (set_tlb lives in
+ * flash .text, reachable via longcall while TLB is still M/cacheable). */
 static void RAMFUNCTION hal_flash_cache_disable(void)
 {
-    uint32_t mas2;
-    /* Select TLB1, entry 2 (flash) */
-    mtspr(MAS0, BOOKE_MAS0(1, 2, 0));
-    __asm__ __volatile__("isync; tlbre; isync");
-    /* Change WIMGE from M to I|G */
-    mas2 = mfspr(MAS2);
-    mas2 &= ~0x1F; /* clear WIMGE bits */
-    mas2 |= (MAS2_I | MAS2_G);
-    mtspr(MAS2, mas2);
-    __asm__ __volatile__("isync; msync; tlbwe; isync");
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+        FLASH_TLB_PAGESZ, 1);
 }
 
 /* Restore flash TLB to cacheable mode after flash operation.
- * Flash is back in read-array mode, safe to cache again. */
+ * Flash must be back in read-array mode before calling (AMD_CMD_RESET sent).
+ * Invalidate caches afterward so stale pre-erase data is not served. */
 static void RAMFUNCTION hal_flash_cache_enable(void)
 {
-    uint32_t mas2;
-    /* Select TLB1, entry 2 (flash) */
-    mtspr(MAS0, BOOKE_MAS0(1, 2, 0));
-    __asm__ __volatile__("isync; tlbre; isync");
-    /* Change WIMGE from I|G to M (cacheable) */
-    mas2 = mfspr(MAS2);
-    mas2 &= ~0x1F;
-    mas2 |= MAS2_M;
-    mtspr(MAS2, mas2);
-    __asm__ __volatile__("isync; msync; tlbwe; isync");
-    /* Invalidate D-cache and I-cache — stale entries from before
-     * the flash operation must be discarded */
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+        FLASH_TLB_PAGESZ, 1);
     invalidate_dcache();
     invalidate_icache();
+}
+
+/* Clear IFC write-protect. T2080RM says IFC_CSPR should only be written
+ * when V=0. Must be called from RAMFUNCTION (DDR) with flash TLB set to
+ * guarded (MAS2_G) so no speculative access occurs while V is briefly 0. */
+static void RAMFUNCTION hal_flash_clear_wp(void)
+{
+    uint32_t cspr = get32(IFC_CSPR(0));
+    if (cspr & IFC_CSPR_WP) {
+        /* Clear V first, then modify WP, then re-enable V */
+        set32(IFC_CSPR(0), cspr & ~(IFC_CSPR_WP | IFC_CSPR_V));
+        __asm__ __volatile__("sync; isync");
+        set32(IFC_CSPR(0), (cspr & ~IFC_CSPR_WP) | IFC_CSPR_V);
+        __asm__ __volatile__("sync; isync");
+        /* Verify WP cleared */
+        cspr = get32(IFC_CSPR(0));
+        wolfBoot_printf("WP clear: CSPR0=0x%x%s\n", cspr,
+            (cspr & IFC_CSPR_WP) ? " (FAILED)" : " (OK)");
+    }
 }
 
 static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector)
@@ -720,6 +730,77 @@ static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector)
     /* AMD unlock sequence */
     FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
     FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+}
+
+/* Check and clear PPB (Persistent Protection Bits) for a sector.
+ * S29GL01GS has per-sector non-volatile protection bits. If set, erase/program
+ * fails with DQ5 error. PPB erase is chip-wide (clears ALL sectors).
+ * Returns: 0 if unprotected or successfully cleared, -1 on failure. */
+static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
+{
+    uint16_t ppb_status;
+    uint16_t read1, read2;
+    uint32_t timeout;
+
+    /* Enter PPB ASO (Address Space Overlay) */
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+
+    /* Read PPB status for target sector: DQ0=0 means protected */
+    ppb_status = FLASH_IO8_READ(sector, 0);
+
+    if ((ppb_status & 0x0101) == 0x0101) {
+        /* Both chips report unprotected — exit PPB mode and return */
+        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+        return 0;
+    }
+
+    /* Exit PPB ASO before calling printf (flash must be in read-array
+     * mode for I-cache misses to fetch valid instructions) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    wolfBoot_printf("PPB: sector %d protected (0x%x), erasing all PPBs\n",
+        sector, ppb_status);
+
+    /* Re-enter PPB ASO for erase */
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+
+    /* PPB Erase All (clears all sectors' PPBs) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
+
+    /* Wait for PPB erase completion — poll for toggle stop */
+    timeout = 0;
+    do {
+        read1 = FLASH_IO8_READ(0, 0);
+        read2 = FLASH_IO8_READ(0, 0);
+        if (read1 == read2)
+            break;
+        ram_udelay(10);
+    } while (timeout++ < 100000); /* 1 second */
+
+    /* Exit PPB ASO */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+
+    /* Reset to read-array mode */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    if (timeout >= 100000) {
+        wolfBoot_printf("PPB: erase timeout\n");
+        return -1;
+    }
+
+    wolfBoot_printf("PPB: erase complete\n");
+    return 0;
 }
 
 /* wait for toggle to stop and status mask to be met within microsecond timeout.
@@ -773,6 +854,12 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     /* Disable flash caching — AMD commands must reach the chip directly */
     hal_flash_cache_disable();
+    hal_flash_clear_wp();
+
+    /* Reset flash to read-array mode in case previous operation left it
+     * in command mode (e.g. after a timeout or incomplete operation) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
 
     pos = 0;
     while (len > 0) {
@@ -792,18 +879,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
         hal_flash_unlock_sector(sector);
         FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_TO_BUFFER);
-    #if FLASH_CFI_WIDTH == 16
-        FLASH_IO16_WRITE(sector, offset, (nwords-1));
-    #else
+        /* Word count (N-1) must be replicated to both chips */
         FLASH_IO8_WRITE(sector, offset, (nwords-1));
-    #endif
 
         for (i=0; i<nwords; i++) {
             const uint8_t* ptr = &data[pos];
         #if FLASH_CFI_WIDTH == 16
-            FLASH_IO16_WRITE(sector, i, *((const uint16_t*)ptr));
+            FLASH_IO16_WRITE(sector, offset + i, *((const uint16_t*)ptr));
         #else
-            FLASH_IO8_WRITE(sector, i, *ptr);
+            FLASH_IO8_WRITE(sector, offset + i, *ptr);
         #endif
             pos += (FLASH_CFI_WIDTH/8);
         }
@@ -813,6 +897,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         /* poll for program completion - max 200ms */
         ret = hal_flash_status_wait(sector, 0x44, 200*1000);
         if (ret != 0) {
+            /* Reset flash to read-array mode BEFORE calling printf */
+            FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+            ram_udelay(50);
             wolfBoot_printf("Flash Write: Timeout at sector %d\n", sector);
             break;
         }
@@ -837,6 +924,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     /* Disable flash caching — AMD commands must reach the chip directly */
     hal_flash_cache_disable();
+    hal_flash_clear_wp();
+
+    /* Reset flash to read-array mode in case previous operation left it
+     * in command mode (e.g. after a timeout or incomplete operation) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
 
     while (len > 0) {
         /* determine sector address */
@@ -847,6 +940,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             sector, address, len);
     #endif
 
+        /* Check and clear PPB protection if set */
+        if (hal_flash_ppb_unlock(sector) != 0) {
+            wolfBoot_printf("Flash Erase: PPB unlock failed sector %d\n", sector);
+            ret = -1;
+            break;
+        }
+
+        wolfBoot_printf("Erasing sector %d...\n", sector);
+
         hal_flash_unlock_sector(sector);
         FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_ERASE_START);
         hal_flash_unlock_sector(sector);
@@ -854,12 +956,24 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         /* block erase timeout = 50us - for additional sectors */
         /* Typical is 200ms (max 1100ms) */
 
-        /* poll for erase completion - max 1.1 sec */
+        /* poll for erase completion - max 1.1 sec
+         * NOTE: Do NOT call wolfBoot_printf while flash is in erase mode.
+         * With cache-inhibited TLB, I-cache misses fetch from flash which
+         * returns status data instead of instructions. */
         ret = hal_flash_status_wait(sector, 0x4C, 1100*1000);
         if (ret != 0) {
+            /* Reset flash to read-array mode BEFORE calling printf */
+            FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+            ram_udelay(50);
             wolfBoot_printf("Flash Erase: Timeout at sector %d\n", sector);
             break;
         }
+
+        /* Erase succeeded — flash is back in read-array mode.
+         * Reset to be safe before any printf (I-cache may miss) */
+        FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+        ram_udelay(10);
+        wolfBoot_printf("Erase sector %d: OK\n", sector);
 
         address += FLASH_SECTOR_SIZE;
         len -= FLASH_SECTOR_SIZE;

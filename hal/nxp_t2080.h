@@ -131,7 +131,7 @@ enum ifc_amask_sizes {
 
 /* ---- NOR Flash ---- */
 #define FLASH_BANK_SIZE   (128*1024*1024)
-#define FLASH_PAGE_SIZE   (1024) /* program buffer */
+#define FLASH_PAGE_SIZE   (512) /* program buffer (256 bytes per chip x 2 chips) */
 #define FLASH_SECTOR_SIZE (128*1024)
 #define FLASH_SECTORS     (FLASH_BANK_SIZE / FLASH_SECTOR_SIZE)
 #define FLASH_CFI_WIDTH   16 /* 8 or 16 */
