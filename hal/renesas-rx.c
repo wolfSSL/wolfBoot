@@ -61,12 +61,13 @@
 
 /* forward declaration */
 int hal_flash_init(void);
-
+#if defined(WOLFBOOT_RENESAS_TSIP) && !defined(WOLFBOOT_RENESAS_APP)
 static void hal_panic(void)
 {
     while(1)
         ;
 }
+#endif
 
 #ifdef ENABLE_LED
 void hal_led_on(void)
@@ -104,6 +105,21 @@ void hal_delay_us(uint32_t us)
     }
 }
 
+static flash_err_t flash_check_error()
+{
+	uint32_t st = FLASH_FSTATR;
+
+	if (st & FLASH_FSTATR_ILGLERR) return FLASH_ERR_ILGL;
+	if (st & FLASH_FSTATR_PRGERR) return FLASH_ERR_PRG;
+	if (st & FLASH_FSTATR_ERSERR) return FLASH_ERR_ERS;
+	if (st & FLASH_FSTATR_FLWEERR) return FLASH_ERR_FLWE;
+	if (st & FLASH_FSTATR_FESETERR) return FLASH_ERR_FESET;
+	if (st & FLASH_FSTATR_SECERR) return FLASH_ERR_SEC;
+	if (st & FLASH_FSTATR_OTERR) return FLASH_ERR_OT;
+
+	return FLASH_OK;
+
+}
 #ifdef DEBUG_UART
 
 #ifndef DEBUG_UART_SCI
@@ -210,7 +226,6 @@ void uart_write(const char* buf, unsigned int sz)
 void hal_clk_init(void)
 {
     uint32_t reg, i;
-    uint16_t stc;
     uint8_t  cksel = CFG_CKSEL;
 
     PROTECT_OFF(); /* write protect off */
@@ -521,16 +536,8 @@ int hal_flash_init(void)
 /* write up to 128 bytes at a time */
 #define FLASH_FACI_CODE_BLOCK_SZ \
     (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH)
-#define FLASH_OK              0
-#define FLASH_ERR_ALIGN      -1
-#define FLASH_ERR_PRG        -2
-#define FLASH_ERR_ILGL       -3
-#define FLASH_ERR_ERS        -4
 #ifdef __CCRX__
 #pragma section FRAM
-#define MEMCPY ram_memcpy
-#else
-#define MEMCPY memcpy
 #endif
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
@@ -540,18 +547,19 @@ int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
     uint32_t block_base;
     uint32_t offset;
     int      write_size;
+    int      ret;
 
     while (len > 0) {
     	/* Align address to 128-byte boundary */
     	block_base = addr & ~(FLASH_FACI_CODE_BLOCK_SZ - 1);
     	offset = addr - block_base;
 
-    	MEMCPY(codeblock, (uint8_t*)block_base, FLASH_FACI_CODE_BLOCK_SZ);
+    	XMEMCPY(codeblock, (uint8_t*)block_base, FLASH_FACI_CODE_BLOCK_SZ);
     	write_size = FLASH_FACI_CODE_BLOCK_SZ - offset;
     	if (write_size > len)
     		write_size = len;
 
-    	MEMCPY(&codeblock[offset], data, write_size);
+    	XMEMCPY(&codeblock[offset], data, write_size);
     	data16 = (uint16_t*)codeblock;
 
 
@@ -572,14 +580,8 @@ int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 
         /* Wait for FCU operation to complete */
         while ((FLASH_FSTATR & FLASH_FSTATR_FRDY) == 0);
-        if (FLASH_FSTATR & FLASH_FSTATR_ILGLERR) {
-        	return FLASH_ERR_ILGL;
-        }
-        if (FLASH_FSTATR & FLASH_FSTATR_PRGERR) {
-        	return FLASH_ERR_PRG;
-        }
-        if (FLASH_FSTATR & FLASH_FSTATR_ERSERR) {
-        	return FLASH_ERR_PRG;
+        if ((ret = flash_check_error()) != FLASH_OK) {
+        	return ret;
         }
         len -= write_size;
         addr += write_size;
@@ -621,7 +623,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
 static int RAMFUNCTION hal_flash_write_faw(uint32_t faw)
 {
-    volatile uint8_t* cmdArea = (volatile uint8_t*)FLASH_FACI_CMD_AREA;
 
 #ifndef BIG_ENDIAN_ORDER
   #if defined(__CCRX__)
@@ -692,6 +693,6 @@ void* hal_get_primary_address(void)
 
 void* hal_get_update_address(void)
 {
-    return (void*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    return (void*)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
 }
 #endif

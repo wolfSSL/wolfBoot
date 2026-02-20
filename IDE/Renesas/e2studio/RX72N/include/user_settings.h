@@ -280,8 +280,4 @@
 #endif
 #define PRINTF_ENABLED
 #define NVM_FLASH_WRITEONCE
-#ifdef XMEMCPY
- #undef XMEMCPY
- #define XMEMCPY ram_memcpy
-#endif
 #endif /* !H_USER_SETTINGS_ */

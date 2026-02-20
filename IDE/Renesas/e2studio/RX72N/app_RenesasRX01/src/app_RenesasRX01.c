@@ -103,7 +103,7 @@ static void printPartitions(void)
     printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    printPart((uint8_t*)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
 }
 
 void main(void)
