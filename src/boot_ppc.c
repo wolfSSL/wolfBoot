@@ -31,6 +31,10 @@ extern unsigned int __bss_end__;
 extern unsigned int _stored_data;
 extern unsigned int _start_data;
 extern unsigned int _end_data;
+/* .ramcode section (RAMFUNCTION) - may be in separate memory region */
+extern unsigned int _stored_ramcode;
+extern unsigned int _start_ramcode;
+extern unsigned int _end_ramcode;
 
 extern void main(void);
 extern void hal_early_init(void);
@@ -113,32 +117,87 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 }
 #endif
 
+/* forward declaration */
+#ifndef BUILD_LOADER_STAGE1
+void flush_cache(uint32_t start_addr, uint32_t size);
+#endif
+
 void boot_entry_C(void)
 {
-    register unsigned int *dst, *src, *end;
+    volatile unsigned int *dst;
+    volatile const unsigned int *src;
+    volatile unsigned int *end;
 
-    hal_early_init();
-
-    /* Copy the .data section from flash to RAM */
-    src = (unsigned int*)&_stored_data;
-    dst = (unsigned int*)&_start_data;
-    end = (unsigned int*)&_end_data;
+    /* Copy .ramcode section FIRST - to CPC SRAM which is already available.
+     * This makes RAMFUNCTION code (memcpy, memmove) available before DDR.
+     * Use volatile to prevent compiler from transforming to memcpy call. */
+    src = (volatile const unsigned int*)&_stored_ramcode;
+    dst = (volatile unsigned int*)&_start_ramcode;
+    end = (volatile unsigned int*)&_end_ramcode;
     while (dst < end) {
         *dst = *src;
         dst++;
         src++;
     }
 
-    /* Initialize the BSS section to 0 */
-    dst = (unsigned int*)&__bss_start__;
-    end = (unsigned int*)&__bss_end__;
+#ifndef BUILD_LOADER_STAGE1
+    /* Flush D-cache and invalidate I-cache for .ramcode in CPC SRAM.
+     * PowerPC I/D caches are not coherent — explicit dcbst+icbi required. */
+    if ((uint32_t)&_end_ramcode > (uint32_t)&_start_ramcode) {
+        flush_cache((uint32_t)&_start_ramcode,
+            (uint32_t)&_end_ramcode - (uint32_t)&_start_ramcode);
+    }
+#endif
+
+    /* Now initialize DDR and other hardware */
+    hal_early_init();
+
+    /* Copy the .data section from flash to DDR.
+     * Use volatile to prevent the compiler from transforming this loop
+     * into a memcpy() call. */
+    src = (volatile const unsigned int*)&_stored_data;
+    dst = (volatile unsigned int*)&_start_data;
+    end = (volatile unsigned int*)&_end_data;
+    while (dst < end) {
+        *dst = *src;
+        dst++;
+        src++;
+    }
+
+#ifndef BUILD_LOADER_STAGE1
+    /* Flush D-cache and invalidate I-cache for .data region in DDR. */
+    flush_cache((uint32_t)&_start_data,
+        (uint32_t)&_end_data - (uint32_t)&_start_data);
+#endif
+
+    /* Initialize the BSS section to 0 (volatile prevents memset transform) */
+    dst = (volatile unsigned int*)&__bss_start__;
+    end = (volatile unsigned int*)&__bss_end__;
     while (dst < end) {
         *dst = 0U;
         dst++;
     }
 
     /* Run wolfBoot! */
+#ifdef ENABLE_DDR
+    /* DDR is initialized, .data and .bss are set up.
+     * Switch stack from CPC SRAM to DDR for:
+     * 1. Better performance (DDR stack is cacheable by L1/L2/CPC)
+     * 2. More stack space (64KB vs shared CPC SRAM)
+     * Uses assembly trampoline since we can't return after stack switch.
+     * The CPC SRAM will be released back to L2 cache in hal_init(). */
+    {
+        extern void ddr_call_with_stack(uint32_t func, uint32_t sp);
+        /* Zero DDR stack area using volatile to prevent memset transform */
+        volatile uint32_t *p = (volatile uint32_t *)DDR_STACK_BASE;
+        volatile uint32_t *e = (volatile uint32_t *)DDR_STACK_TOP;
+        while (p < e) { *p++ = 0; }
+        ddr_call_with_stack((uint32_t)main, DDR_STACK_TOP - 64);
+        /* Does not return */
+    }
+#else
     main();
+#endif
 }
 
 #ifndef BUILD_LOADER_STAGE1

@@ -3065,9 +3065,8 @@ Flash factory_custom.bin to NOR base 0xEC00_0000
 
 The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Support has been tested with the NAII 68PPC2.
 
-Example configurations for this target are provided in:
-* NXP T2080: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
-* NAII 68PPC2: [/config/examples/nxp-t2080-68ppc2.config](/config/examples/nxp-t2080-68ppc2.config).
+Example configuration: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
+Stock layout is default; for NAII 68PPC2, uncomment the "# NAII 68PPC2:" lines and comment the stock lines.
 
 ### Design NXP T2080 PPC
 
@@ -3084,9 +3083,10 @@ RM 4.3.3 Boot Space Translation
 By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
 
 The `make` creates a `factory.bin` image that can be programmed at `0xE8080000`
+(For NAII 68PPC2, first edit `nxp-t2080.config` to uncomment the NAII 68PPC2 lines.)
 
 ```
-cp ./config/examples/nxp-t2080-68ppc2.config .config
+cp ./config/examples/nxp-t2080.config .config
 make clean
 make keytools
 make
@@ -3133,12 +3133,22 @@ Example Boot Debug Output:
 
 ```
 wolfBoot Init
-Part: Active 0, Address E8080000
-Image size 1028
+Build: Feb 19 2026 13:24:56
+DDR Test: PASSED
+Ramcode: copied 2852 bytes to DDR, TLB9 remapped
+CPC: Released SRAM, full 2MB L2 cache enabled
+Flash: caching enabled (L1+L2+CPC)
+Versions: Boot 1, Update 0
+Trying Boot partition at 0xEFFC0000
+Boot partition: 0xEFFC0000 (sz 3164, ver 0x1, type 0x601)
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
 Firmware Valid
-Loading 1028 bytes to RAM at 19000
-Failed parsing DTB to load.
-Booting at 19000
+Copying image from 0xEFFC0200 to RAM at 0x19000 (3164 bytes)
+Failed parsing DTB to load
+Booting at 0x19000
+FDT: Invalid header! -1
 Test App
 
 0x00000001

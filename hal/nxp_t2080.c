@@ -23,278 +23,64 @@
 #include "printf.h"
 #include "image.h" /* for RAMFUNCTION */
 #include "nxp_ppc.h"
+#include "nxp_t2080.h"
 
-/* Tested on T2080E Rev 1.1, e6500 core 2.0, PVR 8040_0120 and SVR 8538_0011 */
-
-/* T2080 */
-#define SYS_CLK (600000000) /* 100MHz PLL with 6:1 = 600 MHz */
-
-/* T2080 PC16552D Dual UART */
-#define BAUD_RATE 115200
-#define UART_SEL 0 /* select UART 0 or 1 */
-
-#define UART_BASE(n) (CCSRBAR + 0x11C500 + (n * 0x1000))
-
-#define UART_RBR(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* receiver buffer register */
-#define UART_THR(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* transmitter holding register */
-#define UART_IER(n)  *((volatile uint8_t*)(UART_BASE(n) + 1)) /* interrupt enable register */
-#define UART_IIR(n)  *((volatile uint8_t*)(UART_BASE(n) + 2)) /* interrupt ID register */
-#define UART_FCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 2)) /* FIFO control register */
-#define UART_LCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 3)) /* line control register */
-#define UART_MCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 4)) /* modem control register */
-#define UART_LSR(n)  *((volatile uint8_t*)(UART_BASE(n) + 5)) /* line status register */
-
-/* enabled when UART_LCR_DLAB set */
-#define UART_DLB(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* divisor least significant byte register */
-#define UART_DMB(n)  *((volatile uint8_t*)(UART_BASE(n) + 1)) /* divisor most significant byte register */
-
-#define UART_FCR_TFR  (0x04) /* Transmitter FIFO reset */
-#define UART_FCR_RFR  (0x02) /* Receiver FIFO reset */
-#define UART_FCR_FEN  (0x01) /* FIFO enable */
-#define UART_LCR_DLAB (0x80) /* Divisor latch access bit */
-#define UART_LCR_WLS  (0x03) /* Word length select: 8-bits */
-#define UART_LSR_TEMT (0x40) /* Transmitter empty */
-#define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
-
-
-/* T2080 IFC (Integrated Flash Controller) - RM 13.3 */
-#define IFC_BASE        (CCSRBAR + 0x00124000)
-#define IFC_MAX_BANKS   8
-
-#define IFC_CSPR_EXT(n) *((volatile uint32_t*)(IFC_BASE + 0x000C + (n * 0xC))) /* Extended Base Address */
-#define IFC_CSPR(n)     *((volatile uint32_t*)(IFC_BASE + 0x0010 + (n * 0xC))) /* Chip-select Property */
-#define IFC_AMASK(n)    *((volatile uint32_t*)(IFC_BASE + 0x00A0 + (n * 0xC)))
-#define IFC_CSOR(n)     *((volatile uint32_t*)(IFC_BASE + 0x0130 + (n * 0xC)))
-#define IFC_CSOR_EXT(n) *((volatile uint32_t*)(IFC_BASE + 0x0134 + (n * 0xC)))
-#define IFC_FTIM0(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C0 + (n * 0x30)))
-#define IFC_FTIM1(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C4 + (n * 0x30)))
-#define IFC_FTIM2(n)    *((volatile uint32_t*)(IFC_BASE + 0x01C8 + (n * 0x30)))
-#define IFC_FTIM3(n)    *((volatile uint32_t*)(IFC_BASE + 0x01CC + (n * 0x30)))
-
-#define IFC_CSPR_PHYS_ADDR(x) (((uint32_t)x) & 0xFFFF0000) /* Physical base address */
-#define IFC_CSPR_PORT_SIZE_8  0x00000080 /* Port Size 8 */
-#define IFC_CSPR_PORT_SIZE_16 0x00000100 /* Port Size 16 */
-#define IFC_CSPR_WP           0x00000040 /* Write Protect */
-#define IFC_CSPR_MSEL_NOR     0x00000000 /* Mode Select - NOR */
-#define IFC_CSPR_MSEL_NAND    0x00000002 /* Mode Select - NAND */
-#define IFC_CSPR_MSEL_GPCM    0x00000004 /* Mode Select - GPCM (General-purpose chip-select machine) */
-#define IFC_CSPR_V            0x00000001 /* Bank Valid */
-
-/* NOR Timings (IFC clocks) */
-#define IFC_FTIM0_NOR_TACSE(n) (((n) & 0x0F) << 28) /* After address hold cycle */
-#define IFC_FTIM0_NOR_TEADC(n) (((n) & 0x3F) << 16) /* External latch address delay cycles */
-#define IFC_FTIM0_NOR_TAVDS(n) (((n) & 0x3F) << 8)  /* Delay between CS assertion */
-#define IFC_FTIM0_NOR_TEAHC(n) (((n) & 0x3F) << 0)  /* External latch address hold cycles */
-#define IFC_FTIM1_NOR_TACO(n)  (((n) & 0xFF) << 24) /* CS assertion to output enable */
-#define IFC_FTIM1_NOR_TRAD(n)  (((n) & 0x3F) << 8)  /* read access delay */
-#define IFC_FTIM1_NOR_TSEQ(n)  (((n) & 0x3F) << 0)  /* sequential read access delay */
-#define IFC_FTIM2_NOR_TCS(n)   (((n) & 0x0F) << 24) /* Chip-select assertion setup time */
-#define IFC_FTIM2_NOR_TCH(n)   (((n) & 0x0F) << 18) /* Chip-select hold time */
-#define IFC_FTIM2_NOR_TWPH(n)  (((n) & 0x3F) << 10) /* Chip-select hold time */
-#define IFC_FTIM2_NOR_TWP(n)   (((n) & 0xFF) << 0)  /* Write enable pulse width */
-
-/* GPCM Timings (IFC clocks) */
-#define IFC_FTIM0_GPCM_TACSE(n) (((n) & 0x0F) << 28) /* After address hold cycle */
-#define IFC_FTIM0_GPCM_TEADC(n) (((n) & 0x3F) << 16) /* External latch address delay cycles */
-#define IFC_FTIM0_GPCM_TEAHC(n) (((n) & 0x3F) << 0)  /* External latch address hold cycles */
-#define IFC_FTIM1_GPCM_TACO(n)  (((n) & 0xFF) << 24) /* CS assertion to output enable */
-#define IFC_FTIM1_GPCM_TRAD(n)  (((n) & 0x3F) << 8)  /* read access delay */
-#define IFC_FTIM2_GPCM_TCS(n)   (((n) & 0x0F) << 24) /* Chip-select assertion setup time */
-#define IFC_FTIM2_GPCM_TCH(n)   (((n) & 0x0F) << 18) /* Chip-select hold time */
-#define IFC_FTIM2_GPCM_TWP(n)   (((n) & 0xFF) << 0)  /* Write enable pulse width */
-
-/* IFC AMASK - RM Table 13-3 - Count of MSB minus 1 */
-enum ifc_amask_sizes {
-    IFC_AMASK_64KB =  0xFFFF0000,
-    IFC_AMASK_128KB = 0xFFFE0000,
-    IFC_AMASK_256KB = 0xFFFC0000,
-    IFC_AMASK_512KB = 0xFFF80000,
-    IFC_AMASK_1MB   = 0xFFF00000,
-    IFC_AMASK_2MB   = 0xFFE00000,
-    IFC_AMASK_4MB   = 0xFFC00000,
-    IFC_AMASK_8MB   = 0xFF800000,
-    IFC_AMASK_16MB  = 0xFF000000,
-    IFC_AMASK_32MB  = 0xFE000000,
-    IFC_AMASK_64MB  = 0xFC000000,
-    IFC_AMASK_128MB = 0xF8000000,
-    IFC_AMASK_256MB = 0xF0000000,
-    IFC_AMASK_512MB = 0xE0000000,
-    IFC_AMASK_1GB   = 0xC0000000,
-    IFC_AMASK_2GB   = 0x80000000,
-    IFC_AMASK_4GB   = 0x00000000,
-};
-
-
-/* NOR Flash */
-#define FLASH_BASE        0xE8000000
-
-#define FLASH_BANK_SIZE   (128*1024*1024)
-#define FLASH_PAGE_SIZE   (1024) /* program buffer */
-#define FLASH_SECTOR_SIZE (128*1024)
-#define FLASH_SECTORS     (FLASH_BANK_SIZE / FLASH_SECTOR_SIZE)
-#define FLASH_CFI_16BIT   0x02 /* word */
-#define FLASH_CFI_WIDTH   FLASH_CFI_16BIT
-
-#define FLASH_ERASE_TOUT  60000 /* Flash Erase Timeout (ms) */
-#define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
-
-
-#if 0
-    #define ENABLE_CPLD
-#endif
-/* CPLD */
-#define CPLD_BASE               0xFFDF0000
-#define CPLD_BASE_PHYS_HIGH     0xFULL
-
-#define CPLD_SPARE              0x00
-#define CPLD_SATA_MUX_SEL       0x02
-#define CPLD_BANK_SEL           0x04
-#define CPLD_FW_REV             0x06
-#define CPLD_TTL_RW             0x08
-#define CPLD_TTL_LPBK           0x0A
-#define CPLD_TTL_DATA           0x0C
-#define CPLD_PROC_STATUS        0x0E /* write 1 to enable proc reset function, reset default value is 0 */
-#define CPLD_FPGA_RDY           0x10 /* read only when reg read 0x0DB1 then fpga is ready */
-#define CPLD_PCIE_SW_RESET      0x12 /* write 1 to reset the PCIe switch */
-#define CPLD_WR_TTL_INT_EN      0x14
-#define CPLD_WR_TTL_INT_DIR     0x16
-#define CPLD_INT_STAT           0x18
-#define CPLD_WR_TEMP_ALM_OVRD   0x1A /* write 0 to enable temp shutdown. reset default value is 1 */
-#define CPLD_PWR_DWN_CMD        0x1C
-#define CPLD_TEMP_ALM_INT_STAT  0x1E
-#define CPLD_WR_TEMP_ALM_INT_EN 0x20
-
-#define CPLD_FLASH_BANK_0       0x00
-#define CPLD_FLASH_BANK_1       0x01
-
-#define CPLD_DATA(n) *((volatile uint8_t*)(CPLD_BASE + n))
-
-
-/* SATA */
-#define SATA_ENBL (*(volatile uint32_t *)(0xB1003F4C)) /* also saw 0xB4003F4C */
-
-/* DDR */
-/* NAII 68PPC2 - 8GB discrete DDR3 IM8G08D3EBDG-15E */
-/* 1333.333 MT/s data rate 8 GiB (DDR3, 64-bit, CL=9, ECC on) */
-#define DDR_N_RANKS     2
-#define DDR_RANK_DENS   0x100000000
-#define DDR_SDRAM_WIDTH 64
-#define DDR_EC_SDRAM_W  8
-#define DDR_N_ROW_ADDR  16
-#define DDR_N_COL_ADDR  10
-#define DDR_N_BANKS     8
-#define DDR_EDC_CONFIG  2
-#define DDR_BURSTL_MASK 0x0c
-#define DDR_TCKMIN_X_PS 1500
-#define DDR_TCMMAX_PS   3000
-#define DDR_CASLAT_X    0x000007E0
-#define DDR_TAA_PS      13500
-#define DDR_TRCD_PS     13500
-#define DDR_TRP_PS      13500
-#define DDR_TRAS_PS     36000
-#define DDR_TRC_PS      49500
-#define DDR_TFAW_PS     30000
-#define DDR_TWR_PS      15000
-#define DDR_TRFC_PS     260000
-#define DDR_TRRD_PS     6000
-#define DDR_TWTR_PS     7500
-#define DDR_TRTP_PS     7500
-#define DDR_REF_RATE_PS 7800000
-
-#define DDR_CS0_BNDS_VAL       0x000000FF
-#define DDR_CS1_BNDS_VAL       0x010001FF
-#define DDR_CS2_BNDS_VAL       0x0300033F
-#define DDR_CS3_BNDS_VAL       0x0340037F
-#define DDR_CS0_CONFIG_VAL     0x80044402
-#define DDR_CS1_CONFIG_VAL     0x80044402
-#define DDR_CS2_CONFIG_VAL     0x00000202
-#define DDR_CS3_CONFIG_VAL     0x00040202
-#define DDR_CS_CONFIG_2_VAL    0x00000000
-
-#define DDR_TIMING_CFG_0_VAL   0xFF530004
-#define DDR_TIMING_CFG_1_VAL   0x98906345
-#define DDR_TIMING_CFG_2_VAL   0x0040A114
-#define DDR_TIMING_CFG_3_VAL   0x010A1100
-#define DDR_TIMING_CFG_4_VAL   0x00000001
-#define DDR_TIMING_CFG_5_VAL   0x04402400
-
-#define DDR_SDRAM_MODE_VAL     0x00441C70
-#define DDR_SDRAM_MODE_2_VAL   0x00980000
-#define DDR_SDRAM_MODE_3_8_VAL 0x00000000
-#define DDR_SDRAM_MD_CNTL_VAL  0x00000000
-
-#define DDR_SDRAM_CFG_VAL      0xE7040000
-#define DDR_SDRAM_CFG_2_VAL    0x00401010
-
-#define DDR_SDRAM_INTERVAL_VAL 0x0C300100
-#define DDR_DATA_INIT_VAL      0xDEADBEEF
-#define DDR_SDRAM_CLK_CNTL_VAL 0x02400000
-#define DDR_ZQ_CNTL_VAL        0x89080600
-
-#define DDR_WRLVL_CNTL_VAL     0x8675F604
-#define DDR_WRLVL_CNTL_2_VAL   0x05060607
-#define DDR_WRLVL_CNTL_3_VAL   0x080A0A0B
-
-#define DDR_SDRAM_RCW_1_VAL    0x00000000
-#define DDR_SDRAM_RCW_2_VAL    0x00000000
-
-#define DDR_DDRCDR_1_VAL       0x80040000
-#define DDR_DDRCDR_2_VAL       0x00000001
-
-#define DDR_ERR_INT_EN_VAL     0x0000001D
-#define DDR_ERR_SBE_VAL        0x00010000
-
-
-/* 12.4 DDR Memory Map */
-#define DDR_BASE           (CCSRBAR + 0x8000)
-
-#define DDR_CS_BNDS(n)     *((volatile uint32_t*)(DDR_BASE + 0x000 + (n * 8))) /* Chip select n memory bounds */
-#define DDR_CS_CONFIG(n)   *((volatile uint32_t*)(DDR_BASE + 0x080 + (n * 4))) /* Chip select n configuration */
-#define DDR_CS_CONFIG_2(n) *((volatile uint32_t*)(DDR_BASE + 0x0C0 + (n * 4))) /* Chip select n configuration 2 */
-#define DDR_SDRAM_CFG      *((volatile uint32_t*)(DDR_BASE + 0x110)) /* DDR SDRAM control configuration */
-#define DDR_SDRAM_CFG_2    *((volatile uint32_t*)(DDR_BASE + 0x114)) /* DDR SDRAM control configuration 2 */
-#define DDR_SDRAM_INTERVAL *((volatile uint32_t*)(DDR_BASE + 0x124)) /* DDR SDRAM interval configuration */
-#define DDR_INIT_ADDR      *((volatile uint32_t*)(DDR_BASE + 0x148)) /* DDR training initialization address */
-#define DDR_INIT_EXT_ADDR  *((volatile uint32_t*)(DDR_BASE + 0x14C)) /* DDR training initialization extended address */
-#define DDR_DATA_INIT      *((volatile uint32_t*)(DDR_BASE + 0x128)) /* DDR training initialization value */
-#define DDR_TIMING_CFG_0   *((volatile uint32_t*)(DDR_BASE + 0x104)) /* DDR SDRAM timing configuration 0 */
-#define DDR_TIMING_CFG_1   *((volatile uint32_t*)(DDR_BASE + 0x108)) /* DDR SDRAM timing configuration 1 */
-#define DDR_TIMING_CFG_2   *((volatile uint32_t*)(DDR_BASE + 0x10C)) /* DDR SDRAM timing configuration 2 */
-#define DDR_TIMING_CFG_3   *((volatile uint32_t*)(DDR_BASE + 0x100)) /* DDR SDRAM timing configuration 3 */
-#define DDR_TIMING_CFG_4   *((volatile uint32_t*)(DDR_BASE + 0x160)) /* DDR SDRAM timing configuration 4 */
-#define DDR_TIMING_CFG_5   *((volatile uint32_t*)(DDR_BASE + 0x164)) /* DDR SDRAM timing configuration 5 */
-#define DDR_TIMING_CFG_6   *((volatile uint32_t*)(DDR_BASE + 0x168)) /* DDR SDRAM timing configuration 6 */
-#define DDR_ZQ_CNTL        *((volatile uint32_t*)(DDR_BASE + 0x170)) /* DDR ZQ calibration control */
-#define DDR_WRLVL_CNTL     *((volatile uint32_t*)(DDR_BASE + 0x174)) /* DDR write leveling control */
-#define DDR_WRLVL_CNTL_2   *((volatile uint32_t*)(DDR_BASE + 0x190)) /* DDR write leveling control 2 */
-#define DDR_WRLVL_CNTL_3   *((volatile uint32_t*)(DDR_BASE + 0x194)) /* DDR write leveling control 3 */
-#define DDR_SR_CNTR        *((volatile uint32_t*)(DDR_BASE + 0x17C)) /* DDR Self Refresh Counter */
-#define DDR_SDRAM_RCW_1    *((volatile uint32_t*)(DDR_BASE + 0x180)) /* DDR Register Control Word 1 */
-#define DDR_SDRAM_RCW_2    *((volatile uint32_t*)(DDR_BASE + 0x184)) /* DDR Register Control Word 2 */
-#define DDR_DDRCDR_1       *((volatile uint32_t*)(DDR_BASE + 0xB28)) /* DDR Control Driver Register 1 */
-#define DDR_DDRCDR_2       *((volatile uint32_t*)(DDR_BASE + 0xB2C)) /* DDR Control Driver Register 2 */
-#define DDR_DDRDSR_1       *((volatile uint32_t*)(DDR_BASE + 0xB20)) /* DDR Debug Status Register 1 */
-#define DDR_DDRDSR_2       *((volatile uint32_t*)(DDR_BASE + 0xB24)) /* DDR Debug Status Register 2 */
-#define DDR_ERR_DISABLE    *((volatile uint32_t*)(DDR_BASE + 0xE44)) /* Memory error disable */
-#define DDR_ERR_INT_EN     *((volatile uint32_t*)(DDR_BASE + 0xE48)) /* Memory error interrupt enable */
-#define DDR_ERR_SBE        *((volatile uint32_t*)(DDR_BASE + 0xE58)) /* Single-Bit ECC memory error management */
-#define DDR_SDRAM_MODE     *((volatile uint32_t*)(DDR_BASE + 0x118)) /* DDR SDRAM mode configuration */
-#define DDR_SDRAM_MODE_2   *((volatile uint32_t*)(DDR_BASE + 0x11C)) /* DDR SDRAM mode configuration 2 */
-#define DDR_SDRAM_MODE_3   *((volatile uint32_t*)(DDR_BASE + 0x200)) /* DDR SDRAM mode configuration 3 */
-#define DDR_SDRAM_MODE_4   *((volatile uint32_t*)(DDR_BASE + 0x204)) /* DDR SDRAM mode configuration 4 */
-#define DDR_SDRAM_MODE_5   *((volatile uint32_t*)(DDR_BASE + 0x208)) /* DDR SDRAM mode configuration 5 */
-#define DDR_SDRAM_MODE_6   *((volatile uint32_t*)(DDR_BASE + 0x20C)) /* DDR SDRAM mode configuration 6 */
-#define DDR_SDRAM_MODE_7   *((volatile uint32_t*)(DDR_BASE + 0x210)) /* DDR SDRAM mode configuration 7 */
-#define DDR_SDRAM_MODE_8   *((volatile uint32_t*)(DDR_BASE + 0x214)) /* DDR SDRAM mode configuration 8 */
-#define DDR_SDRAM_MD_CNTL  *((volatile uint32_t*)(DDR_BASE + 0x120)) /* DDR SDRAM mode control */
-#define DDR_SDRAM_CLK_CNTL *((volatile uint32_t*)(DDR_BASE + 0x130)) /* DDR SDRAM clock control */
-
-#define DDR_SDRAM_CFG_MEM_EN   0x80000000 /* SDRAM interface logic is enabled */
-#define DDR_SDRAM_CFG_2_D_INIT 0x00000010 /* data initialization in progress */
-
-
-/* generic share NXP QorIQ driver code */
+/* generic shared NXP QorIQ driver code */
 #include "nxp_ppc.c"
+
+#define ENABLE_IFC
+#define ENABLE_BUS_CLK_CALC
+
+#ifndef BUILD_LOADER_STAGE1
+    #define ENABLE_MP   /* multi-core support */
+#endif
+
+/* Forward declarations */
+static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector);
+#ifdef ENABLE_MP
+static void hal_mp_init(void);
+#endif
+
+/* AMD CFI Commands (Spansion/Cypress) */
+#define FLASH_CMD_READ_ID            0x90
+#define AMD_CMD_RESET                0xF0
+#define AMD_CMD_WRITE                0xA0
+#define AMD_CMD_ERASE_START          0x80
+#define AMD_CMD_ERASE_SECTOR         0x30
+#define AMD_CMD_UNLOCK_START         0xAA
+#define AMD_CMD_UNLOCK_ACK           0x55
+#define AMD_CMD_WRITE_TO_BUFFER      0x25
+#define AMD_CMD_WRITE_BUFFER_CONFIRM 0x29
+#define AMD_CMD_SET_PPB_ENTRY        0xC0
+#define AMD_CMD_SET_PPB_EXIT_BC1     0x90
+#define AMD_CMD_SET_PPB_EXIT_BC2     0x00
+#define AMD_CMD_PPB_UNLOCK_BC1       0x80
+#define AMD_CMD_PPB_UNLOCK_BC2       0x30
+#define AMD_CMD_PPB_LOCK_BC1         0xA0
+#define AMD_CMD_PPB_LOCK_BC2         0x00
+
+#define AMD_STATUS_TOGGLE            0x40
+#define AMD_STATUS_ERROR             0x20
+
+/* Flash unlock addresses */
+#if FLASH_CFI_WIDTH == 16
+#define FLASH_UNLOCK_ADDR1 0x555
+#define FLASH_UNLOCK_ADDR2 0x2AA
+#else
+#define FLASH_UNLOCK_ADDR1 0xAAA
+#define FLASH_UNLOCK_ADDR2 0x555
+#endif
+
+/* Flash IO Helpers */
+#if FLASH_CFI_WIDTH == 16
+#define FLASH_IO8_WRITE(sec, n, val)  *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (((val) << 8) | (val))
+#define FLASH_IO16_WRITE(sec, n, val) *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (val)
+#define FLASH_IO8_READ(sec, n)  (uint8_t)(*((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))))
+#define FLASH_IO16_READ(sec, n)           *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2)))
+#else
+#define FLASH_IO8_WRITE(sec, n, val)      *((volatile uint8_t*)(FLASH_BASE_ADDR  + (FLASH_SECTOR_SIZE * (sec)) + (n))) = (val)
+#define FLASH_IO8_READ(sec, n)            *((volatile uint8_t*)(FLASH_BASE_ADDR  + (FLASH_SECTOR_SIZE * (sec)) + (n)))
+#endif
 
 
 #ifdef DEBUG_UART
@@ -307,20 +93,20 @@ void uart_init(void)
      */
     uint32_t div = (((SYS_CLK / 2.0) / (16 * BAUD_RATE)) + 0.5);
 
-    while (!(UART_LSR(UART_SEL) & UART_LSR_TEMT))
+    while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
        ;
 
     /* set ier, fcr, mcr */
-    UART_IER(UART_SEL) = 0;
-    UART_FCR(UART_SEL) = (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN);
+    set8(UART_IER(UART_SEL), 0);
+    set8(UART_FCR(UART_SEL), (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN));
 
     /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    UART_LCR(UART_SEL) = (UART_LCR_DLAB | UART_LCR_WLS);
+    set8(UART_LCR(UART_SEL), (UART_LCR_DLAB | UART_LCR_WLS));
     /* set divisor */
-    UART_DLB(UART_SEL) = (div & 0xff);
-    UART_DMB(UART_SEL) = ((div>>8) & 0xff);
+    set8(UART_DLB(UART_SEL), (div & 0xff));
+    set8(UART_DMB(UART_SEL), ((div>>8) & 0xff));
     /* disable rate access (DLAB=0) */
-    UART_LCR(UART_SEL) = (UART_LCR_WLS);
+    set8(UART_LCR(UART_SEL), (UART_LCR_WLS));
 }
 
 void uart_write(const char* buf, uint32_t sz)
@@ -329,11 +115,11 @@ void uart_write(const char* buf, uint32_t sz)
     while (sz-- > 0) {
         char c = buf[pos++];
         if (c == '\n') { /* handle CRLF */
-            while ((UART_LSR(UART_SEL) & UART_LSR_THRE) == 0);
-            UART_THR(UART_SEL) = '\r';
+            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
+            set8(UART_THR(UART_SEL), '\r');
         }
-        while ((UART_LSR(UART_SEL) & UART_LSR_THRE) == 0);
-        UART_THR(UART_SEL) = c;
+        while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
+        set8(UART_THR(UART_SEL), c);
     }
 }
 #endif /* DEBUG_UART */
@@ -344,114 +130,218 @@ void law_init(void)
     set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
 }
 
-static void hal_flash_init(void)
+/* Clock helpers */
+#ifdef ENABLE_BUS_CLK_CALC
+static uint32_t hal_get_core_clk(void)
 {
-    /* IFC - NOR Flash */
-    /* LAW is also set in boot_ppc_start.S:flash_law */
-    set_law(1, FLASH_BASE_PHYS_HIGH, FLASH_BASE, LAW_TRGT_IFC, LAW_SIZE_128MB, 1);
+    /* compute core clock (system input * ratio) */
+    uint32_t core_clk;
+    uint32_t core_ratio = get32(CLOCKING_PLLCNGSR(0)); /* see CGA_PLL1_RAT in RCW */
+    /* shift by 1 and mask */
+    core_ratio = ((core_ratio >> 1) & 0x3F);
+    core_clk = SYS_CLK * core_ratio;
+    return core_clk;
+}
+static uint32_t hal_get_plat_clk(void)
+{
+    /* compute platform clock (system input * ratio) */
+    uint32_t plat_clk;
+    uint32_t plat_ratio = get32(CLOCKING_PLLPGSR); /* see SYS_PLL_RAT in RCW */
+    /* shift by 1 and mask */
+    plat_ratio = ((plat_ratio >> 1) & 0x1F);
+    plat_clk = SYS_CLK * plat_ratio;
+    return plat_clk;
+}
+static uint32_t hal_get_bus_clk(void)
+{
+    /* compute bus clock (platform clock / 2) */
+    uint32_t bus_clk = hal_get_plat_clk() / 2;
+    return bus_clk;
+}
+#else
+#define hal_get_core_clk() (uint32_t)(SYS_CLK * 14)
+#define hal_get_plat_clk() (uint32_t)(SYS_CLK * 4)
+#define hal_get_bus_clk()  (uint32_t)(hal_get_plat_clk() / 2)
+#endif
 
-    /* NOR IFC Flash Timing Parameters */
-    IFC_FTIM0(0) = (IFC_FTIM0_NOR_TACSE(4) | \
-                    IFC_FTIM0_NOR_TEADC(5) | \
-                    IFC_FTIM0_NOR_TEAHC(5));
-    IFC_FTIM1(0) = (IFC_FTIM1_NOR_TACO(53) |
-                    IFC_FTIM1_NOR_TRAD(26) |
-                    IFC_FTIM1_NOR_TSEQ(19));
-    IFC_FTIM2(0) = (IFC_FTIM2_NOR_TCS(4) |
-                    IFC_FTIM2_NOR_TCH(4) |
-                    IFC_FTIM2_NOR_TWPH(14) |
-                    IFC_FTIM2_NOR_TWP(28));
-    IFC_FTIM3(0) = 0;
-    /* NOR IFC Definitions (CS0) */
-    IFC_CSPR_EXT(0) = (0xF);
-    IFC_CSPR(0) =     (IFC_CSPR_PHYS_ADDR(FLASH_BASE) | \
-                       IFC_CSPR_PORT_SIZE_16 | \
-                       IFC_CSPR_MSEL_NOR | \
-                       IFC_CSPR_V);
-    IFC_AMASK(0) = IFC_AMASK_128MB;
-    IFC_CSOR(0) = 0x0000000C; /* TRHZ (80 clocks for read enable high) */
+#define TIMEBASE_CLK_DIV 16
+#define TIMEBASE_HZ (hal_get_plat_clk() / TIMEBASE_CLK_DIV)
+#define DELAY_US  (TIMEBASE_HZ / 1000000)
+static void udelay(uint32_t delay_us)
+{
+    wait_ticks(delay_us * DELAY_US);
 }
 
-static void hal_ddr_init(void)
+#if defined(ENABLE_IFC) && !defined(BUILD_LOADER_STAGE1)
+static int hal_flash_getid(void)
+{
+    uint8_t manfid[4];
+
+    hal_flash_unlock_sector(0);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, FLASH_CMD_READ_ID);
+    udelay(1000);
+
+    manfid[0] = FLASH_IO8_READ(0, 0);  /* Manufacture Code */
+    manfid[1] = FLASH_IO8_READ(0, 1);  /* Device Code 1 */
+    manfid[2] = FLASH_IO8_READ(0, 14); /* Device Code 2 */
+    manfid[3] = FLASH_IO8_READ(0, 15); /* Device Code 3 */
+
+    /* Exit read info */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    udelay(1);
+
+    wolfBoot_printf("Flash: Mfg 0x%x, Device Code 0x%x/0x%x/0x%x\n",
+        manfid[0], manfid[1], manfid[2], manfid[3]);
+
+    return 0;
+}
+#endif /* ENABLE_IFC && !BUILD_LOADER_STAGE1 */
+
+static void hal_flash_init(void)
+{
+#ifdef ENABLE_IFC
+    uint32_t cspr;
+
+    /* IFC CS0 - NOR Flash
+     * Do NOT reprogram IFC CS0 base address, port size, AMASK, CSOR, or
+     * FTIM while executing from flash (XIP). The boot ROM already
+     * configured CS0 correctly.
+     *
+     * However, the boot ROM may set IFC_CSPR_WP (write-protect), which
+     * blocks all write cycles to the flash. This prevents AMD command
+     * sequences (erase/program) from reaching the chips. Clearing just
+     * the WP bit is safe during XIP — it doesn't change chip-select
+     * decode, only enables write forwarding. */
+    cspr = get32(IFC_CSPR(0));
+#ifdef DEBUG_UART
+    wolfBoot_printf("IFC CSPR0: 0x%x%s\n", cspr,
+        (cspr & IFC_CSPR_WP) ? " (WP set)" : "");
+#endif
+    /* WP clearing is done in hal_flash_clear_wp() from RAMFUNCTION code.
+     * T2080RM requires V=0 before modifying IFC_CSPR, which is not safe
+     * during XIP. The RAMFUNCTION code runs from DDR with flash TLB
+     * guarded, so it can safely toggle V=0 -> modify -> V=1. */
+
+    /* Note: hal_flash_getid() is disabled because AMD Autoselect mode
+     * affects the entire flash bank. Since wolfBoot runs XIP from the same
+     * bank (CS0), entering Autoselect mode crashes instruction fetch.
+     * Flash write/erase use RAMFUNCTION to execute from DDR during
+     * flash command mode (after .ramcode relocation in hal_init). */
+#endif /* ENABLE_IFC */
+}
+
+void hal_ddr_init(void)
 {
 #ifdef ENABLE_DDR
+    uint32_t reg;
+
     /* Map LAW for DDR */
-    set_law(4, 0, 0, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
+    set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
 
     /* If DDR is already enabled then just return */
-    if (DDR_SDRAM_CFG & DDR_SDRAM_CFG_MEM_EN) {
+    reg = get32(DDR_SDRAM_CFG);
+    if (reg & DDR_SDRAM_CFG_MEM_EN) {
         return;
     }
 
+    /* Set clock early for clock / pin */
+    set32(DDR_SDRAM_CLK_CNTL, DDR_SDRAM_CLK_CNTL_VAL);
+
     /* Setup DDR CS (chip select) bounds */
-    DDR_CS_BNDS(0) = DDR_CS0_BNDS_VAL;
-    DDR_CS_CONFIG(0) = DDR_CS0_CONFIG_VAL;
-    DDR_CS_CONFIG_2(0) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(1) = DDR_CS1_BNDS_VAL;
-    DDR_CS_CONFIG(1) = DDR_CS1_CONFIG_VAL;
-    DDR_CS_CONFIG_2(1) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(2) = DDR_CS2_BNDS_VAL;
-    DDR_CS_CONFIG(2) = DDR_CS2_CONFIG_VAL;
-    DDR_CS_CONFIG_2(2) = DDR_CS_CONFIG_2_VAL;
-    DDR_CS_BNDS(3) = DDR_CS3_BNDS_VAL;
-    DDR_CS_CONFIG(3) = DDR_CS3_CONFIG_VAL;
-    DDR_CS_CONFIG_2(3) = DDR_CS_CONFIG_2_VAL;
+    set32(DDR_CS_BNDS(0), DDR_CS0_BNDS_VAL);
+    set32(DDR_CS_CONFIG(0), DDR_CS0_CONFIG_VAL);
+    set32(DDR_CS_CONFIG_2(0), DDR_CS_CONFIG_2_VAL);
+    set32(DDR_CS_BNDS(1), DDR_CS1_BNDS_VAL);
+    set32(DDR_CS_CONFIG(1), DDR_CS1_CONFIG_VAL);
+    set32(DDR_CS_CONFIG_2(1), DDR_CS_CONFIG_2_VAL);
+    set32(DDR_CS_BNDS(2), DDR_CS2_BNDS_VAL);
+    set32(DDR_CS_CONFIG(2), DDR_CS2_CONFIG_VAL);
+    set32(DDR_CS_CONFIG_2(2), DDR_CS_CONFIG_2_VAL);
+    set32(DDR_CS_BNDS(3), DDR_CS3_BNDS_VAL);
+    set32(DDR_CS_CONFIG(3), DDR_CS3_CONFIG_VAL);
+    set32(DDR_CS_CONFIG_2(3), DDR_CS_CONFIG_2_VAL);
 
     /* DDR SDRAM timing configuration */
-    DDR_TIMING_CFG_0 = DDR_TIMING_CFG_0_VAL;
-    DDR_TIMING_CFG_1 = DDR_TIMING_CFG_1_VAL;
-    DDR_TIMING_CFG_2 = DDR_TIMING_CFG_2_VAL;
-    DDR_TIMING_CFG_3 = DDR_TIMING_CFG_3_VAL;
-    DDR_TIMING_CFG_4 = DDR_TIMING_CFG_4_VAL;
-    DDR_TIMING_CFG_5 = DDR_TIMING_CFG_5_VAL;
+    set32(DDR_TIMING_CFG_3, DDR_TIMING_CFG_3_VAL);
+    set32(DDR_TIMING_CFG_0, DDR_TIMING_CFG_0_VAL);
+    set32(DDR_TIMING_CFG_1, DDR_TIMING_CFG_1_VAL);
+    set32(DDR_TIMING_CFG_2, DDR_TIMING_CFG_2_VAL);
+    set32(DDR_TIMING_CFG_4, DDR_TIMING_CFG_4_VAL);
+    set32(DDR_TIMING_CFG_5, DDR_TIMING_CFG_5_VAL);
+
+    set32(DDR_ZQ_CNTL, DDR_ZQ_CNTL_VAL);
 
     /* DDR SDRAM mode configuration */
-    DDR_SDRAM_MODE =   DDR_SDRAM_MODE_VAL;
-    DDR_SDRAM_MODE_2 = DDR_SDRAM_MODE_2_VAL;
-    DDR_SDRAM_MODE_3 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MODE_4 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MODE_5 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MODE_6 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MODE_7 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MODE_8 = DDR_SDRAM_MODE_3_8_VAL;
-    DDR_SDRAM_MD_CNTL = DDR_SDRAM_MD_CNTL_VAL;
+    set32(DDR_SDRAM_MODE, DDR_SDRAM_MODE_VAL);
+    set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
+    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
 
     /* DDR Configuration */
-    DDR_SDRAM_INTERVAL = DDR_SDRAM_INTERVAL_VAL;
-    DDR_SDRAM_CLK_CNTL = DDR_SDRAM_CLK_CNTL_VAL;
-    DDR_DATA_INIT = DDR_DATA_INIT_VAL;
-    DDR_ZQ_CNTL = DDR_ZQ_CNTL_VAL;
-    DDR_WRLVL_CNTL = DDR_WRLVL_CNTL_VAL;
-    DDR_WRLVL_CNTL_2 = DDR_WRLVL_CNTL_2_VAL;
-    DDR_WRLVL_CNTL_3 = DDR_WRLVL_CNTL_3_VAL;
-    DDR_SR_CNTR = 0;
-    DDR_SDRAM_RCW_1 = 0;
-    DDR_SDRAM_RCW_2 = 0;
-    DDR_DDRCDR_1 = DDR_DDRCDR_1_VAL;
-    DDR_DDRCDR_2 = DDR_DDRCDR_2_VAL;
-    DDR_SDRAM_CFG_2 = DDR_SDRAM_CFG_2_VAL;
-    DDR_INIT_ADDR = 0;
-    DDR_INIT_EXT_ADDR = 0;
-    DDR_ERR_DISABLE = 0;
-    DDR_ERR_INT_EN = DDR_ERR_INT_EN_VAL;
-    DDR_ERR_SBE = DDR_ERR_SBE_VAL;
+    set32(DDR_SDRAM_INTERVAL, DDR_SDRAM_INTERVAL_VAL);
+    set32(DDR_DATA_INIT, DDR_DATA_INIT_VAL);
+    set32(DDR_WRLVL_CNTL, DDR_WRLVL_CNTL_VAL);
+    set32(DDR_WRLVL_CNTL_2, DDR_WRLVL_CNTL_2_VAL);
+    set32(DDR_WRLVL_CNTL_3, DDR_WRLVL_CNTL_3_VAL);
+    set32(DDR_SR_CNTR, 0);
+    set32(DDR_SDRAM_RCW_1, 0);
+    set32(DDR_SDRAM_RCW_2, 0);
+    set32(DDR_DDRCDR_1, DDR_DDRCDR_1_VAL);
+    set32(DDR_SDRAM_CFG_2, (DDR_SDRAM_CFG_2_VAL | DDR_SDRAM_CFG_2_D_INIT));
+    set32(DDR_INIT_ADDR, 0);
+    set32(DDR_INIT_EXT_ADDR, 0);
+    set32(DDR_DDRCDR_2, DDR_DDRCDR_2_VAL);
+    set32(DDR_ERR_DISABLE, 0);
+    set32(DDR_ERR_INT_EN, DDR_ERR_INT_EN_VAL);
+    set32(DDR_ERR_SBE, DDR_ERR_SBE_VAL);
 
     /* Set values, but do not enable the DDR yet */
-    DDR_SDRAM_CFG = (DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
-
-    /* TODO: Errata A009942 */
-
-    /* Enable controller */
-    DDR_SDRAM_CFG |= DDR_SDRAM_CFG_MEM_EN;
+    set32(DDR_SDRAM_CFG, DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
     __asm__ __volatile__("sync;isync");
 
-    /* Wait for data initialization is complete */
-    while ((DDR_SDRAM_CFG_2 & DDR_SDRAM_CFG_2_D_INIT));
-#endif
+    /* busy wait for ~500us */
+    udelay(500);
+    __asm__ __volatile__("sync;isync");
+
+    /* Enable controller */
+    reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
+    set32(DDR_SDRAM_CFG, reg | DDR_SDRAM_CFG_MEM_EN);
+    __asm__ __volatile__("sync;isync");
+
+    /* Wait for data initialization to complete */
+    while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
+        /* busy wait loop - throttle polling */
+        udelay(10000);
+    }
+#endif /* ENABLE_DDR */
 }
 
 void hal_early_init(void)
 {
+    /* Enable timebase on core 0 */
+    set32(RCPM_PCTBENR, (1 << 0));
+
+    /* Only invalidate the CPC if it is NOT configured as SRAM.
+     * When CPC SRAM is active (used as stack), writing CPCFI|CPCLFC
+     * without preserving CPCE would disable the CPC and corrupt the
+     * stack. Skip invalidation when SRAMEN is set (T2080RM 8.4.2.2). */
+    if (!(get32((volatile uint32_t*)(CPC_BASE + CPCSRCR0)) & CPCSRCR0_SRAMEN)) {
+        set32((volatile uint32_t*)(CPC_BASE + CPCCSR0),
+            (CPCCSR0_CPCFI | CPCCSR0_CPCLFC));
+        /* Wait for self-clearing invalidate bits */
+        while (get32((volatile uint32_t*)(CPC_BASE + CPCCSR0)) &
+            (CPCCSR0_CPCFI | CPCCSR0_CPCLFC));
+    }
+
+    /* Set DCSR space = 1G */
+    set32(DCFG_DCSR, (get32(DCFG_DCSR) | CORENET_DCSR_SZ_1G));
+    get32(DCFG_DCSR); /* read back to sync */
+
     hal_ddr_init();
 }
 
@@ -459,27 +349,27 @@ static void hal_cpld_init(void)
 {
 #ifdef ENABLE_CPLD
     /* CPLD IFC Timing Parameters */
-    IFC_FTIM0(3) = (IFC_FTIM0_GPCM_TACSE(16UL) |
-                    IFC_FTIM0_GPCM_TEADC(16UL) |
-                    IFC_FTIM0_GPCM_TEAHC(16UL));
-    IFC_FTIM1(3) = (IFC_FTIM1_GPCM_TACO(16UL) |
-                    IFC_FTIM1_GPCM_TRAD(31UL));
-    IFC_FTIM2(3) = (IFC_FTIM2_GPCM_TCS(16UL) |
-                    IFC_FTIM2_GPCM_TCH(8UL) |
-                    IFC_FTIM2_GPCM_TWP(31UL));
-    IFC_FTIM3(3) = 0;
+    set32(IFC_FTIM0(3), (IFC_FTIM0_GPCM_TACSE(16UL) |
+                         IFC_FTIM0_GPCM_TEADC(16UL) |
+                         IFC_FTIM0_GPCM_TEAHC(16UL)));
+    set32(IFC_FTIM1(3), (IFC_FTIM1_GPCM_TACO(16UL) |
+                         IFC_FTIM1_GPCM_TRAD(31UL)));
+    set32(IFC_FTIM2(3), (IFC_FTIM2_GPCM_TCS(16UL) |
+                         IFC_FTIM2_GPCM_TCH(8UL) |
+                         IFC_FTIM2_GPCM_TWP(31UL)));
+    set32(IFC_FTIM3(3), 0);
 
     /* CPLD IFC Definitions (CS3) */
-    IFC_CSPR_EXT(3) = CPLD_BASE_PHYS_HIGH;
-    IFC_CSPR(3) =     (IFC_CSPR_PHYS_ADDR(CPLD_BASE) |
-                       IFC_CSPR_PORT_SIZE_16 |
-                       IFC_CSPR_MSEL_GPCM |
-                       IFC_CSPR_V);
-    IFC_AMASK(3) = IFC_AMASK_64KB;
-    IFC_CSOR(3) = 0;
+    set32(IFC_CSPR_EXT(3), CPLD_BASE_PHYS_HIGH);
+    set32(IFC_CSPR(3),     (IFC_CSPR_PHYS_ADDR(CPLD_BASE) |
+                            IFC_CSPR_PORT_SIZE_16 |
+                            IFC_CSPR_MSEL_GPCM |
+                            IFC_CSPR_V));
+    set32(IFC_AMASK(3), IFC_AMASK_64KB);
+    set32(IFC_CSOR(3), 0);
 
-    /* IFC - CPLD */
-    set_law(2, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
+    /* IFC - CPLD (use LAW 5; LAW 2 is used for CPC SRAM) */
+    set_law(5, CPLD_BASE_PHYS_HIGH, CPLD_BASE,
         LAW_TRGT_IFC, LAW_SIZE_4KB, 1);
 
     /* CPLD - TBL=1, Entry 17 */
@@ -489,84 +379,766 @@ static void hal_cpld_init(void)
 #endif
 }
 
+#ifdef ENABLE_DDR
+/* Release CPC SRAM back to L2 cache mode.
+ * Call after stack is relocated to DDR (done in boot_entry_C).
+ * This gives us the full 2MB CPC as L3 cache for better performance.
+ *
+ * Before releasing CPC SRAM, .ramcode (RAMFUNCTION) is copied to DDR
+ * and TLB9 is remapped: VA 0xF8F00000 -> PA DDR_RAMCODE_ADDR so that
+ * RAMFUNCTION code (memcpy, wolfBoot_start, etc.) continues to work. */
+static void hal_reconfigure_cpc_as_cache(void)
+{
+    volatile uint32_t *cpc_csr0 = (volatile uint32_t *)(CPC_BASE + CPCCSR0);
+    volatile uint32_t *cpc_srcr0 = (volatile uint32_t *)(CPC_BASE + CPCSRCR0);
+    uint32_t reg;
+
+    /* Linker symbols for .ramcode section boundaries */
+    extern unsigned int _start_ramcode;
+    extern unsigned int _end_ramcode;
+    uint32_t ramcode_size = (uint32_t)&_end_ramcode - (uint32_t)&_start_ramcode;
+
+    /* Step 1: Copy .ramcode from CPC SRAM to DDR.
+     * Must use volatile loop — memcpy itself is in .ramcode! */
+    if (ramcode_size > 0) {
+        volatile const uint32_t *src = (volatile const uint32_t *)&_start_ramcode;
+        volatile uint32_t *dst = (volatile uint32_t *)DDR_RAMCODE_ADDR;
+        volatile uint32_t *end = (volatile uint32_t *)(DDR_RAMCODE_ADDR +
+                                                        ramcode_size);
+        while (dst < end) {
+            *dst++ = *src++;
+        }
+
+        /* Flush D-cache and invalidate I-cache for the DDR copy */
+        flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
+
+        /* Step 2: Remap TLB9: same VA (0xF8F00000) -> DDR physical address.
+         * All .ramcode references use VA 0xF8F00000, so this makes them
+         * transparently access the DDR copy instead of CPC SRAM. */
+        set_tlb(1, 9,
+            L2SRAM_ADDR, DDR_RAMCODE_ADDR, 0,
+            MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+            INITIAL_SRAM_BOOKE_SZ, 1);
+
+        /* Ensure TLB update and I-cache pick up new mapping */
+        invalidate_icache();
+    }
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("Ramcode: copied %d bytes to DDR, TLB9 remapped\n",
+        ramcode_size);
+#endif
+
+    /* Step 3: Flush the CPC to push any dirty SRAM data out.
+     * Read-modify-write to preserve CPCE/CPCPE enable bits. */
+    reg = *cpc_csr0;
+    reg |= CPCCSR0_CPCFL;
+    *cpc_csr0 = reg;
+    __asm__ __volatile__("sync; isync" ::: "memory");
+
+    /* Step 4: Poll until flush completes (CPCFL clears) */
+    while (*cpc_csr0 & CPCCSR0_CPCFL);
+
+    /* Step 5: Disable SRAM mode - release all ways back to cache */
+    *cpc_srcr0 = 0;
+    __asm__ __volatile__("sync; isync" ::: "memory");
+
+    /* Step 6: Disable CPC SRAM LAW (no longer needed — TLB9 now routes
+     * to DDR via LAW4, not CPC SRAM via LAW2).
+     * Keep TLB9 — it's remapped to DDR and still in use. */
+    set32(LAWAR(2), 0);
+
+    /* Step 7: Flash invalidate CPC to start fresh as cache */
+    reg = *cpc_csr0;
+    reg |= CPCCSR0_CPCFI;
+    *cpc_csr0 = reg;
+    __asm__ __volatile__("sync; isync" ::: "memory");
+    while (*cpc_csr0 & CPCCSR0_CPCFI);
+
+    /* CPC remains enabled (CPCE/CPCPE preserved), now all 2MB as cache */
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("CPC: Released SRAM, full 2MB L2 cache enabled\n");
+#endif
+}
+
+/* Make flash TLB cacheable for XIP code performance.
+ * Changes TLB Entry 2 (flash) from MAS2_I|MAS2_G to MAS2_M.
+ * This enables L1 I-cache + L2 + CPC to cache flash instructions. */
+static void hal_flash_enable_caching(void)
+{
+    /* Rewrite flash TLB entry with cacheable attributes.
+     * MAS2_M = memory coherent, enables caching */
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+        FLASH_TLB_PAGESZ, 1);
+
+    /* Invalidate L1 I-cache so new TLB attributes take effect */
+    invalidate_icache();
+
+#ifdef DEBUG_UART
+    wolfBoot_printf("Flash: caching enabled (L1+L2+CPC)\n");
+#endif
+}
+#endif /* ENABLE_DDR */
+
+#if defined(DEBUG_UART) && defined(ENABLE_DDR)
+/* DDR memory test - writes patterns and verifies readback */
+static int hal_ddr_test(void)
+{
+    volatile uint32_t *ddr = (volatile uint32_t *)DDR_ADDRESS;
+    uint32_t patterns[] = {0x55555555, 0xAAAAAAAA, 0x12345678, 0xDEADBEEF};
+    uint32_t test_offsets[] = {0, 0x100, 0x1000, 0x10000, 0x100000, 0x1000000};
+    int i, j;
+    int errors = 0;
+    uint32_t reg;
+
+#ifdef DEBUG_DDR
+    /* Show DDR controller status */
+    reg = get32(DDR_SDRAM_CFG);
+    wolfBoot_printf("DDR: SDRAM_CFG=0x%x (MEM_EN=%d)\n", reg,
+        (reg & DDR_SDRAM_CFG_MEM_EN) ? 1 : 0);
+    reg = get32(DDR_SDRAM_CFG_2);
+    wolfBoot_printf("DDR: SDRAM_CFG_2=0x%x (D_INIT=%d)\n", reg,
+        (reg & DDR_SDRAM_CFG_2_D_INIT) ? 1 : 0);
+
+    /* Show DDR LAW configuration (LAW 4) */
+    wolfBoot_printf("DDR LAW4: H=0x%x L=0x%x AR=0x%x\n",
+        get32(LAWBARH(4)), get32(LAWBARL(4)), get32(LAWAR(4)));
+
+    /* Read DDR TLB entry 12 using tlbre */
+    {
+        uint32_t mas0, mas1, mas2, mas3, mas7;
+        /* Select TLB1, entry 12 */
+        mas0 = (1 << 28) | (12 << 16); /* TLBSEL=1, ESEL=12 */
+        mtspr(MAS0, mas0);
+        __asm__ __volatile__("isync; tlbre; isync");
+        mas1 = mfspr(MAS1);
+        mas2 = mfspr(MAS2);
+        mas3 = mfspr(MAS3);
+        mas7 = mfspr(MAS7);
+        wolfBoot_printf("DDR TLB12: MAS1=0x%x MAS2=0x%x MAS3=0x%x MAS7=0x%x\n",
+            mas1, mas2, mas3, mas7);
+        /* Check if TLB entry is valid */
+        if (!(mas1 & 0x80000000)) {
+            wolfBoot_printf("DDR: ERROR - TLB12 not valid!\n");
+            return -1;
+        }
+    }
+#endif /* DEBUG_DDR */
+
+    /* Check if DDR is enabled */
+    if (!(get32(DDR_SDRAM_CFG) & DDR_SDRAM_CFG_MEM_EN)) {
+        wolfBoot_printf("DDR: ERROR - Memory not enabled!\n");
+        return -1;
+    }
+
+    /* Check if DDR LAW is enabled */
+    reg = get32(LAWAR(4));
+    if (!(reg & LAWAR_ENABLE)) {
+        wolfBoot_printf("DDR: ERROR - LAW4 not enabled!\n");
+        return -1;
+    }
+
+#ifdef DEBUG_DDR
+    /* Show DDR chip select configuration */
+    wolfBoot_printf("DDR CS0: BNDS=0x%x CFG=0x%x\n",
+        get32(DDR_CS_BNDS(0)), get32(DDR_CS_CONFIG(0)));
+    wolfBoot_printf("DDR CS1: BNDS=0x%x CFG=0x%x\n",
+        get32(DDR_CS_BNDS(1)), get32(DDR_CS_CONFIG(1)));
+
+    /* Show DDR debug status registers */
+    wolfBoot_printf("DDR DDRDSR_1=0x%x DDRDSR_2=0x%x\n",
+        get32(DDR_DDRDSR_1), get32(DDR_DDRDSR_2));
+    wolfBoot_printf("DDR DDRCDR_1=0x%x DDRCDR_2=0x%x\n",
+        get32(DDR_DDRCDR_1), get32(DDR_DDRCDR_2));
+#endif /* DEBUG_DDR */
+
+    /* Check for pre-existing DDR errors */
+    reg = get32(DDR_ERR_DETECT);
+    if (reg != 0) {
+        wolfBoot_printf("DDR: ERR_DETECT=0x%x (errors present)\n", reg);
+#ifdef DEBUG_DDR
+        wolfBoot_printf("  Bit 31 (MME): %d - Multiple errors\n", (reg >> 31) & 1);
+        wolfBoot_printf("  Bit 7  (APE): %d - Address parity\n", (reg >> 7) & 1);
+        wolfBoot_printf("  Bit 3  (ACE): %d - Auto calibration\n", (reg >> 3) & 1);
+        wolfBoot_printf("  Bit 2  (CDE): %d - Correctable data\n", (reg >> 2) & 1);
+#endif
+        return -1;
+    }
+
+#ifdef DEBUG_DDR
+    wolfBoot_printf("DDR Test: base=0x%x\n", DDR_ADDRESS);
+#endif
+
+    for (i = 0; i < (int)(sizeof(test_offsets)/sizeof(test_offsets[0])); i++) {
+        uint32_t offset = test_offsets[i];
+        volatile uint32_t *addr = ddr + (offset / sizeof(uint32_t));
+
+        for (j = 0; j < (int)(sizeof(patterns)/sizeof(patterns[0])); j++) {
+            uint32_t pattern = patterns[j];
+            uint32_t readback;
+
+            /* Write pattern */
+            *addr = pattern;
+            __asm__ __volatile__("sync" ::: "memory");
+
+            /* Read back */
+            readback = *addr;
+
+            if (readback != pattern) {
+                wolfBoot_printf("DDR FAIL: @0x%x wrote 0x%x read 0x%x\n",
+                    (uint32_t)addr, pattern, readback);
+                errors++;
+            }
+        }
+    }
+
+    if (errors == 0) {
+        wolfBoot_printf("DDR Test: PASSED\n");
+    } else {
+        wolfBoot_printf("DDR Test: FAILED (%d errors)\n", errors);
+    }
+
+    return errors;
+}
+#endif /* DEBUG_UART && ENABLE_DDR */
+
 void hal_init(void)
 {
 #if defined(DEBUG_UART) && defined(ENABLE_CPLD)
     uint32_t fw;
 #endif
 
+    /* Enable timebase on core 0 */
+    set32(RCPM_PCTBENR, (1 << 0));
+
     law_init();
 
 #ifdef DEBUG_UART
     uart_init();
     uart_write("wolfBoot Init\n", 14);
+#ifndef WOLFBOOT_REPRODUCIBLE_BUILD
+    wolfBoot_printf("Build: %s %s\n", __DATE__, __TIME__);
+#endif
 #endif
 
     hal_flash_init();
     hal_cpld_init();
 
 #ifdef ENABLE_CPLD
-    CPLD_DATA(CPLD_PROC_STATUS) = 1; /* Enable proc reset */
-    CPLD_DATA(CPLD_WR_TEMP_ALM_OVRD) = 0; /* Enable temp alarm */
+    set8(CPLD_DATA(CPLD_PROC_STATUS), 1); /* Enable proc reset */
+    set8(CPLD_DATA(CPLD_WR_TEMP_ALM_OVRD), 0); /* Enable temp alarm */
 
 #ifdef DEBUG_UART
-    fw = CPLD_DATA(CPLD_FW_REV);
+    fw = get8(CPLD_DATA(CPLD_FW_REV));
     wolfBoot_printf("CPLD FW Rev: 0x%x\n", fw);
 #endif
 #endif /* ENABLE_CPLD */
 
-#if 0 /* not tested */
-    /* Disable SATA Write Protection */
-    SATA_ENBL = 0;
+#ifdef ENABLE_DDR
+    /* Test DDR (when DEBUG_UART enabled) */
+#ifdef DEBUG_UART
+    hal_ddr_test();
+#endif
+
+    /* Stack is already in DDR (relocated in boot_entry_C via
+     * ddr_call_with_stack trampoline before main() was called).
+     *
+     * Now release CPC SRAM back to L2 cache and enable flash caching.
+     * This dramatically improves ECC signature verification performance:
+     * - CPC (2MB) becomes L3 cache for all memory accesses
+     * - Flash code is cached by L1 I-cache + L2 + CPC
+     * - Stack/data in DDR is cached by L1 D-cache + L2 + CPC */
+    hal_reconfigure_cpc_as_cache();
+    hal_flash_enable_caching();
+#endif
+
+#ifdef ENABLE_MP
+    /* Start secondary cores AFTER CPC release and flash caching.
+     * Secondary cores' L2 flash-invalidate on the shared cluster L2
+     * must not disrupt the CPC SRAM→cache transition. Starting them
+     * after ensures the cache hierarchy is fully stable. */
+    hal_mp_init();
 #endif
 }
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+/* RAM-resident microsecond delay using inline timebase reads.
+ * Cannot call wait_ticks() (in flash .text) from RAMFUNCTION code
+ * while flash is in command mode — instruction fetch would return garbage. */
+static void RAMFUNCTION ram_udelay(uint32_t delay_us)
 {
-    (void)address;
-    (void)data;
-    (void)len;
-    /* TODO: Implement NOR flash write using IFC */
+    uint32_t tbl_start, tbl_now;
+    uint32_t ticks = delay_us * DELAY_US;
+    __asm__ __volatile__("mfspr %0,268" : "=r"(tbl_start));
+    do {
+        __asm__ __volatile__("mfspr %0,268" : "=r"(tbl_now));
+    } while ((tbl_now - tbl_start) < ticks);
+}
+
+/* Switch flash TLB to cache-inhibited + guarded for direct flash chip access.
+ * AMD flash commands require writes to reach the chip immediately and status
+ * reads to come directly from the chip. With MAS2_M (cacheable), stores go
+ * through the CPC coherency fabric; IFC does not support coherent writes and
+ * returns a bus error (DSI). tlbre/tlbwe only modifies MAS2 and is unreliable
+ * when the entry has IPROT=1; use set_tlb() to rewrite all MAS fields.
+ * Must be called while flash is still in read-array mode (set_tlb lives in
+ * flash .text, reachable via longcall while TLB is still M/cacheable). */
+static void RAMFUNCTION hal_flash_cache_disable(void)
+{
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+        FLASH_TLB_PAGESZ, 1);
+}
+
+/* Restore flash TLB to cacheable mode after flash operation.
+ * Flash must be back in read-array mode before calling (AMD_CMD_RESET sent).
+ * Invalidate caches afterward so stale pre-erase data is not served. */
+static void RAMFUNCTION hal_flash_cache_enable(void)
+{
+    set_tlb(1, 2,
+        FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
+        MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+        FLASH_TLB_PAGESZ, 1);
+    invalidate_dcache();
+    invalidate_icache();
+}
+
+/* Clear IFC write-protect. T2080RM says IFC_CSPR should only be written
+ * when V=0. Must be called from RAMFUNCTION (DDR) with flash TLB set to
+ * guarded (MAS2_G) so no speculative access occurs while V is briefly 0. */
+static void RAMFUNCTION hal_flash_clear_wp(void)
+{
+    uint32_t cspr = get32(IFC_CSPR(0));
+    if (cspr & IFC_CSPR_WP) {
+        /* Clear V first, then modify WP, then re-enable V */
+        set32(IFC_CSPR(0), cspr & ~(IFC_CSPR_WP | IFC_CSPR_V));
+        __asm__ __volatile__("sync; isync");
+        set32(IFC_CSPR(0), (cspr & ~IFC_CSPR_WP) | IFC_CSPR_V);
+        __asm__ __volatile__("sync; isync");
+        /* Verify WP cleared */
+        cspr = get32(IFC_CSPR(0));
+        wolfBoot_printf("WP clear: CSPR0=0x%x%s\n", cspr,
+            (cspr & IFC_CSPR_WP) ? " (FAILED)" : " (OK)");
+    }
+}
+
+static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector)
+{
+    /* AMD unlock sequence */
+    FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+}
+
+/* Check and clear PPB (Persistent Protection Bits) for a sector.
+ * S29GL01GS has per-sector non-volatile protection bits. If set, erase/program
+ * fails with DQ5 error. PPB erase is chip-wide (clears ALL sectors).
+ * Returns: 0 if unprotected or successfully cleared, -1 on failure. */
+static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
+{
+    uint16_t ppb_status;
+    uint16_t read1, read2;
+    uint32_t timeout;
+
+    /* Enter PPB ASO (Address Space Overlay) */
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+
+    /* Read PPB status for target sector: DQ0=0 means protected */
+    ppb_status = FLASH_IO8_READ(sector, 0);
+
+    if ((ppb_status & 0x0101) == 0x0101) {
+        /* Both chips report unprotected — exit PPB mode and return */
+        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+        return 0;
+    }
+
+    /* Exit PPB ASO before calling printf (flash must be in read-array
+     * mode for I-cache misses to fetch valid instructions) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    wolfBoot_printf("PPB: sector %d protected (0x%x), erasing all PPBs\n",
+        sector, ppb_status);
+
+    /* Re-enter PPB ASO for erase */
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+
+    /* PPB Erase All (clears all sectors' PPBs) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
+
+    /* Wait for PPB erase completion — poll for toggle stop */
+    timeout = 0;
+    do {
+        read1 = FLASH_IO8_READ(0, 0);
+        read2 = FLASH_IO8_READ(0, 0);
+        if (read1 == read2)
+            break;
+        ram_udelay(10);
+    } while (timeout++ < 100000); /* 1 second */
+
+    /* Exit PPB ASO */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+
+    /* Reset to read-array mode */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    if (timeout >= 100000) {
+        wolfBoot_printf("PPB: erase timeout\n");
+        return -1;
+    }
+
+    wolfBoot_printf("PPB: erase complete\n");
     return 0;
 }
 
-int hal_flash_erase(uint32_t address, int len)
+/* wait for toggle to stop and status mask to be met within microsecond timeout.
+ * RAMFUNCTION: executes from DDR while flash is in program/erase command mode. */
+static int RAMFUNCTION hal_flash_status_wait(uint32_t sector, uint16_t mask,
+    uint32_t timeout_us)
 {
-    (void)address;
-    (void)len;
-    /* TODO: Implement NOR flash erase using IFC */
-    return 0;
+    int ret = 0;
+    uint32_t timeout = 0;
+    uint16_t read1, read2;
+
+    do {
+        /* detection of completion happens when reading status bits
+         * DQ6 and DQ2 stop toggling (0x44) */
+        read1 = FLASH_IO8_READ(sector, 0);
+        if ((read1 & AMD_STATUS_TOGGLE) == 0)
+            read1 = FLASH_IO8_READ(sector, 0);
+        read2 = FLASH_IO8_READ(sector, 0);
+        if ((read2 & AMD_STATUS_TOGGLE) == 0)
+            read2 = FLASH_IO8_READ(sector, 0);
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Wait toggle %x -> %x\n", read1, read2);
+    #endif
+        if (read1 == read2 && ((read1 & mask) == mask))
+            break;
+        ram_udelay(1);
+    } while (timeout++ < timeout_us);
+    if (timeout >= timeout_us) {
+        ret = -1; /* timeout */
+    }
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Wait done (%d tries): %x -> %x\n",
+        timeout, read1, read2);
+#endif
+    return ret;
 }
 
-void hal_flash_unlock(void)
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    /* Disable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
-    /* clear all protection bit (80h/30h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x8080;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x3030;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+    int ret = 0;
+    uint32_t i, pos, sector, offset, xfer, nwords;
+
+    /* adjust for flash base */
+    if (address >= FLASH_BASE_ADDR)
+        address -= FLASH_BASE_ADDR;
+
+#ifdef DEBUG_FLASH
+    wolfBoot_printf("Flash Write: Ptr %p -> Addr 0x%x (len %d)\n",
+        data, address, len);
+#endif
+
+    /* Disable flash caching — AMD commands must reach the chip directly */
+    hal_flash_cache_disable();
+    hal_flash_clear_wp();
+
+    /* Reset flash to read-array mode in case previous operation left it
+     * in command mode (e.g. after a timeout or incomplete operation) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    pos = 0;
+    while (len > 0) {
+        /* determine sector address */
+        sector = (address / FLASH_SECTOR_SIZE);
+        offset = address - (sector * FLASH_SECTOR_SIZE);
+        offset /= (FLASH_CFI_WIDTH/8);
+        xfer = len;
+        if (xfer > FLASH_PAGE_SIZE)
+            xfer = FLASH_PAGE_SIZE;
+        nwords = xfer / (FLASH_CFI_WIDTH/8);
+
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Flash Write: Sector %d, Offset %d, Len %d, Pos %d\n",
+            sector, offset, xfer, pos);
+    #endif
+
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_TO_BUFFER);
+        /* Word count (N-1) must be replicated to both chips */
+        FLASH_IO8_WRITE(sector, offset, (nwords-1));
+
+        for (i=0; i<nwords; i++) {
+            const uint8_t* ptr = &data[pos];
+        #if FLASH_CFI_WIDTH == 16
+            FLASH_IO16_WRITE(sector, offset + i, *((const uint16_t*)ptr));
+        #else
+            FLASH_IO8_WRITE(sector, offset + i, *ptr);
+        #endif
+            pos += (FLASH_CFI_WIDTH/8);
+        }
+        FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_BUFFER_CONFIRM);
+        /* Typical 410us */
+
+        /* poll for program completion - max 200ms */
+        ret = hal_flash_status_wait(sector, 0x44, 200*1000);
+        if (ret != 0) {
+            /* Reset flash to read-array mode BEFORE calling printf */
+            FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+            ram_udelay(50);
+            wolfBoot_printf("Flash Write: Timeout at sector %d\n", sector);
+            break;
+        }
+
+        address += xfer;
+        len -= xfer;
+    }
+
+    /* Restore flash caching — flash is back in read-array mode */
+    hal_flash_cache_enable();
+    return ret;
+}
+
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+{
+    int ret = 0;
+    uint32_t sector;
+
+    /* adjust for flash base */
+    if (address >= FLASH_BASE_ADDR)
+        address -= FLASH_BASE_ADDR;
+
+    /* Disable flash caching — AMD commands must reach the chip directly */
+    hal_flash_cache_disable();
+    hal_flash_clear_wp();
+
+    /* Reset flash to read-array mode in case previous operation left it
+     * in command mode (e.g. after a timeout or incomplete operation) */
+    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    ram_udelay(50);
+
+    while (len > 0) {
+        /* determine sector address */
+        sector = (address / FLASH_SECTOR_SIZE);
+
+    #ifdef DEBUG_FLASH
+        wolfBoot_printf("Flash Erase: Sector %d, Addr 0x%x, Len %d\n",
+            sector, address, len);
+    #endif
+
+        /* Check and clear PPB protection if set */
+        if (hal_flash_ppb_unlock(sector) != 0) {
+            wolfBoot_printf("Flash Erase: PPB unlock failed sector %d\n", sector);
+            ret = -1;
+            break;
+        }
+
+        wolfBoot_printf("Erasing sector %d...\n", sector);
+
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, FLASH_UNLOCK_ADDR1, AMD_CMD_ERASE_START);
+        hal_flash_unlock_sector(sector);
+        FLASH_IO8_WRITE(sector, 0, AMD_CMD_ERASE_SECTOR);
+        /* block erase timeout = 50us - for additional sectors */
+        /* Typical is 200ms (max 1100ms) */
+
+        /* poll for erase completion - max 1.1 sec
+         * NOTE: Do NOT call wolfBoot_printf while flash is in erase mode.
+         * With cache-inhibited TLB, I-cache misses fetch from flash which
+         * returns status data instead of instructions. */
+        ret = hal_flash_status_wait(sector, 0x4C, 1100*1000);
+        if (ret != 0) {
+            /* Reset flash to read-array mode BEFORE calling printf */
+            FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+            ram_udelay(50);
+            wolfBoot_printf("Flash Erase: Timeout at sector %d\n", sector);
+            break;
+        }
+
+        /* Erase succeeded — flash is back in read-array mode.
+         * Reset to be safe before any printf (I-cache may miss) */
+        FLASH_IO8_WRITE(sector, 0, AMD_CMD_RESET);
+        ram_udelay(10);
+        wolfBoot_printf("Erase sector %d: OK\n", sector);
+
+        address += FLASH_SECTOR_SIZE;
+        len -= FLASH_SECTOR_SIZE;
+    }
+
+    /* Restore flash caching — flash is back in read-array mode */
+    hal_flash_cache_enable();
+    return ret;
+}
+
+void RAMFUNCTION hal_flash_unlock(void)
+{
+    /* Per-sector unlock is done in hal_flash_write/erase before each operation.
+     * The previous non-volatile PPB protection mode (C0h) approach caused
+     * unnecessary wear on PPB cells since it was called on every boot. */
+    hal_flash_unlock_sector(0);
 }
 
 void hal_flash_lock(void)
 {
-    /* Enable all flash protection bits */
-    /* enter Non-volatile protection mode (C0h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xAAAA;
-    *((volatile uint16_t*)(FLASH_BASE + 0x554)) = 0x5555;
-    *((volatile uint16_t*)(FLASH_BASE + 0xAAA)) = 0xC0C0;
-    /* set all protection bit (A0h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0xA0A0;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
-    /* exit Non-volatile protection mode (90h/00h) */
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x9090;
-    *((volatile uint16_t*)(FLASH_BASE + 0x000)) = 0x0000;
+
 }
+
+/* SMP Multi-Processor Driver */
+#ifdef ENABLE_MP
+
+/* from boot_ppc_mp.S */
+extern uint32_t _secondary_start_page;
+extern uint32_t _second_half_boot_page;
+extern uint32_t _spin_table[];
+extern uint32_t _spin_table_addr;
+extern uint32_t _bootpg_addr;
+
+/* Startup additional cores with spin table and synchronize the timebase.
+ * spin_table_ddr: DDR address of the spin table (for checking status) */
+static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
+{
+    uint32_t all_cores, active_cores, whoami;
+    int timeout = 50, i;
+
+    whoami = get32(PIC_WHOAMI); /* Get current running core number */
+    all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
+    active_cores = (1 << whoami); /* current running cores */
+
+    wolfBoot_printf("MP: Starting cores (boot page %p, spin table %p)\n",
+        bootpg, spin_table_ddr);
+
+    /* Set the boot page translation register */
+    set32(LCC_BSTRH, 0);
+    set32(LCC_BSTRL, bootpg);
+    set32(LCC_BSTAR, (LCC_BSTAR_EN |
+                      LCC_BSTAR_LAWTRGT(LAW_TRGT_DDR_1) |
+                      LAW_SIZE_4KB));
+    (void)get32(LCC_BSTAR); /* read back to sync */
+
+    /* Enable time base on current core only */
+    set32(RCPM_PCTBENR, (1 << whoami));
+
+    /* Release the CPU core(s) */
+    set32(DCFG_BRR, all_cores);
+    __asm__ __volatile__("sync; isync; msync");
+
+    /* wait for other core(s) to start */
+    while (timeout) {
+        for (i = 0; i < CPU_NUMCORES; i++) {
+            volatile uint32_t* entry = (volatile uint32_t*)(
+                  spin_table_ddr + (i * ENTRY_SIZE) + ENTRY_ADDR_LOWER);
+            if (*entry) {
+                active_cores |= (1 << i);
+            }
+        }
+        if ((active_cores & all_cores) == all_cores) {
+            break;
+        }
+
+        udelay(100);
+        timeout--;
+    }
+
+    if (timeout == 0) {
+        wolfBoot_printf("MP: Timeout enabling additional cores!\n");
+    }
+
+    /* Disable all timebases */
+    set32(RCPM_PCTBENR, 0);
+
+    /* Reset our timebase */
+    mtspr(SPRN_TBWU, 0);
+    mtspr(SPRN_TBWL, 0);
+
+    /* Enable timebase for all cores */
+    set32(RCPM_PCTBENR, all_cores);
+}
+
+static void hal_mp_init(void)
+{
+    uint32_t *fixup = (uint32_t*)&_secondary_start_page;
+    uint32_t bootpg, second_half_ddr, spin_table_ddr;
+    int i_tlb = 0; /* always 0 */
+    size_t i;
+    const volatile uint32_t *s;
+    volatile uint32_t *d;
+
+    /* Assign virtual boot page at end of LAW-mapped DDR region.
+     * DDR LAW maps 2GB (LAW_SIZE_2GB) starting at DDR_ADDRESS.
+     * DDR_SIZE may exceed 32-bit range (e.g. 8GB), so use the LAW-mapped
+     * size to ensure bootpg fits in 32 bits and is accessible. */
+    bootpg = DDR_ADDRESS + 0x80000000UL - BOOT_ROM_SIZE;
+
+    /* Second half boot page (spin loop + spin table) goes just below.
+     * For XIP flash builds, .bootmp is in flash — secondary cores can't
+     * write to flash, so the spin table MUST be in DDR. */
+    second_half_ddr = bootpg - BOOT_ROM_SIZE;
+
+    /* DDR addresses for second half symbols */
+    spin_table_ddr = second_half_ddr +
+        ((uint32_t)_spin_table - (uint32_t)&_second_half_boot_page);
+
+    /* Flush DDR destination before copying */
+    flush_cache(bootpg, BOOT_ROM_SIZE);
+    flush_cache(second_half_ddr, BOOT_ROM_SIZE);
+
+    /* Map reset page to bootpg so we can copy code there.
+     * Boot page translation will redirect secondary core fetches from
+     * 0xFFFFF000 to bootpg in DDR. */
+    disable_tlb1(i_tlb);
+    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn, urpn */
+        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), /* perms, wimge */
+        0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
+
+    /* Copy first half (startup code) to DDR via BOOT_ROM_ADDR mapping.
+     * Uses cache-inhibited TLB to ensure data reaches DDR immediately. */
+    s = (const uint32_t*)fixup;
+    d = (uint32_t*)BOOT_ROM_ADDR;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+
+    /* Write _bootpg_addr and _spin_table_addr into the DDR first-half copy.
+     * These variables are .long 0 in the linked .bootmp (flash), and direct
+     * stores to their flash addresses silently fail on XIP builds.
+     * Calculate offsets within the boot page and write via BOOT_ROM_ADDR. */
+    {
+        volatile uint32_t *bp = (volatile uint32_t*)(BOOT_ROM_ADDR +
+            ((uint32_t)&_bootpg_addr - (uint32_t)&_secondary_start_page));
+        volatile uint32_t *st = (volatile uint32_t*)(BOOT_ROM_ADDR +
+            ((uint32_t)&_spin_table_addr - (uint32_t)&_secondary_start_page));
+        *bp = second_half_ddr;
+        *st = spin_table_ddr;
+    }
+
+    /* Copy second half (spin loop + spin table) directly to DDR.
+     * Master has DDR TLB (entry 12, MAS2_M). Flush cache after copy
+     * to ensure secondary cores see the data. */
+    s = (const uint32_t*)&_second_half_boot_page;
+    d = (uint32_t*)second_half_ddr;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+    flush_cache(second_half_ddr, BOOT_ROM_SIZE);
+
+    /* start cores and wait for them to be enabled */
+    hal_mp_up(bootpg, spin_table_ddr);
+}
+#endif /* ENABLE_MP */
 
 void hal_prepare_boot(void)
 {
@@ -578,4 +1150,90 @@ void* hal_get_dts_address(void)
 {
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
-#endif
+
+int hal_dts_fixup(void* dts_addr)
+{
+#ifndef BUILD_LOADER_STAGE1
+    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    int off;
+    uint32_t *reg;
+
+    /* verify the FDT is valid */
+    off = fdt_check_header(dts_addr);
+    if (off != 0) {
+        wolfBoot_printf("FDT: Invalid header! %d\n", off);
+        return off;
+    }
+
+    /* display FDT information */
+    wolfBoot_printf("FDT: Version %d, Size %d\n",
+        fdt_version(fdt), fdt_totalsize(fdt));
+
+    /* expand total size */
+    fdt->totalsize += 2048; /* expand by 2KB */
+    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", fdt->totalsize);
+
+    /* fixup the memory region - single bank */
+    off = fdt_find_devtype(fdt, -1, "memory");
+    if (off != -FDT_ERR_NOTFOUND) {
+        /* build addr/size as 64-bit */
+        uint8_t ranges[sizeof(uint64_t) * 2], *p = ranges;
+        *(uint64_t*)p = cpu_to_fdt64(DDR_ADDRESS);
+        p += sizeof(uint64_t);
+        *(uint64_t*)p = cpu_to_fdt64(DDR_SIZE);
+        p += sizeof(uint64_t);
+        wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
+            DDR_ADDRESS, (uint32_t)DDR_SIZE);
+        fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
+    }
+
+    /* fixup CPU status and release address and enable method */
+    off = fdt_find_devtype(fdt, -1, "cpu");
+    while (off != -FDT_ERR_NOTFOUND) {
+        int core;
+    #ifdef ENABLE_MP
+        uint64_t core_spin_table;
+    #endif
+
+        reg = (uint32_t*)fdt_getprop(fdt, off, "reg", NULL);
+        if (reg == NULL)
+            break;
+        core = (int)fdt32_to_cpu(*reg);
+        if (core >= CPU_NUMCORES) {
+            break; /* invalid core index */
+        }
+
+    #ifdef ENABLE_MP
+        /* calculate location of spin table for core */
+        core_spin_table = (uint64_t)((uintptr_t)(
+                  (uint8_t*)_spin_table + (core * ENTRY_SIZE)));
+
+        fdt_fixup_str(fdt, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
+        fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table);
+        fdt_fixup_str(fdt, off, "cpu", "enable-method", "spin-table");
+    #endif
+        fdt_fixup_val(fdt, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
+        fdt_fixup_val(fdt, off, "cpu", "clock-frequency", hal_get_core_clk());
+        fdt_fixup_val(fdt, off, "cpu", "bus-frequency", hal_get_plat_clk());
+
+        off = fdt_find_devtype(fdt, off, "cpu");
+    }
+
+    /* fixup the soc clock */
+    off = fdt_find_devtype(fdt, -1, "soc");
+    if (off != -FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "soc", "bus-frequency", hal_get_plat_clk());
+    }
+
+    /* fixup the serial clocks */
+    off = fdt_find_devtype(fdt, -1, "serial");
+    while (off != -FDT_ERR_NOTFOUND) {
+        fdt_fixup_val(fdt, off, "serial", "clock-frequency", hal_get_bus_clk());
+        off = fdt_find_devtype(fdt, off, "serial");
+    }
+
+#endif /* !BUILD_LOADER_STAGE1 */
+    (void)dts_addr;
+    return 0;
+}
+#endif /* MMU */

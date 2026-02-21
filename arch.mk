@@ -627,10 +627,17 @@ endif
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
   LDFLAGS+=-Wl,--build-id=none
-  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY
+  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
+  endif
+
+  # Target-specific CPU flags
+  ifeq ($(TARGET),nxp_t2080)
+    CFLAGS+=-mcpu=e6500 -mno-altivec -mbss-plt
+  else ifeq ($(TARGET),nxp_t1024)
+    CFLAGS+=-mcpu=e5500
   endif
 
   # Prune unused functions and data
@@ -994,6 +1001,7 @@ ifeq ($(TARGET),nxp_t2080)
   LDFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
   LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  OBJS+=src/boot_ppc_mp.o # support for spin table
   UPDATE_OBJS:=src/update_ram.o
   OBJS+=src/fdt.o
 endif
