@@ -797,9 +797,10 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 
 ### PolarFire SoC Files
 
-`hal/mpfs250.c` - Hardware abstraction layer implementation (UART and uSD)
+`hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)
 `hal/mpfs250.h` - Register definitions and hardware interfaces
-`hal/mpfs250.ld` - Linker script for the platform
+`hal/mpfs250.ld` - Linker script for S-mode (HSS-based boot)
+`hal/mpfs250-m.ld` - Linker script for M-mode (eNVM + L2 SRAM)
 `hal/mpfs.dts` - Device tree source
 `hal/mpfs.yaml` - HSS payload generator configuration
 `hal/mpfs250.its` - Example FIT image creation template
@@ -1363,11 +1364,105 @@ ML-DSA    87   verify       200 ops took 1.077 sec, avg 5.385 ms,   185.704 ops/
 Benchmark complete
 ```
 
-### PolarFire TODO
+### PolarFire Machine Mode (M-Mode) Support
 
-* Add support for full HSS replacement using wolfboot
-  - Machine level assembly startup
-  - DDR driver
+wolfBoot supports running directly in Machine Mode (M-mode) on PolarFire SoC,
+replacing the Hart Software Services (HSS) as the first-stage bootloader. In
+M-mode, wolfBoot runs on the E51 monitor core and loads a signed application
+from SC QSPI flash to on-chip LIM (Loosely Integrated Memory).
+
+#### M-Mode Features
+
+* Runs on E51 monitor core (hart 0) directly from eNVM
+* Executes from L2 Scratchpad SRAM (256KB at 0x0A000000)
+* Loads signed application from SC QSPI flash to LIM (0x08000000)
+* No HSS or DDR required — boots entirely from on-chip memory
+* Wakes and manages secondary U54 harts via IPI
+* Per-hart UART output (each hart uses its own MMUART)
+* ECC384 + SHA384 signature verification
+
+#### M-Mode Files
+
+| File | Description |
+|------|-------------|
+| `config/examples/polarfire_mpfs250_m_qspi.config` | M-mode + SC QSPI configuration |
+| `hal/mpfs250-m.ld` | M-mode linker script (eNVM + L2 SRAM) |
+| `hal/mpfs250.c` | HAL with QSPI driver, UART, L2 cache init |
+| `src/boot_riscv_start.S` | M-mode assembly startup |
+
+#### Building for M-Mode
+
+```sh
+# Copy M-mode QSPI configuration
+cp config/examples/polarfire_mpfs250_m_qspi.config .config
+
+# Build wolfBoot and signed test-app
+make clean
+make
+```
+
+This produces:
+- `wolfboot.elf` — bootloader for eNVM (~26KB)
+- `test-app/image_v1_signed.bin` — signed application for QSPI flash
+
+#### Flashing
+
+M-mode requires programming two targets:
+
+1. **eNVM** (wolfBoot): Programmed via JTAG using mpfsBootmodeProgrammer (bootmode 1)
+2. **QSPI flash** (signed application): Programmed via Libero/FPExpress SPI programming
+
+```sh
+# Set SoftConsole installation directory
+export SC_INSTALL_DIR=/opt/Microchip/SoftConsole-v2022.2-RISC-V-747
+
+# Flash wolfboot.elf to eNVM
+$SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
+    $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
+    --bootmode 1 --die MPFS250T --package FCG1152 --workdir $PWD wolfboot.elf
+
+# Flash test-app/image_v1_signed.bin to QSPI at offset 0x20000
+# (use Libero SoC Design Suite SPI flash programming)
+```
+
+#### M-Mode Boot Flow
+
+1. **eNVM Reset Vector** (0x20220100): CPU starts, copies code to L2 SRAM
+2. **L2 SRAM Execution** (0x0A000000): wolfBoot runs from scratchpad
+3. **Hardware Init**: L2 cache configuration, UART setup
+4. **QSPI Init**: SC QSPI controller (0x37020100), JEDEC ID read, 4-byte address mode
+5. **Image Load**: Read signed image from QSPI flash (0x20000) to LIM (0x08000200)
+6. **Verify & Boot**: SHA384 integrity check, ECC384 signature verification, jump to app
+
+#### M-Mode QSPI Partition Layout
+
+The SC QSPI flash (Micron MT25QL01G, 128MB) is partitioned as:
+
+| Region | Address | Size |
+|--------|---------|------|
+| Boot partition | 0x00020000 | ~32MB |
+| Update partition | 0x02000000 | ~32MB |
+| Swap partition | 0x04000000 | 64KB |
+
+#### M-Mode UART Mapping
+
+| Hart | Core | MMUART | USB Device |
+|------|------|--------|------------|
+| 0 | E51 | MMUART0 | /dev/ttyUSB0 |
+| 1 | U54_1 | MMUART1 | /dev/ttyUSB1 |
+| 2 | U54_2 | MMUART2 | N/A |
+| 3 | U54_3 | MMUART3 | N/A |
+| 4 | U54_4 | MMUART4 | N/A |
+
+#### M-Mode Notes
+
+* The E51 core is rv64imac (no FPU or crypto extensions). wolfBoot is compiled
+  with `NO_ASM=1` to use portable C crypto implementations and
+  `-march=rv64imac -mabi=lp64` for correct code generation.
+* CLINT MTIME counter is not running in bare-metal M-mode (no HSS), so
+  `udelay()` uses a calibrated busy loop instead of the timer CSR.
+* DDR initialization support is available on the `polarfire_ddr` branch for
+  use cases that require loading larger applications to DDR memory.
 
 
 ## STM32F7

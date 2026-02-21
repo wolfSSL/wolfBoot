@@ -272,9 +272,16 @@ jobs:
     with:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250.config
-      # Only building wolfBoot - not test app for now (cross compiler cannot find suitable multilib set for '-march=rv64imafd_zicsr_zmmul_zaamo_zalrsc'/'-mabi=lp64d')
-      # Consider building cached RISCV64 toolchain for this target
-      make-args: wolfboot.bin
+  microchip_mpfs250_qspi_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_qspi.config
+  microchip_mpfs250_m_qspi_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m_qspi.config
 
   raspi3_test:
     uses: ./.github/workflows/test-build.yml

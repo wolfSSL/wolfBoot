@@ -581,7 +581,17 @@ endif
 ## RISCV64 (64-bit)
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+
+  # M-mode vs S-mode configuration
+  ifeq ($(RISCV_MMODE),1)
+    # Machine Mode: Running directly from eNVM/L2 SRAM
+    CFLAGS+=-DWOLFBOOT_RISCV_MMODE -DWOLFBOOT_DUALBOOT
+    # Use M-mode specific linker script
+    LSCRIPT_IN:=hal/$(TARGET)-m.ld
+  else
+    # Supervisor Mode (default): Running under HSS with DDR available
+    CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+  endif
 
   # If SD card or eMMC is enabled use update_disk loader with GPT support
   ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
@@ -595,7 +605,17 @@ ifeq ($(ARCH),RISCV64)
     UPDATE_OBJS?=src/update_ram.o
   endif
 
-  ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+  ifeq ($(RISCV_MMODE),1)
+    # E51 core: rv64imac (no FPU, no crypto extensions)
+    ARCH_FLAGS=-march=rv64imac -mabi=lp64 -mcmodel=medany
+  else
+    # U54 cores: rv64gc (with FPU)
+    ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+
+    # FDT support required
+    CFLAGS+=-DWOLFBOOT_FDT
+    OBJS+=src/fdt.o
+  endif
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV -DARCH_RISCV64
   CFLAGS+=$(ARCH_FLAGS)
   LDFLAGS+=$(ARCH_FLAGS)
@@ -606,9 +626,6 @@ ifeq ($(ARCH),RISCV64)
 
   # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
   OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
-
-  CFLAGS+=-DWOLFBOOT_FDT
-  OBJS+=src/fdt.o
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o

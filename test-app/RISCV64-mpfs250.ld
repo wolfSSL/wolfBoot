@@ -10,6 +10,9 @@ OUTPUT_ARCH( "riscv" )
 
 ENTRY( _reset )
 
+/* Provide M-mode symbols as dummy values for test-app (not used at runtime) */
+PROVIDE(_main_hart_hls = 0);
+
 /* Memory areas */
 MEMORY
 {
