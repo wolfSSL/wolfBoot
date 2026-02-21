@@ -218,7 +218,9 @@ void WEAKFUNCTION hal_cache_invalidate(void)
 {
     /* if cache flushing is required implement in hal */
 }
-
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 static int RAMFUNCTION nvm_select_fresh_sector(int part)
 {
     int sel;
@@ -377,7 +379,9 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
     return ret;
 }
-
+#ifdef __CCRX__
+#pragma section
+#endif
 #else
 #   define trailer_write(part,addr, val) hal_flash_write(addr, (void *)&val, 1)
 #   define partition_magic_write(part,addr) hal_flash_write(addr, \
@@ -395,6 +399,9 @@ void     RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val);
 void     RAMFUNCTION set_partition_magic(uint8_t part);
 
 #elif !defined(WOLFBOOT_FIXED_PARTITIONS)
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
     (void)part;
@@ -413,9 +420,13 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
     (void)part;
     return;
 }
-
+#ifdef __CCRX__
+#pragma section
+#endif
 #else
-
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 /**
  * @brief Get the trailer at a specific address
  *
@@ -550,12 +561,18 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
         }
     }
 }
+#ifdef __CCRX__
+#pragma section
+#endif
 #endif
 #endif /* !MOCK_PARTITION_TRAILER */
 
 
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 /**
  * @brief Get the magic trailer of a partition.
  *
@@ -843,6 +860,9 @@ void RAMFUNCTION wolfBoot_success(void)
     wolfBoot_erase_encrypt_key();
 #endif
 }
+#ifdef __CCRX__
+#pragma section
+#endif
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**

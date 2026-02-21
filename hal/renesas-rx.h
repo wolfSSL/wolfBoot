@@ -411,4 +411,15 @@ void hal_delay_us(uint32_t us);
 #define ICU_PIBR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7700 + (x)))
 #define ICU_PIAR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7900 + (x)))
 
+typedef enum {
+	FLASH_ERR_ILGL = -7,
+	FLASH_ERR_PRG  = -6,
+	FLASH_ERR_ERS  = -5,
+	FLASH_ERR_FLWE = -4,
+	FLASH_ERR_FESET = -3,
+	FLASH_ERR_SEC   = -2,
+	FLASH_ERR_OT    = -1,
+	FLASH_ERR_UNKNOWN = -99,
+	FLASH_OK = 0
+} flash_err_t;
 #endif /* !_WOLFBOOT_RENESAS_RX_H_ */

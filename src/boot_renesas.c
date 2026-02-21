@@ -84,6 +84,7 @@ void do_boot(const uint32_t *app_offset)
 #if defined(__RX__)
     /* Do unconditional jump (r1 = app_offset) */
     #if defined(__CCRX__)
+    	printf("app_offset 0x%p\n", app_offset);
         longJump(app_offset);
     #else
         app_entry = (void(*))(*app_offset);

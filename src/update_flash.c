@@ -46,6 +46,10 @@ int WP11_Library_Init(void);
 #error "MMU is not yet supported for update_flash.c, please consider update_ram.c instead"
 #endif
 
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
+
 #ifdef RAM_CODE
 #ifndef TARGET_rp2350
 extern unsigned int _start_text;
@@ -61,7 +65,6 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #  endif
 #endif
-
 
 static void RAMFUNCTION wolfBoot_erase_bootloader(void)
 {
@@ -410,6 +413,9 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 
     return 0;
 }
+#ifdef __CCRX__
+#pragma section
+#endif
 #endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER */
 
 #ifdef DELTA_UPDATES
@@ -645,7 +651,9 @@ out:
 #else
     #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
 #endif
-
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
@@ -1062,8 +1070,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
     return 0;
 }
-
-
+#ifdef __CCRX__
+#pragma section
+#endif
 
 #if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
 int wolfBoot_unlock_disk(void)
@@ -1172,7 +1181,9 @@ int wolfBoot_unlock_disk(void)
     return ret;
 }
 #endif
-
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 void RAMFUNCTION wolfBoot_start(void)
 {
     int bootRet;
@@ -1330,7 +1341,9 @@ void RAMFUNCTION wolfBoot_start(void)
 
     do_boot((void *)boot.fw_base);
 }
-
+#ifdef __CCRX__
+#pragma section
+#endif
 #ifdef WOLFBOOT_ARMORED
 #    ifdef __GNUC__
 #        pragma GCC pop_options

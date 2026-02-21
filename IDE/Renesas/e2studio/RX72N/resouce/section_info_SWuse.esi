@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="ASCII"?>
 <com.renesas.linkersection.model:SectionContainer xmi:version="2.0" xmlns:xmi="http://www.omg.org/XMI" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:com.renesas.linkersection.model="http:///LinkerSection.ecore">
-  <sections name="SU">
+  <sections name="SI">
     <sectionAddress xsi:type="com.renesas.linkersection.model:FixedAddress" fixedAddress="4"/>
   </sections>
-  <sections name="SI"/>
   <sections name="B_1"/>
   <sections name="R_1"/>
   <sections name="B_2"/>
@@ -13,9 +12,12 @@
   <sections name="B_8"/>
   <sections name="R_8"/>
   <sections name="RPFRAM"/>
-  <sections name="RPFRAM2"/>
+  <sections name="C_FIRMWARE_UPDATE_CONTROL_BLOCK">
+    <sectionAddress xsi:type="com.renesas.linkersection.model:FixedAddress" fixedAddress="1048576"/>
+  </sections>
+  <sections name="C_FIRMWARE_UPDATE_CONTROL_BLOCK_MIRROR"/>
   <sections name="PResetPRG">
-    <sectionAddress xsi:type="com.renesas.linkersection.model:FixedAddress" fixedAddress="4290839040"/>
+    <sectionAddress xsi:type="com.renesas.linkersection.model:FixedAddress" fixedAddress="4290772992"/>
   </sections>
   <sections name="C_1"/>
   <sections name="C_2"/>
@@ -27,7 +29,6 @@
   <sections name="L"/>
   <sections name="P"/>
   <sections name="PFRAM"/>
-  <sections name="PFRAM2"/>
   <sections name="EXCEPTVECT">
     <sectionAddress xsi:type="com.renesas.linkersection.model:FixedAddress" fixedAddress="4294967168"/>
   </sections>
