@@ -445,29 +445,34 @@ void do_boot(const uint32_t *app_offset)
      */
 
 #ifdef WOLFBOOT_RISCV_MMODE
+#ifdef WOLFBOOT_MMODE_SMODE_BOOT
     /*
      * M-mode to S-mode transition for booting Linux:
      * 1. Set up PMP to allow S-mode full memory access
      * 2. Delegate traps/interrupts to S-mode
      * 3. Use MRET to switch to S-mode and jump to kernel
      */
-#ifdef DEBUG_BOOT
-    wolfBoot_printf("Setting up M-mode to S-mode transition...\n");
-    wolfBoot_printf("  PMP: Configuring for S-mode access\n");
-#endif
+    wolfBoot_printf("M->S transition: entry=0x%lx\n", (unsigned long)app_offset);
     setup_pmp_for_smode();
-
-#ifdef DEBUG_BOOT
-    wolfBoot_printf("  Delegating traps to S-mode\n");
-#endif
     delegate_traps_to_smode();
-
-#ifdef DEBUG_BOOT
-    wolfBoot_printf("  Entering S-mode: entry=0x%lx, hartid=%lu, dtb=0x%lx\n",
-        (unsigned long)app_offset, hartid, dts_addr);
-#endif
     /* This never returns */
     enter_smode((unsigned long)app_offset, hartid, dts_addr);
+#else
+    /*
+     * Direct M-mode jump for bare-metal payloads (no S-mode transition).
+     * Use this for test-apps; define WOLFBOOT_MMODE_SMODE_BOOT for Linux.
+     */
+    wolfBoot_printf("M-mode direct jump to 0x%lx\n", (unsigned long)app_offset);
+    /* Drain UART before jumping */
+    {
+        volatile int i;
+        for (i = 0; i < 100000; i++) {}
+    }
+    (void)hartid;
+    (void)dts_addr;
+    asm volatile("jr %0" : : "r"(app_offset));
+    __builtin_unreachable();
+#endif /* WOLFBOOT_MMODE_SMODE_BOOT */
 
 #elif __riscv_xlen == 64
     asm volatile(

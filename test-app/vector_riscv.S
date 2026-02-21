@@ -62,11 +62,8 @@
     ld x30, 112(sp)
     ld x31, 120(sp)
     addi sp, sp, 128
-#ifndef WOLFBOOT_RISCV_MMODE
+    /* Always sret: payload always runs in S-mode under wolfBoot */
     sret
-#else
-    mret
-#endif
 .endm
 
 #else /* __riscv_xlen == 32 */
@@ -110,11 +107,8 @@
   lw x30, 56(sp)
   lw x31, 60(sp)
   addi sp, sp, 64
-#ifndef WOLFBOOT_RISCV_MMODE
+  /* Always sret: payload always runs in S-mode under wolfBoot */
   sret
-#else
-  mret
-#endif
 .endm
 
 #endif /* __riscv_xlen */

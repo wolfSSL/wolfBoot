@@ -365,6 +365,10 @@ typedef struct {
 
 /* Multi-hart function declarations */
 #ifndef __ASSEMBLER__
+#ifdef DEBUG_UART
+void uart_init(void);
+void uart_write(const char* buf, unsigned int sz);
+#endif
 #ifdef WOLFBOOT_RISCV_MMODE
 int mpfs_wake_secondary_harts(void);
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);

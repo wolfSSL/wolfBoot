@@ -36,8 +36,10 @@
 
 void main(void)
 {
+    /* wolfBoot already initialized L2 cache, UART clocks, and QSPI.
+     * Just re-init UART registers (clocks already on). Do NOT call
+     * hal_init() - it would try to write to _main_hart_hls=0 (NULL). */
     uart_init();
-    hal_init();
 
     wolfBoot_printf("========================\r\n");
     wolfBoot_printf("PolarFire SoC MPFS250 wolfBoot demo Application\r\n");
