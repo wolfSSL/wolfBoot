@@ -500,22 +500,21 @@ void hal_prepare_boot(void)
 
 }
 
-#ifdef __CCRX__
-/* copy RAM functions from ROM to RAM */
-static void copyfuncs(void)
-{
-	unsigned char *dst, *src;
-	src = __sectop("PFRAM");
-	dst = __sectop("RPFRAM");
-	while(src < __secend("PFRAM")) {
-		*dst++ = *src++;
-	}
-}
-#endif
 int hal_flash_init(void)
 {
 #ifdef __CCRX__
-	copyfuncs();
+	unsigned char *src, *dst;
+	size_t n;
+
+	src = (unsigned char*)__sectop("PFRAM");
+	dst = (unsigned char*)__sectop("RPFRAM");
+
+	n = (size_t)((unsigned char*)__secend("PFRAM") -
+				 (unsigned char*)__sectop("PFRAM"));
+	wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
+	wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
+	wolfBoot_printf("RAM Function size  = %d\n", n);
+	memcpy(dst, src, n);
 #endif
     /* Flash Write Enable */
     FLASH_FWEPROR = FLASH_FWEPROR_FLWE;
@@ -542,7 +541,7 @@ int hal_flash_init(void)
 int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
 {
     int i;
-    uint8_t codeblock[FLASH_FACI_CODE_BLOCK_SZ] = {0};
+    uint8_t codeblock[FLASH_FACI_CODE_BLOCK_SZ];
     uint16_t* data16 = (uint16_t*)data;
     uint32_t block_base;
     uint32_t offset;
@@ -554,14 +553,13 @@ int RAMFUNCTION hal_flash_write(uint32_t addr, const uint8_t *data, int len)
     	block_base = addr & ~(FLASH_FACI_CODE_BLOCK_SZ - 1);
     	offset = addr - block_base;
 
-    	XMEMCPY(codeblock, (uint8_t*)block_base, FLASH_FACI_CODE_BLOCK_SZ);
+    	memcpy(codeblock, (uint8_t*)block_base, FLASH_FACI_CODE_BLOCK_SZ);
     	write_size = FLASH_FACI_CODE_BLOCK_SZ - offset;
     	if (write_size > len)
     		write_size = len;
 
-    	XMEMCPY(&codeblock[offset], data, write_size);
+    	memcpy(&codeblock[offset], data, write_size);
     	data16 = (uint16_t*)codeblock;
-
 
         FLASH_FSADDR = block_base;
         /* flash program command */

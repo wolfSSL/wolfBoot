@@ -282,6 +282,9 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 
     return dst;
 }
+#ifdef __CCRX__
+ #pragma section
+#endif
 #endif /* IAR */
 
 #if !defined(__IAR_SYSTEMS_ICC__) && !defined(__CCRX__)

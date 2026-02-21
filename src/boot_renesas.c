@@ -55,16 +55,6 @@ static void longJump(const uint32_t *app_offset)
     jmp   r1;
 }
 #endif
-static void verify_flash_write(uint32_t addr, int len)
-{
-    uint8_t *p = (uint8_t *)addr;
-    int i;
-    printf("verify addr=0x%08x: ", addr);
-    for (i = 0; i < len && i < 8; i++) {
-        printf("%02x ", p[i]);
-    }
-    printf("\n");
-}
 
 /* Calls the application entry point */
 void do_boot(const uint32_t *app_offset)
