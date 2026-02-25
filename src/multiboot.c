@@ -338,7 +338,7 @@ uint8_t *mb2_find_header(uint8_t *image, int size)
     uint32_t *ptr;
     int i;
 
-    if (size > MB2_HEADER_MAX_OFF/4)
+    if (size > MB2_HEADER_MAX_OFF)
         size = MB2_HEADER_MAX_OFF;
     size = size / 4;
     for (ptr = (uint32_t*)image,i = 0; i < size; ++i) {
