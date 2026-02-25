@@ -117,7 +117,7 @@ int disk_open(int drv)
     uint32_t gpt_lba = 0;
     uint8_t sector[GPT_SECTOR_SIZE] XALIGNED(4);
 
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
         return -1;
     }
@@ -231,11 +231,11 @@ int disk_open(int drv)
  */
 static struct disk_partition *open_part(int drv, int part)
 {
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
         return NULL;
     }
-    if ((part < 0) || (part > MAX_PARTITIONS)) {
+    if ((part < 0) || (part >= MAX_PARTITIONS)) {
         wolfBoot_printf("Attempting to access invalid partition %d\r\n", part);
         return NULL;
     }
@@ -344,7 +344,7 @@ int disk_find_partition_by_label(int drv, const char *label)
     struct disk_partition *p;
     int i;
 
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         return -1;
     }
     if (Drives[drv].is_open == 0) {
