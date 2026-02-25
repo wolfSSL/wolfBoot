@@ -36,6 +36,10 @@ extern uint32_t IMAGE_APP_RAM_start;
 #include "r_smc_entry.h"
 #endif
 
+#if defined(_RENESAS_RA_)
+#include "bsp_api.h"
+#endif
+
 void RAMFUNCTION arch_reboot(void)
 {
 #if defined(__RX__)
@@ -67,7 +71,11 @@ void do_boot(const uint32_t *app_offset)
 #if defined(__CCRX__)
     clrpsw_i();
 #elif defined(__GNUC__)
+#if defined(_RENESAS_RA_)
+    __disable_irq();
+#else
     __builtin_rx_clrpsw('I');
+#endif
 #elif defined(__ICCRX__)
     __disable_interrupt();
 #endif
@@ -90,19 +98,28 @@ void do_boot(const uint32_t *app_offset)
         app_entry();
     #endif
 #elif defined(_RENESAS_RA_)
-    app_sp = VECTOR_SP;
+    uint32_t app_reset;
 
-    __asm__ ("ldr r3, [%0]" ::"r"(app_sp));
-    __asm__ ("mov sp, r3");
+    /* app_offset points to the application vector table (past wolfBoot header).
+     * Read Initial SP and Reset Handler from the application vector table. */
+    app_sp    = app_offset[0];
+    app_reset = app_offset[1];
 
-    /*
-     * address of Reset Handler is stored in Vector table[] that is defined in startup.c.
-     * The vector for Reset Handler is placed right after Initial Stack Pointer.
-     * The application assumes to start from 0x10200.
-     *
-     */
-    app_entry = (void(*)(void))(*VECTOR_Reset_Handler);
-    (*app_entry)();
+    /* switch vector table to application */
+    SCB->VTOR = (uint32_t)app_offset;
+    __DSB();
+    __ISB();
+
+    /* Clear MSPLIM before changing MSP.
+     * wolfBoot's SystemInit() sets MSPLIM to wolfBoot's stack limit via
+     * __set_MSPLIM(BSP_PRV_STACK_LIMIT) (BSP_FEATURE_TZ_HAS_TRUSTZONE=1).
+     * If MSP is set to a value below MSPLIM, the CPU immediately triggers
+     * a UsageFault (STKOVF) which escalates to HardFault. */
+    __set_MSPLIM(0U);
+
+    __set_MSP(app_sp);
+    app_entry = (void(*)(void))app_reset;
+    app_entry();
 #elif defined(_RENESAS_RZN_)
     app_entry = (void(*))(&IMAGE_APP_RAM_start);
     /* Jump to the application project */

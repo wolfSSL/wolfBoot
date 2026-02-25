@@ -27,6 +27,9 @@
 #endif
 
 #include <stddef.h>
+#if defined(_RENESAS_RA_)
+#include <stdint.h>
+#endif
 #ifndef TARGET_library
 #include <string.h>
 #else
@@ -40,7 +43,8 @@ size_t strlen(const char *s); /* forward declaration */
     #endif
 #endif
 
-#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI) && \
+	!defined(_RENESAS_RA_)
 /* for RAMFUNCTION */
 #include "image.h"
 #endif

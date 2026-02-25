@@ -32,6 +32,12 @@
 			<arguments>
 			</arguments>
 		</buildCommand>
+		<buildCommand>
+			<name>com.renesas.cdt.managedbuild.jsoncdb.compilationdatabase.compilationDatabaseBuilder</name>
+			<triggers>full,incremental,</triggers>
+			<arguments>
+			</arguments>
+		</buildCommand>
 	</buildSpec>
 	<natures>
 		<nature>org.eclipse.cdt.core.cnature</nature>
@@ -40,6 +46,7 @@
 		<nature>com.renesas.cdt.ddsc.contentgen.ddscNature</nature>
 		<nature>com.renesas.cdt.ra.contentgen.raNature</nature>
 		<nature>org.eclipse.xtext.ui.shared.xtextNature</nature>
+		<nature>com.renesas.cdt.managedbuild.jsoncdb.compilationdatabase.CompileCommandsNature</nature>
 	</natures>
 	<linkedResources>
 		<link>
@@ -51,6 +58,21 @@
 			<name>src/renesas-ra.c</name>
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/hal/renesas-ra.c</locationURI>
+		</link>
+		<link>
+			<name>src/string.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/string.c</locationURI>
+		</link>
+		<link>
+			<name>src/target.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/wolfBoot/target.h</locationURI>
+		</link>
+		<link>
+			<name>src/user_settings.h</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/wolfBoot/user_settings.h</locationURI>
 		</link>
 	</linkedResources>
 </projectDescription>
