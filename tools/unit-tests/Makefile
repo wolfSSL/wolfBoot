@@ -29,7 +29,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store
+       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk
 
 all: $(TESTS)
 
@@ -152,6 +152,9 @@ unit-update-ram: ../../include/target.h unit-update-ram.c
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-disk: unit-disk.c
+	gcc -o $@ $< $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
