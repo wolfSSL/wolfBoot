@@ -276,12 +276,15 @@ static struct disk_partition *open_part(int drv, int part)
 int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
-    int len = sz;
     uint64_t start;
+    int len;
     int ret;
     if (p == NULL) {
         return -1;
     }
+    if (sz > DISK_IO_MAX_SIZE)
+        sz = DISK_IO_MAX_SIZE;
+    len = (int)sz;
     start = p->start + off;
     /* overflow */
     if (start < p->start) {
@@ -325,12 +328,15 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
-    int len = sz;
     uint64_t start;
+    int len;
     int ret;
     if (p == NULL) {
         return -1;
     }
+    if (sz > DISK_IO_MAX_SIZE)
+        sz = DISK_IO_MAX_SIZE;
+    len = (int)sz;
     start = p->start + off;
     /* overflow */
     if (start < p->start) {

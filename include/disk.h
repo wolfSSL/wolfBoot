@@ -25,6 +25,9 @@
 #include <stdint.h>
 #include "gpt.h"
 
+/* cap DISK I/O write operation to a reasonable size */
+#define DISK_IO_MAX_SIZE 0x7FFFFFFFUL
+
 #ifndef MAX_PARTITIONS
 #define MAX_PARTITIONS 16
 #endif
