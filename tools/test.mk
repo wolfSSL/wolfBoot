@@ -276,7 +276,7 @@ test-sim-self-update: wolfboot.bin FORCE
 # then verifies the persisted header matches the signing tool's --header-only
 # output byte-for-byte, and finally boots into the test-app which calls
 # open_self/verify_integrity/verify_authenticity to simulate an external entity
-# veriyfing the bootloader image
+# verifying the bootloader image
 #
 test-sim-self-header-verify: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@echo "=== Simulator Self-Header Verification Test ==="
@@ -301,7 +301,7 @@ test-sim-self-header-verify: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@# Extract the persisted header that the self-update wrote
 	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=$$(($(WOLFBOOT_SECTOR_SIZE))) of=persisted_hdr.dd 2>/dev/null
 	@# Verify persisted header matches the signing tool's --header-only output
-	$(Q)cmp -n 256 persisted_hdr.dd wolfboot_v2_header.bin
+	$(Q)cmp -n $$(($(IMAGE_HEADER_SIZE))) persisted_hdr.dd wolfboot_v2_header.bin
 	@# Reassemble flash with test-app in boot partition so the app runs after wolfboot
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part_empty.dd
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_with_app.dd
@@ -342,11 +342,11 @@ test-sim-self-header-ext-verify: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@# Run simulator — triggers self-update, which persists the header to external flash
 	$(Q)./wolfboot.elf get_version || true
 	@# Confirm internal flash self-header location remains erased (header went to external only)
-	$(Q)dd if=/dev/zero bs=256 count=1 2>/dev/null | tr '\000' '\377' > erased_256.dd
-	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=256 2>/dev/null | cmp -s erased_256.dd - && echo "=== Internal Self-Header location remains erased PASSED ==="
+	$(Q)dd if=/dev/zero bs=$$(($(IMAGE_HEADER_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > erased_hdr.dd
+	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=$$(($(IMAGE_HEADER_SIZE))) 2>/dev/null | cmp -s erased_hdr.dd - && echo "=== Internal Self-Header location remains erased PASSED ==="
 	@# Extract persisted header from external flash and verify it matches the signed header
 	$(Q)dd if=external_flash.dd bs=1 skip=$(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS) count=$$(($(WOLFBOOT_SECTOR_SIZE))) of=persisted_hdr.dd 2>/dev/null
-	$(Q)cmp -n 256 persisted_hdr.dd wolfboot_v2_header.bin
+	$(Q)cmp -n $$(($(IMAGE_HEADER_SIZE))) persisted_hdr.dd wolfboot_v2_header.bin
 	@# Reassemble flash with test-app in boot and the persisted external header
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part_empty.dd
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_with_app.dd

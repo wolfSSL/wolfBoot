@@ -365,7 +365,7 @@ endif
 ifeq ($(WOLFBOOT_SELF_HEADER),1)
   CFLAGS+=-D"WOLFBOOT_SELF_HEADER"
   CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
-  # Test app needs addtional image, keystore, and crypto objects to do verification
+  # Test app needs additional image, keystore, and crypto objects to do verification
   APP_OBJS+=../src/image.o ../src/keystore.o
   # Only add wolfcrypt objs if WOLFHSM blocks won't provide them
   ifeq ($(WOLFHSM_CLIENT)$(WOLFHSM_SERVER),)
