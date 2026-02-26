@@ -285,7 +285,8 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
                 return r;
             break;
         default:
-            wolfBoot_printf("mb2: unsupported info request tag: %d\r\n", i);
+            wolfBoot_printf("mb2: unsupported info request tag: %d\r\n",
+                          info_req_tag->mbi_tag_types[i]);
             return -1;
         }
     }
