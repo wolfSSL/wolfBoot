@@ -111,6 +111,8 @@ static uint8_t *mb2_find_tag_by_type(uint8_t *tags, uint32_t tags_len,
     while ((uint8_t*)tag + sizeof(*tag) <= end && tag->type != 0) {
         if (tag->size < sizeof(*tag))
             return NULL;
+        if (tag->size > ((uint32_t)(end - (uint8_t*)tag)))
+            return NULL;
         if (tag->type == type)
             return (uint8_t*)tag;
         tag = (struct mb2_tag*)mb2_align_address_up((uint8_t*)tag + tag->size,
@@ -315,17 +317,26 @@ static void mb2_parse_info_request_tag(void* tag) {
     }
 }
 
-static void mb2_dump_tags(void* mbTags) {
+static void mb2_dump_tags(void* mbTags, uint32_t tags_len) {
     struct mb2_tag* tag = (struct  mb2_tag*)mbTags;
+    uint8_t *end = (uint8_t*)mbTags + tags_len;
 
-    while (tag->type != 0) {
+    while ((uint8_t*)tag + sizeof(*tag) <= end && tag->type != 0) {
         MB2_DEBUG_PRINTF("Tag Type: %u\r\n", tag->type);
         MB2_DEBUG_PRINTF("Tag Flags: 0x%x\r\n", tag->flags);
         MB2_DEBUG_PRINTF("Tag Size: %u\r\n", tag->size);
 
+        if (tag->size < sizeof(*tag))
+            return;
+
+        if (tag->size > ((uint32_t)(end - (uint8_t*)tag)))
+            return;
+
         if (tag->type == MB2_TAG_TYPE_INFO_REQ)
             mb2_parse_info_request_tag(tag);
 
+        if (tag->size < sizeof(*tag))
+            break;
         tag = (struct mb2_tag*)mb2_align_address_up((uint8_t*)tag + tag->size,
                                                     8);
     }
@@ -341,7 +352,9 @@ static void mb2_dump_header(void* mbHeader) {
     MB2_DEBUG_PRINTF("Checksum: 0x%x\r\n", header->checksum);
 
     tags = (uint8_t*)header + sizeof(*header);
-    mb2_dump_tags(tags);
+    if (header->header_length < sizeof(struct mb2_header))
+        MB2_DEBUG_PRINTF("Invalid header length\r\n");
+    mb2_dump_tags(tags, header->header_length - sizeof(*header));
 }
 #endif /* DEBUG_MB2 */
 
