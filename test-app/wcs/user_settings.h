@@ -147,7 +147,9 @@ extern int tolower(int c);
 #define NO_ERROR_STRINGS
 #define NO_KDF
 
-#define WC_TEST_NO_CRYPTOCB_SW_TEST
+#ifdef WOLF_CRYPTO_CB
+    #define WC_TEST_NO_CRYPTOCB_SW_TEST
+#endif
 #define BENCH_EMBEDDED
 
 #define HAVE_ECC_KEY_EXPORT

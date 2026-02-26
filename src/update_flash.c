@@ -720,11 +720,13 @@ out:
 #    endif
 #endif
 
-/* Reserve space for two sectors in case of NVM_FLASH_WRITEONCE, for redundancy */
+/* Max firmware size: partition must hold header + fw + trailer sector(s) */
 #ifndef NVM_FLASH_WRITEONCE
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE))
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
+        IMAGE_HEADER_SIZE - WOLFBOOT_SECTOR_SIZE))
 #else
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - (2 *WOLFBOOT_SECTOR_SIZE)))
+    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
+        IMAGE_HEADER_SIZE - (2 * WOLFBOOT_SECTOR_SIZE)))
 #endif
 
 static int wolfBoot_get_total_size(struct wolfBoot_image* boot,

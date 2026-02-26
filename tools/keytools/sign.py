@@ -72,6 +72,8 @@ HDR_IMG_TYPE_WOLFBOOT     = 0x0000
 HDR_IMG_TYPE_APP          = 0x0001
 
 WOLFBOOT_HEADER_SIZE = 256
+WOLFBOOT_PARTITION_SIZE = 0
+WOLFBOOT_SECTOR_SIZE = 0
 
 sign="auto"
 self_update=False
@@ -386,6 +388,12 @@ if cfile:
             val=l.split('=')[1].rstrip('\n')
             WOLFBOOT_HEADER_SIZE = int(val,0)
             print("IMAGE_HEADER_SIZE (from .config): " + str(WOLFBOOT_HEADER_SIZE))
+        if "WOLFBOOT_PARTITION_SIZE" in l and "ADDRESS" not in l:
+            val=l.split('=')[1].rstrip('\n')
+            WOLFBOOT_PARTITION_SIZE = int(val,0)
+        if "WOLFBOOT_SECTOR_SIZE" in l:
+            val=l.split('=')[1].rstrip('\n')
+            WOLFBOOT_SECTOR_SIZE = int(val,0)
 
         l = cfile.readline()
     cfile.close()
@@ -703,6 +711,24 @@ while True:
 
 infile.close()
 outfile.close()
+
+# Check if signed image fits in partition
+if WOLFBOOT_PARTITION_SIZE > 0:
+    img_size = os.path.getsize(image_file)
+    total_img_sz = WOLFBOOT_HEADER_SIZE + img_size
+    # Only subtract sector for trailer when sector < partition.
+    # When sector >= partition (e.g. update_ram targets), the
+    # entire partition is available for the image.
+    if WOLFBOOT_SECTOR_SIZE < WOLFBOOT_PARTITION_SIZE:
+        max_img_sz = WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE
+    else:
+        max_img_sz = WOLFBOOT_PARTITION_SIZE
+    if total_img_sz > max_img_sz:
+        print("Error: Image size %d (header %d + firmware %d) "
+            "exceeds max %d (partition %d - sector %d)" %
+            (total_img_sz, WOLFBOOT_HEADER_SIZE, img_size,
+            max_img_sz, WOLFBOOT_PARTITION_SIZE, WOLFBOOT_SECTOR_SIZE))
+        sys.exit(1)
 
 if (encrypt):
     delta_align=64

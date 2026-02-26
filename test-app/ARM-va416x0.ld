@@ -1,5 +1,5 @@
-_Min_Heap_Size  = 0x00002000; /* required amount of heap  */
-_Min_Stack_Size = 0x00002000; /* required amount of stack */
+_Min_Heap_Size  = 0x00000100; /* minimal heap (not using malloc) */
+_Min_Stack_Size = 0x00003000; /* required amount of stack */
 
 /* Memory areas */
 MEMORY

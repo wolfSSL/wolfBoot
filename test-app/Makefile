@@ -95,6 +95,71 @@ ifeq ($(DEBUG_UART),1)
     APP_OBJS+=../src/string.o
 endif
 
+# wolfCrypt Test and Benchmark Support
+WOLFCRYPT_SUPPORT=0
+
+ifeq ($(WOLFCRYPT_TEST),1)
+  CFLAGS+=-DWOLFCRYPT_TEST
+  WOLFCRYPT_SUPPORT=1
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/test/test.o
+endif
+
+ifeq ($(WOLFCRYPT_BENCHMARK),1)
+  CFLAGS+=-DWOLFCRYPT_BENCHMARK
+  WOLFCRYPT_SUPPORT=1
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/benchmark/benchmark.o
+endif
+
+ifeq ($(WOLFCRYPT_SUPPORT),1)
+  # Add support infrastructure
+  APP_OBJS+=wolfcrypt_support.o
+  APP_OBJS+=syscalls.o
+
+  # Add wolfCrypt core implementation files
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/misc.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
+
+  # Add SHA implementations (needed for test/benchmark)
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+
+  # Add RNG support (needed for ECC signing and tests)
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+
+  # Add AES support (needed by benchmark for AES-CBC etc.)
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+
+  # Add ECC support (needed by test suite)
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o
+
+  # Add SP math implementations for ARM Cortex-M
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+
+  ifneq ($(NO_ARM_ASM),1)
+    APP_OBJS+= \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+
+    CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO -DWOLFSSL_ARMASM_INLINE \
+                              -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
+  endif
+
+  CFLAGS+=-DWOLFSSL_USER_SETTINGS
+  CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
+endif
+
 ifeq ($(TZEN),1)
     CFLAGS+=-DNONSECURE_APP
     CFLAGS+=-I./
@@ -335,6 +400,17 @@ ifeq ($(TARGET),va416x0)
   ifneq ($(SIGN),NONE)
     APP_OBJS+=../src/keystore.o
   endif
+  # Reduce size: newlib-nano and section GC
+  LDFLAGS+=--specs=nano.specs
+  ifneq ($(WOLFCRYPT_SUPPORT),1)
+    # Only use nosys stubs when not providing our own syscalls
+    LDFLAGS+=--specs=nosys.specs
+  endif
+  ifeq ($(WOLFCRYPT_BENCHMARK),1)
+    # Benchmark needs float printf for results
+    LDFLAGS+=-u _printf_float
+  endif
+  CFLAGS+=-ffunction-sections -fdata-sections
 endif
 
 ifeq ($(TARGET),sim)
