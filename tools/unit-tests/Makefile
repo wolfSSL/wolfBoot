@@ -29,7 +29,8 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk
+       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk \
+       unit-multiboot
 
 all: $(TESTS)
 
@@ -164,6 +165,9 @@ gpt-sfdisk-test.h:
 
 unit-disk: unit-disk.c gpt-sfdisk-test.h
 	gcc -o $@ $< $(CFLAGS) $(LDFLAGS)
+
+unit-multiboot: unit-multiboot.c
+	gcc -o $@ unit-multiboot.c $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
