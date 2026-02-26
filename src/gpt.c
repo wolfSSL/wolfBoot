@@ -152,10 +152,14 @@ int gpt_parse_partition(const uint8_t *entry_data, uint32_t entry_size,
     if (pe->first > pe->last) {
         return -1;
     }
+    /* LBA 0 is the protective MBR; no valid partition can end there */
+    if (pe->last == 0) {
+        return -1;
+    }
 
     /* Extract partition info (convert LBA to byte offsets) */
     part->start = pe->first * GPT_SECTOR_SIZE;
-    part->end = (pe->last * GPT_SECTOR_SIZE) - 1;
+    part->end = ((pe->last + 1) * GPT_SECTOR_SIZE) - 1;
     memcpy(part->name, pe->name, sizeof(part->name));
 
     return 0;
