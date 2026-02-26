@@ -81,6 +81,9 @@ static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
             uint64_t end_bytes = start_bytes +
                 ((uint64_t)pte->lba_size * GPT_SECTOR_SIZE) - 1;
 
+            if (n >= MAX_PARTITIONS)
+                break;
+
             drive->part[n].drv = drive->drv;
             drive->part[n].start = start_bytes;
             drive->part[n].end = end_bytes;
