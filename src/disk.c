@@ -277,18 +277,27 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
+    uint64_t start;
     int ret;
     if (p == NULL) {
         return -1;
     }
-    if ((p->end - (p->start + off)) < sz) {
-        len = p->end - (p->start + off);
+    start = p->start + off;
+    /* overflow */
+    if (start < p->start) {
+        return -1;
+    }
+    /* p->end is the last valid byte we can read */
+    if (start > p->end) {
+        return -1;
+    }
+    if ((p->end - start + 1) < sz) {
+        len = (uint32_t)(p->end - start + 1);
     }
     if (len < 0) {
         return -1;
     }
-
-    ret = disk_read(drv, p->start + off, len, buf);
+    ret = disk_read(drv, start, len, buf);
 #ifdef DEBUG_DISK
     wolfBoot_printf("disk_part_read: drv: %d, part: %d, off: %llu, sz: %llu, "
         "buf: %p, ret %d\r\n", drv, part, p->start + off, len, buf, ret);
@@ -317,17 +326,26 @@ int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t 
 {
     struct disk_partition *p = open_part(drv, part);
     int len = sz;
+    uint64_t start;
     int ret;
     if (p == NULL) {
         return -1;
     }
-    if ((p->end - (p->start + off)) < sz) {
-        len = p->end - (p->start + off);
+    start = p->start + off;
+    /* overflow */
+    if (start < p->start) {
+        return -1;
+    }
+    if (start > p->end) {
+        return -1;
+    }
+    if ((p->end - start + 1) < sz) {
+        len = (uint32_t)(p->end - start + 1);
     }
     if (len < 0) {
         return -1;
     }
-    ret = disk_write(drv, p->start + off, len, buf);
+    ret = disk_write(drv, start, len, buf);
 #ifdef DEBUG_DISK
     wolfBoot_printf("disk_part_write: drv: %d, part: %d, off: %llu, sz: %llu, "
         "buf: %p, ret %d\r\n", drv, part, p->start + off, sz, buf, ret);
