@@ -20,6 +20,7 @@ This README describes configuration of supported targets.
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP LPC55S69](#lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
@@ -1743,7 +1744,7 @@ Example configurations for this target are provided in:
 
 1. Download `aarch64-none-elf-` toolchain.
 
-2. Copy the example `nxp-ls1028a.cofig` file to root directory and rename to `.config`
+2. Copy the example `nxp-ls1028a.config` file to root directory and rename to `.config`
 
 3. Build keytools and wolfboot
 

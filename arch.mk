@@ -1112,6 +1112,42 @@ ifeq ($(TARGET),lpc)
   endif
 endif
 
+ifeq ($(TARGET),lpc55s69)
+  ifneq ($(TZEN),1)
+    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+  endif
+  CFLAGS+=\
+      -I$(MCUXPRESSO_PROJECT_TEMPLATE) \
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_DRIVERS)/../periph \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO)/drivers/flexcomm \
+      -I$(MCUXPRESSO)/drivers/flexcomm/usart \
+      -I$(MCUXPRESSO)/drivers/iap1 \
+      -I$(MCUXPRESSO)/drivers/lpc_gpio \
+      -I$(MCUXPRESSO)/drivers/lpc_iocon \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=-DCPU_$(MCUXPRESSO_CPU)
+  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
+  LDFLAGS+=-mcpu=cortex-m33
+  OBJS+=\
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o \
+      $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
+      $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
+      $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o
+  ifeq ($(DEBUG_UART),1)
+    OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
+      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
+  endif
+endif
+
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
     OBJS+=\
