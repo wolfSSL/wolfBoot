@@ -195,6 +195,10 @@ int gpt_part_name_eq(const uint16_t *utf16_name, const char *ascii_label)
     /* Skip BOM if present */
     if (utf16_name[utf16_idx] == 0xfeff) {
         utf16_idx = 1;
+        /* Ensure label + BOM offset fits in name array */
+        if (ascii_len + utf16_idx > GPT_PART_NAME_SIZE) {
+            return 0;
+        }
     }
 
     /* Compare each character */
