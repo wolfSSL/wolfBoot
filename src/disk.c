@@ -385,6 +385,8 @@ int disk_find_partition_by_label(int drv, const char *label)
     }
     for (i = 0; i < Drives[drv].n_parts; i++) {
         p = open_part(drv, i);
+        if (p == NULL)
+            continue;
         if (gpt_part_name_eq(p->name, label) == 1)
             return i;
     }
