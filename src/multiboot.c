@@ -23,6 +23,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <printf.h>
 #include <sys/types.h>
 
@@ -360,18 +361,19 @@ static void mb2_dump_header(void* mbHeader) {
 
 uint8_t *mb2_find_header(uint8_t *image, int size)
 {
-    uint32_t *ptr;
+    uint32_t val;
     int i;
 
     if (size > MB2_HEADER_MAX_OFF)
         size = MB2_HEADER_MAX_OFF;
     size = size / 4;
-    for (ptr = (uint32_t*)image,i = 0; i < size; ++i) {
-        if (ptr[i] == MB2_HEADER_MAGIC) {
+    for (i = 0; i < size; ++i) {
+        memcpy(&val, image + i * 4, sizeof(val));
+        if (val == MB2_HEADER_MAGIC) {
 #ifdef DEBUG_MB2
-            mb2_dump_header(&ptr[i]);
+            mb2_dump_header(image + i * 4);
 #endif /* DEBUG_MB2 */
-            return (uint8_t*)&ptr[i];
+            return image + i * 4;
         }
     }
     return NULL;
