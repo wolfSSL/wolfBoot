@@ -148,12 +148,14 @@ int disk_open(int drv)
         r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
         if (r < 0) {
             wolfBoot_printf("Disk read failed\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
         /* Parse and validate GPT header */
         if (gpt_parse_header((uint8_t*)sector, &ptable) != 0) {
             wolfBoot_printf("Invalid GPT header\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
@@ -175,8 +177,10 @@ int disk_open(int drv)
                 break;
 
             r = disk_read(drv, address, ptable.array_sz, entry_buf);
-            if (r < 0)
+            if (r < 0) {
+                Drives[drv].is_open = 0;
                 return -1;
+            }
 
             if (gpt_parse_partition((uint8_t*)entry_buf, ptable.array_sz,
                     &part_info) == 0) {
@@ -204,12 +208,14 @@ int disk_open(int drv)
         /* Check MBR boot signature (0xAA55) */
         if (*boot_sig != GPT_MBR_BOOTSIG_VALUE) {
             wolfBoot_printf("No valid partition table found\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
         wolfBoot_printf("Found MBR partition table\r\n");
         if (disk_open_mbr(&Drives[drv], sector) < 0) {
             wolfBoot_printf("Failed to parse MBR\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
     }
