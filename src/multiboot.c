@@ -102,11 +102,15 @@ static uint8_t* mb2_align_address_up(uint8_t *addr, int align)
     return (uint8_t*)((v + mask) & ~(mask));
 }
 
-static uint8_t *mb2_find_tag_by_type(uint8_t *tags, uint32_t type)
+static uint8_t *mb2_find_tag_by_type(uint8_t *tags, uint32_t tags_len,
+                                     uint32_t type)
 {
+    uint8_t *end = tags + tags_len;
     struct mb2_tag* tag = (struct mb2_tag*)tags;
 
-    while (tag->type != 0) {
+    while ((uint8_t*)tag + sizeof(*tag) <= end && tag->type != 0) {
+        if (tag->size < sizeof(*tag))
+            return NULL;
         if (tag->type == type)
             return (uint8_t*)tag;
         tag = (struct mb2_tag*)mb2_align_address_up((uint8_t*)tag + tag->size,
@@ -247,6 +251,7 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
         (struct mb2_boot_info_header *)mb2_boot_info;
     struct mb2_tag_info_req *info_req_tag;
     int requested_tags, i, r;
+    uint32_t header_length;
     uint8_t *idx;
 
     if (max_size < sizeof(*hdr)) {
@@ -256,8 +261,14 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
     max_size -= sizeof(*hdr);
     idx = (uint8_t*)hdr + sizeof(*hdr);
     hdr->reserved = 0;
+    header_length = ((struct mb2_header *)mb2_header)->header_length;
+    if (header_length < sizeof(struct mb2_header))
+        return -1;
     info_req_tag =
-        (struct mb2_tag_info_req *)mb2_find_tag_by_type(mb2_header + sizeof(struct mb2_header), MB2_TAG_TYPE_INFO_REQ);
+        (struct mb2_tag_info_req *)mb2_find_tag_by_type(
+            mb2_header + sizeof(struct mb2_header),
+            header_length - sizeof(struct mb2_header),
+            MB2_TAG_TYPE_INFO_REQ);
     if (info_req_tag == NULL)
         return -1;
     requested_tags = (info_req_tag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint32_t);
