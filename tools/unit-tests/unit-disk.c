@@ -61,7 +61,7 @@ void disk_close(int drv) { (void)drv; }
 /* GPT partition layout (LBA offsets) */
 static const int PART0_OFF = 40;
 static const int PART0_END = 100;
-static const int PART1_OFF = 100;
+static const int PART1_OFF = 101;
 static const int PART1_END = 200;
 
 /* --- Helpers to build fake disk layouts --- */
