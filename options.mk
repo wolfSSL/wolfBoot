@@ -1030,9 +1030,11 @@ CFLAGS+=$(CFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
 
 ifeq ($(USE_GCC_HEADLESS),1)
-  ifneq ($(ARCH),RENESAS_RX)
-    ifneq ($(ARCH),AURIX_TC3)
-      CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+  ifeq ($(USE_GCC),1)
+    ifneq ($(ARCH),RENESAS_RX)
+      ifneq ($(ARCH),AURIX_TC3)
+        CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+      endif
     endif
   endif
 endif

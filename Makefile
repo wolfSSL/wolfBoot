@@ -180,7 +180,7 @@ CFLAGS+=$(WOLFPSA_CFLAGS)
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -nostartfiles
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding
   CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
   # Allow unused parameters and functions
   CFLAGS+=-Wno-unused-parameter -Wno-unused-function

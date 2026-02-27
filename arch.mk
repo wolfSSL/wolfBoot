@@ -134,8 +134,12 @@ endif
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
   CFLAGS+=-DARCH_ARM
-  CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
-  LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
+  CFLAGS+=-mthumb -mlittle-endian
+  LDFLAGS+=-mthumb -mlittle-endian
+  ifeq ($(USE_GCC),1)
+    CFLAGS+=-mthumb-interwork
+    LDFLAGS+=-mthumb-interwork
+  endif
 
   ## Target specific configuration
   ifeq ($(TARGET),samr21)
