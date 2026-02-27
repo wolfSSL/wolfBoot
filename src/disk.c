@@ -297,9 +297,6 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
     if ((p->end - start + 1) < sz) {
         len = (uint32_t)(p->end - start + 1);
     }
-    if (len < 0) {
-        return -1;
-    }
     ret = disk_read(drv, start, len, buf);
 #ifdef DEBUG_DISK
     wolfBoot_printf("disk_part_read: drv: %d, part: %d, off: %llu, sz: %llu, "
@@ -347,9 +344,6 @@ int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t 
     }
     if ((p->end - start + 1) < sz) {
         len = (uint32_t)(p->end - start + 1);
-    }
-    if (len < 0) {
-        return -1;
     }
     ret = disk_write(drv, start, len, buf);
 #ifdef DEBUG_DISK
