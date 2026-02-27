@@ -251,6 +251,7 @@ struct cmd_options {
     int policy_sign;
     int self_update;
     int sha_only;
+    int header_only;
     int encrypt;
     int hash_algo;
     int sign;
@@ -1113,7 +1114,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 {
     uint32_t header_idx;
     uint8_t *header;
-    FILE *f, *f2, *fek, *fef;
+    FILE *f = NULL, *f2 = NULL, *fek = NULL, *fef = NULL;
     uint32_t fw_version32;
     struct stat attrib;
     uint16_t image_type;
@@ -1747,20 +1748,26 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     }
     fwrite(header, 1, header_idx, f);
     /* Copy image to output */
-    f2 = fopen(image_file, "rb");
-    pos = 0;
-    while (pos < image_sz) {
-        read_sz = image_sz;
-        if (read_sz > sizeof(buf))
-            read_sz = sizeof(buf);
-        read_sz = (uint32_t)fread(buf, 1, read_sz, f2);
-        if ((read_sz == 0) && (feof(f2)))
-            break;
-        fwrite(buf, 1, read_sz, f);
-        pos += read_sz;
+    if (!CMD.header_only) {
+        f2  = fopen(image_file, "rb");
+        pos = 0;
+        while (pos < image_sz) {
+            read_sz = image_sz;
+            if (read_sz > sizeof(buf)) {
+                read_sz = sizeof(buf);
+            }
+            read_sz = (uint32_t)fread(buf, 1, read_sz, f2);
+            if ((read_sz == 0) && (feof(f2))) {
+                break;
+            }
+            fwrite(buf, 1, read_sz, f);
+            pos += read_sz;
+        }
+        fclose(f2);
+        f2 = NULL;
     }
 
-    if ((CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
+    if (!CMD.header_only && (CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
         uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
         uint8_t enc_buf[ENC_MAX_BLOCK_SZ];
         int ivSz, keySz, encBlockSz;
@@ -1855,8 +1862,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     }
     printf("Output image(s) successfully created.\n");
     ret = 0;
-    fclose(f2);
-    fclose(f);
+    if (f2) {
+        fclose(f2);
+    }
+    if (f) {
+        fclose(f);
+    }
 failure:
     if (cert_chain)
         free(cert_chain);
@@ -2602,6 +2613,9 @@ int main(int argc, char** argv)
             CMD.self_update = 1;
             CMD.partition_id = 0;
         }
+        else if (strcmp(argv[i], "--header-only") == 0) {
+            CMD.header_only = 1;
+        }
         else if (strcmp(argv[i], "--id") == 0) {
             long id = strtol(argv[++i], NULL, 10);
             if ((id < 0 || id > 15) || ((id == 0) && (argv[i][0] != '0'))) {
@@ -2811,9 +2825,12 @@ int main(int argc, char** argv)
     if (tmpstr) {
         *tmpstr = '\0'; /* null terminate at last "." */
     }
-    snprintf(CMD.output_image_file, sizeof(CMD.output_image_file) - 1,
-            "%s_v%s_%s.bin", (char*)buf, CMD.fw_version,
-            CMD.sha_only ? "digest" : "signed");
+    {
+        const char* artifact =
+            CMD.header_only ? "header" : (CMD.sha_only ? "digest" : "signed");
+        snprintf(CMD.output_image_file, sizeof(CMD.output_image_file) - 1,
+                 "%s_v%s_%s.bin", (char*)buf, CMD.fw_version, artifact);
+    }
 
     snprintf(CMD.output_encrypted_image_file,
             sizeof(CMD.output_encrypted_image_file),
@@ -2855,9 +2872,10 @@ int main(int argc, char** argv)
                 "%s_v%s_signed_diff_encrypted.bin",
                 (char*)buf, CMD.fw_version);
     }
-    printf("Output %6s:        %s\n",    CMD.sha_only ? "digest" : "image",
-            CMD.output_image_file);
-    if (CMD.encrypt) {
+    printf("Output %6s:        %s\n",
+           CMD.header_only ? "header" : (CMD.sha_only ? "digest" : "image"),
+           CMD.output_image_file);
+    if (CMD.encrypt && !CMD.header_only) {
         printf("Encrypted output:     %s\n", CMD.output_encrypted_image_file);
     }
     printf("Target partition id : %hu ", CMD.partition_id);

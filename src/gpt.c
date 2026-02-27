@@ -152,10 +152,14 @@ int gpt_parse_partition(const uint8_t *entry_data, uint32_t entry_size,
     if (pe->first > pe->last) {
         return -1;
     }
+    /* LBA 0 is the protective MBR; no valid partition can end there */
+    if (pe->last == 0) {
+        return -1;
+    }
 
     /* Extract partition info (convert LBA to byte offsets) */
     part->start = pe->first * GPT_SECTOR_SIZE;
-    part->end = (pe->last * GPT_SECTOR_SIZE) - 1;
+    part->end = ((pe->last + 1) * GPT_SECTOR_SIZE) - 1;
     memcpy(part->name, pe->name, sizeof(part->name));
 
     return 0;
@@ -191,6 +195,10 @@ int gpt_part_name_eq(const uint16_t *utf16_name, const char *ascii_label)
     /* Skip BOM if present */
     if (utf16_name[utf16_idx] == 0xfeff) {
         utf16_idx = 1;
+        /* Ensure label + BOM offset fits in name array */
+        if (ascii_len + utf16_idx > GPT_PART_NAME_SIZE) {
+            return 0;
+        }
     }
 
     /* Compare each character */

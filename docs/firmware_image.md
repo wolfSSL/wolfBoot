@@ -111,6 +111,14 @@ In order to boot a different image, wolfBoot will have to swap the content of th
 
 For more information on how firmware images are stored and managed within the two partitions, see [Flash partitions](flash_partitions.md)
 
+The same manifest header format is also used by the **self-header** feature
+(`WOLFBOOT_SELF_HEADER`), where a copy of the bootloader's manifest header is
+persisted at a separate flash address. This allows external components to
+cryptographically verify the bootloader's authenticity and version using the
+standard wolfBoot verification APIs. See
+[firmware_update.md](firmware_update.md#self-header-persisting-the-bootloader-manifest)
+for full details.
+
 
 
 

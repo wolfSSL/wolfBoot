@@ -81,6 +81,9 @@ static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
             uint64_t end_bytes = start_bytes +
                 ((uint64_t)pte->lba_size * GPT_SECTOR_SIZE) - 1;
 
+            if (n >= MAX_PARTITIONS)
+                break;
+
             drive->part[n].drv = drive->drv;
             drive->part[n].start = start_bytes;
             drive->part[n].end = end_bytes;
@@ -117,7 +120,7 @@ int disk_open(int drv)
     uint32_t gpt_lba = 0;
     uint8_t sector[GPT_SECTOR_SIZE] XALIGNED(4);
 
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
         return -1;
     }
@@ -145,12 +148,14 @@ int disk_open(int drv)
         r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
         if (r < 0) {
             wolfBoot_printf("Disk read failed\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
         /* Parse and validate GPT header */
         if (gpt_parse_header((uint8_t*)sector, &ptable) != 0) {
             wolfBoot_printf("Invalid GPT header\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
@@ -172,8 +177,10 @@ int disk_open(int drv)
                 break;
 
             r = disk_read(drv, address, ptable.array_sz, entry_buf);
-            if (r < 0)
+            if (r < 0) {
+                Drives[drv].is_open = 0;
                 return -1;
+            }
 
             if (gpt_parse_partition((uint8_t*)entry_buf, ptable.array_sz,
                     &part_info) == 0) {
@@ -201,12 +208,14 @@ int disk_open(int drv)
         /* Check MBR boot signature (0xAA55) */
         if (*boot_sig != GPT_MBR_BOOTSIG_VALUE) {
             wolfBoot_printf("No valid partition table found\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
 
         wolfBoot_printf("Found MBR partition table\r\n");
         if (disk_open_mbr(&Drives[drv], sector) < 0) {
             wolfBoot_printf("Failed to parse MBR\r\n");
+            Drives[drv].is_open = 0;
             return -1;
         }
     }
@@ -231,11 +240,11 @@ int disk_open(int drv)
  */
 static struct disk_partition *open_part(int drv, int part)
 {
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         wolfBoot_printf("Attempting to access invalid drive %d\r\n", drv);
         return NULL;
     }
-    if ((part < 0) || (part > MAX_PARTITIONS)) {
+    if ((part < 0) || (part >= MAX_PARTITIONS)) {
         wolfBoot_printf("Attempting to access invalid partition %d\r\n", part);
         return NULL;
     }
@@ -267,25 +276,32 @@ static struct disk_partition *open_part(int drv, int part)
 int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
-    int len = sz;
+    uint64_t start;
     int ret;
     if (p == NULL) {
         return -1;
     }
-    if ((p->end - (p->start + off)) < sz) {
-        len = p->end - (p->start + off);
-    }
-    if (len < 0) {
+    if (sz > DISK_IO_MAX_SIZE)
+        sz = DISK_IO_MAX_SIZE;
+    start = p->start + off;
+    /* overflow */
+    if (start < p->start) {
         return -1;
     }
-
-    ret = disk_read(drv, p->start + off, len, buf);
+    /* p->end is the last valid byte we can read */
+    if (start > p->end) {
+        return -1;
+    }
+    if ((p->end - start + 1) < sz)
+        sz = p->end - start + 1;
+    ret = disk_read(drv, start, (uint32_t)sz, buf);
 #ifdef DEBUG_DISK
     wolfBoot_printf("disk_part_read: drv: %d, part: %d, off: %llu, sz: %llu, "
-        "buf: %p, ret %d\r\n", drv, part, p->start + off, len, buf, ret);
+        "buf: %p, ret %d\r\n", drv, part, p->start + off, (uint32_t)sz, buf,
+        ret);
 #endif
     if (ret == 0) {
-        ret = len; /* success expects to return the number of bytes read */
+        ret = (int)sz;
     }
     return ret;
 }
@@ -307,24 +323,31 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf)
 {
     struct disk_partition *p = open_part(drv, part);
-    int len = sz;
+    uint64_t start;
     int ret;
     if (p == NULL) {
         return -1;
     }
-    if ((p->end - (p->start + off)) < sz) {
-        len = p->end - (p->start + off);
-    }
-    if (len < 0) {
+    if (sz > DISK_IO_MAX_SIZE)
+        sz = DISK_IO_MAX_SIZE;
+    start = p->start + off;
+    /* overflow */
+    if (start < p->start) {
         return -1;
     }
-    ret = disk_write(drv, p->start + off, len, buf);
+    if (start > p->end) {
+        return -1;
+    }
+    if ((p->end - start + 1) < sz)
+        sz = p->end - start + 1;
+    ret = disk_write(drv, start, (uint32_t)sz, buf);
 #ifdef DEBUG_DISK
     wolfBoot_printf("disk_part_write: drv: %d, part: %d, off: %llu, sz: %llu, "
-        "buf: %p, ret %d\r\n", drv, part, p->start + off, sz, buf, ret);
+        "buf: %p, ret %d\r\n", drv, part, p->start + off, (uint32_t)sz, buf,
+        ret);
 #endif
     if (ret == 0) {
-        ret = len; /* success expects to return the number of bytes written */
+        ret = (int)sz;
     }
     return ret;
 }
@@ -344,7 +367,7 @@ int disk_find_partition_by_label(int drv, const char *label)
     struct disk_partition *p;
     int i;
 
-    if ((drv < 0) || (drv > MAX_DISKS)) {
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
         return -1;
     }
     if (Drives[drv].is_open == 0) {
@@ -352,6 +375,8 @@ int disk_find_partition_by_label(int drv, const char *label)
     }
     for (i = 0; i < Drives[drv].n_parts; i++) {
         p = open_part(drv, i);
+        if (p == NULL)
+            continue;
         if (gpt_part_name_eq(p->name, label) == 1)
             return i;
     }

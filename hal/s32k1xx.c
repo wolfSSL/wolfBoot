@@ -62,6 +62,12 @@
 /* Located at 0x400-0x40F in flash */
 
 #ifdef __WOLFBOOT
+
+/* Flash Option Byte - override with CFLAGS_EXTRA+=-DWOLFBOOT_FOPT=0xF7 */
+#ifndef WOLFBOOT_FOPT
+#define WOLFBOOT_FOPT 0xFF
+#endif
+
 #define FCF_LEN (16)
 const uint8_t __attribute__((section(".flash_config"))) flash_config[FCF_LEN] = {
     /* Backdoor comparison key (8 bytes) */
@@ -71,7 +77,7 @@ const uint8_t __attribute__((section(".flash_config"))) flash_config[FCF_LEN] = 
     /* Flash Security Byte */
     0xFE,  /* SEC=10 (unsecured), FSLACC=11, MEEN=11, KEYEN=11 */
     /* Flash Option Byte */
-    0xFF,
+    WOLFBOOT_FOPT,
     /* EEPROM Protection Byte */
     0xFF,
     /* Data Flash Protection Byte */

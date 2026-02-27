@@ -165,6 +165,23 @@ the bootloader itself is stored.
   * `--wolfboot-update` Indicate that the image contains a signed self-update
 package for the bootloader. Equivalent to `--id 0`.
 
+#### Header-only output (wolfBoot self header)
+
+Use `--header-only` to emit only the manifest header without copying the
+firmware bytes into the output file. This is useful when persisting
+wolfBoot's own header at a separate flash address for external measurement:
+
+```
+$ tools/keytools/sign --wolfboot-update --header-only wolfboot.bin key.der 1
+# Produces wolfboot_v1_header.bin (header only)
+$ tools/keytools/sign --wolfboot-update wolfboot.bin key.der 1
+# Produces wolfboot_v1_signed.bin (header + firmware)
+```
+
+For complete documentation of the self-header feature — including
+configuration, update flow, and runtime verification — see
+[firmware_update.md](firmware_update.md#self-header-persisting-the-bootloader-manifest).
+
 #### Encryption using a symmetric key
 
 Although signed to be authenticated, by default the image is not encrypted and

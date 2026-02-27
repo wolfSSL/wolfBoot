@@ -1,4 +1,4 @@
-name: Simulator self-update test
+name: Simulator self-update and self-header tests
 
 on:
   push:
@@ -71,3 +71,15 @@ jobs:
           make clean
           cp config/examples/sim-self-update-ext.config .config
           make test-sim-self-update-ext
+
+      - name: Run self-header verification test (internal flash)
+        run: |
+          make clean
+          cp config/examples/sim-self-header.config .config
+          make test-sim-self-header-verify
+
+      - name: Run self-header verification test (external flash)
+        run: |
+          make clean
+          cp config/examples/sim-self-header-ext.config .config
+          make test-sim-self-header-ext-verify

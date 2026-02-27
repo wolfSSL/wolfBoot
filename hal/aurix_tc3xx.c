@@ -301,9 +301,11 @@ void hal_init(void)
 #ifdef DEBUG_UART
     uart_init();
 #ifndef WOLFBOOT_AURIX_TC3XX_HSM
-    wolfBoot_printf("Hello from TC3xx wolfBoot on Tricore\n");
+    wolfBoot_printf("Hello from TC3xx wolfBoot on Tricore: V%d\n",
+                    WOLFBOOT_VERSION);
 #else
-    wolfBoot_printf("Hello from TC3xx wolfBoot on HSM\n");
+    wolfBoot_printf("Hello from TC3xx wolfBoot on HSM: V%d\n",
+                    WOLFBOOT_VERSION);
 #endif
 #endif /* DEBUG_UART */
 }

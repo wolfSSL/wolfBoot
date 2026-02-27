@@ -3651,6 +3651,21 @@ The following build options are available for the S32K1xx HAL:
 | `DEBUG_UART` | Enable LPUART1 debug output. |
 | `DEBUG_HARDFAULT` | Enable detailed hard fault debugging output. |
 | `S32K144`, `S32K146`, `S32K148` | Select variant (default is S32K142). Affects flash/SRAM size definitions. |
+| `WOLFBOOT_FOPT` | Override the Flash Option Byte (FOPT) in the Flash Configuration Field (FCF at 0x40D). Default is `0xFF`. Set via `CFLAGS_EXTRA+=-DWOLFBOOT_FOPT=0xF7` in your `.config` file. See FOPT bit field table below. |
+
+**FOPT Bit Fields** (from S32K1xx Reference Manual Table 25-2):
+
+| Bit(s) | Field | Default | Description |
+|--------|-------|---------|-------------|
+| 7-6 | Reserved | 1 | Reserved for future expansion. |
+| 5 | Reserved | 1 | Reserved. |
+| 4 | Reserved | 1 | Reserved for future expansion. |
+| 3 | RESET_PIN_CFG | 1 | `1`: RESET pin enabled (pullup, passive filter). `0`: RESET pin disabled after POR (use PTA5 as GPIO). |
+| 2 | NMI_PIN_CFG | 1 | `1`: NMI pin/interrupts enabled. `0`: NMI interrupts always blocked (pin defaults to NMI_b with pullup). |
+| 1 | Reserved | 1 | Reserved for future expansion. |
+| 0 | LPBOOT | 1 | `1`: Core/system clock divider (OUTDIV1) = divide by 1. `0`: OUTDIV1 = divide by 2. Not available on S32K14xW. |
+
+Example: To disable the RESET pin (use PTA5 as GPIO), set bit 3 to 0: `WOLFBOOT_FOPT=0xF7`.
 
 **IMPORTANT:** Flash sector size depends on the S32K variant:
 - **S32K142** (256KB Flash): 2KB sectors (`WOLFBOOT_SECTOR_SIZE=0x800`)

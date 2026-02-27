@@ -29,6 +29,9 @@
 #include "target.h"
 
 #include "wolfboot/wolfboot.h"
+#ifdef WOLFBOOT_SELF_HEADER
+#include "image.h"
+#endif
 
 #ifdef DUALBANK_SWAP
 uint32_t hal_sim_get_dualbank_state(void);
@@ -119,6 +122,42 @@ int do_cmd(const char *cmd)
             printf("TLV 0x%x: not found!\r\n", tlv);
         }
     }
+#ifdef WOLFBOOT_SELF_HEADER
+    if (strcmp(cmd, "verify_self") == 0) {
+        struct wolfBoot_image img;
+        int                   ret;
+
+        printf("=== Self-Header Verification Test ===\n");
+
+        /* Open bootloader image using persisted self-header */
+        ret = wolfBoot_open_self(&img);
+        if (ret != 0) {
+            printf("FAIL: wolfBoot_open_self returned %d\n", ret);
+            return -1;
+        }
+        printf("open_self: OK (fw_size=%u, part=%d)\n", (unsigned)img.fw_size,
+               img.part);
+
+        /* Verify integrity (hash check) */
+        ret = wolfBoot_verify_integrity(&img);
+        if (ret != 0) {
+            printf("FAIL: wolfBoot_verify_integrity returned %d\n", ret);
+            return -1;
+        }
+        printf("verify_integrity: OK\n");
+
+        /* Verify authenticity (signature check) */
+        ret = wolfBoot_verify_authenticity(&img);
+        if (ret != 0) {
+            printf("FAIL: wolfBoot_verify_authenticity returned %d\n", ret);
+            return -1;
+        }
+        printf("verify_authenticity: OK\n");
+
+        printf("=== Self-header verification PASSED ===\n");
+        return 0;
+    }
+#endif
     /* wrong command */
     return -1;
 }

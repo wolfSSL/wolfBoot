@@ -29,7 +29,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store
+       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk
 
 all: $(TESTS)
 
@@ -152,6 +152,18 @@ unit-update-ram: ../../include/target.h unit-update-ram.c
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+gpt-sfdisk-test.h:
+	truncate -s 131072 .gpt-tmp.img
+	printf 'label: gpt\nfirst-lba: 34\nstart=34, size=67, name="boot"\nstart=101, size=100, name="rootfs"\n' \
+		| sfdisk --no-reread --no-tell-kernel .gpt-tmp.img >/dev/null 2>&1
+	dd if=.gpt-tmp.img bs=512 count=3 of=gpt_sfdisk_data 2>/dev/null
+	(echo '/* Generated — do not edit. Regenerate: make gpt-sfdisk-test.h */'; \
+	 xxd -i gpt_sfdisk_data | sed 's/^unsigned/static const unsigned/') > $@
+	rm -f .gpt-tmp.img gpt_sfdisk_data
+
+unit-disk: unit-disk.c gpt-sfdisk-test.h
+	gcc -o $@ $< $(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
