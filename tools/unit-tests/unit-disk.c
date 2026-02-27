@@ -26,6 +26,7 @@
 
 #include "gpt.c"
 #include "disk.c"
+#include "gpt-sfdisk-test.h"
 
 /* Fake disk backing store for mock disk_read/disk_write */
 #define FAKE_DISK_SIZE (128 * 1024) /* 128 KB */
@@ -779,6 +780,64 @@ START_TEST(test_gpt_part_name_eq_not_null_terminated)
 END_TEST
 
 /* ============================================================
+ *  Tests using real sfdisk-generated GPT image
+ * ============================================================ */
+
+static void build_sfdisk_gpt_disk(void)
+{
+    memset(fake_disk, 0, FAKE_DISK_SIZE);
+    memcpy(fake_disk, gpt_sfdisk_data, gpt_sfdisk_data_len);
+}
+
+START_TEST(test_sfdisk_gpt_labels)
+{
+    build_sfdisk_gpt_disk();
+    ck_assert_int_eq(disk_open(0), 2);
+    ck_assert_int_eq(disk_find_partition_by_label(0, "boot"), 0);
+    ck_assert_int_eq(disk_find_partition_by_label(0, "rootfs"), 1);
+    ck_assert_int_eq(disk_find_partition_by_label(0, "nonexistent"), -1);
+}
+END_TEST
+
+START_TEST(test_sfdisk_gpt_last_lba_access)
+{
+    uint8_t buf[GPT_SECTOR_SIZE];
+    struct disk_partition *p;
+    uint64_t part_size;
+    int ret;
+    int i;
+
+    build_sfdisk_gpt_disk();
+    ck_assert_int_eq(disk_open(0), 2);
+
+    for (i = 0; i < 2; i++) {
+        uint8_t pattern = (i == 0) ? 0xAA : 0xBB;
+        p = &Drives[0].part[i];
+        part_size = p->end - p->start + 1;
+
+        /* Fill partition data area in fake_disk */
+        memset(fake_disk + p->start, pattern, part_size);
+
+        /* Read the last sector of the partition */
+        ret = disk_part_read(0, i, part_size - GPT_SECTOR_SIZE,
+            GPT_SECTOR_SIZE, buf);
+        ck_assert_int_eq(ret, GPT_SECTOR_SIZE);
+        ck_assert_uint_eq(buf[0], pattern);
+        ck_assert_uint_eq(buf[GPT_SECTOR_SIZE - 1], pattern);
+
+        /* Read 1 byte at the very last byte offset */
+        ret = disk_part_read(0, i, part_size - 1, 1, buf);
+        ck_assert_int_eq(ret, 1);
+        ck_assert_uint_eq(buf[0], pattern);
+
+        /* Read that would span past end — gets clamped to 1 byte */
+        ret = disk_part_read(0, i, part_size - 1, GPT_SECTOR_SIZE, buf);
+        ck_assert_int_eq(ret, 1);
+    }
+}
+END_TEST
+
+/* ============================================================
  *  Suite setup
  * ============================================================ */
 
@@ -830,6 +889,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_gpt_part_name_eq_label_too_long);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_not_null_terminated);
     suite_add_tcase(s, tc_cov);
+
+    TCase *tc_sfdisk = tcase_create("sfdisk-gpt");
+    tcase_add_test(tc_sfdisk, test_sfdisk_gpt_labels);
+    tcase_add_test(tc_sfdisk, test_sfdisk_gpt_last_lba_access);
+    suite_add_tcase(s, tc_sfdisk);
 
     return s;
 }
