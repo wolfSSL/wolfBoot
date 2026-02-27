@@ -1759,7 +1759,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
             partition_sz = (uint32_t)tmp;
 
-            if (env_ssize) {
+            if (env_ssize && *env_ssize) {
                 errno = 0;
                 tmp = strtoul(env_ssize, &endptr, 0);
                 if (endptr == env_ssize || *endptr != '\0' ||

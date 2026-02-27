@@ -93,9 +93,11 @@ int _write(int file, char *ptr, int len)
     /* Write to UART for stdout/stderr */
     if (file == 1 || file == 2) {
         uart_write(ptr, len);
+        return len;
     }
 
-    return len;
+    errno = EBADF;
+    return -1;
 }
 
 void _exit(int status)
