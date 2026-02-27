@@ -51,10 +51,10 @@ make clean && make wolfboot.bin && make test-app/image.bin
 
 # Function to sign image
 sign_image() {
-    IMAGE_HEADER_SIZE=${IMAGE_HEADER_SIZE} \
-    WOLFBOOT_PARTITION_SIZE=${PARTITION_SIZE} \
-    WOLFBOOT_SECTOR_SIZE=${SECTOR_SIZE} \
-    ./tools/keytools/sign ${SIGN_ARG} ${HASH_ARG} test-app/image.bin wolfboot_signing_private_key.der "$1"
+    IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE}" \
+    WOLFBOOT_PARTITION_SIZE="${PARTITION_SIZE}" \
+    WOLFBOOT_SECTOR_SIZE="${SECTOR_SIZE}" \
+    ./tools/keytools/sign "${SIGN_ARG}" "${HASH_ARG}" test-app/image.bin wolfboot_signing_private_key.der "$1"
 }
 
 # Function to print summary
@@ -71,22 +71,22 @@ print_summary() {
 }
 
 if [ "$MODE" = "clean" ]; then
-    sign_image ${VERSION}
+    sign_image "${VERSION}"
     dd if=/dev/zero of=blank_update.bin bs=1K count=108
     ./tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \
-        ${BOOT_ADDRESS} test-app/image_v${VERSION}_signed.bin \
-        ${UPDATE_ADDRESS} blank_update.bin
-    ${JLINK} -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
+        "${BOOT_ADDRESS}" test-app/image_v${VERSION}_signed.bin \
+        "${UPDATE_ADDRESS}" blank_update.bin
+    "${JLINK}" -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
     print_summary
 else
-    TRIGGER_ADDRESS=$(printf "0x%X" $((${UPDATE_ADDRESS} + ${PARTITION_SIZE} - 5)))
-    PREV_VERSION=$((${VERSION} - 1))
-    sign_image ${PREV_VERSION} && sign_image ${VERSION}
+    TRIGGER_ADDRESS=$(printf "0x%X" $(("${UPDATE_ADDRESS}" + "${PARTITION_SIZE}" - 5)))
+    PREV_VERSION=$(("${VERSION}" - 1))
+    sign_image "${PREV_VERSION}" && sign_image "${VERSION}"
     echo -n "pBOOT" > trigger_magic.bin
     ./tools/bin-assemble/bin-assemble update.bin 0x0 wolfboot.bin \
-        ${BOOT_ADDRESS} test-app/image_v${PREV_VERSION}_signed.bin \
-        ${UPDATE_ADDRESS} test-app/image_v${VERSION}_signed.bin \
-        ${TRIGGER_ADDRESS} trigger_magic.bin
-    ${JLINK} -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
+        "${BOOT_ADDRESS}" test-app/image_v${PREV_VERSION}_signed.bin \
+        "${UPDATE_ADDRESS}" test-app/image_v${VERSION}_signed.bin \
+        "${TRIGGER_ADDRESS}" trigger_magic.bin
+    "${JLINK}" -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
     print_summary "${TRIGGER_ADDRESS}" "${PREV_VERSION}"
 fi
