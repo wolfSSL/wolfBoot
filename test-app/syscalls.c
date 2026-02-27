@@ -90,8 +90,6 @@ extern void uart_write(const char *buf, unsigned int sz);
 
 int _write(int file, char *ptr, int len)
 {
-    int i;
-
     /* Write to UART for stdout/stderr */
     if (file == 1 || file == 2) {
         uart_write(ptr, len);

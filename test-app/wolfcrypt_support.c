@@ -76,17 +76,19 @@ unsigned long my_time(unsigned long* timer)
  */
 double current_time(int reset)
 {
-    (void)reset;
-
 #if defined(WOLFCRYPT_SECURE_MODE)
     return wolfBoot_nsc_current_time(reset);
 #elif defined(TARGET_va416x0)
+    (void)reset;
     /* Use Vorago SDK SysTick-based millisecond counter */
     return (double)HAL_time_ms / 1000.0;
 #else
     /* Simple counter-based timing */
-    double timeNow = (double)tick_counter;
-    return timeNow;
+    if (reset)
+        tick_counter = 0;
+    else
+        tick_counter++;
+    return (double)tick_counter;
 #endif
 }
 #endif /* WOLFCRYPT_BENCHMARK */

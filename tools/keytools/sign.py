@@ -724,10 +724,16 @@ if WOLFBOOT_PARTITION_SIZE > 0:
     else:
         max_img_sz = WOLFBOOT_PARTITION_SIZE
     if total_img_sz > max_img_sz:
-        print("Error: Image size %d (header %d + firmware %d) "
-            "exceeds max %d (partition %d - sector %d)" %
-            (total_img_sz, WOLFBOOT_HEADER_SIZE, img_size,
-            max_img_sz, WOLFBOOT_PARTITION_SIZE, WOLFBOOT_SECTOR_SIZE))
+        if WOLFBOOT_SECTOR_SIZE < WOLFBOOT_PARTITION_SIZE:
+            print("Error: Image size %d (header %d + firmware %d) "
+                "exceeds max %d (partition %d - sector %d)" %
+                (total_img_sz, WOLFBOOT_HEADER_SIZE, img_size,
+                max_img_sz, WOLFBOOT_PARTITION_SIZE, WOLFBOOT_SECTOR_SIZE))
+        else:
+            print("Error: Image size %d (header %d + firmware %d) "
+                "exceeds max %d (partition %d)" %
+                (total_img_sz, WOLFBOOT_HEADER_SIZE, img_size,
+                max_img_sz, WOLFBOOT_PARTITION_SIZE))
         sys.exit(1)
 
 if (encrypt):
