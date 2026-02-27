@@ -228,6 +228,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     uint8_t* addrErase = 0;
     uint32_t word_0;
     uint32_t word_1;
+    uint32_t *ptr_word_0, *ptr_word_1;
 
 #if defined(EXT_FLASH) && !defined(FLAGS_HOME)
     if ((part == PART_UPDATE) && FLAGS_UPDATE_EXT()) {
@@ -254,8 +255,28 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
     }
 
     /* check magic in case the sector is corrupt */
-    word_0 = *((uint32_t*)((uintptr_t)base -  sizeof(uint32_t)));
-    word_1 = *((uint32_t*)((uintptr_t)base - (WOLFBOOT_SECTOR_SIZE + sizeof(uint32_t))));
+    ptr_word_0 = (uint32_t*)((uintptr_t)base -  sizeof(uint32_t));
+    ptr_word_1 = (uint32_t*)((uintptr_t)base - (WOLFBOOT_SECTOR_SIZE + sizeof(uint32_t)));
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+    if (hal_flash_is_erased_at((uintptr_t)ptr_word_0))
+    {
+        word_0 = FLASH_WORD_ERASED;
+    }
+    else
+#endif
+    {
+        word_0 = *ptr_word_0;
+    }
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+    if (hal_flash_is_erased_at((uintptr_t)ptr_word_1))
+    {
+        word_1 = FLASH_WORD_ERASED;
+    }
+    else
+#endif
+    {
+        word_1 = *ptr_word_1;
+    }
 
     if (word_0 == WOLFBOOT_MAGIC_TRAIL && word_1 != WOLFBOOT_MAGIC_TRAIL) {
         sel = 0;
@@ -301,8 +322,15 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
 finish:
     /* Erase the non-selected partition, requires unlocked flash */
     addrErase -= WOLFBOOT_SECTOR_SIZE * (!sel);
-    if (*((uint32_t*)(addrErase + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
-            != FLASH_WORD_ERASED) {
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        ! hal_flash_is_erased_at((uintptr_t)addrErase)
+#else
+        *((uint32_t*)(addrErase + WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t)))
+            != FLASH_WORD_ERASED
+#endif
+    )
+    {
         hal_flash_erase((uintptr_t)addrErase, WOLFBOOT_SECTOR_SIZE);
     }
     return sel;
@@ -626,11 +654,20 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     if (part == PART_NONE)
         return -1;
     magic = get_partition_magic(part);
-    if (*magic != WOLFBOOT_MAGIC_TRAIL)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC_TRAIL
+    )
+    {
         set_partition_magic(part);
+    }
     state = get_partition_state(part);
     if (*state != newst)
+    {
         set_partition_state(part, newst);
+    }
     return 0;
 }
 
@@ -652,8 +689,15 @@ int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector,
     uint8_t pos = sector >> 1;
 
     magic = get_partition_magic(PART_UPDATE);
-    if (*magic != wolfboot_magic_trail)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != wolfboot_magic_trail
+    )
+    {
         set_partition_magic(PART_UPDATE);
+    }
 
     flags = get_update_sector_flags(pos);
     if (sector == (pos << 1))
@@ -681,8 +725,15 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     if (part == PART_NONE)
         return -1;
     magic = get_partition_magic(part);
-    if (*magic != WOLFBOOT_MAGIC_TRAIL)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC_TRAIL
+    )
+    {
         return -1;
+    }
     state = get_partition_state(part);
     *st = *state;
     return 0;
@@ -706,8 +757,15 @@ int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
     uint8_t *flags;
     uint8_t pos = sector >> 1;
     magic = get_partition_magic(PART_UPDATE);
-    if (*magic != WOLFBOOT_MAGIC_TRAIL)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC_TRAIL
+    )
+    {
         return -1;
+    }
     flags = get_update_sector_flags(pos);
     if (sector == (pos << 1))
         *flag = *flags & 0x0F;
@@ -1009,8 +1067,15 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 
     /* Don't check image against NULL to allow using address 0x00000000 */
     magic = (uint32_t *)image;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC
+    )
+    {
         return -1;
+    }
     if (inverse) {
         if (wolfBoot_find_header((uint8_t *)(image + IMAGE_HEADER_OFFSET),
                     HDR_IMG_DELTA_INVERSE, (uint8_t **)img_offset)
@@ -1083,8 +1148,15 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     img_bin = dec_hdr;
 #endif
     magic = (uint32_t *)img_bin;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC
+    )
+    {
         return 0;
+    }
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
             (void *)&version_field) == 0)
         return 0;
@@ -1116,8 +1188,15 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     img_bin = dec_hdr;
 #endif
     magic = (uint32_t *)img_bin;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC
+    )
+    {
         return 0;
+    }
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
             (void *)&type_field) == 0)
         return 0;
@@ -1153,8 +1232,15 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     img_bin = dec_hdr;
 #endif
     magic = (uint32_t *)img_bin;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        hal_flash_is_erased_at((uintptr_t)magic) ||
+#endif
+        *magic != WOLFBOOT_MAGIC
+    )
+    {
         return 0;
+    }
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
             (void *)&delta_base) == 0)
         return 0;

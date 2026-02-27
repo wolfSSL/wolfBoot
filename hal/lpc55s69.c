@@ -1,6 +1,6 @@
 /* lpc55s69.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -163,9 +163,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return -1;
 }
 
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+int RAMFUNCTION hal_flash_is_erased_at(uint32_t address)
+{
+    address &= ~(WOLFBOOT_SECTOR_SIZE - 1);
+    return FLASH_VerifyErase(&pflash, address, WOLFBOOT_SECTOR_SIZE) == kStatus_FLASH_Success;
+}
+#endif
+
 #ifdef WOLFCRYPT_SECURE_MODE
-/* These functions are stubs for now, because the MCUXpresso SDK doesn't
- * implement drivers for the MCXN's TRNG. */
 void hal_trng_init(void)
 {
 }
