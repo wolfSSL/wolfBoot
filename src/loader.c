@@ -32,6 +32,7 @@
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
+#include "hooks.h"
 #include "spi_flash.h"
 #ifdef UART_FLASH
 #include "uart_flash.h"
@@ -101,6 +102,9 @@ int main(void)
     main_argc = argc;
 #endif
 
+#ifdef WOLFBOOT_HOOK_LOADER_PREINIT
+    wolfBoot_hook_preinit();
+#endif
     hal_init();
 #ifdef TEST_FLASH
     hal_flash_test();
@@ -124,6 +128,9 @@ int main(void)
 #endif
 #ifdef WOLFCRYPT_SECURE_MODE
     wcs_Init();
+#endif
+#ifdef WOLFBOOT_HOOK_LOADER_POSTINIT
+    wolfBoot_hook_postinit();
 #endif
     wolfBoot_start();
 

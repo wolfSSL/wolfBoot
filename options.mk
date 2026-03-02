@@ -1149,6 +1149,25 @@ ifeq ($(WOLFHSM_SERVER),1)
       $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_cert.o
     CFLAGS += -DWOLFHSM_CFG_CERTIFICATE_MANAGER
   endif
+
+endif
+
+# wolfBoot hooks framework
+# WOLFBOOT_HOOKS_FILE: path to a single .c file containing hook definitions
+ifneq ($(WOLFBOOT_HOOKS_FILE),)
+  OBJS += $(patsubst %.c,%.o,$(WOLFBOOT_HOOKS_FILE))
+endif
+ifeq ($(WOLFBOOT_HOOK_LOADER_PREINIT),1)
+  CFLAGS += -DWOLFBOOT_HOOK_LOADER_PREINIT
+endif
+ifeq ($(WOLFBOOT_HOOK_LOADER_POSTINIT),1)
+  CFLAGS += -DWOLFBOOT_HOOK_LOADER_POSTINIT
+endif
+ifeq ($(WOLFBOOT_HOOK_BOOT),1)
+  CFLAGS += -DWOLFBOOT_HOOK_BOOT
+endif
+ifeq ($(WOLFBOOT_HOOK_PANIC),1)
+  CFLAGS += -DWOLFBOOT_HOOK_PANIC
 endif
 
 # Cert chain verification options

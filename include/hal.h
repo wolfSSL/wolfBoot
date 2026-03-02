@@ -203,7 +203,6 @@ int hal_hsm_server_cleanup(void);
 
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER */
 
-
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
     defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 

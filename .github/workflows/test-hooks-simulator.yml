@@ -1,0 +1,188 @@
+name: hook simulator tests
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  hooks_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mechanism: flash
+            config: sim.config
+            test_script: sim-sunnyday-update.sh
+            expected_preinit: 2
+            expected_postinit: 2
+            expected_boot: 2
+            expected_panic: 0
+          - mechanism: dualbank
+            config: sim-dualbank.config
+            test_script: sim-dualbank-swap-update.sh
+            expected_preinit: 3
+            expected_postinit: 3
+            expected_boot: 3
+            expected_panic: 0
+          - mechanism: panic
+            config: sim.config
+            test_script: ""
+            expected_preinit: 1
+            expected_postinit: 1
+            expected_boot: 0
+            expected_panic: 1
+
+    name: hooks (${{ matrix.mechanism }})
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Workaround for sources.list
+        run: |
+            set -euxo pipefail
+
+            apt-cache policy
+            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
+
+            shopt -s nullglob
+
+            echo "Replace sources.list (legacy)"
+            sudo sed -i \
+              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+              /etc/apt/sources.list || true
+
+            echo "Replace sources.list.d/*.list (legacy)"
+            for f in /etc/apt/sources.list.d/*.list; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                "$f"
+            done
+
+            echo "Replace sources.list.d/*.sources (deb822)"
+            for f in /etc/apt/sources.list.d/*.sources; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
+                "$f"
+            done
+
+            echo "Fix /etc/apt/apt-mirrors.txt (used by URIs: mirror+file:...)"
+            if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
+              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
+            fi
+
+            grep -RIn "azure.archive.ubuntu.com" /etc/apt || true
+            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
+            echo "--- apt-mirrors.txt ---"
+            cat /etc/apt/apt-mirrors.txt || true
+
+      - name: Update repository
+        run: sudo apt-get update -o Acquire::Retries=3
+
+      - name: Create test_hooks.c
+        run: |
+          cat > test_hooks.c << 'EOF'
+          #include <stdio.h>
+          #include "hooks.h"
+
+          #define HOOK_LOG_FILE "/tmp/wolfboot_hooks.log"
+
+          static void log_hook(const char *name)
+          {
+              FILE *f = fopen(HOOK_LOG_FILE, "a");
+              if (f) {
+                  fprintf(f, "%s\n", name);
+                  fclose(f);
+              }
+          }
+
+          void wolfBoot_hook_preinit(void)  { log_hook("preinit"); }
+          void wolfBoot_hook_postinit(void) { log_hook("postinit"); }
+          void wolfBoot_hook_boot(struct wolfBoot_image *boot_img) { (void)boot_img; log_hook("boot"); }
+          void wolfBoot_hook_panic(void)    { log_hook("panic"); }
+          EOF
+
+      - name: Select config
+        run: |
+          cp config/examples/${{ matrix.config }} .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot.elf with hooks
+        run: |
+          make clean && make test-sim-internal-flash-with-update \
+            WOLFBOOT_HOOKS_FILE=test_hooks.c \
+            WOLFBOOT_HOOK_LOADER_PREINIT=1 \
+            WOLFBOOT_HOOK_LOADER_POSTINIT=1 \
+            WOLFBOOT_HOOK_BOOT=1 \
+            WOLFBOOT_HOOK_PANIC=1
+
+      - name: Clear hook log
+        run: |
+          rm -f /tmp/wolfboot_hooks.log
+
+      - name: Corrupt partitions and run panic test
+        if: matrix.mechanism == 'panic'
+        run: |
+          # Zero out boot partition header (offset 0x80000) to invalidate image
+          printf '\x00\x00\x00\x00\x00\x00\x00\x00' | \
+            dd of=internal_flash.dd bs=1 seek=$((0x80000)) conv=notrunc
+          # Zero out update partition header (offset 0x100000) to invalidate image
+          printf '\x00\x00\x00\x00\x00\x00\x00\x00' | \
+            dd of=internal_flash.dd bs=1 seek=$((0x100000)) conv=notrunc
+          # wolfBoot_panic() calls exit('P') = exit(80) on ARCH_SIM
+          ./wolfboot.elf get_version 2>&1 || EXIT_CODE=$?
+          echo "wolfboot.elf exited with code ${EXIT_CODE:-0}"
+          if [ "${EXIT_CODE:-0}" -ne 80 ]; then
+            echo "FAIL: expected exit code 80 (panic), got ${EXIT_CODE:-0}"
+            exit 1
+          fi
+          echo "OK: wolfboot panicked as expected"
+
+      - name: Run ${{ matrix.mechanism }} update test
+        if: matrix.mechanism != 'panic'
+        run: |
+          tools/scripts/${{ matrix.test_script }}
+
+      - name: Display hook log
+        if: always()
+        run: |
+          echo "=== Hook log contents ==="
+          cat /tmp/wolfboot_hooks.log || echo "(no log file found)"
+
+      - name: Verify hook call counts
+        run: |
+          LOG="/tmp/wolfboot_hooks.log"
+          PASS=true
+
+          check_count() {
+            local hook_name="$1"
+            local expected="$2"
+            local actual
+            actual=$(grep -c "^${hook_name}$" "$LOG" 2>/dev/null || echo 0)
+            if [ "$actual" -ne "$expected" ]; then
+              echo "FAIL: ${hook_name} expected=${expected} actual=${actual}"
+              PASS=false
+            else
+              echo "OK: ${hook_name} expected=${expected} actual=${actual}"
+            fi
+          }
+
+          check_count "preinit"  ${{ matrix.expected_preinit }}
+          check_count "postinit" ${{ matrix.expected_postinit }}
+          check_count "boot"     ${{ matrix.expected_boot }}
+          check_count "panic"    ${{ matrix.expected_panic }}
+
+          if [ "$PASS" != "true" ]; then
+            echo "Hook verification FAILED"
+            exit 1
+          fi
+          echo "All hook counts verified successfully"

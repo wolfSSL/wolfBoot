@@ -25,6 +25,7 @@
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
+#include "hooks.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
 #ifdef SECURE_PKCS11
@@ -104,5 +105,8 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
     hal_prepare_boot();
+#ifdef WOLFBOOT_HOOK_BOOT
+    wolfBoot_hook_boot(&fw_image);
+#endif
     do_boot((void *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
 }
