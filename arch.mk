@@ -1362,7 +1362,6 @@ ifeq ($(ARCH), AURIX_TC3)
   # TC3xx specific
   ifeq ($(TARGET), aurix_tc3xx)
     USE_GCC?=1
-    ARCH_FLASH_OFFSET=0x00000000
 
     CFLAGS += -I$(TC3_DIR) -Ihal
 
@@ -1408,6 +1407,7 @@ ifeq ($(ARCH), AURIX_TC3)
     endif
 
     ifeq ($(AURIX_TC3_HSM),1)
+      ARCH_FLASH_OFFSET=0x80028000
       # HSM compiler flags, build options, source code, etc
       ifeq ($(USE_GCC),1)
         # Just arm-none-eabi-gcc for now
@@ -1476,6 +1476,7 @@ ifeq ($(ARCH), AURIX_TC3)
 
     else
       # Tricore compiler settings
+      ARCH_FLASH_OFFSET=0x800A0000
       ifeq ($(USE_GCC),1)
         HT_ROOT?=/opt/hightec/gnutri_v4.9.4.1-11fcedf-lin64
         CROSS_COMPILE?=$(HT_ROOT)/bin/tricore-
