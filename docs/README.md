@@ -14,6 +14,7 @@ See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/
 - [**flash-OTP.md**](./flash-OTP.md) - Using One-Time Programmable (OTP) regions in flash for secure data.
 - [**flash_partitions.md**](./flash_partitions.md) - Flash partitioning schemes and configuration guidance.
 - [**HAL.md**](./HAL.md) - Hardware Abstraction Layer notes and porting considerations.
+- [**hooks.md**](./hooks.md) - User-defined hooks for injecting custom logic into the wolfBoot boot process.
 - [**keystore.md**](./keystore.md) - Keystore design, key storage, and access strategies.
 - [**lib.md**](./lib.md) - Using wolfBoot as a library and linking/integration guidance.
 - [**Loader.md**](./Loader.md) - Loader/secondary stage behavior and handoff to application.

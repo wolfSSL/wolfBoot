@@ -39,6 +39,7 @@
 #include "image.h"
 #include "loader.h"
 #include "hal.h"
+#include "hooks.h"
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
@@ -502,6 +503,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     hal_prepare_boot();
 
+#ifdef WOLFBOOT_HOOK_BOOT
+    wolfBoot_hook_boot(&os_image);
+#endif
     do_boot((uint32_t*)load_address
     #ifdef MMU
         ,(uint32_t*)dts_addr

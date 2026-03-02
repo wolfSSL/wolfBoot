@@ -55,21 +55,38 @@ extern "C" {
 
 void wolfBoot_start(void);
 
+#include "hooks.h"
+
 #if defined(ARCH_ARM) && defined(WOLFBOOT_ARMORED)
 
 /* attempt to jump 5 times to self, causing loop that cannot be glitched past */
-#define wolfBoot_panic() \
+#ifdef WOLFBOOT_HOOK_PANIC
+#define wolfBoot_panic() do { \
+    wolfBoot_hook_panic(); \
     asm volatile("b ."); \
     asm volatile("b .-2"); \
     asm volatile("b .-4"); \
     asm volatile("b .-6"); \
-    asm volatile("b .-8");
+    asm volatile("b .-8"); \
+    } while(0)
+#else
+#define wolfBoot_panic() do { \
+    asm volatile("b ."); \
+    asm volatile("b .-2"); \
+    asm volatile("b .-4"); \
+    asm volatile("b .-6"); \
+    asm volatile("b .-8"); \
+    } while(0)
+#endif
 
 #elif defined(ARCH_SIM)
 #include <stdlib.h>
 #include <stdio.h>
 static inline void wolfBoot_panic(void)
 {
+#ifdef WOLFBOOT_HOOK_PANIC
+    wolfBoot_hook_panic();
+#endif
     fprintf(stderr, "wolfBoot: PANIC!\n");
     exit('P');
 }
@@ -77,6 +94,9 @@ static inline void wolfBoot_panic(void)
 static int wolfBoot_panicked = 0;
 static inline void wolfBoot_panic(void)
 {
+#ifdef WOLFBOOT_HOOK_PANIC
+    wolfBoot_hook_panic();
+#endif
     fprintf(stderr, "wolfBoot: PANIC!\n");
     wolfBoot_panicked++;
 }
@@ -84,6 +104,9 @@ static inline void wolfBoot_panic(void)
 #include "printf.h"
 static inline void wolfBoot_panic(void)
 {
+#ifdef WOLFBOOT_HOOK_PANIC
+    wolfBoot_hook_panic();
+#endif
     wolfBoot_printf("wolfBoot: PANIC!\n");
 #ifdef WOLFBOOT_FSP
     extern void panic(void);

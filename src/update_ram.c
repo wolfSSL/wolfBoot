@@ -25,6 +25,7 @@
 #include "image.h"
 #include "loader.h"
 #include "hal.h"
+#include "hooks.h"
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
@@ -389,6 +390,9 @@ backup_on_failure:
 
     hal_prepare_boot();
 
+#ifdef WOLFBOOT_HOOK_BOOT
+    wolfBoot_hook_boot(&os_image);
+#endif
 #ifdef MMU
     do_boot((uint32_t*)load_address,
             (uint32_t*)dts_addr);

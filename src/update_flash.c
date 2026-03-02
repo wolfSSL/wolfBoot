@@ -26,6 +26,7 @@
 #include "loader.h"
 #include "image.h"
 #include "hal.h"
+#include "hooks.h"
 #include "spi_flash.h"
 #include "target.h"
 #include "wolfboot/wolfboot.h"
@@ -1419,6 +1420,9 @@ void RAMFUNCTION wolfBoot_start(void)
 
     hal_prepare_boot();
 
+#ifdef WOLFBOOT_HOOK_BOOT
+    wolfBoot_hook_boot(&boot);
+#endif
     do_boot((void *)boot.fw_base);
 }
 
