@@ -87,8 +87,27 @@ void main(void)
     wolfBoot_printf("Hello from firmware version %d\n", boot_ver);
 
     if (boot_ver == 1) {
+        uint32_t update_ver;
+
         /* blue on */
         GPIO_PinWrite(GPIO, 1, BLUE_LED, 0);
+
+#ifdef WOLFCRYPT_SECURE_MODE
+        update_ver = wolfBoot_nsc_update_firmware_version();
+#else
+        update_ver = wolfBoot_update_firmware_version();
+#endif
+
+        if (update_ver != 0) {
+            wolfBoot_printf("Update firmware detected, version: 0x%lx\n", update_ver);
+            wolfBoot_printf("Triggering update...\n");
+#ifdef WOLFCRYPT_SECURE_MODE
+            wolfBoot_nsc_update_trigger();
+#else
+            wolfBoot_update_trigger();
+#endif
+            wolfBoot_printf("...done. Reboot to apply.\n");
+        }
     }
     else {
         /* green on */

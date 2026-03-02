@@ -355,7 +355,12 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = addr_align - (nvm_cached_sector * NVM_CACHE_SIZE);
-    XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+    if (hal_flash_is_erased_at((uintptr_t)addr_read))
+        XMEMSET(NVM_CACHE, 0xFF, NVM_CACHE_SIZE);
+    else
+#endif
+        XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     NVM_CACHE[addr_off] = val;
 
     /* Calculate write address */
@@ -399,7 +404,12 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     nvm_cached_sector = nvm_select_fresh_sector(part);
     addr_read = base - (nvm_cached_sector * NVM_CACHE_SIZE);
     addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
-    XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
+#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+    if (hal_flash_is_erased_at((uintptr_t)addr_read))
+        XMEMSET(NVM_CACHE, 0xFF, NVM_CACHE_SIZE);
+    else
+#endif
+        XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
@@ -850,12 +860,17 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
 #else
         uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
         uint32_t offset = SECTOR_FLAGS_SIZE;
-#ifdef FLAGS_HOME
+# ifdef FLAGS_HOME
         offset -= (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
-#endif
+# endif
         selSec = nvm_select_fresh_sector(PART_UPDATE);
-        XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
-            WOLFBOOT_SECTOR_SIZE);
+# ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+        if (hal_flash_is_erased_at((uintptr_t)lastSector - WOLFBOOT_SECTOR_SIZE * selSec))
+            XMEMSET(NVM_CACHE, 0xFF, WOLFBOOT_SECTOR_SIZE);
+        else
+# endif
+            XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
+                WOLFBOOT_SECTOR_SIZE);
         /* write to the non selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * !selSec,
             WOLFBOOT_SECTOR_SIZE);
@@ -869,7 +884,6 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
             WOLFBOOT_SECTOR_SIZE);
 #endif
     }
-
 
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_lock();
