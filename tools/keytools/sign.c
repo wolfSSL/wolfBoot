@@ -1748,6 +1748,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             char *endptr;
             unsigned long tmp;
             uint32_t partition_sz, sector_sz = 0;
+            const char *env_nvm_wo = getenv("NVM_FLASH_WRITEONCE");
+            int nvm_writeonce = (env_nvm_wo && *env_nvm_wo &&
+                strcmp(env_nvm_wo, "1") == 0);
 
             errno = 0;
             tmp = strtoul(env_psize, &endptr, 0);
@@ -1775,15 +1778,23 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 uint32_t total_img_sz = CMD.header_sz + image_sz;
                 /* Only subtract sector for trailer when sector < partition.
                  * When sector >= partition (e.g. update_ram targets), the
-                 * entire partition is available for the image. */
-                uint32_t max_img_sz = (sector_sz < partition_sz) ?
-                    (partition_sz - sector_sz) : partition_sz;
+                 * entire partition is available for the image.
+                 * NVM_FLASH_WRITEONCE reserves 2 sectors (active + redundant).
+                 */
+                uint32_t trailer_sz = sector_sz;
+                uint32_t max_img_sz;
+                if (nvm_writeonce && sector_sz < partition_sz)
+                    trailer_sz = 2 * sector_sz;
+                max_img_sz = (sector_sz < partition_sz) ?
+                    (partition_sz - trailer_sz) : partition_sz;
                 if (total_img_sz > max_img_sz) {
                     if (sector_sz < partition_sz) {
                         printf("Error: Image size %u (header %u + firmware %u) "
-                            "exceeds max %u (partition %u - sector %u)\n",
+                            "exceeds max %u (partition %u - %d x sector %u)\n",
                             total_img_sz, CMD.header_sz, image_sz,
-                            max_img_sz, partition_sz, sector_sz);
+                            max_img_sz, partition_sz,
+                            nvm_writeonce ? 2 : 1,
+                            sector_sz);
                     } else {
                         printf("Error: Image size %u (header %u + firmware %u) "
                             "exceeds max %u (partition %u)\n",
