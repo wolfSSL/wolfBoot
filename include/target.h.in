@@ -116,6 +116,9 @@
 /* Load address in RAM for staged OS (update_ram only) */
 #define WOLFBOOT_LOAD_ADDRESS                 @WOLFBOOT_LOAD_ADDRESS@
 #endif
+
+/* Optional RAM-boot image size cap for targets without partitions */
+#define WOLFBOOT_RAMBOOT_MAX_SIZE             @WOLFBOOT_RAMBOOT_MAX_SIZE@
 #define WOLFBOOT_LOAD_DTS_ADDRESS             @WOLFBOOT_LOAD_DTS_ADDRESS@
 
 
