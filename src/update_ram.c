@@ -82,6 +82,10 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 
     /* determine size of partition */
     img_size = wolfBoot_image_size((uint8_t*)dst);
+    if (img_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        wolfBoot_printf("Invalid image size %u at %p\n", img_size, src);
+        return -1;
+    }
 
     /* Read the entire image into RAM */
     wolfBoot_printf("Loading image %d bytes from %p to %p...",
