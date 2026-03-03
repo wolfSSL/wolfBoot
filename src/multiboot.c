@@ -336,8 +336,6 @@ static void mb2_dump_tags(void* mbTags, uint32_t tags_len) {
         if (tag->type == MB2_TAG_TYPE_INFO_REQ)
             mb2_parse_info_request_tag(tag);
 
-        if (tag->size < sizeof(*tag))
-            break;
         tag = (struct mb2_tag*)mb2_align_address_up((uint8_t*)tag + tag->size,
                                                     8);
     }
