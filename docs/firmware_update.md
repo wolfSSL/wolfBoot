@@ -200,6 +200,78 @@ regular signed image at the bootloader origin.
 See [Signing.md](Signing.md#header-only-output-wolfboot-self-header) for
 more detail on the `--header-only` sign tool option.
 
+#### Monolithic updates
+
+The self-update mechanism can be used to update both the bootloader
+**and** the application firmware in a single atomic operation. Because
+`wolfBoot_self_update()` copies `fw_size` bytes from the update image to
+`ARCH_FLASH_OFFSET`, a payload that is larger than the bootloader region
+will spill into the contiguous BOOT partition, overwriting whatever
+application image was there previously.
+
+No wolfBoot code changes are required — only the update payload needs to
+be assembled differently. The payload is constructed by concatenating the
+new bootloader binary with the new signed application image and signing
+the result as a wolfBoot self-update:
+
+```
+cat wolfboot.bin image_v1_signed.bin > monolithic_payload.bin
+sign --wolfboot-update monolithic_payload.bin key.der 2
+```
+
+After the self-update completes, flash looks like:
+
+```
+ARCH_FLASH_OFFSET                   BOOT_ADDRESS
+     |                                   |
+     v                                   v
+     [  new bootloader bytes  | padding  |  new signed app image  ]
+     <-------- fw_size ------------------------------------------->
+```
+
+##### Self-header interaction
+
+When `WOLFBOOT_SELF_HEADER` is enabled, the persisted header retains the
+`fw_size`, hash and signature exactly as the signing tool produced them.
+The hash covers the **entire** monolithic payload — both the bootloader
+bytes and the nested application image. Later calls to
+`wolfBoot_open_self()` / `wolfBoot_verify_integrity()` will re-hash
+`fw_size` bytes starting at `ARCH_FLASH_OFFSET`, spanning into the BOOT
+partition.
+
+##### Restrictions
+
+- **Not power-fail safe.** Like all self-updates, a monolithic update
+  erases the bootloader region and writes in-place. An interruption
+  during the write leaves the device unbootable. Additionally, the BOOT
+  partition is written without a prior erase — this relies on the
+  partition being in an erased (0xFF) state, which is only guaranteed
+  when the device has no prior application installed or the partition has
+  been explicitly erased beforehand.
+
+- **Not revertable.** There is no swap or rollback mechanism. The old
+  bootloader and application are destroyed during the update.
+
+- **Locks bootloader verification to a specific application version.**
+  Because the self-header hash covers the full monolithic image, any
+  independent application update will invalidate the persisted
+  self-header. To maintain a valid self-header, both components must
+  always be updated together as a single monolithic payload.
+
+- **Payload must fit in the UPDATE partition.** The signed monolithic
+  image (header + bootloader + signed application) plus the 5-byte
+  `pBOOT` trailer must not exceed `WOLFBOOT_PARTITION_SIZE`.
+
+##### Simulator test
+
+A simulator test is provided in `tools/test.mk` to exercise this use case:
+
+```
+cp config/examples/sim-self-update-monolithic.config .config
+make clean && make
+make test-sim-self-update-monolithic
+```
+
 ### Incremental updates (aka: 'delta' updates)
 
 wolfBoot supports incremental updates, based on a specific older version. The sign tool
