@@ -425,6 +425,7 @@ void RAMFUNCTION wolfBoot_start(void)
         }
         os_image.fw_base = (uint8_t*)load_address;
 
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         wolfBoot_printf("Checking image integrity...");
         BENCHMARK_START();
         if (wolfBoot_verify_integrity(&os_image) != 0) {
@@ -446,6 +447,10 @@ void RAMFUNCTION wolfBoot_start(void)
             failures = 0;
             break; /* Success case */
         }
+#else
+        failures = 0;
+        break; /* Skip verification, boot directly */
+#endif
     } while (failures < MAX_FAILURES);
 
     if (failures) {

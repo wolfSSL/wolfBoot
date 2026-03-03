@@ -192,6 +192,7 @@ void RAMFUNCTION wolfBoot_start(void)
             goto backup_on_failure;
         }
 
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         /* Verify image integrity (hash check) */
         wolfBoot_printf("Checking integrity...");
         BENCHMARK_START();
@@ -211,6 +212,7 @@ void RAMFUNCTION wolfBoot_start(void)
             goto backup_on_failure;
         }
         BENCHMARK_END("done");
+#endif
 
         {
             /* Success - integrity and signature valid */
