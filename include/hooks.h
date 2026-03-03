@@ -28,6 +28,10 @@
 #ifndef WOLFBOOT_HOOKS_H
 #define WOLFBOOT_HOOKS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct wolfBoot_image;
 
 #ifdef WOLFBOOT_HOOK_LOADER_PREINIT
@@ -44,6 +48,10 @@ void wolfBoot_hook_boot(struct wolfBoot_image *boot_img);
 
 #ifdef WOLFBOOT_HOOK_PANIC
 void wolfBoot_hook_panic(void);
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* WOLFBOOT_HOOKS_H */

@@ -1154,20 +1154,28 @@ endif
 
 # wolfBoot hooks framework
 # WOLFBOOT_HOOKS_FILE: path to a single .c file containing hook definitions
-ifneq ($(WOLFBOOT_HOOKS_FILE),)
-  OBJS += $(patsubst %.c,%.o,$(WOLFBOOT_HOOKS_FILE))
-endif
+WOLFBOOT_HOOKS_ENABLED :=
 ifeq ($(WOLFBOOT_HOOK_LOADER_PREINIT),1)
   CFLAGS += -DWOLFBOOT_HOOK_LOADER_PREINIT
+  WOLFBOOT_HOOKS_ENABLED := 1
 endif
 ifeq ($(WOLFBOOT_HOOK_LOADER_POSTINIT),1)
   CFLAGS += -DWOLFBOOT_HOOK_LOADER_POSTINIT
+  WOLFBOOT_HOOKS_ENABLED := 1
 endif
 ifeq ($(WOLFBOOT_HOOK_BOOT),1)
   CFLAGS += -DWOLFBOOT_HOOK_BOOT
+  WOLFBOOT_HOOKS_ENABLED := 1
 endif
 ifeq ($(WOLFBOOT_HOOK_PANIC),1)
   CFLAGS += -DWOLFBOOT_HOOK_PANIC
+  WOLFBOOT_HOOKS_ENABLED := 1
+endif
+ifneq ($(WOLFBOOT_HOOKS_ENABLED),)
+  ifeq ($(WOLFBOOT_HOOKS_FILE),)
+    $(error WOLFBOOT_HOOKS_FILE must be set to a .c file when hooks are enabled)
+  endif
+  OBJS += $(patsubst %.c,%.o,$(WOLFBOOT_HOOKS_FILE))
 endif
 
 # Cert chain verification options

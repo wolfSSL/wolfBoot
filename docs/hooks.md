@@ -51,7 +51,7 @@ wolfBoot_panic()  (called on any fatal error)
 
 ## Build Configuration
 
-First, Enable hooks in your `.config`
+First, enable hooks in your `.config`:
 
 ```makefile
 # Path to a single .c file containing your hook implementations
