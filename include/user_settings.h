@@ -141,7 +141,7 @@ extern int tolower(int c);
 #   else
 #       define HAVE_ECC_SIGN
 #       define HAVE_ECC_VERIFY
-#ifndef PKCS11_SMALL
+#if !defined(PKCS11_SMALL) && !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define HAVE_ECC_CDH
 #endif
 #       define WOLFSSL_SP_MATH
@@ -326,9 +326,11 @@ extern int tolower(int c);
     !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define NO_SHA256
 #   endif
-#ifndef WOLFSSL_SHA512
-#define WOLFSSL_SHA512
-#endif
+#   ifndef WOLFSSL_SHA512
+#       define WOLFSSL_SHA512
+#       define WOLFSSL_NOSHA512_224
+#       define WOLFSSL_NOSHA512_256
+#   endif
 #endif
 
 /* If SP math is enabled determine word size */
@@ -420,8 +422,7 @@ extern int tolower(int c);
 
 #if (defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)) || \
     defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
-    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) || \
-    defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #   define WOLFSSL_BASE64_ENCODE
 #else
 #   define NO_CODING
@@ -599,6 +600,7 @@ extern int tolower(int c);
     #ifndef WOLFSSL_STATIC_MEMORY_TEST_SZ
         #define WOLFSSL_STATIC_MEMORY_TEST_SZ (10 * 1024)
     #endif
+    #define WOLFSSL_STATIC_MEMORY_LEAN
 
     /* Enable SP math digit operations */
     #define WOLFSSL_SP_MUL_D

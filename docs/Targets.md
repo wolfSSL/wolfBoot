@@ -5058,8 +5058,8 @@ echo -n "pBOOT" > trigger_magic.bin
 ./tools/bin-assemble/bin-assemble \
     update.bin \
         0x0     wolfboot.bin \
-        0x9800  test-app/image_v1_signed.bin \
-        0x24800 test-app/image_v2_signed.bin \
+        0xB800  test-app/image_v1_signed.bin \
+        0x25800 test-app/image_v2_signed.bin \
         0x3F7FB trigger_magic.bin
 
 # Use JLink to load
