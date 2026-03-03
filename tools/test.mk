@@ -266,6 +266,42 @@ test-sim-self-update: wolfboot.bin FORCE
 	@# Verify dummy payload was written to bootloader region, indicating the self update swapped images as expected
 	$(Q)cmp -n $$(wc -c < dummy_update.bin | awk '{print $$1}') dummy_update.bin internal_flash.dd && echo "=== Self-update test PASSED ==="
 
+# Test monolithic self-update mechanism using simulator. A monolithic self-update
+# updates both the bootloader AND the boot partition application image in a single
+# operation by crafting a payload that spans the bootloader region and spills into
+# the contiguous boot partition.
+test-sim-self-update-monolithic: wolfboot.bin test-app/image_v1_signed.bin FORCE
+	@echo "=== Simulator Monolithic Self-Update Test ==="
+	@# Create dummy bootloader (0xAA pattern, exactly BOOTLOADER_PARTITION_SIZE)
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=1 2>/dev/null | tr '\000' '\252' > monolithic_dummy_bl.bin
+	@# Concatenate dummy bootloader + signed app image to form monolithic payload
+	$(Q)cat monolithic_dummy_bl.bin test-app/image_v1_signed.bin > monolithic_payload.bin
+	@# Sign monolithic payload as wolfBoot self-update v2
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update monolithic_payload.bin $(PRIVATE_KEY) 2
+	@# Create update partition with signed monolithic image and "pBOOT" trailer
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
+	$(Q)dd if=monolithic_payload_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
+	@# Create erased boot and swap partitions
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > erased_sec.dd
+	@# Assemble flash: wolfboot.bin at 0, empty boot partition, update partition, swap
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) boot_part.dd \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS) - $(ARCH_FLASH_OFFSET))) update_part.dd \
+		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS) - $(ARCH_FLASH_OFFSET))) erased_sec.dd
+	@# Run simulator - self-update fires, copies monolithic payload to offset 0
+	$(Q)./wolfboot.elf get_version || true
+	@# Verify bootloader region contains 0xAA pattern (dummy bootloader was written)
+	$(Q)cmp -n $$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) monolithic_dummy_bl.bin internal_flash.dd
+	@echo "  Bootloader region 0xAA pattern: PASSED"
+	@# Extract nested app from boot partition and verify it matches original signed app
+	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=$$(wc -c < test-app/image_v1_signed.bin | awk '{print $$1}') of=nested_app.dd 2>/dev/null
+	$(Q)cmp nested_app.dd test-app/image_v1_signed.bin
+	@echo "  Nested app at boot partition: PASSED"
+	@echo "=== Monolithic Self-Update Test PASSED ==="
+
 # Test self-header cryptographic verification (hash + signature validation)
 #
 # Verifies that an application can cryptographically verify the bootloader using
