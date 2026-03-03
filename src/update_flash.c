@@ -1345,6 +1345,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_printf("Booting version: 0x%x\n",
         wolfBoot_get_blob_version(boot.hdr));
 
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
     if (bootRet < 0
             || (wolfBoot_verify_integrity(&boot) < 0)
             || (wolfBoot_verify_authenticity(&boot) < 0)
@@ -1376,6 +1377,11 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
     PART_SANITY_CHECK(&boot);
+#else
+    if (bootRet < 0) {
+        wolfBoot_panic();
+    }
+#endif
 
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;

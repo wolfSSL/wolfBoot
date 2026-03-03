@@ -50,10 +50,12 @@ void RAMFUNCTION wolfBoot_start(void)
         boot_panic();
 
     for (;;) {
-        if ((wolfBoot_open_image(&fw_image, active) < 0) ||
-            (wolfBoot_verify_integrity(&fw_image) < 0) ||
-            (wolfBoot_verify_authenticity(&fw_image) < 0)) {
-
+        if ((wolfBoot_open_image(&fw_image, active) < 0)
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+            || (wolfBoot_verify_integrity(&fw_image) < 0)
+            || (wolfBoot_verify_authenticity(&fw_image) < 0)
+#endif
+        ) {
             /* panic if authentication fails and no backup */
             if (!wolfBoot_fallback_is_possible())
                 boot_panic();
