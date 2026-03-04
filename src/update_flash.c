@@ -68,11 +68,19 @@ static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #endif
 
 
-static void RAMFUNCTION wolfBoot_erase_bootloader(void)
+static void RAMFUNCTION wolfBoot_erase_bootloader(uint32_t len)
 {
-    uint32_t len = WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET;
+#ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+    /* Erase the full write range (rounded up to sector boundary) so that
+     * a monolithic payload that spills past the bootloader region into the
+     * contiguous boot partition lands on erased flash. */
+    len = ((len + WOLFBOOT_SECTOR_SIZE - 1) /
+            WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE;
+#else
+    (void)len;
+    len = WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET;
+#endif
     hal_flash_erase(ARCH_FLASH_OFFSET, len);
-
 }
 
 #include <string.h>
@@ -155,7 +163,7 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 #endif
 
     hal_flash_unlock();
-    wolfBoot_erase_bootloader();
+    wolfBoot_erase_bootloader(src->fw_size);
 #ifdef EXT_FLASH
     if (PART_IS_EXT(src)) {
         while (pos < src->fw_size) {
