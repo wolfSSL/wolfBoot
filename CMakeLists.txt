@@ -388,6 +388,7 @@ if(NOT DEFINED ARM_TARGETS)
                             imx_rt
                             kinetis
                             lpc54606j512
+                            lpc55s69
                             mcxa
                             mcxw
                             mcxn
