@@ -212,17 +212,35 @@ application image was there previously.
 No wolfBoot code changes are required — only the update payload needs to
 be assembled differently. The payload is constructed by concatenating the
 new bootloader binary with the new signed application image and signing
-the result as a wolfBoot self-update:
+the result as a wolfBoot self-update. Note that the user must ensure that padding
+is supplied such that the header of the new signed app image will be located
+at an offset of `WOLFBOOT_PARTITION_BOOT_ADDRESS` from the base of the binary.
 
-```
-cat wolfboot.bin image_v1_signed.bin > monolithic_payload.bin
-sign --wolfboot-update monolithic_payload.bin key.der 2
+
+The following pseudo-shell-script demonstrates how to use standard CLI tools to
+build this padded image, where `$PRIVATE_KEY`, `$ARCH_FLASH_OFFSET` and
+`$WOLFBOOT_PARTITION_BOOT_ADDRESS` are the wolfBoot config variables that
+correspond to your platform
+
+```sh
+# Sign your app image as v2 for inclusion in the monolithic payload. This generates test-app/image_v2_signed.bin
+tools/keytools/sign test-app/image.bin $(PRIVATE_KEY) 2
+
+# Create padded wolfboot v2 binary file (0xFF fill to exact bootloader region size)
+# Bootloader region = $WOLFBOOT_PARTITION_BOOT_ADDRESS - $ARCH_FLASH_OFFSET
+dd if=/dev/zero bs=$$(($WOLFBOOT_PARTITION_BOOT_ADDRESS - $ARCH_FLASH_OFFSET)) count=1 2>/dev/null | tr '\000' '\377' > wolfboot_v2_padded.bin
+dd if=wolfboot.bin of=wolfboot_v2_padded.bin conv=notrunc 2>/dev/null
+
+# Concatenate padded bootloader v2 + signed app v2 to form the monolithic payload
+cat wolfboot_v2_padded.bin test-app/image_v2_signed.bin > monolithic_payload.bin
+# Sign the monolithic payload as a wolfBoot self-update v2
+tools/keytools/sign --wolfboot-update monolithic_payload.bin $PRIVATE_KEY 2
 ```
 
 After the self-update completes, flash looks like:
 
 ```
-ARCH_FLASH_OFFSET                   BOOT_ADDRESS
+ARCH_FLASH_OFFSET            WOLFBOOT_PARTITION_BOOT_ADDRESS
      |                                   |
      v                                   v
      [  new bootloader bytes  | padding  |  new signed app image  ]
@@ -243,11 +261,7 @@ partition.
 
 - **Not power-fail safe.** Like all self-updates, a monolithic update
   erases the bootloader region and writes in-place. An interruption
-  during the write leaves the device unbootable. Additionally, the BOOT
-  partition is written without a prior erase — this relies on the
-  partition being in an erased (0xFF) state, which is only guaranteed
-  when the device has no prior application installed or the partition has
-  been explicitly erased beforehand.
+  during the write leaves the device unbootable.
 
 - **Not revertable.** There is no swap or rollback mechanism. The old
   bootloader and application are destroyed during the update.
