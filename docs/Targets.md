@@ -2113,7 +2113,7 @@ cp ${PREBUILT_DIR}/pmufw.elf .
 cp ${PREBUILT_DIR}/bl31.elf .
 
 source ${VITIS_PATH}/settings64.sh
-bootgen -arch zynqmp -image ./tools/scripts/zynqmp_sd_boot.bif -w -o BOOT.BIN
+bootgen -arch zynqmp -image ./tools/scripts/zcu102/zynqmp_sd_boot.bif -w -o BOOT.BIN
 ```
 
 The BIF file (`zynqmp_sd_boot.bif`) configures the boot chain:
