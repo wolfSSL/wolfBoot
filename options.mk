@@ -74,6 +74,12 @@ ifeq ($(WOLFBOOT_TPM_SEAL),1)
   endif
 endif
 
+## Monolithic self-update: erase covers fw_size so the payload can span
+## the bootloader region into the contiguous boot partition.
+ifeq ($(SELF_UPDATE_MONOLITHIC),1)
+  CFLAGS+=-DWOLFBOOT_SELF_UPDATE_MONOLITHIC
+endif
+
 ## Persist wolfBoot self header at fixed address
 ## Invariants and defaults are enforced in wolfboot.h
 ifeq ($(WOLFBOOT_SELF_HEADER),1)
