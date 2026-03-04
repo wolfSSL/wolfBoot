@@ -203,14 +203,14 @@ more detail on the `--header-only` sign tool option.
 #### Monolithic updates
 
 The self-update mechanism can be used to update both the bootloader
-**and** the application firmware in a single atomic operation. Because
+**and** the application firmware in a single operation. Because
 `wolfBoot_self_update()` copies `fw_size` bytes from the update image to
 `ARCH_FLASH_OFFSET`, a payload that is larger than the bootloader region
 will spill into the contiguous BOOT partition, overwriting whatever
 application image was there previously.
 
-No wolfBoot code changes are required — only the update payload needs to
-be assembled differently. The payload is constructed by concatenating the
+To enable this behavior, set `SELF_UPDATE_MONOLITHIC=1` in your build
+configuration. The payload should be constructed by concatenating the
 new bootloader binary with the new signed application image and signing
 the result as a wolfBoot self-update. Note that the user must ensure that padding
 is supplied such that the header of the new signed app image will be located
