@@ -654,6 +654,10 @@ ifeq ($(DEBUG_UART),1)
     endif
   endif
 endif
+# Flash erase/write/read test at WOLFBOOT_PARTITION_UPDATE_ADDRESS.
+ifeq ($(TEST_FLASH),1)
+  CFLAGS+=-DTEST_FLASH
+endif
 ifeq ($(NO_QNX),1)
   CFLAGS+=-D"NO_QNX"
 endif

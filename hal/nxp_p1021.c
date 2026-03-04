@@ -34,29 +34,16 @@
 #define ENABLE_BUS_CLK_CALC
 
 #ifndef BUILD_LOADER_STAGE1
-    /* Tests */
-    #if 0
-        #define TEST_DDR
-        #define TEST_TPM
-    #endif
     #define ENABLE_PCIE
     #define ENABLE_CPLD /* Board Configuration and Status Registers (BCSR) */
     #define ENABLE_CONF_IO
     #define ENABLE_QE   /* QUICC Engine */
-    #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
+    #if defined(WOLFBOOT_TPM)
         #define ENABLE_ESPI /* SPI for TPM */
     #endif
     #define ENABLE_MP   /* multi-core support */
     #define ENABLE_IRQ
     /* #define ENABLE_QE_CRC32 */ /* CRC32 check on QE disabled by default */
-#endif
-
-/* Foward declarations */
-#if defined(ENABLE_DDR) && defined(TEST_DDR)
-static int test_ddr(void);
-#endif
-#if defined(ENABLE_ESPI) && defined(TEST_TPM)
-static int test_tpm(void);
 #endif
 
 #ifdef ENABLE_ESPI
@@ -488,11 +475,7 @@ static uint32_t          flash_idx;
 int ext_flash_read(uintptr_t address, uint8_t *data, int len);
 #endif
 
-/* generic share NXP QorIQ driver code */
-#include "nxp_ppc.c"
-
-
-/* local functions */
+/* P1021 bus clock: reads GUTS_PORPLLSR (different from E5500/E6500 CLOCKING regs) */
 #ifdef ENABLE_BUS_CLK_CALC
 static uint32_t hal_get_bus_clk(void)
 {
@@ -508,53 +491,16 @@ static uint32_t hal_get_bus_clk(void)
 #define hal_get_bus_clk() (uint32_t)(SYS_CLK * 6)
 #endif
 
+/* E500 uses bus-clock based delay (not TIMEBASE like E5500/E6500) */
 #define DELAY_US (hal_get_bus_clk() / 1000000)
 static void udelay(uint32_t delay_us)
 {
     wait_ticks(delay_us * DELAY_US);
 }
 
-#if 0 /* useful timer code */
+/* generic share NXP QorIQ driver code (uart_init/uart_write use hal_get_bus_clk above) */
+#include "nxp_ppc.c"
 
-uint64_t hal_timer_ms(void)
-{
-    uint64_t val;
-    /* time base is updated every 8 CCB clocks */
-    uint64_t cntfrq = hal_get_bus_clk() / 8;
-    uint64_t cntpct = get_ticks();
-    val = (cntpct * 1000ULL) / cntfrq;
-    return val;
-}
-
-/* example usage */
-//uint64_t start = hal_get_tick_count();
-// do some work
-//wolfBoot_printf("done (%lu ms)\n", (uint32_t)hal_elapsed_time_ms(start));
-
-/* Calculate elapsed time in milliseconds, handling timer overflow properly */
-uint64_t hal_elapsed_time_ms(uint64_t start_ticks)
-{
-    uint64_t current_ticks, elapsed_ticks;
-    uint64_t cntfrq = hal_get_bus_clk() / 8;
-
-    current_ticks = get_ticks();
-
-    /* Handle timer overflow using unsigned arithmetic
-     * This works correctly even if the timer has rolled over,
-     * as long as the elapsed time is less than the full timer range
-     */
-    elapsed_ticks = current_ticks - start_ticks;
-
-    /* Convert elapsed ticks to milliseconds */
-    return (elapsed_ticks * 1000ULL) / cntfrq;
-}
-
-/* Get current tick count for use with hal_elapsed_time_ms() */
-uint64_t hal_get_tick_count(void)
-{
-    return get_ticks();
-}
-#endif
 
 /* ---- eSPI Driver ---- */
 #ifdef ENABLE_ESPI
@@ -673,47 +619,7 @@ void hal_espi_deinit(void)
 }
 #endif /* ENABLE_ESPI */
 
-/* ---- DUART Driver ---- */
-#ifdef DEBUG_UART
-
-void uart_init(void)
-{
-    /* calc divisor for UART
-     * baud rate = CCSRBAR frequency ÷ (16 x [UDMB||UDLB])
-     */
-    /* compute UART divisor - round up */
-    uint32_t div = (hal_get_bus_clk() + (16/2 * BAUD_RATE)) / (16 * BAUD_RATE);
-
-    while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
-       ;
-
-    /* set ier, fcr, mcr */
-    set8(UART_IER(UART_SEL), 0);
-    set8(UART_FCR(UART_SEL), (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN));
-
-    /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    set8(UART_LCR(UART_SEL), (UART_LCR_DLAB | UART_LCR_WLS));
-    /* set divisor */
-    set8(UART_DLB(UART_SEL), (div & 0xff));
-    set8(UART_DMB(UART_SEL), ((div>>8) & 0xff));
-    /* disable rate access (DLAB=0) */
-    set8(UART_LCR(UART_SEL), (UART_LCR_WLS));
-}
-
-void uart_write(const char* buf, uint32_t sz)
-{
-    uint32_t pos = 0;
-    while (sz-- > 0) {
-        char c = buf[pos++];
-        if (c == '\n') { /* handle CRLF */
-            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-            set8(UART_THR(UART_SEL), '\r');
-        }
-        while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-        set8(UART_THR(UART_SEL), c);
-    }
-}
-#endif /* DEBUG_UART */
+/* uart_init and uart_write are provided by nxp_ppc.c shared code */
 
 /* ---- eLBC Driver ---- */
 #ifdef ENABLE_ELBC

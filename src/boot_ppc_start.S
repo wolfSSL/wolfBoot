@@ -72,6 +72,21 @@ All TLBs for boot will be in TLB1 and supervisor mode (not user)
 
 #include "hal/nxp_ppc.h"
 
+/* e6500 has 64-bit GPRs. When loading 32-bit addresses with bit 31 set
+ * (addresses >= 0x80000000), the lis instruction sign-extends, putting
+ * 0xFFFFFFFF in the upper 32 bits. This causes memory access failures.
+ * Use LOAD_ADDR32 macro to properly load 32-bit addresses on e6500. */
+#ifdef CORE_E6500
+#define LOAD_ADDR32(reg, addr) \
+        li      reg, 0; \
+        oris    reg, reg, (addr)@h; \
+        ori     reg, reg, (addr)@l
+#else
+#define LOAD_ADDR32(reg, addr) \
+        lis     reg, (addr)@h; \
+        ori     reg, reg, (addr)@l
+#endif
+
 /* variables from linker script */
 .global _start_vector
 .global isr_empty
@@ -173,9 +188,10 @@ hardware_reg:
 
 #ifndef BUILD_LOADER_STAGE1
 branch_prediction:
-        /* enable branch prediction */
-        lis     r0,     (BUCSR_ENABLE)@h
-        ori     r0, r0, (BUCSR_ENABLE)@l
+        /* Disable branch prediction during early boot.
+         * Enabled later in C after DDR stack relocation to avoid
+         * speculative fetches during hardware init. */
+        li      r0, 0
         mtspr   SPRN_BUCSR, r0
 #endif
 
@@ -193,6 +209,13 @@ startup_init:
 #ifndef BUILD_LOADER_STAGE1
 #ifndef TLB1_NEW_SIZE
 #define TLB1_NEW_SIZE BOOKE_PAGESZ_256K
+#endif
+/* EPN alignment mask for TLB1_NEW_SIZE page.
+ * e6500: page = 2^(TSIZE+10), e500/e5500: page = 2^(2*TSIZE+10) */
+#ifdef CORE_E6500
+#define TLB1_EPN_MASK (~((1 << (TLB1_NEW_SIZE + 10)) - 1))
+#else
+#define TLB1_EPN_MASK (~((1 << (2 * TLB1_NEW_SIZE + 10)) - 1))
 #endif
 shrink_default_tlb1:
         /* Shrink the current TLB1 entry */
@@ -219,12 +242,15 @@ find_pc:
         oris    r3, r3, MAS1_IPROT@h
         mtspr   MAS1, r3
 
-        /* Find page for PC (R1) */
-        lis     r3, MAS2_EPN@h
-        ori     r3, r3, MAS2_EPN@l
+        /* Align PC (R1) to TLB page size boundary.
+         * Use LOAD_ADDR32: TLB1_EPN_MASK has bit 31 set (e.g. 0xFFFC0000),
+         * so lis would sign-extend to 0xFFFFFFFF_FFFC0000 on e6500. */
+        LOAD_ADDR32(r3, TLB1_EPN_MASK)
         and     r1, r1, r3
 
-        /* Set the real and virtual page for this TLB */
+        /* Set the real and virtual page for this TLB.
+         * Use LOAD_ADDR32: MAS2_EPN (0xFFFFF000) has bit 31 set. */
+        LOAD_ADDR32(r3, MAS2_EPN)
         mfspr   r2, MAS2
         andc    r2, r2, r3
         or      r2, r2, r1
@@ -267,7 +293,8 @@ find_pc:
 setup_interrupts:
 
         /* Setup interrupt vectors */
-        lis     r1, (_start_vector)@h
+        /* e6500 GPRs are 64-bit; avoid sign-extension for high addresses */
+        LOAD_ADDR32(r1, _start_vector)
         mtspr   IVPR, r1 /* set the 48-bit high-order prefix address */
 
 #ifdef ENABLE_INTERRUPTS
@@ -412,10 +439,17 @@ invalidate_temp_tlb:
 boot_page:
         /* make sure we have the default boot page added to MMU */
         /* BOOT_PAGE: TLB 1, Entry 0, Supervisor X/R/W, I, TS=0, 4KB, IPROT */
+        /* Skip if Entry 0 is the currently executing TLB (R14 from
+         * shrink_default_tlb1). Overwriting it with a 4K page would unmap
+         * the code we are running from. The shrink code already set Entry 0
+         * to 256K with IPROT, which is sufficient. */
+        cmpwi   r14, 0
+        beq     1f
         set_tlb(1, 0,
                 BOOT_ROM_ADDR, BOOT_ROM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I, 0,
                 BOOKE_PAGESZ_4K, 1, r3);
+1:
 #endif
 
 ccsr_tlb:
@@ -431,8 +465,7 @@ ccsr_law:
         #define CCSR_LAW (LAWAR_ENABLE | \
                           LAWAR_TRGT_ID(LAW_TRGT_CORENET) | \
                           LAW_SIZE_16MB)
-        lis     r9,     CCSRBAR + LAWBAR_BASE(0)@h
-        ori     r9, r9, CCSRBAR + LAWBAR_BASE(0)@l
+        LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(0))
         lis     r0,     CCSRBAR_PHYS_HIGH@h
         ori     r0, r0, CCSRBAR_PHYS_HIGH@l
         lis     r1,     CCSRBAR@h
@@ -456,8 +489,7 @@ flash_law:
         #define FLASH_LAW (LAWAR_ENABLE | \
                            LAWAR_TRGT_ID(LAW_TRGT_IFC) | \
                            FLASH_LAW_SIZE)
-        lis     r9,     CCSRBAR + LAWBAR_BASE(1)@h
-        ori     r9, r9, CCSRBAR + LAWBAR_BASE(1)@l
+        LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(1))
         lis     r0,     FLASH_BASE_PHYS_HIGH@h
         ori     r0, r0, FLASH_BASE_PHYS_HIGH@l
         lis     r1,     FLASH_BASE_ADDR@h
@@ -472,15 +504,14 @@ flash_law:
         lwz     r2, 8(r9)
         isync
 flash_tlb:
-        /* Flash: TLB 1, Entry 2, Super X/R/W, W/I/G, TS=0, 64/128M, IPROT */
-        /* Write is required for Write/Erase using CFI commands to base */
-    #ifdef BUILD_LOADER_STAGE1
-        /* Using XIP from this flash, so cannot use cache inhibit */
+        /* Flash: TLB 1, Entry 2, Super X/R/W, W+G, TS=0, 64/128M, IPROT
+         * Write-through (W) enables L1 I-cache to cache flash instruction
+         * fetches during XIP boot — matches reference T2080 implementation.
+         * Guarded (G) prevents speculative prefetches to the IFC.
+         * After DDR stack relocation, C code switches to I|G for flash
+         * write/erase (hal_flash_cache_disable) or M for full caching
+         * (hal_flash_enable_caching). */
         #define FLASH_TLB_WING (MAS2_W | MAS2_G)
-    #else
-        /* IFC polling requires cache inhibit */
-        #define FLASH_TLB_WING (MAS2_I | MAS2_G)
-    #endif
         set_tlb(1, 2,
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
                 MAS3_SX | MAS3_SW | MAS3_SR, FLASH_TLB_WING, 0,
@@ -511,94 +542,153 @@ flash_tlb:
     #endif
 
         /* Map initial DDR, but can be adjusted later in hal_ddr_init() */
-        /* DDR - TBL=1, Entry 12/13 */
+        /* DDR - TBL=1, Entry 12 (and 13 for e500) */
+    #ifdef CORE_E6500
+        /* e6500 supports 2GB page size - use single TLB entry */
+        set_tlb(1, 12, DDR_ADDRESS, DDR_ADDRESS, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING,
+                0, BOOKE_PAGESZ_2G, 1, r3);
+    #else
+        /* e500 uses two 1GB TLB entries */
         set_tlb(1, 12, DDR_ADDRESS, DDR_ADDRESS, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING,
                 0, BOOKE_PAGESZ_1G, 1, r3);
-    #if DDR_SIZE > 0x40000000
+        #if DDR_SIZE > 0x40000000
         set_tlb(1, 13, DDR_ADDRESS + 0x40000000, DDR_ADDRESS + 0x40000000, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, DDR_WING,
                 0, BOOKE_PAGESZ_1G, 1, r3);
+        #endif
     #endif
 #endif /* ENABLE_DDR */
 
+/* =========================================================================
+ * CPC SRAM Initialization
+ * Order: 1) CPC invalidate, 2) CPCSRCR config, 3) LAW, 4) TLB, 5) CPC enable
+ * Note: TLB must be created BEFORE CPC enable (original working sequence)
+ * ========================================================================= */
+#if defined(ENABLE_L2_CACHE) && defined(L2SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
+cpc_setup_sram:
+        /* T2080RM: 8.4.2.2 - CPC initialization sequence:
+         * Step 1: Flash invalidate CPC and clear locks (CPCFI | CPCLFC)
+         * Step 2: Poll until invalidate completes
+         * Step 3: Configure SRAM control registers (CPCSRCR1, CPCSRCR0)
+         * Step 4: Configure LAW for SRAM routing (done after this block)
+         * Step 5: Enable CPC with parity (CPCE | CPCPE)
+         * Step 6: Create TLB for SRAM access
+         * The LAW (DDR_1) provides CoreNet routing; CPC intercepts before DDR. */
+
+        /* R1 = CPC base - preserve across LAW setup */
+        LOAD_ADDR32(r1, CPC_BASE)
+
+        /* Step 1: Flash invalidate CPC and clear all locks */
+        lis     r0, (CPCCSR0_CPCFI | CPCCSR0_CPCLFC)@h
+        ori     r0, r0, (CPCCSR0_CPCFI | CPCCSR0_CPCLFC)@l
+        stw     r0, CPCCSR0(r1)
+
+        /* Step 2: Poll until CPCFI and CPCLFC clear */
+cpc_poll_invalidate:
+        lwz     r2, CPCCSR0(r1)
+        and.    r2, r2, r0
+        bne     cpc_poll_invalidate
+        isync
+
+        /* Step 3: Configure CPC SRAM control registers */
+        li      r0, 0
+        stw     r0, CPCSRCR1(r1) /* SRAM high address = 0 */
+        /* SRAM low address - use LOAD_ADDR32 on e6500 to avoid sign extension */
+        LOAD_ADDR32(r0, L2SRAM_ADDR)
+        /* Enable SRAM and set size (must match L2SRAM_SIZE = 1MB for P384) */
+        ori     r0, r0, (CPCSRCR0_SRAMSZ_1024 | CPCSRCR0_SRAMEN)
+        stw     r0, CPCSRCR0(r1)
+        mbar
+        isync
+#endif /* ENABLE_L2_CACHE && L2SRAM_ADDR */
+
+/* Step 3: Configure LAW for SRAM */
 #ifdef INITIAL_SRAM_ADDR
+#ifndef INITIAL_SRAM_NO_LAW
 init_sram_law:
-        /* Intial SRAM LAW 2 */
+        /* CPC SRAM uses LAW 2 - DO NOT reuse this LAW index elsewhere!
+         * The stack resides in CPC SRAM; overwriting this LAW causes crashes. */
         #define INITIAL_SRAM_LAW (LAWAR_ENABLE | \
                                   LAWAR_TRGT_ID(INITIAL_SRAM_LAW_TRGT) | \
                                   INITIAL_SRAM_LAW_SZ)
-        lis     r9,     CCSRBAR + LAWBAR_BASE(2)@h
-        ori     r9, r9, CCSRBAR + LAWBAR_BASE(2)@l
+        LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(2))
         li      r0,     0 /* UPPER=0 */
-        lis     r1,     INITIAL_SRAM_ADDR@h
-        ori     r1, r1, INITIAL_SRAM_ADDR@l
-        lis     r2,     INITIAL_SRAM_LAW@h
-        ori     r2, r2, INITIAL_SRAM_LAW@l
+        /* Use LOAD_ADDR32 on e6500 to avoid sign-extension for addresses >= 0x80000000 */
+        LOAD_ADDR32(r3, INITIAL_SRAM_ADDR)
+        LOAD_ADDR32(r2, INITIAL_SRAM_LAW)
         stw     r0, 0(r9) /* LAWBARH */
-        stw     r1, 4(r9) /* LAWBARL */
+        stw     r3, 4(r9) /* LAWBARL */
         sync
         stw     r2, 8(r9) /* LAWAR */
         /* read back LAWAR (per 2.3.2 Configuring Local Access Windows) */
         lwz     r2, 8(r9)
         isync
+#endif /* !INITIAL_SRAM_NO_LAW */
+#endif /* INITIAL_SRAM_ADDR */
 
+/* Step 4: Create TLB for SRAM - BEFORE CPC enable (original working order)
+ * This is for e5500/e6500 CPC SRAM only. e500 has its own init_sram_tlb below. */
+#if defined(INITIAL_SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
 init_sram_tlb:
-        /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT */
+        /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT
+         * Original working T2080 code (commit 11f46a51) used MAS2_M. */
         set_tlb(1, 9,
                 INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
                 MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
                 INITIAL_SRAM_BOOKE_SZ, 1, r3);
-#endif
+#endif /* INITIAL_SRAM_ADDR && (CORE_E5500 || CORE_E6500) */
 
-#ifdef ENABLE_L2_CACHE
-
-#if defined(CORE_E5500) || defined(CORE_E6500) /* --- L2 E5500/E6500 --- */
-#ifdef L2SRAM_ADDR
-l2_setup_sram:
-        /* T2080RM: 8.4.2.2 or T1024RM 13.4.2.2
-         * Enabling the CPC after Power-On Reset */
+/* Step 5: Enable CPC after TLB is configured */
+#if defined(ENABLE_L2_CACHE) && defined(L2SRAM_ADDR) && (defined(CORE_E5500) || defined(CORE_E6500))
+cpc_enable:
         /* R1 = CPC base */
-        lis     r1,     CPC_BASE@h
-        ori     r1, r1, CPC_BASE@l
+        LOAD_ADDR32(r1, CPC_BASE)
 
-        /* Set CPC SRAM control register */
-        /* SRAM high addrress 0x0 */
-        li      r0, 0
-        stw     r0, CPCSRCR1(r1)
-        /* SRAM low address */
-        lis     r0,     L2SRAM_ADDR@h
-        ori     r0, r0, L2SRAM_ADDR@l
-        /* Enable SRAM and set size (must match L2SRAM_SIZE) */
-        ori     r0, r0, (CPCSRCR0_SRAMSZ_256 | CPCSRCR0_SRAMEN)
-        stw     r0, CPCSRCR0(r1)
-
-        /* Enable memory mapped SRAM */
-        lis     r0, CPCCSR0_SRAM_ENABLE@h
+        /* Enable CPC WITHOUT parity in SRAM mode.
+         * SRAM is uninitialized at cold power cycle; enabling CPCPE causes CPC
+         * to read-modify-write ECC on the first dcbz, which reads uninitialized
+         * SRAM and triggers an ECC/parity machine check.
+         * Parity is enabled later when CPC transitions to full cache mode in C. */
+        lis     r0, (CPCCSR0_CPCE)@h
         mbar
         isync
         stw     r0, CPCCSR0(r1)
         mbar
 
-        /* Disable speculation */
+        /* Verify CPC is enabled by reading back CPCCSR0 */
+cpc_poll_enable:
+        lwz     r2, CPCCSR0(r1)
+        andis.  r2, r2, CPCCSR0_CPCE@h  /* check CPCE bit */
+        beq     cpc_poll_enable
+        isync
+
+        /* Disable speculation (Errata A-006593) */
         lwz     r0, CPCHDBCR0(r1)
         oris    r0, r0, CPCHDBCR0_SPEC_DIS@h
         stw     r0, CPCHDBCR0(r1)
-#endif /* L2SRAM_ADDR */
+        mbar
+        isync
+#endif /* ENABLE_L2_CACHE && L2SRAM_ADDR */
+
+#ifdef ENABLE_L2_CACHE
+#if defined(CORE_E5500) || defined(CORE_E6500) /* --- L2 E5500/E6500 --- */
+/* Note: CPC SRAM setup moved above for correct T2080RM sequence */
 
 #if defined(CORE_E6500) /* --- L2 E6500 --- */
 l2_setup_cache:
         /* E6500CORERM: 11.7 L2 cache state */
         /* R5 = L2 cluster 1 base */
-        lis     r5,     L2_CLUSTER_BASE(0)@h
-        ori     r5, r5, L2_CLUSTER_BASE(0)@l
-        /* Invalidate and clear locks */
-        lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
-        ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
+        LOAD_ADDR32(r5, L2_CLUSTER_BASE(0))
+
+        /* Flash invalidate L2 (locks already clear after reset) */
+        lis     r1,     L2CSR0_L2FI@h
+        ori     r1, r1, L2CSR0_L2FI@l
         sync
         stw     r1, L2CSR0(r5)
 
-        /* poll till invalidate and lock bits are cleared */
+        /* Poll until L2FI clears */
 l2_poll_invclear:
         lwz     r4, L2CSR0(r5)
         and.    r4, r1, r4
@@ -612,8 +702,15 @@ l2_poll_invclear:
         /* enable L2 with parity */
         sync
         isync
-        lis     r4, (L2CSR0_L2E | L2CSR0_L2PE)@h
+        LOAD_ADDR32(r4, (L2CSR0_L2E | L2CSR0_L2PE))
         stw     r4, L2CSR0(r5)
+        mbar
+
+        /* Verify L2 is enabled by reading back L2CSR0 */
+l2_poll_enable:
+        lwz     r3, L2CSR0(r5)
+        andis.  r3, r3, L2CSR0_L2E@h  /* check bit 31 (L2E) */
+        beq     l2_poll_enable        /* loop until enabled */
         isync
 
 #elif defined(CORE_E5500) /* --- L2 E5500 --- */
@@ -675,6 +772,17 @@ l2_setup_sram:
         stw     r1, L2SRBAR0(r5)
         mbar
 #endif /* L2SRAM_ADDR */
+
+#ifdef INITIAL_SRAM_ADDR
+init_sram_tlb:
+        /* Initial SRAM: TLB 1, Entry 9, Supervisor X/R/W, M, TS=0, IPROT
+         * For e500, L2 SRAM uses cacheable memory-coherent (M) access.
+         * TLB is created AFTER l2_setup_sram configures L2 as SRAM. */
+        set_tlb(1, 9,
+                INITIAL_SRAM_ADDR, INITIAL_SRAM_ADDR, 0,
+                MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0,
+                INITIAL_SRAM_BOOKE_SZ, 1, r3);
+#endif /* INITIAL_SRAM_ADDR */
 #endif /* CORE_E500 */
 #endif /* ENABLE_L2_CACHE */
 
@@ -713,10 +821,9 @@ l1_tlb:
 #endif
 #endif /* ENABLE_L1_CACHE */
 
-#ifdef CACHE_SRAM_ADDR
+#ifdef L1_CACHE_ADDR
 cache_sram_init:
-        lis     r3,     CACHE_SRAM_ADDR@h
-        ori     r3, r3, CACHE_SRAM_ADDR@l
+        LOAD_ADDR32(r3, L1_CACHE_ADDR)
         /* read the cache size */
         mfspr   r2, L1CFG0
         andi.   r2, r2, 0x1FF
@@ -736,13 +843,27 @@ cache_sram_init_loop:
 #endif
         addi    r3, r3, CACHE_LINE_SIZE
         bdnz    cache_sram_init_loop
-#endif /* CACHE_SRAM_ADDR */
+#elif defined(L2SRAM_ADDR)
+cache_sram_init:
+        /* CPC SRAM: skip bulk zeroing.
+         * Bulk sequential writes to CPC SRAM via CoreNet hang on cold power
+         * cycle (bus errors before L1/L2 caches are fully operational).
+         * The L1 locked dcache is used as initial stack instead (see
+         * L1_CACHE_ADDR). CPC SRAM is later released back to L3 cache mode
+         * by hal_reconfigure_cpc_as_cache() after DDR init. */
+#endif /* L1_CACHE_ADDR */
 
 setup_stack:
         /* Build top of stack address */
         /* Reserve 64 bytes of initial data (must be 16 byte aligned) */
-        lis     r1, (_end_stack-64)@h
-        ori     r1, r1, (_end_stack-64)@l
+#ifdef L1_CACHE_ADDR
+        /* Use L1 locked dcache as initial stack (16KB).
+         * L1_CACHE_ADDR + 4*4KB = top of locked region.
+         * CPC SRAM is unreliable on cold power cycle (bus errors via CoreNet). */
+        LOAD_ADDR32(r1, L1_CACHE_ADDR + 0x4000 - 64)
+#else
+        LOAD_ADDR32(r1, _end_stack-64)
+#endif
 
         /* PowerPC e500 Application Binary Interface User's Guide
          * 2.3.5.1.1 Minimal Stack Frame: No Local Variables or Saved Parameters
@@ -751,14 +872,14 @@ setup_stack:
         stwu    r0, -4(r1)
         stwu    r0, -4(r1)   /* Terminate Back chain */
         stwu    r1, -8(r1)   /* Save back chain and move SP */
-        lis     r0,     RESET_VECTOR@h /* Address of reset vector */
-        ori     r0, r0, RESET_VECTOR@l
+        /* RESET_VECTOR (0xEFFFFFFC) has bit 31 set; use LOAD_ADDR32 on e6500 */
+        LOAD_ADDR32(r0, RESET_VECTOR)
         stwu    r1, -8(r1)   /* Save back chain and move SP */
         stw     r0, +12(r1)  /* Save return addr (underflow vect) */
 
-        /* switch back to AS/TS=0 */
-        lis     r3,     (MSR_CE | MSR_ME | MSR_DE)@h
-        ori     r3, r3, (MSR_CE | MSR_ME | MSR_DE)@l
+        /* switch back to AS/TS=0, enable recoverable interrupts */
+        lis     r3,     (MSR_CE | MSR_ME | MSR_DE | MSR_RI)@h
+        ori     r3, r3, (MSR_CE | MSR_ME | MSR_DE | MSR_RI)@l
         mtmsr   r3
         isync
 
@@ -767,10 +888,11 @@ setup_stack:
 #endif
 
 #ifdef USE_LONG_JUMP
-        /* load absolute address into "LR" and branch return to it */
-        /* Enables long jump in 32-bit */
-        lis     r3,     boot_entry_C@h
-        ori     r3, r3, boot_entry_C@l
+        /* Load boot_entry_C into LR for indirect branch.
+         * Use LOAD_ADDR32, not lis, because e6500 has 64-bit GPRs and lis
+         * sign-extends for addresses >= 0x80000000 (e.g. 0xEFFExxxx becomes
+         * 0xFFFFFFFF_EFFExxxx), causing an instruction TLB miss on blr. */
+        LOAD_ADDR32(r3, boot_entry_C)
         mtlr    r3
         blr
 #else
@@ -780,6 +902,14 @@ setup_stack:
 
 
 /* -- Assembly Functions -- */
+
+/* Functions placed in .ramcode when RAM_CODE is defined.
+ * This allows them to be called from RAMFUNCTION code during flash
+ * command mode (when I-cache misses to flash return status data). */
+#ifdef RAM_CODE
+    .section .ramcode, "ax", @progbits
+#endif
+
 /*
  * unsigned long long get_ticks(void);
  *
@@ -815,15 +945,6 @@ wait_ticks:
         mtlr    r8               /* restore link register */
         blr
 
-/* return the address we are running at */
-.global get_pc
-get_pc:
-        mflr    r0
-        bl      1f
-1:      mflr    r3
-        mtlr    r0
-        blr
-
 /* L1 Cache Helpers */
 .global invalidate_icache
 invalidate_icache:
@@ -845,12 +966,37 @@ invalidate_dcache:
         isync
         blr
 
+/* Back to .text for functions that must remain in flash */
+#ifdef RAM_CODE
+    .text
+#endif
+
+/* return the address we are running at */
+.global get_pc
+get_pc:
+        mflr    r0
+        bl      1f
+1:      mflr    r3
+        mtlr    r0
+        blr
+
 #ifndef BUILD_LOADER_STAGE1
 .global icache_enable
 icache_enable:
+#ifdef RAM_CODE
+        /* Inline invalidation — invalidate_icache is in .ramcode,
+         * unreachable via bl from .text */
+        mfspr   r4, L1CSR1
+        ori     r4, r4, L1CSR_CFI
+        msync
+        isync
+        mtspr   L1CSR1, r4
+        isync
+#else
         mflr    r8
         bl      invalidate_icache
         mtlr    r8
+#endif
         isync
         mfspr   r4, L1CSR1
         ori     r4, r4, L1CSR_CE
@@ -862,9 +1008,20 @@ icache_enable:
 
 .global dcache_enable
 dcache_enable:
+#ifdef RAM_CODE
+        /* Inline invalidation — invalidate_dcache is in .ramcode,
+         * unreachable via bl from .text */
+        mfspr   r4, L1CSR0
+        ori     r4, r4, L1CSR_CFI
+        msync
+        isync
+        mtspr   L1CSR0, r4
+        isync
+#else
         mflr    r8
         bl      invalidate_dcache
         mtlr    r8
+#endif
         isync
         mfspr   r4, L1CSR0
         ori     r4, r4, L1CSR_CE
@@ -882,10 +1039,34 @@ dcache_disable:
         lis     r4, 0
         ori     r4, r4, L1CSR_CE
         andc    r3, r3, r4
-        mtspr   L1CSR0, r0
+        mtspr   L1CSR0, r3
         isync
         blr
 #endif
+
+/* void ddr_call_with_stack(uint32_t func_ptr, uint32_t new_sp)
+ * Switches stack pointer to DDR and calls the given function.
+ * Used by boot_entry_C to transition from CPC SRAM stack to DDR stack
+ * before calling main(). Does not return.
+ * r3 = function pointer to call
+ * r4 = new stack pointer (top of DDR stack area) */
+.global ddr_call_with_stack
+ddr_call_with_stack:
+        mr      r1, r4          /* Set stack pointer to DDR */
+        /* Create minimal PPC ABI stack frame with terminated back chain */
+        li      r0, 0
+        stwu    r0, -4(r1)     /* Terminate back chain */
+        stwu    r0, -4(r1)
+        stwu    r1, -8(r1)    /* Save back chain and move SP */
+        /* RESET_VECTOR (0xEFFFFFFC) has bit 31 set; use LOAD_ADDR32 on e6500 */
+        LOAD_ADDR32(r0, RESET_VECTOR)
+        stwu    r1, -8(r1)    /* Save back chain and move SP */
+        stw     r0, +12(r1)   /* Save return addr (underflow vector) */
+        /* Call the function */
+        mtctr   r3
+        bctrl
+        /* Should never reach here */
+1:      b       1b
 
 #ifdef USE_GOT
 
@@ -982,8 +1163,8 @@ in_ram:
         stwu    r0, -4(r1)
         stwu    r0, -4(r1)   /* Terminate Back chain */
         stwu    r1, -8(r1)   /* Save back chain and move SP */
-        lis     r0, RESET_VECTOR@h /* Address of reset vector */
-        ori     r0, r0, RESET_VECTOR@l
+        /* RESET_VECTOR (0xEFFFFFFC) has bit 31 set; use LOAD_ADDR32 on e6500 */
+        LOAD_ADDR32(r0, RESET_VECTOR)
         stwu    r1, -8(r1)   /* Save back chain and move SP */
         stw     r0, +12(r1)  /* Save return addr (underflow vect) */
 
@@ -996,8 +1177,45 @@ in_ram:
 .section .isr_vector
 .align 8
 isr_empty:
-        nop
-        rfi
+        /* Minimal fault dump for early bring-up.
+         * IMPORTANT: Do NOT use r0 as base register for addi/stw!
+         * PowerPC treats RA=0 specially: addi with RA=0 uses literal 0
+         * (not GPR0), and stw with RA=0 uses EA=0+D (not GPR0+D).
+         * This caused all stores to go to address 0x0000 (DDR, not
+         * initialized on cold boot) -> nested machine check -> checkstop.
+         * Use r3 as base, r4 as scratch. */
+#if defined(DEBUG_UART) && defined(TARGET_nxp_t2080)
+        /* Print '!' to UART to signal exception occurred */
+        LOAD_ADDR32(r3, 0xFE11C500)
+.L_isr_wait:
+        lbz     r4, 5(r3)
+        andi.   r4, r4, 0x20
+        beq     .L_isr_wait
+        li      r4, '!'
+        stb     r4, 0(r3)
+        eieio
+#endif
+#ifdef L2SRAM_ADDR
+        LOAD_ADDR32(r3, L2SRAM_ADDR + 0x200)
+        mfspr   r4, SRR0
+        stw     r4, 0x00(r3)
+        mfspr   r4, SRR1
+        stw     r4, 0x04(r3)
+        mfspr   r4, SPRN_ESR
+        stw     r4, 0x08(r3)
+        mfspr   r4, SPRN_DEAR
+        stw     r4, 0x0C(r3)
+        mfspr   r4, SPRN_MCSR
+        stw     r4, 0x10(r3)
+        mfspr   r4, SPRN_PIR
+        stw     r4, 0x14(r3)
+        /* Machine check exceptions use MCSRR0/MCSRR1 (not SRR0/SRR1) */
+        mfspr   r4, SPRN_MCSRR0
+        stw     r4, 0x18(r3)
+        mfspr   r4, SPRN_MCSRR1
+        stw     r4, 0x1C(r3)
+#endif
+1:      b       1b
 #endif
 
 /* reset entry point - must be at end of .S */
