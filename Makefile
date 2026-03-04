@@ -174,6 +174,17 @@ export WOLFBOOT_LIB_WOLFHSM
 ## Architecture/CPU configuration
 include arch.mk
 
+ifeq ($(TARGET),wolfhal)
+  ifeq ($(strip $(BOARD)),)
+    $(error TARGET=wolfhal requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
+  endif
+  # wolfHAL target: hal/wolfhal.o is added by the per-TARGET rule
+  # above. The board's board.c provides hal_init/hal_prepare_boot and
+  # the wolfHAL device handles; board.mk pulls in chip drivers.
+  OBJS+=./hal/boards/$(BOARD)/board.o
+  include hal/boards/$(BOARD)/board.mk
+endif
+
 # Parse config options
 include options.mk
 
@@ -567,7 +578,10 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_LOAD_ADDRESS@/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
 		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" | \
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
-		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" \
+		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" | \
+		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_TEXT@/$(WOLFHAL_FLASH_EXCLUDE_TEXT)/g' | \
+		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_RODATA@/$(WOLFHAL_FLASH_EXCLUDE_RODATA)/g' | \
+		sed -e 's/@WOLFHAL_FLASH_RAM_SECTIONS@/$(WOLFHAL_FLASH_RAM_SECTIONS)/g' \
 		> $@
 
 hex: wolfboot.hex
