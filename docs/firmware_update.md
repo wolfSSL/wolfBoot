@@ -286,6 +286,34 @@ make clean && make
 make test-sim-self-update-monolithic
 ```
 
+#### Skipping boot image verification
+
+When wolfBoot is used together with the [self-header](#self-header-persisting-the-bootloader-manifest)
+and [monolithic updates](#monolithic-updates) features, an external verifier such as
+[wolfHSM](wolfHSM.md) can verify the combined bootloader+application payload before wolfBoot runs.
+In this scenario, wolfBoot's own boot-time verification is redundant and can be skipped as a
+performance optimization.
+
+Setting `WOLFBOOT_SKIP_BOOT_VERIFY=1` in the build configuration disables both the integrity (hash)
+and authenticity (signature) checks that wolfBoot normally performs on the boot image at startup.
+
+**WARNING: This option completely disables boot-time firmware verification. It is only safe to use
+when ALL of the following conditions are met:**
+
+- The self-header feature is enabled, so the bootloader manifest is persisted alongside the
+  application image
+- Monolithic updates are enabled, so the bootloader and application are always updated together as a
+  single payload
+- An external entity (e.g. an HSM running wolfHSM) is guaranteed to verify the full monolithic
+  payload before wolfBoot boots
+
+**Using this option outside of this specific scenario removes all boot-time authenticity and integrity
+guarantees and is not secure.**
+
+Note that this option only affects verification of the boot image at startup. Firmware updates
+staged in the update partition are still fully verified (signature and integrity) before being
+installed, regardless of this setting.
+
 ### Incremental updates (aka: 'delta' updates)
 
 wolfBoot supports incremental updates, based on a specific older version. The sign tool
