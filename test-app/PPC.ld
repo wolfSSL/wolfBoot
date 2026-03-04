@@ -1,6 +1,6 @@
 OUTPUT_ARCH( "powerpc" )
 
-ENTRY( main )
+ENTRY( _app_entry )
 
 PHDRS
 {
@@ -14,6 +14,7 @@ SECTIONS
 
     .text :
     {
+       *(.text._app_entry)
        *(.text.main)
         *(.text*)
         *(.rodata*)
@@ -23,6 +24,7 @@ SECTIONS
     {
         _start_data = .;
         KEEP(*(.data*))
+        *(.sdata*)       /* PPC small initialized data */
         . = ALIGN(4);
         KEEP(*(.ramcode))
 
@@ -54,6 +56,7 @@ SECTIONS
         _start_bss = .;
         __bss_start__ = .;
         *(.bss*)
+        *(.sbss*)        /* PPC small uninitialized data */
         *(COMMON)
         . = ALIGN(4);
         _end_bss = .;
@@ -62,4 +65,12 @@ SECTIONS
     }
     . = ALIGN(4);
 
+    /* Heap for _sbrk (used by syscalls.c malloc) */
+    _Min_Heap_Size = 0x10000; /* 64KB */
+
+    /* Stack: 64KB, grows downward from _stack_top.
+     * wolfCrypt ECC384 operations need deep stack (~11KB per frame). */
+    _Min_Stack_Size = 0x10000; /* 64KB */
+    _stack_end = _end + _Min_Heap_Size;
+    _stack_top = _stack_end + _Min_Stack_Size;
 }

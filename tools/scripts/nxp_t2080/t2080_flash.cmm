@@ -1,0 +1,382 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T2080 NOR Flash Programming Script
+; @Description:
+;   Uses CPC_SRAM for target-based NOR FLASH programming.
+;   Programs wolfBoot, signed application image, RCW, and FMAN microcode.
+; @Chip: T2080
+; Based on demo scripts from Lauterbach
+; ------------------------------------------------------------------------------
+;
+; NOTE: NVMRO pin (GPIO 21) determines which flash bank is visible:
+;   NVMRO = 0 (GPIO 21 LOW)  = Primary flash bank
+;   NVMRO = 1 (GPIO 21 HIGH) = Secondary flash bank
+;
+; This script operates on whichever flash bank is selected by NVMRO.
+; Set NVMRO appropriately and power cycle before running this script.
+; ------------------------------------------------------------------------------
+
+; Base directory for wolfBoot build output (adjust to match your build path)
+&basedir="."
+
+; FLASH Number of banks (1 or 2)
+&flashBanks=2
+
+; FLASH parameters
+&waitstates=6
+
+; PART 1: Set up MMU, IFC and CPC for target-based flash programming
+; ------------------------------------------------------------------------------
+
+PRINT "========================================"
+PRINT "wolfBoot T2080 Flash Programming"
+PRINT "========================================"
+PRINT ""
+
+SYStem.RESet
+SYStem.BdmClock 15.MHz
+SYStem.CPU T2080
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE OFF
+
+; Use RCW override to prevent flash RCW from running before we are ready.
+; This keeps the system halted for configuration.
+PRINT "Initializing with temporary RCW override..."
+SYStem.Mode.Prepare
+
+SYStem.Option.HRCWOVerRide ON
+
+; Load RCW (known-working values for T2080)
+Data.Set DBG:0x01000000  0x0c050012
+Data.Set DBG:0x01000001  0x0e000000
+Data.Set DBG:0x01000002  0x00000000
+Data.Set DBG:0x01000003  0x00000000
+Data.Set DBG:0x01000004  0xd8150002
+Data.Set DBG:0x01000005  0x00800000
+Data.Set DBG:0x01000006  0xfc027000
+Data.Set DBG:0x01000007  0xa1000000
+Data.Set DBG:0x01000008  0x00000000
+Data.Set DBG:0x01000009  0x00000000
+Data.Set DBG:0x0100000A  0x00000000
+Data.Set DBG:0x0100000B  0x0002b000
+Data.Set DBG:0x0100000C  0x00000200
+Data.Set DBG:0x0100000D  0x0080000d
+Data.Set DBG:0x0100000E  0x00000000
+Data.Set DBG:0x0100000F  0x00000004
+
+SYStem.Up
+
+SYStem.Option.HRCWOVerRide OFF
+
+PRINT "System initialized (halted state with temporary RCW)"
+
+; Set CCSRBAR to 0x40000000
+Data.Set ANC:IOBASE()+0x00004 %Long 0x40000000
+Data.Set ANC:IOBASE()+0x00008 %Long 0x80000000  ; commit
+Data.Set ANC:IOBASE()+0x00008 %Long 0x00000000
+
+; Set up local access window: 0xC0000000--0xFFFFFFFF
+Data.Set ANC:IOBASE()+0x00C00 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C04 %Long %BE 0xC0000000
+Data.Set ANC:IOBASE()+0x00C08 %Long %BE 0x81F0001D
+
+; Set up local access window: 0x10000000--0x1007FFFF (CPC memory complex 1)
+Data.Set ANC:IOBASE()+0x00C10 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C14 %Long %BE 0x10000000
+Data.Set ANC:IOBASE()+0x00C18 %Long %BE 0x81000012
+
+; Set up local access window: 0x10080000--0x100FFFFF (CPC memory complex 2)
+Data.Set ANC:IOBASE()+0x00C20 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C24 %Long %BE 0x10080000
+Data.Set ANC:IOBASE()+0x00C28 %Long %BE 0x81100012
+
+; Enable CoreNet Platform Cache (CPC) as SRAM
+; Block 1, memory complex 1
+Data.Set ANC:IOBASE()+0x10000 %Long %BE 0x80200000
+Data.Set ANC:IOBASE()+0x10100 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x10104 %Long %BE 0x10000009  ; 512 kB, start at 0x10000000
+; Block 2, memory complex 2
+Data.Set ANC:IOBASE()+0x11000 %Long %BE 0x80200000
+Data.Set ANC:IOBASE()+0x11100 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x11104 %Long %BE 0x10080009  ; 512 kB, start at 0x10080000
+
+; TLB entry for FLASH 0xC0000000--0xFFFFFFFF (cache-inhibited, guarded)
+MMU.TLB1.Set 0. 0xC0000A00 0xC000000A 0xC0000015 0x00000000 0x0
+
+; TLB entry for CPC-SRAM 0x10000000--0x100FFFFF
+MMU.TLB1.Set 1. 0x80000500 0x10000002 0x10000015 0x00000000 0x0
+
+; PART 2: FLASH setup (chip select and debugger)
+; ------------------------------------------------------------------------------
+
+; Initial FLASH base address (8 MB)
+&flashbase=0xEF800000
+; End of flash region
+&flashend=0xEFFFFFFF
+
+; Set up initial chip select for FLASH memory
+Data.Set ANC:IOBASE.ADDRESS()+0x00124010 %Long (Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)&0x0000FFBF)|&flashbase
+
+; Get port width
+&portwidth=(Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)>>7.)&0x00000003
+
+IF &portwidth==1
+  &flashwidth="BYTE"
+ELSE IF &portwidth==2
+  &flashwidth="WORD"
+ELSE
+(
+  PRINT %ERROR "ERROR: invalid IFC_CS0 port width"
+  STOP
+)
+
+; Get FLASH size
+&flashsize=FLASH.CFI.SIZE(ANC:&flashbase,&flashwidth)
+IF (&flashsize==0)
+(
+  PRINT %ERROR "ERROR: FLASH module could not be detected"
+  STOP
+)
+
+; Adjust for dual-bank devices
+&flashsize=&flashsize/&flashBanks
+
+; Calculate real FLASH base address
+&flashbase=(&flashend+1)-&flashsize
+
+; Set up true chip select for FLASH memory
+Data.Set ANC:IOBASE.ADDRESS()+0x00124010 %Long (Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)&0x0000FFFF)|&flashbase
+
+; Declare FLASH
+FLASH.RESet
+; Flash target: code at 0x10000000, data at 0x10002000, buffer 0x4000
+FLASH.CFI &flashbase &flashwidth /TARGET 0x10000000 0x10002000 0x4000 /DualPort
+
+&sizemb=FORMAT.Decimal(0,&flashsize>>20.)
+PRINT "Configured Flash at address &flashbase, &sizemb MBytes."
+
+; ============================================================================
+; PART 3: Interactive Flash Programming Options
+; ============================================================================
+
+PRINT ""
+PRINT "========================================"
+PRINT "Flash Programming Options"
+PRINT "========================================"
+PRINT ""
+PRINT "NOTE: NVMRO pin (GPIO 21) determines which flash bank is programmed"
+PRINT ""
+
+; ============================================================================
+; Option 1: Flash wolfBoot components (most common operation)
+; ============================================================================
+DIALOG.YESNO "Flash wolfBoot components (RCW + FMAN + wolfBoot + test app)?"
+ENTRY &flashwolfboot
+IF &flashwolfboot
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Flashing wolfBoot Components"
+  PRINT "========================================"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 1. RCW (Reset Configuration Word) - CRITICAL for boot
+  ; --------------------------------------------------------------------------
+  PRINT "1. Programming RCW (Reset Configuration Word)..."
+  PRINT "   Source: &basedir/t2080_rcw.bin"
+  PRINT "   Address: 0xE8000000 (64 KB)"
+  FLASH.UNLOCK 0xE8000000--0xE800FFFF
+  FLASH.ReProgram 0xE8000000--0xE800FFFF /Erase
+  Data.LOAD.binary &basedir/t2080_rcw.bin 0xE8000000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/t2080_rcw.bin 0xE8000000 /Verify
+  PRINT "   RCW programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 2. FMAN Microcode - Required for networking
+  ; --------------------------------------------------------------------------
+  PRINT "2. Programming FMAN microcode..."
+  PRINT "   Source: &basedir/t2080_fman.bin"
+  PRINT "   Address: 0xE8020000 (128 KB)"
+  FLASH.UNLOCK 0xE8020000--0xE803FFFF
+  FLASH.ReProgram 0xE8020000--0xE803FFFF /Erase
+  Data.LOAD.binary &basedir/t2080_fman.bin 0xE8020000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/t2080_fman.bin 0xE8020000 /Verify
+  PRINT "   FMAN microcode programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 3. wolfBoot Bootloader
+  ; --------------------------------------------------------------------------
+  PRINT "3. Programming wolfBoot bootloader..."
+  PRINT "   Source: &basedir/wolfboot.bin"
+  PRINT "   Address: 0xEFFE0000 (128 KB)"
+  FLASH.UNLOCK 0xEFFE0000--0xEFFFFFFF
+  FLASH.ReProgram 0xEFFE0000--0xEFFFFFFF /Erase
+  Data.LOAD.binary &basedir/wolfboot.bin 0xEFFE0000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/wolfboot.bin 0xEFFE0000 /Verify
+  PRINT "   wolfBoot programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 4. Test Application (Boot Partition)
+  ; --------------------------------------------------------------------------
+  PRINT "4. Programming test application..."
+  PRINT "   Source: &basedir/test-app/image_v1_signed.bin"
+  PRINT "   Address: 0xEFEE0000 (WOLFBOOT_PARTITION_BOOT_ADDRESS, 1 MB)"
+  FLASH.UNLOCK 0xEFEE0000--0xEFFDFFFF
+  FLASH.ReProgram 0xEFEE0000--0xEFFDFFFF /Erase
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFEE0000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFEE0000 /Verify
+  PRINT "   Test application programmed and verified"
+  PRINT ""
+
+  PRINT ""
+  PRINT "========================================"
+  PRINT "wolfBoot Flash Programming Complete!"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Flash Layout:"
+  PRINT "  0xE8000000: RCW (64 KB)"
+  PRINT "  0xE8020000: FMAN Microcode (128 KB)"
+  PRINT "  0xEFEE0000: Test Application (boot partition, 1 MB)"
+  PRINT "  0xEFFDFFFF: End of boot partition"
+  PRINT "  0xEFFE0000: wolfBoot (128 KB)"
+  PRINT ""
+
+  PRINT "Verification - First bytes of each component:"
+  PRINT ""
+  PRINT "RCW at 0xE8000000 (should be AA 55 AA 55):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+  PRINT "wolfBoot at 0xEFFE0000:"
+  Data.dump 0xEFFE0000++0x3F /Long
+  PRINT ""
+  PRINT "Test app at 0xEFEE0000:"
+  Data.dump 0xEFEE0000++0x3F /Long
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "Skipping wolfBoot component flashing"
+  PRINT ""
+)
+
+; ============================================================================
+; Option 2: Backup current flash bank
+; ============================================================================
+PRINT ""
+PRINT "========================================"
+PRINT "Optional: Backup Current Flash Bank"
+PRINT "========================================"
+PRINT ""
+
+DIALOG.YESNO "Backup current flash bank to &basedir/t2080_backup.bin?"
+ENTRY &dobackup
+IF &dobackup
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Backing Up Flash"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Saving to: &basedir/t2080_backup.bin"
+  PRINT "Saving flash (128 MB) - this will take several minutes..."
+  PRINT ""
+
+  Data.SAVE.Binary &basedir/t2080_backup.bin 0xE8000000--0xEFFFFFFF
+
+  PRINT "Flash backup saved to: &basedir/t2080_backup.bin"
+  PRINT ""
+
+  PRINT "First 64 bytes at 0xE8000000 (RCW area):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+
+  PRINT "========================================"
+  PRINT "Backup Complete!"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Verify with: hexdump -C t2080_backup.bin | head -n 8"
+  PRINT "Valid flash should start with 'AA 55 AA 55' (RCW preamble)"
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "Skipping flash backup"
+  PRINT ""
+)
+
+; ============================================================================
+; Option 3: Restore full backup (t2080_backup.bin)
+; ============================================================================
+DIALOG.YESNO "Restore full backup from &basedir/t2080_backup.bin (128 MB)?"
+ENTRY &restorebackup
+IF &restorebackup
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Restoring Full Flash Backup"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Source: &basedir/t2080_backup.bin"
+  PRINT "Target: 0xE8000000--0xEFFFFFFF (128 MB)"
+  PRINT "This will take several minutes..."
+  PRINT ""
+
+  PRINT "Unlocking flash..."
+  FLASH.UNLOCK 0xE8000000--0xEFFFFFFF
+
+  FLASH.ReProgram 0xE8000000--0xEFFFFFFF /Erase
+  Data.LOAD.binary &basedir/t2080_backup.bin 0xE8000000
+  FLASH.ReProgram.off
+
+  PRINT ""
+  PRINT "Verifying restored backup..."
+  Data.LOAD.binary &basedir/t2080_backup.bin 0xE8000000 /Verify
+
+  PRINT ""
+  PRINT "Full backup restored and verified"
+  PRINT ""
+
+  PRINT "RCW at 0xE8000000 (should be AA 55 AA 55):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "No flash operation selected"
+  PRINT ""
+)
+
+flash_complete:
+
+PRINT ""
+PRINT "========================================"
+PRINT "Script Complete!"
+PRINT "========================================"
+PRINT ""
+PRINT "Next steps:"
+PRINT "  1. Disconnect Lauterbach"
+PRINT "  2. Power cycle the board"
+PRINT "  3. Monitor UART for boot output"
+PRINT ""
+PRINT "Expected UART output after wolfBoot flash:"
+PRINT "  wolfBoot init"
+PRINT ""
+
+ENDDO

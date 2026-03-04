@@ -42,6 +42,41 @@
 #elif defined(TARGET_va416x0)
     /* Use Vorago SDK HAL_time_ms (incremented by SysTick_Handler every 1ms) */
     extern volatile uint64_t HAL_time_ms;
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+    /* PPC timebase register for accurate timing.
+     * Timebase frequency = platform_clock / 16. */
+    static uint32_t ppc_tb_hz = 0;
+    static unsigned long long ppc_start_ticks = 0;
+
+    static unsigned long long ppc_get_ticks(void)
+    {
+        unsigned long hi, lo, tmp;
+        __asm__ volatile (
+            "1: mftbu %0\n"
+            "   mftb  %1\n"
+            "   mftbu %2\n"
+            "   cmpw  %0, %2\n"
+            "   bne   1b\n"
+            : "=r"(hi), "=r"(lo), "=r"(tmp)
+        );
+        return ((unsigned long long)hi << 32) | lo;
+    }
+
+    static uint32_t ppc_get_timebase_hz(void)
+    {
+        /* Read Platform PLL ratio from CLOCKING_PLLPGSR register.
+         * CCSRBAR=0xFE000000, CLOCKING_BASE=CCSRBAR+0xE1000,
+         * PLLPGSR=CLOCKING_BASE+0xC00 */
+        volatile uint32_t *pllpgsr =
+            (volatile uint32_t *)(0xFE000000UL + 0xE1C00UL);
+        uint32_t plat_ratio = ((*pllpgsr) >> 1) & 0x1F;
+    #if defined(BOARD_NAII_68PPC2) || defined(TARGET_nxp_t1024)
+        uint32_t sys_clk = 100000000; /* 100 MHz */
+    #else
+        uint32_t sys_clk = 66666667;  /* 66.66 MHz (T2080 RDB) */
+    #endif
+        return (sys_clk * plat_ratio) / 16;
+    }
 #else
     /* Simple tick counter fallback */
     static volatile unsigned int tick_counter = 0;
@@ -61,6 +96,14 @@ unsigned long my_time(unsigned long* timer)
     unsigned long t = (unsigned long)(HAL_time_ms / 1000);
     if (timer) *timer = t;
     return t;
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+    if (ppc_tb_hz == 0)
+        ppc_tb_hz = ppc_get_timebase_hz();
+    {
+        unsigned long t = (unsigned long)(ppc_get_ticks() / ppc_tb_hz);
+        if (timer) *timer = t;
+        return t;
+    }
 #else
     /* Simple incrementing counter */
     tick_counter++;
@@ -82,6 +125,12 @@ double current_time(int reset)
     (void)reset;
     /* Use Vorago SDK SysTick-based millisecond counter */
     return (double)HAL_time_ms / 1000.0;
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+    if (ppc_tb_hz == 0)
+        ppc_tb_hz = ppc_get_timebase_hz();
+    if (reset)
+        ppc_start_ticks = ppc_get_ticks();
+    return (double)(ppc_get_ticks() - ppc_start_ticks) / (double)ppc_tb_hz;
 #else
     /* Simple counter-based timing */
     if (reset)

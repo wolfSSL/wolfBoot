@@ -477,11 +477,11 @@ extern int tolower(int c);
 
 #if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC) && \
     !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
-#if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-      defined(WOLFBOOT_SIGN_ML_DSA)) && \
-    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#define WC_NO_RNG
-#endif
+    #if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+        defined(WOLFBOOT_SIGN_ML_DSA)) && \
+        !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        #define WC_NO_RNG
+    #endif
     #define WC_NO_HASHDRBG
     #define NO_AES_CBC
 #else
@@ -493,6 +493,9 @@ extern int tolower(int c);
         #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
         #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
         extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+        
+        #define HAVE_AESGCM
+        #define GCM_TABLE
     #else
         #define HAVE_HASHDRBG
         #define WOLFSSL_AES_CFB
@@ -589,6 +592,9 @@ extern int tolower(int c);
 /* Common optimizations when test/benchmark enabled */
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
     #define NO_WRITE_TEMP_FILES
+
+    /* Use printf for wolfSSL logging (redirected to UART via syscalls.c) */
+    #define WOLFSSL_LOG_PRINTF
 
     /* Use static memory pool to avoid system malloc dependency.
      * benchmark.c provides gBenchMemory static buffer.

@@ -400,6 +400,16 @@ void hal_init(void)
 #ifndef WOLFBOOT_REPRODUCIBLE_BUILD
     wolfBoot_printf("Build: %s %s\n", __DATE__, __TIME__);
 #endif
+    wolfBoot_printf("System Clock: %lu MHz\n",
+        (unsigned long)(SYS_CLK / 1000000));
+    wolfBoot_printf("Platform Clock: %lu MHz\n",
+        (unsigned long)(hal_get_plat_clk() / 1000000));
+    wolfBoot_printf("Core Clock: %lu MHz\n",
+        (unsigned long)(hal_get_core_clk() / 1000000));
+    wolfBoot_printf("Bus Clock: %lu MHz\n",
+        (unsigned long)(hal_get_bus_clk() / 1000000));
+    wolfBoot_printf("Timebase: %lu MHz\n",
+        (unsigned long)(TIMEBASE_HZ / 1000000));
 #endif
 
     hal_flash_init();
