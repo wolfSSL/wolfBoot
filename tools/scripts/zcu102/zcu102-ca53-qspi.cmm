@@ -1,0 +1,225 @@
+; Zynq UltraScale+ ZCU102 Quad SPI FLASH Programming Script
+;
+; S(D)RAM : 0xFFFC1000
+; Generic Quad-SPI Controller base: 0xFF0F0000
+; FLASH: MT25QU512 (Micron)
+;
+; Based on Lauterbach TRACE32 ZCU102 QSPI demo scripts.
+
+LOCAL &arg1
+ENTRY &arg1
+&arg1=STRing.UPpeR("&arg1")  // for example "PREPAREONLY"
+&dualqspi=1  ; dual(1) or single(0)
+
+; Adjust to your TRACE32 installation path
+LOCAL &pdd
+&pdd="C:/T32/demo/arm"
+
+SYStem.RESet
+SYStem.CPU ZYNQ-ULTRASCALE+-APU
+SYStem.MemAccess DAP
+CORE.ASSIGN 1.
+ETM.OFF
+Trace.DISable
+
+; <temporarily switch to BOOTMODE=JTAG>
+; this sequence forces the SoC to use BOOTMODE=JTAG
+; a SRST is issued using the debug logic
+; we use the first A53 for flash programming
+SYStem.Option ResBreak OFF
+SYStem.Option EnReset OFF
+SYStem.Option TRST OFF
+DO &pdd/hardware/zynq_ultrascale/scripts/zynq-ultrascale_reset.cmm OVERRIDE_BOOTMODE=0x0
+SYStem.Mode Prepare
+DO &pdd/hardware/zynq_ultrascale/scripts/zynq-ultrascale_kick_bootcore.cmm "A53_X64"
+SYStem.Mode.Attach
+Break.direct
+; </temporarily switch to BOOTMODE=JTAG>
+
+SYStem.JtagClock CTCK 24MHz
+
+; --------------------------------------------------------------------------------
+; peripheral initializations
+
+//Pin muxing MIO configuration  MIO[0:12]
+
+Data.Set A:0xFF5E0068 %LE %Long 0x01010c00 ;QSPI_REF_CTRL
+
+&addr=0xFF180000
+RePeaT 13.
+(
+  Data.Set A:&addr %LE %Long 0x2
+  &addr=&addr+0x4
+)
+
+Data.Set A:0xFF180204 %LE %Long 0x2240000
+
+Data.Set A:0xFF5E0238 %Long 0x17FFFE
+
+IF &dualqspi==1
+  GOSUB READ_ID_TEST_DUAL
+ELSE
+  GOSUB READ_ID_TEST
+
+Data.Set A:0xFF0F0144 %LE %Long 1  ;enable GQSPI_SEL
+Data.Set A:0xFF0F010C %Long 0x0FBE  ; Interrupt disable register
+Data.Set A:0xFF0F0128 %Long 0x01    ; thres hold
+Data.Set A:0xFF0F012C %Long 0x01    ; thres hold
+Data.Set A:0xFF0F0104 %Long 0x0FBE  ; Interrupt status register
+
+Data.Set A:0xFF0F014C %Long 0x7   ; reset tx fifo and gen_fifo..
+WAIT 100.ms
+Data.Set A:0xFF0F0100 %Long 0x00080010  ;Config register, clk speed control[5:3] , mode==00 [31:30] I/O mode
+
+;The flash dualport works only under the non-secure mode for the ZYNQ-ULTRASCALE+
+SYStem.MemAccess DAP
+Register.Set NS 1.
+Register.Set M 0x5 ;EL1h
+
+; --------------------------------------------------------------------------------
+; Flash Declaration
+
+Break.RESet
+
+FLASHFILE.RESet
+FLASHFILE.CONFIG 0xFF0F0000
+
+IF &dualqspi==1
+  FLASHFILE.TARGET 0xFFFC1000++0x2FFF  E:0xFFFC4000++0x27FF  &pdd/flash/word/spiw4b64_zynqultra.bin  /KEEP  /STACKSIZE 0x400 /DUALPORT
+ELSE
+  FLASHFILE.TARGET 0xFFFC1000++0x2FFF  E:0xFFFC4000++0x27FF  &pdd/flash/byte/spi4b64fs_zynqultra.bin /KEEP  /STACKSIZE 0x400 /DUALPORT
+
+FLASHFILE.GETID
+
+//End of the test prepareonly
+IF "&arg1"=="PREPAREONLY"
+  ENDDO
+
+; Save Whole Flash
+;FLASHFILE.SAVE "flash_dump.bin" 0x0++0x1FFFFFFF
+
+FLASHFILE.Create 0x0--0x1FFFFFFF 0x20000 Byte
+
+; Flash BOOT.BIN (wolfBoot) at offset 0x0
+DIALOG.YESNO "Flash wolfBoot BOOT.BIN now?"
+ENTRY &programnow
+if &programnow
+(
+  FLASHFILE.ReProgram ALL
+  FLASHFILE.Load "BOOT.BIN" 0x0
+  FLASHFILE.ReProgram off
+)
+
+; Flash signed application image at partition offset
+DIALOG.YESNO "Flash signed application image now?"
+ENTRY &programnow
+if &programnow
+(
+  FLASHFILE.ReProgram ALL
+  FLASHFILE.Load "test-app/image_v1_signed.bin" 0x7000000
+  FLASHFILE.ReProgram off
+)
+
+ENDDO
+
+; --------------------------------------------------------------------------------
+; Subroutines
+
+READ_ID_TEST:
+(
+  Data.Set A:0xFF0F0144 %LE %Long 1  ;enable GQSPI_SEL
+  Data.Set A:0xFF0F010C %Long 0x0FBE   ;Interrupt disable register
+  Data.Set A:0xFF0F0128 %Long 0x01     ;thres hold
+  Data.Set A:0xFF0F012C %Long 0x01     ;thres hold
+  Data.Set A:0xFF0F0104 %Long 0x0FBE   ;Interrupt status register
+
+  ;read A:0xFF0F0100 -> 0x0
+
+  Data.Set A:0xFF0f014c %Long 0x7  ; reset tx fifo and gen_fifo..
+  WAIT 100.ms
+
+  Data.Set A:0xFF0F0100 %Long 0x00080010  ;Config register, clk speed control[5:3] , mode==00 [31:30] I/O mode
+
+  &dat_xfer=0x1<<8.
+  &spimode=0x1<<10.
+  &cs_lower=0x1<<12.
+  &cs_upper=0x1<<13.
+  &bus_lower=0x1<<14.
+  &bus_upper=0x2<<14.
+  &bus_both=0x3<<14.
+  &transmit=0x1<<16.
+  &receive=0x1<<17.
+  &stripe=0x1<<18.
+
+  Data.Set A:0xFF0F0114 %Long 0x1  ;spi enable register , cs low
+
+  Data.Set A:0xFF0F011C %Long 0x9f ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &transmit|&receive|&bus_lower|&cs_lower|&spimode|&dat_xfer|0x1
+  PRINT "read 0x" Data.Long(A:0xff0f0120) " (dummy)"
+
+  Data.Set A:0xFF0F011C %Long 0x00 ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &transmit|&receive|&bus_lower|&cs_lower|&spimode|&dat_xfer|0x1
+  PRINT "read 0x" Data.Long(A:0xff0f0120)  " (manufacture id)"
+
+  Data.Set A:0xFF0F011C %Long 0x00 ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &transmit|&receive|&bus_lower|&cs_lower|&spimode|&dat_xfer|0x1
+  PRINT "read 0x" Data.Long(A:0xff0f0120) " (device id)"
+
+  Data.Set A:0xFF0F011C %Long 0x00 ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &transmit|&receive|&bus_lower|&cs_lower|&spimode|&dat_xfer|0x1
+  PRINT "read 0x" Data.Long(A:0xff0f0120)
+
+  Data.Set A:0xFF0F0114 %Long 0x0  ;spi disable, cs high
+
+  RETURN
+)
+
+
+READ_ID_TEST_DUAL:
+(
+  Data.Set A:0xFF0F0144 %LE %Long 1  ;enable GQSPI_SEL
+  Data.Set A:0xFF0F010C %Long 0x0FBE   ;Interrupt disable register
+  Data.Set A:0xFF0F0128 %Long 0x01     ;thres hold
+  Data.Set A:0xFF0F012C %Long 0x01     ;thres hold
+  Data.Set A:0xFF0F0104 %Long 0x0FBE   ;Interrupt status register
+
+  ;read A:0xFF0F0100 -> 0x0
+
+  Data.Set A:0xFF0f014c %Long 0x7  ; reset tx fifo and gen_fifo..
+  WAIT 100.ms
+
+  Data.Set A:0xFF0F0100 %Long 0x00080010  ;Config register, clk speed control[5:3] , mode==00 [31:30] I/O mode
+
+  &dat_xfer=0x1<<8.
+  &spimode=0x1<<10.
+  &cs_lower=0x1<<12.
+  &cs_upper=0x1<<13.
+  &bus_lower=0x1<<14.
+  &bus_upper=0x2<<14.
+  &bus_both=0x3<<14.
+  &transmit=0x1<<16.
+  &receive=0x1<<17.
+  &stripe=0x1<<18.
+
+  Data.Set A:0xFF0F0114 %Long 0x1  ;spi enable register , cs low
+
+  Data.Set A:0xFF0F011C %Long 0x00009f9f  ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &stripe|&transmit|&receive|&bus_both|&cs_lower|&cs_upper|&spimode|&dat_xfer|0x4    ; tx,4 byte data transfer
+  PRINT "read 0x" Data.Long(A:0xff0f0120)
+
+  Data.Set A:0xFF0F011C %Long 0x00000000  ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &stripe|&transmit|&receive|&bus_both|&cs_lower|&cs_upper|&spimode|&dat_xfer|0x4    ; tx,4 byte data transfer
+  PRINT "read 0x" Data.Long(A:0xff0f0120)
+
+  Data.Set A:0xFF0F011C %Long 0x00000000  ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &stripe|&transmit|&receive|&bus_both|&cs_lower|&cs_upper|&spimode|&dat_xfer|0x4    ; tx,4 byte data transfer
+  PRINT "read 0x" Data.Long(A:0xff0f0120)
+
+  Data.Set A:0xFF0F011C %Long 0x00000000  ; tx, data transfer
+  Data.Set A:0xFF0F0140 %Long &stripe|&transmit|&receive|&bus_both|&cs_lower|&cs_upper|&spimode|&dat_xfer|0x4    ; tx,4 byte data transfer
+  PRINT "read 0x" Data.Long(A:0xff0f0120)
+
+  Data.Set A:0xFF0F0114 %Long 0x0  ;spi disable, cs high
+
+  RETURN
+)

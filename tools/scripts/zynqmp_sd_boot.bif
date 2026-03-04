@@ -1,0 +1,23 @@
+// Boot BIF for wolfBoot ZynqMP SD Card Boot
+// FSBL -> PMUFW -> BL31 (EL3) -> wolfBoot (EL2)
+// wolfBoot loads firmware from MBR partitions on SD card
+//
+// Usage:
+//   bootgen -arch zynqmp -image zynqmp_sd_boot.bif -w -o BOOT.BIN
+//
+// Required files (copy to same directory):
+//   zynqmp_fsbl.elf  - First Stage Boot Loader
+//   pmufw.elf        - Platform Management Unit firmware
+//   bl31.elf         - ARM Trusted Firmware (EL3)
+//   wolfboot.elf     - wolfBoot bootloader
+//
+// Optional:
+//   system.bit       - PL bitstream (uncomment line below)
+the_ROM_image:
+{
+	[bootloader, destination_cpu=a53-0] zynqmp_fsbl.elf
+	[pmufw_image] pmufw.elf
+	// [destination_device=pl] system.bit
+	[destination_cpu=a53-0, exception_level=el-3, trustzone] bl31.elf
+	[destination_cpu=a53-0, exception_level=el-2] wolfboot.elf
+}

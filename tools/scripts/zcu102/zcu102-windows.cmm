@@ -1,0 +1,48 @@
+; ZCU102 TRACE32 Window Layout Script
+
+B::
+
+; Set working directory to wolfboot root
+;ChDir "~/wolfboot"
+
+TOOLBAR   ON
+STATUSBAR ON
+FramePOS 313.29 58.733 363. 116.
+WinPAGE.RESet
+
+WinPAGE.Create P000
+WinCLEAR
+
+WinPOS 214.0 1.8 142. 5. 27. 1. W003
+WinTABS 13. 16. 0. 0. 0. 0. 0. 0. 0. 71.
+B.List
+
+WinPOS 0.0 0.0 151. 58. 14. 0. W008
+PEDIT "tools/scripts/zcu102/zcu102-ca53-qspi.cmm"
+
+WinPOS 2.1429 1.2667 154. 59. 14. 0. W000
+PEDIT "tools/scripts/zcu102/zcu102-debug-uboot.cmm"
+
+WinPOS 4.2857 2.5333 156. 59. 14. 0. W004
+PEDIT "tools/scripts/zcu102/zcu102-debug-wolfboot.cmm"
+
+WinPOS 53.571 11.333 164. 76. 24. 1. W001
+WinTABS 13. 18. 25.
+List.auto
+
+WinPOS 228.0 12.933 128. 25. 5. 0. W005
+Frame
+
+WinPOS 255.43 43.067 100. 25. 0. 0. W009
+Var.Local
+WinPAN 0. 6.
+
+WinPOS 264.14 71.333 92. 29. 0. 0. W007
+Register
+
+WinPOS 1.4286 78.467 154. 23. 0. 0. W002
+AREA
+
+WinPAGE.select P000
+
+ENDDO

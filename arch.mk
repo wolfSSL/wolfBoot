@@ -78,6 +78,7 @@ ifeq ($(ARCH),AARCH64)
       HASH_HAL=1
       CFLAGS+=-DWOLFBOOT_ZYNQMP_CSU
     endif
+
   endif
 
   ifeq ($(TARGET),versal)

@@ -12,8 +12,11 @@ _EL2_STACK_SIZE = DEFINED(_EL2_STACK_SIZE) ? _EL2_STACK_SIZE : 1024;
 MEMORY
 {
    /* psu_ddr_0_MEM_0 : ORIGIN = 0x0, LENGTH = 0x80000000 */
-   /* Use the end of DDR0 for wolfBoot (reserve 1MB) */
-   psu_ddr_0_MEM_0 : ORIGIN = 0x7FF00000, LENGTH = 0x100000
+   /* wolfBoot DDR location (2MB reserved):
+    *   Loaded by FSBL/BL31 to DDR at 0x8000000 (128MB)
+    *   Same address used for both QSPI and SD card boot
+    */
+   psu_ddr_0_MEM_0 : ORIGIN = 0x8000000, LENGTH = 0x200000
    psu_ddr_1_MEM_0 : ORIGIN = 0x800000000, LENGTH = 0x80000000
    psu_ocm_ram_0_MEM_0 : ORIGIN = 0xFFFC0000, LENGTH = 0x40000
    psu_qspi_linear_0_MEM_0 : ORIGIN = 0xC0000000, LENGTH = 0x20000000
@@ -38,7 +41,7 @@ SECTIONS
    *(.gnu.linkonce.t.*)
    *(.plt)
    *(.gnu_warning)
-   *(.gcc_execpt_table)
+   *(.gcc_except_table)
    *(.glue_7)
    *(.glue_7t)
    *(.ARM.extab)
@@ -197,7 +200,7 @@ SECTIONS
 .ARM.exidx : {
    __exidx_start = .;
    *(.ARM.exidx*)
-   *(.gnu.linkonce.armexidix.*.*)
+   *(.gnu.linkonce.armexidx.*.*)
    __exidx_end = .;
 } > psu_ddr_0_MEM_0
 

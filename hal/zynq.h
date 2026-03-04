@@ -32,6 +32,11 @@
 #ifndef EL2_HYPERVISOR
 #define EL2_HYPERVISOR 1
 #endif
+
+/* Cache line size for Cortex-A53 (AArch64) */
+#define CACHE_LINE_SIZE         64
+/* Region size to flush before booting application */
+#define APP_CACHE_FLUSH_SIZE    (1 * 1024 * 1024)  /* 1MB */
 #ifndef EL1_NONSECURE
 #define EL1_NONSECURE  0
 #endif
@@ -58,8 +63,8 @@
 
 
 /* IOP System-level Control */
-#define IOU_SLCR_BASSE             0xFF180000
-#define IOU_TAPDLY_BYPASS_ADDR     (IOU_SLCR_BASSE + 0x390)
+#define IOU_SLCR_BASE              0xFF180000
+#define IOU_TAPDLY_BYPASS_ADDR     (IOU_SLCR_BASE + 0x390)
 #define IOU_TAPDLY_BYPASS          (*((volatile uint32_t*)IOU_TAPDLY_BYPASS_ADDR))
 #define IOU_TAPDLY_BYPASS_LQSPI_RX (1UL << 2) /* LQSPI Tap Delay Enable on Rx Clock signal. 0: enable. 1: disable (bypass tap delay). */
 
@@ -398,7 +403,29 @@
 #define QSPI_REF_CTRL_DIVISOR0(n)   (((n) << 8) & QSPI_REF_CTRL_DIVISOR0_MASK)
 
 #define QSPI_REF_CTRL_DIVISOR1_MASK (0x3F << 16)
-#define QSPI_REF_CTRL_DIVISOR1(n)   (((n) << 16) & QSPI_REF_CTRL_DIVISOR0_MASK)
+#define QSPI_REF_CTRL_DIVISOR1(n)   (((n) << 16) & QSPI_REF_CTRL_DIVISOR1_MASK)
+
+/* SD/SDHCI Controller Base Addresses */
+#define ZYNQMP_SD0_BASE     0xFF160000UL
+#define ZYNQMP_SD1_BASE     0xFF170000UL
+
+/* SD/SDIO Reference Clock Control (CRL_APB) */
+#define SDIO0_REF_CTRL      (*((volatile uint32_t*)(CRL_APB_BASE + 0x6C)))
+#define SDIO1_REF_CTRL      (*((volatile uint32_t*)(CRL_APB_BASE + 0x70)))
+
+/* SD/SDIO Reset Control (CRL_APB RST_LPD_IOU2) */
+#define RST_LPD_IOU2        (*((volatile uint32_t*)(CRL_APB_BASE + 0x0238)))
+#define RST_LPD_IOU2_SDIO0  (1UL << 5)
+#define RST_LPD_IOU2_SDIO1  (1UL << 6)
+
+/* IOU_SLCR SD Configuration (feeds into SDHCI Capabilities register) */
+#define IOU_SLCR_SD_CONFIG_REG2  (*((volatile uint32_t*)(IOU_SLCR_BASE + 0x320)))
+/* SD1 Slot Type: 00=Removable, 01=Embedded, 10=Shared Bus */
+#define SD_CONFIG_REG2_SD1_SLOTTYPE_SHIFT  28
+#define SD_CONFIG_REG2_SD1_SLOTTYPE_MASK   0x30000000UL
+/* SD0 Slot Type */
+#define SD_CONFIG_REG2_SD0_SLOTTYPE_SHIFT  12
+#define SD_CONFIG_REG2_SD0_SLOTTYPE_MASK   0x00003000UL
 
 
 /* Configuration Security Unit (CSU) */

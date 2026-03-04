@@ -1,0 +1,56 @@
+; ZCU102 wolfBoot Debug Script
+;
+; Debug wolfBoot on Zynq UltraScale+ ZCU102.
+; Based on Lauterbach TRACE32 ZCU102 demo scripts.
+;
+; Prerequisites:
+;  * Connect Debug Cable to J6
+;  * set SW6 = 0y1111 (JTAG Bootmode)
+
+; --------------------------------------------------------------------------------
+; initialize and start the debugger
+SYStem.RESet
+SYStem.CPU ZYNQ-ULTRASCALE+-APU
+SYStem.Option TRST OFF
+SYStem.Option ResBreak OFF
+SYStem.Option WaitDAPPWR ON
+SYStem.JtagClock CTCK 20MHz
+CORE.ASSIGN 1.
+; disable Trace infrastructure for the moment - TPIU may be unclocked!
+ETM.OFF
+Trace.DISable
+
+SYStem.Mode Prepare
+;GOSUB DisableWatchdog
+;DO "C:/T32/demo/arm/hardware/zynq_ultrascale/scripts/zynq-ultrascale_kick_bootcore.cmm" A53_X64
+
+SYStem.Mode.Attach
+
+
+; --------------------------------------------------------------------------------
+; Load symbols for wolfBoot
+sYmbol.SourcePATH.SetBaseDir "."
+
+Data.LOAD.Elf "wolfboot.elf" /NoCode
+;Data.LOAD.Elf "test-app/image.elf" /NoClear /NoCode
+
+IF STATE.RUN()
+  Break.direct
+
+B.Delete
+B.Set wolfBoot_start
+
+ENDDO
+
+; ================================================================================
+DisableWatchdog:
+(
+  PRIVATE &swdtMode
+
+  &swdtMode=Data.Long(ENAXI:0xFF150000)
+  &swdtMode=&swdtMode&0xFFE      ; Mode.WDEN = 0
+  &swdtMode=&swdtMode+0xABC000   ; zKEY
+
+  Data.Set ENAXI:0xFF150000 %LE %Long &swdtMode
+)
+RETURN
