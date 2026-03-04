@@ -48,18 +48,18 @@ static void hal_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure: application flash area (boot partition) */
+    /* Non-secure: application flash area (boot+update partition) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
-            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + (WOLFBOOT_PARTITION_SIZE * 2) - 1,
             0);
 
     /* Non-secure RAM */
-    sau_init_region(2, 0x20020000, 0x20025FFF, 0);
+    sau_init_region(2, 0x20020000, 0x20027FFF, 0);
 
     /* Peripherals */
-    sau_init_region(3, 0x40000000, 0x4005FFFF, 0);
-    sau_init_region(4, 0x40080000, 0x400DFFFF, 0);
-    sau_init_region(5, 0x40100000, 0x4013FFFF, 0);
+    sau_init_region(3, 0x40000000, 0x4003FFFF, 0);
+    sau_init_region(4, 0x40080000, 0x400AFFFF, 0);
+    sau_init_region(5, 0x40100000, 0x4010FFFF, 0);
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;
@@ -70,13 +70,8 @@ static void hal_sau_init(void)
 
 static void periph_unsecure(void)
 {
-    // CLOCK_EnableClock(kCLOCK_Gpio0);
-    // CLOCK_EnableClock(kCLOCK_Gpio1);
-    // CLOCK_EnableClock(kCLOCK_Port0);
-    // CLOCK_EnableClock(kCLOCK_Port1);
-
-    // GPIO_EnablePinControlNonSecure(GPIO0, (1UL << 10) | (1UL << 27));
-    // GPIO_EnablePinControlNonSecure(GPIO1, (1UL << 2) | (1UL << 8) | (1UL << 9));
+    CLOCK_EnableClock(kCLOCK_Iocon);
+    CLOCK_EnableClock(kCLOCK_Gpio1);
 }
 #endif
 
@@ -96,8 +91,6 @@ void hal_init(void)
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
     FLASH_Init(&pflash);
-    // FLASH_GetProperty(&pflash, kFLASH_PropertyPflashSectorSize,
-    //         &pflash_sector_size);
 #endif
 
 #if defined(TZEN) && !defined(NONSECURE_APP)
@@ -153,8 +146,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         address % pflash_page_size == 0 &&
         len % pflash_page_size == 0 &&
         FLASH_Erase(&pflash, address, len, kFLASH_ApiEraseKey)
-            == kStatus_FLASH_Success &&
-        FLASH_VerifyErase(&pflash, address, len) == kStatus_FLASH_Success
+            == kStatus_FLASH_Success
     )
     {
         return 0;
