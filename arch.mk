@@ -206,6 +206,11 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  # Defaults for linker script placeholders (overridden by wolfhal target)
+  WOLFHAL_FLASH_EXCLUDE_TEXT?=*(.text*)
+  WOLFHAL_FLASH_EXCLUDE_RODATA?=*(.rodata*)
+  WOLFHAL_FLASH_RAM_SECTIONS?=
+
   ifeq ($(TARGET),stm32wb)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
@@ -221,6 +226,24 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+  ifeq ($(TARGET),wolfhal_stm32wb)
+    ARCH_FLASH_OFFSET=0x08000000
+    LSCRIPT_IN=hal/stm32wb.ld
+    WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
+    CFLAGS+=-I$(WOLFHAL_ROOT) -DWHAL_CFG_DIRECT_CALLBACKS
+    OBJS+=./hal/boards/$(BOARD).o
+    OBJS+=$(WOLFHAL_ROOT)/src/clock/stm32wb_rcc.o
+    OBJS+=$(WOLFHAL_ROOT)/src/flash/stm32wb_flash.o
+    ifeq ($(DEBUG_UART),1)
+      OBJS+=$(WOLFHAL_ROOT)/src/gpio/stm32wb_gpio.o
+      OBJS+=$(WOLFHAL_ROOT)/src/uart/stm32wb_uart.o
+    endif
+    ifeq ($(RAM_CODE),1)
+      WOLFHAL_FLASH_EXCLUDE_TEXT=*(EXCLUDE_FILE(*stm32wb_flash.o) .text*)
+      WOLFHAL_FLASH_EXCLUDE_RODATA=*(EXCLUDE_FILE(*stm32wb_flash.o) .rodata*)
+      WOLFHAL_FLASH_RAM_SECTIONS=*stm32wb_flash.o(.text* .rodata*)
+    endif
+  endif
 
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
