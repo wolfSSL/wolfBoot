@@ -29,7 +29,7 @@
 #ifdef TARGET_zynq
 
 /* Provide current_el() for hal/zynq.o (normally in boot_aarch64.c) */
-unsigned int current_el(void)
+__attribute__((weak)) unsigned int current_el(void)
 {
     unsigned long el;
     __asm__ volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
