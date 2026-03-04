@@ -1132,7 +1132,7 @@ ifeq ($(TARGET),lpc55s69)
       -I$(MCUXPRESSO_CMSIS)/Core/Include
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU)
   CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
-  LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-mcpu=cortex-m33 -Wl,--no-warn-rwx-segments
   OBJS+=\
       $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \

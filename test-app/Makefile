@@ -585,6 +585,7 @@ ifeq ($(TARGET),lpc55s69)
     ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
       LDFLAGS+=--specs=nosys.specs
     endif
+    LDFLAGS+=-Wl,--no-warn-rwx-segments
 endif
 
 ifeq ($(TARGET),imx_rt)
