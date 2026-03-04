@@ -3,7 +3,7 @@
 // wolfBoot loads firmware from MBR partitions on SD card
 //
 // Usage:
-//   bootgen -arch zynqmp -image zynqmp_sd_boot.bif -w -o BOOT.BIN
+//   bootgen -arch zynqmp -image tools/scripts/zcu102/zynqmp_sd_boot.bif -w -o BOOT.BIN
 //
 // Required files (copy to same directory):
 //   zynqmp_fsbl.elf  - First Stage Boot Loader
