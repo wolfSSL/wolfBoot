@@ -343,3 +343,4 @@ image.ub
 *.pdi
 system-default.dtb
 test_output/
+sdcard.img

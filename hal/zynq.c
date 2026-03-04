@@ -1563,7 +1563,9 @@ void hal_init(void)
     wolfBoot_printf(bootMsg);
     wolfBoot_printf("Current EL: %d\n", current_el());
 
+#if defined(EXT_FLASH) && (EXT_FLASH == 1)
     qspi_init();
+#endif
 
     pmuVer = pmu_get_version();
     wolfBoot_printf("PMUFW Ver: %d.%d\n",
@@ -1581,7 +1583,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-#if GQPI_USE_4BYTE_ADDR == 1
+#if defined(EXT_FLASH) && (EXT_FLASH == 1) && GQPI_USE_4BYTE_ADDR == 1
     /* Exit 4-byte address mode */
     int ret = qspi_exit_4byte_addr(&mDev);
     if (ret != GQSPI_CODE_SUCCESS)
@@ -1594,6 +1596,24 @@ void hal_prepare_boot(void)
         mDev.qnx = NULL;
     }
 #endif
+
+    /* Clean and invalidate caches for the loaded application.
+     * The application was written to RAM via D-cache, but the CPU will
+     * fetch instructions via I-cache from main memory. We must:
+     * 1. Clean D-cache (flush dirty data to memory)
+     * 2. Invalidate I-cache (ensure fresh instruction fetch) */
+    __asm__ volatile("dsb sy");
+    {
+        uintptr_t addr;
+        uintptr_t end = WOLFBOOT_LOAD_ADDRESS + APP_CACHE_FLUSH_SIZE;
+        for (addr = WOLFBOOT_LOAD_ADDRESS; addr < end; addr += CACHE_LINE_SIZE) {
+            __asm__ volatile("dc civac, %0" : : "r"(addr));
+        }
+    }
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("ic iallu");
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
 }
 
 /* Flash functions must be relocated to RAM for execution */
@@ -1779,7 +1799,13 @@ void RAMFUNCTION ext_flash_unlock(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
+#ifdef WOLFBOOT_DTS_BOOT_ADDRESS
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
+#elif defined(WOLFBOOT_LOAD_DTS_ADDRESS)
+    return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+#else
+    return NULL;
+#endif
 }
 
 int hal_dts_fixup(void* dts_addr)
@@ -1833,5 +1859,337 @@ static int test_ext_flash(QspiDev_t* dev)
     return ret;
 }
 #endif /* TEST_EXT_FLASH */
+
+
+/* ============================================================================
+ * SDHCI (SD Card / eMMC) Platform Support
+ * ============================================================================
+ * Platform-specific hooks for the generic SDHCI driver (src/sdhci.c).
+ * ZynqMP uses the Arasan SDHCI controller with standard register layout.
+ * The generic driver uses Cadence SD4HC register offsets, so we translate:
+ *   - HRS registers at 0x000-0x01F (Cadence-specific: reset, PHY, eMMC mode)
+ *   - SRS registers at 0x200-0x2FF (standard SDHCI mapped at offset +0x200)
+ * Arasan uses standard SDHCI registers at 0x000-0x0FF (no 0x200 offset).
+ */
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+#include "sdhci.h"
+
+/* SD controller base address selection:
+ *   SD0 (ZYNQMP_SD0_BASE = 0xFF160000) - internal, typically eMMC
+ *   SD1 (ZYNQMP_SD1_BASE = 0xFF170000) - external SD card slot on ZCU102
+ */
+#ifndef ZYNQMP_SDHCI_BASE
+#define ZYNQMP_SDHCI_BASE  ZYNQMP_SD1_BASE
+#endif
+
+#define CADENCE_SRS_OFFSET      0x200
+
+/* Legacy SDMA system address register (standard SDHCI offset 0x00).
+ * The Arasan SDHCI v3.0 on ZynqMP does not support Host Version 4 Enable
+ * (HV4E) mode. The generic SDHCI driver uses HV4E-style 64-bit DMA
+ * addressing via SRS22/SRS23 (offsets 0x58/0x5C), but on this controller
+ * we must use the legacy SRS00 register (offset 0x00) for SDMA addresses.
+ * The platform reg_read/reg_write functions transparently redirect
+ * SRS22 <-> SRS00, making legacy SDMA work without changes to sdhci.c. */
+#define STD_SDHCI_SDMA_ADDR     0x00  /* SDMA System Address (32-bit) */
+#define STD_SDHCI_HOST_CTRL2    0x3C  /* Auto CMD Err(16) + Host Ctrl 2(16) */
+
+/* Standard SDHCI register offsets (byte addresses within the controller) */
+#define STD_SDHCI_HOST_CTRL1    0x28  /* Host Control 1 (8-bit) */
+#define STD_SDHCI_POWER_CTRL    0x29  /* Power Control (8-bit) */
+#define STD_SDHCI_BLKGAP_CTRL   0x2A  /* Block Gap Control (8-bit) */
+#define STD_SDHCI_WAKEUP_CTRL   0x2B  /* Wakeup Control (8-bit) */
+#define STD_SDHCI_CLK_CTRL      0x2C  /* Clock Control (16-bit) */
+#define STD_SDHCI_TIMEOUT_CTRL  0x2E  /* Timeout Control (8-bit) */
+#define STD_SDHCI_SW_RESET      0x2F  /* Software Reset (8-bit) */
+
+/* Software Reset register bits (at offset 0x2F, 8-bit register) */
+#define STD_SDHCI_SRA           0x01  /* Software Reset for All */
+#define STD_SDHCI_SRCMD         0x02  /* Software Reset for CMD Line */
+#define STD_SDHCI_SRDAT         0x04  /* Software Reset for DAT Line */
+
+/* Handle reads from Cadence HRS registers (0x000-0x1FF) */
+static uint32_t zynqmp_sdhci_hrs_read(uint32_t hrs_offset)
+{
+    volatile uint8_t *base = (volatile uint8_t *)ZYNQMP_SDHCI_BASE;
+
+    switch (hrs_offset) {
+    case 0x000: /* HRS00 - Software Reset */
+    {
+        /* Map standard SRA (byte at 0x2F) to Cadence SWR (bit 0) */
+        uint8_t val = *((volatile uint8_t *)(base + STD_SDHCI_SW_RESET));
+        return (val & STD_SDHCI_SRA) ? 1U : 0U;
+    }
+    case 0x010: /* HRS04 - PHY access (Cadence-specific) */
+        /* Return ACK set to prevent wait loops from hanging */
+        return (1U << 26); /* SDHCI_HRS04_UIS_ACK */
+    default:
+        /* HRS01 (debounce), HRS02, HRS06 (eMMC mode) - not applicable */
+        return 0;
+    }
+}
+
+/* Handle writes to Cadence HRS registers (0x000-0x1FF) */
+static void zynqmp_sdhci_hrs_write(uint32_t hrs_offset, uint32_t val)
+{
+    volatile uint8_t *base = (volatile uint8_t *)ZYNQMP_SDHCI_BASE;
+
+    switch (hrs_offset) {
+    case 0x000: /* HRS00 - Software Reset */
+        if (val & 1U) {
+            /* Issue SRA via 8-bit write to offset 0x2F (per SDHCI spec).
+             * The Arasan controller requires byte-level access for the
+             * Software Reset register. */
+            *((volatile uint8_t *)(base + STD_SDHCI_SW_RESET)) = STD_SDHCI_SRA;
+        }
+        break;
+    default:
+        /* HRS01, HRS04, HRS06 - not applicable on ZynqMP, ignore */
+        break;
+    }
+}
+
+/* Register access functions for generic SDHCI driver.
+ * Translates Cadence SD4HC register offsets to standard Arasan SDHCI layout.
+ *
+ * IMPORTANT: The Arasan SDHCI on ZynqMP requires specific register access
+ * widths matching the SDHCI specification (see Xilinx SDPS driver reference):
+ *   - Host Control 1 (0x28): 8-bit
+ *   - Power Control (0x29):  8-bit
+ *   - Clock Control (0x2C):  16-bit
+ *   - Timeout Control (0x2E): 8-bit
+ *   - Software Reset (0x2F): 8-bit
+ * The Cadence driver uses 32-bit SRS10/SRS11 registers that span these byte
+ * offsets. We decompose 32-bit writes into the correct access widths. */
+uint32_t sdhci_reg_read(uint32_t offset)
+{
+    volatile uint8_t *base = (volatile uint8_t *)ZYNQMP_SDHCI_BASE;
+
+    /* Cadence SRS registers (0x200+) -> standard SDHCI (subtract 0x200) */
+    if (offset >= CADENCE_SRS_OFFSET) {
+        uint32_t std_off = offset - CADENCE_SRS_OFFSET;
+
+        /* SRS22 (0x58) -> SRS00 (0x00): Legacy SDMA address register */
+        if (std_off == 0x58) {
+            return *((volatile uint32_t *)(base + STD_SDHCI_SDMA_ADDR));
+        }
+        /* SRS23 (0x5C) -> 0: No 64-bit addressing on SDHCI v3.0 */
+        if (std_off == 0x5C) {
+            return 0;
+        }
+
+        {
+            uint32_t val = *((volatile uint32_t *)(base + std_off));
+            /* Mask out A64S from Capabilities to prevent HV4E init */
+            if (std_off == 0x40) { /* SRS16 - Capabilities */
+                val &= ~SDHCI_SRS16_A64S;
+            }
+            return val;
+        }
+    }
+    /* Cadence HRS registers (0x000-0x1FF) -> translate to standard equivalents */
+    return zynqmp_sdhci_hrs_read(offset);
+}
+
+void sdhci_reg_write(uint32_t offset, uint32_t val)
+{
+    volatile uint8_t *base = (volatile uint8_t *)ZYNQMP_SDHCI_BASE;
+
+    if (offset >= CADENCE_SRS_OFFSET) {
+        uint32_t std_off = offset - CADENCE_SRS_OFFSET;
+
+        /* SRS10 (Cadence 0x228) = standard 0x28-0x2B:
+         *   0x28: Host Control 1 (8-bit)
+         *   0x29: Power Control (8-bit)
+         *   0x2A: Block Gap Control (8-bit)
+         *   0x2B: Wakeup Control (8-bit) */
+        if (std_off == 0x28) {
+            *((volatile uint8_t *)(base + STD_SDHCI_HOST_CTRL1)) =
+                (uint8_t)(val & 0xFF);
+            *((volatile uint8_t *)(base + STD_SDHCI_POWER_CTRL)) =
+                (uint8_t)((val >> 8) & 0xFF);
+            *((volatile uint8_t *)(base + STD_SDHCI_BLKGAP_CTRL)) =
+                (uint8_t)((val >> 16) & 0xFF);
+            *((volatile uint8_t *)(base + STD_SDHCI_WAKEUP_CTRL)) =
+                (uint8_t)((val >> 24) & 0xFF);
+            return;
+        }
+
+        /* SRS11 (Cadence 0x22C) = standard 0x2C-0x2F:
+         *   0x2C: Clock Control (16-bit)
+         *   0x2E: Timeout Control (8-bit)
+         *   0x2F: Software Reset (8-bit) */
+        if (std_off == 0x2C) {
+            *((volatile uint16_t *)(base + STD_SDHCI_CLK_CTRL)) =
+                (uint16_t)(val & 0xFFFF);
+            *((volatile uint8_t *)(base + STD_SDHCI_TIMEOUT_CTRL)) =
+                (uint8_t)((val >> 16) & 0xFF);
+            *((volatile uint8_t *)(base + STD_SDHCI_SW_RESET)) =
+                (uint8_t)((val >> 24) & 0xFF);
+            return;
+        }
+
+        /* SRS22 (0x58) -> SRS00 (0x00): Legacy SDMA address register.
+         * The generic driver writes the DMA buffer address here for HV4E mode.
+         * Redirect to SRS00 which is the legacy SDMA system address register.
+         * Writing SRS00 also restarts DMA after a boundary interrupt. */
+        if (std_off == 0x58) {
+            *((volatile uint32_t *)(base + STD_SDHCI_SDMA_ADDR)) = val;
+            return;
+        }
+        /* SRS23 (0x5C) -> no-op: No 64-bit addressing on SDHCI v3.0 */
+        if (std_off == 0x5C) {
+            return;
+        }
+
+        /* SRS15 (0x3C) -> mask out HV4E and A64 bits.
+         * The generic driver enables HV4E for SDMA, but the Arasan SDHCI v3.0
+         * does not support it. These are reserved bits on v3.0 and must not
+         * be set. */
+        if (std_off == STD_SDHCI_HOST_CTRL2) {
+            val &= ~(SDHCI_SRS15_HV4E | SDHCI_SRS15_A64);
+        }
+
+        /* All other SRS registers: 32-bit write */
+        *((volatile uint32_t *)(base + std_off)) = val;
+        return;
+    }
+    /* Cadence HRS registers (0x000-0x1FF) -> translate to standard equivalents */
+    zynqmp_sdhci_hrs_write(offset, val);
+}
+
+/* Platform initialization - called from sdhci_init()
+ * FSBL already initializes the SD controller on ZynqMP when booting from SD,
+ * so we don't need to configure clocks/reset (CRL_APB registers).
+ *
+ * However, the FSBL uses GPIO-based card detect (polling MIO45 as GPIO)
+ * rather than the SDHCI controller's built-in CD mechanism. The default
+ * IOU_SLCR SD_CONFIG_REG2 slot type is "Removable" (00), but MIO45 is not
+ * routed to the SDHCI controller as a CD function. This causes the Arasan
+ * SDHCI to report Card Inserted=0 and gate writes to Bus Power and SD Clock
+ * Enable registers.
+ *
+ * Fix: Set SD1 slot type to "Embedded" (01) in IOU_SLCR SD_CONFIG_REG2.
+ * This makes the controller always assert Card Inserted and Card State
+ * Stable, allowing normal SDHCI register access. */
+void sdhci_platform_init(void)
+{
+    uint32_t reg;
+    volatile int i;
+    uint32_t slot_mask;
+    uint32_t slot_shift;
+    uint32_t reset_bit;
+
+    /* Set the selected SDx slot type to "Embedded Slot for One Device" (01).
+     * This feeds into the SDHCI Capabilities register bits 31:30 and makes
+     * the controller report card as always present, bypassing the physical
+     * CD pin that is not connected to the SDHCI controller on ZCU102. */
+    if (ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE) {
+        slot_mask  = SD_CONFIG_REG2_SD0_SLOTTYPE_MASK;
+        slot_shift = SD_CONFIG_REG2_SD0_SLOTTYPE_SHIFT;
+        reset_bit  = RST_LPD_IOU2_SDIO0;
+    } else {
+        slot_mask  = SD_CONFIG_REG2_SD1_SLOTTYPE_MASK;
+        slot_shift = SD_CONFIG_REG2_SD1_SLOTTYPE_SHIFT;
+        reset_bit  = RST_LPD_IOU2_SDIO1;
+    }
+
+    reg = IOU_SLCR_SD_CONFIG_REG2;
+    reg &= ~slot_mask;
+    reg |= (1UL << slot_shift); /* 01 = Embedded */
+    IOU_SLCR_SD_CONFIG_REG2 = reg;
+
+    /* The SDHCI Capabilities register latches IOU_SLCR values on controller
+     * reset. Issue SDIOx reset via CRL_APB so the controller picks up the
+     * new slot type configuration. */
+    RST_LPD_IOU2 |= reset_bit;              /* Assert SDIOx reset */
+    for (i = 0; i < 100; i++) {}             /* Brief delay */
+    RST_LPD_IOU2 &= ~reset_bit;             /* De-assert SDIOx reset */
+    for (i = 0; i < 1000; i++) {}            /* Wait for controller ready */
+
+#ifdef DEBUG_SDHCI
+    {
+        volatile uint8_t *base = (volatile uint8_t *)ZYNQMP_SDHCI_BASE;
+        uint32_t val;
+
+        wolfBoot_printf("sdhci_platform_init: SD%d at 0x%x\n",
+            (ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE) ? 0 : 1,
+            (unsigned int)ZYNQMP_SDHCI_BASE);
+
+        wolfBoot_printf("  SD_CONFIG_REG2: 0x%x\n",
+            (unsigned int)IOU_SLCR_SD_CONFIG_REG2);
+
+        /* Read standard SDHCI registers to verify controller access */
+        val = *((volatile uint32_t *)(base + 0x24));  /* Present State */
+        wolfBoot_printf("  Present State: 0x%x\n", (unsigned int)val);
+
+        val = *((volatile uint32_t *)(base + 0x40));  /* Capabilities */
+        wolfBoot_printf("  Capabilities:  0x%x\n", (unsigned int)val);
+        (void)val;
+    }
+#endif
+}
+
+/* Platform interrupt setup - called from sdhci_init()
+ * Using polling mode for simplicity - no GIC setup needed */
+void sdhci_platform_irq_init(void)
+{
+#ifdef DEBUG_SDHCI
+    wolfBoot_printf("sdhci_platform_irq_init: Using polling mode\n");
+#endif
+}
+
+/* Platform bus mode selection - called from sdhci_init() after software reset */
+void sdhci_platform_set_bus_mode(int is_emmc)
+{
+    (void)is_emmc;
+#ifdef DEBUG_SDHCI
+    wolfBoot_printf("sdhci_platform_set_bus_mode: is_emmc=%d\n", is_emmc);
+#endif
+}
+
+/* DMA cache maintenance - called from sdhci_transfer() around SDMA operations.
+ * The SDMA engine transfers data directly to/from physical memory, bypassing
+ * the CPU's L1/L2 caches. We must ensure cache coherency:
+ *   - Before DMA write (card←memory): clean D-cache so DMA reads correct data
+ *   - After DMA read (card→memory): invalidate D-cache so CPU sees new data */
+void sdhci_platform_dma_prepare(void *buf, uint32_t sz, int is_write)
+{
+    uintptr_t addr;
+    uintptr_t start = (uintptr_t)buf & ~(CACHE_LINE_SIZE - 1);
+    uintptr_t end = (uintptr_t)buf + sz;
+
+    if (is_write) {
+        /* Clean D-cache: flush dirty lines to memory for DMA to read */
+        for (addr = start; addr < end; addr += CACHE_LINE_SIZE) {
+            __asm__ volatile("dc cvac, %0" : : "r"(addr) : "memory");
+        }
+    } else {
+        /* Invalidate D-cache: discard stale lines before DMA writes to memory */
+        for (addr = start; addr < end; addr += CACHE_LINE_SIZE) {
+            __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+        }
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+}
+
+void sdhci_platform_dma_complete(void *buf, uint32_t sz, int is_write)
+{
+    /* After DMA read (card->memory): invalidate so CPU sees DMA-written data.
+     * For DMA write (card<-memory): DMA only read from memory, so there is no
+     * new data for the CPU to see and invalidation could discard dirty lines. */
+    uintptr_t addr;
+    uintptr_t start = (uintptr_t)buf & ~(CACHE_LINE_SIZE - 1);
+    uintptr_t end = (uintptr_t)buf + sz;
+
+    if (!is_write) {
+        for (addr = start; addr < end; addr += CACHE_LINE_SIZE) {
+            __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+        }
+        __asm__ volatile("dsb sy" : : : "memory");
+    }
+}
+#endif /* DISK_SDCARD || DISK_EMMC */
+
 
 #endif /* TARGET_zynq */

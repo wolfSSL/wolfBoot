@@ -23,6 +23,7 @@
 
 #include "image.h"
 #include "loader.h"
+#include "printf.h"
 #include "wolfboot/wolfboot.h"
 
 /* Include platform-specific header for EL configuration defines */
@@ -130,7 +131,10 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
+    wolfBoot_printf("do_boot: entry=0x%08x, EL=%d\n",
+        (uint32_t)(uintptr_t)app_offset, current_el());
 #ifdef MMU
+    wolfBoot_printf("do_boot: dts=0x%08x\n", (uint32_t)(uintptr_t)dts_offset);
     hal_dts_fixup((uint32_t*)dts_offset);
 #endif
 
@@ -155,6 +159,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     #else
         uintptr_t dts = 0;
     #endif
+        wolfBoot_printf("do_boot: EL2->EL1 via ERET\n");
         el2_to_el1_boot((uintptr_t)app_offset, dts);
     }
 #else

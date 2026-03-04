@@ -212,6 +212,8 @@
 /* SRS10 - Host Control 1 / Power / Block Gap / Wakeup */
 #define SDHCI_SRS10_DTW         (1U << 1)   /* Data transfer width (4-bit) */
 #define SDHCI_SRS10_EDTW        (1U << 5)   /* Extended data transfer width (8-bit) */
+#define SDHCI_SRS10_CDTL        (1U << 6)   /* Card Detect Test Level */
+#define SDHCI_SRS10_CDSS        (1U << 7)   /* Card Detect Signal Selection */
 #define SDHCI_SRS10_HSE         (1U << 2)   /* High speed enable */
 #define SDHCI_SRS10_BP          (1U << 8)   /* Bus power */
 #define SDHCI_SRS10_BVS_MASK    (0x7U << 9)

@@ -1984,28 +1984,50 @@ qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_rasp
 
 ## Xilinx Zynq UltraScale
 
-Xilinx UltraScale+ ZCU102 (Aarch64)
+AMD Zynq UltraScale+ MPSoC ZCU102 Evaluation Kit - Quad-core ARM Cortex-A53 (plus dual Cortex-R5).
 
-See example .config file at `config/examples/zynqmp.config`.
-
-Example build options (.config):
+wolfBoot replaces U-Boot in the ZynqMP boot flow:
 ```
-TARGET=zynq
-ARCH=AARCH64
-SIGN=RSA4096
-HASH=SHA3
+FSBL -> PMUFW -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
 ```
 
-### Building Zynq with Xilinx tools (Vitis IDE)
+wolfBoot runs from DDR at `0x8000000` (128MB, EL2, non-secure) for both QSPI and SD card boot. All clock, MIO, and DDR initialization is handled by the FSBL/PMUFW before wolfBoot starts.
+
+This target supports **two boot paths**:
+- **QSPI boot** (primary, production-style): `config/examples/zynqmp.config`
+- **SD card boot** (MBR, A/B images): `config/examples/zynqmp_sdcard.config`
+
+### Prerequisites
+
+1. **Xilinx Vitis 2024.1 or newer**
+   - Set `VITIS_PATH` environment variable: `export VITIS_PATH=/opt/Xilinx/Vitis/2024.1`
+2. **Toolchain**: `aarch64-none-elf-gcc`
+3. **Pre-built firmware** (FSBL, PMUFW, BL31):
+   ```sh
+   git clone --branch xlnx_rel_v2024.2 https://github.com/Xilinx/soc-prebuilt-firmware.git
+   export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/zcu102-zynqmp
+   ```
+
+### Configuration Options
+
+Key configuration options:
+
+- `ARCH=AARCH64` - ARM 64-bit architecture
+- `TARGET=zynq` - ZynqMP platform target
+- `SIGN=RSA4096` - RSA 4096-bit signatures
+- `HASH=SHA3` - SHA3-384 hashing
+- `ELF=1` - ELF loading support
+
+### Building with Xilinx tools (Vitis IDE)
 
 See [IDE/XilinxSDK/README.md](/IDE/XilinxSDK/README.md) for using Xilinx IDE
 
-### Building Zynq with gcc-aarch64-linux-gnu
+### Building with gcc-aarch64-linux-gnu
 
 Requires `gcc-aarch64-linux-gnu` package.
 Use `make CROSS_COMPILE=aarch64-linux-gnu-`
 
-### Building Zynq with QNX
+### Building with QNX
 
 ```sh
 source ~/qnx700/qnxsdp-env.sh
@@ -2014,17 +2036,196 @@ make clean
 make CROSS_COMPILE=aarch64-unknown-nto-qnx7.0.0-
 ```
 
-#### Testing Zynq with QEMU
+### QSPI Boot (default)
 
+Use `config/examples/zynqmp.config`.
+
+```sh
+cp config/examples/zynqmp.config .config
+make clean
+make
 ```
+
+**QSPI layout**
+| Partition   | Size   | Address     | Description                    |
+|-------------|--------|-------------|--------------------------------|
+| Bootloader  | -      | 0x8000000   | wolfBoot in DDR (loaded by FSBL) |
+| Primary     | 42MB   | 0x800000    | Boot partition in QSPI         |
+| Update      | 42MB   | 0x3A00000   | Update partition in QSPI       |
+| Swap        | -      | 0x63E0000   | Swap area in QSPI              |
+
+**Build BOOT.BIN for QSPI**
+
+See [IDE/XilinxSDK/README.md](/IDE/XilinxSDK/README.md) for creating BOOT.BIN with the Xilinx IDE, or use the existing BIF file:
+
+```sh
+cp ${PREBUILT_DIR}/zynqmp_fsbl.elf .
+cp ${PREBUILT_DIR}/pmufw.elf .
+cp ${PREBUILT_DIR}/bl31.elf .
+
+source ${VITIS_PATH}/settings64.sh
+bootgen -arch zynqmp -image ./IDE/XilinxSDK/boot.bif -w -o BOOT.BIN
+```
+
+**Signing**
+
+```sh
+tools/keytools/sign --rsa4096 --sha3 /path/to/vmlinux.bin wolfboot_signing_private_key.der 1
+```
+
+**Testing with QEMU**
+
+```sh
 qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display none \
     -device loader,file=wolfboot.bin,cpu-num=0
-
 ```
 
-#### Signing Zynq
+### SD Card Boot (MBR + A/B)
 
-`tools/keytools/sign --rsa4096 --sha3 /srv/linux-rpi4/vmlinux.bin wolfboot_signing_private_key.der 1`
+Use `config/examples/zynqmp_sdcard.config`. This uses the Arasan SDHCI controller (SD1 - external SD card slot on ZCU102) and an **MBR** partitioned SD card.
+
+**Partition layout**
+| Partition | Name   | Size      | Type                          | Contents                                   |
+|-----------|--------|-----------|-------------------------------|-------------------------------------------|
+| 1         | boot   | 128MB     | FAT32 LBA (0x0c), bootable    | BOOT.BIN (FSBL + PMUFW + BL31 + wolfBoot) |
+| 2         | OFP_A  | 200MB     | Linux (0x83)                  | Primary signed firmware image              |
+| 3         | OFP_B  | 200MB     | Linux (0x83)                  | Update signed firmware image               |
+| 4         | rootfs | remainder | Linux (0x83)                  | Linux root filesystem                      |
+
+**Build wolfBoot + sign test images**
+```sh
+cp config/examples/zynqmp_sdcard.config .config
+make clean
+make
+
+make test-app/image.bin
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --rsa4096 --sha3 test-app/image.elf wolfboot_signing_private_key.der 1
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --rsa4096 --sha3 test-app/image.elf wolfboot_signing_private_key.der 2
+```
+
+**Build BOOT.BIN for SD card**
+
+Copy the pre-built firmware and generate BOOT.BIN:
+
+```sh
+cp ${PREBUILT_DIR}/zynqmp_fsbl.elf .
+cp ${PREBUILT_DIR}/pmufw.elf .
+cp ${PREBUILT_DIR}/bl31.elf .
+
+source ${VITIS_PATH}/settings64.sh
+bootgen -arch zynqmp -image ./tools/scripts/zynqmp_sd_boot.bif -w -o BOOT.BIN
+```
+
+The BIF file (`zynqmp_sd_boot.bif`) configures the boot chain:
+- FSBL at A53-0 (bootloader)
+- PMUFW at PMU
+- BL31 at EL3 with TrustZone
+- wolfBoot at EL2
+
+**Create SD image**
+```sh
+dd if=/dev/zero of=sdcard.img bs=1M count=1024
+sfdisk sdcard.img <<EOF
+label: dos
+
+1 : start=2048, size=128M, type=c, bootable
+2 : size=200M, type=83
+3 : size=200M, type=83
+4 : type=83
+EOF
+
+SECTOR2=$(sfdisk -d sdcard.img | awk '/sdcard.img2/ {for (i=1;i<=NF;i++) if ($i ~ /start=/) {gsub(/start=|,/, "", $i); print $i}}')
+SECTOR3=$(sfdisk -d sdcard.img | awk '/sdcard.img3/ {for (i=1;i<=NF;i++) if ($i ~ /start=/) {gsub(/start=|,/, "", $i); print $i}}')
+dd if=test-app/image_v1_signed.bin of=sdcard.img bs=512 seek=$SECTOR2 conv=notrunc
+dd if=test-app/image_v2_signed.bin of=sdcard.img bs=512 seek=$SECTOR3 conv=notrunc
+```
+
+**Provision SD card**
+```sh
+sudo dd if=sdcard.img of=/dev/sdX bs=4M status=progress conv=fsync
+sync
+sudo mkfs.vfat -F 32 -n BOOT /dev/sdX1
+sudo mount /dev/sdX1 /mnt
+sudo cp BOOT.BIN /mnt/
+sudo umount /mnt
+sudo fdisk -l /dev/sdX
+```
+
+Or just mount and copy the BOOT.BIN and "dd" the partitions
+
+```sh
+# Mount the FAT boot partition and copy just the updated BOOT.BIN
+sudo mount /dev/sdX1 /mnt && sudo cp BOOT.BIN /mnt/ && sudo umount /mnt && sync
+
+# Write the signed image to partition 2 (P:A) and partition 3 (P:B)
+sudo dd if=test-app/image_v1_signed.bin of=/dev/sdX2 bs=4k
+sudo dd if=test-app/image_v1_signed.bin of=/dev/sdX3 bs=4k
+```
+
+**Boot Mode**
+
+Set the ZCU102 boot mode switches (SW6) for SD card boot:
+
+| Boot Mode | MODE Pins 3:0 | SW6[4:1]       |
+| --------- | ------------- | -------------- |
+| JTAG      | 0 0 0 0       | on, on, on, on |
+| QSPI32    | 0 0 1 0       | on, on, off, on |
+| SD1       | 1 1 1 0       | off, off, off, on |
+
+**Debug**
+
+Enable SDHCI debug output by uncommenting in the config:
+```
+CFLAGS_EXTRA+=-DDEBUG_SDHCI
+CFLAGS_EXTRA+=-DDEBUG_DISK
+```
+
+**Example Boot Output**
+
+```
+wolfBoot Secure Boot
+Current EL: 2
+PMUFW Ver: 1.1
+SDHCI: SDCard mode
+Reading MBR...
+Found MBR partition table
+  MBR part 1: type=0x0C, start=0x100000, size=128MB
+  MBR part 2: type=0x83, start=0x8100000, size=200MB
+  MBR part 3: type=0x83, start=0x14900000, size=200MB
+  MBR part 4: type=0x83, start=0x21100000, size=71MB
+Total partitions on disk0: 4
+Checking primary OS image in 0,1...
+Checking secondary OS image in 0,2...
+Versions, A:1 B:1
+Load address 0x10000000
+Attempting boot from P:A
+Boot partition: 0x8038AA0 (sz 211096, ver 0x1, type 0x401)
+Loading image from disk...done
+Boot partition: 0x8038AA0 (sz 211096, ver 0x1, type 0x401)
+Checking image integrity...done
+Verifying image signature...done
+Firmware Valid.
+Loading elf at 0x10000000
+Found valid elf64 (little endian)
+Program Headers 1 (size 56)
+Load 29888 bytes (offset 0x10000) to 0x10000000 (p 0x10000000)
+Clear 17540 bytes at 0x10000000 (p 0x10000000)
+Entry point 0x10000000
+Booting at 10000000
+do_boot: entry=0x10000000, EL=2
+do_boot: dts=0x00000000
+
+
+===========================================
+ wolfBoot Test Application - AMD ZynqMP
+===========================================
+
+Current EL: 2
+Boot mode: Disk-based (MBR partitions)
+Application running successfully!
+
+Entering idle loop...
+```
 
 
 ## Versal Gen 1 VMK180
@@ -2313,7 +2514,6 @@ make test-app/image.bin
 dd if=/dev/zero of=sdcard.img bs=1M count=1024
 sfdisk sdcard.img <<EOF
 label: dos
-unit: sectors
 
 1 : start=2048, size=128M, type=c, bootable
 2 : size=200M, type=83
@@ -2343,8 +2543,8 @@ sudo fdisk -l /dev/sdX
 | Boot Mode | MODE Pins 3:0 | Mode SW1[4:1]  |
 | --------- | ------------- | -------------- |
 | JTAG      | 0 0 0 0       | on, on, on, on |
-| QSPI32    | 0 0 1 0       | on, on, off,on |
-| SD1       | 1 1 1 0       | off,off,off,on |
+| QSPI32    | 0 0 1 0       | on, on, off, on |
+| SD1       | 1 1 1 0       | off, off, off, on |
 
 
 ## Cypress PSoC-6

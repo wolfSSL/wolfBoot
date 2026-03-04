@@ -35,6 +35,22 @@
 #include "disk.h"
 
 /* ============================================================================
+ * Platform DMA cache maintenance (weak defaults - override in HAL)
+ * ============================================================================ */
+#ifndef SDHCI_SDMA_DISABLED
+void __attribute__((weak)) sdhci_platform_dma_prepare(
+    void *buf, uint32_t sz, int is_write)
+{
+    (void)buf; (void)sz; (void)is_write;
+}
+void __attribute__((weak)) sdhci_platform_dma_complete(
+    void *buf, uint32_t sz, int is_write)
+{
+    (void)buf; (void)sz; (void)is_write;
+}
+#endif
+
+/* ============================================================================
  * Internal state
  * ============================================================================ */
 
@@ -368,7 +384,7 @@ static uint32_t sdhci_set_clock(uint32_t clock_khz)
     reg = SDHCI_REG(SDHCI_SRS11);
     reg &= ~(SDHCI_SRS11_SDCFSL_MASK | SDHCI_SRS11_SDCFSH_MASK);
     reg |= (((mclk & 0x0FF) << SDHCI_SRS11_SDCFSL_SHIFT) & SDHCI_SRS11_SDCFSL_MASK);  /* lower 8 bits */
-    reg |= (((mclk & 0x300) << SDHCI_SRS11_SDCFSH_SHIFT) & SDHCI_SRS11_SDCFSH_SHIFT); /* upper 2 bits */
+    reg |= (((mclk & 0x300) >> 2) & SDHCI_SRS11_SDCFSH_MASK);  /* upper 2 bits */
     reg |= SDHCI_SRS11_ICE; /* clock enable */
     reg &= ~SDHCI_SRS11_CGS; /* select clock */
     SDHCI_REG_SET(SDHCI_SRS11, reg);
@@ -560,6 +576,13 @@ static int sdcard_power_init_seq(uint32_t voltage)
 {
     /* Set power to specified voltage */
     int status = sdhci_set_power(voltage);
+#ifdef DEBUG_SDHCI
+    wolfBoot_printf("sdcard_power_init: power status=%d, SRS09=0x%x, "
+        "SRS10=0x%x, SRS11=0x%x, SRS12=0x%x\n",
+        status,
+        SDHCI_REG(SDHCI_SRS09), SDHCI_REG(SDHCI_SRS10),
+        SDHCI_REG(SDHCI_SRS11), SDHCI_REG(SDHCI_SRS12));
+#endif
     if (status == 0) {
         /* send CMD0 (go idle) to reset card */
         status = sdhci_cmd(MMC_CMD0_GO_IDLE, 0, SDHCI_RESP_NONE);
@@ -1183,10 +1206,16 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             /* SDMA mode with Host Version 4 enable.
              * HV4E is required for SDMA to use the 64-bit address registers
              * (SRS22/SRS23) instead of the legacy 32-bit register (SRS00).
-             * A64 is cleared in SRS15 to use 32-bit DMA addressing. */
+             * A64 is cleared in SRS15 to use 32-bit DMA addressing.
+             * Note: Platform may redirect SRS22/SRS23 to SRS00 for legacy
+             * SDMA on controllers that don't support HV4E. */
             sdhci_reg_or(SDHCI_SRS10, SDHCI_SRS10_DMA_SDMA);
             sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_HV4E);
             sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_A64);
+
+            /* Platform DMA cache maintenance before transfer */
+            sdhci_platform_dma_prepare(buf, sz, dir == SDHCI_DIR_WRITE);
+
             /* Set SDMA address */
             SDHCI_REG_SET(SDHCI_SRS22, (uint32_t)(uintptr_t)buf);
             SDHCI_REG_SET(SDHCI_SRS23, (uint32_t)(((uint64_t)(uintptr_t)buf) >> 32));
@@ -1223,6 +1252,9 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             }
         }
         sdhci_disable_sdma_interrupts();
+
+        /* Platform DMA cache maintenance after transfer */
+        sdhci_platform_dma_complete(buf, sz, dir == SDHCI_DIR_WRITE);
     }
     else {
         /* Blocking mode - buffer ready flag differs for read vs write */
@@ -1407,6 +1439,7 @@ int sdhci_init(void)
 
     /* check if card inserted and stable */
     reg = SDHCI_REG(SDHCI_SRS09);
+#ifndef SDHCI_FORCE_CARD_DETECT
     if ((reg & SDHCI_SRS09_CSS) == 0) {
         /* card not inserted or not stable */
         return -1;
@@ -1419,6 +1452,7 @@ int sdhci_init(void)
         return -1;
     }
 #endif
+#endif /* !SDHCI_FORCE_CARD_DETECT */
 
     /* Start in 1-bit bus mode */
     reg = SDHCI_REG(SDHCI_SRS10);
