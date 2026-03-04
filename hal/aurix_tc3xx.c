@@ -348,9 +348,13 @@ void do_boot(const uint32_t* app_offset)
 }
 #endif
 
-void arch_reboot(void)
+RAMFUNCTION void arch_reboot(void)
 {
+#ifdef WOLFBOOT_AURIX_TC3XX_HSM
+    tc3arm_HsmBridgeSysReset();
+#else
     tc3_Scu_TriggerSwReset(1, WOLFBOOT_AURIX_RESET_REASON);
+#endif
 }
 
 /* Programs unaligned input data to flash, assuming the underlying memory is
@@ -612,15 +616,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 /* If the IAP interface of the flash memory of the target requires it, this
  * function is called before every write and erase operations to unlock write
  * access to the flash. On some targets, this function may be empty. */
-void hal_flash_unlock(void) {}
+RAMFUNCTION void hal_flash_unlock(void) {}
 
 /* If the IAP interface of the flash memory requires locking/unlocking, this
  * function restores the flash write protection by excluding write accesses.
  * This function is called by the bootloader at the end of every write and erase
  * operations. */
-void hal_flash_lock(void) {}
+RAMFUNCTION void hal_flash_lock(void) {}
 
-int ext_flash_write(uintptr_t address, const uint8_t* data, int len)
+RAMFUNCTION int ext_flash_write(uintptr_t address, const uint8_t* data, int len)
 {
     return hal_flash_write(address, data, len);
 }
@@ -685,17 +689,17 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
     return 0;
 }
 
-int ext_flash_erase(uintptr_t address, int len)
+RAMFUNCTION int ext_flash_erase(uintptr_t address, int len)
 {
     return hal_flash_erase(address, len);
 }
 
-void ext_flash_lock(void)
+RAMFUNCTION void ext_flash_lock(void)
 {
     hal_flash_lock();
 }
 
-void ext_flash_unlock(void)
+RAMFUNCTION void ext_flash_unlock(void)
 {
     hal_flash_unlock();
 }

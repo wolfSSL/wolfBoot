@@ -42,8 +42,15 @@
 #define ECC_TIMING_RESISTANT
 
 #define ENCRYPT_KEY "123456789abcdef0123456789abcdef0123456789abcdef"
-#define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC256
+#if !defined(WOLFBOOT_SIGN_ED25519) && !defined(WOLFBOOT_SIGN_ED448) && \
+    !defined(WOLFBOOT_SIGN_RSA2048) && !defined(WOLFBOOT_SIGN_RSA3072) && \
+    !defined(WOLFBOOT_SIGN_RSA4096) && !defined(WOLFBOOT_SIGN_RSA2048ENC) && \
+    !defined(WOLFBOOT_SIGN_RSA3072ENC) && !defined(WOLFBOOT_SIGN_RSA4096ENC) && \
+    !defined(WOLFBOOT_SIGN_ECC256) && !defined(WOLFBOOT_SIGN_ECC384) && \
+    !defined(WOLFBOOT_SIGN_ECC521) && !defined(WOLFBOOT_SIGN_LMS) && \
+    !defined(WOLFBOOT_SIGN_XMSS) && !defined(WOLFBOOT_SIGN_ML_DSA)
 #define WOLFBOOT_SIGN_ECC256
+#endif
 
 #include <stdio.h>
 #include <check.h>
@@ -69,11 +76,13 @@ static int find_header_fail = 0;
 static int find_header_called = 0;
 static int find_header_mocked = 1;
 
+#if defined(WOLFBOOT_SIGN_ECC256)
 static const unsigned char pubkey_digest[SHA256_DIGEST_SIZE] = {
   0x17, 0x20, 0xa5, 0x9b, 0xe0, 0x9b, 0x80, 0x0c, 0xaa, 0xc4, 0xf5, 0x3f,
   0xae, 0xe5, 0x72, 0x4f, 0xf2, 0x1f, 0x33, 0x53, 0xd1, 0xd4, 0xcd, 0x8b,
   0x5c, 0xc3, 0x4e, 0xda, 0xea, 0xc8, 0x4a, 0x68
 };
+#endif
 
 
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
@@ -161,6 +170,48 @@ static const unsigned char test_img_v200000000_wrong_pubkey_bin[] = {
   0xff, 0xff, 0xff, 0xff, 0x54, 0x65, 0x73, 0x74, 0x20, 0x69, 0x6d, 0x61,
   0x67, 0x65, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x0a
 };
+
+static uint16_t _find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
+
+static void patch_pubkey_hint(uint8_t *img, uint32_t img_len)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+    uint8_t hash[SHA256_DIGEST_SIZE];
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_PUBKEY, &ptr);
+    ck_assert_int_eq(len, WOLFBOOT_SHA_DIGEST_SIZE);
+    key_sha256(0, hash);
+    memcpy(ptr, hash, WOLFBOOT_SHA_DIGEST_SIZE);
+}
+
+static void patch_signature_len(uint8_t *img, uint32_t img_len, uint16_t new_len)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_SIGNATURE, &ptr);
+    ck_assert_int_ne(len, 0);
+    ptr[-2] = (uint8_t)(new_len & 0xFF);
+    ptr[-1] = (uint8_t)(new_len >> 8);
+}
+
+static void patch_image_type_auth(uint8_t *img, uint32_t img_len)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+    uint16_t type;
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &ptr);
+    ck_assert_int_eq(len, sizeof(uint16_t));
+    type = (uint16_t)(ptr[0] | (ptr[1] << 8));
+    type = (uint16_t)((type & ~HDR_IMG_TYPE_AUTH_MASK) | HDR_IMG_TYPE_AUTH);
+    ptr[0] = (uint8_t)(type & 0xFF);
+    ptr[1] = (uint8_t)(type >> 8);
+}
 static const unsigned int test_img_len = 275;
 
 
@@ -392,7 +443,12 @@ START_TEST(test_sha_ops)
 
     /* key_sha256 */
     key_sha256(0, hash);
+#if defined(WOLFBOOT_SIGN_ECC256)
     ck_assert_mem_eq(hash, pubkey_digest, SHA256_DIGEST_SIZE);
+#else
+    /* For non-ECC256 configurations we do not have a fixed expected digest. */
+    (void)hash;
+#endif
 }
 END_TEST
 
@@ -492,6 +548,29 @@ START_TEST(test_verify_authenticity)
     ret = wolfBoot_verify_authenticity(&test_img);
     ck_assert_int_eq(ret, 0);
 
+}
+END_TEST
+
+START_TEST(test_verify_authenticity_bad_siglen)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_auth(buf, sizeof(buf));
+    patch_pubkey_hint(buf, sizeof(buf));
+    patch_signature_len(buf, sizeof(buf), 1);
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ext_flash_write(0, buf, sizeof(buf));
+
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    test_img.part = PART_UPDATE;
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, -1);
 }
 END_TEST
 
@@ -599,6 +678,7 @@ Suite *wolfboot_suite(void)
     TCase* tcase_verify_authenticity = tcase_create("verify_authenticity");
     tcase_set_timeout(tcase_verify_authenticity, 20);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
+    tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
     suite_add_tcase(s, tcase_verify_authenticity);
 
     TCase* tcase_verify_integrity = tcase_create("verify_integrity");

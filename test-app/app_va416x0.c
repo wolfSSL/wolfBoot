@@ -35,6 +35,19 @@
 
 #include "../hal/va416x0.h"
 
+/* wolfCrypt test/benchmark support */
+#ifdef WOLFCRYPT_TEST
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/test/test.h>
+int wolfcrypt_test(void *args);
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/benchmark/benchmark.h>
+int benchmark_test(void *args);
+#endif
+
 /* Vorago HAL includes */
 #include "va416xx_hal.h"
 #include "va416xx_hal_clkgen.h"
@@ -151,6 +164,21 @@ void main(void)
 
     print_info();
 
+#ifdef WOLFCRYPT_TEST
+    wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");
+    wolfCrypt_Init();
+    wolfcrypt_test(NULL);
+    wolfCrypt_Cleanup();
+    wolfBoot_printf("Tests complete.\r\n\r\n");
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+    wolfBoot_printf("Running wolfCrypt benchmarks...\r\n");
+    wolfCrypt_Init();
+    benchmark_test(NULL);
+    wolfCrypt_Cleanup();
+    wolfBoot_printf("Benchmarks complete.\r\n\r\n");
+#endif
 
     if (app_version > 1) {
         /* Turn on update LED */

@@ -2229,6 +2229,41 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     }
 #endif
 
+    if (stored_signature_size == 0 || stored_signature == NULL) {
+        return -1;
+    }
+#if defined(WOLFBOOT_SIGN_ED25519)
+    if (stored_signature_size != ED25519_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined(WOLFBOOT_SIGN_ED448)
+    if (stored_signature_size != ED448_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined (WOLFBOOT_SIGN_RSA2048) || \
+      defined (WOLFBOOT_SIGN_RSA3072) || \
+      defined (WOLFBOOT_SIGN_RSA4096) || \
+      defined (WOLFBOOT_SIGN_RSA2048ENC) || \
+      defined (WOLFBOOT_SIGN_RSA3072ENC) || \
+      defined (WOLFBOOT_SIGN_RSA4096ENC)
+    if (stored_signature_size != RSA_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined (WOLFBOOT_SIGN_ECC256) || \
+      defined (WOLFBOOT_SIGN_ECC384) || \
+      defined (WOLFBOOT_SIGN_ECC521)
+    if (stored_signature_size != ECC_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined(WOLFBOOT_SIGN_LMS)
+    if (stored_signature_size != LMS_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined(WOLFBOOT_SIGN_XMSS)
+    if (stored_signature_size != XMSS_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#elif defined(WOLFBOOT_SIGN_ML_DSA)
+    if (stored_signature_size != ML_DSA_IMAGE_SIGNATURE_SIZE)
+        return -1;
+#else
+    return -1;
+#endif
+
     /* wolfBoot_verify_signature_ecc() does not return the result directly.
      * A call to wolfBoot_image_confirm_signature_ok() is required in order to
      * confirm that the signature verification is OK.
@@ -2238,7 +2273,6 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      *
      */
     wolfBoot_verify_signature_primary(key_slot, img, stored_signature);
-    (void)stored_signature_size;
 
 #ifdef WOLFBOOT_ARMORED
 #define SIG_OK(imgp) (((imgp)->signature_ok == 1) && \

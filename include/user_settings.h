@@ -92,6 +92,7 @@ extern int tolower(int c);
 #   define NO_ED448_EXPORT
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
+#   define WOLFSSL_SHA512
 #endif
 
 /* ECC */
@@ -101,8 +102,8 @@ extern int tolower(int c);
     defined(WOLFBOOT_SIGN_SECONDARY_ECC256) || \
     defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
     defined(WOLFBOOT_SIGN_SECONDARY_ECC521) || \
-    defined(WOLFCRYPT_SECURE_MODE)
-
+    defined(WOLFCRYPT_SECURE_MODE) || \
+    defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 
 #   define HAVE_ECC
 #   define ECC_TIMING_RESISTANT
@@ -118,6 +119,7 @@ extern int tolower(int c);
 
     /* Some ECC options are disabled to reduce size */
 #   if !defined(WOLFCRYPT_SECURE_MODE) && \
+       !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #       if !defined(WOLFBOOT_TPM)
@@ -138,6 +140,7 @@ extern int tolower(int c);
 #       endif
 #   else
 #       define HAVE_ECC_SIGN
+#       define HAVE_ECC_VERIFY
 #ifndef PKCS11_SMALL
 #       define HAVE_ECC_CDH
 #endif
@@ -147,6 +150,7 @@ extern int tolower(int c);
 #       define WOLFSSL_HAVE_SP_ECC
 #       define WOLFSSL_KEY_GEN
 #       define HAVE_ECC_KEY_EXPORT
+#       define HAVE_ECC_KEY_IMPORT
 #   endif
 
     /* SP MATH */
@@ -160,15 +164,18 @@ extern int tolower(int c);
 
     /* Curve */
 #   if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFCRYPT_SECURE_MODE) || \
-        defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
+        defined(WOLFBOOT_SIGN_SECONDARY_ECC256) || \
+        defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 #       define HAVE_ECC256
 #   endif
 #   if defined(WOLFBOOT_SIGN_ECC384) || \
         defined(WOLFBOOT_SIGN_SECONDARY_ECC384) || \
-        defined(WOLFCRYPT_SECURE_MODE)
+        defined(WOLFCRYPT_SECURE_MODE) || \
+        defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 #       define HAVE_ECC384
 #       define WOLFSSL_SP_384
 #   endif
+    /* ECC521 only enabled if specifically requested (not for tests - too large) */
 #   if defined(WOLFBOOT_SIGN_ECC521) || \
         defined(WOLFBOOT_SIGN_SECONDARY_ECC521) || \
         defined(WOLFCRYPT_SECURE_MODE)
@@ -219,6 +226,7 @@ extern int tolower(int c);
 #   define RSA_LOW_MEM
 #   define WC_ASN_HASH_SHA256
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
+       !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #       define WOLFSSL_RSA_VERIFY_INLINE
@@ -305,7 +313,8 @@ extern int tolower(int c);
 #ifdef WOLFBOOT_HASH_SHA3_384
 #   define WOLFSSL_SHA3
 #   if defined(NO_RSA) && !defined(WOLFBOOT_TPM) && \
-    !defined(WOLFCRYPT_SECURE_MODE)
+        !defined(WOLFCRYPT_SECURE_MODE) && \
+        !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define NO_SHA256
 #   endif
 #endif
@@ -313,7 +322,8 @@ extern int tolower(int c);
 #ifdef WOLFBOOT_HASH_SHA384
 #   define WOLFSSL_SHA384
 #   if defined(NO_RSA) && !defined(WOLFBOOT_TPM) && \
-    !defined(WOLFCRYPT_SECURE_MODE)
+    !defined(WOLFCRYPT_SECURE_MODE) && \
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define NO_SHA256
 #   endif
 #ifndef WOLFSSL_SHA512
@@ -410,7 +420,8 @@ extern int tolower(int c);
 
 #if (defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)) || \
     defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
-    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) || \
+    defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 #   define WOLFSSL_BASE64_ENCODE
 #else
 #   define NO_CODING
@@ -464,7 +475,8 @@ extern int tolower(int c);
     #endif
 #endif
 
-#if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC)
+#if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC) && \
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
       defined(WOLFBOOT_SIGN_ML_DSA)) && \
     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
@@ -473,23 +485,40 @@ extern int tolower(int c);
     #define WC_NO_HASHDRBG
     #define NO_AES_CBC
 #else
-    #define HAVE_HASHDRBG
-    #define WOLFSSL_AES_CFB
+    #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+        /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
+         * WARNING: my_rng_seed_gen is NOT cryptographically secure.
+         * Only used in test-app builds, not in production wolfBoot. */
+        #define WC_NO_HASHDRBG
+        #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
+        #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
+        extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+    #else
+        #define HAVE_HASHDRBG
+        #define WOLFSSL_AES_CFB
+    #endif
 #endif
 
 
 #if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
-    !defined(WOLFBOOT_TPM_PARMENC) && !defined(WOLFCRYPT_SECURE_MODE)
+    !defined(WOLFBOOT_TPM_PARMENC) && !defined(WOLFCRYPT_SECURE_MODE) && \
+    !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
     #define NO_AES
 #endif
 
-#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE)
+#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #   define NO_HMAC
-#if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-      defined(WOLFBOOT_SIGN_ML_DSA)) &&          \
-    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#define WC_NO_RNG
 #endif
+
+#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+#   if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+       defined(WOLFBOOT_SIGN_ML_DSA)) &&          \
+      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#   define WC_NO_RNG
+#   endif
 #   define WC_NO_HASHDRBG
 #   define NO_DEV_RANDOM
 #   if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
@@ -534,9 +563,55 @@ extern int tolower(int c);
 #define NO_CHECK_PRIVATE_KEY
 #define NO_KDF
 
-#define BENCH_EMBEDDED
-#define NO_CRYPT_TEST
-#define NO_CRYPT_BENCHMARK
+/* wolfCrypt Test/Benchmark Configuration */
+#ifdef WOLFCRYPT_TEST
+    /* Skip extended tests to save memory */
+    #define NO_CRYPT_TEST_EXTENDED
+    /* Use smaller certificate buffers */
+    #define USE_CERT_BUFFERS_256
+    /* Override default NO_CRYPT_TEST */
+    #undef NO_CRYPT_TEST
+#else
+    #define NO_CRYPT_TEST
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+    /* Embedded benchmark mode */
+    #ifndef BENCH_EMBEDDED
+        #define BENCH_EMBEDDED
+    #endif
+    /* Override default NO_CRYPT_BENCHMARK */
+    #undef NO_CRYPT_BENCHMARK
+#else
+    #define NO_CRYPT_BENCHMARK
+#endif
+
+/* Common optimizations when test/benchmark enabled */
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    #define NO_WRITE_TEMP_FILES
+
+    /* Use static memory pool to avoid system malloc dependency.
+     * benchmark.c provides gBenchMemory static buffer.
+     * Default is 50KB with BENCH_EMBEDDED, override for smaller targets */
+    #ifndef WOLFSSL_STATIC_MEMORY
+        #define WOLFSSL_STATIC_MEMORY
+    #endif
+    #ifndef WOLFSSL_STATIC_MEMORY_TEST_SZ
+        #define WOLFSSL_STATIC_MEMORY_TEST_SZ (10 * 1024)
+    #endif
+
+    /* Enable SP math digit operations */
+    #define WOLFSSL_SP_MUL_D
+
+    /* User time functions provided */
+    #define WOLFSSL_USER_CURRTIME
+    #define XTIME my_time
+    extern unsigned long my_time(unsigned long* timer);
+#endif
+
+#if !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+    #define BENCH_EMBEDDED
+#endif
 
 #if defined(WOLFCRYPT_TZ_PSA)
 #undef NO_CMAC
@@ -566,7 +641,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_NO_DYN_STACK
 #   endif
 #   if !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
-       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+       !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define NO_WOLFSSL_MEMORY
 #       define WOLFSSL_NO_MALLOC
 #   endif

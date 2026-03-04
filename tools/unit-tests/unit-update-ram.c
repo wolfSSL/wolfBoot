@@ -203,6 +203,69 @@ START_TEST (test_empty_panic)
 END_TEST
 
 
+START_TEST (test_ramboot_invalid_header)
+{
+    struct wolfBoot_image img;
+    uint8_t bad_magic[4] = { 'G', 'O', 'L', 'F' };
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS, bad_magic, sizeof(bad_magic));
+    ext_flash_lock();
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_ramboot(&img,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS, wolfboot_ram);
+    ck_assert_int_eq(ret, -1);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_ramboot_oversize_rejected)
+{
+    struct wolfBoot_image img;
+    uint32_t too_large = WOLFBOOT_PARTITION_SIZE;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4,
+            (const uint8_t *)&too_large, 4);
+    ext_flash_lock();
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_ramboot(&img,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS, wolfboot_ram);
+    ck_assert_int_eq(ret, -1);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_ramboot_success)
+{
+    struct wolfBoot_image img;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_ramboot(&img,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS, wolfboot_ram);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(img.not_ext, 1);
+    ck_assert_int_eq(get_version_ramloaded(), 1);
+    cleanup_flash();
+}
+END_TEST
+
+
 START_TEST (test_sunnyday_noupdate)
 {
     reset_mock_stats();
@@ -423,6 +486,9 @@ Suite *wolfboot_suite(void)
 
     /* Test cases */
     TCase *empty_panic = tcase_create("Empty partition panic test");
+    TCase *ramboot_invalid_header = tcase_create("Ramboot invalid header");
+    TCase *ramboot_oversize = tcase_create("Ramboot oversize");
+    TCase *ramboot_success = tcase_create("Ramboot success");
     TCase *sunnyday_noupdate =
         tcase_create("Sunny day test with no update available");
     TCase *forward_update_samesize =
@@ -446,6 +512,9 @@ Suite *wolfboot_suite(void)
 
 
     tcase_add_test(empty_panic, test_empty_panic);
+    tcase_add_test(ramboot_invalid_header, test_ramboot_invalid_header);
+    tcase_add_test(ramboot_oversize, test_ramboot_oversize_rejected);
+    tcase_add_test(ramboot_success, test_ramboot_success);
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
@@ -463,6 +532,9 @@ Suite *wolfboot_suite(void)
 
 
     suite_add_tcase(s, empty_panic);
+    suite_add_tcase(s, ramboot_invalid_header);
+    suite_add_tcase(s, ramboot_oversize);
+    suite_add_tcase(s, ramboot_success);
     suite_add_tcase(s, sunnyday_noupdate);
     suite_add_tcase(s, forward_update_samesize);
     suite_add_tcase(s, forward_update_tolarger);
@@ -480,6 +552,9 @@ Suite *wolfboot_suite(void)
 
     /* Set timeout for tests */
     tcase_set_timeout(empty_panic, 5);
+    tcase_set_timeout(ramboot_invalid_header, 5);
+    tcase_set_timeout(ramboot_oversize, 5);
+    tcase_set_timeout(ramboot_success, 5);
     tcase_set_timeout(sunnyday_noupdate, 5);
     tcase_set_timeout(forward_update_samesize, 5);
     tcase_set_timeout(forward_update_tolarger, 5);
