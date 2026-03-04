@@ -1602,18 +1602,17 @@ void hal_prepare_boot(void)
      * fetch instructions via I-cache from main memory. We must:
      * 1. Clean D-cache (flush dirty data to memory)
      * 2. Invalidate I-cache (ensure fresh instruction fetch) */
-    __asm__ volatile("dsb sy");
     {
         uintptr_t addr;
         uintptr_t end = WOLFBOOT_LOAD_ADDRESS + APP_CACHE_FLUSH_SIZE;
         for (addr = WOLFBOOT_LOAD_ADDRESS; addr < end; addr += CACHE_LINE_SIZE) {
-            __asm__ volatile("dc civac, %0" : : "r"(addr));
+            __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
         }
     }
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("ic iallu");
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
+    __asm__ volatile("dsb sy" : : : "memory");
+    __asm__ volatile("ic iallu" : : : "memory");
+    __asm__ volatile("dsb sy" : : : "memory");
+    __asm__ volatile("isb" : : : "memory");
 }
 
 /* Flash functions must be relocated to RAM for execution */
@@ -2084,15 +2083,15 @@ void sdhci_platform_init(void)
      * This feeds into the SDHCI Capabilities register bits 31:30 and makes
      * the controller report card as always present, bypassing the physical
      * CD pin that is not connected to the SDHCI controller on ZCU102. */
-    if (ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE) {
-        slot_mask  = SD_CONFIG_REG2_SD0_SLOTTYPE_MASK;
-        slot_shift = SD_CONFIG_REG2_SD0_SLOTTYPE_SHIFT;
-        reset_bit  = RST_LPD_IOU2_SDIO0;
-    } else {
-        slot_mask  = SD_CONFIG_REG2_SD1_SLOTTYPE_MASK;
-        slot_shift = SD_CONFIG_REG2_SD1_SLOTTYPE_SHIFT;
-        reset_bit  = RST_LPD_IOU2_SDIO1;
-    }
+#if ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE
+    slot_mask  = SD_CONFIG_REG2_SD0_SLOTTYPE_MASK;
+    slot_shift = SD_CONFIG_REG2_SD0_SLOTTYPE_SHIFT;
+    reset_bit  = RST_LPD_IOU2_SDIO0;
+#else
+    slot_mask  = SD_CONFIG_REG2_SD1_SLOTTYPE_MASK;
+    slot_shift = SD_CONFIG_REG2_SD1_SLOTTYPE_SHIFT;
+    reset_bit  = RST_LPD_IOU2_SDIO1;
+#endif
 
     reg = IOU_SLCR_SD_CONFIG_REG2;
     reg &= ~slot_mask;
@@ -2113,7 +2112,11 @@ void sdhci_platform_init(void)
         uint32_t val;
 
         wolfBoot_printf("sdhci_platform_init: SD%d at 0x%x\n",
-            (ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE) ? 0 : 1,
+#if ZYNQMP_SDHCI_BASE == ZYNQMP_SD0_BASE
+            0,
+#else
+            1,
+#endif
             (unsigned int)ZYNQMP_SDHCI_BASE);
 
         wolfBoot_printf("  SD_CONFIG_REG2: 0x%x\n",
@@ -2157,7 +2160,8 @@ void sdhci_platform_dma_prepare(void *buf, uint32_t sz, int is_write)
 {
     uintptr_t addr;
     uintptr_t start = (uintptr_t)buf & ~(CACHE_LINE_SIZE - 1);
-    uintptr_t end = (uintptr_t)buf + sz;
+    uintptr_t end = ((uintptr_t)buf + sz + CACHE_LINE_SIZE - 1) &
+        ~(CACHE_LINE_SIZE - 1);
 
     if (is_write) {
         /* Clean D-cache: flush dirty lines to memory for DMA to read */
@@ -2180,7 +2184,8 @@ void sdhci_platform_dma_complete(void *buf, uint32_t sz, int is_write)
      * new data for the CPU to see and invalidation could discard dirty lines. */
     uintptr_t addr;
     uintptr_t start = (uintptr_t)buf & ~(CACHE_LINE_SIZE - 1);
-    uintptr_t end = (uintptr_t)buf + sz;
+    uintptr_t end = ((uintptr_t)buf + sz + CACHE_LINE_SIZE - 1) &
+        ~(CACHE_LINE_SIZE - 1);
 
     if (!is_write) {
         for (addr = start; addr < end; addr += CACHE_LINE_SIZE) {

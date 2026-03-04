@@ -1253,8 +1253,10 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         }
         sdhci_disable_sdma_interrupts();
 
+    #ifndef SDHCI_SDMA_DISABLED
         /* Platform DMA cache maintenance after transfer */
         sdhci_platform_dma_complete(buf, sz, dir == SDHCI_DIR_WRITE);
+    #endif /* !SDHCI_SDMA_DISABLED */
     }
     else {
         /* Blocking mode - buffer ready flag differs for read vs write */
