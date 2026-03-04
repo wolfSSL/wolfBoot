@@ -1,0 +1,184 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T2080 wolfBoot Debug Script
+; @Description:
+;   Brings up the T2080, loads wolfBoot ELF symbols, and sets breakpoints
+;   for source-level debugging of wolfBoot running from NOR flash (XIP).
+; @Chip: T2080
+; Based on demo scripts from Lauterbach
+; ------------------------------------------------------------------------------
+;
+; Prerequisites:
+;   - wolfBoot must already be flashed to NOR (use t2080_flash.cmm)
+;   - wolfboot.elf must be built with debug symbols (DEBUG=1 recommended)
+; ------------------------------------------------------------------------------
+
+; Base directory for wolfBoot build output (adjust to match your build path)
+&basedir="."
+
+PRINT "========================================"
+PRINT "T2080 wolfBoot Debug Session"
+PRINT "========================================"
+PRINT ""
+
+; Reset everything
+RESet
+SYStem.RESet
+
+SYStem.BdmClock 15.MHz
+SYStem.CPU T2080
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE ON
+SYStem.Option.IMASKASM ON
+
+; Use RCW override to bring up the system in a controlled state.
+; This halts the CPU before any flash code executes.
+PRINT "Bringing up system with RCW override..."
+SYStem.Mode.Prepare
+
+SYStem.Option.HRCWOVerRide ON
+
+; RCW values (matching the flash RCW)
+Data.Set DBG:0x01000000  0x0c050012
+Data.Set DBG:0x01000001  0x0e000000
+Data.Set DBG:0x01000002  0x00000000
+Data.Set DBG:0x01000003  0x00000000
+Data.Set DBG:0x01000004  0xd8150002
+Data.Set DBG:0x01000005  0x00800000
+Data.Set DBG:0x01000006  0xfc027000
+Data.Set DBG:0x01000007  0xa1000000
+Data.Set DBG:0x01000008  0x00000000
+Data.Set DBG:0x01000009  0x00000000
+Data.Set DBG:0x0100000A  0x00000000
+Data.Set DBG:0x0100000B  0x0002b000
+Data.Set DBG:0x0100000C  0x00000200
+Data.Set DBG:0x0100000D  0x0080000d
+Data.Set DBG:0x0100000E  0x00000000
+Data.Set DBG:0x0100000F  0x00000004
+
+SYStem.Up
+
+SYStem.Option.HRCWOVerRide OFF
+
+PRINT "System up (CPU halted)"
+
+; Allow non-intrusive run-time memory access
+SYStem.MemAccess CPU
+
+; NOTE: Keep CCSRBAR at default 0xFE000000 to match wolfBoot.
+; wolfBoot uses CCSRBAR_DEF = 0xFE000000 in hal/nxp_ppc.h.
+; Do NOT relocate CCSRBAR here.
+
+; Set up LAW0 for CCSR at 0xFE000000 (16 MB)
+; LAWAR = ENABLE(0x80000000) | TRGT_CORENET(0x1E<<20) | SIZE_16MB(0x17)
+PRINT "Setting up LAW for CCSR access..."
+Data.Set ANC:IOBASE()+0x00C00 %Long %BE 0x00000000  ; LAWBARH0 = 0
+Data.Set ANC:IOBASE()+0x00C04 %Long %BE 0xFE000000  ; LAWBARL0 = 0xFE000000
+Data.Set ANC:IOBASE()+0x00C08 %Long %BE 0x81E00017  ; LAWAR0 = enable|CORENET|16 MB
+
+; Set up LAW1 for IFC NOR Flash at 0xE8000000 (128 MB)
+; LAWAR = ENABLE(0x80000000) | TRGT_IFC(0x1F<<20) | SIZE_128MB(0x1A)
+PRINT "Setting up LAW for flash access..."
+Data.Set ANC:IOBASE()+0x00C10 %Long %BE 0x00000000  ; LAWBARH1 = 0
+Data.Set ANC:IOBASE()+0x00C14 %Long %BE 0xE8000000  ; LAWBARL1 = 0xE8000000
+Data.Set ANC:IOBASE()+0x00C18 %Long %BE 0x81F0001A  ; LAWAR1 = enable|IFC|128 MB
+
+; TLB for CCSR: Entry 1, 0xFE000000, 16 MB
+; MAS1: V=1(0x80000000), IPROT=1(0x40000000), TSIZE=14 (16 MB) <<7 = 0x700
+; MAS2: EPN=0xFE000000, I|G=0x0A
+; MAS3: RPN=0xFE000000, SX|SW|SR=0x15
+MMU.TLB1.Set 1. 0xC0000700 0xFE00000A 0xFE000015 0x00000000 0x0
+
+; TLB for Flash: Entry 2, 0xE8000000, 128 MB
+; MAS1: V=1, IPROT=1, TSIZE=17 (128 MB) <<7 = 0x880
+; MAS2: EPN=0xE8000000, I|G=0x0A
+; MAS3: RPN=0xE8000000, SX|SW|SR=0x15
+MMU.TLB1.Set 2. 0xC0000880 0xE800000A 0xE8000015 0x00000000 0x0
+
+PRINT "CCSR (0xFE000000) and Flash (0xE8000000) configured"
+
+; Verify flash is accessible - check for RCW preamble
+&rcw_preamble=Data.Long(D:0xE8000000)
+PRINT "RCW preamble at 0xE8000000: &rcw_preamble"
+IF &rcw_preamble!=0xAA55AA55
+(
+  PRINT %WARNING "WARNING: Expected RCW preamble 0xAA55AA55, got &rcw_preamble"
+  PRINT "         Flash may not be properly programmed"
+)
+ELSE
+(
+  PRINT "  RCW preamble OK"
+)
+
+; Verify wolfBoot code is present at expected location
+&wb_first=Data.Long(D:0xEFFE0000)
+PRINT "wolfBoot first word at 0xEFFE0000: &wb_first"
+IF &wb_first==0xFFFFFFFF
+(
+  PRINT %ERROR "ERROR: wolfBoot region appears erased (0xFFFFFFFF)"
+  PRINT "       Run t2080_flash.cmm first"
+  STOP
+)
+
+PRINT ""
+PRINT "Loading wolfBoot symbols..."
+
+; Load ELF symbols (debug info only - code is already in flash, XIP)
+Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE
+Data.LOAD.Elf &basedir/test-app/image.elf /NoCODE /NoClear
+sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/lib/wolfssl &basedir/test-app
+
+PRINT "  Symbols loaded from wolfboot.elf"
+PRINT "  Symbols loaded from test-app/image.elf"
+
+; Set breakpoints at key wolfBoot entry points
+PRINT ""
+PRINT "Setting breakpoints..."
+
+Break.Delete /ALL
+
+; Entry point - reset vector
+Break.Set _reset /Program /Onchip
+PRINT "  BP: _reset (0xEFFFF000) - reset vector"
+
+; main wolfBoot entry
+IF sYmbol.EXIST(main)
+(
+  Break.Set main /Program /Onchip
+  PRINT "  BP: main"
+)
+
+; hal_init
+IF sYmbol.EXIST(hal_init)
+(
+  Break.Set hal_init /Program /Onchip
+  PRINT "  BP: hal_init"
+)
+
+PRINT ""
+
+; Set PC to wolfBoot reset vector
+Register.Set PC 0xEFFFF000
+
+PRINT "PC set to _reset (0xEFFFF000)"
+PRINT ""
+
+PRINT "========================================"
+PRINT "wolfBoot Debug Ready"
+PRINT "========================================"
+PRINT ""
+PRINT "Key symbols:"
+PRINT "  _reset:          0xEFFFF000 (entry)"
+PRINT "  _start_vector:   0xEFFE0000"
+PRINT "  hal_init:        (see symbol table)"
+PRINT ""
+PRINT "Commands:"
+PRINT "  Go               - Run to next breakpoint"
+PRINT "  Step / Step.Over  - Single step"
+PRINT "  Var.View <var>    - Inspect variable"
+PRINT "  Data.dump <addr>  - Memory dump"
+PRINT ""
+PRINT "Ready - press Go to start execution"
+PRINT ""
+
+ENDDO

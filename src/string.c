@@ -346,7 +346,7 @@ void uart_writenum(int num, int base, int zeropad, int maxdigits)
 void uart_vprintf(const char* fmt, va_list argp)
 {
     char* fmtp = (char*)fmt;
-    int zeropad, maxdigits;
+    int zeropad, maxdigits, precision, leftjust;
     while (fmtp != NULL && *fmtp != '\0') {
         /* print non formatting characters */
         if (*fmtp != '%') {
@@ -356,16 +356,41 @@ void uart_vprintf(const char* fmt, va_list argp)
         fmtp++; /* skip % */
 
         /* find formatters */
-        zeropad = maxdigits = 0;
+        zeropad = maxdigits = leftjust = 0;
+        precision = -1; /* -1 = not specified */
+        /* check for left-justify flag */
+        if (*fmtp == '-') {
+            leftjust = 1;
+            fmtp++;
+        }
         while (*fmtp != '\0') {
-            if (*fmtp >= '0' && *fmtp <= '9') {
+            if (*fmtp == '*') {
+                /* width from argument */
+                maxdigits = va_arg(argp, int);
+                fmtp++;
+            }
+            else if (*fmtp >= '0' && *fmtp <= '9') {
                 /* length formatter */
-                if (*fmtp == '0') {
+                if (*fmtp == '0' && maxdigits == 0) {
                     zeropad = 1;
                 }
                 maxdigits <<= 8;
                 maxdigits += (*fmtp - '0');
                 fmtp++;
+            }
+            else if (*fmtp == '.') {
+                /* precision */
+                fmtp++;
+                if (*fmtp == '*') {
+                    precision = va_arg(argp, int);
+                    fmtp++;
+                } else {
+                    precision = 0;
+                    while (*fmtp >= '0' && *fmtp <= '9') {
+                        precision = precision * 10 + (*fmtp - '0');
+                        fmtp++;
+                    }
+                }
             }
             else if (*fmtp == 'l') {
                 /* long - skip */
@@ -405,7 +430,20 @@ void uart_vprintf(const char* fmt, va_list argp)
             case 's':
             {
                 char* str = (char*)va_arg(argp, char*);
-                uart_write(str, (uint32_t)strlen(str));
+                int slen = (int)strlen(str);
+                if (leftjust) {
+                    uart_write(str, slen);
+                    while (slen < maxdigits) {
+                        uart_write(" ", 1);
+                        slen++;
+                    }
+                } else {
+                    while (slen < maxdigits) {
+                        uart_write(" ", 1);
+                        slen++;
+                    }
+                    uart_write(str, (uint32_t)strlen(str));
+                }
                 break;
             }
             case 'c':
@@ -414,6 +452,44 @@ void uart_vprintf(const char* fmt, va_list argp)
                 uart_write(&c, 1);
                 break;
             }
+#ifdef UART_PRINTF_FLOAT
+            case 'f':
+            case 'e':
+            case 'g':
+            {
+                double val = va_arg(argp, double);
+                int prec = (precision >= 0) ? precision : 3;
+                int digit;
+                unsigned int ipart;
+
+                /* handle negative */
+                if (val < 0.0) {
+                    uart_write("-", 1);
+                    val = -val;
+                }
+
+                /* integer part */
+                ipart = (unsigned int)val;
+                uart_writenum((int)ipart, 10, 0, 0);
+
+                /* fractional part */
+                if (prec > 0) {
+                    double frac = val - (double)ipart;
+                    char c;
+                    int i;
+                    uart_write(".", 1);
+                    for (i = 0; i < prec; i++) {
+                        frac *= 10.0;
+                        digit = (int)frac;
+                        if (digit > 9) digit = 9;
+                        c = '0' + digit;
+                        uart_write(&c, 1);
+                        frac -= (double)digit;
+                    }
+                }
+                break;
+            }
+#endif /* UART_PRINTF_FLOAT */
             default:
                 break;
         }

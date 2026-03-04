@@ -107,7 +107,12 @@ endif
 ifeq ($(WOLFCRYPT_BENCHMARK),1)
   CFLAGS+=-DWOLFCRYPT_BENCHMARK
   WOLFCRYPT_SUPPORT=1
+  UART_PRINTF_FLOAT?=1
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/benchmark/benchmark.o
+endif
+
+ifeq ($(UART_PRINTF_FLOAT),1)
+  CFLAGS+=-DUART_PRINTF_FLOAT
 endif
 
 ifeq ($(WOLFCRYPT_SUPPORT),1)
@@ -141,25 +146,60 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o
 
-  # Add SP math implementations for ARM Cortex-M
-  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
+  # Add SP C math (all architectures)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
-  ifneq ($(NO_ARM_ASM),1)
-    APP_OBJS+= \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
-          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+  ifneq ($(NO_ASM),1)
+    # SP Cortex M
+    ifneq ($(filter ARM ARM_BE,$(ARCH)),)
+      ifeq ($(SPMATH),1)
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_cortexm.o
+      endif
 
-    CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO -DWOLFSSL_ARMASM_INLINE \
-                              -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
+      ifneq ($(NO_ARM_ASM),1)
+        APP_OBJS+= \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+
+        CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO -DWOLFSSL_ARMASM_INLINE \
+                -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
+      endif
+    endif
+
+    # Power PC
+    ifeq ($(ARCH),PPC)
+      # SP mp int PowerPC ASM
+      ifeq ($(PPC64),1)
+        CFLAGS+=-DWOLFSSL_SP_PPC64
+      else
+        CFLAGS+=-DWOLFSSL_SP_PPC
+      endif
+
+      # SHA256
+      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+      CFLAGS+=-DWOLFSSL_PPC32_ASM
+      CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
+      CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
+
+      ifeq ($(PPC64),1) # requires wolfssl PR 9852
+        # AES
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
+        CFLAGS+=-DWOLFSSL_PPC64_ASM 
+        CFLAGS+=-DWOLFSSL_PPC64_ASM_INLINE
+        CFLAGS+=-DWOLFSSL_PPC64_ASM_SMALL
+        CFLAGS+=-DWOLFSSL_PPC64_ASM_AES_NO_HARDEN
+      endif
+
+      CFLAGS+=-fomit-frame-pointer
+    endif
   endif
 
   CFLAGS+=-DWOLFSSL_USER_SETTINGS
   CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
-endif
+endif # WOLFCRYPT_SUPPORT
 
 ifeq ($(TZEN),1)
     CFLAGS+=-DNONSECURE_APP
@@ -412,6 +452,22 @@ ifeq ($(TARGET),va416x0)
     LDFLAGS+=-u _printf_float
   endif
   CFLAGS+=-ffunction-sections -fdata-sections
+endif
+
+PPC64=0
+ifeq ($(TARGET),nxp_t2080)
+  ifneq ($(SIGN),NONE)
+    APP_OBJS+=../src/keystore.o
+  endif
+  CFLAGS+=-ffunction-sections -fdata-sections
+
+  # PowerPC e6500
+  PPC64=1
+endif
+
+ifeq ($(TARGET),nxp_t1024)
+  # PowerPC e5500
+  PPC64=1
 endif
 
 ifeq ($(TARGET),sim)

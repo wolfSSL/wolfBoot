@@ -3315,10 +3315,13 @@ placed in `.ramcode`, copied to DDR, and remapped via TLB9. Key rules:
 
 - **No calls to flash-resident code.** The linker generates trampolines that
   jump back to flash addresses. Any helper called from RAMFUNCTION code must
-  itself be RAMFUNCTION or fully inlined. Delay ticks are pre-computed in
-  `hal_flash_init()` to avoid calling `hal_get_plat_clk()` from flash `.text`.
+  itself be RAMFUNCTION or fully inlined. Delay/clock helpers (for example,
+  `udelay` and associated clock accessors) are provided by `nxp_ppc.c` and
+  are marked `RAMFUNCTION` so they can be safely invoked without executing
+  from flash `.text`.
 - **Inline TLB/cache ops.** `hal_flash_cache_disable/enable` use
-  `ram_write_tlb()` (inline mtspr) and direct L1CSR0/L1CSR1 manipulation.
+  `set_tlb()` / `write_tlb()` (inline `mtspr` helpers) and direct
+  L1CSR0/L1CSR1 manipulation.
 - **WBP timing.** The write-buffer-program sequence (unlock → 0x25 → count →
   data → 0x29) must execute without bus-stalling delays. UART output between
   steps (~87us per character at 115200) triggers DQ1 abort.
