@@ -15,7 +15,7 @@ is initialized when `wolfBoot_open_image_address()` is called. The signature is:
 `int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)`
 
 
-where `img` is a pointer to a local (uninitialized) structure of type `wolfBoot_image`, and
+where `img` is a pointer to a local (memset but otherwise uninitalized) structure of type `wolfBoot_image`, and
 `image` is a pointer to where the signed image is mapped in memory, starting from the beginning
 of the manifest header.
 
