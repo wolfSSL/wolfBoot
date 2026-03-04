@@ -10,10 +10,8 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
-;        *(EXCLUDE_FILE(*chacha*) .text*)
-;       *(EXCLUDE_FILE(*chacha*) .rodata*)
-	*(.text*)
-	*(.rodata*)
+	@WOLFHAL_FLASH_EXCLUDE_TEXT@
+	@WOLFHAL_FLASH_EXCLUDE_RODATA@
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
@@ -30,9 +28,7 @@ SECTIONS
         KEEP(*(.data*))
         . = ALIGN(4);
         KEEP(*(.ramcode))
-;        KEEP(*(.text.wc_Chacha*))
-;	KEEP(*(.rodata.sigma))
-;	KEEP(*(.rodata.tau))
+        @WOLFHAL_FLASH_RAM_SECTIONS@
         . = ALIGN(4);
         _end_data = .;
     } > RAM
