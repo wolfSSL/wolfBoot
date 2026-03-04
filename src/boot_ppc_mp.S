@@ -110,8 +110,8 @@ branch_prediction:
         srwi    r10, r0, 5       /* r10 = cluster */
 
         mulli   r5, r10, CORES_PER_CLUSTER
-        add     r5, r5, r8
-        mulli   r4, r5, CORES_PER_CLUSTER
+        add     r5, r5, r8       /* r5 = linear core ID */
+        mr      r4, r5           /* r4 = PIR = linear core ID */
 #elif defined(CORE_E500MC) /* BOOKE e500mc family */
         rlwinm  r4, r0, 27, 27, 31
         mr      r5, r4
@@ -132,34 +132,15 @@ branch_prediction:
         mtspr   L1CSR2, r8
 
 #if defined(CORE_E6500) /* --- L2 E6500 --- */
-l2_setup_cache:
-        /* E6500CORERM: 11.7 L2 cache state */
-        /* R5 = L2 cluster 1 base */
-        lis     r5,     L2_CLUSTER_BASE(0)@h
-        ori     r5, r5, L2_CLUSTER_BASE(0)@l
-        /* Invalidate and clear locks */
-        lis     r1,     (L2CSR0_L2FI | L2CSR0_L2LFC)@h
-        ori     r1, r1, (L2CSR0_L2FI | L2CSR0_L2LFC)@l
-        sync
-        stw     r1, L2CSR0(r5)
-
-        /* poll till invalidate and lock bits are cleared */
-l2_poll_invclear:
-        lwz     r4, L2CSR0(r5)
-        and.    r4, r1, r4
-        bne     l2_poll_invclear
-        isync
-
-        /* set stash id to (coreID * 2) + 32 + L2 (1) */
-        addi    r3, r8,1
-        stw     r3, L2CSR1(r5)
-
-        /* enable L2 with parity */
-        sync
-        isync
-        lis     r4, (L2CSR0_L2E | L2CSR0_L2PE)@h
-        stw     r4, L2CSR0(r5)
-        isync
+        /* e6500 L2 is per-cluster (shared by all cores in the cluster).
+         * The primary core already invalidated and enabled L2 during boot.
+         * Secondary cores must NOT do L2FI (flash invalidate) — it discards
+         * ALL dirty L2 lines including the primary core's stack, return
+         * addresses, and cached code, causing the primary core to crash
+         * (typically SRR0=0 from corrupted return address).
+         * L1 stash ID (set above via L1CSR2 SPR) is per-core and sufficient.
+         * L2CSR1 (stash ID) is per-cluster and already set by core 0.
+         * No CCSR TLB mapping needed since we skip L2 register access. */
 
 #elif defined(CORE_E5500) /* --- L2 E5500 --- */
 l2_setup_cache:

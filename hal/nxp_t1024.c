@@ -40,12 +40,6 @@
 #define ENABLE_BUS_CLK_CALC
 
 #ifndef BUILD_LOADER_STAGE1
-    /* Tests */
-    #if 0
-        #define TEST_DDR
-        #define TEST_TPM
-    #endif
-
     #define ENABLE_PCIE
     #define ENABLE_CPLD
     #define ENABLE_QE   /* QUICC Engine */
@@ -53,7 +47,7 @@
     #define ENABLE_PHY
     #define ENABLE_MRAM
 
-    #if defined(WOLFBOOT_TPM) || defined(TEST_TPM)
+    #if defined(WOLFBOOT_TPM)
         #define ENABLE_ESPI /* SPI for TPM */
     #endif
     #define ENABLE_MP   /* multi-core support */
@@ -67,14 +61,7 @@
 #define USE_ERRATA_DDRA009663
 #define USE_ERRATA_DDRA009942
 
-/* Foward declarations */
-#if defined(ENABLE_DDR) && defined(TEST_DDR)
-static int test_ddr(void);
-#endif
-#if defined(ENABLE_ESPI) && defined(TEST_TPM)
-static int test_tpm(void);
-#endif
-
+/* Forward declarations */
 static void hal_flash_unlock_sector(uint32_t sector);
 
 #ifdef ENABLE_ESPI
@@ -1011,47 +998,7 @@ enum ifc_amask_sizes {
 /* generic share NXP QorIQ driver code */
 #include "nxp_ppc.c"
 
-
-#ifdef ENABLE_BUS_CLK_CALC
-static uint32_t hal_get_core_clk(void)
-{
-    /* compute core clock (system input * ratio) */
-    uint32_t core_clk;
-    uint32_t core_ratio = get32(CLOCKING_PLLCNGSR(0)); /* see CGA_PLL1_RAT in RCW */
-    /* shift by 1 and mask */
-    core_ratio = ((core_ratio >> 1) & 0x3F);
-    core_clk = SYS_CLK * core_ratio;
-    return core_clk;
-}
-static uint32_t hal_get_plat_clk(void)
-{
-    /* compute core clock (system input * ratio) */
-    uint32_t plat_clk;
-    uint32_t plat_ratio = get32(CLOCKING_PLLPGSR); /* see SYS_PLL_RAT in RCW */
-    /* shift by 1 and mask */
-    plat_ratio = ((plat_ratio >> 1) & 0x1F);
-    plat_clk = SYS_CLK * plat_ratio;
-    return plat_clk;
-}
-static uint32_t hal_get_bus_clk(void)
-{
-    /* compute bus clock (platform clock / 2) */
-    uint32_t bus_clk = hal_get_plat_clk() / 2;
-    return bus_clk;
-}
-#else
-#define hal_get_core_clk() (uint32_t)(SYS_CLK * 14)
-#define hal_get_plat_clk() (uint32_t)(SYS_CLK * 4)
-#define hal_get_bus_clk()  (uint32_t)(hal_get_plat_clk() / 2)
-#endif
-
-#define TIMEBASE_CLK_DIV 16
-#define TIMEBASE_HZ (hal_get_plat_clk() / TIMEBASE_CLK_DIV)
-#define DELAY_US  (TIMEBASE_HZ / 1000000)
-static void udelay(uint32_t delay_us)
-{
-    wait_ticks(delay_us * DELAY_US);
-}
+/* clock helpers and udelay are provided by nxp_ppc.c (CORE_E5500 path) */
 
 static void law_init(void)
 {
@@ -1200,46 +1147,7 @@ void hal_espi_deinit(void)
 }
 #endif /* ENABLE_ESPI */
 
-/* ---- DUART Driver ---- */
-#ifdef DEBUG_UART
-void uart_init(void)
-{
-    /* calc divisor for UART
-     * baud rate = CCSRBAR frequency ÷ (16 x [UDMB||UDLB])
-     */
-    /* compute UART divisor - round up */
-    uint32_t div = (hal_get_bus_clk() + (16/2 * BAUD_RATE)) / (16 * BAUD_RATE);
-
-    while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
-       ;
-
-    /* set ier, fcr, mcr */
-    set8(UART_IER(UART_SEL), 0);
-    set8(UART_FCR(UART_SEL), (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN));
-
-    /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    set8(UART_LCR(UART_SEL), (UART_LCR_DLAB | UART_LCR_WLS));
-    /* set divisor */
-    set8(UART_DLB(UART_SEL), (div & 0xff));
-    set8(UART_DMB(UART_SEL), ((div>>8) & 0xff));
-    /* disable rate access (DLAB=0) */
-    set8(UART_LCR(UART_SEL), (UART_LCR_WLS));
-}
-
-void uart_write(const char* buf, uint32_t sz)
-{
-    uint32_t pos = 0;
-    while (sz-- > 0) {
-        char c = buf[pos++];
-        if (c == '\n') { /* handle CRLF */
-            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-            set8(UART_THR(UART_SEL), '\r');
-        }
-        while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-        set8(UART_THR(UART_SEL), c);
-    }
-}
-#endif /* DEBUG_UART */
+/* uart_init and uart_write are provided by nxp_ppc.c shared code */
 
 /* ---- IFC Driver ---- */
 #if defined(ENABLE_IFC) && !defined(BUILD_LOADER_STAGE1)
@@ -1682,15 +1590,6 @@ static int hal_pcie_init(void)
         set32(PCIE_IWBEAR(pcie_bus, 3), 0x0);
         set32(  PCIE_IWAR(pcie_bus, 3), (PIWAR_PF | PIWAR_TRGT_LOCAL |
             PIWAR_READ | PIWAR_WRITE | LAW_SIZE_1TB));
-
-        #define PCI_LTSSM    0x404  /* PCIe Link Training, Status State Machine */
-        #define PCI_LTSSM_L0 0x16   /* L0 state */
-
-        /* TODO: Check if link is active. Read config PCI_LTSSM */
-    #if 0
-        link = pci_config_read16(0, 0, 0, PCI_LTSSM);
-        enabled = (link >= PCI_LTSSM_L0);
-    #endif
     }
 
     /* Only enumerate PCIe 3 */

@@ -101,7 +101,7 @@
     #define USE_LONG_JUMP
 
 #elif defined(TARGET_nxp_t2080)
-    /* NXP T0280 */
+    /* NXP T2080 */
     #define CORE_E6500
     #define CPU_NUMCORES 4
     #define CORES_PER_CLUSTER 4
@@ -111,36 +111,72 @@
     #define CCSRBAR_DEF (0xFE000000UL) /* T2080RM 4.3.1 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
 
-    /* relocate to 64-bit 0xE_ */
-    //#define CCSRBAR_PHYS_HIGH 0xEULL
-    //#define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
-
     #define ENABLE_L1_CACHE
     #define ENABLE_L2_CACHE
 
-    #define L2SRAM_ADDR   (0xF8F80000UL) /* L2 as SRAM */
-    #define L2SRAM_SIZE   (256UL * 1024UL)
+    /* L1 locked dcache as initial stack (16KB).
+     * CPC SRAM (via CoreNet) is unreliable on cold power cycle —
+     * store buffer drains cause bus errors. L1 locked cache is
+     * core-local and works reliably from first instruction.
+     * Address chosen below CPC SRAM range, no backing memory needed. */
+    #define L1_CACHE_ADDR (0xF8E00000UL)
+
+    /* T2080 CPC SRAM config - 1MB for ECC P384 stack requirements.
+     * CPC hardware is configured in early ASM but NOT used for stack.
+     * CPC SRAM becomes usable after cache hierarchy is initialized in C. */
+    #define L2SRAM_ADDR   (0xF8F00000UL) /* CPC as SRAM (1MB) */
+    #define L2SRAM_SIZE   (1024UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
-    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+    /* CPC SRAM transactions traverse the CoreNet interconnect, which
+     * requires a LAW to route them. LAW_TRGT_DDR_1 (0x10) is the CPC
+     * target per T2080RM Table 2-2 (Target ID Assignments). */
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_1MB
     #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_DDR_1
-    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_1M
 
     #define ENABLE_INTERRUPTS
 
     #define ENABLE_DDR
     #ifndef DDR_SIZE
-    #define DDR_SIZE (8192UL * 1024UL * 1024UL)
+    #ifdef BOARD_CW_VPX3152
+    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* TODO: confirm from CS_BNDS dump (4/8/16 GB) */
+    #else
+    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* T2080 RDB / NAII 68PPC2: 8 GB */
+    #endif
     #endif
 
+    /* DDR stack configuration - relocate from CPC SRAM after DDR init
+     * Stack is at top of first 32MB of DDR, with 64KB reserved for stack
+     * Stack grows downward from DDR_STACK_TOP */
+    #define DDR_STACK_SIZE    (64 * 1024)        /* 64KB stack in DDR */
+    #define DDR_STACK_TOP     0x02000000UL       /* Top of first 32MB */
+    #define DDR_STACK_BASE    (DDR_STACK_TOP - DDR_STACK_SIZE)
+
+    /* DDR address where .ramcode is copied before CPC SRAM is released.
+     * TLB9 is remapped: VA 0xF8F00000 -> PA DDR_RAMCODE_ADDR so that
+     * RAMFUNCTION code continues to work after CPC becomes L2 cache. */
+    #define DDR_RAMCODE_ADDR  0x03000000UL       /* 48MB into DDR */
+
+    /* Flash base address and size — may differ between board variants.
+     * TODO: Confirm VPX3-152 flash mapping from IFC CSPR(0)/AMASK(0) dump.
+     * If the new board uses a different base address (e.g. 0xF0000000 for
+     * 256 MB flash), update the BOARD_CW_VPX3152 values and uncomment. */
+#if 0 && defined(BOARD_CW_VPX3152)
+    #define FLASH_BASE_ADDR      0xF0000000UL  /* TODO: from IFC dump */
+    #define FLASH_BASE_PHYS_HIGH 0x0ULL
+    #define FLASH_LAW_SIZE       LAW_SIZE_256MB
+    #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
+#else
     #define FLASH_BASE_ADDR      0xE8000000UL
     #define FLASH_BASE_PHYS_HIGH 0x0ULL
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_128M
+#endif
 
     #define USE_LONG_JUMP
 #else
-    #error Please define platform PowerPC core version and CCSRBAR
+    #error Please define TARGET (nxp_t2080, nxp_t1024, or nxp_p1021)
 #endif
 
 
@@ -169,6 +205,7 @@
 #ifndef CCSRBAR_PHYS_HIGH
 #define CCSRBAR_PHYS_HIGH 0
 #endif
+
 
 /* DDR */
 #ifndef DDR_ADDRESS
@@ -285,20 +322,24 @@
     #define CPC_BASE            (CCSRBAR + 0x10000)
     /* 8.2 CoreNet Platform Cache (CPC) Memory Map */
     #define CPCCSR0             (0x000)
+    #define CPCEWCR0            (0x010)
     #define CPCSRCR1            (0x100)
     #define CPCSRCR0            (0x104)
+    #define CPCERRDIS           (0xE44)
     #define CPCHDBCR0           (0xF00)
 
     #define CPCCSR0_CPCE        (0x80000000 >> 0)
     #define CPCCSR0_CPCPE       (0x80000000 >> 1)
     #define CPCCSR0_CPCFI       (0x80000000 >> 10)
+    #define CPCCSR0_CPCFL       (0x80000000 >> 20)
     #define CPCCSR0_CPCLFC      (0x80000000 >> 21)
-    #define CPCCSR0_SRAM_ENABLE (CPCCSR0_CPCE | CPCCSR0_CPCPE)
 
     #ifdef CORE_E6500
-        #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 14-15 */
-        #define CPCSRCR0_SRAMSZ_256 (0x3 << 1) /* ways 8-15 */
-        #define CPCSRCR0_SRAMSZ_512 (0x4 << 1) /* ways 0-15 */
+        /* T2080: 2MB CPC, 16 ways, 128KB per way */
+        #define CPCSRCR0_SRAMSZ_256  (0x1 << 1) /* ways 14-15, 256KB */
+        #define CPCSRCR0_SRAMSZ_512  (0x2 << 1) /* ways 12-15, 512KB */
+        #define CPCSRCR0_SRAMSZ_1024 (0x3 << 1) /* ways 8-15, 1MB */
+        #define CPCSRCR0_SRAMSZ_2048 (0x4 << 1) /* ways 0-15, 2MB */
     #else /* CORE E5500 */
         #define CPCSRCR0_SRAMSZ_64  (0x1 << 1) /* ways 6-7 */
         #define CPCSRCR0_SRAMSZ_128 (0x2 << 1) /* ways 4-7 */
@@ -465,31 +506,37 @@
     #define L2CSR1    0x3FA /* L2 Data Cache Control and Status Register 1 */
 #endif
 
-#define L2CSR0_L2FI  0x00200000 /* L2 Cache Flash Invalidate */
-#define L2CSR0_L2FL  0x00000800 /* L2 Cache Flush */
-#define L2CSR0_L2LFC 0x00000400 /* L2 Cache Lock Flash Clear */
-#define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
 #define L2CSR0_L2E   0x80000000 /* L2 Cache Enable */
-
+#define L2CSR0_L2PE  0x40000000 /* L2 Cache Parity/ECC Enable */
 #define L2CSR0_L2WP  0x1c000000 /* L2 I/D Way Partioning */
 #define L2CSR0_L2CM  0x03000000 /* L2 Cache Coherency Mode */
 #define L2CSR0_L2FI  0x00200000 /* L2 Cache Flash Invalidate */
 #define L2CSR0_L2IO  0x00100000 /* L2 Cache Instruction Only */
 #define L2CSR0_L2DO  0x00010000 /* L2 Cache Data Only */
 #define L2CSR0_L2REP 0x00003000 /* L2 Line Replacement Algo */
+#define L2CSR0_L2FL  0x00000800 /* L2 Cache Flush */
+#define L2CSR0_L2LFC 0x00000400 /* L2 Cache Lock Flash Clear */
 
 
 #define SCCSRBAR  0x3FE /* Shifted CCSRBAR */
 
 #define SPRN_DBSR 0x130 /* Debug Status Register */
 #define SPRN_DEC  0x016 /* Decrement Register */
-#define SPRN_TSR  0x3D8 /* Timer Status Register */
 
-#define SPRN_TCR  0x3DA /* Timer Control Register */
+#ifdef CORE_E6500
+    #define SPRN_TSR  0x150 /* Timer Status Register (SPR 336) */
+    #define SPRN_TCR  0x154 /* Timer Control Register (SPR 340) */
+    #define SPRN_DEAR 0x03D /* Data Exception Address Register (SPR 61) */
+    #define SPRN_ESR  0x03E /* Exception Syndrome Register (SPR 62) */
+#else
+    #define SPRN_TSR  0x3D8 /* Timer Status Register */
+    #define SPRN_TCR  0x3DA /* Timer Control Register */
+    #define SPRN_DEAR 0x3D5 /* Data Exception Address Register */
+    #define SPRN_ESR  0x3D4 /* Exception Syndrome Register */
+#endif
+
 #define TCR_WIE   0x08000000 /* Watchdog Interrupt Enable */
 #define TCR_DIE   0x04000000 /* Decrement Interrupt Enable */
-
-#define SPRN_ESR  0x3D4 /* Exception Syndrome Register */
 #define SPRN_MCSR 0x23C /* Machine Check Syndrome Register */
 #define SPRN_PVR  0x11F /* Processor Version */
 #define SPRN_SVR  0x3FF /* System Version */
@@ -524,9 +571,12 @@
 
 #define SRR0     0x01A   /* Save/Restore Register 0 */
 #define SRR1     0x01B   /* Save/Restore Register 1 */
+#define SPRN_MCSRR0  0x23A /* Machine Check Save/Restore Register 0 */
+#define SPRN_MCSRR1  0x23B /* Machine Check Save/Restore Register 1 */
 
 #define MSR_DS   (1<<4)  /* Book E Data address space */
 #define MSR_IS   (1<<5)  /* Book E Instruction address space */
+#define MSR_RI   (1<<1)  /* Recoverable Interrupt */
 #define MSR_DE   (1<<9)  /* Debug Exception Enable */
 #define MSR_ME   (1<<12) /* Machine check enable */
 #define MSR_EE   (1<<15) /* External Interrupt enable */
@@ -575,6 +625,10 @@
 #endif
 
 #define mtspr(rn, v) __asm__ __volatile__("mtspr " WC_STRINGIFY(rn) ",%0" : : "r" (v))
+#define mfspr(rn) ({ \
+    unsigned int rval; \
+    __asm__ __volatile__("mfspr %0," WC_STRINGIFY(rn) : "=r" (rval)); rval; \
+})
 
 #define mfmsr() ({ \
     unsigned int rval; \
@@ -649,10 +703,19 @@ static inline void set32(volatile unsigned int *addr, unsigned int val)
     );
 }
 
+/* longcall attribute for functions in .ramcode — callers in .text need
+ * indirect calls since .ramcode VMA is ~143MB from .text VMA,
+ * exceeding PPC bl +/-32MB range */
+#if defined(__WOLFBOOT) && defined(RAM_CODE) && defined(ARCH_PPC)
+#define LONGCALL_ATTR __attribute__((longcall))
+#else
+#define LONGCALL_ATTR
+#endif
+
 /* C version in boot_ppc.c */
-extern void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
-    uint32_t urpn, uint8_t perms, uint8_t wimge, uint8_t ts, uint8_t tsize,
-    uint8_t iprot);
+extern void LONGCALL_ATTR set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn,
+    uint32_t rpn, uint32_t urpn, uint8_t perms, uint8_t wimge, uint8_t ts,
+    uint8_t tsize, uint8_t iprot);
 extern void disable_tlb1(uint8_t esel);
 extern void flush_cache(uint32_t start_addr, uint32_t size);
 extern void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
@@ -662,18 +725,49 @@ extern void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
 extern void uart_init(void);
 
 /* from boot_ppc_start.S */
-extern unsigned long long get_ticks(void);
-extern void wait_ticks(unsigned long long);
+extern unsigned long long LONGCALL_ATTR get_ticks(void);
+extern void LONGCALL_ATTR wait_ticks(unsigned long long);
 extern unsigned long get_pc(void);
 extern void relocate_code(uint32_t *dest, uint32_t *src, uint32_t length);
-extern void invalidate_dcache(void);
-extern void invalidate_icache(void);
+extern void LONGCALL_ATTR invalidate_dcache(void);
+extern void LONGCALL_ATTR invalidate_icache(void);
 extern void icache_enable(void);
 extern void dcache_enable(void);
 extern void dcache_disable(void);
 
 #else
 /* Assembly version */
+#ifdef CORE_E6500
+/* e6500 has 64-bit MAS registers. On 64-bit PPC, lis sign-extends to 64 bits.
+ * Any MAS value with bit 31 set (MAS1=0xC..., MAS2/MAS3 high addresses) gets
+ * upper 32 bits = 0xFFFFFFFF. Hardware may require reserved upper bits = 0.
+ * Use "li 0; oris; ori" pattern for MAS1, MAS2, MAS3 to avoid sign-extension. */
+#define set_tlb(tlb, esel, epn, rpn, urpn, perms, winge, ts, tsize, iprot, reg) \
+    lis   reg, BOOKE_MAS0(tlb, esel, 0)@h; \
+    ori   reg, reg, BOOKE_MAS0(tlb, esel, 0)@l; \
+    mtspr MAS0, reg;\
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS1(1, iprot, 0, ts, tsize)@h; \
+    ori   reg, reg, BOOKE_MAS1(1, iprot, 0, ts, tsize)@l; \
+    mtspr MAS1, reg; \
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS2(epn, winge)@h; \
+    ori   reg, reg, BOOKE_MAS2(epn, winge)@l; \
+    mtspr MAS2, reg; \
+    li    reg, 0; \
+    oris  reg, reg, BOOKE_MAS3(rpn, 0, perms)@h; \
+    ori   reg, reg, BOOKE_MAS3(rpn, 0, perms)@l; \
+    mtspr MAS3, reg; \
+    li    reg, 0; \
+    oris  reg, reg, urpn@h; \
+    ori   reg, reg, urpn@l; \
+    mtspr MAS7, reg; \
+    isync; \
+    msync; \
+    tlbwe; \
+    isync;
+#else
+/* e500/e5500 - 32-bit MAS registers */
 #define set_tlb(tlb, esel, epn, rpn, urpn, perms, winge, ts, tsize, iprot, reg) \
     lis   reg, BOOKE_MAS0(tlb, esel, 0)@h; \
     ori   reg, reg, BOOKE_MAS0(tlb, esel, 0)@l; \
@@ -694,6 +788,7 @@ extern void dcache_disable(void);
     msync; \
     tlbwe; \
     isync;
+#endif /* CORE_E6500 */
 
     /* readability helpers for assembly to show register versus decimal */
     #define r0 0
@@ -743,11 +838,6 @@ extern void dcache_disable(void);
 #define ENTRY_R3_LOWER    12
 #define ENTRY_RESV        16
 #define ENTRY_PIR         20
-
-/* not used for ePAPR 1.1 */
-#define ENTRY_R6_UPPER    24
-#define ENTRY_R6_LOWER    28
-
 
 #define ENTRY_SIZE        64
 
