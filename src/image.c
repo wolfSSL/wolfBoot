@@ -1272,7 +1272,7 @@ uint32_t wolfBoot_image_size(uint8_t *image)
  * the wolfBoot_image structure.
  * Note that this function initializes the members of the wolfBoot_image structure
  * but does not initialize the structure itself.  It is expected that the wolfBoot_image
- * struct is memset to 0 before being passed in, with image->hdr optionally set.
+ * struct is memset to 0 before being passed in, with img->hdr optionally set.
  *
  * @param img The pointer to the wolfBoot_image structure to be initialized.
  * @param image The pointer to the image address.
