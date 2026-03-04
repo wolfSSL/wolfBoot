@@ -272,7 +272,7 @@ test-sim-self-update: wolfboot.bin FORCE
 # the contiguous boot partition.
 test-sim-self-update-monolithic: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@echo "=== Simulator Monolithic Self-Update Test ==="
-	@# Create dummy bootloader (0xAA pattern, exactly BOOTLOADER_PARTITION_SIZE)
+	@# Create dummy bootloader (0xAA pattern, exactly bootloader region size: WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET)
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=1 2>/dev/null | tr '\000' '\252' > monolithic_dummy_bl.bin
 	@# Concatenate dummy bootloader + signed app image to form monolithic payload
 	$(Q)cat monolithic_dummy_bl.bin test-app/image_v1_signed.bin > monolithic_payload.bin
