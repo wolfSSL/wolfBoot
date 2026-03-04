@@ -422,7 +422,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
-    uint8_t updateState;
+    uint8_t updateState = IMG_STATE_NEW;
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
