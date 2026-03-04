@@ -140,6 +140,20 @@ jobs:
       config-file: ./config/examples/lpc54606j512.config
       board-name: lpcxpresso55s06
 
+  lpc55s69_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69.config
+      board-name: lpcxpresso55s69
+
+  lpc55s69_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69-tz.config
+      board-name: lpcxpresso55s69
+
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml
     with:
