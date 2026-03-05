@@ -1,4 +1,4 @@
-/* nxp_t1024.c
+/* app_nxp_t1040.c
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -19,5 +19,33 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Wrapper for shared T10xx HAL */
-#include "nxp_t10xx.c"
+#include <stdint.h>
+#include "../hal/nxp_ppc.h"
+#include "printf.h"
+
+static const char* hex_lut = "0123456789abcdef";
+
+void main(void)
+{
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    char snum[8];
+
+    uart_init();
+
+    uart_write("Test App\n", 9);
+
+    /* Wait for reboot */
+    while(1) {
+        for (j=0; j<1000000; j++)
+            ;
+        i++;
+
+        uart_write("\r\n0x", 4);
+        for (k=0; k<8; k++) {
+            snum[7 - k] = hex_lut[(i >> 4*k) & 0xf];
+        }
+        uart_write(snum, 8);
+    }
+}

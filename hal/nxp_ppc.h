@@ -100,6 +100,45 @@
 
     #define USE_LONG_JUMP
 
+#elif defined(TARGET_nxp_t1040)
+    /* NXP T1040 */
+    #define CORE_E5500
+    #define CPU_NUMCORES 4
+    #define CORES_PER_CLUSTER 1
+    #define LAW_MAX_ENTRIES 16
+
+    #define CCSRBAR_DEF (0xFE000000) /* T1040RM 4.4.1 default base */
+    #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
+
+    #define INITIAL_SRAM_ADDR     0xFDFC0000
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+    #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_PSRAM
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
+
+    #define ENABLE_L1_CACHE
+    #define ENABLE_INTERRUPTS
+
+    #ifdef BUILD_LOADER_STAGE1
+        #define ENABLE_L2_CACHE
+    #else
+        /* relocate to 64-bit 0xF_ */
+        #define CCSRBAR_PHYS_HIGH 0xFULL
+        #define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
+    #endif
+
+    #define ENABLE_DDR
+    #ifndef DDR_SIZE
+    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* 8GB */
+    #endif
+
+    /* 256MB NOR: 0xE8000000 - 0xF7FFFFFF */
+    #define FLASH_BASE_ADDR      0xE8000000UL
+    #define FLASH_BASE_PHYS_HIGH 0xFULL
+    #define FLASH_LAW_SIZE       LAW_SIZE_256MB
+    #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
+
+    #define USE_LONG_JUMP
+
 #elif defined(TARGET_nxp_t2080)
     /* NXP T2080 */
     #define CORE_E6500
@@ -176,7 +215,7 @@
 
     #define USE_LONG_JUMP
 #else
-    #error Please define TARGET (nxp_t2080, nxp_t1024, or nxp_p1021)
+    #error Please define TARGET (nxp_t2080, nxp_t1040, nxp_t1024, or nxp_p1021)
 #endif
 
 
