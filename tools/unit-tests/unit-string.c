@@ -92,6 +92,83 @@ START_TEST(test_case_insensitive_alpha_only)
 }
 END_TEST
 
+START_TEST(test_strcasecmp_mixed_alnum_punct)
+{
+    ck_assert_int_eq(strcasecmp("Boot-123_OK!", "bOot-123_ok!"), 0);
+    ck_assert_int_eq(strcasecmp("v1.2.3-rc1", "V1.2.3-RC1"), 0);
+    ck_assert_int_eq(strcasecmp("A_B-C.D", "a_b-c.d"), 0);
+}
+END_TEST
+
+START_TEST(test_strcasecmp_non_alpha_ordering)
+{
+    ck_assert_int_lt(strcasecmp("abc-1", "abc_1"), 0);
+    ck_assert_int_gt(strcasecmp("abc_1", "abc-1"), 0);
+    ck_assert_int_lt(strcasecmp("abc1", "abc2"), 0);
+    ck_assert_int_gt(strcasecmp("abc2", "abc1"), 0);
+}
+END_TEST
+
+START_TEST(test_strncasecmp_non_alpha_n_boundaries)
+{
+    ck_assert_int_eq(strncasecmp("Boot-123_OK!", "bOot-123_ok?", 11), 0);
+    ck_assert_int_lt(strncasecmp("Boot-123_OK!", "bOot-123_ok?", 12), 0);
+    ck_assert_int_gt(strncasecmp("bOot-123_ok?", "Boot-123_OK!", 12), 0);
+    ck_assert_int_eq(strncasecmp("A1.B2-C3", "a1.b2-c3", 8), 0);
+}
+END_TEST
+
+START_TEST(test_strcasecmp_prefix_regression)
+{
+    ck_assert_int_lt(strcasecmp("a", "ab"), 0);
+    ck_assert_int_gt(strcasecmp("ab", "a"), 0);
+    ck_assert_int_lt(strcasecmp("", "a"), 0);
+    ck_assert_int_gt(strcasecmp("a", ""), 0);
+}
+END_TEST
+
+START_TEST(test_strncasecmp_n_limit_regression)
+{
+    ck_assert_int_eq(strncasecmp("ABC", "abc", 0), 0);
+    ck_assert_int_eq(strncasecmp("", "a", 0), 0);
+    ck_assert_int_eq(strncasecmp("AbCd", "aBcE", 3), 0);
+    ck_assert_int_lt(strncasecmp("AbCd", "aBcE", 4), 0);
+}
+END_TEST
+
+START_TEST(test_strncasecmp_stop_at_null_regression)
+{
+    const char s1[] = { 'A', '\0', 'x', '\0' };
+    const char s2[] = { 'a', '\0', 'Y', '\0' };
+
+    ck_assert_int_eq(strncasecmp(s1, s2, 2), 0);
+    ck_assert_int_eq(strncasecmp(s1, s2, 3), 0);
+    ck_assert_int_eq(strncasecmp(s1, s2, 8), 0);
+}
+END_TEST
+
+START_TEST(test_strncasecmp_prefix_large_n_regression)
+{
+    ck_assert_int_lt(strncasecmp("a", "ab", 8), 0);
+    ck_assert_int_gt(strncasecmp("ab", "a", 8), 0);
+    ck_assert_int_lt(strncasecmp("A", "aB", 8), 0);
+}
+END_TEST
+
+START_TEST(test_strncasecmp_no_read_past_null_when_n_remaining)
+{
+    const char s1[] = { '\0' };
+    const char s2[] = { '\0' };
+
+    /*
+     * Regression target: if implementation does not stop on '\0' when n > 1,
+     * the next loop iteration reads past both 1-byte buffers.
+     */
+    ck_assert_int_eq(strncasecmp(s1, s2, 2), 0);
+    ck_assert_int_eq(strncasecmp(s1, s2, 8), 0);
+}
+END_TEST
+
 START_TEST(test_isalpha_helpers)
 {
     ck_assert_int_eq(islower('a'), 1);
@@ -142,6 +219,16 @@ START_TEST(test_strlen_strcmp)
     ck_assert_int_gt(strcmp("abe", "abd"), 0);
     ck_assert_int_lt(strcmp("", "a"), 0);
     ck_assert_int_gt(strcmp("a", ""), 0);
+}
+END_TEST
+
+START_TEST(test_strcmp_prefix_termination)
+{
+    ck_assert_int_lt(strcmp("a", "abc"), 0);
+    ck_assert_int_lt(strcmp("ab", "abc"), 0);
+    ck_assert_int_gt(strcmp("abc", "ab"), 0);
+    ck_assert_int_gt(strcmp("abc", "a"), 0);
+    ck_assert_int_eq(strcmp("", ""), 0);
 }
 END_TEST
 
@@ -329,9 +416,18 @@ Suite *string_suite(void)
     tcase_add_test(tcase_strncasecmp, test_strncasecmp_n_exact);
     tcase_add_test(tcase_strncasecmp, test_strncasecmp_diff_before_n);
     tcase_add_test(tcase_strncasecmp, test_case_insensitive_alpha_only);
+    tcase_add_test(tcase_strncasecmp, test_strcasecmp_mixed_alnum_punct);
+    tcase_add_test(tcase_strncasecmp, test_strcasecmp_non_alpha_ordering);
+    tcase_add_test(tcase_strncasecmp, test_strncasecmp_non_alpha_n_boundaries);
+    tcase_add_test(tcase_strncasecmp, test_strcasecmp_prefix_regression);
+    tcase_add_test(tcase_strncasecmp, test_strncasecmp_n_limit_regression);
+    tcase_add_test(tcase_strncasecmp, test_strncasecmp_stop_at_null_regression);
+    tcase_add_test(tcase_strncasecmp, test_strncasecmp_prefix_large_n_regression);
+    tcase_add_test(tcase_strncasecmp, test_strncasecmp_no_read_past_null_when_n_remaining);
     tcase_add_test(tcase_misc, test_isalpha_helpers);
     tcase_add_test(tcase_misc, test_memset_memcmp_memchr);
     tcase_add_test(tcase_misc, test_strlen_strcmp);
+    tcase_add_test(tcase_misc, test_strcmp_prefix_termination);
     tcase_add_test(tcase_misc, test_strcpy_strncpy_strcat_strncat);
     tcase_add_test(tcase_misc, test_strncmp);
     tcase_add_test(tcase_misc, test_memcpy_memmove);

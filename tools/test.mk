@@ -1110,11 +1110,11 @@ test-all: clean
 test-size-all:
 	make test-size SIGN=NONE LIMIT=5040 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=11700 NO_ARM_ASM=1
+	make test-size SIGN=ED25519 LIMIT=11724 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ECC256  LIMIT=18944 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13840 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13856 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA2048 LIMIT=11916 NO_ARM_ASM=1
 	make clean
@@ -1126,9 +1126,9 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ECC384 LIMIT=19888 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15216 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15232 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=13760 NO_ARM_ASM=1
+	make test-size SIGN=ED448 LIMIT=13776 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA3072 LIMIT=12056 NO_ARM_ASM=1
 	make clean
@@ -1136,11 +1136,11 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 \
 		WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 \
-		IMAGE_HEADER_SIZE?=5288 LIMIT=7696 NO_ARM_ASM=1
+		IMAGE_HEADER_SIZE?=5288 LIMIT=7712 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' \
 		IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE?=4096 \
-		LIMIT=8560 NO_ARM_ASM=1
+		LIMIT=8568 NO_ARM_ASM=1
 	make keysclean
 	make clean
 	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19362 \

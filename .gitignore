@@ -140,6 +140,7 @@ tools/unit-tests/unit-aes128
 tools/unit-tests/unit-aes256
 tools/unit-tests/unit-chacha20
 tools/unit-tests/unit-delta
+tools/unit-tests/unit-disk
 tools/unit-tests/unit-enc-nvm
 tools/unit-tests/unit-enc-nvm-flagshome
 tools/unit-tests/unit-extflash
@@ -153,7 +154,9 @@ tools/unit-tests/unit-pci
 tools/unit-tests/unit-pkcs11_store
 tools/unit-tests/unit-sectorflags
 tools/unit-tests/unit-spi-flash
+tools/unit-tests/unit-string
 tools/unit-tests/unit-update-flash
+tools/unit-tests/unit-update-flash-enc
 tools/unit-tests/unit-update-ram
 
 
