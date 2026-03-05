@@ -109,54 +109,41 @@ char *strcat(char *dest, const char *src)
 
 int strcmp(const char *s1, const char *s2)
 {
-    int diff = 0;
-
-    while (!diff && *s1) {
-        diff = (int)*s1 - (int)*s2;
-        s1++;
-        s2++;
+    while (*s1 && *s2) {
+        int c1 = ((unsigned char)*s1++);
+        int c2 = ((unsigned char)*s2++);
+        if (c1 != c2)
+            return c1 - c2;
     }
-
-    return diff;
+    return ((unsigned char)*s1) - ((unsigned char)*s2);
 }
 #endif /* Renesas CCRX */
 
 int strcasecmp(const char *s1, const char *s2)
 {
-    int diff = 0;
-
-    while (!diff && *s1) {
-        diff = (int)*s1 - (int)*s2;
-
-        if (((diff == 'A' - 'a') || (diff == 'a' - 'A')) &&
-                (isalpha((unsigned char)*s1) && isalpha((unsigned char)*s2)))
-            diff = 0;
-
-        s1++;
-        s2++;
+    while (*s1 && *s2) {
+        int c1 = tolower((unsigned char)*s1++);
+        int c2 = tolower((unsigned char)*s2++);
+        if (c1 != c2)
+            return c1 - c2;
     }
-
-    return diff;
+    return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
 }
 
 int strncasecmp(const char *s1, const char *s2, size_t n)
 {
-    int diff = 0;
-    size_t i = 0;
+    if (n == 0)
+        return 0;
 
-    while (!diff && *s1) {
-        diff = (int)*s1 - (int)*s2;
-
-        if (((diff == 'A' - 'a') || (diff == 'a' - 'A')) &&
-                (isalpha((unsigned char)*s1) && isalpha((unsigned char)*s2)))
-            diff = 0;
-
-        s1++;
-        s2++;
-        if (++i >= n)
-            break;
+    while (n--) {
+        int c1 = tolower((unsigned char)*s1++);
+        int c2 = tolower((unsigned char)*s2++);
+        if (c1 != c2)
+            return c1 - c2;
+        if (c1 == '\0')
+            return 0;
     }
-    return diff;
+    return 0;
 }
 
 #if !defined(__CCRX__) /* Renesas CCRX */
@@ -206,7 +193,7 @@ char *strcpy(char *dst, const char *src)
 {
    size_t i = 0;
 
-    while(1) {
+    while (1) {
         dst[i] = src[i];
         if (src[i] == '\0')
             break;

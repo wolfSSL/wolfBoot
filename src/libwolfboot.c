@@ -861,51 +861,74 @@ void RAMFUNCTION wolfBoot_success(void)
  */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
-    uint8_t *p = haystack;
+    uint8_t *p;
     uint16_t len, htype;
-    const volatile uint8_t *max_p = (haystack - IMAGE_HEADER_OFFSET) +
-                                                    IMAGE_HEADER_SIZE;
+    uintptr_t p_addr, max_addr;
+
     *ptr = NULL;
-    if (p > max_p) {
+
+    if (haystack == NULL) {
+        unit_dbg("Illegal address (NULL)\n");
+        return 0;
+    }
+
+    p_addr = (uintptr_t)haystack;
+    if (p_addr < IMAGE_HEADER_OFFSET) {
+        unit_dbg("Illegal address (too low)\n");
+        return 0;
+    }
+
+    max_addr = p_addr - IMAGE_HEADER_OFFSET;
+    if (max_addr > (UINTPTR_MAX - IMAGE_HEADER_SIZE)) {
+        unit_dbg("Illegal address (overflow)\n");
+        return 0;
+    }
+    max_addr += IMAGE_HEADER_SIZE;
+
+    if (p_addr > max_addr) {
         unit_dbg("Illegal address (too high)\n");
         return 0;
     }
-    while ((p + 4) < max_p) {
+
+    while (p_addr < max_addr) {
+        if ((max_addr - p_addr) < 4U) {
+            break;
+        }
+        p = (uint8_t *)p_addr;
         htype = p[0] | (p[1] << 8);
         if (htype == 0) {
             unit_dbg("Explicit end of options reached\n");
             break;
         }
         /* skip unaligned half-words and padding bytes */
-        if ((p[0] == HDR_PADDING) || ((((size_t)p) & 0x01) != 0)) {
-            p++;
+        if ((p[0] == HDR_PADDING) || ((p_addr & 0x01U) != 0U)) {
+            p_addr++;
             continue;
         }
 
         len = p[2] | (p[3] << 8);
         /* check len */
-        if ((4 + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+        if ((4U + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available "
                      "in the current header)\n");
-            unit_dbg("%d %d %d\n", len, IMAGE_HEADER_SIZE, IMAGE_HEADER_OFFSET);
+            unit_dbg("%u %u %u\n", (unsigned int)len,
+                     (unsigned int)IMAGE_HEADER_SIZE,
+                     (unsigned int)IMAGE_HEADER_OFFSET);
             break;
         }
         /* check max pointer */
-        if (p + 4 + len > max_p) {
+        if ((max_addr - p_addr) < (uintptr_t)(4U + len)) {
             unit_dbg("This field is too large and would overflow the image "
                      "header\n");
             break;
         }
 
-        /* skip header [type|len] */
-        p += 4;
-
         if (htype == type) {
             /* found, return pointer to data portion */
-            *ptr = p;
+            *ptr = (uint8_t *)(p_addr + 4U);
             return len;
         }
-        p += len;
+        p_addr += (uintptr_t)(4U + len);
     }
     return 0;
 }
