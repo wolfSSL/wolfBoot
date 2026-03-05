@@ -2781,7 +2781,6 @@ The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:
 
 ```
 make TARGET=psoc6 \
-    NVM_FLASH_WRITEONCE=1 \
     CYPRESS_PDL=./lib/psoc6pdl \
     CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
     CYPRESS_CORE_LIB=./lib/core-lib \
@@ -2797,6 +2796,34 @@ To compile with hardware acceleration disabled, use the option
 `PSOC6_CRYPTO=0`
 
 in your wolfBoot configuration.
+
+#### External Flash Support
+
+PSoC6 supports external QSPI flash for firmware storage. To enable:
+
+```
+make TARGET=psoc6 \
+    EXT_FLASH=1 \
+    CYPRESS_PDL=./lib/psoc6pdl \
+    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
+    CYPRESS_CORE_LIB=./lib/core-lib \
+    WOLFBOOT_SECTOR_SIZE=4096
+```
+
+External flash uses a temporary sector backup mechanism to handle the larger erase size (for example, 0x40000-byte sectors on an S25FL512S device) compared to internal flash rows. The backup sector is automatically managed in external flash beyond the update partition.
+
+#### Dual-Bank Flash Swap
+
+PSoC6 supports hardware-assisted bank swapping for faster and more reliable firmware updates:
+
+```
+make TARGET=psoc6 \
+    DUALBANK_SWAP=1 \
+    CYPRESS_PDL=./lib/psoc6pdl \
+    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
+    CYPRESS_CORE_LIB=./lib/core-lib \
+    WOLFBOOT_SECTOR_SIZE=4096
+```
 
 #### OpenOCD installation
 
