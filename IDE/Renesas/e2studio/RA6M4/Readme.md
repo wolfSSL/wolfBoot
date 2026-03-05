@@ -17,24 +17,24 @@ Please see `Readme_wSCE.md` for Renesas SCE use case.
 |:--|:--|:--|
 |Board|Renesas EK-RA6M4||
 |Device|R7FA6M4AF3CFB||
-|Toolchain|GCC ARM Embedded 10.3.1.20210824|Included in GCC for Renesas RA|
-|FSP Version|3.6.0|Download from Renesas site|
-|IDE|e2studio 2022-01|Download from Renesas site|
+|Toolchain|GCC ARM Embedded 13.2 (arm-none-eabi)|Included in e2studio / GCC for Renesas RA|
+|FSP Version|6.1.0|Bundled with e2studio or download from Renesas site|
+|IDE|e2studio 2024-01 or later|Download from Renesas site|
 |Flash Writer|Renesas Flash Programmer v3|Download from Renesas site|
-|Binary tool|aarch64-none-elf-objcopy 10.3-2021.07|Download from GNU site|
-|Key tool|keygen and sign|Included in wolfBoot|
+|Binary tool|arm-none-eabi-objcopy|Included in GCC ARM toolchain|
+|Key tool|keygen and sign|Included in wolfBoot (`tools/keytools`)|
+|RTT Viewer|J-Link RTT Viewer|Included in J-Link Software Pack (SEGGER)|
 
 
 |FIT Components|Version|
 |:--|:--|
-|Board Support Package Common Files|v3.6.0|
-|I/O Port|v3.6.0|
-|Arm CMSIS Version 5 - Core (M)|v5.8.0+fsp.3.6.0|
-|RA6M4-EK Board Support Files|v3.6.0|
-|Board support package for R7FA6M4AF3CFB|v3.6.0|
-|Board support package for RA6M4|v3.6.0|
-|Board support package for RA6M4 - FSP Data|v3.6.0|
-|Flash Memory High Performance|v3.6.0|
+|Board Support Package Common Files|v6.1.0|
+|I/O Port|v6.1.0|
+|Arm CMSIS Version 6 - Core (M)|v6.x+fsp.6.1.0|
+|RA6M4-EK Board Support Files|v6.1.0|
+|Board support package for R7FA6M4AF3CFB|v6.1.0|
+|Board support package for RA6M4|v6.1.0|
+|Board support package for RA6M4 - FSP Data|v6.1.0|
 
 
 e2Studio Project:\
@@ -48,178 +48,364 @@ Flash Allocation:
 | B |H|                     |H|                      |     |
 | o |e|   Primary           |e|   Update             |Swap |
 | o |a|   Partition         |a|   Partition          |Sect |
-| t |d|                     |d|                      |     |
+| t |d|   (448 KB)          |d|   (448 KB)           |64KB |
 +---------------------------+------------------------+-----+
-0x00000000: wolfBoot
-0x00010000: Primary partition (Header)
+0x00000000: wolfBoot (64 KB)
+0x00010000: Primary partition (Header, IMAGE_HEADER_SIZE = 0x200)
 0x00010200: Primary partition (Application image)
 0x00080000: Update  partition (Header)
 0x00080200: Update  partition (Application image)
-0x000F0000: Swap sector
+0x000F0000: Swap sector (64 KB)
 ```
 
-## 2. How to build and use
-This section describes about how to build wolfBoot and application and use them.
+## 3. Key Architecture Notes
 
-### 1) Key generation
-It has key tools running under the host environment such as Linux, Windows or MacOS.
-For compiling the tools, follow the instruction described in the user manual.
+### FSP Usage Summary
 
+Both the **wolfBoot** and **app_RA** projects use the Renesas FSP, but only for the following:
+
+| FSP Role | wolfBoot | app_RA |
+|:--|:--|:--|
+| `SystemInit` (clock init, cache, early BSP) | ✓ | ✓ |
+| `SystemRuntimeInit` (.data copy, .bss zero) | **✗ Disabled** (`BSP_CFG_C_RUNTIME_INIT=0`) | ✓ |
+| Clock configuration (PLL, PCLK, ICLK via `bsp_clocks.c`) | ✓ | ✓ |
+| IOPORT pin configuration (`R_IOPORT_Open`) | — | ✓ |
+| **Flash driver (`g_flash0 Flash(r_flash_hp)`)** | **✗ Not used** | **✗ Not used** |
+
+wolfBoot sets **C Runtime Initialization = Disabled** in the FSP Smart Configurator
+(BSP tab → RA Common → C Runtime Initialization).
+Instead, wolfBoot copies the `.ram_code_from_flash` / `.data` sections and zeros `.bss`
+manually inside `hal_init()` → `copy_ram_sections()` (`hal/renesas-ra.c`).
+
+The FSP provides the indispensable clock and startup infrastructure (`SystemInit`),
+but RAM section initialisation and flash erase/write are handled by wolfBoot itself.
+
+### Direct FACI HP Flash Access (No FSP Flash Driver)
+
+wolfBoot accesses the RA6M4 code flash directly via FACI HP registers (`hal/renesas-ra.c`, `hal/renesas-ra.h`).
+**The FSP `g_flash0 Flash(r_flash_hp)` driver is NOT used** — do not add it to either project.
+
+Direct register access requires all flash erase/write functions to run from RAM (`RAMFUNCTION`).
+The `RAMFUNCTION` macro is defined in `wolfBoot/user_settings.h`:
+
+```c
+#define RAMFUNCTION \
+    __attribute__((used, noinline, section(".ram_code_from_flash"), long_call))
+```
+
+> **Important**: The `noinline` attribute is required. Without it, GCC `-O2` (`-finline-functions`)
+> can inline RAMFUNCTION bodies into flash-resident callers, causing a HardFault when code flash
+> is in P/E mode (instruction fetches from flash are prohibited during P/E).
+
+### wolfBoot Warm Start in app_RA
+
+When the application is launched by wolfBoot, wolfBoot's RAM functions occupy the lower part of RAM.
+The application's own RAM functions (`__ram_from_flash$$` section) must be copied to RAM
+**before** `SystemRuntimeInit()` calls `memcpy()` — otherwise `memcpy()` itself is not yet in place.
+
+This is handled by `wolfboot_pre_init()` in `app_RA/src/wolfboot_startup.c`, called from
+`R_BSP_WarmStart(BSP_WARM_START_RESET)` in `app_RA/src/hal_warmstart.c`.
+
+## 4. How to Build and Use
+
+### 1) Key Generation
+
+Build and install the key tools on your host (Linux, Windows, or macOS).
+See the wolfBoot user manual for toolchain prerequisites.
 
 ```
 $ cd <wolfBoot>
 $ export PATH=$PATH:<wolfBoot>/tools/keytools
-$ keygen --ecc256 -g ./pri-ecc256.der    # ECC256
-$ keygen --rsa2048 -g ./pri-rsa2048.der  # RSA2048
+$ keygen --rsa2048 -g ./pri-rsa2048.der
 ```
 
-The `keygen` tool generates a pair of private and public key with -g option.
-The private key is stored in the specified file.
-The public key is stored in a key store as a C source code in "src/keystore.c" so that it can be compiled and linked with wolfBoot.
-If you have an existing key pair, you can use -i option to import the public key to the store.
+The `keygen` tool writes the public key into `src/keystore.c` for linking with wolfBoot.
+Other supported algorithms: `--ed25519 --ed448 --ecc256 --ecc384 --ecc521 --rsa2048 --rsa3072 --rsa4096`
 
-You can specify various signature algorithms such as
+### 2) Build wolfBoot
 
-```les
---ed25519 --ed448 --ecc256 --ecc384 --ecc521 --rsa2048 --rsa3072 --rsa4096
+Open the project `IDE/Renesas/e2studio/RA6M4/wolfBoot` in e2studio and build.
+
+> **Note**: `configuration.xml` (FSP Smart Configurator project file) is not stored in the
+> repository. You must generate the FSP files (`ra_gen/`, `ra_cfg/`) using a `dummy_library`
+> project as described below.
+
+#### 2-1) Create `dummy_library` to Generate FSP Files
+
++ Click **File** → **New** → **RA C/C++ Project**
++ Select `EK-RA6M4` from the board drop-down list
++ Check **Static Library**
++ Select **No RTOS**. Click Next
++ Check **Bare Metal Minimal**. Click Finish
++ Open Smart Configurator by clicking `configuration.xml` in the project
++ Go to **BSP** tab → **RA Common** on the Properties page:
+  + Set **Main Stack Size (bytes)** to `0x2000`
+  + Set **Heap Size (bytes)** to `0x10000`
+  + Set **C Runtime Initialization** to `Disabled`
++ Save the `dummy_library` FSP configuration
++ Copy `configuration.xml` and `pincfg` from `dummy_library` into `wolfBoot`
++ Open Smart Configurator by clicking the copied `configuration.xml`
++ Click **Generate Project Content**
++ Build the `wolfBoot` project
+
+Key BSP settings configured above (`wolfBoot/ra_cfg/fsp_cfg/bsp/bsp_cfg.h`):
+
+|Setting|Value|Note|
+|:--|:--|:--|
+|`BSP_CFG_STACK_MAIN_BYTES`|`0x2000`|8 KB main stack|
+|`BSP_CFG_HEAP_BYTES`|`0x10000`|64 KB heap (wolfCrypt)|
+|`BSP_CFG_C_RUNTIME_INIT`|`0`|wolfBoot copies RAM sections manually in `hal_init()`|
+
+wolfBoot initialises the FACI HP directly; **no FSP flash stack (`g_flash0`) is required**.
+
+To enable debug output over UART (SCI7, P613=TXD7, J23 connector), edit `wolfBoot/user_settings.h`:
+```c
+#define DEBUG_UART
+#define PRINTF_ENABLED
 ```
 
-### 2) Compile wolfBoot
+#### 2-2) Modify wolfBoot hal_entry.c
 
-Open project under IDE/Renesas/e2studio/RA6M4/wolfBoot with e2Studio, and build the project. Project properties are preset for the demo.
+`wolfBoot/src/hal_entry.c` is **not stored in the repository** (Renesas copyright, FSP-generated).
+After FSP generates the file, replace the `/* TODO */` body with the `loader_main()` call:
 
-`PRINTF_ENABLED` is for debug information about partitions. Eliminate them for operational use.
+```c
+#include <stdint.h>
+#include "hal_data.h"
 
-#### 2-1) Create `dummy_library` Static Library
-+ Click File->New->`RA C/C++ Project`.
-+ Select `EK-RA6M4` from Drop-down list.
-+ Check `Static Library`.
-+ Select `No RTOS` from RTOS selection. Click Next.
-+ Check `Bare Metal Minimal`. Click Finish.
-+ Open Smart Configurator by clicking configuration.xml in the project
-+ Go to `BSP` tab and increase Main Stack Size under `RA Common` on Properties page, e.g. 0x2000
-+ Go to `BSP` tab and increase Heap Size under `RA Common` on Properties page, e.g. 0x10000
-+ Go to `Stacks` tab
-+ Add `SCE Protected Mode` stack from `New Stack` -> `Security`
-+ Add `g_flash0 Flash(r_flash_hp)` stack from  `New Stack` -> `Storage`
+void hal_entry(void)
+{
+    loader_main(); /* wolfBoot entry */
+#if BSP_TZ_SECURE_BUILD
+    R_BSP_NonSecureEnter();
+#endif
+}
+```
 
-Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
-|Property|Value|
-|:--|:--|
-|Data Flash Background Operation|Disabled|
+> **Important**: FSP regeneration (clicking **Generate Project Content**) may overwrite
+> `hal_entry.c`. If that happens, restore the `loader_main()` call manually.
+> Without it, wolfBoot will halt in `hal_entry()` without ever verifying or booting the application.
 
-+ Save `dummy_library` FSP configuration
-+ Copy <u>configuration.xml</u> and pincfg under `dummy_library` to `wolfBoot`
-+ Open Smart Configurator by clicking copied configuration.xml
-+ Click `Generate Project Content` on Smart Configurator
-+ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
-+ Build `wolfBoot` project
+### 3) Build the Sample Application
 
-### 3) Compile the sample application
+Open the project `IDE/Renesas/e2studio/RA6M4/app_RA` in e2studio and build.
 
-Open project under IDE/Renesas/e2studio/RA6M4/app_RA with e2Studio, and build the project.
-Project properties are preset for the demo.
+> **Note**: `configuration.xml` is not stored in the repository.
+> You must generate the FSP files using a `dummy_application` project as described below.
 
- #### 3-1). Prepare SEGGER_RTT for logging
-  + Download J-Link software from [Segger](https://www.segger.com/downloads/jlink)
-  + Choose `J-Link Software and Documentation Pack`
-  + Copy sample program files below from `Installed SEGGER` folder, `e.g C:\Program Files\SEGGER\JLink\Samples\RTT`, to /path/to/wolfBoot/IDE/Reenesas/e2studio/RA6M4/app_RA/src/SEGGER_RTT\
+#### 3-1) Create `dummy_application` to Generate FSP Files
 
-    SEGGER_RTT.c\
-    SEGGER_RTT.h\
-    SEGGER_RTT_Conf.h\
-    SEGGER_RTT_printf.c
-  + Open `SEGGER_RTT_Conf.h` and Set `SEGGER_RTT_MEMCPY_USE_BYTELOOP` to `1`
-  + To connect RTT block, you can configure RTT viewer configuration based on where RTT block is in map file
++ Click **File** → **New** → **RA C/C++ Project**
++ Select `EK-RA6M4` from the board drop-down list
++ Check **Executable**
++ Select **No RTOS**. Click Next
++ Check **Bare Metal Minimal**. Click Finish
++ Open Smart Configurator by clicking `configuration.xml` in the project
++ Go to **BSP** tab → **RA Common**: leave default settings (C Runtime Initialization = Enabled)
++ Save the `dummy_application` FSP configuration
++ Copy `configuration.xml` and `pincfg` from `dummy_application` into `app_RA`
++ Open Smart Configurator by clicking the copied `configuration.xml`
++ Click **Generate Project Content**
++ Build the `app_RA` project
 
-  e.g.[app_RA.map]
+#### 3-2) Application Linker Script
+
+`app_RA/script/fsp.ld` contains wolfBoot-specific overrides (already in the project):
+
+```ld
+// FLASH_START  = 0x00010200;   /* wolfBoot 64 KB + image header 512 B */
+// FLASH_LENGTH = 0x000EFE00;
+```
+
+Uncomment these two lines only if you need to run the app **standalone** (without wolfBoot).
+Leave them commented out for the normal wolfBoot-booted build.
+
+#### 3-3) Required Source Files in app_RA
+
+**Copy from the wolfBoot repository** into `app_RA/src/`:
+
+|File|Source in repo|Purpose|
+|:--|:--|:--|
+|`wolfboot_startup.c`|`IDE/Renesas/e2studio/RA6M4/app_RA/src/wolfboot_startup.c`|Defines `wolfboot_pre_init()` — copies `__ram_from_flash$$` to RAM before `SystemRuntimeInit` runs|
+|`app_RA.c`|`IDE/Renesas/e2studio/RA6M4/app_RA/src/app_RA.c`|Main application logic|
+
+**Modify the FSP-generated `hal_entry.c`** (Renesas copyright, not stored in repo):
+
+After FSP generates `hal_entry.c`, add the following:
+
+1. At the top of the file, after `#include "hal_data.h"`, add:
+
+```c
+#include <stdint.h>
+
+/* Enable flash P/E (required for wolfBoot_success() when running standalone). */
+#define R_SYSTEM_FWEPROR    (*(volatile uint8_t *)0x4001E416UL)
+#define FWEPROR_FLWE_ENABLE (0x01U)
+
+void app_RA(void);
+```
+
+2. Inside `hal_entry()`, replace the `/* TODO */` comment with:
+
+```c
+void hal_entry(void)
+{
+    R_SYSTEM_FWEPROR = FWEPROR_FLWE_ENABLE;   /* <-- add: enable code flash P/E */
+    app_RA();                                   /* <-- add: call application     */
+#if BSP_TZ_SECURE_BUILD
+    R_BSP_NonSecureEnter();
+#endif
+}
+```
+
+**Modify the FSP-generated `hal_warmstart.c`** (Renesas copyright, not stored in repo):
+
+After FSP generates `hal_warmstart.c`, add the following two lines manually:
+
+1. After `FSP_CPP_FOOTER`, add the forward declaration:
+
+```c
+/* wolfBoot-specific early startup — see wolfboot_startup.c */
+extern void wolfboot_pre_init(void);
+```
+
+2. Inside the `BSP_WARM_START_RESET` block, call `wolfboot_pre_init()`:
+
+```c
+void R_BSP_WarmStart (bsp_warm_start_event_t event)
+{
+    if (BSP_WARM_START_RESET == event)
+    {
+        /* Copy APP RAM functions before SystemRuntimeInit runs.
+         * Required when booted by wolfBoot — see wolfboot_startup.c for details. */
+        wolfboot_pre_init();   /* <-- add this line */
+    }
+
+    if (BSP_WARM_START_POST_C == event)
+    {
+        R_IOPORT_Open(&IOPORT_CFG_CTRL, &IOPORT_CFG_NAME);
+    }
+}
+```
+
+**Why this is necessary**: wolfBoot's RAM functions occupy the lower RAM area when the app starts.
+The app's own RAM functions (`__ram_from_flash$$` section) must be copied to their correct VMA
+addresses *before* `SystemRuntimeInit()` calls `memcpy()` — because `memcpy()` itself is one
+of those RAM functions. `wolfboot_pre_init()` performs this copy using a plain word loop that
+requires no library functions.
+
+#### 3-4) SEGGER RTT for Logging
+
+  + Download J-Link Software from [SEGGER](https://www.segger.com/downloads/jlink) and choose `J-Link Software and Documentation Pack`
+  + Copy the following files from `<JLink install>/Samples/RTT/` to `app_RA/src/SEGGER_RTT/`:
 
     ```
-    .bss._SEGGER_RTT
-                0x2000094c       0xa8 ./src/SEGGER_RTT/SEGGER_RTT.o
-                0x2000094c                _SEGGER_RTT
-    ````
+    SEGGER_RTT.c
+    SEGGER_RTT.h
+    SEGGER_RTT_Conf.h
+    SEGGER_RTT_printf.c
+    ```
 
-    you can specify "RTT control block" to 0x2000094c by Address
-      OR
-    you can specify "RTT control block" to 0x20000000 0x1000 by Search Range
+  + Open `SEGGER_RTT_Conf.h` and set `SEGGER_RTT_MEMCPY_USE_BYTELOOP` to `1`
 
- #### 3-2). Create `dummy_application`
-+ Click File->New->`RA C/C++ Project`.
-+ Select `EK-RA6M4` from Drop-down list.
-+ Check `Executable`.
-+ Select `No RTOS` from RTOS selection. Click Next.
-+ Check `Bare Metal Minimal`. Click Finish.
-+ Go to `BSP` tab and Add `g_flash0 Flash(r_flash_hp)` stack from  `New Stack` -> `Storage`
+  + To find the RTT Control Block address, search for `_SEGGER_RTT` in the build's `.map` file after each build:
 
-Modify `g_flash0 Flash(r_flash_hp)` properties as follows:
-|Property|Value|
-|:--|:--|
-|Data Flash Background Operation|Disabled|
+    ```
+    grep _SEGGER_RTT app_RA/Debug/app_RA.map
+    # Example output:
+    #   0x20000eb0   _SEGGER_RTT
+    ```
 
-+ Save `dummy_application` FSP configuration
-+ Copy <u>configuration.xml</u> and pincfg under `dummy_application` to `app_RA`
-+ Open Smart Configurator by clicking copied configuration.xml
-+ Click `Generate Project Content` on Smart Configurator
-+ Set `BSP_FEATURE_FLASH_SUPPORTS_ACCESS_WINDOW` to 1)
-+ Build `app_RA` project
+    In J-Link RTT Viewer, set **RTT Control Block** to **Address** `0x20000eb0`
+    (the exact address changes per build and optimization level).
 
-Code Origin and entry point is "0x00010200". app_RA.elf is generated under Debug.
+    Alternatively, use **Search Range** `0x20000000 0x10000` for automatic detection.
 
-### 4) Generate Signature for app V1
-You can derive the binary file (app_RA.bin) using objcopy command as follows:
+> **Note on optimization**: The RTT Control Block address shifts with `-O2` vs `-O0`/-O1`
+> because code size affects `.bss` layout. Always re-check the map file after changing
+> the optimization level.
 
-```
-$ aarch64-none-elf-objcopy.exe -O binary -j .text -j .data app_RA.elf app_RA.bin
-```
+#### 3-5) Optimization Level
 
-"sign" command under tools/keytools generates a signature for the binary with a specified version.
-It generates a file contain a partition header and application image.
-The partition header contain generated signature and other control fields.
-Output file name is made up from the input file name and version like app_RenesasRx01_v1.0_signed.bin.
+The default build uses `-O0` or `-O1`. If you set `-O2`:
 
-```
-$ sign --ecc256 app_RA.bin ../../../../../pri-ecc256.der 1.0
-$ sign --rsa2048 app_RA.bin ../../../../../pri-rsa2048.der 1.0
-wolfBoot KeyTools (Compiled C version)
-wolfBoot version 10E0000
-Update type:          Firmware
-Input image:          app_RA.bin
-Selected cipher:      RSA2048
-Selected hash  :      SHA256
-Public key:           ./pri-rsa2048.der
-Output  image:        app_RA_v1.0_signed.bin
-Target partition id : 1
-Calculating SHA256 digest...
-Signing the digest...
-Output image(s) successfully created.
+- Ensure `RAMFUNCTION` in `wolfBoot/user_settings.h` includes `noinline`:
+  ```c
+  #define RAMFUNCTION \
+      __attribute__((used, noinline, section(".ram_code_from_flash"), long_call))
+  ```
+- Re-check the RTT Control Block address in the `.map` file.
+
+### 4) Convert ELF to Binary
+
+#### 4-1) Using the provided script (recommended)
+
+`IDE/Renesas/e2studio/RA6M4/elf2hex.sh` automates steps 4–5 for both v1 and v2.
+Run it from WSL or an equivalent Bash environment:
+
+```bash
+$ cd IDE/Renesas/e2studio/RA6M4
+$ ./elf2hex.sh 0 <wolfBoot_dir> <arm-none-eabi-toolchain-bin-dir>
+# e.g.:
+$ ./elf2hex.sh 0 /mnt/c/workspace/wolfBoot /mnt/c/toolchain/gcc-arm/bin
 ```
 
-### 5) Download the app V1
+This produces `app_RA_v1.0_signed.hex` and `app_RA_v2.0_signed.hex` ready for Renesas Flash Programmer.
 
-You can convert the binary file to hex format and download it to the board by Flash Programmer. The partition starts at "0x00010000".
+#### 4-2) Manual Steps
 
+The FSP linker uses `$$`-delimited section names. Use `arm-none-eabi-objcopy` with the
+following sections to produce a flat binary:
+
+```bash
+$ arm-none-eabi-objcopy -O binary --gap-fill=0xff \
+    -j '__flash_vectors$$'       \
+    -j '__flash_readonly$$'      \
+    -j '__flash_ctor$$'          \
+    -j '__flash_preinit_array$$' \
+    -j '__flash_.got$$'          \
+    -j '__flash_init_array$$'    \
+    -j '__flash_fini_array$$'    \
+    -j '__flash_arm.extab$$'     \
+    -j '__flash_arm.exidx$$'     \
+    -j '__ram_from_flash$$'      \
+    app_RA.elf app_RA.bin
 ```
-$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00010000 app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
+
+> **Note**: Shell quoting of `$$` is required on Bash. Wrap each section name in
+> single quotes when running interactively, or use the script above.
+
+### 5) Sign and Generate Hex
+
+```bash
+$ cd <wolfBoot>
+# Sign version 1
+$ sign --rsa2048 app_RA.bin ./pri-rsa2048.der 1.0
+# Output: app_RA_v1.0_signed.bin
+
+# Convert to SREC (Primary partition starts at 0x00010000)
+$ arm-none-eabi-objcopy -I binary -O srec \
+    --change-addresses=0x00010000 \
+    app_RA_v1.0_signed.bin app_RA_v1.0_signed.hex
 ```
 
-### 6) Execute initial boot
+### 6) Download app V1 and Execute Initial Boot
 
-Now, you can download and start wolfBoot program by e2Studio debugger.
-After starting the program, you can see the partition information as follows.
-If the boot program succeeds integrity and authenticity check, it initiate the application V1. To initially run `wolfBoot` project,
-1.) Right-Click the Project name.
-2.) Select `Debug As` -> `Renesas GDB Hardware Debugging`
-3.) Select `J-Link ARM`. Click OK.
-4.) Select `R7FA6M4AF`. Click OK.
+Flash `app_RA_v1.0_signed.hex` to the board using Renesas Flash Programmer (partition base `0x00010000`).
+
+Then start wolfBoot via e2studio debugger:
+1. Right-click the **wolfBoot** project → **Debug As** → **Renesas GDB Hardware Debugging**
+2. Select **J-Link ARM** → OK
+3. Select **R7FA6M4AF** → OK
+
+Expected RTT output:
 
 ```
 | ------------------------------------------------------------------- |
 | Renesas RA User Application in BOOT partition started by wolfBoot   |
 | ------------------------------------------------------------------- |
 
-
-WOLFBOOT_PARTITION_SIZE:           0x00060000
+WOLFBOOT_PARTITION_SIZE:           0x00070000
 WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00010000
 WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00080000
 
@@ -229,70 +415,60 @@ Application Entry Address:         0x00010200
 Magic:    WOLF
 Version:  01
 Status:   FF
-Trailer Magic:
+Trailer Mgc:
 
 === Update Partition[00080000] ===
 Magic:
 Version:  00
 Status:   FF
-Trailer Magic:
+Trailer Mgc:
 Current Firmware Version : 1
 
 Calling wolfBoot_success()
-
-```
-
-The application is calling wolfBoot_success() to set boot partition state.
-
-```
 Called wolfBoot_success()
 === Boot Partition[00010000] ===
 Magic:    WOLF
 Version:  01
 Status:   00
-Trailer Magic: BOOT
+Trailer Mgc: BOOT
 
 === Update Partition[00080000] ===
 Magic:
 Version:  00
 Status:   FF
-Trailer Magic:
+Trailer Mgc:
 ```
 
-You can see the state is Success("00") and Trailer Magic number becomes "BOOT".
-You can also see flashing each LED light in 1 second. Notable things about V1 application,
-it will also call wolfBoot_update_trigger() so that it tells wolfBoot that new version exists.
-We are going to generate and download V2 application into "Update partition".
+State `00` = Success; Trailer Magic `BOOT` confirms the partition is marked good.
+V1 also calls `wolfBoot_update_trigger()` so wolfBoot will look for a V2 image.
+LEDs blink in sequence (reverse order for V1).
 
-### 7) Generate Signed app V2 and download it
+### 7) Sign and Download app V2
 
-Similar to V1, you can sign and generate a binary of V2. The update partition starts at "0x00080000".
-You can download it by the flash programmer.
+```bash
+# Sign version 2
+$ sign --rsa2048 app_RA.bin ./pri-rsa2048.der 2.0
 
-Updtate partition:
--change-addresses=0x00080000
-
-```
-$ sign --ecc256 app_RA.bin ../../../../../pri-ecc256.der 2.0
-$ sign --rsa2048 app_RA.bin ../../../../../pri-rsa2048.der 2.0
-$ aarch64-none-elf-objcopy.exe -I binary -O srec --change-addresses=0x00080000 app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
+# Convert to SREC (Update partition starts at 0x00080000)
+$ arm-none-eabi-objcopy -I binary -O srec \
+    --change-addresses=0x00080000 \
+    app_RA_v2.0_signed.bin app_RA_v2.0_signed.hex
 ```
 
+Flash `app_RA_v2.0_signed.hex` to the board at base `0x00080000`.
 
-### 8) Re-boot and secure update to V2
+### 8) Re-boot and Secure Update to V2
 
-The boot program checks integrity and authenticity of V2, swap the partition safely and initiates V2.
-You will see following message after the partition
-information. You can also see flashing each LED light in 5 second.
+Reset the board (or re-run the debugger). wolfBoot verifies V2, swaps the partitions, and boots V2.
+
+Expected RTT output:
 
 ```
-
 | ------------------------------------------------------------------- |
 | Renesas RA User Application in BOOT partition started by wolfBoot   |
 | ------------------------------------------------------------------- |
 
-
-WOLFBOOT_PARTITION_SIZE:           0x00060000
+WOLFBOOT_PARTITION_SIZE:           0x00070000
 WOLFBOOT_PARTITION_BOOT_ADDRESS:   0x00010000
 WOLFBOOT_PARTITION_UPDATE_ADDRESS: 0x00080000
 
@@ -302,13 +478,13 @@ Application Entry Address:         0x00010200
 Magic:    WOLF
 Version:  02
 Status:   00
-Trailer Magic: BOOT
+Trailer Mgc: BOOT
 
 === Update Partition[00080000] ===
 Magic:    WOLF
 Version:  01
 Status:   FF
-Trailer Magic:
+Trailer Mgc:
 Current Firmware Version : 2
 
 Calling wolfBoot_success()
@@ -317,14 +493,14 @@ Called wolfBoot_success()
 Magic:    WOLF
 Version:  02
 Status:   00
-Trailer Magic: BOOT
+Trailer Mgc: BOOT
 
 === Update Partition[00080000] ===
 Magic:    WOLF
 Version:  01
 Status:   FF
-Trailer Magic:
+Trailer Mgc:
 ```
 
-You can see "Current Firmware Version : 2". The state is Success("00") and Tailer Magic number becomes "BOOT".
-You can also see flashing each LED light in 5 second at this new version.
+`Current Firmware Version : 2` confirms the secure update succeeded.
+LEDs blink in forward order for V2.

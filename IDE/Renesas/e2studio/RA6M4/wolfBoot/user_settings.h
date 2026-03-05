@@ -4,7 +4,7 @@
  * Enabled via WOLFSSL_USER_SETTINGS.
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -23,10 +23,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#ifndef H_USER_SETTINGS_
-#define H_USER_SETTINGS_
+#ifndef _WOLFBOOT_USER_SETTINGS_H_
+#define _WOLFBOOT_USER_SETTINGS_H_
+
+/* RAMFUNCTION: use FSP-managed .ram_code_from_flash section.
+ * fsp_gen.ld places this in RAM (AT > FLASH) and the FSP BSP
+ * startup copies it automatically — no extra linker changes needed.
+ * This must be defined before wolfboot.h to override its default. */
+#define RAMFUNCTION \
+    __attribute__((used, noinline,\
+				section(".ram_code_from_flash"), long_call))
 
 #define WOLFBOOT_LOADER_MAIN
+
+/* Debug UART: define both to enable wolfBoot_printf via uart_write */
+/* #define DEBUG_UART    */
+/* #define PRINTF_ENABLED */
 
 /* For SCE use, please enable the following line. */
 /* #define WOLFBOOT_RENESAS_SCEPROTECT */
@@ -42,9 +54,6 @@
 
 #define WOLFBOOT_FIXED_PARTITIONS
 
-#define VECTOR_SP            ((uint32_t *) (0x00000))
-#define VECTOR_Reset_Handler ((uint32_t *) (0x10204))
-
 #ifdef WOLFBOOT_RENESAS_SCEPROTECT
 #   define WOLFSSL_RENESAS_SCEPROTECT_CRYPTONLY
 #   define WOLFBOOT_SMALL_STACK
@@ -53,6 +62,7 @@
 #   define SCE_ID 7890
 #   undef  VECTOR_Reset_Handler
 #   define VECTOR_Reset_Handler ((uint32_t *)(0x20204))
+...
 #endif
 
 #ifdef WOLFBOOT_DUALBOOT
@@ -305,5 +315,7 @@
 #   define WOLFSSL_SMALL_STACK
 #endif
 
-
+#define NVM_FLASH_WRITEONCE
+/*#define DEBUG_UART*/
+/*#define PRINTF_ENABLED*/
 #endif /* !H_USER_SETTINGS_ */

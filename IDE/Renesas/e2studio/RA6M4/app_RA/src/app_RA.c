@@ -2,7 +2,7 @@
  *
  * Test bare-metal application.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -29,49 +29,83 @@
 #include "hal.h"
 #include "hal_data.h"
 #include "wolfboot/wolfboot.h"
+#include "image.h"
 
 extern bsp_leds_t g_bsp_leds;
 
 void R_BSP_WarmStart(bsp_warm_start_event_t event);
 int myprintf(const char * sFormat, ...);
 
-static void blink(int interval)
+static const char* state2str(uint8_t s)
 {
+    switch(s) {
+        case IMG_STATE_NEW: return "New";
+        case IMG_STATE_UPDATING: return "Updating";
+        case IMG_STATE_TESTING: return "Testing";
+        case IMG_STATE_SUCCESS: return "Success";
+        default: return "Unknown";
+    }
+}
+
+static const char* upFlag2str(uint8_t s)
+{
+    switch(s) {
+        case SECT_FLAG_NEW: return "New";
+        case SECT_FLAG_SWAPPING: return "Swapping";
+        case SECT_FLAG_BACKUP: return "Backup";
+        case SECT_FLAG_UPDATED: return "Updated";
+        default: return "Unknown";
+    }
+}
+
+static void blink(int order)
+{
+
+	int start, end, step;
+    int i = 0;
 
     /* LED type structure */
     bsp_leds_t leds = g_bsp_leds;
 
 #if BSP_TZ_SECURE_BUILD
-
     /* Enter non-secure code */
     R_BSP_NonSecureEnter();
 #endif
 
     /* Define the units to be used with the software delay function */
-    const bsp_delay_units_t bsp_delay_units = BSP_DELAY_UNITS_MILLISECONDS * interval;
-    /* Calculate the delay in terms of bsp_delay_units */
-    const uint32_t delay = bsp_delay_units / 2;
-
+    const bsp_delay_units_t bsp_delay_units = BSP_DELAY_UNITS_MILLISECONDS;
+    const uint32_t freq = 1;
+    /* Calculate the delay: 500ms * interval per LED write */
+    const uint32_t delay = (uint32_t)(bsp_delay_units / (freq * 2));
+    
     /* Holds level to set for pins */
     bsp_io_level_t pin_level = BSP_IO_LEVEL_LOW;
+    start = 0;
+    end = leds.led_count;
+    step = (order == -1)? -1 : 1;
+
+    if (order == -1) {
+    	start = end - 1;
+    	end = -1;
+    }
 
     while (1)
     {
         /* Enable access to the PFS registers */
         R_BSP_PinAccessEnable();
 
-
         /* Update each LEDs*/
-        for (uint32_t i = 0; i < leds.led_count; i++)
+        i = start;
+        for (;;)
         {
+        	if (i == end) break;
             /* Get pin to toggle */
             uint32_t pin = leds.p_leds[i];
-
             /* Write to this pin */
             R_BSP_PinWrite((bsp_io_port_pin_t) pin, pin_level);
 
-            /* Delay */
             R_BSP_SoftwareDelay(delay, bsp_delay_units);
+            i += step;
         }
 
         /* Protect PFS registers */
@@ -84,6 +118,8 @@ static void blink(int interval)
         else {
             pin_level = BSP_IO_LEVEL_LOW;
         }
+        /* Delay */
+        R_BSP_SoftwareDelay(delay, bsp_delay_units);
     }
 }
 
@@ -96,15 +132,20 @@ static void printPart(uint8_t *part)
     uint8_t  *magic;
     uint8_t  state;
     uint32_t ver;
+    uint8_t  upflag;
 
     magic = part;
     myprintf("Magic:    %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
     ver = wolfBoot_get_blob_version(part);
     myprintf("Version:  %02x\n", ver);
-    state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
-    myprintf("Status:   %02x\n", state);
+    wolfBoot_get_partition_state(0, &state);
+    myprintf("Status:   %02x(%s)\n", state, state2str(state));
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
-    myprintf("Trailer Magic: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    if (magic[0] != 0x42)
+        magic = part + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t);
+    myprintf("Trailer Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    wolfBoot_get_update_sector_flag(0, &upflag);
+    myprintf("Update flag: %02x (%s)\n", upflag, upFlag2str(upflag));
 
 #ifdef WOLFBOOT_DEBUG_PARTION
     v = (uint32_t *)part;
@@ -130,6 +171,7 @@ void app_RA(void)
     uint8_t firmware_version = 0;
 
     R_BSP_WarmStart(BSP_WARM_START_POST_C);
+    SystemCoreClockUpdate();
 
     hal_init();
 
@@ -175,13 +217,13 @@ void app_RA(void)
 
     if (firmware_version == 1) {
         wolfBoot_update_trigger();
-        blink(1);
+        blink(-1);
     }
     else if (firmware_version == 2) {
-        blink(5);
+        blink(1);
     }
     /* busy wait */
 busy_idle:
     /* flashing LEDs in busy */
-    blink(1);
+    blink(-1);
 }
