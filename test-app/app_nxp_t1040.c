@@ -28,7 +28,7 @@ static const char* hex_lut = "0123456789abcdef";
 void main(void)
 {
     int i = 0;
-    int j = 0;
+    volatile int j = 0;
     int k = 0;
     char snum[8];
 

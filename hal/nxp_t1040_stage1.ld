@@ -2,34 +2,49 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-/* Boot ROM out of reset mapped to 0xF7FFF000 */
+/* Boot ROM out of reset mapped to 0xEFFFF000 (top of 128MB NOR) */
 BASE_ADDR = @WOLFBOOT_STAGE1_FLASH_ADDR@;
 
 LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
 
 /* Boot initialization code */
-BOOTSTRAP_TLB = 0xF7FFF000;
+BOOTSTRAP_TLB = 0xEFFFF000;
 
 /* Entry point where RCW directs code to execute from */
-BOOTSTRAP_ENTRY = 0xF7FFFFFC;
+BOOTSTRAP_ENTRY = 0xEFFFFFFC;
 
 MEMORY
 {
     /* Boot Location */
     FLASH (rx) : ORIGIN = BASE_ADDR, LENGTH = LOADER_STAGE1_SIZE
 
-    /* L1 SRAM - 16KB */
-    L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
+    /* L1 locked dcache as initial stack - 16KB */
+    L1RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x4000
 
-    /* Platform SRAM - 160KB */
-    PSRAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+    /* CPC SRAM - 256KB (CoreNet Platform Cache configured as SRAM) */
+    CPCSRAM (rwx) : ORIGIN = 0xFDFE0000, LENGTH = 0x40000
 
-    /* DDR - 8GB: Start at 16MB to avoid using 0x0 (NULL) addresses */
+    /* DDR - 8GB physical, 32-bit addressing limits window to <2GB.
+     * Start at 16MB to avoid using 0x0 (NULL) addresses */
     DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x7FFFFFFF - 0x1000000
 }
 
 SECTIONS
 {
+    /* .text is placed first via "> FLASH" which allocates from ORIGIN(FLASH).
+     * .boot and .reset use explicit addresses at end-of-flash and do NOT
+     * consume FLASH region space (no "> FLASH" directive). */
+    .text :
+    {
+        _start_vector = .;
+        KEEP(*(.isr_vector))
+        . = ALIGN(256);
+        _start_text = .;
+        *(.text*)
+        *(.rodata*)
+        *(.sdata*)
+    } > FLASH
+
     /* boot code boot_ppc_start.S for _reset */
     .boot BOOTSTRAP_TLB :
     {
@@ -43,17 +58,6 @@ SECTIONS
         KEEP(*(.reset))
     } = 0x4
     . = ALIGN(4);
-
-    .text :
-    {
-        _start_vector = .;
-        KEEP(*(.isr_vector))
-        . = ALIGN(256);
-        _start_text = .;
-        *(.text*)
-        *(.rodata*)
-        *(.sdata*)
-    } > FLASH
 
     /* Read-only sections, merged into text segment: */
     .interp         : { *(.interp) }
@@ -105,6 +109,8 @@ SECTIONS
 
 }
 
-/* Platform SRAM heap/stack */
-PROVIDE(_start_heap = ORIGIN(PSRAM));
-PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM)));
+/* CPC SRAM heap, L1 locked dcache stack */
+PROVIDE(_start_heap = ORIGIN(CPCSRAM));
+PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)));
+
+ASSERT(_stored_data <= BOOTSTRAP_TLB, ".text/.reloc overflow into bootstrap region")

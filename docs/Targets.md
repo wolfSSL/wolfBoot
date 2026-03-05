@@ -3277,9 +3277,9 @@ Reset Configuration Word (RCW):
 00000020: 00000000 00000000 00000000 00030810
 00000030: 00000000 0342580f 00000000 00000000
 
-Flash is NOR on IFC CS0 (0x0_E800_0000) 256MB.
+Flash is NOR on IFC CS0 (0x0_E800_0000) 128MB (Micron JS28F00AM29EWHA, 16-bit, AMD CFI).
 
-Default NOR Flash Memory Layout (256MB) (128KB block, 1K page)
+Default NOR Flash Memory Layout (128MB) (128KB block, 1K page)
 
 | Description       | Address    | Size                 |
 | ----------------- | ---------- | -------------------- |
@@ -3289,13 +3289,13 @@ Default NOR Flash Memory Layout (256MB) (128KB block, 1K page)
 | Free              | 0xE8100000 | 0x00700000 (  7 MB)  |
 | FDT (Primary)     | 0xE8800000 | 0x00020000 (128 KB)  |
 | FDT (Update)      | 0xE8820000 | 0x00020000 (128 KB)  |
-| Free              | 0xE8840000 | 0x0D7C0000 (~200 MB) |
-| Application (OS)  | 0xF6000000 | 0x00F00000 ( 15 MB)  |
-| Update (OS)       | 0xF6F00000 | 0x00F00000 ( 15 MB)  |
-| QUICC             | 0xF7E00000 | 0x00100000 (  1 MB)  |
-| DPAA (FMAN)       | 0xF7F00000 | 0x00020000 (128 KB)  |
-| wolfBoot          | 0xF7F40000 | 0x000BC000 (752 KB)  |
-| wolfBoot Stage 1  | 0xF7FFC000 | 0x00004000 ( 16 KB)  |
+| Free              | 0xE8840000 | 0x057C0000 ( 87 MB)  |
+| Application (OS)  | 0xEE000000 | 0x00F00000 ( 15 MB)  |
+| Update (OS)       | 0xEEF00000 | 0x00F00000 ( 15 MB)  |
+| QUICC             | 0xEFE00000 | 0x00100000 (  1 MB)  |
+| DPAA (FMAN)       | 0xEFF00000 | 0x00020000 (128 KB)  |
+| wolfBoot          | 0xEFF40000 | 0x000BC000 (752 KB)  |
+| wolfBoot Stage 1  | 0xEFFFC000 | 0x00004000 ( 16 KB)  |
 
 QE: uploading microcode 'Microcode for T1040 r1.0' version 0.0.1
 
@@ -3336,11 +3336,11 @@ If getting errors with keystore then you can reset things using `make distclean`
 ./tools/bin-assemble/bin-assemble factory_custom.bin \
     0xE8000000 RCW.bin \
     0xE8020000 custom.dtb \
-    0xF6000000 custom_v1_signed.bin \
-    0xF7E00000 iram_Type_A_T1040_r1.0.bin \
-    0xF7F00000 fsl_fman_ucode_t1040.bin \
-    0xF7F40000 wolfboot.bin \
-    0xF7FFC000 stage1/loader_stage1.bin
+    0xEE000000 custom_v1_signed.bin \
+    0xEFE00000 iram_Type_A_T1040_r1.0.bin \
+    0xEFF00000 fsl_fman_ucode_t1040.bin \
+    0xEFF40000 wolfboot.bin \
+    0xEFFFC000 stage1/loader_stage1.bin
 ```
 
 Flash factory_custom.bin to NOR base 0xE800_0000

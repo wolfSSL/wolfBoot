@@ -30,6 +30,20 @@ MEMORY
 
 SECTIONS
 {
+    /* .text is placed first via "> FLASH" which allocates from ORIGIN(FLASH).
+     * .boot and .reset use explicit addresses at end-of-flash and do NOT
+     * consume FLASH region space (no "> FLASH" directive). */
+    .text :
+    {
+        _start_vector = .;
+        KEEP(*(.isr_vector))
+        . = ALIGN(256);
+        _start_text = .;
+        *(.text*)
+        *(.rodata*)
+        *(.sdata*)
+    } > FLASH
+
     /* boot code boot_ppc_start.S for _reset */
     .boot BOOTSTRAP_TLB :
     {
@@ -43,17 +57,6 @@ SECTIONS
         KEEP(*(.reset))
     } = 0x4
     . = ALIGN(4);
-
-    .text :
-    {
-        _start_vector = .;
-        KEEP(*(.isr_vector))
-        . = ALIGN(256);
-        _start_text = .;
-        *(.text*)
-        *(.rodata*)
-        *(.sdata*)
-    } > FLASH
 
     /* Read-only sections, merged into text segment: */
     .interp         : { *(.interp) }
@@ -108,3 +111,5 @@ SECTIONS
 /* Platform SRAM heap/stack */
 PROVIDE(_start_heap = ORIGIN(PSRAM));
 PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM)));
+
+ASSERT(_stored_data <= BOOTSTRAP_TLB, ".text/.reloc overflow into bootstrap region")

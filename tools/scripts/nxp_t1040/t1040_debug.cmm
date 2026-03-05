@@ -1,0 +1,247 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T1040 wolfBoot Debug Script
+; @Description:
+;   Brings up the T1040, loads wolfBoot ELF symbols, and sets breakpoints
+;   for source-level debugging. Stage1 runs XIP from NOR flash, then loads
+;   wolfBoot to DDR at 0x7FF00000 for execution.
+; @Chip: T1040
+; Based on demo scripts from Lauterbach
+; ------------------------------------------------------------------------------
+;
+; Prerequisites:
+;   - wolfBoot must already be flashed to NOR (use t1040_flash.cmm)
+;   - wolfboot.elf must be built with debug symbols (DEBUG=1 recommended)
+;
+; Boot flow:
+;   1. Reset vector (0xEFFFFFFC) -> Stage1 bootstrap TLB (0xEFFFF000)
+;   2. Stage1 (0xEFFFC000 XIP) -> sets up DDR, copies wolfBoot to DDR
+;   3. wolfBoot runs from DDR (0x7FF00000)
+; ------------------------------------------------------------------------------
+
+; Base directory for wolfBoot build output (adjust to match your build path)
+&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+
+PRINT "========================================"
+PRINT "T1040 wolfBoot Debug Session"
+PRINT "========================================"
+PRINT ""
+
+; Reset everything
+RESet
+SYStem.RESet
+
+SYStem.BdmClock 15.MHz
+SYStem.CPU T1040
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE ON
+SYStem.Option.IMASKASM ON
+
+; Use RCW override to bring up the system in a controlled state.
+; This halts the CPU before any flash code executes.
+PRINT "Bringing up system with RCW override..."
+SYStem.Mode.Prepare
+
+SYStem.Option.HRCWOVerRide ON
+
+; RCW values (T1040D4RDB, extracted from factory flash)
+Data.Set DBG:0x01000000  0x0c18000e
+Data.Set DBG:0x01000001  0x0e000000
+Data.Set DBG:0x01000002  0x00000000
+Data.Set DBG:0x01000003  0x00000000
+Data.Set DBG:0x01000004  0x66000002
+Data.Set DBG:0x01000005  0x40000002
+Data.Set DBG:0x01000006  0xec027000
+Data.Set DBG:0x01000007  0x01000000
+Data.Set DBG:0x01000008  0x00000000
+Data.Set DBG:0x01000009  0x00000000
+Data.Set DBG:0x0100000A  0x00000000
+Data.Set DBG:0x0100000B  0x00030810
+Data.Set DBG:0x0100000C  0x00000000
+Data.Set DBG:0x0100000D  0x0342580f
+Data.Set DBG:0x0100000E  0x00000000
+Data.Set DBG:0x0100000F  0x00000000
+
+SYStem.Up
+
+SYStem.Option.HRCWOVerRide OFF
+
+PRINT "System up (CPU halted)"
+
+; Allow non-intrusive run-time memory access
+SYStem.MemAccess CPU
+
+; NOTE: Keep CCSRBAR at default 0xFE000000 to match wolfBoot.
+; wolfBoot uses CCSRBAR_DEF = 0xFE000000 in hal/nxp_ppc.h.
+; Do NOT relocate CCSRBAR here.
+
+; Set up LAW0 for CCSR at 0xFE000000 (16 MB)
+; LAWAR = ENABLE(0x80000000) | TRGT_CORENET(0x1E<<20) | SIZE_16MB(0x17)
+PRINT "Setting up LAW for CCSR access..."
+Data.Set ANC:IOBASE()+0x00C00 %Long %BE 0x00000000  ; LAWBARH0 = 0
+Data.Set ANC:IOBASE()+0x00C04 %Long %BE 0xFE000000  ; LAWBARL0 = 0xFE000000
+Data.Set ANC:IOBASE()+0x00C08 %Long %BE 0x81E00017  ; LAWAR0 = enable|CORENET|16 MB
+
+; Set up LAW1 for IFC NOR Flash at 0xE8000000 (128 MB)
+; LAWBARH=0 matches what stage1 writes (32-bit physical addresses).
+; LAWAR = ENABLE(0x80000000) | TRGT_IFC(0x1F<<20) | SIZE_128MB(0x1A)
+PRINT "Setting up LAW for flash access..."
+Data.Set ANC:IOBASE()+0x00C10 %Long %BE 0x00000000  ; LAWBARH1 = 0 (32-bit)
+Data.Set ANC:IOBASE()+0x00C14 %Long %BE 0xE8000000  ; LAWBARL1 = 0xE8000000
+Data.Set ANC:IOBASE()+0x00C18 %Long %BE 0x81F0001A  ; LAWAR1 = enable|IFC|128 MB
+
+; TLB for CCSR: Entry 1, 0xFE000000, 16 MB
+; MAS1: V=1(0x80000000), IPROT=1(0x40000000), TSIZE=7 (16 MB) -> 0x700
+; MAS2: EPN=0xFE000000, I|G=0x0A
+; MAS3: RPN=0xFE000000, SX|SW|SR=0x15
+MMU.TLB1.Set 1. 0xC0000700 0xFE00000A 0xFE000015 0x00000000 0x0
+
+; TLB for Flash: Entry 2, 0xE8000000, 256 MB
+; e5500 has no 128MB page size (64MB->256MB), so use 256MB to cover 128MB NOR
+; MAS1: V=1, IPROT=1, TSIZE=9 (256 MB on e5500) -> 0x900
+; MAS2: EPN=0xE8000000 (auto-aligns to 256MB boundary 0xE0000000), I|G=0x0A
+; MAS3: RPN=0xE8000000, SX|SW|SR=0x15
+MMU.TLB1.Set 2. 0xC0000900 0xE800000A 0xE8000015 0x00000000 0x0
+
+; TLB for DDR: Entry 3, 0x00000000, 1 GB (for wolfBoot running from DDR)
+; MAS1: V=1, IPROT=1, TSIZE=10 (1 GB) -> 0xA00
+; MAS2: EPN=0x00000000, M=0x04 (memory coherence)
+; MAS3: RPN=0x00000000, SX|SW|SR=0x15
+MMU.TLB1.Set 3. 0xC0000A00 0x00000004 0x00000015 0x00000000 0x0
+
+PRINT "CCSR (0xFE000000), Flash (0xE8000000), DDR (0x00000000) configured"
+
+; Verify flash is accessible - check for RCW preamble
+&rcw_preamble=Data.Long(D:0xE8000000)
+PRINT "RCW preamble at 0xE8000000: &rcw_preamble"
+IF &rcw_preamble!=0xAA55AA55
+(
+  PRINT %WARNING "WARNING: Expected RCW preamble 0xAA55AA55, got &rcw_preamble"
+  PRINT "         Flash may not be properly programmed"
+)
+ELSE
+(
+  PRINT "  RCW preamble OK"
+)
+
+; Verify stage1 code is present
+&stage1_first=Data.Long(D:0xEFFFC000)
+PRINT "Stage1 first word at 0xEFFFC000: &stage1_first"
+IF &stage1_first==0xFFFFFFFF
+(
+  PRINT %ERROR "ERROR: Stage1 region appears erased (0xFFFFFFFF)"
+  PRINT "       Run t1040_flash.cmm first"
+  STOP
+)
+
+; Verify wolfBoot code is present at expected location
+&wb_first=Data.Long(D:0xEFF40000)
+PRINT "wolfBoot first word at 0xEFF40000: &wb_first"
+IF &wb_first==0xFFFFFFFF
+(
+  PRINT %ERROR "ERROR: wolfBoot region appears erased (0xFFFFFFFF)"
+  PRINT "       Run t1040_flash.cmm first"
+  STOP
+)
+
+; Verify reset vector
+&reset_vec=Data.Long(D:0xEFFFFFFC)
+PRINT "Reset vector at 0xEFFFFFFC: &reset_vec"
+
+PRINT ""
+PRINT "Loading symbols..."
+
+; Load ELF symbols for stage1 (runs XIP from flash)
+Data.LOAD.Elf &basedir/stage1/loader_stage1.elf /NoCODE
+PRINT "  Stage1 symbols loaded"
+
+; Load ELF symbols for wolfBoot (runs from DDR at 0x7FF00000)
+Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE /NoClear
+PRINT "  wolfBoot symbols loaded"
+
+; Load ELF symbols for test application
+Data.LOAD.Elf &basedir/test-app/image.elf /NoCODE /NoClear
+PRINT "  Test app symbols loaded"
+
+sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/lib/wolfssl &basedir/test-app &basedir/stage1 &basedir/include
+
+; Verify symbols loaded correctly
+PRINT ""
+PRINT "Symbol verification:"
+IF sYmbol.EXIST(hal_early_init)
+  PRINT "  hal_early_init = " sYmbol.BEGIN(hal_early_init)
+IF sYmbol.EXIST(hal_ddr_init)
+  PRINT "  hal_ddr_init   = " sYmbol.BEGIN(hal_ddr_init)
+IF sYmbol.EXIST(main)
+  PRINT "  main           = " sYmbol.BEGIN(main)
+
+; Set breakpoints at key entry points
+PRINT ""
+PRINT "Setting breakpoints..."
+
+Break.Delete /ALL
+
+; Stage1 bootstrap entry (TLB setup code at top of flash)
+Break.Set 0xEFFFF000 /Program /Onchip
+PRINT "  BP: 0xEFFFF000 (stage1 bootstrap TLB)"
+
+; Stage1 main entry
+IF sYmbol.EXIST(loader_stage1)
+(
+  Break.Set loader_stage1 /Program /Onchip
+  PRINT "  BP: loader_stage1"
+)
+
+; wolfBoot main entry (in DDR)
+IF sYmbol.EXIST(main)
+(
+  Break.Set main /Program /Onchip
+  PRINT "  BP: main"
+)
+
+; hal_init
+IF sYmbol.EXIST(hal_init)
+(
+  Break.Set hal_init /Program /Onchip
+  PRINT "  BP: hal_init"
+)
+
+Break.Set \\loader_stage1\Global\setup_stack /Program /Onchip
+
+PRINT ""
+
+; Set PC to stage1 bootstrap entry (reset vector destination)
+Register.Set PC 0xEFFFF000
+
+PRINT "PC set to stage1 bootstrap (0xEFFFF000)"
+PRINT ""
+
+PRINT "========================================"
+PRINT "wolfBoot Debug Ready"
+PRINT "========================================"
+PRINT ""
+PRINT "Boot flow:"
+PRINT "  0xEFFFFFFC: Reset vector -> 0xEFFFF000"
+PRINT "  0xEFFFF000: Stage1 bootstrap TLB setup"
+PRINT "  0xEFFFC000: Stage1 loader (XIP from flash)"
+PRINT "              - Initializes DDR, UART, L2 cache"
+PRINT "              - Copies wolfBoot to DDR 0x7FF00000"
+PRINT "              - Jumps to wolfBoot"
+PRINT "  0x7FF00000: wolfBoot (running from DDR)"
+PRINT ""
+PRINT "Key addresses:"
+PRINT "  Stage1 (flash): 0xEFFFC000"
+PRINT "  wolfBoot (DDR): 0x7FF00000"
+PRINT "  Boot partition:  0xEE000000"
+PRINT "  App load addr:   0x70000000"
+PRINT ""
+PRINT "Commands:"
+PRINT "  Go               - Run to next breakpoint"
+PRINT "  Step / Step.Over  - Single step"
+PRINT "  Var.View <var>    - Inspect variable"
+PRINT "  Data.dump <addr>  - Memory dump"
+PRINT ""
+PRINT "Ready - press Go to start execution"
+PRINT ""
+
+ENDDO

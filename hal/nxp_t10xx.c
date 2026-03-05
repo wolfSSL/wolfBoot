@@ -65,9 +65,12 @@
 #endif
 
 #define USE_ERRATA_DDRA008378
-#define USE_ERRATA_DDRA008109
 #define USE_ERRATA_DDRA009663
 #define USE_ERRATA_DDRA009942
+#ifdef TARGET_nxp_t1024
+/* A-008109: T1024 rev 1.0 specific - DDR controller init failure */
+#define USE_ERRATA_DDRA008109
+#endif
 
 /* Forward declarations */
 static void hal_flash_unlock_sector(uint32_t sector);
@@ -525,7 +528,7 @@ enum ifc_amask_sizes {
 
 /* NOR Flash */
 #ifdef TARGET_nxp_t1040
-#define FLASH_BANK_SIZE   (256*1024*1024) /* 256MB NOR */
+#define FLASH_BANK_SIZE   (128*1024*1024) /* 128MB NOR */
 #else
 #define FLASH_BANK_SIZE   (64*1024*1024)  /* 64MB NOR */
 #endif
@@ -1304,7 +1307,7 @@ static void hal_flash_init(void)
                         IFC_CSPR_MSEL_NOR |
                         IFC_CSPR_V));
 #ifdef TARGET_nxp_t1040
-    set32(IFC_AMASK(0), IFC_AMASK_256MB);
+    set32(IFC_AMASK(0), IFC_AMASK_128MB);
 #else
     set32(IFC_AMASK(0), IFC_AMASK_64MB);
 #endif
@@ -1408,22 +1411,26 @@ static void hal_ddr_init(void)
     set32(DDR_SDRAM_CFG, DDR_SDRAM_CFG_VAL & ~DDR_SDRAM_CFG_MEM_EN);
     __asm__ __volatile__("sync;isync");
 
-    /* busy wait for ~500us */
-    udelay(500);
+#ifdef USE_ERRATA_DDRA008378
+    /* Errata A-008378: training in DDR4 mode
+     * Must write DEBUG_29[8:11] = 0x9 before controller is enabled */
+    reg = get32(DDR_DEBUG_29);
+    reg |= (0x9 << 20);
+    set32(DDR_DEBUG_29, reg);
+#endif
+
+    /* busy wait for ~500us before enabling DDR controller */
+    {
+        volatile int d;
+        for (d = 0; d < 50000; d++)
+            ;
+    }
     __asm__ __volatile__("sync;isync");
 
     /* Enable controller */
     reg = get32(DDR_SDRAM_CFG) & ~DDR_SDRAM_CFG_BI;
     set32(DDR_SDRAM_CFG, reg | DDR_SDRAM_CFG_MEM_EN);
     __asm__ __volatile__("sync;isync");
-
-#ifdef USE_ERRATA_DDRA008378
-    /* Errata A-008378: training in DDR4 mode */
-    /* write to DEBUG_29[8:11] a value of 4'b1001 before controller is enabled */
-    reg = get32(DDR_DEBUG_29);
-    reg |= (0x9 << 20);
-    set32(DDR_DEBUG_29, reg);
-#endif
 #ifdef USE_ERRATA_DDRA008109
     /* Errata A-008109: Memory controller could fail to complete initialization */
     reg = get32(DDR_SDRAM_CFG_2);
@@ -1442,10 +1449,13 @@ static void hal_ddr_init(void)
     set32(DDR_DEBUG_29, reg);
 #endif
 
-    /* Wait for data initialization to complete */
+    /* Wait for data initialization to complete.
+     * Use simple delay loop instead of udelay() — timebase may not be
+     * running yet during early stage1 init (RCPM clock distribution). */
     while (get32(DDR_SDRAM_CFG_2) & DDR_SDRAM_CFG_2_D_INIT) {
-        /* busy wait loop - throttle polling */
-        udelay(10000);
+        volatile int i;
+        for (i = 0; i < 1000; i++)
+            ;
     }
 
 #ifdef USE_ERRATA_DDRA009663
@@ -1461,11 +1471,15 @@ void hal_early_init(void)
     /* enable timebase on core 0 */
     set32(RCPM_PCTBENR, (1 << 0));
 
-    /* invalidate the CPC before DDR gets enabled */
+    /* invalidate the CPC before DDR gets enabled.
+     * Skip for stage1: assembly already configured CPC as SRAM and the
+     * stack/heap reside there — re-invalidating would destroy them. */
+#ifndef BUILD_LOADER_STAGE1
     set32((volatile uint32_t*)(CPC_BASE + CPCCSR0),
         (CPCCSR0_CPCFI | CPCCSR0_CPCLFC));
     while (get32((volatile uint32_t*)(CPC_BASE + CPCCSR0)) &
         (CPCCSR0_CPCFI | CPCCSR0_CPCLFC));
+#endif
 
     /* set DCSRCR space = 1G */
     set32(DCFG_DCSR, (get32(DCFG_DCSR) | CORENET_DCSR_SZ_1G));

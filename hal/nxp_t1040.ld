@@ -4,15 +4,15 @@ ENTRY( _reset )
 
 MEMORY
 {
-    /* DDR4 - 8GB (offset by destination address and 4KB boot region) */
+    /* DDR4 - 8GB physical (32-bit addressing limits window to <2GB) */
     DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
                  LENGTH = 0x7FFFFFFF - 4K - @WOLFBOOT_STAGE1_LOAD_ADDR@
 
-    /* L1 SRAM - 16KB */
-    L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
+    /* L1 locked dcache - 16KB */
+    L1RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x4000
 
-    /* Platform SRAM - 160KB */
-    PSRAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+    /* CPC SRAM - 256KB */
+    CPCSRAM (rwx) : ORIGIN = 0xFDFE0000, LENGTH = 0x40000
 }
 
 SECTIONS
@@ -84,6 +84,6 @@ SECTIONS
 PROVIDE(_start_heap = _end);
 PROVIDE(_end_stack  = ORIGIN(DRAM) + (LENGTH(DRAM)));
 
-/* Platform SRAM heap/stack */
-/* PROVIDE(_start_heap = ORIGIN(PSRAM)); */
-/* PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM))); */
+/* CPC SRAM heap/stack (unused - wolfBoot runs from DDR) */
+/* PROVIDE(_start_heap = ORIGIN(CPCSRAM)); */
+/* PROVIDE(_end_stack  = ORIGIN(CPCSRAM) + (LENGTH(CPCSRAM))); */
