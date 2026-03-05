@@ -263,7 +263,7 @@ partition.
   erases the bootloader region and writes in-place. An interruption
   during the write leaves the device unbootable.
 
-- **Not revertable.** There is no swap or rollback mechanism. The old
+- **Not revertible.** There is no swap or rollback mechanism. The old
   bootloader and application are destroyed during the update.
 
 - **Locks bootloader verification to a specific application version.**
