@@ -1199,9 +1199,12 @@ ifeq ($(TARGET),lpc55s69)
       -I$(MCUXPRESSO)/drivers/iap1 \
       -I$(MCUXPRESSO)/drivers/lpc_gpio \
       -I$(MCUXPRESSO)/drivers/lpc_iocon \
+      -I$(MCUXPRESSO)/drivers/rng_1 \
       -I$(MCUXPRESSO_CMSIS)/Include \
       -I$(MCUXPRESSO_CMSIS)/Core/Include
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU)
+  CFLAGS+=-DFSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL=1
+  CFLAGS+=-DFSL_SDK_DISABLE_DRIVER_RESET_CONTROL=1
   CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
   LDFLAGS+=-mcpu=cortex-m33 -Wl,--no-warn-rwx-segments
   OBJS+=\
@@ -1211,6 +1214,9 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
       $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o
+  ifeq ($(WOLFCRYPT_TZ),1)
+    OBJS+=$(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
+  endif
   ifeq ($(DEBUG_UART),1)
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
