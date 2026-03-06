@@ -2016,7 +2016,6 @@ Booting version: 0x1
 lpc55s69 init
     boot:   ver=0x1 state=0xFF
     update: ver=0x0 state=0xFF
-Hello from firmware version 1
 Calling wolfBoot_success()
     boot:   ver=0x1 state=0x00
     update: ver=0x0 state=0xFF
@@ -2048,7 +2047,6 @@ Booting version: 0x1
 lpc55s69 init
     boot:   ver=0x1 state=0x00
     update: ver=0x2 state=0xFF
-Hello from firmware version 1
 Update detected, version: 0x2
 Triggering update...
     boot:   ver=0x1 state=0x00
@@ -2226,7 +2224,6 @@ Booting version: 0x2
 lpc55s69 init
     boot:   ver=0x2 state=0x10
     update: ver=0x1 state=0xFF
-Hello from firmware version 2
 Calling wolfBoot_success()
     boot:   ver=0x2 state=0x00
     update: ver=0x1 state=0xFF
