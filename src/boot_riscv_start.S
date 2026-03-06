@@ -118,7 +118,7 @@ _copy_params:
     csrc  mstatus, t0
     csrw  mie, zero
     csrw  mip, zero
-    li    t0, MIP_MSIP                 /* wake only on IPI */
+    li    t0, MIE_MSIE                 /* wake only on IPI */
     csrw  mie, t0
 
     /* Set up per-hart stack: base + (hartid+1)*STACK_SIZE_PER_HART */

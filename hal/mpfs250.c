@@ -902,14 +902,20 @@ int ext_flash_erase(uintptr_t address, int len)
  * ============================================================================ */
 #if defined(UART_QSPI_PROGRAM) && defined(__WOLFBOOT)
 
-#define QSPI_PROG_CHUNK     256
-#define QSPI_PROG_ACK       0x06
+#define QSPI_PROG_CHUNK        256
+#define QSPI_PROG_ACK          0x06
+#define QSPI_RX_TIMEOUT_MS     5000U  /* 5 s per byte — aborts if host disappears */
 
-static uint8_t uart_qspi_rx(void)
+/* Returns 0-255 on success, -1 on timeout (so the boot path is never deadlocked). */
+static int uart_qspi_rx(void)
 {
-    while (!(MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR))
-        ;
-    return MMUART_RBR(DEBUG_UART_BASE);
+    uint32_t t;
+    for (t = 0; t < QSPI_RX_TIMEOUT_MS; t++) {
+        if (MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR)
+            return (int)(uint8_t)MMUART_RBR(DEBUG_UART_BASE);
+        udelay(1000);
+    }
+    return -1; /* timeout */
 }
 
 static void uart_qspi_tx(uint8_t c)
@@ -959,16 +965,42 @@ static void qspi_uart_program(void)
 
     /* Receive destination address then data length (4 bytes LE each) */
     addr = 0;
-    for (i = 0; i < 4; i++)
-        addr |= ((uint32_t)uart_qspi_rx() << (i * 8));
+    for (i = 0; i < 4; i++) {
+        int b = uart_qspi_rx();
+        if (b < 0) {
+            wolfBoot_printf("QSPI-PROG: RX timeout receiving addr\r\n");
+            return;
+        }
+        addr |= ((uint32_t)(uint8_t)b << (i * 8));
+    }
     size = 0;
-    for (i = 0; i < 4; i++)
-        size |= ((uint32_t)uart_qspi_rx() << (i * 8));
+    for (i = 0; i < 4; i++) {
+        int b = uart_qspi_rx();
+        if (b < 0) {
+            wolfBoot_printf("QSPI-PROG: RX timeout receiving size\r\n");
+            return;
+        }
+        size |= ((uint32_t)(uint8_t)b << (i * 8));
+    }
 
     wolfBoot_printf("QSPI-PROG: addr=0x%x size=%u bytes\r\n", addr, size);
 
     if (size == 0 || size > 0x200000U) {
         wolfBoot_printf("QSPI-PROG: Invalid size, aborting\r\n");
+        return;
+    }
+
+    /* Reject writes to unaligned or out-of-partition addresses before any erase */
+    if ((addr & (FLASH_SECTOR_SIZE - 1U)) != 0U) {
+        wolfBoot_printf("QSPI-PROG: addr 0x%x not sector-aligned, aborting\r\n", addr);
+        return;
+    }
+    if (!((addr >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
+           addr + size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) ||
+          (addr >= WOLFBOOT_PARTITION_UPDATE_ADDRESS &&
+           addr + size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))) {
+        wolfBoot_printf("QSPI-PROG: addr 0x%x+%u outside allowed partitions, aborting\r\n",
+                        addr, size);
         return;
     }
 
@@ -1002,8 +1034,16 @@ static void qspi_uart_program(void)
 
         uart_qspi_tx(QSPI_PROG_ACK);          /* request next chunk */
 
-        for (i = 0; i < chunk_len; i++)
-            chunk[i] = uart_qspi_rx();
+        for (i = 0; i < chunk_len; i++) {
+            int b = uart_qspi_rx();
+            if (b < 0) {
+                wolfBoot_printf("QSPI-PROG: RX timeout at 0x%x+%u\r\n",
+                                addr + written, i);
+                ext_flash_lock();
+                return;
+            }
+            chunk[i] = (uint8_t)b;
+        }
 
         ret = ext_flash_write(addr + written, chunk, (int)chunk_len);
         if (ret < 0) {

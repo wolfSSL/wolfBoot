@@ -66,8 +66,8 @@ static volatile int g_mmc_irq_pending = 0;
 /* Microsecond delay using hardware timer */
 static void udelay(uint32_t us)
 {
-    uint64_t start = hal_get_timer_us();
-    while ((hal_get_timer_us() - start) < us);
+    uint64_t end = hal_get_timer_us() + us;
+    while (hal_get_timer_us() < end);
 }
 
 /* ============================================================================
