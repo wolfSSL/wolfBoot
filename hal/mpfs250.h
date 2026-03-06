@@ -295,8 +295,8 @@ typedef struct {
     volatile uint32_t shared_mem_marker; /* 0x08: Init marker */
     volatile uint32_t shared_mem_status; /* 0x0C: Status */
     volatile uint64_t* shared_mem;       /* 0x10: Shared memory pointer */
-    volatile uint64_t reserved[2];       /* 0x18: Reserved/padding */
-} HLS_DATA;  /* 64 bytes */
+    volatile uint64_t reserved[5];       /* 0x18: Reserved/padding to 64 bytes */
+} HLS_DATA;  /* 64 bytes total */
 #endif /* __ASSEMBLER__ */
 
 #define HLS_MAIN_HART_STARTED       0x12344321UL

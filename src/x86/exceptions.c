@@ -202,7 +202,7 @@ int setup_interrupts()
 
 void deinit_interrupts()
 {
-    idt_descriptor.base = (uintptr_t)NULL;
+    idt_descriptor.base = (uintptr_t)0;
     idt_descriptor.limit = 0xffff;
     asm ("cli\r\n");
     asm ("lidt %0\r\n" : : "m"(idt_descriptor));

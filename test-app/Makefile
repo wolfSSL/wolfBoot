@@ -871,7 +871,7 @@ ifeq ($(ELF_FLASH_SCATTER),1)
 SQUASHELF_TOOL = ../tools/squashelf/squashelf
 image-orig.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 
 image.elf: image-orig.elf
 	@echo "\t[SQUASHELF] $@"
@@ -880,7 +880,7 @@ else
 # Default behavior when ELF_FLASH_SCATTER is not set
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 endif
 
 standalone: image.bin

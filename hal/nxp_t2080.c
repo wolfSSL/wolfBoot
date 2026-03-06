@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <stdint.h>
+#include <stddef.h>
 #include "target.h"
 #include "printf.h"
 #include "image.h" /* for RAMFUNCTION */

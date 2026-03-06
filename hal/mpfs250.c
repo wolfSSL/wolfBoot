@@ -222,7 +222,7 @@ int mpfs_read_serial_number(uint8_t *serial)
     SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
 
     /* Wait for request bit to clear (command accepted) */
-    timeout = 10000;
+    timeout = MPFS_SCB_TIMEOUT;
     while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && timeout > 0) {
         timeout--;
     }
@@ -232,7 +232,7 @@ int mpfs_read_serial_number(uint8_t *serial)
     }
 
     /* Wait for busy bit to clear (command completed) */
-    timeout = 10000;
+    timeout = MPFS_SCB_TIMEOUT;
     while (mpfs_scb_mailbox_busy() && timeout > 0) {
         timeout--;
     }
@@ -1268,6 +1268,8 @@ static void uart_config_baud(unsigned long base, uint32_t baudrate)
     uint32_t div_int  = div_x64 / 64u;
     uint32_t div_frac = div_x64 - (div_int * 64u);
     div_frac += (div_x128 - (div_int * 128u)) - (div_frac * 2u);
+    if (div_frac > 63u)
+        div_frac = 63u;
     if (div_int > (uint32_t)UINT16_MAX)
         return;
     MMUART_LCR(base) |= DLAB_MASK;

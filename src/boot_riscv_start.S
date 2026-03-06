@@ -121,12 +121,11 @@ _copy_params:
     li    t0, MIE_MSIE                 /* wake only on IPI */
     csrw  mie, t0
 
-    /* Set up per-hart stack: base + (hartid+1)*STACK_SIZE_PER_HART */
+    /* Set up per-hart stack: base + hartid*STACK_SIZE_PER_HART */
     csrr  a0, mhartid
     la    t0, _secondary_hart_stack_base
     li    t1, STACK_SIZE_PER_HART
-    addi  a1, a0, 1
-    mul   t2, a1, t1
+    mul   t2, a0, t1
     add   sp, t0, t2
     li    t0, -16
     and   sp, sp, t0
