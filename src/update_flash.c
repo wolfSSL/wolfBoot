@@ -449,7 +449,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #else
 # ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
     if (hal_flash_is_erased_at((uintptr_t)(boot->hdr + tmpBootPos)))
-        memset(tmpBuffer, 0xFF, sizeof(tmpBuffer));
+        memset(tmpBuffer, FLASH_BYTE_ERASED, sizeof(tmpBuffer));
     else
 # endif
         memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
