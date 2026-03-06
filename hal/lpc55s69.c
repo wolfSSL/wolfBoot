@@ -30,6 +30,7 @@
 #include "fsl_iap.h"
 #include "fsl_iocon.h"
 #include "fsl_reset.h"
+#include "fsl_rng.h"
 #include "fsl_usart.h"
 #include "loader.h"
 
@@ -166,6 +167,11 @@ int RAMFUNCTION hal_flash_is_erased_at(uint32_t address)
 #ifdef WOLFCRYPT_SECURE_MODE
 void hal_trng_init(void)
 {
+#ifdef __WOLFBOOT
+    CLOCK_EnableClock(kCLOCK_Rng);
+    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
+#endif
+    RNG_Init(RNG);
 }
 
 void hal_trng_fini(void)
@@ -174,8 +180,9 @@ void hal_trng_fini(void)
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
-    (void)out;
-    (void)len;
+    if (RNG_GetRandomData(RNG, out, len) == kStatus_Success)
+        return 0;
+
     return -1;
 }
 #endif
@@ -222,6 +229,7 @@ void uart_init(void)
 
     /* attach 12 MHz clock to FLEXCOMM0 (debug console) */
     CLOCK_AttachClk(kFRO12M_to_FLEXCOMM0);
+    CLOCK_EnableClock(kCLOCK_FlexComm0);
     RESET_ClearPeripheralReset(kFC0_RST_SHIFT_RSTn);
 
     usart_config_t config;
