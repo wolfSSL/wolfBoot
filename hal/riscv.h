@@ -124,8 +124,15 @@ static inline void riscv_icache_sync(void)
 #define SSTATUS_SIE  (1UL << 1)
 #define SSTATUS_SPIE (1UL << 5)
 
-/* MIP register bits */
+/* MIP register bits (mip CSR: pending interrupt flags, written by hardware) */
 #define MIP_MSIP     (1 << IRQ_M_SOFT)
+
+/* MIE register bits (mie CSR: interrupt enable, always written by software.
+ * Bit positions match MIP but use these names when targeting the mie register
+ * to avoid confusing the two CSRs.) */
+#define MIE_MSIE     (1 << IRQ_M_SOFT)
+#define MIE_MTIE     (1 << IRQ_M_TIMER)
+#define MIE_MEIE     (1 << IRQ_M_EXT)
 
 /* SIE register bits */
 #define SIE_SSIE     (1 << IRQ_S_SOFT)

@@ -795,12 +795,43 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 * Low power consumption
 * External flash support
 
+### Supported Boot Configurations
+
+Five ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+
+| Configuration | Config File | Boot Mode | Storage | Memory | HSS |
+|---------------|-------------|-----------|---------|--------|-----|
+| **SDCard** | `polarfire_mpfs250.config` | S-mode (U54 via HSS) | SD Card | DDR | Yes |
+| **eMMC** | `polarfire_mpfs250.config` + `DISK_EMMC=1` | S-mode (U54 via HSS) | eMMC | DDR | Yes |
+| **QSPI (S-mode)** | `polarfire_mpfs250_qspi.config` | S-mode (U54 via HSS) | MSS or SC QSPI | DDR | Yes |
+| **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
+| **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
+
+Key build settings that differ between configurations:
+
+| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode |
+|---------|--------|------|------|--------|--------|
+| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` |
+| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` |
+| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 |
+| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 |
+| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 |
+| `MPFS_L2LIM` | – | – | – | 1 | – |
+| `RISCV_MMODE` | – | – | – | – | 1 |
+| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` |
+| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A |
+| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 |
+
+> **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
+> crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
+
 ### PolarFire SoC Files
 
 `hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)
 `hal/mpfs250.h` - Register definitions and hardware interfaces
 `hal/mpfs250.ld` - Linker script for S-mode (HSS-based boot)
 `hal/mpfs250-m.ld` - Linker script for M-mode (eNVM + L2 SRAM)
+`hal/mpfs250-hss.ld` - Linker script for S-mode (HSS with L2-LIM)
 `hal/mpfs.dts` - Device tree source
 `hal/mpfs.yaml` - HSS payload generator configuration for use of DDR
 `hal/mpfs-l2lim.yaml` - HSS payload generator for the use of L2-LIM
@@ -904,6 +935,63 @@ Notes:
   explicitly want wolfBoot to load from disk and the application from QSPI.
 - The MSS QSPI path expects external flash on the MSS QSPI pins; the SC QSPI path is for
   fabric-connected flash (design flash) accessed via the System Controller's QSPI instance.
+
+### PolarFire SoC HSS S-Mode with L2-LIM (no DDR)
+
+wolfBoot can run in S-mode via HSS without DDR by targeting the on-chip **L2 Loosely Integrated
+Memory (L2-LIM)**. HSS loads wolfBoot from SC QSPI flash into L2-LIM on a U54 application core,
+and wolfBoot loads the signed application from SC QSPI into L2-LIM as well. This is useful for
+early bring-up or power-constrained scenarios where DDR is not yet initialized.
+
+**Features:**
+* S-mode on U54 application core (hart 1), loaded by HSS
+* wolfBoot and application both reside in L2-LIM (`0x08000000`, up to 1.5 MB)
+* No DDR required
+* SC QSPI flash for both wolfBoot payload and signed application image
+* Raw binary output (`ELF=0`) required — ELF with debug symbols is too large for L2-LIM
+
+**Relevant files:**
+
+| File | Description |
+|------|-------------|
+| `config/examples/polarfire_mpfs250_hss_l2lim.config` | HSS S-mode + SC QSPI + L2-LIM |
+| `hal/mpfs250-hss.ld` | Linker script for S-mode with L2-LIM |
+| `hal/mpfs-l2lim.yaml` | HSS payload generator YAML for L2-LIM load target |
+
+**Build:**
+```sh
+cp config/examples/polarfire_mpfs250_hss_l2lim.config .config
+make clean && make wolfboot.bin
+dtc -I dts -O dtb hal/mpfs.dts -o hal/mpfs.dtb
+hss-payload-generator -vvv -c ./hal/mpfs-l2lim.yaml wolfboot.bin
+```
+
+Flash the HSS payload to the eMMC/SD BIOS partition using HSS `USBDMSC`:
+```sh
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
+```
+
+**Build and sign the test application:**
+```sh
+make test-app/image_v1_signed.bin
+```
+
+**Flash the signed application to QSPI:**
+```sh
+python3 tools/scripts/mpfs_qspi_prog.py /dev/ttyUSB1 \
+    test-app/image_v1_signed.bin 0x20000
+```
+
+**Notes:**
+- `ELF=0` is required: the test-app linker script (`test-app/RISCV64-mpfs250.ld`) places `.init`
+  (containing `_reset()`) first so the raw binary entry point is at offset 0. The full ELF with
+  debug symbols exceeds L2-LIM capacity.
+- wolfBoot is placed at `0x08040000` (above the HSS L2-LIM resident region) and the application
+  is loaded at `0x08060000`. The stack resides at the top of the 1.5 MB L2-LIM region.
+- HSS must be built and programmed to eNVM separately (see [PolarFire Building Hart Software Services](#polarfire-building-hart-software-services-hss)).
+- **LIM instruction fetch caveat:** Ensure `L2_WAY_ENABLE` leaves enough cache ways unallocated
+  to back the LIM SRAM region. See the M-mode section for a detailed explanation.
+- UART output appears on MMUART1 (`/dev/ttyUSB1`), same as other S-mode configurations.
 
 ### PolarFire SoC M-Mode (bare-metal eNVM boot)
 
