@@ -80,23 +80,22 @@ jobs:
         run: sudo apt-get update -o Acquire::Retries=3
 
       # ============================================================
-      # Prebuilt RISC-V toolchains from riscv-collab
-      # https://github.com/riscv-collab/riscv-gnu-toolchain/releases
-      # Extracts to: riscv/bin/riscv{32,64}-unknown-elf-*
+      # xPack RISC-V GCC — single toolchain with full multilib
+      # supporting both rv32 and rv64 targets (including rv32imac/ilp32
+      # and rv64imac/lp64 which riscv-collab nightly builds lack).
+      # https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack
       # ============================================================
-      - name: Download and install RISC-V toolchain (riscv32)
-        if: ${{ inputs.arch == 'riscv' }}
+      - name: Download and install xPack RISC-V toolchain
         run: |
-          wget -q https://github.com/riscv-collab/riscv-gnu-toolchain/releases/latest/download/riscv32-elf-ubuntu-24.04-gcc.tar.xz
-          tar -xf riscv32-elf-ubuntu-24.04-gcc.tar.xz
-          echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
-          $GITHUB_WORKSPACE/riscv/bin/riscv32-unknown-elf-gcc --version
-
-      - name: Install RISC-V toolchain (riscv64)
-        if: ${{ inputs.arch == 'riscv64' }}
-        run: |
-          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
-          riscv64-unknown-elf-gcc --version
+          XPACK_VER="15.2.0-1"
+          XPACK_FILE="xpack-riscv-none-elf-gcc-${XPACK_VER}-linux-x64.tar.gz"
+          wget -q "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v${XPACK_VER}/${XPACK_FILE}"
+          echo "aaaa8060c914851a3e5ee1ba82cc3d6f80972f90638a05c6e823a37557a33758  ${XPACK_FILE}" | sha256sum -c -
+          tar -xf "${XPACK_FILE}"
+          echo "$GITHUB_WORKSPACE/xpack-riscv-none-elf-gcc-${XPACK_VER}/bin" >> $GITHUB_PATH
+          export PATH="$GITHUB_WORKSPACE/xpack-riscv-none-elf-gcc-${XPACK_VER}/bin:$PATH"
+          riscv-none-elf-gcc --version
+          riscv-none-elf-gcc -print-multi-lib | head -5
 
       # ============================================================
       # Build wolfboot
@@ -116,9 +115,9 @@ jobs:
       - name: Build wolfboot (riscv32)
         if: ${{ inputs.arch == 'riscv' }}
         run: |
-          make CROSS_COMPILE=riscv32-unknown-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
+          make CROSS_COMPILE=riscv-none-elf- FREEDOM_E_SDK=$GITHUB_WORKSPACE/freedom-e-sdk ${{inputs.make-args}}
 
       - name: Build wolfboot (riscv64)
         if: ${{ inputs.arch == 'riscv64' }}
         run: |
-          make CROSS_COMPILE=riscv64-unknown-elf- ${{inputs.make-args}}
+          make CROSS_COMPILE=riscv-none-elf- ${{inputs.make-args}}

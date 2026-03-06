@@ -78,6 +78,10 @@ def main():
     bin_path  = sys.argv[2]
     offset    = int(sys.argv[3], 0) if len(sys.argv) > 3 else 0x20000
 
+    if offset < 0 or offset > 0xFFFFFFFF:
+        print(f"Error: offset out of range (0x0..0xFFFFFFFF, got 0x{offset:X})")
+        sys.exit(1)
+
     if not os.path.exists(bin_path):
         print(f"Error: file not found: {bin_path}")
         sys.exit(1)

@@ -30,7 +30,7 @@
 #if defined(_RENESAS_RA_)
 #include <stdint.h>
 #endif
-#ifndef TARGET_library
+#if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__
 #include <string.h>
 #else
 size_t strlen(const char *s); /* forward declaration */
@@ -289,7 +289,7 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 }
 #endif /* IAR */
 
-#ifndef __IAR_SYSTEMS_ICC__
+#if !defined(__IAR_SYSTEMS_ICC__) && !defined(TARGET_X86_64_EFI)
 void *memmove(void *dst, const void *src, size_t n)
 {
     int i;
@@ -306,7 +306,7 @@ void *memmove(void *dst, const void *src, size_t n)
         return memcpy(dst, src, n);
     }
 }
-#endif
+#endif /* !IAR && !X86_64_EFI */
 #endif /* __CCRX__ Renesas CCRX */
 #endif /* WOLFBOOT_USE_STDLIBC */
 

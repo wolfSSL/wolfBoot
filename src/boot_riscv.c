@@ -273,7 +273,7 @@ void do_boot(const uint32_t *app_offset)
     unsigned long dts_addr;
     hal_dts_fixup((uint32_t*)dts_offset);
     dts_addr = (unsigned long)dts_offset;
-#else
+#elif defined(WOLFBOOT_RISCV_MMODE) || __riscv_xlen == 64
     unsigned long dts_addr = 0;
 #endif
 

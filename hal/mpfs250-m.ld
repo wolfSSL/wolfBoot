@@ -89,7 +89,7 @@ SECTIONS
         /* Public key store - must be in a copied section so it's available
          * in L2 SRAM after startup copies .data from eNVM */
         KEEP(*(.keystore*))
-        . = ALIGN(4);
+        . = ALIGN(8);
         _end_data = .;
     } > L2_SCRATCH AT > FLASH_ENVM
 
@@ -100,7 +100,7 @@ SECTIONS
         *(.bss*)
         *(.sbss*)
         *(COMMON)
-        . = ALIGN(4);
+        . = ALIGN(8);
         _end_bss = .;
         _end = .;
     } > L2_SCRATCH

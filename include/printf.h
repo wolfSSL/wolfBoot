@@ -48,7 +48,9 @@
 
 /* support for wolfBoot_printf logging */
 #if defined(PRINTF_ENABLED) && !defined(WOLFBOOT_NO_PRINTF)
-#   include <stdio.h>
+#   if !defined(DEBUG_UART) && !defined(DEBUG_ZYNQ) && !defined(WOLFBOOT_DEBUG_EFI)
+#       include <stdio.h>
+#   endif
 #   if defined(DEBUG_ZYNQ) && !defined(USE_QNX) && !defined(DEBUG_UART)
 #       include "xil_printf.h"
 #       define wolfBoot_printf(_f_, ...) xil_printf(_f_, ##__VA_ARGS__)
