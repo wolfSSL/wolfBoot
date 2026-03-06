@@ -357,7 +357,7 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
     addr_read = addr_align - (nvm_cached_sector * NVM_CACHE_SIZE);
 #ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
     if (hal_flash_is_erased_at((uintptr_t)addr_read))
-        XMEMSET(NVM_CACHE, 0xFF, NVM_CACHE_SIZE);
+        XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, NVM_CACHE_SIZE);
     else
 #endif
         XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
@@ -406,7 +406,7 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     addr_write = base - (!nvm_cached_sector * NVM_CACHE_SIZE);
 #ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
     if (hal_flash_is_erased_at((uintptr_t)addr_read))
-        XMEMSET(NVM_CACHE, 0xFF, NVM_CACHE_SIZE);
+        XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, NVM_CACHE_SIZE);
     else
 #endif
         XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
@@ -866,7 +866,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         selSec = nvm_select_fresh_sector(PART_UPDATE);
 # ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
         if (hal_flash_is_erased_at((uintptr_t)lastSector - WOLFBOOT_SECTOR_SIZE * selSec))
-            XMEMSET(NVM_CACHE, 0xFF, WOLFBOOT_SECTOR_SIZE);
+            XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, WOLFBOOT_SECTOR_SIZE);
         else
 # endif
             XMEMCPY(NVM_CACHE, (uint8_t*)lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
