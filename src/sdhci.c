@@ -63,6 +63,13 @@ static uint32_t g_rca = 0; /* SD Card Relative Address */
 static volatile uint32_t g_mmc_irq_status = 0;
 static volatile int g_mmc_irq_pending = 0;
 
+/* Microsecond delay using hardware timer */
+static void udelay(uint32_t us)
+{
+    uint64_t start = hal_get_timer_us();
+    while ((hal_get_timer_us() - start) < us);
+}
+
 /* ============================================================================
  * Register Access Helpers
  * ============================================================================ */
@@ -176,7 +183,7 @@ void sdhci_irq_handler(void)
     /* Signal that interrupt was handled */
     g_mmc_irq_pending = 1;
 
-#ifdef DEBUG_SDHCI
+#ifdef DEBUG_SDHCI_IRQ
     wolfBoot_printf("sdhci_irq_handler: status=0x%08X, flags=0x%02X\n",
         status, g_mmc_irq_status);
 #endif
@@ -529,7 +536,7 @@ static int sdhci_wait_busy(int check_dat0)
 }
 
 /* Reset data and command lines to recover from errors */
-static void sdhci_reset_lines(void)
+static inline void sdhci_reset_lines(void)
 {
     sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_DAT_CMD);
     while (SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD);
@@ -953,7 +960,7 @@ static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
         }
 
         /* Small delay between retries */
-        for (volatile int i = 0; i < 1000; i++);
+        udelay(10);
 
     } while (--timeout > 0);
 
@@ -1016,6 +1023,13 @@ static int emmc_card_full_init(void)
     int status;
     uint32_t ocr_reg;
 
+    /* Set power to 3.3v */
+    status = sdhci_set_power(SDHCI_SRS10_BVS_3_3V);
+    if (status != 0) {
+        wolfBoot_printf("eMMC: Failed to set power\n");
+        return status;
+    }
+
     /* Send CMD0 (GO_IDLE) to reset eMMC */
     status = sdhci_cmd(MMC_CMD0_GO_IDLE, 0, SDHCI_RESP_NONE);
     if (status != 0) {
@@ -1024,7 +1038,7 @@ static int emmc_card_full_init(void)
     }
 
     /* Small delay after reset */
-    for (volatile int i = 0; i < 10000; i++);
+    udelay(100);
 
     /* Send CMD1 with operating conditions (3.3V, sector mode) */
     status = emmc_send_op_cond(MMC_DEVICE_3_3V_VOLT_SET, &ocr_reg);
@@ -1387,10 +1401,14 @@ int sdhci_init(void)
     reg &= ~SDHCI_HRS06_EMM_MASK;
 #ifdef DISK_EMMC
     reg |= SDHCI_HRS06_MODE_LEGACY;  /* eMMC Legacy mode */
+#ifdef DEBUG_SDHCI
     wolfBoot_printf("SDHCI: eMMC mode\n");
+#endif
 #else
     reg |= SDHCI_HRS06_MODE_SD;      /* SD card mode */
+#ifdef DEBUG_SDHCI
     wolfBoot_printf("SDHCI: SDCard mode\n");
+#endif
 #endif
     SDHCI_REG_SET(SDHCI_HRS06, reg);
 
@@ -1465,33 +1483,18 @@ int sdhci_init(void)
     sdhci_set_clock(SDHCI_CLK_400KHZ);
 
 #ifdef DISK_EMMC
-    /* =========================================================================
-     * eMMC Initialization Path
-     * ========================================================================= */
-
-    /* Set power to 3.3v */
-    status = sdhci_set_power(SDHCI_SRS10_BVS_3_3V);
-    if (status != 0) {
-        wolfBoot_printf("eMMC: Failed to set power\n");
-        return status;
-    }
-
     /* Run full eMMC card initialization */
     status = emmc_card_full_init();
     if (status != 0) {
-        wolfBoot_printf("eMMC: Card initialization failed\n");
+        wolfBoot_printf("eMMC: Card init failed (%d)\n", status);
         return status;
     }
 
 #else /* DISK_SDCARD */
-    /* =========================================================================
-     * SD Card Initialization Path
-     * ========================================================================= */
-
     /* Run full SD card initialization */
     status = sdcard_card_full_init();
     if (status != 0) {
-        wolfBoot_printf("SD Card: Card initialization failed\n");
+        wolfBoot_printf("SD Card: Card init failed (%d)\n", status);
         return status;
     }
 
@@ -1502,6 +1505,19 @@ int sdhci_init(void)
         /* Set data timeout to 3000ms */
         status = sdhci_set_timeout(SDHCI_DATA_TIMEOUT_US);
     }
+
+#ifdef DEBUG_SDHCI
+    {
+        const char *card_type;
+#ifdef DISK_EMMC
+        card_type = "eMMC";
+#else
+        card_type = "SD";
+#endif
+        wolfBoot_printf("sdhci_init: %s status: %d\n", card_type, status);
+    }
+#endif
+
     return status;
 }
 

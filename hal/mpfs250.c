@@ -46,159 +46,211 @@
 #include "gpt.h"
 #include "fdt.h"
 
+/* UART base addresses for per-hart access (LO addresses, M-mode compatible) */
+const unsigned long MSS_UART_BASE_ADDR[5] = {
+    MSS_UART0_LO_BASE,  /* Hart 0 (E51) */
+    MSS_UART1_LO_BASE,  /* Hart 1 (U54_1) */
+    MSS_UART2_LO_BASE,  /* Hart 2 (U54_2) */
+    MSS_UART3_LO_BASE,  /* Hart 3 (U54_3) */
+    MSS_UART4_LO_BASE,  /* Hart 4 (U54_4) */
+};
+
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 #include "sdhci.h"
+
+/* Forward declaration of SDHCI IRQ handler */
+extern void sdhci_irq_handler(void);
 #endif
+
+/* Video Kit DDR/Clock configuration is included in mpfs250.h */
+
+/* Configure L2 cache: enable ways 0,1,3 (0x0B) and set way masks for all masters */
+#ifdef WOLFBOOT_RISCV_MMODE
+static void mpfs_config_l2_cache(void)
+{
+    L2_WAY_ENABLE = 0x0B;  /* ways 0, 1, 3 — matches DDR demo config */
+    SYSREG_L2_SHUTDOWN_CR = 0;
+    L2_WAY_MASK_DMA        = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_AXI4_PORT0 = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_AXI4_PORT1 = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_AXI4_PORT2 = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_AXI4_PORT3 = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_E51_DCACHE  = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_E51_ICACHE  = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_1_DCACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_1_ICACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_2_DCACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_2_ICACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_3_DCACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_3_ICACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_4_DCACHE = L2_WAY_MASK_CACHE_ONLY;
+    L2_WAY_MASK_U54_4_ICACHE = L2_WAY_MASK_CACHE_ONLY;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+}
+
+/* Busy-loop delay — MTIME not running in M-mode without HSS.
+ * E51 at 80 MHz reset: ~8 iters/us accounting for loop overhead. */
+static __attribute__((noinline)) void udelay(uint32_t us)
+{
+    volatile uint32_t i;
+    for (i = 0; i < us * 8; i++)
+        ;
+}
+
+#endif /* WOLFBOOT_RISCV_MMODE */
+
+
+/* Multi-Hart Support */
+#ifdef WOLFBOOT_RISCV_MMODE
+
+extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8_t to avoid size confusion */
+
+/* CLINT MSIP register for IPI delivery */
+#define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
+
+/* Signal secondary harts that E51 (main hart) is ready. */
+static void mpfs_signal_main_hart_started(void)
+{
+    HLS_DATA* hls = (HLS_DATA*)&_main_hart_hls;
+    hls->in_wfi_indicator = HLS_MAIN_HART_STARTED;
+    hls->my_hart_id = MPFS_FIRST_HART;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+}
+
+/* Wake secondary U54 harts by sending software IPIs via CLINT MSIP. */
+int mpfs_wake_secondary_harts(void)
+{
+    int hart_id;
+    int woken_count = 0;
+
+    wolfBoot_printf("Waking secondary harts...\n");
+    for (hart_id = MPFS_FIRST_U54_HART; hart_id <= MPFS_LAST_U54_HART; hart_id++) {
+        CLINT_MSIP_REG(hart_id) = 0x01;
+        __asm__ volatile("fence iorw, iorw" ::: "memory");
+        udelay(1000);
+        woken_count++;
+    }
+    wolfBoot_printf("Woke %d secondary harts\n", woken_count);
+    return woken_count;
+}
+
+/* Secondary hart (U54) entry: init per-hart UART and spin in WFI for Linux/SBI. */
+void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
+{
+    char msg[] = "Hart X: Woken, waiting for Linux boot...\n";
+    (void)hls;
+    uart_init_hart(hartid);
+    msg[5] = '0' + (char)hartid;
+    uart_write_hart(hartid, msg, sizeof(msg) - 1);
+    while (1)
+        __asm__ volatile("wfi");
+}
+#endif /* WOLFBOOT_RISCV_MMODE */
 
 #if defined(EXT_FLASH) && defined(TEST_EXT_FLASH) && defined(__WOLFBOOT)
 static int test_ext_flash(void);
 #endif
+#if defined(EXT_FLASH) && defined(UART_QSPI_PROGRAM) && defined(__WOLFBOOT)
+static void qspi_uart_program(void);
+#endif
 
 void hal_init(void)
 {
-#if defined(DEBUG_UART) && defined(__WOLFBOOT)
+#ifdef WOLFBOOT_RISCV_MMODE
+    mpfs_config_l2_cache();
+    mpfs_signal_main_hart_started();
+#endif
+
+#ifdef DEBUG_UART
+    SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << DEBUG_UART_PORT);
+    SYSREG_SOFT_RESET_CR &= ~(MSS_PERIPH_MMUART0 << DEBUG_UART_PORT);
+    uart_init();
+#endif
+
 #ifdef WOLFBOOT_REPRODUCIBLE_BUILD
     wolfBoot_printf("wolfBoot Version: %s\n", LIBWOLFBOOT_VERSION_STRING);
 #else
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
-        LIBWOLFBOOT_VERSION_STRING,__DATE__, __TIME__);
+        LIBWOLFBOOT_VERSION_STRING, __DATE__, __TIME__);
 #endif
+
+#ifdef WOLFBOOT_RISCV_MMODE
+    wolfBoot_printf("Running on E51 (hart 0) in M-mode\n");
 #endif
 
 #ifdef EXT_FLASH
     if (qspi_init() != 0) {
         wolfBoot_printf("QSPI: Init failed\n");
-    }
+    } else {
 #if defined(TEST_EXT_FLASH) && defined(__WOLFBOOT)
-    else {
         test_ext_flash();
-    }
 #endif
+#if defined(UART_QSPI_PROGRAM) && defined(__WOLFBOOT)
+        qspi_uart_program();
+#endif
+    }
 #endif /* EXT_FLASH */
 }
 
-/* ============================================================================
- * System Controller Mailbox Functions
- *
- * The MPFS system controller provides various system services via a mailbox
- * interface. Commands are sent by writing the opcode to the control register
- * and responses are read from the mailbox RAM.
- * ============================================================================ */
+/* System Controller Mailbox */
 
-/* Wait for SCB register bits to clear, with timeout */
-static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
-    uint32_t timeout)
+static int mpfs_scb_mailbox_busy(void)
 {
-    while ((SCBCTRL_REG(reg_offset) & mask) && --timeout)
-        ;
-    return (timeout == 0) ? -1 : 0;
+    return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
 }
 
-int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len)
-{
-    uint32_t i;
-
-    if (out == NULL) {
-        return -1;
-    }
-
-    for (i = 0; i < len; i++) {
-        out[i] = SCBMBOX_BYTE(i);
-    }
-
-    return 0;
-}
-
-static void mpfs_scb_write_mailbox(const uint8_t *data, uint32_t len)
-{
-    uint32_t i = 0;
-
-    if (data == NULL || len == 0) {
-        return;
-    }
-
-    /* Write full words (little-endian) */
-    while (i + 4 <= len) {
-        uint32_t word = ((uint32_t)data[i]) |
-                        ((uint32_t)data[i + 1] << 8) |
-                        ((uint32_t)data[i + 2] << 16) |
-                        ((uint32_t)data[i + 3] << 24);
-        SCBMBOX_REG(i) = word;
-        i += 4;
-    }
-
-    /* Write remaining bytes */
-    while (i < len) {
-        SCBMBOX_BYTE(i) = data[i];
-        i++;
-    }
-}
-
-int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data,
-    uint32_t mb_len, uint32_t timeout)
-{
-    uint32_t cmd;
-    uint32_t status;
-
-    if (mpfs_scb_wait_clear(SERVICES_SR_OFFSET, SERVICES_SR_BUSY_MASK, 1)) {
-        return -1;
-    }
-
-    if (mb_data && mb_len > 0) {
-        mpfs_scb_write_mailbox(mb_data, mb_len);
-    }
-
-    cmd = ((opcode & 0x7F) << SERVICES_CR_COMMAND_SHIFT) |
-          SERVICES_CR_REQ_MASK;
-    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
-
-    if (mpfs_scb_wait_clear(SERVICES_CR_OFFSET, SERVICES_CR_REQ_MASK,
-            timeout) < 0) {
-        return -2;
-    }
-
-    if (mpfs_scb_wait_clear(SERVICES_SR_OFFSET, SERVICES_SR_BUSY_MASK,
-            timeout) < 0) {
-        return -3;
-    }
-
-    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT)
-        & 0xFFFF;
-    if (status != 0) {
-        return -4;
-    }
-
-    return 0;
-}
-
-/**
- * mpfs_read_serial_number - Read the device serial number via system services
- * @serial: Buffer to store the 16-byte device serial number
- *
- * This function sends a serial number request (opcode 0x00) to the system
- * controller and reads the 16-byte response from the mailbox RAM.
- *
- * Returns: 0 on success, negative error code on failure
- */
+/* Read 16-byte device serial number via SCB system service (opcode 0x00). */
 int mpfs_read_serial_number(uint8_t *serial)
 {
-    int ret;
+    uint32_t cmd, status;
+    int i, timeout;
 
     if (serial == NULL) {
         return -1;
     }
 
-    ret = mpfs_scb_service_call(SYS_SERV_CMD_SERIAL_NUMBER, NULL, 0,
-        MPFS_SCB_TIMEOUT);
-    if (ret != 0) {
-        wolfBoot_printf("SCB mailbox error: %d\n", ret);
-        return ret;
+    /* Check if mailbox is busy */
+    if (mpfs_scb_mailbox_busy()) {
+        wolfBoot_printf("SCB mailbox busy\n");
+        return -2;
     }
 
-    /* Read serial number from mailbox RAM (16 bytes). */
-    ret = mpfs_scb_read_mailbox(serial, DEVICE_SERIAL_NUMBER_SIZE);
-    if (ret != 0) {
-        return ret;
+    /* Send serial number request command (opcode 0x00)
+     * Command format: [31:16] = opcode, [0] = request bit */
+    cmd = (SYS_SERV_CMD_SERIAL_NUMBER << SERVICES_CR_COMMAND_SHIFT) |
+          SERVICES_CR_REQ_MASK;
+    SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
+
+    /* Wait for request bit to clear (command accepted) */
+    timeout = 10000;
+    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && timeout > 0) {
+        timeout--;
+    }
+    if (timeout == 0) {
+        wolfBoot_printf("SCB mailbox request timeout\n");
+        return -3;
+    }
+
+    /* Wait for busy bit to clear (command completed) */
+    timeout = 10000;
+    while (mpfs_scb_mailbox_busy() && timeout > 0) {
+        timeout--;
+    }
+    if (timeout == 0) {
+        wolfBoot_printf("SCB mailbox busy timeout\n");
+        return -4;
+    }
+
+    /* Check status (upper 16 bits of status register) */
+    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
+    if (status != 0) {
+        wolfBoot_printf("SCB mailbox error: 0x%x\n", status);
+        return -5;
+    }
+
+    /* Read serial number from mailbox RAM (16 bytes) */
+    for (i = 0; i < DEVICE_SERIAL_NUMBER_SIZE; i++) {
+        serial[i] = SCBMBOX_BYTE(i);
     }
 
     return 0;
@@ -316,9 +368,10 @@ int hal_dts_fixup(void* dts_addr)
 
     return 0;
 }
-
 void hal_prepare_boot(void)
 {
+    /* reset the eMMC/SD card? */
+
 
 }
 
@@ -347,6 +400,16 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+
+/* Wait for SCB register bits to clear, with timeout */
+static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
+    uint32_t timeout)
+{
+    while ((SCBCTRL_REG(reg_offset) & mask) && --timeout)
+        ;
+    return (timeout == 0) ? -1 : 0;
+}
+
 #ifdef EXT_FLASH
 /* ==========================================================================
  * QSPI Flash Controller Implementation
@@ -357,13 +420,14 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
  * ========================================================================== */
 
 /* Microsecond delay using RISC-V time CSR (1 MHz tick rate) */
+#ifndef WOLFBOOT_RISCV_MMODE
 static void udelay(uint32_t us)
 {
     uint64_t start = csr_read(time);
     while ((uint64_t)(csr_read(time) - start) < us)
         ;
 }
-
+#endif
 /* Forward declarations */
 static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
                                 uint32_t cmd_len, uint8_t *data,
@@ -819,6 +883,146 @@ int ext_flash_erase(uintptr_t address, int len)
     return total;
 }
 
+/* ============================================================================
+ * UART QSPI Programmer
+ *
+ * Allows programming the QSPI flash over the debug UART without a JTAG/Libero
+ * tool. Enabled at build time with UART_QSPI_PROGRAM=1 in the .config.
+ *
+ * Protocol (after wolfBoot prints the "QSPI-PROG" prompt):
+ *   1. Host sends 'P' within the timeout window to enter programming mode
+ *   2. wolfBoot sends "READY\r\n"
+ *   3. Host sends [4-byte LE QSPI address][4-byte LE data length]
+ *   4. wolfBoot erases required sectors, sends "ERASED\r\n"
+ *   5. For each 256-byte chunk:
+ *        wolfBoot sends ACK byte (0x06) -> host sends chunk -> wolfBoot writes
+ *   6. wolfBoot sends "DONE\r\n" and continues normal boot
+ *
+ * Host side: tools/scripts/mpfs_qspi_prog.py
+ * ============================================================================ */
+#if defined(UART_QSPI_PROGRAM) && defined(__WOLFBOOT)
+
+#define QSPI_PROG_CHUNK     256
+#define QSPI_PROG_ACK       0x06
+
+static uint8_t uart_qspi_rx(void)
+{
+    while (!(MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR))
+        ;
+    return MMUART_RBR(DEBUG_UART_BASE);
+}
+
+static void uart_qspi_tx(uint8_t c)
+{
+    while (!(MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_THRE))
+        ;
+    MMUART_THR(DEBUG_UART_BASE) = c;
+}
+
+static void uart_qspi_puts(const char *s)
+{
+    while (*s)
+        uart_qspi_tx((uint8_t)*s++);
+}
+
+static void qspi_uart_program(void)
+{
+    uint8_t ch = 0;
+    uint32_t addr, size, n_sectors, written, t;
+    uint32_t i, s;
+    uint8_t chunk[QSPI_PROG_CHUNK];
+
+    wolfBoot_printf("QSPI-PROG: Press 'P' within 3s to program flash\r\n");
+
+    /* Drain any stale RX bytes before opening the window */
+    while (MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR)
+        (void)MMUART_RBR(DEBUG_UART_BASE);
+
+    /* Wait up to 3s: 3000 iterations of 1ms each */
+    for (t = 0; t < 3000U; t++) {
+        udelay(1000);
+        if (MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR) {
+            ch = MMUART_RBR(DEBUG_UART_BASE);
+            break;
+        }
+    }
+
+    if (ch != 'P' && ch != 'p') {
+        wolfBoot_printf("QSPI-PROG: No trigger (got 0x%02x LSR=0x%02x), booting\r\n",
+                        (unsigned)ch,
+                        (unsigned)MMUART_LSR(DEBUG_UART_BASE));
+        return;
+    }
+
+    wolfBoot_printf("QSPI-PROG: Entering programmer mode\r\n");
+    uart_qspi_puts("READY\r\n");
+
+    /* Receive destination address then data length (4 bytes LE each) */
+    addr = 0;
+    for (i = 0; i < 4; i++)
+        addr |= ((uint32_t)uart_qspi_rx() << (i * 8));
+    size = 0;
+    for (i = 0; i < 4; i++)
+        size |= ((uint32_t)uart_qspi_rx() << (i * 8));
+
+    wolfBoot_printf("QSPI-PROG: addr=0x%x size=%u bytes\r\n", addr, size);
+
+    if (size == 0 || size > 0x200000U) {
+        wolfBoot_printf("QSPI-PROG: Invalid size, aborting\r\n");
+        return;
+    }
+
+    /* Erase all required sectors (FLASH_SECTOR_SIZE = 64 KB) */
+    n_sectors = (size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
+    wolfBoot_printf("QSPI-PROG: Erasing %u sector(s) at 0x%x...\r\n",
+                    n_sectors, addr);
+    ext_flash_unlock();
+    for (s = 0; s < n_sectors; s++) {
+        int ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
+                                  FLASH_SECTOR_SIZE);
+        if (ret < 0) {
+            wolfBoot_printf("QSPI-PROG: Erase failed at 0x%x (ret %d)\r\n",
+                            addr + s * FLASH_SECTOR_SIZE, ret);
+            ext_flash_lock();
+            return;
+        }
+    }
+
+    /* "ERASED\r\n" must be the last bytes before the first ACK (0x06).
+     * Do not insert any wolfBoot_printf between here and the transfer loop. */
+    uart_qspi_puts("ERASED\r\n");
+
+    /* Chunk transfer: wolfBoot requests each 256-byte block with ACK 0x06 */
+    written = 0;
+    while (written < size) {
+        int ret;
+        uint32_t chunk_len = size - written;
+        if (chunk_len > QSPI_PROG_CHUNK)
+            chunk_len = QSPI_PROG_CHUNK;
+
+        uart_qspi_tx(QSPI_PROG_ACK);          /* request next chunk */
+
+        for (i = 0; i < chunk_len; i++)
+            chunk[i] = uart_qspi_rx();
+
+        ret = ext_flash_write(addr + written, chunk, (int)chunk_len);
+        if (ret < 0) {
+            wolfBoot_printf("QSPI-PROG: Write failed at 0x%x (ret %d)\r\n",
+                            addr + written, ret);
+            ext_flash_lock();
+            return;
+        }
+        written += chunk_len;
+    }
+    ext_flash_lock();
+
+    wolfBoot_printf("QSPI-PROG: Wrote %u bytes to 0x%x\r\n", written, addr);
+    uart_qspi_puts("DONE\r\n");
+    wolfBoot_printf("QSPI-PROG: Done, continuing boot\r\n");
+}
+
+#endif /* UART_QSPI_PROGRAM */
+
 /* Test for external QSPI flash erase/write/read */
 #ifdef TEST_EXT_FLASH
 
@@ -940,44 +1144,20 @@ void* hal_get_dts_address(void)
 }
 #endif
 
-#if defined(DISK_SDCARD) || defined(DISK_EMMC)
-/* ============================================================================
- * SDHCI Platform HAL Implementation
- * ============================================================================ */
-
-/* Register access functions for generic SDHCI driver */
-uint32_t sdhci_reg_read(uint32_t offset)
+/* PLIC: E51(hart 0)->ctx 0 (M-mode only); U54(1-4)->ctx hart*2-1 (M), hart*2 (S) */
+#ifdef WOLFBOOT_RISCV_MMODE
+uint32_t plic_get_context(void)
 {
-    return *((volatile uint32_t*)(EMMC_SD_BASE + offset));
+    uint32_t hart_id;
+    __asm__ volatile("csrr %0, mhartid" : "=r"(hart_id));
+    return (hart_id == 0) ? 0 : (hart_id * 2) - 1;
 }
-
-void sdhci_reg_write(uint32_t offset, uint32_t val)
-{
-    *((volatile uint32_t*)(EMMC_SD_BASE + offset)) = val;
-}
-#endif /* DISK_SDCARD || DISK_EMMC */
-
-/* ============================================================================
- * PLIC - Platform-Level Interrupt Controller (MPFS250-specific)
- *
- * Generic PLIC functions are in src/boot_riscv.c
- * Platform must provide:
- *   - plic_get_context(): Map current hart to PLIC context
- *   - plic_dispatch_irq(): Dispatch IRQ to appropriate handler
- * ============================================================================ */
-
-/* Get the PLIC context for the current hart in S-mode */
+#else
 extern unsigned long get_boot_hartid(void);
 uint32_t plic_get_context(void)
 {
-    uint32_t hart_id = get_boot_hartid();
-    /* Get S-mode context for a given hart (1-4 for U54 cores) */
-    return hart_id * 2;
+    return (uint32_t)get_boot_hartid() * 2;
 }
-
-/* Forward declaration of SDHCI IRQ handler */
-#if defined(DISK_SDCARD) || defined(DISK_EMMC)
-extern void sdhci_irq_handler(void);
 #endif
 
 /* Dispatch IRQ to appropriate platform handler */
@@ -996,18 +1176,13 @@ void plic_dispatch_irq(uint32_t irq)
 }
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
-/* ============================================================================
- * SDHCI Platform HAL Functions
- * ============================================================================ */
+/* SDHCI Platform HAL */
 
-/* Platform initialization - called from sdhci_init() */
 void sdhci_platform_init(void)
 {
-    /* Release MMC controller from reset */
-    SYSREG_SOFT_RESET_CR &= ~SYSREG_SOFT_RESET_CR_MMC;
+    SYSREG_SOFT_RESET_CR &= ~MSS_PERIPH_MMC;
 }
 
-/* Platform interrupt setup - called from sdhci_init() */
 void sdhci_platform_irq_init(void)
 {
     /* Set priority for MMC main interrupt */
@@ -1025,109 +1200,69 @@ void sdhci_platform_irq_init(void)
 #endif
 }
 
-/* Platform bus mode selection - called from sdhci_init() */
 void sdhci_platform_set_bus_mode(int is_emmc)
 {
     (void)is_emmc;
-    /* Nothing additional needed for MPFS - mode is set in generic driver */
+}
+
+uint32_t sdhci_reg_read(uint32_t offset)
+{
+    return *((volatile uint32_t*)(EMMC_SD_BASE + offset));
+}
+
+void sdhci_reg_write(uint32_t offset, uint32_t val)
+{
+    *((volatile uint32_t*)(EMMC_SD_BASE + offset)) = val;
 }
 #endif /* DISK_SDCARD || DISK_EMMC */
 
-/* ============================================================================
- * DEBUG UART Functions
- * ============================================================================ */
-
+/* DEBUG UART */
 #ifdef DEBUG_UART
 
-#ifndef DEBUG_UART_BASE
-#define DEBUG_UART_BASE MSS_UART1_LO_BASE
-#endif
-
-/* Configure baud divisors with fractional baud rate support.
- *
- * UART baud rate divisor formula: divisor = PCLK / (baudrate * 16)
- *
- * To support fractional divisors (6-bit, 0-63), we scale up the calculation:
- *   divisor_x128 = (PCLK * 8) / baudrate  (128x scaled for rounding precision)
- *   divisor_x64  = divisor_x128 / 2       (64x scaled for 6-bit fractional)
- *   integer_div  = divisor_x64 / 64       (integer portion of divisor)
- *   frac_div     = divisor_x64 % 64       (fractional portion, 0-63)
- *
- * The fractional part is then adjusted using the x128 value for rounding.
- */
-static void uart_config_clk(uint32_t baudrate)
+/* Baud divisor: integer = PCLK/(baudrate*16), fractional (0-63) via 128x scaling. */
+static void uart_config_baud(unsigned long base, uint32_t baudrate)
 {
     const uint64_t pclk = MSS_APB_AHB_CLK;
-
-    /* Scale up for precision: (PCLK * 128) / (baudrate * 16) */
     uint32_t div_x128 = (uint32_t)((8UL * pclk) / baudrate);
     uint32_t div_x64  = div_x128 / 2u;
-
-    /* Extract integer and fractional parts */
     uint32_t div_int  = div_x64 / 64u;
     uint32_t div_frac = div_x64 - (div_int * 64u);
-
-    /* Apply rounding correction from x128 calculation */
     div_frac += (div_x128 - (div_int * 128u)) - (div_frac * 2u);
-
     if (div_int > (uint32_t)UINT16_MAX)
         return;
-
-    /* Write 16-bit divisor: set DLAB, write high/low bytes, clear DLAB */
-    MMUART_LCR(DEBUG_UART_BASE) |= DLAB_MASK;
-    MMUART_DMR(DEBUG_UART_BASE) = (uint8_t)(div_int >> 8);
-    MMUART_DLR(DEBUG_UART_BASE) = (uint8_t)div_int;
-    MMUART_LCR(DEBUG_UART_BASE) &= ~DLAB_MASK;
-
-    /* Enable fractional divisor if integer divisor > 1 */
+    MMUART_LCR(base) |= DLAB_MASK;
+    MMUART_DMR(base) = (uint8_t)(div_int >> 8);
+    MMUART_DLR(base) = (uint8_t)div_int;
+    MMUART_LCR(base) &= ~DLAB_MASK;
     if (div_int > 1u) {
-        MMUART_MM0(DEBUG_UART_BASE) |= EFBR_MASK;
-        MMUART_DFR(DEBUG_UART_BASE) = (uint8_t)div_frac;
+        MMUART_MM0(base) |= EFBR_MASK;
+        MMUART_DFR(base) = (uint8_t)div_frac;
+    } else {
+        MMUART_MM0(base) &= ~EFBR_MASK;
     }
-    else {
-        MMUART_MM0(DEBUG_UART_BASE) &= ~EFBR_MASK;
-    }
+}
+
+static void uart_init_base(unsigned long base)
+{
+    MMUART_MM0(base) &= ~ELIN_MASK;
+    MMUART_MM1(base) &= ~EIRD_MASK;
+    MMUART_MM2(base) &= ~EERR_MASK;
+    MMUART_IER(base)  = 0u;
+    MMUART_FCR(base)  = CLEAR_RX_FIFO_MASK | CLEAR_TX_FIFO_MASK | RXRDY_TXRDYN_EN_MASK;
+    MMUART_MCR(base) &= ~(LOOP_MASK | RLOOP_MASK);
+    MMUART_MM1(base) &= ~(E_MSB_TX_MASK | E_MSB_RX_MASK);
+    MMUART_MM2(base) &= ~(EAFM_MASK | ESWM_MASK);
+    MMUART_MM0(base) &= ~(ETTG_MASK | ERTO_MASK | EFBR_MASK);
+    MMUART_GFR(base)  = 0u;
+    MMUART_TTG(base)  = 0u;
+    MMUART_RTO(base)  = 0u;
+    uart_config_baud(base, 115200);
+    MMUART_LCR(base)  = MSS_UART_DATA_8_BITS | MSS_UART_NO_PARITY | MSS_UART_ONE_STOP_BIT;
 }
 
 void uart_init(void)
 {
-    /* Disable special modes: LIN, IrDA, SmartCard */
-    MMUART_MM0(DEBUG_UART_BASE) &= ~ELIN_MASK;
-    MMUART_MM1(DEBUG_UART_BASE) &= ~EIRD_MASK;
-    MMUART_MM2(DEBUG_UART_BASE) &= ~EERR_MASK;
-
-    /* Disable interrupts */
-    MMUART_IER(DEBUG_UART_BASE) = 0u;
-
-    /* Reset and configure FIFOs, enable RXRDYN/TXRDYN pins */
-    MMUART_FCR(DEBUG_UART_BASE) = 0u;
-    MMUART_FCR(DEBUG_UART_BASE) |= CLEAR_RX_FIFO_MASK | CLEAR_TX_FIFO_MASK;
-    MMUART_FCR(DEBUG_UART_BASE) |= RXRDY_TXRDYN_EN_MASK;
-
-    /* Disable loopback (local and remote) */
-    MMUART_MCR(DEBUG_UART_BASE) &= ~(LOOP_MASK | RLOOP_MASK);
-
-    /* Set LSB-first for TX/RX */
-    MMUART_MM1(DEBUG_UART_BASE) &= ~(E_MSB_TX_MASK | E_MSB_RX_MASK);
-
-    /* Disable AFM, single wire mode */
-    MMUART_MM2(DEBUG_UART_BASE) &= ~(EAFM_MASK | ESWM_MASK);
-
-    /* Disable TX time guard, RX timeout, fractional baud */
-    MMUART_MM0(DEBUG_UART_BASE) &= ~(ETTG_MASK | ERTO_MASK | EFBR_MASK);
-
-    /* Clear timing registers */
-    MMUART_GFR(DEBUG_UART_BASE) = 0u;
-    MMUART_TTG(DEBUG_UART_BASE) = 0u;
-    MMUART_RTO(DEBUG_UART_BASE) = 0u;
-
-    /* Configure baud rate (115200) */
-    uart_config_clk(115200);
-
-    /* Set line config: 8N1 */
-    MMUART_LCR(DEBUG_UART_BASE) = MSS_UART_DATA_8_BITS |
-                                  MSS_UART_NO_PARITY |
-                                  MSS_UART_ONE_STOP_BIT;
+    uart_init_base(DEBUG_UART_BASE);
 }
 
 void uart_write(const char* buf, unsigned int sz)
@@ -1135,7 +1270,7 @@ void uart_write(const char* buf, unsigned int sz)
     uint32_t pos = 0;
     while (sz-- > 0) {
         char c = buf[pos++];
-        if (c == '\n') { /* handle CRLF */
+        if (c == '\n') {
             while ((MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_THRE) == 0);
             MMUART_THR(DEBUG_UART_BASE) = '\r';
         }
@@ -1144,3 +1279,41 @@ void uart_write(const char* buf, unsigned int sz)
     }
 }
 #endif /* DEBUG_UART */
+
+#ifdef WOLFBOOT_RISCV_MMODE
+/* Initialize UART for a secondary hart (1-4). Hart 0 uses uart_init(). */
+void uart_init_hart(unsigned long hartid)
+{
+    unsigned long base;
+    if (hartid == 0 || hartid > 4)
+        return;
+    base = UART_BASE_FOR_HART(hartid);
+    /* MSS_PERIPH_MMUART0 = bit 5; shift by hartid selects MMUART1-4 */
+    SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << hartid);
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    SYSREG_SOFT_RESET_CR &= ~(MSS_PERIPH_MMUART0 << hartid);
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    udelay(100);
+    uart_init_base(base);
+    udelay(10);
+}
+
+/* Write to a specific hart's UART (hart 0-4). */
+void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz)
+{
+    unsigned long base;
+    uint32_t pos = 0;
+    if (hartid > 4)
+        return;
+    base = UART_BASE_FOR_HART(hartid);
+    while (sz-- > 0) {
+        char c = buf[pos++];
+        if (c == '\n') {
+            while ((MMUART_LSR(base) & MSS_UART_THRE) == 0);
+            MMUART_THR(base) = '\r';
+        }
+        while ((MMUART_LSR(base) & MSS_UART_THRE) == 0);
+        MMUART_THR(base) = c;
+    }
+}
+#endif /* WOLFBOOT_RISCV_MMODE */

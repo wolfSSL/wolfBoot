@@ -42,56 +42,32 @@
 extern void trap_entry(void);
 extern void trap_exit(void);
 
-/* Linker symbols - use native pointer-sized types */
+/* Linker symbols */
 #if __riscv_xlen == 64
-extern uint64_t  _start_vector;
-extern uint64_t  _stored_data;
-extern uint64_t  _start_data;
-extern uint64_t  _end_data;
-extern uint64_t  _start_bss;
-extern uint64_t  _end_bss;
-extern uint64_t  _end_stack;
-extern uint64_t  _start_heap;
+extern uint64_t  _start_vector, _stored_data, _start_data, _end_data;
+extern uint64_t  _start_bss, _end_bss, _end_stack, _start_heap;
 extern uint64_t  _global_pointer;
 extern void (* const trap_vector_table[])(void);
 #else
-extern uint32_t  _start_vector;
-extern uint32_t  _stored_data;
-extern uint32_t  _start_data;
-extern uint32_t  _end_data;
-extern uint32_t  _start_bss;
-extern uint32_t  _end_bss;
-extern uint32_t  _end_stack;
-extern uint32_t  _start_heap;
+extern uint32_t  _start_vector, _stored_data, _start_data, _end_data;
+extern uint32_t  _start_bss, _end_bss, _end_stack, _start_heap;
 extern uint32_t  _global_pointer;
 extern void (* const IV[])(void);
 #endif
 
 extern void main(void);
-
-/* reloc_trap_vector is implemented in boot_riscv_start.S */
 extern void reloc_trap_vector(const uint32_t *address);
 
-/* ============================================================================
- * Trap Handling
- * ============================================================================ */
-
+/* Trap state saved for debugging */
 #if __riscv_xlen == 64
-static uint64_t last_cause = 0;
-static uint64_t last_epc = 0;
-static uint64_t last_tval = 0;
+static uint64_t last_cause = 0, last_epc = 0, last_tval = 0;
 #else
-static uint32_t last_cause = 0;
-static uint32_t last_epc = 0;
-static uint32_t last_tval = 0;
+static uint32_t last_cause = 0, last_epc = 0, last_tval = 0;
 #endif
 
 #ifdef PLIC_BASE
-/* ============================================================================
- * PLIC - Platform-Level Interrupt Controller (Generic Implementation)
- * ============================================================================ */
+/* PLIC generic implementation */
 
-/* Set priority for an interrupt source */
 void plic_set_priority(uint32_t irq, uint32_t priority)
 {
     if (irq > 0 && priority <= PLIC_PRIORITY_MAX) {
@@ -103,7 +79,6 @@ void plic_set_priority(uint32_t irq, uint32_t priority)
     }
 }
 
-/* Enable an interrupt for the current hart's context */
 void plic_enable_interrupt(uint32_t irq)
 {
     uint32_t ctx = plic_get_context();
@@ -116,7 +91,6 @@ void plic_enable_interrupt(uint32_t irq)
     }
 }
 
-/* Disable an interrupt for the current hart's context */
 void plic_disable_interrupt(uint32_t irq)
 {
     uint32_t ctx = plic_get_context();
@@ -129,7 +103,6 @@ void plic_disable_interrupt(uint32_t irq)
     }
 }
 
-/* Set the priority threshold for the current hart's context */
 void plic_set_threshold(uint32_t threshold)
 {
     uint32_t ctx = plic_get_context();
@@ -138,31 +111,25 @@ void plic_set_threshold(uint32_t threshold)
     }
 }
 
-/* Claim the highest priority pending interrupt */
 uint32_t plic_claim(void)
 {
     uint32_t ctx = plic_get_context();
     return PLIC_CLAIM_REG(PLIC_BASE, ctx);
 }
 
-/* Signal completion of interrupt handling */
 void plic_complete(uint32_t irq)
 {
     uint32_t ctx = plic_get_context();
     PLIC_COMPLETE_REG(PLIC_BASE, ctx) = irq;
 }
 
-/* Handle external interrupts via PLIC */
 static void handle_external_interrupt(void)
 {
     uint32_t irq;
 
     /* Claim and dispatch interrupts until none pending */
     while ((irq = plic_claim()) != 0) {
-        /* Platform-provided dispatch function */
         plic_dispatch_irq(irq);
-
-        /* Signal completion to PLIC */
         plic_complete(irq);
     }
 }
@@ -174,6 +141,15 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     last_cause = cause;
     last_epc = epc;
     last_tval = tval;
+
+#ifdef DEBUG_BOOT
+    /* Debug: print trap info for synchronous exceptions (not interrupts) */
+    if (!(cause & MCAUSE_INT)) {
+        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\n", cause, epc,
+            tval);
+        while (1) ; /* halt to prevent infinite trap-mret loop */
+    }
+#endif
 
 #ifdef PLIC_BASE
     /* Check if this is an interrupt (MSB set) */
@@ -198,11 +174,13 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
 
 uint64_t hal_get_timer(void)
 {
-#if __riscv_xlen == 64
-    /* For RV64, CSR time contains full 64-bit value */
+#ifdef WOLFBOOT_RISCV_MMODE
+    /* M-mode: rdtime not available without HSS; use mcycle (CPU clock) */
+    return csr_read(mcycle);
+#elif __riscv_xlen == 64
     return csr_read(time);
 #else
-    /* For RV32, read both timeh and time with wrap-around protection */
+    /* RV32: read timeh+time with wrap-around protection */
     uint32_t hi, lo;
 
     do {
@@ -214,22 +192,12 @@ uint64_t hal_get_timer(void)
 #endif
 }
 
-/* Get timer value in microseconds
- * Formula: time_us = (ticks * 1000) / (rate / 1000)
- *        = (ticks * 1000000) / rate
- */
 uint64_t hal_get_timer_us(void)
 {
     uint64_t ticks = hal_get_timer();
     uint32_t rate = RISCV_SMODE_TIMER_FREQ;
-
-    /* Avoid overflow: (ticks * 1000) / (rate / 1000) */
     return (ticks * 1000) / (rate / 1000);
 }
-
-/* ============================================================================
- * Boot Functions
- * ============================================================================ */
 
 #ifdef MMU
 int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
@@ -239,8 +207,51 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 }
 #endif
 
+#ifdef WOLFBOOT_RISCV_MMODE
+/* Configure PMP entry 0: NAPOT full address space, RWX, for S-mode access */
+static void setup_pmp_for_smode(void)
+{
+    csr_write(pmpaddr0, -1UL);  /* all-ones = cover entire address space (NAPOT) */
+    csr_write(pmpcfg0, 0x1F);   /* A=NAPOT(3), R=1, W=1, X=1 */
+    __asm__ volatile("sfence.vma" ::: "memory");
+}
+
+/* Delegate common exceptions and S-mode interrupts to S-mode */
+static void delegate_traps_to_smode(void)
+{
+    /* Delegate exceptions 0-8, 12, 13, 15 (all except S-mode ecall, reserved) */
+    csr_write(medeleg, (1 << 0)|(1 << 1)|(1 << 2)|(1 << 3)|
+                       (1 << 4)|(1 << 5)|(1 << 6)|(1 << 7)|
+                       (1 << 8)|(1 << 12)|(1 << 13)|(1 << 15));
+    /* Delegate S-mode software, timer, and external interrupts */
+    csr_write(mideleg, (1 << IRQ_S_SOFT)|(1 << IRQ_S_TIMER)|(1 << IRQ_S_EXT));
+}
+
+/* Switch to S-mode and jump to entry (never returns). a0=hartid, a1=dtb */
+static void __attribute__((noreturn)) enter_smode(unsigned long entry,
+                                                  unsigned long hartid,
+                                                  unsigned long dtb)
+{
+    unsigned long mstatus_val;
+    csr_write(mepc, entry);
+    mstatus_val  = csr_read(mstatus);
+    mstatus_val &= ~MSTATUS_MPP_MASK;
+    mstatus_val |= MSTATUS_MPP_S | MSTATUS_MPIE;
+    mstatus_val &= ~MSTATUS_MIE;
+    csr_write(mstatus, mstatus_val);
+    csr_write(satp, 0);
+    __asm__ volatile(
+        "mv a0, %0\n"
+        "mv a1, %1\n"
+        "mret\n"
+        : : "r"(hartid), "r"(dtb) : "a0", "a1"
+    );
+    __builtin_unreachable();
+}
+#endif /* WOLFBOOT_RISCV_MMODE */
+
 #if __riscv_xlen == 64
-/* Get the hartid saved by boot_riscv_start.S in the tp register */
+/* Return the hartid saved in tp by boot_riscv_start.S */
 unsigned long get_boot_hartid(void)
 {
     unsigned long hartid;
@@ -260,17 +271,13 @@ void do_boot(const uint32_t *app_offset)
 #endif
 #ifdef MMU
     unsigned long dts_addr;
-#endif
-
-#ifdef MMU
     hal_dts_fixup((uint32_t*)dts_offset);
     dts_addr = (unsigned long)dts_offset;
+#else
+    unsigned long dts_addr = 0;
 #endif
 
 #if __riscv_xlen == 64
-    /* Get the hartid that was saved by boot_riscv_start.S in tp register.
-     * This is the hartid passed to wolfBoot by the prior boot stage (e.g., HSS).
-     * For MPFS, this should be 1-4 (U54 cores), never 0 (E51 monitor core). */
     hartid = get_boot_hartid();
 #endif
 
@@ -288,20 +295,46 @@ void do_boot(const uint32_t *app_offset)
     /* Relocate trap vector table to application */
     reloc_trap_vector(app_offset);
 
-    /*
-     * RISC-V Linux kernel boot requirements (Documentation/arch/riscv/boot.rst):
-     *   a0 = hartid of the current core
-     *   a1 = physical address of the device tree blob (DTB)
-     *   satp = 0 (MMU disabled)
-     *
-     * For SMP systems using ordered booting (preferred), only the boot hart
-     * enters the kernel. Secondary harts are started via SBI HSM extension.
-     */
+#ifdef WOLFBOOT_RISCV_MMODE
+#ifdef WOLFBOOT_MMODE_SMODE_BOOT
+    /* M-mode -> S-mode transition for Linux boot */
+    wolfBoot_printf("M->S transition: entry=0x%lx\n", (unsigned long)app_offset);
+    setup_pmp_for_smode();
+    delegate_traps_to_smode();
+    /* This never returns */
+    enter_smode((unsigned long)app_offset, hartid, dts_addr);
+#else
+    /* Direct M-mode jump for bare-metal payloads.
+     * Define WOLFBOOT_MMODE_SMODE_BOOT to boot Linux via S-mode transition. */
+    wolfBoot_printf("M-mode direct jump to 0x%lx\n", (unsigned long)app_offset);
+#ifdef DEBUG_BOOT
+    {
+        volatile uint8_t lsr = MMUART_LSR(DEBUG_UART_BASE);
+        uint32_t *p = (uint32_t*)app_offset;
+        wolfBoot_printf("Pre-jump: LSR=0x%x THRE=%d\n",
+                        (unsigned)lsr, (lsr & MSS_UART_THRE) ? 1 : 0);
+        wolfBoot_printf("App[0]=0x%lx [1]=0x%lx\n",
+                        (unsigned long)p[0], (unsigned long)p[1]);
+    }
+    /* Drain UART TX before jumping (~10 ms at 40 MHz) */
+    { volatile int i; for (i = 0; i < 400000; i++) {} }
+#endif /* DEBUG_BOOT */
+    (void)hartid;
+    (void)dts_addr;
+    /* fence + fence.i: ensure stores from ELF loading are visible to I-fetch */
+    asm volatile("fence" ::: "memory");
+    asm volatile("fence.i" ::: "memory");
+    asm volatile("jr %0" : : "r"(app_offset));
+    __builtin_unreachable();
+#endif /* WOLFBOOT_MMODE_SMODE_BOOT */
 
-#if __riscv_xlen == 64
-#ifdef MMU
+#elif __riscv_xlen == 64
+    /* S-mode / RV64 boot */
+    asm volatile("fence" ::: "memory");
+    riscv_icache_sync();
     asm volatile(
-    #ifndef WOLFBOOT_RISCV_MMODE
+    #if defined(MMU) && !defined(WOLFBOOT_RISCV_MMODE)
+        /* S-mode boot (e.g., when running under HSS/OpenSBI) */
         "csrw satp, zero\n"
         "sfence.vma\n"
     #endif
@@ -310,14 +343,7 @@ void do_boot(const uint32_t *app_offset)
         "jr %2\n"
         : : "r"(hartid), "r"(dts_addr), "r"(app_offset) : "a0", "a1"
     );
-#else
-    asm volatile(
-        "mv a0, %0\n"
-        "mv a1, zero\n"
-        "jr %1\n"
-        : : "r"(hartid), "r"(app_offset) : "a0", "a1"
-    );
-#endif
+
 #else /* RV32 */
     /* RV32: typically bare-metal without Linux, simpler boot */
     asm volatile("jr %0" : : "r"(app_offset));
@@ -329,12 +355,9 @@ void do_boot(const uint32_t *app_offset)
 
 void isr_empty(void)
 {
-    /* Empty interrupt handler */
 }
 
-/* ============================================================================
- * Reboot Functions
- * ============================================================================ */
+/* Reboot functions */
 
 #if __riscv_xlen == 32 && defined(RAM_CODE)
 /* RV32 HiFive1 watchdog-based reboot */
@@ -360,8 +383,6 @@ void RAMFUNCTION arch_reboot(void)
     AON_WDOGKEY = AON_WDOGKEY_VALUE;
     AON_WDOGFEED = 1;
 
-    while(1)
-        ;
     wolfBoot_panic();
 }
 
@@ -373,8 +394,6 @@ void WEAKFUNCTION arch_reboot(void)
     SYSREG_MSS_RESET_CR = 0xDEAD;
 #endif
 
-    while(1)
-        ;
     wolfBoot_panic();
 }
 
