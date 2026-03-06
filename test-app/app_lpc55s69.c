@@ -110,17 +110,16 @@ void main(void)
 
     check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
-    wolfBoot_printf("Hello from firmware version %d\n", boot_ver);
-
     if (
         boot_ver != 0 &&
         (boot_state == IMG_STATE_TESTING || boot_state == IMG_STATE_NEW)
     )
     {
-        wolfBoot_printf("Calling wolfBoot_success()\n");
 #ifdef WOLFCRYPT_SECURE_MODE
+        wolfBoot_printf("Calling wolfBoot_nsc_success()\n");
         wolfBoot_nsc_success();
 #else
+        wolfBoot_printf("Calling wolfBoot_success()\n");
         wolfBoot_success();
 #endif
         check_parts(&boot_ver, &update_ver, &boot_state, &update_state);

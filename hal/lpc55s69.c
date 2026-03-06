@@ -84,10 +84,9 @@ void hal_init(void)
 //    BOARD_BootClockPLL150M();
 #ifdef DEBUG_UART
     uart_init();
-#endif
-#endif
-
     uart_write("lpc55s69 init\n", 14);
+#endif
+#endif
 
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
@@ -195,6 +194,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 #define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
 #define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
 
+#ifdef DEBUG_UART
 void uart_init(void)
 {
     CLOCK_EnableClock(kCLOCK_Iocon);
@@ -262,3 +262,4 @@ void uart_write(const char *buf, unsigned int sz)
         sz -= line_sz + 1U;
     }
 }
+#endif
