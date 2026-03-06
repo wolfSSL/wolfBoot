@@ -62,11 +62,7 @@
     ld x30, 112(sp)
     ld x31, 120(sp)
     addi sp, sp, 128
-#ifndef WOLFBOOT_RISCV_MMODE
-    sret
-#else
-    mret
-#endif
+    MODE_PREFIX(ret)
 .endm
 
 #else /* __riscv_xlen == 32 */
@@ -110,11 +106,7 @@
   lw x30, 56(sp)
   lw x31, 60(sp)
   addi sp, sp, 64
-#ifndef WOLFBOOT_RISCV_MMODE
-  sret
-#else
-  mret
-#endif
+  MODE_PREFIX(ret)
 .endm
 
 #endif /* __riscv_xlen */

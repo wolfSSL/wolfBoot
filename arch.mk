@@ -564,10 +564,24 @@ endif
 ## RISCV (32-bit)
 ifeq ($(ARCH),RISCV)
   CROSS_COMPILE?=riscv32-unknown-elf-
-  ARCH_FLAGS=-march=rv32imac -mabi=ilp32 -mcmodel=medany
+  # GCC 12+ separated _zicsr (CSR instructions) and _zifencei (fence.i)
+  # from the base "I" extension, requiring them to be listed explicitly in
+  # the -march string.  Detect with compile-only tests (-c).
+  #
+  # IMPORTANT: these extensions are added to CFLAGS only (compilation).
+  # They must NOT appear in LDFLAGS because GCC 15 decomposes the ISA
+  # string (m→zmmul, a→zaamo+zalrsc, c→zca) producing an expanded
+  # -march that has no matching multilib, causing a fatal error at
+  # link time.  The base march is multilib-safe for all GCC versions.
+  RISCV32_ZICSR := $(shell echo "void _start(void){}" | \
+    $(CROSS_COMPILE)gcc -march=rv32imac_zicsr -mabi=ilp32 -c -x c - -o /dev/null 2>/dev/null && echo _zicsr)
+  RISCV32_ZIFENCEI := $(shell echo "void _start(void){}" | \
+    $(CROSS_COMPILE)gcc -march=rv32imac_zifencei -mabi=ilp32 -c -x c - -o /dev/null 2>/dev/null && echo _zifencei)
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV
-  CFLAGS+=$(ARCH_FLAGS)
-  LDFLAGS+=$(ARCH_FLAGS)
+  # Compilation: extended march so assembler accepts CSR/fence.i
+  CFLAGS+=-march=rv32imac$(RISCV32_ZICSR)$(RISCV32_ZIFENCEI) -mabi=ilp32 -mcmodel=medany
+  # Linking: base march (no extension suffixes) for multilib lookup
+  LDFLAGS+=-march=rv32imac -mabi=ilp32 -mcmodel=medany
   MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
   # Prune unused functions and data
@@ -582,7 +596,24 @@ endif
 ## RISCV64 (64-bit)
 ifeq ($(ARCH),RISCV64)
   CROSS_COMPILE?=riscv64-unknown-elf-
-  CFLAGS+=-DMMU -DWOLFBOOT_DUALBOOT
+
+  # M-mode vs S-mode configuration
+  ifeq ($(RISCV_MMODE),1)
+    # Machine Mode: Running directly from eNVM/L2 SRAM
+    CFLAGS+=-DWOLFBOOT_RISCV_MMODE -DWOLFBOOT_DUALBOOT
+    # Use M-mode specific linker script
+    LSCRIPT_IN:=hal/$(TARGET)-m.ld
+  else
+    # Supervisor Mode: Running under HSS
+    CFLAGS+=-DWOLFBOOT_DUALBOOT
+    ifeq ($(MPFS_L2LIM),1)
+      # L2-LIM mode: wolfBoot in on-chip SRAM, loaded by HSS (no DDR)
+      LSCRIPT_IN:=hal/$(TARGET)-hss.ld
+    else
+      # DDR mode (default): full MMU and FDT support
+      CFLAGS+=-DMMU
+    endif
+  endif
 
   # If SD card or eMMC is enabled use update_disk loader with GPT support
   ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
@@ -596,10 +627,30 @@ ifeq ($(ARCH),RISCV64)
     UPDATE_OBJS?=src/update_ram.o
   endif
 
-  ARCH_FLAGS=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+  # GCC 12+ extension detection (see RISCV 32-bit section above).
+  # Extensions go in CFLAGS only; LDFLAGS uses the base march to avoid
+  # GCC 15 multilib lookup failures from ISA string decomposition.
+  RISCV64_ZICSR := $(shell echo "void _start(void){}" | \
+    $(CROSS_COMPILE)gcc -march=rv64imafd_zicsr -mabi=lp64d -c -x c - -o /dev/null 2>/dev/null && echo _zicsr)
+  RISCV64_ZIFENCEI := $(shell echo "void _start(void){}" | \
+    $(CROSS_COMPILE)gcc -march=rv64imafd_zifencei -mabi=lp64d -c -x c - -o /dev/null 2>/dev/null && echo _zifencei)
+
+  ifeq ($(RISCV_MMODE),1)
+    # E51 core: rv64imac (no FPU, no crypto extensions)
+    CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
+    LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
+  else
+    # U54 cores: rv64gc (with FPU)
+    CFLAGS+=-march=rv64imafd$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64d -mcmodel=medany
+    LDFLAGS+=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+
+    # FDT support for DDR S-mode (not needed for L2-LIM bare-metal boot)
+    ifneq ($(MPFS_L2LIM),1)
+      CFLAGS+=-DWOLFBOOT_FDT
+      OBJS+=src/fdt.o
+    endif
+  endif
   CFLAGS+=-fno-builtin-printf -DUSE_M_TIME -g -nostartfiles -DARCH_RISCV -DARCH_RISCV64
-  CFLAGS+=$(ARCH_FLAGS)
-  LDFLAGS+=$(ARCH_FLAGS)
 
   # Prune unused functions and data
   CFLAGS +=-ffunction-sections -fdata-sections
@@ -607,9 +658,6 @@ ifeq ($(ARCH),RISCV64)
 
   # Unified RISC-V boot code (32/64-bit via __riscv_xlen)
   OBJS+=src/boot_riscv_start.o src/boot_riscv.o src/vector_riscv.o
-
-  CFLAGS+=-DWOLFBOOT_FDT
-  OBJS+=src/fdt.o
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o
@@ -1630,6 +1678,13 @@ ifeq ($(DEBUG_UART),1)
   ifneq (,$(wildcard hal/uart/uart_drv_$(TARGET).c))
     OBJS+=hal/uart/uart_drv_$(TARGET).o
   endif
+endif
+
+# UART QSPI programmer (PolarFire SoC MPFS): receive binary over UART and
+# write it directly to QSPI flash. Requires EXT_FLASH=1 and DEBUG_UART=1.
+# Use tools/scripts/mpfs_qspi_prog.py on the host side.
+ifeq ($(UART_QSPI_PROGRAM),1)
+  CFLAGS+=-DUART_QSPI_PROGRAM
 endif
 
 ifeq ($(NXP_CUSTOM_DCD),1)

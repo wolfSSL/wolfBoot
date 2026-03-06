@@ -10,6 +10,9 @@ OUTPUT_ARCH( "riscv" )
 
 ENTRY( _reset )
 
+/* Provide M-mode symbols as dummy values for test-app (not used at runtime) */
+PROVIDE(_main_hart_hls = 0);
+
 /* Memory areas */
 MEMORY
 {
@@ -23,12 +26,23 @@ MEMORY
 /* Define output sections */
 SECTIONS
 {
-  /* The startup code goes first into IRAM */
+  /* Entry point must be first for raw binary (.bin) boot.
+   * _reset() initializes GP, SP, BSS, then calls main().
+   * For ELF boot the ENTRY(_reset) directive handles this,
+   * but for .bin wolfBoot jumps to the load address directly. */
+  .init :
+  {
+    . = ALIGN(8);
+    KEEP(*(.init))
+    . = ALIGN(8);
+  } >IRAM
+
+  /* Interrupt/trap vector table */
   .isr_vector :
   {
     . = ALIGN(8);
-    KEEP(*(.isr_vector)) /* Startup code */
     _start_vector = .;
+    KEEP(*(.isr_vector))
     . = ALIGN(8);
   } >IRAM
 
@@ -42,7 +56,6 @@ SECTIONS
     *(.rodata)         /* .rodata sections (constants, strings, etc.) */
     *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
 
-    KEEP (*(.init))
     KEEP (*(.fini))
 
     . = ALIGN(8);

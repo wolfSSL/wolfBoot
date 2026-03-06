@@ -25,129 +25,279 @@
 #include "hal/mpfs250.h"
 #endif
 
-/* MODE_PREFIX is now defined in hal/riscv.h */
 
-/* ============================================================================
- * RISC-V Boot Entry Point
- * ============================================================================
- *
- * For RV64 (typically running under SBI):
- *   Entry conditions (passed by prior boot stage / SBI):
- *     a0 = hart ID (hardware thread identifier)
- *     a1 = pointer to device tree blob (DTB) in memory
- *
- * For RV32 (typically bare metal):
- *   Starts fresh, reads hart ID from CSR
- *
- * ============================================================================ */
+/* RV64 M-mode: direct boot from eNVM; a0=hartid from CSR
+ * RV64 S-mode: entered from SBI with a0=hartid, a1=DTB pointer
+ * RV32: bare metal; stack/gp from linker symbols */
 .section .init
 .globl _reset
 _reset:
 #if __riscv_xlen == 64
-    /* ---------- RV64 Boot Sequence ---------- */
 
 #ifdef WOLFBOOT_RISCV_MMODE
-    /*
-     * Machine Mode: Read hart ID from CSR since we're the first code
-     * running on this core. In Supervisor mode, the SBI passes it in a0.
-     */
-    csrr  a0, CSR_MHARTID
+    /* RV64 M-mode: first code from eNVM at 0x20220100 */
+    call  .L_clear_ras                /* flush stale RAS prediction state */
+
+    csrr  a0, mhartid
+    mv    tp, a0
+
+    /* Disable interrupts, clear M-mode CSRs */
+    li    t0, MSTATUS_MIE
+    csrc  mstatus, t0
+    csrw  mie, zero
+    csrw  mip, zero
+    csrw  mscratch, zero
+    csrw  mcause, zero
+    csrw  mepc, zero
+    csrw  pmpcfg0, zero
+    csrw  pmpcfg2, zero
+
+    /* Hart 0 (E51) continues; others park in .init until woken */
+    mv    a0, tp
+    bnez  a0, .L_secondary_hart_wait_envm
+
+#ifdef TARGET_mpfs250
+    /* Enable L2 ways (mask 0x0B: ways 0, 1, 3) and clear shutdown
+     * before copying text to L2 scratchpad. */
+    li    t1, 0x02010000
+    li    t2, 0x0B
+    sd    t2, 8(t1)                /* L2_WAY_ENABLE */
+    fence
+    li    t1, 0x20002000
+    sw    zero, 0x174(t1)          /* SYSREG_L2_SHUTDOWN_CR = 0 */
+    fence
 #endif
 
-    /*
-     * Preserve boot parameters in callee-saved registers:
-     *   tp (x4) = hart ID - Used for multi-hart coordination. The RISC-V ABI
-     *             reserves tp as thread-local storage pointer, which C code
-     *             won't clobber, making it safe for inter-hart communication.
-     *   s1 (x9) = DTB pointer - Saved for later use (e.g., passing to kernel)
-     */
+    /* Copy .text from eNVM to L2 SRAM.
+     * Use li/ld for dest/size (la would give wrong address across the
+     * eNVM-to-L2 gap which exceeds the 32-bit PC-relative range). */
+    la    t0, _stored_text
+    la    t3, _copy_params
+    ld    t1, 0(t3)                   /* dest (L2 SRAM base) */
+    ld    t2, 8(t3)                   /* byte count */
+    add   t2, t1, t2                  /* end address */
+
+.L_copy_text:
+    bgeu  t1, t2, .L_copy_text_done   /* if dest >= end, done */
+    ld    t3, 0(t0)
+    sd    t3, 0(t1)
+    addi  t0, t0, 8
+    addi  t1, t1, 8
+    j     .L_copy_text
+.L_copy_text_done:
+    fence.i                           /* flush icache before jumping to SRAM */
+
+    lui   t0, %hi(.L_sram_entry)
+    addi  t0, t0, %lo(.L_sram_entry)
+    jr    t0
+
+/* Two-level nested call to flush the Return Address Stack predictor */
+.L_clear_ras:
+    mv    t0, ra
+    nop
+    call  .L_clear_ras_inner
+    nop
+    mv    ra, t0
+    ret
+
+.L_clear_ras_inner:
+    nop
+    nop
+    ret
+
+/* linker-provided copy params (loaded via la, within eNVM PC range) */
+.align 3
+_copy_params:
+    .dword _start_text_sram   /* destination (L2 SRAM) */
+    .dword _text_size         /* byte count */
+
+/* Secondary harts (U54 cores) park here until woken by E51 via CLINT IPI.
+ * HLS protocol: signal IN_WFI -> wfi -> clear MSIP -> signal PASSED_WFI -> jump. */
+.L_secondary_hart_wait_envm:
+    li    t0, MSTATUS_MIE
+    csrc  mstatus, t0
+    csrw  mie, zero
+    csrw  mip, zero
+    li    t0, MIP_MSIP                 /* wake only on IPI */
+    csrw  mie, t0
+
+    /* Set up per-hart stack: base + (hartid+1)*STACK_SIZE_PER_HART */
+    csrr  a0, mhartid
+    la    t0, _secondary_hart_stack_base
+    li    t1, STACK_SIZE_PER_HART
+    addi  a1, a0, 1
+    mul   t2, a1, t1
+    add   sp, t0, t2
+    li    t0, -16
+    and   sp, sp, t0
+
+    addi  sp, sp, -64                  /* allocate 64-byte HLS at top of stack */
+    mv    s11, sp
+    sd    zero,  0(s11)
+    sd    zero,  8(s11)
+    sd    zero, 16(s11)
+    sd    zero, 24(s11)
+    sd    zero, 32(s11)
+    sd    zero, 40(s11)
+    sd    zero, 48(s11)
+    sd    zero, 56(s11)
+
+    /* Wait for E51 to signal HLS_MAIN_HART_STARTED */
+    li    t3, 0x12344321
+    la    t1, _main_hart_hls
+.L_wait_main_hart:
+    lwu   t2, 0(t1)
+    bne   t3, t2, .L_wait_main_hart
+
+    li    t0, 0x12345678               /* HLS_OTHER_HART_IN_WFI */
+    sw    t0, 0(s11)
+    fence iorw, iorw
+
+.L_secondary_wfi_loop:
+    wfi
+    csrr  t0, mip
+    andi  t0, t0, MIP_MSIP
+    beqz  t0, .L_secondary_wfi_loop
+
+    csrr  a0, mhartid
+    li    t0, 0x02000000               /* CLINT_BASE */
+    slli  t1, a0, 2
+    add   t0, t0, t1
+    sw    zero, 0(t0)                  /* clear MSIP */
+
+    li    t0, 0x87654321               /* HLS_OTHER_HART_PASSED_WFI */
+    sw    t0, 0(s11)
+    fence iorw, iorw
+    fence.i
+
+    csrr  a0, mhartid
+    mv    a1, s11
+    la    t0, secondary_hart_entry
+    jr    t0
+
+/* .text section follows — runs from L2 SRAM after copy from eNVM */
+.section .text
+.L_sram_entry:
+    la    t0, trap_vector_table
+    csrw  mtvec, t0
+1:  csrr  t1, mtvec
+    bne   t0, t1, 1b
+
+    /* Zero all GPRs (tp = hart ID preserved) */
+    li    x1, 0
+    li    x2, 0
+    li    x3, 0
+    /* x4 (tp) = hart ID, don't clear */
+    li    x5, 0
+    li    x6, 0
+    li    x7, 0
+    li    x8, 0
+    li    x9, 0
+    li    x10, 0
+    li    x11, 0
+    li    x12, 0
+    li    x13, 0
+    li    x14, 0
+    li    x15, 0
+    li    x16, 0
+    li    x17, 0
+    li    x18, 0
+    li    x19, 0
+    li    x20, 0
+    li    x21, 0
+    li    x22, 0
+    li    x23, 0
+    li    x24, 0
+    li    x25, 0
+    li    x26, 0
+    li    x27, 0
+    li    x28, 0
+    li    x29, 0
+    li    x30, 0
+    li    x31, 0
+
+    /* Spin until misa confirms RV64 (MSB set = negative when sign-extended) */
+.L_xlen_check:
+    csrr  t0, misa
+    bltz  t0, .L_xlen_ok
+    j     .L_xlen_check
+.L_xlen_ok:
+
+    .option push
+    .option norelax
+    la    gp, __global_pointer$
+    .option pop
+
+    la    sp, _end_stack
+    li    t0, -16
+    and   sp, sp, t0
+    mv    s0, sp
+
+    /* Copy .data from flash to RAM */
+    la    t0, _stored_data
+    la    t1, _start_data
+    la    t2, _end_data
+    beq   t0, t1, .L_data_copy_done
+.L_data_copy:
+    beq   t1, t2, .L_data_copy_done
+    ld    t3, 0(t0)
+    sd    t3, 0(t1)
+    addi  t0, t0, 8
+    addi  t1, t1, 8
+    j     .L_data_copy
+.L_data_copy_done:
+
+    /* Clear .bss */
+    la    t0, _start_bss
+    la    t1, _end_bss
+.L_bss_clear:
+    beq   t0, t1, .L_bss_clear_done
+    sd    zero, 0(t0)
+    addi  t0, t0, 8
+    j     .L_bss_clear
+.L_bss_clear_done:
+
+#ifndef TARGET_mpfs250
+    /* Clear SiFive bus error unit accrued registers (not present on MPFS) */
+    la a4,0x01700020UL
+    sb   x0, 0(a4)
+    la a4,0x01701020UL
+    sb   x0, 0(a4)
+    la a4,0x01702020UL
+    sb   x0, 0(a4)
+    la a4,0x01703020UL
+    sb   x0, 0(a4)
+    la a4,0x01704020UL
+    sb   x0, 0(a4)
+#endif
+
+    mv    a0, tp
+    j     main
+
+#else
+    /* RV64 S-mode: a0=hartid, a1=DTB pointer (passed by SBI) */
     mv    tp, a0
     mv    s1, a1
-
-    /*
-     * Initialize global pointer to zero as a safety measure.
-     * If an exception occurs before the C runtime is initialized,
-     * gp=0 ensures predictable behavior rather than random memory access.
-     */
     mv    gp, zero
 
-    /*
-     * Configure trap/exception handler:
-     * Load address of trap_vector_table into the trap-vector base-address
-     * register (mtvec in M-mode, stvec in S-mode). All synchronous exceptions
-     * and interrupts will vector through this table.
-     */
     la    t0, trap_vector_table
-    csrw  MODE_PREFIX(tvec), t0
-
-    /*
-     * Disable all interrupt sources initially by clearing the
-     * interrupt-enable register (mie/sie). This prevents spurious
-     * interrupts during early initialization.
-     */
-    csrw  MODE_PREFIX(ie), zero
-
-    /*
-     * Enable interrupt sources:
-     * - Software Interrupts (IPIs) for multi-hart boot coordination
-     * - External Interrupts for PLIC-routed peripheral interrupts (e.g., MMC)
-     *
-     * M-mode: MSIE (Software) + MEIE (External)
-     * S-mode: SSIE (Software) + SEIE (External)
-     */
-#ifndef WOLFBOOT_RISCV_MMODE
+    csrw  stvec, t0
+    csrw  sie, zero
     li    t0, (SIE_SSIE | SIE_SEIE)
-#else
-    li    t0, (MIE_MSIE | MIE_MEIE)
-#endif
-    csrs  MODE_PREFIX(ie), t0
-
-    /*
-     * Enable global interrupts by setting the SIE/MIE bit in sstatus/mstatus.
-     * Without this, the CPU will never take interrupts regardless of the
-     * per-source enables in sie/mie.
-     *
-     * M-mode: mstatus.MIE (bit 3)
-     * S-mode: sstatus.SIE (bit 1)
-     */
-#ifndef WOLFBOOT_RISCV_MMODE
+    csrs  sie, t0
     li    t0, SSTATUS_SIE
-#else
-    li    t0, MSTATUS_MIE
-#endif
-    csrs  MODE_PREFIX(status), t0
+    csrs  sstatus, t0
 
-    /*
-     * Initialize stack pointer:
-     *   WOLFBOOT_STACK_TOP = 0x80000000 (M-mode) or 0x80200000 (S-mode)
-     *
-     * The stack grows downward from this address. RISC-V calling convention
-     * requires 16-byte stack alignment, enforced by AND with -16 (0xFFFF...FFF0).
-     *
-     * s0 (frame pointer) is set to match sp for the initial stack frame.
-     */
     li    t0, -16
     li    t1, WOLFBOOT_STACK_TOP
     and   sp, t1, t0
     mv    s0, sp
-
-    /*
-     * Set global pointer (gp) to the stack base.
-     * Note: This is platform-specific. Typically gp points to a .sdata
-     * section for efficient global variable access, but here it's used
-     * as a known reference point for early boot.
-     */
     mv    gp, s0
 
-    /*
-     * Jump to C entry point:
-     *   a0 = hart ID (restored from tp for main's first argument)
-     *
-     * Using 'j' (jump) instead of 'call' since main() should never return.
-     * The DTB pointer in s1 can be retrieved later if needed.
-     */
     mv    a0, tp
     j     main
+
+#endif /* WOLFBOOT_RISCV_MMODE */
 
 #else /* __riscv_xlen == 32 */
     /* ---------- RV32 Boot Sequence ---------- */
@@ -191,15 +341,7 @@ _reset:
 
 #endif /* __riscv_xlen */
 
-/* ============================================================================
- * reloc_trap_vector - Relocate trap vector table
- *
- * Parameters:
- *   a0 = pointer to new trap vector table base (uint32_t*)
- *
- * Sets the trap-vector base-address register to (address + 4),
- * accounting for the header offset in the application image.
- * ============================================================================ */
+/* reloc_trap_vector: update tvec to app image trap table (a0 = base uint32_t*) */
 .globl reloc_trap_vector
 reloc_trap_vector:
     addi  a0, a0, 4                  /* address + 1 (uint32_t* = +4 bytes) */

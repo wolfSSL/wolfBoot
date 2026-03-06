@@ -42,11 +42,11 @@ void __attribute__((naked,section(".init"))) _reset(void) {
     asm volatile("la gp, _global_pointer");
     asm volatile("la sp, _end_stack");
 
-    /* Set up vectored interrupt, with IV starting at offset 0x100 */
-#ifndef WOLFBOOT_RISCV_MMODE
-    asm volatile("csrw stvec, %0":: "r"((uint8_t *)(&_start_vector) + 1));
-#else
+    /* Set up vectored interrupt table. The +1 sets MODE=1 (vectored). */
+#ifdef WOLFBOOT_RISCV_MMODE
     asm volatile("csrw mtvec, %0":: "r"((uint8_t *)(&_start_vector) + 1));
+#else
+    asm volatile("csrw stvec, %0":: "r"((uint8_t *)(&_start_vector) + 1));
 #endif
 
     src = (uint32_t *) &_stored_data;
@@ -79,10 +79,12 @@ void do_boot(const uint32_t *app_offset)
 static uint32_t synctrap_cause = 0;
 void __attribute__((naked)) isr_synctrap(void)
 {
-#ifndef WOLFBOOT_RISCV_MMODE
-    asm volatile("csrr %0, scause" : "=r"(synctrap_cause));
-#else
+#ifdef WOLFBOOT_RISCV_MMODE
     asm volatile("csrr %0, mcause" : "=r"(synctrap_cause));
+    asm volatile("mret");
+#else
+    asm volatile("csrr %0, scause" : "=r"(synctrap_cause));
+    asm volatile("sret");
 #endif
 }
 

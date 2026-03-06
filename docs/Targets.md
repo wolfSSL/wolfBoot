@@ -797,11 +797,13 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 
 ### PolarFire SoC Files
 
-`hal/mpfs250.c` - Hardware abstraction layer implementation (UART and uSD)
+`hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)
 `hal/mpfs250.h` - Register definitions and hardware interfaces
-`hal/mpfs250.ld` - Linker script for the platform
+`hal/mpfs250.ld` - Linker script for S-mode (HSS-based boot)
+`hal/mpfs250-m.ld` - Linker script for M-mode (eNVM + L2 SRAM)
 `hal/mpfs.dts` - Device tree source
-`hal/mpfs.yaml` - HSS payload generator configuration
+`hal/mpfs.yaml` - HSS payload generator configuration for use of DDR
+`hal/mpfs-l2lim.yaml` - HSS payload generator for the use of L2-LIM
 `hal/mpfs250.its` - Example FIT image creation template
 
 ### PolarFire SoC Building wolfBoot
@@ -902,6 +904,127 @@ Notes:
   explicitly want wolfBoot to load from disk and the application from QSPI.
 - The MSS QSPI path expects external flash on the MSS QSPI pins; the SC QSPI path is for
   fabric-connected flash (design flash) accessed via the System Controller's QSPI instance.
+
+### PolarFire SoC M-Mode (bare-metal eNVM boot)
+
+wolfBoot supports running directly in Machine Mode (M-mode) on PolarFire SoC, replacing the Hart
+Software Services (HSS) as the first-stage bootloader. wolfBoot runs on the E51 monitor core from
+eNVM and loads a signed application from SC QSPI flash into L2 Scratchpad (on-chip RAM) — no HSS
+or DDR required. This is the simplest bring-up path.
+
+**Features:**
+* Runs on E51 monitor core (hart 0) directly from eNVM
+* Executes from L2 Scratchpad SRAM (256 KB at `0x0A000000`)
+* Loads signed application from SC QSPI flash to L2 Scratchpad (`0x0A010200`)
+* No HSS or DDR required — boots entirely from on-chip memory
+* Wakes and manages secondary U54 harts via IPI
+* Per-hart UART output (each hart uses its own MMUART)
+* ECC384 + SHA384 signature verification
+
+**Relevant files:**
+
+| File | Description |
+|------|-------------|
+| `config/examples/polarfire_mpfs250_m_qspi.config` | M-mode + SC QSPI configuration |
+| `hal/mpfs250-m.ld` | M-mode linker script (eNVM + L2 SRAM) |
+| `hal/mpfs250.c` | HAL with QSPI driver, UART, L2 cache init |
+| `src/boot_riscv_start.S` | M-mode assembly startup |
+
+**Boot flow:**
+1. **eNVM reset vector** (`0x20220100`): CPU starts, startup code copies wolfBoot to L2 Scratchpad
+2. **L2 Scratchpad execution** (`0x0A000000`): wolfBoot runs from scratchpad
+3. **Hardware init**: L2 cache configuration, UART setup
+4. **QSPI init**: SC QSPI controller (`0x37020100`), JEDEC ID read, 4-byte address mode
+5. **Image load**: Read signed image from QSPI flash (`0x20000`) to L2 Scratchpad (`0x0A010200`)
+6. **Verify & boot**: SHA384 integrity check, ECC384 signature verification, jump to app
+
+**Build:**
+```sh
+cp config/examples/polarfire_mpfs250_m_qspi.config .config
+make clean && make wolfboot.elf
+```
+
+**Flash wolfBoot to eNVM** (requires SoftConsole / Libero SoC install):
+```sh
+export SC_INSTALL_DIR=/opt/Microchip/SoftConsole-v2022.2-RISC-V-747
+
+$SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
+    $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
+    --bootmode 1 --die MPFS250T --package FCG1152 --workdir $PWD wolfboot.elf
+```
+
+**Build and sign the test application:**
+```sh
+make test-app/image_v1_signed.bin
+```
+
+**Flash the signed application to QSPI** using the UART programmer (requires `EXT_FLASH=1` and
+`UART_QSPI_PROGRAM=1` in `.config`, and `pyserial` installed):
+```sh
+python3 tools/scripts/mpfs_qspi_prog.py /dev/ttyUSB0 \
+    test-app/image_v1_signed.bin 0x20000
+```
+
+The script:
+1. Waits for wolfBoot to print the `QSPI-PROG: Press 'P'` prompt (power-cycle the board)
+2. Sends `P` to enter programming mode
+3. Transfers the binary in 256-byte ACK-driven chunks
+4. wolfBoot erases, writes, and then continues booting the new image
+
+Use `0x20000` for the boot partition and `0x02000000` for the update partition.
+
+**QSPI partition layout** (Micron MT25QL01G, 128 MB):
+
+| Region | Address | Size |
+|--------|---------|------|
+| Boot partition | `0x00020000` | ~32 MB |
+| Update partition | `0x02000000` | ~32 MB |
+| Swap partition | `0x04000000` | 64 KB |
+
+**UART mapping:**
+
+| Hart | Core | MMUART | USB device |
+|------|------|--------|------------|
+| 0 | E51 | MMUART0 | /dev/ttyUSB0 |
+| 1 | U54_1 | MMUART1 | /dev/ttyUSB1 |
+| 2 | U54_2 | MMUART2 | N/A |
+| 3 | U54_3 | MMUART3 | N/A |
+| 4 | U54_4 | MMUART4 | N/A |
+
+**Expected serial output on successful boot:**
+```
+wolfBoot Version: 2.7.0 (...)
+Running on E51 (hart 0) in M-mode
+QSPI: Using SC QSPI Controller (0x37020100)
+QSPI: Flash ID = 0x20 0xBA 0x21
+QSPI-PROG: Press 'P' within 3s to program flash
+QSPI-PROG: No trigger (got 0x00 ...), booting
+Versions: Boot 1, Update 0
+...
+Firmware Valid
+Booting at 0x...
+```
+
+**Notes:**
+- The E51 is `rv64imac` (no FPU or crypto extensions). wolfBoot is compiled with `NO_ASM=1` to
+  use portable C crypto implementations and `-march=rv64imac -mabi=lp64` for correct code
+  generation. The `rdtime` CSR instruction is not available in bare-metal M-mode; wolfBoot uses a
+  calibrated busy-loop for all delays (`udelay()` in `hal/mpfs250.c`).
+- `UART_QSPI_PROGRAM=1` adds a 3-second boot pause every time. Set to `0` once the flash
+  contents are stable.
+- The config uses `WOLFBOOT_LOAD_ADDRESS=0x0A010200` to place the application in L2 Scratchpad
+  above wolfBoot code (~64 KB at `0x0A000000`), with the stack at the top of the 256 KB region.
+- **LIM instruction fetch limitation:** The on-chip LIM (`0x08000000`, 2 MB) is backed by L2
+  cache ways. When `L2_WAY_ENABLE` is set to `0x0B` (all cache ways 0–7 active for caching),
+  no ways remain for LIM backing SRAM. Data reads from LIM work through the L2 cache, but
+  instruction fetch silently hangs — the CPU stalls with no trap generated. For this reason the
+  application is loaded into L2 Scratchpad (`0x0A000000`), which is always accessible regardless
+  of `L2_WAY_ENABLE`. To use LIM, reduce `L2_WAY_ENABLE` to free cache ways for LIM backing.
+- **Strip debug symbols** before signing the test-app ELF. The debug build is ~150 KB but the
+  stripped ELF is ~5 KB. L2 Scratchpad has ~150 KB available between wolfBoot code and the stack:
+  `riscv64-unknown-elf-strip --strip-debug test-app/image.elf`
+- **DDR support:** DDR initialization is available on the `polarfire_ddr` branch for use cases
+  that require loading larger applications to DDR memory.
 
 ### PolarFire testing
 
@@ -1362,13 +1485,6 @@ ML-DSA    87     sign       100 ops took 1.162 sec, avg 11.617 ms,    86.084 ops
 ML-DSA    87   verify       200 ops took 1.077 sec, avg 5.385 ms,   185.704 ops/sec
 Benchmark complete
 ```
-
-### PolarFire TODO
-
-* Add support for full HSS replacement using wolfboot
-  - Machine level assembly startup
-  - DDR driver
-
 
 ## STM32F7
 

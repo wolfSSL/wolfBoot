@@ -4,4 +4,3 @@ add-symbol-file test-app/image.elf
 set pagination off
 foc c
 
-
