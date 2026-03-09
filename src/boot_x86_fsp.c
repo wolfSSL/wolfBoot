@@ -257,13 +257,23 @@ static void jump_into_wolfboot(void)
 /* The image needs to be already verified */
 int wolfBoot_image_measure(uint8_t *image)
 {
-    uint16_t hash_len;
-    uint8_t *hash;
+    struct wolfBoot_image img;
+    int ret;
 
-    hash_len = wolfBoot_find_header(image + IMAGE_HEADER_OFFSET,
-                                    WOLFBOOT_SHA_HDR, &hash);
-    wolfBoot_print_hexstr(hash, hash_len, 0);
-    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, hash, __LINE__);
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_open_image_address(&img, image);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = wolfBoot_verify_integrity(&img);
+    if (ret != 0 || img.sha_hash == NULL) {
+        return -1;
+    }
+
+    wolfBoot_print_hexstr(img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, img.sha_hash,
+        __LINE__);
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
