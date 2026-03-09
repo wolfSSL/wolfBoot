@@ -58,6 +58,19 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
+static int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
+    uint32_t len)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++) {
+        diff |= expected[i] ^ actual[i];
+    }
+
+    return diff == 0;
+}
+
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
      defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
@@ -367,6 +380,9 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
 static inline int DecodeAsn1Tag(const uint8_t* input, int inputSz, int* inOutIdx,
     int* tag_len, uint8_t tag)
 {
+    if (*inOutIdx < 0 || *inOutIdx >= inputSz || (*inOutIdx + 1) >= inputSz) {
+        return -1;
+    }
     if (input[*inOutIdx] != tag) {
         return -1;
     }
@@ -1492,6 +1508,12 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
 
     img->hdr     = hdr;
     img->fw_size = wolfBoot_image_size(hdr);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        return -1;
+    }
+#endif
     img->fw_base = image;
     img->part    = PART_SELF;
     img->hdr_ok  = 1;
@@ -1518,7 +1540,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
-    if (memcmp(digest, stored_sha, stored_sha_len) != 0)
+    if (!image_CT_compare(digest, stored_sha, stored_sha_len))
         return -1;
     img->sha_ok = 1;
     img->sha_hash = stored_sha;
@@ -2366,6 +2388,21 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 
 #if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
 
+/* Compare fixed-size key hints without early exit to avoid leaking hash prefix
+ * matches through lookup timing. */
+static int keyslot_CT_hint_matches(const uint8_t *expected,
+    const uint8_t *actual)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++) {
+        diff |= expected[i] ^ actual[i];
+    }
+
+    return diff == 0;
+}
+
 /**
  * @brief Get the key slot ID by SHA hash.
  *
@@ -2378,13 +2415,14 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 int keyslot_id_by_sha(const uint8_t *hint)
 {
     int id;
+    int match_id = -1;
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         key_hash(id, digest);
-        if (memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
-            return id;
+        if ((match_id < 0) && keyslot_CT_hint_matches(digest, hint)) {
+            match_id = id;
         }
     }
-    return -1;
+    return match_id;
 }
 #endif /* !WOLFBOOT_NO_SIGN && !WOLFBOOT_RENESAS_SCEPROTECT */

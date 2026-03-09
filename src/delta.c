@@ -135,6 +135,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
             continue;
         }
         if (*pp == ESC) {
+            if ((ctx->patch_size - ctx->p_off) < 2)
+                return -1;
             if (*(pp + 1) == ESC) {
                 *(dst + dst_off) = ESC;
                 /* Two bytes of the patch have been consumed to produce ESC */
@@ -142,6 +144,8 @@ int wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
                 dst_off++;
                 continue;
             } else {
+                if ((ctx->patch_size - ctx->p_off) < BLOCK_HDR_SIZE)
+                    return -1;
                 hdr = (struct block_hdr *)pp;
                 src_off = (hdr->off[0] << 16) + (hdr->off[1] << 8) +
                     hdr->off[2];

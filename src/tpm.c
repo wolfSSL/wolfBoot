@@ -382,6 +382,8 @@ int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
           defined(WOLFBOOT_SIGN_RSA3072) || \
           defined(WOLFBOOT_SIGN_RSA4096)
         uint32_t inOutIdx = 0;
+        uint32_t exponent = 0;
+        uint32_t j;
         const uint8_t*n = NULL, *e = NULL;
         uint32_t nSz = 0, eSz = 0;
         if (key_type != AUTH_KEY_RSA2048 && key_type != AUTH_KEY_RSA3072 &&
@@ -396,9 +398,18 @@ int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
             );
         }
         if (rc == 0) {
+            if (eSz == 0 || eSz > sizeof(exponent))
+                rc = -1;
+        }
+        if (rc == 0) {
+            for (j = 0; j < eSz; j++) {
+                exponent = (exponent << 8) | e[j];
+            }
+        }
+        if (rc == 0) {
             /* Load public key into TPM */
             rc = wolfTPM2_LoadRsaPublicKey_ex(&wolftpm_dev, pubKey,
-                n, nSz, *((uint32_t*)e),
+                n, nSz, exponent,
                 TPM_ALG_NULL, WOLFBOOT_TPM_HASH_ALG);
         }
     #else

@@ -34,6 +34,23 @@
 
 #include "gpt.h"
 
+static uint32_t gpt_crc32(const uint8_t *data, uint32_t len)
+{
+    uint32_t crc = 0xFFFFFFFFU;
+    uint32_t i;
+    uint32_t j;
+
+    for (i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (j = 0; j < 8; j++) {
+            uint32_t mask = -(crc & 1U);
+            crc = (crc >> 1) ^ (0xEDB88320U & mask);
+        }
+    }
+
+    return ~crc;
+}
+
 /**
  * @brief Check MBR for protective GPT partition entry.
  *
@@ -98,6 +115,7 @@ int gpt_check_mbr_protective(const uint8_t *mbr_sector, uint32_t *gpt_lba)
 int gpt_parse_header(const uint8_t *sector, struct guid_ptable *hdr)
 {
     const struct guid_ptable *src;
+    struct guid_ptable tmp;
 
     if (sector == NULL || hdr == NULL) {
         return -1;
@@ -107,6 +125,16 @@ int gpt_parse_header(const uint8_t *sector, struct guid_ptable *hdr)
 
     /* Validate GPT signature */
     if (src->signature != GPT_SIGNATURE) {
+        return -1;
+    }
+
+    if (src->hdr_size < 0x5C || src->hdr_size > GPT_SECTOR_SIZE) {
+        return -1;
+    }
+
+    memcpy(&tmp, src, sizeof(tmp));
+    tmp.hdr_crc32 = 0;
+    if (gpt_crc32((const uint8_t *)&tmp, src->hdr_size) != src->hdr_crc32) {
         return -1;
     }
 

@@ -45,6 +45,15 @@ int WP11_Library_Init(void);
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
+
+static void wolfBoot_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+
+    while (len-- > 0) {
+        *p++ = 0;
+    }
+}
 #endif /* EXT_ENCRYPTED */
 
 #ifdef MMU
@@ -224,6 +233,7 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
 static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     struct wolfBoot_image *dst, uint32_t sector)
 {
+    int ret = 0;
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = src_sector_offset;
@@ -245,8 +255,10 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         dst_sector_offset = 0;
 
 #ifdef EXT_ENCRYPTED
-    if (wolfBoot_initialize_encryption() < 0)
-        return -1;
+    if (wolfBoot_initialize_encryption() < 0) {
+        ret = -1;
+        goto out;
+    }
 
     wolfBoot_get_encrypt_key(key, nonce);
     if (src->part == PART_SWAP)
@@ -286,7 +298,8 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
             }
             pos += FLASHBUFFER_SIZE;
         }
-        return pos;
+        ret = pos;
+        goto out;
     }
 #endif
     wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
@@ -298,12 +311,21 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         }
         pos += FLASHBUFFER_SIZE;
     }
-    return pos;
+    ret = pos;
+#if defined(EXT_FLASH) || defined(EXT_ENCRYPTED)
+out:
+#endif
+#ifdef EXT_ENCRYPTED
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
+#endif
+    return ret;
 }
 
 #ifdef EXT_ENCRYPTED
 static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
 {
+    int ret = 0;
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = 0;
@@ -325,8 +347,10 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
 
     iv_counter = src_sector_offset;
     iv_counter /= ENCRYPT_BLOCK_SIZE;
-    if (wolfBoot_initialize_encryption() < 0)
-        return -1;
+    if (wolfBoot_initialize_encryption() < 0) {
+        ret = -1;
+        goto out;
+    }
     /*
      * Preserve the IV sequence used by the source sector so that the staging
      * copy in SWAP can be decrypted with exactly the same keystream when it is
@@ -345,9 +369,14 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
             wb_flash_write(dst, dst_sector_offset + pos, encrypted_block, ENCRYPT_BLOCK_SIZE);
             pos += ENCRYPT_BLOCK_SIZE;
         }
-        return 0;
-    } else
-        return wolfBoot_copy_sector(src, dst, sector);
+        ret = 0;
+    } else {
+        ret = wolfBoot_copy_sector(src, dst, sector);
+    }
+out:
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
+    return ret;
 }
 #else
 #define wolfBoot_backup_last_boot_sector(sec) wolfBoot_copy_sector(boot, swap, sec)
@@ -701,6 +730,10 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         sector++;
     }
 out:
+#ifdef EXT_ENCRYPTED
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
+#endif
 #ifdef EXT_FLASH
     ext_flash_lock();
 #endif

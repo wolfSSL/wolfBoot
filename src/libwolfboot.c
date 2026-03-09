@@ -107,8 +107,8 @@ int wolfBoot_initialize_encryption(void)
                              (2 * WOLFBOOT_SECTOR_SIZE)))
                              /* MAGIC (4B) + PART_FLAG (1B) + (N_SECTORS / 2) */
     #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
-    #define SECTOR_FLAGS_SIZE WOLFBOOT_SECTOR_SIZE - (4 + 1 + \
-        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE)
+    #define SECTOR_FLAGS_SIZE (WOLFBOOT_SECTOR_SIZE - (4 + 1 + \
+        ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
     /* MAGIC (4B) + PART_FLAG (1B) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE */
 #else
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))

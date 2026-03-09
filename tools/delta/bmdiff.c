@@ -98,7 +98,7 @@ int main(int argc, char *argv[])
     }
     len2 = st.st_size;
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
-    if (base == (void *)(-1)) {
+    if (buffer == (void *)(-1)) {
         perror("mmap");
         exit(3);
     }

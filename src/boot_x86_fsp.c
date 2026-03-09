@@ -82,6 +82,9 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 #define FSP_STATUS_RESET_REQUIRED_WARM  0x40000002
 #define MEMORY_4GB (4ULL * 1024 * 1024 * 1024)
 #define ENDLINE "\r\n"
+/* Standard PCI capabilities live in conventional config space at 0x40-0xFC,
+ * on 4-byte alignment, so there are at most 48 distinct capability headers. */
+#define PCI_MAX_STANDARD_CAPABILITIES 48
 
 
 /* compile time alignment checks */
@@ -257,13 +260,23 @@ static void jump_into_wolfboot(void)
 /* The image needs to be already verified */
 int wolfBoot_image_measure(uint8_t *image)
 {
-    uint16_t hash_len;
-    uint8_t *hash;
+    struct wolfBoot_image img;
+    int ret;
 
-    hash_len = wolfBoot_find_header(image + IMAGE_HEADER_OFFSET,
-                                    WOLFBOOT_SHA_HDR, &hash);
-    wolfBoot_print_hexstr(hash, hash_len, 0);
-    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, hash, __LINE__);
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_open_image_address(&img, image);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = wolfBoot_verify_integrity(&img);
+    if (ret != 0 || img.sha_hash == NULL) {
+        return -1;
+    }
+
+    wolfBoot_print_hexstr(img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, img.sha_hash,
+        __LINE__);
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 
@@ -332,19 +345,21 @@ static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
                               uint8_t cap_id, uint8_t *cap_off)
 {
     uint8_t r8, id;
+    uint8_t cap_count = 0;
     uint32_t r32;
 
     r32 = pci_config_read16(bus, dev, fun, PCI_STATUS_OFFSET);
     if (!(r32 & PCI_STATUS_CAP_LIST))
         return -1;
     r8 = pci_config_read8(bus, dev, fun, PCI_CAP_OFFSET);
-    while (r8 != 0) {
+    while ((r8 != 0) && (cap_count < PCI_MAX_STANDARD_CAPABILITIES)) {
         id = pci_config_read8(bus, dev, fun, r8);
         if (id == cap_id) {
             *cap_off = r8;
             return 0;
         }
         r8 = pci_config_read8(bus, dev, fun, r8 + 1);
+        cap_count++;
     }
     return -1;
 }

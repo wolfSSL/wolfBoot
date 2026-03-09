@@ -94,7 +94,7 @@ uint8_t flash[FLASH_SIZE];
 
 /* Mocks for ext_flash_read, ext_flash_write, and ext_flash_erase functions */
 int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
-    printf("Called ext_flash_read %p %p %d\n", address, data, len);
+    printf("Called ext_flash_read %p %p %d\n", (void *)address, (void *)data, len);
 
     /* Check that the read address and size are within the bounds of the flash memory */
     ck_assert_int_le(address + len, FLASH_SIZE);
@@ -106,7 +106,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
-    printf("Called ext_flash_write %p %p %d\n", address, data, len);
+    printf("Called ext_flash_write %p %p %d\n", (void *)address, (const void *)data, len);
 
 
     /* Check that the write address and size are within the bounds of the flash memory */

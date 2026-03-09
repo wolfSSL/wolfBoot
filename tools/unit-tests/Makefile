@@ -8,10 +8,21 @@ endif
 # Default library paths (can be overridden)
 WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
+WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
+WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
+
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
+WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
+endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFTPM)),)
+WOLFBOOT_LIB_WOLFTPM=../../../external-libs/wolfTPM
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
+WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
+WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -33,10 +44,10 @@ endif
 
 TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
-       unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
+       unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk \
-       unit-multiboot
+       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
+       unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp
 
 all: $(TESTS)
 
@@ -75,6 +86,7 @@ unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
 unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
 unit-pkcs11_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11
+unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DWOLFCRYPT_TZ_PSA
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -103,6 +115,15 @@ unit-extflash: ../../include/target.h unit-extflash.c
 unit-spi-flash: ../../include/target.h unit-spi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
+unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-tpm-rsa-exp: ../../include/target.h unit-tpm-rsa-exp.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
 
@@ -118,6 +139,11 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
 
+unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
+	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
+		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
 unit-mock-state: ../../include/target.h unit-mock-state.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -126,6 +152,11 @@ unit-sectorflags: ../../include/target.h unit-sectorflags.c
 
 unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ $^ $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048
+unit-image-rsa: ../../include/target.h unit-image.c unit-common.c
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(CFLAGS) -D__WOLFBOOT $(LDFLAGS)
 
 unit-nvm: ../../include/target.h unit-nvm.c
 	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
@@ -160,6 +191,9 @@ unit-update-ram: ../../include/target.h unit-update-ram.c
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-psa_store: ../../include/target.h unit-psa_store.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-psa_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 gpt-sfdisk-test.h:
 	truncate -s 131072 .gpt-tmp.img
