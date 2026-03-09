@@ -1492,6 +1492,12 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
 
     img->hdr     = hdr;
     img->fw_size = wolfBoot_image_size(hdr);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        return -1;
+    }
+#endif
     img->fw_base = image;
     img->part    = PART_SELF;
     img->hdr_ok  = 1;

@@ -28,6 +28,7 @@
 #define EXT_FLASH
 #define PART_UPDATE_EXT
 #define NVM_FLASH_WRITEONCE
+#define WOLFBOOT_SELF_HEADER
 
 #if defined(ENCRYPT_WITH_AES256) || defined(ENCRYPT_WITH_AES128)
     #define WOLFSSL_AES_COUNTER
@@ -61,6 +62,10 @@
 #include "wolfssl/wolfcrypt/sha.h"
 #include "wolfboot/wolfboot.h"
 
+#ifndef ARCH_FLASH_OFFSET
+#define ARCH_FLASH_OFFSET WOLFBOOT_PARTITION_BOOT_ADDRESS
+#endif
+
 #include "unit-keystore.c"
 
 #include "image.c"
@@ -75,6 +80,11 @@ static int verify_called = 0;
 static int find_header_fail = 0;
 static int find_header_called = 0;
 static int find_header_mocked = 1;
+
+uint8_t *wolfBoot_get_self_header(void)
+{
+    return NULL;
+}
 
 #if defined(WOLFBOOT_SIGN_ECC256)
 static const unsigned char pubkey_digest[SHA256_DIGEST_SIZE] = {
@@ -606,6 +616,8 @@ START_TEST(test_open_image)
 {
     struct wolfBoot_image img;
     int ret;
+    uint8_t self_hdr[IMAGE_HEADER_SIZE];
+    uint32_t oversize;
 
 
     /* invalid argument */
@@ -651,6 +663,17 @@ START_TEST(test_open_image)
     ck_assert_ptr_eq(img.hdr, (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
     ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
             + 256);
+
+    /* Self header must reject sizes beyond the partition payload budget */
+    memset(self_hdr, 0xFF, sizeof(self_hdr));
+    ((uint32_t *)self_hdr)[0] = WOLFBOOT_MAGIC;
+    oversize = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE + 1;
+    ((uint32_t *)self_hdr)[1] = oversize;
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_open_self_address(&img, self_hdr,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    ck_assert_int_eq(ret, -1);
 }
 END_TEST
 
