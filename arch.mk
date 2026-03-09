@@ -867,6 +867,12 @@ ifeq ($(TARGET),nrf5340)
   endif
 endif
 
+ifeq ($(TARGET),nrf54l)
+  ifneq ($(TZEN), 1)
+    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+  endif
+endif
+
 ifeq ($(TARGET),nrf5340_net)
   # Net core doesn't support DSP and FP
   CFLAGS+=-mcpu=cortex-m33+nodsp+nofp

@@ -17,6 +17,7 @@ This README describes configuration of supported targets.
 * [Microchip SAME51](#microchip-same51)
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
+* [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
@@ -4581,6 +4582,120 @@ mon reset
 c
 ```
 
+
+## Nordic nRF54L15
+
+Tested with the Nordic nRF54L15-DK. This device features a 128MHz Arm Cortex-M33 application
+processor with TrustZone support, a 128MHz RISC-V coprocessor (VPR) used as a SoftPeripheral,
+1524KB of RRAM (Resistive RAM), and 256KB of RAM. wolfBoot runs on the Cortex-M33 only and does
+not interact with the RISC-V coprocessor.
+
+Two configurations are available at `config/examples`:
+
+- `nrf54l15.config`: TrustZone disabled; wolfBoot and the application always run in secure mode.
+  Delta updates are enabled.
+
+- `nrf54l15-wolfcrypt-tz.config`: TrustZone enabled; wolfBoot runs in secure mode and boots the
+  application as non-secure code. Includes a non-secure callable (NSC) wolfPKCS11 API for
+  cryptographic operations via wolfCrypt, and a secure keyvault managed by wolfBoot. The update
+  partition is in secure memory and is intended to be written via wolfBoot's NSC veneers from the
+  non-secure application. See the "NSC API" section in `docs/API.md`.
+
+### Flash Memory Layout
+
+#### nrf54l15.config
+
+```
+0x00000000 - 0x0000FFFF  wolfBoot        (64 KB)
+0x00010000 - 0x000C5FFF  Boot partition  (728 KB)
+0x000C6000 - 0x0017BFFF  Update partition (728 KB)
+0x0017C000 - 0x0017CFFF  Swap area       (4 KB)
+```
+
+#### nrf54l15-wolfcrypt-tz.config
+
+```
+0x00000000 - 0x0004EFFF  wolfBoot         (316 KB)  secure
+0x0004F000 - 0x00064FFF  Keyvault          (88 KB)  secure
+0x00065000 - 0x00065FFF  NSC region         (4 KB)  non-secure callable
+0x00066000 - 0x000F0FFF  Boot partition    (556 KB)  non-secure
+0x000F1000 - 0x0017BFFF  Update partition  (556 KB)  secure
+0x0017C000 - 0x0017CFFF  Swap area          (4 KB)  secure
+```
+
+### UART
+
+Debug output is available on UART20, connected to the J-Link VCOM port (TX=P1.4, RX=P1.5).
+A secondary UART (UART30, TX=P0.0, RX=P0.1) is reserved for the `UART_FLASH` feature.
+
+### Building
+
+```sh
+cp config/examples/nrf54l15.config .config
+make clean
+make
+```
+
+Or, for the TrustZone + wolfCrypt variant:
+
+```sh
+cp config/examples/nrf54l15-wolfcrypt-tz.config .config
+make clean
+make
+```
+
+### Flashing
+
+Flash the factory image using JLink:
+
+```
+JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
+loadbin factory.bin 0x0
+rnh
+```
+
+### Testing an Update
+
+Sign the test application as version 2, then write the update trigger magic (`pBOOT`)
+at the end of the partition.
+
+#### nrf54l15.config (partition size 0xB6000)
+
+```sh
+tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0      test-app/image_v2_signed.bin \
+    0xB5FFB  trigger_magic.bin
+```
+
+Flash the assembled image to the update partition:
+
+```
+JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
+loadbin update.bin 0xC6000
+rnh
+```
+
+#### nrf54l15-wolfcrypt-tz.config (partition size 0x8B000)
+
+```sh
+tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0      test-app/image_v2_signed.bin \
+    0x8AFFB  trigger_magic.bin
+```
+
+Flash the assembled image to the update partition:
+
+```
+JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
+loadbin update.bin 0xF1000
+rnh
+```
 
 ## Simulated
 
