@@ -114,6 +114,22 @@ START_TEST(test_wb_patch_resume_large_len)
 }
 END_TEST
 
+START_TEST(test_wb_patch_trailing_escape_invalid)
+{
+    WB_PATCH_CTX patch_ctx;
+    uint8_t src[SRC_SIZE] = {0};
+    uint8_t patch[1] = {ESC};
+    uint8_t dst[DELTA_BLOCK_SIZE] = {0};
+    int ret;
+
+    ret = wb_patch_init(&patch_ctx, src, SRC_SIZE, patch, sizeof(patch));
+    ck_assert_int_eq(ret, 0);
+
+    ret = wb_patch(&patch_ctx, dst, sizeof(dst));
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
 START_TEST(test_wb_diff_init_invalid)
 {
     WB_DIFF_CTX ctx;
@@ -230,6 +246,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_src_bounds_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_resume_bounds_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_resume_large_len);
+    tcase_add_test(tc_wolfboot_delta, test_wb_patch_trailing_escape_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff);
     suite_add_tcase(s, tc_wolfboot_delta);
 
