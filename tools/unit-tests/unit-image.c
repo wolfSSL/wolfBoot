@@ -384,6 +384,19 @@ START_TEST(test_verify_signature)
     ck_assert_int_eq(verify_called, 1);
 }
 END_TEST
+
+START_TEST(test_keyslot_id_by_sha_scans_all_slots)
+{
+    int id;
+
+    unit_keystore_reset_counters();
+    id = keyslot_id_by_sha(pubkey_digest);
+
+    ck_assert_int_eq(id, 0);
+    ck_assert_int_eq(unit_keystore_get_buffer_calls(), keystore_num_pubkeys());
+    ck_assert_int_eq(unit_keystore_get_size_calls(), keystore_num_pubkeys());
+}
+END_TEST
 #endif
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || \
@@ -745,6 +758,7 @@ Suite *wolfboot_suite(void)
     TCase* tcase_verify_signature = tcase_create("verify_signature");
     tcase_set_timeout(tcase_verify_signature, 20);
     tcase_add_test(tcase_verify_signature, test_verify_signature);
+    tcase_add_test(tcase_verify_signature, test_keyslot_id_by_sha_scans_all_slots);
     suite_add_tcase(s, tcase_verify_signature);
 #endif
 

@@ -2415,13 +2415,14 @@ static int keyslot_CT_hint_matches(const uint8_t *expected,
 int keyslot_id_by_sha(const uint8_t *hint)
 {
     int id;
+    int match_id = -1;
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         key_hash(id, digest);
-        if (keyslot_CT_hint_matches(digest, hint)) {
-            return id;
+        if ((match_id < 0) && keyslot_CT_hint_matches(digest, hint)) {
+            match_id = id;
         }
     }
-    return -1;
+    return match_id;
 }
 #endif /* !WOLFBOOT_NO_SIGN && !WOLFBOOT_RENESAS_SCEPROTECT */

@@ -99,7 +99,11 @@
 #endif
 #endif
 
-#define NUM_PUBKEYS 1
+#define NUM_PUBKEYS 3
+
+static int keystore_get_buffer_calls;
+static int keystore_get_size_calls;
+
 const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {
 
 	/* Key associated to file 'wolfboot_signing_private_key.der' */
@@ -109,6 +113,20 @@ const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {
 		.part_id_mask = 0xFFFFFFFF,
 		.pubkey_size = UNIT_PUBKEY_SIZE,
 		.pubkey = UNIT_PUBKEY_INIT,
+	},
+	{
+		.slot_id = 1,
+		.key_type = UNIT_KEY_TYPE,
+		.part_id_mask = 0xFFFFFFFF,
+		.pubkey_size = UNIT_PUBKEY_SIZE,
+		.pubkey = { 0x00 },
+	},
+	{
+		.slot_id = 2,
+		.key_type = UNIT_KEY_TYPE,
+		.part_id_mask = 0xFFFFFFFF,
+		.pubkey_size = UNIT_PUBKEY_SIZE,
+		.pubkey = { 0x01 },
 	},
 
 
@@ -123,6 +141,7 @@ uint8_t *keystore_get_buffer(int id)
 {
     if (id >= keystore_num_pubkeys())
         return (uint8_t *)0;
+    keystore_get_buffer_calls++;
     return (uint8_t *)PubKeys[id].pubkey;
 }
 
@@ -130,6 +149,7 @@ int keystore_get_size(int id)
 {
     if (id >= keystore_num_pubkeys())
         return -1;
+    keystore_get_size_calls++;
     return (int)PubKeys[id].pubkey_size;
 }
 
@@ -143,6 +163,22 @@ uint32_t keystore_get_mask(int id)
 uint32_t keystore_get_key_type(int id)
 {
    return PubKeys[id].key_type;
+}
+
+void unit_keystore_reset_counters(void)
+{
+    keystore_get_buffer_calls = 0;
+    keystore_get_size_calls = 0;
+}
+
+int unit_keystore_get_buffer_calls(void)
+{
+    return keystore_get_buffer_calls;
+}
+
+int unit_keystore_get_size_calls(void)
+{
+    return keystore_get_size_calls;
 }
 
 #endif /* WOLFBOOT_NO_SIGN */
