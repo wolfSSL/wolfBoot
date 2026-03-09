@@ -65,6 +65,29 @@ static const int PART0_END = 100;
 static const int PART1_OFF = 101;
 static const int PART1_END = 200;
 
+static uint32_t test_crc32(const uint8_t *data, uint32_t len)
+{
+    uint32_t crc = 0xFFFFFFFFU;
+    uint32_t i;
+    uint32_t j;
+
+    for (i = 0; i < len; i++) {
+        crc ^= data[i];
+        for (j = 0; j < 8; j++) {
+            uint32_t mask = -(crc & 1U);
+            crc = (crc >> 1) ^ (0xEDB88320U & mask);
+        }
+    }
+
+    return ~crc;
+}
+
+static void finalize_gpt_header_crc(struct guid_ptable *hdr)
+{
+    hdr->hdr_crc32 = 0;
+    hdr->hdr_crc32 = test_crc32((const uint8_t *)hdr, hdr->hdr_size);
+}
+
 /* --- Helpers to build fake disk layouts --- */
 
 /* Write a UTF-16LE string into a buffer (no BOM).
@@ -133,6 +156,8 @@ static void build_gpt_disk(void)
         (PART0_END - PART0_OFF + 1) * GPT_SECTOR_SIZE);
     memset(fake_disk + PART1_OFF * GPT_SECTOR_SIZE, 0xBB,
         (PART1_END - PART1_OFF + 1) * GPT_SECTOR_SIZE);
+
+    finalize_gpt_header_crc(gpt_hdr);
 }
 
 /* Populate fake_disk with MBR-only layout (no GPT protective entry).
@@ -200,6 +225,17 @@ START_TEST(test_gpt_parse_header)
     ck_assert_uint_eq(hdr.start_array, 2);
     ck_assert_uint_eq(hdr.array_sz, 128);
 
+    /* Corrupt a header field without updating CRC */
+    {
+        struct guid_ptable *gpt_hdr =
+            (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
+        gpt_hdr->n_part = 3;
+        ck_assert_int_eq(
+            gpt_parse_header(fake_disk + GPT_SECTOR_SIZE, &hdr), -1);
+        gpt_hdr->n_part = 2;
+        finalize_gpt_header_crc(gpt_hdr);
+    }
+
     /* Corrupt signature in the real header */
     {
         struct guid_ptable *gpt_hdr =
@@ -208,6 +244,7 @@ START_TEST(test_gpt_parse_header)
         ck_assert_int_eq(
             gpt_parse_header(fake_disk + GPT_SECTOR_SIZE, &hdr), -1);
         gpt_hdr->signature = GPT_SIGNATURE;
+        finalize_gpt_header_crc(gpt_hdr);
     }
 
     /* NULL inputs */
@@ -537,6 +574,7 @@ START_TEST(test_disk_open_gpt_excess_partitions)
 
     gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
     gpt_hdr->n_part = MAX_PARTITIONS + 10;
+    finalize_gpt_header_crc(gpt_hdr);
 
     /* Only 2 actual entries on disk so loop will break after parsing them,
      * but the capping branch is exercised. */
@@ -555,6 +593,7 @@ START_TEST(test_disk_open_gpt_large_array_sz)
 
     gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
     gpt_hdr->array_sz = GPT_PART_ENTRY_SIZE + 1; /* 257 > 256 */
+    finalize_gpt_header_crc(gpt_hdr);
 
     ck_assert_int_eq(disk_open(0), 0); /* 0 partitions found */
 }
@@ -571,6 +610,7 @@ START_TEST(test_disk_open_gpt_empty_entry_mid_table)
 
     gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
     gpt_hdr->n_part = 3;
+    finalize_gpt_header_crc(gpt_hdr);
 
     /* Zero out entry 1's type GUID */
     pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE + 128);
