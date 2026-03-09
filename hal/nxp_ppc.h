@@ -140,7 +140,7 @@
     #define ENABLE_DDR
     #ifndef DDR_SIZE
     #ifdef BOARD_CW_VPX3152
-    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* TODO: confirm from CS_BNDS dump (4/8/16 GB) */
+    #define DDR_SIZE (4096ULL * 1024ULL * 1024ULL) /* CW VPX3-152: 4 GB (CS0_BNDS=0x000000FF, CS1 disabled) */
     #else
     #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* T2080 RDB / NAII 68PPC2: 8 GB */
     #endif
@@ -158,13 +158,13 @@
      * RAMFUNCTION code continues to work after CPC becomes L2 cache. */
     #define DDR_RAMCODE_ADDR  0x03000000UL       /* 48MB into DDR */
 
-    /* Flash base address and size — may differ between board variants.
-     * TODO: Confirm VPX3-152 flash mapping from IFC CSPR(0)/AMASK(0) dump.
-     * If the new board uses a different base address (e.g. 0xF0000000 for
-     * 256 MB flash), update the BOARD_CW_VPX3152 values and uncomment. */
-#if 0 && defined(BOARD_CW_VPX3152)
-    #define FLASH_BASE_ADDR      0xF0000000UL  /* TODO: from IFC dump */
-    #define FLASH_BASE_PHYS_HIGH 0x0ULL
+    /* Flash base address and size.
+     * CW VPX3-152: 256 MB NOR at 0xF_F000_0000
+     *   Confirmed from U-Boot: IFC CSPR(0)=0xF0000105 (EXT=0xF), AMASK(0)=0xF0000000,
+     *   LAW0: addr=0xF_F000_0000, size=256MB, target=IFC. */
+#ifdef BOARD_CW_VPX3152
+    #define FLASH_BASE_ADDR      0xF0000000UL  /* 256MB NOR flash (0xF0000000-0xFFFFFFFF) */
+    #define FLASH_BASE_PHYS_HIGH 0xFULL
     #define FLASH_LAW_SIZE       LAW_SIZE_256MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
 #else

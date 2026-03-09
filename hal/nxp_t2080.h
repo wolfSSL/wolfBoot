@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  * Board support:
- *   Default:          T2080 RDB (66.66 MHz oscillator, DDR3L SODIMM)
- *   BOARD_CW_VPX3152: CW VPX3-152 (66.667 MHz oscillator, DDR3L)
+ *   Default:           T2080 RDB (66.66 MHz oscillator, DDR3L SODIMM)
+ *   BOARD_CW_VPX3152:  Curtiss-Wright VPX3-152 (66.667 MHz oscillator,
+ *                      4GB DDR3L single-rank, 256MB NOR flash at 0xF0000000)
  *   BOARD_NAII_68PPC2: NAII 68PPC2 (100 MHz oscillator, 8GB DDR3)
  *
- * NXP T2080E Rev 1.1, e6500 core 2.0, PVR 8040_0120 and SVR 8538_0011
+ * NXP T2080E Rev 1.1, e6500 core 2.0, PVR=0x80400120 SVR=0x85380011
+ * (confirmed on CW VPX3-152 via U-Boot: md.l 0xfe0e00a0 2)
  */
 
 #ifndef NXP_T2080_H
@@ -141,7 +143,11 @@ enum ifc_amask_sizes {
 
 
 /* ---- NOR Flash ---- */
-#define FLASH_BANK_SIZE   (128*1024*1024)
+#ifdef BOARD_CW_VPX3152
+#define FLASH_BANK_SIZE   (256*1024*1024) /* 256MB NOR flash (IFC CS0 AMASK=0xF0000000) */
+#else
+#define FLASH_BANK_SIZE   (128*1024*1024) /* 128MB NOR flash */
+#endif
 #define FLASH_PAGE_SIZE   (512) /* program buffer (256 bytes per chip x 2 chips) */
 #define FLASH_SECTOR_SIZE (128*1024)
 #define FLASH_SECTORS     (FLASH_BANK_SIZE / FLASH_SECTOR_SIZE)
@@ -242,8 +248,35 @@ enum ifc_amask_sizes {
 #define DDR_TWTR_PS     7500
 #define DDR_TRTP_PS     7500
 #define DDR_REF_RATE_PS 7800000
+#elif defined(BOARD_CW_VPX3152)
+/* CW VPX3-152: 4 GB single-rank DDR3L
+ * Confirmed from U-Boot: CS0_BNDS=0x000000FF (4GB), CS1_CONFIG bit31=0 (disabled) */
+#define DDR_N_RANKS     1     /* CS0 only; CS1 disabled (CS1_CONFIG=0x00014402) */
+#define DDR_RANK_DENS   0x100000000 /* 4 GB per rank */
+#define DDR_SDRAM_WIDTH 64
+#define DDR_EC_SDRAM_W  8
+#define DDR_N_ROW_ADDR  16
+#define DDR_N_COL_ADDR  10
+#define DDR_N_BANKS     8
+#define DDR_EDC_CONFIG  2
+#define DDR_BURSTL_MASK 0x0c
+#define DDR_TCKMIN_X_PS 1500  /* DDR3-1333 (from TIMING_CFG_3=0x020E1100) */
+#define DDR_TCMMAX_PS   3000
+#define DDR_CASLAT_X    0x000007E0
+#define DDR_TAA_PS      13500
+#define DDR_TRCD_PS     13500
+#define DDR_TRP_PS      13500
+#define DDR_TRAS_PS     36000
+#define DDR_TRC_PS      49500
+#define DDR_TFAW_PS     30000
+#define DDR_TWR_PS      15000
+#define DDR_TRFC_PS     260000
+#define DDR_TRRD_PS     6000
+#define DDR_TWTR_PS     7500
+#define DDR_TRTP_PS     7500
+#define DDR_REF_RATE_PS 7800000
 #else
-/* T2080 RDB / CW VPX3-152: DDR3L SODIMM */
+/* T2080 RDB: DDR3L SODIMM */
 /* TODO: Fill SPD parameters from DDR3L SODIMM datasheet */
 #define DDR_N_RANKS     2     /* TODO: confirm from CS_CONFIG dump */
 #define DDR_RANK_DENS   0x100000000 /* TODO: confirm */
@@ -316,8 +349,53 @@ enum ifc_amask_sizes {
 
 #define DDR_ERR_INT_EN_VAL     0x0000001D
 #define DDR_ERR_SBE_VAL        0x00010000
+#elif defined(BOARD_CW_VPX3152)
+/* CW VPX3-152: DDR register values from U-Boot hardware dump */
+#define DDR_CS0_BNDS_VAL       0x000000FF /* CS0: 0-4GB (4GB rank) */
+#define DDR_CS1_BNDS_VAL       0x00000000 /* CS1: disabled */
+#define DDR_CS2_BNDS_VAL       0x00000000
+#define DDR_CS3_BNDS_VAL       0x00000000
+#define DDR_CS0_CONFIG_VAL     0x80014402 /* CS0 enabled */
+#define DDR_CS1_CONFIG_VAL     0x00014402 /* CS1 disabled (bit31=0) */
+#define DDR_CS2_CONFIG_VAL     0x00000000
+#define DDR_CS3_CONFIG_VAL     0x00000000
+#define DDR_CS_CONFIG_2_VAL    0x00000000
+
+#define DDR_TIMING_CFG_3_VAL   0x020E1100
+#define DDR_TIMING_CFG_0_VAL   0x8066000F
+#define DDR_TIMING_CFG_1_VAL   0xD0D8B067
+#define DDR_TIMING_CFG_2_VAL   0x0049315A
+#define DDR_TIMING_CFG_4_VAL   0x00000001
+#define DDR_TIMING_CFG_5_VAL   0x05401400
+
+#define DDR_SDRAM_MODE_VAL     0x00461014
+#define DDR_SDRAM_MODE_2_VAL   0x00A00000
+#define DDR_SDRAM_MODE_3_8_VAL 0x00000000
+#define DDR_SDRAM_MD_CNTL_VAL  0x00000000
+
+#define DDR_SDRAM_CFG_VAL      0xE7240000 /* MEM_EN|SREN|ECC_EN, DDR3 */
+#define DDR_SDRAM_CFG_2_VAL    0x00401000 /* ODT_CFG, NUM_PR=1 */
+
+#define DDR_SDRAM_INTERVAL_VAL 0x0E3C071C
+#define DDR_DATA_INIT_VAL      0xDEADBEEF /* ECC init pattern */
+#define DDR_SDRAM_CLK_CNTL_VAL 0x01400000
+#define DDR_ZQ_CNTL_VAL        0x8A090700
+
+/* Write leveling - board-specific PCB trace delays */
+#define DDR_WRLVL_CNTL_VAL     0x8655F604
+#define DDR_WRLVL_CNTL_2_VAL   0x05030709
+#define DDR_WRLVL_CNTL_3_VAL   0x0E090D08
+
+#define DDR_SDRAM_RCW_1_VAL    0x00000000 /* unbuffered DDR3L */
+#define DDR_SDRAM_RCW_2_VAL    0x00000000
+
+#define DDR_DDRCDR_1_VAL       0x80000000
+#define DDR_DDRCDR_2_VAL       0x00000001
+
+#define DDR_ERR_INT_EN_VAL     0x0000001D
+#define DDR_ERR_SBE_VAL        0x00010000
 #else
-/* T2080 RDB / CW VPX3-152: DDR register values */
+/* T2080 RDB: DDR register values */
 /* TODO: Fill ALL values from Phase 1 U-Boot register dump:
  *   md.l 0xfe008000 4; md.l 0xfe008010 4  (CS BNDS)
  *   md.l 0xfe008080 4; md.l 0xfe0080c0 4  (CS CONFIG)
@@ -335,10 +413,10 @@ enum ifc_amask_sizes {
 #define DDR_CS3_CONFIG_VAL     0x00000000 /* TODO: from dump */
 #define DDR_CS_CONFIG_2_VAL    0x00000000 /* TODO: from dump */
 
+#define DDR_TIMING_CFG_3_VAL   0x00000000 /* TODO: from dump */
 #define DDR_TIMING_CFG_0_VAL   0x00000000 /* TODO: from dump */
 #define DDR_TIMING_CFG_1_VAL   0x00000000 /* TODO: from dump */
 #define DDR_TIMING_CFG_2_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_3_VAL   0x00000000 /* TODO: from dump */
 #define DDR_TIMING_CFG_4_VAL   0x00000000 /* TODO: from dump */
 #define DDR_TIMING_CFG_5_VAL   0x00000000 /* TODO: from dump */
 
