@@ -32,7 +32,7 @@ bmdiff.o:
 	gcc -c -o bmdiff.o bmdiff.c -I../../include -ggdb $(CFLAGS)
 
 clean:
-	rm -f bmpatch bmdiff delta.o
+	rm -f bmpatch bmdiff bmdiff-test delta.o test-bmdiff.o
 
 delta-test: FORCE bmdiff bmpatch
 	@./bmdiff delta-test/0.txt delta-test/1.txt 0-to-1.patch
@@ -44,5 +44,14 @@ delta-test: FORCE bmdiff bmpatch
 	@diff 0p.txt delta-test/1.txt && echo "Test 0-to-1: OK"
 	@diff 1p.txt delta-test/0.txt && echo "Test 1-to-0: OK"
 	@rm -f 0-to-1.patch 1-to-0.patch 0p.txt 1p.txt
+
+bmdiff-test: test-bmdiff.o
+	gcc -o bmdiff-test test-bmdiff.o
+
+test-bmdiff.o:
+	gcc -c -o test-bmdiff.o test-bmdiff.c -I../../include -ggdb $(CFLAGS)
+
+test: FORCE bmdiff-test
+	@./bmdiff-test && echo "bmdiff mmap failure test: OK"
 
 .PHONY: FORCE
