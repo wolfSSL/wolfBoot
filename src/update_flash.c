@@ -303,8 +303,10 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         pos += FLASHBUFFER_SIZE;
     }
     ret = pos;
-#ifdef EXT_ENCRYPTED
+#if defined(EXT_FLASH) || defined(EXT_ENCRYPTED)
 out:
+#endif
+#ifdef EXT_ENCRYPTED
     ForceZero(key, sizeof(key));
     ForceZero(nonce, sizeof(nonce));
 #endif
