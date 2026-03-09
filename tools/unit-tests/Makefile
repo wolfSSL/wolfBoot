@@ -38,7 +38,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
-       unit-multiboot unit-boot-x86-fsp
+       unit-multiboot unit-boot-x86-fsp unit-qspi-flash
 
 all: $(TESTS)
 
@@ -104,6 +104,9 @@ unit-extflash: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-spi-flash: ../../include/target.h unit-spi-flash.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-string: ../../include/target.h unit-string.c

@@ -431,7 +431,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
         ret = qspi_write_enable();
         if (ret == 0) {
             uint8_t* ptr;
-            xferSz = len;
+            xferSz = len - (page * FLASH_PAGE_SIZE);
             if (xferSz > FLASH_PAGE_SIZE)
                 xferSz = FLASH_PAGE_SIZE;
 
