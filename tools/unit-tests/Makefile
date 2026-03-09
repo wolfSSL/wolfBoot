@@ -38,7 +38,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
-       unit-multiboot
+       unit-multiboot unit-boot-x86-fsp
 
 all: $(TESTS)
 
@@ -120,6 +120,11 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
+
+unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
+	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
+		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-mock-state: ../../include/target.h unit-mock-state.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
