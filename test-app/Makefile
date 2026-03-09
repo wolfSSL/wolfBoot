@@ -382,6 +382,14 @@ ifeq ($(TARGET),nrf5340)
   endif
 endif
 
+ifeq ($(TARGET),nrf54l)
+  ifeq ($(TZEN),1)
+	LSCRIPT_TEMPLATE=ARM-nrf54l-ns.ld
+  else
+	LSCRIPT_TEMPLATE=ARM.ld
+  endif
+endif
+
 ifeq ($(TARGET),nrf5340_net)
   CFLAGS+=-mcpu=cortex-m33+nodsp+nofp
   LDFLAGS+=-mcpu=cortex-m33+nodsp+nofp
