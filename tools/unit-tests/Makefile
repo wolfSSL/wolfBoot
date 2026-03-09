@@ -9,11 +9,20 @@ endif
 WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
+WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
+
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
+WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
+endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFTPM)),)
+WOLFBOOT_LIB_WOLFTPM=../../../external-libs/wolfTPM
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
+WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -110,8 +119,9 @@ unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-rsa-exp: ../../include/target.h unit-tpm-rsa-exp.c
-	gcc -o $@ $^ $(CFLAGS) -I../../lib/wolfTPM -DWOLFBOOT_TPM \
-		-DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 -DWOLFBOOT_HASH_SHA256 \
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-string: ../../include/target.h unit-string.c
