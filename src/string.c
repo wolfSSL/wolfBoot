@@ -361,7 +361,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                 if (*fmtp == '0' && maxdigits == 0) {
                     zeropad = 1;
                 }
-                maxdigits <<= 8;
+                maxdigits *= 10;
                 maxdigits += (*fmtp - '0');
                 fmtp++;
             }
