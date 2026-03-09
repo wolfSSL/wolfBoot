@@ -264,6 +264,9 @@ endif
 ifeq ($(TARGET),nxp_t1024)
     MAIN_TARGET:=factory_wstage1.bin
 endif
+ifeq ($(TARGET),nxp_t1040)
+    MAIN_TARGET:=factory_wstage1.bin
+endif
 
 ifeq ($(TARGET),sama5d3)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin

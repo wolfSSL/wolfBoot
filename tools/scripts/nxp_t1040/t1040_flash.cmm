@@ -1,0 +1,439 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T1040 NOR Flash Programming Script
+; @Description:
+;   Uses CPC_SRAM for target-based NOR FLASH programming.
+;   Programs wolfBoot stage1, wolfBoot, signed application image, RCW, and
+;   FMAN microcode.
+; @Chip: T1040
+; Based on demo scripts from Lauterbach
+; ------------------------------------------------------------------------------
+;
+; T1040D4RDB has 128MB NOR flash (JS28F00AM29EWHA) at 0xE8000000-0xEFFFFFFF.
+; The CPLD supports virtual banking (VBANK) to remap 16MB zones within the
+; 128MB space. With VBANK=000 (default), the flash is accessed normally.
+;
+; wolfBoot Flash Layout (128MB NOR):
+;   0xE8000000: RCW (128 KB sector, 96 bytes actual)
+;   0xE80F0000: Swap sector (128 KB)
+;   0xE8800000: DTS boot (128 KB)
+;   0xE8820000: DTS update (128 KB)
+;   0xEE000000: Boot partition (15 MB)
+;   0xEEF00000: Update partition (15 MB)
+;   0xEFF00000: FMAN microcode (64 KB, ~32 KB actual)
+;   0xEFF40000: wolfBoot (768 KB)
+;   0xEFFFC000: Stage 1 loader (16 KB, includes reset vector)
+; ------------------------------------------------------------------------------
+
+; Base directory for wolfBoot build output (adjust to match your build path)
+&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+
+; Persistent backup directory (survives make clean)
+&backupdir="/home/davidgarske/Projects/NXP/t1040rdb"
+
+; FLASH Number of banks
+; The JS28F00AM29EWHA is a single 128MB NOR chip. CPLD virtual banking
+; presents two "virtual banks" but CFI reports 128MB for the single chip.
+; Set to 1 so flashbase = 0xE8000000.
+&flashBanks=1
+
+; FLASH parameters
+&waitstates=6
+
+; PART 1: Set up MMU, IFC and CPC for target-based flash programming
+; ------------------------------------------------------------------------------
+
+PRINT "========================================"
+PRINT "wolfBoot T1040 Flash Programming"
+PRINT "========================================"
+PRINT ""
+
+SYStem.RESet
+SYStem.BdmClock 15.MHz
+SYStem.CPU T1040
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE OFF
+
+; Use RCW override to prevent flash RCW from running before we are ready.
+; This keeps the system halted for configuration.
+PRINT "Initializing with temporary RCW override..."
+SYStem.Mode.Prepare
+
+SYStem.Option.HRCWOVerRide ON
+
+; Load RCW (T1040D4RDB values extracted from factory flash)
+Data.Set DBG:0x01000000  0x0c18000e
+Data.Set DBG:0x01000001  0x0e000000
+Data.Set DBG:0x01000002  0x00000000
+Data.Set DBG:0x01000003  0x00000000
+Data.Set DBG:0x01000004  0x66000002
+Data.Set DBG:0x01000005  0x40000002
+Data.Set DBG:0x01000006  0xec027000
+Data.Set DBG:0x01000007  0x01000000
+Data.Set DBG:0x01000008  0x00000000
+Data.Set DBG:0x01000009  0x00000000
+Data.Set DBG:0x0100000A  0x00000000
+Data.Set DBG:0x0100000B  0x00030810
+Data.Set DBG:0x0100000C  0x00000000
+Data.Set DBG:0x0100000D  0x0342580f
+Data.Set DBG:0x0100000E  0x00000000
+Data.Set DBG:0x0100000F  0x00000000
+
+SYStem.Up
+
+SYStem.Option.HRCWOVerRide OFF
+
+PRINT "System initialized (halted state with temporary RCW)"
+
+; Set CCSRBAR to 0x40000000
+Data.Set ANC:IOBASE()+0x00004 %Long 0x40000000
+Data.Set ANC:IOBASE()+0x00008 %Long 0x80000000  ; commit
+Data.Set ANC:IOBASE()+0x00008 %Long 0x00000000
+
+; Set up local access window: 0xC0000000--0xFFFFFFFF
+Data.Set ANC:IOBASE()+0x00C00 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C04 %Long %BE 0xC0000000
+Data.Set ANC:IOBASE()+0x00C08 %Long %BE 0x81F0001D
+
+; Set up local access window: 0x10000000--0x1007FFFF (CPC memory complex 1)
+Data.Set ANC:IOBASE()+0x00C10 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C14 %Long %BE 0x10000000
+Data.Set ANC:IOBASE()+0x00C18 %Long %BE 0x81000012
+
+; Set up local access window: 0x10080000--0x100FFFFF (CPC memory complex 2)
+Data.Set ANC:IOBASE()+0x00C20 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x00C24 %Long %BE 0x10080000
+Data.Set ANC:IOBASE()+0x00C28 %Long %BE 0x81100012
+
+; Enable CoreNet Platform Cache (CPC) as SRAM
+; Block 1, memory complex 1
+Data.Set ANC:IOBASE()+0x10000 %Long %BE 0x80200000
+Data.Set ANC:IOBASE()+0x10100 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x10104 %Long %BE 0x10000009  ; 512 kB, start at 0x10000000
+; Block 2, memory complex 2
+Data.Set ANC:IOBASE()+0x11000 %Long %BE 0x80200000
+Data.Set ANC:IOBASE()+0x11100 %Long %BE 0x00000000
+Data.Set ANC:IOBASE()+0x11104 %Long %BE 0x10080009  ; 512 kB, start at 0x10080000
+
+; TLB entry for FLASH 0xC0000000--0xFFFFFFFF (cache-inhibited, guarded)
+; MAS1: V=1, IPROT=1, TSIZE=10 (1GB on e5500)
+MMU.TLB1.Set 0. 0xC0000A00 0xC000000A 0xC0000015 0x00000000 0x0
+
+; TLB entry for CPC-SRAM 0x10000000--0x100FFFFF
+MMU.TLB1.Set 1. 0x80000500 0x10000002 0x10000015 0x00000000 0x0
+
+; PART 2: FLASH setup (chip select and debugger)
+; ------------------------------------------------------------------------------
+
+; Initial FLASH base address (8 MB from end, for CFI probe)
+&flashbase=0xEF800000
+; End of flash region
+&flashend=0xEFFFFFFF
+
+; Set up initial chip select for FLASH memory
+Data.Set ANC:IOBASE.ADDRESS()+0x00124010 %Long (Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)&0x0000FFBF)|&flashbase
+
+; Get port width
+&portwidth=(Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)>>7.)&0x00000003
+
+IF &portwidth==1
+  &flashwidth="BYTE"
+ELSE IF &portwidth==2
+  &flashwidth="WORD"
+ELSE
+(
+  PRINT %ERROR "ERROR: invalid IFC_CS0 port width"
+  STOP
+)
+
+; Get FLASH size
+&flashsize=FLASH.CFI.SIZE(ANC:&flashbase,&flashwidth)
+IF (&flashsize==0)
+(
+  PRINT %ERROR "ERROR: FLASH module could not be detected"
+  STOP
+)
+
+&cfisizemb=FORMAT.Decimal(0,&flashsize>>20.)
+PRINT "CFI reported flash size: &cfisizemb MB (raw), flashBanks=&flashBanks"
+
+; Adjust for dual-bank devices (if CFI reports more than physical size)
+&flashsize=&flashsize/&flashBanks
+
+; Calculate real FLASH base address
+&flashbase=(&flashend+1)-&flashsize
+
+; Set up true chip select for FLASH memory
+Data.Set ANC:IOBASE.ADDRESS()+0x00124010 %Long (Data.Long(ANC:IOBASE.ADDRESS()+0x00124010)&0x0000FFFF)|&flashbase
+
+; Declare FLASH
+FLASH.RESet
+; Flash target: code at 0x10000000, data at 0x10002000, buffer 0x4000
+FLASH.CFI &flashbase &flashwidth /TARGET 0x10000000 0x10002000 0x4000 /DualPort
+
+&sizemb=FORMAT.Decimal(0,&flashsize>>20.)
+PRINT "Configured Flash at address &flashbase, &sizemb MBytes."
+
+; Verify expected flash base
+IF &flashbase!=0xE8000000
+(
+  PRINT %WARNING "WARNING: Expected flash base 0xE8000000, got &flashbase"
+  PRINT "         Check &flashBanks setting (currently &flashBanks)"
+)
+
+; ============================================================================
+; PART 3: Interactive Flash Programming Options
+; ============================================================================
+
+PRINT ""
+PRINT "========================================"
+PRINT "Flash Programming Options"
+PRINT "========================================"
+PRINT ""
+
+; ============================================================================
+; Option 1: Flash wolfBoot components (most common operation)
+; ============================================================================
+DIALOG.YESNO "Flash wolfBoot components (RCW + FMAN + wolfBoot + stage1 + test app)?"
+ENTRY &flashwolfboot
+IF &flashwolfboot
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Flashing wolfBoot Components"
+  PRINT "========================================"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 1. RCW (Reset Configuration Word) - CRITICAL for boot
+  ; --------------------------------------------------------------------------
+  PRINT "1. Programming RCW (Reset Configuration Word)..."
+  PRINT "   Source: &backupdir/t1040_rcw.bin"
+  PRINT "   Address: 0xE8000000 (128 KB sector)"
+  FLASH.UNLOCK 0xE8000000--0xE801FFFF
+  FLASH.ReProgram 0xE8000000--0xE801FFFF /Erase
+  Data.LOAD.binary &backupdir/t1040_rcw.bin 0xE8000000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &backupdir/t1040_rcw.bin 0xE8000000 /Verify
+  PRINT "   RCW programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 2. FMAN Microcode - Required for networking
+  ; --------------------------------------------------------------------------
+  PRINT "2. Programming FMAN microcode..."
+  PRINT "   Source: &backupdir/t1040_fman.bin"
+  PRINT "   Address: 0xEFF00000 (64 KB)"
+  FLASH.UNLOCK 0xEFF00000--0xEFF0FFFF
+  FLASH.ReProgram 0xEFF00000--0xEFF0FFFF /Erase
+  Data.LOAD.binary &backupdir/t1040_fman.bin 0xEFF00000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &backupdir/t1040_fman.bin 0xEFF00000 /Verify
+  PRINT "   FMAN microcode programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 3. wolfBoot Bootloader (768 KB at 0xEFF40000)
+  ; --------------------------------------------------------------------------
+  PRINT "3. Programming wolfBoot bootloader..."
+  PRINT "   Source: &basedir/wolfboot.bin"
+  PRINT "   Address: 0xEFF40000 (768 KB)"
+  FLASH.UNLOCK 0xEFF40000--0xEFFBFFFF
+  FLASH.ReProgram 0xEFF40000--0xEFFBFFFF /Erase
+  Data.LOAD.binary &basedir/wolfboot.bin 0xEFF40000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/wolfboot.bin 0xEFF40000 /Verify
+  PRINT "   wolfBoot programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 4. Stage 1 Loader (16 KB at 0xEFFFC000, includes reset vector)
+  ; --------------------------------------------------------------------------
+  PRINT "4. Programming stage 1 loader..."
+  PRINT "   Source: &basedir/stage1/loader_stage1.bin"
+  PRINT "   Address: 0xEFFFC000 (16 KB, reset vector at 0xEFFFFFFC)"
+  FLASH.UNLOCK 0xEFFFC000--0xEFFFFFFF
+  FLASH.ReProgram 0xEFFFC000--0xEFFFFFFF /Erase
+  Data.LOAD.binary &basedir/stage1/loader_stage1.bin 0xEFFFC000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/stage1/loader_stage1.bin 0xEFFFC000 /Verify
+  PRINT "   Stage 1 loader programmed and verified"
+  PRINT ""
+
+  ; --------------------------------------------------------------------------
+  ; 5. Test Application (Boot Partition at 0xEE000000)
+  ;    Only erase/program sectors needed for the actual image size,
+  ;    not the full 15 MB partition.
+  ; --------------------------------------------------------------------------
+  PRINT "5. Programming test application..."
+  PRINT "   Source: &basedir/test-app/image_v1_signed.bin"
+  &appsize=OS.FILE.SIZE(&basedir/test-app/image_v1_signed.bin)
+  ; Round up to next 128 KB sector boundary
+  &append=0xEE000000+((&appsize+0x1FFFF)&~0x1FFFF)-1
+  &appsizemb=FORMAT.Decimal(0,&appsize>>10.)
+  PRINT "   Address: 0xEE000000, image size &appsizemb KB, erasing to &append"
+  FLASH.UNLOCK 0xEE000000--&append
+  FLASH.ReProgram 0xEE000000--&append /Erase
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEE000000
+  FLASH.ReProgram.off
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEE000000 /Verify
+  PRINT "   Test application programmed and verified"
+  PRINT ""
+
+  PRINT ""
+  PRINT "========================================"
+  PRINT "wolfBoot Flash Programming Complete!"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Flash Layout:"
+  PRINT "  0xE8000000: RCW (128 KB sector)"
+  PRINT "  0xEE000000: Test Application (boot partition, 15 MB)"
+  PRINT "  0xEEEFFFFF: End of boot partition"
+  PRINT "  0xEFF00000: FMAN Microcode (64 KB)"
+  PRINT "  0xEFF40000: wolfBoot (768 KB)"
+  PRINT "  0xEFFBFFFF: End of wolfBoot"
+  PRINT "  0xEFFFC000: Stage 1 Loader (16 KB)"
+  PRINT "  0xEFFFFFFC: Reset vector"
+  PRINT ""
+
+  PRINT "Verification - First bytes of each component:"
+  PRINT ""
+  PRINT "RCW at 0xE8000000 (should be AA 55 AA 55):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+  PRINT "FMAN at 0xEFF00000 (should show QEF header):"
+  Data.dump 0xEFF00000++0x3F /Long
+  PRINT ""
+  PRINT "wolfBoot at 0xEFF40000:"
+  Data.dump 0xEFF40000++0x3F /Long
+  PRINT ""
+  PRINT "Stage1 at 0xEFFFC000:"
+  Data.dump 0xEFFFC000++0x3F /Long
+  PRINT ""
+  PRINT "Reset vector at 0xEFFFFFFC:"
+  Data.dump 0xEFFFFFFC++0x03 /Long
+  PRINT ""
+  PRINT "Test app at 0xEE000000 (should be WOLF header):"
+  Data.dump 0xEE000000++0x3F /Long
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "Skipping wolfBoot component flashing"
+  PRINT ""
+)
+
+; ============================================================================
+; Option 2: Backup current flash bank
+; ============================================================================
+PRINT ""
+PRINT "========================================"
+PRINT "Optional: Backup Current Flash Bank"
+PRINT "========================================"
+PRINT ""
+
+DIALOG.YESNO "Backup current flash to &backupdir/t1040_backup.bin (128 MB)?"
+ENTRY &dobackup
+IF &dobackup
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Backing Up Flash"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Saving to: &backupdir/t1040_backup.bin"
+  PRINT "Saving flash (128 MB) - this will take several minutes..."
+  PRINT ""
+
+  Data.SAVE.Binary &backupdir/t1040_backup.bin 0xE8000000--0xEFFFFFFF
+
+  PRINT "Flash backup saved to: &backupdir/t1040_backup.bin"
+  PRINT ""
+
+  PRINT "First 64 bytes at 0xE8000000 (RCW area):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+
+  PRINT "========================================"
+  PRINT "Backup Complete!"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Verify with: hexdump -C t1040_backup.bin | head -n 8"
+  PRINT "Valid flash should start with 'AA 55 AA 55' (RCW preamble)"
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "Skipping flash backup"
+  PRINT ""
+)
+
+; ============================================================================
+; Option 3: Restore full backup (t1040_backup.bin)
+; ============================================================================
+DIALOG.YESNO "Restore full backup from &backupdir/t1040_backup.bin (128 MB)?"
+ENTRY &restorebackup
+IF &restorebackup
+(
+  PRINT ""
+  PRINT "========================================"
+  PRINT "Restoring Full Flash Backup"
+  PRINT "========================================"
+  PRINT ""
+  PRINT "Source: &backupdir/t1040_backup.bin"
+  PRINT "Target: 0xE8000000--0xEFFFFFFF (128 MB)"
+  PRINT "This will take several minutes..."
+  PRINT ""
+
+  PRINT "Unlocking flash..."
+  FLASH.UNLOCK 0xE8000000--0xEFFFFFFF
+
+  FLASH.ReProgram 0xE8000000--0xEFFFFFFF /Erase
+  Data.LOAD.binary &backupdir/t1040_backup.bin 0xE8000000
+  FLASH.ReProgram.off
+
+  PRINT ""
+  PRINT "Verifying restored backup..."
+  Data.LOAD.binary &backupdir/t1040_backup.bin 0xE8000000 /Verify
+
+  PRINT ""
+  PRINT "Full backup restored and verified"
+  PRINT ""
+
+  PRINT "RCW at 0xE8000000 (should be AA 55 AA 55):"
+  Data.dump 0xE8000000++0x3F /Long
+  PRINT ""
+
+  GOTO flash_complete
+)
+ELSE
+(
+  PRINT ""
+  PRINT "No flash operation selected"
+  PRINT ""
+)
+
+flash_complete:
+
+PRINT ""
+PRINT "========================================"
+PRINT "Script Complete!"
+PRINT "========================================"
+PRINT ""
+PRINT "Next steps:"
+PRINT "  1. Disconnect Lauterbach"
+PRINT "  2. Power cycle the board (or toggle reset via Pi4 GPIO 21)"
+PRINT "  3. Monitor UART (GENERIC_UART_ttyUSB4) for boot output"
+PRINT ""
+PRINT "Expected UART output after wolfBoot flash:"
+PRINT "  Stage1 loader sets up DDR, copies wolfBoot to 0x7FF00000"
+PRINT "  wolfBoot init"
+PRINT ""
+
+ENDDO

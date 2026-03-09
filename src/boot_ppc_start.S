@@ -597,8 +597,15 @@ cpc_poll_invalidate:
         stw     r0, CPCSRCR1(r1) /* SRAM high address = 0 */
         /* SRAM low address - use LOAD_ADDR32 on e6500 to avoid sign extension */
         LOAD_ADDR32(r0, L2SRAM_ADDR)
-        /* Enable SRAM and set size (must match L2SRAM_SIZE = 1MB for P384) */
+        /* Enable SRAM and set size.
+         * e6500 (T2080): SRAMSZ_1024 = ways 8-15, 1MB
+         * e5500 (T1040): SRAMSZ_256  = ways 0-7, 256KB
+         * Both are (0x3 << 1) but interpreted differently per core. */
+#ifdef CORE_E6500
         ori     r0, r0, (CPCSRCR0_SRAMSZ_1024 | CPCSRCR0_SRAMEN)
+#else
+        ori     r0, r0, (CPCSRCR0_SRAMSZ_256 | CPCSRCR0_SRAMEN)
+#endif
         stw     r0, CPCSRCR0(r1)
         mbar
         isync

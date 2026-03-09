@@ -1,4 +1,4 @@
-/* nxp_t1024.c
+/* nxp_t1040.c
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *

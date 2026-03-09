@@ -1039,6 +1039,27 @@ ifeq ($(TARGET),nxp_t1024)
   OPTIMIZATION_LEVEL=0 # using default -Os causes issues with alignment
 endif
 
+ifeq ($(TARGET),nxp_t1040)
+  # Power PC big endian (e5500, same core as T1024)
+  ARCH_FLAGS=-mhard-float -mcpu=e5500
+  CFLAGS+=$(ARCH_FLAGS)
+  BIG_ENDIAN=1
+  CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
+  CFLAGS+=-pipe # use pipes instead of temp files
+  CFLAGS+=-feliminate-unused-debug-types
+  LDFLAGS+=$(ARCH_FLAGS)
+  LDFLAGS+=-Wl,--hash-style=both # generate both sysv and gnu symbol hash table
+  LDFLAGS+=-Wl,--as-needed # remove weak functions not used
+  OBJS+=src/boot_ppc_mp.o # support for spin table
+  OBJS+=src/fdt.o
+  OBJS+=src/pci.o
+  CFLAGS+=-DWOLFBOOT_USE_PCI
+  UPDATE_OBJS:=src/update_ram.o
+
+  SPI_TARGET=nxp
+  OPTIMIZATION_LEVEL=0 # using default -Os causes issues with alignment
+endif
+
 ifeq ($(TARGET),nxp_t2080)
   # Power PC big endian
   ARCH_FLAGS=-mhard-float -mcpu=e6500

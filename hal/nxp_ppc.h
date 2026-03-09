@@ -94,9 +94,66 @@
     #endif
 
     #define FLASH_BASE_ADDR      0xEC000000UL
-    #define FLASH_BASE_PHYS_HIGH 0xFULL
+    #ifndef BUILD_LOADER_STAGE1
+    #define FLASH_BASE_PHYS_HIGH 0xFULL /* 36-bit: 0xF_EC000000 */
+    #else
+    #define FLASH_BASE_PHYS_HIGH 0x0ULL /* 32-bit stage1 */
+    #endif
     #define FLASH_LAW_SIZE       LAW_SIZE_64MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_64M
+
+    #define USE_LONG_JUMP
+
+#elif defined(TARGET_nxp_t1040)
+    /* NXP T1040 */
+    #define CORE_E5500
+    #define CPU_NUMCORES 4
+    #define CORES_PER_CLUSTER 1
+    #define LAW_MAX_ENTRIES 16
+
+    #define CCSRBAR_DEF (0xFE000000) /* T1040RM 4.4.1 default base */
+    #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
+
+    #define ENABLE_L1_CACHE
+    #define ENABLE_INTERRUPTS
+
+    /* T1040 has a 256KB CPC (CoreNet Platform Cache), not PSRAM.
+     * Use L1 locked dcache (16KB) as initial stack, same as T2080.
+     * CPC SRAM is configured but not used for stack to avoid
+     * cold power cycle reliability issues via CoreNet. */
+    #define L1_CACHE_ADDR (0xFDFC0000UL)
+
+    #define L2SRAM_ADDR   (0xFDFE0000UL) /* CPC as SRAM (256KB) */
+    #define L2SRAM_SIZE   (256UL * 1024UL)
+
+    #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
+    #define INITIAL_SRAM_LAW_SZ   LAW_SIZE_256KB
+    #define INITIAL_SRAM_LAW_TRGT LAW_TRGT_DDR_1 /* CPC target per T1040RM */
+    #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_256K
+
+    #ifdef BUILD_LOADER_STAGE1
+        #define ENABLE_L2_CACHE
+    #else
+        /* relocate to 64-bit 0xF_ */
+        #define CCSRBAR_PHYS_HIGH 0xFULL
+        #define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
+    #endif
+
+    #define ENABLE_DDR
+    #ifndef DDR_SIZE
+    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* 8GB */
+    #endif
+
+    /* 128MB NOR: 0xE8000000 - 0xEFFFFFFF */
+    #define FLASH_BASE_ADDR      0xE8000000UL
+    #ifndef BUILD_LOADER_STAGE1
+    #define FLASH_BASE_PHYS_HIGH 0xFULL /* 36-bit: 0xF_E8000000 */
+    #else
+    #define FLASH_BASE_PHYS_HIGH 0x0ULL /* 32-bit stage1 */
+    #endif
+    #define FLASH_LAW_SIZE       LAW_SIZE_128MB
+    /* e5500 BookE has no 128M page size (64M->256M), use 256M TLB */
+    #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
 
     #define USE_LONG_JUMP
 
@@ -176,7 +233,7 @@
 
     #define USE_LONG_JUMP
 #else
-    #error Please define TARGET (nxp_t2080, nxp_t1024, or nxp_p1021)
+    #error Please define TARGET (nxp_t2080, nxp_t1040, nxp_t1024, or nxp_p1021)
 #endif
 
 

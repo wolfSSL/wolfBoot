@@ -469,6 +469,10 @@ ifeq ($(TARGET),nxp_t1024)
   # PowerPC e5500
   PPC64=1
 endif
+ifeq ($(TARGET),nxp_t1040)
+  # PowerPC e5500
+  PPC64=1
+endif
 
 ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
