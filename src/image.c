@@ -58,6 +58,19 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
+static int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
+    uint32_t len)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++) {
+        diff |= expected[i] ^ actual[i];
+    }
+
+    return diff == 0;
+}
+
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
      defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
@@ -1527,7 +1540,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
-    if (memcmp(digest, stored_sha, stored_sha_len) != 0)
+    if (!image_CT_compare(digest, stored_sha, stored_sha_len))
         return -1;
     img->sha_ok = 1;
     img->sha_hash = stored_sha;
