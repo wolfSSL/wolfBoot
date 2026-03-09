@@ -319,7 +319,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
     }
 }
 
-
+#if defined(WOLFBOOT_SIGN_ECC256)
 int wc_ecc_init(ecc_key* key) {
     if (ecc_init_fail)
         return -1;
@@ -348,7 +348,9 @@ int wc_ecc_verify_hash_ex(mp_int *r, mp_int *s, const byte* hash,
     *res = 1;
     return 0;
 }
+#endif
 
+#if defined(WOLFBOOT_SIGN_ECC256)
 START_TEST(test_verify_signature)
 {
     uint8_t pubkey[32];
@@ -382,6 +384,60 @@ START_TEST(test_verify_signature)
     ck_assert_int_eq(verify_called, 1);
 }
 END_TEST
+#endif
+
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || \
+    defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
+int wc_InitRsaKey(RsaKey* key, void* heap)
+{
+    (void)key;
+    (void)heap;
+    return 0;
+}
+
+int wc_FreeRsaKey(RsaKey* key)
+{
+    (void)key;
+    return 0;
+}
+
+int wc_RsaPublicKeyDecode(const byte* input, word32* inOutIdx, RsaKey* key,
+    word32 inSz)
+{
+    (void)input;
+    (void)inOutIdx;
+    (void)key;
+    (void)inSz;
+    return 0;
+}
+
+int wc_RsaSSL_VerifyInline(byte* in, word32 inLen, byte** out, RsaKey* key)
+{
+    (void)in;
+    (void)inLen;
+    (void)out;
+    (void)key;
+    return 0;
+}
+
+START_TEST(test_decode_asn1_tag_start_bounds)
+{
+    uint8_t *input = malloc(1);
+    int idx = 0;
+    volatile int input_sz = 1;
+    int tag_len = -1;
+
+    ck_assert_ptr_nonnull(input);
+    input[0] = ASN_SEQUENCE | ASN_CONSTRUCTED;
+
+    ck_assert_int_eq(DecodeAsn1Tag(input, input_sz, &idx, &tag_len,
+        ASN_SEQUENCE | ASN_CONSTRUCTED), -1);
+    free(input);
+}
+END_TEST
+#endif
 
 
 START_TEST(test_sha_ops)
@@ -517,6 +573,7 @@ START_TEST(test_headers)
     ck_assert_uint_eq(sz, test_img_len - 256);
 }
 
+#if defined(WOLFBOOT_SIGN_ECC256)
 START_TEST(test_verify_authenticity)
 {
     struct wolfBoot_image test_img;
@@ -583,6 +640,7 @@ START_TEST(test_verify_authenticity_bad_siglen)
     ck_assert_int_eq(ret, -1);
 }
 END_TEST
+#endif
 
 START_TEST(test_verify_integrity)
 {
@@ -683,11 +741,35 @@ Suite *wolfboot_suite(void)
     /* Suite initialization */
     Suite *s = suite_create("wolfBoot");
 
+#if defined(WOLFBOOT_SIGN_ECC256)
     TCase* tcase_verify_signature = tcase_create("verify_signature");
     tcase_set_timeout(tcase_verify_signature, 20);
     tcase_add_test(tcase_verify_signature, test_verify_signature);
     suite_add_tcase(s, tcase_verify_signature);
+#endif
 
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || \
+    defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
+    TCase* tcase_rsa_asn1 = tcase_create("rsa_asn1");
+    tcase_set_timeout(tcase_rsa_asn1, 20);
+    tcase_add_test(tcase_rsa_asn1, test_decode_asn1_tag_start_bounds);
+    suite_add_tcase(s, tcase_rsa_asn1);
+#endif
+
+#if defined(WOLFBOOT_SIGN_ECC256)
+    TCase* tcase_verify_authenticity = tcase_create("verify_authenticity");
+    tcase_set_timeout(tcase_verify_authenticity, 20);
+    tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
+    tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
+    suite_add_tcase(s, tcase_verify_authenticity);
+#endif
+
+#if !defined(WOLFBOOT_SIGN_RSA2048) && !defined(WOLFBOOT_SIGN_RSA3072) && \
+    !defined(WOLFBOOT_SIGN_RSA4096) && !defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) && \
+    !defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) && \
+    !defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
     TCase* tcase_sha_ops = tcase_create("sha_ops");
     tcase_set_timeout(tcase_sha_ops, 20);
     tcase_add_test(tcase_sha_ops, test_sha_ops);
@@ -698,12 +780,6 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_headers, test_headers);
     suite_add_tcase(s, tcase_headers);
 
-    TCase* tcase_verify_authenticity = tcase_create("verify_authenticity");
-    tcase_set_timeout(tcase_verify_authenticity, 20);
-    tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
-    tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
-    suite_add_tcase(s, tcase_verify_authenticity);
-
     TCase* tcase_verify_integrity = tcase_create("verify_integrity");
     tcase_set_timeout(tcase_verify_integrity, 20);
     tcase_add_test(tcase_verify_integrity, test_verify_integrity);
@@ -713,6 +789,7 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(tcase_open_image, 20);
     tcase_add_test(tcase_open_image, test_open_image);
     suite_add_tcase(s, tcase_open_image);
+#endif
     return s;
 }
 

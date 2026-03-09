@@ -35,7 +35,7 @@ endif
 
 TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
-       unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
+       unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-multiboot
@@ -129,6 +129,11 @@ unit-sectorflags: ../../include/target.h unit-sectorflags.c
 
 unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ $^ $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048
+unit-image-rsa: ../../include/target.h unit-image.c unit-common.c
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(CFLAGS) -D__WOLFBOOT $(LDFLAGS)
 
 unit-nvm: ../../include/target.h unit-nvm.c
 	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)

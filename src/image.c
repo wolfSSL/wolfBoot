@@ -367,6 +367,9 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
 static inline int DecodeAsn1Tag(const uint8_t* input, int inputSz, int* inOutIdx,
     int* tag_len, uint8_t tag)
 {
+    if ((*inOutIdx + 1) >= inputSz) {
+        return -1;
+    }
     if (input[*inOutIdx] != tag) {
         return -1;
     }
