@@ -45,6 +45,15 @@ int WP11_Library_Init(void);
 
 #ifdef EXT_ENCRYPTED
 #include "encrypt.h"
+
+static void wolfBoot_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+
+    while (len-- > 0) {
+        *p++ = 0;
+    }
+}
 #endif /* EXT_ENCRYPTED */
 
 #ifdef MMU
@@ -307,8 +316,8 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 out:
 #endif
 #ifdef EXT_ENCRYPTED
-    ForceZero(key, sizeof(key));
-    ForceZero(nonce, sizeof(nonce));
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
 #endif
     return ret;
 }
@@ -365,8 +374,8 @@ static int RAMFUNCTION wolfBoot_backup_last_boot_sector(uint32_t sector)
         ret = wolfBoot_copy_sector(src, dst, sector);
     }
 out:
-    ForceZero(key, sizeof(key));
-    ForceZero(nonce, sizeof(nonce));
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
     return ret;
 }
 #else
@@ -722,8 +731,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     }
 out:
 #ifdef EXT_ENCRYPTED
-    ForceZero(key, sizeof(key));
-    ForceZero(nonce, sizeof(nonce));
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
 #endif
 #ifdef EXT_FLASH
     ext_flash_lock();
