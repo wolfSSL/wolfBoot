@@ -2372,6 +2372,21 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 
 #if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
 
+/* Compare fixed-size key hints without early exit to avoid leaking hash prefix
+ * matches through lookup timing. */
+static int keyslot_CT_hint_matches(const uint8_t *expected,
+    const uint8_t *actual)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++) {
+        diff |= expected[i] ^ actual[i];
+    }
+
+    return diff == 0;
+}
+
 /**
  * @brief Get the key slot ID by SHA hash.
  *
@@ -2387,7 +2402,7 @@ int keyslot_id_by_sha(const uint8_t *hint)
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
         key_hash(id, digest);
-        if (memcmp(digest, hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
+        if (keyslot_CT_hint_matches(digest, hint)) {
             return id;
         }
     }
