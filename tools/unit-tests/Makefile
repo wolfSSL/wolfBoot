@@ -8,10 +8,12 @@ endif
 # Default library paths (can be overridden)
 WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
+WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
+WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -35,7 +37,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-disk \
+       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-multiboot
 
 all: $(TESTS)
@@ -75,6 +77,7 @@ unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
 unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
 unit-pkcs11_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11
+unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DWOLFCRYPT_TZ_PSA
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -160,6 +163,9 @@ unit-update-ram: ../../include/target.h unit-update-ram.c
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-psa_store: ../../include/target.h unit-psa_store.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-psa_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 gpt-sfdisk-test.h:
 	truncate -s 131072 .gpt-tmp.img

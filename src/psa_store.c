@@ -512,8 +512,8 @@ int wolfPSA_Store_Write(void* store, unsigned char* buffer, int len)
            % WOLFBOOT_SECTOR_SIZE;
         sector_base = (uintptr_t)handle->buffer + handle->in_buffer_offset - in_sector_offset;
         in_sector_len = WOLFBOOT_SECTOR_SIZE - in_sector_offset;
-        if (in_sector_len > (uint32_t)len)
-            in_sector_len = len;
+        if (in_sector_len > (uint32_t)(len - written))
+            in_sector_len = len - written;
 
         /* Cache the corresponding sector */
         memcpy(cached_sector, (void *)(uintptr_t)sector_base, WOLFBOOT_SECTOR_SIZE);

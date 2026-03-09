@@ -242,8 +242,8 @@ START_TEST (test_store_and_load_objs) {
     /* Read out the content */
     memset(secret_rd, 0, KEYVAULT_OBJ_SIZE);
     ret = wolfPKCS11_Store_Read(store, secret_rd, KEYVAULT_OBJ_SIZE);
-    ck_assert(ret == KEYVAULT_OBJ_SIZE - 8);
-    ck_assert(strncmp(dante_filler, secret_rd, KEYVAULT_OBJ_SIZE - 8) == 0);
+    ck_assert_int_eq(ret, strlen(dante_filler) + 1);
+    ck_assert(strncmp(dante_filler, secret_rd, strlen(dante_filler) + 1) == 0);
     wolfPKCS11_Store_Close(store);
 
     /* Reopen for writing, test truncate */
@@ -280,14 +280,55 @@ START_TEST (test_store_and_load_objs) {
 }
 END_TEST
 
+START_TEST(test_cross_sector_write_preserves_length)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 7;
+    const CK_ULONG id_obj = 9;
+    void *store = NULL;
+    unsigned char *payload;
+    struct store_handle *handle;
+    int ret;
+
+    payload = malloc(WOLFBOOT_SECTOR_SIZE);
+    ck_assert_ptr_nonnull(payload);
+
+    for (ret = 0; ret < WOLFBOOT_SECTOR_SIZE; ret++)
+        payload[ret] = (unsigned char)(ret & 0xFF);
+
+    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_ptr_nonnull(store);
+
+    ret = wolfPKCS11_Store_Write(store, payload, WOLFBOOT_SECTOR_SIZE);
+    ck_assert_int_eq(ret, WOLFBOOT_SECTOR_SIZE);
+    handle = store;
+    ck_assert_uint_eq(handle->in_buffer_offset,
+        2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
+    ck_assert_uint_eq(handle->hdr->size,
+        2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
+    wolfPKCS11_Store_Close(store);
+
+    free(payload);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
     Suite *s = suite_create("wolfBoot-pkcs11-store");
 
     TCase* tcase_store_and_load_objs = tcase_create("store_and_load_objs");
+    TCase* tcase_cross_sector_write = tcase_create("cross_sector_write");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
+    tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     suite_add_tcase(s, tcase_store_and_load_objs);
+    suite_add_tcase(s, tcase_cross_sector_write);
     return s;
 }
 
