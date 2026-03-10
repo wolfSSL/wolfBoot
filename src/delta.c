@@ -302,7 +302,9 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
-                while (*pa == *(ctx->src_b + ctx->off_b)) {
+                while (((uintptr_t)(pa - ctx->src_a) < (uintptr_t)ctx->size_a) &&
+                        (ctx->off_b < ctx->size_b) &&
+                        (*pa == *(ctx->src_b + ctx->off_b))) {
                     /* Extend matching block if possible, as long as the
                      * identical sequence continues.
                      */
@@ -360,7 +362,9 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     blk_start = pb - ctx->src_b;
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
-                    while (*pb == *(ctx->src_b + ctx->off_b)) {
+                    while (((uintptr_t)(pb - ctx->src_b) < pb_end) &&
+                            (ctx->off_b < ctx->size_b) &&
+                            (*pb == *(ctx->src_b + ctx->off_b))) {
                         /* Extend match as long as the areas have the
                          * same content. Block skipping in this case is
                          * not a problem since the distance between the patched
