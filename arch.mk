@@ -134,8 +134,14 @@ endif
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
   CFLAGS+=-DARCH_ARM
-  CFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
-  LDFLAGS+=-mthumb -mlittle-endian -mthumb-interwork
+  CFLAGS+=-mthumb -mlittle-endian
+  LDFLAGS+=-mthumb -mlittle-endian
+  ifeq ($(USE_GCC),1)
+    ifeq ($(findstring clang,$(notdir $(CC))),)
+    CFLAGS+=-mthumb-interwork
+    LDFLAGS+=-mthumb-interwork
+    endif
+  endif
 
   ## Target specific configuration
   ifeq ($(TARGET),samr21)
@@ -1214,6 +1220,29 @@ ifeq ($(TARGET),psoc6)
         CFLAGS+=-DWOLFSSL_PSOC6_CRYPTO
         OBJS+=$(PSOC6_CRYPTO_OBJS)
     endif
+endif
+
+ifeq ($(USE_CLANG),1)
+  ifneq ($(ARCH),ARM)
+    $(error USE_CLANG=1 is currently supported only for ARCH=ARM)
+  endif
+  CLANG?=clang
+  CLANG_GCC_NAME?=$(CROSS_COMPILE)gcc
+  CLANG_TARGET?=arm-none-eabi
+  CLANG_DRIVER:=$(CLANG) --target=$(CLANG_TARGET) -ccc-gcc-name $(CLANG_GCC_NAME)
+  CLANG_LIBC_A?=$(shell $(CLANG_GCC_NAME) -print-file-name=libc.a)
+  CLANG_NEWLIB_INCLUDE?=$(abspath $(dir $(CLANG_LIBC_A))/../include)
+
+  CC=$(CLANG_DRIVER)
+  LD=$(CLANG_DRIVER)
+  AS=$(CLANG_DRIVER)
+  AR=$(CROSS_COMPILE)ar
+  OBJCOPY?=$(CROSS_COMPILE)objcopy
+  SIZE=$(CROSS_COMPILE)size
+
+  CFLAGS+=-isystem $(CLANG_NEWLIB_INCLUDE)
+  CFLAGS+=-DWOLFSSL_NO_ATOMIC -DWOLFSSL_NO_ATOMICS
+  LDFLAGS+=-nostdlib
 endif
 
 ifeq ($(USE_GCC),1)

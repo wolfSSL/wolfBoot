@@ -25,7 +25,12 @@ LIBS=
 SIGN_ALG=
 OBJCOPY_FLAGS=
 BIG_ENDIAN?=0
+USE_CLANG?=0
+ifeq ($(USE_CLANG),1)
+USE_GCC?=0
+else
 USE_GCC?=1
+endif
 USE_GCC_HEADLESS?=1
 FLASH_OTP_KEYSTORE?=0
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
@@ -180,7 +185,7 @@ CFLAGS+=$(WOLFPSA_CFLAGS)
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding -nostartfiles
+  CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding
   CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
   # Allow unused parameters and functions
   CFLAGS+=-Wno-unused-parameter -Wno-unused-function

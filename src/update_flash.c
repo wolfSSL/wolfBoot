@@ -754,9 +754,11 @@ out:
 
 
 #ifdef WOLFBOOT_ARMORED
-#    ifdef __GNUC__
+#    if defined(__GNUC__) && !defined(__clang__)
 #        pragma GCC push_options
 #        pragma GCC optimize("O0")
+#    elif defined(__clang__)
+#        pragma clang optimize off
 #    elif defined(__IAR_SYSTEMS_ICC__)
 #        pragma optimize=none
 #    endif
@@ -1474,8 +1476,10 @@ void RAMFUNCTION wolfBoot_start(void)
 }
 
 #ifdef WOLFBOOT_ARMORED
-#    ifdef __GNUC__
+#    if defined(__GNUC__) && !defined(__clang__)
 #        pragma GCC pop_options
+#    elif defined(__clang__)
+#        pragma clang optimize on
 #    elif defined(__IAR_SYSTEMS_ICC__)
 #        pragma optimize=default
 #    endif

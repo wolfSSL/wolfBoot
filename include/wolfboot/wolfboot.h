@@ -46,7 +46,17 @@ extern "C" {
 #ifndef RAMFUNCTION
 #  if defined(__WOLFBOOT) && defined(RAM_CODE)
 #    if defined(ARCH_ARM)
-#      define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#      if defined(__has_attribute)
+#        if __has_attribute(long_call)
+#          define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#        else
+#          define RAMFUNCTION __attribute__((used,section(".ramcode")))
+#        endif
+#      elif defined(__GNUC__)
+#        define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
+#      else
+#        define RAMFUNCTION __attribute__((used,section(".ramcode")))
+#      endif
 #    elif defined(ARCH_PPC)
 #      define RAMFUNCTION __attribute__((used,section(".ramcode"),longcall))
 #    else

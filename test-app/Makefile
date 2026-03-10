@@ -22,7 +22,12 @@ endif
 CFLAGS+=-I. -I..
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
-USE_GCC?=1
+USE_CLANG?=0
+ifeq ($(USE_CLANG),1)
+  USE_GCC?=0
+else
+  USE_GCC?=1
+endif
 USE_GCC_HEADLESS?=1
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
@@ -57,14 +62,18 @@ else
   CFLAGS+=-Wall -ffreestanding -Wno-unused
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX_TC3)
-    CFLAGS+=-Wstack-usage=1024 -nostartfiles
+    ifneq ($(USE_CLANG),1)
+      CFLAGS+=-Wstack-usage=1024
+    endif
   endif
   CFLAGS+=-DTARGET_$(TARGET) -I../include
   CFLAGS+=-g
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)
-    CFLAGS+=-gstabs
+    ifneq ($(USE_CLANG),1)
+      CFLAGS+=-gstabs
+    endif
   endif
 
   ifeq ($(ARCH),RENESAS_RX)
@@ -78,6 +87,10 @@ endif
 
 include ../arch.mk
 
+ifeq ($(USE_CLANG),1)
+  APP_OBJS+=../src/string.o
+endif
+
 # Optional alias for clearer TZ PSA selection in app builds.
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_TZ=1
@@ -85,7 +98,7 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
 endif
 
 # Setup default linker flags
-LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map
+LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
