@@ -1,7 +1,18 @@
 WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
-USE_GCC?=1
+USE_CLANG?=0
+ifeq ($(USE_CLANG),1)
+  USE_GCC?=0
+else
+  USE_GCC?=1
+endif
 WOLFBOOT_TEST_FILLER?=0
 WOLFBOOT_TIME_TEST?=0
+
+ifeq ($(USE_CLANG),1)
+  ifeq ($(USE_GCC),1)
+    $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
+  endif
+endif
 
 # Support for Built-in ROT into OTP flash memory
 ifeq ($(FLASH_OTP_KEYSTORE),1)
@@ -722,7 +733,9 @@ ifeq ($(DEBUG_SYMBOLS),1)
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)
+    ifneq ($(USE_CLANG),1)
     CFLAGS+=-gstabs
+    endif
   endif
 endif
 
@@ -1031,9 +1044,11 @@ OBJS+=$(OBJS_EXTRA)
 
 ifeq ($(USE_GCC_HEADLESS),1)
   ifeq ($(USE_GCC),1)
-    ifneq ($(ARCH),RENESAS_RX)
-      ifneq ($(ARCH),AURIX_TC3)
-        CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+    ifneq ($(USE_CLANG),1)
+      ifneq ($(ARCH),RENESAS_RX)
+        ifneq ($(ARCH),AURIX_TC3)
+          CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
+        endif
       endif
     endif
   endif
