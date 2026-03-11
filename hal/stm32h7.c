@@ -160,7 +160,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    flash_wait_complete(1);
+    flash_wait_complete(0);
     if ((FLASH_CR1 & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR1 = FLASH_KEY1;
         DMB();
@@ -170,7 +170,7 @@ void RAMFUNCTION hal_flash_unlock(void)
             ;
     }
 
-    flash_wait_complete(2);
+    flash_wait_complete(1);
     if ((FLASH_CR2 & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR2 = FLASH_KEY1;
         DMB();
@@ -183,11 +183,11 @@ void RAMFUNCTION hal_flash_unlock(void)
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    flash_wait_complete(1);
+    flash_wait_complete(0);
     if ((FLASH_CR1 & FLASH_CR_LOCK) == 0)
         FLASH_CR1 |= FLASH_CR_LOCK;
 
-    flash_wait_complete(2);
+    flash_wait_complete(1);
     if ((FLASH_CR2 & FLASH_CR_LOCK) == 0)
         FLASH_CR2 |= FLASH_CR_LOCK;
 }
@@ -619,4 +619,3 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
 }
 
 #endif /* FLASH_OTP_KEYSTORE */
-
