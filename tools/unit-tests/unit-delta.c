@@ -167,11 +167,13 @@ START_TEST(test_wb_diff_self_match_extends_to_src_b_end)
     uint8_t *src_a;
     uint8_t *src_b;
     uint8_t patch[DELTA_BLOCK_SIZE] = {0};
-    uint32_t sector_size;
+    int sector_size_ret;
+    size_t sector_size;
     int ret;
 
-    sector_size = wb_diff_get_sector_size();
-    ck_assert_uint_gt(sector_size, BLOCK_HDR_SIZE);
+    sector_size_ret = wb_diff_get_sector_size();
+    ck_assert_int_gt(sector_size_ret, BLOCK_HDR_SIZE);
+    sector_size = (size_t)sector_size_ret;
 
     src_a = calloc(1, sector_size + BLOCK_HDR_SIZE);
     src_b = calloc(1, sector_size + BLOCK_HDR_SIZE + 1);
@@ -212,16 +214,24 @@ static void initialize_buffers(uint8_t *src_a, uint8_t *src_b, size_t size)
     }
 
     /* Introduce differences */
-    src_b[100] = src_a[100] + 1;
-    src_b[200] = src_a[200] + 2;
+    if (size > 100) {
+        src_b[100] = src_a[100] + 1;
+    }
+    if (size > 200) {
+        src_b[200] = src_a[200] + 2;
+    }
 
     /* 10-bytes difference across two blocks */
-    for (int i = 1020; i < 1040; ++i) {
+    for (int i = 1020; i < 1040 && (size_t)i < size; ++i) {
         src_b[i] = src_a[i] + 3;
     }
 
-    src_a[510] = ESC;
-    src_b[1022] = ESC;
+    if (size > 510) {
+        src_a[510] = ESC;
+    }
+    if (size > 1022) {
+        src_b[1022] = ESC;
+    }
 
 }
 
