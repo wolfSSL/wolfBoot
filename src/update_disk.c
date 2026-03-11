@@ -134,6 +134,9 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
             continue;
         }
 
+        if (p + 4 + tlv_len > max_p)
+            break;
+
         if (tlv_type == HDR_VERSION && tlv_len == 4) {
             uint32_t ver = *((uint32_t*)(p + 4));
             return ver;
