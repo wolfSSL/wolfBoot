@@ -32,7 +32,6 @@
 #include "spi_drv.h"
 #include "tpm.h"
 #include "wolftpm/tpm2_tis.h" /* for TIS header size and wait state */
-#include <wolfssl/wolfcrypt/misc.h>
 
 WOLFTPM2_DEV     wolftpm_dev;
 #if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
@@ -45,6 +44,19 @@ WOLFTPM2_KEY     wolftpm_srk;
 #endif
 
 #if defined(WOLFBOOT_TPM_SEAL) || defined(WOLFBOOT_TPM_KEYSTORE)
+static int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b,
+    uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
     unsigned long maxLine)
 {
@@ -1516,7 +1528,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
         if (rc == 0) {
             /* verify the hint (hash) matches */
             if (digestSz == WOLFBOOT_SHA_DIGEST_SIZE &&
-                ConstantCompare(digest, pubkey_hint,
+                wolfBoot_constant_compare(digest, pubkey_hint,
                     WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
                 wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
             }
