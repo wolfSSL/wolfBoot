@@ -41,6 +41,7 @@ This README describes configuration of supported targets.
 * [STM32F7](#stm32f7)
 * [STM32G0](#stm32g0)
 * [STM32H5](#stm32h5)
+* [STM32N6](#stm32n6)
 * [STM32H7](#stm32h7)
 * [STM32L0](#stm32l0)
 * [STM32L4](#stm32l4)
@@ -1610,6 +1611,123 @@ add-symbol-file test-app/image.elf 0x08060000
 mon reset init
 b main
 c
+```
+
+
+## STM32N6
+
+The STM32N6 (Cortex-M55) has no internal flash — all firmware resides on external
+NOR flash (Macronix MX25UM51245G, 64MB) connected via XSPI2. The on-chip Boot ROM
+copies the FSBL (First Stage Boot Loader) from external flash to internal SRAM and
+jumps to it. wolfBoot serves as the FSBL, performing image verification and
+chain-loading the application from external flash in XIP (Execute-In-Place) mode.
+
+Tested on: **NUCLEO-N657X0-Q** (STM32N657X0H, MB1940)
+
+### Memory Layout
+
+```
+XSPI2 NOR Flash (memory-mapped at 0x70000000):
+  0x70000000  FSBL header area (128KB, future autonomous boot)
+  0x70010000  Swap partition (64KB, device-relative: 0x00010000)
+  0x70020000  Boot partition (1MB, app runs from here via XIP)
+  0x70120000  Update partition (1MB, device-relative: 0x00120000)
+
+AXISRAM (0x34000000):
+  0x34000000  wolfBoot (loaded to SRAM via SWD or Boot ROM FSBL copy)
+  0x34020000  Stack / work area
+```
+
+### Build and Flash
+
+Use the example configuration and build:
+
+```sh
+cp config/examples/stm32n6.config .config
+make
+make flash
+```
+
+`make flash` uses OpenOCD with the stmqspi driver to:
+1. Program the signed application to NOR flash at 0x70020000
+2. Load wolfBoot to SRAM at 0x34000000
+3. Start wolfBoot, which verifies and boots the application via XIP
+
+Prerequisites:
+- OpenOCD 0.12+ with stm32n6x target support (build from source if needed)
+- ST-Link connected to the Nucleo board
+- arm-none-eabi toolchain in PATH
+
+### Build Options
+
+```sh
+make TARGET=stm32n6 SIGN=ECC256
+```
+
+The example config uses:
+- `EXT_FLASH=1` with `PART_UPDATE_EXT=1` and `PART_SWAP_EXT=1`
+- Boot partition at 0x70020000 (XIP, not marked EXT)
+- Update/swap partitions use device-relative offsets
+- 4KB sector size (`WOLFBOOT_SECTOR_SIZE=0x1000`)
+- ECC256 + SHA256 for signature verification
+
+### XIP Constraints
+
+Since the application executes directly from NOR flash via XSPI2 memory-mapped
+mode, the following constraints apply:
+
+- The application must NOT call `hal_init()` — XSPI2 is already configured by
+  wolfBoot for memory-mapped mode. Reinitializing XSPI2 would disable XIP and
+  crash the CPU.
+- Calling `wolfBoot_success()` requires all flash write functions to be placed
+  in RAM (RAMFUNCTION). The HAL flash functions in `hal/stm32n6.c` need the
+  RAMFUNCTION attribute for this to work from an XIP application.
+
+### Flash Script Options
+
+The flash script supports several modes:
+
+```sh
+./tools/scripts/stm32n6_flash.sh                  # Build and flash all
+./tools/scripts/stm32n6_flash.sh --skip-build      # Flash only (existing binaries)
+./tools/scripts/stm32n6_flash.sh --app-only         # Flash signed app only
+./tools/scripts/stm32n6_flash.sh --test-update      # Flash v1 boot + v2 update
+./tools/scripts/stm32n6_flash.sh --halt             # Leave OpenOCD running
+```
+
+### Debugging
+
+OpenOCD:
+
+```sh
+openocd -f config/openocd/openocd_stm32n6.cfg
+```
+
+After OpenOCD starts, connect via telnet (port 4444). To manually load wolfBoot
+and start it:
+
+```sh
+reset halt
+load_image wolfboot.bin 0x34000000 bin
+reg msplim_s 0x00000000
+reg psplim_s 0x00000000
+reg msp 0x34020000
+mww 0xE000ED08 0x34000000
+resume <entry_address>
+```
+
+The entry address can be found with:
+```sh
+arm-none-eabi-nm wolfboot.elf | grep isr_reset
+```
+
+GDB:
+
+```sh
+arm-none-eabi-gdb wolfboot.elf
+target remote :3333
+mon halt
+add-symbol-file test-app/image.elf 0x70020400
 ```
 
 

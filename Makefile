@@ -269,6 +269,11 @@ ifeq ($(TARGET),sama5d3)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),stm32n6)
+    # wolfBoot runs from SRAM, app from XIP on external NOR - no contiguous factory.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),rp2350)
     MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
 endif
@@ -646,6 +651,12 @@ stack-usage: wolfboot.bin
 
 image-header-size: wolfboot.bin
 	$(Q)echo $(IMAGE_HEADER_SIZE) > .image_header_size
+
+## Target-specific flash targets
+ifeq ($(TARGET),stm32n6)
+flash: wolfboot.bin test-app/image_v1_signed.bin
+	$(Q)tools/scripts/stm32n6_flash.sh --skip-build
+endif
 
 
 cppcheck:

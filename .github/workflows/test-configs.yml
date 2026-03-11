@@ -449,6 +449,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32h5-tz-dualbank-otp-lms.config
 
+  stm32n6_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32n6.config
+
   stm32h7_test:
     uses: ./.github/workflows/test-build.yml
     with:

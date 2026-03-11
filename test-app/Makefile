@@ -364,6 +364,14 @@ ifeq ($(TARGET),stm32h5)
   endif
 endif
 
+ifeq ($(TARGET),stm32n6)
+  LSCRIPT_TEMPLATE=ARM-stm32n6.ld
+  CFLAGS+=-mcpu=cortex-m55 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m55
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
 ifeq ($(TARGET),stm32u5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32u5-ns.ld
@@ -528,6 +536,10 @@ ifeq ($(TARGET),s32k1xx)
     endif
     CFLAGS+=-DAPP_HAS_SYSTICK
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
+endif
+
+ifeq ($(TARGET),stm32n6)
+    CFLAGS+=-DRAM_CODE
 endif
 
 ifeq ($(TARGET),mcxw)
