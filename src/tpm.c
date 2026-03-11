@@ -1094,6 +1094,7 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
             memcpy(secret, unsealOut.outData.buffer, *secret_sz);
         }
     }
+    TPM2_ForceZero(&unsealOut, sizeof(unsealOut));
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);

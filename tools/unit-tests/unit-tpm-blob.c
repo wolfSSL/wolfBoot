@@ -25,6 +25,7 @@
 enum mock_mode {
     MOCK_OVERSIZE_PUB,
     MOCK_OVERSIZE_PRIV,
+    MOCK_UNSEAL_OK,
     MOCK_UNSEAL_OVERSIZE
 };
 
@@ -32,6 +33,8 @@ static enum mock_mode current_mode;
 static int nvread_calls;
 static int oversized_pub_read_attempted;
 static int oversized_priv_read_attempted;
+static int forcezero_calls;
+static word32 last_forcezero_len;
 static uint8_t test_hdr[64];
 static uint8_t test_modulus[256];
 static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
@@ -217,6 +220,12 @@ TPM_RC TPM2_Unseal(Unseal_In* in, Unseal_Out* out)
 {
     (void)in;
 
+    if (current_mode == MOCK_UNSEAL_OK) {
+        out->outData.size = 4;
+        memset(out->outData.buffer, 0x5A, out->outData.size);
+        return 0;
+    }
+
     if (current_mode != MOCK_UNSEAL_OVERSIZE) {
         ck_abort_msg("Unexpected TPM2_Unseal call in mode %d", current_mode);
     }
@@ -224,6 +233,13 @@ TPM_RC TPM2_Unseal(Unseal_In* in, Unseal_Out* out)
     out->outData.size = 16;
     memset(out->outData.buffer, 0x5A, out->outData.size);
     return 0;
+}
+
+void TPM2_ForceZero(void* mem, word32 len)
+{
+    forcezero_calls++;
+    last_forcezero_len = len;
+    memset(mem, 0, len);
 }
 
 int keyslot_id_by_sha(const uint8_t* pubkey_hint)
@@ -312,6 +328,8 @@ static void setup(void)
     nvread_calls = 0;
     oversized_pub_read_attempted = 0;
     oversized_priv_read_attempted = 0;
+    forcezero_calls = 0;
+    last_forcezero_len = 0;
     memset(test_hdr, 0x22, sizeof(test_hdr));
     memset(test_modulus, 0x33, sizeof(test_modulus));
 }
@@ -329,6 +347,30 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(nvread_calls, 1);
     ck_assert_int_eq(oversized_pub_read_attempted, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
+{
+    uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE] = {0};
+    uint8_t policy[sizeof(uint32_t) + 4] = {0};
+    int secret_sz;
+    int rc;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(secret, 0, sizeof(secret));
+    current_mode = MOCK_UNSEAL_OK;
+    secret_sz = (int)sizeof(secret);
+
+    rc = wolfBoot_unseal_blob(pubkey_hint, policy, sizeof(policy), &blob,
+        secret, &secret_sz, NULL, 0);
+
+    ck_assert_int_eq(rc, 0);
+    ck_assert_int_eq(secret_sz, 4);
+    ck_assert_int_eq(forcezero_calls, 1);
+    ck_assert_uint_eq(last_forcezero_len, sizeof(Unseal_Out));
 }
 END_TEST
 
@@ -388,6 +430,7 @@ static Suite *tpm_blob_suite(void)
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_public_area);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_private_area);
+    tcase_add_test(tc, test_wolfBoot_unseal_blob_zeroes_unseal_output);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity);
     suite_add_tcase(s, tc);
     return s;
