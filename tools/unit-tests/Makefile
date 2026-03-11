@@ -47,7 +47,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
-       unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
+       unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 \
        unit-tpm-blob
 
@@ -213,6 +213,9 @@ unit-update-flash-enc: ../../include/target.h unit-update-flash.c
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-disk: ../../include/target.h unit-update-disk.c
+	gcc -o $@ unit-update-disk.c $(CFLAGS) $(LDFLAGS)
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
