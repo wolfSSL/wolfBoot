@@ -293,6 +293,11 @@ START_TEST(test_partition_magic_write_stops_on_flash_write_error)
     ret = mmap_file("/tmp/wolfboot-unit-file-error.bin", (void *)MOCK_ADDRESS,
             WOLFBOOT_PARTITION_SIZE, NULL);
     ck_assert(ret >= 0);
+#ifdef FLAGS_HOME
+    ret = mmap_file("/tmp/wolfboot-unit-int-file-error.bin",
+            (void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+#endif
     ret = mmap_file("/tmp/wolfboot-unit-swap-error.bin", (void *)MOCK_ADDRESS_SWAP,
             WOLFBOOT_SECTOR_SIZE, NULL);
     ck_assert(ret >= 0);
@@ -312,6 +317,11 @@ START_TEST(test_partition_magic_write_stops_on_flash_write_error)
             PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
     ck_assert_int_eq(ret, -1);
     ck_assert_int_eq(erased_update, 0);
+#ifdef FLAGS_HOME
+    ck_assert_int_eq(erased_boot, 1);
+#else
+    ck_assert_int_eq(erased_boot, 0);
+#endif
     ck_assert_int_eq(erased_nvm_bank0, 0);
     ck_assert_int_eq(erased_nvm_bank1, 0);
     ck_assert_uint_eq(*magic, wolfboot_magic_trail);
