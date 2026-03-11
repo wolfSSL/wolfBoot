@@ -293,6 +293,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 break;
             if ((memcmp(pa, (ctx->src_b + ctx->off_b), BLOCK_HDR_SIZE) == 0)) {
                 uintptr_t b_start;
+                uint8_t *pa_limit = ctx->src_a + ctx->size_a;
                 /* Identical areas of BLOCK_HDR_SIZE bytes match between the images.
                  * initialize match_len; blk_start is the relative offset within
                  * the src image.
@@ -302,11 +303,13 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
-                while (*pa == *(ctx->src_b + ctx->off_b)) {
+                while ((pa < pa_limit) &&
+                        (ctx->off_b < ctx->size_b) &&
+                        (*pa == *(ctx->src_b + ctx->off_b))) {
                     /* Extend matching block if possible, as long as the
                      * identical sequence continues.
                      */
-                    if ((uint32_t)(pa + 1 - ctx->src_a) >= ctx->size_a) {
+                    if ((pa + 1) >= pa_limit) {
                         /* Stop matching if the source image size limit is hit. */
                         break;
                     }
@@ -335,6 +338,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         if (!found) {
             /* Try matching an earlier section in the resulting image */
             uintptr_t pb_end = page_start * wolfboot_sector_size;
+            uint8_t *pb_limit = ctx->src_b + pb_end;
             pb = ctx->src_b;
             while (((uintptr_t)(pb - ctx->src_b) < pb_end) && (p_off < len)) {
                 /* Check image boundary */
@@ -360,7 +364,9 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     blk_start = pb - ctx->src_b;
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
-                    while (*pb == *(ctx->src_b + ctx->off_b)) {
+                    while ((pb < pb_limit) &&
+                            (ctx->off_b < ctx->size_b) &&
+                            (*pb == *(ctx->src_b + ctx->off_b))) {
                         /* Extend match as long as the areas have the
                          * same content. Block skipping in this case is
                          * not a problem since the distance between the patched
@@ -368,7 +374,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                          * block size.
                          */
                         pb++;
-                        if ((uint32_t)(pb - ctx->src_b) >= pb_end) {
+                        if (pb >= pb_limit) {
                             pb--;
                             break;
                         }

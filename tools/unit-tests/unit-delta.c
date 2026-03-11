@@ -24,6 +24,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "delta.h"
 #define WC_RSA_BLINDING
@@ -33,7 +34,6 @@
 #define PATCH_SIZE 8192
 #define DST_SIZE 4096
 #define DIFF_SIZE 8192
-
 
 
 START_TEST(test_wb_patch_init_invalid)
@@ -142,11 +142,67 @@ START_TEST(test_wb_diff_init_invalid)
 }
 END_TEST
 
-static void initialize_buffers(uint8_t *src_a, uint8_t *src_b)
+START_TEST(test_wb_diff_match_extends_to_src_b_end)
+{
+    WB_DIFF_CTX diff_ctx;
+    uint8_t src_a[BLOCK_HDR_SIZE + 2] = {0};
+    uint8_t src_b[BLOCK_HDR_SIZE + 1] = {0};
+    uint8_t patch[DELTA_BLOCK_SIZE] = {0};
+    int ret;
+
+    memset(src_a, 0x41, sizeof(src_a));
+    memset(src_b, 0x41, sizeof(src_b));
+
+    ret = wb_diff_init(&diff_ctx, src_a, sizeof(src_a), src_b, sizeof(src_b));
+    ck_assert_int_eq(ret, 0);
+
+    ret = wb_diff(&diff_ctx, patch, sizeof(patch));
+    ck_assert_int_gt(ret, 0);
+}
+END_TEST
+
+START_TEST(test_wb_diff_self_match_extends_to_src_b_end)
+{
+    WB_DIFF_CTX diff_ctx;
+    uint8_t *src_a;
+    uint8_t *src_b;
+    uint8_t patch[DELTA_BLOCK_SIZE] = {0};
+    int sector_size_ret;
+    size_t sector_size;
+    int ret;
+
+    sector_size_ret = wb_diff_get_sector_size();
+    ck_assert_int_gt(sector_size_ret, BLOCK_HDR_SIZE);
+    sector_size = (size_t)sector_size_ret;
+
+    src_a = calloc(1, sector_size + BLOCK_HDR_SIZE);
+    src_b = calloc(1, sector_size + BLOCK_HDR_SIZE + 1);
+    ck_assert_ptr_nonnull(src_a);
+    ck_assert_ptr_nonnull(src_b);
+
+    ret = wb_diff_init(&diff_ctx, src_a, sector_size + BLOCK_HDR_SIZE,
+            src_b, sector_size + BLOCK_HDR_SIZE + 1);
+    ck_assert_int_eq(ret, 0);
+
+    memset(src_a + sector_size, 0x11, BLOCK_HDR_SIZE);
+    memset(src_b, 0x22, BLOCK_HDR_SIZE + 1);
+    memset(src_b + sector_size, 0x22, BLOCK_HDR_SIZE + 1);
+    diff_ctx.off_b = sector_size;
+
+    ret = wb_diff(&diff_ctx, patch, sizeof(patch));
+    ck_assert_int_gt(ret, 0);
+
+    free(src_a);
+    free(src_b);
+}
+END_TEST
+
+static void initialize_buffers(uint8_t *src_a, uint8_t *src_b, size_t size)
 {
     uint32_t pseudo_rand = 0;
-    uint8_t tmp[128];
-    for (int i = 0; i < SRC_SIZE; ++i) {
+    size_t i;
+
+    for (i = 0; i < size; ++i) {
         src_a[i] = pseudo_rand % 256;
         src_b[i] = pseudo_rand % 256;
         if ((i % 100) == 42) {
@@ -158,24 +214,24 @@ static void initialize_buffers(uint8_t *src_a, uint8_t *src_b)
     }
 
     /* Introduce differences */
-    src_b[100] = src_a[100] + 1;
-    src_b[200] = src_a[200] + 2;
+    if (size > 100) {
+        src_b[100] = src_a[100] + 1;
+    }
+    if (size > 200) {
+        src_b[200] = src_a[200] + 2;
+    }
 
     /* 10-bytes difference across two blocks */
-    for (int i = 1020; i < 1040; ++i) {
+    for (int i = 1020; i < 1040 && (size_t)i < size; ++i) {
         src_b[i] = src_a[i] + 3;
     }
 
-
-    /* Copy a sequence from A to B, behind */
-    src_a[510] = ESC;
-    memcpy(src_b + 4090, src_a + 500, 20);
-
-
-    /* Copy a sequence from B to itself, ahead */
-    src_b[1022] = ESC;
-    memcpy(tmp, src_b + 1020, 30);
-    memcpy(src_b + 7163, tmp, 30);
+    if (size > 510) {
+        src_a[510] = ESC;
+    }
+    if (size > 1022) {
+        src_b[1022] = ESC;
+    }
 
 }
 
@@ -192,7 +248,7 @@ START_TEST(test_wb_patch_and_diff)
     uint32_t p_written = 0;
 
 
-    initialize_buffers(src_a, src_b);
+    initialize_buffers(src_a, src_b, SRC_SIZE);
 
     ret = wb_diff_init(&diff_ctx, src_a, SRC_SIZE, src_b, SRC_SIZE);
     ck_assert_int_eq(ret, 0);
@@ -224,7 +280,7 @@ START_TEST(test_wb_patch_and_diff)
     ck_assert_int_eq(i, SRC_SIZE); // The patched length should match the buffer size
 
     /* Verify that the patched destination matches src_b */
-    for (int i = 0; i < SRC_SIZE; ++i) {
+    for (i = 0; i < SRC_SIZE; ++i) {
         ck_assert_uint_eq(patched_dst[i], src_b[i]);
     }
 }
@@ -247,6 +303,8 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_resume_bounds_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_resume_large_len);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_trailing_escape_invalid);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_match_extends_to_src_b_end);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_self_match_extends_to_src_b_end);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff);
     suite_add_tcase(s, tc_wolfboot_delta);
 
