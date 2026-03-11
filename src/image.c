@@ -1143,6 +1143,7 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha384 sha384_ctx;
 
+    memset(hash, 0, SHA384_DIGEST_SIZE);
     if (!pubkey || (pubkey_sz < 0))
         return;
 
@@ -1237,6 +1238,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha3 sha3_ctx;
 
+    memset(hash, 0, WC_SHA3_384_DIGEST_SIZE);
     if (!pubkey || (pubkey_sz < 0))
         return;
     wc_InitSha3_384(&sha3_ctx, NULL, INVALID_DEVID);

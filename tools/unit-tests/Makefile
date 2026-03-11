@@ -48,7 +48,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
-       unit-image-nopart \
+       unit-image-nopart unit-image-sha384 unit-image-sha3-384 \
        unit-tpm-blob
 
 all: $(TESTS)
@@ -165,6 +165,18 @@ unit-image-nopart: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT
 	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
 		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_NO_PARTITIONS -DMOCK_PARTITIONS \
 		-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 $(LDFLAGS)
+
+unit-image-sha384: ../../include/target.h unit-image.c unit-common.c
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DUNIT_IMAGE_KEYHASH_ONLY \
+		-DWOLFBOOT_HASH_SHA384 $(LDFLAGS)
+
+unit-image-sha3-384: ../../include/target.h unit-image.c unit-common.c
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DUNIT_IMAGE_KEYHASH_ONLY \
+		-DWOLFBOOT_HASH_SHA3_384 $(LDFLAGS)
 
 unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048
 unit-image-rsa: ../../include/target.h unit-image.c unit-common.c

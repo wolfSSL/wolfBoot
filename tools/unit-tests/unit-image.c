@@ -24,7 +24,10 @@
 
 /* Option to enable sign tool debugging */
 /* Must also define DEBUG_WOLFSSL in user_settings.h */
+#if !defined(WOLFBOOT_HASH_SHA256) && !defined(WOLFBOOT_HASH_SHA384) && \
+    !defined(WOLFBOOT_HASH_SHA3_384)
 #define WOLFBOOT_HASH_SHA256
+#endif
 #define EXT_FLASH
 #define PART_UPDATE_EXT
 #define NVM_FLASH_WRITEONCE
@@ -86,7 +89,7 @@ uint8_t *wolfBoot_get_self_header(void)
     return NULL;
 }
 
-#if defined(WOLFBOOT_SIGN_ECC256)
+#if defined(WOLFBOOT_SIGN_ECC256) && defined(WOLFBOOT_HASH_SHA256)
 static const unsigned char pubkey_digest[SHA256_DIGEST_SIZE] = {
   0x17, 0x20, 0xa5, 0x9b, 0xe0, 0x9b, 0x80, 0x0c, 0xaa, 0xc4, 0xf5, 0x3f,
   0xae, 0xe5, 0x72, 0x4f, 0xf2, 0x1f, 0x33, 0x53, 0xd1, 0xd4, 0xcd, 0x8b,
@@ -187,12 +190,12 @@ static void patch_pubkey_hint(uint8_t *img, uint32_t img_len)
 {
     uint8_t *ptr = NULL;
     uint16_t len;
-    uint8_t hash[SHA256_DIGEST_SIZE];
+    uint8_t hash[WOLFBOOT_SHA_DIGEST_SIZE];
 
     (void)img_len;
     len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_PUBKEY, &ptr);
     ck_assert_int_eq(len, WOLFBOOT_SHA_DIGEST_SIZE);
-    key_sha256(0, hash);
+    key_hash(0, hash);
     memcpy(ptr, hash, WOLFBOOT_SHA_DIGEST_SIZE);
 }
 
@@ -388,13 +391,29 @@ END_TEST
 START_TEST(test_keyslot_id_by_sha_scans_all_slots)
 {
     int id;
+    uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 
+    key_hash(0, digest);
     unit_keystore_reset_counters();
-    id = keyslot_id_by_sha(pubkey_digest);
+    id = keyslot_id_by_sha(digest);
 
     ck_assert_int_eq(id, 0);
     ck_assert_int_eq(unit_keystore_get_buffer_calls(), keystore_num_pubkeys());
     ck_assert_int_eq(unit_keystore_get_size_calls(), keystore_num_pubkeys());
+}
+END_TEST
+
+START_TEST(test_key_hash_zeroes_output_on_invalid_slot)
+{
+    uint8_t hash[WOLFBOOT_SHA_DIGEST_SIZE];
+    size_t i;
+
+    memset(hash, 0xA5, sizeof(hash));
+    key_hash(0xFF, hash);
+
+    for (i = 0; i < sizeof(hash); i++) {
+        ck_assert_uint_eq(hash[i], 0);
+    }
 }
 END_TEST
 #endif
@@ -455,7 +474,7 @@ END_TEST
 
 START_TEST(test_sha_ops)
 {
-    uint8_t hash[SHA256_DIGEST_SIZE];
+    uint8_t hash[WOLFBOOT_SHA_DIGEST_SIZE];
     static uint8_t FlashImg[32 * 1024];
     uint8_t *retp = NULL;
     struct wolfBoot_image test_img;
@@ -499,15 +518,15 @@ START_TEST(test_sha_ops)
     ck_assert_ptr_eq(retp, ext_hash_block);
     ck_assert_uint_eq(sz, WOLFBOOT_SHA_BLOCK_SIZE);
 
-    /* Test image_sha256 */
+    /* Test image hash */
 
     /* NULL img */
-    ck_assert_int_lt(image_sha256(NULL, hash), 0);
+    ck_assert_int_lt(image_hash(NULL, hash), 0);
 
     /* Too short, internal partition field */
     test_img.part = PART_BOOT;
     test_img.fw_size = 0x1000;
-    ck_assert_int_lt(image_sha256(&test_img, hash), 0);
+    ck_assert_int_lt(image_hash(&test_img, hash), 0);
 
     /* Ext partition with a valid SHA */
     find_header_mocked = 0;
@@ -518,14 +537,14 @@ START_TEST(test_sha_ops)
     test_img.part = PART_UPDATE;
     test_img.fw_base = 0;
     test_img.fw_size = test_img_len;
-    ck_assert_int_eq(image_sha256(&test_img, hash), 0);
+    ck_assert_int_eq(image_hash(&test_img, hash), 0);
 
-    /* key_sha256 */
-    key_sha256(0, hash);
-#if defined(WOLFBOOT_SIGN_ECC256)
+    /* key hash */
+    key_hash(0, hash);
+#if defined(WOLFBOOT_SIGN_ECC256) && defined(WOLFBOOT_HASH_SHA256)
     ck_assert_mem_eq(hash, pubkey_digest, SHA256_DIGEST_SIZE);
 #else
-    /* For non-ECC256 configurations we do not have a fixed expected digest. */
+    /* Only the SHA-256 ECC256 fixture has a fixed expected digest here. */
     (void)hash;
 #endif
 }
@@ -775,11 +794,20 @@ Suite *wolfboot_suite(void)
     /* Suite initialization */
     Suite *s = suite_create("wolfBoot");
 
+#ifdef UNIT_IMAGE_KEYHASH_ONLY
+    TCase* tcase_key_hash = tcase_create("key_hash");
+    tcase_set_timeout(tcase_key_hash, 20);
+    tcase_add_test(tcase_key_hash, test_key_hash_zeroes_output_on_invalid_slot);
+    suite_add_tcase(s, tcase_key_hash);
+    return s;
+#endif
+
 #if defined(WOLFBOOT_SIGN_ECC256)
     TCase* tcase_verify_signature = tcase_create("verify_signature");
     tcase_set_timeout(tcase_verify_signature, 20);
     tcase_add_test(tcase_verify_signature, test_verify_signature);
     tcase_add_test(tcase_verify_signature, test_keyslot_id_by_sha_scans_all_slots);
+    tcase_add_test(tcase_verify_signature, test_key_hash_zeroes_output_on_invalid_slot);
     suite_add_tcase(s, tcase_verify_signature);
 #endif
 
