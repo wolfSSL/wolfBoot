@@ -655,6 +655,7 @@ START_TEST(test_verify_authenticity_bad_siglen)
 END_TEST
 #endif
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 START_TEST(test_verify_integrity)
 {
     struct wolfBoot_image test_img;
@@ -682,7 +683,9 @@ START_TEST(test_verify_integrity)
     ck_assert_int_eq(ret, 0);
 }
 END_TEST
+#endif
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 START_TEST(test_open_image)
 {
     struct wolfBoot_image img;
@@ -747,6 +750,24 @@ START_TEST(test_open_image)
     ck_assert_int_eq(ret, -1);
 }
 END_TEST
+#else
+START_TEST(test_open_image_address_without_partitions_rejects_oversized_fw_size)
+{
+    struct wolfBoot_image img;
+    uint8_t image[IMAGE_HEADER_SIZE] = {0};
+    int ret;
+
+    memset(&img, 0, sizeof(img));
+    ((uint32_t *)image)[0] = WOLFBOOT_MAGIC;
+    ((uint32_t *)image)[1] = WOLFBOOT_RAMBOOT_MAX_SIZE + 1;
+
+    ret = wolfBoot_open_image_address(&img, image);
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
+}
+END_TEST
+#endif
 
 
 Suite *wolfboot_suite(void)
@@ -794,14 +815,21 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_headers, test_headers);
     suite_add_tcase(s, tcase_headers);
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     TCase* tcase_verify_integrity = tcase_create("verify_integrity");
     tcase_set_timeout(tcase_verify_integrity, 20);
     tcase_add_test(tcase_verify_integrity, test_verify_integrity);
     suite_add_tcase(s, tcase_verify_integrity);
+#endif
 
     TCase* tcase_open_image = tcase_create("open_image");
     tcase_set_timeout(tcase_open_image, 20);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     tcase_add_test(tcase_open_image, test_open_image);
+#else
+    tcase_add_test(tcase_open_image,
+        test_open_image_address_without_partitions_rejects_oversized_fw_size);
+#endif
     suite_add_tcase(s, tcase_open_image);
 #endif
     return s;

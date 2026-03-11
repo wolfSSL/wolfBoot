@@ -48,6 +48,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
+       unit-image-nopart \
        unit-tpm-blob
 
 all: $(TESTS)
@@ -159,6 +160,11 @@ unit-sectorflags: ../../include/target.h unit-sectorflags.c
 
 unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ $^ $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-image-nopart: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_NO_PARTITIONS -DMOCK_PARTITIONS \
+		-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 $(LDFLAGS)
 
 unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048
 unit-image-rsa: ../../include/target.h unit-image.c unit-common.c
