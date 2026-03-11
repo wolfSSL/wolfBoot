@@ -24,13 +24,17 @@
 
 enum mock_mode {
     MOCK_OVERSIZE_PUB,
-    MOCK_OVERSIZE_PRIV
+    MOCK_OVERSIZE_PRIV,
+    MOCK_UNSEAL_OVERSIZE
 };
 
 static enum mock_mode current_mode;
 static int nvread_calls;
 static int oversized_pub_read_attempted;
 static int oversized_priv_read_attempted;
+static uint8_t test_hdr[64];
+static uint8_t test_modulus[256];
+static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
 
 int wolfBoot_printf(const char* fmt, ...)
 {
@@ -45,6 +49,205 @@ int wolfTPM2_SetAuthHandle(WOLFTPM2_DEV* dev, int index,
     (void)index;
     (void)handle;
     return 0;
+}
+
+int wolfTPM2_SetAuthSession(WOLFTPM2_DEV* dev, int index,
+    WOLFTPM2_SESSION* tpmSession, TPMA_SESSION sessionAttributes)
+{
+    (void)dev;
+    (void)index;
+    (void)tpmSession;
+    (void)sessionAttributes;
+    return 0;
+}
+
+int wolfTPM2_UnsetAuthSession(WOLFTPM2_DEV* dev, int index,
+    WOLFTPM2_SESSION* tpmSession)
+{
+    (void)dev;
+    (void)index;
+    (void)tpmSession;
+    return 0;
+}
+
+int wolfTPM2_SetAuthHandleName(WOLFTPM2_DEV* dev, int index,
+    const WOLFTPM2_HANDLE* handle)
+{
+    (void)dev;
+    (void)index;
+    (void)handle;
+    return 0;
+}
+
+int wolfTPM2_StartSession(WOLFTPM2_DEV* dev, WOLFTPM2_SESSION* session,
+    WOLFTPM2_KEY* tpmKey, WOLFTPM2_HANDLE* bind, TPM_SE sesType,
+    int encDecAlg)
+{
+    (void)dev;
+    (void)tpmKey;
+    (void)bind;
+    (void)sesType;
+    (void)encDecAlg;
+    session->handle.hndl = 1;
+    return 0;
+}
+
+int wolfTPM2_LoadKey(WOLFTPM2_DEV* dev, WOLFTPM2_KEYBLOB* keyBlob,
+    WOLFTPM2_HANDLE* parent)
+{
+    (void)dev;
+    (void)parent;
+    keyBlob->handle.hndl = 2;
+    return 0;
+}
+
+int wolfTPM2_UnloadHandle(WOLFTPM2_DEV* dev, WOLFTPM2_HANDLE* handle)
+{
+    (void)dev;
+    (void)handle;
+    return 0;
+}
+
+int wolfTPM2_LoadEccPublicKey(WOLFTPM2_DEV* dev, WOLFTPM2_KEY* pubKey,
+    int curveID, const byte* qx, word32 qxSz, const byte* qy, word32 qySz)
+{
+    (void)dev;
+    (void)pubKey;
+    (void)curveID;
+    (void)qx;
+    (void)qxSz;
+    (void)qy;
+    (void)qySz;
+    return 0;
+}
+
+int wc_RsaPublicKeyDecode_ex(const byte* input, word32* inOutIdx, word32 inSz,
+    const byte** n, word32* nSz, const byte** e, word32* eSz)
+{
+    (void)input;
+    (void)inSz;
+
+    *inOutIdx = 0;
+    *n = test_modulus;
+    *nSz = sizeof(test_modulus);
+    *e = &test_exponent_der[1];
+    *eSz = 3;
+    return 0;
+}
+
+int wolfTPM2_LoadRsaPublicKey_ex(WOLFTPM2_DEV* dev, WOLFTPM2_KEY* key,
+    const byte* rsaPub, word32 rsaPubSz, word32 exponent,
+    TPM_ALG_ID scheme, TPMI_ALG_HASH hashAlg)
+{
+    (void)dev;
+    (void)key;
+    (void)rsaPub;
+    (void)rsaPubSz;
+    (void)exponent;
+    (void)scheme;
+    (void)hashAlg;
+    return 0;
+}
+
+int wolfTPM2_VerifyHashTicket(WOLFTPM2_DEV* dev, WOLFTPM2_KEY* key,
+    const byte* sig, int sigSz, const byte* digest, int digestSz,
+    TPMI_ALG_SIG_SCHEME sigAlg, TPMI_ALG_HASH hashAlg,
+    TPMT_TK_VERIFIED* checkTicket)
+{
+    (void)dev;
+    (void)key;
+    (void)sig;
+    (void)sigSz;
+    (void)digest;
+    (void)digestSz;
+    (void)sigAlg;
+    (void)hashAlg;
+    (void)checkTicket;
+    return 0;
+}
+
+int wolfTPM2_GetPolicyDigest(WOLFTPM2_DEV* dev, TPM_HANDLE sessionHandle,
+    byte* policyDigest, word32* policyDigestSz)
+{
+    (void)dev;
+    (void)sessionHandle;
+    memset(policyDigest, 0x11, *policyDigestSz);
+    return 0;
+}
+
+int wolfTPM2_PolicyPCR(WOLFTPM2_DEV* dev, TPM_HANDLE sessionHandle,
+    TPM_ALG_ID pcrAlg, byte* pcrArray, word32 pcrArraySz)
+{
+    (void)dev;
+    (void)sessionHandle;
+    (void)pcrAlg;
+    (void)pcrArray;
+    (void)pcrArraySz;
+    return 0;
+}
+
+int wolfTPM2_PolicyAuthorize(WOLFTPM2_DEV* dev, TPM_HANDLE sessionHandle,
+    const TPM2B_PUBLIC* pub, const TPMT_TK_VERIFIED* checkTicket,
+    const byte* pcrDigest, word32 pcrDigestSz,
+    const byte* policyRef, word32 policyRefSz)
+{
+    (void)dev;
+    (void)sessionHandle;
+    (void)pub;
+    (void)checkTicket;
+    (void)pcrDigest;
+    (void)pcrDigestSz;
+    (void)policyRef;
+    (void)policyRefSz;
+    return 0;
+}
+
+int wolfTPM2_PolicyRefMake(TPM_ALG_ID pcrAlg, byte* digest, word32* digestSz,
+    const byte* policyRef, word32 policyRefSz)
+{
+    (void)pcrAlg;
+    (void)digest;
+    (void)digestSz;
+    (void)policyRef;
+    (void)policyRefSz;
+    return 0;
+}
+
+TPM_RC TPM2_Unseal(Unseal_In* in, Unseal_Out* out)
+{
+    (void)in;
+
+    if (current_mode != MOCK_UNSEAL_OVERSIZE) {
+        ck_abort_msg("Unexpected TPM2_Unseal call in mode %d", current_mode);
+    }
+
+    out->outData.size = 16;
+    memset(out->outData.buffer, 0x5A, out->outData.size);
+    return 0;
+}
+
+int keyslot_id_by_sha(const uint8_t* pubkey_hint)
+{
+    (void)pubkey_hint;
+    return 0;
+}
+
+uint32_t keystore_get_key_type(int id)
+{
+    ck_assert_int_eq(id, 0);
+    return AUTH_KEY_RSA2048;
+}
+
+uint8_t *keystore_get_buffer(int id)
+{
+    ck_assert_int_eq(id, 0);
+    return test_hdr;
+}
+
+int keystore_get_size(int id)
+{
+    ck_assert_int_eq(id, 0);
+    return (int)sizeof(test_hdr);
 }
 
 const char* TPM2_GetRCString(int rc)
@@ -109,6 +312,8 @@ static void setup(void)
     nvread_calls = 0;
     oversized_pub_read_attempted = 0;
     oversized_priv_read_attempted = 0;
+    memset(test_hdr, 0x22, sizeof(test_hdr));
+    memset(test_modulus, 0x33, sizeof(test_modulus));
 }
 
 START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
@@ -124,6 +329,35 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(nvread_calls, 1);
     ck_assert_int_eq(oversized_pub_read_attempted, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity)
+{
+    struct {
+        uint8_t secret[8];
+        uint8_t canary[8];
+    } output;
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE] = {0};
+    uint8_t policy[sizeof(uint32_t) + 4] = {0};
+    int secret_sz;
+    int rc;
+    int i;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(&output, 0xA5, sizeof(output));
+    current_mode = MOCK_UNSEAL_OVERSIZE;
+    secret_sz = (int)sizeof(output.secret);
+
+    rc = wolfBoot_unseal_blob(pubkey_hint, policy, sizeof(policy), &blob,
+        output.secret, &secret_sz, NULL, 0);
+
+    ck_assert_int_eq(rc, BUFFER_E);
+    ck_assert_int_eq(secret_sz, 0);
+    for (i = 0; i < (int)sizeof(output.canary); i++) {
+        ck_assert_uint_eq(output.canary[i], 0xA5);
+    }
 }
 END_TEST
 
@@ -154,6 +388,7 @@ static Suite *tpm_blob_suite(void)
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_public_area);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_private_area);
+    tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity);
     suite_add_tcase(s, tc);
     return s;
 }

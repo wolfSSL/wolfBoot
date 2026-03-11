@@ -47,6 +47,10 @@ int wolfBoot_unseal_auth(const uint8_t* pubkey_hint, const uint8_t* policy, uint
     int index, uint8_t* secret, int* secret_sz, const byte* auth, int authSz);
 ```
 
+For `wolfBoot_unseal_auth()`, `*secret_sz` is an in/out parameter: set it to the
+capacity of `secret` before the call, and on success it is updated to the
+number of bytes unsealed.
+
 By default this index will be based on an NV Index at `(0x01400300 + index)`.
 The default NV base can be overridden with `WOLFBOOT_TPM_SEAL_NV_BASE`.
 
