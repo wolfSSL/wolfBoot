@@ -31,6 +31,7 @@ static int erased_swap = 0;
 static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
+static int hal_flash_write_fail = 0;
 const char *argv0;
 
 #include <sys/stat.h>
@@ -45,6 +46,10 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     int i;
     uint8_t *a = (uint8_t *)(uintptr_t)address;
     ck_assert_msg(!locked, "Attempting to write to a locked FLASH");
+    if (hal_flash_write_fail) {
+        hal_flash_write_fail = 0;
+        return -1;
+    }
     if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         for (i = 0; i < len; i++) {

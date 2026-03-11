@@ -285,6 +285,41 @@ START_TEST (test_nvm_select_fresh_sector)
 }
 END_TEST
 
+START_TEST(test_partition_magic_write_stops_on_flash_write_error)
+{
+    int ret;
+    uint32_t *magic;
+
+    ret = mmap_file("/tmp/wolfboot-unit-file-error.bin", (void *)MOCK_ADDRESS,
+            WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+    ret = mmap_file("/tmp/wolfboot-unit-swap-error.bin", (void *)MOCK_ADDRESS_SWAP,
+            WOLFBOOT_SECTOR_SIZE, NULL);
+    ck_assert(ret >= 0);
+
+    hal_flash_unlock();
+    wolfBoot_erase_partition(PART_UPDATE);
+
+    magic = get_partition_magic(PART_UPDATE);
+    *magic = wolfboot_magic_trail;
+
+    erased_update = 0;
+    erased_nvm_bank0 = 0;
+    erased_nvm_bank1 = 0;
+    hal_flash_write_fail = 1;
+
+    ret = partition_magic_write(PART_UPDATE,
+            PART_UPDATE_ENDFLAGS - sizeof(uint32_t));
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(erased_update, 0);
+    ck_assert_int_eq(erased_nvm_bank0, 0);
+    ck_assert_int_eq(erased_nvm_bank1, 0);
+    ck_assert_uint_eq(*magic, wolfboot_magic_trail);
+
+    hal_flash_lock();
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -294,6 +329,8 @@ Suite *wolfboot_suite(void)
     /* Test cases */
     TCase *nvm_select_fresh_sector = tcase_create("NVM select fresh sector");
     tcase_add_test(nvm_select_fresh_sector, test_nvm_select_fresh_sector);
+    tcase_add_test(nvm_select_fresh_sector,
+            test_partition_magic_write_stops_on_flash_write_error);
     suite_add_tcase(s, nvm_select_fresh_sector);
 
     return s;
