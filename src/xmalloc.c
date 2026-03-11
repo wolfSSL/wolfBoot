@@ -117,7 +117,7 @@ struct xmalloc_slot {
     static uint8_t mp_points_3[MP_POINT_SIZE];
     #endif
     static uint8_t mp_points_0[MP_POINT_SIZE * 2];
-    static uint8_t mp_points_1[MP_POINT_SIZE * 2];
+    static uint8_t mp_points_1[MP_POINT_SIZE * 3];
     static uint8_t mp_points_2[MP_POINT_SIZE * (16 + 1)];
     static uint8_t mp_digits_buffer_0[MP_DIGITS_BUFFER_SIZE_0];
     static uint8_t mp_digits_buffer_1[MP_DIGITS_BUFFER_SIZE_1];

@@ -33,11 +33,6 @@ jobs:
         asym: [ed25519, ecc256, ecc384, ecc521, rsa2048, rsa3072, rsa4096, ed448]
         hash: [sha256, sha384, sha3]
 
-        # See https://github.com/wolfSSL/wolfBoot/issues/614 regarding exclusions:
-        exclude:
-          - math: "SPMATH=1 WOLFBOOT_SMALL_STACK=1"
-          - math: "SPMATHALL=1 WOLFBOOT_SMALL_STACK=1"
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,4 +196,3 @@ jobs:
           fi
 
           echo "Got expected non-zero exit and 'Failure' message."
-
