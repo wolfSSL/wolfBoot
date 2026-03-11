@@ -696,9 +696,14 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
         (uint8_t*)&blob->pub.size, &readSz, pos);
     if (rc == 0) {
         pos += readSz;
-        readSz = blob->pub.size;
-        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
-            pubAreaBuffer, &readSz, pos);
+        if (blob->pub.size > sizeof(pubAreaBuffer)) {
+            rc = BUFFER_E;
+        }
+        else {
+            readSz = blob->pub.size;
+            rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+                pubAreaBuffer, &readSz, pos);
+        }
     }
     if (rc == 0) {
         pos += readSz;
@@ -712,9 +717,14 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     }
     if (rc == 0) {
         pos += sizeof(blob->priv.size);
-        readSz = blob->priv.size;
-        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
-            blob->priv.buffer, &readSz, pos);
+        if (blob->priv.size > sizeof(blob->priv.buffer)) {
+            rc = BUFFER_E;
+        }
+        else {
+            readSz = blob->priv.size;
+            rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+                blob->priv.buffer, &readSz, pos);
+        }
     }
     if (rc == 0) {
         pos += blob->priv.size;
