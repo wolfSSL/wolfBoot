@@ -31,6 +31,10 @@ enum mock_mode {
 
 static enum mock_mode current_mode;
 static int nvread_calls;
+static int unexpected_nvcreate_calls;
+static int unexpected_nvwrite_calls;
+static int unexpected_nvopen_calls;
+static int unexpected_nvdelete_calls;
 static int oversized_pub_read_attempted;
 static int oversized_priv_read_attempted;
 static int forcezero_calls;
@@ -51,6 +55,13 @@ int wolfTPM2_SetAuthHandle(WOLFTPM2_DEV* dev, int index,
     (void)dev;
     (void)index;
     (void)handle;
+    return 0;
+}
+
+int wolfTPM2_UnsetAuth(WOLFTPM2_DEV* dev, int index)
+{
+    (void)dev;
+    (void)index;
     return 0;
 }
 
@@ -280,6 +291,71 @@ int TPM2_ParsePublic(TPM2B_PUBLIC* pub, byte* buf, word32 size, int* sizeUsed)
     return 0;
 }
 
+int TPM2_AppendPublic(byte* out, word32 outSz, int* pubAreaSize,
+    TPM2B_PUBLIC* pub)
+{
+    (void)pub;
+    ck_assert_uint_ge(outSz, 4);
+    memset(out, 0, 4);
+    *pubAreaSize = 4;
+    return 0;
+}
+
+int wolfTPM2_NVCreateAuth(WOLFTPM2_DEV* dev, WOLFTPM2_HANDLE* parent,
+    WOLFTPM2_NV* nv, word32 nvIndex, word32 nvAttributes, word32 maxSize,
+    const byte* auth, int authSz)
+{
+    (void)dev;
+    (void)parent;
+    (void)nv;
+    (void)nvIndex;
+    (void)nvAttributes;
+    (void)maxSize;
+    (void)auth;
+    (void)authSz;
+    unexpected_nvcreate_calls++;
+    ck_abort_msg("Unexpected wolfTPM2_NVCreateAuth call");
+    return -1;
+}
+
+int wolfTPM2_NVWriteAuth(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv,
+    word32 nvIndex, byte* dataBuf, word32 dataSz, word32 offset)
+{
+    (void)dev;
+    (void)nv;
+    (void)nvIndex;
+    (void)dataBuf;
+    (void)dataSz;
+    (void)offset;
+    unexpected_nvwrite_calls++;
+    ck_abort_msg("Unexpected wolfTPM2_NVWriteAuth call");
+    return -1;
+}
+
+int wolfTPM2_NVOpen(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv,
+    word32 nvIndex, const byte* auth, word32 authSz)
+{
+    (void)dev;
+    (void)nv;
+    (void)nvIndex;
+    (void)auth;
+    (void)authSz;
+    unexpected_nvopen_calls++;
+    ck_abort_msg("Unexpected wolfTPM2_NVOpen call");
+    return -1;
+}
+
+int wolfTPM2_NVDeleteAuth(WOLFTPM2_DEV* dev, WOLFTPM2_HANDLE* parent,
+    word32 nvIndex)
+{
+    (void)dev;
+    (void)parent;
+    (void)nvIndex;
+    unexpected_nvdelete_calls++;
+    ck_abort_msg("Unexpected wolfTPM2_NVDeleteAuth call");
+    return -1;
+}
+
 int wolfTPM2_NVReadAuth(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv,
     word32 nvIndex, byte* dataBuf, word32* pDataSz, word32 offset)
 {
@@ -326,6 +402,10 @@ static void setup(void)
 {
     current_mode = MOCK_OVERSIZE_PUB;
     nvread_calls = 0;
+    unexpected_nvcreate_calls = 0;
+    unexpected_nvwrite_calls = 0;
+    unexpected_nvopen_calls = 0;
+    unexpected_nvdelete_calls = 0;
     oversized_pub_read_attempted = 0;
     oversized_priv_read_attempted = 0;
     forcezero_calls = 0;
@@ -347,6 +427,56 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(nvread_calls, 1);
     ck_assert_int_eq(oversized_pub_read_attempted, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_store_blob_rejects_oversized_auth)
+{
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t auth[sizeof(((WOLFTPM2_NV*)0)->handle.auth.buffer) + 1];
+    int rc;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(auth, 0x44, sizeof(auth));
+
+    rc = wolfBoot_store_blob(TPM_RH_PLATFORM, 0x01400300, 0, &blob,
+        auth, (uint32_t)sizeof(auth));
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(unexpected_nvcreate_calls, 0);
+    ck_assert_int_eq(unexpected_nvwrite_calls, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_read_blob_rejects_oversized_auth)
+{
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t auth[sizeof(((WOLFTPM2_NV*)0)->handle.auth.buffer) + 1];
+    int rc;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(auth, 0x55, sizeof(auth));
+
+    rc = wolfBoot_read_blob(0x01400300, &blob, auth, (uint32_t)sizeof(auth));
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(nvread_calls, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_delete_blob_rejects_oversized_auth)
+{
+    uint8_t auth[sizeof(((WOLFTPM2_NV*)0)->handle.auth.buffer) + 1];
+    int rc;
+
+    memset(auth, 0x66, sizeof(auth));
+
+    rc = wolfBoot_delete_blob(TPM_RH_PLATFORM, 0x01400300, auth,
+        (uint32_t)sizeof(auth));
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(unexpected_nvopen_calls, 0);
+    ck_assert_int_eq(unexpected_nvdelete_calls, 0);
 }
 END_TEST
 
@@ -428,6 +558,9 @@ static Suite *tpm_blob_suite(void)
     s = suite_create("TPM Blob");
     tc = tcase_create("wolfBoot_read_blob");
     tcase_add_checked_fixture(tc, setup, NULL);
+    tcase_add_test(tc, test_wolfBoot_store_blob_rejects_oversized_auth);
+    tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_auth);
+    tcase_add_test(tc, test_wolfBoot_delete_blob_rejects_oversized_auth);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_public_area);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_private_area);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_zeroes_unseal_output);

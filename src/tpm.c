@@ -605,6 +605,8 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     if (authSz > 0) {
         if (auth == NULL)
             return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
+            return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
     }
@@ -685,6 +687,8 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     if (authSz > 0) {
         if (auth == NULL)
             return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
+            return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
     }
@@ -753,6 +757,8 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     nv.handle.hndl = nvIndex;
     if (authSz > 0) {
         if (auth == NULL)
+            return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
             return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
