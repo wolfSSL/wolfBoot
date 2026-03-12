@@ -125,17 +125,20 @@
 #define PFS_PMR         (1u << 16)
 #define PFS_PDR         (1u << 2)
 #define PFS_PODR        (1u << 0)
-#define PFS_PSEL_SCI7   (0x05u << 24)  /* PSEL=0x05: SCI1/3/5/7/9 odd channels */
+#define PFS_PSEL_SCI7   (0x05u << 24) /* PSEL=0x05: SCI1/3/5/7/9 odd channels */
 #define R_PMISC_PWPR    REG8(0x40080D03UL)
 #define PWPR_PFSWE      (1u << 6)
 #define PWPR_B0WI       (1u << 7)
 #ifndef DEBUG_BAUD_RATE
  #define DEBUG_BAUD_RATE 115200U
 #endif
-#ifndef RA_PCLKB
- #define RA_PCLKB        50000000U
+/* SCI7 on RA6M4 is clocked by PCLKA (not PCLKB).
+ * Default EK-RA6M4 FSP config: PLL=200MHz, PCLKA Div/2 = 100MHz. */
+#ifndef RA_PCLKA_SCI
+ #define RA_PCLKA_SCI    100000000U  /* PCLKA = 100MHz */
 #endif
-#define SCI_BRR_VAL    (RA_PCLKB / (8U * DEBUG_BAUD_RATE) - 1U)
+/* BRR: BGDM=1, ABCS=1 -> divisor=8. 100MHz/(8*115200)-1 = 107 -> 115741bps */
+#define SCI_BRR_VAL    (RA_PCLKA_SCI / (8U * DEBUG_BAUD_RATE) - 1U)
 /* --- Flash error codes (used by flash_check_error) --- */
 typedef enum {
     FLASH_OK        = 0,
