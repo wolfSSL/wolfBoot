@@ -132,10 +132,11 @@ void disk_close(int drv)
 int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 {
     uint8_t *image;
+    uint64_t max = IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE;
 
     (void)drv;
     image = (part == BOOT_PART_B) ? part_b_image : part_a_image;
-    if (off + sz > IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE)
+    if ((off > max) || (sz > (max - off)))
         return -1;
     memcpy(buf, image + off, (size_t)sz);
     return (int)sz;
@@ -143,13 +144,17 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 {
-    uint32_t magic = *(uint32_t *)image;
+    uint32_t magic;
+    uint32_t fw_size;
+
+    memcpy(&magic, image, sizeof(magic));
 
     if (magic != WOLFBOOT_MAGIC)
         return -1;
     memset(img, 0, sizeof(*img));
     img->hdr = image;
-    img->fw_size = *(uint32_t *)(image + sizeof(uint32_t));
+    memcpy(&fw_size, image + sizeof(uint32_t), sizeof(fw_size));
+    img->fw_size = fw_size;
     img->fw_base = image + IMAGE_HEADER_SIZE;
     img->hdr_ok = 1;
     return 0;

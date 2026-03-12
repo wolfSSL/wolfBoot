@@ -39,6 +39,7 @@ static int oversized_pub_read_attempted;
 static int oversized_priv_read_attempted;
 static int forcezero_calls;
 static word32 last_forcezero_len;
+static word32 last_pub_read_request_sz;
 static uint8_t test_hdr[64];
 static uint8_t test_modulus[256];
 static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
@@ -369,22 +370,31 @@ int wolfTPM2_NVReadAuth(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv,
     switch (nvread_calls) {
         case 1:
             if (current_mode == MOCK_OVERSIZE_PUB) {
-                *(uint16_t*)dataBuf = (uint16_t)(sizeof(TPM2B_PUBLIC) + 1);
+                uint16_t value = (uint16_t)(sizeof(TPM2B_PUBLIC) + 1);
+                memcpy(dataBuf, &value, sizeof(value));
             }
             else {
-                *(uint16_t*)dataBuf = 4;
+                uint16_t value = 4;
+                memcpy(dataBuf, &value, sizeof(value));
             }
             *pDataSz = sizeof(uint16_t);
             return 0;
         case 2:
             if (current_mode == MOCK_OVERSIZE_PUB) {
-                oversized_pub_read_attempted = 1;
+                last_pub_read_request_sz = *pDataSz;
+                if (*pDataSz > sizeof(TPM2B_PUBLIC)) {
+                    oversized_pub_read_attempted = 1;
+                }
                 return -100;
             }
             memset(dataBuf, 0, *pDataSz);
             return 0;
         case 3:
-            *(uint16_t*)dataBuf = (uint16_t)(sizeof(((WOLFTPM2_KEYBLOB*)0)->priv.buffer) + 1);
+        {
+            uint16_t value =
+                (uint16_t)(sizeof(((WOLFTPM2_KEYBLOB*)0)->priv.buffer) + 1);
+            memcpy(dataBuf, &value, sizeof(value));
+        }
             *pDataSz = sizeof(uint16_t);
             return 0;
         case 4:
@@ -410,6 +420,7 @@ static void setup(void)
     oversized_priv_read_attempted = 0;
     forcezero_calls = 0;
     last_forcezero_len = 0;
+    last_pub_read_request_sz = 0;
     memset(test_hdr, 0x22, sizeof(test_hdr));
     memset(test_modulus, 0x33, sizeof(test_modulus));
 }
@@ -426,6 +437,7 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
 
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(nvread_calls, 1);
+    ck_assert_uint_eq(last_pub_read_request_sz, 0);
     ck_assert_int_eq(oversized_pub_read_attempted, 0);
 }
 END_TEST
@@ -527,6 +539,8 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity)
 
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(secret_sz, 0);
+    ck_assert_int_eq(forcezero_calls, 1);
+    ck_assert_uint_eq(last_forcezero_len, sizeof(Unseal_Out));
     for (i = 0; i < (int)sizeof(output.canary); i++) {
         ck_assert_uint_eq(output.canary[i], 0xA5);
     }

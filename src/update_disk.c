@@ -121,7 +121,10 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
         return 0;
 
     /* Search for version TLV */
-    while (p + 4 < max_p) {
+    while ((size_t)(max_p - p) >= 4U) {
+        size_t remaining = (size_t)(max_p - p);
+        size_t tlv_total;
+
         tlv_type = *((uint16_t*)p);
         tlv_len = *((uint16_t*)(p + 2));
 
@@ -134,7 +137,8 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
             continue;
         }
 
-        if (p + 4 + tlv_len > max_p)
+        tlv_total = 4U + (size_t)tlv_len;
+        if (remaining < tlv_total)
             break;
 
         if (tlv_type == HDR_VERSION && tlv_len == 4) {
@@ -142,7 +146,7 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
             return ver;
         }
 
-        p += 4 + tlv_len;
+        p += tlv_total;
     }
     return 0;
 }
