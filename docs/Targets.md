@@ -20,6 +20,7 @@ This README describes configuration of supported targets.
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP LPC55S69](#nxp-lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
@@ -1935,6 +1936,315 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 ```
 
 
+## NXP LPC55S69
+
+The NXP LPC55S69 is a dual-core Cortex-M33 microcontroller. The support has been
+tested on the LPCXpresso55S69 board (LPC55S69-EVK), with the on-board LINK2 configured in
+the default CMSIS-DAP mode.
+
+This requires the NXP MCUXpresso SDK. We tested using
+[mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
+[CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
+
+To set up the MCUXpresso SDK:
+
+```
+cd ../NXP
+
+# Install west
+python -m venv west-venv
+source west-venv/bin/activate
+pip install west
+
+# Set up the repository
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update_board --set board lpcxpresso55s69
+
+deactivate
+```
+
+### LPC55S69: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/lpc55s69.config .config
+make
+```
+
+We also provide a TrustZone configuration at `config/examples/lpc55s69-tz.config`.
+
+### LPC55S69: Loading the firmware
+
+Download and install the LinkServer tool:
+[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+
+NOTE: The LPCXpresso55S69's on-board LINK2 debugger comes loaded with CMSIS-DAP protocol, but it can be
+optionally updated to use JLink protocol instead.  See the EVK user manual for how to do this, if desired.
+The below examples were tested with the default CMSIS-DAP protocol.  CMSIS-DAP is supported by default in
+the MCUXpresso IDE for debugging purposes.
+
+Connect a USB cable from your development PC to P6 on the dev board.
+
+Open a terminal to the virtual COM port with putty or similar app, settings 115200-N-8-1.
+
+### LPC55S69: Testing firmware factory.bin
+
+1) Erase the entire flash:
+
+```sh
+LinkServer flash LPC55S69 erase
+```
+
+2) Program the factory.bin, which contains both wolfBoot and the test-app version 1:
+
+```sh
+LinkServer flash LPC55S69 load factory.bin:0
+```
+
+3) The LED will light up blue to indicate version 1 of the firmware is running.  You should also see output
+like this in the terminal window:
+
+```sh
+lpc55s69 init
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x15000
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Booting version: 0x1
+lpc55s69 init
+    boot:   ver=0x1 state=0xFF
+    update: ver=0x0 state=0xFF
+Calling wolfBoot_success()
+    boot:   ver=0x1 state=0x00
+    update: ver=0x0 state=0xFF
+```
+
+### LPC55S69: Testing firmware update
+
+1) Sign the test-app with version 2:
+
+```sh
+./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+2) Flash v2 update binary to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
+
+Example:
+```sh
+LinkServer flash LPC55S69 load test-app/image_v2_signed.bin:0x15000
+```
+
+3) You should see output like this in the terminal window:
+
+```sh
+lpc55s69 init
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Booting version: 0x1
+lpc55s69 init
+    boot:   ver=0x1 state=0x00
+    update: ver=0x2 state=0xFF
+Update detected, version: 0x2
+Triggering update...
+    boot:   ver=0x1 state=0x00
+    update: ver=0x2 state=0x70
+...done. Reboot to apply.
+```
+
+4) Press the RESET button to reboot
+
+5) The LED will light up green to indicate version 2 of the firmware is running.  You should also see output
+like this in the terminal window:
+
+```sh
+lpc55s69 init
+Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
+Starting Update (fallback allowed 0)
+Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
+Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Versions: Current 0x1, Update 0x2
+Copy sector 0 (part 1->2)
+Copy sector 0 (part 0->1)
+Copy sector 0 (part 2->0)
+Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
+Update partition: 0x15000 (sz 24016, ver 0x1, type 0x601)
+Copy sector 1 (part 1->2)
+Copy sector 1 (part 0->1)
+Copy sector 1 (part 2->0)
+Copy sector 2 (part 1->2)
+Copy sector 2 (part 0->1)
+Copy sector 2 (part 2->0)
+Copy sector 3 (part 1->2)
+Copy sector 3 (part 0->1)
+Copy sector 3 (part 2->0)
+Copy sector 4 (part 1->2)
+Copy sector 4 (part 0->1)
+Copy sector 4 (part 2->0)
+Copy sector 5 (part 1->2)
+Copy sector 5 (part 0->1)
+Copy sector 5 (part 2->0)
+Copy sector 6 (part 1->2)
+Copy sector 6 (part 0->1)
+Copy sector 6 (part 2->0)
+Copy sector 7 (part 1->2)
+Copy sector 7 (part 0->1)
+Copy sector 7 (part 2->0)
+Copy sector 8 (part 1->2)
+Copy sector 8 (part 0->1)
+Copy sector 8 (part 2->0)
+Copy sector 9 (part 1->2)
+Copy sector 9 (part 0->1)
+Copy sector 9 (part 2->0)
+Copy sector 10 (part 1->2)
+Copy sector 10 (part 0->1)
+Copy sector 10 (part 2->0)
+Copy sector 11 (part 1->2)
+Copy sector 11 (part 0->1)
+Copy sector 11 (part 2->0)
+Copy sector 12 (part 1->2)
+Copy sector 12 (part 0->1)
+Copy sector 12 (part 2->0)
+Copy sector 13 (part 1->2)
+Copy sector 13 (part 0->1)
+Copy sector 13 (part 2->0)
+Copy sector 14 (part 1->2)
+Copy sector 14 (part 0->1)
+Copy sector 14 (part 2->0)
+Copy sector 15 (part 1->2)
+Copy sector 15 (part 0->1)
+Copy sector 15 (part 2->0)
+Copy sector 16 (part 1->2)
+Copy sector 16 (part 0->1)
+Copy sector 16 (part 2->0)
+Copy sector 17 (part 1->2)
+Copy sector 17 (part 0->1)
+Copy sector 17 (part 2->0)
+Copy sector 18 (part 1->2)
+Copy sector 18 (part 0->1)
+Copy sector 18 (part 2->0)
+Copy sector 19 (part 1->2)
+Copy sector 19 (part 0->1)
+Copy sector 19 (part 2->0)
+Copy sector 20 (part 1->2)
+Copy sector 20 (part 0->1)
+Copy sector 20 (part 2->0)
+Copy sector 21 (part 1->2)
+Copy sector 21 (part 0->1)
+Copy sector 21 (part 2->0)
+Copy sector 22 (part 1->2)
+Copy sector 22 (part 0->1)
+Copy sector 22 (part 2->0)
+Copy sector 23 (part 1->2)
+Copy sector 23 (part 0->1)
+Copy sector 23 (part 2->0)
+Copy sector 24 (part 1->2)
+Copy sector 24 (part 0->1)
+Copy sector 24 (part 2->0)
+Copy sector 25 (part 1->2)
+Copy sector 25 (part 0->1)
+Copy sector 25 (part 2->0)
+Copy sector 26 (part 1->2)
+Copy sector 26 (part 0->1)
+Copy sector 26 (part 2->0)
+Copy sector 27 (part 1->2)
+Copy sector 27 (part 0->1)
+Copy sector 27 (part 2->0)
+Copy sector 28 (part 1->2)
+Copy sector 28 (part 0->1)
+Copy sector 28 (part 2->0)
+Copy sector 29 (part 1->2)
+Copy sector 29 (part 0->1)
+Copy sector 29 (part 2->0)
+Copy sector 30 (part 1->2)
+Copy sector 30 (part 0->1)
+Copy sector 30 (part 2->0)
+Copy sector 31 (part 1->2)
+Copy sector 31 (part 0->1)
+Copy sector 31 (part 2->0)
+Copy sector 32 (part 1->2)
+Copy sector 32 (part 0->1)
+Copy sector 32 (part 2->0)
+Copy sector 33 (part 1->2)
+Copy sector 33 (part 0->1)
+Copy sector 33 (part 2->0)
+Copy sector 34 (part 1->2)
+Copy sector 34 (part 0->1)
+Copy sector 34 (part 2->0)
+Copy sector 35 (part 1->2)
+Copy sector 35 (part 0->1)
+Copy sector 35 (part 2->0)
+Copy sector 36 (part 1->2)
+Copy sector 36 (part 0->1)
+Copy sector 36 (part 2->0)
+Copy sector 37 (part 1->2)
+Copy sector 37 (part 0->1)
+Copy sector 37 (part 2->0)
+Copy sector 38 (part 1->2)
+Copy sector 38 (part 0->1)
+Copy sector 38 (part 2->0)
+Copy sector 39 (part 1->2)
+Copy sector 39 (part 0->1)
+Copy sector 39 (part 2->0)
+Copy sector 40 (part 1->2)
+Copy sector 40 (part 0->1)
+Copy sector 40 (part 2->0)
+Copy sector 41 (part 1->2)
+Copy sector 41 (part 0->1)
+Copy sector 41 (part 2->0)
+Copy sector 42 (part 1->2)
+Copy sector 42 (part 0->1)
+Copy sector 42 (part 2->0)
+Copy sector 43 (part 1->2)
+Copy sector 43 (part 0->1)
+Copy sector 43 (part 2->0)
+Copy sector 44 (part 1->2)
+Copy sector 44 (part 0->1)
+Copy sector 44 (part 2->0)
+Copy sector 45 (part 1->2)
+Copy sector 45 (part 0->1)
+Copy sector 45 (part 2->0)
+Copy sector 46 (part 1->2)
+Copy sector 46 (part 0->1)
+Copy sector 46 (part 2->0)
+Copy sector 47 (part 1->2)
+Copy sector 47 (part 0->1)
+Copy sector 47 (part 2->0)
+Erasing remainder of partition (38 sectors)...
+Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
+Update partition: 0x15000 (sz 24016, ver 0x1, type 0x601)
+Copy sector 85 (part 0->2)
+Copied boot sector to swap
+Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
+Booting version: 0x2
+lpc55s69 init
+    boot:   ver=0x2 state=0x10
+    update: ver=0x1 state=0xFF
+Calling wolfBoot_success()
+    boot:   ver=0x2 state=0x00
+    update: ver=0x1 state=0xFF
+```
+
+### LPC55S69: Debugging
+
+Debugging with GDB:
+
+Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
+
+In one terminal: `LinkServer gdbserver LPC55S69`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
+```
+
+
 ## NXP LS1028A
 
 The LS1028A is a AARCH64 armv8-a Cortex-A72 processor. Support has been tested with the NXP LS1028ARDB.
@@ -1947,7 +2257,7 @@ Example configurations for this target are provided in:
 
 1. Download `aarch64-none-elf-` toolchain.
 
-2. Copy the example `nxp-ls1028a.cofig` file to root directory and rename to `.config`
+2. Copy the example `nxp-ls1028a.config` file to root directory and rename to `.config`
 
 3. Build keytools and wolfboot
 

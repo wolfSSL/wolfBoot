@@ -422,7 +422,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
-    uint8_t updateState;
+    uint8_t updateState = IMG_STATE_NEW;
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
@@ -447,7 +447,12 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     ext_flash_read((uintptr_t)(boot->hdr + tmpBootPos), (void*)tmpBuffer,
         sizeof(tmpBuffer));
 #else
-    memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
+# ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
+    if (hal_flash_is_erased_at((uintptr_t)(boot->hdr + tmpBootPos)))
+        memset(tmpBuffer, FLASH_BYTE_ERASED, sizeof(tmpBuffer));
+    else
+# endif
+        memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
 #endif
 
     /* Check if the magic trailer exists - indicates an interrupted swap
