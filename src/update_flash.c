@@ -1206,7 +1206,7 @@ int wolfBoot_unlock_disk(void)
     int ret;
     struct wolfBoot_image img;
     uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
-    int     secretSz;
+    int     secretSz = sizeof(secret);
     uint8_t* policy = NULL, *pubkey_hint = NULL;
     uint16_t policySz = 0;
     int      nvIndex = 0; /* where the sealed blob is stored in NV */
@@ -1249,7 +1249,7 @@ int wolfBoot_unlock_disk(void)
             }
             if (ret == 0) {
                 uint8_t secretCheck[WOLFBOOT_MAX_SEAL_SZ];
-                int     secretCheckSz = 0;
+                int     secretCheckSz = sizeof(secretCheck);
 
                 /* unseal again to make sure it works */
                 memset(secretCheck, 0, sizeof(secretCheck));

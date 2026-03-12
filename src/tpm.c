@@ -44,6 +44,19 @@ WOLFTPM2_KEY     wolftpm_srk;
 #endif
 
 #if defined(WOLFBOOT_TPM_SEAL) || defined(WOLFBOOT_TPM_KEYSTORE)
+static int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b,
+    uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
     unsigned long maxLine)
 {
@@ -605,6 +618,8 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     if (authSz > 0) {
         if (auth == NULL)
             return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
+            return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
     }
@@ -685,6 +700,8 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     if (authSz > 0) {
         if (auth == NULL)
             return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
+            return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
     }
@@ -696,9 +713,14 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
         (uint8_t*)&blob->pub.size, &readSz, pos);
     if (rc == 0) {
         pos += readSz;
-        readSz = blob->pub.size;
-        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
-            pubAreaBuffer, &readSz, pos);
+        if (blob->pub.size > sizeof(pubAreaBuffer)) {
+            rc = BUFFER_E;
+        }
+        else {
+            readSz = blob->pub.size;
+            rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+                pubAreaBuffer, &readSz, pos);
+        }
     }
     if (rc == 0) {
         pos += readSz;
@@ -712,9 +734,14 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
     }
     if (rc == 0) {
         pos += sizeof(blob->priv.size);
-        readSz = blob->priv.size;
-        rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
-            blob->priv.buffer, &readSz, pos);
+        if (blob->priv.size > sizeof(blob->priv.buffer)) {
+            rc = BUFFER_E;
+        }
+        else {
+            readSz = blob->priv.size;
+            rc = wolfTPM2_NVReadAuth(&wolftpm_dev, &nv, nv.handle.hndl,
+                blob->priv.buffer, &readSz, pos);
+        }
     }
     if (rc == 0) {
         pos += blob->priv.size;
@@ -743,6 +770,8 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
     nv.handle.hndl = nvIndex;
     if (authSz > 0) {
         if (auth == NULL)
+            return BAD_FUNC_ARG;
+        if (authSz > sizeof(nv.handle.auth.buffer))
             return BAD_FUNC_ARG;
         nv.handle.auth.size = authSz;
         memcpy(nv.handle.auth.buffer, auth, authSz);
@@ -925,6 +954,7 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     const uint8_t* auth, int authSz)
 {
     int rc, i;
+    int secret_capacity;
     WOLFTPM2_SESSION policy_session;
     uint32_t key_type;
     TPM_ALG_ID pcrAlg = WOLFBOOT_TPM_PCR_ALG;
@@ -949,7 +979,12 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         return -1;
     }
 
+    secret_capacity = *secret_sz;
     *secret_sz = 0; /* init */
+
+    if (secret_capacity < 0) {
+        return BAD_FUNC_ARG;
+    }
 
     /* extract pcrMask and populate PCR selection array */
     memcpy(&pcrMask, policy, sizeof(pcrMask));
@@ -1069,9 +1104,16 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
         rc = TPM2_Unseal(&unsealIn, &unsealOut);
     }
     if (rc == 0) {
-        *secret_sz = unsealOut.outData.size;
-        memcpy(secret, unsealOut.outData.buffer, *secret_sz);
+        if (unsealOut.outData.size > WOLFBOOT_MAX_SEAL_SZ ||
+                (int)unsealOut.outData.size > secret_capacity) {
+            rc = BUFFER_E;
+        }
+        else {
+            *secret_sz = unsealOut.outData.size;
+            memcpy(secret, unsealOut.outData.buffer, *secret_sz);
+        }
     }
+    TPM2_ForceZero(&unsealOut, sizeof(unsealOut));
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
@@ -1486,7 +1528,8 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
         if (rc == 0) {
             /* verify the hint (hash) matches */
             if (digestSz == WOLFBOOT_SHA_DIGEST_SIZE &&
-                memcmp(digest, pubkey_hint, WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
+                wolfBoot_constant_compare(digest, pubkey_hint,
+                    WOLFBOOT_SHA_DIGEST_SIZE) == 0) {
                 wolfBoot_printf("TPM Root of Trust valid (id %d)\n", key_slot);
             }
             else {

@@ -121,7 +121,10 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
         return 0;
 
     /* Search for version TLV */
-    while (p + 4 < max_p) {
+    while ((size_t)(max_p - p) >= 4U) {
+        size_t remaining = (size_t)(max_p - p);
+        size_t tlv_total;
+
         tlv_type = *((uint16_t*)p);
         tlv_len = *((uint16_t*)(p + 2));
 
@@ -134,12 +137,16 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
             continue;
         }
 
+        tlv_total = 4U + (size_t)tlv_len;
+        if (remaining < tlv_total)
+            break;
+
         if (tlv_type == HDR_VERSION && tlv_len == 4) {
             uint32_t ver = *((uint32_t*)(p + 4));
             return ver;
         }
 
-        p += 4 + tlv_len;
+        p += tlv_total;
     }
     return 0;
 }
@@ -208,6 +215,12 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
     return 0;
 }
 
+static void disk_crypto_clear(void)
+{
+    ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
+    ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
+}
+
 #endif /* DISK_ENCRYPT */
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
@@ -254,11 +267,13 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef DISK_ENCRYPT
     /* Initialize encryption - this sets up the cipher with key from storage */
     if (wolfBoot_initialize_encryption() != 0) {
+        disk_crypto_clear();
         wolfBoot_printf("Error initializing encryption\r\n");
         wolfBoot_panic();
     }
     /* Retrieve encryption key and nonce for disk decryption */
     if (wolfBoot_get_encrypt_key(disk_encrypt_key, disk_encrypt_nonce) != 0) {
+        disk_crypto_clear();
         wolfBoot_printf("Error getting encryption key\r\n");
         wolfBoot_panic();
     }
@@ -267,10 +282,16 @@ void RAMFUNCTION wolfBoot_start(void)
 
     ret = disk_init(BOOT_DISK);
     if (ret != 0) {
+#ifdef DISK_ENCRYPT
+        disk_crypto_clear();
+#endif
         wolfBoot_panic();
     }
 
     if (disk_open(BOOT_DISK) < 0) {
+#ifdef DISK_ENCRYPT
+        disk_crypto_clear();
+#endif
         wolfBoot_printf("Error opening disk %d\r\n", BOOT_DISK);
         wolfBoot_panic();
     }
@@ -306,6 +327,9 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 
     if ((pB_ver == 0) && (pA_ver == 0)) {
+#ifdef DISK_ENCRYPT
+        disk_crypto_clear();
+#endif
         wolfBoot_printf("No valid OS image found in either partition %d or %d\r\n",
             BOOT_PART_A, BOOT_PART_B);
         wolfBoot_panic();
@@ -409,6 +433,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Decrypting image...");
         BENCHMARK_START();
         if ((IMAGE_HEADER_SIZE % ENCRYPT_BLOCK_SIZE) != 0) {
+            disk_crypto_clear();
             wolfBoot_printf("Encrypted disk images require aligned header size\r\n");
             wolfBoot_panic();
         }
@@ -456,6 +481,9 @@ void RAMFUNCTION wolfBoot_start(void)
     } while (failures < MAX_FAILURES);
 
     if (failures) {
+#ifdef DISK_ENCRYPT
+        disk_crypto_clear();
+#endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
         wolfBoot_panic();
     }
@@ -512,6 +540,9 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&os_image);
+#endif
+#ifdef DISK_ENCRYPT
+    disk_crypto_clear();
 #endif
     do_boot((uint32_t*)load_address
     #ifdef MMU

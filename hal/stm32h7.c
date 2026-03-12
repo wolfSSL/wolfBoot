@@ -23,6 +23,9 @@
 
 static uint32_t stm32h7_cache[STM32H7_WORD_SIZE / sizeof(uint32_t)];
 
+#define FLASH_BANK_1 0
+#define FLASH_BANK_2 1
+
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -38,7 +41,7 @@ static RAMFUNCTION void flash_wait_last(void)
 
 static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 {
-    if (bank == 0) {
+    if (bank == FLASH_BANK_1) {
         while ((FLASH_SR1 & FLASH_SR_QW) == FLASH_SR_QW);
     }
     else {
@@ -48,7 +51,7 @@ static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 
 static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 {
-    if (bank == 0) {
+    if (bank == FLASH_BANK_1) {
         FLASH_SR1 |= (FLASH_SR_WRPERR | FLASH_SR_PGSERR | FLASH_SR_STRBERR |
                       FLASH_SR_INCERR | FLASH_SR_OPERR | FLASH_SR_RDPERR |
                       FLASH_SR_RDSERR | FLASH_SR_SNECCERR | FLASH_SR_DBECCERR);
@@ -62,7 +65,7 @@ static void RAMFUNCTION flash_clear_errors(uint8_t bank)
 
 static void RAMFUNCTION flash_program_on(uint8_t bank)
 {
-    if (bank == 0) {
+    if (bank == FLASH_BANK_1) {
         FLASH_CR1 |= FLASH_CR_PG;
         while ((FLASH_CR1 & FLASH_CR_PG) == 0)
             ;
@@ -76,7 +79,7 @@ static void RAMFUNCTION flash_program_on(uint8_t bank)
 
 static void RAMFUNCTION flash_program_off(uint8_t bank)
 {
-    if (bank == 0) {
+    if (bank == FLASH_BANK_1) {
         FLASH_CR1 &= ~FLASH_CR_PG;
     }
     else {
@@ -88,13 +91,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0, ii =0;
     uint32_t *src, *dst;
-    uint8_t bank=0;
+    uint8_t bank = FLASH_BANK_1;
     uint8_t *vbytes = (uint8_t *)(stm32h7_cache);
     int off;
     uint32_t base_addr;
 
     if ((address & FLASH_BANK2_BASE_REL) != 0) {
-        bank = 1;
+        bank = FLASH_BANK_2;
     }
 
     while (i < len) {
@@ -102,8 +105,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             ((((uint32_t)data) + i) & 0x1F) == 0))
         {
             flash_wait_last();
-            flash_clear_errors(0);
-            flash_clear_errors(1);
+            flash_clear_errors(FLASH_BANK_1);
+            flash_clear_errors(FLASH_BANK_2);
             flash_program_on(bank);
             flash_wait_complete(bank);
             src = (uint32_t *)(data + i);
@@ -140,8 +143,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
             /* Actual write from cache to FLASH */
             flash_wait_last();
-            flash_clear_errors(0);
-            flash_clear_errors(1);
+            flash_clear_errors(FLASH_BANK_1);
+            flash_clear_errors(FLASH_BANK_2);
             flash_program_on(bank);
             flash_wait_complete(bank);
             ISB();
@@ -160,7 +163,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    flash_wait_complete(1);
+    flash_wait_complete(FLASH_BANK_1);
     if ((FLASH_CR1 & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR1 = FLASH_KEY1;
         DMB();
@@ -170,7 +173,7 @@ void RAMFUNCTION hal_flash_unlock(void)
             ;
     }
 
-    flash_wait_complete(2);
+    flash_wait_complete(FLASH_BANK_2);
     if ((FLASH_CR2 & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR2 = FLASH_KEY1;
         DMB();
@@ -183,11 +186,11 @@ void RAMFUNCTION hal_flash_unlock(void)
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    flash_wait_complete(1);
+    flash_wait_complete(FLASH_BANK_1);
     if ((FLASH_CR1 & FLASH_CR_LOCK) == 0)
         FLASH_CR1 |= FLASH_CR_LOCK;
 
-    flash_wait_complete(2);
+    flash_wait_complete(FLASH_BANK_2);
     if ((FLASH_CR2 & FLASH_CR_LOCK) == 0)
         FLASH_CR2 |= FLASH_CR_LOCK;
 }
@@ -211,7 +214,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
                 (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
             DMB();
             FLASH_CR1 |= FLASH_CR_STRT;
-            flash_wait_complete(1);
+            flash_wait_complete(FLASH_BANK_1);
         }
         if ((p>= FLASH_BANK2_BASE_REL) &&
             (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE))) {
@@ -222,7 +225,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
                 (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
             DMB();
             FLASH_CR2 |= FLASH_CR_STRT;
-            flash_wait_complete(2);
+            flash_wait_complete(FLASH_BANK_2);
         }
     }
     return 0;
@@ -619,4 +622,3 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
 }
 
 #endif /* FLASH_OTP_KEYSTORE */
-

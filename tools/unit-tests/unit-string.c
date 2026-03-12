@@ -237,6 +237,7 @@ START_TEST(test_strcpy_strncpy_strcat_strncat)
     char buf[8];
     char dest[8];
     char short_dest[4];
+    char padded[8];
 
     strcpy(buf, "hi");
     ck_assert_str_eq(buf, "hi");
@@ -244,6 +245,17 @@ START_TEST(test_strcpy_strncpy_strcat_strncat)
     memset(dest, 0, sizeof(dest));
     strncpy(dest, "abc", 4);
     ck_assert_str_eq(dest, "abc");
+
+    memset(padded, 'X', sizeof(padded));
+    strncpy(padded, "abc", sizeof(padded));
+    ck_assert_int_eq(padded[0], 'a');
+    ck_assert_int_eq(padded[1], 'b');
+    ck_assert_int_eq(padded[2], 'c');
+    ck_assert_int_eq(padded[3], '\0');
+    ck_assert_int_eq(padded[4], '\0');
+    ck_assert_int_eq(padded[5], '\0');
+    ck_assert_int_eq(padded[6], '\0');
+    ck_assert_int_eq(padded[7], '\0');
 
     memset(short_dest, 'X', sizeof(short_dest));
     strncpy(short_dest, "abcdef", 3);

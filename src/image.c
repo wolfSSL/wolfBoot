@@ -1143,6 +1143,7 @@ static void key_sha384(uint8_t key_slot, uint8_t *hash)
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha384 sha384_ctx;
 
+    memset(hash, 0, SHA384_DIGEST_SIZE);
     if (!pubkey || (pubkey_sz < 0))
         return;
 
@@ -1237,6 +1238,7 @@ static void key_sha3_384(uint8_t key_slot, uint8_t *hash)
     int pubkey_sz = keystore_get_size(key_slot);
     wc_Sha3 sha3_ctx;
 
+    memset(hash, 0, WC_SHA3_384_DIGEST_SIZE);
     if (!pubkey || (pubkey_sz < 0))
         return;
     wc_InitSha3_384(&sha3_ctx, NULL, INVALID_DEVID);
@@ -1306,9 +1308,9 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
-        wolfBoot_printf("Image size %d > max %d\n",
+        wolfBoot_printf("Image size %u > max %u\n",
             (unsigned int)img->fw_size,
-            (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
+            (unsigned int)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
         img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
         return -1;
     }
@@ -1317,6 +1319,14 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     }
     img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
 #else
+#ifdef WOLFBOOT_RAMBOOT_MAX_SIZE
+    if (img->fw_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
+        wolfBoot_printf("Image size %u > max %u\n",
+            (unsigned int)img->fw_size,
+            (unsigned int)WOLFBOOT_RAMBOOT_MAX_SIZE);
+        return -1;
+    }
+#endif
     if (img->hdr == NULL) {
         img->hdr = image;
     }

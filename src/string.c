@@ -98,8 +98,9 @@ char *strcat(char *dest, const char *src)
 {
     size_t i = 0;
     size_t j = strlen(dest);
+    size_t src_len = strlen(src);
 
-    for (i = 0; i < strlen(src); i++) {
+    for (i = 0; i < src_len; i++) {
         dest[j++] = src[i];
     }
     dest[j] = '\0';
@@ -184,6 +185,10 @@ char *strncpy(char *dst, const char *src, size_t n)
         dst[i] = src[i];
         if (src[i] == '\0')
             break;
+    }
+
+    while (++i < n) {
+        dst[i] = '\0';
     }
 
     return dst;

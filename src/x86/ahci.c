@@ -272,7 +272,7 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
                                               int *secret_size)
 {
     uint8_t secret_check[WOLFBOOT_MAX_SEAL_SZ];
-    int secret_check_sz;
+    int secret_check_sz = sizeof(secret_check);
     int ret;
 
     if (*secret_size < ATA_UNLOCK_DISK_KEY_SZ)
@@ -797,4 +797,3 @@ void sata_disable(uint32_t base)
 
 }
 #endif /* AHCI_H_ */
-

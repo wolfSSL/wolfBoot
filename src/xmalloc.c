@@ -64,6 +64,8 @@ struct xmalloc_slot {
 
 #if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) || defined(WOLFBOOT_SIGN_ECC521)
 
+#include <wolfssl/wolfcrypt/ecc.h>
+
 #ifndef USE_FAST_MATH
     /* SP MATH */
     #ifdef WOLFBOOT_SIGN_ECC256
@@ -113,11 +115,20 @@ struct xmalloc_slot {
             #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 12)
         #endif
     #endif /* WOLFBOOT_SIGN_ECC521 */
+    #ifdef WOLFSSL_SP_MATH_ALL
+        #define MP_CURVE_SPECS_ALL_SIZE (MP_CURVE_SPECS_SIZE * 5)
+        static uint8_t mp_curve_specs_all[MP_CURVE_SPECS_ALL_SIZE];
+        static uint8_t ecc_point_dyn_0[sizeof(ecc_point)];
+        static uint8_t ecc_point_dyn_1[sizeof(ecc_point)];
+        static uint8_t ecc_point_dyn_2[sizeof(ecc_point)];
+        static uint8_t ecc_point_dyn_3[sizeof(ecc_point)];
+        static uint8_t ecc_point_dyn_4[sizeof(ecc_point)];
+    #endif
     #ifndef WC_NO_CACHE_RESISTANT
     static uint8_t mp_points_3[MP_POINT_SIZE];
     #endif
     static uint8_t mp_points_0[MP_POINT_SIZE * 2];
-    static uint8_t mp_points_1[MP_POINT_SIZE * 2];
+    static uint8_t mp_points_1[MP_POINT_SIZE * 3];
     static uint8_t mp_points_2[MP_POINT_SIZE * (16 + 1)];
     static uint8_t mp_digits_buffer_0[MP_DIGITS_BUFFER_SIZE_0];
     static uint8_t mp_digits_buffer_1[MP_DIGITS_BUFFER_SIZE_1];
@@ -203,6 +214,14 @@ static struct xmalloc_slot xmalloc_pool[] = {
     { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
 #endif
     { (uint8_t *)mp_curve_specs, MP_CURVE_SPECS_SIZE, 0 },
+#ifdef WOLFSSL_SP_MATH_ALL
+    { (uint8_t *)mp_curve_specs_all, MP_CURVE_SPECS_ALL_SIZE, 0 },
+    { (uint8_t *)ecc_point_dyn_0, sizeof(ecc_point), 0 },
+    { (uint8_t *)ecc_point_dyn_1, sizeof(ecc_point), 0 },
+    { (uint8_t *)ecc_point_dyn_2, sizeof(ecc_point), 0 },
+    { (uint8_t *)ecc_point_dyn_3, sizeof(ecc_point), 0 },
+    { (uint8_t *)ecc_point_dyn_4, sizeof(ecc_point), 0 },
+#endif
 #ifndef USE_FAST_MATH
     { (uint8_t *)mp_points_0, MP_POINT_SIZE * 2, 0 },
     #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
@@ -304,6 +323,10 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
 #ifndef USE_FAST_MATH
     #ifdef WOLFBOOT_SIGN_RSA2048
         #define MP_SCHEME "SP RSA2048"
+        #define MP_INT_DYNAMIC_SIZE MP_INT_SIZEOF(MP_BITS_CNT(2048))
+        #define MP_BIGINT_MODEXP_SIZE (MP_INT_DYNAMIC_SIZE * 4)
+        #define MP_BIGINT_DIV_SIZE (MP_INT_DYNAMIC_SIZE * 3)
+        #define MP_BIGINT_MUL_SIZE (MP_INT_DYNAMIC_SIZE - sizeof(sp_int_digit))
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 64 * 5)
         #else
@@ -313,6 +336,10 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
         #endif
     #elif defined WOLFBOOT_SIGN_RSA3072
         #define MP_SCHEME "SP RSA3072"
+        #define MP_INT_DYNAMIC_SIZE MP_INT_SIZEOF(MP_BITS_CNT(3072))
+        #define MP_BIGINT_MODEXP_SIZE (MP_INT_DYNAMIC_SIZE * 4)
+        #define MP_BIGINT_DIV_SIZE (MP_INT_DYNAMIC_SIZE * 3)
+        #define MP_BIGINT_MUL_SIZE (MP_INT_DYNAMIC_SIZE - sizeof(sp_int_digit))
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 96 * 5)
         #else
@@ -322,6 +349,10 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
         #endif
     #else
         #define MP_SCHEME "SP RSA4096"
+        #define MP_INT_DYNAMIC_SIZE MP_INT_SIZEOF(MP_BITS_CNT(4096))
+        #define MP_BIGINT_MODEXP_SIZE (MP_INT_DYNAMIC_SIZE * 4)
+        #define MP_BIGINT_DIV_SIZE (MP_INT_DYNAMIC_SIZE * 3)
+        #define MP_BIGINT_MUL_SIZE (MP_INT_DYNAMIC_SIZE - sizeof(sp_int_digit))
         #ifdef WOLFSSL_SP_ARM_CORTEX_M_ASM
             #define MPDIGIT_BUF0_SIZE (MP_DIGIT_SIZE * 128 * 5)
         #else
@@ -330,12 +361,20 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
     #endif
+    static uint8_t mp_int_dynamic[MP_INT_DYNAMIC_SIZE];
+    static uint8_t mp_bigint_modexp[MP_BIGINT_MODEXP_SIZE];
+    static uint8_t mp_bigint_div[MP_BIGINT_DIV_SIZE];
+    static uint8_t mp_bigint_mul[MP_BIGINT_MUL_SIZE];
     static uint8_t mp_digit_buf0[MPDIGIT_BUF0_SIZE];
     static struct xmalloc_slot xmalloc_pool[] = {
     #if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
         { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
     #endif
         { asncheck_buf, ASNCHECK_BUF_SIZE, 0 },
+        { mp_int_dynamic, MP_INT_DYNAMIC_SIZE, 0 },
+        { mp_bigint_modexp, MP_BIGINT_MODEXP_SIZE, 0 },
+        { mp_bigint_div, MP_BIGINT_DIV_SIZE, 0 },
+        { mp_bigint_mul, MP_BIGINT_MUL_SIZE, 0 },
         { mp_digit_buf0, MPDIGIT_BUF0_SIZE, 0},
     #ifndef WOLFSSL_SP_ARM_CORTEX_M_ASM
         { mp_digit_buf1, MPDIGIT_BUF1_SIZE, 0},
@@ -400,6 +439,7 @@ static struct xmalloc_slot xmalloc_pool[] = {
 void* XMALLOC(size_t n, void* heap, int type)
 {
     int i = 0;
+    int best = -1;
 
 #ifdef WOLFBOOT_DEBUG_MALLOC
     static int detect_init = 0;
@@ -412,16 +452,22 @@ void* XMALLOC(size_t n, void* heap, int type)
 #endif
 
     while (xmalloc_pool[i].addr) {
-        if ((n == xmalloc_pool[i].size) &&
-                (xmalloc_pool[i].in_use == 0)) {
-            xmalloc_pool[i].in_use++;
-        #ifdef WOLFBOOT_DEBUG_MALLOC
-            printf(" Index %d, Ptr %p\n", i, xmalloc_pool[i].addr);
-        #endif
-            return xmalloc_pool[i].addr;
+        if ((xmalloc_pool[i].in_use == 0) && (n <= xmalloc_pool[i].size)) {
+            if ((best < 0) || (xmalloc_pool[i].size < xmalloc_pool[best].size)) {
+                best = i;
+            }
         }
         i++;
     }
+
+    if (best >= 0) {
+        xmalloc_pool[best].in_use++;
+    #ifdef WOLFBOOT_DEBUG_MALLOC
+        printf(" Index %d, Ptr %p\n", best, xmalloc_pool[best].addr);
+    #endif
+        return xmalloc_pool[best].addr;
+    }
+
     (void)heap;
     (void)type;
 #ifdef WOLFBOOT_DEBUG_MALLOC

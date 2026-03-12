@@ -118,7 +118,7 @@
 #endif
 
 /* Optional RAM-boot image size cap for targets without partitions */
-#define WOLFBOOT_RAMBOOT_MAX_SIZE             @WOLFBOOT_RAMBOOT_MAX_SIZE@
+@WOLFBOOT_RAMBOOT_MAX_SIZE_DEFINE@
 #define WOLFBOOT_LOAD_DTS_ADDRESS             @WOLFBOOT_LOAD_DTS_ADDRESS@
 
 
