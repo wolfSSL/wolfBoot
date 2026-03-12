@@ -30,7 +30,8 @@
 #if defined(_RENESAS_RA_)
 #include <stdint.h>
 #endif
-#if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__
+#if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__ \
+    && !defined(__CCRX__)
 #include <string.h>
 #else
 size_t strlen(const char *s); /* forward declaration */
