@@ -440,7 +440,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("do_boot_r5:\n"
                  "  mov     pc, r0\n");
 
-#elif defined(CORTEX_M33) /* Armv8 boot procedure */
+#elif defined(CORTEX_M33) || defined(CORTEX_M55) /* Armv8 boot procedure */
 
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
