@@ -235,14 +235,20 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
         #define SELF_HASH_ADDR  ((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS)
         #define SELF_HASH_SZ    ((uint32_t)WOLFBOOT_PARTITION_SIZE)
     #endif
-#else
-    /* Default: measure wolfBoot's own code region
-     * (from ARCH_FLASH_OFFSET to WOLFBOOT_PARTITION_BOOT_ADDRESS) */
+#elif defined(ARCH_SIM)
+    /* Simulator: no linker script, use bootloader partition region */
     #if defined(WOLFBOOT_PARTITION_BOOT_ADDRESS) && defined(ARCH_FLASH_OFFSET)
         #define SELF_HASH_ADDR  ((uintptr_t)ARCH_FLASH_OFFSET)
         #define SELF_HASH_SZ    ((uint32_t)((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS - \
                                             (uintptr_t)ARCH_FLASH_OFFSET))
     #endif
+#else
+    /* Default: measure wolfBoot's own code using linker script symbols */
+    extern unsigned int _start_text;
+    extern unsigned int _stored_data;
+    #define SELF_HASH_ADDR  ((uintptr_t)&_start_text)
+    #define SELF_HASH_SZ    ((uint32_t)((uintptr_t)&_stored_data - \
+                                        (uintptr_t)&_start_text))
 #endif
 
 #ifdef SELF_HASH_ADDR
