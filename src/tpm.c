@@ -229,8 +229,8 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 
-#ifdef WOLFBOOT_MEASURED_BOOT_APP_PARTITION
-    /* Legacy: measure the boot (application) partition */
+#if defined(WOLFBOOT_MEASURED_BOOT_APP_PARTITION) || defined(STAGE1_AUTH)
+    /* measure the boot (application) partition */
     #ifndef WOLFBOOT_NO_PARTITIONS
         #define SELF_HASH_ADDR  ((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS)
         #define SELF_HASH_SZ    ((uint32_t)WOLFBOOT_PARTITION_SIZE)
