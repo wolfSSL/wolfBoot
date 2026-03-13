@@ -25,6 +25,7 @@ SECTIONS
        _end_wolfboot = .;
     }
 
+    _stored_data = _end_text;
     _fsp_size = _end_fsp_s - _start_fsp_s;
     .bss WOLFBOOT_LOAD_BASE + SIZEOF(.text) (NOLOAD):
     {
