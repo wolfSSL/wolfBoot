@@ -95,7 +95,9 @@ void RAMFUNCTION spi_write(const char byte)
             SPI_EVENTS_DMA_TX_BUSERROR == 0)
         ;
     SPI_EVENTS_STOPPED = 0;
-    spi_rx_ready = 1;
+
+    if (SPI_EVENTS_DMA_RX_BUSERROR == 0 && SPI_EVENTS_DMA_RX_BUSERROR == 0)
+        spi_rx_ready = 1;
 }
 
 
@@ -113,9 +115,9 @@ void spi_init(int polarity, int phase)
         GPIO_PIN_CNF(SPI_MISO_PORT, SPI_MISO_PIN) =
             (GPIO_CNF_IN | GPIO_CNF_PULL_UP);
 
-        GPIO_OUTSET(SPI_CS_PORT) = (1 << SPI_CS_PIN);
-        GPIO_OUTCLR(SPI_SCK_PORT) = (1 << SPI_SCK_PIN);
-        GPIO_OUTCLR(SPI_MOSI_PORT) = (1 << SPI_MOSI_PIN);
+        GPIO_OUTSET(SPI_CS_PORT) = (1U << SPI_CS_PIN);
+        GPIO_OUTCLR(SPI_SCK_PORT) = (1U << SPI_SCK_PIN);
+        GPIO_OUTCLR(SPI_MOSI_PORT) = (1U << SPI_MOSI_PIN);
 
         SPI_ENABLE_REG = SPIM_ENABLE_ENABLE_Disabled;
         SPI_PSEL_MISO = (PSEL_PORT(SPI_MISO_PORT) | SPI_MISO_PIN);

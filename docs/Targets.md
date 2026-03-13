@@ -4593,7 +4593,6 @@ not interact with the RISC-V coprocessor.
 Two configurations are available at `config/examples`:
 
 - `nrf54l15.config`: TrustZone disabled; wolfBoot and the application always run in secure mode.
-  Delta updates are enabled.
 
 - `nrf54l15-wolfcrypt-tz.config`: TrustZone enabled; wolfBoot runs in secure mode and boots the
   application as non-secure code. Includes a non-secure callable (NSC) wolfPKCS11 API for
