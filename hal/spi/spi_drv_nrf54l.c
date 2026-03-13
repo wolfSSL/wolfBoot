@@ -96,7 +96,7 @@ void RAMFUNCTION spi_write(const char byte)
         ;
     SPI_EVENTS_STOPPED = 0;
 
-    if (SPI_EVENTS_DMA_RX_BUSERROR == 0 && SPI_EVENTS_DMA_RX_BUSERROR == 0)
+    if (SPI_EVENTS_DMA_RX_BUSERROR == 0 && SPI_EVENTS_DMA_TX_BUSERROR == 0)
         spi_rx_ready = 1;
 }
 
