@@ -83,10 +83,30 @@ static void led_off(uint32_t gpio_base, int pin)
     GPIO_BSRR(gpio_base) = (1 << pin);
 }
 
-static void delay(volatile uint32_t count)
+/* SysTick-based millisecond delay (polling, no interrupts).
+ * SysTick clocks from HCLK (CPU / AHB prescaler).
+ * HCLK = 300 MHz confirms PLL running at 600 MHz (1 Hz blink = correct). */
+#define SYSTICK_BASE    (0xE000E010UL)
+#define SYSTICK_CSR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x00))
+#define SYSTICK_RVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x04))
+#define SYSTICK_CVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x08))
+#define HCLK_FREQ       300000000UL /* 600 MHz CPU / AHB prescaler 2 */
+#define SYSTICK_COUNTFLAG (1 << 16)
+
+static void systick_init(void)
 {
-    while (count--)
-        ;
+    SYSTICK_RVR = (HCLK_FREQ / 1000) - 1; /* 1ms reload */
+    SYSTICK_CVR = 0;
+    SYSTICK_CSR = 0x5; /* enable, processor clock, no interrupt */
+}
+
+static void delay_ms(uint32_t ms)
+{
+    while (ms > 0) {
+        while (!(SYSTICK_CSR & SYSTICK_COUNTFLAG))
+            ;
+        ms--;
+    }
 }
 
 volatile uint32_t app_running __attribute__((section(".data"))) = 0;
@@ -111,10 +131,23 @@ void main(void)
     /* Mark firmware stable (flash ops are RAMFUNCTION, safe from XIP) */
     wolfBoot_success();
 
+    /* Enable icache for XIP performance (hal_prepare_boot disables it) */
+#define SCB_CCR_REG     (*(volatile uint32_t *)(0xE000ED14UL))
+#define SCB_ICIALLU_REG (*(volatile uint32_t *)(0xE000EF50UL))
+    __asm__ volatile("dsb; isb");
+    SCB_ICIALLU_REG = 0;
+    __asm__ volatile("dsb; isb");
+    SCB_CCR_REG |= (1 << 17); /* IC bit */
+    __asm__ volatile("dsb; isb");
+
+    systick_init();
+
+    /* Blink blue LED at 1 Hz (500ms on/off).
+     * Correct rate confirms CPU running at 600 MHz PLL. */
     while (1) {
         led_on(GPIOG_BASE, LED_BLUE_PIN);
-        delay(2000000);
+        delay_ms(500);
         led_off(GPIOG_BASE, LED_BLUE_PIN);
-        delay(2000000);
+        delay_ms(500);
     }
 }

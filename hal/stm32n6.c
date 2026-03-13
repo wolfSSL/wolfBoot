@@ -25,14 +25,30 @@
 #include "hal.h"
 #include "hal/stm32n6.h"
 
+/* OCTOSPI register definitions come from hal/spi/spi_drv_stm32.h (included
+ * via stm32n6.h). STM32N6 XSPI2 uses the same IP block as OCTOSPI.
+ *
+ * Note: We cannot reuse qspi_transfer() from spi_drv_stm32.c because it
+ * disables/enables the peripheral on each transfer. The N6 boots via XIP
+ * (memory-mapped mode on XSPI2), so we need custom transfer code that:
+ *  1) Aborts memory-mapped mode before indirect access
+ *  2) Restores memory-mapped mode after each operation
+ *  3) Runs from SRAM (RAMFUNCTION) when called from XIP code
+ */
+
+/* SPI mode values for OCTOSPI CCR fields */
+#define SPI_MODE_NONE       0
+#define SPI_MODE_SINGLE     1
+
 /* RAMFUNCTION override for test-app (XIP needs flash ops in SRAM) */
 #if defined(RAM_CODE) && !defined(__WOLFBOOT)
     #undef RAMFUNCTION
     #define RAMFUNCTION __attribute__((used,section(".ramcode"),long_call))
 #endif
 
-/* XSPI2 indirect-mode command helper */
-static int RAMFUNCTION xspi_cmd(uint8_t fmode, uint8_t cmd,
+/* OCTOSPI indirect-mode command helper.
+ * Handles memory-mapped mode abort/restore and TEF error detection. */
+static int RAMFUNCTION octospi_cmd(uint8_t fmode, uint8_t cmd,
     uint32_t addr, uint32_t addrMode,
     uint8_t *data, uint32_t dataSz, uint32_t dataMode,
     uint32_t dummyCycles)
@@ -40,130 +56,133 @@ static int RAMFUNCTION xspi_cmd(uint8_t fmode, uint8_t cmd,
     uint32_t ccr;
 
     /* Abort memory-mapped mode if active */
-    if ((XSPI2_CR & XSPI_CR_FMODE_MASK) == XSPI_CR_FMODE_MMAP) {
-        XSPI2_CR |= XSPI_CR_ABORT;
-        while (XSPI2_CR & XSPI_CR_ABORT)
+    if ((OCTOSPI_CR & OCTOSPI_CR_FMODE_MASK) == OCTOSPI_CR_FMODE_MMAP) {
+        OCTOSPI_CR |= OCTOSPI_CR_ABORT;
+        while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
             ;
     }
-    while (XSPI2_SR & XSPI_SR_BUSY)
+    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
         ;
-    XSPI2_FCR = XSPI_FCR_CTCF | XSPI_FCR_CTEF | XSPI_FCR_CSMF;
+    OCTOSPI_FCR = OCTOSPI_FCR_CTCF | OCTOSPI_FCR_CTEF | OCTOSPI_FCR_CSMF;
 
-    XSPI2_CR = (XSPI2_CR & ~XSPI_CR_FMODE_MASK) | XSPI_CR_FMODE(fmode);
+    OCTOSPI_CR = (OCTOSPI_CR & ~OCTOSPI_CR_FMODE_MASK) |
+                 OCTOSPI_CR_FMODE(fmode);
 
     if (dataSz > 0) {
-        XSPI2_DLR = dataSz - 1;
+        OCTOSPI_DLR = dataSz - 1;
     }
 
-    ccr = XSPI_CCR_IMODE(XSPI_MODE_SINGLE) | XSPI_CCR_ISIZE(0);
-    if (addrMode != XSPI_MODE_NONE) {
-        ccr |= XSPI_CCR_ADMODE(addrMode) | XSPI_CCR_ADSIZE(3);
+    ccr = OCTOSPI_CCR_IMODE(SPI_MODE_SINGLE) | OCTOSPI_CCR_ISIZE(0);
+    if (addrMode != SPI_MODE_NONE) {
+        ccr |= OCTOSPI_CCR_ADMODE(addrMode) | OCTOSPI_CCR_ADSIZE(3);
     }
-    if (dataMode != XSPI_MODE_NONE) {
-        ccr |= XSPI_CCR_DMODE(dataMode);
+    if (dataMode != SPI_MODE_NONE) {
+        ccr |= OCTOSPI_CCR_DMODE(dataMode);
     }
-    XSPI2_CCR = ccr;
-    XSPI2_TCR = XSPI_TCR_DCYC(dummyCycles);
-    XSPI2_IR = cmd;
+    OCTOSPI_CCR = ccr;
+    OCTOSPI_TCR = OCTOSPI_TCR_DCYC(dummyCycles);
+    OCTOSPI_IR = cmd;
 
-    if (addrMode != XSPI_MODE_NONE) {
-        XSPI2_AR = addr;
+    if (addrMode != SPI_MODE_NONE) {
+        OCTOSPI_AR = addr;
     }
 
     if (dataSz > 0 && data != NULL) {
         while (dataSz >= 4) {
             if (fmode == 0) {
-                while (!(XSPI2_SR & (XSPI_SR_FTF | XSPI_SR_TEF)))
+                while (!(OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TEF)))
                     ;
-                if (XSPI2_SR & XSPI_SR_TEF) goto xspi_err;
-                XSPI2_DR32 = *(uint32_t *)data;
+                if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+                OCTOSPI_DR32 = *(uint32_t *)data;
             } else {
-                while (!(XSPI2_SR & (XSPI_SR_FTF | XSPI_SR_TCF |
-                                     XSPI_SR_TEF)))
+                while (!(OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TCF |
+                                       OCTOSPI_SR_TEF)))
                     ;
-                if (XSPI2_SR & XSPI_SR_TEF) goto xspi_err;
-                *(uint32_t *)data = XSPI2_DR32;
+                if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+                *(uint32_t *)data = OCTOSPI_DR32;
             }
             data += 4;
             dataSz -= 4;
         }
         while (dataSz > 0) {
             if (fmode == 0) {
-                while (!(XSPI2_SR & (XSPI_SR_FTF | XSPI_SR_TEF)))
+                while (!(OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TEF)))
                     ;
-                if (XSPI2_SR & XSPI_SR_TEF) goto xspi_err;
-                XSPI2_DR = *data;
+                if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+                OCTOSPI_DR = *data;
             } else {
-                while (!(XSPI2_SR & (XSPI_SR_FTF | XSPI_SR_TCF |
-                                     XSPI_SR_TEF)))
+                while (!(OCTOSPI_SR & (OCTOSPI_SR_FTF | OCTOSPI_SR_TCF |
+                                       OCTOSPI_SR_TEF)))
                     ;
-                if (XSPI2_SR & XSPI_SR_TEF) goto xspi_err;
-                *data = XSPI2_DR;
+                if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+                *data = OCTOSPI_DR;
             }
             data++;
             dataSz--;
         }
     }
 
-    while (!(XSPI2_SR & (XSPI_SR_TCF | XSPI_SR_TEF)))
+    while (!(OCTOSPI_SR & (OCTOSPI_SR_TCF | OCTOSPI_SR_TEF)))
         ;
-    if (XSPI2_SR & XSPI_SR_TEF) goto xspi_err;
-    XSPI2_FCR = XSPI_FCR_CTCF;
+    if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+    OCTOSPI_FCR = OCTOSPI_FCR_CTCF;
 
     return 0;
 
-xspi_err:
-    XSPI2_FCR = XSPI_FCR_CTEF;
-    XSPI2_CR |= XSPI_CR_ABORT;
-    while (XSPI2_CR & XSPI_CR_ABORT)
+octospi_err:
+    OCTOSPI_FCR = OCTOSPI_FCR_CTEF;
+    OCTOSPI_CR |= OCTOSPI_CR_ABORT;
+    while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
         ;
     return -1;
 }
 
-static void RAMFUNCTION xspi_write_enable(void)
+static void RAMFUNCTION octospi_write_enable(void)
 {
-    xspi_cmd(0, NOR_CMD_WRITE_ENABLE, 0, XSPI_MODE_NONE,
-             NULL, 0, XSPI_MODE_NONE, 0);
+    octospi_cmd(0, WRITE_ENABLE_CMD, 0, SPI_MODE_NONE,
+                NULL, 0, SPI_MODE_NONE, 0);
 }
 
-static void RAMFUNCTION xspi_wait_ready(void)
+static void RAMFUNCTION octospi_wait_ready(void)
 {
     uint8_t sr;
     do {
         sr = 0;
-        xspi_cmd(1, NOR_CMD_READ_SR, 0, XSPI_MODE_NONE,
-                 &sr, 1, XSPI_MODE_SINGLE, 0);
-    } while (sr & NOR_SR_WIP);
+        octospi_cmd(1, READ_SR_CMD, 0, SPI_MODE_NONE,
+                    &sr, 1, SPI_MODE_SINGLE, 0);
+    } while (sr & FLASH_SR_BUSY);
 }
 
-static void RAMFUNCTION xspi_enable_mmap(void)
+static void RAMFUNCTION octospi_enable_mmap(void)
 {
     /* Abort first if already in mmap mode (BUSY stays set in mmap) */
-    if ((XSPI2_CR & XSPI_CR_FMODE_MASK) == XSPI_CR_FMODE_MMAP) {
-        XSPI2_CR |= XSPI_CR_ABORT;
-        while (XSPI2_CR & XSPI_CR_ABORT)
+    if ((OCTOSPI_CR & OCTOSPI_CR_FMODE_MASK) == OCTOSPI_CR_FMODE_MMAP) {
+        OCTOSPI_CR |= OCTOSPI_CR_ABORT;
+        while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
             ;
     }
-    while (XSPI2_SR & XSPI_SR_BUSY)
+    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
         ;
-    XSPI2_FCR = XSPI_FCR_CTCF | XSPI_FCR_CTEF | XSPI_FCR_CSMF;
+    OCTOSPI_FCR = OCTOSPI_FCR_CTCF | OCTOSPI_FCR_CTEF | OCTOSPI_FCR_CSMF;
 
-    XSPI2_CR = (XSPI2_CR & ~XSPI_CR_FMODE_MASK) | XSPI_CR_FMODE_MMAP;
+    OCTOSPI_CR = (OCTOSPI_CR & ~OCTOSPI_CR_FMODE_MASK) |
+                 OCTOSPI_CR_FMODE_MMAP;
 
     /* Fast read: single SPI, 4-byte addr, 8 dummy cycles */
-    XSPI2_CCR = XSPI_CCR_IMODE(XSPI_MODE_SINGLE) |
-                XSPI_CCR_ISIZE(0) |
-                XSPI_CCR_ADMODE(XSPI_MODE_SINGLE) |
-                XSPI_CCR_ADSIZE(3) |
-                XSPI_CCR_DMODE(XSPI_MODE_SINGLE);
-    XSPI2_TCR = XSPI_TCR_DCYC(8) | XSPI_TCR_SSHIFT;
-    XSPI2_IR = NOR_CMD_FAST_READ_4B;
+    OCTOSPI_CCR = OCTOSPI_CCR_IMODE(SPI_MODE_SINGLE) |
+                  OCTOSPI_CCR_ISIZE(0) |
+                  OCTOSPI_CCR_ADMODE(SPI_MODE_SINGLE) |
+                  OCTOSPI_CCR_ADSIZE(3) |
+                  OCTOSPI_CCR_DMODE(SPI_MODE_SINGLE);
+    OCTOSPI_TCR = OCTOSPI_TCR_DCYC(8) | OCTOSPI_TCR_SSHIFT;
+    OCTOSPI_IR = FAST_READ_4B_CMD;
 
     DSB();
     ISB();
 }
 
-static void RAMFUNCTION dcache_clean_invalidate_by_addr(uint32_t addr, uint32_t size)
+static void RAMFUNCTION dcache_clean_invalidate_by_addr(uint32_t addr,
+    uint32_t size)
 {
     uint32_t line;
     for (line = addr & ~0x1FUL; line < addr + size; line += 32) {
@@ -231,8 +250,8 @@ static void dcache_disable(void)
     ISB();
 }
 
-/* XSPI2 GPIO: PN0-PN11 as AF9 (DQS, CLK, NCS, IO0-IO7) */
-static void xspi2_gpio_init(void)
+/* OCTOSPI GPIO: PN0-PN11 as AF9 (DQS, CLK, NCS, IO0-IO7) */
+static void octospi_gpio_init(void)
 {
     uint32_t reg;
     int pin;
@@ -275,7 +294,7 @@ static void xspi2_gpio_init(void)
     GPIO_AFRH(GPION_BASE) = reg;
 }
 
-static void xspi2_init(void)
+static void octospi_init(void)
 {
     volatile uint32_t delay;
 
@@ -283,42 +302,124 @@ static void xspi2_init(void)
     RCC_MISCENR |= RCC_MISCENR_XSPIPHYCOMPEN;
     DMB();
 
-    XSPI2_CR = 0;
-    while (XSPI2_SR & XSPI_SR_BUSY)
+    OCTOSPI_CR = 0;
+    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
         ;
 
-    XSPI2_DCR1 = XSPI_DCR1_DLYBYP |
-                  XSPI_DCR1_DEVSIZE(NOR_DEVICE_SIZE_LOG2) |
-                  XSPI_DCR1_CSHT(3);
-    XSPI2_DCR2 = XSPI_DCR2_PRESCALER(16);
-    while (XSPI2_SR & XSPI_SR_BUSY)
+    OCTOSPI_DCR1 = OCTOSPI_DCR1_DLYBYP |
+                   OCTOSPI_DCR1_DEVSIZE(FLASH_DEVICE_SIZE_LOG2) |
+                   OCTOSPI_DCR1_CSHT(3);
+    OCTOSPI_DCR2 = OCTOSPI_DCR2_PRESCALER(16);
+    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
         ;
 
-    XSPI2_CR = XSPI_CR_FTHRES(1) | XSPI_CR_EN;
+    OCTOSPI_CR = OCTOSPI_CR_FTHRES(1) | OCTOSPI_CR_EN;
 
     /* NOR flash software reset */
-    xspi_cmd(0, NOR_CMD_RESET_ENABLE, 0, XSPI_MODE_NONE,
-             NULL, 0, XSPI_MODE_NONE, 0);
-    xspi_cmd(0, NOR_CMD_RESET_MEMORY, 0, XSPI_MODE_NONE,
-             NULL, 0, XSPI_MODE_NONE, 0);
+    octospi_cmd(0, RESET_ENABLE_CMD, 0, SPI_MODE_NONE,
+                NULL, 0, SPI_MODE_NONE, 0);
+    octospi_cmd(0, RESET_MEMORY_CMD, 0, SPI_MODE_NONE,
+                NULL, 0, SPI_MODE_NONE, 0);
     for (delay = 0; delay < 100000; delay++)
         ;
 
-    xspi_enable_mmap();
+    octospi_enable_mmap();
 }
 
+/* Configure clocks: PLL1 → 600 MHz CPU (Voltage Scale 1).
+ * STM32N6 supports up to 800 MHz at Voltage Scale 0 (PWR_VOSCR_VOS=1).
+ *
+ * Clock tree:
+ *   HSI 64 MHz → PLL1 (M=4, N=75) → VCO 1200 MHz → PDIV1=1 → 1200 MHz
+ *     IC1 /2 = 600 MHz → CPU (CPUSW=IC1)
+ *     IC2 /3 = 400 MHz → AXI bus (SYSSW=IC2)
+ *     IC6 /4 = 300 MHz → system bus C (SYSSW=IC6)
+ *     IC11/3 = 400 MHz → system bus D (SYSSW=IC11)
+ *   AHB prescaler /2 → HCLK = 300 MHz
+ */
 static void clock_config(void)
 {
-    /* HSI at 64 MHz (PLL configuration deferred) */
-    RCC_CR |= RCC_CR_HSION;
+    uint32_t reg;
+
+    /* Enable HSI 64 MHz */
+    RCC_CSR = RCC_CR_HSION;
     while (!(RCC_SR & RCC_SR_HSIRDY))
+        ;
+
+    /* Disable PLL1 before reconfiguring */
+    RCC_CCR = RCC_CR_PLL1ON;
+    while (RCC_SR & RCC_SR_PLL1RDY)
+        ;
+
+    /* PLL1: HSI / 4 * 75 = 1200 MHz VCO.
+     * Clear BYP (bypass) — Boot ROM leaves it set, which routes HSI
+     * directly to PLL output, skipping the VCO entirely. */
+    reg = RCC_PLL1CFGR1;
+    reg &= ~(RCC_PLL1CFGR1_SEL_MASK | RCC_PLL1CFGR1_DIVM_MASK |
+             RCC_PLL1CFGR1_DIVN_MASK | RCC_PLL1CFGR1_BYP);
+    reg |= RCC_PLL1CFGR1_SEL_HSI |
+           (4 << RCC_PLL1CFGR1_DIVM_SHIFT) |
+           (75 << RCC_PLL1CFGR1_DIVN_SHIFT);
+    RCC_PLL1CFGR1 = reg;
+
+    RCC_PLL1CFGR2 = 0; /* no fractional */
+
+    /* PDIV1=1, PDIV2=1 → PLL output = VCO = 1200 MHz.
+     * MODSSDIS: disable spread spectrum. PDIVEN: enable PLL output. */
+    RCC_PLL1CFGR3 = (1 << RCC_PLL1CFGR3_PDIV1_SHIFT) |
+                    (1 << RCC_PLL1CFGR3_PDIV2_SHIFT) |
+                    RCC_PLL1CFGR3_MODSSDIS |
+                    RCC_PLL1CFGR3_MODSSRST |
+                    RCC_PLL1CFGR3_PDIVEN;
+
+    /* Enable PLL1, wait for lock */
+    RCC_CSR = RCC_CR_PLL1ON;
+    while (!(RCC_SR & RCC_SR_PLL1RDY))
+        ;
+
+    /* Configure IC dividers: disable → configure → re-enable.
+     * IC divider = INT + 1, SEL: 0=PLL1 (per ST LL driver). */
+    RCC_DIVENCR = RCC_DIVENR_IC1EN;
+    RCC_IC1CFGR = RCC_ICCFGR_SEL_PLL1 | ((2 - 1) << RCC_ICCFGR_INT_SHIFT);
+    RCC_DIVENSR = RCC_DIVENR_IC1EN;
+
+    RCC_DIVENCR = RCC_DIVENR_IC2EN;
+    RCC_IC2CFGR = RCC_ICCFGR_SEL_PLL1 | ((3 - 1) << RCC_ICCFGR_INT_SHIFT);
+    RCC_DIVENSR = RCC_DIVENR_IC2EN;
+
+    RCC_DIVENCR = RCC_DIVENR_IC6EN;
+    RCC_IC6CFGR = RCC_ICCFGR_SEL_PLL1 | ((4 - 1) << RCC_ICCFGR_INT_SHIFT);
+    RCC_DIVENSR = RCC_DIVENR_IC6EN;
+
+    RCC_DIVENCR = RCC_DIVENR_IC11EN;
+    RCC_IC11CFGR = RCC_ICCFGR_SEL_PLL1 | ((3 - 1) << RCC_ICCFGR_INT_SHIFT);
+    RCC_DIVENSR = RCC_DIVENR_IC11EN;
+
+    /* AHB prescaler /2 → HCLK = 300 MHz */
+    reg = RCC_CFGR2;
+    reg &= ~RCC_CFGR2_HPRE_MASK;
+    reg |= (1 << RCC_CFGR2_HPRE_SHIFT);
+    RCC_CFGR2 = reg;
+
+    /* Switch CPU to IC1, system bus to IC2/IC6/IC11 */
+    reg = RCC_CFGR1;
+    reg &= ~(RCC_CFGR1_CPUSW_MASK | RCC_CFGR1_SYSSW_MASK);
+    reg |= (0x3 << RCC_CFGR1_CPUSW_SHIFT) |
+           (0x3 << RCC_CFGR1_SYSSW_SHIFT);
+    RCC_CFGR1 = reg;
+    while ((RCC_CFGR1 & RCC_CFGR1_CPUSWS_MASK) !=
+           (0x3 << RCC_CFGR1_CPUSWS_SHIFT))
+        ;
+    while ((RCC_CFGR1 & RCC_CFGR1_SYSSWS_MASK) !=
+           (0x3 << RCC_CFGR1_SYSSWS_SHIFT))
         ;
 }
 
 #ifdef DEBUG_UART
 /* USART1 on PE5 (TX) / PE6 (RX), AF7 */
 
-#define UART_CLOCK_FREQ  64000000UL
+#define UART_BASE        USART1_BASE
+#define UART_CLOCK_FREQ  300000000UL /* HCLK/APB2 after PLL config */
 
 static void uart_init(uint32_t baud)
 {
@@ -346,27 +447,27 @@ static void uart_init(uint32_t baud)
     GPIO_OSPEEDR(GPIOE_BASE) = reg;
 
     /* 8N1 */
-    USART1_CR1 = 0;
-    USART1_CR2 = 0;
-    USART1_CR3 = 0;
-    USART1_BRR = (UART_CLOCK_FREQ + baud / 2) / baud;
-    USART1_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+    UART_CR1(UART_BASE) = 0;
+    UART_CR2(UART_BASE) = 0;
+    UART_CR3(UART_BASE) = 0;
+    UART_BRR(UART_BASE) = (UART_CLOCK_FREQ + baud / 2) / baud;
+    UART_CR1(UART_BASE) = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
 }
 
 static void uart_write(const char *buf, int len)
 {
     int i;
     for (i = 0; i < len; i++) {
-        while (!(USART1_ISR & USART_ISR_TXE))
+        while (!(UART_ISR(UART_BASE) & USART_ISR_TXE))
             ;
-        USART1_TDR = buf[i];
+        UART_TDR(UART_BASE) = buf[i];
     }
-    while (!(USART1_ISR & USART_ISR_TC))
+    while (!(UART_ISR(UART_BASE) & USART_ISR_TC))
         ;
 }
 #endif
 
-/* Mark VDDIO supplies valid (required for XSPI2 GPIO) */
+/* Mark VDDIO supplies valid (required for OCTOSPI GPIO) */
 static void pwr_enable_io_supply(void)
 {
     RCC_AHB4ENR |= RCC_AHB4ENR_PWREN;
@@ -383,8 +484,8 @@ void hal_init(void)
     pwr_enable_io_supply();
     icache_enable();
     dcache_enable();
-    xspi2_gpio_init();
-    xspi2_init();
+    octospi_gpio_init();
+    octospi_init();
 
 #ifdef DEBUG_UART
     uart_init(115200);
@@ -394,76 +495,85 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    xspi_enable_mmap();
+    octospi_enable_mmap();
     dcache_disable();
     icache_disable();
 }
 
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+/* Shared NOR flash helpers used by both hal_flash_* and ext_flash_* */
+static int RAMFUNCTION nor_flash_write(uint32_t offset, const uint8_t *data,
+    int len)
 {
-    uint32_t offset;
     uint32_t page_off, write_sz;
-    int total = len;
+    int remaining = len;
     int ret = 0;
 
     if (len <= 0)
         return 0;
 
-    offset = address - XSPI2_MEM_BASE;
+    while (remaining > 0) {
+        page_off = offset & (FLASH_PAGE_SIZE - 1);
+        write_sz = FLASH_PAGE_SIZE - page_off;
+        if ((int)write_sz > remaining)
+            write_sz = remaining;
 
-    while (len > 0) {
-        page_off = offset & (NOR_PAGE_SIZE - 1);
-        write_sz = NOR_PAGE_SIZE - page_off;
-        if ((int)write_sz > len)
-            write_sz = len;
-
-        xspi_write_enable();
-        ret = xspi_cmd(0, NOR_CMD_PAGE_PROG_4B,
-                 offset, XSPI_MODE_SINGLE,
-                 (uint8_t *)data, write_sz, XSPI_MODE_SINGLE, 0);
+        octospi_write_enable();
+        ret = octospi_cmd(0, PAGE_PROG_4B_CMD,
+                 offset, SPI_MODE_SINGLE,
+                 (uint8_t *)data, write_sz, SPI_MODE_SINGLE, 0);
         if (ret < 0)
             break;
 
-        xspi_wait_ready();
+        octospi_wait_ready();
 
         offset += write_sz;
         data += write_sz;
-        len -= write_sz;
+        remaining -= write_sz;
     }
 
-    xspi_enable_mmap();
-    dcache_clean_invalidate_by_addr(address, total);
-
+    octospi_enable_mmap();
     return ret;
 }
 
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+static int RAMFUNCTION nor_flash_erase(uint32_t offset, int len)
 {
-    uint32_t offset;
     uint32_t end;
     int ret = 0;
 
     if (len <= 0)
         return -1;
 
-    offset = address - XSPI2_MEM_BASE;
     end = offset + len;
 
     while (offset < end) {
-        xspi_write_enable();
-        ret = xspi_cmd(0, NOR_CMD_SECTOR_ERASE_4B,
-                 offset, XSPI_MODE_SINGLE,
-                 NULL, 0, XSPI_MODE_NONE, 0);
+        octospi_write_enable();
+        ret = octospi_cmd(0, SEC_ERASE_4B_CMD,
+                 offset, SPI_MODE_SINGLE,
+                 NULL, 0, SPI_MODE_NONE, 0);
         if (ret < 0)
             break;
 
-        xspi_wait_ready();
-        offset += NOR_SECTOR_SIZE;
+        octospi_wait_ready();
+        offset += FLASH_SECTOR_SIZE;
     }
 
-    xspi_enable_mmap();
-    dcache_clean_invalidate_by_addr(address, len);
+    octospi_enable_mmap();
+    return ret;
+}
 
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    int ret = nor_flash_write(address - OCTOSPI_MEM_BASE, data, len);
+    if (ret == 0 && len > 0)
+        dcache_clean_invalidate_by_addr(address, len);
+    return ret;
+}
+
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+{
+    int ret = nor_flash_erase(address - OCTOSPI_MEM_BASE, len);
+    if (ret == 0 && len > 0)
+        dcache_clean_invalidate_by_addr(address, len);
     return ret;
 }
 
@@ -484,79 +594,24 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
     if (len <= 0)
         return 0;
 
-    ret = xspi_cmd(1, NOR_CMD_FAST_READ_4B,
-             (uint32_t)address, XSPI_MODE_SINGLE,
-             data, len, XSPI_MODE_SINGLE, 8);
+    ret = octospi_cmd(1, FAST_READ_4B_CMD,
+             (uint32_t)address, SPI_MODE_SINGLE,
+             data, len, SPI_MODE_SINGLE, 8);
 
-    xspi_enable_mmap();
+    octospi_enable_mmap();
 
     return (ret < 0) ? ret : len;
 }
 
-int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
+int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data,
+    int len)
 {
-    uint32_t offset = (uint32_t)address;
-    uint32_t page_off, write_sz;
-    const uint8_t *src = data;
-    int remaining = len;
-    int ret = 0;
-
-    if (len <= 0)
-        return 0;
-
-    while (remaining > 0) {
-        page_off = offset & (NOR_PAGE_SIZE - 1);
-        write_sz = NOR_PAGE_SIZE - page_off;
-        if ((int)write_sz > remaining)
-            write_sz = remaining;
-
-        xspi_write_enable();
-
-        ret = xspi_cmd(0, NOR_CMD_PAGE_PROG_4B,
-                 offset, XSPI_MODE_SINGLE,
-                 (uint8_t *)src, write_sz, XSPI_MODE_SINGLE, 0);
-        if (ret < 0)
-            break;
-
-        xspi_wait_ready();
-
-        offset += write_sz;
-        src += write_sz;
-        remaining -= write_sz;
-    }
-
-    xspi_enable_mmap();
-
-    return ret;
+    return nor_flash_write((uint32_t)address, data, len);
 }
 
 int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
 {
-    uint32_t offset = (uint32_t)address;
-    uint32_t end;
-    int ret = 0;
-
-    if (len <= 0)
-        return -1;
-
-    end = offset + len;
-
-    while (offset < end) {
-        xspi_write_enable();
-
-        ret = xspi_cmd(0, NOR_CMD_SECTOR_ERASE_4B,
-                 offset, XSPI_MODE_SINGLE,
-                 NULL, 0, XSPI_MODE_NONE, 0);
-        if (ret < 0)
-            break;
-
-        xspi_wait_ready();
-        offset += NOR_SECTOR_SIZE;
-    }
-
-    xspi_enable_mmap();
-
-    return ret;
+    return nor_flash_erase((uint32_t)address, len);
 }
 
 void RAMFUNCTION ext_flash_lock(void)
