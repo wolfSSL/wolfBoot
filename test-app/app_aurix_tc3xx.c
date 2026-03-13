@@ -27,6 +27,9 @@
 #include "printf.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+#include "wolfhsm/wh_client.h"
+#endif
 
 #define BASE_FW_VERSION 1
 
@@ -76,6 +79,34 @@ void tc3tc_main(void)
          * (to prevent rollback) */
         wolfBoot_success();
     }
+
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+    {
+        int        rc;
+        const char echoMsg[] = "wolfHSM echo test";
+        char       echoResp[sizeof(echoMsg)];
+        uint16_t   echoRespLen = 0;
+
+        rc = hal_hsm_init_connect();
+        if (rc == 0) {
+            wolfBoot_printf("wolfHSM Echo: sending %d bytes\n",
+                            sizeof(echoMsg));
+            rc = wh_Client_Echo(&hsmClientCtx, sizeof(echoMsg), echoMsg,
+                                &echoRespLen, echoResp);
+            if (rc == 0) {
+                wolfBoot_printf("wolfHSM Echo success: received %d bytes\n",
+                                echoRespLen);
+            }
+            else {
+                wolfBoot_printf("wolfHSM Echo test failed: %d\n", rc);
+            }
+            hal_hsm_disconnect();
+        }
+        else {
+            wolfBoot_printf("HSM connect failed: %d\n", rc);
+        }
+    }
+#endif
 
     /* Main application loop */
     while(1) {
