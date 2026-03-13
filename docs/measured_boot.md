@@ -30,8 +30,13 @@ Having TPM measurements provide a way for the firmware or Operating System(OS),
 like Windows or Linux, to know that the software loaded before it gained control
 over system, is trustworthy and not modified.
 
-In wolfBoot the concept is simplified to measuring a single component, the main
-firmware image. However, this can easily be extended by using more PCR registers.
+In wolfBoot the concept is simplified to measuring a single component, the
+wolfBoot bootloader code itself. This ensures the bootloader has not been
+tampered with before it verifies and loads the application. However, this can
+easily be extended by using more PCR registers.
+
+To use the legacy behavior of measuring the boot (application) partition instead
+of wolfBoot's own code, set `MEASURED_BOOT_APP_PARTITION=1` in your config.
 
 ## Configuration
 
@@ -81,6 +86,6 @@ MEASURED_PCR_A?=16
 ### Code
 
 wolfBoot offers out-of-the-box solution. There is zero need of the developer to touch wolfBoot code
-in order to use measured boot. If you would want to check the code, then look in `src/image.c` and
-more specifically the `measure_boot()` function. There you would find several TPM2 native API calls
-to wolfTPM. For more information about wolfTPM you can check its GitHub repository.
+in order to use measured boot. If you would want to check the code, then look in `src/tpm.c` and
+more specifically the `self_hash()` and `measure_boot()` functions. There you would find several TPM2
+native API calls to wolfTPM. For more information about wolfTPM you can check its GitHub repository.

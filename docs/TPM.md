@@ -11,8 +11,9 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | `WOLFBOOT_TPM_KEYSTORE=1` | `WOLFBOOT_TPM_KEYSTORE` | Enables TPM based root of trust. NV Index must store a hash of the trusted public key. |
 | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | NV index in platform range 0x1400000 - 0x17FFFFF. |
 | `WOLFBOOT_TPM_KEYSTORE_AUTH=secret` | `WOLFBOOT_TPM_KEYSTORE_AUTH` | Password for NV access |
-| `MEASURED_BOOT=1` | `WOLFBOOT_MEASURED_BOOT` | Enable measured boot. Extend PCR with wolfBoot hash. |
+| `MEASURED_BOOT=1` | `WOLFBOOT_MEASURED_BOOT` | Enable measured boot. Extends PCR with a hash of the wolfBoot bootloader code. |
 | `MEASURED_PCR_A=16` | `WOLFBOOT_MEASURED_PCR_A=16` | The PCR index to use. See [docs/measured_boot.md](/docs/measured_boot.md). |
+| `MEASURED_BOOT_APP_PARTITION=1` | `WOLFBOOT_MEASURED_BOOT_APP_PARTITION` | Legacy: measure the boot (application) partition instead of wolfBoot code. |
 | `WOLFBOOT_TPM_SEAL=1` | `WOLFBOOT_TPM_SEAL` | Enables support for sealing/unsealing based on PCR policy signed externally. |
 | `WOLFBOOT_TPM_SEAL_NV_BASE=0x01400300` | `WOLFBOOT_TPM_SEAL_NV_BASE` | To override the default sealed blob storage location in the platform hierarchy. |
 | `WOLFBOOT_TPM_SEAL_AUTH=secret` | `WOLFBOOT_TPM_SEAL_AUTH` | Password for sealing/unsealing secrets, if omitted the PCR policy will be used |
@@ -30,7 +31,9 @@ NOTE: The TPM's RSA verify requires ASN.1 encoding, so use SIGN=RSA2048ENC
 
 ## Measured Boot
 
-The wolfBoot image is hashed and extended to the indicated PCR. This can be used later in the application to prove the boot process was not tampered with. Enabled with `WOLFBOOT_MEASURED_BOOT` and exposes API `wolfBoot_tpm2_extend`.
+The wolfBoot bootloader code is hashed and extended to the indicated PCR. This can be used later in the application to prove the boot process was not tampered with. Enabled with `WOLFBOOT_MEASURED_BOOT` and exposes API `wolfBoot_tpm2_extend`.
+
+By default, the measurement covers wolfBoot's own code region (from `_start_text` to `_stored_data` linker symbols). To use the legacy behavior of measuring the boot (application) partition instead, set `MEASURED_BOOT_APP_PARTITION=1`.
 
 ## Sealing and Unsealing a secret
 
