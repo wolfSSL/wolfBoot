@@ -53,6 +53,7 @@ SECTIONS
 
     .bootloader WOLFBOOT_ORIGIN :
     {
+       _start_text = .;
        KEEP(./tgl_fsp.o(.boot))
        KEEP(*(.boot*))
        KEYSTORE_START = .;
