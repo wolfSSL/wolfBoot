@@ -36,8 +36,10 @@
 /*** RCC (Reset and Clock Control) — base 0x56028000 (secure) ***/
 #define RCC_BASE                (0x56028000UL)
 
-/* RCC_CR: control register — enable bits */
-#define RCC_CR                  (*(volatile uint32_t *)(RCC_BASE + 0x00))
+/* RCC_CR: control register (read), CSR: set register, CCR: clear register */
+#define RCC_CR                  (*(volatile uint32_t *)(RCC_BASE + 0x000))
+#define RCC_CSR                 (*(volatile uint32_t *)(RCC_BASE + 0x800))
+#define RCC_CCR                 (*(volatile uint32_t *)(RCC_BASE + 0x1000))
 #define RCC_CR_LSION            (1 << 0)
 #define RCC_CR_LSEON            (1 << 1)
 #define RCC_CR_MSION            (1 << 2)
@@ -71,16 +73,18 @@
 #define RCC_CFGR1_SYSSWS_SHIFT  (28)
 #define RCC_CFGR1_SYSSWS_MASK   (0x3 << 28)
 
-/* RCC_CFGR2: APB prescalers */
+/* RCC_CFGR2: AHB/APB prescalers */
 #define RCC_CFGR2               (*(volatile uint32_t *)(RCC_BASE + 0x24))
 #define RCC_CFGR2_PPRE1_SHIFT   (0)
 #define RCC_CFGR2_PPRE1_MASK    (0x7 << 0)
 #define RCC_CFGR2_PPRE2_SHIFT   (4)
 #define RCC_CFGR2_PPRE2_MASK    (0x7 << 4)
-#define RCC_CFGR2_PPRE4_SHIFT   (8)
-#define RCC_CFGR2_PPRE4_MASK    (0x7 << 8)
-#define RCC_CFGR2_PPRE5_SHIFT   (12)
-#define RCC_CFGR2_PPRE5_MASK    (0x7 << 12)
+#define RCC_CFGR2_PPRE4_SHIFT   (12)
+#define RCC_CFGR2_PPRE4_MASK    (0x7 << 12)
+#define RCC_CFGR2_PPRE5_SHIFT   (16)
+#define RCC_CFGR2_PPRE5_MASK    (0x7 << 16)
+#define RCC_CFGR2_HPRE_SHIFT    (20)
+#define RCC_CFGR2_HPRE_MASK     (0x7 << 20)
 
 /* PLL1 Configuration registers */
 #define RCC_PLL1CFGR1           (*(volatile uint32_t *)(RCC_BASE + 0x80))
@@ -90,12 +94,22 @@
 #define RCC_PLL1CFGR1_DIVM_MASK   (0x3F << 20)
 #define RCC_PLL1CFGR1_SEL_SHIFT   (28)  /* bits [30:28]: PLL source */
 #define RCC_PLL1CFGR1_SEL_MASK    (0x7 << 28)
+#define RCC_PLL1CFGR1_BYP         (1 << 27)    /* PLL bypass (ref clock passthrough) */
 #define RCC_PLL1CFGR1_SEL_HSI     (0x0 << 28)
 #define RCC_PLL1CFGR1_SEL_HSE     (0x1 << 28)
 #define RCC_PLL1CFGR1_SEL_MSI     (0x2 << 28)
 
 #define RCC_PLL1CFGR2           (*(volatile uint32_t *)(RCC_BASE + 0x84))
+/* PLL1CFGR2: fractional DIVN only (bits [23:0]) */
+
 #define RCC_PLL1CFGR3           (*(volatile uint32_t *)(RCC_BASE + 0x88))
+#define RCC_PLL1CFGR3_PDIV2_SHIFT (24)   /* bits [26:24]: output post-divider 2 (1-7) */
+#define RCC_PLL1CFGR3_PDIV2_MASK  (0x7 << 24)
+#define RCC_PLL1CFGR3_PDIV1_SHIFT (27)   /* bits [29:27]: output post-divider 1 (1-7) */
+#define RCC_PLL1CFGR3_PDIV1_MASK  (0x7 << 27)
+#define RCC_PLL1CFGR3_MODSSRST   (1 << 0)  /* spread spectrum modulation reset */
+#define RCC_PLL1CFGR3_MODSSDIS   (1 << 2)  /* spread spectrum disable */
+#define RCC_PLL1CFGR3_PDIVEN     (1 << 30) /* post-divider + PLL output enable */
 
 /* IC (Interconnect Clock) dividers */
 #define RCC_IC1CFGR             (*(volatile uint32_t *)(RCC_BASE + 0xC4))
@@ -123,8 +137,10 @@
 #define RCC_ICCFGR_SEL_PLL3     (0x2 << 28)
 #define RCC_ICCFGR_SEL_PLL4     (0x3 << 28)
 
-/* Divider and bus enable registers */
+/* Divider enable: direct, set (+0x800), clear (+0x1000) */
 #define RCC_DIVENR              (*(volatile uint32_t *)(RCC_BASE + 0x240))
+#define RCC_DIVENSR             (*(volatile uint32_t *)(RCC_BASE + 0xA40))
+#define RCC_DIVENCR             (*(volatile uint32_t *)(RCC_BASE + 0x1240))
 #define RCC_DIVENR_IC1EN        (1 << 0)
 #define RCC_DIVENR_IC2EN        (1 << 1)
 #define RCC_DIVENR_IC3EN        (1 << 2)
@@ -182,8 +198,10 @@
 #define PWR_CR4                 (*(volatile uint32_t *)(PWR_BASE + 0x0C))
 #define PWR_VOSCR               (*(volatile uint32_t *)(PWR_BASE + 0x20))
 
-/* PWR_VOSCR fields */
-#define PWR_VOSCR_VOS           (1 << 0)    /* 0=Scale2, 1=Scale1 */
+/* PWR_VOSCR: Voltage scaling controls max CPU frequency.
+ * Scale 1 (VOS=0, default): up to 600 MHz CPU.
+ * Scale 0 (VOS=1):          up to 800 MHz CPU. */
+#define PWR_VOSCR_VOS           (1 << 0)
 #define PWR_VOSCR_VOSRDY        (1 << 1)
 
 /* PWR Supply Voltage Monitoring Control Registers */
@@ -214,22 +232,15 @@
 #define GPIOP_BASE              (0x56023C00UL)
 #define GPIOQ_BASE              (0x56024000UL)
 
-/* GPIO register offsets (same as H5/H7) */
+/* GPIO register offsets — GPIO_ODR, GPIO_BSRR, GPIO_MODE_* come from
+ * spi_drv_stm32.h. Define the rest that aren't in the shared header. */
 #define GPIO_MODER(base)        (*(volatile uint32_t *)((base) + 0x00))
 #define GPIO_OTYPER(base)       (*(volatile uint32_t *)((base) + 0x04))
 #define GPIO_OSPEEDR(base)      (*(volatile uint32_t *)((base) + 0x08))
 #define GPIO_PUPDR(base)        (*(volatile uint32_t *)((base) + 0x0C))
 #define GPIO_IDR(base)          (*(volatile uint32_t *)((base) + 0x10))
-#define GPIO_ODR(base)          (*(volatile uint32_t *)((base) + 0x14))
-#define GPIO_BSRR(base)         (*(volatile uint32_t *)((base) + 0x18))
 #define GPIO_AFRL(base)         (*(volatile uint32_t *)((base) + 0x20))
 #define GPIO_AFRH(base)         (*(volatile uint32_t *)((base) + 0x24))
-
-/* GPIO mode values */
-#define GPIO_MODE_INPUT         0x0
-#define GPIO_MODE_OUTPUT        0x1
-#define GPIO_MODE_AF            0x2
-#define GPIO_MODE_ANALOG        0x3
 
 /* GPIO speed values */
 #define GPIO_SPEED_LOW          0x0
@@ -238,158 +249,60 @@
 #define GPIO_SPEED_VERY_HIGH    0x3
 
 
-/*** XSPI2 (External SPI for NOR flash) ***/
-#define XSPI2_BASE              (0x5802A000UL)
-#define XSPI2_MEM_BASE          (0x70000000UL)
+/*** OCTOSPI (XSPI2) — register definitions from hal/spi/spi_drv_stm32.h ***/
+/* Set base address before including shared OCTOSPI register macros.
+ * STM32N6 XSPI2 uses the same IP block as OCTOSPI (identical register layout).
+ */
+#define OCTOSPI_BASE            (0x5802A000UL)
+#define OCTOSPI_MEM_BASE        (0x70000000UL) /* XSPI2 memory-mapped region */
 
-#define XSPI2_CR                (*(volatile uint32_t *)(XSPI2_BASE + 0x00))
-#define XSPI2_DCR1              (*(volatile uint32_t *)(XSPI2_BASE + 0x08))
-#define XSPI2_DCR2              (*(volatile uint32_t *)(XSPI2_BASE + 0x0C))
-#define XSPI2_DCR3              (*(volatile uint32_t *)(XSPI2_BASE + 0x10))
-#define XSPI2_DCR4              (*(volatile uint32_t *)(XSPI2_BASE + 0x14))
-#define XSPI2_SR                (*(volatile uint32_t *)(XSPI2_BASE + 0x20))
-#define XSPI2_FCR               (*(volatile uint32_t *)(XSPI2_BASE + 0x24))
-#define XSPI2_DLR               (*(volatile uint32_t *)(XSPI2_BASE + 0x40))
-#define XSPI2_AR                (*(volatile uint32_t *)(XSPI2_BASE + 0x48))
-#define XSPI2_DR                (*(volatile uint8_t  *)(XSPI2_BASE + 0x50))
-#define XSPI2_DR32              (*(volatile uint32_t *)(XSPI2_BASE + 0x50))
-#define XSPI2_PSMKR             (*(volatile uint32_t *)(XSPI2_BASE + 0x80))
-#define XSPI2_PSMAR             (*(volatile uint32_t *)(XSPI2_BASE + 0x88))
-#define XSPI2_PIR               (*(volatile uint32_t *)(XSPI2_BASE + 0x90))
-#define XSPI2_CCR               (*(volatile uint32_t *)(XSPI2_BASE + 0x100))
-#define XSPI2_TCR               (*(volatile uint32_t *)(XSPI2_BASE + 0x108))
-#define XSPI2_IR                (*(volatile uint32_t *)(XSPI2_BASE + 0x110))
-#define XSPI2_ABR               (*(volatile uint32_t *)(XSPI2_BASE + 0x120))
-#define XSPI2_LPTR              (*(volatile uint32_t *)(XSPI2_BASE + 0x130))
-#define XSPI2_WCCR              (*(volatile uint32_t *)(XSPI2_BASE + 0x180))
-#define XSPI2_WTCR              (*(volatile uint32_t *)(XSPI2_BASE + 0x188))
-#define XSPI2_WIR               (*(volatile uint32_t *)(XSPI2_BASE + 0x190))
-#define XSPI2_WABR              (*(volatile uint32_t *)(XSPI2_BASE + 0x1A0))
+#include "hal/spi/spi_drv_stm32.h"
 
-/* XSPI CR fields */
-#define XSPI_CR_EN              (1 << 0)
-#define XSPI_CR_ABORT           (1 << 1)
-#define XSPI_CR_FSEL            (1 << 7)
-#define XSPI_CR_FTHRES_SHIFT    (8)
-#define XSPI_CR_FTHRES_MASK     (0x3F << 8)
-#define XSPI_CR_FTHRES(n)       ((((n) - 1) & 0x3F) << 8)
-#define XSPI_CR_TCIE            (1 << 17)
-#define XSPI_CR_FTIE            (1 << 18)
-#define XSPI_CR_FMODE_SHIFT     (28)
-#define XSPI_CR_FMODE_MASK      (0x3 << 28)
-#define XSPI_CR_FMODE(m)        (((m) & 0x3) << 28)
-#define XSPI_CR_FMODE_IWRITE    XSPI_CR_FMODE(0)
-#define XSPI_CR_FMODE_IREAD     XSPI_CR_FMODE(1)
-#define XSPI_CR_FMODE_AUTOPOLL  XSPI_CR_FMODE(2)
-#define XSPI_CR_FMODE_MMAP      XSPI_CR_FMODE(3)
-
-/* XSPI DCR1 fields */
-#define XSPI_DCR1_CKMODE_3     (1 << 0)
-#define XSPI_DCR1_FRCK          (1 << 1)
-#define XSPI_DCR1_DLYBYP       (1 << 3)    /* Bypass delay block (DLL) */
-#define XSPI_DCR1_CSHT_SHIFT   (8)
-#define XSPI_DCR1_CSHT_MASK    (0x3F << 8)
-#define XSPI_DCR1_CSHT(n)      (((n) & 0x3F) << 8)
-#define XSPI_DCR1_DEVSIZE_SHIFT (16)
-#define XSPI_DCR1_DEVSIZE_MASK  (0x1F << 16)
-#define XSPI_DCR1_DEVSIZE(n)   (((n) & 0x1F) << 16)
-#define XSPI_DCR1_MTYP_SHIFT   (24)
-#define XSPI_DCR1_MTYP_MASK    (0x7 << 24)
-#define XSPI_DCR1_MTYP(n)      (((n) & 0x7) << 24)
-
-/* XSPI DCR2 fields */
-#define XSPI_DCR2_PRESCALER_SHIFT (0)
-#define XSPI_DCR2_PRESCALER_MASK  (0xFF)
-#define XSPI_DCR2_PRESCALER(n)    (((n) - 1) & 0xFF)
-
-/* XSPI SR fields */
-#define XSPI_SR_TEF             (1 << 0)
-#define XSPI_SR_TCF             (1 << 1)
-#define XSPI_SR_FTF             (1 << 2)
-#define XSPI_SR_SMF             (1 << 3)
-#define XSPI_SR_BUSY            (1 << 5)
-#define XSPI_SR_FLEVEL_SHIFT    (8)
-#define XSPI_SR_FLEVEL_MASK     (0x3F << 8)
-
-/* XSPI FCR fields */
-#define XSPI_FCR_CTEF           (1 << 0)
-#define XSPI_FCR_CTCF           (1 << 1)
-#define XSPI_FCR_CSMF           (1 << 3)
-
-/* XSPI CCR fields (Communication Configuration Register) */
-#define XSPI_CCR_IMODE_SHIFT    (0)
-#define XSPI_CCR_IMODE_MASK     (0x7)
-#define XSPI_CCR_IMODE(n)       (((n) & 0x7) << 0)
-#define XSPI_CCR_ISIZE_SHIFT    (4)
-#define XSPI_CCR_ISIZE(n)       (((n) & 0x3) << 4)
-#define XSPI_CCR_ADMODE_SHIFT   (8)
-#define XSPI_CCR_ADMODE(n)      (((n) & 0x7) << 8)
-#define XSPI_CCR_ADSIZE_SHIFT   (12)
-#define XSPI_CCR_ADSIZE(n)      (((n) & 0x3) << 12)
-#define XSPI_CCR_ABMODE_SHIFT   (16)
-#define XSPI_CCR_ABMODE(n)      (((n) & 0x7) << 16)
-#define XSPI_CCR_ABSIZE_SHIFT   (20)
-#define XSPI_CCR_ABSIZE(n)      (((n) & 0x3) << 20)
-#define XSPI_CCR_DMODE_SHIFT    (24)
-#define XSPI_CCR_DMODE(n)       (((n) & 0x7) << 24)
-#define XSPI_CCR_DDTR           (1 << 27)
-#define XSPI_CCR_SIOO           (1 << 31)
-
-/* XSPI TCR fields */
-#define XSPI_TCR_DCYC_SHIFT    (0)
-#define XSPI_TCR_DCYC_MASK     (0x1F)
-#define XSPI_TCR_DCYC(n)       (((n) & 0x1F) << 0)
-#define XSPI_TCR_DHQC          (1 << 28)
-#define XSPI_TCR_SSHIFT        (1 << 30)
-
-/* SPI mode values: 0=none, 1=single, 2=dual, 3=quad, 4=octal */
-#define XSPI_MODE_NONE         0
-#define XSPI_MODE_SINGLE       1
-#define XSPI_MODE_DUAL         2
-#define XSPI_MODE_QUAD         3
-#define XSPI_MODE_OCTAL        4
-
+/* OCTOSPI bits not defined in spi_drv_stm32.h */
+#define OCTOSPI_CR_FMODE_MMAP   OCTOSPI_CR_FMODE(3) /* Memory-mapped mode */
+#define OCTOSPI_SR_TEF          (1 << 0)  /* Transfer Error Flag */
+#define OCTOSPI_FCR_CTEF        (1 << 0)  /* Clear Transfer Error Flag */
+#define OCTOSPI_FCR_CTCF        (1 << 1)  /* Clear Transfer Complete Flag */
+#define OCTOSPI_FCR_CSMF        (1 << 3)  /* Clear Status Match Flag */
+#define OCTOSPI_DCR1_DLYBYP     (1 << 3)  /* Bypass delay block (N6-specific) */
 
 /*** XSPIM (XSPI I/O Manager) ***/
 #define XSPIM_BASE              (0x5802B400UL)
 #define XSPIM_CR                (*(volatile uint32_t *)(XSPIM_BASE + 0x00))
 
 /*** NOR Flash Commands (Macronix MX25UM51245G) ***/
-/* Single-SPI mode commands (initial boot) */
-#define NOR_CMD_WRITE_ENABLE    0x06
-#define NOR_CMD_WRITE_DISABLE   0x04
-#define NOR_CMD_READ_SR         0x05
-#define NOR_CMD_READ_ID         0x9F
-#define NOR_CMD_FAST_READ_4B    0x0C
-#define NOR_CMD_PAGE_PROG_4B    0x12
-#define NOR_CMD_SECTOR_ERASE_4B 0x21
-#define NOR_CMD_BLOCK_ERASE_4B  0xDC
-#define NOR_CMD_RESET_ENABLE    0x66
-#define NOR_CMD_RESET_MEMORY    0x99
+/* Same commands as src/qspi_flash.c, using 4-byte address variants
+ * (0x0C/0x12/0x21) instead of entering 4-byte address mode. */
+#define WRITE_ENABLE_CMD        0x06U
+#define READ_SR_CMD             0x05U
+#define FAST_READ_4B_CMD        0x0CU
+#define PAGE_PROG_4B_CMD        0x12U
+#define SEC_ERASE_4B_CMD        0x21U   /* 4KB sector erase, 4-byte addr */
+#define RESET_ENABLE_CMD        0x66U
+#define RESET_MEMORY_CMD        0x99U
 
 /* NOR flash status register bits */
-#define NOR_SR_WIP              (1 << 0)
-#define NOR_SR_WEL              (1 << 1)
+#define FLASH_SR_BUSY           (1 << 0)    /* Write-in-progress */
+#define FLASH_SR_WRITE_EN       (1 << 1)    /* Write enable latch */
 
 /* NOR flash geometry */
-#define NOR_PAGE_SIZE           256
-#define NOR_SECTOR_SIZE         0x1000      /* 4KB */
-#define NOR_BLOCK_SIZE          0x10000     /* 64KB */
-#define NOR_DEVICE_SIZE         (64 * 1024 * 1024) /* 64MB */
-#define NOR_DEVICE_SIZE_LOG2    26          /* XSPI DEVSIZE: 2^26 = 64MB */
+#define FLASH_PAGE_SIZE         256
+#define FLASH_SECTOR_SIZE       0x1000      /* 4KB */
+#define FLASH_DEVICE_SIZE       (64 * 1024 * 1024) /* 64MB */
+#define FLASH_DEVICE_SIZE_LOG2  26          /* DEVSIZE: 2^26 = 64MB */
 
 
-/*** USART1 (Debug UART) ***/
+/*** USART — parameterized by base address ***/
 #define USART1_BASE             (0x52001000UL)
 
-#define USART1_CR1              (*(volatile uint32_t *)(USART1_BASE + 0x00))
-#define USART1_CR2              (*(volatile uint32_t *)(USART1_BASE + 0x04))
-#define USART1_CR3              (*(volatile uint32_t *)(USART1_BASE + 0x08))
-#define USART1_BRR              (*(volatile uint32_t *)(USART1_BASE + 0x0C))
-#define USART1_ISR              (*(volatile uint32_t *)(USART1_BASE + 0x1C))
-#define USART1_ICR              (*(volatile uint32_t *)(USART1_BASE + 0x20))
-#define USART1_RDR              (*(volatile uint32_t *)(USART1_BASE + 0x24))
-#define USART1_TDR              (*(volatile uint32_t *)(USART1_BASE + 0x28))
+#define UART_CR1(base)          (*(volatile uint32_t *)((base) + 0x00))
+#define UART_CR2(base)          (*(volatile uint32_t *)((base) + 0x04))
+#define UART_CR3(base)          (*(volatile uint32_t *)((base) + 0x08))
+#define UART_BRR(base)          (*(volatile uint32_t *)((base) + 0x0C))
+#define UART_ISR(base)          (*(volatile uint32_t *)((base) + 0x1C))
+#define UART_ICR(base)          (*(volatile uint32_t *)((base) + 0x20))
+#define UART_RDR(base)          (*(volatile uint32_t *)((base) + 0x24))
+#define UART_TDR(base)          (*(volatile uint32_t *)((base) + 0x28))
 
 #define USART_CR1_UE            (1 << 0)
 #define USART_CR1_RE            (1 << 2)

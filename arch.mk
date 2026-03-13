@@ -357,7 +357,7 @@ else
   endif
   ifeq ($(CORTEX_M55),1)
     CORTEX_M33=1
-    CFLAGS+=-mcpu=cortex-m55
+    CFLAGS+=-mcpu=cortex-m55 -DCORTEX_M55
     LDFLAGS+=-mcpu=cortex-m55
   endif
   ifeq ($(CORTEX_M33),1)
