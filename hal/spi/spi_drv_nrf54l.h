@@ -48,6 +48,10 @@
     #define SPI_MISO_PIN 27
 #endif
 
+#ifndef SPI_CS_TPM
+    #define SPI_CS_TPM         SPI_CS_PIN
+#endif
+
 #define SPI_CS_FLASH           SPI_CS_PIN
 #define SPI_CS_PIO_BASE        SPI_CS_PORT
 #define SPI_CS_TPM_PIO_BASE    SPI_CS_PORT

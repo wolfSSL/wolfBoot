@@ -22,6 +22,7 @@
 #ifdef TARGET_nrf54l
 
 #include <stdint.h>
+#include <inttypes.h>
 
 #include <string.h>
 
@@ -67,8 +68,8 @@ static void uart_init_device(int device, uint32_t bitrate, uint8_t data, char pa
                      ((port << UART_PSEL_RXD_PORT_Pos) & UART_PSEL_RXD_PORT_Msk);
     UART_PSEL_CTS(device) = UART_PSEL_CTS_CONNECT_Disconnected;
     UART_PSEL_RTS(device) = UART_PSEL_RTS_CONNECT_Disconnected;
-    UART_BAUDRATE(device) = UART_BAUDRATE_BAUDRATE_Baud115200;
-    UART_CONFIG(device) = UART_CONFIG_8N1; /* 8N1, no HW flow control */
+    UART_BAUDRATE(device) = UART_BAUDRATE_VALUE(bitrate);
+    UART_CONFIG(device) = UART_CONFIG_VALUE(data, parity, stop);
 
     UART_ENABLE(device) = UART_ENABLE_ENABLE_Enabled;
 }
@@ -99,6 +100,12 @@ void uart_write_raw(int device, const char* buffer, unsigned int sz)
                (UART_EVENTS_DMA_TX_BUSERROR(device) == 0))
             ;
 
+        if (UART_EVENTS_DMA_TX_BUSERROR(device) != 0) {
+            UART_TASKS_DMA_TX_STOP(device) =
+                UART_TASKS_DMA_TX_STOP_STOP_Trigger;
+            break;
+        }
+
         sz -= xfer;
         buffer += xfer;
     }
@@ -109,13 +116,18 @@ void uart_write_device(int device, const char* buf, unsigned int sz)
     static char buffer[UART_WRITE_BUF_SIZE];
     int bufsz = 0;
 
-    for(int i=0; i<(int)sz && bufsz < UART_WRITE_BUF_SIZE; i++)
-    {
+    for (int i = 0; i < (int)sz && bufsz < UART_WRITE_BUF_SIZE; i++) {
         char ch = (char) buf[i];
-        if(ch == '\r')
+
+        if (ch == '\r')
             continue;
-        if(ch == '\n')
+
+        if (ch == '\n') {
+            if (bufsz >= (UART_WRITE_BUF_SIZE - 1))
+                break;
+
             buffer[bufsz++] = '\r';
+        }
         buffer[bufsz++] = ch;
     }
     uart_write_raw(device, buffer, bufsz);
@@ -299,6 +311,9 @@ void uart_init(void)
 static uintptr_t ext_flash_addr_calc(uintptr_t address)
 {
     /* offset external flash addresses by the update partition address */
+    if (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
+        return 0;
+    }
     address -= WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     return address;
 }
@@ -307,7 +322,8 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
 #ifdef DEBUG_FLASH
     uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Write: Len %d, Addr 0x%x (off 0x%x) -> 0x%x\n",
+    wolfBoot_printf("Ext Write: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
+            ") -> %p\n",
         len, address, addr, data);
 #endif
     return 0;
@@ -317,7 +333,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
 #ifdef DEBUG_FLASH
     uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Read: Len %d, Addr 0x%x (off 0x%x) -> %p\n",
+    wolfBoot_printf("Ext Read: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
+            ") -> %p\n",
         len, address, addr, data);
 #endif
     memset(data, FLASH_BYTE_ERASED, len);
@@ -328,7 +345,8 @@ int ext_flash_erase(uintptr_t address, int len)
 {
 #ifdef DEBUG_FLASH
     uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Erase: Len %d, Addr 0x%x (off 0x%x)\n",
+    wolfBoot_printf("Ext Erase: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
+            ")\n",
         len, address, addr);
 #endif
     return 0;

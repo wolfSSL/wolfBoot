@@ -27,7 +27,7 @@
 
 #ifdef TARGET_nrf54l
 
-#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
+#if defined(SPI_FLASH)
 
 #include "hal/nrf54l.h"
 #include "hal/spi/spi_drv_nrf54l.h"
@@ -85,10 +85,14 @@ void RAMFUNCTION spi_write(const char byte)
     SPI_DMA_TX_LIST = 0;
 
     SPI_TASKS_START = SPIM_TASKS_START_TASKS_START_Trigger;
-    while (SPI_EVENTS_END == 0)
+    while (SPI_EVENTS_END == 0 &&
+            SPI_EVENTS_DMA_RX_BUSERROR == 0 &&
+            SPI_EVENTS_DMA_TX_BUSERROR == 0)
         ;
     SPI_TASKS_STOP = SPIM_TASKS_STOP_TASKS_STOP_Trigger;
-    while (SPI_EVENTS_STOPPED == 0)
+    while (SPI_EVENTS_STOPPED == 0 &&
+            SPI_EVENTS_DMA_RX_BUSERROR == 0 &&
+            SPI_EVENTS_DMA_TX_BUSERROR == 0)
         ;
     SPI_EVENTS_STOPPED = 0;
     spi_rx_ready = 1;
@@ -144,21 +148,5 @@ void spi_release(void)
 
 }
 
-#ifdef WOLFBOOT_TPM
-int spi_xfer(int cs, const uint8_t* tx, uint8_t* rx, uint32_t sz, int flags)
-{
-    uint32_t i;
-    spi_cs_on(SPI_CS_TPM_PIO_BASE, cs);
-    for (i = 0; i < sz; i++) {
-        spi_write((const char)tx[i]);
-        rx[i] = spi_read();
-    }
-    if (!(flags & SPI_XFER_FLAG_CONTINUE)) {
-        spi_cs_off(SPI_CS_TPM_PIO_BASE, cs);
-    }
-    return 0;
-}
-#endif /* WOLFBOOT_TPM */
-
-#endif /* SPI_FLASH || WOLFBOOT_TPM */
+#endif /* SPI_FLASH */
 #endif /* TARGET_nrf54l */

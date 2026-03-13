@@ -379,9 +379,13 @@ static inline int hal_uart_pin_num_rx(int device)
 #define UART_PSEL_CTS_CONNECT_Disconnected     (0x1UL << 31)
 #define UART_PSEL_RTS_CONNECT_Disconnected     (0x1UL << 31)
 
-#define UART_CONFIG_FRAMESIZE_Pos              9UL
-#define UART_CONFIG_FRAMESIZE_8bit             0x8UL
-#define UART_CONFIG_8N1                        (UART_CONFIG_FRAMESIZE_8bit << UART_CONFIG_FRAMESIZE_Pos)
+#define UART_CONFIG_VALUE(framesize, parity, stop) \
+        ((framesize << 9UL) | \
+        ((parity == 'E') ? 0x00E : \
+         (parity == 'O') ? 0x10E : \
+                           0x000) | \
+        ((stop == 2) ? 0x10 : \
+                       0x00))
 
 #define UART_TASKS_DMA_TX_START_START_Trigger  0x1UL
 #define UART_TASKS_DMA_TX_STOP_STOP_Trigger    0x1UL
@@ -389,9 +393,24 @@ static inline int hal_uart_pin_num_rx(int device)
 #define UART_TASKS_DMA_RX_START_START_Trigger  0x1UL
 #define UART_TASKS_DMA_RX_STOP_STOP_Trigger    0x1UL
 
-#define UART_BAUDRATE_BAUDRATE_Baud115200      0x01D60000UL
-
-#define BAUD_115200  UART_BAUDRATE_BAUDRATE_Baud115200
+#define UART_BAUDRATE_VALUE(rate) (rate == 1200)    ? 0x0004F000 : \
+                            (rate == 2400)    ? 0x0009D000 : \
+                            (rate == 4800)    ? 0x0013B000 : \
+                            (rate == 9600)    ? 0x00275000 : \
+                            (rate == 14400)   ? 0x003AF000 : \
+                            (rate == 19200)   ? 0x004EA000 : \
+                            (rate == 28800)   ? 0x0075C000 : \
+                            (rate == 31250)   ? 0x00800000 : \
+                            (rate == 38400)   ? 0x009D0000 : \
+                            (rate == 56000)   ? 0x00E50000 : \
+                            (rate == 57600)   ? 0x00EB0000 : \
+                            (rate == 76800)   ? 0x013A9000 : \
+                            (rate == 115200)  ? 0x01D60000 : \
+                            (rate == 230400)  ? 0x03B00000 : \
+                            (rate == 250000)  ? 0x04000000 : \
+                            (rate == 460800)  ? 0x07400000 : \
+                            (rate == 921600)  ? 0x0F000000 : \
+                            (rate == 1000000) ? 0x10000000 : 0
 
 /* Nordic PMIC */
 #define PMIC_TWIM_PORT                1
