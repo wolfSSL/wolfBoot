@@ -35,10 +35,6 @@
 #include "hal/armv8m_tz.h"
 #endif
 
-#ifndef DEBUG_UART
-#define DEBUG_UART      1
-#endif
-
 /* UART */
 
 #ifdef DEBUG_UART
