@@ -809,9 +809,7 @@ static whNvmFlashContext nvmFlashCtx[1]  = {{0}};
 static whNvmCb           nvmCb[1] = {WH_NVM_FLASH_CB};
 static whNvmContext      nvmCtx[1] = {0};
 
-static whServerCryptoContext cryptoCtx[1] = {{
-    .devId = INVALID_DEVID, /* HSM_DEVID once CCB enabled */
-}};
+static whServerCryptoContext cryptoCtx[1] = {0};
 
 /* Global server context */
 whServerContext hsmServerCtx = {0};
