@@ -317,5 +317,4 @@
 
 #define NVM_FLASH_WRITEONCE
 /*#define DEBUG_UART*/
-/*#define PRINTF_ENABLED*/
 #endif /* !H_USER_SETTINGS_ */

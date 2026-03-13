@@ -158,11 +158,28 @@ Key BSP settings configured above (`wolfBoot/ra_cfg/fsp_cfg/bsp/bsp_cfg.h`):
 
 wolfBoot initialises the FACI HP directly; **no FSP flash stack (`g_flash0`) is required**.
 
-To enable debug output over UART (SCI7, P613=TXD7, J23 connector), edit `wolfBoot/user_settings.h`:
+#### 2-3) Enable Debug UART Output (optional)
+
+Defining `DEBUG_UART` enables `wolfBoot_printf()` output over SCI7.
+Edit `wolfBoot/user_settings.h` and uncomment both lines:
+
 ```c
 #define DEBUG_UART
 #define PRINTF_ENABLED
 ```
+
+**UART channel and pin assignment (EK-RA6M4):**
+
+| Signal | Port pin | Board connector | Note |
+|:--|:--|:--|:--|
+| TXD7 | P613 | J23 Pin2 (silk: TX►0) | Connect to RXD of USB-UART adapter |
+| RXD7 | P614 | J23 Pin1 (silk: RX◄0) | Connect to TXD of USB-UART adapter |
+| GND  | —    | J24 Pin7 | Common ground |
+
+**Terminal settings:** 115200 bps, 8N1, no flow control.
+
+> **Note**: SCI7 on RA6M4 uses **PCLKA (100 MHz)**, not PCLKB (50 MHz).
+> The BRR value in `hal/renesas-ra.h` is calculated accordingly (`RA_PCLKA_SCI = 100000000U`).
 
 #### 2-2) Modify wolfBoot hal_entry.c
 
