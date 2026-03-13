@@ -941,8 +941,20 @@ ifeq ($(TARGET),aurix_tc3xx)
 
 
   ifeq ($(WOLFHSM_SERVER),1)
-    APP_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
     APP_OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o
+  endif
+
+  # wolfHSM TC3xx port objects needed by the HAL (aurix_tc3xx.c)
+  ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
+    APP_OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_common.o \
+                $(WOLFHSM_INFINEON_TC3XX)/port/tchsm_hsmhost.o \
+                $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+  endif
+
+  ifeq ($(WOLFHSM_CLIENT),1)
+    APP_OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/client/hsm_ipc.o \
+                $(WOLFHSM_INFINEON_TC3XX)/port/client/io.o \
+                $(WOLFHSM_INFINEON_TC3XX)/port/client/tchsm_hh_host.o
   endif
 endif
 
