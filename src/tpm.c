@@ -229,13 +229,35 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 
-#ifndef WOLFBOOT_NO_PARTITIONS
+#if defined(WOLFBOOT_MEASURED_BOOT_APP_PARTITION) || defined(STAGE1_AUTH)
+    /* measure the boot (application) partition */
+    #ifndef WOLFBOOT_NO_PARTITIONS
+        #define SELF_HASH_ADDR  ((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS)
+        #define SELF_HASH_SZ    ((uint32_t)WOLFBOOT_PARTITION_SIZE)
+    #endif
+#elif defined(ARCH_SIM)
+    /* Simulator: no linker script, use bootloader partition region */
+    #if defined(WOLFBOOT_PARTITION_BOOT_ADDRESS) && defined(ARCH_FLASH_OFFSET)
+        #define SELF_HASH_ADDR  ((uintptr_t)ARCH_FLASH_OFFSET)
+        #define SELF_HASH_SZ    ((uint32_t)((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS - \
+                                            (uintptr_t)ARCH_FLASH_OFFSET))
+    #endif
+#else
+    /* Default: measure wolfBoot's own code using linker script symbols */
+    extern unsigned int _start_text;
+    extern unsigned int _stored_data;
+    #define SELF_HASH_ADDR  ((uintptr_t)&_start_text)
+    #define SELF_HASH_SZ    ((uint32_t)((uintptr_t)&_stored_data - \
+                                        (uintptr_t)&_start_text))
+#endif
+
+#ifdef SELF_HASH_ADDR
 #ifdef WOLFBOOT_HASH_SHA256
 #include <wolfssl/wolfcrypt/sha256.h>
 static int self_sha256(uint8_t *hash)
 {
-    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
+    uintptr_t p = SELF_HASH_ADDR;
+    uint32_t sz = SELF_HASH_SZ;
     uint32_t blksz, position = 0;
     wc_Sha256 sha256_ctx;
 
@@ -244,7 +266,8 @@ static int self_sha256(uint8_t *hash)
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (position + blksz > sz)
             blksz = sz - position;
-    #if defined(EXT_FLASH) && defined(NO_XIP)
+    #if defined(EXT_FLASH) && defined(NO_XIP) && \
+        defined(WOLFBOOT_MEASURED_BOOT_APP_PARTITION)
         rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
         if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
             return -1;
@@ -264,8 +287,8 @@ static int self_sha256(uint8_t *hash)
 #include <wolfssl/wolfcrypt/sha512.h>
 static int self_sha384(uint8_t *hash)
 {
-    uintptr_t p = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t sz = (uint32_t)WOLFBOOT_PARTITION_SIZE;
+    uintptr_t p = SELF_HASH_ADDR;
+    uint32_t sz = SELF_HASH_SZ;
     uint32_t blksz, position = 0;
     wc_Sha384 sha384_ctx;
 
@@ -274,7 +297,8 @@ static int self_sha384(uint8_t *hash)
         blksz = WOLFBOOT_SHA_BLOCK_SIZE;
         if (position + blksz > sz)
             blksz = sz - position;
-    #if defined(EXT_FLASH) && defined(NO_XIP)
+    #if defined(EXT_FLASH) && defined(NO_XIP) && \
+        defined(WOLFBOOT_MEASURED_BOOT_APP_PARTITION)
         rc = ext_flash_read(p, ext_hash_block, WOLFBOOT_SHA_BLOCK_SIZE);
         if (rc != WOLFBOOT_SHA_BLOCK_SIZE)
             return -1;
@@ -290,7 +314,7 @@ static int self_sha384(uint8_t *hash)
     return 0;
 }
 #endif /* HASH type */
-#endif /* WOLFBOOT_NO_PARTITIONS */
+#endif /* SELF_HASH_ADDR */
 
 /**
  * @brief Extends a PCR in the TPM with a hash.
@@ -1434,8 +1458,9 @@ int wolfBoot_tpm2_init(void)
     }
 #endif /* WOLFBOOT_TPM_KEYSTORE | WOLFBOOT_TPM_SEAL */
 
-#if defined(WOLFBOOT_MEASURED_BOOT) && !defined(WOLFBOOT_NO_PARTITIONS)
-    /* hash wolfBoot and extend PCR */
+#if defined(WOLFBOOT_MEASURED_BOOT) && defined(SELF_HASH_ADDR)
+    /* measured boot: hash wolfBoot code (or boot partition if
+     * WOLFBOOT_MEASURED_BOOT_APP_PARTITION) and extend PCR */
     if (rc == 0) {
         rc = self_hash(digest);
         if (rc == 0) {
@@ -1445,7 +1470,7 @@ int wolfBoot_tpm2_init(void)
             wolfBoot_printf("Error %d performing wolfBoot measurement!\n", rc);
         }
     }
-#endif /* defined(WOLFBOOT_MEASURED_BOOT) && !defined(WOLFBOOT_NO_PARTITIONS) */
+#endif /* WOLFBOOT_MEASURED_BOOT && SELF_HASH_ADDR */
 
     return rc;
 }
