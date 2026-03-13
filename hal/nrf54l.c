@@ -308,60 +308,6 @@ void uart_init(void)
 }
 #endif
 
-static uintptr_t ext_flash_addr_calc(uintptr_t address)
-{
-    /* offset external flash addresses by the update partition address */
-    if (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS) {
-        return 0;
-    }
-    address -= WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-    return address;
-}
-
-int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
-{
-#ifdef DEBUG_FLASH
-    uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Write: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
-            ") -> %p\n",
-        len, address, addr, data);
-#endif
-    return 0;
-}
-
-int ext_flash_read(uintptr_t address, uint8_t *data, int len)
-{
-#ifdef DEBUG_FLASH
-    uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Read: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
-            ") -> %p\n",
-        len, address, addr, data);
-#endif
-    memset(data, FLASH_BYTE_ERASED, len);
-    return len;
-}
-
-int ext_flash_erase(uintptr_t address, int len)
-{
-#ifdef DEBUG_FLASH
-    uintptr_t addr = ext_flash_addr_calc(address);
-    wolfBoot_printf("Ext Erase: Len %d, Addr 0x%" PRIxPTR " (off 0x%" PRIxPTR
-            ")\n",
-        len, address, addr);
-#endif
-    return 0;
-}
-
-void ext_flash_lock(void)
-{
-    /* no op */
-}
-
-void ext_flash_unlock(void)
-{
-    /* no op */
-}
-
 static void high_freq_clock_init(void)
 {
     /* Start the HFXO and wait until it is running */

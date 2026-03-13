@@ -24,28 +24,28 @@
 
 /* Default pin-mux matches the nRF54L15-DK */
 #ifndef SPI_CS_PORT
-    #define SPI_CS_PORT 0
+    #define SPI_CS_PORT 2
 #endif
 #ifndef SPI_CS_PIN
-    #define SPI_CS_PIN 25
+    #define SPI_CS_PIN 5
 #endif
 #ifndef SPI_SCK_PORT
-    #define SPI_SCK_PORT 0
+    #define SPI_SCK_PORT 2
 #endif
 #ifndef SPI_SCK_PIN
-    #define SPI_SCK_PIN 29
+    #define SPI_SCK_PIN 1
 #endif
 #ifndef SPI_MOSI_PORT
-    #define SPI_MOSI_PORT 0
+    #define SPI_MOSI_PORT 2
 #endif
 #ifndef SPI_MOSI_PIN
-    #define SPI_MOSI_PIN 28
+    #define SPI_MOSI_PIN 2
 #endif
 #ifndef SPI_MISO_PORT
-    #define SPI_MISO_PORT 0
+    #define SPI_MISO_PORT 2
 #endif
 #ifndef SPI_MISO_PIN
-    #define SPI_MISO_PIN 27
+    #define SPI_MISO_PIN 4
 #endif
 
 #ifndef SPI_CS_TPM
