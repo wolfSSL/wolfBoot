@@ -18,6 +18,7 @@ SECURE_LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
 LSCRIPT_IN:=hal/$(TARGET).ld
+L2SRAM_ADDR?=0xF8F00000
 V?=0
 DEBUG?=0
 DEBUG_UART?=0
@@ -527,7 +528,8 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@BOOTLOADER_START@/$(BOOTLOADER_START)/g" | \
 		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g" | \
 		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" | \
-		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" \
+		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
+		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" \
 		> $@
 
 hex: wolfboot.hex

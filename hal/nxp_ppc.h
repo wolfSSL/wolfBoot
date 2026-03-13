@@ -118,13 +118,18 @@
      * CPC SRAM (via CoreNet) is unreliable on cold power cycle —
      * store buffer drains cause bus errors. L1 locked cache is
      * core-local and works reliably from first instruction.
-     * Address chosen below CPC SRAM range, no backing memory needed. */
+     * Address chosen below CPC SRAM range, no backing memory needed.
+     *
+     * VPX3-152: default addresses (0xF8E/F8F) fall within 256MB flash
+     * VA range (0xF0000000-0xFFFFFFFF), causing TLB overlap on e6500.
+     * Relocated below CCSRBAR (0xEF000000) to avoid conflict. */
+#ifdef BOARD_CW_VPX3152
+    #define L1_CACHE_ADDR (0xEE800000UL)
+    #define L2SRAM_ADDR   (0xEE900000UL) /* CPC as SRAM (1MB) */
+#else
     #define L1_CACHE_ADDR (0xF8E00000UL)
-
-    /* T2080 CPC SRAM config - 1MB for ECC P384 stack requirements.
-     * CPC hardware is configured in early ASM but NOT used for stack.
-     * CPC SRAM becomes usable after cache hierarchy is initialized in C. */
     #define L2SRAM_ADDR   (0xF8F00000UL) /* CPC as SRAM (1MB) */
+#endif
     #define L2SRAM_SIZE   (1024UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
@@ -136,6 +141,14 @@
     #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_1M
 
     #define ENABLE_INTERRUPTS
+
+#ifdef BOARD_CW_VPX3152
+    /* Relocate CCSRBAR: default 0xFE000000 (16MB) falls within 256MB flash
+     * VA range 0xF0000000-0xFFFFFFFF. Move to 0xEF000000 (just below flash).
+     * The existing relocation code in boot_ppc_start.S handles the hardware
+     * CCSRBAR register write when CCSRBAR_DEF != CCSRBAR_PHYS. */
+    #define CCSRBAR 0xEF000000UL
+#endif
 
     #define ENABLE_DDR
     #ifndef DDR_SIZE
