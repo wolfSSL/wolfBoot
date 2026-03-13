@@ -118,13 +118,18 @@
      * CPC SRAM (via CoreNet) is unreliable on cold power cycle —
      * store buffer drains cause bus errors. L1 locked cache is
      * core-local and works reliably from first instruction.
-     * Address chosen below CPC SRAM range, no backing memory needed. */
+     * Address chosen below CPC SRAM range, no backing memory needed.
+     *
+     * VPX3-152: default addresses (0xF8E/F8F) fall within 256MB flash
+     * VA range (0xF0000000-0xFFFFFFFF), causing TLB overlap on e6500.
+     * Relocated below CCSRBAR (0xEF000000) to avoid conflict. */
+#ifdef BOARD_CW_VPX3152
+    #define L1_CACHE_ADDR (0xEE800000UL)
+    #define L2SRAM_ADDR   (0xEE900000UL) /* CPC as SRAM (1MB) */
+#else
     #define L1_CACHE_ADDR (0xF8E00000UL)
-
-    /* T2080 CPC SRAM config - 1MB for ECC P384 stack requirements.
-     * CPC hardware is configured in early ASM but NOT used for stack.
-     * CPC SRAM becomes usable after cache hierarchy is initialized in C. */
     #define L2SRAM_ADDR   (0xF8F00000UL) /* CPC as SRAM (1MB) */
+#endif
     #define L2SRAM_SIZE   (1024UL * 1024UL)
 
     #define INITIAL_SRAM_ADDR     L2SRAM_ADDR
@@ -137,10 +142,18 @@
 
     #define ENABLE_INTERRUPTS
 
+#ifdef BOARD_CW_VPX3152
+    /* Relocate CCSRBAR: default 0xFE000000 (16MB) falls within 256MB flash
+     * VA range 0xF0000000-0xFFFFFFFF. Move to 0xEF000000 (just below flash).
+     * The existing relocation code in boot_ppc_start.S handles the hardware
+     * CCSRBAR register write when CCSRBAR_DEF != CCSRBAR_PHYS. */
+    #define CCSRBAR 0xEF000000UL
+#endif
+
     #define ENABLE_DDR
     #ifndef DDR_SIZE
     #ifdef BOARD_CW_VPX3152
-    #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* TODO: confirm from CS_BNDS dump (4/8/16 GB) */
+    #define DDR_SIZE (4096ULL * 1024ULL * 1024ULL) /* CW VPX3-152: 4 GB (CS0_BNDS=0x000000FF, CS1 disabled) */
     #else
     #define DDR_SIZE (8192ULL * 1024ULL * 1024ULL) /* T2080 RDB / NAII 68PPC2: 8 GB */
     #endif
@@ -158,13 +171,13 @@
      * RAMFUNCTION code continues to work after CPC becomes L2 cache. */
     #define DDR_RAMCODE_ADDR  0x03000000UL       /* 48MB into DDR */
 
-    /* Flash base address and size — may differ between board variants.
-     * TODO: Confirm VPX3-152 flash mapping from IFC CSPR(0)/AMASK(0) dump.
-     * If the new board uses a different base address (e.g. 0xF0000000 for
-     * 256 MB flash), update the BOARD_CW_VPX3152 values and uncomment. */
-#if 0 && defined(BOARD_CW_VPX3152)
-    #define FLASH_BASE_ADDR      0xF0000000UL  /* TODO: from IFC dump */
-    #define FLASH_BASE_PHYS_HIGH 0x0ULL
+    /* Flash base address and size.
+     * CW VPX3-152: 256 MB NOR at 0xF_F000_0000
+     *   Confirmed from U-Boot: IFC CSPR(0)=0xF0000105 (EXT=0xF), AMASK(0)=0xF0000000,
+     *   LAW0: addr=0xF_F000_0000, size=256MB, target=IFC. */
+#ifdef BOARD_CW_VPX3152
+    #define FLASH_BASE_ADDR      0xF0000000UL  /* 256MB NOR flash (0xF0000000-0xFFFFFFFF) */
+    #define FLASH_BASE_PHYS_HIGH 0xFULL
     #define FLASH_LAW_SIZE       LAW_SIZE_256MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
 #else
