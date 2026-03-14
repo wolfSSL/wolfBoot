@@ -382,7 +382,7 @@ static void hal_handle_approtect(void)
 #endif
 }
 
-#ifdef TZEN
+#if defined(TZEN) && TZ_SECURE()
 /* Make a single peripheral non-secure */
 static void spu_periph_set_ns(uint32_t periph_s_addr)
 {
@@ -473,7 +473,7 @@ static void periph_unsecure(void)
     spu_periph_set_ns(GPIO_P0_S_BASE);
     spu_gpio_pins_set_ns(SPU30_BASE, 0);
 }
-#endif /* TZEN */
+#endif /* defined(TZEN) && TZ_SECURE() */
 
 void hal_init(void)
 {
@@ -486,7 +486,7 @@ void hal_init(void)
     clock_init();
 #endif
 
-#ifdef TZEN
+#if defined(TZEN) && TZ_SECURE()
     hal_tz_init();
 #endif
 
@@ -500,7 +500,7 @@ void hal_prepare_boot(void)
 {
     clock_deinit();
 
-#ifdef TZEN
+#if defined(TZEN) && TZ_SECURE()
     periph_unsecure();
     DSB();
     ISB();
