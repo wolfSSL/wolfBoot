@@ -27,6 +27,12 @@
 #include <string.h>
 
 void uart_write_device(int device, const char* buf, unsigned int sz);
+void uart_write(const char* buf, unsigned int sz);
+#if (UART_FLASH)
+int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
+#else
+void uart_init(void);
+#endif
 
 
 #if !defined(TZEN) || !defined(NONSECURE_APP)
