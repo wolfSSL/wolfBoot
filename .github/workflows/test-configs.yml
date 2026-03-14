@@ -167,6 +167,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf5340_net.config
 
+  nrf54l15_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54l15.config
+
+  nrf54l15_wolfcrypt_tz_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54l15-wolfcrypt-tz.config
+
   nxp_p1021_test:
     uses: ./.github/workflows/test-build.yml
     with:

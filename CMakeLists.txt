@@ -395,6 +395,7 @@ if(NOT DEFINED ARM_TARGETS)
                             nrf52840
                             nrf5340
                             nrf5340_net
+                            nrf54l
                             rp2350
                             sama5d3
                             same51
