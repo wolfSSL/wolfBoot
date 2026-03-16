@@ -76,6 +76,23 @@ static void periph_unsecure(void)
 }
 #endif
 
+static void hal_flash_fix_ecc(void)
+{
+    uint8_t page_buf[512];
+    uint32_t addr;
+    uint32_t start = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t end   = WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE;
+
+    memset(page_buf, 0xFF, sizeof(page_buf));
+
+    for (addr = start; addr < end; addr += pflash_page_size) {
+        if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
+                == kStatus_FLASH_Success) {
+            FLASH_Program(&pflash, addr, page_buf, pflash_page_size);
+        }
+    }
+}
+
 void hal_init(void)
 {
 #ifdef __WOLFBOOT
@@ -91,6 +108,7 @@ void hal_init(void)
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
     FLASH_Init(&pflash);
+    hal_flash_fix_ecc();
 #endif
 
 #if defined(TZEN) && !defined(NONSECURE_APP)
@@ -120,16 +138,41 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    if (
-        address % pflash_page_size == 0 &&
-        len % pflash_page_size == 0 &&
-        FLASH_Program(&pflash, address, data, len) == kStatus_FLASH_Success
-    )
-    {
-        return 0;
+    uint8_t page_buf[512];
+    uint32_t page_addr;
+    uint32_t offset;
+    uint32_t chunk;
+
+    while (len > 0) {
+        page_addr = address & ~(pflash_page_size - 1);
+        offset = address - page_addr;
+        chunk = pflash_page_size - offset;
+        if ((uint32_t)len < chunk)
+            chunk = (uint32_t)len;
+
+        if (FLASH_VerifyErase(&pflash, page_addr, pflash_page_size)
+                == kStatus_FLASH_Success) {
+            memset(page_buf, 0xFF, pflash_page_size);
+        } else {
+            memcpy(page_buf, (void *)page_addr, pflash_page_size);
+
+            if (FLASH_Erase(&pflash, page_addr, pflash_page_size,
+                    kFLASH_ApiEraseKey) != kStatus_FLASH_Success)
+                return -1;
+        }
+
+        memcpy(page_buf + offset, data, chunk);
+
+        if (FLASH_Program(&pflash, page_addr, page_buf, pflash_page_size)
+                != kStatus_FLASH_Success)
+            return -1;
+
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
     }
 
-    return -1;
+    return 0;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -142,26 +185,26 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    if (
-        address % pflash_page_size == 0 &&
-        len % pflash_page_size == 0 &&
-        FLASH_Erase(&pflash, address, len, kFLASH_ApiEraseKey)
-            == kStatus_FLASH_Success
-    )
-    {
-        return 0;
+    uint8_t page_buf[512];
+    uint32_t pos;
+
+    if (address % pflash_page_size != 0 || len % pflash_page_size != 0)
+        return -1;
+
+    memset(page_buf, 0xFF, sizeof(page_buf));
+
+    for (pos = address; pos < address + (uint32_t)len; pos += pflash_page_size) {
+        if (FLASH_Erase(&pflash, pos, pflash_page_size, kFLASH_ApiEraseKey)
+                != kStatus_FLASH_Success)
+            return -1;
+
+        if (FLASH_Program(&pflash, pos, page_buf, pflash_page_size)
+                != kStatus_FLASH_Success)
+            return -1;
     }
 
-    return -1;
+    return 0;
 }
-
-#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
-int RAMFUNCTION hal_flash_is_erased_at(uint32_t address)
-{
-    address &= ~(WOLFBOOT_SECTOR_SIZE - 1);
-    return FLASH_VerifyErase(&pflash, address, WOLFBOOT_SECTOR_SIZE) == kStatus_FLASH_Success;
-}
-#endif
 
 #ifdef WOLFCRYPT_SECURE_MODE
 void hal_trng_init(void)

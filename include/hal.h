@@ -88,9 +88,6 @@ uint64_t hal_get_timer_us(void);
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
 void hal_prepare_boot(void);
-#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
-    int hal_flash_is_erased_at(uint32_t address);
-#endif
 
 #ifdef DUALBANK_SWAP
     void hal_flash_dualbank_swap(void);
