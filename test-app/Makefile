@@ -429,17 +429,17 @@ endif
 
 ifeq ($(TARGET),nrf5340)
   ifeq ($(TZEN),1)
-	LSCRIPT_TEMPLATE=ARM-nrf5340-ns.ld
+    LSCRIPT_TEMPLATE=ARM-nrf5340-ns.ld
   else
-	LSCRIPT_TEMPLATE=ARM.ld
+    LSCRIPT_TEMPLATE=ARM.ld
   endif
 endif
 
 ifeq ($(TARGET),nrf54l)
   ifeq ($(TZEN),1)
-	LSCRIPT_TEMPLATE=ARM-nrf54l-ns.ld
+    LSCRIPT_TEMPLATE=ARM-nrf54l-ns.ld
   else
-	LSCRIPT_TEMPLATE=ARM.ld
+    LSCRIPT_TEMPLATE=ARM.ld
   endif
 endif
 
@@ -839,7 +839,7 @@ ifeq ($(TARGET),aurix_tc3xx)
                 $(TC3_DIR)/src/tc3tc_traps.o \
                 $(TC3_DIR)/src/tc3tc.o \
                 $(TC3_DIR)/src/tc3tc_crt.o
-	# Use TC3 app linker script
+    # Use TC3 app linker script
     LSCRIPT_TEMPLATE = tc3tc_app.ld
   endif
 
