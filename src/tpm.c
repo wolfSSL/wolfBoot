@@ -891,7 +891,11 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
     WOLFTPM2_KEYBLOB seal_blob;
     word32 nvAttributes;
 
+    if (authSz < 0)
+        return BAD_FUNC_ARG;
     if (auth == NULL && authSz > 0)
+        return BAD_FUNC_ARG;
+    if (authSz > (int)sizeof(seal_blob.handle.auth.buffer))
         return BAD_FUNC_ARG;
 
     memset(&seal_blob, 0, sizeof(seal_blob));
@@ -899,7 +903,7 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
     seal_blob.handle.auth.size = authSz;
 
     if (auth != NULL)
-        XMEMCPY(seal_blob.handle.auth.buffer, auth, authSz);
+        memcpy(seal_blob.handle.auth.buffer, auth, authSz);
 
     /* creates a sealed keyed hash object (not loaded to TPM) */
     rc = wolfBoot_seal_blob(pubkey_hint, policy, policySz, &seal_blob,
@@ -1085,7 +1089,11 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     #endif
 
         /* if using password auth, set it otherwise use policy auth */
+        if (authSz < 0)
+            return BAD_FUNC_ARG;
         if (auth != NULL && authSz > 0) {
+            if (authSz > (int)sizeof(seal_blob->handle.auth.buffer))
+                return BAD_FUNC_ARG;
             seal_blob->handle.auth.size = authSz;
             memcpy(seal_blob->handle.auth.buffer, auth, authSz);
             wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);

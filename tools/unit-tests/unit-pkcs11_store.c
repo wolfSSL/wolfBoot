@@ -318,6 +318,37 @@ START_TEST(test_cross_sector_write_preserves_length)
 }
 END_TEST
 
+START_TEST(test_delete_object_ignores_metadata_prefix)
+{
+    const int32_t type = DYNAMIC_TYPE_RSA;
+    const uint32_t tok_id = VAULT_HEADER_MAGIC;
+    const uint32_t obj_id = 0x01020308U;
+    uint32_t *words;
+    uint8_t bitmap_before[BITMAP_SIZE];
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    words = (uint32_t *)vault_base;
+    words[0] = VAULT_HEADER_MAGIC;
+    words[1] = obj_id;
+    words[2] = (uint32_t)type;
+    words[3] = 0;
+    words[4] = 0;
+
+    memcpy(bitmap_before, vault_base + sizeof(uint32_t), BITMAP_SIZE);
+
+    delete_object(type, tok_id, obj_id);
+
+    ck_assert_mem_eq(vault_base + sizeof(uint32_t), bitmap_before, BITMAP_SIZE);
+    ck_assert_uint_eq(((uint32_t *)vault_base)[0], VAULT_HEADER_MAGIC);
+    ck_assert_uint_eq(((uint32_t *)vault_base)[1], obj_id);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -325,10 +356,13 @@ Suite *wolfboot_suite(void)
 
     TCase* tcase_store_and_load_objs = tcase_create("store_and_load_objs");
     TCase* tcase_cross_sector_write = tcase_create("cross_sector_write");
+    TCase* tcase_delete_object = tcase_create("delete_object");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
+    tcase_add_test(tcase_delete_object, test_delete_object_ignores_metadata_prefix);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
+    suite_add_tcase(s, tcase_delete_object);
     return s;
 }
 

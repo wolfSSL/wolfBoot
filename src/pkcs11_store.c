@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "hal.h"
+#include "store_sbrk.h"
 
 #ifdef SECURE_PKCS11
 
@@ -72,17 +73,7 @@ void * _sbrk(unsigned int incr)
 {
     static uint8_t *heap = NULL;
     static uint32_t heapsize = (uint32_t)&_heap_size;
-    void *old_heap = heap;
-    (void)heapsize;
-    if (((incr >> 2) << 2) != incr)
-        incr = ((incr >> 2) + 1) << 2;
-
-    if (heap == NULL) {
-        heap = (uint8_t*)&_start_heap;
-        old_heap = heap;
-    } else
-        heap += incr;
-    return old_heap;
+    return wolfboot_store_sbrk(incr, &heap, (uint8_t *)&_start_heap, heapsize);
 }
 #endif
 
@@ -227,7 +218,7 @@ static void check_vault(void)
 
 static void delete_object(int32_t type, uint32_t tok_id, uint32_t obj_id)
 {
-    struct obj_hdr *hdr = (struct obj_hdr *)cached_sector;
+    struct obj_hdr *hdr = (struct obj_hdr *)(cached_sector + STORE_PRIV_HDR_OFFSET);
     check_vault();
     memcpy(cached_sector, vault_base, WOLFBOOT_SECTOR_SIZE);
 
