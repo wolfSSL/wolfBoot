@@ -164,6 +164,12 @@ tools/unit-tests/unit-multiboot
 tools/unit-tests/unit-psa_store
 tools/unit-tests/unit-qspi-flash
 tools/unit-tests/unit-tpm-rsa-exp
+tools/unit-tests/unit-image-nopart
+tools/unit-tests/unit-image-sha3-384
+tools/unit-tests/unit-image-sha384
+tools/unit-tests/unit-store-sbrk
+tools/unit-tests/unit-tpm-blob
+tools/unit-tests/unit-update-disk
 
 
 

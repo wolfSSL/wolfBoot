@@ -793,6 +793,7 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
   LDFLAGS+=--specs=nano.specs
+  WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/pkcs11_store.o
   WOLFCRYPT_OBJS+=src/pkcs11_callable.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
@@ -839,6 +840,7 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
   LDFLAGS+=--specs=nano.specs
+  WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/psa_store.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_ipc.o
