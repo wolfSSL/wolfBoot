@@ -323,7 +323,7 @@ void RAMFUNCTION hal_flash_opt_unlock(void)
         DMB();
         FLASH_OPTKEYR = FLASH_OPTKEY2;
         DMB();
-        while ((FLASH_CR & FLASH_CR_LOCK) != 0)
+        while ((FLASH_OPTCR & FLASH_OPTCR_OPTLOCK) != 0)
             ;
     }
 
