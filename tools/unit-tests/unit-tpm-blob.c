@@ -230,8 +230,20 @@ int wolfTPM2_PolicyRefMake(TPM_ALG_ID pcrAlg, byte* digest, word32* digestSz,
 
 int TPM2_GetHashDigestSize(TPMI_ALG_HASH hashAlg)
 {
-    (void)hashAlg;
-    return 32;
+    switch (hashAlg) {
+        case TPM_ALG_SHA1:
+            return 20;
+        case TPM_ALG_SHA256:
+            return 32;
+        case TPM_ALG_SHA384:
+            return 48;
+        case TPM_ALG_SHA512:
+            return 64;
+        case TPM_ALG_SM3_256:
+            return 32;
+        default:
+            return 0;
+    }
 }
 
 int wolfTPM2_GetKeyTemplate_KeySeal(TPMT_PUBLIC* publicTemplate,
@@ -568,6 +580,25 @@ START_TEST(test_wolfBoot_seal_auth_rejects_oversized_auth)
 }
 END_TEST
 
+START_TEST(test_wolfBoot_seal_auth_rejects_negative_auth_size)
+{
+    uint8_t auth[8] = {0};
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE] = {0};
+    uint8_t policy[sizeof(uint32_t) + 4] = {0};
+    uint8_t secret[8] = {0};
+    int rc;
+
+    rc = wolfBoot_seal_auth(pubkey_hint, policy, sizeof(policy), 0,
+        secret, sizeof(secret), auth, -1);
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(unexpected_nvcreate_calls, 0);
+    ck_assert_int_eq(unexpected_nvwrite_calls, 0);
+    ck_assert_int_eq(unexpected_nvopen_calls, 0);
+    ck_assert_int_eq(unexpected_nvdelete_calls, 0);
+}
+END_TEST
+
 START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
 {
     uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
@@ -610,6 +641,28 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_oversized_auth)
 
     rc = wolfBoot_unseal_blob(pubkey_hint, policy, sizeof(policy), &blob,
         secret, &secret_sz, auth, (int)sizeof(auth));
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_unseal_blob_rejects_negative_auth_size)
+{
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t auth[8] = {0};
+    uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE] = {0};
+    uint8_t policy[sizeof(uint32_t) + 4] = {0};
+    int secret_sz;
+    int rc;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(secret, 0, sizeof(secret));
+    secret_sz = (int)sizeof(secret);
+    current_mode = MOCK_OVERSIZE_PUB;
+
+    rc = wolfBoot_unseal_blob(pubkey_hint, policy, sizeof(policy), &blob,
+        secret, &secret_sz, auth, -1);
 
     ck_assert_int_eq(rc, BAD_FUNC_ARG);
 }
@@ -675,10 +728,12 @@ static Suite *tpm_blob_suite(void)
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_auth);
     tcase_add_test(tc, test_wolfBoot_delete_blob_rejects_oversized_auth);
     tcase_add_test(tc, test_wolfBoot_seal_auth_rejects_oversized_auth);
+    tcase_add_test(tc, test_wolfBoot_seal_auth_rejects_negative_auth_size);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_public_area);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_private_area);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_zeroes_unseal_output);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_oversized_auth);
+    tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_negative_auth_size);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity);
     suite_add_tcase(s, tc);
     return s;
