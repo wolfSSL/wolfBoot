@@ -592,6 +592,29 @@ START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
 }
 END_TEST
 
+START_TEST(test_wolfBoot_unseal_blob_rejects_oversized_auth)
+{
+    WOLFTPM2_KEYBLOB blob;
+    uint8_t auth[sizeof(((WOLFTPM2_KEYBLOB*)0)->handle.auth.buffer) + 1];
+    uint8_t secret[WOLFBOOT_MAX_SEAL_SZ];
+    uint8_t pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE] = {0};
+    uint8_t policy[sizeof(uint32_t) + 4] = {0};
+    int secret_sz;
+    int rc;
+
+    memset(&blob, 0, sizeof(blob));
+    memset(auth, 0x88, sizeof(auth));
+    memset(secret, 0, sizeof(secret));
+    secret_sz = (int)sizeof(secret);
+    current_mode = MOCK_OVERSIZE_PUB;
+
+    rc = wolfBoot_unseal_blob(pubkey_hint, policy, sizeof(policy), &blob,
+        secret, &secret_sz, auth, (int)sizeof(auth));
+
+    ck_assert_int_eq(rc, BAD_FUNC_ARG);
+}
+END_TEST
+
 START_TEST(test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity)
 {
     struct {
@@ -655,6 +678,7 @@ static Suite *tpm_blob_suite(void)
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_public_area);
     tcase_add_test(tc, test_wolfBoot_read_blob_rejects_oversized_private_area);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_zeroes_unseal_output);
+    tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_oversized_auth);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity);
     suite_add_tcase(s, tc);
     return s;

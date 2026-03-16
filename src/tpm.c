@@ -1088,6 +1088,8 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
 
         /* if using password auth, set it otherwise use policy auth */
         if (auth != NULL && authSz > 0) {
+            if (authSz > (int)sizeof(seal_blob->handle.auth.buffer))
+                return BAD_FUNC_ARG;
             seal_blob->handle.auth.size = authSz;
             memcpy(seal_blob->handle.auth.buffer, auth, authSz);
             wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
