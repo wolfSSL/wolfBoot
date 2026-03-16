@@ -158,6 +158,13 @@ tools/unit-tests/unit-string
 tools/unit-tests/unit-update-flash
 tools/unit-tests/unit-update-flash-enc
 tools/unit-tests/unit-update-ram
+tools/unit-tests/unit-boot-x86-fsp
+tools/unit-tests/unit-image-rsa
+tools/unit-tests/unit-multiboot
+tools/unit-tests/unit-psa_store
+tools/unit-tests/unit-qspi-flash
+tools/unit-tests/unit-tpm-rsa-exp
+
 
 
 # Elf preprocessing tools
