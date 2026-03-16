@@ -197,6 +197,26 @@ START_TEST(test_wb_diff_self_match_extends_to_src_b_end)
 }
 END_TEST
 
+START_TEST(test_wb_diff_preserves_trailing_header_margin_for_escape)
+{
+    WB_DIFF_CTX diff_ctx;
+    uint8_t src_a[64] = {0};
+    uint8_t src_b[64] = {0};
+    uint8_t patch[BLOCK_HDR_SIZE + 2] = {0};
+    int ret;
+
+    src_b[0] = ESC;
+
+    ret = wb_diff_init(&diff_ctx, src_a, sizeof(src_a), src_b, 1);
+    ck_assert_int_eq(ret, 0);
+
+    ret = wb_diff(&diff_ctx, patch, BLOCK_HDR_SIZE + 1);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(patch[0], 0);
+}
+END_TEST
+
 static void initialize_buffers(uint8_t *src_a, uint8_t *src_b, size_t size)
 {
     uint32_t pseudo_rand = 0;
@@ -305,6 +325,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_trailing_escape_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_match_extends_to_src_b_end);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_self_match_extends_to_src_b_end);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_preserves_trailing_header_margin_for_escape);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff);
     suite_add_tcase(s, tc_wolfboot_delta);
 

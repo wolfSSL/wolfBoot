@@ -407,6 +407,8 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
     }
     while ((p_off < len - BLOCK_HDR_SIZE) && ctx->off_b < ctx->size_b) {
         if (*(ctx->src_b + ctx->off_b) == ESC) {
+            if ((p_off + 1) >= (len - BLOCK_HDR_SIZE))
+                break;
             *(patch + p_off++) = ESC;
             *(patch + p_off++) = ESC;
         } else {
