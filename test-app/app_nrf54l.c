@@ -4,7 +4,6 @@
  */
 
 #include <stdint.h>
-#include <string.h>
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
