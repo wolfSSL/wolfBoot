@@ -1277,17 +1277,10 @@ uint32_t wolfBoot_image_size(uint8_t *image)
  */
 int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
-    uint32_t *pmagic = (uint32_t *)(image);
-    uint32_t magic = FLASH_WORD_ERASED;
-    if (
-#ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
-        hal_flash_is_erased_at((uintptr_t)pmagic) ||
-#endif
-        (magic = *pmagic) != WOLFBOOT_MAGIC
-    )
-    {
+    uint32_t *magic = (uint32_t *)(image);
+    if (*magic != WOLFBOOT_MAGIC) {
         wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
-            img->part, (unsigned int)magic, img->hdr);
+            img->part, (unsigned int)*magic, img->hdr);
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);

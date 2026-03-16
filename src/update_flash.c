@@ -409,12 +409,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     ext_flash_read((uintptr_t)(boot->hdr + tmpBootPos), (void*)tmpBuffer,
         sizeof(tmpBuffer));
 #else
-# ifdef NO_DIRECT_READ_OF_ERASED_SECTOR
-    if (hal_flash_is_erased_at((uintptr_t)(boot->hdr + tmpBootPos)))
-        memset(tmpBuffer, FLASH_BYTE_ERASED, sizeof(tmpBuffer));
-    else
-# endif
-        memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
+    memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
 #endif
 
     /* Check if the magic trailer exists - indicates an interrupted swap
