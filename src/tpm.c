@@ -893,6 +893,8 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
 
     if (auth == NULL && authSz > 0)
         return BAD_FUNC_ARG;
+    if (authSz > (int)sizeof(seal_blob.handle.auth.buffer))
+        return BAD_FUNC_ARG;
 
     memset(&seal_blob, 0, sizeof(seal_blob));
 
