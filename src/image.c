@@ -1989,7 +1989,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
     /* Finalize SHA calculation */
     final_hash(&ctx, calc_digest);
-    if (memcmp(calc_digest, exp_digest, WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
+    if (!image_CT_compare(exp_digest, calc_digest, WOLFBOOT_SHA_DIGEST_SIZE)) {
         wolfBoot_printf("ELF: [CHECK] SHA verification FAILED\n");
         wolfBoot_printf(
             "ELF: [CHECK] Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
