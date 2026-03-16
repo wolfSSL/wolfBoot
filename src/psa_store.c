@@ -226,7 +226,7 @@ static void check_vault(void)
 
 static void delete_object(int32_t type, uint32_t tok_id, uint32_t obj_id)
 {
-    struct obj_hdr *hdr = (struct obj_hdr *)cached_sector;
+    struct obj_hdr *hdr = (struct obj_hdr *)(cached_sector + STORE_PRIV_HDR_OFFSET);
     check_vault();
     memcpy(cached_sector, vault_base, WOLFBOOT_SECTOR_SIZE);
 
