@@ -219,7 +219,7 @@ target_link_libraries(wolfcrypt target user_settings)
 target_compile_definitions(
     wolfcrypt
     PUBLIC WOLFSSL_USER_SETTINGS
-    PRIVATE ${WOLFCRYPT_DEFS} ${SIGN_OPTIONS})
+    PRIVATE ${WOLFCRYPT_DEFS} ${SIGN_OPTIONS} ${WOLFBOOT_DEFS})
 
 if(WOLFBOOT_SMALL_STACK)
     target_compile_definitions(wolfcrypt PRIVATE WOLFBOOT_SMALL_STACK XMALLOC_USER)
