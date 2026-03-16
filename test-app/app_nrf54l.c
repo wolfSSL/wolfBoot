@@ -50,8 +50,6 @@ static void led_toggle(void)
 void main(void)
 {
     uint32_t version = wolfBoot_current_firmware_version();
-    uint8_t version_bytes[sizeof(version)];
-    memcpy(version_bytes, &version, sizeof(version));
 
     hal_init();
 
@@ -60,10 +58,7 @@ void main(void)
     GPIO_OUTCLR(TEST_LED_PORT) = (1U << TEST_LED_PIN);
 
     uart_init();
-    uart_write("*", 1);
-    for (int i = (int)(sizeof(version_bytes) - 1); i >= 0; i--) {
-        uart_write((const char*)&version_bytes[i], 1);
-    }
+    wolfBoot_printf("Booted firmware version: %d\r\n", version);
 
     for (;;) {
         led_toggle();
