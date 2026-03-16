@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "hal.h"
+#include "store_sbrk.h"
 
 #ifdef SECURE_PKCS11
 
@@ -72,17 +73,7 @@ void * _sbrk(unsigned int incr)
 {
     static uint8_t *heap = NULL;
     static uint32_t heapsize = (uint32_t)&_heap_size;
-    void *old_heap = heap;
-    (void)heapsize;
-    if (((incr >> 2) << 2) != incr)
-        incr = ((incr >> 2) + 1) << 2;
-
-    if (heap == NULL) {
-        heap = (uint8_t*)&_start_heap;
-        old_heap = heap;
-    } else
-        heap += incr;
-    return old_heap;
+    return wolfboot_store_sbrk(incr, &heap, (uint8_t *)&_start_heap, heapsize);
 }
 #endif
 
