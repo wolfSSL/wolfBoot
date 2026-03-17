@@ -676,6 +676,10 @@ endif
 ifeq ($(ARCH),PPC)
   CROSS_COMPILE?=powerpc-linux-gnu-
   LDFLAGS+=-Wl,--build-id=none
+  # Produce a fully-resolved static ELF (no dynamic relocations).
+  # Required for JTAG probes that load ELFs but don't process relocations.
+  CFLAGS+=-fno-pic -fno-pie
+  LDFLAGS+=-no-pie
   CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
