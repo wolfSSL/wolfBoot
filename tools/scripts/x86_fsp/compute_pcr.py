@@ -61,13 +61,21 @@ def get_sha256_hash_of_wolfboot_image(file_path: str):
             return data[4:4+l]
         data = data[4+l:]
 
+def get_sym_addr(elf_file: str, sym_name: str) -> int:
+    """
+    get the address of a symbol from ELF file
+    """
+    symbols = subprocess.check_output(['nm', elf_file]).split(b'\n')
+    matches = list(filter(lambda x: sym_name.encode() in x, symbols))
+    if not matches:
+        return None
+    return int(matches[0].split(b' ')[0], 16)
+
 def get_keystore_sym_addr() -> int:
     """
     get the address of symbol keystore from ELF file image
     """
-    symbols = subprocess.check_output(['nm', 'stage1/loader_stage1.elf']).split(b'\n')
-    _start_keystore = int(list(filter(lambda x: b'_start_keystore' in x, symbols))[0].split(b' ')[0], 16)
-    return _start_keystore
+    return get_sym_addr('stage1/loader_stage1.elf', '_start_keystore')
 
 def pcr_extend(pcr: bytearray, data: bytearray) -> bytearray:
     """
@@ -95,23 +103,25 @@ if __name__ == '__main__':
 
     pcr0 = bytearray(b'\x00'*32)
     if args.target == 'qemu':
+        # self_extend_pcr() in boot_x86_fsp.c
+        # Hashes from _start_keystore to end of 4GB (keystore + vectors)
         keystore_addr = get_keystore_sym_addr()
         keystore_off = addr_to_off(keystore_addr, image_size = len(image))
         ibb = image[keystore_off:]
-        h = hashlib.sha256()
-        h.update(ibb)
-        pcr0_data_hash = h.digest()
-        pcr0 = pcr_extend(b'\x00'*32, pcr0_data_hash)
+        pcr0 = pcr_extend(pcr0, get_sha256_hash(ibb))
 
     print(f"Initial PCR0: {pcr0.hex()}")
 
     is_stage1_auth_enabled = get_config_value(config, 'STAGE1_AUTH') == '1'
     print(f"stage1  auth is {'enabled' if is_stage1_auth_enabled else 'disabled'}")
 
-    if is_stage1_auth_enabled:
+    is_measured_boot = get_config_value(config, 'MEASURED_BOOT') == '1'
+
+    # wolfBoot_image_measure() extends PCR with wolfboot image hash
+    if is_measured_boot:
         wb_hash = get_sha256_hash_of_wolfboot_image('stage1/wolfboot_raw_v1_signed.bin')
         pcr0 = pcr_extend(pcr0, wb_hash)
-        print(f"PCR0 after wolfboot: {pcr0.hex()}")
+        print(f"PCR0 after wolfboot image measure: {pcr0.hex()}")
 
     # the pcrdigest needed by policy_sign tool is the hash of the concatenation of all PCRs involved in the policy.
     # we have only one PCR here

@@ -242,6 +242,10 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
         #define SELF_HASH_SZ    ((uint32_t)((uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS - \
                                             (uintptr_t)ARCH_FLASH_OFFSET))
     #endif
+#elif defined(WOLFBOOT_FSP)
+    /* FSP: stage1 boot_x86_fsp.c handles measurement via self_extend_pcr()
+     * and wolfBoot_image_measure(). Skip generic self-measurement here since
+     * stage2 .data is interleaved with .text making the hash non-deterministic */
 #else
     /* Default: measure wolfBoot's own code using linker script symbols */
     extern unsigned int _start_text;
