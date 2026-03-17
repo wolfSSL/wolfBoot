@@ -53,17 +53,24 @@ SECTIONS
         *(.text*)
         *(.rodata*)
         *(.sdata*)
+        KEEP(*(.keystore))
     } > FLASH
 
-    /* Read-only sections, merged into text segment: */
-    .interp         : { *(.interp) }
-    .hash           : { *(.hash) }
-    .dynsym         : { *(.dynsym) }
-    .dynstr         : { *(.dynstr) }
-    .gnu.version    : { *(.gnu.version) }
-    .gnu.version_r  : { *(.gnu.version_r) }
-    .gnu.hash       : { *(.gnu.hash) }
-    .rela.dyn       : { *(.rela.dyn) }
+    /* Discard dynamic linking sections - not needed for bare-metal.
+     * Ensures the ELF has no relocation sections, so JTAG probes
+     * (e.g. Ronetix PEEDI) can load it without a dynamic linker. */
+    /DISCARD/ :
+    {
+        *(.interp)
+        *(.hash)
+        *(.dynsym)
+        *(.dynstr)
+        *(.gnu.version)
+        *(.gnu.version_r)
+        *(.gnu.hash)
+        *(.rela.dyn)
+        *(.rela.plt)
+    }
 
     /* Store flash location for .ramcode copy */
     _stored_ramcode = .;
