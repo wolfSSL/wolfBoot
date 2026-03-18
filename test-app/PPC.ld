@@ -5,7 +5,6 @@ ENTRY( _app_entry )
 PHDRS
 {
     text PT_LOAD;
-    bss  PT_LOAD;
 }
 
 SECTIONS

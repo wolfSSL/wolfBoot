@@ -488,6 +488,16 @@ ifeq ($(TARGET),nxp_t2080)
 endif
 
 ifeq ($(TARGET),nxp_t1024)
+  ifneq ($(SIGN),NONE)
+    APP_OBJS+=../src/keystore.o
+  endif
+  # PowerPC e5500
+  PPC64=1
+endif
+ifeq ($(TARGET),nxp_t1040)
+  ifneq ($(SIGN),NONE)
+    APP_OBJS+=../src/keystore.o
+  endif
   # PowerPC e5500
   PPC64=1
 endif

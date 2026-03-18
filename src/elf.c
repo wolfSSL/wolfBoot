@@ -67,6 +67,11 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
     uint8_t *entry_off;
     uint32_t ph_offset;
     int is_elf32, is_le, i;
+    /* Cache for program headers: 
+     * Allows safe in-place ELF loading (e.g. RAM boot) where segment 
+     * copies via memmove could overwrite unread headers */
+    uint8_t ph_cache[ELF_MAX_PH * sizeof(elf64_program_header)];
+    uint32_t ph_table_sz;
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Loading elf at %p\r\n", (void*)image);
@@ -118,6 +123,16 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
         return -3; /* program header table out of bounds */
     }
     entry_off = image + ph_offset;
+
+    /* Cache program headers on the stack so that in-place segment copies
+     * (memmove) cannot corrupt headers that have not been read yet.
+     * This is critical for RAM-boot where the ELF buffer address equals
+     * the target virtual address of the first LOAD segment. */
+    ph_table_sz = (uint32_t)entry_count * entry_size;
+    if (entry_count <= ELF_MAX_PH && ph_table_sz <= sizeof(ph_cache)) {
+        memcpy(ph_cache, entry_off, ph_table_sz);
+        entry_off = ph_cache;
+    }
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Program Headers %d (size %d)\r\n", entry_count, entry_size);

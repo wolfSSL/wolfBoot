@@ -2,7 +2,7 @@ OUTPUT_ARCH( "powerpc" )
 
 ENTRY( _reset )
 
-/* Boot ROM out of reset mapped to 0xEFFFF000 */
+/* Boot ROM out of reset mapped to 0xEFFFF000 (top of 128MB NOR) */
 BASE_ADDR = @WOLFBOOT_STAGE1_FLASH_ADDR@;
 
 LOADER_STAGE1_SIZE = @WOLFBOOT_STAGE1_SIZE@;
@@ -18,13 +18,14 @@ MEMORY
     /* Boot Location */
     FLASH (rx) : ORIGIN = BASE_ADDR, LENGTH = LOADER_STAGE1_SIZE
 
-    /* L1 SRAM - 16KB */
-    L1RAM (rwx) : ORIGIN = 0xF8F80000, LENGTH = 0x4000
+    /* L1 locked dcache as initial stack - 16KB */
+    L1RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x4000
 
-    /* Platform SRAM - 160KB */
-    PSRAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x28000
+    /* CPC SRAM - 256KB (CoreNet Platform Cache configured as SRAM) */
+    CPCSRAM (rwx) : ORIGIN = 0xFDFE0000, LENGTH = 0x40000
 
-    /* DDR - 2GB: Start at 16MB to avoid using 0x0 (NULL) addresses */
+    /* DDR - 8GB physical, 32-bit addressing limits window to <2GB.
+     * Start at 16MB to avoid using 0x0 (NULL) addresses */
     DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x7FFFFFFF - 0x1000000
 }
 
@@ -108,8 +109,8 @@ SECTIONS
 
 }
 
-/* Platform SRAM heap/stack */
-PROVIDE(_start_heap = ORIGIN(PSRAM));
-PROVIDE(_end_stack  = ORIGIN(PSRAM) + (LENGTH(PSRAM)));
+/* CPC SRAM heap, L1 locked dcache stack */
+PROVIDE(_start_heap = ORIGIN(CPCSRAM));
+PROVIDE(_end_stack  = ORIGIN(L1RAM) + (LENGTH(L1RAM)));
 
 ASSERT(_stored_data <= BOOTSTRAP_TLB, ".text/.reloc overflow into bootstrap region")

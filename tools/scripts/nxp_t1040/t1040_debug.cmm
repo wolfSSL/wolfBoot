@@ -1,0 +1,182 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T1040 wolfBoot Debug Script
+; @Description:
+;   Brings up the T1040, loads wolfBoot ELF symbols, and sets breakpoints
+;   for source-level debugging. Stage1 runs XIP from NOR flash, then loads
+;   wolfBoot to DDR at 0x7FF00000 for execution.
+; @Chip: T1040
+; Based on demo scripts from Lauterbach
+; ------------------------------------------------------------------------------
+;
+; Prerequisites:
+;   - wolfBoot must already be flashed to NOR (use t1040_flash.cmm)
+;   - wolfboot.elf must be built with debug symbols (DEBUG=1 recommended)
+;
+; Boot flow:
+;   1. Reset vector (0xEFFFFFFC) -> Stage1 bootstrap TLB (0xEFFFF000)
+;   2. Stage1 (0xEFFFC000 XIP) -> sets up DDR, copies wolfBoot to DDR
+;   3. wolfBoot runs from DDR (0x7FF00000)
+; ------------------------------------------------------------------------------
+
+; Base directory for wolfBoot build output (adjust to match your build path)
+&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+
+PRINT "========================================"
+PRINT "T1040 wolfBoot Debug Session"
+PRINT "========================================"
+PRINT ""
+
+; Reset everything
+RESet
+SYStem.RESet
+
+SYStem.BdmClock 15.MHz
+SYStem.CPU T1040
+SYStem.DETECT CPU
+CORE.ASSIGN 1.
+SYStem.Option.FREEZE ON
+SYStem.Option.IMASKASM ON
+
+; Boot from flash — NO RCW override.
+; The boot ROM loads RCW from NOR flash and initializes PLLs properly.
+PRINT "Booting from flash (PLLs initialized by boot ROM)..."
+SYStem.Up
+
+PRINT "System up — CPU halted at first instruction"
+
+; Allow non-intrusive run-time memory access
+SYStem.MemAccess CPU
+
+; --------------------------------------------------------------------------
+; Set up LAWs for debugger access
+; --------------------------------------------------------------------------
+PRINT "Setting up LAW for CCSR access..."
+Data.Set ANC:IOBASE()+0x00C00 %Long %BE 0x00000000  ; LAWBARH0 = 0
+Data.Set ANC:IOBASE()+0x00C04 %Long %BE 0xFE000000  ; LAWBARL0 = 0xFE000000
+Data.Set ANC:IOBASE()+0x00C08 %Long %BE 0x81E00017  ; LAWAR0 = enable|CORENET|16 MB
+
+PRINT "Setting up LAW for flash access..."
+Data.Set ANC:IOBASE()+0x00C10 %Long %BE 0x00000000  ; LAWBARH1 = 0 (32-bit)
+Data.Set ANC:IOBASE()+0x00C14 %Long %BE 0xE8000000  ; LAWBARL1 = 0xE8000000
+Data.Set ANC:IOBASE()+0x00C18 %Long %BE 0x81F0001A  ; LAWAR1 = enable|IFC|128 MB
+
+; --------------------------------------------------------------------------
+; TLBs for debugger data access (high indices to avoid boot_ppc_start.S)
+; --------------------------------------------------------------------------
+
+; TLB for CCSR: Entry 10, 0xFE000000, 16 MB, I|G
+MMU.TLB1.Set 10. 0xC0000700 0xFE00000A 0xFE000015 0x00000000 0x0
+
+; TLB for Flash: Entry 11, 256 MB, I|G
+MMU.TLB1.Set 11. 0xC0000900 0xE800000A 0xE8000015 0x00000000 0x0
+
+; TLB for DDR: Entry 12, 0x00000000, 1 GB, M
+MMU.TLB1.Set 12. 0xC0000A00 0x00000004 0x00000015 0x00000000 0x0
+
+; TLB for DDR: Entry 13, 0x40000000, 1 GB, M (covers wolfBoot at 0x7FF00000)
+MMU.TLB1.Set 13. 0xC0000A00 0x40000004 0x40000015 0x00000000 0x0
+
+PRINT "TLBs configured (CCSR, Flash, DDR)"
+
+; --------------------------------------------------------------------------
+; Verify flash is accessible
+; --------------------------------------------------------------------------
+&rcw_preamble=Data.Long(D:0xE8000000)
+PRINT "RCW preamble at 0xE8000000: &rcw_preamble"
+IF &rcw_preamble!=0xAA55AA55
+(
+  PRINT %WARNING "WARNING: Expected RCW preamble 0xAA55AA55, got &rcw_preamble"
+)
+
+; Verify stage1 code is present
+&stage1_first=Data.Long(D:0xEFFFC000)
+PRINT "Stage1 first word at 0xEFFFC000: &stage1_first"
+IF &stage1_first==0xFFFFFFFF
+(
+  PRINT %ERROR "ERROR: Stage1 region appears erased — run t1040_flash.cmm first"
+  STOP
+)
+
+PRINT ""
+
+; --------------------------------------------------------------------------
+; Load ELF symbols
+; STRIPPART strips leading path components from DWARF source paths so
+; SourcePATH can resolve them. Adjust the number if source doesn't resolve.
+; --------------------------------------------------------------------------
+PRINT "Loading symbols..."
+
+; Load wolfBoot symbols FIRST (primary debug target, runs from DDR)
+Data.LOAD.Elf "&basedir/wolfboot.elf" /NoCODE /StripPART "&basedir/"
+PRINT "  wolfBoot symbols loaded (DDR 0x7FF00000)"
+
+; Load stage1 symbols (secondary, runs XIP from flash)
+Data.LOAD.Elf "&basedir/stage1/loader_stage1.elf" /NoClear /NoCODE /StripPART "&basedir/"
+PRINT "  Stage1 symbols loaded (flash 0xEFFFC000)"
+
+; Load test application symbols (if available)
+IF OS.FILE("&basedir/test-app/image.elf")
+(
+  Data.LOAD.Elf "&basedir/test-app/image.elf" /NoClear /NoCODE /StripPART "&basedir/"
+  PRINT "  Test app symbols loaded"
+)
+
+; Set source search paths
+sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/lib/wolfssl &basedir/test-app &basedir/stage1 &basedir/include
+
+; Verify symbols loaded at correct addresses
+PRINT ""
+PRINT "Symbol verification:"
+IF sYmbol.EXIST(hal_pcie_init)
+  PRINT "  hal_pcie_init  = " sYmbol.BEGIN(hal_pcie_init)
+IF sYmbol.EXIST(hal_qe_init)
+  PRINT "  hal_qe_init    = " sYmbol.BEGIN(hal_qe_init)
+IF sYmbol.EXIST(hal_fman_init)
+  PRINT "  hal_fman_init  = " sYmbol.BEGIN(hal_fman_init)
+IF sYmbol.EXIST(hal_mp_init)
+  PRINT "  hal_mp_init    = " sYmbol.BEGIN(hal_mp_init)
+
+; --------------------------------------------------------------------------
+; Set breakpoints (e5500 has only 2 on-chip instruction BPs)
+; Change these as needed for the current debug focus.
+; --------------------------------------------------------------------------
+PRINT ""
+PRINT "Setting breakpoints (2 max on e5500)..."
+
+Break.Delete /ALL
+
+Break.Set hal_pcie_init /Program /Onchip
+PRINT "  BP: hal_pcie_init"
+
+; Second BP: uncomment ONE of these as needed:
+;Break.Set hal_qe_init /Program /Onchip
+;Break.Set hal_fman_init /Program /Onchip
+;Break.Set hal_mp_init /Program /Onchip
+;Break.Set main /Program /Onchip
+
+PRINT ""
+PRINT "Current PC: " Register(PC)
+PRINT ""
+
+PRINT "========================================"
+PRINT "wolfBoot Debug Ready (flash boot)"
+PRINT "========================================"
+PRINT ""
+PRINT "Boot flow:"
+PRINT "  0xEFFFFFFC: Reset vector -> 0xEFFFF000"
+PRINT "  0xEFFFF000: Stage1 bootstrap TLB setup"
+PRINT "  0xEFFFC000: Stage1 loader (XIP from flash)"
+PRINT "              - hal_early_init -> hal_ddr_init"
+PRINT "              - boot_entry_C copies .data to DDR"
+PRINT "              - Copies wolfBoot to DDR 0x7FF00000"
+PRINT "              - Jumps to wolfBoot"
+PRINT "  0x7FF00000: wolfBoot (running from DDR)"
+PRINT ""
+PRINT "To change breakpoints:"
+PRINT "  Break.Delete /ALL"
+PRINT "  Break.Set <symbol_or_addr> /Program /Onchip"
+PRINT ""
+PRINT "Ready — press Go to start execution"
+PRINT ""
+
+ENDDO
