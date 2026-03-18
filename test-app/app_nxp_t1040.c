@@ -1,6 +1,6 @@
-/* app_nxp_t1024.c
+/* app_nxp_t1040.c
  *
- * Test bare-metal application for NXP T1024.
+ * Test bare-metal application for NXP T1040.
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *
@@ -163,7 +163,7 @@ void main(void)
     uart_init();
 
     wolfBoot_printf("========================\r\n");
-    wolfBoot_printf("NXP T1024 wolfBoot demo Application\r\n");
+    wolfBoot_printf("NXP T1040 wolfBoot demo Application\r\n");
     wolfBoot_printf("Copyright 2025 wolfSSL Inc\r\n");
     wolfBoot_printf("GPL v3\r\n");
     wolfBoot_printf("========================\r\n");

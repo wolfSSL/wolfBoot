@@ -28,7 +28,7 @@ This README describes configuration of supported targets.
 * [NXP MCXN947](#nxp-mcxn947)
 * [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
-* [NXP T1024 PPC](#nxp-qoriq-t1024-ppc)
+* [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
@@ -3714,13 +3714,29 @@ make factory_wstage1.bin
 ```
 
 
-## NXP QorIQ T1024 PPC
+## NXP QorIQ T10xx PPC (T1024 / T1040)
 
-The NXP QorIQ T1024 is a two core 64-bit PPC e5500 based processor at 1400MHz. Each core has 256KB L2 cache.
+The NXP QorIQ T1024 and T1040 are 64-bit PPC e5500 based processors at 1400MHz. Each core has 256KB L2 cache. Both share the same HAL code (`hal/nxp_t10xx.c`) with `#ifdef` guards for differences.
 
-Board: T1024RDB
-Board rev: 0x3031
-CPLD ver: 0x42
+| Feature        | T1024                  | T1040                        |
+| -------------- | ---------------------- | ---------------------------- |
+| Cores          | 2                      | 4                            |
+| SVR            | 0x8548_0010            | 0x8528_0011                  |
+| DDR4           | 2 GB                   | 8 GB (Micron 18ASF1G72AZ)   |
+| NOR Flash      | 64 MB at 0xEC000000    | 128 MB at 0xE8000000         |
+| Flash TLB      | 64 MB page             | 256 MB page (no 128M on e5500) |
+| PCIe           | 3 controllers          | 3 controllers                |
+| Ethernet       | 4 mEMAC                | 5 DTSEC                     |
+| QE FW address  | 0xEFE00000             | 0xEFF10000                   |
+| Board          | T1024RDB               | T1040D4RDB                   |
+| Config         | `nxp-t1024.config`     | `nxp-t1040.config`           |
+
+Both use the same wolfBoot partition layout at the top of flash — addresses
+differ only because the NOR base differs (64MB vs 128MB NOR).
+
+### T1024 Board Info
+
+Board: T1024RDB, Board rev: 0x3031, CPLD ver: 0x42
 
 T1024E, Version: 1.0, (0x8548_0010)
 e5500, Version: 2.1, (0x8024_1021)
@@ -3731,9 +3747,9 @@ Reset Configuration Word (RCW):
 00000020: 00000000 00000000 60000000 00036800
 00000030: 00000100 484a5808 00000000 00000006
 
-Flash is NOR on IFC CS0 (0x0_EC00_0000) 64MB (default).
+Flash is NOR on IFC CS0 (0x0_EC00_0000) 64MB.
 
-Default NOR Flash Memory Layout (64MB) (128KB block, 1K page)
+#### T1024 NOR Flash Layout (64MB, 128KB block)
 
 | Description       | Address    | Size                |
 | ----------------- | ---------- | ------------------- |
@@ -3743,32 +3759,191 @@ Default NOR Flash Memory Layout (64MB) (128KB block, 1K page)
 | Free              | 0xEC100000 | 0x00700000 (  7 MB) |
 | FDT (Primary)     | 0xEC800000 | 0x00020000 (128 KB) |
 | FDT (Update)      | 0xEC820000 | 0x00020000 (128 KB) |
-| Free              | 0xEC840000 | 0x008A0000 (   8MB) |
-| Ethenet Config    | 0xED0E0000 | 0x00000400 (  1 KB) |
+| Free              | 0xEC840000 | 0x008A0000 (  8 MB) |
+| Ethernet Config   | 0xED0E0000 | 0x00000400 (  1 KB) |
 | Free              | 0xED100000 | 0x00F00000 ( 15 MB) |
 | Application (OS)  | 0xEE000000 | 0x00F00000 ( 15 MB) |
 | Update (OS)       | 0xEEF00000 | 0x00F00000 ( 15 MB) |
-| QUICC             | 0xEFE00000 | 0x00100000 (  1 MB) |
+| QUICC (QE)        | 0xEFE00000 | 0x00100000 (  1 MB) |
 | DPAA (FMAN)       | 0xEFF00000 | 0x00020000 (128 KB) |
 | wolfBoot          | 0xEFF40000 | 0x000BC000 (752 KB) |
 | wolfBoot Stage 1  | 0xEFFFC000 | 0x00004000 ( 16 KB) |
 
-QE: uploading microcode 'Microcode for T1024 r1.0' version 0.0.1
+### T1040 Board Info
 
-DDR4 2GB
+Board: T1040D4RDB, Board ID: 0x1130013, CPLD PLD ver: 0x13
 
-### Building wolfBoot for NXP T1024 PPC
+T1040E, Version: 1.1, (0x8528_0011)
+e5500, Version: 2.1, (0x8024_1021)
+
+Reset Configuration Word (RCW):
+00000000: 0c18000e 0e000000 00000000 00000000
+00000010: 66000002 40000002 ec027000 01000000
+00000020: 00000000 00000000 00000000 00030810
+00000030: 00000000 0342580f 00000000 00000000
+
+Flash is NOR on IFC CS0 (0x0_E800_0000) 128MB (Micron JS28F00AM29EWHA, 16-bit, AMD CFI).
+
+#### T1040 NOR Flash Layout (128MB, 128KB block)
+
+| Description       | Address    | Size                 |
+| ----------------- | ---------- | -------------------- |
+| RCW               | 0xE8000000 | 0x00020000 (128 KB)  |
+| Free              | 0xE8020000 | 0x000D0000 (832 KB)  |
+| Swap Sector       | 0xE80F0000 | 0x00010000 ( 64 KB)  |
+| Free              | 0xE8100000 | 0x00700000 (  7 MB)  |
+| FDT (Primary)     | 0xE8800000 | 0x00020000 (128 KB)  |
+| FDT (Update)      | 0xE8820000 | 0x00020000 (128 KB)  |
+| Free              | 0xE8840000 | 0x057C0000 ( 87 MB)  |
+| Application (OS)  | 0xEE000000 | 0x00F00000 ( 15 MB)  |
+| Update (OS)       | 0xEEF00000 | 0x00F00000 ( 15 MB)  |
+| Free              | 0xEFE00000 | 0x00100000 (  1 MB)  |
+| DPAA (FMAN)       | 0xEFF00000 | 0x00010000 ( 64 KB)  |
+| QUICC (QE)        | 0xEFF10000 | 0x00010000 ( 64 KB)  |
+| Free              | 0xEFF20000 | 0x00020000 (128 KB)  |
+| wolfBoot          | 0xEFF40000 | 0x000BC000 (752 KB)  |
+| wolfBoot Stage 1  | 0xEFFFC000 | 0x00004000 ( 16 KB)  |
+
+Note: On T1040, FMAN and QE firmware share the same 128KB NOR erase sector
+(0xEFF00000-0xEFF1FFFF). They must be programmed together in a single
+erase/write operation.
+
+### Design
+
+Both T1024 and T1040 use a two-stage boot. Stage1 runs XIP from NOR flash,
+initializes DDR, and copies wolfBoot to DDR for execution.
+
+#### Boot Sequence
+
+```
+Reset vector (0xEFFFFFFC) -> Stage1 bootstrap TLB (0xEFFFF000)
+  -> Stage1 loader XIP from flash (0xEFFFC000)
+    -> hal_early_init: DDR controller init
+    -> boot_entry_C: copies wolfBoot .data/.bss to DDR
+    -> Copies wolfBoot binary to DDR (0x7FF00000)
+    -> Jumps to wolfBoot
+  -> wolfBoot (running from DDR at 0x7FF00000)
+    -> LAW/TLB init, UART, LIODN, IFC, CPLD, PCIe, QE, FMAN, multi-core
+    -> Verify + load application ELF to 0x70000000
+    -> FDT fixup, do_boot -> application entry
+```
+
+#### Memory Hierarchy
+
+```
+CPU Core (e5500) -> L1 (32KB I + 32KB D) -> L2 (256KB per core)
+                 -> CoreNet Fabric -> CPC (256KB, SRAM or cache)
+                 -> DDR Controller -> DDR4
+                 -> IFC Controller -> NOR Flash
+```
+
+#### Memory Map
+
+| Region           | Virtual Address | Physical Address   | Size   | Notes                       |
+| ---------------- | --------------- | ------------------ | ------ | --------------------------- |
+| DDR              | 0x00000000      | 0x00000000         | 2/8 GB | T1024: 2GB, T1040: 8GB      |
+| CPC SRAM         | 0xFDFE0000      | 0xFDFE0000         | 256 KB | Initial stack (stage1)      |
+| L1 Locked DCache | 0xFDFC0000      | 0xFDFC0000         | 16 KB  | Stage1 stack before DDR     |
+| NOR Flash        | 0xE8/EC000000   | 0x0F_E8/EC000000   | 64/128 MB | T1024: EC, T1040: E8     |
+| CCSRBAR          | 0xFE000000      | 0x0F_FE000000      | 16 MB  | Peripheral registers        |
+
+Note: Stage1 uses 32-bit physical addresses (PHYS_HIGH=0x0). wolfBoot main
+relocates to 36-bit physical addresses (PHYS_HIGH=0xF) matching the hardware
+default bus routing.
+
+#### TLB Entries (MMU TLB1)
+
+Configured by `boot_ppc_start.S` during stage1:
+
+| Entry | Virtual Address  | Physical Address  | Size   | Attributes | Purpose            |
+| ----- | ---------------- | ----------------- | ------ | ---------- | ------------------ |
+| 0     | 0xFFFFF000       | 0xFFFFF000        | 4 KB   | I, SX/SR   | Boot ROM           |
+| 1     | 0xFE000000       | 0xFE000000        | 16 MB  | I\|G, All  | CCSRBAR            |
+| 2     | FLASH_BASE_ADDR  | FLASH_BASE_ADDR   | 64/256 MB | W\|G, All  | NOR Flash (XIP) |
+| 9     | 0xFDFE0000       | 0xFDFE0000        | 256 KB | M, All     | CPC SRAM           |
+| 12    | 0x00000000       | 0x00000000        | 2 GB   | M, All     | DDR                |
+
+The e5500 supports a 2GB MMU page size, so a single TLB entry covers the
+low 2GB of DDR. Larger DDR (T1040's 8GB) is accessible via LAW but only the
+first 2GB is mapped in the 32-bit effective address space.
+
+T1024 uses 64MB flash TLB page (matching its 64MB NOR). T1040 uses 256MB
+page because e5500 has no 128MB page size (jumps 64M to 256M). The 128MB
+over-map is harmless as the extra region has no LAW target.
+
+#### LAW Entries (Local Access Windows)
+
+**Stage1 (assembly):**
+
+| Index | Base Address     | Size   | Target        | Purpose              |
+| ----- | ---------------- | ------ | ------------- | -------------------- |
+| 0     | 0xFE000000       | 16 MB  | CoreNet       | CCSRBAR routing      |
+| 1     | FLASH_BASE_ADDR  | 64/128 MB | IFC        | NOR Flash            |
+| 2     | 0xFDFE0000       | 256 KB | DDR_1         | CPC SRAM routing     |
+
+**wolfBoot main (C code, law_init):**
+
+| Index | Base Address | Size   | Target        | Purpose              |
+| ----- | ------------ | ------ | ------------- | -------------------- |
+| 3     | BMAN_BASE    | 32 MB  | BMAN          | Buffer Manager       |
+| 4     | QMAN_BASE    | 32 MB  | QMAN          | Queue Manager        |
+| 5     | DCSR_BASE    | 4 MB   | DCSR          | Debug Control/Status |
+| 15    | 0x00000000   | 2/8 GB | DDR_1         | Main DDR memory      |
+
+#### Cold Boot Stack
+
+Stage1 uses L1 locked data cache (16KB at 0xFDFC0000) as the initial stack.
+`dcbz` allocates cache lines without bus reads; `dcbtls` locks them to prevent
+eviction. This provides a core-local stack before DDR is available.
+
+After DDR init in `hal_early_init()`, the CPC is configured as 256KB SRAM for
+general use. wolfBoot main runs with its stack in DDR.
+
+#### DDR Errata
+
+- **A-008378** (T1024/T1040): Set DEBUG_29[8:11]=0x9 before DDR enable
+- **A-009942** (T1040 only): Adjust CPO setting after DDR training completes
+- **A-008109** (T1024 only): DDR_SLOW mode and debug register adjustments
+
+#### Multi-Core
+
+T1024 has 2 cores; T1040 has 4 cores. The primary core (core 0) completes all
+initialization. Secondary cores spin on a spin-table in DDR, waiting for a
+non-zero entry point written by the OS. The boot page is at 0x7FFFF000.
+
+#### UART
+
+DUART0 at CCSRBAR + 0x11C500 (0xFE11C500), 115200 baud, 8N1.
+Both RDB boards use UART0 on the front-panel micro-USB connector.
+
+#### Lauterbach TRACE32 Scripts
+
+Debugging scripts are in `tools/scripts/nxp_t1040/`:
+
+- **t1040_flash.cmm** — Flash programming using CPC SRAM as target buffer.
+  Programs RCW, FMAN+QE (combined), wolfBoot, stage1, and test application.
+  Also supports full backup/restore of the 128MB NOR.
+- **t1040_debug.cmm** — Debug session setup. Configures TLB/LAW for debugger
+  access, loads wolfBoot + stage1 + test-app ELF symbols, and sets breakpoints.
+  Supports source-level debugging with STRIPPART for path resolution.
+
+The debug script sets high TLB1 entries (10-13) so they do not conflict with
+the boot_ppc_start.S entries (0-9, 12). The e5500 has only 2 on-chip
+instruction breakpoints.
+
+### Building
 
 By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
 
-The `make` creates a `factory_stage1.bin` image that can be programmed at `0xEC000000`
-
 ```
-cp ./config/examples/nxp-t1024.config .config
+cp ./config/examples/nxp-t1024.config .config   # T1024
+cp ./config/examples/nxp-t1040.config .config   # T1040
 make clean
 make keytools
 make
 ```
+
+The `make` creates a `factory_wstage1.bin` image. For T1024 it is programmed at `0xEC000000`; for T1040 at `0xE8000000`.
 
 Or each `make` component can be manually built using:
 
@@ -3780,6 +3955,19 @@ make test-app/image_v1_signed.bin
 
 If getting errors with keystore then you can reset things using `make distclean`.
 
+Use `V=1` to show verbose output for build steps.
+Use `DEBUG=1` to enable debug symbols.
+
+The first stage loader must fit into 16KB. To build stage1 in release and wolfBoot with debug symbols:
+
+```
+make clean
+make stage1
+make DEBUG=1 wolfboot.bin
+make DEBUG=1 test-app/image_v1_signed.bin
+make factory_wstage1.bin
+```
+
 ### Signing Custom application
 
 ```
@@ -3788,10 +3976,12 @@ If getting errors with keystore then you can reset things using `make distclean`
 
 ### Assembly of custom firmware image
 
+**T1024:**
+
 ```
 ./tools/bin-assemble/bin-assemble factory_custom.bin \
-    0xEC000000 RCW_CTS.bin \
-    0xEC020000 custom.dtb \
+    0xEC000000 RCW.bin \
+    0xEC800000 custom.dtb \
     0xEE000000 custom_v1_signed.bin \
     0xEFE00000 iram_Type_A_T1024_r1.0.bin \
     0xEFF00000 fsl_fman_ucode_t1024_r1.0_108_4_5.bin \
@@ -3801,6 +3991,20 @@ If getting errors with keystore then you can reset things using `make distclean`
 
 Flash factory_custom.bin to NOR base 0xEC00_0000
 
+**T1040:**
+
+```
+./tools/bin-assemble/bin-assemble factory_custom.bin \
+    0xE8000000 RCW.bin \
+    0xE8800000 custom.dtb \
+    0xEE000000 custom_v1_signed.bin \
+    0xEFF00000 fsl_fman_ucode_t1040.bin \
+    0xEFF10000 t1040_qe.bin \
+    0xEFF40000 wolfboot.bin \
+    0xEFFFC000 stage1/loader_stage1.bin
+```
+
+Flash factory_custom.bin to NOR base 0xE800_0000
 
 
 ## NXP QorIQ T2080 PPC

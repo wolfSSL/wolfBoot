@@ -53,6 +53,11 @@ extern "C" {
 /* program header type */
 #define ELF_PT_LOAD       (0x1)
 
+/* Maximum program headers to cache for in-place ELF loading */
+#ifndef ELF_MAX_PH
+#define ELF_MAX_PH        8
+#endif
+
 typedef struct elf32_header {
     uint8_t  ident[16];
     uint16_t type;

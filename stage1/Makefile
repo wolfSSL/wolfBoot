@@ -84,7 +84,6 @@ endif
 MAIN_TARGET=loader_stage1.bin
 TARGET_H_TEMPLATE:=../include/target.h.in
 
-ASFLAGS:=$(CFLAGS)
 BOOTLOADER_PARTITION_SIZE?=$$(( $(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET)))
 
 ifeq ($(WOLFBOOT_STAGE1_SIZE),)
@@ -99,8 +98,13 @@ CFLAGS+=\
 	-DWOLFBOOT_STAGE1_FLASH_ADDR=$(WOLFBOOT_STAGE1_FLASH_ADDR) \
 	-DWOLFBOOT_STAGE1_BASE_ADDR=$(WOLFBOOT_STAGE1_BASE_ADDR)
 
+# ASFLAGS must be set after BUILD_LOADER_STAGE1 is added to CFLAGS,
+# so assembly files see the same defines as C files.
+ASFLAGS:=$(CFLAGS)
+
 # For printf support (disable NO_PRINTF_UART) and increase WOLFBOOT_STAGE1_SIZE
 ifeq ($(ARCH),PPC)
+  CFLAGS+=-g -gdwarf-4
   CFLAGS+=-DNO_PRINTF_UART -DWOLFBOOT_NO_PRINTF
   ifeq ($(NO_XIP),1)
     # Use PIC (Position Independent Code) for first stage loader

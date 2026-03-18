@@ -691,7 +691,7 @@ ifeq ($(ARCH),PPC)
   # Target-specific CPU flags
   ifeq ($(TARGET),nxp_t2080)
     CFLAGS+=-mcpu=e6500 -mno-altivec -mbss-plt
-  else ifeq ($(TARGET),nxp_t1024)
+  else ifneq ($(filter nxp_t1024 nxp_t1040,$(TARGET)),)
     CFLAGS+=-mcpu=e5500
   endif
 
@@ -1030,8 +1030,8 @@ ifeq ($(ARCH),ARM_BE)
   endif
 endif
 
-ifeq ($(TARGET),nxp_t1024)
-  # Power PC big endian
+ifneq ($(filter nxp_t1024 nxp_t1040,$(TARGET)),)
+  # Power PC big endian (e5500 core, T1024 2-core / T1040 4-core)
   ARCH_FLAGS=-mhard-float -mcpu=e5500
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
