@@ -49,7 +49,7 @@ cp config/examples/stm32h5-tz-psa.config .config
 make clean wolfboot.bin
 ```
 
-This also produces `src/wc_secure_calls.o`, which Zephyr links for CMSE veneers.
+This also produces `src/wolfboot_tz_nsc.o`, which Zephyr links for CMSE veneers.
 
 ## 4) Build the PSA crypto sample with wolfBoot as an extra module
 
@@ -101,7 +101,7 @@ wolfboot/src/arm_tee_psa_ipc.c
 
 ### PSA symbols missing during Zephyr build
 Make sure:
-- You built wolfBoot first (for `wc_secure_calls.o`).
+- You built wolfBoot first (for `wolfboot_tz_nsc.o`).
 - You passed `-DZEPHYR_EXTRA_MODULES=/path/to/wolfboot`.
 
 ### Kconfig warnings about WOLFBOOT_* symbols

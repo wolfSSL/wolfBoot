@@ -109,7 +109,7 @@ static uint32_t emu_current_version(void)
 {
     uintptr_t addr = (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     return wolfBoot_nsc_current_firmware_version();
 #else
     if (addr == 0u) {
@@ -178,7 +178,7 @@ static void wait_for_update(uint32_t version)
 
     memset(page, 0xFF, PAGESIZE);
 
-#ifndef WOLFCRYPT_SECURE_MODE
+#ifndef TZEN
     hal_flash_unlock();
 #endif
 
@@ -237,7 +237,7 @@ static void wait_for_update(uint32_t version)
             if ((page_idx == PAGESIZE) || (next_seq + (uint32_t)psize >= tot_len)) {
                 uint32_t dst = (WOLFBOOT_PARTITION_UPDATE_ADDRESS + recv_seq + (uint32_t)psize) - (uint32_t)page_idx;
                 uint32_t dst_off = (recv_seq + (uint32_t)psize) - (uint32_t)page_idx;
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
                 if ((dst_off % WOLFBOOT_SECTOR_SIZE) == 0u) {
                     wolfBoot_nsc_erase_update(dst_off, WOLFBOOT_SECTOR_SIZE);
                 }
@@ -255,7 +255,7 @@ static void wait_for_update(uint32_t version)
         ack(next_seq);
         if (next_seq >= tot_len) {
             uint32_t update_ver;
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
             update_ver = wolfBoot_nsc_update_firmware_version();
 #else
             update_ver = wolfBoot_get_blob_version((uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
@@ -264,7 +264,7 @@ static void wait_for_update(uint32_t version)
                 __asm volatile("bkpt #0x4D");
                 break;
             }
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
             wolfBoot_nsc_update_trigger();
 #else
             wolfBoot_update_trigger();
@@ -274,7 +274,7 @@ static void wait_for_update(uint32_t version)
         }
     }
 
-#ifndef WOLFCRYPT_SECURE_MODE
+#ifndef TZEN
     hal_flash_lock();
 #endif
 
@@ -293,7 +293,7 @@ int main(void)
     printf("get_version=%lu\n", (unsigned long)version);
 
     if (version == 4u) {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
         wolfBoot_nsc_success();
 #else
         wolfBoot_success();
@@ -310,7 +310,7 @@ int main(void)
         }
     }
     if (version == 8u) {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
         wolfBoot_nsc_success();
 #else
         wolfBoot_success();

@@ -176,7 +176,7 @@ if(BUILD_TEST_APPS)
         target_include_directories(image PRIVATE ../lib/wolfPKCS11)
     endif()
 
-    # For TrustZone builds, avoid linking the bootloader lib (it defines NSC stubs).
+    # wolfCrypt TrustZone test builds provide extra secure-call wrappers directly.
     if(TZEN AND WOLFCRYPT_TZ)
         target_sources(image PRIVATE ../src/libwolfboot.c)
         if(NOT SIGN STREQUAL "NONE")
@@ -189,11 +189,15 @@ if(BUILD_TEST_APPS)
         target_link_libraries(image PRIVATE wolfboot wolfboothal public_key target)
     endif()
 
-    # For TrustZone builds, the test app is a non-secure application
-    if(TZEN AND WOLFCRYPT_TZ)
-        list(APPEND TEST_APP_COMPILE_DEFINITIONS NONSECURE_APP WOLFBOOT_SECURE_CALLS)
+    # For TrustZone builds, the test app is a non-secure application and links
+    # the CMSE import library generated from the secure bootloader veneers.
+    if(TZEN)
+        list(APPEND TEST_APP_COMPILE_DEFINITIONS NONSECURE_APP)
         add_dependencies(image wolfboot_${PLATFORM_NAME})
-        target_link_libraries(image PRIVATE ${CMAKE_BINARY_DIR}/wc_secure_calls.o)
+        target_link_libraries(image PRIVATE ${CMAKE_BINARY_DIR}/wolfboot_tz_nsc.o)
+    endif()
+    if(TZEN AND WOLFCRYPT_TZ)
+        list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_SECURE_CALLS)
     endif()
 
     if(WOLFCRYPT_TZ_PKCS11)

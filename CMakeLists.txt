@@ -690,14 +690,14 @@ if(ARCH STREQUAL "ARM")
             list(APPEND WOLFBOOT_COMPILE_OPTIONS -mcmse)
             list(APPEND WOLFBOOT_LINK_OPTIONS -mcmse)
         endif()
+        list(APPEND WOLFBOOT_LINK_OPTIONS
+            -Wl,--cmse-implib
+            -Wl,--out-implib=${CMAKE_CURRENT_BINARY_DIR}/wolfboot_tz_nsc.o)
 
         # wolfCrypt TrustZone secure mode
         if(WOLFCRYPT_TZ)
             list(APPEND WOLFBOOT_DEFS WOLFCRYPT_SECURE_MODE)
             list(APPEND WOLFBOOT_SOURCES src/wc_callable.c)
-            list(APPEND WOLFBOOT_LINK_OPTIONS
-                -Wl,--cmse-implib
-                -Wl,--out-implib=${CMAKE_CURRENT_BINARY_DIR}/wc_secure_calls.o)
 
             # PKCS11 TrustZone interface
             if(WOLFCRYPT_TZ_PKCS11)

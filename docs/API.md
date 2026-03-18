@@ -78,6 +78,8 @@ secure domain. For this purpose, wolfBoot provides Non-Secure Callable (NSC)
 APIs that allow code running in the non-secure domain to call into the secure
 domain managed by wolfBoot.
 
+When `TZEN=1` is enabled, these APIs are available to non-secure applications.
+
 These APIs are listed below.
 
 - `void wolfBoot_nsc_success(void)`: wrapper for `wolfBoot_success()`

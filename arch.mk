@@ -353,13 +353,13 @@ else
         OBJS+=hal/stm32_tz.o
       endif
       CFLAGS+=-mcmse
+      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
       ifeq ($(WOLFCRYPT_TZ),1)
         CORTEXM_ARM_EXTRA_OBJS=
         CORTEXM_ARM_EXTRA_CFLAGS=
         SECURE_OBJS+=./src/wc_callable.o
         WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
         CFLAGS+=-DWOLFCRYPT_SECURE_MODE
-        SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wc_secure_calls.o
       endif
     endif # TZEN=1
       ifeq ($(SPMATH),1)

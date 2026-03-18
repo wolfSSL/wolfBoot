@@ -2330,7 +2330,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
 
-#if defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
+#if defined(__WOLFBOOT) && defined(TZEN)
 CSME_NSE_API
 void wolfBoot_nsc_success(void)
 {
@@ -2386,4 +2386,4 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
     return ret;
 }
 
-#endif
+#endif /* __WOLFBOOT && TZEN */
