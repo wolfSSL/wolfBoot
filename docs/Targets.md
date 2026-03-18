@@ -4349,7 +4349,14 @@ cp config/examples/mcxn.config .config`
 make
 ```
 
-We also provide a TrustZone configuration at `config/examples/mcxn-tz.config`.
+We provide three configuration files:
+- `mcxn.config`: basic configuration file; both wolfBoot and your application
+  run in secure world.
+- `mcxn-tz.config`: wolfBoot runs in secure world, your application runs in
+  non-secure world.
+- `mcxn-wolfcrypt-tz.config`: same as above, but also includes a non-secure
+  callable (NSC) wolfPKCS11 API to perform crypto operations via wolfCrypt and
+  access a secure keyvault provided by wolfBoot.
 
 ### MCX N: Loading the firmware
 
