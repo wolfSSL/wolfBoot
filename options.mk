@@ -305,6 +305,98 @@ ifeq ($(SIGN),ED448)
   endif
 endif
 
+ifeq ($(SIGN),RSAPSS2048)
+  KEYGEN_OPTIONS+=--rsapss2048
+  SIGN_OPTIONS+=--rsapss2048
+  SIGN_ALG=RSAPSS2048
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS2048" $(RSA_EXTRA_CFLAGS)
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5008
+    else
+      STACK_USAGE=4096
+    endif
+  else
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=35952
+      else
+        STACK_USAGE=17568
+      endif
+    endif
+  endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
+endif
+
+ifeq ($(SIGN),RSAPSS3072)
+  KEYGEN_OPTIONS+=--rsapss3072
+  SIGN_OPTIONS+=--rsapss3072
+  SIGN_ALG=RSAPSS3072
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS3072" $(RSA_EXTRA_CFLAGS)
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5008
+    else
+      STACK_USAGE=4364
+    endif
+  else
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=52592
+      else
+        STACK_USAGE=12288
+      endif
+    endif
+  endif
+  ifneq ($(HASH),SHA256)
+    ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
+      IMAGE_HEADER_SIZE=1024
+    endif
+  endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
+    IMAGE_HEADER_SIZE=512
+  endif
+endif
+
+ifeq ($(SIGN),RSAPSS4096)
+  KEYGEN_OPTIONS+=--rsapss4096
+  SIGN_OPTIONS+=--rsapss4096
+  SIGN_ALG=RSAPSS4096
+  WOLFCRYPT_OBJS+= $(RSA_OBJS)
+  WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS4096" $(RSA_EXTRA_CFLAGS)
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE=5888
+    else
+      STACK_USAGE=5768
+    endif
+  else
+    ifeq ($(WOLFTPM),1)
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
+    else
+      ifneq ($(SPMATH),1)
+        STACK_USAGE=69232
+      else
+        STACK_USAGE=18064
+      endif
+    endif
+  endif
+  ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
+    IMAGE_HEADER_SIZE=1024
+  endif
+endif
+
 ifneq ($(findstring RSA2048,$(SIGN)),)
   KEYGEN_OPTIONS+=--rsa2048
   ifeq ($(SIGN),RSA2048ENC)
@@ -367,7 +459,9 @@ ifneq ($(findstring RSA3072,$(SIGN)),)
     endif
   endif
   ifneq ($(HASH),SHA256)
-    IMAGE_HEADER_SIZE=1024
+    ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 1024; echo $$?),0)
+      IMAGE_HEADER_SIZE=1024
+    endif
   endif
   ifeq ($(shell test $(IMAGE_HEADER_SIZE) -lt 512; echo $$?),0)
     IMAGE_HEADER_SIZE=512
@@ -507,6 +601,18 @@ ifneq ($(SIGN_SECONDARY),)
     WOLFCRYPT_OBJS+=$(MATH_OBJS)
   endif
   ifeq ($(SIGN_SECONDARY),RSA4096)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),RSAPSS2048)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),RSAPSS3072)
+    WOLFCRYPT_OBJS+=$(RSA_OBJS)
+    WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  ifeq ($(SIGN_SECONDARY),RSAPSS4096)
     WOLFCRYPT_OBJS+=$(RSA_OBJS)
     WOLFCRYPT_OBJS+=$(MATH_OBJS)
   endif
