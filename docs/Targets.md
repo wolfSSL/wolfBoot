@@ -1839,9 +1839,14 @@ XSPI2 NOR Flash (memory-mapped at 0x70000000):
   0x70020000  Boot partition (1MB, app runs from here via XIP)
   0x70120000  Update partition (1MB, device-relative: 0x00120000)
 
-AXISRAM (0x34000000):
+AXISRAM — without TrustZone (non-secure alias):
   0x34000000  wolfBoot (loaded to SRAM via SWD or Boot ROM FSBL copy)
   0x34020000  Stack / work area
+
+AXISRAM — with TrustZone (TZEN=1, secure alias):
+  0x24000000  wolfBoot (secure SRAM — IDAU marks 0x24xxxxxx as secure)
+  0x24020000  Stack / work area (secure)
+  0x34000000  Application SRAM (SAU region: non-secure)
 ```
 
 ### Build and Flash
@@ -1849,14 +1854,20 @@ AXISRAM (0x34000000):
 Use the example configuration and build:
 
 ```sh
+# Without TrustZone:
 cp config/examples/stm32n6.config .config
+make
+make flash
+
+# With TrustZone:
+cp config/examples/stm32n6-tz.config .config
 make
 make flash
 ```
 
 `make flash` uses OpenOCD with the stmqspi driver to:
 1. Program the signed application to NOR flash at 0x70020000
-2. Load wolfBoot to SRAM at 0x34000000
+2. Load wolfBoot to SRAM (0x24000000 for TZEN=1, 0x34000000 otherwise)
 3. Start wolfBoot, which verifies and boots the application via XIP
 
 Prerequisites:
@@ -1872,10 +1883,65 @@ make TARGET=stm32n6 SIGN=ECC256
 
 The example config uses:
 - `EXT_FLASH=1` with `PART_UPDATE_EXT=1` and `PART_SWAP_EXT=1`
-- Boot partition at 0x70020000 (XIP, not marked EXT)
+- `PART_BOOT_EXT` — boot partition reads use ext_flash API during updates
+  (required because boot and update share the same XSPI2 NOR flash)
+- `RAM_CODE=1` — flash functions placed in `.ramcode` for XIP safety
+- `DEBUG_UART=1` — USART1 output for boot messages and test-app
+- Boot partition at 0x70020000 (XIP for app execution)
 - Update/swap partitions use device-relative offsets
 - 4KB sector size (`WOLFBOOT_SECTOR_SIZE=0x1000`)
 - ECC256 + SHA256 for signature verification
+
+### TrustZone Support (TZEN=1)
+
+The STM32N6 Cortex-M55 always boots in secure mode. Unlike older STM32 parts
+(H5, L5, U5), there is no `TZEN` option byte — TrustZone is always available
+via the hardware IDAU (Implementation-Defined Attribution Unit).
+
+wolfBoot supports two modes:
+
+**Without TrustZone** (`stm32n6.config`): wolfBoot runs from the non-secure SRAM
+alias at `0x34000000`. A blanket SAU NSC region covers the entire address space,
+allowing access to all peripherals and memory. The application boots in the same
+(non-secure) state.
+
+**With TrustZone** (`stm32n6-tz.config`, `TZEN=1`): wolfBoot runs from the secure
+SRAM alias at `0x24000000`. The SAU is configured with specific regions:
+
+| SAU Region | Address Range | Type | Purpose |
+|------------|---------------|------|---------|
+| 0 (NSC) | 0x24010000–0x2401FFFF | Non-Secure Callable | Gateway veneers |
+| 1 (NS)  | 0x70000000–0x7FFFFFFF | Non-Secure | XSPI2 flash (app XIP) |
+| 2 (NS)  | 0x34000000–0x343FFFFF | Non-Secure | App SRAM |
+| 3 (NS)  | 0x40000000–0x4FFFFFFF | Non-Secure | Peripheral NS aliases |
+| *default* | *all other* | Secure | wolfBoot SRAM, secure peripherals |
+
+wolfBoot uses secure peripheral aliases (0x56xxx RCC, 0x52xxx USART, 0x58xxx XSPI2).
+The application runs in non-secure state and uses non-secure aliases (0x46xxx, 0x42xxx).
+The flash script automatically selects the correct SRAM load address based on the
+`TZEN` setting in `.config`.
+
+### SAU Configuration (non-TrustZone)
+
+Without `TZEN=1`, wolfBoot configures SAU region 0 to cover the entire 4GB address
+space as Non-Secure Callable (NSC), allowing the CPU to access all peripherals and
+memory regions regardless of IDAU attribution.
+
+### Shared Flash: PART_BOOT_EXT
+
+The boot and update partitions reside on the same XSPI2 NOR flash. During
+firmware updates, wolfBoot must read boot partition data while also issuing SPI
+commands to write the update/swap partitions. Since the XSPI2 cannot be in
+memory-mapped (XIP) and SPI command mode simultaneously, the boot partition
+must be accessed via SPI commands during updates.
+
+The config sets `PART_BOOT_EXT` so all boot partition reads during the update
+swap use `ext_flash_read()` (SPI commands) instead of XIP. The `ext_flash_*`
+functions in `hal/stm32n6.c` accept both absolute memory-mapped addresses
+(0x70xxxxxx) and device-relative offsets, converting automatically.
+
+The application still boots via XIP — `do_boot()` jumps to the memory-mapped
+address at 0x70020400.
 
 ### XIP Constraints
 
@@ -1885,9 +1951,19 @@ mode, the following constraints apply:
 - The application must NOT call `hal_init()` — XSPI2 is already configured by
   wolfBoot for memory-mapped mode. Reinitializing XSPI2 would disable XIP and
   crash the CPU.
-- Calling `wolfBoot_success()` requires all flash write functions to be placed
-  in RAM (RAMFUNCTION). The HAL flash functions in `hal/stm32n6.c` need the
-  RAMFUNCTION attribute for this to work from an XIP application.
+- `RAM_CODE=1` must be set so that flash write functions are tagged RAMFUNCTION
+  and placed in `.ramcode`. The test-app's startup code copies `.ramcode` to
+  RAM, allowing `wolfBoot_success()` and other flash operations to execute
+  from RAM while XSPI2 is in SPI command mode.
+- The `nor_flash_write()` function buffers data to a stack-local array before
+  issuing SPI commands, since the source data pointer may reference XIP flash
+  that becomes inaccessible when XSPI2 leaves memory-mapped mode.
+
+### UART Clock
+
+USART1 kernel clock defaults to PCLK2. With the PLL1 configuration
+(IC2 = 400 MHz, AHB prescaler /2, APB2 prescaler /1), PCLK2 = 200 MHz.
+The BRR is calculated accordingly for 115200 baud.
 
 ### Flash Script Options
 
@@ -1914,11 +1990,12 @@ and start it:
 
 ```sh
 reset halt
-load_image wolfboot.bin 0x34000000 bin
+# Use 0x24000000 for TZEN=1, 0x34000000 for non-TZ
+load_image wolfboot.bin 0x24000000 bin
 reg msplim_s 0x00000000
 reg psplim_s 0x00000000
-reg msp 0x34020000
-mww 0xE000ED08 0x34000000
+reg msp 0x24020000
+mww 0xE000ED08 0x24000000
 resume <entry_address>
 ```
 

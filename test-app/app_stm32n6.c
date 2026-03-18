@@ -21,34 +21,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include <stdio.h>
 #include <stdint.h>
 #include "system.h"
 #include "hal.h"
+#include "hal/stm32n6.h"
 #include "wolfboot/wolfboot.h"
 #include "target.h"
-
-#define RCC_BASE        (0x56028000UL)
-#define RCC_AHB4ENR     (*(volatile uint32_t *)(RCC_BASE + 0x25C))
-#define RCC_AHB4ENR_GPIOGEN  (1 << 6)
-#define RCC_AHB4ENR_PWREN    (1 << 18)
-
-/* PWR I/O supply valid bits (required for Port G output) */
-#define PWR_BASE        (0x56024800UL)
-#define PWR_SVMCR3      (*(volatile uint32_t *)(PWR_BASE + 0x3C))
-#define PWR_SVMCR3_VDDIO2SV  (1 << 8)
-#define PWR_SVMCR3_VDDIO3SV  (1 << 9)
-
-#define GPIO_MODER(base)    (*(volatile uint32_t *)((base) + 0x00))
-#define GPIO_OSPEEDR(base)  (*(volatile uint32_t *)((base) + 0x08))
-#define GPIO_PUPDR(base)    (*(volatile uint32_t *)((base) + 0x0C))
-#define GPIO_BSRR(base)     (*(volatile uint32_t *)((base) + 0x18))
-
-#define GPIOG_BASE      (0x56021800UL)
 
 /* User LEDs: active LOW on Port G (LD6=PG0 green, LD7=PG8 blue, LD5=PG10 red) */
 #define LED_GREEN_PIN   0
 #define LED_BLUE_PIN    8
 #define LED_RED_PIN     10
+
+/* CPU clock for SysTick delay */
+#define CPU_FREQ        600000000UL /* IC1 = PLL1(1200MHz) / 2 */
+#define SYSTICK_COUNTFLAG (1 << 16)
 
 static void led_init(void)
 {
@@ -57,7 +45,6 @@ static void led_init(void)
     RCC_AHB4ENR |= RCC_AHB4ENR_GPIOGEN | RCC_AHB4ENR_PWREN;
     DMB();
 
-    /* Mark I/O supply valid for Port G */
     PWR_SVMCR3 |= PWR_SVMCR3_VDDIO2SV | PWR_SVMCR3_VDDIO3SV;
     DMB();
 
@@ -72,10 +59,9 @@ static void led_init(void)
     GPIO_MODER(GPIOG_BASE) = reg;
 }
 
-/* Active LOW: BSRR reset = ON, BSRR set = OFF */
 static void led_on(uint32_t gpio_base, int pin)
 {
-    GPIO_BSRR(gpio_base) = (1 << (pin + 16));
+    GPIO_BSRR(gpio_base) = (1 << (pin + 16)); /* active LOW */
 }
 
 static void led_off(uint32_t gpio_base, int pin)
@@ -83,19 +69,9 @@ static void led_off(uint32_t gpio_base, int pin)
     GPIO_BSRR(gpio_base) = (1 << pin);
 }
 
-/* SysTick-based millisecond delay (polling, no interrupts).
- * SysTick clocks from HCLK (CPU / AHB prescaler).
- * HCLK = 300 MHz confirms PLL running at 600 MHz (1 Hz blink = correct). */
-#define SYSTICK_BASE    (0xE000E010UL)
-#define SYSTICK_CSR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x00))
-#define SYSTICK_RVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x04))
-#define SYSTICK_CVR     (*(volatile uint32_t *)(SYSTICK_BASE + 0x08))
-#define HCLK_FREQ       300000000UL /* 600 MHz CPU / AHB prescaler 2 */
-#define SYSTICK_COUNTFLAG (1 << 16)
-
 static void systick_init(void)
 {
-    SYSTICK_RVR = (HCLK_FREQ / 1000) - 1; /* 1ms reload */
+    SYSTICK_RVR = (CPU_FREQ / 1000) - 1;
     SYSTICK_CVR = 0;
     SYSTICK_CSR = 0x5; /* enable, processor clock, no interrupt */
 }
@@ -109,45 +85,81 @@ static void delay_ms(uint32_t ms)
     }
 }
 
-volatile uint32_t app_running __attribute__((section(".data"))) = 0;
+static const char* state_name(uint8_t state)
+{
+    switch (state) {
+        case IMG_STATE_NEW:      return "NEW";
+        case IMG_STATE_UPDATING: return "UPDATING";
+        case IMG_STATE_TESTING:  return "TESTING";
+        case IMG_STATE_SUCCESS:  return "SUCCESS";
+        default:                 return "UNKNOWN";
+    }
+}
+
+static void print_partition_info(void)
+{
+    uint32_t boot_ver, update_ver;
+    uint8_t boot_state = 0, update_state = 0;
+
+    boot_ver = wolfBoot_current_firmware_version();
+    update_ver = wolfBoot_update_firmware_version();
+    wolfBoot_get_partition_state(PART_BOOT, &boot_state);
+    wolfBoot_get_partition_state(PART_UPDATE, &update_state);
+
+    printf("Partition Info\r\n");
+    printf("  Boot:   version %lu, state %s\r\n",
+           (unsigned long)boot_ver, state_name(boot_state));
+    printf("  Update: version %lu, state %s\r\n",
+           (unsigned long)update_ver, state_name(update_state));
+}
 
 void main(void)
 {
-    /* hal_init() not called — XSPI2 already configured by wolfBoot for XIP */
+    uint32_t version;
+    uint8_t boot_state = 0;
+    int led_pin;
+
+    /* hal_init() not called -- XSPI2 already configured by wolfBoot for XIP */
     led_init();
-
-    app_running = 0xCAFEBEEF;
-    (void)wolfBoot_current_firmware_version();
-
     led_on(GPIOG_BASE, LED_GREEN_PIN);
 
-    /* Test flash erase from XIP (RAMFUNCTION verification) */
-    hal_flash_unlock();
-    hal_flash_erase(0x70010000, 0x1000);
-    hal_flash_lock();
+    version = wolfBoot_current_firmware_version();
 
-    app_running = 0xF1A5F1A5;
+    printf("\r\n=== STM32N6 wolfBoot Test App ===\r\n");
+    printf("Firmware Version: %lu\r\n", (unsigned long)version);
+    print_partition_info();
 
-    /* Mark firmware stable (flash ops are RAMFUNCTION, safe from XIP) */
-    wolfBoot_success();
+    /* Auto-handle boot state */
+    wolfBoot_get_partition_state(PART_BOOT, &boot_state);
+    if (boot_state == IMG_STATE_TESTING) {
+        printf("State TESTING -> marking success\r\n");
+        wolfBoot_success();
+    } else if (boot_state != IMG_STATE_SUCCESS) {
+        printf("Calling wolfBoot_success()\r\n");
+        wolfBoot_success();
+    }
+    printf("Boot OK (state: %s)\r\n", state_name(boot_state));
 
     /* Enable icache for XIP performance (hal_prepare_boot disables it) */
-#define SCB_CCR_REG     (*(volatile uint32_t *)(0xE000ED14UL))
-#define SCB_ICIALLU_REG (*(volatile uint32_t *)(0xE000EF50UL))
-    __asm__ volatile("dsb; isb");
-    SCB_ICIALLU_REG = 0;
-    __asm__ volatile("dsb; isb");
-    SCB_CCR_REG |= (1 << 17); /* IC bit */
-    __asm__ volatile("dsb; isb");
+    DSB();
+    ISB();
+    SCB_ICIALLU = 0;
+    DSB();
+    ISB();
+    SCB_CCR |= SCB_CCR_IC;
+    DSB();
+    ISB();
 
     systick_init();
 
-    /* Blink blue LED at 1 Hz (500ms on/off).
-     * Correct rate confirms CPU running at 600 MHz PLL. */
+    /* Blink LED based on version: blue for v1, red for v>1 */
+    printf("Blinking %s LED\r\n", (version > 1) ? "red" : "blue");
+
+    led_pin = (version > 1) ? LED_RED_PIN : LED_BLUE_PIN;
     while (1) {
-        led_on(GPIOG_BASE, LED_BLUE_PIN);
+        led_on(GPIOG_BASE, led_pin);
         delay_ms(500);
-        led_off(GPIOG_BASE, LED_BLUE_PIN);
+        led_off(GPIOG_BASE, led_pin);
         delay_ms(500);
     }
 }

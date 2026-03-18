@@ -616,7 +616,8 @@ ifeq ($(TARGET),s32k1xx)
 endif
 
 ifeq ($(TARGET),stm32n6)
-    CFLAGS+=-DRAM_CODE
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
+    APP_OBJS+=syscalls.o
 endif
 
 ifeq ($(TARGET),mcxw)

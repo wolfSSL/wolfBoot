@@ -274,7 +274,11 @@ ifeq ($(ARCH),ARM)
     CORTEX_M55=1
     CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x70000000
-    WOLFBOOT_ORIGIN=0x34000000
+    ifeq ($(TZEN),1)
+      WOLFBOOT_ORIGIN=0x24000000
+    else
+      WOLFBOOT_ORIGIN=0x34000000
+    endif
     EXT_FLASH=1
     PART_UPDATE_EXT=1
     PART_SWAP_EXT=1
@@ -375,7 +379,9 @@ else
     endif
     ifeq ($(TZEN),1)
       ifneq (,$(findstring stm32,$(TARGET)))
-        OBJS+=hal/stm32_tz.o
+        ifneq ($(TARGET),stm32n6)
+          OBJS+=hal/stm32_tz.o
+        endif
       endif
       CFLAGS+=-mcmse
       ifeq ($(WOLFCRYPT_TZ),1)

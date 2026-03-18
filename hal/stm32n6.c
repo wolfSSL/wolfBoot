@@ -21,9 +21,12 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include <image.h>
 #include "hal.h"
 #include "hal/stm32n6.h"
+#include "printf.h"
+#include "hal/armv8m_tz.h"
 
 /* OCTOSPI register definitions come from hal/spi/spi_drv_stm32.h (included
  * via stm32n6.h). STM32N6 XSPI2 uses the same IP block as OCTOSPI.
@@ -419,9 +422,9 @@ static void clock_config(void)
 /* USART1 on PE5 (TX) / PE6 (RX), AF7 */
 
 #define UART_BASE        USART1_BASE
-#define UART_CLOCK_FREQ  300000000UL /* HCLK/APB2 after PLL config */
+#define UART_CLOCK_FREQ  200000000UL /* PCLK2 = IC2(400MHz) / AHB(2) / APB2(1) */
 
-static void uart_init(uint32_t baud)
+static void uart_init_baud(uint32_t baud)
 {
     uint32_t reg;
 
@@ -454,9 +457,9 @@ static void uart_init(uint32_t baud)
     UART_CR1(UART_BASE) = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
 }
 
-static void uart_write(const char *buf, int len)
+void uart_write(const char *buf, unsigned int len)
 {
-    int i;
+    unsigned int i;
     for (i = 0; i < len; i++) {
         while (!(UART_ISR(UART_BASE) & USART_ISR_TXE))
             ;
@@ -478,18 +481,64 @@ static void pwr_enable_io_supply(void)
     DMB();
 }
 
+
 void hal_init(void)
 {
+#ifdef TZEN
+    /* TrustZone enabled: wolfBoot runs Secure, app runs Non-Secure.
+     * Configure SAU to define non-secure regions for the application. */
+    {
+        SAU_CTRL = 0;
+        DSB();
+
+        /* Region 0: NSC - reserved for secure gateway veneers */
+        sau_init_region(0, 0x24010000, 0x2401FFFF, 1);
+
+        /* Region 1: NS - XSPI2 memory-mapped flash (app XIP + data) */
+        sau_init_region(1, 0x70000000, 0x7FFFFFFF, 0);
+
+        /* Region 2: NS - app SRAM (non-secure AXISRAM alias) */
+        sau_init_region(2, 0x34000000, 0x343FFFFF, 0);
+
+        /* Region 3: NS - peripheral non-secure aliases (for app) */
+        sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
+
+        SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+        DSB();
+        ISB();
+
+        /* Enable SecureFault handler */
+        SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+    }
+#else
+    /* No TrustZone: blanket NSC region allows secure CPU to access all
+     * memory regardless of IDAU attribution. */
+    {
+        SAU_CTRL = 0;
+        DSB();
+        sau_init_region(0, 0x00000000, 0xFFFFFFE0, 1); /* full range, NSC */
+        SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+        DSB();
+        ISB();
+    }
+#endif
     clock_config();
     pwr_enable_io_supply();
     icache_enable();
-    dcache_enable();
     octospi_gpio_init();
     octospi_init();
+    dcache_enable();
 
 #ifdef DEBUG_UART
-    uart_init(115200);
+    uart_init_baud(115200);
     uart_write("wolfBoot Init\n", 14);
+    wolfBoot_printf("TrustZone: %s\n",
+    #if TZ_SECURE()
+        "Secure"
+    #else
+        "Off"
+    #endif
+    );
 #endif
 }
 
@@ -507,6 +556,10 @@ static int RAMFUNCTION nor_flash_write(uint32_t offset, const uint8_t *data,
     uint32_t page_off, write_sz;
     int remaining = len;
     int ret = 0;
+    /* Buffer for data that may reside in XIP flash (memory-mapped XSPI2).
+     * The source pointer becomes invalid once XSPI2 leaves mmap mode for
+     * the SPI page-program command, so we copy to RAM first. */
+    uint8_t page_buf[FLASH_PAGE_SIZE];
 
     if (len <= 0)
         return 0;
@@ -517,10 +570,12 @@ static int RAMFUNCTION nor_flash_write(uint32_t offset, const uint8_t *data,
         if ((int)write_sz > remaining)
             write_sz = remaining;
 
+        memcpy(page_buf, data, write_sz);
+
         octospi_write_enable();
         ret = octospi_cmd(0, PAGE_PROG_4B_CMD,
                  offset, SPI_MODE_SINGLE,
-                 (uint8_t *)data, write_sz, SPI_MODE_SINGLE, 0);
+                 page_buf, write_sz, SPI_MODE_SINGLE, 0);
         if (ret < 0)
             break;
 
@@ -585,7 +640,15 @@ void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
-/* ext_flash API: device-relative offsets (update/swap partitions) */
+/* ext_flash API: accepts both device-relative offsets (update/swap) and
+ * absolute memory-mapped addresses (boot partition with PART_BOOT_EXT). */
+
+static uint32_t RAMFUNCTION ext_flash_addr(uintptr_t address)
+{
+    if (address >= OCTOSPI_MEM_BASE)
+        return (uint32_t)(address - OCTOSPI_MEM_BASE);
+    return (uint32_t)address;
+}
 
 int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
@@ -595,7 +658,7 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
         return 0;
 
     ret = octospi_cmd(1, FAST_READ_4B_CMD,
-             (uint32_t)address, SPI_MODE_SINGLE,
+             ext_flash_addr(address), SPI_MODE_SINGLE,
              data, len, SPI_MODE_SINGLE, 8);
 
     octospi_enable_mmap();
@@ -606,12 +669,12 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t *data, int len)
 int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data,
     int len)
 {
-    return nor_flash_write((uint32_t)address, data, len);
+    return nor_flash_write(ext_flash_addr(address), data, len);
 }
 
 int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
 {
-    return nor_flash_erase((uint32_t)address, len);
+    return nor_flash_erase(ext_flash_addr(address), len);
 }
 
 void RAMFUNCTION ext_flash_lock(void)

@@ -44,6 +44,16 @@ OPENOCD_CFG="${WOLFBOOT_ROOT}/config/openocd/openocd_stm32n6.cfg"
 BOOT_ADDR=0x70020000
 UPDATE_ADDR=0x70120000
 
+# Determine SRAM load address from TZEN config
+TZEN_CHECK=$(grep -E '^TZEN\?*=' "${WOLFBOOT_ROOT}/.config" 2>/dev/null | head -1 | sed 's/.*=//;s/[[:space:]]//g')
+if [ "$TZEN_CHECK" = "1" ]; then
+    SRAM_ADDR=0x24000000
+    SRAM_WORK=0x24020000
+else
+    SRAM_ADDR=0x34000000
+    SRAM_WORK=0x34020000
+fi
+
 check_tool() {
     command -v "$1" &>/dev/null || { echo -e "${RED}Error: $1 not found${NC}"; exit 1; }
 }
@@ -99,8 +109,8 @@ sleep 1
 OPENOCD_CMDS="reset init; "
 
 if [ $APP_ONLY -eq 0 ]; then
-    echo -e "${CYAN}  wolfboot.bin -> SRAM 0x34000000${NC}"
-    OPENOCD_CMDS+="load_image ${WOLFBOOT_ROOT}/wolfboot.bin 0x34000000 bin; "
+    echo -e "${CYAN}  wolfboot.bin -> SRAM ${SRAM_ADDR}${NC}"
+    OPENOCD_CMDS+="load_image ${WOLFBOOT_ROOT}/wolfboot.bin ${SRAM_ADDR} bin; "
 fi
 
 echo -e "${CYAN}  image_v1_signed.bin -> NOR ${BOOT_ADDR}${NC}"
@@ -109,6 +119,15 @@ OPENOCD_CMDS+="flash write_image erase ${WOLFBOOT_ROOT}/test-app/image_v1_signed
 if [ $TEST_UPDATE -eq 1 ]; then
     echo -e "${CYAN}  image_v2_signed.bin -> NOR ${UPDATE_ADDR}${NC}"
     OPENOCD_CMDS+="flash write_image erase ${WOLFBOOT_ROOT}/test-app/image_v2_signed.bin ${UPDATE_ADDR}; "
+
+    # Write update trigger: "pBOOT" (0x70 0x42 0x4F 0x4F 0x54) at end of
+    # update partition. wolfBoot reads this trailer to detect a pending update.
+    # Address: UPDATE_ADDR + PARTITION_SIZE - 5
+    PART_SIZE=$(grep -E '^WOLFBOOT_PARTITION_SIZE' "${WOLFBOOT_ROOT}/.config" | head -1 | sed 's/.*=//;s/[[:space:]]//g')
+    TRIGGER_ADDR=$(printf "0x%08x" $(( ${UPDATE_ADDR} + ${PART_SIZE} - 5 )))
+    echo -e "${CYAN}  Update trigger -> NOR ${TRIGGER_ADDR}${NC}"
+    printf 'pBOOT' > /tmp/trigger_magic.bin
+    OPENOCD_CMDS+="flash write_image /tmp/trigger_magic.bin ${TRIGGER_ADDR}; "
 fi
 
 # Boot wolfBoot from SRAM (reset would clear SRAM, so we jump directly)
@@ -121,7 +140,7 @@ if [ $APP_ONLY -eq 0 ]; then
     OPENOCD_CMDS+="reg msplim_s 0x00000000; "
     OPENOCD_CMDS+="reg psplim_s 0x00000000; "
     OPENOCD_CMDS+="reg msp ${INIT_SP}; "
-    OPENOCD_CMDS+="mww 0xE000ED08 0x34000000; "  # VTOR
+    OPENOCD_CMDS+="mww 0xE000ED08 ${SRAM_ADDR}; "  # VTOR
     OPENOCD_CMDS+="mww 0xE000ED28 0xFFFFFFFF; "  # Clear CFSR
     OPENOCD_CMDS+="resume ${ENTRY_THUMB}; "
 fi

@@ -33,8 +33,23 @@
 #define DSB() __asm__ volatile ("dsb")
 #endif
 
-/*** RCC (Reset and Clock Control) — base 0x56028000 (secure) ***/
-#define RCC_BASE                (0x56028000UL)
+/* TrustZone secure/non-secure detection.
+ * When compiled with -mcmse (TZEN=1) and not building the non-secure app,
+ * TZ_SECURE() is 1 and we use secure peripheral aliases (0x5xxxxxxx).
+ * Otherwise we use non-secure aliases (0x4xxxxxxx). */
+#if (defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+     !defined(NONSECURE_APP))
+#   define TZ_SECURE() (1)
+#else
+#   define TZ_SECURE() (0)
+#endif
+
+/*** RCC (Reset and Clock Control) ***/
+#if TZ_SECURE()
+#define RCC_BASE                (0x56028000UL) /* AHB4 secure */
+#else
+#define RCC_BASE                (0x46028000UL) /* AHB4 non-secure */
+#endif
 
 /* RCC_CR: control register (read), CSR: set register, CCR: clear register */
 #define RCC_CR                  (*(volatile uint32_t *)(RCC_BASE + 0x000))
@@ -190,7 +205,11 @@
 
 
 /*** PWR (Power Control) — base 0x56024800 (secure) ***/
-#define PWR_BASE                (0x56024800UL)
+#if TZ_SECURE()
+#define PWR_BASE                (0x56024800UL) /* secure */
+#else
+#define PWR_BASE                (0x46024800UL) /* non-secure */
+#endif
 
 #define PWR_CR1                 (*(volatile uint32_t *)(PWR_BASE + 0x00))
 #define PWR_CR2                 (*(volatile uint32_t *)(PWR_BASE + 0x04))
@@ -219,6 +238,7 @@
 
 
 /*** GPIO ***/
+#if TZ_SECURE()
 #define GPIOA_BASE              (0x56020000UL)
 #define GPIOB_BASE              (0x56020400UL)
 #define GPIOC_BASE              (0x56020800UL)
@@ -231,6 +251,20 @@
 #define GPIOO_BASE              (0x56023800UL)
 #define GPIOP_BASE              (0x56023C00UL)
 #define GPIOQ_BASE              (0x56024000UL)
+#else
+#define GPIOA_BASE              (0x46020000UL)
+#define GPIOB_BASE              (0x46020400UL)
+#define GPIOC_BASE              (0x46020800UL)
+#define GPIOD_BASE              (0x46020C00UL)
+#define GPIOE_BASE              (0x46021000UL)
+#define GPIOF_BASE              (0x46021400UL)
+#define GPIOG_BASE              (0x46021800UL)
+#define GPIOH_BASE              (0x46021C00UL)
+#define GPION_BASE              (0x46023400UL)
+#define GPIOO_BASE              (0x46023800UL)
+#define GPIOP_BASE              (0x46023C00UL)
+#define GPIOQ_BASE              (0x46024000UL)
+#endif
 
 /* GPIO register offsets — GPIO_ODR, GPIO_BSRR, GPIO_MODE_* come from
  * spi_drv_stm32.h. Define the rest that aren't in the shared header. */
@@ -253,7 +287,11 @@
 /* Set base address before including shared OCTOSPI register macros.
  * STM32N6 XSPI2 uses the same IP block as OCTOSPI (identical register layout).
  */
-#define OCTOSPI_BASE            (0x5802A000UL)
+#if TZ_SECURE()
+#define OCTOSPI_BASE            (0x5802A000UL) /* AHB5 secure */
+#else
+#define OCTOSPI_BASE            (0x4802A000UL) /* AHB5 non-secure */
+#endif
 #define OCTOSPI_MEM_BASE        (0x70000000UL) /* XSPI2 memory-mapped region */
 
 #include "hal/spi/spi_drv_stm32.h"
@@ -293,7 +331,11 @@
 
 
 /*** USART — parameterized by base address ***/
-#define USART1_BASE             (0x52001000UL)
+#if TZ_SECURE()
+#define USART1_BASE             (0x52001000UL) /* APB2 secure */
+#else
+#define USART1_BASE             (0x42001000UL) /* APB2 non-secure */
+#endif
 
 #define UART_CR1(base)          (*(volatile uint32_t *)((base) + 0x00))
 #define UART_CR2(base)          (*(volatile uint32_t *)((base) + 0x04))
@@ -328,6 +370,8 @@
 #define SCB_DCCSW               (*(volatile uint32_t *)(0xE000EF6CUL))
 #define SCB_DCCIMVAC            (*(volatile uint32_t *)(0xE000EF70UL))
 #define SCB_DCCISW              (*(volatile uint32_t *)(0xE000EF74UL))
+
+/* SAU registers defined in hal/armv8m_tz.h */
 
 /* Cache size ID registers */
 #define CCSIDR                  (*(volatile uint32_t *)(0xE000ED80UL))
