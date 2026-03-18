@@ -28,6 +28,11 @@
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
 
+#ifdef WOLFCRYPT_SECURE_MODE
+#include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
+
 extern void hal_init(void);
 
 static void gpio_init_output(GPIO_Type *gpio, PORT_Type *port,
@@ -77,6 +82,28 @@ static void gpio_init_output(GPIO_Type *gpio, PORT_Type *port,
     PORT_SetPinConfig(port, pin, &pin_config);
 }
 
+#ifdef WOLFCRYPT_SECURE_MODE
+void print_random_number(void)
+{
+    WC_RNG rng;
+    uint32_t rnd;
+    int ret;
+
+    ret = wc_InitRng(&rng);
+    if (ret != 0) {
+        wolfBoot_printf("Random number: init failed (%d)\n", ret);
+    }
+    else {
+        ret = wc_RNG_GenerateBlock(&rng, (byte *)&rnd, sizeof(rnd));
+        if (ret != 0)
+            wolfBoot_printf("Random number: generate failed (%d)\n", ret);
+        else
+            wolfBoot_printf("Today's lucky number: 0x%08lx\n", (unsigned long)rnd);
+        wc_FreeRng(&rng);
+    }
+}
+#endif
+
 void main(void)
 {
     uint32_t boot_ver;
@@ -90,6 +117,10 @@ void main(void)
 #endif
 
     wolfBoot_printf("Hello from firmware version %d\n", boot_ver);
+
+#ifdef WOLFCRYPT_SECURE_MODE
+    print_random_number();
+#endif
 
     if (boot_ver == 1) {
         /* Red off */
