@@ -68,6 +68,7 @@
 /* RSA */
 #define HAVE_RSA
 #define WC_RSA_BLINDING
+#define WC_RSA_PSS
 #define WOLFSSL_KEY_GEN
 
 /* Hashing */

@@ -193,6 +193,9 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define SIGN_RSA2048   HDR_IMG_TYPE_AUTH_RSA2048
 #define SIGN_RSA3072   HDR_IMG_TYPE_AUTH_RSA3072
 #define SIGN_RSA4096   HDR_IMG_TYPE_AUTH_RSA4096
+#define SIGN_RSAPSS2048  HDR_IMG_TYPE_AUTH_RSAPSS2048
+#define SIGN_RSAPSS3072  HDR_IMG_TYPE_AUTH_RSAPSS3072
+#define SIGN_RSAPSS4096  HDR_IMG_TYPE_AUTH_RSAPSS4096
 #define SIGN_ED448     HDR_IMG_TYPE_AUTH_ED448
 #define SIGN_ECC384    HDR_IMG_TYPE_AUTH_ECC384
 #define SIGN_ECC521    HDR_IMG_TYPE_AUTH_ECC521
@@ -837,6 +840,25 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 break;
 
             FALL_THROUGH; /* we didn't solve the key, keep trying */
+        case SIGN_RSAPSS2048:
+            ret = load_key_rsa(SIGN_RSAPSS2048, 256, KEYSTORE_PUBKEY_SIZE_RSA2048, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
+            if (ret == 0)
+                break;
+            FALL_THROUGH;
+        case SIGN_RSAPSS3072:
+            ret = load_key_rsa(SIGN_RSAPSS3072, 384, KEYSTORE_PUBKEY_SIZE_RSA3072, 512,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
+            if (ret == 0)
+                break;
+            FALL_THROUGH;
+        case SIGN_RSAPSS4096:
+            ret = load_key_rsa(SIGN_RSAPSS4096, 512, KEYSTORE_PUBKEY_SIZE_RSA4096, 1024,
+                key_buffer, key_buffer_sz, pubkey, pubkey_sz, secondary);
+            if (ret == 0)
+                break;
+
+            FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_LMS:
             ret = -1;
 
@@ -1103,6 +1125,30 @@ static int sign_digest(int sign, int hash_algo,
         }
         ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, *signature_sz,
                 &key.rsa, &rng);
+        if (ret > 0) {
+            *signature_sz = ret;
+            ret = 0;
+        }
+    }
+    else
+    if (sign == SIGN_RSAPSS2048 ||
+        sign == SIGN_RSAPSS3072 ||
+        sign == SIGN_RSAPSS4096)
+    {
+        enum wc_HashType hash_type;
+        int mgf;
+        if (hash_algo == HASH_SHA256) {
+            hash_type = WC_HASH_TYPE_SHA256;
+            mgf = WC_MGF1SHA256;
+        } else if (hash_algo == HASH_SHA384) {
+            hash_type = WC_HASH_TYPE_SHA384;
+            mgf = WC_MGF1SHA384;
+        } else {
+            fprintf(stderr, "RSA-PSS requires SHA-256 or SHA-384\n");
+            return -1;
+        }
+        ret = wc_RsaPSS_Sign(digest, digest_sz, signature, *signature_sz,
+                hash_type, mgf, &key.rsa, &rng);
         if (ret > 0) {
             *signature_sz = ret;
             ret = 0;
@@ -2630,6 +2676,23 @@ static void set_signature_sizes(int secondary)
             CMD.header_sz = 1024;
         *sz = 512;
     }
+    else if (*sign == SIGN_RSAPSS2048) {
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 256;
+    }
+    else if (*sign == SIGN_RSAPSS3072) {
+        if ((CMD.header_sz < 1024) && (CMD.hash_algo != HASH_SHA256))
+            CMD.header_sz = 1024;
+        if (CMD.header_sz < 512)
+            CMD.header_sz = 512;
+        *sz = 384;
+    }
+    else if (*sign == SIGN_RSAPSS4096) {
+        if (CMD.header_sz < 1024)
+            CMD.header_sz = 1024;
+        *sz = 512;
+    }
     else if (*sign == SIGN_LMS) {
         int    lms_ret = 0;
         word32 sig_sz = 0;
@@ -2921,6 +2984,36 @@ int main(int argc, char** argv)
             } else {
                 CMD.sign = SIGN_RSA4096;
                 sign_str = "RSA4096";
+            }
+        }
+        else if (strcmp(argv[i], "--rsapss2048") == 0) {
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSAPSS2048;
+                secondary_sign_str = "RSAPSS2048";
+            } else {
+                CMD.sign = SIGN_RSAPSS2048;
+                sign_str = "RSAPSS2048";
+            }
+        }
+        else if (strcmp(argv[i], "--rsapss3072") == 0) {
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSAPSS3072;
+                secondary_sign_str = "RSAPSS3072";
+            } else {
+                CMD.sign = SIGN_RSAPSS3072;
+                sign_str = "RSAPSS3072";
+            }
+        }
+        else if (strcmp(argv[i], "--rsapss4096") == 0) {
+            if (CMD.sign != SIGN_AUTO) {
+                CMD.hybrid = 1;
+                CMD.secondary_sign = SIGN_RSAPSS4096;
+                secondary_sign_str = "RSAPSS4096";
+            } else {
+                CMD.sign = SIGN_RSAPSS4096;
+                sign_str = "RSAPSS4096";
             }
         }
         else if (strcmp(argv[i], "--lms") == 0) {
@@ -3331,7 +3424,10 @@ int main(int argc, char** argv)
     }
     else if (CMD.sign == SIGN_RSA2048 ||
              CMD.sign == SIGN_RSA3072 ||
-             CMD.sign == SIGN_RSA4096) {
+             CMD.sign == SIGN_RSA4096 ||
+             CMD.sign == SIGN_RSAPSS2048 ||
+             CMD.sign == SIGN_RSAPSS3072 ||
+             CMD.sign == SIGN_RSAPSS4096) {
         wc_FreeRsaKey(&key.rsa);
     }
     else if (CMD.sign == SIGN_LMS) {

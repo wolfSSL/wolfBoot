@@ -68,6 +68,11 @@ extern "C" {
     defined (WOLFBOOT_SIGN_RSA4096ENC)
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_rsa
 #endif
+#if defined (WOLFBOOT_SIGN_RSAPSS2048) || \
+    defined (WOLFBOOT_SIGN_RSAPSS3072) || \
+    defined (WOLFBOOT_SIGN_RSAPSS4096)
+#define wolfBoot_verify_signature_primary wolfBoot_verify_signature_rsa_pss
+#endif
 #if defined (WOLFBOOT_SIGN_ECC256) || \
         defined (WOLFBOOT_SIGN_ECC384) || \
         defined (WOLFBOOT_SIGN_ECC521)
@@ -96,6 +101,11 @@ extern "C" {
     defined (WOLFBOOT_SIGN_SECONDARY_RSA3072ENC) || \
     defined (WOLFBOOT_SIGN_SECONDARY_RSA4096ENC)
 #define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_rsa
+#endif
+#if defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
+    defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+#define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_rsa_pss
 #endif
 #if defined (WOLFBOOT_SIGN_SECONDARY_ECC256) || \
         defined (WOLFBOOT_SIGN_SECONDARY_ECC384) || \

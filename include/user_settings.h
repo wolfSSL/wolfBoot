@@ -222,12 +222,25 @@ extern int tolower(int c);
     defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
+    defined(WOLFBOOT_SIGN_RSAPSS2048) || \
+    defined(WOLFBOOT_SIGN_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_RSAPSS4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096) || \
     (defined(WOLFCRYPT_SECURE_MODE) && (!defined(PKCS11_SMALL)))
 
 #   define WC_RSA_BLINDING
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
 #   define WC_ASN_HASH_SHA256
+#   if defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
+       defined(WOLFBOOT_SIGN_RSAPSS4096) || \
+       defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
+       defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
+       defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+#       define WC_RSA_PSS
+#   endif
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
        !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
@@ -235,7 +248,9 @@ extern int tolower(int c);
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #       define WOLFSSL_RSA_PUBLIC_ONLY
-#       define WC_NO_RSA_OAEP
+#       if !defined(WC_RSA_PSS)
+#           define WC_NO_RSA_OAEP
+#       endif
 #       define NO_RSA_BOUNDS_CHECK
 #   endif
 #   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
@@ -244,7 +259,8 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
 #   endif
-#   if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048)
+#   if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+       defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048)
 #       define FP_MAX_BITS (2048 * 2)
 #       define SP_INT_BITS 2048
 #       define WOLFSSL_SP_NO_3072
@@ -253,7 +269,8 @@ extern int tolower(int c);
 #       define RSA_MIN_SIZE 2048
 #       define RSA_MAX_SIZE 2048
 #   endif
-#   if defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)
+#   if defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+       defined(WOLFBOOT_SIGN_RSAPSS3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072)
 #       define FP_MAX_BITS (3072 * 2)
 #       define SP_INT_BITS 3072
 #       define WOLFSSL_SP_NO_2048
@@ -263,7 +280,8 @@ extern int tolower(int c);
 #       define RSA_MAX_SIZE 3072
 #   endif
 
-#   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
+#   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
+       defined(WOLFBOOT_SIGN_RSAPSS4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
 #       define FP_MAX_BITS (4096 * 2)
 #       define SP_INT_BITS 4096
 #       define WOLFSSL_SP_NO_2048
