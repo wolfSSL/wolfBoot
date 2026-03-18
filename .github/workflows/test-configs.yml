@@ -260,6 +260,13 @@ jobs:
       config-file: ./config/examples/mcxn-tz.config
       board-name: frdmmcxn947
 
+  nxp_mcxn_wolfcrypt_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-wolfcrypt-tz.config
+      board-name: frdmmcxn947
+
   nxp_s32k142_test:
     uses: ./.github/workflows/test-build.yml
     with:
