@@ -37,7 +37,7 @@
 
 /* UART */
 
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) || (UART_FLASH)
 
 #define UART_WRITE_BUF_SIZE 128
 
@@ -134,7 +134,7 @@ void uart_write(const char* buf, unsigned int sz)
    uart_write_device(DEVICE_MONITOR, buf, sz);
 }
 
-#endif /* DEBUG_UART */
+#endif /* DEBUG_UART || UART_FLASH */
 
 #if (defined DEBUG_UART || UART_FLASH)
 #define UART_RX_TIMEOUT 1000000UL
