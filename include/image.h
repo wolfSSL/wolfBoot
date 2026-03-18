@@ -382,6 +382,8 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
  * double checking its return value contains a valid
  * len (>= WOLFBOOT_SHA_DIGEST_SIZE).
  *
+ * Uses GAS local numeric labels (1f/1:) so the macro can be safely expanded
+ * multiple times in the same function (e.g. RSA PKCS#1.5 + RSA-PSS paths).
  */
 #define RSA_VERIFY_FN(ret,fn,...) \
     { \
@@ -400,22 +402,22 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
-        asm volatile("blt nope"); \
+        asm volatile("blt 1f"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
-        asm volatile("blt nope"); \
+        asm volatile("blt 1f"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
-        asm volatile("blt nope"); \
+        asm volatile("blt 1f"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
         asm volatile("cmp r0, r2":::"cc"); \
-        asm volatile("blt nope"); \
+        asm volatile("blt 1f"); \
         /* Return value is set here in case of success */ \
         ret = tmp_ret; \
-        asm volatile("nope:"); \
+        asm volatile("1:"); \
         asm volatile("nop"); \
     }
 
@@ -424,12 +426,14 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
  *
  * Compare the digest twice, then confirm via
  * wolfBoot_image_confirm_signature_ok();
+ *
+ * Uses GAS local numeric labels (2f/2:) for safe multi-expansion.
  */
 #define RSA_VERIFY_HASH(img,digest) \
     { \
         volatile int compare_res; \
         if (!img || !digest)    \
-            asm volatile("b hnope"); \
+            asm volatile("b 2f"); \
         /* Redundant set of r0=50*/ \
         asm volatile("mov r0, #50":::"r0"); \
         asm volatile("mov r0, #50":::"r0"); \
@@ -440,19 +444,19 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope":::"cc"); \
+        asm volatile("bne 2f":::"cc"); \
         asm volatile("cmp r0, #0"); \
         asm volatile("cmp r0, #0"); \
         asm volatile("cmp r0, #0"); \
-        asm volatile("bne hnope":::"cc"); \
+        asm volatile("bne 2f":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         /* Repeat comparison call */ \
         compare_res = image_CT_compare(digest, img->sha_hash, \
             WOLFBOOT_SHA_DIGEST_SIZE); \
@@ -461,22 +465,85 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
-        asm volatile("bne hnope"); \
+        asm volatile("bne 2f"); \
         /* Confirm that the signature is OK */ \
         wolfBoot_image_confirm_signature_ok(img); \
-        asm volatile("hnope:"); \
+        asm volatile("2:"); \
+        asm volatile("nop"); \
+    }
+
+/**
+ * Second part of RSA-PSS verification.
+ *
+ * Call wc_RsaPSS_CheckPadding twice, then confirm via
+ * wolfBoot_image_confirm_signature_ok();
+ *
+ * Uses GAS local numeric labels (3f/3:) for safe multi-expansion.
+ */
+#define RSA_PSS_VERIFY_HASH(img, pss_data, pss_data_sz, hash_type) \
+    { \
+        volatile int pss_res; \
+        if (!img || !pss_data)    \
+            asm volatile("b 3f"); \
+        /* Redundant set of r0=50*/ \
+        asm volatile("mov r0, #50":::"r0"); \
+        asm volatile("mov r0, #50":::"r0"); \
+        asm volatile("mov r0, #50":::"r0"); \
+        pss_res = wc_RsaPSS_CheckPadding(img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, \
+            pss_data, pss_data_sz, hash_type); \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f":::"cc"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("cmp r0, #0"); \
+        asm volatile("bne 3f":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        /* Repeat wc_RsaPSS_CheckPadding call */ \
+        pss_res = wc_RsaPSS_CheckPadding(img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, \
+            pss_data, pss_data_sz, hash_type); \
+        pss_res; \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 3f"); \
+        /* Confirm that the signature is OK */ \
+        wolfBoot_image_confirm_signature_ok(img); \
+        asm volatile("3:"); \
         asm volatile("nop"); \
     }
 
@@ -489,6 +556,8 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
  * set the return value accordingly.
  *
  * Double check by reading the value in p_res from memory a few times.
+ *
+ * Uses GAS local numeric labels (4f/4:) for safe multi-expansion.
  */
 #if defined(__GNUC__)
 
@@ -503,63 +572,63 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
     asm volatile("cmp r0, #0":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     /* Check that res = 1, a few times, reading the value from memory */ \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("mvn r3, r2":::"r3"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("mvn r3, r2":::"r3"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("mvn r3, r2":::"r3"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("ldr r2, [%0]" ::"r"(p_res)); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
     asm volatile("cmp r2, #1":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     asm volatile("mvn r3, r2":::"r3"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
     asm volatile("cmp r3, #0xFFFFFFFE":::"cc"); \
-    asm volatile("bne nope"); \
+    asm volatile("bne 4f"); \
     /* Confirm that the signature is OK */ \
     wolfBoot_image_confirm_signature_ok(img); \
-    asm volatile("nope:"); \
+    asm volatile("4:"); \
     asm volatile("nop") \
 
 #elif defined(__ICCARM__) && defined(__IAR_SYSTEMS_ICC__)
@@ -1247,6 +1316,11 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
 
 #define RSA_VERIFY_HASH(img,digest) \
     if (image_CT_compare(img->sha_hash, digest, WOLFBOOT_SHA_DIGEST_SIZE) == 0) \
+        wolfBoot_image_confirm_signature_ok(img);
+
+#define RSA_PSS_VERIFY_HASH(img, pss_data, pss_data_sz, hash_type) \
+    if (wc_RsaPSS_CheckPadding(img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, \
+            pss_data, pss_data_sz, hash_type) == 0) \
         wolfBoot_image_confirm_signature_ok(img);
 
 #define PART_SANITY_CHECK(p) \

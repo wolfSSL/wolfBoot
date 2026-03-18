@@ -601,7 +601,15 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
         return;
     }
 
-    /* wolfCrypt software RSA-PSS verify */
+    /* wolfCrypt software RSA-PSS verify (two-step)
+     *
+     * Step 1 (RSA_VERIFY_FN): wc_RsaPSS_VerifyInline performs the RSA
+     * operation and PSS unmasking, returning a pointer to the PSS data and
+     * its length.
+     *
+     * Step 2 (RSA_PSS_VERIFY_HASH): wc_RsaPSS_CheckPadding verifies the PSS
+     * padding against img->sha_hash. Returns 0 on success. Both steps are
+     * armored when WOLFBOOT_ARMORED is enabled. */
     ret = wc_InitRsaKey(&rsa, NULL);
     if (ret == 0) {
         /* Import public key */
@@ -609,26 +617,13 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
         if (ret >= 0) {
             XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
             RSA_VERIFY_FN(ret,
-                wc_RsaPSS_VerifyCheckInline, output, RSA_IMAGE_SIGNATURE_SIZE,
-                    &digest_out, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
-                    hash_type, mgf, &rsa);
+                wc_RsaPSS_VerifyInline, output, RSA_IMAGE_SIGNATURE_SIZE,
+                    &digest_out, hash_type, mgf, &rsa);
         }
     }
     wc_FreeRsaKey(&rsa);
-    /* wc_RsaPSS_VerifyCheckInline returns the PSS-verified data length on
-     * success (>= digest size), or a negative error code on failure.
-     * The hash comparison is performed internally by the function.
-     *
-     * Note: uses '>=' rather than '==' because PSS verify returns the digest
-     * size on success, unlike PKCS#1 v1.5 which returns exact decoded length.
-     *
-     * ARMORED limitation: the PKCS#1 v1.5 path uses both RSA_VERIFY_FN and
-     * RSA_VERIFY_HASH armored macros (two hardened gates), but PSS only uses
-     * RSA_VERIFY_FN because wc_RsaPSS_VerifyCheckInline performs the hash
-     * comparison internally. The branch below is not armored. Full armored
-     * hardening for PSS would require a new macro or restructuring. */
-    if (ret >= WOLFBOOT_SHA_DIGEST_SIZE && img) {
-        wolfBoot_image_confirm_signature_ok(img);
+    if (ret >= WOLFBOOT_SHA_DIGEST_SIZE && img && digest_out) {
+        RSA_PSS_VERIFY_HASH(img, digest_out, ret, hash_type);
     }
 }
 
