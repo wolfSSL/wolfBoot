@@ -1839,13 +1839,13 @@ XSPI2 NOR Flash (memory-mapped at 0x70000000):
   0x70020000  Boot partition (1MB, app runs from here via XIP)
   0x70120000  Update partition (1MB, device-relative: 0x00120000)
 
-AXISRAM — without TrustZone (non-secure alias):
-  0x34000000  wolfBoot (loaded to SRAM via SWD or Boot ROM FSBL copy)
-  0x34020000  Stack / work area
+AXISRAM2 — without TrustZone (non-secure alias):
+  0x34180400  wolfBoot FSBL (Boot ROM copies from NOR to here)
+  0x341A0400  Stack top (128KB above origin)
 
-AXISRAM — with TrustZone (TZEN=1, secure alias):
-  0x24000000  wolfBoot (secure SRAM — IDAU marks 0x24xxxxxx as secure)
-  0x24020000  Stack / work area (secure)
+AXISRAM2 — with TrustZone (TZEN=1, secure alias):
+  0x24180400  wolfBoot FSBL (secure — IDAU marks 0x24xxxxxx as secure)
+  0x241A0400  Stack top (secure)
   0x34000000  Application SRAM (SAU region: non-secure)
 ```
 
@@ -1866,14 +1866,65 @@ make flash
 ```
 
 `make flash` uses OpenOCD with the stmqspi driver to:
-1. Program the signed application to NOR flash at 0x70020000
-2. Load wolfBoot to SRAM (0x24000000 for TZEN=1, 0x34000000 otherwise)
-3. Start wolfBoot, which verifies and boots the application via XIP
+1. Generate a Boot ROM FSBL header using `STM32_SigningTool_CLI` and program
+   `wolfboot-trusted.bin` to NOR flash at 0x70000000 (for autonomous boot on reset)
+2. Load wolfBoot directly to SRAM for immediate execution
+3. Program the signed application to NOR flash at 0x70020000
+4. Start wolfBoot, which verifies and boots the application via XIP
+
+The Boot ROM copies the FSBL from NOR flash to AXISRAM2 at `0x34180400`.
+wolfBoot is linked at this address so it runs correctly after both
+OpenOCD-initiated and reset-initiated boots.
 
 Prerequisites:
-- OpenOCD 0.12+ with stm32n6x target support (build from source if needed)
+- OpenOCD 0.12+ with stm32n6x target support (build from
+  [openocd-org/openocd](https://github.com/openocd-org/openocd) if needed)
+- `STM32_SigningTool_CLI` (included with STM32CubeIDE) for Boot ROM FSBL header
+  generation. The flash script auto-detects the tool location. Without it,
+  wolfBoot is loaded to SRAM only (no autonomous boot on reset).
 - ST-Link connected to the Nucleo board
 - arm-none-eabi toolchain in PATH
+- OTP fuse VDDIO3_HSLV programmed (see [OTP Configuration](#otp-configuration)
+  below)
+
+### OTP Configuration (One-Time)
+
+The STM32N6 Boot ROM requires OTP fuse configuration to boot from external
+XSPI2 NOR flash. This is a **one-time permanent** operation.
+
+**OTP Word 124** (BSEC_HW_CONFIG) — set bit 15:
+
+| Bit | Name | Value | Description |
+|-----|------|-------|-------------|
+| 15 | VDDIO3_HSLV | 1 | Enable XSPI2 I/O high-speed low-voltage mode |
+
+**Using STM32CubeProgrammer (GUI):**
+
+1. Connect to the board via SWD (JP2/BOOT1 in position 2-3 for development mode)
+2. Select **OTP** in the left menu
+3. Find word 124 and set value to `0x00008000`
+4. Click **Program**
+
+**Using STM32_Programmer_CLI:**
+
+```sh
+STM32_Programmer_CLI -c port=SWD ap=1 \
+    -el <path>/OTP_FUSES_STM32N6xx.stldr \
+    -otp write word=124 value=0x00008000
+```
+
+### Boot Mode Switches (JP1/JP2)
+
+The NUCLEO-N657X0-Q has two boot mode jumpers:
+
+| Mode | JP1 (BOOT0) | JP2 (BOOT1) | Description |
+|------|-------------|-------------|-------------|
+| Development | don't care | 2-3 | Boot ROM waits for debugger (OpenOCD/SWD) |
+| External flash | 1-2 | 1-2 | Boot ROM loads FSBL from XSPI2 NOR flash |
+
+For development, use JP2=2-3 to flash via OpenOCD. After flashing, switch
+both JP1 and JP2 to position 1-2 and press reset for autonomous boot from
+NOR flash.
 
 ### Build Options
 

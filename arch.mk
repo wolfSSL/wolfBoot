@@ -274,11 +274,10 @@ ifeq ($(ARCH),ARM)
     CORTEX_M55=1
     CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x70000000
-    ifeq ($(TZEN),1)
-      WOLFBOOT_ORIGIN=0x24000000
-    else
-      WOLFBOOT_ORIGIN=0x34000000
-    endif
+    # Boot ROM copies FSBL from NOR to AXISRAM2 at 0x34180400.
+    # Use the same address for both TZEN=0 and TZEN=1 since the Boot ROM
+    # always uses the non-secure alias. SAU is configured in hal_init().
+    WOLFBOOT_ORIGIN=0x34180400
     EXT_FLASH=1
     PART_UPDATE_EXT=1
     PART_SWAP_EXT=1

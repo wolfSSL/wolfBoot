@@ -44,15 +44,14 @@ OPENOCD_CFG="${WOLFBOOT_ROOT}/config/openocd/openocd_stm32n6.cfg"
 BOOT_ADDR=0x70020000
 UPDATE_ADDR=0x70120000
 
-# Determine SRAM load address from TZEN config
-TZEN_CHECK=$(grep -E '^TZEN\?*=' "${WOLFBOOT_ROOT}/.config" 2>/dev/null | head -1 | sed 's/.*=//;s/[[:space:]]//g')
-if [ "$TZEN_CHECK" = "1" ]; then
-    SRAM_ADDR=0x24000000
-    SRAM_WORK=0x24020000
-else
-    SRAM_ADDR=0x34000000
-    SRAM_WORK=0x34020000
-fi
+# Boot ROM always copies FSBL to AXISRAM2 at this address
+SRAM_ADDR=0x34180400
+
+# STM32_SigningTool_CLI for Boot ROM FSBL header (use latest version)
+SIGN_TOOL=""
+for d in $(ls -rd /opt/st/stm32cubeide_*/plugins/com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.*/tools/bin 2>/dev/null); do
+    [ -x "$d/STM32_SigningTool_CLI" ] && SIGN_TOOL="$d/STM32_SigningTool_CLI" && break
+done
 
 check_tool() {
     command -v "$1" &>/dev/null || { echo -e "${RED}Error: $1 not found${NC}"; exit 1; }
@@ -109,6 +108,20 @@ sleep 1
 OPENOCD_CMDS="reset init; "
 
 if [ $APP_ONLY -eq 0 ]; then
+    # Generate Boot ROM FSBL header using STM32_SigningTool_CLI
+    if [ -n "$SIGN_TOOL" ]; then
+        TRUSTED_BIN="${WOLFBOOT_ROOT}/wolfboot-trusted.bin"
+        chmod u+w "${TRUSTED_BIN}" 2>/dev/null; rm -f "${TRUSTED_BIN}"
+        echo -e "${CYAN}  Generating FSBL header (STM32_SigningTool_CLI)...${NC}"
+        "$SIGN_TOOL" -bin "${WOLFBOOT_ROOT}/wolfboot.bin" -nk -of 0x80000000 -t fsbl -hv 2.3 -align -la ${SRAM_ADDR} -ep ${SRAM_ADDR} -o "${TRUSTED_BIN}" || true
+        [ -f "${TRUSTED_BIN}" ] || { echo -e "${RED}Failed to generate trusted binary${NC}"; exit 1; }
+        echo -e "${CYAN}  wolfboot-trusted.bin -> NOR 0x70000000${NC}"
+        OPENOCD_CMDS+="flash write_image erase ${TRUSTED_BIN} 0x70000000; "
+    else
+        echo -e "${YELLOW}  STM32_SigningTool_CLI not found, loading wolfBoot to SRAM only${NC}"
+    fi
+
+    # Also load wolfBoot directly to SRAM for immediate execution
     echo -e "${CYAN}  wolfboot.bin -> SRAM ${SRAM_ADDR}${NC}"
     OPENOCD_CMDS+="load_image ${WOLFBOOT_ROOT}/wolfboot.bin ${SRAM_ADDR} bin; "
 fi
@@ -130,7 +143,7 @@ if [ $TEST_UPDATE -eq 1 ]; then
     OPENOCD_CMDS+="flash write_image /tmp/trigger_magic.bin ${TRIGGER_ADDR}; "
 fi
 
-# Boot wolfBoot from SRAM (reset would clear SRAM, so we jump directly)
+# Boot wolfBoot from SRAM (also loaded to NOR for reset persistence)
 if [ $APP_ONLY -eq 0 ]; then
     # Extract initial SP (word 0) and entry point (word 1) from vector table
     INIT_SP=$(od -A n -t x4 -N 4 "${WOLFBOOT_ROOT}/wolfboot.bin" | awk '{print "0x"$1}')
