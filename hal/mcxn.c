@@ -40,6 +40,11 @@
 #include "hal/armv8m_tz.h"
 #endif
 
+#ifdef WOLFCRYPT_SECURE_MODE
+void hal_trng_init(void);
+int hal_trng_get_entropy(unsigned char *out, unsigned int len);
+#endif
+
 static flash_config_t pflash;
 static uint32_t pflash_sector_size = WOLFBOOT_SECTOR_SIZE;
 uint32_t SystemCoreClock;
@@ -104,6 +109,7 @@ void hal_init(void)
 #if defined(TZEN) && !defined(NONSECURE_APP)
     hal_sau_init();
 #endif
+
 }
 
 #ifdef __WOLFBOOT
@@ -207,21 +213,71 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
-/* These functions are stubs for now, because the MCUXpresso SDK doesn't
- * implement drivers for the MCXN's TRNG. */
+#define ELS_CMD_RND_REQ 24U
+
 void hal_trng_init(void)
 {
+    /* Enable ELS and wait for it to be ready */
+    ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1);
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
 }
 
 void hal_trng_fini(void)
 {
+    /* Don't disable ELS, it might be used by other actors */
 }
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
-    (void)out;
-    (void)len;
-    return -1;
+    /* Implemented as a RND_REQ command to the ELS */
+
+    uint32_t aligned_len = len & ~3U;
+    uint32_t status;
+
+    /* Wait for ELS to be ready */
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
+
+    /* Handle the word-aligned portion */
+    if (aligned_len > 0) {
+        ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)out;
+        ELS->ELS_DMA_RES0_LEN = aligned_len;
+        ELS->ELS_CMDCFG0 = 0;
+        ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
+                       | S50_ELS_CTRL_ELS_START(1)
+                       | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
+
+        while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+            ;
+
+        status = ELS->ELS_STATUS;
+        if (status & S50_ELS_STATUS_ELS_ERR_MASK)
+            return -1;
+    }
+
+    /* Handle remaining bytes (1-3) with a temporary word */
+    if (len > aligned_len) {
+        uint32_t tmp;
+
+        ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)&tmp;
+        ELS->ELS_DMA_RES0_LEN = 4;
+        ELS->ELS_CMDCFG0 = 0;
+        ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
+                       | S50_ELS_CTRL_ELS_START(1)
+                       | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
+
+        while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+            ;
+
+        status = ELS->ELS_STATUS;
+        if (status & S50_ELS_STATUS_ELS_ERR_MASK)
+            return -1;
+
+        memcpy(out + aligned_len, &tmp, len - aligned_len);
+    }
+
+    return 0;
 }
 #endif
 
