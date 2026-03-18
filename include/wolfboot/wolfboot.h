@@ -588,7 +588,7 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
 
-#if !defined(__WOLFBOOT) && defined(WOLFCRYPT_SECURE_MODE)
+#if !defined(__WOLFBOOT) && defined(TZEN)
 
 /* Applications can access update success/trigger and flash erase/write
  * via non-secure callable, to facilitate updates
@@ -627,7 +627,7 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len);
 CSME_NSE_API
 int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len);
 
-#endif /* !__WOLFBOOT && WOLFCRYPT_SECURE_MODE */
+#endif /* !__WOLFBOOT && TZEN */
 
 
 #ifdef __cplusplus

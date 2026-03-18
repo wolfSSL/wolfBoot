@@ -32,7 +32,7 @@ zephyr_library_include_directories(
   ${WOLFBOOT_MODULE_DIR}/include
 )
 
-set(WOLFBOOT_CMSE_VENEERS ${WOLFBOOT_MODULE_DIR}/src/wc_secure_calls.o)
+set(WOLFBOOT_CMSE_VENEERS ${WOLFBOOT_MODULE_DIR}/src/wolfboot_tz_nsc.o)
 if(EXISTS ${WOLFBOOT_CMSE_VENEERS})
   zephyr_library_link_libraries(${WOLFBOOT_CMSE_VENEERS})
 else()

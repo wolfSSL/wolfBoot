@@ -30,7 +30,7 @@ NSC_OBJ :=
 ifeq ($(TZEN),1)
   CFLAGS += -DNONSECURE_APP
   CFLAGS += -DWOLFCRYPT_SECURE_MODE
-  NSC_OBJ := ../../../src/wc_secure_calls.o
+  NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
 endif
 
 VPATH := ../common

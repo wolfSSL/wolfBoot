@@ -218,9 +218,9 @@ ifeq ($(TZEN),1)
     CFLAGS+=-DNONSECURE_APP
     CFLAGS+=-I./
     APP_OBJS+=../hal/$(TARGET)_ns.o
+    APP_OBJS+=../src/wolfboot_tz_nsc.o
     ifeq ($(WOLFCRYPT_TZ),1)
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
-        APP_OBJS+=../src/wc_secure_calls.o
         WOLFCRYPT_APP_OBJS+=\
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o \
@@ -244,11 +244,6 @@ ifeq ($(TZEN),1)
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfentropy.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
-        ifeq ($(TEST_APP_NO_RNG),1)
-            CFLAGS+=-DWC_NO_RNG
-        else
-            WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
-        endif
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
             CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
             CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11 -DWOLFBOOT_TZ_PKCS11
@@ -286,6 +281,12 @@ ifeq ($(TZEN),1)
                 CFLAGS+=-DWOLFSSL_SP_ARM_CORTEX_M_ASM
                 APP_OBJS+=./wcs/sp_cortexm.o
               endif
+            endif
+        else
+            ifeq ($(TEST_APP_NO_RNG),1)
+                CFLAGS+=-DWC_NO_RNG
+            else
+                WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
             endif
         endif
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184

@@ -83,7 +83,7 @@ void main(void)
 
     hal_init();
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     boot_ver = wolfBoot_nsc_current_firmware_version();
 #else
     boot_ver = wolfBoot_current_firmware_version();
@@ -107,7 +107,7 @@ void main(void)
         /* Blue off */
         gpio_init_output(GPIO1, PORT1, kCLOCK_Gpio1, kCLOCK_Port1, 2U, 1U);
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
         wolfBoot_nsc_success();
 #else
         wolfBoot_success();
