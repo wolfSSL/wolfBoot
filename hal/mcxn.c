@@ -228,53 +228,51 @@ void hal_trng_fini(void)
     /* Don't disable ELS, it might be used by other actors */
 }
 
-int hal_trng_get_entropy(unsigned char *out, unsigned int len)
+static int els_rnd_req(void *out, uint32_t len)
 {
-    /* Implemented as a RND_REQ command to the ELS */
-
-    uint32_t aligned_len = len & ~3U;
-    uint32_t status;
-
-    /* Wait for ELS to be ready */
     while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
         ;
+    ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)out;
+    ELS->ELS_DMA_RES0_LEN = len;
+    ELS->ELS_CMDCFG0 = 0;
+    ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
+                   | S50_ELS_CTRL_ELS_START(1)
+                   | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
+    return (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_ERR_MASK) ? -1 : 0;
+}
 
-    /* Handle the word-aligned portion */
-    if (aligned_len > 0) {
-        ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)out;
-        ELS->ELS_DMA_RES0_LEN = aligned_len;
-        ELS->ELS_CMDCFG0 = 0;
-        ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
-                       | S50_ELS_CTRL_ELS_START(1)
-                       | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
+int hal_trng_get_entropy(unsigned char *out, unsigned int len)
+{
+    uint32_t tmp;
 
-        while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
-            ;
-
-        status = ELS->ELS_STATUS;
-        if (status & S50_ELS_STATUS_ELS_ERR_MASK)
+    /* Handle unaligned head (up to 3 bytes) via temporary word */
+    if ((uintptr_t)out & 3U) {
+        uint32_t head = 4U - ((uintptr_t)out & 3U);
+        if (head > len)
+            head = len;
+        if (els_rnd_req(&tmp, 4) != 0)
             return -1;
+        memcpy(out, &tmp, head);
+        out += head;
+        len -= head;
     }
 
-    /* Handle remaining bytes (1-3) with a temporary word */
-    if (len > aligned_len) {
-        uint32_t tmp;
-
-        ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)&tmp;
-        ELS->ELS_DMA_RES0_LEN = 4;
-        ELS->ELS_CMDCFG0 = 0;
-        ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
-                       | S50_ELS_CTRL_ELS_START(1)
-                       | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
-
-        while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
-            ;
-
-        status = ELS->ELS_STATUS;
-        if (status & S50_ELS_STATUS_ELS_ERR_MASK)
+    /* Bulk aligned portion in one request */
+    if (len >= 4) {
+        uint32_t aligned_len = len & ~3U;
+        if (els_rnd_req(out, aligned_len) != 0)
             return -1;
+        out += aligned_len;
+        len -= aligned_len;
+    }
 
-        memcpy(out + aligned_len, &tmp, len - aligned_len);
+    /* Handle remaining tail bytes (1-3) via temporary word */
+    if (len > 0) {
+        if (els_rnd_req(&tmp, 4) != 0)
+            return -1;
+        memcpy(out, &tmp, len);
     }
 
     return 0;
