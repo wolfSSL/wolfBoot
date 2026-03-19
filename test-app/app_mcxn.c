@@ -83,7 +83,7 @@ static void gpio_init_output(GPIO_Type *gpio, PORT_Type *port,
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
-void print_random_number(void)
+static void print_random_number(void)
 {
     WC_RNG rng;
     uint32_t rnd;
