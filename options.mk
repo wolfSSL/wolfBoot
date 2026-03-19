@@ -131,6 +131,10 @@ ifeq ($(WOLFBOOT_SMALL_STACK),1)
   OBJS+=./src/xmalloc.o
 endif
 
+# GCC 13 overestimates some wolfTPM wrapper stack usage; keep TPM
+# limits above 10 KB to avoid false -Wstack-usage failures.
+STACK_USAGE_WOLFTPM=10680
+
 
 ECC_OBJS= \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
@@ -192,7 +196,7 @@ ifeq ($(SIGN),ECC256)
        STACK_USAGE=4096
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=7616
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=5264
@@ -216,7 +220,7 @@ ifeq ($(SIGN),ECC384)
        STACK_USAGE=5880
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=6680
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=11248
@@ -240,7 +244,7 @@ ifeq ($(SIGN),ECC521)
        STACK_USAGE=4096
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=6680
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=11256
@@ -261,7 +265,7 @@ ifeq ($(SIGN),ED25519)
   WOLFCRYPT_OBJS+=$(ED25519_OBJS)
   CFLAGS+=-D"WOLFBOOT_SIGN_ED25519"
   ifeq ($(WOLFTPM),1)
-    STACK_USAGE=6680
+    STACK_USAGE=$(STACK_USAGE_WOLFTPM)
   else
     STACK_USAGE?=5000
   endif
@@ -275,7 +279,7 @@ ifeq ($(SIGN),ED448)
   SIGN_OPTIONS+=--ed448
   WOLFCRYPT_OBJS+= $(ED448_OBJS)
   ifeq ($(WOLFTPM),1)
-    STACK_USAGE=6680
+    STACK_USAGE=$(STACK_USAGE_WOLFTPM)
   else
     ifeq ($(WOLFBOOT_SMALL_STACK),1)
       STACK_USAGE?=1024
@@ -313,7 +317,7 @@ ifneq ($(findstring RSA2048,$(SIGN)),)
     endif
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=9096
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=35952
@@ -346,7 +350,7 @@ ifneq ($(findstring RSA3072,$(SIGN)),)
     endif
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=9096
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=52592
@@ -383,7 +387,7 @@ ifneq ($(findstring RSA4096,$(SIGN)),)
     endif
   else
     ifeq ($(WOLFTPM),1)
-      STACK_USAGE=10680
+      STACK_USAGE=$(STACK_USAGE_WOLFTPM)
     else
       ifneq ($(SPMATH),1)
         STACK_USAGE=69232
