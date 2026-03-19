@@ -14,5 +14,3 @@ fi
 
 echo Test successful.
 exit 0
-
-

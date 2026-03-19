@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
@@ -86,6 +87,18 @@ uint32_t hal_sim_get_dualbank_state(void);
  * application */
 char **main_argv;
 int main_argc;
+
+static int sim_memfd_create(const char *name, unsigned int flags)
+{
+#if defined(__linux__) && defined(SYS_memfd_create)
+    return (int)syscall(SYS_memfd_create, name, flags);
+#else
+    (void)name;
+    (void)flags;
+    errno = ENOSYS;
+    return -1;
+#endif
+}
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 
@@ -558,7 +571,7 @@ void do_boot(const uint32_t *app_offset)
     exit(0);
 #else
     char *envp[1] = {NULL};
-    int fd = memfd_create("test_app", 0);
+    int fd = sim_memfd_create("test_app", 0);
     size_t wret;
     if (fd == -1) {
         wolfBoot_printf( "memfd error\n");

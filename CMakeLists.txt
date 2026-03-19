@@ -717,6 +717,7 @@ if(ARCH STREQUAL "ARM")
 
                 list(APPEND WOLFBOOT_DEFS
                     SECURE_PKCS11
+                    WOLFPKCS11_USER_SETTINGS
                     WOLFSSL_PKCS11_RW_TOKENS
                     WP11_HASH_PIN_COST=3)
                 list(APPEND WOLFBOOT_DEFS "CK_CALLABLE=__attribute__\\(\\(cmse_nonsecure_entry\\)\\)")

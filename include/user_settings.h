@@ -367,7 +367,9 @@ extern int tolower(int c);
 #   define HAVE_PBKDF2
 #   define WOLFPKCS11_CUSTOM_STORE
 #   define WOLFBOOT_SECURE_PKCS11
-#   define WOLFPKCS11_USER_SETTINGS
+#   ifndef WOLFPKCS11_USER_SETTINGS
+#       define WOLFPKCS11_USER_SETTINGS
+#   endif
 #   define WOLFPKCS11_NO_TIME
 #ifndef WOLFSSL_AES_COUNTER
 #   define WOLFSSL_AES_COUNTER

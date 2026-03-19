@@ -791,6 +791,7 @@ endif
 
 ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DSECURE_PKCS11
+  CFLAGS+=-DWOLFPKCS11_USER_SETTINGS
   CFLAGS+=-DWOLFSSL_PKCS11_RW_TOKENS
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
@@ -899,7 +900,6 @@ ifeq ($(WOLFTPM),1)
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
   CFLAGS+=-D"WOLFBOOT_TPM"
   CFLAGS+=-D"WOLFTPM_SMALL_STACK"
-  CFLAGS+=-D"WOLFTPM_AUTODETECT"
   ifneq ($(SPI_FLASH),1)
     # don't use spi if we're using simulator
     ifeq ($(TARGET),sim)
@@ -915,6 +915,7 @@ ifeq ($(WOLFTPM),1)
           OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/hal/tpm_io_mmio.o
         # By default, on other architectures, provide SPI driver
         else
+          CFLAGS+=-D"WOLFTPM_AUTODETECT"
           WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
         endif
     endif
