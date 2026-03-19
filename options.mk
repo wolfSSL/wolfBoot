@@ -910,12 +910,11 @@ ifeq ($(WOLFTPM),1)
       OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_swtpm.o
     else
       # Use memory-mapped WOLFTPM on x86-64
-       ifeq ($(ARCH),x86_64)
+        ifeq ($(ARCH),x86_64)
           CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE
           OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/hal/tpm_io_mmio.o
         # By default, on other architectures, provide SPI driver
         else
-          CFLAGS+=-D"WOLFTPM_AUTODETECT"
           WOLFCRYPT_OBJS+=hal/spi/spi_drv_$(SPI_TARGET).o
         endif
     endif
