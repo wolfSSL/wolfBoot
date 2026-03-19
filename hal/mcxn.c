@@ -40,6 +40,11 @@
 #include "hal/armv8m_tz.h"
 #endif
 
+#ifdef WOLFCRYPT_SECURE_MODE
+void hal_trng_init(void);
+int hal_trng_get_entropy(unsigned char *out, unsigned int len);
+#endif
+
 static flash_config_t pflash;
 static uint32_t pflash_sector_size = WOLFBOOT_SECTOR_SIZE;
 uint32_t SystemCoreClock;
@@ -104,6 +109,7 @@ void hal_init(void)
 #if defined(TZEN) && !defined(NONSECURE_APP)
     hal_sau_init();
 #endif
+
 }
 
 #ifdef __WOLFBOOT
@@ -207,21 +213,69 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
-/* These functions are stubs for now, because the MCUXpresso SDK doesn't
- * implement drivers for the MCXN's TRNG. */
+#define ELS_CMD_RND_REQ 24U
+
 void hal_trng_init(void)
 {
+    /* Enable ELS and wait for it to be ready */
+    ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1);
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
 }
 
 void hal_trng_fini(void)
 {
+    /* Don't disable ELS, it might be used by other actors */
+}
+
+static int els_rnd_req(void *out, uint32_t len)
+{
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
+    ELS->ELS_DMA_RES0 = (uint32_t)(uintptr_t)out;
+    ELS->ELS_DMA_RES0_LEN = len;
+    ELS->ELS_CMDCFG0 = 0;
+    ELS->ELS_CTRL = S50_ELS_CTRL_ELS_EN(1)
+                   | S50_ELS_CTRL_ELS_START(1)
+                   | S50_ELS_CTRL_ELS_CMD(ELS_CMD_RND_REQ);
+    while (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_BUSY_MASK)
+        ;
+    return (ELS->ELS_STATUS & S50_ELS_STATUS_ELS_ERR_MASK) ? -1 : 0;
 }
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
-    (void)out;
-    (void)len;
-    return -1;
+    uint32_t tmp;
+
+    /* Handle unaligned head (up to 3 bytes) via temporary word */
+    if ((uintptr_t)out & 3U) {
+        uint32_t head = 4U - ((uintptr_t)out & 3U);
+        if (head > len)
+            head = len;
+        if (els_rnd_req(&tmp, 4) != 0)
+            return -1;
+        memcpy(out, &tmp, head);
+        out += head;
+        len -= head;
+    }
+
+    /* Bulk aligned portion in one request */
+    if (len >= 4) {
+        uint32_t aligned_len = len & ~3U;
+        if (els_rnd_req(out, aligned_len) != 0)
+            return -1;
+        out += aligned_len;
+        len -= aligned_len;
+    }
+
+    /* Handle remaining tail bytes (1-3) via temporary word */
+    if (len > 0) {
+        if (els_rnd_req(&tmp, 4) != 0)
+            return -1;
+        memcpy(out, &tmp, len);
+    }
+
+    return 0;
 }
 #endif
 

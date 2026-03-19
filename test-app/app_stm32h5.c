@@ -318,7 +318,7 @@ static int cmd_update_xmodem(const char *args)
 
     printf("Erasing update partition...");
     fflush(stdout);
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     wolfBoot_nsc_erase_update(dst_offset, WOLFBOOT_PARTITION_SIZE);
 #else
     hal_flash_unlock();
@@ -387,7 +387,7 @@ static int cmd_update_xmodem(const char *args)
             if (crc == calc_crc) {
                 /* CRC is valid */
                 memcpy(xpkt_payload, xpkt + 3, XMODEM_PAYLOAD_SIZE);
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
                 ret = wolfBoot_nsc_write_update(dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
 #else
                 ret = hal_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + dst_offset, xpkt_payload, XMODEM_PAYLOAD_SIZE);
@@ -425,7 +425,7 @@ static int cmd_update_xmodem(const char *args)
     }
     else {
         printf("Transfer succeeded\r\n");
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
         update_ver = wolfBoot_nsc_update_firmware_version();
 #else
         update_ver = wolfBoot_update_firmware_version();
@@ -433,7 +433,7 @@ static int cmd_update_xmodem(const char *args)
         if (update_ver != 0) {
             printf("New firmware version: 0x%lx\r\n", update_ver);
             printf("Triggering update...\r\n");
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
             wolfBoot_nsc_update_trigger();
 #else
             wolfBoot_update_trigger();
@@ -444,7 +444,7 @@ static int cmd_update_xmodem(const char *args)
         }
     }
 
-#ifndef WOLFCRYPT_SECURE_MODE
+#ifndef TZEN
     hal_flash_lock();
 #endif
 
@@ -535,7 +535,7 @@ static int cmd_info(const char *args)
     uint16_t hdrSz;
     uint8_t boot_part_state = IMG_STATE_NEW, update_part_state = IMG_STATE_NEW;
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     cur_fw_version = wolfBoot_nsc_current_firmware_version();
     update_fw_version = wolfBoot_nsc_update_firmware_version();
 
@@ -597,7 +597,7 @@ static int cmd_info(const char *args)
 
 static int cmd_success(const char *args)
 {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     wolfBoot_nsc_success();
 #else
     wolfBoot_success();
@@ -1335,7 +1335,7 @@ void main(void)
     /* Enable SysTick */
     systick_enable();
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     app_version = wolfBoot_nsc_current_firmware_version();
 #else
     app_version = wolfBoot_current_firmware_version();
