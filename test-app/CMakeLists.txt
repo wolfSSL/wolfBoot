@@ -176,8 +176,8 @@ if(BUILD_TEST_APPS)
         target_include_directories(image PRIVATE ../lib/wolfPKCS11)
     endif()
 
-    # wolfCrypt TrustZone test builds provide extra secure-call wrappers directly.
-    if(TZEN AND WOLFCRYPT_TZ)
+    # For TrustZone builds, avoid linking the bootloader lib (it defines NSC stubs).
+    if(TZEN)
         target_sources(image PRIVATE ../src/libwolfboot.c)
         if(NOT SIGN STREQUAL "NONE")
             set_source_files_properties(${CMAKE_BINARY_DIR}/keystore.c PROPERTIES GENERATED TRUE)
