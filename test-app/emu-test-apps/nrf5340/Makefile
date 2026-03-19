@@ -28,6 +28,7 @@ LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
 NSC_OBJ :=
 ifeq ($(TZEN),1)
+  CFLAGS += -DTZEN
   CFLAGS += -DWOLFCRYPT_SECURE_MODE
   NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
 endif
