@@ -102,6 +102,14 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
+OBJCOPY_IMAGE_FLAGS:=
+
+ifeq ($(USE_CLANG),1)
+  # Clang-built ARM ELFs can keep RAM sections as loadable segments, and raw
+  # objcopy output then expands the flash-to-RAM gap into a huge sparse image.
+  # The app image only needs the flash-backed output sections.
+  OBJCOPY_IMAGE_FLAGS+=-j .text -j .edidx
+endif
 
 ifeq ($(DEBUG_UART),1)
     CFLAGS+=-DDEBUG_UART
@@ -913,15 +921,15 @@ delta-extra-data:LDFLAGS=-Wl,-Map=image.map
 
 image.bin: image.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O binary $^ $@
 
 image.hex: image.elf
 	@echo "\t[HEX] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O ihex $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O ihex $^ $@
 
 image.srec: image.elf
 	@echo "\t[SREC] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O srec $^ $@
 
 APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
     $(WOLFSSL_LOCAL_OBJDIR)/%, $(APP_OBJS))
