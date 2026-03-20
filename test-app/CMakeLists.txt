@@ -206,9 +206,12 @@ if(BUILD_TEST_APPS)
 
     if(WOLFCRYPT_TZ_PKCS11)
         list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_PKCS11_APP SECURE_PKCS11 WOLFPKCS11_USER_SETTINGS)
+        if(PKCS11_TESTAPP)
+            list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_PKCS11_TESTAPP)
+        endif()
         set(WOLFSSL_PKCS11_SOURCES
+            test_pkcs11.c
             wcs/pkcs11_stub.c
-            wcs/pkcs11_test_ecc.c
             ../lib/wolfssl/wolfcrypt/src/ecc.c
             ../lib/wolfssl/wolfcrypt/src/rsa.c
             ../lib/wolfssl/wolfcrypt/src/asn.c
