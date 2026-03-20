@@ -21,6 +21,7 @@ This README describes configuration of supported targets.
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP LPC54S018M](#nxp-lpc54s018m)
 * [NXP LPC55S69](#nxp-lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
@@ -1935,6 +1936,202 @@ Then, from another console:
 arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x0000a100
 ```
+
+
+## NXP LPC54S018M
+
+The NXP LPC54S018M is a Cortex-M4 microcontroller running at 180MHz. Unlike the
+LPC54606 which has internal flash, the LPC54S018M has **no internal NOR flash** —
+all code executes from on-package SPIFI-mapped QSPI flash (Winbond W25Q32JV, 4MB)
+at address `0x10000000`.
+
+This has been tested on the LPC54S018M-EVK board, which includes an on-board
+Link2 debug probe (CMSIS-DAP / J-Link compatible) and a VCOM UART via Flexcomm0.
+
+Because flash erase/write operations disable XIP (execute-in-place), all flash
+programming functions must run from RAM. The configuration uses `RAM_CODE=1` to
+ensure this.
+
+### LPC54S018M: Link2 debug probe setup
+
+The LPC54S018M-EVK has an on-board LPC-Link2 debug probe (LPC4322). The probe
+firmware determines the debug protocol: CMSIS-DAP or J-Link. J-Link firmware is
+recommended for use with wolfBoot.
+
+**Jumper JP5** controls the Link2 boot mode:
+- **Installed (normal):** Link2 runs from its internal flash (debug probe mode)
+- **Removed (DFU):** Link2 enters DFU mode for firmware programming
+
+To program J-Link firmware onto the Link2:
+
+1. Remove JP5 and power cycle the board. The Link2 enters DFU mode
+   (USB `1fc9:000c`).
+
+2. Install [NXP LinkServer](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER)
+   which includes LPCScrypt.
+
+3. Boot LPCScrypt onto the Link2 (requires sudo or udev rules):
+
+```sh
+sudo /usr/local/LinkServer/lpcscrypt/scripts/boot_lpcscrypt
+```
+
+4. Identify the LPCScrypt serial port and program J-Link firmware:
+
+```sh
+# Find the new ttyACM device created after boot_lpcscrypt
+ls -lt /dev/ttyACM*
+
+# Program J-Link firmware (replace /dev/ttyACMx with the correct port)
+sudo /usr/local/LinkServer/lpcscrypt/bin/lpcscrypt -d /dev/ttyACMx \
+    program /usr/local/LinkServer/lpcscrypt/probe_firmware/LPCLink2/Firmware_JLink_LPC-Link2_20230502.bin BankA
+```
+
+5. Re-install JP5 and power cycle the board. The Link2 should now enumerate
+   as a Segger J-Link USB device.
+
+**Note:** If `uart-monitor` or another tool has the serial port open, you must
+release it first (e.g., `uart-monitor yield /dev/ttyACMx`) before running
+lpcscrypt.
+
+To program CMSIS-DAP firmware instead (for use with pyocd/OpenOCD):
+
+```sh
+sudo /usr/local/LinkServer/lpcscrypt/bin/lpcscrypt -d /dev/ttyACMx \
+    program /usr/local/LinkServer/lpcscrypt/probe_firmware/LPCLink2/LPC432x_CMSIS_DAP_V5_460.bin.hdr BankA
+```
+
+### LPC54S018M: MCUXpresso SDK setup
+
+This requires the NXP MCUXpresso SDK. We tested using
+[mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
+[CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
+
+```sh
+cd ../NXP
+
+# Install west
+python -m venv west-venv
+source west-venv/bin/activate
+pip install west
+
+# Set up the repository
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update
+
+deactivate
+```
+
+The CMSIS headers are also needed:
+
+```sh
+cd ../NXP
+git clone https://github.com/nxp-mcuxpresso/CMSIS_5.git
+```
+
+### LPC54S018M: Flash partition layout
+
+The 4MB SPIFI flash is partitioned as follows:
+
+| Region       | Address      | Size   |
+|--------------|-------------|--------|
+| wolfBoot     | 0x10000000  | 64KB   |
+| Boot (app)   | 0x10010000  | 960KB  |
+| Update       | 0x10100000  | 960KB  |
+| Swap sector  | 0x101F0000  | 4KB    |
+
+The sector size is 4KB, matching the W25Q32JV minimum erase size.
+
+### LPC54S018M: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/nxp_lpc54s018m.config .config
+make
+```
+
+This produces `factory.bin` containing wolfBoot + the signed test application.
+
+### LPC54S018M: Loading the firmware
+
+The on-board Link2 debugger supports both CMSIS-DAP and J-Link protocols.
+See [Link2 debug probe setup](#lpc54s018m-link2-debug-probe-setup) for
+programming the probe firmware.
+
+**Using JLink** (Link2 with J-Link firmware):
+
+```
+JLinkExe -device LPC54S018M -if SWD -speed 4000
+loadbin factory.bin 0x10000000
+r
+g
+```
+
+**Using pyocd** (Link2 with CMSIS-DAP firmware):
+
+```sh
+pyocd pack install LPC54S018J4MET180
+pyocd flash -t LPC54S018J4MET180 factory.bin --base-address 0x10000000
+pyocd reset -t LPC54S018J4MET180
+```
+
+**Note:** The LPC54S018M boot ROM validates a vector table checksum at offset
+0x1C. The build system automatically computes and patches this checksum into
+`wolfboot.bin`. If the checksum is invalid, the boot ROM will enter ISP mode
+instead of booting from SPIFI flash.
+
+### LPC54S018M: Testing firmware update
+
+1. Build and flash factory.bin (version 1). USR_LED1 (P3.14) lights up.
+
+2. Sign a version 2 update image and load it to the update partition:
+
+```sh
+# Build update image (version 2)
+make test-app/image_v2_signed.bin
+```
+
+```
+JLinkExe -device LPC54S018M -if SWD -speed 4000
+loadbin test-app/image_v2_signed.bin 0x10100000
+r
+g
+```
+
+3. The test application detects the update, triggers a swap via
+   `wolfBoot_update_trigger()`, and resets. After the swap, USR_LED2 (P3.3)
+   lights up indicating version 2 is running.
+
+4. The application calls `wolfBoot_success()` to confirm the update and
+   prevent rollback.
+
+### LPC54S018M: LED indicators
+
+The test application uses three user LEDs (accent LEDs accent active low):
+
+| LED       | GPIO   | Meaning                    |
+|-----------|--------|----------------------------|
+| USR_LED1  | P3.14  | Version 1 running          |
+| USR_LED2  | P3.3   | Version 2+ running         |
+| USR_LED3  | P2.2   | Update activity in progress |
+
+### LPC54S018M: Debugging with JLink
+
+```
+JLinkGDBServer -device LPC54S018M -if SWD -speed 4000 -port 3333
+```
+
+Then, from another console:
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x10010100
+```
+
+Note: The image.elf symbol offset is the boot partition address (0x10010000) plus
+the wolfBoot image header size (0x100).
 
 
 ## NXP LPC55S69
