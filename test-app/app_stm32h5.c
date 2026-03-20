@@ -1282,7 +1282,9 @@ void main(void)
 
 #ifdef WOLFBOOT_PKCS11_TESTAPP
     ret = test_pkcs11_start();
-    if (ret == 0)
+    if (ret == PKCS11_TEST_FIRST_BOOT_OK)
+        asm volatile ("bkpt #0x7d");
+    else if (ret == PKCS11_TEST_SECOND_BOOT_OK)
         asm volatile ("bkpt #0x7f");
     else
         asm volatile ("bkpt #0x7e");

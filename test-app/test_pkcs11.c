@@ -17,12 +17,15 @@
 
 #include "test_pkcs11.h"
 
+#include "wolfpkcs11/pkcs11.h"
+
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/wc_port.h>
+#include <wolfssl/wolfcrypt/wc_pkcs11.h>
+#include <wolfssl/wolfcrypt/sha256.h>
 #include <string.h>
 #include <stdio.h>
-
-#include "wolfpkcs11/pkcs11.h"
 
 extern const char pkcs11_library_name[];
 extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
@@ -31,8 +34,10 @@ static const CK_BYTE test_token_label[32] = {
     'E','c','c','K','e','y',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',
     ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' '
 };
+static const char test_token_name[] = "EccKey";
 static const CK_BYTE test_so_pin[] = "0123456789ABCDEF";
-static const CK_BYTE test_user_pin[] = "ABCDEF0123456789";
+static const CK_BYTE test_user_pin[] = "0123456789ABCDEF";
+static const CK_BYTE test_so_pin_label[] = "SO-PIN";
 static const CK_BYTE test_key_id[] = { 0x57, 0x42, 0x50, 0x31 };
 static const CK_BYTE test_pub_label[] = "wolfBoot PKCS11 demo pub";
 static const CK_BYTE test_priv_label[] = "wolfBoot PKCS11 demo priv";
@@ -71,6 +76,22 @@ static int test_pkcs11_ck_ok(const char *label, CK_RV rv)
         return -1;
     }
     return 0;
+}
+
+static void test_pkcs11_log_blob_checksum(const struct test_pkcs11_blob *blob,
+    const char *prefix)
+{
+    byte digest[WC_SHA256_DIGEST_SIZE];
+    word32 blob_len = (word32)(blob->payload_len + blob->sig_len);
+    word32 i;
+
+    if (wc_Sha256Hash(blob->data, blob_len, digest) != 0)
+        return;
+
+    printf("pkcs11: %s blob_sha256=", prefix);
+    for (i = 0; i < (word32)sizeof(digest); i++)
+        printf("%02x", digest[i]);
+    printf("\r\n");
 }
 
 static int test_pkcs11_find_one(CK_SESSION_HANDLE session,
@@ -159,32 +180,46 @@ static int test_pkcs11_log_obj_attr(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE 
     return 0;
 }
 
-static int test_pkcs11_init_token_if_needed(void)
+static int test_pkcs11_provision_token(void)
 {
+    int ret;
     CK_RV rv;
-    CK_TOKEN_INFO info;
-    CK_SESSION_HANDLE session;
+    CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
+    Pkcs11Token token;
+    Pkcs11Dev dev;
 
-    rv = wolfpkcs11nsFunctionList.C_GetTokenInfo(TEST_PKCS11_SLOT_ID, &info);
-    if (rv == CKR_OK && (info.flags & CKF_TOKEN_INITIALIZED))
-        return 0;
+    printf("pkcs11: provisioning token\r\n");
 
-    printf("pkcs11: initializing token\r\n");
+    dev.heap = NULL;
+    dev.func = (CK_FUNCTION_LIST *)&wolfpkcs11nsFunctionList;
+
+    ret = wc_Pkcs11Token_Init(&token, &dev, (int)TEST_PKCS11_SLOT_ID,
+        test_token_name, test_user_pin, (int)(sizeof(test_user_pin) - 1));
+    if (ret != 0) {
+        printf("pkcs11: wc_Pkcs11Token_Init ret=%d\r\n", ret);
+        return -1;
+    }
+
     rv = wolfpkcs11nsFunctionList.C_InitToken(TEST_PKCS11_SLOT_ID,
         (CK_UTF8CHAR_PTR)test_so_pin, (CK_ULONG)(sizeof(test_so_pin) - 1),
         (CK_UTF8CHAR_PTR)test_token_label);
-    if (test_pkcs11_ck_ok("C_InitToken", rv) < 0)
+    if (test_pkcs11_ck_ok("C_InitToken", rv) < 0) {
+        wc_Pkcs11Token_Final(&token);
         return -1;
+    }
 
     rv = wolfpkcs11nsFunctionList.C_OpenSession(TEST_PKCS11_SLOT_ID,
         CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL, NULL, &session);
-    if (test_pkcs11_ck_ok("C_OpenSession(SO)", rv) < 0)
+    if (test_pkcs11_ck_ok("C_OpenSession(SO)", rv) < 0) {
+        wc_Pkcs11Token_Final(&token);
         return -1;
+    }
 
     rv = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
         (CK_UTF8CHAR_PTR)test_so_pin, (CK_ULONG)(sizeof(test_so_pin) - 1));
     if (test_pkcs11_ck_ok("C_Login(SO)", rv) < 0) {
         (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
+        wc_Pkcs11Token_Final(&token);
         return -1;
     }
 
@@ -193,11 +228,13 @@ static int test_pkcs11_init_token_if_needed(void)
     if (test_pkcs11_ck_ok("C_InitPIN", rv) < 0) {
         (void)wolfpkcs11nsFunctionList.C_Logout(session);
         (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
+        wc_Pkcs11Token_Final(&token);
         return -1;
     }
 
     (void)wolfpkcs11nsFunctionList.C_Logout(session);
     (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
+    wc_Pkcs11Token_Final(&token);
     return 0;
 }
 
@@ -310,7 +347,7 @@ static int test_pkcs11_sign_payload(CK_SESSION_HANDLE session,
     CK_ULONG payload_len = (CK_ULONG)(sizeof(test_payload) - 1);
     CK_ULONG sig_len = (CK_ULONG)(sizeof(blob->data) - payload_len);
 
-    mech.mechanism = CKM_ECDSA;
+    mech.mechanism = CKM_ECDSA_SHA256;
     mech.pParameter = NULL;
     mech.ulParameterLen = 0;
 
@@ -333,6 +370,7 @@ static int test_pkcs11_sign_payload(CK_SESSION_HANDLE session,
 
     printf("pkcs11: signed payload len=%lu sig_len=%lu\r\n",
         (unsigned long)blob->payload_len, (unsigned long)blob->sig_len);
+    test_pkcs11_log_blob_checksum(blob, "created");
     return 0;
 }
 
@@ -376,6 +414,7 @@ static int test_pkcs11_load_blob(CK_SESSION_HANDLE session,
 
     printf("pkcs11: restored blob payload_len=%lu sig_len=%lu\r\n",
         (unsigned long)blob->payload_len, (unsigned long)blob->sig_len);
+    test_pkcs11_log_blob_checksum(blob, "restored");
     return 0;
 }
 
@@ -385,7 +424,7 @@ static int test_pkcs11_verify_blob(CK_SESSION_HANDLE session,
     CK_RV rv;
     CK_MECHANISM mech;
 
-    mech.mechanism = CKM_ECDSA;
+    mech.mechanism = CKM_ECDSA_SHA256;
     mech.pParameter = NULL;
     mech.ulParameterLen = 0;
 
@@ -421,6 +460,7 @@ static int test_pkcs11_log_key_attrs(CK_SESSION_HANDLE session,
 
 int test_pkcs11_start(void)
 {
+    int wc_ret;
     CK_RV rv;
     CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
     CK_OBJECT_HANDLE pub_obj = CK_INVALID_HANDLE;
@@ -428,45 +468,68 @@ int test_pkcs11_start(void)
     CK_OBJECT_HANDLE data_obj = CK_INVALID_HANDLE;
     struct test_pkcs11_blob blob;
     int ret;
+    int key_state;
+    int data_state;
+    int result = PKCS11_TEST_FAIL;
 
     memset(&blob, 0, sizeof(blob));
 
     printf("pkcs11: start\r\n");
     printf("pkcs11: secure provider=%s\r\n", pkcs11_library_name);
 
-    rv = wolfpkcs11nsFunctionList.C_Initialize(NULL);
-    if (test_pkcs11_ck_ok("C_Initialize", rv) < 0)
+    wc_ret = wolfCrypt_Init();
+    if (wc_ret != 0) {
+        printf("pkcs11: wolfCrypt_Init ret=%d\r\n", wc_ret);
         return -1;
+    }
 
-    if (test_pkcs11_init_token_if_needed() < 0) {
-        (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
+    rv = wolfpkcs11nsFunctionList.C_Initialize(NULL);
+    if (test_pkcs11_ck_ok("C_Initialize", rv) < 0) {
+        wolfCrypt_Cleanup();
         return -1;
     }
 
     ret = test_pkcs11_open_user_session(&session);
     if (ret == -2) {
-        (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
-        return -1;
+        printf("pkcs11: first boot path, provisioning token\r\n");
+        if (test_pkcs11_provision_token() < 0) {
+            (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
+            wolfCrypt_Cleanup();
+            return -1;
+        }
+        ret = test_pkcs11_open_user_session(&session);
     }
     if (ret < 0) {
         (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
+        wolfCrypt_Cleanup();
         return -1;
     }
 
-    ret = test_pkcs11_find_keypair(session, &pub_obj, &priv_obj);
-    if (ret < 0) {
+    key_state = test_pkcs11_find_keypair(session, &pub_obj, &priv_obj);
+    if (key_state < 0) {
+        ret = -1;
+        goto cleanup;
+    }
+
+    data_state = test_pkcs11_find_data_obj(session, &data_obj);
+    if (data_state < 0) {
         (void)wolfpkcs11nsFunctionList.C_Logout(session);
         (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
         (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
+        wolfCrypt_Cleanup();
         return -1;
     }
 
-    if (ret == 1) {
+    if (key_state == 1 && data_state == 1) {
         printf("pkcs11: first boot path, creating persistent objects\r\n");
         if (test_pkcs11_generate_keypair(session, &pub_obj, &priv_obj) < 0)
             ret = -1;
-        if (ret == 1 || ret == 0)
+        else
+            ret = 0;
+        if (ret == 0)
             ret = test_pkcs11_sign_payload(session, priv_obj, &blob);
+        if (ret == 0)
+            ret = test_pkcs11_verify_blob(session, pub_obj, &blob);
         if (ret == 0)
             ret = test_pkcs11_store_blob(session, &blob, &data_obj);
         if (ret == 0)
@@ -477,12 +540,12 @@ int test_pkcs11_start(void)
             ret = test_pkcs11_log_obj_attr(session, data_obj, "data", CKA_OBJECT_ID);
         if (ret == 0)
             printf("pkcs11: created persistent PKCS11 objects\r\n");
-    }
-    else {
-        printf("pkcs11: second boot path, restoring persistent objects\r\n");
-        ret = test_pkcs11_find_data_obj(session, &data_obj);
         if (ret == 0)
-            ret = test_pkcs11_load_blob(session, data_obj, &blob);
+            result = PKCS11_TEST_FIRST_BOOT_OK;
+    }
+    else if (key_state == 0 && data_state == 0) {
+        printf("pkcs11: second boot path, restoring persistent objects\r\n");
+        ret = test_pkcs11_load_blob(session, data_obj, &blob);
         if (ret == 0)
             ret = test_pkcs11_log_key_attrs(session, pub_obj, priv_obj);
         if (ret == 0)
@@ -491,18 +554,27 @@ int test_pkcs11_start(void)
             ret = test_pkcs11_verify_blob(session, pub_obj, &blob);
         if (ret == 0)
             printf("pkcs11: restored persistent PKCS11 objects\r\n");
+        if (ret == 0)
+            result = PKCS11_TEST_SECOND_BOOT_OK;
+    }
+    else {
+        printf("pkcs11: inconsistent persistent state key_state=%d data_state=%d\r\n",
+            key_state, data_state);
+        ret = -1;
     }
 
+cleanup:
     (void)wolfpkcs11nsFunctionList.C_Logout(session);
     (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
     (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
+    (void)wolfCrypt_Cleanup();
 
     if (ret == 0)
         printf("pkcs11: success\r\n");
     else
         printf("pkcs11: failure\r\n");
 
-    return ret;
+    return (ret == 0) ? result : PKCS11_TEST_FAIL;
 }
 
 #else
