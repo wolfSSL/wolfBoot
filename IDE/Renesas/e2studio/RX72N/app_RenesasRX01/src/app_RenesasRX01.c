@@ -2,7 +2,7 @@
  *
  * Test bare-metal application.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -29,6 +29,10 @@
 #include "wolfboot/wolfboot.h"
 #include "image.h"
 #include "r_smc_entry.h"
+
+/* define as 1 to enable full header hexdump */
+#define DEBUG_PARTITION 0
+
 static const char* state2str(uint8_t s)
 {
     switch(s) {
@@ -53,7 +57,7 @@ static const char* upFlag2str(uint8_t s)
 
 static void printPart(uint8_t *part)
 {
-#ifdef WOLFBOOT_DEBUG_PARTION
+#if defined(DEBUG_PARTITION)
     uint32_t *v;
     int i;
 #endif
@@ -75,7 +79,7 @@ static void printPart(uint8_t *part)
     wolfBoot_get_update_sector_flag(0, &upflag);
     printf("Update flag: %02x (%s)\n", upflag, upFlag2str(upflag));
 
-#ifdef WOLFBOOT_DEBUG_PARTION
+#if defined(DEBUG_PARTITION)
     v = (uint32_t *)part;
     for(i = 0; i < 0x100/4; i++) {
         if(i % 4 == 0)
@@ -85,18 +89,6 @@ static void printPart(uint8_t *part)
 #endif
 
 }
-#ifdef WOLFBOOT_DEBUG_PARTION
-static void verify_flash_write(uint32_t addr, int len)
-{
-    uint8_t *p = (uint8_t *)addr;
-    int i;
-    printf("verify addr=0x%08x: ", addr);
-    for (i = 0; i < len && i < 8; i++) {
-        printf("%02x ", p[i]);
-    }
-    printf("\n");
-}
-#endif
 
 static void printPartitions(void)
 {
