@@ -8,7 +8,7 @@ jobs:
   trustzone-emulator-tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/danielinux/m33mu-ci:1.5
+      image: ghcr.io/danielinux/m33mu-ci:1.8
     steps:
       - uses: actions/checkout@v4
 
@@ -31,14 +31,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          make clean distclean
-          cp config/examples/stm32h5-tz.config .config
-          make PKCS11_TESTAPP=1
-
+          build_log=/tmp/m33mu-pkcs11-build.log
           first_log=/tmp/m33mu-pkcs11-first.log
           second_log=/tmp/m33mu-pkcs11-second.log
           persist_dir=/tmp/m33mu-pkcs11-persist
-          rm -f "$first_log" "$second_log"
+          rm -f "$build_log" "$first_log" "$second_log"
           rm -rf "$persist_dir"
           mkdir -p "$persist_dir"
 
@@ -50,13 +47,29 @@ jobs:
             fi
           }
 
+          make clean distclean >"$build_log" 2>&1 || {
+            dump_log "$build_log"
+            exit 1
+          }
+          cp config/examples/stm32h5-tz.config .config >>"$build_log" 2>&1 || {
+            dump_log "$build_log"
+            exit 1
+          }
+          make PKCS11_TESTAPP=1 >>"$build_log" 2>&1 || {
+            dump_log "$build_log"
+            exit 1
+          }
+
           (
             cd "$persist_dir"
             m33mu "$GITHUB_WORKSPACE/wolfboot.bin" \
               "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x60000" \
               --persist --uart-stdout --timeout 120 --expect-bkpt 0x7d \
               >"$first_log" 2>&1
-          )
+          ) || {
+            dump_log "$first_log"
+            exit 1
+          }
 
           grep -q "pkcs11: first boot path, creating persistent objects" "$first_log" && \
           grep -q "pkcs11: created persistent PKCS11 objects" "$first_log" && \
@@ -73,7 +86,10 @@ jobs:
               "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x60000" \
               --persist --uart-stdout --timeout 120 --expect-bkpt 0x7f \
               >"$second_log" 2>&1
-          )
+          ) || {
+            dump_log "$second_log"
+            exit 1
+          }
 
           grep -q "pkcs11: second boot path, restoring persistent objects" "$second_log" && \
           grep -q "pkcs11: restored persistent PKCS11 objects" "$second_log" && \
