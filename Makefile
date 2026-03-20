@@ -334,6 +334,10 @@ wolfboot.efi: wolfboot.elf
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
+ifeq ($(TARGET),nxp_lpc54s018m)
+	@echo "\t[LPC] enhanced boot block"
+	$(Q)python3 -c "import struct,os;f=open('$@','r+b');sz=os.path.getsize('$@');f.seek(0x24);f.write(struct.pack('<2I',0xEDDC94BD,0x160));f.seek(0x160);f.write(struct.pack('<25I',0xFEEDA5A5,3,0x10000000,sz-4,0,0,0,0,0,0xEDDC94BD,0,0,0,0x001640EF,0,0,0x1301001D,0,0,0,0x00000100,0,0,0x04030050,0x14110D09));f.seek(0);d=f.read(28);w=struct.unpack('<7I',d);s=sum(w)&0xFFFFFFFF;ck=(0x100000000-s)&0xFFFFFFFF;f.seek(0x1C);f.write(struct.pack('<I',ck));f.close();print('\tvector checksum: 0x%08X'%ck)"
+endif
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf

@@ -1189,6 +1189,11 @@ ifeq ($(TARGET),lpc)
   endif
 endif
 
+ifeq ($(TARGET),nxp_lpc54s018m)
+  ARCH_FLASH_OFFSET=0x10000000
+  # Bare-metal HAL — no NXP SDK dependencies
+endif
+
 ifeq ($(TARGET),lpc55s69)
   ifneq ($(TZEN),1)
     LSCRIPT_IN=hal/$(TARGET)-ns.ld

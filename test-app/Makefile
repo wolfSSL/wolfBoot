@@ -699,6 +699,16 @@ ifeq ($(TARGET),lpc55s69)
     LDFLAGS+=-Wl,--no-warn-rwx-segments
 endif
 
+ifeq ($(TARGET),nxp_lpc54s018m)
+    LSCRIPT_TEMPLATE=ARM-nxp_lpc54s018m.ld
+    # Enable RAMFUNCTION for test app (flash ops must run from RAM)
+    CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
+      LDFLAGS+=--specs=nosys.specs
+    endif
+    LDFLAGS+=-Wl,--no-warn-rwx-segments
+endif
+
 ifeq ($(TARGET),imx_rt)
   LDFLAGS+=\
     -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \
