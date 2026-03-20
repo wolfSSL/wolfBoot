@@ -187,6 +187,10 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),max32666)
+    ARCH_FLASH_OFFSET=0x10000000
+  endif
+
   ifeq ($(TARGET),pic32cz)
     ARCH_FLASH_OFFSET=0x08000000
     CORTEX_M7=1
