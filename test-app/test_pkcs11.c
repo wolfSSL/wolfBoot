@@ -500,9 +500,8 @@ int test_pkcs11_start(void)
         ret = test_pkcs11_open_user_session(&session);
     }
     if (ret < 0) {
-        (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
-        wolfCrypt_Cleanup();
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
 
     key_state = test_pkcs11_find_keypair(session, &pub_obj, &priv_obj);
@@ -513,11 +512,8 @@ int test_pkcs11_start(void)
 
     data_state = test_pkcs11_find_data_obj(session, &data_obj);
     if (data_state < 0) {
-        (void)wolfpkcs11nsFunctionList.C_Logout(session);
-        (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
-        (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
-        wolfCrypt_Cleanup();
-        return -1;
+        ret = -1;
+        goto cleanup;
     }
 
     if (key_state == 1 && data_state == 1) {
