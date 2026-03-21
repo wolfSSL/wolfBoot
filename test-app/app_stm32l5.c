@@ -21,10 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 #include "system.h"
 #include "hal.h"
 #include "uart_drv.h"
@@ -33,12 +30,9 @@
 #include "target.h"
 
 #ifdef SECURE_PKCS11
+#include "test_pkcs11.h"
 #include "wcs/user_settings.h"
 #include <wolfssl/wolfcrypt/settings.h>
-#include <wolfssl/wolfcrypt/wc_pkcs11.h>
-#include <wolfssl/wolfcrypt/random.h>
-extern const char pkcs11_library_name[];
-extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
 #endif
 
 #define LED_BOOT_PIN (9)  /* PA9 - Nucleo - Red Led */
@@ -134,84 +128,15 @@ void extra_led_off(void)
     GPIOB_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
 
-
-extern int ecdsa_sign_verify(int devId);
-
-
 void main(void)
 {
-    int ret;
-    uint32_t rand;
-    uint32_t i;
-    uint32_t klen = 200;
-    int otherkey_slot;
-    unsigned int devId = 0;
-
 #ifdef SECURE_PKCS11
-    WC_RNG rng;
-    Pkcs11Token token;
-    Pkcs11Dev PKCS11_d;
-    unsigned long session;
-    char TokenPin[] = "0123456789ABCDEF";
-    char UserPin[] = "ABCDEF0123456789";
-    char SoPinName[] = "SO-PIN";
+    int ret;
 
     boot_led_on();
-
-    wolfCrypt_Init();
-
-    PKCS11_d.heap = NULL,
-    PKCS11_d.func = (CK_FUNCTION_LIST *)&wolfpkcs11nsFunctionList;
-
-    ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 1, "EccKey",
-            (const byte*)TokenPin, strlen(TokenPin));
-
-    if (ret == 0) {
-        ret = wolfpkcs11nsFunctionList.C_OpenSession(1,
-                CKF_SERIAL_SESSION | CKF_RW_SESSION,
-                NULL, NULL, &session);
-    }
-    if (ret == 0) {
-        ret = wolfpkcs11nsFunctionList.C_InitToken(1,
-                (byte *)TokenPin, strlen(TokenPin), (byte *)SoPinName);
-    }
-
-    if (ret == 0) {
-        extra_led_on();
-        ret = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
-                (byte *)TokenPin,
-                strlen(TokenPin));
-    }
-    if (ret == 0) {
-        ret = wolfpkcs11nsFunctionList.C_InitPIN(session,
-                (byte *)TokenPin,
-                strlen(TokenPin));
-    }
-    if (ret == 0) {
-        ret = wolfpkcs11nsFunctionList.C_Logout(session);
-    }
-    if (ret != 0) {
-        while(1)
-            ;
-    }
-    if (ret == 0) {
-        ret = wc_CryptoDev_RegisterDevice(devId, wc_Pkcs11_CryptoDevCb,
-                &token);
-        if (ret != 0) {
-            while(1)
-                ;
-        }
-        if (ret == 0) {
-#ifdef HAVE_ECC
-            ret = ecdsa_sign_verify(devId);
-            if (ret != 0)
-                ret = 1;
-            else
-                usr_led_on();
-#endif
-        }
-        wc_Pkcs11Token_Final(&token);
-    }
+    ret = test_pkcs11_start();
+    if (ret != PKCS11_TEST_FAIL)
+        usr_led_on();
 #endif
     while(1)
         ;
