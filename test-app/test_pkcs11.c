@@ -242,6 +242,8 @@ static int test_pkcs11_open_user_session(CK_SESSION_HANDLE *session)
 {
     CK_RV rv;
 
+    *session = CK_INVALID_HANDLE;
+
     rv = wolfpkcs11nsFunctionList.C_OpenSession(TEST_PKCS11_SLOT_ID,
         CKF_SERIAL_SESSION | CKF_RW_SESSION, NULL, NULL, session);
     if (test_pkcs11_ck_ok("C_OpenSession(USER)", rv) < 0)
@@ -254,11 +256,13 @@ static int test_pkcs11_open_user_session(CK_SESSION_HANDLE *session)
 
     if (rv == CKR_USER_PIN_NOT_INITIALIZED) {
         (void)wolfpkcs11nsFunctionList.C_CloseSession(*session);
+        *session = CK_INVALID_HANDLE;
         return -2;
     }
 
     test_pkcs11_dump_rv("C_Login(USER)", rv);
     (void)wolfpkcs11nsFunctionList.C_CloseSession(*session);
+    *session = CK_INVALID_HANDLE;
     return -1;
 }
 
@@ -398,6 +402,7 @@ static int test_pkcs11_load_blob(CK_SESSION_HANDLE session,
     CK_OBJECT_HANDLE data_obj, struct test_pkcs11_blob *blob)
 {
     CK_ULONG len = sizeof(*blob);
+    CK_ULONG expected_len;
     int ret;
 
     ret = test_pkcs11_get_attr(session, data_obj, CKA_VALUE, (CK_BYTE *)blob, &len);
@@ -410,6 +415,11 @@ static int test_pkcs11_load_blob(CK_SESSION_HANDLE session,
     if (blob->payload_len > sizeof(blob->data) ||
         blob->sig_len > sizeof(blob->data) ||
         blob->payload_len + blob->sig_len > sizeof(blob->data))
+        return -1;
+
+    expected_len = (CK_ULONG)(sizeof(*blob) - sizeof(blob->data) +
+        blob->payload_len + blob->sig_len);
+    if (len < expected_len)
         return -1;
 
     printf("pkcs11: restored blob payload_len=%lu sig_len=%lu\r\n",
