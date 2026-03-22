@@ -436,9 +436,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 void wolfPKCS11_Store_Close(void* store)
 {
     struct store_handle *handle = store;
-    /* This removes all flags (including STORE_FLAGS_OPEN) */
-    handle->flags = 0;
-    handle->hdr = NULL;
+    memset(handle, 0, sizeof(*handle));
 }
 
 int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)

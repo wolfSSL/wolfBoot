@@ -90,6 +90,39 @@ START_TEST(test_cross_sector_write_preserves_length)
 }
 END_TEST
 
+START_TEST(test_close_clears_handle_state)
+{
+    enum { type = WOLFPSA_STORE_KEY };
+    const unsigned long id1 = 17;
+    const unsigned long id2 = 21;
+    void *store = NULL;
+    struct store_handle *handle;
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    ret = wolfPSA_Store_Open(type, id1, id2, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_ptr_nonnull(store);
+
+    handle = store;
+    ck_assert_ptr_nonnull(handle->buffer);
+    ck_assert_ptr_nonnull(handle->hdr);
+    ck_assert_uint_ne(handle->in_buffer_offset, 0);
+
+    wolfPSA_Store_Close(store);
+
+    ck_assert_uint_eq(handle->flags, 0);
+    ck_assert_uint_eq(handle->pos, 0);
+    ck_assert_ptr_null(handle->buffer);
+    ck_assert_ptr_null(handle->hdr);
+    ck_assert_uint_eq(handle->in_buffer_offset, 0);
+}
+END_TEST
+
 START_TEST(test_delete_object_ignores_metadata_prefix)
 {
     enum { type = WOLFPSA_STORE_KEY };
@@ -125,11 +158,14 @@ Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot-psa-store");
     TCase *tcase_write = tcase_create("cross_sector_write");
+    TCase *tcase_close = tcase_create("close_state");
     TCase *tcase_delete = tcase_create("delete_object");
 
     tcase_add_test(tcase_write, test_cross_sector_write_preserves_length);
+    tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete, test_delete_object_ignores_metadata_prefix);
     suite_add_tcase(s, tcase_write);
+    suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete);
     return s;
 }

@@ -442,9 +442,7 @@ int wolfPSA_Store_OpenSz(int type, unsigned long id1, unsigned long id2, int rea
 void wolfPSA_Store_Close(void* store)
 {
     struct store_handle *handle = store;
-    /* This removes all flags (including STORE_FLAGS_OPEN) */
-    handle->flags = 0;
-    handle->hdr = NULL;
+    memset(handle, 0, sizeof(*handle));
 }
 
 int wolfPSA_Store_Read(void* store, unsigned char* buffer, int len)
