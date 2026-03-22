@@ -281,7 +281,6 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
     ret = sata_get_random_base64(secret, secret_size);
     if (ret == 0) {
         wolfBoot_printf("Creating new secret (%d bytes)\r\n", *secret_size);
-        wolfBoot_printf("%s\r\n", secret);
 
         /* seal new secret */
         ret = wolfBoot_seal(pubkey_hint, policy, policy_size,
@@ -305,14 +304,11 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
         }
 
         wolfBoot_printf("Secret Check %d bytes\n", secret_check_sz);
-        wolfBoot_printf("%s\r\n", secret_check);
         TPM2_ForceZero(secret_check, sizeof(secret_check));
     }
 
-    if (ret == 0) {
+    if (ret == 0)
         wolfBoot_printf("Secret %d bytes\n", *secret_size);
-        wolfBoot_printf("%s\r\n", secret);
-    }
 
     return ret;
 }
@@ -414,9 +410,6 @@ int sata_unlock_disk(int drv, int freeze)
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
         return r;
-#ifdef TARGET_x86_fsp_qemu
-    wolfBoot_printf("DISK LOCK SECRET: %s\r\n", secret);
-#endif
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
 #if defined(TARGET_x86_fsp_qemu)
