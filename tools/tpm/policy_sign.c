@@ -287,7 +287,7 @@ int policy_sign(int argc, char *argv[])
                 pcrDigestSz = -1;
             else
                 pcrDigestSz = hexToByte(hashHexStr, pcrDigest, hashHexStrlen);
-            if (pcrDigestSz <= 0) {
+            if ((int)pcrDigestSz <= 0) {
                 fprintf(stderr, "Invalid PCR hash length\n");
                 usage();
                 return -1;
@@ -300,7 +300,7 @@ int policy_sign(int argc, char *argv[])
                 digestSz = -1;
             else
                 digestSz = hexToByte(hashHexStr, digest, hashHexStrlen);
-            if (digestSz <= 0) {
+            if ((int)digestSz <= 0) {
                 fprintf(stderr, "Invalid Policy Digest hash length\n");
                 usage();
                 return -1;
