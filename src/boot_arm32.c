@@ -86,7 +86,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #ifdef RAM_CODE
 
 #define AIRCR *(volatile uint32_t *)(0xE000ED0C)
-#define AIRCR_VKEY (0r05FA << 16)
+#define AIRCR_VKEY (0x05FA << 16)
 #define AIRCR_SYSRESETREQ (1 << 2)
 
 void RAMFUNCTION arch_reboot(void)
