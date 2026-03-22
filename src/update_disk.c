@@ -221,6 +221,11 @@ static void disk_crypto_clear(void)
     ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
 }
 
+static void disk_decrypted_header_clear(uint8_t *hdr)
+{
+    ForceZero(hdr, IMAGE_HEADER_SIZE);
+}
+
 #endif /* DISK_ENCRYPT */
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
@@ -267,12 +272,14 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef DISK_ENCRYPT
     /* Initialize encryption - this sets up the cipher with key from storage */
     if (wolfBoot_initialize_encryption() != 0) {
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
         wolfBoot_printf("Error initializing encryption\r\n");
         wolfBoot_panic();
     }
     /* Retrieve encryption key and nonce for disk decryption */
     if (wolfBoot_get_encrypt_key(disk_encrypt_key, disk_encrypt_nonce) != 0) {
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
         wolfBoot_printf("Error getting encryption key\r\n");
         wolfBoot_panic();
@@ -283,6 +290,7 @@ void RAMFUNCTION wolfBoot_start(void)
     ret = disk_init(BOOT_DISK);
     if (ret != 0) {
 #ifdef DISK_ENCRYPT
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
         wolfBoot_panic();
@@ -290,6 +298,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     if (disk_open(BOOT_DISK) < 0) {
 #ifdef DISK_ENCRYPT
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
         wolfBoot_printf("Error opening disk %d\r\n", BOOT_DISK);
@@ -328,6 +337,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     if ((pB_ver == 0) && (pA_ver == 0)) {
 #ifdef DISK_ENCRYPT
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
         wolfBoot_printf("No valid OS image found in either partition %d or %d\r\n",
@@ -433,6 +443,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Decrypting image...");
         BENCHMARK_START();
         if ((IMAGE_HEADER_SIZE % ENCRYPT_BLOCK_SIZE) != 0) {
+            disk_decrypted_header_clear(dec_hdr);
             disk_crypto_clear();
             wolfBoot_printf("Encrypted disk images require aligned header size\r\n");
             wolfBoot_panic();
@@ -482,6 +493,7 @@ void RAMFUNCTION wolfBoot_start(void)
 
     if (failures) {
 #ifdef DISK_ENCRYPT
+        disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
@@ -542,6 +554,7 @@ void RAMFUNCTION wolfBoot_start(void)
     wolfBoot_hook_boot(&os_image);
 #endif
 #ifdef DISK_ENCRYPT
+    disk_decrypted_header_clear(dec_hdr);
     disk_crypto_clear();
 #endif
     do_boot((uint32_t*)load_address
