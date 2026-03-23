@@ -974,8 +974,7 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
 {
     uint8_t *stored_sha, *end_sha;
     uint16_t stored_sha_len;
-    uint8_t *p;
-    int blksz;
+    uint8_t* p;
     if (!img)
         return -1;
 
@@ -989,13 +988,20 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     wc_InitSha256(sha256_ctx);
 #endif
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
-    while (p < end_sha) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (end_sha - p < blksz)
-            blksz = end_sha - p;
-        wc_Sha256Update(sha256_ctx, p, blksz);
-        p += blksz;
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha256Update(sha256_ctx, p, (word32)(end_sha - p));
+#else
+    {
+        int blksz;
+        while (p < end_sha) {
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (end_sha - p < blksz)
+                blksz = end_sha - p;
+            wc_Sha256Update(sha256_ctx, p, blksz);
+            p += blksz;
+        }
     }
+#endif
     return 0;
 }
 
@@ -1008,23 +1014,29 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
  */
 static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 {
-    uint32_t position = 0;
-    uint8_t *p;
-    int blksz;
     wc_Sha256 sha256_ctx;
 
     if (header_sha256(&sha256_ctx, img) != 0)
         return -1;
-    do {
-        p = get_sha_block(img, position);
-        if (p == NULL)
-            break;
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (position + blksz > img->fw_size)
-            blksz = img->fw_size - position;
-        wc_Sha256Update(&sha256_ctx, p, blksz);
-        position += blksz;
-    } while(position < img->fw_size);
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha256Update(&sha256_ctx, img->fw_base, img->fw_size);
+#else
+    {
+        uint32_t position = 0;
+        uint8_t* p;
+        int      blksz;
+        do {
+            p = get_sha_block(img, position);
+            if (p == NULL)
+                break;
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (position + blksz > img->fw_size)
+                blksz = img->fw_size - position;
+            wc_Sha256Update(&sha256_ctx, p, blksz);
+            position += blksz;
+        } while (position < img->fw_size);
+    }
+#endif
 
     wc_Sha256Final(&sha256_ctx, hash);
     wc_Sha256Free(&sha256_ctx);
@@ -1065,8 +1077,7 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
 {
     uint16_t stored_sha_len;
     uint8_t *stored_sha, *end_sha;
-    uint8_t *p;
-    int blksz;
+    uint8_t* p;
     if (!img)
         return -1;
 
@@ -1080,13 +1091,20 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
     wc_InitSha384(sha384_ctx);
 #endif
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
-    while (p < end_sha) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (end_sha - p < blksz)
-            blksz = end_sha - p;
-        wc_Sha384Update(sha384_ctx, p, blksz);
-        p += blksz;
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha384Update(sha384_ctx, p, (word32)(end_sha - p));
+#else
+    {
+        int blksz;
+        while (p < end_sha) {
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (end_sha - p < blksz)
+                blksz = end_sha - p;
+            wc_Sha384Update(sha384_ctx, p, blksz);
+            p += blksz;
+        }
     }
+#endif
     return 0;
 }
 
@@ -1102,23 +1120,29 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
  */
 static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
-    uint32_t position = 0;
-    uint8_t *p;
-    int blksz;
     wc_Sha384 sha384_ctx;
 
     if (header_sha384(&sha384_ctx, img) != 0)
         return -1;
-    do {
-        p = get_sha_block(img, position);
-        if (p == NULL)
-            break;
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (position + blksz > img->fw_size)
-            blksz = img->fw_size - position;
-        wc_Sha384Update(&sha384_ctx, p, blksz);
-        position += blksz;
-    } while(position < img->fw_size);
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha384Update(&sha384_ctx, img->fw_base, img->fw_size);
+#else
+    {
+        uint32_t position = 0;
+        uint8_t* p;
+        int      blksz;
+        do {
+            p = get_sha_block(img, position);
+            if (p == NULL)
+                break;
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (position + blksz > img->fw_size)
+                blksz = img->fw_size - position;
+            wc_Sha384Update(&sha384_ctx, p, blksz);
+            position += blksz;
+        } while (position < img->fw_size);
+    }
+#endif
 
     wc_Sha384Final(&sha384_ctx, hash);
     wc_Sha384Free(&sha384_ctx);
@@ -1165,8 +1189,7 @@ static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
 {
     uint16_t stored_sha_len;
     uint8_t *stored_sha, *end_sha;
-    uint8_t *p;
-    int blksz;
+    uint8_t* p;
 
     if (!img)
         return -1;
@@ -1177,13 +1200,20 @@ static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
         return -1;
     wc_InitSha3_384(sha3_ctx, NULL, INVALID_DEVID);
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
-    while (p < end_sha) {
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (end_sha - p < blksz)
-            blksz = end_sha - p;
-        wc_Sha3_384_Update(sha3_ctx, p, blksz);
-        p += blksz;
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha3_384_Update(sha3_ctx, p, (word32)(end_sha - p));
+#else
+    {
+        int blksz;
+        while (p < end_sha) {
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (end_sha - p < blksz)
+                blksz = end_sha - p;
+            wc_Sha3_384_Update(sha3_ctx, p, blksz);
+            p += blksz;
+        }
     }
+#endif
     return 0;
 }
 
@@ -1198,23 +1228,29 @@ static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
  */
 static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
 {
-    uint8_t *p;
-    int blksz;
-    uint32_t position = 0;
     wc_Sha3 sha3_ctx;
 
     if (header_sha3_384(&sha3_ctx, img) != 0)
         return -1;
-    do {
-        p = get_sha_block(img, position);
-        if (p == NULL)
-            break;
-        blksz = WOLFBOOT_SHA_BLOCK_SIZE;
-        if (position + blksz > img->fw_size)
-            blksz = img->fw_size - position;
-        wc_Sha3_384_Update(&sha3_ctx, p, blksz);
-        position += blksz;
-    } while(position < img->fw_size);
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    wc_Sha3_384_Update(&sha3_ctx, img->fw_base, img->fw_size);
+#else
+    {
+        uint8_t* p;
+        int      blksz;
+        uint32_t position = 0;
+        do {
+            p = get_sha_block(img, position);
+            if (p == NULL)
+                break;
+            blksz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (position + blksz > img->fw_size)
+                blksz = img->fw_size - position;
+            wc_Sha3_384_Update(&sha3_ctx, p, blksz);
+            position += blksz;
+        } while (position < img->fw_size);
+    }
+#endif
 
     wc_Sha3_384_Final(&sha3_ctx, hash);
     wc_Sha3_384_Free(&sha3_ctx);
@@ -1733,6 +1769,10 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
                                    struct wolfBoot_image* img, uint32_t offset,
                                    uint32_t size)
 {
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    update_hash(ctx, img->fw_base + offset, size);
+    return 0;
+#else
     uint32_t current_offset = offset;
     uint32_t remaining_size = size;
     uint8_t read_buf[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED_STACK(4); /* Use local buffer */
@@ -1755,6 +1795,7 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
         current_offset += read_size;
     }
     return 0;
+#endif
 }
 
 /*
@@ -1764,6 +1805,11 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
 static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
                                   uint32_t size, int src_ext)
 {
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    (void)src_ext;
+    update_hash(ctx, (uint8_t*)addr, size);
+    return 0;
+#else
     uint8_t   buffer[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED_STACK(4);
     uint32_t  remaining_size = size;
     uintptr_t current_addr   = addr;
@@ -1788,6 +1834,7 @@ static int update_hash_flash_addr(wolfBoot_hash_t* ctx, uintptr_t addr,
     }
 
     return 0;
+#endif
 }
 
 int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
