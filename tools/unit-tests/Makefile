@@ -132,10 +132,11 @@ unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 		-DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
-unit-policy-sign: ../../include/target.h unit-policy-sign.c
+unit-policy-sign: ../../include/target.h unit-policy-sign.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
 	gcc -o $@ $^ -I../tpm $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_HASH_SHA256 \
-		-DHAVE_ECC -DHAVE_ECC_KEY_IMPORT \
+		-DHAVE_ECC_KEY_IMPORT \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
