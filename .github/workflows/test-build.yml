@@ -32,10 +32,6 @@ jobs:
 
       - name: Install Clang
         if: |
-          inputs.config-file == './config/examples/stm32c0.config' ||
-          inputs.config-file == './config/examples/stm32c0-rsa2048.config' ||
-          inputs.config-file == './config/examples/stm32h5.config' ||
-          inputs.config-file == './config/examples/stm32h5-dualbank.config' ||
           inputs.config-file == './config/examples/stm32h7.config' ||
           inputs.config-file == './config/examples/stm32h7-octospi.config' ||
           inputs.config-file == './config/examples/stm32u5.config' ||
@@ -63,10 +59,6 @@ jobs:
 
       - name: Rebuild wolfboot with Clang
         if: |
-          inputs.config-file == './config/examples/stm32c0.config' ||
-          inputs.config-file == './config/examples/stm32c0-rsa2048.config' ||
-          inputs.config-file == './config/examples/stm32h5.config' ||
-          inputs.config-file == './config/examples/stm32h5-dualbank.config' ||
           inputs.config-file == './config/examples/stm32h7.config' ||
           inputs.config-file == './config/examples/stm32h7-octospi.config' ||
           inputs.config-file == './config/examples/stm32u5.config' ||

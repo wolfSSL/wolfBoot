@@ -109,7 +109,6 @@ ifeq ($(USE_CLANG),1)
   # objcopy output then expands the flash-to-RAM gap into a huge sparse image.
   # The app image only needs the flash-backed output sections.
   OBJCOPY_IMAGE_FLAGS+=-j .text -j .edidx
-  LDFLAGS+=-T ../hal/clang-discard.ld
 endif
 
 ifeq ($(DEBUG_UART),1)
@@ -947,7 +946,7 @@ ifeq ($(ELF_FLASH_SCATTER),1)
 SQUASHELF_TOOL = ../tools/squashelf/squashelf
 image-orig.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 
 image.elf: image-orig.elf
 	@echo "\t[SQUASHELF] $@"
@@ -956,7 +955,7 @@ else
 # Default behavior when ELF_FLASH_SCATTER is not set
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 endif
 
 standalone: image.bin

@@ -12,6 +12,9 @@ ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
   endif
+  ifeq ($(ARMORED),1)
+    $(error USE_CLANG=1 requires ARMORED=0)
+  endif
 endif
 
 # Support for Built-in ROT into OTP flash memory
