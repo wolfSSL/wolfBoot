@@ -584,6 +584,8 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
     word32 inOutIdx = 0;
     struct RsaKey rsa;
 
+    (void)inOutIdx;
+
 #if defined(WOLFBOOT_HASH_SHA256)
     enum wc_HashType hash_type = WC_HASH_TYPE_SHA256;
     int mgf = WC_MGF1SHA256;
@@ -594,14 +596,19 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
     #error "RSA-PSS requires SHA-256 or SHA-384"
 #endif
 
+#if (!defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)) || \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) &&  \
+        !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
 
     if (pubkey == NULL || pubkey_sz < 0) {
         return;
     }
+#endif
 
-    /* wolfCrypt software RSA-PSS verify (two-step)
+    /* RSA-PSS verify (two-step)
      *
      * Step 1 (RSA_VERIFY_FN): wc_RsaPSS_VerifyInline performs the RSA
      * operation and PSS unmasking, returning a pointer to the PSS data and
@@ -610,6 +617,78 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
      * Step 2 (RSA_PSS_VERIFY_HASH): wc_RsaPSS_CheckPadding verifies the PSS
      * padding against img->sha_hash. Returns 0 on success. Both steps are
      * armored when WOLFBOOT_ARMORED is enabled. */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+    ret = wc_InitRsaKey_ex(&rsa, NULL, hsmDevIdPubKey);
+    if (ret != 0) {
+        return;
+    }
+#if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID) ||  \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+     defined(WOLFBOOT_CERT_CHAIN_VERIFY))
+    (void)key_slot;
+    /* public key is stored on server at hsmKeyIdPubKey*/
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    /* If using certificate chain verification and we have a verified leaf key
+     * ID */
+    if (g_leafKeyIdValid) {
+        /* Use the leaf key ID from certificate verification */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        ret = wh_Client_RsaSetKeyId(&rsa, g_certLeafKeyId);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        ret = wh_Server_CacheExportRsaKey(&hsmServerCtx, g_certLeafKeyId, &rsa);
+#endif
+        wolfBoot_printf(
+            "Using leaf cert public key (ID: %08x) for RSA-PSS verification\n",
+            (unsigned int)g_certLeafKeyId);
+    }
+    else {
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        /* Default behavior: use the pre-configured public key ID */
+        ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyIdPubKey);
+#endif
+    }
+#else
+    ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyIdPubKey);
+#endif
+    if (ret != 0) {
+        return;
+    }
+#else
+    whKeyId hsmKeyId = WH_KEYID_ERASED;
+    /* Cache the public key on the server */
+    ret = wh_Client_KeyCache(&hsmClientCtx, WH_NVM_FLAGS_USAGE_VERIFY, NULL, 0,
+                             pubkey, pubkey_sz, &hsmKeyId);
+    if (ret != WH_ERROR_OK) {
+        return;
+    }
+    /* Associate this RSA struct with the keyId of the cached key */
+    ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyId);
+    if (ret != WH_ERROR_OK) {
+        return;
+    }
+#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+    XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
+    RSA_VERIFY_FN(ret, wc_RsaPSS_VerifyInline, output, RSA_IMAGE_SIGNATURE_SIZE,
+                  &digest_out, hash_type, mgf, &rsa);
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+    /* evict the key after use, since we aren't using the RSA import API */
+    if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
+        return;
+    }
+#elif defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    if (g_leafKeyIdValid) {
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
+#endif
+        g_leafKeyIdValid = 0;
+    }
+#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+#else
+    /* wolfCrypt software RSA-PSS verify */
     ret = wc_InitRsaKey(&rsa, NULL);
     if (ret == 0) {
         /* Import public key */
@@ -621,6 +700,7 @@ static void wolfBoot_verify_signature_rsa_pss(uint8_t key_slot,
                     &digest_out, hash_type, mgf, &rsa);
         }
     }
+#endif /* WOLFBOOT_ENABLE_WOLFHSM */
     wc_FreeRsaKey(&rsa);
     if (ret >= WOLFBOOT_SHA_DIGEST_SIZE && img && digest_out) {
         RSA_PSS_VERIFY_HASH(img, digest_out, ret, hash_type);
