@@ -31,7 +31,17 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Install Clang
-        if: inputs.arch == 'arm' || inputs.arch == 'ARM'
+        if: |
+          inputs.config-file == './config/examples/stm32c0.config' ||
+          inputs.config-file == './config/examples/stm32c0-rsa2048.config' ||
+          inputs.config-file == './config/examples/stm32h5.config' ||
+          inputs.config-file == './config/examples/stm32h5-dualbank.config' ||
+          inputs.config-file == './config/examples/stm32h7.config' ||
+          inputs.config-file == './config/examples/stm32h7-octospi.config' ||
+          inputs.config-file == './config/examples/stm32u5.config' ||
+          inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
+          inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
+          inputs.config-file == 'config/examples/stm32n567.config'
         run: |
           sudo apt-get install -y clang
 
@@ -52,7 +62,17 @@ jobs:
           make ${{inputs.make-args}}
 
       - name: Rebuild wolfboot with Clang
-        if: inputs.arch == 'arm' || inputs.arch == 'ARM'
+        if: |
+          inputs.config-file == './config/examples/stm32c0.config' ||
+          inputs.config-file == './config/examples/stm32c0-rsa2048.config' ||
+          inputs.config-file == './config/examples/stm32h5.config' ||
+          inputs.config-file == './config/examples/stm32h5-dualbank.config' ||
+          inputs.config-file == './config/examples/stm32h7.config' ||
+          inputs.config-file == './config/examples/stm32h7-octospi.config' ||
+          inputs.config-file == './config/examples/stm32u5.config' ||
+          inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
+          inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
+          inputs.config-file == 'config/examples/stm32n567.config'
         run: |
           make distclean
           cp ${{inputs.config-file}} .config

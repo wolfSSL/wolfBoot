@@ -1300,7 +1300,6 @@ ifeq ($(USE_CLANG),1)
   CFLAGS+=-DWOLFSSL_NO_ATOMIC -DWOLFSSL_NO_ATOMICS
   CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
   CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
-  LDFLAGS+=-nostdlib
   LSCRIPT_FLAGS+=-T hal/clang-discard.ld
 endif
 

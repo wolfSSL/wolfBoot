@@ -305,7 +305,10 @@ ifeq ($(TZEN),1)
                 WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
             endif
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS
+        ifneq ($(USE_CLANG),1)
+          CFLAGS+=-Wstack-usage=19184
+        endif
         LDFLAGS+=--specs=nosys.specs -u _printf_float
     endif
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
