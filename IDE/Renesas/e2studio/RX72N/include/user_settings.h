@@ -278,5 +278,6 @@
 #else
 #   define WOLFSSL_SMALL_STACK
 #endif
-
+#define PRINTF_ENABLED
+#define NVM_FLASH_WRITEONCE
 #endif /* !H_USER_SETTINGS_ */

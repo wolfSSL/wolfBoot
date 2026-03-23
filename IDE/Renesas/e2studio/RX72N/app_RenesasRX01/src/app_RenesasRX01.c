@@ -2,7 +2,7 @@
  *
  * Test bare-metal application.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -27,6 +27,11 @@
 #include <string.h>
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#include "image.h"
+#include "r_smc_entry.h"
+
+/* define as 1 to enable full header hexdump */
+#define DEBUG_PARTITION 0
 
 static const char* state2str(uint8_t s)
 {
@@ -39,26 +44,42 @@ static const char* state2str(uint8_t s)
     }
 }
 
+static const char* upFlag2str(uint8_t s)
+{
+    switch(s) {
+        case SECT_FLAG_NEW: return "New";
+        case SECT_FLAG_SWAPPING: return "Swapping";
+        case SECT_FLAG_BACKUP: return "Backup";
+        case SECT_FLAG_UPDATED: return "Updated";
+        default: return "Unknown";
+    }
+}
+
 static void printPart(uint8_t *part)
 {
-#ifdef WOLFBOOT_DEBUG_PARTION
+#if defined(DEBUG_PARTITION)
     uint32_t *v;
     int i;
 #endif
     uint8_t  *magic;
     uint8_t  state;
+    uint8_t  upflag;
     uint32_t ver;
 
     magic = part;
     printf("Magic:    %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
     ver = wolfBoot_get_blob_version(part);
     printf("Version:  %02x\n", ver);
-    state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
+    wolfBoot_get_partition_state(0, &state);
     printf("Status:   %02x (%s)\n", state,state2str(state));
     magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
+    if (magic[0] != 0x42)
+    	magic = part + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE - sizeof(uint32_t);
     printf("Trailer Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    wolfBoot_get_update_sector_flag(0, &upflag);
+    printf("Update flag: %02x (%s)\n", upflag, upFlag2str(upflag));
 
-#ifdef WOLFBOOT_DEBUG_PARTION
+#if defined(DEBUG_PARTITION)
     v = (uint32_t *)part;
     for(i = 0; i < 0x100/4; i++) {
         if(i % 4 == 0)
@@ -69,13 +90,12 @@ static void printPart(uint8_t *part)
 
 }
 
-
 static void printPartitions(void)
 {
     printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    printPart((uint8_t*)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
 }
 
 void main(void)

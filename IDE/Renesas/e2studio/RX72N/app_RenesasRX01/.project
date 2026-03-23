@@ -44,5 +44,10 @@
 			<type>1</type>
 			<locationURI>PARENT-5-PROJECT_LOC/hal/renesas-rx.c</locationURI>
 		</link>
+		<link>
+			<name>src/string.c</name>
+			<type>1</type>
+			<locationURI>PARENT-5-PROJECT_LOC/src/string.c</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
