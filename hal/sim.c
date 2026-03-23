@@ -183,9 +183,7 @@ whCommServerConfig cs_conf[1] = {{
 }};
 
 /* Crypto context */
-whServerCryptoContext crypto[1] = {{
-    .devId = INVALID_DEVID,
-}};
+whServerCryptoContext crypto[1] = {0};
 
 #if defined(WOLFHSM_CFG_SHE_EXTENSION)
 whServerSheContext    she[1]    = {{0}};

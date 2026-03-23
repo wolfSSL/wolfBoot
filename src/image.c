@@ -816,9 +816,10 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
                         ML_DSA_LEVEL);
 
         /* Finally verify signature. */
-        ret = wc_MlDsaKey_Verify(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
-                                 img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
-                                 &verify_res);
+        ret = wc_MlDsaKey_VerifyCtx(&ml_dsa, sig, ML_DSA_IMAGE_SIGNATURE_SIZE,
+                                    NULL, 0,
+                                    img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE,
+                                    &verify_res);
 
     #ifdef WOLFBOOT_ARMORED
         if (ret == 0) {

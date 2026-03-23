@@ -1088,8 +1088,9 @@ static int sign_digest(int sign, int hash_algo,
     if (sign == SIGN_ML_DSA) {
         /* Nothing else to do, ready to sign. */
         if (ret == 0) {
-            ret = wc_MlDsaKey_Sign(&key.ml_dsa, signature, signature_sz,
-                                   digest, digest_sz, &rng);
+            ret = wc_MlDsaKey_SignCtx(&key.ml_dsa, NULL, 0,
+                                      signature, signature_sz,
+                                      digest, digest_sz, &rng);
         }
         if (ret != 0) {
             fprintf(stderr, "error signing with ML-DSA: %d\n", ret);
