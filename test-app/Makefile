@@ -88,7 +88,7 @@ endif
 include ../arch.mk
 
 ifeq ($(USE_CLANG),1)
-  APP_OBJS+=../src/string.o
+  APP_NEEDS_STRING:=1
 endif
 
 # Optional alias for clearer TZ PSA selection in app builds.
@@ -114,6 +114,10 @@ endif
 
 ifeq ($(DEBUG_UART),1)
     CFLAGS+=-DDEBUG_UART
+    APP_NEEDS_STRING:=1
+endif
+
+ifeq ($(APP_NEEDS_STRING),1)
     APP_OBJS+=../src/string.o
 endif
 

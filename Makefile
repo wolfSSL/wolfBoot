@@ -25,6 +25,7 @@ DEBUG_UART?=0
 LIBS=
 SIGN_ALG=
 OBJCOPY_FLAGS=
+OBJCOPY_BIN_FLAGS=
 BIG_ENDIAN?=0
 USE_CLANG?=0
 ifeq ($(USE_CLANG),1)
@@ -197,6 +198,12 @@ ifeq ($(USE_GCC_HEADLESS),1)
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
+
+ifeq ($(USE_CLANG),1)
+  ifeq ($(ARCH),ARM)
+    OBJCOPY_BIN_FLAGS+=-j .text -j .ramcode -j .keystore -j .edidx -j .gnu.sgstubs
+  endif
+endif
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
 endif
@@ -326,7 +333,7 @@ wolfboot.efi: wolfboot.elf
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_BIN_FLAGS) -O binary $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
