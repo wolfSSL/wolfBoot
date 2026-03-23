@@ -970,6 +970,11 @@ $(WOLFSSL_LOCAL_OBJDIR)/%.o: %.c
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(WOLFSSL_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+$(WOLFSSL_LOCAL_OBJDIR)/%.o: %.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFSSL_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR)

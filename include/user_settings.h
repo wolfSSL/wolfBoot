@@ -77,8 +77,10 @@ extern int tolower(int c);
 #if defined(WOLFBOOT_SIGN_ED25519) || defined(WOLFBOOT_SIGN_SECONDARY_ED25519)
 #   define HAVE_ED25519
 #   define ED25519_SMALL
-#   define NO_ED25519_SIGN
-#   define NO_ED25519_EXPORT
+#   if !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#       define NO_ED25519_SIGN
+#       define NO_ED25519_EXPORT
+#   endif
 #   define USE_SLOW_SHA512
 #   define WOLFSSL_SHA512
 #endif
@@ -88,8 +90,10 @@ extern int tolower(int c);
 #   define HAVE_ED448
 #   define HAVE_ED448_VERIFY
 #   define ED448_SMALL
-#   define NO_ED448_SIGN
-#   define NO_ED448_EXPORT
+#   if !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#       define NO_ED448_SIGN
+#       define NO_ED448_EXPORT
+#   endif
 #   define WOLFSSL_SHA3
 #   define WOLFSSL_SHAKE256
 #   define WOLFSSL_SHA512
@@ -146,7 +150,6 @@ extern int tolower(int c);
 #endif
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
-#       define SP_WORD_SIZE 32
 #       define WOLFSSL_HAVE_SP_ECC
 #       define WOLFSSL_KEY_GEN
 #       define HAVE_ECC_KEY_EXPORT
@@ -343,8 +346,9 @@ extern int tolower(int c);
 #       define HAVE___UINT128_T
 #       define SP_WORD_SIZE 64
 #   elif defined(ARCH_x86_64) && !defined(FORCE_32BIT)
+#       define HAVE___UINT128_T
 #       define SP_WORD_SIZE 64
-#       ifndef NO_ASM
+#       if !defined(NO_ASM)
 #           define WOLFSSL_SP_X86_64_ASM
 #       endif
 #   else

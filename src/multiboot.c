@@ -379,6 +379,7 @@ uint8_t *mb2_find_header(uint8_t *image, int size)
 
 void mb2_jump(uintptr_t entry, uint32_t mb2_boot_info)
 {
+#if defined(__x86_64__) || defined(__i386__)
     __asm__(
             "mov $0x36d76289, %%eax\r\n"
             "mov %0, %%ebx\r\n"
@@ -386,6 +387,10 @@ void mb2_jump(uintptr_t entry, uint32_t mb2_boot_info)
             :
             : "g"(mb2_boot_info), "g"(entry)
             : "eax", "ebx");
+#else
+    (void)entry;
+    (void)mb2_boot_info;
+#endif
 }
 
 #endif /* WOLFBOOT_MULTIBOOT2 */

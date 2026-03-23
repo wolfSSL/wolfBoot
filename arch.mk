@@ -49,6 +49,8 @@ ifeq ($(ARCH),x86_64)
       endif
     else
       MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_x86_64.o
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_x86_64_asm.o
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o
     endif
   endif
   ifeq ($(TARGET),x86_64_efi)
@@ -1474,8 +1476,17 @@ ifeq ($(ARCH),sim)
     LDFLAGS+=-m32
   endif
   ifeq ($(SPMATH),1)
-    MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
-    CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+    ifeq ($(FORCE_32BIT),1)
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+      CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+    else ifeq ($(shell uname -m),aarch64)
+      CFLAGS += -DARCH_AARCH64 -DFAST_MEMCPY
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
+    else
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+      CFLAGS+=-DWOLFSSL_SP_DIV_WORD_HALF
+    endif
   endif
   ifeq ($(WOLFHSM_CLIENT),1)
     WOLFHSM_OBJS += $(WOLFBOOT_LIB_WOLFHSM)/port/posix/posix_transport_tcp.o

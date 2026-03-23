@@ -75,6 +75,12 @@ struct xmalloc_slot {
             #define MP_POINT_SIZE (196)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 8)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 8 * 6)
+        #elif SP_WORD_SIZE == 64
+            #define MP_POINT_SIZE (200)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 4)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (2 * 4 * 6))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 4 * 6))
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 8)
         #else
             #define MP_POINT_SIZE (220)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 9)
@@ -91,6 +97,12 @@ struct xmalloc_slot {
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 12)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 12 * 6)
             #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 12)
+        #elif SP_WORD_SIZE == 64
+            #define MP_POINT_SIZE (344)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 7)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (2 * 7 * 6))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 7 * 6))
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 12)
         #else
             #define MP_POINT_SIZE (364)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 15)
@@ -107,6 +119,12 @@ struct xmalloc_slot {
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 17)
             #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * 2 * 17 * 6)
             #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 12)
+        #elif SP_WORD_SIZE == 64
+            #define MP_POINT_SIZE (440)
+            #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 9)
+            #define MP_DIGITS_BUFFER_SIZE_1 (MP_DIGIT_SIZE * (2 * 9 * 6))
+            #define MP_DIGITS_BUFFER_SIZE_2 (MP_DIGIT_SIZE * (2 * 9 * 6))
+            #define MP_MONTGOMERY_SIZE (sizeof(int64_t) * 2 * 12)
         #else
             #define MP_POINT_SIZE (508)
             #define MP_DIGITS_BUFFER_SIZE_0 (MP_DIGIT_SIZE * 18 * 21)
@@ -129,7 +147,13 @@ struct xmalloc_slot {
     #endif
     static uint8_t mp_points_0[MP_POINT_SIZE * 2];
     static uint8_t mp_points_1[MP_POINT_SIZE * 3];
+    /* x86_64 SP always uses win_add_sub with 33+2 precomputed points,
+     * even when WOLFSSL_SP_SMALL is defined */
+    #if SP_WORD_SIZE == 64
+    static uint8_t mp_points_2[MP_POINT_SIZE * (33 + 2)];
+    #else
     static uint8_t mp_points_2[MP_POINT_SIZE * (16 + 1)];
+    #endif
     static uint8_t mp_digits_buffer_0[MP_DIGITS_BUFFER_SIZE_0];
     static uint8_t mp_digits_buffer_1[MP_DIGITS_BUFFER_SIZE_1];
     #if !defined(WOLFSSL_SP_ARM_CORTEX_M_ASM) && (defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) || defined(WOLFBOOT_SIGN_ECC521))
@@ -234,7 +258,11 @@ static struct xmalloc_slot xmalloc_pool[] = {
     { (uint8_t *)mp_digits_buffer_2, MP_DIGITS_BUFFER_SIZE_2, 0 },
     { (uint8_t *)mp_montgomery, MP_MONTGOMERY_SIZE, 0 },
     #endif
+    #if SP_WORD_SIZE == 64
+    { (uint8_t *)mp_points_2, MP_POINT_SIZE * (33 + 2), 0 },
+    #else
     { (uint8_t *)mp_points_2, MP_POINT_SIZE * (16 + 1), 0 },
+    #endif
     { (uint8_t *)mp_digits_buffer_0, MP_DIGITS_BUFFER_SIZE_0, 0},
     { (uint8_t *)mp_digits_buffer_1, MP_DIGITS_BUFFER_SIZE_1, 0},
     #ifndef WC_NO_CACHE_RESISTANT
