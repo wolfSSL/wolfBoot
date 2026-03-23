@@ -35,3 +35,11 @@ jobs:
       - name: Run bootloader with no arguments
         run: |
           ./wolfboot.elf
+
+      - name: Build wolfboot.elf (ELF_SCATTERED, ONESHOT_HASH)
+        run: |
+          make clean && make test-sim-internal-flash-with-update ELF=1 ELF_SCATTERED=1 WOLFBOOT_IMG_HASH_ONESHOT=1
+
+      - name: Run bootloader with no arguments (ONESHOT_HASH)
+        run: |
+          ./wolfboot.elf
