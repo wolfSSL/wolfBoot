@@ -1241,7 +1241,6 @@ int wolfBoot_unlock_disk(void)
             ret = wolfBoot_get_random(secret, secretSz);
             if (ret == 0) {
                 wolfBoot_printf("Creating new secret (%d bytes)\n", secretSz);
-                wolfBoot_print_hexstr(secret, secretSz, 0);
 
                 /* seal new secret */
                 ret = wolfBoot_seal(pubkey_hint, policy, policySz, nvIndex,
@@ -1265,7 +1264,6 @@ int wolfBoot_unlock_disk(void)
                 }
 
                 wolfBoot_printf("Secret Check %d bytes\n", secretCheckSz);
-                wolfBoot_print_hexstr(secretCheck, secretCheckSz, 0);
                 TPM2_ForceZero(secretCheck, sizeof(secretCheck));
             }
         }
@@ -1273,7 +1271,6 @@ int wolfBoot_unlock_disk(void)
 
     if (ret == 0) {
         wolfBoot_printf("Secret %d bytes\n", secretSz);
-        wolfBoot_print_hexstr(secret, secretSz, 0);
 
         /* TODO: Unlock disk */
 

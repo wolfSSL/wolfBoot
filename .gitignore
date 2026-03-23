@@ -170,6 +170,7 @@ tools/unit-tests/unit-image-sha384
 tools/unit-tests/unit-store-sbrk
 tools/unit-tests/unit-tpm-blob
 tools/unit-tests/unit-update-disk
+tools/unit-tests/unit-policy-sign
 
 
 

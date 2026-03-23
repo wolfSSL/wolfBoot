@@ -192,10 +192,18 @@ static int fdt_test(void* fdt)
     off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qman-portal");
     while (off != -FDT_ERR_NOTFOUND) {
         const int *ci = fdt_getprop(fdt, off, "cell-index", NULL);
+        uint32_t portal_idx;
         uint32_t liodns[2];
         if (!ci)
             break;
-        i = fdt32_to_cpu(*ci);
+        portal_idx = fdt32_to_cpu(*ci);
+        if (portal_idx >= QMAN_NUM_PORTALS) {
+            printf("FDT: Invalid qman-portal cell-index %u at %d\n",
+                portal_idx, off);
+            ret = -FDT_ERR_BADSTRUCTURE;
+            goto exit;
+        }
+        i = (int)portal_idx;
 
         liodns[0] = qp_info[i].dliodn;
         liodns[1] = qp_info[i].fliodn;

@@ -67,7 +67,9 @@ int main(int argc, char *argv[])
             ret = -1;
         }
     }
-    fclose(f);
+    if (f != NULL) {
+        fclose(f);
+    }
 
     if (ret == 0) {
         ret = elf_load_image_mmu(image, (uint32_t)imageSz, &entry, NULL);
