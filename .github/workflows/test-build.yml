@@ -30,6 +30,11 @@ jobs:
       - name: Trust workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Install Clang
+        if: inputs.arch == 'arm' || inputs.arch == 'ARM'
+        run: |
+          sudo apt-get install -y clang
+
       - name: make clean
         run: |
           make distclean
@@ -45,3 +50,11 @@ jobs:
       - name: Build wolfboot
         run: |
           make ${{inputs.make-args}}
+
+      - name: Rebuild wolfboot with Clang
+        if: inputs.arch == 'arm' || inputs.arch == 'ARM'
+        run: |
+          make distclean
+          cp ${{inputs.config-file}} .config
+          make -C tools/keytools && make -C tools/bin-assemble
+          make USE_CLANG=1 USE_GCC=0 ${{inputs.make-args}}
