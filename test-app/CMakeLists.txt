@@ -122,6 +122,9 @@ endif()
 
 if(BUILD_TEST_APPS)
     message(STATUS "Building wolfBoot test apps")
+    if(WOLFCRYPT_TZ_PKCS11 AND NOT TZEN)
+        message(FATAL_ERROR "WOLFCRYPT_TZ_PKCS11 requires TZEN=ON for test-app builds")
+    endif()
     add_executable(image)
 
     target_sources(image PRIVATE ${APP_SOURCES})
@@ -176,7 +179,7 @@ if(BUILD_TEST_APPS)
         target_include_directories(image PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/wcs)
     endif()
 
-    if(WOLFCRYPT_TZ_PKCS11)
+    if(TZEN AND WOLFCRYPT_TZ_PKCS11)
         target_include_directories(image PRIVATE ../lib/wolfPKCS11)
     endif()
 
@@ -204,7 +207,7 @@ if(BUILD_TEST_APPS)
         list(APPEND TEST_APP_COMPILE_DEFINITIONS WOLFBOOT_SECURE_CALLS)
     endif()
 
-    if(WOLFCRYPT_TZ_PKCS11)
+    if(TZEN AND WOLFCRYPT_TZ_PKCS11)
         list(APPEND TEST_APP_COMPILE_DEFINITIONS
             WOLFBOOT_PKCS11_APP
             SECURE_PKCS11

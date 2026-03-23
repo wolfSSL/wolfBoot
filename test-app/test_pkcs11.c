@@ -481,6 +481,7 @@ int test_pkcs11_start(void)
     int key_state;
     int data_state;
     int result = PKCS11_TEST_FAIL;
+    int session_logged_in = 0;
 
     memset(&blob, 0, sizeof(blob));
 
@@ -513,6 +514,7 @@ int test_pkcs11_start(void)
         ret = -1;
         goto cleanup;
     }
+    session_logged_in = 1;
 
     key_state = test_pkcs11_find_keypair(session, &pub_obj, &priv_obj);
     if (key_state < 0) {
@@ -570,8 +572,11 @@ int test_pkcs11_start(void)
     }
 
 cleanup:
-    (void)wolfpkcs11nsFunctionList.C_Logout(session);
-    (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
+    if (session != CK_INVALID_HANDLE) {
+        if (session_logged_in)
+            (void)wolfpkcs11nsFunctionList.C_Logout(session);
+        (void)wolfpkcs11nsFunctionList.C_CloseSession(session);
+    }
     (void)wolfpkcs11nsFunctionList.C_Finalize(NULL);
     (void)wolfCrypt_Cleanup();
 
