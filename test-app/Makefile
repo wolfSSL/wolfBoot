@@ -108,7 +108,7 @@ ifeq ($(USE_CLANG),1)
   # Clang-built ARM ELFs can keep RAM sections as loadable segments, and raw
   # objcopy output then expands the flash-to-RAM gap into a huge sparse image.
   # The app image only needs the flash-backed output sections.
-  OBJCOPY_IMAGE_FLAGS+=-j .text -j .edidx
+  OBJCOPY_IMAGE_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_APP)
 endif
 
 ifeq ($(DEBUG_UART),1)

@@ -1301,6 +1301,12 @@ ifeq ($(USE_CLANG),1)
   CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
   CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
   LSCRIPT_FLAGS+=-T $(abspath $(WOLFBOOT_ROOT)/hal/clang-discard.ld)
+  # Keep Clang-specific raw-image section selection in one place. Both the
+  # bootloader and test-app need flash-backed sections only, but the bootloader
+  # has a few extra output sections that must be preserved.
+  CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE:=-j .text -j .edidx
+  CLANG_ARM_OBJCOPY_FLASH_FLAGS_BOOT:=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE) -j .ramcode -j .keystore -j .gnu.sgstubs
+  CLANG_ARM_OBJCOPY_FLASH_FLAGS_APP:=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE)
 endif
 
 ifeq ($(USE_GCC),1)

@@ -201,7 +201,7 @@ endif
 
 ifeq ($(USE_CLANG),1)
   ifeq ($(ARCH),ARM)
-    OBJCOPY_BIN_FLAGS+=-j .text -j .ramcode -j .keystore -j .edidx -j .gnu.sgstubs
+    OBJCOPY_BIN_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BOOT)
   endif
 endif
 ifeq ($(TARGET),ti_hercules)
