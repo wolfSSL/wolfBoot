@@ -11,7 +11,7 @@ jobs:
   test_external_libs:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:latest
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.2
     timeout-minutes: 15
 
     # Matrix to test multiple configurations
@@ -78,12 +78,6 @@ jobs:
             WOLFBOOT_LIB_WOLFTPM="$(realpath ../external-libs/wolfTPM)" \
             WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)" \
             WOLFBOOT_LIB_WOLFHSM="$(realpath ../external-libs/wolfHSM)"
-
-      # If building unit tests, install libcheck
-      - name: install libcheck
-        if: matrix.test-config.is-unit-test == true
-        run: echo "libcheck already installed in container"
-
 
       # Build unit tests with external paths
       - name: Build unit tests with external library paths

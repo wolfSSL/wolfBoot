@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:latest
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.2
     timeout-minutes: 30
 
     steps:

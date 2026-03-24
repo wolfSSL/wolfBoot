@@ -1,4 +1,4 @@
-name: Wolfboot Reusable Build Workflow for STM32Cube SDK
+name: Wolfboot Reusable Build Workflow (PowerPC)
 
 on:
 
@@ -10,10 +10,6 @@ on:
       config-file:
         required: true
         type: string
-      cube-repo:
-        description: 'STM32Cube repository to clone (e.g., STMicroelectronics/STM32CubeL4)'
-        required: true
-        type: string
       make-args:
         required: false
         type: string
@@ -23,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.2
+      image: ghcr.io/wolfssl/wolfboot-ci-powerpc:v0.9.2
     timeout-minutes: 30
 
     steps:
@@ -31,22 +27,16 @@ jobs:
         with:
           submodules: true
 
-      - uses: actions/checkout@v4
-        with:
-          repository: ${{inputs.cube-repo}}
-          path: STM32Cube
-          submodules: true
-
       - name: Trust workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: make distclean
+      - name: make clean
         run: |
           make distclean
 
       - name: Select config
         run: |
-          cp ${{inputs.config-file}} .config && make include/target.h
+          cp ${{inputs.config-file}} .config
 
       - name: Build tools
         run: |
@@ -54,4 +44,4 @@ jobs:
 
       - name: Build wolfboot
         run: |
-          make STM32CUBE="$GITHUB_WORKSPACE/STM32Cube" ${{inputs.make-args}} V=1
+          make ${{inputs.make-args}}
