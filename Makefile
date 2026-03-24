@@ -318,7 +318,7 @@ wolfboot.efi: wolfboot.elf
 	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \
 					-j .dynamic -j .dynsym  -j .rel \
 					-j .rela -j .reloc -j .eh_frame \
-					--target=efi-app-x86_64 --subsystem=10 $^ $@
+					-O pei-x86-64 --subsystem=10 $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.efi
