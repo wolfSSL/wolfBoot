@@ -395,7 +395,12 @@ enum ifc_amask_sizes {
 #define DDR_ERR_INT_EN_VAL     0x0000001D
 #define DDR_ERR_SBE_VAL        0x00010000
 #else
-/* T2080 RDB: DDR register values */
+/* T2080 RDB DDR register values are not yet populated.
+ * To complete this, boot U-Boot on T2080 RDB and run the register dump
+ * commands below, then replace the 0x00000000 placeholders with actual values. */
+#ifdef ENABLE_DDR
+#error "T2080 RDB DDR register values not populated. See TODO comments in nxp_t2080.h. Define BOARD_CW_VPX3152 or BOARD_NAII_68PPC2, or fill in DDR values from a U-Boot register dump."
+#endif
 /* TODO: Fill ALL values from Phase 1 U-Boot register dump:
  *   md.l 0xfe008000 4; md.l 0xfe008010 4  (CS BNDS)
  *   md.l 0xfe008080 4; md.l 0xfe0080c0 4  (CS CONFIG)

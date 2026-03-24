@@ -119,7 +119,7 @@ branch_prediction:
         mr      r4, r0
         mr      r5, r4
 #endif
-        slwi    r8, r5, 6 /* spin table is padded to 64 bytes */
+        slwi    r8, r5, 6 /* multiply by ENTRY_SIZE (64 bytes) */
         /* use r10 for the spin table base address */
         add     r10, r3, r8
 
@@ -268,7 +268,7 @@ _second_half_boot_page:
         li      r8, 3
         stw     r8, ENTRY_ADDR_LOWER(r10)
 
-        /* mask branch address (64MB) to setup tlb */
+        /* Align branch address to 64MB boundary for TLB mapping below */
         rlwinm  r12, r4, 0, 0, 5
 
         /* setup registers before jump */
@@ -280,7 +280,7 @@ _second_half_boot_page:
         li      r4, 0
         li      r5, 0
         li      r6, 0
-        lis     r7, (64 * 1024 * 1024)@h
+        lis     r7, (64 * 1024 * 1024)@h /* r7 = IMA size (64MB per ePAPR) */
         li      r8, 0
         li      r9, 0
 
@@ -309,7 +309,7 @@ _second_half_boot_page:
         rfi
 
         /* Reserve space for spin table entries */
-        .align 6 /* 64-bytes */
+        .align 6 /* 64-byte alignment for spin table entries (ENTRY_SIZE) */
         .globl _spin_table
 _spin_table:
         .space CPU_NUMCORES * ENTRY_SIZE

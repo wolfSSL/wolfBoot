@@ -300,6 +300,9 @@ static void hal_reconfigure_cpc_as_cache(void)
             *dst++ = *src++;
         }
 
+        /* Ensure all stores have drained before flushing cache lines */
+        __asm__ __volatile__("sync" ::: "memory");
+
         /* Flush D-cache and invalidate I-cache for the DDR copy */
         flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
 
@@ -663,6 +666,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int ret = 0;
     uint32_t i, sector, offset, nwords;
     const uint32_t width_bytes = FLASH_CFI_WIDTH / 8;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* Enforce alignment to flash bus width */
     if ((address % width_bytes) != 0 || (len % width_bytes) != 0) {
@@ -741,6 +751,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret = 0;
     uint32_t sector;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -848,7 +865,7 @@ extern uint32_t _bootpg_addr;
 static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
 {
     uint32_t all_cores, active_cores, whoami;
-    int timeout = 50, i;
+    int timeout = 10000, i; /* 10000 * 100us = 1s, matches U-Boot convention */
 
     whoami = get32(PIC_WHOAMI); /* Get current running core number */
     all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
@@ -990,7 +1007,8 @@ static void hal_mp_init(void)
 
 void hal_prepare_boot(void)
 {
-
+    /* Intentionally empty: pre-boot cleanup (cache flush, interrupt disable)
+     * is handled by boot_ppc.c:do_boot(). */
 }
 
 #ifdef MMU

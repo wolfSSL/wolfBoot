@@ -341,14 +341,26 @@ setup_interrupts:
         ori     r9, r9, (CCSRBAR + 0x1000)@l
 
 create_temp_ccsr:
-        /* Create a temporary TLB entry for new and old location  */
-        /* CCSRBAR: TLB 0, Entry 0, Supervisor R/W, IG, TS=0, 4KB */
+        /* Create temporary TLB0 entries for CCSRBAR relocation.
+         *
+         * TLB0 on e6500 is 4-way set-associative (2048 entries, 512 sets).
+         * The "esel" parameter selects the WAY within a set; the SET is
+         * determined by the virtual address (EPN). These two entries map
+         * different EPNs (CCSRBAR vs CCSRBAR+0x1000), so they fall in
+         * different TLB0 sets and do not overwrite each other.
+         *
+         * We use different ways (0 and 1) for visual clarity. Both entries
+         * are cleaned up by the TLB0 flash-invalidate (MMUCSR0) after
+         * relocation completes. */
+
+        /* CCSRBAR new location: TLB0 Way 0, Supervisor R/W, IG, TS=0, 4KB */
         set_tlb(0, 0,
                 CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
                 MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_4K, 0, r3);
 
-        set_tlb(0, 0,
+        /* CCSRBAR old location: TLB0 Way 1, Supervisor R/W, IG, TS=0, 4KB */
+        set_tlb(0, 1,
                 CCSRBAR + 0x1000, CCSRBAR_DEF, 0,
                 MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_4K, 0, r3);
