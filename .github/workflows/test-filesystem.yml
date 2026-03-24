@@ -10,7 +10,7 @@ jobs:
   build-lib-fs-example:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.5
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

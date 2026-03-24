@@ -10,7 +10,7 @@ jobs:
   test-lib:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.5
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
     timeout-minutes: 15
 
     strategy:

@@ -14,7 +14,7 @@ jobs:
     name: Build wolfBoot (target=${{ matrix.target }})
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.5
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
     timeout-minutes: 15
 
     strategy:

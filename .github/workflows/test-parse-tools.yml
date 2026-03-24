@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-powerpc:v0.9.5
+      image: ghcr.io/wolfssl/wolfboot-ci-powerpc:v1.0
     timeout-minutes: 15
 
     steps:
