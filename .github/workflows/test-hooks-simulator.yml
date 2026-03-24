@@ -10,7 +10,7 @@ jobs:
   hooks_test:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.3
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.4
     timeout-minutes: 30
     strategy:
       fail-fast: false

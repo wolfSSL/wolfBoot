@@ -8,13 +8,14 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   ubuntu-cmake:
     name: Build on Ubuntu
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.3
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.4
     timeout-minutes: 20
     defaults:
       run:
