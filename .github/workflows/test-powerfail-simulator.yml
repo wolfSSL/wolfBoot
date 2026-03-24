@@ -10,7 +10,7 @@ jobs:
   powerfail_simulator_tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.4
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.5
     timeout-minutes: 15
 
     steps:
@@ -583,5 +583,4 @@ jobs:
       - name: Run emergency fallback test (FLASH_MULTI_SECTOR_ERASE=1)
         run: |
           tools/scripts/sim-update-emergency-fallback.sh
-
 

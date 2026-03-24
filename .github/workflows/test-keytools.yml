@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.4
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.5
     timeout-minutes: 15
 
     steps:
@@ -294,5 +294,4 @@ jobs:
         run: |
           ./tools/keytools/sign --ecc256 --sha256 --custom-tlv-string 0x46 "Hello world" test-app/image.elf wolfboot_signing_private_key.der 3
           grep "Hello world" test-app/image_v3_signed.bin
-
 
