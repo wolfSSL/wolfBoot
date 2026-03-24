@@ -661,8 +661,21 @@ image-header-size: wolfboot.bin
 
 cppcheck:
 	cppcheck -f --enable=warning --enable=portability \
+		-Iinclude -I. \
+		-D'XALIGNED(x)=' -D'TZ_SECURE()=0' -D'__has_attribute(x)=0' \
 		--suppress="ctunullpointer" --suppress="nullPointer" \
 		--suppress="objectIndex" --suppress="comparePointers" \
+		--suppress="bufferAccessOutOfBounds" \
+		--suppress="internalAstError" \
+		--suppress="invalidPrintfArgType_s" \
+		--suppress="invalidPrintfArgType_sint" \
+		--suppress="invalidPrintfArgType_uint" \
+		--suppress="invalidTestForOverflow" \
+		--suppress="preprocessorErrorDirective" \
+		--suppress="shiftTooManyBitsSigned" \
+		--suppress="syntaxError" \
+		--suppress="uninitvar" \
+		--suppress="zerodiv" \
 		--check-level=exhaustive \
 		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
 

@@ -169,12 +169,18 @@ static int range_overlaps(uint32_t start1, uint32_t end1, uint32_t start2,
     return !(end1 <= start2 || end2 <= start1);
 }
 
+static size_t linker_range_size(const void *start, const void *end)
+{
+    return (size_t)((uintptr_t)end - (uintptr_t)start);
+}
+
 static int check_memory_ranges()
 {
     uint32_t wb_start, wb_end;
 
     wb_start = (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE;
-    wb_end = wb_start + (_wolfboot_flash_end - _wolfboot_flash_start);
+    wb_end = wb_start + (uint32_t)linker_range_size(_wolfboot_flash_start,
+        _wolfboot_flash_end);
     if (range_overlaps(wb_start, wb_end, (uint32_t)_start_data,
                        (uint32_t)_end_data))
         return -1;
@@ -210,11 +216,12 @@ static void load_wolfboot(void)
     }
 
     wolfboot_start = (uint32_t)WOLFBOOT_LOAD_BASE - IMAGE_HEADER_SIZE;
-    wolfboot_size = _wolfboot_flash_end - _wolfboot_flash_start;
+    wolfboot_size = linker_range_size(_wolfboot_flash_start,
+        _wolfboot_flash_end);
     x86_log_memory_load(wolfboot_start, wolfboot_start + wolfboot_size,
                         "wolfboot");
     memcpy((uint8_t*)wolfboot_start,_wolfboot_flash_start, wolfboot_size);
-    bss_size = wb_end_bss - wb_start_bss;
+    bss_size = linker_range_size(wb_start_bss, wb_end_bss);
     x86_log_memory_load((uint32_t)(uintptr_t)wb_start_bss,
                         (uint32_t)(uintptr_t)(wb_start_bss + bss_size),
                         "wolfboot .bss");
@@ -338,7 +345,7 @@ static inline void memory_init_data_bss(void)
     }
     x86_log_memory_load((uint32_t)(uintptr_t)_start_bss,
                           (uint32_t)(uintptr_t)_end_bss, "stage1 .bss");
-    memset(_start_bss, 0, (_end_bss - _start_bss));
+    memset(_start_bss, 0, linker_range_size(_start_bss, _end_bss));
 }
 
 static int pci_get_capability(uint8_t bus, uint8_t dev, uint8_t fun,
@@ -656,7 +663,8 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     stage2_params->tpm_policy = (uint32_t)_start_policy;
 
     stage2_params->tpm_policy_size = *_policy_size_u32;
-    if (stage2_params->tpm_policy_size > _end_policy - _start_policy)
+    if (stage2_params->tpm_policy_size >
+            linker_range_size(_start_policy, _end_policy))
         stage2_params->tpm_policy_size = 0;
     wolfBoot_printf("setting policy @%x (%d bytes)\r\n",
                     (uint32_t)(uintptr_t)stage2_params->tpm_policy,

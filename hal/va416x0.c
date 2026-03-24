@@ -425,7 +425,7 @@ static int test_ext_flash(void)
 {
     int ret;
     uint32_t i;
-    uint8_t pageData[WOLFBOOT_SECTOR_SIZE];
+    uint8_t pageData[WOLFBOOT_SECTOR_SIZE] = { 0 };
 
 #ifndef READONLY
     /* Erase sector */

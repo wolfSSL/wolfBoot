@@ -129,14 +129,14 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
     while (i < len) {
         uint32_t cur_addr = (uint32_t)dst + i;
-        uint32_t *dst_aligned = (uint32_t *)(cur_addr & ~0xf);
+        uint32_t *dst_aligned = (uint32_t *)(cur_addr & 0xFFFFFFF0U);
         int byte_offset = cur_addr - (uint32_t)dst_aligned;
         int i_aligned = i - byte_offset;
         int j;
         if (byte_offset == 0 && i + 16 <= len) {
             /* Full aligned 128 bits */
             for (j = 0; j < 4; j++) {
-                qword[j] = src[(i >> 2) + j];
+                qword[j] = src[((unsigned int)i >> 2) + j];
             }
         } else {
             /* Non-aligned / non-full 128 bits */

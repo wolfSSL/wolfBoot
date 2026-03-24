@@ -194,19 +194,19 @@ jobs:
       config-file: ./config/examples/nrf54l15-wolfcrypt-tz.config
 
   nxp_p1021_test:
-    uses: ./.github/workflows/test-build.yml
+    uses: ./.github/workflows/test-build-powerpc.yml
     with:
       arch: ppc
       config-file: ./config/examples/nxp-p1021.config
 
   nxp_t1024_test:
-    uses: ./.github/workflows/test-build.yml
+    uses: ./.github/workflows/test-build-powerpc.yml
     with:
       arch: ppc
       config-file: ./config/examples/nxp-t1024.config
 
   nxp_t2080_test:
-    uses: ./.github/workflows/test-build.yml
+    uses: ./.github/workflows/test-build-powerpc.yml
     with:
       arch: ppc
       config-file: ./config/examples/nxp-t2080.config
