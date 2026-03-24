@@ -21,10 +21,12 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.1
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: true
 
@@ -33,24 +35,14 @@ jobs:
           repository: raspberrypi/pico-sdk
           path: pico-sdk
 
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: pico-sdk submodules initialization
         run: |
           cd pico-sdk
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/pico-sdk"
           git submodule update --init --recursive
-
-      - name: Workaround for sources.list
-        run: |
-            # workaround disabled, splitting the load between azure and arizona.edu to avoid timeouts
-
-            # See reference code in test-build.yml for various sources that may be updated. Enable as needed here.
-            echo "Workaround for sources.list disabled for this workflow"
-
-      - name: Update repository
-        run: sudo apt-get update
-
-      - name: Install cross compilers
-        run: |
-          sudo apt-get install -y gcc-arm-none-eabi
 
       - name: make distclean
         run: |

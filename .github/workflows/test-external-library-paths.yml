@@ -10,6 +10,8 @@ on:
 jobs:
   test_external_libs:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.1
     timeout-minutes: 15
 
     # Matrix to test multiple configurations
@@ -37,6 +39,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # Move libraries outside the wolfBoot tree
       - name: Relocate libraries to external path
@@ -77,7 +82,7 @@ jobs:
       # If building unit tests, install libcheck
       - name: install libcheck
         if: matrix.test-config.is-unit-test == true
-        run: sudo apt-get install --no-install-recommends -y -q check
+        run: echo "libcheck already installed in container"
 
 
       # Build unit tests with external paths

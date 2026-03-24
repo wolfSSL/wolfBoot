@@ -10,12 +10,17 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.1
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # ECC
       - name: make clean

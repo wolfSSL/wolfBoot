@@ -9,14 +9,16 @@ on:
 jobs:
   build-lib-fs-example:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.1
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: true
 
-      - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Set simulation config and build signed boot partition
         run: |

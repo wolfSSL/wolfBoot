@@ -10,6 +10,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.1
     timeout-minutes: 15
 
     steps:
@@ -17,11 +19,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Install cross compilers
-        run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/sources.list
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi gcc-powerpc-linux-gnu
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: make distclean
         run: |

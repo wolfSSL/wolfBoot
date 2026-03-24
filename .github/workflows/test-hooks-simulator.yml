@@ -9,6 +9,8 @@ on:
 jobs:
   hooks_test:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v0.9.1
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -43,47 +45,8 @@ jobs:
         with:
           submodules: true
 
-      - name: Workaround for sources.list
-        run: |
-            set -euxo pipefail
-
-            apt-cache policy
-            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
-
-            shopt -s nullglob
-
-            echo "Replace sources.list (legacy)"
-            sudo sed -i \
-              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-              /etc/apt/sources.list || true
-
-            echo "Replace sources.list.d/*.list (legacy)"
-            for f in /etc/apt/sources.list.d/*.list; do
-              sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-                "$f"
-            done
-
-            echo "Replace sources.list.d/*.sources (deb822)"
-            for f in /etc/apt/sources.list.d/*.sources; do
-              sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
-                "$f"
-            done
-
-            echo "Fix /etc/apt/apt-mirrors.txt (used by URIs: mirror+file:...)"
-            if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
-              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
-            fi
-
-            grep -RIn "azure.archive.ubuntu.com" /etc/apt || true
-            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
-            echo "--- apt-mirrors.txt ---"
-            cat /etc/apt/apt-mirrors.txt || true
-
-      - name: Update repository
-        run: sudo apt-get update -o Acquire::Retries=3
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Create test_hooks.c
         run: |

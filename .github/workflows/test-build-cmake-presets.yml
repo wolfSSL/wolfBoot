@@ -13,6 +13,8 @@ jobs:
   ubuntu-cmake:
     name: Build on Ubuntu
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v0.9.1
     timeout-minutes: 20
     defaults:
       run:
@@ -53,15 +55,8 @@ jobs:
         with:
           submodules: true
 
-      # Lock down network/runner
-      # See https://github.com/step-security/harden-runner/releases
-      # Currently only supported on Ubuntu
-
-      # ARM GCC toolchain (adds the bin dir to PATH)
-      - name: Set up ARM none-eabi GCC
-        run: |
-          sudo apt update
-          sudo apt install -y gcc-arm-none-eabi
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: List all environment variables
         run: |
