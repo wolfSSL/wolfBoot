@@ -8,7 +8,9 @@ on:
 
 jobs:
   footprint_test:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
     timeout-minutes: 15
 
     steps:
@@ -16,18 +18,12 @@ jobs:
         with:
           submodules: true
 
-      # Get the arm-non-eabi-gcc toolchain
-      - name: Install arm-none-eabi-gcc
-        run : |
-          sudo apt-get install -y gcc-arm-none-eabi
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: make clean
         run: |
           make keysclean && rm -f include/target.h
-
-      - name: Install wolfSSL
-        run: |
-          sudo apt-get install --no-install-recommends -y -q make libwolfssl-dev
 
       - name: Select config
         run: |
@@ -40,4 +36,3 @@ jobs:
       - name: Build wolfboot and test footprint
         run: |
           make test-size-all
-

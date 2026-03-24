@@ -20,6 +20,8 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
     # Provide fallbacks when not workflow_dispatch
     env:
       WORKSPACE_PATH: ${{ github.event_name == 'workflow_dispatch' && inputs.workspace_path || 'IDE/VSCode/wolfBoot.code-workspace' }}
@@ -27,13 +29,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Python and CMake deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y python3 python3-pip ninja-build
-          cmake --version
-          ninja --version
 
       - name: Validate workspace JSONC and folder paths
         shell: python3 {0}

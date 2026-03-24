@@ -9,15 +9,14 @@ on:
 jobs:
   cppcheck:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
-
-      - name: install cppcheck
-        run: sudo apt-get install --no-install-recommends -y -q cppcheck
 
       - name: Run cppcheck static analysis
         run: |

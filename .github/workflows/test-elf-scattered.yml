@@ -9,12 +9,17 @@ on:
 jobs:
   elf_scattered_test:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: make clean
         run: |

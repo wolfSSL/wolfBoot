@@ -8,12 +8,9 @@ on:
 
 jobs:
   test-lib:
-    # If jobs cancel, consider pinning to ubuntu-24.04
-    # The ubuntu-latest alias can point to different images during migrations (and sometimes be extra busy),
-    # while ubuntu-24.04 always targets the 24.04 pool
     runs-on: ubuntu-latest
-
-    # The timeout is run time after a runner starts, not time in queue
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
     timeout-minutes: 15
 
     strategy:
@@ -38,6 +35,9 @@ jobs:
         with:
           clean: true
           submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: make clean
         run: |

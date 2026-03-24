@@ -1,4 +1,4 @@
-name: Wolfboot Reusable Build Workflow
+name: Wolfboot Reusable Build Workflow (PowerPC)
 
 on:
 
@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
+      image: ghcr.io/wolfssl/wolfboot-ci-powerpc:v1.0
     timeout-minutes: 30
 
     steps:

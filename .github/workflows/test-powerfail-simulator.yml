@@ -9,12 +9,17 @@ on:
 jobs:
   powerfail_simulator_tests:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
     timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: make clean
         run: |
@@ -578,5 +583,3 @@ jobs:
       - name: Run emergency fallback test (FLASH_MULTI_SECTOR_ERASE=1)
         run: |
           tools/scripts/sim-update-emergency-fallback.sh
-
-
