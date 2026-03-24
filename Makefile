@@ -199,9 +199,11 @@ ifeq ($(USE_GCC_HEADLESS),1)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
 
-ifeq ($(USE_CLANG),1)
-  ifeq ($(ARCH),ARM)
-    OBJCOPY_BIN_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BOOT)
+ifeq ($(ARCH),ARM)
+  ifeq ($(USE_CLANG),1)
+    ifneq ($(TZEN),1)
+      OBJCOPY_BIN_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BOOT)
+    endif
   endif
 endif
 ifeq ($(TARGET),ti_hercules)
@@ -333,7 +335,21 @@ wolfboot.efi: wolfboot.elf
 
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
+ifeq ($(USE_CLANG),1)
+ifeq ($(TZEN),1)
+	$(Q)last_load="$$($(CROSS_COMPILE)readelf -Wl $< | awk '/ LOAD / { line = $$0 } END { print line }')"; \
+		set -- $$last_load; \
+		last_phys=$$(printf '%d' $$4); \
+		last_filesz=$$(printf '%d' $$5); \
+		padded_filesz=$$((($$last_filesz + 0xff) & ~0xff)); \
+		pad_to=$$((last_phys + padded_filesz)); \
+		$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_BIN_FLAGS) --pad-to=$$(printf '0x%x' $$pad_to) -O binary $< $@
+else
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_BIN_FLAGS) -O binary $^ $@
+endif
+else
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_BIN_FLAGS) -O binary $^ $@
+endif
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
