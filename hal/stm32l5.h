@@ -181,8 +181,10 @@
 #define FLASH_NS_SR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR          (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
 
-#define TZSC_PRIVCFGR1   *((uint32_t *)(0x50032420))
-#define TZSC_PRIVCFG1_LPUARTPRIV (1 << 21)
+#define TZSC_PRIVCFGR1   (*(volatile uint32_t *)(0x50032420))
+#define TZSC_PRIVCFG1_LPUARTPRIV (1u << 21)
+#define TZSC_SECCFGR1    (*(volatile uint32_t *)(0x50032410))
+#define TZSC_SECCFGR1_USART3SEC (1u << 11)
 
 
 #else
@@ -257,6 +259,7 @@
 
 #define RCC_APB1_CLOCK_ER (*(volatile uint32_t *)(RCC_BASE + 0x5C ))
 #define UART1_APB1_CLOCK_ER_VAL (1 << 0)
+#define UART3_APB1_CLOCK_ER_VAL (1 << 18)
 
 #define UART1_PIN_AF 8
 #define UART1_RX_PIN 8

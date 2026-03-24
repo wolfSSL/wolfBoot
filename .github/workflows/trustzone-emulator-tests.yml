@@ -8,7 +8,7 @@ jobs:
   trustzone-emulator-tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/danielinux/m33mu-ci:1.5
+      image: ghcr.io/wolfssl/m33mu-ci:1.9
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +27,56 @@ jobs:
         run: |
           ./test.sh
 
+      - name: Clean build tree for PKCS11 test (stm32h5)
+        run: |
+          make clean distclean
+
+      - name: Configure PKCS11 test (stm32h5)
+        run: |
+          cp config/examples/stm32h5-tz.config .config
+
+      - name: Build persistent PKCS11 test app (stm32h5)
+        run: |
+          make PKCS11_TESTAPP=1
+
+      - name: Prepare PKCS11 persistence directory
+        run: |
+          rm -rf /tmp/m33mu-pkcs11-persist
+          mkdir -p /tmp/m33mu-pkcs11-persist
+          rm -f /tmp/m33mu-pkcs11-first.log /tmp/m33mu-pkcs11-second.log
+
+      - name: Run PKCS11 first boot (stm32h5)
+        run: |
+          cd /tmp/m33mu-pkcs11-persist
+          m33mu "$GITHUB_WORKSPACE/wolfboot.bin" \
+            "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x60000" \
+            --persist --uart-stdout --timeout 120 --expect-bkpt 0x7d \
+            | tee /tmp/m33mu-pkcs11-first.log
+
+      - name: Verify PKCS11 first boot (stm32h5)
+        run: |
+          grep -q "pkcs11: first boot path, creating persistent objects" /tmp/m33mu-pkcs11-first.log
+          grep -q "pkcs11: created persistent PKCS11 objects" /tmp/m33mu-pkcs11-first.log
+          grep -q "pkcs11: success" /tmp/m33mu-pkcs11-first.log
+          grep -q "\\[BKPT\\] imm=0x7d" /tmp/m33mu-pkcs11-first.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-pkcs11-first.log
+
+      - name: Run PKCS11 second boot (stm32h5)
+        run: |
+          cd /tmp/m33mu-pkcs11-persist
+          m33mu "$GITHUB_WORKSPACE/wolfboot.bin" \
+            "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x60000" \
+            --persist --uart-stdout --timeout 120 --expect-bkpt 0x7f \
+            | tee /tmp/m33mu-pkcs11-second.log
+
+      - name: Verify PKCS11 second boot (stm32h5)
+        run: |
+          grep -q "pkcs11: second boot path, restoring persistent objects" /tmp/m33mu-pkcs11-second.log
+          grep -q "pkcs11: restored persistent PKCS11 objects" /tmp/m33mu-pkcs11-second.log
+          grep -q "pkcs11: success" /tmp/m33mu-pkcs11-second.log
+          grep -q "\\[BKPT\\] imm=0x7f" /tmp/m33mu-pkcs11-second.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-pkcs11-second.log
+
       - name: Clean and build stm32u5 (TZ + wolfcrypt)
         run: |
           make clean distclean
@@ -44,7 +94,7 @@ jobs:
           cp config/examples/stm32l5-wolfcrypt-tz.config .config
           make wolfboot.bin
 
-      - name: Run emu test (stm32u5)
+      - name: Run emu test (stm32l5)
         working-directory: test-app/emu-test-apps
         run: |
           TARGET=stm32l5 ./test.sh

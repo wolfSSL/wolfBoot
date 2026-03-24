@@ -41,12 +41,7 @@
 #endif
 
 #ifdef WOLFBOOT_TZ_PKCS11
-#include "wcs/user_settings.h"
-#include "wolfssl/wolfcrypt/settings.h"
-#include "wolfssl/wolfcrypt/wc_pkcs11.h"
-#include "wolfssl/wolfcrypt/random.h"
-extern const char pkcs11_library_name[];
-extern const CK_FUNCTION_LIST wolfpkcs11nsFunctionList;
+#include "test_pkcs11.h"
 #endif
 
 #ifdef WOLFCRYPT_SECURE_MODE
@@ -191,8 +186,6 @@ void extra_led_off(void)
 {
     GPIOF_BSRR |= (1 << (LED_EXTRA_PIN + 16));
 }
-
-extern int ecdsa_sign_verify(int devId);
 
 /* Command line commands */
 static int cmd_help(const char *args);
@@ -837,98 +830,8 @@ static int run_psa_boot_attestation(void)
 #ifdef WOLFBOOT_TZ_PKCS11
 static int cmd_login_pkcs11(const char *args)
 {
-    int ret = -1;
-    unsigned int devId = 0;
-    Pkcs11Token token;
-    Pkcs11Dev PKCS11_d;
-    unsigned long session;
-    char TokenPin[] = "0123456789ABCDEF";
-    char UserPin[] = "ABCDEF0123456789";
-    char SoPinName[] = "SO-PIN";
-    static int pkcs11_initialized = 0;
-
-    if (pkcs11_initialized) {
-        printf("PKCS11 already initialized.\r\n");
-        return 0;
-    }
-
-    printf("PKCS11 Login\r\n");
-
-    printf("Initializing wolfCrypt...");
-    fflush(stdout);
-    wolfCrypt_Init();
-    printf("Done.\r\n");
-
-    PKCS11_d.heap = NULL,
-    PKCS11_d.func = (CK_FUNCTION_LIST *)&wolfpkcs11nsFunctionList;
-
-    printf("Initializing EccKey token...");
-    fflush(stdout);
-    ret = wc_Pkcs11Token_Init(&token, &PKCS11_d, 1, "EccKey",
-            (const byte*)TokenPin, strlen(TokenPin));
-
-    if (ret == 0) {
-        printf("Done.\r\n");
-        printf("Initializing token...");
-        fflush(stdout);
-        ret = wolfpkcs11nsFunctionList.C_InitToken(1,
-                (byte *)TokenPin, strlen(TokenPin), (byte *)SoPinName);
-    }
-    if (ret == 0) {
-        printf("Done.\r\n");
-        printf("Opening session...");
-        fflush(stdout);
-        ret = wolfpkcs11nsFunctionList.C_OpenSession(1,
-                CKF_SERIAL_SESSION | CKF_RW_SESSION,
-                NULL, NULL, &session);
-    }
-
-    if (ret == 0) {
-        printf("Done.\r\n");
-        printf("Logging in as SO...");
-        ret = wolfpkcs11nsFunctionList.C_Login(session, CKU_SO,
-                (byte *)TokenPin,
-                strlen(TokenPin));
-    }
-    if (ret == 0) {
-        extra_led_on();
-        printf("Done.\r\n");
-        printf("Setting PIN...");
-        ret = wolfpkcs11nsFunctionList.C_InitPIN(session,
-                (byte *)TokenPin,
-                strlen(TokenPin));
-    }
-    if (ret == 0) {
-        printf("Done.\r\n");
-        printf("Logging out...");
-        ret = wolfpkcs11nsFunctionList.C_Logout(session);
-    }
-    if (ret == 0) {
-        printf("Done.\r\n");
-        printf("Registering crypto calls with wolfCrypt...");
-        ret = wc_CryptoDev_RegisterDevice(devId, wc_Pkcs11_CryptoDevCb,
-                &token);
-    }
-    if (ret == 0) {
-        printf("Done.\r\n");
-#ifdef HAVE_ECC
-        printf("Testing ECC...");
-        ret = ecdsa_sign_verify(devId);
-        if (ret != 0) {
-            ret = -1;
-            printf("Failed.\r\n");
-        }
-        else {
-            usr_led_on();
-            printf("Done.\r\n");
-        }
-#endif
-    }
-    if (ret == 0) {
-        printf("PKCS11 initialization completed successfully.\r\n");
-        pkcs11_initialized = 1;
-    }
-    return ret;
+    (void)args;
+    return test_pkcs11_start();
 }
 #endif /* WOLFBOOT_TZ_PKCS11 */
 
@@ -1375,6 +1278,16 @@ void main(void)
 
 #ifdef WOLFCRYPT_TZ_PSA
     (void)run_psa_boot_attestation();
+#endif
+
+#ifdef WOLFBOOT_PKCS11_TESTAPP
+    ret = test_pkcs11_start();
+    if (ret == PKCS11_TEST_FIRST_BOOT_OK)
+        asm volatile ("bkpt #0x7d");
+    else if (ret == PKCS11_TEST_SECOND_BOOT_OK)
+        asm volatile ("bkpt #0x7f");
+    else
+        asm volatile ("bkpt #0x7e");
 #endif
 
     console_loop();

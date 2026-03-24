@@ -400,11 +400,17 @@ static void clock_pll_on(int powersave)
 #if TZ_SECURE()
 static void periph_unsecure()
 {
+    volatile uint32_t reg;
+
     /*Enable clock for User LED GPIOs */
     RCC_AHB2_CLOCK_ER|= LED_AHB2_ENABLE;
 
     /* Enable clock for LPUART1 */
     RCC_APB1_CLOCK_ER |= UART1_APB1_CLOCK_ER_VAL;
+    /* Enable clock for USART3 used by emu-test-apps on PD8/PD9 */
+    RCC_APB1_CLOCK_ER |= UART3_APB1_CLOCK_ER_VAL;
+    /* Enable clock for GPIO D (USART3 pins) */
+    RCC_AHB2_CLOCK_ER |= GPIOD_AHB2_CLOCK_ER;
 
 
     PWR_CR2 |= PWR_CR2_IOSV;
@@ -422,6 +428,16 @@ static void periph_unsecure()
     TZSC_PRIVCFGR1 &= ~(TZSC_PRIVCFG1_LPUARTPRIV);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_TX_PIN);
     GPIO_SECCFGR(GPIOG_BASE) &= ~(1<<UART1_RX_PIN);
+
+    /* Unsecure USART3 and its pins for the STM32L5 emulator app path. */
+    reg = TZSC_SECCFGR1;
+    if (reg & TZSC_SECCFGR1_USART3SEC) {
+        reg &= ~TZSC_SECCFGR1_USART3SEC;
+        DMB();
+        TZSC_SECCFGR1 = reg;
+    }
+    GPIO_SECCFGR(GPIOD_BASE) &= ~(1u << 8);
+    GPIO_SECCFGR(GPIOD_BASE) &= ~(1u << 9);
 
 }
 #endif
