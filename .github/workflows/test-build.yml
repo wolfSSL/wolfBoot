@@ -30,17 +30,6 @@ jobs:
       - name: Trust workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-      - name: Install Clang
-        if: |
-          inputs.config-file == './config/examples/stm32h7.config' ||
-          inputs.config-file == './config/examples/stm32h7-octospi.config' ||
-          inputs.config-file == './config/examples/stm32u5.config' ||
-          inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
-          inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
-          inputs.config-file == 'config/examples/stm32n567.config'
-        run: |
-          sudo apt-get install -y clang
-
       - name: make clean
         run: |
           make distclean
@@ -64,7 +53,7 @@ jobs:
           inputs.config-file == './config/examples/stm32u5.config' ||
           inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
           inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
-          inputs.config-file == 'config/examples/stm32n567.config'
+          inputs.config-file == './config/examples/stm32n567.config'
         run: |
           make distclean
           cp ${{inputs.config-file}} .config
