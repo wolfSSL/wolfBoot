@@ -16,6 +16,11 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
+#include "hal/max32666.h"
+
+#define LED_RED_PIN     (1UL << 29)
+#define LED_BLUE_PIN    (1UL << 30)
+#define LED_GREEN_PIN   (1UL << 31)
 
 void main(void)
 {
@@ -23,7 +28,20 @@ void main(void)
 
     hal_init();
 
+
     version = wolfBoot_current_firmware_version();
+
+    if (version == 1) {
+        /* Turn on blue LED */
+        GPIO0_EN0_SET = LED_BLUE_PIN;    /* configure as GPIO */
+        GPIO0_OUT_EN |= LED_BLUE_PIN;    /* enable output */
+        GPIO0_OUT_CLR = LED_BLUE_PIN;    /* drive low (LED on) */
+    } else {
+        /* Turn on green LED */
+        GPIO0_EN0_SET = LED_GREEN_PIN;   /* configure as GPIO */
+        GPIO0_OUT_EN |= LED_GREEN_PIN;   /* enable output */
+        GPIO0_OUT_CLR = LED_GREEN_PIN;   /* drive low (LED on) */
+    }
 
     wolfBoot_printf("MAX32666 Test App v%lu\n", (unsigned long)version);
 
@@ -35,6 +53,6 @@ void main(void)
 
     /* Main loop */
     while (1) {
-        __asm__ volatile ("wfi");
+        __asm__ volatile ("nop");
     }
 }

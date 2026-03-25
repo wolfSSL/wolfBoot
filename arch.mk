@@ -189,6 +189,9 @@ ifeq ($(ARCH),ARM)
 
   ifeq ($(TARGET),max32666)
     ARCH_FLASH_OFFSET=0x10000000
+    ifeq ($(MAX32666_FTHR2),1)
+      CFLAGS+=-DMAX32666_FTHR2
+    endif
   endif
 
   ifeq ($(TARGET),pic32cz)
