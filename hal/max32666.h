@@ -260,10 +260,15 @@
 #define UART_BAUD0_FACTOR_32    (2UL << 16)          /* Oversampling 32 */
 #define UART_BAUD0_FACTOR_16    (3UL << 16)          /* Oversampling 16 */
 
-/* Baud rate: baud = uart_clk / (IBAUD * (128 >> FACTOR))
- * Using HIRC8M (7.3728 MHz) for exact standard baud rates.
- * For 115200 with FACTOR=2 (div 32): IBAUD = 7372800 / (115200 * 32) = 2
- * For 115200 with FACTOR=3 (div 16): IBAUD = 7372800 / (115200 * 16) = 4
+/* Baud rate: baud = uart_clk / ((IBAUD + DBAUD/128) * (128 >> FACTOR))
+ *
+ * Per errata #8, HIRC8M causes a spurious TX pulse.
+ * Use PCLK (SYSCLK/2 = 48 MHz) instead.
+ *
+ * For 115200 with PCLK=48MHz, FACTOR=0 (prescale 128):
+ *   divisor = 48000000/115200 = 416.667
+ *   IBAUD = 416/128 = 3, remainder = 416.667 - 3*128 = 32.667
+ *   DBAUD = 33, adjusted for ME10-650 errata: 33 - 3 = 30
  */
 #define HIRC8M_FREQ             7372800UL
 #define HIRC96M_FREQ            96000000UL
@@ -274,10 +279,15 @@
 #endif
 
 /* Select debug UART instance
- * MAX32666FTHR uses UART1 MAP_B (P1.12 RX, P1.13 TX) through PICO adapter
+ * MAX32666FTHR  uses UART1 MAP_B (P1.12 RX, P1.13 TX) through external PICO
+ * MAX32666FTHR2 uses UART0 MAP_A (P0.0 TX, P0.1 RX) through onboard DAPLINK
  */
 #ifndef DEBUG_UART_NUM
+#ifdef MAX32666_FTHR2
+#define DEBUG_UART_NUM          0
+#else
 #define DEBUG_UART_NUM          1
+#endif
 #endif
 
 #if DEBUG_UART_NUM == 0
@@ -348,9 +358,14 @@
 #define GPIO1_IN                (*(volatile uint32_t *)(GPIO1_BASE + GPIO_IN_OFF))
 
 /* Pin definitions for MAX32666FTHR:
- * UART1 MAP_B: P1.12 = RX, P1.13 = TX (AF3: EN0=1, EN1=1)
- * UART0 MAP_A: P0.0 = TX, P0.1 = RX (AF1: EN0=0, EN1=0, default)
+ * UART1 MAP_B: P1.13 = TX, P1.12 = RX (AF3: EN0=1, EN1=1)
+ * 
+ * Pin definitions for MAX32666FTHR2:
+ * UART0 MAP_A: P0.9 = TX, P0.10 = RX (AF3: EN0=1, EN1=1)
  */
+#define UART0A_TX_PIN           (1UL << 9)  /* P0.9 */
+#define UART0A_RX_PIN           (1UL << 10) /* P0.10 */
+#define UART0A_PINS             (UART0A_TX_PIN | UART0A_RX_PIN)
 #define UART1B_TX_PIN           (1UL << 13) /* P1.13 */
 #define UART1B_RX_PIN           (1UL << 12) /* P1.12 */
 #define UART1B_PINS             (UART1B_TX_PIN | UART1B_RX_PIN)
