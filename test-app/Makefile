@@ -107,8 +107,11 @@ OBJCOPY_IMAGE_FLAGS:=
 ifeq ($(USE_CLANG),1)
   # Clang-built ARM ELFs can keep RAM sections as loadable segments, and raw
   # objcopy output then expands the flash-to-RAM gap into a huge sparse image.
-  # The app image only needs the flash-backed output sections.
-  ifneq ($(TZEN),1)
+  # The app image only needs the flash-backed output sections. TrustZone
+  # non-secure apps also need the flash-backed .data load image.
+  ifeq ($(TZEN),1)
+    OBJCOPY_IMAGE_FLAGS+=-j .text -j .edidx -j .data
+  else
     OBJCOPY_IMAGE_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_APP)
   endif
 endif
