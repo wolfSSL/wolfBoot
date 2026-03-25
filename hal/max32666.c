@@ -79,15 +79,10 @@ static void clock_init(void)
     /* Select HIRC96 as system clock, no prescaler (PSC=0 = div1) */
     GCR_CLKCN = (GCR_CLKCN & ~(GCR_CLKCN_CLKSEL_MASK | GCR_CLKCN_PSC_MASK)) |
                 GCR_CLKCN_CLKSEL_HIRC96 |
-                GCR_CLKCN_HIRC96M_EN |
-                GCR_CLKCN_HIRC8M_EN;
+                GCR_CLKCN_HIRC96M_EN;
 
     /* Wait for clock switch to complete */
     while (!(GCR_CLKCN & GCR_CLKCN_CKRDY)) {}
-
-    /* Enable HIRC8M (7.3728 MHz) for UART baud rate generation */
-    GCR_CLKCN |= GCR_CLKCN_HIRC8M_EN;
-    while (!(GCR_CLKCN & GCR_CLKCN_HIRC8M_RDY)) {}
 }
 
 /* ============== ICC (Instruction Cache) Functions ============== */
@@ -231,19 +226,20 @@ static int RAMFUNCTION flc_page_erase(uint32_t address,
 
 void uart_init(void)
 {
-    /* Enable GPIO1 clock for pin muxing */
-    GCR_PERCKCN0 &= ~GCR_PERCKCN0_GPIO1D;
-
     /* Enable UART peripheral clock (clear disable bit) */
     GCR_PERCKCN0 &= ~DEBUG_UART_PCLKDIS;
 
-    /* Enable HIRC8M for UART baud rate clock */
-    GCR_CLKCN |= GCR_CLKCN_HIRC8M_EN;
-    while (!(GCR_CLKCN & GCR_CLKCN_HIRC8M_RDY)) {}
-
-#if DEBUG_UART_NUM == 1
+#if DEBUG_UART_NUM == 0
+    /* UART0 MAP_A: P0.9 (TX), P0.10 (RX) = AF3
+     * AF3: EN0=0, EN1=0, EN2=1 */
+    GCR_PERCKCN0 &= ~GCR_PERCKCN0_GPIO0D;
+    GPIO0_EN0_CLR = UART0A_PINS;
+    GPIO0_EN1_CLR = UART0A_PINS;
+    *(volatile uint32_t *)(GPIO0_BASE + GPIO_EN2_SET_OFF) = UART0A_PINS;
+#elif DEBUG_UART_NUM == 1
     /* UART1 MAP_B: P1.12 (RX), P1.13 (TX) = AF3
      * AF3: EN0=0, EN1=0, EN2=1 (per MSDK gpio_reva.c) */
+    GCR_PERCKCN0 &= ~GCR_PERCKCN0_GPIO1D;
     GPIO1_EN0_CLR = UART1B_PINS;
     GPIO1_EN1_CLR = UART1B_PINS;
     *(volatile uint32_t *)(GPIO1_BASE + GPIO_EN2_SET_OFF) = UART1B_PINS;
@@ -252,16 +248,23 @@ void uart_init(void)
     /* Disable UART before configuration */
     DEBUG_UART_CTRL = 0;
 
-    /* Configure: 8-bit, no parity, 1 stop bit, HIRC8M clock source */
-    DEBUG_UART_CTRL = UART_CTRL_CHAR_SZ_8 | UART_CTRL_CLKSEL;
+    /* Configure: 8-bit, no parity, 1 stop bit, PCLK clock source.
+     * Per errata #8: do NOT use HIRC8M (CLKSEL=1) for TX,
+     * it generates a spurious pulse that corrupts framing. */
+    DEBUG_UART_CTRL = UART_CTRL_CHAR_SZ_8;
 
-    /* Set baud rate using HIRC8M (7.3728 MHz)
-     * baud = clk / (IBAUD * (128 >> FACTOR))
-     * For 115200 with FACTOR=2 (div 32): IBAUD = 7372800 / (115200*32) = 2
+    /* Set baud rate using PCLK (SYSCLK/2 = 48 MHz @ 96 MHz sys clock).
+     * baud = clk / ((IBAUD + DBAUD/128) * (128 >> FACTOR))
+     * For 115200 with FACTOR=0 (prescale 128):
+     *   48000000 / 115200 = 416.667
+     *   IBAUD = floor(416.667/128) = 3
+     *   DBAUD = round((416.667/128 - 3) * 128) = round(32.667) = 33
+     *   ME10-650 DBAUD workaround (per MSDK uart_reva.c): 33 - 3 = 30
+     *   Effective baud = 48000000 / ((3 + 33/128) * 128) = 115200.0
      */
-    DEBUG_UART_BAUD0 = (2UL << UART_BAUD0_IBAUD_SHIFT) |
-                       UART_BAUD0_FACTOR_32;
-    DEBUG_UART_BAUD1 = 0; /* No fractional adjustment */
+    DEBUG_UART_BAUD0 = (3UL << UART_BAUD0_IBAUD_SHIFT) |
+                       UART_BAUD0_FACTOR_128;
+    DEBUG_UART_BAUD1 = 30;
 
     /* Disable all interrupts */
     DEBUG_UART_INT_EN = 0;
