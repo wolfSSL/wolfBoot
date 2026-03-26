@@ -1199,9 +1199,11 @@ ifeq ($(TARGET),lpc55s69)
       -I$(MCUXPRESSO_DRIVERS)/drivers \
       -I$(MCUXPRESSO_DRIVERS)/../periph \
       -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/casper \
       -I$(MCUXPRESSO)/drivers/common \
       -I$(MCUXPRESSO)/drivers/flexcomm \
       -I$(MCUXPRESSO)/drivers/flexcomm/usart \
+      -I$(MCUXPRESSO)/drivers/hashcrypt \
       -I$(MCUXPRESSO)/drivers/iap1 \
       -I$(MCUXPRESSO)/drivers/lpc_gpio \
       -I$(MCUXPRESSO)/drivers/lpc_iocon \
@@ -1220,14 +1222,22 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
       $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o
-  ifeq ($(WOLFCRYPT_TZ),1)
-    OBJS+=$(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
-  endif
   ifeq ($(DEBUG_UART),1)
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
       $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
+  endif
+  ifeq ($(PKA),1)
+    CFLAGS+=-DWOLFSSL_NXP_CASPER -DWOLFSSL_NXP_HASHCRYPT
+    OBJS+=\
+        $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
+        $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
+  endif
+  ifeq ($(WOLFCRYPT_TZ),1)
+    OBJS+=$(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
   endif
 endif
 
