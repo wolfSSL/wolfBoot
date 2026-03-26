@@ -122,6 +122,12 @@ extern "C" {
 #define wolfBoot_verify_signature_secondary wolfBoot_verify_signature_ml_dsa
 #endif
 
+/* Thin wrappers: dispatch RSA / RSA-PSS to the unified verify function */
+#define wolfBoot_verify_signature_rsa(ks, img, sig) \
+    wolfBoot_verify_signature_rsa_common(ks, img, sig, 0)
+#define wolfBoot_verify_signature_rsa_pss(ks, img, sig) \
+    wolfBoot_verify_signature_rsa_common(ks, img, sig, 1)
+
 #if defined(WOLFBOOT_TPM) && defined (WOLFBOOT_TPM_VERIFY)
 #undef wolfBoot_verify_signature_primary
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_tpm
