@@ -40,6 +40,17 @@ extern "C" {
 #define ECC_IMAGE_SIGNATURE_SIZE (132)
 #endif
 
+/* Consolidated RSA-PSS flag: set when any RSA-PSS variant is enabled
+ * (primary or secondary). Used to guard PSS-specific code paths in the
+ * unified RSA verify function. */
+#if defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_RSAPSS4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+#define WOLFBOOT_RSA_PSS
+#endif
+
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048)
 #define RSA_IMAGE_SIGNATURE_SIZE (256)
