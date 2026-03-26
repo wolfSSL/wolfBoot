@@ -93,17 +93,27 @@ static void hal_flash_fix_ecc(void)
     }
 }
 
+
+extern int wc_hashcrypt_init(void);
+
 void hal_init(void)
 {
 #ifdef __WOLFBOOT
     /* lpc55s69 must run < 100 MHz for flash write/erase to work */
     BOARD_BootClockFROHF96M();
 //    BOARD_BootClockPLL150M();
-#ifdef DEBUG_UART
+
+# ifdef WOLFSSL_NXP_HASHCRYPT
+    CLOCK_EnableClock(kCLOCK_HashCrypt);
+    wc_hashcrypt_init();
+# endif
+
+# ifdef DEBUG_UART
     uart_init();
     uart_write("lpc55s69 init\n", 14);
-#endif
-#endif
+# endif
+
+#endif /* __WOLFBOOT */
 
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
