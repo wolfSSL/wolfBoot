@@ -140,7 +140,7 @@ endif
 ## ARM Cortex-M
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
-  CFLAGS+=-DARCH_ARM
+  CFLAGS+=-DARCH_ARM -DFAST_MEMCPY
   CFLAGS+=-mthumb -mlittle-endian
   LDFLAGS+=-mthumb -mlittle-endian
   ifeq ($(USE_GCC),1)

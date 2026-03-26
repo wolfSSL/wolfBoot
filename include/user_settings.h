@@ -513,7 +513,8 @@ extern int tolower(int c);
 #endif
 
 #if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
+    !defined(WOLFCRYPT_MAX32666_TEST)
     #if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
         defined(WOLFBOOT_SIGN_ML_DSA)) && \
         !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
@@ -561,12 +562,14 @@ extern int tolower(int c);
 #endif
 
 #if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
+    !defined(WOLFCRYPT_MAX32666_TEST)
 #   define NO_HMAC
 #endif
 
 #if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
+    !defined(WOLFCRYPT_MAX32666_TEST)
 #   if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
        defined(WOLFBOOT_SIGN_ML_DSA)) &&          \
       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
@@ -706,7 +709,8 @@ extern int tolower(int c);
 #   endif
 #   if !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
        !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
-       !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+       !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
+       !defined(WOLFCRYPT_MAX32666_TEST)
 #       define NO_WOLFSSL_MEMORY
 #       define WOLFSSL_NO_MALLOC
 #   endif

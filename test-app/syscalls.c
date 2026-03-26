@@ -461,30 +461,68 @@ void *__memcpy_chk(void *dst, const void *src, unsigned int len,
 }
 
 /* ========== Heap allocator (bare-metal) ==========
- * Simple allocator using _sbrk. Replaces glibc malloc/free/realloc
- * which require TLS and internal glibc state not available bare-metal. */
+ * Bump allocator using _sbrk with top-of-heap reclaim.  When the most
+ * recent allocation is freed, the heap pointer is moved back so the
+ * memory can be reused.  This is critical for MAX3266X_SHA: the wolfSSL
+ * TPU SHA port allocates a msg buffer (malloc), grows it (realloc), and
+ * frees it (free) for every SHA operation.  The HASHDRBG performs dozens
+ * of SHA-256 calls during wc_InitRng and ECC blinding, which would
+ * exhaust the heap without reclaim. */
+
+static void *last_alloc_ptr;
+static unsigned int last_alloc_size;
 
 void *malloc(unsigned int size)
 {
-    void *p = _sbrk((int)size);
+    void *p;
+    /* Round up to 4-byte alignment so that all allocations are naturally
+     * aligned. Required by peripherals such as the MAX32666 MAA, which
+     * perform word-wide DMA copies and fault on misaligned buffers. */
+    size = (size + 3u) & ~3u;
+    p = _sbrk((int)size);
     if (p == (void *)-1)
         return (void *)0;
+    last_alloc_ptr = p;
+    last_alloc_size = size;
     return p;
 }
 
 void free(void *ptr)
 {
-    (void)ptr; /* no-op: bare-metal bump allocator doesn't reclaim */
+    if (ptr != (void *)0 && ptr == last_alloc_ptr) {
+        /* Reclaim the top-of-heap allocation */
+        _sbrk(-((int)last_alloc_size));
+        last_alloc_ptr = (void *)0;
+        last_alloc_size = 0;
+    }
+    /* Non-top allocations cannot be reclaimed in a bump allocator */
 }
 
 void *realloc(void *ptr, unsigned int size)
 {
+    unsigned int new_size;
     void *newp;
+
     if (!ptr)
         return malloc(size);
-    newp = malloc(size);
+
+    new_size = (size + 3u) & ~3u;
+
+    /* If this is the most recent allocation, extend in place */
+    if (ptr == last_alloc_ptr) {
+        if (new_size <= last_alloc_size)
+            return ptr; /* shrink or same size: nothing to do */
+        /* Grow: request the additional bytes */
+        if (_sbrk((int)(new_size - last_alloc_size)) == (void *)-1)
+            return (void *)0;
+        last_alloc_size = new_size;
+        return ptr;
+    }
+
+    /* Not the most recent allocation: allocate new and copy */
+    newp = malloc(new_size);
     if (newp)
-        memcpy(newp, ptr, size); /* may over-copy, but safe for bump alloc */
+        memcpy(newp, ptr, new_size); /* may over-copy, safe for bump alloc */
     return newp;
 }
 

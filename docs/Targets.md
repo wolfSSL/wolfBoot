@@ -8498,14 +8498,17 @@ Number of public keys: 1
 The Analog Devices MAX32665/MAX32666 family features a dual Cortex-M4 at 96 MHz
 with 1MB internal flash (2 x 512KB banks), 560KB SRAM, and BLE 5.
 
-wolfBoot has been tested on the MAX32666FTHR board with a MAX32625PICO debug adapter.
+wolfBoot has been tested on the MAX32666FTHR board with a MAX32625PICO debug adapter,
+as well as the MAX32666FTHR2 board with the onboard debugger.
 
 **Key Features:**
 - ARM Cortex-M4 core at 96 MHz (HIRC96M oscillator)
 - 1MB Flash: 8KB page erase, 128-bit (16-byte) write unit, dual-bank (FLC0/FLC1)
 - 560KB SRAM
 - Bare-metal implementation (no MSDK required for boot)
-- UART0 debug output (P0.0 TX, P0.1 RX on FTHR board)
+- UART0 debug output:
+  - P1.13 TX, P1.12 RX on FTHR board
+  - P0.9 TX, P0.10 RX on FTHR2 board
 
 ### MAX32666: Memory Layout
 
