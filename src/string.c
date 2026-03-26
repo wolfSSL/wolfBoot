@@ -43,6 +43,7 @@
 #endif
 
 #include <stddef.h>
+#include <stdint.h>
 #if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__ \
     && !defined(__CCRX__)
 #include <string.h>
@@ -98,9 +99,32 @@ int isalpha(int c)
 void *memset(void *s, int c, size_t n)
 {
     unsigned char *d = (unsigned char *)s;
+    unsigned char uc = (unsigned char)c;
+
+#if defined(ARCH_ARM) || defined(ARCH_AARCH64)
+    /* Use word-sized writes when aligned — required for MMIO peripheral
+     * registers on ARM (APB bus does not support sub-word writes). */
+
+    /* Write bytes until the pointer is 4-byte aligned */
+    while (n > 0 && ((uintptr_t)d & 3U)) {
+        *d++ = uc;
+        n--;
+    }
+
+    if (n >= 4) {
+        uint32_t w = ((uint32_t)uc) | ((uint32_t)uc << 8) |
+                     ((uint32_t)uc << 16) | ((uint32_t)uc << 24);
+        volatile uint32_t *dw = (volatile uint32_t *)d;
+        while (n >= 4) {
+            *dw++ = w;
+            n -= 4;
+        }
+        d = (unsigned char *)dw;
+    }
+#endif /* ARCH_ARM || ARCH_AARCH64 */
 
     while (n--) {
-        *d++ = (unsigned char)c;
+        *d++ = uc;
     }
 
     return s;

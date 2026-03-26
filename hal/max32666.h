@@ -101,6 +101,7 @@
 
 /* GCR_PERCKCN1 bits */
 #define GCR_PERCKCN1_UART2D    (1UL << 1)
+#define GCR_PERCKCN1_TRNGD     (1UL << 2)
 #define GCR_PERCKCN1_FLCD      (1UL << 3)
 #define GCR_PERCKCN1_ICCD      (1UL << 11)
 #define GCR_PERCKCN1_WDT0D     (1UL << 27)
