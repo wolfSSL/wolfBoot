@@ -48,7 +48,23 @@ extern "C" {
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
-#define WOLFBOOT_RSA_PSS
+#define WOLFBOOT_SIGN_RSAPSS_ANY
+#endif
+
+/* Consolidated RSA flag: set when any RSA variant is enabled (PKCS#1 v1.5 or
+ * PSS, primary or secondary). Used to guard the unified RSA verify function
+ * and related RSA code paths. */
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || \
+    defined(WOLFBOOT_SIGN_RSA4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
+    defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_RSAPSS4096) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
+    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+#define WOLFBOOT_SIGN_RSA_ANY
 #endif
 
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
