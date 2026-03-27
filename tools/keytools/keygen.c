@@ -506,6 +506,10 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
 
     memset(&sl, 0, sizeof(sl));
     sl.slot_id = id_slot;
+    if (ktype >= AUTH_KEY_NUM) {
+        fprintf(stderr, "error: unknown key type %u\n", ktype);
+        exit(1);
+    }
     sl.key_type = ktype;
     sl.part_id_mask = id_mask;
 
