@@ -96,19 +96,6 @@
 #include "wolfboot/wolfboot.h"
 
 
-#define KEYGEN_NONE    0
-#define KEYGEN_ED25519 1
-#define KEYGEN_ECC256  2
-#define KEYGEN_RSA2048 3
-#define KEYGEN_RSA4096 4
-#define KEYGEN_ED448   5
-#define KEYGEN_ECC384  6
-#define KEYGEN_ECC521  7
-#define KEYGEN_RSA3072 8
-#define KEYGEN_LMS     9
-#define KEYGEN_XMSS    10
-#define KEYGEN_ML_DSA  11
-
 /* Globals */
 static FILE *fpub, *fpub_image;
 static int force = 0;
@@ -425,34 +412,34 @@ static uint32_t get_pubkey_size(uint32_t keyType)
     uint32_t size = 0;
 
     switch (keyType) {
-        case KEYGEN_ED25519:
+        case AUTH_KEY_ED25519:
             size = KEYSTORE_PUBKEY_SIZE_ED25519;
             break;
-        case KEYGEN_ED448:
+        case AUTH_KEY_ED448:
             size = KEYSTORE_PUBKEY_SIZE_ED448;
             break;
-        case KEYGEN_ECC256:
+        case AUTH_KEY_ECC256:
             size = KEYSTORE_PUBKEY_SIZE_ECC256;
             break;
-        case KEYGEN_ECC384:
+        case AUTH_KEY_ECC384:
             size = KEYSTORE_PUBKEY_SIZE_ECC384;
             break;
-        case KEYGEN_RSA2048:
+        case AUTH_KEY_RSA2048:
             size = KEYSTORE_PUBKEY_SIZE_RSA2048;
             break;
-        case KEYGEN_RSA3072:
+        case AUTH_KEY_RSA3072:
             size = KEYSTORE_PUBKEY_SIZE_RSA3072;
             break;
-        case KEYGEN_RSA4096:
+        case AUTH_KEY_RSA4096:
             size = KEYSTORE_PUBKEY_SIZE_RSA4096;
             break;
-        case KEYGEN_LMS:
+        case AUTH_KEY_LMS:
             size = KEYSTORE_PUBKEY_SIZE_LMS;
             break;
-        case KEYGEN_XMSS:
+        case AUTH_KEY_XMSS:
             size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
-        case KEYGEN_ML_DSA:
+        case AUTH_KEY_ML_DSA:
         {
             char *env_ml_dsa_level = getenv("ML_DSA_LEVEL");
             if (env_ml_dsa_level == NULL) {
@@ -490,6 +477,11 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     static int id_slot = 0;
     struct keystore_slot sl;
     size_t slot_size;
+
+    if (ktype >= AUTH_KEY_NUM) {
+        fprintf(stderr, "error: unknown key type %u\n", ktype);
+        exit(1);
+    }
 
     fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, sz);
     if (noLocalKeys) {
@@ -584,11 +576,11 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     }
 
     if (kbits == 2048)
-        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA2048, pub_der, publen, keyfile, id_mask);
     else if (kbits == 3072)
-        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA3072, pub_der, publen, keyfile, id_mask);
     else if (kbits == 4096)
-        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA4096, pub_der, publen, keyfile, id_mask);
 }
 
 #define MAX_ECC_KEY_SIZE 66
@@ -688,11 +680,11 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
-        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 48)
-        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 66)
-        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
 }
 
 
@@ -730,7 +722,7 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
         }
     }
 
-    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
+    keystore_add(AUTH_KEY_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
 }
 
 static void keygen_ed448(const char *privkey, uint32_t id_mask)
@@ -767,7 +759,7 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
         }
     }
 
-    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
+    keystore_add(AUTH_KEY_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
 }
 
 #include "../lms/lms_common.h"
@@ -868,7 +860,7 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
         }
     }
 
-    keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
     wc_LmsKey_Free(&key);
 }
@@ -968,7 +960,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     }
 
 
-    keystore_add(KEYGEN_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
     wc_XmssKey_Free(&key);
 }
@@ -1144,7 +1136,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
         }
     }
 
-    keystore_add(KEYGEN_ML_DSA, pub, pub_len, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
     wc_MlDsaKey_Free(&key);
     free(priv);
@@ -1185,55 +1177,55 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
 
     switch (ktype) {
 #ifdef HAVE_ED25519
-        case KEYGEN_ED25519:
+        case AUTH_KEY_ED25519:
             keygen_ed25519(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ED448
-        case KEYGEN_ED448:
+        case AUTH_KEY_ED448:
             keygen_ed448(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ECC
-        case KEYGEN_ECC256:
+        case AUTH_KEY_ECC256:
             keygen_ecc(kfilename, 32, id_mask);
             break;
-        case KEYGEN_ECC384:
+        case AUTH_KEY_ECC384:
             keygen_ecc(kfilename, 48, id_mask);
             break;
-        case KEYGEN_ECC521:
+        case AUTH_KEY_ECC521:
             keygen_ecc(kfilename, 66, id_mask);
             break;
 #endif
 
 #ifndef NO_RSA
-        case KEYGEN_RSA2048:
+        case AUTH_KEY_RSA2048:
             keygen_rsa(kfilename, 2048, id_mask);
             break;
-        case KEYGEN_RSA3072:
+        case AUTH_KEY_RSA3072:
             keygen_rsa(kfilename, 3072, id_mask);
             break;
-        case KEYGEN_RSA4096:
+        case AUTH_KEY_RSA4096:
             keygen_rsa(kfilename, 4096, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_HAVE_LMS
-        case KEYGEN_LMS:
+        case AUTH_KEY_LMS:
             keygen_lms(kfilename, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_HAVE_XMSS
-        case KEYGEN_XMSS:
+        case AUTH_KEY_XMSS:
             keygen_xmss(kfilename, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_WC_DILITHIUM
-        case KEYGEN_ML_DSA:
+        case AUTH_KEY_ML_DSA:
             keygen_ml_dsa(kfilename, id_mask);
             break;
 #endif
@@ -1276,8 +1268,8 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
     keySz = get_pubkey_size(ktype);
 
     if (readLen > (int)keySz) {
-        if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
-            ktype == KEYGEN_ECC521) {
+        if (ktype == AUTH_KEY_ECC256 || ktype == AUTH_KEY_ECC384 ||
+            ktype == AUTH_KEY_ECC521) {
             initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
@@ -1288,7 +1280,7 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
             if (initKey == 0)
                 wc_ecc_free(eccKey);
         }
-        else if (ktype == KEYGEN_ED25519) {
+        else if (ktype == AUTH_KEY_ED25519) {
             initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
             if (ret < 0)
@@ -1302,7 +1294,7 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
             if (initKey == 0)
                 wc_ed25519_free(ed25519Key);
         }
-        else if (ktype == KEYGEN_ED448) {
+        else if (ktype == AUTH_KEY_ED448) {
             initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
                 ed448Key, readLen);
 
@@ -1368,42 +1360,42 @@ int main(int argc, char** argv)
     for (i = 1; i < argc; i++) {
         /* Parse Arguments */
         if (strcmp(argv[i], "--ed25519") == 0) {
-            keytype = KEYGEN_ED25519;
+            keytype = AUTH_KEY_ED25519;
         }
         else if (strcmp(argv[i], "--ed448") == 0) {
-            keytype = KEYGEN_ED448;
+            keytype = AUTH_KEY_ED448;
         }
         else if (strcmp(argv[i], "--ecc256") == 0) {
-            keytype = KEYGEN_ECC256;
+            keytype = AUTH_KEY_ECC256;
         }
         else if (strcmp(argv[i], "--ecc384") == 0) {
-            keytype = KEYGEN_ECC384;
+            keytype = AUTH_KEY_ECC384;
         }
         else if (strcmp(argv[i], "--ecc521") == 0) {
-            keytype = KEYGEN_ECC521;
+            keytype = AUTH_KEY_ECC521;
         }
         else if (strcmp(argv[i], "--rsa2048") == 0) {
-            keytype = KEYGEN_RSA2048;
+            keytype = AUTH_KEY_RSA2048;
         }
         else if (strcmp(argv[i], "--rsa3072") == 0) {
-            keytype = KEYGEN_RSA3072;
+            keytype = AUTH_KEY_RSA3072;
         }
         else if (strcmp(argv[i], "--rsa4096") == 0) {
-            keytype = KEYGEN_RSA4096;
+            keytype = AUTH_KEY_RSA4096;
         }
 #if defined(WOLFSSL_HAVE_LMS)
         else if (strcmp(argv[i], "--lms") == 0) {
-            keytype = KEYGEN_LMS;
+            keytype = AUTH_KEY_LMS;
         }
 #endif
 #if defined(WOLFSSL_HAVE_XMSS)
         else if (strcmp(argv[i], "--xmss") == 0) {
-            keytype = KEYGEN_XMSS;
+            keytype = AUTH_KEY_XMSS;
         }
 #endif
 #if defined(WOLFSSL_WC_DILITHIUM)
         else if (strcmp(argv[i], "--ml_dsa") == 0) {
-            keytype = KEYGEN_ML_DSA;
+            keytype = AUTH_KEY_ML_DSA;
         }
 #endif
         else if (strcmp(argv[i], "--force") == 0) {
@@ -1465,7 +1457,7 @@ int main(int argc, char** argv)
         }
     }
     printf("Keytype: %s\n", KName[keytype]);
-    if (keytype == 0)
+    if (keytype == AUTH_KEY_NONE)
         exit(0);
     fpub = fopen(pubkeyfile, "rb");
     if (!force && (fpub != NULL)) {
