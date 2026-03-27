@@ -215,6 +215,7 @@ extern "C" {
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */
+#define AUTH_KEY_NONE    0x00
 #define AUTH_KEY_ED25519 0x01
 #define AUTH_KEY_ECC256  0x02
 #define AUTH_KEY_RSA2048 0x03
@@ -224,9 +225,9 @@ extern "C" {
 #define AUTH_KEY_ECC521  0x07
 #define AUTH_KEY_RSA3072 0x08
 #define AUTH_KEY_LMS     0x09
-                        /* 0x0A...0x0F reserved */
-#define AUTH_KEY_XMSS    0x10
-#define AUTH_KEY_ML_DSA  0x11
+#define AUTH_KEY_XMSS    0x0A
+#define AUTH_KEY_ML_DSA  0x0B
+#define AUTH_KEY_NUM     0x0C
 
 /*
  * 8 bits: auth type
