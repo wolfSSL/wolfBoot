@@ -1,4 +1,4 @@
-FROM antmicro/renode:latest
+FROM antmicro/renode:1.15.3
 
 RUN whoami
 USER root
