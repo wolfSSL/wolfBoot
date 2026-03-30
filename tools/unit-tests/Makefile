@@ -49,7 +49,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
-       unit-tpm-blob unit-policy-sign unit-sdhci-response-bits unit-hal-otp
+       unit-tpm-blob unit-policy-sign unit-rot-auth unit-sdhci-response-bits unit-hal-otp
 
 all: $(TESTS)
 
@@ -137,6 +137,12 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 	gcc -o $@ $^ -I../tpm $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_HASH_SHA256 \
 		-DHAVE_ECC_KEY_IMPORT \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-rot-auth: ../../include/target.h unit-rot-auth.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
+	gcc -o $@ $^ -I../tpm $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
