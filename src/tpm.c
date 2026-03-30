@@ -1539,7 +1539,6 @@ int wolfBoot_tpm2_clear(void)
 int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
 {
     int rc;
-    size_t auth_sz;
     uint8_t  digest[WOLFBOOT_SHA_DIGEST_SIZE];
     uint32_t digestSz = WOLFBOOT_SHA_DIGEST_SIZE;
     WOLFTPM2_NV nv;
@@ -1547,7 +1546,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     memset(&nv, 0, sizeof(nv));
     nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
 #ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
-    auth_sz = strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
+    size_t auth_sz = strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
     if (auth_sz > (size_t)UINT16_MAX ||
         auth_sz > sizeof(nv.handle.auth.buffer))
         return BAD_FUNC_ARG;
