@@ -303,7 +303,6 @@ static void pic32_fcw_pfswap_set(int sw)
 void pic32_flash_dualbank_swap(void)
 {
     uint32_t sw;
-    uint32_t reg;
 
     pic32_fcw_wait_complete();
     sw = pic32_fcw_pfswap_get();
