@@ -323,6 +323,19 @@ extern "C" {
 #include "wolfssl/wolfcrypt/wc_port.h"
 #include "wolfssl/wolfcrypt/types.h"
 
+/* HAL crypto device ID abstraction.
+ * Override per-class via build system -D flags.
+ * Defaults to INVALID_DEVID (software-only). */
+#ifndef WOLFBOOT_DEVID_HASH
+    #define WOLFBOOT_DEVID_HASH   INVALID_DEVID
+#endif
+#ifndef WOLFBOOT_DEVID_PUBKEY
+    #define WOLFBOOT_DEVID_PUBKEY INVALID_DEVID
+#endif
+#ifndef WOLFBOOT_DEVID_CRYPT
+    #define WOLFBOOT_DEVID_CRYPT  INVALID_DEVID
+#endif
+
 #ifdef WOLFBOOT_RENESAS_TSIP
     /* Include these before any algorithm headers */
     #include "mcu/all/r_bsp_common.h"

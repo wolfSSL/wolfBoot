@@ -702,6 +702,7 @@ extern int tolower(int c);
         #define WOLFSSL_RENESAS_SCEPROTECT_CRYPTONLY
         #define RENESAS_SCE_INSTALLEDKEY_ADDR 0x08001000U
         #define SCE_ID 7890
+        #define RENESAS_DEVID SCE_ID
     #endif
     #ifdef WOLFBOOT_RENESAS_RSIP
         #define WOLFSSL_RENESAS_FSPSM
@@ -711,6 +712,12 @@ extern int tolower(int c);
         #define RENESAS_RSIP_INSTALLEDKEY_FLASH_ADDR  0x60200000
         #define RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR    0x10000100
         #define RENESAS_DEVID 7890
+    #endif
+    #ifndef WOLFBOOT_DEVID_PUBKEY
+        #define WOLFBOOT_DEVID_PUBKEY RENESAS_DEVID
+    #endif
+    #ifndef WOLFBOOT_DEVID_CRYPT
+        #define WOLFBOOT_DEVID_CRYPT (RENESAS_DEVID + 1)
     #endif
 #endif
 #endif /* WOLFBOOT_PKCS11_APP */
@@ -740,6 +747,13 @@ extern int tolower(int c);
 
 #ifdef WOLFSSL_STM32_PKA
 #define HAVE_UINTPTR_T /* make sure stdint.h is included */
+#endif
+
+/* WOLF_CRYPTO_CB requires WC_RNG type for cryptocb.h function declarations.
+ * Forward-declare as incomplete type — sufficient for WC_RNG* pointers in
+ * function signatures. We never call functions that dereference WC_RNG. */
+#if defined(WOLF_CRYPTO_CB) && defined(WC_NO_RNG)
+typedef struct WC_RNG WC_RNG;
 #endif
 
 #endif /* !_WOLFBOOT_USER_SETTINGS_H_ */

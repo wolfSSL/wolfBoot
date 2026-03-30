@@ -48,6 +48,66 @@
 #include "elf.h"
 #endif
 
+#if defined(WOLFBOOT_TEST_SIM_CRYPTOCB) && defined(__WOLFBOOT)
+#include <wolfssl/wolfcrypt/error-crypt.h>
+#include <wolfssl/wolfcrypt/cryptocb.h>
+
+/* Crypto callback that prints dispatched algorithm names to stdout, then
+ * returns CRYPTOCB_UNAVAILABLE to trigger software fallback.  Test scripts
+ * redirect stdout to a log and grep for "sim-cryptocb: <type> <name>" lines.
+ *
+ * NOTE: We only need to support the algorithms used by wolfBoot that also have
+ * internal support for crypto callbacks. Algorithms like ED448 do not need to
+ * be handled here since they do not dispatch to a crypto callback internally.
+ */
+static int sim_cryptocb(int devIdArg, wc_CryptoInfo* info, void* ctx)
+{
+    (void)devIdArg;
+    (void)ctx;
+
+    if (info == NULL)
+        return CRYPTOCB_UNAVAILABLE;
+
+    if (info->algo_type == WC_ALGO_TYPE_HASH) {
+        const char* name = "unknown";
+        switch (info->hash.type) {
+            case WC_HASH_TYPE_SHA256:  name = "SHA-256";  break;
+            case WC_HASH_TYPE_SHA384:  name = "SHA-384";  break;
+            case WC_HASH_TYPE_SHA3_384: name = "SHA3-384"; break;
+            default: break;
+        }
+        printf("sim-cryptocb: hash %s\n", name);
+    }
+    else if (info->algo_type == WC_ALGO_TYPE_PK) {
+        const char* name = "unknown";
+        switch (info->pk.type) {
+            case WC_PK_TYPE_RSA:            name = "RSA";            break;
+            case WC_PK_TYPE_ECDSA_VERIFY:   name = "ECDSA-verify";   break;
+            case WC_PK_TYPE_ED25519_VERIFY: name = "ED25519-verify"; break;
+        #ifdef HAVE_DILITHIUM
+            case WC_PK_TYPE_PQC_SIG_VERIFY:
+                name = "ML-DSA-verify";
+                break;
+        #endif
+            default: break;
+        }
+        printf("sim-cryptocb: pk %s\n", name);
+    }
+    #if !defined(NO_AES) || !defined(NO_DES3)
+    else if (info->algo_type == WC_ALGO_TYPE_CIPHER) {
+        const char* name = "unknown";
+        switch (info->cipher.type) {
+            case WC_CIPHER_AES_CTR: name = "AES-CTR"; break;
+            default: break;
+        }
+        printf("sim-cryptocb: cipher %s\n", name);
+    }
+    #endif
+
+    return CRYPTOCB_UNAVAILABLE;
+}
+#endif /* WOLFBOOT_TEST_SIM_CRYPTOCB && __WOLFBOOT */
+
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_client.h"
@@ -438,6 +498,23 @@ void hal_init(void)
         else if (strcmp(main_argv[i], "emergency") == 0)
             forceEmergency = 1;
     }
+
+#if defined(WOLFBOOT_TEST_SIM_CRYPTOCB) && defined(__WOLFBOOT)
+    {
+        int cb_ret;
+        /* wolfCrypt_Init() must be called before RegisterDevice —
+         * it initializes CryptoDev[] slots to INVALID_DEVID via
+         * wc_CryptoCb_Init(). Ref-counted, safe to call multiple times. */
+        wolfCrypt_Init();
+        cb_ret = wc_CryptoCb_RegisterDevice(0xCB, sim_cryptocb, NULL);
+        if (cb_ret != 0) {
+            wolfBoot_printf("Failed to register sim crypto callback: %d\n",
+                cb_ret);
+            exit(-1);
+        }
+        wolfBoot_printf("Registered sim_cryptocb with devId 0xCB\n");
+    }
+#endif
 }
 
 void ext_flash_lock(void)
@@ -583,6 +660,7 @@ void do_boot(const uint32_t *app_offset)
     }
     wolfBoot_printf("Stored test-app to memfd, address %p (%zu bytes)\n", app_offset, wret);
 
+    fflush(stdout);
     ret = fexecve(fd, main_argv, envp);
     wolfBoot_printf( "fexecve error\n");
 #endif
