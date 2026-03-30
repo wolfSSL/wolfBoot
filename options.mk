@@ -1273,6 +1273,18 @@ ifneq ($(WOLFBOOT_PART_ID),)
   SIGN_OPTIONS+=--id $(WOLFBOOT_PART_ID)
 endif
 
+# Simulator crypto callback test option
+ifeq ($(ARCH),sim)
+ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
+  CFLAGS += -DWOLFBOOT_TEST_SIM_CRYPTOCB
+  CFLAGS += -DWOLF_CRYPTO_CB
+  CFLAGS += -DWOLFBOOT_DEVID_HASH=0xCB
+  CFLAGS += -DWOLFBOOT_DEVID_PUBKEY=0xCB
+  CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xCB
+  WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+endif
+endif
+
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
@@ -1306,6 +1318,12 @@ ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT -DWOLFHSM_CFG_ENABLE_CLIENT
+  # HAL crypto devId abstraction for wolfHSM client
+  CFLAGS += -DWOLFBOOT_DEVID_HASH=hsmDevIdHash
+  CFLAGS += -DWOLFBOOT_DEVID_PUBKEY=hsmDevIdPubKey
+  ifeq ($(ENCRYPT),1)
+    CFLAGS += -DWOLFBOOT_DEVID_CRYPT=hsmDevIdCrypt
+  endif
   # Make sure we export generated public keys so they can be used to load into
   # HSM out-of-band
   KEYGEN_OPTIONS += --exportpubkey --der
@@ -1364,8 +1382,14 @@ ifeq ($(WOLFHSM_SERVER),1)
 
   #includes
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
-  # defines'
+  # defines
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_SERVER -DWOLFHSM_CFG_ENABLE_SERVER
+  # HAL crypto devId abstraction for wolfHSM server
+  CFLAGS += -DWOLFBOOT_DEVID_HASH=hsmDevIdHash
+  CFLAGS += -DWOLFBOOT_DEVID_PUBKEY=hsmDevIdPubKey
+  ifeq ($(ENCRYPT),1)
+    CFLAGS += -DWOLFBOOT_DEVID_CRYPT=hsmDevIdCrypt
+  endif
 
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification

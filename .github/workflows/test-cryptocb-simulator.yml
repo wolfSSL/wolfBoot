@@ -1,0 +1,242 @@
+name: test simulator with crypto callback (cryptocb)
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  cryptocb_simulator_tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # 64 bit simulator, cryptocb enabled
+      #
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config (64 bit simulator)
+        run: |
+          cp config/examples/sim.config .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      # Classical algorithms (each tested once with SPMATH=1)
+      # Note: ECC uses wc_ecc_verify_hash_ex which bypasses cryptocb PK dispatch,
+      # so we only verify hash for ECC. ED25519 and RSA dispatch PK through cryptocb.
+      #
+      - name: Build wolfboot.elf (ED25519, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ED25519 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ED25519)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "ED25519-verify"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC256, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ECC256)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC384, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC384 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ECC384)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC521, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC521 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ECC521)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (RSA2048, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA2048 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (RSA2048)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "RSA"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (RSA3072, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA3072 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (RSA3072)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "RSA"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (RSA4096, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (RSA4096)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "RSA"
+
+      # SHA-384 hash coverage (paired with algorithms that naturally use 384-bit)
+      #
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC384 + SHA384, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC384 HASH=SHA384 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ECC384 + SHA384)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-384"
+
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (RSA4096 + SHA384, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=RSA4096 HASH=SHA384 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (RSA4096 + SHA384)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-384" "RSA"
+
+      # SHA3-384 hash coverage
+      #
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC384 + SHA3-384, cryptocb)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC384 HASH=SHA3 SPMATH=1 WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ECC384 + SHA3-384)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA3-384"
+
+      # AES encrypted partition coverage (external flash + AES128-CTR)
+      #
+      - name: Cleanup to change key type
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ED25519 + AES128 encrypt, cryptocb)
+        run: |
+          cp config/examples/sim-encrypt-update.config .config
+          make clean && make test-sim-external-flash-with-enc-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run cryptocb sunnyday test (ED25519 + AES128 encrypt)
+        run: |
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "ED25519-verify" "AES-CTR"
+
+      # PQ algorithms (each uses its own config, build + test inline)
+      #
+      - name: Build and test LMS (cryptocb)
+        run: |
+          cp config/examples/sim-lms.config .config
+          make keysclean && make clean
+          make keytools
+          make test-sim-internal-flash-with-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256"
+
+      - name: Build and test XMSS (cryptocb)
+        run: |
+          cp config/examples/sim-xmss.config .config
+          make keysclean && make clean
+          make keytools
+          make test-sim-internal-flash-with-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256"
+
+      - name: Build and test ML-DSA level 2 (cryptocb)
+        run: |
+          cp config/examples/sim-ml-dsa.config .config
+          make keysclean && make clean
+          make keytools
+          make test-sim-internal-flash-with-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "ML-DSA-verify"
+
+      - name: Build and test ML-DSA level 3 (cryptocb)
+        run: |
+          cp config/examples/sim-ml-dsa3.config .config
+          make keysclean && make clean
+          make keytools
+          make test-sim-internal-flash-with-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "ML-DSA-verify"
+
+      - name: Build and test ML-DSA level 5 (cryptocb)
+        run: |
+          cp config/examples/sim-ml-dsa5.config .config
+          make keysclean && make clean
+          make keytools
+          make test-sim-internal-flash-with-update WOLFBOOT_TEST_SIM_CRYPTOCB=1
+          tools/scripts/sim-cryptocb-sunnyday-update.sh "SHA-256" "ML-DSA-verify"
+
+      # Hybrid auth: ML_DSA + ECDSA
+      #
+      - name: make clean (hybrid)
+        run: |
+          make keysclean
+
+      - name: Select config (hybrid ML_DSA + ECC)
+        run: |
+          cp config/examples/sim-ml-dsa-ecc-hybrid.config .config
+
+      - name: Build tools (hybrid)
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot.elf (hybrid, cryptocb)
+        run: |
+          make clean && make WOLFBOOT_TEST_SIM_CRYPTOCB=1
+
+      - name: Run hybrid boot test with cryptocb verification
+        run: |
+          ./wolfboot.elf get_version > sim_cryptocb.log 2>/dev/null
+          grep -q "sim-cryptocb: hash SHA-256" sim_cryptocb.log || (echo "hash SHA-256 not found" && cat sim_cryptocb.log && exit 1)
+          grep -q "sim-cryptocb: pk ML-DSA-verify" sim_cryptocb.log || (echo "pk ML-DSA-verify not found" && cat sim_cryptocb.log && exit 1)
+          echo "Hybrid cryptocb verification passed"
