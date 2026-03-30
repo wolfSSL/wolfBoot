@@ -522,9 +522,26 @@ const char* fdt_get_name(const void *fdt, int nodeoffset, int *len)
 
 const char* fdt_get_string(const void *fdt, int stroffset, int *lenp)
 {
-    const char *s = (const char*)fdt + fdt_off_dt_strings(fdt) + stroffset;
+    uint32_t strsize = fdt_size_dt_strings(fdt);
+    const char *s;
+    const char *end;
+
+    if ((stroffset < 0) || ((uint32_t)stroffset >= strsize)) {
+        if (lenp)
+            *lenp = -FDT_ERR_BADOFFSET;
+        return NULL;
+    }
+
+    s = (const char*)fdt + fdt_off_dt_strings(fdt) + stroffset;
+    end = memchr(s, '\0', strsize - (uint32_t)stroffset);
+    if (end == NULL) {
+        if (lenp)
+            *lenp = -FDT_ERR_BADSTRUCTURE;
+        return NULL;
+    }
+
     if (lenp) {
-        *lenp = (int)strlen(s);
+        *lenp = (int)(end - s);
     }
     return s;
 }

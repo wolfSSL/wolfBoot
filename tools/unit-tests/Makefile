@@ -42,7 +42,7 @@ endif
 
 
 
-TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
+TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
@@ -79,6 +79,7 @@ unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
 unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
 unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
 unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
+unit-fdt:CFLAGS+=-DWOLFBOOT_FDT
 unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
 unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
@@ -111,6 +112,10 @@ unit-extflash.o: FORCE
 
 unit-parser: ../../include/target.h unit-parser.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-fdt: ../../include/target.h unit-fdt.c ../../src/fdt.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-extflash: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
