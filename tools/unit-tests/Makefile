@@ -50,6 +50,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-sign unit-rot-auth unit-sdhci-response-bits unit-hal-otp
+TESTS+=unit-tpm-check-rot-auth
 
 all: $(TESTS)
 
@@ -121,6 +122,12 @@ unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-rsa-exp: ../../include/target.h unit-tpm-rsa-exp.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-check-rot-auth: ../../include/target.h unit-tpm-check-rot-auth.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \

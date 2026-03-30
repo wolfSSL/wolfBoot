@@ -1547,6 +1547,8 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     nv.handle.hndl = WOLFBOOT_TPM_KEYSTORE_NV_BASE + key_slot;
 #ifdef WOLFBOOT_TPM_KEYSTORE_AUTH
     nv.handle.auth.size = (UINT16)strlen(WOLFBOOT_TPM_KEYSTORE_AUTH);
+    if (nv.handle.auth.size > sizeof(nv.handle.auth.buffer))
+        return BAD_FUNC_ARG;
     memcpy(nv.handle.auth.buffer, WOLFBOOT_TPM_KEYSTORE_AUTH,
         nv.handle.auth.size);
 #endif
