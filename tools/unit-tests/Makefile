@@ -49,7 +49,7 @@ TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
-       unit-tpm-blob unit-policy-sign
+       unit-tpm-blob unit-policy-sign unit-sdhci-response-bits
 
 all: $(TESTS)
 
@@ -144,6 +144,10 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-aes128: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
