@@ -308,6 +308,9 @@ void hal_init(void)
                     WOLFBOOT_VERSION);
 #endif
 #endif /* DEBUG_UART */
+
+    /* Catch bus errors due to ECC faults. Reenabled on application boot */
+    TC3_CAPTURE_BUS_ERRORS();
 }
 
 /* This function is called by the bootloader at a very late stage, before
@@ -338,6 +341,9 @@ void hal_prepare_boot(void)
     /* Undo pre-init*/
     tc3tc_UnpreInit();
 #endif
+
+    /* Reenable bus trap/exception masking */
+    TC3_ENFORCE_BUS_ERRORS();
 }
 
 #ifndef WOLFBOOT_AURIX_TC3XX_HSM
