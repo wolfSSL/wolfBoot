@@ -1301,12 +1301,6 @@ ifeq ($(USE_CLANG),1)
   CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
   CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
   LSCRIPT_FLAGS+=-T $(abspath $(WOLFBOOT_ROOT)/hal/clang-discard.ld)
-  # Clang-built ARM raw images may otherwise expand ELF loadable gaps into
-  # oversized binaries on some targets. Keep the section selection scoped to
-  # the Clang workaround paths only.
-  CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE:=-j .text -j .edidx
-  CLANG_ARM_OBJCOPY_FLASH_FLAGS_BOOT:=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE) -j .ramcode -j .keystore -j .gnu.sgstubs
-  CLANG_ARM_OBJCOPY_FLASH_FLAGS_APP:=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_BASE)
 endif
 
 ifeq ($(USE_GCC),1)

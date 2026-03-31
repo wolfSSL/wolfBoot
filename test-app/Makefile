@@ -105,15 +105,6 @@ OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 OBJCOPY_IMAGE_FLAGS:=
 
 ifeq ($(USE_CLANG),1)
-  # Clang-built ARM ELFs can keep RAM sections as loadable segments, and raw
-  # objcopy output then expands the flash-to-RAM gap into a huge sparse image.
-  # The app image only needs the flash-backed output sections. TrustZone
-  # non-secure apps also need the flash-backed .data load image.
-  ifeq ($(TZEN),1)
-    OBJCOPY_IMAGE_FLAGS+=-j .text -j .edidx -j .data
-  else
-    OBJCOPY_IMAGE_FLAGS+=$(CLANG_ARM_OBJCOPY_FLASH_FLAGS_APP)
-  endif
   # Clang doesn't emit empty .data/.bss sections in object files (GCC does).
   # GNU ld mishandles AT() for output sections with no matching input sections,
   # setting LMA=VMA instead of the specified flash address.
