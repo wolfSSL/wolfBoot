@@ -95,6 +95,7 @@ static void hal_flash_fix_ecc(void)
 
 
 extern int wc_hashcrypt_init(void);
+extern int wc_casper_init(void);
 
 void hal_init(void)
 {
@@ -103,14 +104,19 @@ void hal_init(void)
     BOARD_BootClockFROHF96M();
 //    BOARD_BootClockPLL150M();
 
+# ifdef DEBUG_UART
+    uart_init();
+    uart_write("lpc55s69 init\n", 14);
+# endif
+
 # ifdef WOLFSSL_NXP_HASHCRYPT
     CLOCK_EnableClock(kCLOCK_HashCrypt);
     wc_hashcrypt_init();
 # endif
 
-# ifdef DEBUG_UART
-    uart_init();
-    uart_write("lpc55s69 init\n", 14);
+# ifdef WOLFSSL_NXP_CASPER
+    CLOCK_EnableClock(kCLOCK_Casper);
+    wc_casper_init();
 # endif
 
 #endif /* __WOLFBOOT */
