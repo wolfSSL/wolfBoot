@@ -327,10 +327,12 @@ static int test_pkcs11_find_data_obj(CK_SESSION_HANDLE session,
         (CK_ULONG)(sizeof(data_tmpl) / sizeof(data_tmpl[0])), data_obj);
 }
 
-static int test_pkcs11_generate_keypair(CK_SESSION_HANDLE session,
+static int test_pkcs11_import_keypair(CK_SESSION_HANDLE session,
     CK_OBJECT_HANDLE *pub_obj, CK_OBJECT_HANDLE *priv_obj)
 {
     CK_RV rv;
+    CK_OBJECT_HANDLE pub_handle = CK_INVALID_HANDLE;
+    CK_OBJECT_HANDLE priv_handle = CK_INVALID_HANDLE;
     CK_OBJECT_CLASS pub_class = CKO_PUBLIC_KEY;
     CK_OBJECT_CLASS priv_class = CKO_PRIVATE_KEY;
     CK_KEY_TYPE key_type = CKK_EC;
@@ -357,14 +359,24 @@ static int test_pkcs11_generate_keypair(CK_SESSION_HANDLE session,
         { CKA_VALUE, (CK_VOID_PTR)test_ecc_p256_priv, sizeof(test_ecc_p256_priv) }
     };
 
+    *pub_obj = CK_INVALID_HANDLE;
+    *priv_obj = CK_INVALID_HANDLE;
+
     rv = wolfpkcs11nsFunctionList.C_CreateObject(session, pub_tmpl,
-        (CK_ULONG)(sizeof(pub_tmpl) / sizeof(pub_tmpl[0])), pub_obj);
+        (CK_ULONG)(sizeof(pub_tmpl) / sizeof(pub_tmpl[0])), &pub_handle);
     if (test_pkcs11_ck_ok("C_CreateObject(pub)", rv) < 0)
         return -1;
 
     rv = wolfpkcs11nsFunctionList.C_CreateObject(session, priv_tmpl,
-        (CK_ULONG)(sizeof(priv_tmpl) / sizeof(priv_tmpl[0])), priv_obj);
-    return test_pkcs11_ck_ok("C_CreateObject(priv)", rv);
+        (CK_ULONG)(sizeof(priv_tmpl) / sizeof(priv_tmpl[0])), &priv_handle);
+    if (test_pkcs11_ck_ok("C_CreateObject(priv)", rv) < 0) {
+        (void)wolfpkcs11nsFunctionList.C_DestroyObject(session, pub_handle);
+        return -1;
+    }
+
+    *pub_obj = pub_handle;
+    *priv_obj = priv_handle;
+    return 0;
 }
 
 static int test_pkcs11_sign_payload(CK_SESSION_HANDLE session,
@@ -558,7 +570,7 @@ int test_pkcs11_start(void)
 
     if (key_state == 1 && data_state == 1) {
         printf("pkcs11: first boot path, creating persistent objects\r\n");
-        if (test_pkcs11_generate_keypair(session, &pub_obj, &priv_obj) < 0)
+        if (test_pkcs11_import_keypair(session, &pub_obj, &priv_obj) < 0)
             ret = -1;
         else
             ret = 0;
