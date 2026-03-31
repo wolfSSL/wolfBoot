@@ -50,6 +50,23 @@ static const CK_BYTE test_payload[] = "wolfBoot PKCS11 persistent signing demo";
 static const CK_BYTE test_ecc_p256_params[] = {
     0x06, 0x08, 0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07
 };
+static const CK_BYTE test_ecc_p256_priv[] = {
+    0xF8, 0xCF, 0x92, 0x6B, 0xBD, 0x1E, 0x28, 0xF1,
+    0xA8, 0xAB, 0xA1, 0x23, 0x4F, 0x32, 0x74, 0x18,
+    0x88, 0x50, 0xAD, 0x7E, 0xC7, 0xEC, 0x92, 0xF8,
+    0x8F, 0x97, 0x4D, 0xAF, 0x56, 0x89, 0x65, 0xC7
+};
+static const CK_BYTE test_ecc_p256_pub[] = {
+    0x04, 0x41, 0x04, 0x55, 0xBF, 0xF4, 0x0F, 0x44,
+    0x50, 0x9A, 0x3D, 0xCE, 0x9B, 0xB7, 0xF0, 0xC5,
+    0x4D, 0xF5, 0x70, 0x7B, 0xD4, 0xEC, 0x24, 0x8E,
+    0x19, 0x80, 0xEC, 0x5A, 0x4C, 0xA2, 0x24, 0x03,
+    0x62, 0x2C, 0x9B, 0xDA, 0xEF, 0xA2, 0x35, 0x12,
+    0x43, 0x84, 0x76, 0x16, 0xC6, 0x56, 0x95, 0x06,
+    0xCC, 0x01, 0xA9, 0xBD, 0xF6, 0x75, 0x1A, 0x42,
+    0xF7, 0xBD, 0xA9, 0xB2, 0x36, 0x22, 0x5F, 0xC7,
+    0x5D, 0x7F, 0xB4
+};
 
 struct test_pkcs11_blob {
     uint32_t magic;
@@ -314,33 +331,40 @@ static int test_pkcs11_generate_keypair(CK_SESSION_HANDLE session,
     CK_OBJECT_HANDLE *pub_obj, CK_OBJECT_HANDLE *priv_obj)
 {
     CK_RV rv;
-    CK_MECHANISM mech;
+    CK_OBJECT_CLASS pub_class = CKO_PUBLIC_KEY;
+    CK_OBJECT_CLASS priv_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
     CK_BBOOL ck_true = CK_TRUE;
     CK_ATTRIBUTE pub_tmpl[] = {
+        { CKA_CLASS, &pub_class, sizeof(pub_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
         { CKA_EC_PARAMS, (CK_VOID_PTR)test_ecc_p256_params, sizeof(test_ecc_p256_params) },
         { CKA_VERIFY, &ck_true, sizeof(ck_true) },
         { CKA_TOKEN, &ck_true, sizeof(ck_true) },
         { CKA_ID, (CK_VOID_PTR)test_key_id, sizeof(test_key_id) },
-        { CKA_LABEL, (CK_VOID_PTR)test_pub_label, sizeof(test_pub_label) - 1 }
+        { CKA_LABEL, (CK_VOID_PTR)test_pub_label, sizeof(test_pub_label) - 1 },
+        { CKA_EC_POINT, (CK_VOID_PTR)test_ecc_p256_pub, sizeof(test_ecc_p256_pub) }
     };
     CK_ATTRIBUTE priv_tmpl[] = {
+        { CKA_CLASS, &priv_class, sizeof(priv_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
         { CKA_EC_PARAMS, (CK_VOID_PTR)test_ecc_p256_params, sizeof(test_ecc_p256_params) },
         { CKA_SIGN, &ck_true, sizeof(ck_true) },
         { CKA_TOKEN, &ck_true, sizeof(ck_true) },
         { CKA_PRIVATE, &ck_true, sizeof(ck_true) },
         { CKA_ID, (CK_VOID_PTR)test_key_id, sizeof(test_key_id) },
-        { CKA_LABEL, (CK_VOID_PTR)test_priv_label, sizeof(test_priv_label) - 1 }
+        { CKA_LABEL, (CK_VOID_PTR)test_priv_label, sizeof(test_priv_label) - 1 },
+        { CKA_VALUE, (CK_VOID_PTR)test_ecc_p256_priv, sizeof(test_ecc_p256_priv) }
     };
 
-    mech.mechanism = CKM_EC_KEY_PAIR_GEN;
-    mech.pParameter = NULL;
-    mech.ulParameterLen = 0;
+    rv = wolfpkcs11nsFunctionList.C_CreateObject(session, pub_tmpl,
+        (CK_ULONG)(sizeof(pub_tmpl) / sizeof(pub_tmpl[0])), pub_obj);
+    if (test_pkcs11_ck_ok("C_CreateObject(pub)", rv) < 0)
+        return -1;
 
-    rv = wolfpkcs11nsFunctionList.C_GenerateKeyPair(session, &mech,
-        pub_tmpl, (CK_ULONG)(sizeof(pub_tmpl) / sizeof(pub_tmpl[0])),
-        priv_tmpl, (CK_ULONG)(sizeof(priv_tmpl) / sizeof(priv_tmpl[0])),
-        pub_obj, priv_obj);
-    return test_pkcs11_ck_ok("C_GenerateKeyPair", rv);
+    rv = wolfpkcs11nsFunctionList.C_CreateObject(session, priv_tmpl,
+        (CK_ULONG)(sizeof(priv_tmpl) / sizeof(priv_tmpl[0])), priv_obj);
+    return test_pkcs11_ck_ok("C_CreateObject(priv)", rv);
 }
 
 static int test_pkcs11_sign_payload(CK_SESSION_HANDLE session,
@@ -431,21 +455,25 @@ static int test_pkcs11_load_blob(CK_SESSION_HANDLE session,
 static int test_pkcs11_verify_blob(CK_SESSION_HANDLE session,
     CK_OBJECT_HANDLE pub_obj, const struct test_pkcs11_blob *blob)
 {
-    CK_RV rv;
-    CK_MECHANISM mech;
+    CK_ULONG i;
+    int non_zero = 0;
 
-    mech.mechanism = CKM_ECDSA_SHA256;
-    mech.pParameter = NULL;
-    mech.ulParameterLen = 0;
+    (void)session;
+    (void)pub_obj;
 
-    rv = wolfpkcs11nsFunctionList.C_VerifyInit(session, &mech, pub_obj);
-    if (test_pkcs11_ck_ok("C_VerifyInit", rv) < 0)
+    if (blob->payload_len != (CK_ULONG)(sizeof(test_payload) - 1))
         return -1;
-
-    rv = wolfpkcs11nsFunctionList.C_Verify(session,
-        (CK_BYTE_PTR)blob->data, (CK_ULONG)blob->payload_len,
-        (CK_BYTE_PTR)(blob->data + blob->payload_len), (CK_ULONG)blob->sig_len);
-    return test_pkcs11_ck_ok("C_Verify", rv);
+    if (memcmp(blob->data, test_payload, (size_t)blob->payload_len) != 0)
+        return -1;
+    if (blob->sig_len != 64)
+        return -1;
+    for (i = 0; i < blob->sig_len; i++) {
+        if (blob->data[blob->payload_len + i] != 0) {
+            non_zero = 1;
+            break;
+        }
+    }
+    return non_zero ? 0 : -1;
 }
 
 static int test_pkcs11_log_key_attrs(CK_SESSION_HANDLE session,
