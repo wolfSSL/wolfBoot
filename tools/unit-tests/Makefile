@@ -49,7 +49,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
-       unit-tpm-blob unit-policy-sign unit-rot-auth unit-sdhci-response-bits unit-hal-otp
+       unit-tpm-blob unit-policy-sign unit-rot-auth unit-sdhci-response-bits
 TESTS+=unit-tpm-check-rot-auth
 
 all: $(TESTS)
@@ -166,9 +166,6 @@ unit-string: ../../include/target.h unit-string.c
 unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
-
-unit-hal-otp: ../../include/target.h unit-hal-otp.c
-	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-aes128: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)

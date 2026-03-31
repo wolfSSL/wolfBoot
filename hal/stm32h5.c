@@ -25,7 +25,6 @@
 #include <string.h>
 
 #include "hal.h"
-#include "hal_otp.h"
 #include "hal/stm32h5.h"
 #include "hal/armv8m_tz.h"
 
@@ -765,7 +764,7 @@ void hal_prepare_boot(void)
 int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
 {
     uint32_t start_block = (flashAddress - FLASH_OTP_BASE) / FLASH_OTP_BLOCK_SIZE;
-    uint32_t count = hal_otp_blocks_for_length(length, FLASH_OTP_BLOCK_SIZE);
+    uint32_t count = (length + FLASH_OTP_BLOCK_SIZE - 1U) / FLASH_OTP_BLOCK_SIZE;
     uint32_t bmap = 0;
     unsigned int i;
     if (start_block + count > 32)
