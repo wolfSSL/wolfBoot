@@ -764,20 +764,15 @@ void hal_prepare_boot(void)
 int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
 {
     uint32_t start_block = (flashAddress - FLASH_OTP_BASE) / FLASH_OTP_BLOCK_SIZE;
-    uint32_t count = length / FLASH_OTP_BLOCK_SIZE;
+    uint32_t count = (length + FLASH_OTP_BLOCK_SIZE - 1U) / FLASH_OTP_BLOCK_SIZE;
     uint32_t bmap = 0;
     unsigned int i;
     if (start_block + count > 32)
         return -1;
 
-    if ((length % FLASH_OTP_BLOCK_SIZE) != 0)
-    {
-        count++;
-    }
-
     /* Turn on the bits */
     for (i = start_block; i < (start_block + count); i++) {
-        bmap |= (1 << i);
+        bmap |= (1U << i);
     }
     /* Enable OTP write protection for the selected blocks */
     while ((bmap & FLASH_OTPBLR_CUR) != bmap) {

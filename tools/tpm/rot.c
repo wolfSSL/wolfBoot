@@ -148,6 +148,10 @@ static int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvBase
         /* Setup a read/lock structure */
         XMEMSET(&nv, 0, sizeof(nv));
         nv.handle.hndl = handle;
+        if (authBufSz > (int)sizeof(nv.handle.auth.buffer)) {
+            rc = BAD_FUNC_ARG;
+            goto exit;
+        }
         nv.handle.auth.size = authBufSz;
         XMEMCPY(nv.handle.auth.buffer, authBuf, nv.handle.auth.size);
 

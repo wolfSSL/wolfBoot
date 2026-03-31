@@ -171,6 +171,11 @@ tools/unit-tests/unit-store-sbrk
 tools/unit-tests/unit-tpm-blob
 tools/unit-tests/unit-update-disk
 tools/unit-tests/unit-policy-sign
+tools/unit-tests/unit-fdt
+tools/unit-tests/unit-hal-otp
+tools/unit-tests/unit-rot-auth
+tools/unit-tests/unit-sdhci-response-bits
+tools/unit-tests/unit-tpm-check-rot-auth
 
 
 
@@ -362,3 +367,5 @@ image.ub
 system-default.dtb
 test_output/
 sdcard.img
+
+

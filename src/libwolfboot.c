@@ -1882,7 +1882,7 @@ int pkcs11_crypto_init(void)
     };
     CK_ULONG search_attr_count = sizeof(search_attr) / sizeof(*search_attr);
     CK_ULONG obj_count = 0;
-    int pkcs11_intiialized = 0, session_opened = 0, logged_in = 0;
+    int pkcs11_initialized = 0, session_opened = 0, logged_in = 0;
 
     if (encrypt_initialized)
         return 0;

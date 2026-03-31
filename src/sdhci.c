@@ -565,7 +565,7 @@ static uint32_t sdhci_get_response_bits(int from, int count)
     resp[3] = SDHCI_REG(SDHCI_SRS07);
 
     ret = resp[off] >> shft;
-    if ((from + shft) > 32) {
+    if ((shft + count) > 32) {
         ret |= resp[off + 1] << ((32 - shft) % 32);
     }
     return ret & mask;

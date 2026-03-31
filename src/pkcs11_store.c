@@ -244,7 +244,7 @@ static uint8_t *find_object_buffer(int32_t type, uint32_t tok_id, uint32_t obj_i
 {
     struct obj_hdr *hdr = NODES_TABLE;
     uint32_t *tok_obj_stored = NULL;
-    while ((uintptr_t)hdr < ((uintptr_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
+    while ((uintptr_t)hdr < ((uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE)) {
         if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id)
                 && (hdr->type == type)) {
             tok_obj_stored = (uint32_t *) (vault_base + (2 * WOLFBOOT_SECTOR_SIZE) + (hdr->pos * KEYVAULT_OBJ_SIZE));
@@ -275,7 +275,7 @@ static struct obj_hdr *find_object_header(int32_t type, uint32_t tok_id,
         uint32_t obj_id)
 {
     struct obj_hdr *hdr = NODES_TABLE;
-    while ((uintptr_t)hdr < ((uintptr_t)NODES_TABLE + WOLFBOOT_SECTOR_SIZE)) {
+    while ((uintptr_t)hdr < ((uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE)) {
         if ((hdr->token_id == tok_id) && (hdr->object_id == obj_id)
                 && (hdr->type == type)) {
             return hdr;

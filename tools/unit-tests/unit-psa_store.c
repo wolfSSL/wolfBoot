@@ -154,19 +154,52 @@ START_TEST(test_delete_object_ignores_metadata_prefix)
 }
 END_TEST
 
+START_TEST(test_find_object_search_stops_at_header_sector)
+{
+    enum { type = WOLFPSA_STORE_KEY };
+    const uint32_t tok_id = 0x11223344U;
+    const uint32_t obj_id = 0x55667788U;
+    struct obj_hdr *backup_hdr;
+    uint32_t *payload_ids;
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    backup_hdr = (struct obj_hdr *)(vault_base + WOLFBOOT_SECTOR_SIZE);
+    backup_hdr->token_id = tok_id;
+    backup_hdr->object_id = obj_id;
+    backup_hdr->type = type;
+    backup_hdr->pos = 0;
+    backup_hdr->size = 2 * sizeof(uint32_t);
+
+    payload_ids = (uint32_t *)(vault_base + 2 * WOLFBOOT_SECTOR_SIZE);
+    payload_ids[0] = tok_id;
+    payload_ids[1] = obj_id;
+
+    ck_assert_ptr_null(find_object_header(type, tok_id, obj_id));
+    ck_assert_ptr_null(find_object_buffer(type, tok_id, obj_id));
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot-psa-store");
     TCase *tcase_write = tcase_create("cross_sector_write");
     TCase *tcase_close = tcase_create("close_state");
     TCase *tcase_delete = tcase_create("delete_object");
+    TCase *tcase_find_bounds = tcase_create("find_bounds");
 
     tcase_add_test(tcase_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete, test_delete_object_ignores_metadata_prefix);
+    tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     suite_add_tcase(s, tcase_write);
     suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete);
+    suite_add_tcase(s, tcase_find_bounds);
     return s;
 }
 

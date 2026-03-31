@@ -42,14 +42,15 @@ endif
 
 
 
-TESTS:=unit-parser unit-extflash unit-string unit-spi-flash unit-aes128 \
+TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash \
        unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
-       unit-tpm-blob unit-policy-sign
+       unit-tpm-blob unit-policy-sign unit-rot-auth unit-sdhci-response-bits
+TESTS+=unit-tpm-check-rot-auth
 
 all: $(TESTS)
 
@@ -78,6 +79,7 @@ unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
 unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
 unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
 unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
+unit-fdt:CFLAGS+=-DWOLFBOOT_FDT
 unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
 unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
@@ -111,6 +113,10 @@ unit-extflash.o: FORCE
 unit-parser: ../../include/target.h unit-parser.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
+unit-fdt: ../../include/target.h unit-fdt.c ../../src/fdt.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
 unit-extflash: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -121,6 +127,12 @@ unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-rsa-exp: ../../include/target.h unit-tpm-rsa-exp.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-check-rot-auth: ../../include/target.h unit-tpm-check-rot-auth.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_VERIFY -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \
@@ -139,11 +151,21 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 		-DHAVE_ECC_KEY_IMPORT \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
+unit-rot-auth: ../../include/target.h unit-rot-auth.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
+	gcc -o $@ $^ -I../tpm $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-aes128: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
