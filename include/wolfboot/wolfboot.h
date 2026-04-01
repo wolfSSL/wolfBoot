@@ -464,6 +464,22 @@ extern "C" {
 
 #endif /* defined WOLFBOOT */
 
+/* Monolithic self-update: imply DISABLE_BACKUP and enforce prerequisites */
+#ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+  #ifndef DISABLE_BACKUP
+    #define DISABLE_BACKUP
+  #endif
+  #ifdef DELTA_UPDATES
+    #error "DELTA_UPDATES is not compatible with WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+  #endif
+  #ifdef NVM_FLASH_WRITEONCE
+    #error "NVM_FLASH_WRITEONCE is not compatible with WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+  #endif
+  #ifndef RAM_CODE
+    #error "WOLFBOOT_SELF_UPDATE_MONOLITHIC requires RAM_CODE"
+  #endif
+#endif
+
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2

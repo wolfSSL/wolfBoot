@@ -233,6 +233,10 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
 }
 #endif /* RAM_CODE for self_update */
 
+#ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+/* The swap-based update machinery (wolfBoot_copy_sector, wolfBoot_update, etc.)
+ * is not used in monolithic self-update mode. */
+
 static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     struct wolfBoot_image *dst, uint32_t sector)
 {
@@ -804,7 +808,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * magic has not been set flag will have an un-determined value when we go
      * to check it */
     uint8_t flag = SECT_FLAG_NEW;
-    struct wolfBoot_image boot, update, swap;
+    struct wolfBoot_image boot, update;
+#ifndef DISABLE_BACKUP
+    struct wolfBoot_image swap;
+#endif
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
@@ -856,7 +863,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             return -1;
 #endif
         wolfBoot_open_image(&boot, PART_BOOT);
+#ifndef DISABLE_BACKUP
         wolfBoot_open_image(&swap, PART_SWAP);
+#endif
 
 #if defined(EXT_ENCRYPTED) && defined(DELTA_UPDATES)
         wolfBoot_printf("Update partition fallback image: %d\n", fallback_image);
@@ -1208,6 +1217,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef __CCRX__
 #pragma section
 #endif
+#endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
 
 #if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
 int wolfBoot_unlock_disk(void)
@@ -1319,12 +1329,14 @@ int wolfBoot_unlock_disk(void)
 void RAMFUNCTION wolfBoot_start(void)
 {
     int bootRet;
+#ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
     int updateRet;
 #ifndef DISABLE_BACKUP
     int resumedFinalErase;
 #endif
     uint8_t bootState;
     uint8_t updateState;
+#endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
     struct wolfBoot_image boot;
 
 #if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
@@ -1334,6 +1346,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef RAM_CODE
     wolfBoot_check_self_update();
 #endif
+
+#ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
 
 #ifdef NVM_FLASH_WRITEONCE
     /* nvm_select_fresh_sector needs unlocked flash in cases where the unused
@@ -1393,6 +1407,12 @@ void RAMFUNCTION wolfBoot_start(void)
         }
     }
 
+#else /* WOLFBOOT_SELF_UPDATE_MONOLITHIC */
+#ifdef SECURE_PKCS11
+    WP11_Library_Init();
+#endif
+#endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
+
     bootRet = wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_printf("Booting version: 0x%x\n",
         wolfBoot_get_blob_version(boot.hdr));
@@ -1404,6 +1424,7 @@ void RAMFUNCTION wolfBoot_start(void)
     ) {
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
+#ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
         wolfBoot_printf("Trying emergency update\n");
         if (likely(wolfBoot_update(1) < 0)) {
             /* panic: no boot option available. */
@@ -1427,6 +1448,13 @@ void RAMFUNCTION wolfBoot_start(void)
                 wolfBoot_panic();
             }
         }
+#else
+        /* Monolithic mode: no emergency update path available */
+    #ifdef WOLFBOOT_TPM
+        wolfBoot_tpm2_deinit();
+    #endif
+        wolfBoot_panic();
+#endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
     }
     PART_SANITY_CHECK(&boot);
 #else

@@ -282,15 +282,13 @@ test-sim-self-update-monolithic: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
 	$(Q)dd if=monolithic_payload_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
 	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
-	@# Create erased boot and swap partitions
+	@# Create erased boot partition
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > erased_sec.dd
-	@# Assemble flash: wolfboot.bin at 0, empty boot partition, update partition, swap
+	@# Assemble flash: wolfboot.bin at 0, empty boot partition, update partition
 	$(Q)$(BINASSEMBLE) internal_flash.dd \
 		0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) boot_part.dd \
-		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS) - $(ARCH_FLASH_OFFSET))) update_part.dd \
-		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS) - $(ARCH_FLASH_OFFSET))) erased_sec.dd
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS) - $(ARCH_FLASH_OFFSET))) update_part.dd
 	@# Run simulator - self-update fires, copies monolithic payload to offset 0
 	$(Q)./wolfboot.elf get_version || true
 	@# Verify bootloader region contains 0xAA pattern (dummy bootloader was written)

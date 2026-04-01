@@ -92,6 +92,7 @@ endif
 ## the bootloader region into the contiguous boot partition.
 ifeq ($(SELF_UPDATE_MONOLITHIC),1)
   CFLAGS+=-DWOLFBOOT_SELF_UPDATE_MONOLITHIC
+  DISABLE_BACKUP=1
 endif
 
 ## Persist wolfBoot self header at fixed address
@@ -719,6 +720,7 @@ endif
 
 ifeq ($(DISABLE_BACKUP),1)
   CFLAGS+= -D"DISABLE_BACKUP"
+  WOLFBOOT_PARTITION_SWAP_ADDRESS?=0
 endif
 
 DEBUG_SYMBOLS?=0
