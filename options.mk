@@ -98,6 +98,7 @@ ifeq ($(WOLFBOOT_SELF_UPDATE_MONOLITHIC),1)
 endif
 ifeq ($(SELF_UPDATE_MONOLITHIC),1)
   CFLAGS+=-DWOLFBOOT_SELF_UPDATE_MONOLITHIC
+  DISABLE_BACKUP=1
 endif
 
 ## Persist wolfBoot self header at fixed address
@@ -732,6 +733,7 @@ endif
 ifeq ($(DISABLE_BACKUP),1)
   $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"
+  WOLFBOOT_PARTITION_SWAP_ADDRESS?=0
 endif
 
 DEBUG_SYMBOLS?=0
