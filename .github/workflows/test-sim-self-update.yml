@@ -32,6 +32,12 @@ jobs:
           cp config/examples/sim-self-update-ext.config .config
           make test-sim-self-update-ext
 
+      - name: Run monolithic self-update test
+        run: |
+          make clean
+          cp config/examples/sim-self-update-monolithic.config .config
+          make test-sim-self-update-monolithic
+
       - name: Run self-header verification test (internal flash)
         run: |
           make clean
@@ -43,3 +49,10 @@ jobs:
           make clean
           cp config/examples/sim-self-header-ext.config .config
           make test-sim-self-header-ext-verify
+
+      - name: Run combined monolithic self-update + self-header test
+        run: |
+          make clean
+          cp config/examples/sim-self-update-monolithic.config .config
+          make test-sim-self-update-monolithic-self-header WOLFBOOT_SELF_HEADER=1 WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS=0x1F000
+
