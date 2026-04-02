@@ -480,6 +480,10 @@ extern "C" {
   #endif
 #endif
 
+#if defined(DISABLE_BACKUP) && defined(DELTA_UPDATES)
+  #error "DELTA_UPDATES requires swap partition (incompatible with DISABLE_BACKUP)"
+#endif
+
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
