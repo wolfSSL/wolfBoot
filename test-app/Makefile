@@ -102,7 +102,7 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
-OBJCOPY_IMAGE_FLAGS:=
+OBJCOPY_IMAGE_FLAGS?=
 
 ifeq ($(USE_CLANG),1)
   # Clang doesn't emit empty .data/.bss sections in object files (GCC does).
