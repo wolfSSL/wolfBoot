@@ -303,8 +303,9 @@ ifeq ($(TZEN),1)
         CFLAGS+=-DWOLFBOOT_SECURE_CALLS
         ifneq ($(USE_CLANG),1)
           CFLAGS+=-Wstack-usage=19184
+          LDFLAGS+=--specs=nosys.specs
         endif
-        LDFLAGS+=--specs=nosys.specs -u _printf_float
+        LDFLAGS+=-u _printf_float
     endif
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
         CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA

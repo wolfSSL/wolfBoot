@@ -803,7 +803,13 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
-  LDFLAGS+=--specs=nano.specs
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+	LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
   WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/pkcs11_store.o
   WOLFCRYPT_OBJS+=src/pkcs11_callable.o
@@ -850,7 +856,13 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
-  LDFLAGS+=--specs=nano.specs
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+	LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
   WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/psa_store.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o
