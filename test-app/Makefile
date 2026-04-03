@@ -105,9 +105,6 @@ OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 OBJCOPY_IMAGE_FLAGS?=
 
 ifeq ($(USE_CLANG),1)
-  # Clang doesn't emit empty .data/.bss sections in object files (GCC does).
-  # GNU ld mishandles AT() for output sections with no matching input sections,
-  # setting LMA=VMA instead of the specified flash address.
   APP_OBJS+=clang_sections.o
 endif
 
