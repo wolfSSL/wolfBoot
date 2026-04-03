@@ -1290,9 +1290,9 @@ ifeq ($(USE_CLANG),1)
   CC=$(CLANG_DRIVER)
   LD=$(CLANG_DRIVER) -fuse-ld=lld
   AS=$(CLANG_DRIVER)
-  AR=$(CROSS_COMPILE)ar
-  OBJCOPY?=$(CROSS_COMPILE)objcopy
-  SIZE=$(CROSS_COMPILE)size
+  AR=llvm-ar
+  OBJCOPY?=llvm-objcopy
+  SIZE=llvm-size
 
   CFLAGS+=-isystem $(CLANG_NEWLIB_INCLUDE)
   CFLAGS+=-DWOLFSSL_NO_ATOMIC -DWOLFSSL_NO_ATOMICS
