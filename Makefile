@@ -42,6 +42,10 @@ OBJS:= \
 	./src/libwolfboot.o \
 	./hal/hal.o
 
+ifeq ($(USE_CLANG),1)
+OBJS+=./src/clang_sections.o
+endif
+
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
 OBJS+=./src/dice/dice.o
 endif

@@ -102,10 +102,9 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
-OBJCOPY_IMAGE_FLAGS?=
 
 ifeq ($(USE_CLANG),1)
-  APP_OBJS+=clang_sections.o
+  APP_OBJS+=../src/clang_sections.o
 endif
 
 ifeq ($(DEBUG_UART),1)
@@ -925,15 +924,15 @@ delta-extra-data:LDFLAGS=-Wl,-Map=image.map
 
 image.bin: image.elf
 	@echo "\t[BIN] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O binary $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 
 image.hex: image.elf
 	@echo "\t[HEX] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O ihex $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O ihex $^ $@
 
 image.srec: image.elf
 	@echo "\t[SREC] $@"
-	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) $(OBJCOPY_IMAGE_FLAGS) -O srec $^ $@
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O srec $^ $@
 
 APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
     $(WOLFSSL_LOCAL_OBJDIR)/%, $(APP_OBJS))
@@ -943,7 +942,7 @@ ifeq ($(ELF_FLASH_SCATTER),1)
 SQUASHELF_TOOL = ../tools/squashelf/squashelf
 image-orig.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 
 image.elf: image-orig.elf
 	@echo "\t[SQUASHELF] $@"
@@ -952,7 +951,7 @@ else
 # Default behavior when ELF_FLASH_SCATTER is not set
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
-	$(Q)$(LD) $(LDFLAGS) $(LSCRIPT_FLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
+	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@
 endif
 
 standalone: image.bin

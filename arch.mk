@@ -1288,9 +1288,7 @@ ifeq ($(USE_CLANG),1)
   CLANG_NEWLIB_INCLUDE?=$(abspath $(dir $(CLANG_LIBC_A))/../include)
 
   CC=$(CLANG_DRIVER)
-  # Keep clang for compilation, but use the GNU linker driver so linker-script
-  # LMAs for RAM sections are preserved and objcopy does not emit sparse images.
-  LD=$(CLANG_GCC_NAME)
+  LD=$(CLANG_DRIVER) -fuse-ld=lld
   AS=$(CLANG_DRIVER)
   AR=$(CROSS_COMPILE)ar
   OBJCOPY?=$(CROSS_COMPILE)objcopy
@@ -1300,7 +1298,7 @@ ifeq ($(USE_CLANG),1)
   CFLAGS+=-DWOLFSSL_NO_ATOMIC -DWOLFSSL_NO_ATOMICS
   CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
   CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
-  LSCRIPT_FLAGS+=-T $(abspath $(WOLFBOOT_ROOT)/hal/clang-discard.ld)
+  LDFLAGS+=-nostdlib
 endif
 
 ifeq ($(USE_GCC),1)
