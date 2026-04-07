@@ -261,6 +261,8 @@ ifeq ($(TARGET),raspi3)
 endif
 
 ifeq ($(TARGET),sim)
+    CFLAGS+=-fno-pie
+    LDFLAGS+=-no-pie
     MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 

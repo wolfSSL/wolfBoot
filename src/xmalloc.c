@@ -185,6 +185,7 @@ struct xmalloc_slot {
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #ifndef _LP64
             #define ECC_POINT_SIZE (412)
+            #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #else
             #define ECC_POINT_SIZE (512)
             #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
@@ -201,6 +202,7 @@ struct xmalloc_slot {
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #ifndef _LP64
             #define ECC_POINT_SIZE (520)
+            #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #else
             #define ECC_POINT_SIZE (608)
             #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
