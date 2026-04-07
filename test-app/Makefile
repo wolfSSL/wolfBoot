@@ -53,7 +53,10 @@ ifeq ($(HASH),SHA3_384)
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
 endif
 
-
+STACK_USAGE_LIMIT:=1024
+ifeq ($(TARGET),sim)
+  STACK_USAGE_LIMIT:=4608
+endif
 
 ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
@@ -63,7 +66,7 @@ else
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX_TC3)
     ifneq ($(USE_CLANG),1)
-      CFLAGS+=-Wstack-usage=1024
+      CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
     endif
   endif
   CFLAGS+=-DTARGET_$(TARGET) -I../include
@@ -509,6 +512,8 @@ ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
   LDFLAGS=
+  CFLAGS+=-fno-pie
+  LDFLAGS+=-no-pie
   ifeq ($(FORCE_32BIT),1)
     LDFLAGS+=-m32
     CFLAGS+=-m32
