@@ -171,9 +171,10 @@ struct xmalloc_slot {
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #ifndef _LP64
             #define ECC_POINT_SIZE (232)
+            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #else
             #define ECC_POINT_SIZE (320)
-            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 5)
+            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #endif
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
@@ -186,8 +187,11 @@ struct xmalloc_slot {
             #define ECC_POINT_SIZE (412)
         #else
             #define ECC_POINT_SIZE (512)
+            #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #endif
+        #ifndef MP_INT_BUFFER_SIZE
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
+        #endif
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
@@ -199,8 +203,11 @@ struct xmalloc_slot {
             #define ECC_POINT_SIZE (520)
         #else
             #define ECC_POINT_SIZE (608)
+            #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #endif
+        #ifndef MP_INT_BUFFER_SIZE
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
+        #endif
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
