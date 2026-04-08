@@ -319,6 +319,37 @@ START_TEST(test_set_encrypt_key_propagates_flash_write_error)
 }
 END_TEST
 
+START_TEST(test_erase_encrypt_key_propagates_flash_write_error)
+{
+    int ret;
+    static const uint8_t key[ENCRYPT_KEY_SIZE] = { 0x33 };
+    static const uint8_t nonce[ENCRYPT_NONCE_SIZE] = { 0x44 };
+
+    ret = mmap_file("/tmp/wolfboot-unit-enc-erase.bin", (void *)MOCK_ADDRESS,
+            WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+    ret = mmap_file("/tmp/wolfboot-unit-enc-erase-int.bin",
+            (void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+    ret = mmap_file("/tmp/wolfboot-unit-enc-erase-swap.bin",
+            (void *)MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE, NULL);
+    ck_assert(ret >= 0);
+
+    hal_flash_unlock();
+    wolfBoot_erase_partition(PART_BOOT);
+    hal_flash_lock();
+
+    ret = wolfBoot_set_encrypt_key(key, nonce);
+    ck_assert_int_eq(ret, 0);
+
+    hal_flash_write_fail = 1;
+    ret = wolfBoot_erase_encrypt_key();
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_msg(locked, "The FLASH was left unlocked.\n");
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -330,6 +361,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(nvm_update_with_encryption, test_nvm_update_with_encryption);
     tcase_add_test(nvm_update_with_encryption,
             test_set_encrypt_key_propagates_flash_write_error);
+    tcase_add_test(nvm_update_with_encryption,
+            test_erase_encrypt_key_propagates_flash_write_error);
     suite_add_tcase(s, nvm_update_with_encryption);
 
     return s;

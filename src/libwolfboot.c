@@ -1659,6 +1659,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 #elif defined(MMU)
     ForceZero(ENCRYPT_KEY, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
 #else
+    int ret = 0;
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -1668,7 +1669,8 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 #endif
     XMEMSET(ff, FLASH_BYTE_ERASED, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
     if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
-        hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+        ret = hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+    return ret;
 #endif
     return 0;
 }
