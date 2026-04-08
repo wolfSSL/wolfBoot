@@ -525,6 +525,10 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #endif
     hal_flash_lock();
 
+#ifdef EXT_ENCRYPTED
+    wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+#endif
+
     return 0;
 }
 #ifdef __CCRX__
