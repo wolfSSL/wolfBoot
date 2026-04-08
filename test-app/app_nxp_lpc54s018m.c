@@ -25,6 +25,30 @@
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
+#ifdef DEBUG_UART
+extern void uart_write(const char *buf, unsigned int sz);
+
+static void print_str(const char *s)
+{
+    unsigned int len = 0;
+    while (s[len] != '\0')
+        len++;
+    uart_write(s, len);
+}
+
+static void print_hex32(uint32_t val)
+{
+    static const char hex[] = "0123456789abcdef";
+    char buf[10];
+    int i;
+    buf[0] = '0';
+    buf[1] = 'x';
+    for (i = 0; i < 8; i++)
+        buf[2 + i] = hex[(val >> (28 - i * 4)) & 0xF];
+    uart_write(buf, 10);
+}
+#endif
+
 /* LPC54S018M-EVK GPIO register definitions */
 /* GPIO base: 0x4008C000 */
 #define GPIO_BASE       0x4008C000
@@ -74,12 +98,34 @@ static void led_off(int port, int pin)
     GPIO_SET(port) = (1UL << pin);
 }
 
+static void check_parts(uint32_t *pboot_ver, uint32_t *pupdate_ver,
+    uint8_t *pboot_state, uint8_t *pupdate_state)
+{
+    *pboot_ver = wolfBoot_current_firmware_version();
+    *pupdate_ver = wolfBoot_update_firmware_version();
+    if (wolfBoot_get_partition_state(PART_BOOT, pboot_state) != 0)
+        *pboot_state = IMG_STATE_NEW;
+    if (wolfBoot_get_partition_state(PART_UPDATE, pupdate_state) != 0)
+        *pupdate_state = IMG_STATE_NEW;
+
+#ifdef DEBUG_UART
+    print_str("    boot:   ver=");
+    print_hex32(*pboot_ver);
+    print_str(" state=");
+    print_hex32(*pboot_state);
+    print_str("\n    update: ver=");
+    print_hex32(*pupdate_ver);
+    print_str(" state=");
+    print_hex32(*pupdate_state);
+    print_str("\n");
+#endif
+}
+
 void main(void)
 {
     uint32_t boot_ver, update_ver;
     uint8_t boot_state, update_state;
 
-    /* Clock and SPIFI already initialized by wolfBoot before jump to app */
     leds_init();
 
     boot_ver = wolfBoot_current_firmware_version();
@@ -89,14 +135,8 @@ void main(void)
     if (wolfBoot_get_partition_state(PART_UPDATE, &update_state) != 0)
         update_state = IMG_STATE_NEW;
 
-    /* Show LED indicator first (before flash writes which may crash if
-     * RAMFUNCTION isn't working — e.g. SPIFI XIP conflict) */
-    if (boot_ver == 1) {
-        led_on(LED1_PORT, LED1_PIN);
-    }
-    else {
-        led_on(LED2_PORT, LED2_PIN);
-    }
+    /* LED1 on immediately to show app is running */
+    led_on(LED1_PORT, LED1_PIN);
 
     /* Confirm boot if state is TESTING or NEW */
     if (boot_ver != 0 &&
@@ -106,11 +146,18 @@ void main(void)
     }
 
     if (boot_ver == 1 && update_ver != 0) {
-        /* Update available: LED3 on to indicate update activity */
+        /* Update available: LED3 on, trigger update */
         led_on(LED3_PORT, LED3_PIN);
         wolfBoot_update_trigger();
     }
+    else if (boot_ver != 1) {
+        /* v2+: LED2 on */
+        led_on(LED2_PORT, LED2_PIN);
+    }
 
+#ifdef DEBUG_UART
+    print_str("App running\n");
+#endif
     while (1) {
         __asm__ volatile ("wfi");
     }
