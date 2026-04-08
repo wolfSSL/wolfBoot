@@ -341,6 +341,7 @@ START_TEST (test_forward_update_sameversion_denied) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 1);
+    ck_assert_uint_eq(*(uint32_t *)(wolfboot_ram + 4), TEST_SIZE_SMALL);
     ck_assert(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) == TEST_SIZE_SMALL);
     cleanup_flash();
 }
