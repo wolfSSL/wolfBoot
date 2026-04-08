@@ -495,6 +495,23 @@ START_TEST (test_invalid_update_type) {
     cleanup_flash();
 }
 
+START_TEST (test_invalid_update_auth_type) {
+    reset_mock_stats();
+    prepare_flash();
+    uint16_t word16 = HDR_IMG_TYPE_AUTH_ECC256 | HDR_IMG_TYPE_APP;
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
+    ext_flash_lock();
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
+    cleanup_flash();
+}
+
 START_TEST (test_update_toolarge) {
     uint32_t very_large = WOLFBOOT_PARTITION_SIZE;
     reset_mock_stats();
@@ -684,6 +701,8 @@ Suite *wolfboot_suite(void)
         tcase_create("Update to older version denied");
     TCase *invalid_update_type =
         tcase_create("Invalid update type");
+    TCase *invalid_update_auth_type =
+        tcase_create("Invalid update auth type");
     TCase *update_toolarge = tcase_create("Update too large");
     TCase *invalid_sha = tcase_create("Invalid SHA digest");
     TCase *emergency_rollback = tcase_create("Emergency rollback");
@@ -714,6 +733,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
     tcase_add_test(update_oldversion_denied, test_update_oldversion_denied);
     tcase_add_test(invalid_update_type, test_invalid_update_type);
+    tcase_add_test(invalid_update_auth_type, test_invalid_update_auth_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
@@ -735,6 +755,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, forward_update_sameversion_denied);
     suite_add_tcase(s, update_oldversion_denied);
     suite_add_tcase(s, invalid_update_type);
+    suite_add_tcase(s, invalid_update_auth_type);
     suite_add_tcase(s, update_toolarge);
     suite_add_tcase(s, invalid_sha);
     suite_add_tcase(s, emergency_rollback);
