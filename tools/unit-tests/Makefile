@@ -173,8 +173,6 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 		-DHAVE_ECC_KEY_IMPORT \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
-<<<<<<< HEAD
-=======
 unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c \
 		$(KEYTOOLS_SIGN_SRCS)
 	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 \
@@ -182,8 +180,6 @@ unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c 
 		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
 		-ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections
-
->>>>>>> 34438999 (Fix sign encrypted output open failure)
 unit-rot-auth: ../../include/target.h unit-rot-auth.c \
 		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
 	gcc -o $@ $^ -I../tpm $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
