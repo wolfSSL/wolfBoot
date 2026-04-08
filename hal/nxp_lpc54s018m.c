@@ -71,7 +71,7 @@
 #define W25Q_CMD_READ_STATUS1   0x05
 #define W25Q_CMD_PAGE_PROGRAM   0x02
 #define W25Q_CMD_SECTOR_ERASE   0x20  /* 4KB sector erase */
-#define W25Q_CMD_FAST_READ_QUAD 0x6B  /* Quad output fast read */
+#define W25Q_CMD_FAST_READ_QUAD_IO 0xEB  /* Quad I/O fast read */
 
 /* W25Q status register bits */
 #define W25Q_STATUS_BUSY        0x01
@@ -101,15 +101,166 @@ static uint8_t flash_page_cache[FLASH_PAGE_SIZE];
      SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) | \
      SPIFI_CMD_OPCODE(W25Q_CMD_PAGE_PROGRAM))
 
-/* Memory-mode command: quad output fast read with 1 intermediate (dummy) byte */
+/* Memory-mode command: Quad I/O fast read (0xEB) — must match boot ROM config.
+ * Boot ROM MCMD = 0xEB930000:
+ *   opcode 0xEB, FRAMEFORM=4 (opcode+3addr), FIELDFORM=2 (addr+data quad),
+ *   INTLEN=3 (3 intermediate/dummy bytes in quad mode) */
 #define MCMD_READ_QUAD \
-    (SPIFI_CMD_INTLEN(1) | SPIFI_CMD_FIELDFORM(FIELDFORM_DATA_QUAD) | \
+    (SPIFI_CMD_INTLEN(3) | SPIFI_CMD_FIELDFORM(FIELDFORM_DATA_QUAD) | \
      SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_FAST_READ_QUAD))
+     SPIFI_CMD_OPCODE(W25Q_CMD_FAST_READ_QUAD_IO))
 
 #ifdef NVM_FLASH_WRITEONCE
 #   error "wolfBoot LPC54S018M HAL: WRITEONCE not supported on SPIFI flash."
 #endif
+
+/* -------------------------------------------------------------------------- */
+/*  UART via Flexcomm0 (bare-metal, no SDK)                                   */
+/* -------------------------------------------------------------------------- */
+#ifdef DEBUG_UART
+
+/* SYSCON registers for clock gating and peripheral reset */
+#define SYSCON_BASE         0x40000000
+#define SYSCON_AHBCLKCTRL0  (*(volatile uint32_t *)(SYSCON_BASE + 0x200))
+#define SYSCON_AHBCLKCTRL1  (*(volatile uint32_t *)(SYSCON_BASE + 0x204))
+#define SYSCON_PRESETCTRL1  (*(volatile uint32_t *)(SYSCON_BASE + 0x104))
+#define SYSCON_FCLKSEL0     (*(volatile uint32_t *)(SYSCON_BASE + 0x2B0))
+
+#define AHBCLKCTRL0_IOCON   (1UL << 13)
+#define AHBCLKCTRL1_FC0     (1UL << 11)
+#define PRESETCTRL1_FC0     (1UL << 11)
+
+/* IOCON pin mux registers */
+#define IOCON_BASE          0x40001000
+#define IOCON_PIO0_29       (*(volatile uint32_t *)(IOCON_BASE + 0x074))
+#define IOCON_PIO0_30       (*(volatile uint32_t *)(IOCON_BASE + 0x078))
+#define IOCON_FUNC1         1U
+#define IOCON_DIGITAL_EN    (1U << 8)
+
+/* Flexcomm0 USART registers */
+#define FC0_BASE            0x40086000
+#define FC0_CFG             (*(volatile uint32_t *)(FC0_BASE + 0x000))
+#define FC0_BRG             (*(volatile uint32_t *)(FC0_BASE + 0x020))
+#define FC0_OSR             (*(volatile uint32_t *)(FC0_BASE + 0x028))
+#define FC0_FIFOCFG         (*(volatile uint32_t *)(FC0_BASE + 0xE00))
+#define FC0_FIFOSTAT        (*(volatile uint32_t *)(FC0_BASE + 0xE04))
+#define FC0_FIFOWR          (*(volatile uint32_t *)(FC0_BASE + 0xE20))
+#define FC0_PSELID          (*(volatile uint32_t *)(FC0_BASE + 0xFF8))
+
+/* USART CFG bits */
+#define USART_CFG_ENABLE    (1U << 0)
+#define USART_CFG_DATALEN8  (1U << 2)   /* 8-bit data */
+
+/* FIFO bits */
+#define FIFOCFG_ENABLETX    (1U << 0)
+#define FIFOCFG_ENABLERX    (1U << 1)
+#define FIFOCFG_EMPTYTX     (1U << 16)
+#define FIFOCFG_EMPTYRX     (1U << 17)
+#define FIFOSTAT_TXEMPTY    (1U << 3)
+#define FIFOSTAT_TXNOTFULL  (1U << 4)
+
+/* Baud rate: FRO 12 MHz / (13 * 8) = 115384 (0.16% error from 115200) */
+#define UART_OSR_VAL        12   /* oversampling = OSR + 1 = 13 */
+#define UART_BRG_VAL        7    /* divisor = BRG + 1 = 8 */
+
+/* Timeout for UART FIFO polling */
+#define UART_TX_TIMEOUT     100000
+
+/* SYSCON SET/CLR registers for atomic bit manipulation */
+#define SYSCON_PRESETCTRLSET1  (*(volatile uint32_t *)(SYSCON_BASE + 0x124))
+#define SYSCON_PRESETCTRLCLR1  (*(volatile uint32_t *)(SYSCON_BASE + 0x144))
+#define SYSCON_AHBCLKCTRLSET1  (*(volatile uint32_t *)(SYSCON_BASE + 0x224))
+
+static int uart_ready;
+
+void uart_init(void)
+{
+    volatile int i;
+
+    uart_ready = 0;
+
+    /* Enable IOCON clock */
+    SYSCON_AHBCLKCTRL0 |= AHBCLKCTRL0_IOCON;
+
+    /* Pin mux: P0_29 = FC0_RXD, P0_30 = FC0_TXD (function 1, digital) */
+    IOCON_PIO0_29 = IOCON_FUNC1 | IOCON_DIGITAL_EN;
+    IOCON_PIO0_30 = IOCON_FUNC1 | IOCON_DIGITAL_EN;
+
+    /* Select FRO 12 MHz as Flexcomm0 clock source */
+    SYSCON_FCLKSEL0 = 0;
+
+    /* Enable Flexcomm0 clock (use atomic SET register) */
+    SYSCON_AHBCLKCTRLSET1 = AHBCLKCTRL1_FC0;
+
+    /* Reset Flexcomm0 using atomic CLR/SET registers (NXP SDK pattern) */
+    SYSCON_PRESETCTRLCLR1 = PRESETCTRL1_FC0;       /* Assert reset */
+    while (SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)    /* Wait for assert */
+        ;
+    SYSCON_PRESETCTRLSET1 = PRESETCTRL1_FC0;       /* Deassert reset */
+    while (!(SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)) /* Wait for deassert */
+        ;
+
+    /* Small delay after reset deassertion for peripheral to stabilize */
+    for (i = 0; i < 100; i++)
+        ;
+
+    /* Select USART mode */
+    FC0_PSELID = 1;
+
+    /* Verify Flexcomm0 is accessible — if PSELID reads 0, peripheral is
+     * not responding (observed on some LPC54S018M boards). Skip UART. */
+    if ((FC0_PSELID & 0x71) == 0) {
+        return;
+    }
+
+    /* Configure 8N1 (disabled initially) */
+    FC0_CFG = USART_CFG_DATALEN8;
+
+    /* Set baud rate */
+    FC0_OSR = UART_OSR_VAL;
+    FC0_BRG = UART_BRG_VAL;
+
+    /* Enable and flush FIFOs */
+    FC0_FIFOCFG = FIFOCFG_ENABLETX | FIFOCFG_ENABLERX |
+                  FIFOCFG_EMPTYTX | FIFOCFG_EMPTYRX;
+
+    /* Enable USART */
+    FC0_CFG |= USART_CFG_ENABLE;
+
+    uart_ready = 1;
+}
+
+void uart_write(const char *buf, unsigned int sz)
+{
+    unsigned int i;
+    uint32_t timeout;
+
+    if (!uart_ready)
+        return;
+
+    for (i = 0; i < sz; i++) {
+        if (buf[i] == '\n') {
+            timeout = UART_TX_TIMEOUT;
+            while (!(FC0_FIFOSTAT & FIFOSTAT_TXNOTFULL) && --timeout)
+                ;
+            if (timeout == 0)
+                return;
+            FC0_FIFOWR = '\r';
+        }
+        timeout = UART_TX_TIMEOUT;
+        while (!(FC0_FIFOSTAT & FIFOSTAT_TXNOTFULL) && --timeout)
+            ;
+        if (timeout == 0)
+            return;
+        FC0_FIFOWR = (uint32_t)buf[i];
+    }
+    /* Wait for transmit to complete */
+    timeout = UART_TX_TIMEOUT;
+    while (!(FC0_FIFOSTAT & FIFOSTAT_TXEMPTY) && --timeout)
+        ;
+}
+
+#endif /* DEBUG_UART */
 
 /* -------------------------------------------------------------------------- */
 /*  Boot-time initialization (runs from flash / XIP)                          */
@@ -136,6 +287,10 @@ void hal_init(void)
      * The flash erase/write paths (all RAMFUNCTION) handle SPIFI mode
      * switching as needed.
      */
+#ifdef DEBUG_UART
+    uart_init();
+    uart_write("wolfBoot HAL init\n", 18);
+#endif
 }
 
 void hal_prepare_boot(void)
@@ -154,11 +309,17 @@ void hal_prepare_boot(void)
  */
 static void RAMFUNCTION spifi_set_cmd(uint32_t cmd_val)
 {
-    /* If in memory mode (MCINIT set), reset to exit */
+    /* If in memory mode (MCINIT set), reset to exit.
+     * The SPIFI reset clears CTRL and CLIMIT — save and restore
+     * the boot ROM's configuration. */
     if (SPIFI_STAT & SPIFI_STAT_MCINIT) {
+        uint32_t ctrl = SPIFI_CTRL;
+        uint32_t climit = SPIFI_CLIMIT;
         SPIFI_STAT = SPIFI_STAT_RESET;
         while (SPIFI_STAT & SPIFI_STAT_RESET)
             ;
+        SPIFI_CTRL = ctrl;
+        SPIFI_CLIMIT = climit;
     }
 
     /* Wait for any active command to complete */
@@ -173,15 +334,29 @@ static void RAMFUNCTION spifi_set_cmd(uint32_t cmd_val)
  */
 static void RAMFUNCTION spifi_enter_memmode(void)
 {
-    /* Wait for any active command */
+    uint32_t ctrl = SPIFI_CTRL;
+    uint32_t climit = SPIFI_CLIMIT;
+
+    /* Wait for any active command to complete */
     while (SPIFI_STAT & SPIFI_STAT_CMD)
         ;
+
+    /* Reset to clear stale command/POLL state, restore config, enter
+     * memory mode. */
+    SPIFI_STAT = SPIFI_STAT_RESET;
+    while (SPIFI_STAT & SPIFI_STAT_RESET)
+        ;
+    SPIFI_CTRL = ctrl;
+    SPIFI_CLIMIT = climit;
 
     SPIFI_MCMD = MCMD_READ_QUAD;
 
     /* Wait for memory mode to initialize */
     while (!(SPIFI_STAT & SPIFI_STAT_MCINIT))
         ;
+
+    __asm__ volatile ("dsb");
+    __asm__ volatile ("isb");
 }
 
 static void RAMFUNCTION spifi_write_enable(void)
@@ -191,13 +366,55 @@ static void RAMFUNCTION spifi_write_enable(void)
 
 static void RAMFUNCTION spifi_wait_busy(void)
 {
-    uint8_t status;
+    /* Use SPIFI POLL mode with properly configured IDATA/CLIMIT.
+     *
+     * The boot ROM leaves CLIMIT[7:0]=0x00 which makes the POLL comparison
+     * always succeed immediately. We must set CLIMIT[7:0] to mask the BUSY
+     * bit and IDATA[7:0] to the expected value (0 = not busy).
+     *
+     * CLIMIT also serves as the cache limit register (upper bits), so we
+     * preserve those bits and only modify the lower byte used for POLL mask.
+     */
+    uint32_t saved_climit = SPIFI_CLIMIT;
 
-    /* Issue read-status command in poll mode */
-    spifi_set_cmd(CMD_READ_STATUS);
-    do {
-        status = *(volatile uint8_t *)&SPIFI_DATA;
-    } while (status & W25Q_STATUS_BUSY);
+    SPIFI_IDATA = 0x00;                        /* expect BUSY=0 */
+    SPIFI_CLIMIT = (saved_climit & 0xFFFFFF00) | W25Q_STATUS_BUSY; /* mask bit 0 */
+
+    spifi_set_cmd(CMD_READ_STATUS);             /* POLL mode command */
+
+    /* SPIFI hardware polls flash status internally.
+     * CMD bit clears when (status & mask) == (IDATA & mask). */
+    while (SPIFI_STAT & SPIFI_STAT_CMD)
+        ;
+
+    SPIFI_CLIMIT = saved_climit;                /* restore cache limit */
+}
+
+/*
+ * Minimal SPIFI mode-switch test: exit memory mode, immediately re-enter.
+ * Used to verify the basic exit/enter cycle works before testing flash ops.
+ */
+void RAMFUNCTION spifi_test_mode_switch(void)
+{
+    uint32_t ctrl = SPIFI_CTRL;
+    uint32_t climit = SPIFI_CLIMIT;
+
+    /* Exit memory mode */
+    SPIFI_STAT = SPIFI_STAT_RESET;
+    while (SPIFI_STAT & SPIFI_STAT_RESET)
+        ;
+
+    /* Restore all config */
+    SPIFI_CTRL = ctrl;
+    SPIFI_CLIMIT = climit;
+
+    /* Re-enter memory mode */
+    SPIFI_MCMD = MCMD_READ_QUAD;
+    while (!(SPIFI_STAT & SPIFI_STAT_MCINIT))
+        ;
+
+    __asm__ volatile ("dsb");
+    __asm__ volatile ("isb");
 }
 
 /*
