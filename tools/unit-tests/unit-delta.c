@@ -34,6 +34,7 @@
 #define PATCH_SIZE 8192
 #define DST_SIZE 4096
 #define DIFF_SIZE 8192
+#define DELTA_OFFSET_LIMIT (1U << 24)
 
 
 START_TEST(test_wb_patch_init_invalid)
@@ -238,6 +239,31 @@ START_TEST(test_wb_diff_preserves_main_loop_header_margin_for_escape)
 }
 END_TEST
 
+START_TEST(test_wb_diff_rejects_match_offsets_beyond_24_bits)
+{
+    WB_DIFF_CTX diff_ctx;
+    uint8_t *src_a;
+    uint8_t src_b[BLOCK_HDR_SIZE + 1] = {0};
+    uint8_t patch[DELTA_BLOCK_SIZE] = {0};
+    size_t src_a_size = DELTA_OFFSET_LIMIT + BLOCK_HDR_SIZE;
+    int ret;
+
+    src_a = calloc(1, src_a_size);
+    ck_assert_ptr_nonnull(src_a);
+
+    memset(src_a + DELTA_OFFSET_LIMIT, 0x5a, BLOCK_HDR_SIZE);
+    memset(src_b, 0x5a, BLOCK_HDR_SIZE);
+
+    ret = wb_diff_init(&diff_ctx, src_a, src_a_size, src_b, sizeof(src_b));
+    ck_assert_int_eq(ret, 0);
+
+    ret = wb_diff(&diff_ctx, patch, sizeof(patch));
+    ck_assert_int_eq(ret, -1);
+
+    free(src_a);
+}
+END_TEST
+
 static void initialize_buffers(uint8_t *src_a, uint8_t *src_b, size_t size)
 {
     uint32_t pseudo_rand = 0;
@@ -348,6 +374,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_self_match_extends_to_src_b_end);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_preserves_trailing_header_margin_for_escape);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_preserves_main_loop_header_margin_for_escape);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_rejects_match_offsets_beyond_24_bits);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff);
     suite_add_tcase(s, tc_wolfboot_delta);
 

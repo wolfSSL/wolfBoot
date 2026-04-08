@@ -2240,6 +2240,10 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
     len2 = st.st_size;
+    if (len2 > MAX_SRC_SIZE) {
+        printf("%s: file too large\n", CMD.output_image_file);
+        goto cleanup;
+    }
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
     if (buffer == (void *)(-1)) {
         perror("mmap");
@@ -2275,6 +2279,10 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     fseek(f2, 0L, SEEK_END);
     len2 = ftell(f2);
     fseek(f2, 0L, SEEK_SET);
+    if (len2 > MAX_SRC_SIZE) {
+        printf("%s: file too large\n", CMD.output_image_file);
+        goto cleanup;
+    }
     buffer = malloc(len2);
     if (buffer == NULL) {
         fprintf(stderr, "Error malloc for buffer %d\n", len2);

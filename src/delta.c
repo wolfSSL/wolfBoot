@@ -40,6 +40,7 @@ struct BLOCK_HDR_PACKED block_hdr {
 };
 
 #define BLOCK_HDR_SIZE (sizeof (struct block_hdr))
+#define BLOCK_OFF_MAX 0xFFFFFFU
 
 #if defined(EXT_ENCRYPTED) && defined(__WOLFBOOT)
 #include "image.h"
@@ -300,6 +301,8 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                  */
                 match_len = BLOCK_HDR_SIZE;
                 blk_start = pa - ctx->src_a;
+                if (blk_start > BLOCK_OFF_MAX)
+                    return -1;
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
@@ -362,6 +365,8 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                      */
                     match_len = BLOCK_HDR_SIZE;
                     blk_start = pb - ctx->src_b;
+                    if (blk_start > BLOCK_OFF_MAX)
+                        return -1;
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
                     while ((pb < pb_limit) &&
