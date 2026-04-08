@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
                 pcrDigestSz = -1;
             else
                 pcrDigestSz = hexToByte(hashHexStr, pcrDigest, hashHexStrLen);
-            if (pcrDigestSz <= 0) {
+            if ((int)pcrDigestSz <= 0) {
                 fprintf(stderr, "Invalid PCR hash length\n");
                 usage();
                 return -1;
