@@ -281,7 +281,7 @@ int hal_flash_test_dualbank(void)
 
 #endif /* TEST_FLASH */
 
-WEAKFUNCTION int hal_flash_protect(haladdr_t address, int len)
+WEAKFUNCTION int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
 {
     (void)address;
     (void)len;

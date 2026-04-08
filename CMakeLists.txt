@@ -1152,7 +1152,7 @@ if(TZEN)
     endif()
 endif()
 
-target_sources(wolfboothal PRIVATE include/hal.h hal/${WOLFBOOT_TARGET}.c ${WOLFBOOT_FLASH_SOURCES}
+target_sources(wolfboothal PRIVATE include/hal.h hal/hal.c hal/${WOLFBOOT_TARGET}.c ${WOLFBOOT_FLASH_SOURCES}
                                    ${PARTITION_SOURCE} ${WOLFBOOT_TZ_HAL_SOURCES})
 
 
