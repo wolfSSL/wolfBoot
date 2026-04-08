@@ -666,7 +666,7 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     if (exportPubKey) {
         int pubOutLen;
         /* Reuse priv_der buffer for public key */
-        memset(priv_der, 0, sizeof(priv_der));
+        wc_ForceZero(priv_der, sizeof(priv_der));
 
         if (saveAsDer) {
             /* If you want public key also exported as a DER file and not as RAW
@@ -693,6 +693,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     }
 
     wc_ecc_free(&k);
+    wc_ForceZero(d, sizeof(d));
+    wc_ForceZero(priv_der, sizeof(priv_der));
 
     memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
