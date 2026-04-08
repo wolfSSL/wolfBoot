@@ -1899,7 +1899,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         fef = fopen(CMD.output_encrypted_image_file, "wb");
         if (!fef) {
             fprintf(stderr, "Open encrypted output file %s: %s\n",
-                    CMD.encrypt_key_file, strerror(errno));
+                    CMD.output_encrypted_image_file, strerror(errno));
+            goto failure;
         }
         fsize = ftell(f);
         fseek(f, 0, SEEK_SET); /* restart the _signed file from 0 */
