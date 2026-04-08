@@ -2001,33 +2001,15 @@ sudo /usr/local/LinkServer/lpcscrypt/bin/lpcscrypt -d /dev/ttyACMx \
     program /usr/local/LinkServer/lpcscrypt/probe_firmware/LPCLink2/LPC432x_CMSIS_DAP_V5_460.bin.hdr BankA
 ```
 
-### LPC54S018M: MCUXpresso SDK setup
+### LPC54S018M: Toolchain
 
-This requires the NXP MCUXpresso SDK. We tested using
-[mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
-[CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
-
-```sh
-cd ../NXP
-
-# Install west
-python -m venv west-venv
-source west-venv/bin/activate
-pip install west
-
-# Set up the repository
-west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
-cd mcuxpresso-sdk
-west update
-
-deactivate
-```
-
-The CMSIS headers are also needed:
+This port uses bare-metal register access and does not require the NXP
+MCUXpresso SDK. Only an ARM GCC toolchain (`arm-none-eabi-gcc`) and
+[pyocd](https://pyocd.io/) are needed.
 
 ```sh
-cd ../NXP
-git clone https://github.com/nxp-mcuxpresso/CMSIS_5.git
+pip install pyocd
+pyocd pack install LPC54S018J4MET180
 ```
 
 ### LPC54S018M: Flash partition layout
@@ -2084,14 +2066,31 @@ instead of booting from SPIFI flash.
 
 ### LPC54S018M: Testing firmware update
 
+A convenience script automates the full build, sign, and flash process:
+
+```sh
+# Build and flash v1 only
+./tools/scripts/nxp-lpc54s018m-flash.sh
+
+# Build, sign v2, and flash both (full update test)
+./tools/scripts/nxp-lpc54s018m-flash.sh --test-update
+
+# Flash existing images without rebuilding
+./tools/scripts/nxp-lpc54s018m-flash.sh --test-update --skip-build
+```
+
+**Manual steps** (if not using the script):
+
 1. Build and flash factory.bin (version 1). USR_LED1 (P3.14) lights up.
 
 2. Sign a version 2 update image and load it to the update partition:
 
 ```sh
 # Build update image (version 2)
-make test-app/image_v2_signed.bin
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
+
+**Using JLink:**
 
 ```
 JLinkExe -device LPC54S018M -if SWD -speed 4000
@@ -2100,22 +2099,32 @@ r
 g
 ```
 
+**Using pyocd:**
+
+```sh
+pyocd flash -t LPC54S018J4MET180 test-app/image_v2_signed.bin --base-address 0x10100000
+```
+
 3. The test application detects the update, triggers a swap via
-   `wolfBoot_update_trigger()`, and resets. After the swap, USR_LED2 (P3.3)
-   lights up indicating version 2 is running.
+   `wolfBoot_update_trigger()`, and resets. After the swap (~60 seconds),
+   USR_LED2 (P3.3) lights up indicating version 2 is running.
 
 4. The application calls `wolfBoot_success()` to confirm the update and
    prevent rollback.
 
 ### LPC54S018M: LED indicators
 
-The test application uses three user LEDs (accent LEDs accent active low):
+The test application uses three user LEDs (accent LEDs, active low):
 
 | LED       | GPIO   | Meaning                    |
 |-----------|--------|----------------------------|
 | USR_LED1  | P3.14  | Version 1 running          |
 | USR_LED2  | P3.3   | Version 2+ running         |
 | USR_LED3  | P2.2   | Update activity in progress |
+
+**Note:** The firmware swap takes approximately 60 seconds due to the SPIFI
+controller mode-switch overhead for each of the 240 sector operations (960KB
+partition with 4KB sectors).
 
 ### LPC54S018M: Debugging with JLink
 

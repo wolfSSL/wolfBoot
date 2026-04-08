@@ -1191,6 +1191,7 @@ endif
 
 ifeq ($(TARGET),nxp_lpc54s018m)
   ARCH_FLASH_OFFSET=0x10000000
+  LDFLAGS+=-Wl,--no-warn-rwx-segments
   # Bare-metal HAL — no NXP SDK dependencies
 endif
 
