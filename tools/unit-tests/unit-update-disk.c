@@ -8,12 +8,14 @@
 #define IMAGE_HEADER_SIZE 256
 #define BOOT_PART_A 0
 #define BOOT_PART_B 1
+#define MOCK_ADDRESS_BOOT 0xCD000000
 
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <check.h>
 
+#include "hal.h"
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 #include "image.h"
@@ -190,6 +192,13 @@ void do_boot(const uint32_t *address)
     mock_boot_address = address;
 }
 
+int hal_flash_protect(haladdr_t address, int len)
+{
+    (void)address;
+    (void)len;
+    return 0;
+}
+
 #include "update_disk.c"
 
 START_TEST(test_update_disk_zeroizes_key_material_on_panic)
@@ -232,6 +241,24 @@ START_TEST(test_update_disk_zeroizes_key_material_before_boot)
 }
 END_TEST
 
+START_TEST(test_update_disk_prefers_primary_partition_when_versions_equal)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 7, 0xB2);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_eq(mock_boot_address, (const uint32_t *)WOLFBOOT_LOAD_ADDRESS);
+    ck_assert_int_eq(memcmp(load_buffer, part_a_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+    ck_assert_int_ne(memcmp(load_buffer, part_b_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+}
+END_TEST
+
 START_TEST(test_get_decrypted_blob_version_rejects_truncated_version_tlv)
 {
     uint8_t hdr[IMAGE_HEADER_SIZE + 2];
@@ -268,6 +295,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tc, test_update_disk_zeroizes_key_material_on_panic);
     tcase_add_test(tc, test_update_disk_zeroizes_key_material_before_boot);
+    tcase_add_test(tc, test_update_disk_prefers_primary_partition_when_versions_equal);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
     suite_add_tcase(s, tc);
 
