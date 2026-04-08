@@ -117,7 +117,7 @@ const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {
 	{
 		.slot_id = 1,
 		.key_type = UNIT_KEY_TYPE,
-		.part_id_mask = 0xFFFFFFFF,
+		.part_id_mask = KEY_VERIFY_APP_ONLY,
 		.pubkey_size = UNIT_PUBKEY_SIZE,
 		.pubkey = { 0x00 },
 	},
