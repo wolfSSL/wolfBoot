@@ -1202,6 +1202,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Save the encryption key after swapping */
 #ifdef EXT_ENCRYPTED
     wolfBoot_set_encrypt_key(key, nonce);
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
 #endif
 #endif /* DISABLE_BACKUP */
 #ifdef EXT_ENCRYPTED
