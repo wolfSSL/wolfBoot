@@ -58,8 +58,8 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
-static int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
-    uint32_t len)
+static int __attribute__((noinline)) image_CT_compare(
+    const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
     uint8_t diff = 0;
     uint32_t i;
