@@ -59,7 +59,11 @@ include unit-sign-encrypted-output.mkfrag
 all: $(TESTS)
 
 cov:
+	rm -f unit-sign-encrypted-output-*
 	gcovr -f "^\.\.\/\.\.\/src.*\.c" -r ../.. --verbose \
+		--exclude-directories 'tools/keytools$$' \
+		--gcov-exclude '.*tools/keytools/.*' \
+		--gcov-exclude '.*unit-sign-encrypted-output-.*' \
 		--merge-mode-functions merge-use-line-0 \
 		--html-medium-threshold 60 \
 		--html-high-threshold 80 \
@@ -316,6 +320,7 @@ unit-multiboot: unit-multiboot.c
 
 covclean:
 	rm -f *.gcov *.gcno *.gcda coverage.*
+	rm -f unit-sign-encrypted-output-*
 
 clean: covclean
 	rm -f $(TESTS) *.o *.gcno *.gcda coverage.*
