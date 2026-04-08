@@ -34,6 +34,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
 #include "libwolfboot.c"
@@ -834,6 +835,25 @@ START_TEST (test_diffbase_version_reads)
 }
 END_TEST
 
+START_TEST (test_get_total_size_preserves_uint32_range)
+{
+    struct wolfBoot_image boot;
+    struct wolfBoot_image update;
+    uint32_t total_size;
+
+    memset(&boot, 0, sizeof(boot));
+    memset(&update, 0, sizeof(update));
+
+    boot.fw_size = (uint32_t)INT_MAX - IMAGE_HEADER_SIZE + 1u;
+    update.fw_size = boot.fw_size + 7u;
+
+    total_size = wolfBoot_get_total_size(&boot, &update);
+
+    ck_assert_uint_eq(total_size, update.fw_size + IMAGE_HEADER_SIZE);
+    ck_assert(total_size > (uint32_t)INT_MAX);
+}
+END_TEST
+
 #ifdef DELTA_UPDATES
 START_TEST (test_delta_zero_size_valid_header_rejected_without_recovery_heuristic)
 {
@@ -933,6 +953,7 @@ Suite *wolfboot_suite(void)
     TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
     TCase *swap_resume = tcase_create("Swap resume noop");
     TCase *diffbase_version = tcase_create("Diffbase version lookup");
+    TCase *get_total_size = tcase_create("Total size range");
     TCase *boot_success = tcase_create("Boot success state");
 #ifdef DELTA_UPDATES
     TCase *delta_zero_size = tcase_create("Delta zero size");
@@ -974,6 +995,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
     tcase_add_test(swap_resume, test_swap_resume_noop);
     tcase_add_test(diffbase_version, test_diffbase_version_reads);
+    tcase_add_test(get_total_size, test_get_total_size_preserves_uint32_range);
     tcase_add_test(boot_success, test_boot_success_sets_state);
 #ifdef DELTA_UPDATES
     tcase_add_test(delta_zero_size, test_delta_zero_size_valid_header_rejected_without_recovery_heuristic);
@@ -1007,6 +1029,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);
     suite_add_tcase(s, swap_resume);
     suite_add_tcase(s, diffbase_version);
+    suite_add_tcase(s, get_total_size);
     suite_add_tcase(s, boot_success);
 #ifdef DELTA_UPDATES
     suite_add_tcase(s, delta_zero_size);

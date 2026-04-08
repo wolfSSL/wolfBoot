@@ -786,7 +786,7 @@ out:
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
-static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
+static uint32_t wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
     uint32_t total_size = 0;
