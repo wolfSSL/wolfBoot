@@ -1252,6 +1252,8 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
 #endif
 
 /* Defined in image.c */
+int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
+    uint32_t len);
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 #ifdef EXT_FLASH
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);
