@@ -1710,6 +1710,7 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
+    int ret = 0;
 #ifdef CUSTOM_ENCRYPT_KEY
     uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
     uint8_t key[ENCRYPT_KEY_SIZE];
@@ -1718,9 +1719,9 @@ int RAMFUNCTION chacha_init(void)
     uint8_t *key;
 #endif
 #ifdef CUSTOM_ENCRYPT_KEY
-    int ret = wolfBoot_get_encrypt_key(key, stored_nonce);
+    ret = wolfBoot_get_encrypt_key(key, stored_nonce);
     if (ret != 0)
-        return ret;
+        goto exit;
 #else
     #if defined(MMU) || defined(UNIT_TEST)
         key = ENCRYPT_KEY;
@@ -1736,14 +1737,21 @@ int RAMFUNCTION chacha_init(void)
 
     XMEMSET(&chacha, 0, sizeof(chacha));
 
-    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE))
-        return -1;
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE)) {
+        ret = -1;
+        goto exit;
+    }
 
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
 
     wc_Chacha_SetKey(&chacha, key, ENCRYPT_KEY_SIZE);
     encrypt_initialized = 1;
-    return 0;
+exit:
+#ifdef CUSTOM_ENCRYPT_KEY
+    ForceZero(key, sizeof(key));
+    ForceZero(stored_nonce, sizeof(stored_nonce));
+#endif
+    return ret;
 }
 
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
@@ -1762,6 +1770,7 @@ Aes aes_dec, aes_enc;
 int aes_init(void)
 {
     int devId = INVALID_DEVID;
+    int ret = 0;
 #if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
     uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
     uint8_t key[ENCRYPT_KEY_SIZE];
@@ -1770,7 +1779,6 @@ int aes_init(void)
     uint8_t *key;
 #endif
 #ifdef WOLFBOOT_RENESAS_TSIP
-    int ret;
     wrap_enc_key_t* enc_key;
     devId = RENESAS_DEVID + 1;
     enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
@@ -1797,8 +1805,10 @@ int aes_init(void)
     wc_AesInit(&aes_enc, NULL, devId);
     wc_AesInit(&aes_dec, NULL, devId);
 
-    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE))
-        return -1;
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE)) {
+        ret = -1;
+        goto exit;
+    }
 
 #ifdef WOLFBOOT_RENESAS_TSIP
     /* Unwrap key and get key index */
@@ -1810,7 +1820,8 @@ int aes_init(void)
         enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
 #endif
     if (ret != TSIP_SUCCESS) {
-        return -1;
+        ret = -1;
+        goto exit;
     }
     /* set encryption key size */
     aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
@@ -1831,7 +1842,12 @@ int aes_init(void)
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     encrypt_initialized = 1;
 
-    return 0;
+exit:
+#if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
+    ForceZero(key, sizeof(key));
+    ForceZero(stored_nonce, sizeof(stored_nonce));
+#endif
+    return ret;
 }
 
 /**
