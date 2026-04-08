@@ -562,8 +562,13 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t *base_hash;
 
     if (boot->fw_size == 0) {
-        /* Resume after powerfail can leave boot header erased; bound by partition size. */
-        boot->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        if ((boot->hdr != NULL) &&
+                (*((uint32_t *)boot->hdr) != WOLFBOOT_MAGIC)) {
+            /* Resume after powerfail can leave the boot header erased. */
+            boot->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        } else {
+            return -1;
+        }
     }
 
     /* Use biggest size for the swap */

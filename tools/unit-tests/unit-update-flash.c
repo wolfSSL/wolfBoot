@@ -672,6 +672,22 @@ START_TEST (test_update_toolarge) {
     cleanup_flash();
 }
 
+START_TEST (test_zero_size_update_rejected)
+{
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, 0);
+    add_payload(PART_UPDATE, 2, 0);
+
+    ret = wolfBoot_update(1);
+    ck_assert_int_eq(ret, -1);
+
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_invalid_sha) {
     uint8_t bad_digest[SHA256_DIGEST_SIZE];
     reset_mock_stats();
@@ -817,6 +833,50 @@ START_TEST (test_diffbase_version_reads)
     cleanup_flash();
 }
 END_TEST
+
+#ifdef DELTA_UPDATES
+START_TEST (test_delta_zero_size_valid_header_rejected_without_recovery_heuristic)
+{
+    struct wolfBoot_image boot, update, swap;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, 0);
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    memset(&update, 0, sizeof(update));
+    memset(&swap, 0, sizeof(swap));
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(boot.fw_size, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_zero_size_erased_header_uses_recovery_heuristic)
+{
+    struct wolfBoot_image boot, update, swap;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), -1);
+    memset(&update, 0, sizeof(update));
+    memset(&swap, 0, sizeof(swap));
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(boot.fw_size,
+        WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE);
+
+    cleanup_flash();
+}
+END_TEST
+#endif
 #endif
 
 
@@ -865,6 +925,7 @@ Suite *wolfboot_suite(void)
     TCase *invalid_update_auth_type =
         tcase_create("Invalid update auth type");
     TCase *update_toolarge = tcase_create("Update too large");
+    TCase *zero_size_update = tcase_create("Zero size update");
     TCase *invalid_sha = tcase_create("Invalid SHA digest");
     TCase *emergency_rollback = tcase_create("Emergency rollback");
     TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
@@ -873,6 +934,9 @@ Suite *wolfboot_suite(void)
     TCase *swap_resume = tcase_create("Swap resume noop");
     TCase *diffbase_version = tcase_create("Diffbase version lookup");
     TCase *boot_success = tcase_create("Boot success state");
+#ifdef DELTA_UPDATES
+    TCase *delta_zero_size = tcase_create("Delta zero size");
+#endif
 #ifdef RAM_CODE
     TCase *self_update_sameversion = tcase_create("Self update same version erased");
     TCase *self_update_oldversion = tcase_create("Self update older version erased");
@@ -902,6 +966,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_type, test_invalid_update_type);
     tcase_add_test(invalid_update_auth_type, test_invalid_update_auth_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
+    tcase_add_test(zero_size_update, test_zero_size_update_rejected);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
@@ -910,6 +975,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(swap_resume, test_swap_resume_noop);
     tcase_add_test(diffbase_version, test_diffbase_version_reads);
     tcase_add_test(boot_success, test_boot_success_sets_state);
+#ifdef DELTA_UPDATES
+    tcase_add_test(delta_zero_size, test_delta_zero_size_valid_header_rejected_without_recovery_heuristic);
+    tcase_add_test(delta_zero_size, test_delta_zero_size_erased_header_uses_recovery_heuristic);
+#endif
 #ifdef RAM_CODE
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
     tcase_add_test(self_update_oldversion, test_self_update_oldversion_erased);
@@ -930,6 +999,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, invalid_update_type);
     suite_add_tcase(s, invalid_update_auth_type);
     suite_add_tcase(s, update_toolarge);
+    suite_add_tcase(s, zero_size_update);
     suite_add_tcase(s, invalid_sha);
     suite_add_tcase(s, emergency_rollback);
     suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
@@ -938,6 +1008,9 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, swap_resume);
     suite_add_tcase(s, diffbase_version);
     suite_add_tcase(s, boot_success);
+#ifdef DELTA_UPDATES
+    suite_add_tcase(s, delta_zero_size);
+#endif
 #ifdef RAM_CODE
     suite_add_tcase(s, self_update_sameversion);
     suite_add_tcase(s, self_update_oldversion);
