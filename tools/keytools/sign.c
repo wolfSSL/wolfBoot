@@ -296,6 +296,23 @@ static struct cmd_options CMD = {
     .hybrid = 0
 };
 
+static void zero_and_free(uint8_t *buf, uint32_t len)
+{
+    volatile uint8_t *p;
+    uint32_t i;
+
+    if (buf == NULL) {
+        return;
+    }
+
+    p = buf;
+    for (i = 0; i < len; i++) {
+        p[i] = 0;
+    }
+
+    free(buf);
+}
+
 static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
     uint8_t *p = haystack;
@@ -942,7 +959,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
 failure:
     if (*key_buffer != NULL) {
-        free(*key_buffer);
+        zero_and_free(*key_buffer, *key_buffer_sz);
         *key_buffer = NULL;
     }
     return NULL;
@@ -3009,7 +3026,7 @@ int main(int argc, char** argv)
         DEBUG_PRINT("Secondary signature size: %u\n", CMD.secondary_signature_sz);
         DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
         if (kbuf2)
-            free(kbuf2);
+            zero_and_free(kbuf2, key_buffer_sz2);
         if (pubkey2)
             free(pubkey2);
     } else {
@@ -3029,7 +3046,7 @@ int main(int argc, char** argv)
         free(pubkey);
 
     if (kbuf)
-        free(kbuf);
+        zero_and_free(kbuf, key_buffer_sz);
     if (CMD.sign == SIGN_ED25519) {
         wc_ed25519_free(&key.ed);
     }
