@@ -1205,6 +1205,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     keystore_add(AUTH_KEY_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
     wc_MlDsaKey_Free(&key);
+    wc_ForceZero(priv, priv_len);
     free(priv);
     priv = NULL;
 }
