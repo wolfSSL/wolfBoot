@@ -827,7 +827,7 @@ void hal_init(void)
 
 #ifdef __WOLFBOOT
 /* enable write protection for the region of flash specified */
-int RAMFUNCTION hal_flash_protect(uint32_t start, uint32_t len)
+int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
 {
     /* only application core supports SPU */
 #ifdef TARGET_nrf5340_app
