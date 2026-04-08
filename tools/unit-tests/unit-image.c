@@ -231,6 +231,23 @@ static void patch_image_type_auth(uint8_t *img, uint32_t img_len)
     ptr[1] = (uint8_t)(type >> 8);
 }
 
+static void patch_image_type_auth_value(uint8_t *img, uint32_t img_len,
+        uint16_t auth)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+    uint16_t type;
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &ptr);
+    ck_assert_int_eq(len, sizeof(uint16_t));
+    type = (uint16_t)(ptr[0] | (ptr[1] << 8));
+    type = (uint16_t)((type & ~HDR_IMG_TYPE_AUTH_MASK) |
+            (auth & HDR_IMG_TYPE_AUTH_MASK));
+    ptr[0] = (uint8_t)(type & 0xFF);
+    ptr[1] = (uint8_t)(type >> 8);
+}
+
 static void patch_image_type_part(uint8_t *img, uint32_t img_len, uint16_t part)
 {
     uint8_t *ptr = NULL;
@@ -694,6 +711,29 @@ START_TEST(test_verify_authenticity_bad_siglen)
 }
 END_TEST
 
+START_TEST(test_verify_authenticity_rejects_mismatched_auth_type)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_auth_value(buf, sizeof(buf), HDR_IMG_TYPE_AUTH_RSA2048);
+    patch_pubkey_hint(buf, sizeof(buf));
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ext_flash_write(0, buf, sizeof(buf));
+
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    test_img.part = PART_UPDATE;
+    test_img.signature_ok = 1;
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
 START_TEST(test_verify_authenticity_rejects_disallowed_key_mask)
 {
     struct wolfBoot_image test_img;
@@ -898,6 +938,8 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(tcase_verify_authenticity, 20);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
+    tcase_add_test(tcase_verify_authenticity,
+            test_verify_authenticity_rejects_mismatched_auth_type);
     tcase_add_test(tcase_verify_authenticity,
             test_verify_authenticity_rejects_disallowed_key_mask);
     tcase_add_test(tcase_verify_authenticity,
