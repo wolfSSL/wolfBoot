@@ -84,6 +84,13 @@ static void reset_mock_stats(void)
     wolfBoot_staged_ok = 0;
 }
 
+int hal_flash_protect(haladdr_t address, int len)
+{
+    (void)address;
+    (void)len;
+    return 0;
+}
+
 uint32_t get_version_ramloaded(void)
 {
     return wolfBoot_get_blob_version(wolfboot_ram);
