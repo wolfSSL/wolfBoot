@@ -1265,7 +1265,8 @@ int wolfBoot_unlock_disk(void)
                     secretCheck, &secretCheckSz);
                 if (ret == 0) {
                     if (secretSz != secretCheckSz ||
-                        memcmp(secret, secretCheck, secretSz) != 0)
+                        wolfBoot_constant_compare(secret, secretCheck,
+                            (uint32_t)secretSz) != 0)
                     {
                         wolfBoot_printf("secret check mismatch!\n");
                         ret = -1;

@@ -296,7 +296,8 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
                               secret_check, &secret_check_sz);
         if (ret == 0) {
             if (*secret_size != secret_check_sz ||
-                memcmp(secret, secret_check, secret_check_sz) != 0)
+                wolfBoot_constant_compare(secret, secret_check,
+                    (uint32_t)secret_check_sz) != 0)
                 {
                     wolfBoot_printf("secret check mismatch!\n");
                     ret = -1;
