@@ -70,6 +70,20 @@ static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
 static uint32_t encrypt_iv_offset = 0;
 static int fallback_iv_forced = 0;
 
+static int encrypt_key_is_valid(const uint8_t *key, uint32_t len)
+{
+    uint8_t has_one = 0;
+    uint8_t has_zero = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++) {
+        has_one |= key[i];
+        has_zero |= (uint8_t)~key[i];
+    }
+
+    return (has_one != 0) && (has_zero != 0);
+}
+
 #define FALLBACK_IV_OFFSET 0x00100000U
     #if !defined(XMEMSET)
         #include <string.h>
@@ -1692,8 +1706,6 @@ int RAMFUNCTION chacha_init(void)
     const uint8_t* stored_nonce;
     uint8_t *key;
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-
 #ifdef CUSTOM_ENCRYPT_KEY
     int ret = wolfBoot_get_encrypt_key(key, stored_nonce);
     if (ret != 0)
@@ -1713,12 +1725,7 @@ int RAMFUNCTION chacha_init(void)
 
     XMEMSET(&chacha, 0, sizeof(chacha));
 
-    /* Check against 'all 0xff' or 'all zero' cases */
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
-    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE))
         return -1;
 
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
@@ -1751,8 +1758,6 @@ int aes_init(void)
     uint8_t *stored_nonce;
     uint8_t *key;
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-
 #ifdef WOLFBOOT_RENESAS_TSIP
     int ret;
     wrap_enc_key_t* enc_key;
@@ -1781,12 +1786,7 @@ int aes_init(void)
     wc_AesInit(&aes_enc, NULL, devId);
     wc_AesInit(&aes_dec, NULL, devId);
 
-    /* Check against 'all 0xff' or 'all zero' cases */
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
-    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE))
         return -1;
 
 #ifdef WOLFBOOT_RENESAS_TSIP
