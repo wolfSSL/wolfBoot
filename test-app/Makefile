@@ -703,7 +703,7 @@ ifeq ($(TARGET),nxp_lpc54s018m)
     LSCRIPT_TEMPLATE=ARM-nxp_lpc54s018m.ld
     # Enable RAMFUNCTION for test app (flash ops must run from RAM)
     CFLAGS+=-DRAM_CODE -D__WOLFBOOT
-    # SPIFI XIP: memcpy/memset must be in RAM for use during flash operations
+    # string.o provides RAMFUNCTION memcpy; already added when DEBUG_UART=1 (line ~108)
     ifeq ($(DEBUG_UART),)
       APP_OBJS+=../src/string.o
     endif

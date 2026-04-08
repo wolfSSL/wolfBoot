@@ -24,30 +24,7 @@
 #include <stdint.h>
 #include "target.h"
 #include "wolfboot/wolfboot.h"
-
-#ifdef DEBUG_UART
-extern void uart_write(const char *buf, unsigned int sz);
-
-static void print_str(const char *s)
-{
-    unsigned int len = 0;
-    while (s[len] != '\0')
-        len++;
-    uart_write(s, len);
-}
-
-static void print_hex32(uint32_t val)
-{
-    static const char hex[] = "0123456789abcdef";
-    char buf[10];
-    int i;
-    buf[0] = '0';
-    buf[1] = 'x';
-    for (i = 0; i < 8; i++)
-        buf[2 + i] = hex[(val >> (28 - i * 4)) & 0xF];
-    uart_write(buf, 10);
-}
-#endif
+#include "printf.h"
 
 /* LPC54S018M-EVK GPIO register definitions */
 /* GPIO base: 0x4008C000 */
@@ -108,17 +85,10 @@ static void check_parts(uint32_t *pboot_ver, uint32_t *pupdate_ver,
     if (wolfBoot_get_partition_state(PART_UPDATE, pupdate_state) != 0)
         *pupdate_state = IMG_STATE_NEW;
 
-#ifdef DEBUG_UART
-    print_str("    boot:   ver=");
-    print_hex32(*pboot_ver);
-    print_str(" state=");
-    print_hex32(*pboot_state);
-    print_str("\n    update: ver=");
-    print_hex32(*pupdate_ver);
-    print_str(" state=");
-    print_hex32(*pupdate_state);
-    print_str("\n");
-#endif
+    wolfBoot_printf("    boot:   ver=0x%lx state=0x%02x\n",
+        *pboot_ver, *pboot_state);
+    wolfBoot_printf("    update: ver=0x%lx state=0x%02x\n",
+        *pupdate_ver, *pupdate_state);
 }
 
 void main(void)
@@ -127,37 +97,36 @@ void main(void)
     uint8_t boot_state, update_state;
 
     leds_init();
-
-    boot_ver = wolfBoot_current_firmware_version();
-    update_ver = wolfBoot_update_firmware_version();
-    if (wolfBoot_get_partition_state(PART_BOOT, &boot_state) != 0)
-        boot_state = IMG_STATE_NEW;
-    if (wolfBoot_get_partition_state(PART_UPDATE, &update_state) != 0)
-        update_state = IMG_STATE_NEW;
-
-    /* LED1 on immediately to show app is running */
-    led_on(LED1_PORT, LED1_PIN);
+    check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
     /* Confirm boot if state is TESTING or NEW */
     if (boot_ver != 0 &&
         (boot_state == IMG_STATE_TESTING || boot_state == IMG_STATE_NEW))
     {
+        wolfBoot_printf("Calling wolfBoot_success()\n");
         wolfBoot_success();
+        check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
     }
 
-    if (boot_ver == 1 && update_ver != 0) {
-        /* Update available: LED3 on, trigger update */
-        led_on(LED3_PORT, LED3_PIN);
-        wolfBoot_update_trigger();
+    if (boot_ver == 1) {
+        /* v1: LED1 on */
+        led_on(LED1_PORT, LED1_PIN);
+
+        if (update_ver != 0) {
+            wolfBoot_printf("Update detected, triggering update...\n");
+            wolfBoot_update_trigger();
+            check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
+            /* LED3 on to indicate update triggered */
+            led_on(LED3_PORT, LED3_PIN);
+            wolfBoot_printf("...done. Reboot to apply.\n");
+        }
     }
-    else if (boot_ver != 1) {
+    else {
         /* v2+: LED2 on */
         led_on(LED2_PORT, LED2_PIN);
     }
 
-#ifdef DEBUG_UART
-    print_str("App running\n");
-#endif
+    wolfBoot_printf("App running\n");
     while (1) {
         __asm__ volatile ("wfi");
     }

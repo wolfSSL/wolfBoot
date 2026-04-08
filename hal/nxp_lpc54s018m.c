@@ -32,6 +32,7 @@
 #include <string.h>
 #include <target.h>
 #include "image.h"
+#include "printf.h"
 
 /* -------------------------------------------------------------------------- */
 /*  SPIFI controller registers (base 0x40080000)                              */
@@ -289,8 +290,8 @@ void hal_init(void)
      */
 #ifdef DEBUG_UART
     uart_init();
-    uart_write("wolfBoot HAL init\n", 18);
 #endif
+    wolfBoot_printf("wolfBoot HAL init\n");
 }
 
 void hal_prepare_boot(void)
@@ -388,33 +389,6 @@ static void RAMFUNCTION spifi_wait_busy(void)
         ;
 
     SPIFI_CLIMIT = saved_climit;                /* restore cache limit */
-}
-
-/*
- * Minimal SPIFI mode-switch test: exit memory mode, immediately re-enter.
- * Used to verify the basic exit/enter cycle works before testing flash ops.
- */
-void RAMFUNCTION spifi_test_mode_switch(void)
-{
-    uint32_t ctrl = SPIFI_CTRL;
-    uint32_t climit = SPIFI_CLIMIT;
-
-    /* Exit memory mode */
-    SPIFI_STAT = SPIFI_STAT_RESET;
-    while (SPIFI_STAT & SPIFI_STAT_RESET)
-        ;
-
-    /* Restore all config */
-    SPIFI_CTRL = ctrl;
-    SPIFI_CLIMIT = climit;
-
-    /* Re-enter memory mode */
-    SPIFI_MCMD = MCMD_READ_QUAD;
-    while (!(SPIFI_STAT & SPIFI_STAT_MCINIT))
-        ;
-
-    __asm__ volatile ("dsb");
-    __asm__ volatile ("isb");
 }
 
 /*
