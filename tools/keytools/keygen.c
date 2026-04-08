@@ -539,31 +539,41 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     uint8_t priv_der[4096], pub_der[2048];
     int privlen, publen;
     FILE *fpriv;
+    int ret = 0;
+    int exit_code = 0;
+    int rsa_init = 0;
 
-    if (wc_InitRsaKey(&k, NULL) != 0) {
+    ret = wc_InitRsaKey(&k, NULL);
+    if (ret != 0) {
         fprintf(stderr, "Unable to initialize RSA%d key\n", kbits);
         exit(1);
     }
+    rsa_init = 1;
 
-    if (wc_MakeRsaKey(&k, kbits, 65537, &rng) != 0) {
+    ret = wc_MakeRsaKey(&k, kbits, 65537, &rng);
+    if (ret != 0) {
         fprintf(stderr, "Unable to create RSA%d key\n", kbits);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     privlen = wc_RsaKeyToDer(&k, priv_der, kbits);
     if (privlen <= 0) {
         fprintf(stderr, "Unable to export private key to DER\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     publen = wc_RsaKeyToPublicDer(&k, pub_der, kbits);
     if (publen <= 0) {
         fprintf(stderr, "Unable to export public key\n");
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     printf("RSA public key len: %d bytes\n", publen);
     fpriv = fopen(keyfile, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", keyfile, strerror(errno));
-        exit(4);
+        exit_code = 4;
+        goto cleanup;
     }
     fwrite(priv_der, privlen, 1, fpriv);
     fclose(fpriv);
@@ -571,7 +581,8 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(keyfile, pub_der, publen) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(5);
+            exit_code = 5;
+            goto cleanup;
         }
     }
 
@@ -581,6 +592,13 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
         keystore_add(AUTH_KEY_RSA3072, pub_der, publen, keyfile, id_mask);
     else if (kbits == 4096)
         keystore_add(AUTH_KEY_RSA4096, pub_der, publen, keyfile, id_mask);
+
+cleanup:
+    wc_ForceZero(priv_der, sizeof(priv_der));
+    if (rsa_init)
+        wc_FreeRsaKey(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 #define MAX_ECC_KEY_SIZE 66
