@@ -221,9 +221,23 @@ static void header_append_u16(uint8_t* header, uint32_t* idx, uint16_t tmp16)
     memcpy(&header[*idx], &tmp16, sizeof(tmp16));
     *idx += sizeof(tmp16);
 }
+
+static uint32_t header_append_limit(void);
+
 static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
-    uint16_t len, void* data)
+    uint16_t len, const void* data)
 {
+    const uint32_t append_sz = (uint32_t)(sizeof(tag) + sizeof(len)) + len;
+    const uint32_t header_sz = header_append_limit();
+
+    if ((*idx > header_sz) || (append_sz > (header_sz - *idx))) {
+        fprintf(stderr,
+            "Header overflow while appending tag 0x%04x "
+            "(offset=%u, size=%u, header=%u)\n",
+            tag, *idx, append_sz, header_sz);
+        exit(1);
+    }
+
     header_append_u16(header, idx, tag);
     header_append_u16(header, idx, len);
     memcpy(&header[*idx], data, len);
@@ -295,6 +309,11 @@ static struct cmd_options CMD = {
     .partition_id = HDR_IMG_TYPE_APP,
     .hybrid = 0
 };
+
+static uint32_t header_append_limit(void)
+{
+    return CMD.header_sz;
+}
 
 static void zero_and_free(uint8_t *buf, uint32_t len)
 {
@@ -1124,6 +1143,114 @@ static int sign_digest(int sign, int hash_algo,
 #define ALIGN_8(x) while ((x % 8) != 4) { x++; }
 #define ALIGN_4(x) while ((x % 4) != 0) { x++; }
 
+static void header_size_align_8(uint32_t *idx)
+{
+    while ((*idx % 8U) != 4U) {
+        (*idx)++;
+    }
+}
+
+static void header_size_align_4(uint32_t *idx)
+{
+    while ((*idx % 4U) != 0U) {
+        (*idx)++;
+    }
+}
+
+static void header_size_append_tag(uint32_t *idx, uint32_t len)
+{
+    *idx += 4U + len;
+}
+
+static uint32_t header_digest_size(int hash_algo)
+{
+    switch (hash_algo) {
+        case HASH_SHA256:
+            return HDR_SHA256_LEN;
+        case HASH_SHA384:
+            return HDR_SHA384_LEN;
+        case HASH_SHA3:
+            return HDR_SHA3_384_LEN;
+        default:
+            return 0;
+    }
+}
+
+static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
+    uint32_t secondary_key_sz)
+{
+    uint32_t idx = 0;
+    uint32_t digest_sz = header_digest_size(CMD.hash_algo);
+    uint32_t i;
+
+    idx += 2U * sizeof(uint32_t);
+    header_size_append_tag(&idx, HDR_VERSION_LEN);
+    header_size_align_8(&idx);
+
+    if (!CMD.no_ts) {
+        header_size_append_tag(&idx, HDR_TIMESTAMP_LEN);
+    }
+
+    header_size_append_tag(&idx, HDR_IMG_TYPE_LEN);
+
+    if (is_diff) {
+        header_size_align_4(&idx);
+        header_size_append_tag(&idx, 4);
+        header_size_append_tag(&idx, 4);
+        header_size_align_4(&idx);
+        header_size_append_tag(&idx, 4);
+        header_size_append_tag(&idx, 4);
+
+        if (!CMD.no_base_sha && digest_sz > 0U) {
+            header_size_align_8(&idx);
+            header_size_append_tag(&idx, digest_sz);
+        }
+    }
+
+    for (i = 0; i < CMD.custom_tlvs; i++) {
+        header_size_align_8(&idx);
+        header_size_append_tag(&idx, CMD.custom_tlv[i].len);
+    }
+
+    if (cert_chain_sz > 0U) {
+        header_size_align_8(&idx);
+        header_size_append_tag(&idx, cert_chain_sz);
+    }
+
+    if (digest_sz > 0U) {
+        header_size_align_8(&idx);
+        header_size_append_tag(&idx, digest_sz);
+        header_size_align_8(&idx);
+
+        if (CMD.hybrid && secondary_key_sz > 0U) {
+            header_size_append_tag(&idx, 2);
+            header_size_align_8(&idx);
+            header_size_append_tag(&idx, digest_sz);
+            header_size_align_8(&idx);
+        }
+
+        header_size_append_tag(&idx, digest_sz);
+    }
+
+    if (CMD.sign != NO_SIGN) {
+        header_size_align_8(&idx);
+        header_size_append_tag(&idx, CMD.signature_sz);
+
+        if (CMD.hybrid) {
+            header_size_align_8(&idx);
+            header_size_append_tag(&idx, CMD.secondary_signature_sz);
+        }
+
+        if (CMD.policy_sign) {
+            header_size_align_8(&idx);
+            header_size_append_tag(&idx,
+                CMD.policy_sz + (uint32_t)sizeof(uint32_t));
+        }
+    }
+
+    return idx;
+}
+
 static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *image_file, const char *outfile,
         uint32_t delta_base_version, uint32_t patch_len, uint32_t patch_inv_off,
@@ -1157,14 +1284,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         /* Get the file size */
         if (stat(CMD.cert_chain_file, &file_stat) == 0) {
-            /* 2 bytes for tag + 2 bytes for length field */
-            const uint32_t tag_len_size = 4;
-            /* Maximum alignment padding that might be needed */
-            const uint32_t max_alignment = 8;
-            /* Required space = tag(2) + length(2) + data + potential alignment
-             * * padding */
-            const uint32_t required_space =
-                tag_len_size + file_stat.st_size + max_alignment;
+            const uint32_t required_space = header_required_size(is_diff,
+                (uint32_t)file_stat.st_size, secondary_key_sz);
 
             /* If the current header size is too small, increase it */
             if (CMD.header_sz < required_space) {

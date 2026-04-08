@@ -220,6 +220,58 @@ START_TEST(test_make_header_ex_fails_when_image_reopen_fails)
 }
 END_TEST
 
+START_TEST(test_make_header_ex_grows_header_for_cert_chain_and_digest_tlvs)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char cert_chain_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x01, 0x02, 0x03, 0x04 };
+    uint8_t cert_chain_buf[200];
+    uint8_t pubkey[] = { 0xA5 };
+    struct stat st;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(cert_chain_path, sizeof(cert_chain_path), "%s/cert-chain.bin",
+        tempdir);
+
+    memset(cert_chain_buf, 0xC3, sizeof(cert_chain_buf));
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    ck_assert_int_eq(write_file(cert_chain_path, cert_chain_buf,
+        sizeof(cert_chain_buf)), 0);
+
+    memset(&CMD, 0, sizeof(CMD));
+    CMD.sign = NO_SIGN;
+    CMD.hash_algo = HASH_SHA256;
+    CMD.partition_id = HDR_IMG_TYPE_APP;
+    CMD.header_sz = 256;
+    CMD.fw_version = "7";
+    CMD.no_ts = 1;
+    CMD.cert_chain_file = cert_chain_path;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(CMD.header_sz, 512);
+    ck_assert_int_eq(stat(output_path, &st), 0);
+    ck_assert_uint_eq((uint32_t)st.st_size, CMD.header_sz + sizeof(image_buf));
+    ck_assert_int_eq(mock_null_fwrite_calls, 0);
+    ck_assert_int_eq(mock_null_fread_calls, 0);
+    ck_assert_int_eq(mock_null_fclose_calls, 0);
+
+    unlink(output_path);
+    unlink(cert_chain_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-encrypted-output");
@@ -227,6 +279,8 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tcase, test_make_header_ex_fails_when_encrypted_output_open_fails);
     tcase_add_test(tcase, test_make_header_ex_fails_when_image_reopen_fails);
+    tcase_add_test(tcase,
+        test_make_header_ex_grows_header_for_cert_chain_and_digest_tlvs);
     suite_add_tcase(s, tcase);
 
     return s;
