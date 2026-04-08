@@ -1417,6 +1417,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
             /* Hash image file */
             f = fopen(image_file, "rb");
+            if (f == NULL) {
+                printf("Open image file %s failed\n", image_file);
+                ret = -1;
+                wc_Sha256Free(&sha);
+                goto failure;
+            }
             pos = 0;
             while (ret == 0 && pos < image_sz) {
                 read_sz = image_sz - pos;
@@ -1486,6 +1492,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
             /* Hash image file */
             f = fopen(image_file, "rb");
+            if (f == NULL) {
+                printf("Open image file %s failed\n", image_file);
+                ret = -1;
+                wc_Sha384Free(&sha);
+                goto failure;
+            }
             pos = 0;
             while (ret == 0 && pos < image_sz) {
                 read_sz = image_sz - pos;
@@ -1553,6 +1565,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
             /* Hash image file */
             f = fopen(image_file, "rb");
+            if (f == NULL) {
+                printf("Open image file %s failed\n", image_file);
+                ret = -1;
+                wc_Sha3_384_Free(&sha);
+                goto failure;
+            }
             pos = 0;
             while (ret == 0 && pos < image_sz) {
                 read_sz = image_sz - pos;
