@@ -714,22 +714,37 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
     uint8_t priv[32], pub[32];
     FILE *fpriv;
     uint32_t outlen = ED25519_KEY_SIZE;
+    int exit_code = 0;
+    int key_init = 0;
+
+    key_init = wc_ed25519_init(&k);
+    if (key_init != 0) {
+        fprintf(stderr, "Unable to initialize ed25519 key\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+
     if (wc_ed25519_make_key(&rng, ED25519_KEY_SIZE, &k) != 0) {
         fprintf(stderr, "Unable to create ed25519 key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     if (wc_ed25519_export_private_only(&k, priv, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed25519 private key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
+    outlen = ED25519_PUB_KEY_SIZE;
     if (wc_ed25519_export_public(&k, pub, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed25519 public key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     fpriv = fopen(privkey, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", privkey, strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
@@ -738,11 +753,19 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(privkey, pub, ED25519_PUB_KEY_SIZE) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
     }
 
     keystore_add(AUTH_KEY_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
+
+cleanup:
+    wc_ForceZero(priv, sizeof(priv));
+    if (key_init == 0)
+        wc_ed25519_free(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 static void keygen_ed448(const char *privkey, uint32_t id_mask)
@@ -751,22 +774,37 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
     uint8_t priv[ED448_KEY_SIZE], pub[ED448_PUB_KEY_SIZE];
     FILE *fpriv;
     uint32_t outlen = ED448_KEY_SIZE;
+    int exit_code = 0;
+    int key_init = 0;
+
+    key_init = wc_ed448_init(&k);
+    if (key_init != 0) {
+        fprintf(stderr, "Unable to initialize ed448 key\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+
     if (wc_ed448_make_key(&rng, ED448_KEY_SIZE, &k) != 0) {
         fprintf(stderr, "Unable to create ed448 key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     if (wc_ed448_export_private_only(&k, priv, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed448 private key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
+    outlen = ED448_PUB_KEY_SIZE;
     if (wc_ed448_export_public(&k, pub, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed448 public key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     fpriv = fopen(privkey, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file 'ed448.der' for writing: %s", strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
@@ -775,11 +813,19 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(privkey, pub, ED448_PUB_KEY_SIZE) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
     }
 
     keystore_add(AUTH_KEY_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
+
+cleanup:
+    wc_ForceZero(priv, sizeof(priv));
+    if (key_init == 0)
+        wc_ed448_free(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 #include "../lms/lms_common.h"
