@@ -62,6 +62,19 @@
 
 #include <stddef.h> /* for size_t */
 
+#ifdef EXT_ENCRYPTED
+static int encrypt_key_is_erased(const uint8_t *key, uint32_t len)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++)
+        diff |= key[i] ^ FLASH_BYTE_ERASED;
+
+    return diff == 0;
+}
+#endif
+
 #if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(MMU))
 #include "encrypt.h"
 static int encrypt_initialized = 0;
@@ -82,17 +95,6 @@ static int encrypt_key_is_valid(const uint8_t *key, uint32_t len)
     }
 
     return (has_one != 0) && (has_zero != 0);
-}
-
-static int encrypt_key_is_erased(const uint8_t *key, uint32_t len)
-{
-    uint8_t diff = 0;
-    uint32_t i;
-
-    for (i = 0; i < len; i++)
-        diff |= key[i] ^ FLASH_BYTE_ERASED;
-
-    return diff == 0;
 }
 
 #define FALLBACK_IV_OFFSET 0x00100000U
