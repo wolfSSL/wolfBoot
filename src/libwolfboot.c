@@ -1549,7 +1549,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     /* erase the old key */
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
-        return ret;
+        goto exit_lock;
 #endif
 
     /* Populate key + nonce in the cache */
@@ -1574,7 +1574,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
 #ifdef NVM_FLASH_WRITEONCE
     if (ret != 0)
-        return ret;
+        goto exit_lock;
     /* Erasing original sector "sel_sec",
      * same one returned from by nvm_select.
      */
@@ -1582,6 +1582,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
+exit_lock:
     hal_flash_lock();
     return ret;
 #endif
@@ -1596,14 +1597,13 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
  * @param key Pointer to the encryption key.
  * @param nonce Pointer to the encryption nonce.
  *
- * @return 0 if successful.
+ * @return 0 on success, or the underlying flash error code on failure.
  *
  */
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     const uint8_t *nonce)
 {
-    hal_set_key(key, nonce);
-    return 0;
+    return hal_set_key(key, nonce);
 }
 
 #ifndef UNIT_TEST
