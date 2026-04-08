@@ -329,7 +329,7 @@ START_TEST(test_memcpy_memmove)
 }
 END_TEST
 
-#if defined(__linux__) && (SIZE_MAX > INT_MAX)
+#if defined(__linux__) && (SIZE_MAX > INT_MAX) && !defined(__GCOV__)
 START_TEST(test_memmove_large_overlap_length)
 {
     size_t n = (size_t)INT_MAX + 2U;

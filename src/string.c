@@ -294,6 +294,14 @@ void *memmove(void *dst, const void *src, size_t n)
     if (src < dst)  {
         const char *s = (const char *)src;
         char *d = (char *)dst;
+        if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
+            ((size_t)src & (sizeof(unsigned long)-1)) == 0)
+        {
+            while (n >= sizeof(unsigned long)) {
+                n -= sizeof(unsigned long);
+                *(unsigned long*)(d + n) = *(const unsigned long*)(s + n);
+            }
+        }
         for (i = n; i > 0; i--) {
             d[i - 1] = s[i - 1];
         }
