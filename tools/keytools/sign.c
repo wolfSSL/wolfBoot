@@ -1269,6 +1269,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     int ret = -1;
     uint8_t  buf[4096];
     uint8_t  second_buf[4096];
+    uint8_t  key[ENC_MAX_KEY_SZ];
+    uint8_t  iv[ENC_MAX_IV_SZ];
     uint32_t read_sz, pos;
     uint8_t  digest[48]; /* max digest */
     uint32_t digest_sz = 0;
@@ -1276,6 +1278,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     int io_sz;
     uint8_t*    cert_chain    = NULL;
     uint32_t    cert_chain_sz = 0;
+
+    XMEMSET(key, 0, sizeof(key));
+    XMEMSET(iv, 0, sizeof(iv));
 
     /* Check certificate chain file size before allocating header, and adjust
      * header size if needed */
@@ -1992,7 +1997,6 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     }
 
     if (!CMD.header_only && (CMD.encrypt != ENC_OFF) && CMD.encrypt_key_file) {
-        uint8_t key[ENC_MAX_KEY_SZ], iv[ENC_MAX_IV_SZ];
         uint8_t enc_buf[ENC_MAX_BLOCK_SZ];
         int ivSz, keySz, encBlockSz;
         uint32_t fsize = 0;
@@ -2021,19 +2025,20 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         if (fek == NULL) {
             fprintf(stderr, "Open encryption key file %s: %s\n",
                     CMD.encrypt_key_file, strerror(errno));
-            exit(1);
+            goto failure;
         }
         ret = (int)fread(key, 1, keySz, fek);
         if (ret != keySz) {
             fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);
-            exit(1);
+            goto failure;
         }
         ret = (int)fread(iv, 1, ivSz, fek);
         if (ret != ivSz) {
             fprintf(stderr, "Error reading IV from %s\n", CMD.encrypt_key_file);
-            exit(1);
+            goto failure;
         }
         fclose(fek);
+        fek = NULL;
 
         fef = fopen(CMD.output_encrypted_image_file, "wb");
         if (!fef) {
@@ -2051,7 +2056,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 #ifndef HAVE_CHACHA
             fprintf(stderr, "Encryption not supported: chacha support not found"
                    "in wolfssl configuration.\n");
-            exit(100);
+            ret = 100;
+            goto failure;
 #endif
             wc_Chacha_SetKey(&cha, key, sizeof(key));
             wc_Chacha_SetIV(&cha, iv, 0);
@@ -2083,6 +2089,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
         }
         fclose(fef);
+        fef = NULL;
         printf("Encryption complete.\n");
     }
     printf("Output image(s) successfully created.\n");
@@ -2094,6 +2101,12 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         fclose(f);
     }
 failure:
+    wc_ForceZero(key, sizeof(key));
+    wc_ForceZero(iv, sizeof(iv));
+    if (fek)
+        fclose(fek);
+    if (fef)
+        fclose(fef);
     if (cert_chain)
         free(cert_chain);
     if (policy)
