@@ -34,6 +34,10 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+    /* wolfBoot calls hal_flash_protect() before this hook.
+     * Override hal_flash_protect() to lock the bootloader region on
+     * targets that support runtime write protection, and use this hook
+     * only for any remaining platform-specific handoff work. */
 }
 
 #endif
@@ -55,4 +59,3 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     return 0; /* on success. */
 }
-

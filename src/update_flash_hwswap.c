@@ -106,6 +106,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
 #endif
+#ifndef TZEN
+    (void)hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
+#endif
     hal_prepare_boot();
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&fw_image);

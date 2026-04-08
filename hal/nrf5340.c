@@ -884,14 +884,6 @@ static void periph_unsecure()
 
 void hal_prepare_boot(void)
 {
-    /* Write protect bootloader region of flash.
-     * Not needed in TrustZone configs because the application
-     * runs in non-secure mode and the bootloader partition is marked as
-     * secure. */
-#ifndef TZEN
-    hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
-#endif
-
     if (enableShm) {
     #ifdef TARGET_nrf5340_net
         if (doUpdateNet) {
