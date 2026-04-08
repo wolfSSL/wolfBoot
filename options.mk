@@ -724,6 +724,7 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
 endif
 
 ifeq ($(DISABLE_BACKUP),1)
+  $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"
 endif
 

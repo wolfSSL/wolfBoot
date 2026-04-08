@@ -193,7 +193,9 @@ To circumvent the compile-time checks on the maximum allowed stack size, use `WO
 
 Optionally, it is possible to disable the backup copy of the current running firmware upon the installation of the
 update. This implies that no fall-back mechanism is protecting the target from a faulty firmware installation, but may be useful
-in some cases where it is not possible to write on the update partition from the bootloader.
+in some cases where it is not possible to write on the update partition from the bootloader. This also removes the
+power-fail-safe swap behavior: if power is lost while the update is being copied into the BOOT partition, the original
+firmware may already be partially overwritten and the device can be left unrecoverable.
 The associated compile-time option is
 
 `DISABLE_BACKUP=1`
