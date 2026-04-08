@@ -288,14 +288,14 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
     !defined(__CCRX__)
 void *memmove(void *dst, const void *src, size_t n)
 {
-    int i;
+    size_t i;
     if (dst == src)
         return dst;
     if (src < dst)  {
         const char *s = (const char *)src;
         char *d = (char *)dst;
-        for (i = n - 1; i >= 0; i--) {
-            d[i] = s[i];
+        for (i = n; i > 0; i--) {
+            d[i - 1] = s[i - 1];
         }
         return dst;
     } else {

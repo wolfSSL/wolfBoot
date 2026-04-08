@@ -25,8 +25,12 @@
 #define FAST_MEMCPY
 
 #include <check.h>
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
+#ifdef __linux__
+#include <sys/mman.h>
+#endif
 
 #include "string.c"
 
@@ -325,6 +329,31 @@ START_TEST(test_memcpy_memmove)
 }
 END_TEST
 
+#if defined(__linux__) && (SIZE_MAX > INT_MAX)
+START_TEST(test_memmove_large_overlap_length)
+{
+    size_t n = (size_t)INT_MAX + 2U;
+    size_t len = n + 1U;
+    unsigned char *region = mmap(NULL, len, PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    ck_assert_ptr_ne(region, MAP_FAILED);
+
+    region[0] = 0x11;
+    region[1] = 0x22;
+    region[n - 1] = 0x33;
+    region[n] = 0x44;
+
+    memmove(region + 1, region, n);
+
+    ck_assert_uint_eq(region[1], 0x11);
+    ck_assert_uint_eq(region[n], 0x33);
+
+    ck_assert_int_eq(munmap(region, len), 0);
+}
+END_TEST
+#endif
+
 START_TEST(test_memcpy_aligned_buffers)
 {
     union {
@@ -443,6 +472,9 @@ Suite *string_suite(void)
     tcase_add_test(tcase_misc, test_strcpy_strncpy_strcat_strncat);
     tcase_add_test(tcase_misc, test_strncmp);
     tcase_add_test(tcase_misc, test_memcpy_memmove);
+#if defined(__linux__) && (SIZE_MAX > INT_MAX)
+    tcase_add_test(tcase_misc, test_memmove_large_overlap_length);
+#endif
     tcase_add_test(tcase_misc, test_memcpy_aligned_buffers);
     tcase_add_test(tcase_misc, test_uart_writenum_basic);
     tcase_add_test(tcase_misc, test_uart_printf_formats);
