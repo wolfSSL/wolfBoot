@@ -84,6 +84,17 @@ static int encrypt_key_is_valid(const uint8_t *key, uint32_t len)
     return (has_one != 0) && (has_zero != 0);
 }
 
+static int encrypt_key_is_erased(const uint8_t *key, uint32_t len)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++)
+        diff |= key[i] ^ FLASH_BYTE_ERASED;
+
+    return diff == 0;
+}
+
 #define FALLBACK_IV_OFFSET 0x00100000U
     #if !defined(XMEMSET)
         #include <string.h>
@@ -1682,7 +1693,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     XMEMSET(ff, FLASH_BYTE_ERASED, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
-    if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
+    if (!encrypt_key_is_erased(mem, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
         ret = hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
     return ret;
 #endif
