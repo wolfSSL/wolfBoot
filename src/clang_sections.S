@@ -20,11 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Workaround for GNU ld mishandling AT() on output sections when no input
- * object contributes a matching section.  Clang does not emit empty .data/.bss
- * sections in object files (GCC does), so GNU ld fails to assign the correct
- * LMA for the .data output section, producing a huge sparse binary.
- * Including this object ensures .data and .bss exist as inputs.
- */
+/* Force clang to emit .data and .bss sections, even if empty, to prevent the
+ * linker from mishandling ld scripts and creating sparse binaries by putting
+ * .data in RAM. */
 .section .data
 .section .bss
