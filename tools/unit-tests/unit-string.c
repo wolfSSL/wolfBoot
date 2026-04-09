@@ -329,7 +329,7 @@ START_TEST(test_memcpy_memmove)
 }
 END_TEST
 
-#if defined(__linux__) && (SIZE_MAX > INT_MAX) && !defined(__GCOV__)
+#if defined(__linux__) && (SIZE_MAX > INT_MAX) && !defined(UNIT_TEST_COVERAGE)
 START_TEST(test_memmove_large_overlap_length)
 {
     size_t n = (size_t)INT_MAX + 2U;
@@ -473,7 +473,9 @@ Suite *string_suite(void)
     tcase_add_test(tcase_misc, test_strncmp);
     tcase_add_test(tcase_misc, test_memcpy_memmove);
 #if defined(__linux__) && (SIZE_MAX > INT_MAX)
+#if !defined(UNIT_TEST_COVERAGE)
     tcase_add_test(tcase_misc, test_memmove_large_overlap_length);
+#endif
 #endif
     tcase_add_test(tcase_misc, test_memcpy_aligned_buffers);
     tcase_add_test(tcase_misc, test_uart_writenum_basic);

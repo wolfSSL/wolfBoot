@@ -29,6 +29,7 @@ CFLAGS+=-g -ggdb
 CFLAGS+=-fprofile-arcs
 CFLAGS+=-ftest-coverage
 CFLAGS+=--coverage
+CFLAGS+=-DUNIT_TEST_COVERAGE
 CFLAGS+=-DUNIT_TEST -DWOLFSSL_USER_SETTINGS
 LDFLAGS+=-fprofile-arcs
 LDFLAGS+=-ftest-coverage
