@@ -53,7 +53,8 @@ jobs:
           inputs.config-file == './config/examples/stm32u5.config' ||
           inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
           inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
-          inputs.config-file == './config/examples/stm32n567.config'
+          inputs.config-file == './config/examples/stm32n6.config'
+          inputs.config-file == './config/examples/stm32n6-tz.config'
         run: |
           make distclean
           cp ${{inputs.config-file}} .config
