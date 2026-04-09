@@ -294,16 +294,19 @@ void *memmove(void *dst, const void *src, size_t n)
     if (src < dst)  {
         const char *s = (const char *)src;
         char *d = (char *)dst;
+        size_t aligned_n = 0;
         if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
             ((size_t)src & (sizeof(unsigned long)-1)) == 0)
         {
-            while (n >= sizeof(unsigned long)) {
-                n -= sizeof(unsigned long);
-                *(unsigned long*)(d + n) = *(const unsigned long*)(s + n);
-            }
+            aligned_n = n & ~(sizeof(unsigned long) - 1);
         }
-        for (i = n; i > 0; i--) {
+        for (i = n; i > aligned_n; i--) {
             d[i - 1] = s[i - 1];
+        }
+        while (aligned_n > 0) {
+            aligned_n -= sizeof(unsigned long);
+            *(unsigned long*)(d + aligned_n) =
+                *(const unsigned long*)(s + aligned_n);
         }
         return dst;
     } else {

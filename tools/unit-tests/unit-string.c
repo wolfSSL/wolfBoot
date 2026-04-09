@@ -325,6 +325,14 @@ START_TEST(test_memcpy_memmove)
     ck_assert_int_eq(p[0], 0);
     ck_assert_int_eq(p[1], 1);
 
+    for (i = 0; i < 24; i++) {
+        p[i] = (unsigned char)i;
+    }
+    memmove(p + sizeof(unsigned long), p, sizeof(unsigned long) + 2);
+    for (i = 0; i < (int)(sizeof(unsigned long) + 2); i++) {
+        ck_assert_int_eq(p[sizeof(unsigned long) + i], i);
+    }
+
     ck_assert_ptr_eq(memmove(p, p, 4), p);
 }
 END_TEST
