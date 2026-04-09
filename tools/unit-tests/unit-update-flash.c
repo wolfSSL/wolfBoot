@@ -56,6 +56,9 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type);
 
 #ifdef CUSTOM_ENCRYPT_KEY
+static int mock_set_encrypt_key_ret = 0;
+static int mock_set_encrypt_key_calls = 0;
+
 int wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
     int i;
@@ -72,7 +75,8 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
 {
     (void)key;
     (void)nonce;
-    return 0;
+    mock_set_encrypt_key_calls++;
+    return mock_set_encrypt_key_ret;
 }
 
 int wolfBoot_erase_encrypt_key(void)
@@ -133,6 +137,8 @@ int hal_flash_protect(haladdr_t address, int len)
 static void reset_mock_stats(void)
 {
     wolfBoot_staged_ok = 0;
+    mock_set_encrypt_key_ret = 0;
+    mock_set_encrypt_key_calls = 0;
 #ifndef ARCH_SIM
     wolfBoot_panicked = 0;
 #endif
@@ -516,6 +522,38 @@ START_TEST (test_fallback_image_verification_rejects_corruption)
 
     ret = wolfBoot_update(1);
     ck_assert_int_eq(ret, -1);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_final_swap_propagates_encrypt_key_persist_failure)
+{
+    int ret;
+    int erase_len = WOLFBOOT_SECTOR_SIZE;
+    uintptr_t tmp_boot_pos = WOLFBOOT_PARTITION_SIZE - erase_len -
+        WOLFBOOT_SECTOR_SIZE;
+    uint32_t tmp_buffer[TRAILER_OFFSET_WORDS + 1];
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    memset(tmp_buffer, 0, sizeof(tmp_buffer));
+    tmp_buffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
+
+    hal_flash_unlock();
+    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + tmp_boot_pos,
+        (const uint8_t *)tmp_buffer, sizeof(tmp_buffer));
+    hal_flash_lock();
+
+    mock_set_encrypt_key_ret = -5;
+    ret = wolfBoot_swap_and_final_erase(1);
+
+    ck_assert_int_eq(ret, -5);
+    ck_assert_int_eq(mock_set_encrypt_key_calls, 1);
 
     cleanup_flash();
 }
@@ -973,6 +1011,7 @@ Suite *wolfboot_suite(void)
 #ifdef UNIT_TEST_FALLBACK_ONLY
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
     suite_add_tcase(s, fallback_verify);
 #endif
     return s;
@@ -1009,6 +1048,7 @@ Suite *wolfboot_suite(void)
 #endif
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
 #endif
 
     suite_add_tcase(s, empty_panic);

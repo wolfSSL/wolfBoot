@@ -426,6 +426,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     uint8_t updateState = IMG_STATE_NEW;
+    int ret = 0;
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
@@ -499,8 +500,16 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 
 #ifdef EXT_ENCRYPTED
     /* Initialize encryption with the saved key */
-    wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
-            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
+    ret = wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
+        (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
+    if (ret != 0) {
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+        return ret;
+    }
     /* wolfBoot_set_encrypt_key calls hal_flash_unlock, need to unlock again */
     hal_flash_unlock();
 #endif
@@ -808,6 +817,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t total_size = 0;
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
+    int ret = 0;
     /* we need to pre-set flag to SECT_FLAG_NEW in case magic hasn't been set
      * on the update partition as part of the delta update direction check. if
      * magic has not been set flag will have an un-determined value when we go
@@ -1128,7 +1138,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #if !defined(CUSTOM_PARTITION_TRAILER)
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
-    wolfBoot_swap_and_final_erase(0);
+    ret = wolfBoot_swap_and_final_erase(0);
+    if (ret != 0)
+        return ret;
 #ifndef DISABLE_BACKUP
     if (rollback_needed) {
         hal_flash_unlock();
@@ -1205,16 +1217,19 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     /* Save the encryption key after swapping */
 #ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(key, nonce);
+    ret = wolfBoot_set_encrypt_key(key, nonce);
     wolfBoot_zeroize(key, sizeof(key));
     wolfBoot_zeroize(nonce, sizeof(nonce));
+    if (ret != 0)
+        goto out;
 #endif
 #endif /* DISABLE_BACKUP */
+out:
 #ifdef EXT_ENCRYPTED
     /* Make sure we leave the global IV offset in its normal state. */
     wolfBoot_enable_fallback_iv(0);
 #endif
-    return 0;
+    return ret;
 }
 #ifdef __CCRX__
 #pragma section
