@@ -137,8 +137,10 @@ int hal_flash_protect(haladdr_t address, int len)
 static void reset_mock_stats(void)
 {
     wolfBoot_staged_ok = 0;
+#ifdef CUSTOM_ENCRYPT_KEY
     mock_set_encrypt_key_ret = 0;
     mock_set_encrypt_key_calls = 0;
+#endif
 #ifndef ARCH_SIM
     wolfBoot_panicked = 0;
 #endif

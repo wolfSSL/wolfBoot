@@ -107,7 +107,8 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
 #ifndef TZEN
-    (void)hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0)
+        boot_panic();
 #endif
     hal_prepare_boot();
 #ifdef WOLFBOOT_HOOK_BOOT

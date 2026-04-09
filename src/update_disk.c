@@ -549,7 +549,10 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
 #ifndef TZEN
-    (void)hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
+        wolfBoot_printf("Error protecting bootloader flash region\r\n");
+        wolfBoot_panic();
+    }
 #endif
     hal_prepare_boot();
 
