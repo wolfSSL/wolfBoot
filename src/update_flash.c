@@ -426,7 +426,6 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     uint8_t updateState = IMG_STATE_NEW;
-    int ret = 0;
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
@@ -499,6 +498,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
 #ifdef EXT_ENCRYPTED
+    int ret;
     /* Initialize encryption with the saved key */
     ret = wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
         (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
@@ -1221,10 +1221,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_zeroize(key, sizeof(key));
     wolfBoot_zeroize(nonce, sizeof(nonce));
     if (ret != 0)
-        goto out;
+        return ret;
 #endif
 #endif /* DISABLE_BACKUP */
-out:
 #ifdef EXT_ENCRYPTED
     /* Make sure we leave the global IV offset in its normal state. */
     wolfBoot_enable_fallback_iv(0);
