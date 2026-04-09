@@ -192,6 +192,32 @@ ifeq ($(ARCH),ARM)
     ifeq ($(MAX32666_FTHR2),1)
       CFLAGS+=-DMAX32666_FTHR2
     endif
+    # MAX3266X TPU hardware SHA256 acceleration (requires MSDK_DIR)
+    ifeq ($(MAX3266X_TPU),1)
+      NO_ARM_ASM=1
+      CFLAGS+=-DWOLFSSL_MAX3266X -DMAX3266X_SHA
+      CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
+      CFLAGS+=-ffunction-sections -fdata-sections
+      MAX3266X_CFLAGS:= \
+        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
+        -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
+        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/ \
+        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/ \
+        -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+      CFLAGS+=$(MAX3266X_CFLAGS)
+      OBJS+=$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o \
+            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o \
+            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o \
+            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
+    endif
+  endif
+
+  # max3266x.c requires WOLFSSL_SP_MATH_ALL for MXC_WORD_SIZE, but only the
+  # MAA math code (MAX3266X_MATH) actually uses it. Add SP_MATH_ALL to just
+  # this object to satisfy the header, without bloating the bootloader.
+  ifeq ($(MAX3266X_TPU),1)
+$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o: CFLAGS+=-DWOLFSSL_SP_MATH_ALL
   endif
 
   ifeq ($(TARGET),pic32cz)

@@ -273,7 +273,9 @@
  */
 #define HIRC8M_FREQ             7372800UL
 #define HIRC96M_FREQ            96000000UL
+#ifndef HIRC_FREQ
 #define HIRC_FREQ               60000000UL
+#endif
 
 #ifndef UART_BAUDRATE
 #define UART_BAUDRATE           115200
@@ -372,7 +374,9 @@
 #define UART1B_PINS             (UART1B_TX_PIN | UART1B_RX_PIN)
 
 /* ============== ARM Cortex-M4 System Registers ============== */
+#ifndef SCB_BASE
 #define SCB_BASE                0xE000ED00UL
+#endif
 #define SCB_CPUID               (*(volatile uint32_t *)(SCB_BASE + 0x00UL))
 #define SCB_ICSR                (*(volatile uint32_t *)(SCB_BASE + 0x04UL))
 #define SCB_VTOR                (*(volatile uint32_t *)(SCB_BASE + 0x08UL))

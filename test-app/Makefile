@@ -144,25 +144,18 @@ endif
 WOLFCRYPT_SUPPORT=0
 
 # MAX32666 hardware crypto test (MSDK TPU/MAA/TRNG acceleration)
+# Base TPU/SHA support and MSDK paths are inherited from arch.mk
+# when MAX3266X_TPU=1. This block adds the extra features for the
+# full crypto test (AES, RNG, MAA math, ECDHE).
 ifeq ($(TARGET),max32666)
   ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
-    MSDK_DIR?=../../msdk
     CFLAGS += -DWOLFCRYPT_MAX32666_TEST
-    CFLAGS += -DWOLFSSL_MAX3266X
-    CFLAGS += -DMAX3266X_RNG -DMAX3266X_AES -DMAX3266X_SHA -DMAX3266X_MATH
+    CFLAGS += -DMAX3266X_RNG -DMAX3266X_AES -DMAX3266X_MATH
     CFLAGS += -DHAVE_ECC_CDH -DHAVE_ECC_DHE
     CFLAGS += -DHAVE_AESGCM -DGCM_TABLE
     CFLAGS += -DENCRYPT_WITH_AES256
     CFLAGS += -DWOLFSSL_SP_MATH_ALL
-    CFLAGS += -DTARGET=MAX32665 -DTARGET_REV=0x4131
-    CFLAGS += -ffunction-sections -fdata-sections
-    CFLAGS += \
-      -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
-      -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
-      -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/ \
-      -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/ \
-      -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/ \
-      -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+    CFLAGS += -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/
     WOLFCRYPT_SUPPORT=1
   endif
 endif
@@ -596,7 +589,6 @@ endif
 ifeq ($(TARGET),max32666)
   LSCRIPT_TEMPLATE=ARM-max32666.ld
   ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
-    MSDK_DIR?=../../msdk
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_reva.o

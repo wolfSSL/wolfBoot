@@ -157,10 +157,16 @@ extern int tolower(int c);
 #   endif
 
     /* SP MATH */
-#   if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
-#       define WOLFSSL_SP_MATH
-#       define WOLFSSL_SP_SMALL
-#       define WOLFSSL_HAVE_SP_ECC
+#   if !defined(USE_FAST_MATH)
+#       if !defined(WOLFSSL_SP_MATH_ALL)
+#           define WOLFSSL_SP_MATH
+#       endif
+#       ifndef WOLFSSL_SP_SMALL
+#           define WOLFSSL_SP_SMALL
+#       endif
+#       ifndef WOLFSSL_HAVE_SP_ECC
+#           define WOLFSSL_HAVE_SP_ECC
+#       endif
 #   endif
 
 #define WOLFSSL_PUBLIC_MP
