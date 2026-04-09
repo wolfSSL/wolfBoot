@@ -806,7 +806,7 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   ifeq ($(USE_CLANG),1)
     CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
     LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
-	LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
   else
     LDFLAGS+=--specs=nano.specs
   endif
@@ -859,7 +859,7 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   ifeq ($(USE_CLANG),1)
     CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
     LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
-	LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
   else
     LDFLAGS+=--specs=nano.specs
   endif
