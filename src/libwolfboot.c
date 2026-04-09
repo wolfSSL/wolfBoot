@@ -1676,7 +1676,7 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
  * This function erases the encryption key and nonce, resetting them to all 0xFF
  * bytes.It ensures that the key and nonce cannot be accessed after erasure.
  *
- * @return 0 if successful.
+ * @return 0 on success, or the underlying flash error code on failure.
  *
  */
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
