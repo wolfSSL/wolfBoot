@@ -424,9 +424,9 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         asm volatile("mov r0, #50":::"r0"); \
         asm volatile("mov r0, #50":::"r0"); \
         asm volatile("mov r0, #50":::"r0"); \
-        compare_res = !image_CT_compare(digest, img->sha_hash, \
+        compare_res = image_CT_compare(digest, img->sha_hash, \
             WOLFBOOT_SHA_DIGEST_SIZE); \
-        /* Redundant checks that ensure the function actually returned 0 */ \
+        /* Redundant checks that ensure the function actually returned 1 */ \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
@@ -444,10 +444,10 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
         /* Repeat comparison call */ \
-        compare_res = !image_CT_compare(digest, img->sha_hash, \
+        compare_res = image_CT_compare(digest, img->sha_hash, \
             WOLFBOOT_SHA_DIGEST_SIZE); \
         compare_res; \
-        /* Redundant checks that ensure the function actually returned 0 */ \
+        /* Redundant checks that ensure the function actually returned 1 */ \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
