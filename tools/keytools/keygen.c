@@ -577,6 +577,7 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     }
     fwrite(priv_der, privlen, 1, fpriv);
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         if (export_pubkey_file(keyfile, pub_der, publen) != 0) {
@@ -670,6 +671,7 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         fwrite(d, dsize, 1, fpriv);
     }
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         int pubOutLen;
