@@ -1178,6 +1178,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     fwrite(priv, priv_len, 1, fpriv);
     fwrite(pub, pub_len, 1, fpriv);
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         if (saveAsDer) {
