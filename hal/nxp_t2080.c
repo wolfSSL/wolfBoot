@@ -31,7 +31,15 @@
 /* #define DEBUG_FLASH */
 
 #ifndef BUILD_LOADER_STAGE1
+#ifndef BOARD_CW_VPX3152
+    /* CW VPX3-152: hal_mp_init() calls disable_tlb1(0) which invalidates the
+     * 16 MB boot TLB Entry 0 (which contains wolfBoot code). Without a separate
+     * flash TLB entry covering wolfBoot's code, the next instruction fetch
+     * faults. NAII works because its 256 KB boot TLB doesn't cover wolfBoot
+     * code (which is in flash TLB Entry 2 at 0xE8000000-0xEFFFFFFF).
+     * For VPX3-152, secondary cores remain disabled. */
     #define ENABLE_MP   /* multi-core support */
+#endif
 #endif
 
 /* generic shared NXP QorIQ driver code */
@@ -164,12 +172,12 @@ void hal_ddr_init(void)
     /* DDR SDRAM mode configuration */
     set32(DDR_SDRAM_MODE, DDR_SDRAM_MODE_VAL);
     set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
-    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_VAL);
+    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_4_VAL);
+    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_5_VAL);
+    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_6_VAL);
+    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_7_VAL);
+    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_8_VAL);
     set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
 
     /* DDR Configuration */
@@ -300,6 +308,9 @@ static void hal_reconfigure_cpc_as_cache(void)
             *dst++ = *src++;
         }
 
+        /* Ensure all stores have drained before flushing cache lines */
+        __asm__ __volatile__("sync" ::: "memory");
+
         /* Flush D-cache and invalidate I-cache for the DDR copy */
         flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
 
@@ -364,9 +375,15 @@ static void hal_reconfigure_cpc_as_cache(void)
 
 /* Make flash TLB cacheable for XIP code performance.
  * Changes TLB Entry 2 (flash) from MAS2_I|MAS2_G to MAS2_M.
- * This enables L1 I-cache + L2 + CPC to cache flash instructions. */
+ * This enables L1 I-cache + L2 + CPC to cache flash instructions.
+ *
+ * For BOARD_CW_VPX3152: TLB1 Entry 2 is NOT used (256 MB flash TLB would
+ * overlap with the 16 MB boot ROM TLB at the top of flash, causing e6500
+ * multi-hit). The boot TLB covers wolfBoot + partitions cache-inhibited;
+ * skip the caching update — flash runs uncached (slower but correct). */
 static void hal_flash_enable_caching(void)
 {
+#ifndef BOARD_CW_VPX3152
     /* Rewrite flash TLB entry with cacheable attributes.
      * MAS2_M = memory coherent, enables caching */
     set_tlb(1, 2,
@@ -376,6 +393,7 @@ static void hal_flash_enable_caching(void)
 
     /* Invalidate L1 I-cache so new TLB attributes take effect */
     invalidate_icache();
+#endif
 
 #ifdef DEBUG_UART
     wolfBoot_printf("Flash: caching enabled (L1+L2+CPC)\n");
@@ -463,8 +481,10 @@ void hal_init(void)
  * returns a bus error (DSI). */
 static void RAMFUNCTION hal_flash_cache_disable(void)
 {
+#ifndef BOARD_CW_VPX3152
     set_tlb(1, 2, FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, FLASH_TLB_PAGESZ, 1);
+#endif
 }
 
 /* Restore flash TLB to cacheable mode after flash operation.
@@ -472,8 +492,10 @@ static void RAMFUNCTION hal_flash_cache_disable(void)
  * Invalidate caches afterward so stale pre-erase data is not served. */
 static void RAMFUNCTION hal_flash_cache_enable(void)
 {
+#ifndef BOARD_CW_VPX3152
     set_tlb(1, 2, FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0, FLASH_TLB_PAGESZ, 1);
+#endif
     invalidate_dcache();
     invalidate_icache();
 }
@@ -663,6 +685,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int ret = 0;
     uint32_t i, sector, offset, nwords;
     const uint32_t width_bytes = FLASH_CFI_WIDTH / 8;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* Enforce alignment to flash bus width */
     if ((address % width_bytes) != 0 || (len % width_bytes) != 0) {
@@ -741,6 +770,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret = 0;
     uint32_t sector;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -848,7 +884,7 @@ extern uint32_t _bootpg_addr;
 static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
 {
     uint32_t all_cores, active_cores, whoami;
-    int timeout = 50, i;
+    int timeout = 10000, i; /* 10000 * 100us = 1s, matches U-Boot convention */
 
     whoami = get32(PIC_WHOAMI); /* Get current running core number */
     all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
@@ -990,13 +1026,21 @@ static void hal_mp_init(void)
 
 void hal_prepare_boot(void)
 {
-
+    /* Intentionally empty: pre-boot cleanup (cache flush, interrupt disable)
+     * is handled by boot_ppc.c:do_boot(). */
 }
 
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
+#ifdef BOARD_CW_VPX3152
+    /* DTS is at 0xF0040000 which is below the 16 MB boot TLB
+     * (covers 0xFF000000-0xFFFFFFFF). Return NULL to skip DTS loading
+     * until a separate flash TLB is added for the DTS region. */
+    return NULL;
+#else
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
+#endif
 }
 
 int hal_dts_fixup(void* dts_addr)

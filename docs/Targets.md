@@ -4009,16 +4009,28 @@ Flash factory_custom.bin to NOR base 0xE800_0000
 
 ## NXP QorIQ T2080 PPC
 
-The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Support has been tested with the NAII 68PPC2.
+The NXP QorIQ T2080 is a PPC e6500 based processor (four cores). Three board
+variants are supported:
+
+| Board | Config Define | Oscillator | DDR | NOR Flash |
+|-------|---------------|-----------|-----|-----------|
+| T2080 RDB (default) | _(none)_ | 66.66 MHz | DDR3L SODIMM | 128 MB @ `0xE8000000` |
+| Curtiss-Wright VPX3-152 | `BOARD_CW_VPX3152` | 66.667 MHz | 4 GB DDR3L | 256 MB @ `0xF0000000` |
+| NAII 68PPC2 | `BOARD_NAII_68PPC2` | 100 MHz | 8 GB DDR3 | 128 MB @ `0xE8000000` |
+
+> **Note:** The T2080 RDB DDR register values are placeholder stubs (all zeros
+> with TODO comments in `hal/nxp_t2080.h`). DDR initialization will not succeed
+> until you populate them from a U-Boot register dump. The NAII 68PPC2 and
+> CW VPX3-152 DDR configs are populated and tested.
 
 Example configuration: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
-Stock layout is default; for NAII 68PPC2, uncomment the "# NAII 68PPC2:" lines and comment the stock lines.
+See [Board Selection](#board-selection) below for per-board setup.
 
 ### Design NXP T2080 PPC
 
-The QorIQ requires a Reset Configuration Word (RCW) to define the boot parameters, which resides at the start of the flash (0xE8000000).
+The QorIQ requires a Reset Configuration Word (RCW) to define the boot parameters, which resides at the start of the flash (`0xE8000000` for 128 MB boards, `0xF0000000` for the 256 MB CW VPX3-152).
 
-The flash boot entry point is `0xEFFFFFFC`, which is an offset jump to wolfBoot initialization boot code. Initially the PowerPC core enables only a 4KB region to execute from. The initialization code (`src/boot_ppc_start.S`) sets the required CCSR and TLB for memory addressing and jumps to wolfBoot `main()`.
+The flash boot entry point is the last 4 bytes of the NOR flash region (`0xEFFFFFFC` for 128 MB flash, `0xFFFFFFFC` for 256 MB flash), which is an offset jump to wolfBoot initialization boot code. Initially the PowerPC core enables only a 4KB region to execute from. The initialization code (`src/boot_ppc_start.S`) sets the required CCSR and TLB for memory addressing and jumps to wolfBoot `main()`.
 
 #### Boot Sequence and Hardware Constraints
 
@@ -4041,7 +4053,7 @@ CPC SRAM is unreliable for stores on cold power-on — L1 dirty-line evictions
 through CoreNet to CPC cause bus errors (silent CPU checkstop with `MSR[ME]=0`).
 The fix (matching U-Boot) uses L1 locked D-cache as the initial 16KB stack:
 `dcbz` allocates cache lines without bus reads, `dcbtls` locks them so they
-are never evicted. The locked lines at `L1_CACHE_ADDR` (0xF8E00000) are
+are never evicted. The locked lines at `L1_CACHE_ADDR` (`0xF8E00000`; `0xEE800000` on VPX3-152) are
 entirely core-local. After DDR init in `hal_init()`, the stack relocates to
 DDR and the CPC switches from SRAM to L3 cache mode.
 
@@ -4052,9 +4064,16 @@ boot, allowing L1 I-cache to cache instruction fetches while preventing
 speculative prefetch to the IFC. C code switches to `MAS2_I | MAS2_G` during
 flash write/erase (command mode), then `MAS2_M` for full caching afterward.
 
+**CCSRBAR Relocation (CW VPX3-152 only)**
+
+The default CCSRBAR at `0xFE000000` (16 MB) falls within the VPX3-152's 256 MB
+flash VA range (`0xF0000000`–`0xFFFFFFFF`). The startup assembly relocates
+CCSRBAR to `0xEF000000` (just below flash). The CPC SRAM and L1 cache addresses
+are also relocated to `0xEE900000`/`0xEE800000` to avoid overlap.
+
 **RAMFUNCTION Constraints**
 
-The NAII 68PPC2 NOR flash (two S29GL01GS x8 in parallel, 16-bit bus) enters
+The NOR flash (two S29GL01GS x8 in parallel, 16-bit bus) enters
 command mode bank-wide — instruction fetches during program/erase return status
 data instead of code. All flash write/erase functions are marked `RAMFUNCTION`,
 placed in `.ramcode`, copied to DDR, and remapped via TLB9. Key rules:
@@ -4094,30 +4113,38 @@ machine check (exceptions instead of checkstop), debug, and recoverable
 interrupt enable. Branch prediction (BUCSR) is deferred to `hal_init()` after
 DDR stack relocation.
 
-**UART Debug Checkpoints (`DEBUG_UART=1`)**
-
-Assembly startup emits characters to UART0 (0xFE11C500, 115200 baud):
-
-```
-1 - CPC invalidate start       A - L2 cluster enable start
-2 - CPC invalidate done        B - L2 cluster enabled
-3 - CPC SRAM configured        E - L1 cache setup
-4 - SRAM LAW configured        F - L1 I-cache enabled
-5 - Flash TLB configured       G - L1 D-cache enabled
-6 - CCSRBAR TLB configured     D - Stack ready (L1 locked cache)
-7 - SRAM TLB configured        Z - About to jump to C code
-8 - CPC enabled
-```
-
 ### Building wolfBoot for NXP T2080 PPC
 
 By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
 
-The `make` creates a `factory.bin` image that can be programmed at `0xE8080000`
-(For NAII 68PPC2, first edit `nxp-t2080.config` to uncomment the NAII 68PPC2 lines.)
+#### Board Selection
 
+Copy the example config and select your board:
+
+**T2080 RDB (default):**
 ```
 cp ./config/examples/nxp-t2080.config .config
+```
+
+**Curtiss-Wright VPX3-152:**
+```
+cp ./config/examples/nxp-t2080.config .config
+```
+Then in `.config`, uncomment `CFLAGS_EXTRA+=-DBOARD_CW_VPX3152` and all lines
+marked with `# CW VPX3-152` (flash offset, SRAM address, origin, partition addresses,
+DTS addresses).
+
+**NAII 68PPC2:**
+```
+cp ./config/examples/nxp-t2080.config .config
+```
+Then in `.config`, uncomment `CFLAGS_EXTRA+=-DBOARD_NAII_68PPC2`.
+
+#### Build
+
+The `make` creates a `factory.bin` image that can be programmed to the application partition address.
+
+```
 make clean
 make keytools
 make
@@ -4146,19 +4173,31 @@ CROSS_COMPILE_PATH=/opt/fsl-qoriq/2.0/sysroots/ppce6500-fsl-linux/usr
 
 ### Programming NXP T2080 PPC
 
-NOR Flash Region: `0xE8000000 - 0xEFFFFFFF` (128 MB)
+NOR Flash Regions:
+- **T2080 RDB / NAII 68PPC2**: `0xE8000000 - 0xEFFFFFFF` (128 MB)
+- **CW VPX3-152**: `0xF0000000 - 0xFFFFFFFF` (256 MB)
 
-Flash Layout (with files):
+Flash Layout (T2080 RDB / NAII 68PPC2, 128 MB flash):
 
 | Description | File | Address |
 | ----------- | ---- | ------- |
-| Reset Configuration Word (RCW) | `68PPC2_RCW_v0p7.bin` | `0xE8000000` |
+| Reset Configuration Word (RCW) | _(board-specific)_ | `0xE8000000` |
 | Frame Manager Microcode | `fsl_fman_ucode_t2080_r1.0.bin` | `0xE8020000` |
 | Signed Application | `test-app/image_v1_signed.bin` | `0xE8080000` |
-| wolfBoot | `wolfboot.bin` | `0xEFF40000` |
-| Boot Entry Point (with offset jump to init code) |  | `0xEFFFFFFC` |
+| wolfBoot | `wolfboot.bin` | `0xEFFE0000` |
+| Boot Entry Point (offset jump to init code) |  | `0xEFFFFFFC` |
 
-Or program the `factory.bin` to `0xE8080000`
+Flash Layout (CW VPX3-152, 256 MB flash):
+
+| Description | File | Address |
+| ----------- | ---- | ------- |
+| Reset Configuration Word (RCW) | _(board-specific)_ | `0xF0000000` |
+| Frame Manager Microcode | `fsl_fman_ucode_t2080_r1.0.bin` | `0xF0020000` |
+| Signed Application | `test-app/image_v1_signed.bin` | `0xF0080000` |
+| wolfBoot | `wolfboot.bin` | `0xFFFE0000` |
+| Boot Entry Point (offset jump to init code) |  | `0xFFFFFFFC` |
+
+Or program the `factory.bin` to the application partition address.
 
 Example Boot Debug Output (with `DEBUG_UART=1`):
 
@@ -4197,11 +4236,11 @@ See these TRACE32 demo script files:
 ```
 DO flash_cfi.cmm
 
-FLASH.ReProgram 0xEFF40000--0xEFFFFFFF /Erase
-Data.LOAD.binary wolfboot.bin 0xEFF40000
+FLASH.ReProgram 0xEFFE0000--0xEFFFFFFF /Erase
+Data.LOAD.binary wolfboot.bin 0xEFFE0000
 FLASH.ReProgram.off
 
-Data.LOAD.binary wolfboot.bin 0xEFF40000 /Verify
+Data.LOAD.binary wolfboot.bin 0xEFFE0000 /Verify
 ```
 
 Note: To disable the flash protection bits use:
@@ -4219,7 +4258,11 @@ Data.Set 0xE8000000 %W 0x9090
 Data.Set 0xE8000000 %W 0x0000
 ```
 
-#### Flash Programming with CodeWarrior TAP
+#### Flash Programming with CodeWarrior TAP (Experimental)
+
+> **Note:** CodeWarrior TAP debugging has not been validated for this target.
+> Lauterbach TRACE32 is the recommended debug probe. The following steps are
+> provided for reference only.
 
 In CodeWarrior use the `Flash Programmer` tool (see under Commander View -> Miscellaneous)
 * Connection: "CodeWarrior TAP Connection"
@@ -4231,12 +4274,96 @@ In CodeWarrior use the `Flash Programmer` tool (see under Commander View -> Misc
 
 ```
 tftp 1000000 wolfboot.bin
-protect off eff40000 +C0000
-erase eff40000 +C0000
-cp.b 1000000 eff40000 C0000
-protect on eff40000 +C0000
-cmp.b 1000000 eff40000 C0000
+protect off effe0000 +20000
+erase effe0000 +20000
+cp.b 1000000 effe0000 20000
+protect on effe0000 +20000
+cmp.b 1000000 effe0000 20000
 ```
+
+#### CW VPX3-152 PABS Recovery and Testing
+
+The CW VPX3-152 has a Permanent Alternate Boot Site (PABS) — a second U-Boot on a
+separate flash device. When jumper JB1 (ALT-BOOT) is installed and the board is reset,
+it boots from PABS U-Boot (prompt: `VPX3-152 PABS=>`), which can reprogram the main
+NOR flash via TFTP. This is used for wolfBoot development and testing.
+
+Reference: CW VPX3-152 Firmware User's Manual (838400 rev 6), Section 6.
+
+**Prerequisites:**
+- JB1: Controlled by Pi4 GPIO 16 relay (or physical jumper)
+- JB5: Must be removed (NOR write protect disabled)
+- NVMRO: Must be grounded
+- Serial: COM1 at 115200 N81 (P2 connector)
+- Ethernet: GE02 (FM1@DTSEC1) on P1 connector
+
+**Entering PABS mode:**
+1. Install JB1 jumper (or assert GPIO 16 high)
+2. Reset the board
+3. Board boots to `VPX3-152 PABS=>` prompt
+
+**Network setup in PABS U-Boot:**
+```
+setenv serverip 10.0.4.24
+setenv ipaddr 10.0.4.152
+setenv gatewayip 10.0.4.1
+setenv netmask 255.255.255.0
+```
+
+**Flash wolfBoot from PABS:**
+```
+tftp 0x1000000 wolfboot.bin
+protect off 0xFFFE0000 0xFFFFFFFF
+erase 0xFFFE0000 0xFFFFFFFF
+cp.b 0x1000000 0xFFFE0000 $filesize
+cmp.b 0x1000000 0xFFFE0000 $filesize
+```
+
+**Flash signed application from PABS:**
+```
+tftp 0x1000000 image_v1_signed.bin
+protect off 0xFFEE0000 0xFFFDFFFF
+erase 0xFFEE0000 0xFFFDFFFF
+cp.b 0x1000000 0xFFEE0000 $filesize
+cmp.b 0x1000000 0xFFEE0000 $filesize
+```
+
+**Boot wolfBoot:** Remove JB1 jumper (or deassert GPIO 16), reset the board.
+
+**Restore original CW U-Boot (from PABS):**
+```
+fwupd 608603-100_rev-
+```
+
+**DDR Register Verification:**
+
+The CW VPX3-152 DDR register values in `hal/nxp_t2080.h` were obtained from a
+U-Boot register dump. To verify or update these values, boot into PABS or main
+U-Boot and run the following `md.l` commands. Use CCSRBAR `0xEF000000` (CW U-Boot
+relocates CCSRBAR) or `0xFE000000` (default, check with `bdinfo`):
+
+```
+# CS Bounds and Config (DDR_BASE + 0x000, 0x080, 0x0C0)
+md.l 0xef008000 4; md.l 0xef008080 4; md.l 0xef0080c0 4
+# Timing (DDR_BASE + 0x100, 0x160)
+md.l 0xef008100 4; md.l 0xef008160 3
+# Config/Mode/Clock (DDR_BASE + 0x110, 0x130)
+md.l 0xef008110 8; md.l 0xef008130 1
+# ZQ/Write Leveling (DDR_BASE + 0x170, 0x190)
+md.l 0xef008170 3; md.l 0xef008190 2
+# RCW/Mode3-8 (DDR_BASE + 0x180, 0x200)
+md.l 0xef008180 2; md.l 0xef008200 6
+# Control Driver (DDR_BASE + 0xB28)
+md.l 0xef008b28 2
+# Error registers (DDR_BASE + 0xE40, 0xE58)
+md.l 0xef008e40 3; md.l 0xef008e58 1
+```
+
+**Automated test script:** `tools/scripts/nxp_t2080/cw_vpx3152_pabs_test.sh`
+
+Uses Pi4 GPIO control (GPIO 16 = PABS/JB1, GPIO 19 = Reset) and UART monitoring
+to automate the full flash-and-verify cycle. See script for usage and options
+including `--dump-ddr` mode.
 
 ### Debugging NXP T2080 PPC
 
@@ -4265,9 +4392,11 @@ sYmbol.SourcePATH.SetBaseDir ~/wolfBoot
 Data.LOAD.Elf wolfboot.elf /NoCODE /StripPART "/home/username/wolfBoot/"
 ```
 
-#### CodeWarrior TAP
+#### CodeWarrior TAP (Experimental)
 
-This is an example for debugging the T2080 with CodeWarrior TAP, however we were not successful using it. The Lauterbach is what we ended up using to debug.
+> **Note:** CodeWarrior TAP debugging has not been validated for this target.
+> Lauterbach TRACE32 is the recommended debug probe. The following steps are
+> provided for reference only.
 
 Start GDB Proxy:
 

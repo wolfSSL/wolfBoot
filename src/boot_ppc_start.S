@@ -87,6 +87,87 @@ All TLBs for boot will be in TLB1 and supervisor mode (not user)
         ori     reg, reg, (addr)@l
 #endif
 
+/* Early UART debug output for boot diagnostics.
+ * Uses DUART0 at CCSRBAR + 0x11C500 (THR=+0, LSR=+5, LCR=+3, DLB=+0, DMB=+1).
+ * Before CCSRBAR relocation: 0xFE11C500 (default).
+ * After relocation on VPX3-152: 0xEF11C500.
+ * Baud divisor for 115200 @ 533.333MHz platform clock:
+ *   divisor = platform_clock / (16 * baud) = 533333333 / (16 * 115200) = 289 = 0x0121
+ * However platform clock varies; a safe default divisor is from the CW PABS
+ * U-Boot which sets 115200 baud. We re-init to be safe.
+ * Clobbers r10, r11. */
+#if defined(DEBUG_UART) && defined(CORE_E6500)
+#define EARLY_UART_BASE  (CCSRBAR_DEF + 0x11C500)
+/* UART baud divisor: platform_clk / (16 * 115200)
+ * T2080 CCB=533.333MHz, platform=CCB/2=266.667MHz? No, UART uses platform clock.
+ * CW VPX3-152: CCB=533.333 MHz, UART clock = CCB/2 = 266.667 MHz
+ * Divisor = 266666667 / (16 * 115200) = 144.68 ~ 145 = 0x0091
+ * But CW U-Boot uses divisor for 115200 at their clock. Let's try 0x0091. */
+/* T2080 DUART baud divisor - computed from platform clock at runtime
+ * in C code (hal_init). For early assembly debug, skip baud init and
+ * just send raw characters. They will appear garbled but serve as
+ * progress indicators (each unique byte = different boot stage). */
+/* CW VPX3-152 (608605-100 RCW) - 1.8 GHz / 600 MHz platform clock:
+ *   bus_clk = SYS_CLK * plat_ratio / 2 = 66.667 MHz * 9 / 2 = 300 MHz
+ *   divisor = bus_clk / (16 * 115200) = 300000000 / 1843200 = 163 = 0xA3
+ * For CW PABS (608609-100 RCW) - 1.2 GHz / 533 MHz platform clock:
+ *   bus_clk = 66.667 * 8 / 2 = 266.667 MHz, divisor = 145 = 0x91 */
+#ifdef BOARD_CW_VPX3152
+#define UART_DIVISOR_HI  0x00
+#define UART_DIVISOR_LO  0xA3
+#else
+#define UART_DIVISOR_HI  0x00
+#define UART_DIVISOR_LO  0x91
+#endif
+.macro uart_init_at base
+        li      r10, 0
+        oris    r10, r10, (\base)@h
+        ori     r10, r10, (\base)@l
+        /* Set DLAB to access divisor registers */
+        li      r11, 0x83       /* LCR: DLAB=1, 8N1 */
+        stb     r11, 3(r10)     /* LCR */
+        li      r11, UART_DIVISOR_LO
+        stb     r11, 0(r10)     /* DLB (divisor low) */
+        li      r11, UART_DIVISOR_HI
+        stb     r11, 1(r10)     /* DMB (divisor high) */
+        /* Clear DLAB, set 8N1 */
+        li      r11, 0x03       /* LCR: DLAB=0, 8N1 */
+        stb     r11, 3(r10)     /* LCR */
+        /* Enable and reset FIFOs */
+        li      r11, 0x07       /* FCR: FIFO enable, reset TX+RX */
+        stb     r11, 2(r10)     /* FCR */
+        /* MCR: DTR + RTS */
+        li      r11, 0x03
+        stb     r11, 4(r10)     /* MCR */
+.endm
+.macro debug_char_imm char
+        li      r10, 0
+        oris    r10, r10, (EARLY_UART_BASE)@h
+        ori     r10, r10, (EARLY_UART_BASE)@l
+1:      lbz     r11, 5(r10)     /* LSR */
+        andi.   r11, r11, 0x20  /* THRE */
+        beq     1b
+        li      r11, \char
+        stb     r11, 0(r10)     /* THR */
+.endm
+/* After CCSRBAR relocation, use new base address */
+.macro debug_char_new char
+        li      r10, 0
+        oris    r10, r10, (CCSRBAR + 0x11C500)@h
+        ori     r10, r10, (CCSRBAR + 0x11C500)@l
+1:      lbz     r11, 5(r10)     /* LSR */
+        andi.   r11, r11, 0x20  /* THRE */
+        beq     1b
+        li      r11, \char
+        stb     r11, 0(r10)     /* THR */
+.endm
+#else
+.macro debug_char_imm char
+.endm
+.macro debug_char_new char
+.endm
+#endif
+
 /* variables from linker script */
 .global _start_vector
 .global isr_empty
@@ -208,7 +289,17 @@ startup_init:
 
 #ifndef BUILD_LOADER_STAGE1
 #ifndef TLB1_NEW_SIZE
+/* CW VPX3-152 has 256 MB NOR flash at 0xF0000000-0xFFFFFFFF. The flash TLB
+ * (TLB1 Entry 2 mapping the full 256 MB) would overlap with the boot ROM
+ * TLB at the top of flash (0xFFFC0000-0xFFFFFFFF for default 256 KB), causing
+ * a TLB1 multi-hit on e6500. Use a 16 MB boot TLB instead to cover wolfBoot
+ * code and partitions in the upper 16 MB of flash; skip the flash_tlb entry
+ * for VPX3-152 since the boot TLB covers what wolfBoot needs at boot time. */
+#ifdef BOARD_CW_VPX3152
+#define TLB1_NEW_SIZE BOOKE_PAGESZ_16M
+#else
 #define TLB1_NEW_SIZE BOOKE_PAGESZ_256K
+#endif
 #endif
 /* EPN alignment mask for TLB1_NEW_SIZE page.
  * e6500: page = 2^(TSIZE+10), e500/e5500: page = 2^(2*TSIZE+10) */
@@ -335,28 +426,37 @@ setup_interrupts:
 #if CCSRBAR_DEF != CCSRBAR_PHYS
 
         /* Use R8 = new, R9 = old virtual */
-        lis     r8,     CCSRBAR@h
-        ori     r8, r8, CCSRBAR@l
-        lis     r9,     (CCSRBAR + 0x1000)@h
-        ori     r9, r9, (CCSRBAR + 0x1000)@l
+        LOAD_ADDR32(r8, CCSRBAR)
+        LOAD_ADDR32(r9, (CCSRBAR + 0x1000))
 
 create_temp_ccsr:
-        /* Create a temporary TLB entry for new and old location  */
-        /* CCSRBAR: TLB 0, Entry 0, Supervisor R/W, IG, TS=0, 4KB */
+        /* Create temporary TLB0 entries for CCSRBAR relocation.
+         *
+         * TLB0 on e6500 is 4-way set-associative (2048 entries, 512 sets).
+         * The "esel" parameter selects the WAY within a set; the SET is
+         * determined by the virtual address (EPN). These two entries map
+         * different EPNs (CCSRBAR vs CCSRBAR+0x1000), so they fall in
+         * different TLB0 sets and do not overwrite each other.
+         *
+         * We use different ways (0 and 1) for visual clarity. Both entries
+         * are cleaned up by the TLB0 flash-invalidate (MMUCSR0) after
+         * relocation completes. */
+
+        /* CCSRBAR new location: TLB0 Way 0, Supervisor R/W, IG, TS=0, 4KB */
         set_tlb(0, 0,
                 CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
                 MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_4K, 0, r3);
 
-        set_tlb(0, 0,
+        /* CCSRBAR old location: TLB0 Way 1, Supervisor R/W, IG, TS=0, 4KB */
+        set_tlb(0, 1,
                 CCSRBAR + 0x1000, CCSRBAR_DEF, 0,
                 MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 BOOKE_PAGESZ_4K, 0, r3);
 
 verify_old_ccsr:
         /* verify the TLB is for old one */
-        lis     r0, CCSRBAR_DEF@h
-        ori     r0, r0, CCSRBAR_DEF@l
+        LOAD_ADDR32(r0, CCSRBAR_DEF)
 #ifdef USE_CORENET_INTERFACE
         lwz     r1, 4(r9) /* CCSRBARL */
 #else
@@ -373,12 +473,9 @@ ccsr_temp_law:
         #define CCSR_TEMP_LAW (LAWAR_ENABLE | \
                                LAWAR_TRGT_ID(LAW_TRGT_CORENET) | \
                                LAW_SIZE_4KB)
-        lis     r0,     CCSRBAR_PHYS_HIGH@h
-        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1,     CCSRBAR_DEF@h
-        ori     r1, r1, CCSRBAR_DEF@l
-        lis     r2,     CCSR_TEMP_LAW@h
-        ori     r2, r2, CCSR_TEMP_LAW@l
+        LOAD_ADDR32(r0, CCSRBAR_PHYS_HIGH)
+        LOAD_ADDR32(r1, CCSRBAR_DEF)
+        LOAD_ADDR32(r2, CCSR_TEMP_LAW)
         stw     r0, LAWBAR_BASE(0)(r9)   /* LAWBARH */
         stw     r1, LAWBAR_BASE(0)+4(r9) /* LAWBARL */
         sync
@@ -393,13 +490,10 @@ read_old_ccsr:
         isync
 
 write_new_ccsrbar:
-        lis     r0,     CCSRBAR_PHYS_HIGH@h
-        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1,     CCSRBAR@h
-        ori     r1, r1, CCSRBAR@l
+        LOAD_ADDR32(r0, CCSRBAR_PHYS_HIGH)
+        LOAD_ADDR32(r1, CCSRBAR)
         #define CCSRAR_C 0x80000000 /* Commit */
-        lis     r2,     CCSRAR_C@h
-        ori     r2, r2, CCSRAR_C@l
+        LOAD_ADDR32(r2, CCSRAR_C)
         stw     r0, 0(r9) /* CCSRBARH */
         sync
         stw     r1, 4(r9) /* CCSRBARL */
@@ -415,8 +509,7 @@ write_new_ccsrbar:
         lwz     r0, 0(r9)
         isync
         /* write new CCSBAR */
-        lis     r0,     (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@h
-        ori     r0, r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12)@l
+        LOAD_ADDR32(r0, (CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12))
         stw     r0, 0(r9)
         sync
         isync
@@ -431,6 +524,12 @@ invalidate_temp_tlb:
         /* L2TLB0_FI: TLB0 flash invalidate (write 1 to invalidate) */
         li      r3, 0x04
         mtspr   MMUCSR0, r3
+
+        /* Re-create TLB1 Entry 1 for the new (relocated) CCSRBAR address */
+        set_tlb(1, 1,
+                CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
+                MAS3_SX | MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
+                CCSRBAR_SIZE, 1, r3);
 #endif /* CCSRBAR_DEF != CCSRBAR_PHYS */
 
 
@@ -452,12 +551,16 @@ boot_page:
 1:
 #endif
 
+#if CCSRBAR_DEF == CCSRBAR
 ccsr_tlb:
-        /* CCSRBAR: TLB 1, Entry 1, Supervisor R/W, IG, TS=0, 1M/16M, IPROT */
+        /* No relocation -- map CCSRBAR directly in TLB1 Entry 1 */
         set_tlb(1, 1,
                 CCSRBAR, CCSRBAR, CCSRBAR_PHYS_HIGH,
                 MAS3_SX | MAS3_SR | MAS3_SW, MAS2_I | MAS2_G, 0,
                 CCSRBAR_SIZE, 1, r3);
+#endif
+        /* When CCSRBAR was relocated, TLB1 Entry 1 was already re-created
+         * for the new address after relocation (above). Do NOT overwrite it. */
 
 #if defined(CORE_E5500) || defined(CORE_E6500)
 ccsr_law:
@@ -466,12 +569,9 @@ ccsr_law:
                           LAWAR_TRGT_ID(LAW_TRGT_CORENET) | \
                           LAW_SIZE_16MB)
         LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(0))
-        lis     r0,     CCSRBAR_PHYS_HIGH@h
-        ori     r0, r0, CCSRBAR_PHYS_HIGH@l
-        lis     r1,     CCSRBAR@h
-        ori     r1, r1, CCSRBAR@l
-        lis     r2,     CCSR_LAW@h
-        ori     r2, r2, CCSR_LAW@l
+        LOAD_ADDR32(r0, CCSRBAR_PHYS_HIGH)
+        LOAD_ADDR32(r1, CCSRBAR)
+        LOAD_ADDR32(r2, CCSR_LAW)
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
         sync
@@ -481,21 +581,21 @@ ccsr_law:
         isync
 #endif /* CORE_E5500 || CORE_E6500 */
 
-#ifdef FLASH_BASE_ADDR
+#if defined(FLASH_BASE_ADDR) && !defined(BOARD_CW_VPX3152)
 #if defined(CORE_E5500) || defined(CORE_E6500)
-        /* Memory Mapped NOR Flash (64/128MB) at 0xEC000000/0xE8000000 */
+        /* Memory Mapped NOR Flash (64/128MB) at 0xEC000000/0xE8000000.
+         * Skipped for CW VPX3-152: 256 MB flash TLB would overlap with boot
+         * ROM TLB at top of flash. The 16 MB boot TLB (set by TLB1_NEW_SIZE)
+         * covers wolfBoot + partitions instead. */
 flash_law:
         /* FLASH - LAW1 (IFC 64/128MB) */
         #define FLASH_LAW (LAWAR_ENABLE | \
                            LAWAR_TRGT_ID(LAW_TRGT_IFC) | \
                            FLASH_LAW_SIZE)
         LOAD_ADDR32(r9, CCSRBAR + LAWBAR_BASE(1))
-        lis     r0,     FLASH_BASE_PHYS_HIGH@h
-        ori     r0, r0, FLASH_BASE_PHYS_HIGH@l
-        lis     r1,     FLASH_BASE_ADDR@h
-        ori     r1, r1, FLASH_BASE_ADDR@l
-        lis     r2,     FLASH_LAW@h
-        ori     r2, r2, FLASH_LAW@l
+        LOAD_ADDR32(r0, FLASH_BASE_PHYS_HIGH)
+        LOAD_ADDR32(r1, FLASH_BASE_ADDR)
+        LOAD_ADDR32(r2, FLASH_LAW)
         stw     r0, 0(r9) /* LAWBARH */
         stw     r1, 4(r9) /* LAWBARL */
         sync
@@ -1192,8 +1292,9 @@ isr_empty:
          * initialized on cold boot) -> nested machine check -> checkstop.
          * Use r3 as base, r4 as scratch. */
 #if defined(DEBUG_UART) && defined(TARGET_nxp_t2080)
-        /* Print '!' to UART to signal exception occurred */
-        LOAD_ADDR32(r3, 0xFE11C500)
+        /* Print '!' to UART to signal exception occurred.
+         * Use CCSRBAR (which is the relocated address on VPX3-152). */
+        LOAD_ADDR32(r3, CCSRBAR + 0x11C500)
 .L_isr_wait:
         lbz     r4, 5(r3)
         andi.   r4, r4, 0x20
