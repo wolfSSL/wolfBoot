@@ -68,7 +68,7 @@ int __attribute__((noinline)) image_CT_compare(
         diff |= expected[i] ^ actual[i];
     }
 
-    return diff == 0;
+    return diff;
 }
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
@@ -1551,7 +1551,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
-    if (!image_CT_compare(digest, stored_sha, stored_sha_len))
+    if (image_CT_compare(digest, stored_sha, stored_sha_len) != 0)
         return -1;
     img->sha_ok = 1;
     img->sha_hash = stored_sha;
@@ -1990,7 +1990,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
     /* Finalize SHA calculation */
     final_hash(&ctx, calc_digest);
-    if (!image_CT_compare(exp_digest, calc_digest, WOLFBOOT_SHA_DIGEST_SIZE)) {
+    if (image_CT_compare(exp_digest, calc_digest, WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
         wolfBoot_printf("ELF: [CHECK] SHA verification FAILED\n");
         wolfBoot_printf(
             "ELF: [CHECK] Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
