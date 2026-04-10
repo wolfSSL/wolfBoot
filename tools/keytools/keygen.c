@@ -615,19 +615,24 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     uint8_t priv_der[ECC_BUFSIZE];
     int privlen;
     uint8_t k_buffer[2 * MAX_ECC_KEY_SIZE];
-    FILE *fpriv;
+    FILE *fpriv = NULL;
+    int exit_code = 0;
+    int key_init = 0;
 
     wc_ecc_init(&k);
+    key_init = 1;
 
     if (wc_ecc_make_key(&rng, ecc_key_size, &k) != 0) {
         fprintf(stderr, "Unable to create ecc key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_EccKeyToDer(&k, priv_der, (word32)sizeof(priv_der));
     if (ret <= 0) {
         fprintf(stderr, "Unable to export private key to DER\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     privlen = ret;
     ret = 0;
@@ -635,20 +640,23 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     if (wc_ecc_export_private_raw(&k, Qx, &qxsize, Qy, &qysize, d, &dsize) != 0)
     {
         fprintf(stderr, "Unable to export private key to raw\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
 
     if (wc_ecc_export_public_raw(&k, Qx, &qxsize, Qy, &qysize ) != 0)
     {
         fprintf(stderr, "Unable to export public key\n");
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
 
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,
                 strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
 
     if (saveAsDer) {
@@ -683,18 +691,27 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         if (ret < 0) {
             fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
                     ret);
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
         if (export_pubkey_file(priv_fname, priv_der, pubOutLen) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
         ret = 0;
     }
 
-    wc_ecc_free(&k);
+cleanup:
+    if (fpriv != NULL)
+        fclose(fpriv);
+    if (key_init)
+        wc_ecc_free(&k);
     wc_ForceZero(d, sizeof(d));
     wc_ForceZero(priv_der, sizeof(priv_der));
+
+    if (exit_code != 0)
+        exit(exit_code);
 
     memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
@@ -1044,6 +1061,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     int      ml_dsa_priv_len = 0;
     int      ml_dsa_pub_len = 0;
     int      ml_dsa_level = ML_DSA_LEVEL;
+    int      exit_code = 0;
+    int      key_init = 0;
     char *   env_ml_dsa_level = getenv("ML_DSA_LEVEL");
     if (env_ml_dsa_level != NULL) {
         ml_dsa_level = atoi(env_ml_dsa_level);
@@ -1054,21 +1073,25 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     ret = wc_MlDsaKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     ret = wc_MlDsaKey_SetParams(&key, ml_dsa_level);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_SetParams(%d) returned %d\n",
                 ml_dsa_level, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Make the key pair. */
     ret = wc_MlDsaKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Get the ML-DSA public key length. */
@@ -1076,7 +1099,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || ml_dsa_pub_len <= 0) {
         printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     printf("info: ml-dsa public key length: %d\n", ml_dsa_pub_len);
 
@@ -1086,14 +1110,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || ml_dsa_priv_len <= 0) {
         printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     printf("info: ml-dsa private key length: %d\n", ml_dsa_priv_len);
 
     if (ml_dsa_priv_len <= ml_dsa_pub_len) {
         printf("error: ml-dsa: unexpected key lengths: %d, %d",
                ml_dsa_priv_len, ml_dsa_pub_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     else {
         ml_dsa_priv_len -= ml_dsa_pub_len;
@@ -1102,7 +1128,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     priv = malloc(ml_dsa_priv_len);
     if (priv == NULL) {
         fprintf(stderr, "error: malloc(%d) failed\n", ml_dsa_priv_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Set the expected key lengths. */
@@ -1112,25 +1139,29 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     ret = wc_MlDsaKey_ExportPubRaw(&key, pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_MlDsaKey_ExportPrivRaw(&key, priv, &priv_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPrivRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if ((int)pub_len != ml_dsa_pub_len) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned pub_len=%d, " \
                         "expected %d\n", pub_len, ml_dsa_pub_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if ((int) priv_len != ml_dsa_priv_len) {
         fprintf(stderr, "error: ml_dsa priv key mismatch: got %d " \
                         "bytes, expected %d\n", priv_len, ml_dsa_priv_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fpriv = fopen(priv_fname, "wb");
@@ -1138,7 +1169,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (fpriv == NULL) {
         fprintf(stderr, "error: fopen(%s) failed: %s",
                 priv_fname, strerror(errno));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fwrite(priv, priv_len, 1, fpriv);
@@ -1165,14 +1197,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
                     break;
                 default:
                     fprintf(stderr, "Error: Unsupported ML DSA level\n");
-                    exit(1);
+                    exit_code = 1;
+                    goto cleanup;
                     break;
             }
             pubDer = (uint8_t*)malloc(pubDerSz);
             if (pubDer == NULL) {
                 fprintf(stderr,
                         "Error: Failed to allocate memory for DER export\n");
-                exit(1);
+                exit_code = 1;
+                goto cleanup;
             }
 
             /* Export public key in DER format */
@@ -1182,12 +1216,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
             if (pubOutLen < 0) {
                 fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
                         pubOutLen);
-                exit(1);
+                free(pubDer);
+                exit_code = 1;
+                goto cleanup;
             }
 
             if (export_pubkey_file(priv_fname, pubDer, pubOutLen) != 0) {
                 fprintf(stderr, "Unable to export public key to file\n");
-                exit(1);
+                free(pubDer);
+                exit_code = 1;
+                goto cleanup;
             }
 
             free(pubDer);
@@ -1197,17 +1235,26 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
             if (export_pubkey_file(priv_fname, pub,
                                    KEYSTORE_PUBKEY_SIZE_ML_DSA) != 0) {
                 fprintf(stderr, "Unable to export public key to file\n");
-                exit(1);
+                exit_code = 1;
+                goto cleanup;
             }
         }
     }
 
     keystore_add(AUTH_KEY_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
-    wc_MlDsaKey_Free(&key);
-    wc_ForceZero(priv, priv_len);
-    free(priv);
-    priv = NULL;
+cleanup:
+    if (fpriv != NULL)
+        fclose(fpriv);
+    if (key_init)
+        wc_MlDsaKey_Free(&key);
+    if (priv != NULL) {
+        wc_ForceZero(priv, priv_len);
+        free(priv);
+        priv = NULL;
+    }
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 static void key_gen_check(const char *kfilename)
