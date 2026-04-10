@@ -1224,7 +1224,8 @@ static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
 
         if (CMD.hybrid && secondary_key_sz > 0U) {
             header_size_append_tag(&idx, 2);
-            header_size_align_8(&idx);
+            if (CMD.hash_algo == HASH_SHA256)
+                header_size_align_8(&idx);
             header_size_append_tag(&idx, digest_sz);
             header_size_align_8(&idx);
         }
