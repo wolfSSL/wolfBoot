@@ -1242,9 +1242,13 @@ static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
         }
 
         if (CMD.policy_sign) {
+            uint32_t policy_sig_sz = CMD.policy_sz;
+            if (policy_sig_sz == 0U) {
+                policy_sig_sz = CMD.signature_sz;
+            }
             header_size_align_8(&idx);
             header_size_append_tag(&idx,
-                CMD.policy_sz + (uint32_t)sizeof(uint32_t));
+                policy_sig_sz + (uint32_t)sizeof(uint32_t));
         }
     }
 
