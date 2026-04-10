@@ -317,18 +317,11 @@ static uint32_t header_append_limit(void)
 
 static void zero_and_free(uint8_t *buf, uint32_t len)
 {
-    volatile uint8_t *p;
-    uint32_t i;
-
     if (buf == NULL) {
         return;
     }
 
-    p = buf;
-    for (i = 0; i < len; i++) {
-        p[i] = 0;
-    }
-
+    wc_ForceZero(buf, len);
     free(buf);
 }
 
