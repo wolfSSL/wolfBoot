@@ -56,12 +56,15 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type);
 
 #ifdef CUSTOM_ENCRYPT_KEY
+static int mock_get_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_calls = 0;
 
 int wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
     int i;
+    if (mock_get_encrypt_key_ret != 0)
+        return mock_get_encrypt_key_ret;
     for (i = 0; i < ENCRYPT_KEY_SIZE; i++) {
         k[i] = (uint8_t)(i + 1);
     }
@@ -138,6 +141,7 @@ static void reset_mock_stats(void)
 {
     wolfBoot_staged_ok = 0;
 #ifdef CUSTOM_ENCRYPT_KEY
+    mock_get_encrypt_key_ret = 0;
     mock_set_encrypt_key_ret = 0;
     mock_set_encrypt_key_calls = 0;
 #endif
@@ -556,6 +560,26 @@ START_TEST (test_final_swap_propagates_encrypt_key_persist_failure)
 
     ck_assert_int_eq(ret, -5);
     ck_assert_int_eq(mock_set_encrypt_key_calls, 1);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_final_swap_propagates_encrypt_key_read_failure)
+{
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    mock_get_encrypt_key_ret = -7;
+    ret = wolfBoot_swap_and_final_erase(0);
+
+    ck_assert_int_eq(ret, -7);
+    ck_assert_int_eq(mock_set_encrypt_key_calls, 0);
 
     cleanup_flash();
 }
@@ -1013,6 +1037,7 @@ Suite *wolfboot_suite(void)
 #ifdef UNIT_TEST_FALLBACK_ONLY
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
     suite_add_tcase(s, fallback_verify);
 #endif
@@ -1050,6 +1075,7 @@ Suite *wolfboot_suite(void)
 #endif
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
 #endif
 

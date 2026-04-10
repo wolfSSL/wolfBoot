@@ -486,8 +486,16 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_printf("In function wolfBoot_final_swap: swapDone = %d\n", swapDone);
     if (swapDone == 0) {
         /* For encrypted images: Get the encryption key and IV */
-        wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
-            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
+        ret = wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
+            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
+        if (ret != 0) {
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+            wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+            return ret;
+        }
         /* Set the magic trailer in the buffer and write it to the staging sector */
         tmpBuffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
 
