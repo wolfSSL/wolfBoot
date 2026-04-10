@@ -83,6 +83,20 @@ extern "C" {
 #  endif
 #endif
 
+#ifndef NOINLINEFUNCTION
+#  if defined(__has_attribute)
+#    if __has_attribute(noinline)
+#      define NOINLINEFUNCTION __attribute__((noinline))
+#    else
+#      define NOINLINEFUNCTION
+#    endif
+#  elif defined(__GNUC__) || defined(__CC_ARM)
+#    define NOINLINEFUNCTION __attribute__((noinline))
+#  else
+#    define NOINLINEFUNCTION
+#  endif
+#endif
+
 
 /* Helpers for memory alignment */
 #ifndef XALIGNED
