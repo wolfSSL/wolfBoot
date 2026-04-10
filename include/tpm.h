@@ -79,10 +79,6 @@ int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg);
 #endif
 
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
-int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b, uint32_t len);
-#endif
-
 #ifdef WOLFBOOT_TPM_KEYSTORE
 int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint);
 #endif

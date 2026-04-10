@@ -223,6 +223,18 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
     return diff;
 }
 
+int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b, uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
 void* memchr(void const *s, int c_in, size_t n)
 {
     unsigned char c = (unsigned char)c_in;
