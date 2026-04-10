@@ -434,7 +434,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
-    int ret;
+    int ret = 0;
 
     /* open partitions (ignore failure) */
     wolfBoot_open_image(boot, PART_BOOT);

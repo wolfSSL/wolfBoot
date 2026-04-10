@@ -2034,11 +2034,13 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         ret = (int)fread(key, 1, keySz, fek);
         if (ret != keySz) {
             fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);
+            ret = -1;
             goto failure;
         }
         ret = (int)fread(iv, 1, ivSz, fek);
         if (ret != ivSz) {
             fprintf(stderr, "Error reading IV from %s\n", CMD.encrypt_key_file);
+            ret = -1;
             goto failure;
         }
         fclose(fek);
