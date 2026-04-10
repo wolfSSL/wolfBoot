@@ -437,6 +437,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
+    int ret;
 
     /* open partitions (ignore failure) */
     wolfBoot_open_image(boot, PART_BOOT);
@@ -498,7 +499,6 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
 #ifdef EXT_ENCRYPTED
-    int ret;
     /* Initialize encryption with the saved key */
     ret = wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
         (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
@@ -537,7 +537,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #ifdef EXT_ENCRYPTED
     wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
 #endif
-
+    (void)ret;
     return 0;
 }
 #ifdef __CCRX__
