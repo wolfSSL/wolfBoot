@@ -295,19 +295,23 @@ void *memmove(void *dst, const void *src, size_t n)
         const char *s = (const char *)src;
         char *d = (char *)dst;
         size_t aligned_n = 0;
+#ifdef FAST_MEMCPY
         if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
             ((size_t)src & (sizeof(unsigned long)-1)) == 0)
         {
             aligned_n = n & ~(sizeof(unsigned long) - 1);
         }
+#endif
         for (i = n; i > aligned_n; i--) {
             d[i - 1] = s[i - 1];
         }
+#ifdef FAST_MEMCPY
         while (aligned_n > 0) {
             aligned_n -= sizeof(unsigned long);
             *(unsigned long*)(d + aligned_n) =
                 *(const unsigned long*)(s + aligned_n);
         }
+#endif
         return dst;
     } else {
         return memcpy(dst, src, n);
