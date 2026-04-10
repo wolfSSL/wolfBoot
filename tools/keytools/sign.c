@@ -604,6 +604,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         }
     }
     fclose(f);
+    f = NULL;
     if (*key_buffer == NULL) {
         printf("Key buffer malloc error!\n");
         goto failure;
@@ -1443,6 +1444,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             printf("Could not get certificate chain file size: %s\n",
                    strerror(errno));
             fclose(f);
+            f = NULL;
             goto failure;
         }
 
@@ -1457,6 +1459,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                                   cert_chain_sz),
                    CMD.header_sz);
             fclose(f);
+            f = NULL;
             goto failure;
         }
 
@@ -1464,12 +1467,14 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         if (cert_chain == NULL) {
             printf("Certificate chain buffer malloc error!\n");
             fclose(f);
+            f = NULL;
             goto failure;
         }
 
         /* Read the entire file into the buffer */
         io_sz = (int)fread(cert_chain, 1, cert_chain_sz, f);
         fclose(f);
+        f = NULL;
 
         if (io_sz != (int)cert_chain_sz) {
             printf("Error reading certificate chain file: %s\n",
@@ -1774,6 +1779,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             }
             io_sz = (int)fread(signature, 1, CMD.signature_sz, f);
             fclose(f);
+            f = NULL;
             if (io_sz <= 0) {
                 printf("Error reading file %s\n", CMD.signature_file);
                 goto failure;
@@ -1821,6 +1827,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             if (io_sz != sizeof(uint32_t)) {
                 printf("Error reading file %s\n", CMD.policy_file);
                 fclose(f);
+                f = NULL;
                 goto failure;
             }
 
@@ -1828,6 +1835,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 /* in normal sign mode PCR digest (32 bytes) */
                 io_sz = (int)fread(digest, 1, digest_sz, f);
                 fclose(f);
+                f = NULL;
                 if (io_sz != (int)digest_sz) {
                     printf("Error reading file %s\n", CMD.policy_file);
                     goto failure;
@@ -1850,6 +1858,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 /* in manual mode remainder is PCR signature */
                 io_sz = (int)fread(policy, 1, CMD.policy_sz, f);
                 fclose(f);
+                f = NULL;
                 if (io_sz <= 0) {
                     printf("Error reading file %s\n", CMD.policy_file);
                     goto failure;
@@ -1864,6 +1873,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             if (f != NULL) {
                 fwrite(policy, 1, CMD.policy_sz + sizeof(uint32_t), f);
                 fclose(f);
+                f = NULL;
             }
         }
 
