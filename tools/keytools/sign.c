@@ -2100,13 +2100,19 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     ret = 0;
     if (f2) {
         fclose(f2);
+        f2 = NULL;
     }
     if (f) {
         fclose(f);
+        f = NULL;
     }
 failure:
     wc_ForceZero(key, sizeof(key));
     wc_ForceZero(iv, sizeof(iv));
+    if (f)
+        fclose(f);
+    if (f2)
+        fclose(f2);
     if (fek)
         fclose(fek);
     if (fef)
