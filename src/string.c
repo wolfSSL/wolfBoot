@@ -27,9 +27,6 @@
 #endif
 
 #include <stddef.h>
-#if defined(_RENESAS_RA_)
-#include <stdint.h>
-#endif
 #if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__ \
     && !defined(__CCRX__)
 #include <string.h>
@@ -218,18 +215,6 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
         s1++;
         s2++;
         n--;
-    }
-
-    return diff;
-}
-
-int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b, uint32_t len)
-{
-    uint32_t i;
-    uint8_t diff = 0;
-
-    for (i = 0; i < len; i++) {
-        diff |= a[i] ^ b[i];
     }
 
     return diff;

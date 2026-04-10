@@ -109,6 +109,19 @@ __attribute__((aligned(HBA_TBL_ALIGN)));
 #define AHCI_DEBUG_PRINTF(...) do {} while(0)
 #endif /* DEBUG_AHCI */
 
+static int wolfBoot_local_constant_compare(const uint8_t* a, const uint8_t* b,
+    uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
 /**
  * @brief Sets the AHCI Base Address Register (ABAR) for the given device.
  *
@@ -296,7 +309,7 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
                               secret_check, &secret_check_sz);
         if (ret == 0) {
             if (*secret_size != secret_check_sz ||
-                wolfBoot_constant_compare(secret, secret_check,
+                wolfBoot_local_constant_compare(secret, secret_check,
                     (uint32_t)secret_check_sz) != 0)
                 {
                     wolfBoot_printf("secret check mismatch!\n");

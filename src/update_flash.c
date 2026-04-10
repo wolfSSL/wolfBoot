@@ -42,6 +42,19 @@ static void wolfBoot_zeroize(void *ptr, size_t len)
     }
 }
 
+static int wolfBoot_local_constant_compare(const uint8_t* a, const uint8_t* b,
+    uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
 #ifdef EXT_ENCRYPTED
 int wolfBoot_force_fallback_iv(int enable);
 #include "encrypt.h"
@@ -1293,7 +1306,7 @@ int wolfBoot_unlock_disk(void)
                     secretCheck, &secretCheckSz);
                 if (ret == 0) {
                     if (secretSz != secretCheckSz ||
-                        wolfBoot_constant_compare(secret, secretCheck,
+                        wolfBoot_local_constant_compare(secret, secretCheck,
                             (uint32_t)secretSz) != 0)
                     {
                         wolfBoot_printf("secret check mismatch!\n");
