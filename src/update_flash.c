@@ -903,7 +903,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* get total size */
     total_size = wolfBoot_get_total_size(&boot, &update);
     if (total_size <= IMAGE_HEADER_SIZE) {
-        wolfBoot_printf("Image total size %u too large!\n", total_size);
+        wolfBoot_printf("Image total size %u invalid!\n", total_size);
         return -1;
     }
     /* In case this is a new update, do the required
