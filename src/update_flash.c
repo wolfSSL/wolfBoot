@@ -33,19 +33,6 @@
 
 #include "delta.h"
 #include "printf.h"
-#ifdef EXT_ENCRYPTED
-int wolfBoot_force_fallback_iv(int enable);
-#endif
-#ifdef WOLFBOOT_TPM
-#include "tpm.h"
-#endif
-#ifdef SECURE_PKCS11
-int WP11_Library_Init(void);
-#endif
-
-#ifdef EXT_ENCRYPTED
-#include "encrypt.h"
-
 static void wolfBoot_zeroize(void *ptr, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)ptr;
@@ -54,7 +41,17 @@ static void wolfBoot_zeroize(void *ptr, size_t len)
         *p++ = 0;
     }
 }
-#endif /* EXT_ENCRYPTED */
+
+#ifdef EXT_ENCRYPTED
+int wolfBoot_force_fallback_iv(int enable);
+#include "encrypt.h"
+#endif
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
+#ifdef SECURE_PKCS11
+int WP11_Library_Init(void);
+#endif
 
 #ifdef MMU
 #error "MMU is not yet supported for update_flash.c, please consider update_ram.c instead"
