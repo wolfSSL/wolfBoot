@@ -1788,7 +1788,9 @@ int aes_init(void)
     stored_nonce = enc_key->initial_vector;
     wolfCrypt_Init(); /* required to setup the crypto callback defaults */
 #elif defined(CUSTOM_ENCRYPT_KEY)
-    wolfBoot_get_encrypt_key(key, stored_nonce);
+    ret = wolfBoot_get_encrypt_key(key, stored_nonce);
+    if (ret != 0)
+        goto exit;
 #else
     #if defined(MMU) || defined(UNIT_TEST)
         key = ENCRYPT_KEY;
