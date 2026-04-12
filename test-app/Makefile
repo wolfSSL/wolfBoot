@@ -725,8 +725,17 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
       $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o
-    ifeq ($(WOLFCRYPT_TZ),1)
-      APP_OBJS+=$(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
+    ifeq ($(PKA),1)
+      CFLAGS+=-DWOLFSSL_NXP_LPC55S69
+      APP_OBJS+=\
+        $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
+        $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
+        $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/rng_port.o
+    else
+      CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
     endif
     ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
       LDFLAGS+=--specs=nosys.specs
