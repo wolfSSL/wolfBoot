@@ -1229,15 +1229,16 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
   endif
   ifeq ($(PKA),1)
-    CFLAGS+=-DWOLFSSL_NXP_CASPER -DWOLFSSL_NXP_HASHCRYPT
+    CFLAGS+=-DWOLFSSL_NXP_LPC55S69
     OBJS+=\
         $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
         $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
+        $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
-        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
-  endif
-  ifeq ($(WOLFCRYPT_TZ),1)
-    OBJS+=$(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/rng_port.o
+  else
+    CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
   endif
 endif
 
