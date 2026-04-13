@@ -119,7 +119,9 @@ PROVIDE(_start_heap = _end);
  *
  * Total stack area: STACK_SIZE + 4 * STACK_SIZE_PER_HART
  */
-PROVIDE(STACK_SIZE_PER_HART = 8192);
+/* M-mode: only E51 (hart 0) runs; secondary harts park in eNVM WFI loop.
+ * Set to 0 so no L2 Scratch is wasted on phantom secondary stacks. */
+PROVIDE(STACK_SIZE_PER_HART = 0);
 
 /* End of L2 scratchpad */
 PROVIDE(_l2_scratch_end = ORIGIN(L2_SCRATCH) + LENGTH(L2_SCRATCH));

@@ -168,6 +168,7 @@ extern const unsigned long MSS_UART_BASE_ADDR[5];
 #define CLEAR_RX_FIFO_MASK   (1U << 1) /* Clear receiver FIFO */
 #define CLEAR_TX_FIFO_MASK   (1U << 2) /* Clear transmitter FIFO */
 
+#define RTS_MASK             (1U << 1) /* Request To Send */
 #define LOOP_MASK            (1U << 4) /* Local loopback */
 #define RLOOP_MASK           (1U << 5) /* Remote loopback & Automatic echo*/
 

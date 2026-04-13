@@ -57,7 +57,13 @@ def wait_for(port, keyword, timeout_sec, label=""):
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         port.timeout = min(1.0, remaining)
-        line = port.readline()
+        try:
+            line = port.readline()
+        except serial.SerialException:
+            # JTAG reset can cause a brief USB-UART glitch on PTY proxies.
+            # Tolerate the transient disconnect and keep trying.
+            time.sleep(0.5)
+            continue
         if not line:
             continue
         text = line.decode("ascii", errors="replace").rstrip()

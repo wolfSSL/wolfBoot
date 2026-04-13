@@ -122,8 +122,9 @@ extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8
 #  define WATCHDOG_TIMEOUT_TICKS ((WATCHDOG_TIMEOUT_MS) * 300U)
 #endif
 
-/* Saved boot ROM watchdog value, restored in hal_prepare_boot() */
+/* Saved boot ROM watchdog values, restored in hal_prepare_boot() */
 static uint32_t mpfs_wdt_default_mvrp = 0;
+static uint32_t mpfs_wdt_default_ctrl = 0;
 
 
 /* CLINT MSIP register for IPI delivery */
@@ -178,8 +179,9 @@ static void qspi_uart_program(void);
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* Capture boot ROM WDT default for restoration in hal_prepare_boot() */
+    /* Capture boot ROM WDT defaults for restoration in hal_prepare_boot() */
     mpfs_wdt_default_mvrp = MSS_WDT_MVRP(MSS_WDT_E51_BASE);
+    mpfs_wdt_default_ctrl = MSS_WDT_CONTROL(MSS_WDT_E51_BASE);
 
 #ifndef WATCHDOG
     /* WATCHDOG=0 (default): disable WDT for the duration of wolfBoot.
@@ -191,6 +193,7 @@ void hal_init(void)
      * never have to pet the WDT during ECDSA verify. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
     MSS_WDT_MVRP(MSS_WDT_E51_BASE) = WATCHDOG_TIMEOUT_TICKS;
+    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) |= MSS_WDT_CTRL_ENABLE;
 #endif
 
     mpfs_config_l2_cache();
@@ -407,12 +410,13 @@ int hal_dts_fixup(void* dts_addr)
 void hal_prepare_boot(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* Restore boot ROM WDT default so the application sees a normal WDT.
+    /* Restore boot ROM WDT defaults so the application sees a normal WDT.
      * Refresh first so the timer doesn't fire immediately after we apply
-     * the new MVRP. Re-enable in case it was disabled by hal_init(). */
+     * the new MVRP. Restore the original CONTROL value (including the
+     * enable bit) rather than unconditionally enabling. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
     MSS_WDT_MVRP(MSS_WDT_E51_BASE) = mpfs_wdt_default_mvrp;
-    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) |= MSS_WDT_CTRL_ENABLE;
+    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) = mpfs_wdt_default_ctrl;
 #endif
     /* reset the eMMC/SD card? */
 }
@@ -1339,7 +1343,7 @@ static void uart_init_base(unsigned long base)
     MMUART_IER(base)  = 0u;
     MMUART_FCR(base)  = CLEAR_RX_FIFO_MASK | CLEAR_TX_FIFO_MASK | RXRDY_TXRDYN_EN_MASK;
     MMUART_MCR(base) &= ~(LOOP_MASK | RLOOP_MASK);
-    MMUART_MCR(base) |= (1U << 1);  /* Assert RTS — required for USB-UART bridge CTS */
+    MMUART_MCR(base) |= RTS_MASK;  /* Assert RTS — required for USB-UART bridge CTS */
     MMUART_MM1(base) &= ~(E_MSB_TX_MASK | E_MSB_RX_MASK);
     MMUART_MM2(base) &= ~(EAFM_MASK | ESWM_MASK);
     MMUART_MM0(base) &= ~(ETTG_MASK | ERTO_MASK | EFBR_MASK);
