@@ -30,7 +30,7 @@ SECTIONS
         *(.ARM.exidx*)
     } > FLASH
 
-    .gnu.sgstubs :
+    .gnu.sgstubs ORIGIN(FLASH_NSC) :
     {
         . += 0x400;
         . = ALIGN(4);

@@ -26,6 +26,12 @@ SECTIONS
         *(.ARM.exidx*)
     } > FLASH
 
+    .keystore :
+    {
+        . = ALIGN(4);
+        KEEP(*(.keystore*))
+    } > FLASH
+
     _stored_data = .;
 
     .data : AT (_stored_data)

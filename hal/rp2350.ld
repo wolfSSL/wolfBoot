@@ -102,7 +102,7 @@ SECTIONS
         . = ALIGN(4);
     } > FLASH
 
-    .gnu.sgstubs :
+    .gnu.sgstubs ORIGIN(FLASH_NSC) :
     {
         *(.gnu.sgstubs*)   /* Secure Gateway stubs */
         . = ALIGN(4);

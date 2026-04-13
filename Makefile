@@ -42,6 +42,10 @@ OBJS:= \
 	./src/libwolfboot.o \
 	./hal/hal.o
 
+ifeq ($(USE_CLANG),1)
+OBJS+=./src/clang_sections.o
+endif
+
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
 OBJS+=./src/dice/dice.o
 endif
@@ -197,6 +201,7 @@ ifeq ($(USE_GCC_HEADLESS),1)
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
+
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
 endif

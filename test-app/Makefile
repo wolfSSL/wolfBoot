@@ -91,7 +91,7 @@ endif
 include ../arch.mk
 
 ifeq ($(USE_CLANG),1)
-  APP_OBJS+=../src/string.o
+  APP_NEEDS_STRING:=1
 endif
 
 # Optional alias for clearer TZ PSA selection in app builds.
@@ -106,8 +106,16 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 
+ifeq ($(USE_CLANG),1)
+  APP_OBJS+=../src/clang_sections.o
+endif
+
 ifeq ($(DEBUG_UART),1)
     CFLAGS+=-DDEBUG_UART
+    APP_NEEDS_STRING:=1
+endif
+
+ifeq ($(APP_NEEDS_STRING),1)
     APP_OBJS+=../src/string.o
 endif
 
@@ -295,8 +303,12 @@ ifeq ($(TZEN),1)
                 WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
             endif
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
-        LDFLAGS+=--specs=nosys.specs -u _printf_float
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS
+        ifneq ($(USE_CLANG),1)
+          CFLAGS+=-Wstack-usage=19184
+          LDFLAGS+=--specs=nosys.specs
+        endif
+        LDFLAGS+=-u _printf_float
     endif
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
         CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA
