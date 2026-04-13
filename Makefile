@@ -451,11 +451,20 @@ test-app/image_v1_signed.bin: $(BOOT_IMG) keytools_check
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
-
+ifeq ($(STRIP_ELF),1)
+	@echo "\t[STRIP] $(BOOT_IMG)"
+	$(Q)$(OBJCOPY) --strip-debug $(BOOT_IMG) $(BOOT_IMG).stripped
+	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
+		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG).stripped $(PRIVATE_KEY) \
+		$(SECONDARY_PRIVATE_KEY) 1 || true
+	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG).stripped 1 || true
+	$(Q)mv test-app/image.elf_v1_signed.bin test-app/image_v1_signed.bin
+else
 	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
 		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
 		$(SECONDARY_PRIVATE_KEY) 1 || true
 	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+endif
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" image.elf
@@ -537,6 +546,7 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_LOAD_BASE@/$(WOLFBOOT_LOAD_BASE)/g" | \
 		sed -e "s/@BOOTLOADER_START@/$(BOOTLOADER_START)/g" | \
 		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g" | \
+		sed -e "s/@WOLFBOOT_LOAD_ADDRESS@/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
 		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" | \
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
 		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" \

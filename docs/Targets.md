@@ -827,6 +827,28 @@ Key build settings that differ between configurations:
 > **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
 > crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
 
+### M-Mode Optional Build Flags
+
+These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS_EXTRA+=-D...`.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `WATCHDOG` | undefined (disabled) | When defined, the E51 watchdog timer is **kept enabled** during wolfBoot operation with a generous timeout. When undefined, the WDT is **disabled** in `hal_init()` and re-enabled with the boot ROM default in `hal_prepare_boot()` before jumping to the application. Either way, the application receives a normal WDT. |
+| `WATCHDOG_TIMEOUT_MS` | `30000` (30 s) | Watchdog timeout in milliseconds when `WATCHDOG` is defined. ECDSA P-384 verification on E51 with portable C math is bounded at ~5 s; the default 30 s avoids any need to refresh the WDT during the long verify call. |
+
+#### Stack overflow detection
+
+The trap handler in `src/boot_riscv.c` automatically detects stack overflow on synchronous exceptions. When a trap fires with `SP < _main_hart_stack_bottom`, it prints:
+
+```
+TRAP: cause=2 epc=A000740 tval=0 sp=A02FFE8
+STACK OVERFLOW: sp=A02FFE8 < bottom=A030000 (under by 24)
+```
+
+This is helpful for diagnosing illegal-instruction TRAPs at random valid `.text` addresses, which are the classic signature of stack overflow corrupting the return address.
+
+The current `STACK_SIZE` in `hal/mpfs250-m.ld` is **32 KB**. Measured peak for ECC384 + SHA384 + SPMATHALL + NO_ASM is ~6 KB (5x headroom).
+
 ### PolarFire SoC Files
 
 `hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)

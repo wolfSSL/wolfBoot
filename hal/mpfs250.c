@@ -105,6 +105,27 @@ static __attribute__((noinline)) void udelay(uint32_t us)
 
 extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8_t to avoid size confusion */
 
+/* Watchdog timeout configuration.
+ *   WATCHDOG=0 (default): WDT disabled in hal_init() then restored to boot
+ *                         ROM defaults in hal_prepare_boot() before do_boot.
+ *   WATCHDOG=1: WDT kept enabled with WATCHDOG_TIMEOUT_MS during wolfBoot.
+ * Verify is bounded at ~5s; default 30s leaves ample headroom and avoids
+ * the need to pet the WDT during the long ECDSA verify call. */
+#ifdef WATCHDOG
+#  ifndef WATCHDOG_TIMEOUT_MS
+#    define WATCHDOG_TIMEOUT_MS  30000U
+#  endif
+/* MPFS MSS WDT clock is AHB / 256 ≈ 150 MHz / 256 ≈ 585 kHz at S-mode rate
+ * but ~80 MHz / 256 ≈ 312 kHz on E51 reset clocks. Use a conservative
+ * 300 ticks/ms; the actual rate may be a bit higher but a slightly longer
+ * timeout is safe. Caller can override WATCHDOG_TIMEOUT_MS at build time. */
+#  define WATCHDOG_TIMEOUT_TICKS ((WATCHDOG_TIMEOUT_MS) * 300U)
+#endif
+
+/* Saved boot ROM watchdog value, restored in hal_prepare_boot() */
+static uint32_t mpfs_wdt_default_mvrp = 0;
+
+
 /* CLINT MSIP register for IPI delivery */
 #define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
 
@@ -157,6 +178,21 @@ static void qspi_uart_program(void);
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
+    /* Capture boot ROM WDT default for restoration in hal_prepare_boot() */
+    mpfs_wdt_default_mvrp = MSS_WDT_MVRP(MSS_WDT_E51_BASE);
+
+#ifndef WATCHDOG
+    /* WATCHDOG=0 (default): disable WDT for the duration of wolfBoot.
+     * It will be re-enabled in hal_prepare_boot() before do_boot. */
+    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) &= ~MSS_WDT_CTRL_ENABLE;
+#else
+    /* WATCHDOG=1: keep WDT enabled with a generous timeout for crypto.
+     * Verify is bounded at ~5s; configure a much larger timeout so we
+     * never have to pet the WDT during ECDSA verify. */
+    MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
+    MSS_WDT_MVRP(MSS_WDT_E51_BASE) = WATCHDOG_TIMEOUT_TICKS;
+#endif
+
     mpfs_config_l2_cache();
     mpfs_signal_main_hart_started();
 #endif
@@ -370,9 +406,15 @@ int hal_dts_fixup(void* dts_addr)
 }
 void hal_prepare_boot(void)
 {
+#ifdef WOLFBOOT_RISCV_MMODE
+    /* Restore boot ROM WDT default so the application sees a normal WDT.
+     * Refresh first so the timer doesn't fire immediately after we apply
+     * the new MVRP. Re-enable in case it was disabled by hal_init(). */
+    MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
+    MSS_WDT_MVRP(MSS_WDT_E51_BASE) = mpfs_wdt_default_mvrp;
+    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) |= MSS_WDT_CTRL_ENABLE;
+#endif
     /* reset the eMMC/SD card? */
-
-
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -541,7 +583,9 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
     timeout = QSPI_TIMEOUT_TRIES;
     while (!(QSPI_STATUS & QSPI_STATUS_READY) && --timeout);
     if (timeout == 0) {
+    #ifdef DEBUG_QSPI
         wolfBoot_printf("QSPI: Timeout waiting for READY\n");
+    #endif
         return -1;
     }
 
@@ -587,7 +631,9 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
         timeout = QSPI_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_TXAVAIL) && --timeout);
         if (timeout == 0) {
+        #ifdef DEBUG_QSPI
             wolfBoot_printf("QSPI: TX FIFO full timeout\n");
+        #endif
             return -2;
         }
         QSPI_TX_DATA = cmd[i];
@@ -600,8 +646,10 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
             timeout = QSPI_RX_TIMEOUT_TRIES;
             while (!(QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout);
             if (timeout == 0) {
+            #ifdef DEBUG_QSPI
                 wolfBoot_printf("QSPI: RX timeout at byte %d, status=0x%x\n",
                     i, QSPI_STATUS);
+            #endif
                 return -3;
             }
             data[i] = QSPI_RX_DATA;
@@ -610,7 +658,9 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
         timeout = QSPI_RX_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_RXDONE) && --timeout);
         if (timeout == 0) {
+        #ifdef DEBUG_QSPI
             wolfBoot_printf("QSPI: RXDONE timeout\n");
+        #endif
             return -5;
         }
     } else {
@@ -625,7 +675,9 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
                 timeout = QSPI_TIMEOUT_TRIES;
                 while (!(QSPI_STATUS & QSPI_STATUS_TXAVAIL) && --timeout);
                 if (timeout == 0) {
+                #ifdef DEBUG_QSPI
                     wolfBoot_printf("QSPI: TX data timeout\n");
+                #endif
                     return -4;
                 }
                 QSPI_TX_DATA = data[i];
@@ -636,8 +688,10 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
         timeout = QSPI_TIMEOUT_TRIES;
         while (!(QSPI_STATUS & QSPI_STATUS_TXDONE) && --timeout);
         if (timeout == 0) {
+        #ifdef DEBUG_QSPI
             wolfBoot_printf("QSPI: TXDONE timeout, status=0x%x\n",
                 QSPI_STATUS);
+        #endif
             return -5;
         }
     }
@@ -904,7 +958,8 @@ int ext_flash_erase(uintptr_t address, int len)
 
 #define QSPI_PROG_CHUNK        256
 #define QSPI_PROG_ACK          0x06
-#define QSPI_RX_TIMEOUT_MS     5000U  /* 5 s per byte — aborts if host disappears */
+#define QSPI_RX_TIMEOUT_MS     10000U  /* 10 s per byte — aborts if host disappears */
+
 
 /* Returns 0-255 on success, -1 on timeout (so the boot path is never deadlocked). */
 static int uart_qspi_rx(void)
@@ -938,7 +993,11 @@ static void qspi_uart_program(void)
     uint32_t i, s;
     uint8_t chunk[QSPI_PROG_CHUNK];
 
-    wolfBoot_printf("QSPI-PROG: Press 'P' within 3s to program flash\r\n");
+    /* Use uart_qspi_puts (direct UART) for ALL programmer output.
+     * wolfBoot_printf uses uart_write which adds \r before \n and may
+     * leave stale bytes in the UART TX pipeline that corrupt the
+     * binary ACK/data protocol after ERASED. */
+    uart_qspi_puts("QSPI-PROG: Press 'P' within 3s to program flash\r\n");
 
     /* Drain any stale RX bytes before opening the window */
     while (MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_DR)
@@ -954,13 +1013,10 @@ static void qspi_uart_program(void)
     }
 
     if (ch != 'P' && ch != 'p') {
-        wolfBoot_printf("QSPI-PROG: No trigger (got 0x%02x LSR=0x%02x), booting\r\n",
-                        (unsigned)ch,
-                        (unsigned)MMUART_LSR(DEBUG_UART_BASE));
+        uart_qspi_puts("QSPI-PROG: No trigger, booting\r\n");
         return;
     }
 
-    wolfBoot_printf("QSPI-PROG: Entering programmer mode\r\n");
     uart_qspi_puts("READY\r\n");
 
     /* Receive destination address then data length (4 bytes LE each) */
@@ -968,7 +1024,7 @@ static void qspi_uart_program(void)
     for (i = 0; i < 4; i++) {
         int b = uart_qspi_rx();
         if (b < 0) {
-            wolfBoot_printf("QSPI-PROG: RX timeout receiving addr\r\n");
+            uart_qspi_puts("QSPI-PROG: RX timeout (addr)\r\n");
             return;
         }
         addr |= ((uint32_t)(uint8_t)b << (i * 8));
@@ -977,54 +1033,49 @@ static void qspi_uart_program(void)
     for (i = 0; i < 4; i++) {
         int b = uart_qspi_rx();
         if (b < 0) {
-            wolfBoot_printf("QSPI-PROG: RX timeout receiving size\r\n");
+            uart_qspi_puts("QSPI-PROG: RX timeout (size)\r\n");
             return;
         }
         size |= ((uint32_t)(uint8_t)b << (i * 8));
     }
 
-    wolfBoot_printf("QSPI-PROG: addr=0x%x size=%u bytes\r\n", addr, size);
-
     if (size == 0 || size > 0x200000U) {
-        wolfBoot_printf("QSPI-PROG: Invalid size, aborting\r\n");
+        uart_qspi_puts("QSPI-PROG: Invalid size\r\n");
         return;
     }
 
-    /* Reject writes to unaligned or out-of-partition addresses before any erase */
+    /* Reject writes to unaligned or out-of-partition addresses */
     if ((addr & (FLASH_SECTOR_SIZE - 1U)) != 0U) {
-        wolfBoot_printf("QSPI-PROG: addr 0x%x not sector-aligned, aborting\r\n", addr);
+        uart_qspi_puts("QSPI-PROG: Not sector-aligned\r\n");
         return;
     }
     if (!((addr >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
            addr + size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) ||
           (addr >= WOLFBOOT_PARTITION_UPDATE_ADDRESS &&
            addr + size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))) {
-        wolfBoot_printf("QSPI-PROG: addr 0x%x+%u outside allowed partitions, aborting\r\n",
-                        addr, size);
+        uart_qspi_puts("QSPI-PROG: Outside partition\r\n");
         return;
     }
 
-    /* Erase all required sectors (FLASH_SECTOR_SIZE = 64 KB) */
+    /* Erase all required sectors */
     n_sectors = (size + FLASH_SECTOR_SIZE - 1) / FLASH_SECTOR_SIZE;
-    wolfBoot_printf("QSPI-PROG: Erasing %u sector(s) at 0x%x...\r\n",
-                    n_sectors, addr);
+    uart_qspi_puts("QSPI-PROG: Erasing...\r\n");
     ext_flash_unlock();
     for (s = 0; s < n_sectors; s++) {
         int ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
                                   FLASH_SECTOR_SIZE);
         if (ret < 0) {
-            wolfBoot_printf("QSPI-PROG: Erase failed at 0x%x (ret %d)\r\n",
-                            addr + s * FLASH_SECTOR_SIZE, ret);
+            uart_qspi_puts("QSPI-PROG: Erase failed\r\n");
             ext_flash_lock();
             return;
         }
     }
 
-    /* "ERASED\r\n" must be the last bytes before the first ACK (0x06).
-     * Do not insert any wolfBoot_printf between here and the transfer loop. */
     uart_qspi_puts("ERASED\r\n");
 
-    /* Chunk transfer: wolfBoot requests each 256-byte block with ACK 0x06 */
+    /* Chunk transfer: wolfBoot requests each 256-byte block with ACK 0x06.
+     * No wolfBoot_printf allowed in this loop — only direct UART via
+     * uart_qspi_tx/uart_qspi_puts to avoid protocol corruption. */
     written = 0;
     while (written < size) {
         int ret;
@@ -1037,8 +1088,7 @@ static void qspi_uart_program(void)
         for (i = 0; i < chunk_len; i++) {
             int b = uart_qspi_rx();
             if (b < 0) {
-                wolfBoot_printf("QSPI-PROG: RX timeout at 0x%x+%u\r\n",
-                                addr + written, i);
+                uart_qspi_puts("QSPI-PROG: RX timeout\r\n");
                 ext_flash_lock();
                 return;
             }
@@ -1047,8 +1097,7 @@ static void qspi_uart_program(void)
 
         ret = ext_flash_write(addr + written, chunk, (int)chunk_len);
         if (ret < 0) {
-            wolfBoot_printf("QSPI-PROG: Write failed at 0x%x (ret %d)\r\n",
-                            addr + written, ret);
+            uart_qspi_puts("QSPI-PROG: Write failed\r\n");
             ext_flash_lock();
             return;
         }
@@ -1056,9 +1105,7 @@ static void qspi_uart_program(void)
     }
     ext_flash_lock();
 
-    wolfBoot_printf("QSPI-PROG: Wrote %u bytes to 0x%x\r\n", written, addr);
     uart_qspi_puts("DONE\r\n");
-    wolfBoot_printf("QSPI-PROG: Done, continuing boot\r\n");
 }
 
 #endif /* UART_QSPI_PROGRAM */
@@ -1292,6 +1339,7 @@ static void uart_init_base(unsigned long base)
     MMUART_IER(base)  = 0u;
     MMUART_FCR(base)  = CLEAR_RX_FIFO_MASK | CLEAR_TX_FIFO_MASK | RXRDY_TXRDYN_EN_MASK;
     MMUART_MCR(base) &= ~(LOOP_MASK | RLOOP_MASK);
+    MMUART_MCR(base) |= (1U << 1);  /* Assert RTS — required for USB-UART bridge CTS */
     MMUART_MM1(base) &= ~(E_MSB_TX_MASK | E_MSB_RX_MASK);
     MMUART_MM2(base) &= ~(EAFM_MASK | ESWM_MASK);
     MMUART_MM0(base) &= ~(ETTG_MASK | ERTO_MASK | EFBR_MASK);

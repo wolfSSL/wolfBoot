@@ -44,6 +44,10 @@ extern int wolfBoot_get_dts_size(void *dts_addr);
 extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
 
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
+#endif
+
 #if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
     (defined(EXT_ENCRYPTED) && defined(MMU))) && \
     !defined(WOLFBOOT_NO_RAMBOOT)
@@ -94,6 +98,16 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #elif defined(WOLFBOOT_PARTITION_SIZE)
     if (img_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Invalid image size %u at %p\n", img_size, src);
+        return -1;
+    }
+#endif
+
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    /* Runtime overlap check: ensure image destination does not overwrite
+     * wolfBoot's own code/data/bss in RAM. */
+    if ((uintptr_t)dst < (uintptr_t)_end) {
+        wolfBoot_printf("Error: image dest %p overlaps wolfBoot end %p\n",
+            dst, _end);
         return -1;
     }
 #endif
@@ -212,6 +226,7 @@ void RAMFUNCTION wolfBoot_start(void)
             goto backup_on_failure;
         }
         BENCHMARK_END("done");
+
 #endif
 
         {
