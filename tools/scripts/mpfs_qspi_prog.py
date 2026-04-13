@@ -177,8 +177,13 @@ def main():
             sys.exit(1)
 
         chunk = data[sent : sent + CHUNK_SIZE]
-        port.write(chunk)
-        port.flush()
+        # Send in small pieces: some USB-UART bridges (e.g., PolarFire
+        # Video Kit) stall on bulk writes. 8-byte pieces with 10ms
+        # pauses prevent the bridge's TX FIFO from stalling.
+        for ci in range(0, len(chunk), 8):
+            port.write(chunk[ci:ci+8])
+            port.flush()
+            time.sleep(0.010)
         sent += len(chunk)
 
         pct = sent * 100 // total

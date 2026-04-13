@@ -59,12 +59,24 @@ _reset:
 #ifdef TARGET_mpfs250
     /* Enable L2 ways (mask 0x0B: ways 0, 1, 3) and clear shutdown
      * before copying text to L2 scratchpad. */
-    li    t1, 0x02010000
+    li    t1, 0x02010000              /* L2_CACHE_BASE */
     li    t2, 0x0B
-    sd    t2, 8(t1)                /* L2_WAY_ENABLE */
+    sd    t2, 8(t1)                   /* L2_WAY_ENABLE */
     fence
-    li    t1, 0x20002000
-    sw    zero, 0x174(t1)          /* SYSREG_L2_SHUTDOWN_CR = 0 */
+    li    t1, 0x20002000              /* SYSREG_BASE */
+    sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
+    fence
+
+    /* Route E51 D-cache to scratchpad ways (8-11) for the copy.
+     * With the default mask (0xFF = cache ways 0-7), stores to the
+     * Zero Device (0x0A000000) land in cache and never reach the
+     * scratchpad SRAM. The I-cache later fetches from scratchpad and
+     * gets uninitialized data (zeros), causing illegal-instruction
+     * traps. Setting the mask to 0xF00 forces stores into the actual
+     * scratchpad SRAM. See HSS mss_l2_cache.c config_l2_cache(). */
+    li    t4, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
+    li    t5, 0xF00                   /* scratchpad ways 8-11 */
+    sd    t5, 0(t4)
     fence
 #endif
 
@@ -85,6 +97,12 @@ _reset:
     addi  t1, t1, 8
     j     .L_copy_text
 .L_copy_text_done:
+#ifdef TARGET_mpfs250
+    /* Restore D-cache to cache-only ways before normal execution */
+    li    t5, 0xFF                    /* cache ways 0-7 */
+    sd    t5, 0(t4)                   /* WAY_MASK_E51_DCACHE = cache-only */
+#endif
+    fence rw, rw
     fence.i                           /* flush icache before jumping to SRAM */
 
     lui   t0, %hi(.L_sram_entry)
@@ -255,6 +273,7 @@ _copy_params:
     addi  t0, t0, 8
     j     .L_bss_clear
 .L_bss_clear_done:
+
 
 #ifndef TARGET_mpfs250
     /* Clear SiFive bus error unit accrued registers (not present on MPFS) */
