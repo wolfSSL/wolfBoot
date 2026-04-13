@@ -90,6 +90,9 @@ endif
 
 ## Monolithic self-update: erase covers fw_size so the payload can span
 ## the bootloader region into the contiguous boot partition.
+ifeq ($(WOLFBOOT_SELF_UPDATE_MONOLITHIC),1)
+  SELF_UPDATE_MONOLITHIC:=1
+endif
 ifeq ($(SELF_UPDATE_MONOLITHIC),1)
   CFLAGS+=-DWOLFBOOT_SELF_UPDATE_MONOLITHIC
 endif
@@ -710,6 +713,12 @@ ifeq ($(ALLOW_DOWNGRADE),1)
 endif
 
 ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
+  ifneq ($(WOLFBOOT_SELF_HEADER),1)
+    $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_HEADER=1)
+  endif
+  ifneq ($(SELF_UPDATE_MONOLITHIC),1)
+    $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_UPDATE_MONOLITHIC (set SELF_UPDATE_MONOLITHIC=1))
+  endif
   CFLAGS+=-D"WOLFBOOT_SKIP_BOOT_VERIFY"
 endif
 
@@ -718,6 +727,7 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
 endif
 
 ifeq ($(DISABLE_BACKUP),1)
+  $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"
 endif
 

@@ -1,0 +1,30 @@
+KEYTOOLS_SIGN_SRCS=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed448.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_operations.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_operations.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_448.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_448.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.c \
+	../../src/delta.c

@@ -86,6 +86,7 @@ tools/keytools/Debug
 tools/keytools/Release
 tools/keytools/otp/otp-keystore-primer
 
+
 # delta binaries
 tools/delta/bmdiff
 tools/delta/bmpatch
@@ -176,6 +177,10 @@ tools/unit-tests/unit-hal-otp
 tools/unit-tests/unit-rot-auth
 tools/unit-tests/unit-sdhci-response-bits
 tools/unit-tests/unit-tpm-check-rot-auth
+tools/unit-tests/unit-policy-create
+tools/unit-tests/unit-sign-encrypted-output
+tools/unit-tests/unit-update-flash-delta
+tools/unit-tests/unit-update-flash-self-update
 
 
 

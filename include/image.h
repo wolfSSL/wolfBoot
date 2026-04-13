@@ -166,7 +166,7 @@ struct wolfBoot_image {
  * With ARMORED setup, the flag is redundant, and the information is wrapped in
  * between canary variables, to mitigate attacks based on memory corruptions.
  */
-static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
+static void NOINLINEFUNCTION wolfBoot_image_confirm_signature_ok(
     struct wolfBoot_image *img)
 {
     img->canary_FEED4567 = 0xFEED4567UL;
@@ -176,7 +176,7 @@ static void __attribute__((noinline)) wolfBoot_image_confirm_signature_ok(
     img->canary_FEED89AB = 0xFEED89ABUL;
 }
 
-static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
+static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
 	struct wolfBoot_image *img)
 {
 	img->canary_FEED4567 = 0xFEED4567UL;
@@ -424,7 +424,8 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         asm volatile("mov r0, #50":::"r0"); \
         asm volatile("mov r0, #50":::"r0"); \
         asm volatile("mov r0, #50":::"r0"); \
-        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        compare_res = image_CT_compare(digest, img->sha_hash, \
+            WOLFBOOT_SHA_DIGEST_SIZE); \
         /* Redundant checks that ensure the function actually returned 0 */ \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
@@ -442,8 +443,9 @@ static void __attribute__((noinline)) wolfBoot_image_clear_signature_ok(
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne hnope"); \
-        /* Repeat memcmp call */ \
-        compare_res = XMEMCMP(digest, img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE); \
+        /* Repeat comparison call */ \
+        compare_res = image_CT_compare(digest, img->sha_hash, \
+            WOLFBOOT_SHA_DIGEST_SIZE); \
         compare_res; \
         /* Redundant checks that ensure the function actually returned 0 */ \
         asm volatile("cmp r0, #0":::"cc"); \
@@ -1234,7 +1236,7 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
     ret = fn(__VA_ARGS__);
 
 #define RSA_VERIFY_HASH(img,digest) \
-    if (XMEMCMP(img->sha_hash, digest, WOLFBOOT_SHA_DIGEST_SIZE) == 0) \
+    if (image_CT_compare(img->sha_hash, digest, WOLFBOOT_SHA_DIGEST_SIZE) == 0) \
         wolfBoot_image_confirm_signature_ok(img);
 
 #define PART_SANITY_CHECK(p) \
@@ -1250,6 +1252,8 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
 #endif
 
 /* Defined in image.c */
+int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
+    uint32_t len);
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 #ifdef EXT_FLASH
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);

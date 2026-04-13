@@ -62,6 +62,19 @@
 
 #include <stddef.h> /* for size_t */
 
+#ifdef EXT_ENCRYPTED
+static int encrypt_key_is_erased(const uint8_t *key, uint32_t len)
+{
+    uint8_t diff = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++)
+        diff |= key[i] ^ FLASH_BYTE_ERASED;
+
+    return diff == 0;
+}
+#endif
+
 #if defined(EXT_ENCRYPTED) && (defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(MMU))
 #include "encrypt.h"
 static int encrypt_initialized = 0;
@@ -69,6 +82,20 @@ static int encrypt_initialized = 0;
 static uint8_t encrypt_iv_nonce[ENCRYPT_NONCE_SIZE] XALIGNED(4);
 static uint32_t encrypt_iv_offset = 0;
 static int fallback_iv_forced = 0;
+
+static int encrypt_key_is_valid(const uint8_t *key, uint32_t len)
+{
+    uint8_t has_one = 0;
+    uint8_t has_zero = 0;
+    uint32_t i;
+
+    for (i = 0; i < len; i++) {
+        has_one |= key[i];
+        has_zero |= (uint8_t)~key[i];
+    }
+
+    return (has_one != 0) && (has_zero != 0);
+}
 
 #define FALLBACK_IV_OFFSET 0x00100000U
     #if !defined(XMEMSET)
@@ -1549,7 +1576,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     /* erase the old key */
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
     if (ret != 0)
-        return ret;
+        goto exit_lock;
 #endif
 
     /* Populate key + nonce in the cache */
@@ -1574,7 +1601,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
 #ifdef NVM_FLASH_WRITEONCE
     if (ret != 0)
-        return ret;
+        goto exit_lock;
     /* Erasing original sector "sel_sec",
      * same one returned from by nvm_select.
      */
@@ -1582,6 +1609,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
+exit_lock:
     hal_flash_lock();
     return ret;
 #endif
@@ -1596,14 +1624,13 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
  * @param key Pointer to the encryption key.
  * @param nonce Pointer to the encryption nonce.
  *
- * @return 0 if successful.
+ * @return 0 on success, or the underlying flash error code on failure.
  *
  */
 int RAMFUNCTION wolfBoot_set_encrypt_key(const uint8_t *key,
     const uint8_t *nonce)
 {
-    hal_set_key(key, nonce);
-    return 0;
+    return hal_set_key(key, nonce);
 }
 
 #ifndef UNIT_TEST
@@ -1649,7 +1676,7 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
  * This function erases the encryption key and nonce, resetting them to all 0xFF
  * bytes.It ensures that the key and nonce cannot be accessed after erasure.
  *
- * @return 0 if successful.
+ * @return 0 on success, or the underlying flash error code on failure.
  *
  */
 int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
@@ -1659,6 +1686,7 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
 #elif defined(MMU)
     ForceZero(ENCRYPT_KEY, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
 #else
+    int ret = 0;
     uint8_t ff[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
     uint8_t *mem = (uint8_t *)ENCRYPT_TMP_SECRET_OFFSET +
         WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -1667,8 +1695,9 @@ int RAMFUNCTION wolfBoot_erase_encrypt_key(void)
     mem -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
 #endif
     XMEMSET(ff, FLASH_BYTE_ERASED, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE);
-    if (XMEMCMP(mem, ff, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE) != 0)
-        hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+    if (!encrypt_key_is_erased(mem, ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
+        ret = hal_set_key(ff, ff + ENCRYPT_KEY_SIZE);
+    return ret;
 #endif
     return 0;
 }
@@ -1683,6 +1712,7 @@ ChaCha chacha;
 
 int RAMFUNCTION chacha_init(void)
 {
+    int ret = 0;
 #ifdef CUSTOM_ENCRYPT_KEY
     uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
     uint8_t key[ENCRYPT_KEY_SIZE];
@@ -1690,12 +1720,10 @@ int RAMFUNCTION chacha_init(void)
     const uint8_t* stored_nonce;
     uint8_t *key;
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-
 #ifdef CUSTOM_ENCRYPT_KEY
-    int ret = wolfBoot_get_encrypt_key(key, stored_nonce);
+    ret = wolfBoot_get_encrypt_key(key, stored_nonce);
     if (ret != 0)
-        return ret;
+        goto exit;
 #else
     #if defined(MMU) || defined(UNIT_TEST)
         key = ENCRYPT_KEY;
@@ -1711,19 +1739,21 @@ int RAMFUNCTION chacha_init(void)
 
     XMEMSET(&chacha, 0, sizeof(chacha));
 
-    /* Check against 'all 0xff' or 'all zero' cases */
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
-    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE)) {
+        ret = -1;
+        goto exit;
+    }
 
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
 
     wc_Chacha_SetKey(&chacha, key, ENCRYPT_KEY_SIZE);
     encrypt_initialized = 1;
-    return 0;
+exit:
+#ifdef CUSTOM_ENCRYPT_KEY
+    ForceZero(key, sizeof(key));
+    ForceZero(stored_nonce, sizeof(stored_nonce));
+#endif
+    return ret;
 }
 
 #elif defined(ENCRYPT_WITH_AES128) || defined(ENCRYPT_WITH_AES256)
@@ -1742,6 +1772,7 @@ Aes aes_dec, aes_enc;
 int aes_init(void)
 {
     int devId = INVALID_DEVID;
+    int ret = 0;
 #if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
     uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
     uint8_t key[ENCRYPT_KEY_SIZE];
@@ -1749,10 +1780,7 @@ int aes_init(void)
     uint8_t *stored_nonce;
     uint8_t *key;
 #endif
-    uint8_t ff[ENCRYPT_KEY_SIZE];
-
 #ifdef WOLFBOOT_RENESAS_TSIP
-    int ret;
     wrap_enc_key_t* enc_key;
     devId = RENESAS_DEVID + 1;
     enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
@@ -1760,7 +1788,9 @@ int aes_init(void)
     stored_nonce = enc_key->initial_vector;
     wolfCrypt_Init(); /* required to setup the crypto callback defaults */
 #elif defined(CUSTOM_ENCRYPT_KEY)
-    wolfBoot_get_encrypt_key(key, stored_nonce);
+    ret = wolfBoot_get_encrypt_key(key, stored_nonce);
+    if (ret != 0)
+        goto exit;
 #else
     #if defined(MMU) || defined(UNIT_TEST)
         key = ENCRYPT_KEY;
@@ -1779,13 +1809,10 @@ int aes_init(void)
     wc_AesInit(&aes_enc, NULL, devId);
     wc_AesInit(&aes_dec, NULL, devId);
 
-    /* Check against 'all 0xff' or 'all zero' cases */
-    XMEMSET(ff, 0xFF, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
-    XMEMSET(ff, 0x00, ENCRYPT_KEY_SIZE);
-    if (XMEMCMP(key, ff, ENCRYPT_KEY_SIZE) == 0)
-        return -1;
+    if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE)) {
+        ret = -1;
+        goto exit;
+    }
 
 #ifdef WOLFBOOT_RENESAS_TSIP
     /* Unwrap key and get key index */
@@ -1797,7 +1824,8 @@ int aes_init(void)
         enc_key->encrypted_user_key, &aes_enc.ctx.tsip_keyIdx);
 #endif
     if (ret != TSIP_SUCCESS) {
-        return -1;
+        ret = -1;
+        goto exit;
     }
     /* set encryption key size */
     aes_enc.ctx.keySize = ENCRYPT_KEY_SIZE;
@@ -1818,7 +1846,12 @@ int aes_init(void)
     XMEMCPY(encrypt_iv_nonce, stored_nonce, ENCRYPT_NONCE_SIZE);
     encrypt_initialized = 1;
 
-    return 0;
+exit:
+#if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
+    ForceZero(key, sizeof(key));
+    ForceZero(stored_nonce, sizeof(stored_nonce));
+#endif
+    return ret;
 }
 
 /**

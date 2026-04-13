@@ -390,6 +390,12 @@ backup_on_failure:
     (void)hal_hsm_server_cleanup();
 #endif
 
+#ifndef TZEN
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
+        wolfBoot_printf("Error protecting bootloader flash region\n");
+        wolfBoot_panic();
+    }
+#endif
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT

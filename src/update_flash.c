@@ -33,19 +33,6 @@
 
 #include "delta.h"
 #include "printf.h"
-#ifdef EXT_ENCRYPTED
-int wolfBoot_force_fallback_iv(int enable);
-#endif
-#ifdef WOLFBOOT_TPM
-#include "tpm.h"
-#endif
-#ifdef SECURE_PKCS11
-int WP11_Library_Init(void);
-#endif
-
-#ifdef EXT_ENCRYPTED
-#include "encrypt.h"
-
 static void wolfBoot_zeroize(void *ptr, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)ptr;
@@ -54,7 +41,30 @@ static void wolfBoot_zeroize(void *ptr, size_t len)
         *p++ = 0;
     }
 }
-#endif /* EXT_ENCRYPTED */
+
+static int wolfBoot_local_constant_compare(const uint8_t* a, const uint8_t* b,
+    uint32_t len)
+{
+    uint32_t i;
+    uint8_t diff = 0;
+
+    for (i = 0; i < len; i++) {
+        diff |= a[i] ^ b[i];
+    }
+
+    return diff;
+}
+
+#ifdef EXT_ENCRYPTED
+int wolfBoot_force_fallback_iv(int enable);
+#include "encrypt.h"
+#endif
+#ifdef WOLFBOOT_TPM
+#include "tpm.h"
+#endif
+#ifdef SECURE_PKCS11
+int WP11_Library_Init(void);
+#endif
 
 #ifdef MMU
 #error "MMU is not yet supported for update_flash.c, please consider update_ram.c instead"
@@ -437,6 +447,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
         WOLFBOOT_SECTOR_SIZE;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
+    int ret = 0;
 
     /* open partitions (ignore failure) */
     wolfBoot_open_image(boot, PART_BOOT);
@@ -485,8 +496,16 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_printf("In function wolfBoot_final_swap: swapDone = %d\n", swapDone);
     if (swapDone == 0) {
         /* For encrypted images: Get the encryption key and IV */
-        wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
-            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
+        ret = wolfBoot_get_encrypt_key((uint8_t*)tmpBuffer,
+            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
+        if (ret != 0) {
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+            wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+            return ret;
+        }
         /* Set the magic trailer in the buffer and write it to the staging sector */
         tmpBuffer[TRAILER_OFFSET_WORDS] = WOLFBOOT_MAGIC_TRAIL;
 
@@ -499,8 +518,16 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 
 #ifdef EXT_ENCRYPTED
     /* Initialize encryption with the saved key */
-    wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
-            (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE/sizeof(uint32_t)]);
+    ret = wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
+        (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
+    if (ret != 0) {
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+        return ret;
+    }
     /* wolfBoot_set_encrypt_key calls hal_flash_unlock, need to unlock again */
     hal_flash_unlock();
 #endif
@@ -525,6 +552,8 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #endif
     hal_flash_lock();
 
+    wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+    (void)ret;
     return 0;
 }
 #ifdef __CCRX__
@@ -562,8 +591,13 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t *base_hash;
 
     if (boot->fw_size == 0) {
-        /* Resume after powerfail can leave boot header erased; bound by partition size. */
-        boot->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        if ((boot->hdr != NULL) &&
+                (*((uint32_t *)boot->hdr) != WOLFBOOT_MAGIC)) {
+            /* Resume after powerfail can leave the boot header erased. */
+            boot->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+        } else {
+            return -1;
+        }
     }
 
     /* Use biggest size for the swap */
@@ -633,7 +667,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 cur_v, delta_base_v);
             ret = -1;
         } else if (!resume && delta_base_hash &&
-                memcmp(base_hash, delta_base_hash, base_hash_sz) != 0) {
+                image_CT_compare(base_hash, delta_base_hash, base_hash_sz) != 0) {
             /* Wrong base image digest, cannot apply delta patch */
             wolfBoot_printf("Delta Base hash mismatch\n");
             ret = -1;
@@ -781,7 +815,7 @@ out:
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
-static int wolfBoot_get_total_size(struct wolfBoot_image* boot,
+static uint32_t wolfBoot_get_total_size(struct wolfBoot_image* boot,
     struct wolfBoot_image* update)
 {
     uint32_t total_size = 0;
@@ -799,6 +833,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint32_t total_size = 0;
     const uint32_t sector_size = WOLFBOOT_SECTOR_SIZE;
     uint32_t sector = 0;
+    int ret = 0;
     /* we need to pre-set flag to SECT_FLAG_NEW in case magic hasn't been set
      * on the update partition as part of the delta update direction check. if
      * magic has not been set flag will have an un-determined value when we go
@@ -868,7 +903,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* get total size */
     total_size = wolfBoot_get_total_size(&boot, &update);
     if (total_size <= IMAGE_HEADER_SIZE) {
-        wolfBoot_printf("Image total size %u too large!\n", total_size);
+        wolfBoot_printf("Image total size %u invalid!\n", total_size);
         return -1;
     }
     /* In case this is a new update, do the required
@@ -1119,7 +1154,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #if !defined(CUSTOM_PARTITION_TRAILER)
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
-    wolfBoot_swap_and_final_erase(0);
+    ret = wolfBoot_swap_and_final_erase(0);
+    if (ret != 0)
+        return ret;
 #ifndef DISABLE_BACKUP
     if (rollback_needed) {
         hal_flash_unlock();
@@ -1196,14 +1233,18 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     /* Save the encryption key after swapping */
 #ifdef EXT_ENCRYPTED
-    wolfBoot_set_encrypt_key(key, nonce);
+    ret = wolfBoot_set_encrypt_key(key, nonce);
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
+    if (ret != 0)
+        return ret;
 #endif
 #endif /* DISABLE_BACKUP */
 #ifdef EXT_ENCRYPTED
     /* Make sure we leave the global IV offset in its normal state. */
     wolfBoot_enable_fallback_iv(0);
 #endif
-    return 0;
+    return ret;
 }
 #ifdef __CCRX__
 #pragma section
@@ -1265,7 +1306,8 @@ int wolfBoot_unlock_disk(void)
                     secretCheck, &secretCheckSz);
                 if (ret == 0) {
                     if (secretSz != secretCheckSz ||
-                        memcmp(secret, secretCheck, secretSz) != 0)
+                        wolfBoot_local_constant_compare(secret, secretCheck,
+                            (uint32_t)secretSz) != 0)
                     {
                         wolfBoot_printf("secret check mismatch!\n");
                         ret = -1;
@@ -1475,6 +1517,12 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_server_cleanup();
 #endif
 
+#ifndef TZEN
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
+        wolfBoot_printf("Error protecting bootloader flash region\n");
+        wolfBoot_panic();
+    }
+#endif
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT

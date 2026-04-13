@@ -83,6 +83,20 @@ extern "C" {
 #  endif
 #endif
 
+#ifndef NOINLINEFUNCTION
+#  if defined(__has_attribute)
+#    if __has_attribute(noinline)
+#      define NOINLINEFUNCTION __attribute__((noinline))
+#    else
+#      define NOINLINEFUNCTION
+#    endif
+#  elif defined(__GNUC__) || defined(__CC_ARM)
+#    define NOINLINEFUNCTION __attribute__((noinline))
+#  else
+#    define NOINLINEFUNCTION
+#  endif
+#endif
+
 
 /* Helpers for memory alignment */
 #ifndef XALIGNED
@@ -184,6 +198,15 @@ extern "C" {
 #endif
 #endif
 #endif /* WOLFBOOT_SELF_HEADER */
+
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY) && !defined(WOLFBOOT_SELF_HEADER)
+#error "WOLFBOOT_SKIP_BOOT_VERIFY requires WOLFBOOT_SELF_HEADER"
+#endif
+
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY) && \
+    !defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC)
+#error "WOLFBOOT_SKIP_BOOT_VERIFY requires WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+#endif
 
 #ifdef BIG_ENDIAN_ORDER
 #    define WOLFBOOT_MAGIC          0x574F4C46 /* WOLF */
