@@ -28,11 +28,38 @@
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
 
+/* wolfCrypt test/benchmark support */
+#ifdef WOLFCRYPT_TEST
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/test/test.h>
+int wolfcrypt_test(void *args);
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/benchmark/benchmark.h>
+int benchmark_test(void *args);
+#endif
+
 #define RED_LED     6
 #define GREEN_LED   7
 #define BLUE_LED    4
 
 extern void hal_init(void);
+
+
+volatile uint64_t SysTick_time_ms;
+
+void SysTick_Handler(void)
+{
+    SysTick_time_ms++;
+}
+
+static void systick_init(void)
+{
+    SysTick_Config(CLOCK_GetCoreSysClkFreq() / 1000U); /* 1 ms period */
+}
+
 
 #define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
 #define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
@@ -106,7 +133,14 @@ void main(void)
     uint8_t boot_state, update_state;
 
     hal_init();
+    systick_init();
     leds_init();
+    __enable_irq();
+
+    wolfBoot_printf("\n==================================\n");
+    wolfBoot_printf("LPC55S69 wolfBoot demo Application\n");
+    wolfBoot_printf("Copyright 2026 wolfSSL Inc\n");
+    wolfBoot_printf("==================================\n");
 
     check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
@@ -147,69 +181,87 @@ void main(void)
         GPIO_PinWrite(GPIO, 1, GREEN_LED, 0);
     }
 
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    wolfCrypt_Init();
+
+# ifdef WOLFCRYPT_TEST
+    wolfBoot_printf("\nRunning wolfCrypt tests...\n");
+    wolfcrypt_test(NULL);
+    wolfBoot_printf("Tests complete.\n\n");
+# endif
+
+# ifdef WOLFCRYPT_BENCHMARK
+    wolfBoot_printf("\nRunning wolfCrypt benchmarks...\n");
+    benchmark_test(NULL);
+    wolfBoot_printf("Benchmarks complete.\n\n");
+# endif
+
+    wolfCrypt_Cleanup();
+#endif
+
     while (1) {
         __asm__ volatile ("wfi");
     }
 }
 
 
-#include "sys/stat.h"
-int _getpid(void)
-{
-    return 1;
-}
+// #include "sys/stat.h"
+// int _getpid(void)
+// {
+//     return 1;
+// }
 
-int _kill(int pid, int sig)
-{
-    (void)pid;
-    (void)sig;
-    return -1;
-}
+// int _kill(int pid, int sig)
+// {
+//     (void)pid;
+//     (void)sig;
+//     return -1;
+// }
 
-void _exit(int status)
-{
-    _kill(status, -1);
-    while (1) {}
-}
+// void _exit(int status)
+// {
+//     _kill(status, -1);
+//     while (1) {}
+// }
 
-int _read(int file, char *ptr, int len)
-{
-    (void)file;
-    (void)ptr;
-    (void)len;
-    return -1;
-}
+// int _read(int file, char *ptr, int len)
+// {
+//     (void)file;
+//     (void)ptr;
+//     (void)len;
+//     return -1;
+// }
 
-int _write(int file, char *ptr, int len)
-{
-    (void)file;
-    (void)ptr;
-    return len;
-}
+// int _write(int file, char *ptr, int len)
+// {
+//     (void)file;
+//     (void)ptr;
+//     return len;
+// }
 
-int _close(int file)
-{
-    (void)file;
-    return -1;
-}
+// int _close(int file)
+// {
+//     (void)file;
+//     return -1;
+// }
 
-int _isatty(int file)
-{
-    (void)file;
-    return 1;
-}
+// int _isatty(int file)
+// {
+//     (void)file;
+//     return 1;
+// }
 
-int _lseek(int file, int ptr, int dir)
-{
-    (void)file;
-    (void)ptr;
-    (void)dir;
-    return 0;
-}
+// int _lseek(int file, int ptr, int dir)
+// {
+//     (void)file;
+//     (void)ptr;
+//     (void)dir;
+//     return 0;
+// }
 
-int _fstat(int file, struct stat *st)
-{
-    (void)file;
-    st->st_mode = S_IFCHR;
-    return 0;
-}
+// int _fstat(int file, struct stat *st)
+// {
+//     (void)file;
+//     st->st_mode = S_IFCHR;
+//     return 0;
+// }
