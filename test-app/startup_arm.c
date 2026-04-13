@@ -43,7 +43,7 @@ extern void isr_usart3(void);
 extern void isr_lpuart1(void);
 #endif
 
-#ifdef TARGET_va416x0
+#if defined(TARGET_va416x0) || defined(TARGET_lpc55s69)
 #define isr_systick SysTick_Handler
 #elif !defined(APP_HAS_SYSTICK)
 #define isr_systick isr_empty

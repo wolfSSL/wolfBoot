@@ -42,6 +42,8 @@
 #elif defined(TARGET_va416x0)
     /* Use Vorago SDK HAL_time_ms (incremented by SysTick_Handler every 1ms) */
     extern volatile uint64_t HAL_time_ms;
+#elif defined(TARGET_lpc55s69)
+    extern volatile uint64_t SysTick_time_ms;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     /* PPC timebase register for accurate timing.
      * Timebase frequency = platform_clock / 16. */
@@ -96,6 +98,10 @@ unsigned long my_time(unsigned long* timer)
     unsigned long t = (unsigned long)(HAL_time_ms / 1000);
     if (timer) *timer = t;
     return t;
+#elif defined(TARGET_lpc55s69)
+    unsigned long t = (unsigned long)(SysTick_time_ms / 1000);
+    if (timer) *timer = t;
+    return t;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();
@@ -125,6 +131,9 @@ double current_time(int reset)
     (void)reset;
     /* Use Vorago SDK SysTick-based millisecond counter */
     return (double)HAL_time_ms / 1000.0;
+#elif defined(TARGET_lpc55s69)
+    (void)reset;
+    return (double)SysTick_time_ms / 1000.0;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();

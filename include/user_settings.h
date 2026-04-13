@@ -493,14 +493,19 @@ extern int tolower(int c);
     #define NO_AES_CBC
 #else
     #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
-        /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
-         * WARNING: my_rng_seed_gen is NOT cryptographically secure.
-         * Only used in test-app builds, not in production wolfBoot. */
-        #define WC_NO_HASHDRBG
-        #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
-        #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
-        extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
-        
+        #ifdef WOLFSSL_NXP_LPC55S69
+            /* use actual rng hardware for seed, HASHDRBG for generation */
+            #define HAVE_HASHDRBG
+        #else
+            /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
+            * WARNING: my_rng_seed_gen is NOT cryptographically secure.
+            * Only used in test-app builds, not in production wolfBoot. */
+            #define WC_NO_HASHDRBG
+            #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
+            #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
+            extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+        #endif
+            
         #define HAVE_AESGCM
         #define GCM_TABLE
     #else
@@ -575,6 +580,10 @@ extern int tolower(int c);
 
 /* wolfCrypt Test/Benchmark Configuration */
 #ifdef WOLFCRYPT_TEST
+    #ifdef WOLFSSL_NXP_LPC55S69
+        /* lpc55s69 hashcrypt hw does not support interleaving */
+        #define NO_WOLFSSL_SHA256_INTERLEAVE
+    #endif
     /* Skip extended tests to save memory */
     #define NO_CRYPT_TEST_EXTENDED
     /* Use smaller certificate buffers */

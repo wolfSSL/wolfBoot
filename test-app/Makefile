@@ -710,6 +710,7 @@ ifeq ($(TARGET),mcxn)
 endif
 
 ifeq ($(TARGET),lpc55s69)
+    CFLAGS+=-ffunction-sections -fdata-sections
     ifeq ($(TZEN),1)
       LSCRIPT_TEMPLATE=ARM-lpc55s69-ns.ld
       CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
@@ -737,10 +738,16 @@ ifeq ($(TARGET),lpc55s69)
     else
       CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
     endif
-    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
+    LIBS+=--specs=nano.specs
+    ifneq ($(WOLFCRYPT_SUPPORT),1)
+      # Only use nosys stubs when not providing our own syscalls
       LDFLAGS+=--specs=nosys.specs
     endif
-    LDFLAGS+=-Wl,--no-warn-rwx-segments
+    ifeq ($(WOLFCRYPT_BENCHMARK),1)
+      # Benchmark needs float printf for results
+      LDFLAGS+=-Wl,-u_printf_float
+    endif
+    LDFLAGS+=-Wl,--no-warn-rwx-segments -Wl,--allow-multiple-definition
 endif
 
 ifeq ($(TARGET),nxp_lpc54s0xx)
