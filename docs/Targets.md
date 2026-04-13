@@ -838,11 +838,12 @@ These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS
 
 #### Stack overflow detection
 
-The trap handler in `src/boot_riscv.c` automatically detects stack overflow on synchronous exceptions. When a trap fires with `SP < _main_hart_stack_bottom`, it prints:
+The trap handler in `src/boot_riscv.c` automatically detects stack overflow on synchronous exceptions (requires `DEBUG_BOOT`). When a trap fires with `SP < _main_hart_stack_bottom`, it prints:
 
 ```
-TRAP: cause=2 epc=A000740 tval=0 sp=A02FFE8
-STACK OVERFLOW: sp=A02FFE8 < bottom=A030000 (under by 24)
+TRAP: cause=2 epc=A000740 tval=0
+      sp=A02FFE8
+STACK OVERFLOW: under by 24
 ```
 
 This is helpful for diagnosing illegal-instruction TRAPs at random valid `.text` addresses, which are the classic signature of stack overflow corrupting the return address.

@@ -274,7 +274,6 @@ _copy_params:
     j     .L_bss_clear
 .L_bss_clear_done:
 
-
 #ifndef TARGET_mpfs250
     /* Clear SiFive bus error unit accrued registers (not present on MPFS) */
     la a4,0x01700020UL
