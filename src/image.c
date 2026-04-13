@@ -982,15 +982,18 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    if (end_sha <= p) {
+        return -1;
+    }
+#endif
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)wc_InitSha256_ex(sha256_ctx, NULL, hsmDevIdHash);
 #else
     wc_InitSha256(sha256_ctx);
 #endif
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (end_sha <= p)
-        return -1;
     wc_Sha256Update(sha256_ctx, p, (word32)(end_sha - p));
 #else
     {
@@ -1021,8 +1024,10 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
     if (header_sha256(&sha256_ctx, img) != 0)
         return -1;
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (img->fw_base == NULL)
+    if (img->fw_base == NULL) {
+        wc_Sha256Free(&sha256_ctx);
         return -1;
+    }
     wc_Sha256Update(&sha256_ctx, img->fw_base, img->fw_size);
 #else
     {
@@ -1089,15 +1094,18 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA384, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
+    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    if (end_sha <= p) {
+        return -1;
+    }
+#endif
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)wc_InitSha384_ex(sha384_ctx, NULL, hsmDevIdHash);
 #else
     wc_InitSha384(sha384_ctx);
 #endif
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (end_sha <= p)
-        return -1;
     wc_Sha384Update(sha384_ctx, p, (word32)(end_sha - p));
 #else
     {
@@ -1131,8 +1139,10 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
     if (header_sha384(&sha384_ctx, img) != 0)
         return -1;
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (img->fw_base == NULL)
+    if (img->fw_base == NULL) {
+        wc_Sha384Free(&sha384_ctx);
         return -1;
+    }
     wc_Sha384Update(&sha384_ctx, img->fw_base, img->fw_size);
 #else
     {
@@ -1206,11 +1216,14 @@ static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA3_384, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
-    wc_InitSha3_384(sha3_ctx, NULL, INVALID_DEVID);
     end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (end_sha <= p)
+    if (end_sha <= p) {
         return -1;
+    }
+#endif
+    wc_InitSha3_384(sha3_ctx, NULL, INVALID_DEVID);
+#ifdef WOLFBOOT_IMG_HASH_ONESHOT
     wc_Sha3_384_Update(sha3_ctx, p, (word32)(end_sha - p));
 #else
     {
@@ -1243,8 +1256,10 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     if (header_sha3_384(&sha3_ctx, img) != 0)
         return -1;
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
-    if (img->fw_base == NULL)
+    if (img->fw_base == NULL) {
+        wc_Sha3_384_Free(&sha3_ctx);
         return -1;
+    }
     wc_Sha3_384_Update(&sha3_ctx, img->fw_base, img->fw_size);
 #else
     {
@@ -1782,6 +1797,12 @@ static int update_hash_flash_fwimg(wolfBoot_hash_t*       ctx,
                                    uint32_t size)
 {
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
+    if (img->fw_base == NULL) {
+        return -1;
+    }
+    if ((uint64_t)offset + size > img->fw_size) {
+        return -1;
+    }
     update_hash(ctx, img->fw_base + offset, size);
     return 0;
 #else
