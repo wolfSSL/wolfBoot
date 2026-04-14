@@ -25,9 +25,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__unix__) || defined(__APPLE__)
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#define HAVE_POSIX_FORK 1
+#endif
 
 #include "delta.h"
 #define WC_RSA_BLINDING
@@ -485,6 +488,7 @@ END_TEST
 
 START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
 {
+#if HAVE_POSIX_FORK
     const char *saved = getenv("WOLFBOOT_SECTOR_SIZE");
     char *saved_copy = saved ? strdup(saved) : NULL;
     pid_t pid;
@@ -510,6 +514,9 @@ START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
     else {
         ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
     }
+#else
+    ck_assert_int_eq(1, 1);
+#endif
 }
 END_TEST
 
