@@ -316,25 +316,25 @@ extern "C" {
 #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
 #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
 
+/* HAL crypto device ID abstraction.
+ * Override per-class via build system -D flags.
+ * Defaults to INVALID_DEVID (software-only). */
+#ifndef WOLFBOOT_DEVID_HASH
+    #define WOLFBOOT_DEVID_HASH   (-2) /* INVALID_DEVID */
+#endif
+#ifndef WOLFBOOT_DEVID_PUBKEY
+    #define WOLFBOOT_DEVID_PUBKEY (-2) /* INVALID_DEVID */
+#endif
+#ifndef WOLFBOOT_DEVID_CRYPT
+    #define WOLFBOOT_DEVID_CRYPT  (-2) /* INVALID_DEVID */
+#endif
+
 #if defined(__WOLFBOOT) || defined(UNIT_TEST_AUTH)
 
 #include "wolfssl/wolfcrypt/settings.h"
 #include "wolfssl/wolfcrypt/visibility.h"
 #include "wolfssl/wolfcrypt/wc_port.h"
 #include "wolfssl/wolfcrypt/types.h"
-
-/* HAL crypto device ID abstraction.
- * Override per-class via build system -D flags.
- * Defaults to INVALID_DEVID (software-only). */
-#ifndef WOLFBOOT_DEVID_HASH
-    #define WOLFBOOT_DEVID_HASH   INVALID_DEVID
-#endif
-#ifndef WOLFBOOT_DEVID_PUBKEY
-    #define WOLFBOOT_DEVID_PUBKEY INVALID_DEVID
-#endif
-#ifndef WOLFBOOT_DEVID_CRYPT
-    #define WOLFBOOT_DEVID_CRYPT  INVALID_DEVID
-#endif
 
 #ifdef WOLFBOOT_RENESAS_TSIP
     /* Include these before any algorithm headers */
