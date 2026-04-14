@@ -83,7 +83,7 @@ void hal_prepare_boot(void)
     return;
 }
 
-static void wolfBoot_panic(void)
+static void library_panic(void)
 {
     wolfBoot_printf("wolfBoot: PANIC!\n");
     exit('P');

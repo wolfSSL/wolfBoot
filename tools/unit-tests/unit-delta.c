@@ -493,20 +493,36 @@ START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
     char *saved_copy = saved ? strdup(saved) : NULL;
     pid_t pid;
     int status = 0;
+    int setenv_ok;
+    int fork_ok = 0;
+    int wait_ok = 0;
+    int exited_ok = 0;
+    int exit_code = -1;
 
-    ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", "0x20000", 1), 0);
+    setenv_ok = (setenv("WOLFBOOT_SECTOR_SIZE", "0x20000", 1) == 0);
+    if (!setenv_ok) {
+        goto restore_env;
+    }
+
     pid = fork();
-    ck_assert_int_ne(pid, -1);
+    if (pid != -1) {
+        fork_ok = 1;
+    }
 
     if (pid == 0) {
         (void)wb_diff_get_sector_size();
         _exit(0);
     }
 
-    ck_assert_int_eq(waitpid(pid, &status, 0), pid);
-    ck_assert(WIFEXITED(status));
-    ck_assert_int_eq(WEXITSTATUS(status), 6);
+    if (fork_ok && (waitpid(pid, &status, 0) == pid)) {
+        wait_ok = 1;
+        exited_ok = WIFEXITED(status);
+        if (exited_ok) {
+            exit_code = WEXITSTATUS(status);
+        }
+    }
 
+restore_env:
     if (saved_copy != NULL) {
         ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", saved_copy, 1), 0);
         free(saved_copy);
@@ -514,6 +530,12 @@ START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
     else {
         ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
     }
+
+    ck_assert(setenv_ok);
+    ck_assert(fork_ok);
+    ck_assert(wait_ok);
+    ck_assert(exited_ok);
+    ck_assert_int_eq(exit_code, 6);
 #else
     ck_assert_int_eq(1, 1);
 #endif
