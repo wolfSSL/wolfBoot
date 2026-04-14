@@ -870,6 +870,15 @@ START_TEST(test_open_image)
     ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
             + 256);
 
+    /* Invalid external header must keep hdr_ok cleared on failure */
+    ext_flash_erase(0, WOLFBOOT_SECTOR_SIZE);
+    memset(&img, 0, sizeof(img));
+    hdr_cpy_done = 0;
+    ret = wolfBoot_open_image_external(&img, PART_UPDATE,
+            (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
+
     /* Self header must reject sizes beyond the partition payload budget */
     memset(self_hdr, 0xFF, sizeof(self_hdr));
     ((uint32_t *)self_hdr)[0] = WOLFBOOT_MAGIC;

@@ -1451,6 +1451,7 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
     uint8_t* addr)
 {
     uint8_t* image;
+    int ret;
     if (img == NULL)
         return -1;
 
@@ -1460,7 +1461,10 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
     img->hdr_ok = 1;
     hdr_cpy_done = 0; /* reset hdr "open" flag */
     image = fetch_hdr_cpy(img);
-    return wolfBoot_open_image_address(img, image);
+    ret = wolfBoot_open_image_address(img, image);
+    if (ret != 0)
+        img->hdr_ok = 0;
+    return ret;
 }
 #endif /* EXT_FLASH */
 
