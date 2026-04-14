@@ -48,7 +48,7 @@ int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b,
     uint32_t len)
 {
     uint32_t i;
-    uint8_t diff = 0;
+    volatile uint8_t diff = 0;
 
     for (i = 0; i < len; i++) {
         diff |= a[i] ^ b[i];

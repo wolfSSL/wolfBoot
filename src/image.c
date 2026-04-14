@@ -61,7 +61,7 @@ static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 int NOINLINEFUNCTION image_CT_compare(
     const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
-    uint8_t diff = 0;
+    volatile uint8_t diff = 0;
     uint32_t i;
 
     for (i = 0; i < len; i++) {
@@ -2404,7 +2404,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 static int keyslot_CT_hint_matches(const uint8_t *expected,
     const uint8_t *actual)
 {
-    uint8_t diff = 0;
+    volatile uint8_t diff = 0;
     uint32_t i;
 
     for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++) {
