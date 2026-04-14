@@ -211,14 +211,37 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define ENC_MAX_KEY_SZ   ENCRYPT_KEY_SIZE_AES256    /* 32 */
 #define ENC_MAX_IV_SZ    ENCRYPT_NONCE_SIZE_AES     /* 16 */
 
+static void header_store_u16_le(uint8_t *dst, uint16_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+}
+
+static void header_store_u32_le(uint8_t *dst, uint32_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+    dst[2] = (uint8_t)((val >> 16) & 0xFFU);
+    dst[3] = (uint8_t)((val >> 24) & 0xFFU);
+}
+
+static void header_store_u64_le(uint8_t *dst, uint64_t val)
+{
+    uint32_t lo = (uint32_t)(val & 0xFFFFFFFFULL);
+    uint32_t hi = (uint32_t)(val >> 32);
+
+    header_store_u32_le(dst, lo);
+    header_store_u32_le(dst + 4, hi);
+}
+
 static void header_append_u32(uint8_t* header, uint32_t* idx, uint32_t tmp32)
 {
-    memcpy(&header[*idx], &tmp32, sizeof(tmp32));
+    header_store_u32_le(&header[*idx], tmp32);
     *idx += sizeof(tmp32);
 }
 static void header_append_u16(uint8_t* header, uint32_t* idx, uint16_t tmp16)
 {
-    memcpy(&header[*idx], &tmp16, sizeof(tmp16));
+    header_store_u16_le(&header[*idx], tmp16);
     *idx += sizeof(tmp16);
 }
 
@@ -242,6 +265,33 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     header_append_u16(header, idx, len);
     memcpy(&header[*idx], data, len);
     *idx += len;
+}
+
+static void header_append_tag_u16(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint16_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u16_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
+}
+
+static void header_append_tag_u32(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint32_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u32_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
+}
+
+static void header_append_tag_u64(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint64_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u64_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
 }
 
 #include "../lms/lms_common.h"
@@ -1340,8 +1390,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
     /* Append Version field */
     fw_version32 = strtol(CMD.fw_version, NULL, 10);
-    header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN,
-        &fw_version32);
+    header_append_tag_u32(header, &header_idx, HDR_VERSION, fw_version32);
 
     /* Append pad bytes, so timestamp val field is 8-byte aligned */
     ALIGN_8(header_idx);
@@ -1349,8 +1398,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     if (!CMD.no_ts) {
         /* Append Timestamp field */
         stat(image_file, &attrib);
-        header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
-            &attrib.st_ctime);
+        header_append_tag_u64(header, &header_idx, HDR_TIMESTAMP,
+            (uint64_t)attrib.st_ctime);
     }
 
     /* Append Image type field */
@@ -1358,23 +1407,22 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     image_type |= CMD.partition_id;
     if (is_diff)
         image_type |= HDR_IMG_TYPE_DIFF;
-    header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
-        &image_type);
+    header_append_tag_u16(header, &header_idx, HDR_IMG_TYPE, image_type);
 
     if (is_diff) {
         /* Append pad bytes, so fields are 4-byte aligned */
         ALIGN_4(header_idx);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
-                &delta_base_version);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 4,
-                &patch_len);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_BASE,
+            delta_base_version);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_SIZE,
+            patch_len);
 
         /* Append pad bytes, so fields are 4-byte aligned */
         ALIGN_4(header_idx);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
-                &patch_inv_off);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 4,
-                &patch_inv_len);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_INVERSE,
+            patch_inv_off);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE,
+            patch_inv_len);
 
         if (!CMD.no_base_sha) {
             /* Append pad bytes, so base hash is 8-byte aligned */
@@ -1535,7 +1583,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     wc_Sha256Final(&sha, second_buf);
                 wc_Sha256Free(&sha);
                 /* Add Secondary cipher to header */
-                header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                header_append_tag_u16(header, &header_idx,
+                    HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                 ALIGN_8(header_idx);
                 /* Add Secondary Pubkey Hash to header */
                 header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
@@ -1612,7 +1661,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (ret == 0) {
                     wc_Sha384Final(&sha, second_buf);
                     /* Add Secondary cipher to header */
-                    header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                    header_append_tag_u16(header, &header_idx,
+                        HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                     /* Add Secondary Pubkey Hash to header */
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
                     DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
@@ -1683,7 +1733,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (ret == 0) {
                     ret = wc_Sha3_384_Final(&sha, second_buf);
                     /* Add Secondary cipher to header */
-                    header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                    header_append_tag_u16(header, &header_idx,
+                        HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
                     DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
                     DEBUG_BUFFER(second_buf, digest_sz);
