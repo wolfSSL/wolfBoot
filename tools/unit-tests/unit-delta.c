@@ -542,6 +542,31 @@ restore_env:
 }
 END_TEST
 
+START_TEST(test_wb_diff_get_sector_size_accepts_16bit_limit)
+{
+    const char *saved = getenv("WOLFBOOT_SECTOR_SIZE");
+    char *saved_copy = saved ? strdup(saved) : NULL;
+    int setenv_ok = 0;
+    int sector_size = 0;
+
+    setenv_ok = (setenv("WOLFBOOT_SECTOR_SIZE", "0xFFFF", 1) == 0);
+    if (setenv_ok) {
+        sector_size = wb_diff_get_sector_size();
+    }
+
+    if (saved_copy != NULL) {
+        ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", saved_copy, 1), 0);
+        free(saved_copy);
+    }
+    else {
+        ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
+    }
+
+    ck_assert(setenv_ok);
+    ck_assert_int_eq(sector_size, 0xFFFF);
+}
+END_TEST
+
 START_TEST(test_wb_patch_and_diff_size_changing_update)
 {
     uint8_t src_a[2048];
@@ -601,6 +626,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_completely_different_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_all_escape_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_multi_sector_images);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_accepts_16bit_limit);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_rejects_values_above_16bit);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_size_changing_update);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_single_byte_difference);

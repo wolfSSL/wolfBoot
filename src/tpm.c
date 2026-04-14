@@ -54,7 +54,7 @@ int NOINLINEFUNCTION wolfBoot_constant_compare(const uint8_t* a, const uint8_t* 
         diff |= (uint32_t)(a[i] ^ b[i]);
     }
 
-    return (int)diff;
+    return (diff != 0U) ? 1 : 0;
 }
 
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,

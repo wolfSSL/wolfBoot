@@ -61,14 +61,14 @@ static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 int NOINLINEFUNCTION image_CT_compare(
     const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
-    volatile uint8_t diff = 0;
+    volatile uint32_t diff = 0U;
     uint32_t i;
 
     for (i = 0; i < len; i++) {
-        diff |= expected[i] ^ actual[i];
+        diff |= (uint32_t)(expected[i] ^ actual[i]);
     }
 
-    return diff;
+    return (diff != 0U) ? 1 : 0;
 }
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \

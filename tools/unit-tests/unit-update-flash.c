@@ -85,6 +85,24 @@ static uint16_t host_to_img_u16(uint16_t val)
 #endif
 }
 
+static void ext_flash_write_le16(uintptr_t addr, uint16_t val)
+{
+    uint8_t le[2];
+    le[0] = (uint8_t)(val & 0xFFu);
+    le[1] = (uint8_t)((val >> 8) & 0xFFu);
+    ext_flash_write(addr, le, sizeof(le));
+}
+
+static void ext_flash_write_le32(uintptr_t addr, uint32_t val)
+{
+    uint8_t le[4];
+    le[0] = (uint8_t)(val & 0xFFu);
+    le[1] = (uint8_t)((val >> 8) & 0xFFu);
+    le[2] = (uint8_t)((val >> 16) & 0xFFu);
+    le[3] = (uint8_t)((val >> 24) & 0xFFu);
+    ext_flash_write(addr, le, sizeof(le));
+}
+
 #ifdef DELTA_UPDATES
 static int mock_wb_patch_init_calls = 0;
 static uint8_t *mock_wb_patch_init_patch = NULL;
@@ -1063,6 +1081,44 @@ START_TEST (test_get_total_size_preserves_uint32_range)
 }
 END_TEST
 
+START_TEST (test_diffbase_version_reads_from_little_endian_bytes)
+{
+    uint32_t magic = WOLFBOOT_MAGIC;
+    uint16_t img_type = HDR_IMG_TYPE_AUTH | HDR_IMG_TYPE_APP;
+    uint32_t version = 0x01020304;
+    uint32_t delta_base = 0x55667788;
+    uint32_t tag;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        (const uint8_t *)&magic, sizeof(magic));
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, TEST_SIZE_SMALL);
+
+    tag = (4u << 16) | HDR_VERSION;
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 8, tag);
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 12, version);
+
+    tag = (2u << 16) | HDR_IMG_TYPE;
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 16, tag);
+    ext_flash_write_le16(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, img_type);
+
+    tag = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 24, tag);
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 28, delta_base);
+    ext_flash_lock();
+
+    ck_assert_uint_eq(wolfBoot_get_image_version(PART_UPDATE), version);
+    ck_assert_uint_eq(wolfBoot_get_diffbase_version(PART_UPDATE), delta_base);
+    ck_assert_uint_eq(wolfBoot_get_blob_diffbase_version(
+        (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS), delta_base);
+
+    cleanup_flash();
+}
+END_TEST
+
 #ifdef DELTA_UPDATES
 START_TEST (test_delta_zero_size_valid_header_rejected_without_recovery_heuristic)
 {
@@ -1187,6 +1243,7 @@ START_TEST (test_delta_base_version_match_accepts)
     ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
     ck_assert_int_eq(ret, 0);
     ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+    ck_assert_ptr_eq(mock_wb_patch_init_patch, update.hdr + IMAGE_HEADER_SIZE);
     ck_assert_uint_eq(mock_wb_patch_init_psz, delta_sz);
 
     cleanup_flash();
@@ -1350,6 +1407,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
     tcase_add_test(swap_resume, test_swap_resume_noop);
     tcase_add_test(diffbase_version, test_diffbase_version_reads);
+    tcase_add_test(diffbase_version, test_diffbase_version_reads_from_little_endian_bytes);
     tcase_add_test(get_total_size, test_get_total_size_preserves_uint32_range);
     tcase_add_test(boot_success, test_boot_success_sets_state);
 #ifdef DELTA_UPDATES
