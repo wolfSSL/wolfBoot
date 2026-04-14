@@ -233,6 +233,12 @@ int wb_diff_get_sector_size(void)
         fprintf(stderr, "WOLFBOOT_SECTOR_SIZE cannot be 0\n");
         exit(6);
     }
+    if (sec_sz > 0xFFFFU) {
+        fprintf(stderr,
+            "WOLFBOOT_SECTOR_SIZE (%" PRIu32 ") exceeds delta encoding limit (65535)\n",
+            sec_sz);
+        exit(6);
+    }
     if (sec_sz > (uint32_t)INT_MAX) {
         fprintf(stderr, "WOLFBOOT_SECTOR_SIZE (%" PRIu32 ") exceeds INT_MAX (%d)\n",
             sec_sz, INT_MAX);
