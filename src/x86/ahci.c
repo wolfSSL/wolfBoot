@@ -257,15 +257,15 @@ static int sata_get_random_base64(uint8_t *out, int *out_size)
 {
     uint8_t rand[ATA_SECRET_RANDOM_BYTES];
     word32 base_64_len;
-    int ret;
+    int ret = -1;
 
     ret = wolfBoot_get_random(rand, ATA_SECRET_RANDOM_BYTES);
     if (ret != 0)
-        return ret;
+        goto cleanup;
     base_64_len = *out_size;
     ret = Base64_Encode_NoNl(rand, ATA_SECRET_RANDOM_BYTES, out, &base_64_len);
     if (ret != 0)
-        return ret;
+        goto cleanup;
 
     /* double check we have a NULL-terminated string */
     if ((int)base_64_len < *out_size) {
@@ -275,7 +275,11 @@ static int sata_get_random_base64(uint8_t *out, int *out_size)
         out[base_64_len-1] = '\0';
     }
     *out_size = (int)base_64_len;
-    return 0;
+    ret = 0;
+
+cleanup:
+    TPM2_ForceZero(rand, sizeof(rand));
+    return ret;
 }
 
 static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
