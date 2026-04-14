@@ -42,6 +42,7 @@
 #elif defined(WOLFBOOT_HASH_SHA3_384)
 #include <wolfssl/wolfcrypt/sha3.h>
 #endif
+#include <wolfssl/wolfcrypt/memory.h>
 #endif
 
 #define PLL_SRC_HSE 1
@@ -272,9 +273,11 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
                 copy_len = out_len;
             }
             memcpy(out, uds, copy_len);
+            wc_ForceZero(uds, sizeof(uds));
             return 0;
         }
     }
+    wc_ForceZero(uds, sizeof(uds));
 #endif
 
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
