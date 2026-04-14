@@ -660,18 +660,23 @@ static int wolfboot_attest_get_private_key(ecc_key *key,
     {
         uint8_t priv[WOLFBOOT_DICE_KEY_LEN];
         size_t priv_len = sizeof(priv);
+        int ret = -1;
 
         if (hal_attestation_get_iak_private_key(priv, &priv_len) != 0) {
-            return -1;
+            goto cleanup;
         }
         if (priv_len != WOLFBOOT_DICE_KEY_LEN) {
-            return -1;
+            goto cleanup;
         }
         if (wc_ecc_import_private_key_ex(priv, (word32)priv_len, NULL, 0,
                                          key, ECC_SECP256R1) != 0) {
-            return -1;
+            goto cleanup;
         }
-        return 0;
+        ret = 0;
+
+cleanup:
+        wc_ForceZero(priv, sizeof(priv));
+        return ret;
     }
 #else
     if (hal_uds_derive_key(uds, uds_len) != 0) {
