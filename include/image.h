@@ -1395,7 +1395,7 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 #ifndef EXT_ENCRYPTED
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - \
     (TRAILER_SKIP + sizeof(uint32_t) + \
-    (WOLFBOOT_PARTITION_SIZE + 1 / (WOLFBOOT_SECTOR_SIZE * 8))))
+    ((WOLFBOOT_PARTITION_SIZE + 1) / (WOLFBOOT_SECTOR_SIZE * 8))))
 #else
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - ENCRYPT_TMP_SECRET_OFFSET)
 #endif

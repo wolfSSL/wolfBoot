@@ -45,6 +45,7 @@ endif
 
 TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
+       unit-max-space \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash unit-update-flash-delta \
        unit-update-flash-self-update \
@@ -204,6 +205,9 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-max-space: ../../include/target.h unit-max-space.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
