@@ -1945,6 +1945,22 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             DEBUG_BUFFER(policy + sizeof(uint32_t), CMD.policy_sz);
         }
 
+        if (CMD.signature_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Signature too large for TLV encoding (%u > %u)\n",
+                CMD.signature_sz, (unsigned int)UINT16_MAX);
+            ret = -1;
+            goto failure;
+        }
+
+        if (CMD.hybrid &&
+            CMD.secondary_signature_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Secondary signature too large for TLV encoding "
+                "(%u > %u)\n",
+                CMD.secondary_signature_sz, (unsigned int)UINT16_MAX);
+            ret = -1;
+            goto failure;
+        }
+
         /* Add signature to header */
         ALIGN_8(header_idx);
         header_append_tag(header, &header_idx, HDR_SIGNATURE, CMD.signature_sz,

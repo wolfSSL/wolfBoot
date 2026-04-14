@@ -699,6 +699,53 @@ START_TEST(test_make_header_ex_rejects_cert_chain_tlv_length_overflow)
 }
 END_TEST
 
+START_TEST(test_make_header_ex_rejects_signature_tlv_length_overflow)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char signature_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x11, 0x22, 0x33, 0x44 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t *signature_buf = NULL;
+    const uint32_t signature_len = 65536U;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(signature_path, sizeof(signature_path), "%s/signature.bin", tempdir);
+
+    signature_buf = malloc(signature_len);
+    ck_assert_ptr_nonnull(signature_buf);
+    memset(signature_buf, 0x5A, signature_len);
+
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    ck_assert_int_eq(write_file(signature_path, signature_buf, signature_len), 0);
+
+    reset_cmd_defaults();
+    CMD.sign = SIGN_RSA2048;
+    CMD.manual_sign = 1;
+    CMD.signature_file = signature_path;
+    CMD.signature_sz = signature_len;
+    /* Keep room for a large signature TLV to expose uint16_t truncation. */
+    CMD.header_sz = 131072U;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_ne(ret, 0);
+
+    free(signature_buf);
+    unlink(output_path);
+    unlink(signature_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-encrypted-output");
@@ -717,6 +764,8 @@ Suite *wolfboot_suite(void)
         test_make_header_ex_keeps_boundary_header_for_sha384_sha3_hybrid_cert_chain);
     tcase_add_test(tcase,
         test_make_header_ex_rejects_cert_chain_tlv_length_overflow);
+    tcase_add_test(tcase,
+        test_make_header_ex_rejects_signature_tlv_length_overflow);
     suite_add_tcase(s, tcase);
 
     return s;
