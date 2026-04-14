@@ -1205,7 +1205,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
             (void *)&delta_base) == 0)
         return 0;
     if (delta_base)
-        return *delta_base;
+        return im2n(*delta_base);
     return 0;
 }
 

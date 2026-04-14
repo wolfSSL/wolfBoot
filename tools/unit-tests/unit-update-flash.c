@@ -63,8 +63,32 @@ static void cleanup_flash(void);
 static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type);
 
+static uint32_t host_to_img_u32(uint32_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    return (((val & 0x000000FFu) << 24) |
+            ((val & 0x0000FF00u) << 8) |
+            ((val & 0x00FF0000u) >> 8) |
+            ((val & 0xFF000000u) >> 24));
+#else
+    return val;
+#endif
+}
+
+static uint16_t host_to_img_u16(uint16_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    return (uint16_t)(((val & 0x00FFu) << 8) |
+                      ((val & 0xFF00u) >> 8));
+#else
+    return val;
+#endif
+}
+
 #ifdef DELTA_UPDATES
 static int mock_wb_patch_init_calls = 0;
+static uint8_t *mock_wb_patch_init_patch = NULL;
+static uint32_t mock_wb_patch_init_psz = 0;
 
 int unit_test_wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz,
     uint8_t *patch, uint32_t psz)
@@ -72,9 +96,9 @@ int unit_test_wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz,
     (void)bm;
     (void)src;
     (void)ssz;
-    (void)patch;
-    (void)psz;
     mock_wb_patch_init_calls++;
+    mock_wb_patch_init_patch = patch;
+    mock_wb_patch_init_psz = psz;
     return 0;
 }
 
@@ -192,6 +216,8 @@ static void reset_mock_stats(void)
 #endif
 #ifdef DELTA_UPDATES
     mock_wb_patch_init_calls = 0;
+    mock_wb_patch_init_patch = NULL;
+    mock_wb_patch_init_psz = 0;
 #endif
 }
 
@@ -243,6 +269,10 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type)
 {
     uint32_t word;
+    uint32_t magic = WOLFBOOT_MAGIC;
+    uint32_t size_img = host_to_img_u32(size);
+    uint32_t version_img = host_to_img_u32(version);
+    uint16_t img_type_img = host_to_img_u16(img_type);
     int i;
     uint8_t *base = (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     int ret;
@@ -260,21 +290,21 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
 
 
     hal_flash_unlock();
-    hal_flash_write((uintptr_t)base, "WOLF", 4);
-    printf("Written magic: \"WOLF\"\n");
+    hal_flash_write((uintptr_t)base, (void *)&magic, 4);
+    printf("Written magic: 0x%08X\n", magic);
 
-    hal_flash_write((uintptr_t)base + 4, (void *)&size, 4);
+    hal_flash_write((uintptr_t)base + 4, (void *)&size_img, 4);
     printf("Written size: %u\n", size);
 
     /* Headers */
     word = 4 << 16 | HDR_VERSION;
     hal_flash_write((uintptr_t)base + 8, (void *)&word, 4);
-    hal_flash_write((uintptr_t)base + 12, (void *)&version, 4);
+    hal_flash_write((uintptr_t)base + 12, (void *)&version_img, 4);
     printf("Written version: %u\n", version);
 
     word = 2 << 16 | HDR_IMG_TYPE;
     hal_flash_write((uintptr_t)base + 16, (void *)&word, 4);
-    hal_flash_write((uintptr_t)base + 20, (void *)&img_type, 2);
+    hal_flash_write((uintptr_t)base + 20, (void *)&img_type_img, 2);
     printf("Written img_type: %04X\n", img_type);
 
     /* Add 28B header to sha calculation */
@@ -929,7 +959,12 @@ END_TEST
 
 START_TEST (test_diffbase_version_reads)
 {
+    uint32_t magic = WOLFBOOT_MAGIC;
     uint32_t word;
+    uint32_t word_le;
+    uint32_t version_le;
+    uint32_t delta_base_le;
+    uint16_t img_type_le;
     uint32_t version = 0x01020304;
     uint32_t delta_base = 0x33445566;
     uint16_t img_type = HDR_IMG_TYPE_AUTH | HDR_IMG_TYPE_APP;
@@ -939,27 +974,33 @@ START_TEST (test_diffbase_version_reads)
 
     ext_flash_unlock();
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-            (const uint8_t *)"WOLF", 4);
+            (const uint8_t *)&magic, sizeof(magic));
+    version_le = host_to_img_u32(version);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4,
-            (const uint8_t *)&version, sizeof(version));
+            (const uint8_t *)&version_le, sizeof(version_le));
 
     word = (4u << 16) | HDR_VERSION;
+    word_le = word;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 8,
-            (const uint8_t *)&word, sizeof(word));
+            (const uint8_t *)&word_le, sizeof(word_le));
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 12,
-            (const uint8_t *)&version, sizeof(version));
+            (const uint8_t *)&version_le, sizeof(version_le));
 
     word = (2u << 16) | HDR_IMG_TYPE;
+    word_le = word;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 16,
-            (const uint8_t *)&word, sizeof(word));
+            (const uint8_t *)&word_le, sizeof(word_le));
+    img_type_le = host_to_img_u16(img_type);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20,
-            (const uint8_t *)&img_type, sizeof(img_type));
+            (const uint8_t *)&img_type_le, sizeof(img_type_le));
 
     word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    word_le = word;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 24,
-            (const uint8_t *)&word, sizeof(word));
+            (const uint8_t *)&word_le, sizeof(word_le));
+    delta_base_le = host_to_img_u32(delta_base);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 28,
-            (const uint8_t *)&delta_base, sizeof(delta_base));
+            (const uint8_t *)&delta_base_le, sizeof(delta_base_le));
     ext_flash_lock();
 
     ck_assert_uint_eq(wolfBoot_get_diffbase_version(PART_UPDATE), delta_base);
@@ -1051,13 +1092,15 @@ START_TEST (test_delta_base_version_mismatch_rejected)
     word = (4u << 16) | HDR_IMG_DELTA_SIZE;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
         (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_sz);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
-        (const uint8_t *)&delta_sz, sizeof(delta_sz));
+        (const uint8_t *)&word, sizeof(word));
     word = (4u << 16) | HDR_IMG_DELTA_BASE;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
         (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
-        (const uint8_t *)&delta_base, sizeof(delta_base));
+        (const uint8_t *)&word, sizeof(word));
     ext_flash_lock();
 
     ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
@@ -1078,7 +1121,7 @@ START_TEST (test_delta_base_version_match_accepts)
 {
     struct wolfBoot_image boot, update, swap;
     uint32_t word;
-    uint32_t delta_sz = 0;
+    uint32_t delta_sz = 0x00001020;
     uint32_t delta_base = 1;
     int ret;
 
@@ -1092,13 +1135,15 @@ START_TEST (test_delta_base_version_match_accepts)
     word = (4u << 16) | HDR_IMG_DELTA_SIZE;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
         (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_sz);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
-        (const uint8_t *)&delta_sz, sizeof(delta_sz));
+        (const uint8_t *)&word, sizeof(word));
     word = (4u << 16) | HDR_IMG_DELTA_BASE;
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
         (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
     ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
-        (const uint8_t *)&delta_base, sizeof(delta_base));
+        (const uint8_t *)&word, sizeof(word));
     ext_flash_lock();
 
     ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
@@ -1110,6 +1155,59 @@ START_TEST (test_delta_base_version_match_accepts)
     ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
     ck_assert_int_eq(ret, 0);
     ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+    ck_assert_uint_eq(mock_wb_patch_init_psz, delta_sz);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_inverse_values_passed_with_native_endian)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t word;
+    uint32_t delta_inverse_offset = 0x00001020;
+    uint32_t delta_inverse_size = 0x00002040;
+    uint32_t delta_base = 1;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_INVERSE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_inverse_offset);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_INVERSE_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_inverse_size);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 80,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 84,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    memset(&swap, 0, sizeof(swap));
+    swap.part = PART_SWAP;
+    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 1);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+    ck_assert_ptr_eq(mock_wb_patch_init_patch, update.hdr + delta_inverse_offset);
+    ck_assert_uint_eq(mock_wb_patch_init_psz, delta_inverse_size);
 
     cleanup_flash();
 }
@@ -1225,6 +1323,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(delta_zero_size, test_delta_zero_size_erased_header_uses_recovery_heuristic);
     tcase_add_test(delta_base_version, test_delta_base_version_mismatch_rejected);
     tcase_add_test(delta_base_version, test_delta_base_version_match_accepts);
+    tcase_add_test(delta_base_version, test_delta_inverse_values_passed_with_native_endian);
 #endif
 #ifdef RAM_CODE
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);

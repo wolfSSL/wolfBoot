@@ -577,6 +577,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
     uint32_t *img_offset;
     uint32_t *img_size;
+    uint32_t delta_img_offset = 0;
+    uint32_t delta_img_size = 0;
     uint32_t total_size;
     WB_PATCH_CTX ctx;
     uint32_t cur_v, upd_v, delta_base_v;
@@ -617,6 +619,9 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 &delta_base_hash, &delta_base_hash_sz) < 0) {
         return -1;
     }
+    delta_img_size = im2n(*img_size);
+    if (inverse)
+        delta_img_offset = im2n(*img_offset);
     cur_v = wolfBoot_current_firmware_version();
     upd_v = wolfBoot_update_firmware_version();
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
@@ -653,7 +658,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ((cur_v == upd_v) && (delta_base_v <= cur_v)) ||
             ((cur_v == delta_base_v) && (upd_v >= cur_v))) {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
-                    IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
+                    IMAGE_HEADER_SIZE, update->hdr + delta_img_offset,
+                    delta_img_size);
         } else {
             wolfBoot_printf("Delta version check failed! "
                 "Cur 0x%x, Upd 0x%x, Delta 0x%x\n",
@@ -673,7 +679,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                    update->hdr + IMAGE_HEADER_SIZE, *img_size);
+                    update->hdr + IMAGE_HEADER_SIZE, delta_img_size);
         }
     }
     if (ret < 0)
