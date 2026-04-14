@@ -737,6 +737,40 @@ START_TEST (test_update_toolarge) {
     cleanup_flash();
 }
 
+START_TEST (test_update_max_size_minus_one_accepted)
+{
+    uint32_t boundary_ok = (uint32_t)(MAX_UPDATE_SIZE - 1U);
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, boundary_ok);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_update_max_size_rejected)
+{
+    uint32_t boundary_reject = (uint32_t)MAX_UPDATE_SIZE;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, boundary_reject);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_zero_size_update_rejected)
 {
     int ret;
@@ -1056,6 +1090,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_type, test_invalid_update_type);
     tcase_add_test(invalid_update_auth_type, test_invalid_update_auth_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
+    tcase_add_test(update_toolarge, test_update_max_size_minus_one_accepted);
+    tcase_add_test(update_toolarge, test_update_max_size_rejected);
     tcase_add_test(zero_size_update, test_zero_size_update_rejected);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
