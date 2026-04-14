@@ -679,10 +679,13 @@ cleanup:
         return ret;
     }
 #else
-    if (hal_uds_derive_key(uds, uds_len) != 0) {
-        return -1;
+    int ret = -1;
+
+    if (hal_uds_derive_key(uds, uds_len) == 0) {
+        ret = wolfboot_dice_derive_attestation_key(key, uds, uds_len, claims);
     }
-    return wolfboot_dice_derive_attestation_key(key, uds, uds_len, claims);
+    wc_ForceZero(uds, sizeof(uds));
+    return ret;
 #endif
 }
 
