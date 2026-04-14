@@ -96,7 +96,9 @@ void main(void)
     uint32_t boot_ver, update_ver;
     uint8_t boot_state, update_state;
 
+    uart_init();
     leds_init();
+    wolfBoot_printf("Test app (v%lu)\n", wolfBoot_current_firmware_version());
     check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
     /* Confirm boot if state is TESTING or NEW */
@@ -131,19 +133,3 @@ void main(void)
         __asm__ volatile ("wfi");
     }
 }
-
-
-#include "sys/stat.h"
-int _getpid(void) { return 1; }
-int _kill(int pid, int sig) { (void)pid; (void)sig; return -1; }
-void _exit(int status) { _kill(status, -1); while (1) {} }
-int _read(int file, char *ptr, int len)
-    { (void)file; (void)ptr; (void)len; return -1; }
-int _write(int file, char *ptr, int len)
-    { (void)file; (void)ptr; return len; }
-int _close(int file) { (void)file; return -1; }
-int _isatty(int file) { (void)file; return 1; }
-int _lseek(int file, int ptr, int dir)
-    { (void)file; (void)ptr; (void)dir; return 0; }
-int _fstat(int file, struct stat *st)
-    { (void)file; st->st_mode = S_IFCHR; return 0; }
