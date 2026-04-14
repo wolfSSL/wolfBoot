@@ -2059,10 +2059,40 @@ pyocd flash -t LPC54S018J4MET180 factory.bin --base-address 0x10000000
 pyocd reset -t LPC54S018J4MET180
 ```
 
-**Note:** The LPC54S018M boot ROM validates a vector table checksum at offset
-0x1C. The build system automatically computes and patches this checksum into
-`wolfboot.bin`. If the checksum is invalid, the boot ROM will enter ISP mode
-instead of booting from SPIFI flash.
+**Note:** The LPC54S018M boot ROM requires two post-processing steps on
+`wolfboot.bin` before the chip can boot from SPIFI flash. Both are applied
+automatically by the top-level `Makefile` (see the `wolfboot.bin:` rule,
+gated on `TARGET=nxp_lpc54s018m`), so no user action is needed — but they
+are documented here because the patched binary will not match the ELF output
+and this affects any external flashing or signing workflow.
+
+1. **Vector table checksum** (offset `0x1C`):
+   The boot ROM validates that the sum of the first 8 words of the vector
+   table (SP, Reset, NMI, HardFault, MemManage, BusFault, UsageFault,
+   checksum) equals zero. The build computes
+   `ck = (-sum_of_first_7_words) & 0xFFFFFFFF` and writes `ck` at offset
+   `0x1C`. If this checksum is wrong, the boot ROM enters ISP mode
+   (USB DFU / UART autobaud) instead of booting from SPIFI.
+
+2. **Enhanced boot block** (at offset `0x160`, pointed to by offset `0x24`):
+   A 100-byte structure (25 × uint32) that the boot ROM reads **before**
+   jumping to the application, to configure the SPIFI controller for
+   quad I/O fast read XIP. Key fields:
+   - `0xFEEDA5A5` magic word
+   - Image type / image load address (`0x10000000`) / image size
+   - `0xEDDC94BD` signature (matches the pointer at offset `0x24`)
+   - SPIFI device configuration words (`0x001640EF`, `0x1301001D`,
+     `0x04030050`, `0x14110D09`) — these describe the W25Q32JV command
+     set, dummy cycles, and timing
+   - Offset `0x24` contains `{0xEDDC94BD, 0x160}` — the marker plus the
+     pointer to the block itself
+
+   Without this block the boot ROM leaves SPIFI in slow single-lane read
+   mode (or unconfigured), and XIP either fails or runs far below spec.
+
+The build prints both `[LPC] enhanced boot block` and
+`vector checksum: 0xXXXXXXXX` lines when these steps run — absence of
+either message means the binary is not bootable on this chip.
 
 ### LPC54S018M: Testing firmware update
 
