@@ -605,6 +605,50 @@ START_TEST(test_make_header_ex_keeps_boundary_header_for_sha384_sha3_hybrid_cert
 }
 END_TEST
 
+START_TEST(test_make_header_ex_rejects_cert_chain_tlv_length_overflow)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char cert_chain_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x41, 0x42, 0x43, 0x44 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t *cert_chain_buf = NULL;
+    const uint32_t cert_chain_len = 65536U;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(cert_chain_path, sizeof(cert_chain_path), "%s/cert-chain.bin",
+        tempdir);
+
+    cert_chain_buf = malloc(cert_chain_len);
+    ck_assert_ptr_nonnull(cert_chain_buf);
+    memset(cert_chain_buf, 0xC7, cert_chain_len);
+
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    ck_assert_int_eq(write_file(cert_chain_path, cert_chain_buf,
+        cert_chain_len), 0);
+
+    reset_cmd_defaults();
+    CMD.cert_chain_file = cert_chain_path;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_ne(ret, 0);
+
+    free(cert_chain_buf);
+    unlink(output_path);
+    unlink(cert_chain_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-encrypted-output");
@@ -620,6 +664,8 @@ Suite *wolfboot_suite(void)
         test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header);
     tcase_add_test(tcase,
         test_make_header_ex_keeps_boundary_header_for_sha384_sha3_hybrid_cert_chain);
+    tcase_add_test(tcase,
+        test_make_header_ex_rejects_cert_chain_tlv_length_overflow);
     suite_add_tcase(s, tcase);
 
     return s;

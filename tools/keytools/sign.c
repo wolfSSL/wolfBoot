@@ -1450,6 +1450,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         cert_chain_sz = file_stat.st_size;
 
+        if (cert_chain_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Certificate chain too large for TLV encoding "
+                   "(%u > %u)\n",
+                   cert_chain_sz, (unsigned int)UINT16_MAX);
+            fclose(f);
+            f = NULL;
+            goto failure;
+        }
+
         /* Verify that the chain will fit in our header */
         if (header_idx + cert_chain_tlv_hdr_sz + cert_chain_sz >
             CMD.header_sz) {
