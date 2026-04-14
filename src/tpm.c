@@ -1117,11 +1117,15 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     #endif
 
         /* if using password auth, set it otherwise use policy auth */
-        if (authSz < 0)
-            return BAD_FUNC_ARG;
+        if (authSz < 0) {
+            rc = BAD_FUNC_ARG;
+            goto exit;
+        }
         if (auth != NULL && authSz > 0) {
-            if (authSz > (int)sizeof(seal_blob->handle.auth.buffer))
-                return BAD_FUNC_ARG;
+            if (authSz > (int)sizeof(seal_blob->handle.auth.buffer)) {
+                rc = BAD_FUNC_ARG;
+                goto exit;
+            }
             seal_blob->handle.auth.size = authSz;
             memcpy(seal_blob->handle.auth.buffer, auth, authSz);
             wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &seal_blob->handle);
@@ -1151,6 +1155,7 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     }
     TPM2_ForceZero(&unsealOut, sizeof(unsealOut));
 
+exit:
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
