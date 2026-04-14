@@ -416,36 +416,36 @@ int sata_unlock_disk(int drv, int freeze)
     int secret_size = ATA_UNLOCK_DISK_KEY_SZ;
     uint8_t secret[ATA_UNLOCK_DISK_KEY_SZ];
     enum ata_security_state ata_st;
-    int r;
+    int r = -1;
 
 #ifdef WOLFBOOT_ATA_DISABLE_USER_PASSWORD
     sata_disable_password(0);
 #endif
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
-        return r;
+        goto cleanup;
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
 #if defined(TARGET_x86_fsp_qemu)
     if (ata_st == ATA_SEC0)
-        return 0;
+        goto cleanup;
 #endif
     if (ata_st == ATA_SEC1) {
         AHCI_DEBUG_PRINTF("ATA: calling set passphrase\r\n", r);
         r = ata_security_set_password(drv, 0, (char*)secret);
         if (r != 0)
-            return -1;
+            goto error;
         AHCI_DEBUG_PRINTF("ATA: calling freeze lock\r\n", r);
         if (freeze) {
             r = ata_security_freeze_lock(drv);
             AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n", r);
             if (r != 0)
-                return -1;
+                goto error;
         }
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         if (r != 0)
-            return -1;
+            goto error;
         ata_st = ata_security_get_state(drv);
         wolfBoot_printf("ATA: State SEC%d\r\n", ata_st);
     }
@@ -454,11 +454,11 @@ int sata_unlock_disk(int drv, int freeze)
         r = ata_security_unlock_device(drv, (char*)secret, 0);
         AHCI_DEBUG_PRINTF("ATA device unlock: returned %d\r\n", r);
         if (r != 0)
-            return -1;
+            goto error;
         r = ata_identify_device(drv);
         AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
         if (r != 0)
-            return -1;
+            goto error;
         ata_st = ata_security_get_state(drv);
         if (ata_st == ATA_SEC5) {
             if (freeze) {
@@ -467,14 +467,14 @@ int sata_unlock_disk(int drv, int freeze)
                 AHCI_DEBUG_PRINTF("ATA security freeze lock: returned %d\r\n",
                                   r);
                 if (r != 0)
-                    return -1;
+                    goto error;
             } else {
                 AHCI_DEBUG_PRINTF("ATA security freeze skipped\r\n");
             }
             r = ata_identify_device(drv);
             AHCI_DEBUG_PRINTF("ATA identify: returned %d\r\n", r);
             if (r != 0)
-                return -1;
+                goto error;
         }
     }
     ata_st = ata_security_get_state(drv);
@@ -484,8 +484,13 @@ int sata_unlock_disk(int drv, int freeze)
         panic();
     }
     AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);
-
-    return 0;
+    r = 0;
+    goto cleanup;
+error:
+    r = -1;
+cleanup:
+    TPM2_ForceZero(secret, sizeof(secret));
+    return r;
 }
 #endif /* WOLFBOOT_ATA_DISK_LOCK */
 
