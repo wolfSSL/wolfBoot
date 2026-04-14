@@ -240,7 +240,7 @@ unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 		-Wl,--gc-sections
 
 unit-loader-tpm-init: ../../include/target.h unit-loader-tpm-init.c
-	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
 		-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_SIGN_ECC256 \
 		-DWOLFBOOT_HASH_SHA256 -ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections

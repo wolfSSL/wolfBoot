@@ -567,6 +567,18 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     #   define DELTA_BLOCK_SIZE 1024
     #endif
 
+static inline uint32_t wb_im2n32(uint32_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    return val;
+#else
+    return (((val & 0x000000FFU) << 24) |
+            ((val & 0x0000FF00U) << 8) |
+            ((val & 0x00FF0000U) >> 8) |
+            ((val & 0xFF000000U) >> 24));
+#endif
+}
+
 static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse,
     int resume)
@@ -619,9 +631,9 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 &delta_base_hash, &delta_base_hash_sz) < 0) {
         return -1;
     }
-    delta_img_size = im2n(*img_size);
+    delta_img_size = wb_im2n32(*img_size);
     if (inverse)
-        delta_img_offset = im2n(*img_offset);
+        delta_img_offset = wb_im2n32(*img_offset);
     cur_v = wolfBoot_current_firmware_version();
     upd_v = wolfBoot_update_firmware_version();
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);

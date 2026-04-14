@@ -355,13 +355,14 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
         TPM2_GetHashDigestSize(WOLFBOOT_TPM_PCR_ALG));
 #ifdef WOLFBOOT_DEBUG_TPM
     if (rc == 0) {
+        int read_rc;
         wolfBoot_printf("Measured boot: Index %d, Line %d\n", pcrIndex, line);
 
-        rc = wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
+        read_rc = wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
             digest, &digestSz);
 
         wolfBoot_printf("PCR %d: Res %d, Digest Sz %d\n",
-            pcrIndex, rc, digestSz);
+            pcrIndex, read_rc, digestSz);
         wolfBoot_print_bin(digest, digestSz);
     }
     else {
