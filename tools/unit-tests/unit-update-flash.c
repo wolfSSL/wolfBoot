@@ -38,7 +38,15 @@
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
 #include "libwolfboot.c"
+#ifdef DELTA_UPDATES
+#define wb_patch_init unit_test_wb_patch_init
+#define wb_patch unit_test_wb_patch
+#endif
 #include "update_flash.c"
+#ifdef DELTA_UPDATES
+#undef wb_patch_init
+#undef wb_patch
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
@@ -54,6 +62,30 @@ static void prepare_flash(void);
 static void cleanup_flash(void);
 static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type);
+
+#ifdef DELTA_UPDATES
+static int mock_wb_patch_init_calls = 0;
+
+int unit_test_wb_patch_init(WB_PATCH_CTX *bm, uint8_t *src, uint32_t ssz,
+    uint8_t *patch, uint32_t psz)
+{
+    (void)bm;
+    (void)src;
+    (void)ssz;
+    (void)patch;
+    (void)psz;
+    mock_wb_patch_init_calls++;
+    return 0;
+}
+
+int unit_test_wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
+{
+    (void)ctx;
+    (void)dst;
+    (void)len;
+    return 0;
+}
+#endif
 
 #ifdef CUSTOM_ENCRYPT_KEY
 static int mock_get_encrypt_key_ret = 0;
@@ -157,6 +189,9 @@ static void reset_mock_stats(void)
     ext_flash_reset_lock();
 #ifdef RAM_CODE
     arch_reboot_called = 0;
+#endif
+#ifdef DELTA_UPDATES
+    mock_wb_patch_init_calls = 0;
 #endif
 }
 
@@ -997,6 +1032,88 @@ START_TEST (test_delta_zero_size_erased_header_uses_recovery_heuristic)
     cleanup_flash();
 }
 END_TEST
+
+START_TEST (test_delta_base_version_mismatch_rejected)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t word;
+    uint32_t delta_sz = 0;
+    uint32_t delta_base = 3;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&delta_sz, sizeof(delta_sz));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&delta_base, sizeof(delta_base));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    memset(&swap, 0, sizeof(swap));
+    swap.part = PART_SWAP;
+    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_base_version_match_accepts)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t word;
+    uint32_t delta_sz = 0;
+    uint32_t delta_base = 1;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&delta_sz, sizeof(delta_sz));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&delta_base, sizeof(delta_base));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    memset(&swap, 0, sizeof(swap));
+    swap.part = PART_SWAP;
+    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+
+    cleanup_flash();
+}
+END_TEST
 #endif
 #endif
 
@@ -1058,6 +1175,7 @@ Suite *wolfboot_suite(void)
     TCase *boot_success = tcase_create("Boot success state");
 #ifdef DELTA_UPDATES
     TCase *delta_zero_size = tcase_create("Delta zero size");
+    TCase *delta_base_version = tcase_create("Delta base version check");
 #endif
 #ifdef RAM_CODE
     TCase *self_update_sameversion = tcase_create("Self update same version erased");
@@ -1105,6 +1223,8 @@ Suite *wolfboot_suite(void)
 #ifdef DELTA_UPDATES
     tcase_add_test(delta_zero_size, test_delta_zero_size_valid_header_rejected_without_recovery_heuristic);
     tcase_add_test(delta_zero_size, test_delta_zero_size_erased_header_uses_recovery_heuristic);
+    tcase_add_test(delta_base_version, test_delta_base_version_mismatch_rejected);
+    tcase_add_test(delta_base_version, test_delta_base_version_match_accepts);
 #endif
 #ifdef RAM_CODE
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
@@ -1140,6 +1260,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, boot_success);
 #ifdef DELTA_UPDATES
     suite_add_tcase(s, delta_zero_size);
+    suite_add_tcase(s, delta_base_version);
 #endif
 #ifdef RAM_CODE
     suite_add_tcase(s, self_update_sameversion);
