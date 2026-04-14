@@ -116,12 +116,26 @@ static uint8_t flash_page_cache[FLASH_PAGE_SIZE];
 #endif
 
 /* -------------------------------------------------------------------------- */
+/*  SYSCON registers (shared across clock + UART)                             */
+/* -------------------------------------------------------------------------- */
+#define SYSCON_BASE              0x40000000
+#define SYSCON_PDRUNCFGCLR0      (*(volatile uint32_t *)(SYSCON_BASE + 0x04C))
+#define SYSCON_MAINCLKSELA       (*(volatile uint32_t *)(SYSCON_BASE + 0x280))
+#define SYSCON_MAINCLKSELB       (*(volatile uint32_t *)(SYSCON_BASE + 0x284))
+#define SYSCON_AHBCLKDIV         (*(volatile uint32_t *)(SYSCON_BASE + 0x380))
+#define SYSCON_FROCTRL           (*(volatile uint32_t *)(SYSCON_BASE + 0x550))
+
+/* FROCTRL bits */
+#define FROCTRL_SEL_96MHZ        (1UL << 14)  /* 0=48MHz, 1=96MHz */
+#define FROCTRL_HSPDCLK          (1UL << 30)  /* Enable FRO high-speed output */
+#define FROCTRL_WRTRIM           (1UL << 31)  /* Write trim enable */
+
+/* -------------------------------------------------------------------------- */
 /*  UART via Flexcomm0 (bare-metal, no SDK)                                   */
 /* -------------------------------------------------------------------------- */
 #ifdef DEBUG_UART
 
 /* SYSCON registers for clock gating and peripheral reset */
-#define SYSCON_BASE         0x40000000
 #define SYSCON_AHBCLKCTRL0  (*(volatile uint32_t *)(SYSCON_BASE + 0x200))
 #define SYSCON_AHBCLKCTRL1  (*(volatile uint32_t *)(SYSCON_BASE + 0x204))
 #define SYSCON_PRESETCTRL1  (*(volatile uint32_t *)(SYSCON_BASE + 0x104))
@@ -193,12 +207,13 @@ void uart_init(void)
     /* Enable Flexcomm0 clock (use atomic SET register) */
     SYSCON_AHBCLKCTRLSET1 = AHBCLKCTRL1_FC0;
 
-    /* Reset Flexcomm0 using atomic CLR/SET registers (NXP SDK pattern) */
-    SYSCON_PRESETCTRLCLR1 = PRESETCTRL1_FC0;       /* Assert reset */
-    while (SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)    /* Wait for assert */
+    /* Reset Flexcomm0: NXP PRESETCTRL polarity is bit=1 means IN reset,
+     * bit=0 means OUT of reset. Use SET to assert, CLR to deassert. */
+    SYSCON_PRESETCTRLSET1 = PRESETCTRL1_FC0;        /* Assert reset (bit→1) */
+    while (!(SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)) /* Wait for bit=1 */
         ;
-    SYSCON_PRESETCTRLSET1 = PRESETCTRL1_FC0;       /* Deassert reset */
-    while (!(SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)) /* Wait for deassert */
+    SYSCON_PRESETCTRLCLR1 = PRESETCTRL1_FC0;        /* Deassert reset (bit→0) */
+    while (SYSCON_PRESETCTRL1 & PRESETCTRL1_FC0)    /* Wait for bit=0 */
         ;
 
     /* Small delay after reset deassertion for peripheral to stabilize */
@@ -209,7 +224,7 @@ void uart_init(void)
     FC0_PSELID = 1;
 
     /* Verify Flexcomm0 is accessible — if PSELID reads 0, peripheral is
-     * not responding (observed on some LPC54S018M boards). Skip UART. */
+     * not responding. Skip UART. */
     if ((FC0_PSELID & 0x71) == 0) {
         return;
     }
@@ -277,17 +292,55 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
         ;
 }
 
+/* Forward declaration — defined later in the file as RAMFUNCTION */
+static void RAMFUNCTION spifi_enter_memmode(void);
+
+/*
+ * Boost main clock from FRO 12MHz to FRO_HF 96MHz (8x speedup).
+ * Must run from RAM because changing MAINCLK affects the SPIFI XIP clock.
+ * UART is unaffected: FCLKSEL0=0 selects FRO 12MHz for Flexcomm0 independently.
+ */
+static void RAMFUNCTION hal_clock_boost(void)
+{
+    /* Ensure FRO, ROM, and VD6 (OTP) power domains are enabled.
+     * Boot ROM usually leaves these on, but clearing is idempotent. */
+    SYSCON_PDRUNCFGCLR0 = (1UL << 4) | (1UL << 17) | (1UL << 29);
+
+    /* Confirm main clock is FRO 12MHz (safety before frequency change). */
+    SYSCON_MAINCLKSELA = 0U;
+    SYSCON_MAINCLKSELB = 0U;
+
+    /* Enable FRO_HF directly via FROCTRL (bypass ROM API which faults
+     * on this silicon). Set HSPDCLK + SEL=96MHz with FREQTRIM=0; the FRO
+     * will operate at nominal 96MHz with reduced accuracy (no OTP trim),
+     * which is fine for crypto acceleration. */
+    SYSCON_FROCTRL = FROCTRL_HSPDCLK | FROCTRL_SEL_96MHZ;
+
+    /* Brief delay for FRO_HF to stabilize */
+    {
+        volatile int i;
+        for (i = 0; i < 1000; i++) ;
+    }
+
+    /* AHB divider = /1 (96MHz AHB clock). */
+    SYSCON_AHBCLKDIV = 0U;
+
+    /* Switch main clock to FRO_HF. SPIFI clock (SPIFICLKSEL=MAIN_CLK,
+     * SPIFICLKDIV=/1) auto-scales to 96MHz — within W25Q32JV quad I/O
+     * limit of 104MHz. Boot ROM's MCMD already has 6 dummy cycles
+     * (INTLEN=3 in quad mode) which covers the full speed range. */
+    SYSCON_MAINCLKSELA = 3U;
+
+    /* Re-enter SPIFI memory mode at new clock. */
+    spifi_enter_memmode();
+}
+
 void hal_init(void)
 {
-    /* The boot ROM has already configured basic clocks and SPIFI for XIP.
-     * We must NOT reconfigure clocks or SPIFI from flash (XIP) because
-     * changing the clock source or SPIFI controller while executing from
-     * SPIFI flash will cause an instruction fetch fault.
-     *
-     * Clock and SPIFI reconfiguration can only be done from RAM functions.
-     * The flash erase/write paths (all RAMFUNCTION) handle SPIFI mode
-     * switching as needed.
-     */
+    /* Boost from FRO 12MHz to FRO_HF 96MHz before anything else.
+     * Runs from RAM because changing MAINCLK affects SPIFI XIP. */
+    hal_clock_boost();
+
 #ifdef DEBUG_UART
     uart_init();
 #endif

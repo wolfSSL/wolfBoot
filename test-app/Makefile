@@ -707,9 +707,8 @@ ifeq ($(TARGET),nxp_lpc54s018m)
     ifeq ($(DEBUG_UART),)
       APP_OBJS+=../src/string.o
     endif
-    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
-      LDFLAGS+=--specs=nosys.specs
-    endif
+    # Use shared newlib syscall stubs (routes _write to uart_write)
+    APP_OBJS+=syscalls.o
     LDFLAGS+=-Wl,--no-warn-rwx-segments
 endif
 
