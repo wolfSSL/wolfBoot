@@ -632,8 +632,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         return -1;
     }
     delta_img_size = wb_delta_im2n(*img_size);
-    if (inverse)
+    if (inverse) {
         delta_img_offset = wb_delta_im2n(*img_offset);
+    } else {
+        delta_img_offset = IMAGE_HEADER_SIZE;
+    }
     cur_v = wolfBoot_current_firmware_version();
     upd_v = wolfBoot_update_firmware_version();
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
@@ -691,7 +694,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                    update->hdr + IMAGE_HEADER_SIZE, delta_img_size);
+                    update->hdr + delta_img_offset, delta_img_size);
         }
     }
     if (ret < 0)
@@ -1487,6 +1490,10 @@ void RAMFUNCTION wolfBoot_start(void)
                 wolfBoot_panic();
             }
         }
+    }
+    if ((boot.hdr_ok != 1U) || (boot.sha_ok != 1U) ||
+        (boot.signature_ok != 1U)) {
+        wolfBoot_panic();
     }
     PART_SANITY_CHECK(&boot);
 #else

@@ -122,6 +122,14 @@ static int wolfBoot_local_constant_compare(const uint8_t* a, const uint8_t* b,
     return diff;
 }
 
+static void ahci_secret_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 /**
  * @brief Sets the AHCI Base Address Register (ABAR) for the given device.
  *
@@ -278,7 +286,7 @@ static int sata_get_random_base64(uint8_t *out, int *out_size)
     ret = 0;
 
 cleanup:
-    TPM2_ForceZero(rand, sizeof(rand));
+    ahci_secret_zeroize(rand, sizeof(rand));
     return ret;
 }
 
@@ -322,7 +330,7 @@ static int sata_create_and_seal_unlock_secret(const uint8_t *pubkey_hint,
         }
 
         wolfBoot_printf("Secret Check %d bytes\n", secret_check_sz);
-        TPM2_ForceZero(secret_check, sizeof(secret_check));
+        ahci_secret_zeroize(secret_check, sizeof(secret_check));
     }
 
     if (ret == 0)
@@ -495,7 +503,7 @@ int sata_unlock_disk(int drv, int freeze)
 error:
     r = -1;
 cleanup:
-    TPM2_ForceZero(secret, sizeof(secret));
+    ahci_secret_zeroize(secret, sizeof(secret));
     return r;
 }
 #endif /* WOLFBOOT_ATA_DISK_LOCK */
