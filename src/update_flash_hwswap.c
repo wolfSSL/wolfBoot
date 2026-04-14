@@ -114,5 +114,8 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&fw_image);
 #endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&fw_image);
+#endif
     do_boot((void *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
 }

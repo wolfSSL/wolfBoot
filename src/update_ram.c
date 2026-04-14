@@ -406,6 +406,9 @@ backup_on_failure:
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&os_image);
 #endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&os_image);
+#endif
 #ifdef MMU
     do_boot((uint32_t*)load_address,
             (uint32_t*)dts_addr);
