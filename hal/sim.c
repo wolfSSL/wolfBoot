@@ -502,17 +502,18 @@ void hal_init(void)
 #if defined(WOLFBOOT_TEST_SIM_CRYPTOCB) && defined(__WOLFBOOT)
     {
         int cb_ret;
-        /* wolfCrypt_Init() must be called before RegisterDevice —
-         * it initializes CryptoDev[] slots to INVALID_DEVID via
-         * wc_CryptoCb_Init(). Ref-counted, safe to call multiple times. */
         wolfCrypt_Init();
-        cb_ret = wc_CryptoCb_RegisterDevice(0xCB, sim_cryptocb, NULL);
+        /* simulator WOLFBOOT_DEVID_XXX are all the same, only need to register
+         * one of them for the sim test - chose hash. */
+        cb_ret = wc_CryptoCb_RegisterDevice(WOLFBOOT_DEVID_HASH,
+            sim_cryptocb, NULL);
         if (cb_ret != 0) {
             wolfBoot_printf("Failed to register sim crypto callback: %d\n",
                 cb_ret);
             exit(-1);
         }
-        wolfBoot_printf("Registered sim_cryptocb with devId 0xCB\n");
+        wolfBoot_printf("Registered sim_cryptocb with devId %d\n",
+            WOLFBOOT_DEVID_HASH);
     }
 #endif
 }
