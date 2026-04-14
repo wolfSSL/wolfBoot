@@ -1048,6 +1048,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
     wc_XmssKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
 }
 
 
