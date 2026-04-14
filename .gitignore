@@ -181,6 +181,9 @@ tools/unit-tests/unit-policy-create
 tools/unit-tests/unit-sign-encrypted-output
 tools/unit-tests/unit-update-flash-delta
 tools/unit-tests/unit-update-flash-self-update
+tools/unit-tests/unit-loader-tpm-init
+tools/unit-tests/unit-update-ram-nofixed
+
 
 
 
