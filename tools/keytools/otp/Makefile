@@ -19,6 +19,7 @@ CFLAGS+=-I. -I../../../ -I../../../include -I$(WOLFBOOT_LIB_WOLFSSL) \
 CFLAGS+=-I./wcs
 CFLAGS+=-DFLASH_OTP_KEYSTORE -D__FLASH_OTP_PRIMER -DWOLFSSL_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE
 PRI_KS_OBJS+=startup.o otp-keystore-primer.o ../../../src/keystore.o
+PRI_KS_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.o
 
 ifeq ($(HASH),SHA256)
     PRI_KS_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o

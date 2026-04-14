@@ -570,12 +570,12 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 static inline uint32_t wb_im2n32(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
-    return val;
-#else
     return (((val & 0x000000FFU) << 24) |
             ((val & 0x0000FF00U) << 8) |
             ((val & 0x00FF0000U) >> 8) |
             ((val & 0xFF000000U) >> 24));
+#else
+    return val;
 #endif
 }
 
