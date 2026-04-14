@@ -49,7 +49,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-enc-nvm-flagshome unit-delta unit-update-flash unit-update-flash-delta \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-disk \
-       unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
+       unit-update-disk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output
@@ -234,6 +234,12 @@ unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
 		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
+
+unit-loader-tpm-init: ../../include/target.h unit-loader-tpm-init.c
+	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
+		-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_SIGN_ECC256 \
+		-DWOLFBOOT_HASH_SHA256 -ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
 
 unit-mock-state: ../../include/target.h unit-mock-state.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
