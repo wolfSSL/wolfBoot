@@ -1456,7 +1456,7 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
         } else {
             /* Emergency update successful, try to re-open boot image */
-            if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
+            if (unlikely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
                     (wolfBoot_verify_authenticity(&boot) < 0)
                     ))) {
