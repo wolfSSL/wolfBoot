@@ -1338,22 +1338,32 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         /* Get the file size */
         if (stat(CMD.cert_chain_file, &file_stat) == 0) {
-            const uint32_t required_space = header_required_size(is_diff,
-                (uint32_t)file_stat.st_size, secondary_key_sz);
+            off_t chain_file_sz = file_stat.st_size;
+            uint32_t required_space;
 
-            /* If the current header size is too small, increase it */
-            if (CMD.header_sz < required_space) {
-                /* Round up to nearest power of 2 that can hold the chain */
-                const uint32_t min_header_size = 256;
-                uint32_t       new_size        = min_header_size;
-                while (new_size < required_space) {
-                    new_size *= 2;
+            if ((chain_file_sz < 0) ||
+                ((uintmax_t)chain_file_sz > (uintmax_t)UINT32_MAX)) {
+                printf("Warning: certificate chain file size is invalid (%jd)\n",
+                    (intmax_t)chain_file_sz);
+            }
+            else {
+                required_space = header_required_size(is_diff,
+                    (uint32_t)chain_file_sz, secondary_key_sz);
+
+                /* If the current header size is too small, increase it */
+                if (CMD.header_sz < required_space) {
+                    /* Round up to nearest power of 2 that can hold the chain */
+                    const uint32_t min_header_size = 256;
+                    uint32_t       new_size        = min_header_size;
+                    while (new_size < required_space) {
+                        new_size *= 2;
+                    }
+
+                    printf("Increasing header size from %u to %u bytes to fit "
+                        "certificate chain\n",
+                        CMD.header_sz, new_size);
+                    CMD.header_sz = new_size;
                 }
-
-                printf("Increasing header size from %u to %u bytes to fit "
-                       "certificate chain\n",
-                       CMD.header_sz, new_size);
-                CMD.header_sz = new_size;
             }
         }
         else {
@@ -1496,7 +1506,15 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             goto failure;
         }
 
-        cert_chain_sz = file_stat.st_size;
+        if ((file_stat.st_size < 0) ||
+            ((uintmax_t)file_stat.st_size > (uintmax_t)UINT32_MAX)) {
+            printf("Error: Invalid certificate chain file size (%jd)\n",
+                   (intmax_t)file_stat.st_size);
+            fclose(f);
+            f = NULL;
+            goto failure;
+        }
+        cert_chain_sz = (uint32_t)file_stat.st_size;
 
         if (cert_chain_sz > (uint32_t)UINT16_MAX) {
             printf("Error: Certificate chain too large for TLV encoding "

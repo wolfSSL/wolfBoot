@@ -504,7 +504,7 @@ START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
     }
 
     ck_assert_int_eq(waitpid(pid, &status, 0), pid);
-    ck_assert_int_eq(WIFEXITED(status), 1);
+    ck_assert(WIFEXITED(status));
     ck_assert_int_eq(WEXITSTATUS(status), 6);
 
     if (saved_copy != NULL) {
