@@ -774,6 +774,7 @@ START_TEST (test_invalid_sha) {
 
 START_TEST (test_emergency_rollback) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    uint8_t st = 0;
     reset_mock_stats();
     prepare_flash();
     add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
@@ -788,6 +789,8 @@ START_TEST (test_emergency_rollback) {
     ck_assert(!wolfBoot_panicked);
     ck_assert(wolfBoot_staged_ok);
     ck_assert(wolfBoot_current_firmware_version() == 1);
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+    ck_assert_uint_eq(st, IMG_STATE_SUCCESS);
     cleanup_flash();
 }
 
