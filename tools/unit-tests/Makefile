@@ -52,7 +52,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
-       unit-sign-encrypted-output
+       unit-sdhci-disk-unaligned unit-sign-encrypted-output
 TESTS+=unit-tpm-check-rot-auth
 
 include unit-sign-encrypted-output.mkfrag
@@ -204,6 +204,10 @@ unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	$(CFLAGS) $(LDFLAGS)
 
 unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
+unit-sdhci-disk-unaligned: ../../include/target.h unit-sdhci-disk-unaligned.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
