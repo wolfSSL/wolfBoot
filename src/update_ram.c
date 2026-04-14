@@ -150,7 +150,12 @@ void RAMFUNCTION wolfBoot_start(void)
         else
             source_address = (uint32_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     #else
-        active = wolfBoot_dualboot_candidate_addr((void**)&source_address);
+        if (active < 0)
+            active = wolfBoot_dualboot_candidate_addr((void**)&source_address);
+        else if (active == PART_BOOT)
+            source_address = (uint32_t*)hal_get_primary_address();
+        else
+            source_address = (uint32_t*)hal_get_update_address();
     #endif
         if (active < 0) { /* panic if no images available */
             wolfBoot_printf("No valid image found!\n");

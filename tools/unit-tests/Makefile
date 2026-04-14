@@ -48,7 +48,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash unit-update-flash-delta \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
+       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -116,6 +116,13 @@ unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-ram-nofixed:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH \
+	-DPART_UPDATE_EXT -DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT \
+	-DNO_XIP -DWOLFBOOT_NO_PARTITIONS -DUNIT_TEST_NO_FIXED_PARTITIONS \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-string:CFLAGS+=-fno-builtin
@@ -294,6 +301,9 @@ unit-update-flash-enc: ../../include/target.h unit-update-flash.c
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-ram-nofixed: ../../include/target.h unit-update-ram-nofixed.c
+	gcc -o $@ unit-update-ram-nofixed.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk: ../../include/target.h unit-update-disk.c
 	gcc -o $@ unit-update-disk.c $(CFLAGS) $(LDFLAGS)
