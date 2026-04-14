@@ -573,6 +573,38 @@ START_TEST (test_empty_panic)
 }
 END_TEST
 
+START_TEST (test_part_sanity_check_panics_on_sha_mismatch)
+{
+    struct wolfBoot_image img;
+
+    memset(&img, 0, sizeof(img));
+    img.hdr_ok = 1;
+    img.sha_ok = 0;
+    img.signature_ok = 1;
+    wolfBoot_panicked = 0;
+
+    PART_SANITY_CHECK(&img);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
+    wolfBoot_panicked = 0;
+}
+END_TEST
+
+START_TEST (test_part_sanity_check_panics_on_signature_mismatch)
+{
+    struct wolfBoot_image img;
+
+    memset(&img, 0, sizeof(img));
+    img.hdr_ok = 1;
+    img.sha_ok = 1;
+    img.signature_ok = 0;
+    wolfBoot_panicked = 0;
+
+    PART_SANITY_CHECK(&img);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
+    wolfBoot_panicked = 0;
+}
+END_TEST
+
 #ifdef EXT_ENCRYPTED
 START_TEST (test_fallback_image_verification_rejects_corruption)
 {
@@ -1297,6 +1329,8 @@ Suite *wolfboot_suite(void)
     return s;
 #else
     tcase_add_test(empty_panic, test_empty_panic);
+    tcase_add_test(empty_panic, test_part_sanity_check_panics_on_sha_mismatch);
+    tcase_add_test(empty_panic, test_part_sanity_check_panics_on_signature_mismatch);
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);

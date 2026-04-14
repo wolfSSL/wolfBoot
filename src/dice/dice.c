@@ -35,7 +35,6 @@
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/integer.h>
-#include <wolfssl/wolfcrypt/memory.h>
 
 #if defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
@@ -67,6 +66,14 @@
 #define WOLFBOOT_DICE_ERR_BUFFER_TOO_SMALL -2
 #define WOLFBOOT_DICE_ERR_HW -3
 #define WOLFBOOT_DICE_ERR_CRYPTO -4
+
+static NOINLINEFUNCTION void wolfboot_dice_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
 
 #define COSE_LABEL_ALG 1
 #define COSE_ALG_ES256 (-7)
@@ -621,7 +628,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
         goto cleanup;
     }
     /* CDI is no longer needed once the seed has been derived. */
-    wc_ForceZero(cdi, sizeof(cdi));
+    wolfboot_dice_zeroize(cdi, sizeof(cdi));
 
     if (wolfboot_dice_hkdf(seed, sizeof(seed),
                            (const uint8_t *)"WOLFBOOT-IAK", 12,
@@ -630,7 +637,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
         goto cleanup;
     }
     /* Seed is no longer needed once the private key material is derived. */
-    wc_ForceZero(seed, sizeof(seed));
+    wolfboot_dice_zeroize(seed, sizeof(seed));
 
     if (wolfboot_dice_fixup_priv(priv, sizeof(priv)) != 0) {
         goto cleanup;
@@ -644,9 +651,9 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
     ret = 0;
 
 cleanup:
-    wc_ForceZero(priv, sizeof(priv));
-    wc_ForceZero(seed, sizeof(seed));
-    wc_ForceZero(cdi, sizeof(cdi));
+    wolfboot_dice_zeroize(priv, sizeof(priv));
+    wolfboot_dice_zeroize(seed, sizeof(seed));
+    wolfboot_dice_zeroize(cdi, sizeof(cdi));
     return ret;
 }
 
@@ -675,7 +682,7 @@ static int wolfboot_attest_get_private_key(ecc_key *key,
         ret = 0;
 
 cleanup:
-        wc_ForceZero(priv, sizeof(priv));
+        wolfboot_dice_zeroize(priv, sizeof(priv));
         return ret;
     }
 #else
@@ -684,7 +691,7 @@ cleanup:
     if (hal_uds_derive_key(uds, uds_len) == 0) {
         ret = wolfboot_dice_derive_attestation_key(key, uds, uds_len, claims);
     }
-    wc_ForceZero(uds, sizeof(uds));
+    wolfboot_dice_zeroize(uds, sizeof(uds));
     return ret;
 #endif
 }
@@ -870,10 +877,10 @@ cleanup:
     }
     if (key_inited) {
         wc_ecc_free(&key);
-        wc_ForceZero(&key, sizeof(key));
+        wolfboot_dice_zeroize(&key, sizeof(key));
     }
-    wc_ForceZero(hash, sizeof(hash));
-    wc_ForceZero(der_sig, sizeof(der_sig));
+    wolfboot_dice_zeroize(hash, sizeof(hash));
+    wolfboot_dice_zeroize(der_sig, sizeof(der_sig));
     return ret;
 }
 

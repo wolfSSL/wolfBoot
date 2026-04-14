@@ -44,17 +44,17 @@ WOLFTPM2_KEY     wolftpm_srk;
 #endif
 
 #if defined(WOLFBOOT_TPM_SEAL) || defined(WOLFBOOT_TPM_KEYSTORE)
-int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b,
+int NOINLINEFUNCTION wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b,
     uint32_t len)
 {
     uint32_t i;
-    volatile uint8_t diff = 0;
+    volatile uint32_t diff = 0U;
 
     for (i = 0; i < len; i++) {
-        diff |= a[i] ^ b[i];
+        diff |= (uint32_t)(a[i] ^ b[i]);
     }
 
-    return diff;
+    return (int)diff;
 }
 
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
