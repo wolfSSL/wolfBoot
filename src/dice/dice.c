@@ -809,7 +809,10 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
 {
     ecc_key key;
     WC_RNG rng;
-    int ret;
+    int ret = WOLFBOOT_DICE_ERR_CRYPTO;
+    int wc_ret;
+    int key_inited = 0;
+    int rng_inited = 0;
     uint8_t hash[SHA256_DIGEST_SIZE];
     uint8_t der_sig[128];
     word32 der_sig_len = sizeof(der_sig);
@@ -823,16 +826,18 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
     }
 
     wc_ecc_init(&key);
+    key_inited = 1;
     if (wolfboot_attest_get_private_key(&key, claims) != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_HW;
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
     }
 
     (void)wc_ecc_set_deterministic(&key, 1);
     if (wc_InitRng(&rng) != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_HW;
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
     }
+    rng_inited = 1;
 
     {
         wc_Sha256 sha;
@@ -841,26 +846,35 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
         wc_Sha256Final(&sha, hash);
     }
 
-    ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
-    wc_FreeRng(&rng);
-    if (ret != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_CRYPTO;
+    wc_ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
+    if (wc_ret != 0) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
     }
 
-    ret = wc_ecc_sig_to_rs(der_sig, der_sig_len, r, &r_len, s, &s_len);
-    if (ret != 0 || r_len > sizeof(r) || s_len > sizeof(s)) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_CRYPTO;
+    wc_ret = wc_ecc_sig_to_rs(der_sig, der_sig_len, r, &r_len, s, &s_len);
+    if (wc_ret != 0 || r_len > sizeof(r) || s_len > sizeof(s)) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
     }
 
     XMEMSET(sig, 0, WOLFBOOT_DICE_SIG_LEN);
     XMEMCPY(sig + (sizeof(r) - r_len), r, r_len);
     XMEMCPY(sig + sizeof(r) + (sizeof(s) - s_len), s, s_len);
     *sig_len = WOLFBOOT_DICE_SIG_LEN;
+    ret = WOLFBOOT_DICE_SUCCESS;
 
-    wc_ecc_free(&key);
-    return WOLFBOOT_DICE_SUCCESS;
+cleanup:
+    if (rng_inited) {
+        wc_FreeRng(&rng);
+    }
+    if (key_inited) {
+        wc_ecc_free(&key);
+        wc_ForceZero(&key, sizeof(key));
+    }
+    wc_ForceZero(hash, sizeof(hash));
+    wc_ForceZero(der_sig, sizeof(der_sig));
+    return ret;
 }
 
 static int wolfboot_dice_build_token(uint8_t *token_buf,
