@@ -1383,9 +1383,7 @@ int wolfBoot_get_dts_size(void *dts_addr)
  */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
-#ifdef MMU
     int ret;
-#endif
     uint8_t *image;
     if (!img)
         return -1;
@@ -1441,8 +1439,10 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     else
         image = (uint8_t *)img->hdr;
     img->hdr_ok = 1;
-
-    return wolfBoot_open_image_address(img, image);
+    ret = wolfBoot_open_image_address(img, image);
+    if (ret != 0)
+        img->hdr_ok = 0;
+    return ret;
 }
 
 

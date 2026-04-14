@@ -835,6 +835,7 @@ START_TEST(test_open_image)
     ext_flash_erase(0, WOLFBOOT_SECTOR_SIZE);
     ret = wolfBoot_open_image(&img, PART_UPDATE);
     ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
 
     /* Swap partition */
     ret = wolfBoot_open_image(&img, PART_SWAP);
