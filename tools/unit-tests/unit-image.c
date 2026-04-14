@@ -360,7 +360,8 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
     }
 }
 
-#if defined(WOLFBOOT_SIGN_ECC256)
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) || \
+    defined(WOLFBOOT_SIGN_ECC521)
 int wc_ecc_init_ex(ecc_key* key, void* heap, int devId) {
     (void)heap;
     (void)devId;
