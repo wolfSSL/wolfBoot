@@ -207,8 +207,11 @@ jobs:
 
   nxp_t2080_test:
     uses: ./.github/workflows/test-build-powerpc.yml
-  # T2080 RDB DDR register values are not yet populated (placeholders in
-  # nxp_t2080.h), so CI must select a board with complete DDR config.
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t2080.config
+
+  # Additional T2080 board-specific compile tests for alternate board macros.
   nxp_t2080_test_naii_68ppc2:
     uses: ./.github/workflows/test-build-powerpc.yml
     with:

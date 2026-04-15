@@ -4018,10 +4018,10 @@ variants are supported:
 | Curtiss-Wright VPX3-152 | `BOARD_CW_VPX3152` | 66.667 MHz | 4 GB DDR3L | 256 MB @ `0xF0000000` |
 | NAII 68PPC2 | `BOARD_NAII_68PPC2` | 100 MHz | 8 GB DDR3 | 128 MB @ `0xE8000000` |
 
-> **Note:** The T2080 RDB DDR register values are placeholder stubs (all zeros
-> with TODO comments in `hal/nxp_t2080.h`). DDR initialization will not succeed
-> until you populate them from a U-Boot register dump. The NAII 68PPC2 and
-> CW VPX3-152 DDR configs are populated and tested.
+> **Note:** The T2080 RDB DDR register values in `hal/nxp_t2080.h` are
+> populated from a U-Boot register dump but have not been validated on
+> hardware. The NAII 68PPC2 and CW VPX3-152 DDR configs are populated
+> and tested.
 
 Example configuration: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
 See [Board Selection](#board-selection) below for per-board setup.
@@ -4359,11 +4359,27 @@ md.l 0xef008b28 2
 md.l 0xef008e40 3; md.l 0xef008e58 1
 ```
 
-**Automated test script:** `tools/scripts/nxp_t2080/cw_vpx3152_pabs_test.sh`
+**Flashing wolfBoot via PABS U-Boot:**
 
-Uses Pi4 GPIO control (GPIO 16 = PABS/JB1, GPIO 19 = Reset) and UART monitoring
-to automate the full flash-and-verify cycle. See script for usage and options
-including `--dump-ddr` mode.
+The PABS U-Boot maps main NOR flash starting at `0x80000000`. To convert wolfBoot
+flash addresses to PABS addresses, replace the `0xF` prefix with `0x8` (e.g.
+`0xFFFE0000` becomes `0x8FFE0000`). After configuring the network, use:
+
+```
+# Flash wolfBoot (128 KB at top of flash)
+tftp 0x1000000 wolfboot.bin
+erase 0x8FFE0000 +0x20000
+cp.b 0x1000000 0x8FFE0000 $filesize
+cmp.b 0x1000000 0x8FFE0000 $filesize
+
+# Flash signed application (1 MB boot partition)
+tftp 0x1000000 image_v1_signed.bin
+erase 0x8FEE0000 +0x100000
+cp.b 0x1000000 0x8FEE0000 $filesize
+cmp.b 0x1000000 0x8FEE0000 $filesize
+```
+
+Remove the JB1 jumper and power cycle to boot from main flash with wolfBoot.
 
 ### Debugging NXP T2080 PPC
 

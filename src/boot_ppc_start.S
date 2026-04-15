@@ -289,17 +289,7 @@ startup_init:
 
 #ifndef BUILD_LOADER_STAGE1
 #ifndef TLB1_NEW_SIZE
-/* CW VPX3-152 has 256 MB NOR flash at 0xF0000000-0xFFFFFFFF. The flash TLB
- * (TLB1 Entry 2 mapping the full 256 MB) would overlap with the boot ROM
- * TLB at the top of flash (0xFFFC0000-0xFFFFFFFF for default 256 KB), causing
- * a TLB1 multi-hit on e6500. Use a 16 MB boot TLB instead to cover wolfBoot
- * code and partitions in the upper 16 MB of flash; skip the flash_tlb entry
- * for VPX3-152 since the boot TLB covers what wolfBoot needs at boot time. */
-#ifdef BOARD_CW_VPX3152
-#define TLB1_NEW_SIZE BOOKE_PAGESZ_16M
-#else
 #define TLB1_NEW_SIZE BOOKE_PAGESZ_256K
-#endif
 #endif
 /* EPN alignment mask for TLB1_NEW_SIZE page.
  * e6500: page = 2^(TSIZE+10), e500/e5500: page = 2^(2*TSIZE+10) */
@@ -581,12 +571,13 @@ ccsr_law:
         isync
 #endif /* CORE_E5500 || CORE_E6500 */
 
-#if defined(FLASH_BASE_ADDR) && !defined(BOARD_CW_VPX3152)
+#ifdef FLASH_BASE_ADDR
 #if defined(CORE_E5500) || defined(CORE_E6500)
-        /* Memory Mapped NOR Flash (64/128MB) at 0xEC000000/0xE8000000.
-         * Skipped for CW VPX3-152: 256 MB flash TLB would overlap with boot
-         * ROM TLB at top of flash. The 16 MB boot TLB (set by TLB1_NEW_SIZE)
-         * covers wolfBoot + partitions instead. */
+        /* Memory Mapped NOR Flash. For CW VPX3-152 (256 MB at 0xF0000000),
+         * this entry overlaps with the boot ROM TLB at top of flash. We
+         * handle that below by invalidating the boot ROM TLB after this
+         * entry is created (the IPROT-protected 256 MB Entry 2 will serve
+         * instruction fetches for the entire flash region, including boot ROM). */
 flash_law:
         /* FLASH - LAW1 (IFC 64/128MB) */
         #define FLASH_LAW (LAWAR_ENABLE | \
@@ -616,6 +607,33 @@ flash_tlb:
                 FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
                 MAS3_SX | MAS3_SW | MAS3_SR, FLASH_TLB_WING, 0,
                 FLASH_TLB_PAGESZ, 1, r3);
+
+#ifdef BOARD_CW_VPX3152
+        /* CW VPX3-152: the 256 MB flash TLB Entry 2 created above overlaps
+         * with the boot ROM TLB (Entry 0, at 0xFFFC0000-0xFFFFFFFF after
+         * shrink_default_tlb1) because flash covers 0xF0000000-0xFFFFFFFF.
+         * e6500 TLB1 multi-hit is a machine check. Invalidate the boot ROM
+         * TLB now -- Entry 2 (IPROT) will serve instruction fetches for the
+         * boot ROM region. Must clear IPROT via tlbwe before tlbivax, since
+         * IPROT entries are protected from invalidation.
+         *
+         * Uses r14 (saved ESEL from shrink_default_tlb1) to target the
+         * correct entry. */
+vpx3_invalidate_boot_tlb:
+        /* Build MAS0 = TLBSEL=1, ESEL=r14 */
+        rlwinm  r3, r14, 16, MAS0_ESEL_MSK
+        oris    r3, r3, MAS0_TLBSEL(1)@h
+        mtspr   MAS0, r3
+        tlbre                      /* read Entry r14 into MAS1-3/7 */
+        mfspr   r3, MAS1
+        LOAD_ADDR32(r4, MAS1_IPROT)
+        andc    r3, r3, r4         /* clear IPROT */
+        rlwinm  r3, r3, 0, 1, 31   /* clear V (bit 0) */
+        mtspr   MAS1, r3
+        tlbwe                      /* write back with V=0, IPROT=0 */
+        isync
+        msync
+#endif
 #else
 flash_tlb:
         /* For TS/AS=1 map boot ROM */

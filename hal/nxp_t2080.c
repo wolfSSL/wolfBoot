@@ -31,15 +31,7 @@
 /* #define DEBUG_FLASH */
 
 #ifndef BUILD_LOADER_STAGE1
-#ifndef BOARD_CW_VPX3152
-    /* CW VPX3-152: hal_mp_init() calls disable_tlb1(0) which invalidates the
-     * 16 MB boot TLB Entry 0 (which contains wolfBoot code). Without a separate
-     * flash TLB entry covering wolfBoot's code, the next instruction fetch
-     * faults. NAII works because its 256 KB boot TLB doesn't cover wolfBoot
-     * code (which is in flash TLB Entry 2 at 0xE8000000-0xEFFFFFFF).
-     * For VPX3-152, secondary cores remain disabled. */
     #define ENABLE_MP   /* multi-core support */
-#endif
 #endif
 
 /* generic shared NXP QorIQ driver code */
@@ -79,6 +71,12 @@ static void hal_mp_init(void);
 #define FLASH_UNLOCK_ADDR1 0xAAA
 #define FLASH_UNLOCK_ADDR2 0x555
 #endif
+
+/* FLASH_CMD_SECTOR: sector used for flash command sequences that don't target
+ * a specific sector (reset, unlock, PPB entry/exit). AMD flash command decode
+ * only looks at the low address bits, so sector 0 works for all boards with
+ * a properly mapped full-flash TLB entry. */
+#define FLASH_CMD_SECTOR 0
 
 /* Flash IO Helpers */
 #if FLASH_CFI_WIDTH == 16
@@ -375,15 +373,9 @@ static void hal_reconfigure_cpc_as_cache(void)
 
 /* Make flash TLB cacheable for XIP code performance.
  * Changes TLB Entry 2 (flash) from MAS2_I|MAS2_G to MAS2_M.
- * This enables L1 I-cache + L2 + CPC to cache flash instructions.
- *
- * For BOARD_CW_VPX3152: TLB1 Entry 2 is NOT used (256 MB flash TLB would
- * overlap with the 16 MB boot ROM TLB at the top of flash, causing e6500
- * multi-hit). The boot TLB covers wolfBoot + partitions cache-inhibited;
- * skip the caching update — flash runs uncached (slower but correct). */
+ * This enables L1 I-cache + L2 + CPC to cache flash instructions. */
 static void hal_flash_enable_caching(void)
 {
-#ifndef BOARD_CW_VPX3152
     /* Rewrite flash TLB entry with cacheable attributes.
      * MAS2_M = memory coherent, enables caching */
     set_tlb(1, 2,
@@ -393,7 +385,6 @@ static void hal_flash_enable_caching(void)
 
     /* Invalidate L1 I-cache so new TLB attributes take effect */
     invalidate_icache();
-#endif
 
 #ifdef DEBUG_UART
     wolfBoot_printf("Flash: caching enabled (L1+L2+CPC)\n");
@@ -481,10 +472,8 @@ void hal_init(void)
  * returns a bus error (DSI). */
 static void RAMFUNCTION hal_flash_cache_disable(void)
 {
-#ifndef BOARD_CW_VPX3152
     set_tlb(1, 2, FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0, FLASH_TLB_PAGESZ, 1);
-#endif
 }
 
 /* Restore flash TLB to cacheable mode after flash operation.
@@ -492,10 +481,8 @@ static void RAMFUNCTION hal_flash_cache_disable(void)
  * Invalidate caches afterward so stale pre-erase data is not served. */
 static void RAMFUNCTION hal_flash_cache_enable(void)
 {
-#ifndef BOARD_CW_VPX3152
     set_tlb(1, 2, FLASH_BASE_ADDR, FLASH_BASE_ADDR, FLASH_BASE_PHYS_HIGH,
         MAS3_SX | MAS3_SW | MAS3_SR, MAS2_M, 0, FLASH_TLB_PAGESZ, 1);
-#endif
     invalidate_dcache();
     invalidate_icache();
 }
@@ -539,9 +526,9 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     uint32_t timeout;
 
     /* Enter PPB ASO (Address Space Overlay) */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* Read PPB status for target sector: DQ0=0 means protected.
      * On 16-bit bus, must read both chip lanes to check both devices. */
@@ -553,16 +540,16 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     if ((ppb_status & 0x01) == 0x01) {
 #endif
         /* Both chips report unprotected — exit PPB mode and return */
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
         return 0;
     }
 
     /* Exit PPB ASO before calling printf (flash must be in read-array
      * mode for I-cache misses to fetch valid instructions) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
 #ifdef DEBUG_FLASH
@@ -571,24 +558,24 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
 #endif
 
     /* Re-enter PPB ASO for erase */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* PPB Erase All (clears all sectors' PPBs) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
 
     /* Wait for PPB erase completion — poll for toggle stop.
      * On 16-bit bus, read both chip lanes to ensure both complete. */
     timeout = 0;
     do {
 #if FLASH_CFI_WIDTH == 16
-        read1 = FLASH_IO16_READ(0, 0);
-        read2 = FLASH_IO16_READ(0, 0);
+        read1 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
 #else
-        read1 = FLASH_IO8_READ(0, 0);
-        read2 = FLASH_IO8_READ(0, 0);
+        read1 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
 #endif
         if (read1 == read2)
             break;
@@ -596,11 +583,11 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     } while (timeout++ < 100000); /* 1 second */
 
     /* Exit PPB ASO */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
 
     /* Reset to read-array mode */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     if (timeout >= 100000) {
@@ -717,7 +704,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     /* Program one word at a time using AMD single-word program (0xA0).
@@ -788,7 +775,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     while (len > 0) {
@@ -1033,14 +1020,7 @@ void hal_prepare_boot(void)
 #ifdef MMU
 void* hal_get_dts_address(void)
 {
-#ifdef BOARD_CW_VPX3152
-    /* DTS is at 0xF0040000 which is below the 16 MB boot TLB
-     * (covers 0xFF000000-0xFFFFFFFF). Return NULL to skip DTS loading
-     * until a separate flash TLB is added for the DTS region. */
-    return NULL;
-#else
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
-#endif
 }
 
 int hal_dts_fixup(void* dts_addr)
