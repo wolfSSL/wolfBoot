@@ -380,6 +380,7 @@ START_TEST (test_invalid_update_type) {
     wolfBoot_start();
     ck_assert(!wolfBoot_staged_ok);
     ck_assert_int_eq(wolfBoot_panicked, 1);
+    ck_assert_int_eq(get_version_ramloaded(), 2);
     cleanup_flash();
 }
 

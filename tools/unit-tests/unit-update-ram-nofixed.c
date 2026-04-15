@@ -210,6 +210,7 @@ START_TEST(test_invalid_update_rollback_to_older_boot_is_denied)
 
     ck_assert_int_eq(wolfBoot_staged_ok, 0);
     ck_assert_int_eq(wolfBoot_panicked, 1);
+    ck_assert_ptr_eq((void *)wolfBoot_stage_address, (void *)0xFFFFFFFF);
     cleanup_flash();
 }
 END_TEST
