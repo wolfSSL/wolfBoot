@@ -20,8 +20,8 @@ This README describes configuration of supported targets.
 * [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
-* [NXP LPC54xxx](#nxp-lpc54xxx)
-* [NXP LPC54S018M](#nxp-lpc54s018m)
+* [NXP LPC546xx](#nxp-lpc546xx)
+* [NXP LPC540xx / LPC54S0xx (SPIFI boot)](#nxp-lpc540xx--lpc54s0xx-spifi-boot)
 * [NXP LPC55S69](#nxp-lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
@@ -1897,11 +1897,17 @@ c
 ```
 
 
-## NXP LPC54xxx
+## NXP LPC546xx
+
+This covers the LPC546xx series (Cortex-M4F with internal NOR flash), using the
+NXP MCUXpresso SDK. Tested on LPC54606J512.
+
+For the LPC540xx / LPC54S0xx SPIFI-boot series (no internal flash), see the
+[next section](#nxp-lpc540xx--lpc54s0xx-spifi-boot).
 
 ### Build Options
 
-The LPC54xxx build can be obtained by specifying the CPU type and the MCUXpresso SDK path at compile time.
+The build can be obtained by specifying the CPU type and the MCUXpresso SDK path at compile time.
 
 The following configuration has been tested against LPC54606J512BD208:
 
@@ -1938,15 +1944,22 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 ```
 
 
-## NXP LPC54S018M
+## NXP LPC540xx / LPC54S0xx (SPIFI boot)
 
-The NXP LPC54S018M is a Cortex-M4 microcontroller running at 180MHz. Unlike the
-LPC54606 which has internal flash, the LPC54S018M has **no internal NOR flash** —
-all code executes from on-package SPIFI-mapped QSPI flash (Winbond W25Q32JV, 4MB)
-at address `0x10000000`.
+This section covers the LPC540xx and LPC54S0xx family (LPC54005, LPC54016,
+LPC54018, LPC54S005, LPC54S016, LPC54S018, and the "M" in-package-flash
+variants LPC54018M / LPC54S018M). These are Cortex-M4F parts at 180 MHz with
+**no internal NOR flash** — all code executes from SPIFI-mapped QSPI flash at
+address `0x10000000`. The boot ROM loads the image from SPIFI via an
+"enhanced boot block" descriptor embedded in the vector table area.
 
-This has been tested on the LPC54S018M-EVK board, which includes an on-board
-Link2 debug probe (CMSIS-DAP / J-Link compatible) and a VCOM UART via Flexcomm0.
+The wolfBoot HAL (`hal/nxp_lpc54s018m.c`) is bare-metal (no NXP SDK
+dependency) and targets this whole SPIFI-boot subseries. It has been
+verified on the LPC54S018M-EVK, which uses an on-package Winbond W25Q32JV
+(4MB) and provides an on-board Link2 debug probe (CMSIS-DAP / J-Link) with
+a VCOM UART on Flexcomm0. Other members of the family should work after
+adjusting the SPIFI device configuration words to match the attached QSPI
+part and sector size.
 
 Because flash erase/write operations disable XIP (execute-in-place), all flash
 programming functions must run from RAM. The configuration uses `RAM_CODE=1` to
@@ -2096,7 +2109,21 @@ either message means the binary is not bootable on this chip.
 
 ### LPC54S018M: Testing firmware update
 
-A convenience script automates the full build, sign, and flash process:
+The helper script [`tools/scripts/nxp-lpc54s018m-flash.sh`](../tools/scripts/nxp-lpc54s018m-flash.sh)
+automates the full **build → sign → flash** cycle for the LPC54S018M-EVK:
+
+1. Copies `config/examples/nxp_lpc54s018m.config` to `.config`
+2. Runs `make` to produce `factory.bin` (wolfBoot + signed v1 test-app)
+3. Parses the active `.config` to resolve partition and trailer addresses
+4. Erases the BOOT and UPDATE partition trailer sectors (clean boot state)
+5. Flashes `factory.bin` to SPIFI at `0x10000000` via `pyocd`
+6. Optionally signs a v2 test-app and flashes it to the update partition
+   to exercise the swap-and-confirm update flow
+
+It drives [pyocd](https://pyocd.io/) with CMSIS-DAP firmware on the on-board
+Link2 probe. Override `CONFIG_FILE`, `PYOCD_TARGET`, or `CROSS_COMPILE` via
+environment variables to adapt the script to other LPC540xx/LPC54S0xx
+boards. Run with `--help` for the full option list.
 
 ```sh
 # Build and flash v1 only

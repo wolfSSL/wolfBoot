@@ -2,13 +2,31 @@
 #
 # NXP LPC54S018M-EVK Flash Script
 #
-# This script automates:
-# 1. Configure for NXP LPC54S018M-EVK
-# 2. Build factory.bin (or factory + v2 update)
-# 3. Flash via pyocd (CMSIS-DAP)
+# End-to-end helper to build wolfBoot, sign the test application, and
+# program the LPC54S018M-EVK SPIFI flash via pyocd. Also optionally
+# exercises the A/B update flow by signing a v2 image and loading it
+# into the update partition so wolfBoot will swap on the next boot.
 #
-# The LPC-Link2 debug probe must have CMSIS-DAP firmware.
-# See docs/Targets.md for Link2 probe setup instructions.
+# Flow:
+#   1. Copy config/examples/nxp_lpc54s018m.config to .config
+#   2. make -> factory.bin (wolfBoot + signed v1 test-app)
+#   3. Parse .config to derive partition/trailer addresses
+#   4. Erase BOOT and UPDATE partition trailer sectors (clean boot state)
+#   5. pyocd flash factory.bin @ 0x10000000 (SPIFI base)
+#   6. With --test-update: sign v2, flash at WOLFBOOT_PARTITION_UPDATE_ADDRESS
+#
+# Requirements:
+#   - pyocd + LPC54S018J4MET180 target pack
+#   - arm-none-eabi-gcc toolchain
+#   - LPC-Link2 probe running CMSIS-DAP firmware (see docs/Targets.md:
+#     "LPC54S018M: Link2 debug probe setup")
+#
+# Customization (LPC540xx / LPC54S0xx family):
+#   Override CONFIG_FILE, PYOCD_TARGET, or CROSS_COMPILE via environment to
+#   reuse this script for other LPC540xx / LPC54S0xx boards.
+#
+# See also: docs/Targets.md section
+#   "NXP LPC540xx / LPC54S0xx (SPIFI boot) -> LPC54S018M: Testing firmware update"
 #
 
 set -e

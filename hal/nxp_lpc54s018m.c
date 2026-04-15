@@ -18,12 +18,18 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
- * NXP LPC54S018M HAL for wolfBoot
+ * NXP LPC540xx / LPC54S0xx (SPIFI-boot) HAL for wolfBoot
  *
- * The LPC54S018M has no internal NOR flash. All code executes from
- * on-package SPIFI QSPI flash (W25Q32JV, 4MB) mapped at 0x10000000.
- * Flash operations MUST run from RAM since XIP is disabled during
- * erase/write.
+ * Covers the LPC540xx and LPC54S0xx subseries (LPC54005/54016/54018,
+ * LPC54S005/54S016/54S018, and the in-package flash "M" variants
+ * LPC54018M / LPC54S018M). None of these parts have internal NOR flash —
+ * all code executes from external QSPI flash mapped via SPIFI at
+ * address 0x10000000. Flash operations MUST run from RAM since XIP is
+ * disabled during erase/write.
+ *
+ * Verified on the LPC54S018M-EVK (Winbond W25Q32JV, 4 MB). Other family
+ * members should work after adjusting the SPIFI device configuration words
+ * and sector/partition sizes to match the attached QSPI part.
  *
  * This HAL uses bare-metal register access — no NXP SDK dependencies.
  */
