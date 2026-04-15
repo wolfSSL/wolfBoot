@@ -211,11 +211,11 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t2080.config
 
-  nxp_lpc54s018m_test:
+  nxp_lpc54s0xx_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
-      config-file: ./config/examples/nxp_lpc54s018m.config
+      config-file: ./config/examples/nxp_lpc54s0xx.config
 
   nxp_ls1028a_test:
     uses: ./.github/workflows/test-build.yml

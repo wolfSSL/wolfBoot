@@ -1953,7 +1953,7 @@ variants LPC54018M / LPC54S018M). These are Cortex-M4F parts at 180 MHz with
 address `0x10000000`. The boot ROM loads the image from SPIFI via an
 "enhanced boot block" descriptor embedded in the vector table area.
 
-The wolfBoot HAL (`hal/nxp_lpc54s018m.c`) is bare-metal (no NXP SDK
+The wolfBoot HAL (`hal/nxp_lpc54s0xx.c`) is bare-metal (no NXP SDK
 dependency) and targets this whole SPIFI-boot subseries. It has been
 verified on the LPC54S018M-EVK, which uses an on-package Winbond W25Q32JV
 (4MB) and provides an on-board Link2 debug probe (CMSIS-DAP / J-Link) with
@@ -2043,7 +2043,7 @@ The sector size is 4KB, matching the W25Q32JV minimum erase size.
 Copy the example configuration file and build with make:
 
 ```sh
-cp config/examples/nxp_lpc54s018m.config .config
+cp config/examples/nxp_lpc54s0xx.config .config
 make
 ```
 
@@ -2075,7 +2075,7 @@ pyocd reset -t LPC54S018J4MET180
 **Note:** The LPC54S018M boot ROM requires two post-processing steps on
 `wolfboot.bin` before the chip can boot from SPIFI flash. Both are applied
 automatically by the top-level `Makefile` (see the `wolfboot.bin:` rule,
-gated on `TARGET=nxp_lpc54s018m`), so no user action is needed — but they
+gated on `TARGET=nxp_lpc54s0xx`), so no user action is needed — but they
 are documented here because the patched binary will not match the ELF output
 and this affects any external flashing or signing workflow.
 
@@ -2109,10 +2109,10 @@ either message means the binary is not bootable on this chip.
 
 ### LPC54S018M: Testing firmware update
 
-The helper script [`tools/scripts/nxp-lpc54s018m-flash.sh`](../tools/scripts/nxp-lpc54s018m-flash.sh)
+The helper script [`tools/scripts/nxp-lpc54s0xx-flash.sh`](../tools/scripts/nxp-lpc54s0xx-flash.sh)
 automates the full **build → sign → flash** cycle for the LPC54S018M-EVK:
 
-1. Copies `config/examples/nxp_lpc54s018m.config` to `.config`
+1. Copies `config/examples/nxp_lpc54s0xx.config` to `.config`
 2. Runs `make` to produce `factory.bin` (wolfBoot + signed v1 test-app)
 3. Parses the active `.config` to resolve partition and trailer addresses
 4. Erases the BOOT and UPDATE partition trailer sectors (clean boot state)
@@ -2127,13 +2127,13 @@ boards. Run with `--help` for the full option list.
 
 ```sh
 # Build and flash v1 only
-./tools/scripts/nxp-lpc54s018m-flash.sh
+./tools/scripts/nxp-lpc54s0xx-flash.sh
 
 # Build, sign v2, and flash both (full update test)
-./tools/scripts/nxp-lpc54s018m-flash.sh --test-update
+./tools/scripts/nxp-lpc54s0xx-flash.sh --test-update
 
 # Flash existing images without rebuilding
-./tools/scripts/nxp-lpc54s018m-flash.sh --test-update --skip-build
+./tools/scripts/nxp-lpc54s0xx-flash.sh --test-update --skip-build
 ```
 
 **Manual steps** (if not using the script):
