@@ -27,7 +27,7 @@ static __thread unsigned char
 #define WOLFBOOT_LOAD_ADDRESS (((uintptr_t)wolfboot_ram) + IMAGE_HEADER_SIZE)
 #define TEST_SIZE_SMALL 5300
 #define DIGEST_TLV_OFF_IN_HDR 28
-#define STAGE_ADDR_SENTINEL ((uintptr_t)0xFFFFFFFFu)
+#define STAGE_ADDR_SENTINEL UINTPTR_MAX
 
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
@@ -53,7 +53,8 @@ int wolfBoot_dualboot_candidate_addr(void** addr)
 #include <wolfssl/wolfcrypt/sha256.h>
 
 int wolfBoot_staged_ok = 0;
-const uint32_t *wolfBoot_stage_address = (uint32_t *)0xFFFFFFFF;
+const uint32_t *wolfBoot_stage_address =
+    (const uint32_t *)(uintptr_t)STAGE_ADDR_SENTINEL;
 
 void* hal_get_primary_address(void)
 {

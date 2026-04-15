@@ -253,6 +253,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     struct wolfBoot_image os_image;
     int pA_ver = 0, pB_ver = 0;
+    uint32_t pA_ver_u = 0U, pB_ver_u = 0U;
     uint32_t cur_part = 0;
     int ret = -1;
     int selected;
@@ -346,11 +347,16 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
-    wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver, pB_ver);
-    max_ver = (pB_ver > pA_ver) ? (uint32_t)pB_ver : (uint32_t)pA_ver;
+    if (pA_ver > 0)
+        pA_ver_u = (uint32_t)pA_ver;
+    if (pB_ver > 0)
+        pB_ver_u = (uint32_t)pB_ver;
+
+    wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
+    max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
 
     /* Choose partition with higher version */
-    selected = (pB_ver > pA_ver) ? 1: 0;
+    selected = (pB_ver_u > pA_ver_u) ? 1 : 0;
 
 #ifdef WOLFBOOT_FSP
     stage2_params = stage2_get_parameters();
@@ -372,7 +378,7 @@ void RAMFUNCTION wolfBoot_start(void)
             cur_part = BOOT_PART_A;
 #ifndef ALLOW_DOWNGRADE
         {
-            uint32_t cur_ver = selected ? (uint32_t)pB_ver : (uint32_t)pA_ver;
+            uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
             if ((max_ver > 0U) && (cur_ver < max_ver)) {
                 wolfBoot_printf("Rollback to lower version not allowed\r\n");
                 wolfBoot_panic();

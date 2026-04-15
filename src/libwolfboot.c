@@ -1401,8 +1401,7 @@ int wolfBoot_dualboot_candidate(void)
 
         if (fallback_v < candidate_v) {
             wolfBoot_printf("Rollback to lower version not allowed\n");
-            wolfBoot_erase_partition(candidate);
-            return -1;
+            return candidate;
         }
 #endif
         wolfBoot_erase_partition(candidate);

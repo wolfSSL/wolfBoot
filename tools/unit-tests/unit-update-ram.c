@@ -433,8 +433,9 @@ START_TEST (test_emergency_rollback_to_older_version_denied) {
     ext_flash_lock();
 
     wolfBoot_start();
-    ck_assert(!wolfBoot_staged_ok);
-    ck_assert_int_eq(wolfBoot_panicked, 1);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_int_eq(get_version_ramloaded(), 2);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
     cleanup_flash();
 }
 
@@ -453,8 +454,8 @@ START_TEST (test_dualboot_candidate_rejects_testing_rollback_to_lower_version) {
     ext_flash_lock();
 
     candidate = wolfBoot_dualboot_candidate();
-    ck_assert_int_eq(candidate, -1);
-    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 0U);
+    ck_assert_int_eq(candidate, PART_BOOT);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2U);
     cleanup_flash();
 }
 
