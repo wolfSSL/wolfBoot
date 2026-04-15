@@ -54,6 +54,10 @@ jobs:
           cp config/examples/sim-dualbank.config .config
           make test-sim-internal-flash-with-update
 
+      - name: Run dualbank rollback denial simulation
+        run: |
+          tools/scripts/sim-dualbank-rollback-denied.sh
+
       - name: Run dualbank swap simulation
         run: |
           tools/scripts/sim-dualbank-swap-update.sh

@@ -28,6 +28,7 @@
 #include "hooks.h"
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
+#include "printf.h"
 #ifdef SECURE_PKCS11
 int WP11_Library_Init(void);
 #endif
