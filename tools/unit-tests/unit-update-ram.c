@@ -378,8 +378,8 @@ START_TEST (test_invalid_update_type) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
@@ -396,8 +396,8 @@ START_TEST (test_update_toolarge) {
 
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
@@ -414,12 +414,12 @@ START_TEST (test_invalid_sha) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
-START_TEST (test_emergency_rollback) {
+START_TEST (test_emergency_rollback_to_older_version_denied) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
     reset_mock_stats();
     prepare_flash();
@@ -432,8 +432,8 @@ START_TEST (test_emergency_rollback) {
     ext_flash_lock();
 
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
@@ -532,7 +532,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_type, test_invalid_update_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(invalid_sha, test_invalid_sha);
-    tcase_add_test(emergency_rollback, test_emergency_rollback);
+    tcase_add_test(emergency_rollback, test_emergency_rollback_to_older_version_denied);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);

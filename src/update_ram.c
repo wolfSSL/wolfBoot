@@ -138,6 +138,11 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t *dts_addr = NULL;
     uint32_t dts_size = 0;
 #endif
+#ifndef ALLOW_DOWNGRADE
+    uint32_t boot_v = wolfBoot_current_firmware_version();
+    uint32_t update_v = wolfBoot_update_firmware_version();
+    uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
+#endif
 
     memset(&os_image, 0, sizeof(struct wolfBoot_image));
 
@@ -162,6 +167,16 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
             break;
         }
+#ifndef ALLOW_DOWNGRADE
+        {
+            uint32_t active_v = (active == PART_UPDATE) ? update_v : boot_v;
+            if ((max_v > 0U) && (active_v < max_v)) {
+                wolfBoot_printf("Rollback to lower version not allowed\n");
+                wolfBoot_panic();
+                break;
+            }
+        }
+#endif
 
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         wolfBoot_printf("Trying %s partition at %p\n",

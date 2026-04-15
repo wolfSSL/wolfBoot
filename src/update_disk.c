@@ -259,6 +259,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t *load_address;
     int failures = 0;
     uint32_t load_off;
+    uint32_t max_ver;
     const uint8_t *hdr_ptr = NULL;
 #ifdef MMU
     uint8_t *dts_addr = NULL;
@@ -346,6 +347,7 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver, pB_ver);
+    max_ver = (pB_ver > pA_ver) ? (uint32_t)pB_ver : (uint32_t)pA_ver;
 
     /* Choose partition with higher version */
     selected = (pB_ver > pA_ver) ? 1: 0;
@@ -368,6 +370,15 @@ void RAMFUNCTION wolfBoot_start(void)
             cur_part = BOOT_PART_B;
         else
             cur_part = BOOT_PART_A;
+#ifndef ALLOW_DOWNGRADE
+        {
+            uint32_t cur_ver = selected ? (uint32_t)pB_ver : (uint32_t)pA_ver;
+            if ((max_ver > 0U) && (cur_ver < max_ver)) {
+                wolfBoot_printf("Rollback to lower version not allowed\r\n");
+                break;
+            }
+        }
+#endif
 
         part_name[2] = 'A' + selected;
 
