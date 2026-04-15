@@ -22,8 +22,14 @@
  */
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdarg.h>
 #include <sys/stat.h>
+
+/* Forward declaration of vsnprintf. We intentionally do not include <stdio.h>
+ * because this file redefines stdout/stderr/fputs/fflush with bare-metal
+ * (void *) stubs that collide with the libc FILE-based prototypes. */
+extern int vsnprintf(char *str, size_t size, const char *fmt, va_list ap);
 
 /* Provide our own errno for bare-metal.
  * Using the libc errno via <errno.h> can conflict with TLS-based errno
