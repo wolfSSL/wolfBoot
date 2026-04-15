@@ -330,6 +330,75 @@ START_TEST(test_partition_magic_write_stops_on_flash_write_error)
 }
 END_TEST
 
+START_TEST(test_get_update_sector_flag_rejects_invalid_magic)
+{
+    int ret;
+    uint8_t st = 0xA5;
+    uint32_t *magic;
+
+    ret = mmap_file("/tmp/wolfboot-unit-invalid-magic.bin", (void *)MOCK_ADDRESS,
+            WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+#ifdef FLAGS_HOME
+    ret = mmap_file("/tmp/wolfboot-unit-invalid-magic-int.bin",
+            (void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+#endif
+    ret = mmap_file("/tmp/wolfboot-unit-invalid-magic-swap.bin",
+            (void *)MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE, NULL);
+    ck_assert(ret >= 0);
+
+    hal_flash_unlock();
+    wolfBoot_erase_partition(PART_UPDATE);
+
+    magic = get_partition_magic(PART_UPDATE);
+    *magic = 0xFFFFFFFF;
+
+    ret = wolfBoot_get_update_sector_flag(0, &st);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(st, 0xA5);
+
+    hal_flash_lock();
+}
+END_TEST
+
+START_TEST(test_update_sector_flag_high_index_does_not_alias_low_index)
+{
+    int ret;
+    uint8_t st = 0;
+
+    ret = mmap_file("/tmp/wolfboot-unit-high-index.bin", (void *)MOCK_ADDRESS,
+            WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+#ifdef FLAGS_HOME
+    ret = mmap_file("/tmp/wolfboot-unit-high-index-int.bin",
+            (void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE, NULL);
+    ck_assert(ret >= 0);
+#endif
+    ret = mmap_file("/tmp/wolfboot-unit-high-index-swap.bin",
+            (void *)MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE, NULL);
+    ck_assert(ret >= 0);
+
+    hal_flash_unlock();
+    wolfBoot_erase_partition(PART_UPDATE);
+
+    ret = wolfBoot_set_update_sector_flag(1, SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfBoot_set_update_sector_flag(512, SECT_FLAG_UPDATED);
+    ck_assert_int_eq(ret, 0);
+
+    ret = wolfBoot_get_update_sector_flag(1, &st);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(st, SECT_FLAG_SWAPPING);
+
+    ret = wolfBoot_get_update_sector_flag(512, &st);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(st, SECT_FLAG_UPDATED);
+
+    hal_flash_lock();
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -341,6 +410,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(nvm_select_fresh_sector, test_nvm_select_fresh_sector);
     tcase_add_test(nvm_select_fresh_sector,
             test_partition_magic_write_stops_on_flash_write_error);
+    tcase_add_test(nvm_select_fresh_sector,
+            test_get_update_sector_flag_rejects_invalid_magic);
+    tcase_add_test(nvm_select_fresh_sector,
+            test_update_sector_flag_high_index_does_not_alias_low_index);
     suite_add_tcase(s, nvm_select_fresh_sector);
 
     return s;

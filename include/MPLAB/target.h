@@ -90,6 +90,41 @@
 #define WOLFBOOT_DTS_BOOT_ADDRESS             
 #define WOLFBOOT_DTS_UPDATE_ADDRESS           
 
+#if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET) && !defined(PULL_LINKER_DEFINES)
+    /*
+     * Only compare partitions that share the same internal flash address
+     * space. External partitions and runtime/linker-provided addresses are
+     * validated elsewhere.
+     */
+    #if !defined(PART_BOOT_EXT) && !defined(PART_UPDATE_EXT) && \
+        (WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0) && \
+        ((WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) > \
+         WOLFBOOT_PARTITION_UPDATE_ADDRESS) && \
+        (WOLFBOOT_PARTITION_BOOT_ADDRESS < \
+         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
+        #error "Boot and update partitions overlap"
+    #endif
+
+    #if !defined(PART_BOOT_EXT) && !defined(PART_SWAP_EXT) && \
+        (WOLFBOOT_PARTITION_SWAP_ADDRESS != 0) && \
+        ((WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) > \
+         WOLFBOOT_PARTITION_SWAP_ADDRESS) && \
+        (WOLFBOOT_PARTITION_BOOT_ADDRESS < \
+         (WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
+        #error "Boot and swap partitions overlap"
+    #endif
+
+    #if !defined(PART_UPDATE_EXT) && !defined(PART_SWAP_EXT) && \
+        (WOLFBOOT_PARTITION_UPDATE_ADDRESS != 0) && \
+        (WOLFBOOT_PARTITION_SWAP_ADDRESS != 0) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE) > \
+         WOLFBOOT_PARTITION_SWAP_ADDRESS) && \
+        (WOLFBOOT_PARTITION_UPDATE_ADDRESS < \
+         (WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE))
+        #error "Update and swap partitions overlap"
+    #endif
+#endif
+
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /* Load address in RAM for staged OS (update_ram only) */

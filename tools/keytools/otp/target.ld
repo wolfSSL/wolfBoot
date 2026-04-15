@@ -15,6 +15,7 @@ SECTIONS
         *(.fini)
         *(.text*)
         *(.rodata*)
+        KEEP(*(.keystore*))
         . = ALIGN(4);
         _end_text = .;
     } > FLASH

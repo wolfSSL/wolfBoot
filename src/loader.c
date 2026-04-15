@@ -124,7 +124,9 @@ int main(void)
     uart_send_current_version();
 #endif
 #ifdef WOLFBOOT_TPM
-    wolfBoot_tpm2_init();
+    if (wolfBoot_tpm2_init() != 0) {
+        wolfBoot_panic();
+    }
 #endif
 #ifdef WOLFCRYPT_SECURE_MODE
     wcs_Init();

@@ -237,6 +237,20 @@ static void assert_header_bytes(const uint8_t *image, uint16_t tag,
         "Tag 0x%04x mismatch", tag);
 }
 
+static void store_u16_le(uint8_t *dst, uint16_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+}
+
+static void store_u32_le(uint8_t *dst, uint32_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+    dst[2] = (uint8_t)((val >> 16) & 0xFFU);
+    dst[3] = (uint8_t)((val >> 24) & 0xFFU);
+}
+
 static uint16_t find_exact_fill_custom_len(void)
 {
     uint16_t len;
@@ -413,6 +427,39 @@ START_TEST(test_make_header_ex_grows_header_for_cert_chain_and_digest_tlvs)
 }
 END_TEST
 
+START_TEST(test_header_append_helpers_emit_little_endian_bytes)
+{
+    uint8_t header[32];
+    uint8_t value[] = { 0xAA, 0x55, 0x77 };
+    uint32_t idx = 0;
+
+    reset_cmd_defaults();
+    CMD.header_sz = sizeof(header);
+    memset(header, 0x00, sizeof(header));
+
+    header_append_u32(header, &idx, 0x11223344U);
+    ck_assert_uint_eq(idx, 4);
+    ck_assert_uint_eq(header[0], 0x44);
+    ck_assert_uint_eq(header[1], 0x33);
+    ck_assert_uint_eq(header[2], 0x22);
+    ck_assert_uint_eq(header[3], 0x11);
+
+    header_append_u16(header, &idx, 0x5566U);
+    ck_assert_uint_eq(idx, 6);
+    ck_assert_uint_eq(header[4], 0x66);
+    ck_assert_uint_eq(header[5], 0x55);
+
+    header_append_tag(header, &idx, 0xABCDU, (uint16_t)sizeof(value), value);
+    ck_assert_uint_eq(idx, 13);
+    ck_assert_uint_eq(header[6], 0xCD);
+    ck_assert_uint_eq(header[7], 0xAB);
+    ck_assert_uint_eq(header[8], (uint8_t)sizeof(value));
+    ck_assert_uint_eq(header[9], 0x00);
+    ck_assert_msg(memcmp(&header[10], value, sizeof(value)) == 0,
+        "header_append_tag payload mismatch");
+}
+END_TEST
+
 START_TEST(test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser)
 {
     char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
@@ -427,6 +474,8 @@ START_TEST(test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser)
     uint8_t tlv_three[] = { 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28 };
     uint16_t image_type;
     uint32_t version = 7;
+    uint8_t version_le[4];
+    uint8_t image_type_le[2];
     size_t output_len;
     int ret;
 
@@ -460,10 +509,11 @@ START_TEST(test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser)
     ck_assert_int_eq(ret, 0);
     ck_assert_int_eq(read_file(output_path, &output_buf, &output_len), 0);
     ck_assert_uint_eq(output_len, CMD.header_sz + sizeof(image_buf));
-    assert_header_bytes(output_buf, HDR_VERSION, (uint8_t *)&version,
-        sizeof(version));
-    assert_header_bytes(output_buf, HDR_IMG_TYPE, (uint8_t *)&image_type,
-        sizeof(image_type));
+    store_u32_le(version_le, version);
+    store_u16_le(image_type_le, image_type);
+    assert_header_bytes(output_buf, HDR_VERSION, version_le, sizeof(version_le));
+    assert_header_bytes(output_buf, HDR_IMG_TYPE, image_type_le,
+        sizeof(image_type_le));
     assert_header_bytes(output_buf, 0x30, tlv_one, sizeof(tlv_one));
     assert_header_bytes(output_buf, 0x31, tlv_two, sizeof(tlv_two));
     assert_header_bytes(output_buf, 0x32, tlv_three, sizeof(tlv_three));
@@ -605,6 +655,97 @@ START_TEST(test_make_header_ex_keeps_boundary_header_for_sha384_sha3_hybrid_cert
 }
 END_TEST
 
+START_TEST(test_make_header_ex_rejects_cert_chain_tlv_length_overflow)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char cert_chain_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x41, 0x42, 0x43, 0x44 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t *cert_chain_buf = NULL;
+    const uint32_t cert_chain_len = 65536U;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(cert_chain_path, sizeof(cert_chain_path), "%s/cert-chain.bin",
+        tempdir);
+
+    cert_chain_buf = malloc(cert_chain_len);
+    ck_assert_ptr_nonnull(cert_chain_buf);
+    memset(cert_chain_buf, 0xC7, cert_chain_len);
+
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    ck_assert_int_eq(write_file(cert_chain_path, cert_chain_buf,
+        cert_chain_len), 0);
+
+    reset_cmd_defaults();
+    CMD.cert_chain_file = cert_chain_path;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_ne(ret, 0);
+
+    free(cert_chain_buf);
+    unlink(output_path);
+    unlink(cert_chain_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
+START_TEST(test_make_header_ex_rejects_signature_tlv_length_overflow)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char signature_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x11, 0x22, 0x33, 0x44 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t *signature_buf = NULL;
+    const uint32_t signature_len = 65536U;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(signature_path, sizeof(signature_path), "%s/signature.bin", tempdir);
+
+    signature_buf = malloc(signature_len);
+    ck_assert_ptr_nonnull(signature_buf);
+    memset(signature_buf, 0x5A, signature_len);
+
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    ck_assert_int_eq(write_file(signature_path, signature_buf, signature_len), 0);
+
+    reset_cmd_defaults();
+    CMD.sign = SIGN_RSA2048;
+    CMD.manual_sign = 1;
+    CMD.signature_file = signature_path;
+    CMD.signature_sz = signature_len;
+    /* Keep room for a large signature TLV to expose uint16_t truncation. */
+    CMD.header_sz = 131072U;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_ne(ret, 0);
+
+    free(signature_buf);
+    unlink(output_path);
+    unlink(signature_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-encrypted-output");
@@ -614,12 +755,17 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase, test_make_header_ex_fails_when_image_reopen_fails);
     tcase_add_test(tcase,
         test_make_header_ex_grows_header_for_cert_chain_and_digest_tlvs);
+    tcase_add_test(tcase, test_header_append_helpers_emit_little_endian_bytes);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header);
     tcase_add_test(tcase,
         test_make_header_ex_keeps_boundary_header_for_sha384_sha3_hybrid_cert_chain);
+    tcase_add_test(tcase,
+        test_make_header_ex_rejects_cert_chain_tlv_length_overflow);
+    tcase_add_test(tcase,
+        test_make_header_ex_rejects_signature_tlv_length_overflow);
     suite_add_tcase(s, tcase);
 
     return s;

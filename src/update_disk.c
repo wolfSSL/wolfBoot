@@ -559,6 +559,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&os_image);
 #endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&os_image);
+#endif
 #ifdef DISK_ENCRYPT
     disk_decrypted_header_clear(dec_hdr);
     disk_crypto_clear();

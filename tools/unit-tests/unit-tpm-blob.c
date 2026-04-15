@@ -40,6 +40,10 @@ static int oversized_priv_read_attempted;
 static int forcezero_calls;
 static word32 last_forcezero_len;
 static word32 last_pub_read_request_sz;
+static int unload_handle_calls;
+static int unload_seal_blob_calls;
+static int unload_policy_session_calls;
+static int unload_auth_key_calls;
 static uint8_t test_hdr[64];
 static uint8_t test_modulus[256];
 static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
@@ -119,7 +123,18 @@ int wolfTPM2_LoadKey(WOLFTPM2_DEV* dev, WOLFTPM2_KEYBLOB* keyBlob,
 int wolfTPM2_UnloadHandle(WOLFTPM2_DEV* dev, WOLFTPM2_HANDLE* handle)
 {
     (void)dev;
-    (void)handle;
+    unload_handle_calls++;
+    if (handle != NULL) {
+        if (handle->hndl == 1) {
+            unload_policy_session_calls++;
+        }
+        else if (handle->hndl == 2) {
+            unload_seal_blob_calls++;
+        }
+        else {
+            unload_auth_key_calls++;
+        }
+    }
     return 0;
 }
 
@@ -488,6 +503,10 @@ static void setup(void)
     forcezero_calls = 0;
     last_forcezero_len = 0;
     last_pub_read_request_sz = 0;
+    unload_handle_calls = 0;
+    unload_seal_blob_calls = 0;
+    unload_policy_session_calls = 0;
+    unload_auth_key_calls = 0;
     memset(test_hdr, 0x22, sizeof(test_hdr));
     memset(test_modulus, 0x33, sizeof(test_modulus));
 }
@@ -643,6 +662,8 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_oversized_auth)
         secret, &secret_sz, auth, (int)sizeof(auth));
 
     ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(unload_seal_blob_calls, 1);
+    ck_assert_int_eq(unload_policy_session_calls, 1);
 }
 END_TEST
 
@@ -665,6 +686,8 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_negative_auth_size)
         secret, &secret_sz, auth, -1);
 
     ck_assert_int_eq(rc, BAD_FUNC_ARG);
+    ck_assert_int_eq(unload_seal_blob_calls, 1);
+    ck_assert_int_eq(unload_policy_session_calls, 1);
 }
 END_TEST
 

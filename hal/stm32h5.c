@@ -246,6 +246,14 @@ static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
     return 1;
 }
 
+static NOINLINEFUNCTION void hal_secret_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 int hal_uds_derive_key(uint8_t *out, size_t out_len)
 {
 #if defined(FLASH_OTP_KEYSTORE)
@@ -272,9 +280,11 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
                 copy_len = out_len;
             }
             memcpy(out, uds, copy_len);
+            hal_secret_zeroize(uds, sizeof(uds));
             return 0;
         }
     }
+    hal_secret_zeroize(uds, sizeof(uds));
 #endif
 
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST

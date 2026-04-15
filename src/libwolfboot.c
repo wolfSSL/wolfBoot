@@ -693,7 +693,7 @@ int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector,
     uint32_t *magic;
     uint8_t *flags;
     uint8_t fl_value;
-    uint8_t pos = sector >> 1;
+    uint32_t pos = sector >> 1;
 
     magic = get_partition_magic(PART_UPDATE);
     if (*magic != wolfboot_magic_trail)
@@ -748,7 +748,7 @@ int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag)
 {
     uint32_t *magic;
     uint8_t *flags;
-    uint8_t pos = sector >> 1;
+    uint32_t pos = sector >> 1;
     magic = get_partition_magic(PART_UPDATE);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
         return -1;
@@ -1205,7 +1205,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
             (void *)&delta_base) == 0)
         return 0;
     if (delta_base)
-        return *delta_base;
+        return im2n(*delta_base);
     return 0;
 }
 

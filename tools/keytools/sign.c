@@ -211,14 +211,37 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define ENC_MAX_KEY_SZ   ENCRYPT_KEY_SIZE_AES256    /* 32 */
 #define ENC_MAX_IV_SZ    ENCRYPT_NONCE_SIZE_AES     /* 16 */
 
+static void header_store_u16_le(uint8_t *dst, uint16_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+}
+
+static void header_store_u32_le(uint8_t *dst, uint32_t val)
+{
+    dst[0] = (uint8_t)(val & 0xFFU);
+    dst[1] = (uint8_t)((val >> 8) & 0xFFU);
+    dst[2] = (uint8_t)((val >> 16) & 0xFFU);
+    dst[3] = (uint8_t)((val >> 24) & 0xFFU);
+}
+
+static void header_store_u64_le(uint8_t *dst, uint64_t val)
+{
+    uint32_t lo = (uint32_t)(val & 0xFFFFFFFFULL);
+    uint32_t hi = (uint32_t)(val >> 32);
+
+    header_store_u32_le(dst, lo);
+    header_store_u32_le(dst + 4, hi);
+}
+
 static void header_append_u32(uint8_t* header, uint32_t* idx, uint32_t tmp32)
 {
-    memcpy(&header[*idx], &tmp32, sizeof(tmp32));
+    header_store_u32_le(&header[*idx], tmp32);
     *idx += sizeof(tmp32);
 }
 static void header_append_u16(uint8_t* header, uint32_t* idx, uint16_t tmp16)
 {
-    memcpy(&header[*idx], &tmp16, sizeof(tmp16));
+    header_store_u16_le(&header[*idx], tmp16);
     *idx += sizeof(tmp16);
 }
 
@@ -242,6 +265,33 @@ static void header_append_tag(uint8_t* header, uint32_t* idx, uint16_t tag,
     header_append_u16(header, idx, len);
     memcpy(&header[*idx], data, len);
     *idx += len;
+}
+
+static void header_append_tag_u16(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint16_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u16_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
+}
+
+static void header_append_tag_u32(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint32_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u32_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
+}
+
+static void header_append_tag_u64(uint8_t *header, uint32_t *idx, uint16_t tag,
+    uint64_t val)
+{
+    uint8_t tmp[sizeof(val)];
+
+    header_store_u64_le(tmp, val);
+    header_append_tag(header, idx, tag, sizeof(val), tmp);
 }
 
 #include "../lms/lms_common.h"
@@ -1288,22 +1338,32 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         /* Get the file size */
         if (stat(CMD.cert_chain_file, &file_stat) == 0) {
-            const uint32_t required_space = header_required_size(is_diff,
-                (uint32_t)file_stat.st_size, secondary_key_sz);
+            off_t chain_file_sz = file_stat.st_size;
+            uint32_t required_space;
 
-            /* If the current header size is too small, increase it */
-            if (CMD.header_sz < required_space) {
-                /* Round up to nearest power of 2 that can hold the chain */
-                const uint32_t min_header_size = 256;
-                uint32_t       new_size        = min_header_size;
-                while (new_size < required_space) {
-                    new_size *= 2;
+            if ((chain_file_sz < 0) ||
+                ((uintmax_t)chain_file_sz > (uintmax_t)UINT32_MAX)) {
+                printf("Warning: certificate chain file size is invalid (%jd)\n",
+                    (intmax_t)chain_file_sz);
+            }
+            else {
+                required_space = header_required_size(is_diff,
+                    (uint32_t)chain_file_sz, secondary_key_sz);
+
+                /* If the current header size is too small, increase it */
+                if (CMD.header_sz < required_space) {
+                    /* Round up to nearest power of 2 that can hold the chain */
+                    const uint32_t min_header_size = 256;
+                    uint32_t       new_size        = min_header_size;
+                    while (new_size < required_space) {
+                        new_size *= 2;
+                    }
+
+                    printf("Increasing header size from %u to %u bytes to fit "
+                        "certificate chain\n",
+                        CMD.header_sz, new_size);
+                    CMD.header_sz = new_size;
                 }
-
-                printf("Increasing header size from %u to %u bytes to fit "
-                       "certificate chain\n",
-                       CMD.header_sz, new_size);
-                CMD.header_sz = new_size;
             }
         }
         else {
@@ -1340,8 +1400,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
     /* Append Version field */
     fw_version32 = strtol(CMD.fw_version, NULL, 10);
-    header_append_tag(header, &header_idx, HDR_VERSION, HDR_VERSION_LEN,
-        &fw_version32);
+    header_append_tag_u32(header, &header_idx, HDR_VERSION, fw_version32);
 
     /* Append pad bytes, so timestamp val field is 8-byte aligned */
     ALIGN_8(header_idx);
@@ -1349,8 +1408,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     if (!CMD.no_ts) {
         /* Append Timestamp field */
         stat(image_file, &attrib);
-        header_append_tag(header, &header_idx, HDR_TIMESTAMP, HDR_TIMESTAMP_LEN,
-            &attrib.st_ctime);
+        header_append_tag_u64(header, &header_idx, HDR_TIMESTAMP,
+            (uint64_t)attrib.st_ctime);
     }
 
     /* Append Image type field */
@@ -1358,23 +1417,22 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     image_type |= CMD.partition_id;
     if (is_diff)
         image_type |= HDR_IMG_TYPE_DIFF;
-    header_append_tag(header, &header_idx, HDR_IMG_TYPE, HDR_IMG_TYPE_LEN,
-        &image_type);
+    header_append_tag_u16(header, &header_idx, HDR_IMG_TYPE, image_type);
 
     if (is_diff) {
         /* Append pad bytes, so fields are 4-byte aligned */
         ALIGN_4(header_idx);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE, 4,
-                &delta_base_version);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_SIZE, 4,
-                &patch_len);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_BASE,
+            delta_base_version);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_SIZE,
+            patch_len);
 
         /* Append pad bytes, so fields are 4-byte aligned */
         ALIGN_4(header_idx);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE, 4,
-                &patch_inv_off);
-        header_append_tag(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE, 4,
-                &patch_inv_len);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_INVERSE,
+            patch_inv_off);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_DELTA_INVERSE_SIZE,
+            patch_inv_len);
 
         if (!CMD.no_base_sha) {
             /* Append pad bytes, so base hash is 8-byte aligned */
@@ -1448,7 +1506,24 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             goto failure;
         }
 
-        cert_chain_sz = file_stat.st_size;
+        if ((file_stat.st_size < 0) ||
+            ((uintmax_t)file_stat.st_size > (uintmax_t)UINT32_MAX)) {
+            printf("Error: Invalid certificate chain file size (%jd)\n",
+                   (intmax_t)file_stat.st_size);
+            fclose(f);
+            f = NULL;
+            goto failure;
+        }
+        cert_chain_sz = (uint32_t)file_stat.st_size;
+
+        if (cert_chain_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Certificate chain too large for TLV encoding "
+                   "(%u > %u)\n",
+                   cert_chain_sz, (unsigned int)UINT16_MAX);
+            fclose(f);
+            f = NULL;
+            goto failure;
+        }
 
         /* Verify that the chain will fit in our header */
         if (header_idx + cert_chain_tlv_hdr_sz + cert_chain_sz >
@@ -1526,7 +1601,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     wc_Sha256Final(&sha, second_buf);
                 wc_Sha256Free(&sha);
                 /* Add Secondary cipher to header */
-                header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                header_append_tag_u16(header, &header_idx,
+                    HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                 ALIGN_8(header_idx);
                 /* Add Secondary Pubkey Hash to header */
                 header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
@@ -1603,7 +1679,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (ret == 0) {
                     wc_Sha384Final(&sha, second_buf);
                     /* Add Secondary cipher to header */
-                    header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                    header_append_tag_u16(header, &header_idx,
+                        HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                     /* Add Secondary Pubkey Hash to header */
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
                     DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
@@ -1674,7 +1751,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (ret == 0) {
                     ret = wc_Sha3_384_Final(&sha, second_buf);
                     /* Add Secondary cipher to header */
-                    header_append_tag(header, &header_idx, HDR_SECONDARY_CIPHER, 2, &CMD.secondary_sign);
+                    header_append_tag_u16(header, &header_idx,
+                        HDR_SECONDARY_CIPHER, (uint16_t)CMD.secondary_sign);
                     header_append_tag(header, &header_idx, HDR_SECONDARY_PUBKEY, digest_sz, second_buf);
                     DEBUG_PRINT("Secondary pubkey hash %d\n", digest_sz);
                     DEBUG_BUFFER(second_buf, digest_sz);
@@ -1883,6 +1961,22 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             DEBUG_PRINT("PCR Mask 0x%08x\n", *((uint32_t*)policy));
             DEBUG_PRINT("Policy Signature %d\n", CMD.policy_sz);
             DEBUG_BUFFER(policy + sizeof(uint32_t), CMD.policy_sz);
+        }
+
+        if (CMD.signature_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Signature too large for TLV encoding (%u > %u)\n",
+                CMD.signature_sz, (unsigned int)UINT16_MAX);
+            ret = -1;
+            goto failure;
+        }
+
+        if (CMD.hybrid &&
+            CMD.secondary_signature_sz > (uint32_t)UINT16_MAX) {
+            printf("Error: Secondary signature too large for TLV encoding "
+                "(%u > %u)\n",
+                CMD.secondary_signature_sz, (unsigned int)UINT16_MAX);
+            ret = -1;
+            goto failure;
         }
 
         /* Add signature to header */

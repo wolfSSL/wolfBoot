@@ -567,6 +567,18 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     #   define DELTA_BLOCK_SIZE 1024
     #endif
 
+static inline uint32_t wb_delta_im2n(uint32_t val)
+{
+#ifdef BIG_ENDIAN_ORDER
+    return (((val & 0x000000FFU) << 24) |
+            ((val & 0x0000FF00U) << 8) |
+            ((val & 0x00FF0000U) >> 8) |
+            ((val & 0xFF000000U) >> 24));
+#else
+    return val;
+#endif
+}
+
 static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     struct wolfBoot_image *update, struct wolfBoot_image *swap, int inverse,
     int resume)
@@ -577,6 +589,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
     uint32_t *img_offset;
     uint32_t *img_size;
+    uint32_t delta_img_offset = 0;
+    uint32_t delta_img_size = 0;
     uint32_t total_size;
     WB_PATCH_CTX ctx;
     uint32_t cur_v, upd_v, delta_base_v;
@@ -617,6 +631,12 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 &delta_base_hash, &delta_base_hash_sz) < 0) {
         return -1;
     }
+    delta_img_size = wb_delta_im2n(*img_size);
+    if (inverse) {
+        delta_img_offset = wb_delta_im2n(*img_offset);
+    } else {
+        delta_img_offset = IMAGE_HEADER_SIZE;
+    }
     cur_v = wolfBoot_current_firmware_version();
     upd_v = wolfBoot_update_firmware_version();
     delta_base_v = wolfBoot_get_diffbase_version(PART_UPDATE);
@@ -653,7 +673,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ((cur_v == upd_v) && (delta_base_v <= cur_v)) ||
             ((cur_v == delta_base_v) && (upd_v >= cur_v))) {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size +
-                    IMAGE_HEADER_SIZE, update->hdr + *img_offset, *img_size);
+                    IMAGE_HEADER_SIZE, update->hdr + delta_img_offset,
+                    delta_img_size);
         } else {
             wolfBoot_printf("Delta version check failed! "
                 "Cur 0x%x, Upd 0x%x, Delta 0x%x\n",
@@ -673,7 +694,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             ret = -1;
         } else {
             ret = wb_patch_init(&ctx, boot->hdr, boot->fw_size + IMAGE_HEADER_SIZE,
-                    update->hdr + IMAGE_HEADER_SIZE, *img_size);
+                    update->hdr + delta_img_offset, delta_img_size);
         }
     }
     if (ret < 0)
@@ -1456,7 +1477,7 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
         } else {
             /* Emergency update successful, try to re-open boot image */
-            if (likely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
+            if (unlikely(((wolfBoot_open_image(&boot, PART_BOOT) < 0) ||
                     (wolfBoot_verify_integrity(&boot) < 0)  ||
                     (wolfBoot_verify_authenticity(&boot) < 0)
                     ))) {
@@ -1469,6 +1490,10 @@ void RAMFUNCTION wolfBoot_start(void)
                 wolfBoot_panic();
             }
         }
+    }
+    if ((boot.hdr_ok != 1U) || (boot.sha_ok != 1U) ||
+        (boot.signature_ok != 1U)) {
+        wolfBoot_panic();
     }
     PART_SANITY_CHECK(&boot);
 #else

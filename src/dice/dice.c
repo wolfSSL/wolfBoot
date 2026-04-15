@@ -35,7 +35,6 @@
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/integer.h>
-#include <wolfssl/wolfcrypt/memory.h>
 
 #if defined(WOLFBOOT_HASH_SHA384)
 #include <wolfssl/wolfcrypt/sha512.h>
@@ -67,6 +66,14 @@
 #define WOLFBOOT_DICE_ERR_BUFFER_TOO_SMALL -2
 #define WOLFBOOT_DICE_ERR_HW -3
 #define WOLFBOOT_DICE_ERR_CRYPTO -4
+
+static NOINLINEFUNCTION void wolfboot_dice_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
 
 #define COSE_LABEL_ALG 1
 #define COSE_ALG_ES256 (-7)
@@ -621,7 +628,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
         goto cleanup;
     }
     /* CDI is no longer needed once the seed has been derived. */
-    wc_ForceZero(cdi, sizeof(cdi));
+    wolfboot_dice_zeroize(cdi, sizeof(cdi));
 
     if (wolfboot_dice_hkdf(seed, sizeof(seed),
                            (const uint8_t *)"WOLFBOOT-IAK", 12,
@@ -630,7 +637,7 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
         goto cleanup;
     }
     /* Seed is no longer needed once the private key material is derived. */
-    wc_ForceZero(seed, sizeof(seed));
+    wolfboot_dice_zeroize(seed, sizeof(seed));
 
     if (wolfboot_dice_fixup_priv(priv, sizeof(priv)) != 0) {
         goto cleanup;
@@ -644,9 +651,9 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
     ret = 0;
 
 cleanup:
-    wc_ForceZero(priv, sizeof(priv));
-    wc_ForceZero(seed, sizeof(seed));
-    wc_ForceZero(cdi, sizeof(cdi));
+    wolfboot_dice_zeroize(priv, sizeof(priv));
+    wolfboot_dice_zeroize(seed, sizeof(seed));
+    wolfboot_dice_zeroize(cdi, sizeof(cdi));
     return ret;
 }
 
@@ -660,24 +667,32 @@ static int wolfboot_attest_get_private_key(ecc_key *key,
     {
         uint8_t priv[WOLFBOOT_DICE_KEY_LEN];
         size_t priv_len = sizeof(priv);
+        int ret = -1;
 
         if (hal_attestation_get_iak_private_key(priv, &priv_len) != 0) {
-            return -1;
+            goto cleanup;
         }
         if (priv_len != WOLFBOOT_DICE_KEY_LEN) {
-            return -1;
+            goto cleanup;
         }
         if (wc_ecc_import_private_key_ex(priv, (word32)priv_len, NULL, 0,
                                          key, ECC_SECP256R1) != 0) {
-            return -1;
+            goto cleanup;
         }
-        return 0;
+        ret = 0;
+
+cleanup:
+        wolfboot_dice_zeroize(priv, sizeof(priv));
+        return ret;
     }
 #else
-    if (hal_uds_derive_key(uds, uds_len) != 0) {
-        return -1;
+    int ret = -1;
+
+    if (hal_uds_derive_key(uds, uds_len) == 0) {
+        ret = wolfboot_dice_derive_attestation_key(key, uds, uds_len, claims);
     }
-    return wolfboot_dice_derive_attestation_key(key, uds, uds_len, claims);
+    wolfboot_dice_zeroize(uds, sizeof(uds));
+    return ret;
 #endif
 }
 
@@ -801,7 +816,10 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
 {
     ecc_key key;
     WC_RNG rng;
-    int ret;
+    int ret = WOLFBOOT_DICE_ERR_CRYPTO;
+    int wc_ret;
+    int key_inited = 0;
+    int rng_inited = 0;
     uint8_t hash[SHA256_DIGEST_SIZE];
     uint8_t der_sig[128];
     word32 der_sig_len = sizeof(der_sig);
@@ -815,16 +833,18 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
     }
 
     wc_ecc_init(&key);
+    key_inited = 1;
     if (wolfboot_attest_get_private_key(&key, claims) != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_HW;
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
     }
 
     (void)wc_ecc_set_deterministic(&key, 1);
     if (wc_InitRng(&rng) != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_HW;
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
     }
+    rng_inited = 1;
 
     {
         wc_Sha256 sha;
@@ -833,26 +853,35 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
         wc_Sha256Final(&sha, hash);
     }
 
-    ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
-    wc_FreeRng(&rng);
-    if (ret != 0) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_CRYPTO;
+    wc_ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
+    if (wc_ret != 0) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
     }
 
-    ret = wc_ecc_sig_to_rs(der_sig, der_sig_len, r, &r_len, s, &s_len);
-    if (ret != 0 || r_len > sizeof(r) || s_len > sizeof(s)) {
-        wc_ecc_free(&key);
-        return WOLFBOOT_DICE_ERR_CRYPTO;
+    wc_ret = wc_ecc_sig_to_rs(der_sig, der_sig_len, r, &r_len, s, &s_len);
+    if (wc_ret != 0 || r_len > sizeof(r) || s_len > sizeof(s)) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
     }
 
     XMEMSET(sig, 0, WOLFBOOT_DICE_SIG_LEN);
     XMEMCPY(sig + (sizeof(r) - r_len), r, r_len);
     XMEMCPY(sig + sizeof(r) + (sizeof(s) - s_len), s, s_len);
     *sig_len = WOLFBOOT_DICE_SIG_LEN;
+    ret = WOLFBOOT_DICE_SUCCESS;
 
-    wc_ecc_free(&key);
-    return WOLFBOOT_DICE_SUCCESS;
+cleanup:
+    if (rng_inited) {
+        wc_FreeRng(&rng);
+    }
+    if (key_inited) {
+        wc_ecc_free(&key);
+        wolfboot_dice_zeroize(&key, sizeof(key));
+    }
+    wolfboot_dice_zeroize(hash, sizeof(hash));
+    wolfboot_dice_zeroize(der_sig, sizeof(der_sig));
+    return ret;
 }
 
 static int wolfboot_dice_build_token(uint8_t *token_buf,

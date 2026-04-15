@@ -45,14 +45,15 @@ endif
 
 TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
+       unit-max-space \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-update-flash unit-update-flash-delta \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-ram unit-pkcs11_store unit-psa_store unit-disk \
-       unit-update-disk unit-multiboot unit-boot-x86-fsp unit-qspi-flash unit-tpm-rsa-exp \
+       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-disk \
+       unit-update-disk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
-       unit-sign-encrypted-output
+       unit-sdhci-disk-unaligned unit-sign-encrypted-output
 TESTS+=unit-tpm-check-rot-auth
 
 include unit-sign-encrypted-output.mkfrag
@@ -116,6 +117,13 @@ unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-ram-nofixed:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH \
+	-DPART_UPDATE_EXT -DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT \
+	-DNO_XIP -DWOLFBOOT_NO_PARTITIONS -DUNIT_TEST_NO_FIXED_PARTITIONS \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-string:CFLAGS+=-fno-builtin
@@ -198,12 +206,19 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
 
+unit-max-space: ../../include/target.h unit-max-space.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(CFLAGS) $(LDFLAGS)
 
 unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
+unit-sdhci-disk-unaligned: ../../include/target.h unit-sdhci-disk-unaligned.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
@@ -223,6 +238,13 @@ unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
 		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
+
+unit-loader-tpm-init: ../../include/target.h unit-loader-tpm-init.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS \
+		-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_SIGN_ECC256 \
+		-DWOLFBOOT_HASH_SHA256 -ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
 
 unit-mock-state: ../../include/target.h unit-mock-state.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
@@ -290,6 +312,9 @@ unit-update-flash-enc: ../../include/target.h unit-update-flash.c
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-ram-nofixed: ../../include/target.h unit-update-ram-nofixed.c
+	gcc -o $@ unit-update-ram-nofixed.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk: ../../include/target.h unit-update-disk.c
 	gcc -o $@ unit-update-disk.c $(CFLAGS) $(LDFLAGS)

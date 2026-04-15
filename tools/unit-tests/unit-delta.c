@@ -25,6 +25,12 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#define HAVE_POSIX_FORK 1
+#endif
 
 #include "delta.h"
 #define WC_RSA_BLINDING
@@ -480,6 +486,87 @@ START_TEST(test_wb_patch_and_diff_multi_sector_images)
 }
 END_TEST
 
+START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
+{
+#if HAVE_POSIX_FORK
+    const char *saved = getenv("WOLFBOOT_SECTOR_SIZE");
+    char *saved_copy = saved ? strdup(saved) : NULL;
+    pid_t pid;
+    int status = 0;
+    int setenv_ok;
+    int fork_ok = 0;
+    int wait_ok = 0;
+    int exited_ok = 0;
+    int exit_code = -1;
+
+    setenv_ok = (setenv("WOLFBOOT_SECTOR_SIZE", "0x20000", 1) == 0);
+    if (!setenv_ok) {
+        goto restore_env;
+    }
+
+    pid = fork();
+    if (pid != -1) {
+        fork_ok = 1;
+    }
+
+    if (pid == 0) {
+        (void)wb_diff_get_sector_size();
+        _exit(0);
+    }
+
+    if (fork_ok && (waitpid(pid, &status, 0) == pid)) {
+        wait_ok = 1;
+        exited_ok = WIFEXITED(status);
+        if (exited_ok) {
+            exit_code = WEXITSTATUS(status);
+        }
+    }
+
+restore_env:
+    if (saved_copy != NULL) {
+        ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", saved_copy, 1), 0);
+        free(saved_copy);
+    }
+    else {
+        ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
+    }
+
+    ck_assert(setenv_ok);
+    ck_assert(fork_ok);
+    ck_assert(wait_ok);
+    ck_assert(exited_ok);
+    ck_assert_int_eq(exit_code, 6);
+#else
+    ck_assert_int_eq(1, 1);
+#endif
+}
+END_TEST
+
+START_TEST(test_wb_diff_get_sector_size_accepts_16bit_limit)
+{
+    const char *saved = getenv("WOLFBOOT_SECTOR_SIZE");
+    char *saved_copy = saved ? strdup(saved) : NULL;
+    int setenv_ok = 0;
+    int sector_size = 0;
+
+    setenv_ok = (setenv("WOLFBOOT_SECTOR_SIZE", "0xFFFF", 1) == 0);
+    if (setenv_ok) {
+        sector_size = wb_diff_get_sector_size();
+    }
+
+    if (saved_copy != NULL) {
+        ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", saved_copy, 1), 0);
+        free(saved_copy);
+    }
+    else {
+        ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
+    }
+
+    ck_assert(setenv_ok);
+    ck_assert_int_eq(sector_size, 0xFFFF);
+}
+END_TEST
+
 START_TEST(test_wb_patch_and_diff_size_changing_update)
 {
     uint8_t src_a[2048];
@@ -539,6 +626,8 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_completely_different_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_all_escape_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_multi_sector_images);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_accepts_16bit_limit);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_rejects_values_above_16bit);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_size_changing_update);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_single_byte_difference);
     suite_add_tcase(s, tc_wolfboot_delta);

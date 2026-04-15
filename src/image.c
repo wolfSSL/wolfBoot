@@ -61,14 +61,14 @@ static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 int NOINLINEFUNCTION image_CT_compare(
     const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
-    uint8_t diff = 0;
+    volatile uint32_t diff = 0U;
     uint32_t i;
 
     for (i = 0; i < len; i++) {
-        diff |= expected[i] ^ actual[i];
+        diff |= (uint32_t)(expected[i] ^ actual[i]);
     }
 
-    return diff;
+    return (diff != 0U) ? 1 : 0;
 }
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
@@ -1383,9 +1383,7 @@ int wolfBoot_get_dts_size(void *dts_addr)
  */
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
 {
-#ifdef MMU
     int ret;
-#endif
     uint8_t *image;
     if (!img)
         return -1;
@@ -1441,8 +1439,10 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     else
         image = (uint8_t *)img->hdr;
     img->hdr_ok = 1;
-
-    return wolfBoot_open_image_address(img, image);
+    ret = wolfBoot_open_image_address(img, image);
+    if (ret != 0)
+        img->hdr_ok = 0;
+    return ret;
 }
 
 
@@ -1451,6 +1451,7 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
     uint8_t* addr)
 {
     uint8_t* image;
+    int ret;
     if (img == NULL)
         return -1;
 
@@ -1460,7 +1461,10 @@ int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part,
     img->hdr_ok = 1;
     hdr_cpy_done = 0; /* reset hdr "open" flag */
     image = fetch_hdr_cpy(img);
-    return wolfBoot_open_image_address(img, image);
+    ret = wolfBoot_open_image_address(img, image);
+    if (ret != 0)
+        img->hdr_ok = 0;
+    return ret;
 }
 #endif /* EXT_FLASH */
 
@@ -2404,7 +2408,7 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 static int keyslot_CT_hint_matches(const uint8_t *expected,
     const uint8_t *actual)
 {
-    uint8_t diff = 0;
+    volatile uint8_t diff = 0;
     uint32_t i;
 
     for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++) {
