@@ -224,7 +224,7 @@ static int writeBin(const char* filename, const byte *buf, word32 bufSz)
     FILE *fp = NULL;
     size_t fileSz = 0;
 
-    fp = fopen(filename, "wt");
+    fp = fopen(filename, "wb");
     if (fp != NULL) {
         fileSz = fwrite(buf, 1, bufSz, fp);
         /* sanity check */

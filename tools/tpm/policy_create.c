@@ -54,7 +54,7 @@ int writeBin(const char* filename, const uint8_t*buf, word32 bufSz)
     XFILE fp = NULL;
     size_t fileSz = 0;
 
-    fp = XFOPEN(filename, "wt");
+    fp = XFOPEN(filename, "wb");
     if (fp != XBADFILE) {
         fileSz = XFWRITE(buf, 1, bufSz, fp);
         /* sanity check */
