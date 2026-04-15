@@ -375,7 +375,8 @@ void RAMFUNCTION wolfBoot_start(void)
             uint32_t cur_ver = selected ? (uint32_t)pB_ver : (uint32_t)pA_ver;
             if ((max_ver > 0U) && (cur_ver < max_ver)) {
                 wolfBoot_printf("Rollback to lower version not allowed\r\n");
-                break;
+                wolfBoot_panic();
+                return;
             }
         }
 #endif
@@ -509,6 +510,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
         wolfBoot_panic();
+        return;
     }
 
     disk_close(BOOT_DISK);

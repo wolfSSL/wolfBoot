@@ -62,7 +62,7 @@ void RAMFUNCTION wolfBoot_start(void)
         if ((max_v > 0U) && (active_v < max_v)) {
             wolfBoot_printf("Rollback to lower version not allowed\n");
             boot_panic();
-            continue;
+            return;
         }
 #endif
         if ((wolfBoot_open_image(&fw_image, active) < 0)

@@ -301,7 +301,8 @@ START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
 
     wolfBoot_start();
 
-    ck_assert_int_eq(wolfBoot_panicked, 1);
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
 }
 END_TEST
 
