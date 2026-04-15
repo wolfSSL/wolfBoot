@@ -30,6 +30,7 @@
 #
 
 set -e
+set -o pipefail
 
 # Configuration (can be overridden via environment variables)
 CONFIG_FILE="${CONFIG_FILE:-config/examples/nxp_lpc54s0xx.config}"
@@ -110,10 +111,15 @@ parse_config() {
         exit 1
     fi
 
-    # Helper function to extract config value
+    # Helper function to extract config value.
+    # Anchor the regex to `KEY=` or `KEY?=` so e.g. SIGN does not match SIGN_ALG.
+    # grep with --max-count=1 keeps the pipeline single-stage so pipefail catches
+    # a truly missing key (exit 1) rather than relying on `head` to mask it.
     get_config_value() {
         local key="$1"
-        grep -E "^${key}" "$config_file" | head -1 | sed -E "s/^${key}\??=//" | tr -d '[:space:]'
+        local line
+        line=$(grep -E "^${key}\\??=" "$config_file" --max-count=1) || return 0
+        printf '%s' "${line#*=}" | tr -d '[:space:]'
     }
 
     # Extract SIGN and HASH
@@ -146,9 +152,9 @@ parse_config() {
 
     # Ensure partition addresses have 0x prefix for bash arithmetic
     for var in WOLFBOOT_PARTITION_BOOT_ADDRESS WOLFBOOT_PARTITION_UPDATE_ADDRESS WOLFBOOT_PARTITION_SIZE WOLFBOOT_SECTOR_SIZE; do
-        eval "val=\$$var"
+        local val="${!var}"
         if [[ ! "$val" =~ ^0x ]]; then
-            eval "$var=\"0x\${val}\""
+            printf -v "$var" '0x%s' "$val"
         fi
     done
 

@@ -440,6 +440,9 @@ static void RAMFUNCTION spifi_wait_busy(void)
     SPIFI_IDATA = 0x00;                        /* expect BUSY=0 */
     SPIFI_CLIMIT = (saved_climit & 0xFFFFFF00) | W25Q_STATUS_BUSY; /* mask bit 0 */
 
+    /* Callers (hal_flash_write / hal_flash_erase) always issue a non-MCMD
+     * command before reaching here, so MCINIT is clear and the reset path in
+     * spifi_set_cmd() does not run — IDATA/CLIMIT programmed above survive. */
     spifi_set_cmd(CMD_READ_STATUS);             /* POLL mode command */
 
     /* SPIFI hardware polls flash status internally.
