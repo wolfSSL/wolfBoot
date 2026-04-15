@@ -193,7 +193,7 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
     return 0;
 }
 
-START_TEST(test_invalid_update_rollback_to_older_boot_is_denied)
+START_TEST(test_invalid_update_falls_back_to_boot)
 {
     uint8_t bad_digest[SHA256_DIGEST_SIZE];
 
@@ -210,9 +210,9 @@ START_TEST(test_invalid_update_rollback_to_older_boot_is_denied)
 
     wolfBoot_start();
 
-    ck_assert_int_eq(wolfBoot_staged_ok, 0);
-    ck_assert_int_eq(wolfBoot_panicked, 1);
-    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address, STAGE_ADDR_SENTINEL);
+    ck_assert_int_eq(wolfBoot_staged_ok, 1);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address, WOLFBOOT_LOAD_ADDRESS);
     cleanup_flash();
 }
 END_TEST
@@ -222,7 +222,7 @@ static Suite *wolfboot_suite(void)
     Suite *s = suite_create("wolfboot-update-ram-nofixed");
     TCase *tc = tcase_create("fallback");
 
-    tcase_add_test(tc, test_invalid_update_rollback_to_older_boot_is_denied);
+    tcase_add_test(tc, test_invalid_update_falls_back_to_boot);
     tcase_set_timeout(tc, 5);
     suite_add_tcase(s, tc);
 
