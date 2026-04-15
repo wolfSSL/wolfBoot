@@ -57,6 +57,20 @@
     /* QSPI bare-metal */
 #endif
 
+/* DTB fixup for kernel command line. Override LINUX_BOOTARGS or
+ * LINUX_BOOTARGS_ROOT in your config to customize.
+ *
+ * Note: console=ttyPS0 is ZynqMP-specific (PS UART0). Versal's default
+ * (hal/versal.c) omits the console= token because Versal relies on
+ * earlycon alone plus a DT-declared stdout-path. */
+#ifndef LINUX_BOOTARGS
+#ifndef LINUX_BOOTARGS_ROOT
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
+#endif
+#define LINUX_BOOTARGS \
+    "earlycon console=ttyPS0,115200 root=" LINUX_BOOTARGS_ROOT " rootwait"
+#endif
+
 /* QSPI Slave Device Information */
 typedef struct QspiDev {
     uint32_t mode;   /* GQSPI_GEN_FIFO_MODE_SPI, GQSPI_GEN_FIFO_MODE_DSPI or GQSPI_GEN_FIFO_MODE_QSPI */
@@ -1795,7 +1809,20 @@ void RAMFUNCTION ext_flash_unlock(void)
 
 }
 
-#ifdef MMU
+#if defined(MMU) && defined(__WOLFBOOT)
+/* Get current time in microseconds using ARMv8 generic timer */
+uint64_t hal_get_timer_us(void)
+{
+    uint64_t count, freq;
+    __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(count));
+    __asm__ volatile("mrs %0, CNTFRQ_EL0" : "=r"(freq));
+    if (freq == 0)
+        return 0;
+    /* Use __uint128_t to avoid overflow of (count * 1e6) at long uptimes
+     * (would overflow uint64_t after ~51h at 100MHz). */
+    return (uint64_t)(((__uint128_t)count * 1000000ULL) / freq);
+}
+
 void* hal_get_dts_address(void)
 {
 #ifdef WOLFBOOT_DTS_BOOT_ADDRESS
@@ -1809,8 +1836,46 @@ void* hal_get_dts_address(void)
 
 int hal_dts_fixup(void* dts_addr)
 {
-    /* place FDT fixup specific to ZynqMP here */
-    //fdt_set_boot_cpuid_phys(buf, fdt_boot_cpuid_phys(fdt));
+    int off, ret;
+    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+
+    /* Verify FDT header */
+    ret = fdt_check_header(dts_addr);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: Invalid header! %d\n", ret);
+        return ret;
+    }
+
+    wolfBoot_printf("FDT: Version %d, Size %d\n",
+        fdt_version(fdt), fdt_totalsize(fdt));
+
+    /* Expand totalsize so fdt_setprop() has in-blob free space to place
+     * a new/larger bootargs property. Physical headroom is already
+     * guaranteed by the load-address layout (DTB at WOLFBOOT_LOAD_DTS_ADDRESS,
+     * kernel loaded much higher), so growing the header is safe. Matches
+     * the pattern used in hal/versal.c:hal_dts_fixup. */
+    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+
+    /* Find /chosen node */
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off < 0) {
+        /* Create /chosen node if it doesn't exist */
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+    if (off < 0) {
+        wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
+        return off;
+    }
+
+    /* Set bootargs property - overrides PetaLinux default root= with
+     * the wolfBoot partition layout. */
+    wolfBoot_printf("FDT: Setting bootargs: %s\n", LINUX_BOOTARGS);
+    ret = fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    if (ret < 0) {
+        wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
+        return ret;
+    }
+
     return 0;
 }
 #endif

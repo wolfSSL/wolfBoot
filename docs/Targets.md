@@ -2599,6 +2599,8 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 
 Use `config/examples/zynqmp_sdcard.config`. This uses the Arasan SDHCI controller (SD1 - external SD card slot on ZCU102) and an **MBR** partitioned SD card.
 
+wolfBoot unconditionally flushes the EL2 D-cache/I-cache and disables the EL2 MMU before handoff (see `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`), satisfying the ARM64 Linux boot protocol with no extra config flag required.
+
 **Partition layout**
 | Partition | Name   | Size      | Type                          | Contents                                   |
 |-----------|--------|-----------|-------------------------------|-------------------------------------------|
@@ -3004,6 +3006,8 @@ Typical boot timing with ECC384/SHA384 signing:
 ### SD Card Boot (MBR + A/B)
 
 Use `config/examples/versal_vmk180_sdcard.config`. This uses the Arasan SDHCI controller and an **MBR** partitioned SD card.
+
+Versal defaults to `BOOT_EL1` — the handoff goes through `el2_to_el1_boot` (ERET to EL1). Custom `BOOT_EL2` Versal configs get the same EL2 cache/MMU teardown as ZynqMP via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`, so no extra config flag is needed to boot Linux directly at EL2.
 
 **Partition layout**
 | Partition | Name | Size | Type | Contents |

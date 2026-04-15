@@ -26,9 +26,16 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 
-/* Include platform-specific header for EL configuration defines */
-#ifdef TARGET_versal
+/* Include platform-specific header for EL configuration defines
+ * (EL2_HYPERVISOR, etc.). Must be visible here so the BOOT_EL1 /
+ * EL2_HYPERVISOR guards around the EL2->EL1 ERET transition below
+ * compile in for the active target. */
+#if defined(TARGET_versal)
 #include "hal/versal.h"
+#elif defined(TARGET_zynq)
+#include "hal/zynq.h"
+#elif defined(TARGET_ls1028a)
+#include "hal/nxp_ls1028a.h"
 #endif
 
 /* Linker exported variables */
@@ -42,6 +49,17 @@ extern unsigned int _end_data;
 
 extern void main(void);
 extern void gicv2_init_secure(void);
+
+/* Asm helper in boot_aarch64_start.S: cleans the entire D-cache to PoC,
+ * invalidates the I-cache to PoU, and disables MMU + I-cache + D-cache
+ * via SCTLR_EL2, then returns. Required before handoff to any payload
+ * that sets up its own translation (Linux kernel, hypervisor, bare-metal
+ * RTOS, later bootloader stage), and mandatory for the ARM64 Linux boot
+ * protocol. Only built when EL2_HYPERVISOR == 1 is visible to
+ * boot_aarch64_start.S (e.g. via hal/zynq.h on ZynqMP). */
+#if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+extern void el2_flush_and_disable_mmu(void);
+#endif
 
 /* SKIP_GIC_INIT - Skip GIC initialization before booting app
  * This is needed for:
@@ -163,7 +181,22 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
         el2_to_el1_boot((uintptr_t)app_offset, dts);
     }
 #else
-    /* Stay at current EL (EL2 or EL3) and jump directly to application */
+    /* Stay at current EL (EL2 or EL3) and jump directly to application.
+     *
+     * Before the jump, tear down wolfBoot's EL2 MMU/caches so the next
+     * stage enters with a clean state. Mandatory for the ARM64 Linux
+     * boot protocol (Linux's arm64_panic_block_init() panics with
+     * "Non-EFI boot detected with MMU and caches enabled" otherwise),
+     * and correct for any payload that sets up its own translation
+     * (hypervisor, RTOS, later bootloader stage). */
+#if defined(MMU) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    if (current_el() == 2) {
+        wolfBoot_printf("do_boot: flushing caches, disabling MMU\n");
+        el2_flush_and_disable_mmu();
+    }
+#endif
+
+    /* Non-Linux EL2 and EL3 path: legacy direct br x4 */
 
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
