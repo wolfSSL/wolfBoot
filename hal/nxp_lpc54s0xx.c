@@ -1,4 +1,4 @@
-/* nxp_lpc54s018m.c
+/* nxp_lpc54s0xx.c
  *
  * Copyright (C) 2025 wolfSSL Inc.
  *

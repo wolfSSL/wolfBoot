@@ -1,4 +1,4 @@
-/* app_nxp_lpc54s018m.c
+/* app_nxp_lpc54s0xx.c
  *
  * Test application for LPC54S018M-EVK
  *

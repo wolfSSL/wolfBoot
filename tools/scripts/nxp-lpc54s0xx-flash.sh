@@ -8,7 +8,7 @@
 # into the update partition so wolfBoot will swap on the next boot.
 #
 # Flow:
-#   1. Copy config/examples/nxp_lpc54s018m.config to .config
+#   1. Copy config/examples/nxp_lpc54s0xx.config to .config
 #   2. make -> factory.bin (wolfBoot + signed v1 test-app)
 #   3. Parse .config to derive partition/trailer addresses
 #   4. Erase BOOT and UPDATE partition trailer sectors (clean boot state)
@@ -32,7 +32,7 @@
 set -e
 
 # Configuration (can be overridden via environment variables)
-CONFIG_FILE="${CONFIG_FILE:-config/examples/nxp_lpc54s018m.config}"
+CONFIG_FILE="${CONFIG_FILE:-config/examples/nxp_lpc54s0xx.config}"
 PYOCD_TARGET="${PYOCD_TARGET:-lpc54s018j4met180}"
 
 # Colors for output
@@ -57,7 +57,7 @@ usage() {
     echo "  -h, --help       Show this help message"
     echo ""
     echo "Environment variables:"
-    echo "  CONFIG_FILE      Override config file (default: config/examples/nxp_lpc54s018m.config)"
+    echo "  CONFIG_FILE      Override config file (default: config/examples/nxp_lpc54s0xx.config)"
     echo "  PYOCD_TARGET     Override pyocd target (default: lpc54s018j4met180)"
     echo "  CROSS_COMPILE    Override toolchain prefix (default: arm-none-eabi-)"
     echo ""

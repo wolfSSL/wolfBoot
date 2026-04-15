@@ -699,8 +699,8 @@ ifeq ($(TARGET),lpc55s69)
     LDFLAGS+=-Wl,--no-warn-rwx-segments
 endif
 
-ifeq ($(TARGET),nxp_lpc54s018m)
-    LSCRIPT_TEMPLATE=ARM-nxp_lpc54s018m.ld
+ifeq ($(TARGET),nxp_lpc54s0xx)
+    LSCRIPT_TEMPLATE=ARM-nxp_lpc54s0xx.ld
     # Enable RAMFUNCTION for test app (flash ops must run from RAM)
     CFLAGS+=-DRAM_CODE -D__WOLFBOOT
     # string.o provides RAMFUNCTION memcpy; already added when DEBUG_UART=1 (line ~108)
