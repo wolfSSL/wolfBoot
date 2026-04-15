@@ -159,7 +159,10 @@ static int PolicySign(int alg, const char* keyFile, byte* hash, word32 hashSz,
         rc = BAD_FUNC_ARG;
     }
 
-    XFREE(buf, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (buf != NULL) {
+        wc_ForceZero(buf, bufSz);
+        XFREE(buf, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
     wc_FreeRng(&rng);
 
     if (rc != 0) {
