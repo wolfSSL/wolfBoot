@@ -66,7 +66,7 @@
 /* Linux kernel command line arguments */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
-#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p2"
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
 #endif
 
 #define LINUX_BOOTARGS \

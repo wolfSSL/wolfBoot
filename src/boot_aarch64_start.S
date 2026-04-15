@@ -1334,4 +1334,118 @@ el2_to_el1_boot:
     b      .
 #endif /* BOOT_EL1 && EL2_HYPERVISOR */
 
+
+/*
+ * Clean entire D-cache to the Point of Coherency (PoC), invalidate the
+ * I-cache to the Point of Unification (PoU), and disable MMU + I/D-cache
+ * at EL2. Returns normally to the caller.
+ *
+ * Terminology (ARM ARM B2.8):
+ *   PoC - Point of Coherency: the point at which all observers (CPUs,
+ *         DMA masters, etc.) see the same memory. Cleaning to PoC
+ *         guarantees the image bytes we memcpy'd are visible to the
+ *         next stage's first uncached instruction fetches.
+ *   PoU - Point of Unification: the point at which instruction and data
+ *         caches converge. Invalidating I-cache to PoU ensures stale
+ *         fetches are discarded before we hand off.
+ *
+ * wolfBoot's startup (line ~347 above) enables MMU+I+D cache at EL2 for
+ * its own use. Any payload we hand off to (Linux kernel, hypervisor,
+ * bare-metal RTOS, a later bootloader stage) expects to enter without
+ * inheriting wolfBoot's translation tables, and the ARM64 Linux boot
+ * protocol (Documentation/arch/arm64/booting.rst) explicitly REQUIRES
+ * MMU off, D-cache off, and the loaded image cleaned to PoC. This
+ * helper performs that teardown and returns; the caller then performs
+ * the actual jump with whatever ABI the payload expects.
+ *
+ * Safe to return because wolfBoot's .text is identity-mapped (VA=PA)
+ * at EL2, so instruction fetch keeps working after SCTLR_EL2.M is
+ * cleared.
+ *
+ * AAPCS64: clobbers x0-x11; x30 (LR) is preserved because the
+ * set/way loop body does not touch it.
+ */
+#if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+.global el2_flush_and_disable_mmu
+el2_flush_and_disable_mmu:
+    /* ---- 1. Clean & invalidate entire data cache to PoC by set/way ----
+     * Standard ARMv8 routine, adapted from arm-trusted-firmware /
+     * U-Boot / Linux. Iterates every (level, set, way) triple and
+     * issues `dc cisw` on it. Terminates at the Level of Coherency
+     * (LoC) read from CLIDR_EL1. */
+    mrs     x0, clidr_el1
+    and     x3, x0, #0x07000000     /* x3 = LoC (level of coherency) */
+    lsr     x3, x3, #23             /* x3 = LoC * 2 */
+    cbz     x3, .Ldcache_done
+    mov     x10, #0                 /* x10 = current cache level << 1 */
+
+.Ldcache_level_loop:
+    add     x2, x10, x10, lsr #1    /* x2 = level * 3 */
+    lsr     x1, x0, x2              /* x1 = ctype field for this level */
+    and     x1, x1, #7
+    cmp     x1, #2
+    b.lt    .Ldcache_skip_level     /* No data cache at this level */
+    msr     csselr_el1, x10         /* Select cache level (instruction = 0) */
+    isb
+    mrs     x1, ccsidr_el1
+    and     x2, x1, #7              /* x2 = log2(line length) - 4 */
+    add     x2, x2, #4              /* x2 = log2(line length) */
+    mov     x4, #0x3ff
+    and     x4, x4, x1, lsr #3      /* x4 = max way number */
+    clz     w5, w4                  /* x5 = bit position of way size */
+    mov     x7, #0x7fff
+    and     x7, x7, x1, lsr #13     /* x7 = max set number */
+
+.Ldcache_set_loop:
+    mov     x9, x4                  /* x9 = current way */
+.Ldcache_way_loop:
+    lsl     x6, x9, x5
+    orr     x11, x10, x6            /* level | way */
+    lsl     x6, x7, x2
+    orr     x11, x11, x6            /* level | way | set */
+    dc      cisw, x11               /* clean & invalidate by set/way */
+    subs    x9, x9, #1
+    b.ge    .Ldcache_way_loop
+    subs    x7, x7, #1
+    b.ge    .Ldcache_set_loop
+
+.Ldcache_skip_level:
+    add     x10, x10, #2
+    cmp     x3, x10
+    b.gt    .Ldcache_level_loop
+
+.Ldcache_done:
+    mov     x10, #0
+    msr     csselr_el1, x10
+    dsb     sy
+    isb
+
+    /* ---- 2. Invalidate entire I-cache to PoU ----
+     * `ic iallu` invalidates all instruction cache to the Point of
+     * Unification for the local PE. */
+    ic      iallu
+    dsb     ish
+    isb
+
+    /* ---- 3. Disable MMU + I-cache + D-cache at EL2 ----
+     *   SCTLR_EL2.M (bit 0)  = MMU enable
+     *   SCTLR_EL2.C (bit 2)  = D-cache enable
+     *   SCTLR_EL2.I (bit 12) = I-cache enable
+     *
+     * ARM ARM (B2.7.2) requires `dsb sy` before `isb` when modifying
+     * SCTLR_ELx.M so the system register write is observable before the
+     * pipeline is re-synchronized. Matches the MMU-enable sequence used
+     * earlier in this file.
+     */
+    mrs     x0, SCTLR_EL2
+    bic     x0, x0, #(1 << 0)       /* M  */
+    bic     x0, x0, #(1 << 2)       /* C  */
+    bic     x0, x0, #(1 << 12)      /* I  */
+    msr     SCTLR_EL2, x0
+    dsb     sy
+    isb
+
+    ret
+#endif /* EL2_HYPERVISOR */
+
 .end

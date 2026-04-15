@@ -581,6 +581,7 @@ static uint32_t sdhci_get_response_bits(int from, int count)
 /* voltage: 0=off or SDHCI_SRS10_BVS_[X_X]V */
 static int sdcard_power_init_seq(uint32_t voltage)
 {
+    int retries;
     /* Set power to specified voltage */
     int status = sdhci_set_power(voltage);
 #ifdef DEBUG_SDHCI
@@ -590,9 +591,24 @@ static int sdcard_power_init_seq(uint32_t voltage)
         SDHCI_REG(SDHCI_SRS09), SDHCI_REG(SDHCI_SRS10),
         SDHCI_REG(SDHCI_SRS11), SDHCI_REG(SDHCI_SRS12));
 #endif
-    if (status == 0) {
-        /* send CMD0 (go idle) to reset card */
+    if (status != 0)
+        return status;
+    /* SD spec requires >= 1ms after power stabilizes before CMD0. */
+    udelay(1000);
+    /* Some cards and the ZynqMP Arasan controller need more settling
+     * time after the slot-type change + soft reset in sdhci_platform_init().
+     * Use a retry loop: if CMD0 fails, wait and retry (self-calibrating). */
+    for (retries = 0; retries < 10; retries++) {
         status = sdhci_cmd(MMC_CMD0_GO_IDLE, 0, SDHCI_RESP_NONE);
+        if (status == 0)
+            break;
+        udelay(10000); /* 10ms between retries */
+    }
+    if (status != 0) {
+        wolfBoot_printf("SD: CMD0 failed after %d retries\n", retries);
+    }
+    else if (retries > 0) {
+        wolfBoot_printf("SD: CMD0 succeeded after %d retries\n", retries);
     }
     if (status == 0) {
         /* send the operating conditions command */
@@ -1387,6 +1403,11 @@ int sdhci_init(void)
     /* Call platform-specific initialization (clocks, resets, pin mux) */
     sdhci_platform_init();
 
+    /* Allow controller to settle after platform init (slot type change,
+     * soft reset, clock configuration). Without this, the controller may
+     * not be ready to accept register writes on some platforms. */
+    udelay(1000); /* 1ms */
+
     /* Reset the host controller */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
@@ -1481,6 +1502,9 @@ int sdhci_init(void)
 
     /* Setup 400khz starting clock */
     sdhci_set_clock(SDHCI_CLK_400KHZ);
+
+    /* Allow clock to stabilize before issuing first command */
+    udelay(1000); /* 1ms */
 
 #ifdef DISK_EMMC
     /* Run full eMMC card initialization */
