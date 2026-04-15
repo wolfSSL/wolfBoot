@@ -139,9 +139,17 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t dts_size = 0;
 #endif
 #ifndef ALLOW_DOWNGRADE
-    uint32_t boot_v = wolfBoot_current_firmware_version();
-    uint32_t update_v = wolfBoot_update_firmware_version();
+    int boot_v_raw = (int)wolfBoot_current_firmware_version();
+    int update_v_raw = (int)wolfBoot_update_firmware_version();
+    uint32_t boot_v = 0U;
+    uint32_t update_v = 0U;
     uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
+
+    if (boot_v_raw >= 0)
+        boot_v = (uint32_t)boot_v_raw;
+    if (update_v_raw >= 0)
+        update_v = (uint32_t)update_v_raw;
+    max_v = (boot_v > update_v) ? boot_v : update_v;
 #endif
 
     memset(&os_image, 0, sizeof(struct wolfBoot_image));

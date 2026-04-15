@@ -27,6 +27,7 @@ static __thread unsigned char
 #define WOLFBOOT_LOAD_ADDRESS (((uintptr_t)wolfboot_ram) + IMAGE_HEADER_SIZE)
 #define TEST_SIZE_SMALL 5300
 #define DIGEST_TLV_OFF_IN_HDR 28
+#define STAGE_ADDR_SENTINEL ((uintptr_t)0xFFFFFFFFu)
 
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
@@ -210,7 +211,7 @@ START_TEST(test_invalid_update_rollback_to_older_boot_is_denied)
 
     ck_assert_int_eq(wolfBoot_staged_ok, 0);
     ck_assert_int_eq(wolfBoot_panicked, 1);
-    ck_assert_ptr_eq((void *)wolfBoot_stage_address, (void *)0xFFFFFFFF);
+    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address, STAGE_ADDR_SENTINEL);
     cleanup_flash();
 }
 END_TEST
