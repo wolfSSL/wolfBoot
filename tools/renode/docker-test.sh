@@ -12,8 +12,6 @@ mkdir -p ${HOST_LOG_PATH}
 
 docker pull ${DOCKER_IMAGE} >/dev/null 2>&1 || true
 
-# running in `if` to avoid setting +e
-
 exit_code=0
 if ! docker run \
   --log-driver=none -a stdout -a stderr \
