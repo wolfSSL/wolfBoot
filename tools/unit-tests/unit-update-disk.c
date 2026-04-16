@@ -33,6 +33,7 @@ static int mock_disk_init_ret;
 static int mock_disk_close_called;
 static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
+static int mock_fail_payload_part;
 
 ChaCha chacha;
 
@@ -72,6 +73,7 @@ static void reset_mocks(void)
     mock_disk_close_called = 0;
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
+    mock_fail_payload_part = -1;
     wolfBoot_panicked = 0;
 }
 
@@ -140,6 +142,8 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
 
     (void)drv;
     image = (part == BOOT_PART_B) ? part_b_image : part_a_image;
+    if ((mock_fail_payload_part == part) && (off >= IMAGE_HEADER_SIZE))
+        return -1;
     if ((off > max) || (sz > (max - off)))
         return -1;
     memcpy(buf, image + off, (size_t)sz);
@@ -288,6 +292,20 @@ START_TEST(test_get_decrypted_blob_version_rejects_truncated_version_tlv)
 }
 END_TEST
 
+START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 5, 0xB2);
+    mock_fail_payload_part = BOOT_PART_A;
+
+    wolfBoot_start();
+
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -297,6 +315,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_zeroizes_key_material_before_boot);
     tcase_add_test(tc, test_update_disk_prefers_primary_partition_when_versions_equal);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
+    tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
     suite_add_tcase(s, tc);
 
     return s;

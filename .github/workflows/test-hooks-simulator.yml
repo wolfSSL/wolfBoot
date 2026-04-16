@@ -88,6 +88,11 @@ jobs:
             WOLFBOOT_HOOK_BOOT=1 \
             WOLFBOOT_HOOK_PANIC=1
 
+      - name: Run dualbank rollback denial simulation
+        if: matrix.mechanism == 'dualbank'
+        run: |
+          tools/scripts/sim-dualbank-rollback-denied.sh
+
       - name: Clear hook log
         run: |
           rm -f /tmp/wolfboot_hooks.log

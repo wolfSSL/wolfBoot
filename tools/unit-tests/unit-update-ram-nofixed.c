@@ -27,6 +27,7 @@ static __thread unsigned char
 #define WOLFBOOT_LOAD_ADDRESS (((uintptr_t)wolfboot_ram) + IMAGE_HEADER_SIZE)
 #define TEST_SIZE_SMALL 5300
 #define DIGEST_TLV_OFF_IN_HDR 28
+#define STAGE_ADDR_SENTINEL UINTPTR_MAX
 
 #include "user_settings.h"
 #include "wolfboot/wolfboot.h"
@@ -52,7 +53,8 @@ int wolfBoot_dualboot_candidate_addr(void** addr)
 #include <wolfssl/wolfcrypt/sha256.h>
 
 int wolfBoot_staged_ok = 0;
-const uint32_t *wolfBoot_stage_address = (uint32_t *)0xFFFFFFFF;
+const uint32_t *wolfBoot_stage_address =
+    (const uint32_t *)(uintptr_t)STAGE_ADDR_SENTINEL;
 
 void* hal_get_primary_address(void)
 {
@@ -191,7 +193,7 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
     return 0;
 }
 
-START_TEST(test_invalid_update_falls_back_to_boot_without_reselect_loop)
+START_TEST(test_invalid_update_falls_back_to_boot)
 {
     uint8_t bad_digest[SHA256_DIGEST_SIZE];
 
@@ -209,7 +211,8 @@ START_TEST(test_invalid_update_falls_back_to_boot_without_reselect_loop)
     wolfBoot_start();
 
     ck_assert_int_eq(wolfBoot_staged_ok, 1);
-    ck_assert_ptr_eq(wolfBoot_stage_address, (const uint32_t *)WOLFBOOT_LOAD_ADDRESS);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address, WOLFBOOT_LOAD_ADDRESS);
     cleanup_flash();
 }
 END_TEST
@@ -219,7 +222,7 @@ static Suite *wolfboot_suite(void)
     Suite *s = suite_create("wolfboot-update-ram-nofixed");
     TCase *tc = tcase_create("fallback");
 
-    tcase_add_test(tc, test_invalid_update_falls_back_to_boot_without_reselect_loop);
+    tcase_add_test(tc, test_invalid_update_falls_back_to_boot);
     tcase_set_timeout(tc, 5);
     suite_add_tcase(s, tc);
 

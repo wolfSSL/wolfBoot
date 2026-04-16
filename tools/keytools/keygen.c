@@ -948,6 +948,7 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
     wc_LmsKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
 }
 
 #include "../xmss/xmss_common.h"

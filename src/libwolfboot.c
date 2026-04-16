@@ -1395,6 +1395,15 @@ int wolfBoot_dualboot_candidate(void)
             (wolfBoot_get_partition_state(candidate, &p_state) == 0) &&
             (p_state == IMG_STATE_TESTING))
     {
+#ifndef ALLOW_DOWNGRADE
+        uint32_t candidate_v = (candidate == PART_BOOT) ? boot_v : update_v;
+        uint32_t fallback_v = (candidate == PART_BOOT) ? update_v : boot_v;
+
+        if (fallback_v < candidate_v) {
+            wolfBoot_printf("Rollback to lower version not allowed\n");
+            return candidate;
+        }
+#endif
         wolfBoot_erase_partition(candidate);
         candidate ^= 1; /* switch to other partition if available */
     }
