@@ -675,3 +675,33 @@ For Visual Studio, the developer command prompt will need to be activated.
     * wolfTPM v2.4.0-594-g6d5df60
     * wolfPKCS11 v2.0.0-stable-33-g81af264
     * wolfHSM v1.3.0 (8ac56d7)
+
+### V 2.8.0 - (2026-04-16)
+  * New hardware targets
+    * AMD/Xilinx Versal Gen 1 VMK180 support, including SD/QSPI boot flows and PetaLinux boot support
+    * Microchip PolarFire SoC MPFS250 support extended to M-mode/QSPI/LIM boot flows, plus eMMC/SD support
+    * New target support for NXP MCXN and MCXW71, NXP S32K14x, NXP LPC55S69, and Nordic nRF54L15
+    * Added NXP T1040 RDB support and refreshed NXP T2080 vendor-board configurations
+  * Improvements to supported targets
+    * STM32H5 TrustZone/PKCS11 integration reworked with NSC veneers, plus additional OTP and flash handling fixes
+    * PSoC6 now supports external flash dual-bank updates and read-modify-erase-write flash programming
+    * AURIX TC3xx self-update and wolfHSM configurations expanded, including RSA4096 and cert-chain examples
+    * Renesas RA6M4 and RX projects refreshed, with improved RAM-function handling for CCRX builds
+    * Improved clang/LLVM support for embedded builds and test-app image generation, with dedicated CI coverage
+  * New features and improvements
+    * Added wolfPSA integration for secure storage and TrustZone-backed PSA services
+    * Added TrustZone PSA-crypto support and PSA attestation compliance, including DICE-based attestation flows
+    * Added Zephyr integration to replace the TEE layer, with PSA-facing interfaces and sample patches
+    * Added a generic hook framework for pre-init, post-init, and boot hooks
+    * Added custom encryption-key hooks, PKCS11-backed encrypted partitions, and improved image inspection/status tooling
+    * Added monolithic self-update builds, reproducible-build support, self-header support, and expanded simulator self-update / TrustZone test coverage
+  * Bug fixes and hardening
+    * Strengthened image parsing, signing, and update flows with stricter bounds/overflow checks for signatures, TLVs, delta images, GPT/FDT parsing, disk I/O, and partition overlap
+    * Added fail-closed flash protection, stricter rollback handling in non-flash paths, and final sanity checks in boot and library boot paths
+    * Expanded constant-time comparisons and zeroization for TPM, DICE, SATA, update, and key-generation code paths
+    * Fixed self-update regressions, encrypted-partition handling, SDHCI/MMC corner cases, and assorted build/test regressions across ARM, PPC, RISC-V, and simulator targets
+  * Updated modules
+    * wolfSSL v5.9.1-stable
+    * wolfTPM v3.10.0-88-gefaab4a
+    * wolfPKCS11 v2.0.0-stable-126-g8fec695
+    * wolfHSM v1.4.0-57-g977bf18

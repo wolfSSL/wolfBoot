@@ -2,7 +2,7 @@
  *
  * Newlib syscall stubs for embedded systems without filesystem
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

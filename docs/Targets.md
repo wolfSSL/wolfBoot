@@ -1083,7 +1083,7 @@ Use `0x20000` for the boot partition and `0x02000000` for the update partition.
 
 **Expected serial output on successful boot:**
 ```
-wolfBoot Version: 2.7.0 (...)
+wolfBoot Version: 2.8.0 (...)
 Running on E51 (hart 0) in M-mode
 QSPI: Using SC QSPI Controller (0x37020100)
 QSPI: Flash ID = 0x20 0xBA 0x21

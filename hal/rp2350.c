@@ -3,7 +3,7 @@
  * Custom HAL implementation. Defines the
  * functions used by wolfboot for raspberry-pi pico2 (rp2350)
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

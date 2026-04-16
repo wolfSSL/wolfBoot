@@ -7,7 +7,7 @@
  * specified LMA ranges, sorting them by LMA, and writing them to a new,
  * reorganized ELF file. See README.md for more information.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

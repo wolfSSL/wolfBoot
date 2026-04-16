@@ -3,7 +3,7 @@
  * Unit test for multiboot2 functions
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

@@ -15,7 +15,7 @@
  *   0x10000000              : Linux kernel load address
  *   0x11800000              : Device tree load address (optional)
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  */
 
 OUTPUT_FORMAT("elf64-littleaarch64")

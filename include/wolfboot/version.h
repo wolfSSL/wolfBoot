@@ -2,7 +2,7 @@
  *
  * The wolfBoot library version
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -29,8 +29,8 @@ extern "C" {
 #endif
 
 
-#define LIBWOLFBOOT_VERSION_STRING "2.7.0"
-#define LIBWOLFBOOT_VERSION_HEX 0x02070000
+#define LIBWOLFBOOT_VERSION_STRING "2.8.0"
+#define LIBWOLFBOOT_VERSION_HEX 0x02080000
 
 #ifndef WOLFBOOT_VERSION
     #define WOLFBOOT_VERSION LIBWOLFBOOT_VERSION_HEX
