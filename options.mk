@@ -1437,6 +1437,92 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
+
+  # Additional algorithms for cert chain verification
+  # Usage: CERT_CHAIN_HASH=sha384,sha512  CERT_CHAIN_PK=rsa4096,ecc256
+  comma := ,
+  CERT_CHAIN_HASH_LIST := $(subst $(comma), ,$(CERT_CHAIN_HASH))
+  CERT_CHAIN_PK_LIST   := $(subst $(comma), ,$(CERT_CHAIN_PK))
+
+  # --- Cert chain hash algorithms ---
+  ifneq ($(filter sha256,$(CERT_CHAIN_HASH_LIST)),)
+    CFLAGS += -DCERT_CHAIN_HASH_SHA256
+  endif
+  ifneq ($(filter sha384,$(CERT_CHAIN_HASH_LIST)),)
+    CFLAGS += -DCERT_CHAIN_HASH_SHA384
+    ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+    endif
+  endif
+  ifneq ($(filter sha512,$(CERT_CHAIN_HASH_LIST)),)
+    CFLAGS += -DCERT_CHAIN_HASH_SHA512
+    ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+    endif
+  endif
+  ifneq ($(filter sha3,$(CERT_CHAIN_HASH_LIST)),)
+    CFLAGS += -DCERT_CHAIN_HASH_SHA3
+    ifeq ($(filter %/sha3.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+    endif
+  endif
+
+  # --- Cert chain PK algorithms ---
+  ifneq ($(filter rsa2048,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_RSA2048
+  endif
+  ifneq ($(filter rsa3072,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_RSA3072
+  endif
+  ifneq ($(filter rsa4096,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_RSA4096
+  endif
+  # Add RSA objects if any RSA cert chain PK is requested
+  ifneq ($(filter rsa2048 rsa3072 rsa4096,$(CERT_CHAIN_PK_LIST)),)
+    ifeq ($(filter %/rsa.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(RSA_OBJS)
+    endif
+    ifeq ($(filter %/sp_int.o %/integer.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(MATH_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ecc256,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_ECC256
+  endif
+  ifneq ($(filter ecc384,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_ECC384
+  endif
+  ifneq ($(filter ecc521,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_ECC521
+  endif
+  # Add ECC objects if any ECC cert chain PK is requested
+  ifneq ($(filter ecc256 ecc384 ecc521,$(CERT_CHAIN_PK_LIST)),)
+    ifeq ($(filter %/ecc.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ECC_OBJS)
+    endif
+    ifeq ($(filter %/sp_int.o %/integer.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(MATH_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ed25519,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_ED25519
+    ifeq ($(filter %/ed25519.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ED25519_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ed448,$(CERT_CHAIN_PK_LIST)),)
+    CFLAGS += -DCERT_CHAIN_PK_ED448
+    ifeq ($(filter %/ed448.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ED448_OBJS)
+    endif
+    ifeq ($(filter %/sha3.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+    endif
+  endif
+
 endif
 
 # Clock Speed (Hz)
