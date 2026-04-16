@@ -12,10 +12,40 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      - name: Workaround for sources.list
+        run: |
+            set -euxo pipefail
+
+            apt-cache policy
+            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
+
+            shopt -s nullglob
+
+            sudo sed -i \
+              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+              /etc/apt/sources.list || true
+
+            for f in /etc/apt/sources.list.d/*.list; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                "$f"
+            done
+
+            for f in /etc/apt/sources.list.d/*.sources; do
+              sudo sed -i \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
+                "$f"
+            done
+
+            if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
+              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
+            fi
       - name: install req
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y -q nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
       - name: setup git
         run: |
           git config --global user.email "you@example.com"
