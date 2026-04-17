@@ -72,6 +72,12 @@ static void hal_mp_init(void);
 #define FLASH_UNLOCK_ADDR2 0x555
 #endif
 
+/* FLASH_CMD_SECTOR: sector used for flash command sequences that don't target
+ * a specific sector (reset, unlock, PPB entry/exit). AMD flash command decode
+ * only looks at the low address bits, so sector 0 works for all boards with
+ * a properly mapped full-flash TLB entry. */
+#define FLASH_CMD_SECTOR 0
+
 /* Flash IO Helpers */
 #if FLASH_CFI_WIDTH == 16
 #define FLASH_IO8_WRITE(sec, n, val)      *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (((val) << 8) | (val))
@@ -164,12 +170,12 @@ void hal_ddr_init(void)
     /* DDR SDRAM mode configuration */
     set32(DDR_SDRAM_MODE, DDR_SDRAM_MODE_VAL);
     set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
-    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_VAL);
+    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_4_VAL);
+    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_5_VAL);
+    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_6_VAL);
+    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_7_VAL);
+    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_8_VAL);
     set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
 
     /* DDR Configuration */
@@ -299,6 +305,9 @@ static void hal_reconfigure_cpc_as_cache(void)
         while (dst < end) {
             *dst++ = *src++;
         }
+
+        /* Ensure all stores have drained before flushing cache lines */
+        __asm__ __volatile__("sync" ::: "memory");
 
         /* Flush D-cache and invalidate I-cache for the DDR copy */
         flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
@@ -517,9 +526,9 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     uint32_t timeout;
 
     /* Enter PPB ASO (Address Space Overlay) */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* Read PPB status for target sector: DQ0=0 means protected.
      * On 16-bit bus, must read both chip lanes to check both devices. */
@@ -531,16 +540,16 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     if ((ppb_status & 0x01) == 0x01) {
 #endif
         /* Both chips report unprotected — exit PPB mode and return */
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
         return 0;
     }
 
     /* Exit PPB ASO before calling printf (flash must be in read-array
      * mode for I-cache misses to fetch valid instructions) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
 #ifdef DEBUG_FLASH
@@ -549,24 +558,24 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
 #endif
 
     /* Re-enter PPB ASO for erase */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* PPB Erase All (clears all sectors' PPBs) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
 
     /* Wait for PPB erase completion — poll for toggle stop.
      * On 16-bit bus, read both chip lanes to ensure both complete. */
     timeout = 0;
     do {
 #if FLASH_CFI_WIDTH == 16
-        read1 = FLASH_IO16_READ(0, 0);
-        read2 = FLASH_IO16_READ(0, 0);
+        read1 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
 #else
-        read1 = FLASH_IO8_READ(0, 0);
-        read2 = FLASH_IO8_READ(0, 0);
+        read1 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
 #endif
         if (read1 == read2)
             break;
@@ -574,11 +583,11 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     } while (timeout++ < 100000); /* 1 second */
 
     /* Exit PPB ASO */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
 
     /* Reset to read-array mode */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     if (timeout >= 100000) {
@@ -663,6 +672,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int ret = 0;
     uint32_t i, sector, offset, nwords;
     const uint32_t width_bytes = FLASH_CFI_WIDTH / 8;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* Enforce alignment to flash bus width */
     if ((address % width_bytes) != 0 || (len % width_bytes) != 0) {
@@ -688,7 +704,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     /* Program one word at a time using AMD single-word program (0xA0).
@@ -741,6 +757,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret = 0;
     uint32_t sector;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -752,7 +775,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     while (len > 0) {
@@ -848,7 +871,7 @@ extern uint32_t _bootpg_addr;
 static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
 {
     uint32_t all_cores, active_cores, whoami;
-    int timeout = 50, i;
+    int timeout = 10000, i; /* 10000 * 100us = 1s, matches U-Boot convention */
 
     whoami = get32(PIC_WHOAMI); /* Get current running core number */
     all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
@@ -990,7 +1013,8 @@ static void hal_mp_init(void)
 
 void hal_prepare_boot(void)
 {
-
+    /* Intentionally empty: pre-boot cleanup (cache flush, interrupt disable)
+     * is handled by boot_ppc.c:do_boot(). */
 }
 
 #ifdef MMU

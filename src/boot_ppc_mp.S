@@ -27,6 +27,21 @@
 
 #define TORESET(x)     (x - _secondary_start_page + BOOT_ROM_ADDR)
 
+/* e6500 has 64-bit GPRs. When loading 32-bit addresses with bit 31 set
+ * (addresses >= 0x80000000), the lis instruction sign-extends, putting
+ * 0xFFFFFFFF in the upper 32 bits. This causes memory access failures.
+ * Use LOAD_ADDR32 macro to properly load 32-bit addresses on e6500. */
+#ifdef CORE_E6500
+#define LOAD_ADDR32(reg, addr) \
+        li      reg, 0; \
+        oris    reg, reg, (addr)@h; \
+        ori     reg, reg, (addr)@l
+#else
+#define LOAD_ADDR32(reg, addr) \
+        lis     reg, (addr)@h; \
+        ori     reg, reg, (addr)@l
+#endif
+
 /* Additional cores (mp) assembly code for core minimum startup and spin table.
  * All code must fit in 4KB, which gets virtually mapped via the TLB1 (MMU) and
  * loaded by core 0. Spin table entry TLB1(0) mapped for work is 64MB.
@@ -34,9 +49,9 @@
         .section .bootmp, "ax"
         .globl        _secondary_start_page
 _secondary_start_page:
-        /* Time base, MAS7 and machine check pin enable */
-        lis     r0,     (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@h
-        ori     r0, r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7)@l
+        /* Time base, MAS7 and machine check pin enable.
+         * HID0_EMCP=0x80000000 has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r0, (HID0_EMCP | HID0_TBEN | HID0_ENMAS7))
         mtspr   SPRN_HID0, r0
 
 #ifdef CORE_E500
@@ -98,9 +113,10 @@ branch_prediction:
         andi.   r1, r3, L1CSR_CE@l
         beq     2b
 
-        /* Get our PIR to figure out our table entry */
-        lis     r3,     TORESET(_spin_table_addr)@h
-        ori     r3, r3, TORESET(_spin_table_addr)@l
+        /* Get our PIR to figure out our table entry.
+         * TORESET(...) resolves to address near BOOT_ROM_ADDR (0xFFFFF000),
+         * bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r3, TORESET(_spin_table_addr))
         lwz     r3, 0(r3)
 
         /* Use PIR to determine cluster/core for spin table base at r10 */
@@ -119,7 +135,7 @@ branch_prediction:
         mr      r4, r0
         mr      r5, r4
 #endif
-        slwi    r8, r5, 6 /* spin table is padded to 64 bytes */
+        slwi    r8, r5, 6 /* multiply by ENTRY_SIZE (64 bytes) */
         /* use r10 for the spin table base address */
         add     r10, r3, r8
 
@@ -160,8 +176,9 @@ l2_poll_invclear:
         addi    r3, r8, 1
         mtspr   L2CSR1, r3
 
-        /* enable L2 with no parity */
-        lis     r3, (L2CSR0_L2E)@h
+        /* enable L2 with no parity.
+         * L2CSR0_L2E=0x80000000 has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r3, L2CSR0_L2E)
         mtspr   L2CSR0, r3
         isync
 2:
@@ -171,33 +188,37 @@ l2_poll_invclear:
 #endif
 #endif /* CORE_E5500 || CORE_E6500 */
 3:
-        /* setup mapping for the spin table, WIMGE=0b00100 */
-        lis     r13, TORESET(_spin_table_addr)@h
-        ori     r13, r13, TORESET(_spin_table_addr)@l
+        /* setup mapping for the spin table, WIMGE=0b00100.
+         * TORESET(...) has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r13, TORESET(_spin_table_addr))
         lwz     r13, 0(r13)
         /* mask by 4K */
         rlwinm  r13, r13, 0, 0, 19
 
         lis     r11, (MAS0_TLBSEL(1) | MAS0_ESEL(1))@h
         mtspr   MAS0, r11
-        lis     r11, (MAS1_VALID | MAS1_IPROT)@h
-        ori     r11, r11, (MAS1_TS | MAS1_TSIZE(BOOKE_PAGESZ_4K))@l
+        /* MAS1_VALID=0x80000000 has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r11, (MAS1_VALID | MAS1_IPROT | MAS1_TS |
+                          MAS1_TSIZE(BOOKE_PAGESZ_4K)))
         mtspr   MAS1, r11
+        /* Build MAS2 = r13 (spin table base, 4K aligned) | MAS2_M | MAS2_G.
+         * Note: both oris and ori must use r11 as source for the second op
+         * (the original code erroneously used r13 on the second op, which
+         * overwrote the upper 16 bits from the first oris). */
         oris    r11, r13, (MAS2_M | MAS2_G)@h
-        ori     r11, r13, (MAS2_M | MAS2_G)@l
+        ori     r11, r11, (MAS2_M | MAS2_G)@l
         mtspr   MAS2, r11
         oris    r11, r13, (MAS3_SX | MAS3_SW | MAS3_SR)@h
-        ori     r11, r13, (MAS3_SX | MAS3_SW | MAS3_SR)@l
+        ori     r11, r11, (MAS3_SX | MAS3_SW | MAS3_SR)@l
         mtspr   MAS3, r11
         li      r11, 0
         mtspr   MAS7, r11
         tlbwe
 
         /* _bootpg_addr has the address of _second_half_boot_page
-         * jump there in AS=1 space with cache enabled
-         */
-        lis     r13, TORESET(_bootpg_addr)@h
-        ori     r13, r13, TORESET(_bootpg_addr)@l
+         * jump there in AS=1 space with cache enabled.
+         * TORESET(...) has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r13, TORESET(_bootpg_addr))
         lwz     r11, 0(r13)
         mtspr   SRR0, r11
         mfmsr   r13
@@ -268,7 +289,7 @@ _second_half_boot_page:
         li      r8, 3
         stw     r8, ENTRY_ADDR_LOWER(r10)
 
-        /* mask branch address (64MB) to setup tlb */
+        /* Align branch address to 64MB boundary for TLB mapping below */
         rlwinm  r12, r4, 0, 0, 5
 
         /* setup registers before jump */
@@ -280,7 +301,7 @@ _second_half_boot_page:
         li      r4, 0
         li      r5, 0
         li      r6, 0
-        lis     r7, (64 * 1024 * 1024)@h
+        lis     r7, (64 * 1024 * 1024)@h /* r7 = IMA size (64MB per ePAPR) */
         li      r8, 0
         li      r9, 0
 
@@ -295,8 +316,8 @@ _second_half_boot_page:
         /* Add tlb 1 entry 0 64MB for new entry */
         lis     r10, (MAS0_TLBSEL(1) | MAS0_ESEL(0))@h
         mtspr   MAS0, r10
-        lis     r10, (MAS1_VALID | MAS1_IPROT)@h
-        ori     r10, r10, (MAS1_TSIZE(BOOKE_PAGESZ_64M))@l
+        /* MAS1_VALID=0x80000000 has bit 31 set; use LOAD_ADDR32 for e6500. */
+        LOAD_ADDR32(r10, (MAS1_VALID | MAS1_IPROT | MAS1_TSIZE(BOOKE_PAGESZ_64M)))
         mtspr   MAS1, r10
         mtspr   MAS2, r12 /* WIMGE = 0 */
         ori     r12, r12, (MAS3_SX | MAS3_SW | MAS3_SR)
@@ -309,7 +330,7 @@ _second_half_boot_page:
         rfi
 
         /* Reserve space for spin table entries */
-        .align 6 /* 64-bytes */
+        .align 6 /* 64-byte alignment for spin table entries (ENTRY_SIZE) */
         .globl _spin_table
 _spin_table:
         .space CPU_NUMCORES * ENTRY_SIZE

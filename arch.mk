@@ -1063,6 +1063,9 @@ ifeq ($(TARGET),nxp_t2080)
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
+  # Support U-Boot legacy uImage header: strip 64-byte header before jumping
+  # to the OS image (e.g. uVxWorks, uImage Linux kernel).
+  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)

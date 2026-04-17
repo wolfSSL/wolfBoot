@@ -305,10 +305,10 @@ backup_on_failure:
     image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
     if (image_ptr) {
         if (*((uint32_t*)image_ptr) == UBOOT_IMG_HDR_MAGIC) {
-            /* Note: Could parse header and get load address at 0x10 */
-
-            /* Skip 64 bytes (size of Legacy format image header) */
-            load_address += UBOOT_IMG_HDR_SZ;
+            /* Skip 64-byte legacy header in source; load address unchanged
+             * so kernel is placed at WOLFBOOT_LOAD_ADDRESS */
+            wolfBoot_printf("U-Boot Legacy header detected, skipping %d bytes\n",
+                UBOOT_IMG_HDR_SZ);
             os_image.fw_base += UBOOT_IMG_HDR_SZ;
             os_image.fw_size -= UBOOT_IMG_HDR_SZ;
         }

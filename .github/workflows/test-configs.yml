@@ -211,6 +211,24 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t2080.config
 
+  # Additional T2080 board-specific compile tests for alternate board macros.
+  nxp_t2080_test_naii_68ppc2:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t2080.config
+      make-args: CFLAGS_EXTRA=-DBOARD_NAII_68PPC2
+
+  # VPX3-152 compile test: validates board-specific code paths build cleanly.
+  # Uses default config addresses (128MB layout); real hardware needs the
+  # VPX3-152 address overrides uncommented in .config.
+  nxp_t2080_vpx3152_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t2080.config
+      make-args: CFLAGS_EXTRA=-DBOARD_CW_VPX3152
+
   nxp_ls1028a_test:
     uses: ./.github/workflows/test-build.yml
     with:

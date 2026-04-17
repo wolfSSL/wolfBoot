@@ -217,11 +217,13 @@
     #endif
     #endif
 
-    /* DDR stack configuration - relocate from CPC SRAM after DDR init
-     * Stack is at top of first 32MB of DDR, with 64KB reserved for stack
-     * Stack grows downward from DDR_STACK_TOP */
+    /* DDR stack configuration - relocate from CPC SRAM after DDR init.
+     * Stack must be ABOVE the image load area to avoid being overwritten
+     * when the OS image is copied to WOLFBOOT_LOAD_ADDRESS (0x100000).
+     * With WOLFBOOT_PARTITION_SIZE=0x800000 the image area ends at 0x900000.
+     * Place stack at 16MB to be safely above the image + DTS regions. */
     #define DDR_STACK_SIZE    (64 * 1024)        /* 64KB stack in DDR */
-    #define DDR_STACK_TOP     0x02000000UL       /* Top of first 32MB */
+    #define DDR_STACK_TOP     0x01000000UL       /* 16MB - above image area */
     #define DDR_STACK_BASE    (DDR_STACK_TOP - DDR_STACK_SIZE)
 
     /* DDR address where .ramcode is copied before CPC SRAM is released.
