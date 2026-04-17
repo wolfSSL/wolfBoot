@@ -353,6 +353,7 @@ void RAMFUNCTION wolfBoot_start(void)
         pB_ver_u = (uint32_t)pB_ver;
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
+    wolfBoot_printf("Load block size: %dKB\r\n", DISK_BLOCK_SIZE / 1024);
     max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
 
     /* Choose partition with higher version */

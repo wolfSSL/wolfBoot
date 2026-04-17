@@ -3313,6 +3313,25 @@ Set the ZCU102 boot mode switches (SW6) for SD card boot:
 | QSPI32    | 0 0 1 0       | on, on, off, on |
 | SD1       | 1 1 1 0       | off, off, off, on |
 
+**SDHCI Notes (Arasan controller)**
+
+The ZynqMP uses an Arasan SDHCI v3.0 controller. Key considerations:
+
+- **SDMA vs PIO**: The PIO (Programmed I/O) multi-block read path has a race condition on
+  this controller under compiler optimization (`-Os`/`-O2`). The BRR (Buffer Read Ready)
+  flag is re-polled too quickly between blocks, causing stale data reads that corrupt
+  firmware images. The default `SDHCI_DMA_THRESHOLD=4096` forces all multi-block reads
+  through the SDMA path, which avoids this issue entirely.
+- **HV4E redirect**: The Arasan controller does not support Host Version 4 Enable (HV4E).
+  The platform HAL in `hal/zynq.c` transparently redirects SRS22/SRS23 writes to the
+  legacy SRS00 register for 32-bit SDMA addressing.
+- **Card detect**: The Arasan controller does not support CDSS/CDTL card detect test
+  level. `SDHCI_FORCE_CARD_DETECT` is set in the config since FSBL already booted from
+  the same SD card.
+- **`DISK_BLOCK_SIZE`**: Controls the firmware read chunk size in `update_disk.c` (default
+  64KB). This determines the per-read size passed to the SDHCI driver. Must be less than
+  the SDMA buffer boundary (4KB with the default threshold).
+
 **Debug**
 
 Enable SDHCI debug output by uncommenting in the config:

@@ -40,9 +40,16 @@
 #define SDHCI_BLOCK_SIZE        512
 #endif
 
-/* DMA threshold - minimum transfer size to use DMA mode (default: 512KB) */
+/* DMA threshold - minimum transfer size (bytes) to use SDMA instead of PIO.
+ * Default 4KB: forces SDMA for virtually all multi-block CMD18 reads.
+ * The PIO multi-block read path has a known race condition on Arasan SDHCI
+ * controllers (ZynqMP, Versal) where BRR (Buffer Read Ready) is re-checked
+ * too quickly between blocks under compiler optimization (-Os/-O2), causing
+ * stale data reads and firmware integrity failures. Using SDMA avoids the
+ * BRR polling loop entirely.
+ * Override in target .config if a larger PIO window is acceptable. */
 #ifndef SDHCI_DMA_THRESHOLD
-#define SDHCI_DMA_THRESHOLD     (512U * 1024U)
+#define SDHCI_DMA_THRESHOLD     (4U * 1024U)
 #endif
 
 /* Disk test block address (platform should override) */

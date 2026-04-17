@@ -1289,7 +1289,22 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     #endif /* !SDHCI_SDMA_DISABLED */
     }
     else {
-        /* Blocking mode - buffer ready flag differs for read vs write */
+        /* PIO (Programmed I/O) mode — reads/writes data word-by-word via
+         * the SRS08 data port register.
+         *
+         * CAUTION: On Arasan SDHCI v3.0 (ZynqMP, Versal), multi-block PIO
+         * reads (CMD18) have a known race condition under compiler
+         * optimization (-Os/-O2). After reading one block, the BRR (Buffer
+         * Read Ready) flag in SRS12 may still be set from the previous
+         * block when the outer loop re-checks it. The optimized code
+         * re-polls so quickly that BRR has not yet auto-cleared, causing
+         * the next 512-byte read from SRS08 to return stale/partial data.
+         * This corrupts the loaded firmware image.
+         *
+         * Workaround: Set SDHCI_DMA_THRESHOLD low (default 4KB) so that
+         * multi-block reads use SDMA instead of this PIO path. The eMMC
+         * path manually clears BRR between blocks (W1C write below),
+         * which also avoids the race. */
         uint32_t buf_ready_flag = (dir == SDHCI_DIR_READ) ?
             SDHCI_SRS12_BRR : SDHCI_SRS12_BWR;
 
@@ -1531,15 +1546,21 @@ int sdhci_init(void)
     }
 
 #ifdef DEBUG_SDHCI
-    {
-        const char *card_type;
-#ifdef DISK_EMMC
-        card_type = "eMMC";
-#else
-        card_type = "SD";
-#endif
-        wolfBoot_printf("sdhci_init: %s status: %d\n", card_type, status);
+    if (status == 0) {
+        wolfBoot_printf("SDHCI: DMA (threshold: %dKB, buf boundary: %dKB)\n",
+            SDHCI_DMA_THRESHOLD / 1024,
+            (4 << ((SDHCI_DMA_BUFF_BOUNDARY >> 12) & 0x7))
+        );
     }
+
+    wolfBoot_printf("SDHCI: %s init, status %d\n",
+    #ifdef DISK_EMMC
+        "eMMC"
+    #else
+        "SD"
+    #endif
+        , status
+    );
 #endif
 
     return status;
