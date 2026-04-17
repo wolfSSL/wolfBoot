@@ -4071,6 +4071,17 @@ flash VA range (`0xF0000000`–`0xFFFFFFFF`). The startup assembly relocates
 CCSRBAR to `0xEF000000` (just below flash). The CPC SRAM and L1 cache addresses
 are also relocated to `0xEE900000`/`0xEE800000` to avoid overlap.
 
+**Boot ROM TLB invalidation (CW VPX3-152 only)**
+
+For VPX3-152, TLB1 Entry 2 maps the full 256 MB flash at `0xF0000000-0xFFFFFFFF`
+with IPROT. This range overlaps with the boot ROM TLB (default 4 KB at
+`0xFFFFF000`, resized to 256 KB at `0xFFFC0000` by `shrink_default_tlb1`).
+Overlapping TLB1 entries cause an e6500 multi-hit machine check. After Entry 2
+is created, the boot ROM TLB is cleared via `tlbwe` with `V=0` and `IPROT=0`;
+Entry 2 then serves all instruction fetches for the flash region including the
+boot ROM range. For NAII 68PPC2 and T2080 RDB (128 MB flash at `0xE8000000`),
+there is no overlap and the boot ROM TLB remains valid alongside Entry 2.
+
 **RAMFUNCTION Constraints**
 
 The NOR flash (two S29GL01GS x8 in parallel, 16-bit bus) enters
