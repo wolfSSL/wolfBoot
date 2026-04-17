@@ -508,6 +508,10 @@ extern int tolower(int c);
             
         #define HAVE_AESGCM
         #define GCM_TABLE
+        #define HAVE_AES_ECB
+        #define WOLFSSL_AES_OFB
+        #define WOLFSSL_AES_CFB
+        #define WOLFSSL_AES_COUNTER
     #else
         #define HAVE_HASHDRBG
         #define WOLFSSL_AES_CFB
