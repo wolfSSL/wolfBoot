@@ -133,9 +133,11 @@ void main(void)
     uint8_t boot_state, update_state;
 
     hal_init();
-    systick_init();
     leds_init();
+#ifndef TZEN
+    systick_init();
     __enable_irq();
+#endif
 
     wolfBoot_printf("\n==================================\n");
     wolfBoot_printf("LPC55S69 wolfBoot demo Application\n");
@@ -205,63 +207,69 @@ void main(void)
 }
 
 
-// #include "sys/stat.h"
-// int _getpid(void)
-// {
-//     return 1;
-// }
+#include "sys/stat.h"
+int WEAKFUNCTION _getpid(void)
+{
+    return 1;
+}
 
-// int _kill(int pid, int sig)
-// {
-//     (void)pid;
-//     (void)sig;
-//     return -1;
-// }
+int WEAKFUNCTION _kill(int pid, int sig)
+{
+    (void)pid;
+    (void)sig;
+    return -1;
+}
 
-// void _exit(int status)
-// {
-//     _kill(status, -1);
-//     while (1) {}
-// }
+void WEAKFUNCTION _exit(int status)
+{
+    _kill(status, -1);
+    while (1) {}
+}
 
-// int _read(int file, char *ptr, int len)
-// {
-//     (void)file;
-//     (void)ptr;
-//     (void)len;
-//     return -1;
-// }
+int WEAKFUNCTION _read(int file, char *ptr, int len)
+{
+    (void)file;
+    (void)ptr;
+    (void)len;
+    return -1;
+}
 
-// int _write(int file, char *ptr, int len)
-// {
-//     (void)file;
-//     (void)ptr;
-//     return len;
-// }
+int WEAKFUNCTION _write(int file, char *ptr, int len)
+{
+    (void)file;
+    (void)ptr;
+    return len;
+}
 
-// int _close(int file)
-// {
-//     (void)file;
-//     return -1;
-// }
+int WEAKFUNCTION _close(int file)
+{
+    (void)file;
+    return -1;
+}
 
-// int _isatty(int file)
-// {
-//     (void)file;
-//     return 1;
-// }
+int WEAKFUNCTION _isatty(int file)
+{
+    (void)file;
+    return 1;
+}
 
-// int _lseek(int file, int ptr, int dir)
-// {
-//     (void)file;
-//     (void)ptr;
-//     (void)dir;
-//     return 0;
-// }
+int WEAKFUNCTION _lseek(int file, int ptr, int dir)
+{
+    (void)file;
+    (void)ptr;
+    (void)dir;
+    return 0;
+}
 
-// int _fstat(int file, struct stat *st)
-// {
-//     (void)file;
-//     st->st_mode = S_IFCHR;
-//     return 0;
-// }
+int WEAKFUNCTION _fstat(int file, struct stat *st)
+{
+    (void)file;
+    st->st_mode = S_IFCHR;
+    return 0;
+}
+
+void WEAKFUNCTION *_sbrk(int incr)
+{
+    (void)incr;
+    return 0;
+}
