@@ -182,6 +182,9 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add SP C math (all architectures)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
+  # Add RSA support (needed by test suite)
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o
+
   ifneq ($(NO_ASM),1)
     # SP Cortex M
     ifneq ($(filter ARM ARM_BE,$(ARCH)),)
@@ -738,10 +741,8 @@ ifeq ($(TARGET),lpc55s69)
     else
       CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
     endif
-    LIBS+=--specs=nano.specs
-    ifneq ($(WOLFCRYPT_SUPPORT),1)
-      # Only use nosys stubs when not providing our own syscalls
-      LDFLAGS+=--specs=nosys.specs
+    ifeq ($(WOLFCRYPT_SUPPORT),1)
+      LIBS+=--specs=nano.specs
     endif
     ifeq ($(WOLFCRYPT_BENCHMARK),1)
       # Benchmark needs float printf for results
