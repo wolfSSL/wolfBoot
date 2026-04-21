@@ -4,9 +4,13 @@
 -include ./wcs/pkcs11.mk
 
 WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
+WOLFBOOT_LIB_WOLFTPM?=../lib/wolfTPM
 WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
+WOLFTPM_LOCAL_OBJDIR?=wolftpm_obj
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
+vpath %.c $(WOLFBOOT_LIB_WOLFTPM)
+vpath %.S $(WOLFBOOT_LIB_WOLFTPM)
 
 TARGET?=none
 ARCH?=ARM
@@ -98,6 +102,11 @@ endif
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_TZ=1
   WOLFCRYPT_TZ_PSA=1
+endif
+
+ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+  WOLFCRYPT_TZ=1
+  WOLFCRYPT_TZ_FTPM=1
 endif
 
 # Setup default linker flags
@@ -324,6 +333,24 @@ ifeq ($(TZEN),1)
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_aes.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_hash.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_pkcbs.o
+    endif
+    ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+        CFLAGS:=$(filter-out -DWOLFTPM_FWTPM,$(CFLAGS))
+        CFLAGS+=-DWOLFBOOT_TZ_FTPM -DWOLFBOOT_TPM -DWOLFTPM_ADV_IO
+        CFLAGS+=-DWOLFTPM_EXAMPLE_HAL
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFTPM)"
+        APP_OBJS+=./wcs/ftpm_stub.o
+        WOLFTPM_APP_OBJS+=\
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_tis.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_wrap.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_param_enc.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_util.o \
+            $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_crypto.o
+        WOLFTPM_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFTPM)/%, \
+            $(WOLFTPM_LOCAL_OBJDIR)/%, $(WOLFTPM_APP_OBJS))
+        APP_OBJS+=$(sort $(WOLFTPM_APP_OBJS))
     endif
     WOLFCRYPT_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
         $(WOLFSSL_LOCAL_OBJDIR)/%, $(WOLFCRYPT_APP_OBJS))
@@ -908,6 +935,7 @@ endif
 
 # Capture final flags for locally built wolfSSL objects.
 WOLFSSL_CFLAGS:=$(CFLAGS)
+WOLFTPM_CFLAGS:=$(CFLAGS)
 
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
@@ -995,9 +1023,19 @@ $(WOLFSSL_LOCAL_OBJDIR)/%.o: %.S
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(WOLFSSL_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+$(WOLFTPM_LOCAL_OBJDIR)/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFTPM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+$(WOLFTPM_LOCAL_OBJDIR)/%.o: %.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFTPM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
-	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR)
+	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset

@@ -810,6 +810,15 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   ifeq ($(WOLFCRYPT_TZ_PSA),1)
     $(error WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_PSA are mutually exclusive)
   endif
+  ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+    $(error WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_FTPM are mutually exclusive)
+  endif
+endif
+
+ifeq ($(WOLFCRYPT_TZ_PSA),1)
+  ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+    $(error WOLFCRYPT_TZ_PSA and WOLFCRYPT_TZ_FTPM are mutually exclusive)
+  endif
 endif
 
 ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
@@ -917,6 +926,50 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   endif
   endif
   endif
+endif
+
+ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+  CFLAGS+=-DWOLFBOOT_TZ_FTPM
+  CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+  CFLAGS+=-DWOLFTPM_FWTPM
+  CFLAGS+=-DFWTPM_NO_NV
+  CFLAGS+=-DWC_RSA_PSS
+  CFLAGS+=-DWOLFSSL_PSS_SALT_LEN_DISCOVER
+  CFLAGS+=-DFWTPM_MAX_COMMAND_SIZE=4096
+  CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
+  WOLFCRYPT_OBJS+=src/store_sbrk.o
+  WOLFCRYPT_OBJS+=src/ftpm_callable.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/fwtpm.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/fwtpm_command.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/fwtpm_crypto.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/fwtpm_nv.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_util.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_crypto.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_param_enc.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+  ifneq ($(SIGN),ED25519)
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+  endif
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
+  ifeq ($(ENCRYPT_WITH_AES128)$(ENCRYPT_WITH_AES256),)
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+  endif
+  WOLFCRYPT_OBJS+=$(RSA_OBJS)
+  ifeq ($(findstring ECC,$(SIGN)),)
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(ECC_OBJS)
+      WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  endif
+  STACK_USAGE=20000
 endif
 
 OBJS+=$(PUBLIC_KEY_OBJS)
