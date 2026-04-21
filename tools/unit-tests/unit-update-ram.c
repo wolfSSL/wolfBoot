@@ -2,7 +2,7 @@
  *
  * unit tests for update procedures in update_ram.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -82,6 +82,13 @@ static void reset_mock_stats(void)
 {
     wolfBoot_panicked = 0;
     wolfBoot_staged_ok = 0;
+}
+
+int hal_flash_protect(haladdr_t address, int len)
+{
+    (void)address;
+    (void)len;
+    return 0;
 }
 
 uint32_t get_version_ramloaded(void)
@@ -341,6 +348,7 @@ START_TEST (test_forward_update_sameversion_denied) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 1);
+    ck_assert_uint_eq(*(uint32_t *)(wolfboot_ram + 4), TEST_SIZE_SMALL);
     ck_assert(*(uint32_t *)(WOLFBOOT_PARTITION_BOOT_ADDRESS + 4) == TEST_SIZE_SMALL);
     cleanup_flash();
 }
@@ -370,8 +378,9 @@ START_TEST (test_invalid_update_type) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
+    ck_assert_int_eq(get_version_ramloaded(), 2);
     cleanup_flash();
 }
 
@@ -388,8 +397,8 @@ START_TEST (test_update_toolarge) {
 
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
@@ -406,12 +415,12 @@ START_TEST (test_invalid_sha) {
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
-    ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
     cleanup_flash();
 }
 
-START_TEST (test_emergency_rollback) {
+START_TEST (test_emergency_rollback_to_older_version_denied) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
     reset_mock_stats();
     prepare_flash();
@@ -425,7 +434,28 @@ START_TEST (test_emergency_rollback) {
 
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
-    ck_assert(get_version_ramloaded() == 1);
+    ck_assert_int_eq(get_version_ramloaded(), 2);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    cleanup_flash();
+}
+
+START_TEST (test_dualboot_candidate_rejects_testing_rollback_to_lower_version) {
+    uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    int candidate;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
+            testing_flags, 5);
+    ext_flash_lock();
+
+    candidate = wolfBoot_dualboot_candidate();
+    ck_assert_int_eq(candidate, PART_BOOT);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2U);
     cleanup_flash();
 }
 
@@ -505,6 +535,8 @@ Suite *wolfboot_suite(void)
     TCase *update_toolarge = tcase_create("Update too large");
     TCase *invalid_sha = tcase_create("Invalid SHA digest");
     TCase *emergency_rollback = tcase_create("Emergency rollback");
+    TCase *dualboot_candidate_rollback_denied =
+        tcase_create("Dualboot candidate rollback denied");
     TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
     TCase *empty_boot_partition_update = tcase_create("Empty boot partition update");
     TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
@@ -524,7 +556,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_type, test_invalid_update_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(invalid_sha, test_invalid_sha);
-    tcase_add_test(emergency_rollback, test_emergency_rollback);
+    tcase_add_test(emergency_rollback, test_emergency_rollback_to_older_version_denied);
+    tcase_add_test(dualboot_candidate_rollback_denied,
+        test_dualboot_candidate_rejects_testing_rollback_to_lower_version);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
@@ -545,6 +579,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, update_toolarge);
     suite_add_tcase(s, invalid_sha);
     suite_add_tcase(s, emergency_rollback);
+    suite_add_tcase(s, dualboot_candidate_rollback_denied);
     suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
     suite_add_tcase(s, empty_boot_partition_update);
     suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);
@@ -565,6 +600,7 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(update_toolarge, 5);
     tcase_set_timeout(invalid_sha, 5);
     tcase_set_timeout(emergency_rollback, 5);
+    tcase_set_timeout(dualboot_candidate_rollback_denied, 5);
     tcase_set_timeout(emergency_rollback_failure_due_to_bad_update, 5);
     tcase_set_timeout(empty_boot_partition_update, 5);
     tcase_set_timeout(empty_boot_but_update_sha_corrupted_denied, 5);

@@ -1,6 +1,6 @@
 /* stm32h5.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -246,6 +246,14 @@ static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
     return 1;
 }
 
+static NOINLINEFUNCTION void hal_secret_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 int hal_uds_derive_key(uint8_t *out, size_t out_len)
 {
 #if defined(FLASH_OTP_KEYSTORE)
@@ -272,9 +280,11 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
                 copy_len = out_len;
             }
             memcpy(out, uds, copy_len);
+            hal_secret_zeroize(uds, sizeof(uds));
             return 0;
         }
     }
+    hal_secret_zeroize(uds, sizeof(uds));
 #endif
 
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
@@ -764,20 +774,15 @@ void hal_prepare_boot(void)
 int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
 {
     uint32_t start_block = (flashAddress - FLASH_OTP_BASE) / FLASH_OTP_BLOCK_SIZE;
-    uint32_t count = length / FLASH_OTP_BLOCK_SIZE;
+    uint32_t count = (length + FLASH_OTP_BLOCK_SIZE - 1U) / FLASH_OTP_BLOCK_SIZE;
     uint32_t bmap = 0;
     unsigned int i;
     if (start_block + count > 32)
         return -1;
 
-    if ((length % FLASH_OTP_BLOCK_SIZE) != 0)
-    {
-        count++;
-    }
-
     /* Turn on the bits */
     for (i = start_block; i < (start_block + count); i++) {
-        bmap |= (1 << i);
+        bmap |= (1U << i);
     }
     /* Enable OTP write protection for the selected blocks */
     while ((bmap & FLASH_OTPBLR_CUR) != bmap) {

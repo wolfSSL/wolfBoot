@@ -3,7 +3,7 @@
  * Implementation for RAM based updater
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -138,6 +138,19 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t *dts_addr = NULL;
     uint32_t dts_size = 0;
 #endif
+#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
+    int boot_v_raw = (int)wolfBoot_current_firmware_version();
+    int update_v_raw = (int)wolfBoot_update_firmware_version();
+    uint32_t boot_v = 0U;
+    uint32_t update_v = 0U;
+    uint32_t max_v = 0U;
+
+    if (boot_v_raw >= 0)
+        boot_v = (uint32_t)boot_v_raw;
+    if (update_v_raw >= 0)
+        update_v = (uint32_t)update_v_raw;
+    max_v = (boot_v > update_v) ? boot_v : update_v;
+#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
 
     memset(&os_image, 0, sizeof(struct wolfBoot_image));
 
@@ -150,13 +163,28 @@ void RAMFUNCTION wolfBoot_start(void)
         else
             source_address = (uint32_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
     #else
-        active = wolfBoot_dualboot_candidate_addr((void**)&source_address);
+        if (active < 0)
+            active = wolfBoot_dualboot_candidate_addr((void**)&source_address);
+        else if (active == PART_BOOT)
+            source_address = (uint32_t*)hal_get_primary_address();
+        else
+            source_address = (uint32_t*)hal_get_update_address();
     #endif
         if (active < 0) { /* panic if no images available */
             wolfBoot_printf("No valid image found!\n");
             wolfBoot_panic();
             break;
         }
+#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
+        {
+            uint32_t active_v = (active == PART_UPDATE) ? update_v : boot_v;
+            if ((max_v > 0U) && (active_v < max_v)) {
+                wolfBoot_printf("Rollback to lower version not allowed\n");
+                wolfBoot_panic();
+                break;
+            }
+        }
+#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
 
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         wolfBoot_printf("Trying %s partition at %p\n",
@@ -390,10 +418,19 @@ backup_on_failure:
     (void)hal_hsm_server_cleanup();
 #endif
 
+#ifndef TZEN
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
+        wolfBoot_printf("Error protecting bootloader flash region\n");
+        wolfBoot_panic();
+    }
+#endif
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&os_image);
+#endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&os_image);
 #endif
 #ifdef MMU
     do_boot((uint32_t*)load_address,

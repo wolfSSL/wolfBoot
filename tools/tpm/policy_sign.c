@@ -159,7 +159,10 @@ static int PolicySign(int alg, const char* keyFile, byte* hash, word32 hashSz,
         rc = BAD_FUNC_ARG;
     }
 
-    XFREE(buf, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (buf != NULL) {
+        wc_ForceZero(buf, bufSz);
+        XFREE(buf, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
     wc_FreeRng(&rng);
 
     if (rc != 0) {
@@ -221,7 +224,7 @@ static int writeBin(const char* filename, const byte *buf, word32 bufSz)
     FILE *fp = NULL;
     size_t fileSz = 0;
 
-    fp = fopen(filename, "wt");
+    fp = fopen(filename, "wb");
     if (fp != NULL) {
         fileSz = fwrite(buf, 1, bufSz, fp);
         /* sanity check */

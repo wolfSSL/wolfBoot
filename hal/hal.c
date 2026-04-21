@@ -1,6 +1,6 @@
 /* hal.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -280,6 +280,13 @@ int hal_flash_test_dualbank(void)
 #endif /* DUALBANK_SWAP */
 
 #endif /* TEST_FLASH */
+
+WEAKFUNCTION int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
+{
+    (void)address;
+    (void)len;
+    return 0;
+}
 
 WEAKFUNCTION int hal_uds_derive_key(uint8_t *out, size_t out_len)
 {

@@ -12,6 +12,9 @@ ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
   endif
+  ifeq ($(ARMORED),1)
+    $(error USE_CLANG=1 requires ARMORED=0)
+  endif
 endif
 
 # Support for Built-in ROT into OTP flash memory
@@ -90,8 +93,12 @@ endif
 
 ## Monolithic self-update: erase covers fw_size so the payload can span
 ## the bootloader region into the contiguous boot partition.
+ifeq ($(WOLFBOOT_SELF_UPDATE_MONOLITHIC),1)
+  SELF_UPDATE_MONOLITHIC:=1
+endif
 ifeq ($(SELF_UPDATE_MONOLITHIC),1)
   CFLAGS+=-DWOLFBOOT_SELF_UPDATE_MONOLITHIC
+  DISABLE_BACKUP=1
 endif
 
 ## Persist wolfBoot self header at fixed address
@@ -710,6 +717,12 @@ ifeq ($(ALLOW_DOWNGRADE),1)
 endif
 
 ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
+  ifneq ($(WOLFBOOT_SELF_HEADER),1)
+    $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_HEADER=1)
+  endif
+  ifneq ($(SELF_UPDATE_MONOLITHIC),1)
+    $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_UPDATE_MONOLITHIC (set SELF_UPDATE_MONOLITHIC=1))
+  endif
   CFLAGS+=-D"WOLFBOOT_SKIP_BOOT_VERIFY"
 endif
 
@@ -718,7 +731,9 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
 endif
 
 ifeq ($(DISABLE_BACKUP),1)
+  $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"
+  WOLFBOOT_PARTITION_SWAP_ADDRESS?=0
 endif
 
 DEBUG_SYMBOLS?=0
@@ -783,6 +798,10 @@ ifeq ($(ARMORED),1)
   CFLAGS+=-DWOLFBOOT_ARMORED
 endif
 
+ifeq ($(WOLFBOOT_IMG_HASH_ONESHOT),1)
+  CFLAGS+=-DWOLFBOOT_IMG_HASH_ONESHOT
+endif
+
 ifeq ($(WOLFBOOT_HUGE_STACK),1)
   CFLAGS+=-DWOLFBOOT_HUGE_STACK
 endif
@@ -800,7 +819,13 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   CFLAGS+=-DCK_CALLABLE="__attribute__((cmse_nonsecure_entry))"
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11)
   CFLAGS+=-DWP11_HASH_PIN_COST=3
-  LDFLAGS+=--specs=nano.specs
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
   WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/pkcs11_store.o
   WOLFCRYPT_OBJS+=src/pkcs11_callable.o
@@ -847,7 +872,13 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
-  LDFLAGS+=--specs=nano.specs
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
   WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/psa_store.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o

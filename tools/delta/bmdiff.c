@@ -3,7 +3,7 @@
  * diff/patch tool for wolfBoot
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -97,6 +97,10 @@ int main(int argc, char *argv[])
         exit(3);
     }
     len2 = st.st_size;
+    if (len2 > MAX_SRC_SIZE) {
+        printf("%s: file too large\n", argv[2]);
+        exit(3);
+    }
     buffer = mmap(NULL, len2, PROT_READ, MAP_SHARED, fd2, 0);
     if (buffer == (void *)(-1)) {
         perror("mmap");

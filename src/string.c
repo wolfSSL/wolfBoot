@@ -3,7 +3,7 @@
  * Implementations of standard library functions to eliminate external dependencies.
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -27,9 +27,6 @@
 #endif
 
 #include <stddef.h>
-#if defined(_RENESAS_RA_)
-#include <stdint.h>
-#endif
 #if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__ \
     && !defined(__CCRX__)
 #include <string.h>
@@ -288,15 +285,30 @@ void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
     !defined(__CCRX__)
 void *memmove(void *dst, const void *src, size_t n)
 {
-    int i;
+    size_t i;
     if (dst == src)
         return dst;
     if (src < dst)  {
         const char *s = (const char *)src;
         char *d = (char *)dst;
-        for (i = n - 1; i >= 0; i--) {
-            d[i] = s[i];
+        size_t aligned_n = 0;
+#ifdef FAST_MEMCPY
+        if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
+            ((size_t)src & (sizeof(unsigned long)-1)) == 0)
+        {
+            aligned_n = n & ~(sizeof(unsigned long) - 1);
         }
+#endif
+        for (i = n; i > aligned_n; i--) {
+            d[i - 1] = s[i - 1];
+        }
+#ifdef FAST_MEMCPY
+        while (aligned_n > 0) {
+            aligned_n -= sizeof(unsigned long);
+            *(unsigned long*)(d + aligned_n) =
+                *(const unsigned long*)(s + aligned_n);
+        }
+#endif
         return dst;
     } else {
         return memcpy(dst, src, n);

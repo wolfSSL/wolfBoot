@@ -8,7 +8,7 @@ jobs:
   trustzone-emulator-tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:v1.0
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
     steps:
       - uses: actions/checkout@v4
 

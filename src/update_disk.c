@@ -4,7 +4,7 @@
  * drives and partition mapping.
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -253,12 +253,14 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     struct wolfBoot_image os_image;
     int pA_ver = 0, pB_ver = 0;
+    uint32_t pA_ver_u = 0U, pB_ver_u = 0U;
     uint32_t cur_part = 0;
     int ret = -1;
     int selected;
     uint32_t *load_address;
     int failures = 0;
     uint32_t load_off;
+    uint32_t max_ver;
     const uint8_t *hdr_ptr = NULL;
 #ifdef MMU
     uint8_t *dts_addr = NULL;
@@ -345,10 +347,16 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
-    wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver, pB_ver);
+    if (pA_ver > 0)
+        pA_ver_u = (uint32_t)pA_ver;
+    if (pB_ver > 0)
+        pB_ver_u = (uint32_t)pB_ver;
+
+    wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
+    max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
 
     /* Choose partition with higher version */
-    selected = (pB_ver > pA_ver) ? 1: 0;
+    selected = (pB_ver_u > pA_ver_u) ? 1 : 0;
 
 #ifdef WOLFBOOT_FSP
     stage2_params = stage2_get_parameters();
@@ -368,6 +376,16 @@ void RAMFUNCTION wolfBoot_start(void)
             cur_part = BOOT_PART_B;
         else
             cur_part = BOOT_PART_A;
+#ifndef ALLOW_DOWNGRADE
+        {
+            uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
+            if ((max_ver > 0U) && (cur_ver < max_ver)) {
+                wolfBoot_printf("Rollback to lower version not allowed\r\n");
+                wolfBoot_panic();
+                return;
+            }
+        }
+#endif
 
         part_name[2] = 'A' + selected;
 
@@ -498,6 +516,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
         wolfBoot_panic();
+        return;
     }
 
     disk_close(BOOT_DISK);
@@ -548,10 +567,19 @@ void RAMFUNCTION wolfBoot_start(void)
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
 #endif
+#ifndef TZEN
+    if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
+        wolfBoot_printf("Error protecting bootloader flash region\r\n");
+        wolfBoot_panic();
+    }
+#endif
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&os_image);
+#endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&os_image);
 #endif
 #ifdef DISK_ENCRYPT
     disk_decrypted_header_clear(dec_hdr);

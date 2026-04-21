@@ -3,7 +3,7 @@
  * Fixed-pool implementation of malloc/free for wolfBoot
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -171,9 +171,10 @@ struct xmalloc_slot {
         #define MP_CURVE_FIELD_COUNT_SIZE (380)
         #ifndef _LP64
             #define ECC_POINT_SIZE (232)
+            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #else
             #define ECC_POINT_SIZE (320)
-            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 5)
+            #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #endif
         #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
@@ -187,7 +188,7 @@ struct xmalloc_slot {
         #else
             #define ECC_POINT_SIZE (512)
         #endif
-        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
+        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif
@@ -200,7 +201,7 @@ struct xmalloc_slot {
         #else
             #define ECC_POINT_SIZE (608)
         #endif
-        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 5)
+        #define MP_INT_BUFFER_SIZE (MP_INT_TYPE_SIZE * 6)
         #define MP_INT_BUFFER_SIZE_1 (MP_INT_TYPE_SIZE * 6)
         #define MP_DIGIT_BUFFER_MONT_SIZE (sizeof(fp_digit)*(FP_SIZE + 1))
     #endif

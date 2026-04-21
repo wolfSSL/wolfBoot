@@ -28,7 +28,7 @@ Protocol (implemented in hal/mpfs250.c qspi_uart_program()):
          wolfBoot sends ACK (0x06) -> script sends chunk
     7. wolfBoot sends "DONE\\r\\n" and continues booting
 
-Copyright (C) 2025 wolfSSL Inc.
+Copyright (C) 2026 wolfSSL Inc.
 GPL v3
 """
 

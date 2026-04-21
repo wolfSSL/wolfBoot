@@ -54,6 +54,10 @@ jobs:
           cp config/examples/sim-dualbank.config .config
           make test-sim-internal-flash-with-update
 
+      - name: Run dualbank rollback denial simulation
+        run: |
+          tools/scripts/sim-dualbank-rollback-denied.sh
+
       - name: Run dualbank swap simulation
         run: |
           tools/scripts/sim-dualbank-swap-update.sh
@@ -329,6 +333,30 @@ jobs:
           make clean && make test-sim-internal-flash-with-update SIGN=ECC256 WOLFBOOT_SMALL_STACK=1 SPMATH=1
 
       - name: Run sunny day update test
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (ECC256, ONESHOT_HASH, SHA256)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 SPMATH=1 WOLFBOOT_IMG_HASH_ONESHOT=1
+
+      - name: Run sunny day update test (ONESHOT_HASH, SHA256)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (ECC256, ONESHOT_HASH, SHA384)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 SPMATH=1 HASH=SHA384 WOLFBOOT_IMG_HASH_ONESHOT=1
+
+      - name: Run sunny day update test (ONESHOT_HASH, SHA384)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Build wolfboot.elf (ECC256, ONESHOT_HASH, SHA3)
+        run: |
+          make clean && make test-sim-internal-flash-with-update SIGN=ECC256 SPMATH=1 HASH=SHA3 WOLFBOOT_IMG_HASH_ONESHOT=1
+
+      - name: Run sunny day update test (ONESHOT_HASH, SHA3)
         run: |
           tools/scripts/sim-sunnyday-update.sh
 

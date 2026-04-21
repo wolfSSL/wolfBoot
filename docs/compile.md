@@ -189,11 +189,29 @@ falls in one of these cases, wolfBoot compilation will terminate with an explici
 In some cases you might have enough memory available to allow large stack allocations.
 To circumvent the compile-time checks on the maximum allowed stack size, use `WOLFBOOT_HUGE_STACK=1`.
 
+### One-shot hash verification
+
+By default, wolfBoot hashes firmware images in blocks of `WOLFBOOT_SHA_BLOCK_SIZE` bytes during
+verification. This block-by-block approach is required when firmware resides in external flash or
+other non-memory-mapped storage, where data must be read through intermediate buffers.
+
+When firmware images are stored in directly memory-mapped flash (e.g. internal flash with
+execute-in-place support), the block-by-block overhead can be eliminated by enabling
+`WOLFBOOT_IMG_HASH_ONESHOT=1`. With this option, the entire image buffer is passed to the wolfCrypt
+hash function in a single call, which can improve verification performance.
+
+**warning** This option assumes that `fw_base` pointers are directly dereferenceable for the full
+firmware size. It is incompatible with `EXT_FLASH=1` configurations where partitions reside on
+external SPI or UART flash. Only use `WOLFBOOT_IMG_HASH_ONESHOT=1` when all firmware partitions are
+in directly addressable, memory-mapped flash.
+
 ### Disable Backup of current running firmware
 
 Optionally, it is possible to disable the backup copy of the current running firmware upon the installation of the
 update. This implies that no fall-back mechanism is protecting the target from a faulty firmware installation, but may be useful
-in some cases where it is not possible to write on the update partition from the bootloader.
+in some cases where it is not possible to write on the update partition from the bootloader. This also removes the
+power-fail-safe swap behavior: if power is lost while the update is being copied into the BOOT partition, the original
+firmware may already be partially overwritten and the device can be left unrecoverable.
 The associated compile-time option is
 
 `DISABLE_BACKUP=1`

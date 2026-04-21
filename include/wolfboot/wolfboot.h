@@ -2,7 +2,7 @@
  *
  * The wolfBoot API definitions.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -80,6 +80,20 @@ extern "C" {
 #    define UNUSEDFUNCTION __attribute__((unused))
 #  else
 #    define UNUSEDFUNCTION
+#  endif
+#endif
+
+#ifndef NOINLINEFUNCTION
+#  if defined(__has_attribute)
+#    if __has_attribute(noinline)
+#      define NOINLINEFUNCTION __attribute__((noinline))
+#    else
+#      define NOINLINEFUNCTION
+#    endif
+#  elif defined(__GNUC__) || defined(__CC_ARM)
+#    define NOINLINEFUNCTION __attribute__((noinline))
+#  else
+#    define NOINLINEFUNCTION
 #  endif
 #endif
 
@@ -185,6 +199,15 @@ extern "C" {
 #endif
 #endif /* WOLFBOOT_SELF_HEADER */
 
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY) && !defined(WOLFBOOT_SELF_HEADER)
+#error "WOLFBOOT_SKIP_BOOT_VERIFY requires WOLFBOOT_SELF_HEADER"
+#endif
+
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY) && \
+    !defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC)
+#error "WOLFBOOT_SKIP_BOOT_VERIFY requires WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+#endif
+
 #ifdef BIG_ENDIAN_ORDER
 #    define WOLFBOOT_MAGIC          0x574F4C46 /* WOLF */
 #    define WOLFBOOT_MAGIC_TRAIL    0x424F4F54 /* BOOT */
@@ -215,6 +238,7 @@ extern "C" {
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */
+#define AUTH_KEY_NONE    0x00
 #define AUTH_KEY_ED25519 0x01
 #define AUTH_KEY_ECC256  0x02
 #define AUTH_KEY_RSA2048 0x03
@@ -224,9 +248,9 @@ extern "C" {
 #define AUTH_KEY_ECC521  0x07
 #define AUTH_KEY_RSA3072 0x08
 #define AUTH_KEY_LMS     0x09
-                        /* 0x0A...0x0F reserved */
-#define AUTH_KEY_XMSS    0x10
-#define AUTH_KEY_ML_DSA  0x11
+#define AUTH_KEY_XMSS    0x0A
+#define AUTH_KEY_ML_DSA  0x0B
+#define AUTH_KEY_NUM     0x0C
 
 /*
  * 8 bits: auth type
@@ -462,6 +486,26 @@ extern "C" {
  #include "keystore.h"
 
 #endif /* defined WOLFBOOT */
+
+/* Monolithic self-update: imply DISABLE_BACKUP and enforce prerequisites */
+#ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+  #ifndef DISABLE_BACKUP
+    #define DISABLE_BACKUP
+  #endif
+  #ifdef DELTA_UPDATES
+    #error "DELTA_UPDATES is not compatible with WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+  #endif
+  #ifdef NVM_FLASH_WRITEONCE
+    #error "NVM_FLASH_WRITEONCE is not compatible with WOLFBOOT_SELF_UPDATE_MONOLITHIC"
+  #endif
+  #ifndef RAM_CODE
+    #error "WOLFBOOT_SELF_UPDATE_MONOLITHIC requires RAM_CODE"
+  #endif
+#endif
+
+#if defined(DISABLE_BACKUP) && defined(DELTA_UPDATES)
+  #error "DELTA_UPDATES requires swap partition (incompatible with DISABLE_BACKUP)"
+#endif
 
 #define PART_BOOT   0
 #define PART_UPDATE 1

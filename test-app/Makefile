@@ -53,7 +53,10 @@ ifeq ($(HASH),SHA3_384)
   CFLAGS+=-D"WOLFBOOT_HASH_SHA3_384"
 endif
 
-
+STACK_USAGE_LIMIT:=1024
+ifeq ($(TARGET),sim)
+  STACK_USAGE_LIMIT:=4608
+endif
 
 ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
@@ -63,7 +66,7 @@ else
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX_TC3)
     ifneq ($(USE_CLANG),1)
-      CFLAGS+=-Wstack-usage=1024
+      CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
     endif
   endif
   CFLAGS+=-DTARGET_$(TARGET) -I../include
@@ -88,7 +91,7 @@ endif
 include ../arch.mk
 
 ifeq ($(USE_CLANG),1)
-  APP_OBJS+=../src/string.o
+  APP_NEEDS_STRING:=1
 endif
 
 # Optional alias for clearer TZ PSA selection in app builds.
@@ -103,8 +106,16 @@ LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 
+ifeq ($(USE_CLANG),1)
+  APP_OBJS+=../src/clang_sections.o
+endif
+
 ifeq ($(DEBUG_UART),1)
     CFLAGS+=-DDEBUG_UART
+    APP_NEEDS_STRING:=1
+endif
+
+ifeq ($(APP_NEEDS_STRING),1)
     APP_OBJS+=../src/string.o
 endif
 
@@ -295,8 +306,12 @@ ifeq ($(TZEN),1)
                 WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
             endif
         endif
-        CFLAGS+=-DWOLFBOOT_SECURE_CALLS -Wstack-usage=19184
-        LDFLAGS+=--specs=nosys.specs -u _printf_float
+        CFLAGS+=-DWOLFBOOT_SECURE_CALLS
+        ifneq ($(USE_CLANG),1)
+          CFLAGS+=-Wstack-usage=19184
+          LDFLAGS+=--specs=nosys.specs
+        endif
+        LDFLAGS+=-u _printf_float
     endif
     ifeq ($(WOLFCRYPT_TZ_PSA),1)
         CFLAGS+=-DWOLFCRYPT_TZ_PSA -DWOLFSSL_HAVE_PSA
@@ -512,6 +527,8 @@ ifeq ($(TARGET),sim)
   # LD on MacOS does not support "-Map="
   LDMAPSUPPORTED=$(shell $(CC) -Wl,-Map=image.map 2>&1 | grep 'unknown option')
   LDFLAGS=
+  CFLAGS+=-fno-pie
+  LDFLAGS+=-no-pie
   ifeq ($(FORCE_32BIT),1)
     LDFLAGS+=-m32
     CFLAGS+=-m32

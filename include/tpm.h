@@ -1,6 +1,6 @@
 /* tpm.h
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -77,6 +77,10 @@ int wolfBoot_tpm2_clear(void);
 #if defined(WOLFBOOT_TPM_VERIFY) || defined(WOLFBOOT_TPM_SEAL)
 int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     TPM_ALG_ID* pAlg);
+#endif
+
+#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+int wolfBoot_constant_compare(const uint8_t* a, const uint8_t* b, uint32_t len);
 #endif
 
 #ifdef WOLFBOOT_TPM_KEYSTORE

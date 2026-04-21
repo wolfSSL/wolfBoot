@@ -25,7 +25,7 @@ SECTIONS
         *(.ARM.exidx*)
     } > FLASH
 
-    .gnu.sgstubs :
+    .gnu.sgstubs ORIGIN(FLASH_NSC) :
     {
         . = ALIGN(32);
         *(.gnu.sgstubs*)   /* Secure Gateway stubs */

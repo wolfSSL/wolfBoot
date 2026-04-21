@@ -86,6 +86,7 @@ tools/keytools/Debug
 tools/keytools/Release
 tools/keytools/otp/otp-keystore-primer
 
+
 # delta binaries
 tools/delta/bmdiff
 tools/delta/bmpatch
@@ -113,6 +114,7 @@ include/target.h
 .wolfboot-offset
 .wolfboot-partition-size
 .bootloader-partition-size
+NVChip
 MPLabX/wolfBoot-SAME51.X/.generated_files/
 test-dummy-ca/**
 
@@ -171,6 +173,21 @@ tools/unit-tests/unit-store-sbrk
 tools/unit-tests/unit-tpm-blob
 tools/unit-tests/unit-update-disk
 tools/unit-tests/unit-policy-sign
+tools/unit-tests/unit-fdt
+tools/unit-tests/unit-hal-otp
+tools/unit-tests/unit-rot-auth
+tools/unit-tests/unit-sdhci-response-bits
+tools/unit-tests/unit-tpm-check-rot-auth
+tools/unit-tests/unit-policy-create
+tools/unit-tests/unit-sign-encrypted-output
+tools/unit-tests/unit-update-flash-delta
+tools/unit-tests/unit-update-flash-self-update
+tools/unit-tests/unit-loader-tpm-init
+tools/unit-tests/unit-update-ram-nofixed
+tools/unit-tests/unit-max-space
+tools/unit-tests/unit-sdhci-disk-unaligned
+
+
 
 
 
@@ -362,3 +379,4 @@ image.ub
 system-default.dtb
 test_output/
 sdcard.img
+

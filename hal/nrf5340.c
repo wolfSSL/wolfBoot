@@ -1,6 +1,6 @@
 /* nrf5340.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -827,7 +827,7 @@ void hal_init(void)
 
 #ifdef __WOLFBOOT
 /* enable write protection for the region of flash specified */
-int hal_flash_protect(uint32_t start, uint32_t len)
+int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
 {
     /* only application core supports SPU */
 #ifdef TARGET_nrf5340_app
@@ -884,14 +884,6 @@ static void periph_unsecure()
 
 void hal_prepare_boot(void)
 {
-    /* Write protect bootloader region of flash.
-     * Not needed in TrustZone configs because the application
-     * runs in non-secure mode and the bootloader partition is marked as
-     * secure. */
-#ifndef TZEN
-    hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE);
-#endif
-
     if (enableShm) {
     #ifdef TARGET_nrf5340_net
         if (doUpdateNet) {

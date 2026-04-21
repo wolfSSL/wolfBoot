@@ -3,7 +3,7 @@
  * Unit test for parser functions in image.c
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -186,7 +186,7 @@ static const unsigned char test_img_v200000000_wrong_pubkey_bin[] = {
 
 static uint16_t _find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr);
 
-static void patch_pubkey_hint(uint8_t *img, uint32_t img_len)
+static void patch_pubkey_hint_slot(uint8_t *img, uint32_t img_len, uint8_t slot)
 {
     uint8_t *ptr = NULL;
     uint16_t len;
@@ -195,8 +195,13 @@ static void patch_pubkey_hint(uint8_t *img, uint32_t img_len)
     (void)img_len;
     len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_PUBKEY, &ptr);
     ck_assert_int_eq(len, WOLFBOOT_SHA_DIGEST_SIZE);
-    key_hash(0, hash);
+    key_hash(slot, hash);
     memcpy(ptr, hash, WOLFBOOT_SHA_DIGEST_SIZE);
+}
+
+static void patch_pubkey_hint(uint8_t *img, uint32_t img_len)
+{
+    patch_pubkey_hint_slot(img, img_len, 0);
 }
 
 static void patch_signature_len(uint8_t *img, uint32_t img_len, uint16_t new_len)
@@ -222,6 +227,39 @@ static void patch_image_type_auth(uint8_t *img, uint32_t img_len)
     ck_assert_int_eq(len, sizeof(uint16_t));
     type = (uint16_t)(ptr[0] | (ptr[1] << 8));
     type = (uint16_t)((type & ~HDR_IMG_TYPE_AUTH_MASK) | HDR_IMG_TYPE_AUTH);
+    ptr[0] = (uint8_t)(type & 0xFF);
+    ptr[1] = (uint8_t)(type >> 8);
+}
+
+static void patch_image_type_auth_value(uint8_t *img, uint32_t img_len,
+        uint16_t auth)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+    uint16_t type;
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &ptr);
+    ck_assert_int_eq(len, sizeof(uint16_t));
+    type = (uint16_t)(ptr[0] | (ptr[1] << 8));
+    type = (uint16_t)((type & ~HDR_IMG_TYPE_AUTH_MASK) |
+            (auth & HDR_IMG_TYPE_AUTH_MASK));
+    ptr[0] = (uint8_t)(type & 0xFF);
+    ptr[1] = (uint8_t)(type >> 8);
+}
+
+static void patch_image_type_part(uint8_t *img, uint32_t img_len, uint16_t part)
+{
+    uint8_t *ptr = NULL;
+    uint16_t len;
+    uint16_t type;
+
+    (void)img_len;
+    len = _find_header(img + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE, &ptr);
+    ck_assert_int_eq(len, sizeof(uint16_t));
+    type = (uint16_t)(ptr[0] | (ptr[1] << 8));
+    type = (uint16_t)((type & ~HDR_IMG_TYPE_PART_MASK) |
+            (part & HDR_IMG_TYPE_PART_MASK));
     ptr[0] = (uint8_t)(type & 0xFF);
     ptr[1] = (uint8_t)(type >> 8);
 }
@@ -672,6 +710,80 @@ START_TEST(test_verify_authenticity_bad_siglen)
     ck_assert_int_eq(ret, -1);
 }
 END_TEST
+
+START_TEST(test_verify_authenticity_rejects_mismatched_auth_type)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_auth_value(buf, sizeof(buf), HDR_IMG_TYPE_AUTH_RSA2048);
+    patch_pubkey_hint(buf, sizeof(buf));
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ext_flash_write(0, buf, sizeof(buf));
+
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    test_img.part = PART_UPDATE;
+    test_img.signature_ok = 1;
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
+START_TEST(test_verify_authenticity_rejects_disallowed_key_mask)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_auth(buf, sizeof(buf));
+    patch_pubkey_hint_slot(buf, sizeof(buf), 1);
+    patch_image_type_part(buf, sizeof(buf), HDR_IMG_TYPE_WOLFBOOT);
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ext_flash_write(0, buf, sizeof(buf));
+
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    test_img.part = PART_UPDATE;
+    test_img.signature_ok = 1;
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
+START_TEST(test_verify_authenticity_allows_permitted_key_mask)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_auth(buf, sizeof(buf));
+    patch_pubkey_hint_slot(buf, sizeof(buf), 1);
+    patch_image_type_part(buf, sizeof(buf), HDR_IMG_TYPE_APP);
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ecc_import_fail = 0;
+    ecc_init_fail = 0;
+    ext_flash_erase(0, 2 * WOLFBOOT_SECTOR_SIZE);
+    ext_flash_write(0, buf, sizeof(buf));
+
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    test_img.part = PART_UPDATE;
+    test_img.signature_ok = 1;
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, 0);
+}
+END_TEST
 #endif
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -723,6 +835,7 @@ START_TEST(test_open_image)
     ext_flash_erase(0, WOLFBOOT_SECTOR_SIZE);
     ret = wolfBoot_open_image(&img, PART_UPDATE);
     ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
 
     /* Swap partition */
     ret = wolfBoot_open_image(&img, PART_SWAP);
@@ -756,6 +869,15 @@ START_TEST(test_open_image)
     ck_assert_ptr_eq(img.hdr, (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
     ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
             + 256);
+
+    /* Invalid external header must keep hdr_ok cleared on failure */
+    ext_flash_erase(0, WOLFBOOT_SECTOR_SIZE);
+    memset(&img, 0, sizeof(img));
+    hdr_cpy_done = 0;
+    ret = wolfBoot_open_image_external(&img, PART_UPDATE,
+            (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
 
     /* Self header must reject sizes beyond the partition payload budget */
     memset(self_hdr, 0xFF, sizeof(self_hdr));
@@ -826,6 +948,12 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(tcase_verify_authenticity, 20);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
+    tcase_add_test(tcase_verify_authenticity,
+            test_verify_authenticity_rejects_mismatched_auth_type);
+    tcase_add_test(tcase_verify_authenticity,
+            test_verify_authenticity_rejects_disallowed_key_mask);
+    tcase_add_test(tcase_verify_authenticity,
+            test_verify_authenticity_allows_permitted_key_mask);
     suite_add_tcase(s, tcase_verify_authenticity);
 #endif
 

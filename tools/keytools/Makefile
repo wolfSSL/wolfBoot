@@ -1,7 +1,5 @@
 # wolfBoot KeyGen and Signing Tool
 
--include ../../.config
-
 V?=0
 ifeq ($(V),0)
   Q=@
@@ -18,6 +16,7 @@ LD      = gcc
 WOLFBOOTDIR = ../..
 CFLAGS  = -Wall -Wextra -Werror
 CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFBOOT_LIB_WOLFSSL) -I$(WOLFBOOTDIR)/include
+DEPFLAGS = -MMD -MP
 LDFLAGS =
 OBJDIR = ./
 LIBS =
@@ -112,6 +111,7 @@ OBJS_REAL+=\
 OBJS_REAL+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
+DEPS=$(OBJS_VIRT:.o=.d) sign.d keygen.d
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/
 vpath %.c $(WOLFBOOTDIR)/src/
 vpath %.c ./
@@ -125,11 +125,11 @@ debug: all
 
 # build objects
 $(OBJDIR)/%.o: %.c
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFBOOTDIR)/src/%.c
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/%.c
-	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+	$(Q)$(CC) $(CFLAGS) $(DEPFLAGS) -c -o $@ $<
 
 # build templates
 sign: $(OBJS_VIRT) $(LIBS) sign.o
@@ -141,5 +141,6 @@ keygen: $(OBJS_VIRT) $(LIBS) keygen.o
 	$(Q)$(LD) -o $@ $@.o $(OBJS_VIRT) $(LIBS) $(LDFLAGS)
 
 clean:
-	rm -f sign keygen *.o
+	rm -f sign keygen *.o *.d
 
+-include $(DEPS)

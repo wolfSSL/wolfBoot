@@ -3,7 +3,7 @@
  * Unit test for parser functions in libwolfboot.c
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -342,6 +342,19 @@ START_TEST(test_wolfBoot_set_partition_state)
 
 END_TEST
 
+START_TEST(test_wolfBoot_get_partition_state_rejects_erased_magic)
+{
+    uint8_t st = IMG_STATE_SUCCESS;
+
+    mock_reset_partition_states();
+
+    /* With no magic trailer set, reads must fail. */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &st), -1);
+    ck_assert_uint_eq(st, IMG_STATE_SUCCESS);
+    ck_assert_uint_eq(mock_state[PART_UPDATE].getstate_called, 0);
+}
+END_TEST
+
 START_TEST(test_wolfBoot_misc_utils)
 {
     uint16_t word2 = 0xA0B1;
@@ -373,6 +386,8 @@ Suite *wolfboot_suite(void)
     TCase* tcase_wolfBoot_set_partition_state = tcase_create("wolfBoot_set_partition_state");
     tcase_set_timeout(tcase_wolfBoot_set_partition_state, 20);
     tcase_add_test(tcase_wolfBoot_set_partition_state, test_wolfBoot_set_partition_state);
+    tcase_add_test(tcase_wolfBoot_set_partition_state,
+        test_wolfBoot_get_partition_state_rejects_erased_magic);
     suite_add_tcase(s, tcase_wolfBoot_set_partition_state);
     
     TCase* tcase_wolfBoot_misc_utils = tcase_create("wolfBoot_misc_utils");

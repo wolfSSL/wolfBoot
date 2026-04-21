@@ -2,7 +2,7 @@
  *
  * Test bare-metal application for NXP T1024.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *

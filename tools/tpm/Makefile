@@ -91,6 +91,12 @@ debug: all
 swtpm:CFLAGS+=-DWOLFTPM_SWTPM
 swtpm:all
 
+# The TPM host tools consume the generated root keystore just like the
+# bootloader build. In a clean CI workspace, regenerate it through the
+# top-level makefile before compiling the local keystore object.
+$(WOLFBOOTDIR)/src/keystore.c:
+	$(Q)$(MAKE) -C $(WOLFBOOTDIR) src/keystore.c
+
 # build objects
 $(OBJDIR)/%.o: %.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
@@ -102,6 +108,8 @@ $(OBJDIR)/%.o: $(WOLFBOOT_LIB_WOLFTPM)/src/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
 $(OBJDIR)/%.o: $(WOLFBOOT_LIB_WOLFTPM)/hal/%.c
 	$(Q)$(CC) $(CFLAGS) -c -o $@ $<
+
+$(OBJDIR)/keystore.o: $(WOLFBOOTDIR)/src/keystore.c
 
 # build templates
 rot: $(OBJS_VIRT) rot.o

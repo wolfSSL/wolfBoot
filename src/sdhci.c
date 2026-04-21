@@ -3,7 +3,7 @@
  * Cadence SD Host Controller Interface (SDHCI) Driver
  * Generic implementation supporting SD cards and eMMC.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -565,7 +565,7 @@ static uint32_t sdhci_get_response_bits(int from, int count)
     resp[3] = SDHCI_REG(SDHCI_SRS07);
 
     ret = resp[off] >> shft;
-    if ((from + shft) > 32) {
+    if ((shft + count) > 32) {
         ret |= resp[off + 1] << ((32 - shft) % 32);
     }
     return ret & mask;
@@ -1550,6 +1550,9 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
             start_offset != 0 ||            /* start not block aligned */
             ((uintptr_t)buf % 4) != 0)      /* buf not 4-byte aligned */
         {
+            if (read_sz > (SDHCI_BLOCK_SIZE - start_offset)) {
+                read_sz = SDHCI_BLOCK_SIZE - start_offset;
+            }
             /* block read to temporary buffer */
             status = sdhci_read(MMC_CMD17_READ_SINGLE, block_addr,
                 tmp_block, SDHCI_BLOCK_SIZE);
@@ -1602,6 +1605,9 @@ int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
             start_offset != 0 ||             /* start not block aligned */
             ((uintptr_t)buf % 4) != 0)       /* buf not 4-byte aligned */
         {
+            if (write_sz > (SDHCI_BLOCK_SIZE - start_offset)) {
+                write_sz = SDHCI_BLOCK_SIZE - start_offset;
+            }
             /* read-modify-write for partial block */
             status = sdhci_read(MMC_CMD17_READ_SINGLE, block_addr,
                 tmp_block, SDHCI_BLOCK_SIZE);

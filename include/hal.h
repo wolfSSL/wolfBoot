@@ -2,7 +2,7 @@
  *
  * The HAL API definitions.
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -87,6 +87,11 @@ uint64_t hal_get_timer_us(void);
 #endif
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
+/*
+ * Lock the flash region [address, address + len) against writes.
+ * Return 0 on success, or a negative value on failure.
+ */
+int hal_flash_protect(haladdr_t address, int len);
 void hal_prepare_boot(void);
 
 #ifdef DUALBANK_SWAP

@@ -1,6 +1,6 @@
 /* library.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -83,6 +83,12 @@ void hal_prepare_boot(void)
     return;
 }
 
+void WEAKFUNCTION wolfBoot_panic(void)
+{
+    wolfBoot_printf("wolfBoot: PANIC!\n");
+    exit('P');
+}
+
 int do_boot(uint32_t* v)
 {
     wolfBoot_printf("booting %p"
@@ -143,6 +149,13 @@ int wolfBoot_start(void)
 
     wolfBoot_printf("Firmware Valid\n");
 
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    if ((os_image.hdr_ok != 1U) || (os_image.sha_ok != 1U) ||
+        (os_image.signature_ok != 1U)) {
+        wolfBoot_panic();
+    }
+    PART_SANITY_CHECK(&os_image);
+#endif
     do_boot((uint32_t*)os_image.fw_base);
 
  exit:

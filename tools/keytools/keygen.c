@@ -3,7 +3,7 @@
  * C native key generation tool
  *
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -95,19 +95,6 @@
 
 #include "wolfboot/wolfboot.h"
 
-
-#define KEYGEN_NONE    0
-#define KEYGEN_ED25519 1
-#define KEYGEN_ECC256  2
-#define KEYGEN_RSA2048 3
-#define KEYGEN_RSA4096 4
-#define KEYGEN_ED448   5
-#define KEYGEN_ECC384  6
-#define KEYGEN_ECC521  7
-#define KEYGEN_RSA3072 8
-#define KEYGEN_LMS     9
-#define KEYGEN_XMSS    10
-#define KEYGEN_ML_DSA  11
 
 /* Globals */
 static FILE *fpub, *fpub_image;
@@ -425,34 +412,34 @@ static uint32_t get_pubkey_size(uint32_t keyType)
     uint32_t size = 0;
 
     switch (keyType) {
-        case KEYGEN_ED25519:
+        case AUTH_KEY_ED25519:
             size = KEYSTORE_PUBKEY_SIZE_ED25519;
             break;
-        case KEYGEN_ED448:
+        case AUTH_KEY_ED448:
             size = KEYSTORE_PUBKEY_SIZE_ED448;
             break;
-        case KEYGEN_ECC256:
+        case AUTH_KEY_ECC256:
             size = KEYSTORE_PUBKEY_SIZE_ECC256;
             break;
-        case KEYGEN_ECC384:
+        case AUTH_KEY_ECC384:
             size = KEYSTORE_PUBKEY_SIZE_ECC384;
             break;
-        case KEYGEN_RSA2048:
+        case AUTH_KEY_RSA2048:
             size = KEYSTORE_PUBKEY_SIZE_RSA2048;
             break;
-        case KEYGEN_RSA3072:
+        case AUTH_KEY_RSA3072:
             size = KEYSTORE_PUBKEY_SIZE_RSA3072;
             break;
-        case KEYGEN_RSA4096:
+        case AUTH_KEY_RSA4096:
             size = KEYSTORE_PUBKEY_SIZE_RSA4096;
             break;
-        case KEYGEN_LMS:
+        case AUTH_KEY_LMS:
             size = KEYSTORE_PUBKEY_SIZE_LMS;
             break;
-        case KEYGEN_XMSS:
+        case AUTH_KEY_XMSS:
             size = KEYSTORE_PUBKEY_SIZE_XMSS;
             break;
-        case KEYGEN_ML_DSA:
+        case AUTH_KEY_ML_DSA:
         {
             char *env_ml_dsa_level = getenv("ML_DSA_LEVEL");
             if (env_ml_dsa_level == NULL) {
@@ -490,6 +477,11 @@ void keystore_add(uint32_t ktype, uint8_t *key, uint32_t sz, const char *keyfile
     static int id_slot = 0;
     struct keystore_slot sl;
     size_t slot_size;
+
+    if (ktype >= AUTH_KEY_NUM) {
+        fprintf(stderr, "error: unknown key type %u\n", ktype);
+        exit(1);
+    }
 
     fprintf(fpub, Slot_hdr,  keyfile, id_slot, KType[ktype], id_mask, sz);
     if (noLocalKeys) {
@@ -547,48 +539,67 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask)
     uint8_t priv_der[4096], pub_der[2048];
     int privlen, publen;
     FILE *fpriv;
+    int ret = 0;
+    int exit_code = 0;
+    int rsa_init = 0;
 
-    if (wc_InitRsaKey(&k, NULL) != 0) {
+    ret = wc_InitRsaKey(&k, NULL);
+    if (ret != 0) {
         fprintf(stderr, "Unable to initialize RSA%d key\n", kbits);
         exit(1);
     }
+    rsa_init = 1;
 
-    if (wc_MakeRsaKey(&k, kbits, 65537, &rng) != 0) {
+    ret = wc_MakeRsaKey(&k, kbits, 65537, &rng);
+    if (ret != 0) {
         fprintf(stderr, "Unable to create RSA%d key\n", kbits);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     privlen = wc_RsaKeyToDer(&k, priv_der, kbits);
     if (privlen <= 0) {
         fprintf(stderr, "Unable to export private key to DER\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     publen = wc_RsaKeyToPublicDer(&k, pub_der, kbits);
     if (publen <= 0) {
         fprintf(stderr, "Unable to export public key\n");
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     printf("RSA public key len: %d bytes\n", publen);
     fpriv = fopen(keyfile, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", keyfile, strerror(errno));
-        exit(4);
+        exit_code = 4;
+        goto cleanup;
     }
     fwrite(priv_der, privlen, 1, fpriv);
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         if (export_pubkey_file(keyfile, pub_der, publen) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(5);
+            exit_code = 5;
+            goto cleanup;
         }
     }
 
     if (kbits == 2048)
-        keystore_add(KEYGEN_RSA2048, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA2048, pub_der, publen, keyfile, id_mask);
     else if (kbits == 3072)
-        keystore_add(KEYGEN_RSA3072, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA3072, pub_der, publen, keyfile, id_mask);
     else if (kbits == 4096)
-        keystore_add(KEYGEN_RSA4096, pub_der, publen, keyfile, id_mask);
+        keystore_add(AUTH_KEY_RSA4096, pub_der, publen, keyfile, id_mask);
+
+cleanup:
+    wc_ForceZero(priv_der, sizeof(priv_der));
+    if (rsa_init)
+        wc_FreeRsaKey(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 #define MAX_ECC_KEY_SIZE 66
@@ -605,19 +616,24 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     uint8_t priv_der[ECC_BUFSIZE];
     int privlen;
     uint8_t k_buffer[2 * MAX_ECC_KEY_SIZE];
-    FILE *fpriv;
+    FILE *fpriv = NULL;
+    int exit_code = 0;
+    int key_init = 0;
 
     wc_ecc_init(&k);
+    key_init = 1;
 
     if (wc_ecc_make_key(&rng, ecc_key_size, &k) != 0) {
         fprintf(stderr, "Unable to create ecc key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_EccKeyToDer(&k, priv_der, (word32)sizeof(priv_der));
     if (ret <= 0) {
         fprintf(stderr, "Unable to export private key to DER\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     privlen = ret;
     ret = 0;
@@ -625,20 +641,23 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
     if (wc_ecc_export_private_raw(&k, Qx, &qxsize, Qy, &qysize, d, &dsize) != 0)
     {
         fprintf(stderr, "Unable to export private key to raw\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
 
     if (wc_ecc_export_public_raw(&k, Qx, &qxsize, Qy, &qysize ) != 0)
     {
         fprintf(stderr, "Unable to export public key\n");
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
 
     fpriv = fopen(priv_fname, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", priv_fname,
                 strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
 
     if (saveAsDer) {
@@ -652,11 +671,12 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         fwrite(d, dsize, 1, fpriv);
     }
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         int pubOutLen;
         /* Reuse priv_der buffer for public key */
-        memset(priv_der, 0, sizeof(priv_der));
+        wc_ForceZero(priv_der, sizeof(priv_der));
 
         if (saveAsDer) {
             /* If you want public key also exported as a DER file and not as RAW
@@ -673,26 +693,37 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         if (ret < 0) {
             fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
                     ret);
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
         if (export_pubkey_file(priv_fname, priv_der, pubOutLen) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
         ret = 0;
     }
 
-    wc_ecc_free(&k);
+cleanup:
+    if (fpriv != NULL)
+        fclose(fpriv);
+    if (key_init)
+        wc_ecc_free(&k);
+    wc_ForceZero(d, sizeof(d));
+    wc_ForceZero(priv_der, sizeof(priv_der));
+
+    if (exit_code != 0)
+        exit(exit_code);
 
     memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
 
     if (ecc_key_size == 32)
-        keystore_add(KEYGEN_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC256, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 48)
-        keystore_add(KEYGEN_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC384, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
     else if (ecc_key_size == 66)
-        keystore_add(KEYGEN_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
+        keystore_add(AUTH_KEY_ECC521, k_buffer, 2 * ecc_key_size, priv_fname, id_mask);
 }
 
 
@@ -702,22 +733,37 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
     uint8_t priv[32], pub[32];
     FILE *fpriv;
     uint32_t outlen = ED25519_KEY_SIZE;
+    int exit_code = 0;
+    int key_init = 0;
+
+    key_init = wc_ed25519_init(&k);
+    if (key_init != 0) {
+        fprintf(stderr, "Unable to initialize ed25519 key\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+
     if (wc_ed25519_make_key(&rng, ED25519_KEY_SIZE, &k) != 0) {
         fprintf(stderr, "Unable to create ed25519 key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     if (wc_ed25519_export_private_only(&k, priv, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed25519 private key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
+    outlen = ED25519_PUB_KEY_SIZE;
     if (wc_ed25519_export_public(&k, pub, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed25519 public key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     fpriv = fopen(privkey, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file '%s' for writing: %s", privkey, strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
@@ -726,11 +772,19 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(privkey, pub, ED25519_PUB_KEY_SIZE) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
     }
 
-    keystore_add(KEYGEN_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
+    keystore_add(AUTH_KEY_ED25519, pub, ED25519_PUB_KEY_SIZE, privkey, id_mask);
+
+cleanup:
+    wc_ForceZero(priv, sizeof(priv));
+    if (key_init == 0)
+        wc_ed25519_free(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 static void keygen_ed448(const char *privkey, uint32_t id_mask)
@@ -739,22 +793,37 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
     uint8_t priv[ED448_KEY_SIZE], pub[ED448_PUB_KEY_SIZE];
     FILE *fpriv;
     uint32_t outlen = ED448_KEY_SIZE;
+    int exit_code = 0;
+    int key_init = 0;
+
+    key_init = wc_ed448_init(&k);
+    if (key_init != 0) {
+        fprintf(stderr, "Unable to initialize ed448 key\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+
     if (wc_ed448_make_key(&rng, ED448_KEY_SIZE, &k) != 0) {
         fprintf(stderr, "Unable to create ed448 key\n");
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     if (wc_ed448_export_private_only(&k, priv, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed448 private key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
+    outlen = ED448_PUB_KEY_SIZE;
     if (wc_ed448_export_public(&k, pub, &outlen) != 0) {
         fprintf(stderr, "Unable to export ed448 public key\n");
-        exit(2);
+        exit_code = 2;
+        goto cleanup;
     }
     fpriv = fopen(privkey, "wb");
     if (fpriv == NULL) {
         fprintf(stderr, "Unable to open file 'ed448.der' for writing: %s", strerror(errno));
-        exit(3);
+        exit_code = 3;
+        goto cleanup;
     }
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
@@ -763,11 +832,19 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(privkey, pub, ED448_PUB_KEY_SIZE) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(4);
+            exit_code = 4;
+            goto cleanup;
         }
     }
 
-    keystore_add(KEYGEN_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
+    keystore_add(AUTH_KEY_ED448, pub, ED448_PUB_KEY_SIZE, privkey, id_mask);
+
+cleanup:
+    wc_ForceZero(priv, sizeof(priv));
+    if (key_init == 0)
+        wc_ed448_free(&k);
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 #include "../lms/lms_common.h"
@@ -868,9 +945,10 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
         }
     }
 
-    keystore_add(KEYGEN_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
     wc_LmsKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
 }
 
 #include "../xmss/xmss_common.h"
@@ -968,9 +1046,10 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     }
 
 
-    keystore_add(KEYGEN_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
     wc_XmssKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
 }
 
 
@@ -986,6 +1065,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     int      ml_dsa_priv_len = 0;
     int      ml_dsa_pub_len = 0;
     int      ml_dsa_level = ML_DSA_LEVEL;
+    int      exit_code = 0;
+    int      key_init = 0;
     char *   env_ml_dsa_level = getenv("ML_DSA_LEVEL");
     if (env_ml_dsa_level != NULL) {
         ml_dsa_level = atoi(env_ml_dsa_level);
@@ -996,21 +1077,25 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     ret = wc_MlDsaKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     ret = wc_MlDsaKey_SetParams(&key, ml_dsa_level);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_SetParams(%d) returned %d\n",
                 ml_dsa_level, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Make the key pair. */
     ret = wc_MlDsaKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Get the ML-DSA public key length. */
@@ -1018,7 +1103,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || ml_dsa_pub_len <= 0) {
         printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     printf("info: ml-dsa public key length: %d\n", ml_dsa_pub_len);
 
@@ -1028,14 +1114,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || ml_dsa_priv_len <= 0) {
         printf("error: wc_MlDsaKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     printf("info: ml-dsa private key length: %d\n", ml_dsa_priv_len);
 
     if (ml_dsa_priv_len <= ml_dsa_pub_len) {
         printf("error: ml-dsa: unexpected key lengths: %d, %d",
                ml_dsa_priv_len, ml_dsa_pub_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
     else {
         ml_dsa_priv_len -= ml_dsa_pub_len;
@@ -1044,7 +1132,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     priv = malloc(ml_dsa_priv_len);
     if (priv == NULL) {
         fprintf(stderr, "error: malloc(%d) failed\n", ml_dsa_priv_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Set the expected key lengths. */
@@ -1054,25 +1143,29 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     ret = wc_MlDsaKey_ExportPubRaw(&key, pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_MlDsaKey_ExportPrivRaw(&key, priv, &priv_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPrivRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if ((int)pub_len != ml_dsa_pub_len) {
         fprintf(stderr, "error: wc_MlDsaKey_ExportPubRaw returned pub_len=%d, " \
                         "expected %d\n", pub_len, ml_dsa_pub_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if ((int) priv_len != ml_dsa_priv_len) {
         fprintf(stderr, "error: ml_dsa priv key mismatch: got %d " \
                         "bytes, expected %d\n", priv_len, ml_dsa_priv_len);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fpriv = fopen(priv_fname, "wb");
@@ -1080,12 +1173,14 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
     if (fpriv == NULL) {
         fprintf(stderr, "error: fopen(%s) failed: %s",
                 priv_fname, strerror(errno));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fwrite(priv, priv_len, 1, fpriv);
     fwrite(pub, pub_len, 1, fpriv);
     fclose(fpriv);
+    fpriv = NULL;
 
     if (exportPubKey) {
         if (saveAsDer) {
@@ -1107,14 +1202,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
                     break;
                 default:
                     fprintf(stderr, "Error: Unsupported ML DSA level\n");
-                    exit(1);
+                    exit_code = 1;
+                    goto cleanup;
                     break;
             }
             pubDer = (uint8_t*)malloc(pubDerSz);
             if (pubDer == NULL) {
                 fprintf(stderr,
                         "Error: Failed to allocate memory for DER export\n");
-                exit(1);
+                exit_code = 1;
+                goto cleanup;
             }
 
             /* Export public key in DER format */
@@ -1124,12 +1221,16 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
             if (pubOutLen < 0) {
                 fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
                         pubOutLen);
-                exit(1);
+                free(pubDer);
+                exit_code = 1;
+                goto cleanup;
             }
 
             if (export_pubkey_file(priv_fname, pubDer, pubOutLen) != 0) {
                 fprintf(stderr, "Unable to export public key to file\n");
-                exit(1);
+                free(pubDer);
+                exit_code = 1;
+                goto cleanup;
             }
 
             free(pubDer);
@@ -1139,16 +1240,26 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
             if (export_pubkey_file(priv_fname, pub,
                                    KEYSTORE_PUBKEY_SIZE_ML_DSA) != 0) {
                 fprintf(stderr, "Unable to export public key to file\n");
-                exit(1);
+                exit_code = 1;
+                goto cleanup;
             }
         }
     }
 
-    keystore_add(KEYGEN_ML_DSA, pub, pub_len, priv_fname, id_mask);
+    keystore_add(AUTH_KEY_ML_DSA, pub, pub_len, priv_fname, id_mask);
 
-    wc_MlDsaKey_Free(&key);
-    free(priv);
-    priv = NULL;
+cleanup:
+    if (fpriv != NULL)
+        fclose(fpriv);
+    if (key_init)
+        wc_MlDsaKey_Free(&key);
+    if (priv != NULL) {
+        wc_ForceZero(priv, priv_len);
+        free(priv);
+        priv = NULL;
+    }
+    if (exit_code != 0)
+        exit(exit_code);
 }
 
 static void key_gen_check(const char *kfilename)
@@ -1185,55 +1296,55 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
 
     switch (ktype) {
 #ifdef HAVE_ED25519
-        case KEYGEN_ED25519:
+        case AUTH_KEY_ED25519:
             keygen_ed25519(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ED448
-        case KEYGEN_ED448:
+        case AUTH_KEY_ED448:
             keygen_ed448(kfilename, id_mask);
             break;
 #endif
 
 #ifdef HAVE_ECC
-        case KEYGEN_ECC256:
+        case AUTH_KEY_ECC256:
             keygen_ecc(kfilename, 32, id_mask);
             break;
-        case KEYGEN_ECC384:
+        case AUTH_KEY_ECC384:
             keygen_ecc(kfilename, 48, id_mask);
             break;
-        case KEYGEN_ECC521:
+        case AUTH_KEY_ECC521:
             keygen_ecc(kfilename, 66, id_mask);
             break;
 #endif
 
 #ifndef NO_RSA
-        case KEYGEN_RSA2048:
+        case AUTH_KEY_RSA2048:
             keygen_rsa(kfilename, 2048, id_mask);
             break;
-        case KEYGEN_RSA3072:
+        case AUTH_KEY_RSA3072:
             keygen_rsa(kfilename, 3072, id_mask);
             break;
-        case KEYGEN_RSA4096:
+        case AUTH_KEY_RSA4096:
             keygen_rsa(kfilename, 4096, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_HAVE_LMS
-        case KEYGEN_LMS:
+        case AUTH_KEY_LMS:
             keygen_lms(kfilename, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_HAVE_XMSS
-        case KEYGEN_XMSS:
+        case AUTH_KEY_XMSS:
             keygen_xmss(kfilename, id_mask);
             break;
 #endif
 
 #ifdef WOLFSSL_WC_DILITHIUM
-        case KEYGEN_ML_DSA:
+        case AUTH_KEY_ML_DSA:
             keygen_ml_dsa(kfilename, id_mask);
             break;
 #endif
@@ -1276,8 +1387,8 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
     keySz = get_pubkey_size(ktype);
 
     if (readLen > (int)keySz) {
-        if (ktype == KEYGEN_ECC256 || ktype == KEYGEN_ECC384 ||
-            ktype == KEYGEN_ECC521) {
+        if (ktype == AUTH_KEY_ECC256 || ktype == AUTH_KEY_ECC384 ||
+            ktype == AUTH_KEY_ECC521) {
             initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
@@ -1288,7 +1399,7 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
             if (initKey == 0)
                 wc_ecc_free(eccKey);
         }
-        else if (ktype == KEYGEN_ED25519) {
+        else if (ktype == AUTH_KEY_ED25519) {
             initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
             if (ret < 0)
@@ -1302,7 +1413,7 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
             if (initKey == 0)
                 wc_ed25519_free(ed25519Key);
         }
-        else if (ktype == KEYGEN_ED448) {
+        else if (ktype == AUTH_KEY_ED448) {
             initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
                 ed448Key, readLen);
 
@@ -1368,42 +1479,42 @@ int main(int argc, char** argv)
     for (i = 1; i < argc; i++) {
         /* Parse Arguments */
         if (strcmp(argv[i], "--ed25519") == 0) {
-            keytype = KEYGEN_ED25519;
+            keytype = AUTH_KEY_ED25519;
         }
         else if (strcmp(argv[i], "--ed448") == 0) {
-            keytype = KEYGEN_ED448;
+            keytype = AUTH_KEY_ED448;
         }
         else if (strcmp(argv[i], "--ecc256") == 0) {
-            keytype = KEYGEN_ECC256;
+            keytype = AUTH_KEY_ECC256;
         }
         else if (strcmp(argv[i], "--ecc384") == 0) {
-            keytype = KEYGEN_ECC384;
+            keytype = AUTH_KEY_ECC384;
         }
         else if (strcmp(argv[i], "--ecc521") == 0) {
-            keytype = KEYGEN_ECC521;
+            keytype = AUTH_KEY_ECC521;
         }
         else if (strcmp(argv[i], "--rsa2048") == 0) {
-            keytype = KEYGEN_RSA2048;
+            keytype = AUTH_KEY_RSA2048;
         }
         else if (strcmp(argv[i], "--rsa3072") == 0) {
-            keytype = KEYGEN_RSA3072;
+            keytype = AUTH_KEY_RSA3072;
         }
         else if (strcmp(argv[i], "--rsa4096") == 0) {
-            keytype = KEYGEN_RSA4096;
+            keytype = AUTH_KEY_RSA4096;
         }
 #if defined(WOLFSSL_HAVE_LMS)
         else if (strcmp(argv[i], "--lms") == 0) {
-            keytype = KEYGEN_LMS;
+            keytype = AUTH_KEY_LMS;
         }
 #endif
 #if defined(WOLFSSL_HAVE_XMSS)
         else if (strcmp(argv[i], "--xmss") == 0) {
-            keytype = KEYGEN_XMSS;
+            keytype = AUTH_KEY_XMSS;
         }
 #endif
 #if defined(WOLFSSL_WC_DILITHIUM)
         else if (strcmp(argv[i], "--ml_dsa") == 0) {
-            keytype = KEYGEN_ML_DSA;
+            keytype = AUTH_KEY_ML_DSA;
         }
 #endif
         else if (strcmp(argv[i], "--force") == 0) {
@@ -1465,7 +1576,7 @@ int main(int argc, char** argv)
         }
     }
     printf("Keytype: %s\n", KName[keytype]);
-    if (keytype == 0)
+    if (keytype == AUTH_KEY_NONE)
         exit(0);
     fpub = fopen(pubkeyfile, "rb");
     if (!force && (fpub != NULL)) {

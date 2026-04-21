@@ -1,6 +1,6 @@
 # wolfboot/cmake/stm32_hal_download.cmake
 #
-# Copyright (C) 2025 wolfSSL Inc.
+# Copyright (C) 2026 wolfSSL Inc.
 #
 # This file is part of wolfBoot.
 #

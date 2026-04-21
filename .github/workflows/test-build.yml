@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.3
     timeout-minutes: 30
 
     steps:
@@ -45,3 +45,18 @@ jobs:
       - name: Build wolfboot
         run: |
           make ${{inputs.make-args}}
+
+      - name: Rebuild wolfboot with Clang
+        if: |
+          inputs.config-file == './config/examples/stm32h7.config' ||
+          inputs.config-file == './config/examples/stm32h7-octospi.config' ||
+          inputs.config-file == './config/examples/stm32u5.config' ||
+          inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
+          inputs.config-file == './config/examples/stm32u5-nonsecure-dualbank.config' ||
+          inputs.config-file == './config/examples/stm32n6.config' ||
+          inputs.config-file == './config/examples/stm32n6-tz.config'
+        run: |
+          make distclean
+          cp ${{inputs.config-file}} .config
+          make -C tools/keytools && make -C tools/bin-assemble
+          make USE_CLANG=1 USE_GCC=0 ${{inputs.make-args}}

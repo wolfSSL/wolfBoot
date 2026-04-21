@@ -1,6 +1,6 @@
 /* loader.c
  *
- * Copyright (C) 2025 wolfSSL Inc.
+ * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -124,7 +124,9 @@ int main(void)
     uart_send_current_version();
 #endif
 #ifdef WOLFBOOT_TPM
-    wolfBoot_tpm2_init();
+    if (wolfBoot_tpm2_init() != 0) {
+        wolfBoot_panic();
+    }
 #endif
 #ifdef WOLFCRYPT_SECURE_MODE
     wcs_Init();

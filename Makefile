@@ -42,6 +42,10 @@ OBJS:= \
 	./src/libwolfboot.o \
 	./hal/hal.o
 
+ifeq ($(USE_CLANG),1)
+OBJS+=./src/clang_sections.o
+endif
+
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
 OBJS+=./src/dice/dice.o
 endif
@@ -197,6 +201,7 @@ ifeq ($(USE_GCC_HEADLESS),1)
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
+
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
 endif
@@ -261,6 +266,8 @@ ifeq ($(TARGET),raspi3)
 endif
 
 ifeq ($(TARGET),sim)
+    CFLAGS+=-fno-pie
+    LDFLAGS+=-no-pie
     MAIN_TARGET:=wolfboot.bin tools/bin-assemble/bin-assemble test-app/image_v1_signed.bin internal_flash.dd
 endif
 
@@ -463,7 +470,7 @@ assemble_internal_flash.dd: FORCE
 		0 wolfboot.bin \
 		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) /tmp/swap \
-		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) /tmp/swap
+		$(if $(filter 1,$(DISABLE_BACKUP)),,$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) /tmp/swap) # omit swap partition if DISABLE_BACKUP=1
 
 internal_flash.dd: $(BINASSEMBLE) wolfboot.bin $(BOOT_IMG) $(PRIVATE_KEY) test-app/image_v1_signed.bin
 	@echo "\t[MERGE] internal_flash.dd"
