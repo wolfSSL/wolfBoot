@@ -50,9 +50,15 @@ static struct ftpm_tis_state ftpm_tis = {
     FTPM_STS_VALID | FTPM_STS_COMMAND_READY
 };
 
-static uint32_t ftpm_reg_offset(uint32_t addr)
+static int ftpm_reg_offset(uint32_t addr, uint32_t *off)
 {
-    return (addr - FTPM_TIS_BASE) & 0x0FFFU;
+    if (off == NULL || addr < FTPM_TIS_BASE ||
+            addr >= (FTPM_TIS_BASE + 0x1000U)) {
+        return BAD_FUNC_ARG;
+    }
+
+    *off = addr - FTPM_TIS_BASE;
+    return TPM_RC_SUCCESS;
 }
 
 static void ftpm_store_le(uint8_t *buf, uint16_t size, uint32_t val)
@@ -107,11 +113,14 @@ int TPM2_IoCb_FtpmNsc(TPM2_CTX *ctx, INT32 isRead, UINT32 addr,
     (void)ctx;
     (void)userCtx;
 
-    if (buf == NULL || size == 0U || addr < FTPM_TIS_BASE) {
+    if (buf == NULL || size == 0U) {
         return BAD_FUNC_ARG;
     }
 
-    off = ftpm_reg_offset(addr);
+    if (ftpm_reg_offset(addr, &off) != TPM_RC_SUCCESS) {
+        return BAD_FUNC_ARG;
+    }
+
     burst = FTPM_BURST_COUNT;
 
     if (isRead) {

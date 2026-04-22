@@ -117,27 +117,36 @@ void wcs_ftpm_init(void)
 int CSME_NSE_API wcs_ftpm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         uint8_t *rsp, uint32_t *rspSz)
 {
+    int rc;
     int rspLen;
+    uint32_t rspCapacity;
+    uint32_t wireSz;
 
     if (!ftpm_ready) {
         return TPM_RC_INITIALIZE;
     }
     if (cmd == NULL || rsp == NULL || rspSz == NULL || cmdSz == 0U ||
-            cmdSz > WCS_FTPM_MAX_COMMAND_SIZE || *rspSz == 0U ||
-            *rspSz > WCS_FTPM_MAX_COMMAND_SIZE) {
+            cmdSz > WCS_FTPM_MAX_COMMAND_SIZE) {
         return BAD_FUNC_ARG;
     }
 
-    rspLen = (int)*rspSz;
-    int rc = FWTPM_ProcessCommand(&ftpm_ctx, cmd, (int)cmdSz, rsp, &rspLen, 0);
-    if (rc >= 0) {
-        uint32_t wireSz = ftpm_rsp_size(rsp, rspLen);
-        if (wireSz > 0U && wireSz <= *rspSz) {
+    rspCapacity = *rspSz;
+    if (rspCapacity == 0U || rspCapacity > WCS_FTPM_MAX_COMMAND_SIZE) {
+        return BAD_FUNC_ARG;
+    }
+
+    rspLen = (int)rspCapacity;
+    rc = FWTPM_ProcessCommand(&ftpm_ctx, cmd, (int)cmdSz, rsp, &rspLen, 0);
+    if (rc == TPM_RC_SUCCESS) {
+        wireSz = ftpm_rsp_size(rsp, rspLen);
+        if (wireSz > 0U && wireSz <= rspCapacity) {
             *rspSz = wireSz;
-            rc = TPM_RC_SUCCESS;
         }
-        else if (rspLen >= 0) {
+        else if (rspLen >= 0 && (uint32_t)rspLen <= rspCapacity) {
             *rspSz = (uint32_t)rspLen;
+        }
+        else {
+            rc = TPM_RC_FAILURE;
         }
     }
     return rc;
