@@ -59,6 +59,8 @@ ifeq ($(WOLFTPM),1)
     tpm2_packet.o \
     tpm2_tis.o \
     tpm2_wrap.o \
+    tpm2_crypto.o \
+    tpm2_util.o \
     tpm2_param_enc.o \
     image.o
 endif

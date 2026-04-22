@@ -984,6 +984,8 @@ ifeq ($(WOLFTPM),1)
     $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o \
     $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_tis.o \
     $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_wrap.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_crypto.o \
+    $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_util.o \
     $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_param_enc.o
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
   CFLAGS+=-D"WOLFBOOT_TPM"
