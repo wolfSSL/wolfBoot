@@ -1,0 +1,38 @@
+;; lpc55s69_debug.cmm
+;;
+;; "make DEBUG_SYMBOLS=1"
+
+RESet
+SYStem.RESet
+SYStem.CPU LPC55S69JBD100-CPU0
+SYStem.CONFIG.DEBUGPORTTYPE SWD
+IF COMBIPROBE()||UTRACE()
+(
+  SYStem.CONFIG.CONNECTOR MIPI20T
+)
+SYStem.Option DUALPORT ON
+SYStem.MemAccess DAP
+SYStem.JtagClock 10MHz
+ITM.OFF
+Trace.DISable
+break.config.method program onchip
+mode.hll
+
+SYStem.Up
+
+;; STOP in wolfBoot...
+data.load "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\wolfboot.elf" /nocode
+symbol.sourcepath.TranslateSUBpath "\home\tcook\wolf" "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf"
+Register.Set PC isr_reset
+Register.Set MSP END_STACK
+break.set main /onchip /temporary
+break.set do_boot /onchip /temporary
+go
+
+;; STOP in test-app...
+;; UNCOMMENT the following:
+;;WAIT !STATE.RUN()
+;;data.load "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\test-app\image.elf" /nocode
+;;break.set main /onchip /temporary
+
+go
