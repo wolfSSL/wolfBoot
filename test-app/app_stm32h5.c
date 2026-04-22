@@ -36,11 +36,11 @@
 #endif
 #include "target.h"
 
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
 #include "tpm.h"
 #endif
 
-#ifdef WOLFBOOT_TZ_FTPM
+#ifdef WOLFBOOT_TZ_FWTPM
 #include "wolftpm/tpm2_wrap.h"
 #include "wolfssl/wolfcrypt/sha256.h"
 #endif
@@ -206,7 +206,7 @@ static int cmd_timestamp(const char *args);
 static int cmd_update(const char *args);
 static int cmd_update_xmodem(const char *args);
 static int cmd_reboot(const char *args);
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
 static int cmd_tpm_info(const char *args);
 #ifdef WOLFTPM_MFG_IDENTITY
 static int cmd_tpm_idevid(const char *args);
@@ -215,8 +215,8 @@ static int cmd_tpm_signed_timestamp(const char *args);
 static int cmd_tpm_quote(const char *args);
 #endif
 #endif
-#ifdef WOLFBOOT_TZ_FTPM
-static int cmd_ftpm_test(const char *args);
+#ifdef WOLFBOOT_TZ_FWTPM
+static int cmd_fwtpm_test(const char *args);
 #endif
 
 
@@ -246,7 +246,7 @@ struct console_command COMMANDS[] =
     {cmd_test, "test", "run the wolfCrypt test"},
     {cmd_update_xmodem, "update", "update the firmware via XMODEM"},
     {cmd_reboot, "reboot", "reboot the system"},
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
     {cmd_tpm_info, "tpm", "get TPM capabilities"},
 #ifdef WOLFTPM_MFG_IDENTITY
     {cmd_tpm_idevid, "idevid", "show Initial Device Identification (IDevID) certificate"},
@@ -255,8 +255,8 @@ struct console_command COMMANDS[] =
     {cmd_tpm_quote, "quote", "TPM IAK signed PCR(s) attestation report"},
 #endif
 #endif
-#ifdef WOLFBOOT_TZ_FTPM
-    {cmd_ftpm_test, "ftpm", "run fTPM tests through the secure NSC interface"},
+#ifdef WOLFBOOT_TZ_FWTPM
+    {cmd_fwtpm_test, "fwtpm", "run fwTPM tests through the secure NSC interface"},
 #endif
     {NULL, "", ""}
 };
@@ -863,7 +863,7 @@ static int cmd_test(const char *args)
     return 0;
 }
 
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
 #include <wolftpm/tpm2.h>
 #include <wolftpm/tpm2_wrap.h>
 
@@ -1130,13 +1130,13 @@ static int cmd_tpm_quote(const char *args)
     return rc;
 }
 #endif /* WOLFTPM_MFG_IDENTITY */
-#endif /* WOLFBOOT_TPM && !WOLFBOOT_TZ_FTPM */
+#endif /* WOLFBOOT_TPM && !WOLFBOOT_TZ_FWTPM */
 
-#ifdef WOLFBOOT_TZ_FTPM
-extern int TPM2_IoCb_FtpmNsc(TPM2_CTX *ctx, INT32 isRead, UINT32 addr,
+#ifdef WOLFBOOT_TZ_FWTPM
+extern int TPM2_IoCb_FwtpmNsc(TPM2_CTX *ctx, INT32 isRead, UINT32 addr,
     BYTE *buf, UINT16 size, void *userCtx);
 
-static int ftpm_expected_pcr_after_extend(const uint8_t *before,
+static int fwtpm_expected_pcr_after_extend(const uint8_t *before,
     const uint8_t *event, uint8_t *expected)
 {
     wc_Sha256 sha;
@@ -1157,9 +1157,9 @@ static int ftpm_expected_pcr_after_extend(const uint8_t *before,
     return rc;
 }
 
-static int ftpm_seal_unseal_pcr_secret(WOLFTPM2_DEV *dev)
+static int fwtpm_seal_unseal_pcr_secret(WOLFTPM2_DEV *dev)
 {
-    static const uint8_t secret[] = "wolfBoot fTPM PCR secret";
+    static const uint8_t secret[] = "wolfBoot fwTPM PCR secret";
     uint8_t pcrArray[1] = { 0 };
     uint8_t policyDigest[TPM_MAX_DIGEST_SIZE];
     word32 policyDigestSz = sizeof(policyDigest);
@@ -1182,7 +1182,7 @@ static int ftpm_seal_unseal_pcr_secret(WOLFTPM2_DEV *dev)
 
     rc = wolfTPM2_CreateSRK(dev, &storage, TPM_ALG_ECC, NULL, 0);
     if (rc != TPM_RC_SUCCESS) {
-        printf("fTPM seal SRK failed: 0x%x\r\n", rc);
+        printf("fwTPM seal SRK failed: 0x%x\r\n", rc);
         return rc;
     }
 
@@ -1198,7 +1198,7 @@ static int ftpm_seal_unseal_pcr_secret(WOLFTPM2_DEV *dev)
     }
     wolfTPM2_UnloadHandle(dev, &trialSession.handle);
     if (rc != TPM_RC_SUCCESS) {
-        printf("fTPM seal policy failed: 0x%x\r\n", rc);
+        printf("fwTPM seal policy failed: 0x%x\r\n", rc);
         wolfTPM2_UnloadHandle(dev, &storage.handle);
         return rc;
     }
@@ -1237,22 +1237,22 @@ static int ftpm_seal_unseal_pcr_secret(WOLFTPM2_DEV *dev)
     wolfTPM2_UnloadHandle(dev, &storage.handle);
 
     if (rc != TPM_RC_SUCCESS) {
-        printf("fTPM unseal failed: 0x%x\r\n", rc);
+        printf("fwTPM unseal failed: 0x%x\r\n", rc);
         return rc;
     }
 
     if (unsealOut.outData.size != sizeof(secret) ||
             XMEMCMP(unsealOut.outData.buffer, secret, sizeof(secret)) != 0) {
-        printf("fTPM unsealed secret mismatch\r\n");
+        printf("fwTPM unsealed secret mismatch\r\n");
         return TPM_RC_FAILURE;
     }
 
-    printf("fTPM unsealed secret: %.*s\r\n",
+    printf("fwTPM unsealed secret: %.*s\r\n",
         unsealOut.outData.size, unsealOut.outData.buffer);
     return TPM_RC_SUCCESS;
 }
 
-static int cmd_ftpm_test(const char *args)
+static int cmd_fwtpm_test(const char *args)
 {
     int rc;
     WOLFTPM2_DEV dev;
@@ -1274,26 +1274,26 @@ static int cmd_ftpm_test(const char *args)
     XMEMSET(pcrEvent, 0, sizeof(pcrEvent));
     XMEMSET(pcrExpected, 0, sizeof(pcrExpected));
 
-    rc = wolfTPM2_Init(&dev, TPM2_IoCb_FtpmNsc, NULL);
+    rc = wolfTPM2_Init(&dev, TPM2_IoCb_FwtpmNsc, NULL);
     if (rc != TPM_RC_SUCCESS) {
-        printf("fTPM init failed: 0x%x\r\n", rc);
+        printf("fwTPM init failed: 0x%x\r\n", rc);
         return rc;
     }
 
     rc = wolfTPM2_GetCapabilities(&dev, &caps);
     if (rc == TPM_RC_SUCCESS) {
-        printf("fTPM caps: mfg %s vendor %s fw %u.%u\r\n",
+        printf("fwTPM caps: mfg %s vendor %s fw %u.%u\r\n",
             caps.mfgStr, caps.vendorStr, caps.fwVerMajor, caps.fwVerMinor);
     }
 
     if (rc == TPM_RC_SUCCESS) {
         int randRc = wolfTPM2_GetRandom(&dev, rnd, sizeof(rnd));
         if (randRc == TPM_RC_SUCCESS) {
-            printf("fTPM random:");
+            printf("fwTPM random:");
             print_hex(rnd, sizeof(rnd), 0);
         }
         else {
-            printf("fTPM random unavailable: 0x%x\r\n", randRc);
+            printf("fwTPM random unavailable: 0x%x\r\n", randRc);
         }
     }
 
@@ -1306,11 +1306,12 @@ static int cmd_ftpm_test(const char *args)
     }
 
     if (rc == TPM_RC_SUCCESS) {
-        rc = wc_Sha256Hash((const uint8_t *)"wolfBoot fTPM PCR event",
-            23, pcrEvent);
+        static const uint8_t pcrEventName[] = "wolfBoot fwTPM PCR event";
+        rc = wc_Sha256Hash(pcrEventName, sizeof(pcrEventName) - 1U,
+            pcrEvent);
     }
     if (rc == TPM_RC_SUCCESS) {
-        rc = ftpm_expected_pcr_after_extend(pcrBefore, pcrEvent, pcrExpected);
+        rc = fwtpm_expected_pcr_after_extend(pcrBefore, pcrEvent, pcrExpected);
     }
     if (rc == TPM_RC_SUCCESS) {
         rc = wolfTPM2_ExtendPCR(&dev, 0, TPM_ALG_SHA256, pcrEvent,
@@ -1320,31 +1321,31 @@ static int cmd_ftpm_test(const char *args)
         pcrSz = sizeof(pcr);
         rc = wolfTPM2_ReadPCR(&dev, 0, TPM_ALG_SHA256, pcr, &pcrSz);
         if (rc == TPM_RC_SUCCESS) {
-            printf("fTPM PCR0 extended:");
+            printf("fwTPM PCR0 extended:");
             print_hex(pcr, (uint32_t)pcrSz, 0);
         }
     }
     if (rc == TPM_RC_SUCCESS && (pcrSz != (int)sizeof(pcrExpected) ||
             XMEMCMP(pcr, pcrExpected, sizeof(pcrExpected)) != 0)) {
-        printf("fTPM PCR0 extend mismatch\r\n");
+        printf("fwTPM PCR0 extend mismatch\r\n");
         rc = TPM_RC_FAILURE;
     }
     if (rc == TPM_RC_SUCCESS) {
-        rc = ftpm_seal_unseal_pcr_secret(&dev);
+        rc = fwtpm_seal_unseal_pcr_secret(&dev);
     }
 
     wolfTPM2_Cleanup(&dev);
 
     if (rc == TPM_RC_SUCCESS) {
-        printf("fTPM NSC tests passed\r\n");
+        printf("fwTPM NSC tests passed\r\n");
     }
     else {
-        printf("fTPM NSC tests failed: 0x%x\r\n", rc);
+        printf("fwTPM NSC tests failed: 0x%x\r\n", rc);
     }
 
     return rc;
 }
-#endif /* WOLFBOOT_TZ_FTPM */
+#endif /* WOLFBOOT_TZ_FWTPM */
 
 
 static int parse_cmd(const char *cmd)
@@ -1493,11 +1494,11 @@ void main(void)
 #endif
 
     cmd_info(NULL);
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
     cmd_tpm_info(NULL);
 #endif
-#ifdef WOLFBOOT_TZ_FTPM
-    ret = cmd_ftpm_test(NULL);
+#ifdef WOLFBOOT_TZ_FWTPM
+    ret = cmd_fwtpm_test(NULL);
     if (ret == 0)
         asm volatile ("bkpt #0x7f");
     else

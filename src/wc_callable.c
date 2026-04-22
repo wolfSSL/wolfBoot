@@ -30,8 +30,8 @@
 #include "hal.h"
 #include <stdint.h>
 
-#ifdef WOLFBOOT_TZ_FTPM
-#include "wolfboot/wcs_ftpm.h"
+#ifdef WOLFBOOT_TZ_FWTPM
+#include "wolfboot/wcs_fwtpm.h"
 #endif
 
 static WC_RNG wcs_rng;
@@ -45,8 +45,8 @@ void wcs_Init(void)
 {
     hal_trng_init();
     wc_InitRng(&wcs_rng);
-#ifdef WOLFBOOT_TZ_FTPM
-    wcs_ftpm_init();
+#ifdef WOLFBOOT_TZ_FWTPM
+    wcs_fwtpm_init();
 #endif
 }
 

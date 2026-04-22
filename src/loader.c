@@ -123,7 +123,7 @@ int main(void)
     uart_init(UART_FLASH_BITRATE, 8, 'N', 1);
     uart_send_current_version();
 #endif
-#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FTPM)
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
     if (wolfBoot_tpm2_init() != 0) {
         wolfBoot_panic();
     }

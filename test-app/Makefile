@@ -104,9 +104,9 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_TZ_PSA=1
 endif
 
-ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
   WOLFCRYPT_TZ=1
-  WOLFCRYPT_TZ_FTPM=1
+  WOLFCRYPT_TZ_FWTPM=1
 endif
 
 # Setup default linker flags
@@ -334,12 +334,12 @@ ifeq ($(TZEN),1)
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_hash.o \
             $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/psa/psa_pkcbs.o
     endif
-    ifeq ($(WOLFCRYPT_TZ_FTPM),1)
+    ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
         CFLAGS:=$(filter-out -DWOLFTPM_FWTPM,$(CFLAGS))
-        CFLAGS+=-DWOLFBOOT_TZ_FTPM -DWOLFBOOT_TPM -DWOLFTPM_ADV_IO
+        CFLAGS+=-DWOLFBOOT_TZ_FWTPM -DWOLFBOOT_TPM -DWOLFTPM_ADV_IO
         CFLAGS+=-DWOLFTPM_EXAMPLE_HAL
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFTPM)"
-        APP_OBJS+=./wcs/ftpm_stub.o
+        APP_OBJS+=./wcs/fwtpm_stub.o
         WOLFTPM_APP_OBJS+=\
             $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2.o \
             $(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o \
