@@ -1,0 +1,28 @@
+;; lpc55s69_flash_factory_bin.cmm
+;;
+;; "make DEBUG_SYMBOLS=1"
+
+RESet
+SYStem.RESet
+SYStem.CPU LPC55S69JBD100-CPU0
+SYStem.CONFIG.DEBUGPORTTYPE SWD
+IF COMBIPROBE()||UTRACE()
+(
+  SYStem.CONFIG.CONNECTOR MIPI20T
+)
+SYStem.Option DUALPORT ON
+SYStem.MemAccess DAP
+SYStem.JtagClock 10MHz
+ITM.OFF
+Trace.DISable
+
+SYStem.Up
+
+DO ~~/demo/arm/flash/lpc55xx PREPAREONLY
+
+flash.erase all
+FLASH.ReProgram ALL
+Data.LOAD.Binary "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\factory.bin" 0
+FLASH.ReProgram OFF
+
+ENDDO
