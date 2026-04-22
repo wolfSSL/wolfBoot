@@ -106,18 +106,18 @@ jobs:
           make
           m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600
 
-      - name: Clean and build test with fTPM (stm32h5)
+      - name: Clean and build test with fwTPM (stm32h5)
         run: |
           make clean distclean
-          cp config/examples/stm32h5-tz-ftpm.config .config
+          cp config/examples/stm32h5-tz-fwtpm.config .config
           make
           m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600 \
-            | tee /tmp/m33mu-ftpm.log
-          grep -q "fTPM PCR0 extended:" /tmp/m33mu-ftpm.log
-          grep -q "fTPM unsealed secret: wolfBoot fTPM PCR secret" /tmp/m33mu-ftpm.log
-          grep -q "fTPM NSC tests passed" /tmp/m33mu-ftpm.log
-          grep -q "\\[BKPT\\] imm=0x7f" /tmp/m33mu-ftpm.log
-          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-ftpm.log
+            | tee /tmp/m33mu-fwtpm.log
+          grep -q "fwTPM PCR0 extended:" /tmp/m33mu-fwtpm.log
+          grep -q "fwTPM unsealed secret: wolfBoot fwTPM PCR secret" /tmp/m33mu-fwtpm.log
+          grep -q "fwTPM NSC tests passed" /tmp/m33mu-fwtpm.log
+          grep -q "\\[BKPT\\] imm=0x7f" /tmp/m33mu-fwtpm.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-fwtpm.log
 
       - name: Clean and build test with DICE attestation + OTP (stm32h5)
         run: |
