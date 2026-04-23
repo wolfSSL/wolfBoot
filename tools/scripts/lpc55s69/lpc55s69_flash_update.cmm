@@ -1,8 +1,6 @@
 ;; lpc55s69_flash_update.cmm
-;;
-;; make DEBUG_SYMBOLS=1
-;;   then
-;; tools/keytools/sign --ecc384 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+
+&basedir="\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot"
 
 RESet
 SYStem.RESet
@@ -22,9 +20,9 @@ SYStem.Up
 
 DO ~~/demo/arm/flash/lpc55xx PREPAREONLY
 
-;; flash.erase all ;; NOT FOR UPDATE
+
 FLASH.ReProgram ALL
-Data.LOAD.Binary "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\test-app\image_v2_signed.bin" 0x18000
+Data.LOAD.Binary "&basedir\test-app\image_v2_signed.bin" 0x18000
 FLASH.ReProgram OFF
 
 ENDDO
