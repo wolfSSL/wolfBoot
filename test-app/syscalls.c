@@ -141,7 +141,7 @@ int _getpid(void)
  * other OS facilities that don't exist in bare-metal.
  * wolfCrypt test/benchmark code calls standard printf, not wolfBoot_printf.
  */
-static int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp);
+static int ___vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp);
 
 /* Route all printf-family functions through our vsnprintf (in this file)
  * rather than uart_vprintf (in string.c). This ensures float formatting
@@ -150,7 +150,7 @@ static int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp
 int vprintf(const char *fmt, va_list args)
 {
     char buf[256];
-    int len = vsnprintf(buf, sizeof(buf), fmt, args);
+    int len = ___vsnprintf(buf, sizeof(buf), fmt, args);
     if (len > 0)
         uart_write(buf, (len < (int)sizeof(buf)) ? len : (int)sizeof(buf) - 1);
     return len;
@@ -222,7 +222,7 @@ static int buf_num(char *buf, int pos, int size, unsigned int num,
     return pos;
 }
 
-static int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp)
+static int ___vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp)
 {
     int pos = 0;
     const char *fmtp = fmt;
@@ -375,7 +375,7 @@ int snprintf(char *buf, unsigned int size, const char *fmt, ...)
     va_list args;
     int ret;
     va_start(args, fmt);
-    ret = vsnprintf(buf, size, fmt, args);
+    ret = ___vsnprintf(buf, size, fmt, args);
     va_end(args);
     return ret;
 }
@@ -439,7 +439,7 @@ int __snprintf_chk(char *buf, unsigned int maxlen, int flag,
     int ret;
     (void)flag;
     va_start(args, fmt);
-    ret = vsnprintf(buf, size, fmt, args);
+    ret = ___vsnprintf(buf, size, fmt, args);
     va_end(args);
     return ret;
 }
