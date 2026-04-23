@@ -1,6 +1,6 @@
 ;; lpc55s69_debug.cmm
-;;
-;; "make DEBUG_SYMBOLS=1"
+
+&basedir="\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot"
 
 RESet
 SYStem.RESet
@@ -21,8 +21,8 @@ mode.hll
 SYStem.Up
 
 ;; STOP in wolfBoot...
-data.load "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\wolfboot.elf" /nocode
-symbol.sourcepath.TranslateSUBpath "\home\tcook\wolf" "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf"
+data.load "&basedir\wolfboot.elf" /nocode
+symbol.sourcepath.TranslateSUBpath "\home\tcook\wolf\wolfBoot" "&basedir"
 Register.Set PC isr_reset
 Register.Set MSP END_STACK
 break.set main /onchip /temporary
@@ -31,8 +31,8 @@ go
 
 ;; STOP in test-app...
 ;; UNCOMMENT the following:
-;;WAIT !STATE.RUN()
-;;data.load "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\test-app\image.elf" /nocode
-;;break.set main /onchip /temporary
+WAIT !STATE.RUN()
+data.load "&basedir\test-app\image.elf" /nocode
+;break.set wc_InitRng_ex /onchip /temporary
 
 go

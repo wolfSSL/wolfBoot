@@ -1,6 +1,6 @@
 ;; lpc55s69_flash_factory_bin.cmm
-;;
-;; "make DEBUG_SYMBOLS=1"
+
+&basedir="\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot"
 
 RESet
 SYStem.RESet
@@ -22,7 +22,7 @@ DO ~~/demo/arm/flash/lpc55xx PREPAREONLY
 
 flash.erase all
 FLASH.ReProgram ALL
-Data.LOAD.Binary "\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot\factory.bin" 0
+Data.LOAD.Binary "&basedir\factory.bin" 0
 FLASH.ReProgram OFF
 
 ENDDO
