@@ -55,11 +55,12 @@ void SysTick_Handler(void)
     SysTick_time_ms++;
 }
 
+#ifdef WOLFCRYPT_BENCHMARK
 static void systick_init(void)
 {
     SysTick_Config(CLOCK_GetCoreSysClkFreq() / 1000U); /* 1 ms period */
 }
-
+#endif
 
 #define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
 #define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
@@ -134,7 +135,7 @@ void main(void)
 
     hal_init();
     leds_init();
-#ifndef TZEN
+#ifdef WOLFCRYPT_BENCHMARK
     systick_init();
     __enable_irq();
 #endif
@@ -206,6 +207,16 @@ void main(void)
     }
 }
 
+#ifndef ENOMEM
+#define ENOMEM 12
+#endif
+#ifndef EBADF
+#define EBADF  9
+#endif
+#ifndef EINVAL
+#define EINVAL 22
+#endif
+int errno;
 
 #include "sys/stat.h"
 int WEAKFUNCTION _getpid(void)
@@ -268,8 +279,28 @@ int WEAKFUNCTION _fstat(int file, struct stat *st)
     return 0;
 }
 
+/* Heap management */
+extern char _end; /* Defined by linker */
+extern char _Min_Heap_Size; /* Linker symbol: address is the value */
+
 void WEAKFUNCTION *_sbrk(int incr)
 {
-    (void)incr;
-    return 0;
+    static char *heap_end = 0;
+    char *prev_heap_end;
+    char *heap_limit;
+
+    if (heap_end == 0) {
+        heap_end = &_end;
+    }
+    prev_heap_end = heap_end;
+
+    heap_limit = &_end + (uintptr_t)&_Min_Heap_Size;
+
+    if (heap_end + incr > heap_limit) {
+        errno = ENOMEM;
+        return (void *)-1;
+    }
+
+    heap_end += incr;
+    return prev_heap_end;
 }

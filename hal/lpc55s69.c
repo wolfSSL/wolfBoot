@@ -71,10 +71,8 @@ static void hal_sau_init(void)
 
 static void periph_unsecure(void)
 {
-#ifndef WOLFSSL_NXP_LPC55S69_NO_HWACCEL
     CLOCK_EnableClock(kCLOCK_Rng);
     RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
-#endif
     CLOCK_EnableClock(kCLOCK_Iocon);
     CLOCK_EnableClock(kCLOCK_Gpio1);
 }
@@ -113,12 +111,9 @@ void hal_init(void)
     uart_write("lpc55s69 init\n", 14);
 # endif
 
-# ifndef WOLFSSL_NXP_LPC55S69_NO_HWACCEL
+# ifdef WOLFSSL_NXP_LPC55S69_WITH_HWACCEL
     CLOCK_EnableClock(kCLOCK_HashCrypt);
     wc_hashcrypt_init();
-# endif
-
-# ifndef WOLFSSL_NXP_LPC55S69_NO_HWACCEL
     CLOCK_EnableClock(kCLOCK_Casper);
     wc_casper_init();
 # endif
@@ -229,13 +224,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 #ifdef WOLFCRYPT_SECURE_MODE
 void hal_trng_init(void)
 {
-#ifndef WOLFSSL_NXP_LPC55S69_NO_HWACCEL
 # ifdef __WOLFBOOT
     CLOCK_EnableClock(kCLOCK_Rng);
     RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
 # endif
     RNG_Init(RNG);
-#endif
 }
 
 void hal_trng_fini(void)
@@ -244,10 +237,8 @@ void hal_trng_fini(void)
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
-#ifndef WOLFSSL_NXP_LPC55S69_NO_HWACCEL
     if (RNG_GetRandomData(RNG, out, len) == kStatus_Success)
         return 0;
-#endif
 
     return -1;
 }
