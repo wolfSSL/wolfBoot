@@ -141,7 +141,7 @@ int _getpid(void)
  * other OS facilities that don't exist in bare-metal.
  * wolfCrypt test/benchmark code calls standard printf, not wolfBoot_printf.
  */
-int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp);
+static int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp);
 
 /* Route all printf-family functions through our vsnprintf (in this file)
  * rather than uart_vprintf (in string.c). This ensures float formatting
@@ -222,7 +222,7 @@ static int buf_num(char *buf, int pos, int size, unsigned int num,
     return pos;
 }
 
-int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp)
+static int vsnprintf(char *buf, unsigned int size, const char *fmt, va_list argp)
 {
     int pos = 0;
     const char *fmtp = fmt;

@@ -1237,8 +1237,7 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
       $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o \
-      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
-      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/rng_port.o
+      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
   ifeq ($(DEBUG_UART),1)
     OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
@@ -1246,7 +1245,7 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
   endif
   ifeq ($(PKA),1)
-    CFLAGS+=-DWOLFSSL_NXP_LPC55S69
+    CFLAGS+=-DWOLFSSL_NXP_LPC55S69_WITH_HWACCEL
     OBJS+=\
         $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
         $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
