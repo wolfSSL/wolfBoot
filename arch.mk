@@ -1633,15 +1633,13 @@ ifeq ($(ARCH), AURIX_TC3)
           $(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
-          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o
-
-        # SW only for now, as we dont have the right protection macros
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o\
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
       endif
 
       # HSM BSP specific object files

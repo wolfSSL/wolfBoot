@@ -68,7 +68,7 @@
 #include "wolfhsm/wh_nvm_flash.h"
 #include "tchsm_hh_hsm.h"
 #include "port_halflash_df1.h"
-
+#include "ccb_hsm.h"
 #endif
 
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || WOLFBOOT_ENABLE_WOLFHSM_SERVER */
@@ -117,8 +117,8 @@ const whNvmId hsmNvmIdCertRootCA = 1;
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
 
 /* map wolfBoot HAL layer wofHSM exports to their tchsm config vals */
-const int     hsmDevIdHash       = INVALID_DEVID; /*HSM_DEVID once CCB enabled*/
-const int     hsmDevIdPubKey     = INVALID_DEVID; /*HSM_DEVID once CCB enabled*/
+const int     hsmDevIdHash       = HSM_DEVID;
+const int     hsmDevIdPubKey     = HSM_DEVID;
 const whNvmId hsmNvmIdCertRootCA = 1;
 #ifdef EXT_ENCRYPT
 #error "AURIX does not support firmware encryption with wolfHSM(yet)"
@@ -860,7 +860,7 @@ int hal_hsm_server_init(void)
             .comm_config = commServerConfig,
             .nvm         = nvmCtx,
             .crypto      = cryptoCtx,
-            .devId       = INVALID_DEVID, /*HSM_DEVID once CCB enabled */
+            .devId       = HSM_DEVID,
     }};
 
     rc = wh_Nvm_Init(nvmCtx, nvmCfg);
@@ -869,6 +869,12 @@ int hal_hsm_server_init(void)
     }
 
     (void)wolfCrypt_Init();
+    rc = wc_CryptoCb_RegisterDevice(HSM_DEVID, hsmCryptoCb, NULL);
+    if (rc != 0) {
+        wolfBoot_printf(
+            "[ERROR] cryptocb registration for HASH failed, rc=%d\n", rc);
+        wolfBoot_panic();
+    }
 
     rc = wc_InitRng_ex(cryptoCtx->rng, NULL, INVALID_DEVID);
     if (rc != WH_ERROR_OK) {
