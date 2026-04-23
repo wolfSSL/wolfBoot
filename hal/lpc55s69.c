@@ -71,8 +71,6 @@ static void hal_sau_init(void)
 
 static void periph_unsecure(void)
 {
-    CLOCK_EnableClock(kCLOCK_Rng);
-    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
     CLOCK_EnableClock(kCLOCK_Iocon);
     CLOCK_EnableClock(kCLOCK_Gpio1);
 }
@@ -118,7 +116,12 @@ void hal_init(void)
     wc_casper_init();
 # endif
 
+    CLOCK_EnableClock(kCLOCK_Rng);
+    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
+
 #endif /* __WOLFBOOT */
+
+    RNG_Init(RNG);
 
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
@@ -224,11 +227,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 #ifdef WOLFCRYPT_SECURE_MODE
 void hal_trng_init(void)
 {
-# ifdef __WOLFBOOT
-    CLOCK_EnableClock(kCLOCK_Rng);
-    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
-# endif
-    RNG_Init(RNG);
+    /* handled in hal_init() regardless */
 }
 
 void hal_trng_fini(void)
