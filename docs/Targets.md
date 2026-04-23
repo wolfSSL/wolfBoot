@@ -1709,6 +1709,82 @@ arm-none-eabi-gdb
 ```
 
 
+## STM32U3
+
+The STM32U3 family (for example the STM32U385RG on NUCLEO-U385RG-Q) is a
+Cortex-M33 part **without TrustZone**, so the port is single-image only
+(no `-tz` or `-ns` variants). 1 MB internal flash, 256 KB SRAM, 8 KB
+pages, 128-bit (quad-word) flash write quantum.
+
+### Flash layout (stm32u3.config)
+
+Dual-bank flash (2 x 512 KB, 4 KB pages). Bank 1 holds wolfBoot + BOOT,
+bank 2 holds UPDATE + SWAP:
+
+```
+Bank 1:
+  0x08000000 - 0x0800FFFF  wolfBoot bootloader   (64 KB)
+  0x08010000 - 0x0807FFFF  BOOT partition        (0x70000, 448 KB)
+Bank 2:
+  0x08080000 - 0x080EFFFF  UPDATE partition      (0x70000, 448 KB)
+  0x080F0000 - 0x080F0FFF  SWAP sector           (4 KB)
+```
+
+### Clock and UART
+
+UART is always available in the test-app and enabled in wolfBoot via
+`DEBUG_UART=1` (on by default in the example config). USART1 on PA9
+(TX) / PA10 (RX), AF7, 115200 8N1 — the ST-LINK VCP on NUCLEO-U385RG-Q.
+
+### Building
+
+```sh
+cp config/examples/stm32u3.config .config
+make clean
+make
+```
+
+`DEBUG_UART=1` is enabled by default. To also run the flash self-test:
+
+```sh
+make TEST_FLASH=1
+```
+
+### Flashing
+
+Use `STM32_Programmer_CLI` (from STM32CubeIDE or STM32CubeProgrammer).
+`st-flash` does not yet support chipid 0x454.
+
+```sh
+STM32_Programmer_CLI -c port=SWD reset=HWrst -e all \
+    -d factory.bin 0x08000000 -v -rst
+```
+
+The test app blinks LD2 (PA5): slow on v1, fast on v2 (post-update).
+
+### Testing an Update
+
+Sign the test application as version 2 and write the update trigger
+magic (`pBOOT`) at the tail of the partition:
+
+```sh
+tools/keytools/sign --ecc384 --sha384 test-app/image.bin \
+    wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0     test-app/image_v2_signed.bin \
+    0x6FFFB trigger_magic.bin
+STM32_Programmer_CLI -c port=SWD reset=HWrst \
+    -d update.bin 0x08080000 -v -rst
+```
+
+Reset the board — wolfBoot verifies v2, swaps partitions, and jumps to
+the new image. LD2 transitions from the slow (v1) blink to the fast
+(v2) blink; with `DEBUG_UART=1` the UART log shows the v1 → v2
+transition.
+
+
 ## STM32H5
 
 Like [STM32L5](#stm32l5) and [STM32U5](#stm32u5), STM32H5 support is also demonstrated
