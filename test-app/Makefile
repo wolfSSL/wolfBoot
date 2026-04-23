@@ -706,7 +706,7 @@ ifeq ($(TARGET),lpc55s69)
       CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
     endif
     ifeq ($(WOLFCRYPT_SUPPORT),1)
-      LIBS+=--specs=nano.specs
+      LDFLAGS+=--specs=nano.specs
     endif
     ifeq ($(WOLFCRYPT_BENCHMARK),1)
       # Benchmark needs float printf for results
