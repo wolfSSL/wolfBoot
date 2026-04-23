@@ -1869,7 +1869,6 @@ int hal_dts_fixup(void* dts_addr)
 
     /* Set bootargs property - overrides PetaLinux default root= with
      * the wolfBoot partition layout. */
-    wolfBoot_printf("FDT: Setting bootargs: %s\n", LINUX_BOOTARGS);
     ret = fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
     if (ret < 0) {
         wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);

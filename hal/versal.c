@@ -1284,7 +1284,6 @@ int hal_dts_fixup(void* dts_addr)
 
     if (off >= 0) {
         /* Set bootargs property */
-        wolfBoot_printf("FDT: Setting bootargs: %s\n", LINUX_BOOTARGS);
         fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
     } else {
         wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
