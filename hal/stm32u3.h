@@ -20,7 +20,7 @@
  */
 
 /* STM32U3 family (e.g. STM32U385RG on NUCLEO-U385RG-Q).
- * Cortex-M33, no TrustZone.  1 MB dual-bank flash (2 × 512 KB, 8 KB pages).
+ * Cortex-M33, no TrustZone.  1 MB dual-bank flash (2 × 512 KB, 4 KB pages).
  * Reference: RM0487, stm32u385xx.h from STM32Cube_FW_U3_V1.3.0.
  *
  * Peripheral base addresses differ from STM32U5:
@@ -66,7 +66,7 @@
 #define RCC_ICSCR1_MSISDIV_2        (1)            /* /2 */
 #define RCC_ICSCR1_MSISDIV_4        (2)            /* /4 */
 #define RCC_ICSCR1_MSISDIV_8        (3)            /* /8 */
-/* MSIS RC source: bit 31 MSISSEL — 0 = MSIRC1 (24 MHz), 1 = MSIRC0 (96 MHz) */
+/* MSIS RC source: bit 31 MSISSEL — 0 = MSIRC0 (96 MHz), 1 = MSIRC1 (24 MHz) */
 #define RCC_ICSCR1_MSISSEL          (1u << 31)
 
 #define RCC_CFGR1                   (*(volatile uint32_t *)(RCC_BASE + 0x1C))
@@ -130,7 +130,7 @@
 #define FLASH_NS_SR                 (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_NS_CR                 (*(volatile uint32_t *)(FLASH_BASE + 0x28))
 
-/* Secure flash registers — required for erase/write even with TZEN=0 */
+/* Secure flash registers (unused when TZEN=0, kept for reference) */
 #define FLASH_SKEYR                 (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
 #define FLASH_SSR                   (*(volatile uint32_t *)(FLASH_BASE + 0x24))
 #define FLASH_SCR                   (*(volatile uint32_t *)(FLASH_BASE + 0x2C))

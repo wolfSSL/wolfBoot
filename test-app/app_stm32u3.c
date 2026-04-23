@@ -83,7 +83,10 @@ static void busy_delay(uint32_t count)
 void main(void)
 {
     uint32_t version;
+    uint32_t v;
     uint32_t on_ticks, off_ticks;
+    char num[4];
+    int idx = 0;
 
     hal_init();
     led_init();
@@ -93,12 +96,14 @@ void main(void)
 
     version = wolfBoot_current_firmware_version();
 
-    {
-        char v = '0' + (char)(version & 0x7F);
-        char msg[] = "App version: X\r\n";
-        msg[13] = v;
-        uart_write(msg, sizeof(msg) - 1);
-    }
+    v = version;
+    if (v >= 100) { num[idx++] = '0' + (v / 100); v %= 100; }
+    if (v >= 10 || idx > 0) { num[idx++] = '0' + (v / 10); v %= 10; }
+    num[idx++] = '0' + v;
+    num[idx] = '\0';
+    uart_write("App version: ", sizeof("App version: ") - 1);
+    uart_write(num, idx);
+    uart_write("\r\n", 2);
 
     /* v1: slow blink. v2+: fast blink. */
     if (version >= 2) {
