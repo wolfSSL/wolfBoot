@@ -20,7 +20,7 @@
  */
 
 /* STM32U3 family (e.g. NUCLEO-U385RG-Q). Cortex-M33 without TrustZone.
- * Always dual-bank 1 MB flash (2 x 512 KB), 8 KB pages, 64-bit
+ * Always dual-bank 1 MB flash (2 x 512 KB), 4 KB pages, 64-bit
  * (double-word) write quantum.
  * No traditional PLL -- MSIS switches directly between MSIRC1 (24 MHz)
  * and MSIRC0 (96 MHz).
@@ -37,8 +37,12 @@
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
-    if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates)
+    if ((reg & FLASH_ACR_LATENCY_MASK) != waitstates) {
         FLASH_ACR = (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates;
+        /* RM: read-back to confirm LATENCY accepted before clock switch */
+        while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != waitstates)
+            ;
+    }
 }
 
 static RAMFUNCTION void flash_wait_complete(void)
@@ -83,7 +87,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
         /* RM step 6: write first word, then second word */
         dst[i >> 2]       = dword[0];
+        ISB();
         dst[(i >> 2) + 1] = dword[1];
+        ISB();
 
         /* RM step 8: wait for BSY clear */
         flash_wait_complete();
@@ -103,15 +109,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 void RAMFUNCTION hal_flash_unlock(void)
 {
     flash_wait_complete();
-    /* Unlock both NS and Secure flash controllers */
-    if ((FLASH_NS_CR & FLASH_CR_LOCK) != 0) {
-        FLASH_NS_KEYR = FLASH_KEY1;
-        DMB();
-        FLASH_NS_KEYR = FLASH_KEY2;
-        DMB();
-        while ((FLASH_NS_CR & FLASH_CR_LOCK) != 0)
-            ;
-    }
+    /* Unlock NS flash controller (TZEN=0, secure unlock not needed) */
     if ((FLASH_NS_CR & FLASH_CR_LOCK) != 0) {
         FLASH_NS_KEYR = FLASH_KEY1;
         DMB();
@@ -194,13 +192,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     FLASH_NS_CR &= ~FLASH_CR_PER;
     hal_cache_invalidate();
     return 0;
-}
-
-static void RAMFUNCTION stm32u3_reboot(void)
-{
-    AIRCR = AIRCR_SYSRESETREQ | AIRCR_VKEY;
-    while (1)
-        ;
 }
 
 /* --- UART: USART1 on PA9 (TX) / PA10 (RX), AF7 --- */
@@ -335,7 +326,7 @@ void hal_init(void)
 
 #if defined(DEBUG_UART) && defined(__WOLFBOOT)
     uart_init();
-    uart_write("wolfBoot HAL Init\n", 18);
+    uart_write("wolfBoot HAL Init\n", sizeof("wolfBoot HAL Init\n") - 1);
 #endif
 }
 
@@ -360,9 +351,8 @@ void RAMFUNCTION hal_cache_invalidate(void)
         return;
     if ((ICACHE_SR & ICACHE_SR_BUSYF) == 0)
         ICACHE_CR |= ICACHE_CR_CACHEINV;
-    if (ICACHE_SR & ICACHE_SR_BUSYF) {
-        while ((ICACHE_SR & ICACHE_SR_BSYENDF) == 0)
-            ;
-    }
+    /* Wait unconditionally for invalidation to complete */
+    while ((ICACHE_SR & ICACHE_SR_BSYENDF) == 0)
+        ;
     ICACHE_SR |= ICACHE_SR_BSYENDF;
 }

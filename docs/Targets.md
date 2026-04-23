@@ -1689,8 +1689,8 @@ arm-none-eabi-gdb
 
 The STM32U3 family (for example the STM32U385RG on NUCLEO-U385RG-Q) is a
 Cortex-M33 part **without TrustZone**, so the port is single-image only
-(no `-tz` or `-ns` variants). 1 MB internal flash, 256 KB SRAM, 8 KB
-pages, 128-bit (quad-word) flash write quantum.
+(no `-tz` or `-ns` variants). 1 MB internal flash, 256 KB SRAM, 4 KB
+pages, 64-bit (double-word) flash write quantum.
 
 ### Flash layout (stm32u3.config)
 
@@ -1740,17 +1740,11 @@ The test app blinks LD2 (PA5): slow on v1, fast on v2 (post-update).
 
 ### Testing an Update
 
-Sign the test application as version 2 and write the update trigger
-magic (`pBOOT`) at the tail of the partition:
+Sign the test application as version 2, build the update image with the
+`pBOOT` trigger magic, and flash it:
 
 ```sh
-tools/keytools/sign --ecc384 --sha384 test-app/image.bin \
-    wolfboot_signing_private_key.der 2
-echo -n "pBOOT" > trigger_magic.bin
-./tools/bin-assemble/bin-assemble \
-  update.bin \
-    0x0     test-app/image_v2_signed.bin \
-    0x6FFFB trigger_magic.bin
+./tools/scripts/prepare_update_u3.sh 2
 STM32_Programmer_CLI -c port=SWD reset=HWrst \
     -d update.bin 0x08080000 -v -rst
 ```
