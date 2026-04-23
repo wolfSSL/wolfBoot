@@ -182,7 +182,7 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add SP C math (all architectures)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
-  # Add RSA support (needed by test suite)
+  # Add RSA support
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o
 
   ifneq ($(NO_ASM),1)
@@ -728,16 +728,16 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
-      $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o
+      $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o \
+      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
+      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/rng_port.o
     ifeq ($(PKA),1)
-      CFLAGS+=-DWOLFSSL_NXP_LPC55S69
+      CFLAGS+=-DWOLFSSL_NXP_LPC55S69_WITH_HWACCEL
       APP_OBJS+=\
         $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
         $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
-        $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
-        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o \
-        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/rng_port.o
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
     else
       CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
     endif
