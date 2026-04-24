@@ -581,3 +581,36 @@ void hal_prepare_boot(void)
     /* Disable system config IRQs */
     VOR_SYSCONFIG->IRQ_ENB = 0;
 }
+
+#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
+/* Microsecond timer for boot benchmarking.
+ * Uses SysTick counter (counts down each ms tick) combined with
+ * HAL_time_ms (incremented by SysTick_Handler every 1ms).
+ * SysTick->LOAD = (SystemCoreClock / 1000) - 1 (configured by HAL_Init).
+ * SysTick->VAL counts down from LOAD to 0.
+ */
+uint64_t hal_get_timer_us(void)
+{
+    extern volatile uint64_t HAL_time_ms;
+    uint32_t load = SysTick->LOAD;
+    uint64_t ms;
+    uint32_t val;
+    uint32_t elapsed_ticks;
+
+    /* Stable read: retry until ms matches before and after reading VAL.
+     * Avoids a 1ms jump if the SysTick IRQ fires mid-read and makes the
+     * timer non-monotonic (would break udelay() comparisons). */
+    do {
+        ms  = HAL_time_ms;
+        val = SysTick->VAL;
+    } while (ms != HAL_time_ms);
+
+    /* VAL counts LOAD..0 over LOAD+1 ticks, so elapsed = (LOAD+1) - VAL. */
+    elapsed_ticks = (load + 1U) - val;
+    if (elapsed_ticks > load)
+        elapsed_ticks = load + 1U;
+
+    return (ms * 1000ULL) +
+           ((uint64_t)elapsed_ticks * 1000000ULL / SystemCoreClock);
+}
+#endif
