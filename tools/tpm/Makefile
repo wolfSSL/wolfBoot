@@ -67,6 +67,8 @@ OBJS_REAL=\
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2.o \
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_linux.o \
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_packet.o \
+	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_crypto.o \
+	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_util.o \
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_param_enc.o \
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_swtpm.o \
 	$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_tis.o \

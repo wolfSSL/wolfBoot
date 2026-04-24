@@ -186,6 +186,7 @@ tools/unit-tests/unit-loader-tpm-init
 tools/unit-tests/unit-update-ram-nofixed
 tools/unit-tests/unit-max-space
 tools/unit-tests/unit-sdhci-disk-unaligned
+tools/unit-tests/unit-fwtpm-stub
 
 
 

@@ -156,7 +156,7 @@ extern int tolower(int c);
 #define HAVE_PKCS8
 #define HAVE_PKCS12
 
-#ifdef SECURE_PKCS11
+#if defined(SECURE_PKCS11) || defined(WOLFBOOT_TZ_FWTPM)
 
 static inline int wcs_cmse_get_random(unsigned char* output, int sz)
 {

@@ -33,9 +33,9 @@ MEMORY
 }
 
 /* Stack size for the boot hart (E51 in M-mode)
- * ECC384 signature verification with sp_int needs significant stack
- * for big number temporaries and point multiplication */
-PROVIDE(STACK_SIZE = 64k);
+ * ECC384 + SHA384 + SPMATHALL + NO_ASM measured peak: ~6KB.
+ * 32KB provides 5x headroom. */
+PROVIDE(STACK_SIZE = 32k);
 
 SECTIONS
 {
@@ -115,11 +115,13 @@ PROVIDE(_start_heap = _end);
  *
  * Stack sizes (defined in config or header):
  *   STACK_SIZE_PER_HART = 8192 (8KB per hart)
- *   STACK_SIZE = 64K (64KB for main hart E51)
+ *   STACK_SIZE = 32K (32KB for main hart E51)
  *
- * Total stack area: STACK_SIZE + 4 * STACK_SIZE_PER_HART = 48KB
+ * Total stack area: STACK_SIZE + 4 * STACK_SIZE_PER_HART
  */
-PROVIDE(STACK_SIZE_PER_HART = 8192);
+/* M-mode: only E51 (hart 0) runs; secondary harts park in eNVM WFI loop.
+ * Set to 0 so no L2 Scratch is wasted on phantom secondary stacks. */
+PROVIDE(STACK_SIZE_PER_HART = 0);
 
 /* End of L2 scratchpad */
 PROVIDE(_l2_scratch_end = ORIGIN(L2_SCRATCH) + LENGTH(L2_SCRATCH));
@@ -144,3 +146,8 @@ PROVIDE(__global_pointer$ = _global_pointer);
 
 /* Size of text section to copy (for startup code) */
 PROVIDE(_text_size = _end_text - _start_text_sram);
+
+/* Build-time safety: ensure wolfBoot binary does not overlap image load area.
+ * Image header is loaded at (WOLFBOOT_LOAD_ADDRESS - IMAGE_HEADER_SIZE). */
+ASSERT(_end <= @WOLFBOOT_LOAD_ADDRESS@ - @IMAGE_HEADER_SIZE@,
+    "ERROR: wolfBoot binary overlaps image load area! Increase WOLFBOOT_LOAD_ADDRESS")

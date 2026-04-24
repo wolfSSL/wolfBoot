@@ -25,9 +25,7 @@
 
 #include "image.h"
 #include "loader.h"
-#ifdef DEBUG_BOOT
 #include "printf.h"
-#endif
 
 /* Include platform-specific headers (may define PLIC_BASE) */
 #ifdef TARGET_mpfs250
@@ -142,14 +140,31 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     last_epc = epc;
     last_tval = tval;
 
-#ifdef DEBUG_BOOT
-    /* Debug: print trap info for synchronous exceptions (not interrupts) */
+    /* Always print and halt on synchronous exceptions to prevent
+     * infinite trap-mret loops that appear as silent hangs.
+     * NOTE: keep each printf SIMPLE (few args) to minimize the risk of
+     * recursive traps if wolfBoot's state is corrupted. */
     if (!(cause & MCAUSE_INT)) {
-        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\n", cause, epc,
-            tval);
+        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\n",
+            cause, epc, tval);
+#if defined(DEBUG_BOOT)
+        unsigned long sp_now;
+        __asm__ volatile("mv %0, sp" : "=r"(sp_now));
+        wolfBoot_printf("      sp=%lx\n", sp_now);
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
+        /* Detect stack overflow by comparing SP to linker-defined
+         * stack bottom. Trap entry pushes 128 bytes before calling
+         * here, so the trapping SP was slightly higher. */
+        extern uint8_t _main_hart_stack_bottom[];
+        unsigned long bottom = (unsigned long)_main_hart_stack_bottom;
+        if (sp_now < bottom) {
+            wolfBoot_printf("STACK OVERFLOW: under by %lu\n",
+                bottom - sp_now);
+        }
+#endif
+#endif /* DEBUG_BOOT */
         while (1) ; /* halt to prevent infinite trap-mret loop */
     }
-#endif
 
 #ifdef PLIC_BASE
     /* Check if this is an interrupt (MSB set) */

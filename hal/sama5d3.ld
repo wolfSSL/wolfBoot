@@ -38,11 +38,12 @@ SECTIONS
 	}
 
 	/* collect all uninitialized .bss sections */
-	.bss (NOLOAD) : { 
+	.bss (NOLOAD) : {
 		. = ALIGN(4);
 		_start_bss = .;
 		*(.bss)
 		_end_bss = .;
+		_end = .;
 	}
 }
 

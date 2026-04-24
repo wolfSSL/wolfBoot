@@ -20,7 +20,8 @@ This README describes configuration of supported targets.
 * [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
-* [NXP LPC54xxx](#nxp-lpc54xxx)
+* [NXP LPC546xx](#nxp-lpc546xx)
+* [NXP LPC540xx / LPC54S0xx (SPIFI boot)](#nxp-lpc540xx--lpc54s0xx-spifi-boot)
 * [NXP LPC55S69](#nxp-lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
 * [NXP MCXA153](#nxp-mcxa153)
@@ -826,6 +827,29 @@ Key build settings that differ between configurations:
 
 > **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
 > crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
+
+### M-Mode Optional Build Flags
+
+These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS_EXTRA+=-D...`.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `WATCHDOG` | undefined (disabled) | When defined, the E51 watchdog timer is **kept enabled** during wolfBoot operation with a generous timeout. When undefined, the WDT is **disabled** in `hal_init()` and re-enabled with the boot ROM default in `hal_prepare_boot()` before jumping to the application. Either way, the application receives a normal WDT. |
+| `WATCHDOG_TIMEOUT_MS` | `30000` (30 s) | Watchdog timeout in milliseconds when `WATCHDOG` is defined. ECDSA P-384 verification on E51 with portable C math is bounded at ~5 s; the default 30 s avoids any need to refresh the WDT during the long verify call. |
+
+#### Stack overflow detection
+
+The trap handler in `src/boot_riscv.c` automatically detects stack overflow on synchronous exceptions (requires `DEBUG_BOOT`). When a trap fires with `SP < _main_hart_stack_bottom`, it prints:
+
+```
+TRAP: cause=2 epc=A000740 tval=0
+      sp=A02FFE8
+STACK OVERFLOW: under by 24
+```
+
+This is helpful for diagnosing illegal-instruction TRAPs at random valid `.text` addresses, which are the classic signature of stack overflow corrupting the return address.
+
+The current `STACK_SIZE` in `hal/mpfs250-m.ld` is **32 KB**. Measured peak for ECC384 + SHA384 + SPMATHALL + NO_ASM is ~6 KB (5x headroom).
 
 ### PolarFire SoC Files
 
@@ -1896,11 +1920,17 @@ c
 ```
 
 
-## NXP LPC54xxx
+## NXP LPC546xx
+
+This covers the LPC546xx series (Cortex-M4F with internal NOR flash), using the
+NXP MCUXpresso SDK. Tested on LPC54606J512.
+
+For the LPC540xx / LPC54S0xx SPIFI-boot series (no internal flash), see the
+[next section](#nxp-lpc540xx--lpc54s0xx-spifi-boot).
 
 ### Build Options
 
-The LPC54xxx build can be obtained by specifying the CPU type and the MCUXpresso SDK path at compile time.
+The build can be obtained by specifying the CPU type and the MCUXpresso SDK path at compile time.
 
 The following configuration has been tested against LPC54606J512BD208:
 
@@ -1935,6 +1965,262 @@ Then, from another console:
 arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x0000a100
 ```
+
+
+## NXP LPC540xx / LPC54S0xx (SPIFI boot)
+
+This section covers the LPC540xx and LPC54S0xx family (LPC54005, LPC54016,
+LPC54018, LPC54S005, LPC54S016, LPC54S018, and the "M" in-package-flash
+variants LPC54018M / LPC54S018M). These are Cortex-M4F parts at 180 MHz with
+**no internal NOR flash** — all code executes from SPIFI-mapped QSPI flash at
+address `0x10000000`. The boot ROM loads the image from SPIFI via an
+"enhanced boot block" descriptor embedded in the vector table area.
+
+The wolfBoot HAL (`hal/nxp_lpc54s0xx.c`) is bare-metal (no NXP SDK
+dependency) and targets this whole SPIFI-boot subseries. It has been
+verified on the LPC54S018M-EVK, which uses an on-package Winbond W25Q32JV
+(4MB) and provides an on-board Link2 debug probe (CMSIS-DAP / J-Link) with
+a VCOM UART on Flexcomm0. Other members of the family should work after
+adjusting the SPIFI device configuration words to match the attached QSPI
+part and sector size.
+
+Because flash erase/write operations disable XIP (execute-in-place), all flash
+programming functions must run from RAM. The configuration uses `RAM_CODE=1` to
+ensure this.
+
+### LPC54S018M: Link2 debug probe setup
+
+The LPC54S018M-EVK has an on-board LPC-Link2 debug probe (LPC4322). The probe
+firmware determines the debug protocol: CMSIS-DAP or J-Link. J-Link firmware is
+recommended for use with wolfBoot.
+
+**Jumper JP5** controls the Link2 boot mode:
+- **Installed (normal):** Link2 runs from its internal flash (debug probe mode)
+- **Removed (DFU):** Link2 enters DFU mode for firmware programming
+
+To program J-Link firmware onto the Link2:
+
+1. Remove JP5 and power cycle the board. The Link2 enters DFU mode
+   (USB `1fc9:000c`).
+
+2. Install [NXP LinkServer](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER)
+   which includes LPCScrypt.
+
+3. Boot LPCScrypt onto the Link2 (requires sudo or udev rules):
+
+```sh
+sudo /usr/local/LinkServer/lpcscrypt/scripts/boot_lpcscrypt
+```
+
+4. Identify the LPCScrypt serial port and program J-Link firmware:
+
+```sh
+# Find the new ttyACM device created after boot_lpcscrypt
+ls -lt /dev/ttyACM*
+
+# Program J-Link firmware (replace /dev/ttyACMx with the correct port)
+sudo /usr/local/LinkServer/lpcscrypt/bin/lpcscrypt -d /dev/ttyACMx \
+    program /usr/local/LinkServer/lpcscrypt/probe_firmware/LPCLink2/Firmware_JLink_LPC-Link2_20230502.bin BankA
+```
+
+5. Re-install JP5 and power cycle the board. The Link2 should now enumerate
+   as a Segger J-Link USB device.
+
+**Note:** If `uart-monitor` or another tool has the serial port open, you must
+release it first (e.g., `uart-monitor yield /dev/ttyACMx`) before running
+lpcscrypt.
+
+To program CMSIS-DAP firmware instead (for use with pyocd/OpenOCD):
+
+```sh
+sudo /usr/local/LinkServer/lpcscrypt/bin/lpcscrypt -d /dev/ttyACMx \
+    program /usr/local/LinkServer/lpcscrypt/probe_firmware/LPCLink2/LPC432x_CMSIS_DAP_V5_460.bin.hdr BankA
+```
+
+### LPC54S018M: Toolchain
+
+This port uses bare-metal register access and does not require the NXP
+MCUXpresso SDK. Only an ARM GCC toolchain (`arm-none-eabi-gcc`) and
+[pyocd](https://pyocd.io/) are needed.
+
+```sh
+pip install pyocd
+pyocd pack install LPC54S018J4MET180
+```
+
+### LPC54S018M: Flash partition layout
+
+The 4MB SPIFI flash is partitioned as follows:
+
+| Region       | Address      | Size   |
+|--------------|-------------|--------|
+| wolfBoot     | 0x10000000  | 64KB   |
+| Boot (app)   | 0x10010000  | 960KB  |
+| Update       | 0x10100000  | 960KB  |
+| Swap sector  | 0x101F0000  | 4KB    |
+
+The sector size is 4KB, matching the W25Q32JV minimum erase size.
+
+### LPC54S018M: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cp config/examples/nxp_lpc54s0xx.config .config
+make
+```
+
+This produces `factory.bin` containing wolfBoot + the signed test application.
+
+### LPC54S018M: Loading the firmware
+
+The on-board Link2 debugger supports both CMSIS-DAP and J-Link protocols.
+See [Link2 debug probe setup](#lpc54s018m-link2-debug-probe-setup) for
+programming the probe firmware.
+
+**Using JLink** (Link2 with J-Link firmware):
+
+```
+JLinkExe -device LPC54S018M -if SWD -speed 4000
+loadbin factory.bin 0x10000000
+r
+g
+```
+
+**Using pyocd** (Link2 with CMSIS-DAP firmware):
+
+```sh
+pyocd pack install LPC54S018J4MET180
+pyocd flash -t LPC54S018J4MET180 factory.bin --base-address 0x10000000
+pyocd reset -t LPC54S018J4MET180
+```
+
+**Note:** The LPC54S018M boot ROM requires two post-processing steps on
+`wolfboot.bin` before the chip can boot from SPIFI flash. Both are applied
+automatically by the top-level `Makefile` (see the `wolfboot.bin:` rule,
+gated on `TARGET=nxp_lpc54s0xx`), so no user action is needed — but they
+are documented here because the patched binary will not match the ELF output
+and this affects any external flashing or signing workflow.
+
+1. **Vector table checksum** (offset `0x1C`):
+   The boot ROM validates that the sum of the first 8 words of the vector
+   table (SP, Reset, NMI, HardFault, MemManage, BusFault, UsageFault,
+   checksum) equals zero. The build computes
+   `ck = (-sum_of_first_7_words) & 0xFFFFFFFF` and writes `ck` at offset
+   `0x1C`. If this checksum is wrong, the boot ROM enters ISP mode
+   (USB DFU / UART autobaud) instead of booting from SPIFI.
+
+2. **Enhanced boot block** (at offset `0x160`, pointed to by offset `0x24`):
+   A 100-byte structure (25 × uint32) that the boot ROM reads **before**
+   jumping to the application, to configure the SPIFI controller for
+   quad I/O fast read XIP. Key fields:
+   - `0xFEEDA5A5` magic word
+   - Image type / image load address (`0x10000000`) / image size
+   - `0xEDDC94BD` signature (matches the pointer at offset `0x24`)
+   - SPIFI device configuration words (`0x001640EF`, `0x1301001D`,
+     `0x04030050`, `0x14110D09`) — these describe the W25Q32JV command
+     set, dummy cycles, and timing
+   - Offset `0x24` contains `{0xEDDC94BD, 0x160}` — the marker plus the
+     pointer to the block itself
+
+   Without this block the boot ROM leaves SPIFI in slow single-lane read
+   mode (or unconfigured), and XIP either fails or runs far below spec.
+
+The build prints both `[LPC] enhanced boot block` and
+`vector checksum: 0xXXXXXXXX` lines when these steps run — absence of
+either message means the binary is not bootable on this chip.
+
+### LPC54S018M: Testing firmware update
+
+The helper script [`tools/scripts/nxp-lpc54s0xx-flash.sh`](../tools/scripts/nxp-lpc54s0xx-flash.sh)
+automates the full **build → sign → flash** cycle for the LPC54S018M-EVK:
+
+1. Copies `config/examples/nxp_lpc54s0xx.config` to `.config`
+2. Runs `make` to produce `factory.bin` (wolfBoot + signed v1 test-app)
+3. Parses the active `.config` to resolve partition and trailer addresses
+4. Erases the BOOT and UPDATE partition trailer sectors (clean boot state)
+5. Flashes `factory.bin` to SPIFI at `0x10000000` via `pyocd`
+6. Optionally signs a v2 test-app and flashes it to the update partition
+   to exercise the swap-and-confirm update flow
+
+It drives [pyocd](https://pyocd.io/) with CMSIS-DAP firmware on the on-board
+Link2 probe. Override `CONFIG_FILE`, `PYOCD_TARGET`, or `CROSS_COMPILE` via
+environment variables to adapt the script to other LPC540xx/LPC54S0xx
+boards. Run with `--help` for the full option list.
+
+```sh
+# Build and flash v1 only
+./tools/scripts/nxp-lpc54s0xx-flash.sh
+
+# Build, sign v2, and flash both (full update test)
+./tools/scripts/nxp-lpc54s0xx-flash.sh --test-update
+
+# Flash existing images without rebuilding
+./tools/scripts/nxp-lpc54s0xx-flash.sh --test-update --skip-build
+```
+
+**Manual steps** (if not using the script):
+
+1. Build and flash factory.bin (version 1). USR_LED1 (P3.14) lights up.
+
+2. Sign a version 2 update image and load it to the update partition:
+
+```sh
+# Build update image (version 2)
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+**Using JLink:**
+
+```
+JLinkExe -device LPC54S018M -if SWD -speed 4000
+loadbin test-app/image_v2_signed.bin 0x10100000
+r
+g
+```
+
+**Using pyocd:**
+
+```sh
+pyocd flash -t LPC54S018J4MET180 test-app/image_v2_signed.bin --base-address 0x10100000
+```
+
+3. The test application detects the update, triggers a swap via
+   `wolfBoot_update_trigger()`, and resets. After the swap (~60 seconds),
+   USR_LED2 (P3.3) lights up indicating version 2 is running.
+
+4. The application calls `wolfBoot_success()` to confirm the update and
+   prevent rollback.
+
+### LPC54S018M: LED indicators
+
+The test application uses three user LEDs (accent LEDs, active low):
+
+| LED       | GPIO   | Meaning                    |
+|-----------|--------|----------------------------|
+| USR_LED1  | P3.14  | Version 1 running          |
+| USR_LED2  | P3.3   | Version 2+ running         |
+| USR_LED3  | P2.2   | Update activity in progress |
+
+**Note:** The firmware swap takes approximately 60 seconds due to the SPIFI
+controller mode-switch overhead for each of the 240 sector operations (960KB
+partition with 4KB sectors).
+
+### LPC54S018M: Debugging with JLink
+
+```
+JLinkGDBServer -device LPC54S018M -if SWD -speed 4000 -port 3333
+```
+
+Then, from another console:
+
+```
+arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
+(gdb) add-symbol-file test-app/image.elf 0x10010100
+```
+
+Note: The image.elf symbol offset is the boot partition address (0x10010000) plus
+the wolfBoot image header size (0x100).
 
 
 ## NXP LPC55S69

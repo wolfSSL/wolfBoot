@@ -57,7 +57,13 @@ def wait_for(port, keyword, timeout_sec, label=""):
     while time.monotonic() < deadline:
         remaining = deadline - time.monotonic()
         port.timeout = min(1.0, remaining)
-        line = port.readline()
+        try:
+            line = port.readline()
+        except serial.SerialException:
+            # JTAG reset can cause a brief USB-UART glitch on PTY proxies.
+            # Tolerate the transient disconnect and keep trying.
+            time.sleep(0.5)
+            continue
         if not line:
             continue
         text = line.decode("ascii", errors="replace").rstrip()
@@ -177,8 +183,13 @@ def main():
             sys.exit(1)
 
         chunk = data[sent : sent + CHUNK_SIZE]
-        port.write(chunk)
-        port.flush()
+        # Send in small pieces: some USB-UART bridges (e.g., PolarFire
+        # Video Kit) stall on bulk writes. 8-byte pieces with 10ms
+        # pauses prevent the bridge's TX FIFO from stalling.
+        for ci in range(0, len(chunk), 8):
+            port.write(chunk[ci:ci+8])
+            port.flush()
+            time.sleep(0.010)
         sent += len(chunk)
 
         pct = sent * 100 // total

@@ -434,7 +434,7 @@ extern int tolower(int c);
 #   define NO_CODING
 #endif
 
-#ifdef WOLFBOOT_TPM
+#if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
     /* Do not use heap */
     #define WOLFTPM2_NO_HEAP
     /* small stack options */
@@ -645,6 +645,13 @@ extern int tolower(int c);
 #if defined(WOLFCRYPT_TZ_PSA)
 #undef NO_CMAC
 #undef NO_KDF
+#endif
+
+#if defined(WOLFBOOT_TZ_FWTPM)
+#undef NO_CMAC
+#undef NO_KDF
+#define WOLFSSL_AES_CFB
+#define WOLFSSL_SHA384
 #endif
 
 #ifdef __QNX__

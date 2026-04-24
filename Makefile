@@ -334,6 +334,10 @@ wolfboot.efi: wolfboot.elf
 wolfboot.bin: wolfboot.elf
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
+ifeq ($(TARGET),nxp_lpc54s0xx)
+	@echo "\t[LPC] enhanced boot block"
+	$(Q)python3 tools/scripts/lpc54s0xx_patch_boot_block.py $@
+endif
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.elf
@@ -451,11 +455,20 @@ test-app/image_v1_signed.bin: $(BOOT_IMG) keytools_check
 	@echo "\t[SIGN] $(BOOT_IMG)"
 	@echo "\tSECONDARY_SIGN_OPTIONS=$(SECONDARY_SIGN_OPTIONS)"
 	@echo "\tSECONDARY_PRIVATE_KEY=$(SECONDARY_PRIVATE_KEY)"
-
+ifeq ($(STRIP_ELF),1)
+	@echo "\t[STRIP] $(BOOT_IMG)"
+	$(Q)$(OBJCOPY) --strip-debug $(BOOT_IMG) $(BOOT_IMG).stripped
+	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
+		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG).stripped $(PRIVATE_KEY) \
+		$(SECONDARY_PRIVATE_KEY) 1 || true
+	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG).stripped 1 || true
+	$(Q)mv test-app/image.elf_v1_signed.bin test-app/image_v1_signed.bin
+else
 	$(Q)(test $(SIGN) = NONE) || $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) \
 		$(SECONDARY_SIGN_OPTIONS) $(BOOT_IMG) $(PRIVATE_KEY) \
 		$(SECONDARY_PRIVATE_KEY) 1 || true
 	$(Q)(test $(SIGN) = NONE) && $(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(BOOT_IMG) 1 || true
+endif
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" image.elf
@@ -537,6 +550,7 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_LOAD_BASE@/$(WOLFBOOT_LOAD_BASE)/g" | \
 		sed -e "s/@BOOTLOADER_START@/$(BOOTLOADER_START)/g" | \
 		sed -e "s/@IMAGE_HEADER_SIZE@/$(IMAGE_HEADER_SIZE)/g" | \
+		sed -e "s/@WOLFBOOT_LOAD_ADDRESS@/$(WOLFBOOT_LOAD_ADDRESS)/g" | \
 		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" | \
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
 		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" \
@@ -575,7 +589,7 @@ keys: $(PRIVATE_KEY)
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
 	$(Q)rm -f src/wolfboot_tz_nsc.o
-	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
+	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex wolfboot.srec factory.srec
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)

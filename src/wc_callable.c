@@ -30,6 +30,10 @@
 #include "hal.h"
 #include <stdint.h>
 
+#ifdef WOLFBOOT_TZ_FWTPM
+#include "wolfboot/wcs_fwtpm.h"
+#endif
+
 static WC_RNG wcs_rng;
 
 int CSME_NSE_API wcs_get_random(uint8_t *rand, uint32_t size)
@@ -41,6 +45,9 @@ void wcs_Init(void)
 {
     hal_trng_init();
     wc_InitRng(&wcs_rng);
+#ifdef WOLFBOOT_TZ_FWTPM
+    wcs_fwtpm_init();
+#endif
 }
 
 #endif /* WOLFCRYPT_SECURE_MODE */
