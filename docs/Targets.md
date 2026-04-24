@@ -2359,17 +2359,22 @@ LinkServer flash LPC55S69 erase
 ```sh
 LinkServer flash LPC55S69 load factory.bin:0
 ```
+NOTE: See [tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm) for the lauterbach equivalent of 1 and 2 combined.
 
 3) The LED will light up blue to indicate version 1 of the firmware is running.  You should also see output
 like this in the terminal window:
 
 ```sh
 lpc55s69 init
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
-Partition 1 header magic 0xFFFFFFFF invalid at 0x15000
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x18000
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
 Booting version: 0x1
-lpc55s69 init
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
     boot:   ver=0x1 state=0xFF
     update: ver=0x0 state=0xFF
 Calling wolfBoot_success()
@@ -2382,25 +2387,30 @@ Calling wolfBoot_success()
 1) Sign the test-app with version 2:
 
 ```sh
-./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+./tools/keytools/sign --ecc384 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
 2) Flash v2 update binary to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
 
 Example:
 ```sh
-LinkServer flash LPC55S69 load test-app/image_v2_signed.bin:0x15000
+LinkServer flash LPC55S69 load test-app/image_v2_signed.bin:0x18000
 ```
+NOTE: See [tools/scripts/lpc55s69/lpc55s69_flash_update.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_update.cmm) for the lauterbach equivalent.
 
 3) You should see output like this in the terminal window:
 
 ```sh
 lpc55s69 init
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
-Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
 Booting version: 0x1
-lpc55s69 init
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
     boot:   ver=0x1 state=0x00
     update: ver=0x2 state=0xFF
 Update detected, version: 0x2
@@ -2417,18 +2427,18 @@ like this in the terminal window:
 
 ```sh
 lpc55s69 init
-Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
-Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
 Starting Update (fallback allowed 0)
-Update partition: 0x15000 (sz 24016, ver 0x2, type 0x601)
-Boot partition: 0xA000 (sz 24016, ver 0x1, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
 Versions: Current 0x1, Update 0x2
 Copy sector 0 (part 1->2)
 Copy sector 0 (part 0->1)
 Copy sector 0 (part 2->0)
-Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
-Update partition: 0x15000 (sz 24016, ver 0x1, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x1, type 0x601)
 Copy sector 1 (part 1->2)
 Copy sector 1 (part 0->1)
 Copy sector 1 (part 2->0)
@@ -2561,23 +2571,18 @@ Copy sector 43 (part 2->0)
 Copy sector 44 (part 1->2)
 Copy sector 44 (part 0->1)
 Copy sector 44 (part 2->0)
-Copy sector 45 (part 1->2)
-Copy sector 45 (part 0->1)
-Copy sector 45 (part 2->0)
-Copy sector 46 (part 1->2)
-Copy sector 46 (part 0->1)
-Copy sector 46 (part 2->0)
-Copy sector 47 (part 1->2)
-Copy sector 47 (part 0->1)
-Copy sector 47 (part 2->0)
-Erasing remainder of partition (38 sectors)...
-Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
-Update partition: 0x15000 (sz 24016, ver 0x1, type 0x601)
+Erasing remainder of partition (41 sectors)...
+Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
+Update partition: 0x18000 (sz 22460, ver 0x1, type 0x601)
 Copy sector 85 (part 0->2)
 Copied boot sector to swap
-Boot partition: 0xA000 (sz 24016, ver 0x2, type 0x601)
+Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
 Booting version: 0x2
-lpc55s69 init
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
     boot:   ver=0x2 state=0x10
     update: ver=0x1 state=0xFF
 Calling wolfBoot_success()
@@ -2600,7 +2605,248 @@ b main
 mon reset
 c
 ```
+NOTE: See [tools/scripts/lpc55s69/lpc55s69_debug.cmm](/tools/scripts/lpc55s69/lpc55s69_debug.cmm) for the lauterbach equivalent.
 
+
+### LPC55S69: Test and Benchmark
+
+Here is an example of how to run wolfCrypt test and benchmarking on actual hardware.
+
+1. Start with [lpc55s69-benchmark.config](/config/examples/lpc55s69-benchmark.config)
+  - By default, the config file has PKA?=0, which means hardware acceleration of crypto is off.  Let's try that first.
+```sh
+cp config/examples/lpc55s69-benchmark.config .config
+make clean
+make
+```
+
+2. Flash the factory.bin and reboot...
+```sh
+lpc55s69 init
+Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x201)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x3B000
+Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x201)
+Booting version: 0x1
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
+    boot:   ver=0x1 state=0xFF
+    update: ver=0x0 state=0xFF
+Calling wolfBoot_success()
+    boot:   ver=0x1 state=0x00
+    update: ver=0x0 state=0xFF
+
+Running wolfCrypt tests...
+------------------------------------------------------------------------------
+ wolfSSL version 5.9.1
+------------------------------------------------------------------------------
+macro    test passed!
+error    test passed!
+MEMORY   test passed!
+asn      test passed!
+SHA-256  test passed!
+SHA-384  test passed!
+SHA-512  test passed!
+SHA-512/224  test passed!
+SHA-512/256  test passed!
+RANDOM   test passed!
+Hash     test passed!
+HMAC-SHA256 test passed!
+HMAC-SHA384 test passed!
+HMAC-SHA512 test passed!
+GMAC     test passed!
+AES      test passed!
+AES192   test passed!
+AES256   test passed!
+AES-CBC  test passed!
+AES-CTR  test passed!
+AES-OFB  test passed!
+AES-GCM  test passed!
+AES-CFB  test passed!
+ECC      test passed!
+ECC buffer test passed!
+logging  test passed!
+mutex    test passed!
+memcb    test passed!
+Test complete
+Tests complete.
+
+
+Running wolfCrypt benchmarks...
+wolfCrypt Benchmark (block bytes 1024, min 1.0 sec each)
+RNG SHA-256 DRBG         325 KiB took 1.044 seconds, 311.302 KiB/s
+AES-128-CBC-enc          350 KiB took 1.051 seconds, 333.016 KiB/s
+AES-128-CBC-dec          350 KiB took 1.057 seconds, 331.125 KiB/s
+AES-192-CBC-enc          300 KiB took 1.035 seconds, 289.855 KiB/s
+AES-192-CBC-dec          300 KiB took 1.040 seconds, 288.461 KiB/s
+AES-256-CBC-enc          275 KiB took 1.064 seconds, 258.458 KiB/s
+AES-256-CBC-dec          275 KiB took 1.062 seconds, 258.701 KiB/s
+AES-128-GCM-enc          275 KiB took 1.036 seconds, 265.188 KiB/s
+AES-128-GCM-dec          275 KiB took 1.035 seconds, 265.444 KiB/s
+AES-192-GCM-enc          250 KiB took 1.057 seconds, 236.518 KiB/s
+AES-192-GCM-dec          250 KiB took 1.056 seconds, 236.742 KiB/s
+AES-256-GCM-enc          225 KiB took 1.047 seconds, 214.899 KiB/s
+AES-256-GCM-dec          225 KiB took 1.046 seconds, 215.105 KiB/s
+AES-128-GCM-enc-no_AAD   275 KiB took 1.033 seconds, 265.957 KiB/s
+AES-128-GCM-dec-no_AAD   275 KiB took 1.032 seconds, 266.214 KiB/s
+AES-192-GCM-enc-no_AAD   250 KiB took 1.053 seconds, 237.191 KiB/s
+AES-192-GCM-dec-no_AAD   250 KiB took 1.052 seconds, 237.416 KiB/s
+AES-256-GCM-enc-no_AAD   225 KiB took 1.044 seconds, 215.517 KiB/s
+AES-256-GCM-dec-no_AAD   225 KiB took 1.042 seconds, 215.723 KiB/s
+GMAC Table               1 MiB took 1.009 seconds, 1.208 MiB/s
+AES-128-ECB-enc          374 KiB took 1.026 seconds, 364.167 KiB/s
+AES-128-ECB-dec          385 KiB took 1.027 seconds, 374.878 KiB/s
+AES-192-ECB-enc          319 KiB took 1.024 seconds, 311.219 KiB/s
+AES-192-ECB-dec          330 KiB took 1.018 seconds, 323.846 KiB/s
+AES-256-ECB-enc          286 KiB took 1.036 seconds, 276.061 KiB/s
+AES-256-ECB-dec          286 KiB took 1.006 seconds, 284.011 KiB/s
+AES-128-CFB-enc          350 KiB took 1.064 seconds, 328.947 KiB/s
+AES-128-CFB-dec          350 KiB took 1.057 seconds, 331.125 KiB/s
+AES-192-CFB-enc          300 KiB took 1.046 seconds, 286.532 KiB/s
+AES-192-CFB-dec          300 KiB took 1.039 seconds, 288.461 KiB/s
+AES-256-CFB-enc          275 KiB took 1.074 seconds, 256.052 KiB/s
+AES-256-CFB-dec          275 KiB took 1.067 seconds, 257.490 KiB/s
+AES-128-OFB-enc          350 KiB took 1.020 seconds, 343.137 KiB/s
+AES-128-OFB-dec          350 KiB took 1.019 seconds, 343.137 KiB/s
+AES-192-OFB-enc          300 KiB took 1.009 seconds, 297.324 KiB/s
+AES-192-OFB-dec          300 KiB took 1.009 seconds, 297.324 KiB/s
+AES-256-OFB-enc          275 KiB took 1.038 seconds, 264.677 KiB/s
+AES-256-OFB-dec          275 KiB took 1.039 seconds, 264.423 KiB/s
+AES-128-CTR              350 KiB took 1.010 seconds, 346.191 KiB/s
+AES-192-CTR              300 KiB took 1.003 seconds, 299.102 KiB/s
+AES-256-CTR              275 KiB took 1.033 seconds, 265.957 KiB/s
+SHA-256                  1000 KiB took 1.000 seconds, 1000.000 KiB/s
+SHA-384                  425 KiB took 1.060 seconds, 400.565 KiB/s
+SHA-512                  425 KiB took 1.060 seconds, 400.565 KiB/s
+SHA-512/224              425 KiB took 1.062 seconds, 400.188 KiB/s
+SHA-512/256              425 KiB took 1.060 seconds, 400.565 KiB/s
+HMAC-SHA256              1000 KiB took 1.009 seconds, 991.080 KiB/s
+HMAC-SHA384              400 KiB took 1.015 seconds, 394.088 KiB/s
+HMAC-SHA512              400 KiB took 1.015 seconds, 394.088 KiB/s
+ECC   [      SECP256R1]   256  key gen        72 ops took 1.007 sec, avg 13.986 ms, 71.499 ops/sec
+ECDHE [      SECP256R1]   256    agree        34 ops took 1.013 sec, avg 29.823 ms, 33.530 ops/sec
+ECDSA [      SECP256R1]   256     sign        42 ops took 1.036 sec, avg 24.690 ms, 40.501 ops/sec
+ECDSA [      SECP256R1]   256   verify        22 ops took 1.003 sec, avg 45.590 ms, 21.934 ops/sec
+RNG      256 SHA256 Init/Free    196 ops took 1.003 sec, avg 5.117 ms, 195.413 ops/sec
+Benchmark complete
+Benchmarks complete.
+```
+
+2. Now try changing to PKA?=1 in the config file, rebuild, and reflash...
+```sh
+lpc55s69 init
+Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x201)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x3B000
+Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x201)
+Booting version: 0x1
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
+    boot:   ver=0x1 state=0xFF
+    update: ver=0x0 state=0xFF
+Calling wolfBoot_success()
+    boot:   ver=0x1 state=0x00
+    update: ver=0x0 state=0xFF
+
+Running wolfCrypt tests...
+------------------------------------------------------------------------------
+ wolfSSL version 5.9.1
+------------------------------------------------------------------------------
+macro    test passed!
+error    test passed!
+MEMORY   test passed!
+asn      test passed!
+SHA-256  test passed!
+SHA-384  test passed!
+SHA-512  test passed!
+SHA-512/224  test passed!
+SHA-512/256  test passed!
+RANDOM   test passed!
+Hash     test passed!
+HMAC-SHA256 test passed!
+HMAC-SHA384 test passed!
+HMAC-SHA512 test passed!
+GMAC     test passed!
+AES      test passed!
+AES192   test passed!
+AES256   test passed!
+AES-CBC  test passed!
+AES-CTR  test passed!
+AES-OFB  test passed!
+AES-GCM  test passed!
+AES-CFB  test passed!
+ECC      test passed!
+ECC buffer test passed!
+logging  test passed!
+mutex    test passed!
+memcb    test passed!
+Test complete
+Tests complete.
+
+
+Running wolfCrypt benchmarks...
+wolfCrypt Benchmark (block bytes 1024, min 1.0 sec each)
+RNG SHA-256 DRBG         650 KiB took 1.011 seconds, 642.292 KiB/s
+AES-128-CBC-enc          23 MiB took 1.000 seconds, 23.657 MiB/s
+AES-128-CBC-dec          22 MiB took 1.000 seconds, 22.097 MiB/s
+AES-192-CBC-enc          23 MiB took 1.000 seconds, 23.510 MiB/s
+AES-192-CBC-dec          19 MiB took 1.000 seconds, 19.531 MiB/s
+AES-256-CBC-enc          21 MiB took 1.000 seconds, 21.582 MiB/s
+AES-256-CBC-dec          17 MiB took 1.000 seconds, 17.504 MiB/s
+AES-128-GCM-enc          950 KiB took 1.022 seconds, 928.641 KiB/s
+AES-128-GCM-dec          950 KiB took 1.022 seconds, 929.549 KiB/s
+AES-192-GCM-enc          925 KiB took 1.003 seconds, 922.233 KiB/s
+AES-192-GCM-dec          925 KiB took 1.001 seconds, 923.153 KiB/s
+AES-256-GCM-enc          925 KiB took 1.012 seconds, 914.031 KiB/s
+AES-256-GCM-dec          925 KiB took 1.011 seconds, 914.935 KiB/s
+AES-128-GCM-enc-no_AAD   950 KiB took 1.010 seconds, 939.663 KiB/s
+AES-128-GCM-dec-no_AAD   950 KiB took 1.010 seconds, 940.594 KiB/s
+AES-192-GCM-enc-no_AAD   950 KiB took 1.016 seconds, 934.119 KiB/s
+AES-192-GCM-dec-no_AAD   950 KiB took 1.014 seconds, 935.960 KiB/s
+AES-256-GCM-enc-no_AAD   925 KiB took 1.000 seconds, 925.000 KiB/s
+AES-256-GCM-dec-no_AAD   950 KiB took 1.025 seconds, 925.925 KiB/s
+GMAC Table               1 MiB took 1.001 seconds, 1.218 MiB/s
+AES-128-ECB-enc          24 MiB took 1.000 seconds, 24.502 MiB/s
+AES-128-ECB-dec          24 MiB took 1.000 seconds, 24.008 MiB/s
+AES-192-ECB-enc          24 MiB took 1.000 seconds, 24.341 MiB/s
+AES-192-ECB-dec          20 MiB took 1.000 seconds, 20.990 MiB/s
+AES-256-ECB-enc          22 MiB took 1.000 seconds, 22.290 MiB/s
+AES-256-ECB-dec          18 MiB took 1.000 seconds, 18.659 MiB/s
+AES-128-CFB-enc          3 MiB took 1.003 seconds, 3.136 MiB/s
+AES-128-CFB-dec          3 MiB took 1.005 seconds, 3.133 MiB/s
+AES-192-CFB-enc          3 MiB took 1.006 seconds, 3.082 MiB/s
+AES-192-CFB-dec          3 MiB took 1.006 seconds, 3.079 MiB/s
+AES-256-CFB-enc          3 MiB took 1.000 seconds, 3.027 MiB/s
+AES-256-CFB-dec          3 MiB took 1.001 seconds, 3.021 MiB/s
+AES-128-OFB-enc          3 MiB took 1.007 seconds, 3.030 MiB/s
+AES-128-OFB-dec          3 MiB took 1.008 seconds, 3.027 MiB/s
+AES-192-OFB-enc          3 MiB took 1.006 seconds, 2.982 MiB/s
+AES-192-OFB-dec          2 MiB took 1.000 seconds, 2.978 MiB/s
+AES-256-OFB-enc          2 MiB took 1.000 seconds, 2.929 MiB/s
+AES-256-OFB-dec          2 MiB took 1.000 seconds, 2.926 MiB/s
+AES-128-CTR              17 MiB took 1.001 seconds, 17.706 MiB/s
+AES-192-CTR              17 MiB took 1.000 seconds, 17.633 MiB/s
+AES-256-CTR              16 MiB took 1.000 seconds, 16.528 MiB/s
+SHA-256                  57 MiB took 1.000 seconds, 57.397 MiB/s
+SHA-384                  400 KiB took 1.000 seconds, 400.000 KiB/s
+SHA-512                  400 KiB took 1.000 seconds, 400.000 KiB/s
+SHA-512/224              400 KiB took 1.000 seconds, 400.000 KiB/s
+SHA-512/256              400 KiB took 1.000 seconds, 400.000 KiB/s
+HMAC-SHA256              48 MiB took 1.000 seconds, 48.803 MiB/s
+HMAC-SHA384              400 KiB took 1.015 seconds, 393.700 KiB/s
+HMAC-SHA512              400 KiB took 1.015 seconds, 393.700 KiB/s
+ECC   [      SECP256R1]   256  key gen        74 ops took 1.020 sec, avg 13.783 ms, 72.549 ops/sec
+ECDHE [      SECP256R1]   256    agree        34 ops took 1.015 sec, avg 29.882 ms, 33.464 ops/sec
+ECDSA [      SECP256R1]   256     sign        42 ops took 1.003 sec, avg 23.904 ms, 41.832 ops/sec
+ECDSA [      SECP256R1]   256   verify        24 ops took 1.081 sec, avg 45.041 ms, 22.201 ops/sec
+RNG      256 SHA256 Init/Free      5 ops took 1.258 sec, avg 251.600 ms, 3.974 ops/sec
+Benchmark complete
+Benchmarks complete.
+```
 
 ## NXP LS1028A
 
