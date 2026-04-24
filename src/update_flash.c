@@ -1401,6 +1401,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint8_t updateState;
 #endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
     struct wolfBoot_image boot;
+    BENCHMARK_DECLARE();
 
 #if defined(ARCH_SIM) && defined(WOLFBOOT_TPM) && defined(WOLFBOOT_TPM_SEAL)
     wolfBoot_unlock_disk();
@@ -1481,10 +1482,21 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_get_blob_version(boot.hdr));
 
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
-    if (bootRet < 0
-            || (wolfBoot_verify_integrity(&boot) < 0)
-            || (wolfBoot_verify_authenticity(&boot) < 0)
-    ) {
+    if (bootRet >= 0) {
+        wolfBoot_printf("Checking integrity...");
+        BENCHMARK_START();
+        bootRet = wolfBoot_verify_integrity(&boot);
+        if (bootRet >= 0)
+            BENCHMARK_END("done");
+    }
+    if (bootRet >= 0) {
+        wolfBoot_printf("Verifying signature...");
+        BENCHMARK_START();
+        bootRet = wolfBoot_verify_authenticity(&boot);
+        if (bootRet >= 0)
+            BENCHMARK_END("done");
+    }
+    if (bootRet < 0) {
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
 #ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
