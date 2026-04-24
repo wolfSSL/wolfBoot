@@ -502,6 +502,9 @@ extern int tolower(int c);
             #define WOLFSSL_AES_CFB
             #define WOLFSSL_AES_COUNTER
             #define WOLFSSL_STATIC_MEMORY_TEST_SZ (30 * 1024)
+            #define WOLFSSL_SHA256
+            #define WOLFSSL_SHA384
+            #define WOLFSSL_SHA512
         #else
             /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
             * WARNING: my_rng_seed_gen is NOT cryptographically secure.
