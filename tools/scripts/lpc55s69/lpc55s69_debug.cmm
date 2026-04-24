@@ -31,8 +31,8 @@ go
 
 ;; STOP in test-app...
 ;; UNCOMMENT the following:
-WAIT !STATE.RUN()
-data.load "&basedir\test-app\image.elf" /nocode
-;break.set wc_InitRng_ex /onchip /temporary
+;;WAIT !STATE.RUN()
+;;data.load "&basedir\test-app\image.elf" /nocode
+;;break.set main /onchip /temporary
 
 go
