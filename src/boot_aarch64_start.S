@@ -1362,7 +1362,7 @@ el2_to_el1_boot:
  * at EL2, so instruction fetch keeps working after SCTLR_EL2.M is
  * cleared.
  *
- * AAPCS64: clobbers x0-x11; x30 (LR) is preserved because the
+ * AAPCS64: clobbers x0-x7, x9-x11; x30 (LR) is preserved because the
  * set/way loop body does not touch it.
  */
 #if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1

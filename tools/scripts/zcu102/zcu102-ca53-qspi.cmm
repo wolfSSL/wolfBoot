@@ -11,9 +11,15 @@ ENTRY &arg1
 &arg1=STRing.UPpeR("&arg1")  // for example "PREPAREONLY"
 &dualqspi=1  ; dual(1) or single(0)
 
-; Adjust to your TRACE32 installation path
+; TRACE32 demo scripts directory.
+; "~~" is the TRACE32 installation path - expands to the correct location
+; on Windows (e.g. C:/T32), Linux (e.g. /opt/t32), and macOS automatically,
+; so no per-platform edit is needed. Override only if the demo scripts live
+; somewhere non-standard:
+;   &pdd="C:/T32/demo/arm"        ; Windows default install
+;   &pdd="/opt/t32/demo/arm"      ; Linux default install
 LOCAL &pdd
-&pdd="C:/T32/demo/arm"
+&pdd="~~/demo/arm"
 
 SYStem.RESet
 SYStem.CPU ZYNQ-ULTRASCALE+-APU
@@ -100,6 +106,17 @@ IF "&arg1"=="PREPAREONLY"
 
 FLASHFILE.Create 0x0--0x1FFFFFFF 0x20000 Byte
 
+; NOTE ON LARGE IMAGES (>~100 MB):
+; FLASHFILE.Load buffers the full source file into TRACE32 temporary memory
+; before any programming. Many installations cap that pool at ~128 MB, so a
+; single Load of a file larger than ~100 MB will fail with
+;   "FATAL ERROR: out of temporary memory"
+; Workaround: split the source externally (e.g. `dd bs=1M count=N` and
+; `dd bs=1M skip=N`) and issue each Load in its own
+; FLASHFILE.ReProgram ALL / off bracket (the temp pool is released between
+; brackets - a single bracket spanning multiple large Loads still exhausts
+; memory on the second Load).
+
 ; Flash BOOT.BIN (wolfBoot) at offset 0x0
 DIALOG.YESNO "Flash wolfBoot BOOT.BIN now?"
 ENTRY &programnow
@@ -173,7 +190,6 @@ READ_ID_TEST:
 
   RETURN
 )
-
 
 READ_ID_TEST_DUAL:
 (

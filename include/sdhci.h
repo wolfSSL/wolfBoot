@@ -57,7 +57,13 @@
 #define DISK_TEST_BLOCK_ADDR    149504  /* ~76MB offset */
 #endif
 
-/* Auto-select DMA buffer boundary based on threshold */
+/* DMA buffer boundary: how often the SDMA engine pauses to refresh its
+ * address pointer (handled by sdhci_irq_handler() via SDHCI_SRS12_DMAINT).
+ * This is a throughput knob and is independent of SDHCI_DMA_THRESHOLD
+ * (which controls when to switch from PIO to SDMA). Override in target
+ * .config to match the largest expected single transfer for fewer
+ * boundary IRQs; otherwise auto-select based on the threshold. */
+#ifndef SDHCI_DMA_BUFF_BOUNDARY
 #if (SDHCI_DMA_THRESHOLD > (256U * 1024U))
     #define SDHCI_DMA_BUFF_BOUNDARY   SDHCI_SRS01_DMA_BUFF_512KB
     #if (SDHCI_DMA_THRESHOLD != (512U * 1024U))
@@ -99,6 +105,7 @@
         #warning "SDHCI_DMA_THRESHOLD rounded up to 4KB (minimum)"
     #endif
 #endif
+#endif /* !SDHCI_DMA_BUFF_BOUNDARY */
 
 /* Timeouts */
 #ifndef SDHCI_INIT_TIMEOUT_US

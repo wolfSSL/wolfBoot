@@ -13,10 +13,21 @@ MEMORY
 {
    /* psu_ddr_0_MEM_0 : ORIGIN = 0x0, LENGTH = 0x80000000 */
    /* wolfBoot DDR location (2MB reserved):
-    *   Loaded by FSBL/BL31 to DDR at 0x8000000 (128MB)
-    *   Same address used for both QSPI and SD card boot
+    *   Loaded by FSBL/BL31 to DDR at 0x10000000 (256MB). Must be above
+    *   the OS kernel load region: for FIT images whose "load" address is
+    *   0x00200000 (typical for AArch64 kernels) and whose payload
+    *   approaches or exceeds ~126MB, the kernel memcpy into 0x00200000..
+    *   sweeps across 0x08000000 and would clobber wolfBoot if linked
+    *   there. Same address used for QSPI and SD card boot.
+    *
+    *   WOLFBOOT_LOAD_ADDRESS (signed-image staging base) also defaults to
+    *   0x10000000 on the SD-card config. The overlap with wolfBoot's own
+    *   2MB text region is safe because wolfBoot completes the verify and
+    *   jump sequence from I-cache; the I-cache is only invalidated inside
+    *   el2_flush_and_disable_mmu, immediately before control transfers to
+    *   the loaded kernel (which no longer needs wolfBoot's .text).
     */
-   psu_ddr_0_MEM_0 : ORIGIN = 0x8000000, LENGTH = 0x200000
+   psu_ddr_0_MEM_0 : ORIGIN = 0x10000000, LENGTH = 0x200000
    psu_ddr_1_MEM_0 : ORIGIN = 0x800000000, LENGTH = 0x80000000
    psu_ocm_ram_0_MEM_0 : ORIGIN = 0xFFFC0000, LENGTH = 0x40000
    psu_qspi_linear_0_MEM_0 : ORIGIN = 0xC0000000, LENGTH = 0x20000000

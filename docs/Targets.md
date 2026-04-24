@@ -2599,7 +2599,7 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 
 Use `config/examples/zynqmp_sdcard.config`. This uses the Arasan SDHCI controller (SD1 - external SD card slot on ZCU102) and an **MBR** partitioned SD card.
 
-wolfBoot unconditionally flushes the EL2 D-cache/I-cache and disables the EL2 MMU before handoff (see `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`), satisfying the ARM64 Linux boot protocol with no extra config flag required.
+On the direct-jump handoff path, wolfBoot flushes the EL2 D-cache/I-cache and disables the EL2 MMU via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S` when `BOOT_EL1` is not enabled and the current exception level is EL2. The ERET-to-EL1 handoff path is different, so this cleanup is not unconditional.
 
 **Partition layout**
 | Partition | Name   | Size      | Type                          | Contents                                   |
@@ -2705,8 +2705,11 @@ The ZynqMP uses an Arasan SDHCI v3.0 controller. Key considerations:
   level. `SDHCI_FORCE_CARD_DETECT` is set in the config since FSBL already booted from
   the same SD card.
 - **`DISK_BLOCK_SIZE`**: Controls the firmware read chunk size in `update_disk.c` (default
-  64KB). This determines the per-read size passed to the SDHCI driver. Must be less than
-  the SDMA buffer boundary (4KB with the default threshold).
+  64KB). This determines the per-read size passed to the SDHCI driver. It does not need
+  to be smaller than `SDHCI_DMA_BUFF_BOUNDARY`; if a read crosses one or more SDMA buffer
+  boundaries, the SDHCI driver handles that via the normal SDMA boundary interrupt path.
+  In practice, this setting is a tradeoff: larger reads may trigger boundary IRQs more
+  often, while smaller reads reduce crossings but increase request overhead.
 
 **Debug**
 
