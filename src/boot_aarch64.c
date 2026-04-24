@@ -34,7 +34,7 @@
 #include "hal/versal.h"
 #elif defined(TARGET_zynq)
 #include "hal/zynq.h"
-#elif defined(TARGET_ls1028a)
+#elif defined(TARGET_nxp_ls1028a)
 #include "hal/nxp_ls1028a.h"
 #endif
 

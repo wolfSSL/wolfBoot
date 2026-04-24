@@ -18,8 +18,10 @@
 ;   3. wolfBoot runs from DDR (0x7FF00000)
 ; ------------------------------------------------------------------------------
 
-; Base directory for wolfBoot build output (adjust to match your build path)
-&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+; Base directory for wolfBoot build output. "." means the TRACE32 current
+; working directory - set this to your wolfBoot checkout path if running
+; TRACE32 from elsewhere (e.g. "C:/src/wolfBoot" or "/home/user/wolfBoot").
+&basedir="."
 
 PRINT "========================================"
 PRINT "T1040 wolfBoot Debug Session"

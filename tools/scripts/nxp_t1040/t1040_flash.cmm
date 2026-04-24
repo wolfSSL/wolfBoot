@@ -25,11 +25,15 @@
 ;   0xEFFFC000: Stage 1 loader (16 KB, includes reset vector)
 ; ------------------------------------------------------------------------------
 
-; Base directory for wolfBoot build output (adjust to match your build path)
-&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+; Base directory for wolfBoot build output. "." means the TRACE32 current
+; working directory - set this to your wolfBoot checkout path if running
+; TRACE32 from elsewhere (e.g. "C:/src/wolfBoot" or "/home/user/wolfBoot").
+&basedir="."
 
-; Persistent backup directory (survives make clean)
-&backupdir="/home/davidgarske/Projects/NXP/t1040rdb"
+; Persistent backup directory (survives make clean). Leave as "." to keep
+; artifacts alongside the build tree, or point elsewhere to preserve
+; signed/backup images across source cleans.
+&backupdir="."
 
 ; FLASH Number of banks
 ; The JS28F00AM29EWHA is a single 128MB NOR chip. CPLD virtual banking

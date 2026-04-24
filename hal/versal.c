@@ -66,7 +66,11 @@
 /* Linux kernel command line arguments */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
-#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
+/* Default Versal SD layout: rootfs on partition 2. Configurations that use
+ * the 4-partition MBR layout with OFP_A/OFP_B slots
+ * (boot / OFP_A / OFP_B / rootfs, e.g. config/examples/zynqmp_sdcard.config)
+ * should override LINUX_BOOTARGS_ROOT to "/dev/mmcblk0p4". */
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p2"
 #endif
 
 #define LINUX_BOOTARGS \
@@ -1275,10 +1279,11 @@ int hal_dts_fixup(void* dts_addr)
     /* Expand total size to allow adding/modifying properties */
     fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
 
-    /* Find /chosen node */
+    /* Find /chosen node; create it only if genuinely missing. Any other
+     * negative return (malformed FDT, etc.) is surfaced directly rather
+     * than masked by a follow-on fdt_add_subnode() failure. */
     off = fdt_find_node_offset(fdt, -1, "chosen");
-    if (off < 0) {
-        /* Create /chosen node if it doesn't exist */
+    if (off == -FDT_ERR_NOTFOUND) {
         off = fdt_add_subnode(fdt, 0, "chosen");
     }
 

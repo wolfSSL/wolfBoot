@@ -22,7 +22,8 @@ Trace.DISable
 
 SYStem.Mode Prepare
 ;GOSUB DisableWatchdog
-;DO "C:/T32/demo/arm/hardware/zynq_ultrascale/scripts/zynq-ultrascale_kick_bootcore.cmm" A53_X64
+; "~~" expands to the TRACE32 install dir on any host OS (Windows/Linux/macOS):
+;DO "~~/demo/arm/hardware/zynq_ultrascale/scripts/zynq-ultrascale_kick_bootcore.cmm" A53_X64
 
 SYStem.Mode.Attach
 

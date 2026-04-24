@@ -504,7 +504,6 @@ static int csu_dma_config(int ch, int doSwap)
 int csu_aes(int enc, const uint8_t* iv, const uint8_t* in, uint8_t* out, uint32_t sz)
 {
     int ret;
-    uint32_t reg;
 
     /* Flush data cache for variables used */
     flush_dcache_range((unsigned long)iv,  (unsigned long)iv + AES_GCM_TAG_SZ);
@@ -601,7 +600,6 @@ int csu_init(void)
 #endif
     uint32_t reg1 = pmu_mmio_read(CSU_IDCODE);
     uint32_t reg2 = pmu_mmio_read(CSU_VERSION);
-    uint64_t ms;
 
     wolfBoot_printf("CSU ID 0x%08x, Ver 0x%08x\n",
         reg1, reg2 & CSU_VERSION_MASK);
@@ -1361,6 +1359,39 @@ static int qspi_exit_4byte_addr(QspiDev_t* dev)
 }
 #endif
 
+/* Soft-reset the flash to a known idle state.
+ * FSBL / BootROM may leave the flash in an unexpected mode (XIP enabled,
+ * 4-byte addr set, auto-boot probing, etc.). Issue RESET_ENABLE (0x66) +
+ * RESET_MEMORY (0x99) to bring it back to defaults before first transaction.
+ * Per Micron MT25Q datasheet: t_SHSL2 ~ 40 us max after RESET_MEMORY. */
+static int qspi_flash_reset(QspiDev_t* dev)
+{
+    int ret;
+    uint8_t cmd[4]; /* size multiple of uint32_t */
+
+    memset(cmd, 0, sizeof(cmd));
+    cmd[0] = RESET_ENABLE_CMD;
+    /* Reset commands are always issued in single-SPI mode regardless of
+     * dev->mode: the flash's current bus mode is unknown at reset time, and
+     * the single-SPI opcode is the universal-compatible form. */
+    ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
+        GQSPI_GEN_FIFO_MODE_SPI);
+#if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+    wolfBoot_printf("Flash Reset Enable: Ret %d\n", ret);
+#endif
+    if (ret == GQSPI_CODE_SUCCESS) {
+        cmd[0] = RESET_MEMORY_CMD;
+        ret = qspi_transfer(dev, cmd, 1, NULL, 0, NULL, 0, 0,
+            GQSPI_GEN_FIFO_MODE_SPI);
+    #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
+        wolfBoot_printf("Flash Reset Memory: Ret %d\n", ret);
+    #endif
+    }
+    /* Allow flash time to complete the reset and become ready. */
+    hal_delay_ms(1);
+    return ret;
+}
+
 /* QSPI functions */
 void qspi_init(void)
 {
@@ -1444,13 +1475,29 @@ void qspi_init(void)
 #if (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) <= 40000000 /* 40MHz */
     /* At <40 MHz, the Quad-SPI controller should be in non-loopback mode with
      * the clock and data tap delays bypassed. */
-    IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
+    /* IOU_TAPDLY_BYPASS is not writable from EL2/EL1 without going through PMU. */
+    if (current_el() <= 2) {
+        pmu_request(PM_MMIO_WRITE, IOU_TAPDLY_BYPASS_ADDR,
+                    IOU_TAPDLY_BYPASS_LQSPI_RX, IOU_TAPDLY_BYPASS_LQSPI_RX,
+                    0, NULL);
+    }
+    else {
+        IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
+    }
     GQSPI_LPBK_DLY_ADJ = 0;
     GQSPI_DATA_DLY_ADJ = 0;
 #elif (GQSPI_CLK_REF / (2 << GQSPI_CLK_DIV)) <= 100000000 /* 100MHz */
     /* At <100 MHz, the Quad-SPI controller should be in clock loopback mode
      * with the clock tap delay bypassed, but the data tap delay enabled. */
-    IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
+    /* IOU_TAPDLY_BYPASS is not writable from EL2/EL1 without going through PMU. */
+    if (current_el() <= 2) {
+        pmu_request(PM_MMIO_WRITE, IOU_TAPDLY_BYPASS_ADDR,
+                    IOU_TAPDLY_BYPASS_LQSPI_RX, IOU_TAPDLY_BYPASS_LQSPI_RX,
+                    0, NULL);
+    }
+    else {
+        IOU_TAPDLY_BYPASS |= IOU_TAPDLY_BYPASS_LQSPI_RX;
+    }
     GQSPI_LPBK_DLY_ADJ = GQSPI_LPBK_DLY_ADJ_USE_LPBK;
     GQSPI_DATA_DLY_ADJ = (GQSPI_DATA_DLY_ADJ_USE_DATA_DLY |
                           GQSPI_DATA_DLY_ADJ_DATA_DLY_ADJ(2));
@@ -1484,6 +1531,19 @@ void qspi_init(void)
 #endif /* USE_QNX */
     (void)reg_cfg;
     (void)reg_isr;
+
+    /* Issue flash soft reset so we start from a known state regardless of
+     * whatever mode FSBL/BootROM left the device in. Send to each chip in
+     * dual-parallel configurations by targeting both chip selects. */
+    mDev.mode = GQSPI_GEN_FIFO_MODE_SPI;
+    mDev.bus = GQSPI_GEN_FIFO_BUS_LOW;
+    mDev.cs = GQSPI_GEN_FIFO_CS_LOWER;
+    (void)qspi_flash_reset(&mDev);
+#if GQPI_USE_DUAL_PARALLEL == 1
+    mDev.bus = GQSPI_GEN_FIFO_BUS_UP;
+    mDev.cs = GQSPI_GEN_FIFO_CS_UPPER;
+    (void)qspi_flash_reset(&mDev);
+#endif
 
     /* ------ Flash Read ID (retry) ------ */
     timeout = 0;
@@ -1576,6 +1636,10 @@ void hal_init(void)
 #endif
     wolfBoot_printf(bootMsg);
     wolfBoot_printf("Current EL: %d\n", current_el());
+
+#ifndef WOLFBOOT_REPRODUCIBLE_BUILD
+    wolfBoot_printf("Build: %s %s\n", __DATE__, __TIME__);
+#endif
 
 #if defined(EXT_FLASH) && (EXT_FLASH == 1)
     qspi_init();
@@ -1809,15 +1873,28 @@ void RAMFUNCTION ext_flash_unlock(void)
 
 }
 
+/* The following helpers (hal_get_timer_us, hal_get_dts_address, hal_dts_fixup)
+ * are only compiled into the wolfBoot binary. The test-app build also links
+ * hal/zynq.o but must not pull in FDT/MMU-specific code, so __WOLFBOOT gates
+ * these symbols out of that build. */
 #if defined(MMU) && defined(__WOLFBOOT)
+/* Fallback timer frequency if CNTFRQ_EL0 is not configured (e.g. boot path
+ * that did not run ATF/BL31). ZynqMP system counter is 100 MHz. */
+#ifndef ZYNQMP_TIMER_CLK_FREQ
+#define ZYNQMP_TIMER_CLK_FREQ 100000000ULL
+#endif
+
 /* Get current time in microseconds using ARMv8 generic timer */
 uint64_t hal_get_timer_us(void)
 {
     uint64_t count, freq;
     __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(count));
     __asm__ volatile("mrs %0, CNTFRQ_EL0" : "=r"(freq));
+    /* Fall back to a known frequency rather than returning 0, so udelay()
+     * callers that spin on hal_get_timer_us() advancing remain monotonic
+     * (matches hal/versal.c). */
     if (freq == 0)
-        return 0;
+        freq = ZYNQMP_TIMER_CLK_FREQ;
     /* Use __uint128_t to avoid overflow of (count * 1e6) at long uptimes
      * (would overflow uint64_t after ~51h at 100MHz). */
     return (uint64_t)(((__uint128_t)count * 1000000ULL) / freq);
@@ -1856,10 +1933,11 @@ int hal_dts_fixup(void* dts_addr)
      * the pattern used in hal/versal.c:hal_dts_fixup. */
     fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
 
-    /* Find /chosen node */
+    /* Find /chosen node; create it only if genuinely missing. Any other
+     * negative return (malformed FDT, etc.) is surfaced directly rather
+     * than masked by a follow-on fdt_add_subnode() failure. */
     off = fdt_find_node_offset(fdt, -1, "chosen");
-    if (off < 0) {
-        /* Create /chosen node if it doesn't exist */
+    if (off == -FDT_ERR_NOTFOUND) {
         off = fdt_add_subnode(fdt, 0, "chosen");
     }
     if (off < 0) {
