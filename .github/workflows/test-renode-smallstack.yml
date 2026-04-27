@@ -66,6 +66,21 @@ jobs:
         run: ./tools/renode/docker-test.sh "SIGN=RSA4096 WOLFBOOT_SMALL_STACK=1"
 
 
+# RSAPSS2048 TEST
+      - name: Renode Tests RSAPSS2048
+        run: ./tools/renode/docker-test.sh "SIGN=RSAPSS2048 WOLFBOOT_SMALL_STACK=1"
+
+
+# RSAPSS3072 TEST
+      - name: Renode Tests RSAPSS3072
+        run: ./tools/renode/docker-test.sh "SIGN=RSAPSS3072 WOLFBOOT_SMALL_STACK=1"
+
+
+# RSAPSS4096 TEST
+      - name: Renode Tests RSAPSS4096
+        run: ./tools/renode/docker-test.sh "SIGN=RSAPSS4096 WOLFBOOT_SMALL_STACK=1"
+
+
       - name: Upload Output Dir
         uses: actions/upload-artifact@v4
         with:

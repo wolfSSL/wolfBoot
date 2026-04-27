@@ -52,3 +52,12 @@ jobs:
 # RSA4096 TEST: RSA with TFM requires the possibility to allocate
 # large amount of stack space (about 70KB) which are not available
 # on the renode target. This test has been disabled.
+
+
+# RSAPSS2048 TEST
+      - name: Renode Tests RSAPSS2048
+        run: ./tools/renode/docker-test.sh "SIGN=RSAPSS2048 SPMATH=0"
+
+
+# RSAPSS3072/RSAPSS4096 TEST: same TFM stack constraint as RSA3072/RSA4096
+# above. These tests are disabled.

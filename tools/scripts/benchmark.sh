@@ -57,6 +57,9 @@ set_benchmark "rsa2048" SIGN=RSA2048
 set_benchmark "rsa3072" SIGN=RSA3072
 set_benchmark "rsa4096" SIGN=RSA4096
 set_benchmark "rsa4096 with sha384" SIGN=RSA4096 HASH=SHA384
+set_benchmark "rsapss2048" SIGN=RSAPSS2048
+set_benchmark "rsapss3072" SIGN=RSAPSS3072
+set_benchmark "rsapss4096" SIGN=RSAPSS4096
 set_benchmark "ecdsa256" SIGN=ECC256
 set_benchmark "ecdsa384" SIGN=ECC384
 set_benchmark "ecdsa521" SIGN=ECC521
