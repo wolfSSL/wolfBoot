@@ -86,6 +86,18 @@ ifeq ($(SIGN),RSA4096)
   SIGN_ARGS+= --rsa4096
 endif
 
+ifeq ($(SIGN),RSAPSS2048)
+  SIGN_ARGS+= --rsapss2048
+endif
+
+ifeq ($(SIGN),RSAPSS3072)
+  SIGN_ARGS+= --rsapss3072
+endif
+
+ifeq ($(SIGN),RSAPSS4096)
+  SIGN_ARGS+= --rsapss4096
+endif
+
 ifeq ($(SIGN),LMS)
   SIGN_ARGS+= --lms
 endif
