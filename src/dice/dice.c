@@ -517,11 +517,14 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
     XMEMSET(claims, 0, sizeof(*claims));
 
     if (hal_uds_derive_key(uds, uds_len) != 0) {
+        /* Buffer may be partially filled, zero it to be sure */
+        wc_ForceZero(uds, sizeof(uds));
         return WOLFBOOT_DICE_ERR_HW;
     }
 
     if (wolfboot_dice_get_ueid(claims->ueid, &claims->ueid_len,
                                uds, uds_len) != 0) {
+        wc_ForceZero(uds, sizeof(uds));
         return WOLFBOOT_DICE_ERR_HW;
     }
 
@@ -574,6 +577,7 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
         claims->component_count++;
     }
 
+    wc_ForceZero(uds, sizeof(uds));
     return WOLFBOOT_DICE_SUCCESS;
 }
 
