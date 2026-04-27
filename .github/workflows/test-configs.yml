@@ -273,6 +273,20 @@ jobs:
       config-file: ./config/examples/mcxn-wolfcrypt-tz.config
       board-name: frdmmcxn947
 
+  nxp_mcxn_tz_psa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-tz-psa.config
+      board-name: frdmmcxn947
+
+  nxp_mcxn_tz_psa_hw_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-tz-psa-hw.config
+      board-name: frdmmcxn947
+
   nxp_s32k142_test:
     uses: ./.github/workflows/test-build.yml
     with:

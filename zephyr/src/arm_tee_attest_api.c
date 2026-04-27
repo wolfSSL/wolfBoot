@@ -97,3 +97,35 @@ psa_initial_attest_get_token_size(size_t challenge_size,
 
     return status;
 }
+
+#ifndef WOLFBOOT_ATTESTATION_IAK
+psa_status_t
+psa_initial_attest_get_iak_pubkey(uint8_t *buf,
+                                  size_t buf_size,
+                                  size_t *key_len)
+{
+    psa_status_t status;
+
+    if (buf == NULL || key_len == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (buf_size < 65) { /* 65 bytes for uncompressed ECC P-256 public key */
+        return PSA_ERROR_BUFFER_TOO_SMALL;
+    }
+    psa_outvec out_vec[] = {
+        { buf, buf_size }
+    };
+
+    printf("[ATTEST-NS] get_iak_pubkey: buf_size=%u\r\n", (unsigned)buf_size);
+    status = psa_call(ARM_TEE_ATTESTATION_SERVICE_HANDLE,
+                      ARM_TEE_ATTEST_GET_IAK_PUBKEY,
+                      NULL, 0,
+                      out_vec, IOVEC_LEN(out_vec));
+    printf("[ATTEST-NS] get_iak_pubkey: status=%ld key_len=%u\r\n",
+           (long)status, (unsigned)out_vec[0].len);
+    if (status == PSA_SUCCESS) {
+        *key_len = out_vec[0].len;
+    }
+    return status;
+}
+#endif /* !WOLFBOOT_ATTESTATION_IAK */

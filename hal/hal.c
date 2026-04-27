@@ -321,3 +321,38 @@ WEAKFUNCTION int hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len)
     (void)len;
     return -1;
 }
+
+#ifdef WOLFBOOT_DICE_HW
+WEAKFUNCTION int hal_dice_update_cdi(const uint8_t *measurement, size_t meas_len,
+                                     const char *measurement_desc,
+                                     size_t measurement_desc_len)
+{
+    (void)measurement;
+    (void)meas_len;
+    (void)measurement_desc;
+    (void)measurement_desc_len;
+    return -1;
+}
+
+WEAKFUNCTION int hal_dice_create_attest_key(void)
+{
+    return -1;
+}
+
+WEAKFUNCTION int hal_dice_sign_hash(const uint8_t *hash, size_t hash_len,
+                                    uint8_t *sig, size_t *sig_len)
+{
+    (void)hash;
+    (void)hash_len;
+    (void)sig;
+    (void)sig_len;
+    return -1;
+}
+
+WEAKFUNCTION int hal_dice_get_attest_pubkey(uint8_t *buf, size_t *len)
+{
+    (void)buf;
+    (void)len;
+    return -1;
+}
+#endif /* WOLFBOOT_DICE_HW */

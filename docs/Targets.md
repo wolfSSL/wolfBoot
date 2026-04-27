@@ -6107,6 +6107,9 @@ mon reset
 c
 ```
 
+### MCX N: DICE attestation
+Sample application for DICE attestation is available on MCXN947.
+Please find the details in `docs/MCXN947-DICE.md`.
 
 ## NXP S32K1XX
 

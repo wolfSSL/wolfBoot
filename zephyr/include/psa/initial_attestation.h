@@ -47,6 +47,17 @@ psa_status_t psa_initial_attest_get_token(const uint8_t *auth_challenge,
 psa_status_t psa_initial_attest_get_token_size(size_t challenge_size,
 					       size_t *token_size);
 
+/* This function retrieves the public key for the IAK generated during
+ * the most recent psa_initial_attest_get_token call. The public key is
+ * returned in X9.63 uncompressed format (0x04 || X || Y). The internal
+ * copy of the public key is zeroized after this call (read-once).
+ * Not available when WOLFBOOT_ATTESTATION_IAK is set (provisioned key is used). */
+#ifndef WOLFBOOT_ATTESTATION_IAK
+psa_status_t psa_initial_attest_get_iak_pubkey(uint8_t *buf,
+						size_t buf_size,
+						size_t *key_len);
+#endif /* !WOLFBOOT_ATTESTATION_IAK */
+
 #ifdef __cplusplus
 }
 #endif

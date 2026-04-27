@@ -65,7 +65,7 @@ typedef struct psa_outvec {
     ((size_t)(((ctrl_param) & WOLFBOOT_ARM_TEE_OUT_LEN_MASK) >>          \
               WOLFBOOT_ARM_TEE_OUT_LEN_OFFSET))
 
-#if defined(__ARM_FEATURE_CMSE) && defined(__GNUC__)
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(__GNUC__)
 #define WOLFBOOT_CMSE_NS_ENTRY __attribute__((cmse_nonsecure_entry))
 #else
 #define WOLFBOOT_CMSE_NS_ENTRY
