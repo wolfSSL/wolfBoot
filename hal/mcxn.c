@@ -40,6 +40,112 @@
 #include "hal/armv8m_tz.h"
 #endif
 
+#if defined(WOLFCRYPT_TZ_PSA)
+/* 128-bit device UUID in IPC 1 (SYSCON UUID block) */
+#define MCXN_UUID_ADDR  0x01100000U
+#endif
+
+#if defined(WOLFCRYPT_TZ_PSA) && defined(WOLFBOOT_DICE_HW)
+#include "wolfboot/dice.h"
+#include "mcuxClEls.h"
+#include "mcuxClEls_Kdf.h"
+#include "mcuxClEls_Ecc.h"
+#include "mcuxClEls_KeyManagement.h"
+#include "mcuxCsslFlowProtection.h"
+#include <wolfssl/wolfcrypt/sha256.h>
+
+/* Key slot pre-loaded by ROM DICE: HKDF(UDS, wolfBoot_hash) -> initial CDI. */
+#define MCXN_ELS_DICE_CDI_INITIAL_KEYSLOT   7U
+
+/* wolfBoot stores the boot-measurement-derived CDI here. */
+#define MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT   11U
+
+/* wolfBoot stores the per-boot IAK (P-256) here.
+ * ELS EccKeyGen DETERMINISTIC mode uses privateKeyIdx as both the CDI seed
+ * source and the IAK output slot, so the IAK overwrites the CDI in-place. */
+#define MCXN_ELS_DICE_IAK_KEYSLOT           MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT
+
+#endif
+
+#if defined(WOLFCRYPT_TZ_PSA) && !defined(WOLFBOOT_DICE_HW)
+#include <wolfssl/wolfcrypt/sha256.h>
+#include <wolfssl/wolfcrypt/sha512.h>
+
+/* Derive UDS from device UUID for software DICE testing.
+ * NOT secure — UUID is publicly observable. Only enabled with
+ * WOLFBOOT_UDS_UID_FALLBACK_FORTEST. */
+int hal_uds_derive_key(uint8_t *out, size_t out_len)
+{
+    volatile const uint32_t *uuid_addr =
+        (volatile const uint32_t *)MCXN_UUID_ADDR;
+    uint8_t uuid_be[16];
+    uint32_t word;
+    int i;
+#if defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384 hash;
+    uint8_t digest[SHA384_DIGEST_SIZE];
+    size_t copy_len = sizeof(digest);
+#elif defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256 hash;
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    size_t copy_len = sizeof(digest);
+#else
+    (void)out; (void)out_len;
+    return -1;
+#endif
+
+    if (out == NULL || out_len == 0)
+        return -1;
+
+#ifndef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+    (void)uuid_addr; (void)uuid_be; (void)word; (void)i;
+#if defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA256)
+    (void)hash; (void)digest; (void)copy_len;
+#endif
+    return -1;
+#else
+    for (i = 0; i < 4; i++) {
+        word = uuid_addr[i];
+        uuid_be[i * 4 + 0] = (uint8_t)(word >> 24);
+        uuid_be[i * 4 + 1] = (uint8_t)(word >> 16);
+        uuid_be[i * 4 + 2] = (uint8_t)(word >> 8);
+        uuid_be[i * 4 + 3] = (uint8_t)(word);
+    }
+
+#if defined(WOLFBOOT_HASH_SHA384)
+    {
+        int ret = wc_InitSha384(&hash);
+        if (ret == 0) {
+            ret = wc_Sha384Update(&hash, uuid_be, sizeof(uuid_be));
+            if (ret == 0)
+                ret = wc_Sha384Final(&hash, digest);
+            wc_Sha384Free(&hash);
+        }
+        if (ret != 0)
+            return -1;
+    }
+#elif defined(WOLFBOOT_HASH_SHA256)
+    {
+        int ret = wc_InitSha256(&hash);
+        if (ret == 0) {
+            ret = wc_Sha256Update(&hash, uuid_be, sizeof(uuid_be));
+            if (ret == 0)
+                ret = wc_Sha256Final(&hash, digest);
+            wc_Sha256Free(&hash);
+        }
+        if (ret != 0)
+            return -1;
+    }
+#endif
+
+    if (copy_len > out_len)
+        copy_len = out_len;
+    XMEMCPY(out, digest, copy_len);
+    return 0;
+#endif /* WOLFBOOT_UDS_UID_FALLBACK_FORTEST */
+}
+#endif /* WOLFCRYPT_TZ_PSA && !WOLFBOOT_DICE_HW */
+
 #ifdef WOLFCRYPT_SECURE_MODE
 void hal_trng_init(void);
 int hal_trng_get_entropy(unsigned char *out, unsigned int len);
@@ -212,7 +318,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#if defined(WOLFCRYPT_SECURE_MODE) && !defined(NONSECURE_APP)
 #define ELS_CMD_RND_REQ 24U
 
 void hal_trng_init(void)
@@ -383,3 +489,468 @@ void uart_write(const char *buf, unsigned int sz)
         sz -= line_sz + 1U;
     }
 }
+
+#if defined(WOLFCRYPT_TZ_PSA) && defined(WOLFBOOT_DICE_HW) && defined(__WOLFBOOT)
+
+/* Holds the raw 64-byte P-256 public key (X||Y) written by hal_dice_create_attest_key().
+ * Consumed and zeroized by hal_dice_get_attest_pubkey(). */
+static uint8_t s_dice_attest_pubkey[64];
+static int     s_dice_attest_pubkey_valid = 0;
+
+static NOINLINEFUNCTION void hal_dice_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
+/* Derive 33-byte UEID from device UUID at IPC1 (MCXN_UUID_ADDR).
+ * UUID (16 bytes, big-endian) is SHA-256 hashed to produce a 32-byte
+ * opaque identifier. This matches WOLFBOOT_DICE_UEID_LEN = 33.
+ * We can't use UDS because NXP_DIE_DICE_UDS_MK_SK is not accessible,
+ * so we derive UEID from the UUID instead.  */
+int hal_attestation_get_ueid(uint8_t *buf, size_t *len)
+{
+    volatile const uint32_t *uuid_addr =
+        (volatile const uint32_t *)MCXN_UUID_ADDR;
+    uint8_t uuid_be[16];
+    uint32_t word;
+    wc_Sha256 sha;
+    int i, ret = 0;
+
+    if (buf == NULL || len == NULL || *len < 33)
+        ret = -1;
+
+    if (ret == 0) {
+        /* Read 4 words (16 bytes) and convert each to big-endian */
+        for (i = 0; i < 4; i++) {
+            word = uuid_addr[i];
+            uuid_be[i * 4 + 0] = (uint8_t)(word >> 24);
+            uuid_be[i * 4 + 1] = (uint8_t)(word >> 16);
+            uuid_be[i * 4 + 2] = (uint8_t)(word >> 8);
+            uuid_be[i * 4 + 3] = (uint8_t)(word);
+        }
+
+#ifdef DEBUG
+        wolfBoot_printf("[DICE] UUID:");
+        for (i = 0; i < (int)sizeof(uuid_be); i++)
+            wolfBoot_printf(" %02x", uuid_be[i]);
+        wolfBoot_printf("\r\n");
+#endif
+
+        /* SHA-256(UUID) -> 32-byte UEID payload */
+        ret = wc_InitSha256(&sha);
+        if (ret == 0) {
+            ret = wc_Sha256Update(&sha, uuid_be, sizeof(uuid_be));
+            if (ret == 0)
+                ret = wc_Sha256Final(&sha, &buf[1]);
+            wc_Sha256Free(&sha);
+        }
+
+        if (ret == 0) {
+            /* UEID Type RANDOM per EAT spec */
+            buf[0] = 0x01;
+            *len = 33; /* WOLFBOOT_DICE_UEID_LEN */
+
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] UEID:");
+            for (i = 0; i < 33; i++)
+                wolfBoot_printf(" %02x", buf[i]);
+            wolfBoot_printf("\r\n");
+#endif
+        }
+    }
+
+    XMEMSET(uuid_be, 0, sizeof(uuid_be));
+    return ret;
+}
+
+int hal_attestation_get_lifecycle(uint32_t *lifecycle)
+{
+    if (lifecycle == NULL)
+        return -1;
+    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
+    return 0;
+}
+
+/* Counts actual hardware CDI derivations performed (wolfBoot is always skipped).
+ * Shared with hal_dice_create_attest_key so it can reset after each complete sequence. */
+static int cdi_derivation_count = 0;
+
+/* Derive new CDI from measurement and previous CDI */
+int hal_dice_update_cdi(const uint8_t *measurement, size_t meas_len,
+                        const char *measurement_desc, size_t measurement_desc_len)
+{
+    uint8_t deriv[MCUXCLELS_HKDF_RFC5869_DERIVATIONDATA_SIZE];
+    _Static_assert(MCUXCLELS_HKDF_RFC5869_DERIVATIONDATA_SIZE >= SHA256_DIGEST_SIZE,
+        "MCUXCLELS_HKDF_RFC5869_DERIVATIONDATA_SIZE must be at least SHA256_DIGEST_SIZE");
+    mcuxClEls_HkdfOption_t opts = {0};
+    mcuxClEls_KeyProp_t props = {0};
+    int ret = 0;
+
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] update_cdi: derivation_count=%d meas_len=%u\r\n",
+                    cdi_derivation_count, (unsigned)meas_len);
+#endif
+    XMEMSET(deriv, 0, sizeof(deriv));
+
+    /* ROM DICE already incorporated wolfBoot as HKDF(UDS, wolfBoot_hash) -> initial_CDI.
+     * Skip re-applying it — doing so would produce the wrong CDI chain. */
+    if (measurement_desc != NULL &&
+        measurement_desc_len == (sizeof(WOLFBOOT_DICE_COMPONENT_WOLFBOOT) - 1) &&
+        XMEMCMP(measurement_desc, WOLFBOOT_DICE_COMPONENT_WOLFBOOT, measurement_desc_len) == 0) {
+#ifdef DEBUG
+        wolfBoot_printf("[DICE] update_cdi: skipping wolfboot component (ROM already applied)\r\n");
+#endif
+        return 0;
+    }
+
+    if (cdi_derivation_count > 0) {
+        /* Key-slot constraint: only 1 derived CDI slot available.
+         * Raise this limit only after adding extra slots. */
+#ifdef DEBUG
+        wolfBoot_printf("[DICE] update_cdi: cdi_derivation_count=%d > 0, too many components\r\n",
+                        cdi_derivation_count);
+#endif
+        /* Do not return here: the shared epilogue resets cdi_derivation_count on error
+         * (same as other failure paths). This branch issues no ELS commands; any key
+         * material in the derived CDI slot is unchanged from the prior successful HKDF.
+         * After the epilogue, the next successful call KDELETEs that slot then HKDFs
+         * from the ROM initial CDI slot (count is zero again — fresh chain). */
+        ret = -1;
+    }
+
+    if (ret == 0 && (measurement == NULL || meas_len == 0)) {
+#ifdef DEBUG
+        wolfBoot_printf("[DICE] update_cdi: invalid measurement (NULL or zero len)\r\n");
+#endif
+        ret = -1;
+    }
+
+    if (ret == 0) {
+        if (meas_len > SHA256_DIGEST_SIZE) {
+            /* Pre-hash to SHA-256 digest */
+            wc_Sha256 sha;
+            ret = wc_InitSha256(&sha);
+            if (ret == 0) {
+                ret = wc_Sha256Update(&sha, measurement, (word32)meas_len);
+                if (ret == 0) {
+                    ret = wc_Sha256Final(&sha, deriv);
+                }
+                wc_Sha256Free(&sha);
+            }
+#ifdef DEBUG
+            if (ret != 0)
+                wolfBoot_printf("[DICE] update_cdi: wc_Sha256 failed %d\r\n", ret);
+#endif
+        }
+        else {
+            XMEMCPY(deriv, measurement, meas_len);
+        }
+    }
+
+    if (ret == 0) {
+        /* Trigger the KDELETE command to free the key slot.
+         * Note that the slot may be empty on the first update, but that's not an error
+         * because ELS ignores the KDELETE command if the slot is empty.
+         * We just give the names of token and return value
+         * since it's declared within the macro */
+        MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_kdel, tok_kdel,
+            mcuxClEls_KeyDelete_Async(MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT));
+
+        if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_KeyDelete_Async) != tok_kdel) ||
+            (MCUXCLELS_STATUS_OK_WAIT != res_kdel)) {
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] update_cdi: KeyDelete_Async failed"
+                            " res=0x%x tok=0x%x\r\n",
+                            (unsigned)res_kdel, (unsigned)tok_kdel);
+#endif
+            ret = -1;
+        }
+
+        MCUX_CSSL_FP_FUNCTION_CALL_END();
+
+        /* Wait for hardware to finish */
+        if (ret == 0) {
+            MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_w, tok_w,
+                mcuxClEls_WaitForOperation(MCUXCLELS_ERROR_FLAGS_CLEAR));
+
+            if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_WaitForOperation) != tok_w) ||
+                (MCUXCLELS_STATUS_OK != res_w)) {
+#ifdef DEBUG
+                wolfBoot_printf("[DICE] update_cdi: WaitForOperation(KDELETE) failed"
+                                " res=0x%x tok=0x%x\r\n",
+                                (unsigned)res_w, (unsigned)tok_w);
+#endif
+                ret = -1;
+            }
+
+            MCUX_CSSL_FP_FUNCTION_CALL_END();
+        }
+    }
+
+    if (ret == 0) {
+        /* first derivation: start from ROM-loaded initial CDI; subsequent: chain from derived CDI */
+        mcuxClEls_KeyIndex_t hkdf_src_slot = (cdi_derivation_count == 0)
+            ? MCXN_ELS_DICE_CDI_INITIAL_KEYSLOT
+            : MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT;
+
+        /* Set HKDF options */
+        opts.bits.hkdf_algo = MCUXCLELS_HKDF_ALGO_RFC5869;
+
+        /* Set key properties */
+        props.bits.upprot_priv = MCUXCLELS_KEYPROPERTY_PRIVILEGED_TRUE;
+        props.bits.upprot_sec = MCUXCLELS_KEYPROPERTY_SECURE_TRUE;
+        props.bits.ukgsrc = MCUXCLELS_KEYPROPERTY_INPUT_FOR_ECC_TRUE;
+        props.bits.uhkdf = MCUXCLELS_KEYPROPERTY_HKDF_TRUE;
+        props.bits.fgp = MCUXCLELS_KEYPROPERTY_GENERAL_PURPOSE_SLOT_TRUE;
+        props.bits.kbase = MCUXCLELS_KEYPROPERTY_BASE_SLOT;
+        props.bits.kactv = MCUXCLELS_KEYPROPERTY_ACTIVE_TRUE;
+        props.bits.ksize = MCUXCLELS_KEYPROPERTY_KEY_SIZE_256;
+
+        /* Trigger the HKDF command.
+         * We just give the names of token and return value
+         * since it's declared within the macro */
+        MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_hkdf, tok_hkdf,
+            mcuxClEls_Hkdf_Rfc5869_Async(opts,
+                                         hkdf_src_slot,
+                                         MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT,
+                                         props, deriv));
+
+        if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_Hkdf_Rfc5869_Async) != tok_hkdf) ||
+            (MCUXCLELS_STATUS_OK_WAIT != res_hkdf)) {
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] update_cdi: Hkdf_Rfc5869_Async failed"
+                            " res=0x%x tok=0x%x\r\n",
+                            (unsigned)res_hkdf, (unsigned)tok_hkdf);
+#endif
+            ret = -1;
+        }
+
+        MCUX_CSSL_FP_FUNCTION_CALL_END();
+
+        /* Wait for hardware to finish */
+        if (ret == 0) {
+            MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_w, tok_w,
+                mcuxClEls_WaitForOperation(MCUXCLELS_ERROR_FLAGS_CLEAR));
+
+            if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_WaitForOperation) != tok_w) ||
+                (MCUXCLELS_STATUS_OK != res_w)) {
+#ifdef DEBUG
+                wolfBoot_printf("[DICE] update_cdi: WaitForOperation(HKDF) failed"
+                                " res=0x%x tok=0x%x\r\n",
+                                (unsigned)res_w, (unsigned)tok_w);
+#endif
+                ret = -1;
+            }
+
+            MCUX_CSSL_FP_FUNCTION_CALL_END();
+        }
+    }
+
+    if (ret == 0)
+        cdi_derivation_count++;
+    else
+        cdi_derivation_count = 0;   /* reset on error — create_attest_key won't be called */
+
+    XMEMSET(deriv, 0, sizeof(deriv));
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] update_cdi: ret=%d\r\n", ret);
+#endif
+    return ret;
+}
+
+/* Generate P-256 IAK from derived CDI using ELS KEYGEN.
+ * Private key stays in ELS keystore. Public key written to system memory. */
+int hal_dice_create_attest_key(void)
+{
+    uint8_t pub_key[64] __attribute__((aligned(4)));
+    mcuxClEls_EccKeyGenOption_t opts = {0};
+    mcuxClEls_KeyProp_t props = {0};
+    int ret = 0;
+
+    s_dice_attest_pubkey_valid = 0;
+    XMEMSET(s_dice_attest_pubkey, 0, sizeof(s_dice_attest_pubkey));
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] create_attest_key: start\r\n");
+#endif
+
+    /* No KeyDelete here: DETERMINISTIC EccKeyGen reads the CDI from
+     * IAK_KEYSLOT (= CDI_DERIVED_KEYSLOT) as its seed input.
+     * Deleting that slot first would destroy the source material. */
+
+    /* Set KeyGen options */
+    opts.bits.kgsrc    = MCUXCLELS_ECC_OUTPUTKEY_DETERMINISTIC;
+    opts.bits.kgtypedh = MCUXCLELS_ECC_OUTPUTKEY_SIGN;
+
+    /* Set key properties */
+    props.bits.upprot_priv = MCUXCLELS_KEYPROPERTY_PRIVILEGED_TRUE;
+    props.bits.upprot_sec = MCUXCLELS_KEYPROPERTY_SECURE_TRUE;
+    props.bits.uecsg = MCUXCLELS_KEYPROPERTY_ECC_TRUE;
+    props.bits.uksk = MCUXCLELS_KEYPROPERTY_KSK_TRUE;
+    props.bits.fgp = MCUXCLELS_KEYPROPERTY_GENERAL_PURPOSE_SLOT_TRUE;
+    props.bits.kbase = MCUXCLELS_KEYPROPERTY_BASE_SLOT;
+    props.bits.kactv = MCUXCLELS_KEYPROPERTY_ACTIVE_TRUE;
+    props.bits.ksize = MCUXCLELS_KEYPROPERTY_KEY_SIZE_256;
+
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] create_attest_key: EccKeyGen"
+                    " CDI_DERIVED_SLOT=%d IAK_SLOT=%d\r\n",
+                    MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT,
+                    MCXN_ELS_DICE_IAK_KEYSLOT);
+#endif
+
+    /* Trigger the ECC KeyGen command.
+     * We just give the names of token and return value
+     * since it's declared within the macro */
+    MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_kg, tok_kg,
+        mcuxClEls_EccKeyGen_Async(opts,
+            MCXN_ELS_DICE_CDI_DERIVED_KEYSLOT,
+            MCXN_ELS_DICE_IAK_KEYSLOT,
+            props, NULL, pub_key));
+
+    if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_EccKeyGen_Async) != tok_kg) ||
+        (MCUXCLELS_STATUS_OK_WAIT != res_kg)) {
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] create_attest_key: EccKeyGen_Async failed"
+                            " res=0x%x tok=0x%x\r\n",
+                            (unsigned)res_kg, (unsigned)tok_kg);
+#endif
+            ret = -1;
+    }
+
+    MCUX_CSSL_FP_FUNCTION_CALL_END();
+
+    /* Wait for hardware to finish */
+    if (ret == 0) {
+        MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_w, tok_w,
+            mcuxClEls_WaitForOperation(MCUXCLELS_ERROR_FLAGS_CLEAR));
+
+        if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_WaitForOperation) != tok_w) ||
+            (MCUXCLELS_STATUS_OK != res_w)) {
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] create_attest_key: WaitForOperation(KEYGEN) failed"
+                            " res=0x%x tok=0x%x\r\n",
+                            (unsigned)res_w, (unsigned)tok_w);
+#endif
+            ret = -1;
+        }
+
+        MCUX_CSSL_FP_FUNCTION_CALL_END();
+    }
+
+    if (ret == 0) {
+        XMEMCPY(s_dice_attest_pubkey, pub_key, sizeof(s_dice_attest_pubkey));
+        s_dice_attest_pubkey_valid = 1;
+    }
+
+    cdi_derivation_count = 0;   /* reset for the next token build */
+    XMEMSET(pub_key, 0, sizeof(pub_key));
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] create_attest_key: ret=%d\r\n", ret);
+#endif
+    return ret;
+}
+
+int hal_dice_get_attest_pubkey(uint8_t *buf, size_t *len)
+{
+    if (buf == NULL || len == NULL || *len < 65)
+        return -1;
+    if (!s_dice_attest_pubkey_valid)
+        return -1;
+
+    buf[0] = 0x04; /* X9.63 uncompressed prefix */
+    XMEMCPY(buf + 1, s_dice_attest_pubkey, sizeof(s_dice_attest_pubkey));
+    *len = 65;
+
+    /* Zeroize cached public key after copying out (read-once). */
+    hal_dice_zeroize(s_dice_attest_pubkey, sizeof(s_dice_attest_pubkey));
+    s_dice_attest_pubkey_valid = 0;
+
+    return 0;
+}
+
+int hal_dice_sign_hash(const uint8_t *hash, size_t hash_len,
+                       uint8_t *sig, size_t *sig_len)
+{
+    mcuxClEls_EccSignOption_t opts = {0};
+    uint8_t hash_buf[SHA256_DIGEST_SIZE] __attribute__((aligned(4)));
+    uint8_t sig_buf[MCUXCLELS_ECC_SIGNATURE_SIZE] __attribute__((aligned(4)));
+    int ret = 0;
+    _Static_assert(MCUXCLELS_ECC_SIGNATURE_SIZE == 64,
+        "MCUXCLELS_ECC_SIGNATURE_SIZE must equal WOLFBOOT_DICE_SIG_LEN (64)");
+
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] sign_hash: hash_len=%u\r\n", (unsigned)hash_len);
+#endif
+
+    if (hash == NULL || sig == NULL || sig_len == NULL || hash_len != SHA256_DIGEST_SIZE ||
+        *sig_len < MCUXCLELS_ECC_SIGNATURE_SIZE) {
+#ifdef DEBUG
+        wolfBoot_printf("[DICE] sign_hash: invalid args"
+                        " hash=%p sig=%p sig_len=%p hash_len=%u\r\n",
+                        hash, sig, sig_len, (unsigned)hash_len);
+#endif
+        ret = -1;
+    }
+
+    if (ret == 0) {
+        XMEMCPY(hash_buf, hash, SHA256_DIGEST_SIZE);
+
+        /* Set options */
+        opts.bits.echashchl = MCUXCLELS_ECC_HASHED;
+
+        /* Trigger the ECC Sign command.
+         * We just give the names of token and return value
+         * since it's declared within the macro */
+        MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_sign, tok_sign,
+            mcuxClEls_EccSign_Async(opts,
+                MCXN_ELS_DICE_IAK_KEYSLOT,
+                hash_buf, NULL, 0, sig_buf));
+
+        if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_EccSign_Async) != tok_sign) ||
+            (MCUXCLELS_STATUS_OK_WAIT != res_sign)) {
+#ifdef DEBUG
+            wolfBoot_printf("[DICE] sign_hash: EccSign_Async failed"
+                            " res=0x%x tok=0x%x\r\n",
+                            (unsigned)res_sign, (unsigned)tok_sign);
+#endif
+            ret = -1;
+        }
+
+        MCUX_CSSL_FP_FUNCTION_CALL_END();
+
+        /* Wait for hardware to finish */
+        if (ret == 0) {
+            MCUX_CSSL_FP_FUNCTION_CALL_BEGIN(res_w, tok_w,
+                mcuxClEls_WaitForOperation(MCUXCLELS_ERROR_FLAGS_CLEAR));
+
+            if ((MCUX_CSSL_FP_FUNCTION_CALLED(mcuxClEls_WaitForOperation) != tok_w) ||
+                (MCUXCLELS_STATUS_OK != res_w)) {
+#ifdef DEBUG
+                wolfBoot_printf("[DICE] sign_hash: WaitForOperation(SIGN) failed"
+                                " res=0x%x tok=0x%x\r\n",
+                                (unsigned)res_w, (unsigned)tok_w);
+#endif
+                ret = -1;
+            }
+
+            MCUX_CSSL_FP_FUNCTION_CALL_END();
+        }
+    }
+
+    if (ret == 0) {
+        XMEMCPY(sig, sig_buf, MCUXCLELS_ECC_SIGNATURE_SIZE);
+        *sig_len = MCUXCLELS_ECC_SIGNATURE_SIZE;
+    }
+
+    hal_dice_zeroize(hash_buf, sizeof(hash_buf));
+    hal_dice_zeroize(sig_buf, sizeof(sig_buf));
+#ifdef DEBUG
+    wolfBoot_printf("[DICE] sign_hash: ret=%d\r\n", ret);
+#endif
+    return ret;
+}
+
+#endif /* WOLFCRYPT_TZ_PSA && WOLFBOOT_DICE_HW && __WOLFBOOT */

@@ -31,6 +31,7 @@ extern "C" {
 /* Initial Attestation message types that distinguish Attest services. */
 #define ARM_TEE_ATTEST_GET_TOKEN       1001
 #define ARM_TEE_ATTEST_GET_TOKEN_SIZE  1002
+#define ARM_TEE_ATTEST_GET_IAK_PUBKEY  1003
 
 #ifdef __cplusplus
 }

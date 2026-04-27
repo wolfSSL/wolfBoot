@@ -34,7 +34,7 @@ measurement value, and a description string.
 
 ## Keying model
 
-wolfBoot supports two keying modes selected at build time.
+wolfBoot supports three keying modes selected at build time.
 
 ### DICE derived key (default for no provisioning)
 
@@ -54,6 +54,17 @@ can use it directly to sign the token.
 The attestation service calls `hal_attestation_get_iak_private_key()` to
 retrieve the private key material from secure storage (or a manufacturer
 injection flow). The IAK is used instead of the DICE derived key.
+
+### Hardware-based DICE derived key
+
+Some platforms have secure subsystem which supports hardware engines for DICE functionality.
+Some of them don't expose the secrets like UDS, CDI and attestation key.
+In that case, You can enable hardware-based DICE using `WOLFBOOT_DICE_HW` option.
+
+wolfBoot calls `hal_dice_update_cdi()` to update CDI inside secure subsystem for each component.
+Also, `hal_dice_create_attest_key()` is called to derive the attestation key from updated CDI as well.
+Then, wolfBoot uses `hal_dice_sign_hash` to sign the token.
+User can implement hardware-specific procedures inside the hooks.
 
 ## HAL integration (per-target)
 
@@ -75,6 +86,21 @@ families must implement the appropriate subset based on hardware support.
   - Optional lifecycle state for the token.
 - `hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len)`
   - Optional provisioned IAK private key (used in IAK mode only).
+
+If you enable hardware-based DICE, additional hooks are necessary.
+
+- `hal_dice_update_cdi(const uint8_t *measurement, size_t meas_len, const char *measurement_desc, size_t measurement_desc_len)`
+  - Mixes one boot-component measurement into the platform CDI chain.
+  - measurement_desc identifies the component (e.g. "wolfboot", "boot-image").
+- `hal_dice_create_attest_key(void)`
+  - Derive and store the attestation key pair from the current CDI state.
+  - The private key must not be exposed outside the platform security boundary.
+- `hal_dice_sign_hash(const uint8_t *hash, size_t hash_len, uint8_t *sig, size_t *sig_len)` 
+  - Sign a pre-computed SHA-256 hash with the platform private attestation key during token generation.
+  - Output: 64-byte raw R||S (big-endian), same format as wolfCrypt ES256.
+- `hal_dice_get_attest_pubkey(uint8_t *buf, size_t *len)`
+  - Optional hook to get the public part of attestation key.
+  - This is called via PSA Initial Attestation dispatch `psa_initial_attest_get_iak_pubkey()`.
 
 ## STM32H5 OBKeys UDS (optional)
 
@@ -103,6 +129,7 @@ The non-secure application calls the PSA Initial Attestation API wrappers:
 
 - `psa_initial_attest_get_token_size()`
 - `psa_initial_attest_get_token()`
+- `psa_initial_attest_get_iak_pubkey()`
 
 These are provided in `zephyr/include/psa/initial_attestation.h` and are
 implemented as NSC calls in `zephyr/src/arm_tee_attest_api.c`.
@@ -114,9 +141,15 @@ When `WOLFCRYPT_TZ_PSA=1`, the NS application can also use PSA Crypto through
 
 ## Test application
 
+### STM32H5
 The STM32H5 TrustZone test application in `test-app/` exercises PSA crypto,
 attestation, and store access. It requests a token at boot and can perform
 PSA crypto operations from the non-secure side.
 
 See `docs/Targets.md` for the STM32H5 TrustZone scenarios and how to enable
 PSA mode.
+
+### MCXN
+MCXN has TrustZone test application in `test-app/` exercises PSA attestation.
+Default setting is based on hardware secure subsystem called EdgeLock Secure Subsystem.
+See `docs/Targets.md` and `docs/MCXN947-DICE.md` for details.

@@ -167,6 +167,35 @@ int hal_attestation_get_implementation_id(uint8_t *buf, size_t *len);
 int hal_attestation_get_ueid(uint8_t *buf, size_t *len);
 int hal_attestation_get_iak_private_key(uint8_t *buf, size_t *len);
 
+#ifdef WOLFBOOT_DICE_HW
+/* Hardware DICE hooks — implement these to delegate CDI derivation and
+ * attestation signing to a platform security boundary. */
+
+/* Mix one boot-component measurement into the platform CDI chain.
+ * measurement_desc identifies the component; use the WOLFBOOT_DICE_COMPONENT_*
+ * macros from wolfboot/dice.h (e.g. WOLFBOOT_DICE_COMPONENT_WOLFBOOT,
+ * WOLFBOOT_DICE_COMPONENT_BOOTIMAGE).
+ * The platform updates its internal CDI state; no CDI material is returned. */
+int hal_dice_update_cdi(const uint8_t *measurement, size_t meas_len,
+                        const char *measurement_desc, size_t measurement_desc_len);
+
+/* Derive and store the attestation keypair from the current CDI state.
+ * The private key must not be exposed outside the platform security boundary.
+ * Returns 0 on success. */
+int hal_dice_create_attest_key(void);
+
+/* Sign a pre-computed SHA-256 hash with the platform attestation key.
+ * Output: 64-byte raw R||S (big-endian), same format as wolfCrypt ES256.
+ * Must be called after hal_dice_create_attest_key(). */
+int hal_dice_sign_hash(const uint8_t *hash, size_t hash_len,
+                       uint8_t *sig, size_t *sig_len);
+
+/* Retrieve the IAK public key cached by hal_dice_create_attest_key().
+ * Output: 65-byte X9.63 uncompressed point (0x04 || X || Y).
+ * The internal copy is zeroized after this call (read-once). */
+int hal_dice_get_attest_pubkey(uint8_t *buf, size_t *len);
+#endif /* WOLFBOOT_DICE_HW */
+
 #ifdef FLASH_OTP_KEYSTORE
 
 int hal_flash_otp_write(uint32_t flashAddress, const void* data, uint16_t length);

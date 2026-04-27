@@ -974,6 +974,23 @@ ifeq ($(TARGET),mcxn)
       $(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
   endif
+
+  # Link ELS PKC only when -DWOLFBOOT_DICE_HW is emitted (WOLFCRYPT_TZ_PSA=1 in options.mk).
+  ifeq ($(WOLFCRYPT_TZ_PSA),1)
+  ifeq ($(WOLFBOOT_DICE_HW),1)
+    ELS_PKC=$(MCUXPRESSO)/components/els_pkc
+    CFLAGS+=\
+      -I$(ELS_PKC)/includes \
+      -I$(ELS_PKC)/src/comps/mcuxClEls/inc \
+      -I$(ELS_PKC)/src/platforms/mcxn \
+      -I$(ELS_PKC)/src/platforms/mcxn/inc
+    OBJS+=\
+      $(ELS_PKC)/src/comps/mcuxClEls/src/mcuxClEls_Common.o \
+      $(ELS_PKC)/src/comps/mcuxClEls/src/mcuxClEls_Kdf.o \
+      $(ELS_PKC)/src/comps/mcuxClEls/src/mcuxClEls_KeyManagement.o \
+      $(ELS_PKC)/src/comps/mcuxClEls/src/mcuxClEls_Ecc.o
+  endif
+  endif
 endif
 
 ifeq ($(TARGET),nrf5340)

@@ -66,6 +66,7 @@
 #define WOLFBOOT_DICE_ERR_BUFFER_TOO_SMALL -2
 #define WOLFBOOT_DICE_ERR_HW -3
 #define WOLFBOOT_DICE_ERR_CRYPTO -4
+#define WOLFBOOT_DICE_ERR_KEY_NOT_FOUND -5
 
 static NOINLINEFUNCTION void wolfboot_dice_zeroize(void *ptr, size_t len)
 {
@@ -514,8 +515,10 @@ static int wolfboot_dice_fixup_priv(uint8_t *priv, size_t priv_len)
 
 static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
 {
+#ifndef WOLFBOOT_DICE_HW
     uint8_t uds[WOLFBOOT_DICE_CDI_LEN];
     size_t uds_len = sizeof(uds);
+#endif
     uint8_t wb_hash[WOLFBOOT_SHA_DIGEST_SIZE];
     size_t wb_hash_len = sizeof(wb_hash);
     uint8_t boot_hash[WOLFBOOT_SHA_DIGEST_SIZE];
@@ -523,6 +526,13 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
 
     XMEMSET(claims, 0, sizeof(*claims));
 
+#ifdef WOLFBOOT_DICE_HW
+    /* UDS stays inside platform security boundary. wolfboot_dice_get_ueid()
+     * calls hal_attestation_get_ueid() first; with NULL UDS it uses the HAL path. */
+    if (wolfboot_dice_get_ueid(claims->ueid, &claims->ueid_len, NULL, 0) != 0) {
+        return WOLFBOOT_DICE_ERR_HW;
+    }
+#else
     if (hal_uds_derive_key(uds, uds_len) != 0) {
         /* Buffer may be partially filled, zero it to be sure */
         wc_ForceZero(uds, sizeof(uds));
@@ -534,6 +544,7 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
         wc_ForceZero(uds, sizeof(uds));
         return WOLFBOOT_DICE_ERR_HW;
     }
+#endif
 
     {
         size_t impl_len = sizeof(claims->implementation_id);
@@ -560,9 +571,9 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
         claims->components[claims->component_count].measurement_type_len =
             XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
         claims->components[claims->component_count].measurement_desc =
-            "wolfboot";
+            WOLFBOOT_DICE_COMPONENT_WOLFBOOT;
         claims->components[claims->component_count].measurement_desc_len =
-            XSTRLEN("wolfboot");
+            XSTRLEN(WOLFBOOT_DICE_COMPONENT_WOLFBOOT);
         XMEMCPY(claims->components[claims->component_count].measurement,
                 wb_hash, wb_hash_len);
         claims->components[claims->component_count].measurement_len = wb_hash_len;
@@ -575,19 +586,28 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
         claims->components[claims->component_count].measurement_type_len =
             XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
         claims->components[claims->component_count].measurement_desc =
-            "boot-image";
+            WOLFBOOT_DICE_COMPONENT_BOOTIMAGE;
         claims->components[claims->component_count].measurement_desc_len =
-            XSTRLEN("boot-image");
+            XSTRLEN(WOLFBOOT_DICE_COMPONENT_BOOTIMAGE);
         XMEMCPY(claims->components[claims->component_count].measurement,
                 boot_hash, boot_hash_len);
         claims->components[claims->component_count].measurement_len = boot_hash_len;
         claims->component_count++;
     }
-
+#ifndef WOLFBOOT_DICE_HW
     wc_ForceZero(uds, sizeof(uds));
+#endif
     return WOLFBOOT_DICE_SUCCESS;
 }
 
+#ifndef WOLFBOOT_DICE_HW
+/* Cached IAK public key (X9.63, 65 bytes) populated during key derivation.
+ * Consumed and zeroized by wolfBoot_dice_get_attest_pubkey(). */
+static uint8_t s_dice_attest_pubkey[65];
+static word32  s_dice_attest_pubkey_len;
+#endif /* !WOLFBOOT_DICE_HW */
+
+#ifndef WOLFBOOT_DICE_HW
 static int wolfboot_dice_derive_attestation_key(ecc_key *key,
                                                 const uint8_t *uds,
                                                 size_t uds_len,
@@ -652,6 +672,24 @@ static int wolfboot_dice_derive_attestation_key(ecc_key *key,
         goto cleanup;
     }
 
+    /* Compute and cache the public key for wolfBoot_dice_get_attest_pubkey().
+     * wc_ecc_import_private_key_ex with pub=NULL sets PRIVATEKEY_ONLY, so the
+     * public point must be computed explicitly before export. */
+    {
+        word32 pub_len = sizeof(s_dice_attest_pubkey);
+        /* Clear cached public key before new generation */
+        XMEMSET(s_dice_attest_pubkey, 0, sizeof(s_dice_attest_pubkey));
+        s_dice_attest_pubkey_len = 0;
+
+        if (wc_ecc_make_pub(key, NULL) == 0 &&
+            wc_ecc_export_x963(key, s_dice_attest_pubkey, &pub_len) == 0) {
+            s_dice_attest_pubkey_len = pub_len;
+        }
+        else {
+            goto cleanup;
+        }
+    }
+
     ret = 0;
 
 cleanup:
@@ -660,7 +698,32 @@ cleanup:
     wolfboot_dice_zeroize(cdi, sizeof(cdi));
     return ret;
 }
+#endif /* !WOLFBOOT_DICE_HW */
 
+#ifdef WOLFBOOT_DICE_HW
+static int wolfboot_attest_get_private_key_hw(
+    const struct wolfboot_dice_claims *claims)
+{
+    size_t i;
+    /* Mix each boot component measurement into the platform CDI chain */
+    for (i = 0; i < claims->component_count; i++) {
+        if (hal_dice_update_cdi(claims->components[i].measurement,
+                                claims->components[i].measurement_len,
+                                claims->components[i].measurement_desc,
+                                claims->components[i].measurement_desc_len) != 0) {
+            return -1;
+        }
+    }
+    /* Derive attestation keypair from current CDI state.
+     * Private key stays inside the platform security boundary. */
+    if (hal_dice_create_attest_key() != 0) {
+        return -1;
+    }
+    return 0;
+}
+#endif /* WOLFBOOT_DICE_HW */
+
+#ifndef WOLFBOOT_DICE_HW
 static int wolfboot_attest_get_private_key(ecc_key *key,
                                            const struct wolfboot_dice_claims *claims)
 {
@@ -699,6 +762,7 @@ cleanup:
     return ret;
 #endif
 }
+#endif /* !WOLFBOOT_DICE_HW */
 
 static int wolfboot_dice_encode_payload(uint8_t *buf,
                                         size_t buf_len,
@@ -818,45 +882,75 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
                                   size_t *sig_len,
                                   const struct wolfboot_dice_claims *claims)
 {
-    ecc_key key;
-    WC_RNG rng;
     int ret = WOLFBOOT_DICE_ERR_CRYPTO;
-    int wc_ret;
-    int key_inited = 0;
-    int rng_inited = 0;
     uint8_t hash[SHA256_DIGEST_SIZE];
+#ifndef WOLFBOOT_DICE_HW
+    ecc_key key;
+    int key_inited = 0;
+    WC_RNG rng;
+    int wc_ret;
+    int rng_inited = 0;
     uint8_t der_sig[128];
     word32 der_sig_len = sizeof(der_sig);
     uint8_t r[WOLFBOOT_DICE_SIG_LEN / 2];
     uint8_t s[WOLFBOOT_DICE_SIG_LEN / 2];
     word32 r_len = sizeof(r);
     word32 s_len = sizeof(s);
+#endif /* !WOLFBOOT_DICE_HW */
 
     if (sig == NULL || sig_len == NULL || *sig_len < WOLFBOOT_DICE_SIG_LEN) {
         return WOLFBOOT_DICE_ERR_INVALID_ARGUMENT;
     }
 
+#ifdef WOLFBOOT_DICE_HW
+    if (wolfboot_attest_get_private_key_hw(claims) != 0) {
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
+    }
+#else
     wc_ecc_init(&key);
     key_inited = 1;
     if (wolfboot_attest_get_private_key(&key, claims) != 0) {
         ret = WOLFBOOT_DICE_ERR_HW;
         goto cleanup;
     }
+#endif
 
+#ifndef WOLFBOOT_DICE_HW
     (void)wc_ecc_set_deterministic(&key, 1);
     if (wc_InitRng(&rng) != 0) {
         ret = WOLFBOOT_DICE_ERR_HW;
         goto cleanup;
     }
     rng_inited = 1;
+#endif /* !WOLFBOOT_DICE_HW */
 
     {
         wc_Sha256 sha;
-        wc_InitSha256(&sha);
-        wc_Sha256Update(&sha, tbs, (word32)tbs_len);
-        wc_Sha256Final(&sha, hash);
+        ret = wc_InitSha256(&sha);
+        if (ret == 0) {
+            ret = wc_Sha256Update(&sha, tbs, (word32)tbs_len);
+            if (ret == 0) {
+                ret = wc_Sha256Final(&sha, hash);
+            }
+            wc_Sha256Free(&sha);
+        }
+
+        if (ret != 0) {
+            ret = WOLFBOOT_DICE_ERR_CRYPTO;
+            goto cleanup;
+        }
     }
 
+#ifdef WOLFBOOT_DICE_HW
+    /* Platform attestation key is ready. Sign pre-computed hash via HAL.
+     * hal_dice_sign_hash() MUST output 64-byte raw R||S (big-endian), NOT DER.
+     * This matches WOLFBOOT_DICE_SIG_LEN and the COSE_Sign1 signature field directly,
+     * bypassing the wc_ecc_sig_to_rs DER->raw conversion that the software path needs. */
+    ret = hal_dice_sign_hash(hash, sizeof(hash), sig, sig_len);
+    if (ret != 0)
+        ret = WOLFBOOT_DICE_ERR_HW;
+#else /* !WOLFBOOT_DICE_HW */
     wc_ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
     if (wc_ret != 0) {
         ret = WOLFBOOT_DICE_ERR_CRYPTO;
@@ -874,17 +968,20 @@ static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
     XMEMCPY(sig + sizeof(r) + (sizeof(s) - s_len), s, s_len);
     *sig_len = WOLFBOOT_DICE_SIG_LEN;
     ret = WOLFBOOT_DICE_SUCCESS;
+#endif /* !WOLFBOOT_DICE_HW */
 
 cleanup:
-    if (rng_inited) {
-        wc_FreeRng(&rng);
-    }
+#ifndef WOLFBOOT_DICE_HW
     if (key_inited) {
         wc_ecc_free(&key);
         wolfboot_dice_zeroize(&key, sizeof(key));
     }
-    wolfboot_dice_zeroize(hash, sizeof(hash));
+    if (rng_inited) {
+        wc_FreeRng(&rng);
+    }
     wolfboot_dice_zeroize(der_sig, sizeof(der_sig));
+#endif /* !WOLFBOOT_DICE_HW */
+    wolfboot_dice_zeroize(hash, sizeof(hash));
     return ret;
 }
 
@@ -1026,3 +1123,28 @@ int wolfBoot_dice_get_token_size(size_t challenge_size, size_t *token_size)
     *token_size = needed;
     return WOLFBOOT_DICE_SUCCESS;
 }
+
+#ifndef WOLFBOOT_ATTESTATION_IAK
+int wolfBoot_dice_get_attest_pubkey(uint8_t *buf, size_t *len)
+{
+    if (buf == NULL || len == NULL || *len < 65)
+        return WOLFBOOT_DICE_ERR_INVALID_ARGUMENT;
+
+#ifdef WOLFBOOT_DICE_HW
+    if (hal_dice_get_attest_pubkey(buf, len) != 0)
+        return WOLFBOOT_DICE_ERR_KEY_NOT_FOUND; /* key not yet derived; call wolfBoot_dice_get_token() first */
+    else
+        return WOLFBOOT_DICE_SUCCESS;
+#else
+    if (s_dice_attest_pubkey_len == 0)
+        return WOLFBOOT_DICE_ERR_KEY_NOT_FOUND; /* key not yet derived; call wolfBoot_dice_get_token() first */
+
+    XMEMCPY(buf, s_dice_attest_pubkey, s_dice_attest_pubkey_len);
+    *len = s_dice_attest_pubkey_len;
+    wolfboot_dice_zeroize(s_dice_attest_pubkey, sizeof(s_dice_attest_pubkey));
+    s_dice_attest_pubkey_len = 0;
+
+    return WOLFBOOT_DICE_SUCCESS;
+#endif
+}
+#endif /* !WOLFBOOT_ATTESTATION_IAK */

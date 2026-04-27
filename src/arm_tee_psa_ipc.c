@@ -77,6 +77,7 @@
 /* ARM TEE Attestation message types. */
 #define ARM_TEE_ATTEST_GET_TOKEN       1001
 #define ARM_TEE_ATTEST_GET_TOKEN_SIZE  1002
+#define ARM_TEE_ATTEST_GET_IAK_PUBKEY  1003
 
 #ifndef PSA_STORAGE_FLAG_WRITE_ONCE
 #define PSA_STORAGE_FLAG_WRITE_ONCE ((psa_storage_create_flags_t)0x00000001)
@@ -168,6 +169,8 @@ static psa_status_t wolfboot_attest_status(int dice_rc)
             return PSA_ERROR_HARDWARE_FAILURE;
         case -4:
             return PSA_ERROR_GENERIC_ERROR;
+        case -5:
+            return PSA_ERROR_BAD_STATE;
         default:
             return PSA_ERROR_GENERIC_ERROR;
     }
@@ -947,6 +950,35 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
             }
             return PSA_SUCCESS;
         }
+#ifndef WOLFBOOT_ATTESTATION_IAK
+        if (type == ARM_TEE_ATTEST_GET_IAK_PUBKEY) {
+            size_t key_len;
+            int dice_rc;
+            psa_status_t status;
+
+            if (out_vec == NULL || out_len < 1 || out_vec[0].base == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+
+            if (out_vec[0].len < 65) {
+                return PSA_ERROR_BUFFER_TOO_SMALL;
+            }
+
+            key_len = out_vec[0].len;
+            wolfBoot_printf("[ATTEST] GET_IAK_PUBKEY: out_len=%u\r\n",
+                            (unsigned)key_len);
+            dice_rc = wolfBoot_dice_get_attest_pubkey((uint8_t *)out_vec[0].base,
+                                                      &key_len);
+            wolfBoot_printf("[ATTEST] GET_IAK_PUBKEY: dice_rc=%d key_len=%u\r\n",
+                            dice_rc, (unsigned)key_len);
+            status = wolfboot_attest_status(dice_rc);
+            if (status != PSA_SUCCESS) {
+                return status;
+            }
+            out_vec[0].len = key_len;
+            return PSA_SUCCESS;
+        }
+#endif /* !WOLFBOOT_ATTESTATION_IAK */
         return PSA_ERROR_NOT_SUPPORTED;
     }
 
