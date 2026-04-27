@@ -360,8 +360,11 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
     }
 }
 
-#if defined(WOLFBOOT_SIGN_ECC256)
-int wc_ecc_init(ecc_key* key) {
+#if defined(WOLFBOOT_SIGN_ECC256) || defined(WOLFBOOT_SIGN_ECC384) || \
+    defined(WOLFBOOT_SIGN_ECC521)
+int wc_ecc_init_ex(ecc_key* key, void* heap, int devId) {
+    (void)heap;
+    (void)devId;
     if (ecc_init_fail)
         return -1;
     return 0;
@@ -460,10 +463,11 @@ END_TEST
     defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
-int wc_InitRsaKey(RsaKey* key, void* heap)
+int wc_InitRsaKey_ex(RsaKey* key, void* heap, int devId)
 {
     (void)key;
     (void)heap;
+    (void)devId;
     return 0;
 }
 

@@ -60,6 +60,9 @@
 #   define WOLF_CRYPTO_CB
 #   define RENESAS_SCE_INSTALLEDKEY_ADDR 0x08001000U
 #   define SCE_ID 7890
+#   define RENESAS_DEVID SCE_ID
+#   define WOLFBOOT_DEVID_PUBKEY SCE_ID
+#   define WOLFBOOT_DEVID_CRYPT (SCE_ID + 1)
 #   undef  VECTOR_Reset_Handler
 #   define VECTOR_Reset_Handler ((uint32_t *)(0x20204))
 ...

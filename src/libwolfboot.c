@@ -1780,7 +1780,6 @@ Aes aes_dec, aes_enc;
  */
 int aes_init(void)
 {
-    int devId = INVALID_DEVID;
     int ret = 0;
 #if defined(CUSTOM_ENCRYPT_KEY) && !defined(WOLFBOOT_RENESAS_TSIP)
     uint8_t stored_nonce[ENCRYPT_NONCE_SIZE];
@@ -1791,7 +1790,6 @@ int aes_init(void)
 #endif
 #ifdef WOLFBOOT_RENESAS_TSIP
     wrap_enc_key_t* enc_key;
-    devId = RENESAS_DEVID + 1;
     enc_key =(wrap_enc_key_t*)RENESAS_TSIP_INSTALLEDENCKEY_ADDR;
     key = enc_key->encrypted_user_key;
     stored_nonce = enc_key->initial_vector;
@@ -1815,8 +1813,8 @@ int aes_init(void)
 
     XMEMSET(&aes_enc, 0, sizeof(aes_enc));
     XMEMSET(&aes_dec, 0, sizeof(aes_dec));
-    wc_AesInit(&aes_enc, NULL, devId);
-    wc_AesInit(&aes_dec, NULL, devId);
+    wc_AesInit(&aes_enc, NULL, WOLFBOOT_DEVID_CRYPT);
+    wc_AesInit(&aes_dec, NULL, WOLFBOOT_DEVID_CRYPT);
 
     if (!encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE)) {
         ret = -1;
@@ -1843,7 +1841,7 @@ int aes_init(void)
     XMEMCPY(&aes_dec.ctx, &aes_enc.ctx, sizeof(aes_enc.ctx));
 
     /* register AES crypto callback */
-    wc_CryptoCb_RegisterDevice(devId, wc_tsip_AesCipher, NULL);
+    wc_CryptoCb_RegisterDevice(WOLFBOOT_DEVID_CRYPT, wc_tsip_AesCipher, NULL);
 #endif /* WOLFBOOT_RENESAS_TSIP */
 
     /* AES_ENCRYPTION is used for both directions in CTR

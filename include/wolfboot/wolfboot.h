@@ -316,6 +316,19 @@ extern "C" {
 #define KEY_VERIFY_SELF_ONLY   KEY_VERIFY_ONLY_ID(0)
 #define KEY_VERIFY_APP_ONLY   KEY_VERIFY_ONLY_ID(1)
 
+/* HAL crypto device ID abstraction.
+ * Override per-class via build system -D flags.
+ * Defaults to INVALID_DEVID (software-only). */
+#ifndef WOLFBOOT_DEVID_HASH
+    #define WOLFBOOT_DEVID_HASH   (-2) /* INVALID_DEVID */
+#endif
+#ifndef WOLFBOOT_DEVID_PUBKEY
+    #define WOLFBOOT_DEVID_PUBKEY (-2) /* INVALID_DEVID */
+#endif
+#ifndef WOLFBOOT_DEVID_CRYPT
+    #define WOLFBOOT_DEVID_CRYPT  (-2) /* INVALID_DEVID */
+#endif
+
 #if defined(__WOLFBOOT) || defined(UNIT_TEST_AUTH)
 
 #include "wolfssl/wolfcrypt/settings.h"

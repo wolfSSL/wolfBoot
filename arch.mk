@@ -513,6 +513,8 @@ ifeq ($(ARCH),RENESAS_RX)
 
   ifeq ($(PKA),1)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
+    CFLAGS+=-DWOLFBOOT_DEVID_PUBKEY=7890
+    CFLAGS+=-DWOLFBOOT_DEVID_CRYPT=7891
     RX_DRIVER_PATH?=./lib
 
     OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
@@ -1585,7 +1587,7 @@ ifeq ($(ARCH), AURIX_TC3)
     endif
 
     ifeq ($(AURIX_TC3_HSM),1)
-      ARCH_FLASH_OFFSET=0x80028000
+      ARCH_FLASH_OFFSET?=0x80028000
       # HSM compiler flags, build options, source code, etc
       ifeq ($(USE_GCC),1)
         # Just arm-none-eabi-gcc for now
@@ -1631,15 +1633,13 @@ ifeq ($(ARCH), AURIX_TC3)
           $(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
-          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o
-
-        # SW only for now, as we dont have the right protection macros
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
-        #$(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o\
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/ccb_hsm.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hash.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_aes.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_cmac.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_pk.o \
+          $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_trng.o
       endif
 
       # HSM BSP specific object files
@@ -1654,7 +1654,7 @@ ifeq ($(ARCH), AURIX_TC3)
 
     else
       # Tricore compiler settings
-      ARCH_FLASH_OFFSET=0x800A0000
+      ARCH_FLASH_OFFSET?=0x800A0000
       ifeq ($(USE_GCC),1)
         HT_ROOT?=/opt/hightec/gnutri_v4.9.4.1-11fcedf-lin64
         CROSS_COMPILE?=$(HT_ROOT)/bin/tricore-
