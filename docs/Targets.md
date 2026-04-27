@@ -2251,6 +2251,27 @@ west update_board --set board lpcxpresso55s69
 deactivate
 ```
 
+### LPC55S69: Hardware Acceleration
+
+wolfBoot / wolfCrypt provide support for the LPC55S69's hardware acceleration
+blocks, to improve performance of various crypto algorithms.  By default, this
+support is turned off in the config files, and all crypto is software based.
+To turn on hardware acceleration, set PKA=1 in the config file.
+
+Basic hardware acceleration supported:
+- SHA1
+- SHA-256
+- AES-ECB (128, 192, 256 key sizes)
+- AES-CBC (128, 192, 256 key sizes)
+- AES-OFB (128, 192, 256 key sizes)
+  - Only supports full 16-byte blocks
+- AES-CFB (128, 192, 256 key sizes)
+  - Only supports full 16-byte blocks
+- AES-CTR (128, 192, 256 key sizes)
+  - User must avoid counter wrap of all ff's to 0, as this fails in the hardware
+
+See [Test and Benchmark](#lpc55s69-test-and-benchmark) for a comparison with and without hardware acceleration.
+
 ### LPC55S69: Configuring and compiling
 
 Copy the example configuration file and build with make:
@@ -2260,7 +2281,8 @@ cp config/examples/lpc55s69.config .config
 make
 ```
 
-We also provide a TrustZone configuration at `config/examples/lpc55s69-tz.config`.
+We also provide a TrustZone configuration at `config/examples/lpc55s69-tz.config`
+and a benchmarking configuration at `config/examples/lpc55s69-benchmark.config`.
 
 ### LPC55S69: Loading the firmware
 
@@ -2538,7 +2560,7 @@ c
 NOTE: See [tools/scripts/lpc55s69/lpc55s69_debug.cmm](/tools/scripts/lpc55s69/lpc55s69_debug.cmm) for the lauterbach equivalent.
 
 
-### LPC55S69: Test and Benchmark
+### LPC55S69 Test and Benchmark
 
 Here is an example of how to run wolfCrypt test and benchmarking on actual hardware.
 
