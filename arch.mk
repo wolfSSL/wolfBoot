@@ -281,6 +281,19 @@ ifeq ($(ARCH),ARM)
 
   endif
 
+  ifeq ($(TARGET),stm32n6)
+    CORTEX_M55=1
+    CFLAGS+=-Ihal
+    ARCH_FLASH_OFFSET=0x70000000
+    # Boot ROM copies FSBL from NOR to AXISRAM2 at 0x34180400.
+    # Use the same address for both TZEN=0 and TZEN=1 since the Boot ROM
+    # always uses the non-secure alias. SAU is configured in hal_init().
+    WOLFBOOT_ORIGIN=0x34180400
+    EXT_FLASH=1
+    PART_UPDATE_EXT=1
+    PART_SWAP_EXT=1
+  endif
+
   ifeq ($(TARGET),rp2350)
     CORTEX_M33=1
     CFLAGS+=-Ihal
@@ -363,12 +376,22 @@ else
     CORTEXM_ARM_EXTRA_CFLAGS+=-DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
                               -DWOLFSSL_ARMASM_NO_NEON -DWOLFSSL_ARMASM_THUMB2
   endif
+  ifeq ($(CORTEX_M55),1)
+    CORTEX_M33=1
+    CFLAGS+=-mcpu=cortex-m55 -DCORTEX_M55
+    LDFLAGS+=-mcpu=cortex-m55
+  endif
   ifeq ($(CORTEX_M33),1)
-    CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
-    LDFLAGS+=-mcpu=cortex-m33
+    CFLAGS+=-DCORTEX_M33
+    ifneq ($(CORTEX_M55),1)
+      CFLAGS+=-mcpu=cortex-m33
+      LDFLAGS+=-mcpu=cortex-m33
+    endif
     ifeq ($(TZEN),1)
       ifneq (,$(findstring stm32,$(TARGET)))
-        OBJS+=hal/stm32_tz.o
+        ifneq ($(TARGET),stm32n6)
+          OBJS+=hal/stm32_tz.o
+        endif
       endif
       CFLAGS+=-mcmse
       SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o

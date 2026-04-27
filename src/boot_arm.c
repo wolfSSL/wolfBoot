@@ -419,9 +419,10 @@ void isr_empty(void)
  *
  */
 
-#ifdef TZEN
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+    defined(TZEN) && !defined(CORTEX_M55)
 #include "hal.h"
-#define VTOR (*(volatile uint32_t *)(0xE002ED08))
+#define VTOR (*(volatile uint32_t *)(0xE002ED08)) /* Non-secure VTOR */
 #else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif
@@ -440,7 +441,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("do_boot_r5:\n"
                  "  mov     pc, r0\n");
 
-#elif defined(CORTEX_M33) /* Armv8 boot procedure */
+#elif defined(CORTEX_M33) || defined(CORTEX_M55) /* Armv8 boot procedure */
 
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
@@ -451,7 +452,8 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     /* Update IV */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
+#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+       defined(TZEN) && !defined(CORTEX_M55)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
     /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
