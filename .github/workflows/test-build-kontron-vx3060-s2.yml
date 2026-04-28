@@ -22,24 +22,24 @@ jobs:
             shopt -s nullglob
 
             sudo sed -i \
-              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|https://mirror.arizona.edu/ubuntu/|g" \
               /etc/apt/sources.list || true
 
             for f in /etc/apt/sources.list.d/*.list; do
               sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|https://mirror.arizona.edu/ubuntu/|g" \
                 "$f"
             done
 
             for f in /etc/apt/sources.list.d/*.sources; do
               sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|https://mirror.arizona.edu/ubuntu/|g" \
+                -e "s|https\?://azure\.archive\.ubuntu\.com|https://mirror.arizona.edu|g" \
                 "$f"
             done
 
             if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
-              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
+              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|https://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
             fi
       - name: install req
         run: |

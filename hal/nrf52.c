@@ -26,10 +26,12 @@
 #include "nrf52.h"
 
 #ifdef DEBUG_UART
+#define UARTE_ENABLE_ENABLE 8u
+
 void uart_init(void)
 {
     UART0_BAUDRATE = BAUD_115200;
-    UART0_ENABLE = 4;
+    UART0_ENABLE = UARTE_ENABLE_ENABLE;
 }
 
 static volatile uint8_t uart_tx_buf;
