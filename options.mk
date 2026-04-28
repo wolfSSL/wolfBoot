@@ -1440,79 +1440,77 @@ ifneq ($(CERT_CHAIN_VERIFY),)
       CERT_CHAIN_GEN_ALGO+=rsa4096
     endif
 
-    # Per-level algo / hash overrides (default: same algo for CA + leaf,
-    # SHA256 for cert signatures).
-    CERT_CHAIN_CA_ALGO   ?= $(CERT_CHAIN_GEN_ALGO)
-    CERT_CHAIN_LEAF_ALGO ?= $(CERT_CHAIN_GEN_ALGO)
-    CERT_CHAIN_CA_HASH   ?= sha256
-
-    # The leaf cert wraps the wolfBoot signing key, so its algo must
-    # match SIGN. Catch a mismatch here with a clear error rather than
-    # letting openssl fail later inside the chain-gen helper.
-    ifneq ($(strip $(CERT_CHAIN_LEAF_ALGO)),$(strip $(CERT_CHAIN_GEN_ALGO)))
-      $(error CERT_CHAIN_LEAF_ALGO ($(CERT_CHAIN_LEAF_ALGO)) must match the algorithm derived from SIGN=$(SIGN) ($(CERT_CHAIN_GEN_ALGO)))
-    endif
+    # Per-level overrides for the dummy chain generator. Defaults: CA chain
+    # uses the same algo as the leaf (SIGN-derived), SHA256 for cert sigs.
+    # The leaf algo is fixed by SIGN — the leaf cert wraps the wolfBoot
+    # signing key, so it can't diverge.
+    CERT_CHAIN_GEN_CA_ALGO ?= $(CERT_CHAIN_GEN_ALGO)
+    CERT_CHAIN_GEN_CA_HASH ?= sha256
 
     # If any chain component is RSA, the wolfHSM cert buffer must be
     # large enough to hold an RSA4096 cert (~1.5-2 KB).
-    ifneq ($(filter rsa%,$(CERT_CHAIN_CA_ALGO) $(CERT_CHAIN_LEAF_ALGO)),)
+    ifneq ($(filter rsa%,$(CERT_CHAIN_GEN_CA_ALGO) $(CERT_CHAIN_GEN_ALGO)),)
       CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
     endif
 
-    CERT_CHAIN_GEN_FLAGS := --ca-algo $(CERT_CHAIN_CA_ALGO) \
-                            --leaf-algo $(CERT_CHAIN_LEAF_ALGO) \
-                            --ca-hash $(CERT_CHAIN_CA_HASH)
+    CERT_CHAIN_GEN_FLAGS := --ca-algo $(CERT_CHAIN_GEN_CA_ALGO) \
+                            --leaf-algo $(CERT_CHAIN_GEN_ALGO) \
+                            --ca-hash $(CERT_CHAIN_GEN_CA_HASH)
+
+    # Auto-bridge: the verifier in the bootloader must support whatever
+    # algo and hash actually sign the dummy chain. Without this, a
+    # non-default GEN_CA_ALGO/GEN_CA_HASH builds successfully but fails at
+    # runtime when the matching wolfCrypt module is absent.
+    AUX_PK_ALGOS   += $(CERT_CHAIN_GEN_CA_ALGO)
+    AUX_HASH_ALGOS += $(CERT_CHAIN_GEN_CA_HASH)
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
+endif
 
-  # Additional algorithms for cert chain verification
-  # Usage: CERT_CHAIN_HASH=sha384,sha512  CERT_CHAIN_PK=rsa4096,ecc256
+# Auxiliary wolfCrypt algorithms - compile in extra wolfCrypt code beyond
+# what SIGN/HASH already pulls in. Decoupled from any specific feature; the
+# cert chain verifier auto-populates these (see above), but the variables
+# are also available as a generic primitive for any future feature that
+# needs extra algo support compiled in.
+# Usage: AUX_HASH_ALGOS=sha384,sha512  AUX_PK_ALGOS=rsa4096,ecc256
+ifneq ($(strip $(AUX_PK_ALGOS)$(AUX_HASH_ALGOS)),)
   comma := ,
-  CERT_CHAIN_HASH_LIST := $(subst $(comma), ,$(CERT_CHAIN_HASH))
-  CERT_CHAIN_PK_LIST   := $(subst $(comma), ,$(CERT_CHAIN_PK))
+  AUX_HASH_ALGOS_LIST := $(sort $(subst $(comma), ,$(AUX_HASH_ALGOS)))
+  AUX_PK_ALGOS_LIST   := $(sort $(subst $(comma), ,$(AUX_PK_ALGOS)))
 
-  # For auto-generated chains, ensure the verifier supports the CA algo
-  # and CA hash actually used to sign the chain. Without this, a non-
-  # default CERT_CHAIN_CA_ALGO/CERT_CHAIN_CA_HASH builds successfully
-  # but fails at runtime when the matching wolfCrypt module is absent.
-  ifeq ($(USER_CERT_CHAIN),)
-    CERT_CHAIN_HASH_LIST := $(sort $(CERT_CHAIN_HASH_LIST) $(CERT_CHAIN_CA_HASH))
-    CERT_CHAIN_PK_LIST   := $(sort $(CERT_CHAIN_PK_LIST) $(CERT_CHAIN_CA_ALGO))
-  endif
-
-  # --- Cert chain hash algorithms ---
+  # --- Hash algorithms ---
   # SHA256 is always present in wolfCrypt for wolfBoot, no extra flag needed.
-  ifneq ($(filter sha384,$(CERT_CHAIN_HASH_LIST)),)
-    CFLAGS += -DCERT_CHAIN_HASH_SHA384
+  ifneq ($(filter sha384,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA384
     ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
     endif
   endif
-  ifneq ($(filter sha512,$(CERT_CHAIN_HASH_LIST)),)
-    CFLAGS += -DCERT_CHAIN_HASH_SHA512
+  ifneq ($(filter sha512,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA512
     ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
     endif
   endif
-  ifneq ($(filter sha3,$(CERT_CHAIN_HASH_LIST)),)
-    CFLAGS += -DCERT_CHAIN_HASH_SHA3
+  ifneq ($(filter sha3,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA3
     ifeq ($(filter %/sha3.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
     endif
   endif
 
-  # --- Cert chain PK algorithms ---
-  ifneq ($(filter rsa2048,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_RSA2048
+  # --- PK algorithms ---
+  ifneq ($(filter rsa2048,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA2048
   endif
-  ifneq ($(filter rsa3072,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_RSA3072
+  ifneq ($(filter rsa3072,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA3072
   endif
-  ifneq ($(filter rsa4096,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_RSA4096
+  ifneq ($(filter rsa4096,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA4096
   endif
-  # Add RSA objects if any RSA cert chain PK is requested
-  ifneq ($(filter rsa2048 rsa3072 rsa4096,$(CERT_CHAIN_PK_LIST)),)
+  # Add RSA objects if any RSA aux PK is requested
+  ifneq ($(filter rsa2048 rsa3072 rsa4096,$(AUX_PK_ALGOS_LIST)),)
     ifeq ($(filter %/rsa.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(RSA_OBJS)
     endif
@@ -1521,17 +1519,17 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
   endif
 
-  ifneq ($(filter ecc256,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_ECC256
+  ifneq ($(filter ecc256,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC256
   endif
-  ifneq ($(filter ecc384,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_ECC384
+  ifneq ($(filter ecc384,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC384
   endif
-  ifneq ($(filter ecc521,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_ECC521
+  ifneq ($(filter ecc521,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC521
   endif
-  # Add ECC objects if any ECC cert chain PK is requested
-  ifneq ($(filter ecc256 ecc384 ecc521,$(CERT_CHAIN_PK_LIST)),)
+  # Add ECC objects if any ECC aux PK is requested
+  ifneq ($(filter ecc256 ecc384 ecc521,$(AUX_PK_ALGOS_LIST)),)
     ifeq ($(filter %/ecc.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(ECC_OBJS)
     endif
@@ -1540,15 +1538,15 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
   endif
 
-  ifneq ($(filter ed25519,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_ED25519
+  ifneq ($(filter ed25519,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ED25519
     ifeq ($(filter %/ed25519.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(ED25519_OBJS)
     endif
   endif
 
-  ifneq ($(filter ed448,$(CERT_CHAIN_PK_LIST)),)
-    CFLAGS += -DCERT_CHAIN_PK_ED448
+  ifneq ($(filter ed448,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ED448
     ifeq ($(filter %/ed448.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(ED448_OBJS)
     endif
@@ -1556,7 +1554,6 @@ ifneq ($(CERT_CHAIN_VERIFY),)
       WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
     endif
   endif
-
 endif
 
 # Clock Speed (Hz)

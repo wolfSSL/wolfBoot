@@ -59,13 +59,13 @@ jobs:
             needs_posix_server: true
             posix_server_nvminit: true
             needs_nvm_image: false
-            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_CA_ALGO=rsa4096 CERT_CHAIN_LEAF_ALGO=ecc256"
+            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_GEN_CA_ALGO=rsa4096"
           - name: "wolfHSM server cert chain verify mixed inverse (RSA4096 chain, ECC256 leaf)"
             file: "config/examples/sim-wolfHSM-server-certchain-mixed.config"
             needs_posix_server: false
             posix_server_nvminit: false
             needs_nvm_image: true
-            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_CA_ALGO=rsa4096 CERT_CHAIN_LEAF_ALGO=ecc256"
+            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_GEN_CA_ALGO=rsa4096"
 
       fail-fast: false
 
