@@ -311,7 +311,7 @@ ifeq ($(SIGN),RSAPSS2048)
   SIGN_ALG=RSAPSS2048
   WOLFCRYPT_OBJS+= $(RSA_OBJS)
   WOLFCRYPT_OBJS+=$(MATH_OBJS)
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS2048" $(RSA_EXTRA_CFLAGS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA2048" -DWOLFBOOT_SIGN_RSA_PSS $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
       STACK_USAGE=5008
@@ -340,7 +340,7 @@ ifeq ($(SIGN),RSAPSS3072)
   SIGN_ALG=RSAPSS3072
   WOLFCRYPT_OBJS+= $(RSA_OBJS)
   WOLFCRYPT_OBJS+=$(MATH_OBJS)
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS3072" $(RSA_EXTRA_CFLAGS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA3072" -DWOLFBOOT_SIGN_RSA_PSS $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
       STACK_USAGE=5008
@@ -374,7 +374,7 @@ ifeq ($(SIGN),RSAPSS4096)
   SIGN_ALG=RSAPSS4096
   WOLFCRYPT_OBJS+= $(RSA_OBJS)
   WOLFCRYPT_OBJS+=$(MATH_OBJS)
-  CFLAGS+=-D"WOLFBOOT_SIGN_RSAPSS4096" $(RSA_EXTRA_CFLAGS)
+  CFLAGS+=-D"WOLFBOOT_SIGN_RSA4096" -DWOLFBOOT_SIGN_RSA_PSS $(RSA_EXTRA_CFLAGS)
   ifeq ($(WOLFBOOT_SMALL_STACK),1)
     ifneq ($(SPMATH),1)
       STACK_USAGE=5888
@@ -591,7 +591,13 @@ ifneq ($(SIGN_SECONDARY),)
   SECONDARY_KEYGEN_OPTIONS=--$(LOWERCASE_SECONDARY)
   SECONDARY_SIGN_OPTIONS=--$(LOWERCASE_SECONDARY)
   CFLAGS+=-DSIGN_HYBRID
-  CFLAGS+=-DWOLFBOOT_SIGN_SECONDARY_$(SIGN_SECONDARY)
+  # SIGN_SECONDARY=RSAPSS{N} expands to RSA{N} size + RSA_PSS modifier
+  # (orthogonal: size and padding are independent at the macro level).
+  ifneq ($(filter RSAPSS%,$(SIGN_SECONDARY)),)
+    CFLAGS+=-DWOLFBOOT_SIGN_SECONDARY_$(subst RSAPSS,RSA,$(SIGN_SECONDARY)) -DWOLFBOOT_SIGN_SECONDARY_RSA_PSS
+  else
+    CFLAGS+=-DWOLFBOOT_SIGN_SECONDARY_$(SIGN_SECONDARY)
+  endif
   ifeq ($(SIGN_SECONDARY),RSA2048)
     WOLFCRYPT_OBJS+=$(RSA_OBJS)
     WOLFCRYPT_OBJS+=$(MATH_OBJS)
@@ -1427,16 +1433,153 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     ifeq ($(SIGN),ECC256)
       CERT_CHAIN_GEN_ALGO+=ecc256
     endif
+    ifeq ($(SIGN),ECC384)
+      CERT_CHAIN_GEN_ALGO+=ecc384
+    endif
     ifeq ($(SIGN),RSA2048)
       CERT_CHAIN_GEN_ALGO+=rsa2048
     endif
+    ifeq ($(SIGN),RSA3072)
+      CERT_CHAIN_GEN_ALGO+=rsa3072
+    endif
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
-      # Reasonably large default
+    endif
+    ifeq ($(SIGN),RSAPSS2048)
+      CERT_CHAIN_GEN_ALGO+=rsapss2048
+    endif
+    ifeq ($(SIGN),RSAPSS3072)
+      CERT_CHAIN_GEN_ALGO+=rsapss3072
+    endif
+    ifeq ($(SIGN),RSAPSS4096)
+      CERT_CHAIN_GEN_ALGO+=rsapss4096
+    endif
+
+    # Per-level overrides for the dummy chain generator. Defaults: CA chain
+    # uses the same algo as the leaf (SIGN-derived), SHA256 for cert sigs.
+    # The leaf algo is fixed by SIGN — the leaf cert wraps the wolfBoot
+    # signing key, so it can't diverge.
+    CERT_CHAIN_GEN_CA_ALGO ?= $(CERT_CHAIN_GEN_ALGO)
+    CERT_CHAIN_GEN_CA_HASH ?= sha256
+
+    # If any chain component is RSA, the wolfHSM cert buffer must be
+    # large enough to hold an RSA4096 cert (~1.5-2 KB).
+    ifneq ($(filter rsa%,$(CERT_CHAIN_GEN_CA_ALGO) $(CERT_CHAIN_GEN_ALGO)),)
       CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
     endif
+
+    CERT_CHAIN_GEN_FLAGS := --ca-algo $(CERT_CHAIN_GEN_CA_ALGO) \
+                            --leaf-algo $(CERT_CHAIN_GEN_ALGO) \
+                            --ca-hash $(CERT_CHAIN_GEN_CA_HASH)
+
+    # Auto-bridge: the verifier in the bootloader must support whatever
+    # algo and hash actually sign the dummy chain. Without this, a
+    # non-default GEN_CA_ALGO/GEN_CA_HASH builds successfully but fails at
+    # runtime when the matching wolfCrypt module is absent.
+    AUX_PK_ALGOS   += $(CERT_CHAIN_GEN_CA_ALGO)
+    AUX_HASH_ALGOS += $(CERT_CHAIN_GEN_CA_HASH)
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
+endif
+
+# Auxiliary wolfCrypt algorithms - compile in extra wolfCrypt code beyond
+# what SIGN/HASH already pulls in. Decoupled from any specific feature; the
+# cert chain verifier auto-populates these (see above), but the variables
+# are also available as a generic primitive for any future feature that
+# needs extra algo support compiled in.
+# Usage: AUX_HASH_ALGOS=sha384,sha512  AUX_PK_ALGOS=rsa4096,rsapss4096,ecc256
+#
+# RSA tokens are orthogonal along two axes: size (rsa2048/3072/4096) and
+# padding mode (rsa* = PKCS#1 v1.5, rsapss* = PSS). Each rsapssN token
+# enables both the RSAN size and PSS padding; mixing rsaN and rsapssN for
+# the same size accepts either padding for that key length.
+ifneq ($(strip $(AUX_PK_ALGOS)$(AUX_HASH_ALGOS)),)
+  comma := ,
+  AUX_HASH_ALGOS_LIST := $(sort $(subst $(comma), ,$(AUX_HASH_ALGOS)))
+  AUX_PK_ALGOS_LIST   := $(sort $(subst $(comma), ,$(AUX_PK_ALGOS)))
+
+  # --- Hash algorithms ---
+  # SHA256 is always present in wolfCrypt for wolfBoot, no extra flag needed.
+  ifneq ($(filter sha384,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA384
+    ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+    endif
+  endif
+  ifneq ($(filter sha512,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA512
+    ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+    endif
+  endif
+  ifneq ($(filter sha3,$(AUX_HASH_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_HASH_SHA3
+    ifeq ($(filter %/sha3.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+    endif
+  endif
+
+  # --- PK algorithms ---
+  # RSA size flags - rsa{N} and rsapss{N} both select the same N-bit
+  # modulus support; padding is set separately below.
+  ifneq ($(filter rsa2048 rsapss2048,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA2048
+  endif
+  ifneq ($(filter rsa3072 rsapss3072,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA3072
+  endif
+  ifneq ($(filter rsa4096 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA4096
+  endif
+  # PSS padding - any rsapss* token enables PSS for all selected RSA sizes
+  ifneq ($(filter rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_RSA_PSS
+  endif
+  # Add RSA objects if any RSA (PKCS#1 v1.5 or PSS) aux PK is requested
+  ifneq ($(filter rsa2048 rsa3072 rsa4096 rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
+    ifeq ($(filter %/rsa.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(RSA_OBJS)
+    endif
+    ifeq ($(filter %/sp_int.o %/integer.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(MATH_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ecc256,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC256
+  endif
+  ifneq ($(filter ecc384,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC384
+  endif
+  ifneq ($(filter ecc521,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ECC521
+  endif
+  # Add ECC objects if any ECC aux PK is requested
+  ifneq ($(filter ecc256 ecc384 ecc521,$(AUX_PK_ALGOS_LIST)),)
+    ifeq ($(filter %/ecc.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ECC_OBJS)
+    endif
+    ifeq ($(filter %/sp_int.o %/integer.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(MATH_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ed25519,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ED25519
+    ifeq ($(filter %/ed25519.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ED25519_OBJS)
+    endif
+  endif
+
+  ifneq ($(filter ed448,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_PK_ED448
+    ifeq ($(filter %/ed448.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(ED448_OBJS)
+    endif
+    ifeq ($(filter %/sha3.o,$(WOLFCRYPT_OBJS)),)
+      WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+    endif
+  endif
 endif
 
 # Clock Speed (Hz)

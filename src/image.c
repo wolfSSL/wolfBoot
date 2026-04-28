@@ -2395,10 +2395,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
       defined (WOLFBOOT_SIGN_RSA4096) || \
       defined (WOLFBOOT_SIGN_RSA2048ENC) || \
       defined (WOLFBOOT_SIGN_RSA3072ENC) || \
-      defined (WOLFBOOT_SIGN_RSA4096ENC) || \
-      defined (WOLFBOOT_SIGN_RSAPSS2048) || \
-      defined (WOLFBOOT_SIGN_RSAPSS3072) || \
-      defined (WOLFBOOT_SIGN_RSAPSS4096)
+      defined (WOLFBOOT_SIGN_RSA4096ENC)
     if (stored_signature_size != RSA_IMAGE_SIGNATURE_SIZE)
         return -1;
 #elif defined (WOLFBOOT_SIGN_ECC256) || \
@@ -2470,10 +2467,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
       defined (WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
       defined (WOLFBOOT_SIGN_SECONDARY_RSA2048ENC) || \
       defined (WOLFBOOT_SIGN_SECONDARY_RSA3072ENC) || \
-      defined (WOLFBOOT_SIGN_SECONDARY_RSA4096ENC) || \
-      defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
-      defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
-      defined (WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+      defined (WOLFBOOT_SIGN_SECONDARY_RSA4096ENC)
             expected_secondary_signature_size = RSA_IMAGE_SIGNATURE_SIZE;
 #elif defined (WOLFBOOT_SIGN_SECONDARY_ECC256) || \
       defined (WOLFBOOT_SIGN_SECONDARY_ECC384) || \

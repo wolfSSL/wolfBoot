@@ -40,41 +40,29 @@ extern "C" {
 #define ECC_IMAGE_SIGNATURE_SIZE (132)
 #endif
 
-/* Consolidated RSA-PSS flag: set when any RSA-PSS variant is enabled
- * (primary or secondary). Used to guard PSS-specific code paths in the
- * unified RSA verify function. */
-#if defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
-    defined(WOLFBOOT_SIGN_RSAPSS4096) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+/* Consolidated RSA-PSS flag: set when either firmware (primary or secondary)
+ * uses RSA-PSS padding. Used to guard PSS-specific code paths in the unified
+ * RSA verify function. PSS is encoded as a modifier orthogonal to size, so
+ * any RSA size combined with the PSS modifier feeds this aggregate. */
+#if defined(WOLFBOOT_SIGN_RSA_PSS) || defined(WOLFBOOT_SIGN_SECONDARY_RSA_PSS)
 #define WOLFBOOT_SIGN_RSAPSS_ANY
 #endif
 
-/* Consolidated RSA flag: set when any RSA variant is enabled (PKCS#1 v1.5 or
- * PSS, primary or secondary). Used to guard the unified RSA verify function
- * and related RSA code paths. */
+/* Consolidated RSA flag: set when any RSA size is enabled (primary or
+ * secondary). Padding mode is independent — see WOLFBOOT_SIGN_RSAPSS_ANY. */
 #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA3072) || \
     defined(WOLFBOOT_SIGN_RSA4096) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
-    defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
-    defined(WOLFBOOT_SIGN_RSAPSS4096) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
 #define WOLFBOOT_SIGN_RSA_ANY
 #endif
 
-#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
-    defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048)
+#if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048)
 #define RSA_IMAGE_SIGNATURE_SIZE (256)
-#elif defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072) || \
-    defined(WOLFBOOT_SIGN_RSAPSS3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072)
+#elif defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)
 #define RSA_IMAGE_SIGNATURE_SIZE (384)
-#elif defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096) || \
-    defined(WOLFBOOT_SIGN_RSAPSS4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+#elif defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)
 #define RSA_IMAGE_SIGNATURE_SIZE (512)
 #endif
 

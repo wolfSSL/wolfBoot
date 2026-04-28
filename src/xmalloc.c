@@ -336,9 +336,7 @@ static struct xmalloc_slot xmalloc_pool[] = {
 
 
 #elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA4096) || \
-      defined(WOLFBOOT_SIGN_RSA3072) || \
-      defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_RSAPSS4096) || \
-      defined(WOLFBOOT_SIGN_RSAPSS3072)
+      defined(WOLFBOOT_SIGN_RSA3072)
 
 #if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
 static uint32_t sha_block[HASH_BLOCK_SIZE];
@@ -352,7 +350,7 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
 static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
 
 #ifndef USE_FAST_MATH
-    #if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSAPSS2048)
+    #if defined(WOLFBOOT_SIGN_RSA2048)
         #define MP_SCHEME "SP RSA2048"
         #define MP_INT_DYNAMIC_SIZE MP_INT_SIZEOF(MP_BITS_CNT(2048))
         #define MP_BIGINT_MODEXP_SIZE (MP_INT_DYNAMIC_SIZE * 4)
@@ -365,7 +363,7 @@ static uint8_t asncheck_buf[ASNCHECK_BUF_SIZE];
             #define MPDIGIT_BUF1_SIZE (MP_DIGIT_SIZE * (72 * 4 + 3))
             static uint8_t mp_digit_buf1[MPDIGIT_BUF1_SIZE];
         #endif
-    #elif defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_RSAPSS3072)
+    #elif defined(WOLFBOOT_SIGN_RSA3072)
         #define MP_SCHEME "SP RSA3072"
         #define MP_INT_DYNAMIC_SIZE MP_INT_SIZEOF(MP_BITS_CNT(3072))
         #define MP_BIGINT_MODEXP_SIZE (MP_INT_DYNAMIC_SIZE * 4)
