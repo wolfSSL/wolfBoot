@@ -15,7 +15,7 @@ LEAF_ALGO=""          # Defaults to CA_ALGO if not explicitly set
 CA_HASH="sha256"      # Hash used for cert signatures throughout the chain
 
 # Whitelists
-SUPPORTED_ALGOS="ecc256 ecc384 rsa2048 rsa3072 rsa4096"
+SUPPORTED_ALGOS="ecc256 ecc384 rsa2048 rsa3072 rsa4096 rsapss2048 rsapss3072 rsapss4096"
 SUPPORTED_HASHES="sha256 sha384 sha512"
 
 is_supported_algo() {
@@ -35,16 +35,18 @@ is_supported_hash() {
 }
 
 # Helper functions for key operations. Each takes the target algo as $1.
+# rsapss* tokens carry an RSA key plus a PSS padding intent — the key
+# itself is generated/handled identically to plain rsa*.
 generate_private_key() {
     local algo=$1
     local output_file=$2
 
     case "$algo" in
-        ecc256)  openssl ecparam -genkey -name prime256v1 -noout -out "$output_file" ;;
-        ecc384)  openssl ecparam -genkey -name secp384r1  -noout -out "$output_file" ;;
-        rsa2048) openssl genrsa -out "$output_file" 2048 ;;
-        rsa3072) openssl genrsa -out "$output_file" 3072 ;;
-        rsa4096) openssl genrsa -out "$output_file" 4096 ;;
+        ecc256)             openssl ecparam -genkey -name prime256v1 -noout -out "$output_file" ;;
+        ecc384)             openssl ecparam -genkey -name secp384r1  -noout -out "$output_file" ;;
+        rsa2048|rsapss2048) openssl genrsa -out "$output_file" 2048 ;;
+        rsa3072|rsapss3072) openssl genrsa -out "$output_file" 3072 ;;
+        rsa4096|rsapss4096) openssl genrsa -out "$output_file" 4096 ;;
         *) echo "Unsupported algo: $algo" >&2; exit 1 ;;
     esac
 }
@@ -58,7 +60,7 @@ convert_key_to_der() {
         ecc256|ecc384)
             openssl ec  -in "$input_file" -outform DER -out "$output_file"
             ;;
-        rsa2048|rsa3072|rsa4096)
+        rsa2048|rsa3072|rsa4096|rsapss2048|rsapss3072|rsapss4096)
             openssl rsa -in "$input_file" -outform DER -out "$output_file"
             ;;
         *) echo "Unsupported algo: $algo" >&2; exit 1 ;;
@@ -79,7 +81,7 @@ extract_public_key() {
         ecc256|ecc384)
             openssl ec  -pubin -in "$pubkey_pem" -outform DER -out "$pubkey_der"
             ;;
-        rsa2048|rsa3072|rsa4096)
+        rsa2048|rsa3072|rsa4096|rsapss2048|rsapss3072|rsapss4096)
             openssl rsa -pubin -in "$pubkey_pem" -outform DER -out "$pubkey_der"
             ;;
         *) echo "Unsupported algo: $algo" >&2; exit 1 ;;
@@ -94,10 +96,24 @@ validate_key_format() {
         ecc256|ecc384)
             openssl ec  -in "$key_file" -noout
             ;;
-        rsa2048|rsa3072|rsa4096)
+        rsa2048|rsa3072|rsa4096|rsapss2048|rsapss3072|rsapss4096)
             openssl rsa -in "$key_file" -noout
             ;;
         *) echo "Unsupported algo: $algo" >&2; exit 1 ;;
+    esac
+}
+
+# Build openssl -sigopt args for a given algo + hash. For rsapss* algos
+# we ask openssl to use PSS padding with salt length equal to the digest
+# length and MGF1 keyed by the same hash (the standard interoperable
+# choice that wolfCrypt's PSS verify expects). Empty for non-PSS algos.
+sig_opts_for_algo() {
+    local algo=$1
+    local hash=$2
+    case "$algo" in
+        rsapss*)
+            echo "-sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:digest -sigopt rsa_mgf1_md:$hash"
+            ;;
     esac
 }
 
@@ -191,6 +207,14 @@ if [[ -z "$LEAF_ALGO" ]]; then
     LEAF_ALGO="$CA_ALGO"
 fi
 
+# Resolve PSS sigopts once based on the selected algos. CA_SIG_OPTS
+# applies to every cert signed by a CA-tier key (root self-sig,
+# intermediate CSR self-sig, intermediate cert, leaf cert); LEAF_SIG_OPTS
+# applies to the leaf CSR self-sig only (the leaf cert itself is signed
+# by the intermediate's CA-tier key). Both are empty for non-PSS algos.
+CA_SIG_OPTS=$(sig_opts_for_algo "$CA_ALGO" "$CA_HASH")
+LEAF_SIG_OPTS=$(sig_opts_for_algo "$LEAF_ALGO" "$CA_HASH")
+
 # Configuration
 ROOT_SUBJECT="/C=US/ST=California/L=San Francisco/O=MyOrganization/OU=Root CA/CN=My Root CA"
 INTERMEDIATE_SUBJECT="/C=US/ST=California/L=San Francisco/O=MyOrganization/OU=Intermediate CA/CN=My Intermediate CA"
@@ -210,7 +234,7 @@ echo "Generating Root CA..."
 generate_private_key "$CA_ALGO" "${OUTPUT_DIR}/temp/root.key.pem"
 
 # Create PEM format root certificate (temporary)
-openssl req -new -x509 -days 3650 -$CA_HASH \
+openssl req -new -x509 -days 3650 -$CA_HASH $CA_SIG_OPTS \
     -key ${OUTPUT_DIR}/temp/root.key.pem \
     -out ${OUTPUT_DIR}/temp/root.crt.pem \
     -subj "$ROOT_SUBJECT" \
@@ -225,13 +249,13 @@ openssl x509 -in ${OUTPUT_DIR}/temp/root.crt.pem -outform DER -out ${OUTPUT_DIR}
 echo "Generating Intermediate CA..."
 generate_private_key "$CA_ALGO" "${OUTPUT_DIR}/temp/intermediate.key.pem"
 
-openssl req -new -$CA_HASH \
+openssl req -new -$CA_HASH $CA_SIG_OPTS \
     -key ${OUTPUT_DIR}/temp/intermediate.key.pem \
     -out ${OUTPUT_DIR}/temp/intermediate.csr \
     -subj "$INTERMEDIATE_SUBJECT"
 
 # Step 3: Sign Intermediate certificate with Root
-openssl x509 -req -days 1825 -$CA_HASH \
+openssl x509 -req -days 1825 -$CA_HASH $CA_SIG_OPTS \
     -in ${OUTPUT_DIR}/temp/intermediate.csr \
     -out ${OUTPUT_DIR}/temp/intermediate.crt.pem \
     -CA ${OUTPUT_DIR}/temp/root.crt.pem \
@@ -258,13 +282,13 @@ fi
 # Create CSR for leaf certificate (CSR is signed by leaf key, but the
 # resulting cert signature is set by the CA when signing - so the CSR
 # self-signature uses CA_HASH for consistency).
-openssl req -new -$CA_HASH \
+openssl req -new -$CA_HASH $LEAF_SIG_OPTS \
     -key ${OUTPUT_DIR}/temp/leaf.key.pem \
     -out ${OUTPUT_DIR}/temp/leaf.csr \
     -subj "$LEAF_SUBJECT"
 
 # Step 5: Sign Leaf certificate with Intermediate (uses CA_HASH)
-openssl x509 -req -days 365 -$CA_HASH \
+openssl x509 -req -days 365 -$CA_HASH $CA_SIG_OPTS \
     -in ${OUTPUT_DIR}/temp/leaf.csr \
     -out ${OUTPUT_DIR}/temp/leaf.crt.pem \
     -CA ${OUTPUT_DIR}/temp/intermediate.crt.pem \

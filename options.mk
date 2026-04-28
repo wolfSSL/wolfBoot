@@ -1439,6 +1439,15 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
     endif
+    ifeq ($(SIGN),RSAPSS2048)
+      CERT_CHAIN_GEN_ALGO+=rsapss2048
+    endif
+    ifeq ($(SIGN),RSAPSS3072)
+      CERT_CHAIN_GEN_ALGO+=rsapss3072
+    endif
+    ifeq ($(SIGN),RSAPSS4096)
+      CERT_CHAIN_GEN_ALGO+=rsapss4096
+    endif
 
     # Per-level overrides for the dummy chain generator. Defaults: CA chain
     # uses the same algo as the leaf (SIGN-derived), SHA256 for cert sigs.
@@ -1472,7 +1481,12 @@ endif
 # cert chain verifier auto-populates these (see above), but the variables
 # are also available as a generic primitive for any future feature that
 # needs extra algo support compiled in.
-# Usage: AUX_HASH_ALGOS=sha384,sha512  AUX_PK_ALGOS=rsa4096,ecc256
+# Usage: AUX_HASH_ALGOS=sha384,sha512  AUX_PK_ALGOS=rsa4096,rsapss4096,ecc256
+#
+# RSA tokens are orthogonal along two axes: size (rsa2048/3072/4096) and
+# padding mode (rsa* = PKCS#1 v1.5, rsapss* = PSS). Each rsapssN token
+# enables both the RSAN size and PSS padding; mixing rsaN and rsapssN for
+# the same size accepts either padding for that key length.
 ifneq ($(strip $(AUX_PK_ALGOS)$(AUX_HASH_ALGOS)),)
   comma := ,
   AUX_HASH_ALGOS_LIST := $(sort $(subst $(comma), ,$(AUX_HASH_ALGOS)))
@@ -1500,17 +1514,23 @@ ifneq ($(strip $(AUX_PK_ALGOS)$(AUX_HASH_ALGOS)),)
   endif
 
   # --- PK algorithms ---
-  ifneq ($(filter rsa2048,$(AUX_PK_ALGOS_LIST)),)
+  # RSA size flags - rsa{N} and rsapss{N} both select the same N-bit
+  # modulus support; padding is set separately below.
+  ifneq ($(filter rsa2048 rsapss2048,$(AUX_PK_ALGOS_LIST)),)
     CFLAGS += -DWOLFBOOT_AUX_PK_RSA2048
   endif
-  ifneq ($(filter rsa3072,$(AUX_PK_ALGOS_LIST)),)
+  ifneq ($(filter rsa3072 rsapss3072,$(AUX_PK_ALGOS_LIST)),)
     CFLAGS += -DWOLFBOOT_AUX_PK_RSA3072
   endif
-  ifneq ($(filter rsa4096,$(AUX_PK_ALGOS_LIST)),)
+  ifneq ($(filter rsa4096 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
     CFLAGS += -DWOLFBOOT_AUX_PK_RSA4096
   endif
-  # Add RSA objects if any RSA aux PK is requested
-  ifneq ($(filter rsa2048 rsa3072 rsa4096,$(AUX_PK_ALGOS_LIST)),)
+  # PSS padding - any rsapss* token enables PSS for all selected RSA sizes
+  ifneq ($(filter rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
+    CFLAGS += -DWOLFBOOT_AUX_RSA_PSS
+  endif
+  # Add RSA objects if any RSA (PKCS#1 v1.5 or PSS) aux PK is requested
+  ifneq ($(filter rsa2048 rsa3072 rsa4096 rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
     ifeq ($(filter %/rsa.o,$(WOLFCRYPT_OBJS)),)
       WOLFCRYPT_OBJS += $(RSA_OBJS)
     endif

@@ -249,7 +249,8 @@ extern int tolower(int c);
        defined(WOLFBOOT_SIGN_RSAPSS4096) || \
        defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
        defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
-       defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096)
+       defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096) || \
+       defined(WOLFBOOT_AUX_RSA_PSS)
 #       define WC_RSA_PSS
 #   endif
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
