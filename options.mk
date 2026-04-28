@@ -1438,8 +1438,6 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     endif
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
-      # Reasonably large default
-      CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
     endif
 
     # Per-level algo / hash overrides (default: same algo for CA + leaf,
@@ -1447,6 +1445,20 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     CERT_CHAIN_CA_ALGO   ?= $(CERT_CHAIN_GEN_ALGO)
     CERT_CHAIN_LEAF_ALGO ?= $(CERT_CHAIN_GEN_ALGO)
     CERT_CHAIN_CA_HASH   ?= sha256
+
+    # The leaf cert wraps the wolfBoot signing key, so its algo must
+    # match SIGN. Catch a mismatch here with a clear error rather than
+    # letting openssl fail later inside the chain-gen helper.
+    ifneq ($(strip $(CERT_CHAIN_LEAF_ALGO)),$(strip $(CERT_CHAIN_GEN_ALGO)))
+      $(error CERT_CHAIN_LEAF_ALGO ($(CERT_CHAIN_LEAF_ALGO)) must match the algorithm derived from SIGN=$(SIGN) ($(CERT_CHAIN_GEN_ALGO)))
+    endif
+
+    # If any chain component is RSA, the wolfHSM cert buffer must be
+    # large enough to hold an RSA4096 cert (~1.5-2 KB).
+    ifneq ($(filter rsa%,$(CERT_CHAIN_CA_ALGO) $(CERT_CHAIN_LEAF_ALGO)),)
+      CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
+    endif
+
     CERT_CHAIN_GEN_FLAGS := --ca-algo $(CERT_CHAIN_CA_ALGO) \
                             --leaf-algo $(CERT_CHAIN_LEAF_ALGO) \
                             --ca-hash $(CERT_CHAIN_CA_HASH)
@@ -1459,10 +1471,17 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   CERT_CHAIN_HASH_LIST := $(subst $(comma), ,$(CERT_CHAIN_HASH))
   CERT_CHAIN_PK_LIST   := $(subst $(comma), ,$(CERT_CHAIN_PK))
 
-  # --- Cert chain hash algorithms ---
-  ifneq ($(filter sha256,$(CERT_CHAIN_HASH_LIST)),)
-    CFLAGS += -DCERT_CHAIN_HASH_SHA256
+  # For auto-generated chains, ensure the verifier supports the CA algo
+  # and CA hash actually used to sign the chain. Without this, a non-
+  # default CERT_CHAIN_CA_ALGO/CERT_CHAIN_CA_HASH builds successfully
+  # but fails at runtime when the matching wolfCrypt module is absent.
+  ifeq ($(USER_CERT_CHAIN),)
+    CERT_CHAIN_HASH_LIST := $(sort $(CERT_CHAIN_HASH_LIST) $(CERT_CHAIN_CA_HASH))
+    CERT_CHAIN_PK_LIST   := $(sort $(CERT_CHAIN_PK_LIST) $(CERT_CHAIN_CA_ALGO))
   endif
+
+  # --- Cert chain hash algorithms ---
+  # SHA256 is always present in wolfCrypt for wolfBoot, no extra flag needed.
   ifneq ($(filter sha384,$(CERT_CHAIN_HASH_LIST)),)
     CFLAGS += -DCERT_CHAIN_HASH_SHA384
     ifeq ($(filter %/sha512.o,$(WOLFCRYPT_OBJS)),)

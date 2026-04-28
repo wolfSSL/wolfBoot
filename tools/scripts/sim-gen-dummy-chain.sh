@@ -71,7 +71,7 @@ extract_public_key() {
     local pubkey_pem=$3
     local pubkey_der=$4
 
-    # Extract public key from certificate (same for both algos)
+    # Extract public key from certificate (same command for all supported algos)
     openssl x509 -in "$cert_file" -pubkey -noout > "$pubkey_pem"
 
     # Convert public key to DER format
@@ -121,6 +121,7 @@ EOT
 # Parse command line arguments
 LEAF_KEY_FILE=""
 ALGO_LEGACY_SET=0
+ALGO_PER_LEVEL_SET=0
 while [[ $# -gt 0 ]]; do
   case $1 in
     --leaf)
@@ -147,6 +148,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       CA_ALGO="$2"
+      ALGO_PER_LEVEL_SET=1
       shift 2
       ;;
     --leaf-algo)
@@ -155,6 +157,7 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       LEAF_ALGO="$2"
+      ALGO_PER_LEVEL_SET=1
       shift 2
       ;;
     --ca-hash)
@@ -176,6 +179,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$ALGO_LEGACY_SET" -eq 1 ] && [ "$ALGO_PER_LEVEL_SET" -eq 1 ]; then
+    echo "Error: --algo cannot be combined with --ca-algo or --leaf-algo." >&2
+    echo "  Use --algo as a shortcut to set both, or use the per-level flags." >&2
+    exit 1
+fi
 
 # Default leaf algo to CA algo when not explicitly set
 if [[ -z "$LEAF_ALGO" ]]; then

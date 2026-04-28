@@ -54,6 +54,18 @@ jobs:
             needs_posix_server: false
             posix_server_nvminit: false
             needs_nvm_image: true
+          - name: "wolfHSM client cert chain verify mixed inverse (RSA4096 chain, ECC256 leaf)"
+            file: "config/examples/sim-wolfHSM-client-certchain-mixed.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_CA_ALGO=rsa4096 CERT_CHAIN_LEAF_ALGO=ecc256"
+          - name: "wolfHSM server cert chain verify mixed inverse (RSA4096 chain, ECC256 leaf)"
+            file: "config/examples/sim-wolfHSM-server-certchain-mixed.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
+            make_overrides: "SIGN=ECC256 HASH=SHA256 CERT_CHAIN_CA_ALGO=rsa4096 CERT_CHAIN_LEAF_ALGO=ecc256"
 
       fail-fast: false
 
@@ -84,7 +96,7 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make clean && make test-sim-internal-flash-with-update
+          make clean && make ${{ matrix.config.make_overrides }} test-sim-internal-flash-with-update
 
       - name: Build example POSIX TCP server
         if: matrix.config.needs_posix_server
