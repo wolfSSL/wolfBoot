@@ -1427,14 +1427,29 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     ifeq ($(SIGN),ECC256)
       CERT_CHAIN_GEN_ALGO+=ecc256
     endif
+    ifeq ($(SIGN),ECC384)
+      CERT_CHAIN_GEN_ALGO+=ecc384
+    endif
     ifeq ($(SIGN),RSA2048)
       CERT_CHAIN_GEN_ALGO+=rsa2048
+    endif
+    ifeq ($(SIGN),RSA3072)
+      CERT_CHAIN_GEN_ALGO+=rsa3072
     endif
     ifeq ($(SIGN),RSA4096)
       CERT_CHAIN_GEN_ALGO+=rsa4096
       # Reasonably large default
       CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
     endif
+
+    # Per-level algo / hash overrides (default: same algo for CA + leaf,
+    # SHA256 for cert signatures).
+    CERT_CHAIN_CA_ALGO   ?= $(CERT_CHAIN_GEN_ALGO)
+    CERT_CHAIN_LEAF_ALGO ?= $(CERT_CHAIN_GEN_ALGO)
+    CERT_CHAIN_CA_HASH   ?= sha256
+    CERT_CHAIN_GEN_FLAGS := --ca-algo $(CERT_CHAIN_CA_ALGO) \
+                            --leaf-algo $(CERT_CHAIN_LEAF_ALGO) \
+                            --ca-hash $(CERT_CHAIN_CA_HASH)
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
 

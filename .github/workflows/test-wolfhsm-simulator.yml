@@ -44,6 +44,16 @@ jobs:
             needs_posix_server: false
             posix_server_nvminit: false
             needs_nvm_image: true
+          - name: "wolfHSM client cert chain verify mixed (ECC256 chain, RSA4096 leaf)"
+            file: "config/examples/sim-wolfHSM-client-certchain-mixed.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+          - name: "wolfHSM server cert chain verify mixed (ECC256 chain, RSA4096 leaf)"
+            file: "config/examples/sim-wolfHSM-server-certchain-mixed.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
 
       fail-fast: false
 

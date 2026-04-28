@@ -270,6 +270,12 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_SMALL
 #       define WOLFSSL_SP_MATH
 #   endif
+    /* If ECC was already enabled (e.g. via CERT_CHAIN_PK_ECC*), the ECC
+     * block above will have set FP_MAX_BITS / SP_INT_BITS for the ECC curve
+     * size. RSA needs much wider math, so undefine first and let the
+     * algo-specific block below redefine. */
+#   undef FP_MAX_BITS
+#   undef SP_INT_BITS
 #   if defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSA2048) || \
        defined(WOLFBOOT_SIGN_RSAPSS2048) || defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048)
 #       define FP_MAX_BITS (2048 * 2)
