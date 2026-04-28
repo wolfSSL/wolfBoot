@@ -126,16 +126,16 @@ extern "C" {
 
 #ifndef IMAGE_HEADER_SIZE
 /* Largest cases first */
-#   if defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_RSAPSS4096)
+#   if defined(WOLFBOOT_SIGN_RSA4096)
 #       define IMAGE_HEADER_SIZE 1024
 
-    /* RSA3072/RSAPSS3072 + strong hash */
-#   elif ((defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_RSAPSS3072)) && \
+    /* RSA3072 + strong hash (any padding mode) */
+#   elif (defined(WOLFBOOT_SIGN_RSA3072) && \
           (defined(WOLFBOOT_HASH_SHA384) || defined(WOLFBOOT_HASH_SHA3_384)))
 #       define IMAGE_HEADER_SIZE 1024
 
-    /* RSA2048/RSAPSS2048 + SHA256 */
-#   elif (defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSAPSS2048)) && defined(WOLFBOOT_HASH_SHA256)
+    /* RSA2048 + SHA256 (any padding mode) */
+#   elif defined(WOLFBOOT_SIGN_RSA2048) && defined(WOLFBOOT_HASH_SHA256)
 #       define IMAGE_HEADER_SIZE 512
 
     /* ECC384 requires 512 with SHA256 */
@@ -155,7 +155,7 @@ extern "C" {
 #       define IMAGE_HEADER_SIZE 256
 
     /* Secondary 512-byte fallbacks */
-#   elif defined(WOLFBOOT_SIGN_RSA3072) || defined(WOLFBOOT_SIGN_RSAPSS3072) || \
+#   elif defined(WOLFBOOT_SIGN_RSA3072) || \
           defined(WOLFBOOT_SIGN_ECC521) || \
           defined(WOLFBOOT_SIGN_ED448)  || \
           defined(WOLFBOOT_HASH_SHA384) || \
@@ -457,6 +457,22 @@ extern "C" {
  #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
  #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ECC521
  #   endif
+ /* PSS variants must come before plain RSA so the modifier wins. */
+ #elif defined(WOLFBOOT_SIGN_RSA_PSS) && defined(WOLFBOOT_SIGN_RSA2048)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS2048
+ #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
+ #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA2048
+ #   endif
+ #elif defined(WOLFBOOT_SIGN_RSA_PSS) && defined(WOLFBOOT_SIGN_RSA3072)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS3072
+ #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
+ #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA3072
+ #   endif
+ #elif defined(WOLFBOOT_SIGN_RSA_PSS) && defined(WOLFBOOT_SIGN_RSA4096)
+ #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS4096
+ #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
+ #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
+ #   endif
  #elif defined(WOLFBOOT_SIGN_RSA2048) || defined(WOLFBOOT_SIGN_RSA2048ENC)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA2048
  #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
@@ -469,21 +485,6 @@ extern "C" {
  #   endif
  #elif defined(WOLFBOOT_SIGN_RSA4096) || defined(WOLFBOOT_SIGN_RSA4096ENC)
  #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSA4096
- #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
- #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
- #   endif
- #elif defined(WOLFBOOT_SIGN_RSAPSS2048)
- #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS2048
- #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
- #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA2048
- #   endif
- #elif defined(WOLFBOOT_SIGN_RSAPSS3072)
- #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS3072
- #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
- #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA3072
- #   endif
- #elif defined(WOLFBOOT_SIGN_RSAPSS4096)
- #   define HDR_IMG_TYPE_AUTH HDR_IMG_TYPE_AUTH_RSAPSS4096
  #   ifndef WOLFBOOT_UNIVERSAL_KEYSTORE
  #     define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096
  #   endif
