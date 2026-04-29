@@ -118,7 +118,7 @@ int  ext_flash_read(uintptr_t address, uint8_t *data, int len)
     }
     for (i = 0; i < len; i++) {
         if (uart_rx_timeout(&data[i]) != 0)
-            return 0;
+            return -1;
         uart_tx(CMD_ACK);
     }
     return i;

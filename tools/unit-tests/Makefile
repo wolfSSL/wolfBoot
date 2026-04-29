@@ -44,6 +44,7 @@ endif
 
 
 TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
+       unit-uart-flash \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-max-space \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
@@ -155,6 +156,9 @@ unit-spi-flash: ../../include/target.h unit-spi-flash.c
 
 unit-qspi-flash: ../../include/target.h unit-qspi-flash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-uart-flash: ../../include/target.h unit-uart-flash.c ../../src/uart_flash.c
+	gcc -o $@ unit-uart-flash.c $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-rsa-exp: ../../include/target.h unit-tpm-rsa-exp.c ../../src/string.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
