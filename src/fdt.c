@@ -40,6 +40,16 @@
 #endif
 #endif /* WOLFBOOT_GZIP */
 
+/* Default upper bound on a single FIT subimage's decompressed size.
+ * The outer wolfBoot signature already authenticates the FIT, but a
+ * concrete cap defends against a malformed-but-signed FIT scribbling
+ * across unrelated memory. Override per target via:
+ *   CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...
+ */
+#ifndef WOLFBOOT_FIT_MAX_DECOMP
+#define WOLFBOOT_FIT_MAX_DECOMP (256U * 1024U * 1024U)
+#endif
+
 uint32_t cpu_to_fdt32(uint32_t x)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -911,6 +921,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
     int hash_off, len = 0;
     const char *algo = NULL;
     const uint8_t *value = NULL;
+#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
+    int did_init = 0;
+#endif
 #ifdef WOLFBOOT_HASH_SHA256
     wc_Sha256 sha256_ctx;
     uint8_t sha256_digest[WC_SHA256_DIGEST_SIZE];
@@ -950,6 +963,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
         }
         if (ret == 0) {
             ret = wc_InitSha256(&sha256_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
         }
         if (ret == 0) {
             ret = wc_Sha256Update(&sha256_ctx, data, (word32)data_len);
@@ -957,7 +973,10 @@ static int fit_verify_hash(const void *fdt, int img_off,
         if (ret == 0) {
             ret = wc_Sha256Final(&sha256_ctx, sha256_digest);
         }
-        wc_Sha256Free(&sha256_ctx);
+        if (did_init) {
+            wc_Sha256Free(&sha256_ctx);
+            did_init = 0;
+        }
         if (ret != 0) {
             wolfBoot_printf("FIT hash-1 (sha256): wc_Sha256 failed rc=%d\n",
                 ret);
@@ -982,6 +1001,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
         }
         if (ret == 0) {
             ret = wc_InitSha384(&sha384_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
         }
         if (ret == 0) {
             ret = wc_Sha384Update(&sha384_ctx, data, (word32)data_len);
@@ -989,7 +1011,10 @@ static int fit_verify_hash(const void *fdt, int img_off,
         if (ret == 0) {
             ret = wc_Sha384Final(&sha384_ctx, sha384_digest);
         }
-        wc_Sha384Free(&sha384_ctx);
+        if (did_init) {
+            wc_Sha384Free(&sha384_ctx);
+            did_init = 0;
+        }
         if (ret != 0) {
             wolfBoot_printf("FIT hash-1 (sha384): wc_Sha384 failed rc=%d\n",
                 ret);
@@ -1031,53 +1056,88 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
         data = (void*)fdt_getprop(fdt, off, "data", &len);
         load = fdt_getprop_address(fdt, off, "load");
         entry = fdt_getprop_address(fdt, off, "entry");
-        if (data != NULL && load != NULL && data != load) {
-            /* Detect compression unconditionally so we can warn (and fail
-             * closed) when the build lacks support for it instead of
-             * silently copying compressed bytes as if they were raw. */
+        if (data != NULL) {
+            int is_gzip = 0;
+            int is_unknown_comp = 0;
+            /* Detect compression unconditionally (independent of whether
+             * a valid distinct load destination is available) so we can
+             * fail closed when the build lacks support, when the scheme
+             * is unknown, or when there is no place to decompress to -
+             * instead of silently passing compressed bytes through as
+             * raw. */
             comp = (const char*)fdt_getprop(fdt, off, "compression",
                 &complen);
-            if (comp != NULL && complen > 0 && strcmp(comp, "gzip") == 0) {
+            if (comp != NULL && complen > 0) {
+                if (strcmp(comp, "gzip") == 0) {
+                    is_gzip = 1;
+                }
+                else if (strcmp(comp, "none") != 0) {
+                    is_unknown_comp = 1;
+                }
+            }
+            if (load != NULL && data != load) {
+                if (is_gzip) {
 #ifdef WOLFBOOT_GZIP
-                uint32_t out_len = 0;
-                int rc;
-                wolfBoot_printf("Decompressing Image %s (gzip): "
-                    "%p -> %p (%d bytes)\n", image, data, load, len);
-                rc = wolfBoot_gunzip((const uint8_t*)data, (uint32_t)len,
-                    (uint8_t*)load, out_max, &out_len);
-                if (rc != 0) {
-                    wolfBoot_printf("FIT gunzip failed for %s: rc=%d "
-                        "(wrote %u bytes)\n", image, rc, out_len);
+                    uint32_t out_len = 0;
+                    int rc;
+                    wolfBoot_printf("Decompressing Image %s (gzip): "
+                        "%p -> %p (%d bytes)\n", image, data, load, len);
+                    rc = wolfBoot_gunzip((const uint8_t*)data,
+                        (uint32_t)len, (uint8_t*)load, out_max, &out_len);
+                    if (rc != 0) {
+                        wolfBoot_printf("FIT gunzip failed for %s: rc=%d "
+                            "(wrote %u bytes)\n", image, rc, out_len);
+                        return NULL;
+                    }
+                    len = (int)out_len;
+                    wolfBoot_printf("Decompressed %s: %u bytes\n", image,
+                        out_len);
+#else
+                    wolfBoot_printf("FIT: subimage '%s' has compression="
+                        "\"gzip\" but WOLFBOOT_GZIP is not enabled in "
+                        "this build (rebuild with GZIP=1)\n", image);
+                    return NULL;
+#endif
+                }
+                else if (is_unknown_comp) {
+                    /* Unknown compression scheme; fail closed rather
+                     * than silently memcpy compressed bytes as raw. */
+                    wolfBoot_printf("FIT: subimage '%s' has unsupported "
+                        "compression=\"%s\"\n", image, comp);
                     return NULL;
                 }
-                len = (int)out_len;
-                wolfBoot_printf("Decompressed %s: %u bytes\n", image,
-                    out_len);
-#else
-                wolfBoot_printf("FIT: subimage '%s' has compression="
-                    "\"gzip\" but WOLFBOOT_GZIP is not enabled in this "
-                    "build (rebuild with GZIP=1)\n", image);
-                return NULL;
-#endif
-            }
-            else {
-                wolfBoot_printf("Loading Image %s: %p -> %p (%d bytes)\n",
-                    image, data, load, len);
-                memcpy(load, data, len);
-            }
+                else {
+                    wolfBoot_printf("Loading Image %s: %p -> %p "
+                        "(%d bytes)\n", image, data, load, len);
+                    memcpy(load, data, len);
+                }
 
 #ifdef WOLFBOOT_GZIP
-            /* Defense-in-depth: verify FIT hash-1 against loaded bytes */
-            if (fit_verify_hash(fdt, off, (const uint8_t*)load,
-                    (uint32_t)len) != 0) {
-                wolfBoot_printf("FIT hash verification failed for %s\n",
-                    image);
-                return NULL;
-            }
+                /* Defense-in-depth: verify FIT hash-1 against loaded
+                 * bytes */
+                if (fit_verify_hash(fdt, off, (const uint8_t*)load,
+                        (uint32_t)len) != 0) {
+                    wolfBoot_printf("FIT hash verification failed for "
+                        "%s\n", image);
+                    return NULL;
+                }
 #endif
 
-            /* load should always have entry, but if not use load address */
-            data = (entry != NULL) ? entry : load;
+                /* load should always have entry, but if not use load
+                 * address */
+                data = (entry != NULL) ? entry : load;
+            }
+            else if (is_gzip || is_unknown_comp) {
+                /* Compression declared but no distinct destination to
+                 * decompress into. Refuse rather than hand the caller
+                 * a pointer to still-compressed bytes. */
+                wolfBoot_printf("FIT: subimage '%s' declares "
+                    "compression=\"%s\" but has no distinct load "
+                    "destination (load=%p, data=%p); refusing to pass "
+                    "compressed bytes through as raw\n",
+                    image, comp, load, data);
+                return NULL;
+            }
         }
         wolfBoot_printf("Image %s: %p (%d bytes)\n", image, data, len);
     }
@@ -1093,7 +1153,7 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
 
 void* fit_load_image(void* fdt, const char* image, int* lenp)
 {
-    return fit_load_image_ex(fdt, image, lenp, 0xFFFFFFFFU);
+    return fit_load_image_ex(fdt, image, lenp, WOLFBOOT_FIT_MAX_DECOMP);
 }
 
 #endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */
