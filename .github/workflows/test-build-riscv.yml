@@ -18,6 +18,8 @@ jobs:
 
   build:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-riscv:v1.0
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -31,69 +33,16 @@ jobs:
           path: freedom-e-sdk
           submodules: recursive
 
-      - name: Workaround for sources.list
+      - name: Trust workspace
         run: |
-            # Replace sources
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-            set -euxo pipefail
-
-            # Peek (what repos are active now)
-            apt-cache policy
-            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
-
-            # Enable nullglob so *.list/*.sources that don't exist don't break sed
-            shopt -s nullglob
-
-            echo "Replace sources.list (legacy)"
-            sudo sed -i \
-              -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-              /etc/apt/sources.list || true
-
-            echo "Replace sources.list.d/*.list (legacy)"
-            for f in /etc/apt/sources.list.d/*.list; do
-              sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-                "$f"
-            done
-
-            echo "Replace sources.list.d/*.sources (deb822)"
-            for f in /etc/apt/sources.list.d/*.sources; do
-              sudo sed -i \
-                -e "s|https\?://azure\.archive\.ubuntu\.com/ubuntu/?|http://mirror.arizona.edu/ubuntu/|g" \
-                -e "s|https\?://azure\.archive\.ubuntu\.com|http://mirror.arizona.edu|g" \
-                "$f"
-            done
-
-            echo "Fix /etc/apt/apt-mirrors.txt (used by URIs: mirror+file:...)"
-            if grep -qE '^[[:space:]]*https?://azure\.archive\.ubuntu\.com/ubuntu/?' /etc/apt/apt-mirrors.txt; then
-              # Replace azure with our mirror (idempotent)
-              sudo sed -i 's|https\?://azure\.archive\.ubuntu\.com/ubuntu/|http://mirror.arizona.edu/ubuntu/|g' /etc/apt/apt-mirrors.txt
-            fi
-
-            # Peek (verify changes)
-            grep -RIn "azure.archive.ubuntu.com" /etc/apt || true
-            grep -RInE '^(deb|Types|URIs)' /etc/apt || true
-            echo "--- apt-mirrors.txt ---"
-            cat /etc/apt/apt-mirrors.txt || true
-
-      - name: Update repository
-        run: sudo apt-get update -o Acquire::Retries=3
-
-      # ============================================================
-      # xPack RISC-V GCC — single toolchain with full multilib
-      # supporting both rv32 and rv64 targets (including rv32imac/ilp32
-      # and rv64imac/lp64 which riscv-collab nightly builds lack).
-      # https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack
-      # ============================================================
-      - name: Download and install xPack RISC-V toolchain
+      - name: Add preinstalled RISC-V toolchain to PATH
         run: |
-          XPACK_VER="15.2.0-1"
-          XPACK_FILE="xpack-riscv-none-elf-gcc-${XPACK_VER}-linux-x64.tar.gz"
-          wget -q "https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v${XPACK_VER}/${XPACK_FILE}"
-          echo "aaaa8060c914851a3e5ee1ba82cc3d6f80972f90638a05c6e823a37557a33758  ${XPACK_FILE}" | sha256sum -c -
-          tar -xf "${XPACK_FILE}"
-          echo "$GITHUB_WORKSPACE/xpack-riscv-none-elf-gcc-${XPACK_VER}/bin" >> $GITHUB_PATH
-          export PATH="$GITHUB_WORKSPACE/xpack-riscv-none-elf-gcc-${XPACK_VER}/bin:$PATH"
+          echo "/opt/xpack-riscv-none-elf-gcc-15.2.0-1/bin" >> "$GITHUB_PATH"
+
+      - name: Check RISC-V toolchain
+        run: |
           riscv-none-elf-gcc --version
           riscv-none-elf-gcc -print-multi-lib | head -5
 
