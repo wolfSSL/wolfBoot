@@ -1927,11 +1927,12 @@ int hal_dts_fixup(void* dts_addr)
         fdt_version(fdt), fdt_totalsize(fdt));
 
     /* Expand totalsize so fdt_setprop() has in-blob free space to place
-     * a new/larger bootargs property. Physical headroom is already
-     * guaranteed by the load-address layout (DTB at WOLFBOOT_LOAD_DTS_ADDRESS,
-     * kernel loaded much higher), so growing the header is safe. Matches
-     * the pattern used in hal/versal.c:hal_dts_fixup. */
-    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+     * a new/larger bootargs property and (when WOLFBOOT_FIT_RAMDISK is in
+     * play) the linux,initrd-{start,end} properties. Physical headroom is
+     * already guaranteed by the load-address layout (DTB at
+     * WOLFBOOT_LOAD_DTS_ADDRESS, kernel loaded much higher), so growing
+     * the header is safe. Matches the pattern in hal/versal.c. */
+    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 768);
 
     /* Find /chosen node; create it only if genuinely missing. Any other
      * negative return (malformed FDT, etc.) is surfaced directly rather
