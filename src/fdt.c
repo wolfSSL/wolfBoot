@@ -30,6 +30,26 @@
 #include "string.h"
 #include <stdint.h>
 
+#ifdef WOLFBOOT_GZIP
+#include "gzip.h"
+#ifdef WOLFBOOT_HASH_SHA256
+#include <wolfssl/wolfcrypt/sha256.h>
+#endif
+#ifdef WOLFBOOT_HASH_SHA384
+#include <wolfssl/wolfcrypt/sha512.h>
+#endif
+#endif /* WOLFBOOT_GZIP */
+
+/* Default upper bound on a single FIT subimage's decompressed size.
+ * The outer wolfBoot signature already authenticates the FIT, but a
+ * concrete cap defends against a malformed-but-signed FIT scribbling
+ * across unrelated memory. Override per target via:
+ *   CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...
+ */
+#ifndef WOLFBOOT_FIT_MAX_DECOMP
+#define WOLFBOOT_FIT_MAX_DECOMP (256U * 1024U * 1024U)
+#endif
+
 uint32_t cpu_to_fdt32(uint32_t x)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -787,10 +807,11 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name,
 
 
 /* FIT Specific */
-const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt)
+const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
+    const char** pramdisk)
 {
     const void* val;
-    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL;
+    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
     int off, len = 0;
 
     /* Find the default configuration (optional) */
@@ -806,6 +827,7 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
         if (off > 0) {
             kernel = fdt_getprop(fdt, off, "kernel", &len);
             flat_dt = fdt_getprop(fdt, off, "fdt", &len);
+            ramdisk = fdt_getprop(fdt, off, "ramdisk", &len);
         }
     }
     if (kernel == NULL) {
@@ -828,19 +850,205 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
             }
         }
     }
+    if (ramdisk == NULL) {
+        /* find node with "type" == ramdisk */
+        off = fdt_find_prop_offset(fdt, -1, "type", "ramdisk");
+        if (off > 0) {
+            val = fdt_get_name(fdt, off, &len);
+            if (val != NULL && len > 0) {
+                ramdisk = (const char*)val;
+            }
+        }
+    }
 
     if (pkernel)
         *pkernel = kernel;
     if (pflat_dt)
         *pflat_dt = flat_dt;
+    if (pramdisk)
+        *pramdisk = ramdisk;
 
     return conf;
 }
 
-void* fit_load_image(void* fdt, const char* image, int* lenp)
+int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size)
+{
+    int off, ret;
+    uint64_t end;
+
+    if (fdt == NULL) {
+        return -1;
+    }
+
+    end = start + size;
+
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off == -FDT_ERR_NOTFOUND) {
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+    if (off < 0) {
+        return off;
+    }
+
+    ret = fdt_fixup_val64(fdt, off, "chosen", "linux,initrd-start", start);
+    if (ret < 0) {
+        return ret;
+    }
+    ret = fdt_fixup_val64(fdt, off, "chosen", "linux,initrd-end", end);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return 0;
+}
+
+#ifdef WOLFBOOT_GZIP
+/* Verify FIT per-subimage hash-1 subnode against the loaded/decompressed
+ * image bytes. This is defense-in-depth: the outer wolfBoot signature
+ * already authenticates the entire FIT blob, but recomputing the per-image
+ * hash catches inflater bugs and corrupt streams that still parse.
+ *
+ * Returns 0 on success or when no usable hash node is present.
+ * Returns negative on hash mismatch.
+ *
+ * If hash-1.algo names an algorithm that is not compiled into this build,
+ * a warning is printed and 0 is returned (best-effort verification). */
+static int fit_verify_hash(const void *fdt, int img_off,
+                           const uint8_t *data, uint32_t data_len)
+{
+    int ret = 0;
+    int done = 0;
+    int hash_off, len = 0;
+    const char *algo = NULL;
+    const uint8_t *value = NULL;
+#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
+    int did_init = 0;
+#endif
+#ifdef WOLFBOOT_HASH_SHA256
+    wc_Sha256 sha256_ctx;
+    uint8_t sha256_digest[WC_SHA256_DIGEST_SIZE];
+#endif
+#ifdef WOLFBOOT_HASH_SHA384
+    wc_Sha384 sha384_ctx;
+    uint8_t sha384_digest[WC_SHA384_DIGEST_SIZE];
+#endif
+
+    hash_off = fdt_subnode_offset_namelen(fdt, img_off, "hash-1", 6);
+    if (hash_off < 0) {
+        done = 1; /* no hash-1 subnode; nothing to verify */
+    }
+
+    if (!done) {
+        algo = (const char*)fdt_getprop(fdt, hash_off, "algo", &len);
+        if (algo == NULL || len <= 0) {
+            wolfBoot_printf("FIT hash-1: missing algo\n");
+            done = 1;
+        }
+    }
+
+    if (!done) {
+        value = (const uint8_t*)fdt_getprop(fdt, hash_off, "value", &len);
+        if (value == NULL) {
+            /* mkimage emits the hash node but populates 'value' only after
+             * signing; an empty 'value' on an unsigned tree is benign. */
+            done = 1;
+        }
+    }
+
+#ifdef WOLFBOOT_HASH_SHA256
+    if (!done && strcmp(algo, "sha256") == 0) {
+        if (len != WC_SHA256_DIGEST_SIZE) {
+            wolfBoot_printf("FIT hash-1: bad sha256 value len %d\n", len);
+            ret = -1;
+        }
+        if (ret == 0) {
+            ret = wc_InitSha256(&sha256_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
+        }
+        if (ret == 0) {
+            ret = wc_Sha256Update(&sha256_ctx, data, (word32)data_len);
+        }
+        if (ret == 0) {
+            ret = wc_Sha256Final(&sha256_ctx, sha256_digest);
+        }
+        if (did_init) {
+            wc_Sha256Free(&sha256_ctx);
+            did_init = 0;
+        }
+        if (ret != 0) {
+            wolfBoot_printf("FIT hash-1 (sha256): wc_Sha256 failed rc=%d\n",
+                ret);
+            ret = -1;
+        }
+        else if (memcmp(sha256_digest, value, WC_SHA256_DIGEST_SIZE) != 0) {
+            wolfBoot_printf("FIT hash-1 (sha256): MISMATCH\n");
+            ret = -1;
+        }
+        else {
+            wolfBoot_printf("FIT hash-1 (sha256): OK\n");
+        }
+        done = 1;
+    }
+#endif
+
+#ifdef WOLFBOOT_HASH_SHA384
+    if (!done && strcmp(algo, "sha384") == 0) {
+        if (len != WC_SHA384_DIGEST_SIZE) {
+            wolfBoot_printf("FIT hash-1: bad sha384 value len %d\n", len);
+            ret = -1;
+        }
+        if (ret == 0) {
+            ret = wc_InitSha384(&sha384_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
+        }
+        if (ret == 0) {
+            ret = wc_Sha384Update(&sha384_ctx, data, (word32)data_len);
+        }
+        if (ret == 0) {
+            ret = wc_Sha384Final(&sha384_ctx, sha384_digest);
+        }
+        if (did_init) {
+            wc_Sha384Free(&sha384_ctx);
+            did_init = 0;
+        }
+        if (ret != 0) {
+            wolfBoot_printf("FIT hash-1 (sha384): wc_Sha384 failed rc=%d\n",
+                ret);
+            ret = -1;
+        }
+        else if (memcmp(sha384_digest, value, WC_SHA384_DIGEST_SIZE) != 0) {
+            wolfBoot_printf("FIT hash-1 (sha384): MISMATCH\n");
+            ret = -1;
+        }
+        else {
+            wolfBoot_printf("FIT hash-1 (sha384): OK\n");
+        }
+        done = 1;
+    }
+#endif
+
+    if ((ret == 0) && !done) {
+        wolfBoot_printf("FIT hash-1: algo '%s' not built in, skipping\n",
+            algo);
+    }
+    return ret;
+}
+#endif /* WOLFBOOT_GZIP */
+
+void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
+    uint32_t out_max)
 {
     void *load, *entry, *data = NULL;
     int off, len = 0;
+    const char *comp;
+    int complen = 0;
+#ifndef WOLFBOOT_GZIP
+    (void)out_max;
+#endif
 
     off = fdt_find_node_offset(fdt, -1, image);
     if (off > 0) {
@@ -849,9 +1057,57 @@ void* fit_load_image(void* fdt, const char* image, int* lenp)
         load = fdt_getprop_address(fdt, off, "load");
         entry = fdt_getprop_address(fdt, off, "entry");
         if (data != NULL && load != NULL && data != load) {
-            wolfBoot_printf("Loading Image %s: %p -> %p (%d bytes)\n",
-                image, data, load, len);
-            memcpy(load, data, len);
+            /* Detect compression unconditionally so we can warn (and fail
+             * closed) when the build lacks support for it instead of
+             * silently copying compressed bytes as if they were raw. */
+            comp = (const char*)fdt_getprop(fdt, off, "compression",
+                &complen);
+            if (comp != NULL && complen > 0 && strcmp(comp, "gzip") == 0) {
+#ifdef WOLFBOOT_GZIP
+                uint32_t out_len = 0;
+                int rc;
+                wolfBoot_printf("Decompressing Image %s (gzip): "
+                    "%p -> %p (%d bytes)\n", image, data, load, len);
+                rc = wolfBoot_gunzip((const uint8_t*)data, (uint32_t)len,
+                    (uint8_t*)load, out_max, &out_len);
+                if (rc != 0) {
+                    wolfBoot_printf("FIT gunzip failed for %s: rc=%d "
+                        "(wrote %u bytes)\n", image, rc, out_len);
+                    return NULL;
+                }
+                len = (int)out_len;
+                wolfBoot_printf("Decompressed %s: %u bytes\n", image,
+                    out_len);
+#else
+                wolfBoot_printf("FIT: subimage '%s' has compression="
+                    "\"gzip\" but WOLFBOOT_GZIP is not enabled in this "
+                    "build (rebuild with GZIP=1)\n", image);
+                return NULL;
+#endif
+            }
+            else if (comp != NULL && complen > 0
+                     && strcmp(comp, "none") != 0) {
+                /* Unknown compression scheme; fail closed rather than
+                 * silently memcpy compressed bytes as raw. */
+                wolfBoot_printf("FIT: subimage '%s' has unsupported "
+                    "compression=\"%s\"\n", image, comp);
+                return NULL;
+            }
+            else {
+                wolfBoot_printf("Loading Image %s: %p -> %p (%d bytes)\n",
+                    image, data, load, len);
+                memcpy(load, data, len);
+            }
+
+#ifdef WOLFBOOT_GZIP
+            /* Defense-in-depth: verify FIT hash-1 against loaded bytes */
+            if (fit_verify_hash(fdt, off, (const uint8_t*)load,
+                    (uint32_t)len) != 0) {
+                wolfBoot_printf("FIT hash verification failed for %s\n",
+                    image);
+                return NULL;
+            }
+#endif
 
             /* load should always have entry, but if not use load address */
             data = (entry != NULL) ? entry : load;
@@ -866,6 +1122,11 @@ void* fit_load_image(void* fdt, const char* image, int* lenp)
     }
     return data;
 
+}
+
+void* fit_load_image(void* fdt, const char* image, int* lenp)
+{
+    return fit_load_image_ex(fdt, image, lenp, WOLFBOOT_FIT_MAX_DECOMP);
 }
 
 #endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */

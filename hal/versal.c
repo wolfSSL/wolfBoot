@@ -1276,8 +1276,9 @@ int hal_dts_fixup(void* dts_addr)
     wolfBoot_printf("FDT: Version %d, Size %d\n",
         fdt_version(fdt), fdt_totalsize(fdt));
 
-    /* Expand total size to allow adding/modifying properties */
-    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+    /* Expand total size to allow adding/modifying properties (bootargs and,
+     * when WOLFBOOT_FIT_RAMDISK is in play, linux,initrd-{start,end}). */
+    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 768);
 
     /* Find /chosen node; create it only if genuinely missing. Any other
      * negative return (malformed FDT, etc.) is surfaced directly rather

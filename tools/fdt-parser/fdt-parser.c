@@ -372,9 +372,9 @@ void dts_parse_fit_image(void* fit, const char* image, const char* desc)
 
 int dts_parse_fit(void* image)
 {
-    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL;
+    const char *conf = NULL, *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
 
-    conf = fit_find_images(image, &kernel, &flat_dt);
+    conf = fit_find_images(image, &kernel, &flat_dt, &ramdisk);
     if (conf != NULL) {
         printf("FIT: Found '%s' configuration\n", conf);
         dts_fit_image_item(image, fdt_find_node_offset(image, -1, conf),
@@ -384,6 +384,9 @@ int dts_parse_fit(void* image)
     /* dump image information */
     dts_parse_fit_image(image, kernel, "Kernel");
     dts_parse_fit_image(image, flat_dt, "FDT");
+    if (ramdisk != NULL) {
+        dts_parse_fit_image(image, ramdisk, "Ramdisk");
+    }
 
     return 0;
 }

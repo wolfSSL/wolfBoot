@@ -368,12 +368,12 @@ backup_on_failure:
     /* Is this a Flattened uImage Tree (FIT) image (FDT format) */
     if (wolfBoot_get_dts_size(load_address) > 0) {
         void* fit = (void*)load_address;
-        const char *kernel = NULL, *flat_dt = NULL;
+        const char *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
 
         wolfBoot_printf("Flattened uImage Tree: Version %d, Size %d\n",
             fdt_version(fit), fdt_totalsize(fit));
 
-        (void)fit_find_images(fit, &kernel, &flat_dt);
+        (void)fit_find_images(fit, &kernel, &flat_dt, &ramdisk);
         if (kernel != NULL) {
             load_address = fit_load_image(fit, kernel, NULL);
         }
@@ -387,6 +387,45 @@ backup_on_failure:
                 memcpy(dts_addr, dts_ptr, dts_size);
             }
         }
+#ifdef WOLFBOOT_FIT_RAMDISK
+        if (ramdisk != NULL) {
+            int rd_size = 0;
+            uint8_t *rd_ptr = (uint8_t*)fit_load_image(fit, ramdisk, &rd_size);
+            if (rd_ptr != NULL && rd_size > 0) {
+                uint8_t *rd_dst;
+                /* If WOLFBOOT_LOAD_RAMDISK_ADDRESS is set (nonzero), use it
+                 * as the canonical destination (overrides the FIT's `load`
+                 * property). Otherwise honor whatever fit_load_image
+                 * returned (FIT-specified load addr or in-FIT pointer). */
+                if (WOLFBOOT_LOAD_RAMDISK_ADDRESS != 0) {
+                    rd_dst = (uint8_t*)WOLFBOOT_LOAD_RAMDISK_ADDRESS;
+                    if (rd_ptr != rd_dst) {
+                        wolfBoot_printf("Loading ramdisk: %p -> %p (%d bytes)\n",
+                            rd_ptr, rd_dst, rd_size);
+                        memcpy(rd_dst, rd_ptr, rd_size);
+                    }
+                    else {
+                        wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
+                            rd_dst, rd_size);
+                    }
+                }
+                else {
+                    rd_dst = rd_ptr;
+                    wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
+                        rd_dst, rd_size);
+                }
+                if (dts_addr != NULL) {
+                    (void)fdt_fixup_initrd((void*)dts_addr,
+                        (uint64_t)(uintptr_t)rd_dst, (uint64_t)rd_size);
+                }
+            }
+            else {
+                wolfBoot_printf("FIT: ramdisk node present but load failed\n");
+            }
+        }
+#else
+        (void)ramdisk;
+#endif
     }
     else {
     /* Load DTS to RAM */

@@ -1257,7 +1257,45 @@ MACHINE=mpfs-video-kit bitbake mchp-base-image-sdk
 
 Build images are output to: `./tmp-glibc/deploy/images/mpfs-video-kit/`
 
-#### Custom FIT image, signing and coping to SDCard
+#### Custom FIT image, signing and copying to SDCard
+
+wolfBoot can either decompress a gzipped kernel at boot time (`GZIP=1`,
+the default for `polarfire_mpfs250.config` and `polarfire_mpfs250_qspi.config`)
+or accept a pre-decompressed kernel inside the FIT (`GZIP=0`). Pick one path.
+
+##### Option A - Compressed FIT (`GZIP=1`, default)
+
+Set `compression = "gzip"` and point `data` at the gzipped kernel directly
+in `hal/mpfs250.its`:
+
+```dts
+images {
+    kernel-1 {
+        data = /incbin/("../yocto-dev-polarfire/build/tmp-glibc/work/mpfs_video_kit-oe-linux/linux-mchp/6.12.22+git/build/linux.bin.gz");
+        compression = "gzip";
+        load = <0x80200000>;
+        entry = <0x80200000>;
+        hash-1 { algo = "sha256"; };
+        ...
+    };
+};
+```
+
+Then build the FIT directly - no manual `gzip -cdvk` step:
+
+```sh
+sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
+mkimage -f hal/mpfs250.its fitImage
+```
+
+At boot, wolfBoot decompresses the kernel into `0x80200000` directly out of
+the FIT `data` blob and verifies the FIT `hash-1` SHA-256 against the
+decompressed bytes (defense-in-depth on top of the outer wolfBoot signature).
+
+##### Option B - Uncompressed FIT (`GZIP=0`)
+
+Build wolfBoot with `GZIP=0` and pre-decompress the kernel on the host.
+Keep `compression = "none"` in `hal/mpfs250.its`:
 
 ```sh
 # Copy wolfBoot to "BIOS" partition
@@ -3390,6 +3428,103 @@ Application running successfully!
 Entering idle loop...
 ```
 
+**Booting PetaLinux**
+
+ZynqMP can chain into a PetaLinux kernel using the same FIT mechanism as
+the Versal target. wolfBoot's FIT-using configs (`zynqmp.config` and
+`zynqmp_sdcard.config`) default to `GZIP=1`, which lets you point the
+FIT at a gzipped kernel (`Image.gz`) directly:
+
+```dts
+images {
+    kernel-1 {
+        data = /incbin/("Image.gz");
+        compression = "gzip";
+        load = <0x10000000>;
+        entry = <0x10000000>;
+        hash-1 { algo = "sha256"; };
+    };
+};
+```
+
+`mkimage -f your-zynqmp.its fitImage` then produces a single signed FIT
+that wolfBoot decompresses straight to the kernel load address at boot.
+See the [Versal "Booting PetaLinux"](#versal-gen-1-vmk180) section for a
+full walkthrough - the flow is identical apart from the load addresses
+and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain. Set `GZIP=0` in
+`.config` if you want to keep using an uncompressed `Image` plus
+`compression = "none"`.
+
+The decompressed-output bound for any single FIT subimage defaults to
+`WOLFBOOT_FIT_MAX_DECOMP = 256 MB`. Override per target via
+`CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...` if a kernel/ramdisk legitimately
+expands beyond that. The outer wolfBoot signature still authenticates the
+entire FIT; this cap is defense-in-depth against a malformed-but-signed
+stream.
+
+**FIT ramdisk (initramfs)**
+
+When PetaLinux is built with `INITRAMFS_IMAGE_BUNDLE = "0"` the rootfs cpio
+ships as a separate `ramdisk` node in the FIT alongside the kernel and DTB.
+wolfBoot can extract it, copy it to a configurable RAM address, and patch the
+loaded DTB with `/chosen/linux,initrd-{start,end}` so the kernel finds it.
+Enable this with `RAMDISK=1`:
+
+```sh
+cp config/examples/zynqmp_sdcard.config .config
+# Uncomment the RAMDISK / WOLFBOOT_LOAD_RAMDISK_ADDRESS / LINUX_BOOTARGS
+# block under "Optional: FIT-bundled initramfs" and comment out the
+# LINUX_BOOTARGS_ROOT line above it.
+make
+```
+
+Key options (in `config/examples/zynqmp_sdcard.config`):
+- `RAMDISK=1` - enables FIT ramdisk extraction (`-DWOLFBOOT_FIT_RAMDISK`).
+- `WOLFBOOT_LOAD_RAMDISK_ADDRESS=0x40000000` - destination address. Pick a
+  region clear of the kernel image (`~0x80000` + tens of MB) and clear of
+  FIT staging (`WOLFBOOT_LOAD_ADDRESS=0x10000000` + FIT size). The default
+  `0x40000000` leaves ~1 GB of headroom on a 4 GB ZCU102. Set to `0` to
+  honor the FIT's own `load = <...>` property verbatim instead.
+- `LINUX_BOOTARGS` should drop `root=...` since the ramdisk is the rootfs.
+
+Compressed (gzip) ramdisks are supported transparently when `GZIP=1` is set
+(the same gzip path used for the kernel handles `compression = "gzip"` on
+the ramdisk node). The outer wolfBoot signature already authenticates the
+entire FIT, so the ramdisk inherits authentication without per-image
+hashing - though if the FIT does include a `hash-1` subnode under the
+ramdisk image, wolfBoot will verify it after decompression.
+
+Example FIT layout:
+
+```dts
+images {
+    kernel-1  { ... };
+    fdt-1     { ... };
+    ramdisk-1 {
+        data = /incbin/("rootfs.cpio.gz");
+        type = "ramdisk";
+        compression = "gzip";  /* or "none" */
+        load = <0x40000000>;   /* required for decompression / relocation */
+        hash-1 { algo = "sha256"; };
+    };
+};
+configurations {
+    default = "conf-zcu102";
+    conf-zcu102 {
+        kernel  = "kernel-1";
+        fdt     = "fdt-1";
+        ramdisk = "ramdisk-1";
+    };
+};
+```
+
+Successful boot prints:
+```
+Loading ramdisk: 0x... -> 0x40000000 (N bytes)
+FDT: Set chosen (...), linux,initrd-start=1073741824
+FDT: Set chosen (...), linux,initrd-end=...
+```
+
 
 ## Versal Gen 1 VMK180
 
@@ -3552,6 +3687,7 @@ Prerequisites:
 1. **PetaLinux 2024.2** (or compatible version) built for VMK180
 2. **Pre-built Linux images** from your PetaLinux build:
    - `Image` - Uncompressed Linux kernel (ARM64)
+   - `Image.gz` - gzip-compressed kernel (used with `GZIP=1`, see below)
    - `system-default.dtb` - Device tree blob for VMK180
 3. **SD card** with root filesystem (PetaLinux rootfs.ext4 written to partition 2)
 
@@ -3560,7 +3696,51 @@ wolfBoot uses a FIT (Flattened Image Tree) image containing the kernel and devic
 - DTB load address: `0x00001000`
 - SHA256 hashes for integrity
 
-Create and sign the FIT image, then flash to QSPI:
+`config/examples/versal_vmk180.config` and `config/examples/versal_vmk180_sdcard.config`
+default to `GZIP=1`, so wolfBoot can decompress a gzipped kernel at boot
+time. Pick one of the two flows below.
+
+##### Option A - Compressed kernel (`GZIP=1`, default)
+
+Edit `hal/versal.its` to point the kernel `data` at the gzipped kernel
+and set `compression = "gzip"`:
+
+```dts
+images {
+    kernel-1 {
+        data = /incbin/("Image.gz");
+        compression = "gzip";
+        load = <0x00200000>;
+        entry = <0x00200000>;
+        hash-1 { algo = "sha256"; };
+        ...
+    };
+};
+```
+
+Then build and flash the FIT directly - no manual `gunzip` step:
+
+```sh
+cp /path/to/petalinux/images/linux/Image.gz .
+cp /path/to/petalinux/images/linux/system-default.dtb .
+mkimage -f hal/versal.its fitImage
+./tools/keytools/sign --ecc384 --sha384 fitImage wolfboot_signing_private_key.der 1
+
+tftp ${loadaddr} fitImage_v1_signed.bin
+sf probe 0
+sf erase 0x800000 +${filesize}
+sf write ${loadaddr} 0x800000 ${filesize}
+```
+
+The compressed FIT is roughly half the size of the uncompressed equivalent
+on a typical PetaLinux ARM64 kernel, which lets a larger kernel fit in the
+existing 44 MB QSPI partition. wolfBoot decompresses to `0x00200000` at boot
+and verifies the FIT `hash-1` SHA-256 against the decompressed bytes.
+
+##### Option B - Uncompressed kernel (`GZIP=0`)
+
+Build wolfBoot with `GZIP=0` and use the uncompressed `Image` directly.
+Keep `compression = "none"` in `hal/versal.its`:
 
 ```sh
 cp /path/to/petalinux/images/linux/Image .

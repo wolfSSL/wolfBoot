@@ -157,5 +157,10 @@
 @WOLFBOOT_RAMBOOT_MAX_SIZE_DEFINE@
 #define WOLFBOOT_LOAD_DTS_ADDRESS             @WOLFBOOT_LOAD_DTS_ADDRESS@
 
+/* Load address for FIT ramdisk extraction (used when WOLFBOOT_FIT_RAMDISK
+ * is set; otherwise unused). 0 means "use the FIT image's `load` property
+ * verbatim — do not relocate". */
+#define WOLFBOOT_LOAD_RAMDISK_ADDRESS         @WOLFBOOT_LOAD_RAMDISK_ADDRESS@
+
 
 #endif /* !H_TARGETS_TARGET_ */

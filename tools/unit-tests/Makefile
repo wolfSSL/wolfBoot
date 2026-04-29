@@ -48,7 +48,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-max-space \
        unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
-       unit-enc-nvm-flagshome unit-delta unit-update-flash unit-update-flash-delta \
+       unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-disk \
@@ -320,6 +320,9 @@ unit-enc-nvm-flagshome: ../../include/target.h unit-enc-nvm.c
 
 unit-delta: ../../include/target.h unit-delta.c
 	gcc -o $@ unit-delta.c $(CFLAGS) $(LDFLAGS)
+
+unit-gzip: ../../include/target.h unit-gzip.c
+	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP $(LDFLAGS)
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
