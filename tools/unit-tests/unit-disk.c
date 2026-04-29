@@ -820,6 +820,24 @@ START_TEST(test_gpt_parse_partition_first_gt_last)
 }
 END_TEST
 
+START_TEST(test_gpt_parse_partition_first_eq_last)
+{
+    uint8_t entry[128];
+    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    struct gpt_part_info info;
+
+    memset(entry, 0, sizeof(entry));
+    pe->type[0] = 0x0001020304050607ULL;
+    pe->type[1] = 0x08090A0B0C0D0E0FULL;
+    pe->first = 5;
+    pe->last = 5; /* first == last is a valid single-sector partition */
+
+    ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), 0);
+    ck_assert_uint_eq(info.start, 5 * GPT_SECTOR_SIZE);
+    ck_assert_uint_eq(info.end, (6 * GPT_SECTOR_SIZE) - 1);
+}
+END_TEST
+
 START_TEST(test_gpt_part_name_eq_label_too_long)
 {
     uint16_t name[GPT_PART_NAME_SIZE];
@@ -955,6 +973,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_disk_open_gpt_entry_read_failure);
     tcase_add_test(tc_cov, test_gpt_check_mbr_bad_bootsig);
     tcase_add_test(tc_cov, test_gpt_parse_partition_first_gt_last);
+    tcase_add_test(tc_cov, test_gpt_parse_partition_first_eq_last);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_label_too_long);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_not_null_terminated);
     suite_add_tcase(s, tc_cov);
