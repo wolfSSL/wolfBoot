@@ -987,7 +987,7 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
         exit(1);
     }
 
-    if (xmss_params != NULL)
+    if (xmss_params == NULL)
         xmss_params = WOLFBOOT_XMSS_PARAMS;
 
     ret = wc_XmssKey_SetParamStr(&key, xmss_params);

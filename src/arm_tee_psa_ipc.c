@@ -28,6 +28,7 @@
 #include <psa/crypto.h>
 #include <psa/error.h>
 
+#include <wolfssl/wolfcrypt/memory.h>
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfboot/arm_tee_api.h>
 #include <wolfboot/dice.h>
@@ -240,6 +241,7 @@ static struct wolfboot_ps_entry *wolfboot_ps_alloc(psa_storage_uid_t uid)
 {
     for (size_t i = 0; i < WOLFBOOT_PS_MAX_ENTRIES; i++) {
         if (!g_ps_entries[i].in_use) {
+            wc_ForceZero(g_ps_entries[i].data, sizeof(g_ps_entries[i].data));
             g_ps_entries[i].in_use = 1;
             g_ps_entries[i].uid = uid;
             g_ps_entries[i].size = 0;
@@ -844,6 +846,7 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
             if (entry == NULL) {
                 return PSA_ERROR_DOES_NOT_EXIST;
             }
+            wc_ForceZero(entry->data, sizeof(entry->data));
             entry->in_use = 0;
             entry->uid = 0;
             entry->size = 0;

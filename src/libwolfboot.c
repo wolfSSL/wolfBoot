@@ -65,11 +65,12 @@
 #ifdef EXT_ENCRYPTED
 static int encrypt_key_is_erased(const uint8_t *key, uint32_t len)
 {
+    const volatile uint8_t *vkey = key;
     uint8_t diff = 0;
     uint32_t i;
 
     for (i = 0; i < len; i++)
-        diff |= key[i] ^ FLASH_BYTE_ERASED;
+        diff |= vkey[i] ^ FLASH_BYTE_ERASED;
 
     return diff == 0;
 }
@@ -85,13 +86,14 @@ static int fallback_iv_forced = 0;
 
 static int encrypt_key_is_valid(const uint8_t *key, uint32_t len)
 {
+    const volatile uint8_t *vkey = key;
     uint8_t has_one = 0;
     uint8_t has_zero = 0;
     uint32_t i;
 
     for (i = 0; i < len; i++) {
-        has_one |= key[i];
-        has_zero |= (uint8_t)~key[i];
+        has_one |= vkey[i];
+        has_zero |= (uint8_t)~vkey[i];
     }
 
     return (has_one != 0) && (has_zero != 0);

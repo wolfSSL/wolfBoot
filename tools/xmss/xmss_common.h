@@ -88,11 +88,13 @@ static enum wc_XmssRc xmss_write_key(const byte * priv, word32 privSz, void * co
     if (n_read != n_write) {
         fprintf(stderr, "error: read %d, expected %d: %d\n",
             (int)n_read, (int)n_write, ferror(file));
+        wc_ForceZero(buff, privSz);
         free(buff);
         return WC_XMSS_RC_WRITE_FAIL;
     }
 
     n_cmp = XMEMCMP(buff, priv, n_write);
+    wc_ForceZero(buff, privSz);
     free(buff);
     buff = NULL;
 

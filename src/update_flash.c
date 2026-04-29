@@ -46,7 +46,7 @@ static int wolfBoot_local_constant_compare(const uint8_t* a, const uint8_t* b,
     uint32_t len)
 {
     uint32_t i;
-    uint8_t diff = 0;
+    volatile uint8_t diff = 0;
 
     for (i = 0; i < len; i++) {
         diff |= a[i] ^ b[i];
@@ -633,7 +633,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #endif
     if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size,
                 &delta_base_hash, &delta_base_hash_sz) < 0) {
-        return -1;
+        ret = -1;
+        goto out;
     }
     delta_img_size = wb_delta_im2n(*img_size);
     if (inverse) {
@@ -653,7 +654,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             wolfBoot_printf("Error: delta update: Base hash size mismatch"
                     " (size: %x expected %x)\n", delta_base_hash_sz,
                     WOLFBOOT_SHA_DIGEST_SIZE);
-            return -1;
+            ret = -1;
+            goto out;
         }
     }
 
@@ -1592,6 +1594,9 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&boot);
+#endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&boot);
 #endif
     do_boot((void *)boot.fw_base);
 }

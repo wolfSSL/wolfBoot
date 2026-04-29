@@ -88,6 +88,14 @@ static void finalize_gpt_header_crc(struct guid_ptable *hdr)
     hdr->hdr_crc32 = test_crc32((const uint8_t *)hdr, hdr->hdr_size);
 }
 
+static void finalize_gpt_part_array_crc(struct guid_ptable *hdr)
+{
+    uint32_t array_len = hdr->n_part * hdr->array_sz;
+    uint8_t *array = fake_disk + (hdr->start_array * GPT_SECTOR_SIZE);
+
+    hdr->part_crc = test_crc32(array, array_len);
+}
+
 /* --- Helpers to build fake disk layouts --- */
 
 /* Write a UTF-16LE string into a buffer (no BOM).
@@ -157,6 +165,7 @@ static void build_gpt_disk(void)
     memset(fake_disk + PART1_OFF * GPT_SECTOR_SIZE, 0xBB,
         (PART1_END - PART1_OFF + 1) * GPT_SECTOR_SIZE);
 
+    finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 }
 
@@ -324,6 +333,21 @@ START_TEST(test_disk_open_gpt)
 
     n = disk_open(0);
     ck_assert_int_eq(n, 2);
+}
+END_TEST
+
+START_TEST(test_disk_open_gpt_rejects_part_array_crc_mismatch)
+{
+    struct gpt_part_entry *pe;
+
+    build_gpt_disk();
+
+    pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE);
+    pe->first = PART1_OFF;
+    pe->last = PART1_END;
+
+    ck_assert_int_eq(disk_open(0), -1);
+    ck_assert_int_eq(Drives[0].is_open, 0);
 }
 END_TEST
 
@@ -574,6 +598,7 @@ START_TEST(test_disk_open_gpt_excess_partitions)
 
     gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
     gpt_hdr->n_part = MAX_PARTITIONS + 10;
+    finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 
     /* Only 2 actual entries on disk so loop will break after parsing them,
@@ -593,6 +618,7 @@ START_TEST(test_disk_open_gpt_large_array_sz)
 
     gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
     gpt_hdr->array_sz = GPT_PART_ENTRY_SIZE + 1; /* 257 > 256 */
+    finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 
     ck_assert_int_eq(disk_open(0), 0); /* 0 partitions found */
@@ -616,6 +642,8 @@ START_TEST(test_disk_open_gpt_empty_entry_mid_table)
     pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE + 128);
     pe->type[0] = 0;
     pe->type[1] = 0;
+    finalize_gpt_part_array_crc(gpt_hdr);
+    finalize_gpt_header_crc(gpt_hdr);
 
     ck_assert_int_eq(disk_open(0), 1);
 }
@@ -792,6 +820,24 @@ START_TEST(test_gpt_parse_partition_first_gt_last)
 }
 END_TEST
 
+START_TEST(test_gpt_parse_partition_first_eq_last)
+{
+    uint8_t entry[128];
+    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    struct gpt_part_info info;
+
+    memset(entry, 0, sizeof(entry));
+    pe->type[0] = 0x0001020304050607ULL;
+    pe->type[1] = 0x08090A0B0C0D0E0FULL;
+    pe->first = 5;
+    pe->last = 5; /* first == last is a valid single-sector partition */
+
+    ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), 0);
+    ck_assert_uint_eq(info.start, 5 * GPT_SECTOR_SIZE);
+    ck_assert_uint_eq(info.end, (6 * GPT_SECTOR_SIZE) - 1);
+}
+END_TEST
+
 START_TEST(test_gpt_part_name_eq_label_too_long)
 {
     uint16_t name[GPT_PART_NAME_SIZE];
@@ -896,6 +942,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tc_gpt);
 
     tcase_add_test(tc_disk, test_disk_open_gpt);
+    tcase_add_test(tc_disk, test_disk_open_gpt_rejects_part_array_crc_mismatch);
     tcase_add_test(tc_disk, test_disk_open_mbr);
     tcase_add_test(tc_disk, test_disk_part_read);
     tcase_add_test(tc_disk, test_disk_find_partition_by_label);
@@ -926,6 +973,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_disk_open_gpt_entry_read_failure);
     tcase_add_test(tc_cov, test_gpt_check_mbr_bad_bootsig);
     tcase_add_test(tc_cov, test_gpt_parse_partition_first_gt_last);
+    tcase_add_test(tc_cov, test_gpt_parse_partition_first_eq_last);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_label_too_long);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_not_null_terminated);
     suite_add_tcase(s, tc_cov);

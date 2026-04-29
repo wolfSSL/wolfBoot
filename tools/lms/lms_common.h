@@ -82,22 +82,32 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
     if (n_read != n_write) {
         fprintf(stderr, "error: read %d, expected %d: %d\n",
             (int)n_read, (int)n_write, ferror(file));
-        return WC_LMS_RC_WRITE_FAIL;
+        goto verify_fail;
     }
 
     n_cmp = XMEMCMP(buff, priv, n_write);
     if (n_cmp != 0) {
         fprintf(stderr, "error: write data was corrupted: %d\n", n_cmp);
-        return WC_LMS_RC_WRITE_FAIL;
+        goto verify_fail;
     }
 
     err = fclose(file);
     if (err) {
         fprintf(stderr, "error: fclose returned %d\n", err);
+        wc_ForceZero(buff, sizeof(buff));
         return WC_LMS_RC_WRITE_FAIL;
     }
 
+    wc_ForceZero(buff, sizeof(buff));
     return WC_LMS_RC_SAVED_TO_NV_MEMORY;
+
+verify_fail:
+    wc_ForceZero(buff, sizeof(buff));
+    err = fclose(file);
+    if (err) {
+        fprintf(stderr, "error: fclose returned %d\n", err);
+    }
+    return WC_LMS_RC_WRITE_FAIL;
 }
 
 static int lms_read_key(byte * priv, word32 privSz, void * context)

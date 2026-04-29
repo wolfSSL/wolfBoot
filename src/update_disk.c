@@ -99,6 +99,19 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 /* Module-level storage for encryption key */
 static uint8_t disk_encrypt_key[ENCRYPT_KEY_SIZE];
 
+static uint16_t get_hdr_u16(const uint8_t *p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+static uint32_t get_hdr_u32(const uint8_t *p)
+{
+    return ((uint32_t)p[0]) |
+           ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) |
+           ((uint32_t)p[3] << 24);
+}
+
 /**
  * @brief Get the version from an already-decrypted header.
  *
@@ -113,7 +126,6 @@ static uint8_t disk_encrypt_key[ENCRYPT_KEY_SIZE];
 static uint32_t get_decrypted_blob_version(uint8_t *hdr)
 {
     uint32_t *magic = (uint32_t *)hdr;
-    uint16_t tlv_type, tlv_len;
     uint8_t *p = hdr + IMAGE_HEADER_OFFSET;
     uint8_t *max_p = hdr + IMAGE_HEADER_SIZE;
 
@@ -124,26 +136,25 @@ static uint32_t get_decrypted_blob_version(uint8_t *hdr)
     while ((size_t)(max_p - p) >= 4U) {
         size_t remaining = (size_t)(max_p - p);
         size_t tlv_total;
+        uint16_t tlv_type, tlv_len;
 
-        tlv_type = *((uint16_t*)p);
-        tlv_len = *((uint16_t*)(p + 2));
-
-        if (tlv_type == 0 || tlv_type == 0xFFFF)
-            break;
-
-        /* Skip padding bytes */
-        if ((p[0] == 0xFF) || ((((uintptr_t)p) & 0x01) != 0)) {
+        /* Skip padding bytes and unaligned half-words before reading TLVs. */
+        if ((p[0] == HDR_PADDING) || ((((uintptr_t)p) & 0x01U) != 0U)) {
             p++;
             continue;
         }
 
+        tlv_type = get_hdr_u16(p);
+        if (tlv_type == 0 || tlv_type == 0xFFFF)
+            break;
+
+        tlv_len = get_hdr_u16(p + 2);
         tlv_total = 4U + (size_t)tlv_len;
         if (remaining < tlv_total)
             break;
 
         if (tlv_type == HDR_VERSION && tlv_len == 4) {
-            uint32_t ver = *((uint32_t*)(p + 4));
-            return ver;
+            return get_hdr_u32(p + 4);
         }
 
         p += tlv_total;

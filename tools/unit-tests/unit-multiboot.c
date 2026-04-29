@@ -22,8 +22,10 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <check.h>
 
 #ifndef WOLFBOOT_MULTIBOOT2
@@ -422,6 +424,49 @@ START_TEST(test_build_info_header_length_underflow)
 }
 END_TEST
 
+START_TEST(test_dump_header_length_underflow)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    struct mb2_header *h = (struct mb2_header *)header;
+    struct mb2_tag *tag;
+    FILE *capture;
+    int stderr_fd;
+    char output[512];
+    size_t output_len;
+
+    memset(header, 0, sizeof(header));
+    h->magic = MB2_MAGIC;
+    h->header_length = 8; /* less than sizeof(struct mb2_header) */
+
+    tag = (struct mb2_tag *)(header + sizeof(struct mb2_header));
+    tag->type = 1;
+    tag->flags = 0;
+    tag->size = sizeof(*tag);
+
+    capture = tmpfile();
+    ck_assert_ptr_nonnull(capture);
+
+    fflush(stderr);
+    stderr_fd = dup(fileno(stderr));
+    ck_assert_int_ge(stderr_fd, 0);
+    ck_assert_int_ge(dup2(fileno(capture), fileno(stderr)), 0);
+
+    mb2_dump_header(header);
+
+    fflush(stderr);
+    ck_assert_int_ge(dup2(stderr_fd, fileno(stderr)), 0);
+    close(stderr_fd);
+
+    rewind(capture);
+    output_len = fread(output, 1, sizeof(output) - 1, capture);
+    output[output_len] = '\0';
+    fclose(capture);
+
+    ck_assert_ptr_nonnull(strstr(output, "Invalid header length"));
+    ck_assert_ptr_null(strstr(output, "Tag Type: 1\r\n"));
+}
+END_TEST
+
 /* ---- Group 5: mb2_add_basic_mem_info ---- */
 
 START_TEST(test_basic_mem_info_normal)
@@ -722,6 +767,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_build, test_build_info_unsupported_tag);
     tcase_add_test(tc_build, test_build_info_malformed_size);
     tcase_add_test(tc_build, test_build_info_header_length_underflow);
+    tcase_add_test(tc_build, test_dump_header_length_underflow);
     suite_add_tcase(s, tc_build);
 
     TCase *tc_basic = tcase_create("mb2_add_basic_mem_info");

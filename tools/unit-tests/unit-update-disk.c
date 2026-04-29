@@ -264,6 +264,38 @@ START_TEST(test_update_disk_prefers_primary_partition_when_versions_equal)
 }
 END_TEST
 
+START_TEST(test_update_disk_boots_from_A_when_B_is_blank)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    memset(part_b_image, 0, sizeof(part_b_image));
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_eq(mock_boot_address, (const uint32_t *)WOLFBOOT_LOAD_ADDRESS);
+    ck_assert_int_eq(memcmp(load_buffer, part_a_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+}
+END_TEST
+
+START_TEST(test_update_disk_boots_from_B_when_A_is_blank)
+{
+    reset_mocks();
+    memset(part_a_image, 0, sizeof(part_a_image));
+    build_image(part_b_image, 7, 0xB2);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_eq(mock_boot_address, (const uint32_t *)WOLFBOOT_LOAD_ADDRESS);
+    ck_assert_int_eq(memcmp(load_buffer, part_b_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+}
+END_TEST
+
 START_TEST(test_get_decrypted_blob_version_rejects_truncated_version_tlv)
 {
     uint8_t hdr[IMAGE_HEADER_SIZE + 2];
@@ -315,6 +347,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_zeroizes_key_material_on_panic);
     tcase_add_test(tc, test_update_disk_zeroizes_key_material_before_boot);
     tcase_add_test(tc, test_update_disk_prefers_primary_partition_when_versions_equal);
+    tcase_add_test(tc, test_update_disk_boots_from_A_when_B_is_blank);
+    tcase_add_test(tc, test_update_disk_boots_from_B_when_A_is_blank);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
     tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
     suite_add_tcase(s, tc);

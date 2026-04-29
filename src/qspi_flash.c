@@ -431,38 +431,40 @@ int spi_flash_write(uint32_t address, const void *data, int len)
     pages = ((len + (FLASH_PAGE_SIZE-1)) / FLASH_PAGE_SIZE);
     for (page = 0; page < pages; page++) {
         ret = qspi_write_enable();
-        if (ret == 0) {
-            xferSz = (uint32_t)remaining;
-            if (xferSz > FLASH_PAGE_SIZE) {
-                xferSz = FLASH_PAGE_SIZE;
-            }
-
-            addr = address + (page * FLASH_PAGE_SIZE);
-
-            /* ------ Write Flash (page at a time) ------ */
-            ret = qspi_transfer(QSPI_MODE_WRITE, FLASH_WRITE_CMD,
-                addr, QSPI_ADDR_SZ, QSPI_DATA_MODE_SPI,    /* Address */
-                0, 0, QSPI_DATA_MODE_NONE,                 /* Alternate Bytes */
-                0,                                         /* Dummy */
-                ptr,                                       /* Destination Ptr */
-                xferSz, QSPI_DATA_MODE                     /* Data */
-            );
-#ifdef DEBUG_QSPI
-            wolfBoot_printf("QSPI Flash Sector Write: "
-                "Ret %d, Cmd 0x%x, Len %d, %p -> 0x%x\n",
-                ret, FLASH_WRITE_CMD, xferSz, ptr, address);
-#endif
-            if (ret != 0)
-                break;
-
-            ret = qspi_wait_ready(); /* Wait for not busy */
-            if (ret != 0) {
-                break;
-            }
-            /* write disable is automatic */
-            remaining -= (int)xferSz;
-            ptr += xferSz;
+        if (ret != 0) {
+            break;
         }
+
+        xferSz = (uint32_t)remaining;
+        if (xferSz > FLASH_PAGE_SIZE) {
+            xferSz = FLASH_PAGE_SIZE;
+        }
+
+        addr = address + (page * FLASH_PAGE_SIZE);
+
+        /* ------ Write Flash (page at a time) ------ */
+        ret = qspi_transfer(QSPI_MODE_WRITE, FLASH_WRITE_CMD,
+            addr, QSPI_ADDR_SZ, QSPI_DATA_MODE_SPI,    /* Address */
+            0, 0, QSPI_DATA_MODE_NONE,                 /* Alternate Bytes */
+            0,                                         /* Dummy */
+            ptr,                                       /* Destination Ptr */
+            xferSz, QSPI_DATA_MODE                     /* Data */
+        );
+#ifdef DEBUG_QSPI
+        wolfBoot_printf("QSPI Flash Sector Write: "
+            "Ret %d, Cmd 0x%x, Len %d, %p -> 0x%x\n",
+            ret, FLASH_WRITE_CMD, xferSz, ptr, address);
+#endif
+        if (ret != 0)
+            break;
+
+        ret = qspi_wait_ready(); /* Wait for not busy */
+        if (ret != 0) {
+            break;
+        }
+        /* write disable is automatic */
+        remaining -= (int)xferSz;
+        ptr += xferSz;
     }
 
     return ret;

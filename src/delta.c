@@ -370,6 +370,7 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
                     while ((pb < pb_limit) &&
+                            (match_len < UINT16_MAX) &&
                             (ctx->off_b < ctx->size_b) &&
                             (*pb == *(ctx->src_b + ctx->off_b))) {
                         /* Extend match as long as the areas have the
