@@ -633,7 +633,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 #endif
     if (wolfBoot_get_delta_info(PART_UPDATE, inverse, &img_offset, &img_size,
                 &delta_base_hash, &delta_base_hash_sz) < 0) {
-        return -1;
+        ret = -1;
+        goto out;
     }
     delta_img_size = wb_delta_im2n(*img_size);
     if (inverse) {
@@ -653,7 +654,8 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             wolfBoot_printf("Error: delta update: Base hash size mismatch"
                     " (size: %x expected %x)\n", delta_base_hash_sz,
                     WOLFBOOT_SHA_DIGEST_SIZE);
-            return -1;
+            ret = -1;
+            goto out;
         }
     }
 
