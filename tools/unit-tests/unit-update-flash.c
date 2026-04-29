@@ -1151,6 +1151,47 @@ START_TEST (test_diffbase_version_reads_from_little_endian_bytes)
 END_TEST
 
 #ifdef DELTA_UPDATES
+static void prepare_inverse_delta_update(struct wolfBoot_image *boot,
+    struct wolfBoot_image *update, struct wolfBoot_image *swap,
+    uint32_t boot_version, uint32_t update_version, uint32_t delta_base,
+    uint32_t delta_inverse_offset, uint32_t delta_inverse_size)
+{
+    uint32_t word;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, boot_version, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, update_version, TEST_SIZE_SMALL);
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_INVERSE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_inverse_offset);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_INVERSE_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_inverse_size);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 80,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 84,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(update, PART_UPDATE), 0);
+    memset(swap, 0, sizeof(*swap));
+    swap->part = PART_SWAP;
+    swap->hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+}
+
 START_TEST (test_delta_zero_size_valid_header_rejected_without_recovery_heuristic)
 {
     struct wolfBoot_image boot, update, swap;
@@ -1284,50 +1325,90 @@ END_TEST
 START_TEST (test_delta_inverse_values_passed_with_native_endian)
 {
     struct wolfBoot_image boot, update, swap;
-    uint32_t word;
     uint32_t delta_inverse_offset = 0x00001020;
     uint32_t delta_inverse_size = 0x00002040;
-    uint32_t delta_base = 1;
     int ret;
 
-    reset_mock_stats();
-    prepare_flash();
-
-    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
-    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
-
-    ext_flash_unlock();
-    word = (4u << 16) | HDR_IMG_DELTA_INVERSE;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
-        (const uint8_t *)&word, sizeof(word));
-    word = host_to_img_u32(delta_inverse_offset);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
-        (const uint8_t *)&word, sizeof(word));
-    word = (4u << 16) | HDR_IMG_DELTA_INVERSE_SIZE;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
-        (const uint8_t *)&word, sizeof(word));
-    word = host_to_img_u32(delta_inverse_size);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
-        (const uint8_t *)&word, sizeof(word));
-    word = (4u << 16) | HDR_IMG_DELTA_BASE;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 80,
-        (const uint8_t *)&word, sizeof(word));
-    word = host_to_img_u32(delta_base);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 84,
-        (const uint8_t *)&word, sizeof(word));
-    ext_flash_lock();
-
-    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
-    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
-    memset(&swap, 0, sizeof(swap));
-    swap.part = PART_SWAP;
-    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+    prepare_inverse_delta_update(&boot, &update, &swap, 1, 2, 1,
+        delta_inverse_offset, delta_inverse_size);
 
     ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 1);
     ck_assert_int_eq(ret, 0);
     ck_assert_int_eq(mock_wb_patch_init_calls, 1);
     ck_assert_ptr_eq(mock_wb_patch_init_patch, update.hdr + delta_inverse_offset);
     ck_assert_uint_eq(mock_wb_patch_init_psz, delta_inverse_size);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_inverse_accepts_when_current_matches_update)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t delta_inverse_offset = 0x00001020;
+    uint32_t delta_inverse_size = 0x00002040;
+    int ret;
+
+    prepare_inverse_delta_update(&boot, &update, &swap, 2, 2, 1,
+        delta_inverse_offset, delta_inverse_size);
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 0);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+    ck_assert_ptr_eq(mock_wb_patch_init_patch, update.hdr + delta_inverse_offset);
+    ck_assert_uint_eq(mock_wb_patch_init_psz, delta_inverse_size);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_inverse_accepts_when_current_matches_delta_base)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t delta_inverse_offset = 0x00001020;
+    uint32_t delta_inverse_size = 0x00002040;
+    int ret;
+
+    prepare_inverse_delta_update(&boot, &update, &swap, 1, 2, 1,
+        delta_inverse_offset, delta_inverse_size);
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 0);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 1);
+    ck_assert_ptr_eq(mock_wb_patch_init_patch, update.hdr + delta_inverse_offset);
+    ck_assert_uint_eq(mock_wb_patch_init_psz, delta_inverse_size);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_inverse_rejects_when_delta_base_is_newer_than_current)
+{
+    struct wolfBoot_image boot, update, swap;
+    int ret;
+
+    prepare_inverse_delta_update(&boot, &update, &swap, 2, 2, 3,
+        0x00001020, 0x00002040);
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_delta_inverse_rejects_when_versions_do_not_match_any_arm)
+{
+    struct wolfBoot_image boot, update, swap;
+    int ret;
+
+    prepare_inverse_delta_update(&boot, &update, &swap, 2, 1, 3,
+        0x00001020, 0x00002040);
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 1, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 0);
 
     cleanup_flash();
 }
@@ -1450,6 +1531,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(delta_base_version, test_delta_base_version_mismatch_rejected);
     tcase_add_test(delta_base_version, test_delta_base_version_match_accepts);
     tcase_add_test(delta_base_version, test_delta_inverse_values_passed_with_native_endian);
+    tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_update);
+    tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_delta_base);
+    tcase_add_test(delta_base_version, test_delta_inverse_rejects_when_delta_base_is_newer_than_current);
+    tcase_add_test(delta_base_version, test_delta_inverse_rejects_when_versions_do_not_match_any_arm);
 #endif
 #ifdef RAM_CODE
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
