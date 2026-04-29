@@ -351,8 +351,10 @@ static void mb2_dump_header(void* mbHeader) {
     MB2_DEBUG_PRINTF("Checksum: 0x%x\r\n", header->checksum);
 
     tags = (uint8_t*)header + sizeof(*header);
-    if (header->header_length < sizeof(struct mb2_header))
+    if (header->header_length < sizeof(struct mb2_header)) {
         MB2_DEBUG_PRINTF("Invalid header length\r\n");
+        return;
+    }
     mb2_dump_tags(tags, header->header_length - sizeof(*header));
 }
 #endif /* DEBUG_MB2 */
