@@ -42,6 +42,7 @@ int uart_rx(uint8_t *c)
 
 static void reset_uart_script(const uint8_t *script, int len)
 {
+    ck_assert_int_le(len, (int)sizeof(rx_script));
     memset(rx_script, 0, sizeof(rx_script));
     memcpy(rx_script, script, len);
     rx_script_len = len;
