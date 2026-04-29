@@ -45,6 +45,7 @@ uint8_t *ut_get_endpart(void);
 
 static int locked = 0;
 static int ext_locked = 0;
+static int ext_write_count = 0;
 
 void hal_init(void)
 {
@@ -91,6 +92,19 @@ uint8_t *ut_get_endpart(void)
     return flash + WOLFBOOT_PARTITION_SIZE;
 }
 
+static void reset_flash_state(void)
+{
+    memset(flash, 0xFF, sizeof(flash));
+    locked = 0;
+    ext_locked = 0;
+    ext_write_count = 0;
+}
+
+static uint32_t update_sector_flag_addr(uint32_t pos)
+{
+    return PART_UPDATE_ENDFLAGS - (sizeof(uint32_t) + 2 + pos);
+}
+
 /* Mocks for ext_flash_read, ext_flash_write, and ext_flash_erase functions */
 int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
     printf("Called ext_flash_read %p %p %d\n", address, data, len);
@@ -111,6 +125,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
 
     /* Copy the data from the input buffer to the flash memory */
     memcpy(&flash[address], data, len);
+    ext_write_count++;
 
     return 0;
 }
@@ -210,7 +225,40 @@ START_TEST(test_partition_flags) {
 END_TEST
 
 START_TEST(test_sector_flags) {
+    uint8_t flag = 0;
+    uint32_t flag_addr = update_sector_flag_addr(0);
+    int writes_after_change;
 
+    reset_flash_state();
+    flash[flag_addr] = 0xA5;
+    set_partition_magic(PART_UPDATE);
+    ext_write_count = 0;
+
+    wolfBoot_set_update_sector_flag(0, 0x03);
+    ck_assert_uint_eq(flash[flag_addr], 0xA3);
+    ck_assert_int_eq(ext_write_count, 1);
+    ck_assert_int_eq(wolfBoot_get_update_sector_flag(0, &flag), 0);
+    ck_assert_uint_eq(flag, 0x03);
+    ck_assert_int_eq(wolfBoot_get_update_sector_flag(1, &flag), 0);
+    ck_assert_uint_eq(flag, 0x0A);
+
+    writes_after_change = ext_write_count;
+    wolfBoot_set_update_sector_flag(0, 0x03);
+    ck_assert_int_eq(ext_write_count, writes_after_change);
+    ck_assert_uint_eq(flash[flag_addr], 0xA3);
+
+    wolfBoot_set_update_sector_flag(1, 0x0C);
+    ck_assert_uint_eq(flash[flag_addr], 0xC3);
+    ck_assert_int_eq(ext_write_count, writes_after_change + 1);
+    ck_assert_int_eq(wolfBoot_get_update_sector_flag(0, &flag), 0);
+    ck_assert_uint_eq(flag, 0x03);
+    ck_assert_int_eq(wolfBoot_get_update_sector_flag(1, &flag), 0);
+    ck_assert_uint_eq(flag, 0x0C);
+
+    writes_after_change = ext_write_count;
+    wolfBoot_set_update_sector_flag(1, 0x0C);
+    ck_assert_int_eq(ext_write_count, writes_after_change);
+    ck_assert_uint_eq(flash[flag_addr], 0xC3);
 }
 END_TEST
 
