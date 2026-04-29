@@ -55,7 +55,8 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
-       unit-sdhci-disk-unaligned unit-sign-encrypted-output
+       unit-sdhci-disk-unaligned unit-sign-encrypted-output \
+       unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 
@@ -210,6 +211,13 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 
 unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c \
 		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-keygen-xmss-params: ../../include/target.h unit-keygen-xmss-params.c
 	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 \
 		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
 		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
