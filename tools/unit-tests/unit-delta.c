@@ -204,6 +204,53 @@ START_TEST(test_wb_diff_self_match_extends_to_src_b_end)
 }
 END_TEST
 
+START_TEST(test_wb_diff_self_match_caps_16bit_length)
+{
+    WB_DIFF_CTX diff_ctx;
+    uint8_t *src_a;
+    uint8_t *src_b;
+    uint8_t patch[BLOCK_HDR_SIZE + 1] = {0};
+    const char *saved = getenv("WOLFBOOT_SECTOR_SIZE");
+    char *saved_copy = saved ? strdup(saved) : NULL;
+    uint32_t sector_size = UINT16_MAX;
+    uint32_t match_start = 2U * sector_size;
+    uint32_t size = match_start + UINT16_MAX + 1024U;
+    uint16_t encoded_len;
+    int ret;
+
+    ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", "0xFFFF", 1), 0);
+
+    src_a = malloc(size);
+    src_b = calloc(1, size);
+    ck_assert_ptr_nonnull(src_a);
+    ck_assert_ptr_nonnull(src_b);
+
+    memset(src_a, 0xA5, size);
+
+    ret = wb_diff_init(&diff_ctx, src_a, size, src_b, size);
+    ck_assert_int_eq(ret, 0);
+
+    diff_ctx.off_b = match_start;
+    ret = wb_diff(&diff_ctx, patch, sizeof(patch));
+    ck_assert_int_eq(ret, BLOCK_HDR_SIZE);
+
+    encoded_len = (uint16_t)((patch[4] << 8) | patch[5]);
+    ck_assert_uint_eq(encoded_len, UINT16_MAX);
+    ck_assert_uint_eq(diff_ctx.off_b, match_start + UINT16_MAX);
+
+    free(src_b);
+    free(src_a);
+
+    if (saved_copy != NULL) {
+        ck_assert_int_eq(setenv("WOLFBOOT_SECTOR_SIZE", saved_copy, 1), 0);
+        free(saved_copy);
+    }
+    else {
+        ck_assert_int_eq(unsetenv("WOLFBOOT_SECTOR_SIZE"), 0);
+    }
+}
+END_TEST
+
 START_TEST(test_wb_diff_preserves_trailing_header_margin_for_escape)
 {
     WB_DIFF_CTX diff_ctx;
@@ -618,6 +665,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_trailing_escape_invalid);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_match_extends_to_src_b_end);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_self_match_extends_to_src_b_end);
+    tcase_add_test(tc_wolfboot_delta, test_wb_diff_self_match_caps_16bit_length);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_preserves_trailing_header_margin_for_escape);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_preserves_main_loop_header_margin_for_escape);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_rejects_match_offsets_beyond_24_bits);
