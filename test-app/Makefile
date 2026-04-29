@@ -12,6 +12,7 @@ vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.c $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.S $(WOLFBOOT_LIB_WOLFTPM)
 
+WOLFBOOT_ROOT?=..
 TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
@@ -66,7 +67,7 @@ ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
 else
-  CFLAGS+=-Wall -ffreestanding -Wno-unused
+  CFLAGS+=-Wall -ffreestanding -Wno-unused -ffunction-sections -fdata-sections
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX_TC3)
     ifneq ($(USE_CLANG),1)
@@ -640,6 +641,16 @@ else
   ifeq ($(TARGET),stm32wb)
     APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
   endif
+  ifeq ($(TARGET),wolfhal)
+    ifeq ($(strip $(BOARD)),)
+      $(error TARGET=wolfhal requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
+    endif
+    WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
+    CFLAGS+=-I$(WOLFHAL_ROOT) -DWHAL_CFG_NO_TIMEOUT -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
+    DEBUG_UART=1
+    APP_OBJS+=board_$(BOARD).o
+    include $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk
+  endif
 endif
 
 ifeq ($(TARGET),kinetis)
@@ -1041,6 +1052,10 @@ delta-extra-data: image.bin
 
 ../hal/spi/spi_drv_$(SPI_TARGET)_ns.o: ../hal/spi/spi_drv_$(SPI_TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/spi/spi_drv_$(SPI_TARGET).c -DNONSECURE_APP
+
+board_$(BOARD).o: ../hal/boards/$(BOARD)/board.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -DDEBUG_UART -c $(OUTPUT_FLAG) $@ $<
 
 %.o:%.c
 	@echo "\t[CC-$(ARCH)] $@"
