@@ -206,9 +206,11 @@ static int gz_huff_build(gz_huff_t *h, const uint8_t *lengths, int n)
         left = 1;
         for (len = 1; (len <= GZIP_MAX_HUFF_BITS) && (ret == 0); len++) {
             left <<= 1;
-            left -= (int)h->counts[len];
-            if (left < 0) {
+            if ((int)h->counts[len] > left) {
                 ret = WOLFBOOT_GZIP_E_HUFFMAN;
+            }
+            else {
+                left -= (int)h->counts[len];
             }
         }
     }
@@ -427,6 +429,10 @@ static int gz_inflate_dynamic(gz_state_t *s)
     uint32_t hlit = 0, hdist = 0, hclen = 0, val;
     int i, total, idx, sym;
     uint8_t prev = 0;
+
+    for (i = 0; i < (int)(sizeof(code_lens) / sizeof(code_lens[0])); i++) {
+        code_lens[i] = 0;
+    }
 
     ret = gz_get_bits(s, GZIP_HLIT_BITS, &hlit);
     if (ret == 0) {

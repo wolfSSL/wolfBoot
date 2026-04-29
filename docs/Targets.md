@@ -1257,7 +1257,7 @@ MACHINE=mpfs-video-kit bitbake mchp-base-image-sdk
 
 Build images are output to: `./tmp-glibc/deploy/images/mpfs-video-kit/`
 
-#### Custom FIT image, signing and coping to SDCard
+#### Custom FIT image, signing and copying to SDCard
 
 wolfBoot can either decompress a gzipped kernel at boot time (`GZIP=1`,
 the default for `polarfire_mpfs250.config` and `polarfire_mpfs250_qspi.config`)
@@ -3455,6 +3455,13 @@ and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain. Set `GZIP=0` in
 `.config` if you want to keep using an uncompressed `Image` plus
 `compression = "none"`.
 
+The decompressed-output bound for any single FIT subimage defaults to
+`WOLFBOOT_FIT_MAX_DECOMP = 256 MB`. Override per target via
+`CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...` if a kernel/ramdisk legitimately
+expands beyond that. The outer wolfBoot signature still authenticates the
+entire FIT; this cap is defense-in-depth against a malformed-but-signed
+stream.
+
 **FIT ramdisk (initramfs)**
 
 When PetaLinux is built with `INITRAMFS_IMAGE_BUNDLE = "0"` the rootfs cpio
@@ -3497,6 +3504,7 @@ images {
         data = /incbin/("rootfs.cpio.gz");
         type = "ramdisk";
         compression = "gzip";  /* or "none" */
+        load = <0x40000000>;   /* required for decompression / relocation */
         hash-1 { algo = "sha256"; };
     };
 };
