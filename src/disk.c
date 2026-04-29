@@ -162,6 +162,37 @@ int disk_open(int drv)
         wolfBoot_printf("Valid GPT partition table\r\n");
         wolfBoot_printf("Max number of partitions: %d\r\n", ptable.n_part);
 
+        {
+            struct gpt_crc32_ctx part_crc;
+            uint64_t array_addr = ptable.start_array * GPT_SECTOR_SIZE;
+            uint64_t bytes_left = (uint64_t)ptable.n_part * ptable.array_sz;
+
+            gpt_crc32_init(&part_crc);
+            while (bytes_left > 0) {
+                uint32_t chunk = GPT_SECTOR_SIZE;
+
+                if (bytes_left < chunk) {
+                    chunk = (uint32_t)bytes_left;
+                }
+
+                r = disk_read(drv, array_addr, chunk, sector);
+                if (r < 0) {
+                    Drives[drv].is_open = 0;
+                    return -1;
+                }
+
+                gpt_crc32_update(&part_crc, sector, chunk);
+                array_addr += chunk;
+                bytes_left -= chunk;
+            }
+
+            if (gpt_crc32_final(&part_crc) != ptable.part_crc) {
+                wolfBoot_printf("Invalid GPT partition entry array CRC\r\n");
+                Drives[drv].is_open = 0;
+                return -1;
+            }
+        }
+
         n_parts = ptable.n_part;
         if (n_parts > MAX_PARTITIONS)
             n_parts = MAX_PARTITIONS;

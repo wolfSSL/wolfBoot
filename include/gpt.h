@@ -100,6 +100,13 @@ struct gpt_part_info {
 };
 
 /**
+ * @brief CRC32 context for GPT header and partition-array validation.
+ */
+struct gpt_crc32_ctx {
+    uint32_t value;
+};
+
+/**
  * @brief Check MBR for protective GPT partition entry.
  *
  * Scans the MBR sector for a protective GPT partition entry (type 0xEE)
@@ -140,6 +147,32 @@ int gpt_parse_partition(const uint8_t *entry_data, uint32_t entry_size,
                         struct gpt_part_info *part);
 
 /**
+ * @brief Initialize a GPT CRC32 calculation.
+ *
+ * @param[out] ctx Pointer to CRC32 context.
+ */
+void gpt_crc32_init(struct gpt_crc32_ctx *ctx);
+
+/**
+ * @brief Accumulate bytes into a GPT CRC32 calculation.
+ *
+ * @param[in,out] ctx Pointer to CRC32 context.
+ * @param[in] data Pointer to input bytes.
+ * @param[in] len Number of bytes to process.
+ */
+void gpt_crc32_update(struct gpt_crc32_ctx *ctx, const uint8_t *data,
+                      uint32_t len);
+
+/**
+ * @brief Finalize a GPT CRC32 calculation.
+ *
+ * @param[in] ctx Pointer to CRC32 context.
+ *
+ * @return Final CRC32 value.
+ */
+uint32_t gpt_crc32_final(const struct gpt_crc32_ctx *ctx);
+
+/**
  * @brief Compare UTF-16 partition name with ASCII string.
  *
  * Compares a GPT partition name (UTF-16LE) with an ASCII string label.
@@ -152,4 +185,3 @@ int gpt_parse_partition(const uint8_t *entry_data, uint32_t entry_size,
 int gpt_part_name_eq(const uint16_t *utf16_name, const char *ascii_label);
 
 #endif /* GPT_H */
-

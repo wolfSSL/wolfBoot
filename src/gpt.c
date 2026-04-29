@@ -34,21 +34,39 @@
 
 #include "gpt.h"
 
-static uint32_t gpt_crc32(const uint8_t *data, uint32_t len)
+void gpt_crc32_init(struct gpt_crc32_ctx *ctx)
 {
-    uint32_t crc = 0xFFFFFFFFU;
+    if (ctx != NULL) {
+        ctx->value = 0xFFFFFFFFU;
+    }
+}
+
+void gpt_crc32_update(struct gpt_crc32_ctx *ctx, const uint8_t *data,
+                      uint32_t len)
+{
     uint32_t i;
     uint32_t j;
 
-    for (i = 0; i < len; i++) {
-        crc ^= data[i];
-        for (j = 0; j < 8; j++) {
-            uint32_t mask = -(crc & 1U);
-            crc = (crc >> 1) ^ (0xEDB88320U & mask);
-        }
+    if (ctx == NULL || data == NULL) {
+        return;
     }
 
-    return ~crc;
+    for (i = 0; i < len; i++) {
+        ctx->value ^= data[i];
+        for (j = 0; j < 8; j++) {
+            uint32_t mask = -(ctx->value & 1U);
+            ctx->value = (ctx->value >> 1) ^ (0xEDB88320U & mask);
+        }
+    }
+}
+
+uint32_t gpt_crc32_final(const struct gpt_crc32_ctx *ctx)
+{
+    if (ctx == NULL) {
+        return 0;
+    }
+
+    return ~ctx->value;
 }
 
 /**
@@ -116,6 +134,7 @@ int gpt_parse_header(const uint8_t *sector, struct guid_ptable *hdr)
 {
     const struct guid_ptable *src;
     struct guid_ptable tmp;
+    struct gpt_crc32_ctx crc;
 
     if (sector == NULL || hdr == NULL) {
         return -1;
@@ -134,7 +153,9 @@ int gpt_parse_header(const uint8_t *sector, struct guid_ptable *hdr)
 
     memcpy(&tmp, src, sizeof(tmp));
     tmp.hdr_crc32 = 0;
-    if (gpt_crc32((const uint8_t *)&tmp, src->hdr_size) != src->hdr_crc32) {
+    gpt_crc32_init(&crc);
+    gpt_crc32_update(&crc, (const uint8_t *)&tmp, src->hdr_size);
+    if (gpt_crc32_final(&crc) != src->hdr_crc32) {
         return -1;
     }
 
