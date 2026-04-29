@@ -26,17 +26,21 @@
 #include "nrf52.h"
 
 #ifdef DEBUG_UART
+#define UARTE_ENABLE_ENABLE 8u
+
 void uart_init(void)
 {
     UART0_BAUDRATE = BAUD_115200;
-    UART0_ENABLE = 1;
+    UART0_ENABLE = UARTE_ENABLE_ENABLE;
 }
+
+static volatile uint8_t uart_tx_buf;
 
 static void uart_write_char(char c)
 {
+    uart_tx_buf = c;
     UART0_EVENT_ENDTX = 0;
-
-    UART0_TXD_PTR = (uint32_t)(&c);
+    UART0_TXD_PTR = (uint32_t)&uart_tx_buf;
     UART0_TXD_MAXCOUNT = 1;
     UART0_TASK_STARTTX = 1;
     while(UART0_EVENT_ENDTX == 0)
