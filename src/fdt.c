@@ -40,6 +40,16 @@
 #endif
 #endif /* WOLFBOOT_GZIP */
 
+/* Default upper bound on a single FIT subimage's decompressed size.
+ * The outer wolfBoot signature already authenticates the FIT, but a
+ * concrete cap defends against a malformed-but-signed FIT scribbling
+ * across unrelated memory. Override per target via:
+ *   CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...
+ */
+#ifndef WOLFBOOT_FIT_MAX_DECOMP
+#define WOLFBOOT_FIT_MAX_DECOMP (256U * 1024U * 1024U)
+#endif
+
 uint32_t cpu_to_fdt32(uint32_t x)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -911,6 +921,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
     int hash_off, len = 0;
     const char *algo = NULL;
     const uint8_t *value = NULL;
+#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
+    int did_init = 0;
+#endif
 #ifdef WOLFBOOT_HASH_SHA256
     wc_Sha256 sha256_ctx;
     uint8_t sha256_digest[WC_SHA256_DIGEST_SIZE];
@@ -950,6 +963,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
         }
         if (ret == 0) {
             ret = wc_InitSha256(&sha256_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
         }
         if (ret == 0) {
             ret = wc_Sha256Update(&sha256_ctx, data, (word32)data_len);
@@ -957,7 +973,10 @@ static int fit_verify_hash(const void *fdt, int img_off,
         if (ret == 0) {
             ret = wc_Sha256Final(&sha256_ctx, sha256_digest);
         }
-        wc_Sha256Free(&sha256_ctx);
+        if (did_init) {
+            wc_Sha256Free(&sha256_ctx);
+            did_init = 0;
+        }
         if (ret != 0) {
             wolfBoot_printf("FIT hash-1 (sha256): wc_Sha256 failed rc=%d\n",
                 ret);
@@ -982,6 +1001,9 @@ static int fit_verify_hash(const void *fdt, int img_off,
         }
         if (ret == 0) {
             ret = wc_InitSha384(&sha384_ctx);
+            if (ret == 0) {
+                did_init = 1;
+            }
         }
         if (ret == 0) {
             ret = wc_Sha384Update(&sha384_ctx, data, (word32)data_len);
@@ -989,7 +1011,10 @@ static int fit_verify_hash(const void *fdt, int img_off,
         if (ret == 0) {
             ret = wc_Sha384Final(&sha384_ctx, sha384_digest);
         }
-        wc_Sha384Free(&sha384_ctx);
+        if (did_init) {
+            wc_Sha384Free(&sha384_ctx);
+            did_init = 0;
+        }
         if (ret != 0) {
             wolfBoot_printf("FIT hash-1 (sha384): wc_Sha384 failed rc=%d\n",
                 ret);
@@ -1060,6 +1085,14 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
                 return NULL;
 #endif
             }
+            else if (comp != NULL && complen > 0
+                     && strcmp(comp, "none") != 0) {
+                /* Unknown compression scheme; fail closed rather than
+                 * silently memcpy compressed bytes as raw. */
+                wolfBoot_printf("FIT: subimage '%s' has unsupported "
+                    "compression=\"%s\"\n", image, comp);
+                return NULL;
+            }
             else {
                 wolfBoot_printf("Loading Image %s: %p -> %p (%d bytes)\n",
                     image, data, load, len);
@@ -1093,7 +1126,7 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
 
 void* fit_load_image(void* fdt, const char* image, int* lenp)
 {
-    return fit_load_image_ex(fdt, image, lenp, 0xFFFFFFFFU);
+    return fit_load_image_ex(fdt, image, lenp, WOLFBOOT_FIT_MAX_DECOMP);
 }
 
 #endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */

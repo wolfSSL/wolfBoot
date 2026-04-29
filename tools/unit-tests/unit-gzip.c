@@ -35,7 +35,7 @@
 #include "gzip.h"
 
 /* Pull in the implementation under test directly */
-#include "gzip.c"
+#include "../../src/gzip.c"
 
 /* ------------------------------------------------------------------------- */
 /* Helpers: gzip(1) on the host produces our test fixtures                   */
@@ -45,41 +45,47 @@ static uint8_t *gz_compress_buf(const uint8_t *in, size_t in_len, size_t *out_le
 {
     char in_path[64], out_path[64];
     char cmd[256];
-    FILE *f;
+    FILE *f = NULL;
     long n;
-    uint8_t *buf;
+    uint8_t *buf = NULL;
 
     snprintf(in_path,  sizeof(in_path),  "/tmp/wb-gz-in-%d.bin",  getpid());
     snprintf(out_path, sizeof(out_path), "/tmp/wb-gz-out-%d.gz",  getpid());
 
     f = fopen(in_path, "wb");
-    if (f == NULL) return NULL;
+    if (f == NULL) goto cleanup;
     if (in_len > 0) {
         if (fwrite(in, 1, in_len, f) != in_len) {
             fclose(f);
-            return NULL;
+            f = NULL;
+            goto cleanup;
         }
     }
     fclose(f);
+    f = NULL;
 
     snprintf(cmd, sizeof(cmd), "gzip -nc %s > %s", in_path, out_path);
-    if (system(cmd) != 0) return NULL;
+    if (system(cmd) != 0) goto cleanup;
 
     f = fopen(out_path, "rb");
-    if (f == NULL) return NULL;
-    fseek(f, 0, SEEK_END);
+    if (f == NULL) goto cleanup;
+    if (fseek(f, 0, SEEK_END) != 0) goto cleanup;
     n = ftell(f);
-    fseek(f, 0, SEEK_SET);
+    if (n < 0) goto cleanup;
+    if (fseek(f, 0, SEEK_SET) != 0) goto cleanup;
     buf = (uint8_t*)malloc((size_t)n);
-    if (buf == NULL) { fclose(f); return NULL; }
+    if (buf == NULL) goto cleanup;
     if (fread(buf, 1, (size_t)n, f) != (size_t)n) {
-        free(buf); fclose(f);
-        return NULL;
+        free(buf);
+        buf = NULL;
+        goto cleanup;
     }
-    fclose(f);
+    *out_len = (size_t)n;
+
+cleanup:
+    if (f != NULL) fclose(f);
     unlink(in_path);
     unlink(out_path);
-    *out_len = (size_t)n;
     return buf;
 }
 
