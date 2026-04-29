@@ -1595,6 +1595,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef WOLFBOOT_HOOK_BOOT
     wolfBoot_hook_boot(&boot);
 #endif
+#ifndef WOLFBOOT_SKIP_BOOT_VERIFY
+    PART_SANITY_CHECK(&boot);
+#endif
     do_boot((void *)boot.fw_base);
 }
 #ifdef __CCRX__
