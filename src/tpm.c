@@ -1255,7 +1255,8 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
         name[name_sz - 1] = '\0';
     }
     else {
-        strcpy(name, "Unknown");
+        strncpy(name, "Unknown", name_sz - 1);
+        name[name_sz - 1] = '\0';
     }
     return (const char*)name;
 }
@@ -1272,7 +1273,8 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int er
         error[error_sz - 1] = '\0';
     }
     else {
-        strcpy(error, "Unknown");
+        strncpy(error, "Unknown", error_sz - 1);
+        error[error_sz - 1] = '\0';
     }
     return (const char*)error;
 }
