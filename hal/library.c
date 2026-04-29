@@ -191,6 +191,7 @@ int main(int argc, const char* argv[])
         if (((void*)gImage) == NULL) {
             wolfBoot_printf("failed to malloc %zu bytes for image\n", sz);
             ret = -1;
+            goto close_img;
         }
 
         bread = fread((void*)gImage, 1, sz, img);
@@ -198,6 +199,8 @@ int main(int argc, const char* argv[])
             ret = -2;
             wolfBoot_printf("read %zu of %zu bytes from %s\n", bread, sz, argv[1]);
         }
+
+close_img:
         fclose(img);
     } else {
         wolfBoot_printf("usage: %s image_file.bin\n", argv[0]);
