@@ -158,8 +158,15 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name, uint
 int fdt_shrink(void* fdt);
 
 /* FIT */
-const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt);
+const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
+    const char** pramdisk);
 void* fit_load_image(void* fdt, const char* image, int* lenp);
+void* fit_load_image_ex(void* fdt, const char* image, int* lenp, uint32_t out_max);
+
+/* FDT initrd fixup: writes /chosen/linux,initrd-{start,end} as 64-bit
+ * big-endian properties. Creates /chosen if missing. Returns 0 on success
+ * or a negative FDT_ERR_*. */
+int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size);
 
 #ifdef __cplusplus
 }

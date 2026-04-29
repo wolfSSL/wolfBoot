@@ -900,6 +900,22 @@ ifeq ($(DELTA_UPDATES),1)
   endif
 endif
 
+# GZIP=1 enables native gzip decompression of FIT subimages
+# (RFC 1951 + RFC 1952). Enabled by default in FIT-using example configs.
+GZIP ?= 0
+ifeq ($(GZIP),1)
+  OBJS += src/gzip.o
+  CFLAGS+=-DWOLFBOOT_GZIP
+endif
+
+# RAMDISK=1 enables FIT ramdisk (initramfs) extraction and DTB
+# /chosen/linux,initrd-{start,end} fixup. Compressed (gzip) ramdisks
+# decompress through the same path when GZIP=1.
+RAMDISK ?= 0
+ifeq ($(RAMDISK),1)
+  CFLAGS+=-DWOLFBOOT_FIT_RAMDISK
+endif
+
 ifeq ($(ARMORED),1)
   CFLAGS+=-DWOLFBOOT_ARMORED
 endif
