@@ -20,6 +20,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
+* [NXP Kinetis KL26Z](#nxp-kinetis-kl26z)
 * [NXP LPC546xx](#nxp-lpc546xx)
 * [NXP LPC540xx / LPC54S0xx (SPIFI boot)](#nxp-lpc540xx--lpc54s0xx-spifi-boot)
 * [NXP LPC55S69](#nxp-lpc55s69)
@@ -4451,6 +4452,155 @@ WOLFBOOT_SECTOR_SIZE?=0x1000
 WOLFBOOT_PARTITION_BOOT_ADDRESS?=0xA000
 WOLFBOOT_PARTITION_UPDATE_ADDRESS?=0x84000
 WOLFBOOT_PARTITION_SWAP_ADDRESS?=0xff000
+```
+
+
+## NXP Kinetis KL26Z
+
+NXP MKL26Z128 is a Cortex-M0+ microcontroller running at 48MHz with 128 KB
+flash and 16 KB SRAM. The support has been tested using the FRDM-KL26Z board
+with the onboard OpenSDA debugger reflashed to Segger J-Link firmware.
+
+The TARGET is `kinetis_kl26`, separate from the `kinetis` target used for
+K64/K82 because the KL26 silicon ships a different flash driver family
+(legacy `fsl_flash.c`, no FTFx cache, no SYSMPU) and a different memory map.
+
+Two example configurations are provided:
+
+- `config/examples/kinetis-kl26.config` &mdash; **ECC256** with SHA-256.
+- `config/examples/kinetis-kl26-lms.config` &mdash; **LMS** post-quantum
+  signatures (parameters L=1, H=20, W=8, SHA-256).
+
+Both produce a working bootloader for the FRDM-KL26Z; pick the one matching
+your signature scheme. The two configs use different partition layouts (the
+LMS variant trades a larger bootloader region and partition header for the
+bigger PQ signature), so the addresses in the steps below differ between
+them.
+
+This requires the legacy NXP MCUXpresso SDK 2.2 for FRDM-KL26Z, generated and
+downloaded from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/)
+(select the board, then build and download the SDK package). The extracted
+archive should be placed into `../NXP/SDK_2_2_0_FRDM-KL26Z` by default (see
+.config or set with `MCUXPRESSO`).
+
+### KL26Z: Configuring and compiling
+
+Copy one of the example configuration files and build with make:
+
+```sh
+# ECC256 variant
+cp config/examples/kinetis-kl26.config .config
+
+# LMS variant
+cp config/examples/kinetis-kl26-lms.config .config
+
+make
+```
+
+### KL26Z: Loading the firmware
+
+The FRDM-KL26Z board ships with the PEMicro OpenSDA firmware on the K20 debug
+chip. Reflash it once with Segger's board-specific J-Link OpenSDA build:
+
+- Download the firmware from
+  [Segger's J-Link OpenSDA Board-Specific Firmwares page](https://www.segger.com/downloads/jlink/#JLinkOpenSDABoardSpecificFirmwares).
+- Hold the reset button while plugging in USB so the OpenSDA chip enters its
+  bootloader mode (the volume should mount as `BOOTLOADER`).
+- Drop the downloaded firmware file onto the `BOOTLOADER` volume.
+- Replug; the device now enumerates as a Segger J-Link.
+
+Use JLinkExe to upload the initial firmware:
+`JLinkExe -if swd -Device MKL26Z128xxx4`
+
+At the J-Link prompt, type:
+
+```
+unlock kinetis
+loadbin factory.bin 0
+r
+g
+```
+
+The `unlock kinetis` step is required after any chip-erase: a blank Kinetis
+flash configuration field reads `0xFF` at offset `0x40C`, which secures the
+chip on next reset and locks out SWD. `unlock kinetis` issues a mass-erase
+through the MDM-AP backdoor that bypasses the secured state.
+
+Reset or power cycle the board.
+
+Once wolfBoot has performed validation of the partition and booted the v1
+test app, the onboard RGB LED will light up blue.
+
+### KL26Z: Testing firmware update
+
+1) Sign the test-app as v2 passing appropriate parameters:
+
+For the ECC256 variant:
+
+```sh
+tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+For the LMS variant:
+
+```sh
+IMAGE_HEADER_SIZE=4096 \
+LMS_LEVELS=1 LMS_HEIGHT=20 LMS_WINTERNITZ=8 \
+IMAGE_SIGNATURE_SIZE=1776 \
+tools/keytools/sign --lms --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+Either command produces `test-app/image_v2_signed.bin`.
+
+2) Create a bin footer with the wolfBoot trailer "pBOOT" to manually trigger
+an update:
+
+```sh
+echo -n "pBOOT" > trigger_magic.bin
+```
+
+3) Assemble the update partition image. The trigger offset is
+`WOLFBOOT_PARTITION_SIZE - 5`.
+
+For the ECC256 variant (partition size `0xC000`):
+
+```sh
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0    test-app/image_v2_signed.bin \
+    0xBFFB trigger_magic.bin
+```
+
+For the LMS variant (partition size `0xB000`):
+
+```sh
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0    test-app/image_v2_signed.bin \
+    0xAFFB trigger_magic.bin
+```
+
+4) Flash `update.bin` to the update partition base address and reset. On the
+next boot wolfBoot will perform the update and launch version 2. The test app
+will then light up the onboard LED green instead of blue.
+
+- ECC256 variant: `loadbin update.bin 0x12000`
+- LMS variant: `loadbin update.bin 0x13000`
+
+### KL26Z: Debugging
+
+To debug with JLink:
+
+In one terminal: `JLinkGDBServer -if swd -Device MKL26Z128xxx4 -port 3333`
+
+In another terminal use `gdb`:
+
+```
+b main
+mon reset
+c
 ```
 
 
