@@ -665,6 +665,18 @@ ifeq ($(TARGET),kinetis)
   endif
 endif
 
+ifeq ($(TARGET),kinetis_kl26)
+  LSCRIPT_TEMPLATE=ARM-kinetis_kl26.ld
+  APP_OBJS+=\
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o \
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_flash.o
+  ifeq ($(DEBUG_UART),1)
+    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_lpsci.o
+  endif
+  LDFLAGS+=--specs=nosys.specs
+endif
+
 ifeq ($(TARGET),mcxa)
     LSCRIPT_TEMPLATE=ARM-mcxa.ld
     APP_OBJS+=$(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
