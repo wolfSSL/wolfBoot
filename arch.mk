@@ -775,6 +775,24 @@ ifeq ($(TARGET),kinetis)
   endif
 endif
 
+ifeq ($(TARGET),kinetis_kl26)
+  CORTEX_M0=1
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=\
+      -DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1 -DNVM_FLASH_WRITEONCE=1
+  CFLAGS+=-Wno-old-style-declaration
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_flash.o
+  ifeq ($(DEBUG_UART),1)
+    OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_lpsci.o
+  endif
+endif
+
 ifeq ($(TARGET),mcxa)
   CORTEX_M33=1
   CFLAGS+=\
