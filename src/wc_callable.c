@@ -34,6 +34,10 @@
 #include "wolfboot/wcs_fwtpm.h"
 #endif
 
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+#include "wolfboot/wcs_wolfhsm.h"
+#endif
+
 static WC_RNG wcs_rng;
 
 int CSME_NSE_API wcs_get_random(uint8_t *rand, uint32_t size)
@@ -47,6 +51,9 @@ void wcs_Init(void)
     wc_InitRng(&wcs_rng);
 #ifdef WOLFBOOT_TZ_FWTPM
     wcs_fwtpm_init();
+#endif
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+    wcs_wolfhsm_init();
 #endif
 }
 
