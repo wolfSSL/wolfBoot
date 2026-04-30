@@ -4582,12 +4582,14 @@ For the LMS variant (partition size `0xB000`):
     0xAFFB trigger_magic.bin
 ```
 
-4) Flash `update.bin` to the update partition base address and reset. On the
-next boot wolfBoot will perform the update and launch version 2. The test app
-will then light up the onboard LED green instead of blue.
+4) Flash `update.bin` to the update partition base address (`0x13000` in both
+configs) and reset. On the next boot wolfBoot will perform the update and
+launch version 2. The test app will then light up the onboard LED green
+instead of blue.
 
-- ECC256 variant: `loadbin update.bin 0x12000`
-- LMS variant: `loadbin update.bin 0x13000`
+```
+loadbin update.bin 0x13000
+```
 
 ### KL26Z: Debugging
 
