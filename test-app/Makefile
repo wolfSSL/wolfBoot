@@ -109,6 +109,11 @@ ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
   WOLFCRYPT_TZ_FWTPM=1
 endif
 
+ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+  WOLFCRYPT_TZ=1
+  WOLFCRYPT_TZ_WOLFHSM=1
+endif
+
 # Setup default linker flags
 LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 
@@ -354,6 +359,12 @@ ifeq ($(TZEN),1)
         WOLFTPM_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFTPM)/%, \
             $(WOLFTPM_LOCAL_OBJDIR)/%, $(WOLFTPM_APP_OBJS))
         APP_OBJS+=$(sort $(WOLFTPM_APP_OBJS))
+    endif
+    ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+        CFLAGS+=-DWOLFCRYPT_TZ_WOLFHSM
+        CFLAGS+=-DWOLFHSM_CFG_ENABLE_CLIENT
+        CFLAGS+=-DWOLFHSM_CFG_COMM_DATA_LEN=1280
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
     endif
     WOLFCRYPT_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
         $(WOLFSSL_LOCAL_OBJDIR)/%, $(WOLFCRYPT_APP_OBJS))
