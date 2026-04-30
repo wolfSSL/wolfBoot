@@ -7,10 +7,13 @@ WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
 WOLFBOOT_LIB_WOLFTPM?=../lib/wolfTPM
 WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
 WOLFTPM_LOCAL_OBJDIR?=wolftpm_obj
+WOLFHSM_LOCAL_OBJDIR?=wolfhsm_obj
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.c $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.S $(WOLFBOOT_LIB_WOLFTPM)
+vpath %.c $(WOLFBOOT_LIB_WOLFHSM)
+vpath %.S $(WOLFBOOT_LIB_WOLFHSM)
 
 TARGET?=none
 ARCH?=ARM
@@ -364,7 +367,18 @@ ifeq ($(TZEN),1)
         CFLAGS+=-DWOLFCRYPT_TZ_WOLFHSM
         CFLAGS+=-DWOLFHSM_CFG_ENABLE_CLIENT
         CFLAGS+=-DWOLFHSM_CFG_COMM_DATA_LEN=1280
+        CFLAGS+=-DWOLFHSM_CFG_PORT_STM32_TZ_NSC
+        CFLAGS+=-DWOLFHSM_CFG_NO_SYS_TIME
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz"
+        WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+        APP_OBJS+=./wcs/wolfhsm_test.o
+        APP_OBJS+=./wcs/wolfhsm_stub.o
+        WOLFHSM_APP_OBJS+=$(WOLFHSM_CLIENT_OBJS)
+        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz/wh_transport_nsc.o
+        WOLFHSM_APP_OBJS:=$(patsubst $(WOLFBOOT_LIB_WOLFHSM)/%, \
+            $(WOLFHSM_LOCAL_OBJDIR)/%, $(WOLFHSM_APP_OBJS))
+        APP_OBJS+=$(sort $(WOLFHSM_APP_OBJS))
     endif
     WOLFCRYPT_APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
         $(WOLFSSL_LOCAL_OBJDIR)/%, $(WOLFCRYPT_APP_OBJS))
@@ -984,6 +998,7 @@ endif
 # Capture final flags for locally built wolfSSL objects.
 WOLFSSL_CFLAGS:=$(CFLAGS)
 WOLFTPM_CFLAGS:=$(CFLAGS)
+WOLFHSM_CFLAGS:=$(CFLAGS)
 
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
@@ -1081,9 +1096,20 @@ $(WOLFTPM_LOCAL_OBJDIR)/%.o: %.S
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(WOLFTPM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+$(WOLFHSM_LOCAL_OBJDIR)/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFHSM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+$(WOLFHSM_LOCAL_OBJDIR)/%.o: %.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFHSM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
-	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR)
+	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
+		$(WOLFHSM_LOCAL_OBJDIR)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
