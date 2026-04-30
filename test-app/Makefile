@@ -671,7 +671,7 @@ ifeq ($(TARGET),kinetis_kl26)
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_gpio.o \
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_flash.o
-  ifeq ($(DEBUG_UART),1)
+  ifneq (,$(filter 1,$(DEBUG_UART) $(UART_FLASH)))
     APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_lpsci.o
   endif
   LDFLAGS+=--specs=nosys.specs

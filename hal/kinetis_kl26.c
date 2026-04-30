@@ -34,7 +34,7 @@ static int flash_init_done = 0;
 /* UART driver forward declarations - implementation at end of file */
 int  uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
 int  uart_tx(const uint8_t c);
-int  uart_rx(uint8_t *c, int len);
+int  uart_rx(uint8_t *c);
 #ifdef DEBUG_UART
 void uart_write(const char *buf, unsigned int len);
 #endif
@@ -161,7 +161,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (len > 0) {
         if ((len < 4) || (address & 0x03)) {
-            uint8_t aligned_word[4];
+            uint32_t aligned_word_w;
+            uint8_t *aligned_word = (uint8_t *)&aligned_word_w;
             uint32_t address_align = address & ~0x03U;
             uint32_t start_off = address - address_align;
             uint32_t i;
@@ -170,7 +171,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 aligned_word[i] = data[w++];
             if (memcmp(aligned_word, empty_word, 4) != 0) {
                 if (FLASH_Program(&pflash, address_align,
-                                  (uint32_t *)aligned_word, 4)
+                                  &aligned_word_w, 4)
                     != kStatus_FLASH_Success)
                     return -1;
             }
@@ -257,9 +258,8 @@ int uart_tx(const uint8_t c)
     return 1;
 }
 
-int uart_rx(uint8_t *c, int len)
+int uart_rx(uint8_t *c)
 {
-    (void)len;
     if (LPSCI_GetStatusFlags(UART0) & kLPSCI_RxDataRegFullFlag) {
         *c = LPSCI_ReadByte(UART0);
         return 1;

@@ -799,7 +799,7 @@ ifeq ($(TARGET),kinetis_kl26)
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_flash.o
-  ifeq ($(DEBUG_UART),1)
+  ifneq (,$(filter 1,$(DEBUG_UART) $(UART_FLASH)))
     OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_lpsci.o
   endif
 endif
