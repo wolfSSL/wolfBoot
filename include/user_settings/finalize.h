@@ -97,23 +97,85 @@
 
 /* ------------------------------------------------------------------
  * Always-on disables (no fragment opts out today).
- * ------------------------------------------------------------------ */
+ * ------------------------------------------------------------------
+ * Each entry asserts that no fragment has opted in via the matching
+ * positive flag, then defines the disable. If one of these assertions
+ * fires, the right fix is to introduce a WOLFBOOT_NEEDS_* marker and
+ * gate the disable on its absence (see docs/wolfssl-config.md, Section
+ * 8 Step 5).
+ *
+ * Entries without an assertion either have no canonical positive form
+ * (NO_ASN_TIME, NO_SIG_WRAPPER) or describe wolfBoot's environment
+ * rather than a wolfCrypt feature a fragment would plausibly want to
+ * enable (NO_WRITEV, NO_MAIN_DRIVER, NO_WOLFSSL_DIR, WOLFSSL_NO_SOCK,
+ * WOLFSSL_IGNORE_FILE_WARN, NO_ERROR_STRINGS, NO_OLD_RNGNAME). */
+
+#if defined(HAVE_DH)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_DH
+
+#if defined(WOLFSSL_PEM)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define WOLFSSL_NO_PEM
+
 #define NO_ASN_TIME
+
+#if defined(HAVE_RC4)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_RC4
+
+#if defined(WOLFSSL_SHA1)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_SHA
+
+#if defined(HAVE_DSA)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_DSA
+
+#if defined(WOLFSSL_MD4)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_MD4
+
+#if defined(HAVE_RABBIT)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_RABBIT
+
+#if defined(WOLFSSL_MD5)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_MD5
+
 #define NO_SIG_WRAPPER
+
+#if defined(WOLFSSL_CERT_GEN)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_CERT
+
+#if defined(HAVE_SESSION_CACHE)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_SESSION_CACHE
+
+#if defined(HAVE_HC128)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_HC128
+
+#if defined(HAVE_DES3)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #ifndef NO_DES3
 #  define NO_DES3
 #endif
+
 #define NO_WRITEV
 #ifndef WOLFBOOT_PARTITION_FILENAME
 #  define NO_FILESYSTEM
@@ -124,8 +186,22 @@
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
+
+#if defined(HAVE_PKCS12)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_PKCS12
+
+/* NO_PKCS8: no assertion. encrypt.h's SECURE_PKCS11 path defines
+ * HAVE_PKCS8 vestigially; wolfSSL gates PKCS8 on `#ifndef NO_PKCS8`,
+ * so the HAVE_PKCS8 define is a no-op. Until that vestigial define is
+ * cleaned up, we cannot assert here without false-positive on the
+ * SECURE_PKCS11 build. */
 #define NO_PKCS8
+
+#if defined(WOLFSSL_CHECK_PRIVATE_KEY)
+#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+#endif
 #define NO_CHECK_PRIVATE_KEY
 
 /* BENCH_EMBEDDED is the default outside explicit test/benchmark mode. */
