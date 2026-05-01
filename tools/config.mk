@@ -94,8 +94,8 @@ ifeq ($(ARCH),)
 endif
 
 # Global default: 0 means "use the FIT image's `load` property verbatim".
-# Defaulted globally (outside the CI ifeq block above) so RAMDISK=1 can
-# be toggled on any target without forcing an explicit address.
+# Defaulted globally (outside the CI ifeq block above) so FIT_RAMDISK=1
+# can be toggled on any target without forcing an explicit address.
 WOLFBOOT_LOAD_RAMDISK_ADDRESS?=0
 
 CONFIG_VARS:= ARCH TARGET SIGN HASH MCUXSDK MCUXPRESSO MCUXPRESSO_CPU MCUXPRESSO_DRIVERS \
@@ -123,7 +123,7 @@ CONFIG_VARS:= ARCH TARGET SIGN HASH MCUXSDK MCUXPRESSO MCUXPRESSO_CPU MCUXPRESSO
 	WOLFBOOT_UNIVERSAL_KEYSTORE \
 	XMSS_PARAMS \
 	ELF BIG_ENDIAN \
-	GZIP RAMDISK \
+	GZIP FIT_RAMDISK \
 	NXP_CUSTOM_DCD NXP_CUSTOM_DCD_OBJS \
 	FLASH_OTP_KEYSTORE \
 	KEYVAULT_OBJ_SIZE \

@@ -3428,12 +3428,20 @@ Application running successfully!
 Entering idle loop...
 ```
 
-**Booting PetaLinux**
+**Booting Linux via FIT image**
 
-ZynqMP can chain into a PetaLinux kernel using the same FIT mechanism as
-the Versal target. wolfBoot's FIT-using configs (`zynqmp.config` and
-`zynqmp_sdcard.config`) default to `GZIP=1`, which lets you point the
-FIT at a gzipped kernel (`Image.gz`) directly:
+wolfBoot is a drop-in replacement for U-Boot's FIT image loader: it parses
+the same `mkimage`-produced multi-component FIT (kernel + DTB + optional
+ramdisk), honors per-subimage `load`/`entry`/`compression` properties, and
+hands off to the kernel the same way - with the added value of
+authenticating the entire FIT against a wolfBoot signature before any
+subimage is touched.
+
+ZynqMP can chain into a Linux kernel (PetaLinux, Yocto, or any other
+producer) using the same FIT mechanism as the Versal target. wolfBoot's
+FIT-using configs (`zynqmp.config` and `zynqmp_sdcard.config`) default to
+`GZIP=1`, which lets you point the FIT at a gzipped kernel (`Image.gz`)
+directly:
 
 ```dts
 images {
@@ -3449,9 +3457,10 @@ images {
 
 `mkimage -f your-zynqmp.its fitImage` then produces a single signed FIT
 that wolfBoot decompresses straight to the kernel load address at boot.
-See the [Versal "Booting PetaLinux"](#versal-gen-1-vmk180) section for a
-full walkthrough - the flow is identical apart from the load addresses
-and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain. Set `GZIP=0` in
+See the [Versal "Booting Linux via FIT image"](#versal-gen-1-vmk180)
+section for a full walkthrough - the flow is identical apart from the
+load addresses and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain. Set
+`GZIP=0` in
 `.config` if you want to keep using an uncompressed `Image` plus
 `compression = "none"`.
 
@@ -3468,18 +3477,18 @@ When PetaLinux is built with `INITRAMFS_IMAGE_BUNDLE = "0"` the rootfs cpio
 ships as a separate `ramdisk` node in the FIT alongside the kernel and DTB.
 wolfBoot can extract it, copy it to a configurable RAM address, and patch the
 loaded DTB with `/chosen/linux,initrd-{start,end}` so the kernel finds it.
-Enable this with `RAMDISK=1`:
+Enable this with `FIT_RAMDISK=1`:
 
 ```sh
 cp config/examples/zynqmp_sdcard.config .config
-# Uncomment the RAMDISK / WOLFBOOT_LOAD_RAMDISK_ADDRESS / LINUX_BOOTARGS
+# Uncomment the FIT_RAMDISK / WOLFBOOT_LOAD_RAMDISK_ADDRESS / LINUX_BOOTARGS
 # block under "Optional: FIT-bundled initramfs" and comment out the
 # LINUX_BOOTARGS_ROOT line above it.
 make
 ```
 
 Key options (in `config/examples/zynqmp_sdcard.config`):
-- `RAMDISK=1` - enables FIT ramdisk extraction (`-DWOLFBOOT_FIT_RAMDISK`).
+- `FIT_RAMDISK=1` - enables FIT ramdisk extraction (`-DWOLFBOOT_FIT_RAMDISK`).
 - `WOLFBOOT_LOAD_RAMDISK_ADDRESS=0x40000000` - destination address. Pick a
   region clear of the kernel image (`~0x80000` + tens of MB) and clear of
   FIT staging (`WOLFBOOT_LOAD_ADDRESS=0x10000000` + FIT size). The default
@@ -3679,7 +3688,7 @@ Application running successfully!
 Entering idle loop...
 ```
 
-**Booting PetaLinux (QSPI)**
+**Booting Linux via FIT image (QSPI)**
 
 wolfBoot can boot a signed Linux kernel on the Versal VMK180, replacing U-Boot entirely for a secure boot chain.
 

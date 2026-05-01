@@ -1277,8 +1277,10 @@ int hal_dts_fixup(void* dts_addr)
         fdt_version(fdt), fdt_totalsize(fdt));
 
     /* Expand total size to allow adding/modifying properties (bootargs and,
-     * when WOLFBOOT_FIT_RAMDISK is in play, linux,initrd-{start,end}). */
-    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 768);
+     * when WOLFBOOT_FIT_RAMDISK is in play, linux,initrd-{start,end}).
+     * Sizing comes from WOLFBOOT_FDT_FIXUP_HEADROOM in include/fdt.h. */
+    fdt_set_totalsize(fdt,
+        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
 
     /* Find /chosen node; create it only if genuinely missing. Any other
      * negative return (malformed FDT, etc.) is surfaced directly rather

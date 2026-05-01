@@ -1931,8 +1931,10 @@ int hal_dts_fixup(void* dts_addr)
      * play) the linux,initrd-{start,end} properties. Physical headroom is
      * already guaranteed by the load-address layout (DTB at
      * WOLFBOOT_LOAD_DTS_ADDRESS, kernel loaded much higher), so growing
-     * the header is safe. Matches the pattern in hal/versal.c. */
-    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 768);
+     * the header is safe. Sizing comes from WOLFBOOT_FDT_FIXUP_HEADROOM
+     * in include/fdt.h - same constant as hal/versal.c. */
+    fdt_set_totalsize(fdt,
+        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
 
     /* Find /chosen node; create it only if genuinely missing. Any other
      * negative return (malformed FDT, etc.) is surfaced directly rather
