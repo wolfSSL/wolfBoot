@@ -21,6 +21,7 @@ wolfBoot supports using wolfHSM on the following platforms:
 
 - wolfBoot simulator (using wolfHSM POSIX TCP transport)
 - AURIX TC3xx (shared memory transport)
+- STM32H5 TrustZone (the secure-side wolfBoot hosts a wolfHSM server and exposes it to the non-secure application through a single NSC veneer; see [STM32H5 TrustZone Engine](#stm32h5-trustzone-engine) below)
 
 Details on configuring wolfBoot to use wolfHSM on each of these platforms can be found in the wolfBoot (and wolfHSM) documentation specific to that target, with the exception of the simulator, which is documented here. The remainder of this document focuses on the generic wolfHSM-related configuration options.
 
@@ -238,3 +239,51 @@ When using wolfHSM server mode, no external server is required. wolfBoot include
 ```
 
 The embedded wolfHSM server will automatically handle all cryptographic operations and key management using the file-based NVM storage(`wolfBoot_wolfHSM_NVM.bin`) that was generated above.
+
+## STM32H5 TrustZone Engine
+
+On STM32H5, wolfBoot can host a wolfHSM server in the secure TrustZone image and expose it to the non-secure application through a single non-secure-callable veneer (`wcs_wolfhsm_transmit`). The non-secure side runs the standard wolfHSM client API, which auto-registers a wolfCrypt cryptocb under `WH_DEV_ID`, so application-level wolfCrypt calls that pass that device ID transparently round-trip to the secure server.
+
+This is a separate deployment shape from the wolfHSM client/server modes documented above; it does not use `WOLFBOOT_ENABLE_WOLFHSM_CLIENT/SERVER` or the `hsmClientCtx`/`hsmServerCtx` HAL hooks, and is mutually exclusive with the other STM32H5 TrustZone engines (`WOLFCRYPT_TZ_PKCS11`, `WOLFCRYPT_TZ_PSA`, `WOLFCRYPT_TZ_FWTPM`).
+
+### Build
+
+```sh
+cp config/examples/stm32h5-tz-wolfhsm.config .config
+make
+```
+
+For on-board hardware testing, add `WOLFBOOT_TZ_TEST_NO_BKPT=1` so the auto-test prints a UART pass/fail line and idles in `while (1)` instead of issuing `bkpt #0x7f` (which HardFaults on real silicon without a debugger):
+
+```sh
+make WOLFBOOT_TZ_TEST_NO_BKPT=1
+```
+
+### Flash
+
+The wolfBoot helper programs the option bytes the secure boot path requires (`TZEN`, `SECBOOTADD`, `SECWM1`/`SECWM2`); see [STM32-TZ.md](STM32-TZ.md) for the option-byte details:
+
+```sh
+./tools/scripts/set-stm32-tz-option-bytes.sh
+STM32_Programmer_CLI -c port=swd -d wolfboot.bin 0x0C000000
+STM32_Programmer_CLI -c port=swd -d test-app/image_v1_signed.bin 0x08060000
+```
+
+### Test
+
+The non-secure test application runs the wolfHSM auto-test at startup. A successful first boot ends with:
+
+```text
+wolfHSM CommInit ok (client=1 server=...)
+wolfHSM RNG ok: <16 random bytes>
+wolfHSM SHA256 ok
+wolfHSM AES ok
+wolfHSM first boot path, committing key to NVM
+wolfHSM NSC tests passed
+```
+
+The default build raises `bkpt #0x7d` on first-boot success and `bkpt #0x7f` on second-boot success (after the persisted key is reloaded from flash on reset). The `WOLFBOOT_TZ_TEST_NO_BKPT=1` build prints a final `WOLFHSM_TZ_TEST_PASS` UART line instead. Reset the board (no re-flash) to verify persistence; the second boot prints `wolfHSM second boot path, restored persisted key`.
+
+### Notes
+
+The wolfHSM NVM lives in the existing `FLASH_KEYVAULT` region (112 KiB at `0x0C040000`) shared with the other STM32H5 TrustZone engines. The flash adapter (`src/wolfhsm_flash_hal.c`) caches the affected sector, modifies it, and rewrites the whole 8 KiB sector in one erase + program cycle, mirroring `psa_store.c` / `pkcs11_store.c`. This satisfies the H5 quad-word ECC rule that each 16-byte unit may be programmed exactly once between erases, which wolfHSM's 8-byte-unit writes would otherwise violate.
