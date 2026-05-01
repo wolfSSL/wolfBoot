@@ -12,10 +12,14 @@
 #include <string.h>
 
 #include "wolfhsm/wh_client.h"
+#include "wolfhsm/wh_client_crypto.h"
+#include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_error.h"
 
+#include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/random.h"
+#include "wolfssl/wolfcrypt/sha256.h"
 
 #include "wh_transport_nsc.h"
 
@@ -57,9 +61,117 @@ static int wolfhsm_test_rng(void)
     return 0;
 }
 
+static int wolfhsm_test_sha256(void)
+{
+    /* SHA256("abc") — FIPS 180-2, Appendix B.1. */
+    static const uint8_t expected[WC_SHA256_DIGEST_SIZE] = {
+        0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
+        0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
+        0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
+        0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad
+    };
+    wc_Sha256 sha;
+    uint8_t   digest[WC_SHA256_DIGEST_SIZE];
+    int       rc;
+
+    memset(&sha, 0, sizeof(sha));
+    memset(digest, 0, sizeof(digest));
+
+    rc = wc_InitSha256_ex(&sha, NULL, WH_DEV_ID);
+    if (rc != 0) {
+        printf("wolfHSM SHA256 init failed: %d\r\n", rc);
+        return rc;
+    }
+
+    rc = wc_Sha256Update(&sha, (const uint8_t*)"abc", 3);
+    if (rc == 0) {
+        rc = wc_Sha256Final(&sha, digest);
+    }
+    wc_Sha256Free(&sha);
+    if (rc != 0) {
+        printf("wolfHSM SHA256 hash failed: %d\r\n", rc);
+        return rc;
+    }
+
+    if (memcmp(digest, expected, sizeof(expected)) != 0) {
+        printf("wolfHSM SHA256 mismatch\r\n");
+        return -1;
+    }
+    printf("wolfHSM SHA256 ok\r\n");
+    return 0;
+}
+
+static int wolfhsm_test_aes_cached(whClientContext *client)
+{
+    /* FIPS 197 Appendix B AES-128 vector. CBC with IV=0 yields the same
+     * first-block ciphertext as ECB, so a single block under CBC suffices
+     * to verify the key+algorithm wired through correctly. */
+    static const uint8_t key[16] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f
+    };
+    static const uint8_t pt[16] = {
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+        0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff
+    };
+    static const uint8_t expected[16] = {
+        0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30,
+        0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5, 0x5a
+    };
+    static const uint8_t iv[16] = { 0 };
+    Aes      aes;
+    uint8_t  ct[16];
+    uint16_t keyId = WH_KEYID_ERASED;
+    int      rc;
+
+    memset(&aes, 0, sizeof(aes));
+    memset(ct, 0, sizeof(ct));
+
+    rc = wh_Client_KeyCache(client, WH_NVM_FLAGS_USAGE_ENCRYPT, NULL, 0,
+                            key, (uint16_t)sizeof(key), &keyId);
+    if (rc != WH_ERROR_OK) {
+        printf("wolfHSM KeyCache failed: %d\r\n", rc);
+        return rc;
+    }
+
+    rc = wc_AesInit(&aes, NULL, WH_DEV_ID);
+    if (rc != 0) {
+        printf("wolfHSM AesInit failed: %d\r\n", rc);
+        goto out;
+    }
+
+    rc = wh_Client_AesSetKeyId(&aes, keyId);
+    if (rc != WH_ERROR_OK) {
+        printf("wolfHSM AesSetKeyId failed: %d\r\n", rc);
+        goto out;
+    }
+
+    rc = wc_AesSetIV(&aes, iv);
+    if (rc == 0) {
+        rc = wc_AesCbcEncrypt(&aes, ct, pt, (word32)sizeof(pt));
+    }
+    if (rc != 0) {
+        printf("wolfHSM AES encrypt failed: %d\r\n", rc);
+        goto out;
+    }
+
+    if (memcmp(ct, expected, sizeof(expected)) != 0) {
+        printf("wolfHSM AES mismatch\r\n");
+        rc = -1;
+        goto out;
+    }
+    printf("wolfHSM AES ok\r\n");
+
+out:
+    wc_AesFree(&aes);
+    (void)wh_Client_KeyEvict(client, keyId);
+    return rc;
+}
+
 /* Initializes the wolfHSM client (auto-registers the wolfCrypt cryptocb
- * under WH_DEV_ID), runs the CommInit handshake, exercises one crypto
- * round-trip (RNG) through the secure-side server. */
+ * under WH_DEV_ID), runs the CommInit handshake, exercises crypto
+ * round-trips (RNG, SHA256, AES with cached key) through the
+ * secure-side server. */
 int cmd_wolfhsm_test(const char *args)
 {
     static const whTransportNscClientConfig nsc_cfg = { 0 };
@@ -100,6 +212,18 @@ int cmd_wolfhsm_test(const char *args)
         (unsigned)out_clientid, (unsigned)out_serverid);
 
     rc = wolfhsm_test_rng();
+    if (rc != 0) {
+        (void)wh_Client_Cleanup(&client);
+        return rc;
+    }
+
+    rc = wolfhsm_test_sha256();
+    if (rc != 0) {
+        (void)wh_Client_Cleanup(&client);
+        return rc;
+    }
+
+    rc = wolfhsm_test_aes_cached(&client);
     if (rc != 0) {
         (void)wh_Client_Cleanup(&client);
         return rc;
