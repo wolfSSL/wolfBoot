@@ -21,6 +21,7 @@
 #include "wolfhsm/wh_keyid.h"
 
 #include "wolfssl/wolfcrypt/aes.h"
+#include "wolfssl/wolfcrypt/misc.h"
 #include "wolfssl/wolfcrypt/random.h"
 #include "wolfssl/wolfcrypt/sha256.h"
 
@@ -124,7 +125,8 @@ static int wolfhsm_test_aes_cached(whClientContext *client)
     static const uint8_t iv[16] = { 0 };
     Aes      aes;
     uint8_t  ct[16];
-    uint16_t keyId = WH_KEYID_ERASED;
+    uint16_t keyId      = WH_KEYID_ERASED;
+    int      aes_inited = 0;
     int      rc;
 
     memset(&aes, 0, sizeof(aes));
@@ -142,6 +144,7 @@ static int wolfhsm_test_aes_cached(whClientContext *client)
         printf("wolfHSM AesInit failed: %d\r\n", rc);
         goto out;
     }
+    aes_inited = 1;
 
     rc = wh_Client_AesSetKeyId(&aes, keyId);
     if (rc != WH_ERROR_OK) {
@@ -166,7 +169,9 @@ static int wolfhsm_test_aes_cached(whClientContext *client)
     printf("wolfHSM AES ok\r\n");
 
 out:
-    wc_AesFree(&aes);
+    if (aes_inited) {
+        wc_AesFree(&aes);
+    }
     (void)wh_Client_KeyEvict(client, keyId);
     return rc;
 }
@@ -188,11 +193,12 @@ static int wolfhsm_test_persist(whClientContext *client, int *boot_state)
         memcmp(out, persist_key, sizeof(persist_key)) == 0) {
         printf("wolfHSM second boot path, restored persisted key\r\n");
         *boot_state = WOLFHSM_TEST_SECOND_BOOT_OK;
+        wc_ForceZero(out, sizeof(out));
         return 0;
     }
+    wc_ForceZero(out, sizeof(out));
 
     printf("wolfHSM first boot path, committing key to NVM\r\n");
-    keyId = WH_MAKE_KEYID(0, WCS_WOLFHSM_CLIENT_ID, 1);
     rc = wh_Client_KeyCache(client, WH_NVM_FLAGS_USAGE_ENCRYPT, NULL, 0,
                             persist_key, (uint16_t)sizeof(persist_key),
                             &keyId);
@@ -205,13 +211,14 @@ static int wolfhsm_test_persist(whClientContext *client, int *boot_state)
         printf("wolfHSM persist KeyCommit failed: %d\r\n", rc);
         return rc;
     }
+    (void)wh_Client_KeyEvict(client, keyId);
     *boot_state = WOLFHSM_TEST_FIRST_BOOT_OK;
     return 0;
 }
 
 int cmd_wolfhsm_test(const char *args)
 {
-    static const whTransportNscClientConfig nsc_cfg = { 0 };
+    static const whTransportNscClientConfig nsc_cfg = { { 0 } };
     whCommClientConfig comm_cfg;
     whClientConfig     cfg;
     whClientContext    client;
