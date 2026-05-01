@@ -369,6 +369,9 @@ ifeq ($(TZEN),1)
         CFLAGS+=-DWOLFHSM_CFG_COMM_DATA_LEN=1280
         CFLAGS+=-DWOLFHSM_CFG_PORT_STM32_TZ_NSC
         CFLAGS+=-DWOLFHSM_CFG_NO_SYS_TIME
+        ifeq ($(WOLFBOOT_TZ_TEST_NO_BKPT),1)
+            CFLAGS+=-DWOLFBOOT_TZ_TEST_NO_BKPT
+        endif
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz"
         WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
