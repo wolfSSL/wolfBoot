@@ -16,14 +16,15 @@
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_flash.h"
 
-/*
- * STM32H5 page (= erase) size and program-quad-word size. The dual-bank
- * H5 erase granularity is 8 KiB; flash programming happens in 16-byte
- * quad-word units.
- */
-#define WHFH5_SECTOR_SIZE       (8U * 1024U)
-#define WHFH5_PROGRAM_UNIT      16U
+#define WHFH5_SECTOR_SIZE (8U * 1024U)
 
+/* Sector-cached read-modify-erase-write, mirroring psa_store.c. STM32H5
+ * flash programs in 16-byte quad-words with ECC; each quad-word can be
+ * programmed exactly once between erases. wolfHSM issues 8-byte unit
+ * writes which would otherwise re-program neighbouring qwords, so every
+ * Program call here loads the affected sector into RAM, modifies it, and
+ * rewrites the whole 8 KiB sector after an erase. */
+static uint8_t cached_sector[WHFH5_SECTOR_SIZE];
 
 static int _Init(void *context, const void *config)
 {
@@ -55,18 +56,9 @@ static int _Cleanup(void *context)
 static uint32_t _PartitionSize(void *context)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
-    if (ctx == NULL) {
-        return 0U;
-    }
-    return ctx->partition_size;
+    return (ctx == NULL) ? 0U : ctx->partition_size;
 }
 
-/*
- * STM32H5 has a single global flash unlock; per-region lock/unlock isn't
- * available. Program/Erase wrap the unlock+op+lock cycle themselves, so
- * the wh_FlashUnit_Program helper's "WriteUnlock around batch of writes"
- * pattern is satisfied without per-call hardware action here.
- */
 static int _WriteLock(void *context, uint32_t offset, uint32_t size)
 {
     (void)context;
@@ -103,7 +95,7 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
                     const uint8_t *data)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
-    int rc;
+    uint32_t      written = 0U;
 
     if (ctx == NULL || (size != 0U && data == NULL)) {
         return WH_ERROR_BADARGS;
@@ -114,16 +106,29 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
     if (size == 0U) {
         return WH_ERROR_OK;
     }
-    /* hal_flash_write programs in H5 quad-word (16 byte) chunks; partial
-     * quad-words at either end fold the existing flash content so any
-     * `size` is acceptable here. The H5 ECC rule ("each quad-word may be
-     * programmed at most once between erases") is satisfied as long as
-     * wolfHSM's unit writes don't share a quad-word, which holds for the
-     * 32 KiB-aligned partitions / 8-byte units we use. */
-    hal_flash_unlock();
-    rc = hal_flash_write(ctx->base + offset, data, (int)size);
-    hal_flash_lock();
-    return (rc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
+
+    while (written < size) {
+        uint32_t in_sector_off = (offset + written) % WHFH5_SECTOR_SIZE;
+        uint32_t sector_base   = (offset + written) - in_sector_off;
+        uint32_t chunk         = WHFH5_SECTOR_SIZE - in_sector_off;
+        if (chunk > size - written) {
+            chunk = size - written;
+        }
+
+        memcpy(cached_sector,
+               (const uint8_t *)(ctx->base + sector_base),
+               WHFH5_SECTOR_SIZE);
+        memcpy(cached_sector + in_sector_off, data + written, chunk);
+
+        hal_flash_unlock();
+        hal_flash_erase(ctx->base + sector_base, WHFH5_SECTOR_SIZE);
+        hal_flash_write(ctx->base + sector_base, cached_sector,
+                        WHFH5_SECTOR_SIZE);
+        hal_flash_lock();
+
+        written += chunk;
+    }
+    return WH_ERROR_OK;
 }
 
 static int _Erase(void *context, uint32_t offset, uint32_t size)
@@ -171,9 +176,9 @@ static int _Verify(void *context, uint32_t offset, uint32_t size,
 
 static int _BlankCheck(void *context, uint32_t offset, uint32_t size)
 {
-    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    whFlashH5Ctx  *ctx = (whFlashH5Ctx *)context;
     const uint8_t *p;
-    uint32_t i;
+    uint32_t       i;
 
     if (ctx == NULL) {
         return WH_ERROR_BADARGS;
