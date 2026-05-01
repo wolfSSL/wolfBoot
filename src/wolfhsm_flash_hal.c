@@ -13,6 +13,9 @@
 #include "hal.h"
 #include "wolfboot/wolfhsm_flash_hal.h"
 
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/misc.h"
+
 #include "wolfhsm/wh_error.h"
 #include "wolfhsm/wh_flash.h"
 
@@ -28,20 +31,22 @@ static uint8_t cached_sector[WHFH5_SECTOR_SIZE];
 
 static int _Init(void *context, const void *config)
 {
-    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    const whFlashH5Ctx *cfg = (const whFlashH5Ctx *)config;
+    whFlashH5Ctx       *ctx = (whFlashH5Ctx *)context;
 
-    if (ctx == NULL || config == NULL) {
+    if (ctx == NULL || cfg == NULL) {
         return WH_ERROR_BADARGS;
     }
-    *ctx = *((const whFlashH5Ctx *)config);
 
-    if (ctx->base == 0U || ctx->size == 0U || ctx->partition_size == 0U ||
-        (ctx->base % WHFH5_SECTOR_SIZE) != 0U ||
-        (ctx->size % WHFH5_SECTOR_SIZE) != 0U ||
-        (ctx->partition_size % WHFH5_SECTOR_SIZE) != 0U ||
-        ctx->size < (uint32_t)2 * ctx->partition_size) {
+    if (cfg->base == 0U || cfg->size == 0U || cfg->partition_size == 0U ||
+        (cfg->base % WHFH5_SECTOR_SIZE) != 0U ||
+        (cfg->size % WHFH5_SECTOR_SIZE) != 0U ||
+        (cfg->partition_size % WHFH5_SECTOR_SIZE) != 0U ||
+        cfg->partition_size > cfg->size / 2U) {
         return WH_ERROR_BADARGS;
     }
+
+    *ctx = *cfg;
     return WH_ERROR_OK;
 }
 
@@ -96,6 +101,7 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
     uint32_t      written = 0U;
+    int           hrc     = 0;
 
     if (ctx == NULL || (size != 0U && data == NULL)) {
         return WH_ERROR_BADARGS;
@@ -107,28 +113,38 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
         return WH_ERROR_OK;
     }
 
+    hal_flash_unlock();
     while (written < size) {
         uint32_t in_sector_off = (offset + written) % WHFH5_SECTOR_SIZE;
-        uint32_t sector_base   = (offset + written) - in_sector_off;
+        uint32_t sector_offset = (offset + written) - in_sector_off;
         uint32_t chunk         = WHFH5_SECTOR_SIZE - in_sector_off;
         if (chunk > size - written) {
             chunk = size - written;
         }
 
         memcpy(cached_sector,
-               (const uint8_t *)(ctx->base + sector_base),
+               (const uint8_t *)(ctx->base + sector_offset),
                WHFH5_SECTOR_SIZE);
         memcpy(cached_sector + in_sector_off, data + written, chunk);
 
-        hal_flash_unlock();
-        hal_flash_erase(ctx->base + sector_base, WHFH5_SECTOR_SIZE);
-        hal_flash_write(ctx->base + sector_base, cached_sector,
-                        WHFH5_SECTOR_SIZE);
-        hal_flash_lock();
+        hrc = hal_flash_erase(ctx->base + sector_offset, WHFH5_SECTOR_SIZE);
+        if (hrc == 0) {
+            hrc = hal_flash_write(ctx->base + sector_offset, cached_sector,
+                                  WHFH5_SECTOR_SIZE);
+        }
 
+        /* Per-iteration wipe so a fault between sectors doesn't strand
+         * plaintext keystore bytes in the static cache. */
+        wc_ForceZero(cached_sector, sizeof(cached_sector));
+
+        if (hrc != 0) {
+            break;
+        }
         written += chunk;
     }
-    return WH_ERROR_OK;
+    hal_flash_lock();
+
+    return (hrc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
 }
 
 static int _Erase(void *context, uint32_t offset, uint32_t size)

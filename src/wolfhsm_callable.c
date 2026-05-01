@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "loader.h"
 #include "store_sbrk.h"
 #include "wolfboot/wcs_wolfhsm.h"
 #include "wolfboot/wolfhsm_flash_hal.h"
@@ -49,11 +50,9 @@ extern uint32_t _flash_keyvault;
 extern uint32_t _flash_keyvault_size;
 
 static whFlashH5Ctx              g_flash_ctx;
-static const whFlashH5Ctx        g_flash_cfg = {
-    .base           = (uint32_t)&_flash_keyvault,
-    .size           = (uint32_t)&_flash_keyvault_size,
-    .partition_size = WCS_WOLFHSM_PARTITION_SIZE,
-};
+/* Fields filled at runtime in wcs_wolfhsm_init: pointer-to-integer casts of
+ * linker symbols are not strictly conforming static initializers. */
+static whFlashH5Ctx              g_flash_cfg;
 
 static whNvmFlashContext         g_nvm_flash_ctx;
 static whNvmFlashConfig          g_nvm_flash_cfg = {
@@ -94,26 +93,29 @@ void wcs_wolfhsm_init(void)
 {
     int rc;
 
+    g_flash_cfg.base           = (uint32_t)&_flash_keyvault;
+    g_flash_cfg.size           = (uint32_t)&_flash_keyvault_size;
+    g_flash_cfg.partition_size = WCS_WOLFHSM_PARTITION_SIZE;
+
     rc = wc_InitRng(g_crypto_ctx.rng);
     if (rc != 0) {
-        return;
+        wolfBoot_panic();
     }
     rc = wh_Nvm_Init(&g_nvm_ctx, &g_nvm_cfg);
     if (rc != WH_ERROR_OK) {
-        return;
+        wolfBoot_panic();
     }
     rc = wh_Server_Init(&g_server, &g_server_cfg);
     if (rc != WH_ERROR_OK) {
-        return;
+        wolfBoot_panic();
     }
-    (void)wh_Server_SetConnected(&g_server, WH_COMM_CONNECTED);
+    rc = wh_Server_SetConnected(&g_server, WH_COMM_CONNECTED);
+    if (rc != WH_ERROR_OK) {
+        wolfBoot_panic();
+    }
     g_wolfhsm_ready = 1;
 }
 
-/* Single NSC veneer. Per call: validate the NS pointers/sizes (single-fetch
- * defeats TOCTOU on *rspSz), park the buffers in the secure-side transport
- * context, run wh_Server_HandleRequestMessage exactly once, write back the
- * captured response size. */
 int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         uint8_t *rsp, uint32_t *rspSz)
 {
@@ -123,9 +125,8 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     if (cmd == NULL || rsp == NULL || rspSz == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* Single fetch of the caller-supplied capacity; subsequent code uses
-     * only this local copy. The NS caller cannot mutate it under us. */
-    rsp_capacity = *rspSz;
+    /* volatile read forbids the compiler from re-fetching *rspSz later. */
+    rsp_capacity = *(volatile const uint32_t *)rspSz;
 
     if (cmdSz == 0U || cmdSz > WH_COMM_MTU) {
         return WH_ERROR_BADARGS;
@@ -151,6 +152,13 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     } else {
         *rspSz = 0;
     }
+
+    g_srv_tx_ctx.req_buf         = NULL;
+    g_srv_tx_ctx.req_size        = 0;
+    g_srv_tx_ctx.rsp_buf         = NULL;
+    g_srv_tx_ctx.rsp_capacity    = 0;
+    g_srv_tx_ctx.request_pending = 0;
+
     return rc;
 }
 
