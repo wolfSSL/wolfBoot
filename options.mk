@@ -1384,6 +1384,11 @@ ifeq ($(WOLFHSM_SERVER),1)
 
 endif
 
+# Optional secondary wolfHSM root CA NVM ID for certificate-chain fallback.
+ifneq ($(WOLFHSM_SECONDARY_ROOT_CA_NVM_ID),)
+  CFLAGS += -DWOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=$(WOLFHSM_SECONDARY_ROOT_CA_NVM_ID)
+endif
+
 # wolfBoot hooks framework
 # WOLFBOOT_HOOKS_FILE: path to a single .c file containing hook definitions
 WOLFBOOT_HOOKS_ENABLED :=
