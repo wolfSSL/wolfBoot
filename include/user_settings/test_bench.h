@@ -77,6 +77,37 @@
 #  define WOLFSSL_USER_CURRTIME
 #  define XTIME my_time
    extern unsigned long my_time(unsigned long* timer);
+
+   /* Crypto features that test/bench paths used to enable in
+    * finalize.h's chain-1 else branch. */
+#  define HAVE_AESGCM
+#  define GCM_TABLE
+#  if defined(WOLFSSL_NXP_LPC55S69_WITH_HWACCEL) \
+        || defined(WOLFSSL_NXP_LPC55S69_NO_HWACCEL)
+     /* LPC55S69 path uses real RNG hardware for the seed and HASHDRBG
+      * for generation. NEEDS_HASHDRBG is declared in cascade.h on this
+      * combination, so finalize.h emits HAVE_HASHDRBG. */
+#    define HAVE_AES_ECB
+#    define WOLFSSL_AES_OFB
+#    define WOLFSSL_AES_CFB
+#    define WOLFSSL_AES_COUNTER
+     /* Override the default static-memory size for LPC55S69 builds. */
+#    undef  WOLFSSL_STATIC_MEMORY_TEST_SZ
+#    define WOLFSSL_STATIC_MEMORY_TEST_SZ (30 * 1024)
+#    define WOLFSSL_SHA256
+#    define WOLFSSL_SHA384
+#    define WOLFSSL_SHA512
+#  else
+     /* Use a custom RNG for tests/benchmarks (saves ~7 KB vs HASHDRBG).
+      * WARNING: my_rng_seed_gen is NOT cryptographically secure -- it
+      * is only used in test-app builds, never in production wolfBoot.
+      * Cascade.h does NOT declare NEEDS_HASHDRBG on this path, so
+      * finalize.h leaves WC_NO_HASHDRBG defined. */
+#    define WC_NO_HASHDRBG
+#    define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
+#    define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
+   extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+#  endif
 #endif
 
 #endif /* _WOLFBOOT_USER_SETTINGS_TEST_BENCH_H_ */
