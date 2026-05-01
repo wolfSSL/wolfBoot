@@ -36,14 +36,14 @@ void *_sbrk(unsigned int incr)
         (uint32_t)(&_heap_size));
 }
 
-/* Phase 1b uses a 32 KiB ramsim partition pair for the NVM backend; Phase 3
- * swaps this for a flash-backed adapter over wolfBoot's hal_flash_*.
- * pageSize must match WHFU_BYTES_PER_UNIT (8) — wolfHSM programs the flash
+/* pageSize must match WHFU_BYTES_PER_UNIT (8) — wolfHSM programs the flash
  * one unit at a time, so a larger pageSize causes the modulo check in
  * whFlashRamsim_Program to fail. */
 #define WCS_WOLFHSM_RAMSIM_SIZE      (32U * 1024U)
 #define WCS_WOLFHSM_RAMSIM_SECTOR    (8U * 1024U)
 #define WCS_WOLFHSM_RAMSIM_PAGE      8U
+
+#define WCS_WOLFHSM_SERVER_ID        56U
 
 static uint8_t                   g_ramsim_buf[WCS_WOLFHSM_RAMSIM_SIZE];
 static whFlashRamsimCtx          g_ramsim_ctx;
@@ -78,7 +78,7 @@ static whCommServerConfig        g_comm_cfg = {
     .transport_context = &g_srv_tx_ctx,
     .transport_cb      = &whTransportNscServer_Cb,
     .transport_config  = &g_srv_tx_cfg,
-    .server_id         = 56, /* server identifier; NS client uses client_id=1 */
+    .server_id         = WCS_WOLFHSM_SERVER_ID,
 };
 static whServerConfig            g_server_cfg = {
     .comm_config = &g_comm_cfg,
@@ -129,10 +129,10 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
      * only this local copy. The NS caller cannot mutate it under us. */
     rsp_capacity = *rspSz;
 
-    if (cmdSz == 0U || cmdSz > WCS_WOLFHSM_MAX_REQ_SIZE) {
+    if (cmdSz == 0U || cmdSz > WH_COMM_MTU) {
         return WH_ERROR_BADARGS;
     }
-    if (rsp_capacity == 0U || rsp_capacity > WCS_WOLFHSM_MAX_RSP_SIZE) {
+    if (rsp_capacity == 0U || rsp_capacity > WH_COMM_MTU) {
         return WH_ERROR_BADARGS;
     }
     if (!g_wolfhsm_ready) {

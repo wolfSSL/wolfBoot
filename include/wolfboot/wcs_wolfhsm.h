@@ -13,15 +13,6 @@
 
 #ifdef WOLFCRYPT_TZ_WOLFHSM
 
-/* Match wolfHSM's WH_COMM_MTU; bridge buffers are sized to this. */
-#ifndef WCS_WOLFHSM_MAX_REQ_SIZE
-#define WCS_WOLFHSM_MAX_REQ_SIZE 1288U
-#endif
-
-#ifndef WCS_WOLFHSM_MAX_RSP_SIZE
-#define WCS_WOLFHSM_MAX_RSP_SIZE 1288U
-#endif
-
 int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         uint8_t *rsp, uint32_t *rspSz);
 

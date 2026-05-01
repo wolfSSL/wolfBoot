@@ -11,8 +11,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "wolfboot/wcs_wolfhsm.h"
-
 #include "wolfhsm/wh_client.h"
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_error.h"
@@ -59,11 +57,9 @@ static int wolfhsm_test_rng(void)
     return 0;
 }
 
-/*
- * Phase 1c exerciser. Initializes the wolfHSM client (which auto-registers
- * the wolfCrypt cryptocb under WH_DEV_ID), runs the CommInit handshake, then
- * exercises a real crypto op (RNG) routed through the secure-side server.
- */
+/* Initializes the wolfHSM client (auto-registers the wolfCrypt cryptocb
+ * under WH_DEV_ID), runs the CommInit handshake, exercises one crypto
+ * round-trip (RNG) through the secure-side server. */
 int cmd_wolfhsm_test(const char *args)
 {
     static const whTransportNscClientConfig nsc_cfg = { 0 };
