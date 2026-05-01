@@ -11,11 +11,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "wolfhsm_test.h"
+
 #include "wolfhsm/wh_client.h"
 #include "wolfhsm/wh_client_crypto.h"
 #include "wolfhsm/wh_common.h"
 #include "wolfhsm/wh_comm.h"
 #include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_keyid.h"
 
 #include "wolfssl/wolfcrypt/aes.h"
 #include "wolfssl/wolfcrypt/random.h"
@@ -168,10 +171,44 @@ out:
     return rc;
 }
 
-/* Initializes the wolfHSM client (auto-registers the wolfCrypt cryptocb
- * under WH_DEV_ID), runs the CommInit handshake, exercises crypto
- * round-trips (RNG, SHA256, AES with cached key) through the
- * secure-side server. */
+static int wolfhsm_test_persist(whClientContext *client, int *boot_state)
+{
+    static const uint8_t persist_key[16] = {
+        0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,
+        0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0x00
+    };
+    uint16_t keyId = WH_MAKE_KEYID(0, WCS_WOLFHSM_CLIENT_ID, 1);
+    uint8_t  out[sizeof(persist_key)];
+    uint16_t outSz = (uint16_t)sizeof(out);
+    int      rc;
+
+    memset(out, 0, sizeof(out));
+    rc = wh_Client_KeyExport(client, keyId, NULL, 0, out, &outSz);
+    if (rc == WH_ERROR_OK && outSz == sizeof(persist_key) &&
+        memcmp(out, persist_key, sizeof(persist_key)) == 0) {
+        printf("wolfHSM second boot path, restored persisted key\r\n");
+        *boot_state = WOLFHSM_TEST_SECOND_BOOT_OK;
+        return 0;
+    }
+
+    printf("wolfHSM first boot path, committing key to NVM\r\n");
+    keyId = WH_MAKE_KEYID(0, WCS_WOLFHSM_CLIENT_ID, 1);
+    rc = wh_Client_KeyCache(client, WH_NVM_FLAGS_USAGE_ENCRYPT, NULL, 0,
+                            persist_key, (uint16_t)sizeof(persist_key),
+                            &keyId);
+    if (rc != WH_ERROR_OK) {
+        printf("wolfHSM persist KeyCache failed: %d\r\n", rc);
+        return rc;
+    }
+    rc = wh_Client_KeyCommit(client, keyId);
+    if (rc != WH_ERROR_OK) {
+        printf("wolfHSM persist KeyCommit failed: %d\r\n", rc);
+        return rc;
+    }
+    *boot_state = WOLFHSM_TEST_FIRST_BOOT_OK;
+    return 0;
+}
+
 int cmd_wolfhsm_test(const char *args)
 {
     static const whTransportNscClientConfig nsc_cfg = { 0 };
@@ -180,6 +217,7 @@ int cmd_wolfhsm_test(const char *args)
     whClientContext    client;
     uint32_t out_clientid = 0;
     uint32_t out_serverid = 0;
+    int boot_state = WOLFHSM_TEST_FAIL;
     int rc;
 
     (void)args;
@@ -198,14 +236,14 @@ int cmd_wolfhsm_test(const char *args)
     rc = wh_Client_Init(&client, &cfg);
     if (rc != WH_ERROR_OK) {
         printf("wolfHSM Init failed: %d\r\n", rc);
-        return rc;
+        return WOLFHSM_TEST_FAIL;
     }
 
     rc = wh_Client_CommInit(&client, &out_clientid, &out_serverid);
     if (rc != WH_ERROR_OK) {
         printf("wolfHSM CommInit failed: %d\r\n", rc);
         (void)wh_Client_Cleanup(&client);
-        return rc;
+        return WOLFHSM_TEST_FAIL;
     }
 
     printf("wolfHSM CommInit ok (client=%u server=%u)\r\n",
@@ -214,25 +252,31 @@ int cmd_wolfhsm_test(const char *args)
     rc = wolfhsm_test_rng();
     if (rc != 0) {
         (void)wh_Client_Cleanup(&client);
-        return rc;
+        return WOLFHSM_TEST_FAIL;
     }
 
     rc = wolfhsm_test_sha256();
     if (rc != 0) {
         (void)wh_Client_Cleanup(&client);
-        return rc;
+        return WOLFHSM_TEST_FAIL;
     }
 
     rc = wolfhsm_test_aes_cached(&client);
     if (rc != 0) {
         (void)wh_Client_Cleanup(&client);
-        return rc;
+        return WOLFHSM_TEST_FAIL;
+    }
+
+    rc = wolfhsm_test_persist(&client, &boot_state);
+    if (rc != 0) {
+        (void)wh_Client_Cleanup(&client);
+        return WOLFHSM_TEST_FAIL;
     }
 
     printf("wolfHSM NSC tests passed\r\n");
 
     (void)wh_Client_Cleanup(&client);
-    return 0;
+    return boot_state;
 }
 
 #endif /* WOLFCRYPT_TZ_WOLFHSM */
