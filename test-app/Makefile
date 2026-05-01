@@ -5,6 +5,7 @@
 
 WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
 WOLFBOOT_LIB_WOLFTPM?=../lib/wolfTPM
+WOLFBOOT_LIB_WOLFHSM?=../lib/wolfHSM
 WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
 WOLFTPM_LOCAL_OBJDIR?=wolftpm_obj
 WOLFHSM_LOCAL_OBJDIR?=wolfhsm_obj
