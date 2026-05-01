@@ -30,6 +30,13 @@
 #ifdef WOLFCRYPT_SECURE_MODE
    int hal_trng_get_entropy(unsigned char *out, unsigned len);
 #  define CUSTOM_RAND_GENERATE_SEED hal_trng_get_entropy
+   /* SECURE_MODE outside test/bench used to enable AES CFB explicitly
+    * via the finalize.h else-else branch. Keep that behavior here so
+    * the TZ-PSA, TZ-FWTPM, and any future SECURE_MODE sub-mode all
+    * have AES CFB available. */
+#  ifndef WOLFSSL_AES_CFB
+#    define WOLFSSL_AES_CFB
+#  endif
 #endif
 
 #if defined(WOLFCRYPT_TZ_PSA)

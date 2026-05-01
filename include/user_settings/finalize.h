@@ -28,16 +28,58 @@
 #ifndef _WOLFBOOT_USER_SETTINGS_FINALIZE_H_
 #define _WOLFBOOT_USER_SETTINGS_FINALIZE_H_
 
-/* WOLFBOOT_NEEDS_* reconciliation
+/* ------------------------------------------------------------------
+ * NEEDS_* reconciliation
  * ------------------------------------------------------------------
- * Positive intent markers from cascade.h or feature fragments map here
- * to wolfCrypt's negative (NO_*, WC_NO_*) flags. The full marker
- * vocabulary is documented in the refactor plan. */
+ * Each negative wolfCrypt flag (NO_*, WC_NO_*) is gated by the absence
+ * of its matching WOLFBOOT_NEEDS_* marker. Markers are declared in
+ * cascade.h (from feature flags) or in fragment headers. */
+
+/* HASHDRBG: positive when needed, WC_NO_HASHDRBG otherwise.
+ * Note: test_bench.h's non-LPC55S69 path explicitly defines
+ * WC_NO_HASHDRBG itself; this `#ifndef` won't redefine it. */
+#ifdef WOLFBOOT_NEEDS_HASHDRBG
+#  ifndef HAVE_HASHDRBG
+#    define HAVE_HASHDRBG
+#  endif
+#else
+#  ifndef WC_NO_HASHDRBG
+#    define WC_NO_HASHDRBG
+#  endif
+#endif
+
+#ifndef WOLFBOOT_NEEDS_RNG
+#  define WC_NO_RNG
+#endif
+
+#ifndef WOLFBOOT_NEEDS_AES
+#  define NO_AES
+#endif
+#ifndef WOLFBOOT_NEEDS_AES_CBC
+#  define NO_AES_CBC
+#endif
+#ifndef WOLFBOOT_NEEDS_HMAC
+#  define NO_HMAC
+#endif
+#ifndef WOLFBOOT_NEEDS_DEV_RANDOM
+#  define NO_DEV_RANDOM
+#endif
+#ifndef WOLFBOOT_NEEDS_ECC_KEY_EXPORT
+#  define NO_ECC_KEY_EXPORT
+#endif
+#ifndef WOLFBOOT_NEEDS_ASN
+#  define NO_ASN
+#endif
 #ifndef WOLFBOOT_NEEDS_CMAC
 #  define NO_CMAC
 #endif
 #ifndef WOLFBOOT_NEEDS_KDF
 #  define NO_KDF
+#endif
+
+/* RSA: skip NO_RSA when NEEDS_RSA is set. */
+#ifndef WOLFBOOT_NEEDS_RSA
+#  define NO_RSA
 #endif
 
 /* HAVE_PWDBASED is opted into by EXT_ENCRYPTED, SECURE_PKCS11, and
@@ -46,94 +88,16 @@
 #  define NO_PWDBASED
 #endif
 
-/* RNG / HASHDRBG / NO_AES_CBC: today disabled unless any of the
- * "needs entropy" features are active. */
-#if !defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_TPM_PARMENC) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
-#  if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-        defined(WOLFBOOT_SIGN_ML_DSA)) && \
-      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#    define WC_NO_RNG
-#  endif
-#  define WC_NO_HASHDRBG
-#  define NO_AES_CBC
-#else
-#  if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
-#    if defined(WOLFSSL_NXP_LPC55S69_WITH_HWACCEL) \
-        || defined(WOLFSSL_NXP_LPC55S69_NO_HWACCEL)
-       /* use actual rng hardware for seed, HASHDRBG for generation */
-#      define HAVE_HASHDRBG
-#      define HAVE_AES_ECB
-#      define WOLFSSL_AES_OFB
-#      define WOLFSSL_AES_CFB
-#      define WOLFSSL_AES_COUNTER
-#      define WOLFSSL_STATIC_MEMORY_TEST_SZ (30 * 1024)
-#      define WOLFSSL_SHA256
-#      define WOLFSSL_SHA384
-#      define WOLFSSL_SHA512
-#    else
-       /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
-        * WARNING: my_rng_seed_gen is NOT cryptographically secure.
-        * Only used in test-app builds, not in production wolfBoot. */
-#      define WC_NO_HASHDRBG
-#      define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
-#      define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
-       extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
-#    endif
-
-#    define HAVE_AESGCM
-#    define GCM_TABLE
-#  else
-#    define HAVE_HASHDRBG
-#    define WOLFSSL_AES_CFB
-#  endif
-#endif
-
-/* AES core: stripped unless any AES-using fragment is active. */
-#if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
-    !defined(WOLFBOOT_TPM_PARMENC) && !defined(WOLFCRYPT_SECURE_MODE) && \
-    !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
-#  define NO_AES
-#endif
-
-/* HMAC: stripped unless TPM / secure mode / test/bench is active. */
-#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
-#  define NO_HMAC
-#endif
-
-/* RNG / ECC key export / ASN: second copy of the negated chain for the
- * "no TPM, no secure, no test/bench" path. Distinct from the block above
- * because it runs after WC_NO_HASHDRBG / NO_DEV_RANDOM are decided. */
-#if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
-    !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
-#  if !(defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-        defined(WOLFBOOT_SIGN_ML_DSA)) && \
-      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#    define WC_NO_RNG
-#  endif
-#  define WC_NO_HASHDRBG
-#  define NO_DEV_RANDOM
-#  if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#    define NO_ECC_KEY_EXPORT
-#    if defined(NO_RSA)
-#      define NO_ASN
-#    endif
-#  endif
-#endif
-
-/* BASE64 / NO_CODING: opt-in via TPM_SEAL+ATA_DISK_LOCK or wolfHSM. */
-#if (defined(WOLFBOOT_TPM_SEAL) && defined(WOLFBOOT_ATA_DISK_LOCK)) || \
-    defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
-    defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+/* BASE64 / NO_CODING. */
+#ifdef WOLFBOOT_NEEDS_BASE64
 #  define WOLFSSL_BASE64_ENCODE
 #else
 #  define NO_CODING
 #endif
 
-/* Always-on disables (no fragment opts out). */
+/* ------------------------------------------------------------------
+ * Always-on disables (no fragment opts out today).
+ * ------------------------------------------------------------------ */
 #define NO_DH
 #define WOLFSSL_NO_PEM
 #define NO_ASN_TIME
@@ -169,7 +133,9 @@
 #  define BENCH_EMBEDDED
 #endif
 
-/* Memory model. */
+/* ------------------------------------------------------------------
+ * Memory model.
+ * ------------------------------------------------------------------ */
 #if defined(WOLFSSL_SP_MATH) || defined(WOLFSSL_SP_MATH_ALL)
    /* Disable VLAs */
 #  define WOLFSSL_SP_NO_DYN_STACK
@@ -185,9 +151,7 @@
 #    define WOLFSSL_SP_NO_MALLOC
 #    define WOLFSSL_SP_NO_DYN_STACK
 #  endif
-#  if !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
-      !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
-      !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
+#  ifndef WOLFBOOT_NEEDS_MALLOC
 #    define NO_WOLFSSL_MEMORY
 #    define WOLFSSL_NO_MALLOC
 #  endif
