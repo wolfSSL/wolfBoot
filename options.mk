@@ -1147,6 +1147,7 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   endif
   WOLFCRYPT_OBJS+=src/store_sbrk.o
   WOLFCRYPT_OBJS+=src/wolfhsm_callable.o
+  WOLFCRYPT_OBJS+=src/wolfhsm_flash_hal.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
@@ -1165,7 +1166,6 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   endif
   endif
   WOLFHSM_OBJS+=$(WOLFHSM_SERVER_OBJS)
-  WOLFHSM_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_ramsim.o
   WOLFHSM_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz/wh_transport_nsc.o
   STACK_USAGE=20000
 endif
