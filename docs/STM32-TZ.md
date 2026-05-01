@@ -33,6 +33,19 @@ The `WOLFCRYPT_TZ_PSA` option provides a standard PSA Crypto interface using
 wolfPSA in the secure domain. The key storage uses the same secure flash
 keystore backend as PKCS11, exposed through the wolfPSA store API.
 
+### wolfHSM API in non-secure world
+
+The `WOLFCRYPT_TZ_WOLFHSM` option hosts a wolfHSM server inside the secure
+domain and exposes it to non-secure applications through a single non-secure
+callable veneer. Non-secure code uses the standard wolfCrypt API with the
+wolfHSM client cryptocb registered under `WH_DEV_ID`; key material, the
+keystore, and crypto operations stay in the secure domain. Persistent keys
+live in the same secure flash keystore region used by PKCS11 and PSA, with
+two-partition journaling for power-fail safety.
+
+See [wolfHSM](wolfHSM.md) for the full configuration, build, flash, and
+test recipe on STM32H5.
+
 ### PSA Initial Attestation (DICE)
 
 When `WOLFCRYPT_TZ_PSA=1` is enabled, wolfBoot exposes the PSA Initial
