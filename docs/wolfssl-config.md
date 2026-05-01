@@ -836,9 +836,21 @@ Recall the polarity rules from [Section 3.1](#31-why-it-exists):
   vocabulary.
 
 The tell that you're in this case: you `#define HAVE_X` in your
-fragment, build, and find that the wolfCrypt feature is still
-stripped from the binary. Look at `finalize.h` — there will be a
-`#define NO_X` (or `#define WC_NO_X`) in the always-on disables block.
+fragment, build, and either (a) the build fails with the assertion
+
+```
+error: "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
+```
+
+raised by the `#error` directive in `finalize.h`'s always-on block, or
+(b) the build succeeds but the wolfCrypt feature is still stripped
+from the binary because `finalize.h` later defines `NO_X` and that
+wins. Most always-on disables in `finalize.h` are guarded by an
+assertion that catches the polarity-mismatch at compile time and
+points the developer at this section. A handful of disables (the ones
+without a canonical positive form, like `NO_ASN_TIME`, or the
+environment ones, like `NO_FILESYSTEM`) have no assertion; for those
+you'll only see case (b).
 
 #### Worked example: adding `WOLFBOOT_NEEDS_DH`
 
