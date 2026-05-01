@@ -112,7 +112,6 @@ static inline int fp_truncate(FILE *f, size_t len)
 #include <wolfssl/wolfcrypt/error-crypt.h>
 
 #ifdef WOLFSSL_HAVE_LMS
-    #include <wolfssl/wolfcrypt/lms.h>
     #ifdef HAVE_LIBLMS
         #include <wolfssl/wolfcrypt/ext_lms.h>
     #else
@@ -121,7 +120,6 @@ static inline int fp_truncate(FILE *f, size_t len)
 #endif
 
 #ifdef WOLFSSL_HAVE_XMSS
-    #include <wolfssl/wolfcrypt/xmss.h>
     #ifdef HAVE_LIBXMSS
         #include <wolfssl/wolfcrypt/ext_xmss.h>
     #else

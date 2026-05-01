@@ -602,7 +602,6 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
 #endif /* WOLFBOOT_SIGN_RSA_ANY */
 
 #ifdef WOLFBOOT_SIGN_LMS
-#include <wolfssl/wolfcrypt/lms.h>
 #ifdef HAVE_LIBLMS
     #include <wolfssl/wolfcrypt/ext_lms.h>
 #else
@@ -670,7 +669,6 @@ static void wolfBoot_verify_signature_lms(uint8_t key_slot,
 #endif /* WOLFBOOT_SIGN_LMS */
 
 #ifdef WOLFBOOT_SIGN_XMSS
-#include <wolfssl/wolfcrypt/xmss.h>
 #ifdef HAVE_LIBXMSS
     #include <wolfssl/wolfcrypt/ext_xmss.h>
 #else
