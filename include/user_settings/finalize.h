@@ -233,6 +233,13 @@
 #  endif
 #endif
 
+/* base.h skips the XTOLOWER definition under WOLFSSL_ARMASM (the asm port
+ * doesn't link tolower); CTYPE_USER still suppresses wolfCrypt's default,
+ * so provide an identity fallback for asn.c's case-insensitive name match. */
+#ifndef XTOLOWER
+#  define XTOLOWER(x) (x)
+#endif
+
 /* WOLF_CRYPTO_CB requires WC_RNG type for cryptocb.h function declarations.
  * Forward-declare as incomplete type — sufficient for WC_RNG* pointers in
  * function signatures. We never call functions that dereference WC_RNG. */
