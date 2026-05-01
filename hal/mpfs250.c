@@ -327,8 +327,10 @@ int hal_dts_fixup(void* dts_addr)
     wolfBoot_printf("FDT: Version %d, Size %d\n",
         fdt_version(fdt), fdt_totalsize(fdt));
 
-    /* Expand total size to allow adding/modifying properties */
-    fdt_set_totalsize(fdt, fdt_totalsize(fdt) + 512);
+    /* Expand total size to allow adding/modifying properties.
+     * Sizing comes from WOLFBOOT_FDT_FIXUP_HEADROOM in include/fdt.h. */
+    fdt_set_totalsize(fdt,
+        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
 
     /* Find /chosen node */
     off = fdt_find_node_offset(fdt, -1, "chosen");

@@ -908,11 +908,11 @@ ifeq ($(GZIP),1)
   CFLAGS+=-DWOLFBOOT_GZIP
 endif
 
-# RAMDISK=1 enables FIT ramdisk (initramfs) extraction and DTB
+# FIT_RAMDISK=1 enables FIT ramdisk (initramfs) extraction and DTB
 # /chosen/linux,initrd-{start,end} fixup. Compressed (gzip) ramdisks
 # decompress through the same path when GZIP=1.
-RAMDISK ?= 0
-ifeq ($(RAMDISK),1)
+FIT_RAMDISK ?= 0
+ifeq ($(FIT_RAMDISK),1)
   CFLAGS+=-DWOLFBOOT_FIT_RAMDISK
 endif
 

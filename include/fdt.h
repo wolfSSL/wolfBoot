@@ -127,6 +127,16 @@ uint64_t fdt64_to_cpu(uint64_t x);
 #define fdt_set_size_dt_strings(fdt, val)   (fdt_set_header(fdt, size_dt_strings, (val)))
 #define fdt_set_size_dt_struct(fdt, val)    (fdt_set_header(fdt, size_dt_struct, (val)))
 
+/* Headroom (bytes) appended to fdt_totalsize() before wolfBoot inserts
+ * /chosen properties. Sized to comfortably hold a full LINUX_BOOTARGS
+ * plus, when WOLFBOOT_FIT_RAMDISK is enabled, two 64-bit
+ * linux,initrd-{start,end} cells with property-name overhead. A target
+ * whose hal_dts_fixup() inserts more chosen entries can override this
+ * with -DWOLFBOOT_FDT_FIXUP_HEADROOM=<bytes>. */
+#ifndef WOLFBOOT_FDT_FIXUP_HEADROOM
+#define WOLFBOOT_FDT_FIXUP_HEADROOM 768
+#endif
+
 int fdt_check_header(const void *fdt);
 int fdt_next_node(const void *fdt, int offset, int *depth);
 int fdt_first_property_offset(const void *fdt, int nodeoffset);
