@@ -26,10 +26,8 @@
 #ifndef _WOLFBOOT_USER_SETTINGS_TPM_H_
 #define _WOLFBOOT_USER_SETTINGS_TPM_H_
 
-/* TPM Parameter Encryption: implied by KEYSTORE / SEAL. */
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
-#  define WOLFBOOT_TPM_PARMENC /* used in this file to gate features */
-#endif
+/* WOLFBOOT_TPM_PARMENC is derived in user_settings/cascade.h from
+ * WOLFBOOT_TPM_KEYSTORE / WOLFBOOT_TPM_SEAL. */
 
 #if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)
    /* Do not use heap */
@@ -48,6 +46,8 @@
 #    define WOLFSSL_AES_CFB
      /* Get access to mp_* math API's for ECC encrypt */
 #    define WOLFSSL_PUBLIC_MP
+     /* HASHDRBG is enabled via WOLFBOOT_NEEDS_HASHDRBG in cascade.h
+      * which makes finalize.h emit `#define HAVE_HASHDRBG`. */
      /* Configure RNG seed */
 #    include "../loader.h"
 #    define CUSTOM_RAND_GENERATE_SEED(buf, sz) \
