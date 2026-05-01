@@ -233,4 +233,11 @@
 #  endif
 #endif
 
+/* base.h skips the XTOLOWER definition under WOLFSSL_ARMASM (the asm port
+ * doesn't link tolower); CTYPE_USER still suppresses wolfCrypt's default,
+ * so provide an identity fallback for asn.c's case-insensitive name match. */
+#ifndef XTOLOWER
+#  define XTOLOWER(x) (x)
+#endif
+
 #endif /* _WOLFBOOT_USER_SETTINGS_FINALIZE_H_ */
