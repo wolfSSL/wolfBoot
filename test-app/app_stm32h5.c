@@ -219,7 +219,7 @@ static int cmd_tpm_quote(const char *args);
 static int cmd_fwtpm_test(const char *args);
 #endif
 #ifdef WOLFCRYPT_TZ_WOLFHSM
-extern int cmd_wolfhsm_test(const char *args);
+#include "wcs/wolfhsm_test.h"
 #endif
 
 
@@ -1511,7 +1511,7 @@ void main(void)
 #ifdef WOLFCRYPT_TZ_WOLFHSM
     ret = cmd_wolfhsm_test(NULL);
 #ifdef WOLFBOOT_TZ_TEST_NO_BKPT
-    if (ret == 0) {
+    if (ret == WOLFHSM_TEST_FIRST_BOOT_OK || ret == WOLFHSM_TEST_SECOND_BOOT_OK) {
         printf("WOLFHSM_TZ_TEST_PASS\r\n");
         while (1) { }
     } else {
@@ -1519,7 +1519,9 @@ void main(void)
         while (1) { }
     }
 #else
-    if (ret == 0)
+    if (ret == WOLFHSM_TEST_FIRST_BOOT_OK)
+        asm volatile ("bkpt #0x7d");
+    else if (ret == WOLFHSM_TEST_SECOND_BOOT_OK)
         asm volatile ("bkpt #0x7f");
     else
         asm volatile ("bkpt #0x7e");
