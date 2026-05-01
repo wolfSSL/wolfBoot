@@ -62,7 +62,6 @@
 #endif
 
 #if defined(WOLFSSL_HAVE_LMS)
-    #include <wolfssl/wolfcrypt/lms.h>
     #ifdef HAVE_LIBLMS
         #include <wolfssl/wolfcrypt/ext_lms.h>
     #else
@@ -71,7 +70,6 @@
 #endif
 
 #if defined(WOLFSSL_HAVE_XMSS)
-    #include <wolfssl/wolfcrypt/xmss.h>
     #ifdef HAVE_LIBXMSS
         #include <wolfssl/wolfcrypt/ext_xmss.h>
     #else
