@@ -225,7 +225,7 @@ extern int tolower(int c);
 
 /* RSA. Size and padding mode are independent: the SIGN_RSA{N} /
  * SIGN_SECONDARY_RSA{N} / AUX_PK_RSA{N} macros select size; the
- * SIGN_RSA_PSS / SIGN_SECONDARY_RSA_PSS / AUX_RSA_PSS modifiers (gated
+ * SIGN_RSA_PSS / SIGN_SECONDARY_RSA_PSS / AUX_PK_RSA_PSS modifiers (gated
  * separately below) add PSS padding support. */
 #if defined(WOLFBOOT_SIGN_RSA2048) || \
     defined(WOLFBOOT_SIGN_RSA3072) || \
@@ -244,7 +244,7 @@ extern int tolower(int c);
 #   define WC_ASN_HASH_SHA256
 #   if defined(WOLFBOOT_SIGN_RSA_PSS) || \
        defined(WOLFBOOT_SIGN_SECONDARY_RSA_PSS) || \
-       defined(WOLFBOOT_AUX_RSA_PSS)
+       defined(WOLFBOOT_AUX_PK_RSA_PSS)
 #       define WC_RSA_PSS
 #   endif
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \

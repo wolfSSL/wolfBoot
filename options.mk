@@ -1455,6 +1455,16 @@ ifneq ($(CERT_CHAIN_VERIFY),)
       CERT_CHAIN_GEN_ALGO+=rsapss4096
     endif
 
+    # If SIGN didn't match any of the cert-chain-supported algos above,
+    # fail loudly at make time instead of producing a malformed script
+    # invocation (empty --leaf-algo) that fails with a confusing error.
+    ifeq ($(strip $(CERT_CHAIN_GEN_ALGO)),)
+      $(error CERT_CHAIN_VERIFY=1 is not supported with SIGN=$(SIGN). \
+        The dummy cert chain generator supports SIGN values: ECC256, \
+        ECC384, RSA2048, RSA3072, RSA4096, RSAPSS2048, RSAPSS3072, \
+        RSAPSS4096. Set USER_CERT_CHAIN=<path> to supply a pre-built chain.)
+    endif
+
     # Per-level overrides for the dummy chain generator. Defaults: CA chain
     # uses the same algo as the leaf (SIGN-derived), SHA256 for cert sigs.
     # The leaf algo is fixed by SIGN — the leaf cert wraps the wolfBoot
@@ -1475,9 +1485,12 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     # Auto-bridge: the verifier in the bootloader must support whatever
     # algo and hash actually sign the dummy chain. Without this, a
     # non-default GEN_CA_ALGO/GEN_CA_HASH builds successfully but fails at
-    # runtime when the matching wolfCrypt module is absent.
-    AUX_PK_ALGOS   += $(CERT_CHAIN_GEN_CA_ALGO)
-    AUX_HASH_ALGOS += $(CERT_CHAIN_GEN_CA_HASH)
+    # runtime when the matching wolfCrypt module is absent. `override` is
+    # required so a user-supplied AUX_PK_ALGOS/AUX_HASH_ALGOS on the make
+    # command line (which would otherwise be read-only) doesn't silently
+    # defeat the auto-bridge.
+    override AUX_PK_ALGOS   += $(CERT_CHAIN_GEN_CA_ALGO)
+    override AUX_HASH_ALGOS += $(CERT_CHAIN_GEN_CA_HASH)
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
 endif
@@ -1533,7 +1546,7 @@ ifneq ($(strip $(AUX_PK_ALGOS)$(AUX_HASH_ALGOS)),)
   endif
   # PSS padding - any rsapss* token enables PSS for all selected RSA sizes
   ifneq ($(filter rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
-    CFLAGS += -DWOLFBOOT_AUX_RSA_PSS
+    CFLAGS += -DWOLFBOOT_AUX_PK_RSA_PSS
   endif
   # Add RSA objects if any RSA (PKCS#1 v1.5 or PSS) aux PK is requested
   ifneq ($(filter rsa2048 rsa3072 rsa4096 rsapss2048 rsapss3072 rsapss4096,$(AUX_PK_ALGOS_LIST)),)
