@@ -542,6 +542,25 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32u3.config
 
+  stm32c5_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32c5.config
+
+  stm32c5_no_clock_restore_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32c5.config
+      make-args: WOLFBOOT_RESTORE_CLOCK=0
+
+  stm32c5_dualbank_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32c5-dualbank.config
+
   stm32u5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
     with:

@@ -484,6 +484,14 @@ ifeq ($(TARGET),stm32u3)
   CFLAGS+=-I..
 endif
 
+ifeq ($(TARGET),stm32c5)
+  LSCRIPT_TEMPLATE=ARM-stm32c5.ld
+  CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
 ifeq ($(TARGET),nrf5340)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-nrf5340-ns.ld
@@ -855,6 +863,9 @@ ifeq ($(TARGET),stm32g0)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
 ifeq ($(TARGET),stm32c0)
+  CFLAGS+=-DNVM_FLASH_WRITEONCE=1
+endif
+ifeq ($(TARGET),stm32c5)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
 

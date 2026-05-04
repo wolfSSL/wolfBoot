@@ -39,6 +39,7 @@ This README describes configuration of supported targets.
 * [Renesas RZN2L](#renesas-rzn2l)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
 * [STM32C0](#stm32c0)
+* [STM32C5](#stm32c5)
 * [STM32F1](#stm32f1)
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
@@ -1818,6 +1819,174 @@ Reset the board — wolfBoot verifies v2, swaps partitions, and jumps to
 the new image. LD2 transitions from the slow (v1) blink to the fast
 (v2) blink; with `DEBUG_UART=1` the UART log shows the v1 → v2
 transition.
+
+
+## STM32C5
+
+The STM32C5 family (for example the STM32C5A3ZGT6 on NUCLEO-C5A3ZG) is
+a mainstream Cortex-M33 part **without TrustZone**, so the port is
+single-image only (no `-tz` or `-ns` variants). On the -ZG variant:
+1 MB internal flash, 256 KB SRAM, 8 KB pages, **128-bit (quad-word)
+flash write quantum** with per-quad-word ECC.
+
+The HAL writes flash in 16-byte aligned quad-words. When wolfBoot
+asks for a smaller or unaligned write, the HAL reads the surrounding
+flash and merges so each programmed quad-word is a complete ECC
+block - sub-quad-word writes leave ECC undefined and reads come back
+with bit-flipped "corrected" data.
+
+### Flash layout (stm32c5.config)
+
+Dual-bank flash (2 x 512 KB, 8 KB pages). Bank 1 holds wolfBoot +
+BOOT, bank 2 holds UPDATE + SWAP:
+
+```
+Bank 1:
+  0x08000000 - 0x0800FFFF  wolfBoot bootloader   (64 KB)
+  0x08010000 - 0x0807FFFF  BOOT partition        (0x70000, 448 KB)
+Bank 2:
+  0x08080000 - 0x080EFFFF  UPDATE partition      (0x70000, 448 KB)
+  0x080F0000 - 0x080F1FFF  SWAP sector           (8 KB)
+```
+
+### Clock and UART
+
+The reset SYSCLK is **HSIDIV3 = HSIS / 3 = 16 MHz** (RCC_CFGR1.SW=0
+selects HSIDIV3, RCC_CR1 reset value 0x22 = HSIDIV3ON | HSIDIV3RDY).
+wolfBoot brings SYSCLK to **144 MHz HCLK** in `clock_psi_on()` (called
+from `hal_init()`) via the
+PSIS clock chain (HSE 48 MHz reference -> PSI ref=48 MHz / out=144 MHz
+-> PSIS), with all bus prescalers /1 (PCLK1 = PCLK2 = PCLK3 = 144 MHz),
+flash 4 wait states and WRHIGHFREQ programming delay = 2.
+
+By default (`WOLFBOOT_RESTORE_CLOCK` set in `options.mk`),
+`hal_prepare_boot()` switches SYSCLK back to HSIDIV3 before handoff
+but **leaves PSIS, PSI and HSE running**. The loaded firmware's own
+`clock_psi_on()` then just pushes SYSCLK back from HSIDIV3 to PSIS -
+the HSE/PSI configuration it would have written is already in place,
+so it skips the HSE startup wait and the PSI reconfiguration entirely.
+This mirrors ST's `HAL_RCC_ResetSystemClock()` (the lightweight
+restore) rather than the full `HAL_RCC_Reset()`. Disabling HSE in
+`hal_prepare_boot()` and forcing the loaded firmware to re-enable it
+on a back-to-back cycle is not reliable on this part; the lightweight
+restore avoids that path entirely. Pass `WOLFBOOT_RESTORE_CLOCK=0`
+to skip the SYSCLK switch entirely and inherit PSIS @ 144 MHz directly.
+
+UART is always available in the test-app and enabled in wolfBoot via
+`DEBUG_UART=1` (on by default in the example config). USART2_BRR is
+computed for PCLK1 = 144 MHz. The NUCLEO-C5A3ZG ST-LINK virtual COM
+port is wired to MCU pins 36/37 (PA2/PA3) - **USART2** on AF7, 115200
+8N1, **not USART1 on PA9/PA10** (PA9/PA10 only reach the Arduino
+headers).
+
+### Building
+
+```sh
+cp config/examples/stm32c5.config .config
+make clean
+make
+```
+
+Default signing scheme is ECC256 + SHA256. Produces `wolfboot.bin`
+(~25 KB), `test-app/image_v1_signed.bin`, and `factory.bin` (BL +
+signed v1).
+
+### Flashing
+
+Use `STM32_Programmer_CLI` (from STM32CubeIDE or STM32CubeProgrammer
+v2.22+). pyocd has no STM32C5 target as of this writing. The C5
+debug access port is AP2; `mode=UR` (under-reset) is the most
+reliable connect mode while a previous image is running.
+
+```sh
+STM32_Programmer_CLI -c port=swd mode=UR -e all \
+    -d factory.bin 0x08000000 -v -rst
+```
+
+The test app blinks LD2 (PG1, **active low**): five slow blinks on
+v1 then it triggers an update and resets; v2 blinks fast forever
+once `wolfBoot_success()` is acknowledged.
+
+### Testing an Update
+
+Sign the test application as version 2 and flash it directly to the
+update partition:
+
+```sh
+./tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+STM32_Programmer_CLI -c port=swd mode=UR \
+    -d test-app/image_v2_signed.bin 0x08080000 -v -rst
+```
+
+On reset wolfBoot detects the staged v2, the v1 test-app calls
+`wolfBoot_update_trigger()` after its blink sequence and resets,
+wolfBoot performs the bank-to-bank swap, and v2 boots. With
+`DEBUG_UART=1` the UART log shows:
+
+```
+Booting version: 0x1
+TEST APP / App version: 1 / triggering update -> reset
+... swap output ...
+Booting version: 0x2
+TEST APP / App version: 2 / update OK -- success confirmed
+```
+
+### DUALBANK_SWAP variant
+
+`config/examples/stm32c5-dualbank.config` builds wolfBoot with
+`DUALBANK_SWAP=1`, using the STM32C5's `FLASH_OPTCR.SWAP_BANK`
+option byte (bit 31) to flip which physical bank is mapped at
+`0x08000000`. This replaces the copy-based swap with a single
+option-byte toggle and a system reset - much faster, no swap
+sector required.
+
+Layout:
+
+```
+Bank 1 (active by default):
+  0x08000000  wolfBoot                 (64 KB)
+  0x08010000  BOOT partition           (448 KB)
+Bank 2 (active after SWAP_BANK toggle):
+  0x08080000  wolfBoot copy            (64 KB)
+  0x08090000  UPDATE partition         (448 KB)
+```
+
+`hal_init()` runs `fork_bootloader()` on the first boot, comparing
+the contents of bank 1 and bank 2 and copying wolfBoot from bank 1
+into bank 2 if they differ. This guarantees the chip can boot from
+`0x08000000` regardless of which physical bank `SWAP_BANK` currently
+maps there. Subsequent boots are no-ops because the two copies match.
+
+Build, flash, and stage v2 are the same as the default config except
+the UPDATE partition lives at `0x08090000`:
+
+```sh
+cp config/examples/stm32c5-dualbank.config .config
+make distclean && make
+STM32_Programmer_CLI -c port=swd mode=UR -e all \
+    -d factory.bin 0x08000000 -v -rst
+./tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+STM32_Programmer_CLI -c port=swd mode=UR \
+    -d test-app/image_v2_signed.bin 0x08090000 -v -rst
+```
+
+After the swap completes the partition addresses stay the same from
+software's perspective (`WOLFBOOT_PARTITION_BOOT_ADDRESS = 0x08010000`
+keeps pointing at "current BOOT") - only the underlying bank is
+different. Subsequent updates stage at `0x08090000` again.
+
+### TrustZone (TZEN) is not supported
+
+The STM32C5 silicon does not implement the ARMv8-M Security Extensions
+(`__SAUREGION_PRESENT 0U` in the CMSIS device header) and has no
+GTZC, no `FLASH_NS_*` / `FLASH_SECCR*` aliases, and no secure
+peripheral address space. wolfBoot's TrustZone ports (L5, U5, H5)
+cannot be ported to the C5 - the hardware needed to partition memory
+and peripherals into secure / non-secure worlds is absent. For
+application security on the C5 use the MPU (`__MPU_PRESENT 1U`) and
+flash RDP (Read Out Protection); both are wolfBoot-orthogonal.
 
 
 ## STM32H5
