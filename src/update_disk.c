@@ -548,7 +548,13 @@ void RAMFUNCTION wolfBoot_start(void)
 
         (void)fit_find_images(fit, &kernel, &flat_dt, &ramdisk);
         if (kernel != NULL) {
-            load_address = fit_load_image(fit, kernel, NULL);
+            void *new_load = fit_load_image(fit, kernel, NULL);
+            if (new_load == NULL) {
+                wolfBoot_printf("FIT: failed to load kernel '%s'\r\n",
+                    kernel);
+                wolfBoot_panic();
+            }
+            load_address = new_load;
         }
         if (flat_dt != NULL) {
             uint8_t *dts_ptr = fit_load_image(fit, flat_dt, (int*)&dts_size);

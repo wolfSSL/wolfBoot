@@ -59,6 +59,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
+TESTS+=unit-fit-gzip unit-fit-nogzip
 
 include unit-sign-encrypted-output.mkfrag
 
@@ -323,6 +324,19 @@ unit-delta: ../../include/target.h unit-delta.c
 
 unit-gzip: ../../include/target.h unit-gzip.c
 	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP $(LDFLAGS)
+
+# FIT-loader gzip / unsupported-compression branch coverage. Built twice
+# from the same source: once with WOLFBOOT_GZIP (success + decompress
+# failure paths) and once without (compile-time fail-closed path).
+unit-fit-gzip: ../../include/target.h unit-fit-gzip.c
+	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_NO_PRINTF \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-fit-nogzip: ../../include/target.h unit-fit-gzip.c
+	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT \
+		-DWOLFBOOT_NO_PRINTF \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)

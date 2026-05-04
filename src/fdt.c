@@ -34,10 +34,15 @@
 #include "gzip.h"
 #endif
 
-/* Default upper bound on a single FIT subimage's decompressed size.
- * The outer wolfBoot signature already authenticates the FIT, but a
- * concrete cap defends against a malformed-but-signed FIT scribbling
- * across unrelated memory. Override per target via:
+/* Coarse upper bound on a single FIT subimage's decompressed size.
+ * This is a sanity ceiling, not a per-destination memory-safety
+ * bound. Authenticity of the FIT bytes is provided by the outer
+ * wolfBoot signature; this cap is a belt-and-suspenders limit so a
+ * malformed-but-signed gzip stream cannot inflate without bound.
+ * Callers that need a tighter, RAM-window-aware bound should use
+ * fit_load_image_ex() (FIT-`load` destination + explicit out_max)
+ * or fit_load_image_to() (caller-supplied destination + dst_max).
+ * Override per target via:
  *   CFLAGS+=-DWOLFBOOT_FIT_MAX_DECOMP=...
  */
 #ifndef WOLFBOOT_FIT_MAX_DECOMP
@@ -904,13 +909,22 @@ int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size)
 #define WOLFBOOT_LOAD_RAMDISK_ADDRESS 0
 #endif
 
+/* Upper bound on the (decompressed) ramdisk size. Defaults to the
+ * generic FIT decompression cap. Targets with a tighter known-safe
+ * RAM window for the ramdisk should override this. */
+#ifndef WOLFBOOT_FIT_MAX_RAMDISK
+#define WOLFBOOT_FIT_MAX_RAMDISK WOLFBOOT_FIT_MAX_DECOMP
+#endif
+
 /* Load a FIT ramdisk subimage and patch the DTB's /chosen
  * linux,initrd-{start,end} to point at it. If
- * WOLFBOOT_LOAD_RAMDISK_ADDRESS is nonzero, the ramdisk is relocated
- * to that fixed address (overrides the FIT's `load` property);
- * otherwise the address fit_load_image returned (FIT-specified or
- * in-FIT pointer) is used as-is. Caller passes the DTB pointer for
- * the initrd fixup, or NULL to skip the fixup.
+ * WOLFBOOT_LOAD_RAMDISK_ADDRESS is nonzero, the ramdisk is loaded
+ * directly to that fixed address - bypassing the FIT's `load`
+ * property entirely - so a gzip-compressed ramdisk is decompressed
+ * straight into the override (with the override capacity acting as
+ * the safety bound). Otherwise the address fit_load_image returned
+ * (FIT-specified or in-FIT pointer) is used as-is. Caller passes the
+ * DTB pointer for the initrd fixup, or NULL to skip the fixup.
  *
  * Returns 0 on success, -1 if the ramdisk node was found but the
  * load failed. The current callers ignore the return value
@@ -926,41 +940,52 @@ int fit_load_ramdisk(void* fit, const char* ramdisk_node, void* dts_addr)
         return -1;
     }
 
-    rd_ptr = (uint8_t*)fit_load_image(fit, ramdisk_node, &rd_size);
-    if (rd_ptr == NULL || rd_size <= 0) {
-        wolfBoot_printf("FIT: ramdisk node present but load failed\n");
-        return -1;
-    }
-
     if (WOLFBOOT_LOAD_RAMDISK_ADDRESS != 0) {
         rd_dst = (uint8_t*)WOLFBOOT_LOAD_RAMDISK_ADDRESS;
-        if (rd_ptr != rd_dst) {
-            wolfBoot_printf("Loading ramdisk: %p -> %p (%d bytes)\n",
-                rd_ptr, rd_dst, rd_size);
-            memcpy(rd_dst, rd_ptr, rd_size);
+        rd_ptr = (uint8_t*)fit_load_image_to(fit, ramdisk_node,
+            rd_dst, (uint32_t)WOLFBOOT_FIT_MAX_RAMDISK, &rd_size);
+        if (rd_ptr == NULL || rd_size <= 0) {
+            wolfBoot_printf("FIT: ramdisk node present but load failed\n");
+            return -1;
         }
-        else {
-            wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
-                rd_dst, rd_size);
-        }
+        wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
+            rd_dst, rd_size);
     }
     else {
+        rd_ptr = (uint8_t*)fit_load_image(fit, ramdisk_node, &rd_size);
+        if (rd_ptr == NULL || rd_size <= 0) {
+            wolfBoot_printf("FIT: ramdisk node present but load failed\n");
+            return -1;
+        }
         rd_dst = rd_ptr;
         wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
             rd_dst, rd_size);
     }
 
     if (dts_addr != NULL) {
-        (void)fdt_fixup_initrd(dts_addr,
+        int frc = fdt_fixup_initrd(dts_addr,
             (uint64_t)(uintptr_t)rd_dst, (uint64_t)rd_size);
+        if (frc != 0) {
+            wolfBoot_printf("FIT: fdt_fixup_initrd failed (rc=%d); "
+                "kernel will not see initrd\n", frc);
+            return -1;
+        }
     }
 
     return 0;
 }
 #endif /* WOLFBOOT_FIT_RAMDISK */
 
-void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
-    uint32_t out_max)
+/* Inner implementation shared by fit_load_image_ex and fit_load_image_to.
+ * When dst_override is non-NULL it replaces the FIT image's `load`
+ * property as the destination, so a compressed (gzip) payload is
+ * decompressed directly into the caller's buffer rather than being
+ * routed through the FIT-declared address. The `entry` property is
+ * also ignored when dst_override is in effect, since the caller wants
+ * the override address back.
+ */
+static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
+    uint32_t out_max, void* dst_override)
 {
     void *load, *entry, *data = NULL;
     int off, len = 0;
@@ -976,6 +1001,12 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
         data = (void*)fdt_getprop(fdt, off, "data", &len);
         load = fdt_getprop_address(fdt, off, "load");
         entry = fdt_getprop_address(fdt, off, "entry");
+        if (dst_override != NULL) {
+            /* Caller-supplied destination replaces the FIT load
+             * property and disables `entry` resolution. */
+            load = dst_override;
+            entry = NULL;
+        }
         if (data != NULL) {
             int is_gzip = 0;
             int is_unknown_comp = 0;
@@ -1073,9 +1104,24 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
 
 }
 
+void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
+    uint32_t out_max)
+{
+    return fit_load_image_inner(fdt, image, lenp, out_max, NULL);
+}
+
 void* fit_load_image(void* fdt, const char* image, int* lenp)
 {
     return fit_load_image_ex(fdt, image, lenp, WOLFBOOT_FIT_MAX_DECOMP);
+}
+
+void* fit_load_image_to(void* fdt, const char* image, void* dst,
+    uint32_t dst_max, int* lenp)
+{
+    if (dst == NULL) {
+        return NULL;
+    }
+    return fit_load_image_inner(fdt, image, lenp, dst_max, dst);
 }
 
 #endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */
