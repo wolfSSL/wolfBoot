@@ -172,6 +172,12 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
     const char** pramdisk);
 void* fit_load_image(void* fdt, const char* image, int* lenp);
 void* fit_load_image_ex(void* fdt, const char* image, int* lenp, uint32_t out_max);
+/* Load (and, if compressed, decompress) a FIT subimage directly to a
+ * caller-supplied destination buffer. Overrides the FIT image's
+ * `load` and `entry` properties - dst is both the destination and the
+ * value returned. dst_max bounds the decompressed size. */
+void* fit_load_image_to(void* fdt, const char* image, void* dst,
+    uint32_t dst_max, int* lenp);
 
 /* FDT initrd fixup: writes /chosen/linux,initrd-{start,end} as 64-bit
  * big-endian properties. Creates /chosen if missing. Returns 0 on success
