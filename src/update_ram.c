@@ -389,39 +389,7 @@ backup_on_failure:
         }
 #ifdef WOLFBOOT_FIT_RAMDISK
         if (ramdisk != NULL) {
-            int rd_size = 0;
-            uint8_t *rd_ptr = (uint8_t*)fit_load_image(fit, ramdisk, &rd_size);
-            if (rd_ptr != NULL && rd_size > 0) {
-                uint8_t *rd_dst;
-                /* If WOLFBOOT_LOAD_RAMDISK_ADDRESS is set (nonzero), use it
-                 * as the canonical destination (overrides the FIT's `load`
-                 * property). Otherwise honor whatever fit_load_image
-                 * returned (FIT-specified load addr or in-FIT pointer). */
-                if (WOLFBOOT_LOAD_RAMDISK_ADDRESS != 0) {
-                    rd_dst = (uint8_t*)WOLFBOOT_LOAD_RAMDISK_ADDRESS;
-                    if (rd_ptr != rd_dst) {
-                        wolfBoot_printf("Loading ramdisk: %p -> %p (%d bytes)\n",
-                            rd_ptr, rd_dst, rd_size);
-                        memcpy(rd_dst, rd_ptr, rd_size);
-                    }
-                    else {
-                        wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
-                            rd_dst, rd_size);
-                    }
-                }
-                else {
-                    rd_dst = rd_ptr;
-                    wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
-                        rd_dst, rd_size);
-                }
-                if (dts_addr != NULL) {
-                    (void)fdt_fixup_initrd((void*)dts_addr,
-                        (uint64_t)(uintptr_t)rd_dst, (uint64_t)rd_size);
-                }
-            }
-            else {
-                wolfBoot_printf("FIT: ramdisk node present but load failed\n");
-            }
+            (void)fit_load_ramdisk(fit, ramdisk, (void*)dts_addr);
         }
 #else
         (void)ramdisk;

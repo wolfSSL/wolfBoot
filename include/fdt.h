@@ -178,6 +178,14 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp, uint32_t out_ma
  * or a negative FDT_ERR_*. */
 int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size);
 
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* Load a FIT ramdisk subimage (optionally relocated to
+ * WOLFBOOT_LOAD_RAMDISK_ADDRESS) and patch /chosen/linux,initrd-*
+ * in the supplied DTB. Returns 0 on success, -1 on load failure.
+ * Callers typically ignore the return value (log-and-continue). */
+int fit_load_ramdisk(void* fit, const char* ramdisk_node, void* dts_addr);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
