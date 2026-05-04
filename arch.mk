@@ -264,6 +264,15 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),stm32c5)
+    CORTEX_M33=1
+    CFLAGS+=-Ihal
+    ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=0x08000000
+    LSCRIPT_IN=hal/$(TARGET).ld
+    SPI_TARGET=stm32
+  endif
+
   ifeq ($(TARGET),stm32h5)
     CORTEX_M33=1
     CFLAGS+=-Ihal
