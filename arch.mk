@@ -214,6 +214,11 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  # Defaults for linker script placeholders (overridden by wolfhal target)
+  WOLFHAL_FLASH_EXCLUDE_TEXT?=*(.text*)
+  WOLFHAL_FLASH_EXCLUDE_RODATA?=*(.rodata*)
+  WOLFHAL_FLASH_RAM_SECTIONS?=
+
   ifeq ($(TARGET),stm32wb)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
@@ -228,7 +233,6 @@ ifeq ($(ARCH),ARM)
           -I$(STM32CUBE)/Drivers/CMSIS/Include
     endif
   endif
-
 
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
@@ -455,6 +459,11 @@ else
   endif
 endif
 endif
+endif
+
+ifeq ($(TARGET),wolfhal)
+  WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
+  CFLAGS+=-I$(WOLFHAL_ROOT) -Ihal/boards/$(BOARD)
 endif
 
 
