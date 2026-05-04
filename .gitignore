@@ -187,9 +187,7 @@ tools/unit-tests/unit-update-ram-nofixed
 tools/unit-tests/unit-max-space
 tools/unit-tests/unit-sdhci-disk-unaligned
 tools/unit-tests/unit-fwtpm-stub
-
-
-
+tools/unit-tests/unit-gzip
 
 
 # Elf preprocessing tools
@@ -380,4 +378,3 @@ image.ub
 system-default.dtb
 test_output/
 sdcard.img
-

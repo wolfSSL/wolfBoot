@@ -40,15 +40,14 @@
 #define WOLFBOOT_GZIP_E_ISIZE      -7  /* trailer ISIZE mismatch */
 #define WOLFBOOT_GZIP_E_PARAM      -8  /* invalid parameter */
 
-/* RFC 1952 gzip wrapper constants */
+/* RFC 1952 gzip wrapper constants (format-defining; useful to callers
+ * that pre-validate the gzip magic/method before invoking the inflater).
+ * All other DEFLATE-internal constants live in src/gzip.c. */
 #define GZIP_MAGIC_ID1            0x1FU      /* first magic byte  */
 #define GZIP_MAGIC_ID2            0x8BU      /* second magic byte */
 #define GZIP_CM_DEFLATE           8          /* CM = DEFLATE      */
 #define GZIP_HEADER_MIN_SIZE      10         /* magic+CM+FLG+MTIME+XFL+OS */
 #define GZIP_TRAILER_SIZE         8          /* CRC32 + ISIZE     */
-#define GZIP_CRC32_INIT           0xFFFFFFFFU
-#define GZIP_CRC32_FINAL_XOR      0xFFFFFFFFU
-#define GZIP_CRC32_POLY           0xEDB88320U /* IEEE 802.3 reflected */
 
 /* RFC 1952 Sec. 2.3.1 header flag bits (FLG byte) */
 #define GZIP_FLG_FTEXT            0x01
@@ -57,46 +56,6 @@
 #define GZIP_FLG_FNAME            0x08
 #define GZIP_FLG_FCOMMENT         0x10
 #define GZIP_FLG_RESERVED         0xE0
-
-/* RFC 1951 DEFLATE - alphabet sizes */
-#define GZIP_MAX_HUFF_BITS        15    /* max Huffman code length */
-#define GZIP_CL_CODES             19    /* code-length alphabet    */
-#define GZIP_LITLEN_CODES         288   /* literal/length alphabet */
-#define GZIP_DIST_CODES           32    /* distance alphabet       */
-
-/* RFC 1951 DEFLATE - fixed Huffman boundaries (Sec. 3.2.6) */
-#define GZIP_FIXED_LIT_END_8BIT   144   /* 0..143    -> 8 bits */
-#define GZIP_FIXED_LIT_END_9BIT   256   /* 144..255  -> 9 bits */
-#define GZIP_FIXED_LIT_END_7BIT   280   /* 256..279  -> 7 bits */
-#define GZIP_FIXED_LIT_END        288   /* 280..287  -> 8 bits */
-#define GZIP_FIXED_DIST_COUNT     30    /* 0..29     -> 5 bits */
-
-/* RFC 1951 DEFLATE - alphabet bounds (Sec. 3.2.4 / 3.2.5) */
-#define GZIP_EOB_SYMBOL           256   /* end-of-block marker */
-#define GZIP_LENGTH_CODE_BASE     257   /* first length code   */
-#define GZIP_LENGTH_CODE_COUNT    29    /* 257..285            */
-#define GZIP_DIST_CODE_COUNT      30    /* 0..29               */
-
-/* RFC 1951 DEFLATE - dynamic block header (Sec. 3.2.7) */
-#define GZIP_HLIT_BITS            5     /* HLIT field width    */
-#define GZIP_HDIST_BITS           5     /* HDIST field width   */
-#define GZIP_HCLEN_BITS           4     /* HCLEN field width   */
-#define GZIP_HLIT_BASE            257   /* HLIT + 257          */
-#define GZIP_HDIST_BASE           1     /* HDIST + 1           */
-#define GZIP_HCLEN_BASE           4     /* HCLEN + 4           */
-#define GZIP_CL_LEN_BITS          3     /* code-length code is 3 bits */
-
-/* RFC 1951 DEFLATE - run-length repeat symbols (Sec. 3.2.7).
- *   sym 16: 2 extra bits, repeat previous length 3..6 times
- *   sym 17: 3 extra bits, repeat zero        3..10 times
- *   sym 18: 7 extra bits, repeat zero       11..138 times
- */
-#define GZIP_REPEAT_PREV_EXTRA    2
-#define GZIP_REPEAT_PREV_BASE     3
-#define GZIP_REPEAT_Z3_EXTRA      3
-#define GZIP_REPEAT_Z3_BASE       3
-#define GZIP_REPEAT_Z7_EXTRA      7
-#define GZIP_REPEAT_Z7_BASE       11
 
 /* Decompress a gzip stream.
  *

@@ -1289,8 +1289,11 @@ mkimage -f hal/mpfs250.its fitImage
 ```
 
 At boot, wolfBoot decompresses the kernel into `0x80200000` directly out of
-the FIT `data` blob and verifies the FIT `hash-1` SHA-256 against the
-decompressed bytes (defense-in-depth on top of the outer wolfBoot signature).
+the FIT `data` blob. Image integrity is provided by the outer wolfBoot
+signature over the entire FIT (which covers the compressed `data` bytes per
+the FIT spec), and post-decompress integrity by gzip's CRC32 + ISIZE
+trailer; per-image `hash-1` subnodes are not re-verified at runtime since
+they would be redundant with the outer signature.
 
 ##### Option B - Uncompressed FIT (`GZIP=0`)
 
@@ -3500,8 +3503,9 @@ Compressed (gzip) ramdisks are supported transparently when `GZIP=1` is set
 (the same gzip path used for the kernel handles `compression = "gzip"` on
 the ramdisk node). The outer wolfBoot signature already authenticates the
 entire FIT, so the ramdisk inherits authentication without per-image
-hashing - though if the FIT does include a `hash-1` subnode under the
-ramdisk image, wolfBoot will verify it after decompression.
+hashing. Per-image `hash-1` subnodes (if present) are not re-verified at
+runtime - per the FIT spec they hash the in-FIT `data` bytes, which the
+outer wolfBoot signature already covers.
 
 Example FIT layout:
 
@@ -3743,8 +3747,10 @@ sf write ${loadaddr} 0x800000 ${filesize}
 
 The compressed FIT is roughly half the size of the uncompressed equivalent
 on a typical PetaLinux ARM64 kernel, which lets a larger kernel fit in the
-existing 44 MB QSPI partition. wolfBoot decompresses to `0x00200000` at boot
-and verifies the FIT `hash-1` SHA-256 against the decompressed bytes.
+existing 44 MB QSPI partition. wolfBoot decompresses to `0x00200000` at boot.
+Integrity is provided by the outer wolfBoot signature over the entire FIT
+plus gzip's CRC32 + ISIZE trailer on the decompressed payload; per-image
+`hash-1` subnodes are not re-verified at runtime.
 
 ##### Option B - Uncompressed kernel (`GZIP=0`)
 

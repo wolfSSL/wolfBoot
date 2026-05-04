@@ -32,13 +32,7 @@
 
 #ifdef WOLFBOOT_GZIP
 #include "gzip.h"
-#ifdef WOLFBOOT_HASH_SHA256
-#include <wolfssl/wolfcrypt/sha256.h>
 #endif
-#ifdef WOLFBOOT_HASH_SHA384
-#include <wolfssl/wolfcrypt/sha512.h>
-#endif
-#endif /* WOLFBOOT_GZIP */
 
 /* Default upper bound on a single FIT subimage's decompressed size.
  * The outer wolfBoot signature already authenticates the FIT, but a
@@ -902,142 +896,68 @@ int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size)
     return 0;
 }
 
-#ifdef WOLFBOOT_GZIP
-/* Verify FIT per-subimage hash-1 subnode against the loaded/decompressed
- * image bytes. This is defense-in-depth: the outer wolfBoot signature
- * already authenticates the entire FIT blob, but recomputing the per-image
- * hash catches inflater bugs and corrupt streams that still parse.
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* Defensive fallback: targets without a fixed relocation address
+ * leave WOLFBOOT_LOAD_RAMDISK_ADDRESS at 0, in which case the
+ * ramdisk is used in place. */
+#ifndef WOLFBOOT_LOAD_RAMDISK_ADDRESS
+#define WOLFBOOT_LOAD_RAMDISK_ADDRESS 0
+#endif
+
+/* Load a FIT ramdisk subimage and patch the DTB's /chosen
+ * linux,initrd-{start,end} to point at it. If
+ * WOLFBOOT_LOAD_RAMDISK_ADDRESS is nonzero, the ramdisk is relocated
+ * to that fixed address (overrides the FIT's `load` property);
+ * otherwise the address fit_load_image returned (FIT-specified or
+ * in-FIT pointer) is used as-is. Caller passes the DTB pointer for
+ * the initrd fixup, or NULL to skip the fixup.
  *
- * Returns 0 on success or when no usable hash node is present.
- * Returns negative on hash mismatch.
- *
- * If hash-1.algo names an algorithm that is not compiled into this build,
- * a warning is printed and 0 is returned (best-effort verification). */
-static int fit_verify_hash(const void *fdt, int img_off,
-                           const uint8_t *data, uint32_t data_len)
+ * Returns 0 on success, -1 if the ramdisk node was found but the
+ * load failed. The current callers ignore the return value
+ * (log-and-continue), so a missing/failed ramdisk does not abort
+ * the boot. */
+int fit_load_ramdisk(void* fit, const char* ramdisk_node, void* dts_addr)
 {
-    int ret = 0;
-    int done = 0;
-    int hash_off, len = 0;
-    const char *algo = NULL;
-    const uint8_t *value = NULL;
-#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
-    int did_init = 0;
-#endif
-#ifdef WOLFBOOT_HASH_SHA256
-    wc_Sha256 sha256_ctx;
-    uint8_t sha256_digest[WC_SHA256_DIGEST_SIZE];
-#endif
-#ifdef WOLFBOOT_HASH_SHA384
-    wc_Sha384 sha384_ctx;
-    uint8_t sha384_digest[WC_SHA384_DIGEST_SIZE];
-#endif
+    int rd_size = 0;
+    uint8_t *rd_ptr;
+    uint8_t *rd_dst;
 
-    hash_off = fdt_subnode_offset_namelen(fdt, img_off, "hash-1", 6);
-    if (hash_off < 0) {
-        done = 1; /* no hash-1 subnode; nothing to verify */
+    if (fit == NULL || ramdisk_node == NULL) {
+        return -1;
     }
 
-    if (!done) {
-        algo = (const char*)fdt_getprop(fdt, hash_off, "algo", &len);
-        if (algo == NULL || len <= 0) {
-            wolfBoot_printf("FIT hash-1: missing algo\n");
-            done = 1;
-        }
+    rd_ptr = (uint8_t*)fit_load_image(fit, ramdisk_node, &rd_size);
+    if (rd_ptr == NULL || rd_size <= 0) {
+        wolfBoot_printf("FIT: ramdisk node present but load failed\n");
+        return -1;
     }
 
-    if (!done) {
-        value = (const uint8_t*)fdt_getprop(fdt, hash_off, "value", &len);
-        if (value == NULL) {
-            /* mkimage emits the hash node but populates 'value' only after
-             * signing; an empty 'value' on an unsigned tree is benign. */
-            done = 1;
-        }
-    }
-
-#ifdef WOLFBOOT_HASH_SHA256
-    if (!done && strcmp(algo, "sha256") == 0) {
-        if (len != WC_SHA256_DIGEST_SIZE) {
-            wolfBoot_printf("FIT hash-1: bad sha256 value len %d\n", len);
-            ret = -1;
-        }
-        if (ret == 0) {
-            ret = wc_InitSha256(&sha256_ctx);
-            if (ret == 0) {
-                did_init = 1;
-            }
-        }
-        if (ret == 0) {
-            ret = wc_Sha256Update(&sha256_ctx, data, (word32)data_len);
-        }
-        if (ret == 0) {
-            ret = wc_Sha256Final(&sha256_ctx, sha256_digest);
-        }
-        if (did_init) {
-            wc_Sha256Free(&sha256_ctx);
-            did_init = 0;
-        }
-        if (ret != 0) {
-            wolfBoot_printf("FIT hash-1 (sha256): wc_Sha256 failed rc=%d\n",
-                ret);
-            ret = -1;
-        }
-        else if (memcmp(sha256_digest, value, WC_SHA256_DIGEST_SIZE) != 0) {
-            wolfBoot_printf("FIT hash-1 (sha256): MISMATCH\n");
-            ret = -1;
+    if (WOLFBOOT_LOAD_RAMDISK_ADDRESS != 0) {
+        rd_dst = (uint8_t*)WOLFBOOT_LOAD_RAMDISK_ADDRESS;
+        if (rd_ptr != rd_dst) {
+            wolfBoot_printf("Loading ramdisk: %p -> %p (%d bytes)\n",
+                rd_ptr, rd_dst, rd_size);
+            memcpy(rd_dst, rd_ptr, rd_size);
         }
         else {
-            wolfBoot_printf("FIT hash-1 (sha256): OK\n");
+            wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
+                rd_dst, rd_size);
         }
-        done = 1;
     }
-#endif
+    else {
+        rd_dst = rd_ptr;
+        wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n",
+            rd_dst, rd_size);
+    }
 
-#ifdef WOLFBOOT_HASH_SHA384
-    if (!done && strcmp(algo, "sha384") == 0) {
-        if (len != WC_SHA384_DIGEST_SIZE) {
-            wolfBoot_printf("FIT hash-1: bad sha384 value len %d\n", len);
-            ret = -1;
-        }
-        if (ret == 0) {
-            ret = wc_InitSha384(&sha384_ctx);
-            if (ret == 0) {
-                did_init = 1;
-            }
-        }
-        if (ret == 0) {
-            ret = wc_Sha384Update(&sha384_ctx, data, (word32)data_len);
-        }
-        if (ret == 0) {
-            ret = wc_Sha384Final(&sha384_ctx, sha384_digest);
-        }
-        if (did_init) {
-            wc_Sha384Free(&sha384_ctx);
-            did_init = 0;
-        }
-        if (ret != 0) {
-            wolfBoot_printf("FIT hash-1 (sha384): wc_Sha384 failed rc=%d\n",
-                ret);
-            ret = -1;
-        }
-        else if (memcmp(sha384_digest, value, WC_SHA384_DIGEST_SIZE) != 0) {
-            wolfBoot_printf("FIT hash-1 (sha384): MISMATCH\n");
-            ret = -1;
-        }
-        else {
-            wolfBoot_printf("FIT hash-1 (sha384): OK\n");
-        }
-        done = 1;
+    if (dts_addr != NULL) {
+        (void)fdt_fixup_initrd(dts_addr,
+            (uint64_t)(uintptr_t)rd_dst, (uint64_t)rd_size);
     }
-#endif
 
-    if ((ret == 0) && !done) {
-        wolfBoot_printf("FIT hash-1: algo '%s' not built in, skipping\n",
-            algo);
-    }
-    return ret;
+    return 0;
 }
-#endif /* WOLFBOOT_GZIP */
+#endif /* WOLFBOOT_FIT_RAMDISK */
 
 void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
     uint32_t out_max)
@@ -1112,16 +1032,18 @@ void* fit_load_image_ex(void* fdt, const char* image, int* lenp,
                     memcpy(load, data, len);
                 }
 
-#ifdef WOLFBOOT_GZIP
-                /* Defense-in-depth: verify FIT hash-1 against loaded
-                 * bytes */
-                if (fit_verify_hash(fdt, off, (const uint8_t*)load,
-                        (uint32_t)len) != 0) {
-                    wolfBoot_printf("FIT hash verification failed for "
-                        "%s\n", image);
-                    return NULL;
-                }
-#endif
+                /* No per-image hash-1 re-verification here. Per the
+                 * FIT spec (and U-Boot's reference implementation), a
+                 * hash-N subnode's value is computed over the image
+                 * node's `data` property bytes verbatim - which means
+                 * the compressed bytes when compression="gzip". The
+                 * outer wolfBoot signature
+                 * (wolfBoot_verify_authenticity) already authenticates
+                 * the entire FIT, including those data bytes, so a
+                 * runtime per-image hash check would be redundant.
+                 * Inflater bugs on the decompressed payload are
+                 * caught by gzip's own CRC32 + ISIZE trailer inside
+                 * wolfBoot_gunzip. */
 
                 /* load should always have entry, but if not use load
                  * address */
