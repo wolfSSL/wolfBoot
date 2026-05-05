@@ -207,10 +207,15 @@ void do_boot(const uint32_t *address)
     printf("Called do_boot with address %p\n", address);
 }
 
+static int mock_flash_protect_called = 0;
+static haladdr_t mock_flash_protect_addr = 0;
+static int mock_flash_protect_len = 0;
+
 int hal_flash_protect(haladdr_t address, int len)
 {
-    (void)address;
-    (void)len;
+    mock_flash_protect_called++;
+    mock_flash_protect_addr = address;
+    mock_flash_protect_len = len;
     return 0;
 }
 
@@ -251,6 +256,9 @@ static void reset_mock_stats(void)
 #ifdef WOLFBOOT_HOOK_BOOT
     mock_hook_corrupt_signature = 0;
 #endif
+    mock_flash_protect_called = 0;
+    mock_flash_protect_addr = 0;
+    mock_flash_protect_len = 0;
 }
 
 static void clear_erase_stats(void)
@@ -724,6 +732,12 @@ START_TEST (test_sunnyday_noupdate)
     ck_assert(!wolfBoot_panicked);
     ck_assert(wolfBoot_staged_ok);
     ck_assert(wolfBoot_current_firmware_version() == 1);
+#ifndef TZEN
+    ck_assert_int_eq(mock_flash_protect_called, 1);
+    ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
+        (uintptr_t)WOLFBOOT_ORIGIN);
+    ck_assert_int_eq(mock_flash_protect_len, BOOTLOADER_PARTITION_SIZE);
+#endif
     cleanup_flash();
 
 }
