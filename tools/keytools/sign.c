@@ -2361,7 +2361,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         goto cleanup;
     }
 #else
-    f1 = fopen(f_base, "wb");
+    f1 = fopen(f_base, "rb");
     if (f1 == NULL) {
         printf("Cannot open file %s\n", f_base);
         goto cleanup;
@@ -2371,7 +2371,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         fprintf(stderr, "Error malloc for base %d\n", len1);
         goto cleanup;
     }
-    if (len1 != (int)fread(base, len1, 1, f1)) {
+    if ((int)fread(base, 1, len1, f1) != len1) {
         perror("read of base");
         goto cleanup;
     }
@@ -2455,7 +2455,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         fprintf(stderr, "Error malloc for buffer %d\n", len2);
         goto cleanup;
     }
-    if (len2 != (int)fread(buffer, len2, 1, f2)) {
+    if ((int)fread(buffer, 1, len2, f2) != len2) {
         perror("fread of buffer");
         goto cleanup;
     }
@@ -2488,7 +2488,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 #if HAVE_MMAP
         io_sz = write(fd3, dest, r);
 #else
-        io_sz = (int)fwrite(dest, r, 1, f3);
+        io_sz = (int)fwrite(dest, 1, r, f3);
 #endif
         if (io_sz != r) {
             goto cleanup;
@@ -2522,7 +2522,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 #if HAVE_MMAP
         io_sz = write(fd3, dest, r);
 #else
-        io_sz = (int)fwrite(dest, r, 1, f3);
+        io_sz = (int)fwrite(dest, 1, r, f3);
 #endif
         if (io_sz != r) {
             goto cleanup;
