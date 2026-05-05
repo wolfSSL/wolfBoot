@@ -63,6 +63,10 @@ static void build_image(uint8_t *image, uint32_t version, uint8_t fill)
     memset(image + IMAGE_HEADER_SIZE, fill, TEST_PAYLOAD_SIZE);
 }
 
+static int mock_flash_protect_called;
+static haladdr_t mock_flash_protect_addr;
+static int mock_flash_protect_len;
+
 static void reset_mocks(void)
 {
     memset(load_buffer, 0, sizeof(load_buffer));
@@ -75,6 +79,9 @@ static void reset_mocks(void)
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
     mock_fail_payload_part = -1;
+    mock_flash_protect_called = 0;
+    mock_flash_protect_addr = 0;
+    mock_flash_protect_len = 0;
     wolfBoot_panicked = 0;
 }
 
@@ -199,8 +206,9 @@ void do_boot(const uint32_t *address)
 
 int hal_flash_protect(haladdr_t address, int len)
 {
-    (void)address;
-    (void)len;
+    mock_flash_protect_called++;
+    mock_flash_protect_addr = address;
+    mock_flash_protect_len = len;
     return 0;
 }
 
@@ -237,6 +245,12 @@ START_TEST(test_update_disk_zeroizes_key_material_before_boot)
     ck_assert_int_eq(mock_disk_close_called, 1);
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_ptr_eq(mock_boot_address, (const uint32_t *)WOLFBOOT_LOAD_ADDRESS);
+#ifndef TZEN
+    ck_assert_int_eq(mock_flash_protect_called, 1);
+    ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
+        (uintptr_t)WOLFBOOT_ORIGIN);
+    ck_assert_int_eq(mock_flash_protect_len, BOOTLOADER_PARTITION_SIZE);
+#endif
     for (i = 0; i < ENCRYPT_KEY_SIZE; i++) {
         ck_assert_uint_eq(disk_encrypt_key[i], 0);
     }

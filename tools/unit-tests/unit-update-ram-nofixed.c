@@ -86,10 +86,15 @@ void do_boot(const uint32_t *address)
     ck_assert_int_eq(wolfBoot_verify_integrity(&boot_image), 0);
 }
 
+static int mock_flash_protect_called = 0;
+static haladdr_t mock_flash_protect_addr = 0;
+static int mock_flash_protect_len = 0;
+
 int hal_flash_protect(haladdr_t address, int len)
 {
-    (void)address;
-    (void)len;
+    mock_flash_protect_called++;
+    mock_flash_protect_addr = address;
+    mock_flash_protect_len = len;
     return 0;
 }
 
@@ -98,6 +103,9 @@ static void reset_mock_stats(void)
     wolfBoot_panicked = 0;
     wolfBoot_staged_ok = 0;
     dualboot_candidate_addr_calls = 0;
+    mock_flash_protect_called = 0;
+    mock_flash_protect_addr = 0;
+    mock_flash_protect_len = 0;
 }
 
 static void prepare_flash(void)
@@ -213,6 +221,12 @@ START_TEST(test_invalid_update_falls_back_to_boot)
     ck_assert_int_eq(wolfBoot_staged_ok, 1);
     ck_assert_int_eq(wolfBoot_panicked, 0);
     ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address, WOLFBOOT_LOAD_ADDRESS);
+#ifndef TZEN
+    ck_assert_int_eq(mock_flash_protect_called, 1);
+    ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
+        (uintptr_t)WOLFBOOT_ORIGIN);
+    ck_assert_int_eq(mock_flash_protect_len, BOOTLOADER_PARTITION_SIZE);
+#endif
     cleanup_flash();
 }
 END_TEST
