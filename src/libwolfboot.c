@@ -376,6 +376,8 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 #else
     ret = hal_flash_write(addr_write, NVM_CACHE, NVM_CACHE_SIZE);
 #endif
+    if (ret != 0)
+        return ret;
 
     /* Once a copy has been written, erase the older sector */
     ret = hal_flash_erase(addr_read, NVM_CACHE_SIZE);
