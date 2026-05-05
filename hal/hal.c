@@ -190,7 +190,7 @@ int hal_flash_test_unaligned_src(void)
     ptr = (uint8_t*)(uintptr_t)src;
     ptr++;
 
-    for (i = 0; i < sizeof(src); i++) {
+    for (i = 0; i < sizeof(src) - 1; i++) {
         ptr[i] = i & 0xff;
     }
 
