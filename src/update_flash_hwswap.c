@@ -51,7 +51,7 @@ void RAMFUNCTION wolfBoot_start(void)
     int update_v_raw = (int)wolfBoot_update_firmware_version();
     uint32_t boot_v = 0U;
     uint32_t update_v = 0U;
-    uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
+    uint32_t max_v;
 
     if (boot_v_raw >= 0)
         boot_v = (uint32_t)boot_v_raw;
