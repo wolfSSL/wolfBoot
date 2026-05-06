@@ -389,6 +389,10 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         if (in_len < 3 || out_vec == NULL || out_len < 1) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
+        if (in_vec[1].base == NULL ||
+            in_vec[1].len < sizeof(psa_key_attributes_t)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
         {
             psa_key_attributes_t attr = *(const psa_key_attributes_t *)in_vec[1].base;
             /* Fallback to volatile storage if persistent storage is unavailable. */
@@ -403,6 +407,10 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
 
     case ARM_TEE_CRYPTO_GENERATE_KEY_SID:
         if (in_len < 2 || out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        if (in_vec[1].base == NULL ||
+            in_vec[1].len < sizeof(psa_key_attributes_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         {
@@ -479,7 +487,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         struct wolfboot_hash_slot *slot;
         uint32_t handle = 0;
         psa_status_t status;
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(uint32_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         slot = wolfboot_hash_alloc(&handle);
@@ -515,7 +525,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         struct wolfboot_hash_slot *dst_slot;
         uint32_t handle = 0;
         psa_status_t status;
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(uint32_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         src_slot = wolfboot_hash_find(iov->op_handle);
@@ -540,7 +552,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         struct wolfboot_hash_slot *slot;
         size_t hash_len = 0;
         psa_status_t status;
-        if (out_vec == NULL || out_len < 2) {
+        if (out_vec == NULL || out_len < 2 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(uint32_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         slot = wolfboot_hash_find(iov->op_handle);
@@ -562,7 +576,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
 
     case ARM_TEE_CRYPTO_HASH_ABORT_SID: {
         struct wolfboot_hash_slot *slot;
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(uint32_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         slot = wolfboot_hash_find(iov->op_handle);
@@ -582,7 +598,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         struct wolfboot_cipher_slot *slot;
         uint32_t handle = 0;
         psa_status_t status;
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(uint32_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         slot = wolfboot_cipher_alloc(&handle);
