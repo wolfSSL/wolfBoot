@@ -50,7 +50,7 @@ static uint8_t otp_slot_item_cache[SIZEOF_KEYSTORE_SLOT];
 uint8_t *keystore_get_buffer(int id)
 {
     struct keystore_slot *slot;
-    if (id >= keystore_num_pubkeys())
+    if (id < 0 || id >= keystore_num_pubkeys())
         return (uint8_t *)0;
     if (hal_flash_otp_read(FLASH_OTP_BASE +
                 OTP_HDR_SIZE + id * SIZEOF_KEYSTORE_SLOT, otp_slot_item_cache,
@@ -63,7 +63,7 @@ uint8_t *keystore_get_buffer(int id)
 int keystore_get_size(int id)
 {
     struct keystore_slot *slot;
-    if (id >= keystore_num_pubkeys())
+    if (id < 0 || id >= keystore_num_pubkeys())
         return -1;
     if (hal_flash_otp_read(FLASH_OTP_BASE +
                 OTP_HDR_SIZE + id * SIZEOF_KEYSTORE_SLOT, otp_slot_item_cache,
@@ -76,7 +76,7 @@ int keystore_get_size(int id)
 uint32_t keystore_get_mask(int id)
 {
     struct keystore_slot *slot;
-    if (id >= keystore_num_pubkeys())
+    if (id < 0 || id >= keystore_num_pubkeys())
         return 0;
     if (hal_flash_otp_read(FLASH_OTP_BASE +
                 OTP_HDR_SIZE + id * SIZEOF_KEYSTORE_SLOT, otp_slot_item_cache,
@@ -89,7 +89,7 @@ uint32_t keystore_get_mask(int id)
 uint32_t keystore_get_key_type(int id)
 {
     struct keystore_slot *slot;
-    if (id >= keystore_num_pubkeys())
+    if (id < 0 || id >= keystore_num_pubkeys())
         return -1;
     if (hal_flash_otp_read(FLASH_OTP_BASE +
                 OTP_HDR_SIZE + id * SIZEOF_KEYSTORE_SLOT, otp_slot_item_cache,
