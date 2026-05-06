@@ -554,7 +554,8 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         psa_status_t status;
         if (out_vec == NULL || out_len < 2 ||
             out_vec[0].base == NULL ||
-            out_vec[0].len < sizeof(uint32_t)) {
+            out_vec[0].len < sizeof(uint32_t) ||
+            out_vec[1].base == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         slot = wolfboot_hash_find(iov->op_handle);
