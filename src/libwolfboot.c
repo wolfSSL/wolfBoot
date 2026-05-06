@@ -1136,7 +1136,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
-            (void *)&version_field) == 0)
+            (void *)&version_field) != sizeof(uint32_t))
         return 0;
     if (version_field)
         return im2n(*version_field);
@@ -1169,7 +1169,7 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
-            (void *)&type_field) == 0)
+            (void *)&type_field) != sizeof(uint16_t))
         return 0;
     if (type_field)
         return im2ns(*type_field);
@@ -1206,7 +1206,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
-            (void *)&delta_base) == 0)
+            (void *)&delta_base) != sizeof(uint32_t))
         return 0;
     if (delta_base)
         return im2n(*delta_base);
