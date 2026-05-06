@@ -54,7 +54,8 @@ struct KEYSTORE_HDR_PACKED wolfBoot_otp_hdr {
     uint32_t version;
 };
 
-static const char KEYSTORE_HDR_MAGIC[8] = "WOLFBOOT";
+static const char KEYSTORE_HDR_MAGIC[8] =
+    {'W', 'O', 'L', 'F', 'B', 'O', 'O', 'T'};
 
 #define KEYSTORE_MAX_PUBKEYS \
     ((OTP_SIZE - OTP_UDS_STORAGE_SIZE - OTP_HDR_SIZE) / SIZEOF_KEYSTORE_SLOT)
