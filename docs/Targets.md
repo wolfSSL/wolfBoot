@@ -55,6 +55,7 @@ This README describes configuration of supported targets.
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Vorago VA416x0](#vorago-va416x0)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
+* [Xilinx Zynq-7000 (ZC702)](#xilinx-zynq-7000-zc702)
 * [Versal Gen 1 VMK180](#versal-gen-1-vmk180)
 
 ## STM32F4
@@ -3707,6 +3708,290 @@ Loading ramdisk: 0x... -> 0x40000000 (N bytes)
 FDT: Set chosen (...), linux,initrd-start=1073741824
 FDT: Set chosen (...), linux,initrd-end=...
 ```
+
+
+## Xilinx Zynq-7000 (ZC702)
+
+AMD/Xilinx Zynq-7000 (XC7Z020) on the ZC702 Evaluation Kit - dual ARM Cortex-A9 (ARMv7-A 32-bit), 1 GB DDR3, 16 MB QSPI NOR (N25Q128A), SDIO, dual UART. Older sibling of the ZynqMP family - distinct silicon, different controllers (`XQspiPs` not `XQspiPsu`, Arasan SDHCI v2.0 not v3.0, no CSU/PMU/PUF, PL310 L2).
+
+wolfBoot is loaded by the Xilinx Zynq-7000 FSBL into DDR:
+```
+BootROM -> FSBL -> wolfBoot -> signed app (or U-Boot/Linux)
+```
+
+The FSBL handles all PS init (DDR, MIO, clocks, QSPI ref clock); wolfBoot only initializes UART, the QSPI controller, runs the verify/swap logic, and chain-loads the next stage.
+
+This target supports:
+- **QSPI boot** (primary): `config/examples/zynq7000.config` -- one config for bare-metal, U-Boot, and Linux payloads (LINUX_PAYLOAD=1 + MMU=1 + ELF=1; bare-metal apps don't pay any runtime cost beyond ~5 KB of unused FDT/MMU code).
+- **SD card boot**: `config/examples/zc702_sdcard.config` -- bare-metal payload from MBR-partitioned SD via the generic SDHCI driver and the Arasan v2.0 translation in `hal/zynq7000.c`.
+- **JTAG-loaded dev** via Platform Cable II + xsdb (no flash required).
+
+### Prerequisites
+
+1. **Toolchain**: `arm-none-eabi-gcc` (Arm bare-metal). Tested with 13.2.
+2. **Xilinx Vitis** (provides `bootgen`, `xsdb`, and `program_flash`). Source the env once per shell:
+   ```sh
+   source /opt/Xilinx/2025.2/Vitis/settings64.sh
+   ```
+   Vivado's `settings64.sh` works equivalently if you don't have Vitis installed.
+3. **Platform Cable II USB drivers** (one-time, requires root). Without these the
+   cable enumerates as `03fd:0013` with empty descriptors and `xsdb` reports no
+   JTAG targets:
+   ```sh
+   sudo /opt/Xilinx/2025.2/Vitis/data/xicom/cable_drivers/lin64/install_script/install_drivers/install_drivers
+   ```
+   Unplug/replug the cable afterward so udev can load the firmware.
+4. **Pre-built ZC702 FSBL + DTB** (clone next to your wolfboot working tree):
+   ```sh
+   git clone https://github.com/wolfSSL/soc-prebuilt-firmware.git
+   export PREBUILT_DIR=$(pwd)/../soc-prebuilt-firmware/zc702-zynq
+   ls $PREBUILT_DIR/zynq_fsbl.elf  # required
+   ```
+5. **Hardware**: ZC702 with Platform Cable II (USB JTAG) connected to J22 and powered.
+
+### Configuration Options
+
+Key options in `config/examples/zynq7000.config`:
+
+- `ARCH=ARM` - 32-bit ARM
+- `TARGET=zynq7000` - selects `hal/zynq7000.{c,h,ld}` and the `CORTEX_A9` arch.mk block
+- `SIGN=ECC256` / `HASH=SHA256` - smaller and faster than RSA on Cortex-A9
+- `LINUX_PAYLOAD=1 MMU=1 ELF=1` - lets the same image boot Linux/U-Boot or bare-metal. `do_boot` switches to the ARM Linux boot ABI (`r0=0`, `r1=~0`, `r2=DTB_phys`, `r3=0`) which bare-metal apps simply ignore. `MMU=1` enables `update_ram.c`'s DTB-load codepath and pulls in `src/fdt.o`; wolfBoot does not manage page tables (it inherits FSBL's flat 1:1 DDR mapping). `ELF=1` lets wolfBoot understand `vmlinux` / `u-boot.elf` inputs and load only their LOAD segments. Cost over a strictly bare-metal-only build: ~5 KB extra wolfBoot binary (31 KB -> 36 KB).
+- `EXT_FLASH=1` - QSPI as external flash via `XQspiPs`
+- `WOLFBOOT_LOAD_ADDRESS=0x10000000` - DDR offset 256 MB, where the verified app is staged before `do_boot`. Must be **above** wolfBoot's own region (`0x04000000`-`0x040FFFFF`) because `src/update_ram.c` enforces `dst > _end`.
+- `WOLFBOOT_LOAD_DTS_ADDRESS=0x11000000` - DDR offset 272 MB, where a DTB read out of `PART_DTS_BOOT` would be relocated. Ignored for bare-metal payloads and for the appended-DTB Linux flow (where the DTB lives at the end of the signed kernel image).
+- `WOLFBOOT_PARTITION_BOOT_ADDRESS=0x00100000` - 16 MB QSPI layout below
+- `CROSS_COMPILE=arm-none-eabi-`
+
+DDR layout:
+
+| Region | Address range | Contents |
+|---|---|---|
+| App stage | `0x10000000`+ | Verified signed image, app text/data/bss/stack |
+| Image header staging | `0x0FFFFC00`-`0x0FFFFFFF` | wolfBoot copies the 1 KB header here just before the load address |
+| wolfBoot | `0x04000000`-`0x040FFFFF` | Loaded by FSBL, runs in place |
+| FSBL/BootROM/OCM | `0x00000000`-`0x000FFFFF` | OCM low-mapped during boot |
+
+QSPI partition layout (16 MB on-board flash):
+
+| Offset      | Size    | Contents                          |
+|-------------|---------|-----------------------------------|
+| `0x000000`  | ~512 KB | BOOT.BIN (FSBL + wolfboot)        |
+| `0x100000`  | 6 MB    | BOOT_A (signed primary image)     |
+| `0x700000`  | 6 MB    | UPDATE_B (signed update slot)     |
+| `0xD00000`  | 64 KB   | SWAP scratch sector               |
+| `0xD10000`+ |         | reserved                          |
+
+### Building wolfBoot
+
+```sh
+cp config/examples/zynq7000.config .config
+make keysclean && make keytools
+make TARGET=zynq7000 wolfboot.elf
+```
+
+The result is a 32-bit ARM ELF with entry point `0x04000000` and `.text` start at the same address (vector table at the load base).
+
+### Building BOOT.BIN (production QSPI boot)
+
+```sh
+cp ${PREBUILT_DIR}/zynq_fsbl.elf .
+bootgen -arch zynq -image tools/scripts/zc702/zc702_qspi.bif -w -o BOOT.BIN
+```
+
+`bootgen` ships with Vitis. The `.bif` template at `tools/scripts/zc702/zc702_qspi.bif` is the minimum bootable image; add `download.bit` and a DTB if you also need to load the PL bitstream and a Linux device tree (see Milestone 5).
+
+### Programming QSPI
+
+The 16 MB QSPI flash holds two artifacts: `BOOT.BIN` at offset `0x0` (FSBL + wolfBoot, < 1 MB) and the signed payload at `WOLFBOOT_PARTITION_BOOT_ADDRESS` (default `0x100000` for the BOOT_A partition). Both go through `program_flash` over JTAG.
+
+Set ZC702 boot mode straps to **JTAG** (SW16 all OFF) for programming. Then run two commands:
+
+```sh
+# 1. List JTAG targets and note the arm_dap target ID for the Xilinx Platform
+# Cable USB II (skip this step if you only have one JTAG cable connected).
+program_flash -jtagtargets -url TCP:127.0.0.1:3121
+
+# 2. Program BOOT.BIN at offset 0
+program_flash -f BOOT.BIN -offset 0 -flash_type qspi-x4-single \
+    -fsbl ${PREBUILT_DIR}/zynq_fsbl.elf \
+    -target_id <arm_dap_id> -url TCP:127.0.0.1:3121
+
+# 3. Program the signed payload at the BOOT_A partition offset
+program_flash -f test-app/image_v1_signed.bin -offset 0x100000 \
+    -flash_type qspi-x4-single -fsbl ${PREBUILT_DIR}/zynq_fsbl.elf \
+    -target_id <arm_dap_id> -url TCP:127.0.0.1:3121
+```
+
+`program_flash` ships with Vitis. The Vivado Hardware Manager UI works equivalently (Tools -> Add Configuration Memory Device -> select N25Q128 -> program two files at offsets 0 and 0x100000).
+
+After programming, set boot mode to **QSPI** by turning **SW16-4 ON** (the four-position dip mapping is `SW16-4 = MIO[5]` MSB of the boot device strap, with SW16-1..3 = MIO[2..4]; per UG850 ch.1.2.4). Power-cycle the board (cold) so the BootROM re-samples the strap. Console comes up on UART1 (J17 USB-UART), 115200 8N1, and you should see the wolfBoot banner followed by `=== ZC702 test-app: BOOT OK ===` (or, with `LINUX_PAYLOAD=1` and a signed kernel, the Linux boot log).
+
+`program_flash` may print a segmentation fault on exit ("Flash Operation Successful" precedes it) -- that's a Vitis tool quirk on cleanup, not a programming failure; the flash content is correct.
+
+### JTAG-loaded development (no flash)
+
+For driver bring-up or quick iteration, skip bootgen and load directly via Platform Cable II:
+
+```sh
+source /opt/Xilinx/2025.2/Vitis/settings64.sh   # once per shell
+xsdb tools/scripts/zc702/jtag_load.tcl
+```
+
+The script runs the prebuilt FSBL (PS init: DDR/MIO/clocks/UART), then loads `wolfboot.elf` over the top, sets PC to `0x04000000` and CPSR to SVC with IRQ/FIQ masked, and resumes. Override paths via `FSBL_ELF=...` or `WOLFBOOT_ELF=...` env vars.
+
+With a signed image programmed at QSPI offset `0x100000` (see "Building and flashing the signed test app" below), expected UART output is:
+
+```
+wolfBoot Zynq-7000 (ZC702) hal_init
+Versions: Boot 1, Update 0
+Trying Boot partition at 0x100000
+Loading header 1024 bytes from 0x100000 to 0xFFFFC00
+Loading image 396 bytes from 0x100400 to 0x10000000...done
+Boot partition: 0xFFFFC00 (sz 396, ver 0x1, type 0x201)
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
+Firmware Valid
+Booting at 0x10000000
+
+=== ZC702 test-app: BOOT OK ===
+wolfBoot verified + chain-loaded this image
+.....
+```
+
+On a **blank** QSPI (no signed image yet), wolfBoot prints `Versions: Boot 0, Update 0 / No valid image found! / wolfBoot: PANIC!` instead - that is correct behavior, not a bug.
+
+If `xsdb` reports `no targets found` or empty `jtag servers`, either:
+- Cable USB drivers not installed - see step 3 of Prerequisites, OR
+- A previous run left the CPU in a stuck JTAG state - power-cycle the ZC702 (SW10, the Pi4 GPIO 20 power relay, or your PSU control) and retry.
+
+A separate JTAG-only dev build (no QSPI driver) can be produced with `make EXT_FLASH=0`.
+
+### Building and flashing the signed test app
+
+A minimal Cortex-A9 test app lives at `test-app/app_zynq7000.c` (UART banner + heartbeat dots). The top-level `make` target produces both `wolfboot.elf` and `test-app/image_v1_signed.bin` with the keys generated under `wolfboot_signing_private_key.der`:
+
+```sh
+cp config/examples/zynq7000.config .config
+make keysclean && make            # builds wolfboot.elf + test-app/image_v1_signed.bin
+```
+
+Program the signed image to QSPI offset `0x100000` (the BOOT_A partition):
+
+```sh
+program_flash -f test-app/image_v1_signed.bin \
+    -fsbl ${PREBUILT_DIR}/zynq_fsbl.elf \
+    -flash_type qspi-x4-single -offset 0x100000
+```
+
+`program_flash` ships with Vitis. Then run wolfBoot via `xsdb tools/scripts/zc702/jtag_load.tcl` - it should verify and chain-load the test app, producing the heartbeat output above.
+
+### QSPI driver self-test (`TEST_EXT_FLASH`)
+
+To exercise the `XQspiPs` driver in isolation - read JEDEC ID, sector erase + page program + linear-mode read-back of a 256-byte pattern at `0x200000`:
+
+```sh
+make CFLAGS_EXTRA=-DTEST_EXT_FLASH wolfboot.elf
+xsdb tools/scripts/zc702/jtag_load.tcl
+```
+
+Expected output:
+
+```
+qspi: --- TEST_EXT_FLASH start ---
+qspi: JEDEC ID = 0x20bb18  rc=00            <- Micron N25Q128
+qspi: read @0x100000 = 574f4c468c010000     <- "WOLF" magic from a programmed signed image
+qspi: erase sector @ 0x00200000 ...
+qspi: page program ...
+qspi: post-program JEDEC = 0x20bb18
+qspi: rdback[0..7] = 0001020304050607
+qspi: --- TEST_EXT_FLASH PASS ---
+```
+
+### QSPI driver design
+
+The driver in `hal/zynq7000.c` splits read vs cmd-only paths similarly to how the ZynqMP HAL splits SDHCI CMD17 (single-block PIO) vs CMD18 (multi-block SDMA):
+
+| Operation | Path | Why |
+|---|---|---|
+| JEDEC ID, RDSR, WREN, sector erase, page program | I/O mode (TXD0/TXD1/2/3 + auto-start) | Short, command-shaped transactions; needs precise byte counts on MOSI |
+| Bulk reads (signed image, partition headers) | Linear/XIP mode (`memcpy` from `0xFC000000+offset`) | Hardware-accelerated; controller drives cmd+addr+dummy and presents data through the AXI window |
+
+`qspi_linear_mode_setup()` configures `LQSPI_CR=0x8000010B` (single-bit `FAST_READ` 0x0B + 1 dummy byte) which avoids needing the flash QE bit set. A sacrificial first-byte read primes the linear-mode pipeline before the actual `memcpy`.
+
+For TX-only commands sent without RX capture, `qspi_xfer4` picks `TXD1`/`TXD2`/`TXD3` so the controller clocks exactly *N* bytes on the wire (no 4-byte padding that some flash interprets as additional commands - this caused our WREN to fail in an early iteration).
+
+### Boot flow notes
+
+- **Cortex-A9 startup**: shared `src/boot_arm32_start.S` (generic ARMv7-A startup, also used by SAMA5D3) plus shared `src/boot_arm32.c` for `do_boot()`. Sets VBAR to wolfBoot's vector table at `0x04000000`, clears `SCTLR.{A,C,I,V}`, invalidates I-cache + branch predictor + TLB, sets stack pointers for IRQ/FIQ/ABT/UND/SVC modes, then unmasks async aborts and calls `main`.
+- **MMU stays ON**, inheriting FSBL's flat 1:1 DDR mapping. Disabling the MMU on Cortex-A9 makes all memory Strongly-Ordered, which traps unaligned LDR/STR and breaks any ARMv7-A unrolled `memcpy`.
+- **memcpy/memset**: do **not** define `WOLFBOOT_USE_STDLIBC` for this target. newlib's ARMv7-A `memcpy` uses unaligned word LDRs from arbitrary alignments and faults under any code path that runs without the MMU configured for Normal memory. wolfBoot's own byte-wise / aligned-word `memcpy` in `src/string.c` is used instead.
+- **`ext_flash_read` returns bytes-read** (not 0 on success): `src/update_ram.c` checks `ret != IMAGE_HEADER_SIZE` for the header read and `ret < 0` for the body read.
+- **Cache teardown** in `hal_prepare_boot()`: cleans+invalidates L1 D-cache by set/way, invalidates L1 I-cache and branch predictor, then disables MMU+caches via SCTLR before `do_boot()` performs `bx r4`.
+- **Register handoff** (`do_boot` in `src/boot_arm32.c`): bare-metal apps get `r0 = dts_ptr`, `r1=r2=r3=0`, entry in `r4`. With `WOLFBOOT_LINUX_PAYLOAD=1` (set by `LINUX_PAYLOAD=1` in the config), `do_boot` follows the ARM Linux boot ABI: `r0 = 0`, `r1 = ~0` (no machine ID, use DTB), `r2 = DTB physical address`, `r3 = 0`, entry in `r4`.
+- **L2 (PL310)**: not touched by wolfBoot. Stock ZC702 FSBLs do not enable PL310; if your customised FSBL does, extend `hal_prepare_boot()` with an L2x0 clean-invalidate + disable.
+
+### SD card boot (Milestone 6)
+
+`config/examples/zc702_sdcard.config` enables SD-card boot via the generic
+SDHCI driver (`src/sdhci.c`) with HAL hooks in `hal/zynq7000.c` that
+translate the driver's Cadence SD4HC register layout to the Arasan
+SDHCI v2.0 standard layout used by the Zynq-7000 controller.
+
+**Strap**: SW16-3 + SW16-4 ON (others OFF). `BOOT_MODE_REG = 0x5`.
+
+**Layout**: pure MBR (no GPT - the Zynq-7000 BootROM only accepts MBR-with-FAT32-Active for SD boot).
+
+| Partition | Type      | Size  | Contents                              |
+|-----------|-----------|-------|---------------------------------------|
+| p1        | 0x0C FAT32-LBA, Active | 64 MB  | `BOOT.BIN` for the BootROM   |
+| p2        | 0x83 Linux raw         | 16 MB  | Signed boot image (`BOOT_PART_A=1`) |
+| p3        | 0x83 Linux raw         | 16 MB  | Signed update image (`BOOT_PART_B=2`) |
+
+`tools/scripts/zc702/prepare_sdcard.sh` lays this out (parted msdos +
+manual MBR type/active patch + dd of signed images).
+
+```sh
+cp config/examples/zc702_sdcard.config .config
+make
+make test-app/image.bin
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 1
+cp ${PREBUILT_DIR}/zynq_fsbl.elf .
+bootgen -arch zynq -image tools/scripts/zc702/zc702_qspi.bif -w -o BOOT.BIN
+sudo ./tools/scripts/zc702/prepare_sdcard.sh /dev/sdX
+```
+
+**Arasan SDHCI v2.0 quirks** (handled by the HAL/config):
+- 3.3V-only, no UHS-I. The driver tries to enable UHS-I SDR25 / 1.8V
+  signaling on init; we mask out UMS, 1.8V Enable, sampling-clock,
+  HV4E, and A64 in `sdhci_reg_write` for SRS15.
+- High Speed Enable (HSE bit in HostCtrl1) does not work reliably on
+  v2.0 with 3.3V cards that didn't switch to HS via CMD6 - we mask
+  HSE in HostCtrl1 writes.
+- Post-init clock is capped at 6 MHz via `SDHCI_CLK_50MHZ=6000`. At
+  12 MHz the first single-block CMD17 issued after a multi-block
+  CMD18+CMD12 sequence times out (DTOE) - looks like a state-cleanup
+  quirk specific to v2.0. At 24 MHz even the very first CMD17 fails.
+  6 MHz / 4-bit yields ~3 MB/s, plenty for boot-time loads.
+- Cortex-A9 Global Timer at PERIPHCLK = CPU_3x2x = 333.33 MHz on the
+  default ZC702 FSBL clock plan; `Z7_GTIMER_FREQ_HZ` in
+  `hal/zynq7000.h` defaults to that and feeds `hal_get_timer_us()`
+  used by the SDHCI driver's `udelay()`.
+
+### Differences from the ZynqMP port
+
+| Aspect           | ZynqMP (`hal/zynq.c`)         | Zynq-7000 (`hal/zynq7000.c`) |
+|------------------|-------------------------------|------------------------------|
+| CPU              | Cortex-A53 quad, AArch64      | Cortex-A9 dual, ARMv7-A      |
+| QSPI controller  | GQSPI (`XQspiPsu`)            | Linear/Static (`XQspiPs`)    |
+| UART IP          | XUartPs @ `0xFF000000`        | XUartPs @ `0xE0001000`       |
+| SDHCI            | Arasan v3.0 + Cadence shim    | Arasan v2.0 + Cadence shim   |
+| Crypto HW        | CSU (AES-GCM, SHA3, PUF)      | none (DevC AES only)         |
+| Boot chain       | FSBL + PMUFW + BL31 + wolfBoot| FSBL + wolfBoot              |
+| Linux EL         | EL2 (hypervisor)              | SVC (no exception levels)    |
+| `bootgen -arch`  | `zynqmp`                      | `zynq`                       |
 
 
 ## Versal Gen 1 VMK180

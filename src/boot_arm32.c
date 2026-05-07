@@ -55,32 +55,56 @@ void boot_entry_C(void)
  *
  */
 
+#if defined(WOLFBOOT_LINUX_PAYLOAD) && !defined(MMU)
+#error "WOLFBOOT_LINUX_PAYLOAD requires MMU=1 - the ARM Linux boot ABI " \
+       "needs r2 to be a valid DTB physical address, which only the MMU " \
+       "branch of do_boot can supply. Set MMU=1 in your config."
+#endif
+
 #ifdef MMU
 void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
-	/* Set application address via r4 */
-	asm volatile("mov r4, %0" : : "r"(app_offset));
-
+    /* Single asm block so the compiler cannot insert any code between
+     * the register set-up and the bx that would clobber r0..r4. Inputs
+     * are tied to the matching named operands; r0..r4 are listed in the
+     * clobber set so the compiler does not assume their values survive. */
 #ifdef MMU
-	/* Move the dts pointer to r5 (as first argument) */
-	asm volatile("mov r5, %0" : : "r"(dts_offset));
+    register const uint32_t *dts_in = dts_offset;
 #else
-	asm volatile("mov r5, 0");
+    register const uint32_t *dts_in = (const uint32_t *)0;
 #endif
-
-    /* Zero registers r1, r2, r3 */
-    asm volatile("mov r3, 0");
-    asm volatile("mov r2, 0");
-    asm volatile("mov r1, 0");
-
-    /* Move the dts pointer to r0 (as first argument) */
-    asm volatile("mov r0, r5");
-
-    /* Unconditionally jump to app_entry at r4 */
-    asm volatile("bx r4");
+#ifdef WOLFBOOT_LINUX_PAYLOAD
+    /* ARM Linux boot ABI: r0 = 0, r1 = ~0 (no machine ID, use DTB),
+     * r2 = DTB physical address, r3 = 0, entry in r4. */
+    asm volatile (
+        "mov r4, %[entry]\n"
+        "mov r2, %[dts]\n"
+        "mov r0, #0\n"
+        "mvn r1, #0\n"
+        "mov r3, #0\n"
+        "bx  r4\n"
+        :
+        : [entry] "r" (app_offset), [dts] "r" (dts_in)
+        : "r0", "r1", "r2", "r3", "r4", "memory"
+    );
+#else
+    /* wolfBoot legacy DTS handoff: r0 = dts pointer, r1=r2=r3=0,
+     * entry in r4. */
+    asm volatile (
+        "mov r4, %[entry]\n"
+        "mov r0, %[dts]\n"
+        "mov r1, #0\n"
+        "mov r2, #0\n"
+        "mov r3, #0\n"
+        "bx  r4\n"
+        :
+        : [entry] "r" (app_offset), [dts] "r" (dts_in)
+        : "r0", "r1", "r2", "r3", "r4", "memory"
+    );
+#endif
 }
 
 #ifdef RAM_CODE
