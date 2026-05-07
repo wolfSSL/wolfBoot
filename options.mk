@@ -1,4 +1,43 @@
 WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
+
+# Shared wolfHSM client/server object lists. Defined here at the top so any
+# downstream block (legacy WOLFHSM_CLIENT/SERVER, or WOLFCRYPT_TZ_WOLFHSM TZ
+# engine) can reference them by variable name without ordering hazards.
+WOLFHSM_CLIENT_OBJS := \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_nvm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cryptocb.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_dma.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_dma.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o
+
+WOLFHSM_SERVER_OBJS := \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm_flash.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_keyid.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_nvm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_counter.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_keystore.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_customcb.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_keystore.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_counter.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o
+
 USE_CLANG?=0
 ifeq ($(USE_CLANG),1)
   USE_GCC?=0
@@ -935,11 +974,23 @@ ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
   ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
     $(error WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_FWTPM are mutually exclusive)
   endif
+  ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+    $(error WOLFCRYPT_TZ_PKCS11 and WOLFCRYPT_TZ_WOLFHSM are mutually exclusive)
+  endif
 endif
 
 ifeq ($(WOLFCRYPT_TZ_PSA),1)
   ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
     $(error WOLFCRYPT_TZ_PSA and WOLFCRYPT_TZ_FWTPM are mutually exclusive)
+  endif
+  ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+    $(error WOLFCRYPT_TZ_PSA and WOLFCRYPT_TZ_WOLFHSM are mutually exclusive)
+  endif
+endif
+
+ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
+  ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+    $(error WOLFCRYPT_TZ_FWTPM and WOLFCRYPT_TZ_WOLFHSM are mutually exclusive)
   endif
 endif
 
@@ -1091,6 +1142,47 @@ ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
       WOLFCRYPT_OBJS+=$(MATH_OBJS)
   endif
   endif
+  STACK_USAGE=20000
+endif
+
+ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
+  CFLAGS+=-DWOLFCRYPT_TZ_WOLFHSM
+  CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+  CFLAGS+=-DWOLFHSM_CFG_ENABLE_SERVER
+  CFLAGS+=-DWOLFHSM_CFG_COMM_DATA_LEN=1280
+  CFLAGS+=-DWOLFHSM_CFG_PORT_STM32_TZ_NSC
+  CFLAGS+=-DWOLFHSM_CFG_NO_SYS_TIME
+  CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
+  CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz"
+  ifeq ($(USE_CLANG),1)
+    CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-file-name=libc.a)
+    LIBS+=$(shell $(CLANG_GCC_NAME) $(CLANG_MULTILIB_FLAGS) -print-libgcc-file-name)
+  else
+    LDFLAGS+=--specs=nano.specs
+  endif
+  WOLFCRYPT_OBJS+=src/store_sbrk.o
+  WOLFCRYPT_OBJS+=src/wolfhsm_callable.o
+  WOLFCRYPT_OBJS+=src/wolfhsm_flash_hal.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
+  ifneq ($(SIGN),ED25519)
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+  endif
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
+  ifeq ($(ENCRYPT_WITH_AES128)$(ENCRYPT_WITH_AES256),)
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+  endif
+  WOLFCRYPT_OBJS+=$(RSA_OBJS)
+  ifeq ($(findstring ECC,$(SIGN)),)
+  ifeq ($(findstring ECC,$(SIGN_SECONDARY)),)
+      WOLFCRYPT_OBJS+=$(ECC_OBJS)
+      WOLFCRYPT_OBJS+=$(MATH_OBJS)
+  endif
+  endif
+  WOLFHSM_OBJS+=$(WOLFHSM_SERVER_OBJS)
+  WOLFHSM_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz/wh_transport_nsc.o
   STACK_USAGE=20000
 endif
 
@@ -1317,19 +1409,7 @@ ifeq ($(WOLFHSM_CLIENT),1)
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
-  WOLFHSM_OBJS += \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cryptocb.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_crypto.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_dma.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_dma.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o
+  WOLFHSM_OBJS += $(WOLFHSM_CLIENT_OBJS)
   #includes
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines
@@ -1375,26 +1455,7 @@ ifeq ($(WOLFHSM_SERVER),1)
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
-  WOLFHSM_OBJS += \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm_flash.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_keyid.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_crypto.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_counter.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_keystore.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_customcb.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_keystore.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_crypto.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_counter.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
-    $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o
+  WOLFHSM_OBJS += $(WOLFHSM_SERVER_OBJS)
 
   #includes
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"

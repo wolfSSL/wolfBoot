@@ -1,0 +1,227 @@
+/* wolfhsm_flash_hal.c
+ *
+ * Copyright (C) 2026 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ */
+
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+
+#include <stdint.h>
+#include <string.h>
+
+#include "hal.h"
+#include "wolfboot/wolfhsm_flash_hal.h"
+
+#include "wolfssl/wolfcrypt/settings.h"
+#include "wolfssl/wolfcrypt/misc.h"
+
+#include "wolfhsm/wh_error.h"
+#include "wolfhsm/wh_flash.h"
+
+#define WHFH5_SECTOR_SIZE (8U * 1024U)
+
+/* Sector-cached read-modify-erase-write, mirroring psa_store.c. STM32H5
+ * flash programs in 16-byte quad-words with ECC; each quad-word can be
+ * programmed exactly once between erases. wolfHSM issues 8-byte unit
+ * writes which would otherwise re-program neighbouring qwords, so every
+ * Program call here loads the affected sector into RAM, modifies it, and
+ * rewrites the whole 8 KiB sector after an erase. */
+static uint8_t cached_sector[WHFH5_SECTOR_SIZE];
+
+static int _Init(void *context, const void *config)
+{
+    const whFlashH5Ctx *cfg = (const whFlashH5Ctx *)config;
+    whFlashH5Ctx       *ctx = (whFlashH5Ctx *)context;
+
+    if (ctx == NULL || cfg == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+
+    if (cfg->base == 0U || cfg->size == 0U || cfg->partition_size == 0U ||
+        (cfg->base % WHFH5_SECTOR_SIZE) != 0U ||
+        (cfg->size % WHFH5_SECTOR_SIZE) != 0U ||
+        (cfg->partition_size % WHFH5_SECTOR_SIZE) != 0U ||
+        cfg->partition_size > cfg->size / 2U) {
+        return WH_ERROR_BADARGS;
+    }
+
+    *ctx = *cfg;
+    return WH_ERROR_OK;
+}
+
+static int _Cleanup(void *context)
+{
+    if (context == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    return WH_ERROR_OK;
+}
+
+static uint32_t _PartitionSize(void *context)
+{
+    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    return (ctx == NULL) ? 0U : ctx->partition_size;
+}
+
+static int _WriteLock(void *context, uint32_t offset, uint32_t size)
+{
+    (void)context;
+    (void)offset;
+    (void)size;
+    return WH_ERROR_OK;
+}
+
+static int _WriteUnlock(void *context, uint32_t offset, uint32_t size)
+{
+    (void)context;
+    (void)offset;
+    (void)size;
+    return WH_ERROR_OK;
+}
+
+static int _Read(void *context, uint32_t offset, uint32_t size, uint8_t *data)
+{
+    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+
+    if (ctx == NULL || (size != 0U && data == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    if (offset > ctx->size || size > ctx->size - offset) {
+        return WH_ERROR_BADARGS;
+    }
+    if (size > 0U) {
+        memcpy(data, (const uint8_t *)(ctx->base + offset), size);
+    }
+    return WH_ERROR_OK;
+}
+
+static int _Program(void *context, uint32_t offset, uint32_t size,
+                    const uint8_t *data)
+{
+    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    uint32_t      written = 0U;
+    int           hrc     = 0;
+
+    if (ctx == NULL || (size != 0U && data == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    if (offset > ctx->size || size > ctx->size - offset) {
+        return WH_ERROR_BADARGS;
+    }
+    if (size == 0U) {
+        return WH_ERROR_OK;
+    }
+
+    hal_flash_unlock();
+    while (written < size) {
+        uint32_t in_sector_off = (offset + written) % WHFH5_SECTOR_SIZE;
+        uint32_t sector_offset = (offset + written) - in_sector_off;
+        uint32_t chunk         = WHFH5_SECTOR_SIZE - in_sector_off;
+        if (chunk > size - written) {
+            chunk = size - written;
+        }
+
+        memcpy(cached_sector,
+               (const uint8_t *)(ctx->base + sector_offset),
+               WHFH5_SECTOR_SIZE);
+        memcpy(cached_sector + in_sector_off, data + written, chunk);
+
+        hrc = hal_flash_erase(ctx->base + sector_offset, WHFH5_SECTOR_SIZE);
+        if (hrc == 0) {
+            hrc = hal_flash_write(ctx->base + sector_offset, cached_sector,
+                                  WHFH5_SECTOR_SIZE);
+        }
+
+        /* Per-iteration wipe so a fault between sectors doesn't strand
+         * plaintext keystore bytes in the static cache. */
+        wc_ForceZero(cached_sector, sizeof(cached_sector));
+
+        if (hrc != 0) {
+            break;
+        }
+        written += chunk;
+    }
+    hal_flash_lock();
+
+    return (hrc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
+}
+
+static int _Erase(void *context, uint32_t offset, uint32_t size)
+{
+    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    int rc;
+
+    if (ctx == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    if (offset > ctx->size || size > ctx->size - offset) {
+        return WH_ERROR_BADARGS;
+    }
+    if ((offset % WHFH5_SECTOR_SIZE) != 0U ||
+        (size % WHFH5_SECTOR_SIZE) != 0U) {
+        return WH_ERROR_BADARGS;
+    }
+    if (size == 0U) {
+        return WH_ERROR_OK;
+    }
+
+    hal_flash_unlock();
+    rc = hal_flash_erase(ctx->base + offset, (int)size);
+    hal_flash_lock();
+    return (rc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
+}
+
+static int _Verify(void *context, uint32_t offset, uint32_t size,
+                   const uint8_t *data)
+{
+    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+
+    if (ctx == NULL || (size != 0U && data == NULL)) {
+        return WH_ERROR_BADARGS;
+    }
+    if (offset > ctx->size || size > ctx->size - offset) {
+        return WH_ERROR_BADARGS;
+    }
+    if (size > 0U &&
+        memcmp((const uint8_t *)(ctx->base + offset), data, size) != 0) {
+        return WH_ERROR_NOTVERIFIED;
+    }
+    return WH_ERROR_OK;
+}
+
+static int _BlankCheck(void *context, uint32_t offset, uint32_t size)
+{
+    whFlashH5Ctx  *ctx = (whFlashH5Ctx *)context;
+    const uint8_t *p;
+    uint32_t       i;
+
+    if (ctx == NULL) {
+        return WH_ERROR_BADARGS;
+    }
+    if (offset > ctx->size || size > ctx->size - offset) {
+        return WH_ERROR_BADARGS;
+    }
+    p = (const uint8_t *)(ctx->base + offset);
+    for (i = 0U; i < size; i++) {
+        if (p[i] != 0xFFU) {
+            return WH_ERROR_NOTBLANK;
+        }
+    }
+    return WH_ERROR_OK;
+}
+
+const whFlashCb whFlashH5_Cb = {
+    .Init          = _Init,
+    .Cleanup       = _Cleanup,
+    .PartitionSize = _PartitionSize,
+    .WriteLock     = _WriteLock,
+    .WriteUnlock   = _WriteUnlock,
+    .Read          = _Read,
+    .Program       = _Program,
+    .Erase         = _Erase,
+    .Verify        = _Verify,
+    .BlankCheck    = _BlankCheck,
+};
+
+#endif /* WOLFCRYPT_TZ_WOLFHSM */

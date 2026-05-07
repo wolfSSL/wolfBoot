@@ -54,6 +54,14 @@ extern int tolower(int c);
   #define MAX_CRYPTO_DEVID_CALLBACKS 2
 #endif
 
+/* wolfHSM (TZ engine, NS client side) */
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+  #define WOLF_CRYPTO_CB
+  #undef  HAVE_ANONYMOUS_INLINE_AGGREGATES
+  #define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
+  #define WOLFSSL_KEY_GEN
+#endif
+
 
 
 /* ECC */
@@ -156,7 +164,8 @@ extern int tolower(int c);
 #define HAVE_PKCS8
 #define HAVE_PKCS12
 
-#if defined(SECURE_PKCS11) || defined(WOLFBOOT_TZ_FWTPM)
+#if defined(SECURE_PKCS11) || defined(WOLFBOOT_TZ_FWTPM) || \
+    defined(WOLFCRYPT_TZ_WOLFHSM)
 
 static inline int wcs_cmse_get_random(unsigned char* output, int sz)
 {
