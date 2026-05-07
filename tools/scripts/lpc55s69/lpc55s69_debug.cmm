@@ -23,6 +23,7 @@ SYStem.Up
 ;; STOP in wolfBoot...
 data.load "&basedir\wolfboot.elf" /nocode
 symbol.sourcepath.TranslateSUBpath "\home\tcook\wolf\wolfBoot" "&basedir"
+symbol.sourcepath.TranslateSUBpath "\home\tcook\wolf\NXP" "&basedir\..\NXP"
 Register.Set PC isr_reset
 Register.Set MSP END_STACK
 break.set main /onchip /temporary

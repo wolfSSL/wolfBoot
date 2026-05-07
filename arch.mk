@@ -1254,6 +1254,7 @@ ifeq ($(TARGET),lpc55s69)
       -I$(MCUXPRESSO)/drivers/rng_1 \
       -I$(MCUXPRESSO_CMSIS)/Include \
       -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=-DWOLFSSL_NXP_RNG_1
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU)
   CFLAGS+=-DFSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL=1
   CFLAGS+=-DFSL_SDK_DISABLE_DRIVER_RESET_CONTROL=1
@@ -1274,14 +1275,12 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
   endif
   ifeq ($(PKA),1)
-    CFLAGS+=-DWOLFSSL_NXP_LPC55S69_WITH_HWACCEL
+    CFLAGS+=-DWOLFSSL_NXP_LPC55S6X
     OBJS+=\
         $(MCUXPRESSO)/drivers/casper/fsl_casper.o \
         $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
-  else
-    CFLAGS+=-DWOLFSSL_NXP_LPC55S69_NO_HWACCEL
   endif
 endif
 
