@@ -214,6 +214,7 @@ enum ifc_amask_sizes {
 #define CLOCKING_CLKCCSR(n)     ((volatile uint32_t*)(CLOCKING_BASE + 0x000UL + ((n) * 0x20)))
 #define CLOCKING_PLLCNGSR(n)    ((volatile uint32_t*)(CLOCKING_BASE + 0x800UL + ((n) * 0x20))) /* PLL cluster n general status */
 #define CLOCKING_PLLPGSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xC00UL)) /* Platform PLL general status */
+#define CLOCKING_PLLDGSR        ((volatile uint32_t*)(CLOCKING_BASE + 0xC20UL)) /* DDR PLL general status */
 
 /* ---- MPIC - T2080RM 24.3 ---- */
 #define PIC_BASE    (CCSRBAR + 0x40000)
@@ -277,31 +278,30 @@ enum ifc_amask_sizes {
 #define DDR_REF_RATE_PS 7800000
 #else
 /* T2080 RDB: DDR3L SODIMM */
-/* TODO: Fill SPD parameters from DDR3L SODIMM datasheet */
-#define DDR_N_RANKS     2     /* TODO: confirm from CS_CONFIG dump */
-#define DDR_RANK_DENS   0x100000000 /* TODO: confirm */
+#define DDR_N_RANKS     2
+#define DDR_RANK_DENS   0x80000000
 #define DDR_SDRAM_WIDTH 64
 #define DDR_EC_SDRAM_W  8
-#define DDR_N_ROW_ADDR  16    /* TODO: confirm */
-#define DDR_N_COL_ADDR  10    /* TODO: confirm */
+#define DDR_N_ROW_ADDR  15
+#define DDR_N_COL_ADDR  10
 #define DDR_N_BANKS     8
 #define DDR_EDC_CONFIG  2
 #define DDR_BURSTL_MASK 0x0c
-#define DDR_TCKMIN_X_PS 1500  /* TODO: from DDR3L datasheet */
-#define DDR_TCMMAX_PS   3000  /* TODO: from DDR3L datasheet */
-#define DDR_CASLAT_X    0x000007E0 /* TODO */
-#define DDR_TAA_PS      13500 /* TODO */
-#define DDR_TRCD_PS     13500 /* TODO */
-#define DDR_TRP_PS      13500 /* TODO */
-#define DDR_TRAS_PS     36000 /* TODO */
-#define DDR_TRC_PS      49500 /* TODO */
-#define DDR_TFAW_PS     30000 /* TODO */
-#define DDR_TWR_PS      15000 /* TODO */
-#define DDR_TRFC_PS     260000 /* TODO */
-#define DDR_TRRD_PS     6000  /* TODO */
-#define DDR_TWTR_PS     7500  /* TODO */
-#define DDR_TRTP_PS     7500  /* TODO */
-#define DDR_REF_RATE_PS 7800000 /* TODO */
+#define DDR_TCKMIN_X_PS 1125
+#define DDR_TCMMAX_PS   3000
+#define DDR_CASLAT_X    0x000002FC
+#define DDR_TAA_PS      13125
+#define DDR_TRCD_PS     13125
+#define DDR_TRP_PS      13125
+#define DDR_TRAS_PS     34000
+#define DDR_TRC_PS      47125
+#define DDR_TFAW_PS     27000
+#define DDR_TWR_PS      15000
+#define DDR_TRFC_PS     160000
+#define DDR_TRRD_PS     5000
+#define DDR_TWTR_PS     7500
+#define DDR_TRTP_PS     7500
+#define DDR_REF_RATE_PS 7800000
 #endif
 
 #ifdef BOARD_NAII_68PPC2
@@ -326,6 +326,12 @@ enum ifc_amask_sizes {
 #define DDR_SDRAM_MODE_VAL     0x00441C70
 #define DDR_SDRAM_MODE_2_VAL   0x00980000
 #define DDR_SDRAM_MODE_3_8_VAL 0x00000000
+#define DDR_SDRAM_MODE_3_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_4_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_5_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_6_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_7_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_8_VAL   DDR_SDRAM_MODE_3_8_VAL
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
 #define DDR_SDRAM_CFG_VAL      0xE7040000
@@ -353,10 +359,10 @@ enum ifc_amask_sizes {
 /* CW VPX3-152: DDR register values from U-Boot hardware dump */
 #define DDR_CS0_BNDS_VAL       0x000000FF /* CS0: 0-4GB (4GB rank) */
 #define DDR_CS1_BNDS_VAL       0x00000000 /* CS1: disabled */
-#define DDR_CS2_BNDS_VAL       0x00000000
-#define DDR_CS3_BNDS_VAL       0x00000000
 #define DDR_CS0_CONFIG_VAL     0x80014402 /* CS0 enabled */
 #define DDR_CS1_CONFIG_VAL     0x00014402 /* CS1 disabled (bit31=0) */
+#define DDR_CS2_BNDS_VAL       0x00000000
+#define DDR_CS3_BNDS_VAL       0x00000000
 #define DDR_CS2_CONFIG_VAL     0x00000000
 #define DDR_CS3_CONFIG_VAL     0x00000000
 #define DDR_CS_CONFIG_2_VAL    0x00000000
@@ -371,6 +377,12 @@ enum ifc_amask_sizes {
 #define DDR_SDRAM_MODE_VAL     0x00461014
 #define DDR_SDRAM_MODE_2_VAL   0x00A00000
 #define DDR_SDRAM_MODE_3_8_VAL 0x00000000
+#define DDR_SDRAM_MODE_3_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_4_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_5_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_6_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_7_VAL   DDR_SDRAM_MODE_3_8_VAL
+#define DDR_SDRAM_MODE_8_VAL   DDR_SDRAM_MODE_3_8_VAL
 #define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
 #define DDR_SDRAM_CFG_VAL      0xE7240000 /* MEM_EN|SREN|ECC_EN, DDR3 */
@@ -395,55 +407,59 @@ enum ifc_amask_sizes {
 #define DDR_ERR_INT_EN_VAL     0x0000001D
 #define DDR_ERR_SBE_VAL        0x00010000
 #else
-/* T2080 RDB: DDR register values */
-/* TODO: Fill ALL values from Phase 1 U-Boot register dump:
+/* T2080 RDB DDR register values from U-Boot register dump.
+ * T2080 RDB (default CCSRBAR = 0xFE000000, DDR_BASE = 0xFE008000):
  *   md.l 0xfe008000 4; md.l 0xfe008010 4  (CS BNDS)
  *   md.l 0xfe008080 4; md.l 0xfe0080c0 4  (CS CONFIG)
  *   md.l 0xfe008100 4; md.l 0xfe008160 3  (TIMING)
  *   md.l 0xfe008110 8; md.l 0xfe008130 1  (CONFIG/MODE/CLK)
  *   md.l 0xfe008170 3; md.l 0xfe008190 2  (WRLVL)
  *   md.l 0xfe008200 6; md.l 0xfe008b28 2  (MODE3-8/CDR) */
-#define DDR_CS0_BNDS_VAL       0x00000000 /* TODO: from dump */
-#define DDR_CS1_BNDS_VAL       0x00000000 /* TODO: from dump */
-#define DDR_CS2_BNDS_VAL       0x00000000 /* TODO: from dump */
-#define DDR_CS3_BNDS_VAL       0x00000000 /* TODO: from dump */
-#define DDR_CS0_CONFIG_VAL     0x00000000 /* TODO: from dump */
-#define DDR_CS1_CONFIG_VAL     0x00000000 /* TODO: from dump */
-#define DDR_CS2_CONFIG_VAL     0x00000000 /* TODO: from dump */
-#define DDR_CS3_CONFIG_VAL     0x00000000 /* TODO: from dump */
-#define DDR_CS_CONFIG_2_VAL    0x00000000 /* TODO: from dump */
+#define DDR_CS0_BNDS_VAL       0x000000FF
+#define DDR_CS1_BNDS_VAL       0x000000FF
+#define DDR_CS2_BNDS_VAL       0x00000000
+#define DDR_CS3_BNDS_VAL       0x00000000
+#define DDR_CS0_CONFIG_VAL     0x80044302
+#define DDR_CS1_CONFIG_VAL     0x80004302
+#define DDR_CS2_CONFIG_VAL     0x00000000
+#define DDR_CS3_CONFIG_VAL     0x00000000
+#define DDR_CS_CONFIG_2_VAL    0x00000000
 
-#define DDR_TIMING_CFG_3_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_0_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_1_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_2_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_4_VAL   0x00000000 /* TODO: from dump */
-#define DDR_TIMING_CFG_5_VAL   0x00000000 /* TODO: from dump */
+#define DDR_TIMING_CFG_3_VAL   0x02081000
+#define DDR_TIMING_CFG_0_VAL   0x9011000E
+#define DDR_TIMING_CFG_1_VAL   0xD0D8EE57
+#define DDR_TIMING_CFG_2_VAL   0x0048E15A
+#define DDR_TIMING_CFG_4_VAL   0x00000001
+#define DDR_TIMING_CFG_5_VAL   0x05401400
 
-#define DDR_SDRAM_MODE_VAL     0x00000000 /* TODO: from dump */
-#define DDR_SDRAM_MODE_2_VAL   0x00000000 /* TODO: from dump */
-#define DDR_SDRAM_MODE_3_8_VAL 0x00000000 /* TODO: from dump */
-#define DDR_SDRAM_MD_CNTL_VAL  0x00000000 /* TODO: from dump */
+#define DDR_SDRAM_MODE_VAL     0x00441E14
+#define DDR_SDRAM_MODE_2_VAL   0x00A00000
+#define DDR_SDRAM_MODE_3_VAL   0x00001E14
+#define DDR_SDRAM_MODE_4_VAL   0x00A00000
+#define DDR_SDRAM_MODE_5_VAL   0x00001E14
+#define DDR_SDRAM_MODE_6_VAL   0x00A00000
+#define DDR_SDRAM_MODE_7_VAL   0x00001E14
+#define DDR_SDRAM_MODE_8_VAL   0x00A00000
+#define DDR_SDRAM_MD_CNTL_VAL  0x00000000
 
-#define DDR_SDRAM_CFG_VAL      0x00000000 /* TODO: from dump */
-#define DDR_SDRAM_CFG_2_VAL    0x00000000 /* TODO: from dump */
+#define DDR_SDRAM_CFG_VAL      0xE7044000
+#define DDR_SDRAM_CFG_2_VAL    0x00401100
 
-#define DDR_SDRAM_INTERVAL_VAL 0x00000000 /* TODO: from dump */
+#define DDR_SDRAM_INTERVAL_VAL 0x0E38038E
 #define DDR_DATA_INIT_VAL      0xDEADBEEF
-#define DDR_SDRAM_CLK_CNTL_VAL 0x00000000 /* TODO: from dump */
-#define DDR_ZQ_CNTL_VAL        0x00000000 /* TODO: from dump */
+#define DDR_SDRAM_CLK_CNTL_VAL 0x02800000
+#define DDR_ZQ_CNTL_VAL        0x89080600
 
-/* Write leveling - CRITICAL: board-specific values from U-Boot.
- * These depend on PCB trace lengths and MUST come from the register dump. */
-#define DDR_WRLVL_CNTL_VAL     0x00000000 /* TODO: from dump */
-#define DDR_WRLVL_CNTL_2_VAL   0x00000000 /* TODO: from dump */
-#define DDR_WRLVL_CNTL_3_VAL   0x00000000 /* TODO: from dump */
+/* Write leveling - board-specific values from U-Boot register dump */
+#define DDR_WRLVL_CNTL_VAL     0x8675F607
+#define DDR_WRLVL_CNTL_2_VAL   0x0808080C
+#define DDR_WRLVL_CNTL_3_VAL   0x0B0C0C09
 
-#define DDR_SDRAM_RCW_1_VAL    0x00000000 /* TODO: from dump */
-#define DDR_SDRAM_RCW_2_VAL    0x00000000 /* TODO: from dump */
+#define DDR_SDRAM_RCW_1_VAL    0x00000000
+#define DDR_SDRAM_RCW_2_VAL    0x00000000
 
-#define DDR_DDRCDR_1_VAL       0x00000000 /* TODO: from dump */
-#define DDR_DDRCDR_2_VAL       0x00000000 /* TODO: from dump */
+#define DDR_DDRCDR_1_VAL       0x80040000
+#define DDR_DDRCDR_2_VAL       0x00000001
 
 #define DDR_ERR_INT_EN_VAL     0x0000001D
 #define DDR_ERR_SBE_VAL        0x00010000

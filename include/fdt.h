@@ -166,6 +166,7 @@ int fdt_fixup_val(void* fdt, int off, const char* node, const char* name, uint32
 int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name, uint64_t val);
 
 int fdt_shrink(void* fdt);
+int fdt_add_mem_rsv(void* fdt, uint64_t address, uint64_t size);
 
 /* FIT */
 const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
