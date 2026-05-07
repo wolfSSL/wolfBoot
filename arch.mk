@@ -631,6 +631,12 @@ ifeq ($(ARCH),RISCV64)
     CFLAGS+=-DWOLFBOOT_RISCV_MMODE -DWOLFBOOT_DUALBOOT
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
+    # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated
+    # fpga_design_config.h. Setting LIBERO_FPGA_CONFIG_DIR enables DDR init
+    # and adds the directory to the include search path.
+    ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
+      CFLAGS+=-DMPFS_DDR_INIT -I$(LIBERO_FPGA_CONFIG_DIR)
+    endif
   else
     # Supervisor Mode: Running under HSS
     CFLAGS+=-DWOLFBOOT_DUALBOOT

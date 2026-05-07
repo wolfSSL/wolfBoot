@@ -802,7 +802,7 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 
 ### Supported Boot Configurations
 
-Five ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+Six ready-to-use config templates cover all supported boot mode / storage / memory combinations:
 
 | Configuration | Config File | Boot Mode | Storage | Memory | HSS |
 |---------------|-------------|-----------|---------|--------|-----|
@@ -811,21 +811,40 @@ Five ready-to-use config templates cover all supported boot mode / storage / mem
 | **QSPI (S-mode)** | `polarfire_mpfs250_qspi.config` | S-mode (U54 via HSS) | MSS or SC QSPI | DDR | Yes |
 | **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
 | **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
+| **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
+
+The **M-Mode + DDR** configuration brings up the LPDDR4 controller from
+the E51 in M-mode (no HSS), then loads a signed FIT image from SD card
+and hands off to a U54 hart in S-mode for Linux. Because all
+LIBERO_SETTING_\* values are board-specific, this build pulls them from
+a Libero/HSS-generated `fpga_design_config.h` pointed at by the
+`LIBERO_FPGA_CONFIG_DIR` makefile variable - typical sources are an
+HSS Video Kit build at
+`<hss>/build/boards/mpfs-video-kit/fpga_design_config` or a Libero MSS
+Configurator export. Setting `LIBERO_FPGA_CONFIG_DIR` automatically
+defines `MPFS_DDR_INIT` and adds the directory to the include path
+(see `arch.mk`); when unset, the DDR HAL is excluded and the build
+still produces a working M-mode wolfBoot without DDR. Add
+`-DDEBUG_DDR` to `CFLAGS_EXTRA` for verbose register-level traces
+during bring-up.
 
 Key build settings that differ between configurations:
 
-| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode |
-|---------|--------|------|------|--------|--------|
-| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` |
-| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` |
-| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 |
-| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 |
-| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 |
-| `MPFS_L2LIM` | – | – | – | 1 | – |
-| `RISCV_MMODE` | – | – | – | – | 1 |
-| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` |
-| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A |
-| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 |
+| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode | M-Mode + DDR |
+|---------|--------|------|------|--------|--------|--------------|
+| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` | `0x0A000000` |
+| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` | `0x8E000000` |
+| `WOLFBOOT_LOAD_DTS_ADDRESS` | `0x8A000000` | `0x8A000000` | `0x8A000000` | – | – | `0x8A000000` |
+| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 | 0 |
+| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 | 1 |
+| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 | 0 |
+| `MPFS_L2LIM` | – | – | – | 1 | – | – |
+| `RISCV_MMODE` | – | – | – | – | 1 | 1 |
+| `LIBERO_FPGA_CONFIG_DIR` | – | – | – | – | – | required |
+| `WOLFBOOT_MMODE_SMODE_BOOT` | – | – | – | – | – | 1 |
+| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` | `mpfs250-m.ld` |
+| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A | N/A |
+| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 | 1 |
 
 > **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
 > crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
