@@ -84,7 +84,7 @@
         #define ENABLE_L2_CACHE /* setup and enable L2 in first stage only */
     #else
         /* relocate to 64-bit 0xF_ */
-        #define CCSRBAR_PHYS_HIGH 0xFULL
+        #define CCSRBAR_PHYS_HIGH 0xF
         #define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
     #endif
 
@@ -95,9 +95,9 @@
 
     #define FLASH_BASE_ADDR      0xEC000000UL
     #ifndef BUILD_LOADER_STAGE1
-    #define FLASH_BASE_PHYS_HIGH 0xFULL /* 36-bit: 0xF_EC000000 */
+    #define FLASH_BASE_PHYS_HIGH 0xF /* 36-bit: 0xF_EC000000 */
     #else
-    #define FLASH_BASE_PHYS_HIGH 0x0ULL /* 32-bit stage1 */
+    #define FLASH_BASE_PHYS_HIGH 0x0 /* 32-bit stage1 */
     #endif
     #define FLASH_LAW_SIZE       LAW_SIZE_64MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_64M
@@ -136,7 +136,7 @@
         #define ENABLE_L2_CACHE
     #else
         /* relocate to 64-bit 0xF_ */
-        #define CCSRBAR_PHYS_HIGH 0xFULL
+        #define CCSRBAR_PHYS_HIGH 0xF
         #define CCSRBAR_PHYS (CCSRBAR_PHYS_HIGH + CCSRBAR_DEF)
     #endif
 
@@ -148,9 +148,9 @@
     /* 128MB NOR: 0xE8000000 - 0xEFFFFFFF */
     #define FLASH_BASE_ADDR      0xE8000000UL
     #ifndef BUILD_LOADER_STAGE1
-    #define FLASH_BASE_PHYS_HIGH 0xFULL /* 36-bit: 0xF_E8000000 */
+    #define FLASH_BASE_PHYS_HIGH 0xF /* 36-bit: 0xF_E8000000 */
     #else
-    #define FLASH_BASE_PHYS_HIGH 0x0ULL /* 32-bit stage1 */
+    #define FLASH_BASE_PHYS_HIGH 0x0 /* 32-bit stage1 */
     #endif
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB
     /* e5500 BookE has no 128M page size (64M->256M), use 256M TLB */
@@ -159,14 +159,14 @@
     #define USE_LONG_JUMP
 
 #elif defined(TARGET_nxp_t2080)
-    /* NXP T2080 */
+    /* NXP T2080: 4 cores in 2 clusters of 2 (each core has 2 threads) */
     #define CORE_E6500
     #define CPU_NUMCORES 4
-    #define CORES_PER_CLUSTER 4
+    #define CORES_PER_CLUSTER 2
     #define LAW_MAX_ENTRIES 32
     #define ENABLE_PPC64
 
-    #define CCSRBAR_DEF (0xFE000000UL) /* T2080RM 4.3.1 default base */
+    #define CCSRBAR_DEF 0xFE000000 /* T2080RM 4.3.1 default base */
     #define CCSRBAR_SIZE BOOKE_PAGESZ_16M
 
     #define ENABLE_L1_CACHE
@@ -199,13 +199,22 @@
     #define INITIAL_SRAM_BOOKE_SZ BOOKE_PAGESZ_1M
 
     #define ENABLE_INTERRUPTS
+    #define ENABLE_FMAN
 
 #ifdef BOARD_CW_VPX3152
-    /* Relocate CCSRBAR: default 0xFE000000 (16MB) falls within 256MB flash
-     * VA range 0xF0000000-0xFFFFFFFF. Move to 0xEF000000 (just below flash).
-     * The existing relocation code in boot_ppc_start.S handles the hardware
-     * CCSRBAR register write when CCSRBAR_DEF != CCSRBAR_PHYS. */
-    #define CCSRBAR 0xEF000000UL
+    /* Relocate CCSRBAR: default 0xFE000000 (16MB) falls within the 256MB
+     * flash VA range 0xF0000000-0xFFFFFFFF. Move to 0xEF000000 (just below
+     * flash). The existing relocation code in boot_ppc_start.S handles the
+     * hardware CCSRBAR register write when CCSRBAR_DEF != CCSRBAR_PHYS.
+     *
+     * CCSR is mapped at PA=0xF_EF000000 (36-bit-aliased, PHYS_HIGH=0xF) to
+     * match the cw_152_64.dtb soc.ranges entry. A 32-bit alternative
+     * (PA=0x0_EF000000) was tested during bring-up but is not selectable
+     * in this header. */
+    #define CCSRBAR 0xEF000000
+    #define CCSRBAR_PHYS_HIGH 0xF
+    #define CCSRBAR_NEW_REG 0x00FEF000 /* (PHYS_HIGH << 20) | (CCSRBAR >> 12) */
+    #define CCSRBAR_PHYS ((0xFULL << 32) | CCSRBAR_DEF)
 #endif
 
     #define ENABLE_DDR
@@ -217,11 +226,13 @@
     #endif
     #endif
 
-    /* DDR stack configuration - relocate from CPC SRAM after DDR init
-     * Stack is at top of first 32MB of DDR, with 64KB reserved for stack
-     * Stack grows downward from DDR_STACK_TOP */
+    /* DDR stack configuration - relocate from CPC SRAM after DDR init.
+     * Stack must be ABOVE the image load area to avoid being overwritten
+     * when the OS image is copied to WOLFBOOT_LOAD_ADDRESS (0x100000).
+     * With WOLFBOOT_PARTITION_SIZE=0x800000 the image area ends at 0x900000.
+     * Place stack at 16MB to be safely above the image + DTS regions. */
     #define DDR_STACK_SIZE    (64 * 1024)        /* 64KB stack in DDR */
-    #define DDR_STACK_TOP     0x02000000UL       /* Top of first 32MB */
+    #define DDR_STACK_TOP     0x01000000UL       /* 16MB - above image area */
     #define DDR_STACK_BASE    (DDR_STACK_TOP - DDR_STACK_SIZE)
 
     /* DDR address where .ramcode is copied before CPC SRAM is released.
@@ -235,12 +246,12 @@
      *   LAW0: addr=0xF_F000_0000, size=256MB, target=IFC. */
 #ifdef BOARD_CW_VPX3152
     #define FLASH_BASE_ADDR      0xF0000000UL  /* 256MB NOR flash (0xF0000000-0xFFFFFFFF) */
-    #define FLASH_BASE_PHYS_HIGH 0xFULL
+    #define FLASH_BASE_PHYS_HIGH 0xF
     #define FLASH_LAW_SIZE       LAW_SIZE_256MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_256M
 #else
     #define FLASH_BASE_ADDR      0xE8000000UL
-    #define FLASH_BASE_PHYS_HIGH 0x0ULL
+    #define FLASH_BASE_PHYS_HIGH 0x0
     #define FLASH_LAW_SIZE       LAW_SIZE_128MB
     #define FLASH_TLB_PAGESZ     BOOKE_PAGESZ_128M
 #endif
@@ -265,7 +276,7 @@
 
 /* CCSRBAR */
 #ifndef CCSRBAR_DEF
-#define CCSRBAR_DEF  0xFE000000UL
+#define CCSRBAR_DEF  0xFE000000
 #endif
 #ifndef CCSRBAR
 #define CCSRBAR      CCSRBAR_DEF
@@ -275,6 +286,13 @@
 #endif
 #ifndef CCSRBAR_PHYS_HIGH
 #define CCSRBAR_PHYS_HIGH 0
+#endif
+/* Encoding written into CCSRBAR for the legacy (e500/e500mc) relocation
+ * path: PHYS_HIGH in [23:20], PA[35:12] in the low bits. Boards that
+ * relocate CCSRBAR but don't use USE_CORENET_INTERFACE need this
+ * pre-computed because GAS @h/@l can't evaluate the shift/OR. */
+#ifndef CCSRBAR_NEW_REG
+#define CCSRBAR_NEW_REG ((CCSRBAR_PHYS_HIGH << 20) | (CCSRBAR >> 12))
 #endif
 
 
@@ -435,6 +453,7 @@
     #define LAW_TRGT_PCIE1   0x00
     #define LAW_TRGT_PCIE2   0x01
     #define LAW_TRGT_PCIE3   0x02
+    #define LAW_TRGT_PCIE4   0x03
     #define LAW_TRGT_DDR_1   0x10 /* Memory Complex 1 */
     #define LAW_TRGT_DDR_2   0x11
     #define LAW_TRGT_BMAN    0x18 /* Buffer Manager (control) */
@@ -612,6 +631,13 @@
 #define SPRN_PVR  0x11F /* Processor Version */
 #define SPRN_SVR  0x3FF /* System Version */
 #define SPRN_HDBCR0 0x3D0
+#define SPRN_HDBCR1 0x3D1
+#define SPRN_HDBCR2 0x3D2
+#define SPRN_HDBCR7 0x277
+#define SPRN_DBCR0  0x134
+#define SPRN_DBCR1  0x135
+#define SPRN_EPCR   0x133
+#define SPRN_MMUCFG 0x3F7
 
 /* Hardware Implementation-Dependent Registers */
 #define SPRN_HID0   0x3F0
@@ -903,6 +929,17 @@ extern void dcache_disable(void);
 /* For older PPC compat use dcbf to flush spin table entry */
 /* Note: spin-table must be cache-line aligned in memory */
 #define EPAPR_MAGIC       (0x45504150) /* Book III-E CPUs */
+
+/* Initial Mapped Area size passed to OS in r7. U-Boot uses 64MB.
+ * Override via CFLAGS_EXTRA+=-DWOLFBOOT_BOOTMAPSZ=... */
+#ifndef WOLFBOOT_BOOTMAPSZ
+#define WOLFBOOT_BOOTMAPSZ    (64 * 1024 * 1024) /* 64MB */
+#endif
+
+/* Maximum DTS size for flush_cache before OS jump */
+#ifndef WOLFBOOT_DTS_MAX_SIZE
+#define WOLFBOOT_DTS_MAX_SIZE (64 * 1024) /* 64KB */
+#endif
 #define ENTRY_ADDR_UPPER  0
 #define ENTRY_ADDR_LOWER  4
 #define ENTRY_R3_UPPER    8

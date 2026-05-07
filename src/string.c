@@ -26,6 +26,22 @@
 #define _FORTIFY_SOURCE 0
 #endif
 
+/* Enable %llu/%llx support only on platforms where the 64-bit divide
+ * is either native (64-bit CPUs) or backed by linked libgcc helpers
+ * (PPC32 toolchain). The auto-enable deliberately excludes 32-bit
+ * bare-metal targets (Cortex-M, x86 stage1) -- those would link-fail
+ * on __aeabi_uldivmod / __udivmoddi4 because they don't pull in libgcc.
+ * Such targets can still opt-in by defining PRINTF_LONG_LONG manually. */
+#if !defined(PRINTF_LONG_LONG) && ( \
+    defined(__alpha__) || defined(__ia64__) || defined(_ARCH_PPC64) || \
+    defined(__x86_64__) || defined(_M_X64) || \
+    defined(__aarch64__) || defined(_M_ARM64) || \
+    defined(__sparc64__) || defined(__s390x__) || \
+    defined(__ppc64__) || defined(__powerpc64__) || defined(__PPC__) || \
+    (defined(__riscv_xlen) && (__riscv_xlen == 64)))
+    #define PRINTF_LONG_LONG
+#endif
+
 #include <stddef.h>
 #if !defined(TARGET_library) && defined(__STDC_HOSTED__) && __STDC_HOSTED__ \
     && !defined(__CCRX__)
@@ -318,42 +334,87 @@ void *memmove(void *dst, const void *src, size_t n)
 #endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
+/* Shared digit table -- avoids duplicating the literal in each width's
+ * formatting loop. */
+static const char uart_writenum_digits[] = "0123456789ABCDEF";
+
+/* Shared tail for both widths: applies zeropad spacing, slides the digit
+ * run into place, and emits to UART. Caller has filled digits at the
+ * tail of `buf` and counted them in `sz`; `i` is the prefix length
+ * (sign character only). */
+static void uart_writenum_emit(char *buf, int bufsize, int i, int sz,
+    int zeropad, int maxdigits)
+{
+    if (zeropad && sz < maxdigits) {
+        i += maxdigits - sz;
+    }
+    memmove(&buf[i], &buf[bufsize - sz], sz);
+    uart_write(buf, i + sz);
+}
+
 void uart_writenum(int num, int base, int zeropad, int maxdigits)
 {
-    int i = 0;
-    char buf[sizeof(unsigned long)*2+1];
-    const char* kDigitLut = "0123456789ABCDEF";
+    int i = 0, sz = 0;
+    char buf[sizeof(unsigned int) * 2 + 2];
     unsigned int val = (unsigned int)num;
-    int sz = 0;
     if (maxdigits == 0)
         maxdigits = 8;
     if (maxdigits > (int)sizeof(buf))
         maxdigits = (int)sizeof(buf);
     memset(buf, 0, sizeof(buf));
-    if (base == 10 && num < 0) { /* handle negative */
+    if (base == 10 && num < 0) {
         buf[i++] = '-';
-        val = -num;
+        val = (unsigned int)(-num);
+    }
+    if (zeropad) {
+        memset(&buf[i], '0', maxdigits);
+    }
+    /* 32-bit divide: stays out of libgcc 64-bit helpers, which aren't
+     * linked into freestanding stage1 / Cortex-M builds. */
+    do {
+        buf[sizeof(buf) - sz - 1] =
+            uart_writenum_digits[(val % (unsigned)base)];
+        sz++;
+        val /= (unsigned)base;
+    } while (val > 0U);
+    uart_writenum_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
+}
+
+#ifdef PRINTF_LONG_LONG
+/* 64-bit core for %llu/%lld/%llx. Pulls in libgcc 64-bit divide
+ * (__udivmoddi4 / __aeabi_uldivmod) so it's only compiled when needed
+ * and only called from the long-long printf paths -- never from the
+ * 32-bit uart_writenum() fast path above. */
+static void uart_writenum_ll(unsigned long long val, int is_negative,
+    int base, int zeropad, int maxdigits)
+{
+    int i = 0, sz = 0;
+    char buf[sizeof(unsigned long long) * 2 + 2];
+    if (maxdigits == 0)
+        maxdigits = 8;
+    if (maxdigits > (int)sizeof(buf))
+        maxdigits = (int)sizeof(buf);
+    memset(buf, 0, sizeof(buf));
+    if (is_negative) {
+        buf[i++] = '-';
     }
     if (zeropad) {
         memset(&buf[i], '0', maxdigits);
     }
     do {
-        buf[sizeof(buf)-sz-1] = kDigitLut[(val % base)];
+        buf[sizeof(buf) - sz - 1] =
+            uart_writenum_digits[(val % (unsigned)base)];
         sz++;
-        val /= base;
-    } while (val > 0U);
-    if (zeropad && sz < maxdigits) {
-        i += maxdigits-sz;
-    }
-    memmove(&buf[i], &buf[sizeof(buf)-sz], sz);
-    i+=sz;
-    uart_write(buf, i);
+        val /= (unsigned)base;
+    } while (val > 0ULL);
+    uart_writenum_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
 }
+#endif /* PRINTF_LONG_LONG */
 
 void uart_vprintf(const char* fmt, va_list argp)
 {
     char* fmtp = (char*)fmt;
-    int zeropad, maxdigits, precision, leftjust;
+    int zeropad, maxdigits, precision, leftjust, islong;
     while (fmtp != NULL && *fmtp != '\0') {
         /* print non formatting characters */
         if (*fmtp != '%') {
@@ -363,7 +424,7 @@ void uart_vprintf(const char* fmt, va_list argp)
         fmtp++; /* skip % */
 
         /* find formatters */
-        zeropad = maxdigits = leftjust = 0;
+        zeropad = maxdigits = leftjust = islong = 0;
         precision = -1; /* -1 = not specified */
         /* check for left-justify flag */
         if (*fmtp == '-') {
@@ -400,7 +461,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                 }
             }
             else if (*fmtp == 'l') {
-                /* long - skip */
+                islong++;
                 fmtp++;
             }
             else if (*fmtp == 'z') {
@@ -420,8 +481,32 @@ void uart_vprintf(const char* fmt, va_list argp)
             case 'i':
             case 'd':
             {
-                int n = (int)va_arg(argp, int);
-                uart_writenum(n, 10, zeropad, maxdigits);
+            #ifdef PRINTF_LONG_LONG
+                if (islong >= 2) {
+                    /* %llu / %lld: full 64-bit value */
+                    int is_neg = 0;
+                    unsigned long long val;
+                    if (*fmtp != 'u') {
+                        long long sll = va_arg(argp, long long);
+                        if (sll < 0) {
+                            is_neg = 1;
+                            val = (unsigned long long)(-sll);
+                        }
+                        else {
+                            val = (unsigned long long)sll;
+                        }
+                    }
+                    else {
+                        val = va_arg(argp, unsigned long long);
+                    }
+                    uart_writenum_ll(val, is_neg, 10, zeropad, maxdigits);
+                }
+                else
+            #endif
+                {
+                    int n = (int)va_arg(argp, int);
+                    uart_writenum(n, 10, zeropad, maxdigits);
+                }
                 break;
             }
             case 'p':
@@ -430,8 +515,19 @@ void uart_vprintf(const char* fmt, va_list argp)
             case 'x':
             case 'X':
             {
-                int n = (int)va_arg(argp, int);
-                uart_writenum(n, 16, zeropad, maxdigits);
+            #ifdef PRINTF_LONG_LONG
+                if (islong >= 2) {
+                    /* %llx: full 64-bit value */
+                    unsigned long long val =
+                        va_arg(argp, unsigned long long);
+                    uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
+                }
+                else
+            #endif
+                {
+                    int n = (int)va_arg(argp, int);
+                    uart_writenum(n, 16, zeropad, maxdigits);
+                }
                 break;
             }
             case 's':

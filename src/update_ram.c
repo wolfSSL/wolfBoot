@@ -316,16 +316,47 @@ backup_on_failure:
 #endif
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
-    /* Check for U-Boot Legacy format image header */
+    /* Check for U-Boot Legacy format image header.
+     * uImage header (64 bytes, big-endian fields):
+     *   off 0  : magic         0x27051956
+     *   off 4  : header CRC
+     *   off 8  : creation time
+     *   off 12 : data size
+     *   off 16 : ih_load       data load address
+     *   off 20 : ih_ep         entry point address
+     *   off 24 : data CRC
+     *   off 28 : os/arch/type/comp
+     *   off 32 : name (32 bytes)
+     */
     image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
     if (image_ptr) {
         if (*((uint32_t*)image_ptr) == UBOOT_IMG_HDR_MAGIC) {
-            /* Note: Could parse header and get load address at 0x10 */
+            uint32_t ih_load;
+            uint32_t ih_ep;
 
-            /* Skip 64 bytes (size of Legacy format image header) */
-            load_address += UBOOT_IMG_HDR_SZ;
+            ih_load = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 16));
+            ih_ep   = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 20));
+
+            wolfBoot_printf("U-Boot Legacy header detected: load=0x%x ep=0x%x "
+                "(skipping %d bytes)\n",
+                ih_load, ih_ep, UBOOT_IMG_HDR_SZ);
             os_image.fw_base += UBOOT_IMG_HDR_SZ;
             os_image.fw_size -= UBOOT_IMG_HDR_SZ;
+
+            /* Honor the uImage's load address: U-Boot bootm copies the
+             * payload to ih_load and jumps to ih_ep, because PowerPC /
+             * VxWorks kernels are typically built non-relocatable with
+             * absolute references baked in. Falling back to the wolfBoot
+             * default WOLFBOOT_LOAD_ADDRESS would place the kernel at the
+             * wrong address and the first internal jump would fault.
+             *
+             * Note: this override applies only when ih_load is non-zero
+             * (typical for VxWorks: 0x00100000; typical for Linux PPC:
+             * 0x00000000 -- handled below by leaving load_address alone). */
+            if (ih_load != 0) {
+                load_address = (uint32_t*)(uintptr_t)ih_load;
+            }
+            (void)ih_ep; /* TODO: pass through to do_boot when ih_ep != ih_load */
         }
     }
 #endif
