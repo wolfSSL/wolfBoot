@@ -779,6 +779,67 @@ int fdt_shrink(void* fdt)
     return fdt_set_totalsize(fdt, total_size);
 }
 
+/* Append a /memreserve/ entry. Inserts before the (0,0) terminator and
+ * shifts the structure block + strings block down by 16 bytes. Caller must
+ * have already grown totalsize via fdt_set_totalsize() to leave headroom. */
+int fdt_add_mem_rsv(void* fdt, uint64_t address, uint64_t size)
+{
+    struct fdt_reserve_entry* rsv;
+    uint8_t* base = (uint8_t*)fdt;
+    uint32_t off_rsv;
+    uint32_t off_dt;
+    uint32_t off_str;
+    uint32_t size_str;
+    uint32_t total;
+    uint32_t data_end;
+    uint32_t shift;
+    uint32_t i;
+
+    if (fdt == NULL) {
+        return -FDT_ERR_BADSTATE;
+    }
+
+    off_rsv     = fdt_off_mem_rsvmap(fdt);
+    off_dt      = fdt_off_dt_struct(fdt);
+    off_str     = fdt_off_dt_strings(fdt);
+    size_str    = fdt_size_dt_strings(fdt);
+    total       = fdt_totalsize(fdt);
+    data_end    = off_str + size_str;
+    shift       = (uint32_t)sizeof(struct fdt_reserve_entry); /* 16 */
+
+    if ((data_end + shift) > total) {
+        return -FDT_ERR_NOSPACE;
+    }
+
+    /* Find the (0,0) terminator in the reserve map. */
+    rsv = (struct fdt_reserve_entry*)(base + off_rsv);
+    i = 0;
+    while ((rsv[i].address != 0ULL) || (rsv[i].size != 0ULL)) {
+        i++;
+        if ((off_rsv + (i + 1U) * shift) > off_dt) {
+            return -FDT_ERR_BADSTRUCTURE;
+        }
+    }
+
+    /* Shift structure + strings down by 16 bytes. memmove handles overlap. */
+    memmove(base + off_dt + shift, base + off_dt,
+        (size_t)((off_str + size_str) - off_dt));
+
+    /* Insert new entry where the old terminator was, write new terminator. */
+    rsv[i].address = cpu_to_fdt64(address);
+    rsv[i].size    = cpu_to_fdt64(size);
+    rsv[i + 1].address = 0;
+    rsv[i + 1].size    = 0;
+
+    /* Update header offsets. */
+    fdt_set_off_dt_struct(fdt, off_dt + shift);
+    fdt_set_off_dt_strings(fdt, off_str + shift);
+
+    wolfBoot_printf("FDT: /memreserve/ +0x%llx +0x%llx\n",
+        (unsigned long long)address, (unsigned long long)size);
+    return 0;
+}
+
 /* FTD Fixup API's */
 int fdt_fixup_str(void* fdt, int off, const char* node, const char* name,
     const char* str)

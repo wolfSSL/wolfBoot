@@ -34,11 +34,21 @@
     #define ENABLE_MP   /* multi-core support */
 #endif
 
+/* DPAA: Logical I/O Device Number (LIODN) and QMan/BMan software-portal
+ * initialization. Required before handing off to a DPAA-aware OS such
+ * as VxWorks 7 or Linux: peripheral DMA is otherwise blocked by PAMU
+ * (LIODN=0 has no valid window) and the QMan dequeue/enqueue paths
+ * fault. Default-on for T2080. Define WOLFBOOT_NO_DPAA to disable. */
+#ifndef WOLFBOOT_NO_DPAA
+    #define ENABLE_DPAA
+#endif
+
 /* generic shared NXP QorIQ driver code */
 #include "nxp_ppc.c"
 
 /* Forward declarations */
 static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector);
+void RAMFUNCTION hal_ifc_cs0_init(void);
 #ifdef ENABLE_MP
 static void hal_mp_init(void);
 #endif
@@ -72,6 +82,12 @@ static void hal_mp_init(void);
 #define FLASH_UNLOCK_ADDR2 0x555
 #endif
 
+/* FLASH_CMD_SECTOR: sector used for flash command sequences that don't target
+ * a specific sector (reset, unlock, PPB entry/exit). AMD flash command decode
+ * only looks at the low address bits, so sector 0 works for all boards with
+ * a properly mapped full-flash TLB entry. */
+#define FLASH_CMD_SECTOR 0
+
 /* Flash IO Helpers */
 #if FLASH_CFI_WIDTH == 16
 #define FLASH_IO8_WRITE(sec, n, val)      *((volatile uint16_t*)(FLASH_BASE_ADDR + (FLASH_SECTOR_SIZE * (sec)) + ((n) * 2))) = (((val) << 8) | (val))
@@ -84,10 +100,214 @@ static void hal_mp_init(void);
 #endif
 
 
+#ifdef ENABLE_DPAA
+/* T2080RM 4.6.4: DPAA Logical I/O Device Number registers (DCFG block).
+ * DCFG_BASE is defined in nxp_t2080.h as (CCSRBAR + 0xE0000). */
+#define DCFG_USB1LIODNR    ((volatile uint32_t*)(DCFG_BASE + 0x520))
+#define DCFG_USB2LIODNR    ((volatile uint32_t*)(DCFG_BASE + 0x524))
+#define DCFG_SDMMCLIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x530))
+#define DCFG_SATA1LIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x550))
+#define DCFG_SATA2LIODNR   ((volatile uint32_t*)(DCFG_BASE + 0x554))
+#define DCFG_TDMDMALIODNR  ((volatile uint32_t*)(DCFG_BASE + 0x574))
+#define DCFG_DMA1LIODNR    ((volatile uint32_t*)(DCFG_BASE + 0x580))
+#define DCFG_DMA2LIODNR    ((volatile uint32_t*)(DCFG_BASE + 0x584))
+#define DCFG_DMA3LIODNR    ((volatile uint32_t*)(DCFG_BASE + 0x588))
+
+/* PCIe LIODN base register (PEXx_PEX_LBR @ PCIe block + 0x40).
+ * T2080 has four PCIe controllers at CCSRBAR+0x240000 + (n-1)*0x10000. */
+#define PCIE_BASE(n)       (CCSRBAR + 0x240000UL + (((n)-1) * 0x10000UL))
+#define PCIE_LIODN(n)      ((volatile uint32_t*)(PCIE_BASE(n) + 0x40))
+
+/* T2080RM 10.5.1 / 10.5.2: QMan (CCSR + 0x318000) and BMan (CCSR + 0x31A000).
+ * Software-portal physical windows match the T1024/T1040 layout. */
+#define QMAN_CCSR_BASE      (CCSRBAR + 0x318000UL)
+#define QMAN_BASE_PHYS_HIGH 0xF
+#define QMAN_BASE_PHYS      0xF6000000UL
+#define QMAN_NUM_PORTALS    18
+
+#define BMAN_CCSR_BASE      (CCSRBAR + 0x31A000UL)
+#define BMAN_BASE_PHYS_HIGH 0xF
+#define BMAN_BASE_PHYS      0xF4000000UL
+
+/* QMan / BMan CCSR registers */
+#define QMAN_LIODNR     ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xD08))
+#define BMAN_LIODNR     ((volatile uint32_t*)(BMAN_CCSR_BASE + 0xD08))
+
+/* Frame Queue Descriptor (FQD) and Packed Frame Descriptor Record (PFDR) */
+#define FQD_BAR         ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC04))
+#define FQD_AR          ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC10))
+#define PFDR_BARE       ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC20))
+#define PFDR_BAR        ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC24))
+#define PFDR_AR         ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC30))
+
+/* QMan Software-Portal Configuration: base address (upper/lower) and
+ * per-portal LIO_CFG / IO_CFG. */
+#define QCSP_BARE       ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC80))
+#define QCSP_BAR        ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xC84))
+#define QCSP_LIO_CFG(n) ((volatile uint32_t*)(QMAN_CCSR_BASE + 0x1000 + ((n) * 0x10)))
+#define QCSP_IO_CFG(n)  ((volatile uint32_t*)(QMAN_CCSR_BASE + 0x1004 + ((n) * 0x10)))
+
+/* Inhibit registers in the per-portal cache-inhibited window */
+#define QCSP_ISDR(n)    ((volatile uint32_t*)(QMAN_BASE_PHYS + 0x1000E08UL + ((n) * 0x1000UL)))
+#define BCSP_ISDR(n)    ((volatile uint32_t*)(BMAN_BASE_PHYS + 0x1000E08UL + ((n) * 0x1000UL)))
+
+struct liodn_id_table {
+    const char* compat;
+    uint32_t    id;
+    void*       reg_offset;
+};
+#define SET_LIODN(fdtcomp, liodn, reg) \
+    { .compat = fdtcomp, .id = liodn, .reg_offset = (void*)reg }
+
+/* T2080 LIODN assignments. Values mirror NXP/CW U-Boot 2014.01
+ * t2080_ids.c (board/cw/vpx3-152 uses the SoC defaults). */
+static const struct liodn_id_table liodn_tbl[] = {
+    SET_LIODN("fsl,qman",          62, QMAN_LIODNR),
+    SET_LIODN("fsl,bman",          63, BMAN_LIODNR),
+    SET_LIODN("fsl,esdhc",        552, DCFG_SDMMCLIODNR),
+    SET_LIODN("fsl-usb2-mph",     553, DCFG_USB1LIODNR),
+    SET_LIODN("fsl-usb2-dr",      554, DCFG_USB2LIODNR),
+    SET_LIODN("fsl,pq-sata-v2",   555, DCFG_SATA1LIODNR),
+    SET_LIODN("fsl,pq-sata-v2",   556, DCFG_SATA2LIODNR),
+    SET_LIODN("fsl,elo3-dma",     147, DCFG_DMA1LIODNR),
+    SET_LIODN("fsl,elo3-dma",     227, DCFG_DMA2LIODNR),
+    SET_LIODN("fsl,elo3-dma",     226, DCFG_DMA3LIODNR),
+    SET_LIODN("fsl,qoriq-pcie",   148, PCIE_LIODN(1)),
+    SET_LIODN("fsl,qoriq-pcie",   228, PCIE_LIODN(2)),
+    SET_LIODN("fsl,qoriq-pcie",   308, PCIE_LIODN(3)),
+    SET_LIODN("fsl,qoriq-pcie",   388, PCIE_LIODN(4)),
+};
+
+/* Program LIODN registers for DPAA-managed peripherals. Mirrors
+ * U-Boot's set_liodns() for the subset wolfBoot exposes. */
+static void hal_liodn_init(void)
+{
+    int i;
+    for (i = 0; i < (int)(sizeof(liodn_tbl)/sizeof(struct liodn_id_table)); i++) {
+        if (liodn_tbl[i].reg_offset != NULL) {
+#ifdef DEBUG_UART
+            wolfBoot_printf("LIODN %s: %p=%d\n",
+                liodn_tbl[i].compat, liodn_tbl[i].reg_offset,
+                liodn_tbl[i].id);
+#endif
+            set32(liodn_tbl[i].reg_offset, liodn_tbl[i].id);
+        }
+    }
+}
+
+struct qportal_info {
+    uint16_t dliodn;        /* DQRR LIODN */
+    uint16_t fliodn;        /* frame data LIODN */
+    uint16_t liodn_offset;
+    uint8_t  sdest;
+};
+#define SET_QP_INFO(dqrr, fdata, off, dest) \
+    { .dliodn = (dqrr), .fliodn = (fdata), .liodn_offset = (off), .sdest = (dest) }
+
+/* T2080 has 18 software portals; values from CW U-Boot t2080_ids.c. */
+static const struct qportal_info qp_info[QMAN_NUM_PORTALS] = {
+    SET_QP_INFO( 1, 27, 1, 0),
+    SET_QP_INFO( 2, 28, 1, 0),
+    SET_QP_INFO( 3, 29, 1, 1),
+    SET_QP_INFO( 4, 30, 1, 1),
+    SET_QP_INFO( 5, 31, 1, 2),
+    SET_QP_INFO( 6, 32, 1, 2),
+    SET_QP_INFO( 7, 33, 1, 3),
+    SET_QP_INFO( 8, 34, 1, 3),
+    SET_QP_INFO( 9, 35, 1, 0),
+    SET_QP_INFO(10, 36, 1, 0),
+    SET_QP_INFO(11, 37, 1, 1),
+    SET_QP_INFO(12, 38, 1, 1),
+    SET_QP_INFO(13, 39, 1, 2),
+    SET_QP_INFO(14, 40, 1, 2),
+    SET_QP_INFO(15, 41, 1, 3),
+    SET_QP_INFO(16, 42, 1, 3),
+    SET_QP_INFO(17, 43, 1, 0),
+    SET_QP_INFO(18, 44, 1, 0)
+};
+
+/* Configure QMan/BMan software portals for handoff to the OS.
+ *
+ * - Programs the QMan portal cache-enabled base address (QCSP_BARE/BAR).
+ * - Clears Frame Queue Descriptor and PFDR base/access registers so
+ *   the OS can install its own DPAA tables.
+ * - Writes per-portal LIO_CFG/IO_CFG (DQRR LIODN + frame-data LIODN +
+ *   sdest hint).
+ * - Inhibits all portals via QCSP_ISDR/BCSP_ISDR; the OS un-inhibits
+ *   portals it owns.
+ *
+ * Note: this only programs hardware. If the customer's flat device
+ * tree contains placeholder LIODNs (e.g. <0 0>), an FDT fixup pass is
+ * also needed - tracked as a follow-up. */
+static void hal_qbman_init(void)
+{
+    int i;
+
+    /* Point QMan portals at the cache-enabled physical window */
+    set32(QCSP_BARE, QMAN_BASE_PHYS_HIGH);
+    set32(QCSP_BAR,  (uint32_t)QMAN_BASE_PHYS);
+
+    /* Clear FQD / PFDR so OS owns table placement */
+    set32(FQD_BAR,  0);
+    set32(FQD_AR,   0);
+    set32(PFDR_BARE, 0);
+    set32(PFDR_BAR,  0);
+    set32(PFDR_AR,   0);
+
+    /* Inhibit every portal until OS un-inhibits its share */
+    for (i = 0; i < QMAN_NUM_PORTALS; i++) {
+        set32(QCSP_ISDR(i), 0x3FFFFF);
+    }
+    for (i = 0; i < 8; i++) {
+        /* BMan inhibit: 3-bit field, 8 portals */
+        set32(BCSP_ISDR(i), 0x7);
+    }
+
+    /* Program per-portal DQRR / frame LIODN */
+    for (i = 0; i < (int)(sizeof(qp_info)/sizeof(struct qportal_info)); i++) {
+        set32(QCSP_LIO_CFG(i),
+              ((uint32_t)qp_info[i].liodn_offset << 16) |
+               (uint32_t)qp_info[i].dliodn);
+        set32(QCSP_IO_CFG(i),
+              ((uint32_t)qp_info[i].sdest << 16) |
+               (uint32_t)qp_info[i].fliodn);
+    }
+}
+#endif /* ENABLE_DPAA */
+
+
 void law_init(void)
 {
-    /* Buffer Manager (BMan) (control) - probably not required */
-    set_law(3, 0xF, 0xF4000000, LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
+    /* Buffer Manager (BMan) (control) */
+    set_law(3, BMAN_BASE_PHYS_HIGH, (uint32_t)BMAN_BASE_PHYS,
+        LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
+
+#ifdef ENABLE_DPAA
+    /* Queue Manager (QMan) (control) at LAW slot 12.
+     * Slots 5..11 and 13..16 are used by hal_cpld_init and the OS64BIT
+     * transition path; slot 12 is the only free one in the 32-bit map. */
+    set_law(12, QMAN_BASE_PHYS_HIGH, (uint32_t)QMAN_BASE_PHYS,
+        LAW_TRGT_QMAN, LAW_SIZE_32MB, 1);
+
+    /* TLB entries for cached BMan/QMan portal windows so that
+     * hal_qbman_init() can write the per-portal QCSP_ISDR / BCSP_ISDR
+     * inhibit registers (which live in the portal physical window, not
+     * CCSR). LIODN registers and per-portal QCSP_LIO_CFG/IO_CFG live
+     * in CCSR and are reachable through the existing CCSR TLB.
+     *
+     * Use TLB slots 13 and 14 -- the OS64BIT transition path
+     * (hal_os64bit_map_transition) reuses slots 3-8, 10, 11 to install
+     * the 64-bit peripheral map; using lower numbers would have the
+     * OS64BIT writes silently overwrite ours mid-flight. */
+    set_tlb(1, 13, (uint32_t)BMAN_BASE_PHYS,
+                   (uint32_t)BMAN_BASE_PHYS, BMAN_BASE_PHYS_HIGH,
+                   MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+                   BOOKE_PAGESZ_16M, 1);
+    set_tlb(1, 14, (uint32_t)QMAN_BASE_PHYS,
+                   (uint32_t)QMAN_BASE_PHYS, QMAN_BASE_PHYS_HIGH,
+                   MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
+                   BOOKE_PAGESZ_16M, 1);
+#endif /* ENABLE_DPAA */
 }
 
 /* Note: AMD Autoselect (READ_ID) mode is not used here because entering it
@@ -125,8 +345,14 @@ void hal_ddr_init(void)
 #ifdef ENABLE_DDR
     uint32_t reg;
 
-    /* Map LAW for DDR */
+    /* Map LAW for DDR — use full DDR size.
+     * For 4GB boards, a single 4GB LAW at PA 0x0 covers all DDR.
+     * CW U-Boot ostype2 uses: set_ddr_laws(0, ddr_size, DDR_1). */
+#if DDR_SIZE >= (4096ULL * 1024ULL * 1024ULL)
+    set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_4GB, 0);
+#else
     set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
+#endif
 
     /* If DDR is already enabled then just return */
     reg = get32(DDR_SDRAM_CFG);
@@ -164,12 +390,12 @@ void hal_ddr_init(void)
     /* DDR SDRAM mode configuration */
     set32(DDR_SDRAM_MODE, DDR_SDRAM_MODE_VAL);
     set32(DDR_SDRAM_MODE_2, DDR_SDRAM_MODE_2_VAL);
-    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_3_8_VAL);
-    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_3_8_VAL);
+    set32(DDR_SDRAM_MODE_3, DDR_SDRAM_MODE_3_VAL);
+    set32(DDR_SDRAM_MODE_4, DDR_SDRAM_MODE_4_VAL);
+    set32(DDR_SDRAM_MODE_5, DDR_SDRAM_MODE_5_VAL);
+    set32(DDR_SDRAM_MODE_6, DDR_SDRAM_MODE_6_VAL);
+    set32(DDR_SDRAM_MODE_7, DDR_SDRAM_MODE_7_VAL);
+    set32(DDR_SDRAM_MODE_8, DDR_SDRAM_MODE_8_VAL);
     set32(DDR_SDRAM_MD_CNTL, DDR_SDRAM_MD_CNTL_VAL);
 
     /* DDR Configuration */
@@ -270,6 +496,110 @@ static void hal_cpld_init(void)
 #endif
 }
 
+#ifdef ENABLE_FMAN
+/* FMAN microcode upload for T2080.
+ * Firmware is in NOR flash at FMAN_FW_ADDR (typically 0xFFE60000).
+ * Uses same QE firmware format as T1040. */
+#ifndef FMAN_FW_ADDR
+#define FMAN_FW_ADDR    0xFFE60000UL
+#endif
+#define FMAN_BASE       (CCSRBAR + 0x400000UL)
+#define FMAN_IRAM       (FMAN_BASE + 0xC4000UL)
+#define FMAN_IRAM_IADD  ((volatile uint32_t*)(FMAN_IRAM + 0x0))
+#define FMAN_IRAM_IDATA ((volatile uint32_t*)(FMAN_IRAM + 0x4))
+#define FMAN_IRAM_IREADY ((volatile uint32_t*)(FMAN_IRAM + 0xC))
+#define FMAN_IRAM_IADD_AIE  0x80000000
+#define FMAN_IRAM_READY     0x80000000
+
+/* Reuse QE firmware structures (same format as T1040) */
+#if (defined(__IAR_SYSTEMS_ICC__) && (__IAR_SYSTEMS_ICC__ > 8)) || \
+    defined(__GNUC__)
+    #define QE_PACKED __attribute__ ((packed))
+#else
+    #define QE_PACKED
+#endif
+#define QE_MAX_RISC 4
+struct qe_header {
+    uint32_t length;
+    uint8_t  magic[3];
+    uint8_t  version;
+} QE_PACKED;
+struct qe_soc {
+    uint16_t model;
+    uint8_t  major;
+    uint8_t  minor;
+} QE_PACKED;
+struct qe_microcode {
+    uint8_t  id[32];
+    uint32_t traps[16];
+    uint32_t eccr;
+    uint32_t iram_offset;
+    uint32_t count;
+    uint32_t code_offset;
+    uint8_t  major;
+    uint8_t  minor;
+    uint8_t  revision;
+    uint8_t  padding;
+    uint8_t  reserved[4];
+} QE_PACKED;
+struct qe_firmware {
+    struct qe_header    header;
+    uint8_t             id[62];
+    uint8_t             split;
+    uint8_t             count;
+    struct qe_soc       soc;
+    uint8_t             padding[4];
+    uint64_t            extended_modes;
+    uint32_t            vtraps[8];
+    uint8_t             reserved[4];
+    struct qe_microcode microcode[1];
+} QE_PACKED;
+
+static int hal_fman_init(void)
+{
+    const struct qe_firmware *fw = (const struct qe_firmware *)FMAN_FW_ADDR;
+    const struct qe_header *hdr = &fw->header;
+    unsigned int i;
+
+    /* Check firmware magic */
+    if (hdr->magic[0] != 'Q' || hdr->magic[1] != 'E' || hdr->magic[2] != 'F') {
+        wolfBoot_printf("FMAN: no firmware at 0x%x\n", FMAN_FW_ADDR);
+        return -1;
+    }
+
+    for (i = 0; i < fw->count; i++) {
+        const struct qe_microcode *ucode = &fw->microcode[i];
+        const uint32_t *code;
+        unsigned int j;
+
+        if (!ucode->code_offset)
+            continue;
+
+        code = (const uint32_t *)((const uint8_t *)fw + ucode->code_offset);
+        wolfBoot_printf("FMAN: uploading '%s' v%u.%u.%u\n",
+            ucode->id, ucode->major, ucode->minor, ucode->revision);
+
+        set32(FMAN_IRAM_IADD, FMAN_IRAM_IADD_AIE);
+        for (j = 0; j < ucode->count; j++) {
+            set32(FMAN_IRAM_IDATA, code[j]);
+        }
+        set32(FMAN_IRAM_IADD, 0);
+        {
+            int timeout = 1000000;
+            while ((get32(FMAN_IRAM_IDATA) != code[0]) && --timeout)
+                ;
+            if (!timeout) {
+                wolfBoot_printf("FMAN: upload timeout\n");
+                return -1;
+            }
+        }
+        set32(FMAN_IRAM_IREADY, FMAN_IRAM_READY);
+    }
+
+    return 0;
+}
+#endif /* ENABLE_FMAN */
+
 #ifdef ENABLE_DDR
 /* Release CPC SRAM back to L2 cache mode.
  * Call after stack is relocated to DDR (done in boot_entry_C).
@@ -299,6 +629,9 @@ static void hal_reconfigure_cpc_as_cache(void)
         while (dst < end) {
             *dst++ = *src++;
         }
+
+        /* Ensure all stores have drained before flushing cache lines */
+        __asm__ __volatile__("sync" ::: "memory");
 
         /* Flush D-cache and invalidate I-cache for the DDR copy */
         flush_cache(DDR_RAMCODE_ADDR, ramcode_size);
@@ -386,8 +719,12 @@ static void hal_flash_enable_caching(void)
 
 void hal_init(void)
 {
-#if defined(DEBUG_UART) && defined(ENABLE_CPLD)
+    uint32_t bucsr;
+#ifdef DEBUG_UART
+    uint32_t ddr_ratio;
+  #ifdef ENABLE_CPLD
     uint32_t fw;
+  #endif
 #endif
 
     /* Enable timebase on core 0 */
@@ -411,9 +748,29 @@ void hal_init(void)
         (unsigned long)(hal_get_bus_clk() / 1000000));
     wolfBoot_printf("Timebase: %lu MHz\n",
         (unsigned long)(TIMEBASE_HZ / 1000000));
+    ddr_ratio = get32(CLOCKING_PLLDGSR);
+    ddr_ratio = ((ddr_ratio >> 1) & 0x3F);
+    wolfBoot_printf("DDR Clock: %lu MHz (%lu MT/s, ratio %lu:1)\n",
+        (unsigned long)(SYS_CLK / 1000000 * ddr_ratio),
+        (unsigned long)(SYS_CLK / 1000000 * ddr_ratio * 2),
+        (unsigned long)ddr_ratio);
 #endif
 
     hal_flash_init();
+#ifdef ENABLE_IFC
+    hal_ifc_cs0_init(); /* Set IFC CS0 BA to match flash TLB (RAMFUNCTION) */
+#endif
+
+#ifdef DEBUG_UART
+    /* Dump LAW BARH values to verify 36-bit addressing */
+    wolfBoot_printf("LAW0: BARH=0x%x BARL=0x%x LAWAR=0x%x\n",
+        get32(LAWBARH(0)), get32(LAWBARL(0)), get32(LAWAR(0)));
+    wolfBoot_printf("LAW1: BARH=0x%x BARL=0x%x LAWAR=0x%x\n",
+        get32(LAWBARH(1)), get32(LAWBARL(1)), get32(LAWAR(1)));
+    wolfBoot_printf("LAW4: BARH=0x%x BARL=0x%x LAWAR=0x%x\n",
+        get32(LAWBARH(4)), get32(LAWBARL(4)), get32(LAWAR(4)));
+#endif
+
     hal_cpld_init();
 
 #ifdef ENABLE_CPLD
@@ -425,6 +782,19 @@ void hal_init(void)
     wolfBoot_printf("CPLD FW Rev: 0x%x\n", fw);
 #endif
 #endif /* ENABLE_CPLD */
+
+#ifdef ENABLE_DPAA
+    /* Program LIODNs and configure QMan/BMan software portals before
+     * any DPAA-capable peripheral is touched and before the OS handoff.
+     * Without this, VxWorks (and DPAA-aware Linux) faults during early
+     * peripheral DMA setup because LIODN=0 has no PAMU window. */
+    hal_liodn_init();
+    hal_qbman_init();
+#endif
+
+#ifdef ENABLE_FMAN
+    hal_fman_init();
+#endif
 
 #ifdef ENABLE_DDR
     /* Stack is already in DDR (relocated in boot_entry_C via
@@ -441,11 +811,17 @@ void hal_init(void)
     /* Enable branch prediction now that DDR stack and cache hierarchy
      * are fully configured.  Disabled during early ASM boot to avoid
      * speculative fetches during hardware init. */
-    {
-        uint32_t bucsr = BUCSR_STAC_EN | BUCSR_LS_EN | BUCSR_BBFI | BUCSR_BPEN;
-        __asm__ __volatile__("mtspr %0, %1; isync" :: "i"(SPRN_BUCSR), "r"(bucsr));
-    }
+    bucsr = BUCSR_STAC_EN | BUCSR_LS_EN | BUCSR_BBFI | BUCSR_BPEN;
+    __asm__ __volatile__("mtspr %0, %1; isync" :: "i"(SPRN_BUCSR), "r"(bucsr));
 #endif
+
+    /* Note: previously had a duplicate `set32(DCFG_BRR, 0x0F)` here
+     * mislabelled as "enable hardware threading" -- DCFG+0xE4 is
+     * actually DCFG_BRR (Boot Release Register), not threading enable,
+     * and hal_mp_init() already writes the same value. Removed: it
+     * caused secondaries to be released pre-OS, which CW U-Boot does
+     * not do for VxWorks 7 64-bit (ossel=ostype2). VxWorks releases
+     * its own secondaries via the ePAPR spin-table protocol. */
 
 #ifdef ENABLE_MP
     /* Start secondary cores AFTER CPC release and flash caching.
@@ -499,6 +875,71 @@ static void RAMFUNCTION hal_flash_clear_wp(void)
     }
 }
 
+/* Initialize IFC CS0 with the correct base address for the NOR flash.
+ * The RCW default may have BA=0 (CSPR=0x141) which doesn't match the
+ * flash LAW/TLB at FLASH_BASE_ADDR. CW U-Boot sets CSPR=0xF0000105.
+ * Must be called from RAMFUNCTION with flash TLB guarded. */
+void RAMFUNCTION hal_ifc_cs0_init(void)
+{
+    /* Match CW U-Boot IFC CS0 configuration exactly:
+     * CSPR_EXT=0x0F, CSPR=0xF0000105, AMASK=0xF0000000
+     * BA=0xF000 (flash at 0xF0000000), PORT_SIZE=16-bit, GPCM, V=1
+     * MSEL=GPCM (0x4) is required to match U-Boot -- previously this
+     * code set MSEL=NOR (0) which differed from CW U-Boot's CSPR. */
+    uint32_t cspr = get32(IFC_CSPR(0));
+
+    /* Only update if BA doesn't match flash base */
+    if ((cspr & 0xFFFF0000) != IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR)) {
+        /* Clear V, update all IFC CS0 registers, re-enable V */
+        set32(IFC_CSPR(0), cspr & ~IFC_CSPR_V);
+        __asm__ __volatile__("sync; isync");
+        set32(IFC_CSPR_EXT(0), (uint32_t)FLASH_BASE_PHYS_HIGH);
+        set32(IFC_AMASK(0), IFC_AMASK_256MB);
+        set32(IFC_CSPR(0), IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR) |
+                           IFC_CSPR_PORT_SIZE_16 |
+                           IFC_CSPR_MSEL_GPCM | IFC_CSPR_V);
+        __asm__ __volatile__("sync; isync");
+    }
+
+#ifdef ENABLE_OS64BIT
+    /* IFC CS1/2/3 setup for VxWorks/Linux 64-bit (matches CW U-Boot
+     * post-init state). wolfBoot previously set CSPR but NOT AMASK,
+     * leaving AMASK = 0 -- chip-select region size is unbounded.
+     * AMASK values from CW U-Boot dump:
+     *   CS1 (FPGA  8-bit @ 0xEE600000): AMASK=0xFFF80000 (512 KB)
+     *   CS2 (NVRAM      @ 0xEE700000): AMASK=0xFFF80000 (512 KB)
+     *   CS3 (FPGA 32-bit @ 0xEE400000): AMASK=0xFFE00000 (2 MB) */
+
+    /* IFC CS1: FPGA 8-bit at 0xEE600000 (GPCM, 8-bit port, 512 KB) */
+    set32(IFC_CSPR_EXT(1), 0xF);
+    set32(IFC_AMASK(1),    IFC_AMASK_512KB);
+    set32(IFC_CSPR(1), IFC_CSPR_PHYS_ADDR(0xEE600000) |
+                       IFC_CSPR_PORT_SIZE_8 | IFC_CSPR_MSEL_GPCM | IFC_CSPR_V);
+
+    /* IFC CS2: NVRAM at 0xEE700000 (GPCM, 8-bit port, 512 KB) */
+    set32(IFC_CSPR_EXT(2), 0xF);
+    set32(IFC_AMASK(2),    IFC_AMASK_512KB);
+    set32(IFC_CSPR(2), IFC_CSPR_PHYS_ADDR(0xEE700000) |
+                       IFC_CSPR_PORT_SIZE_8 | IFC_CSPR_MSEL_GPCM | IFC_CSPR_V);
+
+    /* IFC CS3: FPGA 32-bit at 0xEE400000 (GPCM, 16-bit port, 2 MB) */
+    set32(IFC_CSPR_EXT(3), 0xF);
+    set32(IFC_AMASK(3),    IFC_AMASK_2MB);
+    set32(IFC_CSPR(3), IFC_CSPR_PHYS_ADDR(0xEE400000) |
+                       IFC_CSPR_PORT_SIZE_16 | IFC_CSPR_MSEL_GPCM | IFC_CSPR_V);
+
+    /* CSOR mismatch (wolfBoot at reset default 0xC vs CW U-Boot CS0=
+     * 0xF000801, CS1/3=0x2F0C0000, CS2=0x0F000000) intentionally NOT
+     * touched here: changing CS0 CSOR while wolfBoot is still XIPing
+     * from flash hangs the next instruction fetch (timing mismatch
+     * mid-fetch). Would need to be done from a RAM-resident path with
+     * flash text already cached, or after switching to DDR-resident
+     * code. Not critical for OS-handoff matching since the OS
+     * immediately reprograms IFC for its own timings. */
+    __asm__ __volatile__("sync; isync");
+#endif
+}
+
 static void RAMFUNCTION hal_flash_unlock_sector(uint32_t sector)
 {
     /* AMD unlock sequence */
@@ -517,9 +958,9 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     uint32_t timeout;
 
     /* Enter PPB ASO (Address Space Overlay) */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* Read PPB status for target sector: DQ0=0 means protected.
      * On 16-bit bus, must read both chip lanes to check both devices. */
@@ -531,16 +972,16 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     if ((ppb_status & 0x01) == 0x01) {
 #endif
         /* Both chips report unprotected — exit PPB mode and return */
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-        FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+        FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
         return 0;
     }
 
     /* Exit PPB ASO before calling printf (flash must be in read-array
      * mode for I-cache misses to fetch valid instructions) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
 #ifdef DEBUG_FLASH
@@ -549,24 +990,24 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
 #endif
 
     /* Re-enter PPB ASO for erase */
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
-    FLASH_IO8_WRITE(0, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_UNLOCK_START);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR2, AMD_CMD_UNLOCK_ACK);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, FLASH_UNLOCK_ADDR1, AMD_CMD_SET_PPB_ENTRY);
 
     /* PPB Erase All (clears all sectors' PPBs) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC1);  /* 0x80 */
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_PPB_UNLOCK_BC2);  /* 0x30 */
 
     /* Wait for PPB erase completion — poll for toggle stop.
      * On 16-bit bus, read both chip lanes to ensure both complete. */
     timeout = 0;
     do {
 #if FLASH_CFI_WIDTH == 16
-        read1 = FLASH_IO16_READ(0, 0);
-        read2 = FLASH_IO16_READ(0, 0);
+        read1 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO16_READ(FLASH_CMD_SECTOR, 0);
 #else
-        read1 = FLASH_IO8_READ(0, 0);
-        read2 = FLASH_IO8_READ(0, 0);
+        read1 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
+        read2 = FLASH_IO8_READ(FLASH_CMD_SECTOR, 0);
 #endif
         if (read1 == read2)
             break;
@@ -574,11 +1015,11 @@ static int RAMFUNCTION hal_flash_ppb_unlock(uint32_t sector)
     } while (timeout++ < 100000); /* 1 second */
 
     /* Exit PPB ASO */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC1);
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_SET_PPB_EXIT_BC2);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC1);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_SET_PPB_EXIT_BC2);
 
     /* Reset to read-array mode */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     if (timeout >= 100000) {
@@ -663,6 +1104,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int ret = 0;
     uint32_t i, sector, offset, nwords;
     const uint32_t width_bytes = FLASH_CFI_WIDTH / 8;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* Enforce alignment to flash bus width */
     if ((address % width_bytes) != 0 || (len % width_bytes) != 0) {
@@ -688,7 +1136,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     /* Program one word at a time using AMD single-word program (0xA0).
@@ -741,6 +1189,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret = 0;
     uint32_t sector;
+    uint32_t addr_off = address;
+
+    /* Bounds check */
+    if (addr_off >= FLASH_BASE_ADDR)
+        addr_off -= FLASH_BASE_ADDR;
+    if (addr_off + (uint32_t)len > FLASH_BANK_SIZE)
+        return -1;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -752,7 +1207,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     /* Reset flash to read-array mode in case previous operation left it
      * in command mode (e.g. after a timeout or incomplete operation) */
-    FLASH_IO8_WRITE(0, 0, AMD_CMD_RESET);
+    FLASH_IO8_WRITE(FLASH_CMD_SECTOR, 0, AMD_CMD_RESET);
     udelay(50);
 
     while (len > 0) {
@@ -839,8 +1294,9 @@ extern uint32_t _spin_table[];
 extern uint32_t _spin_table_addr;
 
 /* DDR address of the spin table, set during hal_mp_init() and reused in
- * hal_dts_fixup() for cpu-release-addr fixups. */
-static uint32_t g_spin_table_ddr = 0;
+ * hal_dts_fixup() for cpu-release-addr fixups. Also read by boot_ppc.c
+ * pre-jump dump to capture spin-table contents at handoff. */
+uint32_t g_spin_table_ddr = 0;
 extern uint32_t _bootpg_addr;
 
 /* Startup additional cores with spin table and synchronize the timebase.
@@ -848,7 +1304,7 @@ extern uint32_t _bootpg_addr;
 static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
 {
     uint32_t all_cores, active_cores, whoami;
-    int timeout = 50, i;
+    int timeout = 10000, i; /* 10000 * 100us = 1s, matches U-Boot convention */
 
     whoami = get32(PIC_WHOAMI); /* Get current running core number */
     all_cores = ((1 << CPU_NUMCORES) - 1); /* mask of all cores */
@@ -857,6 +1313,23 @@ static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
     wolfBoot_printf("MP: Starting cores (boot page %p, spin table %p)\n",
         bootpg, spin_table_ddr);
 
+    /* Enable time base on current core only */
+    set32(RCPM_PCTBENR, (1 << whoami));
+
+#ifdef ENABLE_OS64BIT
+    /* VxWorks 7 64-bit (ossel=ostype2) handoff matches CW U-Boot's
+     * profile: BSTRL/BSTAR stay disabled, DCFG_BRR stays 0, and
+     * secondary cores remain held in reset. The OS releases its own
+     * secondaries via the ePAPR spin-table protocol using
+     * cpu-release-addr from the FDT, which still points at the
+     * spin_table_ddr we set up below. Skip the active release here. */
+    (void)bootpg;
+    (void)all_cores;
+    (void)spin_table_ddr;
+    (void)active_cores;
+    (void)timeout;
+    (void)i;
+#else
     /* Set the boot page translation register */
     set32(LCC_BSTRH, 0);
     set32(LCC_BSTRL, bootpg);
@@ -864,9 +1337,6 @@ static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
                       LCC_BSTAR_LAWTRGT(LAW_TRGT_DDR_1) |
                       LAW_SIZE_4KB));
     (void)get32(LCC_BSTAR); /* read back to sync */
-
-    /* Enable time base on current core only */
-    set32(RCPM_PCTBENR, (1 << whoami));
 
     /* Release the CPU core(s) */
     set32(DCFG_BRR, all_cores);
@@ -911,13 +1381,16 @@ static void hal_mp_up(uint32_t bootpg, uint32_t spin_table_ddr)
         /* Only re-enable timebase for boot core */
         set32(RCPM_PCTBENR, (1 << whoami));
     }
+#endif /* !ENABLE_OS64BIT */
 }
 
 static void hal_mp_init(void)
 {
     uint32_t *fixup = (uint32_t*)&_secondary_start_page;
     uint32_t bootpg, second_half_ddr, spin_table_ddr;
-    int i_tlb = 0; /* always 0 */
+#ifdef BOARD_CW_VPX3152
+    volatile uint32_t *bp, *st;
+#endif
     size_t i;
     const volatile uint32_t *s;
     volatile uint32_t *d;
@@ -925,8 +1398,21 @@ static void hal_mp_init(void)
     /* Assign virtual boot page at end of LAW-mapped DDR region.
      * DDR LAW maps 2GB (LAW_SIZE_2GB) starting at DDR_ADDRESS.
      * DDR_SIZE may exceed 32-bit range (e.g. 8GB), so use the LAW-mapped
-     * size to ensure bootpg fits in 32 bits and is accessible. */
+     * size to ensure bootpg fits in 32 bits and is accessible.
+     *
+     * VPX3-152 / VxWorks 7 ostype2: the cw_152_64.dtb has /memory.reg
+     * with a hole at 0x7E400000-0x7FFFFFFF (between region 2 ending at
+     * 0x7E3FFFFF and region 3 starting at 0x80000000). Putting bootpg /
+     * spin_table at 0x7FFFF000 / 0x7FFFE000 lands them inside that hole,
+     * which production CW U-Boot ostype2 also does -- but VxWorks may
+     * not install TLB mappings for hole addresses when walking /memory.
+     * For the silent-boot diagnosis, place bootpg JUST BELOW the hole
+     * (top of region 2) so spin_table is inside declared /memory. */
+#if defined(ENABLE_OS64BIT) && defined(BOARD_CW_VPX3152)
+    bootpg = DDR_ADDRESS + 0x7E400000UL - BOOT_ROM_SIZE;
+#else
     bootpg = DDR_ADDRESS + 0x80000000UL - BOOT_ROM_SIZE;
+#endif
 
     /* Second half boot page (spin loop + spin table) goes just below.
      * For XIP flash builds, .bootmp is in flash — secondary cores can't
@@ -941,26 +1427,46 @@ static void hal_mp_init(void)
     flush_cache(bootpg, BOOT_ROM_SIZE);
     flush_cache(second_half_ddr, BOOT_ROM_SIZE);
 
-    /* Map reset page to bootpg so we can copy code there.
-     * Boot page translation will redirect secondary core fetches from
-     * 0xFFFFF000 to bootpg in DDR. */
-    disable_tlb1(i_tlb);
-    set_tlb(1, i_tlb, BOOT_ROM_ADDR, bootpg, 0, /* tlb, epn, rpn, urpn */
-        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G), /* perms, wimge */
-        0, BOOKE_PAGESZ_4K, 1); /* ts, esel, tsize, iprot */
+#ifdef BOARD_CW_VPX3152
+    /* VPX3-152: TLB1 Entry 2 (256MB flash) covers 0xF0000000-0xFFFFFFFF
+     * which includes BOOT_ROM_ADDR (0xFFFFF000). Creating a TLB1 Entry 0
+     * at that VA would cause a multi-hit machine check on e6500.
+     * Instead, copy boot page code directly to DDR via the DDR TLB and
+     * flush D-cache to ensure secondary cores see the data. */
 
-    /* Copy first half (startup code) to DDR via BOOT_ROM_ADDR mapping.
-     * Uses cache-inhibited TLB to ensure data reaches DDR immediately. */
+    /* Copy first half (startup code) directly to DDR at bootpg */
     s = (const uint32_t*)fixup;
-    d = (uint32_t*)BOOT_ROM_ADDR;
+    d = (volatile uint32_t*)bootpg;
     for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
         d[i] = s[i];
     }
 
-    /* Write _bootpg_addr and _spin_table_addr into the DDR first-half copy.
-     * These variables are .long 0 in the linked .bootmp (flash), and direct
-     * stores to their flash addresses silently fail on XIP builds.
-     * Calculate offsets within the boot page and write via BOOT_ROM_ADDR. */
+    /* Write _bootpg_addr and _spin_table_addr into the DDR copy */
+    bp = (volatile uint32_t*)(bootpg +
+        ((uint32_t)&_bootpg_addr - (uint32_t)&_secondary_start_page));
+    st = (volatile uint32_t*)(bootpg +
+        ((uint32_t)&_spin_table_addr - (uint32_t)&_secondary_start_page));
+    *bp = second_half_ddr;
+    *st = spin_table_ddr;
+
+    /* Flush boot page from D-cache to DDR so secondary cores see it */
+    flush_cache(bootpg, BOOT_ROM_SIZE);
+#else
+    /* Non-VPX3: map BOOT_ROM_ADDR → DDR bootpg via TLB1 Entry 0 with
+     * cache-inhibited attributes so writes go directly to DDR. */
+    disable_tlb1(0);
+    set_tlb(1, 0, BOOT_ROM_ADDR, bootpg, 0,
+        (MAS3_SX | MAS3_SW | MAS3_SR), (MAS2_I | MAS2_G),
+        0, BOOKE_PAGESZ_4K, 1);
+
+    /* Copy first half (startup code) to DDR via BOOT_ROM_ADDR mapping */
+    s = (const uint32_t*)fixup;
+    d = (volatile uint32_t*)BOOT_ROM_ADDR;
+    for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
+        d[i] = s[i];
+    }
+
+    /* Write _bootpg_addr and _spin_table_addr into the DDR copy */
     {
         volatile uint32_t *bp = (volatile uint32_t*)(BOOT_ROM_ADDR +
             ((uint32_t)&_bootpg_addr - (uint32_t)&_secondary_start_page));
@@ -969,12 +1475,12 @@ static void hal_mp_init(void)
         *bp = second_half_ddr;
         *st = spin_table_ddr;
     }
+#endif
 
     /* Copy second half (spin loop + spin table) directly to DDR.
-     * Master has DDR TLB (entry 12, MAS2_M). Flush cache after copy
-     * to ensure secondary cores see the data. */
+     * Flush cache after copy to ensure secondary cores see the data. */
     s = (const uint32_t*)&_second_half_boot_page;
-    d = (uint32_t*)second_half_ddr;
+    d = (volatile uint32_t*)second_half_ddr;
     for (i = 0; i < BOOT_ROM_SIZE/4; i++) {
         d[i] = s[i];
     }
@@ -990,7 +1496,37 @@ static void hal_mp_init(void)
 
 void hal_prepare_boot(void)
 {
+    /* Intentionally minimal. Flash TLB switch to cache-inhibit and any
+     * other pre-OS-jump state changes happen in boot_ppc.c::do_boot()
+     * AFTER the FDT fixups + debug prints, since those run from flash
+     * and would each take many ms each on uncached IFC reads. */
+}
 
+/* Public wrapper for boot_ppc.c::do_boot() - switch flash TLB to
+ * MAS2_I|MAS2_G to match CW U-Boot's pre-VxWorks state (TLB#2 WIMG=I|G,
+ * MAS2=0xF000000A). Mismatched flash cache attributes between
+ * bootloader and OS can cause stale instruction fetches if the OS reads
+ * from flash. Must be called AFTER all FDT walks / debug prints --
+ * those run from flash and become very slow once cache is off.
+ *
+ * Also aligns small but observable pre-jump state items to CW U-Boot's
+ * profile when chasing VxWorks 7 64-bit silent boot:
+ *   - DUART1 MCR = 3   (DTR+RTS asserted; U-Boot sets this, our driver
+ *                       leaves it at the post-reset 0)
+ *   - TCR = 0x04000000 (matches U-Boot's leftover; wolfBoot was clearing
+ *                       it; VxWorks 7 BSP early code may inherit) */
+void RAMFUNCTION hal_flash_cache_disable_pre_os(void)
+{
+    hal_flash_cache_disable();
+#ifdef ENABLE_OS64BIT
+    /* DUART1 modem control: DTR+RTS asserted, matching CW U-Boot's
+     * pre-bootm value. */
+    set8(UART_MCR(0), 0x03);
+    /* TCR=0 matches CW U-Boot's pre-bootm value. WRC != 0 would let
+     * the watchdog fire silently after VxWorks starts. */
+    mtspr(SPRN_TCR, 0);
+    __asm__ __volatile__("isync" ::: "memory");
+#endif
 }
 
 #ifdef MMU
@@ -1025,21 +1561,103 @@ int hal_dts_fixup(void* dts_addr)
             fdt_totalsize(fdt));
     }
 
-    /* fixup the memory region - single bank */
+#ifdef ENABLE_OS64BIT
+    /* /memreserve/ entries: keep VxWorks/Linux away from the spin-table
+     * page (wolfBoot places it at g_spin_table_ddr, page-aligned down)
+     * and the top-of-DDR scratch pages. CW U-Boot's ostype2 reserves its
+     * own spin-table page (0x7fee4000); wolfBoot's spin table lives
+     * elsewhere, so we reserve based on the actual runtime address. */
+    {
+        int rsv_ret;
+        uint64_t spin_pg = (uint64_t)(g_spin_table_ddr & ~0xFFFU);
+
+        rsv_ret = fdt_add_mem_rsv(fdt, spin_pg, 0x1000ULL);
+        if (rsv_ret != 0) {
+            wolfBoot_printf("FDT: failed to reserve spin-table page "
+                "@ 0x%llx: %d\n", spin_pg, rsv_ret);
+            return rsv_ret;
+        }
+        rsv_ret = fdt_add_mem_rsv(fdt, 0x7ffff000ULL, 0x1000ULL);
+        if (rsv_ret != 0) {
+            wolfBoot_printf("FDT: failed to reserve boot page "
+                "@ 0x7ffff000: %d\n", rsv_ret);
+            return rsv_ret;
+        }
+        rsv_ret = fdt_add_mem_rsv(fdt, 0xfffff000ULL, 0x1000ULL);
+        if (rsv_ret != 0) {
+            wolfBoot_printf("FDT: failed to reserve top-of-4GB page "
+                "@ 0xfffff000: %d\n", rsv_ret);
+            return rsv_ret;
+        }
+    }
+#endif
+
+    /* fixup the memory region.
+     *
+     * IMPORTANT: production CW U-Boot's fdt_fixup_memory only writes
+     * /memory if the node is missing (`if (off < 0)`). The cw_152_64.dtb
+     * already has /memory.reg populated with the 3-region layout that
+     * VxWorks 7 64-bit expects. Overwriting it -- which wolfBoot was
+     * doing unconditionally -- causes VxWorks's libfdt-driven memory
+     * setup to disagree with what its assembly prologue installed and
+     * silent-fail before the UART driver comes up. Skip the write when
+     * the node already has a non-empty `reg` property. */
     off = fdt_find_devtype(fdt, -1, "memory");
     if (off >= 0) {
-        /* build addr/size as aligned 64-bit values */
-        uint64_t ranges[2];
-        ranges[0] = cpu_to_fdt64(DDR_ADDRESS);
-        ranges[1] = cpu_to_fdt64(DDR_SIZE);
-        wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
-            DDR_ADDRESS, (uint32_t)DDR_SIZE);
-        fdt_setprop(fdt, off, "reg", ranges, sizeof(ranges));
+        int reg_len = 0;
+        const void *existing = fdt_getprop(fdt, off, "reg", &reg_len);
+        if (existing != NULL && reg_len > 0) {
+            wolfBoot_printf("FDT: /memory already has reg (%d bytes), keep\n",
+                reg_len);
+            goto memory_fixup_done;
+        }
     }
+    if (off >= 0) {
+#ifdef ENABLE_OS64BIT
+        /* For 64-bit OS: 3-region memory layout matching CW U-Boot's
+         * fdt_fixup_memory_vxworks(). Regions avoid the peripheral hole
+         * at 0x7E400000-0x7FFFFFFF (reserved for CPU release/spin
+         * table). All three regions live at low PA (high cell == 0);
+         * the 4GB DDR LAW set in hal_ddr_init covers them all. */
+        uint64_t start[3], size[3];
+        int num_regions = 2;
+        start[0] = cpu_to_fdt64(0x000000000ULL);
+        size[0]  = cpu_to_fdt64(0x040000000ULL); /* 1GB */
+        start[1] = cpu_to_fdt64(0x040000000ULL);
+        size[1]  = cpu_to_fdt64(0x03E400000ULL); /* ~993MB (1G-4M for CPU release) */
+    #if DDR_SIZE >= (4096ULL * 1024ULL * 1024ULL) /* 4GB+ */
+        num_regions = 3;
+        start[2] = cpu_to_fdt64(0x080000000ULL);
+        size[2]  = cpu_to_fdt64(DDR_SIZE - 0x080000000ULL); /* upper DDR */
+    #endif
+        wolfBoot_printf("FDT: Set memory (%d regions, OS 64-bit)\n", num_regions);
+        {
+            uint64_t reg[6]; /* max 3 start/size pairs */
+            int i;
+            for (i = 0; i < num_regions; i++) {
+                reg[i*2]   = start[i];
+                reg[i*2+1] = size[i];
+            }
+            fdt_setprop(fdt, off, "reg", reg, num_regions * 2 * sizeof(uint64_t));
+        }
+#else
+        /* 32-bit OS: single contiguous DDR region */
+        {
+            uint64_t ranges[2];
+            ranges[0] = cpu_to_fdt64(DDR_ADDRESS);
+            ranges[1] = cpu_to_fdt64(DDR_SIZE);
+            wolfBoot_printf("FDT: Set memory, start=0x%x, size=0x%x\n",
+                DDR_ADDRESS, (uint32_t)DDR_SIZE);
+            fdt_setprop(fdt, off, "reg", ranges, sizeof(ranges));
+        }
+#endif
+    }
+memory_fixup_done:
 
     /* fixup CPU status and release address and enable method */
     off = fdt_find_devtype(fdt, -1, "cpu");
     while (off >= 0) {
+        uint32_t thread_id;
         int core;
     #ifdef ENABLE_MP
         uint64_t core_spin_table;
@@ -1048,33 +1666,66 @@ int hal_dts_fixup(void* dts_addr)
         reg = (uint32_t*)fdt_getprop(fdt, off, "reg", NULL);
         if (reg == NULL)
             break;
-        core = (int)fdt32_to_cpu(*reg);
+        thread_id = fdt32_to_cpu(*reg);
+    #ifdef CORE_E6500
+        /* e6500 has 2 threads per core. DTB reg values are thread IDs
+         * (0,1 for core0; 2,3 for core1; 4,5 for core2; 6,7 for core3).
+         * Convert to physical core ID for spin table indexing. */
+        core = (int)(thread_id >> 1);
+    #else
+        core = (int)thread_id;
+    #endif
         if (core >= CPU_NUMCORES) {
-            break; /* invalid core index */
+            /* Skip invalid cores but continue scanning */
+            off = fdt_find_devtype(fdt, off, "cpu");
+            continue;
         }
 
     #ifdef ENABLE_MP
-        /* Calculate DDR address of this core's spin table entry.
-         * Must use g_spin_table_ddr (the DDR copy), NOT _spin_table which
-         * is the flash/VMA address — Linux writes the release word to this
-         * address, and XIP flash is read-only. */
-        core_spin_table = (uint64_t)(g_spin_table_ddr + (core * ENTRY_SIZE));
-
-        fdt_fixup_str(fdt, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
-        fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table);
+        /* All cores get cpu-release-addr and enable-method = "spin-table"
+         * (matches CW U-Boot ostype2 fixup). Boot CPU also gets a release
+         * addr — it isn't actually waiting there, but VxWorks/Linux still
+         * read the property and reject the node if absent or zero. */
+        core_spin_table = (uint64_t)(g_spin_table_ddr +
+            (core * ENTRY_SIZE));
+        fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr",
+            core_spin_table);
         fdt_fixup_str(fdt, off, "cpu", "enable-method", "spin-table");
+        if (core == 0) {
+            fdt_fixup_str(fdt, off, "cpu", "status", "okay");
+        }
+        else {
+            fdt_fixup_str(fdt, off, "cpu", "status", "disabled");
+        }
     #endif
+    #ifndef BOARD_CW_VPX3152
+        /* CW VPX3-152: skip cpu/soc/clockgen/serial frequency fixups —
+         * the CW base DTB (cw_152_64.dtb) already has the correct values,
+         * and CW U-Boot's ft_cpu_setup() does not touch them. Adding them
+         * here produces a divergent FDT vs the known-working U-Boot path
+         * (extra cpu freq properties + off-by-1/3 rounding on soc/clockgen).
+         * Other T2080 targets (RDB) still need these because their base
+         * DTBs lack the properties. */
         fdt_fixup_val(fdt, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
         fdt_fixup_val(fdt, off, "cpu", "clock-frequency", hal_get_core_clk());
         fdt_fixup_val(fdt, off, "cpu", "bus-frequency", hal_get_plat_clk());
+    #endif
 
         off = fdt_find_devtype(fdt, off, "cpu");
     }
 
+#ifndef BOARD_CW_VPX3152
     /* fixup the soc clock */
     off = fdt_find_devtype(fdt, -1, "soc");
     if (off >= 0) {
         fdt_fixup_val(fdt, off, "soc", "bus-frequency", hal_get_plat_clk());
+    }
+
+    /* fixup clockgen frequency — VxWorks/Linux use this to derive all
+     * clocks via PLL ratios. Match U-Boot's ft_cpu_setup behavior. */
+    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qoriq-clockgen-2.0");
+    if (off >= 0) {
+        fdt_fixup_val(fdt, off, "clockgen", "clock-frequency", SYS_CLK);
     }
 
     /* fixup the serial clocks */
@@ -1083,6 +1734,21 @@ int hal_dts_fixup(void* dts_addr)
         fdt_fixup_val(fdt, off, "serial", "clock-frequency", hal_get_bus_clk());
         off = fdt_find_devtype(fdt, off, "serial");
     }
+#endif
+
+    /* fixup /chosen bootargs -- override the DTB's baked-in bootargs
+     * with WOLFBOOT_BOOTARGS from .config. Production CW U-Boot leaves
+     * the DTB value untouched during bootm; we override here so users
+     * can change boot parameters without reflashing the DTB. */
+#ifdef WOLFBOOT_BOOTARGS
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off < 0) {
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+    if (off >= 0) {
+        fdt_fixup_str(fdt, off, "chosen", "bootargs", WOLFBOOT_BOOTARGS);
+    }
+#endif
 
 #endif /* !BUILD_LOADER_STAGE1 */
     (void)dts_addr;
