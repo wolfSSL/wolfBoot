@@ -307,6 +307,11 @@ jobs:
     with:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250_qspi.config
+  microchip_mpfs250_m_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
   microchip_mpfs250_m_qspi_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:

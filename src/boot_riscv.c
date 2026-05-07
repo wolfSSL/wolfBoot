@@ -134,7 +134,7 @@ static void handle_external_interrupt(void)
 #endif /* PLIC_BASE */
 
 unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
-    unsigned long tval)
+    unsigned long tval, unsigned long *regs)
 {
     last_cause = cause;
     last_epc = epc;
@@ -160,6 +160,51 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
         if (sp_now < bottom) {
             wolfBoot_printf("STACK OVERFLOW: under by %lu\n",
                 bottom - sp_now);
+        }
+        /* Dump saved register frame from trap_entry. Each slot is
+         * 8 bytes (REGBYTES); slot[N] = xN.  See vector_riscv.S. */
+        if (regs != NULL) {
+            wolfBoot_printf(
+                "  ra=%lx  sp=%lx  gp=%lx  tp=%lx\n",
+                regs[1], regs[2], regs[3], regs[4]);
+            wolfBoot_printf(
+                "  t0=%lx  t1=%lx  t2=%lx\n",
+                regs[5], regs[6], regs[7]);
+            wolfBoot_printf(
+                "  s0=%lx  s1=%lx\n",
+                regs[8], regs[9]);
+            wolfBoot_printf(
+                "  a0=%lx  a1=%lx  a2=%lx  a3=%lx\n",
+                regs[10], regs[11], regs[12], regs[13]);
+            wolfBoot_printf(
+                "  a4=%lx  a5=%lx  a6=%lx  a7=%lx\n",
+                regs[14], regs[15], regs[16], regs[17]);
+            wolfBoot_printf(
+                "  s2=%lx  s3=%lx  s4=%lx  s5=%lx\n",
+                regs[18], regs[19], regs[20], regs[21]);
+            wolfBoot_printf(
+                "  s6=%lx  s7=%lx  s8=%lx  s9=%lx\n",
+                regs[22], regs[23], regs[24], regs[25]);
+            wolfBoot_printf(
+                "  s10=%lx s11=%lx\n",
+                regs[26], regs[27]);
+            wolfBoot_printf(
+                "  t3=%lx  t4=%lx  t5=%lx  t6=%lx\n",
+                regs[28], regs[29], regs[30], regs[31]);
+            /* Dump stack memory above the trap frame.  Trap frame is
+             * 256 bytes; above it is the trapping function's own frame
+             * containing its saved ra values from sub-call chains. */
+            {
+                unsigned long *stk = (unsigned long *)(regs + 32);
+                int j;
+                wolfBoot_printf("  stack from caller sp=%lx:\n",
+                    (unsigned long)stk);
+                for (j = 0; j < 24; j += 4) {
+                    wolfBoot_printf(
+                        "    +%x: %lx %lx %lx %lx\n",
+                        j * 8, stk[j], stk[j+1], stk[j+2], stk[j+3]);
+                }
+            }
         }
 #endif
 #endif /* DEBUG_BOOT */
@@ -263,6 +308,27 @@ static void __attribute__((noreturn)) enter_smode(unsigned long entry,
     );
     __builtin_unreachable();
 }
+
+/* Public M->S handoff entry point. Sets up PMP, delegates S-mode traps,
+ * then transitions the calling hart to S-mode at entry. Used both by the
+ * default do_boot path and by HAL overrides that release a different hart. */
+void __attribute__((noreturn))
+riscv_mmode_to_smode(unsigned long entry, unsigned long hartid,
+                     unsigned long dtb)
+{
+    setup_pmp_for_smode();
+    delegate_traps_to_smode();
+    enter_smode(entry, hartid, dtb);
+}
+
+/* Weak default: hand the kernel off in S-mode on the current hart. Platforms
+ * that need a different topology (e.g. the MPFS E51 must release a U54
+ * because cpu@0 is disabled in the DTB) override this in their HAL. */
+void __attribute__((weak, noreturn))
+hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
+{
+    riscv_mmode_to_smode(entry, hartid, dtb);
+}
 #endif /* WOLFBOOT_RISCV_MMODE */
 
 #if __riscv_xlen == 64
@@ -312,12 +378,13 @@ void do_boot(const uint32_t *app_offset)
 
 #ifdef WOLFBOOT_RISCV_MMODE
 #ifdef WOLFBOOT_MMODE_SMODE_BOOT
-    /* M-mode -> S-mode transition for Linux boot */
-    wolfBoot_printf("M->S transition: entry=0x%lx\n", (unsigned long)app_offset);
-    setup_pmp_for_smode();
-    delegate_traps_to_smode();
+    /* M-mode -> S-mode transition for Linux boot. Default: hand off on the
+     * current hart. HAL may override hal_smode_boot to release a different
+     * hart and self-park (see hal/mpfs250.c when MPFS_DDR_INIT is set). */
+    wolfBoot_printf("M->S handoff: entry=0x%lx hart=%lu dtb=0x%lx\n",
+                    (unsigned long)app_offset, hartid, dts_addr);
     /* This never returns */
-    enter_smode((unsigned long)app_offset, hartid, dts_addr);
+    hal_smode_boot((unsigned long)app_offset, hartid, dts_addr);
 #else
     /* Direct M-mode jump for bare-metal payloads.
      * Define WOLFBOOT_MMODE_SMODE_BOOT to boot Linux via S-mode transition. */

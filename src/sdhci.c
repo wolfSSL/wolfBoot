@@ -480,11 +480,15 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
         SDHCI_SRS12_EINT)) == 0 && --timeout > 0);
 
     if (timeout == 0) {
-        wolfBoot_printf("sdhci_send_cmd: timeout waiting for command complete\n");
+        wolfBoot_printf("sdhci_send_cmd: cmd %u arg 0x%08X resp %u: "
+            "timeout waiting for command complete\n",
+            cmd_index, cmd_arg, resp_type);
         status = -1; /* error */
     }
     else if (SDHCI_REG(SDHCI_SRS12) & SDHCI_SRS12_EINT) {
-        wolfBoot_printf("sdhci_send_cmd: error SRS12: 0x%08X\n", SDHCI_REG(SDHCI_SRS12));
+        wolfBoot_printf("sdhci_send_cmd: cmd %u arg 0x%08X resp %u: "
+            "error SRS12=0x%08X\n",
+            cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         status = -1; /* error */
     }
 
@@ -611,6 +615,12 @@ static int sdcard_power_init_seq(uint32_t voltage)
         wolfBoot_printf("SD: CMD0 succeeded after %d retries\n", retries);
     }
     if (status == 0) {
+        /* SD spec doesn't require a delay between CMD0 and CMD8, but on
+         * the Cadence SD4HC controller used by Microchip MPFS the card's
+         * first CMD8 response can come back with CMD_INDEX_ERR +
+         * CMD_END_BIT_ERR if CMD8 is issued immediately after CMD0.  HSS
+         * does an explicit ~100 us spin between the two; mirror that. */
+        udelay(200);
         /* send the operating conditions command */
         status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
             SDHCI_RESP_R7);
@@ -1418,6 +1428,12 @@ int sdhci_init(void)
     /* Call platform-specific initialization (clocks, resets, pin mux) */
     sdhci_platform_init();
 
+    /* Dump capability + presence registers so the bring-up log shows the
+     * controller's reported base clock and whether a card was detected. */
+    wolfBoot_printf("SDHCI: SRS09=0x%08X SRS16=0x%08X SRS17=0x%08X\n",
+        SDHCI_REG(SDHCI_SRS09), SDHCI_REG(SDHCI_SRS16),
+        SDHCI_REG(SDHCI_SRS17));
+
     /* Allow controller to settle after platform init (slot type change,
      * soft reset, clock configuration). Without this, the controller may
      * not be ready to accept register writes on some platforms. */
@@ -1611,10 +1627,29 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
             /* direct full block(s) read */
             uint32_t blocks = (count / SDHCI_BLOCK_SIZE);
             read_sz = (blocks * SDHCI_BLOCK_SIZE);
+        #if defined(SDHCI_FORCE_SINGLE_BLOCK_READ)
+            /* On Arasan/Cadence-family controllers (ZynqMP, Versal, MPFS)
+             * multi-block PIO reads (CMD18) suffer a documented BRR race
+             * (see CAUTION above) and SDMA does not restart cleanly across
+             * boundary crossings.  Force a sequence of CMD17 single-block
+             * reads instead - slower but reliable.  ~1024 reads of 512 B
+             * for one 512 KB chunk takes a few hundred ms. */
+            uint32_t i;
+            read_sz = SDHCI_BLOCK_SIZE;
+            status = 0;
+            for (i = 0; i < blocks && status == 0; i++) {
+                status = sdhci_read(MMC_CMD17_READ_SINGLE,
+                    block_addr + i,
+                    (uint32_t*)(buf + i * SDHCI_BLOCK_SIZE),
+                    SDHCI_BLOCK_SIZE);
+            }
+            read_sz = blocks * SDHCI_BLOCK_SIZE;
+        #else
             status = sdhci_read(blocks > 1 ?
                                 MMC_CMD18_READ_MULTIPLE :
                                 MMC_CMD17_READ_SINGLE,
                 block_addr, (uint32_t*)buf, read_sz);
+        #endif
         }
         if (status != 0) {
             break;
