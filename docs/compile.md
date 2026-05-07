@@ -441,6 +441,10 @@ make CERT_CHAIN_VERIFY=1 \
 
 When `CERT_CHAIN_VERIFY=1` is set without `USER_CERT_CHAIN`, the build auto-generates a dummy 3-tier certificate hierarchy in `test-dummy-ca/` for testing. This also applies to wolfHSM NVM image generation when applicable.
 
+For wolfHSM certificate-chain builds, `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=<id>` can be set to compile in a secondary root CA fallback. wolfBoot verifies against the primary root CA NVM ID provided by the HAL first, then retries with the configured secondary NVM ID only if the primary certificate-chain verification fails. Leave it unset for the existing single-root behavior.
+
+The secondary root certificate must be provisioned in wolfHSM NVM at the configured object ID. The option applies only to wolfHSM certificate-chain trust validation; signature verification continues to use the cached leaf public key from whichever root verified the chain.
+
 ### Manual Key Management
 
 For advanced scenarios (multiple keys, mixed algorithms, partition-restricted keys, or third-party managed private keys), use the `keygen` tool directly instead of the `USER_*` variables.

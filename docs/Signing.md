@@ -134,6 +134,7 @@ When building wolfBoot and the test app with the Makefile, the `USER_*` variable
 - `USER_PRIVATE_KEY`: Path to your leaf signing key (DER format)
 - `USER_PUBLIC_KEY`: Path to your leaf public key (DER format)
 - `USER_CERT_CHAIN`: Path to your certificate chain (DER format)
+- `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID`: Optional wolfHSM NVM object ID for a secondary root CA fallback
 
 Example:
 
@@ -150,7 +151,7 @@ If `USER_CERT_CHAIN` is not provided when `CERT_CHAIN_VERIFY=1`, a dummy certifi
 
 **Note:** If your private key is managed by a third party and you only have access to the public key, use `keygen -i` to import it instead. See the [Keygen tool](#keygen-tool) section above.
 
-Certificate chain verification of images is currently limited to use in conjunction with wolfHSM. See [wolfHSM.md](wolfHSM.md) for more details.
+Certificate chain verification of images is currently limited to use in conjunction with wolfHSM. For wolfHSM builds, `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=<id>` enables fallback to a second root CA only when primary root verification fails. The secondary root certificate must be provisioned in wolfHSM NVM at that ID. See [wolfHSM.md](wolfHSM.md) for more details.
 
 #### Target partition id (Multiple partition images, "self-update" feature)
 

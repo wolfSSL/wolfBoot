@@ -51,7 +51,7 @@ The certificate verification process with wolfHSM works as follows:
 4. A certificate chain is created consisting of the signing identity certificate and an optional number of intermediate certificates, where trust is chained back to the root CA.
 5. During the signing process, the image is signed with the signer private key and the certificate chain is embedded in the firmware image header.
 6. During boot, wolfBoot extracts the certificate chain from the firmware header
-7. wolfBoot uses the wolfHSM server (remotely or directly, depending on configuration) to verify the certificate chain against a pre-provisioned root CA certificate stored on the HSM and caches the public key of the leaf certificate if the chain verifies as trusted
+7. wolfBoot uses the wolfHSM server (remotely or directly, depending on configuration) to verify the certificate chain against a pre-provisioned root CA certificate stored on the HSM and caches the public key of the leaf certificate if the chain verifies as trusted. If `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID` is configured and the primary root check fails, wolfBoot retries the certificate chain against that secondary root CA NVM object.
 8. If the chain is trusted, wolfBoot uses the cached public key from the leaf certificate to verify the firmware signature on the wolfHSM server
 
 To use certificate verification with wolfHSM:
@@ -60,6 +60,8 @@ To use certificate verification with wolfHSM:
 2. Ensure the wolfHSM server is configured with certificate manager support (`WOLFHSM_CFG_CERTIFICATE_MANAGER`)
 3. Pre-provision the root CA certificate on the wolfHSM server at the NVM ID specified by the HAL `hsmNvmIdCertRootCA`
 4. Sign firmware images with the `--cert-chain` option, providing a DER-encoded certificate chain
+
+Optionally set `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=<id>` to allow certificate-chain fallback to a second wolfHSM root CA object. The secondary root certificate must be provisioned in wolfHSM NVM at the configured object ID. This fallback only affects wolfHSM certificate-chain trust validation; the image signature is still verified with the cached leaf public key from the chain that verified successfully.
 
 To build the simulator using wolfHSM for certificate verification:
 
@@ -84,6 +86,12 @@ This option enables use of the reserved wolfHSM public key ID for firmware authe
 
 If this option is not defined, cryptographic operations are still performed on the wolfHSM server, but wolfBoot assumes the key material is present in the keystore and NOT stored on the HSM. This means that wolfBoot will first load keys from the keystore, send the key material to the wolfHSM server at the time of use (cached as ephemeral keys), and finally evict the key from the HSM after usage. This behavior is typically only useful for debugging or testing scenarios, where the keys may not be pre-loaded onto the HSM. The keystore for use in this mode should not be generated with the `--nolocalkeys` option.
 
+### `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID`
+
+This Make/config option defines `WOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID` and enables a secondary root CA fallback for wolfHSM certificate-chain verification. wolfBoot first verifies the image certificate chain against `hsmNvmIdCertRootCA`. If that attempt fails due to a wolfHSM API error or a certificate validation failure, wolfBoot retries with the configured secondary NVM ID.
+
+Leave this option unset to preserve the normal single-root behavior. When set, the secondary root CA certificate must already be provisioned in wolfHSM NVM at that object ID, for example `WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=2`.
+
 ## HAL Implementations
 
 In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms must also implement or instantiate the following wolfHSM-specific items in the platform HAL:
@@ -96,6 +104,7 @@ In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms mu
 - `hsmDevIdHash`: The HSM device ID for hash operations. This is used to identify the HSM device to wolfBoot.
 - `hsmDevIdPubKey`: The HSM device ID for public key operations. This is used to identify the HSM device to wolfBoot.
 - `hsmKeyIdPubKey`: The HSM key ID for public key operations. This is used to identify the key to use for public key operations.
+- `hsmNvmIdCertRootCA`: The wolfHSM NVM ID for the primary trusted root CA certificate when certificate-chain verification is enabled.
 
 ### Client HAL Functions
 

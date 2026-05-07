@@ -76,6 +76,59 @@ int NOINLINEFUNCTION image_CT_compare(
      defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
 static whKeyId g_certLeafKeyId  = WH_KEYID_ERASED;
 static int     g_leafKeyIdValid = 0;
+
+static void wolfBoot_cert_chain_evict_leaf_key(void)
+{
+    if (g_certLeafKeyId != WH_KEYID_ERASED) {
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
+#endif
+    }
+
+    g_certLeafKeyId = WH_KEYID_ERASED;
+    g_leafKeyIdValid = 0;
+}
+
+static int wolfBoot_cert_chain_verify_with_root(uint8_t *cert_chain,
+        uint16_t cert_chain_size, whNvmId root_id, int32_t *verify_result)
+{
+    int hsm_ret = WH_ERROR_OK;
+
+    *verify_result = -1;
+
+    /* Verify certificate chain using wolfHSM's verification API. Use DMA if
+     * available in the wolfHSM configuration. */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+#if defined(WOLFHSM_CFG_DMA)
+    wolfBoot_printf("verifying cert chain and caching leaf pubkey "
+                    "(root=%08x, using DMA)\n", (unsigned int)root_id);
+    hsm_ret = wh_Client_CertVerifyDmaAndCacheLeafPubKey(
+        &hsmClientCtx, cert_chain, cert_chain_size, root_id,
+        WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, verify_result);
+#else
+    wolfBoot_printf("verifying cert chain and caching leaf pubkey "
+                    "(root=%08x)\n", (unsigned int)root_id);
+    hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
+        &hsmClientCtx, cert_chain, cert_chain_size, root_id,
+        WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, verify_result);
+#endif
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+    wolfBoot_printf("verifying cert chain and caching leaf pubkey "
+                    "(root=%08x)\n", (unsigned int)root_id);
+    hsm_ret = wh_Server_CertVerify(
+        &hsmServerCtx, cert_chain, cert_chain_size, root_id,
+        WH_CERT_FLAGS_CACHE_LEAF_PUBKEY, WH_NVM_FLAGS_USAGE_VERIFY,
+        &g_certLeafKeyId);
+    if (hsm_ret == WH_ERROR_OK) {
+        *verify_result = 0;
+    }
+    wolfBoot_printf("wh_Server_CertVerify returned %d\n", hsm_ret);
+#endif
+
+    return hsm_ret;
+}
 #endif
 
 /* TPM based verify */
@@ -319,12 +372,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         }
     #if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
         if (g_leafKeyIdValid) {
-            #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
-            (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
-            #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-            (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
-            #endif
-            g_leafKeyIdValid = 0;
+            wolfBoot_cert_chain_evict_leaf_key();
         }
     #endif
     #else
@@ -537,12 +585,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
     }
 #elif defined(WOLFBOOT_CERT_CHAIN_VERIFY)
     if (g_leafKeyIdValid) {
-#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
-        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
-#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-        (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
-#endif
-        g_leafKeyIdValid = 0;
+        wolfBoot_cert_chain_evict_leaf_key();
     }
 #endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
 #else
@@ -2237,11 +2280,17 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
      defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
     uint8_t* cert_chain;
     uint16_t cert_chain_size;
-    int32_t  cert_verify_result;
+    int32_t cert_verify_result;
+    int32_t primary_verify_result;
     int hsm_ret;
+    int primary_hsm_ret;
+#ifdef WOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID
+    int32_t secondary_verify_result;
+    int secondary_hsm_ret;
+#endif
 
     /* Reset certificate chain usage for this verification */
-    g_leafKeyIdValid = 0;
+    wolfBoot_cert_chain_evict_leaf_key();
 #endif
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);
@@ -2313,41 +2362,49 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         wolfBoot_printf("Found certificate chain (%d bytes)\n",
                         cert_chain_size);
 
-        /* Verify certificate chain using wolfHSM's verification API. Use DMA if
-         * available in the wolfHSM configuration */
-#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
-#if defined(WOLFHSM_CFG_DMA)
-        wolfBoot_printf(
-            "verifying cert chain and caching leaf pubkey (using DMA)\n");
-        hsm_ret = wh_Client_CertVerifyDmaAndCacheLeafPubKey(
-            &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
-#else
-        wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
-        hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
-            &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
-#endif
-#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-        wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
-        hsm_ret = wh_Server_CertVerify(
-            &hsmServerCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
-            WH_CERT_FLAGS_CACHE_LEAF_PUBKEY, WH_NVM_FLAGS_USAGE_VERIFY,
-            &g_certLeafKeyId);
-        if (hsm_ret == WH_ERROR_OK) {
-            cert_verify_result = 0;
-        }
-        wolfBoot_printf("wh_Server_CertVerify returned %d\n", hsm_ret);
-#endif
+        primary_hsm_ret = wolfBoot_cert_chain_verify_with_root(cert_chain,
+            cert_chain_size, hsmNvmIdCertRootCA, &primary_verify_result);
+        hsm_ret = primary_hsm_ret;
+        cert_verify_result = primary_verify_result;
 
-        /* Error or verification failure results in standard auth check failure
-         * path */
-        if (hsm_ret != 0 || cert_verify_result != 0) {
+#ifdef WOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID
+        if (hsm_ret != WH_ERROR_OK || cert_verify_result != 0) {
+            wolfBoot_printf("Primary certificate chain verification failed: "
+                            "hsm_ret=%d, verify_result=%d; retrying with "
+                            "secondary root %08x\n",
+                            hsm_ret, cert_verify_result,
+                            (unsigned int)
+                            WOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID);
+            wolfBoot_cert_chain_evict_leaf_key();
+
+            secondary_hsm_ret = wolfBoot_cert_chain_verify_with_root(cert_chain,
+                cert_chain_size,
+                (whNvmId)WOLFBOOT_WOLFHSM_SECONDARY_ROOT_CA_NVM_ID,
+                &secondary_verify_result);
+            hsm_ret = secondary_hsm_ret;
+            cert_verify_result = secondary_verify_result;
+
+            if (hsm_ret != WH_ERROR_OK || cert_verify_result != 0) {
+                wolfBoot_printf("Certificate chain verification failed: "
+                                "primary_hsm_ret=%d, "
+                                "primary_verify_result=%d, "
+                                "secondary_hsm_ret=%d, "
+                                "secondary_verify_result=%d\n",
+                                primary_hsm_ret, primary_verify_result,
+                                secondary_hsm_ret, secondary_verify_result);
+                wolfBoot_cert_chain_evict_leaf_key();
+                return -1;
+            }
+        }
+#else
+        if (hsm_ret != WH_ERROR_OK || cert_verify_result != 0) {
             wolfBoot_printf("Certificate chain verification failed: "
                             "hsm_ret=%d, verify_result=%d\n",
                             hsm_ret, cert_verify_result);
+            wolfBoot_cert_chain_evict_leaf_key();
             return -1;
         }
+#endif
 
         wolfBoot_printf("Certificate chain verified, using leaf key ID: %08x\n",
                         (unsigned int)g_certLeafKeyId);

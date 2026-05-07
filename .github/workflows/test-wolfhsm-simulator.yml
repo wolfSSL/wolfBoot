@@ -44,6 +44,39 @@ jobs:
             needs_posix_server: false
             posix_server_nvminit: false
             needs_nvm_image: true
+          # The "secondary root fallback" entries below provision NVM with a
+          # mismatched root CA at the primary slot (id 1) and the real root at
+          # the secondary slot (id 2). This forces wolfBoot to take the
+          # WOLFHSM_SECONDARY_ROOT_CA_NVM_ID fallback path during cert chain
+          # verification and ensures the sunny-day update still succeeds.
+          - name: "wolfHSM client cert chain verify ECC, secondary root fallback"
+            file: "config/examples/sim-wolfHSM-client-certchain-ecc.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+            secondary_root_fallback: true
+            cert_algo: ecc256
+          - name: "wolfHSM client cert chain verify RSA4096, secondary root fallback"
+            file: "config/examples/sim-wolfHSM-client-certchain-rsa4096.config"
+            needs_posix_server: true
+            posix_server_nvminit: true
+            needs_nvm_image: false
+            secondary_root_fallback: true
+            cert_algo: rsa4096
+          - name: "wolfHSM server cert chain verify ECC, secondary root fallback"
+            file: "config/examples/sim-wolfHSM-server-certchain-ecc.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
+            secondary_root_fallback: true
+            cert_algo: ecc256
+          - name: "wolfHSM server cert chain verify RSA4096, secondary root fallback"
+            file: "config/examples/sim-wolfHSM-server-certchain-rsa4096.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
+            secondary_root_fallback: true
+            cert_algo: rsa4096
 
       fail-fast: false
 
@@ -74,7 +107,25 @@ jobs:
 
       - name: Build wolfboot.elf
         run: |
-          make clean && make test-sim-internal-flash-with-update
+          make clean
+          if [ "${{ matrix.config.secondary_root_fallback }}" = "true" ]; then
+            make test-sim-internal-flash-with-update WOLFHSM_SECONDARY_ROOT_CA_NVM_ID=2
+          else
+            make test-sim-internal-flash-with-update
+          fi
+
+      # Generate an unrelated "wrong" root CA to provision at the primary NVM
+      # slot. This forces verification against the primary root to fail so the
+      # WOLFHSM_SECONDARY_ROOT_CA_NVM_ID fallback path is exercised.
+      - name: Generate wrong root CA for secondary root fallback test
+        if: matrix.config.secondary_root_fallback
+        run: |
+          rm -rf test-dummy-ca-wrong
+          tools/scripts/sim-gen-dummy-chain.sh --algo ${{ matrix.config.cert_algo }} --outdir test-dummy-ca-wrong
+          if cmp -s test-dummy-ca/root-cert.der test-dummy-ca-wrong/root-cert.der; then
+            echo "Wrong root cert is identical to the real root; secondary fallback would not be exercised" >&2
+            exit 1
+          fi
 
       - name: Build example POSIX TCP server
         if: matrix.config.needs_posix_server
@@ -87,7 +138,13 @@ jobs:
           cd lib/wolfHSM/examples/posix/wh_posix_server
           if [ "${{ matrix.config.posix_server_nvminit }}" = "true" ]; then
             tmpfile=$(mktemp)
-            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            if [ "${{ matrix.config.secondary_root_fallback }}" = "true" ]; then
+              # Mismatched root at primary slot (id 1) and real root at secondary slot (id 2)
+              echo "obj 1 0xFFFF 0x0000 \"cert CA wrong\" ../../../../../test-dummy-ca-wrong/root-cert.der" >> $tmpfile
+              echo "obj 2 0xFFFF 0x0000 \"cert CA right\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            else
+              echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            fi
             ./Build/wh_posix_server.elf --type tcp --nvminit $tmpfile &
           else
             # --flags=0x100 sets the WH_NVM_FLAGS_USAGE_VERIFY flag
@@ -103,7 +160,13 @@ jobs:
         run: |
           make -C lib/wolfHSM/tools/whnvmtool
           tmpfile=$(mktemp)
-          echo "obj 1 0xFFFF 0x0000 \"cert CA\" test-dummy-ca/root-cert.der" >> $tmpfile
+          if [ "${{ matrix.config.secondary_root_fallback }}" = "true" ]; then
+            # Mismatched root at primary slot (id 1) and real root at secondary slot (id 2)
+            echo "obj 1 0xFFFF 0x0000 \"cert CA wrong\" test-dummy-ca-wrong/root-cert.der" >> $tmpfile
+            echo "obj 2 0xFFFF 0x0000 \"cert CA right\" test-dummy-ca/root-cert.der" >> $tmpfile
+          else
+            echo "obj 1 0xFFFF 0x0000 \"cert CA\" test-dummy-ca/root-cert.der" >> $tmpfile
+          fi
           ./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size=16348 --invert-erased-byte $tmpfile
 
       # Run the sunny day update test against the server
