@@ -456,6 +456,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32h5-dualbank.config
 
+  stm32n6_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32n6.config
+
+  stm32n6_tz_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32n6-tz.config
+
   stm32h5_tz_test:
     uses: ./.github/workflows/test-build.yml
     with:
