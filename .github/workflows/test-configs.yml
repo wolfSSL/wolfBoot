@@ -648,6 +648,18 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/zynqmp_sdcard.config
 
+  zynq7000_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/zynq7000.config
+
+  zc702_sdcard_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/zc702_sdcard.config
+
   versal_vmk180_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

@@ -303,6 +303,28 @@ ifeq ($(ARCH),ARM)
      CFLAGS+=-DWOLFBOOT_USE_STDLIBC
   endif
 
+  ifeq ($(TARGET),zynq7000)
+     # AMD/Xilinx Zynq-7000 (Cortex-A9, ARMv7-A) - ZC702 Evaluation Kit.
+     # Loaded by Xilinx FSBL into DDR; see hal/zynq7000.{c,h,ld}.
+     CORTEX_A9=1
+     UPDATE_OBJS:=src/update_ram.o
+     CFLAGS+=-DWOLFBOOT_DUALBOOT -fno-builtin -ffreestanding
+     # Do NOT define WOLFBOOT_USE_STDLIBC: newlib's memcpy uses unaligned
+     # LDRs which fault on ARMv7-A whenever the active mapping treats memory
+     # as Strongly-Ordered (typically MMU off, but also some boot-stage
+     # configurations). wolfBoot's startup keeps FSBL's MMU + flat 1:1
+     # mapping enabled to avoid that, but we still link against the
+     # aligned-safe memcpy in src/string.c so unaligned loads can never
+     # surprise us regardless of MMU state.
+     # U-Boot legacy 64-byte header strip is only meaningful for the
+     # Linux/U-Boot payload variant (zynq7000_linux.config). Bare-metal
+     # payloads (zynq7000.config, zc702_sdcard.config) shouldn't risk a
+     # ~1-in-2^32 false-positive collision with UBOOT_IMG_HDR_MAGIC.
+     ifeq ($(LINUX_PAYLOAD),1)
+       CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+     endif
+  endif
+
   ifeq ($(TARGET),va416x0)
     CFLAGS+=-I$(WOLFBOOT_ROOT)/hal/vorago/ \
             -I$(VORAGO_SDK_DIR)/common/drivers/hdr/ \
@@ -333,6 +355,49 @@ ifeq ($(CORTEX_A5),1)
           -z noexecstack  -Ttext 0x300000
   # Cortex-A uses boot_arm32.o
   OBJS+=src/boot_arm32.o src/boot_arm32_start.o
+  ifeq ($(NO_ASM),1)
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+  else
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm32.o
+    ifneq ($(NO_ARM_ASM),1)
+      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm.o
+      OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-32-sha256-asm_c.o
+      CFLAGS+=-DWOLFSSL_SP_ARM32_ASM -DWOLFSSL_ARMASM -DWOLFSSL_ARMASM_NO_HW_CRYPTO \
+              -DWOLFSSL_ARM_ARCH=7 -DWOLFSSL_ARMASM_INLINE -DWOLFSSL_ARMASM_NO_NEON
+    endif
+  endif
+else
+ifeq ($(CORTEX_A9),1)
+  # Cortex-A9 (ARMv7-A, 32-bit) - Zynq-7000.
+  # Build in ARM state (-marm); reset vector lands in ARM mode after FSBL.
+  # Note: do not filter out -mthumb from CFLAGS/LDFLAGS - that converts the
+  # variables to simple-expansion flavor and breaks lazy $(LSCRIPT) expansion
+  # in test-app/Makefile. -marm appended later wins over -mthumb anyway.
+  FPU=-mfpu=vfp3-d16
+  CFLAGS+=-mcpu=cortex-a9 -mtune=cortex-a9 -marm -mno-unaligned-access
+  LDFLAGS+=-mcpu=cortex-a9 -mtune=cortex-a9 -marm -static \
+           -Wl,-z,noexecstack
+  # Cortex-A9 uses the same generic ARMv7-A startup as Cortex-A5
+  # (src/boot_arm32_start.S handles VBAR, per-mode stacks, cache
+  # invalidate, async-abort enable for any ARMv7-A target).
+  OBJS+=src/boot_arm32.o src/boot_arm32_start.o
+  # Linux/U-Boot payload: enable MMU + FDT codepaths in update_ram.c so DTBs
+  # can be loaded from a separate signed PART_DTS_BOOT partition. The MMU
+  # itself stays inherited from FSBL's flat 1:1 mapping; wolfBoot does not
+  # manage page tables on Cortex-A9.
+  ifeq ($(MMU),1)
+    CFLAGS+=-DMMU -DWOLFBOOT_FDT
+    OBJS+=src/fdt.o
+  endif
+  # SD card / eMMC boot: swap the update_ram loader for update_disk + GPT.
+  # The SDHCI HAL hooks live in hal/zynq7000.c and translate the generic
+  # Cadence-layout driver to the Arasan SDHCI v2.0 controller.
+  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+    CFLAGS+=-DWOLFBOOT_UPDATE_DISK -DMAX_DISKS=1
+    UPDATE_OBJS:=src/update_disk.o
+    OBJS += src/gpt.o
+    OBJS += src/disk.o
+  endif
   ifeq ($(NO_ASM),1)
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   else
@@ -453,6 +518,7 @@ else
       endif
     endif
   endif
+endif
 endif
 endif
 endif
