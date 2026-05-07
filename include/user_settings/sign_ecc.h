@@ -83,8 +83,10 @@
 #  define HAVE_ECC_KEY_IMPORT
 #endif
 
-/* SP MATH */
-#if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL)
+/* SP MATH default for builds that did not go through the secure-mode/
+ * test/bench/wolfHSM #else branch above (which already sets these). */
+#if !defined(USE_FAST_MATH) && !defined(WOLFSSL_SP_MATH_ALL) && \
+    !defined(WOLFSSL_SP_MATH)
 #  define WOLFSSL_SP_MATH
 #  define WOLFSSL_SP_SMALL
 #  define WOLFSSL_HAVE_SP_ECC

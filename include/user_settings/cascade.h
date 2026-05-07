@@ -51,10 +51,9 @@
 #  endif
 #endif
 
-/* Any RSA SIGN flag (or WOLFCRYPT_SECURE_MODE without PKCS11_SMALL) means
- * the build links wolfCrypt's RSA code. sign_rsa.h handles the actual
- * configuration; the marker is set here so finalize.h can see it ahead
- * of finalize-time and skip NO_ASN. */
+/* Single source of truth for "this build links wolfCrypt's RSA code".
+ * Tested by sign_rsa.h's outer #if and by the WOLFBOOT_NEEDS_RSA marker
+ * below; finalize.h reads the marker to skip NO_RSA / NO_ASN. */
 #if defined(WOLFBOOT_SIGN_RSA2048)            || \
     defined(WOLFBOOT_SIGN_RSA3072)            || \
     defined(WOLFBOOT_SIGN_RSA4096)            || \
@@ -68,6 +67,12 @@
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096) || \
     (defined(WOLFCRYPT_SECURE_MODE) && !defined(PKCS11_SMALL))
+#  ifndef WOLFBOOT_RSA_ENABLED
+#    define WOLFBOOT_RSA_ENABLED
+#  endif
+#endif
+
+#ifdef WOLFBOOT_RSA_ENABLED
 #  ifndef WOLFBOOT_NEEDS_RSA
 #    define WOLFBOOT_NEEDS_RSA
 #  endif

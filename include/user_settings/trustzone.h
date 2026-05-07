@@ -40,12 +40,13 @@
 #endif
 
 #if defined(WOLFCRYPT_TZ_PSA)
+   /* WOLFSSL_AES_CFB is set by the SECURE_MODE block above (TZ_PSA implies
+    * SECURE_MODE in options.mk). */
 #  define WOLFSSL_AES_COUNTER
 #  define WOLFSSL_AES_GCM
 #  define HAVE_AESGCM
 #  define HAVE_AESCCM
 #  define HAVE_AES_ECB
-#  define WOLFSSL_AES_CFB
 #  define WOLFSSL_AES_OFB
 #  ifndef NO_DES3
 #    define NO_DES3
@@ -70,7 +71,8 @@
 #endif
 
 #if defined(WOLFBOOT_TZ_FWTPM)
-#  define WOLFSSL_AES_CFB
+   /* WOLFSSL_AES_CFB is set by the SECURE_MODE block above (TZ_FWTPM
+    * implies SECURE_MODE in options.mk). */
 #  define WOLFSSL_SHA384
 #endif
 

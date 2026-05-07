@@ -3,8 +3,8 @@
  * wolfCrypt configuration for RSA (PKCS#1 v1.5 and PSS) signature
  * verification.
  *
- * Active when any WOLFBOOT_SIGN_RSA{2048,3072,4096} (or RSAPSS, or
- * SECONDARY) is defined, or when WOLFCRYPT_SECURE_MODE && !PKCS11_SMALL.
+ * Active when WOLFBOOT_RSA_ENABLED is set by cascade.h (any RSA SIGN
+ * flag, or WOLFCRYPT_SECURE_MODE && !PKCS11_SMALL).
  *
  * The companion `NO_RSA` fallback (when RSA isn't enabled) is also in
  * this file, in the #else branch -- so the fragment is included
@@ -32,24 +32,13 @@
 #ifndef _WOLFBOOT_USER_SETTINGS_SIGN_RSA_H_
 #define _WOLFBOOT_USER_SETTINGS_SIGN_RSA_H_
 
-/* This fragment is included unconditionally by user_settings.h: the trigger
- * condition is here in the outer #if, and the #else branch defines NO_RSA
- * so downstream blocks that test `#if defined(NO_RSA)` (e.g. the NO_ASN
- * carve-out) keep seeing the same value. */
+/* This fragment is included unconditionally by user_settings.h. The opt-in
+ * condition lives in cascade.h as WOLFBOOT_RSA_ENABLED (single source of
+ * truth shared with the WOLFBOOT_NEEDS_RSA marker). The #else branch
+ * defines NO_RSA so downstream blocks that test `#if defined(NO_RSA)`
+ * (e.g. the hash_sha*.h NO_ASN carve-outs) keep seeing the same value. */
 
-#if defined(WOLFBOOT_SIGN_RSA2048)            || \
-    defined(WOLFBOOT_SIGN_RSA3072)            || \
-    defined(WOLFBOOT_SIGN_RSA4096)            || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSA2048)  || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSA3072)  || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSA4096)  || \
-    defined(WOLFBOOT_SIGN_RSAPSS2048)         || \
-    defined(WOLFBOOT_SIGN_RSAPSS3072)         || \
-    defined(WOLFBOOT_SIGN_RSAPSS4096)         || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS2048) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS3072) || \
-    defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096) || \
-    (defined(WOLFCRYPT_SECURE_MODE) && !defined(PKCS11_SMALL))
+#ifdef WOLFBOOT_RSA_ENABLED
 
 #define WC_RSA_BLINDING
 #define WC_RSA_DIRECT
@@ -132,7 +121,7 @@
 #  define RSA_MAX_SIZE 4096
 #endif
 
-#else /* No RSA SIGN flag, no SECURE_MODE without PKCS11_SMALL */
+#else /* !WOLFBOOT_RSA_ENABLED */
 #  define NO_RSA
 #endif
 
