@@ -642,6 +642,23 @@ static void periph_unsecure(void)
     nvic_reg_off = NVIC_USART3_IRQ % 32;
     nvic_itns = ((volatile uint32_t *)(NVIC_ITNS_BASE + 4 * nvic_reg_pos));
     *nvic_itns |= (1 << nvic_reg_off);
+
+    /* H5 product state with TZEN=1 defaults every GPIO pin to secure
+     * via GPIOx_SECCFGR (offset 0x30 in each GPIO block, all 16 bits
+     * = 0xFFFF at reset). Until those bits are cleared, NS code can't
+     * read or write the pin's MODER/AFR/ODR, and the corresponding
+     * clock-enable bit in RCC_AHB2ENR is masked from the NS side.
+     *
+     * Clear SECCFGR for every pin on the ports the wolfIP NS app uses
+     * (RMII + USART3 + LED), then enable GPIOG's clock (the existing
+     * code only covered A/B/C/D). PD8 (USART3 TX) is already cleared
+     * above, but covering all of GPIOD is harmless. */
+    GPIO_SECCFGR(GPIOA_BASE) = 0u;
+    GPIO_SECCFGR(GPIOB_BASE) = 0u;
+    GPIO_SECCFGR(GPIOC_BASE) = 0u;
+    GPIO_SECCFGR(GPIOD_BASE) = 0u;
+    GPIO_SECCFGR(GPIOG_BASE) = 0u;
+    RCC_AHB2_CLOCK_ER |= GPIOG_AHB2_CLOCK_ER;
 }
 #endif /* TZ_SECURE() */
 

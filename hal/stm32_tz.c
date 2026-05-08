@@ -209,14 +209,20 @@ void hal_gtzc_init(void)
      * 0: Non-secure access only to block
      */
 
-    /* Configure SRAM1 as secure (Low 256 KB) */
+    /* Configure SRAM1 as secure (Low 256 KB).
+     * wolfBoot links its own RAM/RAM_HEAP into the SRAM1 secure alias
+     * (0x30000000-0x3003FFFF, see hal/stm32h5.ld), so SRAM1 must stay
+     * secure for wolfBoot's .bss/stack/heap to remain accessible. */
     for (i = 0; i < 16; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
-    /* Configure SRAM2 as secure (64 KB) */
+    /* Configure SRAM2 as non-secure (64 KB).
+     * wolfBoot does not use SRAM2; ceding it to the NS application
+     * widens the NS RAM window from 320 KB (SRAM3 only) to 384 KB
+     * (SRAM2 + SRAM3). */
     for (i = 0; i < 4; i++) {
-        SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0xFFFFFFFF);
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0x0);
     }
 
     /* Configure SRAM3 as non-secure (320 KB) */
@@ -310,8 +316,11 @@ void hal_tz_sau_init(void)
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
-    /* Non-secure RAM region */
-    sau_init_region(2, 0x20050000, 0x2009FFFF, 0);
+    /* Non-secure RAM region: SRAM2 (64 KB) + SRAM3 (320 KB).
+     * Lower bound widened from 0x20050000 to 0x20040000 to cover SRAM2,
+     * which hal_gtzc_init also leaves non-secure. SRAM1 (0x20000000-
+     * 0x2003FFFF) stays secure for wolfBoot's own RAM/heap. */
+    sau_init_region(2, 0x20040000, 0x2009FFFF, 0);
 
     /* Non-secure: internal peripherals */
     sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
