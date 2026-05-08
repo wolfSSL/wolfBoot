@@ -31,6 +31,10 @@
 #include "wolfboot/wolfboot.h"
 #include <string.h>
 
+#ifdef WOLFBOOT_UBOOT_LEGACY
+#include "gpt.h" /* gpt_crc32_* helpers (reflected CRC-32, poly 0xEDB88320) */
+#endif
+
 #ifdef WOLFBOOT_TPM
 #include "tpm.h"
 #endif
@@ -134,6 +138,81 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     return 0; /* success */
 }
 #endif /* WOLFBOOT_USE_RAMBOOT */
+
+#ifdef WOLFBOOT_UBOOT_LEGACY
+/* Validate a 64-byte U-Boot legacy image header (image_header_t).
+ *
+ * Layout (all multi-byte fields stored big-endian on flash):
+ *   0x00  4   ih_magic   0x27051956
+ *   0x04  4   ih_hcrc    CRC32 of header with hcrc treated as 0
+ *   0x08  4   ih_time    timestamp
+ *   0x0C  4   ih_size    payload size (excl. header)
+ *   0x10  4   ih_load    load address
+ *   0x14  4   ih_ep      entry point
+ *   0x18  4   ih_dcrc    data CRC32 (validated by wolfBoot signature)
+ *   0x1C  1   ih_os
+ *   0x1D  1   ih_arch
+ *   0x1E  1   ih_type
+ *   0x1F  1   ih_comp
+ *   0x20 32   ih_name
+ *
+ * Magic alone is a ~1-in-2^32 collision for random data, so we also
+ * validate the header CRC32 (~2^-32) and the payload size, dropping the
+ * joint false-positive probability to roughly 2^-64. This matches
+ * U-Boot's own mkimage/bootm validation. */
+static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
+{
+    struct gpt_crc32_ctx ctx;
+    uint8_t scratch[UBOOT_IMG_HDR_SZ];
+    uint32_t magic;
+    uint32_t hcrc;
+    uint32_t size;
+    uint32_t crc;
+
+    if (hdr == NULL)
+        return 0;
+    if (total < UBOOT_IMG_HDR_SZ)
+        return 0;
+
+    /* ih_magic is stored big-endian on flash; UBOOT_IMG_HDR_MAGIC is the
+     * host-order word that compares equal to that BE encoding on a
+     * little-endian host (which is the only ARM/x86 host wolfBoot
+     * supports for the targets enabling WOLFBOOT_UBOOT_LEGACY). */
+    memcpy(&magic, hdr + 0x00, sizeof(magic));
+    if (magic != UBOOT_IMG_HDR_MAGIC)
+        return 0;
+
+    /* ih_size: big-endian payload length. Reject zero and anything that
+     * would overrun the signed image. */
+    memcpy(&size, hdr + 0x0C, sizeof(size));
+    size = ((size & 0xFF000000U) >> 24) |
+           ((size & 0x00FF0000U) >>  8) |
+           ((size & 0x0000FF00U) <<  8) |
+           ((size & 0x000000FFU) << 24);
+    if (size == 0)
+        return 0;
+    if (size > (total - UBOOT_IMG_HDR_SZ))
+        return 0;
+
+    /* ih_hcrc: CRC32 of the header with the hcrc field treated as zero. */
+    memcpy(scratch, hdr, UBOOT_IMG_HDR_SZ);
+    memcpy(&hcrc, scratch + 0x04, sizeof(hcrc));
+    memset(scratch + 0x04, 0, sizeof(hcrc));
+    gpt_crc32_init(&ctx);
+    gpt_crc32_update(&ctx, scratch, UBOOT_IMG_HDR_SZ);
+    crc = gpt_crc32_final(&ctx);
+    /* hcrc is stored big-endian; byte-swap for comparison against the
+     * host-order CRC32 returned by gpt_crc32_final. */
+    hcrc = ((hcrc & 0xFF000000U) >> 24) |
+           ((hcrc & 0x00FF0000U) >>  8) |
+           ((hcrc & 0x0000FF00U) <<  8) |
+           ((hcrc & 0x000000FFU) << 24);
+    if (hcrc != crc)
+        return 0;
+
+    return 1;
+}
+#endif /* WOLFBOOT_UBOOT_LEGACY */
 
 void RAMFUNCTION wolfBoot_start(void)
 {
@@ -316,17 +395,17 @@ backup_on_failure:
 #endif
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
-    /* Check for U-Boot Legacy format image header */
+    /* Check for U-Boot legacy format image header. Validate magic +
+     * header CRC32 + payload size before stripping the 64-byte header,
+     * so a non-uImage payload whose first 4 bytes happen to collide
+     * with UBOOT_IMG_HDR_MAGIC (~1 in 2^32) cannot be misinterpreted. */
     image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
-    if (image_ptr) {
-        if (*((uint32_t*)image_ptr) == UBOOT_IMG_HDR_MAGIC) {
-            /* Note: Could parse header and get load address at 0x10 */
-
-            /* Skip 64 bytes (size of Legacy format image header) */
-            load_address += UBOOT_IMG_HDR_SZ;
-            os_image.fw_base += UBOOT_IMG_HDR_SZ;
-            os_image.fw_size -= UBOOT_IMG_HDR_SZ;
-        }
+    if (image_ptr != NULL &&
+        uboot_legacy_header_valid(image_ptr, os_image.fw_size)) {
+        /* Skip 64 bytes (size of legacy format image header). */
+        load_address += UBOOT_IMG_HDR_SZ;
+        os_image.fw_base += UBOOT_IMG_HDR_SZ;
+        os_image.fw_size -= UBOOT_IMG_HDR_SZ;
     }
 #endif
 

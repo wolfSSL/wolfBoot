@@ -285,6 +285,10 @@ ifeq ($(TARGET),sama5d3)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),zynq7000)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),rp2350)
     MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
 endif
