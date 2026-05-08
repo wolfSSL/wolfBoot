@@ -200,6 +200,9 @@ void hal_tz_release_nonsecure_area(void)
 
 #define SET_GTZC1_MPCBBx_SECCFGR_VCTR(bank,n,val) \
     (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + n )) = val
+/* PRIVCFGR_VCTR sits 0x100 after SECCFGR_VCTR in each MPCBB block. */
+#define SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(bank,n,val) \
+    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + 64 + n )) = val
 
 void hal_gtzc_init(void)
 {
@@ -217,17 +220,23 @@ void hal_gtzc_init(void)
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
-    /* Configure SRAM2 as non-secure (64 KB).
+    /* Configure SRAM2 as non-secure (64 KB) and unprivileged.
      * wolfBoot does not use SRAM2; ceding it to the NS application
      * widens the NS RAM window from 320 KB (SRAM3 only) to 384 KB
-     * (SRAM2 + SRAM3). */
+     * (SRAM2 + SRAM3). The PRIVCFGR clear is required because the
+     * H5 ETH DMA master is unprivileged; with the reset default
+     * (PRIVCFGR=0xFFFFFFFF) the DMA's descriptor/buffer reads from
+     * SRAM2 raise illegal-access (TZIC1_SR4 bit 26) and the channel
+     * suspends with TPS=6 (TBU). */
     for (i = 0; i < 4; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0x0);
+        SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(2, i, 0x0);
     }
 
-    /* Configure SRAM3 as non-secure (320 KB) */
+    /* Configure SRAM3 as non-secure (320 KB) and unprivileged. */
     for (i = 0; i < 20; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
+        SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(3, i, 0x0);
     }
 }
 
