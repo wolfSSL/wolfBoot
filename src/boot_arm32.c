@@ -61,26 +61,44 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
-	/* Set application address via r4 */
-	asm volatile("mov r4, %0" : : "r"(app_offset));
-
+    /* Single asm block so the compiler cannot insert any code between
+     * the register set-up and the bx that would clobber r0..r4. Inputs
+     * are tied to the matching named operands; r0..r4 are listed in the
+     * clobber set so the compiler does not assume their values survive.
+     *
+     * When MMU=1 we always emit the ARM Linux boot ABI
+     * (r0=0, r1=~0, r2=DTB_phys, r3=0). Bare-metal payloads do not read
+     * r0..r3 so the same ABI works for them; Linux requires it. This
+     * removes the need for a separate LINUX_PAYLOAD switch per target.
+     *
+     * Without MMU there is no DTB to pass, so we fall back to a minimal
+     * handoff (all GPRs cleared) used by targets like sama5d3. */
 #ifdef MMU
-	/* Move the dts pointer to r5 (as first argument) */
-	asm volatile("mov r5, %0" : : "r"(dts_offset));
+    register const uint32_t *dts_in = dts_offset;
+    asm volatile (
+        "mov r4, %[entry]\n"
+        "mov r2, %[dts]\n"
+        "mov r0, #0\n"
+        "mvn r1, #0\n"
+        "mov r3, #0\n"
+        "bx  r4\n"
+        :
+        : [entry] "r" (app_offset), [dts] "r" (dts_in)
+        : "r0", "r1", "r2", "r3", "r4", "memory"
+    );
 #else
-	asm volatile("mov r5, 0");
+    asm volatile (
+        "mov r4, %[entry]\n"
+        "mov r0, #0\n"
+        "mov r1, #0\n"
+        "mov r2, #0\n"
+        "mov r3, #0\n"
+        "bx  r4\n"
+        :
+        : [entry] "r" (app_offset)
+        : "r0", "r1", "r2", "r3", "r4", "memory"
+    );
 #endif
-
-    /* Zero registers r1, r2, r3 */
-    asm volatile("mov r3, 0");
-    asm volatile("mov r2, 0");
-    asm volatile("mov r1, 0");
-
-    /* Move the dts pointer to r0 (as first argument) */
-    asm volatile("mov r0, r5");
-
-    /* Unconditionally jump to app_entry at r4 */
-    asm volatile("bx r4");
 }
 
 #ifdef RAM_CODE
