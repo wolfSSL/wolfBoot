@@ -511,8 +511,7 @@ extern int tolower(int c);
     #define NO_AES_CBC
 #else
     #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
-        #if defined(WOLFSSL_NXP_LPC55S69_WITH_HWACCEL) \
-            || defined(WOLFSSL_NXP_LPC55S69_NO_HWACCEL)
+        #ifdef TARGET_lpc55s69
             /* use actual rng hardware for seed, HASHDRBG for generation */
             #define HAVE_HASHDRBG
             #define HAVE_AES_ECB
@@ -607,10 +606,6 @@ extern int tolower(int c);
 
 /* wolfCrypt Test/Benchmark Configuration */
 #ifdef WOLFCRYPT_TEST
-    #ifdef WOLFSSL_NXP_LPC55S69_WITH_HWACCEL
-        /* lpc55s69 hashcrypt hw does not support interleaving */
-        #define NO_WOLFSSL_SHA256_INTERLEAVE
-    #endif
     /* Skip extended tests to save memory */
     #define NO_CRYPT_TEST_EXTENDED
     /* Use smaller certificate buffers */

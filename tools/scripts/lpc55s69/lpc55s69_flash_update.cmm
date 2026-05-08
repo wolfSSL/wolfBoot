@@ -20,6 +20,9 @@ SYStem.Up
 
 DO ~~/demo/arm/flash/lpc55xx PREPAREONLY
 
+; Change from 32KiB sector size to 512
+flash.delete 1.
+flash.create 1. 0x00000000--0x00097fff 0x200 TARGET Long
 
 FLASH.ReProgram ALL
 Data.LOAD.Binary "&basedir\test-app\image_v2_signed.bin" 0x18000

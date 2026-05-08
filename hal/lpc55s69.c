@@ -102,14 +102,13 @@ void hal_init(void)
 #ifdef __WOLFBOOT
     /* lpc55s69 must run < 100 MHz for flash write/erase to work */
     BOARD_BootClockFROHF96M();
-//    BOARD_BootClockPLL150M();
 
 # ifdef DEBUG_UART
     uart_init();
     uart_write("lpc55s69 init\n", 14);
 # endif
 
-# ifdef WOLFSSL_NXP_LPC55S69_WITH_HWACCEL
+# ifdef WOLFSSL_NXP_LPC55S6X
     CLOCK_EnableClock(kCLOCK_HashCrypt);
     wc_hashcrypt_init();
     CLOCK_EnableClock(kCLOCK_Casper);
@@ -118,10 +117,8 @@ void hal_init(void)
 
     CLOCK_EnableClock(kCLOCK_Rng);
     RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
-
-#endif /* __WOLFBOOT */
-
     RNG_Init(RNG);
+#endif /* __WOLFBOOT */
 
 #if defined(__WOLFBOOT) || !defined(TZEN)
     memset(&pflash, 0, sizeof(pflash));
