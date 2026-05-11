@@ -191,7 +191,8 @@ const int hsmDevIdCrypt = WH_DEV_ID;
 const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+/* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
+ * line) to override the default single-root list. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
 #define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
 #endif
@@ -265,7 +266,8 @@ whServerContext hsmServerCtx = {0};
 
 const int      hsmDevIdHash             = INVALID_DEVID;
 const int      hsmDevIdPubKey           = INVALID_DEVID;
-/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+/* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
+ * line) to override the default single-root list. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
 #define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
 #endif

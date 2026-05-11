@@ -1465,6 +1465,15 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   # export the private key in DER format so it can be used with certificates
   KEYGEN_OPTIONS += --der
 
+  # Optional override for the wolfHSM trusted-root NVM ID list used during
+  # cert-chain verification. Expects a comma-separated initializer (no quotes,
+  # no spaces), e.g. WOLFHSM_NVM_ROOT_CA_LIST=1,2,3. Bounded by
+  # WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS. When unset, falls back to a HAL-specified
+  # default
+  ifneq ($(strip $(WOLFHSM_NVM_ROOT_CA_LIST)),)
+    CFLAGS += '-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=$(WOLFHSM_NVM_ROOT_CA_LIST)'
+  endif
+
   # User-provided cert chain takes precedence
   ifneq ($(USER_CERT_CHAIN),)
     CERT_CHAIN_FILE = $(USER_CERT_CHAIN)
