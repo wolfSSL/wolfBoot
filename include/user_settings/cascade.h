@@ -108,8 +108,7 @@
 #if defined(WOLFBOOT_TPM_PARMENC)  || \
     defined(WOLFCRYPT_SECURE_MODE) || \
     ((defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)) && \
-     (defined(WOLFSSL_NXP_LPC55S69_WITH_HWACCEL) || \
-      defined(WOLFSSL_NXP_LPC55S69_NO_HWACCEL)))
+     defined(TARGET_lpc55s69))
 #  ifndef WOLFBOOT_NEEDS_HASHDRBG
 #    define WOLFBOOT_NEEDS_HASHDRBG
 #  endif
