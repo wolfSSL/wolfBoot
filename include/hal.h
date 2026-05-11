@@ -221,8 +221,11 @@ extern const int hsmDevIdCrypt; /* devId for image (enc)decryption */
 extern const int hsmKeyIdCrypt; /* KeyId for image (enc/dec)ryption */
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-/* NvmId for trusted root CA certificate */
-extern const whNvmId hsmNvmIdCertRootCA;
+/* List of NvmIds for trusted root CA certificates. Verification succeeds if
+ * the cert chain anchors to any root in the list. The list length must not
+ * exceed WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS. */
+extern const whNvmId  hsmNvmIdCertRootCAList[];
+extern const uint16_t hsmNvmIdCertRootCACount;
 #endif
 
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || WOLFBOOT_ENABLE_WOLFHSM_SERVER */

@@ -191,7 +191,13 @@ const int hsmDevIdCrypt = WH_DEV_ID;
 const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-const whNvmId hsmNvmIdCertRootCA = 1;
+/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+#ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#endif
+const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
+const uint16_t hsmNvmIdCertRootCACount  =
+    sizeof(hsmNvmIdCertRootCAList) / sizeof(hsmNvmIdCertRootCAList[0]);
 #endif
 
 int hal_hsm_init_connect(void);
@@ -257,9 +263,15 @@ whServerConfig s_conf[1] = {{
 
 whServerContext hsmServerCtx = {0};
 
-const int     hsmDevIdHash       = INVALID_DEVID;
-const int     hsmDevIdPubKey     = INVALID_DEVID;
-const whNvmId hsmNvmIdCertRootCA = 1;
+const int      hsmDevIdHash             = INVALID_DEVID;
+const int      hsmDevIdPubKey           = INVALID_DEVID;
+/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+#ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#endif
+const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
+const uint16_t hsmNvmIdCertRootCACount  =
+    sizeof(hsmNvmIdCertRootCAList) / sizeof(hsmNvmIdCertRootCAList[0]);
 #ifdef EXT_ENCRYPT
 #error "Simulator does not support firmware encryption with wolfHSM(yet)"
 const int     hsmDevIdCrypt      = WH_DEV_ID;

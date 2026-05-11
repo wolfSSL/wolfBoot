@@ -2319,25 +2319,28 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 #if defined(WOLFHSM_CFG_DMA)
         wolfBoot_printf(
             "verifying cert chain and caching leaf pubkey (using DMA)\n");
-        hsm_ret = wh_Client_CertVerifyDmaAndCacheLeafPubKey(
-            &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
+        hsm_ret = wh_Client_CertVerifyMultiRootDmaAndCacheLeafPubKey(
+            &hsmClientCtx, cert_chain, cert_chain_size,
+            hsmNvmIdCertRootCAList, hsmNvmIdCertRootCACount,
             WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
 #else
         wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
-        hsm_ret = wh_Client_CertVerifyAndCacheLeafPubKey(
-            &hsmClientCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
+        hsm_ret = wh_Client_CertVerifyMultiRootAndCacheLeafPubKey(
+            &hsmClientCtx, cert_chain, cert_chain_size,
+            hsmNvmIdCertRootCAList, hsmNvmIdCertRootCACount,
             WH_NVM_FLAGS_USAGE_VERIFY, &g_certLeafKeyId, &cert_verify_result);
 #endif
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
         wolfBoot_printf("verifying cert chain and caching leaf pubkey\n");
-        hsm_ret = wh_Server_CertVerify(
-            &hsmServerCtx, cert_chain, cert_chain_size, hsmNvmIdCertRootCA,
+        hsm_ret = wh_Server_CertVerifyMultiRoot(
+            &hsmServerCtx, cert_chain, cert_chain_size,
+            hsmNvmIdCertRootCAList, hsmNvmIdCertRootCACount,
             WH_CERT_FLAGS_CACHE_LEAF_PUBKEY, WH_NVM_FLAGS_USAGE_VERIFY,
             &g_certLeafKeyId);
         if (hsm_ret == WH_ERROR_OK) {
             cert_verify_result = 0;
         }
-        wolfBoot_printf("wh_Server_CertVerify returned %d\n", hsm_ret);
+        wolfBoot_printf("wh_Server_CertVerifyMultiRoot returned %d\n", hsm_ret);
 #endif
 
         /* Error or verification failure results in standard auth check failure
