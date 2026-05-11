@@ -27,10 +27,6 @@
 #define _WOLFBOOT_USER_SETTINGS_TEST_BENCH_H_
 
 #ifdef WOLFCRYPT_TEST
-#  ifdef WOLFSSL_NXP_LPC55S69_WITH_HWACCEL
-     /* lpc55s69 hashcrypt hw does not support interleaving */
-#    define NO_WOLFSSL_SHA256_INTERLEAVE
-#  endif
    /* Skip extended tests to save memory */
 #  define NO_CRYPT_TEST_EXTENDED
    /* Use smaller certificate buffers */
@@ -82,8 +78,7 @@
     * finalize.h's chain-1 else branch. */
 #  define HAVE_AESGCM
 #  define GCM_TABLE
-#  if defined(WOLFSSL_NXP_LPC55S69_WITH_HWACCEL) \
-        || defined(WOLFSSL_NXP_LPC55S69_NO_HWACCEL)
+#  ifdef TARGET_lpc55s69
      /* LPC55S69 path uses real RNG hardware for the seed and HASHDRBG
       * for generation. NEEDS_HASHDRBG is declared in cascade.h on this
       * combination, so finalize.h emits HAVE_HASHDRBG. */
