@@ -111,7 +111,8 @@ const int hsmDevIdCrypt = WH_DEV_ID;
 const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+/* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
+ * line) to override the default single-root list. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
 #define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
 #endif
@@ -125,7 +126,8 @@ const uint16_t hsmNvmIdCertRootCACount  =
 /* map wolfBoot HAL layer wofHSM exports to their tchsm config vals */
 const int      hsmDevIdHash             = HSM_DEVID;
 const int      hsmDevIdPubKey           = HSM_DEVID;
-/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+/* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
+ * line) to override the default single-root list. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
 #define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
 #endif
