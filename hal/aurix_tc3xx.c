@@ -111,15 +111,27 @@ const int hsmDevIdCrypt = WH_DEV_ID;
 const int hsmKeyIdCrypt = 0xFF;
 #endif
 #ifdef WOLFBOOT_CERT_CHAIN_VERIFY
-const whNvmId hsmNvmIdCertRootCA = 1;
+/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+#ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#endif
+const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
+const uint16_t hsmNvmIdCertRootCACount  =
+    sizeof(hsmNvmIdCertRootCAList) / sizeof(hsmNvmIdCertRootCAList[0]);
 #endif
 
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) /*WOLFBOOT_ENABLE_WOLFHSM_CLIENT*/
 
 /* map wolfBoot HAL layer wofHSM exports to their tchsm config vals */
-const int     hsmDevIdHash       = HSM_DEVID;
-const int     hsmDevIdPubKey     = HSM_DEVID;
-const whNvmId hsmNvmIdCertRootCA = 1;
+const int      hsmDevIdHash             = HSM_DEVID;
+const int      hsmDevIdPubKey           = HSM_DEVID;
+/* Override at build time, e.g. -DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST="1, 2, 3" */
+#ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#endif
+const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
+const uint16_t hsmNvmIdCertRootCACount  =
+    sizeof(hsmNvmIdCertRootCAList) / sizeof(hsmNvmIdCertRootCAList[0]);
 #ifdef EXT_ENCRYPT
 #error "AURIX does not support firmware encryption with wolfHSM(yet)"
 const int     hsmDevIdCrypt      = INVALID_DEVID; /*HSM_DEVID once CCB enabled*/
