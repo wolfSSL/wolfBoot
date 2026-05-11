@@ -200,9 +200,12 @@ void hal_tz_release_nonsecure_area(void)
 
 #define SET_GTZC1_MPCBBx_SECCFGR_VCTR(bank,n,val) \
     (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + n )) = val
-/* PRIVCFGR_VCTR sits 0x100 after SECCFGR_VCTR in each MPCBB block. */
+/* PRIVCFGR_VCTR sits 0x100 bytes (0x40 words) after SECCFGR_VCTR in each
+ * MPCBB block. */
+#define GTZC_MPCBB_PRIVCFGR_WORD_OFFSET (0x100u / sizeof(uint32_t))
 #define SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(bank,n,val) \
-    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + 64 + n )) = val
+    (*((volatile uint32_t *)(GTZC1_MPCBB##bank##_SECCFGR) + \
+        GTZC_MPCBB_PRIVCFGR_WORD_OFFSET + n )) = val
 
 void hal_gtzc_init(void)
 {
