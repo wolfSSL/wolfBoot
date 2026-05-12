@@ -878,6 +878,23 @@ endif
 ifeq ($(TARGET),stm32g0)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
+ifeq ($(TARGET),stm32g4)
+  CFLAGS+=-DNVM_FLASH_WRITEONCE=1
+  CFLAGS+=-I../hal
+  LDFLAGS+=-Wl,-gc-sections
+  # Test app uses printf via syscalls.o (routes _write -> uart_write).
+  # syscalls.c references uart_write/uart_vprintf from string.o; string.o
+  # is already pulled in when DEBUG_UART=1. Pull it in unconditionally so
+  # printf is available even when DEBUG_UART is off.
+  ifeq ($(DEBUG_UART),)
+    APP_OBJS+=../src/string.o
+  endif
+  APP_OBJS+=syscalls.o
+  # _Min_Heap_Size is consumed by syscalls.c _sbrk(); ARM.ld does not
+  # define a heap, so anchor it at zero. _sbrk is gc'd when malloc is
+  # unused, but the symbol must still resolve.
+  LDFLAGS+=-Wl,--defsym=_Min_Heap_Size=0
+endif
 ifeq ($(TARGET),stm32c0)
   CFLAGS+=-DNVM_FLASH_WRITEONCE=1
 endif
