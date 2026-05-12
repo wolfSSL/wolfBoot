@@ -50,15 +50,12 @@ extern uint32_t _flash_keyvault;
 extern uint32_t _flash_keyvault_size;
 
 static whFlashH5Ctx              g_flash_ctx;
-/* Fields filled at runtime in wcs_wolfhsm_init: pointer-to-integer casts of
- * linker symbols are not strictly conforming static initializers. */
-static whFlashH5Ctx              g_flash_cfg;
 
 static whNvmFlashContext         g_nvm_flash_ctx;
 static whNvmFlashConfig          g_nvm_flash_cfg = {
     .cb      = &whFlashH5_Cb,
     .context = &g_flash_ctx,
-    .config  = &g_flash_cfg,
+    /* .config is set at runtime in wcs_wolfhsm_init */
 };
 static whNvmCb                   g_nvm_flash_cb = WH_NVM_FLASH_CB;
 static whNvmContext              g_nvm_ctx;
@@ -70,7 +67,7 @@ static whNvmConfig               g_nvm_cfg = {
 
 static whServerCryptoContext     g_crypto_ctx;
 static whTransportNscServerContext g_srv_tx_ctx;
-static whTransportNscServerConfig g_srv_tx_cfg = { { 0 } };
+static whTransportNscServerConfig g_srv_tx_cfg = { 0 };
 static whCommServerConfig        g_comm_cfg = {
     .transport_context = &g_srv_tx_ctx,
     .transport_cb      = &whTransportNscServer_Cb,
@@ -81,7 +78,7 @@ static whServerConfig            g_server_cfg = {
     .comm_config = &g_comm_cfg,
     .nvm         = &g_nvm_ctx,
     .crypto      = &g_crypto_ctx,
-#if defined WOLF_CRYPTO_CB
+#ifdef WOLF_CRYPTO_CB
     .devId       = INVALID_DEVID,
 #endif
 };
@@ -91,13 +88,22 @@ static int                       g_wolfhsm_ready;
 
 void wcs_wolfhsm_init(void)
 {
-    int rc;
+    whFlashH5Ctx flash_cfg;
+    int          rc;
 
-    g_flash_cfg.base           = (uint32_t)&_flash_keyvault;
-    g_flash_cfg.size           = (uint32_t)&_flash_keyvault_size;
-    g_flash_cfg.partition_size = WCS_WOLFHSM_PARTITION_SIZE;
+    if (g_wolfhsm_ready) {
+        return;
+    }
 
-    rc = wc_InitRng(g_crypto_ctx.rng);
+    memset(&g_srv_tx_ctx, 0, sizeof(g_srv_tx_ctx));
+
+    flash_cfg.base           = (uint32_t)&_flash_keyvault;
+    flash_cfg.size           = (uint32_t)&_flash_keyvault_size;
+    flash_cfg.partition_size = WCS_WOLFHSM_PARTITION_SIZE;
+    g_nvm_flash_cfg.config   = &flash_cfg;
+
+    /* g_crypto_ctx.rng is an embedded WC_RNG[1] (see wh_server.h) */
+    rc = wc_InitRng(&g_crypto_ctx.rng[0]);
     if (rc != 0) {
         wolfBoot_panic();
     }
@@ -125,16 +131,19 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     if (cmd == NULL || rsp == NULL || rspSz == NULL) {
         return WH_ERROR_BADARGS;
     }
-    /* volatile read forbids the compiler from re-fetching *rspSz later. */
+    /* single-fetch *rspSz so it cannot be re-read after validation */
     rsp_capacity = *(volatile const uint32_t *)rspSz;
 
     if (cmdSz == 0U || cmdSz > WH_COMM_MTU) {
+        *rspSz = 0;
         return WH_ERROR_BADARGS;
     }
     if (rsp_capacity == 0U || rsp_capacity > WH_COMM_MTU) {
+        *rspSz = 0;
         return WH_ERROR_BADARGS;
     }
     if (!g_wolfhsm_ready) {
+        *rspSz = 0;
         return WH_ERROR_NOTREADY;
     }
 
@@ -148,8 +157,16 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     rc = wh_Server_HandleRequestMessage(&g_server);
 
     if (rc == WH_ERROR_OK) {
-        *rspSz = (uint32_t)g_srv_tx_ctx.rsp_size;
-    } else {
+        /* clamp: dispatcher must honor rsp_capacity; defend against regression */
+        if ((uint32_t)g_srv_tx_ctx.rsp_size > rsp_capacity) {
+            *rspSz = 0;
+            rc     = WH_ERROR_ABORTED;
+        }
+        else {
+            *rspSz = (uint32_t)g_srv_tx_ctx.rsp_size;
+        }
+    }
+    else {
         *rspSz = 0;
     }
 

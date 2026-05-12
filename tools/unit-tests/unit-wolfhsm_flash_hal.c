@@ -60,9 +60,17 @@ int hal_flash_write(haladdr_t addr, const uint8_t *data, int len)
 
 static void mock_flash_init(void)
 {
+    /* Prefer MAP_FIXED_NOREPLACE so the kernel refuses to clobber an
+     * existing mapping at MOCK_FLASH_BASE (Linux >= 4.17). Older kernels
+     * fall back to plain MAP_FIXED. */
+    int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+#ifdef MAP_FIXED_NOREPLACE
+    flags |= MAP_FIXED_NOREPLACE;
+#else
+    flags |= MAP_FIXED;
+#endif
     void *p = mmap((void *)(uintptr_t)MOCK_FLASH_BASE, MOCK_FLASH_SIZE,
-                   PROT_READ | PROT_WRITE,
-                   MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+                   PROT_READ | PROT_WRITE, flags, -1, 0);
     ck_assert_ptr_eq(p, (void *)(uintptr_t)MOCK_FLASH_BASE);
     memset((void *)(uintptr_t)MOCK_FLASH_BASE, 0xFF, MOCK_FLASH_SIZE);
     g_flash_locked     = 1;
@@ -280,6 +288,132 @@ START_TEST(test_blank_check)
 }
 END_TEST
 
+START_TEST(test_cleanup)
+{
+    whFlashH5Ctx ctx;
+
+    ck_assert_int_eq(whFlashH5_Cb.Cleanup(NULL), WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.Cleanup(&ctx), WH_ERROR_OK);
+}
+END_TEST
+
+START_TEST(test_program_propagates_erase_failure)
+{
+    whFlashH5Ctx ctx;
+    uint8_t      data[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+
+    mock_flash_init();
+    ctx.base           = MOCK_FLASH_BASE;
+    ctx.size           = MOCK_FLASH_SIZE;
+    ctx.partition_size = MOCK_FLASH_SIZE / 2U;
+
+    g_flash_erase_fail = 1;
+    ck_assert_int_eq(whFlashH5_Cb.Program(&ctx, 0U, sizeof(data), data),
+                     WH_ERROR_ABORTED);
+    g_flash_erase_fail = 0;
+    mock_flash_fini();
+}
+END_TEST
+
+START_TEST(test_read_returns_flash_contents)
+{
+    whFlashH5Ctx ctx;
+    uint8_t      data[16];
+    uint8_t      buf[16];
+    int          i;
+
+    for (i = 0; i < (int)sizeof(data); i++) {
+        data[i] = (uint8_t)(0xA0 + i);
+    }
+    mock_flash_init();
+    ctx.base           = MOCK_FLASH_BASE;
+    ctx.size           = MOCK_FLASH_SIZE;
+    ctx.partition_size = MOCK_FLASH_SIZE / 2U;
+
+    ck_assert_int_eq(whFlashH5_Cb.Program(&ctx, 0U, sizeof(data), data),
+                     WH_ERROR_OK);
+    memset(buf, 0, sizeof(buf));
+    ck_assert_int_eq(whFlashH5_Cb.Read(&ctx, 0U, sizeof(buf), buf),
+                     WH_ERROR_OK);
+    ck_assert_mem_eq(buf, data, sizeof(data));
+    mock_flash_fini();
+}
+END_TEST
+
+START_TEST(test_callbacks_reject_null_context)
+{
+    uint8_t data[8] = { 0 };
+
+    ck_assert_int_eq(whFlashH5_Cb.Read(NULL, 0U, sizeof(data), data),
+                     WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.Program(NULL, 0U, sizeof(data), data),
+                     WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.Erase(NULL, 0U, MOCK_FLASH_SECTOR),
+                     WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.Verify(NULL, 0U, sizeof(data), data),
+                     WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.BlankCheck(NULL, 0U, sizeof(data)),
+                     WH_ERROR_BADARGS);
+    ck_assert_uint_eq(whFlashH5_Cb.PartitionSize(NULL), 0U);
+}
+END_TEST
+
+START_TEST(test_callbacks_reject_null_data)
+{
+    whFlashH5Ctx ctx;
+
+    ctx.base           = MOCK_FLASH_BASE;
+    ctx.size           = MOCK_FLASH_SIZE;
+    ctx.partition_size = MOCK_FLASH_SIZE / 2U;
+
+    ck_assert_int_eq(whFlashH5_Cb.Program(&ctx, 0U, 8U, NULL),
+                     WH_ERROR_BADARGS);
+    ck_assert_int_eq(whFlashH5_Cb.Verify(&ctx, 0U, 8U, NULL),
+                     WH_ERROR_BADARGS);
+}
+END_TEST
+
+START_TEST(test_program_spans_three_sectors)
+{
+    whFlashH5Ctx   ctx;
+    const uint32_t off = MOCK_FLASH_SECTOR - 4U;
+    const uint32_t sz  = (2U * MOCK_FLASH_SECTOR) + 8U;
+    uint8_t        data[(2U * MOCK_FLASH_SECTOR) + 8U];
+    uint8_t        readback[sizeof(data)];
+    uint32_t       i;
+
+    for (i = 0U; i < sizeof(data); i++) {
+        data[i] = (uint8_t)(i & 0xFFU);
+    }
+    mock_flash_init();
+    ctx.base           = MOCK_FLASH_BASE;
+    ctx.size           = MOCK_FLASH_SIZE;
+    ctx.partition_size = MOCK_FLASH_SIZE / 2U;
+
+    ck_assert_int_eq(whFlashH5_Cb.Program(&ctx, off, sz, data), WH_ERROR_OK);
+    memcpy(readback, (void *)(uintptr_t)(MOCK_FLASH_BASE + off), sz);
+    ck_assert_mem_eq(readback, data, sz);
+    ck_assert_uint_eq(((uint8_t *)(uintptr_t)MOCK_FLASH_BASE)[off - 1U], 0xFFU);
+    ck_assert_uint_eq(((uint8_t *)(uintptr_t)MOCK_FLASH_BASE)[off + sz], 0xFFU);
+    mock_flash_fini();
+}
+END_TEST
+
+START_TEST(test_writelock_writeunlock_noop)
+{
+    whFlashH5Ctx ctx;
+
+    ctx.base           = MOCK_FLASH_BASE;
+    ctx.size           = MOCK_FLASH_SIZE;
+    ctx.partition_size = MOCK_FLASH_SIZE / 2U;
+
+    ck_assert_int_eq(whFlashH5_Cb.WriteLock(&ctx, 0U, MOCK_FLASH_SECTOR),
+                     WH_ERROR_OK);
+    ck_assert_int_eq(whFlashH5_Cb.WriteUnlock(&ctx, 0U, MOCK_FLASH_SECTOR),
+                     WH_ERROR_OK);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s  = suite_create("wolfHSM-flash-hal");
@@ -295,6 +429,13 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_erase_alignment);
     tcase_add_test(tc, test_verify);
     tcase_add_test(tc, test_blank_check);
+    tcase_add_test(tc, test_cleanup);
+    tcase_add_test(tc, test_program_propagates_erase_failure);
+    tcase_add_test(tc, test_read_returns_flash_contents);
+    tcase_add_test(tc, test_callbacks_reject_null_context);
+    tcase_add_test(tc, test_callbacks_reject_null_data);
+    tcase_add_test(tc, test_program_spans_three_sectors);
+    tcase_add_test(tc, test_writelock_writeunlock_noop);
     suite_add_tcase(s, tc);
     return s;
 }

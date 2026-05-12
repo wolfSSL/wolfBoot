@@ -88,4 +88,5 @@ jobs:
             WOLFBOOT_LIB_WOLFSSL="$(realpath ../external-libs/wolfssl)" \
             WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)" \
             WOLFBOOT_LIB_WOLFPSA="$(realpath ../external-libs/wolfPSA)" \
-            WOLFBOOT_LIB_WOLFTPM="$(realpath ../external-libs/wolfTPM)"
+            WOLFBOOT_LIB_WOLFTPM="$(realpath ../external-libs/wolfTPM)" \
+            WOLFBOOT_LIB_WOLFHSM="$(realpath ../external-libs/wolfHSM)"

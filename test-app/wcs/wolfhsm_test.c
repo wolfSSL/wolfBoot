@@ -153,9 +153,11 @@ static int wolfhsm_test_aes_cached(whClientContext *client)
     }
 
     rc = wc_AesSetIV(&aes, iv);
-    if (rc == 0) {
-        rc = wc_AesCbcEncrypt(&aes, ct, pt, (word32)sizeof(pt));
+    if (rc != 0) {
+        printf("wolfHSM AesSetIV failed: %d\r\n", rc);
+        goto out;
     }
+    rc = wc_AesCbcEncrypt(&aes, ct, pt, (word32)sizeof(pt));
     if (rc != 0) {
         printf("wolfHSM AES encrypt failed: %d\r\n", rc);
         goto out;
@@ -209,6 +211,7 @@ static int wolfhsm_test_persist(whClientContext *client, int *boot_state)
     rc = wh_Client_KeyCommit(client, keyId);
     if (rc != WH_ERROR_OK) {
         printf("wolfHSM persist KeyCommit failed: %d\r\n", rc);
+        (void)wh_Client_KeyEvict(client, keyId);
         return rc;
     }
     (void)wh_Client_KeyEvict(client, keyId);
@@ -218,7 +221,7 @@ static int wolfhsm_test_persist(whClientContext *client, int *boot_state)
 
 int cmd_wolfhsm_test(const char *args)
 {
-    static const whTransportNscClientConfig nsc_cfg = { { 0 } };
+    static const whTransportNscClientConfig nsc_cfg = { 0 };
     whCommClientConfig comm_cfg;
     whClientConfig     cfg;
     whClientContext    client;

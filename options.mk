@@ -1437,44 +1437,6 @@ ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
 endif
 endif
 
-# Shared wolfHSM client/server object lists. Both the legacy WOLFHSM_CLIENT=1 /
-# WOLFHSM_SERVER=1 flags and the WOLFCRYPT_TZ_WOLFHSM=1 TZ engine reference
-# these to avoid object-list duplication.
-WOLFHSM_CLIENT_OBJS := \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_nvm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_cryptocb.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_crypto.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_client_dma.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_dma.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o
-
-WOLFHSM_SERVER_OBJS := \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_utils.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_comm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_nvm_flash.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_keyid.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_nvm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_crypto.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_counter.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_keystore.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_customcb.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_customcb.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_keystore.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_crypto.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_counter.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_nvm.o \
-  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o
-
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
