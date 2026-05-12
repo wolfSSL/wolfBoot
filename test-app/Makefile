@@ -368,18 +368,18 @@ ifeq ($(TZEN),1)
         CFLAGS+=-DWOLFCRYPT_TZ_WOLFHSM
         CFLAGS+=-DWOLFHSM_CFG_ENABLE_CLIENT
         CFLAGS+=-DWOLFHSM_CFG_COMM_DATA_LEN=1280
-        CFLAGS+=-DWOLFHSM_CFG_PORT_STM32_TZ_NSC
+        CFLAGS+=-DWOLFHSM_CFG_PORT_ARMV8M_TZ_NSC
         CFLAGS+=-DWOLFHSM_CFG_NO_SYS_TIME
         ifeq ($(WOLFBOOT_TZ_TEST_NO_BKPT),1)
             CFLAGS+=-DWOLFBOOT_TZ_TEST_NO_BKPT
         endif
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
-        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz"
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/armv8m-tz"
         WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
         APP_OBJS+=./wcs/wolfhsm_test.o
         APP_OBJS+=./wcs/wolfhsm_stub.o
         WOLFHSM_APP_OBJS+=$(WOLFHSM_CLIENT_OBJS)
-        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/stmicro/stm32-tz/wh_transport_nsc.o
+        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/armv8m-tz/wh_transport_nsc.o
         WOLFHSM_APP_OBJS:=$(patsubst $(WOLFBOOT_LIB_WOLFHSM)/%, \
             $(WOLFHSM_LOCAL_OBJDIR)/%, $(WOLFHSM_APP_OBJS))
         APP_OBJS+=$(sort $(WOLFHSM_APP_OBJS))
