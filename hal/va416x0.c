@@ -376,23 +376,25 @@ static void iram_write(void *dst, const void *src, int len)
 {
     uintptr_t d = (uintptr_t)dst;
     uintptr_t s = (uintptr_t)src;
-    /* Word-aligned bulk copy */
-    if (((d | s) & 3u) == 0u) {
-        uint32_t *wd = (uint32_t *)dst;
+    /* Word-aligned bulk copy. The destination is marked volatile so the
+     * compiler cannot lower a 32-bit assignment into byte/halfword stores
+     * (which would be silently dropped by the IRAM ECC machinery). */
+    if (((d | s) & (uintptr_t)3u) == 0u) {
+        volatile uint32_t *wd = (volatile uint32_t *)dst;
         const uint32_t *ws = (const uint32_t *)src;
         while (len >= 4) {
             *wd++ = *ws++;
             len -= 4;
         }
         /* Fall through with byte tail (typically zero on this target) */
-        dst = wd;
+        dst = (void *)wd;
         src = ws;
     }
     /* Byte tail/unaligned: do read-modify-write of the containing word
      * (sub-word stores are dropped by the hardware). */
     while (len > 0) {
-        uintptr_t addr = (uintptr_t)dst & ~3u;
-        uint32_t off = (uintptr_t)dst & 3u;
+        uintptr_t addr = (uintptr_t)dst & ~(uintptr_t)3u;
+        uint32_t off = (uint32_t)((uintptr_t)dst & (uintptr_t)3u);
         uint32_t word = *(volatile uint32_t *)addr;
         uint8_t *wp = (uint8_t *)&word;
         while (len > 0 && off < 4u) {
@@ -410,17 +412,18 @@ static void iram_fill(void *dst, uint8_t val, int len)
     uint32_t pattern = ((uint32_t)val << 24) | ((uint32_t)val << 16) |
                        ((uint32_t)val << 8)  |  (uint32_t)val;
     uintptr_t d = (uintptr_t)dst;
-    if ((d & 3u) == 0u) {
-        uint32_t *wd = (uint32_t *)dst;
+    /* Word-aligned bulk fill via volatile to guarantee 32-bit stores. */
+    if ((d & (uintptr_t)3u) == 0u) {
+        volatile uint32_t *wd = (volatile uint32_t *)dst;
         while (len >= 4) {
             *wd++ = pattern;
             len -= 4;
         }
-        dst = wd;
+        dst = (void *)wd;
     }
     while (len > 0) {
-        uintptr_t addr = (uintptr_t)dst & ~3u;
-        uint32_t off = (uintptr_t)dst & 3u;
+        uintptr_t addr = (uintptr_t)dst & ~(uintptr_t)3u;
+        uint32_t off = (uint32_t)((uintptr_t)dst & (uintptr_t)3u);
         uint32_t word = *(volatile uint32_t *)addr;
         uint8_t *wp = (uint8_t *)&word;
         while (len > 0 && off < 4u) {
