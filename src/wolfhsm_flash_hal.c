@@ -21,15 +21,17 @@
 
 #define WHFH5_SECTOR_SIZE (8U * 1024U)
 
-/* Sector-cached read-modify-erase-write, mirroring psa_store.c. STM32H5
- * flash programs in 16-byte quad-words with ECC; each quad-word can be
- * programmed exactly once between erases. wolfHSM issues 8-byte unit
- * writes which would otherwise re-program neighbouring qwords, so every
- * Program call here loads the affected sector into RAM, modifies it, and
- * rewrites the whole 8 KiB sector after an erase. */
+/* Sector-cached RMW, mirrors psa_store.c. H5 flash programs as 16-byte
+ * qwords ECC; one program per erase. wolfHSM 8-byte writes would clobber
+ * neighbours, so Program loads the sector, modifies, erases, rewrites.
+ *
+ * Single static cache: non-reentrant by design (one secure-side server,
+ * synchronous per-NSC dispatch, no threads or interrupts on this path).
+ * Residual plaintext may remain in cache for one programming cycle if a
+ * synchronous fault aborts hal_flash_write; disable debug in production. */
 static uint8_t cached_sector[WHFH5_SECTOR_SIZE];
 
-static int _Init(void *context, const void *config)
+static int whFlashH5_Init(void *context, const void *config)
 {
     const whFlashH5Ctx *cfg = (const whFlashH5Ctx *)config;
     whFlashH5Ctx       *ctx = (whFlashH5Ctx *)context;
@@ -50,7 +52,7 @@ static int _Init(void *context, const void *config)
     return WH_ERROR_OK;
 }
 
-static int _Cleanup(void *context)
+static int whFlashH5_Cleanup(void *context)
 {
     if (context == NULL) {
         return WH_ERROR_BADARGS;
@@ -58,13 +60,13 @@ static int _Cleanup(void *context)
     return WH_ERROR_OK;
 }
 
-static uint32_t _PartitionSize(void *context)
+static uint32_t whFlashH5_PartitionSize(void *context)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
     return (ctx == NULL) ? 0U : ctx->partition_size;
 }
 
-static int _WriteLock(void *context, uint32_t offset, uint32_t size)
+static int whFlashH5_WriteLock(void *context, uint32_t offset, uint32_t size)
 {
     (void)context;
     (void)offset;
@@ -72,7 +74,7 @@ static int _WriteLock(void *context, uint32_t offset, uint32_t size)
     return WH_ERROR_OK;
 }
 
-static int _WriteUnlock(void *context, uint32_t offset, uint32_t size)
+static int whFlashH5_WriteUnlock(void *context, uint32_t offset, uint32_t size)
 {
     (void)context;
     (void)offset;
@@ -80,7 +82,8 @@ static int _WriteUnlock(void *context, uint32_t offset, uint32_t size)
     return WH_ERROR_OK;
 }
 
-static int _Read(void *context, uint32_t offset, uint32_t size, uint8_t *data)
+static int whFlashH5_Read(void *context, uint32_t offset, uint32_t size,
+                          uint8_t *data)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
 
@@ -96,8 +99,8 @@ static int _Read(void *context, uint32_t offset, uint32_t size, uint8_t *data)
     return WH_ERROR_OK;
 }
 
-static int _Program(void *context, uint32_t offset, uint32_t size,
-                    const uint8_t *data)
+static int whFlashH5_Program(void *context, uint32_t offset, uint32_t size,
+                             const uint8_t *data)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
     uint32_t      written = 0U;
@@ -112,6 +115,9 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
     if (size == 0U) {
         return WH_ERROR_OK;
     }
+
+    /* defensive wipe in case a prior call faulted before the per-iter wipe */
+    wc_ForceZero(cached_sector, sizeof(cached_sector));
 
     hal_flash_unlock();
     while (written < size) {
@@ -147,7 +153,7 @@ static int _Program(void *context, uint32_t offset, uint32_t size,
     return (hrc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
 }
 
-static int _Erase(void *context, uint32_t offset, uint32_t size)
+static int whFlashH5_Erase(void *context, uint32_t offset, uint32_t size)
 {
     whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
     int rc;
@@ -158,24 +164,40 @@ static int _Erase(void *context, uint32_t offset, uint32_t size)
     if (offset > ctx->size || size > ctx->size - offset) {
         return WH_ERROR_BADARGS;
     }
+    if (size == 0U) {
+        return WH_ERROR_OK;
+    }
     if ((offset % WHFH5_SECTOR_SIZE) != 0U ||
         (size % WHFH5_SECTOR_SIZE) != 0U) {
         return WH_ERROR_BADARGS;
     }
-    if (size == 0U) {
-        return WH_ERROR_OK;
-    }
 
+    /* hal_flash_erase takes int; loop over sector-sized chunks so the cast
+     * stays well-defined regardless of how large size grows. */
     hal_flash_unlock();
-    rc = hal_flash_erase(ctx->base + offset, (int)size);
+    {
+        uint32_t erased = 0U;
+        rc = 0;
+        while (erased < size) {
+            rc = hal_flash_erase(ctx->base + offset + erased,
+                                 (int)WHFH5_SECTOR_SIZE);
+            if (rc != 0) {
+                break;
+            }
+            erased += WHFH5_SECTOR_SIZE;
+        }
+    }
     hal_flash_lock();
     return (rc == 0) ? WH_ERROR_OK : WH_ERROR_ABORTED;
 }
 
-static int _Verify(void *context, uint32_t offset, uint32_t size,
-                   const uint8_t *data)
+static int whFlashH5_Verify(void *context, uint32_t offset, uint32_t size,
+                            const uint8_t *data)
 {
-    whFlashH5Ctx *ctx = (whFlashH5Ctx *)context;
+    whFlashH5Ctx  *ctx = (whFlashH5Ctx *)context;
+    const uint8_t *p;
+    uint8_t        acc = 0;
+    uint32_t       i;
 
     if (ctx == NULL || (size != 0U && data == NULL)) {
         return WH_ERROR_BADARGS;
@@ -183,14 +205,15 @@ static int _Verify(void *context, uint32_t offset, uint32_t size,
     if (offset > ctx->size || size > ctx->size - offset) {
         return WH_ERROR_BADARGS;
     }
-    if (size > 0U &&
-        memcmp((const uint8_t *)(ctx->base + offset), data, size) != 0) {
-        return WH_ERROR_NOTVERIFIED;
+    /* constant-time compare; verified data may be key material */
+    p = (const uint8_t *)(ctx->base + offset);
+    for (i = 0U; i < size; i++) {
+        acc |= (uint8_t)(p[i] ^ data[i]);
     }
-    return WH_ERROR_OK;
+    return (acc == 0U) ? WH_ERROR_OK : WH_ERROR_NOTVERIFIED;
 }
 
-static int _BlankCheck(void *context, uint32_t offset, uint32_t size)
+static int whFlashH5_BlankCheck(void *context, uint32_t offset, uint32_t size)
 {
     whFlashH5Ctx  *ctx = (whFlashH5Ctx *)context;
     const uint8_t *p;
@@ -212,16 +235,16 @@ static int _BlankCheck(void *context, uint32_t offset, uint32_t size)
 }
 
 const whFlashCb whFlashH5_Cb = {
-    .Init          = _Init,
-    .Cleanup       = _Cleanup,
-    .PartitionSize = _PartitionSize,
-    .WriteLock     = _WriteLock,
-    .WriteUnlock   = _WriteUnlock,
-    .Read          = _Read,
-    .Program       = _Program,
-    .Erase         = _Erase,
-    .Verify        = _Verify,
-    .BlankCheck    = _BlankCheck,
+    .Init          = whFlashH5_Init,
+    .Cleanup       = whFlashH5_Cleanup,
+    .PartitionSize = whFlashH5_PartitionSize,
+    .WriteLock     = whFlashH5_WriteLock,
+    .WriteUnlock   = whFlashH5_WriteUnlock,
+    .Read          = whFlashH5_Read,
+    .Program       = whFlashH5_Program,
+    .Erase         = whFlashH5_Erase,
+    .Verify        = whFlashH5_Verify,
+    .BlankCheck    = whFlashH5_BlankCheck,
 };
 
 #endif /* WOLFCRYPT_TZ_WOLFHSM */

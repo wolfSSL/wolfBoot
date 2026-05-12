@@ -10,6 +10,7 @@ WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
+WOLFBOOT_LIB_WOLFHSM?=../../lib/wolfHSM
 
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
 WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
@@ -17,12 +18,16 @@ endif
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFTPM)),)
 WOLFBOOT_LIB_WOLFTPM=../../../external-libs/wolfTPM
 endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFHSM)),)
+WOLFBOOT_LIB_WOLFHSM=../../../external-libs/wolfHSM
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
+WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
