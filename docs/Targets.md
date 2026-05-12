@@ -45,6 +45,7 @@ This README describes configuration of supported targets.
 * [STM32F4](#stm32f4)
 * [STM32F7](#stm32f7)
 * [STM32G0](#stm32g0)
+* [STM32G4](#stm32g4)
 * [STM32H5](#stm32h5)
 * [STM32N6](#stm32n6)
 * [STM32H7](#stm32h7)
@@ -522,6 +523,79 @@ st-util -p 3333
 ```
 
 wolfBoot has a .gdbinit to configure GDB
+
+```
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x08008100
+mon reset init
+```
+
+## STM32G4
+
+Supports STM32G4 single-bank Category 3 parts (verified on NUCLEO-G491RE,
+STM32G491RET6: 512KB flash, 96KB SRAM, Cortex-M4F).
+
+The HAL boots at 170 MHz using HSI16 + PLL with PWR Range 1 Boost mode
+(RM0440 6.1.4), 4 flash wait states, prefetch + I/D-cache enabled.
+
+Example 512KB partitioning on STM32G491RE:
+
+- Sector size: 2KB
+- wolfBoot partition size: 32KB
+- Application partition size: 232KB
+
+```C
+#define WOLFBOOT_SECTOR_SIZE                 0x800     /* 2 KB  */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08008000
+#define WOLFBOOT_PARTITION_SIZE              0x3A000   /* 232 KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08042000
+#define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x0807C000 /* 16 KB swap */
+```
+
+### Building STM32G4
+
+Reference configuration (see [/config/examples/stm32g4.config](/config/examples/stm32g4.config)).
+You can copy this to wolfBoot root as `.config`: `cp ./config/examples/stm32g4.config .config`.
+To build you can use `make`.
+
+The TARGET for this is `stm32g4`: `make TARGET=stm32g4`.
+Cortex-M4F is the default ARM core for this target.
+The option `NVM_FLASH_WRITEONCE=1` is mandatory: the IAP driver writes one
+64-bit doubleword per location and cannot rewrite without an erase first.
+The default signing scheme is ECC256 with SHA256.
+
+NUCLEO-G491RE has no HSE, so HSI16 is used as the PLL source. The ST-LINK
+virtual COM port is wired to LPUART1 on PA2 (TX) / PA3 (RX) via AF12.
+Optional boot logs over LPUART1 at 115200 8N1 are enabled with
+`CFLAGS_EXTRA+=-DDEBUG_UART`.
+
+This target is single-bank only -- keep `DUALBANK_SWAP=0`.
+
+### STM32G4 Programming
+
+Compile requirements: `make TARGET=stm32g4 NVM_FLASH_WRITEONCE=1`
+
+The output is a single `factory.bin` that includes `wolfboot.bin` and
+`test-app/image_v1_signed.bin` combined together. This should be programmed
+to the flash start address `0x08000000`.
+
+Flash using the STM32CubeProgrammer CLI:
+
+```
+STM32_Programmer_CLI -c port=swd -d factory.bin 0x08000000
+```
+
+### STM32G4 Debugging
+
+Use `make DEBUG=1` and program firmware again.
+
+Start GDB server on port 3333:
+
+```
+ST-LINK_gdbserver -d -e -r 1 -p 3333
+OR
+st-util -p 3333
+```
 
 ```
 arm-none-eabi-gdb

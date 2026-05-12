@@ -230,3 +230,28 @@ void boot_led_off(void)
 }
 
 #endif /* TARGET_stm32l4 */
+
+#ifdef TARGET_stm32g4
+#include "stm32g4.h"
+/* NUCLEO-G491RE user LED LD2 on PA5. */
+
+void boot_led_on(void)
+{
+    uint32_t reg;
+    const uint32_t pin = NUCLEO_G491_LED_LD2_PIN;
+    RCC_AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+    reg = RCC_AHB2ENR; /* read-back so GPIOA clock is live before MODER write */
+    (void)reg;
+    reg = GPIOA_MODER & ~(0x03 << (pin * 2));
+    GPIOA_MODER = reg | (1 << (pin * 2));
+    reg = GPIOA_PUPDR & ~(0x03 << (pin * 2));
+    GPIOA_PUPDR = reg | (1 << (pin * 2));
+    GPIOA_BSRR = (1 << pin); /* BSRR is write-only; bare assignment, not |= */
+}
+
+void boot_led_off(void)
+{
+    GPIOA_BSRR = (1 << (NUCLEO_G491_LED_LD2_PIN + 16));
+}
+
+#endif /* TARGET_stm32g4 */
