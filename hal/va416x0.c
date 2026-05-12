@@ -361,6 +361,77 @@ void ext_flash_unlock(void)
     VOR_SYSCONFIG->ROM_PROT |= SYSCONFIG_ROM_PROT_WREN_Msk;
 }
 
+/* The VA416xx code RAM (IRAM, 0x00000000-0x0003FFFF) silently drops 8/16-bit
+ * stores when WREN=1 - only word-aligned 32-bit stores stick (the ECC
+ * machinery computes parity per word and rejects sub-word writes without
+ * fault). A generic byte-wise memcpy/memset on the IRAM shadow appears
+ * to succeed but leaves the destination unchanged. These helpers copy/fill
+ * with 32-bit stores so the IRAM shadow update actually takes effect.
+ *
+ * Partition addresses (boot/update/swap) are sector-aligned (0x800) and the
+ * swap engine moves whole sector-sized blocks, so in practice the IRAM
+ * shadow path is always word-aligned. The unaligned head/tail fallbacks
+ * exist for defense-in-depth. */
+static void iram_write(void *dst, const void *src, int len)
+{
+    uintptr_t d = (uintptr_t)dst;
+    uintptr_t s = (uintptr_t)src;
+    /* Word-aligned bulk copy */
+    if (((d | s) & 3u) == 0u) {
+        uint32_t *wd = (uint32_t *)dst;
+        const uint32_t *ws = (const uint32_t *)src;
+        while (len >= 4) {
+            *wd++ = *ws++;
+            len -= 4;
+        }
+        /* Fall through with byte tail (typically zero on this target) */
+        dst = wd;
+        src = ws;
+    }
+    /* Byte tail/unaligned: do read-modify-write of the containing word
+     * (sub-word stores are dropped by the hardware). */
+    while (len > 0) {
+        uintptr_t addr = (uintptr_t)dst & ~3u;
+        uint32_t off = (uintptr_t)dst & 3u;
+        uint32_t word = *(volatile uint32_t *)addr;
+        uint8_t *wp = (uint8_t *)&word;
+        while (len > 0 && off < 4u) {
+            wp[off++] = *(const uint8_t *)src;
+            src = (const uint8_t *)src + 1;
+            dst = (uint8_t *)dst + 1;
+            len--;
+        }
+        *(volatile uint32_t *)addr = word;
+    }
+}
+
+static void iram_fill(void *dst, uint8_t val, int len)
+{
+    uint32_t pattern = ((uint32_t)val << 24) | ((uint32_t)val << 16) |
+                       ((uint32_t)val << 8)  |  (uint32_t)val;
+    uintptr_t d = (uintptr_t)dst;
+    if ((d & 3u) == 0u) {
+        uint32_t *wd = (uint32_t *)dst;
+        while (len >= 4) {
+            *wd++ = pattern;
+            len -= 4;
+        }
+        dst = wd;
+    }
+    while (len > 0) {
+        uintptr_t addr = (uintptr_t)dst & ~3u;
+        uint32_t off = (uintptr_t)dst & 3u;
+        uint32_t word = *(volatile uint32_t *)addr;
+        uint8_t *wp = (uint8_t *)&word;
+        while (len > 0 && off < 4u) {
+            wp[off++] = val;
+            dst = (uint8_t *)dst + 1;
+            len--;
+        }
+        *(volatile uint32_t *)addr = word;
+    }
+}
+
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     hal_status_t status;
@@ -370,8 +441,8 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 #endif
     status = FRAM_Write(ROM_SPI_BANK, address, (uint8_t*)data, len);
     if (status == hal_status_ok) {
-        /* update the shadow IRAM */
-        memcpy((void*)address, data, len);
+        /* update the shadow IRAM (word-aligned stores; see iram_write) */
+        iram_write((void*)address, data, len);
     }
     else {
         return -(int)status; /* convert to negative error code */
@@ -388,8 +459,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 #endif
     status = FRAM_Read(ROM_SPI_BANK, address, data, len);
     if (status == hal_status_ok) {
-        /* update the shadow IRAM */
-        memcpy((void*)address, data, len);
+        /* update the shadow IRAM (word-aligned stores; see iram_write) */
+        iram_write((void*)address, data, len);
     }
     else {
         return -(int)status; /* convert to negative error code */
@@ -405,8 +476,8 @@ int ext_flash_erase(uintptr_t address, int len)
 #endif
     status = FRAM_Erase(ROM_SPI_BANK, address, len);
     if (status == hal_status_ok) {
-        /* update the shadow IRAM */
-        memset((void*)address, 0xFF, len);
+        /* update the shadow IRAM (word-aligned stores; see iram_fill) */
+        iram_fill((void*)address, 0xFF, len);
     }
     else {
         return -(int)status; /* convert to negative error code */
@@ -539,7 +610,6 @@ void hal_init(void)
 #ifdef TEST_EXT_FLASH
     test_ext_flash();
 #endif
-
 }
 
 void hal_prepare_boot(void)
