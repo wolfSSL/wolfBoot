@@ -16,7 +16,7 @@ SECTIONS
         _end_text = .;
     } > FLASH
 
-    .edidx :
+    .ARM.exidx :
     {
         . = ALIGN(4);
         *(.ARM.exidx*)

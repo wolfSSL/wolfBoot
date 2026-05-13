@@ -36,10 +36,13 @@ static RAMFUNCTION void flash_wait_complete(void)
 
 static void RAMFUNCTION flash_clear_errors(void)
 {
-    FLASH_SR |= (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
-                 FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR |
-                 FLASH_SR_MISERR | FLASH_SR_FASTERR | FLASH_SR_RDERR |
-                 FLASH_SR_OPTVERR);
+    /* FLASH_SR error/EOP bits are write-1-to-clear. Assign the mask
+     * directly so a read-modify-write doesn't accidentally clear any
+     * other W1C bits that happen to be set. */
+    FLASH_SR = (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
+                FLASH_SR_PGAERR | FLASH_SR_SIZERR | FLASH_SR_PGSERR |
+                FLASH_SR_MISERR | FLASH_SR_FASTERR | FLASH_SR_RDERR |
+                FLASH_SR_OPTVERR);
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
@@ -63,21 +66,21 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         } else {
             uint32_t val[2];
             uint8_t *vbytes = (uint8_t *)(val);
-            int off = (address + i) - (((address + i) >> 3) << 3);
-            uint32_t base_addr = address & (~0x07); /* aligned to 64 bit */
-            int u32_idx = (i >> 2);
+            uint32_t base_addr = (address + i) & ~0x7u; /* DW we touch */
+            int off = (address + i) & 0x7;              /* byte in DW */
             dst = (uint32_t *)(base_addr);
-            val[0] = dst[u32_idx];
-            val[1] = dst[u32_idx + 1];
+            val[0] = dst[0];
+            val[1] = dst[1];
             while ((off < 8) && (i < len))
                 vbytes[off++] = data[i++];
-            dst[u32_idx] = val[0];
-            dst[u32_idx + 1] = val[1];
+            flash_wait_complete();
+            dst[0] = val[0];
+            dst[1] = val[1];
             flash_wait_complete();
         }
     }
-    if ((FLASH_SR & FLASH_SR_EOP) == FLASH_SR_EOP)
-        FLASH_SR |= FLASH_SR_EOP;
+    /* W1C: assign directly; no RMW. Harmless if EOP isn't set. */
+    FLASH_SR = FLASH_SR_EOP;
     FLASH_CR &= ~FLASH_CR_PG;
     return 0;
 }
@@ -113,7 +116,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
     address -= FLASHMEM_ADDRESS_SPACE;
-    end_address = address + len - 1;
+    end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         flash_wait_complete();
         flash_clear_errors();
@@ -258,7 +261,7 @@ void uart_write(const char *buf, unsigned int len)
     for (i = 0; i < len; i++) {
         while ((LPUART1_ISR & USART_ISR_TXE) == 0)
             ;
-        LPUART1_TDR = (uint32_t)buf[i];
+        LPUART1_TDR = (uint32_t)(uint8_t)buf[i];
     }
 }
 
