@@ -10,6 +10,7 @@ WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
+WOLFBOOT_LIB_WOLFHSM?=../../lib/wolfHSM
 
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
 WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
@@ -17,12 +18,16 @@ endif
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFTPM)),)
 WOLFBOOT_LIB_WOLFTPM=../../../external-libs/wolfTPM
 endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFHSM)),)
+WOLFBOOT_LIB_WOLFHSM=../../../external-libs/wolfHSM
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
+WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -51,7 +56,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-disk \
+       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -373,6 +378,12 @@ unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 
 unit-psa_store: ../../include/target.h unit-psa_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-psa_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-wolfhsm_flash_hal:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFHSM) -DWOLFCRYPT_TZ_WOLFHSM -DWOLFHSM_CFG_NO_SYS_TIME -DMOCK_PARTITIONS
+unit-wolfhsm_flash_hal:WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+                                     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/misc.c
+unit-wolfhsm_flash_hal: ../../include/target.h unit-wolfhsm_flash_hal.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-wolfhsm_flash_hal.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 gpt-sfdisk-test.h:
 	truncate -s 131072 .gpt-tmp.img
