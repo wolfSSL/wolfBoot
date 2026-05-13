@@ -165,26 +165,23 @@ LMS_OBJS=\
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.o
 
+# LMS_EXTRA carries only the user-set parameter values. The wolfCrypt-side
+# defines (WOLFSSL_HAVE_LMS, WOLFSSL_LMS_MAX_LEVELS, WOLFSSL_LMS_VERIFY_ONLY,
+# etc.) live in include/user_settings/sign_lms.h and derive from these.
 LMS_EXTRA=\
-    -D"WOLFSSL_HAVE_LMS" \
-    -D"WOLFSSL_WC_LMS" -D"WOLFSSL_WC_LMS_SMALL" \
-    -D"WOLFSSL_LMS_MAX_LEVELS=$(LMS_LEVELS)" \
-    -D"WOLFSSL_LMS_MAX_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_WINTERNITZ=$(LMS_WINTERNITZ)" \
-    -D"LMS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_LMS_VERIFY_ONLY"
+    -D"IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)"
 
 XMSS_OBJS=\
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.o
 
+# XMSS_EXTRA carries only the user-set parameter values. The wolfCrypt-side
+# defines live in include/user_settings/sign_xmss.h.
 XMSS_EXTRA=\
-    -D"WOLFSSL_HAVE_XMSS" \
-    -D"WOLFSSL_WC_XMSS" -D"WOLFSSL_WC_XMSS_SMALL" \
     -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"  \
-    -D"XMSS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
-    -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
+    -D"IMAGE_SIGNATURE_SIZE=$(IMAGE_SIGNATURE_SIZE)"
 
 ML_DSA_OBJS=\
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o
