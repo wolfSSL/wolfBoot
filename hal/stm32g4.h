@@ -30,10 +30,12 @@
 
 #include <stdint.h>
 
-/* Assembly helpers */
-#define DMB() __asm__ volatile ("dmb")
-#define ISB() __asm__ volatile ("isb")
-#define DSB() __asm__ volatile ("dsb")
+/* Assembly helpers. The "memory" clobber tells the compiler not to
+ * reorder loads/stores across the barrier; without it the asm only
+ * orders hardware accesses, not the compiler's own scheduling. */
+#define DMB() __asm__ volatile ("dmb" ::: "memory")
+#define ISB() __asm__ volatile ("isb" ::: "memory")
+#define DSB() __asm__ volatile ("dsb" ::: "memory")
 
 
 /* -------- RCC (AHB1 + 0x1000 = 0x40021000) -------- RM0440 - 7.4 -------- */
