@@ -779,7 +779,13 @@ ifeq ($(ARCH),PPC)
   # Required for JTAG probes that load ELFs but don't process relocations.
   CFLAGS+=-fno-pic -fno-pie
   LDFLAGS+=-no-pie
-  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
+  # FAST_MEMCPY removed: on T2080 e6500 the aligned word-loop interacts
+  # badly with the L1 D / L2 / CPC write-back hierarchy during the 6 MB
+  # kernel-image copy, leaving a 128 KB region (PA 0x1E0000-0x1FFFFF) with
+  # scattered zeroed cache lines that crash VxWorks 7 with PIL on garbage
+  # instructions. Byte-by-byte memcpy avoids the issue. Re-enable only if
+  # you've verified DDR-load integrity on this target.
+  CFLAGS+=-DARCH_PPC -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
@@ -797,6 +803,10 @@ ifeq ($(ARCH),PPC)
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
+
+  # CRC32 helpers in src/gpt.c are reused by update_ram.c's uImage header
+  # validator (WOLFBOOT_UBOOT_LEGACY -> uboot_legacy_header_valid).
+  OBJS+=src/gpt.o
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o

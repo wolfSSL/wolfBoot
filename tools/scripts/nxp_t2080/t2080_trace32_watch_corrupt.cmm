@@ -1,0 +1,57 @@
+; ------------------------------------------------------------------------------
+; @Title: T2080 TRACE32 attach + load symbols + DAC1 store watchpoint
+;
+; Catches the PC of whatever wolfBoot code stores into PA 0x1E0040
+; (the first corrupted location in the 128 KB hole at 0x1E0000-0x1FFFFF).
+;
+; To watch a different word, edit the WATCH_ADDR literal below before
+; invoking the script.
+;
+; Usage:
+;   DO tools/scripts/nxp_t2080/t2080_trace32_watch_corrupt.cmm
+; ------------------------------------------------------------------------------
+
+LOCAL &basedir
+&basedir="/home/davidgarske/GitHub/wolfboot-alt"
+
+PRINT "================================================================"
+PRINT "T2080 watch-corrupt: attach + load wolfboot.elf + DAC1 store BP"
+PRINT "Watch addr: 0x001E0040 (first corrupt byte)"
+PRINT "Entry BP:   0x00100000 (VxWorks kernel entry checkpoint)"
+PRINT "================================================================"
+
+SYStem.CPU T2080
+CORE.ASSIGN 1.
+SYStem.Option.IMASKASM ON
+SYStem.Option.FREEZE ON
+
+PRINT "Attaching to running target (no reset)..."
+SYStem.Mode.Attach
+SYStem.MemAccess CPU
+
+PRINT "Loading wolfboot.elf symbols (no-code)..."
+Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE
+sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/include
+
+Break.Delete /ALL
+
+PRINT "Setting DAC1 data-WRITE watchpoint at 0x001E0040..."
+Break.Set 0x001E0040 /Write /Onchip
+
+PRINT "Setting program BP at 0x00100000 (VxWorks entry)..."
+Break.Set 0x00100000 /Program /Onchip
+
+Break.List
+
+PRINT ""
+PRINT "Ready.  Issue a TARGET RESET.  Watchpoint fires on the first"
+PRINT "store to PA 0x1E0040.  At halt:"
+PRINT "    PRINT Register(PC)"
+PRINT "    List.Hll       (source line)"
+PRINT "    List.asm       (assembly around PC)"
+PRINT "    Data.dump 0x001E0040 /Long"
+PRINT ""
+PRINT "If the first hit is wolfBoot's memcpy writing the correct kernel"
+PRINT "byte 0x41de01e0, press Go -- next hit is the OFFENDER store."
+
+ENDDO

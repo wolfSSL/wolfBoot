@@ -284,20 +284,80 @@ static void RAMFUNCTION hal_os64bit_map_transition(void)
      * and CW U-Boot's cw_late_mmap_adjust() does not touch DDR LAWs).
      * VxWorks accesses upper-DDR via low PA 0x80000000+.
      *
-     * The PCIe LAWs below match the post-cw_late_mmap_adjust 64-bit
-     * positions: PCIe4 memory at PA 0xD_00000000, PCIe1 memory at
-     * PA 0xF_E0000000. Production CW U-Boot rewrites these from the
-     * 32-bit-intermediate windows when bootm runs with ossel=ostype2;
-     * wolfBoot needs the same final layout at handoff. */
-    /* PCIe4 (Switch) memory 2GB at PA 0xD_00000000, EA=0xC0000000 */
-    set_law(13, 0xD, 0x00000000, LAW_TRGT_PCIE4, LAW_SIZE_2GB, 1);
+     * The PCIe LAWs below match U-Boot AfterBootM (cw_late_mmap_adjust)
+     * EXACTLY: PCIe4 mem at PA 0xC_00000000 (2GB), PCIe1 mem at PA
+     * 0xD_00000000 (2GB). Previously wolfBoot had PCIe4 at 0xD and
+     * PCIe1 at 0xF_E0000000 / 256MB -- both wrong per the U-Boot PER
+     * dump and the project memory note (project_cwvpx3_pcie4_law). */
+    /* PCIe4 (Switch) memory 2GB at PA 0xC_00000000 */
+    set_law(13, 0xC, 0x00000000, LAW_TRGT_PCIE4, LAW_SIZE_2GB, 1);
     /* PCIe4 I/O 256KB at PA 0xF_EE800000 */
     set_law(14, 0xF, 0xEE800000, LAW_TRGT_PCIE4, LAW_SIZE_256KB, 1);
-    /* PCIe1 (XMC) memory 256MB at PA 0xF_E0000000, EA=0xE0000000.
-     * (Table 2.5 lists 160MB but power-of-two LAW SIZE rounds to 256MB.) */
-    set_law(15, 0xF, 0xE0000000, LAW_TRGT_PCIE1, LAW_SIZE_256MB, 1);
+    /* PCIe1 (XMC) memory 2GB at PA 0xD_00000000 */
+    set_law(15, 0xD, 0x00000000, LAW_TRGT_PCIE1, LAW_SIZE_2GB, 1);
     /* PCIe1 I/O 256KB at PA 0xF_EE840000 */
     set_law(16, 0xF, 0xEE840000, LAW_TRGT_PCIE1, LAW_SIZE_256KB, 1);
+
+    /* Program PCIe1 and PCIe4 outbound ATMU windows to mirror
+     * U-Boot's post-cw_late_mmap_adjust state captured from TRACE32
+     * PER dump. Without this, VxWorks's PCIe driver sees a controller
+     * whose outbound translation table is empty/default -- any PCIe
+     * MMIO access from the kernel routes to garbage.
+     *
+     * Layout per controller:
+     *   POT[1]: 2 GB memory window at host PA (PCIe1=0xD_00000000,
+     *           PCIe4=0xC_00000000), bus addr starts at 0x80000000.
+     *   POT[2]: small IO window at host PA 0xF_EE840000 (PCIe1) /
+     *           0xF_EE800000 (PCIe4), bus addr 0xEE840000/0xEE800000.
+     *   POT[3], POT[4]: explicitly cleared.
+     */
+    {
+        /* PCIe1 controller register block: PA 0xF_EF240000 */
+        volatile uint32_t *pex1 = (volatile uint32_t *)0xEF240000UL;
+        /* PCIe4 controller register block: PA 0xF_EF270000 */
+        volatile uint32_t *pex4 = (volatile uint32_t *)0xEF270000UL;
+
+        /* POT register offsets (dword index into uint32_t array) */
+        #define POT_TAR(n)   ((0xC00 + (n)*0x20) >> 2)  /* PEXOTARn */
+        #define POT_TEAR(n)  ((0xC04 + (n)*0x20) >> 2)  /* PEXOTEARn */
+        #define POT_WBAR(n)  ((0xC08 + (n)*0x20) >> 2)  /* PEXOWBARn */
+        #define POT_WAR(n)   ((0xC10 + (n)*0x20) >> 2)  /* PEXOWARn */
+
+        /* PCIe1: POT[1] memory window, POT[2] IO window, others cleared */
+        pex1[POT_TAR(1)]   = 0x00080000U;  /* bus addr >> 12 = 0x80000000 >> 12 */
+        pex1[POT_TEAR(1)]  = 0x00000000U;
+        pex1[POT_WBAR(1)]  = 0x00D00000U;  /* host PA >> 12 = 0xD_00000000 >> 12 */
+        pex1[POT_WAR(1)]   = 0x8004401EU;  /* EN | MEM_RD | MEM_WR | SIZE=2GB */
+        pex1[POT_TAR(2)]   = 0x000EE840U;  /* IO bus addr */
+        pex1[POT_TEAR(2)]  = 0x00000000U;
+        pex1[POT_WBAR(2)]  = 0x00FEE840U;  /* IO host PA */
+        pex1[POT_WAR(2)]   = 0x80088011U;  /* EN | IO_RD | IO_WR | SIZE=256K */
+        pex1[POT_TAR(3)]   = 0; pex1[POT_TEAR(3)] = 0;
+        pex1[POT_WBAR(3)]  = 0; pex1[POT_WAR(3)]  = 0;
+        pex1[POT_TAR(4)]   = 0; pex1[POT_TEAR(4)] = 0;
+        pex1[POT_WBAR(4)]  = 0; pex1[POT_WAR(4)]  = 0;
+
+        /* PCIe4: same structure, different host PA / IO target */
+        pex4[POT_TAR(1)]   = 0x00080000U;
+        pex4[POT_TEAR(1)]  = 0x00000000U;
+        pex4[POT_WBAR(1)]  = 0x00C00000U;  /* host PA = 0xC_00000000 */
+        pex4[POT_WAR(1)]   = 0x8004401EU;
+        pex4[POT_TAR(2)]   = 0x000EE800U;
+        pex4[POT_TEAR(2)]  = 0x00000000U;
+        pex4[POT_WBAR(2)]  = 0x00FEE800U;
+        pex4[POT_WAR(2)]   = 0x80088011U;
+        pex4[POT_TAR(3)]   = 0; pex4[POT_TEAR(3)] = 0;
+        pex4[POT_WBAR(3)]  = 0; pex4[POT_WAR(3)]  = 0;
+        pex4[POT_TAR(4)]   = 0; pex4[POT_TEAR(4)] = 0;
+        pex4[POT_WBAR(4)]  = 0; pex4[POT_WAR(4)]  = 0;
+
+        __asm__ __volatile__("sync; isync" ::: "memory");
+
+        #undef POT_TAR
+        #undef POT_TEAR
+        #undef POT_WBAR
+        #undef POT_WAR
+    }
 
     /* No additional TLB entries are added here.
      *
@@ -473,6 +533,78 @@ void RAMFUNCTION wolfBoot_os64bit_jump(os64bit_entry_t entry,
     }
     hal_flash_cache_disable_pre_os();
     __asm__ __volatile__("sync; isync" ::: "memory");
+
+    /* Install b. stubs at IVOR vector locations + clear L2ERRDET +
+     * program IVPR=0 + fixed_ivor.S IVOR layout.  Restored after
+     * confirming a bisection run with these removed also silent-hangs
+     * (so they weren't causing the corruption -- they just made the
+     * downstream PIL trap visible as a deterministic b. loop at PA 0xE0). */
+    {
+        static const uint16_t ivor_offsets[] = {
+            0x000, 0x020, 0x040, 0x060, 0x080, 0x0A0, 0x0C0, 0x0E0,
+            0x100, 0x120, 0x140, 0x160, 0x180, 0x1A0, 0x1C0, 0x1E0,
+            0x200, 0x220, 0x240, 0x260, 0x280, 0x2A0, 0x2C0, 0x2E0,
+            0x300, 0x320
+        };
+        const uint32_t branch_to_self = 0x48000000U; /* b . */
+        uint32_t _vi;
+        const uint32_t n_off =
+            (uint32_t)(sizeof(ivor_offsets) / sizeof(ivor_offsets[0]));
+        for (_vi = 0; _vi < n_off; _vi++) {
+            volatile uint32_t *vec = (volatile uint32_t *)
+                (uintptr_t)ivor_offsets[_vi];
+            *vec = branch_to_self;
+            __asm__ __volatile__("dcbst 0,%0" :: "r"(vec) : "memory");
+        }
+        __asm__ __volatile__("sync" ::: "memory");
+        for (_vi = 0; _vi < n_off; _vi++) {
+            volatile uint32_t *vec = (volatile uint32_t *)
+                (uintptr_t)ivor_offsets[_vi];
+            __asm__ __volatile__("icbi 0,%0" :: "r"(vec) : "memory");
+        }
+        __asm__ __volatile__("sync; isync" ::: "memory");
+    }
+    {
+        volatile uint32_t *_l2errdet = (volatile uint32_t *)
+            (CCSRBAR + 0xC20E40UL);
+        *_l2errdet = 0xFFFFFFFFU; /* W1C all latched bits */
+        __asm__ __volatile__("sync" ::: "memory");
+    }
+    mtspr(IVPR, 0);
+    mtspr(IVOR(0),  0x020); /* Critical Input */
+    mtspr(IVOR(1),  0x000); /* Machine Check */
+    mtspr(IVOR(2),  0x060); /* Data Storage */
+    mtspr(IVOR(3),  0x080); /* Instruction Storage */
+    mtspr(IVOR(4),  0x0A0); /* External Input */
+    mtspr(IVOR(5),  0x0C0); /* Alignment */
+    mtspr(IVOR(6),  0x0E0); /* Program */
+    mtspr(IVOR(7),  0x100); /* FP Unavailable */
+    mtspr(IVOR(8),  0x120); /* System Call */
+    mtspr(IVOR(9),  0x140); /* Auxiliary Processor Unavailable */
+    mtspr(IVOR(10), 0x160); /* Decrementer */
+    mtspr(IVOR(11), 0x180); /* Fixed Interval Timer */
+    mtspr(IVOR(12), 0x1A0); /* Watchdog Timer */
+    mtspr(IVOR(13), 0x1C0); /* Data TLB Error */
+    mtspr(IVOR(14), 0x1E0); /* Instruction TLB Error */
+    mtspr(IVOR(15), 0x040); /* Debug */
+    mtspr(IVOR35,   0x260);
+    mtspr(IVOR36,   0x280);
+    mtspr(IVOR37,   0x2A0);
+    mtspr(IVOR38,   0x2C0);
+    mtspr(IVOR39,   0x2E0);
+    mtspr(IVOR40,   0x300);
+    mtspr(IVOR41,   0x320);
+    __asm__ __volatile__("isync" ::: "memory");
+
+    /* DBG checkpoint 3: very last possible look before jumping to OS. */
+    {
+        volatile uint32_t *dbg = (volatile uint32_t *)0x001E0040UL;
+        __asm__ __volatile__("dcbf 0,%0\nsync\nisync"
+            :: "r" (0x001E0040UL) : "memory");
+        wolfBoot_printf("DBG pre-entry()      0x1E0040: %08x %08x %08x %08x\n",
+            dbg[0], dbg[1], dbg[2], dbg[3]);
+    }
+
     entry(r3, 0, 0, r6, r7, 0, 0);
 }
 #endif /* ENABLE_OS64BIT */
@@ -514,6 +646,36 @@ void do_boot(const uint32_t *app_offset)
      * for a 6+ MB VxWorks kernel — likely cause of silent jump failure. */
     flush_cache((uint32_t)app_offset, WOLFBOOT_PARTITION_SIZE);
 
+    /* CPC L3 flush + invalidate. L2 ops via L2CSR0 SPR hang wolfBoot
+     * on T2080 (likely L2FL completion never signals for the cluster
+     * L2 from a single core path). Stick to CPC for now. */
+    {
+        volatile uint32_t *cpc_csr0 =
+            (volatile uint32_t *)(CPC_BASE + CPCCSR0);
+        uint32_t reg;
+        reg = *cpc_csr0;
+        *cpc_csr0 = reg | CPCCSR0_CPCFL;
+        __asm__ __volatile__("sync; isync" ::: "memory");
+        while (*cpc_csr0 & CPCCSR0_CPCFL) {
+            /* spin */
+        }
+        reg = *cpc_csr0;
+        *cpc_csr0 = reg | CPCCSR0_CPCFI;
+        __asm__ __volatile__("sync; isync" ::: "memory");
+        while (*cpc_csr0 & CPCCSR0_CPCFI) {
+            /* spin */
+        }
+    }
+
+    /* DBG checkpoint 1: post-flush_cache + post-CPC flush/invalidate. */
+    {
+        volatile uint32_t *dbg = (volatile uint32_t *)0x001E0040UL;
+        __asm__ __volatile__("dcbf 0,%0\nsync\nisync"
+            :: "r" (0x001E0040UL) : "memory");
+        wolfBoot_printf("DBG post-flush_cache 0x1E0040: %08x %08x %08x %08x\n",
+            dbg[0], dbg[1], dbg[2], dbg[3]);
+    }
+
     /* Set MSR to match U-Boot's pre-VxWorks state: 0x2200
      * FP(bit13) + DE(bit9) enabled. All others cleared.
      * U-Boot passes MSR=0x2200 when jumping to VxWorks. */
@@ -536,6 +698,15 @@ void do_boot(const uint32_t *app_offset)
 #ifdef ENABLE_OS64BIT
     /* Transition LAWs and TLBs to 64-bit physical addressing. */
     hal_os64bit_map_transition();
+
+    /* DBG checkpoint 2: post-hal_os64bit_map_transition. */
+    {
+        volatile uint32_t *dbg = (volatile uint32_t *)0x001E0040UL;
+        __asm__ __volatile__("dcbf 0,%0\nsync\nisync"
+            :: "r" (0x001E0040UL) : "memory");
+        wolfBoot_printf("DBG post-os64bit_map  0x1E0040: %08x %08x %08x %08x\n",
+            dbg[0], dbg[1], dbg[2], dbg[3]);
+    }
 #endif
 
 #if defined(DEBUG_UART) && defined(WOLFBOOT_ARCH_PPC) && \

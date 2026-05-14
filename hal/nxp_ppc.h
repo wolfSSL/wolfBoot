@@ -653,8 +653,22 @@
 #define HID1_MBDD   (1 << 6)  /* optimized sync instruction */
 
 
-/* Interrupt Vector Offset Register */
+/* Interrupt Vector Offset Register
+ * IVOR0..IVOR15 are at SPR 0x190..0x19F (contiguous).
+ * IVOR32..IVOR37 are at SPR 0x210..0x215.
+ * IVOR38..IVOR42 are at SPR 0x1B0..0x1B4 (NOT 0x216+ -- e6500 layout). */
 #define IVOR(n) (0x190+(n))
+#define IVOR32   0x210
+#define IVOR33   0x211
+#define IVOR34   0x212
+#define IVOR35   0x213
+#define IVOR36   0x214
+#define IVOR37   0x215
+#define IVOR38   0x1B0
+#define IVOR39   0x1B1
+#define IVOR40   0x1B2
+#define IVOR41   0x1B3
+#define IVOR42   0x1B4
 #define IVPR     0x03F   /* Interrupt Vector Prefix Register */
 
 /* Guest Interrupt Vectors */

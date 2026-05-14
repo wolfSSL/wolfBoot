@@ -473,6 +473,32 @@ backup_on_failure:
     wolfBoot_printf("Copying image from %p to RAM at %p (%d bytes)\n",
         os_image.fw_base, load_address, os_image.fw_size);
     memcpy((void*)load_address, os_image.fw_base, os_image.fw_size);
+    /* Diagnostic: dump 4 words at PA 0x1E0040 (inside the 128 KB region
+     * that has been corrupting on this target) immediately after memcpy
+     * returns. Two reads: (1) through cache to show what L1 D believes;
+     * (2) after dcbf+sync+invalidate to show what DDR actually holds.
+     * If they agree on 0x41DE01E0... memcpy + cache + DDR are consistent
+     * and corruption happens later. If they disagree (cache says correct
+     * value, DDR says 0) the writeback never reached DDR -- cache eviction
+     * issue. If both say 0, memcpy itself didn't land the bytes. */
+    {
+        volatile uint32_t *dbg = (volatile uint32_t *)0x001E0040UL;
+        uint32_t c0, c1, c2, c3, d0, d1, d2, d3;
+        c0 = dbg[0]; c1 = dbg[1]; c2 = dbg[2]; c3 = dbg[3];
+        /* dcbf 4 cache lines covering PA 0x1E0040..0x1E007F: writes back
+         * dirty data and invalidates so subsequent read goes to DDR */
+        __asm__ __volatile__(
+            "dcbf 0,%0\n"
+            "dcbf 0,%1\n"
+            "sync\n"
+            "isync\n"
+            :: "r" (0x001E0040UL), "r" (0x001E0050UL) : "memory");
+        d0 = dbg[0]; d1 = dbg[1]; d2 = dbg[2]; d3 = dbg[3];
+        wolfBoot_printf("DBG post-memcpy 0x1E0040: "
+                        "cache=%08x %08x %08x %08x  "
+                        "ddr=%08x %08x %08x %08x\n",
+                        c0, c1, c2, c3, d0, d1, d2, d3);
+    }
     #endif
 #endif /* !WOLFBOOT_USE_RAMBOOT */
 

@@ -389,7 +389,14 @@ enum ifc_amask_sizes {
 #define DDR_SDRAM_CFG_2_VAL    0x00401000 /* ODT_CFG, NUM_PR=1 */
 
 #define DDR_SDRAM_INTERVAL_VAL 0x0E3C071C
-#define DDR_DATA_INIT_VAL      0xDEADBEEF /* ECC init pattern */
+/* ECC scrub pattern. CW U-Boot sets this to 0 (TRACE32 PER capture
+ * confirms DDR_DATA_INIT=0 at VxWorks entry); wolfBoot previously
+ * used 0xDEADBEEF as a debug "uninitialized" sentinel, which left
+ * 0xDEADBEEF in every word VxWorks never touches. VxWorks's _sysInit
+ * reads uninitialized memory and uses portions of it as pointers --
+ * resulting in unaligned floating-point stores to addresses like
+ * 0xFFFFFFFF_FFFFBEEF and a DSI(FP|ST) trap. Match U-Boot: scrub to 0. */
+#define DDR_DATA_INIT_VAL      0x00000000
 #define DDR_SDRAM_CLK_CNTL_VAL 0x01400000
 #define DDR_ZQ_CNTL_VAL        0x8A090700
 

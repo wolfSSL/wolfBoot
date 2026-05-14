@@ -118,6 +118,26 @@ static void hal_mp_init(void);
 #define PCIE_BASE(n)       (CCSRBAR + 0x240000UL + (((n)-1) * 0x10000UL))
 #define PCIE_LIODN(n)      ((volatile uint32_t*)(PCIE_BASE(n) + 0x40))
 
+/* SEC (Security Engine, CAAM) at CCSR + 0x300000 -- T2080RM 4.3.
+ * JR (Job Ring) LIODN registers at SEC + 0x10C0 + (jr*8) for MS,
+ * +4 for LS.  Per NXP set_liodn convention, the pair (idA, idB) is
+ * written to the LS register as ((idA << 16) | idB). */
+#define SEC_BASE           (CCSRBAR + 0x300000UL)
+#define SEC_JRLIODNR_LS(n) ((volatile uint32_t*)(SEC_BASE + 0x10C4UL + (n)*8))
+
+/* PME (Pattern Match Engine) at CCSR + 0x316000. LIODN reg at +0xD00. */
+#define PME_LIODNR         ((volatile uint32_t*)(CCSRBAR + 0x316D00UL))
+
+/* FMan1 BMI port-partition-ID registers (per-port LIODN base).
+ * FMan1 at CCSR + 0x400000.  ccsr_fman struct: 0x80000 muram, then
+ * fm_bmi_common.  fmbm_ppid[] within BMI is at offset 0x304 (computed
+ * from the fm_bmi_common struct layout in NXP fsl_fman.h).  The macro
+ * indexes by (portID - 1) where portID = enetNum + 8 for 1G Rx and
+ * enetNum + 16 for 10G Rx. */
+#define FMAN1_PPID(idx)    ((volatile uint32_t*)(CCSRBAR + 0x480304UL + (idx)*4))
+#define FMAN1_RX1G_PPID(enet)  FMAN1_PPID((enet) + 8 - 1)
+#define FMAN1_RX10G_PPID(enet) FMAN1_PPID((enet) + 16 - 1)
+
 /* T2080RM 10.5.1 / 10.5.2: QMan (CCSR + 0x318000) and BMan (CCSR + 0x31A000).
  * Software-portal physical windows match the T1024/T1040 layout. */
 #define QMAN_CCSR_BASE      (CCSRBAR + 0x318000UL)
@@ -176,6 +196,41 @@ static const struct liodn_id_table liodn_tbl[] = {
     SET_LIODN("fsl,qoriq-pcie",   228, PCIE_LIODN(2)),
     SET_LIODN("fsl,qoriq-pcie",   308, PCIE_LIODN(3)),
     SET_LIODN("fsl,qoriq-pcie",   388, PCIE_LIODN(4)),
+
+    /* Missing LIODNs ported from NXP mainline U-Boot
+     * (arch/powerpc/cpu/mpc85xx/t2080_ids.c) to fix the silent VxWorks
+     * boot. Without these, peripherals (FMan, SEC, PME) make DMA
+     * requests with LIODN=0, which PAMU routes to a default window
+     * that on T2080 can overwrite portions of low DDR (specifically
+     * PA 0x1E0000-0x1FFFFF on this board). A customer reported Linux
+     * boot success after adding these. */
+
+    /* FMan1 Rx 1G ports 0..5: LIODNs 88..93 */
+    SET_LIODN("fsl,fman-port-1g-rx",   88, FMAN1_RX1G_PPID(0)),
+    SET_LIODN("fsl,fman-port-1g-rx",   89, FMAN1_RX1G_PPID(1)),
+    SET_LIODN("fsl,fman-port-1g-rx",   90, FMAN1_RX1G_PPID(2)),
+    SET_LIODN("fsl,fman-port-1g-rx",   91, FMAN1_RX1G_PPID(3)),
+    SET_LIODN("fsl,fman-port-1g-rx",   92, FMAN1_RX1G_PPID(4)),
+    SET_LIODN("fsl,fman-port-1g-rx",   93, FMAN1_RX1G_PPID(5)),
+
+    /* FMan1 Rx 10G ports 0..1: LIODNs 94..95 */
+    SET_LIODN("fsl,fman-port-10g-rx",  94, FMAN1_RX10G_PPID(0)),
+    SET_LIODN("fsl,fman-port-10g-rx",  95, FMAN1_RX10G_PPID(1)),
+
+    /* PME LIODN 117 */
+    SET_LIODN("fsl,pme",              117, PME_LIODNR),
+
+    /* SEC JR LIODNs: NXP packs (idA, idB) into one 32-bit write as
+     * ((idA << 16) | idB) to the LS register, so the .id value here
+     * is the packed 32-bit value. */
+    /* JR0: 454, 458 */
+    SET_LIODN("fsl,sec-v4.0-job-ring", (454u << 16) | 458u, SEC_JRLIODNR_LS(0)),
+    /* JR1: 455, 459 */
+    SET_LIODN("fsl,sec-v4.0-job-ring", (455u << 16) | 459u, SEC_JRLIODNR_LS(1)),
+    /* JR2: 456, 460 */
+    SET_LIODN("fsl,sec-v4.0-job-ring", (456u << 16) | 460u, SEC_JRLIODNR_LS(2)),
+    /* JR3: 457, 461 */
+    SET_LIODN("fsl,sec-v4.0-job-ring", (457u << 16) | 461u, SEC_JRLIODNR_LS(3)),
 };
 
 /* Program LIODN registers for DPAA-managed peripherals. Mirrors
@@ -806,7 +861,19 @@ void hal_init(void)
      * - Flash code is cached by L1 I-cache + L2 + CPC
      * - Stack/data in DDR is cached by L1 D-cache + L2 + CPC */
     hal_reconfigure_cpc_as_cache();
-    hal_flash_enable_caching();
+    /* hal_flash_enable_caching() temporarily disabled to test a
+     * cache-aliasing hypothesis: wolfBoot text at flash PA 0xFFFE0000-
+     * 0xFFFFFFFF (128 KB) aliases perfectly to DDR PA 0x1E0000-0x1FFFFF
+     * in L1 D / L2 / CPC L3 (low 21 bits identical = 0x1E0000), so when
+     * the kernel memcpy populates that DDR range it pressures the same
+     * cache sets that hold wolfBoot's XIP code -- ping-pong evictions
+     * leave a scattered 128 KB hole of zeroed cache lines in DDR, which
+     * VxWorks then PILs on as illegal instructions. Without flash
+     * caching wolfBoot is XIP from uncached flash so its code lives in
+     * IFC buffers instead of L1 I + L2 + CPC, removing the alias.
+     * Re-enable later (with a smaller-scope window around the memcpy)
+     * once the theory is confirmed. */
+    /* hal_flash_enable_caching(); */
 
     /* Enable branch prediction now that DDR stack and cache hierarchy
      * are fully configured.  Disabled during early ASM boot to avoid
