@@ -1152,8 +1152,14 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
     wc_Sha384 sha384_ctx;
 
-    if (header_sha384(&sha384_ctx, img) != 0)
+    wolfBoot_printf("img_sha384: enter img=%p fw_base=%p fw_size=%u\n",
+        (void *)img, (void *)(img ? img->fw_base : NULL),
+        img ? img->fw_size : 0U);
+    if (header_sha384(&sha384_ctx, img) != 0) {
+        wolfBoot_printf("img_sha384: header_sha384 failed\n");
         return -1;
+    }
+    wolfBoot_printf("img_sha384: header_sha384 ok\n");
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (img->fw_base == NULL) {
         wc_Sha384Free(&sha384_ctx);
@@ -1163,6 +1169,7 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 #else
     {
         uint32_t position = 0;
+        uint32_t last_log = 0;
         uint8_t* p;
         int      blksz;
         do {
@@ -1172,14 +1179,33 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
             blksz = WOLFBOOT_SHA_BLOCK_SIZE;
             if (position + blksz > img->fw_size)
                 blksz = img->fw_size - position;
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
+            /* PolarFire SoC: route SHA384 reads through the non-cached
+             * DDR SEG window (0xC0000000 base) so cache fills don't
+             * evict L2 Scratch lines (where wolfBoot's own code/stack
+             * lives).  PDMA already L2-flushed the cached writes when
+             * disk-load happened, so the non-cached side reads the
+             * correct DDR contents.  0x82xxxxxx -> 0xC2xxxxxx. */
+            if (((uintptr_t)p & 0xF0000000UL) == 0x80000000UL) {
+                p = (uint8_t *)((uintptr_t)p | 0x40000000UL);
+            }
+#endif
+            if (position == 0 || position - last_log >= (1U << 20)) {
+                wolfBoot_printf(
+                    "img_sha384: pos=%u p=%p blksz=%d\n",
+                    position, (void *)p, blksz);
+                last_log = position;
+            }
             wc_Sha384Update(&sha384_ctx, p, blksz);
             position += blksz;
         } while (position < img->fw_size);
+        wolfBoot_printf("img_sha384: loop done pos=%u\n", position);
     }
 #endif
 
     wc_Sha384Final(&sha384_ctx, hash);
     wc_Sha384Free(&sha384_ctx);
+    wolfBoot_printf("img_sha384: exit ok\n");
     return 0;
 }
 

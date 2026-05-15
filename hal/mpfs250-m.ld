@@ -26,8 +26,11 @@ MEMORY
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
     FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
 
-    /* L2 Scratchpad SRAM - 256KB available
-     * Used for code execution, data, and stack in M-mode
+    /* L2 Scratchpad SRAM - 256 KB used (2 of 4 scratchpad ways).
+     * Attempted 512 KB (all 4 ways) to match HSS layout, but ways 8-9
+     * are not initialized by the bootmode programmer -- stack/HLS
+     * placed there hit a trap immediately after DDR init.  Reverted
+     * until we add explicit scratchpad init for ways 8-9.
      * Address range: 0x0A000000 - 0x0A03FFFF */
     L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 256k
 }
