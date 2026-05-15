@@ -471,6 +471,28 @@ ifeq ($(TARGET),stm32h5)
   endif
 endif
 
+ifeq ($(TARGET),stm32n6)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-stm32n6-ns.ld
+  else
+    LSCRIPT_TEMPLATE=ARM-stm32n6.ld
+  endif
+  CFLAGS+=-mcpu=cortex-m55 -ffunction-sections -fdata-sections -fno-common
+  # Suppress ARM EABI unwind tables. clang (unlike arm-none-eabi-gcc)
+  # emits .ARM.exidx PREL31 entries for every function by default,
+  # including the RAMFUNCTION-tagged helpers in libwolfboot.o that live
+  # in the test-app's .ramcode (VMA in AXISRAM1 NS alias 0x2401xxxx,
+  # LMA in XSPI2 NOR 0x7018xxxx). The FLASH-to-RAM VMA delta is
+  # ~1.27 GB, which exceeds PREL31's signed ~1.07 GB range and lld
+  # errors at link time. Bare-metal test-app has no use for unwind
+  # tables; suppressing the generation keeps GCC and clang link
+  # behavior identical.
+  CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
+  LDFLAGS+=-mcpu=cortex-m55
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
 ifeq ($(TARGET),stm32u5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32u5-ns.ld
@@ -699,6 +721,11 @@ ifeq ($(TARGET),s32k1xx)
     endif
     CFLAGS+=-DAPP_HAS_SYSTICK
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
+endif
+
+ifeq ($(TARGET),stm32n6)
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
+    APP_OBJS+=syscalls.o
 endif
 
 ifeq ($(TARGET),mcxw)

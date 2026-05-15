@@ -69,6 +69,7 @@ void isr_reset(void) {
     boot_time_pin_on_early();
 #endif
 
+
     src = (unsigned int *) &_stored_data;
     dst = (unsigned int *) &_start_data;
     while (dst < (unsigned int *)&_end_data) {
