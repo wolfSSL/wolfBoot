@@ -27,6 +27,9 @@
 #include "hal.h"
 #include "hooks.h"
 #include "spi_flash.h"
+#if defined(ARCH_PPC)
+#include "../hal/nxp_ppc.h"
+#endif
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
@@ -174,21 +177,18 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
     if (total < UBOOT_IMG_HDR_SZ)
         return 0;
 
-    /* ih_magic is stored big-endian on flash; UBOOT_IMG_HDR_MAGIC is the
-     * host-order word that compares equal to that BE encoding on a
-     * little-endian host (which is the only ARM/x86 host wolfBoot
-     * supports for the targets enabling WOLFBOOT_UBOOT_LEGACY). */
+    /* ih_magic is stored big-endian on flash; UBOOT_IMG_HDR_MAGIC is
+     * defined as the host-order word matching that BE encoding (see
+     * include/image.h -- different on LE vs BE hosts). */
     memcpy(&magic, hdr + 0x00, sizeof(magic));
     if (magic != UBOOT_IMG_HDR_MAGIC)
         return 0;
 
-    /* ih_size: big-endian payload length. Reject zero and anything that
-     * would overrun the signed image. */
+    /* ih_size: big-endian payload length. fdt32_to_cpu handles host
+     * endianness (no-op on a BE host, byte-swap on LE). Reject zero
+     * and anything that would overrun the signed image. */
     memcpy(&size, hdr + 0x0C, sizeof(size));
-    size = ((size & 0xFF000000U) >> 24) |
-           ((size & 0x00FF0000U) >>  8) |
-           ((size & 0x0000FF00U) <<  8) |
-           ((size & 0x000000FFU) << 24);
+    size = fdt32_to_cpu(size);
     if (size == 0)
         return 0;
     if (size > (total - UBOOT_IMG_HDR_SZ))
@@ -201,12 +201,8 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
     gpt_crc32_init(&ctx);
     gpt_crc32_update(&ctx, scratch, UBOOT_IMG_HDR_SZ);
     crc = gpt_crc32_final(&ctx);
-    /* hcrc is stored big-endian; byte-swap for comparison against the
-     * host-order CRC32 returned by gpt_crc32_final. */
-    hcrc = ((hcrc & 0xFF000000U) >> 24) |
-           ((hcrc & 0x00FF0000U) >>  8) |
-           ((hcrc & 0x0000FF00U) <<  8) |
-           ((hcrc & 0x000000FFU) << 24);
+    /* hcrc is stored big-endian; convert to host order. */
+    hcrc = fdt32_to_cpu(hcrc);
     if (hcrc != crc)
         return 0;
 
@@ -472,7 +468,42 @@ backup_on_failure:
     #else
     wolfBoot_printf("Copying image from %p to RAM at %p (%d bytes)\n",
         os_image.fw_base, load_address, os_image.fw_size);
+#if defined(ARCH_PPC) && defined(BOARD_CW_VPX3152)
+    /* Diagnostic: route the kernel memcpy through a CACHE-INHIBITED TLB
+     * alias.  Install a temporary TLB1 slot (15) that maps VA
+     * 0xC0000000-0xC1FFFFFF (32 MB) -> PA 0x00000000-0x01FFFFFF with
+     * MAS2_I|MAS2_G (cache-inhibited + guarded).  memcpy through this
+     * alias bypasses L1 D / L2 / CPC entirely -- every store goes
+     * directly to DDR via the bus.  If the 128 KB DDR hole at PA
+     * 0x1E0000-0x1FFFFF disappears with this routing, the corruption
+     * was cache-related.  If it persists, something external (DMA,
+     * peripheral) is the writer. */
+    {
+        uintptr_t dst_pa = (uintptr_t)load_address;
+        uintptr_t aliased = 0xC0000000UL + dst_pa;
+        /* TLB1 slot 15: VA 0xC0000000 -> PA 0x00000000, 32 MB,
+         * cache-inhibited + guarded.  Covers all of 0x100000..0x6C8AEF. */
+        set_tlb(1, 15,
+            0xC0000000UL,   /* EPN: effective page number */
+            0x00000000UL,   /* RPN: real page number low 32 */
+            0x0U,           /* URPN: real page upper 4 bits */
+            MAS3_SX | MAS3_SW | MAS3_SR,
+            MAS2_I | MAS2_G,
+            0,
+            BOOKE_PAGESZ_32M,
+            1);
+        __asm__ __volatile__("isync" ::: "memory");
+
+        memcpy((void*)aliased, os_image.fw_base, os_image.fw_size);
+
+        /* No need to flush the dest -- writes were uncached, already
+         * in DDR.  Tear down the alias TLB. */
+        disable_tlb1(15);
+        __asm__ __volatile__("isync" ::: "memory");
+    }
+#else
     memcpy((void*)load_address, os_image.fw_base, os_image.fw_size);
+#endif
     /* Diagnostic: dump 4 words at PA 0x1E0040 (inside the 128 KB region
      * that has been corrupting on this target) immediately after memcpy
      * returns. Two reads: (1) through cache to show what L1 D believes;

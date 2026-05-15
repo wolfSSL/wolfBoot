@@ -779,13 +779,12 @@ ifeq ($(ARCH),PPC)
   # Required for JTAG probes that load ELFs but don't process relocations.
   CFLAGS+=-fno-pic -fno-pie
   LDFLAGS+=-no-pie
-  # FAST_MEMCPY removed: on T2080 e6500 the aligned word-loop interacts
-  # badly with the L1 D / L2 / CPC write-back hierarchy during the 6 MB
-  # kernel-image copy, leaving a 128 KB region (PA 0x1E0000-0x1FFFFF) with
-  # scattered zeroed cache lines that crash VxWorks 7 with PIL on garbage
-  # instructions. Byte-by-byte memcpy avoids the issue. Re-enable only if
-  # you've verified DDR-load integrity on this target.
-  CFLAGS+=-DARCH_PPC -ffreestanding -fno-tree-loop-distribute-patterns
+  # FAST_MEMCPY restored: was experimentally removed to debug a 128 KB
+  # DDR corruption at PA 0x1E0000-0x1FFFFF; byte-by-byte memcpy did NOT
+  # fix it, and the resulting 6 MB uncached byte loop made wolfBoot
+  # machine-check during memcpy (MCSR=0x8000 = bus/L2-MMU error class).
+  # The VxWorks corruption is a separate downstream symptom.
+  CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf

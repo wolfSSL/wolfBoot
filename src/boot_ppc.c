@@ -596,13 +596,32 @@ void RAMFUNCTION wolfBoot_os64bit_jump(os64bit_entry_t entry,
     mtspr(IVOR41,   0x320);
     __asm__ __volatile__("isync" ::: "memory");
 
-    /* DBG checkpoint 3: very last possible look before jumping to OS. */
+    /* DBG checkpoint 3: very last possible look before jumping to OS.
+     * Sample MULTIPLE addresses across the 128 KB suspect region.
+     * 0x1E0040 was confirmed correct by every prior boot; the actual
+     * corruption is in the other ~1019 cache lines (zeroed).  By
+     * sampling known-zeroed PAs, we can prove whether wolfBoot's
+     * post-flush DDR is already corrupt at this point, or whether the
+     * zeros only appear later during VxWorks execution. */
     {
-        volatile uint32_t *dbg = (volatile uint32_t *)0x001E0040UL;
-        __asm__ __volatile__("dcbf 0,%0\nsync\nisync"
-            :: "r" (0x001E0040UL) : "memory");
-        wolfBoot_printf("DBG pre-entry()      0x1E0040: %08x %08x %08x %08x\n",
-            dbg[0], dbg[1], dbg[2], dbg[3]);
+        static const uintptr_t probes[] = {
+            0x001E0040UL, /* known-good line in every prior dump */
+            0x001E00C0UL, /* first known-zeroed line in the latest TRACE32 dump */
+            0x001E0200UL, /* zeroed */
+            0x001E1000UL, /* zeroed at the 4 KB boundary */
+            0x001E2F40UL, /* trap PC region this run */
+            0x001E7C00UL, /* trap PC region a previous run */
+            0x001FF000UL  /* near the end of the suspect region */
+        };
+        uint32_t _pi;
+        const uint32_t _n = (uint32_t)(sizeof(probes) / sizeof(probes[0]));
+        for (_pi = 0; _pi < _n; _pi++) {
+            volatile uint32_t *p = (volatile uint32_t *)probes[_pi];
+            __asm__ __volatile__("dcbf 0,%0\nsync\nisync"
+                :: "r" (probes[_pi]) : "memory");
+            wolfBoot_printf("DBG pre-entry() 0x%08lx: %08x %08x %08x %08x\n",
+                (unsigned long)probes[_pi], p[0], p[1], p[2], p[3]);
+        }
     }
 
     entry(r3, 0, 0, r6, r7, 0, 0);
@@ -853,24 +872,7 @@ void do_boot(const uint32_t *app_offset)
         _fdt_sz = (uint32_t)fdt_totalsize(dts_offset);
         wolfBoot_printf("FDT magic=%02x%02x%02x%02x size=%u\n",
             _fdt_p[0], _fdt_p[1], _fdt_p[2], _fdt_p[3], _fdt_sz);
-
-        /* Hex-dump the entire post-fixup FDT so it can be reconstructed
-         * from the UART log via:
-         *   awk '/^F[0-9a-f]+:/{...}' wolfboot.log > wolfboot_fdt.bin
-         * and diffed against the on-flash cw_152_64.dtb. 16 bytes per
-         * line; address tagged with "F" prefix to be greppable. */
-        for (_k = 0; _k < _fdt_sz; _k += 16) {
-            uint32_t _b;
-            uint32_t _bend = _k + 16;
-            if (_bend > _fdt_sz)
-                _bend = _fdt_sz;
-            wolfBoot_printf("F%05x:", _k);
-            for (_b = _k; _b < _bend; _b++) {
-                wolfBoot_printf(" %02x", _fdt_p[_b]);
-            }
-            wolfBoot_printf("\n");
-        }
-        wolfBoot_printf("=== FDT END ===\n");
+        (void)_k;
     #endif
 
         /* Comprehensive IFC chip-select dump. CCSRBAR + 0x124000.

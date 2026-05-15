@@ -139,15 +139,26 @@ static void hal_mp_init(void);
 #define FMAN1_RX10G_PPID(enet) FMAN1_PPID((enet) + 16 - 1)
 
 /* T2080RM 10.5.1 / 10.5.2: QMan (CCSR + 0x318000) and BMan (CCSR + 0x31A000).
- * Software-portal physical windows match the T1024/T1040 layout. */
+ *
+ * Software-portal physical windows: PA 0xF_EC000000 (QMan) and PA
+ * 0xF_EA000000 (BMan), matching production CW U-Boot on this board.
+ *
+ * Earlier values (0xF_F6000000 / 0xF_F4000000) collided with the 256 MB
+ * flash LAW (0xF_F0000000 + 256MB covers 0xF_F0000000 .. 0xF_FFFFFFFF),
+ * producing two enabled LAWs targeting the same PA range -- undefined-
+ * behavior territory that latched L2 ECC/parity errors and dropped ~50%
+ * of memcpy writebacks for DDR PA 0x1E0000..0x1FFFFF (the long-running
+ * VxWorks silent-hang symptom).  TRACE32 confirmed: U-Boot QCSP_BAR was
+ * 0xEC000000 and worked; wolfBoot QCSP_BAR was 0xF6000000 and corrupted
+ * the kernel image. */
 #define QMAN_CCSR_BASE      (CCSRBAR + 0x318000UL)
 #define QMAN_BASE_PHYS_HIGH 0xF
-#define QMAN_BASE_PHYS      0xF6000000UL
+#define QMAN_BASE_PHYS      0xEC000000UL
 #define QMAN_NUM_PORTALS    18
 
 #define BMAN_CCSR_BASE      (CCSRBAR + 0x31A000UL)
 #define BMAN_BASE_PHYS_HIGH 0xF
-#define BMAN_BASE_PHYS      0xF4000000UL
+#define BMAN_BASE_PHYS      0xEA000000UL
 
 /* QMan / BMan CCSR registers */
 #define QMAN_LIODNR     ((volatile uint32_t*)(QMAN_CCSR_BASE + 0xD08))
@@ -357,11 +368,11 @@ void law_init(void)
     set_tlb(1, 13, (uint32_t)BMAN_BASE_PHYS,
                    (uint32_t)BMAN_BASE_PHYS, BMAN_BASE_PHYS_HIGH,
                    MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
-                   BOOKE_PAGESZ_16M, 1);
+                   BOOKE_PAGESZ_32M, 1);
     set_tlb(1, 14, (uint32_t)QMAN_BASE_PHYS,
                    (uint32_t)QMAN_BASE_PHYS, QMAN_BASE_PHYS_HIGH,
                    MAS3_SX | MAS3_SW | MAS3_SR, MAS2_I | MAS2_G, 0,
-                   BOOKE_PAGESZ_16M, 1);
+                   BOOKE_PAGESZ_32M, 1);
 #endif /* ENABLE_DPAA */
 }
 
@@ -782,6 +793,19 @@ void hal_init(void)
   #endif
 #endif
 
+    /* Clear any stale L2 cache error-detect latches (W1C) BEFORE first
+     * cached memory access. A residual MBECC latch from a prior boot can
+     * machine-check the very first L2 read during kernel-image memcpy
+     * (observed as wolfBoot's isr_empty printing "!00000000" right after
+     * the "Copying image..." line). Moving the clear here -- before
+     * law_init / DDR / memcpy -- prevents that. */
+    {
+        volatile uint32_t *l2errdet = (volatile uint32_t *)
+            (CCSRBAR + 0xC20E40UL);
+        *l2errdet = 0xFFFFFFFFU; /* W1C all latched bits */
+        __asm__ __volatile__("sync" ::: "memory");
+    }
+
     /* Enable timebase on core 0 */
     set32(RCPM_PCTBENR, (1 << 0));
 
@@ -861,19 +885,13 @@ void hal_init(void)
      * - Flash code is cached by L1 I-cache + L2 + CPC
      * - Stack/data in DDR is cached by L1 D-cache + L2 + CPC */
     hal_reconfigure_cpc_as_cache();
-    /* hal_flash_enable_caching() temporarily disabled to test a
-     * cache-aliasing hypothesis: wolfBoot text at flash PA 0xFFFE0000-
-     * 0xFFFFFFFF (128 KB) aliases perfectly to DDR PA 0x1E0000-0x1FFFFF
-     * in L1 D / L2 / CPC L3 (low 21 bits identical = 0x1E0000), so when
-     * the kernel memcpy populates that DDR range it pressures the same
-     * cache sets that hold wolfBoot's XIP code -- ping-pong evictions
-     * leave a scattered 128 KB hole of zeroed cache lines in DDR, which
-     * VxWorks then PILs on as illegal instructions. Without flash
-     * caching wolfBoot is XIP from uncached flash so its code lives in
-     * IFC buffers instead of L1 I + L2 + CPC, removing the alias.
-     * Re-enable later (with a smaller-scope window around the memcpy)
-     * once the theory is confirmed. */
-    /* hal_flash_enable_caching(); */
+    /* Flash caching re-enabled.  Was experimentally disabled to test a
+     * cache-aliasing hypothesis (wolfBoot text at flash PA 0xFFFE0000-
+     * 0xFFFFFFFF aliasing DDR PA 0x1E0000-0x1FFFFF in L1/L2/CPC).
+     * Disabling did NOT fix the VxWorks corruption AND it made the
+     * 6 MB byte-by-byte memcpy unstable (machine-check during memcpy,
+     * MCSR=0x8000). */
+    hal_flash_enable_caching();
 
     /* Enable branch prediction now that DDR stack and cache hierarchy
      * are fully configured.  Disabled during early ASM boot to avoid
