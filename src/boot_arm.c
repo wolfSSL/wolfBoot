@@ -192,7 +192,35 @@ asm(
         );
 #endif
 
-void isr_reset(void) {
+#if defined(TARGET_stm32n6)
+/* Naked Reset entry: STM32N6 Boot ROM jumps to FSBL without re-loading MSP
+ * from the FSBL vector table. We'd run on Boot ROM's tiny stack (around
+ * 0x34103000) instead of our own (END_STACK ~ 0x341c0400). Set VTOR to
+ * our vector base, reload MSP from word 0 of that table, then tail-call
+ * into isr_reset_c. Must be naked so no `push` runs on Boot ROM's stack. */
+extern void isr_reset_c(void);
+#define WB_STR2(x) #x
+#define WB_STR(x) WB_STR2(x)
+__attribute__((naked, used, noreturn))
+void isr_reset(void)
+{
+    __asm__ volatile(
+        "ldr r0, =" WB_STR(WOLFBOOT_ORIGIN) "\n\t" /* wolfBoot vector base */
+        "ldr r1, =0xE000ED08\n\t"               /* SCB->VTOR */
+        "str r0, [r1]\n\t"                      /* SCB->VTOR = base */
+        "dsb sy\n\t"
+        "isb sy\n\t"
+        "ldr r0, [r0]\n\t"                      /* r0 = *base = initial MSP */
+        "msr msp, r0\n\t"
+        "isb sy\n\t"
+        "b isr_reset_c\n\t"                     /* continue with normal init */
+        );
+}
+void isr_reset_c(void)
+#else
+void isr_reset(void)
+#endif
+{
     register unsigned int *src, *dst;
 #if defined(TARGET_kinetis)
     /* Immediately disable Watchdog after boot */
@@ -243,6 +271,21 @@ void isr_reset(void) {
         *dst = 0U;
         dst++;
     }
+
+#if defined(TARGET_stm32n6)
+    /* Set MSPLIM so a stack overflow generates a clean UsageFault.STKOF
+     * instead of silently overwriting BSS/.data/.text. The N6 Boot ROM
+     * leaves MSPLIM at a low value that doesn't protect us. Place the
+     * limit at _end_bss, 8-byte aligned. `msr msplim, %0` from Secure
+     * state writes MSPLIM_S (SYSm=0x0A, no NS bit); other M33/M55 ports
+     * either don't need this (their boot ROM sets it) or have their own
+     * limit logic, so the protection is scoped to N6 only. */
+    {
+        uint32_t lim = ((uint32_t)&_end_bss + 7u) & ~7u;
+        __asm__ volatile("msr msplim, %0" : : "r"(lim));
+        __asm__ volatile("isb");
+    }
+#endif
 
     mpu_init();
 
@@ -419,9 +462,10 @@ void isr_empty(void)
  *
  */
 
-#ifdef TZEN
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+    defined(TZEN)
 #include "hal.h"
-#define VTOR (*(volatile uint32_t *)(0xE002ED08))
+#define VTOR (*(volatile uint32_t *)(0xE002ED08)) /* Non-secure VTOR */
 #else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif
@@ -440,24 +484,60 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("do_boot_r5:\n"
                  "  mov     pc, r0\n");
 
-#elif defined(CORTEX_M33) /* Armv8 boot procedure */
+#elif defined(CORTEX_M33) || defined(CORTEX_M55) /* Armv8 boot procedure */
 
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
     app_entry = (void *)(*((uint32_t *)(app_offset + 1)));
+#if defined(TARGET_stm32n6) && defined(TZEN)
+    {
+        /* Defined in hal/stm32n6.c. Drops the secure RISAF12 region
+         * the verify path used and installs the RISAF2 NS region the
+         * NS application needs for stack pushes in AXISRAM1. Must
+         * run AFTER the vector-table reads above and BEFORE BLXNS. */
+        extern void stm32n6_tz_handoff(void);
+        stm32n6_tz_handoff();
+    }
+#endif
     /* Disable interrupts */
     asm volatile("cpsid i");
 
-    /* Update IV */
+    /* Update IV. On N6 the NS app and its vector table live at the
+     * secure-alias address (e.g. 0x70020400). SAU classifies that
+     * range as NS (see hal_init in hal/stm32n6.c), so the NS CPU's
+     * exception fetches resolve correctly through the same address
+     * the secure CPU used to verify the image. This mirrors ST's
+     * Template_Isolation_XIP reference: NS app links at 0x70180400
+     * and VTOR_NS points there directly. */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
+#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+       defined(TZEN)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
+#if defined(TARGET_stm32n6)
+    /* Disable any active FP context before BLXNS. If CONTROL.FPCA is
+     * still set from a prior wolfCrypt call, BLXNS would try to
+     * preserve FP state across the S->NS hand-off and may take an
+     * unexpected fault if FPU is not enabled on the NS side. */
+    {
+        uint32_t ctrl;
+        asm volatile("mrs %0, control" : "=r"(ctrl));
+        ctrl &= ~(1u << 2); /* FPCA */
+        asm volatile("msr control, %0" :: "r"(ctrl));
+        asm volatile("isb");
+    }
+#endif
     /* Jump to non secure app_entry */
     asm volatile("mov r7, %0" ::"r"(app_entry));
     asm volatile("bic.w   r7, r7, #1");
-    /* Re-enable interrupts to allow non-secure OS handlers */
+#if !defined(TARGET_stm32n6)
+    /* Re-enable interrupts to allow non-secure OS handlers. Skipped
+     * for N6: cpsie here can dispatch a pending NS exception before
+     * BLXNS completes, and the implied NS exception stack push +
+     * vector fetch then trip SecureFault.INVEP. The NS application's
+     * Reset_Handler will re-enable interrupts itself. */
     asm volatile("cpsie i");
+#endif
     asm volatile("blxns   r7" );
 #   else
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
