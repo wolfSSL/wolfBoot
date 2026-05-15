@@ -309,6 +309,56 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
+    /* DDR self-test: PDMA-write 0xA5A50000+i (i=0..63) to 64 word
+     * addresses at 0x82000000.  Dump the full 64-word non-cached
+     * readback so we can characterise the address permutation that
+     * scrambles writes between source and DDR.
+     *
+     * Also test CPU stores (cached + non-cached) to isolate whether
+     * the scramble is PDMA-specific or universal. */
+    {
+        extern int mpfs_pdma_memcpy(void *dst, const void *src,
+                                    uint32_t bytes);
+        static uint32_t selftest_src[64] XALIGNED_STACK(64);
+        volatile uint32_t *dst_cached =
+            (volatile uint32_t *)0x82000000UL;
+        volatile uint32_t *dst_nc =
+            (volatile uint32_t *)0xC2000000UL;
+        uint32_t i;
+
+        for (i = 0U; i < 64U; i++)
+            selftest_src[i] = 0xA5A50000U + i;
+
+        /* PDMA write via cached window. */
+        mpfs_pdma_memcpy((void *)dst_cached, selftest_src,
+            64U * sizeof(uint32_t));
+
+        wolfBoot_printf("DDR selftest PDMA: src=0xA5A5000N, "
+            "non-cached readback dst_nc[i]:\n");
+        for (i = 0U; i < 64U; i += 8U) {
+            wolfBoot_printf("  [%2u..]: %x %x %x %x %x %x %x %x\n",
+                i,
+                dst_nc[i+0], dst_nc[i+1], dst_nc[i+2], dst_nc[i+3],
+                dst_nc[i+4], dst_nc[i+5], dst_nc[i+6], dst_nc[i+7]);
+        }
+
+        /* Now write via CPU stores through non-cached window, then
+         * read back non-cached to isolate.  Different prefix so we
+         * can tell apart from previous PDMA writes. */
+        for (i = 0U; i < 64U; i++)
+            dst_nc[i] = 0x5A5A0000U + i;
+        wolfBoot_printf("DDR selftest CPU/NC: src=0x5A5A000N, "
+            "non-cached readback:\n");
+        for (i = 0U; i < 64U; i += 8U) {
+            wolfBoot_printf("  [%2u..]: %x %x %x %x %x %x %x %x\n",
+                i,
+                dst_nc[i+0], dst_nc[i+1], dst_nc[i+2], dst_nc[i+3],
+                dst_nc[i+4], dst_nc[i+5], dst_nc[i+6], dst_nc[i+7]);
+        }
+    }
+#endif
+
     if (disk_open(BOOT_DISK) < 0) {
 #ifdef DISK_ENCRYPT
         disk_decrypted_header_clear(dec_hdr);
@@ -492,6 +542,31 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
         os_image.fw_base = (uint8_t*)load_address;
+
+        {
+            /* Single 8-word peek at the load buffer.  Used to confirm
+             * the image landed; further byte-level corruption analysis
+             * is done via gdb attach to the running M-mode wolfBoot
+             * (target halts in the load loop). */
+            volatile uint32_t *p = (volatile uint32_t *)load_address;
+            wolfBoot_printf("Load buf [0..7]: %x %x %x %x %x %x %x %x\n",
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+        }
+
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
+        /* Phase A canary check before integrity verify.  See hal_init
+         * for where these canaries are placed in L2 Scratch. */
+        {
+            extern char _main_hart_stack_bottom;
+            volatile uint32_t *cb =
+                (volatile uint32_t *)&_main_hart_stack_bottom;
+            volatile uint32_t *cm =
+                (volatile uint32_t *)0x0A030000UL;
+            wolfBoot_printf(
+                "Pre-verify canary: bot[%p]=%x mid[0A030000]=%x\n",
+                (void *)cb, cb[0], cm[0]);
+        }
+#endif
 
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         wolfBoot_printf("Checking image integrity...");
