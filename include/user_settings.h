@@ -233,15 +233,17 @@ extern int tolower(int c);
     /* RSA blinding protects RSA private-key operations against timing
      * side-channels and requires the wolfCrypt RNG. wolfssl's settings.h
      * rejects the combination WC_RSA_BLINDING + WC_NO_RNG, so only enable
-     * blinding in configurations where RNG is available. wolfBoot itself
-     * never invokes a wolfCrypt RSA private-key op (any signing happens
-     * inside the TPM/HSM), so blinding has nothing to protect at runtime
-     * here; this define mainly silences wolfssl's harden-mode warning in
-     * builds where wolfCrypt does have an RNG and could in principle sign. */
-#   if defined(WOLFCRYPT_SECURE_MODE) || defined(WOLFBOOT_TPM_PARMENC) || \
-       defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK) || \
-       defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#       define WC_RSA_BLINDING
+     * blinding in configurations where RNG is available and a private-key
+     * RSA op can actually occur. The NS-side test-app of a TZ build
+     * inherits WOLFCRYPT_SECURE_MODE but compiles with WC_NO_RNG (its
+     * crypto goes via PSA to the secure side) -- the outer WC_NO_RNG
+     * guard keeps it from satisfying the inner condition there. */
+#   ifndef WC_NO_RNG
+#       if defined(WOLFCRYPT_SECURE_MODE) || defined(WOLFBOOT_TPM_PARMENC) || \
+           defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK) || \
+           defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#           define WC_RSA_BLINDING
+#       endif
 #   endif
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
