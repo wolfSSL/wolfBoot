@@ -896,10 +896,18 @@ l2_poll_invclear:
         li      r4, (32 + 1)
         stw     r4, L2CSR1(r5)
 
-        /* enable L2 with parity */
+        /* enable L2 WITHOUT parity/ECC checking.  L2PE makes the cluster
+         * L2 verify ECC on every load, and we observe L2ERRDET=0x80000080
+         * latched at runtime (L2ERREADDR always somewhere in our kernel
+         * DDR range PA 0x1E0000-0x1FFFFF).  DDR ECC is enabled and DDR
+         * itself returns valid bytes (verified via TRACE32 binary dump
+         * post-cache-inhibit-memcpy), so the spurious L2 ECC mismatches
+         * appear to come from L2 generating wrong ECC bytes on fills from
+         * IFC/DDR for the kernel range.  Disabling L2PE silences the
+         * checks; data path is still ECC-protected at the DDR level. */
         sync
         isync
-        LOAD_ADDR32(r4, (L2CSR0_L2E | L2CSR0_L2PE))
+        LOAD_ADDR32(r4, L2CSR0_L2E)
         stw     r4, L2CSR0(r5)
         mbar
 
