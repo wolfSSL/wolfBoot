@@ -108,7 +108,7 @@ OBJS_REAL+=\
 OBJS_REAL+=\
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.o \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.o
-OBJS_REAL+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.o
+OBJS_REAL+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_mldsa.o
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 DEPS=$(OBJS_VIRT:.o=.d) sign.d keygen.d

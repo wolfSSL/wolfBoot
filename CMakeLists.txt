@@ -1231,9 +1231,9 @@ list(
     lib/wolfssl/wolfcrypt/src/tfm.c
     lib/wolfssl/wolfcrypt/src/wc_port.c
     lib/wolfssl/wolfcrypt/src/wolfmath.c
-    lib/wolfssl/wolfcrypt/src/dilithium.c
     lib/wolfssl/wolfcrypt/src/wc_lms.c
     lib/wolfssl/wolfcrypt/src/wc_lms_impl.c
+    lib/wolfssl/wolfcrypt/src/wc_mldsa.c
     lib/wolfssl/wolfcrypt/src/wc_xmss.c
     lib/wolfssl/wolfcrypt/src/wc_xmss_impl.c
 )
