@@ -225,6 +225,7 @@ if(BUILD_TEST_APPS)
             ../lib/wolfssl/wolfcrypt/src/aes.c
             ../lib/wolfssl/wolfcrypt/src/hmac.c
             ../lib/wolfssl/wolfcrypt/src/pwdbased.c
+            ../lib/wolfssl/wolfcrypt/src/pkcs12.c
             ../lib/wolfssl/wolfcrypt/src/hash.c
             ../lib/wolfssl/wolfcrypt/src/sha256.c
             ../lib/wolfssl/wolfcrypt/src/sha512.c

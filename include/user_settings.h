@@ -230,7 +230,19 @@ extern int tolower(int c);
     defined(WOLFBOOT_SIGN_SECONDARY_RSAPSS4096) || \
     (defined(WOLFCRYPT_SECURE_MODE) && (!defined(PKCS11_SMALL)))
 
-#   define WC_RSA_BLINDING
+    /* RSA blinding protects RSA private-key operations against timing
+     * side-channels and requires the wolfCrypt RNG. wolfssl's settings.h
+     * rejects the combination WC_RSA_BLINDING + WC_NO_RNG, so only enable
+     * blinding in configurations where RNG is available. wolfBoot itself
+     * never invokes a wolfCrypt RSA private-key op (any signing happens
+     * inside the TPM/HSM), so blinding has nothing to protect at runtime
+     * here; this define mainly silences wolfssl's harden-mode warning in
+     * builds where wolfCrypt does have an RNG and could in principle sign. */
+#   if defined(WOLFCRYPT_SECURE_MODE) || defined(WOLFBOOT_TPM_PARMENC) || \
+       defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK) || \
+       defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#       define WC_RSA_BLINDING
+#   endif
 #   define WC_RSA_DIRECT
 #   define RSA_LOW_MEM
 #   define WC_ASN_HASH_SHA256

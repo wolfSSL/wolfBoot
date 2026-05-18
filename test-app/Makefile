@@ -223,7 +223,7 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
       ifeq ($(PPC64),1) # requires wolfssl PR 9852
         # AES
         APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
-        CFLAGS+=-DWOLFSSL_PPC64_ASM 
+        CFLAGS+=-DWOLFSSL_PPC64_ASM
         CFLAGS+=-DWOLFSSL_PPC64_ASM_INLINE
         CFLAGS+=-DWOLFSSL_PPC64_ASM_SMALL
         CFLAGS+=-DWOLFSSL_PPC64_ASM_AES_NO_HARDEN
@@ -282,6 +282,7 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/aes.o
             APP_OBJS+=./wcs/hmac.o
             APP_OBJS+=./wcs/pwdbased.o
+            APP_OBJS+=./wcs/pkcs12.o
             APP_OBJS+=./wcs/hash.o
             APP_OBJS+=./wcs/sha256.o
             APP_OBJS+=./wcs/sha512.o
@@ -299,6 +300,17 @@ ifeq ($(TZEN),1)
             APP_OBJS+=./wcs/coding.o
             APP_OBJS+=./wcs/wc_encrypt.o
             APP_OBJS+=./wcs/wc_port.o
+            ifeq ($(SIGN),LMS)
+                APP_OBJS+=./wcs/wc_lms.o
+                APP_OBJS+=./wcs/wc_lms_impl.o
+            endif
+            ifeq ($(SIGN),XMSS)
+                APP_OBJS+=./wcs/wc_xmss.o
+                APP_OBJS+=./wcs/wc_xmss_impl.o
+            endif
+            ifeq ($(SIGN),ML_DSA)
+                APP_OBJS+=./wcs/wc_mldsa.o
+            endif
 
             ifeq ($(SPMATH),1)
               CFLAGS+=-DWOLFSSL_HAVE_SP_RSA -DWOLFSSL_HAVE_SP_ECC

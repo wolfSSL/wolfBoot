@@ -26,5 +26,5 @@ KEYTOOLS_SIGN_SRCS=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.c \
-	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dilithium.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_mldsa.c \
 	../../src/delta.c

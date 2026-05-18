@@ -158,7 +158,7 @@
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\asn.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\chacha.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\coding.c" />
-    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\dilithium.c" />
+    <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\wc_mldsa.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ecc.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ed25519.c" />
     <ClCompile Include="..\..\lib\wolfssl\wolfcrypt\src\ed448.c" />
