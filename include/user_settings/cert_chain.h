@@ -39,6 +39,27 @@
 #  define WOLFSSL_SP_MUL_D
 #  define WOLFSSL_PEM_TO_DER
 #  define WOLFSSL_ALLOW_NO_SUITES
+
+   /* X.509 structural support — every cert chain needs these regardless
+    * of the signature/hash algos in the chain. Algorithm coverage is
+    * driven by SIGN/HASH; additional algos (e.g. ECC384 intermediates,
+    * Ed25519 leaves on a SIGN=ECC256 build) go in the user's
+    * user_additions.h. See docs/wolfssl-config.md Section 8.7. */
+#  ifndef WOLFBOOT_NEEDS_ASN
+#    define WOLFBOOT_NEEDS_ASN
+#  endif
+#  ifndef WOLFBOOT_NEEDS_ASN_TIME
+#    define WOLFBOOT_NEEDS_ASN_TIME
+#  endif
+#  ifndef WOLFBOOT_NEEDS_PEM
+#    define WOLFBOOT_NEEDS_PEM
+#  endif
+#  ifndef WOLFBOOT_NEEDS_PKCS8
+#    define WOLFBOOT_NEEDS_PKCS8
+#  endif
+#  ifndef WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY
+#    define WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY
+#  endif
 #endif
 
 #endif /* _WOLFBOOT_USER_SETTINGS_CERT_CHAIN_H_ */

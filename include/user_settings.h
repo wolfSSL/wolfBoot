@@ -64,7 +64,17 @@
 #include "user_settings/platform.h"
 #include "user_settings/test_bench.h"
 
-/* 6. Reconciliation: NEEDS_* markers -> NO_* / WC_NO_* defaults,
+/* 6. User extension point. Opt-in via WOLFBOOT_USER_ADDITIONS=1 in .config
+ *    or options.mk; the user provides a user_additions.h on the include path
+ *    that declares additional WOLFBOOT_NEEDS_* markers and/or positive
+ *    wolfCrypt flags (HAVE_*, WOLFSSL_*). Runs after every fragment so
+ *    it can append to or override fragment-declared markers, and before
+ *    finalize.h so reconciliation sees the user's intent. */
+#ifdef WOLFBOOT_USER_ADDITIONS
+#  include "user_additions.h"
+#endif
+
+/* 7. Reconciliation: NEEDS_* markers -> NO_* / WC_NO_* defaults,
  *    plus the always-on global wolfCrypt "off" block and memory model.
  *    Must be last so every fragment has had a chance to declare needs. */
 #include "user_settings/finalize.h"

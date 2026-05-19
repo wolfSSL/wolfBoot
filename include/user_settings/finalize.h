@@ -95,32 +95,108 @@
 #  define NO_CODING
 #endif
 
+/* DH: bipolar — positive when NEEDS_DH is set, NO_DH otherwise. */
+#if defined(HAVE_DH) && !defined(WOLFBOOT_NEEDS_DH)
+#  error "user_settings: declare WOLFBOOT_NEEDS_DH alongside HAVE_DH; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_DH
+#  ifndef HAVE_DH
+#    define HAVE_DH
+#  endif
+#else
+#  define NO_DH
+#endif
+
+/* PEM: positive WOLFSSL_PEM when NEEDS_PEM is set, WOLFSSL_NO_PEM otherwise.
+ * WOLFSSL_PEM_TO_DER is a separate flag (cert_chain.h opts in on its own). */
+#if defined(WOLFSSL_PEM) && !defined(WOLFBOOT_NEEDS_PEM)
+#  error "user_settings: declare WOLFBOOT_NEEDS_PEM alongside WOLFSSL_PEM; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_PEM
+#  ifndef WOLFSSL_PEM
+#    define WOLFSSL_PEM
+#  endif
+#else
+#  define WOLFSSL_NO_PEM
+#endif
+
+/* ASN time validation: no canonical positive form — NEEDS_ASN_TIME
+ * is one-way (absence -> NO_ASN_TIME). */
+#ifndef WOLFBOOT_NEEDS_ASN_TIME
+#  define NO_ASN_TIME
+#endif
+
+/* Cert generation: bipolar (WOLFSSL_CERT_GEN). */
+#if defined(WOLFSSL_CERT_GEN) && !defined(WOLFBOOT_NEEDS_CERT_GEN)
+#  error "user_settings: declare WOLFBOOT_NEEDS_CERT_GEN alongside WOLFSSL_CERT_GEN; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_CERT_GEN
+#  ifndef WOLFSSL_CERT_GEN
+#    define WOLFSSL_CERT_GEN
+#  endif
+#else
+#  define NO_CERT
+#endif
+
+/* Session cache: bipolar (HAVE_SESSION_CACHE). */
+#if defined(HAVE_SESSION_CACHE) && !defined(WOLFBOOT_NEEDS_SESSION_CACHE)
+#  error "user_settings: declare WOLFBOOT_NEEDS_SESSION_CACHE alongside HAVE_SESSION_CACHE; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_SESSION_CACHE
+#  ifndef HAVE_SESSION_CACHE
+#    define HAVE_SESSION_CACHE
+#  endif
+#else
+#  define NO_SESSION_CACHE
+#endif
+
+/* PKCS12: bipolar (HAVE_PKCS12). */
+#if defined(HAVE_PKCS12) && !defined(WOLFBOOT_NEEDS_PKCS12)
+#  error "user_settings: declare WOLFBOOT_NEEDS_PKCS12 alongside HAVE_PKCS12; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_PKCS12
+#  ifndef HAVE_PKCS12
+#    define HAVE_PKCS12
+#  endif
+#else
+#  define NO_PKCS12
+#endif
+
+/* PKCS8: no canonical positive form. encrypt.h's SECURE_PKCS11 path
+ * defines HAVE_PKCS8 vestigially; wolfSSL gates PKCS8 on `#ifndef
+ * NO_PKCS8`, so the HAVE_PKCS8 define is a no-op. NEEDS_PKCS8 is the
+ * supported positive form. */
+#ifndef WOLFBOOT_NEEDS_PKCS8
+#  define NO_PKCS8
+#endif
+
+/* Private key cross-check: bipolar (WOLFSSL_CHECK_PRIVATE_KEY). */
+#if defined(WOLFSSL_CHECK_PRIVATE_KEY) && !defined(WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY)
+#  error "user_settings: declare WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY alongside WOLFSSL_CHECK_PRIVATE_KEY; see docs/wolfssl-config.md"
+#endif
+#ifdef WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY
+#  ifndef WOLFSSL_CHECK_PRIVATE_KEY
+#    define WOLFSSL_CHECK_PRIVATE_KEY
+#  endif
+#else
+#  define NO_CHECK_PRIVATE_KEY
+#endif
+
 /* ------------------------------------------------------------------
- * Always-on disables (no fragment opts out today).
+ * Always-on disables (Class A: dead/weak algorithms and protocols).
  * ------------------------------------------------------------------
  * Each entry asserts that no fragment has opted in via the matching
- * positive flag, then defines the disable. If one of these assertions
- * fires, the right fix is to introduce a WOLFBOOT_NEEDS_* marker and
- * gate the disable on its absence (see docs/wolfssl-config.md, Section
- * 8 Step 5).
+ * positive flag, then defines the disable. These are dead protocols
+ * and weak primitives wolfBoot has no business linking; the assertions
+ * exist so a stray HAVE_* or WOLFSSL_* in a fragment is caught at
+ * compile time. There is intentionally no NEEDS_* opt-out — promoting
+ * these would invite re-enabling them.
  *
  * Entries without an assertion either have no canonical positive form
- * (NO_ASN_TIME, NO_SIG_WRAPPER) or describe wolfBoot's environment
- * rather than a wolfCrypt feature a fragment would plausibly want to
- * enable (NO_WRITEV, NO_MAIN_DRIVER, NO_WOLFSSL_DIR, WOLFSSL_NO_SOCK,
+ * (NO_SIG_WRAPPER) or describe wolfBoot's environment rather than a
+ * wolfCrypt feature a fragment would plausibly want to enable
+ * (NO_WRITEV, NO_MAIN_DRIVER, NO_WOLFSSL_DIR, WOLFSSL_NO_SOCK,
  * WOLFSSL_IGNORE_FILE_WARN, NO_ERROR_STRINGS, NO_OLD_RNGNAME). */
-
-#if defined(HAVE_DH)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define NO_DH
-
-#if defined(WOLFSSL_PEM)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define WOLFSSL_NO_PEM
-
-#define NO_ASN_TIME
 
 #if defined(HAVE_RC4)
 #  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
@@ -154,16 +230,6 @@
 
 #define NO_SIG_WRAPPER
 
-#if defined(WOLFSSL_CERT_GEN)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define NO_CERT
-
-#if defined(HAVE_SESSION_CACHE)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define NO_SESSION_CACHE
-
 #if defined(HAVE_HC128)
 #  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
 #endif
@@ -186,23 +252,6 @@
 #define WOLFSSL_NO_SOCK
 #define WOLFSSL_IGNORE_FILE_WARN
 #define NO_ERROR_STRINGS
-
-#if defined(HAVE_PKCS12)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define NO_PKCS12
-
-/* NO_PKCS8: no assertion. encrypt.h's SECURE_PKCS11 path defines
- * HAVE_PKCS8 vestigially; wolfSSL gates PKCS8 on `#ifndef NO_PKCS8`,
- * so the HAVE_PKCS8 define is a no-op. Until that vestigial define is
- * cleaned up, we cannot assert here without false-positive on the
- * SECURE_PKCS11 build. */
-#define NO_PKCS8
-
-#if defined(WOLFSSL_CHECK_PRIVATE_KEY)
-#  error "user_settings: NEEDS_* marker required; see docs/wolfssl-config.md"
-#endif
-#define NO_CHECK_PRIVATE_KEY
 
 /* BENCH_EMBEDDED is the default outside explicit test/benchmark mode. */
 #if !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
