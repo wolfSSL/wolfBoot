@@ -84,7 +84,7 @@ static int sim_cryptocb(int devIdArg, wc_CryptoInfo* info, void* ctx)
             case WC_PK_TYPE_RSA:            name = "RSA";            break;
             case WC_PK_TYPE_ECDSA_VERIFY:   name = "ECDSA-verify";   break;
             case WC_PK_TYPE_ED25519_VERIFY: name = "ED25519-verify"; break;
-        #ifdef HAVE_DILITHIUM
+        #ifdef WOLFSSL_HAVE_MLDSA
             case WC_PK_TYPE_PQC_SIG_VERIFY:
                 name = "ML-DSA-verify";
                 break;

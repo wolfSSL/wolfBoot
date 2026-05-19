@@ -8,8 +8,7 @@ approved PQ signature algorithms:
 - LMS/HSS: https://csrc.nist.gov/projects/stateful-hash-based-signatures
 - XMSS/XMSS^MT: https://csrc.nist.gov/projects/stateful-hash-based-signatures
 
-ML-DSA is a PQ lattice-based algorithm, derived from
-CRYSTALS-DILITHIUM (a round three NIST finalist).
+ML-DSA is a PQ lattice-based algorithm standardized by NIST (FIPS 204).
 
 LMS/HSS and XMSS/XMSS^MT are both PQ stateful hash-based signature (HBS)
 schemes, recommended in NIST SP 800-208.
@@ -82,9 +81,9 @@ IMAGE_SIGNATURE_SIZE=2420
 IMAGE_HEADER_SIZE?=4840
 ```
 
-Note: The wolfcrypt implementation of ML-DSA (dilithium) builds to the
-FIPS 204 final standard by default. If you wish to conform to the older
-FIPS 204 draft standard, then build with `WOLFSSL_DILITHIUM_FIPS204_DRAFT`
+Note: The wolfcrypt implementation of ML-DSA builds to the FIPS 204 final
+standard by default. If you wish to conform to the older FIPS 204 draft
+standard, then build with `WOLFSSL_MLDSA_FIPS204_DRAFT`
 instead.
 
 ## Stateful Hash-Based Signature Methods

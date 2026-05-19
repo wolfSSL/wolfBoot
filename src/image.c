@@ -724,13 +724,13 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
 #endif /* WOLFBOOT_SIGN_XMSS */
 
 #ifdef WOLFBOOT_SIGN_ML_DSA
-#include <wolfssl/wolfcrypt/dilithium.h>
+#include <wolfssl/wolfcrypt/wc_mldsa.h>
 
 static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
-    int       ret = 0;
-    MlDsaKey  ml_dsa;
+    int         ret = 0;
+    wc_MlDsaKey ml_dsa;
 #if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
     (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
      !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))

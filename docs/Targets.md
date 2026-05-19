@@ -1567,7 +1567,7 @@ FDT: MAC1 = 00:04:A3:5B:22:89
 RISC-V 64-bit U54 (RV64GC1) 625 MHz
 
 ```
-./configure --enable-riscv-asm --enable-dilithium --enable-mlkem --enable-sp=yes
+./configure --enable-riscv-asm --enable-mldsa --enable-mlkem --enable-sp=yes
 make
 ./wolfcrypt/benchmark/benchmark
 ------------------------------------------------------------------------------

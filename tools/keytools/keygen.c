@@ -77,8 +77,8 @@
     #endif
 #endif
 
-#ifdef WOLFSSL_WC_DILITHIUM
-    #include <wolfssl/wolfcrypt/dilithium.h>
+#ifdef WOLFSSL_HAVE_MLDSA
+    #include <wolfssl/wolfcrypt/wc_mldsa.h>
 #endif
 
 #include <wolfssl/wolfcrypt/random.h>
@@ -1071,19 +1071,19 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
 
 static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
 {
-    FILE *   fpriv = NULL;
-    MlDsaKey key;
-    int      ret;
-    byte *   priv = NULL;
-    byte     pub[ML_DSA_L5_PUBKEY_SIZE]; /* max size */
-    word32   priv_len = 0;
-    word32   pub_len = 0;
-    int      ml_dsa_priv_len = 0;
-    int      ml_dsa_pub_len = 0;
-    int      ml_dsa_level = ML_DSA_LEVEL;
-    int      exit_code = 0;
-    int      key_init = 0;
-    char *   env_ml_dsa_level = getenv("ML_DSA_LEVEL");
+    FILE *      fpriv = NULL;
+    wc_MlDsaKey key;
+    int         ret;
+    byte *      priv = NULL;
+    byte        pub[ML_DSA_L5_PUBKEY_SIZE]; /* max size */
+    word32      priv_len = 0;
+    word32      pub_len = 0;
+    int         ml_dsa_priv_len = 0;
+    int         ml_dsa_pub_len = 0;
+    int         ml_dsa_level = ML_DSA_LEVEL;
+    int         exit_code = 0;
+    int         key_init = 0;
+    char *      env_ml_dsa_level = getenv("ML_DSA_LEVEL");
     if (env_ml_dsa_level != NULL) {
         ml_dsa_level = atoi(env_ml_dsa_level);
     }
@@ -1232,7 +1232,7 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
 
             /* Export public key in DER format */
 
-            pubOutLen = wc_Dilithium_PublicKeyToDer(&key, pubDer, pubDerSz,
+            pubOutLen = wc_MlDsaKey_PublicKeyToDer(&key, pubDer, pubDerSz,
                                                     WITH_ALG_SPKI);
             if (pubOutLen < 0) {
                 fprintf(stderr, "Unable to export public key to DER, ret=%d\n",
@@ -1368,7 +1368,7 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
             break;
 #endif
 
-#ifdef WOLFSSL_WC_DILITHIUM
+#ifdef WOLFSSL_HAVE_MLDSA
         case AUTH_KEY_ML_DSA:
             keygen_ml_dsa(kfilename, id_mask);
             break;
@@ -1546,7 +1546,7 @@ int main(int argc, char** argv)
             keytype = AUTH_KEY_XMSS;
         }
 #endif
-#if defined(WOLFSSL_WC_DILITHIUM)
+#if defined(WOLFSSL_HAVE_MLDSA)
         else if (strcmp(argv[i], "--ml_dsa") == 0) {
             keytype = AUTH_KEY_ML_DSA;
         }

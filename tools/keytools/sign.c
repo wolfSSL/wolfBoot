@@ -127,8 +127,8 @@ static inline int fp_truncate(FILE *f, size_t len)
     #endif
 #endif
 
-#ifdef WOLFSSL_WC_DILITHIUM
-    #include <wolfssl/wolfcrypt/dilithium.h>
+#ifdef WOLFSSL_HAVE_MLDSA
+    #include <wolfssl/wolfcrypt/wc_mldsa.h>
 #endif
 
 #ifdef DEBUG_SIGNTOOL
@@ -308,7 +308,7 @@ static struct {
     RsaKey rsa;
     LmsKey lms;
     XmssKey xmss;
-    MlDsaKey  ml_dsa;
+    wc_MlDsaKey ml_dsa;
 } key;
 
 struct cmd_options {
