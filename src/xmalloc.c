@@ -53,7 +53,7 @@ struct xmalloc_slot {
 #   define HASH_BLOCK_SIZE WC_SHA256_BLOCK_SIZE
 #elif defined WOLFBOOT_HASH_SHA384
 #   include <wolfssl/wolfcrypt/sha512.h>
-#   define HASH_BLOCK_SIZE (WC_SHA384_BLOCK_SIZE / sizeof(uint32_t))
+#   define HASH_BLOCK_SIZE WC_SHA384_BLOCK_SIZE
 #elif defined WOLFBOOT_HASH_SHA3_384
 #   include <wolfssl/wolfcrypt/sha3.h>
 #   define HASH_BLOCK_SIZE WC_SHA3_384_BLOCK_SIZE
@@ -301,9 +301,7 @@ static uint32_t sha_block[HASH_BLOCK_SIZE];
 static uint32_t sha512_block[sizeof(word64) * 16];
 
 static struct xmalloc_slot xmalloc_pool[] = {
-#if defined(WOLFBOOT_HASH_SHA256) || defined(WOLFBOOT_HASH_SHA384)
-    { (uint8_t *)sha_block, HASH_BLOCK_SIZE * sizeof(uint32_t), 0 },
-#endif
+    { (uint8_t *)sha_block, sizeof(sha_block), 0 },
     { (uint8_t *)sha512_block, sizeof(word64) * 16, 0 },
     { NULL, 0, 0}
 };
