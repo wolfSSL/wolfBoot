@@ -162,7 +162,14 @@ that lets fragments stay decoupled. The phases:
    other's contributions — but the established order is preserved for
    readability.
 
-6. **`finalize.h`** runs last. It tests every `WOLFBOOT_NEEDS_*`
+6. **`user_additions.h`** (opt-in, gated by `WOLFBOOT_USER_ADDITIONS`) is the
+   user extension point. After fragments have run and before
+   `finalize.h` reconciles. Lets a downstream user declare additional
+   `WOLFBOOT_NEEDS_*` markers or positive wolfCrypt flags without
+   forking the in-tree fragments. See
+   [Section 8.7](#87-adding-aux-algorithms-via-user_additionsh).
+
+7. **`finalize.h`** runs last. It tests every `WOLFBOOT_NEEDS_*`
    marker and applies the corresponding wolfCrypt negative flag
    (`NO_*`, `WC_NO_*`) when the marker is absent. It then defines the
    always-on global "off" block and the memory model.
@@ -279,13 +286,28 @@ vocabulary; every marker is pure preprocessor and has no runtime cost.
 | `WOLFBOOT_NEEDS_CMAC` | `NO_CMAC` | `WOLFCRYPT_TZ_PSA`, `WOLFBOOT_TZ_FWTPM` | `cascade.h` |
 | `WOLFBOOT_NEEDS_KDF` | `NO_KDF` | `WOLFCRYPT_TZ_PSA`, `WOLFBOOT_TZ_FWTPM` | `cascade.h` |
 | `WOLFBOOT_NEEDS_MALLOC` | `NO_WOLFSSL_MEMORY`, `WOLFSSL_NO_MALLOC` (in the `!SMALL_STACK` branch of memory model) | `SECURE_PKCS11`, `WOLFCRYPT_TZ_PSA`, `WOLFBOOT_ENABLE_WOLFHSM_SERVER`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
+| `WOLFBOOT_NEEDS_DH` | `NO_DH` (else: defines `HAVE_DH`) | TLS / cert-chain builds that use ephemeral DH | `user_additions.h` (typically) |
+| `WOLFBOOT_NEEDS_PEM` | `WOLFSSL_NO_PEM` (else: defines `WOLFSSL_PEM`) | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
+| `WOLFBOOT_NEEDS_ASN_TIME` | `NO_ASN_TIME` | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
+| `WOLFBOOT_NEEDS_CERT_GEN` | `NO_CERT` (else: defines `WOLFSSL_CERT_GEN`) | builds that generate certs at runtime | `user_additions.h` (typically) |
+| `WOLFBOOT_NEEDS_SESSION_CACHE` | `NO_SESSION_CACHE` (else: defines `HAVE_SESSION_CACHE`) | TLS builds with session resumption | `user_additions.h` (typically) |
+| `WOLFBOOT_NEEDS_PKCS12` | `NO_PKCS12` (else: defines `HAVE_PKCS12`) | builds that parse PKCS#12 bundles | `user_additions.h` (typically) |
+| `WOLFBOOT_NEEDS_PKCS8` | `NO_PKCS8` | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
+| `WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY` | `NO_CHECK_PRIVATE_KEY` (else: defines `WOLFSSL_CHECK_PRIVATE_KEY`) | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
 
-Two markers have a **bipolar** reconciliation: `NEEDS_HASHDRBG` and
-`NEEDS_BASE64` switch between the positive flag (`HAVE_HASHDRBG` /
-`WOLFSSL_BASE64_ENCODE`) when present and the negative flag
-(`WC_NO_HASHDRBG` / `NO_CODING`) when absent. The rest are unipolar:
-absent ⇒ define the negative flag, present ⇒ skip the negative flag
-(the positive flag is set elsewhere by the relevant fragment).
+Several markers have a **bipolar** reconciliation: `NEEDS_HASHDRBG`,
+`NEEDS_BASE64`, `NEEDS_DH`, `NEEDS_PEM`, `NEEDS_CERT_GEN`,
+`NEEDS_SESSION_CACHE`, `NEEDS_PKCS12`, and `NEEDS_CHECK_PRIVATE_KEY`
+switch between the positive flag (e.g. `HAVE_DH`) when present and the
+negative flag (e.g. `NO_DH`) when absent. Each bipolar marker is paired
+with a polarity-mismatch `#error` that fires if the positive flag is
+defined without the matching `NEEDS_*` — this guarantees that opting
+into a feature is always expressed through the `NEEDS_*` vocabulary.
+The remaining markers (`NEEDS_RNG`, `NEEDS_AES`, `NEEDS_ASN`,
+`NEEDS_ASN_TIME`, `NEEDS_PKCS8`, `NEEDS_CMAC`, `NEEDS_KDF`,
+`NEEDS_MALLOC`, …) are unipolar: absent ⇒ define the negative flag,
+present ⇒ skip the negative flag (the positive flag, when one exists,
+is set elsewhere by the relevant fragment).
 
 ---
 
@@ -545,9 +567,22 @@ WOLFBOOT_ENABLE_WOLFHSM_SERVER`.
 WOLFBOOT_CERT_CHAIN_VERIFY`. This is the only build mode that links
 the wolfSSL TLS-layer cert manager (server side).
 
-**Sets:** `NO_TLS`, `NO_OLD_TLS`, `WOLFSSL_NO_TLS12`,
-`WOLFSSL_USER_IO`, `WOLFSSL_SP_MUL_D`, `WOLFSSL_PEM_TO_DER`,
-`WOLFSSL_ALLOW_NO_SUITES`.
+**Sets (TLS-layer carve-outs):** `NO_TLS`, `NO_OLD_TLS`,
+`WOLFSSL_NO_TLS12`, `WOLFSSL_USER_IO`, `WOLFSSL_SP_MUL_D`,
+`WOLFSSL_PEM_TO_DER`, `WOLFSSL_ALLOW_NO_SUITES`.
+
+**Declares (X.509 structural defaults):** `WOLFBOOT_NEEDS_ASN`,
+`WOLFBOOT_NEEDS_ASN_TIME`, `WOLFBOOT_NEEDS_PEM`, `WOLFBOOT_NEEDS_PKCS8`,
+`WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY`. Every cert chain needs these
+regardless of the signature/hash algorithms in the chain itself.
+
+**Out of scope (algorithm coverage).** This fragment ships **no**
+`HAVE_*` algorithm defaults. The wolfCrypt algorithm flags the chain
+actually consumes (RSA, ECC, Ed25519, additional SHA sizes, etc.) are
+driven by the `SIGN=`/`HASH=` selections in `.config`. If your chain
+mixes algorithms — say, an Ed25519 leaf or ECC384 intermediate on a
+SIGN=ECC256 build — declare the missing algos in `user_additions.h` (see
+[Section 8.7](#87-adding-aux-algorithms-via-user_additionsh)).
 
 **Notes.** The companion `WOLFCRYPT_ONLY` carve-out (which un-defines
 `WOLFCRYPT_ONLY` in this mode) still lives in `base.h` as part of the
@@ -700,21 +735,40 @@ The rest are unipolar:
 
 ### 7.2. Always-on disables
 
-A flat list of wolfCrypt features that wolfBoot never uses, regardless
-of configuration:
+Class A — dead protocols and weak primitives wolfBoot has no business
+linking. Each is paired with an `#error` polarity-mismatch guard so a
+stray `HAVE_X`/`WOLFSSL_X` in a fragment is caught at compile time.
+There is intentionally **no** `NEEDS_*` opt-out for these.
 
 ```
-NO_DH, WOLFSSL_NO_PEM, NO_ASN_TIME, NO_RC4, NO_SHA, NO_DSA, NO_MD4,
-NO_RABBIT, NO_MD5, NO_SIG_WRAPPER, NO_CERT, NO_SESSION_CACHE, NO_HC128,
-NO_DES3 (if not already set), NO_WRITEV, NO_FILESYSTEM (unless
-WOLFBOOT_PARTITION_FILENAME), NO_MAIN_DRIVER, NO_OLD_RNGNAME,
+NO_RC4, NO_SHA, NO_DSA, NO_MD4, NO_RABBIT, NO_MD5, NO_SIG_WRAPPER,
+NO_HC128, NO_DES3 (if not already set), NO_WRITEV, NO_FILESYSTEM
+(unless WOLFBOOT_PARTITION_FILENAME), NO_MAIN_DRIVER, NO_OLD_RNGNAME,
 NO_WOLFSSL_DIR, WOLFSSL_NO_SOCK, WOLFSSL_IGNORE_FILE_WARN,
-NO_ERROR_STRINGS, NO_PKCS12, NO_PKCS8, NO_CHECK_PRIVATE_KEY
+NO_ERROR_STRINGS
 ```
 
-If a future feature ever needs one of these to be skipped (e.g. some
-new TLS-using mode wants `NO_PEM` skipped), the entry should move
-under a new NEEDS marker.
+Class B — TLS/cert/PEM-adjacent features that wolfBoot defaults off
+but a future build (or a user via `user_additions.h`) may legitimately
+want. These now live in the NEEDS reconciliation block above (Section
+7.1) with bipolar gates:
+
+```
+NO_DH ↔ WOLFBOOT_NEEDS_DH (HAVE_DH)
+WOLFSSL_NO_PEM ↔ WOLFBOOT_NEEDS_PEM (WOLFSSL_PEM)
+NO_ASN_TIME ↔ WOLFBOOT_NEEDS_ASN_TIME
+NO_CERT ↔ WOLFBOOT_NEEDS_CERT_GEN (WOLFSSL_CERT_GEN)
+NO_SESSION_CACHE ↔ WOLFBOOT_NEEDS_SESSION_CACHE (HAVE_SESSION_CACHE)
+NO_PKCS12 ↔ WOLFBOOT_NEEDS_PKCS12 (HAVE_PKCS12)
+NO_PKCS8 ↔ WOLFBOOT_NEEDS_PKCS8
+NO_CHECK_PRIVATE_KEY ↔ WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY (WOLFSSL_CHECK_PRIVATE_KEY)
+```
+
+If a future feature ever needs one of the Class A always-on disables
+to be skipped, the right move is to introduce a new NEEDS marker
+following the cookbook in Section 8.5. If it's a Class B disable, the
+marker already exists — declare it (from a fragment if the trigger is
+in-tree, from `user_additions.h` if it's user-specific).
 
 ### 7.3. `BENCH_EMBEDDED` default
 
@@ -961,6 +1015,112 @@ too aggressively in cascade.h or moved more than just the one
 Build a config that exercises the new feature. Confirm the build
 links and the binary size is sensible.
 
+### 8.7. Adding aux algorithms via `user_additions.h`
+
+The cookbook above describes the in-tree path: add a feature, declare
+markers in `cascade.h`, lift disables in `finalize.h`. That is the right
+answer when the new opt-in belongs to wolfBoot's shipped configuration
+surface. It is the **wrong** answer when an end user just needs to add
+algorithms that *their particular cert chain* (or TPM template, or
+PKCS#11 backend) consumes — say, an Ed25519 leaf certificate on a build
+where `SIGN=ECC256`, or an ECC384 intermediate on a `SIGN=RSA4096`
+build. Per-feature env vars for every algorithm combination would
+explode the wolfBoot config surface for no maintainable benefit.
+
+The shim's user extension point — `user_additions.h` — exists for exactly
+this case.
+
+#### How it works
+
+Enable `WOLFBOOT_USER_ADDITIONS=1` in `.config` (or `make
+WOLFBOOT_USER_ADDITIONS=1 ...`). `options.mk` emits `-DWOLFBOOT_USER_ADDITIONS`,
+and `user_settings.h` conditionally `#include "user_additions.h"` after all
+fragments and **before** `finalize.h`. The user provides
+`user_additions.h` somewhere on the compiler's include path; a missing file
+is a build error because the opt-in was explicit. Order is the
+contract: `cascade → base → sign → hash → features → user_additions →
+finalize`. That means `user_additions.h` can declare additional
+`WOLFBOOT_NEEDS_*` markers (reconciled by `finalize.h`), can set
+positive wolfCrypt flags (`HAVE_*`, `WOLFSSL_*`) that fragments did not
+set, and can override fragment-declared values that have not yet been
+finalized.
+
+#### Worked example: Ed25519 leaf on a SIGN=ECC256 build
+
+Imagine a wolfHSM server cert-chain build with `SIGN=ECC256` whose
+chain ends in an Ed25519 leaf. The chain validates with SHA-256 and
+SHA-512. Out of the box, the build links ECC and SHA-256 (from
+`SIGN`/`HASH`) and the X.509 structural machinery (from
+`cert_chain.h`). It does **not** link Ed25519 or SHA-512 — those are
+algorithm-coverage decisions and are left to the user.
+
+Create `include/user_additions.h` (or anywhere else on the include path):
+
+```c
+#ifndef _WOLFBOOT_USER_ADDITIONS_H_
+#define _WOLFBOOT_USER_ADDITIONS_H_
+
+/* Ed25519 leaf certs in our PKI. */
+#define HAVE_ED25519
+
+/* Ed25519 verifies use SHA-512. */
+#define WOLFSSL_SHA512
+
+#endif
+```
+
+Enable the include hook in `.config`:
+
+```
+WOLFBOOT_USER_ADDITIONS=1
+```
+
+Pair it with a Makefile override that puts the corresponding wolfCrypt
+objects on the link line (see boundary statement below):
+
+```make
+WOLFCRYPT_OBJS += \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_low_mem.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_low_mem.o \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+```
+
+#### Boundary: `user_additions.h` is header-only
+
+`user_additions.h` is a preprocessor extension point. It can turn on code
+inside compilation units that are *already linked*: additional ECC
+curves under an already-linked `ecc.o`, additional SHA sizes under an
+already-linked `sha256.o`/`sha512.o`, more of `asn.o`/`ssl.o`'s
+coverage once `WOLFBOOT_NEEDS_ASN`/`PEM`/`PKCS8` are set. It **cannot**
+pull new object files onto the link line. If the algorithm your chain
+consumes needs an object that wolfBoot's `WOLFCRYPT_OBJS` does not
+already include — `ed25519.o`, `dh.o`, `sha512.o`, `curve25519.o`, etc.
+— you must extend `WOLFCRYPT_OBJS` yourself, either via
+`CFLAGS_EXTRA`-style overrides in your `.config`, a custom Makefile
+wrapper, or your alternative build system (CMake/IDE) of choice.
+
+The reason for this split is intentional: header-only opt-ins compose
+without surprising binary-size changes for unrelated configs, and they
+keep `wolfBoot`'s linker-input contract explicit. If you find yourself
+adding many objects via this path, it is probably time to propose an
+in-tree feature flag instead.
+
+#### What `user_additions.h` should *not* do
+
+- **Re-enable Class A disables** (`NO_RC4`, `NO_MD4`, `NO_MD5`,
+  `NO_DSA`, `NO_RABBIT`, `NO_HC128`, `NO_DES3`, `NO_SHA`).
+  `finalize.h` keeps these as always-on with `#error` guardrails by
+  design. Defining `HAVE_RC4` from `user_additions.h` will not silently
+  enable RC4; the build will fail with the polarity-mismatch
+  assertion.
+- **Override the active SIGN/HASH selections.** Those are runtime
+  contracts wolfBoot relies on (key parsing, image verification);
+  changing them via `user_additions.h` will produce a binary that does
+  not match the keys generated by `keytools`.
+- **Toggle `WOLFCRYPT_ONLY`.** That carve-out is decided by
+  `base.h`/`cert_chain.h` based on TLS-layer needs.
+
 
 ## 9. Reading an Existing Configuration
 
@@ -1075,6 +1235,11 @@ Steps 1-3 produce the correct wolfCrypt configuration via the cascade
 and fragments. Step 4 is the only one that still needs build-system
 involvement, because it's a linker concern.
 
+The user extension point ([Section 8.7](#87-adding-aux-algorithms-via-user_additionsh))
+works across all three build systems: pass `-DWOLFBOOT_USER_ADDITIONS` and
+put `user_additions.h` on the include path. The shim picks it up via the
+same conditional include regardless of who drove the build.
+
 ### 11.1. CMake
 
 `CMakeLists.txt` already sets `-DWOLFSSL_USER_SETTINGS` and adds
@@ -1170,6 +1335,9 @@ include/
     ├── test_bench.h              # WOLFCRYPT_TEST / BENCHMARK
     │
     └── finalize.h                # NEEDS_* reconciliation + global "off"
+
+(optional, user-supplied — anywhere on the include path)
+user_additions.h                      # gated by -DWOLFBOOT_USER_ADDITIONS
 ```
 
 ## Appendix B: Glossary
@@ -1193,3 +1361,16 @@ include/
 - **Reconciliation.** The process by which `finalize.h` translates the
   set of declared NEEDS markers into the corresponding negative
   flags.
+- **Class A disable.** A negative wolfCrypt flag for a dead protocol or
+  weak primitive that wolfBoot always sets and never opts out of (e.g.
+  `NO_RC4`, `NO_MD4`, `NO_SHA`). Paired with an `#error` polarity
+  guard.
+- **Class B disable.** A negative wolfCrypt flag wolfBoot defaults off
+  but exposes through a `WOLFBOOT_NEEDS_*` marker (e.g. `NO_DH`,
+  `WOLFSSL_NO_PEM`, `NO_PKCS8`). A fragment or `user_additions.h` may
+  declare the marker to opt in.
+- **Injection slot.** The conditional `#include "user_additions.h"` in the
+  shim, gated by `-DWOLFBOOT_USER_ADDITIONS`. Runs after every fragment
+  and before `finalize.h`, letting the user declare additional
+  markers/positive flags. Header-only: cannot add objects to the link
+  line.

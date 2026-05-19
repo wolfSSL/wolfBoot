@@ -30,6 +30,14 @@ ifeq ($(WOLFBOOT_TIME_TEST),1)
     CFLAGS+=-D"WOLFBOOT_TIME_TEST"
 endif
 
+# User extension point: when set, the shim user_settings.h includes
+# user_additions.h from the include path so the user can declare additional
+# WOLFBOOT_NEEDS_* markers and/or positive wolfCrypt flags. See
+# docs/wolfssl-config.md Section 8.7.
+ifeq ($(WOLFBOOT_USER_ADDITIONS),1)
+    CFLAGS+=-D"WOLFBOOT_USER_ADDITIONS"
+endif
+
 # Support for TPM signature verification
 ifeq ($(WOLFBOOT_TPM_VERIFY),1)
   WOLFTPM:=1
