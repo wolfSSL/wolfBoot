@@ -38,7 +38,7 @@
 #  include "sign_ed448.h"
 #endif
 
-/* ML-DSA / Dilithium (primary or secondary) */
+/* ML-DSA (primary or secondary) */
 #if defined(WOLFBOOT_SIGN_ML_DSA) || defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
 #  include "sign_ml_dsa.h"
 #endif

@@ -1,6 +1,6 @@
 /* user_settings/sign_ml_dsa.h
  *
- * wolfCrypt configuration for ML-DSA (post-quantum, FIPS 204 / Dilithium)
+ * wolfCrypt configuration for ML-DSA (post-quantum, FIPS 204)
  * signature verification.
  *
  * Active when WOLFBOOT_SIGN_ML_DSA (primary) or
@@ -29,31 +29,29 @@
 #define _WOLFBOOT_USER_SETTINGS_SIGN_ML_DSA_H_
 
 #if defined(WOLFBOOT_SIGN_ML_DSA) || defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
-#  define HAVE_DILITHIUM
-#  define WOLFSSL_WC_DILITHIUM
+#  define WOLFSSL_HAVE_MLDSA
 #  define WOLFSSL_EXPERIMENTAL_SETTINGS
-   /* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
-    * standard by default. Uncomment this if you want the draft
-    * version instead. */
+   /* Wolfcrypt builds ML-DSA to the FIPS 204 final standard by default.
+    * Uncomment this if you want the draft version instead. */
 #  if 0
-#    define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+#    define WOLFSSL_MLDSA_FIPS204_DRAFT
 #  endif
-#  define WOLFSSL_DILITHIUM_VERIFY_ONLY
-#  define WOLFSSL_DILITHIUM_NO_LARGE_CODE
-#  define WOLFSSL_DILITHIUM_SMALL
-#  define WOLFSSL_DILITHIUM_VERIFY_SMALL_MEM
-#  define WOLFSSL_DILITHIUM_VERIFY_NO_MALLOC
+#  define WOLFSSL_MLDSA_VERIFY_ONLY
+#  define WOLFSSL_MLDSA_NO_LARGE_CODE
+#  define WOLFSSL_MLDSA_SMALL
+#  define WOLFSSL_MLDSA_VERIFY_SMALL_MEM
+#  define WOLFSSL_MLDSA_VERIFY_NO_MALLOC
 /* wolfHSM client/server need ASN.1 for ML-DSA keys traveling over the
  * comm channel. In Phase 4 this becomes
  *   #ifndef WOLFBOOT_NEEDS_ASN
- *     #define WOLFSSL_DILITHIUM_NO_ASN1
+ *     #define WOLFSSL_MLDSA_NO_ASN1
  *   #endif
  * with wolfhsm.h declaring WOLFBOOT_NEEDS_ASN. */
 #  if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
-#    define WOLFSSL_DILITHIUM_NO_ASN1
+#    define WOLFSSL_MLDSA_NO_ASN1
 #  endif
-   /* dilithium needs these sha functions. */
+   /* ML-DSA 44/65/87 uses SHAKE */
 #  define WOLFSSL_SHA3
 #  define WOLFSSL_SHAKE256
 #  define WOLFSSL_SHAKE128
