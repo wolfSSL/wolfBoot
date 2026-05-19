@@ -167,7 +167,7 @@ LMS_OBJS=\
 
 LMS_EXTRA=\
     -D"WOLFSSL_HAVE_LMS" \
-    -D"WOLFSSL_WC_LMS" -D"WOLFSSL_WC_LMS_SMALL" \
+    -D"WOLFSSL_WC_LMS_SMALL" \
     -D"WOLFSSL_LMS_MAX_LEVELS=$(LMS_LEVELS)" \
     -D"WOLFSSL_LMS_MAX_HEIGHT=$(LMS_HEIGHT)" \
     -D"LMS_LEVELS=$(LMS_LEVELS)" -D"LMS_HEIGHT=$(LMS_HEIGHT)" \
@@ -181,7 +181,7 @@ XMSS_OBJS=\
 
 XMSS_EXTRA=\
     -D"WOLFSSL_HAVE_XMSS" \
-    -D"WOLFSSL_WC_XMSS" -D"WOLFSSL_WC_XMSS_SMALL" \
+    -D"WOLFSSL_WC_XMSS_SMALL" \
     -DWOLFBOOT_XMSS_PARAMS=\"$(XMSS_PARAMS)\"  \
     -D"XMSS_IMAGE_SIGNATURE_SIZE"=$(IMAGE_SIGNATURE_SIZE) \
     -D"WOLFSSL_XMSS_VERIFY_ONLY" -D"WOLFSSL_XMSS_MAX_HEIGHT=32"
@@ -570,7 +570,7 @@ ifeq ($(SIGN),XMSS)
 endif
 
 ifeq ($(SIGN),ML_DSA)
-  # Use wolfcrypt ML-DSA dilithium implementation.
+  # Use wolfcrypt ML-DSA implementation.
   KEYGEN_OPTIONS+=--ml_dsa
   SIGN_OPTIONS+=--ml_dsa
   WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
@@ -1309,11 +1309,11 @@ ifeq ($(WOLFHSM_CLIENT),1)
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
-    # Dilithium asn.c decode/encode requires mp_xxx functions
+    # ML-DSA asn.c decode/encode requires mp_xxx functions
     WOLFCRYPT_OBJS += \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
 
-    # Large enough to handle the largest Dilithium key/signature
+    # Large enough to handle the largest ML-DSA key/signature
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
@@ -1371,7 +1371,7 @@ ifeq ($(WOLFHSM_SERVER),1)
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
-    # Large enough to handle the largest Dilithium key/signature
+    # Large enough to handle the largest ML-DSA key/signature
     CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 

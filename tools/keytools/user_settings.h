@@ -80,14 +80,12 @@
 /* Enable experimental PQ algos */
 #define WOLFSSL_EXPERIMENTAL_SETTINGS
 
-/* ML-DSA (dilithium) */
-#define HAVE_DILITHIUM
-#define WOLFSSL_WC_DILITHIUM
-/* Wolfcrypt builds ML-DSA (dilithium) to the FIPS 204 final
-* standard by default. Uncomment this if you want the draft
-* version instead. */
+/* ML-DSA */
+#define WOLFSSL_HAVE_MLDSA
+/* Wolfcrypt builds ML-DSA to the FIPS 204 final standard by default.
+ * Uncomment this if you want the draft version instead. */
 #if 0
-    #define WOLFSSL_DILITHIUM_FIPS204_DRAFT
+    #define WOLFSSL_MLDSA_FIPS204_DRAFT
 #endif
 
 /* Default the keygen/sign tool to use ML-DSA level 2 */
@@ -95,13 +93,12 @@
     #define ML_DSA_LEVEL 2
 #endif
 
-/* Dilithium needs SHAKE128 */
+/* ML-DSA needs SHAKE128 */
 #define WOLFSSL_SHAKE128
 
 /* LMS */
 #define WOLFBOOT_SIGN_LMS
 #define WOLFSSL_HAVE_LMS
-#define WOLFSSL_WC_LMS
 #ifndef LMS_LEVELS
     #define LMS_LEVELS 1
 #endif
@@ -115,7 +112,6 @@
 /* XMSS */
 #define WOLFBOOT_SIGN_XMSS
 #define WOLFSSL_HAVE_XMSS
-#define WOLFSSL_WC_XMSS
 #ifndef WOLFBOOT_XMSS_PARAMS
     #define WOLFBOOT_XMSS_PARAMS "XMSS-SHA2_10_256"
 #endif
