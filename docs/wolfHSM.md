@@ -58,7 +58,7 @@ To use certificate verification with wolfHSM:
 
 1. Enable `WOLFBOOT_CERT_CHAIN_VERIFY` in your wolfBoot configuration
 2. Ensure the wolfHSM server is configured with certificate manager support (`WOLFHSM_CFG_CERTIFICATE_MANAGER`)
-3. Pre-provision the root CA certificate on the wolfHSM server at the NVM ID specified by the HAL `hsmNvmIdCertRootCA`
+3. Pre-provision one or more root CA certificates on the wolfHSM server at the NVM IDs listed in the HAL `hsmNvmIdCertRootCAList`. Verification succeeds if the embedded chain anchors to *any* root in the list (absent NVM IDs are silently skipped). The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8).
 4. Sign firmware images with the `--cert-chain` option, providing a DER-encoded certificate chain
 
 To build the simulator using wolfHSM for certificate verification:
@@ -96,6 +96,7 @@ In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms mu
 - `hsmDevIdHash`: The HSM device ID for hash operations. This is used to identify the HSM device to wolfBoot.
 - `hsmDevIdPubKey`: The HSM device ID for public key operations. This is used to identify the HSM device to wolfBoot.
 - `hsmKeyIdPubKey`: The HSM key ID for public key operations. This is used to identify the key to use for public key operations.
+- `hsmNvmIdCertRootCAList` / `hsmNvmIdCertRootCACount`: Array of NVM IDs identifying the trusted root CA certificate(s) and its element count. Only used when building with `WOLFBOOT_CERT_CHAIN_VERIFY`. The chain in the firmware header may anchor to any of the listed roots; the count is bounded by `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8). Each in-tree HAL provides a default of `{ 1 }`; override the list via the `WOLFHSM_NVM_ROOT_CA_LIST` build option, which takes a comma-separated initializer (no quotes, no spaces) and is propagated to the HAL as `-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=...`. Set it in `.config` (e.g. `WOLFHSM_NVM_ROOT_CA_LIST=1,2,3`) or on the make command line (`make WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 ...`).
 
 ### Client HAL Functions
 
