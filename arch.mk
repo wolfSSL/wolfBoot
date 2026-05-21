@@ -779,6 +779,11 @@ ifeq ($(ARCH),PPC)
   # Required for JTAG probes that load ELFs but don't process relocations.
   CFLAGS+=-fno-pic -fno-pie
   LDFLAGS+=-no-pie
+  # FAST_MEMCPY restored: was experimentally removed to debug a 128 KB
+  # DDR corruption at PA 0x1E0000-0x1FFFFF; byte-by-byte memcpy did NOT
+  # fix it, and the resulting 6 MB uncached byte loop made wolfBoot
+  # machine-check during memcpy (MCSR=0x8000 = bus/L2-MMU error class).
+  # The VxWorks corruption is a separate downstream symptom.
   CFLAGS+=-DARCH_PPC -DFAST_MEMCPY -ffreestanding -fno-tree-loop-distribute-patterns
 
   ifeq ($(DEBUG_UART),0)
@@ -797,6 +802,10 @@ ifeq ($(ARCH),PPC)
   LDFLAGS+=-Wl,--gc-sections
 
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
+
+  # CRC32 helpers in src/gpt.c are reused by update_ram.c's uImage header
+  # validator (WOLFBOOT_UBOOT_LEGACY -> uboot_legacy_header_valid).
+  OBJS+=src/gpt.o
 
   ifeq ($(SPMATH),1)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
@@ -1189,6 +1198,18 @@ ifeq ($(TARGET),nxp_t2080)
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
+  # Support U-Boot legacy uImage header: strip 64-byte header before jumping
+  # to the OS image (e.g. uVxWorks, uImage Linux kernel).
+  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+  # 64-bit OS support (VxWorks 7, Linux 64-bit): transitions LAW/TLB to
+  # 36-bit physical addressing before jumping to the OS. Equivalent to
+  # CW U-Boot "ossel ostype2". Set OS_64BIT=1 in .config to enable.
+  ifeq ($(OS_64BIT),1)
+    CFLAGS+=-DENABLE_OS64BIT
+  endif
+  ifneq ($(WOLFBOOT_BOOTARGS),)
+    CFLAGS+=-DWOLFBOOT_BOOTARGS='"$(WOLFBOOT_BOOTARGS)"'
+  endif
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)

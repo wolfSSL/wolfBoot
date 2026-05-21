@@ -1474,7 +1474,11 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 
 /* -- Image Formats -- */
 /* Legacy U-Boot Image */
+#ifdef BIG_ENDIAN_ORDER
+#define UBOOT_IMG_HDR_MAGIC 0x27051956UL
+#else
 #define UBOOT_IMG_HDR_MAGIC 0x56190527UL
+#endif
 #define UBOOT_IMG_HDR_SZ    64
 
 /* --- Flattened Device Tree Blob */

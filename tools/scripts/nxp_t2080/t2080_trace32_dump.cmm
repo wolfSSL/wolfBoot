@@ -1,0 +1,47 @@
+; ------------------------------------------------------------------------------
+; @Title: T2080 TRACE32 Pre-VxWorks-Entry State Dump (DEPRECATED)
+; @Description:
+;   DO NOT use this script. Use TRACE32's built-in Peripheral (PER) view
+;   "Save As..." export instead -- it produces a complete, replayable
+;   PER.Set.simple dump covering every SPR, CCSR peripheral, LAW, CCF,
+;   PAMU, DDR, IFC, eSPI, etc. in a single file (11000+ entries on T2080).
+;
+; Procedure (run on BOTH U-Boot and wolfBoot at the same halt point):
+;
+;   1. Attach and arm the BP at 0x00100000:
+;        DO tools/scripts/nxp_t2080/t2080_trace32_attach.cmm
+;
+;   2. Let the CPU run into the BP:
+;        - U-Boot side: from the VPX3-152=> prompt, fire
+;            bootm 0x1000000 - 0xf000000
+;          BP halts at PA 0x100000 just before the kernel's first insn.
+;        - wolfBoot side: just power on; wolfBoot autoboots and the
+;          OS64BIT trampoline jumps to PA 0x100000 -- BP halts there.
+;
+;   3. In TRACE32, open the Peripherals view:
+;        View -> Peripherals
+;      or just type at the command line:
+;        PER.view
+;
+;   4. With the PER window focused: File -> Save As...
+;      Save as plain text (the .txt the user picks).
+;      The output is a complete PER.Set.simple dump - replayable, diffable.
+;
+;   5. Suggested filenames (so the diff workflow is consistent):
+;        .t2080-vxworks-debug/uboot-pre-vxworks.txt
+;        .t2080-vxworks-debug/wolfboot-pre-vxworks.txt
+;
+;   6. Diff host-side:
+;        diff -u .t2080-vxworks-debug/uboot-pre-vxworks.txt \
+;                .t2080-vxworks-debug/wolfboot-pre-vxworks.txt | less
+;
+; The first surviving difference (after filtering values that legitimately
+; differ between U-Boot's prompt context and wolfBoot's pre-jump context)
+; is the suspect for the VxWorks silent-hang.
+; ------------------------------------------------------------------------------
+
+PRINT %ERROR "t2080_trace32_dump.cmm is deprecated."
+PRINT "Use the TRACE32 Peripherals view (View -> Peripherals) + File -> Save As"
+PRINT "to export a PER.Set.simple dump. See the comment block in this file."
+
+ENDDO

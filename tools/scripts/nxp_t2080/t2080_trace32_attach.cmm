@@ -1,0 +1,96 @@
+; ------------------------------------------------------------------------------
+; @Title: T2080 TRACE32 Attach (no-reset)
+; @Description:
+;   Attaches TRACE32 to a CW VPX3-152 (NXP T2080) that is ALREADY running
+;   (either the production CW U-Boot or wolfBoot from main flash).
+;   Does NOT reset the CPU, does NOT override RCW, does NOT flash.
+;   Sets a hardware breakpoint at PA 0x00100000 so execution halts at the
+;   VxWorks entry point as soon as U-Boot's bootm or wolfBoot's do_boot
+;   trampoline jumps there.
+; @Chip: T2080
+;
+; Prerequisites:
+;   - Board powered on; CPU0 is running U-Boot or wolfBoot.
+;   - Run this BEFORE issuing 'bootm' (U-Boot) or while wolfBoot is in its
+;     ~40s crypto-verify window (plenty of time to attach + arm BP).
+;   - wolfboot.elf at the build root (only used to load symbols when
+;     attaching to the wolfBoot side; harmless on the U-Boot side).
+;
+; Usage in TRACE32:
+;   DO tools/scripts/nxp_t2080/t2080_trace32_attach.cmm
+;
+; After this script returns:
+;   - CPU is halted-on-attach OR running with BP armed at 0x100000.
+;   - Issue 'Go' (or let it auto-Go) so it runs into the bootm/do_boot
+;     handoff.
+;   - When BP fires (CPU at PA 0x100000), invoke t2080_trace32_dump.cmm
+;     with an output filename.
+; ------------------------------------------------------------------------------
+
+&basedir="."
+&entry=0x00100000
+
+ChDir &basedir
+
+PRINT "========================================"
+PRINT "T2080 TRACE32 ATTACH (no-reset)"
+PRINT "Target: CW VPX3-152 - VxWorks entry at " &entry
+PRINT "========================================"
+
+; Configure the debug session WITHOUT resetting / cycling the target.
+SYStem.BdmClock 5.MHz
+SYStem.CPU T2080
+CORE.ASSIGN 1.
+SYStem.Option.IMASKASM ON
+SYStem.Option.FREEZE ON
+
+; Attach to the running target. Older T32 builds use SYStem.Mode.Attach;
+; newer ones expose SYStem.Up.Attach. Try Attach first; if it fails the
+; user can swap to SYStem.Up.Attach manually.
+PRINT "Attaching (no reset)..."
+SYStem.Mode.Attach
+
+; Allow non-intrusive memory access while the CPU is running.
+SYStem.MemAccess CPU
+
+; Quick sanity check - SVR/PVR confirm we're actually on a T2080.
+&svr=Data.Long(ANC:0xFE0E00A4)
+&pvr=Data.Long(ANC:0xFE0E00A0)
+PRINT "SVR (CCSR+0xE00A4): " &svr
+PRINT "PVR (CCSR+0xE00A0): " &pvr
+; T2080 SVR upper bits: 0x85300xxx family; PVR e6500: 0x80400xxx
+IF (&svr&0xFFFF0000)!=0x85300000
+(
+    PRINT %WARNING "WARNING: SVR upper-half " (&svr&0xFFFF0000) " is not the expected T2080 0x85300000 family - check connection."
+)
+
+; Load wolfBoot ELF symbols if available (harmless on U-Boot side; the
+; symbol table just won't match U-Boot's PCs).
+IF OS.FILE(&basedir/wolfboot.elf)
+(
+    PRINT "Loading wolfboot.elf symbols (no-code)..."
+    Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE
+    sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/include
+)
+ELSE
+(
+    PRINT "(no wolfboot.elf at &basedir - skipping symbol load)"
+)
+
+; Install the breakpoint at the VxWorks entry. Use a hardware (Onchip)
+; breakpoint so it fires whether DDR is cached or not.
+Break.Delete /ALL
+Break.Set &entry /Program /Onchip
+PRINT "BP set: " &entry " (VxWorks kernel entry, PA = EA via DDR slot 0)"
+
+PRINT ""
+PRINT "Attached. CPU state:"
+PRINT "  - If halted: issue 'Go' to let U-Boot/wolfBoot run into the BP."
+PRINT "  - If running: BP will fire at the bootm/do_boot handoff."
+PRINT ""
+PRINT "When BP fires, run:"
+PRINT "  DO tools/scripts/nxp_t2080/t2080_trace32_dump.cmm <outfile>"
+PRINT "  (e.g. .t2080-vxworks-debug/uboot-trace32-pre-entry.txt)"
+PRINT ""
+
+ENDDO

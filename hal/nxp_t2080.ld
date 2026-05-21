@@ -56,17 +56,22 @@ SECTIONS
         KEEP(*(.keystore))
     } > FLASH
 
-    /* Discard dynamic linking sections - not needed for bare-metal.
-     * Ensures the ELF has no relocation sections, so JTAG probes
-     * (e.g. Ronetix PEEDI) can load it without a dynamic linker. */
+    /* Dynamic-linking metadata. Bare-metal ELF does not use these at
+     * runtime, but binutils 2.42 ld rejects /DISCARD/ patterns for the
+     * .gnu.version_r section name -- match the convention used by the
+     * sibling T1024 / P1021 / LS1028A linker scripts and emit proper
+     * (empty) output sections. */
+    .gnu.version    : { *(.gnu.version) }
+    .gnu.version_r  : { *(.gnu.version_r) }
+
+    /* Discard the rest -- not needed for bare-metal so JTAG probes
+     * (e.g. Ronetix PEEDI) can load the ELF without a dynamic linker. */
     /DISCARD/ :
     {
         *(.interp)
         *(.hash)
         *(.dynsym)
         *(.dynstr)
-        *(.gnu.version)
-        *(.gnu.version_r)
         *(.gnu.hash)
         *(.rela.dyn)
         *(.rela.plt)
