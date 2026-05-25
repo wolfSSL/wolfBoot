@@ -518,6 +518,10 @@ extern int tolower(int c);
         defined(WOLFBOOT_SIGN_ML_DSA)) && \
         !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
         #define WC_NO_RNG
+        /* wolfssl rejects WC_NO_RNG with the default blinding macros.
+         * wolfBoot is verify-only, no blinding is meaningful with a
+         * disabled RNG. */
+        #define WC_BLINDING_NO_RNG_ACKNOWLEDGE_WEAKNESS
     #endif
     #define WC_NO_HASHDRBG
     #define NO_AES_CBC
@@ -571,6 +575,9 @@ extern int tolower(int c);
        defined(WOLFBOOT_SIGN_ML_DSA)) &&          \
       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 #   define WC_NO_RNG
+    /* wolfssl rejects WC_NO_RNG with the default blinding macros. wolfBoot
+     * is verify-only, no blinding is meaningful with a disabled RNG. */
+#   define WC_BLINDING_NO_RNG_ACKNOWLEDGE_WEAKNESS
 #   endif
 #   define WC_NO_HASHDRBG
 #   define NO_DEV_RANDOM
@@ -776,8 +783,53 @@ extern int tolower(int c);
 #   undef  HAVE_ANONYMOUS_INLINE_AGGREGATES
 #   define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
 #   define WOLFSSL_KEY_GEN
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || WOLFBOOT_ENABLE_WOLFHSM_SERVER ||
-          WOLFCRYPT_TZ_WOLFHSM */
+#endif
+
+/* Crypto algorithms exercised by the wolfHSM client test suite over
+ * the NSC bridge. These are SECURE-SIDE only - the wolfHSM server
+ * needs AES/HKDF/SHA384/512 to handle the test requests. Gated out
+ * of the wolfHSM client build (which has NO_AES) and out of host
+ * unit tests (UNIT_TEST), neither of which want AES dragged in. */
+#if (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) || \
+     defined(WOLFCRYPT_TZ_WOLFHSM)) && !defined(UNIT_TEST)
+    /* Earlier guards in this file set NO_AES and NO_HMAC for the
+     * verify-only bootloader path. The wolfHSM server needs both AES
+     * and HMAC (HKDF builds on HMAC), so drop them here. */
+#   undef NO_AES
+#   undef NO_HMAC
+#   ifndef WOLFSSL_AES_DIRECT
+#       define WOLFSSL_AES_DIRECT
+#   endif
+#   ifndef HAVE_HKDF
+#       define HAVE_HKDF
+#   endif
+#   ifndef WOLFSSL_AES_COUNTER
+#       define WOLFSSL_AES_COUNTER
+#   endif
+#   ifndef HAVE_AESCTR
+#       define HAVE_AESCTR
+#   endif
+#   ifndef WOLFSSL_AES_GCM
+#       define WOLFSSL_AES_GCM
+#   endif
+#   ifndef HAVE_AESGCM
+#       define HAVE_AESGCM
+#   endif
+#   ifndef GCM_TABLE_4BIT
+#       define GCM_TABLE_4BIT
+#   endif
+    /* Match NS-side WC_MAX_DIGEST_SIZE. NS test-app/wcs/user_settings.h
+     * enables WOLFSSL_SHA3 which sets WC_MAX_DIGEST_SIZE = 64. Without
+     * SHA384/SHA512 on the secure side, WC_MAX_DIGEST_SIZE caps at
+     * SHA256's 32 and wc_ecc_sign_hash (ecc.c:7281) rejects legitimately
+     * oversized hashes (e.g. ECDSA truncation tests) with BAD_LENGTH_E. */
+#   ifndef WOLFSSL_SHA384
+#       define WOLFSSL_SHA384
+#   endif
+#   ifndef WOLFSSL_SHA512
+#       define WOLFSSL_SHA512
+#   endif
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER || WOLFCRYPT_TZ_WOLFHSM, !UNIT_TEST */
 
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
     defined(WOLFBOOT_CERT_CHAIN_VERIFY)

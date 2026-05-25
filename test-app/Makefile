@@ -392,11 +392,20 @@ ifeq ($(TZEN),1)
         endif
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)"
         CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/port/armv8m-tz"
+        CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFHSM)/test"
         WOLFCRYPT_APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
         APP_OBJS+=./wcs/wolfhsm_test.o
         APP_OBJS+=./wcs/wolfhsm_stub.o
         WOLFHSM_APP_OBJS+=$(WOLFHSM_CLIENT_OBJS)
         WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/port/armv8m-tz/wh_transport_nsc.o
+        # wolfHSM bare-metal-safe test sources for whTest_ClientConfig.
+        # We avoid wh_test.c (has its own main()) and wh_test_common.c (its
+        # static whNvmCb table pulls in server-side wh_NvmFlash_* symbols
+        # that don't belong in the NS image). The remaining files compile
+        # cleanly under WOLFHSM_CFG_ENABLE_CLIENT only.
+        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/test/wh_test_clientserver.o
+        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/test/wh_test_crypto.o
+        WOLFHSM_APP_OBJS+=$(WOLFBOOT_LIB_WOLFHSM)/test/wh_test_nvmflags.o
         WOLFHSM_APP_OBJS:=$(patsubst $(WOLFBOOT_LIB_WOLFHSM)/%, \
             $(WOLFHSM_LOCAL_OBJDIR)/%, $(WOLFHSM_APP_OBJS))
         APP_OBJS+=$(sort $(WOLFHSM_APP_OBJS))
