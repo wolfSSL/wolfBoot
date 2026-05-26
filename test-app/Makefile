@@ -16,7 +16,9 @@ TARGET?=none
 ARCH?=ARM
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
-  TEST_APP_NO_RNG?=1
+  ifneq ($(WOLFCRYPT_TZ_PSA),1)
+    TEST_APP_NO_RNG?=1
+  endif
 endif
 ifeq ($(TZEN),1)
   # wcs directory contains a user_settings.h, which will conflict with
