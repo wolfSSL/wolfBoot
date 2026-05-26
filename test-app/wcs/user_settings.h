@@ -166,6 +166,24 @@ static inline int wcs_cmse_get_random(unsigned char* output, int sz)
 #define CUSTOM_RAND_GENERATE_BLOCK wcs_cmse_get_random
 #endif
 
+#ifdef WOLFCRYPT_TZ_PSA
+
+extern int hal_trng_get_entropy(unsigned char *out, unsigned int len);
+
+static inline int wcs_psa_rand_block(unsigned char *output, int sz)
+{
+    if (sz <= 0 || output == (unsigned char*)0)
+        return -1;
+
+    if (hal_trng_get_entropy(output, (unsigned int)sz) != 0)
+        return -1;
+
+    return 0;
+}
+
+#define CUSTOM_RAND_GENERATE_BLOCK wcs_psa_rand_block
+#endif
+
 /* Disable VLAs */
 #define WOLFSSL_SP_NO_DYN_STACK
 
