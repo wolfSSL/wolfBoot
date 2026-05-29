@@ -28,6 +28,8 @@
 #include <psa/crypto.h>
 #include <psa/error.h>
 
+#include <arm_cmse.h>
+
 #include <wolfssl/wolfcrypt/memory.h>
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfboot/arm_tee_api.h>
@@ -755,6 +757,48 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
     psa_outvec *out_vec, size_t out_len)
 {
     (void)type;
+
+    if (in_len > 0 && in_vec == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (in_len > 0 &&
+        cmse_check_address_range((void *)in_vec, in_len * sizeof(*in_vec),
+                                 CMSE_NONSECURE) == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_len > 0 && out_vec == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_len > 0 &&
+        cmse_check_address_range(out_vec, out_len * sizeof(*out_vec),
+                                 CMSE_NONSECURE) == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    {
+        size_t i;
+        for (i = 0; i < in_len; i++) {
+            if (in_vec[i].len > 0 && in_vec[i].base == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+            if (in_vec[i].len > 0 &&
+                cmse_check_address_range((void *)in_vec[i].base,
+                                         in_vec[i].len,
+                                         CMSE_NONSECURE) == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+        for (i = 0; i < out_len; i++) {
+            if (out_vec[i].len > 0 && out_vec[i].base == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+            if (out_vec[i].len > 0 &&
+                cmse_check_address_range(out_vec[i].base,
+                                         out_vec[i].len,
+                                         CMSE_NONSECURE) == NULL) {
+                return PSA_ERROR_INVALID_ARGUMENT;
+            }
+        }
+    }
 
     if (handle == (psa_handle_t)ARM_TEE_CRYPTO_HANDLE) {
         return wolfboot_crypto_dispatch(in_vec, in_len, out_vec, out_len);
