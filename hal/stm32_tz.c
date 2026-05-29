@@ -223,23 +223,26 @@ void hal_gtzc_init(void)
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
-    /* Configure SRAM2 as non-secure (64 KB) and unprivileged.
-     * wolfBoot does not use SRAM2; ceding it to the NS application
-     * widens the NS RAM window from 320 KB (SRAM3 only) to 384 KB
-     * (SRAM2 + SRAM3). The PRIVCFGR clear is required because the
-     * H5 ETH DMA master is unprivileged; with the reset default
-     * (PRIVCFGR=0xFFFFFFFF) the DMA's descriptor/buffer reads from
-     * SRAM2 raise illegal-access (TZIC1_SR4 bit 26) and the channel
-     * suspends with TPS=6 (TBU). */
+    /* Configure SRAM2 as non-secure (64 KB) and unprivileged. SRAM2 is
+     * the ETH DMA arena: the NS wolfIP app pins its ETH descriptors and
+     * buffers (.eth_buffers) into SRAM2. wolfBoot does not use SRAM2.
+     * The PRIVCFGR clear is required because the H5 ETH DMA master is
+     * unprivileged; with the reset default (PRIVCFGR=0xFFFFFFFF) the
+     * DMA's descriptor/buffer reads from SRAM2 raise illegal-access
+     * (TZIC1_SR4 bit 26) and the channel suspends with TPS=6 (TBU). */
     for (i = 0; i < 4; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0x0);
         SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(2, i, 0x0);
     }
 
-    /* Configure SRAM3 as non-secure (320 KB) and unprivileged. */
+    /* Configure SRAM3 as non-secure (320 KB) but PRIVILEGED. The NS CPU
+     * runs privileged (Thread mode) and can use SRAM3 freely; only the
+     * unprivileged ETH DMA master needs unprivileged RAM, and its
+     * descriptors/buffers are pinned to SRAM2 (.eth_buffers). Leaving
+     * SRAM3 privileged lets a future NS OS own the unprivileged
+     * boundary. */
     for (i = 0; i < 20; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
-        SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(3, i, 0x0);
     }
 }
 
