@@ -158,6 +158,10 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
             return -4; /* segment offset/size out of bounds */
         }
 
+        if (GET_E64(vaddr) > (uint64_t)UINTPTR_MAX - GET_E64(mem_size)) {
+            return -5; /* segment destination out of range */
+        }
+
 #ifdef DEBUG_ELF
         if (file_size > 0) {
             wolfBoot_printf(
