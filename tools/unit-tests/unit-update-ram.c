@@ -104,6 +104,13 @@ uint32_t get_version_ramloaded(void)
     return wolfBoot_get_blob_version(wolfboot_ram);
 }
 
+static void assert_part_state(uint8_t part, uint8_t expected)
+{
+    uint8_t st = 0xBB;
+    ck_assert_int_eq(wolfBoot_get_partition_state(part, &st), 0);
+    ck_assert_uint_eq(st, expected);
+}
+
 
 static void prepare_flash(void)
 {
@@ -283,6 +290,7 @@ END_TEST
 
 START_TEST (test_sunnyday_noupdate)
 {
+    uint8_t st = 0xBB;
     reset_mock_stats();
     prepare_flash();
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
@@ -291,6 +299,7 @@ START_TEST (test_sunnyday_noupdate)
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 1);
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), -1);
 #ifndef TZEN
     ck_assert_int_eq(mock_flash_protect_called, 1);
     ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
@@ -323,6 +332,7 @@ START_TEST (test_forward_update_samesize) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 2);
+    assert_part_state(PART_UPDATE, IMG_STATE_TESTING);
     cleanup_flash();
 }
 END_TEST
@@ -336,6 +346,7 @@ START_TEST (test_forward_update_tolarger) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 2);
+    assert_part_state(PART_UPDATE, IMG_STATE_TESTING);
     cleanup_flash();
 }
 END_TEST
@@ -349,6 +360,7 @@ START_TEST (test_forward_update_tosmaller) {
     wolfBoot_start();
     ck_assert(wolfBoot_staged_ok);
     ck_assert(get_version_ramloaded() == 2);
+    assert_part_state(PART_UPDATE, IMG_STATE_TESTING);
     cleanup_flash();
 }
 END_TEST
