@@ -829,6 +829,17 @@ extern int tolower(int c);
 #   ifndef WOLFSSL_SHA512
 #       define WOLFSSL_SHA512
 #   endif
+    /* Match the keycache sizing the wolfHSM test suite is validated
+     * against (test/config/wolfhsm_cfg.h: 9 regular + 3 big). The
+     * library defaults (8 + 1) are one regular slot short of the
+     * suite's peak working set and leave too few big slots for the
+     * RSA/ML-DSA cases. */
+#   ifndef WOLFHSM_CFG_SERVER_KEYCACHE_COUNT
+#       define WOLFHSM_CFG_SERVER_KEYCACHE_COUNT 9
+#   endif
+#   ifndef WOLFHSM_CFG_SERVER_KEYCACHE_BIG_COUNT
+#       define WOLFHSM_CFG_SERVER_KEYCACHE_BIG_COUNT 3
+#   endif
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER || WOLFCRYPT_TZ_WOLFHSM, !UNIT_TEST */
 
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
