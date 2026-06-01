@@ -27,6 +27,7 @@
 #include "image.h"
 #include "printf.h"
 #include "hal/zynq7000.h"
+#include "hal_fpga.h"
 
 #ifndef ARCH_ARM
 #   error "wolfBoot zynq7000 HAL: wrong architecture selected. Please compile with ARCH=ARM."
@@ -870,6 +871,128 @@ uint64_t hal_get_timer_us(void)
      * so the divide is by a known constant - no 64x64 division needed. */
     return (count * 1000000ULL) / (uint64_t)Z7_GTIMER_FREQ_HZ;
 }
+
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+/* PL programming timeout (microseconds). */
+#ifndef Z7_FPGA_TIMEOUT_US
+#define Z7_FPGA_TIMEOUT_US 1000000ULL /* 1 second */
+#endif
+
+/* Clean the D-cache over [start, start+len) by MVA so the DevC DMA sees
+ * the committed bitstream bytes (DCCMVAC, L1 line = 32B). Mirrors the
+ * SDMA coherency path. */
+static void z7_dcache_clean_range(uintptr_t start, uint32_t len)
+{
+    uintptr_t addr;
+    uintptr_t end = (start + len + 31U) & ~31U;
+    start &= ~31U;
+    for (addr = start; addr < end; addr += 32U) {
+        __asm__ volatile("mcr p15, 0, %0, c7, c10, 1" : : "r"(addr) : "memory");
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+}
+
+/* Program the PL from a bootgen .bin bitstream resident in DDR using the
+ * DevC PCAP DMA engine (UG585 ch.6 / Xilinx XDcfg full-bitstream flow).
+ * Only the full-bitstream path is implemented; partial reconfiguration
+ * returns an error. */
+int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
+{
+    uint32_t sts;
+    uint32_t words = (uint32_t)((size + 3U) / 4U);
+    uint64_t t0;
+
+    if (flags == HAL_FPGA_PARTIAL) {
+        /* Partial reconfig leaves PROG_B asserted and routes via PCAP_PR;
+         * not implemented in this initial full-bitstream path. */
+        wolfBoot_printf("Z7 FPGA: partial reconfig not implemented\n");
+        return -1;
+    }
+    if (addr > 0xFFFFFFFFU || size == 0) {
+        return -1;
+    }
+    /* The DevC DMA descriptor encodes the "last" flag in the source
+     * address LSB, so the bitstream buffer must be word-aligned. */
+    if ((addr & 0x3U) != 0U) {
+        wolfBoot_printf("Z7 FPGA: bitstream addr not word-aligned\n");
+        return -1;
+    }
+
+    /* 1. Unlock DevC and select PCAP (not ICAP). */
+    Z7_DEVC_UNLOCK = Z7_DEVC_UNLOCK_KEY;
+    Z7_DEVC_CTRL |= (Z7_DEVC_CTRL_PCAP_MODE | Z7_DEVC_CTRL_PCAP_PR);
+    /* Disable internal PCAP loopback. */
+    Z7_DEVC_MCTRL &= ~Z7_DEVC_MCTRL_PCAP_LPBK;
+
+    /* 2. Clear sticky interrupts. */
+    Z7_DEVC_INT_STS = Z7_DEVC_INT_ALL;
+
+    /* 3. Pulse PROG_B low then high to clear the PL (full bitstream). */
+    Z7_DEVC_CTRL &= ~Z7_DEVC_CTRL_PCFG_PROG_B;
+    t0 = hal_get_timer_us();
+    while (Z7_DEVC_STATUS & Z7_DEVC_STATUS_PCFG_INIT) {
+        if (hal_get_timer_us() - t0 > Z7_FPGA_TIMEOUT_US) {
+            wolfBoot_printf("Z7 FPGA: timeout waiting PCFG_INIT clear\n");
+            return -1;
+        }
+    }
+    Z7_DEVC_CTRL |= Z7_DEVC_CTRL_PCFG_PROG_B;
+    t0 = hal_get_timer_us();
+    while (!(Z7_DEVC_STATUS & Z7_DEVC_STATUS_PCFG_INIT)) {
+        if (hal_get_timer_us() - t0 > Z7_FPGA_TIMEOUT_US) {
+            wolfBoot_printf("Z7 FPGA: timeout waiting PCFG_INIT set\n");
+            return -1;
+        }
+    }
+
+    /* 4. Clear interrupts. */
+    Z7_DEVC_INT_STS = Z7_DEVC_INT_ALL;
+
+    /* 5. Make the bitstream coherent in DDR for the DMA. Clean the same
+     *    rounded-up word length the DMA reads (words * 4), not just the
+     *    byte size, so a non-word-aligned tail is covered. (Xilinx .bin
+     *    bitstreams are word streams, so this normally equals size.) */
+    z7_dcache_clean_range(addr, words * 4U);
+
+    /* 6. Program the DMA: src = DDR bitstream (LSB=1 marks last descriptor),
+     *    dst = PCAP sentinel. Lengths are in 32-bit words. */
+    Z7_DEVC_DMA_SRC = ((uint32_t)addr) | Z7_DEVC_DMA_LAST;
+    Z7_DEVC_DMA_DST = Z7_DEVC_DMA_DEST_PCAP;
+    Z7_DEVC_DMA_SRC_LEN = words;
+    Z7_DEVC_DMA_DST_LEN = words;
+
+    /* 7. Wait for DMA done (and check error bits). */
+    t0 = hal_get_timer_us();
+    do {
+        sts = Z7_DEVC_INT_STS;
+        if (sts & Z7_DEVC_INT_ERR_MASK) {
+            wolfBoot_printf("Z7 FPGA: DMA error, INT_STS=0x%x\n", sts);
+            return -1;
+        }
+        if (hal_get_timer_us() - t0 > Z7_FPGA_TIMEOUT_US) {
+            wolfBoot_printf("Z7 FPGA: timeout waiting DMA done\n");
+            return -1;
+        }
+    } while (!(sts & Z7_DEVC_INT_DMA_DONE));
+
+    /* 8. Wait for the PL to report configuration complete (and surface a
+     *    config error immediately rather than spinning to the timeout). */
+    t0 = hal_get_timer_us();
+    do {
+        sts = Z7_DEVC_INT_STS;
+        if (sts & Z7_DEVC_INT_ERR_MASK) {
+            wolfBoot_printf("Z7 FPGA: config error, INT_STS=0x%x\n", sts);
+            return -1;
+        }
+        if (hal_get_timer_us() - t0 > Z7_FPGA_TIMEOUT_US) {
+            wolfBoot_printf("Z7 FPGA: timeout waiting PCFG_DONE\n");
+            return -1;
+        }
+    } while (!(sts & Z7_DEVC_INT_PCFG_DONE));
+
+    return 0;
+}
+#endif /* WOLFBOOT_FPGA_BITSTREAM */
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 /* ============================================================================

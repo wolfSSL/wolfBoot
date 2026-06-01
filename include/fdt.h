@@ -169,7 +169,15 @@ int fdt_shrink(void* fdt);
 
 /* FIT */
 const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
-    const char** pramdisk);
+    const char** pramdisk, const char** pfpga);
+/* Return a pointer to a subimage's "compatible" property, or NULL if
+ * absent. NOTE: "compatible" is a devicetree string-list (one or more
+ * NUL-separated strings); this returns a pointer to the raw property
+ * data, i.e. the FIRST string only. Callers that must inspect every
+ * entry (e.g. to detect "partial") have to obtain the property length
+ * via fdt_getprop() and scan the whole buffer - fit_load_fpga() does
+ * this internally rather than relying on this helper. */
+const char* fit_get_compatible(void* fdt, const char* image);
 void* fit_load_image(void* fdt, const char* image, int* lenp);
 void* fit_load_image_ex(void* fdt, const char* image, int* lenp, uint32_t out_max);
 /* Load (and, if compressed, decompress) a FIT subimage directly to a
@@ -190,6 +198,15 @@ int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size);
  * in the supplied DTB. Returns 0 on success, -1 on load failure.
  * Callers typically ignore the return value (log-and-continue). */
 int fit_load_ramdisk(void* fit, const char* ramdisk_node, void* dts_addr);
+#endif
+
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+/* Locate a FIT fpga subimage, stage it to its `load` address (or use
+ * the in-FIT data pointer) and program the PL via hal_fpga_load().
+ * Returns 0 on success (including when fpga_node is NULL), negative on
+ * failure. When WOLFBOOT_FPGA_NONFATAL is defined a programming failure
+ * is logged and 0 is returned instead. */
+int fit_load_fpga(void* fdt, const char* fpga_node);
 #endif
 
 #ifdef __cplusplus

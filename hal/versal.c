@@ -1354,6 +1354,25 @@ int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
     return -1;
 }
 
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+/* Versal programs the PL with a PDI (Programmable Device Image), not a raw
+ * bitstream. Runtime PL configuration is done by the PLM via the XilLoader
+ * "Load PDI" command (XLOADER_CMD_ID_LOAD_PDI), reached by building an IPI
+ * request to the PLM channel with the DDR PDI address/size and polling the
+ * PLM response. That path is not yet implemented; until it lands, leave
+ * FPGA_BITSTREAM disabled for Versal (the FIT loader treats a failed load
+ * as fatal unless FPGA_NONFATAL is set). */
+int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
+{
+    (void)flags;
+    (void)addr;
+    (void)size;
+    wolfBoot_printf("Versal FPGA/PDI load not implemented "
+        "(needs PLM XilLoader Load-PDI IPI)\n");
+    return -1;
+}
+#endif /* WOLFBOOT_FPGA_BITSTREAM */
+
 
 /* ============================================================================
  * External Flash Interface

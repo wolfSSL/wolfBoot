@@ -448,11 +448,24 @@ backup_on_failure:
     if (wolfBoot_get_dts_size(load_address) > 0) {
         void* fit = (void*)load_address;
         const char *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
+        const char *fpga = NULL;
 
         wolfBoot_printf("Flattened uImage Tree: Version %d, Size %d\n",
             fdt_version(fit), fdt_totalsize(fit));
 
-        (void)fit_find_images(fit, &kernel, &flat_dt, &ramdisk);
+        (void)fit_find_images(fit, &kernel, &flat_dt, &ramdisk, &fpga);
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+        /* Program the PL before booting so PL-dependent clocks and
+         * peripherals are up first. */
+        if (fpga != NULL) {
+            if (fit_load_fpga(fit, fpga) != 0) {
+                wolfBoot_printf("FIT: FPGA load failed\n");
+                wolfBoot_panic();
+            }
+        }
+#else
+        (void)fpga;
+#endif
         if (kernel != NULL) {
             void *new_load = fit_load_image(fit, kernel, NULL);
             if (new_load == NULL) {
