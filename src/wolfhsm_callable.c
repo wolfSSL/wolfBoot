@@ -154,6 +154,17 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     g_srv_tx_ctx.rsp_size        = 0;
     g_srv_tx_ctx.request_pending = 1;
 
+    /* The NSC bridge is synchronous and always ready once linked. A
+     * client CommClose marks the server disconnected; re-assert the
+     * transport-ready state on every veneer entry so a following
+     * CommInit is accepted. This is the per-transport ready signal,
+     * which for NSC is the veneer call itself. */
+    rc = wh_Server_SetConnected(&g_server, WH_COMM_CONNECTED);
+    if (rc != WH_ERROR_OK) {
+        *rspSz = 0;
+        return rc;
+    }
+
     rc = wh_Server_HandleRequestMessage(&g_server);
 
     if (rc == WH_ERROR_OK) {
