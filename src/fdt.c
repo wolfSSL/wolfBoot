@@ -807,18 +807,37 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name,
 
 /* FIT Specific */
 const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
-    const char** pramdisk)
+    const char** pramdisk, const char** pfpga)
 {
     const void* val;
     const char *conf = NULL, *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
+    const char *fpga = NULL;
     int off, len = 0;
 
-    /* Find the default configuration (optional) */
+    /* Find the configuration to boot (optional). A target may override the
+     * FIT's own `default` with a per-board selection (hal_fit_config_name). */
     off = fdt_find_node_offset(fdt, -1, "configurations");
     if (off > 0) {
-        val = fdt_getprop(fdt, off, "default", &len);
-        if (val != NULL && len > 0) {
-            conf = (const char*)val;
+#ifdef WOLFBOOT_FIT_CONFIG_SELECT
+        conf = hal_fit_config_name();
+        /* If the target selected a config that is not present in this FIT,
+         * fall back to the default rather than silently mis-selecting
+         * images via the type-based search below. */
+        if (conf != NULL && fdt_find_node_offset(fdt, -1, conf) <= 0) {
+            wolfBoot_printf("FIT: configuration '%s' not found, "
+                "using default\n", conf);
+            conf = NULL;
+        }
+        if (conf != NULL) {
+            wolfBoot_printf("FIT: selected configuration '%s'\n", conf);
+        }
+        if (conf == NULL)
+#endif
+        {
+            val = fdt_getprop(fdt, off, "default", &len);
+            if (val != NULL && len > 0) {
+                conf = (const char*)val;
+            }
         }
     }
     if (conf != NULL) {
@@ -827,6 +846,7 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
             kernel = fdt_getprop(fdt, off, "kernel", &len);
             flat_dt = fdt_getprop(fdt, off, "fdt", &len);
             ramdisk = fdt_getprop(fdt, off, "ramdisk", &len);
+            fpga = fdt_getprop(fdt, off, "fpga", &len);
         }
     }
     if (kernel == NULL) {
@@ -859,6 +879,16 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
             }
         }
     }
+    if (fpga == NULL) {
+        /* find node with "type" == fpga */
+        off = fdt_find_prop_offset(fdt, -1, "type", "fpga");
+        if (off > 0) {
+            val = fdt_get_name(fdt, off, &len);
+            if (val != NULL && len > 0) {
+                fpga = (const char*)val;
+            }
+        }
+    }
 
     if (pkernel)
         *pkernel = kernel;
@@ -866,8 +896,32 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
         *pflat_dt = flat_dt;
     if (pramdisk)
         *pramdisk = ramdisk;
+    if (pfpga)
+        *pfpga = fpga;
 
     return conf;
+}
+
+/* Returns a pointer to the first string of the node's "compatible"
+ * property (a NUL-separated DT string-list), or NULL. See the header for
+ * the multi-entry caveat. */
+const char* fit_get_compatible(void* fdt, const char* image)
+{
+    const char* val;
+    int off, len = 0;
+
+    if (image == NULL) {
+        return NULL;
+    }
+    off = fdt_find_node_offset(fdt, -1, image);
+    if (off <= 0) {
+        return NULL;
+    }
+    val = (const char*)fdt_getprop(fdt, off, "compatible", &len);
+    if (val != NULL && len > 0) {
+        return val;
+    }
+    return NULL;
 }
 
 int fdt_fixup_initrd(void* fdt, uint64_t start, uint64_t size)
@@ -991,7 +1045,9 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
     int off, len = 0;
     const char *comp;
     int complen = 0;
-#ifndef WOLFBOOT_GZIP
+#ifdef WOLFBOOT_GZIP
+    BENCHMARK_DECLARE();
+#else
     (void)out_max;
 #endif
 
@@ -1033,6 +1089,7 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
                     int rc;
                     wolfBoot_printf("Decompressing Image %s (gzip): "
                         "%p -> %p (%d bytes)\n", image, data, load, len);
+                    BENCHMARK_START();
                     rc = wolfBoot_gunzip((const uint8_t*)data,
                         (uint32_t)len, (uint8_t*)load, out_max, &out_len);
                     if (rc != 0) {
@@ -1041,8 +1098,12 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
                         return NULL;
                     }
                     len = (int)out_len;
-                    wolfBoot_printf("Decompressed %s: %u bytes\n", image,
+                    /* No trailing newline: BENCHMARK_END("") appends
+                     * " (<ms> ms)\r\n" under BOOT_BENCHMARK, or just "\r\n"
+                     * otherwise. */
+                    wolfBoot_printf("Decompressed %s: %u bytes", image,
                         out_len);
+                    BENCHMARK_END("");
 #else
                     wolfBoot_printf("FIT: subimage '%s' has compression="
                         "\"gzip\" but WOLFBOOT_GZIP is not enabled in "
@@ -1123,5 +1184,106 @@ void* fit_load_image_to(void* fdt, const char* image, void* dst,
     }
     return fit_load_image_inner(fdt, image, lenp, dst_max, dst);
 }
+
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+/* Minimal length-bounded substring search (strstr is not provided by
+ * wolfBoot's freestanding string.c). Searches the first hlen bytes of
+ * haystack for needle. hlen is an explicit length so this works over a
+ * DT "compatible" property, which is a list of NUL-separated strings:
+ * a needle with no embedded NUL (e.g. "partial") matches within any one
+ * entry, and a NUL separator can never be part of the match. Returns 1
+ * if found. */
+static int fit_str_contains(const char* haystack, int hlen, const char* needle)
+{
+    int nlen, i;
+
+    if (haystack == NULL || needle == NULL || hlen <= 0) {
+        return 0;
+    }
+    nlen = (int)strlen(needle);
+    if (nlen == 0 || nlen > hlen) {
+        return 0;
+    }
+    for (i = 0; i + nlen <= hlen; i++) {
+        if (strncmp(haystack + i, needle, (size_t)nlen) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Upper bound on the (decompressed) FPGA bitstream size. Defaults to the
+ * generic FIT decompression cap. The staging region at
+ * WOLFBOOT_LOAD_FPGA_ADDRESS must be at least this large. */
+#ifndef WOLFBOOT_FIT_MAX_FPGA
+#define WOLFBOOT_FIT_MAX_FPGA WOLFBOOT_FIT_MAX_DECOMP
+#endif
+
+int fit_load_fpga(void* fdt, const char* fpga_node)
+{
+    void* data;
+    const char* comp;
+    uint32_t flags = HAL_FPGA_FULL;
+    int len = 0;
+    int ret;
+    int coff;
+    int clen = 0;
+    BENCHMARK_DECLARE();
+
+    if (fpga_node == NULL) {
+        /* No fpga subimage present - nothing to do. */
+        return 0;
+    }
+
+    /* Stage the bitstream into DDR. In the common U-Boot convention the
+     * fpga sub-image carries no `load` property and is gzip-compressed
+     * (the bootloader decompresses it into a scratch buffer before
+     * programming the PL), so when WOLFBOOT_LOAD_FPGA_ADDRESS is set we
+     * decompress/copy straight to that dedicated staging address. If it
+     * is 0 we honor the FIT's own `load` property instead (fit_load_image
+     * fails closed for a compressed sub-image that has no destination). */
+#if defined(WOLFBOOT_LOAD_FPGA_ADDRESS) && (WOLFBOOT_LOAD_FPGA_ADDRESS != 0)
+    data = fit_load_image_to(fdt, fpga_node,
+        (void*)(uintptr_t)(WOLFBOOT_LOAD_FPGA_ADDRESS),
+        WOLFBOOT_FIT_MAX_FPGA, &len);
+#else
+    data = fit_load_image(fdt, fpga_node, &len);
+#endif
+    if (data == NULL || len <= 0) {
+        wolfBoot_printf("FIT: failed to load fpga '%s'\n", fpga_node);
+        return -1;
+    }
+
+    /* Select full vs partial reconfiguration from the U-Boot-style
+     * "compatible" string (e.g. "...fpga-partial"). compatible is a DT
+     * string list (one or more NUL-separated entries), so scan the whole
+     * property rather than only its first string. Default is full. */
+    comp = NULL;
+    coff = fdt_find_node_offset(fdt, -1, fpga_node);
+    if (coff > 0) {
+        comp = (const char*)fdt_getprop(fdt, coff, "compatible", &clen);
+    }
+    if (fit_str_contains(comp, clen, "partial")) {
+        flags = HAL_FPGA_PARTIAL;
+    }
+
+    wolfBoot_printf("FIT: programming FPGA '%s' (%d bytes, %s)\n",
+        fpga_node, len, (flags == HAL_FPGA_PARTIAL) ? "partial" : "full");
+
+    BENCHMARK_START();
+    ret = hal_fpga_load(flags, (uintptr_t)data, (size_t)len);
+    if (ret != 0) {
+        wolfBoot_printf("FIT: hal_fpga_load failed: %d\n", ret);
+#ifdef WOLFBOOT_FPGA_NONFATAL
+        wolfBoot_printf("FIT: continuing without FPGA (non-fatal)\n");
+        return 0;
+#else
+        return -1;
+#endif
+    }
+    BENCHMARK_END("FIT: FPGA programmed");
+    return 0;
+}
+#endif /* WOLFBOOT_FPGA_BITSTREAM */
 
 #endif /* (MMU || WOLFBOOT_FDT) && !BUILD_LOADER_STAGE1 */

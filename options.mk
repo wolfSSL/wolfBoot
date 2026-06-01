@@ -916,6 +916,34 @@ ifeq ($(FIT_RAMDISK),1)
   CFLAGS+=-DWOLFBOOT_FIT_RAMDISK
 endif
 
+# FPGA_BITSTREAM=1 enables loading an "fpga" sub-image from a FIT and
+# programming the PL before booting (Xilinx ZynqMP/Zynq-7000; Versal is
+# stubbed pending a PLM Load-PDI path). Off by default.
+FPGA_BITSTREAM ?= 0
+ifeq ($(FPGA_BITSTREAM),1)
+  CFLAGS+=-DWOLFBOOT_FPGA_BITSTREAM
+endif
+# DDR staging address for the (decompressed) FPGA bitstream. The fpga
+# sub-image typically has no `load` property and is gzip-compressed, so
+# it is decompressed to this address before the PL is programmed. 0 (the
+# default) means "honor the FIT's own `load` property instead". Pick a
+# region clear of the FIT staging area (WOLFBOOT_LOAD_ADDRESS) and the
+# kernel/DTB/ramdisk load addresses.
+WOLFBOOT_LOAD_FPGA_ADDRESS ?= 0
+# FPGA_NONFATAL=1 downgrades a failed PL load from fatal (panic) to a
+# logged warning that continues the boot.
+FPGA_NONFATAL ?= 0
+ifeq ($(FPGA_NONFATAL),1)
+  CFLAGS+=-DWOLFBOOT_FPGA_NONFATAL
+endif
+# FIT_CONFIG_SELECT=1 lets the target pick a per-board FIT configuration
+# at runtime (hal_fit_config_name) instead of always booting the FIT's
+# `default` config - mirrors U-Boot's `bootm <addr>#conf-<board>`.
+FIT_CONFIG_SELECT ?= 0
+ifeq ($(FIT_CONFIG_SELECT),1)
+  CFLAGS+=-DWOLFBOOT_FIT_CONFIG_SELECT
+endif
+
 ifeq ($(ARMORED),1)
   CFLAGS+=-DWOLFBOOT_ARMORED
 endif

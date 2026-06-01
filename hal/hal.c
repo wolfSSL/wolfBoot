@@ -356,3 +356,23 @@ WEAKFUNCTION int hal_dice_get_attest_pubkey(uint8_t *buf, size_t *len)
     return -1;
 }
 #endif /* WOLFBOOT_DICE_HW */
+
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+WEAKFUNCTION int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
+{
+    /* No FPGA loader for this target; implement in the target hal. */
+    (void)flags;
+    (void)addr;
+    (void)size;
+    return -1;
+}
+#endif /* WOLFBOOT_FPGA_BITSTREAM */
+
+#ifdef WOLFBOOT_FIT_CONFIG_SELECT
+WEAKFUNCTION const char* hal_fit_config_name(void)
+{
+    /* Default: use the FIT's own `default` configuration. A target
+     * implements this to select a per-board configuration at runtime. */
+    return NULL;
+}
+#endif /* WOLFBOOT_FIT_CONFIG_SELECT */

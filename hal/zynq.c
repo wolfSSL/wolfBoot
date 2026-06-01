@@ -36,6 +36,7 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+#include "hal_fpga.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -196,6 +197,13 @@ static void smc_call(struct pt_regs *args)
 #define PM_SECURE_RSA      0x1B
 #define PM_MMIO_WRITE      0x13
 #define PM_MMIO_READ       0x14
+
+/* FPGA / PL programming (xilfpga via PMU firmware / TF-A) */
+#define PM_FPGA_LOAD       0x16 /* 22 */
+#define PM_FPGA_GET_STATUS 0x17 /* 23 */
+/* pm_fpga_load flags (bit 0 selects full vs partial bitstream) */
+#define XFPGA_FULLBIT_EN   0x0
+#define XFPGA_PARTIAL_EN   0x1
 
 /* AES */
 /* requires PMU built with -DENABLE_SECURE_VAL=1 */
@@ -1712,6 +1720,52 @@ int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
 {
     return 0;
 }
+
+#ifdef WOLFBOOT_FPGA_BITSTREAM
+/* Program the PL by handing the bitstream to the PMU firmware (xilfpga)
+ * via the PM_FPGA_LOAD EEMI call. The bitstream must be a bootgen .bin
+ * resident in DDR; it is flushed from the D-cache so the CSU DMA sees
+ * the committed bytes. */
+int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
+{
+    uint32_t ret_payload[PM_ARGS_CNT];
+    uint32_t pmflags;
+
+    /* PM_FPGA_LOAD takes the bitstream size in BYTES (the PMU firmware
+     * divides by the word length internally for the CSU DMA). This
+     * matches stock Xilinx U-Boot (drivers/fpga/zynqmppl.c passes
+     * bsize verbatim). For a legacy full bitstream the flags argument
+     * is 0; bit 0 selects partial. */
+    pmflags = (flags == HAL_FPGA_PARTIAL) ? XFPGA_PARTIAL_EN : XFPGA_FULLBIT_EN;
+
+    /* Ensure the bitstream is committed to DDR before the CSU DMA reads it. */
+    flush_dcache_range((unsigned long)addr, (unsigned long)(addr + size));
+
+    memset(ret_payload, 0, sizeof(ret_payload));
+    /* arg0=addr_low, arg1=addr_high, arg2=size(bytes), arg3=flags */
+    pmu_request(PM_FPGA_LOAD,
+        (uint32_t)(addr & 0xFFFFFFFF), (uint32_t)((uint64_t)addr >> 32),
+        (uint32_t)size, pmflags, ret_payload);
+    if (ret_payload[0] != 0) {
+        wolfBoot_printf("PM_FPGA_LOAD failed: %u\n", ret_payload[0]);
+        return -1;
+    }
+
+    /* Confirm the PL reports configured (PCAP status). This is
+     * informational - the load already succeeded above - so a failed
+     * query is logged but does not fail the call. */
+    memset(ret_payload, 0, sizeof(ret_payload));
+    pmu_request(PM_FPGA_GET_STATUS, 0, 0, 0, 0, ret_payload);
+    if (ret_payload[0] == 0) {
+        wolfBoot_printf("FPGA status: 0x%x\n", ret_payload[1]);
+    }
+    else {
+        wolfBoot_printf("FPGA status query failed: %u\n", ret_payload[0]);
+    }
+
+    return 0;
+}
+#endif /* WOLFBOOT_FPGA_BITSTREAM */
 
 /* Xilinx Write uses SPI mode and Page Program 0x02 */
 /* Issues using write with QSPI mode */

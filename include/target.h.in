@@ -162,5 +162,10 @@
  * verbatim — do not relocate". */
 #define WOLFBOOT_LOAD_RAMDISK_ADDRESS         @WOLFBOOT_LOAD_RAMDISK_ADDRESS@
 
+/* DDR staging address for the (decompressed) FPGA bitstream (used when
+ * WOLFBOOT_FPGA_BITSTREAM is set; otherwise unused). 0 means "use the FIT
+ * image's `load` property verbatim". */
+#define WOLFBOOT_LOAD_FPGA_ADDRESS            @WOLFBOOT_LOAD_FPGA_ADDRESS@
+
 
 #endif /* !H_TARGETS_TARGET_ */

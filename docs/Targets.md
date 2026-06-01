@@ -4070,6 +4070,63 @@ FDT: Set chosen (...), linux,initrd-start=1073741824
 FDT: Set chosen (...), linux,initrd-end=...
 ```
 
+**FPGA bitstream from FIT**
+
+wolfBoot can program the PL (FPGA fabric) from an `fpga` sub-image carried in the same signed FIT, using the standard U-Boot convention: a sub-image with `type = "fpga"`, referenced from the configuration node via an optional `fpga = "<node>"` property, with a `compatible` string naming the load method. The PL is programmed before the kernel/DTB are loaded so PL-dependent clocks and peripherals come up first. The outer wolfBoot signature authenticates the whole FIT (bitstream included), so no per-image hashing is required.
+
+Enable with `FPGA_BITSTREAM=1` (off by default). A failed PL load is fatal (`wolfBoot_panic`) unless `FPGA_NONFATAL=1` is also set, which downgrades it to a logged warning that continues the boot.
+
+As produced by `mkimage`, the fpga sub-image is typically gzip-compressed (`compression = "gzip"`) and carries NO `load` property (U-Boot decompresses it into a scratch buffer before programming). wolfBoot mirrors this: set `WOLFBOOT_LOAD_FPGA_ADDRESS` to a DDR staging address (clear of the FIT at `WOLFBOOT_LOAD_ADDRESS`, the kernel, and the DTS), and the bitstream is decompressed there before the PL is programmed. Build with `GZIP=1` (already default in the example configs). If the fpga node does provide its own `load`, leave `WOLFBOOT_LOAD_FPGA_ADDRESS=0` to honor it.
+
+```sh
+cp config/examples/zynqmp.config .config
+make FPGA_BITSTREAM=1 WOLFBOOT_LOAD_FPGA_ADDRESS=0x40000000
+```
+
+Per-target support:
+- **ZynqMP** (`TARGET=zynq`): supported. The bitstream (a bootgen `.bin` with the `66 55 99 aa` sync word, not a Vivado `.bit`) is staged in DDR and handed to the PMU firmware via the `PM_FPGA_LOAD` EEMI call (xilfpga over the CSU DMA / PCAP). The size is passed in bytes and the flags are 0 for a full legacy bitstream, matching stock Xilinx U-Boot; no software byte-swap is applied.
+- **Zynq-7000** (`TARGET=zynq7000`): supported (full bitstream). Programmed directly through the DevC/PCAP DMA engine (UG585 ch.6). Partial reconfiguration is not yet implemented.
+- **Versal** (`TARGET=versal`): not yet implemented - Versal programs the PL with a PDI loaded by the PLM (XilLoader Load-PDI IPI), not a raw bitstream. `hal_fpga_load` is a stub; leave `FPGA_BITSTREAM` off on Versal until that path lands.
+
+The `compatible` string selects full vs partial: any value containing `partial` requests partial reconfiguration, otherwise a full bitstream is loaded. Typical full-bitstream values are `u-boot,fpga-legacy`, `u-boot,zynqmp-fpga-ddrauth`, or `u-boot,zynqmp-fpga-enc`.
+
+Decompressed-size validation: the fpga node carries no explicit uncompressed-size property, but for `compression = "gzip"` the gzip trailer encodes it. wolfBoot verifies the gzip CRC32 and ISIZE (decompressed length) on completion and bounds the output by `WOLFBOOT_FIT_MAX_FPGA`, so a truncated or corrupt bitstream is rejected (fatal, or skipped under `FPGA_NONFATAL=1`). The byte count handed to `PM_FPGA_LOAD` is the validated decompressed length. Note that `WOLFBOOT_FIT_MAX_FPGA` is a compile-time cap only (set it with `CFLAGS_EXTRA+=-DWOLFBOOT_FIT_MAX_FPGA=...`; it defaults to `WOLFBOOT_FIT_MAX_DECOMP`, 256 MB) - it is a sanity ceiling, NOT the size of your DDR staging region. It does not by itself stop the bitstream from overrunning the kernel/DTB/FIT areas, so choosing a `WOLFBOOT_LOAD_FPGA_ADDRESS` clear of those regions (and, if you want a tight bound, lowering `WOLFBOOT_FIT_MAX_FPGA` to your staging window) is the integrator's responsibility.
+
+Multiple configurations: wolfBoot boots the FIT's `default` configuration. For a FIT that carries several boards' configurations selected at runtime (e.g. U-Boot's `bootm <addr>#conf-<board>`), build with `FIT_CONFIG_SELECT=1` and provide a `hal_fit_config_name()` in your integration that returns the config node name to boot (e.g. `"conf-fcm"`), or NULL to fall back to `default`. wolfBoot ships only the weak default (returns NULL) - the board-detection logic (PS GPIO, CHIPID, etc.) is intentionally left to the integrator and is not part of upstream.
+
+Example FIT layout (matches `mkimage` output - gzip, no `load`):
+
+```dts
+images {
+    kernel-1 { ... };
+    fdt-1    { ... };
+    fpga-1 {
+        description = "FPGA bitstream";
+        data = /incbin/("system.bit.bin.gz"); /* gzip of bootgen .bin */
+        type = "fpga";
+        arch = "arm64";                        /* informational; not read by wolfBoot */
+        compression = "gzip";
+        compatible = "u-boot,fpga-legacy";
+        hash-1 { algo = "sha256"; };           /* covered by outer sig */
+    };
+};
+configurations {
+    default = "conf-zcu102";
+    conf-zcu102 {
+        kernel = "kernel-1";
+        fdt    = "fdt-1";
+        fpga   = "fpga-1";
+    };
+};
+```
+
+Successful programming prints (ZynqMP):
+```
+FIT: programming FPGA 'fpga-1' (N bytes, full)
+FPGA status: 0x...
+FIT: FPGA programmed
+```
+
 
 ## Xilinx Zynq-7000 (ZC702)
 

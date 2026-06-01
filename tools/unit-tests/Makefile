@@ -60,6 +60,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
+TESTS+=unit-fit-fpga
 
 include unit-sign-encrypted-output.mkfrag
 
@@ -335,6 +336,12 @@ unit-fit-gzip: ../../include/target.h unit-fit-gzip.c
 
 unit-fit-nogzip: ../../include/target.h unit-fit-gzip.c
 	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT \
+		-DWOLFBOOT_NO_PRINTF \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# FIT fpga-subimage discovery (fit_find_images / fit_get_compatible).
+unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
+	gcc -o $@ unit-fit-fpga.c $(CFLAGS) -DWOLFBOOT_FDT \
 		-DWOLFBOOT_NO_PRINTF \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 

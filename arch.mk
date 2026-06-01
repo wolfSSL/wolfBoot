@@ -74,6 +74,8 @@ ifeq ($(ARCH),AARCH64)
     # Support detection and skip of U-Boot legacy header */
     CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
     CFLAGS+=-DWOLFBOOT_DUALBOOT
+    # FPGA bitstream-from-FIT is supported via the PMU firmware
+    # (PM_FPGA_LOAD). Enable with FPGA_BITSTREAM=1 (opt-in).
 
     ifeq ($(HW_SHA3),1)
       # Use HAL for hash (see zynqmp.c)
@@ -90,6 +92,9 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS+=-DWOLFBOOT_DUALBOOT
     # Support detection and skip of U-Boot legacy header
     CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+    # NOTE: FPGA_BITSTREAM is stubbed on Versal (PL config is a PDI loaded
+    # by the PLM via XilLoader Load-PDI IPI - not yet implemented). Leave
+    # FPGA_BITSTREAM off until that path lands.
     # PLM owns RVBAR on Versal in JTAG boot; skip RVBAR writes
     CFLAGS+=-DSKIP_RVBAR=1
     # Disable SDMA for multi-block transfers - use PIO instead.
@@ -350,6 +355,8 @@ ifeq ($(ARCH),ARM)
      # positive probability from ~2^-32 to ~2^-64, matching what U-Boot's
      # own mkimage/bootm does.
      CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+     # FPGA bitstream-from-FIT is supported via the DevC/PCAP DMA engine
+     # (full bitstream). Enable with FPGA_BITSTREAM=1 (opt-in).
   endif
 
   ifeq ($(TARGET),va416x0)

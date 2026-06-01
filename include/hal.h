@@ -108,6 +108,22 @@ void hal_prepare_boot(void);
     void *hal_get_dts_update_address(void);
 #endif
 
+#ifdef WOLFBOOT_FIT_CONFIG_SELECT
+    /*
+     * Return the name of the FIT /configurations node to boot (e.g.
+     * "conf-fcm"), or NULL to use the FIT's own `default` configuration.
+     * Lets a target select a per-board configuration at runtime (board
+     * detection), the way U-Boot's `bootm <addr>#conf-<board>` does. The
+     * weak default returns NULL.
+     */
+    const char* hal_fit_config_name(void);
+#endif
+
+/* FPGA load mode constants + hal_fpga_load() prototype (kept in a standalone
+ * header so the per-target HAL .c files can include just this, not all of
+ * hal.h). Gated internally by WOLFBOOT_FPGA_BITSTREAM. */
+#include "hal_fpga.h"
+
 #if !defined(SPI_FLASH) && !defined(QSPI_FLASH) && !defined(OCTOSPI_FLASH)
     /* user supplied external flash interfaces */
     int  ext_flash_write(uintptr_t address, const uint8_t *data, int len);

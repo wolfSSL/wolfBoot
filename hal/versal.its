@@ -29,6 +29,30 @@
                 algo = "sha256";
             };
         };
+        /* FPGA bitstream sub-image (requires FPGA_BITSTREAM=1). Add the
+         * "fpga = ..." reference to the configuration node below. The
+         * bitstream must be a bootgen .bin staged to its load address.
+         * NOTE: Versal PL config is a PDI loaded by the PLM (XilLoader
+         * Load-PDI IPI) - the wolfBoot Versal hal_fpga_load is currently
+         * a stub, so leave this disabled on Versal. On ZynqMP/Zynq-7000
+         * this is the working convention.
+         *
+         * As emitted by mkimage the fpga node is usually gzip-compressed
+         * and has no "load" property; set WOLFBOOT_LOAD_FPGA_ADDRESS to a
+         * DDR staging address and build with GZIP=1.
+         *
+         * fpga-1 {
+         *     description = "FPGA bitstream";
+         *     data = /incbin/("../system.bit.bin.gz");
+         *     type = "fpga";
+         *     arch = "arm64";
+         *     compression = "gzip";
+         *     compatible = "u-boot,fpga-legacy";
+         *     hash-1 {
+         *         algo = "sha256";
+         *     };
+         * };
+         */
     };
     configurations {
         default = "conf1";
@@ -36,6 +60,7 @@
             description = "Linux kernel and FDT blob";
             kernel = "kernel-1";
             fdt = "fdt-1";
+            /* fpga = "fpga-1"; */
             hash-1 {
                 algo = "sha256";
             };

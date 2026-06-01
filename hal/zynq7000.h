@@ -199,8 +199,66 @@
 #define Z7_GTIMER_FREQ_HZ   333333333UL
 #endif
 
-/* DevC (Device Configuration: AES + bitstream loader). UG585 ch.6. */
+/* DevC (Device Configuration: AES + bitstream loader). UG585 ch.6.
+ * Register offsets/bits mirror Xilinx xdevcfg_hw.h (XDCFG_*). */
 #define Z7_DEVC_BASE        0xF8007000UL
+#define Z7_DEVC_CTRL        (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x00)))
+#define Z7_DEVC_LOCK        (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x04)))
+#define Z7_DEVC_CFG         (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x08)))
+#define Z7_DEVC_INT_STS     (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x0C)))
+#define Z7_DEVC_INT_MASK    (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x10)))
+#define Z7_DEVC_STATUS      (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x14)))
+#define Z7_DEVC_DMA_SRC     (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x18)))
+#define Z7_DEVC_DMA_DST     (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x1C)))
+#define Z7_DEVC_DMA_SRC_LEN (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x20)))
+#define Z7_DEVC_DMA_DST_LEN (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x24)))
+#define Z7_DEVC_UNLOCK      (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x34)))
+#define Z7_DEVC_MCTRL       (*((volatile uint32_t*)(Z7_DEVC_BASE + 0x80)))
+
+/* CTRL bits */
+#define Z7_DEVC_CTRL_FORCE_RST     0x80000000U /* bit 31 */
+#define Z7_DEVC_CTRL_PCFG_PROG_B   0x40000000U /* bit 30 */
+#define Z7_DEVC_CTRL_PCAP_PR       0x08000000U /* bit 27: 1=PCAP, 0=ICAP */
+#define Z7_DEVC_CTRL_PCAP_MODE     0x04000000U /* bit 26: PCAP enable */
+#define Z7_DEVC_CTRL_QUARTER_RATE  0x02000000U /* bit 25 */
+
+/* INT_STS bits */
+#define Z7_DEVC_INT_DMA_DONE       0x00002000U /* bit 13 */
+#define Z7_DEVC_INT_D_P_DONE       0x00001000U /* bit 12: DMA+PCAP done */
+#define Z7_DEVC_INT_PCFG_DONE      0x00000004U /* bit 2 */
+/* DMA / AXI / config error aggregate. Matches XDcfg
+ * XDCFG_IXR_ERROR_FLAGS_MASK (xdevcfg_hw.h): AXI WTO/WERR/RTO/RERR,
+ * RX_FIFO_OV, DMA_CMD_ERR, DMA_Q_OV, P2D_LEN_ERR, HMAC_ERR. */
+#define Z7_DEVC_INT_AXI_WTO        0x00800000U
+#define Z7_DEVC_INT_AXI_WERR       0x00400000U
+#define Z7_DEVC_INT_AXI_RTO        0x00200000U
+#define Z7_DEVC_INT_AXI_RERR       0x00100000U
+#define Z7_DEVC_INT_RX_FIFO_OV     0x00040000U
+#define Z7_DEVC_INT_DMA_CMD_ERR    0x00008000U
+#define Z7_DEVC_INT_DMA_Q_OV       0x00004000U
+#define Z7_DEVC_INT_P2D_LEN_ERR    0x00000800U
+#define Z7_DEVC_INT_HMAC_ERR       0x00000040U
+#define Z7_DEVC_INT_ERR_MASK       (Z7_DEVC_INT_AXI_WTO | Z7_DEVC_INT_AXI_WERR \
+                                    | Z7_DEVC_INT_AXI_RTO | Z7_DEVC_INT_AXI_RERR \
+                                    | Z7_DEVC_INT_RX_FIFO_OV \
+                                    | Z7_DEVC_INT_DMA_CMD_ERR \
+                                    | Z7_DEVC_INT_DMA_Q_OV \
+                                    | Z7_DEVC_INT_P2D_LEN_ERR \
+                                    | Z7_DEVC_INT_HMAC_ERR) /* 0x00F4C840 */
+#define Z7_DEVC_INT_ALL            0xFFFFFFFFU
+
+/* STATUS bits */
+#define Z7_DEVC_STATUS_DMA_CMD_FULL 0x80000000U /* bit 31 */
+#define Z7_DEVC_STATUS_PCFG_INIT    0x00000010U /* bit 4 */
+
+/* MCTRL bits */
+#define Z7_DEVC_MCTRL_PCAP_LPBK    0x00000010U /* internal loopback */
+
+/* UNLOCK magic and PCAP DMA sentinel (UG585 ch.6 / XDcfg). The DMA
+ * address LSB set to 1 marks the last (only) descriptor in the chain. */
+#define Z7_DEVC_UNLOCK_KEY         0x757BDF0DU
+#define Z7_DEVC_DMA_DEST_PCAP      0xFFFFFFFFU
+#define Z7_DEVC_DMA_LAST           0x00000001U
 
 /* GIC (PL390 / GIC-400 v1) - per-CPU interface and distributor. */
 #define Z7_GIC_CPUIF_BASE   0xF8F00100UL
