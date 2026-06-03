@@ -1056,9 +1056,11 @@ static void qspi_uart_program(void)
         return;
     }
     if (!((addr >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
-           addr + size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) ||
+           addr < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE &&
+           size <= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - addr) ||
           (addr >= WOLFBOOT_PARTITION_UPDATE_ADDRESS &&
-           addr + size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))) {
+           addr < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE &&
+           size <= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - addr))) {
         uart_qspi_puts("QSPI-PROG: Outside partition\r\n");
         return;
     }
