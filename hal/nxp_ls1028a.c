@@ -627,12 +627,13 @@ int hal_flash_erase(uintptr_t address, int len)
 {
     uint32_t num_sectors = 0;
     uint32_t i = 0;
-    uint8_t status[4] = {0, 0, 0, 0};
 
     num_sectors = len / FLASH_ERASE_SIZE;
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
+        uint8_t status[4] = {0, 0, 0, 0};
+
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
@@ -673,12 +674,13 @@ int ext_flash_erase(uintptr_t address, int len)
 {
     uint32_t num_sectors = 0;
     uint32_t i = 0;
-    uint8_t status[4] = {0, 0, 0, 0};
 
     num_sectors = len / FLASH_ERASE_SIZE;
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
+        uint8_t status[4] = {0, 0, 0, 0};
+
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
