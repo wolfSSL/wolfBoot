@@ -585,7 +585,7 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
         XSPI_IPCMD_START();
 
         /* Wait command done */
-        while (!(XSPI_INTR & XSPI_IPCMDDONE))
+        while (!(XSPI_INTR & XSPI_IPCMDDONE));
 
         /* Flush fifo, set done flag */
         XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
