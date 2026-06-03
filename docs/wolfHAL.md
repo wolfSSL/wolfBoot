@@ -7,11 +7,11 @@ platforms.
 
 ## Overview
 
-The wolfHAL integration uses a single generic `TARGET=wolfhal` with a per-board
-abstraction layer. All board-specific details — device instances, driver bindings,
-build flags, and linker scripts — live in a self-contained board directory. Adding
-support for a new board or MCU family requires no changes to the core build system or
-HAL shim.
+The wolfHAL integration is enabled by setting `WOLFHAL=1` alongside the existing
+`TARGET=<chip>` and a new `BOARD=<board>` variable. All board-specific details —
+device instances, driver bindings, build flags, and linker scripts — live in a
+self-contained board directory. Adding support for a new board or MCU family
+requires no changes to the core build system or HAL shim.
 
 The integration uses wolfHAL's **direct API mapping** feature. Each platform
 driver source provides an optional `#ifdef` block that renames its driver
@@ -48,13 +48,14 @@ The integration consists of four parts:
 ### How It Fits Together
 
 ```
-config/examples/wolfhal_<board>.config
-  └─ TARGET=wolfhal  BOARD=<board>
+config/examples/<chip>_wolfhal_<board>.config
+  └─ TARGET=<chip>  BOARD=<board>  WOLFHAL=1
 
 arch.mk
   └─ Sets WOLFHAL_ROOT, CFLAGS += -Ihal/boards/$(BOARD)
 
 Makefile
+  └─ OBJS += hal/wolfhal.o (replaces hal/$(TARGET).o)
   └─ OBJS += hal/boards/$(BOARD)/board.o
   └─ include hal/boards/$(BOARD)/board.mk
 
@@ -78,14 +79,17 @@ linker can garbage-collect any unused symbols with `-Wl,--gc-sections`.
 A wolfHAL-based config requires two variables beyond the standard wolfBoot settings:
 
 ```
-TARGET=wolfhal
+TARGET=stm32wb
 BOARD=stm32wb_nucleo
+WOLFHAL=1
 ```
 
-- `TARGET=wolfhal` selects the generic wolfHAL HAL shim and build path.
+- `TARGET` keeps its usual meaning (the chip family).
+- `WOLFHAL=1` swaps the legacy `hal/$(TARGET).c` for the generic wolfHAL shim
+  (`hal/wolfhal.c`) and includes the per-board build pieces.
 - `BOARD` selects the board directory under `hal/boards/`.
 
-See `config/examples/wolfhal_*.config` for complete examples.
+See `config/examples/*_wolfhal_*.config` for complete examples.
 
 ## Adding a New Board
 
@@ -210,11 +214,12 @@ Only one API mapping flag may be active per device type per build.
 
 ### 4. Config File
 
-Create `config/examples/wolfhal_<board_name>.config`:
+Create `config/examples/<chip>_wolfhal_<board_name>.config`:
 
 ```
-TARGET=wolfhal
+TARGET=<chip>
 BOARD=<board_name>
+WOLFHAL=1
 SIGN=ECC256
 HASH=SHA256
 WOLFBOOT_SECTOR_SIZE=0x1000

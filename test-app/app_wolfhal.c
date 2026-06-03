@@ -30,8 +30,6 @@
 
 #include "board.h"
 
-#ifdef TARGET_wolfhal
-
 /* Chip drivers behind the wolfHAL API are singletons (configured via
  * board.h). Use the BOARD_*_DEV handles defined there. */
 
@@ -85,5 +83,3 @@ void main(void)
     while (1)
         __asm__ volatile("wfi");
 }
-
-#endif /* TARGET_wolfhal */

@@ -90,7 +90,7 @@ else
     APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o ../hal/renesas-rx.o
     LDFLAGS+=-ffreestanding -nostartfiles
     CFLAGS+=-DWOLFBOOT_RENESAS_APP
-  else ifeq ($(TARGET),wolfhal)
+  else ifeq ($(WOLFHAL),1)
     APP_OBJS:=app_wolfhal.o led.o system.o timer.o ../test-app/libwolfboot.o
   else
     APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
@@ -378,7 +378,11 @@ ifeq ($(TZEN),1)
         APP_OBJS+=$(sort $(WOLFCRYPT_APP_OBJS))
     endif
 else
-    APP_OBJS+=../hal/$(TARGET).o
+    ifeq ($(WOLFHAL),1)
+        APP_OBJS+=../hal/wolfhal.o
+    else
+        APP_OBJS+=../hal/$(TARGET).o
+    endif
 endif
 
 ifeq ($(ARCH),RISCV)
@@ -663,16 +667,17 @@ ifeq ($(QSPI_FLASH),1)
   endif
 endif
 
-ifeq ($(TARGET),wolfhal)
+ifeq ($(WOLFHAL),1)
   ifeq ($(strip $(BOARD)),)
-    $(error TARGET=wolfhal requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
+    $(error WOLFHAL=1 requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
+  endif
+  ifeq ($(wildcard $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk),)
+    $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
   endif
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
   CFLAGS+=-I$(WOLFHAL_ROOT) -DWHAL_CFG_NO_TIMEOUT -I$(WOLFBOOT_ROOT)/hal/boards/$(BOARD)
   DEBUG_UART=1
   APP_OBJS+=board_$(BOARD).o
-  # hal/wolfhal.o is added by the generic ../hal/$(TARGET).o rule below
-  # when TARGET=wolfhal, so we don't add it explicitly here.
   include $(WOLFBOOT_ROOT)/hal/boards/$(BOARD)/board.mk
 endif
 
@@ -680,7 +685,11 @@ ifeq ($(UART_FLASH),1)
   CFLAGS+=-D"UART_FLASH=1"
   APP_OBJS+= ../src/uart_flash.o ../hal/uart/uart_drv_$(UART_TARGET).o
 else ifeq ($(TARGET),stm32wb)
-  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  # With WOLFHAL=1, hal/wolfhal.c + the wolfHAL UART driver provide
+  # uart_write; the legacy driver would collide.
+  ifneq ($(WOLFHAL),1)
+    APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  endif
 endif
 
 ifeq ($(TARGET),kinetis)

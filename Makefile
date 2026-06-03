@@ -51,7 +51,11 @@ OBJS+=./src/dice/dice.o
 endif
 
 ifneq ($(TARGET),library)
-	OBJS+=./hal/$(TARGET).o
+  ifeq ($(WOLFHAL),1)
+    OBJS+=./hal/wolfhal.o
+  else
+    OBJS+=./hal/$(TARGET).o
+  endif
 endif
 
 # User-provided key configuration
@@ -174,13 +178,16 @@ export WOLFBOOT_LIB_WOLFHSM
 ## Architecture/CPU configuration
 include arch.mk
 
-ifeq ($(TARGET),wolfhal)
+ifeq ($(WOLFHAL),1)
   ifeq ($(strip $(BOARD)),)
-    $(error TARGET=wolfhal requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
+    $(error WOLFHAL=1 requires BOARD to be set, e.g. BOARD=stm32wb_nucleo)
   endif
-  # wolfHAL target: hal/wolfhal.o is added by the per-TARGET rule
-  # above. The board's board.c provides hal_init/hal_prepare_boot and
-  # the wolfHAL device handles; board.mk pulls in chip drivers.
+  ifeq ($(wildcard hal/boards/$(BOARD)/board.mk),)
+    $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
+  endif
+  # wolfHAL backend: hal/wolfhal.o replaces hal/$(TARGET).o above. The
+  # board's board.c provides hal_init/hal_prepare_boot and the wolfHAL
+  # device handles; board.mk pulls in chip drivers.
   OBJS+=./hal/boards/$(BOARD)/board.o
   include hal/boards/$(BOARD)/board.mk
 endif
