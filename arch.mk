@@ -223,7 +223,7 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
-  # Defaults for linker script placeholders (overridden by wolfhal target)
+  # Defaults for linker script placeholders (overridden when WOLFHAL=1)
   WOLFHAL_FLASH_EXCLUDE_TEXT?=*(.text*)
   WOLFHAL_FLASH_EXCLUDE_RODATA?=*(.rodata*)
   WOLFHAL_FLASH_RAM_SECTIONS?=
@@ -574,7 +574,7 @@ endif
 endif
 endif
 
-ifeq ($(TARGET),wolfhal)
+ifeq ($(WOLFHAL),1)
   WOLFHAL_ROOT?=$(WOLFBOOT_ROOT)/lib/wolfHAL
   CFLAGS+=-I$(WOLFHAL_ROOT) -Ihal/boards/$(BOARD)
 endif
@@ -1953,9 +1953,13 @@ WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.o
 ifeq ($(DEBUG_UART),1)
   CFLAGS+=-DDEBUG_UART
 
-  # If this target has a UART driver, add it to the OBJS
-  ifneq (,$(wildcard hal/uart/uart_drv_$(TARGET).c))
-    OBJS+=hal/uart/uart_drv_$(TARGET).o
+  # If this target has a UART driver, add it to the OBJS. When WOLFHAL=1,
+  # the wolfHAL board.mk pulls in its own UART driver and hal/wolfhal.c
+  # provides uart_write; the legacy driver would collide on uart_write.
+  ifneq ($(WOLFHAL),1)
+    ifneq (,$(wildcard hal/uart/uart_drv_$(TARGET).c))
+      OBJS+=hal/uart/uart_drv_$(TARGET).o
+    endif
   endif
 endif
 

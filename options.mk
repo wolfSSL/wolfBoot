@@ -780,7 +780,12 @@ ifeq ($(NO_XIP),1)
 endif
 
 ifeq ($(DEBUG_UART),1)
-  ifeq ($(strip $(UART_TARGET)),)
+  ifeq ($(WOLFHAL),1)
+    # wolfHAL provides uart_write via hal/wolfhal.c; the wolfHAL board.mk
+    # pulls in the wolfHAL uart driver. Don't auto-add the legacy
+    # hal/uart/uart_drv_$(TARGET).o or its symbols would collide.
+    CFLAGS+=-DDEBUG_UART
+  else ifeq ($(strip $(UART_TARGET)),)
   else
     UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
     ifneq ($(wildcard $(UART_DRV_OBJ)),)
@@ -1215,7 +1220,7 @@ OBJS+=$(SECURE_OBJS)
 ifeq ($(RAM_CODE),1)
   ifeq ($(ENCRYPT),1)
     ifeq ($(ENCRYPT_WITH_CHACHA),1)
-      ifneq ($(TARGET),wolfhal)
+      ifneq ($(WOLFHAL),1)
         LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
       endif
     endif

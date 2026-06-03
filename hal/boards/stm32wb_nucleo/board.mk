@@ -5,7 +5,7 @@ CFLAGS+=-DWHAL_CFG_NO_TIMEOUT
 
 # Upstream wolfHAL drivers from lib/wolfHAL/src/. wolfBoot's hal_flash_*
 # contract is satisfied by hal/wolfhal.c (added automatically because
-# TARGET=wolfhal) calling whal_Flash_*.
+# WOLFHAL=1) calling whal_Flash_*.
 
 CFLAGS+=-DWHAL_CFG_STM32WB_FLASH_DIRECT_API_MAPPING
 CFLAGS+=-DWHAL_CFG_STM32WB_GPIO_DIRECT_API_MAPPING
