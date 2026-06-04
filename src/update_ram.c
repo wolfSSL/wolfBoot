@@ -174,21 +174,18 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
     if (total < UBOOT_IMG_HDR_SZ)
         return 0;
 
-    /* ih_magic is stored big-endian on flash; UBOOT_IMG_HDR_MAGIC is the
-     * host-order word that compares equal to that BE encoding on a
-     * little-endian host (which is the only ARM/x86 host wolfBoot
-     * supports for the targets enabling WOLFBOOT_UBOOT_LEGACY). */
+    /* ih_magic is stored big-endian on flash; UBOOT_IMG_HDR_MAGIC is
+     * defined as the host-order word matching that BE encoding (see
+     * include/image.h -- different on LE vs BE hosts). */
     memcpy(&magic, hdr + 0x00, sizeof(magic));
     if (magic != UBOOT_IMG_HDR_MAGIC)
         return 0;
 
-    /* ih_size: big-endian payload length. Reject zero and anything that
-     * would overrun the signed image. */
+    /* ih_size: big-endian payload length. fdt32_to_cpu handles host
+     * endianness (no-op on a BE host, byte-swap on LE). Reject zero
+     * and anything that would overrun the signed image. */
     memcpy(&size, hdr + 0x0C, sizeof(size));
-    size = ((size & 0xFF000000U) >> 24) |
-           ((size & 0x00FF0000U) >>  8) |
-           ((size & 0x0000FF00U) <<  8) |
-           ((size & 0x000000FFU) << 24);
+    size = fdt32_to_cpu(size);
     if (size == 0)
         return 0;
     if (size > (total - UBOOT_IMG_HDR_SZ))
@@ -201,12 +198,8 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
     gpt_crc32_init(&ctx);
     gpt_crc32_update(&ctx, scratch, UBOOT_IMG_HDR_SZ);
     crc = gpt_crc32_final(&ctx);
-    /* hcrc is stored big-endian; byte-swap for comparison against the
-     * host-order CRC32 returned by gpt_crc32_final. */
-    hcrc = ((hcrc & 0xFF000000U) >> 24) |
-           ((hcrc & 0x00FF0000U) >>  8) |
-           ((hcrc & 0x0000FF00U) <<  8) |
-           ((hcrc & 0x000000FFU) << 24);
+    /* hcrc is stored big-endian; convert to host order. */
+    hcrc = fdt32_to_cpu(hcrc);
     if (hcrc != crc)
         return 0;
 
@@ -388,16 +381,57 @@ backup_on_failure:
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
     /* Check for U-Boot legacy format image header. Validate magic +
-     * header CRC32 + payload size before stripping the 64-byte header,
-     * so a non-uImage payload whose first 4 bytes happen to collide
-     * with UBOOT_IMG_HDR_MAGIC (~1 in 2^32) cannot be misinterpreted. */
+     * header CRC32 + payload size (uboot_legacy_header_valid) before
+     * stripping the 64-byte header -- a non-uImage payload whose first
+     * 4 bytes happen to collide with UBOOT_IMG_HDR_MAGIC (~1 in 2^32)
+     * cannot be misinterpreted because the CRC + size checks fail.
+     *
+     * uImage header (64 bytes, big-endian fields):
+     *   off 0  : magic         0x27051956
+     *   off 4  : header CRC
+     *   off 8  : creation time
+     *   off 12 : data size
+     *   off 16 : ih_load       data load address
+     *   off 20 : ih_ep         entry point address
+     *   off 24 : data CRC
+     *   off 28 : os/arch/type/comp
+     *   off 32 : name (32 bytes)
+     *
+     * After validation, honor the uImage's ih_load: U-Boot bootm copies
+     * the payload to ih_load and jumps to ih_ep, because PowerPC /
+     * VxWorks kernels are typically built non-relocatable with absolute
+     * references baked in. Falling back to the wolfBoot default
+     * WOLFBOOT_LOAD_ADDRESS would place the kernel at the wrong address
+     * and the first internal jump would fault.
+     *
+     * (The ih_load override applies only when ih_load is non-zero --
+     * typical for VxWorks: 0x00100000; for Linux PPC: 0x00000000 ->
+     * leave load_address alone.) */
     image_ptr = wolfBoot_peek_image(&os_image, 0, NULL);
     if (image_ptr != NULL &&
         uboot_legacy_header_valid(image_ptr, os_image.fw_size)) {
+        uint32_t ih_load;
+        uint32_t ih_ep;
+
+        ih_load = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 16));
+        ih_ep   = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 20));
+
+        wolfBoot_printf("U-Boot Legacy header detected: load=0x%x ep=0x%x "
+            "(skipping %d bytes)\n",
+            ih_load, ih_ep, UBOOT_IMG_HDR_SZ);
+
         /* Skip 64 bytes (size of legacy format image header). */
-        load_address += UBOOT_IMG_HDR_SZ;
         os_image.fw_base += UBOOT_IMG_HDR_SZ;
         os_image.fw_size -= UBOOT_IMG_HDR_SZ;
+
+        if (ih_load != 0) {
+            load_address = (uint32_t*)(uintptr_t)ih_load;
+        } else {
+            /* Linux PPC path: leave load_address alone, just advance it
+             * past the header to match upstream behaviour. */
+            load_address += UBOOT_IMG_HDR_SZ;
+        }
+        (void)ih_ep; /* TODO: pass through to do_boot when ih_ep != ih_load */
     }
 #endif
 
