@@ -202,11 +202,19 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
             riscv_icache_sync();
         #endif
         }
-    #ifdef DEBUG_ELF
         else {
-            wolfBoot_printf("Section would collide with headers! Skipping\n");
+            /* The destination overlaps program headers we still need to
+             * read -- i.e. the staging buffer (image) overlaps the ELF's
+             * own load region. Never silently drop a PT_LOAD segment:
+             * doing so leaves a hole in .text/.data and the OS executes
+             * garbage (observed as a spurious early trap). Fail loudly so
+             * the staging address (WOLFBOOT_LOAD_ADDRESS) can be moved
+             * above the segment span. */
+            wolfBoot_printf("ELF: segment vaddr %p (sz %u) would clobber "
+                "program headers -- staging buffer overlaps load region; "
+                "aborting ELF load\n", (void*)vaddr, (uint32_t)file_size);
+            return -5;
         }
-    #endif
 #endif /* !ELF_PARSER */
     }
 

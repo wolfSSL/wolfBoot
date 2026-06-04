@@ -798,6 +798,10 @@ ifeq ($(ARCH),PPC)
 
   OBJS+=src/boot_ppc_start.o src/boot_ppc.o
 
+  # CRC32 helpers in src/gpt.c are reused by update_ram.c's uImage header
+  # validator (WOLFBOOT_UBOOT_LEGACY -> uboot_legacy_header_valid).
+  OBJS+=src/gpt.o
+
   ifeq ($(SPMATH),1)
     MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
   endif
@@ -1172,6 +1176,18 @@ ifeq ($(TARGET),nxp_t2080)
   CFLAGS+=$(ARCH_FLAGS)
   BIG_ENDIAN=1
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
+  # Support U-Boot legacy uImage header: strip 64-byte header before jumping
+  # to the OS image (e.g. uVxWorks, uImage Linux kernel).
+  CFLAGS+=-DWOLFBOOT_UBOOT_LEGACY
+  # 64-bit OS support (VxWorks 7, Linux 64-bit): transitions LAW/TLB to
+  # 36-bit physical addressing before jumping to the OS. Equivalent to
+  # CW U-Boot "ossel ostype2". Set OS_64BIT=1 in .config to enable.
+  ifeq ($(OS_64BIT),1)
+    CFLAGS+=-DENABLE_OS64BIT
+  endif
+  ifneq ($(WOLFBOOT_BOOTARGS),)
+    CFLAGS+=-DWOLFBOOT_BOOTARGS='"$(WOLFBOOT_BOOTARGS)"'
+  endif
   CFLAGS+=-pipe # use pipes instead of temp files
   CFLAGS+=-feliminate-unused-debug-types
   LDFLAGS+=$(ARCH_FLAGS)
