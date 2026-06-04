@@ -1,5 +1,4 @@
 #define WOLFBOOT_UPDATE_DISK
-#define WOLFBOOT_SKIP_BOOT_VERIFY
 #define WOLFBOOT_SELF_UPDATE_MONOLITHIC
 #define RAM_CODE
 #define WOLFBOOT_SELF_HEADER
@@ -35,6 +34,8 @@ static int mock_disk_close_called;
 static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
 static int mock_fail_payload_part;
+static int mock_verify_integrity_ret;
+static int mock_verify_authenticity_ret;
 
 ChaCha chacha;
 
@@ -79,6 +80,8 @@ static void reset_mocks(void)
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
     mock_fail_payload_part = -1;
+    mock_verify_integrity_ret = 0;
+    mock_verify_authenticity_ret = 0;
     mock_flash_protect_called = 0;
     mock_flash_protect_addr = 0;
     mock_flash_protect_len = 0;
@@ -178,14 +181,16 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 
 int wolfBoot_verify_integrity(struct wolfBoot_image* img)
 {
-    (void)img;
-    return 0;
+    if (mock_verify_integrity_ret == 0)
+        img->sha_ok = 1;
+    return mock_verify_integrity_ret;
 }
 
 int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 {
-    (void)img;
-    return 0;
+    if (mock_verify_authenticity_ret == 0)
+        img->signature_ok = 1;
+    return mock_verify_authenticity_ret;
 }
 
 int wolfBoot_get_dts_size(void *dts_addr)
@@ -353,6 +358,34 @@ START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
 }
 END_TEST
 
+START_TEST(test_update_disk_rejects_invalid_integrity)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 7, 0xB2);
+    mock_verify_integrity_ret = -1;
+
+    wolfBoot_start();
+
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
+}
+END_TEST
+
+START_TEST(test_update_disk_rejects_invalid_signature)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 7, 0xB2);
+    mock_verify_authenticity_ret = -1;
+
+    wolfBoot_start();
+
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -365,6 +398,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_boots_from_B_when_A_is_blank);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
     tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
+    tcase_add_test(tc, test_update_disk_rejects_invalid_integrity);
+    tcase_add_test(tc, test_update_disk_rejects_invalid_signature);
     suite_add_tcase(s, tc);
 
     return s;
