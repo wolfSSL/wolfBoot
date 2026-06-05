@@ -61,6 +61,7 @@ TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-linux-loader-e820
+TESTS+=unit-linux-loader-syssize
 
 include unit-sign-encrypted-output.mkfrag
 
@@ -269,6 +270,11 @@ unit-pci:  unit-pci.c ../../src/pci.c
 # build standalone with -m32 and without coverage (no 32bit gcov/check libs).
 unit-linux-loader-e820: ../../include/target.h unit-linux-loader-e820.c
 	gcc -m32 -o $@ unit-linux-loader-e820.c -I. -I../../src -I../../include \
+		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DWOLFBOOT_LOAD_BASE=0x100000
+
+unit-linux-loader-syssize: ../../include/target.h unit-linux-loader-syssize.c
+	gcc -m32 -o $@ unit-linux-loader-syssize.c -I. -I../../src -I../../include \
 		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
 		-DWOLFBOOT_LOAD_BASE=0x100000
 
