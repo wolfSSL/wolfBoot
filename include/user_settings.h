@@ -784,7 +784,6 @@ extern int tolower(int c);
 #   define WOLFSSL_NO_TLS12
 #   define WOLFSSL_USER_IO
 #   define WOLFSSL_SP_MUL_D
-#   define WOLFSSL_PEM_TO_DER
 #   define WOLFSSL_ALLOW_NO_SUITES
 #endif
 
