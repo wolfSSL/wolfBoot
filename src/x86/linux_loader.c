@@ -112,16 +112,27 @@ static int linux_boot_params_fill_memory_map(struct boot_params *bp,
 
 /* Compute the protected-mode kernel size (syssize * 16) in 64-bit to avoid the
  * uint32_t multiplication wrap, and reject any image whose kernel would not fit
- * in the destination window [KERNEL_LOAD_ADDRESS, load_limit). Returns 0 on
- * success, -1 if the size is zero or out of range. */
+ * in the destination window [KERNEL_LOAD_ADDRESS, load_limit).
+ *
+ * load_limit == 0 means "no destination window bound is known" (non-FSP builds,
+ * which do not expose a tolum): in that case only the wrap and zero-size cases
+ * are rejected, bounding the result to what fits in the uint32_t kernel_size.
+ *
+ * Returns 0 on success, -1 if the size is zero or out of range. */
 static int linux_kernel_size(uint32_t syssize, uint32_t load_limit,
                              uint32_t *kernel_size)
 {
     uint64_t ksz = (uint64_t)syssize * 16u;
+    uint64_t max_size;
 
-    if (load_limit <= KERNEL_LOAD_ADDRESS)
+    if (load_limit == 0)
+        max_size = (uint64_t)0xFFFFFFFFu;
+    else if (load_limit <= KERNEL_LOAD_ADDRESS)
         return -1;
-    if (ksz == 0 || ksz > (uint64_t)(load_limit - KERNEL_LOAD_ADDRESS))
+    else
+        max_size = (uint64_t)(load_limit - KERNEL_LOAD_ADDRESS);
+
+    if (ksz == 0 || ksz > max_size)
         return -1;
     *kernel_size = (uint32_t)ksz;
     return 0;

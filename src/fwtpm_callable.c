@@ -17,18 +17,21 @@
 #include "wolftpm/fwtpm/fwtpm_nv.h"
 #include "wolftpm/tpm2_types.h"
 
-/* Validate that a buffer supplied by the non-secure caller is fully accessible
- * from the non-secure world before the secure side dereferences it. Without
- * this check a non-secure caller could pass a pointer into Secure SRAM and turn
- * this veneer into a confused-deputy primitive (forging TPM responses into
- * Secure memory or leaking Secure memory through the command path). Outside of a
- * CMSE secure build there is no security boundary, so the checks collapse to a
- * simple non-NULL pass-through. */
+/* Validate that a buffer supplied by the non-secure caller lives in the
+ * non-secure world before the secure side dereferences it. Without this check a
+ * non-secure caller could pass a pointer into Secure SRAM and turn this veneer
+ * into a confused-deputy primitive (forging TPM responses into Secure memory or
+ * leaking Secure memory through the command path). The relevant property is the
+ * Secure/Non-secure attribution (SAU/IDAU): only CMSE_NONSECURE is checked, not
+ * the MPU read/write permission bits. The MPU bits depend on an enabled NS MPU
+ * (they read back as 0 when NO_MPU is set) and do not constrain Secure accesses
+ * to NS memory anyway, so requiring them would wrongly reject valid NS buffers.
+ * Outside of a CMSE secure build there is no security boundary, so the checks
+ * collapse to a simple non-NULL pass-through. */
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #include <arm_cmse.h>
 #define WCS_FWTPM_NS_RW(p, sz) \
-    cmse_check_address_range((void*)(p), (size_t)(sz), \
-        CMSE_NONSECURE | CMSE_MPU_READWRITE)
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
 #define WCS_FWTPM_NS_R(p, sz) \
     cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
 #else

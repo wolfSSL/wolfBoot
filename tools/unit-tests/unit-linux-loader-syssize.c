@@ -89,6 +89,32 @@ int main(void)
         return 1;
     }
 
+    /* load_limit == 0 is the non-FSP case ("no destination window bound"):
+     * a legitimate kernel must still be accepted (no spurious panic) ... */
+    ksz = 0;
+    ret = linux_kernel_size(0x10000u, 0u, &ksz);
+    if (ret != 0 || ksz != 0x10000u * 16u) {
+        printf("FAIL: valid kernel rejected with no load_limit "
+               "(ret=%d ksz=0x%08x)\n", ret, ksz);
+        return 1;
+    }
+
+    /* ... while the wrapping cases must still be rejected even without a
+     * window bound, since the 64-bit size exceeds the uint32_t kernel_size. */
+    for (i = 0; i < sizeof(wrap_cases) / sizeof(wrap_cases[0]); i++) {
+        if (linux_kernel_size(wrap_cases[i], 0u, &ksz) == 0) {
+            printf("FAIL: overflowing syssize 0x%08x accepted with no "
+                   "load_limit\n", wrap_cases[i]);
+            return 1;
+        }
+    }
+
+    /* Zero-sized kernel must be rejected even without a window bound. */
+    if (linux_kernel_size(0, 0u, &ksz) == 0) {
+        printf("FAIL: zero-sized kernel accepted with no load_limit\n");
+        return 1;
+    }
+
     printf("PASS\n");
     return 0;
 }

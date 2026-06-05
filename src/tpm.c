@@ -1231,17 +1231,19 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 
 /* API's that are callable from non-secure code */
 
-/* Validate that a buffer supplied by the non-secure caller is fully
- * accessible from the non-secure world before the secure side dereferences
- * it. Without this check a non-secure caller could pass a pointer into Secure
- * SRAM and turn these veneers into a confused-deputy write primitive against
- * Secure memory. Outside of a CMSE secure build there is no security boundary,
- * so the checks collapse to a simple non-NULL pass-through. */
+/* Validate that a buffer supplied by the non-secure caller lives in the
+ * non-secure world before the secure side dereferences it. Without this check a
+ * non-secure caller could pass a pointer into Secure SRAM and turn these veneers
+ * into a confused-deputy write primitive against Secure memory. The check
+ * verifies only the Secure/Non-secure attribution (CMSE_NONSECURE); the MPU
+ * read/write permission bits are deliberately not required, as they read back as
+ * 0 when the NS MPU is disabled (NO_MPU) and do not constrain Secure accesses to
+ * NS memory anyway. Outside of a CMSE secure build there is no security
+ * boundary, so the checks collapse to a simple non-NULL pass-through. */
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #include <arm_cmse.h>
 #define WOLFBOOT_TPM_NS_RW(p, sz) \
-    cmse_check_address_range((void*)(p), (size_t)(sz), \
-        CMSE_NONSECURE | CMSE_MPU_READWRITE)
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
 #define WOLFBOOT_TPM_NS_R(p, sz) \
     cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
 #else

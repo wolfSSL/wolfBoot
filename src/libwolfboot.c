@@ -2422,16 +2422,18 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 
 /* The wolfBoot_nsc_* functions are cmse_nonsecure_entry veneers callable by any
  * non-secure code. Pointer arguments arrive directly from the NS caller and are
- * used as the write target of the secure callee. Validate the whole range is
- * accessible from the non-secure world before writing, otherwise an NS caller
- * could aim the write at Secure SRAM (a confused-deputy write primitive). Outside
- * a CMSE secure build there is no security boundary, so the check collapses to a
- * non-NULL pass-through. Same fix pattern as F-4416/F-4417/F-4644. */
+ * used as the write target of the secure callee. Validate the whole range lives
+ * in the non-secure world before writing, otherwise an NS caller could aim the
+ * write at Secure SRAM (a confused-deputy write primitive). The check verifies
+ * only the Secure/Non-secure attribution (CMSE_NONSECURE); the MPU read/write
+ * permission bits are deliberately not required, as they read back as 0 when the
+ * NS MPU is disabled (NO_MPU) and do not constrain Secure accesses to NS memory
+ * anyway. Outside a CMSE secure build there is no security boundary, so the check
+ * collapses to a non-NULL pass-through. Same fix pattern as F-4416/F-4417/F-4644. */
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #include <arm_cmse.h>
 #define WOLFBOOT_NSC_NS_RW(p, sz) \
-    cmse_check_address_range((void*)(p), (size_t)(sz), \
-        CMSE_NONSECURE | CMSE_MPU_READWRITE)
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
 #else
 #define WOLFBOOT_NSC_NS_RW(p, sz) ((void*)(p))
 #endif

@@ -65,6 +65,11 @@
 
 #define MOCK_ADDRESS 0xCF000000
 uint8_t *vault_base = (uint8_t *)MOCK_ADDRESS;
+
+/* Backing file for the mock keyvault. Made unique per process (see main()) so
+ * concurrent test runs do not collide on a shared /tmp path, with a usable
+ * default in case a test is ever driven without main() initializing it. */
+char vault_path[64] = "/tmp/wolfboot-unit-keyvault.bin";
 #include "unit-keystore.c"
 #include "pkcs11_store.c"
 const uint32_t keyvault_size = KEYVAULT_OBJ_SIZE * KEYVAULT_MAX_ITEMS + 2 * WOLFBOOT_SECTOR_SIZE;
@@ -88,7 +93,7 @@ START_TEST (test_store_and_load_objs) {
     id_tok = 1;
     id_obj = 12;
     readonly = 0;
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert(ret == 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -296,7 +301,7 @@ START_TEST(test_cross_sector_write_preserves_length)
     for (ret = 0; ret < WOLFBOOT_SECTOR_SIZE; ret++)
         payload[ret] = (unsigned char)(ret & 0xFF);
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -327,7 +332,7 @@ START_TEST(test_close_clears_handle_state)
     struct store_handle *handle;
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -360,7 +365,7 @@ START_TEST(test_delete_object_ignores_metadata_prefix)
     uint8_t bitmap_before[BITMAP_SIZE];
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xFF, keyvault_size);
@@ -390,7 +395,7 @@ START_TEST(test_delete_object_corrupted_pos_no_oob)
     struct obj_hdr *hdr;
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xFF, keyvault_size);
@@ -429,7 +434,7 @@ START_TEST(test_find_object_search_stops_at_header_sector)
     uint32_t *payload_ids;
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xFF, keyvault_size);
@@ -479,10 +484,19 @@ Suite *wolfboot_suite(void)
 int main(void)
 {
     int fails;
-    Suite *s = wolfboot_suite();
-    SRunner *sr = srunner_create(s);
+    Suite *s;
+    SRunner *sr;
+
+    /* Use a per-process backing file so parallel test runs (or a stale file
+     * from a previous run) cannot collide on a shared /tmp path. */
+    snprintf(vault_path, sizeof(vault_path),
+            "/tmp/wolfboot-unit-keyvault-%d.bin", (int)getpid());
+
+    s = wolfboot_suite();
+    sr = srunner_create(s);
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);
+    unlink(vault_path);
     return fails;
 }

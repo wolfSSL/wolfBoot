@@ -60,8 +60,20 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
+
+# linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
+# (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
+# tests when it can, so a default "make" stays portable on hosts without 32-bit
+# support. Set ENABLE_32BIT_TESTS=1 to force them on (e.g. to fail loudly if the
+# toolchain is unexpectedly missing multilib).
+HAVE_M32 := $(shell printf 'int main(void){return 0;}' | gcc -m32 -x c - -o /dev/null >/dev/null 2>&1 && echo 1 || echo 0)
+ENABLE_32BIT_TESTS ?= $(HAVE_M32)
+ifeq ($(ENABLE_32BIT_TESTS),1)
 TESTS+=unit-linux-loader-e820
 TESTS+=unit-linux-loader-syssize
+else
+$(info Skipping 32-bit x86 linux-loader unit tests: 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
+endif
 
 include unit-sign-encrypted-output.mkfrag
 
