@@ -188,6 +188,8 @@ tools/unit-tests/unit-max-space
 tools/unit-tests/unit-sdhci-disk-unaligned
 tools/unit-tests/unit-fwtpm-stub
 tools/unit-tests/unit-gzip
+tools/unit-tests/unit-linux-loader-e820
+tools/unit-tests/unit-linux-loader-syssize
 
 
 # Elf preprocessing tools
