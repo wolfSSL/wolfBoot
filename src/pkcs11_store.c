@@ -127,6 +127,12 @@ static void bitmap_put(uint32_t pos, int val)
     uint32_t bit = pos % 8;
     uint8_t *bitmap = cached_sector + sizeof(uint32_t);
 
+    /* Reject out-of-range positions (e.g. a power-fault-corrupted hdr->pos
+     * left as erased flash) to avoid an out-of-bounds write past the
+     * bitmap, which lives within cached_sector. */
+    if (pos >= KEYVAULT_MAX_ITEMS)
+        return;
+
     if (val != 0) {
         bitmap[octet] |= (1 << bit);
     } else {
