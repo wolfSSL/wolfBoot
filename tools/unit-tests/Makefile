@@ -60,6 +60,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
+TESTS+=unit-linux-loader-e820
 
 include unit-sign-encrypted-output.mkfrag
 
@@ -263,6 +264,13 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
+
+# linux_loader.c is x86 32bit only and pulls in inline asm guarded on 32bit;
+# build standalone with -m32 and without coverage (no 32bit gcov/check libs).
+unit-linux-loader-e820: ../../include/target.h unit-linux-loader-e820.c
+	gcc -m32 -o $@ unit-linux-loader-e820.c -I. -I../../src -I../../include \
+		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DWOLFBOOT_LOAD_BASE=0x100000
 
 unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \

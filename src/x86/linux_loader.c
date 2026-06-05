@@ -73,8 +73,12 @@ static int e820_add_entry_cb(uint64_t start, uint64_t length, uint32_t type,
                              void *ctx)
 {
     struct boot_params *bp = (struct boot_params*)ctx;
-    struct boot_e820_entry *map = bp->e820_table + bp->e820_entries;
+    struct boot_e820_entry *map;
 
+    if (bp->e820_entries >= E820_MAX_ENTRIES_ZEROPAGE)
+        return -1;
+
+    map = bp->e820_table + bp->e820_entries;
     map->addr = start;
     map->size = length;
     map->type = (type == EFI_RESOURCE_SYSTEM_MEMORY) ? E820_TYPE_RAM :
