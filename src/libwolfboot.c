@@ -2419,6 +2419,23 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* EXT_ENCRYPTED */
 
 #if defined(__WOLFBOOT) && defined(TZEN)
+
+/* The wolfBoot_nsc_* functions are cmse_nonsecure_entry veneers callable by any
+ * non-secure code. Pointer arguments arrive directly from the NS caller and are
+ * used as the write target of the secure callee. Validate the whole range is
+ * accessible from the non-secure world before writing, otherwise an NS caller
+ * could aim the write at Secure SRAM (a confused-deputy write primitive). Outside
+ * a CMSE secure build there is no security boundary, so the check collapses to a
+ * non-NULL pass-through. Same fix pattern as F-4416/F-4417/F-4644. */
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#include <arm_cmse.h>
+#define WOLFBOOT_NSC_NS_RW(p, sz) \
+    cmse_check_address_range((void*)(p), (size_t)(sz), \
+        CMSE_NONSECURE | CMSE_MPU_READWRITE)
+#else
+#define WOLFBOOT_NSC_NS_RW(p, sz) ((void*)(p))
+#endif
+
 CSME_NSE_API
 void wolfBoot_nsc_success(void)
 {
@@ -2440,6 +2457,8 @@ uint32_t wolfBoot_nsc_get_image_version(uint8_t part)
 CSME_NSE_API
 int wolfBoot_nsc_get_partition_state(uint8_t part, uint8_t *st)
 {
+    if (WOLFBOOT_NSC_NS_RW(st, sizeof(uint8_t)) == NULL)
+        return -1;
     return wolfBoot_get_partition_state(part, st);
 }
 
