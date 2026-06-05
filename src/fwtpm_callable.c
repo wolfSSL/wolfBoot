@@ -17,6 +17,25 @@
 #include "wolftpm/fwtpm/fwtpm_nv.h"
 #include "wolftpm/tpm2_types.h"
 
+/* Validate that a buffer supplied by the non-secure caller is fully accessible
+ * from the non-secure world before the secure side dereferences it. Without
+ * this check a non-secure caller could pass a pointer into Secure SRAM and turn
+ * this veneer into a confused-deputy primitive (forging TPM responses into
+ * Secure memory or leaking Secure memory through the command path). Outside of a
+ * CMSE secure build there is no security boundary, so the checks collapse to a
+ * simple non-NULL pass-through. */
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#include <arm_cmse.h>
+#define WCS_FWTPM_NS_RW(p, sz) \
+    cmse_check_address_range((void*)(p), (size_t)(sz), \
+        CMSE_NONSECURE | CMSE_MPU_READWRITE)
+#define WCS_FWTPM_NS_R(p, sz) \
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
+#else
+#define WCS_FWTPM_NS_RW(p, sz) ((void*)(p))
+#define WCS_FWTPM_NS_R(p, sz)  ((void*)(p))
+#endif
+
 static FWTPM_CTX fwtpm_ctx;
 static int fwtpm_ready;
 
@@ -129,9 +148,16 @@ int CSME_NSE_API wcs_fwtpm_transmit(const uint8_t *cmd, uint32_t cmdSz,
             cmdSz > WCS_FWTPM_MAX_COMMAND_SIZE) {
         return BAD_FUNC_ARG;
     }
+    if (WCS_FWTPM_NS_R(cmd, cmdSz) == NULL ||
+            WCS_FWTPM_NS_RW(rspSz, sizeof(*rspSz)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
 
     rspCapacity = *rspSz;
     if (rspCapacity == 0U || rspCapacity > WCS_FWTPM_MAX_COMMAND_SIZE) {
+        return BAD_FUNC_ARG;
+    }
+    if (WCS_FWTPM_NS_RW(rsp, rspCapacity) == NULL) {
         return BAD_FUNC_ARG;
     }
 
