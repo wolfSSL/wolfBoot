@@ -152,6 +152,15 @@ static uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
         if (!lenp) {
             return FDT_END; /* premature end */
         }
+        /* A property value can never be larger than the blob itself.
+         * Reject an oversized length up front: otherwise the unsigned
+         * cursor arithmetic below wraps (e.g. len=0xFFFFFFFF advances
+         * offset by only 7 bytes), the malformed node slips past the
+         * fdt_offset_ptr() bounds check, and the bogus length propagates
+         * to callers as a negative int (a ~4GB memcpy size). */
+        if (fdt32_to_cpu(*lenp) > (uint32_t)fdt_totalsize(fdt)) {
+            return FDT_END; /* bad structure */
+        }
         /* skip-name offset, length and value */
         offset += sizeof(struct fdt_property) - FDT_TAGSIZE
             + fdt32_to_cpu(*lenp);

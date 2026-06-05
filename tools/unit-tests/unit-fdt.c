@@ -78,6 +78,64 @@ START_TEST(test_fdt_get_string_returns_string_with_valid_offset)
 }
 END_TEST
 
+/* Minimal FIT with a single /images/kernel-1 node whose `data` property
+ * declares len=0xFFFFFFFF. There is no `load` (and no `compression`), so
+ * fit_load_image_inner() takes the pass-through branch. Before the
+ * fdt_next_tag() length check, the oversized len wrapped the cursor
+ * arithmetic, slipped past the bounds check, and was handed back as
+ * *lenp = -1 - which update_ram.c then aliased into a ~4GB memcpy size.
+ * The loader must instead fail closed (return NULL). */
+static const uint8_t fit_data_len_overflow[] = {
+    /* header */
+    0xd0, 0x0d, 0xfe, 0xed, /* magic */
+    0x00, 0x00, 0x00, 0x81, /* totalsize = 129 */
+    0x00, 0x00, 0x00, 0x38, /* off_dt_struct = 56 */
+    0x00, 0x00, 0x00, 0x7c, /* off_dt_strings = 124 */
+    0x00, 0x00, 0x00, 0x28, /* off_mem_rsvmap = 40 */
+    0x00, 0x00, 0x00, 0x11, /* version = 17 */
+    0x00, 0x00, 0x00, 0x10, /* last_comp_version = 16 */
+    0x00, 0x00, 0x00, 0x00, /* boot_cpuid_phys */
+    0x00, 0x00, 0x00, 0x05, /* size_dt_strings = 5 */
+    0x00, 0x00, 0x00, 0x44, /* size_dt_struct = 68 */
+    /* mem_rsvmap terminator (offset 40) */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    /* struct block (offset 56) */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE root */
+    0x00, 0x00, 0x00, 0x00,                         /* "" */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE images */
+    0x69, 0x6d, 0x61, 0x67, 0x65, 0x73, 0x00, 0x00, /* "images\0\0" */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE kernel-1 */
+    0x6b, 0x65, 0x72, 0x6e, 0x65, 0x6c, 0x2d, 0x31,
+    0x00, 0x00, 0x00, 0x00,                         /* "kernel-1\0\0\0\0" */
+    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
+    0xff, 0xff, 0xff, 0xff,                         /* len = 0xFFFFFFFF */
+    0x00, 0x00, 0x00, 0x00,                         /* nameoff = 0 ("data") */
+    0x00, 0x00, 0x00, 0x00,                         /* data (4 bytes) */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE kernel-1 */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE images */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE root */
+    0x00, 0x00, 0x00, 0x09,                         /* FDT_END */
+    /* strings block (offset 124) */
+    0x64, 0x61, 0x74, 0x61, 0x00,                   /* "data\0" */
+};
+
+START_TEST(test_fit_load_image_rejects_oversized_prop_len)
+{
+    static uint8_t fit_scratch[sizeof(fit_data_len_overflow)];
+    int len = 0;
+    void *ret;
+
+    memcpy(fit_scratch, fit_data_len_overflow, sizeof(fit_scratch));
+
+    ret = fit_load_image_ex(fit_scratch, "kernel-1", &len, 64 * 1024);
+
+    /* Must fail closed: never return a live pointer with a negative
+     * length that a caller could turn into a giant memcpy size. */
+    ck_assert_ptr_null(ret);
+}
+END_TEST
+
 static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
@@ -85,6 +143,7 @@ static Suite *fdt_suite(void)
 
     tcase_add_test(tc, test_fdt_get_string_rejects_out_of_range_offset);
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
+    tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
     suite_add_tcase(s, tc);
 
     return s;
