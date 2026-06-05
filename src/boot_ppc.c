@@ -376,7 +376,13 @@ void RAMFUNCTION wolfBoot_os64bit_jump(os64bit_entry_t entry,
          * handler to grow without silently truncating the copy. */
         #define WOLFBOOT_OS64BIT_IVPR_MAX 0x400U /* 1 KB */
         if (bytes > WOLFBOOT_OS64BIT_IVPR_MAX) {
-            return; /* refuse to jump with a truncated handler */
+            /* Handler exceeds the reserved IVPR landing zone; a truncated
+             * copy would crash the OS unpredictably. Fail loudly rather
+             * than silently skip the jump. */
+            wolfBoot_printf("os64bit_jump: ISR handler too large "
+                "(%u > %u)\n", (unsigned int)bytes,
+                (unsigned int)WOLFBOOT_OS64BIT_IVPR_MAX);
+            wolfBoot_panic();
         }
 
         for (i = 0; i < copy_words; i++) {

@@ -160,6 +160,27 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
  * validate the header CRC32 (~2^-32) and the payload size, dropping the
  * joint false-positive probability to roughly 2^-64. This matches
  * U-Boot's own mkimage/bootm validation. */
+
+/* Read a 32-bit big-endian uImage header field from a (possibly
+ * unaligned) location and return it in host byte order. Done locally
+ * rather than via fdt32_to_cpu() so WOLFBOOT_UBOOT_LEGACY does not
+ * require src/fdt.c to be linked -- some targets enable uImage support
+ * without the FDT/MMU code (e.g. zynq7000 when MMU != 1). The memcpy
+ * also avoids an unaligned 32-bit load on architectures that fault. */
+static uint32_t uboot_read_be32(const uint8_t *p)
+{
+    uint32_t x;
+    memcpy(&x, p, sizeof(x));
+#ifdef BIG_ENDIAN_ORDER
+    return x;
+#else
+    return ((x & 0xFF000000U) >> 24) |
+           ((x & 0x00FF0000U) >>  8) |
+           ((x & 0x0000FF00U) <<  8) |
+           ((x & 0x000000FFU) << 24);
+#endif
+}
+
 static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
 {
     struct gpt_crc32_ctx ctx;
@@ -181,25 +202,23 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
     if (magic != UBOOT_IMG_HDR_MAGIC)
         return 0;
 
-    /* ih_size: big-endian payload length. fdt32_to_cpu handles host
-     * endianness (no-op on a BE host, byte-swap on LE). Reject zero
+    /* ih_size: big-endian payload length. uboot_read_be32 converts to
+     * host order (no-op on a BE host, byte-swap on LE). Reject zero
      * and anything that would overrun the signed image. */
-    memcpy(&size, hdr + 0x0C, sizeof(size));
-    size = fdt32_to_cpu(size);
+    size = uboot_read_be32(hdr + 0x0C);
     if (size == 0)
         return 0;
     if (size > (total - UBOOT_IMG_HDR_SZ))
         return 0;
 
-    /* ih_hcrc: CRC32 of the header with the hcrc field treated as zero. */
+    /* ih_hcrc: CRC32 of the header with the hcrc field treated as zero.
+     * Read (and convert from big-endian) before zeroing the field. */
     memcpy(scratch, hdr, UBOOT_IMG_HDR_SZ);
-    memcpy(&hcrc, scratch + 0x04, sizeof(hcrc));
+    hcrc = uboot_read_be32(scratch + 0x04);
     memset(scratch + 0x04, 0, sizeof(hcrc));
     gpt_crc32_init(&ctx);
     gpt_crc32_update(&ctx, scratch, UBOOT_IMG_HDR_SZ);
     crc = gpt_crc32_final(&ctx);
-    /* hcrc is stored big-endian; convert to host order. */
-    hcrc = fdt32_to_cpu(hcrc);
     if (hcrc != crc)
         return 0;
 
@@ -421,8 +440,8 @@ backup_on_failure:
         uint32_t ih_load;
         uint32_t ih_ep;
 
-        ih_load = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 16));
-        ih_ep   = fdt32_to_cpu(*(const uint32_t*)((const uint8_t*)image_ptr + 20));
+        ih_load = uboot_read_be32((const uint8_t*)image_ptr + 16);
+        ih_ep   = uboot_read_be32((const uint8_t*)image_ptr + 20);
 
         wolfBoot_printf("U-Boot Legacy header detected: load=0x%x ep=0x%x "
             "(skipping %d bytes)\n",

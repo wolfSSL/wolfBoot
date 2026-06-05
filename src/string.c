@@ -355,17 +355,20 @@ static void uart_writenum_emit(char *buf, int bufsize, int i, int sz,
 void uart_writenum(int num, int base, int zeropad, int maxdigits)
 {
     int i = 0, sz = 0;
-    char buf[sizeof(unsigned int) * 2 + 2];
+    /* Sized for decimal (3 chars/byte) plus sign -- wider than hex. */
+    char buf[sizeof(unsigned int) * 3 + 2];
     unsigned int val = (unsigned int)num;
     if (maxdigits == 0)
         maxdigits = 8;
-    if (maxdigits > (int)sizeof(buf))
-        maxdigits = (int)sizeof(buf);
     memset(buf, 0, sizeof(buf));
     if (base == 10 && num < 0) {
         buf[i++] = '-';
-        val = (unsigned int)(-num);
+        /* Negate in unsigned space so INT_MIN does not overflow. */
+        val = 0U - (unsigned int)num;
     }
+    /* Clamp after reserving the sign slot so zero-pad can't run past buf. */
+    if (maxdigits > (int)sizeof(buf) - i)
+        maxdigits = (int)sizeof(buf) - i;
     if (zeropad) {
         memset(&buf[i], '0', maxdigits);
     }
@@ -389,15 +392,17 @@ static void uart_writenum_ll(unsigned long long val, int is_negative,
     int base, int zeropad, int maxdigits)
 {
     int i = 0, sz = 0;
-    char buf[sizeof(unsigned long long) * 2 + 2];
+    /* Sized for decimal (3 chars/byte) plus sign -- wider than hex. */
+    char buf[sizeof(unsigned long long) * 3 + 2];
     if (maxdigits == 0)
         maxdigits = 8;
-    if (maxdigits > (int)sizeof(buf))
-        maxdigits = (int)sizeof(buf);
     memset(buf, 0, sizeof(buf));
     if (is_negative) {
         buf[i++] = '-';
     }
+    /* Clamp after reserving the sign slot so zero-pad can't run past buf. */
+    if (maxdigits > (int)sizeof(buf) - i)
+        maxdigits = (int)sizeof(buf) - i;
     if (zeropad) {
         memset(&buf[i], '0', maxdigits);
     }
