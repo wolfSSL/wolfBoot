@@ -215,7 +215,7 @@
     #define CCSRBAR 0xEF000000
     #define CCSRBAR_PHYS_HIGH 0xF
     #define CCSRBAR_NEW_REG 0x00FEF000 /* (PHYS_HIGH << 20) | (CCSRBAR >> 12) */
-    #define CCSRBAR_PHYS ((0xFULL << 32) | CCSRBAR_DEF)
+    #define CCSRBAR_PHYS ((0xFULL << 32) | CCSRBAR)
 #endif
 
     #define ENABLE_DDR

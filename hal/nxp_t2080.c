@@ -344,11 +344,11 @@ static void hal_qbman_init(void)
 
 void law_init(void)
 {
+#ifdef ENABLE_DPAA
     /* Buffer Manager (BMan) (control) */
     set_law(3, BMAN_BASE_PHYS_HIGH, (uint32_t)BMAN_BASE_PHYS,
         LAW_TRGT_BMAN, LAW_SIZE_32MB, 1);
 
-#ifdef ENABLE_DPAA
     /* Queue Manager (QMan) (control) at LAW slot 12.
      * Slots 5..11 and 13..16 are used by hal_cpld_init and the OS64BIT
      * transition path; slot 12 is the only free one in the 32-bit map. */
@@ -975,7 +975,11 @@ void RAMFUNCTION hal_ifc_cs0_init(void)
         set32(IFC_CSPR(0), cspr & ~IFC_CSPR_V);
         __asm__ __volatile__("sync; isync");
         set32(IFC_CSPR_EXT(0), (uint32_t)FLASH_BASE_PHYS_HIGH);
-        set32(IFC_AMASK(0), IFC_AMASK_256MB);
+        /* Size the CS0 window to the actual flash bank (FLASH_BANK_SIZE)
+         * rather than a fixed 256MB; over-sizing the decode window aliases
+         * adjacent regions on 128MB boards. AMASK is the count-of-MSB mask,
+         * ~(size - 1): 256MB -> 0xF0000000, 128MB -> 0xF8000000. */
+        set32(IFC_AMASK(0), (uint32_t)(~((uint32_t)FLASH_BANK_SIZE - 1U)));
         set32(IFC_CSPR(0), IFC_CSPR_PHYS_ADDR(FLASH_BASE_ADDR) |
                            IFC_CSPR_PORT_SIZE_16 |
                            IFC_CSPR_MSEL_GPCM | IFC_CSPR_V);
