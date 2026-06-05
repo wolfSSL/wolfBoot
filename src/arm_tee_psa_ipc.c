@@ -766,16 +766,23 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
             const void *data;
             const psa_storage_create_flags_t *flags;
             struct wolfboot_ps_entry *entry;
+            size_t data_len;
             if (in_vec == NULL || in_len < 3) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             uid = (const psa_storage_uid_t *)in_vec[0].base;
             data = in_vec[1].base;
             flags = (const psa_storage_create_flags_t *)in_vec[2].base;
+            /* Snapshot the NS-supplied length once into a Secure-stack local.
+             * in_vec lives in NS memory and may be mutated concurrently (a
+             * preempting NS interrupt or NS-accessible DMA), so re-reading
+             * in_vec[1].len after the bounds check would allow a TOCTOU
+             * double-fetch to grow the copy past WOLFBOOT_PS_MAX_DATA. */
+            data_len = in_vec[1].len;
             if (uid == NULL || flags == NULL) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
-            if (in_vec[1].len > WOLFBOOT_PS_MAX_DATA) {
+            if (data_len > WOLFBOOT_PS_MAX_DATA) {
                 return PSA_ERROR_INSUFFICIENT_STORAGE;
             }
             entry = wolfboot_ps_find(*uid);
@@ -787,13 +794,13 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
             } else if ((entry->flags & PSA_STORAGE_FLAG_WRITE_ONCE) != 0U) {
                 return PSA_ERROR_NOT_PERMITTED;
             }
-            if (in_vec[1].len > 0 && data == NULL) {
+            if (data_len > 0 && data == NULL) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
-            if (in_vec[1].len > 0) {
-                XMEMCPY(entry->data, data, in_vec[1].len);
+            if (data_len > 0) {
+                XMEMCPY(entry->data, data, data_len);
             }
-            entry->size = in_vec[1].len;
+            entry->size = data_len;
             entry->flags = *flags;
             return PSA_SUCCESS;
         }
