@@ -57,6 +57,8 @@ struct test_pci_bar_info {
     uint8_t  is_prefetch; /* 1=prefetchable */
     uint8_t  io_hi16_zero;/* 1=IO BAR only decodes 16 bits (upper 16 of mask are 0) */
     uint32_t upper_mask;  /* 64-bit BARs: upper half probe mask (0 = use default 0xFFFFFFFF) */
+    uint8_t  has_raw_probe;/* 1=override probe readback with raw_probe (hostile/malformed BAR) */
+    uint32_t raw_probe;   /* raw value returned on probe when has_raw_probe is set */
 };
 
 struct test_pci_node {
@@ -262,6 +264,8 @@ static uint32_t test_pci_bar_probe_mask(struct test_pci_node *n, int bar_idx)
         return 0;
 
     b = &n->bars[bar_idx];
+    if (b->has_raw_probe)
+        return b->raw_probe;
     if (b->size > 0) {
         uint32_t mask;
         if (b->is_io) {
@@ -1061,6 +1065,64 @@ START_TEST(test_program_bars_iteration)
 }
 END_TEST
 
+/* test_program_bar_zero_align: a hostile/malformed MMIO BAR whose probe
+ * readback has all address bits (31:4) zero but is non-zero (e.g. 0x8, just
+ * the prefetch indicator) must be treated as unimplemented.  Otherwise
+ * bar_align == 0 makes length = (~0)+1 wrap to 0, the allocator cursor is not
+ * advanced, and the following BAR is programmed onto the same address. */
+START_TEST(test_program_bar_zero_align)
+{
+    struct test_pci_topology t;
+    struct pci_enum_info info;
+    int dev_node;
+    uint32_t bar0_val, bar1_val;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    /* BAR0: malformed prefetchable MMIO — probe returns only the prefetch
+     * bit (0x8), so bar_align == 0.  Use a raw override; no power-of-2 size
+     * can produce this readback. */
+    t.nodes[dev_node].bars[0].has_raw_probe = 1;
+    t.nodes[dev_node].bars[0].raw_probe = 0x00000008;
+    /* BAR1: normal 64KB prefetchable MMIO (same mem_pf window). */
+    test_pci_dev_set_bar(&t, dev_node, 1, 0x10000, TEST_PCI_BAR_PF);
+    test_pci_commit(&t);
+
+    /* Pre-fill BAR0 so we can confirm it is restored, not programmed. */
+    {
+        uint32_t orig = 0xDEAD0008;
+        memcpy(&t.nodes[dev_node].cfg[PCI_BAR0_OFFSET], &orig, 4);
+    }
+
+    memset(&info, 0, sizeof(info));
+    info.mem = 0x80000000;
+    info.mem_limit = 0x88000000;
+    info.mem_pf = 0x90000000;
+    info.mem_pf_limit = 0xFFFFFFFF;
+    info.io = 0x2000;
+
+    pci_enum_bus(0, &info);
+
+    bar0_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    bar1_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET + 4);
+
+    /* The malformed BAR0 must be skipped and restored to its original value,
+     * never programmed onto the MMIO window. */
+    ck_assert_uint_eq(bar0_val, 0xDEAD0008);
+
+    /* BAR1 takes the head of the prefetchable window. */
+    ck_assert_uint_eq(bar1_val, 0x90000000);
+
+    /* The two BARs must not collide on the same MMIO address. */
+    ck_assert_uint_ne(bar0_val, bar1_val);
+
+    /* mem_pf advanced only by BAR1's size. */
+    ck_assert_uint_eq(info.mem_pf, 0x90000000 + 0x10000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_program_bridge: parameterized bridge programming tests */
 
 START_TEST(test_program_bridge)
@@ -1680,6 +1742,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_bars_iter = tcase_create("program-bars-iteration");
     tcase_add_test(tc_bars_iter, test_program_bars_iteration);
     suite_add_tcase(s, tc_bars_iter);
+
+    TCase *tc_bar_zalign = tcase_create("program-bar-zero-align");
+    tcase_add_test(tc_bar_zalign, test_program_bar_zero_align);
+    suite_add_tcase(s, tc_bar_zalign);
 
     TCase *tc_bridge = tcase_create("program-bridge");
     tcase_add_test(tc_bridge, test_program_bridge);

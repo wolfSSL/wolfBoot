@@ -125,6 +125,8 @@ static uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
 {
     const uint32_t *tagp, *lenp;
     uint32_t tag;
+    uint32_t proplen;
+    uint64_t next_off;
     int offset = startoffset;
     const char *p;
 
@@ -152,13 +154,30 @@ static uint32_t fdt_next_tag(const void *fdt, int startoffset, int *nextoffset)
         if (!lenp) {
             return FDT_END; /* premature end */
         }
-        /* skip-name offset, length and value */
-        offset += sizeof(struct fdt_property) - FDT_TAGSIZE
-            + fdt32_to_cpu(*lenp);
-        if (fdt_version(fdt) < 0x10 && fdt32_to_cpu(*lenp) >= 8 &&
-            ((offset - fdt32_to_cpu(*lenp)) % 8) != 0) {
-            offset += 4;
+        proplen = fdt32_to_cpu(*lenp);
+        /* A property value can never be larger than the blob itself.
+         * Reject an oversized length up front: otherwise the unsigned
+         * cursor arithmetic below wraps (e.g. len=0xFFFFFFFF advances
+         * offset by only 7 bytes), the malformed node slips past the
+         * fdt_offset_ptr() bounds check, and the bogus length propagates
+         * to callers as a negative int (a ~4GB memcpy size). */
+        if (proplen > (uint32_t)fdt_totalsize(fdt)) {
+            return FDT_END; /* bad structure */
         }
+        /* skip-name offset, length and value. Accumulate the next cursor in a
+         * 64-bit unsigned so neither the addition nor the narrowing back to the
+         * signed int offset can overflow, then re-validate it against the blob
+         * size before continuing. */
+        next_off = (uint64_t)offset
+            + (sizeof(struct fdt_property) - FDT_TAGSIZE) + proplen;
+        if (fdt_version(fdt) < 0x10 && proplen >= 8 &&
+            ((next_off - proplen) % 8) != 0) {
+            next_off += 4;
+        }
+        if (next_off > (uint64_t)fdt_totalsize(fdt)) {
+            return FDT_END; /* bad structure */
+        }
+        offset = (int)next_off;
         break;
 
     case FDT_END:

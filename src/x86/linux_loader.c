@@ -73,8 +73,12 @@ static int e820_add_entry_cb(uint64_t start, uint64_t length, uint32_t type,
                              void *ctx)
 {
     struct boot_params *bp = (struct boot_params*)ctx;
-    struct boot_e820_entry *map = bp->e820_table + bp->e820_entries;
+    struct boot_e820_entry *map;
 
+    if (bp->e820_entries >= E820_MAX_ENTRIES_ZEROPAGE)
+        return -1;
+
+    map = bp->e820_table + bp->e820_entries;
     map->addr = start;
     map->size = length;
     map->type = (type == EFI_RESOURCE_SYSTEM_MEMORY) ? E820_TYPE_RAM :
@@ -106,10 +110,38 @@ static int linux_boot_params_fill_memory_map(struct boot_params *bp,
 #define KERNEL_LOAD_ADDRESS 0x100000
 #define KERNEL_CMDLINE_ADDRESS 0x10000
 
+/* Compute the protected-mode kernel size (syssize * 16) in 64-bit to avoid the
+ * uint32_t multiplication wrap, and reject any image whose kernel would not fit
+ * in the destination window [KERNEL_LOAD_ADDRESS, load_limit).
+ *
+ * load_limit == 0 means "no destination window bound is known" (non-FSP builds,
+ * which do not expose a tolum): in that case only the wrap and zero-size cases
+ * are rejected, bounding the result to what fits in the uint32_t kernel_size.
+ *
+ * Returns 0 on success, -1 if the size is zero or out of range. */
+static int linux_kernel_size(uint32_t syssize, uint32_t load_limit,
+                             uint32_t *kernel_size)
+{
+    uint64_t ksz = (uint64_t)syssize * 16u;
+    uint64_t max_size;
+
+    if (load_limit == 0)
+        max_size = (uint64_t)0xFFFFFFFFu;
+    else if (load_limit <= KERNEL_LOAD_ADDRESS)
+        return -1;
+    else
+        max_size = (uint64_t)(load_limit - KERNEL_LOAD_ADDRESS);
+
+    if (ksz == 0 || ksz > max_size)
+        return -1;
+    *kernel_size = (uint32_t)ksz;
+    return 0;
+}
+
 void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
 {
     struct boot_params param = { 0 };
-    uint32_t kernel_size, param_size;
+    uint32_t kernel_size, param_size, load_limit;
     uint8_t *image_boot_param;
     uint16_t end_of_header_off;
     uint8_t *_cmd_line;
@@ -141,7 +173,15 @@ void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
     memcpy(_cmd_line, (uint8_t*)cmd_line, strlen(cmd_line)+1);
     param.hdr.type_of_loader = 0xff;
     param.hdr.cmd_line_ptr = (uint32_t)(uintptr_t)_cmd_line;
-    kernel_size = param.hdr.syssize * 16;
+#ifdef WOLFBOOT_FSP
+    load_limit = ((struct stage2_parameter *)params)->tolum;
+#else
+    load_limit = 0;
+#endif /* WOLFBOOT_FSP */
+    if (linux_kernel_size(param.hdr.syssize, load_limit, &kernel_size) != 0) {
+        wolfBoot_printf("invalid kernel size" ENDLINE);
+        wolfBoot_panic();
+    }
     memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, linux_image + param_size,
            kernel_size);
 

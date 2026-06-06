@@ -65,6 +65,11 @@
 
 #define MOCK_ADDRESS 0xCF000000
 uint8_t *vault_base = (uint8_t *)MOCK_ADDRESS;
+
+/* Backing file for the mock keyvault. Made unique per process (see main()) so
+ * concurrent test runs do not collide on a shared /tmp path, with a usable
+ * default in case a test is ever driven without main() initializing it. */
+char vault_path[64] = "/tmp/wolfboot-unit-keyvault.bin";
 #include "unit-keystore.c"
 #include "pkcs11_store.c"
 const uint32_t keyvault_size = KEYVAULT_OBJ_SIZE * KEYVAULT_MAX_ITEMS + 2 * WOLFBOOT_SECTOR_SIZE;
@@ -88,7 +93,7 @@ START_TEST (test_store_and_load_objs) {
     id_tok = 1;
     id_obj = 12;
     readonly = 0;
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert(ret == 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -296,7 +301,7 @@ START_TEST(test_cross_sector_write_preserves_length)
     for (ret = 0; ret < WOLFBOOT_SECTOR_SIZE; ret++)
         payload[ret] = (unsigned char)(ret & 0xFF);
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -327,7 +332,7 @@ START_TEST(test_close_clears_handle_state)
     struct store_handle *handle;
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xEE, keyvault_size);
@@ -360,7 +365,7 @@ START_TEST(test_delete_object_ignores_metadata_prefix)
     uint8_t bitmap_before[BITMAP_SIZE];
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xFF, keyvault_size);
@@ -382,6 +387,44 @@ START_TEST(test_delete_object_ignores_metadata_prefix)
 }
 END_TEST
 
+START_TEST(test_delete_object_corrupted_pos_no_oob)
+{
+    const int32_t type = DYNAMIC_TYPE_RSA;
+    const uint32_t tok_id = 0x0A0B0C0DU;
+    const uint32_t obj_id = 0x10203040U;
+    struct obj_hdr *hdr;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    /* Valid header magic and zeroed bitmap so check_vault() accepts the
+     * sector without restoring/reinitializing it. */
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    /* Simulate a power-fault-corrupted node: valid tok/obj/type but the
+     * 'pos' field was never written and is left as erased flash
+     * (PKCS11_INVALID_ID). delete_object() must not turn this into an
+     * out-of-bounds bitmap_put(0xFFFFFFFF, 0). */
+    hdr = NODES_TABLE;
+    hdr->token_id = tok_id;
+    hdr->object_id = obj_id;
+    hdr->type = type;
+    hdr->pos = PKCS11_INVALID_ID;
+    hdr->size = 2 * sizeof(uint32_t);
+
+    delete_object(type, tok_id, obj_id);
+
+    /* If we get here without a crash, the OOB write was avoided. The node
+     * should also have been invalidated. */
+    ck_assert_uint_eq(NODES_TABLE->token_id, PKCS11_INVALID_ID);
+    ck_assert_uint_eq(NODES_TABLE->object_id, PKCS11_INVALID_ID);
+}
+END_TEST
+
 START_TEST(test_find_object_search_stops_at_header_sector)
 {
     const int32_t type = DYNAMIC_TYPE_RSA;
@@ -391,7 +434,7 @@ START_TEST(test_find_object_search_stops_at_header_sector)
     uint32_t *payload_ids;
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-unit-keyvault.bin", vault_base,
+    ret = mmap_file(vault_path, vault_base,
             keyvault_size, NULL);
     ck_assert_int_eq(ret, 0);
     memset(vault_base, 0xFF, keyvault_size);
@@ -421,16 +464,19 @@ Suite *wolfboot_suite(void)
     TCase* tcase_cross_sector_write = tcase_create("cross_sector_write");
     TCase* tcase_close = tcase_create("close_state");
     TCase* tcase_delete_object = tcase_create("delete_object");
+    TCase* tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase* tcase_find_bounds = tcase_create("find_bounds");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete_object, test_delete_object_ignores_metadata_prefix);
+    tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete_object);
+    suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
     return s;
 }
@@ -438,10 +484,19 @@ Suite *wolfboot_suite(void)
 int main(void)
 {
     int fails;
-    Suite *s = wolfboot_suite();
-    SRunner *sr = srunner_create(s);
+    Suite *s;
+    SRunner *sr;
+
+    /* Use a per-process backing file so parallel test runs (or a stale file
+     * from a previous run) cannot collide on a shared /tmp path. */
+    snprintf(vault_path, sizeof(vault_path),
+            "/tmp/wolfboot-unit-keyvault-%d.bin", (int)getpid());
+
+    s = wolfboot_suite();
+    sr = srunner_create(s);
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);
+    unlink(vault_path);
     return fails;
 }

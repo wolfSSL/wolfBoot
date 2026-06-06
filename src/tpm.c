@@ -1230,14 +1230,41 @@ static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 
 
 /* API's that are callable from non-secure code */
+
+/* Validate that a buffer supplied by the non-secure caller lives in the
+ * non-secure world before the secure side dereferences it. Without this check a
+ * non-secure caller could pass a pointer into Secure SRAM and turn these veneers
+ * into a confused-deputy write primitive against Secure memory. The check
+ * verifies only the Secure/Non-secure attribution (CMSE_NONSECURE); the MPU
+ * read/write permission bits are deliberately not required, as they read back as
+ * 0 when the NS MPU is disabled (NO_MPU) and do not constrain Secure accesses to
+ * NS memory anyway. Outside of a CMSE secure build there is no security
+ * boundary, so the checks collapse to a simple non-NULL pass-through. */
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
+#include <arm_cmse.h>
+#define WOLFBOOT_TPM_NS_RW(p, sz) \
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
+#define WOLFBOOT_TPM_NS_R(p, sz) \
+    cmse_check_address_range((void*)(p), (size_t)(sz), CMSE_NONSECURE)
+#else
+#define WOLFBOOT_TPM_NS_RW(p, sz) ((void*)(p))
+#define WOLFBOOT_TPM_NS_R(p, sz)  ((void*)(p))
+#endif
+
 int CSME_NSE_API wolfBoot_tpm2_caps(WOLFTPM2_CAPS* caps)
 {
+    if (WOLFBOOT_TPM_NS_RW(caps, sizeof(*caps)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     memset(caps, 0, sizeof(*caps));
     return wolfTPM2_GetCapabilities(&wolftpm_dev, caps);
 }
 
 int CSME_NSE_API wolfBoot_tpm2_get_handles(TPM_HANDLE handle, TPML_HANDLE* handles)
 {
+    if (WOLFBOOT_TPM_NS_RW(handles, sizeof(*handles)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     memset(handles, 0, sizeof(*handles));
     return wolfTPM2_GetHandles(handle, handles);
 }
@@ -1247,6 +1274,9 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
 {
     const char* s_name;
     if (name == NULL || name_sz <= 0) {
+        return NULL;
+    }
+    if (WOLFBOOT_TPM_NS_RW(name, name_sz) == NULL) {
         return NULL;
     }
     s_name = TPM2_GetAlgName(alg);
@@ -1267,6 +1297,9 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int er
     if (error == NULL || error_sz <= 0) {
         return NULL;
     }
+    if (WOLFBOOT_TPM_NS_RW(error, error_sz) == NULL) {
+        return NULL;
+    }
     s_error = TPM2_GetRCString(rc);
     if (s_error != NULL && error != NULL && error_sz > 0) {
         strncpy(error, s_error, error_sz - 1);
@@ -1281,17 +1314,32 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int er
 
 int CSME_NSE_API wolfBoot_tpm2_get_capability(GetCapability_In* in, GetCapability_Out* out)
 {
+    if (WOLFBOOT_TPM_NS_R(in, sizeof(*in)) == NULL ||
+        WOLFBOOT_TPM_NS_RW(out, sizeof(*out)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     return (int)TPM2_GetCapability(in, out);
 }
 
 int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* digestSz)
 {
+    if (WOLFBOOT_TPM_NS_RW(digest,
+            TPM2_GetHashDigestSize(WOLFBOOT_TPM_PCR_ALG)) == NULL ||
+        WOLFBOOT_TPM_NS_RW(digestSz, sizeof(*digestSz)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     return wolfTPM2_ReadPCR(&wolftpm_dev, pcrIndex, WOLFBOOT_TPM_PCR_ALG,
         digest, digestSz);
 }
 
 int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz)
 {
+    if (WOLFBOOT_TPM_NS_RW(certSz, sizeof(*certSz)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(cert, *certSz) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
     return wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, certSz);
 }
@@ -1302,6 +1350,13 @@ int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
 {
     int rc;
     if (aik == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(aik, sizeof(*aik)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (masterPassword != NULL &&
+        WOLFBOOT_TPM_NS_R(masterPassword, masterPasswordSz) == NULL) {
         return BAD_FUNC_ARG;
     }
 
@@ -1328,6 +1383,10 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
     };
 
     if (aik == NULL || getTime == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(aik, sizeof(*aik)) == NULL ||
+        WOLFBOOT_TPM_NS_RW(getTime, sizeof(*getTime)) == NULL) {
         return BAD_FUNC_ARG;
     }
 
@@ -1358,6 +1417,10 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
 
 int CSME_NSE_API wolfBoot_tpm2_parse_attest(const TPM2B_ATTEST* in, TPMS_ATTEST* out)
 {
+    if (WOLFBOOT_TPM_NS_R(in, sizeof(*in)) == NULL ||
+        WOLFBOOT_TPM_NS_RW(out, sizeof(*out)) == NULL) {
+        return BAD_FUNC_ARG;
+    }
     return TPM2_ParseAttest(in, out);
 }
 
@@ -1370,6 +1433,11 @@ int CSME_NSE_API wolfBoot_tpm2_quote(WOLFTPM2_KEY* aik,
 
     if (aik == NULL || pcrArray == NULL || pcrArraySz == 0 ||
         quoteResult == NULL) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(aik, sizeof(*aik)) == NULL ||
+        WOLFBOOT_TPM_NS_R(pcrArray, pcrArraySz) == NULL ||
+        WOLFBOOT_TPM_NS_RW(quoteResult, sizeof(*quoteResult)) == NULL) {
         return BAD_FUNC_ARG;
     }
 

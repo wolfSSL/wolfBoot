@@ -481,6 +481,15 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
                     (is_mmio ? "mm" : "io"), bus, dev, fun, bar_idx,
                      (uint32_t)bar_value, *is_64bit ? "64bit" : "",
                      is_prefetch ? "prefetch" : "");
+    /* A BAR with no writable address bits (bar_align == 0) is unimplemented
+     * or malformed: (~0) + 1 would wrap to length 0, leaving the allocator
+     * cursor unchanged and colliding the next BAR onto the same address.
+     * Treat it as unimplemented and skip it.  Legitimate MMIO BARs always
+     * have at least one writable address bit; IO BARs force the high bits
+     * above, so bar_align is never 0 for them. */
+    if (bar_align == 0)
+        goto restore_bar;
+
     align = length = (~bar_align) + 1;
     /* force pci address to be on page boundary */
     if (align < 0x1000)

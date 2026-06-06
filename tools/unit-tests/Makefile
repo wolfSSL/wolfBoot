@@ -61,6 +61,20 @@ TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
 
+# linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
+# (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
+# tests when it can, so a default "make" stays portable on hosts without 32-bit
+# support. Set ENABLE_32BIT_TESTS=1 to force them on (e.g. to fail loudly if the
+# toolchain is unexpectedly missing multilib).
+HAVE_M32 := $(shell printf 'int main(void){return 0;}' | gcc -m32 -x c - -o /dev/null >/dev/null 2>&1 && echo 1 || echo 0)
+ENABLE_32BIT_TESTS ?= $(HAVE_M32)
+ifeq ($(ENABLE_32BIT_TESTS),1)
+TESTS+=unit-linux-loader-e820
+TESTS+=unit-linux-loader-syssize
+else
+$(info Skipping 32-bit x86 linux-loader unit tests: 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
+endif
+
 include unit-sign-encrypted-output.mkfrag
 
 all: $(TESTS)
@@ -263,6 +277,18 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
+
+# linux_loader.c is x86 32bit only and pulls in inline asm guarded on 32bit;
+# build standalone with -m32 and without coverage (no 32bit gcov/check libs).
+unit-linux-loader-e820: ../../include/target.h unit-linux-loader-e820.c
+	gcc -m32 -o $@ unit-linux-loader-e820.c -I. -I../../src -I../../include \
+		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DWOLFBOOT_LOAD_BASE=0x100000
+
+unit-linux-loader-syssize: ../../include/target.h unit-linux-loader-syssize.c
+	gcc -m32 -o $@ unit-linux-loader-syssize.c -I. -I../../src -I../../include \
+		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DWOLFBOOT_LOAD_BASE=0x100000
 
 unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
