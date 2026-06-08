@@ -1731,6 +1731,14 @@ int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
     uint32_t ret_payload[PM_ARGS_CNT];
     uint32_t pmflags;
 
+    /* size is passed to the PMU as a 32-bit word below. On AArch64 size_t is
+     * 64-bit, so reject anything that would truncate. A real bitstream is at
+     * most a few tens of MB. */
+    if (size == 0 || size > 0xFFFFFFFFUL) {
+        wolfBoot_printf("PM_FPGA_LOAD: bad bitstream size\n");
+        return -1;
+    }
+
     /* PM_FPGA_LOAD takes the bitstream size in BYTES (the PMU firmware
      * divides by the word length internally for the CSU DMA). This
      * matches stock Xilinx U-Boot (drivers/fpga/zynqmppl.c passes
