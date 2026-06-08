@@ -413,11 +413,27 @@ void hal_ddr_init(void)
 
     /* Map LAW for DDR -- use full DDR size.
      * For 4GB boards, a single 4GB LAW at PA 0x0 covers all DDR.
-     * CW U-Boot ostype2 uses: set_ddr_laws(0, ddr_size, DDR_1). */
-#if DDR_SIZE >= (4096ULL * 1024ULL * 1024ULL)
-    set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_4GB, 0);
+     * CW U-Boot ostype2 uses: set_ddr_laws(0, ddr_size, DDR_1).
+     *
+     * Slot choice: INTEGRITY-178 tuMP's BSP (BSP_Initialize) reprograms LAW
+     * slots 0-9 for its CW peripheral map and creates NO DDR LAW of its own
+     * -- it relies on the bootloader leaving DDR coverage in a HIGHER slot it
+     * does not touch (CW U-Boot's set_next_law allocates the DDR LAW above the
+     * static peripheral LAWs). With the DDR LAW in slot 4 (inside tuMP's 0-9
+     * range) tuMP overwrites it, DDR loses LAW coverage, and the next
+     * instruction fetch -- including tuMP's own entMCHK handler -- bus-errors
+     * into a recursive machine-check checkstop (silent hang). Park the DDR LAW
+     * in a high slot tuMP leaves alone (T2080 has 32 LAWs; wolfBoot uses 0-16;
+     * VxWorks rebuilds its own LAWs so the slot is immaterial to it). */
+#ifdef BOARD_CW_VPX3152
+    #define DDR_LAW_SLOT 17
 #else
-    set_law(4, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
+    #define DDR_LAW_SLOT 4
+#endif
+#if DDR_SIZE >= (4096ULL * 1024ULL * 1024ULL)
+    set_law(DDR_LAW_SLOT, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_4GB, 0);
+#else
+    set_law(DDR_LAW_SLOT, 0, DDR_ADDRESS, LAW_TRGT_DDR_1, LAW_SIZE_2GB, 0);
 #endif
 
     /* If DDR is already enabled then just return */
@@ -1494,7 +1510,23 @@ static void hal_mp_init(void)
     /* Second half boot page (spin loop + spin table) goes just below.
      * For XIP flash builds, .bootmp is in flash — secondary cores can't
      * write to flash, so the spin table MUST be in DDR. */
+#if defined(ENABLE_OS64BIT) && defined(BOARD_CW_VPX3152)
+    /* INTEGRITY-178 tuMP (cw152 BSP) hardcodes its ePAPR spin-table base at
+     * physical 0x7FEE41C0 (where production CW U-Boot's relocated __spin_table
+     * lands) and does NOT take cpu-release-addr from the DTB. wolfBoot's
+     * default spin table doesn't match, so tuMP's secondaries are never
+     * released and it hangs in BSP_StartUp before console init. Relocate the
+     * second-half boot page so the spin table lands exactly at 0x7FEE41C0.
+     * The spin CODE and TABLE stay adjacent in one 4 KB page (0x7FEE4000) so
+     * the secondary cores' single spin-table TLB entry (boot_ppc_mp.S) maps
+     * both the rfi target (_bootpg_addr) and the table; bootpg stays
+     * page-aligned below the hole for the boot-release. VxWorks 7 follows via
+     * the cpu-release-addr DTB fixup (g_spin_table_ddr). */
+    second_half_ddr = 0x7FEE41C0UL -
+        ((uint32_t)_spin_table - (uint32_t)&_second_half_boot_page);
+#else
     second_half_ddr = bootpg - BOOT_ROM_SIZE;
+#endif
 
     /* DDR addresses for second half symbols */
     spin_table_ddr = second_half_ddr +
