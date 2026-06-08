@@ -899,7 +899,7 @@ static void z7_dcache_clean_range(uintptr_t start, uint32_t len)
 int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
 {
     uint32_t sts;
-    uint32_t words = (uint32_t)((size + 3U) / 4U);
+    uint32_t words;
     uint64_t t0;
 
     if (flags == HAL_FPGA_PARTIAL) {
@@ -911,6 +911,14 @@ int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
     if (addr > 0xFFFFFFFFU || size == 0) {
         return -1;
     }
+#if defined(SIZE_MAX) && SIZE_MAX > 0xFFFFFFFFU
+    /* words and the DMA length register are 32-bit; reject a size that would
+     * truncate. Compiled out where size_t is already 32-bit. */
+    if (size > 0xFFFFFFFFU) {
+        wolfBoot_printf("Z7 FPGA: bitstream size too large\n");
+        return -1;
+    }
+#endif
     /* The DevC DMA descriptor encodes the "last" flag in the source
      * address LSB, so the bitstream buffer must be word-aligned. */
     if ((addr & 0x3U) != 0U) {
@@ -918,7 +926,16 @@ int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
         return -1;
     }
 
-    /* 1. Unlock DevC and select PCAP (not ICAP). */
+    /* Round byte size up to whole words without overflowing size + 3. */
+    words = (uint32_t)(size / 4U);
+    if ((size & 3U) != 0U) {
+        words++;
+    }
+
+    /* 1. Unlock DevC and select PCAP (not ICAP). PCAP_MODE=1 enables the
+     *    PCAP interface; PCAP_PR=1 selects PCAP (0 would select ICAP) per
+     *    UG585 devcfg.CTRL bit 27. This matches Xilinx FSBL pcap.c, which
+     *    sets both bits for full-bitstream programming. */
     Z7_DEVC_UNLOCK = Z7_DEVC_UNLOCK_KEY;
     Z7_DEVC_CTRL |= (Z7_DEVC_CTRL_PCAP_MODE | Z7_DEVC_CTRL_PCAP_PR);
     /* Disable internal PCAP loopback. */
@@ -954,7 +971,18 @@ int hal_fpga_load(uint32_t flags, uintptr_t addr, size_t size)
      *    bitstreams are word streams, so this normally equals size.) */
     z7_dcache_clean_range(addr, words * 4U);
 
-    /* 6. Program the DMA: src = DDR bitstream (LSB=1 marks last descriptor),
+    /* 6. Wait for room in the DevC DMA command queue, then program the DMA.
+     *    Writing a descriptor while the queue is full silently drops it,
+     *    leaving step 7 to spin to the timeout. */
+    t0 = hal_get_timer_us();
+    while (Z7_DEVC_STATUS & Z7_DEVC_STATUS_DMA_CMD_FULL) {
+        if (hal_get_timer_us() - t0 > Z7_FPGA_TIMEOUT_US) {
+            wolfBoot_printf("Z7 FPGA: timeout waiting DMA queue space\n");
+            return -1;
+        }
+    }
+
+    /*    src = DDR bitstream (LSB=1 marks last descriptor),
      *    dst = PCAP sentinel. Lengths are in 32-bit words. */
     Z7_DEVC_DMA_SRC = ((uint32_t)addr) | Z7_DEVC_DMA_LAST;
     Z7_DEVC_DMA_DST = Z7_DEVC_DMA_DEST_PCAP;
