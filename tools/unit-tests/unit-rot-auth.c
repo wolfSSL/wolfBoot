@@ -32,6 +32,8 @@
 
 static uint8_t test_pubkey[32];
 static int symmetric_corrupted;
+static uint32_t mock_nv_datasize = 32;
+static uint32_t mock_nvread_reqsz;
 
 #define TPM2_IoCb NULL
 #define XSTRTOL strtol
@@ -86,7 +88,7 @@ int wolfTPM2_NVReadPublic(WOLFTPM2_DEV* dev, TPM_HANDLE nvIndex,
     (void)dev;
     (void)nvIndex;
     memset(nvPublic, 0, sizeof(*nvPublic));
-    nvPublic->dataSize = 32;
+    nvPublic->dataSize = (UINT16)mock_nv_datasize;
     return 0;
 }
 
@@ -102,7 +104,14 @@ int wolfTPM2_NVReadAuth(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv, TPM_HANDLE nvIndex,
     memset(&zero_sym, 0, sizeof(zero_sym));
     symmetric_corrupted =
         memcmp(&nv->handle.symmetric, &zero_sym, sizeof(zero_sym)) != 0;
-    memset(dataBuf, 0xA5, *dataSz);
+    /* Record the byte count the caller asked us to copy. The real
+     * wolfTPM2_NVReadAuth uses this as the XMEMCPY count into dataBuf with no
+     * separate capacity argument, so the caller must clamp it to its buffer.
+     * Cap the actual write at WC_MAX_DIGEST_SIZE so this harness never itself
+     * overflows the caller's digest[] buffer regardless of the requested size. */
+    mock_nvread_reqsz = *dataSz;
+    memset(dataBuf, 0xA5,
+        *dataSz > WC_MAX_DIGEST_SIZE ? WC_MAX_DIGEST_SIZE : *dataSz);
     return 0;
 }
 
@@ -234,6 +243,31 @@ START_TEST(test_rot_rejects_oversized_auth)
 }
 END_TEST
 
+START_TEST(test_rot_clamps_nv_datasize)
+{
+    char auth[] = "test-auth";
+    int rc;
+
+    /* Emulate a malicious/emulated TPM (or a pre-existing NV index) whose
+     * reported dataSize exceeds the 64-byte digest[] read buffer. The value
+     * must be clamped before being used as the read byte count, otherwise
+     * wolfTPM2_NVReadAuth overflows digest[WC_MAX_DIGEST_SIZE]. */
+    memset(test_pubkey, 0x11, sizeof(test_pubkey));
+    symmetric_corrupted = 0;
+    mock_nvread_reqsz = 0;
+    mock_nv_datasize = 1000;
+
+    rc = TPM2_Boot_SecureROT_Example(TPM_RH_PLATFORM,
+        WOLFBOOT_TPM_KEYSTORE_NV_BASE, WC_HASH_TYPE_SHA256, 0, 0, auth,
+        (int)strlen(auth));
+
+    mock_nv_datasize = 32; /* restore default for other tests */
+
+    ck_assert_int_eq(rc, 0);
+    ck_assert_int_le(mock_nvread_reqsz, (uint32_t)WC_MAX_DIGEST_SIZE);
+}
+END_TEST
+
 static Suite* rot_auth_suite(void)
 {
     Suite* s;
@@ -242,6 +276,7 @@ static Suite* rot_auth_suite(void)
     s = suite_create("rot_auth");
     tc = tcase_create("auth_validation");
     tcase_add_test(tc, test_rot_rejects_oversized_auth);
+    tcase_add_test(tc, test_rot_clamps_nv_datasize);
     suite_add_tcase(s, tc);
     return s;
 }

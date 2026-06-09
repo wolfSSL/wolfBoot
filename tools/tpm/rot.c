@@ -161,6 +161,12 @@ static int TPM2_Boot_SecureROT_Example(TPMI_RH_NV_AUTH authHandle, word32 nvBase
         }
         if (rc == 0) {
             digestSz = nvPublic.dataSize;
+            /* dataSize is supplied by the TPM over the bus; clamp it to the
+             * digest buffer so a malicious/emulated TPM (or a pre-existing NV
+             * index larger than the hash) cannot overflow digest[] during the
+             * read-back below, which uses digestSz as the copy count. */
+            if (digestSz > (int)sizeof(digest))
+                digestSz = (int)sizeof(digest);
 
             /* Read access */
             printf("Reading NV 0x%x public key hash\n", nv.handle.hndl);
