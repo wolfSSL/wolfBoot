@@ -2508,6 +2508,27 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
         }
         len3++;
     }
+    /* make_header_delta() below calls make_header_ex(is_diff=1), which may grow
+     * CMD.header_sz to fit the delta TLVs plus certificate chain. Resolve that
+     * expansion here, using the same logic, so patch_inv_off reflects the header
+     * size actually written; otherwise HDR_IMG_DELTA_INVERSE would encode a
+     * stale, too-small offset and break inverse-patch rollback. */
+    if (CMD.cert_chain_file != NULL) {
+        struct stat cc_stat;
+        if ((stat(CMD.cert_chain_file, &cc_stat) == 0) &&
+            (cc_stat.st_size >= 0) &&
+            ((uintmax_t)cc_stat.st_size <= (uintmax_t)UINT32_MAX)) {
+            uint32_t required_space = header_required_size(1,
+                (uint32_t)cc_stat.st_size, 0);
+            if (CMD.header_sz < required_space) {
+                uint32_t new_size = 256;
+                while (new_size < required_space) {
+                    new_size *= 2;
+                }
+                CMD.header_sz = new_size;
+            }
+        }
+    }
     patch_inv_off = (uint32_t)len3 + CMD.header_sz;
     patch_inv_sz = 0;
 
