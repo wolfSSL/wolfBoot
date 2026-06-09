@@ -62,6 +62,7 @@ TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
+TESTS+=unit-flash-erase-h7
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -261,6 +262,11 @@ unit-max-space: ../../include/target.h unit-max-space.c
 # MPU helpers via WOLFBOOT_UNIT_TEST_MPU), so boot_arm.c is not a separate input.
 unit-mpusize: ../../include/target.h unit-mpusize.c
 	gcc -o $@ unit-mpusize.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-h7 includes hal/stm32h7.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
+unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
+	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \

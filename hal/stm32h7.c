@@ -19,8 +19,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #include "hal/stm32h7.h"
+#endif
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static uint32_t stm32h7_cache[STM32H7_WORD_SIZE / sizeof(uint32_t)];
 
 #define FLASH_BANK_1 0
@@ -194,6 +197,7 @@ void RAMFUNCTION hal_flash_lock(void)
     if ((FLASH_CR2 & FLASH_CR_LOCK) == 0)
         FLASH_CR2 |= FLASH_CR_LOCK;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
@@ -220,9 +224,14 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             (p <= (FLASH_TOP - FLASHMEM_ADDRESS_SPACE))) {
             uint32_t reg = FLASH_CR2 &
                 (~((FLASH_CR_SNB_MASK << FLASH_CR_SNB_SHIFT) | FLASH_CR_PSIZE));
-            p-= (FLASH_BANK2_BASE);
+            /* Sector index within bank 2: subtract the bank-2 base expressed in
+             * the same relative-offset convention as p (FLASH_BANK2_BASE_REL),
+             * not the absolute FLASH_BANK2_BASE which would underflow. Use a
+             * temporary so the loop variable p is not corrupted. */
+            uint32_t sector = (p - FLASH_BANK2_BASE_REL) >> 17;
             FLASH_CR2 = reg |
-                (((p >> 17) << FLASH_CR_SNB_SHIFT) | FLASH_CR_SER | 0x00);
+                (((sector & FLASH_CR_SNB_MASK) << FLASH_CR_SNB_SHIFT) |
+                 FLASH_CR_SER | 0x00);
             DMB();
             FLASH_CR2 |= FLASH_CR_STRT;
             flash_wait_complete(FLASH_BANK_2);
@@ -231,6 +240,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #ifdef DEBUG_UART
 static int uart_init(void)
 {
@@ -622,3 +632,4 @@ int hal_flash_otp_read(uint32_t flashAddress, void* data, uint32_t length)
 }
 
 #endif /* FLASH_OTP_KEYSTORE */
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
