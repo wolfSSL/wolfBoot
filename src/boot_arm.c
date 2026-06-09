@@ -35,7 +35,9 @@ extern unsigned int _end_bss;
 
 extern uint32_t *END_STACK;
 
+#ifndef WOLFBOOT_UNIT_TEST_MPU
 extern void main(void);
+#endif
 #ifdef TARGET_va416x0
 extern void SysTick_Handler(void);
 #endif
@@ -94,7 +96,17 @@ static void mpu_on(void)
 #define MPUSIZE_16K     (0x0d << 1)
 #define MPUSIZE_32K     (0x0e << 1)
 #define MPUSIZE_64K     (0x0f << 1)
-/* ... */
+#define MPUSIZE_128K    (0x10 << 1)
+#define MPUSIZE_256K    (0x11 << 1)
+#define MPUSIZE_512K    (0x12 << 1)
+#define MPUSIZE_1M      (0x13 << 1)
+#define MPUSIZE_2M      (0x14 << 1)
+#define MPUSIZE_4M      (0x15 << 1)
+#define MPUSIZE_8M      (0x16 << 1)
+#define MPUSIZE_16M     (0x17 << 1)
+#define MPUSIZE_32M     (0x18 << 1)
+#define MPUSIZE_64M     (0x19 << 1)
+#define MPUSIZE_128M    (0x1a << 1)
 #define MPUSIZE_256M    (0x1b << 1)
 #define MPUSIZE_512M    (0x1c << 1)
 #define MPUSIZE_1G      (0x1d << 1)
@@ -111,6 +123,28 @@ static uint32_t mpusize(uint32_t size)
         return MPUSIZE_32K;
     if (size <= (64 * 1024))
         return MPUSIZE_64K;
+    if (size <= (128 * 1024))
+        return MPUSIZE_128K;
+    if (size <= (256 * 1024))
+        return MPUSIZE_256K;
+    if (size <= (512 * 1024))
+        return MPUSIZE_512K;
+    if (size <= (1024 * 1024))
+        return MPUSIZE_1M;
+    if (size <= (2 * 1024 * 1024))
+        return MPUSIZE_2M;
+    if (size <= (4 * 1024 * 1024))
+        return MPUSIZE_4M;
+    if (size <= (8 * 1024 * 1024))
+        return MPUSIZE_8M;
+    if (size <= (16 * 1024 * 1024))
+        return MPUSIZE_16M;
+    if (size <= (32 * 1024 * 1024))
+        return MPUSIZE_32M;
+    if (size <= (64 * 1024 * 1024))
+        return MPUSIZE_64M;
+    if (size <= (128 * 1024 * 1024))
+        return MPUSIZE_128M;
     return MPUSIZE_ERR;
 }
 
@@ -175,6 +209,11 @@ static void RAMFUNCTION mpu_off(void)
 #define mpu_off() do{}while(0)
 #endif /* !WOLFBOOT_NO_MPU */
 
+#ifndef WOLFBOOT_UNIT_TEST_MPU
+/* The remainder of this file is Cortex-M/-R reset/boot code that relies on
+ * ARM inline assembly and therefore cannot be compiled for the host. The MPU
+ * size helpers above are pure arithmetic and are exercised by the host unit
+ * test tools/unit-tests/unit-mpusize.c, which defines WOLFBOOT_UNIT_TEST_MPU. */
 
 #ifdef CORTEX_R5
 #define MINITGCR   ((volatile uint32_t *)0xFFFFFF5C)
@@ -710,3 +749,5 @@ void RAMFUNCTION arch_reboot(void)
     wolfBoot_panic();
 }
 #endif /* RAM_CODE */
+
+#endif /* !WOLFBOOT_UNIT_TEST_MPU */
