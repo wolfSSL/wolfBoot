@@ -671,7 +671,8 @@ jobs:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
-      config-file: ./config/examples/stm32wb_wolfhal_nucleo.config
+      config-file: ./config/examples/stm32wb.config
+      make-args: WOLFHAL=1 BOARD=stm32wb_nucleo
 
   # TODO: ti-tms570lc435.config requires F021 Flash API (Windows installer only)
   # ti_tms570lc435_test:
