@@ -96,6 +96,7 @@ run: $(TESTS)
 	for unit in $(TESTS); do \
 		WOLFBOOT_SECTOR_SIZE=0x400 ./$$unit || exit 1; \
 	done
+	python3 unit-sign-delta-tlv.py || exit 1
 
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \

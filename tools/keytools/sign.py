@@ -764,9 +764,9 @@ if (delta):
     base_version = re.split("_", (re.split("_v", delta_base_file)[1]))[0]
     header = make_header(tmp_outfile, fw_version,
             [[HDR_IMG_DELTA_BASE, 4, struct.pack("<L", int(base_version))],
-                [HDR_IMG_DELTA_SIZE, 2, struct.pack("<H", delta_size)],
+                [HDR_IMG_DELTA_SIZE, 4, struct.pack("<L", delta_size)],
                 [HDR_IMG_DELTA_INVERSE, 4, struct.pack("<L", inv_off + WOLFBOOT_HEADER_SIZE)],
-                [HDR_IMG_DELTA_INVERSE_SIZE, 2, struct.pack("<H", delta_inv_size)]
+                [HDR_IMG_DELTA_INVERSE_SIZE, 4, struct.pack("<L", delta_inv_size)]
                 ])
     outfile = open(delta_output_image_file, 'wb')
     outfile.write(header)
