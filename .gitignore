@@ -197,6 +197,7 @@ tools/squashelf/**
 !tools/squashelf/squashelf.c
 !tools/squashelf/Makefile
 !tools/squashelf/README.md
+!tools/squashelf/test-range-overflow.py
 
 # Generated configuration files
 .config

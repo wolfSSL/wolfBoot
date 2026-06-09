@@ -560,7 +560,27 @@ int main(int argCount, char** argValues)
             /* Apply range filter if specified */
             if (hasRange) {
                 uint64_t segmentStart = p_paddr;
-                uint64_t segmentEnd   = p_paddr + p_memsz - 1;
+                uint64_t segmentEnd;
+
+                /* Guard against uint64_t overflow when computing the segment
+                 * end (CWE-190). Both fields come straight from the (possibly
+                 * crafted) program header; if p_paddr + p_memsz - 1 wrapped, the
+                 * range check could spuriously include an out-of-range segment
+                 * or drop a valid one. Treat such a segment as out-of-range. */
+                if (p_memsz == 0) {
+                    segmentEnd = p_paddr;
+                }
+                else if (p_paddr > UINT64_MAX - (p_memsz - 1)) {
+                    fprintf(stderr,
+                            "Skipping segment %zu (LMA 0x%lx, size 0x%lx) - "
+                            "address range overflows 64-bit space\n",
+                            i, (unsigned long)p_paddr,
+                            (unsigned long)p_memsz);
+                    continue;
+                }
+                else {
+                    segmentEnd = p_paddr + p_memsz - 1;
+                }
 
                 /* Check if segment start and end are both within any range */
                 bool startInRange =
