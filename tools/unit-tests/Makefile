@@ -63,6 +63,7 @@ TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
+TESTS+=unit-otp-keystore
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -267,6 +268,12 @@ unit-mpusize: ../../include/target.h unit-mpusize.c
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
 unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
 	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
+
+# unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
+# host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
+# separate input.
+unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
+	gcc -o $@ unit-otp-keystore.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
