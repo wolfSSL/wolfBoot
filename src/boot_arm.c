@@ -35,7 +35,9 @@ extern unsigned int _end_bss;
 
 extern uint32_t *END_STACK;
 
+#ifndef WOLFBOOT_UNIT_TEST_MPU
 extern void main(void);
+#endif
 #ifdef TARGET_va416x0
 extern void SysTick_Handler(void);
 #endif
@@ -94,7 +96,17 @@ static void mpu_on(void)
 #define MPUSIZE_16K     (0x0d << 1)
 #define MPUSIZE_32K     (0x0e << 1)
 #define MPUSIZE_64K     (0x0f << 1)
-/* ... */
+#define MPUSIZE_128K    (0x10 << 1)
+#define MPUSIZE_256K    (0x11 << 1)
+#define MPUSIZE_512K    (0x12 << 1)
+#define MPUSIZE_1M      (0x13 << 1)
+#define MPUSIZE_2M      (0x14 << 1)
+#define MPUSIZE_4M      (0x15 << 1)
+#define MPUSIZE_8M      (0x16 << 1)
+#define MPUSIZE_16M     (0x17 << 1)
+#define MPUSIZE_32M     (0x18 << 1)
+#define MPUSIZE_64M     (0x19 << 1)
+#define MPUSIZE_128M    (0x1a << 1)
 #define MPUSIZE_256M    (0x1b << 1)
 #define MPUSIZE_512M    (0x1c << 1)
 #define MPUSIZE_1G      (0x1d << 1)
@@ -103,14 +115,17 @@ static void mpu_on(void)
 
 static uint32_t mpusize(uint32_t size)
 {
-    if (size <= (8 * 1024))
-        return MPUSIZE_8K;
-    if (size <= (16 * 1024))
-        return MPUSIZE_16K;
-    if (size <= (32 * 1024))
-        return MPUSIZE_32K;
-    if (size <= (64 * 1024))
-        return MPUSIZE_64K;
+    uint32_t rasr = MPUSIZE_8K;
+    uint32_t limit = (8 * 1024);
+
+    while ((size > limit) && (limit < (128 * 1024 * 1024))) {
+        limit <<= 1;
+        rasr += 2;
+    }
+
+    if (size <= limit)
+        return rasr;
+
     return MPUSIZE_ERR;
 }
 
@@ -175,6 +190,11 @@ static void RAMFUNCTION mpu_off(void)
 #define mpu_off() do{}while(0)
 #endif /* !WOLFBOOT_NO_MPU */
 
+#ifndef WOLFBOOT_UNIT_TEST_MPU
+/* The remainder of this file is Cortex-M/-R reset/boot code that relies on
+ * ARM inline assembly and therefore cannot be compiled for the host. The MPU
+ * size helpers above are pure arithmetic and are exercised by the host unit
+ * test tools/unit-tests/unit-mpusize.c, which defines WOLFBOOT_UNIT_TEST_MPU. */
 
 #ifdef CORTEX_R5
 #define MINITGCR   ((volatile uint32_t *)0xFFFFFF5C)
@@ -710,3 +730,5 @@ void RAMFUNCTION arch_reboot(void)
     wolfBoot_panic();
 }
 #endif /* RAM_CODE */
+
+#endif /* !WOLFBOOT_UNIT_TEST_MPU */

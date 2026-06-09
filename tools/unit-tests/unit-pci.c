@@ -1243,6 +1243,55 @@ START_TEST(test_program_bridge)
 }
 END_TEST
 
+/* test_program_bridge_io_64k_no_narrow: a device advertising a 64KB IO BAR
+ * must not push the IO allocator past the 16-bit IO space (0xFFFF).  The PCI
+ * bridge IO base/limit registers carry only address bits [15:8] in a uint8_t,
+ * so an io cursor >= 0x10000 truncates: io_start 0x20000 -> base reg 0x00,
+ * programming a bogus window 0x0000-0x0FFF that forwards legacy IO (8259A PIC,
+ * 8254 PIT, MC146818 RTC) to the secondary bus.  With the allocator capped at
+ * the 16-bit IO ceiling the oversized BAR is skipped and the bridge window is
+ * programmed from the real cursor. */
+START_TEST(test_program_bridge_io_64k_no_narrow)
+{
+    struct test_pci_topology t;
+    struct pci_enum_info info;
+    int dev0, br, ep;
+    uint8_t iobase, iolimit;
+
+    test_pci_init(&t);
+    /* dev 0 on bus 0: hostile/oversized 64KB IO BAR (decodes only 16 bits) */
+    dev0 = test_pci_add_dev(&t, 0, 0, 0x1111, 0x2222, TEST_PCI_ROOT_BUS);
+    test_pci_dev_set_bar(&t, dev0, 0, 0x10000, TEST_PCI_BAR_IO);
+    t.nodes[dev0].bars[0].io_hi16_zero = 1;
+    /* dev 1 on bus 0: bridge with a small 256B IO device behind it */
+    br = test_pci_add_bridge(&t, 1, 0, 0xAAAA, 0xBBBB, TEST_PCI_ROOT_BUS);
+    ep = test_pci_add_dev(&t, 0, 0, 0xCCCC, 0xDDDD, br);
+    test_pci_dev_set_bar(&t, ep, 0, 256, TEST_PCI_BAR_IO);
+    test_pci_commit(&t);
+
+    memset(&info, 0, sizeof(info));
+    info.mem = 0x80000000;
+    info.mem_limit = 0x88000000;
+    info.mem_pf = 0x90000000;
+    info.mem_pf_limit = 0xFFFFFFFF;
+    info.io = 0x2000;
+    info.curr_bus_number = 0;
+
+    pci_enum_bus(0, &info);
+
+    /* The oversized IO BAR must be skipped, leaving the cursor in 16-bit IO
+     * space; the bridge IO window must reflect the real device (0x2000-0x2FFF)
+     * and never decode down to 0x0000 over the legacy IO range. */
+    iobase = pci_config_read8(0, 1, 0, PCI_IO_BASE_OFF);
+    iolimit = pci_config_read8(0, 1, 0, PCI_IO_LIMIT_OFF);
+    ck_assert_uint_eq(iobase, 0x20);
+    ck_assert_uint_eq(iolimit, 0x2F);
+    ck_assert_uint_le(info.io, 0x10000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_program_bridge_oom_initial: initial alignment failures */
 START_TEST(test_program_bridge_oom_initial)
 {
@@ -1335,13 +1384,11 @@ START_TEST(test_program_bridge_oom_post_enum)
               .mem_pf = 0x90000000, .mem_pf_limit = 0xFFFFFFFF,
               .io = 0x2000 }
         },
-        {
-            "io: post-enum 4KB align wraps 32-bit space",
-            256, TEST_PCI_BAR_IO,
-            { .mem = 0x80000000, .mem_limit = 0x88000000,
-              .mem_pf = 0x90000000, .mem_pf_limit = 0xFFFFFFFF,
-              .io = 0xFFFFF000 }
-        },
+        /* No "io: post-enum align wraps" case: the IO allocator is capped at
+         * the 16-bit IO ceiling (PCI_IO32_LIMIT), so info.io can never reach
+         * the top of the 32-bit range and the post-enum IO alignment cannot
+         * wrap.  Oversized IO BARs are now skipped at allocation time, covered
+         * by test_program_bridge_io_64k_no_narrow. */
     };
     int i;
 
@@ -1750,6 +1797,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_bridge = tcase_create("program-bridge");
     tcase_add_test(tc_bridge, test_program_bridge);
     suite_add_tcase(s, tc_bridge);
+
+    TCase *tc_io_64k = tcase_create("bridge-io-64k-no-narrow");
+    tcase_add_test(tc_io_64k, test_program_bridge_io_64k_no_narrow);
+    suite_add_tcase(s, tc_io_64k);
 
     TCase *tc_oom_init = tcase_create("bridge-oom-initial");
     tcase_add_test(tc_oom_init, test_program_bridge_oom_initial);

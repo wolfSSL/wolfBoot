@@ -182,14 +182,23 @@ tools/unit-tests/unit-policy-create
 tools/unit-tests/unit-sign-encrypted-output
 tools/unit-tests/unit-update-flash-delta
 tools/unit-tests/unit-update-flash-self-update
+tools/unit-tests/unit-update-flash-hook
 tools/unit-tests/unit-loader-tpm-init
 tools/unit-tests/unit-update-ram-nofixed
+tools/unit-tests/unit-uart-flash
 tools/unit-tests/unit-max-space
 tools/unit-tests/unit-sdhci-disk-unaligned
 tools/unit-tests/unit-fwtpm-stub
 tools/unit-tests/unit-gzip
+tools/unit-tests/unit-fit-gzip
+tools/unit-tests/unit-fit-nogzip
+tools/unit-tests/unit-flash-erase-h7
+tools/unit-tests/unit-keygen-xmss-params
 tools/unit-tests/unit-linux-loader-e820
 tools/unit-tests/unit-linux-loader-syssize
+tools/unit-tests/unit-mpusize
+tools/unit-tests/unit-otp-keystore
+tools/unit-tests/unit-tpm-api-names
 
 
 # Elf preprocessing tools
@@ -197,6 +206,7 @@ tools/squashelf/**
 !tools/squashelf/squashelf.c
 !tools/squashelf/Makefile
 !tools/squashelf/README.md
+!tools/squashelf/test-range-overflow.py
 
 # Generated configuration files
 .config

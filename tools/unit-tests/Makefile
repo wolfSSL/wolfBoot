@@ -61,6 +61,9 @@ TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
+TESTS+=unit-mpusize
+TESTS+=unit-flash-erase-h7
+TESTS+=unit-otp-keystore
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -96,6 +99,8 @@ run: $(TESTS)
 	for unit in $(TESTS); do \
 		WOLFBOOT_SECTOR_SIZE=0x400 ./$$unit || exit 1; \
 	done
+	python3 unit-sign-delta-tlv.py || exit 1
+	python3 unit-sign-delta-cert-inv-off.py || exit 1
 
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
@@ -253,6 +258,22 @@ unit-string: ../../include/target.h unit-string.c
 
 unit-max-space: ../../include/target.h unit-max-space.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+# unit-mpusize includes src/boot_arm.c directly (guarded to its host-portable
+# MPU helpers via WOLFBOOT_UNIT_TEST_MPU), so boot_arm.c is not a separate input.
+unit-mpusize: ../../include/target.h unit-mpusize.c
+	gcc -o $@ unit-mpusize.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-h7 includes hal/stm32h7.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
+unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
+	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
+
+# unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
+# host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
+# separate input.
+unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
+	gcc -o $@ unit-otp-keystore.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \

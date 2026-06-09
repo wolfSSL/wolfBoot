@@ -936,7 +936,16 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     asm volatile("cpsid i");
     int write_success = 0;
     for (i = 0; i < len; i+= CONFIG_FLASH_PAGE_SIZE) {
-        memcpy(wbuf, data + i, CONFIG_FLASH_PAGE_SIZE);
+        /* The NOR program command always writes a full page. Bound the copy
+         * to the bytes actually provided by the caller so sub-page writes
+         * (e.g. the 1-byte trailer updates) do not overread the source buffer.
+         * Pad the remainder of the page with the erased value (0xFF), which is
+         * a no-op for NOR programming and preserves existing flash contents. */
+        int chunk = len - i;
+        if (chunk > (int)CONFIG_FLASH_PAGE_SIZE)
+            chunk = (int)CONFIG_FLASH_PAGE_SIZE;
+        memset(wbuf, 0xFF, sizeof(wbuf));
+        memcpy(wbuf, data + i, chunk);
         status = g_bootloaderTree->flexSpiNorDriver->program(
             CONFIG_FLASH_FLEXSPI_INSTANCE,
             FLEXSPI_CONFIG,

@@ -18,12 +18,15 @@ else
   CFLAGS+=$(OPTIMIZE)
 endif
 
-.PHONY: clean all debug
+.PHONY: clean all debug test
 
 all: $(TARGET)
 
 debug: CFLAGS+=$(DEBUG_FLAGS)
 debug: all
+
+test: $(TARGET)
+	python3 test-range-overflow.py ./$(TARGET)
 
 $(TARGET): $(TARGET).o
 	@echo "Building squashelf tool"

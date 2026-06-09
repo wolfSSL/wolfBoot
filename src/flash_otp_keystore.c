@@ -24,9 +24,13 @@
 
 #include <stdint.h>
 #include <string.h>
+#ifndef WOLFBOOT_UNIT_TEST_OTP_KEYSTORE
 #include "wolfboot/wolfboot.h"
+#endif
 #include "keystore.h"
+#ifndef WOLFBOOT_UNIT_TEST_OTP_KEYSTORE
 #include "hal.h"
+#endif
 #include "otp_keystore.h"
 
 #if defined(FLASH_OTP_KEYSTORE) && !defined(WOLFBOOT_NO_SIGN)
@@ -70,6 +74,12 @@ int keystore_get_size(int id)
                 SIZEOF_KEYSTORE_SLOT) != 0)
         return -1;
     slot = (struct keystore_slot *)otp_slot_item_cache;
+    /* The pubkey is cached in a fixed-size buffer holding at most
+     * KEYSTORE_PUBKEY_SIZE bytes. A larger pubkey_size read from a corrupted or
+     * mis-provisioned OTP slot would make callers read past the buffer, so
+     * reject it like other invalid OTP fields. */
+    if (slot->pubkey_size > KEYSTORE_PUBKEY_SIZE)
+        return -1;
     return slot->pubkey_size;
 }
 
