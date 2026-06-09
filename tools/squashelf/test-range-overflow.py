@@ -72,29 +72,28 @@ def run(squashelf, infile, outfile, rng):
 
 def main():
     squashelf = sys.argv[1] if len(sys.argv) > 1 else "./squashelf"
-    d = tempfile.mkdtemp()
     rc = 0
+    with tempfile.TemporaryDirectory() as d:
+        # 1) Overflow segment: p_paddr + p_memsz - 1 wraps below p_paddr, so the
+        #    wrapped end (~0x4fe) is inside [0, 0x1000] even though the real span
+        #    covers the whole address space. It MUST be excluded (non-zero exit,
+        #    no output segment).
+        bad = os.path.join(d, "overflow.elf")
+        make_elf64(bad, paddr=0x500, memsz=UINT64_MAX)
+        if run(squashelf, bad, os.path.join(d, "bad.out"), "0x0-0x1000") == 0:
+            print("FAIL: overflow segment was wrongly included by range filter")
+            rc = 1
+        else:
+            print("PASS: overflow segment excluded")
 
-    # 1) Overflow segment: p_paddr + p_memsz - 1 wraps below p_paddr, so the
-    #    wrapped end (~0x4fe) is inside [0, 0x1000] even though the real span
-    #    covers the whole address space. It MUST be excluded (non-zero exit,
-    #    no output segment).
-    bad = os.path.join(d, "overflow.elf")
-    make_elf64(bad, paddr=0x500, memsz=UINT64_MAX)
-    if run(squashelf, bad, os.path.join(d, "bad.out"), "0x0-0x1000") == 0:
-        print("FAIL: overflow segment was wrongly included by range filter")
-        rc = 1
-    else:
-        print("PASS: overflow segment excluded")
-
-    # 2) Regression guard: a normal in-range segment must still be kept.
-    good = os.path.join(d, "ok.elf")
-    make_elf64(good, paddr=0x500, memsz=0x100)
-    if run(squashelf, good, os.path.join(d, "good.out"), "0x0-0x1000") != 0:
-        print("FAIL: normal in-range segment was dropped")
-        rc = 1
-    else:
-        print("PASS: normal in-range segment kept")
+        # 2) Regression guard: a normal in-range segment must still be kept.
+        good = os.path.join(d, "ok.elf")
+        make_elf64(good, paddr=0x500, memsz=0x100)
+        if run(squashelf, good, os.path.join(d, "good.out"), "0x0-0x1000") != 0:
+            print("FAIL: normal in-range segment was dropped")
+            rc = 1
+        else:
+            print("PASS: normal in-range segment kept")
 
     sys.exit(rc)
 

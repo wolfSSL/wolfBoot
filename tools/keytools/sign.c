@@ -2516,16 +2516,27 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     if (CMD.cert_chain_file != NULL) {
         struct stat cc_stat;
         if ((stat(CMD.cert_chain_file, &cc_stat) == 0) &&
-            (cc_stat.st_size >= 0) &&
-            ((uintmax_t)cc_stat.st_size <= (uintmax_t)UINT32_MAX)) {
-            uint32_t required_space = header_required_size(1,
-                (uint32_t)cc_stat.st_size, 0);
-            if (CMD.header_sz < required_space) {
-                uint32_t new_size = 256;
-                while (new_size < required_space) {
-                    new_size *= 2;
+            (cc_stat.st_size >= 0)) {
+            if ((uintmax_t)cc_stat.st_size > (uintmax_t)UINT16_MAX) {
+                printf("Error: Certificate chain too large for TLV encoding "
+                    "(%ju > %u)\n", (uintmax_t)cc_stat.st_size, UINT16_MAX);
+                goto cleanup;
+            }
+            else {
+                uint32_t required_space = header_required_size(1,
+                    (uint32_t)cc_stat.st_size, 0);
+                if (CMD.header_sz < required_space) {
+                    uint32_t new_size = 256;
+                    while (new_size < required_space) {
+                        if (new_size > (UINT32_MAX / 2U)) {
+                            printf("Error: Header size overflow while sizing "
+                                "certificate chain\n");
+                            goto cleanup;
+                        }
+                        new_size *= 2;
+                    }
+                    CMD.header_sz = new_size;
                 }
-                CMD.header_sz = new_size;
             }
         }
     }

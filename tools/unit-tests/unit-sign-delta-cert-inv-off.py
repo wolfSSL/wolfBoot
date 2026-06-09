@@ -78,6 +78,8 @@ def find_tlv_u32(data, want_type, scan_end):
             continue
         length = data[p + 2] | (data[p + 3] << 8)
         if htype == want_type:
+            if length != 4 or p + 4 + length > scan_end:
+                return None
             return struct.unpack("<I", data[p + 4:p + 4 + length])[0]
         p += 4 + length
     return None
