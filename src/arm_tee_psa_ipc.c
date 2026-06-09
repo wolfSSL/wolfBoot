@@ -115,6 +115,11 @@ struct arm_tee_crypto_pack_iovec {
     };
 };
 
+/* Upper bound on the number of in/out descriptors accepted by
+ * arm_tee_psa_call(). The NSC veneer packs in_len/out_len into 3-bit fields,
+ * so a non-secure caller can request at most 7 of each. */
+#define ARM_TEE_PSA_MAX_IOVEC 7
+
 struct wolfboot_hash_slot {
     uint32_t handle;
     psa_hash_operation_t op;
@@ -353,7 +358,8 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
                                              psa_outvec *out_vec,
                                              size_t out_len)
 {
-    const struct arm_tee_crypto_pack_iovec *iov;
+    struct arm_tee_crypto_pack_iovec iov_s;
+    const struct arm_tee_crypto_pack_iovec *iov = &iov_s;
     psa_status_t init_status;
 
     if (in_vec == NULL || in_len == 0) {
@@ -365,10 +371,15 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         return init_status;
     }
 
-    iov = (const struct arm_tee_crypto_pack_iovec *)in_vec[0].base;
-    if (iov == NULL || in_vec[0].len < sizeof(struct arm_tee_crypto_pack_iovec)) {
+    if (in_vec[0].base == NULL ||
+        in_vec[0].len < sizeof(struct arm_tee_crypto_pack_iovec)) {
         return PSA_ERROR_INVALID_ARGUMENT;
     }
+    /* Snapshot the packed iovec header out of NS memory once. Its fields
+     * (function_id, key_id, alg, op_handle, ...) are read repeatedly below;
+     * dereferencing the NS copy each time would let a racing NS agent change
+     * them mid-dispatch. */
+    iov_s = *(const struct arm_tee_crypto_pack_iovec *)in_vec[0].base;
 
     switch (iov->function_id) {
     case ARM_TEE_CRYPTO_GENERATE_RANDOM_SID:
@@ -752,53 +763,11 @@ psa_handle_t arm_tee_psa_connect(uint32_t sid, uint32_t version)
     return (psa_handle_t)PSA_ERROR_CONNECTION_REFUSED;
 }
 
-int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
+static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
     const psa_invec *in_vec, size_t in_len,
     psa_outvec *out_vec, size_t out_len)
 {
     (void)type;
-
-    if (in_len > 0 && in_vec == NULL) {
-        return PSA_ERROR_INVALID_ARGUMENT;
-    }
-    if (in_len > 0 &&
-        cmse_check_address_range((void *)in_vec, in_len * sizeof(*in_vec),
-                                 CMSE_NONSECURE) == NULL) {
-        return PSA_ERROR_INVALID_ARGUMENT;
-    }
-    if (out_len > 0 && out_vec == NULL) {
-        return PSA_ERROR_INVALID_ARGUMENT;
-    }
-    if (out_len > 0 &&
-        cmse_check_address_range(out_vec, out_len * sizeof(*out_vec),
-                                 CMSE_NONSECURE) == NULL) {
-        return PSA_ERROR_INVALID_ARGUMENT;
-    }
-    {
-        size_t i;
-        for (i = 0; i < in_len; i++) {
-            if (in_vec[i].len > 0 && in_vec[i].base == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            if (in_vec[i].len > 0 &&
-                cmse_check_address_range((void *)in_vec[i].base,
-                                         in_vec[i].len,
-                                         CMSE_NONSECURE) == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-        }
-        for (i = 0; i < out_len; i++) {
-            if (out_vec[i].len > 0 && out_vec[i].base == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            if (out_vec[i].len > 0 &&
-                cmse_check_address_range(out_vec[i].base,
-                                         out_vec[i].len,
-                                         CMSE_NONSECURE) == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-        }
-    }
 
     if (handle == (psa_handle_t)ARM_TEE_CRYPTO_HANDLE) {
         return wolfboot_crypto_dispatch(in_vec, in_len, out_vec, out_len);
@@ -1034,6 +1003,86 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
     }
 
     return PSA_ERROR_NOT_SUPPORTED;
+}
+
+int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
+    const psa_invec *in_vec, size_t in_len,
+    psa_outvec *out_vec, size_t out_len)
+{
+    psa_invec in_vec_s[ARM_TEE_PSA_MAX_IOVEC];
+    psa_outvec out_vec_s[ARM_TEE_PSA_MAX_IOVEC];
+    int32_t result;
+    size_t i;
+
+    /* Reject more descriptors than the Secure-stack snapshots can hold. This
+     * also keeps the in_len/out_len * sizeof() products below from
+     * overflowing size_t. */
+    if (in_len > ARM_TEE_PSA_MAX_IOVEC || out_len > ARM_TEE_PSA_MAX_IOVEC) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (in_len > 0 && in_vec == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (in_len > 0 &&
+        cmse_check_address_range((void *)in_vec, in_len * sizeof(*in_vec),
+                                 CMSE_NONSECURE) == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_len > 0 && out_vec == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+    if (out_len > 0 &&
+        cmse_check_address_range(out_vec, out_len * sizeof(*out_vec),
+                                 CMSE_NONSECURE) == NULL) {
+        return PSA_ERROR_INVALID_ARGUMENT;
+    }
+
+    /* Snapshot the NS-supplied descriptor arrays into Secure-stack copies
+     * before validating them, or they might be changed under our nose by NS.
+     */
+    for (i = 0; i < in_len; i++) {
+        in_vec_s[i] = in_vec[i];
+    }
+    for (i = 0; i < out_len; i++) {
+        out_vec_s[i] = out_vec[i];
+    }
+
+    for (i = 0; i < in_len; i++) {
+        if (in_vec_s[i].len > 0 && in_vec_s[i].base == NULL) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        if (in_vec_s[i].len > 0 &&
+            cmse_check_address_range((void *)in_vec_s[i].base,
+                                     in_vec_s[i].len,
+                                     CMSE_NONSECURE) == NULL) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+    for (i = 0; i < out_len; i++) {
+        if (out_vec_s[i].len > 0 && out_vec_s[i].base == NULL) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        if (out_vec_s[i].len > 0 &&
+            cmse_check_address_range(out_vec_s[i].base,
+                                     out_vec_s[i].len,
+                                     CMSE_NONSECURE) == NULL) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+    }
+
+    result = arm_tee_psa_dispatch(handle, type,
+                                  in_len > 0 ? in_vec_s : NULL, in_len,
+                                  out_len > 0 ? out_vec_s : NULL, out_len);
+
+    /* Propagate the (possibly updated) output lengths from the Secure snapshot
+     * back to the NS descriptor array. Only the .len scalars are written back;
+     * .base is never copied out from Secure-derived values. */
+    for (i = 0; i < out_len; i++) {
+        out_vec[i].len = out_vec_s[i].len;
+    }
+
+    return result;
 }
 
 void arm_tee_psa_close(psa_handle_t handle)
