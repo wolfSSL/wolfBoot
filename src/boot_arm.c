@@ -115,36 +115,17 @@ static void mpu_on(void)
 
 static uint32_t mpusize(uint32_t size)
 {
-    if (size <= (8 * 1024))
-        return MPUSIZE_8K;
-    if (size <= (16 * 1024))
-        return MPUSIZE_16K;
-    if (size <= (32 * 1024))
-        return MPUSIZE_32K;
-    if (size <= (64 * 1024))
-        return MPUSIZE_64K;
-    if (size <= (128 * 1024))
-        return MPUSIZE_128K;
-    if (size <= (256 * 1024))
-        return MPUSIZE_256K;
-    if (size <= (512 * 1024))
-        return MPUSIZE_512K;
-    if (size <= (1024 * 1024))
-        return MPUSIZE_1M;
-    if (size <= (2 * 1024 * 1024))
-        return MPUSIZE_2M;
-    if (size <= (4 * 1024 * 1024))
-        return MPUSIZE_4M;
-    if (size <= (8 * 1024 * 1024))
-        return MPUSIZE_8M;
-    if (size <= (16 * 1024 * 1024))
-        return MPUSIZE_16M;
-    if (size <= (32 * 1024 * 1024))
-        return MPUSIZE_32M;
-    if (size <= (64 * 1024 * 1024))
-        return MPUSIZE_64M;
-    if (size <= (128 * 1024 * 1024))
-        return MPUSIZE_128M;
+    uint32_t rasr = MPUSIZE_8K;
+    uint32_t limit = (8 * 1024);
+
+    while ((size > limit) && (limit < (128 * 1024 * 1024))) {
+        limit <<= 1;
+        rasr += 2;
+    }
+
+    if (size <= limit)
+        return rasr;
+
     return MPUSIZE_ERR;
 }
 
