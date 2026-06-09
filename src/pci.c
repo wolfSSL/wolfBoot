@@ -70,6 +70,14 @@
 #define PCI_IO32_BASE 0x2000
 #endif /* PCI_IO32_BASE */
 
+#ifndef PCI_IO32_LIMIT
+/* x86 IO space is 16-bit: valid IO addresses are 0x0000-0xFFFF.  IO BARs must
+ * not be allocated past this ceiling, otherwise the 8-bit bridge IO base/limit
+ * registers (which only carry address bits [15:8]) silently truncate the high
+ * bits, mis-programming the window onto the legacy IO range (PIC/PIT/RTC). */
+#define PCI_IO32_LIMIT 0x10000
+#endif /* PCI_IO32_LIMIT */
+
 #define PCI_ENUM_MAX_DEV  32
 #define PCI_ENUM_MAX_FUN  8
 #define PCI_ENUM_MAX_BARS 6
@@ -474,7 +482,7 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
         if ((bar_align & PCI_DATA_HI16_MASK) == 0)
             bar_align |= PCI_DATA_HI16_MASK;
         base = &info->io;
-        limit = 0xffffffff;
+        limit = PCI_IO32_LIMIT;
     }
 
     PCI_DEBUG_PRINTF("PCI enum: %s %x:%x.%x bar: %d val: %x (%s %s)\r\n",
