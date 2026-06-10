@@ -360,6 +360,35 @@ static void update_store_size(struct obj_hdr *hdr, uint32_t size)
     cache_commit(0);
 }
 
+static void erase_object_payload(uint8_t *buf)
+{
+    uint32_t erase_off;
+    uint32_t erase_end;
+    uint32_t sector_base;
+
+    erase_off = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base) +
+        (2U * sizeof(uint32_t));
+    erase_end = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base) +
+        KEYVAULT_OBJ_SIZE;
+    sector_base = erase_off - (erase_off % WOLFBOOT_SECTOR_SIZE);
+
+    while (sector_base < erase_end) {
+        uint32_t erase_start = erase_off;
+        uint32_t erase_stop = sector_base + WOLFBOOT_SECTOR_SIZE;
+
+        if (erase_start < sector_base)
+            erase_start = sector_base;
+        if (erase_stop > erase_end)
+            erase_stop = erase_end;
+
+        memcpy(cached_sector, vault_base + sector_base, WOLFBOOT_SECTOR_SIZE);
+        memset(cached_sector + (erase_start - sector_base), 0xFF,
+            erase_stop - erase_start);
+        cache_commit(sector_base);
+        sector_base += WOLFBOOT_SECTOR_SIZE;
+    }
+}
+
 /* Find a free handle in openstores_handles[] array
  * to manage the interaction with the API.
  *
@@ -436,18 +465,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
          * prior (longer) payload. New objects are already in a fresh sector
          * from create_object(), so only do this for existing objects. */
         if (!is_new) {
-            uint32_t obj_tok = ((uint32_t *)buf)[0];
-            uint32_t obj_id_val = ((uint32_t *)buf)[1];
-            uint32_t obj_off = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base);
-            uint32_t s;
-            for (s = 0; s < KEYVAULT_OBJ_SIZE; s += WOLFBOOT_SECTOR_SIZE) {
-                memset(cached_sector, 0xFF, WOLFBOOT_SECTOR_SIZE);
-                if (s == 0) {
-                    ((uint32_t *)cached_sector)[0] = obj_tok;
-                    ((uint32_t *)cached_sector)[1] = obj_id_val;
-                }
-                cache_commit(obj_off + s);
-            }
+            erase_object_payload(buf);
         }
     }
 
