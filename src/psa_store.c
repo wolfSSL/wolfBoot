@@ -380,6 +380,7 @@ int wolfPSA_Store_Open(int type, unsigned long id1, unsigned long id2, int read,
 {
     struct store_handle *handle;
     uint8_t *buf;
+    int is_new = 0;
 
     /* Check if there is one handle available to open the slot */
     handle = find_free_handle();
@@ -408,6 +409,7 @@ int wolfPSA_Store_Open(int type, unsigned long id1, unsigned long id2, int read,
             *store = NULL;
             return NOT_AVAILABLE_E;
         }
+        is_new = 1;
     } else { /* buf != NULL, readonly */
         handle->hdr = find_object_header(type, id1, id2);
         if (!handle->hdr) {
@@ -429,6 +431,22 @@ int wolfPSA_Store_Open(int type, unsigned long id1, unsigned long id2, int read,
         handle->flags &= ~STORE_FLAGS_READONLY;
         /* Truncate the slot when opening in write mode */
         update_store_size(handle->hdr, 2 * sizeof(uint32_t));
+        /* Erase the object data region so a shorter write does not leave
+         * residual key material from the previous (longer) payload. */
+        if (!is_new) {
+            uint32_t obj_tok = ((uint32_t *)buf)[0];
+            uint32_t obj_id_val = ((uint32_t *)buf)[1];
+            uint32_t obj_off = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base);
+            uint32_t s;
+            for (s = 0; s < KEYVAULT_OBJ_SIZE; s += WOLFBOOT_SECTOR_SIZE) {
+                memset(cached_sector, 0xFF, WOLFBOOT_SECTOR_SIZE);
+                if (s == 0) {
+                    ((uint32_t *)cached_sector)[0] = obj_tok;
+                    ((uint32_t *)cached_sector)[1] = obj_id_val;
+                }
+                cache_commit(obj_off + s);
+            }
+        }
     }
 
 
