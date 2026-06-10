@@ -563,6 +563,25 @@ START_TEST(test_gpt_parse_partition_last_zero)
 }
 END_TEST
 
+START_TEST(test_gpt_parse_partition_last_overflow)
+{
+    /* pe->last = UINT64_MAX passes the first>last and last==0 guards, but
+     * (pe->last + 1) * GPT_SECTOR_SIZE - 1 would wrap to UINT64_MAX, defeating
+     * the bounds check in disk_part_read. Must be rejected. */
+    uint8_t entry[128];
+    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    struct gpt_part_info info;
+
+    memset(entry, 0, sizeof(entry));
+    pe->type[0] = 0x0001020304050607ULL;
+    pe->type[1] = 0x08090A0B0C0D0E0FULL;
+    pe->first = 1;
+    pe->last = 0xFFFFFFFFFFFFFFFFULL;
+
+    ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), -1);
+}
+END_TEST
+
 /* ============================================================
  *  Coverage tests: disk.c error paths and boundary conditions
  * ============================================================ */
@@ -1007,6 +1026,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_disk_bugs, test_gpt_partition_end_inclusive);
     tcase_add_test(tc_disk_bugs, test_disk_open_failure_clears_is_open);
     tcase_add_test(tc_disk_bugs, test_gpt_parse_partition_last_zero);
+    tcase_add_test(tc_disk_bugs, test_gpt_parse_partition_last_overflow);
     suite_add_tcase(s, tc_disk_bugs);
 
     TCase *tc_cov = tcase_create("disk-coverage");
