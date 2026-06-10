@@ -137,6 +137,21 @@ START_TEST(test_erase_bank1_two_sectors)
 }
 END_TEST
 
+/* Regression for F-5745: when len % FLASH_PAGE_SIZE != 0 the final page was
+ * skipped because end_address = base + len - 1 lands exactly on the start of
+ * that last page and the strict `p < end_address` guard excludes it. */
+START_TEST(test_erase_unaligned_len_covers_last_page)
+{
+    reset_mocks();
+    /* len = PAGE_SIZE + 1: two pages must be erased (sectors 0 and 1). */
+    hal_flash_erase(0x08000000UL, FLASH_PAGE_SIZE + 1);
+
+    ck_assert_int_eq(erase_log_n, 2);
+    ck_assert_uint_eq(snb_of(erase_cr1[0]), 0);
+    ck_assert_uint_eq(snb_of(erase_cr1[1]), 1);
+}
+END_TEST
+
 Suite *flash_erase_suite(void)
 {
     Suite *s = suite_create("flash-erase-h7");
@@ -145,6 +160,7 @@ Suite *flash_erase_suite(void)
     tcase_add_test(tc, test_erase_bank2_two_sectors);
     tcase_add_test(tc, test_erase_bank2_single_sector);
     tcase_add_test(tc, test_erase_bank1_two_sectors);
+    tcase_add_test(tc, test_erase_unaligned_len_covers_last_page);
 
     suite_add_tcase(s, tc);
     return s;

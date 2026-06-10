@@ -208,7 +208,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         return -1;
     end_address = (address - FLASHMEM_ADDRESS_SPACE) + len - 1;
     for (p = (address - FLASHMEM_ADDRESS_SPACE);
-         p < end_address;
+         p <= end_address;
          p += FLASH_PAGE_SIZE)
     {
         if (p < FLASH_BANK2_BASE_REL) {
