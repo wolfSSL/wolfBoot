@@ -1269,6 +1269,7 @@ cleanup:
         fclose(fpriv);
     if (key_init)
         wc_MlDsaKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
     if (priv != NULL) {
         wc_ForceZero(priv, priv_len);
         free(priv);
