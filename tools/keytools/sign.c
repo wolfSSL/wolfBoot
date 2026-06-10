@@ -1443,7 +1443,17 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     /* No pad bytes, version is aligned */
 
     /* Append Version field */
-    fw_version32 = strtol(CMD.fw_version, NULL, 10);
+    {
+        unsigned long tmp_ver;
+        errno = 0;
+        tmp_ver = strtoul(CMD.fw_version, NULL, 10);
+        if (errno == ERANGE || tmp_ver > (unsigned long)UINT32_MAX) {
+            fprintf(stderr, "Error: firmware version out of range: %s\n",
+                    CMD.fw_version);
+            goto failure;
+        }
+        fw_version32 = (uint32_t)tmp_ver;
+    }
     header_append_tag_u32(header, &header_idx, HDR_VERSION, fw_version32);
 
     /* Append pad bytes, so timestamp val field is 8-byte aligned */
