@@ -878,6 +878,8 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     word32  pub_len = sizeof(lms_pub);
     int     lms_levels, lms_height, lms_winternitz;
     char    *env_lms_levels, *env_lms_height, *env_lms_winternitz;
+    int     exit_code = 0;
+    int     key_init = 0;
 
     lms_levels = LMS_LEVELS;
     lms_height = LMS_HEIGHT;
@@ -896,15 +898,18 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     ret = wc_LmsKey_SetParameters(&key, lms_levels, lms_height, lms_winternitz);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
                 " returned %d\n", lms_levels, lms_height,
                 lms_winternitz, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     printf("info: using LMS parameters: L%d-H%d-W%d\n", lms_levels,
@@ -913,37 +918,43 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     ret = wc_LmsKey_SetWriteCb(&key, lms_write_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetWriteCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_SetReadCb(&key, lms_read_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetReadCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_SetContext(&key, (void *) priv_fname);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetContext returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_ExportPubRaw(&key, lms_pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if (pub_len != sizeof(lms_pub)) {
         fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned pub_len=%d\n" \
                         ", expected %d\n", pub_len, (int)sizeof(lms_pub));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Append the public key to the private keyfile. */
@@ -951,7 +962,8 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fseek(fpriv, 64, SEEK_SET);
@@ -961,14 +973,20 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(priv_fname, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(1);
+            exit_code = 1;
+            goto cleanup;
         }
     }
 
     keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
-    wc_LmsKey_Free(&key);
-    wc_ForceZero(&key, sizeof(key));
+cleanup:
+    if (key_init) {
+        wc_LmsKey_Free(&key);
+        wc_ForceZero(&key, sizeof(key));
+    }
+    if (exit_code)
+        exit(exit_code);
 }
 
 #include "../xmss/xmss_common.h"
