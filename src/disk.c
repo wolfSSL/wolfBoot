@@ -149,7 +149,8 @@ int disk_open(int drv)
         wolfBoot_printf("Found GPT PTE at sector %u\r\n", gpt_lba);
 
         /* Read GPT header */
-        r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
+        r = disk_read(drv, (uint64_t)GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE,
+                sector);
         if (r < 0) {
             wolfBoot_printf("Disk read failed\r\n");
             Drives[drv].is_open = 0;

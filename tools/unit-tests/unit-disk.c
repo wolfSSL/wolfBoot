@@ -653,6 +653,31 @@ START_TEST(test_disk_open_gpt_rejects_huge_part_array)
 }
 END_TEST
 
+START_TEST(test_disk_open_gpt_lba_no_overflow)
+{
+    /* The protective-MBR lba_first is an attacker-controlled uint32_t. The
+     * GPT-header byte offset must be computed in 64 bits. If it is computed
+     * as the 32-bit product GPT_SECTOR_SIZE * gpt_lba, it wraps for
+     * gpt_lba >= 0x800000: 512 * 0x800001 wraps to 0x200, silently
+     * redirecting the read back to LBA 1 (the real GPT header) instead of
+     * the out-of-range LBA the field actually names. */
+    struct gpt_mbr_part_entry *mbr_entry;
+
+    build_gpt_disk();
+
+    /* Point the protective entry at an LBA whose 512* product overflows a
+     * 32-bit unsigned back to 0x200 (LBA 1). */
+    mbr_entry = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
+    mbr_entry->lba_first = 0x800001;
+
+    /* With correct 64-bit arithmetic the header read targets byte
+     * 0x100000200, far past the fake disk, so disk_open must fail rather
+     * than wrap to LBA 1 and accept the table. */
+    ck_assert_int_eq(disk_open(0), -1);
+    ck_assert_int_eq(Drives[0].is_open, 0);
+}
+END_TEST
+
 START_TEST(test_disk_open_gpt_empty_entry_mid_table)
 {
     /* GPT header says 3 partitions but entry[1] has zeroed type GUID.
@@ -990,6 +1015,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_disk_open_gpt_excess_partitions);
     tcase_add_test(tc_cov, test_disk_open_gpt_large_array_sz);
     tcase_add_test(tc_cov, test_disk_open_gpt_rejects_huge_part_array);
+    tcase_add_test(tc_cov, test_disk_open_gpt_lba_no_overflow);
     tcase_add_test(tc_cov, test_disk_open_gpt_empty_entry_mid_table);
     tcase_add_test(tc_cov, test_disk_open_mbr_zero_lba_entry);
     tcase_add_test(tc_cov, test_open_part_invalid_drive);
