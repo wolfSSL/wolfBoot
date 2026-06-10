@@ -71,12 +71,14 @@
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/sha512.h>
 
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
 static NOINLINEFUNCTION void hal_uds_zeroize(void *ptr, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)ptr;
     while (len-- > 0U)
         *p++ = 0U;
 }
+#endif
 
 /* Derive UDS from device UUID for software DICE testing.
  * NOT secure — UUID is publicly observable. Only enabled with
