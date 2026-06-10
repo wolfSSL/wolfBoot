@@ -66,6 +66,7 @@ TESTS+=unit-flash-erase-h7
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-fwtpm-nv-oob
+TESTS+=unit-elf-bss-guard
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -452,6 +453,10 @@ unit-multiboot: unit-multiboot.c
 unit-x86-paging-oob: ../../include/target.h unit-x86-paging-oob.c
 	gcc -o $@ unit-x86-paging-oob.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-elf-bss-guard: unit-elf-bss-guard.c
+	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
+		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)

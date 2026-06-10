@@ -191,7 +191,7 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
          * Only protect headers [i+1, entry_count) not yet parsed.
          * Use memmove for safe in-place ELF loading (e.g., RAM boot). */
         if (i + 1 >= entry_count || /* last header, nothing left to protect */
-            (uint8_t*)vaddr + file_size <= (entry_off + ((i + 1) * entry_size)) ||
+            (uint8_t*)vaddr + mem_size <= (entry_off + ((i + 1) * entry_size)) ||
             (uint8_t*)vaddr > (entry_off + entry_count * entry_size))
         {
             memmove((void*)vaddr, image + offset, file_size);
