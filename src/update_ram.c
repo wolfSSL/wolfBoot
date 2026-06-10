@@ -455,8 +455,10 @@ backup_on_failure:
             load_address = (uint32_t*)(uintptr_t)ih_load;
         } else {
             /* Linux PPC path: leave load_address alone, just advance it
-             * past the header to match upstream behaviour. */
-            load_address += UBOOT_IMG_HDR_SZ;
+             * past the header to match upstream behaviour. load_address is
+             * a uint32_t*, so advance by BYTES, not words. */
+            load_address = (uint32_t*)((uint8_t*)load_address +
+                UBOOT_IMG_HDR_SZ);
         }
         (void)ih_ep; /* TODO: pass through to do_boot when ih_ep != ih_load */
     }

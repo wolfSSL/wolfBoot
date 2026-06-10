@@ -495,7 +495,9 @@ void uart_vprintf(const char* fmt, va_list argp)
                         long long sll = va_arg(argp, long long);
                         if (sll < 0) {
                             is_neg = 1;
-                            val = (unsigned long long)(-sll);
+                            /* Negate in unsigned space so LLONG_MIN
+                             * does not overflow. */
+                            val = 0ULL - (unsigned long long)sll;
                         }
                         else {
                             val = (unsigned long long)sll;
