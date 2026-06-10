@@ -215,7 +215,7 @@ unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 
 unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
-		$(LDFLAGS)
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
