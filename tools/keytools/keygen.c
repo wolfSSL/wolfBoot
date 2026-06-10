@@ -725,6 +725,7 @@ cleanup:
         fclose(fpriv);
     if (key_init)
         wc_ecc_free(&k);
+    wc_ForceZero(&k, sizeof(k));
     wc_ForceZero(d, sizeof(d));
     wc_ForceZero(priv_der, sizeof(priv_der));
 
