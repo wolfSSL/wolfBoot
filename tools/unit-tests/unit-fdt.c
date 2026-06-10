@@ -136,6 +136,27 @@ START_TEST(test_fit_load_image_rejects_oversized_prop_len)
 }
 END_TEST
 
+/* off_dt_strings=4, size_dt_strings=0xFFFFFFFC: sum overflows uint32_t to 0.
+ * Before the fix, fdt_data_size_() returned 0 and fdt_shrink() silently set
+ * totalsize=0.  After the fix fdt_shrink() must return an error and leave
+ * totalsize unchanged. */
+START_TEST(test_fdt_shrink_rejects_dt_strings_area_overflow)
+{
+    static uint8_t buf[256];
+    int rc;
+
+    memset(buf, 0, sizeof(buf));
+    fdt_set_totalsize(buf, sizeof(buf));
+    fdt_set_off_dt_strings(buf, 4);
+    fdt_set_size_dt_strings(buf, 0xFFFFFFFC);
+
+    rc = fdt_shrink(buf);
+
+    ck_assert_int_lt(rc, 0);
+    ck_assert_uint_eq(fdt_totalsize(buf), sizeof(buf));
+}
+END_TEST
+
 static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
@@ -144,6 +165,7 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_get_string_rejects_out_of_range_offset);
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
     tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
+    tcase_add_test(tc, test_fdt_shrink_rejects_dt_strings_area_overflow);
     suite_add_tcase(s, tc);
 
     return s;

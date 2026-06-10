@@ -96,7 +96,11 @@ static inline int fdt_data_size_(void *fdt)
 {
     /* the last portion of a FDT is the DT string, so use its offset and size to
      * determine total size */
-    return fdt_off_dt_strings(fdt) + fdt_size_dt_strings(fdt);
+    uint64_t off = (uint64_t)fdt_off_dt_strings(fdt);
+    uint64_t sz  = (uint64_t)fdt_size_dt_strings(fdt);
+    if (off + sz > (uint64_t)UINT32_MAX)
+        return -FDT_ERR_BADOFFSET;
+    return (int)(off + sz);
 }
 
 static const void *fdt_offset_ptr(const void *fdt, int offset, unsigned int len)
@@ -329,7 +333,13 @@ static int fdt_resize_property_(void *fdt, int nodeoffset, const char *name,
 static int fdt_splice_string_(void *fdt, int newlen)
 {
     int err;
-    void *p = (char*)fdt + fdt_off_dt_strings(fdt) + fdt_size_dt_strings(fdt);
+    uint32_t off = fdt_off_dt_strings(fdt);
+    uint32_t sz  = fdt_size_dt_strings(fdt);
+    void *p;
+
+    if (sz > UINT32_MAX - off)
+        return -FDT_ERR_BADOFFSET;
+    p = (char*)fdt + off + sz;
 
     if ((err = fdt_splice_(fdt, p, 0, newlen))) {
         return err;
@@ -794,8 +804,10 @@ int fdt_del_node(void *fdt, int nodeoffset)
 /* adjust the actual total size in the FDT header */
 int fdt_shrink(void* fdt)
 {
-    uint32_t total_size = fdt_data_size_(fdt);
-    return fdt_set_totalsize(fdt, total_size);
+    int total_size = fdt_data_size_(fdt);
+    if (total_size < 0)
+        return total_size;
+    return fdt_set_totalsize(fdt, (uint32_t)total_size);
 }
 
 /* FTD Fixup API's */
