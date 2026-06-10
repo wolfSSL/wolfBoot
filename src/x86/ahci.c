@@ -436,6 +436,10 @@ int sata_unlock_disk(int drv, int freeze)
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
         goto cleanup;
+    if (secret_size != ATA_UNLOCK_DISK_KEY_SZ) {
+        r = -1;
+        goto cleanup;
+    }
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
 #if defined(TARGET_x86_fsp_qemu)

@@ -106,6 +106,8 @@ enum ata_security_state ata_security_get_state(int);
 /* Constants for security set commands */
 #define ATA_SECURITY_COMMAND_LEN                (256 * 2)
 #define ATA_SECURITY_PASSWORD_OFFSET            (1 * 2)
+/* ATA-8 ACS: password field is words 1-16 = 32 bytes */
+#define ATA_SECURITY_PASSWORD_LEN               32
 #define ATA_ERR_BUSY -2
 #define ATA_ERR_OP_IN_PROGRESS -3
 #define ATA_ERR_OP_NOT_IN_PROGRESS -4

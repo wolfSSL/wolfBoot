@@ -463,7 +463,8 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
     if (master)
         buffer[0] = 0x1;
-    memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase, strlen(passphrase));
+    memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase,
+           strnlen(passphrase, ATA_SECURITY_PASSWORD_LEN));
     if (slot < 0) {
         return slot;
     }
