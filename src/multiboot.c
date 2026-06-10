@@ -265,7 +265,12 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
     idx = (uint8_t*)hdr + sizeof(*hdr);
     hdr->reserved = 0;
     header_length = ((struct mb2_header *)mb2_header)->header_length;
-    if (header_length < sizeof(struct mb2_header))
+    /* Per the Multiboot2 spec the whole header must lie within the first
+     * MB2_HEADER_MAX_OFF bytes of the image.  Bounding header_length here keeps
+     * the tag walker inside the header window and prevents an oversized value
+     * (e.g. 0xFFFFFFFF) from inflating its end pointer into an OOB read. */
+    if (header_length < sizeof(struct mb2_header) ||
+            header_length > MB2_HEADER_MAX_OFF)
         return -1;
     info_req_tag =
         (struct mb2_tag_info_req *)mb2_find_tag_by_type(
