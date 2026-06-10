@@ -1398,6 +1398,10 @@ extern uint32_t _spin_table_addr;
  * hal_dts_fixup() for cpu-release-addr fixups. Also read by boot_ppc.c
  * pre-jump dump to capture spin-table contents at handoff. */
 uint32_t g_spin_table_ddr = 0;
+/* DDR address of the secondary-core boot page, set by hal_mp_init() and used
+ * by hal_dts_fixup() to /memreserve/ the actual page (it differs by config:
+ * 0x7E3FF000 for VPX3 OS64BIT, 0x7FFFF000 otherwise). */
+uint32_t g_bootpg_ddr = 0;
 extern uint32_t _bootpg_addr;
 
 /* Startup additional cores with spin table and synchronize the timebase.
@@ -1597,6 +1601,7 @@ static void hal_mp_init(void)
 
     /* Persist DDR spin-table base for hal_dts_fixup() (cpu-release-addr). */
     g_spin_table_ddr = spin_table_ddr;
+    g_bootpg_ddr = bootpg;
 
     /* Release all cores from reset into the spin loop. The cluster L2 runs
      * with ECC ON (boot_ppc_start.S), so the secondaries spin ECC-consistent
@@ -1681,6 +1686,7 @@ int hal_dts_fixup(void* dts_addr)
     {
         int rsv_ret;
         uint64_t spin_pg = (uint64_t)(g_spin_table_ddr & ~0xFFFU);
+        uint64_t boot_pg = (uint64_t)(g_bootpg_ddr & ~0xFFFU);
 
         rsv_ret = fdt_add_mem_rsv(fdt, spin_pg, 0x1000ULL);
         if (rsv_ret != 0) {
@@ -1688,10 +1694,10 @@ int hal_dts_fixup(void* dts_addr)
                 "@ 0x%llx: %d\n", spin_pg, rsv_ret);
             return rsv_ret;
         }
-        rsv_ret = fdt_add_mem_rsv(fdt, 0x7ffff000ULL, 0x1000ULL);
+        rsv_ret = fdt_add_mem_rsv(fdt, boot_pg, 0x1000ULL);
         if (rsv_ret != 0) {
             wolfBoot_printf("FDT: failed to reserve boot page "
-                "@ 0x7ffff000: %d\n", rsv_ret);
+                "@ 0x%llx: %d\n", boot_pg, rsv_ret);
             return rsv_ret;
         }
         rsv_ret = fdt_add_mem_rsv(fdt, 0xfffff000ULL, 0x1000ULL);

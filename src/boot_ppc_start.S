@@ -229,7 +229,7 @@ _reset:
          * VPX3-152 ships rev 1.1 (PVR 0x85380011) per CW U-Boot banner.
          * Read PVR major_rev and gate the rev-1-only fixes accordingly. */
         mfspr   r3, SPRN_PVR
-        rlwinm  r3, r3, 28, 0xf  /* r3 = major_rev */
+        rlwinm  r3, r3, 28, 28, 31  /* r3 = major_rev = (PVR>>4)&0xF */
         cmpwi   r3, 0x1          /* is rev 1? */
         bne     t2080_errata_done
 

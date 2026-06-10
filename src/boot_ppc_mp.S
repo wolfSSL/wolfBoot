@@ -48,7 +48,7 @@ _secondary_start_page:
          * may exhibit cache speculation / DVA-stale / coherency bugs.
          * VPX3-152 ships rev 1.1 (PVR 0x85380011). */
         mfspr   r3, SPRN_PVR
-        rlwinm  r3, r3, 28, 0xf  /* major_rev */
+        rlwinm  r3, r3, 28, 28, 31  /* major_rev = (PVR>>4)&0xF */
         cmpwi   r3, 0x1
         bne     mp_t2080_errata_done
 
