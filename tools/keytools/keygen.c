@@ -614,6 +614,7 @@ cleanup:
     wc_ForceZero(priv_der, sizeof(priv_der));
     if (rsa_init)
         wc_FreeRsaKey(&k);
+    wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
         exit(exit_code);
 }
