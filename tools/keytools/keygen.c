@@ -982,12 +982,16 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     byte    xmss_pub[XMSS_SHA256_PUBLEN];
     char    *xmss_params = getenv("XMSS_PARAMS");
     word32  pub_len = sizeof(xmss_pub);
+    int     exit_code = 0;
+    int     key_init = 0;
 
     ret = wc_XmssKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     if (xmss_params == NULL)
         xmss_params = WOLFBOOT_XMSS_PARAMS;
@@ -996,7 +1000,8 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
                 " returned %d\n", xmss_params, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     printf("info: using XMSS parameters: %s\n", xmss_params);
@@ -1004,26 +1009,30 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     ret = wc_XmssKey_SetWriteCb(&key, xmss_write_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetWriteCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_SetReadCb(&key, xmss_read_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetReadCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_SetContext(&key, (void *) priv_fname);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetContext returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Make the key pair. */
     ret = wc_XmssKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Get the XMSS/XMSS^MT secret key length. */
@@ -1031,19 +1040,22 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || priv_sz <= 0) {
         printf("error: wc_XmssKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_ExportPubRaw(&key, xmss_pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if (pub_len != sizeof(xmss_pub)) {
         fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned pub_len=%d\n" \
                         ", expected %d\n", pub_len, (int)sizeof(xmss_pub));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Append the public key to the private keyfile. */
@@ -1051,7 +1063,8 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fseek(fpriv, priv_sz, SEEK_SET);
@@ -1061,15 +1074,20 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(priv_fname, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(1);
+            exit_code = 1;
+            goto cleanup;
         }
     }
 
-
     keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
-    wc_XmssKey_Free(&key);
-    wc_ForceZero(&key, sizeof(key));
+cleanup:
+    if (key_init) {
+        wc_XmssKey_Free(&key);
+        wc_ForceZero(&key, sizeof(key));
+    }
+    if (exit_code)
+        exit(exit_code);
 }
 
 
