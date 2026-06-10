@@ -2538,10 +2538,11 @@ int keyslot_id_by_sha(const uint8_t *hint)
     int match_id = -1;
 
     for (id = 0; id < keystore_num_pubkeys(); id++) {
+        int match;
         key_hash(id, digest);
-        if ((match_id < 0) && keyslot_CT_hint_matches(digest, hint)) {
+        match = keyslot_CT_hint_matches(digest, hint);
+        if (match && (match_id < 0))
             match_id = id;
-        }
     }
     return match_id;
 }
