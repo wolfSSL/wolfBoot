@@ -35,10 +35,14 @@ static uint8_t fake_disk[FAKE_DISK_SIZE];
 /* Set to a byte offset to make disk_read fail at that address. -1 = no fail */
 static int64_t mock_disk_read_fail_at = -1;
 
+/* Number of disk_read calls since last reset (used to detect scan blow-ups) */
+static unsigned int disk_read_count = 0;
+
 /* Mock disk I/O — copies to/from fake_disk buffer */
 int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 {
     (void)drv;
+    disk_read_count++;
     if (mock_disk_read_fail_at >= 0 && (int64_t)start == mock_disk_read_fail_at)
         return -1;
     if (start + count > FAKE_DISK_SIZE)
@@ -625,6 +629,30 @@ START_TEST(test_disk_open_gpt_large_array_sz)
 }
 END_TEST
 
+START_TEST(test_disk_open_gpt_rejects_huge_part_array)
+{
+    /* A crafted GPT header with a valid (recomputed) header CRC but an
+     * enormous n_part * array_sz must be rejected before the partition-entry
+     * CRC scan loop runs, otherwise it forces a pre-auth DoS via one disk
+     * read per 512-byte chunk of the (here 8 MB) declared array. */
+    struct guid_ptable *gpt_hdr;
+
+    build_gpt_disk();
+
+    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
+    gpt_hdr->n_part = 0x10000;        /* 65536 entries ... */
+    gpt_hdr->array_sz = 128;          /* ... * 128 bytes = 8 MB */
+    finalize_gpt_header_crc(gpt_hdr); /* attacker can always fix header CRC */
+
+    disk_read_count = 0;
+    ck_assert_int_eq(disk_open(0), -1);
+    /* Only the MBR sector and the GPT header sector may be read; the
+     * partition-array scan must not run at all. */
+    ck_assert_uint_le(disk_read_count, 2);
+    ck_assert_int_eq(Drives[0].is_open, 0);
+}
+END_TEST
+
 START_TEST(test_disk_open_gpt_empty_entry_mid_table)
 {
     /* GPT header says 3 partitions but entry[1] has zeroed type GUID.
@@ -961,6 +989,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_disk_open_mbr_bad_bootsig);
     tcase_add_test(tc_cov, test_disk_open_gpt_excess_partitions);
     tcase_add_test(tc_cov, test_disk_open_gpt_large_array_sz);
+    tcase_add_test(tc_cov, test_disk_open_gpt_rejects_huge_part_array);
     tcase_add_test(tc_cov, test_disk_open_gpt_empty_entry_mid_table);
     tcase_add_test(tc_cov, test_disk_open_mbr_zero_lba_entry);
     tcase_add_test(tc_cov, test_open_part_invalid_drive);

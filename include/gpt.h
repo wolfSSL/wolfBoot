@@ -35,6 +35,10 @@
 #define GPT_MBR_BOOTSIG_OFFSET 0x01FE
 #define GPT_MBR_BOOTSIG_VALUE  0xAA55
 #define GPT_PART_ENTRY_SIZE    256
+/* UEFI reserves 128 partition entries by default; bound the partition-entry
+ * array (n_part * array_sz) used by the CRC scan to this many entries so a
+ * crafted header cannot force an unbounded number of disk reads. */
+#define GPT_MAX_PART_ENTRIES   128
 
 /**
  * @brief MBR partition table entry structure.
