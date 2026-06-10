@@ -752,8 +752,29 @@ int main(int argCount, char** argValues)
             /* Align the segment according to its alignment requirement if
              * needed */
             if (p_align > 1) {
+                /* Guard against overflow in the round-up (CWE-190). p_align
+                 * comes straight from a possibly crafted program header; a
+                 * large value would wrap current_offset to a small value and
+                 * place this segment's data over the ELF header. */
+                if (current_offset > UINT64_MAX - (p_align - 1)) {
+                    fprintf(stderr,
+                            "Segment %zu alignment 0x%lx overflows file "
+                            "offset 0x%lx\n",
+                            i, (unsigned long)p_align,
+                            (unsigned long)current_offset);
+                    goto cleanup;
+                }
                 current_offset =
                     (current_offset + p_align - 1) & ~(p_align - 1);
+            }
+
+            /* The 32-bit program header offset is a uint32_t; a larger value
+             * would be silently truncated and corrupt the output layout. */
+            if (current_offset > UINT32_MAX) {
+                fprintf(stderr,
+                        "Segment %zu offset 0x%lx exceeds 32-bit ELF range\n",
+                        i, (unsigned long)current_offset);
+                goto cleanup;
             }
 
             /* Update the segment's offset */
@@ -770,6 +791,18 @@ int main(int argCount, char** argValues)
             /* Align the segment according to its alignment requirement if
              * needed */
             if (p_align > 1) {
+                /* Guard against overflow in the round-up (CWE-190). p_align
+                 * comes straight from a possibly crafted program header; a
+                 * value near UINT64_MAX would wrap current_offset to a small
+                 * value and place this segment's data over the ELF header. */
+                if (current_offset > UINT64_MAX - (p_align - 1)) {
+                    fprintf(stderr,
+                            "Segment %zu alignment 0x%lx overflows file "
+                            "offset 0x%lx\n",
+                            i, (unsigned long)p_align,
+                            (unsigned long)current_offset);
+                    goto cleanup;
+                }
                 current_offset =
                     (current_offset + p_align - 1) & ~(p_align - 1);
             }
