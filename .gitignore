@@ -199,6 +199,7 @@ tools/unit-tests/unit-linux-loader-syssize
 tools/unit-tests/unit-mpusize
 tools/unit-tests/unit-otp-keystore
 tools/unit-tests/unit-tpm-api-names
+tools/unit-tests/unit-elf-bss-guard
 
 
 # Elf preprocessing tools

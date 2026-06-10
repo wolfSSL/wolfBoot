@@ -281,9 +281,15 @@ static void fdt_del_last_string_(void *fdt, const char *s)
 
 static int fdt_splice_(void *fdt, void *splicepoint, int oldlen, int newlen)
 {
+    int data_size;
     char *p, *end;
+
+    data_size = fdt_data_size_(fdt);
+    if (data_size < 0)
+        return data_size;
+
     p = splicepoint;
-    end = (char*)fdt + fdt_data_size_(fdt);
+    end = (char*)fdt + data_size;
     if (((p + oldlen) < p) || ((p + oldlen) > end)) {
         return -FDT_ERR_BADOFFSET;
     }
