@@ -280,7 +280,7 @@ static void uart_flash_erase(uint8_t *base, int ud)
         return;
     if (read_word(ud,&len) != 4)
         return;
-    if (address + len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
+    if ((uint64_t)address + (uint64_t)len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
         return;
     if (address < FIRMWARE_PARTITION_SIZE) {
         printmsg(msgEraseUpdate);
@@ -319,7 +319,7 @@ static void uart_flash_read(uint8_t *base, int ud)
 #if LOG_FLASH_ADDRESS
     printf("Read @%x\n", address);
 #endif
-    if (address + len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
+    if ((uint64_t)address + (uint64_t)len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
         return;
     for (i = 0; i < len; i++) {
         write(ud, base + address + i, 1);
@@ -344,7 +344,7 @@ static void uart_flash_write(uint8_t *base, int ud)
 #if LOG_FLASH_ADDRESS
     printf("Write @%x\n", address);
 #endif
-    if (address + len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
+    if ((uint64_t)address + (uint64_t)len > (FIRMWARE_PARTITION_SIZE + SWAP_SIZE))
         return;
     for (i = 0; i < len; i++) {
         read(ud, base + address + i, 1);

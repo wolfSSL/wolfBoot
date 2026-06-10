@@ -16,6 +16,11 @@ $(EXE): $(EXE).o libwolfboot.o
 libwolfboot.o: ../../src/libwolfboot.c
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) $(^)
 
+test_overflow: test_overflow.c
+	$(Q)$(CC) -Wall -g -o $@ $^ -lutil
+
+test: $(EXE) test_overflow
+	$(Q)./test_overflow ./$(EXE)
 
 clean:
-	$(Q)rm -f *.o $(EXE)
+	$(Q)rm -f *.o $(EXE) test_overflow
