@@ -2317,7 +2317,8 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     int r;
     uint32_t patch_sz, patch_inv_sz;
     uint32_t patch_inv_off;
-    uint32_t *delta_base_version = NULL;
+    uint8_t *delta_base_version = NULL;
+    uint32_t delta_base_version_val = 0;
     uint16_t delta_base_version_sz = 0;
     WB_DIFF_CTX diff_ctx;
     int ret = -1;
@@ -2378,12 +2379,20 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
 #endif
 
     /* Check base image version */
-    delta_base_version_sz = sign_tool_find_header((uint8_t *)base + 8, HDR_VERSION, (void *)&delta_base_version);
-    if ((delta_base_version_sz != sizeof(uint32_t)) || (*delta_base_version == 0)) {
+    delta_base_version_sz = sign_tool_find_header((uint8_t *)base + 8, HDR_VERSION, &delta_base_version);
+    if (delta_base_version_sz != sizeof(uint32_t)) {
+        printf("Could not read firmware version from base file %s\n", f_base);
+        goto cleanup;
+    }
+    delta_base_version_val = (uint32_t)delta_base_version[0] |
+        ((uint32_t)delta_base_version[1] << 8) |
+        ((uint32_t)delta_base_version[2] << 16) |
+        ((uint32_t)delta_base_version[3] << 24);
+    if (delta_base_version_val == 0) {
         printf("Could not read firmware version from base file %s\n", f_base);
         goto cleanup;
     } else {
-        printf("Delta base version: %u\n", *delta_base_version);
+        printf("Delta base version: %u\n", delta_base_version_val);
     }
 
     /* Retrieve the hash digest of the base image */
@@ -2588,7 +2597,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
     /* Create delta file, with header, from the resulting patch */
 
     ret = make_header_delta(pubkey, pubkey_sz, wolfboot_delta_file, CMD.output_diff_file,
-            *delta_base_version, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
+            delta_base_version_val, patch_sz, patch_inv_off, patch_inv_sz, base_hash, base_hash_sz);
 
 cleanup:
     if (dest) {
