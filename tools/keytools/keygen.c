@@ -859,6 +859,7 @@ cleanup:
     wc_ForceZero(priv, sizeof(priv));
     if (key_init == 0)
         wc_ed448_free(&k);
+    wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
         exit(exit_code);
 }
