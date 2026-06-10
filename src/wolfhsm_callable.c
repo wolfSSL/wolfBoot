@@ -9,6 +9,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <arm_cmse.h>
 
 #include "loader.h"
 #include "store_sbrk.h"
@@ -50,6 +51,9 @@ extern uint32_t _flash_keyvault;
 extern uint32_t _flash_keyvault_size;
 
 static whFlashH5Ctx              g_flash_ctx;
+/* Immutable flash config referenced by g_nvm_flash_cfg.config. Held at file
+ * scope so the pointer stays valid after wcs_wolfhsm_init returns. */
+static whFlashH5Ctx              g_flash_h5_cfg;
 
 static whNvmFlashContext         g_nvm_flash_ctx;
 static whNvmFlashConfig          g_nvm_flash_cfg = {
@@ -84,12 +88,11 @@ static whServerConfig            g_server_cfg = {
 };
 
 static whServerContext           g_server;
-static int                       g_wolfhsm_ready;
+static volatile int              g_wolfhsm_ready;
 
 void wcs_wolfhsm_init(void)
 {
-    whFlashH5Ctx flash_cfg;
-    int          rc;
+    int rc;
 
     if (g_wolfhsm_ready) {
         return;
@@ -97,10 +100,10 @@ void wcs_wolfhsm_init(void)
 
     memset(&g_srv_tx_ctx, 0, sizeof(g_srv_tx_ctx));
 
-    flash_cfg.base           = (uint32_t)&_flash_keyvault;
-    flash_cfg.size           = (uint32_t)&_flash_keyvault_size;
-    flash_cfg.partition_size = WCS_WOLFHSM_PARTITION_SIZE;
-    g_nvm_flash_cfg.config   = &flash_cfg;
+    g_flash_h5_cfg.base           = (uint32_t)&_flash_keyvault;
+    g_flash_h5_cfg.size           = (uint32_t)&_flash_keyvault_size;
+    g_flash_h5_cfg.partition_size = WCS_WOLFHSM_PARTITION_SIZE;
+    g_nvm_flash_cfg.config        = &g_flash_h5_cfg;
 
     /* g_crypto_ctx.rng is an embedded WC_RNG[1] (see wh_server.h) */
     rc = wc_InitRng(&g_crypto_ctx.rng[0]);
@@ -131,6 +134,18 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
     if (cmd == NULL || rsp == NULL || rspSz == NULL) {
         return WH_ERROR_BADARGS;
     }
+    /* The caller is the non-secure world. Validate every caller-supplied
+     * pointer references non-secure memory before dereferencing it, so a
+     * compromised NS app cannot trick the secure side into reading or
+     * writing through a secure-world pointer. Check the SAU/IDAU security
+     * attribution only (CMSE_AU_NONSECURE); the NS MPU is not configured in
+     * this demo, so an MPU-based permission check would reject valid
+     * buffers. rspSz is checked first since it is dereferenced below to
+     * obtain the response capacity. */
+    if (cmse_check_address_range((void *)rspSz, sizeof(*rspSz),
+            CMSE_AU_NONSECURE) == NULL) {
+        return WH_ERROR_BADARGS;
+    }
     /* single-fetch *rspSz so it cannot be re-read after validation */
     rsp_capacity = *(volatile const uint32_t *)rspSz;
 
@@ -139,6 +154,16 @@ int CSME_NSE_API wcs_wolfhsm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         return WH_ERROR_BADARGS;
     }
     if (rsp_capacity == 0U || rsp_capacity > WH_COMM_MTU) {
+        *rspSz = 0;
+        return WH_ERROR_BADARGS;
+    }
+    if (cmse_check_address_range((void *)cmd, cmdSz,
+            CMSE_AU_NONSECURE) == NULL) {
+        *rspSz = 0;
+        return WH_ERROR_BADARGS;
+    }
+    if (cmse_check_address_range(rsp, rsp_capacity,
+            CMSE_AU_NONSECURE) == NULL) {
         *rspSz = 0;
         return WH_ERROR_BADARGS;
     }
