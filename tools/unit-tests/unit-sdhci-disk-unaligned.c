@@ -168,6 +168,37 @@ START_TEST(test_disk_write_unaligned_spans_blocks)
 }
 END_TEST
 
+/* A byte offset whose block address (offset / 512) does not fit in the 32-bit
+ * SD command argument must be rejected, not silently truncated/wrapped to an
+ * in-range sector. Here offset / 512 == 0x100000000, which truncates to 0. */
+START_TEST(test_disk_read_rejects_block_addr_overflow)
+{
+    uint8_t out[SDHCI_BLOCK_SIZE];
+    uint64_t start = (uint64_t)0x100000000ULL * SDHCI_BLOCK_SIZE;
+
+    reset_mock_state();
+
+    /* Must fail rather than wrap and read sector 0 (mock_disk[0..]). */
+    ck_assert_int_ne(disk_read(0, start, sizeof(out), out), 0);
+}
+END_TEST
+
+START_TEST(test_disk_write_rejects_block_addr_overflow)
+{
+    uint8_t in[SDHCI_BLOCK_SIZE];
+    uint8_t before[sizeof(mock_disk)];
+    uint64_t start = (uint64_t)0x100000000ULL * SDHCI_BLOCK_SIZE;
+
+    reset_mock_state();
+    memcpy(before, mock_disk, sizeof(before));
+    memset(in, 0x5A, sizeof(in));
+
+    /* Must fail rather than wrap and overwrite sector 0. */
+    ck_assert_int_ne(disk_write(0, start, sizeof(in), in), 0);
+    ck_assert_mem_eq(mock_disk, before, sizeof(before));
+}
+END_TEST
+
 Suite *sdhci_disk_suite(void)
 {
     Suite *s = suite_create("sdhci-disk");
@@ -175,6 +206,8 @@ Suite *sdhci_disk_suite(void)
 
     tcase_add_test(tc, test_disk_read_unaligned_spans_blocks);
     tcase_add_test(tc, test_disk_write_unaligned_spans_blocks);
+    tcase_add_test(tc, test_disk_read_rejects_block_addr_overflow);
+    tcase_add_test(tc, test_disk_write_rejects_block_addr_overflow);
     suite_add_tcase(s, tc);
 
     return s;
