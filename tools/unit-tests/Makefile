@@ -64,6 +64,7 @@ TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
 TESTS+=unit-otp-keystore
+TESTS+=unit-x86-paging-oob
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -442,6 +443,10 @@ unit-disk: unit-disk.c gpt-sfdisk-test.h
 
 unit-multiboot: unit-multiboot.c
 	gcc -o $@ unit-multiboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-x86-paging-oob: ../../include/target.h unit-x86-paging-oob.c
+	gcc -o $@ unit-x86-paging-oob.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
