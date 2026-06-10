@@ -457,14 +457,19 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     struct hba_cmd_table *tbl;
     struct fis_reg_h2d *cmdfis;
     struct ata_drive *ata = &ATA_Drv[drv];
+    size_t passphrase_len = 0;
     int ret;
     int slot = prepare_cmd_h2d_slot(drv, buffer,
             ATA_SECURITY_COMMAND_LEN, 1);
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
     if (master)
         buffer[0] = 0x1;
+    while (passphrase_len < ATA_SECURITY_PASSWORD_LEN &&
+           passphrase[passphrase_len] != '\0') {
+        passphrase_len++;
+    }
     memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase,
-           strnlen(passphrase, ATA_SECURITY_PASSWORD_LEN));
+           passphrase_len);
     if (slot < 0) {
         return slot;
     }
