@@ -65,6 +65,7 @@ TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
+TESTS+=unit-fwtpm-nv-oob
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -211,6 +212,10 @@ unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS -ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections
+
+unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		$(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
