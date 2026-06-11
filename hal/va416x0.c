@@ -220,10 +220,13 @@ hal_status_t FRAM_Init(uint8_t spiBank, uint8_t csNum)
         spiData[0] = FRAM_WREN; /* Set Write Enable Latch(WEL) bit  */
         status = HAL_Spi_Transmit(&spiHandle, spiData, 1, 0, true);
         HAL_Timer_DelayMs(1);
-        status = HAL_Spi_Transmit(&spiHandle, spiData, 1, 0, true);
-        spiData[0] = FRAM_WRSR;	/* Write single-byte Status Register message */
-        spiData[1] = 0x00;	    /* Clear the BP1/BP0 protection */
-        status = HAL_Spi_Transmit(&spiHandle, spiData, 2, 0, true);
+        if (status == hal_status_ok)
+            status = HAL_Spi_Transmit(&spiHandle, spiData, 1, 0, true);
+        if (status == hal_status_ok) {
+            spiData[0] = FRAM_WRSR;	/* Write single-byte Status Register message */
+            spiData[1] = 0x00;	    /* Clear the BP1/BP0 protection */
+            status = HAL_Spi_Transmit(&spiHandle, spiData, 2, 0, true);
+        }
         FRAM_WaitIdle(spiBank);
         spiHandle.state = hal_spi_state_ready;
     }
@@ -255,11 +258,15 @@ hal_status_t FRAM_Write(uint8_t spiBank, uint32_t addr, uint8_t *buf,
 
     spiData[0] = FRAM_WREN;
     status = HAL_Spi_Transmit(&spiHandle, spiData, 1, 0, true);
+    if (status != hal_status_ok)
+        return status;
     spiData[0] = FRAM_WRITE;          /* Write command */
     spiData[1] = (uint8_t)((addr>>16) & 0xFF); /* Address high byte */
     spiData[2] = (uint8_t)((addr>>8) & 0xFF);  /* Address mid byte  */
     spiData[3] = (uint8_t)( addr & 0xFF);      /* Address low byte */
     status = HAL_Spi_Transmit(&spiHandle, spiData, 4, 0, false);
+    if (status != hal_status_ok)
+        return status;
     return HAL_Spi_Transmit(&spiHandle, buf, len, 0, true);
 }
 
