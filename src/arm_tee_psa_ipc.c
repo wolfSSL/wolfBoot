@@ -792,7 +792,8 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
              * in_vec[1].len after the bounds check would allow a TOCTOU
              * double-fetch to grow the copy past WOLFBOOT_PS_MAX_DATA. */
             data_len = in_vec[1].len;
-            if (uid == NULL || flags == NULL) {
+            if (uid == NULL || in_vec[0].len < sizeof(*uid) ||
+                flags == NULL || in_vec[2].len < sizeof(*flags)) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             if (data_len > WOLFBOOT_PS_MAX_DATA) {
@@ -827,7 +828,8 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
             }
             uid = (const psa_storage_uid_t *)in_vec[0].base;
             offset = (const rot_size_t *)in_vec[1].base;
-            if (uid == NULL || offset == NULL) {
+            if (uid == NULL || in_vec[0].len < sizeof(*uid) ||
+                offset == NULL || in_vec[1].len < sizeof(*offset)) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             entry = wolfboot_ps_find(*uid);
@@ -854,7 +856,7 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             uid = (const psa_storage_uid_t *)in_vec[0].base;
-            if (uid == NULL) {
+            if (uid == NULL || in_vec[0].len < sizeof(*uid)) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             entry = wolfboot_ps_find(*uid);
@@ -881,7 +883,7 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             uid = (const psa_storage_uid_t *)in_vec[0].base;
-            if (uid == NULL) {
+            if (uid == NULL || in_vec[0].len < sizeof(*uid)) {
                 return PSA_ERROR_INVALID_ARGUMENT;
             }
             entry = wolfboot_ps_find(*uid);
