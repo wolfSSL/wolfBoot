@@ -182,6 +182,14 @@ __attribute__((weak)) int stm32h5_obkeys_read_uds(uint8_t *out, size_t out_len)
 #endif
 
 #if defined(WOLFCRYPT_TZ_PSA)
+static NOINLINEFUNCTION void hal_secret_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
@@ -231,6 +239,8 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
         copy_len = out_len;
     }
     memcpy(out, digest, copy_len);
+    hal_secret_zeroize(digest, sizeof(digest));
+    hal_secret_zeroize(&hash, sizeof(hash));
     return 0;
 }
 
@@ -244,14 +254,6 @@ static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
         }
     }
     return 1;
-}
-
-static NOINLINEFUNCTION void hal_secret_zeroize(void *ptr, size_t len)
-{
-    volatile uint8_t *p = (volatile uint8_t *)ptr;
-    while (len-- > 0U) {
-        *p++ = 0U;
-    }
 }
 
 int hal_uds_derive_key(uint8_t *out, size_t out_len)
