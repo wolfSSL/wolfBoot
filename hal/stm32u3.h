@@ -36,9 +36,11 @@
 #include <stdint.h>
 
 /* Assembly helpers */
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define DMB() __asm__ volatile ("dmb")
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 /* -------- RCC (AHB1 + 0x10C00 = 0x40030C00) -------- */
 #define RCC_BASE                    (0x40030C00)
@@ -125,10 +127,12 @@
 #define FLASH_ACR_LPM               (1 << 11)
 
 /* Non-secure flash registers (fail with PGSERR on programmed pages) */
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define FLASH_NS_KEYR               (*(volatile uint32_t *)(FLASH_BASE + 0x08))
 #define FLASH_NS_OPTKEYR            (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_NS_SR                 (*(volatile uint32_t *)(FLASH_BASE + 0x20))
 #define FLASH_NS_CR                 (*(volatile uint32_t *)(FLASH_BASE + 0x28))
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 /* Secure flash registers (unused when TZEN=0, kept for reference) */
 #define FLASH_SKEYR                 (*(volatile uint32_t *)(FLASH_BASE + 0x0C))
