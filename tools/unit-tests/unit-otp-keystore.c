@@ -36,14 +36,19 @@
 #define KEYSTORE_PUBKEY_SIZE 64   /* model an ECC-256 keystore slot */
 #define OTP_SIZE 1024
 #define FLASH_OTP_BASE 0
+#define OTP_HDR_SIZE 16
 
 /* Mock OTP flash backing store and reader. With FLASH_OTP_BASE == 0 the address
  * passed by the driver is a plain offset into this buffer. */
 static uint8_t mock_otp[OTP_SIZE];
+/* Set to 1 to make slot reads (offset >= OTP_HDR_SIZE) return -1. */
+static int mock_otp_slot_read_fail;
 
 int hal_flash_otp_read(uint32_t flashAddress, void *data, uint32_t length)
 {
     if (flashAddress + length > (uint32_t)OTP_SIZE)
+        return -1;
+    if (mock_otp_slot_read_fail && flashAddress >= OTP_HDR_SIZE)
         return -1;
     memcpy(data, mock_otp + flashAddress, length);
     return 0;
@@ -51,21 +56,28 @@ int hal_flash_otp_read(uint32_t flashAddress, void *data, uint32_t length)
 
 #include "../../src/flash_otp_keystore.c"
 
-/* Provision the mock OTP with a single keystore slot whose pubkey_size field is
- * set to the supplied (possibly bogus) value. */
-static void setup_otp(uint32_t pubkey_size)
+/* Provision the mock OTP header with n slots; slot 0 gets a specific pubkey_size. */
+static void setup_otp_n(int n, uint32_t pubkey_size)
 {
     struct wolfBoot_otp_hdr *hdr = (struct wolfBoot_otp_hdr *)mock_otp;
     struct keystore_slot *slot =
         (struct keystore_slot *)(mock_otp + OTP_HDR_SIZE);
 
     memset(mock_otp, 0, sizeof(mock_otp));
+    mock_otp_slot_read_fail = 0;
     memcpy(hdr->keystore_hdr_magic, KEYSTORE_HDR_MAGIC, 8);
-    hdr->item_count = 1;
+    hdr->item_count = (uint16_t)n;
     slot->slot_id = 0;
     slot->key_type = 1;
     slot->part_id_mask = 0xFFFFFFFF;
     slot->pubkey_size = pubkey_size;
+}
+
+/* Provision the mock OTP with a single keystore slot whose pubkey_size field is
+ * set to the supplied (possibly bogus) value. */
+static void setup_otp(uint32_t pubkey_size)
+{
+    setup_otp_n(1, pubkey_size);
 }
 
 /* A correctly provisioned slot returns its real size unchanged. */
@@ -99,6 +111,45 @@ START_TEST(test_just_over_rejected)
 }
 END_TEST
 
+/* keystore_num_pubkeys() must return 0 when the OTP magic is corrupted. */
+START_TEST(test_bad_magic_returns_zero)
+{
+    struct wolfBoot_otp_hdr *hdr = (struct wolfBoot_otp_hdr *)mock_otp;
+    setup_otp(KEYSTORE_PUBKEY_SIZE);
+    hdr->keystore_hdr_magic[0] ^= 0xFF;
+    ck_assert_int_eq(keystore_num_pubkeys(), 0);
+}
+END_TEST
+
+/* item_count one above the maximum must be rejected. */
+START_TEST(test_item_count_over_max)
+{
+    setup_otp_n(KEYSTORE_MAX_PUBKEYS + 1, KEYSTORE_PUBKEY_SIZE);
+    ck_assert_int_eq(keystore_num_pubkeys(), 0);
+}
+END_TEST
+
+/* item_count exactly at the maximum must be accepted (catches > vs >= mutation). */
+START_TEST(test_item_count_at_max)
+{
+    setup_otp_n(KEYSTORE_MAX_PUBKEYS, KEYSTORE_PUBKEY_SIZE);
+    ck_assert_int_eq(keystore_num_pubkeys(), KEYSTORE_MAX_PUBKEYS);
+}
+END_TEST
+
+/* All keystore_get_* accessors must return their failure value when the OTP
+ * slot read fails (header read succeeds, slot read fails). */
+START_TEST(test_slot_read_fail_propagates)
+{
+    setup_otp(KEYSTORE_PUBKEY_SIZE);
+    mock_otp_slot_read_fail = 1;
+    ck_assert_ptr_eq(keystore_get_buffer(0), (uint8_t *)0);
+    ck_assert_int_eq(keystore_get_size(0), -1);
+    ck_assert_uint_eq(keystore_get_mask(0), 0);
+    ck_assert_uint_eq(keystore_get_key_type(0), (uint32_t)-1);
+}
+END_TEST
+
 Suite *otp_keystore_suite(void)
 {
     Suite *s = suite_create("otp-keystore");
@@ -107,6 +158,10 @@ Suite *otp_keystore_suite(void)
     tcase_add_test(tc, test_valid_size_passthrough);
     tcase_add_test(tc, test_oversize_rejected);
     tcase_add_test(tc, test_just_over_rejected);
+    tcase_add_test(tc, test_bad_magic_returns_zero);
+    tcase_add_test(tc, test_item_count_over_max);
+    tcase_add_test(tc, test_item_count_at_max);
+    tcase_add_test(tc, test_slot_read_fail_propagates);
 
     suite_add_tcase(s, tc);
     return s;

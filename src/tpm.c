@@ -1007,8 +1007,8 @@ int wolfBoot_unseal_blob(const uint8_t* pubkey_hint,
     uint8_t* policyRef = NULL; /* optional nonce */
     uint32_t policyRefSz = 0;
 
-    if (policy == NULL || policySz <= 0 || secret == NULL ||
-            secret_sz == NULL) {
+    if (policy == NULL || policySz < (uint16_t)sizeof(pcrMask) ||
+            secret == NULL || secret_sz == NULL) {
         return -1;
     }
 

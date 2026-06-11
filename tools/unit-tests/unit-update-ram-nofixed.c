@@ -231,14 +231,56 @@ START_TEST(test_invalid_update_falls_back_to_boot)
 }
 END_TEST
 
+START_TEST(test_candidate_addr_equal_versions_prefers_boot)
+{
+    void *addr = NULL;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    ck_assert_int_eq(add_payload(PART_BOOT, 1, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL), 0);
+
+    ret = wolfBoot_dualboot_candidate_addr_impl(&addr);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_ptr_eq(addr, hal_get_primary_address());
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST(test_candidate_addr_newer_update_prefers_update)
+{
+    void *addr = NULL;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    ck_assert_int_eq(add_payload(PART_BOOT, 1, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL), 0);
+
+    ret = wolfBoot_dualboot_candidate_addr_impl(&addr);
+
+    ck_assert_int_eq(ret, 1);
+    ck_assert_ptr_eq(addr, hal_get_update_address());
+    cleanup_flash();
+}
+END_TEST
+
 static Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-update-ram-nofixed");
     TCase *tc = tcase_create("fallback");
+    TCase *tc_candidate = tcase_create("candidate_addr");
 
     tcase_add_test(tc, test_invalid_update_falls_back_to_boot);
     tcase_set_timeout(tc, 5);
     suite_add_tcase(s, tc);
+
+    tcase_add_test(tc_candidate, test_candidate_addr_equal_versions_prefers_boot);
+    tcase_add_test(tc_candidate, test_candidate_addr_newer_update_prefers_update);
+    tcase_set_timeout(tc_candidate, 5);
+    suite_add_tcase(s, tc_candidate);
 
     return s;
 }

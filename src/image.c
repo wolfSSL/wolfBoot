@@ -501,6 +501,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
     ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyIdPubKey);
 #endif
     if (ret != 0) {
+        wc_FreeRsaKey(&rsa);
         return;
     }
 #else
@@ -509,11 +510,13 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
     ret = wh_Client_KeyCache(&hsmClientCtx, WH_NVM_FLAGS_USAGE_VERIFY, NULL, 0,
                              pubkey, pubkey_sz, &hsmKeyId);
     if (ret != WH_ERROR_OK) {
+        wc_FreeRsaKey(&rsa);
         return;
     }
     /* Associate this RSA struct with the keyId of the cached key */
     ret = wh_Client_RsaSetKeyId(&rsa, hsmKeyId);
     if (ret != WH_ERROR_OK) {
+        wc_FreeRsaKey(&rsa);
         return;
     }
 #endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
@@ -533,6 +536,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
     /* evict the key after use, since we aren't using the RSA import API */
     if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
+        wc_FreeRsaKey(&rsa);
         return;
     }
 #elif defined(WOLFBOOT_CERT_CHAIN_VERIFY)

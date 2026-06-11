@@ -56,7 +56,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-ram unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -68,10 +68,17 @@ TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
+TESTS+=unit-flash-erase-wb
+TESTS+=unit-flash-erase-l0
+TESTS+=unit-flash-erase-g0
+TESTS+=unit-flash-erase-c0
+TESTS+=unit-flash-erase-u3
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
+TESTS+=unit-arm-tee-psa-ipc
+TESTS+=unit-va416x0-fram
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -109,6 +116,7 @@ run: $(TESTS)
 	done
 	python3 unit-sign-delta-tlv.py || exit 1
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
+	python3 unit-sign-custom-tlv-le.py || exit 1
 
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
@@ -153,6 +161,14 @@ unit-update-flash-self-update:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNI
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-hwswap:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-ram-noramboot:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP -DWOLFBOOT_NO_RAMBOOT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-ram-nofixed:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
 	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH \
@@ -268,6 +284,14 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
 
+unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/arm_tee_psa_ipc.c
+	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-va416x0-fram: unit-va416x0-fram.c ../../hal/va416x0.c
+	gcc -o $@ unit-va416x0-fram.c $(CFLAGS) $(LDFLAGS)
+
 unit-max-space: ../../include/target.h unit-max-space.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
@@ -280,6 +304,32 @@ unit-mpusize: ../../include/target.h unit-mpusize.c
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
 unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
 	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-wb includes hal/stm32wb.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32wb.c is not a separate input.
+unit-flash-erase-wb: unit-flash-erase-wb.c ../../hal/stm32wb.c
+	gcc -o $@ unit-flash-erase-wb.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-l0 includes hal/stm32l0.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32l0.c is not a separate input.
+unit-flash-erase-l0: unit-flash-erase-l0.c ../../hal/stm32l0.c
+	gcc -o $@ unit-flash-erase-l0.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-g0 includes hal/stm32g0.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32g0.c is not a separate input.
+unit-flash-erase-g0: unit-flash-erase-g0.c ../../hal/stm32g0.c
+	gcc -o $@ unit-flash-erase-g0.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-c0 includes hal/stm32c0.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32c0.c is not a separate input.
+unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
+	gcc -o $@ unit-flash-erase-c0.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-u3 includes hal/stm32u3.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32u3.c is not a separate input.
+# -I../../ so that #include "hal/stm32u3.h" resolves from the repo root.
+unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3.h
+	gcc -o $@ unit-flash-erase-u3.c -I../../ $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
@@ -430,6 +480,12 @@ unit-update-ram: ../../include/target.h unit-update-ram.c
 
 unit-update-ram-nofixed: ../../include/target.h unit-update-ram-nofixed.c
 	gcc -o $@ unit-update-ram-nofixed.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-ram-noramboot: ../../include/target.h unit-update-ram-noramboot.c
+	gcc -o $@ unit-update-ram-noramboot.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-hwswap: ../../include/target.h unit-update-flash-hwswap.c
+	gcc -o $@ unit-update-flash-hwswap.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk: ../../include/target.h unit-update-disk.c
 	gcc -o $@ unit-update-disk.c $(CFLAGS) $(LDFLAGS)

@@ -630,6 +630,22 @@ START_TEST(test_wb_patch_and_diff_size_changing_update)
 }
 END_TEST
 
+START_TEST(test_wb_patch_and_diff_shrinking_update)
+{
+    uint8_t src_a[3077];
+    uint8_t src_b[2048];
+
+    fill_pattern(src_a, sizeof(src_a), 0x27182818U);
+    fill_pattern(src_b, sizeof(src_b), 0x31415926U);
+    memcpy(src_a + 512, src_b, sizeof(src_b));
+    src_a[0] = ESC;
+    src_a[sizeof(src_a) - 1] ^= 0x5A;
+
+    (void)run_roundtrip_case(src_a, sizeof(src_a), src_b, sizeof(src_b),
+        sizeof(src_b) + DELTA_BLOCK_SIZE);
+}
+END_TEST
+
 START_TEST(test_wb_patch_and_diff_single_byte_difference)
 {
     uint8_t src_a[SRC_SIZE];
@@ -677,6 +693,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_accepts_16bit_limit);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_rejects_values_above_16bit);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_size_changing_update);
+    tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_shrinking_update);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_single_byte_difference);
     suite_add_tcase(s, tc_wolfboot_delta);
 

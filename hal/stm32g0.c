@@ -20,18 +20,24 @@
  */
 
 #include <stdint.h>
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #include <image.h>
+#endif
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #ifndef NVM_FLASH_WRITEONCE
 #   error "wolfBoot STM32G0 HAL: no WRITEONCE support detected. Please define NVM_FLASH_WRITEONCE"
+#endif
 #endif
 
 /* STM32 G0 register configuration */
 
 /* Assembly helpers */
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define DMB() __asm__ volatile ("dmb")
 #define ISB() __asm__ volatile ("isb")
 #define DSB() __asm__ volatile ("dsb")
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 
 /*** RCC ***/
@@ -63,11 +69,13 @@
 #define SYSCFG_APB2_CLOCK_ER_VAL    (1 << 0) /* RM0444 - 5.4.15 - RCC_APBENR2 - SYSCFGEN */
 
 #define FLASH_BASE          (0x40022000)  /*FLASH_R_BASE = 0x40000000UL + 0x00020000UL + 0x00002000UL */
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00)) /* RM0444 - 3.7.1 - FLASH_ACR */
 #define FLASH_KEY           (*(volatile uint32_t *)(FLASH_BASE + 0x08)) /* RM0444 - 3.7.2 - FLASH_KEYR */
 #define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x10)) /* RM0444 - 3.7.4 - FLASH_SR */
 #define FLASH_CR            (*(volatile uint32_t *)(FLASH_BASE + 0x14)) /* RM0444 - 3.7.5 - FLASH_CR */
 #define FLASH_SECR          (*(volatile uint32_t *)(FLASH_BASE + 0x80)) /* RM0444 - 3.7.12 - FLASH_SECR */
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 #define FLASHMEM_ADDRESS_SPACE (0x08000000)
 #define FLASH_PAGE_SIZE     (0x800) /* 2KB */
@@ -103,6 +111,7 @@
 #define FLASH_KEY2                            (0xCDEF89AB)
 
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -181,6 +190,7 @@ void RAMFUNCTION hal_flash_lock(void)
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
@@ -190,7 +200,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
     address -= FLASHMEM_ADDRESS_SPACE;
-    end_address = address + len - 1;
+    end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         while (FLASH_SR & (FLASH_SR_BSY1 | FLASH_SR_BSY2));
         flash_clear_errors();
@@ -210,6 +220,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static void clock_pll_off(void)
 {
     uint32_t reg32;
@@ -356,3 +367,4 @@ void RAMFUNCTION hal_prepare_boot(void)
     do_secure_boot();
 #endif
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */

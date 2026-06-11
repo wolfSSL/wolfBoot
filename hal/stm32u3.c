@@ -27,13 +27,16 @@
  */
 
 #include <stdint.h>
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #include <image.h>
 #include <string.h>
-#include "hal/stm32u3.h"
 #include "hal.h"
 #include "printf.h"
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
+#include "hal/stm32u3.h"
 
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     uint32_t reg = FLASH_ACR;
@@ -148,6 +151,7 @@ void RAMFUNCTION hal_flash_opt_lock(void)
     if ((FLASH_NS_CR & FLASH_CR_OPTLOCK) == 0)
         FLASH_NS_CR |= FLASH_CR_OPTLOCK;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 /* Erase — matches STM32U5 hal pattern exactly (same Cortex-M33 flash controller) */
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
@@ -161,7 +165,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (address < ARCH_FLASH_OFFSET)
         return -1;
 
-    end_address = address + len - 1;
+    end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg;
         uint32_t bker = 0;
@@ -194,6 +198,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 /* --- UART: USART1 on PA9 (TX) / PA10 (RX), AF7 --- */
 
 #define USART1_BASE         (0x40013800U)
@@ -356,3 +361,4 @@ void RAMFUNCTION hal_cache_invalidate(void)
         ;
     ICACHE_SR |= ICACHE_SR_BSYENDF;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
