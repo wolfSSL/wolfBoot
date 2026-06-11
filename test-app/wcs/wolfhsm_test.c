@@ -35,6 +35,7 @@ extern whTransportNscClientContext g_wolfhsm_nsc_client_ctx;
 int cmd_wolfhsm_test(const char *args)
 {
     static const whTransportNscClientConfig nsc_cfg = { 0 };
+    static const whTransportClientCb nsc_cb = WH_TRANSPORT_NSC_CLIENT_CB;
     whCommClientConfig comm_cfg;
     whClientConfig     cfg;
     int rc;
@@ -42,7 +43,7 @@ int cmd_wolfhsm_test(const char *args)
     (void)args;
 
     memset(&comm_cfg, 0, sizeof(comm_cfg));
-    comm_cfg.transport_cb      = &whTransportNscClient_Cb;
+    comm_cfg.transport_cb      = &nsc_cb;
     comm_cfg.transport_context = &g_wolfhsm_nsc_client_ctx;
     comm_cfg.transport_config  = &nsc_cfg;
     comm_cfg.client_id         = WCS_WOLFHSM_CLIENT_ID;

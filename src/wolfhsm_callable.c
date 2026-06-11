@@ -72,9 +72,10 @@ static whNvmConfig               g_nvm_cfg = {
 static whServerCryptoContext     g_crypto_ctx;
 static whTransportNscServerContext g_srv_tx_ctx;
 static whTransportNscServerConfig g_srv_tx_cfg = { 0 };
+static const whTransportServerCb g_srv_tx_cb = WH_TRANSPORT_NSC_SERVER_CB;
 static whCommServerConfig        g_comm_cfg = {
     .transport_context = &g_srv_tx_ctx,
-    .transport_cb      = &whTransportNscServer_Cb,
+    .transport_cb      = &g_srv_tx_cb,
     .transport_config  = &g_srv_tx_cfg,
     .server_id         = WCS_WOLFHSM_SERVER_ID,
 };

@@ -83,13 +83,14 @@ static int wolfhsm_demo_run(void)
     whCommClientConfig comm;
     whClientConfig     cfg;
     int                rc;
+    static const whTransportClientCb nsc_cb = WH_TRANSPORT_NSC_CLIENT_CB;
 
     memset(&s_nsc_ctx, 0, sizeof(s_nsc_ctx));
     memset(&s_nsc_cfg, 0, sizeof(s_nsc_cfg));
     memset(&comm,     0, sizeof(comm));
     memset(&cfg,      0, sizeof(cfg));
 
-    comm.transport_cb      = &whTransportNscClient_Cb;
+    comm.transport_cb      = &nsc_cb;
     comm.transport_context = &s_nsc_ctx;
     comm.transport_config  = &s_nsc_cfg;
     comm.client_id         = WOLFHSM_DEMO_CLIENT_ID;

@@ -451,7 +451,7 @@ the comments at the top to see exactly what the client side has to do:
 
 1. Allocate a static `whTransportNscClientContext`.
 2. Fill in `whCommClientConfig` with the NSC transport callbacks
-   (`whTransportNscClient_Cb` from
+   (`WH_TRANSPORT_NSC_CLIENT_CB` from
    `lib/wolfHSM/port/armv8m-tz/wh_transport_nsc.h`).
 3. Wrap that in a `whClientConfig`.
 4. Call `whTest_ClientConfig(&clientCfg)` (from wolfHSM's test
