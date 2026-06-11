@@ -824,6 +824,7 @@ ifeq ($(BOOT_BENCHMARK),1)
 endif
 
 ifeq ($(ALLOW_DOWNGRADE),1)
+  $(warning ALLOW_DOWNGRADE=1 disables anti-rollback enforcement; signed older firmware images can replace newer ones)
   CFLAGS+= -D"ALLOW_DOWNGRADE"
 endif
 
