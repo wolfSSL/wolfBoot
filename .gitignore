@@ -202,6 +202,15 @@ tools/unit-tests/unit-mpusize
 tools/unit-tests/unit-otp-keystore
 tools/unit-tests/unit-tpm-api-names
 tools/unit-tests/unit-elf-bss-guard
+tools/unit-tests/unit-fit-fpga
+tools/unit-tests/unit-flash-erase-c0
+tools/unit-tests/unit-flash-erase-g0
+tools/unit-tests/unit-flash-erase-l0
+tools/unit-tests/unit-flash-erase-u3
+tools/unit-tests/unit-flash-erase-wb
+tools/unit-tests/unit-fwtpm-nv-oob
+tools/unit-tests/unit-x86-paging-oob
+
 
 
 # Elf preprocessing tools

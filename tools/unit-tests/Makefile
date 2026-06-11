@@ -72,6 +72,8 @@ TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
+TESTS+=unit-arm-tee-psa-ipc
+TESTS+=unit-va416x0-fram
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -276,6 +278,14 @@ unit-store-sbrk: unit-store-sbrk.c ../../src/store_sbrk.c
 
 unit-string: ../../include/target.h unit-string.c
 	gcc -o $@ $^ $(CFLAGS) -DDEBUG_UART -DPRINTF_ENABLED $(LDFLAGS)
+
+unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/arm_tee_psa_ipc.c
+	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-va416x0-fram: unit-va416x0-fram.c ../../hal/va416x0.c
+	gcc -o $@ unit-va416x0-fram.c $(CFLAGS) $(LDFLAGS)
 
 unit-max-space: ../../include/target.h unit-max-space.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)

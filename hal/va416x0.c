@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 
+#ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
 #include "image.h"
 #include "string.h"
 
@@ -40,7 +41,9 @@
 
 #include "printf.h"
 #include "loader.h"
+#endif
 
+#ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
 const stc_iocfg_pin_cfg_t bootDefaultConfig[] =
 {
     {VOR_PORTB,14,en_iocfg_dir_dncare, {{.fltclk=0,.invinp=0,.iewo=0,.opendrn=0,.invout=0,.plevel=0,.pen=0,.pwoa=0,.funsel=3,.iodis=0}}}, /* UART1 TX */
@@ -163,6 +166,7 @@ void uart_flush(void)
     while (DEBUG_UART_BASE->TXSTATUS & UART_TXSTATUS_WRBUSY_Msk);
 }
 #endif /* DEBUG_UART */
+#endif /* !WOLFBOOT_UNIT_TEST_VA416X0_FRAM */
 
 
 /* FRAM Driver */
@@ -192,6 +196,15 @@ static void FRAM_WaitIdle(uint8_t spiBank)
     /* Clear Tx & RX fifo */
     VOR_SPI->BANK[spiBank].FIFO_CLR =
         (SPI_FIFO_CLR_RXFIFO_Msk | SPI_FIFO_CLR_TXFIFO_Msk);
+}
+
+static void FRAM_AbortWriteTransaction(uint8_t spiBank)
+{
+    /* Terminate a split write transaction after a command-phase failure so
+     * the next FRAM operation does not inherit the previous chip-select state.
+     */
+    FRAM_WaitIdle(spiBank);
+    spiHandle.state = hal_spi_state_ready;
 }
 
 /* Init SPI FRAM access */
@@ -265,8 +278,10 @@ hal_status_t FRAM_Write(uint8_t spiBank, uint32_t addr, uint8_t *buf,
     spiData[2] = (uint8_t)((addr>>8) & 0xFF);  /* Address mid byte  */
     spiData[3] = (uint8_t)( addr & 0xFF);      /* Address low byte */
     status = HAL_Spi_Transmit(&spiHandle, spiData, 4, 0, false);
-    if (status != hal_status_ok)
+    if (status != hal_status_ok) {
+        FRAM_AbortWriteTransaction(spiBank);
         return status;
+    }
     return HAL_Spi_Transmit(&spiHandle, buf, len, 0, true);
 }
 
@@ -326,6 +341,7 @@ hal_status_t FRAM_Erase(uint8_t spiBank, uint32_t addr, uint32_t len)
     return 0;
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
@@ -661,3 +677,4 @@ uint64_t hal_get_timer_us(void)
            ((uint64_t)elapsed_ticks * 1000000ULL / SystemCoreClock);
 }
 #endif
+#endif /* !WOLFBOOT_UNIT_TEST_VA416X0_FRAM */
