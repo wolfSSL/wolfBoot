@@ -63,6 +63,7 @@ ifeq ($(WOLFBOOT_ATTESTATION_IAK),1)
 endif
 
 ifeq ($(WOLFBOOT_UDS_UID_FALLBACK_FORTEST),1)
+  $(warning WOLFBOOT_UDS_UID_FALLBACK_FORTEST=1 derives UDS from the publicly-readable device UID; do not use in production)
   CFLAGS+=-D"WOLFBOOT_UDS_UID_FALLBACK_FORTEST"
 endif
 
