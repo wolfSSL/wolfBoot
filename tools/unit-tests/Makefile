@@ -63,6 +63,7 @@ TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
+TESTS+=unit-flash-erase-wb
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-fwtpm-nv-oob
@@ -284,6 +285,11 @@ unit-mpusize: ../../include/target.h unit-mpusize.c
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
 unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
 	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-wb includes hal/stm32wb.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32wb.c is not a separate input.
+unit-flash-erase-wb: unit-flash-erase-wb.c ../../hal/stm32wb.c
+	gcc -o $@ unit-flash-erase-wb.c $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
