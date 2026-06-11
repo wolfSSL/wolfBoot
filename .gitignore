@@ -185,6 +185,7 @@ tools/unit-tests/unit-update-flash-self-update
 tools/unit-tests/unit-update-flash-hook
 tools/unit-tests/unit-loader-tpm-init
 tools/unit-tests/unit-update-ram-nofixed
+tools/unit-tests/unit-update-ram-noramboot
 tools/unit-tests/unit-update-flash-hwswap
 tools/unit-tests/unit-uart-flash
 tools/unit-tests/unit-max-space
