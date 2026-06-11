@@ -66,6 +66,7 @@ TESTS+=unit-flash-erase-h7
 TESTS+=unit-flash-erase-wb
 TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
+TESTS+=unit-flash-erase-c0
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-fwtpm-nv-oob
@@ -302,6 +303,11 @@ unit-flash-erase-l0: unit-flash-erase-l0.c ../../hal/stm32l0.c
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32g0.c is not a separate input.
 unit-flash-erase-g0: unit-flash-erase-g0.c ../../hal/stm32g0.c
 	gcc -o $@ unit-flash-erase-g0.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-c0 includes hal/stm32c0.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32c0.c is not a separate input.
+unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
+	gcc -o $@ unit-flash-erase-c0.c $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
