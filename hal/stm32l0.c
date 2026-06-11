@@ -20,11 +20,15 @@
  */
 
 #include <stdint.h>
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #include <image.h>
+#endif
 /* STM32 L0 register configuration */
 
 /* Assembly helpers */
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define DMB() __asm__ volatile ("dmb")
+#endif
 
 /*** RCC ***/
 
@@ -49,11 +53,13 @@
 #define PWR_APB1_CLOCK_ER_VAL   (1 << 28)
 #define FLASH_BASE          (0x40022000)
 #define FLASH_ACR           (*(volatile uint32_t *)(FLASH_BASE + 0x00))
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 #define FLASH_PECR          (*(volatile uint32_t *)(FLASH_BASE + 0x04))
 #define FLASH_PEKEY         (*(volatile uint32_t *)(FLASH_BASE + 0x0c))
 #define FLASH_PRGKEY        (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_SR            (*(volatile uint32_t *)(FLASH_BASE + 0x18))
 #define FLASHMEM_ADDRESS_SPACE (0x08000000)
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 #define FLASH_PAGE_SIZE     (128)
 
 /* Register values */
@@ -73,6 +79,7 @@
 #define FLASH_PECR_ERASE                      (1 << 9)
 
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
 {
     if (waitstates && ((FLASH_ACR & 1) == 0))
@@ -82,6 +89,7 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
     while ((FLASH_ACR & 1) != waitstates)
         ;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 static RAMFUNCTION void flash_wait_complete(void)
 {
@@ -94,6 +102,7 @@ static void RAMFUNCTION clear_errors(void)
     FLASH_SR |= ( FLASH_SR_SIZERR | FLASH_SR_PGAERR | FLASH_SR_WRPERR |  FLASH_SR_EOP );
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
@@ -151,6 +160,7 @@ void RAMFUNCTION hal_flash_lock(void)
     if ((FLASH_PECR & FLASH_PECR_PRGLOCK) == 0)
         FLASH_PECR |= FLASH_PECR_PRGLOCK;
 }
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
@@ -159,7 +169,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
     if (len == 0)
         return -1;
-    end_address = address + len - 1;
+    end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         FLASH_PECR |= FLASH_PECR_PROG | FLASH_PECR_ERASE;
         *(volatile uint32_t *)(p + FLASHMEM_ADDRESS_SPACE)  = 0xFFFFFFFF;
@@ -169,6 +179,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return 0;
 }
 
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_ERASE
 static void clock_pll_off(void)
 {
     uint32_t reg32;
@@ -270,4 +281,4 @@ void hal_prepare_boot(void)
     clock_pll_off();
 #endif
 }
-
+#endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
