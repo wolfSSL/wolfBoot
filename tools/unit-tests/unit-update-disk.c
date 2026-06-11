@@ -344,6 +344,21 @@ START_TEST(test_get_decrypted_blob_version_rejects_truncated_version_tlv)
 }
 END_TEST
 
+START_TEST(test_update_disk_highbit_version_selects_higher_partition)
+{
+    reset_mocks();
+    build_image(part_a_image, 0x80000001U, 0xA1);
+    build_image(part_b_image, 0x80000002U, 0xB2);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, part_b_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+}
+END_TEST
+
 START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
 {
     reset_mocks();
@@ -397,6 +412,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_boots_from_A_when_B_is_blank);
     tcase_add_test(tc, test_update_disk_boots_from_B_when_A_is_blank);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
+    tcase_add_test(tc, test_update_disk_highbit_version_selects_higher_partition);
     tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
     tcase_add_test(tc, test_update_disk_rejects_invalid_integrity);
     tcase_add_test(tc, test_update_disk_rejects_invalid_signature);
