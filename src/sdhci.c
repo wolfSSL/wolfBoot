@@ -1586,7 +1586,13 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 #endif
 
     while (count > 0) {
-        block_addr = (start / SDHCI_BLOCK_SIZE);
+        uint64_t block_addr64 = (start / SDHCI_BLOCK_SIZE);
+        /* SD/SDHC command argument is 32-bit: reject addresses that would
+         * otherwise be silently truncated and wrap to an in-range sector. */
+        if (block_addr64 > 0xFFFFFFFFUL) {
+            return -1;
+        }
+        block_addr = (uint32_t)block_addr64;
         read_sz = count;
         if (read_sz > SDHCI_BLOCK_SIZE) {
             read_sz = SDHCI_BLOCK_SIZE;
@@ -1641,7 +1647,13 @@ int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
 #endif
 
     while (count > 0) {
-        block_addr = (start / SDHCI_BLOCK_SIZE);
+        uint64_t block_addr64 = (start / SDHCI_BLOCK_SIZE);
+        /* SD/SDHC command argument is 32-bit: reject addresses that would
+         * otherwise be silently truncated and wrap to an in-range sector. */
+        if (block_addr64 > 0xFFFFFFFFUL) {
+            return -1;
+        }
+        block_addr = (uint32_t)block_addr64;
         write_sz = count;
         if (write_sz > SDHCI_BLOCK_SIZE) {
             write_sz = SDHCI_BLOCK_SIZE;

@@ -424,6 +424,42 @@ START_TEST(test_build_info_header_length_underflow)
 }
 END_TEST
 
+/* check that an attacker-controlled header_length larger than the 32 KiB
+ * Multiboot2 header window cannot inflate the tag walker's bounds.  With
+ * header_length = 0xFFFFFFFF the subtraction header_length - sizeof(struct
+ * mb2_header) yields ~4GB, so end = tags + ~4GB in mb2_find_tag_by_type and the
+ * size guard becomes ineffective, letting the walker read far past the image.
+ *
+ * We place a fake info_req tag right after the header.  Without the upper-bound
+ * fix mb2_find_tag_by_type finds it and the function returns 0 (success).  With
+ * the fix the oversized header_length is rejected and it returns -1. */
+START_TEST(test_build_info_header_length_overflow)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    uint8_t boot_info[256];
+    struct stage2_parameter p = make_stage2();
+    struct mb2_header *h = (struct mb2_header *)header;
+    struct mb2_tag_info_req *info;
+    struct mb2_tag *term;
+    memset(header, 0, sizeof(header));
+    h->magic = MB2_MAGIC;
+    h->header_length = 0xFFFFFFFFu; /* far larger than the 32 KiB window */
+
+    info = (struct mb2_tag_info_req *)(header + sizeof(struct mb2_header));
+    info->type = 1; /* MB2_TAG_TYPE_INFO_REQ */
+    info->flags = 0;
+    info->size = 12;
+    info->mbi_tag_types[0] = 4; /* MB2_REQ_TAG_BASIC_MEM_INFO */
+
+    term = (struct mb2_tag *)(header + 32);
+    term->type = 0; term->flags = 0; term->size = 8;
+
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, &p,
+                                   sizeof(boot_info)), -1);
+}
+END_TEST
+
 START_TEST(test_dump_header_length_underflow)
 {
     uint8_t header[48] __attribute__((aligned(8)));
@@ -767,6 +803,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_build, test_build_info_unsupported_tag);
     tcase_add_test(tc_build, test_build_info_malformed_size);
     tcase_add_test(tc_build, test_build_info_header_length_underflow);
+    tcase_add_test(tc_build, test_build_info_header_length_overflow);
     tcase_add_test(tc_build, test_dump_header_length_underflow);
     suite_add_tcase(s, tc_build);
 

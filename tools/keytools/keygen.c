@@ -614,6 +614,7 @@ cleanup:
     wc_ForceZero(priv_der, sizeof(priv_der));
     if (rsa_init)
         wc_FreeRsaKey(&k);
+    wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
         exit(exit_code);
 }
@@ -725,6 +726,7 @@ cleanup:
         fclose(fpriv);
     if (key_init)
         wc_ecc_free(&k);
+    wc_ForceZero(&k, sizeof(k));
     wc_ForceZero(d, sizeof(d));
     wc_ForceZero(priv_der, sizeof(priv_der));
 
@@ -799,6 +801,7 @@ cleanup:
     wc_ForceZero(priv, sizeof(priv));
     if (key_init == 0)
         wc_ed25519_free(&k);
+    wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
         exit(exit_code);
 }
@@ -859,6 +862,7 @@ cleanup:
     wc_ForceZero(priv, sizeof(priv));
     if (key_init == 0)
         wc_ed448_free(&k);
+    wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
         exit(exit_code);
 }
@@ -874,6 +878,8 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     word32  pub_len = sizeof(lms_pub);
     int     lms_levels, lms_height, lms_winternitz;
     char    *env_lms_levels, *env_lms_height, *env_lms_winternitz;
+    int     exit_code = 0;
+    int     key_init = 0;
 
     lms_levels = LMS_LEVELS;
     lms_height = LMS_HEIGHT;
@@ -892,15 +898,18 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     ret = wc_LmsKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     ret = wc_LmsKey_SetParameters(&key, lms_levels, lms_height, lms_winternitz);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
                 " returned %d\n", lms_levels, lms_height,
                 lms_winternitz, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     printf("info: using LMS parameters: L%d-H%d-W%d\n", lms_levels,
@@ -909,37 +918,43 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     ret = wc_LmsKey_SetWriteCb(&key, lms_write_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetWriteCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_SetReadCb(&key, lms_read_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetReadCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_SetContext(&key, (void *) priv_fname);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_SetContext returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_LmsKey_ExportPubRaw(&key, lms_pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if (pub_len != sizeof(lms_pub)) {
         fprintf(stderr, "error: wc_LmsKey_ExportPubRaw returned pub_len=%d\n" \
                         ", expected %d\n", pub_len, (int)sizeof(lms_pub));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Append the public key to the private keyfile. */
@@ -947,7 +962,8 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fseek(fpriv, 64, SEEK_SET);
@@ -957,14 +973,20 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(priv_fname, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(1);
+            exit_code = 1;
+            goto cleanup;
         }
     }
 
     keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
 
-    wc_LmsKey_Free(&key);
-    wc_ForceZero(&key, sizeof(key));
+cleanup:
+    if (key_init) {
+        wc_LmsKey_Free(&key);
+        wc_ForceZero(&key, sizeof(key));
+    }
+    if (exit_code)
+        exit(exit_code);
 }
 
 #include "../xmss/xmss_common.h"
@@ -978,12 +1000,16 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     byte    xmss_pub[XMSS_SHA256_PUBLEN];
     char    *xmss_params = getenv("XMSS_PARAMS");
     word32  pub_len = sizeof(xmss_pub);
+    int     exit_code = 0;
+    int     key_init = 0;
 
     ret = wc_XmssKey_Init(&key, NULL, INVALID_DEVID);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
+    key_init = 1;
 
     if (xmss_params == NULL)
         xmss_params = WOLFBOOT_XMSS_PARAMS;
@@ -992,7 +1018,8 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
                 " returned %d\n", xmss_params, ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     printf("info: using XMSS parameters: %s\n", xmss_params);
@@ -1000,26 +1027,30 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     ret = wc_XmssKey_SetWriteCb(&key, xmss_write_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetWriteCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_SetReadCb(&key, xmss_read_key);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetReadCb returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_SetContext(&key, (void *) priv_fname);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_SetContext returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Make the key pair. */
     ret = wc_XmssKey_MakeKey(&key, &rng);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_MakeKey returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Get the XMSS/XMSS^MT secret key length. */
@@ -1027,19 +1058,22 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (ret != 0 || priv_sz <= 0) {
         printf("error: wc_XmssKey_GetPrivLen returned %d\n",
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     ret = wc_XmssKey_ExportPubRaw(&key, xmss_pub, &pub_len);
     if (ret != 0) {
         fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned %d\n", ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     if (pub_len != sizeof(xmss_pub)) {
         fprintf(stderr, "error: wc_XmssKey_ExportPubRaw returned pub_len=%d\n" \
                         ", expected %d\n", pub_len, (int)sizeof(xmss_pub));
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     /* Append the public key to the private keyfile. */
@@ -1047,7 +1081,8 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (!fpriv) {
         fprintf(stderr, "error: fopen(%s, \"r+\") returned %d\n", priv_fname,
                 ret);
-        exit(1);
+        exit_code = 1;
+        goto cleanup;
     }
 
     fseek(fpriv, priv_sz, SEEK_SET);
@@ -1057,15 +1092,20 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     if (exportPubKey) {
         if (export_pubkey_file(priv_fname, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS) != 0) {
             fprintf(stderr, "Unable to export public key to file\n");
-            exit(1);
+            exit_code = 1;
+            goto cleanup;
         }
     }
 
-
     keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
 
-    wc_XmssKey_Free(&key);
-    wc_ForceZero(&key, sizeof(key));
+cleanup:
+    if (key_init) {
+        wc_XmssKey_Free(&key);
+        wc_ForceZero(&key, sizeof(key));
+    }
+    if (exit_code)
+        exit(exit_code);
 }
 
 
@@ -1269,6 +1309,7 @@ cleanup:
         fclose(fpriv);
     if (key_init)
         wc_MlDsaKey_Free(&key);
+    wc_ForceZero(&key, sizeof(key));
     if (priv != NULL) {
         wc_ForceZero(priv, priv_len);
         free(priv);

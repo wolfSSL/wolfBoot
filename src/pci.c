@@ -510,6 +510,18 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
         goto restore_bar;
     }
 
+    /* pci_enum_next_aligned32 only validates the aligned start address against
+     * the pool limit, not the end of the region.  A malformed BAR advertising a
+     * huge length (e.g. a 2GB MMIO BAR with bar_align == 0x80000000) can pass
+     * that check at a start that leaves [bar_value, bar_value + length) running
+     * past the pool, wrapping the 32-bit cursor below to 0.  Reject it here so
+     * the whole region fits under the limit without overflowing. */
+    if ((uint64_t)bar_value + (uint64_t)length > (uint64_t)limit) {
+        PCI_DEBUG_PRINTF("PCI device region does not fit in the pool... skipping\r\n");
+        ret = -1;
+        goto restore_bar;
+    }
+
     pci_config_write32(bus, dev, fun, bar_off, bar_value);
     if (*is_64bit)
         pci_config_write32(bus, dev, fun, bar_off + 4, 0x0);

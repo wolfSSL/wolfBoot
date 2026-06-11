@@ -3261,6 +3261,27 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
             sector, offset, xfer, pos);
     #endif
 
+    #if FLASH_CFI_WIDTH == 16
+        /* sub-word (1-byte) write: read-modify-write the containing 16-bit word */
+        if (nwords == 0) {
+            uint16_t word = FLASH_IO16_READ(sector, offset);
+            if ((address % 2) == 0)
+                word = ((uint16_t)data[pos] << 8) | (word & 0x00FFU);
+            else
+                word = (word & 0xFF00U) | (uint16_t)data[pos];
+            hal_flash_unlock_sector(sector);
+            FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_TO_BUFFER);
+            FLASH_IO16_WRITE(sector, offset, 0);
+            FLASH_IO16_WRITE(sector, offset, word);
+            FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_BUFFER_CONFIRM);
+            hal_flash_status_wait(sector, 0x44, 200*1000);
+            address++;
+            pos++;
+            len--;
+            continue;
+        }
+    #endif
+
         hal_flash_unlock_sector(sector);
         FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_TO_BUFFER);
     #if FLASH_CFI_WIDTH == 16

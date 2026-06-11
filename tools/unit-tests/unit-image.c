@@ -883,6 +883,16 @@ START_TEST(test_open_image)
     ck_assert_int_eq(ret, -1);
     ck_assert_uint_eq(img.hdr_ok, 0);
 
+    /* Self header must reject bad magic and leave hdr_ok cleared */
+    memset(self_hdr, 0xFF, sizeof(self_hdr));
+    ((uint32_t *)self_hdr)[0] = ~WOLFBOOT_MAGIC;
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_open_self_address(&img, self_hdr,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_uint_eq(img.hdr_ok, 0);
+
     /* Self header must reject sizes beyond the partition payload budget */
     memset(self_hdr, 0xFF, sizeof(self_hdr));
     ((uint32_t *)self_hdr)[0] = WOLFBOOT_MAGIC;

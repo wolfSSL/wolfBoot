@@ -61,7 +61,7 @@ void io_write32(uint16_t port, uint32_t value);
 uint32_t io_read32(uint16_t port);
 void reset(uint8_t warm);
 void delay(int msec);
-void panic(void);
+__attribute__((noreturn)) void panic(void);
 void cpuid(uint32_t eax_param,
            uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 int cpuid_is_1gb_page_supported(void);

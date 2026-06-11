@@ -436,6 +436,15 @@ int sata_unlock_disk(int drv, int freeze)
     r = sata_get_unlock_secret(secret, &secret_size);
     if (r != 0)
         goto cleanup;
+    /* No secret_size check here on purpose: the unlock secret is a
+     * variable-length base64 string (ATA_SECRET_RANDOM_BYTES random bytes
+     * encoded, e.g. 29 bytes), not a fixed ATA_UNLOCK_DISK_KEY_SZ key, so an
+     * equality check is wrong. A size guard is also unnecessary:
+     * sata_get_unlock_secret() passes sizeof(secret) (ATA_UNLOCK_DISK_KEY_SZ)
+     * as the wolfBoot_unseal() capacity, so secret_size can never exceed the
+     * buffer. The non-NUL-terminated read in the ATA passphrase path is bounded
+     * separately by strnlen(passphrase, ATA_SECURITY_PASSWORD_LEN) in
+     * security_command_passphrase(). */
     ata_st = ata_security_get_state(drv);
     wolfBoot_printf("ATA: Security state SEC%d\r\n", ata_st);
 #if defined(TARGET_x86_fsp_qemu)

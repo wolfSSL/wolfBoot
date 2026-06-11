@@ -64,6 +64,9 @@ TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
 TESTS+=unit-otp-keystore
+TESTS+=unit-x86-paging-oob
+TESTS+=unit-fwtpm-nv-oob
+TESTS+=unit-elf-bss-guard
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -210,6 +213,10 @@ unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS -ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections
+
+unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
@@ -442,6 +449,14 @@ unit-disk: unit-disk.c gpt-sfdisk-test.h
 
 unit-multiboot: unit-multiboot.c
 	gcc -o $@ unit-multiboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-x86-paging-oob: ../../include/target.h unit-x86-paging-oob.c
+	gcc -o $@ unit-x86-paging-oob.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-elf-bss-guard: unit-elf-bss-guard.c
+	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
+		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)

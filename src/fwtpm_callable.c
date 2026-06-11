@@ -60,7 +60,7 @@ static int fwtpm_nv_read(void *ctx, word32 offset, byte *buf, word32 size)
 {
     uint8_t *nv = (uint8_t *)ctx;
 
-    if (nv == NULL || buf == NULL || offset > WCS_FWTPM_NV_SIZE ||
+    if (nv == NULL || buf == NULL || offset >= WCS_FWTPM_NV_SIZE ||
             size > (WCS_FWTPM_NV_SIZE - offset)) {
         return BAD_FUNC_ARG;
     }
@@ -74,7 +74,7 @@ static int fwtpm_nv_write(void *ctx, word32 offset, const byte *buf,
 {
     uint8_t *nv = (uint8_t *)ctx;
 
-    if (nv == NULL || buf == NULL || offset > WCS_FWTPM_NV_SIZE ||
+    if (nv == NULL || buf == NULL || offset >= WCS_FWTPM_NV_SIZE ||
             size > (WCS_FWTPM_NV_SIZE - offset)) {
         return BAD_FUNC_ARG;
     }
@@ -87,7 +87,7 @@ static int fwtpm_nv_erase(void *ctx, word32 offset, word32 size)
 {
     uint8_t *nv = (uint8_t *)ctx;
 
-    if (nv == NULL || offset > WCS_FWTPM_NV_SIZE ||
+    if (nv == NULL || offset >= WCS_FWTPM_NV_SIZE ||
             size > (WCS_FWTPM_NV_SIZE - offset)) {
         return BAD_FUNC_ARG;
     }

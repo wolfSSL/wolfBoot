@@ -86,4 +86,6 @@ jobs:
           echo "=== Building unit tests with external paths ==="
           make -C tools/unit-tests \
             WOLFBOOT_LIB_WOLFSSL="$(realpath ../external-libs/wolfssl)" \
-            WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)"
+            WOLFBOOT_LIB_WOLFPKCS11="$(realpath ../external-libs/wolfPKCS11)" \
+            WOLFBOOT_LIB_WOLFPSA="$(realpath ../external-libs/wolfPSA)" \
+            WOLFBOOT_LIB_WOLFTPM="$(realpath ../external-libs/wolfTPM)"

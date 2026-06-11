@@ -156,12 +156,12 @@ static void x86_paging_setup_ptp(uint64_t* e)
 {
     uint8_t *ptp;
 
-    ptp = &page_table_pages[page_table_page_used * PAGE_TABLE_PAGE_SIZE];
-    page_table_page_used++;
-    if (page_table_page_used == WOLFBOOT_PTP_NUM) {
+    if (page_table_page_used >= WOLFBOOT_PTP_NUM) {
         wolfBoot_printf("No more page table page structure\r\n");
         panic();
     }
+    ptp = &page_table_pages[page_table_page_used * PAGE_TABLE_PAGE_SIZE];
+    page_table_page_used++;
     x86_paging_setup_entry(e, (uintptr_t)ptp);
     memset(ptp, 0, PAGE_TABLE_PAGE_SIZE);
 }

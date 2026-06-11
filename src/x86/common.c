@@ -300,9 +300,11 @@ uint64_t hal_get_timer_us(void)
  * This function is used for error handling when the system encounters an unrecoverable issue.
  * It enters an infinite loop, causing a panic state.
  */
-void panic()
+__attribute__((noreturn)) void panic()
 {
-    hlt();
+    while(1) {
+        hlt();
+    }
 }
 
 /**

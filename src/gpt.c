@@ -205,6 +205,14 @@ int gpt_parse_partition(const uint8_t *entry_data, uint32_t entry_size,
     if (pe->last == 0) {
         return -1;
     }
+    /* Reject extents whose byte offset would overflow uint64_t: (pe->last + 1)
+     * must not wrap and (pe->last + 1) * GPT_SECTOR_SIZE must stay representable.
+     * Without this, pe->last = UINT64_MAX yields part->end = UINT64_MAX, which
+     * defeats the bounds check in disk_part_read(). pe->first <= pe->last, so
+     * bounding pe->last also bounds the part->start multiply. */
+    if (pe->last >= (UINT64_MAX / GPT_SECTOR_SIZE)) {
+        return -1;
+    }
 
     /* Extract partition info (convert LBA to byte offsets) */
     part->start = pe->first * GPT_SECTOR_SIZE;

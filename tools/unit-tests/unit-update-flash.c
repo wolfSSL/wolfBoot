@@ -988,6 +988,28 @@ START_TEST (test_emergency_rollback) {
     cleanup_flash();
 }
 
+START_TEST (test_emergency_rollback_equal_versions) {
+    uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
+    uint8_t st = 0;
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
+    /* Set the testing flag in the last five bytes of the BOOT partition */
+    hal_flash_unlock();
+    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
+            testing_flags, 5);
+    hal_flash_lock();
+
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    /* After equal-version emergency rollback, boot partition must be SUCCESS */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+    ck_assert_uint_eq(st, IMG_STATE_SUCCESS);
+    cleanup_flash();
+}
+
 START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
     uint8_t wrong_update_magic[4] = { 'G', 'O', 'L', 'F' };
@@ -1531,6 +1553,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(zero_size_update, test_zero_size_update_rejected);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
+    tcase_add_test(emergency_rollback, test_emergency_rollback_equal_versions);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);

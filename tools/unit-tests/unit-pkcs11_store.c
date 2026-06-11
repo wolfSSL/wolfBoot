@@ -455,6 +455,55 @@ START_TEST(test_find_object_search_stops_at_header_sector)
 }
 END_TEST
 
+/* Prove F-4649: shorter overwrite must not leave prior key bytes in flash.
+ * Write 512 bytes of 0xAA, then reopen and write 50 bytes of 0xBB.
+ * Raw flash at offsets [8+50 .. 8+512) must be 0xFF (erased), not 0xAA. */
+START_TEST(test_shorter_overwrite_erases_residual_key_material)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 42;
+    const CK_ULONG id_obj = 84;
+    void *store = NULL;
+    struct store_handle *h;
+    unsigned char large_key[512];
+    unsigned char small_key[50];
+    uint8_t *obj_flash;
+    uint32_t i;
+    int ret;
+
+    memset(large_key, 0xAA, sizeof(large_key));
+    memset(small_key, 0xBB, sizeof(small_key));
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Write large key to a fresh slot */
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store, large_key, sizeof(large_key));
+    ck_assert_int_eq(ret, (int)sizeof(large_key));
+    wolfPKCS11_Store_Close(store);
+
+    /* Reopen in write mode and store a shorter key */
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    h = store;
+    obj_flash = h->buffer;
+    ret = wolfPKCS11_Store_Write(store, small_key, sizeof(small_key));
+    ck_assert_int_eq(ret, (int)sizeof(small_key));
+    wolfPKCS11_Store_Close(store);
+
+    /* Flash beyond the new payload must be erased (0xFF), not old 0xAA */
+    for (i = 2 * sizeof(uint32_t) + sizeof(small_key);
+         i < 2 * sizeof(uint32_t) + sizeof(large_key); i++) {
+        ck_assert_msg(obj_flash[i] == 0xFF,
+            "Residual key material at object offset %u: 0x%02x (expected 0xFF)",
+            i, obj_flash[i]);
+    }
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -466,18 +515,21 @@ Suite *wolfboot_suite(void)
     TCase* tcase_delete_object = tcase_create("delete_object");
     TCase* tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase* tcase_find_bounds = tcase_create("find_bounds");
+    TCase* tcase_remanence = tcase_create("shorter_overwrite_erases_residual");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete_object, test_delete_object_ignores_metadata_prefix);
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
+    tcase_add_test(tcase_remanence, test_shorter_overwrite_erases_residual_key_material);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete_object);
     suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
+    suite_add_tcase(s, tcase_remanence);
     return s;
 }
 

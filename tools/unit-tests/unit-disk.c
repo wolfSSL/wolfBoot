@@ -35,10 +35,14 @@ static uint8_t fake_disk[FAKE_DISK_SIZE];
 /* Set to a byte offset to make disk_read fail at that address. -1 = no fail */
 static int64_t mock_disk_read_fail_at = -1;
 
+/* Number of disk_read calls since last reset (used to detect scan blow-ups) */
+static unsigned int disk_read_count = 0;
+
 /* Mock disk I/O — copies to/from fake_disk buffer */
 int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
 {
     (void)drv;
+    disk_read_count++;
     if (mock_disk_read_fail_at >= 0 && (int64_t)start == mock_disk_read_fail_at)
         return -1;
     if (start + count > FAKE_DISK_SIZE)
@@ -559,6 +563,25 @@ START_TEST(test_gpt_parse_partition_last_zero)
 }
 END_TEST
 
+START_TEST(test_gpt_parse_partition_last_overflow)
+{
+    /* pe->last = UINT64_MAX passes the first>last and last==0 guards, but
+     * (pe->last + 1) * GPT_SECTOR_SIZE - 1 would wrap to UINT64_MAX, defeating
+     * the bounds check in disk_part_read. Must be rejected. */
+    uint8_t entry[128];
+    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    struct gpt_part_info info;
+
+    memset(entry, 0, sizeof(entry));
+    pe->type[0] = 0x0001020304050607ULL;
+    pe->type[1] = 0x08090A0B0C0D0E0FULL;
+    pe->first = 1;
+    pe->last = 0xFFFFFFFFFFFFFFFFULL;
+
+    ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), -1);
+}
+END_TEST
+
 /* ============================================================
  *  Coverage tests: disk.c error paths and boundary conditions
  * ============================================================ */
@@ -622,6 +645,55 @@ START_TEST(test_disk_open_gpt_large_array_sz)
     finalize_gpt_header_crc(gpt_hdr);
 
     ck_assert_int_eq(disk_open(0), 0); /* 0 partitions found */
+}
+END_TEST
+
+START_TEST(test_disk_open_gpt_rejects_huge_part_array)
+{
+    /* A crafted GPT header with a valid (recomputed) header CRC but an
+     * enormous n_part * array_sz must be rejected before the partition-entry
+     * CRC scan loop runs, otherwise it forces a pre-auth DoS via one disk
+     * read per 512-byte chunk of the (here 8 MB) declared array. */
+    struct guid_ptable *gpt_hdr;
+
+    build_gpt_disk();
+
+    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
+    gpt_hdr->n_part = 0x10000;        /* 65536 entries ... */
+    gpt_hdr->array_sz = 128;          /* ... * 128 bytes = 8 MB */
+    finalize_gpt_header_crc(gpt_hdr); /* attacker can always fix header CRC */
+
+    disk_read_count = 0;
+    ck_assert_int_eq(disk_open(0), -1);
+    /* Only the MBR sector and the GPT header sector may be read; the
+     * partition-array scan must not run at all. */
+    ck_assert_uint_le(disk_read_count, 2);
+    ck_assert_int_eq(Drives[0].is_open, 0);
+}
+END_TEST
+
+START_TEST(test_disk_open_gpt_lba_no_overflow)
+{
+    /* The protective-MBR lba_first is an attacker-controlled uint32_t. The
+     * GPT-header byte offset must be computed in 64 bits. If it is computed
+     * as the 32-bit product GPT_SECTOR_SIZE * gpt_lba, it wraps for
+     * gpt_lba >= 0x800000: 512 * 0x800001 wraps to 0x200, silently
+     * redirecting the read back to LBA 1 (the real GPT header) instead of
+     * the out-of-range LBA the field actually names. */
+    struct gpt_mbr_part_entry *mbr_entry;
+
+    build_gpt_disk();
+
+    /* Point the protective entry at an LBA whose 512* product overflows a
+     * 32-bit unsigned back to 0x200 (LBA 1). */
+    mbr_entry = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
+    mbr_entry->lba_first = 0x800001;
+
+    /* With correct 64-bit arithmetic the header read targets byte
+     * 0x100000200, far past the fake disk, so disk_open must fail rather
+     * than wrap to LBA 1 and accept the table. */
+    ck_assert_int_eq(disk_open(0), -1);
+    ck_assert_int_eq(Drives[0].is_open, 0);
 }
 END_TEST
 
@@ -954,6 +1026,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_disk_bugs, test_gpt_partition_end_inclusive);
     tcase_add_test(tc_disk_bugs, test_disk_open_failure_clears_is_open);
     tcase_add_test(tc_disk_bugs, test_gpt_parse_partition_last_zero);
+    tcase_add_test(tc_disk_bugs, test_gpt_parse_partition_last_overflow);
     suite_add_tcase(s, tc_disk_bugs);
 
     TCase *tc_cov = tcase_create("disk-coverage");
@@ -961,6 +1034,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_disk_open_mbr_bad_bootsig);
     tcase_add_test(tc_cov, test_disk_open_gpt_excess_partitions);
     tcase_add_test(tc_cov, test_disk_open_gpt_large_array_sz);
+    tcase_add_test(tc_cov, test_disk_open_gpt_rejects_huge_part_array);
+    tcase_add_test(tc_cov, test_disk_open_gpt_lba_no_overflow);
     tcase_add_test(tc_cov, test_disk_open_gpt_empty_entry_mid_table);
     tcase_add_test(tc_cov, test_disk_open_mbr_zero_lba_entry);
     tcase_add_test(tc_cov, test_open_part_invalid_drive);

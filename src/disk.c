@@ -149,7 +149,8 @@ int disk_open(int drv)
         wolfBoot_printf("Found GPT PTE at sector %u\r\n", gpt_lba);
 
         /* Read GPT header */
-        r = disk_read(drv, GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE, sector);
+        r = disk_read(drv, (uint64_t)GPT_SECTOR_SIZE * gpt_lba, GPT_SECTOR_SIZE,
+                sector);
         if (r < 0) {
             wolfBoot_printf("Disk read failed\r\n");
             Drives[drv].is_open = 0;
@@ -168,6 +169,19 @@ int disk_open(int drv)
 
         array_addr = ptable.start_array * GPT_SECTOR_SIZE;
         bytes_left = (uint64_t)ptable.n_part * ptable.array_sz;
+
+        /* Reject an implausibly large partition-entry array before scanning
+         * it to compute the CRC. n_part and array_sz come straight from the
+         * (attacker-craftable) GPT header whose only gate is a recomputable
+         * CRC32, so without this bound a header with e.g. n_part=0xFFFFFFFF
+         * forces ~10^9 disk reads before the part_crc mismatch is caught: a
+         * pre-auth denial of service. */
+        if (bytes_left >
+                (uint64_t)GPT_MAX_PART_ENTRIES * GPT_PART_ENTRY_SIZE) {
+            wolfBoot_printf("GPT partition entry array too large\r\n");
+            Drives[drv].is_open = 0;
+            return -1;
+        }
 
         gpt_crc32_init(&part_crc);
         while (bytes_left > 0) {

@@ -360,6 +360,35 @@ static void update_store_size(struct obj_hdr *hdr, uint32_t size)
     cache_commit(0);
 }
 
+static void erase_object_payload(uint8_t *buf)
+{
+    uint32_t erase_off;
+    uint32_t erase_end;
+    uint32_t sector_base;
+
+    erase_off = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base) +
+        (2U * sizeof(uint32_t));
+    erase_end = (uint32_t)((uintptr_t)buf - (uintptr_t)vault_base) +
+        KEYVAULT_OBJ_SIZE;
+    sector_base = erase_off - (erase_off % WOLFBOOT_SECTOR_SIZE);
+
+    while (sector_base < erase_end) {
+        uint32_t erase_start = erase_off;
+        uint32_t erase_stop = sector_base + WOLFBOOT_SECTOR_SIZE;
+
+        if (erase_start < sector_base)
+            erase_start = sector_base;
+        if (erase_stop > erase_end)
+            erase_stop = erase_end;
+
+        memcpy(cached_sector, vault_base + sector_base, WOLFBOOT_SECTOR_SIZE);
+        memset(cached_sector + (erase_start - sector_base), 0xFF,
+            erase_stop - erase_start);
+        cache_commit(sector_base);
+        sector_base += WOLFBOOT_SECTOR_SIZE;
+    }
+}
+
 /* Find a free handle in openstores_handles[] array
  * to manage the interaction with the API.
  *
@@ -381,6 +410,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 {
     struct store_handle *handle;
     uint8_t *buf;
+    int is_new = 0;
 
     /* Check if there is one handle available to open the slot */
     handle = find_free_handle();
@@ -409,6 +439,7 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
             *store = NULL;
             return NOT_AVAILABLE_E;
         }
+        is_new = 1;
     } else { /* buf != NULL, readonly */
         handle->hdr = find_object_header(type, id1, id2);
         if (!handle->hdr) {
@@ -430,6 +461,12 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         handle->flags &= ~STORE_FLAGS_READONLY;
         /* Truncate the slot when opening in write mode */
         update_store_size(handle->hdr, 2 * sizeof(uint32_t));
+        /* Erase object data sectors to clear residual key material from a
+         * prior (longer) payload. New objects are already in a fresh sector
+         * from create_object(), so only do this for existing objects. */
+        if (!is_new) {
+            erase_object_payload(buf);
+        }
     }
 
 

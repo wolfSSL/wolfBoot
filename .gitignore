@@ -199,6 +199,7 @@ tools/unit-tests/unit-linux-loader-syssize
 tools/unit-tests/unit-mpusize
 tools/unit-tests/unit-otp-keystore
 tools/unit-tests/unit-tpm-api-names
+tools/unit-tests/unit-elf-bss-guard
 
 
 # Elf preprocessing tools
@@ -207,6 +208,7 @@ tools/squashelf/**
 !tools/squashelf/Makefile
 !tools/squashelf/README.md
 !tools/squashelf/test-range-overflow.py
+!tools/squashelf/test-align-overflow.py
 
 # Generated configuration files
 .config

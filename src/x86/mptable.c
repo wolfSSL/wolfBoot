@@ -33,7 +33,7 @@
 /* TGL mptable */
 static struct mptable _mptable = {
     .mpf = {
-        .signature = "_MP_",
+        .signature = {'_', 'M', 'P', '_'},
         .phy_addr = (int)MPTABLE_LOAD_BASE + sizeof(struct mp_float),
         .length = 1,
         .spec_rev = 0x4,
@@ -45,7 +45,7 @@ static struct mptable _mptable = {
         .feature5 = 0
     },
     .mpc_table = {
-        .signature = MPC_SIGNATURE,
+        .signature = {'P', 'C', 'M', 'P'},
         .base_table_len = sizeof(struct mp_conf_table_header) +
             sizeof(struct mp_conf_entry_processor) * MP_CPU_NUM_ENTRY +
             sizeof(struct mp_conf_entry_bus) * MP_BUS_NUM_ENTRY +
@@ -248,7 +248,7 @@ static struct mptable _mptable = {
 /* MPtables for qemu */
 struct mptable _mptable = {
     .mpf = {
-        .signature = "_MP_",
+        .signature = {'_', 'M', 'P', '_'},
         .phy_addr = (int)MPTABLE_LOAD_BASE + sizeof(struct mp_float),
         .length = 1,
         .spec_rev = 1,
@@ -260,7 +260,7 @@ struct mptable _mptable = {
         .feature5 = 0
     },
     .mpc_table = {
-        .signature = MPC_SIGNATURE,
+        .signature = {'P', 'C', 'M', 'P'},
         .base_table_len = sizeof(struct mp_conf_table_header) +
             sizeof(struct mp_conf_entry_processor) * MP_CPU_NUM_ENTRY +
             sizeof(struct mp_conf_entry_bus) * MP_BUS_NUM_ENTRY +

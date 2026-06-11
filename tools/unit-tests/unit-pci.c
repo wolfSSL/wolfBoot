@@ -1000,6 +1000,57 @@ START_TEST(test_program_bar_no_space)
 }
 END_TEST
 
+/* test_program_bar_2gb_no_wrap: a device advertising a 2GB non-prefetchable
+ * 32-bit MMIO BAR (bar_align == 0x80000000, length == 0x80000000) must be
+ * rejected.  The aligned start 0x80000000 passes the start-only limit check in
+ * pci_enum_next_aligned32, but [start, start+length) overruns the 128MB pool
+ * and the cursor update *base = start + length wraps to 0 in uint32_t.  That
+ * wrap collides every subsequent BAR onto the low IVT/BIOS region and
+ * mis-programs the bridge MMIO window to a spurious 2GB range.  The oversized
+ * BAR must be skipped and the allocator left untouched. */
+START_TEST(test_program_bar_2gb_no_wrap)
+{
+    struct test_pci_topology t;
+    struct pci_enum_info info;
+    uint8_t is_64bit = 0;
+    int dev_node;
+    int ret;
+    uint32_t bar0_val;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    /* 2GB 32-bit non-prefetchable MMIO BAR */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x80000000, TEST_PCI_BAR_MMIO);
+    test_pci_commit(&t);
+
+    /* Pre-fill BAR0 so we can confirm it is restored, not programmed. */
+    {
+        uint32_t orig = 0xBEEF0000;
+        memcpy(&t.nodes[dev_node].cfg[PCI_BAR0_OFFSET], &orig, 4);
+    }
+
+    memset(&info, 0, sizeof(info));
+    info.mem = 0x80000000;
+    info.mem_limit = 0x88000000;
+    info.mem_pf = 0x90000000;
+    info.mem_pf_limit = 0xFFFFFFFF;
+    info.io = 0x2000;
+
+    ret = pci_program_bar(0, 0, 0, 0, &info, &is_64bit);
+    /* the oversized BAR must not be accepted */
+    ck_assert_int_ne(ret, 0);
+
+    /* the allocator cursor must NOT have wrapped to 0 */
+    ck_assert_uint_eq(info.mem, 0x80000000);
+
+    /* BAR0 restored, never programmed onto the MMIO window */
+    bar0_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar0_val, 0xBEEF0000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_program_bars_iteration: full BAR iteration with mixed types */
 START_TEST(test_program_bars_iteration)
 {
@@ -1785,6 +1836,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_bar_nospace = tcase_create("program-bar-no-space");
     tcase_add_test(tc_bar_nospace, test_program_bar_no_space);
     suite_add_tcase(s, tc_bar_nospace);
+
+    TCase *tc_bar_2gb = tcase_create("program-bar-2gb-no-wrap");
+    tcase_add_test(tc_bar_2gb, test_program_bar_2gb_no_wrap);
+    suite_add_tcase(s, tc_bar_2gb);
 
     TCase *tc_bars_iter = tcase_create("program-bars-iteration");
     tcase_add_test(tc_bars_iter, test_program_bars_iteration);

@@ -71,6 +71,15 @@
 #include <wolfssl/wolfcrypt/sha256.h>
 #include <wolfssl/wolfcrypt/sha512.h>
 
+#ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
+static NOINLINEFUNCTION void hal_uds_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U)
+        *p++ = 0U;
+}
+#endif
+
 /* Derive UDS from device UUID for software DICE testing.
  * NOT secure — UUID is publicly observable. Only enabled with
  * WOLFBOOT_UDS_UID_FALLBACK_FORTEST. */
@@ -121,8 +130,11 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
                 ret = wc_Sha384Final(&hash, digest);
             wc_Sha384Free(&hash);
         }
-        if (ret != 0)
+        if (ret != 0) {
+            hal_uds_zeroize(uuid_be, sizeof(uuid_be));
+            hal_uds_zeroize(digest, sizeof(digest));
             return -1;
+        }
     }
 #elif defined(WOLFBOOT_HASH_SHA256)
     {
@@ -133,14 +145,19 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
                 ret = wc_Sha256Final(&hash, digest);
             wc_Sha256Free(&hash);
         }
-        if (ret != 0)
+        if (ret != 0) {
+            hal_uds_zeroize(uuid_be, sizeof(uuid_be));
+            hal_uds_zeroize(digest, sizeof(digest));
             return -1;
+        }
     }
 #endif
 
     if (copy_len > out_len)
         copy_len = out_len;
     XMEMCPY(out, digest, copy_len);
+    hal_uds_zeroize(digest, sizeof(digest));
+    hal_uds_zeroize(uuid_be, sizeof(uuid_be));
     return 0;
 #endif /* WOLFBOOT_UDS_UID_FALLBACK_FORTEST */
 }
