@@ -112,7 +112,7 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     mem_path_device->Header.SubType = EFI_DEVICE_PATH_PROTOCOL_MEM_SUBTYPE;
     mem_path_device->MemoryType = EfiLoaderData;
     mem_path_device->StartingAddress = (EFI_PHYSICAL_ADDRESS)boot_addr;
-    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)(boot_addr+*size);
+    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)((uint8_t*)boot_addr+*size);
     SetDevicePathNodeLength(&mem_path_device->Header,
                             sizeof(MEMMAP_DEVICE_PATH));
 
