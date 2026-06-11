@@ -388,7 +388,7 @@ static void serve_update(uint8_t *base, const char *uart_dev)
                    idx++;
            }
 
-           v = buf[4] + (buf[3] << 8) + (buf[2] << 16) + (buf[1] << 24);
+           v = buf[4] + (buf[3] << 8) + (buf[2] << 16) + ((uint32_t)buf[1] << 24);
            printf("Boot partition version from test app: %u\n", v);
            continue;
        }
@@ -409,7 +409,7 @@ static void serve_update(uint8_t *base, const char *uart_dev)
             }
             if (idx == 5) {
                 printf("\r\n** TARGET REBOOT **\n");
-                v = buf[1] + (buf[2] << 8) + (buf[3] << 16) + (buf[4] << 24);
+                v = buf[1] + (buf[2] << 8) + (buf[3] << 16) + ((uint32_t)buf[4] << 24);
                 printf("Version running on target: %u\n", v);
             }
             continue;

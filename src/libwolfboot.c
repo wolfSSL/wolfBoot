@@ -1623,6 +1623,10 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
 exit_lock:
+#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
+    !defined(WOLFBOOT_ENCRYPT_CACHE)
+    ForceZero(ENCRYPT_CACHE, NVM_CACHE_SIZE);
+#endif
     hal_flash_lock();
     return ret;
 #endif

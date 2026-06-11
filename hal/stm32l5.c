@@ -120,6 +120,14 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #define STM32L5_UID2 (*(volatile uint32_t *)(STM32L5_UID_BASE + 0x8))
 
 #if defined(WOLFCRYPT_TZ_PSA)
+static NOINLINEFUNCTION void hal_secret_zeroize(void *ptr, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)ptr;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[12];
@@ -173,6 +181,8 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
         copy_len = out_len;
     }
     memcpy(out, digest, copy_len);
+    hal_secret_zeroize(digest, sizeof(digest));
+    hal_secret_zeroize(&hash, sizeof(hash));
     return 0;
 }
 

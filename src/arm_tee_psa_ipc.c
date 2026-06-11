@@ -262,6 +262,9 @@ static struct wolfboot_ps_entry *wolfboot_ps_alloc(psa_storage_uid_t uid)
     return NULL;
 }
 
+static int32_t arm_tee_psa_ps_dispatch(int32_t type, const psa_invec *in_vec,
+    size_t in_len, psa_outvec *out_vec, size_t out_len);
+
 static psa_status_t wolfboot_psa_open_key(psa_key_id_t id, psa_key_id_t *key)
 {
     psa_key_attributes_t attr = PSA_KEY_ATTRIBUTES_INIT;
@@ -774,136 +777,7 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
     }
 
     if (handle == (psa_handle_t)ARM_TEE_PROTECTED_STORAGE_HANDLE) {
-        if (type == ARM_TEE_PS_SET) {
-            const psa_storage_uid_t *uid;
-            const void *data;
-            const psa_storage_create_flags_t *flags;
-            struct wolfboot_ps_entry *entry;
-            size_t data_len;
-            if (in_vec == NULL || in_len < 3) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            uid = (const psa_storage_uid_t *)in_vec[0].base;
-            data = in_vec[1].base;
-            flags = (const psa_storage_create_flags_t *)in_vec[2].base;
-            /* Snapshot the NS-supplied length once into a Secure-stack local.
-             * in_vec lives in NS memory and may be mutated concurrently (a
-             * preempting NS interrupt or NS-accessible DMA), so re-reading
-             * in_vec[1].len after the bounds check would allow a TOCTOU
-             * double-fetch to grow the copy past WOLFBOOT_PS_MAX_DATA. */
-            data_len = in_vec[1].len;
-            if (uid == NULL || flags == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            if (data_len > WOLFBOOT_PS_MAX_DATA) {
-                return PSA_ERROR_INSUFFICIENT_STORAGE;
-            }
-            entry = wolfboot_ps_find(*uid);
-            if (entry == NULL) {
-                entry = wolfboot_ps_alloc(*uid);
-                if (entry == NULL) {
-                    return PSA_ERROR_INSUFFICIENT_STORAGE;
-                }
-            } else if ((entry->flags & PSA_STORAGE_FLAG_WRITE_ONCE) != 0U) {
-                return PSA_ERROR_NOT_PERMITTED;
-            }
-            if (data_len > 0 && data == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            if (data_len > 0) {
-                XMEMCPY(entry->data, data, data_len);
-            }
-            entry->size = data_len;
-            entry->flags = *flags;
-            return PSA_SUCCESS;
-        }
-        if (type == ARM_TEE_PS_GET) {
-            const psa_storage_uid_t *uid;
-            const rot_size_t *offset;
-            struct wolfboot_ps_entry *entry;
-            size_t read_len;
-            if (in_vec == NULL || in_len < 2 || out_vec == NULL || out_len < 1) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            uid = (const psa_storage_uid_t *)in_vec[0].base;
-            offset = (const rot_size_t *)in_vec[1].base;
-            if (uid == NULL || offset == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            entry = wolfboot_ps_find(*uid);
-            if (entry == NULL) {
-                return PSA_ERROR_DOES_NOT_EXIST;
-            }
-            if (*offset > entry->size) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            read_len = entry->size - *offset;
-            if (read_len > out_vec[0].len) {
-                read_len = out_vec[0].len;
-            }
-            if (read_len > 0 && out_vec[0].base != NULL) {
-                XMEMCPY(out_vec[0].base, entry->data + *offset, read_len);
-            }
-            out_vec[0].len = read_len;
-            return PSA_SUCCESS;
-        }
-        if (type == ARM_TEE_PS_GET_INFO) {
-            const psa_storage_uid_t *uid;
-            struct wolfboot_ps_entry *entry;
-            if (in_vec == NULL || in_len < 1 || out_vec == NULL || out_len < 1) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            uid = (const psa_storage_uid_t *)in_vec[0].base;
-            if (uid == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            entry = wolfboot_ps_find(*uid);
-            if (entry == NULL) {
-                return PSA_ERROR_DOES_NOT_EXIST;
-            }
-            {
-                struct psa_storage_info_t info;
-                info.capacity = WOLFBOOT_PS_MAX_DATA;
-                info.size = entry->size;
-                info.flags = entry->flags;
-                if (out_vec[0].len < sizeof(info)) {
-                    return PSA_ERROR_BUFFER_TOO_SMALL;
-                }
-                XMEMCPY(out_vec[0].base, &info, sizeof(info));
-                out_vec[0].len = sizeof(info);
-            }
-            return PSA_SUCCESS;
-        }
-        if (type == ARM_TEE_PS_REMOVE) {
-            const psa_storage_uid_t *uid;
-            struct wolfboot_ps_entry *entry;
-            if (in_vec == NULL || in_len < 1) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            uid = (const psa_storage_uid_t *)in_vec[0].base;
-            if (uid == NULL) {
-                return PSA_ERROR_INVALID_ARGUMENT;
-            }
-            entry = wolfboot_ps_find(*uid);
-            if (entry == NULL) {
-                return PSA_ERROR_DOES_NOT_EXIST;
-            }
-            wc_ForceZero(entry->data, sizeof(entry->data));
-            entry->in_use = 0;
-            entry->uid = 0;
-            entry->size = 0;
-            entry->flags = 0;
-            return PSA_SUCCESS;
-        }
-        if (type == ARM_TEE_PS_GET_SUPPORT) {
-            if (out_vec != NULL && out_len >= 1 && out_vec[0].base != NULL) {
-                uint32_t support = 0;
-                XMEMCPY(out_vec[0].base, &support, sizeof(support));
-                out_vec[0].len = sizeof(support);
-            }
-            return PSA_SUCCESS;
-        }
-        return PSA_ERROR_NOT_SUPPORTED;
+        return arm_tee_psa_ps_dispatch(type, in_vec, in_len, out_vec, out_len);
     }
 
     if (handle == (psa_handle_t)ARM_TEE_ATTESTATION_HANDLE) {
@@ -1004,6 +878,151 @@ static int32_t arm_tee_psa_dispatch(psa_handle_t handle, int32_t type,
 
     return PSA_ERROR_NOT_SUPPORTED;
 }
+
+static int32_t arm_tee_psa_ps_dispatch(int32_t type, const psa_invec *in_vec,
+    size_t in_len, psa_outvec *out_vec, size_t out_len)
+{
+    if (type == ARM_TEE_PS_SET) {
+        const psa_storage_uid_t *uid;
+        const void *data;
+        const psa_storage_create_flags_t *flags;
+        struct wolfboot_ps_entry *entry;
+        size_t data_len;
+        if (in_vec == NULL || in_len < 3) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        uid = (const psa_storage_uid_t *)in_vec[0].base;
+        data = in_vec[1].base;
+        flags = (const psa_storage_create_flags_t *)in_vec[2].base;
+        /* Snapshot the NS-supplied length once into a Secure-stack local.
+         * in_vec lives in NS memory and may be mutated concurrently (a
+         * preempting NS interrupt or NS-accessible DMA), so re-reading
+         * in_vec[1].len after the bounds check would allow a TOCTOU
+         * double-fetch to grow the copy past WOLFBOOT_PS_MAX_DATA. */
+        data_len = in_vec[1].len;
+        if (uid == NULL || in_vec[0].len < sizeof(*uid) ||
+            flags == NULL || in_vec[2].len < sizeof(*flags)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        if (data_len > WOLFBOOT_PS_MAX_DATA) {
+            return PSA_ERROR_INSUFFICIENT_STORAGE;
+        }
+        entry = wolfboot_ps_find(*uid);
+        if (entry == NULL) {
+            entry = wolfboot_ps_alloc(*uid);
+            if (entry == NULL) {
+                return PSA_ERROR_INSUFFICIENT_STORAGE;
+            }
+        } else if ((entry->flags & PSA_STORAGE_FLAG_WRITE_ONCE) != 0U) {
+            return PSA_ERROR_NOT_PERMITTED;
+        }
+        if (data_len > 0 && data == NULL) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        if (data_len > 0) {
+            XMEMCPY(entry->data, data, data_len);
+        }
+        entry->size = data_len;
+        entry->flags = *flags;
+        return PSA_SUCCESS;
+    }
+    if (type == ARM_TEE_PS_GET) {
+        const psa_storage_uid_t *uid;
+        const rot_size_t *offset;
+        struct wolfboot_ps_entry *entry;
+        size_t read_len;
+        if (in_vec == NULL || in_len < 2 || out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        uid = (const psa_storage_uid_t *)in_vec[0].base;
+        offset = (const rot_size_t *)in_vec[1].base;
+        if (uid == NULL || in_vec[0].len < sizeof(*uid) ||
+            offset == NULL || in_vec[1].len < sizeof(*offset)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        entry = wolfboot_ps_find(*uid);
+        if (entry == NULL) {
+            return PSA_ERROR_DOES_NOT_EXIST;
+        }
+        if (*offset > entry->size) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        read_len = entry->size - *offset;
+        if (read_len > out_vec[0].len) {
+            read_len = out_vec[0].len;
+        }
+        if (read_len > 0 && out_vec[0].base != NULL) {
+            XMEMCPY(out_vec[0].base, entry->data + *offset, read_len);
+        }
+        out_vec[0].len = read_len;
+        return PSA_SUCCESS;
+    }
+    if (type == ARM_TEE_PS_GET_INFO) {
+        const psa_storage_uid_t *uid;
+        struct wolfboot_ps_entry *entry;
+        if (in_vec == NULL || in_len < 1 || out_vec == NULL || out_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        uid = (const psa_storage_uid_t *)in_vec[0].base;
+        if (uid == NULL || in_vec[0].len < sizeof(*uid)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        entry = wolfboot_ps_find(*uid);
+        if (entry == NULL) {
+            return PSA_ERROR_DOES_NOT_EXIST;
+        }
+        {
+            struct psa_storage_info_t info;
+            info.capacity = WOLFBOOT_PS_MAX_DATA;
+            info.size = entry->size;
+            info.flags = entry->flags;
+            if (out_vec[0].len < sizeof(info)) {
+                return PSA_ERROR_BUFFER_TOO_SMALL;
+            }
+            XMEMCPY(out_vec[0].base, &info, sizeof(info));
+            out_vec[0].len = sizeof(info);
+        }
+        return PSA_SUCCESS;
+    }
+    if (type == ARM_TEE_PS_REMOVE) {
+        const psa_storage_uid_t *uid;
+        struct wolfboot_ps_entry *entry;
+        if (in_vec == NULL || in_len < 1) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        uid = (const psa_storage_uid_t *)in_vec[0].base;
+        if (uid == NULL || in_vec[0].len < sizeof(*uid)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
+        }
+        entry = wolfboot_ps_find(*uid);
+        if (entry == NULL) {
+            return PSA_ERROR_DOES_NOT_EXIST;
+        }
+        wc_ForceZero(entry->data, sizeof(entry->data));
+        entry->in_use = 0;
+        entry->uid = 0;
+        entry->size = 0;
+        entry->flags = 0;
+        return PSA_SUCCESS;
+    }
+    if (type == ARM_TEE_PS_GET_SUPPORT) {
+        if (out_vec != NULL && out_len >= 1 && out_vec[0].base != NULL) {
+            uint32_t support = 0;
+            XMEMCPY(out_vec[0].base, &support, sizeof(support));
+            out_vec[0].len = sizeof(support);
+        }
+        return PSA_SUCCESS;
+    }
+    return PSA_ERROR_NOT_SUPPORTED;
+}
+
+#ifdef UNIT_TEST
+int32_t arm_tee_psa_test_ps_dispatch(int32_t type, const psa_invec *in_vec,
+    size_t in_len, psa_outvec *out_vec, size_t out_len)
+{
+    return arm_tee_psa_ps_dispatch(type, in_vec, in_len, out_vec, out_len);
+}
+#endif
 
 int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
     const psa_invec *in_vec, size_t in_len,

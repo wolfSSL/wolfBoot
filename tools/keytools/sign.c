@@ -1531,8 +1531,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             ALIGN_8(header_idx);
 
             if (CMD.custom_tlv[i].buffer == NULL) {
+                uint8_t tmp[sizeof(CMD.custom_tlv[i].val)];
+                header_store_u64_le(tmp, CMD.custom_tlv[i].val);
                 header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
-                    CMD.custom_tlv[i].len, &CMD.custom_tlv[i].val);
+                    CMD.custom_tlv[i].len, tmp);
             } else {
                 header_append_tag(header, &header_idx, CMD.custom_tlv[i].tag,
                     CMD.custom_tlv[i].len, CMD.custom_tlv[i].buffer);

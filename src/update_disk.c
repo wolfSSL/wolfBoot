@@ -263,7 +263,7 @@ void RAMFUNCTION wolfBoot_start(void)
     struct stage2_parameter *stage2_params;
 #endif
     struct wolfBoot_image os_image;
-    int pA_ver = 0, pB_ver = 0;
+    uint32_t pA_ver = 0U, pB_ver = 0U;
     uint32_t pA_ver_u = 0U, pB_ver_u = 0U;
     uint32_t cur_part = 0;
     int ret = -1;
@@ -358,10 +358,10 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
-    if (pA_ver > 0)
-        pA_ver_u = (uint32_t)pA_ver;
-    if (pB_ver > 0)
-        pB_ver_u = (uint32_t)pB_ver;
+    if (pA_ver != 0U)
+        pA_ver_u = pA_ver;
+    if (pB_ver != 0U)
+        pB_ver_u = pB_ver;
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
     wolfBoot_printf("Load block size: %dKB\r\n", DISK_BLOCK_SIZE / 1024);
