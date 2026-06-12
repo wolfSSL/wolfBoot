@@ -46,6 +46,7 @@
 #define SUIT_E_INSTALL           (-9)
 #define SUIT_E_ROLLBACK          (-10)
 #define SUIT_E_BOUNDS            (-11)
+#define SUIT_E_FETCH             (-12)
 
 /* SUIT_Envelope map keys (IANA SUIT Envelope Elements). */
 enum suit_envelope_key {
@@ -173,6 +174,8 @@ struct suit_params {
     size_t         classIdLen;
     const uint8_t* content;        /* directive-write content */
     size_t         contentLen;
+    const uint8_t* uri;            /* directive-fetch source (tstr bytes) */
+    size_t         uriLen;
     uint64_t       imageSize;
     size_t         sourceComponent;
     int            componentSlot;
@@ -186,6 +189,9 @@ struct suit_component_ops {
     int (*hash)(void* ctx, size_t idx, uint8_t* out, size_t outLen);
     int (*write)(void* ctx, size_t idx, const uint8_t* src, size_t len);
     int (*copy)(void* ctx, size_t idx, size_t srcIdx);
+    /* Retrieve the payload at uri into component idx (SUIT_HAVE_FETCH). The host
+     * (e.g. wolfUpdate transport) owns the network/storage; NULL if unsupported. */
+    int (*fetch)(void* ctx, size_t idx, const uint8_t* uri, size_t uriLen);
 };
 
 /* Command-sequence interpreter state. Fixed-size, no heap. */
@@ -212,6 +218,22 @@ struct suit_context {
 int suit_open(struct suit_manifest* m, const uint8_t* env, size_t len);
 int suit_verify_auth(struct suit_manifest* m);
 int suit_process(struct suit_context* ctx, struct suit_manifest* m);
+
+#ifdef SUIT_HAVE_REPORT
+/* Minimal SUIT status report keys: a compact outcome record for an update server
+ * (e.g. wolfUpdate), not the full draft-suit-report COSE attestation. */
+enum suit_report_key {
+    SUIT_REPORT_RESULT          = 1, /* int: 0 on success, else the SUIT_E_* code */
+    SUIT_REPORT_SEQUENCE_NUMBER = 2  /* uint: the manifest sequence number */
+};
+
+/* Encode a status report for a finished suit_process into the caller's buffer as
+ * CBOR. result is the suit_process return code. Writes the encoded length to
+ * written. Zero allocation: out is caller-owned. */
+int suit_report_encode(const struct suit_context* ctx,
+    const struct suit_manifest* m, int result,
+    uint8_t* out, size_t outLen, size_t* written);
+#endif /* SUIT_HAVE_REPORT */
 
 /* wolfBoot entry point: open + authenticate + process a staged SUIT envelope.
  * The caller supplies the component I/O ops and this device's identity. */

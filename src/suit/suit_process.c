@@ -144,6 +144,15 @@ static int suit_override(struct suit_context* ctx, WOLFCOSE_CBOR_CTX* c)
                 ctx->params.contentLen = dataLen;
             }
         }
+        else if (pkey == (int64_t)SUIT_PARAM_URI) {
+            if (wc_CBOR_DecodeTstr(c, &data, &dataLen) != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_PARSE;
+            }
+            else {
+                ctx->params.uri = data;
+                ctx->params.uriLen = dataLen;
+            }
+        }
         else if (pkey == (int64_t)SUIT_PARAM_SOURCE_COMPONENT) {
             if (wc_CBOR_DecodeUint(c, &uval) != WOLFCOSE_SUCCESS) {
                 ret = SUIT_E_PARSE;
@@ -313,6 +322,23 @@ static int suit_run_sequence(struct suit_context* ctx, const uint8_t* seq,
                     ctx->params.contentLen);
             }
         }
+#ifdef SUIT_HAVE_FETCH
+        else if (cmd == (int64_t)SUIT_DIR_FETCH) {
+            if (wc_CBOR_Skip(&c) != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_PARSE;
+            }
+            else if ((ctx->ops == NULL) || (ctx->ops->fetch == NULL)) {
+                ret = SUIT_E_UNSUPPORTED;
+            }
+            else if (ctx->params.uri == NULL) {
+                ret = SUIT_E_FETCH;
+            }
+            else if (ctx->ops->fetch(ctx->ops->ctx, ctx->componentIndex,
+                    ctx->params.uri, ctx->params.uriLen) != 0) {
+                ret = SUIT_E_FETCH;
+            }
+        }
+#endif
         else if (cmd == (int64_t)SUIT_DIR_COPY) {
             if (wc_CBOR_Skip(&c) != WOLFCOSE_SUCCESS) {
                 ret = SUIT_E_PARSE;

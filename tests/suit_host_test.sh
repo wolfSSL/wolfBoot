@@ -18,6 +18,7 @@ cd "$ROOT"
 # wolfCOSE is built lean for ES256 sign+verify only, matching a minimal host
 # wolfSSL; the verify path itself is what wolfBoot uses on-target.
 "$CC" -DWOLFBOOT_SUIT -DSUIT_INSTALL_DIRECTIVES -DSUIT_HAVE_ENCRYPTION \
+    -DSUIT_HAVE_FETCH -DSUIT_HAVE_REPORT \
     -DWOLFCOSE_NO_ENCRYPT -DWOLFCOSE_NO_MAC0 \
     -DWOLFCOSE_NO_MAC -DWOLFCOSE_NO_SIGN -DWOLFCOSE_NO_RECIPIENTS \
     -DWOLFCOSE_NO_MLDSA -DWOLFCOSE_NO_KEY_ENCODE -DWOLFCOSE_NO_KEY_DECODE \
@@ -27,6 +28,7 @@ cd "$ROOT"
     -isystem "$WOLFSSL_DIR/include" \
     tests/suit_test.c \
     src/suit/suit_parse.c src/suit/suit_verify.c src/suit/suit_process.c \
+    src/suit/suit_report.c \
     lib/wolfCOSE/src/wolfcose.c lib/wolfCOSE/src/wolfcose_cbor.c \
     -L"$WOLFSSL_DIR/lib" -lwolfssl -o "$OUT"
 

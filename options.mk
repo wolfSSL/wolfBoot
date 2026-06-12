@@ -1602,6 +1602,10 @@ ifeq ($(WOLFBOOT_SUIT),1)
   ifeq ($(SUIT_HAVE_FETCH),1)
     CFLAGS+=-DSUIT_HAVE_FETCH
   endif
+  ifeq ($(SUIT_HAVE_REPORT),1)
+    CFLAGS+=-DSUIT_HAVE_REPORT
+    OBJS+=./src/suit/suit_report.o
+  endif
   ifeq ($(SUIT_HAVE_TRY_EACH),1)
     CFLAGS+=-DSUIT_HAVE_TRY_EACH
   endif

@@ -37,7 +37,9 @@ verify objects (lean, `WOLFCOSE_LEAN_VERIFY`). Fine-tuning macros:
 | `SUIT_HAVE_ENCRYPTION` | decrypt COSE_Encrypt0 payloads on install (AES-GCM); enables AES-GCM in the build |
 | `SUIT_DEVICE_VENDOR_ID` / `SUIT_DEVICE_CLASS_ID` | this device's identity (brace initializers) for the vendor/class conditions |
 | `SUIT_KEY_SLOT` | fallback trust-anchor slot when the COSE_Sign1 carries no key id |
-| `SUIT_HAVE_FETCH` / `SUIT_HAVE_TRY_EACH` / `SUIT_HAVE_RUN_SEQUENCE` | optional commands |
+| `SUIT_HAVE_FETCH` | enable directive-fetch; the host supplies an `ops->fetch` callback that retrieves the payload by uri (e.g. wolfUpdate transport) |
+| `SUIT_HAVE_REPORT` | build `suit_report_encode()`, a compact `{ result, sequence }` status record an update server reads to learn the outcome |
+| `SUIT_HAVE_TRY_EACH` / `SUIT_HAVE_RUN_SEQUENCE` | optional commands |
 
 ## Architecture
 
@@ -90,8 +92,11 @@ CBOR/COSE tooling (test B); it is not a full draft-34 implementation.
 
 - Unrecognized (or known-but-unsupported) commands are **default-denied** (the
   sequence fails), as a SUIT processor must, rather than silently skipped.
-- Not implemented (and rejected if present): directive-fetch, severable members,
-  try-each / run-sequence / swap, dependencies/trust-domains, SUIT Reports.
+- Optional, built only when their macro is set: directive-fetch
+  (`SUIT_HAVE_FETCH`, via a host callback) and a compact status report
+  (`SUIT_HAVE_REPORT`, not the full draft-suit-report COSE attestation).
+- Not implemented (and rejected if present): severable members,
+  try-each / run-sequence / swap, dependencies/trust-domains.
 
 ## Status
 
@@ -110,8 +115,18 @@ image or content larger than the partition space, and an out-of-range component
 index), and **key-id selection** (the COSE_Sign1 `kid` picks the trust anchor
 via the keystore, like the TLV path's pubkey hint).
 
-Follow-ups: `directive-fetch` (networked payload retrieval, wolfUpdate), and the
-optional commands (`try-each` / `run-sequence` / `swap`).
+Networked update support: `directive-fetch` (`SUIT_HAVE_FETCH`) retrieves the
+payload by uri through a host callback, and `suit_report_encode()`
+(`SUIT_HAVE_REPORT`) emits a compact status record, so a server (e.g. wolfUpdate)
+can pull images and learn outcomes. Remaining optional commands: `try-each` /
+`run-sequence` / `swap`.
+
+Production readiness: this feature is experimental and off by default. Before
+enabling it in a shipping product the gate is, at minimum: fuzz the manifest
+parser and complete a security review (the manifest is attacker-controlled),
+hardware-test the boot/swap path, and provision the content-encryption key by
+key-wrap rather than handing it in raw. Encryption (`SUIT_HAVE_ENCRYPTION`) is
+not production-ready until the key-wrap step exists.
 
 This PR is gated on the wolfCOSE fixes in wolfSSL/wolfCOSE PR #53; the submodule
 is pinned to that work and should be repinned to the wolfCOSE v1.0 tag before

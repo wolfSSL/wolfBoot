@@ -106,6 +106,27 @@ static const uint8_t TEST_QY[32] = {
     0x79,0x03,0xFE,0x10,0x08,0xB8,0xBC,0x99,0xA4,0x1A,0xE9,0xE9,0x56,0x28,0xBC,0x64,
     0xF2,0xF1,0xB2,0x0C,0x2D,0x7E,0x9F,0x51,0x77,0xA3,0xC2,0x94,0xD4,0x46,0x22,0x99 };
 
+#ifdef SUIT_HAVE_FETCH
+/* directive-fetch source, and a fetch op standing in for wolfUpdate transport:
+ * it records the uri it was handed and stages the payload into the component. */
+static const char URI[] = "coaps://wolfupdate.example/fw";
+static int g_fetch_called;
+static uint8_t g_fetch_uri[64];
+static size_t g_fetch_uriLen;
+static int comp_fetch(void* c, size_t idx, const uint8_t* uri, size_t uriLen)
+{
+    (void)c; (void)idx;
+    g_fetch_called = 1;
+    if (uriLen > sizeof(g_fetch_uri)) { return -1; }
+    memcpy(g_fetch_uri, uri, uriLen);
+    g_fetch_uriLen = uriLen;
+    if (sizeof(FW) > sizeof(g_flash)) { return -1; }
+    memcpy(g_flash, FW, sizeof(FW));
+    g_flashLen = sizeof(FW);
+    return 0;
+}
+#endif
+
 #define E(call) do { if ((call) != WOLFCOSE_SUCCESS) { return -1; } } while (0)
 
 static void cbor_init(WOLFCOSE_CBOR_CTX* c, uint8_t* out, size_t sz)
@@ -178,6 +199,29 @@ static int enc_install_seq(uint8_t* out, size_t outSz, size_t* outLen,
     return 0;
 }
 
+#ifdef SUIT_HAVE_FETCH
+/* install via fetch: set the image digest + uri, fetch the payload, image-match. */
+static int enc_install_fetch_seq(uint8_t* out, size_t outSz, size_t* outLen,
+    const uint8_t* sd, size_t sdLen)
+{
+    WOLFCOSE_CBOR_CTX c;
+    cbor_init(&c, out, outSz);
+    E(wc_CBOR_EncodeArrayStart(&c, 6));
+    E(wc_CBOR_EncodeInt(&c, SUIT_DIR_OVERRIDE_PARAMETERS));
+    E(wc_CBOR_EncodeMapStart(&c, 2));
+    E(wc_CBOR_EncodeInt(&c, SUIT_PARAM_IMAGE_DIGEST));
+    E(wc_CBOR_EncodeBstr(&c, sd, sdLen));
+    E(wc_CBOR_EncodeInt(&c, SUIT_PARAM_URI));
+    E(wc_CBOR_EncodeTstr(&c, (const uint8_t*)URI, strlen(URI)));
+    E(wc_CBOR_EncodeInt(&c, SUIT_DIR_FETCH));
+    E(wc_CBOR_EncodeUint(&c, 15));
+    E(wc_CBOR_EncodeInt(&c, SUIT_COND_IMAGE_MATCH));
+    E(wc_CBOR_EncodeUint(&c, 15));
+    *outLen = c.idx;
+    return 0;
+}
+#endif
+
 static int enc_common(uint8_t* out, size_t outSz, size_t* outLen,
     const uint8_t* shared, size_t sharedLen)
 {
@@ -247,7 +291,7 @@ static int enc_envelope(uint8_t* out, size_t outSz, size_t* outLen,
  * encrypt is set, the install content is a COSE_Encrypt0 of FW (decrypted on
  * install); the image-digest is always over the FW plaintext. */
 static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff,
-    int encrypt)
+    int encrypt, int useFetch)
 {
     WC_RNG rng;
     ecc_key eccKey;
@@ -295,8 +339,20 @@ static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff,
     (void)encrypt;
 #endif
 
+#ifdef SUIT_HAVE_FETCH
+    if (useFetch) {
+        CHECK(enc_install_fetch_seq(install, sizeof(install), &installLen, sdFw,
+            sdFwLen) == 0, "install-fetch");
+    }
+    else {
+        CHECK(enc_install_seq(install, sizeof(install), &installLen, sdFw,
+            sdFwLen, contentPtr, contentLen) == 0, "install");
+    }
+#else
+    (void)useFetch;
     CHECK(enc_install_seq(install, sizeof(install), &installLen, sdFw, sdFwLen,
         contentPtr, contentLen) == 0, "install");
+#endif
     CHECK(enc_common(common, sizeof(common), &commonLen, shared, sharedLen) == 0,
         "common");
     CHECK(enc_manifest(manifest, sizeof(manifest), &manifestLen, common,
@@ -364,12 +420,20 @@ int main(void)
 #ifdef SUIT_HAVE_ENCRYPTION
     uint8_t decBuf[256];
 #endif
+#ifdef SUIT_HAVE_REPORT
+    uint8_t report[64];
+    size_t reportLen = 0;
+    WOLFCOSE_CBOR_CTX rc;
+    size_t rcount = 0;
+    int64_t rkey = 0, rresult = 0;
+    uint64_t rseq = 0;
+#endif
 
     memset(&ops, 0, sizeof(ops));
     ops.hash = comp_hash;
     ops.write = comp_write;
 
-    if (author(env, sizeof(env), &envLen, &sigOff, 0) != 0) { return 1; }
+    if (author(env, sizeof(env), &envLen, &sigOff, 0, 0) != 0) { return 1; }
     printf("authored full SUIT envelope: %zu bytes\n", envLen);
 
     /* Dump the envelope for the independent cross-check (cbor2 + pycose). */
@@ -441,7 +505,7 @@ int main(void)
 #ifdef SUIT_HAVE_ENCRYPTION
     /* Encrypted payload: install content is a COSE_Encrypt0, decrypted with the
      * device key on write. Confidentiality end to end. */
-    if (author(env, sizeof(env), &envLen, &sigOff, 1) != 0) { return 1; }
+    if (author(env, sizeof(env), &envLen, &sigOff, 1, 0) != 0) { return 1; }
     CHECK(suit_open(&m, env, envLen) == SUIT_SUCCESS, "open (encrypted)");
     CHECK(suit_verify_auth(&m) == SUIT_SUCCESS, "verify_auth (encrypted)");
     g_flashLen = 0;
@@ -455,6 +519,61 @@ int main(void)
     CHECK(g_flashLen == sizeof(FW) && memcmp(g_flash, FW, sizeof(FW)) == 0,
         "decrypted install must equal FW plaintext");
     printf("PASS: encrypted payload decrypted + installed (confidentiality)\n");
+#endif
+
+#ifdef SUIT_HAVE_FETCH
+    /* directive-fetch: the host retrieves the payload by uri instead of having it
+     * embedded, then image-match validates what was fetched. */
+    if (author(env, sizeof(env), &envLen, &sigOff, 0, 1) != 0) { return 1; }
+    CHECK(suit_open(&m, env, envLen) == SUIT_SUCCESS, "open (fetch)");
+    CHECK(suit_verify_auth(&m) == SUIT_SUCCESS, "verify_auth (fetch)");
+    g_flashLen = 0;
+    g_fetch_called = 0;
+    memset(&ops, 0, sizeof(ops));
+    ops.hash = comp_hash;
+    ops.fetch = comp_fetch;
+    ctx_init(&c, &m, &ops);
+    CHECK(suit_process(&c, &m) == SUIT_SUCCESS, "process (fetch) should pass");
+    CHECK(g_fetch_called == 1, "fetch op must be invoked");
+    CHECK(g_fetch_uriLen == strlen(URI) &&
+        memcmp(g_fetch_uri, URI, g_fetch_uriLen) == 0, "fetch uri must match");
+    CHECK(g_flashLen == sizeof(FW) && memcmp(g_flash, FW, sizeof(FW)) == 0,
+        "fetched payload must equal FW");
+    printf("PASS: directive-fetch retrieved + image-matched payload\n");
+    memset(&ops, 0, sizeof(ops));
+    ops.hash = comp_hash;
+    ops.write = comp_write;
+#endif
+
+#ifdef SUIT_HAVE_REPORT
+    /* status report: a finished process emits a compact { result, sequence }
+     * record an update server consumes to learn the outcome. */
+    if (author(env, sizeof(env), &envLen, &sigOff, 0, 0) != 0) { return 1; }
+    CHECK(suit_open(&m, env, envLen) == SUIT_SUCCESS, "open (report)");
+    CHECK(suit_verify_auth(&m) == SUIT_SUCCESS, "verify_auth (report)");
+    g_flashLen = 0;
+    g_corrupt_write = 0;
+    ctx_init(&c, &m, &ops);
+    ret = suit_process(&c, &m);
+    CHECK(ret == SUIT_SUCCESS, "process (report) should pass");
+    CHECK(suit_report_encode(&c, &m, ret, report, sizeof(report), &reportLen)
+        == SUIT_SUCCESS, "report encode");
+    rc.buf = NULL;
+    rc.cbuf = report;
+    rc.bufSz = reportLen;
+    rc.idx = 0;
+    CHECK(wc_CBOR_DecodeMapStart(&rc, &rcount) == WOLFCOSE_SUCCESS &&
+        rcount == 2, "report is a 2-entry map");
+    CHECK(wc_CBOR_DecodeInt(&rc, &rkey) == WOLFCOSE_SUCCESS &&
+        rkey == SUIT_REPORT_RESULT, "report result key");
+    CHECK(wc_CBOR_DecodeInt(&rc, &rresult) == WOLFCOSE_SUCCESS &&
+        rresult == 0, "report result is success");
+    CHECK(wc_CBOR_DecodeInt(&rc, &rkey) == WOLFCOSE_SUCCESS &&
+        rkey == SUIT_REPORT_SEQUENCE_NUMBER, "report sequence key");
+    CHECK(wc_CBOR_DecodeUint(&rc, &rseq) == WOLFCOSE_SUCCESS &&
+        rseq == 1, "report sequence is the manifest sequence");
+    printf("PASS: status report encodes result + sequence (%zu bytes)\n",
+        reportLen);
 #endif
 
     printf("ALL SUIT INSTALL TESTS PASSED\n");
