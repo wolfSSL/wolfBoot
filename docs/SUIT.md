@@ -35,6 +35,8 @@ verify objects (lean, `WOLFCOSE_LEAN_VERIFY`). Fine-tuning macros:
 | `SUIT_INSTALL_HANDOFF` (default) | verify then drive the existing A/B swap |
 | `SUIT_INSTALL_DIRECTIVES` | SUIT copy/write directives drive flash directly |
 | `SUIT_HAVE_ENCRYPTION` | decrypt COSE_Encrypt0 payloads on install (AES-GCM); enables AES-GCM in the build |
+| `SUIT_DEVICE_VENDOR_ID` / `SUIT_DEVICE_CLASS_ID` | this device's identity (brace initializers) for the vendor/class conditions |
+| `SUIT_KEY_SLOT` | fallback trust-anchor slot when the COSE_Sign1 carries no key id |
 | `SUIT_HAVE_FETCH` / `SUIT_HAVE_TRY_EACH` / `SUIT_HAVE_RUN_SEQUENCE` | optional commands |
 
 ## Architecture
@@ -101,6 +103,12 @@ confidentiality** (`SUIT_HAVE_ENCRYPTION`), the `wolfBoot_suit_verify()` entry
 point, and **boot-time auto-dispatch** (format detection from
 `wolfBoot_verify_authenticity`, concatenated `[envelope][image]` layout, handoff
 to the A/B swap).
+
+Security hardening: **anti-rollback** (rejects a manifest whose
+`sequence-number` is below the running version), **image bounds** (rejects an
+image or content larger than the partition space, and an out-of-range component
+index), and **key-id selection** (the COSE_Sign1 `kid` picks the trust anchor
+via the keystore, like the TLV path's pubkey hint).
 
 Follow-ups: `directive-fetch` (networked payload retrieval, wolfUpdate), and the
 optional commands (`try-each` / `run-sequence` / `swap`).

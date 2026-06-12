@@ -97,6 +97,12 @@ static int suit_parse_manifest(struct suit_manifest* m)
         if (wc_CBOR_DecodeInt(&ctx, &key) != WOLFCOSE_SUCCESS) {
             ret = SUIT_E_PARSE;
         }
+        else if (key == (int64_t)SUIT_MAN_SEQUENCE_NUMBER) {
+            if (wc_CBOR_DecodeUint(&ctx, &m->sequenceNumber)
+                    != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_PARSE;
+            }
+        }
         else if (key == (int64_t)SUIT_MAN_COMMON) {
             if (wc_CBOR_DecodeBstr(&ctx, &data, &dataLen) != WOLFCOSE_SUCCESS) {
                 ret = SUIT_E_PARSE;
@@ -157,6 +163,7 @@ int suit_open(struct suit_manifest* m, const uint8_t* env, size_t len)
     m->envEncodedLen = 0;
     m->manifest = NULL;
     m->manifestLen = 0;
+    m->sequenceNumber = 0;
     m->authWrapper = NULL;
     m->authWrapperLen = 0;
     m->common = NULL;

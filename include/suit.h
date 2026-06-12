@@ -44,6 +44,8 @@
 #define SUIT_E_UNSUPPORTED       (-7)
 #define SUIT_E_CRYPTO            (-8)
 #define SUIT_E_INSTALL           (-9)
+#define SUIT_E_ROLLBACK          (-10)
+#define SUIT_E_BOUNDS            (-11)
 
 /* SUIT_Envelope map keys (IANA SUIT Envelope Elements). */
 enum suit_envelope_key {
@@ -147,6 +149,7 @@ struct suit_manifest {
     size_t         envEncodedLen; /* bytes the envelope CBOR actually occupies */
     const uint8_t* manifest;    /* bstr-wrapped SUIT_Manifest */
     size_t         manifestLen;
+    uint64_t       sequenceNumber; /* suit-manifest-sequence-number (anti-rollback) */
     const uint8_t* authWrapper; /* suit-authentication-wrapper contents */
     size_t         authWrapperLen;
     const uint8_t* common;      /* suit-common (bstr-wrapped SUIT_Common) */
@@ -191,6 +194,8 @@ struct suit_context {
     const struct suit_component_ops* ops;
     struct suit_params               params;
     size_t                           componentIndex;
+    uint64_t                         minSequence;   /* reject seq < this (anti-rollback) */
+    size_t                           maxImageSize;  /* reject image/content larger (0 = no cap) */
     const uint8_t*                   deviceVendorId; /* this device's identity */
     size_t                           deviceVendorIdLen;
     const uint8_t*                   deviceClassId;

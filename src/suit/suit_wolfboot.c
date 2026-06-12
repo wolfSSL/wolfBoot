@@ -33,6 +33,17 @@
 #include <wolfssl/wolfcrypt/hash.h>
 #include "image.h"
 
+extern uint32_t wolfBoot_get_image_version(uint8_t part);
+
+/* This device's identity, checked by condition-vendor/class-identifier. Define
+ * SUIT_DEVICE_VENDOR_ID / SUIT_DEVICE_CLASS_ID as brace initializers to enable. */
+#ifdef SUIT_DEVICE_VENDOR_ID
+static const uint8_t suit_dev_vendor[] = SUIT_DEVICE_VENDOR_ID;
+#endif
+#ifdef SUIT_DEVICE_CLASS_ID
+static const uint8_t suit_dev_class[] = SUIT_DEVICE_CLASS_ID;
+#endif
+
 int wolfBoot_suit_verify(const uint8_t* env, size_t envLen,
     const struct suit_component_ops* ops,
     const uint8_t* vendorId, size_t vendorIdLen,
@@ -110,6 +121,18 @@ int wolfBoot_suit_verify_authenticity(struct wolfBoot_image* img)
         ops.hash = wb_suit_hash;
         ctx.m = &m;
         ctx.ops = &ops;
+        /* Anti-rollback against the running version; bound the image to the
+         * space after the envelope; apply this device's identity. */
+        ctx.minSequence = wolfBoot_get_image_version(PART_BOOT);
+        ctx.maxImageSize = WOLFBOOT_PARTITION_SIZE - m.envEncodedLen;
+#ifdef SUIT_DEVICE_VENDOR_ID
+        ctx.deviceVendorId = suit_dev_vendor;
+        ctx.deviceVendorIdLen = sizeof(suit_dev_vendor);
+#endif
+#ifdef SUIT_DEVICE_CLASS_ID
+        ctx.deviceClassId = suit_dev_class;
+        ctx.deviceClassIdLen = sizeof(suit_dev_class);
+#endif
         ret = suit_process(&ctx, &m);
     }
     if (ret == SUIT_SUCCESS) {

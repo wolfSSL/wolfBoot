@@ -42,6 +42,20 @@
 static uint8_t g_pub[64];
 uint8_t* keystore_get_buffer(int id) { (void)id; return g_pub; }
 
+/* COSE key id and a keyslot_id_by_sha() stub that records the kid the verifier
+ * extracted (proving kid-based key selection) and maps it to the test slot. */
+static const uint8_t KID[8] = { 0xde,0xad,0xbe,0xef,0x01,0x02,0x03,0x04 };
+static uint8_t g_seen_kid[16];
+static size_t g_seen_kidLen;
+int keyslot_id_by_sha(const uint8_t* hint)
+{
+    if (hint != NULL) {
+        memcpy(g_seen_kid, hint, sizeof(KID));
+        g_seen_kidLen = sizeof(KID);
+    }
+    return 0;
+}
+
 /* A RAM "component" standing in for a flash partition: directive-write stores
  * the installed payload here, and condition-image-match hashes it. */
 static uint8_t g_flash[256];
@@ -303,9 +317,9 @@ static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff,
     CHECK(wc_CoseKey_SetEcc(&signKey, WOLFCOSE_CRV_P256, &eccKey) == 0,
         "set ecc");
     signKey.hasPrivate = 1;
-    CHECK(wc_CoseSign1_Sign(&signKey, WOLFCOSE_ALG_ES256, NULL, 0, NULL, 0,
-        sdMan, sdManLen, NULL, 0, scratch, sizeof(scratch), cose, sizeof(cose),
-        &coseLen, &rng) == WOLFCOSE_SUCCESS, "sign");
+    CHECK(wc_CoseSign1_Sign(&signKey, WOLFCOSE_ALG_ES256, KID, sizeof(KID),
+        NULL, 0, sdMan, sdManLen, NULL, 0, scratch, sizeof(scratch), cose,
+        sizeof(cose), &coseLen, &rng) == WOLFCOSE_SUCCESS, "sign");
 
     CHECK(enc_auth(aw, sizeof(aw), &awLen, sdMan, sdManLen, cose, coseLen) == 0,
         "auth");
@@ -369,7 +383,10 @@ int main(void)
     CHECK(m.common != NULL && m.sharedSeq != NULL && m.validate != NULL &&
         m.install != NULL, "manifest sub-sequences located");
     CHECK(suit_verify_auth(&m) == SUIT_SUCCESS, "verify_auth");
-    printf("PASS: parsed + authenticated\n");
+    CHECK(g_seen_kidLen == sizeof(KID) &&
+        memcmp(g_seen_kid, KID, sizeof(KID)) == 0,
+        "verifier extracted + used the COSE kid");
+    printf("PASS: parsed + authenticated (key selected by COSE kid)\n");
 
     /* Full process: identity validate, install (write FW), image-match. */
     g_flashLen = 0;
@@ -397,6 +414,22 @@ int main(void)
     ret = suit_process(&c, &m);
     CHECK(ret == SUIT_E_CONDITION, "wrong vendor must fail condition");
     printf("PASS: wrong vendor rejected (condition)\n");
+
+    /* Anti-rollback: a manifest older than the installed sequence is rejected. */
+    g_flashLen = 0;
+    ctx_init(&c, &m, &ops);
+    c.minSequence = 5; /* manifest sequence-number is 1 */
+    ret = suit_process(&c, &m);
+    CHECK(ret == SUIT_E_ROLLBACK, "older sequence must be rejected");
+    printf("PASS: anti-rollback (older sequence rejected)\n");
+
+    /* Bounds: content larger than the allowed image size is rejected. */
+    g_flashLen = 0;
+    ctx_init(&c, &m, &ops);
+    c.maxImageSize = 8; /* FW payload is larger */
+    ret = suit_process(&c, &m);
+    CHECK(ret == SUIT_E_BOUNDS, "oversized content must be rejected");
+    printf("PASS: bounds (oversized content rejected)\n");
 
     /* Tampered signature -> authentication must fail. */
     env[sigOff] ^= 0xFF;

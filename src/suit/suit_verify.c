@@ -37,6 +37,68 @@
  * Declared locally so this file does not pull in the generated keystore sizing
  * header, keeping it buildable in minimal/host contexts. */
 extern uint8_t* keystore_get_buffer(int id);
+extern int keyslot_id_by_sha(const uint8_t* hint);
+
+/* Extract the COSE_Sign1 unprotected key id (label 4), zero-copy. */
+static int suit_cose_kid(const uint8_t* cose, size_t coseLen,
+    const uint8_t** kid, size_t* kidLen)
+{
+    int ret = SUIT_SUCCESS;
+    WOLFCOSE_CBOR_CTX ctx;
+    size_t count = 0;
+    size_t i;
+    int64_t hkey = 0;
+    uint64_t tag = 0;
+    const uint8_t* data = NULL;
+    size_t dataLen = 0;
+
+    *kid = NULL;
+    *kidLen = 0;
+    ctx.buf = NULL;
+    ctx.cbuf = cose;
+    ctx.bufSz = coseLen;
+    ctx.idx = 0;
+
+    if (wc_CBOR_PeekType(&ctx) == 6u) {           /* optional COSE_Sign1 tag */
+        if (wc_CBOR_DecodeTag(&ctx, &tag) != WOLFCOSE_SUCCESS) {
+            ret = SUIT_E_PARSE;
+        }
+    }
+    if (ret == SUIT_SUCCESS) {                    /* [protected, unprot, pl, sig] */
+        if (wc_CBOR_DecodeArrayStart(&ctx, &count) != WOLFCOSE_SUCCESS) {
+            ret = SUIT_E_PARSE;
+        }
+        else if (count < 4u) {
+            ret = SUIT_E_PARSE;
+        }
+    }
+    if (ret == SUIT_SUCCESS) {                    /* protected (bstr) */
+        if (wc_CBOR_DecodeBstr(&ctx, &data, &dataLen) != WOLFCOSE_SUCCESS) {
+            ret = SUIT_E_PARSE;
+        }
+    }
+    if (ret == SUIT_SUCCESS) {                    /* unprotected (map) */
+        if (wc_CBOR_DecodeMapStart(&ctx, &count) != WOLFCOSE_SUCCESS) {
+            ret = SUIT_E_PARSE;
+        }
+    }
+    for (i = 0; (i < count) && (ret == SUIT_SUCCESS); i++) {
+        if (wc_CBOR_DecodeInt(&ctx, &hkey) != WOLFCOSE_SUCCESS) {
+            ret = SUIT_E_PARSE;
+        }
+        else if (hkey == 4) {                     /* kid */
+            if (wc_CBOR_DecodeBstr(&ctx, kid, kidLen) != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_PARSE;
+            }
+        }
+        else {
+            if (wc_CBOR_Skip(&ctx) != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_PARSE;
+            }
+        }
+    }
+    return ret;
+}
 
 #define SUIT_P256_COORD_SZ 32
 #define SUIT_SHA256_SZ     32
@@ -146,6 +208,9 @@ int suit_verify_auth(struct suit_manifest* m)
     size_t suitDigestLen = 0;
     const uint8_t* coseSign1 = NULL;
     size_t coseSign1Len = 0;
+    const uint8_t* kid = NULL;
+    size_t kidLen = 0;
+    int keySlot = SUIT_KEY_SLOT;
     uint8_t* pub = NULL;
     ecc_key eccKey;
     int eccInit = 0;
@@ -163,8 +228,19 @@ int suit_verify_auth(struct suit_manifest* m)
     ret = suit_split_auth(m->authWrapper, m->authWrapperLen,
         &suitDigest, &suitDigestLen, &coseSign1, &coseSign1Len);
 
+    /* Select the trust anchor by the COSE_Sign1 key id (a pubkey hash, as in
+     * the TLV path), falling back to the configured slot when absent. */
     if (ret == SUIT_SUCCESS) {
-        pub = keystore_get_buffer(SUIT_KEY_SLOT);
+        if (suit_cose_kid(coseSign1, coseSign1Len, &kid, &kidLen)
+                == SUIT_SUCCESS) {
+            if (kid != NULL) {
+                keySlot = keyslot_id_by_sha(kid);
+                if (keySlot < 0) {
+                    keySlot = SUIT_KEY_SLOT;
+                }
+            }
+        }
+        pub = keystore_get_buffer(keySlot);
         if (pub == NULL) {
             ret = SUIT_E_AUTH;
         }

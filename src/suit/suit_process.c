@@ -127,6 +127,10 @@ static int suit_override(struct suit_context* ctx, WOLFCOSE_CBOR_CTX* c)
             if (wc_CBOR_DecodeUint(c, &uval) != WOLFCOSE_SUCCESS) {
                 ret = SUIT_E_PARSE;
             }
+            else if ((ctx->maxImageSize != 0u) &&
+                     (uval > (uint64_t)ctx->maxImageSize)) {
+                ret = SUIT_E_BOUNDS;
+            }
             else {
                 ctx->params.imageSize = uval;
             }
@@ -280,6 +284,9 @@ static int suit_run_sequence(struct suit_context* ctx, const uint8_t* seq,
             if (wc_CBOR_DecodeUint(&c, &uval) != WOLFCOSE_SUCCESS) {
                 ret = SUIT_E_PARSE;
             }
+            else if (uval >= (uint64_t)SUIT_MAX_COMPONENTS) {
+                ret = SUIT_E_BOUNDS;
+            }
             else {
                 ctx->componentIndex = (size_t)uval;
             }
@@ -296,6 +303,10 @@ static int suit_run_sequence(struct suit_context* ctx, const uint8_t* seq,
             }
             else if (ctx->params.content == NULL) {
                 ret = SUIT_E_INSTALL;
+            }
+            else if ((ctx->maxImageSize != 0u) &&
+                     (ctx->params.contentLen > ctx->maxImageSize)) {
+                ret = SUIT_E_BOUNDS;
             }
             else {
                 ret = suit_install_write(ctx, ctx->params.content,
@@ -370,6 +381,12 @@ int suit_process(struct suit_context* ctx, struct suit_manifest* m)
         return SUIT_E_INVALID_ARG;
     }
     ctx->m = m;
+
+    /* Anti-rollback: reject a manifest older than the installed sequence
+     * number, so a validly-signed but outdated manifest cannot downgrade. */
+    if (m->sequenceNumber < ctx->minSequence) {
+        return SUIT_E_ROLLBACK;
+    }
 
     /* suit-shared-sequence runs first (sets up parameters and component). */
     if ((ret == SUIT_SUCCESS) && (m->sharedSeq != NULL)) {
