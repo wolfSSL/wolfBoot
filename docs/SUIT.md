@@ -34,6 +34,7 @@ verify objects (lean, `WOLFCOSE_LEAN_VERIFY`). Fine-tuning macros:
 | --- | --- |
 | `SUIT_INSTALL_HANDOFF` (default) | verify then drive the existing A/B swap |
 | `SUIT_INSTALL_DIRECTIVES` | SUIT copy/write directives drive flash directly |
+| `SUIT_HAVE_ENCRYPTION` | decrypt COSE_Encrypt0 payloads on install (AES-GCM); enables AES-GCM in the build |
 | `SUIT_HAVE_FETCH` / `SUIT_HAVE_TRY_EACH` / `SUIT_HAVE_RUN_SEQUENCE` | optional commands |
 
 ## Architecture
@@ -84,10 +85,14 @@ CBOR/COSE tooling (test B); it is not a full draft-34 implementation.
 Implemented + host-tested + interop cross-checked: parse, COSE_Sign1 verify +
 digest binding, the command interpreter (identity + image-match conditions,
 set-component-index / override-parameters / write / copy directives), default
-deny, and the `wolfBoot_suit_verify()` entry point.
+deny, **payload decryption on install (COSE_Encrypt0 / AES-GCM) for
+confidentiality** (`SUIT_HAVE_ENCRYPTION`), and the `wolfBoot_suit_verify()`
+entry point.
 
-Follow-ups: A/B-swap handoff wiring from `wolfBoot_verify_authenticity`, and
-payload encryption (COSE_Encrypt0) for confidentiality.
+Follow-up: auto-dispatch from `wolfBoot_verify_authenticity` (detect a SUIT
+envelope in a partition and route to the SUIT path), which depends on the
+update partition layout (where the envelope and image sit) — a wolfUpdate
+integration decision.
 
 This PR is gated on the wolfCOSE fixes in wolfSSL/wolfCOSE PR #53; the submodule
 is pinned to that work and should be repinned to the wolfCOSE v1.0 tag before

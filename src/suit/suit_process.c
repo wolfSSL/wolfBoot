@@ -192,6 +192,66 @@ static int suit_id_match(const uint8_t* paramId, size_t paramLen,
     return ret;
 }
 
+/* Write install content for the current component. With a content-decryption
+ * key configured (SUIT_HAVE_ENCRYPTION) the content is a COSE_Encrypt0 message,
+ * decrypted into decBuf before ops->write; otherwise it is written as-is. */
+static int suit_install_write(struct suit_context* ctx,
+    const uint8_t* content, size_t contentLen)
+{
+    int ret = SUIT_SUCCESS;
+    int handled = 0;
+#ifdef SUIT_HAVE_ENCRYPTION
+    WOLFCOSE_KEY ek;
+    WOLFCOSE_HDR hdr;
+    uint8_t encScratch[256];
+    size_t ptLen = 0;
+    int ekInit = 0;
+
+    if (ctx->cek != NULL) {
+        handled = 1;
+        if (ctx->decBuf == NULL) {
+            ret = SUIT_E_INSTALL;
+        }
+        if (ret == SUIT_SUCCESS) {
+            if (wc_CoseKey_Init(&ek) != 0) {
+                ret = SUIT_E_CRYPTO;
+            }
+            else {
+                ekInit = 1;
+            }
+        }
+        if (ret == SUIT_SUCCESS) {
+            if (wc_CoseKey_SetSymmetric(&ek, ctx->cek, ctx->cekLen) != 0) {
+                ret = SUIT_E_CRYPTO;
+            }
+        }
+        if (ret == SUIT_SUCCESS) {
+            if (wc_CoseEncrypt0_Decrypt(&ek, content, contentLen, NULL, 0,
+                    NULL, 0, encScratch, sizeof(encScratch), &hdr,
+                    ctx->decBuf, ctx->decBufLen, &ptLen) != WOLFCOSE_SUCCESS) {
+                ret = SUIT_E_CRYPTO;
+            }
+        }
+        if (ret == SUIT_SUCCESS) {
+            if (ctx->ops->write(ctx->ops->ctx, ctx->componentIndex,
+                    ctx->decBuf, ptLen) != 0) {
+                ret = SUIT_E_INSTALL;
+            }
+        }
+        if (ekInit != 0) {
+            wc_CoseKey_Free(&ek);
+        }
+    }
+#endif
+    if ((handled == 0) && (ret == SUIT_SUCCESS)) {
+        if (ctx->ops->write(ctx->ops->ctx, ctx->componentIndex, content,
+                contentLen) != 0) {
+            ret = SUIT_E_INSTALL;
+        }
+    }
+    return ret;
+}
+
 /* Walk one SUIT_Command_Sequence: a flat array of (command, argument) pairs. */
 static int suit_run_sequence(struct suit_context* ctx, const uint8_t* seq,
     size_t seqLen)
@@ -237,9 +297,9 @@ static int suit_run_sequence(struct suit_context* ctx, const uint8_t* seq,
             else if (ctx->params.content == NULL) {
                 ret = SUIT_E_INSTALL;
             }
-            else if (ctx->ops->write(ctx->ops->ctx, ctx->componentIndex,
-                    ctx->params.content, ctx->params.contentLen) != 0) {
-                ret = SUIT_E_INSTALL;
+            else {
+                ret = suit_install_write(ctx, ctx->params.content,
+                    ctx->params.contentLen);
             }
         }
         else if (cmd == (int64_t)SUIT_DIR_COPY) {

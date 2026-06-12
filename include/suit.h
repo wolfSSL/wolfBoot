@@ -194,6 +194,13 @@ struct suit_context {
     size_t                           deviceVendorIdLen;
     const uint8_t*                   deviceClassId;
     size_t                           deviceClassIdLen;
+    /* Content-decryption key (SUIT_HAVE_ENCRYPTION). When set, directive-write
+     * treats the content parameter as a COSE_Encrypt0 message and decrypts it
+     * into decBuf before handing the plaintext to ops->write. */
+    const uint8_t*                   cek;
+    size_t                           cekLen;
+    uint8_t*                         decBuf;
+    size_t                           decBufLen;
 };
 
 int suit_open(struct suit_manifest* m, const uint8_t* env, size_t len);

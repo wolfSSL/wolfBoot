@@ -76,6 +76,12 @@ static const uint8_t VENDOR[16] = {
 static const uint8_t CLASSID[16] = {
     0x14,0x92,0xaf,0x14,0x25,0x69,0x5e,0x48,0xbf,0x42,0x9b,0x2d,0x51,0xf2,0xab,0x45 };
 
+/* Content-encryption key + IV for the encrypted-install case (A128GCM). */
+static const uint8_t CEK[16] = {
+    0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f };
+static const uint8_t ENC_IV[12] = {
+    0xa0,0xa1,0xa2,0xa3,0xa4,0xa5,0xa6,0xa7,0xa8,0xa9,0xaa,0xab };
+
 static const uint8_t TEST_D[32] = {
     0xC9,0xAF,0xA9,0xD8,0x45,0xBA,0x75,0x16,0x6B,0x5C,0x21,0x57,0x67,0xB1,0xD6,0x93,
     0x4E,0x50,0xC3,0xDB,0x36,0xE8,0x9B,0x12,0x7B,0x8A,0x62,0x2B,0x12,0x0F,0x67,0x21 };
@@ -223,8 +229,11 @@ static int enc_envelope(uint8_t* out, size_t outSz, size_t* outLen,
     return 0;
 }
 
-/* Author a full signed SUIT envelope (identity + install of FW) into env. */
-static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff)
+/* Author a full signed SUIT envelope (identity + install of FW) into env. When
+ * encrypt is set, the install content is a COSE_Encrypt0 of FW (decrypted on
+ * install); the image-digest is always over the FW plaintext. */
+static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff,
+    int encrypt)
 {
     WC_RNG rng;
     ecc_key eccKey;
@@ -232,13 +241,20 @@ static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff)
     uint8_t fwDigest[32], manDigest[32];
     uint8_t sdFw[64], sdMan[64];
     size_t sdFwLen = 0, sdManLen = 0;
-    uint8_t shared[64], validate[32], install[160], common[128], manifest[512];
+    uint8_t shared[64], validate[32], install[320], common[128], manifest[640];
     size_t sharedLen = 0, validateLen = 0, installLen = 0, commonLen = 0;
     size_t manifestLen = 0;
     uint8_t cose[256], aw[384];
     size_t coseLen = 0, awLen = 0;
     uint8_t scratch[1024];
+    const uint8_t* contentPtr = FW;
+    size_t contentLen = sizeof(FW);
     size_t i;
+#ifdef SUIT_HAVE_ENCRYPTION
+    WOLFCOSE_KEY enckey;
+    uint8_t encFW[256];
+    size_t encFWLen = 0;
+#endif
 
     CHECK(wc_Hash(WC_HASH_TYPE_SHA256, FW, (word32)sizeof(FW), fwDigest,
         sizeof(fwDigest)) == 0, "hash fw");
@@ -247,8 +263,26 @@ static int author(uint8_t* env, size_t envSz, size_t* envLen, size_t* sigOff)
     CHECK(enc_shared_seq(shared, sizeof(shared), &sharedLen) == 0, "shared");
     CHECK(enc_validate_seq(validate, sizeof(validate), &validateLen) == 0,
         "validate");
+
+#ifdef SUIT_HAVE_ENCRYPTION
+    if (encrypt) {
+        CHECK(wc_CoseKey_Init(&enckey) == 0, "enc key init");
+        CHECK(wc_CoseKey_SetSymmetric(&enckey, CEK, sizeof(CEK)) == 0,
+            "set sym key");
+        CHECK(wc_CoseEncrypt0_Encrypt(&enckey, WOLFCOSE_ALG_A128GCM,
+            ENC_IV, sizeof(ENC_IV), FW, sizeof(FW), NULL, 0, NULL, NULL, 0,
+            scratch, sizeof(scratch), encFW, sizeof(encFW), &encFWLen)
+            == WOLFCOSE_SUCCESS, "encrypt0");
+        wc_CoseKey_Free(&enckey);
+        contentPtr = encFW;
+        contentLen = encFWLen;
+    }
+#else
+    (void)encrypt;
+#endif
+
     CHECK(enc_install_seq(install, sizeof(install), &installLen, sdFw, sdFwLen,
-        FW, sizeof(FW)) == 0, "install");
+        contentPtr, contentLen) == 0, "install");
     CHECK(enc_common(common, sizeof(common), &commonLen, shared, sharedLen) == 0,
         "common");
     CHECK(enc_manifest(manifest, sizeof(manifest), &manifestLen, common,
@@ -313,12 +347,15 @@ int main(void)
     struct suit_context c;
     FILE* f;
     int ret;
+#ifdef SUIT_HAVE_ENCRYPTION
+    uint8_t decBuf[256];
+#endif
 
     memset(&ops, 0, sizeof(ops));
     ops.hash = comp_hash;
     ops.write = comp_write;
 
-    if (author(env, sizeof(env), &envLen, &sigOff) != 0) { return 1; }
+    if (author(env, sizeof(env), &envLen, &sigOff, 0) != 0) { return 1; }
     printf("authored full SUIT envelope: %zu bytes\n", envLen);
 
     /* Dump the envelope for the independent cross-check (cbor2 + pycose). */
@@ -367,6 +404,25 @@ int main(void)
     ret = suit_verify_auth(&m);
     CHECK(ret == SUIT_E_AUTH, "tampered signature must fail auth");
     printf("PASS: tampered signature rejected (auth)\n");
+
+#ifdef SUIT_HAVE_ENCRYPTION
+    /* Encrypted payload: install content is a COSE_Encrypt0, decrypted with the
+     * device key on write. Confidentiality end to end. */
+    if (author(env, sizeof(env), &envLen, &sigOff, 1) != 0) { return 1; }
+    CHECK(suit_open(&m, env, envLen) == SUIT_SUCCESS, "open (encrypted)");
+    CHECK(suit_verify_auth(&m) == SUIT_SUCCESS, "verify_auth (encrypted)");
+    g_flashLen = 0;
+    g_corrupt_write = 0;
+    ctx_init(&c, &m, &ops);
+    c.cek = CEK;
+    c.cekLen = sizeof(CEK);
+    c.decBuf = decBuf;
+    c.decBufLen = sizeof(decBuf);
+    CHECK(suit_process(&c, &m) == SUIT_SUCCESS, "process (encrypted) should pass");
+    CHECK(g_flashLen == sizeof(FW) && memcmp(g_flash, FW, sizeof(FW)) == 0,
+        "decrypted install must equal FW plaintext");
+    printf("PASS: encrypted payload decrypted + installed (confidentiality)\n");
+#endif
 
     printf("ALL SUIT INSTALL TESTS PASSED\n");
     return 0;

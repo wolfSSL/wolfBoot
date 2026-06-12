@@ -1579,9 +1579,21 @@ endif
 # Uses wolfCOSE (lib/wolfCOSE) for CBOR decode + COSE_Sign1 verify. See docs/SUIT.md.
 ifeq ($(WOLFBOOT_SUIT),1)
   CFLAGS+=-DWOLFBOOT_SUIT
-  CFLAGS+=-I$(WOLFBOOT_ROOT)/lib/wolfCOSE/include -DWOLFCOSE_LEAN_VERIFY
+  CFLAGS+=-I$(WOLFBOOT_ROOT)/lib/wolfCOSE/include
   OBJS+=./src/suit/suit_parse.o ./src/suit/suit_verify.o ./src/suit/suit_process.o ./src/suit/suit_wolfboot.o
   OBJS+=./lib/wolfCOSE/src/wolfcose.o ./lib/wolfCOSE/src/wolfcose_cbor.o
+  ifeq ($(SUIT_HAVE_ENCRYPTION),1)
+    # COSE_Sign1 verify + COSE_Encrypt0 decrypt (payload confidentiality). The
+    # plain LEAN_VERIFY profile drops encrypt, so select the pieces explicitly.
+    CFLAGS+=-DSUIT_HAVE_ENCRYPTION
+    CFLAGS+=-DWOLFCOSE_NO_SIGN1_SIGN -DWOLFCOSE_NO_MAC0 -DWOLFCOSE_NO_MAC \
+            -DWOLFCOSE_NO_SIGN -DWOLFCOSE_NO_ENCRYPT -DWOLFCOSE_NO_RECIPIENTS \
+            -DWOLFCOSE_NO_KEY_ENCODE -DWOLFCOSE_NO_KEY_DECODE \
+            -DWOLFCOSE_NO_ENCRYPT0_ENCRYPT
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+  else
+    CFLAGS+=-DWOLFCOSE_LEAN_VERIFY
+  endif
   ifeq ($(SUIT_INSTALL_DIRECTIVES),1)
     CFLAGS+=-DSUIT_INSTALL_DIRECTIVES
   else
