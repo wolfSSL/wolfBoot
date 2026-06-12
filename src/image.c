@@ -1383,6 +1383,17 @@ uint32_t wolfBoot_image_size(uint8_t *image)
 int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
+#ifdef WOLFBOOT_SUIT
+    if ((*magic != WOLFBOOT_MAGIC) && wolfBoot_image_is_suit(image)) {
+        /* SUIT envelope: no wolfBoot TLV header. fw_base/fw_size are set when
+         * the manifest is authenticated (wolfBoot_suit_verify_authenticity). */
+        if (!img->hdr_ok) {
+            img->hdr = image;
+        }
+        img->hdr_ok = 1;
+        return 0;
+    }
+#endif
     if (*magic != WOLFBOOT_MAGIC) {
         wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
             img->part, (unsigned int)*magic, img->hdr);
@@ -1633,6 +1644,14 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
     uint16_t stored_sha_len;
+#ifdef WOLFBOOT_SUIT
+    if (wolfBoot_image_is_suit(img->hdr)) {
+        /* Integrity is established by the manifest image-match during SUIT
+         * authentication, not by a wolfBoot header SHA. */
+        img->sha_ok = 1;
+        return 0;
+    }
+#endif
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
@@ -2246,6 +2265,16 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
 
     /* Reset certificate chain usage for this verification */
     g_leafKeyIdValid = 0;
+#endif
+
+#ifdef WOLFBOOT_SUIT
+    if (wolfBoot_image_is_suit(img->hdr)) {
+        if (wolfBoot_suit_verify_authenticity(img) == 0) {
+            wolfBoot_image_confirm_signature_ok(img);
+            return 0;
+        }
+        return -1;
+    }
 #endif
 
     stored_signature_size = get_header(img, HDR_SIGNATURE, &stored_signature);

@@ -16,3 +16,7 @@
 [submodule "lib/wolfHAL"]
 	path = lib/wolfHAL
 	url = https://github.com/wolfSSL/wolfHAL.git
+[submodule "lib/wolfCOSE"]
+	path = lib/wolfCOSE
+	url = https://github.com/wolfSSL/wolfCOSE.git
+	branch = main

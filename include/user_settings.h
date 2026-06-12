@@ -553,9 +553,19 @@ extern int tolower(int c);
 #endif
 
 
+/* SUIT firmware-encryption: COSE_Encrypt0 payload decrypt needs AES-GCM. */
+#if defined(SUIT_HAVE_ENCRYPTION)
+#   define WOLFSSL_AES_GCM
+#   define HAVE_AESGCM
+#   define GCM_TABLE_4BIT
+#   define WOLFSSL_AES_128
+#   define WOLFSSL_AES_256
+#endif
+
 #if !defined(ENCRYPT_WITH_AES128) && !defined(ENCRYPT_WITH_AES256) && \
     !defined(WOLFBOOT_TPM_PARMENC) && !defined(WOLFCRYPT_SECURE_MODE) && \
     !defined(SECURE_PKCS11) && !defined(WOLFCRYPT_TZ_PSA) && \
+    !defined(SUIT_HAVE_ENCRYPTION) && \
     !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
     #define NO_AES
 #endif
