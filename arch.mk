@@ -742,8 +742,26 @@ ifeq ($(ARCH),RISCV64)
   ifeq ($(RISCV_MMODE),1)
     # Machine Mode: Running directly from eNVM/L2 SRAM
     CFLAGS+=-DWOLFBOOT_RISCV_MMODE -DWOLFBOOT_DUALBOOT
+    # Minimal SBI runtime: services S-mode ecalls / timer / IPI when booting
+    # an S-mode OS (Linux).  Compiles to nothing unless WOLFBOOT_MMODE_SMODE_BOOT
+    # is also defined (see src/riscv_sbi.c).
+    OBJS+=src/riscv_sbi.o
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
+    # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated
+    # fpga_design_config.h. Setting LIBERO_FPGA_CONFIG_DIR enables DDR init
+    # and adds the directory to the include search path.
+    ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
+      CFLAGS+=-DMPFS_DDR_INIT -I$(LIBERO_FPGA_CONFIG_DIR)
+      # FIT/FDT boot: the E51 M-mode DDR boot loads a signed Yocto fitImage
+      # (kernel + dtb) from SD and hands the dtb to S-mode Linux, so enable
+      # the FIT parser (fit_find_images/fit_load_image in src/fdt.c).  The
+      # U54 S-mode build enables this in the RISCV_MMODE=0 branch below; the
+      # E51 M-mode DDR build needs it here too (it is not full MMU, so the
+      # do_boot dtb hand-off is gated on MMU || WOLFBOOT_FDT).
+      CFLAGS+=-DWOLFBOOT_FDT
+      OBJS+=src/fdt.o
+    endif
   else
     # Supervisor Mode: Running under HSS
     CFLAGS+=-DWOLFBOOT_DUALBOOT

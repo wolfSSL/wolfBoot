@@ -159,9 +159,13 @@ _copy_params:
     sd    zero, 48(s11)
     sd    zero, 56(s11)
 
-    /* Wait for E51 to signal HLS_MAIN_HART_STARTED */
+    /* Wait for E51 to signal HLS_MAIN_HART_STARTED.  Poll the DTIM copy
+     * of the flag, not the L2-scratch HLS: an E51 store to the cacheable
+     * scratchpad can be lost on dirty-line eviction (layout-dependent),
+     * which left the secondaries parked here until the kernel's HSM
+     * hart_start IPI arrived -- too late for its 1s online window. */
     li    t3, 0x12344321
-    la    t1, _main_hart_hls
+    li    t1, MPFS_DTIM_MAIN_STARTED_ADDR
 .L_wait_main_hart:
     lwu   t2, 0(t1)
     bne   t3, t2, .L_wait_main_hart
@@ -186,6 +190,14 @@ _copy_params:
     sw    t0, 0(s11)
     fence iorw, iorw
     fence.i
+
+    /* The C code on this hart (secondary_hart_entry and the M->S release
+     * path) addresses small globals gp-relative; only the E51's
+     * .L_sram_entry path sets gp, so set it here too. */
+    .option push
+    .option norelax
+    la    gp, __global_pointer$
+    .option pop
 
     csrr  a0, mhartid
     mv    a1, s11

@@ -34,6 +34,10 @@
 #include "hal.h"
 #include "disk.h"
 
+#ifdef SDHCI_BLOCK_VIA_PDMA
+extern int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
+#endif
+
 /* ============================================================================
  * Platform DMA cache maintenance (weak defaults - override in HAL)
  * ============================================================================ */
@@ -480,11 +484,15 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
         SDHCI_SRS12_EINT)) == 0 && --timeout > 0);
 
     if (timeout == 0) {
-        wolfBoot_printf("sdhci_send_cmd: timeout waiting for command complete\n");
+        wolfBoot_printf("sdhci_send_cmd: cmd %u arg 0x%08X resp %u: "
+            "timeout waiting for command complete\n",
+            cmd_index, cmd_arg, resp_type);
         status = -1; /* error */
     }
     else if (SDHCI_REG(SDHCI_SRS12) & SDHCI_SRS12_EINT) {
-        wolfBoot_printf("sdhci_send_cmd: error SRS12: 0x%08X\n", SDHCI_REG(SDHCI_SRS12));
+        wolfBoot_printf("sdhci_send_cmd: cmd %u arg 0x%08X resp %u: "
+            "error SRS12=0x%08X\n",
+            cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         status = -1; /* error */
     }
 
@@ -533,6 +541,21 @@ static int sdhci_wait_busy(int check_dat0)
     while ((status = sdhci_cmd(MMC_CMD13_SEND_STATUS,
         (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY);
     return status;
+}
+
+/* Full controller software reset for OS handoff: the bootloader has been
+ * driving the SDHC (clocks, PIO mode, an initialized card), and handing
+ * that state to the OS driver makes its re-init/tuning intermittently
+ * fail.  SDHCI software-reset-all returns the host registers to their
+ * power-on defaults so the OS finds a clean controller. */
+void sdhci_shutdown(void)
+{
+    uint32_t to = 100000U;
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_ALL);
+    while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_ALL) != 0U &&
+           to > 0U) {
+        to--;
+    }
 }
 
 /* Reset data and command lines to recover from errors */
@@ -611,6 +634,15 @@ static int sdcard_power_init_seq(uint32_t voltage)
         wolfBoot_printf("SD: CMD0 succeeded after %d retries\n", retries);
     }
     if (status == 0) {
+        /* SD spec doesn't require a delay between CMD0 and CMD8, but on
+         * the Cadence SD4HC controller used by Microchip MPFS the card's
+         * first CMD8 response can come back with CMD_INDEX_ERR +
+         * CMD_END_BIT_ERR if CMD8 is issued immediately after CMD0.  HSS
+         * does an explicit ~100 us spin between the two; we use 200 us
+         * to add margin against slower-responding cards.  Applied on all
+         * SDHCI platforms deliberately: the delay is harmless settle
+         * margin and the SD spec permits it. */
+        udelay(200);
         /* send the operating conditions command */
         status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
             SDHCI_RESP_R7);
@@ -1289,7 +1321,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     #endif /* !SDHCI_SDMA_DISABLED */
     }
     else {
-        /* PIO (Programmed I/O) mode — reads/writes data word-by-word via
+        /* PIO (Programmed I/O) mode -- reads/writes data word-by-word via
          * the SRS08 data port register.
          *
          * CAUTION: On Arasan SDHCI v3.0 (ZynqMP, Versal), multi-block PIO
@@ -1318,7 +1350,32 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                     SDHCI_BLOCK_SIZE : sz;
                 for (i = 0; i < xfer_sz; i += 4) {
                     if (dir == SDHCI_DIR_READ) {
+                #ifdef SDHCI_PIO_WRITE_NONCACHED_ALIAS
+                        /* Bypass L2 cache when landing PIO data into the
+                         * cached DDR window.  On the MPFS250 Video Kit,
+                         * sustained PIO writes to cached DDR thrash L2
+                         * cache enough to corrupt L2 Scratch (where the
+                         * M-mode stack lives) and trigger a cause=2
+                         * epc=0 trap during the post-block CMD13 wait.
+                         * Writing via the non-cached alias bypasses L2
+                         * entirely; upper layers still read the buffer
+                         * at its cached address (L2 misses, fetches
+                         * from DDR).
+                         *
+                         * Guard: only apply the alias when the buffer
+                         * is actually in the cached DDR window (high
+                         * bit set, top 4 bits = 0x8).  Stack-local
+                         * tmp_block buffers in L2 Scratch (0x0A...)
+                         * must NOT be aliased -- the OR would translate
+                         * them into peripheral register space. */
+                        uintptr_t nc = (uintptr_t)buf;
+                        if ((nc & 0xF0000000UL) == 0x80000000UL) {
+                            nc |= (uintptr_t)SDHCI_PIO_WRITE_NONCACHED_ALIAS;
+                        }
+                        *(volatile uint32_t *)nc = SDHCI_REG(SDHCI_SRS08);
+                #else
                         *buf = SDHCI_REG(SDHCI_SRS08);
+                #endif
                     } else {
                         SDHCI_REG_SET(SDHCI_SRS08, *buf);
                     }
@@ -1339,6 +1396,18 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             if (reg & SDHCI_SRS12_EINT) {
                 break; /* error */
             }
+        }
+
+        /* Clear any residual Buffer-Read-Ready so the NEXT single-block
+         * sdhci_read() does not see a stale BRR from this block and read the
+         * data port before the new block's data is ready -- that returns
+         * stale/partial data and intermittently corrupts the loaded image.
+         * The DISK_EMMC path clears BRR between blocks of a multi-block
+         * transfer; the SD single-block path (one CMD17 per block) needs the
+         * same clear after each block.  Deliberately unguarded: BRR is W1C
+         * in the SDHCI spec, so the clear is correct on every platform. */
+        if (dir == SDHCI_DIR_READ) {
+            SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
         }
 
         /* For write: wait for transfer complete before checking status */
@@ -1417,6 +1486,14 @@ int sdhci_init(void)
 
     /* Call platform-specific initialization (clocks, resets, pin mux) */
     sdhci_platform_init();
+
+#ifdef DEBUG_SDHCI
+    /* Dump capability + presence registers so the bring-up log shows the
+     * controller's reported base clock and whether a card was detected. */
+    wolfBoot_printf("SDHCI: SRS09=0x%08X SRS16=0x%08X SRS17=0x%08X\n",
+        SDHCI_REG(SDHCI_SRS09), SDHCI_REG(SDHCI_SRS16),
+        SDHCI_REG(SDHCI_SRS17));
+#endif
 
     /* Allow controller to settle after platform init (slot type change,
      * soft reset, clock configuration). Without this, the controller may
@@ -1609,7 +1686,50 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
                 tmp_block, SDHCI_BLOCK_SIZE);
             if (status == 0) {
                 uint8_t* tmp_buf = (uint8_t*)tmp_block;
+            #ifdef SDHCI_BLOCK_VIA_PDMA
+                /* Same constraint as the full-block path below: direct CPU
+                 * writes to the DDR destination do not land on the MPFS250
+                 * Video Kit, so the final partial / unaligned chunk must be
+                 * written through the PDMA master too.  A plain memcpy() here
+                 * left the last sub-512-byte block (e.g. the 244-byte tail of
+                 * a 19 MB image) stale in DDR, so integrity failed on the
+                 * tail while every full block was correct.  Verify via the
+                 * non-cached alias and re-PDMA on a drop. */
+                if (((uintptr_t)buf & 0xF0000000UL) == 0x80000000UL) {
+                    volatile uint8_t *ncv = (volatile uint8_t *)
+                        ((uintptr_t)buf | 0x40000000UL);
+                    int retry;
+                    int mism = 1;
+                    uint32_t k;
+                    for (retry = 0; retry < 8 && mism != 0; retry++) {
+                        mpfs_pdma_memcpy(buf, tmp_buf + start_offset, read_sz);
+                        *(volatile uint32_t *)0x20001000UL = 0xDEADC0DEU;
+                        __asm__ volatile("fence iorw,iorw" ::: "memory");
+                        mism = 0;
+                        for (k = 0; k < read_sz; k++) {
+                            if (ncv[k] != tmp_buf[start_offset + k]) {
+                                mism = 1;
+                                break;
+                            }
+                        }
+                    }
+                    if (mism != 0) {
+                        /* The verified copy never landed: report the read
+                         * as failed instead of letting the corruption
+                         * surface later as a signature mismatch. */
+                        wolfBoot_printf("SDHCI: partial-block PDMA write "
+                            "failed after retries\n");
+                        return -1;
+                    }
+                }
+                else {
+                    /* destination not in DDR (e.g. an L2 header/GPT buffer):
+                     * a plain CPU copy is correct and lands. */
+                    memcpy(buf, tmp_buf + start_offset, read_sz);
+                }
+            #else
                 memcpy(buf, tmp_buf + start_offset, read_sz);
+            #endif
                 start_offset = 0;
             }
         }
@@ -1617,10 +1737,98 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
             /* direct full block(s) read */
             uint32_t blocks = (count / SDHCI_BLOCK_SIZE);
             read_sz = (blocks * SDHCI_BLOCK_SIZE);
+        #if defined(SDHCI_FORCE_SINGLE_BLOCK_READ)
+            /* On Arasan/Cadence-family controllers (ZynqMP, Versal, MPFS)
+             * multi-block PIO reads (CMD18) suffer a documented BRR race
+             * (see CAUTION above) and SDMA does not restart cleanly across
+             * boundary crossings.  Force a sequence of CMD17 single-block
+             * reads instead - slower but reliable.  ~1024 reads of 512 B
+             * for one 512 KB chunk takes a few hundred ms. */
+            uint32_t i;
+            read_sz = SDHCI_BLOCK_SIZE;
+            status = 0;
+        #ifdef SDHCI_BLOCK_VIA_PDMA
+            /* 2-stage path for boards where direct CPU writes to the
+             * destination DDR address don't land (MPFS250 Video Kit):
+             * SDHCI PIO into a small L2 Scratch staging buffer, then
+             * mpfs_pdma_memcpy() copies the block into DDR via the
+             * PDMA master (which has a working AXI->DDR write path). */
+            {
+                static uint32_t sdhci_pdma_staging
+                    [SDHCI_BLOCK_SIZE / sizeof(uint32_t)];
+                int pdma_retries = 0; /* PDMA-write retries needed */
+                int pdma_hard = 0;    /* blocks that never landed (8 tries) */
+                int retry;
+                int mism;
+                uint32_t w;
+                for (i = 0; i < blocks && status == 0; i++) {
+                    uint8_t *block_dst = buf + i * SDHCI_BLOCK_SIZE;
+                    *(volatile uint32_t*)0x20001000UL = 0xDEADC0DEU; /* WDT */
+                    status = sdhci_read(MMC_CMD17_READ_SINGLE,
+                        block_addr + i, sdhci_pdma_staging,
+                        SDHCI_BLOCK_SIZE);
+                    if (status != 0) {
+                        continue;
+                    }
+                    mpfs_pdma_memcpy(block_dst, sdhci_pdma_staging,
+                        SDHCI_BLOCK_SIZE);
+                    if (((uintptr_t)block_dst & 0xF0000000UL)
+                            == 0x80000000UL) {
+                        /* PDMA-write verify + retry.  The PDMA->DDR write
+                         * intermittently drops a block when interleaved
+                         * with SDHCI single-block reads (staging correct,
+                         * DDR stale, persists after a fence).  Read the
+                         * block back through the non-cached alias and
+                         * re-PDMA until it lands (or give up after 8). */
+                        volatile uint32_t *ncv = (volatile uint32_t *)
+                            ((uintptr_t)block_dst | 0x40000000UL);
+                        mism = 0;
+                        for (retry = 0; retry < 8; retry++) {
+                            __asm__ volatile("fence iorw,iorw" ::: "memory");
+                            mism = 0;
+                            for (w = 0; w < SDHCI_BLOCK_SIZE / 4U; w++) {
+                                if (ncv[w] != sdhci_pdma_staging[w]) {
+                                    mism = 1;
+                                    break;
+                                }
+                            }
+                            if (mism == 0) {
+                                break;
+                            }
+                            pdma_retries++;
+                            mpfs_pdma_memcpy(block_dst, sdhci_pdma_staging,
+                                SDHCI_BLOCK_SIZE);
+                            *(volatile uint32_t *)0x20001000UL = 0xDEADC0DEU;
+                        }
+                        if (mism != 0) {
+                            pdma_hard++;
+                            /* Unrecoverable verified-write failure: fail
+                             * the read rather than return corrupt data. */
+                            status = -1;
+                        }
+                    }
+                }
+                if (pdma_retries > 0 || pdma_hard > 0) {
+                    wolfBoot_printf("SDHCI: pdma_retries=%d hard_fail=%d\n",
+                        pdma_retries, pdma_hard);
+                }
+            }
+        #else
+            for (i = 0; i < blocks && status == 0; i++) {
+                uint8_t *block_dst = buf + i * SDHCI_BLOCK_SIZE;
+                status = sdhci_read(MMC_CMD17_READ_SINGLE,
+                    block_addr + i,
+                    (uint32_t*)block_dst,
+                    SDHCI_BLOCK_SIZE);
+            }
+        #endif
+            read_sz = blocks * SDHCI_BLOCK_SIZE;
+        #else
             status = sdhci_read(blocks > 1 ?
                                 MMC_CMD18_READ_MULTIPLE :
                                 MMC_CMD17_READ_SINGLE,
                 block_addr, (uint32_t*)buf, read_sz);
+        #endif
         }
         if (status != 0) {
             break;

@@ -248,6 +248,7 @@
 #define SDHCI_SRS11_DTCV_SHIFT  16
 #define SDHCI_SRS11_DTCV_MASK   (0x0FU << 16)
 #define SDHCI_SRS11_RESET_DAT_CMD   ((1U << 25) | (1U << 26))
+#define SDHCI_SRS11_RESET_ALL       (1U << 24)
 
 /* SRS12 - Normal Interrupt Status */
 #define SDHCI_SRS12_CC          (1U << 0)   /* Command complete */

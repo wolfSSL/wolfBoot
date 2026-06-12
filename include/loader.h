@@ -25,6 +25,8 @@
 #ifndef LOADER_H
 #define LOADER_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -142,8 +144,21 @@ static inline void wolfBoot_panic(void)
     extern void panic(void);
     panic();
 #endif
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
+    /* Pet MSS WDT in panic loop so GDB has unlimited halt time
+     * to inspect memory.  Without this, WDT fires after ~1 sec
+     * and the chip resets while GDB is paused. */
+    while(1) {
+        *(volatile uint32_t*)0x20001000UL = 0xDEADC0DEU;  /* WDT_E51 REFRESH */
+        *(volatile uint32_t*)0x20101000UL = 0xDEADC0DEU;  /* WDT_U54_1 */
+        *(volatile uint32_t*)0x20103000UL = 0xDEADC0DEU;  /* WDT_U54_2 */
+        *(volatile uint32_t*)0x20105000UL = 0xDEADC0DEU;  /* WDT_U54_3 */
+        *(volatile uint32_t*)0x20107000UL = 0xDEADC0DEU;  /* WDT_U54_4 */
+    }
+#else
     while(1)
         ;
+#endif
 }
 #endif
 

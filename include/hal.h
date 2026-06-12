@@ -33,8 +33,11 @@ extern "C" {
 #include <stdint.h>
 
 /* Architecture specific calls */
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
+/* Weak copy hook for FIT subimages (kernel/dtb): default memcpy; boards where
+ * CPU writes to the load address don't land override it with a DMA copy. */
+extern void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif

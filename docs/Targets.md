@@ -878,7 +878,7 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 
 ### Supported Boot Configurations
 
-Five ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+Six ready-to-use config templates cover all supported boot mode / storage / memory combinations:
 
 | Configuration | Config File | Boot Mode | Storage | Memory | HSS |
 |---------------|-------------|-----------|---------|--------|-----|
@@ -887,21 +887,51 @@ Five ready-to-use config templates cover all supported boot mode / storage / mem
 | **QSPI (S-mode)** | `polarfire_mpfs250_qspi.config` | S-mode (U54 via HSS) | MSS or SC QSPI | DDR | Yes |
 | **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
 | **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
+| **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
+
+The **M-Mode + DDR** configuration brings up the LPDDR4 controller from
+the E51 in M-mode (no HSS), then loads a signed FIT image from SD card,
+verifies it (SHA384 + ECC384) and hands off to a U54 hart in S-mode.
+wolfBoot includes a minimal SBI runtime (`src/riscv_sbi.c`) so the
+hand-off target can be a Linux kernel: tested booting 4-CPU SMP Yocto
+Linux to a login prompt in ~40 s from power-on on the MPFS250T Video
+Kit. Because all
+LIBERO_SETTING_\* values are board-specific, this build pulls them from
+a Libero/HSS-generated `fpga_design_config.h` pointed at by the
+`LIBERO_FPGA_CONFIG_DIR` makefile variable - typical sources are an
+HSS Video Kit build at
+`<hss>/build/boards/mpfs-video-kit/fpga_design_config` or a Libero MSS
+Configurator export. Setting `LIBERO_FPGA_CONFIG_DIR` automatically
+defines `MPFS_DDR_INIT` and adds the directory to the include path
+(see `arch.mk`); when unset, the DDR HAL is excluded and the build
+still produces a working M-mode wolfBoot without DDR. Add
+`-DDEBUG_DDR` to `CFLAGS_EXTRA` for verbose register-level traces
+during bring-up.
+
+A compile-only stub `tools/ci/mpfs_libero_stub/fpga_design_config.h`
+exists for GitHub Actions: every `LIBERO_SETTING_*` symbol referenced
+by the HAL is defined to `0` so the M-Mode + DDR build path stays
+under continuous integration. The stub is **not** runnable - real
+boards must point `LIBERO_FPGA_CONFIG_DIR` at the actual Libero / HSS
+output.
 
 Key build settings that differ between configurations:
 
-| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode |
-|---------|--------|------|------|--------|--------|
-| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` |
-| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` |
-| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 |
-| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 |
-| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 |
-| `MPFS_L2LIM` | – | – | – | 1 | – |
-| `RISCV_MMODE` | – | – | – | – | 1 |
-| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` |
-| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A |
-| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 |
+| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode | M-Mode + DDR |
+|---------|--------|------|------|--------|--------|--------------|
+| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` | `0x0A000000` |
+| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` | `0x82000000` |
+| `WOLFBOOT_LOAD_DTS_ADDRESS` | `0x8A000000` | `0x8A000000` | `0x8A000000` | – | – | `0x8A000000` |
+| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 | 0 |
+| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 | 1 |
+| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 | 0 |
+| `MPFS_L2LIM` | – | – | – | 1 | – | – |
+| `RISCV_MMODE` | – | – | – | – | 1 | 1 |
+| `LIBERO_FPGA_CONFIG_DIR` | – | – | – | – | – | required |
+| `WOLFBOOT_MMODE_SMODE_BOOT` | – | – | – | – | – | 1 |
+| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` | `mpfs250-m.ld` |
+| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A | N/A |
+| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 | 1 |
 
 > **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
 > crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
@@ -1109,8 +1139,7 @@ or DDR required. This is the simplest bring-up path.
 * Executes from L2 Scratchpad SRAM (256 KB at `0x0A000000`)
 * Loads signed application from SC QSPI flash to L2 Scratchpad (`0x0A010200`)
 * No HSS or DDR required — boots entirely from on-chip memory
-* Wakes and manages secondary U54 harts via IPI
-* Per-hart UART output (each hart uses its own MMUART)
+* Parks and releases secondary U54 harts via CLINT IPI
 * ECC384 + SHA384 signature verification
 
 **Relevant files:**
@@ -1215,8 +1244,51 @@ Booting at 0x...
 - **Strip debug symbols** before signing the test-app ELF. The debug build is ~150 KB but the
   stripped ELF is ~5 KB. L2 Scratchpad has ~150 KB available between wolfBoot code and the stack:
   `riscv64-unknown-elf-strip --strip-debug test-app/image.elf`
-- **DDR support:** DDR initialization is available on the `polarfire_ddr` branch for use cases
-  that require loading larger applications to DDR memory.
+- **DDR support:** software LPDDR4 initialization is included via the **M-Mode + DDR**
+  configuration (`polarfire_mpfs250_m.config`, requires `LIBERO_FPGA_CONFIG_DIR`) for use cases
+  that require loading larger images (e.g. a Linux FIT) to DDR memory. See the next section.
+
+### PolarFire SoC M-Mode + DDR: booting Linux (wolfSBI)
+
+The **M-Mode + DDR** configuration (`config/examples/polarfire_mpfs250_m.config`) replaces both
+HSS and OpenSBI: wolfBoot performs the LPDDR4 init/training on the E51, loads and verifies a
+signed Yocto FIT image (kernel + dtb) from SD card into DDR, applies device-tree fixups, releases
+U54 hart 1 into S-mode at the kernel entry, and then remains resident as a minimal M-mode SBI
+runtime. Validated on the MPFS250T Video Kit: 4-CPU SMP Yocto Linux to login in ~40 s from
+power-on.
+
+**wolfSBI runtime** (`src/riscv_sbi.c`, generic RISC-V with HAL hooks; enabled by
+`WOLFBOOT_MMODE_SMODE_BOOT`):
+* SBI v0.2 extensions: BASE, TIME (per-hart `mtimecmp`, MTIP-to-STIP injection), IPI (SSIP
+  injection via CLINT MSIP), RFENCE (remote `fence.i` / `sfence.vma` with completion wait),
+  HSM (`hart_start`/`hart_stop`/`hart_status` backed by per-hart start mailboxes), DBCN and the
+  legacy console putchar (shared with the wolfBoot UART), SRST.
+* `rdtime` emulation: the U54/E51 have no `time` CSR, so reads trap as illegal instruction from
+  S/U-mode and are emulated from CLINT MTIME (enabled via SYSREG `RTC_CLOCK_CR`, 1 MHz to match
+  the device tree `timebase-frequency`).
+* Misaligned load/store emulation (not delegatable on these harts) via MPRV byte accesses,
+  including compressed forms; the kernel relies on this for unaligned copy tails.
+* Per-hart M-mode trap stacks live in the `hss-buffer` reserved (nomap) DDR region; cross-hart
+  state (HSM mailboxes, IPI flags, the hart-release gate flag) lives in the E51 DTIM at
+  `0x01000000`, which is uncached and coherent for all harts. Cacheable L2-scratchpad memory
+  must not be used for cross-hart signalling (stores can be lost on dirty-line eviction).
+
+**Device-tree fixups** applied to the loaded dtb (`hal/mpfs250.c`): bootargs/root device,
+MAC addresses from the device serial number, and all five MSS watchdog nodes are disabled.
+
+**Watchdog policy:** the MSS watchdogs always count and reset the chip on timeout (they cannot
+be disabled in hardware, and `CONTROL=0` does not prevent the reset). After hand-off the parked
+E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
+the dtb fixup so the two never conflict.
+
+**Hand-off / SMP flow:** secondary harts park in eNVM until the E51 signals image-copy
+completion (DTIM gate flag), then park in a WFI loop. The boot hart is released with a staged
+mailbox {entry, dtb} plus MSIP; Linux brings up the remaining harts through SBI HSM
+`hart_start`, which uses the same mailbox + MSIP path. The release path must stay fast
+(no UART access): the kernel allows roughly one second for a started hart to come online.
+
+**DEBUG_DDR note:** DDR training no longer depends on `DEBUG_DDR` console timing; the flag is
+purely diagnostic and off by default.
 
 ### PolarFire testing
 
