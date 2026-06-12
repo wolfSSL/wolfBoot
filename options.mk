@@ -1574,3 +1574,26 @@ endif
 ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
 endif
+
+# SUIT manifest update support (draft-ietf-suit-manifest-34), off by default.
+# Uses wolfCOSE (lib/wolfCOSE) for CBOR decode + COSE_Sign1 verify. See docs/SUIT.md.
+ifeq ($(WOLFBOOT_SUIT),1)
+  CFLAGS+=-DWOLFBOOT_SUIT
+  CFLAGS+=-I$(WOLFBOOT_ROOT)/lib/wolfCOSE/include -DWOLFCOSE_LEAN_VERIFY
+  OBJS+=./src/suit/suit_parse.o ./src/suit/suit_verify.o ./src/suit/suit_process.o ./src/suit/suit_wolfboot.o
+  OBJS+=./lib/wolfCOSE/src/wolfcose.o ./lib/wolfCOSE/src/wolfcose_cbor.o
+  ifeq ($(SUIT_INSTALL_DIRECTIVES),1)
+    CFLAGS+=-DSUIT_INSTALL_DIRECTIVES
+  else
+    CFLAGS+=-DSUIT_INSTALL_HANDOFF
+  endif
+  ifeq ($(SUIT_HAVE_FETCH),1)
+    CFLAGS+=-DSUIT_HAVE_FETCH
+  endif
+  ifeq ($(SUIT_HAVE_TRY_EACH),1)
+    CFLAGS+=-DSUIT_HAVE_TRY_EACH
+  endif
+  ifeq ($(SUIT_HAVE_RUN_SEQUENCE),1)
+    CFLAGS+=-DSUIT_HAVE_RUN_SEQUENCE
+  endif
+endif
