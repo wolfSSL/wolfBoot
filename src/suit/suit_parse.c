@@ -154,6 +154,7 @@ int suit_open(struct suit_manifest* m, const uint8_t* env, size_t len)
 
     m->env = env;
     m->envLen = len;
+    m->envEncodedLen = 0;
     m->manifest = NULL;
     m->manifestLen = 0;
     m->authWrapper = NULL;
@@ -222,6 +223,7 @@ int suit_open(struct suit_manifest* m, const uint8_t* env, size_t len)
     }
 
     if (ret == SUIT_SUCCESS) {
+        m->envEncodedLen = ctx.idx;
         if ((m->manifest == NULL) || (m->authWrapper == NULL)) {
             ret = SUIT_E_PARSE;
         }

@@ -144,6 +144,7 @@ enum suit_cose_digest_alg {
 struct suit_manifest {
     const uint8_t* env;         /* envelope buffer (caller-owned) */
     size_t         envLen;
+    size_t         envEncodedLen; /* bytes the envelope CBOR actually occupies */
     const uint8_t* manifest;    /* bstr-wrapped SUIT_Manifest */
     size_t         manifestLen;
     const uint8_t* authWrapper; /* suit-authentication-wrapper contents */

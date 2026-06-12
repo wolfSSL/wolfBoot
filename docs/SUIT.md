@@ -44,9 +44,20 @@ is via a pluggable `struct suit_component_ops` (hash/write/copy) the host
 supplies. In wolfBoot those wrap the flash HAL; the host unit test wraps a RAM
 buffer. This keeps the SUIT code reusable outside wolfBoot.
 
-- `suit_open()` — parse the envelope + manifest (zero-copy offsets).
-- `suit_verify_auth()` — COSE_Sign1 + digest binding.
-- `suit_process()` — command-sequence interpreter (conditions/directives).
+- `suit_open()`: parse the envelope + manifest (zero-copy offsets).
+- `suit_verify_auth()`: COSE_Sign1 + digest binding.
+- `suit_process()`: command-sequence interpreter (conditions/directives).
+
+## Boot-time dispatch
+
+When `WOLFBOOT_SUIT` is enabled, `wolfBoot_verify_authenticity` (and the open /
+integrity path) detect whether a partition holds a wolfBoot TLV image
+(`WOLFBOOT_MAGIC`) or a SUIT envelope (CBOR), and route the SUIT case to the SUIT
+path automatically; the TLV path is untouched. The layout is concatenated
+`[envelope][image]`: the manifest is authenticated, `image-match` hashes the
+image that follows the envelope, and on success the image is exposed as
+`fw_base`/`fw_size` for the existing A/B swap. The TLV path remains the default
+when the macro is off.
 
 ## Test
 
@@ -86,13 +97,13 @@ Implemented + host-tested + interop cross-checked: parse, COSE_Sign1 verify +
 digest binding, the command interpreter (identity + image-match conditions,
 set-component-index / override-parameters / write / copy directives), default
 deny, **payload decryption on install (COSE_Encrypt0 / AES-GCM) for
-confidentiality** (`SUIT_HAVE_ENCRYPTION`), and the `wolfBoot_suit_verify()`
-entry point.
+confidentiality** (`SUIT_HAVE_ENCRYPTION`), the `wolfBoot_suit_verify()` entry
+point, and **boot-time auto-dispatch** (format detection from
+`wolfBoot_verify_authenticity`, concatenated `[envelope][image]` layout, handoff
+to the A/B swap).
 
-Follow-up: auto-dispatch from `wolfBoot_verify_authenticity` (detect a SUIT
-envelope in a partition and route to the SUIT path), which depends on the
-update partition layout (where the envelope and image sit) — a wolfUpdate
-integration decision.
+Follow-ups: `directive-fetch` (networked payload retrieval, wolfUpdate), and the
+optional commands (`try-each` / `run-sequence` / `swap`).
 
 This PR is gated on the wolfCOSE fixes in wolfSSL/wolfCOSE PR #53; the submodule
 is pinned to that work and should be repinned to the wolfCOSE v1.0 tag before
