@@ -243,6 +243,12 @@ ifeq ($(ARCH),ARM)
     endif
   endif
 
+  ifeq ($(TARGET),stm32wba)
+    CORTEX_M33=1
+    ARCH_FLASH_OFFSET=0x08000000
+    SPI_TARGET=stm32
+  endif
+
   ifeq ($(TARGET),stm32l5)
     CORTEX_M33=1
     CFLAGS+=-Ihal
