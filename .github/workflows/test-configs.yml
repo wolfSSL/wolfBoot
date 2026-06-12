@@ -335,7 +335,6 @@ jobs:
     with:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250_m_qspi.config
-      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
 
   raspi3_test:
     uses: ./.github/workflows/test-build.yml

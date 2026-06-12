@@ -56,6 +56,22 @@ extern void (* const IV[])(void);
 extern void main(void);
 extern void reloc_trap_vector(const uint32_t *address);
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+/* Minimal SBI runtime (src/riscv_sbi.c): services S-mode ecalls and the
+ * M-mode timer/software interrupts that back the S-mode timer and IPIs. */
+extern unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc);
+extern void sbi_timer_irq(void);
+extern void sbi_ipi_irq(unsigned long hartid);
+extern unsigned long sbi_illegal_insn(unsigned long *regs, unsigned long epc,
+                                      unsigned long tval);
+extern unsigned long sbi_misaligned_ldst(unsigned long *regs,
+                                         unsigned long epc,
+                                         unsigned long tval,
+                                         unsigned long cause);
+extern void sbi_mscratch_init(unsigned long hartid);
+extern void sbi_hart_mark_started(unsigned long hartid);
+#endif
+
 /* Trap state saved for debugging */
 #if __riscv_xlen == 64
 static uint64_t last_cause = 0, last_epc = 0, last_tval = 0;
@@ -155,13 +171,64 @@ unsigned long WEAKFUNCTION handle_trap_ex(unsigned long cause, unsigned long epc
     last_epc = epc;
     last_tval = tval;
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    /* SBI runtime: service the S-mode environment calls and the M-mode
+     * timer/software interrupts that back the S-mode timer and IPIs.  All
+     * other traps fall through to the fault handler below. */
+    {
+        unsigned long ec = cause & MCAUSE_CAUSE;
+        if ((cause & MCAUSE_INT) != 0UL) {
+            if (ec == (unsigned long)IRQ_M_TIMER) {
+                sbi_timer_irq();
+                return epc;
+            }
+            if (ec == (unsigned long)IRQ_M_SOFT) {
+                unsigned long self;
+                __asm__ volatile("csrr %0, mhartid" : "=r"(self));
+                sbi_ipi_irq(self);
+                return epc;
+            }
+        }
+        else if (ec == 9UL) { /* environment call from S-mode */
+            return sbi_handle_ecall(regs, epc);
+        }
+        else if (ec == 2UL) {
+            /* Illegal instruction from S-mode OR U-mode: try the SBI
+             * emulation path (rdtime -- these harts have no time CSR, and
+             * userspace reaches it via the vDSO clock_gettime path). */
+            unsigned long mpp = (csr_read(mstatus) >> 11) & 3UL;
+            if (mpp != 3UL) { /* any non-M context */
+                unsigned long nepc = sbi_illegal_insn(regs, epc, tval);
+                if (nepc != 0UL) {
+                    return nepc;
+                }
+            }
+            /* not handled: fall through to the fatal dump below */
+        }
+        else if (ec == 4UL || ec == 6UL) {
+            /* Misaligned load/store from S/U mode: these harts cannot
+             * delegate misaligned traps; firmware emulates them byte-wise
+             * (OpenSBI parity). */
+            unsigned long mpp = (csr_read(mstatus) >> 11) & 3UL;
+            if (mpp != 3UL) {
+                unsigned long nepc = sbi_misaligned_ldst(regs, epc, tval,
+                                                         ec);
+                if (nepc != 0UL) {
+                    return nepc;
+                }
+            }
+            /* not handled: fall through to the fatal dump below */
+        }
+    }
+#endif
+
     /* Always print and halt on synchronous exceptions to prevent
      * infinite trap-mret loops that appear as silent hangs.
      * NOTE: keep each printf SIMPLE (few args) to minimize the risk of
      * recursive traps if wolfBoot's state is corrupted. */
     if (!(cause & MCAUSE_INT)) {
-        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\n",
-            cause, epc, tval);
+        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx mstatus=%lx\n",
+            cause, epc, tval, csr_read(mstatus));
 #if defined(DEBUG_BOOT)
         unsigned long sp_now;
         __asm__ volatile("mv %0, sp" : "=r"(sp_now));
@@ -363,6 +430,21 @@ riscv_mmode_to_smode(unsigned long entry, unsigned long hartid,
 {
     setup_pmp_for_smode();
     delegate_traps_to_smode();
+#if defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    /* Install the wolfBoot SBI trap vector on this hart so S-mode ecalls and
+     * the M-timer/M-soft IRQs are serviced in M-mode here, and arm this
+     * hart's dedicated M-mode trap stack (the S-mode sp is virtual once the
+     * OS enables paging, so the trap entry must not store through it).
+     * Keep illegal-instruction traps in M-mode: rdtime is emulated there
+     * (no time CSR on these harts).  mcounteren still exposes cycle/instret
+     * to S-mode.  Enable M software interrupts for IPI delivery. */
+    csr_write(mtvec, (unsigned long)trap_vector_table);
+    sbi_mscratch_init(hartid);
+    sbi_hart_mark_started(hartid);
+    csr_write(medeleg, csr_read(medeleg) & ~(1UL << 2));
+    csr_write(mcounteren, 0x7UL);
+    csr_write(mie, csr_read(mie) | MIE_MSIE);
+#endif
     enter_smode(entry, hartid, dtb);
 }
 

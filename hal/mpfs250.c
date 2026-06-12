@@ -46,14 +46,6 @@
 #include "gpt.h"
 #include "fdt.h"
 
-/* UART base addresses for per-hart access (LO addresses, M-mode compatible) */
-const unsigned long MSS_UART_BASE_ADDR[5] = {
-    MSS_UART0_LO_BASE,  /* Hart 0 (E51) */
-    MSS_UART1_LO_BASE,  /* Hart 1 (U54_1) */
-    MSS_UART2_LO_BASE,  /* Hart 2 (U54_2) */
-    MSS_UART3_LO_BASE,  /* Hart 3 (U54_3) */
-    MSS_UART4_LO_BASE,  /* Hart 4 (U54_4) */
-};
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 #include "sdhci.h"
@@ -65,10 +57,19 @@ extern void sdhci_irq_handler(void);
 /* Video Kit DDR/Clock configuration is included in mpfs250.h */
 
 /* Configure L2 cache: enable ways 0,1,3 (0x0B) and set way masks for all masters */
+/* APB (PCLK) frequency for UART baud divisors.  Starts at the mode's
+ * compile-time value (40 MHz E51 reset clock in M-mode, 150 MHz under
+ * HSS) and is updated when M-mode wolfBoot raises the MSS PLL. */
+static uint32_t mpfs_apb_clk_hz = MSS_APB_AHB_CLK;
+
 #ifdef WOLFBOOT_RISCV_MMODE
 static void mpfs_config_l2_cache(void)
 {
-    L2_WAY_ENABLE = 0x0B;  /* ways 0, 1, 3 -- matches DDR demo config */
+    L2_WAY_ENABLE = 0x0B;  /* WayEnable INDEX (not a mask): ways 0..11 are
+                            * cache-capable; the masters' way masks (0xFF)
+                            * restrict cache fills to ways 0-7, leaving
+                            * 8-11 as the scratchpad carve-out.  Matches
+                            * HSS/Libero (LIBERO_SETTING_WAY_ENABLE=0xB). */
     SYSREG_L2_SHUTDOWN_CR = 0;
     L2_WAY_MASK_DMA        = L2_WAY_MASK_CACHE_ONLY;
     L2_WAY_MASK_AXI4_PORT0 = L2_WAY_MASK_CACHE_ONLY;
@@ -99,7 +100,9 @@ static uint32_t mpfs_cpu_freq_mhz = 80U;
  * value), tunable 1..9 per HSS TUNE_RPC_156_DQDQS_INIT_VALUE.
  * Bumped between outer retries when training verify reports
  * dq_dqs_err_done != 8 or dqdqs_status2 == 0 (data eye closed). */
+#ifdef MPFS_DDR_INIT
 static uint32_t mpfs_phy_rpc156_val = 6U;
+#endif
 
 /* mcycle-based microsecond delay.  MTIME is not running in M-mode without
  * HSS, but mcycle ticks at the CPU clock rate and is monotonic. */
@@ -131,8 +134,8 @@ extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8
 #  ifndef WATCHDOG_TIMEOUT_MS
 #    define WATCHDOG_TIMEOUT_MS  30000U
 #  endif
-/* MPFS MSS WDT clock is AHB / 256 ≈ 150 MHz / 256 ≈ 585 kHz at S-mode rate
- * but ~80 MHz / 256 ≈ 312 kHz on E51 reset clocks. Use a conservative
+/* MPFS MSS WDT clock is AHB / 256 ~= 150 MHz / 256 ~= 585 kHz at S-mode rate
+ * but ~80 MHz / 256 ~= 312 kHz on E51 reset clocks. Use a conservative
  * 300 ticks/ms; the actual rate may be a bit higher but a slightly longer
  * timeout is safe. Caller can override WATCHDOG_TIMEOUT_MS at build time. */
 #  define WATCHDOG_TIMEOUT_TICKS ((WATCHDOG_TIMEOUT_MS) * 300U)
@@ -150,6 +153,10 @@ static uint32_t mpfs_boot_reset_sr_snap;
 
 /* CLINT MSIP register for IPI delivery */
 #define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
+/* CLINT machine-timer comparator (per hart) and MTIME counter */
+#define CLINT_MTIMECMP_REG(hart) \
+    (*(volatile uint64_t*)(CLINT_BASE + 0x4000UL + (hart) * 8UL))
+#define CLINT_MTIME_REG (*(volatile uint64_t*)(CLINT_BASE + 0xBFF8UL))
 
 /* Signal secondary harts that E51 (main hart) is ready. */
 static void mpfs_signal_main_hart_started(void)
@@ -157,85 +164,219 @@ static void mpfs_signal_main_hart_started(void)
     HLS_DATA* hls = (HLS_DATA*)&_main_hart_hls;
     hls->in_wfi_indicator = HLS_MAIN_HART_STARTED;
     hls->my_hart_id = MPFS_FIRST_HART;
+    /* The eNVM secondary-hart gate polls the DTIM copy of this flag, not
+     * the L2-scratch HLS above: a cacheable store to the scratchpad can
+     * be lost on dirty-line eviction (layout-dependent), which parked
+     * the secondaries until the kernel's hart_start IPI -- too late for
+     * its 1s online window.  DTIM is uncached and visible to all harts. */
+    *(volatile uint32_t *)MPFS_DTIM_MAIN_STARTED_ADDR =
+        (uint32_t)HLS_MAIN_HART_STARTED;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
-/* Wake secondary U54 harts by sending software IPIs via CLINT MSIP. */
-int mpfs_wake_secondary_harts(void)
-{
-    int hart_id;
-    int woken_count = 0;
-
-    wolfBoot_printf("Waking secondary harts...\n");
-    for (hart_id = MPFS_FIRST_U54_HART; hart_id <= MPFS_LAST_U54_HART; hart_id++) {
-        CLINT_MSIP_REG(hart_id) = 0x01;
-        __asm__ volatile("fence iorw, iorw" ::: "memory");
-        udelay(1000);
-        woken_count++;
-    }
-    wolfBoot_printf("Woke %d secondary harts\n", woken_count);
-    return woken_count;
-}
-
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-/* Kernel hand-off context written by the E51 just before sending the IPI
- * that releases the chosen U54 into S-mode. The struct lives in L2 Scratch
- * (BSS) so all harts read the same physical address. */
+/* Per-hart S-mode start mailboxes, written by the E51 (boot hart release)
+ * or by the SBI HSM hart_start backend (on the calling U54), and consumed
+ * by the target hart's park loop in secondary_hart_entry().
+ *
+ * These live in the E51 DTIM, NOT in L2-scratch BSS: cacheable stores to
+ * the scratchpad can be lost on cache-line eviction, so cross-hart
+ * mailboxes written by a U54 would silently vanish (observed: the SBI
+ * HSM hart-state writes never became visible).  The DTIM is small,
+ * uncached and coherent for every hart.  The SBI shared state occupies
+ * DTIM+0x000 (see src/riscv_sbi.c); the mailboxes sit at +0x100. */
 typedef struct {
-    volatile uint32_t marker;       /* MPFS_KERNEL_HANDOFF_MARKER when valid */
-    volatile uint32_t target_hart;  /* hart that should perform the M->S jump */
-    volatile uint64_t kernel_entry; /* S-mode entry point (kernel) */
-    volatile uint64_t dtb_addr;     /* DTB physical address (a1) */
+    volatile uint32_t marker;  /* MPFS_KERNEL_HANDOFF_MARKER when valid */
+    volatile uint64_t entry;   /* S-mode entry point */
+    volatile uint64_t opaque;  /* a1 at entry (dtb for the boot hart) */
 } mpfs_kernel_handoff_t;
 
 #define MPFS_KERNEL_HANDOFF_MARKER  0x4C4E5858UL  /* "LNXX" */
 
-static mpfs_kernel_handoff_t mpfs_kernel_handoff;
+#define mpfs_kernel_handoff \
+    ((mpfs_kernel_handoff_t *)(0x01000000UL + 0x100UL))
 
 /* Provided by src/boot_riscv.c. */
 extern void riscv_mmode_to_smode(unsigned long entry, unsigned long hartid,
                                  unsigned long dtb) __attribute__((noreturn));
 #endif /* MPFS_DDR_INIT && WOLFBOOT_MMODE_SMODE_BOOT */
 
-/* Secondary hart (U54) entry: init per-hart UART and either jump into the
- * waiting Linux kernel (when the E51 has staged a hand-off context for us)
- * or stay parked in WFI waiting for an SBI/Linux IPI. */
+/* Secondary hart (U54) entry: jump into the waiting Linux kernel (when a
+ * hand-off context has been staged for us) or park in WFI waiting for an
+ * SBI/Linux IPI.
+ *
+ * Keep this path FAST and free of UART access: the secondaries reach it
+ * via the kernel's HSM hart_start IPI, inside the kernel's 1s online
+ * window.  A per-hart UART banner here once spent multiple seconds
+ * spinning on LSR (layout-dependent), making harts miss that window. */
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
 {
-    char msg[] = "Hart X: Woken, waiting for kernel boot...\n";
     (void)hls;
-    uart_init_hart(hartid);
-    msg[5] = '0' + (char)hartid;
-    uart_write_hart(hartid, msg, sizeof(msg) - 1);
 
     while (1) {
-        __asm__ volatile("wfi");
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-        /* Clear pending IPI before checking the hand-off context to avoid
-         * a re-entry race on spurious wake-ups. */
-        CLINT_MSIP_REG(hartid) = 0;
-        __asm__ volatile("fence iorw, iorw" ::: "memory");
-
-        if (mpfs_kernel_handoff.marker == MPFS_KERNEL_HANDOFF_MARKER &&
-            mpfs_kernel_handoff.target_hart == (uint32_t)hartid) {
+        /* Check the hand-off context BEFORE sleeping: the release IPI was
+         * already consumed (MSIP cleared) by the eNVM wake path, so a
+         * wfi-first loop sleeps through an already-staged hand-off.  The
+         * old wfi-first order only appeared to work because mtimecmp's
+         * reset value of 0 left MTIP permanently pending, making the wfi
+         * fall through; parking the comparators exposed it. */
+        if (hartid < (unsigned long)MPFS_NUM_HARTS &&
+            mpfs_kernel_handoff[hartid].marker
+                == MPFS_KERNEL_HANDOFF_MARKER) {
             unsigned long kentry;
-            unsigned long dtb;
+            unsigned long opq;
             /* Acquire fence: pair with the writer's release fence so we
-             * are guaranteed to observe kernel_entry / dtb_addr after
-             * seeing marker.  Without this, RISC-V's relaxed memory model
+             * are guaranteed to observe entry / opaque after seeing
+             * marker.  Without this, RISC-V's relaxed memory model
              * permits the reader to use stale field values cached before
              * marker was published. */
             __asm__ volatile("fence r,rw" ::: "memory");
-            kentry = (unsigned long)mpfs_kernel_handoff.kernel_entry;
-            dtb = (unsigned long)mpfs_kernel_handoff.dtb_addr;
-            riscv_mmode_to_smode(kentry, hartid, dtb);
+            kentry = (unsigned long)mpfs_kernel_handoff[hartid].entry;
+            opq = (unsigned long)mpfs_kernel_handoff[hartid].opaque;
+            riscv_mmode_to_smode(kentry, hartid, opq);
             /* never returns */
         }
+        /* Sleep until the next IPI (e.g. a future SBI HSM hart_start),
+         * then clear it and re-check the mailbox. */
+        __asm__ volatile("wfi");
+        CLINT_MSIP_REG(hartid) = 0;
+        __asm__ volatile("fence iorw, iorw" ::: "memory");
+#else
+        __asm__ volatile("wfi");
 #endif /* MPFS_DDR_INIT && WOLFBOOT_MMODE_SMODE_BOOT */
     }
 }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+/* Enable the CLINT MTIME counter via the SYSREG RTC/time-base clock divider
+ * (HSS set_RTC_divisor equivalent).  Without this MTIME never advances and an
+ * S-mode OS has no time source for its scheduler tick. */
+static void mpfs_enable_mtime(void)
+{
+    volatile uint32_t *rtc_cr = (volatile uint32_t *)(SYSREG_BASE + 0x0CUL);
+    uint32_t div;
+#ifdef LIBERO_SETTING_MSS_RTC_CLOCK_CR
+    div = (uint32_t)LIBERO_SETTING_MSS_RTC_CLOCK_CR & 0xFFFU;
+#else
+    div = 125U; /* 125 MHz reference / 1 MHz RTC */
+#endif
+    *rtc_cr &= ~(1UL << 16);   /* disable while changing the divider */
+    *rtc_cr = div;             /* program divider (bits 11:0) */
+    *rtc_cr |= (1UL << 16);    /* enable RTC/time-base clock */
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+}
+
+/* Bring-up diagnostic: locate the booted kernel's printk ring buffer by
+ * scanning DDR (via the non-cached alias) for the "Machine model" line
+ * and dump the surrounding log text.  Lets us see how far the kernel got
+ * even when no console is up yet.  WDT petted during the scan.
+ * Build with -DMPFS_KLOG_DUMP to enable (bring-up only). */
+#ifdef MPFS_KLOG_DUMP
+static void mpfs_dump_kernel_log(void)
+{
+    const volatile uint8_t *nc = (const volatile uint8_t *)0xC0200000UL;
+    const uint32_t span = 24UL * 1024UL * 1024UL; /* kernel image + bss */
+    /* "Machine model" is logged by setup_arch() before sbi_init(), so it
+     * is guaranteed to be in the printk ring; its only other copy is the
+     * .rodata format string "Machine model: %s" (filtered below). */
+    static const char pat[13] = "Machine model";
+    uint32_t i;
+    uint32_t m = 0;
+    uint32_t hit = 0xFFFFFFFFUL;
+    int found = 0;
+
+    for (i = 0; i < span; i++) {
+        if (nc[i] == (uint8_t)pat[m]) {
+            m++;
+            if (m == (uint32_t)sizeof(pat)) {
+                hit = i - ((uint32_t)sizeof(pat) - 1U);
+                m = 0;
+                /* Skip .rodata format-string copies ("Machine model: %s");
+                 * the ring copy has the expanded model text instead. */
+                {
+                    uint32_t r;
+                    int is_rodata = 0;
+                    for (r = 0; r < 24U; r++) {
+                        if (nc[hit + r] == (uint8_t)'%' &&
+                            nc[hit + r + 1U] == (uint8_t)'s') {
+                            is_rodata = 1;
+                            break;
+                        }
+                    }
+                    if (is_rodata == 0) {
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        else {
+            m = (nc[i] == (uint8_t)pat[0]) ? 1U : 0U;
+        }
+        if ((i & 0xFFFFFU) == 0U) {
+            MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
+        }
+    }
+    if (found == 0) {
+        wolfBoot_printf("KLOG: banner not found in %u MB\n",
+            (unsigned)(span >> 20));
+        return;
+    }
+    wolfBoot_printf("KLOG @PA 0x%lx:\n", 0x80200000UL + (unsigned long)hit);
+    /* Dump ring text around the hit (a bit before for the banner record,
+     * then onward), printable chars only. */
+    {
+        char line[81];
+        uint32_t pos = 0;
+        uint32_t k;
+        uint8_t c;
+        uint32_t start = (hit > 512U) ? (hit - 512U) : 0U;
+        for (k = 0; k < 24576U; k++) {
+            c = nc[start + k];
+            if (c == 0U) {
+                continue; /* record gaps/padding */
+            }
+            if (c == (uint8_t)'\n' || pos >= 78U) {
+                line[pos] = '\0';
+                wolfBoot_printf("| %s\n", line);
+                pos = 0;
+                if (c == (uint8_t)'\n') {
+                    continue;
+                }
+            }
+            line[pos] = ((c >= 0x20U) && (c < 0x7FU)) ? (char)c : '.';
+            pos++;
+        }
+        if (pos != 0U) {
+            line[pos] = '\0';
+            wolfBoot_printf("| %s\n", line);
+        }
+    }
+}
+#endif /* MPFS_KLOG_DUMP */
+
+/* SBI HSM hart_start backend (called from src/riscv_sbi.c on the boot
+ * hart): stage the target hart's start mailbox and ring its MSIP; the
+ * parked hart consumes it in secondary_hart_entry() and enters S-mode at
+ * saddr with a0=hartid, a1=opaque. */
+int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,
+    unsigned long opaque)
+{
+    if (hartid < (unsigned long)MPFS_FIRST_U54_HART ||
+        hartid > (unsigned long)MPFS_LAST_U54_HART) {
+        return -1;
+    }
+    mpfs_kernel_handoff[hartid].entry = (uint64_t)saddr;
+    mpfs_kernel_handoff[hartid].opaque = (uint64_t)opaque;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    mpfs_kernel_handoff[hartid].marker = MPFS_KERNEL_HANDOFF_MARKER;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    CLINT_MSIP_REG(hartid) = 0x01;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    return 0;
+}
+
 /* Override of the weak hal_smode_boot in src/boot_riscv.c. The E51 cannot
  * run Linux (cpu@0 is marked disabled in the Yocto MPFS DTB), so instead of
  * dropping to S-mode on hart 0 we stage the kernel/DTB pointers, IPI a U54,
@@ -246,11 +387,30 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
 {
     (void)hartid;  /* the calling E51 hart is not the kernel boot hart */
 
-    mpfs_kernel_handoff.target_hart = (uint32_t)MPFS_FIRST_U54_HART;
-    mpfs_kernel_handoff.kernel_entry = (uint64_t)entry;
-    mpfs_kernel_handoff.dtb_addr = (uint64_t)dtb;
+    /* Bring up the MTIME time base before releasing the U54 into S-mode. */
+    mpfs_enable_mtime();
+
+    /* Enable the clocks and release the soft resets of MMUART1-4 for the
+     * OS: the kernel's mpfs clock driver gates SUBBLK_CLOCK_CR but does
+     * not release peripheral soft resets (HSS normally does), so without
+     * this the serial console (MMUART1) stays dead.  Done here on the
+     * E51, single-threaded, so no SYSREG read-modify-write races. */
+    SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << 1) |
+                              (MSS_PERIPH_MMUART0 << 2) |
+                              (MSS_PERIPH_MMUART0 << 3) |
+                              (MSS_PERIPH_MMUART0 << 4);
     __asm__ volatile("fence iorw, iorw" ::: "memory");
-    mpfs_kernel_handoff.marker = MPFS_KERNEL_HANDOFF_MARKER;
+    SYSREG_SOFT_RESET_CR &= ~((MSS_PERIPH_MMUART0 << 1) |
+                              (MSS_PERIPH_MMUART0 << 2) |
+                              (MSS_PERIPH_MMUART0 << 3) |
+                              (MSS_PERIPH_MMUART0 << 4));
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+
+    mpfs_kernel_handoff[MPFS_FIRST_U54_HART].entry = (uint64_t)entry;
+    mpfs_kernel_handoff[MPFS_FIRST_U54_HART].opaque = (uint64_t)dtb;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    mpfs_kernel_handoff[MPFS_FIRST_U54_HART].marker =
+        MPFS_KERNEL_HANDOFF_MARKER;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 
     wolfBoot_printf("Releasing hart %d into S-mode at 0x%lx (dtb=0x%lx)\n",
@@ -259,11 +419,45 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
     CLINT_MSIP_REG(MPFS_FIRST_U54_HART) = 0x01;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 
-    /* Phase 4A: park the E51 in M-mode. Phase 4B will replace this with a
-     * trap-driven SBI HSM service loop so the kernel can start the other
-     * U54s via sbi_ecall(HSM, HART_START, ...). */
-    while (1) {
-        __asm__ volatile("wfi");
+    /* Park the E51 as the platform monitor (HSS's watchdog-service role):
+     * doze on the machine timer and pet all watchdogs every few seconds.
+     * The MSS watchdogs always count and reset the chip on timeout
+     * (~28 s at the boot-time settings), so the parked E51 must keep
+     * them refreshed while the OS boots and runs. */
+    {
+        static const unsigned long park_wdt_bases[5] = {
+            MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
+            MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
+        };
+        unsigned int w;
+        unsigned int pets = 0;
+        /* Wake only on the machine timer; mstatus.MIE stays clear so the
+         * pending timer wakes WFI without vectoring into the trap path.
+         * Pet ALL watchdogs (HSS's WDog-service role): the MSS WDTs always
+         * count and RESET the chip on timeout even with CONTROL=0, and the
+         * OS watchdog driver is disabled in the dtb fixup (when it owned
+         * them, its refresh-forbidden window made our blind refreshes trip
+         * it).  With MVRP at maximum a refresh is always permitted. */
+        __asm__ volatile("csrw mie, %0" :: "r"(0x80UL)); /* MTIE */
+        while (1) {
+            for (w = 0; w < 5U; w++) {
+                MSS_WDT_REFRESH(park_wdt_bases[w]) = 0xDEADC0DEU;
+            }
+            pets++;
+#ifdef MPFS_KLOG_DUMP
+            if (pets == 6U) {
+                /* One-shot bring-up diagnostic ~30 s after handoff: dump
+                 * the kernel's printk ring from DDR so kernel progress is
+                 * visible even with no working console. */
+                mpfs_dump_kernel_log();
+            }
+#else
+            (void)pets;
+#endif
+            CLINT_MTIMECMP_REG(MPFS_FIRST_HART) =
+                CLINT_MTIME_REG + (5UL * RTC_CLOCK_FREQ);
+            __asm__ volatile("wfi");
+        }
     }
     __builtin_unreachable();
 }
@@ -328,9 +522,11 @@ static void ddr_delay(uint32_t us)
 #define IOSCB_BANK_CNTL_DDR_BASE    0x3E020000UL
 #define IOSCB_DLL_SGMII_BASE        0x3E100000UL
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 /* Forward declaration: defined alongside the SDHCI platform helpers below
  * but called from nwc_init() before MSSIO_CONTROL_CR is committed. */
 static void mpfs_iomux_init(void);
+#endif
 
 /* SGMII Off Mode
  *
@@ -383,7 +579,7 @@ static void sgmii_mux_config(void)
 {
     uint32_t rfckmux;
 
-    wolfBoot_printf("DDR: Configuring SGMII/clock mux...\n");
+    DBG_DDR("DDR: Configuring SGMII/clock mux...\n");
 
     /* First, put SGMII in off mode (from HSS sgmii_off_mode) */
     sgmii_off_mode();
@@ -432,7 +628,7 @@ static void sgmii_mux_config(void)
     DBG_DDR("  CLK_XCVR=0x%x\n", CFM_SGMII_REG(CFM_SGMII_CLK_XCVR));
 
     if (rfckmux != LIBERO_SETTING_SGMII_REFCLKMUX) {
-        wolfBoot_printf("  WARNING: RFCKMUX not set correctly!\n");
+        DBG_DDR("  WARNING: RFCKMUX not set correctly!\n");
     }
 }
 
@@ -499,7 +695,7 @@ static int mss_pll_init(void)
     uint32_t pll_ctrl;
     uint32_t timeout;
 
-    wolfBoot_printf("DDR: Configuring MSS PLL...\n");
+    DBG_DDR("DDR: Configuring MSS PLL...\n");
 
     /* First check if PLL is already configured and locked by System Controller */
     pll_ctrl = MSS_PLL_REG(PLL_CTRL);
@@ -548,12 +744,12 @@ static int mss_pll_init(void)
     DBG_DDR("  After power up: CTRL=0x%x\n", pll_ctrl);
 
     /* Wait for lock */
-    wolfBoot_printf("  Waiting for MSS PLL lock...");
+    DBG_DDR("  Waiting for MSS PLL lock...");
     timeout = 1000000;
     while (timeout > 0) {
         pll_ctrl = MSS_PLL_REG(PLL_CTRL);
         if (pll_ctrl & PLL_LOCK_BIT) {
-            wolfBoot_printf("locked (0x%x)\n", pll_ctrl);
+            DBG_DDR("locked (0x%x)\n", pll_ctrl);
 
             /* Drain the UART TX shift register before changing the APB
              * divisor.  Any byte still mid-flight at the boot-clock baud
@@ -564,6 +760,31 @@ static int mss_pll_init(void)
             while ((MMUART_LSR(DEBUG_UART_BASE) & MSS_UART_TEMT) == 0)
                 ;
 #endif
+
+            /* Reprogram the eNVM clock divider for the new (faster) AHB
+             * clock BEFORE switching, exactly as HSS does in
+             * mss_mux_post_mss_pll_config(): write LIBERO's ENVM_CR, then
+             * poll clock-okay.  wolfBoot previously never wrote ENVM_CR,
+             * leaving the reset divider while AHB jumped 40 -> 150 MHz,
+             * so every later eNVM read (e.g. the secondary harts' WFI
+             * park loop instruction fetches) ran with out-of-spec eNVM
+             * read timing. */
+            {
+                uint32_t envm_to = 1000000UL;
+#ifdef LIBERO_SETTING_MSS_ENVM_CR
+                SYSREG_ENVM_CR = (uint32_t)LIBERO_SETTING_MSS_ENVM_CR;
+#else
+                SYSREG_ENVM_CR = 0x40050005UL; /* Video Kit Libero value */
+#endif
+                mb();
+                while ((SYSREG_ENVM_CR & SYSREG_ENVM_CR_CLOCK_OKAY) == 0U
+                       && envm_to > 0U) {
+                    envm_to--;
+                }
+                if (envm_to == 0U) {
+                    wolfBoot_printf("  ENVM_CR clock-okay TIMEOUT\n");
+                }
+            }
 
             /* Configure clock dividers before switching
              * LIBERO_SETTING_MSS_CLOCK_CONFIG_CR = 0x24:
@@ -582,6 +803,11 @@ static int mss_pll_init(void)
              * and a wrong frequency here breaks the SDHCI bring-up. */
             mpfs_cpu_freq_mhz =
                 (uint32_t)(LIBERO_SETTING_MSS_COREPLEX_CPU_CLK / 1000000UL);
+            /* APB divider is 4 per CLOCK_CONFIG_CR=0x24 above; keep the
+             * UART baud reference in sync for divisors computed after
+             * the clock raise (hal_uart_reinit). */
+            mpfs_apb_clk_hz =
+                (uint32_t)(LIBERO_SETTING_MSS_COREPLEX_CPU_CLK / 4UL);
 
             /* Wait for clock switch to stabilize */
             {
@@ -608,7 +834,7 @@ static int mss_pll_init(void)
     }
 
     wolfBoot_printf("TIMEOUT (0x%x)\n", pll_ctrl);
-    wolfBoot_printf("  REF_FB=0x%x DIV_0_1=0x%x DIV_2_3=0x%x\n",
+    DBG_DDR("  REF_FB=0x%x DIV_0_1=0x%x DIV_2_3=0x%x\n",
         MSS_PLL_REG(PLL_REF_FB), MSS_PLL_REG(PLL_DIV_0_1), MSS_PLL_REG(PLL_DIV_2_3));
     return -1;
 }
@@ -624,7 +850,7 @@ static int ddr_pll_init(void)
     uint32_t pll_ctrl;
     uint32_t timeout;
 
-    wolfBoot_printf("DDR: Configuring DDR PLL...\n");
+    DBG_DDR("DDR: Configuring DDR PLL...\n");
 
     /* Reset DDR bank controller to load NV map values (from HSS DDR_TRAINING_SOFT_RESET) */
     DBG_DDR("  DDR bank controller reset...");
@@ -663,12 +889,12 @@ static int ddr_pll_init(void)
     mb();
 
     /* Wait for lock */
-    wolfBoot_printf("  Waiting for DDR PLL lock...");
+    DBG_DDR("  Waiting for DDR PLL lock...");
     timeout = 1000000;
     while (timeout > 0) {
         pll_ctrl = DDR_PLL_REG(PLL_CTRL);
         if (pll_ctrl & PLL_LOCK_BIT) {
-            wolfBoot_printf("locked (0x%x)\n", pll_ctrl);
+            DBG_DDR("locked (0x%x)\n", pll_ctrl);
             return 0;
         }
         timeout--;
@@ -693,7 +919,7 @@ static int nwc_init(void)
 {
     int ret;
 
-    wolfBoot_printf("DDR: NWC init...\n");
+    DBG_DDR("DDR: NWC init...\n");
 
     /* Configure SCB access timer */
     SCBCFG_REG(0x08) = MSS_SCB_ACCESS_CONFIG;
@@ -790,12 +1016,12 @@ static void setup_segments(void)
      * The unwritten slots (SEG0_2..6, SEG1_0/1/6/7) should read 0 / reset
      * default; nonzero would indicate stale state from a prior init pass
      * (outer retry) or hardware that did not honor a peripheral reset. */
-    wolfBoot_printf("DDR: SEG dump:\n");
-    wolfBoot_printf("  SEG0: %x %x %x %x %x %x %x BLK=%x\n",
+    DBG_DDR("DDR: SEG dump:\n");
+    DBG_DDR("  SEG0: %x %x %x %x %x %x %x BLK=%x\n",
         DDR_SEG_REG(SEG0_0), DDR_SEG_REG(SEG0_1), DDR_SEG_REG(SEG0_2),
         DDR_SEG_REG(SEG0_3), DDR_SEG_REG(SEG0_4), DDR_SEG_REG(SEG0_5),
         DDR_SEG_REG(SEG0_6), DDR_SEG_REG(SEG0_BLOCKER));
-    wolfBoot_printf("  SEG1: %x %x %x %x %x %x %x %x\n",
+    DBG_DDR("  SEG1: %x %x %x %x %x %x %x %x\n",
         DDR_SEG_REG(SEG1_0), DDR_SEG_REG(SEG1_1), DDR_SEG_REG(SEG1_2),
         DDR_SEG_REG(SEG1_3), DDR_SEG_REG(SEG1_4), DDR_SEG_REG(SEG1_5),
         DDR_SEG_REG(SEG1_6), DDR_SEG_REG(SEG1_7));
@@ -1282,262 +1508,13 @@ static void setup_controller(void)
     mb();
 }
 
-#if 0  /* Phase 3.10.3 iter 7: trying to match the full HSS init_ddrc
-        * body broke DFI init -- "Wait DFI complete...TIMEOUT (0x0)"
-        * and wolfBoot fell back to L2-only mode.  Some of these
-        * blocks (likely csr_custom @ 0x3C000 or AXI_IF @ 0x12C00 or
-        * DFI extras @ 0x10010+) interfere with the DFI handshake.
-        * Disabled until we can identify the offending block(s) one
-        * at a time.  ADDR_MAP and MC_BASE3 critical were fine and
-        * are kept above (at the start of setup_controller). */
-static void setup_controller_full_hss(void) {
-    /* Phase 3.10.3 (1) iter 7: full HSS init_ddrc body match.
-     * Prior to this, wolfBoot was missing 199 register writes that
-     * HSS makes in init_ddrc.  Adding them here in HSS source order
-     * (mss_ddr.c:3746-4401), with DFI block skipped (already covered
-     * above via MC_DFI_* names) and MC_BASE2 skipped (already done
-     * above).  Block bases verified against
-     * mss_ddr_sgmii_regs.h DDR_CSR_APB_TypeDef:
-     *   ADDR_MAP @ 0x2400 (already added at top of this function)
-     *   MC_BASE3 @ 0x2800 (already added at top)
-     *   MC_BASE1 @ 0x3c00, MC_BASE2 @ 0x4000 (already covered),
-     *   MPFE @ 0x4c00, REORDER @ 0x5000, RMW @ 0x5400, ECC @ 0x5800,
-     *   READ_CAPT @ 0x5c00, MTA @ 0x6400, DYN_WIDTH_ADJ @ 0x7c00,
-     *   CA_PAR_ERR @ 0x8000, DFI @ 0x10000 (partial, already covered),
-     *   AXI_IF @ 0x12c00, csr_custom @ 0x3c000.
-     */
-
-    /* === MC_BASE1 block (HSS lines 3797-3938) === */
-    DDRCFG_REG(0x3C00) = LIBERO_SETTING_CFG_WRITE_CRC;
-    DDRCFG_REG(0x3C04) = LIBERO_SETTING_CFG_MPR_READ_FORMAT;
-    DDRCFG_REG(0x3C08) = LIBERO_SETTING_CFG_WR_CMD_LAT_CRC_DM;
-    DDRCFG_REG(0x3C0C) = LIBERO_SETTING_CFG_FINE_GRAN_REF_MODE;
-    DDRCFG_REG(0x3C10) = LIBERO_SETTING_CFG_TEMP_SENSOR_READOUT;
-    DDRCFG_REG(0x3C14) = LIBERO_SETTING_CFG_PER_DRAM_ADDR_EN;
-    DDRCFG_REG(0x3C18) = LIBERO_SETTING_CFG_GEARDOWN_MODE;
-    DDRCFG_REG(0x3C1C) = LIBERO_SETTING_CFG_WR_PREAMBLE;
-    DDRCFG_REG(0x3C20) = LIBERO_SETTING_CFG_RD_PREAMBLE;
-    DDRCFG_REG(0x3C24) = LIBERO_SETTING_CFG_RD_PREAMB_TRN_MODE;
-    DDRCFG_REG(0x3C28) = LIBERO_SETTING_CFG_SR_ABORT;
-    DDRCFG_REG(0x3C2C) = LIBERO_SETTING_CFG_CS_TO_CMDADDR_LATENCY;
-    DDRCFG_REG(0x3C30) = LIBERO_SETTING_CFG_INT_VREF_MON;
-    DDRCFG_REG(0x3C34) = LIBERO_SETTING_CFG_TEMP_CTRL_REF_MODE;
-    DDRCFG_REG(0x3C38) = LIBERO_SETTING_CFG_TEMP_CTRL_REF_RANGE;
-    DDRCFG_REG(0x3C3C) = LIBERO_SETTING_CFG_MAX_PWR_DOWN_MODE;
-    DDRCFG_REG(0x3C40) = LIBERO_SETTING_CFG_READ_DBI;
-    DDRCFG_REG(0x3C44) = LIBERO_SETTING_CFG_WRITE_DBI;
-    DDRCFG_REG(0x3C48) = LIBERO_SETTING_CFG_DATA_MASK;
-    DDRCFG_REG(0x3C4C) = LIBERO_SETTING_CFG_CA_PARITY_PERSIST_ERR;
-    DDRCFG_REG(0x3C50) = LIBERO_SETTING_CFG_RTT_PARK;
-    DDRCFG_REG(0x3C54) = LIBERO_SETTING_CFG_ODT_INBUF_4_PD;
-    DDRCFG_REG(0x3C58) = LIBERO_SETTING_CFG_CA_PARITY_ERR_STATUS;
-    DDRCFG_REG(0x3C5C) = LIBERO_SETTING_CFG_CRC_ERROR_CLEAR;
-    DDRCFG_REG(0x3C60) = LIBERO_SETTING_CFG_CA_PARITY_LATENCY;
-    DDRCFG_REG(0x3C64) = LIBERO_SETTING_CFG_CCD_S;
-    DDRCFG_REG(0x3C68) = LIBERO_SETTING_CFG_CCD_L;
-    DDRCFG_REG(0x3C6C) = LIBERO_SETTING_CFG_VREFDQ_TRN_ENABLE;
-    DDRCFG_REG(0x3C70) = LIBERO_SETTING_CFG_VREFDQ_TRN_RANGE;
-    DDRCFG_REG(0x3C74) = LIBERO_SETTING_CFG_VREFDQ_TRN_VALUE;
-    DDRCFG_REG(0x3C78) = LIBERO_SETTING_CFG_RRD_S;
-    DDRCFG_REG(0x3C7C) = LIBERO_SETTING_CFG_RRD_L;
-    DDRCFG_REG(0x3C80) = LIBERO_SETTING_CFG_WTR_S;
-    DDRCFG_REG(0x3C84) = LIBERO_SETTING_CFG_WTR_L;
-    DDRCFG_REG(0x3C88) = LIBERO_SETTING_CFG_WTR_S_CRC_DM;
-    DDRCFG_REG(0x3C8C) = LIBERO_SETTING_CFG_WTR_L_CRC_DM;
-    DDRCFG_REG(0x3C90) = LIBERO_SETTING_CFG_WR_CRC_DM;
-    DDRCFG_REG(0x3C94) = LIBERO_SETTING_CFG_RFC1;
-    DDRCFG_REG(0x3C98) = LIBERO_SETTING_CFG_RFC2;
-    DDRCFG_REG(0x3C9C) = LIBERO_SETTING_CFG_RFC4;
-    /* MC_BASE1 trailing block.  HSS struct DDR_CSR_APB_MC_BASE1_TypeDef
-     * (mss_ddr_sgmii_regs.h:3842-3928) has UNUSED_SPACE0 (9 dwords) at
-     * offset 0xA0 and UNUSED_SPACE1 (6 dwords) at offset 0xC8 between
-     * CFG_RFC4 and the CFG_BIT_MAP_INDEX_* table.  Previous wolfBoot
-     * code wrote sequentially from 0x3CA0 onward, landing the entire
-     * BIT_MAP table 60 bytes too early and missing the actual register
-     * locations.  Result: HSS-canonical offsets 0x3CC4/0x3CE0..0x3D5C
-     * stayed at zero, the controller had no address-to-bank/row/col
-     * mapping, every AXI read targeted addresses outside the configured
-     * map and hung waiting for a response.  Realign to absolute offsets
-     * matching the HSS struct. */
-    DDRCFG_REG(0x3CC4) = LIBERO_SETTING_CFG_NIBBLE_DEVICES;
-    DDRCFG_REG(0x3CE0) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS0_0;
-    DDRCFG_REG(0x3CE4) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS0_1;
-    DDRCFG_REG(0x3CE8) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS1_0;
-    DDRCFG_REG(0x3CEC) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS1_1;
-    DDRCFG_REG(0x3CF0) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS2_0;
-    DDRCFG_REG(0x3CF4) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS2_1;
-    DDRCFG_REG(0x3CF8) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS3_0;
-    DDRCFG_REG(0x3CFC) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS3_1;
-    DDRCFG_REG(0x3D00) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS4_0;
-    DDRCFG_REG(0x3D04) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS4_1;
-    DDRCFG_REG(0x3D08) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS5_0;
-    DDRCFG_REG(0x3D0C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS5_1;
-    DDRCFG_REG(0x3D10) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS6_0;
-    DDRCFG_REG(0x3D14) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS6_1;
-    DDRCFG_REG(0x3D18) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS7_0;
-    DDRCFG_REG(0x3D1C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS7_1;
-    DDRCFG_REG(0x3D20) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS8_0;
-    DDRCFG_REG(0x3D24) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS8_1;
-    DDRCFG_REG(0x3D28) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS9_0;
-    DDRCFG_REG(0x3D2C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS9_1;
-    DDRCFG_REG(0x3D30) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS10_0;
-    DDRCFG_REG(0x3D34) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS10_1;
-    DDRCFG_REG(0x3D38) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS11_0;
-    DDRCFG_REG(0x3D3C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS11_1;
-    DDRCFG_REG(0x3D40) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS12_0;
-    DDRCFG_REG(0x3D44) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS12_1;
-    DDRCFG_REG(0x3D48) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS13_0;
-    DDRCFG_REG(0x3D4C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS13_1;
-    DDRCFG_REG(0x3D50) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS14_0;
-    DDRCFG_REG(0x3D54) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS14_1;
-    DDRCFG_REG(0x3D58) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS15_0;
-    DDRCFG_REG(0x3D5C) = LIBERO_SETTING_CFG_BIT_MAP_INDEX_CS15_1;
-    DDRCFG_REG(0x3D60) = LIBERO_SETTING_CFG_NUM_LOGICAL_RANKS_PER_3DS;
-    DDRCFG_REG(0x3D64) = LIBERO_SETTING_CFG_RFC_DLR1;
-    DDRCFG_REG(0x3D68) = LIBERO_SETTING_CFG_RFC_DLR2;
-    DDRCFG_REG(0x3D6C) = LIBERO_SETTING_CFG_RFC_DLR4;
-    DDRCFG_REG(0x3D70) = LIBERO_SETTING_CFG_RRD_DLR;
-    DDRCFG_REG(0x3D74) = LIBERO_SETTING_CFG_FAW_DLR;
-    /* UNUSED_SPACE2[8] at struct offset 0x178 = abs 0x3D78..0x3D94 */
-    DDRCFG_REG(0x3D98) = LIBERO_SETTING_CFG_ADVANCE_ACTIVATE_READY;
-
-    /* === MPFE block (HSS lines 4226-4240) === */
-    DDRCFG_REG(0x4C00) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P0;
-    DDRCFG_REG(0x4C04) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P1;
-    DDRCFG_REG(0x4C08) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P2;
-    DDRCFG_REG(0x4C0C) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P3;
-    DDRCFG_REG(0x4C10) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P4;
-    DDRCFG_REG(0x4C14) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P5;
-    DDRCFG_REG(0x4C18) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P6;
-    DDRCFG_REG(0x4C1C) = LIBERO_SETTING_CFG_STARVE_TIMEOUT_P7;
-
-    /* === REORDER block (HSS lines 4242-4256) === */
-    /* REORDER block (HSS struct mss_ddr_sgmii_regs.h:4172-4183).
-     * CFG_MAINTAIN_COHERENCY is at offset 0xc and CFG_Q_AGE_LIMIT at
-     * 0x10; previous wolfBoot offsets shifted both by one slot. */
-    DDRCFG_REG(0x5000) = LIBERO_SETTING_CFG_REORDER_EN;
-    DDRCFG_REG(0x5004) = LIBERO_SETTING_CFG_REORDER_QUEUE_EN;
-    DDRCFG_REG(0x5008) = LIBERO_SETTING_CFG_INTRAPORT_REORDER_EN;
-    DDRCFG_REG(0x500C) = LIBERO_SETTING_CFG_MAINTAIN_COHERENCY;
-    DDRCFG_REG(0x5010) = LIBERO_SETTING_CFG_Q_AGE_LIMIT;
-    /* UNUSED_SPACE0 at struct 0x14 = abs 0x5014 */
-    DDRCFG_REG(0x5018) = LIBERO_SETTING_CFG_RO_CLOSED_PAGE_POLICY;
-    DDRCFG_REG(0x501C) = LIBERO_SETTING_CFG_REORDER_RW_ONLY;
-    DDRCFG_REG(0x5020) = LIBERO_SETTING_CFG_RO_PRIORITY_EN;
-
-    /* === RMW block (HSS lines 4258-4259) === */
-    DDRCFG_REG(0x5400) = LIBERO_SETTING_CFG_DM_EN;
-    DDRCFG_REG(0x5404) = LIBERO_SETTING_CFG_RMW_EN;
-
-    /* === ECC block (HSS lines 4260-4267) === */
-    DDRCFG_REG(0x5800) = LIBERO_SETTING_CFG_ECC_CORRECTION_EN;
-    DDRCFG_REG(0x5840) = LIBERO_SETTING_CFG_ECC_BYPASS;
-    DDRCFG_REG(0x5844) = LIBERO_SETTING_INIT_WRITE_DATA_1B_ECC_ERROR_GEN;
-    DDRCFG_REG(0x5848) = LIBERO_SETTING_INIT_WRITE_DATA_2B_ECC_ERROR_GEN;
-    DDRCFG_REG(0x585C) = LIBERO_SETTING_CFG_ECC_1BIT_INT_THRESH;
-
-    /* === READ_CAPT block (HSS line 4269) === */
-    DDRCFG_REG(0x5C00) = LIBERO_SETTING_INIT_READ_CAPTURE_ADDR;
-
-    /* === MTA block (HSS lines 4271-4302) === */
-    /* MTA block (HSS struct mss_ddr_sgmii_regs.h:4219-4255).  After
-     * MTC_ACQ_ADDR at offset 0x18 the next 5 dwords (0x1c..0x2c) are
-     * __I read-only status (MTC_ACQ_CYCS_STORED/TRIG_DETECT/MEM_TRIG_
-     * ADDR/MEM_LAST_ADDR/ACK).  Previous wolfBoot table wrote through
-     * those slots, shifting CFG_TRIG_MT_ADDR_0..ERR_MASK_4 and the
-     * MTC_ACQ_WR_DATA[0..2] by 20 bytes too early.  CFG_PRE_TRIG_CYCS
-     * lives at struct offset 0x12c (abs 0x652C) after a 50-dword
-     * UNUSED_SPACE0, and CFG_DATA_SEL_FIRST_ERROR at 0x150 (abs
-     * 0x6550).  Realign to HSS-canonical offsets. */
-    DDRCFG_REG(0x6400) = LIBERO_SETTING_CFG_ERROR_GROUP_SEL;
-    DDRCFG_REG(0x6404) = LIBERO_SETTING_CFG_DATA_SEL;
-    DDRCFG_REG(0x6408) = LIBERO_SETTING_CFG_TRIG_MODE;
-    DDRCFG_REG(0x640C) = LIBERO_SETTING_CFG_POST_TRIG_CYCS;
-    DDRCFG_REG(0x6410) = LIBERO_SETTING_CFG_TRIG_MASK;
-    DDRCFG_REG(0x6414) = LIBERO_SETTING_CFG_EN_MASK;
-    DDRCFG_REG(0x6418) = LIBERO_SETTING_MTC_ACQ_ADDR;
-    /* 0x641C..0x642C are __I read-only status -- skip */
-    DDRCFG_REG(0x6430) = LIBERO_SETTING_CFG_TRIG_MT_ADDR_0;
-    DDRCFG_REG(0x6434) = LIBERO_SETTING_CFG_TRIG_MT_ADDR_1;
-    DDRCFG_REG(0x6438) = LIBERO_SETTING_CFG_TRIG_ERR_MASK_0;
-    DDRCFG_REG(0x643C) = LIBERO_SETTING_CFG_TRIG_ERR_MASK_1;
-    DDRCFG_REG(0x6440) = LIBERO_SETTING_CFG_TRIG_ERR_MASK_2;
-    DDRCFG_REG(0x6444) = LIBERO_SETTING_CFG_TRIG_ERR_MASK_3;
-    DDRCFG_REG(0x6448) = LIBERO_SETTING_CFG_TRIG_ERR_MASK_4;
-    DDRCFG_REG(0x644C) = LIBERO_SETTING_MTC_ACQ_WR_DATA_0;
-    DDRCFG_REG(0x6450) = LIBERO_SETTING_MTC_ACQ_WR_DATA_1;
-    DDRCFG_REG(0x6454) = LIBERO_SETTING_MTC_ACQ_WR_DATA_2;
-    /* 0x6458..0x6460 are __I MTC_ACQ_RD_DATA[0..2]; 0x6464..0x6528 is
-     * UNUSED_SPACE0 (50 dwords). */
-    DDRCFG_REG(0x652C) = LIBERO_SETTING_CFG_PRE_TRIG_CYCS;
-    DDRCFG_REG(0x6550) = LIBERO_SETTING_CFG_DATA_SEL_FIRST_ERROR;
-
-    /* === DYN_WIDTH_ADJ block (HSS lines 4304-4306) === */
-    DDRCFG_REG(0x7C00) = LIBERO_SETTING_CFG_DQ_WIDTH;
-    DDRCFG_REG(0x7C04) = LIBERO_SETTING_CFG_ACTIVE_DQ_SEL;
-
-    /* === CA_PAR_ERR block (HSS lines 4308-4310) === */
-    DDRCFG_REG(0x8000) = LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_REQ;
-    DDRCFG_REG(0x8004) = LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_CMD;
-
-    /* === DFI block extras (HSS lines 4320-4336) ===
-     * Skip 0x10000-0x1000C (CFG_DFI_T_RDDATA_EN/PHY_RDLAT/PHY_WRLAT/
-     * PHYUPD_EN) -- already written above via MC_DFI_* names. */
-    DDRCFG_REG(0x10010) = LIBERO_SETTING_INIT_DFI_LP_DATA_REQ;
-    DDRCFG_REG(0x10014) = LIBERO_SETTING_INIT_DFI_LP_CTRL_REQ;
-    DDRCFG_REG(0x1001C) = LIBERO_SETTING_INIT_DFI_LP_WAKEUP;
-    DDRCFG_REG(0x10020) = LIBERO_SETTING_INIT_DFI_DRAM_CLK_DISABLE;
-    DDRCFG_REG(0x10030) = LIBERO_SETTING_CFG_DFI_DATA_BYTE_DISABLE;
-    DDRCFG_REG(0x1003C) = LIBERO_SETTING_CFG_DFI_LVL_SEL;
-    DDRCFG_REG(0x10040) = LIBERO_SETTING_CFG_DFI_LVL_PERIODIC;
-    DDRCFG_REG(0x10044) = LIBERO_SETTING_CFG_DFI_LVL_PATTERN;
-    DDRCFG_REG(0x10050) = LIBERO_SETTING_PHY_DFI_INIT_START;
-
-    /* === AXI_IF block (HSS lines 4338-4366) === */
-    DDRCFG_REG(0x12C18) = LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_0;
-    DDRCFG_REG(0x12C1C) = LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_1;
-    DDRCFG_REG(0x12C20) = LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_0;
-    DDRCFG_REG(0x12C24) = LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_1;
-    DDRCFG_REG(0x12F18) = LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_0;
-    DDRCFG_REG(0x12F1C) = LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_1;
-    DDRCFG_REG(0x12F20) = LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_0;
-    DDRCFG_REG(0x12F24) = LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_1;
-    DDRCFG_REG(0x13218) = LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_0;
-    DDRCFG_REG(0x1321C) = LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_1;
-    DDRCFG_REG(0x13220) = LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_0;
-    DDRCFG_REG(0x13224) = LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_1;
-    DDRCFG_REG(0x13514) = LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI1;
-    DDRCFG_REG(0x13518) = LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI2;
-    DDRCFG_REG(0x13690) = LIBERO_SETTING_CFG_AXI_AUTO_PCH;
-
-    /* === csr_custom block (HSS lines 4368-4398) === */
-    DDRCFG_REG(0x3C000) = LIBERO_SETTING_PHY_RESET_CONTROL;
-    DDRCFG_REG(0x3C004) = LIBERO_SETTING_PHY_PC_RANK;
-    DDRCFG_REG(0x3C008) = LIBERO_SETTING_PHY_RANKS_TO_TRAIN;
-    DDRCFG_REG(0x3C00C) = LIBERO_SETTING_PHY_WRITE_REQUEST;
-    DDRCFG_REG(0x3C014) = LIBERO_SETTING_PHY_READ_REQUEST;
-    DDRCFG_REG(0x3C01C) = LIBERO_SETTING_PHY_WRITE_LEVEL_DELAY;
-    DDRCFG_REG(0x3C020) = LIBERO_SETTING_PHY_GATE_TRAIN_DELAY;
-    DDRCFG_REG(0x3C024) = LIBERO_SETTING_PHY_EYE_TRAIN_DELAY;
-    DDRCFG_REG(0x3C028) = LIBERO_SETTING_PHY_EYE_PAT;
-    DDRCFG_REG(0x3C02C) = LIBERO_SETTING_PHY_START_RECAL;
-    DDRCFG_REG(0x3C030) = LIBERO_SETTING_PHY_CLR_DFI_LVL_PERIODIC;
-    DDRCFG_REG(0x3C034) = LIBERO_SETTING_PHY_TRAIN_STEP_ENABLE;
-    DDRCFG_REG(0x3C038) = LIBERO_SETTING_PHY_LPDDR_DQ_CAL_PAT;
-    DDRCFG_REG(0x3C03C) = LIBERO_SETTING_PHY_INDPNDT_TRAINING;
-    DDRCFG_REG(0x3C040) = LIBERO_SETTING_PHY_ENCODED_QUAD_CS;
-    DDRCFG_REG(0x3C044) = LIBERO_SETTING_PHY_HALF_CLK_DLY_ENABLE;
-
-    mb();
-}
-#endif /* 0 - Phase 3.10.3 iter 7 disabled */
 
 /* DDR PHY Configuration */
 static int setup_phy(void)
 {
     uint32_t pvt_stat, pll_ctrl, timeout;
 
-    wolfBoot_printf("DDR: PHY setup...\n");
+    DBG_DDR("DDR: PHY setup...\n");
 
     /* Soft reset DDR PHY */
     DDRPHY_REG(PHY_SOFT_RESET) = 0x01;
@@ -1555,7 +1532,7 @@ static int setup_phy(void)
     mb();
     udelay(10);
     /* Check if mode-driven RPC preload set rpc226=0x14 (HSS canonical) */
-    wolfBoot_printf("  Post-DDRPHY_MODE preload: rpc98=0x%x rpc226=0x%x rpc114=0x%x 0xC=0x%x 0x290=0x%x\n",
+    DBG_DDR("  Post-DDRPHY_MODE preload: rpc98=0x%x rpc226=0x%x rpc114=0x%x 0xC=0x%x 0x290=0x%x\n",
         DDRPHY_REG(0x588), DDRPHY_REG(0x788), DDRPHY_REG(0x5C8),
         DDRPHY_REG(0x00CU), DDRPHY_REG(0x290U));
     DDRPHY_REG(PHY_STARTUP) = 0x003F1F00UL;
@@ -2121,7 +2098,7 @@ static uint8_t mpfs_write_calibration_using_mtc(uint8_t num_lanes)
      * passed the sweep.  Previously we returned early on partial
      * failure -> wrong-data on every lane. */
     mpfs_set_write_calib(num_lanes, lane_lower);
-    wolfBoot_printf(
+    DBG_DDR(
         "  MTC WRCALIB: lanes(%u%u%u%u%u) cal=0x%x status=0x%x\n",
         lane_lower[0], lane_lower[1], lane_lower[2],
         lane_lower[3], lane_lower[4],
@@ -2129,38 +2106,12 @@ static uint8_t mpfs_write_calibration_using_mtc(uint8_t num_lanes)
         status_lower);
 
     if ((status_lower & all_lanes_mask) != all_lanes_mask) {
-        wolfBoot_printf(
+        DBG_DDR(
             "  MTC WRCALIB FAIL: status_lower=0x%x (need 0x%x) -- partial\n",
             status_lower, all_lanes_mask);
         return 1U;
     }
     return 0U;
-}
-
-/* Diagnostic (avenue 4): trace TIP training_status + per-lane wl_delay_0
- * (PHY 0x830) at a labelled point, to learn whether the autonomous WRLVL
- * sets wl_dly before or after the device reset / MR writes, and whether a
- * later step shifts it.  train_stat is read first (global, non-invasive).
- * PHY_LANE_SELECT is saved/restored around the per-lane reads so they do
- * not disturb the TIP (which depends on lane_select state between
- * training iterations). */
-static void mpfs_trace_wldly(const char *tag)
-{
-    uint32_t lane;
-    uint32_t wl[4];
-    uint32_t tstat;
-    uint32_t saved_ls;
-
-    tstat = DDRPHY_REG(PHY_TRAINING_STATUS);
-    saved_ls = DDRPHY_REG(PHY_LANE_SELECT);
-    for (lane = 0; lane < 4; lane++) {
-        DDRPHY_REG(PHY_LANE_SELECT) = lane;
-        ddr_delay(2);
-        wl[lane] = DDRPHY_REG(0x830);
-    }
-    DDRPHY_REG(PHY_LANE_SELECT) = saved_ls;
-    wolfBoot_printf("  [wldly %s] tstat=0x%x L0=0x%x L1=0x%x L2=0x%x L3=0x%x\n",
-        tag, tstat, wl[0], wl[1], wl[2], wl[3]);
 }
 
 /* DDR Training.  retry_count = combined outer*MAX_TRAIN_RETRY + inner
@@ -2201,7 +2152,7 @@ static int run_training(uint32_t retry_count)
      * BCLK90 Rotation (from HSS DDR_TRAINING_ROTATE_CLK)
      * Rotate BCLK90 by 90 degrees using expert mode
      */
-    wolfBoot_printf("DDR: BCLK90 rotation...");
+    DBG_DDR("DDR: BCLK90 rotation...");
     {
         uint32_t i;
 
@@ -2258,7 +2209,7 @@ static int run_training(uint32_t retry_count)
         DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x00;
         mb();
     }
-    wolfBoot_printf("done\n");
+    DBG_DDR("done\n");
 
     /*
      * Apply BCLK phase from Libero settings.
@@ -2270,7 +2221,7 @@ static int run_training(uint32_t retry_count)
      * the BCLK/SCLK phase is NOT the source of the wl_dly divergence --
      * reverted to the Libero default apply.
      */
-    wolfBoot_printf("DDR: BCLK phase (HSS 0x300)...");
+    DBG_DDR("DDR: BCLK phase (HSS 0x300)...");
     {
         /* Force HSS's software-clock-training result on this board:
          * bclk_phase=0x300 (field 3) with paired bclk90=0x2800 (field 5).
@@ -2287,7 +2238,7 @@ static int run_training(uint32_t retry_count)
         mb();
         DDR_PLL_REG(PLL_PHADJ) = 0x00004003UL | bclk_phase | bclk90_phase;
         mb();
-        wolfBoot_printf("PHADJ=0x%x\n", DDR_PLL_REG(PLL_PHADJ));
+        DBG_DDR("PHADJ=0x%x\n", DDR_PLL_REG(PLL_PHADJ));
     }
 
     ddr_delay(1000);
@@ -2296,7 +2247,7 @@ static int run_training(uint32_t retry_count)
      * LPDDR4 Training Sequence (corrected based on HSS)
      * HSS sequence: Configure WRLVL -> DFI init -> wait for DFI complete -> lpddr4_manual_training -> wait for TIP
      */
-    wolfBoot_printf("DDR: Starting TIP training...\n");
+    DBG_DDR("DDR: Starting TIP training...\n");
 
     /* Disable controller auto-initialization during training (HSS
      * mss_ddr.c:750, DDR_TRAINING_RESET; VB Memory Controller User Guide
@@ -2361,7 +2312,6 @@ static int run_training(uint32_t retry_count)
     mb();
     DBG_DDR("done\n");
 
-    mpfs_trace_wldly("after-kick");
 
     /* Step 4: Wait for DFI init complete */
     DBG_DDR("  Wait DFI complete...");
@@ -2379,7 +2329,6 @@ static int run_training(uint32_t retry_count)
     }
     DBG_DDR("OK\n");
 
-    mpfs_trace_wldly("after-dfi-complete");
 
     /* Lane alignment FIFO control (from HSS DDR_TRAINING_IP_SM_START_CHECK) */
     DDRPHY_REG(PHY_LANE_ALIGN_FIFO_CTRL) = 0x00;
@@ -2411,7 +2360,6 @@ static int run_training(uint32_t retry_count)
     ddr_delay(50);
     DBG_DDR("done\n");
 
-    mpfs_trace_wldly("after-device-reset");
 
     /*
      * DDR PLL frequency doubling for LPDDR4 training (from HSS lines 5057-5076)
@@ -2578,7 +2526,6 @@ static int run_training(uint32_t retry_count)
     }
     DBG_DDR("done\n");
 
-    mpfs_trace_wldly("after-MR-writes");
 
     /*
      * Restore PLL to normal speed after mode register writes
@@ -2791,7 +2738,7 @@ static int run_training(uint32_t retry_count)
         if (vref_answer == 128) {
             /* Training failed - use default 0x10 */
             vref_answer = 0x10;
-            DBG_DDR("FAIL(0x%x)...", vref_answer);
+            wolfBoot_printf("FAIL(0x%x)...", vref_answer);
         } else {
             DBG_DDR("0x%x...", vref_answer);
         }
@@ -3055,7 +3002,7 @@ static int run_training(uint32_t retry_count)
         }
 
         if (a5_offset_status != 0)
-            DBG_DDR("FAIL...");
+            wolfBoot_printf("FAIL...");
     }
 
     /* POST_INITIALIZATION after ADDCMD training */
@@ -3075,7 +3022,6 @@ static int run_training(uint32_t retry_count)
     DDRCFG_REG(MC_INIT_DISABLE_CKE) = 0x00;
     ddr_delay(5000);
 
-    mpfs_trace_wldly("after-addcmd");
 
     /* Post-ADDCMD: Refresh mode registers per HSS pattern.
      *
@@ -3125,7 +3071,6 @@ static int run_training(uint32_t retry_count)
      * intermittent first-words corruption. */
     DDRCFG_REG(MC_INIT_AUTOINIT_DISABLE) = 0x0U;
     mb();
-    mpfs_trace_wldly("after-autoinit-reenable");
 
     ddr_delay(100);
 
@@ -3179,37 +3124,25 @@ static int run_training(uint32_t retry_count)
      * WRLVL training bit being set. */
     DBG_DDR("    DPC_BITS/RPC3_ODT restore deferred until WRLVL bit set\n");
 
-#ifdef MPFS_DDR_KICK_TRAINING_START
-    /* EXPERIMENT: HSS never writes 1 to PHY_TRAINING_START in the
-     * success path (only writes 0 in the failure-retry path), but our
-     * snapshot shows train_start=0x0 when TIP refuses to advance past
-     * BCLK_SCLK.  Try kicking it manually to see if TIP comes alive.
-     * If this works, we are missing some auto-trigger HSS gets for free
-     * on its hardware/firmware combination.  If it does nothing, we
-     * have ruled out training_start as the missing piece. */
-    wolfBoot_printf("  Kicking PHY_TRAINING_START=1 (experiment)\n");
-    DDRPHY_REG(PHY_TRAINING_START) = 0x00000001UL;
-    mb();
-#endif
 
     /* Pre-wait state snapshot - what TIP sees right now. */
-    wolfBoot_printf("  Pre-TIP-wait snapshot:\n");
-    wolfBoot_printf("    train_stat=0x%x train_skip=0x%x train_reset=0x%x\n",
+    DBG_DDR("  Pre-TIP-wait snapshot:\n");
+    DBG_DDR("    train_stat=0x%x train_skip=0x%x train_reset=0x%x\n",
         DDRPHY_REG(PHY_TRAINING_STATUS),
         DDRPHY_REG(PHY_TRAINING_SKIP),
         DDRPHY_REG(PHY_TRAINING_RESET));
-    wolfBoot_printf("    train_start=0x%x tip_cfg_params=0x%x\n",
+    DBG_DDR("    train_start=0x%x tip_cfg_params=0x%x\n",
         DDRPHY_REG(PHY_TRAINING_START),
         DDRPHY_REG(PHY_TIP_CFG_PARAMS));
-    wolfBoot_printf("    DPC_BITS=0x%x RPC3_ODT=0x%x\n",
+    DBG_DDR("    DPC_BITS=0x%x RPC3_ODT=0x%x\n",
         DDRPHY_REG(PHY_DPC_BITS), DDRPHY_REG(PHY_RPC3_ODT));
-    wolfBoot_printf("    DFI_init_complete=0x%x DFI_train_complete=0x%x\n",
+    DBG_DDR("    DFI_init_complete=0x%x DFI_train_complete=0x%x\n",
         DDRCFG_REG(MC_DFI_INIT_COMPLETE),
         DDRCFG_REG(0x10038U));
     /* Note: this snapshot previously printed "INIT_DONE=" but read
      * MC_INIT_AUTOINIT_DISABLE (+0x10), not MC_CTRLR_INIT_DONE (+0x3c).
      * Print both correctly so the controller-init state is truthful. */
-    wolfBoot_printf("    CTRLR_INIT_DONE=0x%x AUTOINIT_DIS=0x%x\n",
+    DBG_DDR("    CTRLR_INIT_DONE=0x%x AUTOINIT_DIS=0x%x\n",
         DDRCFG_REG(MC_CTRLR_INIT_DONE),
         DDRCFG_REG(MC_INIT_AUTOINIT_DISABLE));
     {
@@ -3217,7 +3150,7 @@ static int run_training(uint32_t retry_count)
         for (lane = 0; lane < 4; lane++) {
             DDRPHY_REG(PHY_LANE_SELECT) = lane;
             ddr_delay(10);
-            wolfBoot_printf("    L%d: gt_state=0x%x gt_txdly=0x%x wl_dly=0x%x dqdqs_st=0x%x\n",
+            DBG_DDR("    L%d: gt_state=0x%x gt_txdly=0x%x wl_dly=0x%x dqdqs_st=0x%x\n",
                 lane,
                 DDRPHY_REG(0x82C),  /* gt_state */
                 DDRPHY_REG(0x824),  /* gt_txdly -- new */
@@ -3252,7 +3185,7 @@ static int run_training(uint32_t retry_count)
      * - DQS Gate Training (RDGATE) - TIP runs automatically
      * - Read Data Eye Training (DQ_DQS) - TIP runs automatically
      */
-    wolfBoot_printf("  DFI pre wait-loop: INIT=0x%x TRAIN=0x%x\n",
+    DBG_DDR("  DFI pre wait-loop: INIT=0x%x TRAIN=0x%x\n",
         DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
     DBG_DDR("  Wait for TIP WRLVL to start and complete...\n");
     {
@@ -3305,10 +3238,10 @@ static int run_training(uint32_t retry_count)
                 != (WRLVL_BIT | RDGATE_BIT | DQ_DQS_BIT)) {
                 DDRCFG_REG(MT_EN_SINGLE) = 1;
                 mtc_kicks = 1;
-                wolfBoot_printf("      MTC priming kick (train_stat=0x%x)\n",
+                DBG_DDR("      MTC priming kick (train_stat=0x%x)\n",
                     cur_train);
             } else {
-                wolfBoot_printf("      Skip MTC kick (train_stat=0x%x already complete)\n",
+                DBG_DDR("      Skip MTC kick (train_stat=0x%x already complete)\n",
                     cur_train);
             }
             mb();
@@ -3336,7 +3269,7 @@ static int run_training(uint32_t retry_count)
                 DDRPHY_REG(PHY_DPC_BITS) = LIBERO_SETTING_DPC_BITS;
                 DDRPHY_REG(PHY_RPC3_ODT) = LIBERO_SETTING_RPC_ODT_DQ;
                 mb();
-                wolfBoot_printf(
+                DBG_DDR(
                     "      WRLVL done -> restored DPC_BITS=0x%x ODT=0x%x\n",
                     LIBERO_SETTING_DPC_BITS, LIBERO_SETTING_RPC_ODT_DQ);
                 dpc_odt_restored = 1;
@@ -3361,7 +3294,7 @@ static int run_training(uint32_t retry_count)
                 == (WRLVL_BIT | RDGATE_BIT | DQ_DQS_BIT)
                 && (DDRPHY_REG(0x834U) == 8U)) {
                 training_complete = 1;
-                wolfBoot_printf("      DQ_DQS state=8 (complete)\n");
+                DBG_DDR("      DQ_DQS state=8 (complete)\n");
                 break;
             }
 
@@ -3390,7 +3323,7 @@ static int run_training(uint32_t retry_count)
             }
         }
 
-        wolfBoot_printf("      MTC kicks during wait: %u\n",
+        DBG_DDR("      MTC kicks during wait: %u\n",
             (unsigned)mtc_kicks);
 
         /* Final safety restore: if WRLVL never completed, DPC_BITS
@@ -3400,7 +3333,7 @@ static int run_training(uint32_t retry_count)
             DDRPHY_REG(PHY_DPC_BITS) = LIBERO_SETTING_DPC_BITS;
             DDRPHY_REG(PHY_RPC3_ODT) = LIBERO_SETTING_RPC_ODT_DQ;
             mb();
-            wolfBoot_printf(
+            DBG_DDR(
                 "      WRLVL never set -> safety restore DPC=0x%x ODT=0x%x\n",
                 LIBERO_SETTING_DPC_BITS, LIBERO_SETTING_RPC_ODT_DQ);
         }
@@ -3436,10 +3369,10 @@ static int run_training(uint32_t retry_count)
             DBG_DDR("      all_lanes_trained=%d train_stat=0x%x\n",
                     all_lanes_trained, train_stat_check);
         }
-        wolfBoot_printf("    DFI after per-lane reads: INIT=0x%x TRAIN=0x%x\n",
+        DBG_DDR("    DFI after per-lane reads: INIT=0x%x TRAIN=0x%x\n",
             DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
     }
-    wolfBoot_printf("  DFI after wait-loop exit: INIT=0x%x TRAIN=0x%x\n",
+    DBG_DDR("  DFI after wait-loop exit: INIT=0x%x TRAIN=0x%x\n",
         DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
 
     /*
@@ -3462,7 +3395,7 @@ static int run_training(uint32_t retry_count)
 
     /* Dump DFI error/status registers to diagnose why training_complete
      * doesn't assert.  Pre-pulse state. */
-    wolfBoot_printf("  DFI pre-pulse: TRAINING_ERROR=0x%x INIT_COMPLETE=0x%x TRAINING_COMPLETE=0x%x\n",
+    DBG_DDR("  DFI pre-pulse: TRAINING_ERROR=0x%x INIT_COMPLETE=0x%x TRAINING_COMPLETE=0x%x\n",
         DDRCFG_REG(0x10024U), DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
 
     /* Re-pulse PHY_DFI_INIT_START to re-establish DFI init handshake.
@@ -3476,17 +3409,17 @@ static int run_training(uint32_t retry_count)
     mb();
     udelay(1000);  /* let DFI re-handshake */
 
-    wolfBoot_printf("  DFI post-pulse: TRAINING_ERROR=0x%x INIT_COMPLETE=0x%x TRAINING_COMPLETE=0x%x\n",
+    DBG_DDR("  DFI post-pulse: TRAINING_ERROR=0x%x INIT_COMPLETE=0x%x TRAINING_COMPLETE=0x%x\n",
         DDRCFG_REG(0x10024U), DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
 
     /* Check final training status */
     train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
-    wolfBoot_printf("  Final train_stat=0x%x\n", train_stat);
+    DBG_DDR("  Final train_stat=0x%x\n", train_stat);
 
     /* HSS-vs-wolfBoot PHY register diff diagnostic (2026-05-13).
      * HSS dump shows specific PHY offsets at canonical values.  Read
      * back our state at the same point to find what differs. */
-    wolfBoot_printf("  PHY diff: 0xC=0x%x 0x290=0x%x 0x1FC=0x%x "
+    DBG_DDR("  PHY diff: 0xC=0x%x 0x290=0x%x 0x1FC=0x%x "
         "rpc98@0x588=0x%x rpc114@0x5C8=0x%x rpc156@0x670=0x%x "
         "rpc220@0x770=0x%x rpc226@0x788=0x%x DDRPHY_MODE@0x4=0x%x\n",
         DDRPHY_REG(0x00CU), DDRPHY_REG(0x290U), DDRPHY_REG(0x1FCU),
@@ -3505,10 +3438,11 @@ static int run_training(uint32_t retry_count)
             udelay(2);
             eye[l] = DDRPHY_REG(0x850U);
         }
-        wolfBoot_printf(
+        DBG_DDR(
             "  gt_err_comb=0x%x dq_dqs_err_done=0x%x (need 8) eye[0..3]=%u/%u/%u/%u\n",
             DDRPHY_REG(0x81CU), DDRPHY_REG(0x834U),
             eye[0], eye[1], eye[2], eye[3]);
+        (void)eye;
     }
 
     /* Run HSS-equivalent MTC-based write calibration when TIP reached
@@ -3566,7 +3500,7 @@ static int run_training(uint32_t retry_count)
                     *(volatile uint32_t*)0x20107000UL = 0xDEADC0DEU;
                 }
             }
-            wolfBoot_printf(
+            DBG_DDR(
                 "  Pre-WRCALIB: CTRLR_INIT_DONE=0x%x DFI_train_complete=0x%x"
                 " AUTO_REF=0x%x (init %u us, dfi %u us)\n",
                 DDRCFG_REG(MC_CTRLR_INIT_DONE),
@@ -3575,13 +3509,13 @@ static int run_training(uint32_t retry_count)
                 (unsigned)((100000U - init_to) * 10U),
                 (unsigned)((100000U - dfi_to) * 10U));
         }
-        wolfBoot_printf("  MTC WRCALIB (HSS-style) tstat=0x%x...\n",
+        DBG_DDR("  MTC WRCALIB (HSS-style) tstat=0x%x...\n",
             train_stat);
         wrcal_res = mpfs_write_calibration_using_mtc(4U);
         if (wrcal_res == MPFS_MTC_TIMEOUT_ERROR) {
             wolfBoot_printf("  MTC WRCALIB TIMEOUT\n");
         } else if (wrcal_res != 0U) {
-            wolfBoot_printf("  MTC WRCALIB no valid offset for some lane\n");
+            DBG_DDR("  MTC WRCALIB no valid offset for some lane\n");
         }
         /* MTC WRCALIB unreliable on Video Kit (consistent timeouts).
          * Force EXPERT_WRCALIB = HSS-canonical 0x5555 (cal=5 per lane).
@@ -3591,121 +3525,10 @@ static int run_training(uint32_t retry_count)
         DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
         DDRPHY_REG(PHY_EXPERT_WRCALIB) = 0x5555UL;
         mb();
-        wolfBoot_printf("  Forced EXPERT_WRCALIB=0x%x (HSS value)\n",
+        DBG_DDR("  Forced EXPERT_WRCALIB=0x%x (HSS value)\n",
             DDRPHY_REG(PHY_EXPERT_WRCALIB));
         goto skip_mtc_wrcalib;
     }
-
-    /* Write calibration using MTC (Memory Test Controller)
-     * Based on HSS write_calibration_using_mtc().  Used as a fallback
-     * when TIP autonomous training did NOT reach 0x1D. */
-    wolfBoot_printf("  Write calib...");
-    {
-        uint32_t cal_data;
-        uint32_t lane;
-        uint32_t result;
-        uint32_t lane_status = 0;
-        uint32_t lane_calib[5] = {0};
-        const uint32_t num_lanes = 4;  /* Video Kit has 4 data lanes */
-
-        /* Enable expert mode for write calibration */
-        DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x00000008UL;
-
-        /* Sweep write calibration offset from 0 to F */
-        for (cal_data = 0x00000; cal_data < 0xFFFFF; cal_data += 0x11111) {
-            /* Set write calibration offset for all lanes */
-            DDRPHY_REG(PHY_EXPERT_WRCALIB) = cal_data;
-
-            for (lane = 0; lane < num_lanes; lane++) {
-                if (lane_status & (1 << lane))
-                    continue;  /* Already calibrated this lane */
-
-                uint8_t mask = (1 << lane);
-
-                /* Configure MTC for this lane */
-                DDRCFG_REG(MT_STOP_ON_ERROR) = 0;
-                DDRCFG_REG(MT_EN_SINGLE) = 0;
-                DDRCFG_REG(MT_DATA_PATTERN) = 0;  /* Counting pattern */
-                DDRCFG_REG(MT_ADDR_PATTERN) = 0;  /* Sequential */
-                DDRCFG_REG(MT_START_ADDR_0) = 0;
-                DDRCFG_REG(MT_START_ADDR_1) = 0;
-                DDRCFG_REG(MT_ADDR_BITS) = 20;  /* 1MB test size (2^20) */
-
-                /* Set error masks - unmask only the lane under test */
-                DDRCFG_REG(MT_ERROR_MASK_0) = 0xFFFFFFFF;
-                DDRCFG_REG(MT_ERROR_MASK_1) = 0xFFFFFFFF;
-                DDRCFG_REG(MT_ERROR_MASK_2) = 0xFFFFFFFF;
-                DDRCFG_REG(MT_ERROR_MASK_3) = 0xFFFFFFFF;
-                DDRCFG_REG(MT_ERROR_MASK_4) = 0xFFFFFFFF;
-
-                if (mask & 0x1) {
-                    DDRCFG_REG(MT_ERROR_MASK_0) &= 0xFFFFFF00;
-                    DDRCFG_REG(MT_ERROR_MASK_1) &= 0xFFFFF00F;
-                    DDRCFG_REG(MT_ERROR_MASK_2) &= 0xFFFF00FF;
-                    DDRCFG_REG(MT_ERROR_MASK_3) &= 0xFFF00FFF;
-                }
-                if (mask & 0x2) {
-                    DDRCFG_REG(MT_ERROR_MASK_0) &= 0xFFFF00FF;
-                    DDRCFG_REG(MT_ERROR_MASK_1) &= 0xFFF00FFF;
-                    DDRCFG_REG(MT_ERROR_MASK_2) &= 0xFF00FFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_3) &= 0xF00FFFFF;
-                }
-                if (mask & 0x4) {
-                    DDRCFG_REG(MT_ERROR_MASK_0) &= 0xFF00FFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_1) &= 0xF00FFFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_2) &= 0x00FFFFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_3) &= 0x0FFFFFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_4) &= 0xFFFFFFF0;
-                }
-                if (mask & 0x8) {
-                    DDRCFG_REG(MT_ERROR_MASK_0) &= 0x00FFFFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_1) &= 0x0FFFFFFF;
-                    DDRCFG_REG(MT_ERROR_MASK_2) &= 0xFFFFFFF0;
-                    DDRCFG_REG(MT_ERROR_MASK_3) &= 0xFFFFFF00;
-                    DDRCFG_REG(MT_ERROR_MASK_4) &= 0xFFFFF00F;
-                }
-
-                /* Run MTC test */
-                DDRCFG_REG(MT_EN) = 0;
-                DDRCFG_REG(MT_EN_SINGLE) = 0;
-                DDRCFG_REG(MT_EN_SINGLE) = 1;
-
-                /* Wait for MTC completion */
-                timeout = 0xFFFFFF;
-                while ((DDRCFG_REG(MT_DONE_ACK) & 0x01) == 0 && timeout > 0)
-                    timeout--;
-
-                if (timeout == 0) {
-                    wolfBoot_printf("MTC timeout...");
-                    break;
-                }
-
-                /* Check result */
-                result = DDRCFG_REG(MT_ERROR_STS) & 0x01;
-                if (result == 0) {
-                    /* Lane passed */
-                    lane_calib[lane] = cal_data & 0xF;
-                    lane_status |= (1 << lane);
-                }
-            }
-
-            /* Check if all lanes calibrated */
-            if (lane_status == ((1 << num_lanes) - 1))
-                break;
-        }
-
-        if (lane_status == ((1 << num_lanes) - 1)) {
-            /* All lanes calibrated - set final calibration value */
-            uint32_t final_calib = 0;
-            for (lane = 0; lane < num_lanes; lane++)
-                final_calib |= (lane_calib[lane] << (lane * 4));
-            DDRPHY_REG(PHY_EXPERT_WRCALIB) = final_calib;
-            wolfBoot_printf("ok (0x%x)\n", final_calib);
-        } else {
-            wolfBoot_printf("FAIL (lanes=0x%x)\n", lane_status);
-        }
-    }
-
 skip_mtc_wrcalib:
     DBG_DDR("  Final status=0x%x\n", DDRPHY_REG(PHY_TRAINING_STATUS));
     DBG_DDR("  Controller INIT_DONE=0x%x\n", DDRCFG_REG(MC_CTRLR_INIT_DONE));
@@ -3729,76 +3552,6 @@ skip_mtc_wrcalib:
     return 0;
 }
 
-/* DDR Memory Test (cached path only).
- *
- * Empirical: direct non-cached CPU writes at 0xC0000000 succeed (the
- * AXI write-combining buffer absorbs them) but the subsequent read at
- * the same address hangs on most boots, suggesting the WCB doesn't
- * complete the write-then-read round-trip cleanly for small (<16-byte)
- * accesses.  PDMA-style or cached writes go through L2 which promotes
- * them to full 64-byte burst writes that the DDRC accepts.
- *
- * Test sequence per 4-byte pattern:
- *   1. CPU cached write at 0x80000000 (absorbed by L2).
- *   2. mb() memory barrier.
- *   3. L2 FLUSH64 register write forces the line to DDR and
- *      invalidates the L2 entry.
- *   4. CPU cached read fetches a fresh 64-byte L2 line from DDR via
- *      an AXI cached read transaction.
- *
- * Reports a clean PASS/FAIL per word so a hang point is pinpointable
- * in the UART log (the last printed prefix tells which step stalled).
- */
-static int memory_test(void)
-{
-    volatile uint32_t *ddr = (volatile uint32_t *)0x80000000UL;
-    uint32_t patterns[] = {
-        0x55555555UL,
-        0xAAAAAAAAUL,
-        0x12345678UL,
-        0xFEDCBA98UL
-    };
-    uint32_t readback;
-    int i, errors = 0;
-    uint32_t train_stat, blocker, ctrl_done;
-
-    train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
-    blocker = DDR_SEG_REG(SEG0_BLOCKER);
-    ctrl_done = DDRCFG_REG(MC_CTRLR_INIT_DONE);
-    wolfBoot_printf("DDR: Memory test (cached @ 0x80000000)\n");
-    wolfBoot_printf("  Training=0x%x Blocker=0x%x INIT_DONE=0x%x\n",
-                    train_stat, blocker, ctrl_done);
-
-    if (!(blocker & 0x01)) {
-        wolfBoot_printf("  ERROR: DDR blocker not disabled!\n");
-        return -1;
-    }
-
-    for (i = 0; i < 4; i++) {
-        wolfBoot_printf("  [%d] W=0x%x ", i, patterns[i]);
-        ddr[i] = patterns[i];
-        mb();
-        wolfBoot_printf("wr-ok ");
-        L2_FLUSH64 = (uint64_t)(uintptr_t)&ddr[i];
-        mb();
-        wolfBoot_printf("flush-ok ");
-        readback = ddr[i];
-        wolfBoot_printf("R=0x%x ", readback);
-        if (readback != patterns[i]) {
-            wolfBoot_printf("FAIL\n");
-            errors++;
-        } else {
-            wolfBoot_printf("OK\n");
-        }
-    }
-
-    wolfBoot_printf("  errors: %d/4\n", errors);
-    if (errors == 0) {
-        wolfBoot_printf("  PASSED\n");
-        return 0;
-    }
-    return -1;
-}
 
 /* PDMA helpers for DDR pre-fill (HSS clear_bootup_cache_ways). */
 #define MPFS_PDMA_BASE          0x03000000UL
@@ -3915,7 +3668,7 @@ static void mpfs_clear_bootup_cache_ways(uint64_t ddr_pdma_base,
     uint32_t ch;
     uint64_t addr;
 
-    wolfBoot_printf("DDR: PDMA pre-fill %lu MB @ 0x%lx...\n",
+    DBG_DDR("DDR: PDMA pre-fill %lu MB @ 0x%lx...\n",
         (unsigned long)(fill_size >> 20),
         (unsigned long)ddr_pdma_base);
 
@@ -3932,7 +3685,7 @@ static void mpfs_clear_bootup_cache_ways(uint64_t ddr_pdma_base,
         mpfs_pdma_wait(MPFS_PDMA_CH_BASE(ch));
     }
     mb();
-    wolfBoot_printf("  PDMA fill done\n");
+    DBG_DDR("  PDMA fill done\n");
 
     /* L2 FLUSH64: drain any stale cache lines tagged for this range
      * without doing CPU writes (which would re-allocate the lines and
@@ -3943,7 +3696,7 @@ static void mpfs_clear_bootup_cache_ways(uint64_t ddr_pdma_base,
         *flush64 = (uint64_t)addr;
     }
     mb();
-    wolfBoot_printf("  L2 flush done (%lu MB)\n",
+    DBG_DDR("  L2 flush done (%lu MB)\n",
         (unsigned long)(fill_size >> 20));
 }
 
@@ -4007,108 +3760,6 @@ static uint32_t mpfs_mr_masked_write_x5(uint32_t address)
     return error;
 }
 
-/* DDRC register-space walk.
- *
- * Two functions sharing the same address ranges:
- *   mpfs_dump_ddrc_regs()   -- prints each register in HSS DEBUG_DDR_
- *                              DDRCFG format ('Register, 0xADDR  ,
- *                              Value, 0xVAL') for tools/scripts/ddr-
- *                              diff.py.  Diagnostic use only.
- *   mpfs_settle_ddrc_regs() -- silent variant (reads but does not
- *                              print).  Empirically required: with
- *                              the register-read walk between post-
- *                              init and the first AXI access, AXI
- *                              reads from DDR succeed; without it,
- *                              they hang on most boots.  The walk
- *                              gives the controller's internal state
- *                              machines and the APB bus time to
- *                              quiesce before the first AXI request.
- *                              Removing this function will regress
- *                              the read path.
- *
- * Ranges are the union of regions HSS prints via print_reg_array
- * (mss_ddr_debug.c) plus DFI (0x10000+) and AXI_IF (0x12C00+) for
- * full coverage.  These are all readable; addresses outside these
- * ranges may trap. */
-static const uint32_t mpfs_ddrc_dump_ranges[][2] = {
-    {0x2400U, 0x2434U},   /* MC_BASE3 head */
-    {0x2800U, 0x292CU},
-    {0x3C00U, 0x3DB0U},
-    {0x4000U, 0x43FCU},   /* MC_BASE2 */
-    {0x4C00U, 0x4CA0U},
-    {0x5000U, 0x5020U},
-    {0x5400U, 0x5404U},
-    {0x5800U, 0x5868U},
-    {0x5C00U, 0x5C44U},
-    {0x6400U, 0x6558U},
-    {0x7C00U, 0x7C04U},
-    {0x8000U, 0x801CU},
-    {0x10000U, 0x10054U},   /* DFI block */
-    {0x12C00U, 0x12C28U},   /* AXI_IF AXI_START_ADDRESS */
-    {0x12F18U, 0x12F28U},   /* AXI_IF AXI_END_ADDRESS */
-    {0x13218U, 0x13228U},   /* AXI_IF MEM_START_ADDRESS */
-    {0x13514U, 0x13518U},   /* AXI_IF ENABLE_BUS_HOLD */
-    {0x13690U, 0x13690U}    /* AXI_IF AXI_AUTO_PCH */
-};
-
-static volatile uint32_t mpfs_settle_sink;
-
-static void mpfs_settle_ddrc_regs(void)
-{
-    uint32_t i, off;
-
-    for (i = 0U;
-         i < (sizeof(mpfs_ddrc_dump_ranges) /
-              sizeof(mpfs_ddrc_dump_ranges[0]));
-         i++) {
-        for (off = mpfs_ddrc_dump_ranges[i][0];
-             off <= mpfs_ddrc_dump_ranges[i][1];
-             off += 4U) {
-            mpfs_settle_sink =
-                *(volatile uint32_t *)((uintptr_t)DDRCFG_BASE + off);
-        }
-    }
-}
-
-static void mpfs_dump_ddrc_regs(void)
-{
-    uint32_t i, off;
-    uint32_t val;
-    uintptr_t abs_addr;
-
-    for (i = 0U;
-         i < (sizeof(mpfs_ddrc_dump_ranges) /
-              sizeof(mpfs_ddrc_dump_ranges[0]));
-         i++) {
-        for (off = mpfs_ddrc_dump_ranges[i][0];
-             off <= mpfs_ddrc_dump_ranges[i][1];
-             off += 4U) {
-            abs_addr = (uintptr_t)DDRCFG_BASE + off;
-            val = *(volatile uint32_t *)abs_addr;
-            wolfBoot_printf("Register, 0x%016lx  ,Value, 0x%08x\n",
-                (unsigned long)abs_addr, (unsigned)val);
-        }
-    }
-}
-
-/* PHY register dump (CFG_DDR_SGMII_PHY @ 0x20007000).  Covers the
- * range HSS DEBUG HEXDUMP 0x20007000 0xC00 reaches.  Stop before the
- * 0x20007C28 dynamic-control bound to avoid the BEU 'Load or store
- * TileLink bus error' we observed when HSS HEXDUMP overran. */
-static void mpfs_dump_phy_regs(void)
-{
-    uint32_t off;
-    uint32_t val;
-    uintptr_t abs_addr;
-
-    for (off = 0U; off < 0xC00U; off += 4U) {
-        abs_addr = (uintptr_t)CFG_DDR_SGMII_PHY_BASE + off;
-        val = *(volatile uint32_t *)abs_addr;
-        wolfBoot_printf("Register, 0x%016lx  ,Value, 0x%08x\n",
-            (unsigned long)abs_addr, (unsigned)val);
-    }
-}
-
 /* HSS port: LPDDR4 POST_INITIALIZATION (mss_ddr.c:5597-5646).
  *
  * Drop override-to-shim, pulse expert_dlycnt_pause, release CKE,
@@ -4130,7 +3781,7 @@ static int mpfs_ddr_post_initialization(void)
     uint32_t timeout;
     uint32_t mr_err;
 
-    wolfBoot_printf("DDR: Post-init: dropping override-to-shim, pausing dlycnt\n");
+    DBG_DDR("DDR: Post-init: dropping override-to-shim, pausing dlycnt\n");
     DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
     DDRPHY_REG(PHY_EXPERT_DFI_STATUS_TO_SHIM) = 0x0UL;
     DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x09UL;
@@ -4140,12 +3791,12 @@ static int mpfs_ddr_post_initialization(void)
     mb();
     udelay(1);                       /* HSS DELAY_CYCLES_500_NS */
 
-    wolfBoot_printf("DDR: Post-init: releasing CKE\n");
+    DBG_DDR("DDR: Post-init: releasing CKE\n");
     DDRCFG_REG(MC_INIT_DISABLE_CKE) = 0x0UL;
     mb();
     udelay(500);                     /* HSS DELAY_CYCLES_500_MICRO */
 
-    wolfBoot_printf("DDR: Post-init: writing 9 mode registers\n");
+    DBG_DDR("DDR: Post-init: writing 9 mode registers\n");
     /* CRITICAL: do an UNMASKED MR2 write first to clear LPDDR4
      * MR2 OP[7] (write-leveling enable).  TIP's WRLVL phase may
      * set MR2[7]=1 to enter WRLVL mode; the polar-fire-guide rule
@@ -4156,8 +3807,9 @@ static int mpfs_ddr_post_initialization(void)
      * MR2=0x2D = WL Set 5 / RL Set 5, MR2[7]=0 = WRLVL disabled. */
     {
         uint32_t mr2_err = mpfs_mr_unmasked_write(2U, 0x2DUL);
-        wolfBoot_printf("  MR2 explicit clear (=0x2D) ack=%u\n",
+        DBG_DDR("  MR2 explicit clear (=0x2D) ack=%u\n",
             mr2_err == 0U ? 1U : 0U);
+        (void)mr2_err;
     }
     mr_err  = mpfs_mr_masked_write_x5(1U);
     mr_err |= mpfs_mr_masked_write_x5(2U);
@@ -4168,10 +3820,10 @@ static int mpfs_ddr_post_initialization(void)
     mr_err |= mpfs_mr_masked_write_x5(17U);
     mr_err |= mpfs_mr_masked_write_x5(22U);
     mr_err |= mpfs_mr_masked_write_x5(13U);
-    wolfBoot_printf("  MR writes done (mr_err=0x%x)\n", (unsigned)mr_err);
+    DBG_DDR("  MR writes done (mr_err=0x%x)\n", (unsigned)mr_err);
     udelay(10);
 
-    wolfBoot_printf("DDR: Post-init: triggering ZQ cal + releasing auto-init\n");
+    DBG_DDR("DDR: Post-init: triggering ZQ cal + releasing auto-init\n");
     DDRCFG_REG(MC_INIT_ZQ_CAL_START)     = 0x1UL;
     DDRCFG_REG(MC_INIT_AUTOINIT_DISABLE) = 0x0UL;  /* operational handoff */
     mb();
@@ -4187,16 +3839,16 @@ static int mpfs_ddr_post_initialization(void)
 
     if (timeout >= 0xFFU) {
         wolfBoot_printf("DDR: Post-init INIT_ACK TIMEOUT\n");
-        wolfBoot_printf("  AUTOINIT_DIS=0x%x INIT_ACK=0x%x ZQ_CAL_START=0x%x\n",
+        DBG_DDR("  AUTOINIT_DIS=0x%x INIT_ACK=0x%x ZQ_CAL_START=0x%x\n",
             DDRCFG_REG(MC_INIT_AUTOINIT_DISABLE),
             DDRCFG_REG(MC_INIT_ACK),
             DDRCFG_REG(MC_INIT_ZQ_CAL_START));
-        wolfBoot_printf("  CTRLR_INIT_DONE=0x%x PHY_TRAINING_STATUS=0x%x\n",
+        DBG_DDR("  CTRLR_INIT_DONE=0x%x PHY_TRAINING_STATUS=0x%x\n",
             DDRCFG_REG(MC_CTRLR_INIT_DONE),
             DDRPHY_REG(PHY_TRAINING_STATUS));
         return 1;
     }
-    wolfBoot_printf("DDR: Post-init: INIT_ACK=1 after %u us\n",
+    DBG_DDR("DDR: Post-init: INIT_ACK=1 after %u us\n",
         (unsigned)(timeout * 10U));
 
     DDRCFG_REG(MC_CFG_AUTO_ZQ_CAL_EN) = LIBERO_SETTING_CFG_AUTO_ZQ_CAL_EN;
@@ -4208,12 +3860,12 @@ static int mpfs_ddr_post_initialization(void)
      * refresh mode, refusing AXI bursts.  Read STATUS before/after
      * clearing.  Status @ +0x238: bit0=in_self_refresh for rank0,
      * bit1=rank1. */
-    wolfBoot_printf("  Pre-clear SELF_REFRESH=0x%x STATUS=0x%x\n",
+    DBG_DDR("  Pre-clear SELF_REFRESH=0x%x STATUS=0x%x\n",
         DDRCFG_REG(0x4234U), DDRCFG_REG(0x4238U));
     DDRCFG_REG(0x4234U) = 0x0U;  /* INIT_SELF_REFRESH = 0 */
     mb();
     udelay(100);
-    wolfBoot_printf("  Post-clear SELF_REFRESH=0x%x STATUS=0x%x\n",
+    DBG_DDR("  Post-clear SELF_REFRESH=0x%x STATUS=0x%x\n",
         DDRCFG_REG(0x4234U), DDRCFG_REG(0x4238U));
 
     /* Tested forcing expert_dfi_status_override_to_shim=0x07 here
@@ -4224,7 +3876,7 @@ static int mpfs_ddr_post_initialization(void)
      * and the captured 0x07 reflects HSS's last-write residue, not a
      * required steady-state value. */
 
-    wolfBoot_printf("DDR: Post-init COMPLETE -- handing off to AXI\n");
+    DBG_DDR("DDR: Post-init COMPLETE -- handing off to AXI\n");
 
     /* Empirical settle: verbose register dump.  This unblocks AXI
      * reads on ~50% of cold boots vs ~0% without it.  The exact
@@ -4239,7 +3891,7 @@ static int mpfs_ddr_post_initialization(void)
 
     /* Dump key DRAM-control register states to find what's blocking
      * reads from completing.  Then try clearing potential gates. */
-    wolfBoot_printf("  DRAM ctrl: FORCE_RESET=0x%x DISABLE_CKE=0x%x INIT_CS=0x%x "
+    DBG_DDR("  DRAM ctrl: FORCE_RESET=0x%x DISABLE_CKE=0x%x INIT_CS=0x%x "
         "AUTOINIT_DIS=0x%x INIT_REFRESH=0x%x\n",
         DDRCFG_REG(MC_INIT_FORCE_RESET),
         DDRCFG_REG(MC_INIT_DISABLE_CKE),
@@ -4254,7 +3906,7 @@ static int mpfs_ddr_post_initialization(void)
     mb();
     udelay(100);
 
-    wolfBoot_printf("  DRAM ctrl POST-clear: FORCE_RESET=0x%x DISABLE_CKE=0x%x "
+    DBG_DDR("  DRAM ctrl POST-clear: FORCE_RESET=0x%x DISABLE_CKE=0x%x "
         "AUTOINIT_DIS=0x%x\n",
         DDRCFG_REG(MC_INIT_FORCE_RESET),
         DDRCFG_REG(MC_INIT_DISABLE_CKE),
@@ -4267,7 +3919,7 @@ static int mpfs_ddr_post_initialization(void)
      * If non-zero, the controller is sitting in a DFI error state and
      * any subsequent AXI request will stall waiting for a DFI cycle
      * that the PHY refuses to drive. */
-    wolfBoot_printf("DDR: DFI snapshot pre-read: "
+    DBG_DDR("DDR: DFI snapshot pre-read: "
         "INIT_COMPLETE=0x%x TRAINING_COMPLETE=0x%x "
         "TRAINING_ERROR=0x%x ERROR=0x%x ERROR_INFO=0x%x\n",
         DDRCFG_REG(0x10034U),
@@ -4308,12 +3960,15 @@ static int mpfs_ddr_post_initialization(void)
         uint64_t t0, t1;
 
         t0 = csr_read(mcycle);
-        wolfBoot_printf("DDR: naked read @ 0xC0000000 (mcycle=0x%lx): ",
+        DBG_DDR("DDR: naked read @ 0xC0000000 (mcycle=0x%lx): ",
             (unsigned long)t0);
         readback = *test_addr;
         t1 = csr_read(mcycle);
-        wolfBoot_printf("read=0x%x (mcycle delta=0x%lx)\n",
+        DBG_DDR("read=0x%x (mcycle delta=0x%lx)\n",
             readback, (unsigned long)(t1 - t0));
+        (void)readback;
+        (void)t0;
+        (void)t1;
     }
 
     return 0;
@@ -4325,9 +3980,9 @@ int mpfs_ddr_init(unsigned int outer_retry)
     int ret;
 
     wolfBoot_printf("\n========================================\n");
-    wolfBoot_printf("MPFS DDR Init (Video Kit LPDDR4 2GB)\n");
-    wolfBoot_printf("MT53D512M32D2DS-053 x32 @ 1600 Mbps\n");
-    wolfBoot_printf("========================================\n");
+    DBG_DDR("MPFS DDR Init (Video Kit LPDDR4 2GB)\n");
+    DBG_DDR("MT53D512M32D2DS-053 x32 @ 1600 Mbps\n");
+    DBG_DDR("========================================\n");
 
     /* rpc_156 DQ/DQS init offset.  Libero default 6 leaves the data eye
      * closed (dqdqs_status2=0) on the Video Kit.  HSS allows 1..9 via
@@ -4337,7 +3992,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
      * push past the bad starting edge.  Change in code if 3 doesn't
      * give dqdqs_status2 >= 5 on cold boot. */
     mpfs_phy_rpc156_val = 6U;
-    wolfBoot_printf("DDR: rpc156 (DQ/DQS init offset) = %u (was Libero 6)\n",
+    DBG_DDR("DDR: rpc156 (DQ/DQS init offset) = %u (was Libero 6)\n",
         (unsigned)mpfs_phy_rpc156_val);
 
     (void)outer_retry;  /* TUNE sweep removed; outer_retry kept for future use */
@@ -4389,7 +4044,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
      * order; reverse order leaves lanes 0&1 at eye=0. */
     ret = setup_phy();
     if (ret != 0)
-        wolfBoot_printf("DDR: PHY setup warning\n");
+        DBG_DDR("DDR: PHY setup warning\n");
 
     /* Step 6: Configure controller timing (CFG_* registers).  HSS
      * runs init_ddrc here in DDR_TRAINING_SETUP_DDRC state, after
@@ -4472,10 +4127,10 @@ int mpfs_ddr_init(unsigned int outer_retry)
             /* HSS DDR_TRAINING_SET_FINAL_MODE: rewrite DDRPHY_MODE with
              * LIBERO setting to transition PHY from training to
              * operational mode (mss_ddr.c:1619). */
-            wolfBoot_printf("DDR: Post-training sequence...\n");
+            DBG_DDR("DDR: Post-training sequence...\n");
             DDRPHY_REG(PHY_MODE) = LIBERO_SETTING_DDRPHY_MODE;
             mb();
-            wolfBoot_printf("  DDRPHY_MODE -> 0x%x (final)\n",
+            DBG_DDR("  DDRPHY_MODE -> 0x%x (final)\n",
                 DDRPHY_REG(PHY_MODE));
 
             /* rpc220 + load_dq: HSS always runs these as the prelude
@@ -4495,7 +4150,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
                 DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
             }
             mb();
-            wolfBoot_printf("  load_dq done for 4 lanes\n");
+            DBG_DDR("  load_dq done for 4 lanes\n");
 
             /* HSS DDR_TRAINING_WRITE_CALIBRATION (mss_ddr.c:1740-1750):
              * after SET_FINAL_MODE (DDRPHY_MODE final, above) + rpc220
@@ -4511,10 +4166,10 @@ int mpfs_ddr_init(unsigned int outer_retry)
              * from this sweep, not a blanket shift. */
             {
                 uint8_t wrcal;
-                wolfBoot_printf(
+                DBG_DDR(
                     "  WRCALIB after rpc220+load_dq (HSS order)...\n");
                 wrcal = mpfs_write_calibration_using_mtc(4U);
-                wolfBoot_printf(
+                DBG_DDR(
                     "  Post-load_dq WRCALIB: result=%u EXPERT_WRCALIB=0x%x\n",
                     (unsigned)wrcal, DDRPHY_REG(PHY_EXPERT_WRCALIB));
                 /* Reliability gate (2026-06-05): only accept this boot's
@@ -4533,7 +4188,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
                 }
             }
             train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
-            wolfBoot_printf(
+            DBG_DDR(
                 "  CTRLR_INIT_DONE=0x%x AUTOINIT_DIS=0x%x train_stat=0x%x\n",
                 DDRCFG_REG(MC_CTRLR_INIT_DONE),
                 DDRCFG_REG(MC_INIT_AUTOINIT_DISABLE),
@@ -4549,7 +4204,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
              * with a WDT reset.  Accept TIP-side training and proceed
              * to disk-load; the actual AXI reads are independent. */
             if ((train_stat & 0x1CU) == 0x1CU) {
-                wolfBoot_printf("  TIP full training success (0x%x) - skipping MTC sanity\n",
+                DBG_DDR("  TIP full training success (0x%x) - skipping MTC sanity\n",
                     train_stat);
                 mtc_pass = 1;
                 break;
@@ -4591,7 +4246,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
                         *(volatile uint32_t*)0x20107000UL = 0xDEADC0DEU;
                     }
                 }
-                wolfBoot_printf(
+                DBG_DDR(
                     "  Pre-MTC256: DFI_train_complete=0x%x CTRLR_INIT_DONE=0x%x"
                     " AUTO_REF=0x%x RD_ONLY=0x%x WR_ONLY=0x%x (dfi %u us)\n",
                     DDRCFG_REG(0x10038U) & 0x1U,
@@ -4617,7 +4272,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
                     DDRCFG_REG(MT_ERROR_STS));
                 continue;
             }
-            wolfBoot_printf("  MTC 256B PASS (err_sts=0x%x to_used=0x%x)\n",
+            DBG_DDR("  MTC 256B PASS (err_sts=0x%x to_used=0x%x)\n",
                 DDRCFG_REG(MT_ERROR_STS),
                 (unsigned int)(0xFFFFFFUL - mtc_to));
 
@@ -4628,7 +4283,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
              * attempts failed.  Accepting MTC 256B PASS as success
              * still progresses to disk-load on imperfect calibration. */
             train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
-            wolfBoot_printf("  TIP final train_stat=0x%x (WRLVL+RDGATE+DQ_DQS need 0x1C)\n",
+            DBG_DDR("  TIP final train_stat=0x%x (WRLVL+RDGATE+DQ_DQS need 0x1C)\n",
                 train_stat);
 
             mtc_pass = 1;
@@ -4663,109 +4318,118 @@ int mpfs_ddr_init(unsigned int outer_retry)
     /* Phase A.2: dump live ADDR_MAP + BL registers so we can confirm
      * they match the Libero settings and aren't being clobbered by a
      * later step.  ADDR_MAP block is at DDRCFG_BASE+0x2400. */
-    wolfBoot_printf(
+    DBG_DDR(
         "DDRC ADDR_MAP: MAN=%x CHIP=%x CID=%x BANK=%x/%x ROW=%x/%x/%x/%x COL=%x/%x/%x\n",
         DDRCFG_REG(0x2400), DDRCFG_REG(0x2404), DDRCFG_REG(0x2408),
         DDRCFG_REG(0x2414), DDRCFG_REG(0x2418),
         DDRCFG_REG(0x241C), DDRCFG_REG(0x2420), DDRCFG_REG(0x2424), DDRCFG_REG(0x2428),
         DDRCFG_REG(0x242C), DDRCFG_REG(0x2430), DDRCFG_REG(0x2434));
-    wolfBoot_printf(
+    DBG_DDR(
         "DDRC BL=%x MR_MASK=%x DATA_MASK=%x WRITE_DBI=%x READ_DBI=%x\n",
         DDRCFG_REG(0x008),   /* MC_CFG_BL location varies, dump candidates */
         DDRCFG_REG(0x040),   /* MR write mask */
         DDRCFG_REG(0x3C70),  /* CFG_DATA_MASK */
         DDRCFG_REG(0x3C68),  /* CFG_WRITE_DBI */
         DDRCFG_REG(0x3C64)); /* CFG_READ_DBI */
-    wolfBoot_printf("========================================\n");
+    DBG_DDR("========================================\n");
 
-#ifdef MPFS_DDR_PATTERN_TEST
-    /* DDR pattern test for the staging window.  Single region
-     * (0x82000000), counting pattern, 256 KB.  Validates write/read
-     * reliability after DDR init and HALTS the boot so we iterate on
-     * DDR training fixes without SDHCI/disk_load in the loop.  Tracks
-     * train_stat at exit so we can correlate training metric with
-     * pattern-test mismatch count.
-     */
-    {
-        /* Run the same pattern test on both cached (0x82000000) and
-         * non-cached (0xC2000000) regions to triangulate where the
-         * mismatches come from. */
-        volatile uint32_t * const pc  = (volatile uint32_t *)0x82000000UL;
-        volatile uint32_t * const pnc = (volatile uint32_t *)0xC2000000UL;
-        const uint32_t test_words = 0x10000UL;  /* 64K words = 256 KB */
-        uint32_t i;
-        uint32_t bad_c = 0, bad_nc = 0;
-        uint32_t first_bad_c = 0xFFFFFFFFUL, first_bad_v_c = 0;
-        uint32_t first_bad_nc = 0xFFFFFFFFUL, first_bad_v_nc = 0;
-
-        wolfBoot_printf("DDR-TEST: writing pattern (cached @0x82000000) "
-            "(%lx words) -- 3 passes...\n", (unsigned long)test_words);
-        /* Triple-write pass: first pass primes DDR with our pattern
-         * via L2 cache evictions.  Subsequent passes catch the misses.
-         * Each pass: write all words sequentially, fence between passes. */
-        for (i = 0; i < test_words; i++)
-            pc[i] = 0xDEAD0000UL | i;
-        __asm__ volatile("fence rw,rw" ::: "memory");
-        for (i = 0; i < test_words; i++)
-            pc[i] = 0xDEAD0000UL | i;
-        __asm__ volatile("fence rw,rw" ::: "memory");
-        for (i = 0; i < test_words; i++)
-            pc[i] = 0xDEAD0000UL | i;
-        __asm__ volatile("fence rw,rw" ::: "memory");
-        for (i = 0; i < test_words; i++) {
-            uint32_t v = pc[i];
-            uint32_t expected = 0xDEAD0000UL | i;
-            if (v != expected) {
-                if (first_bad_c == 0xFFFFFFFFUL) {
-                    first_bad_c = i; first_bad_v_c = v;
-                }
-                bad_c++;
-            }
-        }
-        if (bad_c == 0)
-            wolfBoot_printf("DDR-TEST cached: PASS\n");
-        else
-            wolfBoot_printf(
-                "DDR-TEST cached: FAIL %lx mismatches; first @ idx=%lx val=%lx\n",
-                (unsigned long)bad_c, (unsigned long)first_bad_c,
-                (unsigned long)first_bad_v_c);
-
-        wolfBoot_printf("DDR-TEST: writing pattern (non-cached @0xC2000000) "
-            "(%lx words)...\n", (unsigned long)test_words);
-        for (i = 0; i < test_words; i++)
-            pnc[i] = 0xBEEF0000UL | i;
-        for (i = 0; i < test_words; i++) {
-            uint32_t v = pnc[i];
-            uint32_t expected = 0xBEEF0000UL | i;
-            if (v != expected) {
-                if (first_bad_nc == 0xFFFFFFFFUL) {
-                    first_bad_nc = i; first_bad_v_nc = v;
-                }
-                bad_nc++;
-            }
-        }
-        if (bad_nc == 0)
-            wolfBoot_printf("DDR-TEST non-cached: PASS\n");
-        else
-            wolfBoot_printf(
-                "DDR-TEST non-cached: FAIL %lx mismatches; first @ idx=%lx val=%lx\n",
-                (unsigned long)bad_nc, (unsigned long)first_bad_nc,
-                (unsigned long)first_bad_v_nc);
-
-        wolfBoot_printf("DDR-TEST: train_stat=0x%x\n",
-            DDRPHY_REG(PHY_TRAINING_STATUS));
-        wolfBoot_printf("DDR-TEST: done\n");
-    }
-#endif /* MPFS_DDR_PATTERN_TEST */
 
     return 0;
 }
 
 #endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
+/* Linker symbols delimiting .text in L2 Scratch and its eNVM load copy. */
+extern char _stored_text[];
+extern char _start_text_sram[];
+extern char _end_text[];
+
+/* Verify the L2-resident .text against its eNVM source and repair any
+ * mismatch.  Diagnostic for the intermittent L2-scratch instruction
+ * corruption (illegal-instruction trap on a legal instruction).  Repair
+ * uses the same E51 D-cache way-mask trick as the startup copy in
+ * boot_riscv_start.S: mask to the scratchpad ways so the stores reach
+ * the scratchpad SRAM, then resync the instruction stream. */
+static void mpfs_verify_text(const char *tag)
+{
+    const volatile uint64_t *src =
+        (const volatile uint64_t *)(uintptr_t)_stored_text;
+    volatile uint64_t *dst = (volatile uint64_t *)(uintptr_t)_start_text_sram;
+    uint32_t words = (uint32_t)(((uintptr_t)_end_text -
+                                 (uintptr_t)_start_text_sram) /
+                                sizeof(uint64_t));
+    uint32_t i;
+    uint32_t bad = 0;
+    uint32_t first = 0;
+
+    for (i = 0; i < words; i++) {
+        if (dst[i] != src[i]) {
+            if (bad == 0U) {
+                first = i;
+            }
+            bad++;
+        }
+    }
+    if (bad == 0U) {
+        DBG_DDR("TEXT-VFY[%s]: clean (%u dwords)\n", tag, (unsigned)words);
+        return;
+    }
+    wolfBoot_printf(
+        "TEXT-VFY[%s]: %u BAD dwords, first @%p exp=%lx got=%lx -- repair\n",
+        tag, (unsigned)bad, (void *)&dst[first],
+        (unsigned long)src[first], (unsigned long)dst[first]);
+    L2_WAY_MASK_E51_DCACHE = 0xF00UL; /* route stores to scratchpad SRAM */
+    mb();
+    for (i = 0; i < words; i++) {
+        if (dst[i] != src[i]) {
+            dst[i] = src[i];
+        }
+    }
+    L2_WAY_MASK_E51_DCACHE = L2_WAY_MASK_CACHE_ONLY;
+    mb();
+    __asm__ volatile("fence.i" ::: "memory");
+    bad = 0;
+    for (i = 0; i < words; i++) {
+        if (dst[i] != src[i]) {
+            bad++;
+        }
+    }
+    wolfBoot_printf("TEXT-VFY[%s]: post-repair bad=%u\n", tag, (unsigned)bad);
+}
+#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
+
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
+    /* Park every hart's machine-timer comparator at maximum.  CLINT MTIME
+     * is 0 (the RTC time base is not running yet) and mtimecmp resets to 0,
+     * so MTIP is pending on every hart out of reset.  A pending interrupt
+     * makes WFI return immediately, so the parked secondary harts' eNVM
+     * wait loop SPINS continuously (fetching from eNVM for the entire
+     * boot) instead of sleeping.  Parking the comparators clears MTIP so
+     * WFI really waits. */
+    {
+        int h;
+        for (h = 0; h < MPFS_NUM_HARTS; h++) {
+            CLINT_MTIMECMP_REG(h) = ~(uint64_t)0;
+        }
+        __asm__ volatile("fence iorw, iorw" ::: "memory");
+    }
+
+#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    /* Clear the DTIM-resident cross-hart state (start mailboxes + SBI
+     * shared block): DTIM content is undefined at power-on. */
+    {
+        volatile uint32_t *dtim = (volatile uint32_t *)0x01000000UL;
+        unsigned int k;
+        for (k = 0; k < (0x200U / sizeof(uint32_t)); k++) {
+            dtim[k] = 0;
+        }
+        __asm__ volatile("fence iorw, iorw" ::: "memory");
+    }
+#endif
+
     /* Capture boot ROM WDT defaults for restoration in hal_prepare_boot() */
     mpfs_wdt_default_mvrp = MSS_WDT_MVRP(MSS_WDT_E51_BASE);
     mpfs_wdt_default_ctrl = MSS_WDT_CONTROL(MSS_WDT_E51_BASE);
@@ -4847,7 +4511,7 @@ void hal_init(void)
 
 #ifdef WOLFBOOT_RISCV_MMODE
     wolfBoot_printf("Running on E51 (hart 0) in M-mode\n");
-    wolfBoot_printf("Boot WDT_E51: REFRESH=%x CTRL=%x STATUS=%x TIME=%x MVRP=%x TRIG=%x\n",
+    DBG_DDR("Boot WDT_E51: REFRESH=%x CTRL=%x STATUS=%x TIME=%x MVRP=%x TRIG=%x\n",
         mpfs_boot_wdt_snap[0], mpfs_boot_wdt_snap[1], mpfs_boot_wdt_snap[2],
         mpfs_boot_wdt_snap[3], mpfs_boot_wdt_snap[4], mpfs_boot_wdt_snap[5]);
     wolfBoot_printf("Boot RESET_SR: %x (bit0=PERIPH bit1=MSS bit2=CPU bit3=DBG "
@@ -4856,26 +4520,26 @@ void hal_init(void)
 
     /* Phase A L2 diagnostic dump.  Print the L2 controller state after
      * mpfs_config_l2_cache() so we can confirm WAY_ENABLE / WAY_MASK
-     * values stuck and scratchpad ways (12-15) are isolated from cache
+     * values stuck and scratchpad ways (8-11) are isolated from cache
      * masters (whose masks are all L2_WAY_MASK_CACHE_ONLY = 0xFF =
      * ways 0-7 only).  CONFIG is read-only and reports the controller
      * geometry (banks / ways / sets). */
-    wolfBoot_printf("L2: CONFIG=%lx WAY_ENABLE=%lx\n",
+    DBG_DDR("L2: CONFIG=%lx WAY_ENABLE=%lx\n",
         (unsigned long)L2_CONFIG, (unsigned long)L2_WAY_ENABLE);
-    wolfBoot_printf(
+    DBG_DDR(
         "L2 MASK DMA=%lx AXI0=%lx AXI1=%lx AXI2=%lx AXI3=%lx\n",
         (unsigned long)L2_WAY_MASK_DMA,
         (unsigned long)L2_WAY_MASK_AXI4_PORT0,
         (unsigned long)L2_WAY_MASK_AXI4_PORT1,
         (unsigned long)L2_WAY_MASK_AXI4_PORT2,
         (unsigned long)L2_WAY_MASK_AXI4_PORT3);
-    wolfBoot_printf(
+    DBG_DDR(
         "L2 MASK E51D=%lx E51I=%lx U54_1D=%lx U54_1I=%lx\n",
         (unsigned long)L2_WAY_MASK_E51_DCACHE,
         (unsigned long)L2_WAY_MASK_E51_ICACHE,
         (unsigned long)L2_WAY_MASK_U54_1_DCACHE,
         (unsigned long)L2_WAY_MASK_U54_1_ICACHE);
-    wolfBoot_printf(
+    DBG_DDR(
         "L2 MASK U54_2D=%lx U54_2I=%lx U54_3D=%lx U54_3I=%lx U54_4D=%lx U54_4I=%lx\n",
         (unsigned long)L2_WAY_MASK_U54_2_DCACHE,
         (unsigned long)L2_WAY_MASK_U54_2_ICACHE,
@@ -4899,7 +4563,7 @@ void hal_init(void)
         cb[2] = 0xC0DEC0DEUL; cb[3] = 0xC0DEC0DEUL;
         cm[0] = 0xCA11AB1EUL; cm[1] = 0xCA11AB1EUL;
         cm[2] = 0xCA11AB1EUL; cm[3] = 0xCA11AB1EUL;
-        wolfBoot_printf(
+        DBG_DDR(
             "Canary placed: stack_bot=%p val=%lx mid=0x0A030000 val=%lx\n",
             (void *)cb, (unsigned long)cb[0], (unsigned long)cm[0]);
     }
@@ -4942,6 +4606,13 @@ void hal_init(void)
             }
         }
     }
+
+    /* Verify (and repair) the L2-resident .text against its eNVM source
+     * right where the intermittent cause=2 L2-scratch instruction
+     * corruption has been observed (the DDR -> SDHCI transition).  A
+     * non-zero count here catches backing-store corruption red-handed;
+     * persistent traps with a clean verify implicate the I-fetch path. */
+    mpfs_verify_text("post-ddr");
 #endif
 #endif
 
@@ -5026,11 +4697,13 @@ int mpfs_read_serial_number(uint8_t *serial)
 /* Linux kernel command line arguments */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
-#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
+/* wolfBoot SD layout (tools/scripts/program-sdcard.sh): p1=boot FIT,
+ * p2=update, p3=rootfs. */
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p3"
 #endif
 
 #define LINUX_BOOTARGS \
-    "earlycon root="LINUX_BOOTARGS_ROOT" rootwait uio_pdrv_genirq.of_id=generic-uio"
+    "earlycon=sbi root="LINUX_BOOTARGS_ROOT" rootwait uio_pdrv_genirq.of_id=generic-uio"
 #endif
 
 /* Microchip OUI (Organizationally Unique Identifier) for MAC address */
@@ -5136,35 +4809,31 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
     }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-    /* Phase 4A single-hart MVP: pin /memory@80000000 to the actual 2 GB the
-     * board has and mark cpu@2..cpu@4 disabled so Linux only brings up the
-     * boot U54 (hart 1).  The kernel still requires an SBI HSM provider to
-     * start additional harts at runtime; that arrives in Phase 4B. */
+    /* NOTE: do NOT override the stock /memory nodes.  The 32-bit cached
+     * DDR window at 0x80000000 is only 1 GB wide -- 0xC0000000 up is the
+     * NON-CACHED alias window onto the same DDR -- and the stock Video
+     * Kit DTB already describes the full 2 GB correctly across the low
+     * and high (38-bit) windows.  An earlier fixup that forced
+     * memory@80000000 to 2 GB made the kernel treat the alias window as
+     * extra RAM (self-aliasing corruption; boot hung at the first
+     * deep memblock allocation).
+     *
+     * cpu@2..cpu@4 stay ENABLED: the SBI HSM hart_start backend releases
+     * the parked harts on the kernel's request (SMP). */
     {
-        uint32_t mem_reg[4];
-        const char *cpu_off[] = { "cpu@2", "cpu@3", "cpu@4" };
+        const char *cpu_off[] = {
+            /* Watchdogs: the MSS WDTs always count; the OS driver arms
+             * them at probe but nothing pings them (no userspace
+             * watchdog daemon in the default image), so the system
+             * resets ~28 s into boot.  Unarmed (driver disabled) they
+             * only latch a harmless tripped status, and the parked E51
+             * monitor keeps them refreshed.  Re-enable when an OS-side
+             * petting story exists. */
+            "watchdog@20001000", "watchdog@20101000", "watchdog@20103000",
+            "watchdog@20105000", "watchdog@20107000" };
         unsigned int i;
 
-        /* /memory@80000000/reg = <0 0x80000000 0 0x80000000> (2 GB). */
-        mem_reg[0] = cpu_to_fdt32(0u);
-        mem_reg[1] = cpu_to_fdt32(0x80000000u);
-        mem_reg[2] = cpu_to_fdt32(0u);
-        mem_reg[3] = cpu_to_fdt32(0x80000000u);
-        off = fdt_find_node_offset(fdt, -1, "memory@80000000");
-        if (off >= 0) {
-            ret = fdt_setprop(fdt, off, "reg", mem_reg, sizeof(mem_reg));
-            if (ret != 0) {
-                wolfBoot_printf("FDT: Failed to set memory reg (%d)\n", ret);
-            }
-            else {
-                wolfBoot_printf("FDT: memory@80000000 = 2 GB\n");
-            }
-        }
-        else {
-            wolfBoot_printf("FDT: memory@80000000 not found\n");
-        }
-
-        /* Disable cpu@2..cpu@4 for the single-hart MVP. cpu@0 (E51) is
+        /* Disable the nodes listed above. cpu@0 (E51) is
          * already disabled in the Yocto DTB; cpu@1 stays enabled so Linux
          * boots on it. */
         for (i = 0; i < sizeof(cpu_off) / sizeof(cpu_off[0]); i++) {
@@ -5187,6 +4856,7 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
     return 0;
 }
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 /* FIT subimage copy via PDMA (overrides the weak default in src/fdt.c).
  * CPU writes to DDR do not land on this board, so route kernel/dtb copies
  * through the PDMA master.  A DDR source is read via its non-cached alias so
@@ -5248,10 +4918,24 @@ int hal_dts_fixup(void* dts_addr)
     wolfBoot_fit_memcpy(dts_addr, l2_dtb, (uint32_t)fdt_totalsize(l2_dtb));
     return ret;
 }
+#else
+/* Without the M-mode DDR constraints the dtb buffer is CPU-writable, so
+ * run the fixups directly in place (the original behavior, kept so
+ * FDT-enabled non-DDR builds do not silently fall back to the weak
+ * no-op hal_dts_fixup). */
+int hal_dts_fixup(void* dts_addr)
+{
+    if (dts_addr == NULL) {
+        return -1;
+    }
+    return mpfs_dts_fixup_inplace(dts_addr);
+}
+#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
 
 void hal_prepare_boot(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
+#ifndef WOLFBOOT_MMODE_SMODE_BOOT
     /* Restore boot ROM WDT defaults so the application sees a normal WDT.
      * Refresh first so the timer doesn't fire immediately after we apply
      * the new MVRP. Restore the original CONTROL value (including the
@@ -5259,8 +4943,28 @@ void hal_prepare_boot(void)
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
     MSS_WDT_MVRP(MSS_WDT_E51_BASE) = mpfs_wdt_default_mvrp;
     MSS_WDT_CONTROL(MSS_WDT_E51_BASE) = mpfs_wdt_default_ctrl;
+#else
+    /* Booting an S-mode OS: keep the watchdogs in the safe state set in
+     * hal_init (no device reset, maximum window) and give every hart's
+     * watchdog one final refresh so the OS inherits a full window (the
+     * OS watchdog driver hangs at probe if it finds an already-tripped
+     * watchdog).  After this the OS owns the U54 watchdogs -- see the
+     * E51 monitor loop in hal_smode_boot, which pets only its own. */
+    MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
+    MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
+    MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
+    MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
+    MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+
+    /* Hand the OS a clean SD controller: wolfBoot just used it for the
+     * image load, and the leftover state makes the OS driver's re-init
+     * and tuning intermittently fail ("Waiting for root device"). */
+    {
+        extern void sdhci_shutdown(void);
+        sdhci_shutdown();
+    }
 #endif
-    /* reset the eMMC/SD card? */
+#endif
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -5804,7 +5508,7 @@ int ext_flash_erase(uintptr_t address, int len)
 
 #define QSPI_PROG_CHUNK        256
 #define QSPI_PROG_ACK          0x06
-#define QSPI_RX_TIMEOUT_MS     10000U  /* 10 s per byte — aborts if host disappears */
+#define QSPI_RX_TIMEOUT_MS     10000U  /* 10 s per byte -- aborts if host disappears */
 
 
 /* Returns 0-255 on success, -1 on timeout (so the boot path is never deadlocked). */
@@ -5910,8 +5614,18 @@ static void qspi_uart_program(void)
     uart_qspi_puts("QSPI-PROG: Erasing...\r\n");
     ext_flash_unlock();
     for (s = 0; s < n_sectors; s++) {
-        int ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
-                                  FLASH_SECTOR_SIZE);
+        int ret;
+        /* The MSS WDTs always count and reset the chip at timeout (~28.6s
+         * at the reset divisor) and cannot be disabled, so a transfer of
+         * more than a few tens of KB outlives the period: refresh all
+         * five per sector here and per chunk below. */
+        MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+        ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
+                              FLASH_SECTOR_SIZE);
         if (ret < 0) {
             uart_qspi_puts("QSPI-PROG: Erase failed\r\n");
             ext_flash_lock();
@@ -5922,7 +5636,7 @@ static void qspi_uart_program(void)
     uart_qspi_puts("ERASED\r\n");
 
     /* Chunk transfer: wolfBoot requests each 256-byte block with ACK 0x06.
-     * No wolfBoot_printf allowed in this loop — only direct UART via
+     * No wolfBoot_printf allowed in this loop -- only direct UART via
      * uart_qspi_tx/uart_qspi_puts to avoid protocol corruption. */
     written = 0;
     while (written < size) {
@@ -5930,6 +5644,12 @@ static void qspi_uart_program(void)
         uint32_t chunk_len = size - written;
         if (chunk_len > QSPI_PROG_CHUNK)
             chunk_len = QSPI_PROG_CHUNK;
+
+        MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
+        MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
 
         uart_qspi_tx(QSPI_PROG_ACK);          /* request next chunk */
 
@@ -6110,9 +5830,6 @@ void plic_dispatch_irq(uint32_t irq)
     }
 }
 
-#if defined(DISK_SDCARD) || defined(DISK_EMMC)
-/* SDHCI Platform HAL */
-
 /* MSSIO IOMUX + bank-config register offsets.
  * IOMUX0..IOMUX6_CR and the per-pad IO_CFG_*_*_CR registers live in SYSREG
  * (base 0x20002000).  The two MSSIO_BANK*_CFG_CR registers that set
@@ -6139,6 +5856,7 @@ void plic_dispatch_irq(uint32_t irq)
  *
  * All values come straight from the Libero/HSS-generated
  * fpga_design_config.h that LIBERO_FPGA_CONFIG_DIR points at. */
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 static void mpfs_iomux_init(void)
 {
     SYSREG_REG(SYSREG_IOMUX0_CR_OFFSET) = LIBERO_SETTING_IOMUX0_CR;
@@ -6210,6 +5928,11 @@ static void mpfs_iomux_init(void)
 
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
+#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
+
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+/* SDHCI Platform HAL */
+
 
 /* MSS MPU base + per-master offset.  Each AXI master (FIC0/1/2, CRYPTO,
  * GEM0/1, USB, MMC, SCB, TRACE) has 16 PMPCFG entries (uint64_t each) at
@@ -6298,10 +6021,13 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
 /* DEBUG UART */
 #ifdef DEBUG_UART
 
-/* Baud divisor: integer = PCLK/(baudrate*16), fractional (0-63) via 128x scaling. */
+/* Baud divisor: integer = PCLK/(baudrate*16), fractional (0-63) via 128x
+ * scaling.  Uses the RUNTIME APB clock so divisors computed after the MSS
+ * PLL raise stay correct (the compile-time MSS_APB_AHB_CLK garbled every
+ * post-raise reinit). */
 static void uart_config_baud(unsigned long base, uint32_t baudrate)
 {
-    const uint64_t pclk = MSS_APB_AHB_CLK;
+    const uint64_t pclk = mpfs_apb_clk_hz;
     uint32_t div_x128 = (uint32_t)((8UL * pclk) / baudrate);
     uint32_t div_x64  = div_x128 / 2u;
     uint32_t div_int  = div_x64 / 64u;
@@ -6331,7 +6057,7 @@ static void uart_init_base(unsigned long base)
     MMUART_IER(base)  = 0u;
     MMUART_FCR(base)  = CLEAR_RX_FIFO_MASK | CLEAR_TX_FIFO_MASK | RXRDY_TXRDYN_EN_MASK;
     MMUART_MCR(base) &= ~(LOOP_MASK | RLOOP_MASK);
-    MMUART_MCR(base) |= RTS_MASK;  /* Assert RTS — required for USB-UART bridge CTS */
+    MMUART_MCR(base) |= RTS_MASK;  /* Assert RTS -- required for USB-UART bridge CTS */
     MMUART_MM1(base) &= ~(E_MSB_TX_MASK | E_MSB_RX_MASK);
     MMUART_MM2(base) &= ~(EAFM_MASK | ESWM_MASK);
     MMUART_MM0(base) &= ~(ETTG_MASK | ERTO_MASK | EFBR_MASK);
@@ -6362,84 +6088,14 @@ void uart_write(const char* buf, unsigned int sz)
 }
 
 #ifdef WOLFBOOT_RISCV_MMODE
-/* Reinitialize UART baud divisor for post-PLL APB clock.  Called after
- * mss_pll_init() locks the MSS PLL -- the compile-time MSS_APB_AHB_CLK
- * (40 MHz pre-PLL) is no longer valid.
- *
- * APB clock is derived from CPU clock via the dividers programmed at
- * mss_pll_init time:
- *   APB = LIBERO_SETTING_MSS_COREPLEX_CPU_CLK / 4
- * (CLOCK_CONFIG_CR=0x24 -> APB divider 4).
- *
- * If the board uses a different MSS_COREPLEX_CPU_CLK or APB divider,
- * either redefine MPFS_APB_PCLK_HZ at build time, or adjust the
- * fpga_design_config.h / .config so that LIBERO_SETTING_MSS_COREPLEX_CPU_CLK
- * is correct. */
-#ifndef MPFS_APB_PCLK_HZ
-#define MPFS_APB_PCLK_HZ  (LIBERO_SETTING_MSS_COREPLEX_CPU_CLK / 4UL)
-#endif
-
+/* Reinitialize the UART baud divisor after mss_pll_init() raises the
+ * APB clock (the divisor was computed for the 40 MHz boot clock). */
 void hal_uart_reinit(void)
 {
-    const uint64_t pclk = MPFS_APB_PCLK_HZ;
-    const uint32_t baudrate = 115200;
-    uint32_t div_x128 = (uint32_t)((8UL * pclk) / baudrate);
-    uint32_t div_x64  = div_x128 / 2u;
-    uint32_t div_int  = div_x64 / 64u;
-    uint32_t div_frac = div_x64 - (div_int * 64u);
-    div_frac += (div_x128 - (div_int * 128u)) - (div_frac * 2u);
-    if (div_frac > 63u)
-        div_frac = 63u;
-    if (div_int > (uint32_t)UINT16_MAX)
-        return;
-    MMUART_LCR(DEBUG_UART_BASE) |= DLAB_MASK;
-    MMUART_DMR(DEBUG_UART_BASE) = (uint8_t)(div_int >> 8);
-    MMUART_DLR(DEBUG_UART_BASE) = (uint8_t)div_int;
-    MMUART_LCR(DEBUG_UART_BASE) &= ~DLAB_MASK;
-    if (div_int > 1u) {
-        MMUART_MM0(DEBUG_UART_BASE) |= EFBR_MASK;
-        MMUART_DFR(DEBUG_UART_BASE) = (uint8_t)div_frac;
-    } else {
-        MMUART_MM0(DEBUG_UART_BASE) &= ~EFBR_MASK;
-    }
+    /* mpfs_apb_clk_hz was updated by mss_pll_init; just reprogram the
+     * divisor (uart_config_baud reads the runtime APB clock). */
+    uart_config_baud(DEBUG_UART_BASE, 115200);
 }
 #endif /* WOLFBOOT_RISCV_MMODE */
 #endif /* DEBUG_UART */
 
-#ifdef WOLFBOOT_RISCV_MMODE
-/* Initialize UART for a secondary hart (1-4). Hart 0 uses uart_init(). */
-void uart_init_hart(unsigned long hartid)
-{
-    unsigned long base;
-    if (hartid == 0 || hartid > 4)
-        return;
-    base = UART_BASE_FOR_HART(hartid);
-    /* MSS_PERIPH_MMUART0 = bit 5; shift by hartid selects MMUART1-4 */
-    SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << hartid);
-    __asm__ volatile("fence iorw, iorw" ::: "memory");
-    SYSREG_SOFT_RESET_CR &= ~(MSS_PERIPH_MMUART0 << hartid);
-    __asm__ volatile("fence iorw, iorw" ::: "memory");
-    udelay(100);
-    uart_init_base(base);
-    udelay(10);
-}
-
-/* Write to a specific hart's UART (hart 0-4). */
-void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz)
-{
-    unsigned long base;
-    uint32_t pos = 0;
-    if (hartid > 4)
-        return;
-    base = UART_BASE_FOR_HART(hartid);
-    while (sz-- > 0) {
-        char c = buf[pos++];
-        if (c == '\n') {
-            while ((MMUART_LSR(base) & MSS_UART_THRE) == 0);
-            MMUART_THR(base) = '\r';
-        }
-        while ((MMUART_LSR(base) & MSS_UART_THRE) == 0);
-        MMUART_THR(base) = c;
-    }
-}
-#endif /* WOLFBOOT_RISCV_MMODE */

@@ -66,6 +66,14 @@
 #define SYSREG_SOFT_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x88)))
 #define SYSREG_SOFT_RESET_CR_QSPI  (1U << 19)
 
+/* eNVM Control Register (offset 0xB8).  Bits [5:0] set the AHB-to-eNVM
+ * clock divider (period = (value+1) * AHB period); bit 6 (clock-okay)
+ * latches once a new divider has taken effect.  Must be reprogrammed for
+ * the faster AHB clock BEFORE the MSS PLL mux switch (HSS does this in
+ * mss_mux_post_mss_pll_config with LIBERO_SETTING_MSS_ENVM_CR). */
+#define SYSREG_ENVM_CR (*((volatile uint32_t*)(SYSREG_BASE + 0xB8)))
+#define SYSREG_ENVM_CR_CLOCK_OKAY (1U << 6)
+
 /* MSS Peripheral control bits (shared by SUBBLK_CLOCK_CR and SOFT_RESET_CR) */
 #define MSS_PERIPH_ENVM     (1U << 0)
 #define MSS_PERIPH_MMC      (1U << 3)
@@ -108,12 +116,6 @@
 #define MSS_UART2_HI_BASE  0x28102000UL
 #define MSS_UART3_HI_BASE  0x28104000UL
 #define MSS_UART4_HI_BASE  0x28106000UL
-
-/* UART base address table for per-hart access (LO addresses for M-mode) */
-#ifndef __ASSEMBLER__
-extern const unsigned long MSS_UART_BASE_ADDR[5];
-#define UART_BASE_FOR_HART(hart) (MSS_UART_BASE_ADDR[(hart) < 5 ? (hart) : 0])
-#endif /* __ASSEMBLER__ */
 
 /* Debug UART port selection (0-4): M-mode defaults to UART0, S-mode to UART1 */
 #ifndef DEBUG_UART_PORT
@@ -325,6 +327,19 @@ typedef struct {
 #define HLS_MAIN_HART_STARTED       0x12344321UL
 #define HLS_OTHER_HART_IN_WFI       0x12345678UL
 
+/* DTIM address of the E51 "main hart started" gate flag polled by the
+ * parked secondary harts in boot_riscv_start.S.  This must NOT live in
+ * L2-scratch (the legacy HLS location): cacheable stores to the
+ * scratchpad can be silently lost on dirty-line eviction, so whether the
+ * secondaries ever saw the flag depended on the image's cache-line
+ * layout (observed: a 304-byte text shift left harts 2-4 stuck in the
+ * eNVM gate until the kernel's HSM hart_start IPI, missing the kernel's
+ * 1s online window).  The E51 DTIM is uncached and coherent for every
+ * hart.  Keep clear of the SBI shared block (DTIM+0x00, src/riscv_sbi.c)
+ * and the hart-start mailboxes (DTIM+0x100, hal/mpfs250.c).
+ * No UL suffix: also used from assembly (boot_riscv_start.S). */
+#define MPFS_DTIM_MAIN_STARTED_ADDR 0x010000F0
+
 /* Number of harts on MPFS */
 #define MPFS_NUM_HARTS              5
 #define MPFS_FIRST_HART             0   /* E51 is hart 0 */
@@ -343,10 +358,7 @@ void uart_init(void);
 void uart_write(const char* buf, unsigned int sz);
 #endif
 #ifdef WOLFBOOT_RISCV_MMODE
-int mpfs_wake_secondary_harts(void);
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
-void uart_init_hart(unsigned long hartid);
-void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz);
 #endif
 #endif /* __ASSEMBLER__ */
 
@@ -839,8 +851,8 @@ int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 /* QSPI Flash Controller
  *
  * Two CoreQSPI v2 controllers with identical register layouts:
- *   SC QSPI  (MPFS_SC_SPI=1, default): 0x37020100 — fabric-connected flash
- *   MSS QSPI (MPFS_SC_SPI=0):          0x21000000 — MSS QSPI pins
+ *   SC QSPI  (MPFS_SC_SPI=1, default): 0x37020100 -- fabric-connected flash
+ *   MSS QSPI (MPFS_SC_SPI=0):          0x21000000 -- MSS QSPI pins
  */
 
 /* QSPI Controller Base Address */

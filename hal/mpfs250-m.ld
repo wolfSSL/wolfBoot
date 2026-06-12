@@ -122,9 +122,12 @@ PROVIDE(_start_heap = _end);
  *
  * Total stack area: STACK_SIZE + 4 * STACK_SIZE_PER_HART
  */
-/* M-mode: only E51 (hart 0) runs; secondary harts park in eNVM WFI loop.
- * Set to 0 so no L2 Scratch is wasted on phantom secondary stacks. */
-PROVIDE(STACK_SIZE_PER_HART = 0);
+/* Per-hart stacks for the secondary (U54) park/wake path.  MUST match the
+ * STACK_SIZE_PER_HART value in CFLAGS (the wake asm computes sp with the
+ * C macro while this symbol places the region): the historical 0-vs-8192
+ * mismatch placed the woken harts' stacks INSIDE the E51 stack region,
+ * smashing the monitor when SBI HSM started the secondary harts. */
+PROVIDE(STACK_SIZE_PER_HART = 4096);
 
 /* End of L2 scratchpad */
 PROVIDE(_l2_scratch_end = ORIGIN(L2_SCRATCH) + LENGTH(L2_SCRATCH));

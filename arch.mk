@@ -742,6 +742,10 @@ ifeq ($(ARCH),RISCV64)
   ifeq ($(RISCV_MMODE),1)
     # Machine Mode: Running directly from eNVM/L2 SRAM
     CFLAGS+=-DWOLFBOOT_RISCV_MMODE -DWOLFBOOT_DUALBOOT
+    # Minimal SBI runtime: services S-mode ecalls / timer / IPI when booting
+    # an S-mode OS (Linux).  Compiles to nothing unless WOLFBOOT_MMODE_SMODE_BOOT
+    # is also defined (see src/riscv_sbi.c).
+    OBJS+=src/riscv_sbi.o
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
     # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated

@@ -543,6 +543,21 @@ static int sdhci_wait_busy(int check_dat0)
     return status;
 }
 
+/* Full controller software reset for OS handoff: the bootloader has been
+ * driving the SDHC (clocks, PIO mode, an initialized card), and handing
+ * that state to the OS driver makes its re-init/tuning intermittently
+ * fail.  SDHCI software-reset-all returns the host registers to their
+ * power-on defaults so the OS finds a clean controller. */
+void sdhci_shutdown(void)
+{
+    uint32_t to = 100000U;
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_ALL);
+    while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_ALL) != 0U &&
+           to > 0U) {
+        to--;
+    }
+}
+
 /* Reset data and command lines to recover from errors */
 static inline void sdhci_reset_lines(void)
 {
@@ -624,7 +639,9 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * first CMD8 response can come back with CMD_INDEX_ERR +
          * CMD_END_BIT_ERR if CMD8 is issued immediately after CMD0.  HSS
          * does an explicit ~100 us spin between the two; we use 200 us
-         * to add margin against slower-responding cards. */
+         * to add margin against slower-responding cards.  Applied on all
+         * SDHCI platforms deliberately: the delay is harmless settle
+         * margin and the SD spec permits it. */
         udelay(200);
         /* send the operating conditions command */
         status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
@@ -1304,7 +1321,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     #endif /* !SDHCI_SDMA_DISABLED */
     }
     else {
-        /* PIO (Programmed I/O) mode — reads/writes data word-by-word via
+        /* PIO (Programmed I/O) mode -- reads/writes data word-by-word via
          * the SRS08 data port register.
          *
          * CAUTION: On Arasan SDHCI v3.0 (ZynqMP, Versal), multi-block PIO
@@ -1387,7 +1404,8 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
          * stale/partial data and intermittently corrupts the loaded image.
          * The DISK_EMMC path clears BRR between blocks of a multi-block
          * transfer; the SD single-block path (one CMD17 per block) needs the
-         * same clear after each block. */
+         * same clear after each block.  Deliberately unguarded: BRR is W1C
+         * in the SDHCI spec, so the clear is correct on every platform. */
         if (dir == SDHCI_DIR_READ) {
             SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
         }
@@ -1695,6 +1713,14 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
                             }
                         }
                     }
+                    if (mism != 0) {
+                        /* The verified copy never landed: report the read
+                         * as failed instead of letting the corruption
+                         * surface later as a signature mismatch. */
+                        wolfBoot_printf("SDHCI: partial-block PDMA write "
+                            "failed after retries\n");
+                        return -1;
+                    }
                 }
                 else {
                     /* destination not in DDR (e.g. an L2 header/GPT buffer):
@@ -1730,127 +1756,62 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
             {
                 static uint32_t sdhci_pdma_staging
                     [SDHCI_BLOCK_SIZE / sizeof(uint32_t)];
-                /* Print a single progress dot every 64 blocks (32 KB)
-                 * so the human can see the load is alive without
-                 * spamming UART per-block.  Also provides a small
-                 * settle delay that empirically helped lane integrity
-                 * in earlier verbose builds.
-                 *
-                 * For the FIRST block landing in DDR, dump the
-                 * staging buffer (SDHCI-read result, in L2 Scratch)
-                 * and the DDR destination after PDMA copy.  Compare
-                 * the 8 words: if staging != ddr_dst, the PDMA write
-                 * path corrupts those bytes -- which tells us the
-                 * problem is in PDMA-to-DDR, not in SD card content
-                 * or SDHCI read. */
-                {
-                    static int first_dump = 0;
-                    int first_ddr_block;
-                    int pdma_mism = 0;   /* total PDMA-write retries needed */
-                    int pdma_hard = 0;   /* blocks that never landed (8 tries) */
-                    int pdma_first = -1;
-                    int retry;
-                    int mism = 0;
-                    uint32_t w;
-                    for (i = 0; i < blocks && status == 0; i++) {
-                        uint8_t *block_dst = buf + i * SDHCI_BLOCK_SIZE;
-                        *(volatile uint32_t*)0x20001000UL = 0xDEADC0DEU;
-                        if ((i & 0x3F) == 0) {
-                            wolfBoot_printf(".");
-                        }
-                        status = sdhci_read(MMC_CMD17_READ_SINGLE,
-                            block_addr + i,
-                            sdhci_pdma_staging,
-                            SDHCI_BLOCK_SIZE);
-                        if (status != 0) {
-                            continue;
-                        }
-                        first_ddr_block = (!first_dump) &&
-                            (((uintptr_t)block_dst & 0xF0000000UL)
-                              == 0x80000000UL);
-                        mpfs_pdma_memcpy(block_dst, sdhci_pdma_staging,
-                            SDHCI_BLOCK_SIZE);
-                        /* Per-block staging-vs-non-cached-DDR compare: did the
-                         * PDMA write actually land this block in DDR?  If this
-                         * stays 0 for the whole load yet integrity still fails,
-                         * the SD-read into staging is the corruptor -- not the
-                         * PDMA/DDR write path (DDR-BIG proved that clean). */
-                        if (((uintptr_t)block_dst & 0xF0000000UL)
-                                == 0x80000000UL) {
-                            /* PDMA-write verify + retry.  The PDMA->DDR write
-                             * intermittently drops a block when interleaved
-                             * with SDHCI single-block reads (confirmed: staging
-                             * correct, DDR stale, persists after a fence).
-                             * Read the block back through the non-cached alias
-                             * and re-PDMA until it lands (or give up after 8). */
-                            volatile uint32_t *ncv = (volatile uint32_t *)
-                                ((uintptr_t)block_dst | 0x40000000UL);
-                            for (retry = 0; retry < 8; retry++) {
-                                __asm__ volatile(
-                                    "fence iorw,iorw" ::: "memory");
-                                mism = 0;
-                                for (w = 0; w < SDHCI_BLOCK_SIZE / 4U; w++) {
-                                    if (ncv[w] != sdhci_pdma_staging[w]) {
-                                        mism = 1;
-                                        break;
-                                    }
-                                }
-                                if (mism == 0) {
+                int pdma_retries = 0; /* PDMA-write retries needed */
+                int pdma_hard = 0;    /* blocks that never landed (8 tries) */
+                int retry;
+                int mism;
+                uint32_t w;
+                for (i = 0; i < blocks && status == 0; i++) {
+                    uint8_t *block_dst = buf + i * SDHCI_BLOCK_SIZE;
+                    *(volatile uint32_t*)0x20001000UL = 0xDEADC0DEU; /* WDT */
+                    status = sdhci_read(MMC_CMD17_READ_SINGLE,
+                        block_addr + i, sdhci_pdma_staging,
+                        SDHCI_BLOCK_SIZE);
+                    if (status != 0) {
+                        continue;
+                    }
+                    mpfs_pdma_memcpy(block_dst, sdhci_pdma_staging,
+                        SDHCI_BLOCK_SIZE);
+                    if (((uintptr_t)block_dst & 0xF0000000UL)
+                            == 0x80000000UL) {
+                        /* PDMA-write verify + retry.  The PDMA->DDR write
+                         * intermittently drops a block when interleaved
+                         * with SDHCI single-block reads (staging correct,
+                         * DDR stale, persists after a fence).  Read the
+                         * block back through the non-cached alias and
+                         * re-PDMA until it lands (or give up after 8). */
+                        volatile uint32_t *ncv = (volatile uint32_t *)
+                            ((uintptr_t)block_dst | 0x40000000UL);
+                        mism = 0;
+                        for (retry = 0; retry < 8; retry++) {
+                            __asm__ volatile("fence iorw,iorw" ::: "memory");
+                            mism = 0;
+                            for (w = 0; w < SDHCI_BLOCK_SIZE / 4U; w++) {
+                                if (ncv[w] != sdhci_pdma_staging[w]) {
+                                    mism = 1;
                                     break;
                                 }
-                                pdma_mism++;
-                                if (pdma_first < 0) {
-                                    pdma_first = (int)i;
-                                    wolfBoot_printf("\nDDR-LOAD pdma drop "
-                                        "blk=%lu w=%lu stg=0x%x ddr=0x%x "
-                                        "(retrying)\n", (unsigned long)i,
-                                        (unsigned long)w,
-                                        sdhci_pdma_staging[w], ncv[w]);
-                                }
-                                mpfs_pdma_memcpy(block_dst,
-                                    sdhci_pdma_staging, SDHCI_BLOCK_SIZE);
-                                *(volatile uint32_t *)0x20001000UL =
-                                    0xDEADC0DEU;
                             }
-                            if (mism != 0) {
-                                pdma_hard++;
+                            if (mism == 0) {
+                                break;
                             }
+                            pdma_retries++;
+                            mpfs_pdma_memcpy(block_dst, sdhci_pdma_staging,
+                                SDHCI_BLOCK_SIZE);
+                            *(volatile uint32_t *)0x20001000UL = 0xDEADC0DEU;
                         }
-                        if (first_ddr_block) {
-                            volatile uint32_t *src =
-                                (volatile uint32_t *)sdhci_pdma_staging;
-                            volatile uint32_t *dst =
-                                (volatile uint32_t *)block_dst;
-                            uintptr_t ncdst = ((uintptr_t)block_dst |
-                                0x40000000UL);
-                            volatile uint32_t *ncv =
-                                (volatile uint32_t *)ncdst;
-                            wolfBoot_printf(
-                                "\nSDhci first-DDR-blk diag:\n"
-                                "  staging (L2 scratch) [0..7]: "
-                                "%08x %08x %08x %08x %08x %08x %08x %08x\n"
-                                "  ddr_cached  @ 0x%lx     [0..7]: "
-                                "%08x %08x %08x %08x %08x %08x %08x %08x\n"
-                                "  ddr_noncached@0x%lx  [0..7]: "
-                                "%08x %08x %08x %08x %08x %08x %08x %08x\n",
-                                src[0], src[1], src[2], src[3],
-                                src[4], src[5], src[6], src[7],
-                                (unsigned long)block_dst,
-                                dst[0], dst[1], dst[2], dst[3],
-                                dst[4], dst[5], dst[6], dst[7],
-                                (unsigned long)ncdst,
-                                ncv[0], ncv[1], ncv[2], ncv[3],
-                                ncv[4], ncv[5], ncv[6], ncv[7]);
-                            first_dump = 1;
+                        if (mism != 0) {
+                            pdma_hard++;
+                            /* Unrecoverable verified-write failure: fail
+                             * the read rather than return corrupt data. */
+                            status = -1;
                         }
-                    }
-                    if (pdma_mism > 0 || pdma_hard > 0) {
-                        wolfBoot_printf("DDR-LOAD: pdma_retries=%d hard_fail=%d "
-                            "(first drop blk=%d in this 512KB chunk)\n",
-                            pdma_mism, pdma_hard, pdma_first);
                     }
                 }
-                wolfBoot_printf("\n");
+                if (pdma_retries > 0 || pdma_hard > 0) {
+                    wolfBoot_printf("SDHCI: pdma_retries=%d hard_fail=%d\n",
+                        pdma_retries, pdma_hard);
+                }
             }
         #else
             for (i = 0; i < blocks && status == 0; i++) {
