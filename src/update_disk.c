@@ -273,7 +273,7 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t load_off;
     uint32_t max_ver;
     const uint8_t *hdr_ptr = NULL;
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     uint8_t *dts_addr = NULL;
     #ifdef WOLFBOOT_FDT
     uint32_t dts_size = 0;
@@ -308,6 +308,12 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
         wolfBoot_panic();
     }
+
+    /* (Removed) DDR self-test that PDMA/CPU-wrote 0xA5A5/0x5A5A patterns
+     * into the image load region (0x82000000 / 0xC2000000).  It was a
+     * debug aid for the now-fixed DDR write scramble (auto-init reorder
+     * in run_training), and it pre-clobbered the first 64 words of the
+     * load region, corrupting the image the integrity check then read. */
 
     if (disk_open(BOOT_DISK) < 0) {
 #ifdef DISK_ENCRYPT
@@ -576,7 +582,7 @@ void RAMFUNCTION wolfBoot_start(void)
                 dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
                     dts_ptr, dts_addr, dts_size);
-                memcpy(dts_addr, dts_ptr, dts_size);
+                wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size);
             }
         }
 #ifdef WOLFBOOT_FIT_RAMDISK
@@ -624,7 +630,7 @@ void RAMFUNCTION wolfBoot_start(void)
     disk_crypto_clear();
 #endif
     do_boot((uint32_t*)load_address
-    #ifdef MMU
+    #if defined(MMU) || defined(WOLFBOOT_FDT)
         ,(uint32_t*)dts_addr
     #endif
     );

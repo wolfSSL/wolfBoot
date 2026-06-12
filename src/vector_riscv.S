@@ -31,7 +31,10 @@
 
 #if __riscv_xlen == 64
 
-/* RV64: Save all caller-saved registers and call handle_trap */
+/* RV64: Save all caller-saved registers and call handle_trap_ex.
+ * handle_trap_ex (in src/boot_riscv.c) is the regs-aware weak hook;
+ * it forwards to the legacy 3-arg weak handle_trap so out-of-tree
+ * platform overrides keep working. */
 .macro trap_entry
     addi sp, sp, -32 * REGBYTES
     STORE x1,   1 * REGBYTES(sp)
@@ -71,7 +74,7 @@
     csrr a2, MODE_PREFIX(tval)
 
     mv a3, sp
-    jal handle_trap
+    jal handle_trap_ex
     csrw MODE_PREFIX(epc), a0
 
 .endm
