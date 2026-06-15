@@ -2271,6 +2271,11 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
       defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
         /* Don't care about the key slot, we are using a fixed wolfHSM keyId */
         key_slot = 0;
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+      defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+        /* Don't care about the key slot, we are using the public key from the
+         * leaf cert */
+        key_slot = 0;
 #else
         key_slot = keyslot_id_by_sha(pubkey_hint);
         if (key_slot < 0) {
