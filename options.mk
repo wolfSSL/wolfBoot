@@ -1397,6 +1397,15 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # big enough for cert chain
   CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
 
+  # wolfHSM client ID presented to the HSM server during the connection
+  # handshake. Single value shared by all targets; defaults to 1. Override in the
+  # .config or on the make command line. This MUST match the client/user ID the
+  # server provisions the wolfBoot public key under -- e.g. the whnvmtool
+  # 'key <clientId> ...' field (tools/scripts/tc3xx/*.nvminit) or the example
+  # POSIX server's '--client <id>' argument.
+  WOLFHSM_CLIENT_ID ?= 1
+  CFLAGS += -DWOLFBOOT_WOLFHSM_CLIENT_ID=$(WOLFHSM_CLIENT_ID)
+
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification
   ifneq ($(CERT_CHAIN_VERIFY),)

@@ -170,11 +170,19 @@ static posixTransportTcpConfig        mytcpconfig[1] = {{
            .server_port      = 23456,
 }};
 
+/* wolfHSM client ID presented to the HSM server. Defined by the build system
+ * (WOLFHSM_CLIENT_ID in options.mk, default 1); must match the client ID the
+ * server provisions the wolfBoot public key under (the example POSIX server's
+ * '--client' argument). */
+#ifndef WOLFBOOT_WOLFHSM_CLIENT_ID
+#error "WOLFBOOT_WOLFHSM_CLIENT_ID is not defined. Set WOLFHSM_CLIENT_ID in your .config or on the make command line."
+#endif
+
 static whCommClientConfig cc_conf[1] = {{
     .transport_cb      = pttccb,
     .transport_context = (void*)tcc,
     .transport_config  = (void*)mytcpconfig,
-    .client_id         = 12,
+    .client_id         = WOLFBOOT_WOLFHSM_CLIENT_ID,
 }};
 static whClientConfig     c_conf[1]  = {{
          .comm = cc_conf,

@@ -170,8 +170,10 @@ Next, in a new terminal window, run the wolfHSM POSIX TCP server, loading the pu
 cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp
 make WOLFSSL_DIR=../../../../../wolfssl
 
-# Run the server, loading the wolfBoot public key and using the client ID and keyId matching the values declared in `hal/sim.c`)
-./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
+# Run the server, loading the wolfBoot public key. The client ID (--client) must
+# match WOLFHSM_CLIENT_ID from the build config (default 1) and the keyId (--id)
+# must match hsmKeyIdPubKey in `hal/sim.c` (255 / 0xFF).
+./Build/wh_server_tcp.elf --client 1 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
 
 # The server will now be waiting for connections
 ```
