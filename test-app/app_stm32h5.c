@@ -218,6 +218,9 @@ static int cmd_tpm_quote(const char *args);
 #ifdef WOLFBOOT_TZ_FWTPM
 static int cmd_fwtpm_test(const char *args);
 #endif
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+#include "wcs/wolfhsm_test.h"
+#endif
 
 
 #define CMD_BUFFER_SIZE 256
@@ -1503,6 +1506,26 @@ void main(void)
         asm volatile ("bkpt #0x7f");
     else
         asm volatile ("bkpt #0x7e");
+#endif
+
+#ifdef WOLFCRYPT_TZ_WOLFHSM
+    ret = cmd_wolfhsm_test(NULL);
+#ifdef WOLFBOOT_TZ_TEST_NO_BKPT
+    if (ret == WOLFHSM_TEST_FIRST_BOOT_OK || ret == WOLFHSM_TEST_SECOND_BOOT_OK) {
+        printf("WOLFHSM_TZ_TEST_PASS\r\n");
+        while (1) { }
+    } else {
+        printf("WOLFHSM_TZ_TEST_FAIL\r\n");
+        while (1) { }
+    }
+#else
+    if (ret == WOLFHSM_TEST_FIRST_BOOT_OK)
+        asm volatile ("bkpt #0x7d");
+    else if (ret == WOLFHSM_TEST_SECOND_BOOT_OK)
+        asm volatile ("bkpt #0x7f");
+    else
+        asm volatile ("bkpt #0x7e");
+#endif
 #endif
 
 #if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
