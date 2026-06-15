@@ -1076,7 +1076,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate the SHA256 hash of the key.
@@ -1187,7 +1187,7 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate SHA-384 hash of a public key in the keystore.
@@ -1303,7 +1303,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     wc_Sha3_384_Free(&sha3_ctx);
     return 0;
 }
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate SHA3-384 hash of a public key in the keystore.
@@ -2303,8 +2303,17 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             return -1;
         img->sha_hash = digest;
     }
-    key_mask = keystore_get_mask(key_slot);
     image_part = image_type & HDR_IMG_TYPE_PART_MASK;
+#ifdef WOLFBOOT_NO_KEYSTORE
+    /* No local keystore is linked: there is no per-key partition permission
+     * mask to consult. Key authorization and usage are enforced by the HSM
+     * (cert-chain root-of-trust plus per-key usage flags), so the wolfBoot
+     * keystore mask check does not apply here. */
+    (void)key_slot;
+    (void)key_mask;
+    (void)image_part;
+#else
+    key_mask = keystore_get_mask(key_slot);
 
     /* Check if the key permission mask matches the current partition id */
     if (((1U << image_part) & key_mask) != (1U << image_part)) {
@@ -2312,6 +2321,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     }
 
     CONFIRM_MASK_VALID(image_part, key_mask);
+#endif
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
@@ -2515,7 +2525,8 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     return p;
 }
 
-#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT) && \
+    !defined(WOLFBOOT_NO_KEYSTORE)
 
 /* Compare fixed-size key hints without early exit to avoid leaking hash prefix
  * matches through lookup timing. */

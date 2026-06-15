@@ -1390,13 +1390,13 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # HSM out-of-band
   KEYGEN_OPTIONS += --exportpubkey --der
 
-  # Default to using public keys on the HSM
-  ifneq ($(WOLFHSM_CLIENT_LOCAL_KEYS),1)
-    KEYGEN_OPTIONS += --nolocalkeys
-    CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
-    # big enough for cert chain
-    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
-  endif
+  # wolfHSM clients always use HSM-resident public keys, referenced by key ID or
+  # authenticated via a certificate chain. Public keys baked into a local
+  # keystore.c are not supported.
+  KEYGEN_OPTIONS += --nolocalkeys
+  CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
+  # big enough for cert chain
+  CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
 
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification
