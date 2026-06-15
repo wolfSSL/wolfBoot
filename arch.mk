@@ -1397,6 +1397,7 @@ ifeq ($(TARGET),lpc55s69)
       -I$(MCUXPRESSO)/drivers/iap1 \
       -I$(MCUXPRESSO)/drivers/lpc_gpio \
       -I$(MCUXPRESSO)/drivers/lpc_iocon \
+      -I$(MCUXPRESSO)/drivers/puf \
       -I$(MCUXPRESSO)/drivers/rng_1 \
       -I$(MCUXPRESSO_CMSIS)/Include \
       -I$(MCUXPRESSO_CMSIS)/Core/Include
@@ -1427,6 +1428,13 @@ ifeq ($(TARGET),lpc55s69)
         $(MCUXPRESSO)/drivers/hashcrypt/fsl_hashcrypt.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
+  endif
+  ifeq ($(HWPUF),1)
+    CFLAGS+=-DWOLFSSL_HWPUF -DWOLFSSL_NXP_HWPUF
+    OBJS+=\
+        $(MCUXPRESSO)/drivers/puf/fsl_puf.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
+        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hwpuf_port.o
   endif
 endif
 
