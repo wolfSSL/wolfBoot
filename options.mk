@@ -1394,7 +1394,6 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # authenticated via a certificate chain. Public keys baked into a local
   # keystore.c are not supported.
   KEYGEN_OPTIONS += --nolocalkeys
-  CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
   # big enough for cert chain
   CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
 
