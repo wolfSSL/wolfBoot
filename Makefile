@@ -152,6 +152,12 @@ else
     OBJS+=./src/flash_otp_keystore.o
   else ifeq ($(WOLFHSM_NO_KEYSTORE),1)
     CFLAGS+=-DWOLFBOOT_NO_KEYSTORE
+    # No built-in keystore is compiled in, but firmware images must still be
+    # signed (for test/factory builds). src/keystore.o normally triggers
+    # generation of the signing key via 'src/keystore.c: $(PRIVATE_KEY)'.
+    # Without it, tie the key to the bootloader build so the signing key is
+    # still produced before any downstream signing step runs.
+    WOLFBOOT_SIGN_KEY_DEP=$(PRIVATE_KEY)
   else
     OBJS+=./src/keystore.o
   endif
@@ -560,7 +566,7 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
-wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) FORCE
+wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) $(WOLFBOOT_SIGN_KEY_DEP) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFHSM_NO_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
