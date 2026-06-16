@@ -84,7 +84,7 @@ START_TEST(test_elf_bss_guard_no_header_corruption)
      *   → write proceeds; memset zeroes ph[1].
      * With the fixed guard (mem_size check):
      *   vaddr + mem_size   = ph[1]_start + 56 > ph[1]_start                  → FALSE
-     *   → write is skipped; ph[1] intact.
+     *   → load is aborted (-5) before any write; ph[1] intact.
      */
     ph[0].type      = ELF_PT_LOAD;
     ph[0].flags     = 0;
@@ -106,7 +106,10 @@ START_TEST(test_elf_bss_guard_no_header_corruption)
     }
 
     ret = elf_load_image_mmu(g_image, sizeof(g_image), &entry, NULL);
-    ck_assert_int_eq(ret, 0);
+
+    /* The loader should reject this image instead of loading it, because the
+     * segment would overwrite part of the image it has not read yet. */
+    ck_assert_int_eq(ret, -5);
 
     /*
      * ph[1].type must not have been zeroed by the BSS memset from ph[0].
