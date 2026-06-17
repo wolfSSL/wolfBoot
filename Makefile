@@ -120,13 +120,13 @@ ifneq ($(USER_NVM_INIT),)
 endif
 
 # Eliminates compilation and linkage of the built-in wolfBoot keystore
-WOLFHSM_NO_KEYSTORE :=
+WOLFBOOT_NO_KEYSTORE :=
 ifeq ($(WOLFHSM_CLIENT),1)
-  WOLFHSM_NO_KEYSTORE := 1
+  WOLFBOOT_NO_KEYSTORE := 1
 endif
 ifeq ($(WOLFHSM_SERVER),1)
   ifneq ($(CERT_CHAIN_VERIFY),)
-    WOLFHSM_NO_KEYSTORE := 1
+    WOLFBOOT_NO_KEYSTORE := 1
   endif
 endif
 
@@ -150,7 +150,7 @@ else
   endif
   ifeq ($(FLASH_OTP_KEYSTORE),1)
     OBJS+=./src/flash_otp_keystore.o
-  else ifeq ($(WOLFHSM_NO_KEYSTORE),1)
+  else ifeq ($(WOLFBOOT_NO_KEYSTORE),1)
     CFLAGS+=-DWOLFBOOT_NO_KEYSTORE
     # No built-in keystore is compiled in, but firmware images must still be
     # signed (for test/factory builds). src/keystore.o normally triggers
@@ -567,7 +567,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) $(WOLFBOOT_SIGN_KEY_DEP) FORCE
-	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFHSM_NO_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
