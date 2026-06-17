@@ -1363,11 +1363,26 @@ int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
     /* Load existing AIK and set auth */
     rc = wolfTPM2_ReadPublicKey(&wolftpm_dev, aik, TPM2_IAK_KEY_HANDLE);
     if (rc == 0) {
-        /* Custom should supply their own custom master password used during
-         * device provisioning. If using a sample TPM supply NULL to use the
-         * default password. */
+#ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
+        /* Derives the authValue on-device from a master secret shared across the
+         * reel; the precomputed default is preferred. Supply NULL for
+         * masterPassword to use the sample default. */
         rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &aik->handle,
             masterPassword, masterPasswordSz);
+#else
+        /* Precomputed (default): set the final per-device authValue directly (no
+         * master secret on device). Caller may override the default via
+         * masterPassword. */
+        static const uint8_t aikAuth[] = WOLFBOOT_TPM_MFG_AIK_AUTH;
+        const uint8_t* auth = (masterPassword != NULL) ? masterPassword : aikAuth;
+        uint16_t authSz = (masterPassword != NULL) ?
+            masterPasswordSz : (uint16_t)sizeof(aikAuth);
+        if (authSz > (uint16_t)sizeof(aik->handle.auth.buffer)) {
+            return BAD_FUNC_ARG;
+        }
+        aik->handle.auth.size = authSz;
+        XMEMCPY(aik->handle.auth.buffer, auth, authSz);
+#endif
     }
     return rc;
 }
@@ -1376,11 +1391,13 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
 {
     int rc;
     WOLFTPM2_HANDLE eh_handle;
-    /* sample master password for EH */
-    uint8_t Master_EH_AuthValue[] = {
-        0xDE, 0xEF, 0x8C, 0xDF, 0x1B, 0x77, 0xBD, 0x00,
-        0x30, 0x58, 0x5E, 0x47, 0xB8, 0x21, 0x46, 0x0B
-    };
+#ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
+    /* EH master secret (shared across the reel) */
+    uint8_t Master_EH_AuthValue[] = WOLFBOOT_TPM_MFG_EH_MASTER;
+#else
+    /* final per-device EH authValue */
+    static const uint8_t eh_auth[] = WOLFBOOT_TPM_MFG_EH_AUTH;
+#endif
 
     if (aik == NULL || getTime == NULL) {
         return BAD_FUNC_ARG;
@@ -1395,9 +1412,19 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
 
     eh_handle.hndl = TPM_RH_ENDORSEMENT;
 
+#ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
     /* Calculate EH auth value */
     rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &eh_handle,
         Master_EH_AuthValue, (uint16_t)sizeof(Master_EH_AuthValue));
+#else
+    /* Set EH authValue directly */
+    if (sizeof(eh_auth) > sizeof(eh_handle.auth.buffer)) {
+        return BAD_FUNC_ARG;
+    }
+    eh_handle.auth.size = (uint16_t)sizeof(eh_auth);
+    XMEMCPY(eh_handle.auth.buffer, eh_auth, sizeof(eh_auth));
+    rc = 0;
+#endif
     if (rc == 0) {
         /* Set EH auth */
         wolfTPM2_SetAuthHandle(&wolftpm_dev, 0, &eh_handle);

@@ -58,6 +58,12 @@ ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
   endif
 endif
 
+## TPM manufacturing identity: precomputed per-device authValue is the default
+## (no master secret on device). Opt into on-device derive-from-master mode:
+ifeq ($(WOLFBOOT_TPM_MFG_AUTH_DERIVE),1)
+  CFLAGS+=-D"WOLFBOOT_TPM_MFG_AUTH_DERIVE"
+endif
+
 ifeq ($(WOLFBOOT_ATTESTATION_IAK),1)
   CFLAGS+=-D"WOLFBOOT_ATTESTATION_IAK"
 endif
