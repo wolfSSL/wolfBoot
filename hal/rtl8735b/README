@@ -1,0 +1,86 @@
+RealTek RTL8735B HAL
+====================
+
+wolfBoot's HAL for the RTL8735B SoC (AmebaPro2 EVB and compatible boards) lives
+entirely in hal/rtl8735b.c, with two interchangeable flash/UART/cache backends
+selected at build time by HAL_BACKEND (see the .config and arch.mk):
+
+  HAL_BACKEND=sdk   (default) - use the RealTek SDK drivers.
+  HAL_BACKEND=bare            - a smaller backend with no SDK dependency
+                                (direct register / ROM access). Stubbed; not
+                                yet implemented.
+
+  hal/rtl8735b.c             - the whole HAL: hal_init, ext_flash_*,
+                               hal_prepare_boot, the RealTek RAM start-table +
+                               trampoline, and BOTH backends (gated on
+                               HAL_BACKEND_SDK).
+  hal/rtl8735b.ld            - SRAM layout + RealTek RAM start-table sections.
+  hal/rtl8735b/sdk-shim/cmsis_os.h - stub CMSIS-OS header (see below).
+  hal/rtl8735b/test-app/     - minimal bare-metal example app (DDR banner) for
+                               validating the verify -> copy-to-DDR -> jump path.
+  config/examples/rtl8735b.config  - example config (TARGET=rtl8735b).
+
+The bare backend builds standalone and links a complete wolfboot.elf, but its
+ext_flash_* entry points are stubs (return -1) and it is not yet functional. The sdk
+backend compiles the RealTek SDK driver chain into hal/rtl8735b.o; its final link
+references the SDK fwlib + ROM symbol table (see "Building / linking").
+
+Two header tricks make the SDK chain build inside wolfBoot's tree
+-----------------------------------------------------------------
+1. hal.h name clash. The RealTek SDK and wolfBoot BOTH ship a header named
+   "hal.h". The SDK's objects.h does #include "hal.h" expecting the SDK
+   aggregation (flash_t, hal_audio_adapter_t via hal_api.h), but wolfBoot's
+   include/hal.h would shadow it. So hal/rtl8735b.c does NOT include wolfBoot's
+   hal.h; the HAL entry points it implements are prototyped by wolfBoot's hal.h
+   in the translation units that call them, and simply defined here. arch.mk
+   passes the SDK dirs with -iquote so the SDK's hal.h wins for that quoted
+   include without disturbing the rest of the tree.
+
+2. No FreeRTOS. The SDK's cmsis.h unconditionally includes "cmsis_os.h"
+   (CONFIG_CMSIS_FREERTOS_EN is hardcoded), which cascades into FreeRTOS.
+   wolfBoot never calls CMSIS-OS, so sdk-shim/cmsis_os.h provides a stub with
+   just the few CMSIS-OS typedefs the SDK headers reference while parsing (e.g.
+   diag.h's osMutexId), placed ahead of the real one -- pulling zero FreeRTOS.
+   arch.mk also mirrors the bootloader's CONFIG_* defines and adds -mcmse (the
+   SDK cache header needs SCB_NS).
+
+Console (DEBUG_UART): a small self-contained UART1 driver in hal/rtl8735b.c
+(pinmux PF4/PF3 -> UART1, clock enable, 8N1, 115200) built on the SDK's
+register-level leaf functions (hal_uart.h / hal_pinmux.h) with a hand-populated
+adapter. It deliberately avoids the SDK hal_uart_init (OS-bound, hangs from a
+no-OS bootloader) and the ROM rt_printf (faults without SDK console init). UART1
+(0x40040400) is the RealTek "LOGUART" wired to the EVB serial console; the boot
+ROM and boot.bin also print there before wolfBoot. The board's UART1 clock is
+~50 MHz (not the SDK's "40 MHz" PXP value), so the 115200 entry in the baud
+table is retuned (OVSR 16 / DIV 27 -> ~115740 baud).
+
+Building / linking
+------------------
+1. sdk backend (default):  tools/scripts/rtl8735b_build.sh
+   `make TARGET=rtl8735b` compiles every object (the SDK driver chain is folded
+   into hal/rtl8735b.o), but the wolfboot.elf link needs SDK/ROM symbols that
+   live in the SDK build tree, so the in-tree link cannot finish. The helper
+   compiles the objects then runs the SDK-resolved final link: it links against
+   the SDK SoC libs (liboutsrc.a, libsoc_ntz.a) in -L $SDK/.../application/output
+   and prepends INCLUDE "romsym_is.so" (from $SDK/.../ROM/GCC) to the linker
+   script. The remaining undefined symbols it resolves are genuine SDK/ROM ones:
+   flash_init, flash_stream_read/write, flash_erase_sector, flash_global_*,
+   pglob_spic_adaptor (SDK mbed flash_api.c), hal_uart_*/hal_pinmux_* (SDK
+   fwlib), and hal_cache_stubs (ROM symbol table). Set AMEBA_SDK/ASDK_PATH to
+   override the SDK checkout and toolchain.
+
+   bare backend (standalone, no SDK -- flash stubbed, not yet functional):
+       make TARGET=rtl8735b HAL_BACKEND=bare
+
+2. Package:  tools/scripts/amebapro2_package.sh wolfboot.elf
+   (board-level: uses the AmebaPro2 EVB partition table + elf2bin).
+
+SPIC adaptor reuse
+------------------
+The RealTek bootloader initializes the SPIC controller before launching wolfBoot
+and hands the adaptor through the RAM start-table field phal_spic_adaptor
+(hal/rtl8735b.c). hal_init() seeds pglob_spic_adaptor with it so flash_init()
+reuses it instead of re-training the flash. If it is NULL the controller is
+re-initialized (safe: the flash is already up).
+
+Do not relicense or reformat vendored RealTek code; preserve its copyright.
