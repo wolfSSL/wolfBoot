@@ -1418,6 +1418,13 @@ endif
 
 # wolfHSM server options
 ifeq ($(WOLFHSM_SERVER),1)
+  # Currently, cert chain auth is the only supported auth mechanism for wolfHSM
+  # server mode
+  ifeq ($(CERT_CHAIN_VERIFY),)
+    $(error WOLFHSM_SERVER=1 requires CERT_CHAIN_VERIFY=1: wolfHSM server mode \
+            only supports certificate-chain authentication)
+  endif
+
   WOLFCRYPT_OBJS += \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \

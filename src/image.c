@@ -875,7 +875,9 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     #endif
     }
 
-#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+     defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
     if (g_leafKeyIdValid) {
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
@@ -884,7 +886,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
 #endif
         g_leafKeyIdValid = 0;
     }
-#endif /* WOLFBOOT_CERT_CHAIN_VERIFY */
+#endif /* WOLFBOOT_CERT_CHAIN_VERIFY && WOLFHSM */
 
     wc_MlDsaKey_Free(&ml_dsa);
 }
