@@ -2408,6 +2408,26 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     }
     len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
 
+#if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+#  error "WOLFBOOT_RAMBOOT_MAX_SIZE required when WOLFBOOT_NO_PARTITIONS=1"
+#endif
+    /* Bound the UNAUTHENTICATED image length before it drives the copy into the
+     * RAM load region: the image is loaded to RAM before its signature is
+     * verified, so this length (read from the not-yet-authenticated header) is
+     * attacker-influenceable and must be range checked first. */
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    if (WOLFBOOT_PARTITION_SIZE <= IMAGE_HEADER_SIZE ||
+            len > (uint32_t)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        wolfBoot_printf("Invalid encrypted image size %u at %p\n", len, src);
+        return -1;
+    }
+#elif defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+    if (len > WOLFBOOT_RAMBOOT_MAX_SIZE) {
+        wolfBoot_printf("Invalid encrypted image size %u at %p\n", len, src);
+        return -1;
+    }
+#endif
+
     /* decrypt content */
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
         wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
