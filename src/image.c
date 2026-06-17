@@ -724,7 +724,8 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
 {
     int         ret = 0;
     wc_MlDsaKey ml_dsa;
-#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     uint8_t * pubkey = NULL;
     int       pub_len = 0;
 #endif
@@ -734,7 +735,8 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     wolfBoot_printf("info: ML-DSA %d verify_signature: pubkey %d, sig %d\n",
         ML_DSA_LEVEL, KEYSTORE_PUBKEY_SIZE, ML_DSA_IMAGE_SIGNATURE_SIZE);
 
-#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     pubkey = keystore_get_buffer(key_slot);
 
     if (pubkey == NULL) {
@@ -759,27 +761,37 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     }
 
-#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
-    /* Use key slot ID directly with wolfHSM */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+     defined(WOLFBOOT_CERT_CHAIN_VERIFY))
+    /* Use the public key ID directly with wolfHSM (no local keystore) */
+    (void)key_slot;
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
     /* If using certificate chain verification and we have a verified leaf key
      * ID */
     if (g_leafKeyIdValid) {
         /* Use the leaf key ID from certificate verification */
+    #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         ret = wh_Client_MlDsaSetKeyId(&ml_dsa, g_certLeafKeyId);
+    #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        ret = wh_Server_MlDsaKeyCacheExport(&hsmServerCtx, g_certLeafKeyId,
+                                            &ml_dsa);
+    #endif
         wolfBoot_printf(
             "Using leaf cert public key (ID: %08x) for ML-DSA verification\n",
             (unsigned int)g_certLeafKeyId);
     }
     else {
         /* Default behavior: use the pre-configured public key ID */
+    #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmKeyIdPubKey);
+    #endif
     }
 #else
     ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmKeyIdPubKey);
 #endif
     if (ret != 0) {
-        wolfBoot_printf("error: wh_Client_MlDsaSetKeyId returned %d\n", ret);
+        wolfBoot_printf("error: ML-DSA set key ID returned %d\n", ret);
     }
 #else
     /* Make sure pub key matches parameters and import it */
@@ -804,7 +816,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
                             ret);
         }
     }
-#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || (SERVER && CERT_CHAIN) */
 
 
     /* Make sure sig len matches parameters. */
@@ -862,6 +874,17 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     #endif
     }
+
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+    if (g_leafKeyIdValid) {
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
+#endif
+        g_leafKeyIdValid = 0;
+    }
+#endif /* WOLFBOOT_CERT_CHAIN_VERIFY */
 
     wc_MlDsaKey_Free(&ml_dsa);
 }
