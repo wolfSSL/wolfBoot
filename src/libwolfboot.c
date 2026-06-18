@@ -2412,7 +2412,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     len = im2n(len);
 
 #if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
-#  error "WOLFBOOT_RAMBOOT_MAX_SIZE required when WOLFBOOT_NO_PARTITIONS=1"
+#  error "WOLFBOOT_FIXED_PARTITIONS or WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the RAM load"
 #endif
     /* Bound the UNAUTHENTICATED image length before it drives the copy into the
      * RAM load region: the image is loaded to RAM before its signature is
