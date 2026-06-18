@@ -1360,7 +1360,7 @@ static int wolfBoot_tpm2_set_handle_auth(WOLFTPM2_HANDLE* handle,
 #endif
 
 int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
-    uint8_t* masterPassword, uint16_t masterPasswordSz)
+    uint8_t* authOverride, uint16_t authOverrideSz)
 {
     int rc;
     if (aik == NULL) {
@@ -1369,8 +1369,8 @@ int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
     if (WOLFBOOT_TPM_NS_RW(aik, sizeof(*aik)) == NULL) {
         return BAD_FUNC_ARG;
     }
-    if (masterPassword != NULL &&
-        WOLFBOOT_TPM_NS_R(masterPassword, masterPasswordSz) == NULL) {
+    if (authOverride != NULL &&
+        WOLFBOOT_TPM_NS_R(authOverride, authOverrideSz) == NULL) {
         return BAD_FUNC_ARG;
     }
 
@@ -1380,17 +1380,17 @@ int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
 #ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
         /* Derives the authValue on-device from a master secret shared across the
          * reel; the precomputed default is preferred. Supply NULL for
-         * masterPassword to use the sample default. */
+         * authOverride to use the sample default. */
         rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &aik->handle,
-            masterPassword, masterPasswordSz);
+            authOverride, authOverrideSz);
 #else
         /* Precomputed (default): set the final per-device authValue directly (no
          * master secret on device). Caller may override the default via
-         * masterPassword. */
+         * authOverride. */
         static const uint8_t aikAuth[] = WOLFBOOT_TPM_MFG_AIK_AUTH;
-        const uint8_t* auth = (masterPassword != NULL) ? masterPassword : aikAuth;
-        uint16_t authSz = (masterPassword != NULL) ?
-            masterPasswordSz : (uint16_t)sizeof(aikAuth);
+        const uint8_t* auth = (authOverride != NULL) ? authOverride : aikAuth;
+        uint16_t authSz = (authOverride != NULL) ?
+            authOverrideSz : (uint16_t)sizeof(aikAuth);
         rc = wolfBoot_tpm2_set_handle_auth(&aik->handle, auth, authSz);
 #endif
     }

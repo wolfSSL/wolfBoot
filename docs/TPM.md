@@ -33,7 +33,7 @@ keys. There are two ways to supply the required `authValue`:
   provisioned). Per-device values are computed off-device at provisioning
   (`SHA-256(CPSN || master)`, low 16 bytes) and baked in via
   `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH`. When `WOLFBOOT_TPM_MFG_AUTH_DERIVE`
-  is not enabled, the `masterPassword` argument to `wolfBoot_tpm2_get_aik()` is
+  is not enabled, the `authOverride` argument to `wolfBoot_tpm2_get_aik()` is
   treated as an optional override for the final AIK `authValue` (not a master secret).
 
 - **Derive mode (`WOLFBOOT_TPM_MFG_AUTH_DERIVE`).** The `authValue` is computed
