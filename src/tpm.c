@@ -1345,6 +1345,20 @@ int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_
 }
 
 #ifdef WOLFTPM_MFG_IDENTITY
+#ifndef WOLFBOOT_TPM_MFG_AUTH_DERIVE
+/* Copy a precomputed authValue directly into a TPM handle. */
+static int wolfBoot_tpm2_set_handle_auth(WOLFTPM2_HANDLE* handle,
+    const uint8_t* auth, uint16_t authSz)
+{
+    if (authSz > (uint16_t)sizeof(handle->auth.buffer)) {
+        return BAD_FUNC_ARG;
+    }
+    handle->auth.size = authSz;
+    XMEMCPY(handle->auth.buffer, auth, authSz);
+    return 0;
+}
+#endif
+
 int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
     uint8_t* masterPassword, uint16_t masterPasswordSz)
 {
@@ -1377,11 +1391,7 @@ int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
         const uint8_t* auth = (masterPassword != NULL) ? masterPassword : aikAuth;
         uint16_t authSz = (masterPassword != NULL) ?
             masterPasswordSz : (uint16_t)sizeof(aikAuth);
-        if (authSz > (uint16_t)sizeof(aik->handle.auth.buffer)) {
-            return BAD_FUNC_ARG;
-        }
-        aik->handle.auth.size = authSz;
-        XMEMCPY(aik->handle.auth.buffer, auth, authSz);
+        rc = wolfBoot_tpm2_set_handle_auth(&aik->handle, auth, authSz);
 #endif
     }
     return rc;
@@ -1420,12 +1430,8 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
     TPM2_ForceZero(Master_EH_AuthValue, sizeof(Master_EH_AuthValue));
 #else
     /* Set EH authValue directly */
-    if (sizeof(eh_auth) > sizeof(eh_handle.auth.buffer)) {
-        return BAD_FUNC_ARG;
-    }
-    eh_handle.auth.size = (uint16_t)sizeof(eh_auth);
-    XMEMCPY(eh_handle.auth.buffer, eh_auth, sizeof(eh_auth));
-    rc = 0;
+    rc = wolfBoot_tpm2_set_handle_auth(&eh_handle, eh_auth,
+        (uint16_t)sizeof(eh_auth));
 #endif
     if (rc == 0) {
         /* Set EH auth */
