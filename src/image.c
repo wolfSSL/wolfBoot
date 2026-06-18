@@ -214,10 +214,8 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
     int ret, verify_res = 0;
     ecc_key ecc;
     mp_int  r, s;
-#if (!defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT &&   \
-     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)) || \
-    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT &&    \
-     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     uint8_t* pubkey    = keystore_get_buffer(key_slot);
     int      pubkey_sz = keystore_get_size(key_slot);
     int      point_sz  = pubkey_sz / 2;
@@ -251,7 +249,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         uint8_t tmpSigBuf[ECC_MAX_SIG_SIZE] = {0};
         size_t  tmpSigSz                    = sizeof(tmpSigBuf);
 
-    #if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID) || \
+    #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
         (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
          defined(WOLFBOOT_CERT_CHAIN_VERIFY))
         (void)key_slot;
@@ -281,11 +279,11 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
             ret = wh_Client_EccSetKeyId(&ecc, hsmKeyIdPubKey);
             #endif
         }
-    #else
+    #else /* WOLFBOOT_CERT_CHAIN_VERIFY */
         #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         ret = wh_Client_EccSetKeyId(&ecc, hsmKeyIdPubKey);
         #endif
-    #endif /* WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+    #endif /* !WOLFBOOT_CERT_CHAIN_VERIFY */
         if (ret != 0) {
             return;
         }
@@ -299,7 +297,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
             return;
         }
 
-    #endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+    #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || (SERVER && CERT_CHAIN) */
         /* wc_ecc_verify_hash_ex() doesn't trigger a crypto callback, so we need
            to use wc_ecc_verify_hash instead. Unfortunately, that requires
            converting the signature to intermediate DER format first */
@@ -436,10 +434,8 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
 #endif
 #endif /* WOLFBOOT_SIGN_RSAPSS_ANY */
 
-#if (!defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)) || \
-    (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) &&  \
-        !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     uint8_t *pubkey = keystore_get_buffer(key_slot);
     int pubkey_sz = keystore_get_size(key_slot);
 
@@ -472,7 +468,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
     if (ret != 0) {
         return;
     }
-#if defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID) ||  \
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) ||  \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
      defined(WOLFBOOT_CERT_CHAIN_VERIFY))
     (void)key_slot;
@@ -519,7 +515,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
         wc_FreeRsaKey(&rsa);
         return;
     }
-#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || (SERVER && CERT_CHAIN) */
     XMEMCPY(output, sig, RSA_IMAGE_SIGNATURE_SIZE);
 #ifdef WOLFBOOT_SIGN_RSAPSS_ANY
     if (is_pss) {
@@ -532,14 +528,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
         RSA_VERIFY_FN(ret, wc_RsaSSL_VerifyInline, output,
                       RSA_IMAGE_SIGNATURE_SIZE, &digest_out, &rsa);
     }
-#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-    !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
-    /* evict the key after use, since we aren't using the RSA import API */
-    if (WH_ERROR_OK != wh_Client_KeyEvict(&hsmClientCtx, hsmKeyId)) {
-        wc_FreeRsaKey(&rsa);
-        return;
-    }
-#elif defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
     if (g_leafKeyIdValid) {
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
@@ -548,7 +537,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
 #endif
         g_leafKeyIdValid = 0;
     }
-#endif /* !WOLFBOOT_USE_WOLFHSM_PUBKEY_ID */
+#endif /* WOLFBOOT_CERT_CHAIN_VERIFY */
 #else
     /* wolfCrypt software RSA verify */
     ret = wc_InitRsaKey_ex(&rsa, NULL, WOLFBOOT_DEVID_PUBKEY);
@@ -735,9 +724,8 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
 {
     int         ret = 0;
     wc_MlDsaKey ml_dsa;
-#if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
-    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
-     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     uint8_t * pubkey = NULL;
     int       pub_len = 0;
 #endif
@@ -747,9 +735,8 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     wolfBoot_printf("info: ML-DSA %d verify_signature: pubkey %d, sig %d\n",
         ML_DSA_LEVEL, KEYSTORE_PUBKEY_SIZE, ML_DSA_IMAGE_SIGNATURE_SIZE);
 
-#if !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT || \
-    (defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
-     !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID))
+#if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+    !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     pubkey = keystore_get_buffer(key_slot);
 
     if (pubkey == NULL) {
@@ -774,28 +761,37 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     }
 
-#if defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT && \
-    defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
-    /* Use key slot ID directly with wolfHSM */
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+     defined(WOLFBOOT_CERT_CHAIN_VERIFY))
+    /* Use the public key ID directly with wolfHSM (no local keystore) */
+    (void)key_slot;
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY)
     /* If using certificate chain verification and we have a verified leaf key
      * ID */
     if (g_leafKeyIdValid) {
         /* Use the leaf key ID from certificate verification */
+    #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         ret = wh_Client_MlDsaSetKeyId(&ml_dsa, g_certLeafKeyId);
+    #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        ret = wh_Server_MlDsaKeyCacheExport(&hsmServerCtx, g_certLeafKeyId,
+                                            &ml_dsa);
+    #endif
         wolfBoot_printf(
             "Using leaf cert public key (ID: %08x) for ML-DSA verification\n",
             (unsigned int)g_certLeafKeyId);
     }
     else {
         /* Default behavior: use the pre-configured public key ID */
+    #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmKeyIdPubKey);
+    #endif
     }
 #else
     ret = wh_Client_MlDsaSetKeyId(&ml_dsa, hsmKeyIdPubKey);
 #endif
     if (ret != 0) {
-        wolfBoot_printf("error: wh_Client_MlDsaSetKeyId returned %d\n", ret);
+        wolfBoot_printf("error: ML-DSA set key ID returned %d\n", ret);
     }
 #else
     /* Make sure pub key matches parameters and import it */
@@ -820,8 +816,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
                             ret);
         }
     }
-#endif /* !defined WOLFBOOT_ENABLE_WOLFHSM_CLIENT &&
-          !defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID) */
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || (SERVER && CERT_CHAIN) */
 
 
     /* Make sure sig len matches parameters. */
@@ -879,6 +874,19 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
         }
     #endif
     }
+
+#if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
+    (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
+     defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER))
+    if (g_leafKeyIdValid) {
+#if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
+        (void)wh_Client_KeyEvict(&hsmClientCtx, g_certLeafKeyId);
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+        (void)wh_Server_KeystoreEvictKey(&hsmServerCtx, g_certLeafKeyId);
+#endif
+        g_leafKeyIdValid = 0;
+    }
+#endif /* WOLFBOOT_CERT_CHAIN_VERIFY && WOLFHSM */
 
     wc_MlDsaKey_Free(&ml_dsa);
 }
@@ -1076,7 +1084,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate the SHA256 hash of the key.
@@ -1187,7 +1195,7 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
     return 0;
 }
 
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate SHA-384 hash of a public key in the keystore.
@@ -1303,7 +1311,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
     wc_Sha3_384_Free(&sha3_ctx);
     return 0;
 }
-#ifndef WOLFBOOT_NO_SIGN
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_NO_KEYSTORE)
 
 /**
  * @brief Calculate SHA3-384 hash of a public key in the keystore.
@@ -2267,9 +2275,13 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         }
         key_slot = 0;
 
-#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-      defined(WOLFBOOT_USE_WOLFHSM_PUBKEY_ID)
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
         /* Don't care about the key slot, we are using a fixed wolfHSM keyId */
+        key_slot = 0;
+#elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
+      defined(WOLFBOOT_CERT_CHAIN_VERIFY)
+        /* Don't care about the key slot, we are using the public key from the
+         * leaf cert */
         key_slot = 0;
 #else
         key_slot = keyslot_id_by_sha(pubkey_hint);
@@ -2298,8 +2310,17 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
             return -1;
         img->sha_hash = digest;
     }
-    key_mask = keystore_get_mask(key_slot);
     image_part = image_type & HDR_IMG_TYPE_PART_MASK;
+#ifdef WOLFBOOT_NO_KEYSTORE
+    /* No local keystore is linked: there is no per-key partition permission
+     * mask to consult. Key authorization and usage are enforced by the HSM
+     * (cert-chain root-of-trust plus per-key usage flags), so the wolfBoot
+     * keystore mask check does not apply here. */
+    (void)key_slot;
+    (void)key_mask;
+    (void)image_part;
+#else
+    key_mask = keystore_get_mask(key_slot);
 
     /* Check if the key permission mask matches the current partition id */
     if (((1U << image_part) & key_mask) != (1U << image_part)) {
@@ -2307,6 +2328,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     }
 
     CONFIRM_MASK_VALID(image_part, key_mask);
+#endif
 
 #if defined(WOLFBOOT_CERT_CHAIN_VERIFY) && \
     (defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
@@ -2510,7 +2532,8 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     return p;
 }
 
-#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT)
+#if !defined(WOLFBOOT_NO_SIGN) && !defined(WOLFBOOT_RENESAS_SCEPROTECT) && \
+    !defined(WOLFBOOT_NO_KEYSTORE)
 
 /* Compare fixed-size key hints without early exit to avoid leaking hash prefix
  * matches through lookup timing. */

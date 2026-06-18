@@ -74,15 +74,11 @@ This section describes the configuration options available for wolfHSM integrati
 
 This option enables wolfHSM client support in wolfBoot. Without defining this option, support for wolfHSM client mode is not compiled in.
 
+In client mode, wolfBoot always uses HSM-resident public keys for firmware authentication; public keys are never baked into a local `keystore.c`. The key to verify against is referenced either by the reserved key ID defined in the HAL (`hsmKeyIdPubKey`), or, when certificate-chain verification (`WOLFBOOT_CERT_CHAIN_VERIFY`) is enabled, by the leaf key ID resolved from the verified chain.
+
 ### `WOLFBOOT_ENABLE_WOLFHSM_SERVER`
 
 This option enables wolfHSM server support in wolfBoot. When defined, wolfBoot includes an embedded wolfHSM server that provides HSM functionality locally within the bootloader. This is mutually exclusive with `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`.
-
-### `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID`
-
-This option enables use of the reserved wolfHSM public key ID for firmware authentication, and is typically the desired behavior for using wolfHSM. When this option is defined, wolfBoot will use the reserved wolfHSM keyId defined by the HAL (`hsmKeyIdPubKey`). This option is meant to be used in conjunction with the `--nolocalkeys` keygen option, as the key material in the keystore will not be used.
-
-If this option is not defined, cryptographic operations are still performed on the wolfHSM server, but wolfBoot assumes the key material is present in the keystore and NOT stored on the HSM. This means that wolfBoot will first load keys from the keystore, send the key material to the wolfHSM server at the time of use (cached as ephemeral keys), and finally evict the key from the HSM after usage. This behavior is typically only useful for debugging or testing scenarios, where the keys may not be pre-loaded onto the HSM. The keystore for use in this mode should not be generated with the `--nolocalkeys` option.
 
 ## HAL Implementations
 
@@ -126,7 +122,7 @@ The wolfBoot simulator supports using wolfHSM with all algorithms mentioned in [
 
 #### wolfHSM Client Mode Build
 
-To build the simulator configured to use wolfHSM client mode, ensure you build with the `WOLFHSM_CLIENT=1` makefile option. This will automatically define `WOLFBOOT_USE_WOLFHSM_PUBKEY_ID`, and requires the public key corresponding to the private key that signed the image to be pre-loaded into the HSM at the keyId specified by `hsmKeyIdPubKey` in the simulator HAL.
+To build the simulator configured to use wolfHSM client mode, ensure you build with the `WOLFHSM_CLIENT=1` makefile option. This requires the public key corresponding to the private key that signed the image to be pre-loaded into the HSM at the keyId specified by `hsmKeyIdPubKey` in the simulator HAL.
 
 ```sh
 # Grab the HSM client simulator configuration
@@ -174,8 +170,10 @@ Next, in a new terminal window, run the wolfHSM POSIX TCP server, loading the pu
 cd lib/wolfHSM/examples/posix/tcp/wh_server_tcp
 make WOLFSSL_DIR=../../../../../wolfssl
 
-# Run the server, loading the wolfBoot public key and using the client ID and keyId matching the values declared in `hal/sim.c`)
-./Build/wh_server_tcp.elf --client 12 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
+# Run the server, loading the wolfBoot public key. The client ID (--client) must
+# match WOLFHSM_CLIENT_ID from the build config (default 1) and the keyId (--id)
+# must match hsmKeyIdPubKey in `hal/sim.c` (255 / 0xFF).
+./Build/wh_server_tcp.elf --client 1 --id 255 --key ../../../../../../wolfboot_signing_private_key_pub.der &
 
 # The server will now be waiting for connections
 ```

@@ -3,4 +3,7 @@
 # Key format is:
 # key <clientId> <keyId> <access> <flags> <label> <file>
 # flags: WH_NVM_FLAGS_USAGE_VERIFY=0x100
+#
+# <clientId> must match the wolfBoot client's WOLFHSM_CLIENT_ID (options.mk
+# default 1); otherwise the server key lookup fails.
 key 0x1 0xFF 0xFF 0x100 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der

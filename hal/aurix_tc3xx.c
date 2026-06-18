@@ -95,6 +95,14 @@ static int _connectCb(void* context, whCommConnected connect);
 static whTransportMemClientContext tmcCtx[1] = {0};
 static whTransportClientCb         tmcCb[1]  = {WH_TRANSPORT_MEM_CLIENT_CB};
 
+/* wolfHSM client ID presented to the HSM server. Defined by the build system
+ * (WOLFHSM_CLIENT_ID in options.mk, default 1); must match the client ID the
+ * keys are provisioned under in the whnvmtool config
+ * (tools/scripts/tc3xx/wolfBoot-wolfHSM-keys.nvminit). */
+#ifndef WOLFBOOT_WOLFHSM_CLIENT_ID
+#error "WOLFBOOT_WOLFHSM_CLIENT_ID is not defined. Set WOLFHSM_CLIENT_ID in your .config or on the make command line."
+#endif
+
 /* Globally exported HAL symbols */
 whClientContext hsmClientCtx = {0};
 const int       hsmDevIdHash = WH_DEV_ID_DMA;
@@ -768,7 +776,7 @@ int hal_hsm_init_connect(void)
         .transport_cb      = tmcCb,
         .transport_context = (void*)tmcCtx,
         .transport_config  = (void*)tmcCfg,
-        .client_id         = 1,
+        .client_id         = WOLFBOOT_WOLFHSM_CLIENT_ID,
         .connect_cb        = _connectCb,
     }};
 

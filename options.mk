@@ -1390,13 +1390,21 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # HSM out-of-band
   KEYGEN_OPTIONS += --exportpubkey --der
 
-  # Default to using public keys on the HSM
-  ifneq ($(WOLFHSM_CLIENT_LOCAL_KEYS),1)
-    KEYGEN_OPTIONS += --nolocalkeys
-    CFLAGS += -DWOLFBOOT_USE_WOLFHSM_PUBKEY_ID
-    # big enough for cert chain
-    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
-  endif
+  # wolfHSM clients always use HSM-resident public keys, referenced by key ID or
+  # authenticated via a certificate chain. Public keys baked into a local
+  # keystore.c are not supported.
+  KEYGEN_OPTIONS += --nolocalkeys
+  # big enough for cert chain
+  CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
+
+  # wolfHSM client ID presented to the HSM server during the connection
+  # handshake. Single value shared by all targets; defaults to 1. Override in the
+  # .config or on the make command line. This MUST match the client/user ID the
+  # server provisions the wolfBoot public key under -- e.g. the whnvmtool
+  # 'key <clientId> ...' field (tools/scripts/tc3xx/*.nvminit) or the example
+  # POSIX server's '--client <id>' argument.
+  WOLFHSM_CLIENT_ID ?= 1
+  CFLAGS += -DWOLFBOOT_WOLFHSM_CLIENT_ID=$(WOLFHSM_CLIENT_ID)
 
   # Ensure wolfHSM is configured to use certificate manager if we are
   # doing cert chain verification
@@ -1410,6 +1418,13 @@ endif
 
 # wolfHSM server options
 ifeq ($(WOLFHSM_SERVER),1)
+  # Currently, cert chain auth is the only supported auth mechanism for wolfHSM
+  # server mode
+  ifeq ($(CERT_CHAIN_VERIFY),)
+    $(error WOLFHSM_SERVER=1 requires CERT_CHAIN_VERIFY=1: wolfHSM server mode \
+            only supports certificate-chain authentication)
+  endif
+
   WOLFCRYPT_OBJS += \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
