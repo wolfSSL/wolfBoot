@@ -97,15 +97,17 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
     /* Bound the UNAUTHENTICATED image length before it drives the copy into the
      * RAM load region: the image is loaded to RAM before its signature is
      * verified, so this length (read from the not-yet-authenticated header) is
-     * attacker-influenceable and must be range checked first. */
-#ifdef WOLFBOOT_FIXED_PARTITIONS
-    if (WOLFBOOT_PARTITION_SIZE <= IMAGE_HEADER_SIZE ||
-            img_size > (uint32_t)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+     * attacker-influenceable and must be range checked first. When both are
+     * configured, WOLFBOOT_RAMBOOT_MAX_SIZE takes precedence: it is the explicit
+     * cap on the RAM load region and may be tighter than the partition size. */
+#if defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+    if (img_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
         wolfBoot_printf("Invalid image size %u at %p\n", img_size, src);
         return -1;
     }
-#elif defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
-    if (img_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
+#elif defined(WOLFBOOT_FIXED_PARTITIONS)
+    if (WOLFBOOT_PARTITION_SIZE <= IMAGE_HEADER_SIZE ||
+            img_size > (uint32_t)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Invalid image size %u at %p\n", img_size, src);
         return -1;
     }
