@@ -2376,6 +2376,17 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
 #endif /* __WOLFBOOT */
 
 #if defined(MMU)
+/* The decrypt loop in wolfBoot_ram_decrypt() copies in ENCRYPT_BLOCK_SIZE
+ * granules, rounding the final write up to a block boundary. The size bound is
+ * only safe if the RAM load region is itself block-aligned; assert that where
+ * the region size is a compile-time constant (a macro in every such config). */
+#if defined(WOLFBOOT_FIXED_PARTITIONS) && defined(WOLFBOOT_PARTITION_SIZE)
+typedef char wolfBoot_ramboot_blockalign_check[
+    ((WOLFBOOT_PARTITION_SIZE) % ENCRYPT_BLOCK_SIZE == 0) ? 1 : -1];
+#elif defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+typedef char wolfBoot_ramboot_blockalign_check[
+    ((WOLFBOOT_RAMBOOT_MAX_SIZE) % ENCRYPT_BLOCK_SIZE == 0) ? 1 : -1];
+#endif
 /**
  * @brief Decrypt data from RAM.
  *
@@ -2406,7 +2417,32 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
         wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
     }
-    len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
+    /* dec_hdr is a byte buffer: copy the little-endian length field without an
+     * unaligned cast, then convert to native byte order. */
+    XMEMCPY(&len, dec_hdr + sizeof(uint32_t), sizeof(len));
+    len = im2n(len);
+
+#if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+#  error "WOLFBOOT_FIXED_PARTITIONS or WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the RAM load"
+#endif
+    /* Bound the UNAUTHENTICATED image length before it drives the copy into the
+     * RAM load region: the image is loaded to RAM before its signature is
+     * verified, so this length (read from the not-yet-authenticated header) is
+     * attacker-influenceable and must be range checked first. When both are
+     * configured, WOLFBOOT_RAMBOOT_MAX_SIZE takes precedence: it is the explicit
+     * cap on the RAM load region and may be tighter than the partition size. */
+#if defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+    if (len > WOLFBOOT_RAMBOOT_MAX_SIZE) {
+        wolfBoot_printf("Invalid encrypted image size %u at %p\n", len, src);
+        return -1;
+    }
+#elif defined(WOLFBOOT_FIXED_PARTITIONS)
+    if (WOLFBOOT_PARTITION_SIZE <= IMAGE_HEADER_SIZE ||
+            len > (uint32_t)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+        wolfBoot_printf("Invalid encrypted image size %u at %p\n", len, src);
+        return -1;
+    }
+#endif
 
     /* decrypt content */
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
