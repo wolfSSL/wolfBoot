@@ -159,12 +159,34 @@ _copy_params:
     sd    zero, 48(s11)
     sd    zero, 56(s11)
 
-    /* Wait for E51 to signal HLS_MAIN_HART_STARTED */
+    /* Wait for E51 to signal HLS_MAIN_HART_STARTED.  On MPFS250 poll the
+     * DTIM copy of the flag, not the L2-scratch HLS: an E51 store to the
+     * cacheable scratchpad can be lost on dirty-line eviction (layout-
+     * dependent), which left the secondaries parked here until the kernel's
+     * HSM hart_start IPI arrived -- too late for its 1s online window.
+     * Other RISCV64 M-mode targets poll the generic _main_hart_hls flag
+     * (MPFS_DTIM_MAIN_STARTED_ADDR is MPFS250-specific). */
     li    t3, 0x12344321
+#ifdef TARGET_mpfs250
+    li    t1, MPFS_DTIM_MAIN_STARTED_ADDR
+#else
     la    t1, _main_hart_hls
+#endif
 .L_wait_main_hart:
     lwu   t2, 0(t1)
     bne   t3, t2, .L_wait_main_hart
+
+    /* Clear any stale CLINT MSIP left by a prior boot (a warm/WDT reset does
+     * not clear CLINT) BEFORE arming the WFI wait, so a stale MSIP cannot fall
+     * the wfi loop through and resume a previous kernel handoff over
+     * un-reinitialized DDR.  E51 sends its release IPI only after we signal
+     * HLS_OTHER_HART_IN_WFI below, so clearing here cannot race the real
+     * wakeup. */
+    csrr  a0, mhartid
+    li    t0, 0x02000000               /* CLINT_BASE */
+    slli  t1, a0, 2
+    add   t0, t0, t1
+    sw    zero, 0(t0)                  /* clear stale MSIP */
 
     li    t0, 0x12345678               /* HLS_OTHER_HART_IN_WFI */
     sw    t0, 0(s11)
@@ -186,6 +208,14 @@ _copy_params:
     sw    t0, 0(s11)
     fence iorw, iorw
     fence.i
+
+    /* The C code on this hart (secondary_hart_entry and the M->S release
+     * path) addresses small globals gp-relative; only the E51's
+     * .L_sram_entry path sets gp, so set it here too. */
+    .option push
+    .option norelax
+    la    gp, __global_pointer$
+    .option pop
 
     csrr  a0, mhartid
     mv    a1, s11

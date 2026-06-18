@@ -31,11 +31,26 @@
 
 #if __riscv_xlen == 64
 
-/* RV64: Save all caller-saved registers and call handle_trap */
+/* RV64: Save all caller-saved registers and call handle_trap_ex.
+ * handle_trap_ex (in src/boot_riscv.c) is the regs-aware weak hook;
+ * it forwards to the legacy 3-arg weak handle_trap so out-of-tree
+ * platform overrides keep working. */
 .macro trap_entry
+#ifdef WOLFBOOT_RISCV_MMODE
+    /* If mscratch holds a per-hart M-mode stack top (armed before mret
+     * into S-mode, see riscv_mmode_to_smode), switch to it: the trapped
+     * context's sp may be an S-mode VIRTUAL address once the OS enables
+     * paging, and M-mode (no translation) must not store through it.
+     * mscratch == 0 means an M-mode context: keep the current stack.
+     * (mscratch is an M-mode-only CSR; S-mode builds keep the original
+     * current-stack frame.) */
+    csrrw sp, mscratch, sp
+    bnez  sp, 100f
+    csrrw sp, mscratch, sp
+100:
+#endif
     addi sp, sp, -32 * REGBYTES
     STORE x1,   1 * REGBYTES(sp)
-    STORE x2,   2 * REGBYTES(sp)
     STORE x3,   3 * REGBYTES(sp)
     STORE x4,   4 * REGBYTES(sp)
     STORE x5,   5 * REGBYTES(sp)
@@ -66,17 +81,54 @@
     STORE x30, 30 * REGBYTES(sp)
     STORE x31, 31 * REGBYTES(sp)
 
+#ifdef WOLFBOOT_RISCV_MMODE
+    /* Frame slot 0 (x0's unused slot) = mscratch at entry: the trapped
+     * sp when we switched to the M-stack, 0 for an M-mode fallback or a
+     * nested trap.  Zero mscratch while inside the handler so a nested
+     * trap keeps descending on the CURRENT stack instead of reusing the
+     * consumed mscratch value as a stack (which caused an infinite
+     * trap-in-trap recursion).  Slot 2 = the trapped sp.  x1 is already
+     * saved in slot 1, so reuse it as a scratch register. */
+    csrr  x1, mscratch
+    STORE x1,   0 * REGBYTES(sp)
+    csrw  mscratch, x0
+    bnez  x1, 101f
+    addi  x1, sp, 32 * REGBYTES
+101:
+    STORE x1,   2 * REGBYTES(sp)
+
+    /* The M-mode handler's C code addresses small globals gp-relative:
+     * reload wolfBoot's gp (the trapped context's gp -- e.g. the OS's --
+     * is restored from frame slot 3 on exit). */
+    .option push
+    .option norelax
+    la gp, __global_pointer$
+    .option pop
+#else
+    STORE x2,   2 * REGBYTES(sp)
+#endif
+
     csrr a0, MODE_PREFIX(cause)
     csrr a1, MODE_PREFIX(epc)
     csrr a2, MODE_PREFIX(tval)
 
     mv a3, sp
-    jal handle_trap
+    jal handle_trap_ex
     csrw MODE_PREFIX(epc), a0
 
 .endm
 
 .macro trap_exit
+#ifdef WOLFBOOT_RISCV_MMODE
+    /* Re-arm mscratch with this M-stack's top, but only for the
+     * OUTERMOST frame of a stack-switched trap (slot 0 non-zero); nested
+     * frames and M-mode fallback frames leave mscratch alone. */
+    LOAD  t0,   0 * REGBYTES(sp)
+    beqz  t0, 102f
+    addi  t0, sp, 32 * REGBYTES
+    csrw  mscratch, t0
+102:
+#endif
     LOAD x1,   1 * REGBYTES(sp)
     LOAD x3,   3 * REGBYTES(sp)
     LOAD x4,   4 * REGBYTES(sp)
@@ -108,7 +160,11 @@
     LOAD x30, 30 * REGBYTES(sp)
     LOAD x31, 31 * REGBYTES(sp)
     LOAD x2,   2 * REGBYTES(sp)
+#ifndef WOLFBOOT_RISCV_MMODE
     addi sp, sp, 32 * REGBYTES
+#endif
+    /* M-mode: slot 2 holds the true trapped sp, so no frame-pop is
+     * needed; S-mode keeps the original current-stack frame layout. */
 
     MODE_PREFIX(ret)
 
