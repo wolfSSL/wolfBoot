@@ -957,6 +957,7 @@ static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
  */
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
+    uint8_t *p;
     if (offset > img->fw_size)
         return NULL;
 #ifdef EXT_FLASH
@@ -964,9 +965,23 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
         ext_flash_check_read((uintptr_t)(img->fw_base) + offset, ext_hash_block,
                 WOLFBOOT_SHA_BLOCK_SIZE);
         return ext_hash_block;
-    } else
+    }
 #endif
-        return (uint8_t *)(img->fw_base + offset);
+    p = (uint8_t *)(img->fw_base + offset);
+#if defined(MPFS_DDR_INIT)
+    /* PolarFire SoC DDR build: route in-DDR image-body reads through the
+     * non-cached DDR SEG window (0xC0000000 base) so cache fills don't evict
+     * L2 Scratch lines (where wolfBoot's own code/stack live).  PDMA already
+     * L2-flushed the cached writes at disk-load, so the non-cached side reads
+     * the correct DDR contents.  0x8xxxxxxx -> 0xCxxxxxxx.  Applied at this
+     * single point so every image-body hasher (SHA256/384/3-384) behaves
+     * identically; inert for the L2-Scratch QSPI M-mode build (fw_base is not
+     * in the 0x8xxxxxxx window). */
+    if (((uintptr_t)p & 0xF0000000UL) == 0x80000000UL) {
+        p = (uint8_t *)((uintptr_t)p | 0x40000000UL);
+    }
+#endif
+    return p;
 }
 
 #ifdef EXT_FLASH
@@ -1184,8 +1199,9 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
     wc_Sha384 sha384_ctx;
 
-    if (header_sha384(&sha384_ctx, img) != 0)
+    if (header_sha384(&sha384_ctx, img) != 0) {
         return -1;
+    }
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (img->fw_base == NULL) {
         wc_Sha384Free(&sha384_ctx);
@@ -1204,6 +1220,8 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
             blksz = WOLFBOOT_SHA_BLOCK_SIZE;
             if (position + blksz > img->fw_size)
                 blksz = img->fw_size - position;
+            /* p is already routed to the non-cached DDR alias by
+             * get_sha_block() under MPFS_DDR_INIT (see above). */
             wc_Sha384Update(&sha384_ctx, p, blksz);
             position += blksz;
             wolfBoot_watchdog_feed();
@@ -1460,7 +1478,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     return 0;
 }
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 
 /**
  * @brief Get the size of the Device Tree Blob (DTB).
@@ -1480,7 +1498,7 @@ int wolfBoot_get_dts_size(void *dts_addr)
     return ret;
 }
 
-#endif /* MMU */
+#endif /* MMU || WOLFBOOT_FDT */
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 

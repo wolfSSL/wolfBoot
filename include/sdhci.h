@@ -248,6 +248,7 @@
 #define SDHCI_SRS11_DTCV_SHIFT  16
 #define SDHCI_SRS11_DTCV_MASK   (0x0FU << 16)
 #define SDHCI_SRS11_RESET_DAT_CMD   ((1U << 25) | (1U << 26))
+#define SDHCI_SRS11_RESET_ALL       (1U << 24)
 
 /* SRS12 - Normal Interrupt Status */
 #define SDHCI_SRS12_CC          (1U << 0)   /* Command complete */
@@ -444,6 +445,10 @@ int sdhci_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type);
 
 /* IRQ handler (call from platform IRQ) */
 void sdhci_irq_handler(void);
+
+/* Full controller software reset for OS handoff (returns host registers to
+ * power-on defaults so the OS driver finds a clean controller) */
+void sdhci_shutdown(void);
 
 /* ============================================================================
  * HAL Interface (platform must implement in target HAL file)

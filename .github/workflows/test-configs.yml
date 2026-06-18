@@ -339,6 +339,18 @@ jobs:
     with:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250_qspi.config
+  # M-mode + LPDDR4 build: generate a CI-only Libero settings stub (all
+  # zeros) and point LIBERO_FPGA_CONFIG_DIR at it so MPFS_DDR_INIT actually
+  # compiles in CI.  The stub is generated from the HAL sources (not
+  # committed); real boards must override LIBERO_FPGA_CONFIG_DIR with the
+  # actual Libero/HSS-generated config.
+  microchip_mpfs250_m_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
   microchip_mpfs250_m_qspi_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:

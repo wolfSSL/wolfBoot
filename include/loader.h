@@ -25,6 +25,8 @@
 #ifndef LOADER_H
 #define LOADER_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -142,6 +144,8 @@ static inline void wolfBoot_panic(void)
     extern void panic(void);
     panic();
 #endif
+    /* Spin so the watchdog fires and resets the chip (recovery).  Do NOT
+     * pet the WDT here -- production must reset out of a panic. */
     while(1)
         ;
 }
