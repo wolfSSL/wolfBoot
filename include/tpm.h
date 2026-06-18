@@ -67,7 +67,7 @@ int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_
  * the masterPassword argument as an optional *authValue* override.
  * Derive mode (WOLFBOOT_TPM_MFG_AUTH_DERIVE): authValue = low 16 bytes of
  * SHA-256(TPM serial || master); the master is shared across the reel. 
- * For wolfBott_tpm2_get_aik() the master password is provided via the
+ * For wolfBoot_tpm2_get_aik() the master password is provided via the
  * masterPassword argument (NULL = sample). */
 #ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
 /* EH master for derive mode (sample - override in production) */
