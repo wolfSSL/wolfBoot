@@ -2406,7 +2406,10 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
         wolfBoot_printf("Error decrypting header at %p!\n", src);
         return -1;
     }
-    len = *((uint32_t*)(dec_hdr + sizeof(uint32_t)));
+    /* dec_hdr is a byte buffer: copy the little-endian length field without an
+     * unaligned cast, then convert to native byte order. */
+    XMEMCPY(&len, dec_hdr + sizeof(uint32_t), sizeof(len));
+    len = im2n(len);
 
 #if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
 #  error "WOLFBOOT_RAMBOOT_MAX_SIZE required when WOLFBOOT_NO_PARTITIONS=1"
