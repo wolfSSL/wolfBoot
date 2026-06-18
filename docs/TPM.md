@@ -32,12 +32,12 @@ keys. There are two ways to supply the required `authValue`:
   the device. Defaults to a `0xFF` placeholder (fails TPM auth until
   provisioned). Per-device values are computed off-device at provisioning
   (`SHA-256(CPSN || master)`, low 16 bytes) and baked in via
-  `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH`. When `WOLFBOOT_TPM_MFG_AUTH_DERIVE` 
+  `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH`. When `WOLFBOOT_TPM_MFG_AUTH_DERIVE`
   is not enabled, the `masterPassword` argument to `wolfBoot_tpm2_get_aik()` is
   treated as an optional override for the final AIK `authValue` (not a master secret).
 
 - **Derive mode (`WOLFBOOT_TPM_MFG_AUTH_DERIVE`).** The `authValue` is computed
-  on-device as the low 16 bytes of `SHA-256(TPM serial || master)`. 
+  on-device as the low 16 bytes of `SHA-256(TPM serial || master)`.
   The endorsement master defaults to a sample and is overridable with
   `WOLFBOOT_TPM_MFG_EH_MASTER`; the AIK master is passed to
   `wolfBoot_tpm2_get_aik()` (NULL = sample). Convenient, but the master is
