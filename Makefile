@@ -9,6 +9,17 @@ include tools/config.mk
 
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
+
+# Resolve LIBERO_FPGA_CONFIG_DIR (MPFS DDR config header dir) to an absolute
+# path here, where the working directory is the repo root, and export it.  The
+# test-app is built by a sub-make with CWD=test-app/, so a relative -I added by
+# arch.mk would resolve against test-app/ and miss the directory.  override is
+# required because it is typically a command-line variable.
+ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
+  override LIBERO_FPGA_CONFIG_DIR := $(abspath $(LIBERO_FPGA_CONFIG_DIR))
+  export LIBERO_FPGA_CONFIG_DIR
+endif
+
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra -Wno-array-bounds
 LSCRIPT:=config/target.ld
@@ -398,7 +409,7 @@ endif
 	@echo
 
 test-app/image.bin: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)"
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" LIBERO_FPGA_CONFIG_DIR="$(LIBERO_FPGA_CONFIG_DIR)"
 	$(Q)$(SIZE) test-app/image.elf
 
 standalone:
@@ -525,7 +536,7 @@ else
 endif
 
 test-app/image.elf: wolfboot.elf
-	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" image.elf
+	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" LIBERO_FPGA_CONFIG_DIR="$(LIBERO_FPGA_CONFIG_DIR)" image.elf
 	$(Q)$(SIZE) test-app/image.elf
 
 ifeq ($(ELF_FLASH_SCATTER),1)
@@ -608,6 +619,7 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@FSP_S_LOAD_BASE@/$(FSP_S_LOAD_BASE)/g" | \
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
 		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" | \
+		sed -e "s/@STACK_SIZE_PER_HART@/$(STACK_SIZE_PER_HART)/g" | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_TEXT@/$(WOLFHAL_FLASH_EXCLUDE_TEXT)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_RODATA@/$(WOLFHAL_FLASH_EXCLUDE_RODATA)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_RAM_SECTIONS@/$(WOLFHAL_FLASH_RAM_SECTIONS)/g' \

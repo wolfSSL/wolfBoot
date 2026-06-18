@@ -878,7 +878,7 @@ The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× 
 
 ### Supported Boot Configurations
 
-Five ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+Six ready-to-use config templates cover all supported boot mode / storage / memory combinations:
 
 | Configuration | Config File | Boot Mode | Storage | Memory | HSS |
 |---------------|-------------|-----------|---------|--------|-----|
@@ -887,21 +887,51 @@ Five ready-to-use config templates cover all supported boot mode / storage / mem
 | **QSPI (S-mode)** | `polarfire_mpfs250_qspi.config` | S-mode (U54 via HSS) | MSS or SC QSPI | DDR | Yes |
 | **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
 | **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
+| **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
+
+The **M-Mode + DDR** configuration brings up the LPDDR4 controller from
+the E51 in M-mode (no HSS), then loads a signed FIT image from SD card,
+verifies it (SHA384 + ECC384) and hands off to a U54 hart in S-mode.
+wolfBoot includes a minimal SBI runtime (`src/riscv_sbi.c`) so the
+hand-off target can be a Linux kernel: tested booting 4-CPU SMP Yocto
+Linux to a login prompt in ~40 s from power-on on the MPFS250T Video
+Kit. Because all
+LIBERO_SETTING_\* values are board-specific, this build pulls them from
+a Libero/HSS-generated `fpga_design_config.h` pointed at by the
+`LIBERO_FPGA_CONFIG_DIR` makefile variable - typical sources are an
+HSS Video Kit build at
+`<hss>/build/boards/mpfs-video-kit/fpga_design_config` or a Libero MSS
+Configurator export. Setting `LIBERO_FPGA_CONFIG_DIR` automatically
+defines `MPFS_DDR_INIT` and adds the directory to the include path
+(see `arch.mk`); when unset, the DDR HAL is excluded and the build
+still produces a working M-mode wolfBoot without DDR. Add
+`-DDEBUG_DDR` to `CFLAGS_EXTRA` for verbose register-level traces
+during bring-up.
+
+For GitHub Actions, `tools/ci/gen_mpfs_libero_stub.sh` generates a
+compile-only stub (every `LIBERO_SETTING_*` symbol referenced by the
+HAL, defined to `0`; loop-bound settings to `1U`) so the M-Mode + DDR
+build path stays under continuous integration. The generated header is
+**not** committed and **not** runnable - real boards must point
+`LIBERO_FPGA_CONFIG_DIR` at the actual Libero / HSS output.
 
 Key build settings that differ between configurations:
 
-| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode |
-|---------|--------|------|------|--------|--------|
-| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` |
-| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` |
-| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 |
-| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 |
-| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 |
-| `MPFS_L2LIM` | – | – | – | 1 | – |
-| `RISCV_MMODE` | – | – | – | – | 1 |
-| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` |
-| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A |
-| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 |
+| Setting | SDCard | eMMC | QSPI | L2-LIM | M-Mode | M-Mode + DDR |
+|---------|--------|------|------|--------|--------|--------------|
+| `WOLFBOOT_ORIGIN` | `0x80000000` | `0x80000000` | `0x80000000` | `0x08040000` | `0x0A000000` | `0x0A000000` |
+| `WOLFBOOT_LOAD_ADDRESS` | `0x8E000000` | `0x8E000000` | `0x8E000000` | `0x08060000` | `0x0A010200` | `0x82000000` |
+| `WOLFBOOT_LOAD_DTS_ADDRESS` | `0x8A000000` | `0x8A000000` | `0x8A000000` | – | – | `0x8A000000` |
+| `EXT_FLASH` | 0 | 0 | 1 | 1 | 1 | 0 |
+| `DISK_SDCARD` | 1 | 0 | 0 | 0 | 0 | 1 |
+| `DISK_EMMC` | 0 | 1 | 0 | 0 | 0 | 0 |
+| `MPFS_L2LIM` | – | – | – | 1 | – | – |
+| `RISCV_MMODE` | – | – | – | – | 1 | 1 |
+| `LIBERO_FPGA_CONFIG_DIR` | – | – | – | – | – | required |
+| `WOLFBOOT_MMODE_SMODE_BOOT` | – | – | – | – | – | 1 |
+| Linker script | `mpfs250.ld` | `mpfs250.ld` | `mpfs250.ld` | `mpfs250-hss.ld` | `mpfs250-m.ld` | `mpfs250-m.ld` |
+| HSS YAML | `mpfs.yaml` | `mpfs.yaml` | `mpfs.yaml` | `mpfs-l2lim.yaml` | N/A | N/A |
+| `ELF` output | 1 | 1 | 1 | 0 (raw .bin) | 1 | 1 |
 
 > **Note:** All configurations require `NO_ASM=1` because the MPFS250 U54/E51 cores lack RISC-V
 > crypto extensions (Zknh); wolfBoot uses portable C implementations for all cryptographic operations.
@@ -933,6 +963,10 @@ The current `STACK_SIZE` in `hal/mpfs250-m.ld` is **32 KB**. Measured peak for E
 
 `hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)
 `hal/mpfs250.h` - Register definitions and hardware interfaces
+`hal/mpfs250_ddr.c` - LPDDR4 PHY/PLL/training and DDR bring-up (M-mode, no HSS)
+`src/ddr_cadence.c` - Generic Cadence DDR controller driver (controller CSR
+programming, Memory Test Controller, LPDDR4 mode-register protocol)
+`include/ddr_cadence.h` - Generic Cadence DDR controller register map + interface
 `hal/mpfs250.ld` - Linker script for S-mode (HSS-based boot)
 `hal/mpfs250-m.ld` - Linker script for M-mode (eNVM + L2 SRAM)
 `hal/mpfs250-hss.ld` - Linker script for S-mode (HSS with L2-LIM)
@@ -1043,9 +1077,9 @@ Notes:
 ### PolarFire SoC HSS S-Mode with L2-LIM (no DDR)
 
 wolfBoot can run in S-mode via HSS without DDR by targeting the on-chip **L2 Loosely Integrated
-Memory (L2-LIM)**. HSS loads wolfBoot from SC QSPI flash into L2-LIM on a U54 application core,
-and wolfBoot loads the signed application from SC QSPI into L2-LIM as well. This is useful for
-early bring-up or power-constrained scenarios where DDR is not yet initialized.
+Memory (L2-LIM)**. HSS loads wolfBoot into L2-LIM on a U54 application core, and wolfBoot loads
+the signed application from SC QSPI into L2-LIM as well. This is the configuration for systems
+that keep HSS and run without DDR.
 
 **Features:**
 * S-mode on U54 application core (hart 1), loaded by HSS
@@ -1101,16 +1135,15 @@ python3 tools/scripts/mpfs_qspi_prog.py /dev/ttyUSB1 \
 
 wolfBoot supports running directly in Machine Mode (M-mode) on PolarFire SoC, replacing the Hart
 Software Services (HSS) as the first-stage bootloader. wolfBoot runs on the E51 monitor core from
-eNVM and loads a signed application from SC QSPI flash into L2 Scratchpad (on-chip RAM) — no HSS
-or DDR required. This is the simplest bring-up path.
+eNVM and loads a signed application from SC QSPI flash into L2 Scratchpad (on-chip RAM) -- no HSS
+or DDR required. This is the minimal on-chip-only configuration.
 
 **Features:**
 * Runs on E51 monitor core (hart 0) directly from eNVM
 * Executes from L2 Scratchpad SRAM (256 KB at `0x0A000000`)
 * Loads signed application from SC QSPI flash to L2 Scratchpad (`0x0A010200`)
 * No HSS or DDR required — boots entirely from on-chip memory
-* Wakes and manages secondary U54 harts via IPI
-* Per-hart UART output (each hart uses its own MMUART)
+* Parks and releases secondary U54 harts via CLINT IPI
 * ECC384 + SHA384 signature verification
 
 **Relevant files:**
@@ -1215,8 +1248,55 @@ Booting at 0x...
 - **Strip debug symbols** before signing the test-app ELF. The debug build is ~150 KB but the
   stripped ELF is ~5 KB. L2 Scratchpad has ~150 KB available between wolfBoot code and the stack:
   `riscv64-unknown-elf-strip --strip-debug test-app/image.elf`
-- **DDR support:** DDR initialization is available on the `polarfire_ddr` branch for use cases
-  that require loading larger applications to DDR memory.
+- **DDR support:** software LPDDR4 initialization is included via the **M-Mode + DDR**
+  configuration (`polarfire_mpfs250_m.config`, requires `LIBERO_FPGA_CONFIG_DIR`) for use cases
+  that require loading larger images (e.g. a Linux FIT) to DDR memory. See the next section.
+
+### PolarFire SoC M-Mode + DDR: booting Linux (minimal SBI)
+
+The **M-Mode + DDR** configuration (`config/examples/polarfire_mpfs250_m.config`) replaces both
+HSS and OpenSBI: wolfBoot performs the LPDDR4 init/training on the E51, loads and verifies a
+signed Yocto FIT image (kernel + dtb) from SD card into DDR, applies device-tree fixups, releases
+U54 hart 1 into S-mode at the kernel entry, and then remains resident as a minimal M-mode SBI
+runtime. Validated on the MPFS250T Video Kit: 4-CPU SMP Yocto Linux to login in ~40 s from
+power-on.
+
+**Minimal SBI runtime** (`src/riscv_sbi.c`, a clean-room implementation of the OpenSBI/SBI spec; generic RISC-V with HAL hooks; enabled by
+`WOLFBOOT_MMODE_SMODE_BOOT`):
+* SBI v0.2 extensions: BASE, TIME (per-hart `mtimecmp`, MTIP-to-STIP injection), IPI (SSIP
+  injection via CLINT MSIP), RFENCE (remote `fence.i` / `sfence.vma` with completion wait),
+  HSM (`hart_start`/`hart_stop`/`hart_status` backed by per-hart start mailboxes), DBCN and the
+  legacy console putchar (shared with the wolfBoot UART), SRST.
+* `rdtime` emulation: the U54/E51 have no `time` CSR, so `rdtime` is emulated from CLINT MTIME.
+  The M-mode HAL starts the MTIME time base before hand-off via SYSREG `RTC_CLOCK_CR` at 1 MHz
+  (`mpfs_enable_mtime()`), matching the device-tree `timebase-frequency`.
+* Misaligned load/store emulation (not delegatable on these harts), including compressed forms,
+  for the kernel's unaligned copy tails.
+* Per-hart M-mode trap stacks live in the `hss-buffer` reserved (nomap) DDR region; cross-hart
+  state (HSM mailboxes, IPI flags, the hart-release gate flag) lives in the E51 DTIM at
+  `0x01000000`, which is uncached and coherent for all harts. Cacheable L2-scratchpad memory
+  must not be used for cross-hart signalling (stores can be lost on dirty-line eviction).
+
+**Device-tree fixups** applied to the loaded dtb (`hal/mpfs250.c`): bootargs/root device,
+MAC addresses from the device serial number, and all five MSS watchdog nodes are disabled.
+
+**Watchdog policy:** the MSS watchdogs always count and reset the chip on timeout (they cannot
+be disabled in hardware, and `CONTROL=0` does not prevent the reset). After hand-off the parked
+E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
+the dtb fixup so the two never conflict.
+
+**Hand-off / SMP flow:** secondary harts park in eNVM until the E51 signals image-copy
+completion (DTIM gate flag), then park in a WFI loop. The boot hart is released with a staged
+mailbox {entry, dtb} plus MSIP; Linux brings up the remaining harts through SBI HSM
+`hart_start`, which uses the same mailbox + MSIP path. The release path must stay fast
+(no UART access): the kernel allows roughly one second for a started hart to come online.
+
+**Driver structure:** the licensed Cadence DDR controller logic (controller CSR programming, the
+Memory Test Controller engine, and the LPDDR4 mode-register protocol) lives in the
+target-independent `src/ddr_cadence.c` / `include/ddr_cadence.h` (controller base overridable via
+`DDR_CADENCE_CTRL_BASE`). The Microchip-specific PHY, PLL, clock mux and training, plus the
+board's `LIBERO_SETTING_*` values, stay in `hal/mpfs250_ddr.c`, which builds the controller
+register table and composes the generic calls. Both compile only when `MPFS_DDR_INIT` is set.
 
 ### PolarFire testing
 
@@ -1294,11 +1374,11 @@ make test-app/image.elf
 sudo dd if=test-app/image_v1_signed.bin of=/dev/sdc2 bs=512 && sudo cmp test-app/image_v1_signed.bin /dev/sdc2
 ```
 
-4) Insert SDCARD into PolarFire and let HSS start wolfBoot. You may need to use `boot sdcard` or configure/build HSS to disable MMC / enable SDCARD.
+4) Insert the SD card into the PolarFire and let HSS start wolfBoot. If HSS defaults to eMMC, select the SD card with `boot sdcard` at the HSS console, or build HSS with MMC disabled / SD card enabled.
 
 ### PolarFire Building Hart Software Services (HSS)
 
-The Hart Software Services (HSS) is the zero-stage bootloader for the PolarFire SoC. It runs on the E51 monitor core and is responsible for system initialization, hardware configuration, and booting the U54 application cores. The HSS provides essential services including watchdog management, inter-processor communication (IPC), and loading payloads from various boot sources (eMMC, SD card, or SPI flash).
+The Hart Software Services (HSS) is the PolarFire SoC zero-stage bootloader (E51 monitor core); it is required only for the HSS-based S-mode configurations above, not for the M-mode + DDR path which replaces it.
 
 ```sh
 git clone https://github.com/polarfire-soc/hart-software-services.git
@@ -1310,7 +1390,7 @@ make BOARD=mpfs-video-kit program
 
 ### PolarFire Building Yocto-SDK Linux
 
-The Yocto Project provides a customizable embedded Linux distribution for PolarFire SoC. Microchip maintains the `meta-mchp` layer with board support packages (BSP), drivers, and example applications for their devices. The build system uses OpenEmbedded and produces bootable images that can be flashed to eMMC or SD card.
+The signed Yocto FIT image booted by wolfBoot is produced from Microchip's `meta-mchp` Yocto layer (BSP, drivers, and kernel for the board).
 
 See:
 * https://github.com/linux4microchip/meta-mchp/blob/scarthgap/meta-mchp-common/README.md
@@ -1367,11 +1447,10 @@ mkimage -f hal/mpfs250.its fitImage
 ```
 
 At boot, wolfBoot decompresses the kernel into `0x80200000` directly out of
-the FIT `data` blob. Image integrity is provided by the outer wolfBoot
-signature over the entire FIT (which covers the compressed `data` bytes per
-the FIT spec), and post-decompress integrity by gzip's CRC32 + ISIZE
-trailer; per-image `hash-1` subnodes are not re-verified at runtime since
-they would be redundant with the outer signature.
+the FIT `data` blob. The outer wolfBoot signature covers the whole FIT
+(including the compressed `data`), and gzip's CRC32 + ISIZE trailer covers
+the decompressed output; the per-image `hash-1` subnodes are not re-checked
+at runtime as they would duplicate the outer signature.
 
 ##### Option B - Uncompressed FIT (`GZIP=0`)
 
@@ -1583,59 +1662,62 @@ set architecture riscv:rv64
 ### PolarFire Example Boot Output
 
 ```
-wolfBoot Version: 2.7.0 (Dec 31 2025 15:33:35)
-Disk encryption enabled
+wolfBoot Version: 2.8.0
+Running on E51 (hart 0) in M-mode
+Boot RESET_SR: 1FF (bit0=PERIPH bit1=MSS bit2=CPU bit3=DBG bit4=FABRIC bit5=WDOG bit6=GPIO bit7=BUS bit8=SOFT)
+========================================
+DDR: Training+MTC PASS after 0 retries
+DDR: Initialization COMPLETE
+SDHCI: platform init
 Reading MBR...
 Found GPT PTE at sector 1
-Found valid boot signature in MBR
 Valid GPT partition table
-Current LBA: 0x1
-Backup LBA: 0x3B723FF
 Max number of partitions: 128
-Software limited: only allowing up to 16 partitions per disk.
-Disk size: 1849146880
-disk0.p0 (0_7FFE00h@ 0_100000)
-disk0.p1 (0_3FFFE00h@ 0_900000)
-disk0.p2 (0_3FFFE00h@ 0_4900000)
-disk0.p3 (7_65AFFE00h@ 0_8900000)
-Total partitions on disk0: 4
-Checking primary OS image in 0,1...
-Checking secondary OS image in 0,2...
+  GPT part 0: 0_2000000h @ 0_100000
+  GPT part 1: 0_2000000h @ 0_2100000
+  GPT part 2: 7_6A300000h @ 0_4100000
+Total partitions on disk0: 3
+Checking primary OS image in 0,0...
+Checking secondary OS image in 0,1...
 Versions, A:1 B:0
-Load address 0x8E000000
+Load block size: 512KB
+Load address 0x82000000
 Attempting boot from P:A
-Boot partition: 0x801FFD90 (sz 19767004, ver 0x0, type 0x0)
-Loading image from disk...done. (877 ms)
-Decrypting image...done. (2894 ms)
-Boot partition: 0x8E000000 (sz 19767004, ver 0x0, type 0x0)
-Checking image integrity...done. (1507 ms)
-Verifying image signature...done. (68 ms)
+Boot partition: 0xA03FD90 (sz 19766364, ver 0x1, type 0x601)
+Loading image from disk...
+done
+Checking image integrity...
+done
+Verifying image signature...
+done
 Firmware Valid.
-Flattened uImage Tree: Version 17, Size 19767004
-Loading Image kernel-1: 0x8E0002C8 -> 0x80200000 (19745280 bytes)
-Image kernel-1: 0x80200000 (19745280 bytes)
-Loading Image fdt-1: 0x8F2D4DCC -> 0x8A000000 (19897 bytes)
-Image fdt-1: 0x8A000000 (19897 bytes)
+Flattened uImage Tree: Version 17, Size 19766364
+Loading Image kernel-1: 0x820000C8 -> 0x80200000 (19745280 bytes)
+Loading Image fdt-1: 0x832D4BCC -> 0x8A000000 (19897 bytes)
 Loading DTS: 0x8A000000 -> 0x8A000000 (19897 bytes)
-Invalid elf, falling back to raw binary
 Booting at 80200000
-FDT: Version 17, Size 19897
-FDT: Set chosen (13840), bootargs=earlycon root=/dev/mmcblk0p4 rootwait uio_pdrv_genirq.of_id=generic-uio
+FDT: Set chosen, bootargs=earlycon=sbi root=/dev/mmcblk0p3 rootwait uio_pdrv_genirq.of_id=generic-uio
 FDT: Device serial: 219A437C-6AE1F1C2-8EDC4324-685B2288
 FDT: MAC0 = 00:04:A3:5B:22:88
-FDT: MAC1 = 00:04:A3:5B:22:89
-[    0.000000] Linux version 6.12.22-linux4microchip+fpga-2025.07-g032a7095303a (oe-user@oe-host) (riscv64-oe-linux-gcc (GCC) 13.3.0, GNU ld (GNU Binutils) 2.42.0.20240723) #1 SMP Tue Jul 22 10:04:20 UTC 2025
+FDT: Set watchdog@20001000 status=disabled   (... all five MSS WDT nodes)
+M->S handoff: entry=0x80200000 hart=0 dtb=0x8A000000
+Releasing hart 1 into S-mode at 0x80200000 (dtb=0x8A000000)
+[    0.000000] Linux version 6.12.22-linux4microchip+fpga-2025.07 ... #1 SMP
 [    0.000000] Machine model: Microchip PolarFire-SoC VIDEO Kit
-[    0.000000] SBI specification v1.0 detected
-[    0.000000] SBI implementation ID=0x8 Version=0x10002
+[    0.000000] SBI specification v0.2 detected
+[    0.000000] SBI implementation ID=0x776f6c66 Version=0x1
 [    0.000000] SBI TIME extension detected
 [    0.000000] SBI IPI extension detected
 [    0.000000] SBI RFENCE extension detected
-[    0.000000] SBI SRST extension detected
-[    0.000000] earlycon: ns16550a0 at MMIO32 0x0000000020100000 (options '115200n8')
-[    0.000000] printk: legacy bootconsole [ns16550a0] enabled
+[    0.000000] riscv: providing IPIs using SBI IPI extension
+[    0.016264] smp: Bringing up secondary CPUs ...
+[    0.040738] smp: Brought up 1 node, 4 CPUs
+[    3.764474] Run /sbin/init as init process
 ...
+mpfs-video-kit login:
 ```
+
+The Linux SBI lines confirm the kernel is talking to wolfBoot's own SBI runtime: the implementation ID `0x776f6c66` is ASCII `"wolf"`, distinguishing it from OpenSBI (ID `0x8`).
 
 ### PolarFire Benchmarks
 

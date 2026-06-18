@@ -406,3 +406,6 @@ sdcard.img
 
 # wolfHSM STM32H5 TZ demo build output
 port/stmicro/stm32h5-tz-wolfhsm/out/
+
+# CI-only generated Libero settings stub (see tools/ci/gen_mpfs_libero_stub.sh)
+tools/ci/mpfs_libero_stub/
