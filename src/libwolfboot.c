@@ -2376,6 +2376,17 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
 #endif /* __WOLFBOOT */
 
 #if defined(MMU)
+/* The decrypt loop in wolfBoot_ram_decrypt() copies in ENCRYPT_BLOCK_SIZE
+ * granules, rounding the final write up to a block boundary. The size bound is
+ * only safe if the RAM load region is itself block-aligned; assert that where
+ * the region size is a compile-time constant (a macro in every such config). */
+#if defined(WOLFBOOT_FIXED_PARTITIONS) && defined(WOLFBOOT_PARTITION_SIZE)
+typedef char wolfBoot_ramboot_blockalign_check[
+    ((WOLFBOOT_PARTITION_SIZE) % ENCRYPT_BLOCK_SIZE == 0) ? 1 : -1];
+#elif defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+typedef char wolfBoot_ramboot_blockalign_check[
+    ((WOLFBOOT_RAMBOOT_MAX_SIZE) % ENCRYPT_BLOCK_SIZE == 0) ? 1 : -1];
+#endif
 /**
  * @brief Decrypt data from RAM.
  *
