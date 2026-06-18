@@ -1416,6 +1416,8 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
     /* Calculate EH auth value */
     rc = wolfTPM2_SetIdentityAuth(&wolftpm_dev, &eh_handle,
         Master_EH_AuthValue, (uint16_t)sizeof(Master_EH_AuthValue));
+    /* master secret consumed; clear it from the stack */
+    TPM2_ForceZero(Master_EH_AuthValue, sizeof(Master_EH_AuthValue));
 #else
     /* Set EH authValue directly */
     if (sizeof(eh_auth) > sizeof(eh_handle.auth.buffer)) {
