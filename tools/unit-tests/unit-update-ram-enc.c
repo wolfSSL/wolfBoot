@@ -290,6 +290,75 @@ START_TEST(test_ram_decrypt_len_bitflip_rejected)
 }
 END_TEST
 
+/* The maximum in-bounds payload, matching the branch the bound check uses. */
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+#  define RAM_DECRYPT_MAX_PAYLOAD (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)
+#elif defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+#  define RAM_DECRYPT_MAX_PAYLOAD WOLFBOOT_RAMBOOT_MAX_SIZE
+#endif
+
+/* The exact maximum in-bounds length must decrypt successfully. Paired with the
+ * one-block-over test below this brackets the accept/reject boundary, locking
+ * the comparison's off-by-one ('>' vs '>=', +/- IMAGE_HEADER_SIZE). */
+START_TEST(test_ram_decrypt_max_valid)
+{
+    const uint32_t len = RAM_DECRYPT_MAX_PAYLOAD;
+    const uint32_t total = IMAGE_HEADER_SIZE + len;
+    uint8_t *plain = malloc(total);
+    uint8_t *enc = malloc(total);
+    uint8_t *dst = malloc(WOLFBOOT_PARTITION_SIZE);
+    uint32_t magic = WOLFBOOT_MAGIC;
+    uint32_t i;
+    int ret;
+
+    ck_assert_ptr_nonnull(plain);
+    ck_assert_ptr_nonnull(enc);
+    ck_assert_ptr_nonnull(dst);
+    ck_assert_uint_eq(total % ENCRYPT_BLOCK_SIZE, 0);
+    ck_assert(total <= WOLFBOOT_PARTITION_SIZE);
+
+    for (i = 0; i < total; i++)
+        plain[i] = (uint8_t)(i * 7 + 3);
+    memcpy(plain, &magic, sizeof(magic));
+    memcpy(plain + sizeof(uint32_t), &len, sizeof(len));
+
+    setup_crypto_key();
+    encrypt_blob(enc, plain, total);
+
+    ret = wolfBoot_ram_decrypt(enc, dst);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_mem_eq(dst, plain, total);
+
+    free(plain);
+    free(enc);
+    free(dst);
+}
+END_TEST
+
+/* One block past the maximum in-bounds length must be rejected before the copy
+ * loop runs (the reject side of the boundary pair). */
+START_TEST(test_ram_decrypt_one_over_rejected)
+{
+    const uint32_t len = RAM_DECRYPT_MAX_PAYLOAD + ENCRYPT_BLOCK_SIZE;
+    uint8_t *enc = malloc(2 * IMAGE_HEADER_SIZE);
+    uint8_t *dst = malloc(WOLFBOOT_PARTITION_SIZE);
+    int ret;
+
+    ck_assert_ptr_nonnull(enc);
+    ck_assert_ptr_nonnull(dst);
+    memset(enc, 0, 2 * IMAGE_HEADER_SIZE);
+
+    setup_crypto_key();
+    make_encrypted_header(enc, len);
+
+    ret = wolfBoot_ram_decrypt(enc, dst);
+    ck_assert_int_eq(ret, -1);
+
+    free(enc);
+    free(dst);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-ram-decrypt");
@@ -297,21 +366,29 @@ Suite *wolfboot_suite(void)
     TCase *oversize = tcase_create("ram_decrypt oversize rejected");
     TCase *overflow = tcase_create("ram_decrypt length-overflow rejected");
     TCase *bitflip = tcase_create("ram_decrypt length bit-flip rejected");
+    TCase *maxvalid = tcase_create("ram_decrypt exact-max valid");
+    TCase *oneover = tcase_create("ram_decrypt one block over rejected");
 
     tcase_add_test(valid, test_ram_decrypt_valid);
     tcase_add_test(oversize, test_ram_decrypt_oversize_rejected);
     tcase_add_test(overflow, test_ram_decrypt_overflow_len_rejected);
     tcase_add_test(bitflip, test_ram_decrypt_len_bitflip_rejected);
+    tcase_add_test(maxvalid, test_ram_decrypt_max_valid);
+    tcase_add_test(oneover, test_ram_decrypt_one_over_rejected);
 
     suite_add_tcase(s, valid);
     suite_add_tcase(s, oversize);
     suite_add_tcase(s, overflow);
     suite_add_tcase(s, bitflip);
+    suite_add_tcase(s, maxvalid);
+    suite_add_tcase(s, oneover);
 
     tcase_set_timeout(bitflip, 5);
     tcase_set_timeout(valid, 5);
     tcase_set_timeout(oversize, 5);
     tcase_set_timeout(overflow, 5);
+    tcase_set_timeout(maxvalid, 5);
+    tcase_set_timeout(oneover, 5);
 
     return s;
 }
