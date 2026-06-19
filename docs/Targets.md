@@ -8587,6 +8587,8 @@ Boot success marked. Version: 1
 | `DEBUG_UART` | Enable UART0 debug output (115200 baud, 8N1). |
 | `EXT_FLASH` | Enable external flash support (for QSPI NAND configuration). |
 | `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
+| `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
+| `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
 
 ### MAX32666: External QSPI NAND Configuration
 

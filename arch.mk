@@ -195,20 +195,33 @@ ifeq ($(ARCH),ARM)
     # MAX3266X TPU hardware SHA256 acceleration (requires MSDK_DIR)
     ifeq ($(MAX3266X_TPU),1)
       NO_ARM_ASM=1
-      CFLAGS+=-DWOLFSSL_MAX3266X -DMAX3266X_SHA
-      CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
+      CFLAGS+=-DMAX3266X_SHA
       CFLAGS+=-ffunction-sections -fdata-sections
-      MAX3266X_CFLAGS:= \
-        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
-        -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
-        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/ \
-        -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/ \
-        -I$(MSDK_DIR)/Libraries/CMSIS/Include/
-      CFLAGS+=$(MAX3266X_CFLAGS)
-      OBJS+=$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o \
-            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o \
-            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o \
-            $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+      ifeq ($(MAX3266X_OLD),1)
+        # Older Maxim SDK tree (flat MAX32665PeriphDriver layout)
+        CFLAGS+=-DWOLFSSL_MAX3266X_OLD
+        MAX3266X_CFLAGS:= \
+          -I$(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Include/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+        CFLAGS+=$(MAX3266X_CFLAGS)
+        OBJS+=$(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source/mxc_sys.o \
+              $(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source/mxc_delay.o
+      else
+        CFLAGS+=-DWOLFSSL_MAX3266X
+        CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
+        MAX3266X_CFLAGS:= \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/ \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+        CFLAGS+=$(MAX3266X_CFLAGS)
+        OBJS+=$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+      endif
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
     endif
   endif
