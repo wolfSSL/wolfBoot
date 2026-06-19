@@ -64,6 +64,12 @@ static volatile uint32_t* flc_base_for_addr(uint32_t address)
     return (volatile uint32_t*)FLC1_BASE;
 }
 
+/* Convert memory-mapped address into physical bank-relative offset */
+static uint32_t flc_phys_addr(uint32_t address)
+{
+    return address & ((FLASH_SIZE / 2) - 1);
+}
+
 /* ============== Watchdog Functions ============== */
 
 static void watchdog_disable(void)
@@ -158,7 +164,7 @@ static int RAMFUNCTION flc_write128(uint32_t address, const uint32_t *data,
     FLC_REG(flc_base, FLC_CLKDIV_OFF) = FLC_CLKDIV_VALUE;
 
     /* Set address */
-    FLC_REG(flc_base, FLC_ADDR_OFF) = address;
+    FLC_REG(flc_base, FLC_ADDR_OFF) = flc_phys_addr(address);
 
     /* Load 128-bit data (4 x 32-bit words) */
     *(volatile uint32_t *)((uint32_t)flc_base + FLC_DATA_OFF + 0x00) = data[0];
@@ -199,7 +205,7 @@ static int RAMFUNCTION flc_page_erase(uint32_t address,
     FLC_REG(flc_base, FLC_CLKDIV_OFF) = FLC_CLKDIV_VALUE;
 
     /* Set address (any address within the page) */
-    FLC_REG(flc_base, FLC_ADDR_OFF) = address;
+    FLC_REG(flc_base, FLC_ADDR_OFF) = flc_phys_addr(address);
 
     /* Set erase code and trigger page erase */
     FLC_REG(flc_base, FLC_CN_OFF) =
