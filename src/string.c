@@ -101,10 +101,7 @@ void *memset(void *s, int c, size_t n)
     unsigned char *d = (unsigned char *)s;
     unsigned char uc = (unsigned char)c;
 
-#if defined(ARCH_ARM) || defined(ARCH_AARCH64)
-    /* Use word-sized writes when aligned — required for MMIO peripheral
-     * registers on ARM (APB bus does not support sub-word writes). */
-
+#ifdef FAST_MEMCPY
     /* Write bytes until the pointer is 4-byte aligned */
     while (n > 0 && ((uintptr_t)d & 3U)) {
         *d++ = uc;
@@ -121,7 +118,7 @@ void *memset(void *s, int c, size_t n)
         }
         d = (unsigned char *)dw;
     }
-#endif /* ARCH_ARM || ARCH_AARCH64 */
+#endif /* FAST_MEMCPY */
 
     while (n--) {
         *d++ = uc;
