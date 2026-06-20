@@ -23,12 +23,6 @@
  * wolfBoot configures HIRC96M = 96 MHz in hal_init(). */
 uint32_t SystemCoreClock = 96000000;
 
-/* MAX32665/MAX32666 TRNG does not implement on-demand health test in hardware.
- * The MSDK trng_revb driver assumes a 3-register layout (ctrl/status/data) but
- * the actual silicon only has 2 registers (cn/data). Provide a stub so that
- * wolfSSL's wc_GenerateSeed() can proceed. */
-int MXC_TRNG_HealthTest(void) { return 0; }
-
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/ecc.h>
