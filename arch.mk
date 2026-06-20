@@ -140,7 +140,7 @@ endif
 ## ARM Cortex-M
 ifeq ($(ARCH),ARM)
   CROSS_COMPILE?=arm-none-eabi-
-  CFLAGS+=-DARCH_ARM -DFAST_MEMCPY
+  CFLAGS+=-DARCH_ARM
   CFLAGS+=-mthumb -mlittle-endian
   LDFLAGS+=-mthumb -mlittle-endian
   ifeq ($(USE_GCC),1)
@@ -195,7 +195,7 @@ ifeq ($(ARCH),ARM)
     # MAX3266X TPU hardware SHA256 acceleration (requires MSDK_DIR)
     ifeq ($(MAX3266X_TPU),1)
       NO_ARM_ASM=1
-      CFLAGS+=-DMAX3266X_SHA
+      CFLAGS+=-DMAX3266X_SHA -DFAST_MEMCPY
       CFLAGS+=-ffunction-sections -fdata-sections
       ifeq ($(MAX3266X_OLD),1)
         # Older Maxim SDK tree (flat MAX32665PeriphDriver layout)
@@ -224,13 +224,6 @@ ifeq ($(ARCH),ARM)
       endif
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
     endif
-  endif
-
-  # max3266x.c requires WOLFSSL_SP_MATH_ALL for MXC_WORD_SIZE, but only the
-  # MAA math code (MAX3266X_MATH) actually uses it. Add SP_MATH_ALL to just
-  # this object to satisfy the header, without bloating the bootloader.
-  ifeq ($(MAX3266X_TPU),1)
-$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o: CFLAGS+=-DWOLFSSL_SP_MATH_ALL
   endif
 
   ifeq ($(TARGET),pic32cz)

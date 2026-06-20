@@ -592,6 +592,8 @@ ifeq ($(TARGET),max32666)
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_reva.o
+    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_me14.o
+    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_revb.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o
     APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
     APP_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
