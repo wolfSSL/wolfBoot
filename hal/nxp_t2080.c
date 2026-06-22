@@ -582,8 +582,18 @@ static void hal_cpld_init(void)
 /* FMAN microcode upload for T2080.
  * Firmware is in NOR flash at FMAN_FW_ADDR (typically 0xFFE60000).
  * Uses same QE firmware format as T1040. */
+/* FMan microcode NOR address. Board-specific: the CW VPX3-152 relocates NOR
+ * to 0xF0000000 (256MB) and keeps the ucode near the top; the T2080 RDB and
+ * NAII 68PPC2 have a 128MB NOR at 0xE8000000 with the ucode just below the
+ * wolfBoot region (matches the T1040 RDB). A wrong address here is read in
+ * hal_fman_init() and an out-of-NOR value machine-checks, so the default is
+ * board-gated and bounds-checked at runtime. */
 #ifndef FMAN_FW_ADDR
+#ifdef BOARD_CW_VPX3152
 #define FMAN_FW_ADDR    0xFFE60000UL
+#else
+#define FMAN_FW_ADDR    0xEFF00000UL
+#endif
 #endif
 #define FMAN_BASE       (CCSRBAR + 0x400000UL)
 #define FMAN_IRAM       (FMAN_BASE + 0xC4000UL)
@@ -642,6 +652,21 @@ static int hal_fman_init(void)
     const struct qe_firmware *fw = (const struct qe_firmware *)FMAN_FW_ADDR;
     const struct qe_header *hdr = &fw->header;
     unsigned int i;
+
+    /* Guard: FMAN_FW_ADDR must lie inside the NOR flash window, else the
+     * magic read below faults (machine check) -- e.g. a wrong board's
+     * address on a smaller NOR. Fail gracefully instead. Compare via the
+     * offset from the base (not base+size) so the upper bound does not
+     * overflow uintptr_t on a 256 MB NOR mapped at the top of the 32-bit
+     * address space (CW VPX3-152: 0xF0000000 + 256 MB wraps to 0). The
+     * first clause guarantees addr >= base, so the subtraction is safe. */
+    if ((uintptr_t)FMAN_FW_ADDR < (uintptr_t)FLASH_BASE_ADDR ||
+        ((uintptr_t)FMAN_FW_ADDR - (uintptr_t)FLASH_BASE_ADDR) >=
+            (uintptr_t)FLASH_BANK_SIZE) {
+        wolfBoot_printf("FMAN: fw addr 0x%x outside NOR, skipping\n",
+            (unsigned)FMAN_FW_ADDR);
+        return -1;
+    }
 
     /* Check firmware magic */
     if (hdr->magic[0] != 'Q' || hdr->magic[1] != 'E' || hdr->magic[2] != 'F') {

@@ -5918,6 +5918,19 @@ variants are supported:
 Example configuration: [/config/examples/nxp-t2080.config](/config/examples/nxp-t2080.config).
 See [Board Selection](#board-selection) below for per-board setup.
 
+> **FMan microcode (DPAA/wolfIP):** when DPAA/FMan is enabled, wolfBoot
+> uploads the FMan microcode from NOR at `FMAN_FW_ADDR` (`hal/nxp_t2080.c`).
+> This default is board-gated: CW VPX3-152 (256 MB NOR) uses `0xFFE60000`;
+> the T2080 RDB and NAII 68PPC2 (128 MB NOR at `0xE8000000`) use `0xEFF00000`
+> (just below the wolfBoot region, like the T1040 RDB). The address is
+> bounds-checked against the NOR window, so a wrong value fails gracefully
+> instead of machine-checking. Flash the matching `fsl_fman_ucode_*` blob at
+> that address. wolfIP-on-FMan is hardware-verified on the CW VPX3-152
+> (FM1@DTSEC1, SGMII) and the NAII 68PPC2 (FM1@DTSEC3, RGMII, PHY @ addr 0 --
+> see the wolfIP block in the example config). NAII NOR is dual-bank with only
+> the top 128 KB boot sector common to both banks, so flash the ucode/app with
+> the boot-bank select in its runtime state.
+
 ### Design NXP T2080 PPC
 
 The QorIQ requires a Reset Configuration Word (RCW) to define the boot parameters, which resides at the start of the flash (`0xE8000000` for 128 MB boards, `0xF0000000` for the 256 MB CW VPX3-152).

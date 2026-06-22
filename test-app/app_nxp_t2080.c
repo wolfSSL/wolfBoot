@@ -51,6 +51,10 @@ void __attribute__((naked, section(".text._app_entry"))) _app_entry(void)
 
 #include "../hal/nxp_ppc.h"
 
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
+
 /* wolfCrypt test/benchmark support */
 #ifdef WOLFCRYPT_TEST
 #include <wolfssl/wolfcrypt/settings.h>
@@ -175,6 +179,14 @@ void main(void)
 #endif
 
     wolfCrypt_Cleanup();
+#endif
+
+#ifdef ENABLE_WOLFIP
+    wolfBoot_printf("\r\nStarting wolfIP network test...\r\n");
+    if (wolfip_tftp_test_run() == 0)
+        wolfBoot_printf("WOLFIP_TEST: PASS\r\n");
+    else
+        wolfBoot_printf("WOLFIP_TEST: FAIL\r\n");
 #endif
 
     wolfBoot_printf("Test App: idle loop\r\n");
