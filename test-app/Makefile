@@ -6,15 +6,18 @@
 WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
 WOLFBOOT_LIB_WOLFTPM?=../lib/wolfTPM
 WOLFBOOT_LIB_WOLFHSM?=../lib/wolfHSM
+WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
 WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
 WOLFTPM_LOCAL_OBJDIR?=wolftpm_obj
 WOLFHSM_LOCAL_OBJDIR?=wolfhsm_obj
+WOLFIP_LOCAL_OBJDIR?=wolfip_obj
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.c $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.S $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.c $(WOLFBOOT_LIB_WOLFHSM)
 vpath %.S $(WOLFBOOT_LIB_WOLFHSM)
+vpath %.c $(WOLFBOOT_LIB_WOLFIP)
 
 WOLFBOOT_ROOT?=..
 TARGET?=none
@@ -631,8 +634,6 @@ ifeq ($(TARGET),nxp_t2080)
   ifneq ($(SIGN),NONE)
     APP_OBJS+=../src/keystore.o
   endif
-  CFLAGS+=-ffunction-sections -fdata-sections
-
   # PowerPC e6500
   PPC64=1
 endif
@@ -1133,6 +1134,60 @@ WOLFSSL_CFLAGS:=$(CFLAGS)
 WOLFTPM_CFLAGS:=$(CFLAGS)
 WOLFHSM_CFLAGS:=$(CFLAGS)
 
+# Optional wolfIP network stack in the test-app.
+#   ENABLE_WOLFIP=1       compile the wolfIP ethernet port (nxp_fman) and a
+#                         link/PHY smoke test into the app.
+#   WOLFBOOT_TEST_TFTP=1  additionally pull in wolfIP core + TFTP client for
+#                         the full network TFTP-fetch test.
+# For local iteration point WOLFBOOT_LIB_WOLFIP at a wolfIP checkout, e.g.
+#   make WOLFBOOT_LIB_WOLFIP=/path/to/wolfip ENABLE_WOLFIP=1 ...
+ifeq ($(ENABLE_WOLFIP),1)
+  # ENABLE_WOLFIP needs a wolfIP checkout at WOLFBOOT_LIB_WOLFIP. Fail early
+  # with a clear message rather than a confusing compile error later.
+  ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFIP)/src/wolfip.c),)
+    $(error ENABLE_WOLFIP=1 but no wolfIP sources found at WOLFBOOT_LIB_WOLFIP=$(WOLFBOOT_LIB_WOLFIP). Set WOLFBOOT_LIB_WOLFIP to a wolfIP checkout, e.g. make WOLFBOOT_LIB_WOLFIP=/path/to/wolfip ENABLE_WOLFIP=1 ...)
+  endif
+  # Select the wolfIP ethernet port by target: LS1028A (AArch64) uses the
+  # ENETC port; the QorIQ PowerPC parts use the FMan port.
+  ifeq ($(TARGET),nxp_ls1028a)
+    WOLFIP_PORT:=nxp_enetc
+    WOLFIP_PORT_OBJ:=nxp_enetc.o
+    CFLAGS+=-DWOLFIP_PORT_ENETC
+  else
+    WOLFIP_PORT:=nxp_fman
+    WOLFIP_PORT_OBJ:=nxp_fman.o
+    # The PowerPC test-app is a standalone binary whose _app_entry does no
+    # BSS-PLT fixup; -mbss-plt (arch.mk) would route cross-module libc calls
+    # (e.g. variable-size memcpy in the wolfIP driver) through an
+    # uninitialized PLT stub that branches to 0, and the cross-gcc's default
+    # _FORTIFY_SOURCE rewrites memcpy/memmove into __memcpy_chk/__memmove_chk
+    # (glibc symbols absent here -> R_PPC_JMP_SLOT imports with zero GOT
+    # slots). -fno-plt + fortify-off keep those calls direct and unfortified.
+    # Scoped to the wolfIP build so default (non-wolfIP) builds are unchanged.
+    CFLAGS+=-ffunction-sections -fdata-sections
+    CFLAGS+=-fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
+  endif
+  WOLFIP_PORTDIR:=$(WOLFBOOT_LIB_WOLFIP)/src/port/$(WOLFIP_PORT)
+  CFLAGS+=-DENABLE_WOLFIP
+  # wolfIP core (wolfip.c) provides the stack incl. DHCP/ICMP/TCP/UDP.
+  WOLFIP_OBJS:=$(WOLFIP_PORTDIR)/$(WOLFIP_PORT_OBJ) \
+               $(WOLFBOOT_LIB_WOLFIP)/src/wolfip.o
+  ifeq ($(WOLFBOOT_TEST_TFTP),1)
+    CFLAGS+=-DWOLFBOOT_TEST_TFTP
+    WOLFIP_OBJS+=$(WOLFBOOT_LIB_WOLFIP)/src/tftp/wolftftp.o
+  endif
+  ifeq ($(WOLFIP_SPEED_TEST),1)
+    CFLAGS+=-DWOLFIP_SPEED_TEST
+  endif
+  APP_OBJS+=$(WOLFIP_OBJS) wolfip_tftp_test.o
+  # wolfIP TUs need the port headers first (so config.h resolves to the
+  # port copy) and tolerate wolfIP's own style; drop -Werror/-Wstack-usage.
+  WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
+    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT),$(CFLAGS)) \
+    -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
+    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers
+endif
+
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
   APP_OBJS += $(WOLFHSM_OBJS)
@@ -1166,6 +1221,9 @@ image.srec: image.elf
 
 APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
     $(WOLFSSL_LOCAL_OBJDIR)/%, $(APP_OBJS))
+
+APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFIP)/%, \
+    $(WOLFIP_LOCAL_OBJDIR)/%, $(APP_OBJS))
 
 ifeq ($(ELF_FLASH_SCATTER),1)
 # When ELF_FLASH_SCATTER=1, preprocess the ELF file with the squashelf tool
@@ -1243,10 +1301,22 @@ $(WOLFHSM_LOCAL_OBJDIR)/%.o: %.S
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(WOLFHSM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+
+$(WOLFIP_LOCAL_OBJDIR)/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFIP_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+# Local test-app wolfIP glue, built with the wolfIP include/flag set.
+wolfip_tftp_test.o: wolfip_tftp_test.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(WOLFIP_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
-		$(WOLFHSM_LOCAL_OBJDIR)
+		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
