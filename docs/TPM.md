@@ -17,6 +17,42 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | `WOLFBOOT_TPM_SEAL=1` | `WOLFBOOT_TPM_SEAL` | Enables support for sealing/unsealing based on PCR policy signed externally. |
 | `WOLFBOOT_TPM_SEAL_NV_BASE=0x01400300` | `WOLFBOOT_TPM_SEAL_NV_BASE` | To override the default sealed blob storage location in the platform hierarchy. |
 | `WOLFBOOT_TPM_SEAL_AUTH=secret` | `WOLFBOOT_TPM_SEAL_AUTH` | Password for sealing/unsealing secrets, if omitted the PCR policy will be used |
+| `WOLFBOOT_TPM_MFG_AUTH_DERIVE=1` | `WOLFBOOT_TPM_MFG_AUTH_DERIVE` | MFG identity: opt into on-device derive-from-master. The default is a precomputed per-device authValue (no master secret on device). Requires `WOLFTPM_MFG_IDENTITY`. |
+| (header macro) | `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH` | Default (precomputed) mode: the 16-byte per-device AIK / EH authValues (placeholder `0xFF` default). |
+| (header macro) | `WOLFBOOT_TPM_MFG_EH_MASTER` | Derive mode: override the endorsement-hierarchy master value (16-byte initializer list, sample default). |
+
+## TPM manufacturing identity (IAK / IDevID authValue)
+
+When `WOLFTPM_MFG_IDENTITY` is enabled, `wolfBoot_tpm2_get_aik()` and
+`wolfBoot_tpm2_get_timestamp()` authorize the pre-provisioned ST33KTPM identity
+keys. There are two ways to supply the required `authValue`:
+
+- **Precomputed mode (default, recommended).** The final **per-device**
+  `authValue` is set directly into the key handle; no master secret is present on
+  the device. Defaults to a `0xFF` placeholder (fails TPM auth until
+  provisioned). Per-device values are computed off-device at provisioning
+  (`SHA-256(CPSN || master)`, low 16 bytes) and baked in via
+  `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH`. When `WOLFBOOT_TPM_MFG_AUTH_DERIVE`
+  is not enabled, the `authOverride` argument to `wolfBoot_tpm2_get_aik()` is
+  treated as an optional override for the final AIK `authValue` (not a master secret).
+
+- **Derive mode (`WOLFBOOT_TPM_MFG_AUTH_DERIVE`).** The `authValue` is computed
+  on-device as the low 16 bytes of `SHA-256(TPM serial || master)`.
+  The endorsement master defaults to a sample and is overridable with
+  `WOLFBOOT_TPM_MFG_EH_MASTER`; the AIK master is passed to
+  `wolfBoot_tpm2_get_aik()` (NULL = sample). Convenient, but the master is
+  **shared across the whole reel/batch** — extracting it
+  from one device's firmware lets an attacker derive the `authValue` for every
+  sibling device.
+
+The byte-array macros are header defaults (overridable via `-D` / `CFLAGS_EXTRA`);
+they are not plain `options.mk` variables because brace initializers contain
+commas. `WOLFTPM_MFG_IDENTITY` itself is supplied via `CFLAGS_EXTRA`.
+
+> Note: because precomputed mode is the default and ships a `0xFF` placeholder, a
+> build that enables `WOLFTPM_MFG_IDENTITY` without provisioning the authValue (or
+> selecting `WOLFBOOT_TPM_MFG_AUTH_DERIVE`) fails TPM auth by design. The test-app
+> builds with `WOLFBOOT_TPM_MFG_AUTH_DERIVE` so it works on a sample TPM.
 
 ## Root of Trust (ROT)
 

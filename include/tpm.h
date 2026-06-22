@@ -60,8 +60,42 @@ int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* 
 int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz);
 
 #ifdef WOLFTPM_MFG_IDENTITY
+
+/* MFG identity auth provisioning.
+ * Precomputed mode (default): the final per-device authValue is set directly,
+ * no master secret on the device. In this mode, wolfBoot_tpm2_get_aik() treats
+ * the authOverride argument as an optional *authValue* override.
+ * Derive mode (WOLFBOOT_TPM_MFG_AUTH_DERIVE): authValue = low 16 bytes of
+ * SHA-256(TPM serial || master); the master is shared across the reel.
+ * For wolfBoot_tpm2_get_aik() the master secret is provided via the
+ * authOverride argument (NULL = sample). */
+#ifdef WOLFBOOT_TPM_MFG_AUTH_DERIVE
+/* EH master for derive mode (sample - override in production) */
+#ifndef WOLFBOOT_TPM_MFG_EH_MASTER
+#define WOLFBOOT_TPM_MFG_EH_MASTER { \
+    0xDE, 0xEF, 0x8C, 0xDF, 0x1B, 0x77, 0xBD, 0x00, \
+    0x30, 0x58, 0x5E, 0x47, 0xB8, 0x21, 0x46, 0x0B }
+#endif
+#else
+/* 16-byte per-device authValues. Placeholder defaults (all 0xFF) fail TPM auth
+ * until overwritten per-device by the provisioning tool. */
+#ifndef WOLFBOOT_TPM_MFG_AIK_AUTH
+#define WOLFBOOT_TPM_MFG_AIK_AUTH { \
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, \
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
+#endif
+#ifndef WOLFBOOT_TPM_MFG_EH_AUTH
+#define WOLFBOOT_TPM_MFG_EH_AUTH { \
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, \
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }
+#endif
+#endif
+
+/* authOverride meaning depends on WOLFBOOT_TPM_MFG_AUTH_DERIVE:
+ *   derive mode      -> master secret hashed into the authValue (NULL = sample)
+ *   precomputed mode -> optional literal authValue override (NULL = built-in) */
 int CSME_NSE_API wolfBoot_tpm2_get_aik(WOLFTPM2_KEY* aik,
-    uint8_t* masterPassword, uint16_t masterPasswordSz);
+    uint8_t* authOverride, uint16_t authOverrideSz);
 int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* getTime);
 int CSME_NSE_API wolfBoot_tpm2_quote(WOLFTPM2_KEY* aik,
     byte* pcrArray, word32 pcrArraySz, Quote_Out* quoteResult);
