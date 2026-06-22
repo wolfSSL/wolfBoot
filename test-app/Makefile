@@ -271,6 +271,31 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
 
       CFLAGS+=-fomit-frame-pointer
     endif
+
+    # AArch64 (ARMv8): same armv8 asm + SP arm64 objects the bootloader links
+    # in arch.mk. The test-app is a separate link and compiles full AES/SHA/ECC
+    # with WOLFSSL_ARMASM (and the __aarch64__ SP asm in user_settings.h).
+    ifeq ($(ARCH),AARCH64)
+      ifneq ($(NO_ARM_ASM),1)
+        ifeq ($(SPMATH),1)
+          APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
+        endif
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
+        # The armv8 asm uses crypto-extension mnemonics (aese/sha256h); the
+        # +crypto arch from arch.mk is lost to a later -mstrict-align, so
+        # restore it here for the asm to assemble.
+        CFLAGS+=-march=armv8-a+crypto
+        # libgcc for SP math 128-bit helpers (__udivti3); link is -nodefaultlibs.
+        LIBS+=-lgcc
+        # syscalls.c _sbrk references _Min_Heap_Size; no heap (static memory),
+        # so anchor it at zero (ARM does the same).
+        LDFLAGS+=-Wl,--defsym=_Min_Heap_Size=0
+      endif
+    endif
   endif
 
   CFLAGS+=-DWOLFSSL_USER_SETTINGS

@@ -77,6 +77,29 @@ SECTIONS
         _rodata_end = .;
     } > FLASH
 
+    /* AArch64 MMU translation tables. Each must be aligned to its own size;
+     * 4KB alignment satisfies L0/L1/L2. Kept read-only in NOR (wolfBoot is XIP
+     * and the table walk reads them from flash). Without these explicit aligned
+     * sections the tables land in .rodata at 8-byte alignment and the MMU walk
+     * reads garbage -> silent hang at MMU enable. */
+    .mmu_tbl0 (ALIGN(4096)) : {
+        __mmu_tbl0_start = .;
+        *(.mmu_tbl0)
+        __mmu_tbl0_end = .;
+    } > FLASH
+
+    .mmu_tbl1 (ALIGN(4096)) : {
+        __mmu_tbl1_start = .;
+        *(.mmu_tbl1)
+        __mmu_tbl1_end = .;
+    } > FLASH
+
+    .mmu_tbl2 (ALIGN(4096)) : {
+        __mmu_tbl2_start = .;
+        *(.mmu_tbl2)
+        __mmu_tbl2_end = .;
+    } > FLASH
+
     PROVIDE(_stored_data = .);
 
     .data :
