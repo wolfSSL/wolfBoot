@@ -28,12 +28,12 @@
 ; Base directory for wolfBoot build output. "." means the TRACE32 current
 ; working directory - set this to your wolfBoot checkout path if running
 ; TRACE32 from elsewhere (e.g. "C:/src/wolfBoot" or "/home/user/wolfBoot").
-&basedir="."
+&basedir="/home/davidgarske/GitHub/wolfboot-alt"
 
 ; Persistent backup directory (survives make clean). Leave as "." to keep
 ; artifacts alongside the build tree, or point elsewhere to preserve
 ; signed/backup images across source cleans.
-&backupdir="."
+&backupdir="/home/davidgarske/GitHub/wolfboot-alt"
 
 ; FLASH Number of banks
 ; The JS28F00AM29EWHA is a single 128MB NOR chip. CPLD virtual banking
@@ -59,36 +59,24 @@ SYStem.DETECT CPU
 CORE.ASSIGN 1.
 SYStem.Option.FREEZE OFF
 
-; Use RCW override to prevent flash RCW from running before we are ready.
-; This keeps the system halted for configuration.
-PRINT "Initializing with temporary RCW override..."
-SYStem.Mode.Prepare
-
-SYStem.Option.HRCWOVerRide ON
-
-; Load RCW (T1040D4RDB values extracted from factory flash)
-Data.Set DBG:0x01000000  0x0c18000e
-Data.Set DBG:0x01000001  0x0e000000
-Data.Set DBG:0x01000002  0x00000000
-Data.Set DBG:0x01000003  0x00000000
-Data.Set DBG:0x01000004  0x66000002
-Data.Set DBG:0x01000005  0x40000002
-Data.Set DBG:0x01000006  0xec027000
-Data.Set DBG:0x01000007  0x01000000
-Data.Set DBG:0x01000008  0x00000000
-Data.Set DBG:0x01000009  0x00000000
-Data.Set DBG:0x0100000A  0x00000000
-Data.Set DBG:0x0100000B  0x00030810
-Data.Set DBG:0x0100000C  0x00000000
-Data.Set DBG:0x0100000D  0x0342580f
-Data.Set DBG:0x0100000E  0x00000000
-Data.Set DBG:0x0100000F  0x00000000
-
+; RCW handling. On a BARE board with no valid RCW, a hard RCW override holds
+; the core in a clean pre-boot state. But a board that already has a valid RCW
+; in NOR (this T1040D4RDB boots) rejects the hard override -- it fails with
+; "RCW override finished without success ... debug port fail". For that case
+; use a plain SYStem.Up: the NOR RCW runs (clocks/DDR come up) and TRACE32
+; halts the core at the reset vector. The flash algorithm runs from CPC-SRAM,
+; so erasing/reprogramming NOR with the core halted is safe.
+; (For a BARE board with no valid RCW, restore a hard RCW override here:
+;   SYStem.Mode.Prepare ; SYStem.Option.HRCWOVerRide ON
+;   write the 16 RCW words to DBG:0x01000000..0x0100000F ; SYStem.Up
+;   SYStem.Option.HRCWOVerRide OFF
+; The T1040D4RDB RCW words are preserved in this file's git history. The hard
+; override FAILS on a board that already has a valid NOR RCW -- "RCW override
+; finished without success ... debug port fail" -- so this board uses a plain
+; SYStem.Up instead.)
+PRINT "Attaching to running target (using the valid NOR RCW)..."
 SYStem.Up
-
-SYStem.Option.HRCWOVerRide OFF
-
-PRINT "System initialized (halted state with temporary RCW)"
+PRINT "System halted for flashing (NOR RCW applied)"
 
 ; Set CCSRBAR to 0x40000000
 Data.Set ANC:IOBASE()+0x00004 %Long 0x40000000

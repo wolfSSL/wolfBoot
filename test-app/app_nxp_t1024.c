@@ -73,6 +73,10 @@ __asm__ (
 
 #include "../hal/nxp_ppc.h"
 
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
+
 static uint8_t boot_part_state = IMG_STATE_NEW;
 static uint8_t update_part_state = IMG_STATE_NEW;
 
@@ -173,6 +177,14 @@ void main(void)
     /* Mark boot partition as successful */
     wolfBoot_success();
     wolfBoot_printf("\r\nBoot partition marked successful\r\n");
+
+#ifdef ENABLE_WOLFIP
+    wolfBoot_printf("\r\nStarting wolfIP network test...\r\n");
+    if (wolfip_tftp_test_run() == 0)
+        wolfBoot_printf("WOLFIP_TEST: PASS\r\n");
+    else
+        wolfBoot_printf("WOLFIP_TEST: FAIL\r\n");
+#endif
 
     wolfBoot_printf("Test App: idle loop\r\n");
     while(1) {
