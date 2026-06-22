@@ -120,21 +120,18 @@
 #define FLC_CN_OFF              0x08UL
 #define FLC_INTR_OFF            0x024UL
 #define FLC_DATA_OFF            0x030UL     /* DATA[0..3] = 128-bit write data */
-#define FLC_ACNTL_OFF           0x040UL
 
 /* FLC0 registers */
 #define FLC0_ADDR               (*(volatile uint32_t *)(FLC0_BASE + FLC_ADDR_OFF))
 #define FLC0_CLKDIV             (*(volatile uint32_t *)(FLC0_BASE + FLC_CLKDIV_OFF))
 #define FLC0_CN                 (*(volatile uint32_t *)(FLC0_BASE + FLC_CN_OFF))
 #define FLC0_INTR               (*(volatile uint32_t *)(FLC0_BASE + FLC_INTR_OFF))
-#define FLC0_ACNTL              (*(volatile uint32_t *)(FLC0_BASE + FLC_ACNTL_OFF))
 
 /* FLC1 registers */
 #define FLC1_ADDR               (*(volatile uint32_t *)(FLC1_BASE + FLC_ADDR_OFF))
 #define FLC1_CLKDIV             (*(volatile uint32_t *)(FLC1_BASE + FLC_CLKDIV_OFF))
 #define FLC1_CN                 (*(volatile uint32_t *)(FLC1_BASE + FLC_CN_OFF))
 #define FLC1_INTR               (*(volatile uint32_t *)(FLC1_BASE + FLC_INTR_OFF))
-#define FLC1_ACNTL              (*(volatile uint32_t *)(FLC1_BASE + FLC_ACNTL_OFF))
 
 /* FLC_CN (Control) register bits */
 #define FLC_CN_WR               (1UL << 0)          /* Start write */
@@ -155,10 +152,6 @@
 #define FLC_INTR_AF             (1UL << 1)          /* Access fault */
 #define FLC_INTR_DONEIE         (1UL << 8)          /* Done interrupt enable */
 #define FLC_INTR_AFIE           (1UL << 9)          /* Fault interrupt enable */
-
-/* FLC unlock sequence (ACNTL register) */
-#define FLC_ACNTL_UNLOCK_KEY1   0x3A7F5200UL
-#define FLC_ACNTL_UNLOCK_KEY2   0xA1E34F20UL
 
 /* FLC clock divider: flash requires 1 MHz clock
  * CLKDIV = SystemClock / 1MHz
@@ -283,7 +276,7 @@
 
 /* Select debug UART instance
  * MAX32666FTHR  uses UART1 MAP_B (P1.12 RX, P1.13 TX) through external PICO
- * MAX32666FTHR2 uses UART0 MAP_A (P0.0 TX, P0.1 RX) through onboard DAPLINK
+ * MAX32666FTHR2 uses UART0 MAP_A (P0.9 TX, P0.10 RX) through onboard DAPLINK
  */
 #ifndef DEBUG_UART_NUM
 #ifdef MAX32666_FTHR2

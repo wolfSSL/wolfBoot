@@ -8506,9 +8506,9 @@ as well as the MAX32666FTHR2 board with the onboard debugger.
 - 1MB Flash: 8KB page erase, 128-bit (16-byte) write unit, dual-bank (FLC0/FLC1)
 - 560KB SRAM
 - Bare-metal implementation (no MSDK required for boot)
-- UART0 debug output:
-  - P1.13 TX, P1.12 RX on FTHR board
-  - P0.9 TX, P0.10 RX on FTHR2 board
+- UART debug output (115200 8N1):
+  - FTHR board: UART1 MAP_B, P1.13 TX, P1.12 RX (via external MAX32625PICO)
+  - FTHR2 board: UART0 MAP_A, P0.9 TX, P0.10 RX (via onboard debugger)
 
 ### MAX32666: Memory Layout
 

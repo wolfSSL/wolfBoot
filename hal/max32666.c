@@ -116,10 +116,6 @@ static void RAMFUNCTION icc_enable(void)
 
 static void RAMFUNCTION flc_unlock(volatile uint32_t *flc_base)
 {
-    FLC_REG(flc_base, FLC_ACNTL_OFF) = FLC_ACNTL_UNLOCK_KEY1;
-    FLC_REG(flc_base, FLC_ACNTL_OFF) = FLC_ACNTL_UNLOCK_KEY2;
-
-    /* Set unlock bits in CN register */
     FLC_REG(flc_base, FLC_CN_OFF) =
         (FLC_REG(flc_base, FLC_CN_OFF) & ~FLC_CN_UNLOCK_MASK) |
         FLC_CN_UNLOCK_UNLOCKED;
@@ -127,7 +123,9 @@ static void RAMFUNCTION flc_unlock(volatile uint32_t *flc_base)
 
 static void RAMFUNCTION flc_lock(volatile uint32_t *flc_base)
 {
-    FLC_REG(flc_base, FLC_ACNTL_OFF) = 0;
+    FLC_REG(flc_base, FLC_CN_OFF) =
+        (FLC_REG(flc_base, FLC_CN_OFF) & ~FLC_CN_UNLOCK_MASK) |
+        FLC_CN_UNLOCK_LOCKED;
 }
 
 static void RAMFUNCTION flc_wait_done(volatile uint32_t *flc_base)
