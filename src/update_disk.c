@@ -94,6 +94,10 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define DISK_BLOCK_SIZE 512
 #endif
 
+#if !defined(WOLFBOOT_FSP) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
+#  error "WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the disk image RAM load"
+#endif
+
 #ifdef DISK_ENCRYPT
 
 /* Module-level storage for encryption key */
@@ -430,11 +434,26 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
 
+        /* Bound the UNAUTHENTICATED image length before it drives the disk
+         * read into the RAM load region. An attacker controlling the boot
+         * media could otherwise declare an arbitrary fw_size and overrun the
+         * load region before any integrity or signature check runs. Mirrors
+         * the cap update_ram.c applies to RAMBOOT loads; on FSP the tolum
+         * check below applies in addition (whichever is tighter wins). */
+#ifdef WOLFBOOT_RAMBOOT_MAX_SIZE
+        if (os_image.fw_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
+            wolfBoot_printf("Image size %u exceeds max RAM load size\r\n",
+                os_image.fw_size);
+            selected ^= 1;
+            continue;
+        }
+#endif
+
 #ifdef WOLFBOOT_FSP
         /* Verify image size fits in low memory */
         if (os_image.fw_size > ((uint32_t)(stage2_params->tolum) -
                                            (uint32_t)(uintptr_t)load_address)) {
-            wolfBoot_printf("Image size %d doesn't fit in low memory\r\n",
+            wolfBoot_printf("Image size %u doesn't fit in low memory\r\n",
                 os_image.fw_size);
             break;
         }
