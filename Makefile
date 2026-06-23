@@ -790,6 +790,61 @@ src/x86/fsp_s.o: $(FSP_S_BIN)
 pico-sdk-info: FORCE
 	@echo "To complete the build, check IDE/pico-sdk/rp2350"
 
+## SBOM generation
+# Usage: make sbom TARGET=<target> SIGN=<scheme> [HASH=SHA256] [EXT_FLASH=0]
+#
+# TARGET and SIGN select the build configuration; they default to stm32f4 and
+# ED25519 (via tools/config.mk) if not supplied.  Pass them explicitly to get
+# an SBOM that reflects your actual build configuration.
+#
+# Extracts the configuration-specific C source list from OBJS (which is fully
+# assembled by this point — core wolfBoot + wolfcrypt + HAL sources are all
+# included), preprocesses wolfBoot's include dirs via cc -dM -E on the host,
+# and calls gen-sbom to emit CycloneDX and SPDX output files.
+#
+# wolfcrypt sources are compiled directly into the wolfBoot image and are
+# therefore listed as wolfBoot's own sources, not as a separate component.
+#
+# Optional make variables:
+#   CRA_PYTHON             Python interpreter (default: python3)
+
+WOLFBOOT_VERSION:=$(shell sed -n \
+    's/.*LIBWOLFBOOT_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
+    include/wolfboot/version.h)
+GEN_SBOM:=$(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom
+SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
+SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
+SBOM_PYTHON?=$(or $(CRA_PYTHON),python3)
+
+sbom:
+	@echo "wolfBoot SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET) sign=$(SIGN)"
+	@echo "  Outputs: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
+	$(eval _SBOM_SRCS := $(wildcard $(patsubst %.o,%.c,$(OBJS))))
+	@if [ -z "$(_SBOM_SRCS)" ]; then \
+	    echo "ERROR: no .c sources found in OBJS — check that TARGET and SIGN are correct." >&2; \
+	    exit 1; \
+	fi
+	@set -e; \
+	_dh=$$(mktemp /tmp/wolfboot-sbom-defines.XXXXXX); \
+	trap 'rm -f "$$_dh"' EXIT; \
+	cc -dM -E \
+	    -I"$(WOLFBOOT_ROOT)/include" \
+	    -I"$(WOLFBOOT_LIB_WOLFSSL)" \
+	    -I"$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src" \
+	    -DWOLFSSL_USER_SETTINGS \
+	    -x c /dev/null >"$$_dh" 2>/dev/null || \
+	    { echo "ERROR: cc -dM -E failed; install a host C compiler." >&2; exit 1; }; \
+	$(SBOM_PYTHON) "$(GEN_SBOM)" \
+	    --name wolfboot \
+	    --version "$(WOLFBOOT_VERSION)" \
+	    --supplier "wolfSSL Inc." \
+	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
+	    --options-h "$$_dh" \
+	    --srcs $(_SBOM_SRCS) \
+	    --cdx-out "$(SBOM_CDX_OUT)" \
+	    --spdx-out "$(SBOM_SPDX_OUT)"
+	@echo "SBOM written: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
+
 FORCE:
 
-.PHONY: FORCE clean keytool_check squashelf_check
+.PHONY: FORCE clean keytool_check squashelf_check sbom
