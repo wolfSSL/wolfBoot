@@ -127,6 +127,30 @@ make
 
 See [docs/CMake](./docs/CMake.md) and [cmake includes](./cmake/README.md).
 
+## SBOM / EU CRA Compliance
+
+wolfBoot generates a Software Bill of Materials (SBOM) in CycloneDX 1.6 and
+SPDX 2.3 formats to support compliance with the EU Cyber Resilience Act (CRA).
+
+```sh
+git submodule update --init lib/wolfssl
+make sbom TARGET=<target> SIGN=<alg> HASH=<alg>
+```
+
+`TARGET`, `SIGN`, and `HASH` must match your wolfBoot build configuration (same
+as a normal `make` invocation). `gen-sbom` lives in the `lib/wolfssl` submodule
+and is used automatically. The artifact hash covers the compiled source files
+for the given configuration.
+
+Output files in the build directory:
+
+| File | Format |
+|------|--------|
+| `wolfboot-2.8.0.cdx.json` | CycloneDX 1.6 |
+| `wolfboot-2.8.0.spdx.json` | SPDX 2.3 JSON |
+
+For further CRA guidance see [wolfssl/doc/CRA.md](https://github.com/wolfSSL/wolfssl/blob/master/doc/CRA.md).
+
 ## Troubleshooting
 
 1. Python errors when signing a key:
