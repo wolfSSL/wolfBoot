@@ -157,16 +157,70 @@ START_TEST(test_fdt_shrink_rejects_dt_strings_area_overflow)
 }
 END_TEST
 
+/* Minimal FDT whose root node carries a `compatible` property whose value has
+ * no NUL terminator within its declared length (len=4, "AAAA").
+ * fdt_node_offset_by_compatible() walks the (possibly multi-string) compatible
+ * value with memchr(prop, '\0', len); */
+static const uint8_t fdt_compatible_no_terminator[] = {
+    /* header */
+    0xd0, 0x0d, 0xfe, 0xed, /* magic */
+    0x00, 0x00, 0x00, 0x63, /* totalsize = 99 */
+    0x00, 0x00, 0x00, 0x38, /* off_dt_struct = 56 */
+    0x00, 0x00, 0x00, 0x58, /* off_dt_strings = 88 */
+    0x00, 0x00, 0x00, 0x28, /* off_mem_rsvmap = 40 */
+    0x00, 0x00, 0x00, 0x11, /* version = 17 */
+    0x00, 0x00, 0x00, 0x10, /* last_comp_version = 16 */
+    0x00, 0x00, 0x00, 0x00, /* boot_cpuid_phys */
+    0x00, 0x00, 0x00, 0x0b, /* size_dt_strings = 11 */
+    0x00, 0x00, 0x00, 0x20, /* size_dt_struct = 32 */
+    /* mem_rsvmap terminator (offset 40) */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    /* struct block (offset 56) */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE root */
+    0x00, 0x00, 0x00, 0x00,                         /* "" */
+    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
+    0x00, 0x00, 0x00, 0x04,                         /* len = 4 */
+    0x00, 0x00, 0x00, 0x00,                         /* nameoff = 0 ("compatible") */
+    0x41, 0x41, 0x41, 0x41,                         /* value "AAAA" -- no NUL */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE root */
+    0x00, 0x00, 0x00, 0x09,                         /* FDT_END */
+    /* strings block (offset 88) */
+    0x63, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, /* "compatib" */
+    0x6c, 0x65, 0x00,                               /* "le\0" */
+};
+
+START_TEST(test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop)
+{
+    int off;
+
+    /* complen = strlen("foo") = 3 <= 4 = declared property length, so the
+     * inner walk loop is entered; "foo" != "AAAA" so it does not match and
+     * falls through to the memchr() advance  */
+    off = fdt_node_offset_by_compatible(fdt_compatible_no_terminator, -1, "foo");
+
+    ck_assert_int_lt(off, 0);
+}
+END_TEST
+
 static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
     TCase *tc = tcase_create("fdt");
+    /* Separate case with a hard timeout so an unterminated-property
+     * regression is reported as a failure rather than hanging the suite. */
+    TCase *tc_dos = tcase_create("fdt-dos");
 
     tcase_add_test(tc, test_fdt_get_string_rejects_out_of_range_offset);
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
     tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
     tcase_add_test(tc, test_fdt_shrink_rejects_dt_strings_area_overflow);
     suite_add_tcase(s, tc);
+
+    tcase_set_timeout(tc_dos, 5);
+    tcase_add_test(tc_dos,
+        test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop);
+    suite_add_tcase(s, tc_dos);
 
     return s;
 }

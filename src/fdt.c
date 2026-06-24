@@ -737,6 +737,10 @@ int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
                 len -= (nextprop - prop) + 1;
                 prop = nextprop + 1;
             }
+            else {
+                /* No NUL terminator within the declared length, break. */
+                break;
+            }
         }
     }
     return offset;
