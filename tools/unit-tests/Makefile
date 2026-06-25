@@ -52,7 +52,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-uart-flash \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-max-space \
-       unit-image unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
+       unit-image unit-image-hybrid unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
@@ -416,6 +416,12 @@ unit-sectorflags: ../../include/target.h unit-sectorflags.c
 
 unit-image:  unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ $^ $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-image-hybrid: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DUNIT_IMAGE_HYBRID_ONLY \
+		-DSIGN_HYBRID -DWOLFBOOT_SIGN_SECONDARY_ECC256 \
+		-DIMAGE_HEADER_SIZE=512 $(LDFLAGS)
 
 unit-image-nopart: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
 	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \

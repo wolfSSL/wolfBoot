@@ -79,6 +79,10 @@ static int ecc_init_fail = 1;
 static int ecc_import_fail = 1;
 
 static int verify_called = 0;
+static int verify_hash_count = 0;
+static int verify_capture_hashes = 0;
+static int verify_reject_hash_mismatch = 0;
+static uint8_t verify_hashes[2][WOLFBOOT_SHA_DIGEST_SIZE];
 
 static int find_header_fail = 0;
 static int find_header_called = 0;
@@ -263,6 +267,48 @@ static void patch_image_type_part(uint8_t *img, uint32_t img_len, uint16_t part)
     ptr[0] = (uint8_t)(type & 0xFF);
     ptr[1] = (uint8_t)(type >> 8);
 }
+
+static void patch_stored_hash(uint8_t *img, uint32_t img_len)
+{
+    struct wolfBoot_image tmp_img;
+    uint8_t hash[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t *stored_sha = NULL;
+    uint16_t stored_sha_len;
+    int saved_find_header_mocked = find_header_mocked;
+
+    (void)img_len;
+    find_header_mocked = 0;
+    memset(&tmp_img, 0, sizeof(tmp_img));
+    tmp_img.part = PART_BOOT;
+    tmp_img.hdr = img;
+    tmp_img.fw_base = img + IMAGE_HEADER_SIZE;
+    tmp_img.fw_size = wolfBoot_image_size(img);
+
+    ck_assert_int_eq(image_hash(&tmp_img, hash), 0);
+    stored_sha_len = _find_header(img + IMAGE_HEADER_OFFSET, WOLFBOOT_SHA_HDR,
+            &stored_sha);
+    ck_assert_uint_eq(stored_sha_len, WOLFBOOT_SHA_DIGEST_SIZE);
+    memcpy(stored_sha, hash, WOLFBOOT_SHA_DIGEST_SIZE);
+    find_header_mocked = saved_find_header_mocked;
+}
+
+static void append_header_tag(uint8_t *img, uint32_t img_len, uint32_t *idx,
+        uint16_t type, uint16_t len, const uint8_t *data)
+{
+    ck_assert_ptr_nonnull(img);
+    ck_assert_ptr_nonnull(idx);
+    ck_assert_ptr_nonnull(data);
+    ck_assert_uint_le(*idx + 4U + len, img_len);
+    ck_assert_uint_le(*idx + 4U + len, IMAGE_HEADER_SIZE);
+
+    img[*idx] = (uint8_t)(type & 0xFF);
+    img[*idx + 1U] = (uint8_t)(type >> 8);
+    img[*idx + 2U] = (uint8_t)(len & 0xFF);
+    img[*idx + 3U] = (uint8_t)(len >> 8);
+    memcpy(img + *idx + 4U, data, len);
+    *idx += 4U + len;
+}
+
 static const unsigned int test_img_len = 275;
 
 
@@ -292,6 +338,37 @@ unsigned char test_img_v123_signed_bin[] = {
   0x67, 0x65, 0x20, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x0a
 };
 unsigned int test_img_v123_signed_bin_len = 275;
+
+#if defined(UNIT_IMAGE_HYBRID_ONLY)
+static void build_hybrid_test_image(uint8_t *img, uint32_t img_len)
+{
+    uint8_t secondary_pubkey_hint[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t secondary_signature[ECC_IMAGE_SIGNATURE_SIZE];
+    uint32_t idx = 256U;
+    uint32_t fixture_payload_len;
+
+    ck_assert_uint_ge(IMAGE_HEADER_SIZE, 512U);
+    ck_assert_uint_ge(img_len, IMAGE_HEADER_SIZE +
+            wolfBoot_image_size(test_img_v123_signed_bin));
+
+    memset(img, 0xFF, img_len);
+    memcpy(img, test_img_v123_signed_bin, 256U);
+
+    fixture_payload_len = test_img_v123_signed_bin_len - 256U;
+    memcpy(img + IMAGE_HEADER_SIZE, test_img_v123_signed_bin + 256U,
+            fixture_payload_len);
+
+    patch_image_type_auth(img, img_len);
+    patch_pubkey_hint_slot(img, img_len, 0);
+
+    key_hash(2, secondary_pubkey_hint);
+    memset(secondary_signature, 0, sizeof(secondary_signature));
+    append_header_tag(img, img_len, &idx, HDR_SECONDARY_PUBKEY,
+            sizeof(secondary_pubkey_hint), secondary_pubkey_hint);
+    append_header_tag(img, img_len, &idx, HDR_SECONDARY_SIGNATURE,
+            sizeof(secondary_signature), secondary_signature);
+}
+#endif
 
 
 static uint16_t _find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
@@ -388,8 +465,21 @@ int wc_ecc_import_unsigned(ecc_key* key, const byte* qx, const byte* qy,
 int wc_ecc_verify_hash_ex(mp_int *r, mp_int *s, const byte* hash,
                     word32 hashlen, int* res, ecc_key* key)
 {
+    int call_idx = verify_hash_count;
+    int valid_hash = (hash != NULL && hashlen == WOLFBOOT_SHA_DIGEST_SIZE);
+
+    if (verify_capture_hashes && call_idx < 2 && valid_hash) {
+        memcpy(verify_hashes[call_idx], hash, WOLFBOOT_SHA_DIGEST_SIZE);
+    }
+    verify_hash_count++;
     verify_called++;
-    *res = 1;
+    if (verify_capture_hashes && verify_reject_hash_mismatch &&
+            call_idx > 0 && valid_hash &&
+            memcmp(hash, verify_hashes[0], WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
+        *res = 0;
+    } else {
+        *res = 1;
+    }
     return 0;
 }
 #endif
@@ -648,6 +738,7 @@ START_TEST(test_headers)
 }
 
 #if defined(WOLFBOOT_SIGN_ECC256)
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 START_TEST(test_verify_authenticity)
 {
     struct wolfBoot_image test_img;
@@ -685,12 +776,16 @@ START_TEST(test_verify_authenticity)
     ext_flash_erase(0, 2 * WOLFBOOT_SECTOR_SIZE);
     ext_flash_write(0, test_img_v123_signed_bin,
             test_img_v123_signed_bin_len);
+    memset(&test_img, 0, sizeof(struct wolfBoot_image));
+    ret = wolfBoot_open_image(&test_img, PART_UPDATE);
+    ck_assert_int_eq(ret, 0);
     test_img.signature_ok = 1; /* mock for VERIFY_FN */
     ret = wolfBoot_verify_authenticity(&test_img);
     ck_assert_int_eq(ret, 0);
 
 }
 END_TEST
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 START_TEST(test_verify_authenticity_bad_siglen)
 {
@@ -762,6 +857,7 @@ START_TEST(test_verify_authenticity_rejects_disallowed_key_mask)
 }
 END_TEST
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 START_TEST(test_verify_authenticity_allows_permitted_key_mask)
 {
     struct wolfBoot_image test_img;
@@ -772,6 +868,7 @@ START_TEST(test_verify_authenticity_allows_permitted_key_mask)
     patch_image_type_auth(buf, sizeof(buf));
     patch_pubkey_hint_slot(buf, sizeof(buf), 1);
     patch_image_type_part(buf, sizeof(buf), HDR_IMG_TYPE_APP);
+    patch_stored_hash(buf, sizeof(buf));
 
     find_header_mocked = 0;
     find_header_fail = 0;
@@ -782,12 +879,60 @@ START_TEST(test_verify_authenticity_allows_permitted_key_mask)
     ext_flash_write(0, buf, sizeof(buf));
 
     memset(&test_img, 0, sizeof(struct wolfBoot_image));
-    test_img.part = PART_UPDATE;
+    ret = wolfBoot_open_image(&test_img, PART_UPDATE);
+    ck_assert_int_eq(ret, 0);
     test_img.signature_ok = 1;
     ret = wolfBoot_verify_authenticity(&test_img);
     ck_assert_int_eq(ret, 0);
 }
 END_TEST
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+
+#if defined(UNIT_IMAGE_HYBRID_ONLY) && defined(SIGN_HYBRID) && \
+    defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
+START_TEST(test_verify_authenticity_hybrid_direct_call_uses_verified_sha)
+{
+    struct wolfBoot_image test_img;
+    uint8_t *stored_sha = NULL;
+    uint16_t stored_sha_len;
+    uint32_t image_len;
+    uint8_t image[IMAGE_HEADER_SIZE + 123U];
+    int ret;
+
+    find_header_mocked = 0;
+    find_header_fail = 0;
+    hdr_cpy_done = 0;
+    ecc_import_fail = 0;
+    ecc_init_fail = 0;
+    verify_hash_count = 0;
+    verify_capture_hashes = 1;
+    verify_reject_hash_mismatch = 1;
+    verify_called = 0;
+
+    build_hybrid_test_image(image, sizeof(image));
+    image_len = IMAGE_HEADER_SIZE + wolfBoot_image_size(image);
+
+    ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS, image, image_len);
+
+    ret = wolfBoot_open_image(&test_img, PART_UPDATE);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_ptr_null(test_img.sha_hash);
+    ck_assert_uint_eq(test_img.sha_ok, 0);
+
+    ret = wolfBoot_verify_authenticity(&test_img);
+    ck_assert_int_eq(ret, 0);
+
+    stored_sha_len = get_header(&test_img, WOLFBOOT_SHA_HDR, &stored_sha);
+    ck_assert_uint_eq(stored_sha_len, WOLFBOOT_SHA_DIGEST_SIZE);
+    ck_assert_uint_eq(test_img.sha_ok, 1);
+    ck_assert_ptr_eq(test_img.sha_hash, stored_sha);
+    ck_assert_int_eq(verify_hash_count, 2);
+    ck_assert_mem_eq(verify_hashes[0], verify_hashes[1],
+            WOLFBOOT_SHA_DIGEST_SIZE);
+}
+END_TEST
+#endif
 #endif
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
@@ -938,6 +1083,15 @@ Suite *wolfboot_suite(void)
     return s;
 #endif
 
+#ifdef UNIT_IMAGE_HYBRID_ONLY
+    TCase* tcase_hybrid_auth = tcase_create("hybrid_auth");
+    tcase_set_timeout(tcase_hybrid_auth, 20);
+    tcase_add_test(tcase_hybrid_auth,
+            test_verify_authenticity_hybrid_direct_call_uses_verified_sha);
+    suite_add_tcase(s, tcase_hybrid_auth);
+    return s;
+#endif
+
 #if defined(WOLFBOOT_SIGN_ECC256)
     TCase* tcase_verify_signature = tcase_create("verify_signature");
     tcase_set_timeout(tcase_verify_signature, 20);
@@ -960,14 +1114,18 @@ Suite *wolfboot_suite(void)
 #if defined(WOLFBOOT_SIGN_ECC256)
     TCase* tcase_verify_authenticity = tcase_create("verify_authenticity");
     tcase_set_timeout(tcase_verify_authenticity, 20);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity);
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
     tcase_add_test(tcase_verify_authenticity, test_verify_authenticity_bad_siglen);
     tcase_add_test(tcase_verify_authenticity,
             test_verify_authenticity_rejects_mismatched_auth_type);
     tcase_add_test(tcase_verify_authenticity,
             test_verify_authenticity_rejects_disallowed_key_mask);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
     tcase_add_test(tcase_verify_authenticity,
             test_verify_authenticity_allows_permitted_key_mask);
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
     suite_add_tcase(s, tcase_verify_authenticity);
 #endif
 
