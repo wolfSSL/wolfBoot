@@ -44,9 +44,8 @@
 
 #include "max32666.h"
 
-/* CMSIS variable required by MSDK drivers (mxc_delay.c).
- * Only define in bootloader; test-app provides its own. */
-#if defined(WOLFSSL_MAX3266X) && defined(__WOLFBOOT)
+/* CMSIS variable required by MSDK drivers (mxc_delay.c). */
+#if defined(WOLFSSL_MAX3266X) || defined(WOLFSSL_MAX3266X_OLD)
 uint32_t SystemCoreClock = 96000000;
 #endif
 
