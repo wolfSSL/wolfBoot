@@ -41,6 +41,12 @@ int wolfcrypt_test(void *args);
 int benchmark_test(void *args);
 #endif
 
+#ifdef WOLFCRYPT_TZ_PSA
+#include "psa/crypto.h"
+#include "psa/error.h"
+#include "psa/initial_attestation.h"
+#endif
+
 #define RED_LED     6
 #define GREEN_LED   7
 #define BLUE_LED    4
@@ -128,6 +134,70 @@ static void check_parts(
     wolfBoot_printf("    update: ver=0x%lx state=0x%02x\n", *pupdate_ver, *pupdate_state);
 }
 
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+
+#define LINE_LEN 16
+static void print_hex(const uint8_t *buffer, uint32_t length, int dumpChars)
+{
+    uint32_t i, sz;
+
+    if (!buffer) {
+        wolfBoot_printf("\tNULL\n");
+        return;
+    }
+
+    while (length > 0) {
+        sz = length;
+        if (sz > LINE_LEN)
+            sz = LINE_LEN;
+
+        wolfBoot_printf("\t");
+        for (i = 0; i < LINE_LEN; i++) {
+            if (i < sz)
+                wolfBoot_printf("%02x ", buffer[i]);
+            else
+                wolfBoot_printf("   ");
+        }
+        if (dumpChars) {
+            wolfBoot_printf("| ");
+            for (i = 0; i < sz; i++) {
+                if (buffer[i] > 31 && buffer[i] < 127)
+                    wolfBoot_printf("%c", buffer[i]);
+                else
+                    wolfBoot_printf(".");
+            }
+        }
+        wolfBoot_printf("\n");
+
+        buffer += sz;
+        length -= sz;
+    }
+}
+
+static int run_attestation_test(void)
+{
+    uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64];
+    uint8_t token[1024];
+    size_t token_size = 0;
+    psa_status_t status;
+    size_t i;
+
+    for (i = 0; i < sizeof(challenge); i++) {
+        challenge[i] = (uint8_t)i;
+    }
+
+    status = psa_initial_attest_get_token(challenge, sizeof(challenge),
+                                          token, sizeof(token), &token_size);
+    if (status != PSA_SUCCESS) {
+        wolfBoot_printf("attest: get token failed (%d)\n", status);
+        return -1;
+    }
+    wolfBoot_printf("attest: token size %lu bytes\n", (unsigned long)token_size);
+    print_hex(token, (uint32_t)token_size, 1);
+    return 0;
+}
+#endif /* WOLFBOOT_ATTESTATION_TEST && WOLFCRYPT_TZ_PSA */
+
 void main(void)
 {
     uint32_t boot_ver, update_ver;
@@ -183,6 +253,11 @@ void main(void)
         /* green on */
         GPIO_PinWrite(GPIO, 1, GREEN_LED, 0);
     }
+
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+    if (run_attestation_test() != 0)
+        wolfBoot_printf("Make sure WOLFBOOT_HWPUF_PROVISION is set\n");
+#endif
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
     wolfCrypt_Init();

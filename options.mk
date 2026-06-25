@@ -1145,6 +1145,13 @@ ifeq ($(WOLFBOOT_DICE_HW),1)
   endif
 endif
 
+ifeq ($(WOLFBOOT_HWPUF_PROVISION),1)
+  ifneq ($(HWPUF),1)
+    $(error WOLFBOOT_HWPUF_PROVISION requires HWPUF=1)
+  endif
+  CFLAGS+=-DWOLFBOOT_HWPUF_PROVISION
+endif
+
 ifeq ($(PKCS11_STORE_STATS),1)
   CFLAGS+=-DPKCS11_STORE_STATS
 endif
