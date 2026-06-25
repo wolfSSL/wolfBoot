@@ -601,7 +601,10 @@ void RAMFUNCTION wolfBoot_start(void)
                 dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
                     dts_ptr, dts_addr, dts_size);
-                wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size);
+                if (wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size) != 0) {
+                    wolfBoot_printf("FIT: failed to load DTS\r\n");
+                    wolfBoot_panic();
+                }
             }
         }
 #ifdef WOLFBOOT_FIT_RAMDISK

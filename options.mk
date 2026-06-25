@@ -1403,9 +1403,13 @@ endif
 # Per-hart secondary stack size: single source of truth shared by the
 # startup asm (via this -D) and the linker script (via @STACK_SIZE_PER_HART@
 # substitution in the LSCRIPT rule).  Set in the target .config; defaults to
-# 0 (no secondary park/wake stacks).
+# 0 (no secondary park/wake stacks).  The concept (and the consuming startup
+# asm) is RISC-V only, so gate the -D to RISC-V; the default is kept
+# unconditional because the LSCRIPT sed always needs a value to substitute.
 STACK_SIZE_PER_HART ?= 0
-CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
+ifneq (,$(filter RISCV RISCV64,$(ARCH)))
+  CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
+endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)

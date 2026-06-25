@@ -752,12 +752,13 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
  * through the PDMA master.  A DDR source is read via its non-cached alias so
  * PDMA sees real DDR; mpfs_pdma_memcpy remaps the dst 0x8x->0xCx and flushes
  * L2.  Chunked + WDT-petted for kernel-sized copies. */
-void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
+int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
 {
     uintptr_t d = (uintptr_t)dst;
     uintptr_t s = (uintptr_t)src;
     uint32_t off = 0;
     uint32_t chunk;
+    int rc = 0;
 
     if ((s & 0xF0000000UL) == 0x80000000UL) {
         s |= 0x40000000UL; /* non-cached source alias */
@@ -767,8 +768,12 @@ void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
         if (chunk > (1024U * 1024U)) {
             chunk = 1024U * 1024U;
         }
-        (void)mpfs_pdma_memcpy((void *)(d + off),
-            (const void *)(s + off), chunk);
+        if (mpfs_pdma_memcpy((void *)(d + off),
+                (const void *)(s + off), chunk) != 0) {
+            /* Remember the failure but keep petting the watchdogs and
+             * unwinding the loop cleanly; the caller fails closed on rc. */
+            rc = -1;
+        }
         /* Refresh all five MSS watchdogs (they always count and reset the
          * chip and cannot be disabled) during the multi-MB kernel copy. */
         MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
@@ -778,6 +783,7 @@ void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
         MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
         off += chunk;
     }
+    return rc;
 }
 
 /* L2 round-trip wrapper around mpfs_dts_fixup_inplace().  The dtb lives in DDR
@@ -816,7 +822,11 @@ int hal_dts_fixup(void* dts_addr)
     /* fixup in the CPU-writable L2 buffer */
     ret = mpfs_dts_fixup_inplace(l2_dtb);
     /* L2 -> DDR via PDMA (expanded totalsize) */
-    wolfBoot_fit_memcpy(dts_addr, l2_dtb, (uint32_t)fdt_totalsize(l2_dtb));
+    if (wolfBoot_fit_memcpy(dts_addr, l2_dtb,
+            (uint32_t)fdt_totalsize(l2_dtb)) != 0) {
+        wolfBoot_printf("FDT: dtb copy-back to DDR failed\n");
+        return -1;
+    }
     return ret;
 }
 #else
