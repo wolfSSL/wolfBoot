@@ -19,10 +19,6 @@
 #include "hal/max32666.h"
 
 #ifdef WOLFCRYPT_MAX32666_TEST
-/* MSDK's mxc_delay.c references SystemCoreClock (CMSIS).
- * wolfBoot configures HIRC96M = 96 MHz in hal_init(). */
-uint32_t SystemCoreClock = 96000000;
-
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/ecc.h>
@@ -168,6 +164,9 @@ static int test_ecdhe_p256(void)
 
     /* Enable TRNG peripheral clock before wc_InitRng seeds from hardware */
     GCR_PERCKCN1 &= ~GCR_PERCKCN1_TRNGD;
+
+    /* Wait for the entropy source to come up before wc_InitRng's health test */
+    while ((MXC_TRNG->st & MXC_F_TRNG_ST_RND_RDY) == 0) {}
 
     ret = wc_InitRng(&rng);
     if (ret != 0) {
