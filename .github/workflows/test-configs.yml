@@ -329,6 +329,20 @@ jobs:
       arch: arm
       config-file: ./config/examples/nxp-s32k148.config
 
+  max32666_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/max32666.config
+
+  # TPU build pulls in the Analog Devices MSDK for hardware SHA256 acceleration
+  max32666_tpu_test:
+    uses: ./.github/workflows/test-build-msdk.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/max32666.config
+      make-args: MAX3266X_TPU=1
+
   microchip_mpfs250_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
