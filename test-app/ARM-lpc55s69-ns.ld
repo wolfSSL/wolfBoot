@@ -1,7 +1,10 @@
+_Min_Heap_Size  = 0x00000100; /* minimal heap (not using malloc) */
+_Min_Stack_Size = 0x00008000; /* required amount of stack */
+
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx) : ORIGIN = 0x20020000, LENGTH = 32K
+    RAM (rwx) : ORIGIN = 0x20020000, LENGTH = 64K
 }
 
 SECTIONS
@@ -46,13 +49,22 @@ SECTIONS
         _end_bss = .;
         _end = .;
     } > RAM
+
+  ._user_heap_stack :
+  {
+    . = ALIGN(8);
+    PROVIDE ( end = . );
+    PROVIDE ( _end = . );
+    PROVIDE ( _start_heap = . );
+    . = . + _Min_Heap_Size;
+    . = . + _Min_Stack_Size;
+    . = ALIGN(8);
+    PROVIDE ( END_STACK = . );
+    PROVIDE ( _end_stack = . );
+  } > RAM
 }
 
 _wolfboot_partition_boot_address = @WOLFBOOT_PARTITION_BOOT_ADDRESS@;
 _wolfboot_partition_size = @WOLFBOOT_PARTITION_SIZE@;
 _wolfboot_partition_update_address = @WOLFBOOT_PARTITION_UPDATE_ADDRESS@;
 _wolfboot_partition_swap_address = @WOLFBOOT_PARTITION_SWAP_ADDRESS@;
-
-PROVIDE(_start_heap = _end);
-PROVIDE(end = _end);
-PROVIDE(_end_stack  = ORIGIN(RAM) + LENGTH(RAM));
