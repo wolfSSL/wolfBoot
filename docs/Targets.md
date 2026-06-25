@@ -2828,6 +2828,7 @@ support is turned off in the config files, and all crypto is software based.
 To turn on hardware acceleration, set PKA=1 in the config file.
 
 Basic hardware acceleration supported:
+- hardware PUF (HWPUF)
 - SHA1
 - SHA-256
 - AES-ECB (128, 192, 256 key sizes)
