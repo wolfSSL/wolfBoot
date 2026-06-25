@@ -197,6 +197,7 @@ ifeq ($(ARCH),ARM)
       NO_ARM_ASM=1
       CFLAGS+=-DMAX3266X_SHA -DFAST_MEMCPY
       CFLAGS+=-ffunction-sections -fdata-sections
+      CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
       ifeq ($(MAX3266X_OLD),1)
         # Older Maxim SDK tree (flat MAX32665PeriphDriver layout)
         CFLAGS+=-DWOLFSSL_MAX3266X_OLD
@@ -209,7 +210,6 @@ ifeq ($(ARCH),ARM)
               $(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source/mxc_delay.o
       else
         CFLAGS+=-DWOLFSSL_MAX3266X
-        CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
         MAX3266X_CFLAGS:= \
           -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
           -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \

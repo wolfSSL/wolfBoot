@@ -589,13 +589,24 @@ endif
 ifeq ($(TARGET),max32666)
   LSCRIPT_TEMPLATE=ARM-max32666.ld
   ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_reva.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_me14.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_revb.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o
-    APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+    ifeq ($(MAX3266X_OLD),1)
+      MAX3266X_SRC := $(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source
+      APP_OBJS += $(MAX3266X_SRC)/hash.o
+      APP_OBJS += $(MAX3266X_SRC)/cipher.o
+      APP_OBJS += $(MAX3266X_SRC)/maa.o
+      APP_OBJS += $(MAX3266X_SRC)/mem_utils.o
+      APP_OBJS += $(MAX3266X_SRC)/trng.o
+      APP_OBJS += $(MAX3266X_SRC)/mxc_sys.o
+      APP_OBJS += $(MAX3266X_SRC)/mxc_delay.o
+    else
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_reva.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_revb.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+    endif
     APP_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
   endif
 endif
