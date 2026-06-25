@@ -403,3 +403,6 @@ image.ub
 system-default.dtb
 test_output/
 sdcard.img
+
+# wolfHSM STM32H5 TZ demo build output
+port/stmicro/stm32h5-tz-wolfhsm/out/

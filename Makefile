@@ -218,6 +218,9 @@ OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(WOLFHSM_OBJS)
 
+# Vendored wolfHSM sources: keep cosmetic unused-parameter warnings non-fatal
+$(WOLFHSM_OBJS): CFLAGS += -Wno-error=unused-parameter
+
 CFLAGS+= \
   -I"." -I"include/" -I"$(WOLFBOOT_LIB_WOLFSSL)" \
   -Wno-array-bounds \
