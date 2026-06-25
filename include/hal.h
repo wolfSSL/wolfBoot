@@ -36,8 +36,10 @@ extern "C" {
 #if defined(MMU) || defined(WOLFBOOT_FDT)
 extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
 /* Weak copy hook for FIT subimages (kernel/dtb): default memcpy; boards where
- * CPU writes to the load address don't land override it with a DMA copy. */
-extern void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
+ * CPU writes to the load address don't land override it with a DMA copy.
+ * Returns 0 on success or a negative value if the copy failed, so callers can
+ * fail closed instead of running on stale data. */
+extern int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif

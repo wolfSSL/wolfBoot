@@ -409,7 +409,7 @@ void RAMFUNCTION wolfBoot_os64bit_jump(os64bit_entry_t entry,
 }
 #endif /* ENABLE_OS64BIT */
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void do_boot(const uint32_t *app_offset)

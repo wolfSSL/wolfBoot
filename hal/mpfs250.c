@@ -477,7 +477,7 @@ void hal_init(void)
      * inner retry inside mpfs_ddr_init() exhausts (typically because
      * MTC wedged after the first failure), come back here for a full
      * controller re-init.  Empirical: per-attempt failure rate ~30%, so
-     * 3 outer attempts cover ~99.7% of boots. */
+     * MPFS_DDR_MAX_OUTER_RETRY (6) outer attempts cover ~99.9% of boots. */
     for (outer_retry = 0; outer_retry < MPFS_DDR_MAX_OUTER_RETRY;
          outer_retry++) {
         if (outer_retry > 0) {
@@ -752,12 +752,18 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
  * through the PDMA master.  A DDR source is read via its non-cached alias so
  * PDMA sees real DDR; mpfs_pdma_memcpy remaps the dst 0x8x->0xCx and flushes
  * L2.  Chunked + WDT-petted for kernel-sized copies. */
-void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
+int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
 {
     uintptr_t d = (uintptr_t)dst;
     uintptr_t s = (uintptr_t)src;
+    volatile const uint8_t *ncd;
+    const uint8_t *ncs;
     uint32_t off = 0;
     uint32_t chunk;
+    uint32_t k;
+    int retry;
+    int mism;
+    int rc = 0;
 
     if ((s & 0xF0000000UL) == 0x80000000UL) {
         s |= 0x40000000UL; /* non-cached source alias */
@@ -767,17 +773,51 @@ void wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
         if (chunk > (1024U * 1024U)) {
             chunk = 1024U * 1024U;
         }
-        (void)mpfs_pdma_memcpy((void *)(d + off),
-            (const void *)(s + off), chunk);
-        /* Refresh all five MSS watchdogs (they always count and reset the
-         * chip and cannot be disabled) during the multi-MB kernel copy. */
-        MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+        /* mpfs_pdma_memcpy always returns 0, so the read-back verify below is
+         * the authoritative success check for this chunk.  The PDMA->DDR write
+         * intermittently drops a block, so re-PDMA on a mismatch (same pattern
+         * as sdhci_platform_block_copy).  A DDR destination (0x8xxxxxxx) is
+         * read back through its non-cached alias (| 0x40000000) so we compare
+         * what actually landed in DDR, not stale L2; this makes the caller's
+         * fail-closed rc real for the signature-uncovered kernel/dtb copies.
+         * A non-DDR destination (e.g. an L2 scratch buffer) lands directly, so
+         * a single copy suffices. */
+        mism = 1;
+        for (retry = 0; retry < 8 && mism != 0; retry++) {
+            (void)mpfs_pdma_memcpy((void *)(d + off),
+                (const void *)(s + off), chunk);
+            /* Refresh all five MSS watchdogs (they always count and reset the
+             * chip and cannot be disabled) during the multi-MB kernel copy
+             * and its read-back verify. */
+            MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
+            MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
+            MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
+            MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
+            MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+            if ((d & 0xF0000000UL) != 0x80000000UL) {
+                mism = 0; /* non-DDR dst lands on the first copy */
+                break;
+            }
+            __asm__ volatile("fence iorw,iorw" ::: "memory");
+            ncd = (volatile const uint8_t *)((d + off) | 0x40000000UL);
+            ncs = (const uint8_t *)(s + off);
+            mism = 0;
+            for (k = 0; k < chunk; k++) {
+                if (ncd[k] != ncs[k]) {
+                    mism = 1;
+                    break;
+                }
+            }
+        }
+        if (mism != 0) {
+            /* Copy could not be verified within the retry budget; remember the
+             * failure so the caller fails closed rather than boot corrupt,
+             * no-longer-signature-covered data. */
+            rc = -1;
+        }
         off += chunk;
     }
+    return rc;
 }
 
 /* L2 round-trip wrapper around mpfs_dts_fixup_inplace().  The dtb lives in DDR
@@ -816,7 +856,11 @@ int hal_dts_fixup(void* dts_addr)
     /* fixup in the CPU-writable L2 buffer */
     ret = mpfs_dts_fixup_inplace(l2_dtb);
     /* L2 -> DDR via PDMA (expanded totalsize) */
-    wolfBoot_fit_memcpy(dts_addr, l2_dtb, (uint32_t)fdt_totalsize(l2_dtb));
+    if (wolfBoot_fit_memcpy(dts_addr, l2_dtb,
+            (uint32_t)fdt_totalsize(l2_dtb)) != 0) {
+        wolfBoot_printf("FDT: dtb copy-back to DDR failed\n");
+        return -1;
+    }
     return ret;
 }
 #else

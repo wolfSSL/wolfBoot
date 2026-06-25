@@ -36,7 +36,7 @@ extern unsigned int *END_STACK;
 
 extern void RAMFUNCTION x86_64_efi_do_boot(uint8_t *kernel);
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void RAMFUNCTION do_boot(const uint32_t *app_offset)

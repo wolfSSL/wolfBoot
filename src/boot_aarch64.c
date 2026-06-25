@@ -148,7 +148,7 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
  *
  */
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
