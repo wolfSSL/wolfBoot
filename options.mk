@@ -69,6 +69,20 @@ ifeq ($(WOLFBOOT_TIME_TEST),1)
     CFLAGS+=-D"WOLFBOOT_TIME_TEST"
 endif
 
+# Persist update/boot/rollback failure diagnostics to a dedicated flash region
+ifeq ($(WOLFBOOT_PERSIST_FAILURE_STATUS),1)
+    CFLAGS+=-D"WOLFBOOT_PERSIST_FAILURE_STATUS"
+    ifneq ($(WOLFBOOT_DIAGNOSTICS_ADDRESS),)
+        CFLAGS+=-D"WOLFBOOT_DIAGNOSTICS_ADDRESS=$(WOLFBOOT_DIAGNOSTICS_ADDRESS)"
+    endif
+    ifneq ($(WOLFBOOT_DIAGNOSTICS_SECTORS),)
+        CFLAGS+=-D"WOLFBOOT_DIAGNOSTICS_SECTORS=$(WOLFBOOT_DIAGNOSTICS_SECTORS)"
+    endif
+    ifeq ($(WOLFBOOT_DIAGNOSTICS_EXT),1)
+        CFLAGS+=-D"WOLFBOOT_DIAGNOSTICS_EXT"
+    endif
+endif
+
 # Support for TPM signature verification
 ifeq ($(WOLFBOOT_TPM_VERIFY),1)
   WOLFTPM:=1

@@ -617,6 +617,43 @@ int wolfBoot_dualboot_candidate(void);
 int wolfBoot_dualboot_candidate_addr(void**);
 int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+/* Phase in which the failure was detected */
+#define WOLFBOOT_FAILURE_PHASE_UPDATE   1 /* update image rejected before swap */
+#define WOLFBOOT_FAILURE_PHASE_BOOT     2 /* boot image failed verification */
+#define WOLFBOOT_FAILURE_PHASE_ROLLBACK 3 /* rolled back to a previous image */
+
+/* Cause of the failure */
+#define WOLFBOOT_FAILURE_CAUSE_HEADER        1 /* bad/invalid image header */
+#define WOLFBOOT_FAILURE_CAUSE_HASH          2 /* hash/integrity check failed */
+#define WOLFBOOT_FAILURE_CAUSE_SIGNATURE     3 /* signature/auth check failed */
+#define WOLFBOOT_FAILURE_CAUSE_NOT_CONFIRMED 4 /* image never confirmed via
+                                                * wolfBoot_success() */
+
+/* Persisted failure record. Exactly 16 bytes so it maps to a single 128-bit
+ * write-once flash word and can be appended without read-modify-write. */
+struct wolfBoot_failure_record {
+    uint32_t seq;        /* monotonic sequence number (higher = newer) */
+    uint8_t  phase;      /* WOLFBOOT_FAILURE_PHASE_* */
+    uint8_t  cause;      /* WOLFBOOT_FAILURE_CAUSE_* */
+    uint8_t  partition;  /* PART_BOOT / PART_UPDATE */
+    uint8_t  reserved;
+    uint32_t fw_version; /* version of the offending image, 0 if unknown */
+    uint32_t crc;        /* CRC32 over the preceding 12 bytes */
+};
+
+/* Public API */
+int wolfBoot_get_failure_count(void);
+int wolfBoot_get_failure(int index, struct wolfBoot_failure_record *out);
+int wolfBoot_clear_failures(void);
+
+#ifdef __WOLFBOOT
+/* Internal API */
+int wolfBoot_record_failure(uint8_t phase, uint8_t cause, uint8_t partition,
+        uint32_t fw_version);
+#endif
+#endif /* WOLFBOOT_PERSIST_FAILURE_STATUS */
+
 
 /* Encryption algorithm constants - always available for tools */
 #define ENCRYPT_BLOCK_SIZE_CHACHA  64
