@@ -898,6 +898,332 @@ void RAMFUNCTION wolfBoot_success(void)
 #endif
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+/* Persistent failure diagnostics.
+ *
+ * Failure records are stored in a dedicated region of WOLFBOOT_DIAGNOSTICS_SECTORS
+ * erase sectors, starting at WOLFBOOT_DIAGNOSTICS_ADDRESS. The region is a
+ * log-structured store managed as a circular log over the sectors:
+ *
+ *  - Each sector begins with a 16-byte header carrying a generation counter;
+ *    the sector with the highest generation is the active (newest) one.
+ *  - New records are appended to the active sector.
+ *  - When the active sector fills, the next sector in the ring (the oldest one)
+ *    is erased and becomes active. The other sectors are retained as history
+ *    until the ring wraps around to them.
+ *
+ *  With a single sector (WOLFBOOT_DIAGNOSTICS_SECTORS == 1), when the sector
+ *  fills it is erased and restarted, discarding all previous records.
+ */
+
+#ifndef WOLFBOOT_DIAGNOSTICS_ADDRESS
+#error "WOLFBOOT_PERSIST_FAILURE_STATUS requires WOLFBOOT_DIAGNOSTICS_ADDRESS"
+#endif
+
+#ifndef WOLFBOOT_DIAGNOSTICS_SECTORS
+#define WOLFBOOT_DIAGNOSTICS_SECTORS 2
+#endif
+#if WOLFBOOT_DIAGNOSTICS_SECTORS < 1
+#error "WOLFBOOT_DIAGNOSTICS_SECTORS must be >= 1"
+#endif
+
+#if defined(EXT_FLASH) && defined(WOLFBOOT_DIAGNOSTICS_EXT)
+#define DIAG_IS_EXT 1
+#else
+#define DIAG_IS_EXT 0
+#endif
+
+#define DIAG_HDR_MAGIC      0x47414944UL /* "DIAG" */
+#define DIAG_FORMAT_VERSION 1U
+#define DIAG_N_SECTORS      WOLFBOOT_DIAGNOSTICS_SECTORS
+#define DIAG_SECTOR_SIZE    WOLFBOOT_SECTOR_SIZE
+#define DIAG_SECTOR_ADDR(i) ((uint32_t)(WOLFBOOT_DIAGNOSTICS_ADDRESS) + \
+                             (uint32_t)(i) * DIAG_SECTOR_SIZE)
+#define DIAG_HDR_SIZE       16U
+#define DIAG_RECORD_SIZE    16U
+#define DIAG_SLOTS_PER_SECTOR ((DIAG_SECTOR_SIZE - DIAG_HDR_SIZE) / DIAG_RECORD_SIZE)
+
+struct wolfBoot_diag_header {
+    uint32_t magic;
+    uint32_t generation;
+    uint32_t format_version;
+    uint32_t crc; /* CRC32 over the preceding 12 bytes */
+};
+
+/* Ensure both structures are exactly 128-bit */
+typedef char diag_record_size_check[
+    (sizeof(struct wolfBoot_failure_record) == DIAG_RECORD_SIZE) ? 1 : -1];
+typedef char diag_header_size_check[
+    (sizeof(struct wolfBoot_diag_header) == DIAG_HDR_SIZE) ? 1 : -1];
+
+static uint32_t RAMFUNCTION diag_crc32(const void *data, uint32_t len)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t crc = 0xFFFFFFFFUL;
+    uint32_t i, j;
+    for (i = 0; i < len; i++) {
+        crc ^= p[i];
+        for (j = 0; j < 8; j++)
+            crc = (crc >> 1) ^ (0xEDB88320UL & (0U - (crc & 1U)));
+    }
+    return crc ^ 0xFFFFFFFFUL;
+}
+
+static int RAMFUNCTION diag_read(uint32_t addr, void *buf, uint32_t len)
+{
+#if DIAG_IS_EXT
+    return ext_flash_read(addr, (uint8_t *)buf, len);
+#else
+    XMEMCPY(buf, (void *)(uintptr_t)addr, len);
+    return (int)len;
+#endif
+}
+
+static int RAMFUNCTION diag_read_header(uint32_t sector_addr,
+        struct wolfBoot_diag_header *hdr)
+{
+    diag_read(sector_addr, hdr, sizeof(*hdr));
+    if (hdr->magic != DIAG_HDR_MAGIC)
+        return -1;
+    if (hdr->format_version != DIAG_FORMAT_VERSION)
+        return -1;
+    if (diag_crc32(hdr, 12) != hdr->crc)
+        return -1;
+    return 0;
+}
+
+static int RAMFUNCTION diag_read_record(uint32_t sector_addr, int slot,
+        struct wolfBoot_failure_record *rec)
+{
+    uint32_t addr = sector_addr + DIAG_HDR_SIZE +
+        (uint32_t)slot * DIAG_RECORD_SIZE;
+    diag_read(addr, rec, sizeof(*rec));
+    if (diag_crc32(rec, 12) != rec->crc)
+        return -1;
+    return 0;
+}
+
+static int RAMFUNCTION diag_sector_count(uint32_t sector_addr)
+{
+    /* The number of records is the index of the first record that fails to
+     * decode. */
+    struct wolfBoot_failure_record rec;
+    int n = 0;
+    while (n < (int)DIAG_SLOTS_PER_SECTOR) {
+        if (diag_read_record(sector_addr, n, &rec) != 0)
+            break;
+        n++;
+    }
+    return n;
+}
+
+static int RAMFUNCTION diag_scan(uint32_t *gen, int *count, int *active)
+{
+    struct wolfBoot_diag_header hdr;
+    uint32_t best_gen = 0;
+    int i, nvalid = 0;
+
+    *active = -1;
+    for (i = 0; i < DIAG_N_SECTORS; i++) {
+        if (diag_read_header(DIAG_SECTOR_ADDR(i), &hdr) == 0) {
+            gen[i] = hdr.generation;
+            count[i] = diag_sector_count(DIAG_SECTOR_ADDR(i));
+            if (*active < 0 || hdr.generation > best_gen) {
+                best_gen = hdr.generation;
+                *active = i;
+            }
+            nvalid++;
+        }
+        else {
+            gen[i] = 0;
+            count[i] = -1;
+        }
+    }
+    return nvalid;
+}
+
+/* Order the valid sector indices from oldest to newest into order[]. */
+static int RAMFUNCTION diag_ordered(int *order, uint32_t *gen, int *count)
+{
+    int active, k = 0, step;
+    if (diag_scan(gen, count, &active) == 0)
+        return 0;
+    for (step = 1; step <= DIAG_N_SECTORS; step++) {
+        int idx = (active + step) % DIAG_N_SECTORS;
+        if (count[idx] >= 0)
+            order[k++] = idx;
+    }
+    return k;
+}
+
+static void RAMFUNCTION diag_unlock(void)
+{
+#if DIAG_IS_EXT
+    ext_flash_unlock();
+#else
+    hal_flash_unlock();
+#endif
+}
+
+static void RAMFUNCTION diag_lock(void)
+{
+#if DIAG_IS_EXT
+    ext_flash_lock();
+#else
+    hal_flash_lock();
+#endif
+}
+
+static int RAMFUNCTION diag_erase(uint32_t addr, uint32_t len)
+{
+#if DIAG_IS_EXT
+    return ext_flash_erase(addr, len);
+#else
+    return hal_flash_erase(addr, len);
+#endif
+}
+
+#ifdef __WOLFBOOT
+static int RAMFUNCTION diag_write(uint32_t addr, const void *buf, uint32_t len)
+{
+#if DIAG_IS_EXT
+    return ext_flash_write(addr, (const uint8_t *)buf, len);
+#else
+    return hal_flash_write(addr, (const uint8_t *)buf, len);
+#endif
+}
+
+static int RAMFUNCTION diag_write_header(uint32_t sector_addr, uint32_t generation)
+{
+    struct wolfBoot_diag_header hdr;
+    XMEMSET(&hdr, 0, sizeof(hdr));
+    hdr.magic = DIAG_HDR_MAGIC;
+    hdr.generation = generation;
+    hdr.format_version = DIAG_FORMAT_VERSION;
+    hdr.crc = diag_crc32(&hdr, 12);
+    return diag_write(sector_addr, &hdr, sizeof(hdr));
+}
+
+/* Highest sequence number present across all sectors (0 if none). */
+static uint32_t RAMFUNCTION diag_max_seq(int *count)
+{
+    struct wolfBoot_failure_record rec;
+    uint32_t maxseq = 0;
+    int i;
+    for (i = 0; i < DIAG_N_SECTORS; i++) {
+        if (count[i] > 0 &&
+                diag_read_record(DIAG_SECTOR_ADDR(i), count[i] - 1, &rec) == 0) {
+            if (rec.seq > maxseq)
+                maxseq = rec.seq;
+        }
+    }
+    return maxseq;
+}
+
+int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
+        uint8_t partition, uint32_t fw_version)
+{
+    uint32_t gen[DIAG_N_SECTORS];
+    int count[DIAG_N_SECTORS];
+    struct wolfBoot_failure_record rec;
+    uint32_t seq, active_gen;
+    int active, active_count, ret;
+
+    diag_unlock();
+
+    if (diag_scan(gen, count, &active) == 0) {
+        /* Region empty: initialize sector 0 at generation 1. */
+        diag_erase(DIAG_SECTOR_ADDR(0), DIAG_SECTOR_SIZE);
+        if (diag_write_header(DIAG_SECTOR_ADDR(0), 1) != 0) {
+            diag_lock();
+            return -1;
+        }
+        active = 0;
+        gen[0] = 1;
+        count[0] = 0;
+    }
+
+    seq = diag_max_seq(count) + 1;
+    active_gen = gen[active];
+    active_count = count[active];
+
+    if (active_count >= (int)DIAG_SLOTS_PER_SECTOR) {
+        /* Active sector full: rotate into next sector. */
+        int target = (active + 1) % DIAG_N_SECTORS;
+        diag_erase(DIAG_SECTOR_ADDR(target), DIAG_SECTOR_SIZE);
+        if (diag_write_header(DIAG_SECTOR_ADDR(target), active_gen + 1) != 0) {
+            diag_lock();
+            return -1;
+        }
+        active = target;
+        active_count = 0;
+    }
+
+    XMEMSET(&rec, 0, sizeof(rec));
+    rec.seq = seq;
+    rec.phase = phase;
+    rec.cause = cause;
+    rec.partition = partition;
+    rec.fw_version = fw_version;
+    rec.crc = diag_crc32(&rec, 12);
+
+    ret = diag_write(DIAG_SECTOR_ADDR(active) + DIAG_HDR_SIZE +
+            (uint32_t)active_count * DIAG_RECORD_SIZE, &rec, sizeof(rec));
+
+    diag_lock();
+    return ret;
+}
+#endif /* __WOLFBOOT */
+
+int wolfBoot_get_failure_count(void)
+{
+    uint32_t gen[DIAG_N_SECTORS];
+    int count[DIAG_N_SECTORS];
+    int active, i, total = 0;
+    diag_scan(gen, count, &active);
+    for (i = 0; i < DIAG_N_SECTORS; i++)
+        if (count[i] >= 0)
+            total += count[i];
+    return total;
+}
+
+int wolfBoot_get_failure(int index, struct wolfBoot_failure_record *out)
+{
+    uint32_t gen[DIAG_N_SECTORS];
+    int count[DIAG_N_SECTORS];
+    int order[DIAG_N_SECTORS];
+    int k, i, total = 0, fwd;
+
+    if (out == NULL)
+        return -1;
+
+    k = diag_ordered(order, gen, count);
+    for (i = 0; i < k; i++)
+        total += count[order[i]];
+    if (index < 0 || index >= total)
+        return -1;
+
+    fwd = total - 1 - index;
+    for (i = 0; i < k; i++) {
+        int c = count[order[i]];
+        if (fwd < c)
+            return diag_read_record(DIAG_SECTOR_ADDR(order[i]), fwd, out);
+        fwd -= c;
+    }
+    return -1;
+}
+
+int wolfBoot_clear_failures(void)
+{
+    int ret = 0, i;
+    diag_unlock();
+    for (i = 0; i < DIAG_N_SECTORS && ret == 0; i++)
+        ret = diag_erase(DIAG_SECTOR_ADDR(i), DIAG_SECTOR_SIZE);
+    diag_lock();
+    return ret;
+}
+#endif /* WOLFBOOT_PERSIST_FAILURE_STATUS */
+
 /**
  * @brief Find header function.
  *

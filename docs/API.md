@@ -67,6 +67,63 @@ For more information about the update process, see [Firmware Update](firmware_up
 
 For the image format, see [Firmware Image](firmware_image.md)
 
+### Failure diagnostics
+
+When wolfBoot is compiled with `WOLFBOOT_PERSIST_FAILURE_STATUS`, it records the
+cause of update, boot and rollback failures into a dedicated flash region so the
+application can read them back after a failed update or an unexpected rollback.
+
+This feature is disabled by default. To enable it, set
+`WOLFBOOT_PERSIST_FAILURE_STATUS=1` and provide:
+
+- `WOLFBOOT_DIAGNOSTICS_ADDRESS`: the start address of the region reserved for
+  diagnostics (it must be sector-aligned and must not overlap any partition);
+- `WOLFBOOT_DIAGNOSTICS_SECTORS`: the size of the region, specified as a number
+  of flash sectors (default: 2).
+
+The region is managed as a circular store over its sectors. With two or more
+sectors, older records are retained until the log wraps all the way around, so
+there is always at least one full sector of history. With a single sector
+(`WOLFBOOT_DIAGNOSTICS_SECTORS=1`) the sector is erased and restarted when it
+fills, discarding all previous records.
+
+The following events are recorded:
+
+- An update image was rejected before performing the update
+  (`WOLFBOOT_FAILURE_PHASE_UPDATE`).
+- A boot image failed verification, triggering an emergency update
+  (`WOLFBOOT_FAILURE_PHASE_BOOT`).
+- A rollback was caused by a new image that never confirmed via
+  `wolfBoot_success()` (`WOLFBOOT_FAILURE_PHASE_ROLLBACK`).
+
+For verification failures, the cause distinguishes a bad header
+(`WOLFBOOT_FAILURE_CAUSE_HEADER`), a failed integrity/hash check
+(`WOLFBOOT_FAILURE_CAUSE_HASH`) and a failed signature/authenticity check
+(`WOLFBOOT_FAILURE_CAUSE_SIGNATURE`). A rollback uses
+`WOLFBOOT_FAILURE_CAUSE_NOT_CONFIRMED`.
+
+The application can read the records, ordered newest-first, through this API:
+
+- `int wolfBoot_get_failure_count(void)`: number of records currently stored.
+- `int wolfBoot_get_failure(int index, struct wolfBoot_failure_record *out)`:
+  copy record `index` (0 is the most recent) into `out`. Returns 0 on success.
+- `int wolfBoot_clear_failures(void)`: erase the diagnostics region.
+
+Each `struct wolfBoot_failure_record` reports `phase`, `cause`, `partition`,
+`fw_version` (the version of the offending image, when known) and a monotonic
+`seq` number.
+
+```c
+struct wolfBoot_failure_record rec;
+int i, n = wolfBoot_get_failure_count();
+for (i = 0; i < n; i++) {
+    if (wolfBoot_get_failure(i, &rec) == 0) {
+        printf("failure: phase %u cause %u part %u ver 0x%x\n",
+            rec.phase, rec.cause, rec.partition, rec.fw_version);
+    }
+}
+```
+
 ## NSC API
 
 If you're running wolfBoot on an ARM TrustZone-enabled device (see for example

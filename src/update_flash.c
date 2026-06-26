@@ -855,6 +855,24 @@ static uint32_t wolfBoot_get_total_size(struct wolfBoot_image* boot,
     return total_size;
 }
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+/* Record a failure according to image verification flags */
+static void RAMFUNCTION wolfBoot_record_verify_failure(uint8_t phase,
+        uint8_t part, struct wolfBoot_image *img)
+{
+    uint8_t cause;
+    uint32_t version;
+    if (!img->hdr_ok)
+        cause = WOLFBOOT_FAILURE_CAUSE_HEADER;
+    else if (!img->sha_ok)
+        cause = WOLFBOOT_FAILURE_CAUSE_HASH;
+    else
+        cause = WOLFBOOT_FAILURE_CAUSE_SIGNATURE;
+    version = img->hdr_ok ? wolfBoot_get_blob_version(img->hdr) : 0;
+    wolfBoot_record_failure(phase, cause, part, version);
+}
+#endif
+
 static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 {
     uint32_t total_size = 0;
@@ -973,6 +991,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                     || (wolfBoot_verify_authenticity(&update) < 0)) {
                 wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
                     update.hdr_ok, update.sha_ok, update.signature_ok);
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+                wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+                    PART_UPDATE, &update);
+#endif
                 return -1;
             }
         } else {
@@ -987,6 +1009,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
                 wolfBoot_printf("Update verify failed: Hdr %d, Hash %d, Sig %d\n",
                     update.hdr_ok, update.sha_ok, update.signature_ok);
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+                wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+                    PART_UPDATE, &update);
+#endif
                 return -1;
             }
 #ifdef EXT_ENCRYPTED
@@ -1200,6 +1226,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         ext_flash_lock();
 #endif
         hal_flash_lock();
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+        wolfBoot_record_failure(WOLFBOOT_FAILURE_PHASE_ROLLBACK,
+            WOLFBOOT_FAILURE_CAUSE_NOT_CONFIRMED, PART_BOOT, cur_ver);
+#endif
     }
 #endif
 #else
@@ -1501,6 +1531,10 @@ void RAMFUNCTION wolfBoot_start(void)
     if (bootRet < 0) {
         wolfBoot_printf("Boot failed: Hdr %d, Hash %d, Sig %d\n",
             boot.hdr_ok, boot.sha_ok, boot.signature_ok);
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+        wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_BOOT,
+            PART_BOOT, &boot);
+#endif
 #ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
         wolfBoot_printf("Trying emergency update\n");
         if (likely(wolfBoot_update(1) < 0)) {
