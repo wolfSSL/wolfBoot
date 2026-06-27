@@ -79,7 +79,9 @@ This feature is disabled by default. To enable it, set
 - `WOLFBOOT_DIAGNOSTICS_ADDRESS`: the start address of the region reserved for
   diagnostics (it must be sector-aligned and must not overlap any partition);
 - `WOLFBOOT_DIAGNOSTICS_SECTORS`: the size of the region, specified as a number
-  of flash sectors (default: 2).
+  of flash sectors (default: 2);
+- `WOLFBOOT_DIAGNOSTICS_EXT`: setting this causes the region to live in
+  external flash. Only meaningful when `EXT_FLASH` is enabled.
 
 The region is managed as a circular store over its sectors. With two or more
 sectors, older records are retained until the log wraps all the way around, so
