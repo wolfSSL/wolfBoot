@@ -1085,7 +1085,7 @@ static int RAMFUNCTION diag_erase(haladdr_t addr, uint32_t len)
 #endif
 }
 
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined(UNIT_TEST)
 static int RAMFUNCTION diag_write(haladdr_t addr, const void *buf, uint32_t len)
 {
 #if DIAG_IS_EXT
@@ -1175,7 +1175,7 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
     diag_lock();
     return ret;
 }
-#endif /* __WOLFBOOT */
+#endif /* __WOLFBOOT || UNIT_TEST */
 
 int wolfBoot_get_failure_count(void)
 {

@@ -64,6 +64,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
+TESTS+=unit-diagnostics
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
@@ -133,6 +134,7 @@ unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
 unit-fdt:CFLAGS+=-DWOLFBOOT_FDT
 unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
+unit-diagnostics:CFLAGS+=-DMOCK_PARTITIONS
 unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
 	-DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA
 unit-enc-nvm:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
@@ -450,6 +452,9 @@ unit-nvm: ../../include/target.h unit-nvm.c
 
 unit-nvm-flagshome: ../../include/target.h unit-nvm.c
 	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
+
+unit-diagnostics: ../../include/target.h unit-diagnostics.c
+	gcc -o $@ unit-diagnostics.c $(CFLAGS) $(LDFLAGS)
 
 unit-enc-nvm: ../../include/target.h unit-enc-nvm.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-nvm.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
