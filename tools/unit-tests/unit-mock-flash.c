@@ -75,6 +75,15 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
         }
     }
 #endif
+#ifdef WOLFBOOT_DIAGNOSTICS_ADDRESS
+    if ((address >= (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS) &&
+            (address < (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS +
+                WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE)) {
+        for (i = 0; i < len; i++) {
+            a[i] = data[i];
+        }
+    }
+#endif
     return 0;
 }
 int hal_flash_erase(haladdr_t address, int len)
@@ -106,6 +115,12 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
         printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
+        memset((void *)(uintptr_t)address, 0xFF, len);
+#endif
+#ifdef WOLFBOOT_DIAGNOSTICS_ADDRESS
+    } else if ((address >= (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS) &&
+            (address < (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS +
+                WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE)) {
         memset((void *)(uintptr_t)address, 0xFF, len);
 #endif
     } else {

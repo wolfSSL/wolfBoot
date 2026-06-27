@@ -647,7 +647,7 @@ int wolfBoot_get_failure_count(void);
 int wolfBoot_get_failure(int index, struct wolfBoot_failure_record *out);
 int wolfBoot_clear_failures(void);
 
-#ifdef __WOLFBOOT
+#if defined(__WOLFBOOT) || defined(UNIT_TEST)
 /* Internal API */
 int wolfBoot_record_failure(uint8_t phase, uint8_t cause, uint8_t partition,
         uint32_t fw_version);
