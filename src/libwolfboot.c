@@ -937,8 +937,8 @@ void RAMFUNCTION wolfBoot_success(void)
 #define DIAG_FORMAT_VERSION 1U
 #define DIAG_N_SECTORS      WOLFBOOT_DIAGNOSTICS_SECTORS
 #define DIAG_SECTOR_SIZE    WOLFBOOT_SECTOR_SIZE
-#define DIAG_SECTOR_ADDR(i) ((uint32_t)(WOLFBOOT_DIAGNOSTICS_ADDRESS) + \
-                             (uint32_t)(i) * DIAG_SECTOR_SIZE)
+#define DIAG_SECTOR_ADDR(i) ((haladdr_t)(WOLFBOOT_DIAGNOSTICS_ADDRESS) + \
+                             (haladdr_t)(i) * DIAG_SECTOR_SIZE)
 #define DIAG_HDR_SIZE       16U
 #define DIAG_RECORD_SIZE    16U
 #define DIAG_SLOTS_PER_SECTOR ((DIAG_SECTOR_SIZE - DIAG_HDR_SIZE) / DIAG_RECORD_SIZE)
@@ -969,7 +969,7 @@ static uint32_t RAMFUNCTION diag_crc32(const void *data, uint32_t len)
     return crc ^ 0xFFFFFFFFUL;
 }
 
-static int RAMFUNCTION diag_read(uint32_t addr, void *buf, uint32_t len)
+static int RAMFUNCTION diag_read(haladdr_t addr, void *buf, uint32_t len)
 {
 #if DIAG_IS_EXT
     return ext_flash_read(addr, (uint8_t *)buf, len);
@@ -979,10 +979,11 @@ static int RAMFUNCTION diag_read(uint32_t addr, void *buf, uint32_t len)
 #endif
 }
 
-static int RAMFUNCTION diag_read_header(uint32_t sector_addr,
+static int RAMFUNCTION diag_read_header(haladdr_t sector_addr,
         struct wolfBoot_diag_header *hdr)
 {
-    diag_read(sector_addr, hdr, sizeof(*hdr));
+    if (diag_read(sector_addr, hdr, sizeof(*hdr)) != (int)sizeof(*hdr))
+        return -1;
     if (hdr->magic != DIAG_HDR_MAGIC)
         return -1;
     if (hdr->format_version != DIAG_FORMAT_VERSION)
@@ -992,18 +993,19 @@ static int RAMFUNCTION diag_read_header(uint32_t sector_addr,
     return 0;
 }
 
-static int RAMFUNCTION diag_read_record(uint32_t sector_addr, int slot,
+static int RAMFUNCTION diag_read_record(haladdr_t sector_addr, int slot,
         struct wolfBoot_failure_record *rec)
 {
-    uint32_t addr = sector_addr + DIAG_HDR_SIZE +
-        (uint32_t)slot * DIAG_RECORD_SIZE;
-    diag_read(addr, rec, sizeof(*rec));
+    haladdr_t addr = sector_addr + DIAG_HDR_SIZE +
+        (haladdr_t)slot * DIAG_RECORD_SIZE;
+    if (diag_read(addr, rec, sizeof(*rec)) != (int)sizeof(*rec))
+        return -1;
     if (diag_crc32(rec, 12) != rec->crc)
         return -1;
     return 0;
 }
 
-static int RAMFUNCTION diag_sector_count(uint32_t sector_addr)
+static int RAMFUNCTION diag_sector_count(haladdr_t sector_addr)
 {
     /* The number of records is the index of the first record that fails to
      * decode. */
@@ -1074,7 +1076,7 @@ static void RAMFUNCTION diag_lock(void)
 #endif
 }
 
-static int RAMFUNCTION diag_erase(uint32_t addr, uint32_t len)
+static int RAMFUNCTION diag_erase(haladdr_t addr, uint32_t len)
 {
 #if DIAG_IS_EXT
     return ext_flash_erase(addr, len);
@@ -1084,7 +1086,7 @@ static int RAMFUNCTION diag_erase(uint32_t addr, uint32_t len)
 }
 
 #ifdef __WOLFBOOT
-static int RAMFUNCTION diag_write(uint32_t addr, const void *buf, uint32_t len)
+static int RAMFUNCTION diag_write(haladdr_t addr, const void *buf, uint32_t len)
 {
 #if DIAG_IS_EXT
     return ext_flash_write(addr, (const uint8_t *)buf, len);
@@ -1093,7 +1095,7 @@ static int RAMFUNCTION diag_write(uint32_t addr, const void *buf, uint32_t len)
 #endif
 }
 
-static int RAMFUNCTION diag_write_header(uint32_t sector_addr, uint32_t generation)
+static int RAMFUNCTION diag_write_header(haladdr_t sector_addr, uint32_t generation)
 {
     struct wolfBoot_diag_header hdr;
     XMEMSET(&hdr, 0, sizeof(hdr));
