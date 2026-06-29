@@ -2305,10 +2305,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     image_type = (uint16_t)(image_type_buf[0] + (image_type_buf[1] << 8));
     if ((image_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)
         return -1;
-    if (img->sha_hash == NULL) {
-        if (image_hash(img, digest) != 0)
+    if ((img->sha_hash == NULL) || (img->sha_ok != 1U)) {
+        if (wolfBoot_verify_integrity(img) != 0)
             return -1;
-        img->sha_hash = digest;
     }
     image_part = image_type & HDR_IMG_TYPE_PART_MASK;
 #ifdef WOLFBOOT_NO_KEYSTORE
