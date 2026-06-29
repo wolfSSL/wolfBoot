@@ -1281,12 +1281,10 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_alg_name(TPM_ALG_ID alg,
     }
     s_name = TPM2_GetAlgName(alg);
     if (s_name != NULL && name != NULL && name_sz > 0) {
-        strncpy(name, s_name, name_sz - 1);
-        name[name_sz - 1] = '\0';
+        snprintf(name, name_sz, "%s", s_name);
     }
     else {
-        strncpy(name, "Unknown", name_sz - 1);
-        name[name_sz - 1] = '\0';
+        snprintf(name, name_sz, "%s", "Unknown");
     }
     return (const char*)name;
 }
@@ -1302,12 +1300,10 @@ const char* CSME_NSE_API wolfBoot_tpm2_get_rc_string(int rc, char* error, int er
     }
     s_error = TPM2_GetRCString(rc);
     if (s_error != NULL && error != NULL && error_sz > 0) {
-        strncpy(error, s_error, error_sz - 1);
-        error[error_sz - 1] = '\0';
+        snprintf(error, error_sz, "%s", s_error);
     }
     else {
-        strncpy(error, "Unknown", error_sz - 1);
-        error[error_sz - 1] = '\0';
+        snprintf(error, error_sz, "%s", "Unknown");
     }
     return (const char*)error;
 }
