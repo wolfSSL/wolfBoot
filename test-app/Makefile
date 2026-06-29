@@ -22,6 +22,17 @@ vpath %.c $(WOLFBOOT_LIB_WOLFIP)
 WOLFBOOT_ROOT?=..
 TARGET?=none
 ARCH?=ARM
+
+# Determine 64-bit PPC core (e5500/e6500) vs 32-bit (e500/e500mc) early, so the
+# wolfCrypt asm wiring below (parsed before the per-TARGET blocks) sees it. The
+# per-TARGET blocks later re-assert the same value.
+ifeq ($(ARCH),PPC)
+  ifneq ($(filter nxp_t2080 nxp_t1024 nxp_t1040,$(TARGET)),)
+    PPC64=1
+  else
+    PPC64=0
+  endif
+endif
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
   ifneq ($(WOLFCRYPT_TZ_PSA),1)
@@ -184,6 +195,7 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add SHA implementations (needed for test/benchmark)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
 
   # Add RNG support (needed for ECC signing and tests)
@@ -222,28 +234,39 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
       endif
     endif
 
-    # Power PC
+    # Power PC (wolfSSL PRs 10740 + 10767: AES/SHA-2/SHA-3 PPC asm)
     ifeq ($(ARCH),PPC)
-      # SP mp int PowerPC ASM
+      # SP big-number math stays on the proven 32-bit PPC asm path (matches the
+      # bootloader and the SP_WORD_SIZE=32 that user_settings.h forces for PPC).
+      # The AES/SHA asm under test is independent of SP math.
+      CFLAGS+=-DWOLFSSL_SP_PPC
       ifeq ($(PPC64),1)
-        CFLAGS+=-DWOLFSSL_SP_PPC64
-      else
-        CFLAGS+=-DWOLFSSL_SP_PPC
-      endif
-
-      # SHA256
-      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
-      CFLAGS+=-DWOLFSSL_PPC32_ASM
-      CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
-      CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
-
-      ifeq ($(PPC64),1) # requires wolfssl PR 9852
-        # AES
-        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
+        # 64-bit cores (e5500 / e6500): PPC64 base-scalar ASM (AES T-table,
+        # SHA-2/SHA-3 using 64-bit GPR ops -- all run on e5500/e6500).
+        # NOTE: e5500/e6500 are NOT POWER8 -- no VSX or vector-crypto category,
+        # so WOLFSSL_PPC64_ASM_CRYPTO / _POWER8 must NOT be enabled (they emit
+        # vcipher/vshasigma and would trap). The base-scalar paths (no macro)
+        # are what is exercised here.
         CFLAGS+=-DWOLFSSL_PPC64_ASM
         CFLAGS+=-DWOLFSSL_PPC64_ASM_INLINE
         CFLAGS+=-DWOLFSSL_PPC64_ASM_SMALL
         CFLAGS+=-DWOLFSSL_PPC64_ASM_AES_NO_HARDEN
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha256-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha512-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha3-asm_c.o
+      else
+        # 32-bit cores (e500mc): PPC32 base-scalar ASM, condition-register
+        # variant (PR 10740). INLINE_REG selects the *_cr.c files and needs the
+        # assembler to accept symbolic register names (-Wa,-mregnames).
+        CFLAGS+=-DWOLFSSL_PPC32_ASM
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE_REG -Wa,-mregnames
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-aes-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha512-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha3-asm_cr.o
       endif
 
       CFLAGS+=-fomit-frame-pointer

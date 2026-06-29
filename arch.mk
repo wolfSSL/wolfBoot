@@ -849,11 +849,19 @@ ifeq ($(ARCH),PPC)
   endif
 
   ifneq ($(NO_ASM),1)
-    # Use the SHA256 and SP math all assembly accelerations
+    # Use the SHA256/SHA512 and SP math assembly accelerations.
+    # (wolfSSL PR 10767 added the SHA-512 PPC32 asm transform; SHA384/SHA512
+    # hashing in sha512.c now references Transform_Sha512_Len.) The unused
+    # object is pruned by --gc-sections when sha512.o is not linked (ED25519).
     CFLAGS+=-DWOLFSSL_SP_PPC
     CFLAGS+=-DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE
     #CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+    # Gate the SHA-512 PPC32 asm object on its source existing (wolfSSL PR 10767):
+    # older pinned checkouts lack it, so degrade gracefully rather than fail to
+    # find the source. sha512.o is pruned by --gc-sections for the default
+    # (non-SHA512) bootloader; a SHA512-using PPC config needs the submodule bump.
+    MATH_OBJS+=$(patsubst %.c,%.o,$(wildcard $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha512-asm_c.c))
   endif
 endif
 
