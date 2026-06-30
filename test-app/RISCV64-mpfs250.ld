@@ -55,6 +55,10 @@ SECTIONS
     *(.text*)          /* .text* sections (code) */
     *(.rodata)         /* .rodata sections (constants, strings, etc.) */
     *(.rodata*)        /* .rodata* sections (constants, strings, etc.) */
+    *(.srodata)        /* RISC-V small read-only data */
+    *(.srodata*)
+    *(.sdata2)         /* RISC-V read-only small data (const) */
+    *(.sdata2*)
 
     KEEP (*(.fini))
 
@@ -72,6 +76,8 @@ SECTIONS
     _start_data = .;   /* create a global symbol at data start */
     *(.data)           /* .data sections */
     *(.data*)          /* .data* sections */
+    *(.sdata)          /* RISC-V small data */
+    *(.sdata*)
     *(.RamFunc)        /* .RamFunc sections */
     *(.RamFunc*)       /* .RamFunc* sections */
 
@@ -89,7 +95,10 @@ SECTIONS
     __bss_start__ = _start_bss;
     *(.bss)
     *(.bss*)
-    /* *(COMMON) */
+    *(.sbss)              /* RISC-V small bss */
+    *(.sbss*)
+    *(.scommon)
+    *(COMMON)
 
     . = ALIGN(8);
     _end_bss = .;         /* define a global symbol at bss end */

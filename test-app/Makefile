@@ -193,8 +193,12 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.o
 
-  # Add SP C math (all architectures)
-  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+  # Add SP C math (sp_c64 for 64-bit RISC-V, sp_c32 otherwise)
+  ifeq ($(ARCH),RISCV64)
+    APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.o
+  else
+    APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+  endif
 
   # Add RSA support
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.o
@@ -244,6 +248,18 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
       endif
 
       CFLAGS+=-fomit-frame-pointer
+    endif
+
+    # RISC-V 64-bit (mirrors the WOLFCRYPT_OBJS asm set in arch.mk).
+    # arch.mk already adds -DWOLFSSL_RISCV_ASM to CFLAGS for the app, so the
+    # wolfcrypt C sources expect these asm symbols; provide the objects here.
+    ifeq ($(ARCH),RISCV64)
+      CFLAGS+=-DWOLFSSL_RISCV_ASM
+      APP_OBJS+= \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
     endif
   endif
 

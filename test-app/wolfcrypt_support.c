@@ -79,6 +79,26 @@
     #endif
         return (sys_clk * plat_ratio) / 16;
     }
+#elif defined(TARGET_mpfs250)
+    /* PolarFire SoC RISC-V timer. Mirrors hal_get_timer() in src/boot_riscv.c:
+     *  - S-mode under stock HSS: the 'time' CSR (CLINT MTIME) runs at
+     *    RISCV_SMODE_TIMER_FREQ (1 MHz), so timing is accurate.
+     *  - M-mode (no HSS): the 'time'/'cycle' user CSRs trap on the E51; read
+     *    the machine 'mcycle' counter (CPU clock) instead. */
+    #include "../hal/riscv.h"
+    #ifndef RISCV_SMODE_TIMER_FREQ
+        /* M-mode: mcycle counts the CPU clock (MSS_CPU_CLK, 600 MHz). */
+        #define RISCV_SMODE_TIMER_FREQ 600000000UL
+    #endif
+    static uint64_t mpfs_start_ticks = 0;
+    static uint64_t mpfs_get_ticks(void)
+    {
+    #ifdef WOLFBOOT_RISCV_MMODE
+        return (uint64_t)csr_read(mcycle);
+    #else
+        return (uint64_t)csr_read(time);
+    #endif
+    }
 #else
     /* Simple tick counter fallback */
     static volatile unsigned int tick_counter = 0;
@@ -110,6 +130,10 @@ unsigned long my_time(unsigned long* timer)
         if (timer) *timer = t;
         return t;
     }
+#elif defined(TARGET_mpfs250)
+    unsigned long t = (unsigned long)(mpfs_get_ticks() / RISCV_SMODE_TIMER_FREQ);
+    if (timer) *timer = t;
+    return t;
 #else
     /* Simple incrementing counter */
     tick_counter++;
@@ -140,6 +164,10 @@ double current_time(int reset)
     if (reset)
         ppc_start_ticks = ppc_get_ticks();
     return (double)(ppc_get_ticks() - ppc_start_ticks) / (double)ppc_tb_hz;
+#elif defined(TARGET_mpfs250)
+    if (reset)
+        mpfs_start_ticks = mpfs_get_ticks();
+    return (double)(mpfs_get_ticks() - mpfs_start_ticks) / (double)RISCV_SMODE_TIMER_FREQ;
 #else
     /* Simple counter-based timing */
     if (reset)
