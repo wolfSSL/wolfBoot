@@ -69,7 +69,7 @@ build: stage-config
 	@echo "==> wolfBoot build (stm32h5-tz-wolfhsm)"
 	@echo "==> WOLFBOOT_LIB_WOLFHSM=$(WOLFBOOT_LIB_WOLFHSM)"
 	cd $(WOLFBOOT_ROOT) && $(MAKE) wolfboot.bin WOLFBOOT_LIB_WOLFHSM=$(WOLFBOOT_LIB_WOLFHSM) $(WOLFBOOT_MAKE_FLAGS)
-	cd $(WOLFBOOT_ROOT) && $(MAKE) test-app/image_v1_signed.bin WOLFBOOT_LIB_WOLFHSM=$(WOLFBOOT_LIB_WOLFHSM) $(WOLFBOOT_MAKE_FLAGS)
+	cd $(WOLFBOOT_ROOT) && $(MAKE) test-app/image_v1_signed.bin WOLFBOOT_LIB_WOLFHSM=$(WOLFBOOT_LIB_WOLFHSM) WOLFBOOT_TZ_TEST_BKPT=1 $(WOLFBOOT_MAKE_FLAGS)
 
 # Force-overwrite .config every build so a stale config from a
 # previous CI step (PKCS11, fwTPM, DICE) cannot bleed through.
