@@ -171,6 +171,8 @@ struct wolfBoot_image {
     uint32_t not_signature_ok;
     uint32_t canary_FEED89AB;
     uint32_t sha_ok;
+    uint32_t canary_FEEDCAFE;
+    uint32_t not_sha_ok;
     uint32_t not_ext; /* image is no longer external */
 };
 
@@ -200,6 +202,31 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
 	img->canary_FEED6789 = 0xFEED6789UL;
 	img->not_signature_ok = 1UL;
 	img->canary_FEED89AB = 0xFEED89ABUL;
+}
+
+/**
+ * This function sets the flag that indicates the digest (integrity) check
+ * succeeded for the wolfBoot_image.
+ *
+ * As with the signature flag, the value is redundant and wrapped between
+ * canary variables, so that a single fault cannot forge a valid state.
+ */
+static void NOINLINEFUNCTION wolfBoot_image_confirm_sha_ok(
+    struct wolfBoot_image *img)
+{
+    img->canary_FEED89AB = 0xFEED89ABUL;
+    img->sha_ok = 1UL;
+    img->canary_FEEDCAFE = 0xFEEDCAFEUL;
+    img->not_sha_ok = ~(1UL);
+}
+
+static void NOINLINEFUNCTION wolfBoot_image_clear_sha_ok(
+    struct wolfBoot_image *img)
+{
+    img->canary_FEED89AB = 0xFEED89ABUL;
+    img->sha_ok = 0UL;
+    img->canary_FEEDCAFE = 0xFEEDCAFEUL;
+    img->not_sha_ok = 1UL;
 }
 
 /**
@@ -552,6 +579,134 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
         asm volatile("3:"); \
         asm volatile("nop"); \
     }
+
+/* Redundant, canary-wrapped test for a confirmed integrity (digest) check. */
+#define SHA_OK(imgp) (((imgp)->sha_ok == 1) && \
+                      ((imgp)->not_sha_ok == ~(uint32_t)1))
+
+/**
+ * Digest (integrity) verification.
+ *
+ * Compare the freshly computed digest against the stored one twice, and after
+ * each call ensure via redundant checks that image_CT_compare() actually
+ * returned 0. Only then record the verified digest and confirm sha_ok through
+ * the unskippable callback. A single instruction skip can neither coerce
+ * image_CT_compare() into a false match nor set the sha_ok flag on its own.
+ *
+ * Uses GAS local numeric labels (5f/5:) for safe multi-expansion.
+ */
+#define VERIFY_INTEGRITY_FN(img, computed_digest, stored) \
+    { \
+        volatile int compare_res; \
+        if (!(img) || !(stored)) \
+            asm volatile("b 5f"); \
+        /* Redundant set of r0=50 */ \
+        asm volatile("mov r0, #50":::"r0"); \
+        asm volatile("mov r0, #50":::"r0"); \
+        asm volatile("mov r0, #50":::"r0"); \
+        compare_res = image_CT_compare((computed_digest), (stored), \
+            WOLFBOOT_SHA_DIGEST_SIZE); \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        /* Repeat comparison call */ \
+        compare_res = image_CT_compare((computed_digest), (stored), \
+            WOLFBOOT_SHA_DIGEST_SIZE); \
+        compare_res; \
+        /* Redundant checks that ensure the function actually returned 0 */ \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("cmp r0, #0":::"cc"); \
+        asm volatile("bne 5f"); \
+        /* Integrity confirmed: record verified digest and set sha_ok */ \
+        (img)->sha_hash = (stored); \
+        wolfBoot_image_confirm_sha_ok(img); \
+        asm volatile("5:"); \
+        asm volatile("nop"); \
+    }
+
+/**
+ * Hardened assertion that the integrity (digest) check has actually been
+ * performed and passed. Mirrors the sha portion of PART_SANITY_CHECK and is
+ * used right after the integrity re-check in wolfBoot_verify_authenticity(),
+ * so that skipping the re-check (or its result) cannot let an unverified
+ * image proceed to signature verification.
+ */
+#define SHA_SANITY_CHECK(p) \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    /* Loading sha_ok flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->sha_ok):"r2"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("cmp r2, #1":::"cc"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    /* Loading ~(sha_ok) flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->not_sha_ok):"r2"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-12")
 
 /**
  * ECC / Ed / PQ signature verification.
@@ -1307,6 +1462,16 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
 {
 	img->signature_ok = 0;
 }
+static void UNUSEDFUNCTION wolfBoot_image_confirm_sha_ok(
+    struct wolfBoot_image *img)
+{
+    img->sha_ok = 1;
+}
+static void UNUSEDFUNCTION wolfBoot_image_clear_sha_ok(
+    struct wolfBoot_image *img)
+{
+	img->sha_ok = 0;
+}
 
 #define likely(x) (x)
 #define unlikely(x) (x)
@@ -1329,8 +1494,21 @@ static void UNUSEDFUNCTION wolfBoot_image_clear_signature_ok(
             pss_data, pss_data_sz, hash_type) == 0) \
         wolfBoot_image_confirm_signature_ok(img);
 
+#define SHA_OK(imgp) ((imgp)->sha_ok == 1)
+
+#define VERIFY_INTEGRITY_FN(img, computed_digest, stored) \
+    if (image_CT_compare((computed_digest), (stored), \
+            WOLFBOOT_SHA_DIGEST_SIZE) == 0) { \
+        (img)->sha_hash = (stored); \
+        wolfBoot_image_confirm_sha_ok(img); \
+    }
+
 #define PART_SANITY_CHECK(p) \
     if (((p)->hdr_ok != 1) || ((p)->sha_ok != 1) || ((p)->signature_ok != 1)) \
+        wolfBoot_panic()
+
+#define SHA_SANITY_CHECK(p) \
+    if ((p)->sha_ok != 1) \
         wolfBoot_panic()
 
 #define CONFIRM_MASK_VALID(id, mask) \
