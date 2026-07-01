@@ -127,10 +127,13 @@ make
 
 See [docs/CMake](./docs/CMake.md) and [cmake includes](./cmake/README.md).
 
-## SBOM / EU CRA Compliance
+## SBOM / EU CRA support
 
 wolfBoot generates a Software Bill of Materials (SBOM) in CycloneDX 1.6 and
-SPDX 2.3 formats to support compliance with the EU Cyber Resilience Act (CRA).
+SPDX 2.3 formats. An SBOM is one of the software-transparency artifacts useful
+towards EU Cyber Resilience Act (CRA) obligations; it does not by itself make a
+product CRA compliant (that is a system- and process-level determination for
+the manufacturer).
 
 ```sh
 git submodule update --init lib/wolfssl
@@ -138,18 +141,17 @@ make sbom TARGET=<target> SIGN=<alg> HASH=<alg>
 ```
 
 `TARGET`, `SIGN`, and `HASH` must match your wolfBoot build configuration (same
-as a normal `make` invocation). `gen-sbom` lives in the `lib/wolfssl` submodule
-and is used automatically. The artifact hash covers the compiled source files
-for the given configuration.
+as a normal `make` invocation), because the SBOM's source set and artifact hash
+are configuration-specific. `gen-sbom` lives in the `lib/wolfssl` submodule and
+is used automatically; override with `GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom`
+if you keep wolfssl elsewhere.
 
-Output files in the build directory:
+Output files are written to the build directory as
+`wolfboot-<version>.cdx.json` (CycloneDX 1.6) and `wolfboot-<version>.spdx.json`
+(SPDX 2.3 JSON), where `<version>` is read from `include/wolfboot/version.h`.
 
-| File | Format |
-|------|--------|
-| `wolfboot-2.8.0.cdx.json` | CycloneDX 1.6 |
-| `wolfboot-2.8.0.spdx.json` | SPDX 2.3 JSON |
-
-For further CRA guidance see [wolfssl/doc/CRA.md](https://github.com/wolfSSL/wolfssl/blob/master/doc/CRA.md).
+For CRA guidance and worked SBOM examples, see the
+[wolfSSL CRA Kit](https://github.com/wolfSSL/wolfssl-examples/tree/master/cra-kit).
 
 ## Troubleshooting
 
