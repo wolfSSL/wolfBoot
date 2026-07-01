@@ -1641,6 +1641,12 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
     uint16_t stored_sha_len;
+    /* Reset any cached integrity state up-front, so that a stale sha_ok (and
+     * its complement/canary) left over from a previous verification of a
+     * re-used image cannot survive a failed comparison and produce a
+     * false-positive SHA_OK() result below. */
+    img->sha_hash = NULL;
+    wolfBoot_image_clear_sha_ok(img);
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;

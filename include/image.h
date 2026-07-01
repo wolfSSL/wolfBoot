@@ -292,6 +292,55 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_sha_ok(
     asm volatile("mov r2, #0":::"r2"); \
     asm volatile("mov r2, #0":::"r2"); \
     asm volatile("mov r2, #0":::"r2"); \
+    /* Loading ~(sha_ok) flag, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->not_sha_ok):"r2"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("cmp r2, #0xFFFFFFFE":::"cc"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    /* Loading canary value, verifying */ \
+    asm volatile("mov r2, %0" ::"r"((p)->canary_FEEDCAFE):"r2"); \
+    asm volatile("mov r0, %0" ::"r"(0xFEEDCAFE):"r0"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("bne ."); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("bne .-4"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("bne .-8"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("cmp r2, r0":::"cc"); \
+    asm volatile("bne .-12"); \
+    /* Redundant set of r2=0 */ \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
+    asm volatile("mov r2, #0":::"r2"); \
     /* Loading signature_ok flag, verifying */ \
     asm volatile("mov r2, %0" ::"r"((p)->signature_ok):"r2"); \
     asm volatile("cmp r2, #1":::"cc"); \
