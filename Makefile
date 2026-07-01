@@ -790,54 +790,73 @@ pico-sdk-info: FORCE
 ## SBOM generation
 # Usage: make sbom TARGET=<target> SIGN=<scheme> [HASH=SHA256] [EXT_FLASH=0]
 #
-# TARGET and SIGN select the build configuration; they default to stm32f4 and
-# ED25519 (via tools/config.mk) if not supplied.  Pass them explicitly to get
-# an SBOM that reflects your actual build configuration.
+# TARGET and SIGN select the build configuration.  They come from the same
+# place as a normal build (command line, environment, or .config) and fall
+# back to the tools/config.mk defaults (stm32f4 / ED25519) when unset.  The
+# recipe echoes the effective target/sign so a default build is visible; pass
+# them explicitly to get an SBOM that reflects your actual configuration.
 #
-# Extracts the configuration-specific C source list from OBJS (which is fully
+# Extracts the configuration-specific source list from OBJS (which is fully
 # assembled by this point — core wolfBoot + wolfcrypt + HAL sources are all
-# included), preprocesses wolfBoot's include dirs via cc -dM -E on the host,
-# and calls gen-sbom to emit CycloneDX and SPDX output files.
+# included), captures the build's -D configuration macros via $(HOSTCC) -dM -E
+# on the host, and calls gen-sbom to emit CycloneDX and SPDX output files.
 #
 # wolfcrypt sources are compiled directly into the wolfBoot image and are
 # therefore listed as wolfBoot's own sources, not as a separate component.
 #
 # Optional make variables:
+#   HOSTCC                 Host C compiler for macro capture (default: cc)
+#   GEN_SBOM               Path to wolfssl scripts/gen-sbom
+#                          (default: $(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom)
 #   CRA_PYTHON             Python interpreter (default: python3)
 
+HOSTCC?=cc
 WOLFBOOT_VERSION:=$(shell sed -n \
     's/.*LIBWOLFBOOT_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
     include/wolfboot/version.h)
-GEN_SBOM:=$(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom
+GEN_SBOM?=$(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom
 SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
 SBOM_PYTHON?=$(or $(CRA_PYTHON),python3)
 
 sbom:
+	@if [ -z "$(WOLFBOOT_VERSION)" ]; then \
+	    echo "ERROR: could not read LIBWOLFBOOT_VERSION_STRING from include/wolfboot/version.h" >&2; \
+	    echo "       (check the file exists and its version format is intact)." >&2; \
+	    exit 1; \
+	fi
+	@if [ ! -f "$(GEN_SBOM)" ]; then \
+	    echo "ERROR: gen-sbom not found at '$(GEN_SBOM)'." >&2; \
+	    echo "       Initialize the submodule: git submodule update --init lib/wolfssl" >&2; \
+	    echo "       or point GEN_SBOM at a wolfssl tree: make sbom GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom" >&2; \
+	    exit 1; \
+	fi
 	@echo "wolfBoot SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET) sign=$(SIGN)"
 	@echo "  Outputs: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
-	$(eval _SBOM_SRCS := $(wildcard $(patsubst %.o,%.c,$(OBJS))))
+	$(eval _SBOM_SRCS := $(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS))))
 	@if [ -z "$(_SBOM_SRCS)" ]; then \
-	    echo "ERROR: no .c sources found in OBJS — check that TARGET and SIGN are correct." >&2; \
+	    echo "ERROR: no source files found in OBJS — check that TARGET and SIGN are correct." >&2; \
 	    exit 1; \
 	fi
 	@set -e; \
 	_dh=$$(mktemp /tmp/wolfboot-sbom-defines.XXXXXX); \
-	trap 'rm -f "$$_dh"' EXIT; \
-	cc -dM -E \
-	    -I"$(WOLFBOOT_ROOT)/include" \
-	    -I"$(WOLFBOOT_LIB_WOLFSSL)" \
-	    -I"$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src" \
-	    -DWOLFSSL_USER_SETTINGS \
+	_sf=$$(mktemp /tmp/wolfboot-sbom-srcs.XXXXXX); \
+	trap 'rm -f "$$_dh" "$$_sf"' EXIT; \
+	_defs=""; \
+	for _t in $(CFLAGS); do \
+	    case "$$_t" in -D*) _defs="$$_defs $$_t" ;; esac; \
+	done; \
+	$(HOSTCC) -dM -E -DWOLFSSL_USER_SETTINGS $$_defs \
 	    -x c /dev/null >"$$_dh" 2>/dev/null || \
-	    { echo "ERROR: cc -dM -E failed; install a host C compiler." >&2; exit 1; }; \
+	    { echo "ERROR: '$(HOSTCC) -dM -E' failed; install a host C compiler or set HOSTCC." >&2; exit 1; }; \
+	printf '%s\n' $(_SBOM_SRCS) >"$$_sf"; \
 	$(SBOM_PYTHON) "$(GEN_SBOM)" \
 	    --name wolfboot \
 	    --version "$(WOLFBOOT_VERSION)" \
 	    --supplier "wolfSSL Inc." \
 	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
 	    --options-h "$$_dh" \
-	    --srcs $(_SBOM_SRCS) \
+	    --srcs-file "$$_sf" \
 	    --cdx-out "$(SBOM_CDX_OUT)" \
 	    --spdx-out "$(SBOM_SPDX_OUT)"
 	@echo "SBOM written: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
