@@ -6,7 +6,7 @@
  * BOARD_*_DEV handles for the rest. RCC is header-inlined and hardcodes
  * its base — no dev pointer needed.
  *
- * Clock target: HSE32 -> PLL1 (M=1, N=25, R=3) -> SYSCLK = 100 MHz, which
+ * Clock target: HSE32 -> PLL1 (M=1, N=24, R=3) -> SYSCLK = 100 MHz, which
  * requires PWR voltage scaling Range 1 and 3 flash wait states (RM0493).
  *
  * Copyright (C) 2026 wolfSSL Inc.
@@ -66,7 +66,7 @@ static void set_vos_range1(void)
         ;
 }
 
-/* HSE32 -> PLL1 (M=1, N=25, R=3 -> 100 MHz) -> SYSCLK */
+/* HSE32 -> PLL1 (M=1, N=24, R=3 -> 100 MHz) -> SYSCLK */
 static void pll_clock_on(void)
 {
     /* Enable PWR clock so the PWR registers are accessible, then move to
@@ -85,10 +85,14 @@ static void pll_clock_on(void)
 
     whal_Stm32wba_Rcc_EnableOsc(
         &(whal_Stm32wba_Rcc_OscCfg){WHAL_STM32WBA_RCC_HSE32_CFG});
+    /* M/N/R are (value-1) encoded per RM0493 (divide/multiply = field + 1):
+     *   f_ref  = HSE32 / (M+1) = 32 / 2  = 16 MHz  (PLL1RGE 8-16)
+     *   f_vco  = f_ref * (N+1) = 16 * 25 = 400 MHz (VCO 128-544)
+     *   SYSCLK = f_vco / (R+1) = 400 / 4 = 100 MHz (part max) */
     whal_Stm32wba_Rcc_EnablePll1(&(whal_Stm32wba_Rcc_Pll1Cfg){
         .clkSrc = WHAL_STM32WBA_RCC_PLL1SRC_HSE32,
         .rge = WHAL_STM32WBA_RCC_PLL1RGE_8_16,
-        .m = 1, .n = 25, .r = 3, .q = 0, .p = 0,
+        .m = 1, .n = 24, .r = 3, .q = 0, .p = 0,
     });
     whal_Stm32wba_Rcc_SetSysClock(WHAL_STM32WBA_RCC_SYSCLK_SRC_PLL1);
 }
@@ -104,11 +108,14 @@ static void pll_clock_off(void)
 
 void hal_init(void)
 {
+#ifdef DEBUG_UART
+    size_t i;
+#endif
     pll_clock_on();
     whal_Flash_Init(BOARD_FLASH_DEV);
 
 #ifdef DEBUG_UART
-    for (size_t i = 0; i < PERIPH_CLK_COUNT; i++) {
+    for (i = 0; i < PERIPH_CLK_COUNT; i++) {
         whal_Stm32wba_Rcc_EnablePeriphClk(&g_periphClks[i]);
     }
 
@@ -120,10 +127,12 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 #ifdef DEBUG_UART
+    size_t i;
+
     whal_Uart_Deinit(BOARD_UART_DEV);
     whal_Gpio_Deinit(BOARD_GPIO_DEV);
 
-    for (size_t i = PERIPH_CLK_COUNT; i-- > 0; ) {
+    for (i = PERIPH_CLK_COUNT; i-- > 0; ) {
         whal_Stm32wba_Rcc_DisablePeriphClk(&g_periphClks[i]);
     }
 #endif

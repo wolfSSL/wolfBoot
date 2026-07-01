@@ -710,6 +710,14 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32wba.config
 
+  # DEBUG_UART=1 variant: compiles the GPIO/UART drivers and board.h pin table.
+  stm32wba_wolfhal_debug_uart_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32wba.config
+      make-args: DEBUG_UART=1
+
   # TODO: ti-tms570lc435.config requires F021 Flash API (Windows installer only)
   # ti_tms570lc435_test:
   #   uses: ./.github/workflows/test-build-ti-hercules.yml
