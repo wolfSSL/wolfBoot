@@ -1641,15 +1641,24 @@ int wolfBoot_verify_integrity(struct wolfBoot_image *img)
 {
     uint8_t *stored_sha;
     uint16_t stored_sha_len;
+    /* Reset any cached integrity state up-front, so that a stale sha_ok (and
+     * its complement/canary) left over from a previous verification of a
+     * re-used image cannot survive a failed comparison and produce a
+     * false-positive SHA_OK() result below. */
+    img->sha_hash = NULL;
+    wolfBoot_image_clear_sha_ok(img);
     stored_sha_len = get_header(img, WOLFBOOT_SHA_HDR, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
     if (image_hash(img, digest) != 0)
         return -1;
-    if (image_CT_compare(digest, stored_sha, stored_sha_len) != 0)
+    /* Redundant, fault-hardened digest comparison. On a match this records the
+     * verified digest and sets sha_ok (plus its complement/canary under
+     * ARMORED) through an unskippable callback; otherwise the flags stay
+     * cleared and SHA_OK() below fails the check. */
+    VERIFY_INTEGRITY_FN(img, digest, stored_sha);
+    if (!SHA_OK(img))
         return -1;
-    img->sha_ok = 1;
-    img->sha_hash = stored_sha;
     return 0;
 }
 
@@ -2309,6 +2318,10 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         if (wolfBoot_verify_integrity(img) != 0)
             return -1;
     }
+    /* Integrity must hold before authenticity: assert it in a fault-hardened
+     * way so that skipping the re-check above (or its result) cannot let an
+     * image with an unverified digest reach signature verification. */
+    SHA_SANITY_CHECK(img);
     image_part = image_type & HDR_IMG_TYPE_PART_MASK;
 #ifdef WOLFBOOT_NO_KEYSTORE
     /* No local keystore is linked: there is no per-key partition permission

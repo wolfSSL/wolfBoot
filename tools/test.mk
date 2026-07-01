@@ -1185,7 +1185,7 @@ test-all: clean
 
 
 test-size-all:
-	make test-size SIGN=NONE LIMIT=5048 NO_ARM_ASM=1
+	make test-size SIGN=NONE LIMIT=5072 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=11844 NO_ARM_ASM=1
 	make keysclean
