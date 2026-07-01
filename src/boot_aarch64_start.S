@@ -214,7 +214,15 @@ InitEL3:
     msr    S3_1_C15_C2_0, x0      /* CPUACTLR_EL1 */
 
     /* Program the counter frequency */
+#ifdef TARGET_nxp_ls1028a
+    /* Read the true base frequency from the system counter (CNTFID0 @ SYSCNT
+     * base+0x20 = SYS_REF_CLK/4). The counterfreq constant is the undivided
+     * clock, which would make CNTPCT-based time run ~4x fast. */
+    ldr    x1, =0x023E0020
+    ldr    w0, [x1]
+#else
     ldr    x0,=counterfreq
+#endif
     msr    CNTFRQ_EL0, x0
 
     /* Enable hardware coherency between cores */
@@ -563,6 +571,12 @@ invalidatecaches_end:
 .set Memory,    0x405 | (3 << 8) | (0x0)        /* normal writeback write allocate inner shared read write */
 #endif
 .set Device,    0x409 | (1 << 53) | (1 << 54) | (0x0) /* strongly ordered read write non executable*/
+/* Outer-shareable Normal WB memory. An external DMA master behind the CCI
+ * (e.g. the LS1028A ENETC, a coherent bus-master) must use Outer-Shareable
+ * memory to snoop the A72 caches; Inner-Shareable only covers the CPU cluster. */
+.set MemoryOSH, 0x405 | (2 << 8) | (0x0)
+
+#ifndef TARGET_nxp_ls1028a
 .section .mmu_tbl0,"a"
 
 MMUTableL0:
@@ -735,6 +749,64 @@ converted to 62MB */
 
 .set    SECT, SECT+0x200000    /* 0xFFE0_0000 - 0xFFFF_FFFF*/
 .8byte  SECT + Memory          /* 2MB OCM/TCM */
+
+#else /* TARGET_nxp_ls1028a */
+/* ============================================================================
+ * LS1028A translation tables (4KB granule, 40-bit VA/PA, T0SZ=24).
+ * Memory map:
+ *   0x00000000-0x17FFFFFF  Device  (CCSR: DCFG 0x1E00000, RST 0x1E60000,
+ *                                   SP805 0xC000000, FlexSPI ctrl 0x20C0000, ...)
+ *   0x18000000-0x181FFFFF  Normal  (OCRAM: wolfBoot .data/.bss/stack)
+ *   0x18200000-0x1FFFFFFF  Device
+ *   0x20000000-0x3FFFFFFF  Normal  (FlexSPI NOR: wolfBoot XIP code, executable)
+ *   0x40000000-0x7FFFFFFF  Device
+ *   0x80000000-0xFFFFFFFF  Normal  (DDR, 2GB) Inner-Shareable Cacheable
+ *   0x100000000-0x7FFFFFFFF Device (incl. ENETC ECAM 0x1F0000000 + BAR
+ *                                   0x1F8000000 at the 7-8GB block)
+ * DDR must be Normal Inner-Shareable Cacheable so the CPU is coherent with the
+ * ENETC's coherent bus-master DMA (SICAR=0x27276767). NOR/OCRAM are Normal so
+ * wolfBoot can execute XIP and so its data/stack are cacheable.
+ * ========================================================================== */
+.section .mmu_tbl0,"a"
+MMUTableL0:
+.set   SECT, MMUTableL1
+.8byte SECT + 0x3              /* 0x00_0000_0000 - 0x7F_FFFF_FFFF -> L1 */
+.8byte 0x0                     /* 0x80_0000_0000 - 0xFF_FFFF_FFFF -> invalid */
+
+.section .mmu_tbl1,"a"
+MMUTableL1:
+.set   SECT, MMUTableL2
+.8byte SECT + 0x3             /* 0x0000_0000 - 0x3FFF_FFFF -> L2 (mixed) */
+.set   SECT, 0x40000000
+.8byte SECT + Device         /* 0x4000_0000 - 0x7FFF_FFFF  1GB Device */
+.set   SECT, 0x80000000
+.8byte SECT + MemoryOSH      /* 0x8000_0000 - 0xBFFF_FFFF  1GB DDR (OSH for DMA) */
+.set   SECT, 0xC0000000
+.8byte SECT + MemoryOSH      /* 0xC000_0000 - 0xFFFF_FFFF  1GB DDR (OSH for DMA) */
+.set   SECT, 0x100000000
+.rept  0x1FC                  /* 0x1_0000_0000 - 0x7F_FFFF_FFFF Device (508GB) */
+.8byte SECT + Device         /*  incl. ENETC ECAM/BAR at the 7-8GB block */
+.set   SECT, SECT + 0x40000000
+.endr
+
+.section .mmu_tbl2,"a"
+MMUTableL2:
+.set   SECT, 0x0
+.rept  0xC0                   /* 0x0000_0000 - 0x17FF_FFFF  Device (384MB CCSR) */
+.8byte SECT + Device
+.set   SECT, SECT + 0x200000
+.endr
+.8byte SECT + Memory         /* 0x1800_0000 - 0x181F_FFFF  OCRAM */
+.set   SECT, SECT + 0x200000
+.rept  0x3F                   /* 0x1820_0000 - 0x1FFF_FFFF  Device */
+.8byte SECT + Device
+.set   SECT, SECT + 0x200000
+.endr
+.rept  0x100                  /* 0x2000_0000 - 0x3FFF_FFFF  NOR (512MB, exec) */
+.8byte SECT + Memory
+.set   SECT, SECT + 0x200000
+.endr
+#endif /* TARGET_nxp_ls1028a */
 
 
 /*

@@ -41,8 +41,6 @@
 
 
 void hal_flash_init(void);
-void switch_el3_to_el2(void);
-extern void mmu_enable(void);
 
 #ifdef DEBUG_UART
 void uart_init(void)
@@ -270,11 +268,6 @@ void* hal_get_dts_address(void)
 void* hal_get_dts_update_address(void)
 {
   return (void*)NULL;
-}
-
-void erratum_err050568(void)
-{
-	/* Use IP bus only if systembus PLL is 300MHz (Dont use 300MHz) */
 }
 
 /* Application on Serial NOR Flash device 18.6.3 */
@@ -698,10 +691,6 @@ int ext_flash_erase(uintptr_t address, int len)
 
 void hal_prepare_boot(void)
 {
-    #if 0
-        /* TODO: EL2 */
-        switch_el3_to_el2();
-    #endif
 }
 
 #ifdef TEST_HW_DDR
@@ -814,28 +803,120 @@ static int test_flash(void)
 }
 #endif /* TEST_EXT_FLASH */
 
-/* Function to set MMU MAIR memory attributes base on index */
-void set_memory_attribute(uint32_t attr_idx, uint64_t mair_value)
-{
-    uint64_t mair = 0;
-
-    asm volatile("mrs %0, mair_el3" : "=r"(mair));
-    mair &= ~(0xffUL << (attr_idx * 8));
-    mair |= (mair_value << (attr_idx * 8));
-    asm volatile("msr mair_el3, %0" : : "r"(mair));
-}
-
 void hal_init_tzpc(void)
 {
     TZDECPROT0_SET = 0xff; //0x86;
     TZDECPROT1_SET = 0xff; //0x00;
     TZPCR0SIZE = 0x00; //0x200;
 
-    /* Enable TZASC to allow secure read/write access to the DDR */
-    /* Really, we are allowing the full Region 0 to be R/W in secure world */
+    /* REGION_ATTRIBUTES_0 (0x110) gates only SECURE R/W; non-secure access is
+     * in REGION_ID_ACCESS_0 (0x114). Open NS R/W too, or the non-secure ENETC
+     * bus-master DMA faults (SIUSBEDR[V]/TBSR[SBE]). TF-A programs both. */
     TZASC_ACTION = TZASC_ACTION_ENABLE_DECERR;
     TZASC_REGION_ATTRIBUTES_0 = TZASC_REGION_ATTRIBUTES_ALLOW_SECRW;
+    TZASC_REGION_ID_ACCESS_0 = TZASC_REGION_ID_ACCESS_ALL_NS;
     TZASC_GATE_KEEPER = TZASC_GATE_KEEPER_REQUEST_OPEN;
+}
+
+/* Boot ROM can leave a Cortex-A72 SP805 watchdog armed; unserviced it resets
+ * the SoC mid-boot (DHCP never completes). Print the reset cause + core0 WDT
+ * state, then disable both per-core watchdogs (standard Layerscape hygiene). */
+#define LS1028A_RST_BASE        0x01E60000UL
+#define LS1028A_RSTRQSR1        (LS1028A_RST_BASE + 0x18UL) /* reset request status */
+#define LS1028A_RSTRQSR2        (LS1028A_RST_BASE + 0x1CUL)
+#define LS1028A_RSTRQWDTSRL     (LS1028A_RST_BASE + 0x30UL) /* WDT reset status lo */
+#define LS1028A_RSTRQWDTSRU     (LS1028A_RST_BASE + 0x34UL) /* WDT reset status hi */
+#define LS1028A_WDOG0_BASE      0x0C000000UL  /* cluster1 core0 SP805 */
+#define LS1028A_WDOG1_BASE      0x0C010000UL  /* cluster1 core1 SP805 */
+#define SP805_WDOGVALUE         0x004UL       /* current count (RO) */
+#define SP805_WDOGCONTROL       0x008UL       /* bit0 INTEN, bit1 RESEN */
+#define SP805_WDOGLOCK          0xC00UL
+#define SP805_WDOG_UNLOCK       0x1ACCE551UL
+
+static void ls1028a_wdt_disable(uint32_t base)
+{
+    *(volatile uint32_t *)(base + SP805_WDOGLOCK) = SP805_WDOG_UNLOCK;
+    *(volatile uint32_t *)(base + SP805_WDOGCONTROL) = 0x0UL;
+    *(volatile uint32_t *)(base + SP805_WDOGLOCK) = 0x0UL; /* re-lock */
+}
+
+static void ls1028a_reset_diag(void)
+{
+    uint32_t rstcause, wctrl, wval;
+
+    rstcause = *(volatile uint32_t *)LS1028A_RSTRQSR1;
+    wctrl = *(volatile uint32_t *)(LS1028A_WDOG0_BASE + SP805_WDOGCONTROL);
+    wval = *(volatile uint32_t *)(LS1028A_WDOG0_BASE + SP805_WDOGVALUE);
+    wolfBoot_printf("RST: RSTRQSR1=0x%x WDOG0 ctrl=0x%x val=0x%x\n",
+                    rstcause, wctrl, wval);
+    wolfBoot_printf("RST: RSTRQSR2=0x%x WDTSRL=0x%x WDTSRU=0x%x\n",
+                    *(volatile uint32_t *)LS1028A_RSTRQSR2,
+                    *(volatile uint32_t *)LS1028A_RSTRQWDTSRL,
+                    *(volatile uint32_t *)LS1028A_RSTRQWDTSRU);
+
+    ls1028a_wdt_disable(LS1028A_WDOG0_BASE);
+    ls1028a_wdt_disable(LS1028A_WDOG1_BASE);
+}
+
+/* Bypass the SMMU-500 (TF-A's job): without it the non-secure ENETC DMA is
+ * faulted on its BD prefetch (SIUSBEDR[V]/TBSR[SBE]). Set CLIENTPD + clear
+ * USFCFG in the secure SCR0 and the non-secure NSCR0. */
+#define LS1028A_SMMU_BASE   0x05000000UL
+#define SMMU_SCR0           0x000UL
+#define SMMU_NSCR0          0x400UL
+#define SMMU_SCR0_CLIENTPD  0x00000001UL
+#define SMMU_SCR0_USFCFG    0x00000400UL
+
+static void ls1028a_smmu_bypass(void)
+{
+    volatile uint32_t *scr0  = (volatile uint32_t *)(LS1028A_SMMU_BASE + SMMU_SCR0);
+    volatile uint32_t *nscr0 = (volatile uint32_t *)(LS1028A_SMMU_BASE + SMMU_NSCR0);
+
+    *scr0  = (*scr0  | SMMU_SCR0_CLIENTPD) & ~SMMU_SCR0_USFCFG;
+    *nscr0 = (*nscr0 | SMMU_SCR0_CLIENTPD) & ~SMMU_SCR0_USFCFG;
+}
+
+/* Enable CCI-400 snoop+DVM for the A72 cluster (slave iface 4); TF-A's job.
+ * Without it the coherent ENETC DMA (SICAR=0x27276767) cannot snoop the caches
+ * and takes a bus error (TBSR[SBE]). */
+#define LS1028A_CCI_BASE        0x04090000UL
+#define CCI_SLAVE_IFACE4        0x5000UL   /* A72 cluster 0 */
+#define CCI_SNOOP_CTRL          0x000UL
+#define CCI_SNOOP_EN            0x00000001UL
+#define CCI_DVM_EN              0x00000002UL
+#define CCI_STATUS              0x00CUL
+#define CCI_STATUS_CHANGE_PEND  0x00000001UL
+
+static void ls1028a_cci_enable_coherency(void)
+{
+    volatile uint32_t *snoop = (volatile uint32_t *)
+        (LS1028A_CCI_BASE + CCI_SLAVE_IFACE4 + CCI_SNOOP_CTRL);
+    volatile uint32_t *status = (volatile uint32_t *)
+        (LS1028A_CCI_BASE + CCI_STATUS);
+
+    *snoop = *snoop | CCI_SNOOP_EN | CCI_DVM_EN;
+    while ((*status & CCI_STATUS_CHANGE_PEND) != 0U) {
+    }
+}
+
+/* Enable the ARMv8 system counter (TF-A's job): route to the A72 (CLTBENR b0)
+ * and start it (CNTCR.EN), or CNTPCT stays frozen and DHCP never retries.
+ * CNTFRQ_EL0 is published from CNTFID0 in boot_aarch64_start.S. */
+#define LS1028A_PMU_BASE        0x01E30000UL
+#define PMU_CLTBENR             0x18A0UL       /* cluster timer base enable */
+#define LS1028A_SYSCNT_BASE     0x023E0000UL
+#define SYSCNT_CNTCR            0x000UL
+#define SYSCNT_CNTCR_EN         0x00000001UL
+
+static void ls1028a_enable_syscounter(void)
+{
+    volatile uint32_t *cltbenr = (volatile uint32_t *)
+        (LS1028A_PMU_BASE + PMU_CLTBENR);
+    volatile uint32_t *cntcr = (volatile uint32_t *)
+        (LS1028A_SYSCNT_BASE + SYSCNT_CNTCR);
+
+    *cltbenr = *cltbenr | 0x1U;          /* cluster 0 timer base */
+    *cntcr = *cntcr | SYSCNT_CNTCR_EN;   /* start the system counter */
 }
 
 void hal_init(void)
@@ -845,6 +926,11 @@ void hal_init(void)
     uart_init();
     wolfBoot_printf("wolfBoot Init\n");
 #endif
+
+    ls1028a_reset_diag();
+    ls1028a_smmu_bypass();
+    ls1028a_cci_enable_coherency();
+    ls1028a_enable_syscounter();
 
     hal_init_tzpc();
 
@@ -877,12 +963,6 @@ void hal_init(void)
     else {
         wolfBoot_printf("DDR R/W test passed\n");
     }
-#endif
-
-#if 0
-    /* TODO: MMU enable? */
-    mmu_enable();
-    wolfBoot_printf("MMU init done\n");
 #endif
 }
 

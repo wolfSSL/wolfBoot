@@ -106,6 +106,13 @@ ifeq ($(ARCH),AARCH64)
   ifeq ($(TARGET),nxp_ls1028a)
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
+    # ZynqMP RVBAR (0xFD5C0040) does not exist on LS1028A -- the store faults
+    # pre-UART. LS1028A reset vector comes from the boot ROM (DCFG BOOTLOCPTR),
+    # so skip the RVBAR write.
+    CFLAGS+=-DSKIP_RVBAR=1
+    # MMU enabled: boot_aarch64_start.S has an LS1028A table (DDR Normal
+    # Inner-Shareable Cacheable, OCRAM/NOR Normal, CCSR/ECAM/BAR Device). Cacheable
+    # DDR is required for coherency with the ENETC coherent DMA (SICAR=0x27276767).
 
     CFLAGS +=-ffunction-sections -fdata-sections
     LDFLAGS+=-Wl,--gc-sections
@@ -849,11 +856,19 @@ ifeq ($(ARCH),PPC)
   endif
 
   ifneq ($(NO_ASM),1)
-    # Use the SHA256 and SP math all assembly accelerations
+    # Use the SHA256/SHA512 and SP math assembly accelerations.
+    # (wolfSSL PR 10767 added the SHA-512 PPC32 asm transform; SHA384/SHA512
+    # hashing in sha512.c now references Transform_Sha512_Len.) The unused
+    # object is pruned by --gc-sections when sha512.o is not linked (ED25519).
     CFLAGS+=-DWOLFSSL_SP_PPC
     CFLAGS+=-DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE
     #CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+    # Gate the SHA-512 PPC32 asm object on its source existing (wolfSSL PR 10767):
+    # older pinned checkouts lack it, so degrade gracefully rather than fail to
+    # find the source. sha512.o is pruned by --gc-sections for the default
+    # (non-SHA512) bootloader; a SHA512-using PPC config needs the submodule bump.
+    MATH_OBJS+=$(patsubst %.c,%.o,$(wildcard $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha512-asm_c.c))
   endif
 endif
 

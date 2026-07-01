@@ -79,6 +79,23 @@
     #endif
         return (sys_clk * plat_ratio) / 16;
     }
+#elif defined(TARGET_nxp_ls1028a)
+    /* ARMv8 generic system counter (enabled by the wolfBoot HAL). */
+    static unsigned long long a64_start_ticks = 0;
+
+    static unsigned long long a64_get_ticks(void)
+    {
+        unsigned long long v;
+        __asm__ volatile ("mrs %0, cntpct_el0" : "=r"(v));
+        return v;
+    }
+
+    static unsigned long long a64_get_hz(void)
+    {
+        unsigned long long v;
+        __asm__ volatile ("mrs %0, cntfrq_el0" : "=r"(v));
+        return v;
+    }
 #else
     /* Simple tick counter fallback */
     static volatile unsigned int tick_counter = 0;
@@ -107,6 +124,13 @@ unsigned long my_time(unsigned long* timer)
         ppc_tb_hz = ppc_get_timebase_hz();
     {
         unsigned long t = (unsigned long)(ppc_get_ticks() / ppc_tb_hz);
+        if (timer) *timer = t;
+        return t;
+    }
+#elif defined(TARGET_nxp_ls1028a)
+    {
+        unsigned long long hz = a64_get_hz();
+        unsigned long t = (hz != 0) ? (unsigned long)(a64_get_ticks() / hz) : 0;
         if (timer) *timer = t;
         return t;
     }
@@ -140,6 +164,15 @@ double current_time(int reset)
     if (reset)
         ppc_start_ticks = ppc_get_ticks();
     return (double)(ppc_get_ticks() - ppc_start_ticks) / (double)ppc_tb_hz;
+#elif defined(TARGET_nxp_ls1028a)
+    {
+        unsigned long long hz = a64_get_hz();
+        if (reset)
+            a64_start_ticks = a64_get_ticks();
+        if (hz == 0)
+            return 0.0;
+        return (double)(a64_get_ticks() - a64_start_ticks) / (double)hz;
+    }
 #else
     /* Simple counter-based timing */
     if (reset)

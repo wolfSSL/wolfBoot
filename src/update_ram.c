@@ -49,7 +49,12 @@ extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
-extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
+extern uint8_t _end[];        /* linker symbol: end of wolfBoot BSS */
+/* Start of wolfBoot text. Weak: some target linker scripts (e.g. zynqmp's
+ * zynq.ld) do not define it. When absent it resolves to 0, which reduces the
+ * overlap test below to the original "dst < _end" (correct when wolfBoot sits
+ * at the bottom of RAM with the image loaded above it). */
+extern uint8_t _start_text[] __attribute__((weak));
 #endif
 
 #if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
@@ -67,6 +72,9 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
     int ret;
     uint32_t img_size;
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    uint8_t *img_end;
+#endif
     BENCHMARK_DECLARE();
 
     /* read header into RAM */
@@ -114,11 +122,18 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
-    /* Runtime overlap check: ensure image destination does not overwrite
-     * wolfBoot's own code/data/bss in RAM. */
-    if ((uintptr_t)dst < (uintptr_t)_end) {
-        wolfBoot_printf("Error: image dest %p overlaps wolfBoot end %p\n",
-            dst, _end);
+    /* Runtime overlap check: ensure the image load region does not intersect
+     * wolfBoot's own code/data/bss in RAM. Full interval-overlap test (not
+     * just dst < _end) so it is correct whether wolfBoot is relocated to the
+     * bottom of RAM (image loads above it) or to the top -- the T1040/T1024
+     * two-stage boot relocates wolfBoot near the 2GB DDR top and the image
+     * loads low. wolfBoot occupies [_start_text, _end]. If _start_text is not
+     * defined by the linker it is a weak 0, and this reduces to "dst < _end". */
+    img_end = dst + IMAGE_HEADER_SIZE + img_size;
+    if ((uintptr_t)dst < (uintptr_t)_end &&
+        (uintptr_t)img_end > (uintptr_t)_start_text) {
+        wolfBoot_printf("Error: image %p..%p overlaps wolfBoot %p..%p\n",
+            dst, img_end, _start_text, _end);
         return -1;
     }
 #endif
