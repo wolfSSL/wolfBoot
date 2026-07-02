@@ -100,6 +100,8 @@ The following events are recorded:
   (`WOLFBOOT_FAILURE_PHASE_UPDATE`).
 - A boot image failed verification, triggering an emergency update
   (`WOLFBOOT_FAILURE_PHASE_BOOT`).
+- The emergency-update image also failed verification, leaving the device
+  unbootable (`WOLFBOOT_FAILURE_PHASE_RECOVERY`).
 - A rollback was caused by a new image that never confirmed via
   `wolfBoot_success()` (`WOLFBOOT_FAILURE_PHASE_ROLLBACK`).
 
