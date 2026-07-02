@@ -2651,11 +2651,16 @@ cleanup:
 
 uint64_t arg2num(const char *arg, size_t len)
 {
-    uint64_t ret = (uint64_t) -1;
+    uint64_t ret;
+    errno = 0;
     if (strncmp(arg, "0x", 2) == 0) {
-       ret = strtoll(arg + 2, NULL, 16);
+       ret = strtoull(arg + 2, NULL, 16);
     } else {
-        ret = strtoll(arg, NULL, 10);
+        ret = strtoull(arg, NULL, 10);
+    }
+    if ((len == 8) && (errno == ERANGE)) {
+        fprintf(stderr, "Custom TLV value out of range: %s\n", arg);
+        exit(16);
     }
     switch (len) {
         case 1:
