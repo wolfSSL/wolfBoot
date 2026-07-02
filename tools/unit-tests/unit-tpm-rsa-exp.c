@@ -29,6 +29,7 @@ static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
 static uint8_t test_nv_digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint32_t captured_exponent;
 static int forbidden_memcmp_calls;
+static uint32_t mock_nv_digest_sz;
 
 int keyslot_id_by_sha(const uint8_t* pubkey_hint)
 {
@@ -127,7 +128,7 @@ int wolfTPM2_NVReadAuth(WOLFTPM2_DEV* dev, WOLFTPM2_NV* nv,
     (void)offset;
     ck_assert_uint_eq(*pDataSz, WOLFBOOT_SHA_DIGEST_SIZE);
     memcpy(dataBuf, test_nv_digest, WOLFBOOT_SHA_DIGEST_SIZE);
-    *pDataSz = WOLFBOOT_SHA_DIGEST_SIZE;
+    *pDataSz = mock_nv_digest_sz;
     return 0;
 }
 
@@ -173,6 +174,7 @@ static void setup(void)
     memset(test_nv_digest, 0x7C, sizeof(test_nv_digest));
     captured_exponent = 0;
     forbidden_memcmp_calls = 0;
+    mock_nv_digest_sz = WOLFBOOT_SHA_DIGEST_SIZE;
 }
 
 START_TEST(test_wolfBoot_load_pubkey_decodes_der_exponent_bytes)
@@ -206,6 +208,34 @@ START_TEST(test_wolfBoot_check_rot_avoids_memcmp_on_digest_compare)
 }
 END_TEST
 
+START_TEST(test_wolfBoot_check_rot_rejects_mismatched_digest)
+{
+    uint8_t hint[WOLFBOOT_SHA_DIGEST_SIZE];
+    int rc;
+
+    memcpy(hint, test_nv_digest, sizeof(hint));
+    hint[0] ^= 0x01;
+
+    rc = wolfBoot_check_rot(0, hint);
+
+    ck_assert_int_ne(rc, 0);
+}
+END_TEST
+
+START_TEST(test_wolfBoot_check_rot_rejects_wrong_digest_size)
+{
+    uint8_t hint[WOLFBOOT_SHA_DIGEST_SIZE];
+    int rc;
+
+    memcpy(hint, test_nv_digest, sizeof(hint));
+    mock_nv_digest_sz = WOLFBOOT_SHA_DIGEST_SIZE - 1;
+
+    rc = wolfBoot_check_rot(0, hint);
+
+    ck_assert_int_ne(rc, 0);
+}
+END_TEST
+
 static Suite *tpm_suite(void)
 {
     Suite *s;
@@ -216,6 +246,8 @@ static Suite *tpm_suite(void)
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_wolfBoot_load_pubkey_decodes_der_exponent_bytes);
     tcase_add_test(tc, test_wolfBoot_check_rot_avoids_memcmp_on_digest_compare);
+    tcase_add_test(tc, test_wolfBoot_check_rot_rejects_mismatched_digest);
+    tcase_add_test(tc, test_wolfBoot_check_rot_rejects_wrong_digest_size);
     suite_add_tcase(s, tc);
     return s;
 }
