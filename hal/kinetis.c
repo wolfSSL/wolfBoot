@@ -337,6 +337,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             ret = FLASH_Program(&pflash, address, (uint8_t*)data + w, len_align);
             if (ret != kStatus_FTFx_Success)
                 return -1;
+            w += len_align;
             len -= len_align;
             address += len_align;
         }

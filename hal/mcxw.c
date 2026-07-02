@@ -183,6 +183,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 write_flash_qword((uint32_t *)(address + i),
                                   (const uint32_t *)(data + w + i));
             }
+            w += len_align;
             len -= len_align;
             address += len_align;
         }

@@ -136,6 +136,31 @@ START_TEST(test_unaligned_write_single_word)
 }
 END_TEST
 
+/* An aligned write longer than one flash word takes the bulk fast path
+ * (FLASH_ProgramPhrase over data + w) for the first 16 bytes, then a
+ * partial-word tail for the rest. The fast path must advance the data source
+ * index "w" by the bulk length; if it does not, the tail re-reads the input
+ * from the start and programs the wrong bytes. Write 24 bytes at an aligned
+ * address: mock_flash[0..23] must equal the input. Before the fix,
+ * mock_flash[16..23] held data[0..7] instead of data[16..23]. */
+START_TEST(test_aligned_write_bulk_then_tail)
+{
+    uint8_t data[24];
+    int i;
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+
+    for (i = 0; i < 24; i++)
+        data[i] = (uint8_t)(i + 1);
+
+    ck_assert_int_eq(hal_flash_write(base, data, 24), 0);
+
+    for (i = 0; i < 24; i++)
+        ck_assert_uint_eq(mock_flash[i], data[i]);
+    for (i = 24; i < MOCK_FLASH_SIZE; i++)
+        ck_assert_uint_eq(mock_flash[i], 0xFF);
+}
+END_TEST
+
 Suite *flash_write_suite(void)
 {
     Suite *s = suite_create("flash-write-mcxa");
@@ -144,6 +169,7 @@ Suite *flash_write_suite(void)
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_unaligned_write_spanning_two_words);
     tcase_add_test(tc, test_unaligned_write_single_word);
+    tcase_add_test(tc, test_aligned_write_bulk_then_tail);
 
     suite_add_tcase(s, tc);
     return s;
