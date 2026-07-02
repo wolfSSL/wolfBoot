@@ -266,6 +266,30 @@ START_TEST(test_shorter_overwrite_clears_tail)
 }
 END_TEST
 
+START_TEST(test_cache_commit_zeroizes_cached_sector)
+{
+    int ret;
+    int i;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    /* Simulate cached_sector staging key-object plaintext, as every
+     * caller of cache_commit() does before committing to flash. */
+    memset(cached_sector, 0x5A, sizeof(cached_sector));
+
+    cache_commit(0);
+
+    for (i = 0; i < (int)sizeof(cached_sector); i++) {
+        ck_assert_msg(cached_sector[i] == 0,
+            "cached_sector retains stale data at offset %d: 0x%02x",
+            i, cached_sector[i]);
+    }
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot-psa-store");
@@ -275,6 +299,7 @@ Suite *wolfboot_suite(void)
     TCase *tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase *tcase_find_bounds = tcase_create("find_bounds");
     TCase *tcase_tail = tcase_create("shorter_overwrite_clears_tail");
+    TCase *tcase_zeroize = tcase_create("cache_commit_zeroizes_cached_sector");
 
     tcase_add_test(tcase_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -282,12 +307,14 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     tcase_add_test(tcase_tail, test_shorter_overwrite_clears_tail);
+    tcase_add_test(tcase_zeroize, test_cache_commit_zeroizes_cached_sector);
     suite_add_tcase(s, tcase_write);
     suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete);
     suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
     suite_add_tcase(s, tcase_tail);
+    suite_add_tcase(s, tcase_zeroize);
     return s;
 }
 

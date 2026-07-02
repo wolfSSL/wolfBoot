@@ -184,6 +184,11 @@ static void cache_commit(uint32_t offset)
     hal_flash_write((uintptr_t)vault_base + offset, cached_sector, WOLFBOOT_SECTOR_SIZE);
 
     hal_flash_lock();
+
+    /* cached_sector may hold key-object plaintext; every caller commits it
+     * to flash and then either overwrites it before reuse or returns, so
+     * it is safe to wipe it here right after the last use. */
+    wc_ForceZero(cached_sector, sizeof(cached_sector));
 }
 
 static void restore_backup(uint32_t offset)
