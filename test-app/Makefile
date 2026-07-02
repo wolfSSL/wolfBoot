@@ -101,6 +101,13 @@ else
   endif
 endif
 
+# Disable Thumb2 ASM for MAX32666 before arch.mk: hardware TPU handles AES
+ifeq ($(TARGET),max32666)
+  ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
+    NO_ARM_ASM=1
+  endif
+endif
+
 include ../arch.mk
 
 ifeq ($(USE_CLANG),1)
@@ -144,6 +151,23 @@ endif
 
 # wolfCrypt Test and Benchmark Support
 WOLFCRYPT_SUPPORT=0
+
+# MAX32666 hardware crypto test (MSDK TPU/MAA/TRNG acceleration)
+# Base TPU/SHA support and MSDK paths are inherited from arch.mk
+# when MAX3266X_TPU=1. This block adds the extra features for the
+# full crypto test (AES, RNG, MAA math, ECDHE).
+ifeq ($(TARGET),max32666)
+  ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
+    CFLAGS += -DWOLFCRYPT_MAX32666_TEST
+    CFLAGS += -DMAX3266X_RNG -DMAX3266X_AES -DMAX3266X_MATH
+    CFLAGS += -DHAVE_ECC_CDH -DHAVE_ECC_DHE
+    CFLAGS += -DHAVE_AESGCM -DGCM_TABLE
+    CFLAGS += -DENCRYPT_WITH_AES256
+    CFLAGS += -DWOLFSSL_SP_MATH_ALL
+    CFLAGS += -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/
+    WOLFCRYPT_SUPPORT=1
+  endif
+endif
 
 ifeq ($(WOLFCRYPT_TEST),1)
   CFLAGS+=-DWOLFCRYPT_TEST
@@ -598,6 +622,31 @@ ifeq ($(TARGET),nrf5340_net)
   CFLAGS+=-mcpu=cortex-m33+nodsp+nofp
   LDFLAGS+=-mcpu=cortex-m33+nodsp+nofp
   LSCRIPT_TEMPLATE=ARM-nrf5340_net.ld
+endif
+
+ifeq ($(TARGET),max32666)
+  LSCRIPT_TEMPLATE=ARM-max32666.ld
+  ifeq ($(WOLFCRYPT_MAX32666_TEST),1)
+    ifeq ($(MAX3266X_OLD),1)
+      MAX3266X_SRC := $(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source
+      APP_OBJS += $(MAX3266X_SRC)/hash.o
+      APP_OBJS += $(MAX3266X_SRC)/cipher.o
+      APP_OBJS += $(MAX3266X_SRC)/maa.o
+      APP_OBJS += $(MAX3266X_SRC)/mem_utils.o
+      APP_OBJS += $(MAX3266X_SRC)/trng.o
+      APP_OBJS += $(MAX3266X_SRC)/mxc_sys.o
+      APP_OBJS += $(MAX3266X_SRC)/mxc_delay.o
+    else
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_reva.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/trng_revb.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o
+      APP_OBJS += $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+    endif
+    APP_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
+  endif
 endif
 
 ifeq ($(TARGET),ti_hercules)

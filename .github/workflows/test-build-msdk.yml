@@ -1,0 +1,52 @@
+name: Wolfboot Reusable Build Workflow for Analog Devices MSDK
+
+on:
+
+  workflow_call:
+    inputs:
+      arch:
+        required: true
+        type: string
+      config-file:
+        required: true
+        type: string
+      make-args:
+        required: false
+        type: string
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.3
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/checkout@main
+        with:
+          repository: analogdevicesinc/msdk
+          path: msdk
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: make distclean
+        run: |
+          make distclean
+
+      - name: Select config
+        run: |
+          cp ${{inputs.config-file}} .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Build wolfboot
+        run: |
+          make MSDK_DIR="$GITHUB_WORKSPACE/msdk" ${{inputs.make-args}} V=1

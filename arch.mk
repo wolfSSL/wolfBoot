@@ -187,6 +187,45 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  ifeq ($(TARGET),max32666)
+    ARCH_FLASH_OFFSET=0x10000000
+    ifeq ($(MAX32666_FTHR2),1)
+      CFLAGS+=-DMAX32666_FTHR2
+    endif
+    # MAX3266X TPU hardware SHA256 acceleration (requires MSDK_DIR)
+    ifeq ($(MAX3266X_TPU),1)
+      NO_ARM_ASM=1
+      CFLAGS+=-DMAX3266X_SHA -DFAST_MEMCPY
+      CFLAGS+=-ffunction-sections -fdata-sections
+      CFLAGS+=-DTARGET=MAX32665 -DTARGET_REV=0x4131
+      ifeq ($(MAX3266X_OLD),1)
+        # Older Maxim SDK tree (flat MAX32665PeriphDriver layout)
+        CFLAGS+=-DWOLFSSL_MAX3266X_OLD
+        MAX3266X_CFLAGS:= \
+          -I$(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Include/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+        CFLAGS+=$(MAX3266X_CFLAGS)
+        OBJS+=$(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source/mxc_sys.o \
+              $(MSDK_DIR)/Libraries/MAX32665PeriphDriver/Source/mxc_delay.o
+      else
+        CFLAGS+=-DWOLFSSL_MAX3266X
+        MAX3266X_CFLAGS:= \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Include/MAX32665/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Device/Maxim/MAX32665/Include/ \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/ \
+          -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/ \
+          -I$(MSDK_DIR)/Libraries/CMSIS/Include/
+        CFLAGS+=$(MAX3266X_CFLAGS)
+        OBJS+=$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_me14.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/TPU/tpu_reva.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/sys_me14.o \
+              $(MSDK_DIR)/Libraries/PeriphDrivers/Source/SYS/mxc_delay.o
+      endif
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/maxim/max3266x.o
+    endif
+  endif
+
   ifeq ($(TARGET),pic32cz)
     ARCH_FLASH_OFFSET=0x08000000
     CORTEX_M7=1

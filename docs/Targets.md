@@ -5,6 +5,7 @@ This README describes configuration of supported targets.
 ## Supported Targets
 
 * [Simulated](#simulated)
+* [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
@@ -8491,3 +8492,113 @@ Number of public keys: 1
   11 0C FA F6 B5 F9 59 BA B9 A5 8E 34 4A CD C5 83
   7E 43 EF 61 6E C4 15 88 3C FE D6 76 47 D9 82 A4
 ```
+
+## Analog Devices MAX32666
+
+The Analog Devices MAX32665/MAX32666 family features a dual Cortex-M4 at 96 MHz
+with 1MB internal flash (2 x 512KB banks), 560KB SRAM, and BLE 5.
+
+wolfBoot has been tested on the MAX32666FTHR board with a MAX32625PICO debug adapter,
+as well as the MAX32666FTHR2 board with the onboard debugger.
+
+**Key Features:**
+- ARM Cortex-M4 core at 96 MHz (HIRC96M oscillator)
+- 1MB Flash: 8KB page erase, 128-bit (16-byte) write unit, dual-bank (FLC0/FLC1)
+- 560KB SRAM
+- Bare-metal implementation (no MSDK required for boot)
+- UART debug output (115200 8N1):
+  - FTHR board: UART1 MAP_B, P1.13 TX, P1.12 RX (via external MAX32625PICO)
+  - FTHR2 board: UART0 MAP_A, P0.9 TX, P0.10 RX (via onboard debugger)
+
+### MAX32666: Memory Layout
+
+Internal-flash-only layout (default):
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| Bootloader | 0x10000000 - 0x10007FFF | 32 KB |
+| Boot Partition | 0x10008000 - 0x10047FFF | 256 KB |
+| Update Partition | 0x10048000 - 0x10087FFF | 256 KB |
+| Swap Sector | 0x10088000 - 0x10089FFF | 8 KB |
+
+### MAX32666: Building
+
+```sh
+cp config/examples/max32666.config .config
+make clean
+make keysclean
+make
+```
+
+Expected wolfBoot size: ~25KB (ECC256 + SHA256 with Cortex-M4 ASM).
+
+### MAX32666: Flashing
+
+The MAX32666FTHR board uses an external MAX32625PICO debug adapter (CMSIS-DAP).
+An OpenOCD target config is provided at `tools/openocd/max32665.cfg`.
+
+**Important:** If multiple CMSIS-DAP probes are connected, specify the PICO's
+serial number with `cmsis_dap_serial`. Find it with:
+`ls /dev/serial/by-id/ | grep DAPLink`
+
+```sh
+# Flash the factory image (wolfBoot + signed test-app)
+openocd -f interface/cmsis-dap.cfg \
+    -c "cmsis_dap_serial <your-pico-serial>" \
+    -f tools/openocd/max32665.cfg \
+    -c "adapter speed 1000" \
+    -c "program factory.bin 0x10000000 verify reset exit"
+```
+
+### MAX32666: UART Console
+
+The FTHR board routes UART1 (P1.12 RX, P1.13 TX) through the PICO adapter's
+CDC serial interface. The serial port appears as the DAPLink's `-if01` interface:
+
+```sh
+# Find the serial port
+ls /dev/serial/by-id/ | grep DAPLink
+
+# Connect (typically /dev/ttyACMx)
+minicom -D /dev/ttyACM2 -b 115200
+# or
+screen /dev/serial/by-id/usb-ARM_DAPLink_CMSIS-DAP_*-if01 115200
+```
+
+Expected output on first boot:
+
+```
+wolfBoot Version: X.Y.Z (date time)
+```
+
+Followed by the test application:
+
+```
+MAX32666 Test App v1
+Boot success marked. Version: 1
+```
+
+### MAX32666: Configuration Options
+
+| Option | Description |
+|--------|-------------|
+| `NVM_FLASH_WRITEONCE` | **Required.** Flash can only be written once between erases. |
+| `RAM_CODE` | **Required.** Run flash erase/write from RAM (executing from same flash). |
+| `DEBUG_UART` | Enable UART0 debug output (115200 baud, 8N1). |
+| `EXT_FLASH` | Enable external flash support (for QSPI NAND configuration). |
+| `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
+| `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
+| `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
+
+### MAX32666: External QSPI NAND Configuration
+
+A separate configuration is provided for external QSPI NAND flash (Micron
+MT29F8G01ADBFD12) as firmware update storage:
+
+```sh
+cp config/examples/max32666-nand.config .config
+make clean
+make
+```
+
+See [config/examples/max32666-nand.config](/config/examples/max32666-nand.config) for details.
