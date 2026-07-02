@@ -336,6 +336,66 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-I$(PICO_SDK_PATH)/src/common/pico_stdlib_headers/include
   endif
 
+  ifeq ($(TARGET),rtl8735b)
+     # RealTek RTL8735B SoC (Cortex-M33), e.g. the AmebaPro2 EVB. wolfBoot is
+     # staged into SRAM by the RealTek bootloader and copies the verified app
+     # from external SPI NOR into DDR before jumping (src/update_ram.c RAMBOOT).
+     CORTEX_M33=1
+     CFLAGS+=-Ihal
+     # ASDK 10.3.0 toolchain (system arm-none-eabi-gcc clashes on newlib/lwip).
+     CROSS_COMPILE:=$(ASDK_PATH)/arm-none-eabi-
+     # Match the RealTek SDK FPU/ABI (-mfpu=fpv5-sp-d16 -mfloat-abi=softfp) so
+     # linking the SDK libraries is consistent; wolfBoot enables the FPU at
+     # hal_init before any SDK code runs.
+     CFLAGS+=-mfpu=fpv5-sp-d16 -mfloat-abi=softfp
+     LDFLAGS+=-mfpu=fpv5-sp-d16 -mfloat-abi=softfp
+     UPDATE_OBJS:=src/update_ram.o
+     CFLAGS+=-DWOLFBOOT_DUALBOOT
+     CFLAGS+=-ffunction-sections -fdata-sections
+     LDFLAGS+=-Wl,--gc-sections
+     # Flash/UART/cache backend: "sdk" (default, RealTek SDK drivers) or "bare"
+     # (smaller, no SDK dependency -- not yet implemented). See hal/rtl8735b.c.
+     HAL_BACKEND?=sdk
+     ifeq ($(HAL_BACKEND),sdk)
+       CFLAGS+=-DHAL_BACKEND_SDK
+       # The SDK backend folds the RealTek SDK driver chain into hal/rtl8735b.o.
+       # Its objects.h pulls the SDK's "hal.h" (defines flash_t,
+       # hal_audio_adapter_t, ...); wolfBoot also ships "hal.h". hal/rtl8735b.c
+       # does not include wolfBoot's hal.h, and the SDK dirs are passed with
+       # -iquote (searched before the global -I for quoted includes) so the SDK
+       # objects.h "hal.h" resolves to the SDK one for THIS object only. sdk-shim
+       # supplies a stub cmsis_os.h so the chain does not pull CMSIS-OS/FreeRTOS
+       # (wolfBoot never calls it). The CONFIG_* defines mirror the bare-metal
+       # bootloader build; -mcmse satisfies the SDK cache header (SCB_NS). The
+       # rest of wolfBoot stays plain M33.
+       HAL_SDK_IQUOTE=-iquote $(WOLFBOOT_ROOT)/hal/rtl8735b/sdk-shim \
+               -iquote $(AMEBA_SDK)/component/mbed/hal_ext \
+               -iquote $(AMEBA_SDK)/component/mbed/hal \
+               -iquote $(AMEBA_SDK)/component/mbed/api \
+               -iquote $(AMEBA_SDK)/component/mbed/targets/hal/rtl8735b \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/fwlib/rtl8735b/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/fwlib/rtl8735b/lib/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/cmsis/rtl8735b/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/cmsis/rtl8735b/lib/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/cmsis/cmsis-core/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/app/rtl_printf/include \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/app/stdio_port \
+               -iquote $(AMEBA_SDK)/component/soc/8735b/misc/utilities/include \
+               -iquote $(AMEBA_SDK)/component/os/os_dep/include
+       # The same dirs as plain -I too, so angle-bracket includes (e.g. some
+       # CMSIS-Core headers) resolve; -iquote only covers quoted includes.
+       HAL_SDK_INC=$(patsubst -iquote,-I,$(HAL_SDK_IQUOTE))
+       HAL_SDK_DEFS=-DCONFIG_PLATFORM_8735B -DCONFIG_RTL8735B_PLATFORM=1 \
+               -DCONFIG_BUILD_RAM=1
+       hal/rtl8735b.o: CFLAGS += $(HAL_SDK_IQUOTE) $(HAL_SDK_INC) $(HAL_SDK_DEFS) -mcmse
+       # Final link also needs the SDK fwlib + ROM symbol table; point at the
+       # prebuilt SDK lib/objects and ROM symbol linker file during bring-up:
+       #   make TARGET=rtl8735b LIBS+=... LDFLAGS_EXTRA="-T<rom_symbol.ld>"
+     else
+       CFLAGS+=-DHAL_BACKEND_BARE
+     endif
+  endif
+
   ifeq ($(TARGET),sama5d3)
      CORTEX_A5=1
      UPDATE_OBJS:=src/update_ram.o

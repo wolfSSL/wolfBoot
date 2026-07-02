@@ -34,6 +34,7 @@ This README describes configuration of supported targets.
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
+* [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX72N](#renesas-rx72n)
@@ -8491,3 +8492,124 @@ Number of public keys: 1
   11 0C FA F6 B5 F9 59 BA B9 A5 8E 34 4A CD C5 83
   7E 43 EF 61 6E C4 15 88 3C FE D6 76 47 D9 82 A4
 ```
+
+## RealTek RTL8735B (AmebaPro2)
+
+Tested on the RealTek RTL8735B (AmebaPro2) EVB. The RTL8735B is an Arm Cortex-M33 AIoT SoC with a vendor secure-boot ROM, an external SPI NOR flash, and DDR/PSRAM.
+
+wolfBoot does not replace the RealTek secure-boot ROM; it runs as a second-stage verified bootloader and A/B firmware-update engine. The RealTek ROM authenticates `boot.bin`, `boot.bin` stages wolfBoot into SRAM via a RealTek `RAM_FUNCTION_START_TABLE`, and wolfBoot then verifies the application in external SPI NOR, applies any pending update, copies the verified image into DDR, and jumps to it. This is the non-TrustZone "Model A" integration.
+
+Because wolfBoot runs from SRAM and its partitions live in external SPI NOR, the target uses `EXT_FLASH=1` and `NO_XIP=1`; the application is loaded to `WOLFBOOT_LOAD_ADDRESS` in DDR by the `src/update_ram.c` RAMBOOT path.
+
+### Flash/UART/cache backend
+
+The HAL (`hal/rtl8735b.c`) has two backends, selected with `HAL_BACKEND`:
+
+* `HAL_BACKEND=sdk` (default) - flash and cache use the RealTek SDK drivers (`flash_api`, `hal_cache`); the `DEBUG_UART` console uses a small self-contained UART1 driver in the HAL (it does not depend on the OS-bound SDK `hal_uart_init`). wolfBoot links against the SDK SoC libraries and the ROM symbol table.
+* `HAL_BACKEND=bare` - scaffold for a smaller backend with no SDK dependency (direct register/ROM access). It links a standalone `wolfboot.elf`, but the `ext_flash_*` entry points are still stubs that return `-1`, so it is not yet functional. Work in progress.
+
+### Console (DEBUG_UART)
+
+`DEBUG_UART=1` routes wolfBoot's log to UART1 (the RealTek "LOGUART" at `0x40040400`, pins PORT_F pin 4 = TX / pin 3 = RX), which reaches the EVB USB serial console at 115200 8N1. wolfBoot brings UART1 up itself (pinmux + clock enable + 115200 8N1). The RealTek boot ROM and `boot.bin` also print on this same UART before wolfBoot, so the vendor boot messages appear first, followed immediately by the wolfBoot banner. A successful boot looks like:
+
+```
+wolfBoot HAL: RTL8735B (AmebaPro2) init
+wolfBoot HAL: flash init done
+Versions: Boot 1, Update 0
+Trying Boot partition at 0x520000
+Loading header 256 bytes from 0x520000 to 0x700FFF00
+Loading image 132 bytes from 0x520100 to 0x70100000...done
+Checking integrity...done
+Verifying signature...done
+Booting at 0x70100000
+```
+
+### Partition layout
+
+wolfBoot itself is packaged into the RealTek `PT_FW1` region (`0x60000`). The BOOT/UPDATE partitions are raw SPI NOR offsets (addressed only by `ext_flash_*`) carved out of the unused `PT_FW2` region so they do not collide with the RealTek partition table:
+
+| Partition   | Address    | Size      | Description |
+|-------------|------------|-----------|-------------|
+| Boot        | 0x520000   | 0x180000  | Running, verified application |
+| Update      | 0x6A0000   | 0x180000  | Staged incoming update |
+| Swap        | 0x820000   | 0x1000    | Reserved (see note) |
+
+These addresses are board-specific; confirm them against the board's `amebapro2_partitiontable.json`. The Swap partition is reserved by the configuration but unused in this RAMBOOT model, which selects between BOOT and UPDATE by version rather than copy-swapping through a swap sector.
+
+### Application load address
+
+The verified application is copied into DDR at `WOLFBOOT_LOAD_ADDRESS` (`0x70100000`) and launched there. The application's vector table must be linked to this same address: `do_boot()` reads word[0] as the initial MSP and word[1] as the entry point, and sets `VTOR` to the base. The DDR memory window starts at `0x70000000` (128 MB); the load address is kept 1 MB inside it because the RAMBOOT path places the image header at `WOLFBOOT_LOAD_ADDRESS - IMAGE_HEADER_SIZE`, which must also land in DDR.
+
+### Building RealTek RTL8735B
+
+All build settings come from the `.config` file. Use `TARGET=rtl8735b` and the RealTek ASDK toolchain (the system `arm-none-eabi-gcc` fails on newlib/lwip clashes). Point `AMEBA_SDK` at the RealTek `ameba-rtos-pro2` checkout and `ASDK_PATH` at the ASDK toolchain.
+
+```sh
+cp config/examples/rtl8735b.config .config
+# Compile wolfBoot and perform the SDK-resolved final link (see note below).
+tools/scripts/rtl8735b_build.sh
+# Wrap wolfBoot with the RealTek partition table/boot/certs into flash_ntz.bin.
+tools/scripts/amebapro2_package.sh wolfboot.elf
+```
+
+For the default `sdk` backend, `make TARGET=rtl8735b` compiles every wolfBoot object (including the RealTek SDK driver chain folded into `hal/rtl8735b.o`), but the final `wolfboot.elf` link must resolve the SDK SoC libraries (`liboutsrc.a`, `libsoc_ntz.a`) and the ROM symbol table (`romsym_is.so`), which live in the SDK build tree. `tools/scripts/rtl8735b_build.sh` runs that compile-then-SDK-resolved-link (it honors `AMEBA_SDK` and `ASDK_PATH`), and `tools/scripts/amebapro2_package.sh` then packages wolfBoot (in `PT_FW1`) with the RealTek partition table, boot, and certs via `elf2bin` into `flash_ntz.bin` (it needs only `AMEBA_SDK`, plus optional `OUTDIR`; no toolchain). See `hal/rtl8735b/README`.
+
+The `bare` backend links a standalone `wolfboot.elf` with no SDK dependency (flash stubbed, not yet functional):
+
+```sh
+make TARGET=rtl8735b HAL_BACKEND=bare
+```
+
+### Building and staging an application
+
+A minimal bare-metal example application is provided in `hal/rtl8735b/test-app/` (a vector table plus a UART banner, linked at the DDR load address). Build it with the ASDK toolchain, sign it with the wolfBoot key, and write it to the BOOT partition offset:
+
+```sh
+export PATH="$ASDK_PATH:$PATH"
+arm-none-eabi-gcc -mcpu=cortex-m33 -mthumb -mfpu=fpv5-sp-d16 -mfloat-abi=softfp \
+    -Os -ffreestanding -nostdlib -nostartfiles \
+    -T hal/rtl8735b/test-app/test_app.ld hal/rtl8735b/test-app/test_app.c -o test_app.elf
+arm-none-eabi-objcopy -O binary test_app.elf test_app.bin
+
+# Sign with ECDSA P-256 + SHA-256 as version 1
+tools/keytools/sign --ecc256 --sha256 test_app.bin wolfboot_signing_private_key.der 1
+
+# Write the signed image to the BOOT partition offset (no whole-image rebuild).
+# uartfwburn's -s flag writes at an arbitrary flash offset.
+uartfwburn.linux -p /dev/ttyUSBx -f test_app_v1_signed.bin -s 0x520000 -b 3000000 -U
+```
+
+To stage an update, sign a newer build with a higher version number and write it to the UPDATE offset (`0x6A0000`) the same way.
+
+### A/B update and rollback
+
+wolfBoot uses version-based A/B selection in this RAMBOOT model (there is no swap copy): it boots whichever of BOOT/UPDATE holds the higher version with a valid signature.
+
+* **Update:** stage a higher-version signed image in UPDATE; on the next boot wolfBoot reports `Versions: Boot x, Update y`, selects the higher version, and boots it.
+* **Integrity / authenticity:** a tampered image fails the SHA-256 integrity or ECDSA signature check and is rejected (`Checking integrity...FAILED`).
+* **Anti-downgrade (secure default, `ALLOW_DOWNGRADE=0`):** if the newer image is rejected and the only remaining candidate is an older version, wolfBoot does not downgrade -- it stops (`Rollback to lower version not allowed`, then panic) rather than run older firmware.
+* **Fault tolerance:** if a valid image of the same (or newer) version exists in the other partition, wolfBoot falls back to it and boots it.
+
+### Watchdog
+
+The RealTek boot ROM arms the SoC's vendor watchdog before handing off to wolfBoot, and it resets the SoC if the watchdog is not serviced. Following the usual wolfBoot convention (the bootloader hands a running watchdog to the application), wolfBoot leaves it running, so the **application is responsible for servicing or reconfiguring it** -- an app that never services the watchdog reboots after the timeout.
+
+The example app in `hal/rtl8735b/test-app/` shows the minimal "pet": a read-modify-write that sets bit 24 (`WDT_CLEAR`) of the secure vendor watchdog register at `0x50002C00`, which reloads the timer while preserving the ROM-configured enable/mode/divisor bits. A real application would service it from a periodic task or reconfigure the timeout to suit its needs.
+
+With `DEBUG_UART=1`, wolfBoot prints the last reset cause at startup, decoded from the AON boot-reason register (`0x40009104`) -- handy for spotting an unfed watchdog:
+
+```
+Reset reason: 0x1 VNDR-WDT     <- vendor watchdog reset (app did not service it)
+Reset reason: 0x10 BOD         <- brown-out / power-on reset
+```
+
+### Status and roadmap
+
+Verified on the AmebaPro2 EVB today: signed boot (ECDSA P-256 / SHA-256), version-based A/B update, rollback/anti-downgrade, the `DEBUG_UART` console, the reset-reason readout, and the watchdog handoff. This is the non-TrustZone "Model A" integration with the `sdk` backend.
+
+Outstanding work (TODO):
+
+- **Device-bound encrypted updates (HUK):** a non-MMU encrypted-RAMBOOT enabler (`wolfBoot_ramboot_decrypt`) and an `rtl8735b-encrypt.config` exist on a separate development branch; they build but are not yet hardware-verified. Binding the partition key to the RTL8735B Hardware Unique Key uses the wolfCrypt RealTek HUK crypto-callback port (wolfSSL PR #10677) and is still to be wired and tested.
+- **TrustZone-M ("Model B"):** secure wolfBoot + non-secure application. Feasibility on the AmebaPro2 (does the ROM hand off in Secure state with the SAU free?) needs a spike before a full design; the generic wolfBoot TZ infrastructure (`hal/armv8m_tz.h`, the `blxns` path in `src/boot_arm.c`, `-mcmse`/`--cmse-implib`) would be reused.
+- **`bare` backend:** currently a scaffold (`ext_flash_*` return `-1`). A no-SDK flash path must reimplement `spic_init()` (controller training) on the ROM `hal_spic_stubs`, since the bootloader hands off no SPIC adaptor.
+- **Measured boot / DICE:** software DICE (HUK-derived UDS + TRNG) is a later follow-on; there is no on-chip TPM.
