@@ -146,6 +146,49 @@
     #endif
 #endif
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+    #ifndef WOLFBOOT_DIAGNOSTICS_SECTORS
+    #define WOLFBOOT_DIAGNOSTICS_SECTORS 2
+    #endif
+
+    #if (WOLFBOOT_DIAGNOSTICS_ADDRESS % WOLFBOOT_SECTOR_SIZE) != 0
+        #error "Diagnostics region is not sector-aligned"
+    #endif
+
+    #if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET) && \
+        !defined(PULL_LINKER_DEFINES) && !defined(WOLFBOOT_DIAGNOSTICS_EXT)
+        #if !defined(PART_BOOT_EXT) && \
+            ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) != 0) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0 + \
+              WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE) > \
+             (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0)) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0) < \
+             (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0))
+            #error "Diagnostics region overlaps the boot partition"
+        #endif
+
+        #if !defined(PART_UPDATE_EXT) && \
+            ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) != 0) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0 + \
+              WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE) > \
+             (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0)) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0) < \
+             (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0))
+            #error "Diagnostics region overlaps the update partition"
+        #endif
+
+        #if !defined(PART_SWAP_EXT) && \
+            ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) != 0) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0 + \
+              WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE) > \
+             (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0)) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0) < \
+             (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE))
+            #error "Diagnostics region overlaps the swap partition"
+        #endif
+    #endif
+#endif /* WOLFBOOT_PERSIST_FAILURE_STATUS */
+
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 #if !defined(WOLFBOOT_NO_LOAD_ADDRESS)

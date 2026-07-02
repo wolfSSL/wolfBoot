@@ -116,6 +116,11 @@ The application can read the records, ordered newest-first, through this API:
   copy record `index` (0 is the most recent) into `out`. Returns 0 on success.
 - `int wolfBoot_clear_failures(void)`: erase the diagnostics region.
 
+The read functions only read the region and have no external dependency.
+`wolfBoot_clear_failures()`, however, erases flash, so an application that calls
+it must have the HAL flash driver (`hal_flash_unlock`, `hal_flash_erase`,
+`hal_flash_lock`) similarly to `wolfBoot_success()`.
+
 Each `struct wolfBoot_failure_record` reports `phase`, `cause`, `partition`,
 `fw_version` (the version of the offending image, when known) and a monotonic
 `seq` number.
