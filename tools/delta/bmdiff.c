@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
             if (r < 0)
                 exit(5);
             if (r > 0) {
-                memcpy(base + len3, dest, r);
+                pwrite(fd1, dest, r, len3);
                 len3 += r;
             }
         } while (r > 0);
