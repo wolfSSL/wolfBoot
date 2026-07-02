@@ -217,6 +217,11 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
     arch_reboot();
 }
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+static void RAMFUNCTION wolfBoot_record_verify_failure(uint8_t phase,
+        uint8_t part, struct wolfBoot_image *img);
+#endif
+
 void RAMFUNCTION wolfBoot_check_self_update(void)
 {
     uint8_t st;
@@ -233,10 +238,20 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
             hal_flash_lock();
             return;
         }
-        if (wolfBoot_verify_integrity(&update) < 0)
+        if (wolfBoot_verify_integrity(&update) < 0) {
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+                PART_UPDATE, &update);
+#endif
             return;
-        if (wolfBoot_verify_authenticity(&update) < 0)
+        }
+        if (wolfBoot_verify_authenticity(&update) < 0) {
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+                PART_UPDATE, &update);
+#endif
             return;
+        }
         PART_SANITY_CHECK(&update);
         wolfBoot_self_update(&update);
     }
@@ -1552,6 +1567,10 @@ void RAMFUNCTION wolfBoot_start(void)
                     ))) {
                 wolfBoot_printf("Boot (try 2) failed: Hdr %d, Hash %d, Sig %d\n",
                     boot.hdr_ok, boot.sha_ok, boot.signature_ok);
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+                wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_RECOVERY,
+                    PART_BOOT, &boot);
+#endif
                 /* panic: something went wrong after the emergency update */
             #ifdef WOLFBOOT_TPM
                 wolfBoot_tpm2_deinit();
