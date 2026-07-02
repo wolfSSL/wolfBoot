@@ -434,6 +434,19 @@ static int security_command(int drv, uint8_t ata_cmd)
 }
 
 /**
+ * @brief Wipe the plaintext passphrase bytes out of the static command
+ * buffer once the HBA no longer needs them.
+ */
+static void ata_security_buffer_zeroize(void)
+{
+    volatile uint8_t *p = (volatile uint8_t *)buffer + ATA_SECURITY_PASSWORD_OFFSET;
+    size_t len = ATA_SECURITY_PASSWORD_LEN;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
+/**
  * @brief Helper function to execute an ATA command from the security set that
  * require transmitting a passphrase.
  * This function groups the common code among all the API in the ATA security
@@ -471,6 +484,7 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     memcpy(buffer + ATA_SECURITY_PASSWORD_OFFSET, passphrase,
            passphrase_len);
     if (slot < 0) {
+        ata_security_buffer_zeroize();
         return slot;
     }
     cmd = (struct hba_cmd_header *)(uintptr_t)ata->clb_port;
@@ -482,6 +496,14 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     cmdfis->command = ata_cmd;
     cmdfis->count = 1;
     ret = exec_cmd_slot_ex(drv, slot, async);
+    /* exec_cmd_slot_ex() only returns once the HBA has finished the DMA
+     * transfer of this buffer when running synchronously (async = 0), so
+     * it is safe to wipe the passphrase here. In async mode the transfer
+     * may still be in flight when we return (the caller polls completion
+     * via ata_cmd_complete_async()), so clearing the buffer now would race
+     * the HBA and could corrupt the command still in progress. */
+    if (!async)
+        ata_security_buffer_zeroize();
     return ret;
 }
 
