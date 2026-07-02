@@ -959,6 +959,7 @@ typedef char diag_record_size_check[
 typedef char diag_header_size_check[
     (sizeof(struct wolfBoot_diag_header) <= DIAG_HDR_SIZE) ? 1 : -1];
 typedef char diag_record_min_check[(DIAG_RECORD_SIZE >= 16U) ? 1 : -1];
+typedef char diag_slots_check[(DIAG_SLOTS_PER_SECTOR >= 1) ? 1 : -1];
 
 static uint32_t RAMFUNCTION diag_crc32(const void *data, uint32_t len)
 {
