@@ -75,6 +75,7 @@ TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-otp-keystore
 TESTS+=unit-x86-paging-oob
+TESTS+=unit-ahci-unlock-panic
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-arm-tee-psa-ipc
@@ -562,6 +563,10 @@ unit-multiboot: unit-multiboot.c
 
 unit-x86-paging-oob: ../../include/target.h unit-x86-paging-oob.c
 	gcc -o $@ unit-x86-paging-oob.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-ahci-unlock-panic: ../../include/target.h unit-ahci-unlock-panic.c
+	gcc -o $@ unit-ahci-unlock-panic.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-elf-bss-guard: unit-elf-bss-guard.c
