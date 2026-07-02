@@ -1106,7 +1106,7 @@ static int RAMFUNCTION diag_write(haladdr_t addr, const void *buf, uint32_t len)
 static int RAMFUNCTION diag_write_header(haladdr_t sector_addr, uint32_t generation)
 {
     struct wolfBoot_diag_header hdr;
-    uint8_t slot[DIAG_HDR_SIZE];
+    uint8_t slot[DIAG_HDR_SIZE] XALIGNED_STACK(4);
     XMEMSET(&hdr, 0, sizeof(hdr));
     hdr.magic = DIAG_HDR_MAGIC;
     hdr.generation = generation;
@@ -1154,7 +1154,7 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
     uint32_t gen[DIAG_N_SECTORS];
     int count[DIAG_N_SECTORS];
     struct wolfBoot_failure_record rec;
-    uint8_t slot[DIAG_RECORD_SIZE];
+    uint8_t slot[DIAG_RECORD_SIZE] XALIGNED_STACK(4);
     uint32_t seq, active_gen;
     int active, active_count, ret;
 
@@ -1162,8 +1162,8 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
 
     if (diag_scan(gen, count, &active) == 0) {
         /* Region empty: initialize sector 0 at generation 1. */
-        diag_erase(DIAG_SECTOR_ADDR(0), DIAG_SECTOR_SIZE);
-        if (diag_write_header(DIAG_SECTOR_ADDR(0), 1) != 0) {
+        if (diag_erase(DIAG_SECTOR_ADDR(0), DIAG_SECTOR_SIZE) != 0 ||
+                diag_write_header(DIAG_SECTOR_ADDR(0), 1) != 0) {
             diag_lock();
             return -1;
         }
@@ -1181,8 +1181,8 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
         /* Active sector full, or the next slot holds a torn write that cannot
          * be reprogrammed: rotate into the next sector. */
         int target = (active + 1) % DIAG_N_SECTORS;
-        diag_erase(DIAG_SECTOR_ADDR(target), DIAG_SECTOR_SIZE);
-        if (diag_write_header(DIAG_SECTOR_ADDR(target), active_gen + 1) != 0) {
+        if (diag_erase(DIAG_SECTOR_ADDR(target), DIAG_SECTOR_SIZE) != 0 ||
+                diag_write_header(DIAG_SECTOR_ADDR(target), active_gen + 1) != 0) {
             diag_lock();
             return -1;
         }

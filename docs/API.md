@@ -98,6 +98,8 @@ The following events are recorded:
 
 - An update image was rejected before performing the update
   (`WOLFBOOT_FAILURE_PHASE_UPDATE`).
+- A bootloader self-update image was rejected
+  (`WOLFBOOT_FAILURE_PHASE_SELF_UPDATE`).
 - A boot image failed verification, triggering an emergency update
   (`WOLFBOOT_FAILURE_PHASE_BOOT`).
 - The emergency-update image also failed verification, leaving the device

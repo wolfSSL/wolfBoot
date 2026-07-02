@@ -624,6 +624,8 @@ int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 #define WOLFBOOT_FAILURE_PHASE_ROLLBACK 3 /* rolled back to a previous image */
 #define WOLFBOOT_FAILURE_PHASE_RECOVERY 4 /* emergency-update image also failed
                                            * verification (device unbootable) */
+#define WOLFBOOT_FAILURE_PHASE_SELF_UPDATE 5 /* bootloader self-update image
+                                              * rejected */
 
 /* Cause of the failure */
 #define WOLFBOOT_FAILURE_CAUSE_HEADER        1 /* bad/invalid image header */

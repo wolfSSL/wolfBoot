@@ -144,6 +144,26 @@
          (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE))
         #error "Update and swap partitions overlap"
     #endif
+
+    #if !defined(PART_UPDATE_EXT) && defined(WOLFBOOT_ORIGIN) && \
+        ((BOOTLOADER_PARTITION_SIZE + 0) != 0) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) != 0) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0) > \
+         (WOLFBOOT_ORIGIN + 0)) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+        #error "Update partition overlaps the bootloader"
+    #endif
+
+    #if !defined(PART_SWAP_EXT) && defined(WOLFBOOT_ORIGIN) && \
+        ((BOOTLOADER_PARTITION_SIZE + 0) != 0) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) != 0) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE) > \
+         (WOLFBOOT_ORIGIN + 0)) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+        #error "Swap partition overlaps the bootloader"
+    #endif
 #endif
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
@@ -185,6 +205,16 @@
             ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0) < \
              (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE))
             #error "Diagnostics region overlaps the swap partition"
+        #endif
+
+        #if defined(WOLFBOOT_ORIGIN) && \
+            ((BOOTLOADER_PARTITION_SIZE + 0) != 0) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0 + \
+              WOLFBOOT_DIAGNOSTICS_SECTORS * WOLFBOOT_SECTOR_SIZE) > \
+             (WOLFBOOT_ORIGIN + 0)) && \
+            ((WOLFBOOT_DIAGNOSTICS_ADDRESS + 0) < \
+             (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+            #error "Diagnostics region overlaps the bootloader"
         #endif
     #endif
 #endif /* WOLFBOOT_PERSIST_FAILURE_STATUS */

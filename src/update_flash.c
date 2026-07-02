@@ -240,14 +240,14 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
         }
         if (wolfBoot_verify_integrity(&update) < 0) {
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
-            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_SELF_UPDATE,
                 PART_UPDATE, &update);
 #endif
             return;
         }
         if (wolfBoot_verify_authenticity(&update) < 0) {
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
-            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_SELF_UPDATE,
                 PART_UPDATE, &update);
 #endif
             return;
