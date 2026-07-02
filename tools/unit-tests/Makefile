@@ -378,8 +378,8 @@ unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
 # interposes read()/malloc()/free() (dlsym RTLD_NEXT, hence -ldl) to observe
 # the OTP buffer and UDS stack array at free() time.
 unit-otp-keystore-gen-zeroize: unit-otp-keystore-gen-zeroize.c \
-		../keytools/otp/otp-keystore-gen.c ../../src/keystore.c
-	gcc -o $@ unit-otp-keystore-gen-zeroize.c ../../src/keystore.c \
+		../keytools/otp/otp-keystore-gen.c unit-keystore.c
+	gcc -o $@ unit-otp-keystore-gen-zeroize.c unit-keystore.c \
 		-DFLASH_OTP_KEYSTORE $(CFLAGS) $(LDFLAGS) -ldl
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
