@@ -149,7 +149,15 @@ int main(int argc, char *argv[])
             if (r < 0)
                 exit(5);
             if (r > 0) {
-                memcpy(base + len3, dest, r);
+                int off = 0;
+                while (off < r) {
+                    ssize_t wr = pwrite(fd1, dest + off, r - off, len3 + off);
+                    if (wr <= 0) {
+                        perror("pwrite");
+                        exit(5);
+                    }
+                    off += (int)wr;
+                }
                 len3 += r;
             }
         } while (r > 0);

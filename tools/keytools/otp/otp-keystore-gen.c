@@ -43,6 +43,19 @@ extern struct keystore_slot PubKeys[];
 
 const char outfile[] = "otp.bin";
 
+/**
+ * @brief Wipe secret bytes from memory before the buffer holding them is
+ * freed or the process exits, so the root UDS does not linger in a freed
+ * heap chunk or a stale stack frame.
+ */
+static void secure_zero(void *buf, size_t len)
+{
+    volatile uint8_t *p = (volatile uint8_t *)buf;
+    while (len-- > 0U) {
+        *p++ = 0U;
+    }
+}
+
 int main(void)
 {
     int n_keys = keystore_num_pubkeys();
@@ -116,6 +129,7 @@ int main(void)
     close(rand_fd);
     if (rlen != (ssize_t)sizeof(uds)) {
         fprintf(stderr, "Error: failed to read random UDS (%zd)\n", rlen);
+        secure_zero(uds, sizeof(uds));
         close(ofd);
         free(otp_buf);
         exit(5);
@@ -125,11 +139,15 @@ int main(void)
 
     if (write(ofd, otp_buf, OTP_SIZE) != OTP_SIZE) {
         fprintf(stderr, "Error writing to %s: %s\n", outfile, strerror(errno));
+        secure_zero(otp_buf + OTP_UDS_OFFSET, sizeof(uds));
+        secure_zero(uds, sizeof(uds));
         close(ofd);
         free(otp_buf);
         exit(3);
     }
     fprintf(stderr, "%s successfully created.\nGoodbye.\n", outfile);
+    secure_zero(otp_buf + OTP_UDS_OFFSET, sizeof(uds));
+    secure_zero(uds, sizeof(uds));
     close(ofd);
     free(otp_buf);
 

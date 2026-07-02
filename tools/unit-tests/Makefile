@@ -74,11 +74,19 @@ TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-otp-keystore
+TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
+TESTS+=unit-ahci-unlock-panic
+TESTS+=unit-ata-security-passphrase-zeroize
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
+TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-va416x0-fram
+TESTS+=unit-flash-write-mcxa
+TESTS+=unit-flash-write-samr21
+TESTS+=unit-flash-write-same51
+TESTS+=unit-imx-rt-cache-align
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -201,6 +209,12 @@ unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_M
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
+# integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
+# signature verification is exercised by that function).
+unit-image-elf-scatter:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DWOLFBOOT_ELF_FLASH_SCATTER -DWOLFBOOT_ELF \
+	-DIMAGE_HEADER_SIZE=256
 unit-string:CFLAGS+=-fno-builtin
 
 
@@ -358,6 +372,15 @@ unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3
 # separate input.
 unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
 	gcc -o $@ unit-otp-keystore.c $(CFLAGS) $(LDFLAGS)
+
+# unit-otp-keystore-gen-zeroize includes the host tool
+# tools/keytools/otp/otp-keystore-gen.c directly (via #define main) and
+# interposes read()/malloc()/free() (dlsym RTLD_NEXT, hence -ldl) to observe
+# the OTP buffer and UDS stack array at free() time.
+unit-otp-keystore-gen-zeroize: unit-otp-keystore-gen-zeroize.c \
+		../keytools/otp/otp-keystore-gen.c unit-keystore.c
+	gcc -o $@ unit-otp-keystore-gen-zeroize.c unit-keystore.c \
+		-DFLASH_OTP_KEYSTORE $(CFLAGS) $(LDFLAGS) -ldl
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
@@ -564,9 +587,38 @@ unit-x86-paging-oob: ../../include/target.h unit-x86-paging-oob.c
 	gcc -o $@ unit-x86-paging-oob.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
+unit-ahci-unlock-panic: ../../include/target.h unit-ahci-unlock-panic.c
+	gcc -o $@ unit-ahci-unlock-panic.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-passphrase-zeroize.c
+	gcc -o $@ unit-ata-security-passphrase-zeroize.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
+# standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
+unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
+	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
+	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-same51: unit-flash-write-same51.c ../../hal/same51.c
+	gcc -o $@ unit-flash-write-same51.c $(CFLAGS) $(LDFLAGS)
+
+# unit-imx-rt-cache-align only pulls in hal/imx_rt.h, which is dependency-free
+# by design, avoiding the (not vendored) NXP MCUXpresso SDK headers that
+# hal/imx_rt.c itself requires.
+unit-imx-rt-cache-align: unit-imx-rt-cache-align.c ../../hal/imx_rt.h
+	gcc -o $@ unit-imx-rt-cache-align.c $(CFLAGS) $(LDFLAGS)
+
 unit-elf-bss-guard: unit-elf-bss-guard.c
 	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
 		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
+unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
+	gcc -o $@ unit-image-elf-scatter.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+		$(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)

@@ -155,7 +155,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int w = 0;
     const uint32_t flash_word_size = 16;
     const uint32_t empty_qword[4] = {
-        0xFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
+        0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
 
     while (len > 0) {
@@ -172,8 +172,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             if (memcmp(aligned_qword, empty_qword, flash_word_size) != 0) {
                 write_flash_qword((uint32_t *)address_align, aligned_qword);
             }
-            address += i;
-            len -= i;
+            address = address_align + i;
+            len -= (int)(i - start_off);
         }
         else {
             uint32_t i;
@@ -183,6 +183,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 write_flash_qword((uint32_t *)(address + i),
                                   (const uint32_t *)(data + w + i));
             }
+            w += len_align;
             len -= len_align;
             address += len_align;
         }

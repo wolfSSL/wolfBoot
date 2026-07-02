@@ -504,6 +504,7 @@ int sata_unlock_disk(int drv, int freeze)
     if ((freeze && ata_st != ATA_SEC6) || (!freeze && ata_st != ATA_SEC5)) {
         AHCI_DEBUG_PRINTF("ATA: Security is not enabled/locked (State SEC%d)\r\n",
                           ata_st);
+        ahci_secret_zeroize(secret, sizeof(secret));
         panic();
     }
     AHCI_DEBUG_PRINTF("ATA: Security enabled. State SEC%d\r\n", ata_st);

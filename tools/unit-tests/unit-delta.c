@@ -533,6 +533,34 @@ START_TEST(test_wb_patch_and_diff_multi_sector_images)
 }
 END_TEST
 
+START_TEST(test_wb_patch_and_diff_match_offset_msb_equals_esc)
+{
+    /* A matched block whose 24-bit source offset has 0x7f (ESC) as its
+     * most-significant byte would encode a header starting with the same
+     * two bytes (ESC, ESC) used to escape a literal ESC byte, making it
+     * indistinguishable on decode. wb_diff must never emit such a header;
+     * base images large enough to expose an offset in [0x7f0000,0x7fffff]
+     * are a supported configuration (e.g. MMU/Linux delta updates).
+     */
+    static uint8_t src_a[0x800000];
+    uint8_t src_b[7];
+    const uint32_t src_off = 0x7f0010;
+
+    memset(src_a, 0, sizeof(src_a));
+    src_a[src_off] = 0x11;
+    src_a[src_off + 1] = 0x22;
+    src_a[src_off + 2] = 0x33;
+    src_a[src_off + 3] = 0x44;
+    src_a[src_off + 4] = 0x55;
+    src_a[src_off + 5] = 0x66;
+
+    memcpy(src_b, src_a + src_off, 6);
+    src_b[6] = 0xAA;
+
+    (void)run_roundtrip_case(src_a, sizeof(src_a), src_b, sizeof(src_b), 64);
+}
+END_TEST
+
 START_TEST(test_wb_diff_get_sector_size_rejects_values_above_16bit)
 {
 #if HAVE_POSIX_FORK
@@ -690,6 +718,7 @@ Suite *patch_diff_suite(void)
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_completely_different_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_all_escape_images);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_multi_sector_images);
+    tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_match_offset_msb_equals_esc);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_accepts_16bit_limit);
     tcase_add_test(tc_wolfboot_delta, test_wb_diff_get_sector_size_rejects_values_above_16bit);
     tcase_add_test(tc_wolfboot_delta, test_wb_patch_and_diff_size_changing_update);

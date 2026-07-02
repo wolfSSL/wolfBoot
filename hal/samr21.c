@@ -106,7 +106,9 @@ void hal_init(void)
 {
 
     WDT_CTRL &= (~WDT_EN);
+#ifndef WOLFBOOT_UNIT_TEST_FLASH_WRITE
     __asm__ volatile ("cpsid i");
+#endif
     uint32_t i, reg;
     /* enable clocks for the power, sysctrl and gclk modules */
     APBAMASK_REG = APBAMASK_PM_EN | APBAMASK_SYSCTRL_EN | APBAMASK_GCLK_EN;
@@ -176,17 +178,16 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         } else {
             uint32_t val;
             uint8_t *vbytes = (uint8_t *)(&val);
-            uint32_t off = (address % 4);
-            dst = (uint32_t *)(address - off);
-            uint32_t dst_idx = (i + off) >> 2;
-            val = dst[dst_idx];
+            uint32_t off = ((address + i) % 4);
+            dst = (uint32_t *)(address + i - off);
+            val = *dst;
             while (off < 4) {
                 if (i < len)
                     vbytes[off++] = data[i++];
                 else
                     off++;
             }
-            dst[dst_idx] = val;
+            *dst = val;
         }
     }
     /* Enable write protection */

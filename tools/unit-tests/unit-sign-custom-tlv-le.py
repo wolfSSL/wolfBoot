@@ -111,6 +111,50 @@ TEST_CASES = [
                                            0x04, 0x03, 0x02, 0x01])),
 ]
 
+# Regression cases for arg2num() saturating 8-byte values >= 2^63 through
+# the signed strtoll() (fixed to use strtoull()).  0x0102030405060708 above
+# is below LLONG_MAX and never exercises the saturation path, so these two
+# values (high bit set, and the all-ones max) are needed to catch it.
+SATURATE_CASES = [
+    (0x0034, 8, 0x8000000000000001, bytes([0x01, 0x00, 0x00, 0x00,
+                                           0x00, 0x00, 0x00, 0x80])),
+    (0x0035, 8, 0xFFFFFFFFFFFFFFFF, bytes([0xFF, 0xFF, 0xFF, 0xFF,
+                                           0xFF, 0xFF, 0xFF, 0xFF])),
+]
+
+
+def run_sign_and_check(cases, work, image, key):
+    cmd = [SIGN, "--ed25519", "--sha256"]
+    for tag, length, val, _ in cases:
+        cmd += ["--custom-tlv", hex(tag), str(length), hex(val)]
+    cmd += [image, key, "1"]
+
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        skip("sign failed: " + r.stderr.strip())
+
+    signed = image.replace(".bin", "_v1_signed.bin")
+    if not os.path.exists(signed):
+        skip("sign did not produce a signed image")
+
+    with open(signed, "rb") as f:
+        data = f.read(512)
+
+    failures = []
+    for tag, length, val, expected in cases:
+        got = find_tlv_bytes(data, tag, len(data))
+        if got is None:
+            failures.append(
+                "tag 0x%04x (len=%d val=%s): TLV not found in header" %
+                (tag, length, hex(val)))
+        elif got != expected:
+            failures.append(
+                "tag 0x%04x (len=%d val=%s): got [%s], want [%s] (LE)" %
+                (tag, length, hex(val),
+                 " ".join("%02x" % b for b in got),
+                 " ".join("%02x" % b for b in expected)))
+    return failures
+
 
 def main():
     if not ensure_sign():
@@ -125,37 +169,8 @@ def main():
         with open(image, "wb") as f:
             f.write(bytes(range(256)) * 8)  # 2 KiB dummy payload
 
-        cmd = [SIGN, "--ed25519", "--sha256"]
-        for tag, length, val, _ in TEST_CASES:
-            cmd += ["--custom-tlv", hex(tag), str(length), hex(val)]
-        cmd += [image, key, "1"]
-
-        r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
-        if r.returncode != 0:
-            skip("sign failed: " + r.stderr.strip())
-
-        signed = image.replace(".bin", "_v1_signed.bin")
-        if not os.path.exists(signed):
-            skip("sign did not produce a signed image")
-
-        with open(signed, "rb") as f:
-            data = f.read(512)
-
-        failures = []
-        for tag, length, val, expected in TEST_CASES:
-            got = find_tlv_bytes(data, tag, len(data))
-            if got is None:
-                failures.append(
-                    "tag 0x%04x (len=%d val=%s): TLV not found in header" %
-                    (tag, length, hex(val)))
-            elif got != expected:
-                failures.append(
-                    "tag 0x%04x (len=%d val=%s): got [%s], want [%s] (LE); "
-                    "raw memcpy from host-endian uint64_t produces wrong bytes "
-                    "on big-endian build hosts" %
-                    (tag, length, hex(val),
-                     " ".join("%02x" % b for b in got),
-                     " ".join("%02x" % b for b in expected)))
+        failures = run_sign_and_check(TEST_CASES, work, image, key)
+        failures += run_sign_and_check(SATURATE_CASES, work, image, key)
 
         if failures:
             for msg in failures:

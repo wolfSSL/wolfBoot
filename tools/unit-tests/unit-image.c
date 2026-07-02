@@ -1028,6 +1028,29 @@ START_TEST(test_open_image)
     ck_assert_int_eq(ret, -1);
     ck_assert_uint_eq(img.hdr_ok, 0);
 
+    /* A firmware payload that exactly fills the partition payload budget
+     * (fw_size == WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE) must be
+     * accepted by the partition-fit check in wolfBoot_open_image_address(),
+     * with fw_base/trailer positioned right after the header / at the end
+     * of the partition. */
+    memset(self_hdr, 0xFF, sizeof(self_hdr));
+    ((uint32_t *)self_hdr)[0] = WOLFBOOT_MAGIC;
+    ((uint32_t *)self_hdr)[1] = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+
+    ext_flash_erase(0, WOLFBOOT_SECTOR_SIZE);
+    ext_flash_write(0, self_hdr, IMAGE_HEADER_SIZE);
+
+    memset(&img, 0, sizeof(img));
+    hdr_cpy_done = 0;
+    ret = wolfBoot_open_image(&img, PART_UPDATE);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(img.hdr_ok, 1);
+    ck_assert_uint_eq(img.fw_size, WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE);
+    ck_assert_ptr_eq(img.fw_base, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
+            + IMAGE_HEADER_SIZE);
+    ck_assert_ptr_eq(img.trailer, (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS
+            + WOLFBOOT_PARTITION_SIZE);
+
     /* Self header must reject bad magic and leave hdr_ok cleared */
     memset(self_hdr, 0xFF, sizeof(self_hdr));
     ((uint32_t *)self_hdr)[0] = ~WOLFBOOT_MAGIC;
@@ -1037,6 +1060,19 @@ START_TEST(test_open_image)
             (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     ck_assert_int_eq(ret, -1);
     ck_assert_uint_eq(img.hdr_ok, 0);
+
+    /* Self header must accept sizes that exactly fill the partition
+     * payload budget (accept side of the same boundary checked below) */
+    memset(self_hdr, 0xFF, sizeof(self_hdr));
+    ((uint32_t *)self_hdr)[0] = WOLFBOOT_MAGIC;
+    ((uint32_t *)self_hdr)[1] = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_open_self_address(&img, self_hdr,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(img.hdr_ok, 1);
+    ck_assert_uint_eq(img.fw_size, WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE);
 
     /* Self header must reject sizes beyond the partition payload budget */
     memset(self_hdr, 0xFF, sizeof(self_hdr));

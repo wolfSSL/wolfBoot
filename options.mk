@@ -164,6 +164,7 @@ endif
 
 ## DSA Settings
 ifeq ($(SIGN),NONE)
+  $(warning SIGN=NONE / WOLFBOOT_NO_SIGN=1 disables firmware signature verification; images are NOT authenticated. Do not use in production.)
   SIGN_OPTIONS+=--no-sign
   ifeq ($(HASH),SHA384)
     STACK_USAGE=3760
@@ -986,6 +987,7 @@ WOLFBOOT_LOAD_FPGA_ADDRESS ?= 0
 # logged warning that continues the boot.
 FPGA_NONFATAL ?= 0
 ifeq ($(FPGA_NONFATAL),1)
+  $(warning FPGA_NONFATAL=1 continues booting when the FPGA bitstream fails to load; the device may run without security-relevant programmable logic)
   CFLAGS+=-DWOLFBOOT_FPGA_NONFATAL
 endif
 # FIT_CONFIG_SELECT=1 lets the target pick a per-board FIT configuration
