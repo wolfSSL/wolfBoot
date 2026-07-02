@@ -95,6 +95,43 @@ static void reset_mock_stats(void)
     dualbank_swap_called = 0;
 }
 
+static void assert_part_state(uint8_t part, uint8_t expected)
+{
+    uint8_t st = 0xBB;
+    ck_assert_int_eq(wolfBoot_get_partition_state(part, &st), 0);
+    ck_assert_uint_eq(st, expected);
+}
+
+/* PART_BOOT_EXT/PART_UPDATE_EXT (set in this test's CFLAGS) route
+ * wolfBoot_set_partition_state() through ext_flash_write() instead of
+ * hal_flash_write(). Pre-seeding a partition trailer from the test body
+ * (outside wolfBoot_start()) therefore needs ext flash unlocked too.
+ */
+static void set_part_state(uint8_t part, uint8_t newst)
+{
+    hal_flash_unlock();
+    ext_flash_unlock();
+    ck_assert_int_eq(wolfBoot_set_partition_state(part, newst), 0);
+    ext_flash_lock();
+    hal_flash_lock();
+}
+
+/* wolfBoot_start() only wraps its own IMG_STATE_TESTING writes with
+ * hal_flash_unlock()/hal_flash_lock(), so with PART_BOOT_EXT it never
+ * unlocks the ext flash that ext_flash_write() actually requires here.
+ * No shipped HW-assisted-swap target defines PART_BOOT_EXT (dualbank
+ * swap is an internal-flash-only mechanism), so this is a limitation of
+ * this test's build config rather than of wolfBoot_start() itself;
+ * unlock ext flash around the call so the state-transition code under
+ * test can run.
+ */
+static void run_wolfboot_start(void)
+{
+    ext_flash_unlock();
+    wolfBoot_start();
+    ext_flash_lock();
+}
+
 static void prepare_flash(void)
 {
     int ret;
@@ -226,15 +263,86 @@ START_TEST (test_hwswap_highversion_rollback_denied) {
 }
 END_TEST
 
+/* Successful first boot of a freshly-flashed BOOT image awaiting
+ * confirmation: the IMG_STATE_UPDATING -> IMG_STATE_TESTING transition
+ * (update_flash_hwswap.c:91-97) must run and do_boot() must be reached.
+ * With no UPDATE candidate available, wolfBoot_dualboot_candidate()
+ * selects PART_BOOT directly, so this pins the transition without
+ * exercising hal_flash_dualbank_swap().
+ */
+START_TEST (test_hwswap_first_boot_success) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    set_part_state(PART_BOOT, IMG_STATE_UPDATING);
+
+    run_wolfboot_start();
+
+    ck_assert_int_eq(do_boot_called, 1);
+    ck_assert_int_eq(dualbank_swap_called, 0);
+    assert_part_state(PART_BOOT, IMG_STATE_TESTING);
+    cleanup_flash();
+}
+END_TEST
+
+/* Successful boot of an UPDATE candidate via HW-assisted swap: pins the
+ * post-swap IMG_STATE_UPDATING -> IMG_STATE_TESTING transition
+ * (update_flash_hwswap.c:107-113). The mock hal_flash_dualbank_swap()
+ * does not physically relocate the partitions, so the post-swap state
+ * checked by wolfBoot_start() is the one written directly to PART_BOOT
+ * here, simulating what a real swap would expose at that address.
+ */
+START_TEST (test_hwswap_postswap_success) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    set_part_state(PART_BOOT, IMG_STATE_UPDATING);
+
+    run_wolfboot_start();
+
+    ck_assert_int_eq(do_boot_called, 1);
+    ck_assert_int_eq(dualbank_swap_called, 1);
+    assert_part_state(PART_BOOT, IMG_STATE_TESTING);
+    cleanup_flash();
+}
+END_TEST
+
+/* Booting the highest version with BOOT and UPDATE at the same version
+ * must succeed: pins the "<" in "(max_v > 0U) && (active_v < max_v)"
+ * (update_flash_hwswap.c:62). A mutation to "<=" would spuriously panic
+ * here (no test above exercises a successful boot at max_v).
+ */
+START_TEST (test_hwswap_sameversion_success) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(do_boot_called, 1);
+    cleanup_flash();
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-hwswap");
     TCase *rollback_denied =
         tcase_create("HW-swap high-version rollback denied");
+    TCase *successful_boot =
+        tcase_create("HW-swap successful boot");
 
     tcase_add_test(rollback_denied, test_hwswap_highversion_rollback_denied);
     suite_add_tcase(s, rollback_denied);
     tcase_set_timeout(rollback_denied, 5);
+
+    tcase_add_test(successful_boot, test_hwswap_first_boot_success);
+    tcase_add_test(successful_boot, test_hwswap_postswap_success);
+    tcase_add_test(successful_boot, test_hwswap_sameversion_success);
+    suite_add_tcase(s, successful_boot);
+    tcase_set_timeout(successful_boot, 5);
     return s;
 }
 
