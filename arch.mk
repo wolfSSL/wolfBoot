@@ -1501,6 +1501,10 @@ ifeq ($(USE_CLANG),1)
 
   CFLAGS+=-isystem $(CLANG_NEWLIB_INCLUDE)
   CFLAGS+=-DWOLFSSL_NO_ATOMIC -DWOLFSSL_NO_ATOMICS
+  # newlib's <stdatomic.h> is unusable under clang for arm-none-eabi (references
+  # int_leastN_t before they are declared); skip it so wc_port.h falls back to
+  # the __atomic_thread_fence compiler builtin
+  CFLAGS+=-DNO_STDATOMIC_H
   CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
   CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
   LDFLAGS+=-nostdlib

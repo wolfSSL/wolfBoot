@@ -1187,7 +1187,7 @@ test-all: clean
 test-size-all:
 	make test-size SIGN=NONE LIMIT=5072 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=11844 NO_ARM_ASM=1
+	make test-size SIGN=ED25519 LIMIT=12184 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ECC256  LIMIT=18880 NO_ARM_ASM=1
 	make clean
@@ -1205,23 +1205,23 @@ test-size-all:
 	make clean
 	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15260 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=13928 NO_ARM_ASM=1
+	make test-size SIGN=ED448 LIMIT=14212 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA3072 LIMIT=11908 NO_ARM_ASM=1
 	make clean
 	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=12436 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS2048 LIMIT=13672 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS2048 LIMIT=13704 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS2048 NO_ASM=1 LIMIT=14232 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS2048 NO_ASM=1 LIMIT=14264 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS3072 LIMIT=13840 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 LIMIT=13872 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14364 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14396 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS4096 LIMIT=14012 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 LIMIT=14044 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14552 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14584 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 \
 		WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 \

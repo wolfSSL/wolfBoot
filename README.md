@@ -731,3 +731,43 @@ For Visual Studio, the developer command prompt will need to be activated.
     * wolfTPM v3.10.0-88-gefaab4a
     * wolfPKCS11 v2.0.0-stable-126-g8fec695
     * wolfHSM v1.4.0-57-g977bf18
+
+### V 2.9.0 - (2026-07-02)
+  * New hardware targets
+    * New STM32 ports: STM32N6 (NUCLEO-N657X0-Q), STM32U3 (NUCLEO-U385RG-Q), STM32C5 (NUCLEO-C5A3ZG), STM32G4, and STM32WBA
+    * NXP LPC54S018M-EVK and Kinetis KL26
+    * Xilinx Zynq-7000 (ZC702) boot support
+    * NXP T2080 / CW VPX3-152: VxWorks 7 64-bit boot support
+  * Improvements to supported targets
+    * Integrated the wolfHAL hardware abstraction layer into wolfBoot, with an STM32WB example
+    * STM32H5: added fwTPM support in TrustZone (with test app) and a WOLFCRYPT_TZ_WOLFHSM TrustZone engine
+    * STM32 TrustZone improvements (validated with wolfIP), plus external-flash access in non-secure-callable (NSC) flash veneers
+    * LPC55S69: hardware crypto acceleration and multiple fixes
+    * PolarFire SoC M-Mode: L2 scratchpad init, QSPI programmer, and watchdog support
+    * ZynqMP ZCU102 SD-card Linux boot: EL2 handoff, SDHCI init, and QSPI hardening
+    * NXP MCXN: hardware-based DICE attestation and TZ/PSA build fixes
+    * Vorago VA416x0: IRAM shadow-update fixes and a simplified flash write path
+  * New features and improvements
+    * Added RSA-PSS image signature support
+    * Added generic cryptocb support for hardware-accelerated crypto callbacks
+    * Added FIT image support for gzip-compressed kernel + ramdisk (initramfs) and for loading FPGA bitstreams
+    * Added a oneshot-hash build option and monolithic self-update optimizations
+    * Added boot-benchmarking support
+    * Added an `sbom` Makefile target for EU CRA compliance
+    * wolfHSM: multi-root-CA verification, keystore-less operation, and related fixes
+    * IDevID: allow using pre-computed authentication values
+    * Renamed ML-DSA (Dilithium) references throughout for consistency
+  * Bug fixes and hardening
+    * Continued Fenrir fuzzing-driven hardening across image parsing and update flows
+    * Bounded unauthenticated image size before RAM load, and enforced bounds over memcpy in the disk update path
+    * Added an integrity check in `wolfBoot_verify_authenticity()` and hardened the armored image integrity check against fault injection
+    * Fixed LMS/XMSS header includes, otp_keystore string initialization, and FDT compatible-string loop termination
+    * Fixed multiple unit-test and self-update regressions; migrated Renode tests to a new container
+    * Zeroized the DICE claim-collection buffer
+  * Updated modules
+    * wolfSSL v5.9.2-stable
+    * wolfTPM v4.0.0-363-g8e796c0
+    * wolfPKCS11 v2.1.0-stable
+    * wolfHSM v1.4.0-245-g7c6359e
+    * wolfHAL (4744f20)
+    * wolfPSA v5.9.1-58-ga4d1187
