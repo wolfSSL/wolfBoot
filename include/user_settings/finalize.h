@@ -50,6 +50,9 @@
 
 #ifndef WOLFBOOT_NEEDS_RNG
 #  define WC_NO_RNG
+   /* wolfssl rejects WC_NO_RNG with the default blinding macros. wolfBoot
+    * is verify-only, no blinding is meaningful with a disabled RNG. */
+#  define WC_BLINDING_NO_RNG_ACKNOWLEDGE_WEAKNESS
 #endif
 
 #ifndef WOLFBOOT_NEEDS_AES
@@ -108,7 +111,9 @@
 #endif
 
 /* PEM: positive WOLFSSL_PEM when NEEDS_PEM is set, WOLFSSL_NO_PEM otherwise.
- * WOLFSSL_PEM_TO_DER is a separate flag (cert_chain.h opts in on its own). */
+ * No fragment declares NEEDS_PEM today (cert chains are DER-only); a
+ * user_additions.h can opt in. Note wolfssl's settings.h auto-enables
+ * WOLFSSL_PEM_TO_DER whenever WOLFSSL_NO_PEM and NO_CODING are absent. */
 #if defined(WOLFSSL_PEM) && !defined(WOLFBOOT_NEEDS_PEM)
 #  error "user_settings: declare WOLFBOOT_NEEDS_PEM alongside WOLFSSL_PEM; see docs/wolfssl-config.md"
 #endif

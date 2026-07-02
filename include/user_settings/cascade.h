@@ -124,7 +124,10 @@
 #  endif
 #endif
 
-/* NEEDS_AES: features that use AES core. */
+/* NEEDS_AES: features that use AES core. The TZ wolfHSM engine serves
+ * NS-side AES requests (options.mk pairs it with WOLFCRYPT_SECURE_MODE,
+ * but the explicit clause keeps non-make builds correct); host unit
+ * tests build the engine without crypto. */
 #if defined(ENCRYPT_WITH_AES128)   || \
     defined(ENCRYPT_WITH_AES256)   || \
     defined(WOLFBOOT_TPM_PARMENC)  || \
@@ -132,17 +135,20 @@
     defined(SECURE_PKCS11)         || \
     defined(WOLFCRYPT_TZ_PSA)      || \
     defined(WOLFCRYPT_TEST)        || \
-    defined(WOLFCRYPT_BENCHMARK)
+    defined(WOLFCRYPT_BENCHMARK)   || \
+    (defined(WOLFCRYPT_TZ_WOLFHSM) && !defined(UNIT_TEST))
 #  ifndef WOLFBOOT_NEEDS_AES
 #    define WOLFBOOT_NEEDS_AES
 #  endif
 #endif
 
-/* NEEDS_HMAC: features that use HMAC. */
+/* NEEDS_HMAC: features that use HMAC. The TZ wolfHSM engine serves
+ * NS-side HMAC/HKDF requests (see NEEDS_AES note above). */
 #if defined(WOLFBOOT_TPM)          || \
     defined(WOLFCRYPT_SECURE_MODE) || \
     defined(WOLFCRYPT_TEST)        || \
-    defined(WOLFCRYPT_BENCHMARK)
+    defined(WOLFCRYPT_BENCHMARK)   || \
+    (defined(WOLFCRYPT_TZ_WOLFHSM) && !defined(UNIT_TEST))
 #  ifndef WOLFBOOT_NEEDS_HMAC
 #    define WOLFBOOT_NEEDS_HMAC
 #  endif

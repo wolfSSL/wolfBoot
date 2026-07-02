@@ -276,9 +276,9 @@ vocabulary; every marker is pure preprocessor and has no runtime cost.
 | `WOLFBOOT_NEEDS_RSA` | `NO_RSA` | Any `WOLFBOOT_SIGN_RSA*` / `RSAPSS*` / `SECONDARY_RSA*` flag, or `WOLFCRYPT_SECURE_MODE && !PKCS11_SMALL` | `cascade.h` |
 | `WOLFBOOT_NEEDS_RNG` | `WC_NO_RNG` | `WOLFBOOT_TPM_PARMENC`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK`, `WOLFBOOT_ENABLE_WOLFHSM_SERVER`, `WOLFBOOT_ENABLE_WOLFHSM_CLIENT && WOLFBOOT_SIGN_ML_DSA` | `cascade.h` |
 | `WOLFBOOT_NEEDS_HASHDRBG` | `WC_NO_HASHDRBG` (else: defines `HAVE_HASHDRBG`) | `WOLFBOOT_TPM_PARMENC`, `WOLFCRYPT_SECURE_MODE`, `(WOLFCRYPT_TEST‖WOLFCRYPT_BENCHMARK) && (LPC55S69_*HWACCEL)` | `cascade.h` |
-| `WOLFBOOT_NEEDS_AES` | `NO_AES` | `ENCRYPT_WITH_AES128`, `ENCRYPT_WITH_AES256`, `WOLFBOOT_TPM_PARMENC`, `WOLFCRYPT_SECURE_MODE`, `SECURE_PKCS11`, `WOLFCRYPT_TZ_PSA`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
+| `WOLFBOOT_NEEDS_AES` | `NO_AES` | `ENCRYPT_WITH_AES128`, `ENCRYPT_WITH_AES256`, `WOLFBOOT_TPM_PARMENC`, `WOLFCRYPT_SECURE_MODE`, `SECURE_PKCS11`, `WOLFCRYPT_TZ_PSA`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK`, `WOLFCRYPT_TZ_WOLFHSM && !UNIT_TEST` | `cascade.h` |
 | `WOLFBOOT_NEEDS_AES_CBC` | `NO_AES_CBC` | `WOLFBOOT_TPM_PARMENC`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
-| `WOLFBOOT_NEEDS_HMAC` | `NO_HMAC` | `WOLFBOOT_TPM`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
+| `WOLFBOOT_NEEDS_HMAC` | `NO_HMAC` | `WOLFBOOT_TPM`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK`, `WOLFCRYPT_TZ_WOLFHSM && !UNIT_TEST` | `cascade.h` |
 | `WOLFBOOT_NEEDS_DEV_RANDOM` | `NO_DEV_RANDOM` | `WOLFBOOT_TPM`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
 | `WOLFBOOT_NEEDS_ECC_KEY_EXPORT` | `NO_ECC_KEY_EXPORT` | `WOLFBOOT_TPM`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK`, `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`, `WOLFBOOT_ENABLE_WOLFHSM_SERVER` | `cascade.h` |
 | `WOLFBOOT_NEEDS_ASN` | `NO_ASN` | `WOLFBOOT_NEEDS_RSA`, `WOLFBOOT_TPM`, `WOLFCRYPT_SECURE_MODE`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK`, `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`, `WOLFBOOT_ENABLE_WOLFHSM_SERVER` | `cascade.h` |
@@ -287,7 +287,7 @@ vocabulary; every marker is pure preprocessor and has no runtime cost.
 | `WOLFBOOT_NEEDS_KDF` | `NO_KDF` | `WOLFCRYPT_TZ_PSA`, `WOLFBOOT_TZ_FWTPM` | `cascade.h` |
 | `WOLFBOOT_NEEDS_MALLOC` | `NO_WOLFSSL_MEMORY`, `WOLFSSL_NO_MALLOC` (in the `!SMALL_STACK` branch of memory model) | `SECURE_PKCS11`, `WOLFCRYPT_TZ_PSA`, `WOLFBOOT_ENABLE_WOLFHSM_SERVER`, `WOLFCRYPT_TEST`, `WOLFCRYPT_BENCHMARK` | `cascade.h` |
 | `WOLFBOOT_NEEDS_DH` | `NO_DH` (else: defines `HAVE_DH`) | TLS / cert-chain builds that use ephemeral DH | `user_additions.h` (typically) |
-| `WOLFBOOT_NEEDS_PEM` | `WOLFSSL_NO_PEM` (else: defines `WOLFSSL_PEM`) | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
+| `WOLFBOOT_NEEDS_PEM` | `WOLFSSL_NO_PEM` (else: defines `WOLFSSL_PEM`) | builds that parse PEM input (cert chains are DER-only and do not) | `user_additions.h` (typically) |
 | `WOLFBOOT_NEEDS_ASN_TIME` | `NO_ASN_TIME` | `cert_chain.h` (server cert chain), `user_additions.h` | `cert_chain.h`, `user_additions.h` |
 | `WOLFBOOT_NEEDS_CERT_GEN` | `NO_CERT` (else: defines `WOLFSSL_CERT_GEN`) | builds that generate certs at runtime | `user_additions.h` (typically) |
 | `WOLFBOOT_NEEDS_SESSION_CACHE` | `NO_SESSION_CACHE` (else: defines `HAVE_SESSION_CACHE`) | TLS builds with session resumption | `user_additions.h` (typically) |
@@ -406,8 +406,11 @@ the outer `#if` tests the same RSA / RSAPSS / SECONDARY / SECURE_MODE
 condition as `sign_dispatch.h` would; the `#else` defines `NO_RSA`.
 
 **Sets when RSA is active:**
-- `WC_RSA_BLINDING`, `WC_RSA_DIRECT`, `RSA_LOW_MEM`,
-  `WC_ASN_HASH_SHA256`
+- `WC_RSA_BLINDING` when an RNG-bearing feature is present
+  (SECURE_MODE / TPM_PARMENC / TEST / BENCH / HSM server) and
+  `WC_NO_RNG` was not forced from CFLAGS (e.g. `TEST_APP_NO_RNG=1`
+  NS-side test-apps)
+- `WC_RSA_DIRECT`, `RSA_LOW_MEM`, `WC_ASN_HASH_SHA256`
 - `WC_RSA_PSS` for any RSAPSS flag
 - Verify-only carve-outs (`WOLFSSL_RSA_VERIFY_INLINE`,
   `WOLFSSL_RSA_VERIFY_ONLY`, `WOLFSSL_RSA_PUBLIC_ONLY`,
@@ -553,13 +556,29 @@ firmware-TPM in the secure world and has its own configuration in
 ### 5.17. `wolfhsm.h`
 
 **Activation.** `WOLFBOOT_ENABLE_WOLFHSM_CLIENT ||
-WOLFBOOT_ENABLE_WOLFHSM_SERVER`.
+WOLFBOOT_ENABLE_WOLFHSM_SERVER || WOLFCRYPT_TZ_WOLFHSM`.
 
 **Sets:**
 - `WOLF_CRYPTO_CB`
 - `HAVE_ANONYMOUS_INLINE_AGGREGATES 1` (overrides the `0` default in
   `base.h`)
 - `WOLFSSL_KEY_GEN`
+
+**Server sizing (any wolfHSM server build — the `WOLFCRYPT_TZ_WOLFHSM`
+TrustZone engine or the verify-only cert-chain server — except host
+unit tests):**
+- `WOLFSSL_SHA384`, `WOLFSSL_SHA512` so `WC_MAX_DIGEST_SIZE` matches
+  the NS side (which enables SHA3)
+- `WOLFHSM_CFG_SERVER_KEYCACHE_COUNT 9`,
+  `WOLFHSM_CFG_SERVER_KEYCACHE_BIG_COUNT 3` to match the keycache
+  sizing the wolfHSM test suite is validated against
+
+**TZ engine extras (`WOLFCRYPT_TZ_WOLFHSM`, except host unit tests):**
+- `WOLFSSL_AES_DIRECT`, `HAVE_HKDF`, `WOLFSSL_AES_COUNTER`,
+  `HAVE_AESCTR`, `WOLFSSL_AES_GCM`, `HAVE_AESGCM`, `GCM_TABLE_4BIT` —
+  the NS client routes general AES/HMAC/HKDF through the secure server.
+  The AES/HMAC cores stay on via the `NEEDS_AES` / `NEEDS_HMAC`
+  cascades (Section 4).
 
 ### 5.18. `cert_chain.h`
 
@@ -569,12 +588,14 @@ the wolfSSL TLS-layer cert manager (server side).
 
 **Sets (TLS-layer carve-outs):** `NO_TLS`, `NO_OLD_TLS`,
 `WOLFSSL_NO_TLS12`, `WOLFSSL_USER_IO`, `WOLFSSL_SP_MUL_D`,
-`WOLFSSL_PEM_TO_DER`, `WOLFSSL_ALLOW_NO_SUITES`.
+`WOLFSSL_ALLOW_NO_SUITES`.
 
 **Declares (X.509 structural defaults):** `WOLFBOOT_NEEDS_ASN`,
-`WOLFBOOT_NEEDS_ASN_TIME`, `WOLFBOOT_NEEDS_PEM`, `WOLFBOOT_NEEDS_PKCS8`,
+`WOLFBOOT_NEEDS_ASN_TIME`, `WOLFBOOT_NEEDS_PKCS8`,
 `WOLFBOOT_NEEDS_CHECK_PRIVATE_KEY`. Every cert chain needs these
 regardless of the signature/hash algorithms in the chain itself.
+Chains are DER-only: the fragment does not declare `NEEDS_PEM`, so
+PEM-to-DER stays out of the image.
 
 **Out of scope (algorithm coverage).** This fragment ships **no**
 `HAVE_*` algorithm defaults. The wolfCrypt algorithm flags the chain
@@ -722,6 +743,8 @@ The rest are unipolar:
 ```c
 #ifndef WOLFBOOT_NEEDS_RNG
 #  define WC_NO_RNG
+   /* verify-only build: no blinding is meaningful without an RNG */
+#  define WC_BLINDING_NO_RNG_ACKNOWLEDGE_WEAKNESS
 #endif
 #ifndef WOLFBOOT_NEEDS_AES
 #  define NO_AES
@@ -1328,7 +1351,7 @@ include/
     ├── encrypt.h                 # EXT_ENCRYPTED, SECURE_PKCS11
     ├── trustzone.h               # SECURE_MODE, TZ_PSA, TZ_FWTPM
     ├── tpm.h                     # WOLFBOOT_TPM
-    ├── wolfhsm.h                 # WOLFHSM client/server
+    ├── wolfhsm.h                 # WOLFHSM client/server + TZ engine
     ├── cert_chain.h              # CERT_CHAIN_VERIFY (server side)
     ├── renesas.h                 # TSIP / RSIP / SCEPROTECT
     ├── platform.h                # SP-math word size, QNX, STM32 PKA
