@@ -213,6 +213,18 @@ tools/unit-tests/unit-fwtpm-nv-oob
 tools/unit-tests/unit-x86-paging-oob
 tools/unit-tests/unit-ahci-unlock-panic
 tools/unit-tests/unit-ata-security-passphrase-zeroize
+tools/unit-tests/unit-arm-tee-psa-ipc
+tools/unit-tests/unit-flash-write-mcxa
+tools/unit-tests/unit-flash-write-same51
+tools/unit-tests/unit-flash-write-samr21
+tools/unit-tests/unit-image-elf-scatter
+tools/unit-tests/unit-image-hybrid
+tools/unit-tests/unit-imx-rt-cache-align
+tools/unit-tests/unit-update-disk-oob
+tools/unit-tests/unit-update-ram-enc
+tools/unit-tests/unit-update-ram-enc-nopart
+tools/unit-tests/unit-va416x0-fram
+tools/unit-tests/unit-wolfhsm_flash_hal
 
 
 
