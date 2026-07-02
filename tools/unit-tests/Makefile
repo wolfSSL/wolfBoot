@@ -80,6 +80,7 @@ TESTS+=unit-ahci-unlock-panic
 TESTS+=unit-ata-security-passphrase-zeroize
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
+TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-mcxa
@@ -206,6 +207,12 @@ unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_M
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
+# integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
+# signature verification is exercised by that function).
+unit-image-elf-scatter:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DWOLFBOOT_ELF_FLASH_SCATTER -DWOLFBOOT_ELF \
+	-DIMAGE_HEADER_SIZE=256
 unit-string:CFLAGS+=-fno-builtin
 
 
@@ -600,6 +607,10 @@ unit-imx-rt-cache-align: unit-imx-rt-cache-align.c ../../hal/imx_rt.h
 unit-elf-bss-guard: unit-elf-bss-guard.c
 	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
 		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
+unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
+	gcc -o $@ unit-image-elf-scatter.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+		$(CFLAGS) $(LDFLAGS)
 
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
