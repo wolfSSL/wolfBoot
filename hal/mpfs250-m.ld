@@ -26,8 +26,11 @@ MEMORY
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
     FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
 
-    /* L2 Scratchpad SRAM - 256KB available
-     * Used for code execution, data, and stack in M-mode
+    /* L2 Scratchpad SRAM - 256 KB used (2 of 4 scratchpad ways).
+     * Attempted 512 KB (all 4 ways) to match HSS layout, but ways 8-9
+     * are not initialized by the bootmode programmer -- stack/HLS
+     * placed there hit a trap immediately after DDR init.  Reverted
+     * until we add explicit scratchpad init for ways 8-9.
      * Address range: 0x0A000000 - 0x0A03FFFF */
     L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 256k
 }
@@ -119,9 +122,14 @@ PROVIDE(_start_heap = _end);
  *
  * Total stack area: STACK_SIZE + 4 * STACK_SIZE_PER_HART
  */
-/* M-mode: only E51 (hart 0) runs; secondary harts park in eNVM WFI loop.
- * Set to 0 so no L2 Scratch is wasted on phantom secondary stacks. */
-PROVIDE(STACK_SIZE_PER_HART = 0);
+/* Per-hart stacks for the secondary (U54) park/wake path.  The value is
+ * substituted from the single Makefile STACK_SIZE_PER_HART variable (set in
+ * the target .config), which ALSO drives the startup asm's -DSTACK_SIZE_PER_HART
+ * -- so the wake asm (which computes sp with the C macro) and this symbol
+ * (which places the region) can never disagree.  A historical macro-vs-linker
+ * mismatch placed the woken harts' stacks INSIDE the E51 stack region,
+ * smashing the monitor when SBI HSM started the secondary harts. */
+PROVIDE(STACK_SIZE_PER_HART = @STACK_SIZE_PER_HART@);
 
 /* End of L2 scratchpad */
 PROVIDE(_l2_scratch_end = ORIGIN(L2_SCRATCH) + LENGTH(L2_SCRATCH));
@@ -151,3 +159,9 @@ PROVIDE(_text_size = _end_text - _start_text_sram);
  * Image header is loaded at (WOLFBOOT_LOAD_ADDRESS - IMAGE_HEADER_SIZE). */
 ASSERT(_end <= @WOLFBOOT_LOAD_ADDRESS@ - @IMAGE_HEADER_SIZE@,
     "ERROR: wolfBoot binary overlaps image load area! Increase WOLFBOOT_LOAD_ADDRESS")
+
+/* Build-time safety: keep at least 4 KB between the end of code/data/bss
+ * (_end) and the main hart stack bottom so code growth cannot silently
+ * reach the stack region at the top of L2 Scratch. */
+ASSERT(_end <= _main_hart_stack_bottom - 0x1000,
+    "ERROR: wolfBoot L2 image too close to stack (need 4 KB headroom)")

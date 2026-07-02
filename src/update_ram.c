@@ -246,8 +246,12 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     uint8_t p_state;
 #endif
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+    /* Passed to the 2-arg do_boot() below; NULL when there is no DTS (e.g.
+     * WOLFBOOT_FDT without MMU, booting a non-FIT image -> no fixup). */
     uint8_t *dts_addr = NULL;
+#endif
+#ifdef MMU
     uint32_t dts_size = 0;
 #endif
 #if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
@@ -605,7 +609,8 @@ backup_on_failure:
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
     PART_SANITY_CHECK(&os_image);
 #endif
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+    /* Match the do_boot() signature condition in src/boot_riscv.c. */
     do_boot((uint32_t*)load_address,
             (uint32_t*)dts_addr);
 #else

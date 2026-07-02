@@ -1164,8 +1164,9 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
 {
     wc_Sha384 sha384_ctx;
 
-    if (header_sha384(&sha384_ctx, img) != 0)
+    if (header_sha384(&sha384_ctx, img) != 0) {
         return -1;
+    }
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (img->fw_base == NULL) {
         wc_Sha384Free(&sha384_ctx);
@@ -1184,6 +1185,19 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
             blksz = WOLFBOOT_SHA_BLOCK_SIZE;
             if (position + blksz > img->fw_size)
                 blksz = img->fw_size - position;
+#if defined(MPFS_DDR_INIT)
+            /* PolarFire SoC DDR build: route SHA384 reads through the
+             * non-cached DDR SEG window (0xC0000000 base) so cache fills
+             * don't evict L2 Scratch lines (where wolfBoot's own code/stack
+             * lives).  PDMA already L2-flushed the cached writes when
+             * disk-load happened, so the non-cached side reads the correct
+             * DDR contents.  0x82xxxxxx -> 0xC2xxxxxx.  (Only meaningful for
+             * the DDR config, where images live in the cached 0x8xxxxxxx
+             * window; inert for the L2-Scratch QSPI M-mode build.) */
+            if (((uintptr_t)p & 0xF0000000UL) == 0x80000000UL) {
+                p = (uint8_t *)((uintptr_t)p | 0x40000000UL);
+            }
+#endif
             wc_Sha384Update(&sha384_ctx, p, blksz);
             position += blksz;
         } while (position < img->fw_size);
@@ -1438,7 +1452,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     return 0;
 }
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 
 /**
  * @brief Get the size of the Device Tree Blob (DTB).
@@ -1458,7 +1472,7 @@ int wolfBoot_get_dts_size(void *dts_addr)
     return ret;
 }
 
-#endif /* MMU */
+#endif /* MMU || WOLFBOOT_FDT */
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 

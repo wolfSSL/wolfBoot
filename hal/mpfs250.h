@@ -50,6 +50,17 @@
     #endif
 #endif
 
+/* E51 reset clock in MHz, used to seed mpfs_cpu_freq_mhz for udelay().
+ * Bumped to the Libero PLL rate after mss_pll_init() (see hal/mpfs250_ddr.c). */
+#ifndef MPFS_CPU_FREQ_RESET_MHZ
+#define MPFS_CPU_FREQ_RESET_MHZ     80U
+#endif
+
+/* Full-DDRC-reinit attempts in hal_init() (per-attempt failure rate ~30%). */
+#ifndef MPFS_DDR_MAX_OUTER_RETRY
+#define MPFS_DDR_MAX_OUTER_RETRY    6U
+#endif
+
 /* Hardware Base Address */
 #define SYSREG_BASE 0x20002000
 
@@ -66,6 +77,14 @@
 #define SYSREG_SOFT_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x88)))
 #define SYSREG_SOFT_RESET_CR_QSPI  (1U << 19)
 
+/* eNVM Control Register (offset 0xB8).  Bits [5:0] set the AHB-to-eNVM
+ * clock divider (period = (value+1) * AHB period); bit 6 (clock-okay)
+ * latches once a new divider has taken effect.  Must be reprogrammed for
+ * the faster AHB clock BEFORE the MSS PLL mux switch (HSS does this in
+ * mss_mux_post_mss_pll_config with LIBERO_SETTING_MSS_ENVM_CR). */
+#define SYSREG_ENVM_CR (*((volatile uint32_t*)(SYSREG_BASE + 0xB8)))
+#define SYSREG_ENVM_CR_CLOCK_OKAY (1U << 6)
+
 /* MSS Peripheral control bits (shared by SUBBLK_CLOCK_CR and SOFT_RESET_CR) */
 #define MSS_PERIPH_ENVM     (1U << 0)
 #define MSS_PERIPH_MMC      (1U << 3)
@@ -74,7 +93,14 @@
 #define MSS_PERIPH_MMUART2  (1U << 7)
 #define MSS_PERIPH_MMUART3  (1U << 8)
 #define MSS_PERIPH_MMUART4  (1U << 9)
+#define MSS_PERIPH_SPI0     (1U << 10)
+#define MSS_PERIPH_SPI1     (1U << 11)
 #define MSS_PERIPH_QSPI     (1U << 19)
+#define MSS_PERIPH_GPIO0    (1U << 20)
+#define MSS_PERIPH_GPIO1    (1U << 21)
+#define MSS_PERIPH_GPIO2    (1U << 22)
+#define MSS_PERIPH_DDRC     (1U << 23)
+#define MSS_PERIPH_ATHENA   (1U << 28)  /* Crypto hardware accelerator */
 
 /* MSS Watchdog Timer (per-hart) */
 #define MSS_WDT_E51_BASE       0x20001000UL
@@ -101,12 +127,6 @@
 #define MSS_UART2_HI_BASE  0x28102000UL
 #define MSS_UART3_HI_BASE  0x28104000UL
 #define MSS_UART4_HI_BASE  0x28106000UL
-
-/* UART base address table for per-hart access (LO addresses for M-mode) */
-#ifndef __ASSEMBLER__
-extern const unsigned long MSS_UART_BASE_ADDR[5];
-#define UART_BASE_FOR_HART(hart) (MSS_UART_BASE_ADDR[(hart) < 5 ? (hart) : 0])
-#endif /* __ASSEMBLER__ */
 
 /* Debug UART port selection (0-4): M-mode defaults to UART0, S-mode to UART1 */
 #ifndef DEBUG_UART_PORT
@@ -159,6 +179,7 @@ extern const unsigned long MSS_UART_BASE_ADDR[5];
 /* LSR (Line Status Register) */
 #define MSS_UART_DR                 ((uint8_t)0x01)    /* Data ready */
 #define MSS_UART_THRE               ((uint8_t)0x20)    /* Transmitter holding register empty */
+#define MSS_UART_TEMT               ((uint8_t)0x40)    /* Transmitter empty (FIFO + shift register) */
 
 #define ELIN_MASK            (1U << 3) /* Enable LIN header detection */
 #define EIRD_MASK            (1U << 2) /* Enable IrDA modem */
@@ -215,6 +236,7 @@ extern const unsigned long MSS_UART_BASE_ADDR[5];
 
 /* System Service command opcodes */
 #define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
+#define SYS_SERV_CMD_SPI_COPY      0x50u /* SCB mailbox SPI copy service */
 
 /* Device serial number size in bytes */
 #define DEVICE_SERIAL_NUMBER_SIZE 16
@@ -316,6 +338,19 @@ typedef struct {
 #define HLS_MAIN_HART_STARTED       0x12344321UL
 #define HLS_OTHER_HART_IN_WFI       0x12345678UL
 
+/* DTIM address of the E51 "main hart started" gate flag polled by the
+ * parked secondary harts in boot_riscv_start.S.  This must NOT live in
+ * L2-scratch (the legacy HLS location): cacheable stores to the
+ * scratchpad can be silently lost on dirty-line eviction, so whether the
+ * secondaries ever saw the flag depended on the image's cache-line
+ * layout (observed: a 304-byte text shift left harts 2-4 stuck in the
+ * eNVM gate until the kernel's HSM hart_start IPI, missing the kernel's
+ * 1s online window).  The E51 DTIM is uncached and coherent for every
+ * hart.  Keep clear of the SBI shared block (DTIM+0x00, src/riscv_sbi.c)
+ * and the hart-start mailboxes (DTIM+0x100, hal/mpfs250.c).
+ * No UL suffix: also used from assembly (boot_riscv_start.S). */
+#define MPFS_DTIM_MAIN_STARTED_ADDR 0x010000F0
+
 /* Number of harts on MPFS */
 #define MPFS_NUM_HARTS              5
 #define MPFS_FIRST_HART             0   /* E51 is hart 0 */
@@ -334,10 +369,7 @@ void uart_init(void);
 void uart_write(const char* buf, unsigned int sz);
 #endif
 #ifdef WOLFBOOT_RISCV_MMODE
-int mpfs_wake_secondary_harts(void);
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
-void uart_init_hart(unsigned long hartid);
-void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz);
 #endif
 #endif /* __ASSEMBLER__ */
 
@@ -354,12 +386,287 @@ void uart_write_hart(unsigned long hartid, const char* buf, unsigned int sz);
 #define PLIC_INT_MMC_MAIN       88
 
 
+/* ============================================================================
+ * DDR Controller and PHY (LPDDR4) - Video Kit MPFS250T
+ *
+ * MPFS DDR subsystem consists of:
+ * - DDR Controller (DDRCFG_BASE @ 0x20080000) - timing, addressing, refresh
+ * - DDR PHY (CFG_DDR_SGMII_PHY @ 0x20007000) - physical interface, training
+ * - Segment registers for address translation
+ * - SCB PLLs for clock generation
+ *
+ * Video Kit memory: Micron MT53D512M32D2DS-053 LPDDR4 (2GB, x32 @ 1600 Mbps)
+ * ============================================================================ */
+
+/* SCB Configuration Block (SCBCFG @ 0x37080000) */
+#define SCBCFG_BASE                 0x37080000UL
+#define SCBCFG_TIMER                (*(volatile uint32_t*)(SCBCFG_BASE + 0x08))
+#define MSS_SCB_ACCESS_CONFIG       0x0008A080UL
+
+/* DDR SGMII PHY Configuration (CFG_DDR_SGMII_PHY @ 0x20007000) */
+#define CFG_DDR_SGMII_PHY_BASE      0x20007000UL
+#define DDRPHY_STARTUP              (*(volatile uint32_t*)(CFG_DDR_SGMII_PHY_BASE + 0x008))
+#define DDRPHY_DYN_CNTL             (*(volatile uint32_t*)(CFG_DDR_SGMII_PHY_BASE + 0xC1C))
+#define DDRPHY_STARTUP_CONFIG       0x003F1F00UL
+#define DDRPHY_DYN_CNTL_CONFIG      0x0000047FUL
+
+/* DFI APB interface control (enables DDR PHY APB access) */
+#define SYSREG_DFIAPB_CR            (*(volatile uint32_t*)(SYSREG_BASE + 0x98))
+
+/* L2 cache flush registers (used at boot for DDR coherency) */
+#define L2_FLUSH64                  (*(volatile uint64_t*)(L2_CACHE_BASE + 0x200))
+#define L2_FLUSH32                  (*(volatile uint32_t*)(L2_CACHE_BASE + 0x240))
+
+/* DDR Base Addresses */
+#define SYSREGSCB_BASE              0x20003000UL
+#define DDRCFG_BASE                 0x20080000UL  /* DDR Controller CSR APB */
+#define DDR_SEG_BASE                0x20005D00UL  /* From HSS mss_seg.h */
+
+/* SCB PLL Bases */
+#define SCB_MSS_PLL_BASE            0x3E001000UL
+#define SCB_DDR_PLL_BASE            0x3E010000UL
+
+/* Clock Fabric Mux bases */
+#define SCB_CFM_MSS_BASE            0x3E002000UL
+#define SCB_CFM_SGMII_BASE          0x3E200000UL
+
+/* DDR Bank Controller (NV map reset during VREF training) */
+#define SCB_BANKCONT_DDR_BASE       0x3E020000UL
+
+/* Register Access Macros */
+#define SYSREG_REG(off)     (*(volatile uint32_t*)(SYSREG_BASE + (off)))
+#define SYSREGSCB_REG(off)  (*(volatile uint32_t*)(SYSREGSCB_BASE + (off)))
+#define DDRCFG_REG(off)     (*(volatile uint32_t*)(DDRCFG_BASE + (off)))
+#define DDRPHY_REG(off)     (*(volatile uint32_t*)(CFG_DDR_SGMII_PHY_BASE + (off)))
+#define DDR_BANKCONT_REG(off) (*(volatile uint32_t*)(SCB_BANKCONT_DDR_BASE + (off)))
+#define DDR_SEG_REG(off)    (*(volatile uint32_t*)(DDR_SEG_BASE + (off)))
+#define SCBCFG_REG(off)     (*(volatile uint32_t*)(SCBCFG_BASE + (off)))
+#define MSS_PLL_REG(off)    (*(volatile uint32_t*)(SCB_MSS_PLL_BASE + (off)))
+#define DDR_PLL_REG(off)    (*(volatile uint32_t*)(SCB_DDR_PLL_BASE + (off)))
+#define CFM_MSS_REG(off)    (*(volatile uint32_t*)(SCB_CFM_MSS_BASE + (off)))
+#define CFM_SGMII_REG(off)  (*(volatile uint32_t*)(SCB_CFM_SGMII_BASE + (off)))
+
+/* SYSREG Offsets */
+#define SYSREG_SUBBLK_CLOCK_CR_OFF  0x84
+#define SYSREG_SOFT_RESET_CR_OFF    0x88
+#define SYSREG_DFIAPB_CR_OFF        0x98
+#define MSSIO_CONTROL_CR_OFF        0x1BC
+
+/* PLL Register Offsets */
+#define PLL_SOFT_RESET              0x000
+#define PLL_CTRL                    0x004
+#define PLL_REF_FB                  0x008
+#define PLL_FRACN                   0x00C
+#define PLL_DIV_0_1                 0x010
+#define PLL_DIV_2_3                 0x014
+#define PLL_CTRL2                   0x018
+#define PLL_PHADJ                   0x020
+#define PLL_SSCG_0                  0x024
+#define PLL_SSCG_1                  0x028
+#define PLL_SSCG_2                  0x02C
+#define PLL_SSCG_3                  0x030
+
+/* PLL Control Bits */
+#define PLL_POWERDOWN_B             (1UL << 0)
+#define PLL_LOCK_BIT                (1UL << 25)
+#define PLL_INIT_OUT_RESET          0x00000003UL
+
+/* CFM Register Offsets */
+#define CFM_BCLKMUX                 0x004
+#define CFM_PLL_CKMUX               0x008
+#define CFM_MSSCLKMUX               0x00C
+#define CFM_FMETER_ADDR             0x014
+#define CFM_FMETER_DATAW            0x018
+
+/* SGMII CFM Register Offsets (at SCB_CFM_SGMII_BASE 0x3E200000) */
+#define CFM_SGMII_SOFT_RESET        0x000
+#define CFM_SGMII_RFCKMUX           0x004   /* Routes refclk to DDR/SGMII PLLs */
+#define CFM_SGMII_SGMII_CLKMUX      0x008
+#define CFM_SGMII_SPARE0            0x00C
+#define CFM_SGMII_CLK_XCVR          0x010
+
+/* DDR PHY Register Offsets */
+#define PHY_SOFT_RESET              0x000
+#define PHY_MODE                    0x004
+#define PHY_STARTUP                 0x008
+#define PHY_PLL_CTRL_MAIN           0x084
+#define PHY_DPC_BITS                0x184
+#define PHY_BANK_STATUS             0x188
+#define PHY_IOC_REG0                0x204
+#define PHY_IOC_REG1                0x208
+#define PHY_IOC_REG2                0x20C
+#define PHY_IOC_REG3                0x210
+#define PHY_IOC_REG6                0x21C   /* Calibration reset/clock divider */
+#define PHY_DYN_CNTL                0xC1C
+#define PHY_SOFT_RESET_TIP          0x800
+#define PHY_RANK_SELECT             0x804
+#define PHY_LANE_SELECT             0x808  /* was wrongly named PHY_BCLK_SCLK */
+/* The real BCLK/SCLK training answer is at 0x870 (bclksclk_answer).
+ * Old PHY_BCLK_SCLK at 0x808 was lane_select, so any printf of it
+ * was meaningless. */
+#define PHY_BCLKSCLK_ANSWER         0x870
+#define PHY_TRAINING_SKIP           0x80C
+#define PHY_TRAINING_START          0x810
+#define PHY_TRAINING_STATUS         0x814
+#define PHY_TRAINING_RESET          0x818
+#define PHY_TIP_CFG                 0x828
+#define PHY_TIP_CFG_PARAMS          0x8D0
+#define PHY_EXPERT_MODE_EN          0x878
+#define PHY_EXPERT_DLYCNT_MOVE0     0x87C
+#define PHY_EXPERT_DLYCNT_MOVE1     0x880
+#define PHY_EXPERT_DLYCNT_DIRECTION0 0x884
+#define PHY_EXPERT_DLYCNT_DIR1      0x888
+#define PHY_EXPERT_DLYCNT_LOAD0     0x88C
+#define PHY_EXPERT_DLYCNT_LOAD1     0x890
+#define PHY_EXPERT_DFI_STATUS_TO_SHIM 0x8CC
+#define PHY_LANE_ALIGN_FIFO_CTRL    0x8D8
+#define PHY_EXPERT_MV_RD_DLY        0x89C
+#define PHY_EXPERT_DLYCNT_PAUSE     0x8A0
+#define PHY_EXPERT_PLLCNT           0x8A4
+#define PHY_EXPERT_DQ_READBACK      0x8A8
+#define PHY_EXPERT_ADDCMD_READBACK  0x8AC  /* Bits 13:12 = rx_bclksclk, 3:0 = rx_ck */
+/* 0x8B0 is expert_read_gate_controls, NOT a DFI status register.
+ * Previous PHY_EXPERT_DFI_STATUS define here pointed writes
+ * (0x6/0x4/0x0 for DQ/DQS output delay setup) at the wrong register.
+ * The correct register is PHY_EXPERT_DFI_STATUS_TO_SHIM at 0x8CC. */
+#define PHY_EXPERT_READ_GATE_CONTROLS 0x8B0
+#define PHY_EXPERT_WRCALIB          0x8BC
+#define PHY_RPC95_IBUFMD_ADDCMD     0x57C   /* LPDDR4 Input Buffer Mode - ADDCMD */
+#define PHY_RPC96_IBUFMD_CLK        0x580   /* LPDDR4 Input Buffer Mode - CLK */
+#define PHY_RPC97_IBUFMD_DQ         0x584   /* LPDDR4 Input Buffer Mode - DQ */
+#define PHY_RPC98_IBUFMD_DQS        0x588   /* LPDDR4 Input Buffer Mode - DQS */
+#define PHY_RPC145                  0x644   /* ADDCMD delay offset (A9 loopback) */
+#define PHY_RPC147                  0x64C   /* DDR clock loopback delay */
+#define PHY_RPC156                  0x670
+#define PHY_RPC166                  0x698
+#define PHY_RPC168                  0x6A0   /* RX_MD_CLKN for LPDDR4 training */
+#define PHY_RPC220                  0x770
+
+/* ODT (On-Die Termination) RPC registers */
+#define PHY_RPC1_ODT                0x384   /* ODT_CA */
+#define PHY_RPC2_ODT                0x388   /* ODT_CLK */
+#define PHY_RPC3_ODT                0x38C   /* ODT_DQ (0 for WRLVL, 3 normally) */
+#define PHY_RPC4_ODT                0x390   /* ODT_DQS */
+
+/* PVT calibration bits */
+#define PVT_CALIB_START             (1U << 0)
+#define PVT_CALIB_LOCK              (1U << 14)
+#define PVT_CALIB_STATUS            (1U << 2)
+#define PVT_IOEN_OUT                (1U << 4)
+
+/* IOSCB IO Calibration DDR base (SCB space for PVT calibration) */
+#define IOSCB_IO_CALIB_DDR_BASE     0x3E040000UL
+#define IOSCB_IO_CALIB_DDR_REG(off) (*(volatile uint32_t*)(IOSCB_IO_CALIB_DDR_BASE + (off)))
+#define IOSCB_SOFT_RESET            0x000
+#define IOSCB_IOC_REG0              0x004
+#define IOSCB_IOC_REG1              0x008
+
+
+/* DDR Segment Register Offsets.
+ * SEG is a 256-byte-stride peripheral pair (mss_seg.h:54): seg_t has
+ * 8 x u32 control regs + 56 x u32 fill = 256 B.  SEG[0] is at base
+ * (DDR_SEG_BASE = 0x20005D00); SEG[1] is at base + 0x100 (= 0x20005E00).
+ * Phase 3.10.3 (A) finding: wolfBoot previously put SEG1_X at offset
+ * 0x20-0x3C (overwriting unrelated registers), so the SEG1 cached/
+ * non-cached DDR address-mapping registers were never written --
+ * 0x80000000 stores faulted with cause=7 (store access fault). */
+#define SEG0_0                      0x00
+#define SEG0_1                      0x04
+#define SEG0_2                      0x08
+#define SEG0_3                      0x0C
+#define SEG0_4                      0x10
+#define SEG0_5                      0x14
+#define SEG0_6                      0x18
+#define SEG0_BLOCKER                0x1C
+#define SEG1_0                      0x100
+#define SEG1_1                      0x104
+#define SEG1_2                      0x108
+#define SEG1_3                      0x10C
+#define SEG1_4                      0x110
+#define SEG1_5                      0x114
+#define SEG1_6                      0x118
+#define SEG1_7                      0x11C
+
+/* DDR Memory Map */
+#define DDR_BASE_CACHED             0x80000000UL   /* Cached access */
+#define DDR_BASE_NONCACHED          0xC0000000UL   /* Non-cached access */
+#define DDR_BASE_NONCACHED_WCB      0xD0000000UL   /* Non-cached with write-combining */
+#define DDR_SIZE                    0x80000000UL   /* 2GB (Video Kit) */
+
+/* DDR Init return codes */
+#define DDR_INIT_SUCCESS            0
+#define DDR_INIT_TIMEOUT            -1
+#define DDR_INIT_TRAINING_FAIL      -2
+#define DDR_INIT_MEM_TEST_FAIL      -3
+
+
+/* ============================================================================
+ * Video Kit Clock/DDR Configuration
+ *
+ * The LIBERO_SETTING_* values come from a Libero/HSS-generated
+ * fpga_design_config.h for the target board.  Set LIBERO_FPGA_CONFIG_DIR
+ * at build time to point at the directory containing fpga_design_config.h
+ * (see arch.mk and the polarfire_mpfs250_m.config example).
+ * ============================================================================ */
+#ifdef MPFS_DDR_INIT
+#include "fpga_design_config.h"
+#endif
+
+/* DDR function declarations */
+#ifndef __ASSEMBLER__
+#ifdef WOLFBOOT_RISCV_MMODE
+int mpfs_ddr_init(unsigned int outer_retry);
+void hal_uart_reinit(void);
+
+/* Verbose DDR/PLL/PHY/training trace (build with -DDEBUG_DDR).  Defined in
+ * the header so both hal/mpfs250.c (WDT/L2/text-verify dumps) and
+ * hal/mpfs250_ddr.c (the DDR driver) can use it. */
+#ifdef DEBUG_DDR
+#   define DBG_DDR(_f_, ...) wolfBoot_printf(_f_, ##__VA_ARGS__)
+#else
+#   define DBG_DDR(_f_, ...) do { } while (0)
+#endif
+
+/* Full system memory barrier (AXI/peripheral ordering). */
+static inline void mb(void)
+{
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+}
+
+/* mcycle-based microsecond busy delay.  Defined in hal/mpfs250.c (it must
+ * exist in non-DDR M-mode builds too); read from hal/mpfs250_ddr.c. */
+void udelay(uint32_t us);
+
+/* CPU/APB clock rates, defined in hal/mpfs250.c (read by udelay() and the
+ * UART baud divisor in every M-mode build) and updated by mss_pll_init() in
+ * hal/mpfs250_ddr.c when the MSS PLL is raised. */
+extern uint32_t mpfs_cpu_freq_mhz;
+extern uint32_t mpfs_apb_clk_hz;
+
+#ifdef MPFS_DDR_INIT
+/* MSSIO IOMUX setup: defined in hal/mpfs250.c (alongside the SDHCI platform
+ * helpers) but called from nwc_init() in hal/mpfs250_ddr.c. */
+void mpfs_iomux_init(void);
+#endif
+
+/* PDMA-based memcpy: src must be CPU-readable (L2 Scratch / LIM / DDR
+ * already loaded), dst is the destination AXI address.  When dst is in
+ * the cached DDR window (top 4 bits = 0x8) the helper rewrites it to
+ * the non-cached alias (top 4 bits = 0xC) before kicking PDMA, since
+ * PDMA-via-non-cached is the only AXI write path that consistently
+ * lands in DDR on this board.  Returns 0 on success, non-zero on
+ * timeout. */
+int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
+#endif
+#endif /* __ASSEMBLER__ */
+
+
 #ifdef EXT_FLASH
 /* QSPI Flash Controller
  *
  * Two CoreQSPI v2 controllers with identical register layouts:
- *   SC QSPI  (MPFS_SC_SPI=1, default): 0x37020100 — fabric-connected flash
- *   MSS QSPI (MPFS_SC_SPI=0):          0x21000000 — MSS QSPI pins
+ *   SC QSPI  (MPFS_SC_SPI=1, default): 0x37020100 -- fabric-connected flash
+ *   MSS QSPI (MPFS_SC_SPI=0):          0x21000000 -- MSS QSPI pins
  */
 
 /* QSPI Controller Base Address */

@@ -56,6 +56,22 @@ extern void (* const IV[])(void);
 extern void main(void);
 extern void reloc_trap_vector(const uint32_t *address);
 
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+/* Minimal SBI runtime (src/riscv_sbi.c): services S-mode ecalls and the
+ * M-mode timer/software interrupts that back the S-mode timer and IPIs. */
+extern unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc);
+extern void sbi_timer_irq(void);
+extern void sbi_ipi_irq(unsigned long hartid);
+extern unsigned long sbi_illegal_insn(unsigned long *regs, unsigned long epc,
+                                      unsigned long tval);
+extern unsigned long sbi_misaligned_ldst(unsigned long *regs,
+                                         unsigned long epc,
+                                         unsigned long tval,
+                                         unsigned long cause);
+extern void sbi_mscratch_init(unsigned long hartid);
+extern void sbi_hart_mark_started(unsigned long hartid);
+#endif
+
 /* Trap state saved for debugging */
 #if __riscv_xlen == 64
 static uint64_t last_cause = 0, last_epc = 0, last_tval = 0;
@@ -133,22 +149,104 @@ static void handle_external_interrupt(void)
 }
 #endif /* PLIC_BASE */
 
+/* Legacy 3-arg weak hook.  The asm trap entry now calls handle_trap_ex (the
+ * real dispatcher); it forwards here for interrupts it does not handle itself
+ * (after the in-tree SBI/PLIC handling) and for synchronous exceptions before
+ * halting.  An out-of-tree override that returns a resume epc different from
+ * the faulting one keeps the extension point pre-dispatcher wolfBoot had; the
+ * weak default returns epc unchanged, so the in-tree path prints and halts. */
 unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     unsigned long tval)
 {
+    (void)cause;
+    (void)tval;
+    return epc;
+}
+
+/* Regs-aware trap dispatch -- called directly from src/vector_riscv.S.
+ * Override this (also weak) to take full control including the saved
+ * register frame.  Falls through to weak handle_trap so legacy 3-arg
+ * overrides still run. */
+unsigned long WEAKFUNCTION handle_trap_ex(unsigned long cause, unsigned long epc,
+    unsigned long tval, unsigned long *regs)
+{
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    unsigned long ec;
+#endif
     last_cause = cause;
     last_epc = epc;
     last_tval = tval;
 
-    /* Always print and halt on synchronous exceptions to prevent
-     * infinite trap-mret loops that appear as silent hangs.
-     * NOTE: keep each printf SIMPLE (few args) to minimize the risk of
-     * recursive traps if wolfBoot's state is corrupted. */
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    /* SBI runtime: service the S-mode environment calls and the M-mode
+     * timer/software interrupts that back the S-mode timer and IPIs.  All
+     * other traps fall through to the fault handler below. */
+    ec = cause & MCAUSE_CAUSE;
+    if ((cause & MCAUSE_INT) != 0UL) {
+        if (ec == (unsigned long)IRQ_M_TIMER) {
+            sbi_timer_irq();
+            return epc;
+        }
+        if (ec == (unsigned long)IRQ_M_SOFT) {
+            unsigned long self;
+            __asm__ volatile("csrr %0, mhartid" : "=r"(self));
+            sbi_ipi_irq(self);
+            return epc;
+        }
+    }
+    else if (ec == 9UL) { /* environment call from S-mode */
+        return sbi_handle_ecall(regs, epc);
+    }
+    else if (ec == 2UL) {
+        /* Illegal instruction from S-mode OR U-mode: try the SBI
+         * emulation path (rdtime -- these harts have no time CSR, and
+         * userspace reaches it via the vDSO clock_gettime path). */
+        unsigned long mpp = (csr_read(mstatus) >> 11) & 3UL;
+        if (mpp != 3UL) { /* any non-M context */
+            unsigned long nepc = sbi_illegal_insn(regs, epc, tval);
+            if (nepc != 0UL) {
+                return nepc;
+            }
+        }
+        /* not handled: fall through to the fatal dump below */
+    }
+    else if (ec == 4UL || ec == 6UL) {
+        /* Misaligned load/store from S/U mode: these harts cannot
+         * delegate misaligned traps; firmware emulates them byte-wise
+         * (OpenSBI parity). */
+        unsigned long mpp = (csr_read(mstatus) >> 11) & 3UL;
+        if (mpp != 3UL) {
+            unsigned long nepc = sbi_misaligned_ldst(regs, epc, tval,
+                                                     ec);
+            if (nepc != 0UL) {
+                return nepc;
+            }
+        }
+        /* not handled: fall through to the fatal dump below */
+    }
+#endif
+
+    /* Halt on synchronous exceptions to prevent infinite trap-mret loops
+     * that appear as silent hangs.  The diagnostic dump below is gated on
+     * DEBUG_BOOT: a production build halts silently and relies on the
+     * watchdog to reset the chip.  NOTE: keep each DEBUG_BOOT printf SIMPLE
+     * (few args) to minimize the risk of recursive traps if wolfBoot's
+     * state is corrupted. */
     if (!(cause & MCAUSE_INT)) {
-        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx\n",
-            cause, epc, tval);
+        unsigned long resume;
+        /* Offer the synchronous exception to the legacy 3-arg hook so an
+         * out-of-tree platform override can service it (returning a resume
+         * epc different from the faulting one).  The weak default returns
+         * epc unchanged, treated as "unhandled" -> fall through to print +
+         * halt (a bare resume-at-epc would spin in a silent trap-mret loop). */
+        resume = handle_trap(cause, epc, tval);
+        if (resume != epc) {
+            return resume;
+        }
 #if defined(DEBUG_BOOT)
         unsigned long sp_now;
+        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx mstatus=%lx\n",
+            cause, epc, tval, csr_read(mstatus));
         __asm__ volatile("mv %0, sp" : "=r"(sp_now));
         wolfBoot_printf("      sp=%lx\n", sp_now);
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
@@ -161,9 +259,56 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
             wolfBoot_printf("STACK OVERFLOW: under by %lu\n",
                 bottom - sp_now);
         }
+        /* Dump saved register frame from trap_entry. Each slot is
+         * 8 bytes (REGBYTES); slot[N] = xN.  See vector_riscv.S. */
+        if (regs != NULL) {
+            unsigned long *stk;
+            int j;
+            wolfBoot_printf(
+                "  ra=%lx  sp=%lx  gp=%lx  tp=%lx\n",
+                regs[1], regs[2], regs[3], regs[4]);
+            wolfBoot_printf(
+                "  t0=%lx  t1=%lx  t2=%lx\n",
+                regs[5], regs[6], regs[7]);
+            wolfBoot_printf(
+                "  s0=%lx  s1=%lx\n",
+                regs[8], regs[9]);
+            wolfBoot_printf(
+                "  a0=%lx  a1=%lx  a2=%lx  a3=%lx\n",
+                regs[10], regs[11], regs[12], regs[13]);
+            wolfBoot_printf(
+                "  a4=%lx  a5=%lx  a6=%lx  a7=%lx\n",
+                regs[14], regs[15], regs[16], regs[17]);
+            wolfBoot_printf(
+                "  s2=%lx  s3=%lx  s4=%lx  s5=%lx\n",
+                regs[18], regs[19], regs[20], regs[21]);
+            wolfBoot_printf(
+                "  s6=%lx  s7=%lx  s8=%lx  s9=%lx\n",
+                regs[22], regs[23], regs[24], regs[25]);
+            wolfBoot_printf(
+                "  s10=%lx s11=%lx\n",
+                regs[26], regs[27]);
+            wolfBoot_printf(
+                "  t3=%lx  t4=%lx  t5=%lx  t6=%lx\n",
+                regs[28], regs[29], regs[30], regs[31]);
+            /* Dump stack memory above the trap frame.  Trap frame is
+             * 256 bytes; above it is the trapping function's own frame
+             * containing its saved ra values from sub-call chains. */
+            stk = (unsigned long *)(regs + 32);
+            wolfBoot_printf("  stack from caller sp=%lx:\n",
+                (unsigned long)stk);
+            for (j = 0; j < 24; j += 4) {
+                wolfBoot_printf(
+                    "    +%x: %lx %lx %lx %lx\n",
+                    j * 8, stk[j], stk[j+1], stk[j+2], stk[j+3]);
+            }
+        }
 #endif
 #endif /* DEBUG_BOOT */
-        while (1) ; /* halt to prevent infinite trap-mret loop */
+        /* Halt: spin so the watchdog fires and resets the chip (recovery).
+         * Do NOT pet the WDT here -- production must reset out of a fault. */
+        while (1)
+            ;
     }
 
 #ifdef PLIC_BASE
@@ -180,7 +325,8 @@ unsigned long WEAKFUNCTION handle_trap(unsigned long cause, unsigned long epc,
     /* Synchronous exceptions are not handled - just record them */
 #endif
 
-    return epc;
+    /* Forward to the legacy 3-arg hook so out-of-tree overrides still run */
+    return handle_trap(cause, epc, tval);
 }
 
 /* ============================================================================
@@ -214,7 +360,7 @@ uint64_t hal_get_timer_us(void)
     return (ticks * 1000) / (rate / 1000);
 }
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
 {
     (void)dts_addr;
@@ -263,6 +409,42 @@ static void __attribute__((noreturn)) enter_smode(unsigned long entry,
     );
     __builtin_unreachable();
 }
+
+/* Public M->S handoff entry point. Sets up PMP, delegates S-mode traps,
+ * then transitions the calling hart to S-mode at entry. Used both by the
+ * default do_boot path and by HAL overrides that release a different hart. */
+void __attribute__((noreturn))
+riscv_mmode_to_smode(unsigned long entry, unsigned long hartid,
+                     unsigned long dtb)
+{
+    setup_pmp_for_smode();
+    delegate_traps_to_smode();
+#if defined(WOLFBOOT_MMODE_SMODE_BOOT)
+    /* Install the wolfBoot SBI trap vector on this hart so S-mode ecalls and
+     * the M-timer/M-soft IRQs are serviced in M-mode here, and arm this
+     * hart's dedicated M-mode trap stack (the S-mode sp is virtual once the
+     * OS enables paging, so the trap entry must not store through it).
+     * Keep illegal-instruction traps in M-mode: rdtime is emulated there
+     * (no time CSR on these harts).  mcounteren still exposes cycle/instret
+     * to S-mode.  Enable M software interrupts for IPI delivery. */
+    csr_write(mtvec, (unsigned long)trap_vector_table);
+    sbi_mscratch_init(hartid);
+    sbi_hart_mark_started(hartid);
+    csr_write(medeleg, csr_read(medeleg) & ~(1UL << 2));
+    csr_write(mcounteren, 0x7UL);
+    csr_write(mie, csr_read(mie) | MIE_MSIE);
+#endif
+    enter_smode(entry, hartid, dtb);
+}
+
+/* Weak default: hand the kernel off in S-mode on the current hart. Platforms
+ * that need a different topology (e.g. the MPFS E51 must release a U54
+ * because cpu@0 is disabled in the DTB) override this in their HAL. */
+void __attribute__((weak, noreturn))
+hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
+{
+    riscv_mmode_to_smode(entry, hartid, dtb);
+}
 #endif /* WOLFBOOT_RISCV_MMODE */
 
 #if __riscv_xlen == 64
@@ -275,7 +457,7 @@ unsigned long get_boot_hartid(void)
 }
 #endif
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 #else
 void do_boot(const uint32_t *app_offset)
@@ -284,9 +466,13 @@ void do_boot(const uint32_t *app_offset)
 #if __riscv_xlen == 64
     unsigned long hartid;
 #endif
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     unsigned long dts_addr;
-    hal_dts_fixup((uint32_t*)dts_offset);
+    /* dts_offset is NULL when the loaded image was not a FIT (or had no
+     * flat_dt): skip the fixup and hand off with dtb=0 rather than deref. */
+    if (dts_offset != NULL) {
+        hal_dts_fixup((uint32_t*)dts_offset);
+    }
     dts_addr = (unsigned long)dts_offset;
 #elif defined(WOLFBOOT_RISCV_MMODE) || __riscv_xlen == 64
     unsigned long dts_addr = 0;
@@ -301,7 +487,7 @@ void do_boot(const uint32_t *app_offset)
 #if __riscv_xlen == 64
     wolfBoot_printf(", hartid=%lu", hartid);
 #endif
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     wolfBoot_printf(", dts=0x%lx", dts_addr);
 #endif
     wolfBoot_printf("\n");
@@ -312,12 +498,13 @@ void do_boot(const uint32_t *app_offset)
 
 #ifdef WOLFBOOT_RISCV_MMODE
 #ifdef WOLFBOOT_MMODE_SMODE_BOOT
-    /* M-mode -> S-mode transition for Linux boot */
-    wolfBoot_printf("M->S transition: entry=0x%lx\n", (unsigned long)app_offset);
-    setup_pmp_for_smode();
-    delegate_traps_to_smode();
+    /* M-mode -> S-mode transition for Linux boot. Default: hand off on the
+     * current hart. HAL may override hal_smode_boot to release a different
+     * hart and self-park (see hal/mpfs250.c when MPFS_DDR_INIT is set). */
+    wolfBoot_printf("M->S handoff: entry=0x%lx hart=%lu dtb=0x%lx\n",
+                    (unsigned long)app_offset, hartid, dts_addr);
     /* This never returns */
-    enter_smode((unsigned long)app_offset, hartid, dts_addr);
+    hal_smode_boot((unsigned long)app_offset, hartid, dts_addr);
 #else
     /* Direct M-mode jump for bare-metal payloads.
      * Define WOLFBOOT_MMODE_SMODE_BOOT to boot Linux via S-mode transition. */

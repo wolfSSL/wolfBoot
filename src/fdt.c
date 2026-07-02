@@ -1132,6 +1132,19 @@ int fit_load_ramdisk(void* fit, const char* ramdisk_node, void* dts_addr)
 }
 #endif /* WOLFBOOT_FIT_RAMDISK */
 
+/* Weak copy hook for FIT subimages (kernel/dtb).  Default is a plain memcpy;
+ * boards where CPU writes to the load destination do not land (e.g. the
+ * PolarFire MPFS250 DDR, where cached writes thrash L2 Scratch) override this
+ * with a DMA-based copy (see hal/mpfs250.c).  Returns 0 on success or a
+ * negative value if the copy failed, so callers can fail closed rather than
+ * run on a partially written destination. */
+int __attribute__((weak)) wolfBoot_fit_memcpy(void *dst, const void *src,
+    uint32_t len)
+{
+    memcpy(dst, src, len);
+    return 0;
+}
+
 /* Inner implementation shared by fit_load_image_ex and fit_load_image_to.
  * When dst_override is non-NULL it replaces the FIT image's `load`
  * property as the destination, so a compressed (gzip) payload is
@@ -1223,7 +1236,11 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
                 else {
                     wolfBoot_printf("Loading Image %s: %p -> %p "
                         "(%d bytes)\n", image, data, load, len);
-                    memcpy(load, data, len);
+                    if (wolfBoot_fit_memcpy(load, data, (uint32_t)len) != 0) {
+                        wolfBoot_printf("FIT: copy of %s to %p failed\n",
+                            image, load);
+                        return NULL;
+                    }
                 }
 
                 /* No per-image hash-1 re-verification here. Per the
