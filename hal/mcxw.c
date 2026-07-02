@@ -172,8 +172,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             if (memcmp(aligned_qword, empty_qword, flash_word_size) != 0) {
                 write_flash_qword((uint32_t *)address_align, aligned_qword);
             }
-            address += i;
-            len -= i;
+            address = address_align + i;
+            len -= (int)(i - start_off);
         }
         else {
             uint32_t i;

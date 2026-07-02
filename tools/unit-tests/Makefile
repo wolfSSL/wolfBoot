@@ -81,6 +81,7 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-va416x0-fram
+TESTS+=unit-flash-write-mcxa
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -573,6 +574,11 @@ unit-ahci-unlock-panic: ../../include/target.h unit-ahci-unlock-panic.c
 unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-passphrase-zeroize.c
 	gcc -o $@ unit-ata-security-passphrase-zeroize.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
+# standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
+unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
+	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
 
 unit-elf-bss-guard: unit-elf-bss-guard.c
 	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
