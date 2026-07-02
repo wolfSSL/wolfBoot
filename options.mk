@@ -164,6 +164,7 @@ endif
 
 ## DSA Settings
 ifeq ($(SIGN),NONE)
+  $(warning SIGN=NONE / WOLFBOOT_NO_SIGN=1 disables firmware signature verification; images are NOT authenticated. Do not use in production.)
   SIGN_OPTIONS+=--no-sign
   ifeq ($(HASH),SHA384)
     STACK_USAGE=3760
