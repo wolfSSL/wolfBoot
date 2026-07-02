@@ -630,8 +630,7 @@ int wolfBoot_get_partition_state(uint8_t part, uint8_t *st);
 #define WOLFBOOT_FAILURE_CAUSE_NOT_CONFIRMED 4 /* image never confirmed via
                                                 * wolfBoot_success() */
 
-/* Persisted failure record. Exactly 16 bytes so it maps to a single 128-bit
- * write-once flash word and can be appended without read-modify-write. */
+/* Persisted failure record. */
 struct wolfBoot_failure_record {
     uint32_t seq;        /* monotonic sequence number (higher = newer) */
     uint8_t  phase;      /* WOLFBOOT_FAILURE_PHASE_* */

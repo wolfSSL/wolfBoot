@@ -82,6 +82,11 @@ This feature is disabled by default. To enable it, set
   of flash sectors (default: 2);
 - `WOLFBOOT_DIAGNOSTICS_EXT`: setting this causes the region to live in
   external flash. Only meaningful when `EXT_FLASH` is enabled.
+- `WOLFBOOT_DIAGNOSTICS_RECORD_SIZE`: the on-flash slot size for each record and
+  the sector header, in bytes (default: 16). It must be a multiple of, and no
+  smaller than, the flash write granularity. Raise it on platforms whose flash
+  write word is wider than 16 bytes (for example 32 for the 256-bit words on
+  STM32H7).
 
 The region is managed as a circular store over its sectors. With two or more
 sectors, older records are retained until the log wraps all the way around, so

@@ -939,8 +939,12 @@ void RAMFUNCTION wolfBoot_success(void)
 #define DIAG_SECTOR_SIZE    WOLFBOOT_SECTOR_SIZE
 #define DIAG_SECTOR_ADDR(i) ((haladdr_t)(WOLFBOOT_DIAGNOSTICS_ADDRESS) + \
                              (haladdr_t)(i) * DIAG_SECTOR_SIZE)
-#define DIAG_HDR_SIZE       16U
-#define DIAG_RECORD_SIZE    16U
+
+#ifndef WOLFBOOT_DIAGNOSTICS_RECORD_SIZE
+#define WOLFBOOT_DIAGNOSTICS_RECORD_SIZE 16U
+#endif
+#define DIAG_HDR_SIZE       WOLFBOOT_DIAGNOSTICS_RECORD_SIZE
+#define DIAG_RECORD_SIZE    WOLFBOOT_DIAGNOSTICS_RECORD_SIZE
 #define DIAG_SLOTS_PER_SECTOR ((DIAG_SECTOR_SIZE - DIAG_HDR_SIZE) / DIAG_RECORD_SIZE)
 
 struct wolfBoot_diag_header {
@@ -950,11 +954,11 @@ struct wolfBoot_diag_header {
     uint32_t crc; /* CRC32 over the preceding 12 bytes */
 };
 
-/* Ensure both structures are exactly 128-bit */
 typedef char diag_record_size_check[
-    (sizeof(struct wolfBoot_failure_record) == DIAG_RECORD_SIZE) ? 1 : -1];
+    (sizeof(struct wolfBoot_failure_record) <= DIAG_RECORD_SIZE) ? 1 : -1];
 typedef char diag_header_size_check[
-    (sizeof(struct wolfBoot_diag_header) == DIAG_HDR_SIZE) ? 1 : -1];
+    (sizeof(struct wolfBoot_diag_header) <= DIAG_HDR_SIZE) ? 1 : -1];
+typedef char diag_record_min_check[(DIAG_RECORD_SIZE >= 16U) ? 1 : -1];
 
 static uint32_t RAMFUNCTION diag_crc32(const void *data, uint32_t len)
 {
@@ -1098,12 +1102,15 @@ static int RAMFUNCTION diag_write(haladdr_t addr, const void *buf, uint32_t len)
 static int RAMFUNCTION diag_write_header(haladdr_t sector_addr, uint32_t generation)
 {
     struct wolfBoot_diag_header hdr;
+    uint8_t slot[DIAG_HDR_SIZE];
     XMEMSET(&hdr, 0, sizeof(hdr));
     hdr.magic = DIAG_HDR_MAGIC;
     hdr.generation = generation;
     hdr.format_version = DIAG_FORMAT_VERSION;
     hdr.crc = diag_crc32(&hdr, 12);
-    return diag_write(sector_addr, &hdr, sizeof(hdr));
+    XMEMSET(slot, 0xFF, sizeof(slot));
+    XMEMCPY(slot, &hdr, sizeof(hdr));
+    return diag_write(sector_addr, slot, DIAG_HDR_SIZE);
 }
 
 /* Highest sequence number present across all sectors (0 if none). */
@@ -1128,6 +1135,7 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
     uint32_t gen[DIAG_N_SECTORS];
     int count[DIAG_N_SECTORS];
     struct wolfBoot_failure_record rec;
+    uint8_t slot[DIAG_RECORD_SIZE];
     uint32_t seq, active_gen;
     int active, active_count, ret;
 
@@ -1169,8 +1177,10 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
     rec.fw_version = fw_version;
     rec.crc = diag_crc32(&rec, 12);
 
+    XMEMSET(slot, 0xFF, sizeof(slot));
+    XMEMCPY(slot, &rec, sizeof(rec));
     ret = diag_write(DIAG_SECTOR_ADDR(active) + DIAG_HDR_SIZE +
-            (uint32_t)active_count * DIAG_RECORD_SIZE, &rec, sizeof(rec));
+            (uint32_t)active_count * DIAG_RECORD_SIZE, slot, DIAG_RECORD_SIZE);
 
     diag_lock();
     return ret;
