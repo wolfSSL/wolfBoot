@@ -201,6 +201,55 @@ START_TEST(test_clear)
 }
 END_TEST
 
+START_TEST(test_torn_write_recovery)
+{
+    struct wolfBoot_failure_record rec;
+    uint8_t *dirty;
+    int i;
+
+    diag_mmap("/tmp/wolfboot-unit-diag-torn.bin");
+    ck_assert_int_eq(wolfBoot_clear_failures(), 0);
+
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 1);
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 2);
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 3);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 3);
+
+    /* Simulate a power failure mid-write: the next slot (3) is partially
+     * programmed, so it is neither erased nor a valid record. */
+    dirty = (uint8_t *)(uintptr_t)(DIAG_SECTOR_ADDR(0) + DIAG_HDR_SIZE +
+            3 * DIAG_RECORD_SIZE);
+    for (i = 0; i < (int)DIAG_RECORD_SIZE; i++)
+        dirty[i] = 0xA5;
+
+    /* Recording must not get stuck on the dirty slot: it rotates to a fresh
+     * sector instead of reprogramming it. */
+    record_one(WOLFBOOT_FAILURE_PHASE_BOOT,
+            WOLFBOOT_FAILURE_CAUSE_SIGNATURE, PART_BOOT, 4);
+
+    /* The dirty slot was left untouched (never reprogrammed). */
+    ck_assert_int_ne(diag_read_record(DIAG_SECTOR_ADDR(0), 3, &rec), 0);
+    ck_assert_uint_eq(dirty[0], 0xA5);
+
+    /* All valid records remain readable, newest-first, in order. */
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 4);
+    ck_assert_int_eq(wolfBoot_get_failure(0, &rec), 0);
+    ck_assert_uint_eq(rec.fw_version, 4);
+    ck_assert_int_eq(wolfBoot_get_failure(3, &rec), 0);
+    ck_assert_uint_eq(rec.fw_version, 1);
+
+    /* Recording keeps making progress. */
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 5);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 5);
+    ck_assert_int_eq(wolfBoot_get_failure(0, &rec), 0);
+    ck_assert_uint_eq(rec.fw_version, 5);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-diagnostics");
@@ -209,6 +258,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(diag, test_ring_wrap_and_ordering);
     tcase_add_test(diag, test_crc_rejection);
     tcase_add_test(diag, test_clear);
+    tcase_add_test(diag, test_torn_write_recovery);
     suite_add_tcase(s, diag);
     return s;
 }
