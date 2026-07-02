@@ -74,6 +74,7 @@ TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-otp-keystore
+TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-ahci-unlock-panic
 TESTS+=unit-ata-security-passphrase-zeroize
@@ -361,6 +362,15 @@ unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3
 # separate input.
 unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
 	gcc -o $@ unit-otp-keystore.c $(CFLAGS) $(LDFLAGS)
+
+# unit-otp-keystore-gen-zeroize includes the host tool
+# tools/keytools/otp/otp-keystore-gen.c directly (via #define main) and
+# interposes read()/malloc()/free() (dlsym RTLD_NEXT, hence -ldl) to observe
+# the OTP buffer and UDS stack array at free() time.
+unit-otp-keystore-gen-zeroize: unit-otp-keystore-gen-zeroize.c \
+		../keytools/otp/otp-keystore-gen.c ../../src/keystore.c
+	gcc -o $@ unit-otp-keystore-gen-zeroize.c ../../src/keystore.c \
+		-DFLASH_OTP_KEYSTORE $(CFLAGS) $(LDFLAGS) -ldl
 
 unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
