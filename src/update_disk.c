@@ -397,6 +397,10 @@ void RAMFUNCTION wolfBoot_start(void)
             uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
             if ((max_ver > 0U) && (cur_ver < max_ver)) {
                 wolfBoot_printf("Rollback to lower version not allowed\r\n");
+#ifdef DISK_ENCRYPT
+                disk_decrypted_header_clear(dec_hdr);
+                disk_crypto_clear();
+#endif
                 wolfBoot_panic();
                 return;
             }
@@ -573,6 +577,10 @@ void RAMFUNCTION wolfBoot_start(void)
         if (fpga != NULL) {
             if (fit_load_fpga(fit, fpga) != 0) {
                 wolfBoot_printf("FIT: FPGA load failed\r\n");
+#ifdef DISK_ENCRYPT
+                disk_decrypted_header_clear(dec_hdr);
+                disk_crypto_clear();
+#endif
                 wolfBoot_panic();
             }
         }
@@ -584,6 +592,10 @@ void RAMFUNCTION wolfBoot_start(void)
             if (new_load == NULL) {
                 wolfBoot_printf("FIT: failed to load kernel '%s'\r\n",
                     kernel);
+#ifdef DISK_ENCRYPT
+                disk_decrypted_header_clear(dec_hdr);
+                disk_crypto_clear();
+#endif
                 wolfBoot_panic();
             }
             load_address = new_load;
@@ -627,6 +639,10 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifndef TZEN
     if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0) {
         wolfBoot_printf("Error protecting bootloader flash region\r\n");
+#ifdef DISK_ENCRYPT
+        disk_decrypted_header_clear(dec_hdr);
+        disk_crypto_clear();
+#endif
         wolfBoot_panic();
     }
 #endif

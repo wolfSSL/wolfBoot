@@ -361,6 +361,8 @@ END_TEST
 
 START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
 {
+    size_t i;
+
     reset_mocks();
     build_image(part_a_image, 7, 0xA1);
     build_image(part_b_image, 5, 0xB2);
@@ -370,6 +372,12 @@ START_TEST(test_update_disk_rejects_rollback_after_higher_image_failure)
 
     ck_assert_int_gt(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_do_boot_called, 0);
+    for (i = 0; i < ENCRYPT_KEY_SIZE; i++) {
+        ck_assert_uint_eq(disk_encrypt_key[i], 0);
+    }
+    for (i = 0; i < ENCRYPT_NONCE_SIZE; i++) {
+        ck_assert_uint_eq(disk_encrypt_nonce[i], 0);
+    }
 }
 END_TEST
 
