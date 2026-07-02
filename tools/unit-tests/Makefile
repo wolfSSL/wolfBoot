@@ -84,6 +84,8 @@ TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-mcxa
+TESTS+=unit-flash-write-samr21
+TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
@@ -597,6 +599,12 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
+	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-same51: unit-flash-write-same51.c ../../hal/same51.c
+	gcc -o $@ unit-flash-write-same51.c $(CFLAGS) $(LDFLAGS)
 
 # unit-imx-rt-cache-align only pulls in hal/imx_rt.h, which is dependency-free
 # by design, avoiding the (not vendored) NXP MCUXpresso SDK headers that
