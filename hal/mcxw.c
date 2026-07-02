@@ -155,7 +155,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int w = 0;
     const uint32_t flash_word_size = 16;
     const uint32_t empty_qword[4] = {
-        0xFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
+        0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF
     };
 
     while (len > 0) {
