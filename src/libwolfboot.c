@@ -1129,6 +1129,21 @@ static uint32_t RAMFUNCTION diag_max_seq(int *count)
     return maxseq;
 }
 
+static int RAMFUNCTION diag_slot_is_erased(haladdr_t sector_addr, int slot)
+{
+    uint8_t buf[DIAG_RECORD_SIZE];
+    uint32_t i;
+    haladdr_t addr = sector_addr + DIAG_HDR_SIZE +
+        (haladdr_t)slot * DIAG_RECORD_SIZE;
+    if (diag_read(addr, buf, DIAG_RECORD_SIZE) != (int)DIAG_RECORD_SIZE)
+        return 0;
+    for (i = 0; i < DIAG_RECORD_SIZE; i++) {
+        if (buf[i] != 0xFF)
+            return 0;
+    }
+    return 1;
+}
+
 int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
         uint8_t partition, uint32_t fw_version)
 {
@@ -1157,8 +1172,10 @@ int RAMFUNCTION wolfBoot_record_failure(uint8_t phase, uint8_t cause,
     active_gen = gen[active];
     active_count = count[active];
 
-    if (active_count >= (int)DIAG_SLOTS_PER_SECTOR) {
-        /* Active sector full: rotate into next sector. */
+    if (active_count >= (int)DIAG_SLOTS_PER_SECTOR ||
+            !diag_slot_is_erased(DIAG_SECTOR_ADDR(active), active_count)) {
+        /* Active sector full, or the next slot holds a torn write that cannot
+         * be reprogrammed: rotate into the next sector. */
         int target = (active + 1) % DIAG_N_SECTORS;
         diag_erase(DIAG_SECTOR_ADDR(target), DIAG_SECTOR_SIZE);
         if (diag_write_header(DIAG_SECTOR_ADDR(target), active_gen + 1) != 0) {
