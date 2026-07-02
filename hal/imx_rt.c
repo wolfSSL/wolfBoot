@@ -26,6 +26,7 @@
 #include <target.h>
 #include "image.h"
 #include "printf.h"
+#include "imx_rt.h"
 #include "fsl_cache.h"
 #include "fsl_common.h"
 #include "fsl_iomuxc.h"
@@ -966,8 +967,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
      * (see definition of DCACHE_InvalidateByRange).
      * To ensure all data is included we align the address downwards, and the length upwards.
      */
-    uint32_t aligned_address = address - (address % 32);
-    uint32_t aligned_len = len + (32 - (len % 32));
+    uint32_t aligned_address, aligned_len;
+    hal_flash_cache_align_range(address, (uint32_t)len, &aligned_address, &aligned_len);
     DCACHE_InvalidateByRange(aligned_address, aligned_len);
     /* Re-enable interrupts */
     asm volatile("cpsie i");
@@ -1010,8 +1011,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
      * (see definition of DCACHE_InvalidateByRange).
      * To ensure all data is included we align the address downwards, and the length upwards.
      */
-    uint32_t aligned_address = address - (address % 32);
-    uint32_t aligned_len = len + (32 - (len % 32));
+    uint32_t aligned_address, aligned_len;
+    hal_flash_cache_align_range(address, (uint32_t)len, &aligned_address, &aligned_len);
     DCACHE_InvalidateByRange(aligned_address, aligned_len);
     /* Re-enable interrupts */
     asm volatile("cpsie i");
