@@ -303,6 +303,15 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                 blk_start = pa - ctx->src_a;
                 if (blk_start > BLOCK_OFF_MAX)
                     return -1;
+                if (((blk_start >> 16) & 0xFF) == ESC) {
+                    /* The most-significant offset byte would collide with
+                     * the escaped-literal marker (ESC ESC), making the
+                     * header indistinguishable from a literal ESC byte on
+                     * decode. Skip this candidate and keep searching.
+                     */
+                    pa++;
+                    continue;
+                }
                 b_start = ctx->off_b;
                 pa+= BLOCK_HDR_SIZE;
                 ctx->off_b += BLOCK_HDR_SIZE;
@@ -367,6 +376,13 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
                     blk_start = pb - ctx->src_b;
                     if (blk_start > BLOCK_OFF_MAX)
                         return -1;
+                    if (((blk_start >> 16) & 0xFF) == ESC) {
+                        /* Same ESC-collision hazard as the forward-match
+                         * path: skip this candidate and keep searching.
+                         */
+                        pb++;
+                        continue;
+                    }
                     pb+= BLOCK_HDR_SIZE;
                     ctx->off_b += BLOCK_HDR_SIZE;
                     while ((pb < pb_limit) &&
