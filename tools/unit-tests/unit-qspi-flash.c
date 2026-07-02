@@ -17,6 +17,7 @@ static uint32_t program_addrs[8];
 static int write_enable_call_count;
 static int write_enable_status_seq[8];
 static int current_write_enable_call;
+static int read_call_count;
 
 void spi_init(int polarity, int phase)
 {
@@ -72,6 +73,11 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
         return 0;
     }
 
+    if (cmd == FLASH_READ_CMD) {
+        read_call_count++;
+        return 0;
+    }
+
     return 0;
 }
 
@@ -84,6 +90,7 @@ static void setup(void)
     write_enable_call_count = 0;
     current_write_enable_call = 0;
     memset(write_enable_status_seq, 0, sizeof(write_enable_status_seq));
+    read_call_count = 0;
 }
 
 START_TEST(test_qspi_write_splits_last_page_to_remaining_bytes)
@@ -124,6 +131,42 @@ START_TEST(test_qspi_write_stops_after_midloop_write_enable_failure)
 }
 END_TEST
 
+START_TEST(test_qspi_read_rejects_address_at_device_size)
+{
+    uint8_t buf[16];
+    int ret;
+
+    ret = spi_flash_read(FLASH_DEVICE_SIZE, buf, sizeof(buf));
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(read_call_count, 0);
+}
+END_TEST
+
+START_TEST(test_qspi_read_rejects_transfer_extending_past_device_size)
+{
+    uint8_t buf[16];
+    int ret;
+
+    ret = spi_flash_read(FLASH_DEVICE_SIZE - 4, buf, sizeof(buf));
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(read_call_count, 0);
+}
+END_TEST
+
+START_TEST(test_qspi_write_rejects_transfer_extending_past_device_size)
+{
+    uint8_t buf[16];
+    int ret;
+
+    ret = spi_flash_write(FLASH_DEVICE_SIZE - 4, buf, sizeof(buf));
+
+    ck_assert_int_ne(ret, 0);
+    ck_assert_int_eq(program_call_count, 0);
+}
+END_TEST
+
 static Suite *qspi_flash_suite(void)
 {
     Suite *s;
@@ -134,6 +177,9 @@ static Suite *qspi_flash_suite(void)
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_qspi_write_splits_last_page_to_remaining_bytes);
     tcase_add_test(tc, test_qspi_write_stops_after_midloop_write_enable_failure);
+    tcase_add_test(tc, test_qspi_read_rejects_address_at_device_size);
+    tcase_add_test(tc, test_qspi_read_rejects_transfer_extending_past_device_size);
+    tcase_add_test(tc, test_qspi_write_rejects_transfer_extending_past_device_size);
     suite_add_tcase(s, tc);
     return s;
 }

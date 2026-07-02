@@ -389,10 +389,11 @@ int spi_flash_read(uint32_t address, void *data, int len)
     uint32_t altMode = QSPI_DATA_MODE_NONE;
 #endif
 
-    if (address > FLASH_DEVICE_SIZE) {
+    if ((len < 0) || (address >= FLASH_DEVICE_SIZE) ||
+            ((uint64_t)address + (uint32_t)len > FLASH_DEVICE_SIZE)) {
 #ifdef DEBUG_QSPI
-        wolfBoot_printf("QSPI Flash Read: Invalid address (0x%x > 0x%x max)\n",
-            address, FLASH_DEVICE_SIZE);
+        wolfBoot_printf("QSPI Flash Read: Invalid address (0x%x, len %d, max 0x%x)\n",
+            address, len, FLASH_DEVICE_SIZE);
 #endif
         return -1;
     }
@@ -426,6 +427,15 @@ int spi_flash_write(uint32_t address, const void *data, int len)
     wolfBoot_printf("QSPI Flash Write: Len %d, %p -> 0x%x\n",
         len, data, address);
 #endif
+
+    if ((len < 0) || (address >= FLASH_DEVICE_SIZE) ||
+            ((uint64_t)address + (uint32_t)len > FLASH_DEVICE_SIZE)) {
+#ifdef DEBUG_QSPI
+        wolfBoot_printf("QSPI Flash Write: Invalid address (0x%x, len %d, max 0x%x)\n",
+            address, len, FLASH_DEVICE_SIZE);
+#endif
+        return -1;
+    }
 
     /* write by page */
     pages = ((len + (FLASH_PAGE_SIZE-1)) / FLASH_PAGE_SIZE);
