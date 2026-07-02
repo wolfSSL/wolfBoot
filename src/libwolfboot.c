@@ -1082,21 +1082,25 @@ static void RAMFUNCTION diag_lock(void)
 
 static int RAMFUNCTION diag_erase(haladdr_t addr, uint32_t len)
 {
+    int ret;
 #if DIAG_IS_EXT
-    return ext_flash_erase(addr, len);
+    ret = ext_flash_erase(addr, len);
 #else
-    return hal_flash_erase(addr, len);
+    ret = hal_flash_erase(addr, len);
 #endif
+    return (ret < 0) ? -1 : 0;
 }
 
 #if defined(__WOLFBOOT) || defined(UNIT_TEST)
 static int RAMFUNCTION diag_write(haladdr_t addr, const void *buf, uint32_t len)
 {
+    int ret;
 #if DIAG_IS_EXT
-    return ext_flash_write(addr, (const uint8_t *)buf, len);
+    ret = ext_flash_write(addr, (const uint8_t *)buf, len);
 #else
-    return hal_flash_write(addr, (const uint8_t *)buf, len);
+    ret = hal_flash_write(addr, (const uint8_t *)buf, len);
 #endif
+    return (ret < 0) ? -1 : 0;
 }
 
 static int RAMFUNCTION diag_write_header(haladdr_t sector_addr, uint32_t generation)
