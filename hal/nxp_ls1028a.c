@@ -555,7 +555,7 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
             for(j = 0; j < XSPI_IP_WM_SIZE; j+=4) {
                 memcpy(&tx_data, data, 4);
                 data += 4;
-                xspi_writereg((uint32_t*)XSPI_TFD_BASE + j, tx_data);
+                xspi_writereg((uint32_t*)XSPI_TFD_BASE + (j / 4), tx_data);
             }
 
             /* Reset fifo */
@@ -574,7 +574,7 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
                 rem_size = ((remaining - j) < 4) ? (remaining - j) : 4;
                 memcpy(&tx_data, data, rem_size);
                 data += rem_size;
-                xspi_writereg((uint32_t*)XSPI_TFD_BASE + j, tx_data);
+                xspi_writereg((uint32_t*)XSPI_TFD_BASE + (j / 4), tx_data);
             }
 
             /* Reset fifo */
