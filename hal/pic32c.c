@@ -293,7 +293,7 @@ static void pic32_fcw_pfswap_set(int sw)
     uint32_t reg;
 
     reg = FCW_SWAP;
-    reg &= FCW_SWAP_PFSWAP;
+    reg &= ~FCW_SWAP_PFSWAP;
     if (sw)
         reg |= FCW_SWAP_PFSWAP;
     FCW_KEY = FCW_UNLOCK_SWAPKEY;

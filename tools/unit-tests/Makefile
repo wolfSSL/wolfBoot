@@ -90,6 +90,7 @@ TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
 TESTS+=unit-xspi-tfd-index
+TESTS+=unit-pic32-pfswap
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -335,6 +336,9 @@ unit-va416x0-fram: unit-va416x0-fram.c ../../hal/va416x0.c
 
 unit-xspi-tfd-index: unit-xspi-tfd-index.c
 	gcc -o $@ unit-xspi-tfd-index.c $(CFLAGS) -I../../hal $(LDFLAGS)
+
+unit-pic32-pfswap: unit-pic32-pfswap.c
+	gcc -o $@ unit-pic32-pfswap.c $(CFLAGS) $(LDFLAGS)
 
 unit-max-space: ../../include/target.h unit-max-space.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
