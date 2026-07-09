@@ -1,13 +1,12 @@
 /* armclang_stubs.c
  *
  * C library glue for building wolfBoot with the ARM Compiler for Embedded
- * (USE_ARMCLANG=1). Only used by the WOLFCRYPT_TZ/PKCS11 configurations.
+ * (USE_ARMCLANG=1).
  *
  * - ARMCLANG_STUBS_MALLOC (secure image): heap allocator over the RAM_HEAP
- *   scatter region. The GNU build uses newlib-nano's malloc on top of the
- *   _sbrk hook in src/pkcs11_store.c; the ARM C library malloc cannot be
- *   used instead because it requires the C library runtime initialization
- *   (__rt_entry), which never runs since wolfBoot enters at isr_reset.
+ *   scatter region. We can't use the ARM C library malloc because it requires
+ *   the C library runtime initialization, which never runs since wolfBoot
+ *   enters at isr_reset.
  *
  * - ARMCLANG_STUBS_DEAD_REFS: trap stubs for symbols that are only
  *   referenced from sections that GNU ld garbage-collects; armlink needs
@@ -39,9 +38,6 @@
 extern unsigned int _start_heap;
 extern unsigned int _heap_size;
 
-/* First-fit allocator with address-ordered free list and coalescing.
- * Block header keeps the total block size (header included); blocks and
- * payloads are 8-byte aligned. */
 struct heap_blk {
     size_t size;
     struct heap_blk *next;
@@ -162,14 +158,6 @@ void *realloc(void *ptr, size_t size)
 #endif /* ARMCLANG_STUBS_MALLOC */
 
 #ifdef ARMCLANG_STUBS_DEAD_REFS
-
-/* Trap stubs for symbols that are referenced only from wolfSSL sections
- * that are dead in the wolfBoot configurations (proven by the GNU builds,
- * where the references would be a link error if the referencing sections
- * survived garbage collection). armlink resolves all symbols before its
- * unused section elimination, so the references need a definition; both
- * the stubs and the referencing sections are eliminated from the image.
- * The infinite loop makes any unexpected live call fail loudly. */
 
 #define ARMCLANG_DEAD_REF_STUB(name) \
     void name(void); \
