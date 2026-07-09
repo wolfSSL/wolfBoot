@@ -1680,6 +1680,45 @@ ifeq ($(USE_CLANG),1)
   LDFLAGS+=-nostdlib
 endif
 
+ifeq ($(USE_ARMCLANG),1)
+  ifneq ($(ARCH),ARM)
+    $(error USE_ARMCLANG=1 is currently supported only for ARCH=ARM)
+  endif
+  ARMCLANG_PATH?=
+  CC=$(ARMCLANG_PATH)armclang --target=arm-arm-none-eabi
+  AS=$(CC)
+  LD=$(ARMCLANG_PATH)armlink
+  AR=$(ARMCLANG_PATH)armar
+  FROMELF?=$(ARMCLANG_PATH)fromelf
+  SIZE=$(FROMELF) -z
+  OBJCOPY=FROMELF="$(FROMELF)" $(WOLFBOOT_ROOT)/tools/armclang/objcopy.sh
+
+  CFLAGS+=-mfloat-abi=soft
+  CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
+  CFLAGS+=-Wno-unknown-attributes -Wno-error=unknown-attributes
+
+  # Map scatter files region names to GNU ld symbols used by wolfBoot code
+  CFLAGS+=-D'_start_text=Image$$$$ER_VECTORS$$$$Base'
+  CFLAGS+=-D'_stored_data=Load$$$$RW_RAM$$$$Base'
+  CFLAGS+=-D'_start_data=Image$$$$RW_RAM$$$$Base'
+  CFLAGS+=-D'_end_data=Image$$$$RW_RAM$$$$Limit'
+  CFLAGS+=-D'_start_bss=Image$$$$RW_RAM$$$$ZI$$$$Base'
+  CFLAGS+=-D'_end_bss=Image$$$$RW_RAM$$$$ZI$$$$Limit'
+
+  # Base armlink options shared by both images:
+  # - the unreferenced vector table needs an explicit --keep or unused
+  #   section elimination removes it
+  # - RW data compression must be off: wolfBoot copies .data to RAM itself,
+  #   word by word, and would copy the compressed image
+  # - Suppress L6314W (no section matches pattern) is suppressed: the scatter
+  #   files list sections that are only present in some configurations (e.g.
+  #   .ramcode)
+  # - --no_startup: wolfBoot has its own reset handler.
+  ARMCLANG_LDFLAGS=--cpu=Cortex-M33 --fpu=SoftVFP --entry=isr_reset \
+                   --keep="*(.isr_vector)" --datacompressor=off --remove \
+                   --no_startup --info=sizes,totals,unused --diag_suppress=6314
+endif
+
 ifeq ($(USE_GCC),1)
   ## Toolchain setup
   CC=$(CROSS_COMPILE)gcc

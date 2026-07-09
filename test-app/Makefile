@@ -1208,6 +1208,19 @@ ifeq ($(PPC64),1)
   CFLAGS:=$(filter-out -DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE,$(CFLAGS))
 endif
 
+## ARM Compiler for Embedded (USE_ARMCLANG=1): rebuild the link options from
+## scratch, since the GNU-specific LDFLAGS accumulated above don't apply to
+## armlink, and switch the linker script to a scatter file.
+ifeq ($(USE_ARMCLANG),1)
+  CFLAGS+=-D'_end_stack=Image$$$$ARM_LIB_STACK$$$$ZI$$$$Limit'
+  CFLAGS+=-D'_start_heap=Image$$$$RW_RAM$$$$ZI$$$$Limit'
+  # GCC-only flags accumulated above
+  CFLAGS:=$(filter-out -Wstack-usage=% -gstabs,$(CFLAGS))
+  LSCRIPT:=../config/target-app.sct
+  LSCRIPT_TEMPLATE:=ARM-$(TARGET)-ns.sct
+  LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=image.map --scatter=$(LSCRIPT)
+endif
+
 # Capture final flags for locally built wolfSSL objects.
 WOLFSSL_CFLAGS:=$(CFLAGS)
 WOLFTPM_CFLAGS:=$(CFLAGS)

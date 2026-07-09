@@ -27,7 +27,8 @@
 
 #include <target.h>
 #include <time.h>
-int clock_gettime (clockid_t clock_id, struct timespec *tp);
+struct timespec;
+int clock_gettime (unsigned long clock_id, struct timespec *tp);
 #include "wolfboot/wc_secure.h"
 
 #define WOLFCRYPT_ONLY

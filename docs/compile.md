@@ -384,6 +384,25 @@ iterating over a range of flash sectors and erasing them one at a time. Setting 
 single HAL flash erase invocation with a larger erase length versus the iterative approach. On targets where multi-sector erases are more performant, this option can be used to dramatically speed up the
 image swap procedure.
 
+### Building with the ARM Compiler for Embedded (armclang)
+
+wolfBoot can be built with the [ARM Compiler for Embedded](https://developer.arm.com/Tools%20and%20Software/Arm%20Compiler%20for%20Embedded)
+(AC6: `armclang`, `armlink`, `armar`, `fromelf`), the toolchain used by Keil
+MDK. No tool from the GNU or LLVM toolchains is required.
+
+At the moment, the only supported and tested target is the STM32U5
+(`config/examples/{stm32u5.config,stm32u5-wolfcrypt-tz.config}`).
+
+To use this, either have the AC6 tools in your `PATH` or set `ARMCLANG_PATH` to
+their location (including a trailing slash). Then build with USE_ARMCLANG=1:
+
+```
+cp config/examples/stm32u5.config .config
+make USE_ARMCLANG=1
+```
+
+Alternatively, append `USE_ARMCLANG=1` and/or `ARMCLANG_PATH` to your `.config`.
+
 ### Using Mac OS/X
 
 If you see 0xC3 0xBF (C3BF) repeated in your factory.bin then your OS is using Unicode characters.
