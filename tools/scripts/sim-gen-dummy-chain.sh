@@ -1,61 +1,83 @@
 #!/bin/bash
-# Certificate Chain Generation Script (ECC P256 or RSA)
+# Certificate Chain Generation Script (ECC or RSA)
 # Creates a certificate chain with root, intermediate, and leaf
 # Outputs DER format files plus C arrays for embedding
 # Optional: Use existing leaf private key with --leaf <file> argument
+# The CA (root+intermediate) key algo, the CA cert signature hash, and the
+# leaf key algo can be chosen independently.
 
 set -e  # Exit on any error
 
-# Default output directory and algorithm
+# Defaults
 OUTPUT_DIR="test-dummy-ca"
-ALGO="ecc256"  # Default to ECC P-256 keys
+LEGACY_ALGO=""  # --algo: sets both CA and leaf (backward compatible)
+CA_ALGO=""
+LEAF_ALGO=""
+CA_HASH=""
 
-# Helper functions for key operations
+VALID_ALGOS="ecc256 ecc384 ecc521 rsa2048 rsa3072 rsa4096"
+VALID_HASHES="sha256 sha384 sha512"
+
+validate_choice() {
+    local kind=$1 value=$2 valid=$3
+    for v in $valid; do
+        [[ "$value" == "$v" ]] && return 0
+    done
+    echo "Invalid $kind: $value. Use one of: $valid"
+    exit 1
+}
+
+# Helper functions for key operations (first argument selects the algorithm)
 generate_private_key() {
-    local output_file=$1
+    local algo=$1
+    local output_file=$2
 
-    if [[ "$ALGO" == "ecc256" ]]; then
-        openssl ecparam -genkey -name prime256v1 -noout -out "$output_file"
-    elif [[ "$ALGO" == "rsa2048" ]]; then
-        openssl genrsa -out "$output_file" 2048
-    elif [[ "$ALGO" == "rsa4096" ]]; then
-        openssl genrsa -out "$output_file" 4096
-    fi
+    case "$algo" in
+        ecc256) openssl ecparam -genkey -name prime256v1 -noout -out "$output_file" ;;
+        ecc384) openssl ecparam -genkey -name secp384r1 -noout -out "$output_file" ;;
+        ecc521) openssl ecparam -genkey -name secp521r1 -noout -out "$output_file" ;;
+        rsa2048) openssl genrsa -out "$output_file" 2048 ;;
+        rsa3072) openssl genrsa -out "$output_file" 3072 ;;
+        rsa4096) openssl genrsa -out "$output_file" 4096 ;;
+    esac
 }
 
 convert_key_to_der() {
-    local input_file=$1
-    local output_file=$2
+    local algo=$1
+    local input_file=$2
+    local output_file=$3
 
-    if [[ "$ALGO" == "ecc256" ]]; then
+    if [[ "$algo" == ecc* ]]; then
         openssl ec -in "$input_file" -outform DER -out "$output_file"
-    elif [[ "$ALGO" == "rsa2048" || "$ALGO" == "rsa4096" ]]; then
+    else
         openssl rsa -in "$input_file" -outform DER -out "$output_file"
     fi
 }
 
 extract_public_key() {
-    local cert_file=$1
-    local pubkey_pem=$2
-    local pubkey_der=$3
+    local algo=$1
+    local cert_file=$2
+    local pubkey_pem=$3
+    local pubkey_der=$4
 
     # Extract public key from certificate (same for both algos)
     openssl x509 -in "$cert_file" -pubkey -noout > "$pubkey_pem"
 
     # Convert public key to DER format
-    if [[ "$ALGO" == "ecc256" ]]; then
+    if [[ "$algo" == ecc* ]]; then
         openssl ec -pubin -in "$pubkey_pem" -outform DER -out "$pubkey_der"
-    elif [[ "$ALGO" == "rsa2048" || "$ALGO" == "rsa4096" ]]; then
+    else
         openssl rsa -pubin -in "$pubkey_pem" -outform DER -out "$pubkey_der"
     fi
 }
 
 validate_key_format() {
-    local key_file=$1
+    local algo=$1
+    local key_file=$2
 
-    if [[ "$ALGO" == "ecc256" ]]; then
+    if [[ "$algo" == ecc* ]]; then
         openssl ec -in "$key_file" -noout
-    elif [[ "$ALGO" == "rsa2048" || "$ALGO" == "rsa4096" ]]; then
+    else
         openssl rsa -in "$key_file" -noout
     fi
 }
@@ -73,20 +95,39 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --algo)
-      ALGO="$2"
-      if [[ "$ALGO" != "ecc256" && "$ALGO" != "rsa2048" && "$ALGO" != "rsa4096" ]]; then
-        echo "Invalid algorithm: $ALGO. Use 'ecc256', 'rsa2048', or 'rsa4096'"
-        exit 1
-      fi
+      LEGACY_ALGO="$2"
+      validate_choice "algorithm" "$LEGACY_ALGO" "$VALID_ALGOS"
+      shift 2
+      ;;
+    --ca-algo)
+      CA_ALGO="$2"
+      validate_choice "CA algorithm" "$CA_ALGO" "$VALID_ALGOS"
+      shift 2
+      ;;
+    --leaf-algo)
+      LEAF_ALGO="$2"
+      validate_choice "leaf algorithm" "$LEAF_ALGO" "$VALID_ALGOS"
+      shift 2
+      ;;
+    --ca-hash)
+      CA_HASH="$2"
+      validate_choice "CA hash" "$CA_HASH" "$VALID_HASHES"
       shift 2
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--leaf <private_key_file>] [--outdir <output_directory>] [--algo <ecc256|rsa2048|rsa4096>]"
+      echo "Usage: $0 [--leaf <private_key_file>] [--outdir <output_directory>]" \
+           "[--algo <alg>] [--ca-algo <alg>] [--leaf-algo <alg>] [--ca-hash <sha256|sha384|sha512>]"
+      echo "  <alg>: $VALID_ALGOS"
       exit 1
       ;;
   esac
 done
+
+# --algo sets both unless overridden; default ecc256
+CA_ALGO="${CA_ALGO:-${LEGACY_ALGO:-ecc256}}"
+LEAF_ALGO="${LEAF_ALGO:-${LEGACY_ALGO:-ecc256}}"
+CA_HASH="${CA_HASH:-sha256}"
 
 # Configuration
 ROOT_SUBJECT="/C=US/ST=California/L=San Francisco/O=MyOrganization/OU=Root CA/CN=My Root CA"
@@ -100,14 +141,14 @@ mkdir -p ${OUTPUT_DIR}/temp
 ##################
 # GENERATE CHAIN
 ##################
-echo "Generating Certificate Chain using $ALGO..."
+echo "Generating Certificate Chain (CA: $CA_ALGO/$CA_HASH, leaf: $LEAF_ALGO)..."
 
 # Step 1: Generate Root key and certificate
 echo "Generating Root CA..."
-generate_private_key "${OUTPUT_DIR}/temp/root.key.pem"
+generate_private_key "$CA_ALGO" "${OUTPUT_DIR}/temp/root.key.pem"
 
 # Create PEM format root certificate (temporary)
-openssl req -new -x509 -days 3650 -sha256 \
+openssl req -new -x509 -days 3650 -$CA_HASH \
     -key ${OUTPUT_DIR}/temp/root.key.pem \
     -out ${OUTPUT_DIR}/temp/root.crt.pem \
     -subj "$ROOT_SUBJECT" \
@@ -115,12 +156,12 @@ openssl req -new -x509 -days 3650 -sha256 \
     -addext "keyUsage=critical,keyCertSign,cRLSign,digitalSignature"
 
 # Convert root key and certificate to DER format
-convert_key_to_der "${OUTPUT_DIR}/temp/root.key.pem" "${OUTPUT_DIR}/root-prvkey.der"
+convert_key_to_der "$CA_ALGO" "${OUTPUT_DIR}/temp/root.key.pem" "${OUTPUT_DIR}/root-prvkey.der"
 openssl x509 -in ${OUTPUT_DIR}/temp/root.crt.pem -outform DER -out ${OUTPUT_DIR}/root-cert.der
 
 # Step 2: Generate Intermediate key and CSR
 echo "Generating Intermediate CA..."
-generate_private_key "${OUTPUT_DIR}/temp/intermediate.key.pem"
+generate_private_key "$CA_ALGO" "${OUTPUT_DIR}/temp/intermediate.key.pem"
 
 openssl req -new -sha256 \
     -key ${OUTPUT_DIR}/temp/intermediate.key.pem \
@@ -128,7 +169,7 @@ openssl req -new -sha256 \
     -subj "$INTERMEDIATE_SUBJECT"
 
 # Step 3: Sign Intermediate certificate with Root
-openssl x509 -req -days 1825 -sha256 \
+openssl x509 -req -days 1825 -$CA_HASH \
     -in ${OUTPUT_DIR}/temp/intermediate.csr \
     -out ${OUTPUT_DIR}/temp/intermediate.crt.pem \
     -CA ${OUTPUT_DIR}/temp/root.crt.pem \
@@ -137,19 +178,19 @@ openssl x509 -req -days 1825 -sha256 \
     -extfile <(printf "basicConstraints=critical,CA:TRUE,pathlen:0\nkeyUsage=critical,keyCertSign,cRLSign,digitalSignature")
 
 # Convert intermediate key and certificate to DER format
-convert_key_to_der "${OUTPUT_DIR}/temp/intermediate.key.pem" "${OUTPUT_DIR}/intermediate-prvkey.der"
+convert_key_to_der "$CA_ALGO" "${OUTPUT_DIR}/temp/intermediate.key.pem" "${OUTPUT_DIR}/intermediate-prvkey.der"
 openssl x509 -in ${OUTPUT_DIR}/temp/intermediate.crt.pem -outform DER -out ${OUTPUT_DIR}/intermediate-cert.der
 
 # Step 4: Handle Leaf key (generate or use existing)
 echo "Handling Leaf Certificate..."
 if [ -z "$LEAF_KEY_FILE" ]; then
     echo "Generating new leaf private key..."
-    generate_private_key "${OUTPUT_DIR}/temp/leaf.key.pem"
+    generate_private_key "$LEAF_ALGO" "${OUTPUT_DIR}/temp/leaf.key.pem"
 else
     echo "Using provided leaf private key: $LEAF_KEY_FILE"
     cp "$LEAF_KEY_FILE" ${OUTPUT_DIR}/temp/leaf.key.pem
     # Ensure the key file is in the right format
-    validate_key_format "${OUTPUT_DIR}/temp/leaf.key.pem"
+    validate_key_format "$LEAF_ALGO" "${OUTPUT_DIR}/temp/leaf.key.pem"
 fi
 
 # Create CSR for leaf certificate
@@ -158,8 +199,8 @@ openssl req -new -sha256 \
     -out ${OUTPUT_DIR}/temp/leaf.csr \
     -subj "$LEAF_SUBJECT"
 
-# Step 5: Sign Leaf certificate with Intermediate
-openssl x509 -req -days 365 -sha256 \
+# Step 5: Sign Leaf certificate with Intermediate (CA key, CA hash)
+openssl x509 -req -days 365 -$CA_HASH \
     -in ${OUTPUT_DIR}/temp/leaf.csr \
     -out ${OUTPUT_DIR}/temp/leaf.crt.pem \
     -CA ${OUTPUT_DIR}/temp/intermediate.crt.pem \
@@ -168,12 +209,12 @@ openssl x509 -req -days 365 -sha256 \
     -extfile <(printf "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth")
 
 # Convert leaf key and certificate to DER format
-convert_key_to_der "${OUTPUT_DIR}/temp/leaf.key.pem" "${OUTPUT_DIR}/leaf-prvkey.der"
+convert_key_to_der "$LEAF_ALGO" "${OUTPUT_DIR}/temp/leaf.key.pem" "${OUTPUT_DIR}/leaf-prvkey.der"
 openssl x509 -in ${OUTPUT_DIR}/temp/leaf.crt.pem -outform DER -out ${OUTPUT_DIR}/leaf-cert.der
 
 # Extract the public key from leaf certificate in DER format
 echo "Extracting public key from leaf certificate..."
-extract_public_key "${OUTPUT_DIR}/temp/leaf.crt.pem" "${OUTPUT_DIR}/temp/leaf_pubkey.pem" "${OUTPUT_DIR}/leaf-pubkey.der"
+extract_public_key "$LEAF_ALGO" "${OUTPUT_DIR}/temp/leaf.crt.pem" "${OUTPUT_DIR}/temp/leaf_pubkey.pem" "${OUTPUT_DIR}/leaf-pubkey.der"
 
 # Create raw DER format certificate chain
 cat ${OUTPUT_DIR}/intermediate-cert.der ${OUTPUT_DIR}/leaf-cert.der > ${OUTPUT_DIR}/raw-chain.der
@@ -250,7 +291,7 @@ openssl verify -CAfile ${OUTPUT_DIR}/temp/root.crt.pem -untrusted ${OUTPUT_DIR}/
 echo ""
 echo "=== Generated Files Summary ==="
 echo ""
-echo "DER Format (Algorithm: $ALGO):"
+echo "DER Format (CA: $CA_ALGO/$CA_HASH, leaf: $LEAF_ALGO):"
 echo "  Root CA certificate:        ${OUTPUT_DIR}/root-cert.der"
 echo "  Root CA key:                ${OUTPUT_DIR}/root-prvkey.der"
 echo "  Intermediate certificate:   ${OUTPUT_DIR}/intermediate-cert.der"

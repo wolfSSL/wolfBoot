@@ -62,10 +62,25 @@ To use certificate verification with wolfHSM:
 3. Pre-provision one or more root CA certificates on the wolfHSM server at the NVM IDs listed in the HAL `hsmNvmIdCertRootCAList`. Verification succeeds if the embedded chain anchors to *any* root in the list (absent NVM IDs are silently skipped). The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8).
 4. Sign firmware images with the `--cert-chain` option, providing a DER-encoded certificate chain
 
+The chain's CA certificates do not need to use the same algorithm as the leaf
+(which wraps the wolfBoot signing key and therefore follows `SIGN`). The
+verifier only needs the CA algorithms compiled in, via `AUX_PK_ALGOS` and
+`AUX_HASH_ALGOS` (see [docs/compile.md](compile.md)):
+
+- When the build auto-generates the dummy test chain (no `USER_CERT_CHAIN`),
+  the CA key algorithm and cert signature hash can be chosen with
+  `CERT_CHAIN_GEN_CA_ALGO` (`ecc256`/`ecc384`/`ecc521`/`rsa2048`/`rsa3072`/
+  `rsa4096`, default: same as the leaf) and `CERT_CHAIN_GEN_CA_HASH`
+  (`sha256`/`sha384`/`sha512`, default `sha256`). Both are bridged into the
+  auxiliary algorithm lists automatically.
+- When providing `USER_CERT_CHAIN`, set `AUX_PK_ALGOS`/`AUX_HASH_ALGOS` to
+  cover every algorithm used by the chain's certificate signatures.
+
 To build the simulator using wolfHSM for certificate verification:
 
 - **Client Mode**: Use [config/examples/sim-wolfHSM-client-certchain.config](config/examples/sim-wolfHSM-client-certchain.config)
 - **Server Mode**: Use [config/examples/sim-wolfHSM-server-certchain.config](config/examples/sim-wolfHSM-server-certchain.config)
+- **Server Mode, mixed-algorithm chain**: Use [config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config](../config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config) (RSA2048/SHA-384 CA certs, ECC256 leaf)
 
 ## Configuration Options
 

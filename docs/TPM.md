@@ -21,6 +21,12 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | (header macro) | `WOLFBOOT_TPM_MFG_AIK_AUTH` / `WOLFBOOT_TPM_MFG_EH_AUTH` | Default (precomputed) mode: the 16-byte per-device AIK / EH authValues (placeholder `0xFF` default). |
 | (header macro) | `WOLFBOOT_TPM_MFG_EH_MASTER` | Derive mode: override the endorsement-hierarchy master value (16-byte initializer list, sample default). |
 
+The TPM primary key (SRK) and parameter encryption need ECC or RSA in
+wolfCrypt. When `WOLFTPM=1` and neither `SIGN`, `SIGN_SECONDARY`, nor
+`AUX_PK_ALGOS` provides one (e.g. `SIGN=ML_DSA` or `SIGN=ED25519`), the build
+automatically adds `ecc256` to `AUX_PK_ALGOS`. See "Auxiliary crypto
+algorithms" in [docs/compile.md](compile.md).
+
 ## TPM manufacturing identity (IAK / IDevID authValue)
 
 When `WOLFTPM_MFG_IDENTITY` is enabled, `wolfBoot_tpm2_get_aik()` and

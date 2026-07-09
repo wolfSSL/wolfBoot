@@ -1618,25 +1618,62 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     CFLAGS += '-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=$(WOLFHSM_NVM_ROOT_CA_LIST)'
   endif
 
-  # User-provided cert chain takes precedence
+  # User-provided cert chain takes precedence. Declare the chain's
+  # algorithms via AUX_PK_ALGOS/AUX_HASH_ALGOS so the verifier has them.
   ifneq ($(USER_CERT_CHAIN),)
     CERT_CHAIN_FILE = $(USER_CERT_CHAIN)
   else
     # Auto-generate dummy cert chain (when USER_CERT_CHAIN not provided)
     CERT_CHAIN_FILE = test-dummy-ca/raw-chain.der
 
-    # Set appropriate cert gen algo based on signature algorithm
+    # The leaf cert wraps the signing key, so its algo follows SIGN
     ifeq ($(SIGN),ECC256)
-      CERT_CHAIN_GEN_ALGO+=ecc256
+      CERT_CHAIN_GEN_LEAF_ALGO:=ecc256
+    endif
+    ifeq ($(SIGN),ECC384)
+      CERT_CHAIN_GEN_LEAF_ALGO:=ecc384
+    endif
+    ifeq ($(SIGN),ECC521)
+      CERT_CHAIN_GEN_LEAF_ALGO:=ecc521
     endif
     ifeq ($(SIGN),RSA2048)
-      CERT_CHAIN_GEN_ALGO+=rsa2048
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa2048
+    endif
+    ifeq ($(SIGN),RSA3072)
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa3072
     endif
     ifeq ($(SIGN),RSA4096)
-      CERT_CHAIN_GEN_ALGO+=rsa4096
-      # Reasonably large default
-      CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa4096
     endif
+    ifeq ($(SIGN),RSAPSS2048)
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa2048
+    endif
+    ifeq ($(SIGN),RSAPSS3072)
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa3072
+    endif
+    ifeq ($(SIGN),RSAPSS4096)
+      CERT_CHAIN_GEN_LEAF_ALGO:=rsa4096
+    endif
+    ifeq ($(CERT_CHAIN_GEN_LEAF_ALGO),)
+      $(error dummy cert chain generation does not support SIGN=$(SIGN); \
+        provide USER_CERT_CHAIN instead)
+    endif
+
+    # Root/intermediate key algo and cert signature hash are configurable
+    CERT_CHAIN_GEN_CA_ALGO?=$(CERT_CHAIN_GEN_LEAF_ALGO)
+    CERT_CHAIN_GEN_CA_HASH?=sha256
+
+    # Compile in the CA's algorithms so the chain verifies in boot
+    ifneq ($(CERT_CHAIN_GEN_CA_ALGO),$(CERT_CHAIN_GEN_LEAF_ALGO))
+      AUX_PK_ALGOS:=$(AUX_PK_ALGOS),$(CERT_CHAIN_GEN_CA_ALGO)
+    endif
+    ifneq ($(CERT_CHAIN_GEN_CA_HASH),sha256)
+      AUX_HASH_ALGOS:=$(AUX_HASH_ALGOS),$(CERT_CHAIN_GEN_CA_HASH)
+    endif
+  endif
+  # Reasonably large default cert buffer when RSA4096 is in the chain
+  ifneq (,$(filter rsa4096,$(CERT_CHAIN_GEN_CA_ALGO) $(CERT_CHAIN_GEN_LEAF_ALGO)))
+    CFLAGS += -DWOLFHSM_CFG_MAX_CERT_SIZE=4096
   endif
   SIGN_OPTIONS += --cert-chain $(CERT_CHAIN_FILE)
 endif
@@ -1681,3 +1718,119 @@ endif
 ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
 endif
+
+# Auxiliary algorithms: compile extra wolfCrypt code beyond what SIGN/HASH
+# selects, for features that need it (cert-chain verification, TPM, ...).
+# Auxiliary algorithms are never used to verify image signatures.
+# AUX_PK_ALGOS / AUX_HASH_ALGOS take comma-separated, case-insensitive
+# entries, e.g. AUX_PK_ALGOS=rsa2048,ecc384 AUX_HASH_ALGOS=sha384.
+# This section must stay below anything that appends to the two lists
+# (e.g. the cert-chain block above).
+AUX_PK_ALGOS?=
+AUX_HASH_ALGOS?=
+AUX_PK_LIST:=$(sort $(shell echo $(AUX_PK_ALGOS) | tr 'A-Z,' 'a-z '))
+AUX_HASH_LIST:=$(sort $(shell echo $(AUX_HASH_ALGOS) | tr 'A-Z,' 'a-z '))
+SIGN_TOKENS_LC:=$(shell echo $(SIGN) $(SIGN_SECONDARY) | tr 'A-Z' 'a-z')
+
+# TPM needs ECC or RSA for the SRK and parameter encryption
+ifeq ($(WOLFTPM),1)
+  ifeq (,$(filter ecc% rsa%,$(SIGN_TOKENS_LC) $(AUX_PK_LIST)))
+    AUX_PK_LIST+=ecc256
+  endif
+endif
+
+ifneq (,$(strip $(AUX_PK_LIST) $(AUX_HASH_LIST)))
+  ifeq ($(WOLFBOOT_SMALL_STACK),1)
+    $(error auxiliary algorithms not supported with WOLFBOOT_SMALL_STACK: \
+      the static pools in src/xmalloc.c only cover the primary SIGN algorithm)
+  endif
+endif
+
+AUX_PK_VALID:=ecc256 ecc384 ecc521 rsa2048 rsa3072 rsa4096 \
+  rsapss2048 rsapss3072 rsapss4096 ed25519 ed448
+AUX_HASH_VALID:=sha256 sha384 sha512 sha3
+ifneq (,$(filter-out $(AUX_PK_VALID),$(AUX_PK_LIST)))
+  $(error invalid AUX_PK_ALGOS entries "$(filter-out $(AUX_PK_VALID),$(AUX_PK_LIST))". Valid: $(AUX_PK_VALID))
+endif
+ifneq (,$(filter-out $(AUX_HASH_VALID),$(AUX_HASH_LIST)))
+  $(error invalid AUX_HASH_ALGOS entries "$(filter-out $(AUX_HASH_VALID),$(AUX_HASH_LIST))". Valid: $(AUX_HASH_VALID))
+endif
+
+# Entries matching SIGN/SIGN_SECONDARY are already compiled in
+AUX_PK_EFFECTIVE:=$(filter-out $(SIGN_TOKENS_LC),$(AUX_PK_LIST))
+
+AUX_WOLFCRYPT_OBJS:=
+ifneq (,$(filter ecc256,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_ECC256
+  AUX_WOLFCRYPT_OBJS+=$(ECC_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter ecc384,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_ECC384
+  AUX_WOLFCRYPT_OBJS+=$(ECC_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter ecc521,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_ECC521
+  AUX_WOLFCRYPT_OBJS+=$(ECC_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsa2048,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSA2048
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsa3072,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSA3072
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsa4096,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSA4096
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsapss2048,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSAPSS2048
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsapss3072,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSAPSS3072
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter rsapss4096,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_RSAPSS4096
+  AUX_WOLFCRYPT_OBJS+=$(RSA_OBJS) $(MATH_OBJS)
+endif
+ifneq (,$(filter ed25519,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_ED25519
+  AUX_WOLFCRYPT_OBJS+=$(ED25519_OBJS)
+endif
+ifneq (,$(filter ed448,$(AUX_PK_EFFECTIVE)))
+  CFLAGS+=-DWOLFBOOT_AUX_PK_ED448
+  AUX_WOLFCRYPT_OBJS+=$(ED448_OBJS)
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+endif
+
+# ED448 defines WOLFSSL_SHA512 in user_settings.h but ED448_OBJS carries no
+# sha512.o; make sure it gets linked (deduplicated below)
+ifneq (,$(filter ED448,$(SIGN) $(SIGN_SECONDARY)))
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+endif
+
+ifneq (,$(filter sha256,$(AUX_HASH_LIST)))
+  CFLAGS+=-DWOLFBOOT_AUX_HASH_SHA256
+endif
+ifneq (,$(filter sha384,$(AUX_HASH_LIST)))
+  CFLAGS+=-DWOLFBOOT_AUX_HASH_SHA384
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+endif
+ifneq (,$(filter sha512,$(AUX_HASH_LIST)))
+  CFLAGS+=-DWOLFBOOT_AUX_HASH_SHA512
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+endif
+ifneq (,$(filter sha3,$(AUX_HASH_LIST)))
+  CFLAGS+=-DWOLFBOOT_AUX_HASH_SHA3
+  AUX_WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+endif
+
+# Append only objects not already selected by SIGN/HASH/features.
+# Snapshot with := first: WOLFCRYPT_OBJS is a recursive variable in some
+# includers (test-app), where a self-referencing += would not terminate.
+AUX_WOLFCRYPT_OBJS_NEW:=$(filter-out $(WOLFCRYPT_OBJS),$(sort $(AUX_WOLFCRYPT_OBJS)))
+WOLFCRYPT_OBJS+=$(AUX_WOLFCRYPT_OBJS_NEW)

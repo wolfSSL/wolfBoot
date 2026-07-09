@@ -142,6 +142,49 @@ It's possible to disable authentication of the firmware image by explicitly usin
 in the Makefile commandline. This will compile a minimal bootloader with no support for public-key authenticated
 secure boot.
 
+### Auxiliary crypto algorithms
+
+Some features need crypto algorithms beyond the ones selected with `SIGN` and
+`HASH`: certificate-chain verification may meet CA certificates signed with a
+different algorithm than the leaf, and TPM support needs ECC or RSA for its
+primary key and parameter encryption even when `SIGN` is a post-quantum or
+Ed25519/Ed448 algorithm.
+
+`AUX_PK_ALGOS` and `AUX_HASH_ALGOS` compile extra wolfCrypt algorithms into
+wolfBoot for those uses. Both take a comma-separated, case-insensitive list
+(no spaces):
+
+```sh
+make SIGN=ECC256 AUX_PK_ALGOS=rsa2048,ecc384 AUX_HASH_ALGOS=sha384
+```
+
+Valid `AUX_PK_ALGOS` entries: `ecc256`, `ecc384`, `ecc521`, `rsa2048`,
+`rsa3072`, `rsa4096`, `rsapss2048`, `rsapss3072`, `rsapss4096`, `ed25519`,
+`ed448`. Valid `AUX_HASH_ALGOS` entries: `sha256`, `sha384`, `sha512`,
+`sha3`. Post-quantum algorithms (ML-DSA, LMS, XMSS) are not yet supported as
+auxiliary algorithms.
+
+Auxiliary algorithms are never used to verify the firmware image signature;
+that remains bound to `SIGN` (and `SIGN_SECONDARY` for hybrid mode). Each
+entry defines a `WOLFBOOT_AUX_PK_<ALGO>` or `WOLFBOOT_AUX_HASH_<ALGO>` macro
+and links the matching wolfCrypt objects; entries already covered by
+`SIGN`/`SIGN_SECONDARY` are no-ops.
+
+Notes:
+
+- Not compatible with `WOLFBOOT_SMALL_STACK=1`: the static memory pools are
+  sized for the primary `SIGN` algorithm only.
+- `STACK_USAGE` is not adjusted automatically. If an auxiliary algorithm with
+  larger stack needs (e.g. `rsa4096`) is actually exercised, consider
+  `WOLFBOOT_HUGE_STACK=1` (the RSA4096 cert-chain configurations already do).
+- When `WOLFTPM=1` and neither `SIGN`, `SIGN_SECONDARY`, nor `AUX_PK_ALGOS`
+  provides an ECC or RSA algorithm, `ecc256` is added automatically so the
+  TPM SRK and parameter encryption work.
+- With `CERT_CHAIN_VERIFY=1`, the generated dummy chain's CA algorithms
+  (`CERT_CHAIN_GEN_CA_ALGO`/`CERT_CHAIN_GEN_CA_HASH`) are bridged into these
+  lists automatically. Users providing `USER_CERT_CHAIN` must list their
+  chain's algorithms here themselves.
+
 ### Incremental updates
 
 wolfBoot support incremental updates. To enable this feature, compile with `DELTA_UPDATES=1`.

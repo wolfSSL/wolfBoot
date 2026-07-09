@@ -432,7 +432,7 @@ ifeq ($(USER_PRIVATE_KEY),)
 	$(Q)(test $(SIGN) = NONE) || ($(SIGN_ENV) "$(KEYGEN_TOOL)" $(KEYGEN_OPTIONS) -g wolfboot_signing_private_key.der) || true
 	$(Q)(test $(SIGN) = NONE) && (echo "// SIGN=NONE" >  src/keystore.c) || true
 	$(Q)(test "$(FLASH_OTP_KEYSTORE)" = "1") && (make -C tools/keytools/otp) || true
-	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(USER_CERT_CHAIN)" != "") || (tools/scripts/sim-gen-dummy-chain.sh --algo $(CERT_CHAIN_GEN_ALGO) --leaf wolfboot_signing_private_key.der)
+	$(Q)(test $(SIGN) = NONE) || (test "$(CERT_CHAIN_VERIFY)" = "") || (test "$(USER_CERT_CHAIN)" != "") || (tools/scripts/sim-gen-dummy-chain.sh --leaf-algo $(CERT_CHAIN_GEN_LEAF_ALGO) --ca-algo $(CERT_CHAIN_GEN_CA_ALGO) --ca-hash $(CERT_CHAIN_GEN_CA_HASH) --leaf wolfboot_signing_private_key.der)
 else
 	@echo "Using user-provided private key: $(USER_PRIVATE_KEY)"
 endif

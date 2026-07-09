@@ -44,6 +44,11 @@ jobs:
             needs_posix_server: false
             posix_server_nvminit: false
             needs_nvm_image: true
+          - name: "wolfHSM server cert chain verify RSA2048/SHA384 CA, ECC256 leaf"
+            file: "config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config"
+            needs_posix_server: false
+            posix_server_nvminit: false
+            needs_nvm_image: true
 
       fail-fast: false
 

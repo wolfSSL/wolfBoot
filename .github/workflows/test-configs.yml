@@ -804,6 +804,34 @@ jobs:
       arch: host
       config-file: ./config/examples/sim-wolfHSM-server-certchain-rsa4096.config
 
+  sim_wolfhsm_server_certchain_rsa2048_ca_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config
+
+  # Auxiliary algorithms (AUX_PK_ALGOS/AUX_HASH_ALGOS) compile-only matrix
+  sim_aux_algos_ed25519_rsa_ecc_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: AUX_PK_ALGOS=rsa4096,ecc384 AUX_HASH_ALGOS=sha384,sha512
+
+  sim_aux_algos_multi_rsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: SIGN=RSA2048 AUX_PK_ALGOS=rsa4096,rsapss2048,ecc521,ed448 AUX_HASH_ALGOS=sha3
+
+  sim_aux_algos_tpm_fallback_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim.config
+      make-args: WOLFTPM=1 SIM_TPM=1
+
   rp2350_test:
     uses: ./.github/workflows/test-build-pico-sdk.yml
     with:
