@@ -24,6 +24,7 @@
 #include <string.h>
 #include "hal/stm32u5.h"
 #include "hal.h"
+#include "uart_drv.h"
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -33,7 +34,7 @@ static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
         FLASH_ACR =  (reg & ~FLASH_ACR_LATENCY_MASK) | waitstates;
 }
 
-static RAMFUNCTION void flash_wait_complete(uint8_t bank)
+void RAMFUNCTION hal_flash_wait_complete(uint8_t bank)
 {
     while ((FLASH_NS_SR & (FLASH_SR_BSY | FLASH_SR_WDW)) != 0)
         ;
@@ -44,7 +45,7 @@ static RAMFUNCTION void flash_wait_complete(uint8_t bank)
 
 }
 
-static void RAMFUNCTION flash_clear_errors(uint8_t bank)
+void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 {
 
     FLASH_NS_SR |= (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR |
@@ -68,7 +69,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t qword[4];
     volatile uint32_t *sr, *cr;
 
-    flash_clear_errors(0);
+    hal_flash_clear_errors(0);
     src = (uint32_t*)data;
     dst = (uint32_t*)address;
 
@@ -105,7 +106,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         ISB();
         dst[(i >> 2) + 3] = qword[3];
         ISB();
-        flash_wait_complete(0);
+        hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
@@ -117,7 +118,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
-    flash_wait_complete(0);
+    hal_flash_wait_complete(0);
 #if (TZ_SECURE())
     if ((FLASH_CR & FLASH_CR_LOCK) != 0) {
         FLASH_KEYR = FLASH_KEY1;
@@ -140,7 +141,7 @@ void RAMFUNCTION hal_flash_unlock(void)
 
 void RAMFUNCTION hal_flash_lock(void)
 {
-    flash_wait_complete(0);
+    hal_flash_wait_complete(0);
 #if (TZ_SECURE())
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
@@ -151,7 +152,7 @@ void RAMFUNCTION hal_flash_lock(void)
 
 void RAMFUNCTION hal_flash_opt_unlock(void)
 {
-    flash_wait_complete(0);
+    hal_flash_wait_complete(0);
 
     if ((FLASH_NS_CR & FLASH_CR_OPTLOCK) != 0) {
         FLASH_NS_OPTKEYR = FLASH_OPTKEY1;
@@ -167,7 +168,7 @@ void RAMFUNCTION hal_flash_opt_lock(void)
 {
 
     FLASH_NS_CR |= FLASH_CR_OPTSTRT;
-    flash_wait_complete(0);
+    hal_flash_wait_complete(0);
     FLASH_NS_CR |= FLASH_CR_OBL_LAUNCH;
     if ((FLASH_NS_CR & FLASH_CR_OPTLOCK) == 0)
         FLASH_NS_CR |= FLASH_CR_OPTLOCK;
@@ -179,7 +180,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
     volatile uint32_t *cr = &FLASH_NS_CR;
 
-    flash_clear_errors(0);
+    hal_flash_clear_errors(0);
     if (len == 0)
         return -1;
 
@@ -219,7 +220,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         *cr = reg;
         DMB();
         *cr |= FLASH_CR_STRT;
-        flash_wait_complete(0);
+        hal_flash_wait_complete(0);
     }
     /* If the erase operation is completed, disable the associated bits */
     *cr &= ~FLASH_CR_PER ;
@@ -500,6 +501,8 @@ static void led_unsecure()
 #define TZSC1_BASE 0x50032400u
 #define TZSC_SECCFGR1 (*(volatile uint32_t *)(TZSC1_BASE + 0x10u))
 #define TZSC_SECCFGR1_USART3SEC (1u << 10)
+#define TZSC_SECCFGR2 (*(volatile uint32_t *)(TZSC1_BASE + 0x14u))
+#define TZSC_SECCFGR2_USART1SEC (1u << 3)
 
 static void periph_unsecure(void)
 {
@@ -521,6 +524,24 @@ static void periph_unsecure(void)
         reg &= ~TZSC_SECCFGR1_USART3SEC;
         DMB();
         TZSC_SECCFGR1 = reg;
+    }
+
+    /* Enable clock for GPIO A (USART1 pins PA9/PA10) */
+    RCC_AHB2ENR1_CLOCK_ER |= GPIOA_AHB2ENR1_CLOCK_ER;
+
+    /* Enable clock for USART1 */
+    RCC_APB2ENR |= UART1_APB2_CLOCK_ER_VAL;
+
+    /* Unsecure USART1 pins (PA9 TX, PA10 RX) */
+    GPIOA_SECCFGR &= ~(1u << UART1_TX_PIN);
+    GPIOA_SECCFGR &= ~(1u << UART1_RX_PIN);
+
+    /* Unsecure USART1 peripheral in GTZC TZSC */
+    reg = TZSC_SECCFGR2;
+    if (reg & TZSC_SECCFGR2_USART1SEC) {
+        reg &= ~TZSC_SECCFGR2_USART1SEC;
+        DMB();
+        TZSC_SECCFGR2 = reg;
     }
 }
 #endif
@@ -554,6 +575,12 @@ void hal_init(void)
         fork_bootloader();
 #endif
     clock_pll_on(0);
+
+#ifdef DEBUG_UART
+    uart_init(115200, 8, 'N', 1);
+    uart_write("wolfBoot Init\n", 14);
+#endif
+
 #if TZ_SECURE()
     hal_tz_sau_init();
     hal_gtzc_init();

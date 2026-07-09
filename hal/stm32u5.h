@@ -277,6 +277,68 @@
 
 #define RCC_AHB2_CLOCK_ER RCC_AHB2ENR1_CLOCK_ER
 
+/* UART */
+#if (TZ_SECURE())
+#define UART1 (0x50013800) /* USART1 - RM0456 - Table 4 */
+#define GPIOA_BASE (0x52020000)
+#else
+#define UART1 (0x40013800) /* USART1 - RM0456 - Table 4 */
+#define GPIOA_BASE (0x42020000)
+#endif
+
+#define UART_CR1(base) (*(volatile uint32_t *)((base) + 0x00))
+#define UART_CR2(base) (*(volatile uint32_t *)((base) + 0x04))
+#define UART_CR3(base) (*(volatile uint32_t *)((base) + 0x08))
+#define UART_BRR(base) (*(volatile uint32_t *)((base) + 0x0c))
+#define UART_ISR(base) (*(volatile uint32_t *)((base) + 0x1c))
+#define UART_ICR(base) (*(volatile uint32_t *)((base) + 0x20))
+#define UART_RDR(base) (*(volatile uint32_t *)((base) + 0x24))
+#define UART_TDR(base) (*(volatile uint32_t *)((base) + 0x28))
+#define UART_PRE(base) (*(volatile uint32_t *)((base) + 0x2C))
+
+#define UART_CR1_UART_ENABLE    (1 << 0)
+#define UART_CR1_OVER8          (1 << 15)
+#define UART_CR1_SYMBOL_LEN     (1 << 12)
+#define UART_CR1_PARITY_ENABLED (1 << 10)
+#define UART_CR1_PARITY_ODD     (1 << 9)
+#define UART_CR1_TX_ENABLE      (1 << 3)
+#define UART_CR1_RX_ENABLE      (1 << 2)
+#define UART_CR2_STOPBITS       (3 << 12)
+#define UART_CR2_LINEN          (1 << 14)
+#define UART_CR2_CLKEN          (1 << 11)
+#define UART_CR3_HDSEL          (1 << 3)
+#define UART_CR3_SCEN           (1 << 5)
+#define UART_CR3_IREN           (1 << 1)
+#define UART_ISR_TX_EMPTY       (1 << 7)
+#define UART_ISR_TX_COMPLETE    (1 << 6)
+#define UART_ISR_RX_NOTEMPTY    (1 << 5)
+#define UART_EPE                (1 << 0)    /* Parity error */
+#define UART_EFE                (1 << 1)    /* Framing error */
+#define UART_ENE                (1 << 2)    /* Noise error */
+#define UART_ORE                (1 << 3)    /* Overrun error */
+
+#define UART1_APB2_CLOCK_ER_VAL (1 << 14) /* RM0456 - RCC_APB2ENR - USART1EN */
+#define RCC_APB2ENR             (*(volatile uint32_t *)(RCC_BASE + 0xA4)) /* RM0456 - Table 108 */
+
+#define RCC_CCIPR1              (*(volatile uint32_t *)(RCC_BASE + 0xE0)) /* RM0456 - 11.8.46 */
+#define RCC_CCIPR1_USART1SEL_SHIFT (0)
+#define RCC_CCIPR1_USART1SEL_MASK  (0x3)
+#define RCC_CCIPR1_USART1SEL_HSI16 (0x2)
+
+#define HSI16_FREQ (16000000)
+
+/* USART1 pin configuration: PA9 (TX) / PA10 (RX), AF7.
+ * Connected to the ST-LINK VCP on Nucleo-U575ZI-Q. */
+#define UART1_PIN_AF 7
+#define UART1_TX_PIN 9
+#define UART1_RX_PIN 10
+
+#define GPIOA_AHB2ENR1_CLOCK_ER (1 << 0)
+#define GPIOA_MODE    (*(volatile uint32_t *)(GPIOA_BASE + 0x00))
+#define GPIOA_AFL     (*(volatile uint32_t *)(GPIOA_BASE + 0x20))
+#define GPIOA_AFH     (*(volatile uint32_t *)(GPIOA_BASE + 0x24))
+#define GPIOA_SECCFGR (*(volatile uint32_t *)(GPIOA_BASE + 0x30))
+
 /* Reset */
 #define OPTR_SWAP_BANK (1 << 20)
 
