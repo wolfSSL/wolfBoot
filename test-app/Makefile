@@ -654,6 +654,9 @@ ifeq ($(TARGET),stm32u5)
   endif
   CFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-mcpu=cortex-m33
+  ifeq ($(DEBUG_UART),1)
+    APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET)_ns.o
+  endif
 endif
 
 ifeq ($(TARGET),stm32u3)
@@ -1381,6 +1384,9 @@ delta-extra-data: image.bin
 
 ../hal/spi/spi_drv_$(SPI_TARGET)_ns.o: ../hal/spi/spi_drv_$(SPI_TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/spi/spi_drv_$(SPI_TARGET).c -DNONSECURE_APP
+
+../hal/uart/uart_drv_$(UART_TARGET)_ns.o: ../hal/uart/uart_drv_$(UART_TARGET).c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/uart/uart_drv_$(UART_TARGET).c -DNONSECURE_APP
 
 board_$(BOARD).o: ../hal/boards/$(BOARD)/board.c
 	@echo "\t[CC-$(ARCH)] $@"
