@@ -34,6 +34,7 @@ This README describes configuration of supported targets.
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [NVIDIA Jetson Orin (aarch64_efi)](#nvidia-jetson-orin-aarch64_efi)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
 * [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
@@ -7782,6 +7783,171 @@ Staging kernel at address D630100, size: 6658016
 You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
 
+
+## NVIDIA Jetson Orin (aarch64_efi)
+
+The `aarch64_efi` target builds wolfBoot as an AArch64 UEFI application (`wolfboot.efi`), the direct counterpart of the [Qemu x86-64 UEFI](#qemu-x86-64-uefi) target. It uses only UEFI Boot Services (no SoC-specific registers), so the same binary runs on any AArch64 UEFI platform. It has been validated on the NVIDIA Jetson Orin Nano Developer Kit (Tegra234), where the on-module UEFI firmware (edk2-nvidia) launches it after the NVIDIA-signed early boot chain (BootROM -> MB1 -> MB2 -> UEFI). wolfBoot reads the next-stage image from the EFI Simple File System, authenticates it with wolfCrypt, and boots it via the UEFI `LoadImage`/`StartImage` services (an AArch64 Linux `Image` is itself a PE/COFF EFI-stub application).
+
+### Prerequisites
+
+ * An AArch64 GNU toolchain (`aarch64-linux-gnu-gcc`)
+ * gnu-efi built for AArch64 (the host distro package is usually x86-only, so build it with the helper script below)
+ * For emulation: `qemu-system-aarch64` plus the AArch64 UEFI firmware (AAVMF, package `qemu-efi-aarch64`)
+
+On a debian-like system:
+
+```
+apt install git make gcc-aarch64-linux-gnu dosfstools mtools
+apt install qemu-system-arm qemu-efi-aarch64   # emulation (optional)
+```
+
+Build the AArch64 gnu-efi runtime once (installs into `tools/gnu-efi-aarch64/`):
+
+```
+./tools/scripts/build-gnu-efi-aarch64.sh
+```
+
+### Configuration
+
+An example configuration is provided in [config/examples/aarch64_efi.config](config/examples/aarch64_efi.config). It selects `ARCH=AARCH64`, `TARGET=aarch64_efi`, and a signature/hash algorithm (ED25519/SHA256 by default). No partition addresses are required -- UEFI provides the storage and dynamic image placement.
+
+### Building
+
+```
+cp config/examples/aarch64_efi.config .config
+make
+```
+
+This produces `wolfboot.efi`, a PE32+ AArch64 EFI application (objcopy output format `pei-aarch64-little`).
+
+### Signing a payload
+
+Sign the image to boot (an AArch64 Linux `Image`, or any EFI application for testing) with the generated key, tagging it with a version. wolfBoot looks for `kernel.img` and `update.img` on the volume it was launched from and boots the higher valid version:
+
+```
+./tools/keytools/sign --ed25519 --sha256 Image wolfboot_signing_private_key.der 1
+cp Image_v1_signed.bin kernel.img
+```
+
+### Running in QEMU
+
+```
+./tools/scripts/aarch64-efi-qemu.sh        # add --gdb to debug with gdb-multiarch
+```
+
+The script exposes a scratch directory to the UEFI firmware as a FAT ESP, copies `wolfboot.efi` (and `kernel.img` from `aarch64_efi-stage/` if present), and auto-runs it.
+
+### Deploying on the Jetson Orin Nano
+
+The Jetson UEFI auto-boots removable media via `\EFI\BOOT\BOOTAA64.EFI`. Place wolfBoot and a signed payload on a FAT32 partition:
+
+```
+\EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi
+\kernel.img              <- signed payload (read from the volume root)
+\cmdline.txt             <- optional Linux kernel command line (see below)
+```
+
+Insert the card and power on; UEFI auto-launches wolfBoot, which verifies and boots the payload. The debug console on the Orin Nano Developer Kit is the J14 button header (not the 40-pin), 115200 8N1. Example output:
+
+```
+Image base: 0x25E5D4000
+Opening file: kernel.img, size: 57969
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
+Firmware Valid
+Booting at 0x5E254100
+Staging kernel at address 5E254100, size: 57969
+```
+
+### Booting Linux
+
+An AArch64 Linux `Image` carries a PE/COFF EFI stub, so wolfBoot boots it with the same `LoadImage`/`StartImage` path used above -- no initrd or bare-metal handoff is needed when the kernel has built-in MMC/ext4 drivers (the NVIDIA L4T kernel does). This has been validated end to end on the Jetson Orin Nano: wolfBoot verifies the signed kernel and boots NVIDIA Jetson Linux (L4T R36.4.4, `5.15.148-tegra`) all the way to an Ubuntu 22.04 login prompt.
+
+Obtain a Tegra234-compatible kernel and root filesystem from the [NVIDIA Jetson Linux (L4T)](https://developer.nvidia.com/embedded/jetson-linux) BSP. The driver package (`Jetson_Linux_R36.x.x_aarch64.tbz2`) contains `Linux_for_Tegra/kernel/Image` and `Linux_for_Tegra/kernel/dtb/tegra234-*.dtb`; the matching `Tegra_Linux_Sample-Root-Filesystem_*.tbz2` provides the rootfs.
+
+Sign the kernel `Image` with the wolfBoot key and name it `kernel.img`:
+
+```
+./tools/keytools/sign --ed25519 --sha256 Linux_for_Tegra/kernel/Image \
+    wolfboot_signing_private_key.der 1
+cp Linux_for_Tegra/kernel/Image_v1_signed.bin kernel.img
+```
+
+Lay out the microSD as a FAT ESP plus a rootfs partition and place:
+
+```
+FAT (p1):   \EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi (UEFI auto-boots this)
+            \kernel.img              <- signed L4T kernel
+            \cmdline.txt             <- kernel command line (below)
+ext4 (p2):  the L4T sample root filesystem
+```
+
+`cmdline.txt` (read by wolfBoot and passed to the kernel via `LoadOptions`):
+
+```
+root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200
+```
+
+On power-up the Jetson UEFI auto-boots `\EFI\BOOT\BOOTAA64.EFI`; wolfBoot verifies `kernel.img` and hands off to the kernel, which receives the real Tegra234 device tree from the UEFI configuration table (`EFI stub: Using DTB from configuration table`), mounts `mmcblk0p2`, and brings up systemd and the login on the J14 debug console (`ttyTCU0`).
+
+Security note: the plaintext `\cmdline.txt` is not covered by the image signature. For a production trust chain the command line should be authenticated -- baked into the signed image, or supplied via the device-tree `/chosen` bootargs. An initramfs-based flow (rather than a direct `root=` mount) would additionally need initrd support via the `LINUX_EFI_INITRD_MEDIA_GUID` LoadFile2 protocol, which this target does not currently implement.
+
+### Root of trust: enrolling wolfBoot into UEFI Secure Boot
+
+The steps above give wolfBoot verifying the kernel. To close the remaining gap -- the firmware verifying `wolfboot.efi` itself -- enroll wolfBoot into UEFI Secure Boot so the platform refuses to launch an unsigned or tampered `wolfboot.efi`. This makes the chain continuous: firmware -> `wolfboot.efi` -> kernel.
+
+`tools/scripts/sign-efi-secureboot.sh` generates a Platform Key (PK), Key Exchange Key (KEK) and signature-database (db) key/cert, signs `wolfboot.efi` with the db key, and emits the signed variable updates (`.auth`) for enrollment:
+
+```
+./tools/scripts/sign-efi-secureboot.sh wolfboot.efi
+```
+
+This produces `wolfboot.efi.signed` and, under `tools/efi-secureboot-keys/`, the `PK`/`KEK`/`db` key and cert plus the signed variable updates (`db.auth`, `KEK.auth`, `PK.auth`). (It requires `sbsigntool`, `efitools`, and `openssl`; `sbsign` may print benign "gaps between PE/COFF sections" warnings for gnu-efi images -- signing and `sbverify` still pass.)
+
+The Jetson edk2 UEFI Shell `setvar` cannot enroll authenticated variables (it has no file input and cannot set the time-based-authenticated attribute), so enroll from the UEFI **setup menu**, which reads the certificate files from the ESP. The menu's "Enroll ... Using File" expects DER-encoded certificates; convert the generated PEM certs once:
+
+```
+cd tools/efi-secureboot-keys
+for k in PK KEK db; do openssl x509 -in $k.crt -outform DER -out $k.cer; done
+```
+
+Copy `db.cer`, `KEK.cer`, `PK.cer` and `wolfboot.efi.signed` onto the ESP (deploy the signed image as `\EFI\BOOT\BOOTAA64.EFI`). Name the cert files with a **lowercase** `.cer` extension: the edk2 file explorer decides a file is a certificate by a case-sensitive suffix match against `.cer`/`.der`/`.crt`, so an uppercase `DB.CER` (as FAT stores a plain 8.3 name) is rejected with "Unsupported file type!". Copy them with lowercase names (e.g. `mcopy db.cer ::/db.cer`) so the VFAT lowercase flag is set. Then, on the board (over the serial console -- use `minicom` or `screen`, not a plain pass-through, so the full-screen menu renders):
+
+1. Reset and press `ESC` at the firmware banner (`ESC to enter Setup`) to enter Setup.
+2. `Device Manager` -> `Secure Boot Configuration`.
+3. Set `Secure Boot Mode` -> `Custom Mode` (reveals `Custom Secure Boot Options`).
+4. Under `Custom Secure Boot Options`, enroll in order -- `db`, then `KEK`, then `PK` (enrolling PK is what turns Secure Boot enforcing and exits Setup Mode):
+   - `DB Options` -> `Enroll Signature` -> `Enroll Signature Using File` -> select `db.cer` -> accept the default signature-owner GUID -> `Commit Changes and Exit`.
+   - `KEK Options` -> `Enroll KEK` -> `Enroll KEK Using File` -> `KEK.cer` -> `Commit Changes and Exit`.
+   - `PK Options` -> `Enroll PK` -> `Enroll PK Using File` -> `PK.cer` -> `Commit Changes and Exit`.
+5. Confirm `Current Secure Boot State: Enabled`, then reset.
+
+On reboot the firmware verifies `\EFI\BOOT\BOOTAA64.EFI` against `db`, so the signed wolfBoot launches (`Verifying signature...done`). To prove enforcement, replace `BOOTAA64.EFI` with an unsigned `wolfboot.efi`; the firmware refuses it with a Security Violation. Secure Boot is fully reversible: in the same menu set `Secure Boot Mode` -> `Standard Mode`, or delete the PK, to return the board to Setup Mode.
+
+Important -- sign the kernel for Secure Boot too. wolfBoot boots the kernel through the UEFI `LoadImage`/`StartImage` services, and with Secure Boot enforcing, `LoadImage` also verifies the kernel image against `db`. A kernel that is only wolfBoot-signed is rejected by `LoadImage` (wolfBoot prints `LoadImage failed: 0x<status>`), even though wolfBoot's own `Verifying signature...done` passed. Sign the raw `Image` with the db key (sbsign) first, then wolfBoot-sign the result, so the kernel is trusted by both UEFI (`db`, for `LoadImage`) and wolfBoot (wolfCrypt):
+
+```
+sbsign --key tools/efi-secureboot-keys/db.key --cert tools/efi-secureboot-keys/db.crt \
+    --output Image.sb Linux_for_Tegra/kernel/Image
+./tools/keytools/sign --ed25519 --sha256 Image.sb wolfboot_signing_private_key.der 1
+cp Image_v1_signed.bin kernel.img      # note: sign drops the .sb, output is Image_v1_signed.bin
+```
+
+The full enforced chain is then firmware -> (Secure Boot) -> wolfBoot -> (wolfCrypt + Secure Boot) -> kernel -> Linux.
+
+Test this without hardware first: the QEMU + AAVMF helper (`tools/scripts/aarch64-efi-qemu.sh`) uses OVMF/AAVMF variable storage that supports enrolling the same keys, so you can confirm the signed binary launches and a wrong-key binary is refused before touching the board.
+
+Note on the Jetson dev kit: the OP-TEE console prints "Test UEFI variable auth key is being used" / "UEFI variable protection is not fully enabled", i.e. the variable store is in a development state (`SetupMode=1`), which is why menu enrollment works without a prior platform key. A production device would additionally fuse-lock the variable store (see below).
+
+### Root of trust: NVIDIA fuse provisioning (production; not performed here)
+
+UEFI Secure Boot above is enforced by the edk2 firmware. On a production Jetson the firmware chain (BootROM -> MB1 -> MB2 -> cpu-bootloader/UEFI) is itself made tamper-resistant by burning the NVIDIA security fuses from the L4T BSP:
+
+- PKC (public-key crypto) fuses: burn the SHA of your signing public key so the BootROM only accepts an NVIDIA-signing-chain that you control.
+- SBK (secure boot key) fuses: optionally encrypt the boot binaries.
+
+These are burned with `odmfuse.sh`/`tegrasign` from `Linux_for_Tegra/` and are irreversible. They are the final production step and are intentionally NOT part of this port -- the development board stays in unfused/dev mode. Consult the NVIDIA Jetson Linux "Secure Boot" documentation for the current `odmfuse.sh` procedure for your module before burning anything. Once fused, the fused firmware enforces UEFI Secure Boot, which enforces `wolfboot.efi`, which enforces the kernel -- a complete hardware root of trust.
 
 ## Intel x86_64 with Intel FSP support
 

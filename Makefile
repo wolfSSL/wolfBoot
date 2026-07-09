@@ -310,6 +310,9 @@ SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) \
 
 
 MAIN_TARGET=factory.bin
+# PE/COFF output format for the wolfboot.efi objcopy rule. Overridden per
+# target in arch.mk (e.g. pei-aarch64-little for aarch64_efi).
+EFI_OBJCOPY_TARGET?=pei-x86-64
 TARGET_H_TEMPLATE:=include/target.h.in
 
 ifeq ($(TZEN),1)
@@ -339,6 +342,10 @@ ifeq ($(TARGET),pic32cz)
 endif
 
 ifeq ($(TARGET),x86_64_efi)
+    MAIN_TARGET:=wolfboot.efi
+endif
+
+ifeq ($(TARGET),aarch64_efi)
     MAIN_TARGET:=wolfboot.efi
 endif
 
@@ -428,7 +435,7 @@ wolfboot.efi: wolfboot.elf
 	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \
 					-j .dynamic -j .dynsym  -j .rel \
 					-j .rela -j .reloc -j .eh_frame \
-					-O pei-x86-64 --subsystem=10 $^ $@
+					-O $(EFI_OBJCOPY_TARGET) --subsystem=10 $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.efi
