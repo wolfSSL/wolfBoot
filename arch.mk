@@ -63,9 +63,20 @@ endif
 
 ## ARM Cortex-A
 ifeq ($(ARCH),AARCH64)
-  CROSS_COMPILE?=aarch64-none-elf-
+  ifeq ($(TARGET),aarch64_efi)
+    # UEFI app: Linux GNU toolchain (freestanding EFI ABI), not aarch64-none-elf-
+    CROSS_COMPILE?=aarch64-linux-gnu-
+  else
+    CROSS_COMPILE?=aarch64-none-elf-
+  endif
   CFLAGS+=-DARCH_AARCH64 -DFAST_MEMCPY
-  OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+  ifeq ($(TARGET),aarch64_efi)
+    # UEFI app: gnu-efi CRT0 is the entry; do_boot is in boot_aarch64_efi.o.
+    # Skip the bare-metal reset (boot_aarch64_start.S) and EL2/GIC glue.
+    OBJS+=src/boot_aarch64_efi.o
+  else
+    OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+  endif
 
   ifeq ($(TARGET),zynq)
     ARCH_FLAGS=-march=armv8-a+crypto
@@ -1933,6 +1944,37 @@ ifeq ($(TARGET),x86_64_efi)
   UPDATE_OBJS:=src/update_ram.o
 endif
 
+ifeq ($(TARGET),aarch64_efi)
+  # Generic AArch64 UEFI application (validated on NVIDIA Jetson Orin Nano).
+  # Build gnu-efi for aarch64 first: ./tools/scripts/build-gnu-efi-aarch64.sh
+  # (override the install path with GNU_EFI_PATH=... if needed).
+  USE_GCC_HEADLESS=0
+  GNU_EFI_PATH?=tools/gnu-efi-aarch64
+  GNU_EFI_LIB_PATH?=$(GNU_EFI_PATH)/lib
+  GNU_EFI_INC_PATH?=$(GNU_EFI_PATH)/include
+  GNU_EFI_CRT0=$(GNU_EFI_LIB_PATH)/crt0-efi-aarch64.o
+  GNU_EFI_LSCRIPT=$(GNU_EFI_LIB_PATH)/elf_aarch64_efi.lds
+  CFLAGS += -fpic -ffreestanding -fno-stack-protector -fno-stack-check \
+            -fshort-wchar -mstrict-align
+  CFLAGS += -I$(GNU_EFI_INC_PATH) -I$(GNU_EFI_INC_PATH)/efi \
+            -I$(GNU_EFI_INC_PATH)/efi/aarch64 \
+            -DTARGET_aarch64_efi -DWOLFBOOT_DUALBOOT
+  # avoid using of fixed LOAD_ADDRESS, uefi target uses dynamic location
+  CFLAGS += -DWOLFBOOT_NO_LOAD_ADDRESS
+  # AArch64 PE/COFF output format for objcopy (see the wolfboot.efi rule).
+  # This binutils exposes it as pei-aarch64-little (not efi-app-aarch64).
+  EFI_OBJCOPY_TARGET=pei-aarch64-little
+  # --allow-multiple-definition: gnu-efi's libefi init.o (pulled in for
+  # InitializeLib) also defines memset/memcpy; wolfBoot's src/string.o comes
+  # first in link order and wins.
+  LDFLAGS = -shared -Bsymbolic --allow-multiple-definition \
+            -L$(GNU_EFI_LIB_PATH) -T$(GNU_EFI_LSCRIPT)
+  LD_START_GROUP = $(GNU_EFI_CRT0)
+  LD_END_GROUP = -lgnuefi -lefi
+  LD = $(CROSS_COMPILE)ld
+  UPDATE_OBJS:=src/update_ram.o
+endif
+
 ifeq ($(ARCH),sim)
   USE_GCC_HEADLESS=0
   LD = gcc
@@ -2193,6 +2235,19 @@ endif
 
 ## Update mechanism
 ifeq ($(ARCH),AARCH64)
+ifeq ($(TARGET),aarch64_efi)
+  # UEFI app: UEFI owns MMU/FDT, so skip the -DMMU/-DWOLFBOOT_FDT DTS path and
+  # fdt.o/gpt.o (like x86_64_efi). update_ram.o is set in the block above.
+  # DEBUG=1: route wolfBoot_printf to the UEFI console (gnu-efi Print).
+  ifeq ($(DEBUG),1)
+    CFLAGS += -DWOLFBOOT_DEBUG_EFI=1
+  endif
+  # Drop -Werror for this target: WOLFBOOT_DEBUG_EFI pulls gnu-efi headers into
+  # every TU and efidebug.h redefines the -DDEBUG object macro as a function
+  # macro. That cpp macro-redefinition warning has no -W name, so it can't be
+  # scoped with -Wno-error=<name>; our own sources are kept warning-clean.
+  CFLAGS := $(filter-out -Werror,$(CFLAGS))
+else
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
   # src/gpt.c provides the CRC32 helpers reused by update_ram.c's uImage
@@ -2213,6 +2268,7 @@ ifeq ($(ARCH),AARCH64)
     # RAM-based boot from external flash (default)
     UPDATE_OBJS:=src/update_ram.o
   endif
+endif
 else
   ifeq ($(DUALBANK_SWAP),1)
     CFLAGS+=-DWOLFBOOT_DUALBOOT

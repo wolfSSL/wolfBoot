@@ -764,6 +764,14 @@ jobs:
       arch: host
       config-file: ./config/examples/x86_64_efi.config
 
+  aarch64_efi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/aarch64_efi.config
+      # Build gnu-efi for aarch64 (pinned in the script) before wolfboot.efi.
+      prep-run: ./tools/scripts/build-gnu-efi-aarch64.sh
+
   zynqmp_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
