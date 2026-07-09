@@ -39,7 +39,8 @@ WOLFHSM_SERVER_OBJS := \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_message_comm.o
 
 USE_CLANG?=0
-ifeq ($(USE_CLANG),1)
+USE_ARMCLANG?=0
+ifneq ($(filter 1,$(USE_CLANG) $(USE_ARMCLANG)),)
   USE_GCC?=0
 else
   USE_GCC?=1
@@ -53,6 +54,18 @@ ifeq ($(USE_CLANG),1)
   endif
   ifeq ($(ARMORED),1)
     $(error USE_CLANG=1 requires ARMORED=0)
+  endif
+endif
+
+ifeq ($(USE_ARMCLANG),1)
+  ifeq ($(USE_GCC),1)
+    $(error USE_ARMCLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
+  endif
+  ifeq ($(USE_CLANG),1)
+    $(error USE_ARMCLANG=1 is incompatible with USE_CLANG=1)
+  endif
+  ifeq ($(ARMORED),1)
+    $(error USE_ARMCLANG=1 requires ARMORED=0)
   endif
 endif
 

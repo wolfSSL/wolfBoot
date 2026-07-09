@@ -1,0 +1,40 @@
+#! armclang -E --target=arm-arm-none-eabi -mcpu=cortex-m33 -xc
+; wolfBoot test-app stm32u5 (TZEN=1, non-secure app) scatter file for
+; armlink, equivalent to test-app/ARM-stm32u5-ns.ld.
+;
+; Region symbols (mapped from the GNU-ld symbol names via -D in arch.mk and
+; test-app/Makefile):
+;   ER_VECTORS      -> _start_text
+;   RW_RAM          -> _stored_data (load), _start_data/_end_data,
+;                      _start_bss/_end_bss, _start_heap (= end of ZI)
+;   ARM_LIB_STACK   -> _end_stack (stack top, grows down from end of RAM)
+
+#define APP_RAM_BASE 0x20020000
+#define APP_RAM_SIZE 0x00020000
+#define APP_STACK_RESERVE 0x1000
+
+LR_FLASH @WOLFBOOT_TEST_APP_ADDRESS@ @WOLFBOOT_TEST_APP_SIZE@
+{
+    ER_VECTORS @WOLFBOOT_TEST_APP_ADDRESS@
+    {
+        *(.isr_vector, +FIRST)
+    }
+
+    ER_TEXT +0 ALIGN 8
+    {
+        .ANY(+RO)
+    }
+
+    RW_RAM APP_RAM_BASE ALIGN 8 (APP_RAM_SIZE - APP_STACK_RESERVE)
+    {
+        *(.ramcode)
+        .ANY(+RW)
+        .ANY(+ZI)
+    }
+
+    ; Empty region only used to define the initial stack pointer; also lets
+    ; armlink error out if RW_RAM grows into the stack reserve
+    ARM_LIB_STACK (APP_RAM_BASE + APP_RAM_SIZE) EMPTY -APP_STACK_RESERVE
+    {
+    }
+}

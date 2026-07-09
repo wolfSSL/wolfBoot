@@ -133,6 +133,7 @@ tools/tpm/pcr_extend
 tools/tpm/policy_create
 tools/tpm/policy_sign
 config/*.ld
+config/*.sct
 test-lib
 lib-fs
 

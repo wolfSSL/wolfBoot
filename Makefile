@@ -27,7 +27,8 @@ SIGN_ALG=
 OBJCOPY_FLAGS=
 BIG_ENDIAN?=0
 USE_CLANG?=0
-ifeq ($(USE_CLANG),1)
+USE_ARMCLANG?=0
+ifneq ($(filter 1,$(USE_CLANG) $(USE_ARMCLANG)),)
 USE_GCC?=0
 else
 USE_GCC?=1
@@ -248,6 +249,39 @@ endif
 ifeq ($(ARCH),AURIX_TC3)
   ifneq ($(USE_GCC_HEADLESS),1)
     LSCRIPT_FLAGS+=-T $(LSCRIPT)
+  endif
+endif
+
+## ARM Compiler for Embedded (USE_ARMCLANG=1): rebuild the link options from
+## scratch and switch the linker script to a scatter file, to support armlink.
+ifeq ($(USE_ARMCLANG),1)
+  CFLAGS+=-D'END_STACK=Image$$$$ARM_LIB_STACK$$$$ZI$$$$Limit'
+  ifeq ($(WOLFCRYPT_TZ),1)
+    # Trap stubs for symbols referenced from wolfSSL code paths that are
+    # dead in this configuration: GNU ld garbage-collects the referencing
+    # sections, but armlink resolves all symbols before unused section
+    # elimination
+    OBJS+=tools/armclang/armclang_stubs.o
+    CFLAGS+=-DARMCLANG_STUBS_DEAD_REFS
+    ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+      CFLAGS+=-D'_flash_keyvault=Image$$$$KEYVAULT$$$$Base'
+      CFLAGS+=-D'_flash_keyvault_size=Image$$$$KEYVAULT$$$$ZI$$$$Length'
+      CFLAGS+=-D'_start_heap=Image$$$$RAM_HEAP$$$$Base'
+      CFLAGS+=-D'_heap_size=Image$$$$RAM_HEAP$$$$ZI$$$$Length'
+      # ARM libc malloc needs the C-library init that never runs (entry is
+      # isr_reset): provide a heap allocator instead
+      CFLAGS+=-DARMCLANG_STUBS_MALLOC
+    endif
+  endif
+  LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=wolfboot.map
+  LSCRIPT:=config/target.sct
+  LSCRIPT_IN:=hal/$(TARGET).sct
+  LSCRIPT_FLAGS:=--scatter=$(LSCRIPT)
+  LD_START_GROUP:=
+  LD_END_GROUP:=
+  SECURE_LDFLAGS:=
+  ifeq ($(TZEN),1)
+    SECURE_LDFLAGS:=--import_cmse_lib_out=./src/wolfboot_tz_nsc.o
   endif
 endif
 
@@ -656,7 +690,7 @@ src/flash_otp_keystore.o: $(PRIVATE_KEY) src/flash_otp_keystore.c
 keys: $(PRIVATE_KEY)
 
 clean:
-	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o test-app/*.o src/x86/*.o
+	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o hal/uart/*.o test-app/*.o src/x86/*.o
 	$(Q)rm -f src/wolfboot_tz_nsc.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
