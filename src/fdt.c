@@ -1149,8 +1149,6 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
     int complen = 0;
 #ifdef WOLFBOOT_GZIP
     BENCHMARK_DECLARE();
-#else
-    (void)out_max;
 #endif
 
     off = fdt_find_node_offset(fdt, -1, image);
@@ -1221,6 +1219,11 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
                     return NULL;
                 }
                 else {
+                    if (len < 0 || (uint32_t)len > out_max) {
+                        wolfBoot_printf("FIT: subimage '%s' size %d exceeds "
+                            "staging bound %u\n", image, len, out_max);
+                        return NULL;
+                    }
                     wolfBoot_printf("Loading Image %s: %p -> %p "
                         "(%d bytes)\n", image, data, load, len);
                     memcpy(load, data, len);

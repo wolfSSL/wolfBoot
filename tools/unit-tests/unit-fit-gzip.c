@@ -285,6 +285,25 @@ START_TEST(test_fit_to_lzma_unknown_returns_null)
 }
 END_TEST
 
+/* An uncompressed ("none") subimage larger than the staging bound must be
+ * rejected instead of overflowing the destination. */
+START_TEST(test_fit_to_none_oversized_rejected)
+{
+    uint8_t buf[64];
+    int len = -1;
+    void *ret;
+    static uint8_t fit_scratch[sizeof(fit_with_none_comp)];
+    memcpy(fit_scratch, fit_with_none_comp, sizeof(fit_scratch));
+
+    memset(buf, 0xA5, sizeof(buf));
+    /* payload is FIT_PLAIN_LEN (23) bytes; bound the destination below it */
+    ret = fit_load_image_to(fit_scratch, "kernel-1", buf, 8, &len);
+    ck_assert_ptr_null(ret);
+    /* nothing may be written at or past the out_max bound */
+    ck_assert_uint_eq(buf[8], 0xA5);
+}
+END_TEST
+
 /* ------------------------------------------------------------------------- */
 
 static Suite *fit_gzip_suite(void)
@@ -301,6 +320,7 @@ static Suite *fit_gzip_suite(void)
     tcase_add_test(tc, test_fit_to_gzip_disabled_returns_null);
 #endif
     tcase_add_test(tc, test_fit_to_lzma_unknown_returns_null);
+    tcase_add_test(tc, test_fit_to_none_oversized_rejected);
 
     suite_add_tcase(s, tc);
     return s;
