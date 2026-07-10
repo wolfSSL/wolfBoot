@@ -957,6 +957,61 @@ START_TEST(test_program_bar_64bit_upper_reject)
 }
 END_TEST
 
+/* test_program_bar_64bit_restore_high: a 64-bit BAR that fails on a
+ * non-"too much memory" error path must restore BOTH the low and high dword. */
+START_TEST(test_program_bar_64bit_restore_high)
+{
+    struct test_pci_topology t;
+    struct pci_enum_info info;
+    uint8_t is_64bit = 0;
+    int dev_node;
+    int ret;
+    uint32_t bar0_val, bar1_val;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    /* 64-bit prefetchable MMIO BAR, 1MB, valid upper half (default probe mask
+     * 0xFFFFFFFF) so the "too much memory" branch is not taken. */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x100000,
+                         TEST_PCI_BAR_64BIT | TEST_PCI_BAR_PF);
+    test_pci_commit(&t);
+
+    /* Pre-fill BAR0/BAR1 with known original values. */
+    {
+        uint32_t orig0 = 0xAABB0000, orig1 = 0xCCDD0000;
+        memcpy(&t.nodes[dev_node].cfg[PCI_BAR0_OFFSET], &orig0, 4);
+        memcpy(&t.nodes[dev_node].cfg[PCI_BAR0_OFFSET + 4], &orig1, 4);
+    }
+
+    memset(&info, 0, sizeof(info));
+    info.mem = 0x80000000;
+    info.mem_limit = 0x88000000;
+    /* Aligned start 0x90000000 is below the limit (passes the start-only
+     * check) but start + 1MB overruns it, taking the region-does-not-fit
+     * path rather than the "too much memory" path. */
+    info.mem_pf = 0x90000000;
+    info.mem_pf_limit = 0x90080000;
+    info.io = 0x2000;
+
+    ret = pci_program_bar(0, 0, 0, 0, &info, &is_64bit);
+    /* region-does-not-fit path sets ret = -1 */
+    ck_assert_int_ne(ret, 0);
+    ck_assert_uint_eq(is_64bit, 1);
+
+    /* Both BAR dwords must be restored; with the incomplete cleanup the high
+     * dword stays at 0xFFFFFFFF from probing. */
+    bar0_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar0_val, 0xAABB0000);
+    bar1_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET + 4);
+    ck_assert_uint_eq(bar1_val, 0xCCDD0000);
+
+    /* Allocator untouched */
+    ck_assert_uint_eq(info.mem_pf, 0x90000000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_program_bar_no_space: limit exceeded → restore_bar */
 START_TEST(test_program_bar_no_space)
 {
@@ -1832,6 +1887,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_bar_ureject = tcase_create("program-bar-64bit-upper-reject");
     tcase_add_test(tc_bar_ureject, test_program_bar_64bit_upper_reject);
     suite_add_tcase(s, tc_bar_ureject);
+
+    TCase *tc_bar_rhi = tcase_create("program-bar-64bit-restore-high");
+    tcase_add_test(tc_bar_rhi, test_program_bar_64bit_restore_high);
+    suite_add_tcase(s, tc_bar_rhi);
 
     TCase *tc_bar_nospace = tcase_create("program-bar-no-space");
     tcase_add_test(tc_bar_nospace, test_program_bar_no_space);

@@ -417,7 +417,7 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
 {
 
     uint32_t bar_align, bar_value;
-    uint32_t orig_bar, orig_bar2;
+    uint32_t orig_bar, orig_bar2 = 0;
     uint32_t length, align;
     uint8_t bar_off;
     int is_prefetch;
@@ -464,7 +464,6 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
             PCI_DEBUG_PRINTF("bar high 32bit: %d\r\n", reg);
             if (reg != 0xffffffff) {
                 PCI_DEBUG_PRINTF("Device wants too much memory, skipping\r\n");
-                pci_config_write32(bus, dev, fun, bar_off + 4, orig_bar2);
                 goto restore_bar;
             }
         }
@@ -534,6 +533,8 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
     return 0;
 
 restore_bar:
+    if (*is_64bit)
+        pci_config_write32(bus, dev, fun, bar_off + 4, orig_bar2);
     pci_config_write32(bus, dev, fun, bar_off, orig_bar);
 
     return ret;
