@@ -899,6 +899,7 @@ ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
   ifneq ($(SELF_UPDATE_MONOLITHIC),1)
     $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_UPDATE_MONOLITHIC (set SELF_UPDATE_MONOLITHIC=1))
   endif
+  $(warning WOLFBOOT_SKIP_BOOT_VERIFY=1 disables ALL boot-time firmware signature and integrity verification; only safe when an external verifier authenticates the full monolithic payload before boot. Do not use in production.)
   CFLAGS+=-D"WOLFBOOT_SKIP_BOOT_VERIFY"
 endif
 
