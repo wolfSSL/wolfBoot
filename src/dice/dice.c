@@ -432,6 +432,7 @@ static int wolfboot_dice_get_ueid(uint8_t *ueid, size_t *ueid_len,
         wc_InitSha256(&hash);
         wc_Sha256Update(&hash, uds, (word32)uds_len);
         wc_Sha256Final(&hash, digest);
+        wolfboot_dice_zeroize(&hash, sizeof(hash));
     }
 #elif defined(WOLFBOOT_HASH_SHA384)
     {
@@ -439,6 +440,7 @@ static int wolfboot_dice_get_ueid(uint8_t *ueid, size_t *ueid_len,
         wc_InitSha384(&hash);
         wc_Sha384Update(&hash, uds, (word32)uds_len);
         wc_Sha384Final(&hash, digest);
+        wolfboot_dice_zeroize(&hash, sizeof(hash));
     }
 #elif defined(WOLFBOOT_HASH_SHA3_384)
     {
@@ -446,6 +448,7 @@ static int wolfboot_dice_get_ueid(uint8_t *ueid, size_t *ueid_len,
         wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
         wc_Sha3_384_Update(&hash, uds, (word32)uds_len);
         wc_Sha3_384_Final(&hash, digest);
+        wolfboot_dice_zeroize(&hash, sizeof(hash));
     }
 #endif
 
@@ -453,6 +456,7 @@ static int wolfboot_dice_get_ueid(uint8_t *ueid, size_t *ueid_len,
     XMEMCPY(&ueid[1], digest,
             (WOLFBOOT_DICE_UEID_LEN - 1));
     *ueid_len = WOLFBOOT_DICE_UEID_LEN;
+    wolfboot_dice_zeroize(digest, sizeof(digest));
     return 0;
 }
 
