@@ -196,7 +196,7 @@ static int whFlashH5_Verify(void *context, uint32_t offset, uint32_t size,
 {
     whFlashH5Ctx  *ctx = (whFlashH5Ctx *)context;
     const uint8_t *p;
-    uint8_t        acc = 0;
+    volatile uint8_t acc = 0;
     uint32_t       i;
 
     if (ctx == NULL || (size != 0U && data == NULL)) {
