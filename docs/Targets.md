@@ -7949,6 +7949,24 @@ UEFI Secure Boot above is enforced by the edk2 firmware. On a production Jetson 
 
 These are burned with `odmfuse.sh`/`tegrasign` from `Linux_for_Tegra/` and are irreversible. They are the final production step and are intentionally NOT part of this port -- the development board stays in unfused/dev mode. Consult the NVIDIA Jetson Linux "Secure Boot" documentation for the current `odmfuse.sh` procedure for your module before burning anything. Once fused, the fused firmware enforces UEFI Secure Boot, which enforces `wolfboot.efi`, which enforces the kernel -- a complete hardware root of trust.
 
+### Measured boot (firmware TPM via EFI_TCG2)
+
+The Jetson firmware provides a TPM 2.0 (an OP-TEE fTPM) behind `EFI_TCG2_PROTOCOL` and already measures the early boot chain into PCRs. wolfBoot extends that chain to the OS: with `MEASURED_BOOT_TCG2=1` (default in `config/examples/aarch64_efi.config`), it measures the verified kernel image into PCR `MEASURED_PCR_A` (default 9) with `HashLogExtendEvent` just before handoff, appending a `wolfBoot kernel.img` record to the firmware event log. This is the same consumer pattern U-Boot uses -- the firmware / fTPM performs the hashing, PCR extend and log append, so wolfBoot needs no TPM transport driver of its own and pulls in no wolfTPM.
+
+It is best-effort and does not disturb boot: wolfBoot logs the TPM capability and, if the platform exposes no TCG2 protocol or reports no TPM present, skips the measurement and continues. On the Orin Nano the console shows:
+
+```
+TCG2: TPM present=1 activeBanks=0x6 banks=2
+TCG2: measured wolfBoot kernel.img (43091976 bytes) into PCR 9
+TCG2: measured wolfBoot cmdline (110 bytes) into PCR 9
+TCG2: measured wolfBoot dtb (997852 bytes) into PCR 9
+TCG2: PCR 9 (SHA256):
+  fef77532719dffa1e62567914d78e820
+  012406452ea644ff193cfc0475937732
+```
+
+`activeBanks=0x6` is the SHA-256 (0x2) + SHA-384 (0x4) PCR banks; the kernel, its command line and the platform device tree are extended into PCR 9 in both, and wolfBoot then reads the PCR back (`TPM2_PCR_Read`) and prints it. An attestation client can compare PCR 9 -- and the TCG2 event log -- against known-good values to confirm exactly which kernel, command line and device tree wolfBoot verified and booted. Choose `MEASURED_PCR_A` to fit the platform's PCR allocation (0-7 are firmware-owned; 8-15 are for OS/loader use). Note the edk2 firmware separately measures the loaded `wolfboot.efi` image itself into its own PCRs via `LoadImage`, so the firmware-verifies-wolfBoot and wolfBoot-measures-kernel events are distinct entries in the log.
+
 ## Intel x86_64 with Intel FSP support
 
 This setup is more complex than the UEFI approach described earlier, but allows
