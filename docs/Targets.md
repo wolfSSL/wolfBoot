@@ -7,6 +7,7 @@ This README describes configuration of supported targets.
 * [Simulated](#simulated)
 * [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
+* [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
@@ -3798,6 +3799,79 @@ dd if=bcm2710-rpi-3-b.dtb of=wolfboot_linux_raspi.bin bs=1 seek=128K conv=notrun
 qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_raspi.bin -cpu cortex-a53
 ```
 
+
+## Cortex-A72 / Raspberry Pi Compute Module 4 (BCM2711)
+
+wolfBoot runs on the Raspberry Pi Compute Module 4 (CM4), a Broadcom BCM2711 with a quad-core Cortex-A72 (AArch64). wolfBoot takes the place of the second-stage OS loader: the BCM2711 boot ROM loads the VideoCore firmware, the firmware loads `kernel8.img` from the boot partition, and that `kernel8.img` is wolfBoot. wolfBoot then verifies the signed application image and boots it, extending the platform root of trust into the OS.
+
+```
+BCM2711 boot ROM -> SPI EEPROM bootloader -> VideoCore firmware (start4.elf)
+   -> kernel8.img (wolfBoot) -> verify (ECDSA/SHA) -> application
+```
+
+On CM4 modules with onboard eMMC the boot files live on the eMMC FAT boot partition; on CM4 Lite they live on a microSD. Either way the medium hangs off the BCM2711 EMMC2 controller (a standard SDHCI v3.0 Arasan block at `0xFE340000`).
+
+### Building
+
+```
+cp config/examples/cm4.config .config
+make CROSS_COMPILE=aarch64-none-elf-
+```
+
+The example uses `SIGN=ECC384 HASH=SHA384` (both FIPS-approved). wolfBoot is entered by the firmware at `0x80000` at EL2, matching `hal/cm4.ld`. The image is loaded from RAM: wolfBoot reads the signed application at `kernel_addr` (`0x140000`), verifies it, copies it to `WOLFBOOT_LOAD_ADDRESS`, and boots.
+
+### Signing and assembling the boot image
+
+Sign the application, then concatenate wolfBoot and the signed image so the signed image lands at `kernel_addr` (`0x140000` = `0x80000` load + `0xC0000`):
+
+```
+make keytools tools/bin-assemble/bin-assemble
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc384 --sha384 \
+    app.bin wolfboot_signing_private_key.der 1
+tools/bin-assemble/bin-assemble kernel8.img \
+    0x0     wolfboot.bin \
+    0xC0000 app_v1_signed.bin
+```
+
+### config.txt
+
+The CM4 UART on GPIO14/15 defaults to the mini-UART because the PL011 is used by Bluetooth. wolfBoot drives the PL011, so route it to the header and fix a known UART clock:
+
+```
+arm_64bit=1
+kernel=kernel8.img
+enable_uart=1
+uart_2ndstage=1
+dtoverlay=disable-bt
+init_uart_clock=48000000
+init_uart_baud=115200
+```
+
+### Flashing
+
+- CM4 Lite: write `kernel8.img` + the RPi firmware (`start4.elf`, `fixup4.dat`) + `config.txt` to the microSD FAT boot partition.
+- CM4 with eMMC: put the module in USB boot mode (nRPIBOOT), run `rpiboot` to expose the eMMC as USB mass storage, and write the same files to its FAT boot partition. See https://github.com/raspberrypi/usbboot .
+
+### Boot output
+
+With `DEBUG_UART=1`, a successful authenticated boot prints (115200 8N1):
+
+```
+wolfBoot CM4 (BCM2711 Cortex-A72) hal_init, EL2
+Trying partition 0 at 0x140000
+Checking integrity...done
+Verifying signature...done
+Firmware Valid
+Booting at 0x3080000
+```
+
+### Optional: eMMC/SD A/B updates
+
+`config/examples/cm4_sdcard.config` enables the disk updater (`DISK_SDCARD`/`DISK_EMMC`), driving the BCM2711 EMMC2 controller through the generic SDHCI driver (`src/sdhci.c`) for A/B image partitions on the boot medium. This path is provided as bring-up scaffolding and is not yet hardware-validated.
+
+### FIPS 140-3
+
+The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform its signature verification with the wolfCrypt FIPS 140-3 validated module. The on-target harness in `test-app/app_cm4.c` registers a FIPS callback and prints the runtime in-core integrity hash over the UART for the `verifyCore[]` bootstrap. See [FIPS.md](FIPS.md) for the full build and hash-sealing procedure.
 
 ## Xilinx Zynq UltraScale
 
