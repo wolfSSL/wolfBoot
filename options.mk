@@ -115,6 +115,16 @@ ifeq ($(MEASURED_BOOT),1)
   endif
 endif
 
+## Measured boot via the platform firmware TPM behind EFI_TCG2_PROTOCOL, for
+## UEFI-application targets (e.g. aarch64_efi on NVIDIA Jetson). wolfBoot
+## measures the verified next-stage image into a PCR with HashLogExtendEvent;
+## the firmware / fTPM owns the TPM, so this pulls in NO wolfTPM transport.
+ifeq ($(MEASURED_BOOT_TCG2),1)
+  MEASURED_PCR_A ?= 9
+  CFLAGS+=-D"WOLFBOOT_MEASURED_BOOT_EFI_TCG2"
+  CFLAGS+=-D"WOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)"
+endif
+
 ## TPM keystore
 ifeq ($(WOLFBOOT_TPM_KEYSTORE),1)
   WOLFTPM:=1
