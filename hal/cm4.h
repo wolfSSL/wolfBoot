@@ -36,7 +36,10 @@
 #define BCM2711_MMIO_BASE       0xFE000000
 #define BCM2711_GPIO_BASE       (BCM2711_MMIO_BASE + 0x200000)
 #define BCM2711_UART0_BASE      (BCM2711_GPIO_BASE + 0x1000)   /* PL011 */
+/* Overridable so host unit tests can retarget the SDHCI glue at a mock buffer */
+#ifndef BCM2711_EMMC2_BASE
 #define BCM2711_EMMC2_BASE      (BCM2711_MMIO_BASE + 0x340000) /* Arasan SDHCI */
+#endif
 #define BCM2711_RNG_BASE        (BCM2711_MMIO_BASE + 0x104000) /* RNG200 TRNG */
 
 /* RNG200 (iproc-rng200) register offsets */

@@ -11,6 +11,7 @@ See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/
 - [**encrypted_partitions.md**](./encrypted_partitions.md) - Creating and managing encrypted firmware/data partitions.
 - [**firmware_image.md**](./firmware_image.md) - wolfBoot firmware image format, layout, and metadata.
 - [**firmware_update.md**](./firmware_update.md) - Update flow: slots, verification, rollback, and recovery.
+- [**FIPS.md**](./FIPS.md) - Building wolfBoot with the wolfCrypt FIPS 140-3 module: approved algorithms, DRBG entropy, and in-core integrity sealing.
 - [**flash-OTP.md**](./flash-OTP.md) - Using One-Time Programmable (OTP) regions in flash for secure data.
 - [**flash_partitions.md**](./flash_partitions.md) - Flash partitioning schemes and configuration guidance.
 - [**HAL.md**](./HAL.md) - Hardware Abstraction Layer notes and porting considerations.

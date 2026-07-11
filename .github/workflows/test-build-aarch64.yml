@@ -18,6 +18,12 @@ on:
         required: false
         type: boolean
         default: false
+      fips:
+        # Download the FIPS-ready wolfSSL tree into ../ before building, for a
+        # build-only FIPS=1 verification (see WOLFBOOT_LIB_WOLFSSL in make-args).
+        required: false
+        type: boolean
+        default: false
 
 jobs:
 
@@ -125,6 +131,16 @@ jobs:
           unsigned long psu_afi_config(void) { return 1UL; }
           unsigned long psu_ddr_qos_init_data(void) { return 1UL; }
           STUB
+
+      - name: Download FIPS-ready wolfSSL
+        if: ${{ inputs.fips }}
+        run: |
+          set -euxo pipefail
+          sudo apt-get install -y unzip
+          curl -fsSL --retry 3 --retry-delay 5 -o /tmp/wolfssl-fips-ready.zip \
+            https://www.wolfssl.com/wolfssl-5.9.2-gplv3-fips-ready.zip
+          unzip -q /tmp/wolfssl-fips-ready.zip -d ..
+          test -f ../wolfssl-5.9.2-gplv3-fips-ready/wolfcrypt/src/fips.c
 
       - name: Build wolfboot
         run: |

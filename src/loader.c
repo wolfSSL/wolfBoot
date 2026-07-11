@@ -58,6 +58,22 @@ static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT
 extern void (** const IV_RAM)(void);
 #endif
 
+#ifdef HAVE_FIPS
+#include "printf.h"
+#include <wolfssl/wolfcrypt/fips_test.h>
+/* FIPS module power-on self-test entry. With NO_ATTRIBUTE_CONSTRUCTOR it is a
+ * plain function (not an .init_array constructor) that wolfBoot calls at boot. */
+extern void fipsEntry(void);
+/* wolfCrypt FIPS in-core integrity / CAST callback. On a hash mismatch
+ * (IN_CORE_FIPS_E) the module reports the runtime hash here; copy it into
+ * verifyCore[] in wolfcrypt/src/fips_test.c and rebuild (see docs/FIPS.md). */
+static void wolfBoot_fipsCb(int ok, int err, const char* hash)
+{
+    wolfBoot_printf("FIPS callback: ok=%d err=%d\n", ok, err);
+    wolfBoot_printf("hash = %s\n", hash != NULL ? hash : "(null)");
+}
+#endif
+
 #ifdef TARGET_sim
 /**
  * @brief Command line arguments for the test-app in sim mode.
@@ -106,6 +122,21 @@ int main(void)
     wolfBoot_hook_preinit();
 #endif
     hal_init();
+#ifdef HAVE_FIPS
+    /* Run the FIPS power-on self-test (in-core integrity + CASTs) and refuse
+     * to boot unless the module is operational. See docs/FIPS.md. */
+    wolfCrypt_SetCb_fips(wolfBoot_fipsCb);
+    fipsEntry();
+    if (wolfCrypt_GetStatus_fips() != 0) {
+        wolfBoot_printf("FIPS 140-3 module NOT operational (status=%d); halting\n",
+            wolfCrypt_GetStatus_fips());
+        /* On self-test failure this returns the runtime in-core hash to seal
+         * into verifyCore[] in fips_test.c. */
+        wolfBoot_printf("FIPS in-core hash = %s\n", wolfCrypt_GetCoreHash_fips());
+        wolfBoot_panic();
+    }
+    wolfBoot_printf("FIPS 140-3 module operational\n");
+#endif
 #ifdef TEST_FLASH
     hal_flash_test();
 #endif
