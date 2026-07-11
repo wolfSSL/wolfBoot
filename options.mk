@@ -1903,3 +1903,89 @@ ifeq ($(ARCH),AARCH64)
     endif
   endif
 endif
+# ---------------------------------------------------------------------------
+# wolfCrypt FIPS 140-3 module (FIPS=1)
+#
+# Point WOLFBOOT_LIB_WOLFSSL at an unpacked FIPS / FIPS-ready wolfSSL tree.
+# The in-core integrity hash on GCC/ELF is enforced by LINK ORDER:
+# wolfcrypt_first.o must be first and wolfcrypt_last.o last, with the FIPS
+# boundary (crypto + fips.o + fips_test.o) between them. We therefore rebuild
+# WOLFCRYPT_OBJS from scratch in that order, replacing the piecemeal per-SIGN
+# selection above (the SIGN/HASH CFLAGS remain in effect). This also drops
+# AUX_WOLFCRYPT_OBJS: hybrid / secondary-signature configurations are not
+# supported with FIPS=1. See docs/FIPS.md.
+ifeq ($(FIPS),1)
+  # Intercept impossible FIPS build cases early with a clear error. Skip for
+  # clean-style goals (which do not compile/link) so 'make clean' still works
+  # with FIPS=1 in .config.
+  ifeq ($(filter clean distclean keysclean,$(MAKECMDGOALS)),)
+    # NO_ARM_ASM is an ARM-only knob; the FIPS module is portable C on every
+    # arch, but only the ARM/AArch64 builds have an asm crypto path to disable
+    # (which would sit outside the validated module boundary). Force it on rather
+    # than erroring when unset, so this works regardless of include order
+    # (test-app/Makefile includes options.mk before arch.mk, so NO_ARM_ASM is
+    # still empty here). Only an explicit NO_ARM_ASM=0 is a hard error.
+    ifneq ($(filter ARM AARCH64,$(ARCH)),)
+      ifeq ($(NO_ARM_ASM),0)
+        $(error FIPS=1 on $(ARCH) requires NO_ARM_ASM=1 (the FIPS module uses portable-C crypto); NO_ARM_ASM=0 was set)
+      endif
+      NO_ARM_ASM=1
+    endif
+    # Only the ECDSA object set is wired into the FIPS boundary below. RSA-PSS
+    # would additionally need rsa.o inside the boundary and its own CI job.
+    ifeq ($(filter $(SIGN),ECC256 ECC384 ECC521),)
+      $(error FIPS=1 requires a FIPS-approved ECDSA SIGN (ECC256/ECC384/ECC521, see docs/FIPS.md); got $(SIGN))
+    endif
+  endif
+  CFLAGS+=-DHAVE_FIPS
+  # Evaluation "FIPS-ready" bundle by default: -DWOLFBOOT_FIPS_READY defines
+  # WOLFSSL_FIPS_READY, which forces HAVE_FIPS_VERSION 7 in settings.h.
+  FIPS_READY?=1
+  ifeq ($(FIPS_READY),1)
+    CFLAGS+=-DWOLFBOOT_FIPS_READY
+  else
+    # Production/validated-bundle path. wolfBoot builds with
+    # -DWOLFSSL_USER_SETTINGS, so settings.h includes only user_settings.h and
+    # never the configure-generated wolfssl/options.h where a validated bundle
+    # supplies HAVE_FIPS_VERSION. Without WOLFSSL_FIPS_READY it would therefore
+    # fall back to FIPS v1 (140-2) silently, so pin the module version
+    # explicitly. e.g. FIPS_VERSION=7 for a 140-3 validated bundle.
+    ifndef FIPS_VERSION
+      $(error FIPS_READY=0 requires FIPS_VERSION=<n> to pin the validated wolfCrypt FIPS module version (e.g. FIPS_VERSION=7); see docs/FIPS.md)
+    endif
+    CFLAGS+=-DHAVE_FIPS_VERSION=$(FIPS_VERSION)
+  endif
+  # The FIPS module pulls in libc malloc/printf. On bare-metal targets stub the
+  # newlib syscalls with nosys.specs; the HAL provides a bounded _sbrk so the
+  # heap cannot grow into the unverified image (see hal/cm4.c).
+  ifneq ($(ARCH),sim)
+    LDFLAGS += --specs=nosys.specs
+  endif
+  WCDIR=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src
+  WOLFCRYPT_OBJS := \
+    $(WCDIR)/wolfcrypt_first.o \
+    $(WCDIR)/hash.o \
+    $(WCDIR)/hmac.o \
+    $(WCDIR)/kdf.o \
+    $(WCDIR)/pwdbased.o \
+    $(WCDIR)/random.o \
+    $(WCDIR)/sha.o \
+    $(WCDIR)/sha256.o \
+    $(WCDIR)/sha512.o \
+    $(WCDIR)/sha3.o \
+    $(WCDIR)/aes.o \
+    $(WCDIR)/cmac.o \
+    $(WCDIR)/ecc.o \
+    $(WCDIR)/sp_int.o \
+    $(WCDIR)/wolfmath.o \
+    $(WCDIR)/memory.o \
+    $(WCDIR)/wc_port.o \
+    $(WCDIR)/logging.o \
+    $(WCDIR)/error.o \
+    $(WCDIR)/coding.o \
+    $(WCDIR)/asn.o \
+    $(WCDIR)/wc_encrypt.o \
+    $(WCDIR)/fips.o \
+    $(WCDIR)/fips_test.o \
+    $(WCDIR)/wolfcrypt_last.o
+endif

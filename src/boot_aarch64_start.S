@@ -1252,6 +1252,11 @@ _vector_table:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
+#if defined(TARGET_cm4) && defined(DEBUG) && defined(DEBUG_UART)
+    ldr x2, =cm4_vectors       /* install fault-dump exception vectors (debug) */
+    msr VBAR_EL2, x2
+    isb                        /* ensure new vector base is in effect */
+#endif
     b 0f
 
 1:  mov x0, #3 << 20
@@ -1282,6 +1287,45 @@ _vector_table:
 #endif
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
+
+#if defined(TARGET_cm4) && defined(DEBUG) && defined(DEBUG_UART)
+/* Minimal EL2 exception vectors for CM4 bring-up debug. On any exception
+ * (data/instruction abort, etc.) dump ESR/ELR/FAR over UART instead of the
+ * silent hang the simple startup would otherwise produce. */
+.macro CM4_VEC label
+    .align 7
+\label:
+    b   cm4_fault_common
+.endm
+
+.align 11
+.global cm4_vectors
+cm4_vectors:
+    CM4_VEC cm4_v0    /* Current EL, SP0:  Sync */
+    CM4_VEC cm4_v1    /*                   IRQ  */
+    CM4_VEC cm4_v2    /*                   FIQ  */
+    CM4_VEC cm4_v3    /*                   SError */
+    CM4_VEC cm4_v4    /* Current EL, SPx:  Sync */
+    CM4_VEC cm4_v5    /*                   IRQ  */
+    CM4_VEC cm4_v6    /*                   FIQ  */
+    CM4_VEC cm4_v7    /*                   SError */
+    CM4_VEC cm4_v8    /* Lower EL, AArch64: Sync */
+    CM4_VEC cm4_v9    /*                   IRQ  */
+    CM4_VEC cm4_v10   /*                   FIQ  */
+    CM4_VEC cm4_v11   /*                   SError */
+    CM4_VEC cm4_v12   /* Lower EL, AArch32: Sync */
+    CM4_VEC cm4_v13   /*                   IRQ  */
+    CM4_VEC cm4_v14   /*                   FIQ  */
+    CM4_VEC cm4_v15   /*                   SError */
+
+cm4_fault_common:
+    mrs x0, esr_el2
+    mrs x1, elr_el2
+    mrs x2, far_el2
+    bl  cm4_fault_handler   /* void cm4_fault_handler(esr, elr, far) */
+9:  wfi
+    b   9b
+#endif /* TARGET_cm4 && DEBUG && DEBUG_UART */
 #if 0
 .section ".boot"
 .global _vector_table

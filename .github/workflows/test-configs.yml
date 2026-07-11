@@ -413,6 +413,56 @@ jobs:
       config-file: ./config/examples/tegra234-sdcard.config
       make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  cm4_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4.config
+      make-args: wolfboot.bin
+
+  cm4_sdcard_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4_sdcard.config
+      make-args: wolfboot.bin
+
+  cm4_emmc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4_emmc.config
+      make-args: wolfboot.bin
+
+  cm4_emmc_linux_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4_emmc_linux.config
+      make-args: wolfboot.bin
+
+  cm4_emmc_rauc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4_emmc_rauc.config
+      make-args: wolfboot.bin
+
+  cm4_fips_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/cm4.config
+      make-args: wolfboot.bin FIPS=1 WOLFBOOT_LIB_WOLFSSL=../wolfssl-5.9.2-gplv3-fips-ready NO_ARM_ASM=1
+      fips: true
+
+  sim_fips_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-fips.config
+      fips: true
+
   sim_tfm_smallstack_test:
     uses: ./.github/workflows/test-build.yml
     with:

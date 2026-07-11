@@ -122,6 +122,34 @@ static int sim_cryptocb(int devIdArg, wc_CryptoInfo* info, void* ctx)
 #include "port/posix/posix_flash_file.h"
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_SERVER */
 
+#if defined(HAVE_FIPS)
+/* FIPS DRBG entropy seed for the simulator: read from /dev/urandom.
+ * Registered via CUSTOM_RAND_GENERATE_SEED in include/user_settings.h. */
+int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
+{
+    unsigned int pos = 0;
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0)
+        return -1;
+    while (pos < sz) {
+        ssize_t r = read(fd, output + pos, sz - pos);
+        if (r < 0) {
+            if (errno == EINTR)
+                continue; /* interrupted, retry */
+            close(fd);
+            return -1;
+        }
+        if (r == 0) { /* unexpected EOF on /dev/urandom */
+            close(fd);
+            return -1;
+        }
+        pos += (unsigned int)r;
+    }
+    close(fd);
+    return 0;
+}
+#endif /* HAVE_FIPS */
+
 /* Global pointer to the internal and external flash base */
 uint8_t *sim_ram_base;
 static uint8_t *flash_base;

@@ -42,6 +42,11 @@
 /* Fixed addresses (provided by the linker script) */
 extern void *kernel_addr, *update_addr, *dts_addr;
 
+#if defined(HAVE_FIPS)
+void cm4_mmu_enable(void);  /* defined below; called from hal_init */
+void cm4_mmu_disable(void); /* defined below; called from hal_prepare_boot */
+#endif
+
 #if defined(DEBUG_UART)
 static void uart_tx(char c)
 {
@@ -129,13 +134,175 @@ void hal_init(void)
     wolfBoot_printf("wolfBoot CM4 (BCM2711 Cortex-A72) hal_init, EL%d\n",
         (int)((el >> 2) & 0x3));
 #endif
+#if defined(HAVE_FIPS)
+    /* Bring up Normal cacheable memory before the FIPS POST, which uses
+     * unaligned / SIMD accesses that the MMU-off Device memory rejects. */
+    cm4_mmu_enable();
+#endif
 }
 
 void hal_prepare_boot(void)
 {
+#if defined(HAVE_FIPS)
+    /* Undo cm4_mmu_enable() before handoff: flush the app out of the D-cache
+     * and return to the MMU-off state the application expects. */
+    cm4_mmu_disable();
+#endif
 }
 
 #if defined(HAVE_FIPS)
+/* Bounded heap for the FIPS module's malloc. wolfBoot builds the FIPS target
+ * with --specs=nosys.specs, whose newlib _sbrk grows unbounded from the linker
+ * 'end' symbol - toward the unverified image staged at kernel_addr (0x140000).
+ * Provide our own _sbrk over a fixed static buffer (in .bss, well below the
+ * image) so heap growth is bounded and can never reach kernel_addr. */
+#ifndef CM4_FIPS_HEAP_SIZE
+#define CM4_FIPS_HEAP_SIZE (128 * 1024)
+#endif
+static unsigned char cm4_fips_heap[CM4_FIPS_HEAP_SIZE];
+void* _sbrk(int incr);
+void* _sbrk(int incr)
+{
+    static unsigned char* brk = cm4_fips_heap;
+    unsigned char* prev = brk;
+
+    if (incr < 0)
+        return (void*)-1;
+    if ((size_t)(brk - cm4_fips_heap) + (size_t)incr > sizeof(cm4_fips_heap))
+        return (void*)-1; /* out of heap */
+    brk += incr;
+    return (void*)prev;
+}
+
+/* Minimal identity-mapped MMU + caches for the CM4. wolfBoot's simple startup
+ * runs with the MMU off, so all memory is Device-nGnRnE, which faults on the
+ * unaligned / 128-bit SIMD accesses the FIPS module and newlib printf perform.
+ * Mapping DDR as Normal (cacheable) permits those accesses and speeds up the
+ * crypto; the peripheral region (incl. 0xFE000000) stays Device.
+ * Four 1GB block descriptors cover the 32-bit VA space at translation level 1. */
+#define MMU_BLOCK_NORMAL  0x0000000000000701ULL /* block, AttrIdx0, AF, SH inner */
+#define MMU_BLOCK_DEVICE  0x0000000000000405ULL /* block, AttrIdx1, AF, SH none  */
+
+static volatile uint64_t cm4_l1_table[512] __attribute__((aligned(4096)));
+
+/* Data-cache maintenance by set/way over all levels to the point of coherency.
+ * clean != 0 -> clean+invalidate (dc cisw); else invalidate-only (dc isw). */
+static void cm4_dcache_maint(int clean)
+{
+    uint64_t clidr, ccsidr;
+    unsigned int level, loc, ctype, linesize, ways, sets, way, set, wayshift;
+
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("mrs %0, clidr_el1" : "=r"(clidr));
+    loc = (unsigned int)((clidr >> 24) & 0x7); /* Level of Coherency */
+    for (level = 0; level < loc; level++) {
+        ctype = (unsigned int)((clidr >> (level * 3)) & 0x7);
+        if (ctype < 2) /* no data/unified cache at this level */
+            continue;
+        __asm__ volatile("msr csselr_el1, %0" :: "r"((uint64_t)(level << 1)));
+        __asm__ volatile("isb");
+        __asm__ volatile("mrs %0, ccsidr_el1" : "=r"(ccsidr));
+        linesize = (unsigned int)(ccsidr & 0x7) + 4;          /* log2(bytes) */
+        ways     = (unsigned int)((ccsidr >> 3) & 0x3FF);     /* assoc - 1 */
+        sets     = (unsigned int)((ccsidr >> 13) & 0x7FFF);   /* sets - 1 */
+        /* __builtin_clz(0) is UB; a direct-mapped cache (ways==0) never uses
+         * the way field (way stays 0), so the shift amount is irrelevant. */
+        wayshift = (ways == 0) ? 32u : (unsigned int)__builtin_clz(ways);
+        for (set = 0; set <= sets; set++) {
+            for (way = 0; way <= ways; way++) {
+                uint64_t val = ((uint64_t)(level << 1))
+                    | ((uint64_t)way << wayshift)
+                    | ((uint64_t)set << linesize);
+                if (clean)
+                    __asm__ volatile("dc cisw, %0" :: "r"(val));
+                else
+                    __asm__ volatile("dc isw, %0" :: "r"(val));
+            }
+        }
+    }
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
+}
+
+void cm4_mmu_enable(void)
+{
+    unsigned long sctlr;
+    int i;
+
+    /* 0-3GB DDR -> Normal; 3-4GB peripherals (0xFE000000) -> Device. */
+    for (i = 0; i < 4; i++) {
+        uint64_t base = (uint64_t)i << 30;
+        cm4_l1_table[i] = base | ((i == 3) ? MMU_BLOCK_DEVICE : MMU_BLOCK_NORMAL);
+    }
+    /* MAIR: Attr0 = 0xFF Normal WB write-alloc, Attr1 = 0x00 Device-nGnRnE. */
+    __asm__ volatile("msr mair_el2, %0" :: "r"(0x00000000000000FFUL));
+    __asm__ volatile("msr ttbr0_el2, %0"
+        :: "r"((uint64_t)(uintptr_t)cm4_l1_table));
+    /* TCR_EL2: T0SZ=32 (32-bit VA), 4KB granule, WB cacheable inner-shareable
+     * table walks, 36-bit PA. */
+    __asm__ volatile("msr tcr_el2, %0" :: "r"(0x0000000000013520UL));
+    __asm__ volatile("isb");
+    __asm__ volatile("tlbi alle2");
+    __asm__ volatile("dsb sy");
+    /* Invalidate the D-cache (and I-cache) before enabling them, so no stale
+     * lines left by an earlier boot stage surface once caching is on. */
+    cm4_dcache_maint(0);
+    __asm__ volatile("ic iallu");
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
+    /* SCTLR_EL2: enable MMU (M), data cache (C), instruction cache (I). */
+    __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
+    sctlr |= (1UL << 0) | (1UL << 2) | (1UL << 12);
+    __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr));
+    __asm__ volatile("isb");
+}
+
+/* Tear down the MMU/caches before boot handoff: clean the freshly-copied app
+ * out of the D-cache to memory, disable the MMU and caches, and invalidate the
+ * I-cache/TLB. Returns the CPU to the MMU-off state the application (and the
+ * ARM64 Linux boot protocol) expects. */
+void cm4_mmu_disable(void)
+{
+    unsigned long sctlr;
+
+    cm4_dcache_maint(1); /* clean+invalidate: flush the loaded app to memory */
+    __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
+    sctlr &= ~((1UL << 0) | (1UL << 2) | (1UL << 12)); /* clear M, C, I */
+    __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr));
+    __asm__ volatile("isb");
+    __asm__ volatile("ic iallu");
+    __asm__ volatile("tlbi alle2");
+    __asm__ volatile("dsb sy");
+    __asm__ volatile("isb");
+}
+#endif /* HAVE_FIPS */
+
+#if defined(DEBUG) && defined(DEBUG_UART)
+/* CM4 bring-up diagnostic: exception handler invoked from cm4_vectors in
+ * src/boot_aarch64_start.S. Dumps the fault syndrome so a data/instruction
+ * abort shows up over UART instead of hanging silently. Built only with
+ * DEBUG + DEBUG_UART. ESR_EL2[31:26] = exception class. */
+void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far);
+void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far)
+{
+    wolfBoot_printf("\n*** CM4 EXCEPTION ***\n");
+    wolfBoot_printf("ESR_EL2=0x%08x EC=0x%02x\n",
+        (unsigned)esr, (unsigned)((esr >> 26) & 0x3F));
+    wolfBoot_printf("ELR_EL2=0x%08x%08x\n",
+        (unsigned)(elr >> 32), (unsigned)elr);
+    wolfBoot_printf("FAR_EL2=0x%08x%08x\n",
+        (unsigned)(far >> 32), (unsigned)far);
+}
+#endif /* DEBUG && DEBUG_UART */
+
+#if defined(HAVE_FIPS)
+/* Upper bound on the busy-wait for the RNG200 FIFO to fill. This is a coarse,
+ * A72-clock-dependent spin count (not a wall-clock timeout); it only guards
+ * against a wedged RNG so the seed read cannot hang forever. Tune if needed. */
+#ifndef RNG200_FIFO_WAIT_ITERS
+#define RNG200_FIFO_WAIT_ITERS 200000000U
+#endif
+
 /* FIPS DRBG entropy seed from the BCM2711 RNG200 hardware TRNG. Registered via
  * CUSTOM_RAND_GENERATE_SEED in include/user_settings.h. The RNG200 has NIST
  * SP800-90B startup/continuous health tests in hardware. */
@@ -163,7 +330,7 @@ int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
         /* wait for at least one 32-bit word in the FIFO (bounded) */
         guard = 0;
         while ((*RNG_FIFO_COUNT & 0xFF) == 0) {
-            if (++guard > 200000000U) {
+            if (++guard > RNG200_FIFO_WAIT_ITERS) {
 #if defined(DEBUG_UART)
                 wolfBoot_printf("RNG200 FIFO timeout int=0x%08x ctrl=0x%08x\n",
                     (unsigned)*RNG_INT_STATUS, (unsigned)*RNG_CTRL);
@@ -176,18 +343,6 @@ int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
         for (i = 0; i < n; i++)
             output[pos++] = (unsigned char)(word >> (i * 8));
     }
-
-#if defined(DEBUG_UART)
-    {
-        static int traced = 0;
-        if (!traced) {
-            wolfBoot_printf("RNG200 seed %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                output[0], output[1], output[2], output[3],
-                output[4], output[5], output[6], output[7]);
-            traced = 1;
-        }
-    }
-#endif
     return 0;
 }
 #endif /* HAVE_FIPS */
@@ -304,11 +459,16 @@ void sdhci_platform_set_bus_mode(int is_emmc)
  * Falls back to the BCM2711 system counter frequency if CNTFRQ_EL0 is 0. */
 uint64_t hal_get_timer_us(void)
 {
+#if defined(__aarch64__)
     uint64_t count, freq;
     __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(count));
     __asm__ volatile("mrs %0, CNTFRQ_EL0" : "=r"(freq));
     if (freq == 0)
         freq = BCM2711_TIMER_CLK_FREQ;
     return (uint64_t)(((__uint128_t)count * 1000000ULL) / freq);
+#else
+    /* Non-AArch64 host build (unit tests): the generic timer is unavailable. */
+    return 0;
+#endif
 }
 #endif /* DISK_SDCARD || DISK_EMMC */

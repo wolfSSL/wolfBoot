@@ -3871,7 +3871,7 @@ Booting at 0x3080000
 
 ### FIPS 140-3
 
-The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform its signature verification with the wolfCrypt FIPS 140-3 validated module. The on-target harness in `test-app/app_cm4.c` registers a FIPS callback and prints the runtime in-core integrity hash over the UART for the `verifyCore[]` bootstrap. See [FIPS.md](FIPS.md) for the full build and hash-sealing procedure.
+The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform its signature verification with the wolfCrypt FIPS 140-3 module (build `config/examples/cm4.config` with `FIPS=1`, pointing `WOLFBOOT_LIB_WOLFSSL` at a FIPS wolfSSL tree). At boot the module runs its power-on self-test and in-core integrity check, and wolfBoot refuses to boot unless the module is operational. Entropy for the FIPS DRBG comes from the BCM2711 RNG200 hardware TRNG. The full flow has been brought up and exercised end to end on CM4 hardware using the FIPS-ready bundle: FIPS module operational -> SHA-384 integrity -> ECDSA-P384 signature verification -> boot handoff. A production, CMVP-validated deployment additionally requires the licensed validated wolfCrypt FIPS bundle at the validated revision (see [FIPS.md](FIPS.md)). The on-target harness in `test-app/app_cm4.c` prints the runtime in-core hash over the UART for the `verifyCore[]` seal. See [FIPS.md](FIPS.md) for the full build, entropy, and hash-sealing procedure.
 
 ## Xilinx Zynq UltraScale
 

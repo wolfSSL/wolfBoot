@@ -69,12 +69,12 @@ static void uart_putdec(int v)
     unsigned int u;
     int i = 0;
 
+    /* Negate in the unsigned domain: -(unsigned)INT_MIN is well defined,
+     * unlike negating the signed int (UB for INT_MIN). */
+    u = (unsigned int)v;
     if (v < 0) {
         uart_putc('-');
-        u = (unsigned int)(-v);
-    }
-    else {
-        u = (unsigned int)v;
+        u = (unsigned int)(-u);
     }
     do {
         buf[i++] = (char)('0' + (u % 10));
