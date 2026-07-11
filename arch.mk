@@ -219,8 +219,18 @@ ifeq ($(ARCH),AARCH64)
     # BOOT_EL1 itself is emitted by options.mk; nothing to add here.
   endif
 
+  ifeq ($(TARGET),cm4)
+    # Raspberry Pi Compute Module 4 - Broadcom BCM2711, Cortex-A72
+    ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
+    # -mstrict-align: wolfBoot runs with the MMU off (simple startup), so data
+    # accesses are Device memory where unaligned access faults. Required for the
+    # FIPS in-core HMAC over the code region (NO_ARM_ASM drops the asm path that
+    # otherwise sets this).
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -mstrict-align
+  endif
+
   # Default ARM ASM setting for unrecognized AARCH64 targets
-  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
+  ifeq ($(filter zynq versal nxp_ls1028a cm4,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 
