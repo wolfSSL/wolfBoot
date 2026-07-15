@@ -852,7 +852,10 @@ ifeq ($(DEBUG_UART),1)
   else ifeq ($(strip $(UART_TARGET)),)
   else
     UART_DRV_OBJ:=hal/uart/uart_drv_$(UART_TARGET).o
-    ifneq ($(wildcard $(UART_DRV_OBJ)),)
+    # Test for the driver SOURCE, not the object: the object does not exist on a
+    # clean tree, so testing for it meant DEBUG_UART was silently dropped on the
+    # very build that was supposed to enable it.
+    ifneq ($(wildcard $(UART_DRV_OBJ:.o=.c)),)
       CFLAGS+=-DDEBUG_UART
       ifneq ($(findstring $(UART_DRV_OBJ),$(OBJS)),$(UART_DRV_OBJ))
         OBJS+=$(UART_DRV_OBJ)
@@ -1465,6 +1468,17 @@ ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
 endif
 endif
 
+# Size of the wolfHSM comm data payload, shared by the client and server blocks
+# below. The default is sized for certificate chains (the whole DER chain is
+# shipped to the HSM in a single message) and for ML-DSA keys/signatures.
+#
+# Targets whose transport slot is smaller MUST override this in their .config:
+# e.g. PIC32CZ's shared-memory slot is 4096 B, of which the transport CSR takes
+# 8 B and the comm header another 8 B, so 4080 is a hard ceiling -- overrunning
+# it silently corrupts the slot rather than failing the build. The value must
+# also match the wolfHSM server's own build, or the two disagree on the layout.
+WOLFHSM_CFG_COMM_DATA_LEN ?= 5000
+
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
@@ -1476,9 +1490,6 @@ ifeq ($(WOLFHSM_CLIENT),1)
     # ML-DSA asn.c decode/encode requires mp_xxx functions
     WOLFCRYPT_OBJS += \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
-
-    # Large enough to handle the largest ML-DSA key/signature
-    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
   endif
 
   WOLFHSM_OBJS += $(WOLFHSM_CLIENT_OBJS)
@@ -1500,8 +1511,7 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # authenticated via a certificate chain. Public keys baked into a local
   # keystore.c are not supported.
   KEYGEN_OPTIONS += --nolocalkeys
-  # big enough for cert chain
-  CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
+  CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=$(WOLFHSM_CFG_COMM_DATA_LEN)
 
   # wolfHSM client ID presented to the HSM server during the connection
   # handshake. Single value shared by all targets; defaults to 1. Override in the
@@ -1545,7 +1555,7 @@ ifeq ($(WOLFHSM_SERVER),1)
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
     # Large enough to handle the largest ML-DSA key/signature
-    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=5000
+    CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=$(WOLFHSM_CFG_COMM_DATA_LEN)
   endif
 
   WOLFHSM_OBJS += $(WOLFHSM_SERVER_OBJS)

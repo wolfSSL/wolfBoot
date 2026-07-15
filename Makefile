@@ -485,6 +485,14 @@ endif
 ifeq ($(WOLFHSM_SERVER),1)
     _DO_WH_NVMTOOL:=1
 endif
+# Not every wolfHSM port provisions keys from a pre-built NVM image. A HAL may
+# instead install the verification key into the server's key cache at boot (see
+# hal_hsm_init_connect on pic32cz), which is the only option on targets whose
+# server wipes its NVM partition on startup. Those set WOLFHSM_NVM_IMAGE=0.
+WOLFHSM_NVM_IMAGE?=1
+ifeq ($(WOLFHSM_NVM_IMAGE),0)
+    _DO_WH_NVMTOOL:=
+endif
 # Disable NVM image generation if user-provided keys without explicit USER_NVM_INIT
 # (providing USER_NVM_INIT allows users to supply keys and still generate a custom NVM image)
 ifeq ($(_USER_PROVIDED_KEYS),1)

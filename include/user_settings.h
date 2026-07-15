@@ -859,8 +859,13 @@ extern int tolower(int c);
 
 /* WOLF_CRYPTO_CB requires WC_RNG type for cryptocb.h function declarations.
  * Forward-declare as incomplete type — sufficient for WC_RNG* pointers in
- * function signatures. We never call functions that dereference WC_RNG. */
-#if defined(WOLF_CRYPTO_CB) && defined(WC_NO_RNG)
+ * function signatures. We never call functions that dereference WC_RNG.
+ *
+ * Skipped under __ASSEMBLER__: wolfSSL's ARM .S sources pull settings.h in
+ * through the assembler, which cannot parse a C typedef. Only targets that
+ * combine a crypto callback (e.g. wolfHSM client) with ARM assembly reach
+ * this, which is why it went unnoticed. */
+#if defined(WOLF_CRYPTO_CB) && defined(WC_NO_RNG) && !defined(__ASSEMBLER__)
 typedef struct WC_RNG WC_RNG;
 #endif
 
