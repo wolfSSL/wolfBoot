@@ -191,6 +191,46 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x08000000
     CORTEX_M7=1
     OBJS+=hal/pic32c.o
+
+    ifeq ($(WOLFHSM_CLIENT),1)
+      ifeq ($(WOLFHSM_MICROCHIP_PIC32CZ),)
+        $(error WOLFHSM_MICROCHIP_PIC32CZ is not set: point it at the wolfHSM \
+                PIC32CZ client port directory (the one containing port/))
+      endif
+
+      CFLAGS+=-I$(WOLFHSM_MICROCHIP_PIC32CZ) \
+              -DWOLFHSM_CFG_NO_SYS_TIME \
+              -DWOLFHSM_CFG_TRANSPORT_MEM \
+              -DWOLFHSM_CFG_CLIENT_ID=WOLFBOOT_WOLFHSM_CLIENT_ID \
+              -DPIC32CZ_CFG_SHARED_MEM_PHYS_BASE=0x20100000U \
+              -DPIC32CZ_CFG_SHARED_MEM_REQ_SIZE=4096 \
+              -DPIC32CZ_CFG_SHARED_MEM_RESP_SIZE=4096 \
+              '-DPIC32CZ_CFG_SHARED_MEM_TOTAL_SIZE=(PIC32CZ_CFG_SHARED_MEM_REQ_SIZE+PIC32CZ_CFG_SHARED_MEM_RESP_SIZE)'
+
+      OBJS+=$(WOLFHSM_MICROCHIP_PIC32CZ)/port/mailbox.o \
+            $(WOLFHSM_MICROCHIP_PIC32CZ)/port/client/czhsm_client.o \
+            $(WOLFHSM_MICROCHIP_PIC32CZ)/port/client/fwmetadata.o \
+            $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+
+      # HSM server firmware. Optional: set HSM_FW_BIN to have wolfBoot load/boot
+      # the HSM core from it at boot; leave it unset when the firmware is already
+      # resident and wolfBoot must not touch it.
+      ifneq ($(HSM_FW_BIN),)
+        ifeq ($(wildcard $(HSM_FW_BIN)),)
+          $(error HSM_FW_BIN=$(HSM_FW_BIN) not found: build the wolfHSM server \
+                  firmware before wolfBoot)
+        endif
+        HSM_FW_ADDR?=0x0c1c0000
+        HSM_FW_SIZE:=$(shell stat -c %s $(HSM_FW_BIN))
+        CFLAGS+=-DHSM_FW_ADDR=$(HSM_FW_ADDR) -DHSM_FW_SIZE=$(HSM_FW_SIZE)
+      endif
+
+      # Signing pubkey header. Optional: set HSM_PUBKEY_HEADER to have the HAL
+      # push the key into the HSM at boot; leave it unset when pre-provisioned.
+      ifneq ($(HSM_PUBKEY_HEADER),)
+        CFLAGS+=-DHSM_PUBKEY_HEADER='"$(HSM_PUBKEY_HEADER)"'
+      endif
+    endif
   endif
 
   ifeq ($(TARGET),pic32ck)
