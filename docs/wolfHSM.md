@@ -21,6 +21,7 @@ wolfBoot supports using wolfHSM on the following platforms:
 
 - wolfBoot simulator (using wolfHSM POSIX TCP transport)
 - AURIX TC3xx (shared memory transport)
+- Microchip PIC32CZ CA9x (shared memory transport)
 - STM32H5 TrustZone (the secure-side wolfBoot hosts a wolfHSM server and exposes it to the non-secure application through a single NSC veneer; see [STM32H5 TrustZone Engine](#stm32h5-trustzone-engine) below)
 
 Details on configuring wolfBoot to use wolfHSM on each of these platforms can be found in the wolfBoot (and wolfHSM) documentation specific to that target, with the exception of the simulator, which is documented here. The remainder of this document focuses on the generic wolfHSM-related configuration options.

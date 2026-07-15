@@ -289,6 +289,10 @@ ifeq ($(TARGET),stm32n6)
 endif
 endif # TZEN=1
 
+ifeq ($(TARGET),pic32cz)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),x86_64_efi)
     MAIN_TARGET:=wolfboot.efi
 endif

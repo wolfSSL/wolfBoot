@@ -5193,6 +5193,21 @@ The test behavior depends on whether the `DUALBANK_SWAP` feature is enabled:
 - **If `DUALBANK_SWAP=1`:** The higher version of the application will be automatically selected, and LED1 will turn on.
 - **If `DUALBANK_SWAP=0`:** The application version 1 will boot first. The application will trigger the update and light LED0. On the next reset, wolfBoot will update the application, boot application version 2, and turn on LED1.
 
+### PIC32CZ with wolfHSM
+
+On Microchip PIC32CZ CA9x devices, wolfBoot can run on the Cortex-M7 host core as
+a [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) client, offloading the
+image digest and signature verification to the wolfHSM server running on the
+Cortex-M0+ HSM core.
+
+Currently, wolfBoot as wolfHSM for PIC32CZ is distributed as part of the wolfHSM
+PIC32CZ platform release bundle, not as a standalone package. This bundle is
+under NDA and is not publicly available.
+
+For access to the PIC32CZ platform release or for more information on using
+wolfBoot and wolfHSM on PIC32CZ devices, contact
+[facts@wolfssl.com](mailto:facts@wolfssl.com).
+
 
 ## Microchip SAME51
 

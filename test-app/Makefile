@@ -1083,6 +1083,9 @@ endif
 
 ifeq ($(TARGET), pic32cz)
   APP_OBJS+=../hal/pic32c.o
+  ifeq ($(DEBUG_UART),1)
+    APP_OBJS+=../hal/uart/uart_drv_pic32cz.o
+  endif
 endif
 
 CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
