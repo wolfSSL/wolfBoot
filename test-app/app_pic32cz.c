@@ -28,6 +28,10 @@
 
 #if defined(TARGET_pic32cz)
 
+#ifdef DEBUG_UART
+extern void uart_write(const char* buf, unsigned int len);
+#endif
+
 #define PORT_BASE (0x44840000U)
 
 #define PORTB_BASE (PORT_BASE + 0x80 * 1)
@@ -58,6 +62,15 @@ void main(void)
     uint32_t boot_version;
     hal_init();
     boot_version = wolfBoot_current_firmware_version();
+#ifdef DEBUG_UART
+    if (boot_version >= 2) {
+        static const char m[] = "APP: booted, verified firmware v2 (update applied)\r\n";
+        uart_write(m, sizeof(m) - 1);
+    } else {
+        static const char m[] = "APP: booted, verified firmware v1\r\n";
+        uart_write(m, sizeof(m) - 1);
+    }
+#endif
     if (boot_version == 1) {
         wolfBoot_update_trigger();
         led0_on();
