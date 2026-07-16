@@ -16,7 +16,6 @@
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
-#include "hal/max32666.h"
 
 #ifdef WOLFCRYPT_MAX32666_TEST
 #include <wolfssl/wolfcrypt/settings.h>
@@ -24,6 +23,11 @@
 #include <wolfssl/wolfcrypt/ecc.h>
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/port/maxim/max3266x.h>
+#endif
+
+#include "hal/max32666.h"
+
+#ifdef WOLFCRYPT_MAX32666_TEST
 
 /*
  * AES-GCM 256-bit known-answer test
