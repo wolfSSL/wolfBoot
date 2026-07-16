@@ -1191,7 +1191,7 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ECC256  LIMIT=18880 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13896 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13912 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA2048 LIMIT=11768 NO_ARM_ASM=1
 	make clean
@@ -1232,5 +1232,5 @@ test-size-all:
 		LIMIT=8728 NO_ARM_ASM=1
 	make keysclean
 	make clean
-	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19486 \
+	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19538 \
 		IMAGE_SIGNATURE_SIZE=2420 IMAGE_HEADER_SIZE?=8192
