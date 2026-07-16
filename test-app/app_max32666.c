@@ -276,6 +276,28 @@ void main(void)
 
     wolfBoot_printf("MAX32666 Test App v%lu\n", (unsigned long)version);
 
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+    {
+        static const char *phase_str[] = { "?", "update", "boot", "rollback",
+            "recovery", "self-update" };
+        static const char *cause_str[] = { "?", "bad header",
+            "hash verification failed", "signature verification failed",
+            "not confirmed" };
+        struct wolfBoot_failure_record rec;
+        int i, n = wolfBoot_get_failure_count();
+        wolfBoot_printf("Recorded failures: %d\n", n);
+        for (i = 0; i < n; i++) {
+            if (wolfBoot_get_failure(i, &rec) == 0) {
+                wolfBoot_printf("  [%d] %s during %s in %s partition (v%lu)\n", i,
+                    rec.cause <= 4 ? cause_str[rec.cause] : "?",
+                    rec.phase <= 5 ? phase_str[rec.phase] : "?",
+                    rec.partition == PART_UPDATE ? "UPDATE" : "BOOT",
+                    (unsigned long)rec.fw_version);
+            }
+        }
+    }
+#endif
+
     /* Mark boot successful to prevent rollback */
     wolfBoot_success();
 
