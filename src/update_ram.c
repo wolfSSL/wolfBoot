@@ -452,6 +452,25 @@ backup_on_failure:
 
         if (ih_load != 0) {
             load_address = (uint32_t*)(uintptr_t)ih_load;
+#ifdef WOLFBOOT_USE_RAMBOOT
+            /* WOLFBOOT_USE_RAMBOOT already placed the payload in RAM at
+             * os_image.fw_base via the early wolfBoot_ramboot() copy, but
+             * the generic "copy image to RAM" memcpy further below is
+             * compiled out entirely when RAMBOOT is active (RAMBOOT is
+             * expected to have already put the data where it needs to be).
+             * That is only true when ih_load coincides with where RAMBOOT
+             * staged the payload -- if the uImage requests a different
+             * ih_load, the payload must be relocated here, or do_boot()
+             * below will jump into RAM that was never written. */
+            if ((uint8_t*)load_address != os_image.fw_base) {
+                wolfBoot_printf(
+                    "RAMBOOT: relocating uImage payload from %p to %p "
+                    "(%d bytes) to honor ih_load\n",
+                    os_image.fw_base, load_address, os_image.fw_size);
+                memmove((void*)load_address, os_image.fw_base,
+                    os_image.fw_size);
+            }
+#endif
         } else {
             /* Linux PPC path: leave load_address alone, just advance it
              * past the header to match upstream behaviour. load_address is
