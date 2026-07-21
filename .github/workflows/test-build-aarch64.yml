@@ -95,6 +95,9 @@ jobs:
       - name: Select config
         run: |
           cp ${{inputs.config-file}} .config
+          if [ -n "$EXTRA_CFLAGS" ]; then
+            printf 'CFLAGS_EXTRA+=%s\n' "$EXTRA_CFLAGS" >> .config
+          fi
 
       - name: Build tools
         run: |

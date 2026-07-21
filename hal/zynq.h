@@ -436,6 +436,85 @@
 #define SD_CONFIG_REG2_SD0_SLOTTYPE_MASK   0x00003000UL
 
 
+#ifdef WOLFBOOT_ZYNQMP_PHY_INIT
+/* Ethernet PHY init over the GEM MDIO management interface.
+ *
+ * wolfBoot has no Ethernet stack; this brings up only the MDIO management
+ * plane so a board-specific register sequence (normally run from U-Boot's
+ * "mii"/"mw" commands) can configure the PHY before the OS starts. Every
+ * magic value below is behind an #ifndef so a board can override it from
+ * CFLAGS_EXTRA. Register layout mirrors the Cadence GEM driver in the
+ * separate wolfIP project (src/port/amd/common/gem_regs.h there).
+ *
+ * The defaults target the ZCU102 on-board PHY (TI DP83867 at MDIO address
+ * 0x0C on GEM3) and just read the PHY ID as a diagnostic.
+ *
+ * A board keeps its own values (GEM base, PHY address, PL poke, and the
+ * ZYNQMP_PHY_INIT_STEPS sequence) in a small header and selects it with one
+ * config line, which keeps the efficient step array without editing this file:
+ *   CFLAGS_EXTRA+=-DZYNQMP_PHY_INIT_HEADER='"myboard_phy.h"'
+ * That header just #defines the macros it wants to change; anything it omits
+ * falls back to the ZCU102 defaults below. Individual scalars can also be set
+ * directly with -D. Where the PHY sits behind the PL, the boot image must
+ * include the FPGA bitstream so the FSBL configures it before this runs,
+ * otherwise the transactions are no-ops. */
+
+#ifdef ZYNQMP_PHY_INIT_HEADER
+#include ZYNQMP_PHY_INIT_HEADER
+#endif
+
+/* GEM instance used for MDIO. Default is GEM3 (ZCU102 on-board PHY). */
+#ifndef ZYNQMP_GEM_BASE
+#define ZYNQMP_GEM_BASE     0xFF0E0000UL   /* GEM3 */
+#endif
+#define GEM_NWCTRL          (*((volatile uint32_t*)(ZYNQMP_GEM_BASE + 0x000)))
+#define GEM_NWCFG           (*((volatile uint32_t*)(ZYNQMP_GEM_BASE + 0x004)))
+#define GEM_NWSR            (*((volatile uint32_t*)(ZYNQMP_GEM_BASE + 0x008)))
+#define GEM_PHYMNTNC        (*((volatile uint32_t*)(ZYNQMP_GEM_BASE + 0x034)))
+
+#define GEM_NWCTRL_MDEN         (1UL << 4)  /* enable MDIO management port */
+#define GEM_NWSR_PHY_IDLE       (1UL << 2)  /* MDIO logic idle */
+#define GEM_NWCFG_MDCDIV_SHIFT  18          /* NWCFG[20:18] MDC clock divisor */
+#define GEM_PHYMNTNC_CLAUSE22   0x40020000UL
+#define GEM_PHYMNTNC_OP_R       (2UL << 28)
+#define GEM_PHYMNTNC_OP_W       (1UL << 28)
+
+/* MDC divisor selector. 5 => pclk/96, keeping MDC below the 2.5 MHz max. */
+#ifndef ZYNQMP_GEM_MDC_DIV
+#define ZYNQMP_GEM_MDC_DIV      5
+#endif
+
+/* PHY MDIO address (clause-22). Default 0x0C = ZCU102 on-board DP83867. */
+#ifndef ZYNQMP_PHY_ADDR
+#define ZYNQMP_PHY_ADDR         0x0C
+#endif
+
+/* Optional PL register address poked by a ZYNQMP_PHY_OP_GPIO step. Default 0
+ * disables the poke (ZCU102 has no such register). A board can set this to its
+ * own PL address; note a PL address only responds once the FPGA bitstream is
+ * loaded. */
+#ifndef ZYNQMP_PHY_GPIO_ADDR
+#define ZYNQMP_PHY_GPIO_ADDR    0
+#endif
+
+/* Op codes for the configurable init sequence. */
+#define ZYNQMP_PHY_OP_GPIO      0   /* write arg1 to ZYNQMP_PHY_GPIO_ADDR */
+#define ZYNQMP_PHY_OP_WR        1   /* MDIO write: reg=arg0, val=arg1 */
+#define ZYNQMP_PHY_OP_RD        2   /* MDIO read:  reg=arg0 (arg1 ignored) */
+
+/* Default sequence: read the PHY ID registers (2, 3) as a diagnostic. With
+ * DEBUG_UART=1 this prints the ID and confirms MDIO reached the PHY. Override
+ * ZYNQMP_PHY_INIT_STEPS with {op, arg0, arg1} rows to replay a board's own
+ * "mii"/"mw" sequence (ZYNQMP_PHY_OP_WR writes, then an optional
+ * ZYNQMP_PHY_OP_GPIO poke of ZYNQMP_PHY_GPIO_ADDR). */
+#ifndef ZYNQMP_PHY_INIT_STEPS
+#define ZYNQMP_PHY_INIT_STEPS \
+    { ZYNQMP_PHY_OP_RD,   0x02, 0 }, \
+    { ZYNQMP_PHY_OP_RD,   0x03, 0 }
+#endif
+#endif /* WOLFBOOT_ZYNQMP_PHY_INIT */
+
+
 /* Configuration Security Unit (CSU) */
 /* Triple-Dedundant MicroBlaze processor */
 /* 128 KB CSU ROM (immutable) */
