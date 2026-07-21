@@ -2076,6 +2076,106 @@ static void zynqmp_enable_cci(void)
 }
 #endif /* ZYNQMP_ENABLE_CCI */
 
+#ifdef WOLFBOOT_ZYNQMP_PHY_INIT
+/* Minimal GEM MDIO management engine, used only to run a board-specific PHY
+ * init sequence before boot. See hal/zynq.h for the register/config macros. */
+
+static int gem_mdio_wait_idle(void)
+{
+    uint32_t spin;
+    for (spin = 0; spin < 100000; spin++) {
+        if (GEM_NWSR & GEM_NWSR_PHY_IDLE) {
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static int gem_mdio_write(uint8_t phy, uint8_t reg, uint16_t val)
+{
+    if (gem_mdio_wait_idle() != 0) {
+        return -1;
+    }
+    GEM_PHYMNTNC = GEM_PHYMNTNC_CLAUSE22 | GEM_PHYMNTNC_OP_W
+        | (((uint32_t)phy & 0x1FU) << 23)
+        | (((uint32_t)reg & 0x1FU) << 18)
+        | (uint32_t)val;
+    if (gem_mdio_wait_idle() != 0) {
+        return -2;
+    }
+    return 0;
+}
+
+static int gem_mdio_read(uint8_t phy, uint8_t reg, uint16_t *out)
+{
+    if (gem_mdio_wait_idle() != 0) {
+        return -1;
+    }
+    GEM_PHYMNTNC = GEM_PHYMNTNC_CLAUSE22 | GEM_PHYMNTNC_OP_R
+        | (((uint32_t)phy & 0x1FU) << 23)
+        | (((uint32_t)reg & 0x1FU) << 18);
+    if (gem_mdio_wait_idle() != 0) {
+        return -2;
+    }
+    *out = (uint16_t)(GEM_PHYMNTNC & 0xFFFFU);
+    return 0;
+}
+
+/* Run the configurable PHY init sequence (default: the board's U-Boot flow).
+ * Best-effort: MDIO errors are reported but never block boot. */
+static void zynq_phy_init(void)
+{
+    static const struct {
+        uint8_t  op;
+        uint8_t  arg0;
+        uint16_t arg1;
+    } steps[] = { ZYNQMP_PHY_INIT_STEPS };
+    uint32_t i;
+    uint16_t rval;
+    int ret;
+
+    wolfBoot_printf("ZynqMP PHY init (addr 0x%02x)\n", (int)ZYNQMP_PHY_ADDR);
+
+    /* Enable the MDIO management port with a safe MDC divisor. */
+    GEM_NWCFG = (GEM_NWCFG & ~(0x7UL << GEM_NWCFG_MDCDIV_SHIFT))
+        | (((uint32_t)ZYNQMP_GEM_MDC_DIV & 0x7U) << GEM_NWCFG_MDCDIV_SHIFT);
+    GEM_NWCTRL |= GEM_NWCTRL_MDEN;
+
+    for (i = 0; i < (sizeof(steps) / sizeof(steps[0])); i++) {
+        switch (steps[i].op) {
+        case ZYNQMP_PHY_OP_GPIO:
+            if (ZYNQMP_PHY_GPIO_ADDR != 0) {
+                *((volatile uint32_t*)ZYNQMP_PHY_GPIO_ADDR) =
+                    (uint32_t)steps[i].arg1;
+                hal_delay_ms(1);
+            }
+            break;
+        case ZYNQMP_PHY_OP_WR:
+            ret = gem_mdio_write(ZYNQMP_PHY_ADDR, steps[i].arg0, steps[i].arg1);
+            if (ret != 0) {
+                wolfBoot_printf("PHY write reg 0x%02x failed (%d)\n",
+                    (int)steps[i].arg0, ret);
+            }
+            break;
+        case ZYNQMP_PHY_OP_RD:
+            rval = 0;
+            ret = gem_mdio_read(ZYNQMP_PHY_ADDR, steps[i].arg0, &rval);
+            if (ret != 0) {
+                wolfBoot_printf("PHY read reg 0x%02x failed (%d)\n",
+                    (int)steps[i].arg0, ret);
+            }
+            else {
+                wolfBoot_printf("PHY reg 0x%02x = 0x%04x\n",
+                    (int)steps[i].arg0, (int)rval);
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+#endif /* WOLFBOOT_ZYNQMP_PHY_INIT */
+
 /* public HAL functions */
 void hal_init(void)
 {
@@ -2108,6 +2208,10 @@ void hal_init(void)
 
 #ifndef WOLFBOOT_REPRODUCIBLE_BUILD
     wolfBoot_printf("Build: %s %s\n", __DATE__, __TIME__);
+#endif
+
+#ifdef WOLFBOOT_ZYNQMP_PHY_INIT
+    zynq_phy_init();
 #endif
 
 #if defined(EXT_FLASH) && (EXT_FLASH == 1)

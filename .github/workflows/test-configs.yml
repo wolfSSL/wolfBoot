@@ -774,6 +774,13 @@ jobs:
       make-args: ZYNQMP_FSBL=1 ZYNQMP_PSU_INIT_DIR=hal/board/zynqmp DISK_SDCARD=1
       psu-init-stub: true
 
+  zynqmp_phy_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp.config
+      make-args: CFLAGS_EXTRA=-DWOLFBOOT_ZYNQMP_PHY_INIT
+
   zynq7000_test:
     uses: ./.github/workflows/test-build.yml
     with:
