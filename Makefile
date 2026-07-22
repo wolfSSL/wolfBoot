@@ -876,10 +876,14 @@ pico-sdk-info: FORCE
 # recipe echoes the effective target/sign so a default build is visible; pass
 # them explicitly to get an SBOM that reflects your actual configuration.
 #
-# Extracts the configuration-specific source list from OBJS (which is fully
-# assembled by this point — core wolfBoot + wolfcrypt + HAL sources are all
-# included), captures the build's -D configuration macros via $(HOSTCC) -dM -E
-# on the host, and calls gen-sbom to emit CycloneDX and SPDX output files.
+# This is the plain-Make / arch.mk entry point.  It also covers every build
+# that is really the Makefile with a vendor SDK bolted on via source/include
+# paths (MCUXpresso, STM32Cube, PSoC6, Freedom-E-SDK, Vorago) and the IDE
+# targets that also have an arch.mk path (TI Hercules, Renesas RX, Zynq).  It
+# extracts the configuration-specific source list from OBJS (fully assembled by
+# this point: core wolfBoot + wolfcrypt + HAL) and passes it, together with the
+# build CFLAGS, to the shared SBOM driver (tools/scripts/wolfboot-sbom.sh) which
+# is the single engine reused by the CMake and IDE entry points too.
 #
 # wolfcrypt sources are compiled directly into the wolfBoot image and are
 # therefore listed as wolfBoot's own sources, not as a separate component.
@@ -898,49 +902,64 @@ GEN_SBOM?=$(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom
 SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
 SBOM_PYTHON?=$(or $(CRA_PYTHON),python3)
+SBOM_DRIVER:=$(WOLFBOOT_ROOT)/tools/scripts/wolfboot-sbom.sh
 
 sbom:
-	@if [ -z "$(WOLFBOOT_VERSION)" ]; then \
-	    echo "ERROR: could not read LIBWOLFBOOT_VERSION_STRING from include/wolfboot/version.h" >&2; \
-	    echo "       (check the file exists and its version format is intact)." >&2; \
-	    exit 1; \
-	fi
-	@if [ ! -f "$(GEN_SBOM)" ]; then \
-	    echo "ERROR: gen-sbom not found at '$(GEN_SBOM)'." >&2; \
-	    echo "       Initialize the submodule: git submodule update --init lib/wolfssl" >&2; \
-	    echo "       or point GEN_SBOM at a wolfssl tree: make sbom GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom" >&2; \
-	    exit 1; \
-	fi
 	@echo "wolfBoot SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET) sign=$(SIGN)"
-	@echo "  Outputs: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
 	$(eval _SBOM_SRCS := $(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS))))
 	@if [ -z "$(_SBOM_SRCS)" ]; then \
 	    echo "ERROR: no source files found in OBJS — check that TARGET and SIGN are correct." >&2; \
 	    exit 1; \
 	fi
 	@set -e; \
-	_dh=$$(mktemp /tmp/wolfboot-sbom-defines.XXXXXX); \
 	_sf=$$(mktemp /tmp/wolfboot-sbom-srcs.XXXXXX); \
-	trap 'rm -f "$$_dh" "$$_sf"' EXIT; \
-	_defs=""; \
-	for _t in $(CFLAGS); do \
-	    case "$$_t" in -D*) _defs="$$_defs $$_t" ;; esac; \
-	done; \
-	$(HOSTCC) -dM -E -DWOLFSSL_USER_SETTINGS $$_defs \
-	    -x c /dev/null >"$$_dh" 2>/dev/null || \
-	    { echo "ERROR: '$(HOSTCC) -dM -E' failed; install a host C compiler or set HOSTCC." >&2; exit 1; }; \
+	trap 'rm -f "$$_sf"' EXIT; \
 	printf '%s\n' $(_SBOM_SRCS) >"$$_sf"; \
-	$(SBOM_PYTHON) "$(GEN_SBOM)" \
+	"$(SBOM_DRIVER)" \
+	    --srcs-file "$$_sf" \
+	    --cflags "$(CFLAGS)" \
 	    --name wolfboot \
 	    --version "$(WOLFBOOT_VERSION)" \
-	    --supplier "wolfSSL Inc." \
 	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
-	    --options-h "$$_dh" \
-	    --srcs-file "$$_sf" \
+	    --gen-sbom "$(GEN_SBOM)" \
+	    --python "$(SBOM_PYTHON)" \
+	    --hostcc "$(HOSTCC)" \
+	    --root "$(WOLFBOOT_ROOT)" \
 	    --cdx-out "$(SBOM_CDX_OUT)" \
 	    --spdx-out "$(SBOM_SPDX_OUT)"
-	@echo "SBOM written: $(SBOM_CDX_OUT)  $(SBOM_SPDX_OUT)"
+
+## Per-HAL SBOM
+# Emits a standalone SBOM whose component is the HAL layer for the selected
+# TARGET (hal/hal.c, hal/$(TARGET).c, and any target flash/uart/board drivers),
+# separate from the full bootloader SBOM.  Uses the same build config (CFLAGS)
+# so the captured macros match the real build.  Run once per TARGET.
+SBOM_HAL_CDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).cdx.json
+SBOM_HAL_SPDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).spdx.json
+
+sbom-hal:
+	@echo "wolfBoot HAL SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET)"
+	$(eval _HAL_SRCS := $(filter hal/%,$(patsubst ./%,%,$(wildcard $(patsubst %.o,%.c,$(OBJS)) $(patsubst %.o,%.S,$(OBJS))))))
+	@if [ -z "$(_HAL_SRCS)" ]; then \
+	    echo "ERROR: no HAL sources found in OBJS for TARGET=$(TARGET)." >&2; \
+	    exit 1; \
+	fi
+	@set -e; \
+	_sf=$$(mktemp /tmp/wolfboot-hal-sbom-srcs.XXXXXX); \
+	trap 'rm -f "$$_sf"' EXIT; \
+	printf '%s\n' $(_HAL_SRCS) >"$$_sf"; \
+	"$(SBOM_DRIVER)" \
+	    --srcs-file "$$_sf" \
+	    --cflags "$(CFLAGS)" \
+	    --name "wolfboot-hal-$(TARGET)" \
+	    --version "$(WOLFBOOT_VERSION)" \
+	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
+	    --gen-sbom "$(GEN_SBOM)" \
+	    --python "$(SBOM_PYTHON)" \
+	    --hostcc "$(HOSTCC)" \
+	    --root "$(WOLFBOOT_ROOT)" \
+	    --cdx-out "$(SBOM_HAL_CDX_OUT)" \
+	    --spdx-out "$(SBOM_HAL_SPDX_OUT)"
 
 FORCE:
 
-.PHONY: FORCE clean keytool_check squashelf_check sbom
+.PHONY: FORCE clean keytool_check squashelf_check sbom sbom-hal
