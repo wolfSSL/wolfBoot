@@ -1550,4 +1550,9 @@ if(HOST_IS_MSVC) # Some VS2022 helpers
                         "${CMAKE_CURRENT_BINARY_DIR}")
 endif() # HOST_IS_MSVC VS2022 helpers
 
+#---------------------------------------------------------------------------------------------
+# SBOM generation (CycloneDX 1.6 + SPDX 2.3), shares the engine used by `make sbom`
+#---------------------------------------------------------------------------------------------
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/sbom.cmake)
+
 message(STATUS "End [WOLFBOOT_ROOT]/CmakeLists.txt")

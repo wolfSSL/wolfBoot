@@ -494,3 +494,9 @@ tools/unit-tests/zynq_write_extract.h
 tools/unit-tests/unit-sign-header-failure
 tools/unit-tests/unit-sign-hybrid-keyload
 tools/unit-tests/unit-update-ram-uboot
+
+# Generated SBOM artifacts (CycloneDX 1.6 + SPDX 2.3)
+wolfboot-*.cdx.json
+wolfboot-*.spdx.json
+wolfboot-*.spdx
+wolfboot-sbom-srcs.txt

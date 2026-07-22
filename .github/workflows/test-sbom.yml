@@ -1,0 +1,147 @@
+name: Wolfboot SBOM Canary
+
+# Exercises every wolfBoot SBOM route so a change to the build system, the
+# shared driver (tools/scripts/wolfboot-sbom.sh) or an IDE extractor cannot
+# silently break SBOM generation:
+#
+#   * Make  path  (methods 1-4)  -> make sbom TARGET=sim
+#   * CMake path  (method 5)     -> cmake --build --target sbom
+#   * IAR extractor (method 7)   -> tools/scripts/ide-sbom/iar_sbom.py
+#   * compdb extractor (6, 8-11) -> tools/scripts/ide-sbom/compdb_sbom.py
+#   * per-HAL SBOM               -> make sbom-hal TARGET=sim
+#   * Zephyr module SBOM         -> tools/scripts/ide-sbom/zephyr_sbom.py
+#
+# Each route must emit a schema-valid CycloneDX 1.6 + SPDX 2.3 document whose
+# top-level component is wolfboot.
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  sbom_canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake python3 build-essential
+
+      # gen-sbom ships with wolfSSL. Use the vendored submodule copy if the
+      # pinned revision already carries it, otherwise fetch it from wolfSSL
+      # master so the canary still runs while the submodule bump lands.
+      - name: Locate gen-sbom
+        id: gensbom
+        run: |
+          if [ -f lib/wolfssl/scripts/gen-sbom ]; then
+            echo "path=$GITHUB_WORKSPACE/lib/wolfssl/scripts/gen-sbom" >> "$GITHUB_OUTPUT"
+          else
+            mkdir -p .sbom-tools
+            curl -fsSL \
+              https://raw.githubusercontent.com/wolfSSL/wolfssl/master/scripts/gen-sbom \
+              -o .sbom-tools/gen-sbom
+            chmod +x .sbom-tools/gen-sbom
+            echo "path=$GITHUB_WORKSPACE/.sbom-tools/gen-sbom" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Reproducibility guard: a -D macro carrying an absolute host path (e.g.
+      # arch.mk's -DPICO_SDK_PATH=$(PICO_SDK_PATH)) must never reach the SBOM.
+      - name: Path scrub check
+        run: |
+          printf 'src/image.c\n' > /tmp/scrub-srcs.txt
+          sh tools/scripts/wolfboot-sbom.sh \
+            --srcs-file /tmp/scrub-srcs.txt \
+            --cflags "-DWOLFBOOT_HASH_SHA256 -DPICO_SDK_PATH=/home/ci-secret/pico-sdk" \
+            --name wolfboot --version 0.0.0-scrubtest \
+            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+            --cdx-out /tmp/scrub.cdx.json --spdx-out /tmp/scrub.spdx.json
+          if grep -q 'ci-secret' /tmp/scrub.cdx.json /tmp/scrub.spdx.json; then
+            echo "ERROR: absolute host path leaked into the SBOM (scrub failed)." >&2
+            exit 1
+          fi
+          grep -q 'PICO_SDK_PATH' /tmp/scrub.cdx.json || {
+            echo "ERROR: PICO_SDK_PATH macro was dropped entirely (should be redacted, not removed)." >&2
+            exit 1; }
+          echo "scrub OK: path redacted, macro key preserved"
+
+      - name: Make path - make sbom (sim)
+        run: |
+          cp config/examples/sim.config .config
+          make sbom TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            wolfboot-*.cdx.json wolfboot-*.spdx.json
+
+      - name: CMake path - cmake --target sbom (sim)
+        run: |
+          rm -rf build-sim
+          cmake -S . -B build-sim -G "Unix Makefiles" \
+            -DWOLFBOOT_TARGET=sim -DARCH=HOST -DSIGN=ED25519 -DHASH=SHA256 \
+            -DWOLFBOOT_SECTOR_SIZE=256 -DWOLFBOOT_PARTITION_SIZE=0x6400 \
+            -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08003000 \
+            -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08009400 \
+            -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x0800F800 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DGEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          cmake --build build-sim --target sbom
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            build-sim/wolfboot-*.cdx.json build-sim/wolfboot-*.spdx.json
+
+      - name: IAR extractor (method 7)
+        run: |
+          python3 tools/scripts/ide-sbom/iar_sbom.py IDE/IAR/wolfboot.ewp \
+            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+            --cdx-out iar.cdx.json --spdx-out iar.spdx.json
+          python3 tools/scripts/ide-sbom/validate_sbom.py iar.cdx.json iar.spdx.json
+
+      - name: compdb extractor (methods 6, 8-11)
+        run: |
+          python3 tools/scripts/ide-sbom/compdb_sbom.py \
+            build-sim/compile_commands.json \
+            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+            --cdx-out compdb.cdx.json --spdx-out compdb.spdx.json
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            compdb.cdx.json compdb.spdx.json
+
+      - name: Per-HAL SBOM (make sbom-hal)
+        run: |
+          cp config/examples/sim.config .config
+          make sbom-hal TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            wolfboot-hal-sim-*.cdx.json wolfboot-hal-sim-*.spdx.json
+
+      - name: Zephyr module SBOM
+        run: |
+          python3 tools/scripts/ide-sbom/zephyr_sbom.py \
+            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+            --cdx-out zephyr.cdx.json --spdx-out zephyr.spdx.json
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            zephyr.cdx.json zephyr.spdx.json
+
+      - name: Upload SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfboot-sboms
+          path: |
+            wolfboot-*.cdx.json
+            wolfboot-*.spdx.json
+            build-sim/wolfboot-*.cdx.json
+            build-sim/wolfboot-*.spdx.json
+            iar.cdx.json
+            iar.spdx.json
+            compdb.cdx.json
+            compdb.spdx.json
+            zephyr.cdx.json
+            zephyr.spdx.json
+          if-no-files-found: warn

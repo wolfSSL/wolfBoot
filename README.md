@@ -142,15 +142,29 @@ make sbom TARGET=<target> SIGN=<alg> HASH=<alg>
 
 `TARGET`, `SIGN`, and `HASH` must match your wolfBoot build configuration (same
 as a normal `make` invocation), because the SBOM's source set and artifact hash
-are configuration-specific. `gen-sbom` lives in the `lib/wolfssl` submodule and
-is used automatically; override with `GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom`
-if you keep wolfssl elsewhere.
+are configuration-specific. `gen-sbom` is part of wolfSSL. The build uses the
+copy in the `lib/wolfssl` submodule. If the pinned revision does not include it,
+give the path with `GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom`.
+
+The same SBOM engine is available from every wolfBoot build system, so you get
+an identical CycloneDX 1.6 / SPDX 2.3 document however you build:
+
+| Build system / artifact | How to generate the SBOM |
+| --- | --- |
+| Make / arch.mk / vendor SDKs | `make sbom TARGET=<target> SIGN=<alg>` |
+| CMake (and Pico SDK) | `cmake --build <dir> --target sbom` |
+| IAR Embedded Workbench | `tools/scripts/ide-sbom/iar_sbom.py IDE/IAR/wolfboot.ewp` |
+| TI CCS / MPLAB X / Renesas / Xilinx | `tools/scripts/ide-sbom/route_through_sbom.sh --config <cfg> ...` |
+| Any IDE with a compilation database | `tools/scripts/ide-sbom/compdb_sbom.py compile_commands.json` |
+| Per-HAL component | `make sbom-hal TARGET=<target>` |
+| Zephyr TEE/PSA module | `tools/scripts/ide-sbom/zephyr_sbom.py` |
 
 Output files are written to the build directory as
 `wolfboot-<version>.cdx.json` (CycloneDX 1.6) and `wolfboot-<version>.spdx.json`
 (SPDX 2.3 JSON), where `<version>` is read from `include/wolfboot/version.h`.
 
-For CRA guidance and worked SBOM examples, see the
+See [docs/SBOM.md](./docs/SBOM.md) for the full per-build-system guide. For CRA
+guidance and worked SBOM examples, see the
 [wolfSSL CRA Kit](https://github.com/wolfSSL/wolfssl-examples/tree/master/cra-kit).
 
 ## Troubleshooting
