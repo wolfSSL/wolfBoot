@@ -8625,16 +8625,3 @@ Boot success marked. Version: 1
 | `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
-
-### MAX32666: External QSPI NAND Configuration
-
-A separate configuration is provided for external QSPI NAND flash (Micron
-MT29F8G01ADBFD12) as firmware update storage:
-
-```sh
-cp config/examples/max32666-nand.config .config
-make clean
-make
-```
-
-See [config/examples/max32666-nand.config](/config/examples/max32666-nand.config) for details.
