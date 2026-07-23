@@ -199,12 +199,12 @@ IF &flashwolfboot
   ; --------------------------------------------------------------------------
   PRINT "2. Programming FMAN microcode..."
   PRINT "   Source: &basedir/t2080_fman.bin"
-  PRINT "   Address: 0xE8020000 (128 KB)"
-  FLASH.UNLOCK 0xE8020000--0xE803FFFF
-  FLASH.ReProgram 0xE8020000--0xE803FFFF /Erase
-  Data.LOAD.binary &basedir/t2080_fman.bin 0xE8020000
+  PRINT "   Address: 0xEFF00000 (FMAN_FW_ADDR, one 64 KB sector, ~32 KB actual)"
+  FLASH.UNLOCK 0xEFF00000--0xEFF0FFFF
+  FLASH.ReProgram 0xEFF00000--0xEFF0FFFF /Erase
+  Data.LOAD.binary &basedir/t2080_fman.bin 0xEFF00000
   FLASH.ReProgram.off
-  Data.LOAD.binary &basedir/t2080_fman.bin 0xE8020000 /Verify
+  Data.LOAD.binary &basedir/t2080_fman.bin 0xEFF00000 /Verify
   PRINT "   FMAN microcode programmed and verified"
   PRINT ""
 
@@ -227,12 +227,19 @@ IF &flashwolfboot
   ; --------------------------------------------------------------------------
   PRINT "4. Programming test application..."
   PRINT "   Source: &basedir/test-app/image_v1_signed.bin"
-  PRINT "   Address: 0xEFEE0000 (WOLFBOOT_PARTITION_BOOT_ADDRESS, 1 MB)"
-  FLASH.UNLOCK 0xEFEE0000--0xEFFDFFFF
-  FLASH.ReProgram 0xEFEE0000--0xEFFDFFFF /Erase
-  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFEE0000
+  ; Only erase/program sectors needed for the actual image size, not the
+  ; full 1 MB partition -- and never climb into the ucode sector above.
+  &appsize=OS.FILE.SIZE(&basedir/test-app/image_v1_signed.bin)
+  ; Round up to next 64 KB sector boundary (WOLFBOOT_SECTOR_SIZE=0x10000)
+  &append=0xEFE00000+((&appsize+0xFFFF)&~0xFFFF)-1
+  &appsizekb=FORMAT.Decimal(0,&appsize>>10.)
+  PRINT "   Address: 0xEFE00000 (WOLFBOOT_PARTITION_BOOT_ADDRESS, 1 MB)"
+  PRINT "   Image size &appsizekb KB, erasing to &append"
+  FLASH.UNLOCK 0xEFE00000--&append
+  FLASH.ReProgram 0xEFE00000--&append /Erase
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFE00000
   FLASH.ReProgram.off
-  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFEE0000 /Verify
+  Data.LOAD.binary &basedir/test-app/image_v1_signed.bin 0xEFE00000 /Verify
   PRINT "   Test application programmed and verified"
   PRINT ""
 
@@ -243,9 +250,9 @@ IF &flashwolfboot
   PRINT ""
   PRINT "Flash Layout:"
   PRINT "  0xE8000000: RCW (64 KB)"
-  PRINT "  0xE8020000: FMAN Microcode (128 KB)"
-  PRINT "  0xEFEE0000: Test Application (boot partition, 1 MB)"
-  PRINT "  0xEFFDFFFF: End of boot partition"
+  PRINT "  0xEFE00000: Test Application (boot partition, 1 MB)"
+  PRINT "  0xEFEFFFFF: End of boot partition"
+  PRINT "  0xEFF00000: FMAN Microcode (64 KB sector, ~32 KB actual)"
   PRINT "  0xEFFE0000: wolfBoot (128 KB)"
   PRINT ""
 
@@ -254,11 +261,14 @@ IF &flashwolfboot
   PRINT "RCW at 0xE8000000 (should be AA 55 AA 55):"
   Data.dump 0xE8000000++0x3F /Long
   PRINT ""
+  PRINT "FMAN at 0xEFF00000 (should show QEF header):"
+  Data.dump 0xEFF00000++0x3F /Long
+  PRINT ""
   PRINT "wolfBoot at 0xEFFE0000:"
   Data.dump 0xEFFE0000++0x3F /Long
   PRINT ""
-  PRINT "Test app at 0xEFEE0000:"
-  Data.dump 0xEFEE0000++0x3F /Long
+  PRINT "Test app at 0xEFE00000:"
+  Data.dump 0xEFE00000++0x3F /Long
   PRINT ""
 
   GOTO flash_complete

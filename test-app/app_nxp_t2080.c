@@ -51,6 +51,10 @@ void __attribute__((naked, section(".text._app_entry"))) _app_entry(void)
 
 #include "../hal/nxp_ppc.h"
 
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
+
 /* wolfCrypt test/benchmark support */
 #ifdef WOLFCRYPT_TEST
 #include <wolfssl/wolfcrypt/settings.h>
@@ -139,9 +143,8 @@ static int print_info(void)
 
 void main(void)
 {
-    /* Zero BSS - required for bare-metal since there's no crt0 startup.
-     * Without this, static variables (gTestMemory, HEAP_HINT, etc.)
-     * contain DDR garbage, causing crashes in wc_LoadStaticMemory. */
+    /* Zero BSS (no crt0 on bare metal): the wolfCrypt static-memory pools
+     * (gTestMemory/HEAP_HINT) must start zeroed or wc_LoadStaticMemory crashes. */
     extern char _start_bss[], _end_bss[];
     {
         char *p = _start_bss;
@@ -175,6 +178,10 @@ void main(void)
 #endif
 
     wolfCrypt_Cleanup();
+#endif
+
+#ifdef ENABLE_WOLFIP
+    wolfip_tftp_test_report();
 #endif
 
     wolfBoot_printf("Test App: idle loop\r\n");
