@@ -13,6 +13,24 @@ name: Wolfboot SBOM Canary
 #
 # Each route must emit a schema-valid CycloneDX 1.6 + SPDX 2.3 document whose
 # top-level component is wolfboot.
+#
+# The sbom_canary job also guards three properties of the SBOM itself:
+#
+#   * Toolchain neutrality - gcc and clang must give a byte-identical SBOM.
+#     The driver captures configuration with the host compiler and the source
+#     list, so the cross-toolchain that builds the firmware does not change the
+#     SBOM. No per-compiler front end is needed for clang, LLVM or a vendor
+#     compiler.
+#   * Reproducibility - the same configuration built from a different absolute
+#     path gives a byte-identical SBOM.
+#   * Path scrub - an absolute host path in a -D macro (the synthetic check and
+#     a real rp2350 build with PICO_SDK_PATH) must not reach the SBOM.
+#
+# The cross_targets job proves the same source route works for many embedded
+# targets with no IDE and no cross-toolchain installed. It runs make sbom for a
+# spread of architectures (Arm-M, Arm-A, PowerPC, Renesas RX and RISC-V). The
+# driver never calls the cross compiler, so the SBOM is produced for a target
+# whose toolchain is absent.
 
 on:
   push:
@@ -36,7 +54,7 @@ jobs:
       - name: Install tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake python3 build-essential
+          sudo apt-get install -y cmake python3 build-essential clang
 
       # gen-sbom ships with wolfSSL. Use the vendored submodule copy if the
       # pinned revision already carries it, otherwise fetch it from wolfSSL
@@ -128,6 +146,78 @@ jobs:
           python3 tools/scripts/ide-sbom/validate_sbom.py \
             zephyr.cdx.json zephyr.spdx.json
 
+      # Toolchain neutrality: the cross-toolchain that builds the firmware must
+      # not change the SBOM. Capture the same config with gcc and with clang and
+      # require a byte-identical result. SOURCE_DATE_EPOCH is fixed so the two
+      # runs are comparable.
+      - name: Toolchain neutrality (gcc vs clang)
+        run: |
+          export SOURCE_DATE_EPOCH=1700000000
+          cp config/examples/sim.config .config
+          rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
+          make sbom TARGET=sim HOSTCC=gcc \
+            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          mv wolfboot-*.cdx.json /tmp/gcc.cdx.json
+          mv wolfboot-*.spdx.json /tmp/gcc.spdx.json
+          make sbom TARGET=sim HOSTCC=clang \
+            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          mv wolfboot-*.cdx.json /tmp/clang.cdx.json
+          mv wolfboot-*.spdx.json /tmp/clang.spdx.json
+          if ! diff -u /tmp/gcc.cdx.json /tmp/clang.cdx.json \
+             || ! diff -u /tmp/gcc.spdx.json /tmp/clang.spdx.json; then
+            echo "ERROR: gcc and clang produced different SBOMs." >&2
+            echo "The SBOM must not depend on the toolchain." >&2
+            exit 1
+          fi
+          echo "neutrality OK: gcc and clang SBOMs are byte-identical"
+
+      # Reproducibility: the same configuration built from a different absolute
+      # path must give a byte-identical SBOM. This catches any absolute build
+      # path that leaks into the source list or the config record.
+      - name: Reproducibility (path independence)
+        run: |
+          export SOURCE_DATE_EPOCH=1700000000
+          cp config/examples/sim.config .config
+          rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
+          make sbom TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          cp wolfboot-*.cdx.json /tmp/repro-a.cdx.json
+          rm -rf /tmp/wb-copy && mkdir -p /tmp/wb-copy
+          cp -a . /tmp/wb-copy/
+          git config --global --add safe.directory /tmp/wb-copy
+          ( cd /tmp/wb-copy \
+            && export SOURCE_DATE_EPOCH=1700000000 \
+            && rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json \
+            && make sbom TARGET=sim \
+                 GEN_SBOM="${{ steps.gensbom.outputs.path }}" )
+          cp /tmp/wb-copy/wolfboot-*.cdx.json /tmp/repro-b.cdx.json
+          if ! diff -u /tmp/repro-a.cdx.json /tmp/repro-b.cdx.json; then
+            echo "ERROR: SBOM is not reproducible across build paths." >&2
+            exit 1
+          fi
+          echo "reproducibility OK: identical SBOM from two paths"
+
+      # Path scrub in a real build: rp2350 injects -DPICO_SDK_PATH=<abs path>
+      # through arch.mk. The absolute path must be redacted while the macro key
+      # is kept. This exercises the scrub on a genuine build, not a synthetic
+      # command line.
+      - name: Path scrub in a real build (rp2350 / PICO_SDK_PATH)
+        run: |
+          cp config/examples/rp2350.config .config
+          rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
+          PICO_SDK_PATH=/home/ci-secret/pico-sdk \
+            make sbom TARGET=rp2350 \
+              GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          if grep -q 'ci-secret' wolfboot-*.cdx.json wolfboot-*.spdx.json; then
+            echo "ERROR: absolute PICO_SDK_PATH leaked in a real rp2350 build." >&2
+            exit 1
+          fi
+          grep -q 'PICO_SDK_PATH' wolfboot-*.cdx.json || {
+            echo "ERROR: PICO_SDK_PATH macro was dropped (should be redacted)." >&2
+            exit 1; }
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            wolfboot-*.cdx.json wolfboot-*.spdx.json
+          echo "rp2350 scrub OK: path redacted, macro key preserved"
+
       - name: Upload SBOM artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -144,4 +234,73 @@ jobs:
             compdb.spdx.json
             zephyr.cdx.json
             zephyr.spdx.json
+          if-no-files-found: warn
+
+  # Proves the source route (make sbom) works for a spread of embedded targets
+  # with no IDE and no cross-toolchain installed. The driver never calls the
+  # cross compiler, so every target below produces a valid SBOM on a plain
+  # runner. This is the "any target, any toolchain, no hardware" guarantee.
+  cross_targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # A spread of architectures whose cross-toolchains are NOT installed:
+        #   stm32h7   Arm Cortex-M7      nrf52840  Arm Cortex-M4
+        #   imx-rt1060 Arm Cortex-M7     sama5d3   Arm Cortex-A5
+        #   nxp-t1040 PowerPC e5500      renesas-rx65n  Renesas RX
+        #   hifive1   RISC-V
+        target:
+          - stm32h7
+          - nrf52840
+          - imx-rt1060
+          - sama5d3
+          - nxp-t1040
+          - renesas-rx65n
+          - hifive1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3
+
+      - name: Locate gen-sbom
+        id: gensbom
+        run: |
+          if [ -f lib/wolfssl/scripts/gen-sbom ]; then
+            echo "path=$GITHUB_WORKSPACE/lib/wolfssl/scripts/gen-sbom" >> "$GITHUB_OUTPUT"
+          else
+            mkdir -p .sbom-tools
+            curl -fsSL \
+              https://raw.githubusercontent.com/wolfSSL/wolfssl/master/scripts/gen-sbom \
+              -o .sbom-tools/gen-sbom
+            chmod +x .sbom-tools/gen-sbom
+            echo "path=$GITHUB_WORKSPACE/.sbom-tools/gen-sbom" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: make sbom (no cross-toolchain present)
+        run: |
+          cp config/examples/${{ matrix.target }}.config .config
+          make sbom TARGET=${{ matrix.target }} \
+            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          python3 tools/scripts/ide-sbom/validate_sbom.py \
+            wolfboot-*.cdx.json wolfboot-*.spdx.json
+
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfboot-sbom-${{ matrix.target }}
+          path: |
+            wolfboot-*.cdx.json
+            wolfboot-*.spdx.json
           if-no-files-found: warn
