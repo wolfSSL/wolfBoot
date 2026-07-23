@@ -6014,202 +6014,29 @@ The flash boot entry point is the last 4 bytes of the NOR flash region (`0xEFFFF
 
 ```
 CPU Core -> L1 (32KB I + 32KB D) -> L2 (2 MB, shared by the single 4-core cluster)
-         → CoreNet Fabric → CPC (2MB, SRAM or L3 cache)
-         → DDR Controller → DDR SDRAM
-         → IFC Controller → NOR Flash
+         -> CoreNet Fabric -> CPC (2MB, SRAM or L3 cache)
+         -> DDR Controller -> DDR SDRAM
+         -> IFC Controller -> NOR Flash
 ```
 
 Each core begins execution at effective address `0x0_FFFF_FFFC` with a single
 4KB MMU page (RM 4.3.3). The assembly startup (`boot_ppc_start.S`) configures
 TLBs, caches, and stack before jumping to C code.
 
-**Cold Boot Stack (L1 Locked D-Cache)**
+The HAL handles several QorIQ boot constraints; the rationale is documented in `src/boot_ppc_start.S` and `hal/nxp_t2080.c`:
 
-CPC SRAM is unreliable for stores on cold power-on — L1 dirty-line evictions
-through CoreNet to CPC cause bus errors (silent CPU checkstop with `MSR[ME]=0`).
-The fix (matching U-Boot) uses L1 locked D-cache as the initial 16KB stack:
-`dcbz` allocates cache lines without bus reads, `dcbtls` locks them so they
-are never evicted. The locked lines at `L1_CACHE_ADDR` (`0xF8E00000`; `0xEE800000` on VPX3-152) are
-entirely core-local. After DDR init in `hal_init()`, the stack relocates to
-DDR and the CPC switches from SRAM to L3 cache mode.
+- **Cold-boot stack.** CPC SRAM is unreliable for stores on cold power-on, so the initial 16KB stack uses locked L1 D-cache and relocates to DDR after `hal_init()`.
+- **XIP flash access.** wolfBoot executes in place from NOR. Because program/erase puts the NOR into command mode bank-wide, all flash write/erase routines are `RAMFUNCTION` (copied to DDR) and must not call flash-resident code; the flash TLB switches cache attributes around program/erase.
+- **Multi-core (`ENABLE_MP`).** The e6500 L2 is shared by all four cores in the single cluster, so secondaries skip L2 re-init and share the boot core's L2.
+- **CW VPX3-152 (256 MB NOR) only.** The larger flash VA range forces CCSRBAR to relocate from `0xFE000000` to `0xEF000000` (CPC/L1 addresses move to `0xEE900000`/`0xEE800000`), and the boot-ROM TLB is invalidated to avoid an e6500 multi-hit machine check. The 128 MB RDB and NAII boards need neither adjustment.
 
-**Flash TLB and XIP**
+#### VxWorks 7 / 64-bit OS Boot Support (ENABLE_OS64BIT)
 
-The flash TLB uses `MAS2_W | MAS2_G` (Write-Through + Guarded) during XIP
-boot, allowing L1 I-cache to cache instruction fetches while preventing
-speculative prefetch to the IFC. C code switches to `MAS2_I | MAS2_G` during
-flash write/erase (command mode), then `MAS2_M` for full caching afterward.
+With `ENABLE_OS64BIT`, `do_boot()` performs the extra handoff needed to launch a 64-bit kernel -- a VxWorks 7 kernel (Curtiss-Wright `ossel=ostype2` mode) or a 64-bit Linux kernel via the ePAPR convention. This path is hardware-verified on the CW VPX3-152 booting VxWorks 7 and Green Hills INTEGRITY-178 tuMP.
 
-**CCSRBAR Relocation (CW VPX3-152 only)**
+wolfBoot hands off per ePAPR: FDT pointer in `r3`, `'EPAP'` in `r6`, IMA size in `r7`, remaining GPRs zero, with the OS switching itself to 64-bit mode. Before the jump wolfBoot builds the final 64-bit memory map (DDR identity-mapped at TLB1 slot 0, plus the board's peripheral and PCIe windows), fixes up the FDT (`cpu-release-addr`, `enable-method`, per-core `status`, and the `WOLFBOOT_BOOTARGS` bootargs), releases the secondary cores into the ePAPR spin-table, and jumps to the OS entry from a `RAMFUNCTION` trampoline running out of DDR. The board-specific peripheral map is supplied by the board HAL (for the VPX3-152, `hal_cw_vpx3152_os64_periph()`).
 
-The default CCSRBAR at `0xFE000000` (16 MB) falls within the VPX3-152's 256 MB
-flash VA range (`0xF0000000`-`0xFFFFFFFF`). The startup assembly relocates
-CCSRBAR to `0xEF000000` (just below flash). The CPC SRAM and L1 cache addresses
-are also relocated to `0xEE900000`/`0xEE800000` to avoid overlap.
-
-**Boot ROM TLB invalidation (CW VPX3-152 only)**
-
-For VPX3-152, TLB1 Entry 2 maps the full 256 MB flash at `0xF0000000-0xFFFFFFFF`
-with IPROT. This range overlaps with the boot ROM TLB (default 4 KB at
-`0xFFFFF000`, resized to 256 KB at `0xFFFC0000` by `shrink_default_tlb1`).
-Overlapping TLB1 entries cause an e6500 multi-hit machine check. After Entry 2
-is created, the boot ROM TLB is cleared via `tlbwe` with `V=0` and `IPROT=0`;
-Entry 2 then serves all instruction fetches for the flash region including the
-boot ROM range. For NAII 68PPC2 and T2080 RDB (128 MB flash at `0xE8000000`),
-there is no overlap and the boot ROM TLB remains valid alongside Entry 2.
-
-**RAMFUNCTION Constraints**
-
-The NOR flash (two S29GL01GS x8 in parallel, 16-bit bus) enters
-command mode bank-wide — instruction fetches during program/erase return status
-data instead of code. All flash write/erase functions are marked `RAMFUNCTION`,
-placed in `.ramcode`, copied to DDR, and remapped via TLB9. Key rules:
-
-- **No calls to flash-resident code.** The linker generates trampolines that
-  jump back to flash addresses. Any helper called from RAMFUNCTION code must
-  itself be RAMFUNCTION or fully inlined. Delay/clock helpers (for example,
-  `udelay` and associated clock accessors) are provided by `nxp_ppc.c` and
-  are marked `RAMFUNCTION` so they can be safely invoked without executing
-  from flash `.text`.
-- **Inline TLB/cache ops.** `hal_flash_cache_disable/enable` use
-  `set_tlb()` / `write_tlb()` (inline `mtspr` helpers) and direct
-  L1CSR0/L1CSR1 manipulation.
-- **WBP timing.** The write-buffer-program sequence (unlock → 0x25 → count →
-  data → 0x29) must execute without bus-stalling delays. UART output between
-  steps (~87us per character at 115200) triggers DQ1 abort.
-- **WBP abort recovery.** Plain `AMD_CMD_RESET` (0xF0) is ignored in
-  WBP-abort state; the full unlock + 0xF0 sequence is required.
-
-**Multi-Core (ENABLE_MP)**
-
-The e6500 L2 cache is per-cluster (shared by all 4 cores). Secondary cores
-must skip L2 flash-invalidate (L2FI) since the primary core already
-initialized the shared L2; they only set L1 stash ID via L1CSR2.
-
-**e6500 64-bit GPR**
-
-The e6500 has 64-bit GPRs even in 32-bit mode. `lis` sign-extends to 64 bits,
-producing incorrect values for addresses >= 0x80000000 (e.g., `lis r3, 0xEFFE`
-→ `0xFFFFFFFF_EFFE0000`), causing TLB misses on `blr`. The `LOAD_ADDR32`
-macro (`li reg, 0` + `oris` + `ori`) avoids this for all address loads.
-
-**MSR Configuration**
-
-After the stack is established: `MSR[CE|ME|DE|RI]` — critical interrupt,
-machine check (exceptions instead of checkstop), debug, and recoverable
-interrupt enable. Branch prediction (BUCSR) is deferred to `hal_init()` after
-DDR stack relocation.
-
-**e6500 Cluster L2 ECC bring-up**
-
-The e6500 cluster L2 (memory-mapped `L2CSR0`) must be enabled in a specific
-order or its ECC array is left uninitialized for ranges the OS later fetches,
-producing an uncorrectable multi-bit ECC machine check (`MCSR[IF]`,
-`L2ERRDET` MBECC). `boot_ppc_start.S` follows the CW U-Boot / SDK2.0 sequence:
-(1) `L2FI | L2LFC` (flash-invalidate + lock-flash-clear), polling until clear;
-(2) `L2PE` (ECC enable) in its own write, polling until it reads back set,
-BEFORE the cache is enabled; (3) `L2E | L2PE | L2REP_MODE` to enable the cache
-with ECC. Writing a bare `L2E` without first polling `L2PE` set is the
-misordering that machine-checks VxWorks.
-
-#### VxWorks 7 64-bit Boot Support (ENABLE_OS64BIT)
-
-When `ENABLE_OS64BIT` is set, `do_boot()` performs the additional handoff
-work needed to launch a VxWorks 7 64-bit kernel (Curtiss-Wright `ossel=ostype2`
-mode) or a 64-bit Linux kernel via the ePAPR convention.
-
-**ePAPR handoff:** wolfBoot passes the FDT pointer in `r3`, the IMA size in
-`r7`, and `0x45504150` (`'EPAP'`) in `r6`. Other GPRs are zero. MSR is
-`0x00002200` (`FP|DE`); the OS sets `MSR[CM]=1` itself within its first ~30
-instructions.
-
-**Final 64-bit memory map (FUM Table 2.5).** `hal_os64bit_map_transition()`
-in `src/boot_ppc.c` performs the board-agnostic DDR-to-slot-0 remap and
-delegates the board-specific peripheral LAW/ATMU programming to
-`hal_cw_vpx3152_os64_periph()`, which builds the 36-bit-aliased peripheral
-map VxWorks 7 expects on CW VPX3-152:
-
-| Effective Address | Physical Address | Region |
-|---|---|---|
-| `0xF000_0000` | `0xF_F000_0000` | Flash (256 MB) |
-| `0xEF00_0000` | `0xF_EF00_0000` | CCSR (16 MB) |
-| `0xEE40_0000` | `0xF_EE40_0000` | FPGA / NVRAM (4 MB span) |
-| `0xEE00_0000` | `0xF_EE00_0000` | DCSR (4 MB) |
-| `0xEC00_0000` | `0xF_EC00_0000` | QMan portals (32 MB) |
-| `0xEA00_0000` | `0xF_EA00_0000` | BMan portals (32 MB) |
-| `0xE000_0000` | `0xD_0000_0000` | PCIe1 (XMC) memory (2 GB) |
-| `0xC000_0000` | `0xC_0000_0000` | PCIe4 (Switch) memory (2 GB) |
-| `0x0000_0000` | `0x0_0000_0000` | DDR identity (2 GB, slot 0) |
-
-**DDR at TLB1 slot 0.** VxWorks 7's early entry stub iterates TLB1 from
-slot 1 upward invalidating each entry, then reads slot 0 expecting it to
-contain the DDR mapping. wolfBoot pins DDR at slot 12 by default; the
-OS-handoff transition invalidates slot 12 and writes DDR identity (2 GB,
-`MAS3_SX|SW|SR`, `MAS2_M`, IPROT) at slot 0.
-
-**Spin-table.** `hal_mp_init()` places the secondary-core spin-table at
-`bootpg - BOOT_ROM_SIZE`. For VxWorks 7 the bootpg is anchored just below
-the FUM `/memory` hole at `0x7E40_0000` so `cpu-release-addr` lands inside
-declared memory. `hal_mp_up()` releases all secondaries into the spin loop
-via `DCFG_BRR` regardless of `ENABLE_OS64BIT` (the earlier theory that CW
-U-Boot holds the secondaries in reset for `ossel=ostype2` was disproven --
-U-Boot also releases CPU0/2/4/6 into the spin loop first). The OS then
-brings up each released core via the standard ePAPR spin-table protocol
-(`cpu-release-addr` in the FDT).
-
-**FDT fixups.** `hal_dts_fixup()` populates `cpus/cpu@N/cpu-release-addr`
-and `enable-method = "spin-table"` for every core, and marks every core
-`status = "okay"` (marking the secondaries `"disabled"` made VxWorks skip
-them and stall on the first spin-table release). The
-DTB's existing `/memory.reg` is left untouched if already populated
-(matching production U-Boot's `fdt_fixup_memory` which only writes when
-the node is missing). The DTB's bootargs is replaced with the
-`WOLFBOOT_BOOTARGS` value from `.config` if defined.
-
-**RAMFUNCTION OS-jump trampoline.** wolfBoot is XIP from flash by default;
-`wolfBoot_os64bit_jump()` is a `RAMFUNCTION` (lives in `.ramcode` /
-DDR). Steps it performs in order:
-
-1. Copy the exception handler (`isr_empty`, ~208 bytes) from flash
-   `0xFFFE_0000` to DDR at `0x0080_0000` (4 KB-aligned), then re-point
-   `IVPR` to the DDR copy. Without this, the next step (switching
-   flash to cache-inhibit + guarded) would break the e6500 fetcher's
-   ability to service handler instructions, causing any subsequent
-   exception to silent-hang. Production U-Boot's `IVPR` likewise
-   targets its DDR-relocated code, not flash.
-2. Call `hal_flash_cache_disable_pre_os()` (also `RAMFUNCTION`) which
-   switches the flash TLB to `MAS2_I|MAS2_G`, asserts DUART1 MCR=3
-   (DTR+RTS, matching production U-Boot's pre-bootm value), and zeros
-   `TCR` to disable any leftover watchdog reset arming.
-3. `sync; isync` to drain the pipeline.
-4. Indirect-jump to the OS entry through `bctrl`. The bctrl is fetched
-   from DDR (the trampoline itself), matching the production U-Boot
-   pattern of running its final pre-OS instructions out of DDR.
-
-**Other VxWorks-driven adjustments:**
-
-- `CORES_PER_CLUSTER = 4` for T2080: the four e6500 cores share a single
-  cluster (2 MB L2), so the MP secondary path's linear core-ID is
-  `(PIR>>5)*4 + ((PIR>>3) & 0x3)`. The cluster term is 0 on this one-cluster
-  part; an earlier value of 2 (a mistaken "2 clusters of 2" reading) was
-  masked by that and only worked by accident.
-- T2080 rev-1 e6500 errata block at primary core reset and the
-  secondary boot path. Erratum A003999 (HDBCR1 |= 0x0100_0000) is
-  intentionally NOT applied because production CW U-Boot does not
-  apply it to T2080.
-- Secondary L2 init is gated on cluster ID > 0; T2080's four cores are all
-  in cluster 0, so every secondary skips it and shares the boot core's L2.
-- IFC chip-selects on CW VPX3-152: AMASK + `MSEL=GPCM` aligned with CW
-  U-Boot's CSPR programming. CSOR is left alone while wolfBoot is still
-  XIP from flash (writing CSOR would alter the GPCM timing of the very
-  flash we are fetching from).
-
-**Early-boot UART debug (`WOLFBOOT_EARLY_UART`).** Defining this
-preprocessor flag compiles in the e6500 early-boot (pre-C) UART debug
-helper macros in `src/boot_ppc_start.S` (DUART1 at `CCSR + 0x11C500`).
-They emit single-character breadcrumbs from the assembly startup when
-bringing up a new board or OS, before the C `wolfBoot_printf` path is
-available. Off by default.
+Set `WOLFBOOT_EARLY_UART` to compile in pre-C single-character UART breadcrumbs (DUART1) emitted from the assembly startup, useful when bringing up a new board or OS. Off by default.
 
 ### Building wolfBoot for NXP T2080 PPC
 
