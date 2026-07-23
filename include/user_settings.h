@@ -217,8 +217,12 @@ extern int tolower(int c);
 #if !defined(PKCS11_SMALL) && !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
 #       define HAVE_ECC_CDH
 #endif
+        /* Don't force SP_MATH when a config selects SP_MATH_ALL (SPMATHALL=1,
+         * e.g. T1024/T1040); the two SP math backends are mutually exclusive. */
+#   if !defined(WOLFSSL_SP_MATH_ALL)
 #       define WOLFSSL_SP_MATH
 #       define WOLFSSL_SP_SMALL
+#   endif
 #       define WOLFSSL_HAVE_SP_ECC
 #       define WOLFSSL_KEY_GEN
 #       define HAVE_ECC_KEY_EXPORT
@@ -622,6 +626,15 @@ extern int tolower(int c);
             #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
             #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
             extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+
+            /* Full test/benchmark algo set: AES ECB/CBC/CTR/GCM/XTS,
+             * SHA-256/384/512, SHA-3. (AES-CBC/GCM added below; SHA-384/512
+             * from HASH=SHA384.) */
+            #define WOLFSSL_AES_COUNTER
+            #define HAVE_AES_ECB
+            #define WOLFSSL_AES_XTS
+            #define WOLFSSL_AES_DIRECT
+            #define WOLFSSL_SHA3
         #endif
 
         #define HAVE_AESGCM

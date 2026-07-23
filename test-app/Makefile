@@ -6,19 +6,32 @@
 WOLFBOOT_LIB_WOLFSSL?=../lib/wolfssl
 WOLFBOOT_LIB_WOLFTPM?=../lib/wolfTPM
 WOLFBOOT_LIB_WOLFHSM?=../lib/wolfHSM
+WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
 WOLFSSL_LOCAL_OBJDIR?=wolfssl_obj
 WOLFTPM_LOCAL_OBJDIR?=wolftpm_obj
 WOLFHSM_LOCAL_OBJDIR?=wolfhsm_obj
+WOLFIP_LOCAL_OBJDIR?=wolfip_obj
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.S $(WOLFBOOT_LIB_WOLFSSL)
 vpath %.c $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.S $(WOLFBOOT_LIB_WOLFTPM)
 vpath %.c $(WOLFBOOT_LIB_WOLFHSM)
 vpath %.S $(WOLFBOOT_LIB_WOLFHSM)
+vpath %.c $(WOLFBOOT_LIB_WOLFIP)
 
 WOLFBOOT_ROOT?=..
 TARGET?=none
 ARCH?=ARM
+
+# PPC64 (e5500/e6500) vs 32-bit (e500/e500mc), set early so the wolfCrypt asm
+# wiring below sees it; per-TARGET blocks later re-assert the same value.
+ifeq ($(ARCH),PPC)
+  ifneq ($(filter nxp_t2080 nxp_t1024 nxp_t1040,$(TARGET)),)
+    PPC64=1
+  else
+    PPC64=0
+  endif
+endif
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
 ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
   ifneq ($(WOLFCRYPT_TZ_PSA),1)
@@ -181,6 +194,7 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add SHA implementations (needed for test/benchmark)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
 
   # Add RNG support (needed for ECC signing and tests)
@@ -219,31 +233,69 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
       endif
     endif
 
-    # Power PC
+    # Power PC (wolfSSL PRs 10740 + 10767: AES/SHA-2/SHA-3 PPC asm)
     ifeq ($(ARCH),PPC)
-      # SP mp int PowerPC ASM
+      # SP big-number math stays on the 32-bit PPC asm path (matches the
+      # bootloader and the SP_WORD_SIZE=32 user_settings.h forces for PPC); the
+      # AES/SHA asm under test is independent of SP math.
+      CFLAGS+=-DWOLFSSL_SP_PPC
+      # PPC_ASM=0 builds wolfCrypt pure-C (no PPC64/PPC32 AES/SHA asm) for the
+      # C-vs-asm benchmark baseline. Default on.
+      PPC_ASM?=1
+      ifeq ($(PPC_ASM),1)
       ifeq ($(PPC64),1)
-        CFLAGS+=-DWOLFSSL_SP_PPC64
-      else
-        CFLAGS+=-DWOLFSSL_SP_PPC
-      endif
-
-      # SHA256
-      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
-      CFLAGS+=-DWOLFSSL_PPC32_ASM
-      CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
-      CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
-
-      ifeq ($(PPC64),1) # requires wolfssl PR 9852
-        # AES
-        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
+        # e5500/e6500: PPC64 base-scalar ASM (AES T-table, SHA-2/SHA-3 via
+        # 64-bit GPR ops). These are NOT POWER8 -- no VSX/vector-crypto -- so
+        # WOLFSSL_PPC64_ASM_CRYPTO / _POWER8 must NOT be set (they emit
+        # vcipher/vshasigma and would trap).
         CFLAGS+=-DWOLFSSL_PPC64_ASM
         CFLAGS+=-DWOLFSSL_PPC64_ASM_INLINE
         CFLAGS+=-DWOLFSSL_PPC64_ASM_SMALL
         CFLAGS+=-DWOLFSSL_PPC64_ASM_AES_NO_HARDEN
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-aes-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha256-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha512-asm_c.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc64/ppc64-sha3-asm_c.o
+      else
+        # e500mc: PPC32 base-scalar ASM, condition-register variant (PR 10740).
+        # INLINE_REG selects the *_cr.c files and needs the assembler to accept
+        # symbolic register names (-Wa,-mregnames).
+        CFLAGS+=-DWOLFSSL_PPC32_ASM
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE_REG -Wa,-mregnames
+        CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-aes-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha512-asm_cr.o
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha3-asm_cr.o
       endif
+      endif  # PPC_ASM
 
       CFLAGS+=-fomit-frame-pointer
+    endif
+
+    # AArch64 (ARMv8): armv8 asm + SP arm64 objects (as arch.mk links for the
+    # bootloader). The test-app is a separate link with full AES/SHA/ECC under
+    # WOLFSSL_ARMASM (and the __aarch64__ SP asm in user_settings.h).
+    ifeq ($(ARCH),AARCH64)
+      ifneq ($(NO_ARM_ASM),1)
+        ifeq ($(SPMATH),1)
+          APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_arm64.o
+        endif
+        APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cpuid.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-aes-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha256-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha512-asm_c.o \
+                  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-sha3-asm_c.o
+        # armv8 asm uses crypto mnemonics (aese/sha256h); arch.mk's +crypto is
+        # lost to a later -mstrict-align, so restore it here for the asm.
+        CFLAGS+=-march=armv8-a+crypto
+        # libgcc for SP math 128-bit helpers (__udivti3); link is -nodefaultlibs.
+        LIBS+=-lgcc
+        # syscalls.c _sbrk references _Min_Heap_Size; no heap, so anchor it at
+        # zero (ARM does the same).
+        LDFLAGS+=-Wl,--defsym=_Min_Heap_Size=0
+      endif
     endif
   endif
 
@@ -631,8 +683,6 @@ ifeq ($(TARGET),nxp_t2080)
   ifneq ($(SIGN),NONE)
     APP_OBJS+=../src/keystore.o
   endif
-  CFLAGS+=-ffunction-sections -fdata-sections
-
   # PowerPC e6500
   PPC64=1
 endif
@@ -1131,10 +1181,68 @@ ifeq ($(TARGET),aurix_tc3xx)
   endif
 endif
 
+# On PPC64 (e5500/e6500) arch.mk turns on PPC32 SHA asm for the bootloader's
+# image-verify link; strip it from the test-app's wolfCrypt so PPC_ASM alone
+# controls the app's AES/SHA asm.
+ifeq ($(PPC64),1)
+  CFLAGS:=$(filter-out -DWOLFSSL_PPC32_ASM -DWOLFSSL_PPC32_ASM_INLINE,$(CFLAGS))
+endif
+
 # Capture final flags for locally built wolfSSL objects.
 WOLFSSL_CFLAGS:=$(CFLAGS)
 WOLFTPM_CFLAGS:=$(CFLAGS)
 WOLFHSM_CFLAGS:=$(CFLAGS)
+
+# Optional wolfIP network stack in the test-app.
+#   ENABLE_WOLFIP=1       wolfIP ethernet port (nxp_fman, or nxp_enetc on
+#                         LS1028A) + a link/PHY smoke test.
+#   WOLFBOOT_TEST_TFTP=1  additionally pull in wolfIP core + TFTP client for
+#                         the full network TFTP-fetch test.
+# Point WOLFBOOT_LIB_WOLFIP at a wolfIP checkout, e.g.
+#   make WOLFBOOT_LIB_WOLFIP=/path/to/wolfip ENABLE_WOLFIP=1 ...
+ifeq ($(ENABLE_WOLFIP),1)
+  # Fail early with a clear message if the wolfIP checkout is missing.
+  ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFIP)/src/wolfip.c),)
+    $(error ENABLE_WOLFIP=1 but no wolfIP sources found at WOLFBOOT_LIB_WOLFIP=$(WOLFBOOT_LIB_WOLFIP). Set WOLFBOOT_LIB_WOLFIP to a wolfIP checkout, e.g. make WOLFBOOT_LIB_WOLFIP=/path/to/wolfip ENABLE_WOLFIP=1 ...)
+  endif
+  # Port by target: LS1028A (AArch64) uses ENETC; QorIQ PowerPC uses FMan.
+  ifeq ($(TARGET),nxp_ls1028a)
+    WOLFIP_PORT:=nxp_enetc
+    WOLFIP_PORT_OBJ:=nxp_enetc.o
+    CFLAGS+=-DWOLFIP_PORT_ENETC
+  else
+    WOLFIP_PORT:=nxp_fman
+    WOLFIP_PORT_OBJ:=nxp_fman.o
+    # The PPC test-app's _app_entry does no BSS-PLT fixup, so -mbss-plt
+    # (arch.mk) would route cross-module libc calls (e.g. variable-size memcpy
+    # in the wolfIP driver) through an uninitialized PLT stub branching to 0;
+    # and default _FORTIFY_SOURCE rewrites memcpy/memmove into the _chk glibc
+    # symbols (absent here -> R_PPC_JMP_SLOT imports, zero GOT slots). -fno-plt
+    # + fortify-off keep those calls direct and unfortified. Scoped to the
+    # wolfIP build so default builds are unchanged.
+    CFLAGS+=-ffunction-sections -fdata-sections
+    CFLAGS+=-fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
+  endif
+  WOLFIP_PORTDIR:=$(WOLFBOOT_LIB_WOLFIP)/src/port/$(WOLFIP_PORT)
+  CFLAGS+=-DENABLE_WOLFIP
+  # wolfIP core (wolfip.c) provides the stack incl. DHCP/ICMP/TCP/UDP.
+  WOLFIP_OBJS:=$(WOLFIP_PORTDIR)/$(WOLFIP_PORT_OBJ) \
+               $(WOLFBOOT_LIB_WOLFIP)/src/wolfip.o
+  ifeq ($(WOLFBOOT_TEST_TFTP),1)
+    CFLAGS+=-DWOLFBOOT_TEST_TFTP
+    WOLFIP_OBJS+=$(WOLFBOOT_LIB_WOLFIP)/src/tftp/wolftftp.o
+  endif
+  ifeq ($(WOLFIP_SPEED_TEST),1)
+    CFLAGS+=-DWOLFIP_SPEED_TEST
+  endif
+  APP_OBJS+=$(WOLFIP_OBJS) wolfip_tftp_test.o
+  # wolfIP TUs need the port headers first (so config.h resolves to the
+  # port copy) and tolerate wolfIP's own style; drop -Werror/-Wstack-usage.
+  WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
+    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT),$(CFLAGS)) \
+    -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
+    -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers
+endif
 
 ifeq ($(WOLFHSM_CLIENT),1)
   CFLAGS += -DSTRING_USER -I"$(WOLFBOOT_LIB_WOLFSSL)"
@@ -1169,6 +1277,9 @@ image.srec: image.elf
 
 APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
     $(WOLFSSL_LOCAL_OBJDIR)/%, $(APP_OBJS))
+
+APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFIP)/%, \
+    $(WOLFIP_LOCAL_OBJDIR)/%, $(APP_OBJS))
 
 ifeq ($(ELF_FLASH_SCATTER),1)
 # When ELF_FLASH_SCATTER=1, preprocess the ELF file with the squashelf tool
@@ -1246,10 +1357,22 @@ $(WOLFHSM_LOCAL_OBJDIR)/%.o: %.S
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(WOLFHSM_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+
+$(WOLFIP_LOCAL_OBJDIR)/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(WOLFIP_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+# Local test-app wolfIP glue, built with the wolfIP include/flag set.
+wolfip_tftp_test.o: wolfip_tftp_test.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(WOLFIP_CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
-		$(WOLFHSM_LOCAL_OBJDIR)
+		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR)
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
