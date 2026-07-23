@@ -1,15 +1,15 @@
 name: Wolfboot SBOM Canary
 
 # Exercises every wolfBoot SBOM route so a change to the build system, the
-# shared driver (tools/scripts/wolfboot-sbom.sh) or an IDE extractor cannot
+# vendored wolfGlass tooling under tools/sbom/, or an IDE extractor cannot
 # silently break SBOM generation:
 #
 #   * Make  path  (methods 1-4)  -> make sbom TARGET=sim
 #   * CMake path  (method 5)     -> cmake --build --target sbom
-#   * IAR extractor (method 7)   -> tools/scripts/ide-sbom/iar_sbom.py
-#   * compdb extractor (6, 8-11) -> tools/scripts/ide-sbom/compdb_sbom.py
+#   * IAR extractor (method 7)   -> tools/sbom/frontends/iar_sbom.py
+#   * compdb extractor (6, 8-11) -> tools/sbom/frontends/compdb_sbom.py
 #   * per-HAL SBOM               -> make sbom-hal TARGET=sim
-#   * Zephyr module SBOM         -> tools/scripts/ide-sbom/zephyr_sbom.py
+#   * Zephyr module SBOM         -> tools/sbom/frontends/zephyr_sbom.py
 #
 # Each route must emit a schema-valid CycloneDX 1.6 + SPDX 2.3 document whose
 # top-level component is wolfboot.
@@ -56,33 +56,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake python3 build-essential clang
 
-      # gen-sbom ships with wolfSSL. Use the vendored submodule copy if the
-      # pinned revision already carries it, otherwise fetch it from wolfSSL
-      # master so the canary still runs while the submodule bump lands.
-      - name: Locate gen-sbom
-        id: gensbom
-        run: |
-          if [ -f lib/wolfssl/scripts/gen-sbom ]; then
-            echo "path=$GITHUB_WORKSPACE/lib/wolfssl/scripts/gen-sbom" >> "$GITHUB_OUTPUT"
-          else
-            mkdir -p .sbom-tools
-            curl -fsSL \
-              https://raw.githubusercontent.com/wolfSSL/wolfssl/master/scripts/gen-sbom \
-              -o .sbom-tools/gen-sbom
-            chmod +x .sbom-tools/gen-sbom
-            echo "path=$GITHUB_WORKSPACE/.sbom-tools/gen-sbom" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Verify vendored gen-sbom
+        run: test -f tools/sbom/gen-sbom
 
       # Reproducibility guard: a -D macro carrying an absolute host path (e.g.
       # arch.mk's -DPICO_SDK_PATH=$(PICO_SDK_PATH)) must never reach the SBOM.
       - name: Path scrub check
         run: |
           printf 'src/image.c\n' > /tmp/scrub-srcs.txt
-          sh tools/scripts/wolfboot-sbom.sh \
+          tools/sbom/sbom-driver \
             --srcs-file /tmp/scrub-srcs.txt \
             --cflags "-DWOLFBOOT_HASH_SHA256 -DPICO_SDK_PATH=/home/ci-secret/pico-sdk" \
             --name wolfboot --version 0.0.0-scrubtest \
-            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
             --cdx-out /tmp/scrub.cdx.json --spdx-out /tmp/scrub.spdx.json
           if grep -q 'ci-secret' /tmp/scrub.cdx.json /tmp/scrub.spdx.json; then
             echo "ERROR: absolute host path leaked into the SBOM (scrub failed)." >&2
@@ -96,12 +81,14 @@ jobs:
       - name: Make path - make sbom (sim)
         run: |
           cp config/examples/sim.config .config
-          make sbom TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          make sbom TARGET=sim
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
 
       - name: CMake path - cmake --target sbom (sim)
         run: |
+          export SOURCE_DATE_EPOCH=1700000000
           rm -rf build-sim
           cmake -S . -B build-sim -G "Unix Makefiles" \
             -DWOLFBOOT_TARGET=sim -DARCH=HOST -DSIGN=ED25519 -DHASH=SHA256 \
@@ -109,42 +96,80 @@ jobs:
             -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08003000 \
             -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08009400 \
             -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x0800F800 \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DGEN_SBOM="${{ steps.gensbom.outputs.path }}"
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build build-sim --target sbom
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
             build-sim/wolfboot-*.cdx.json build-sim/wolfboot-*.spdx.json
 
       - name: IAR extractor (method 7)
         run: |
-          python3 tools/scripts/ide-sbom/iar_sbom.py IDE/IAR/wolfboot.ewp \
-            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+          python3 tools/sbom/frontends/iar_sbom.py IDE/IAR/wolfboot.ewp \
+            --name wolfboot \
+            --driver tools/sbom/sbom-driver \
+            --version-file include/wolfboot/version.h \
+            --version-macro LIBWOLFBOOT_VERSION_STRING \
             --cdx-out iar.cdx.json --spdx-out iar.spdx.json
-          python3 tools/scripts/ide-sbom/validate_sbom.py iar.cdx.json iar.spdx.json
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
+            iar.cdx.json iar.spdx.json
 
       - name: compdb extractor (methods 6, 8-11)
         run: |
-          python3 tools/scripts/ide-sbom/compdb_sbom.py \
+          python3 tools/sbom/frontends/compdb_sbom.py \
             build-sim/compile_commands.json \
-            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+            --name wolfboot \
+            --driver tools/sbom/sbom-driver \
+            --version-file include/wolfboot/version.h \
+            --version-macro LIBWOLFBOOT_VERSION_STRING \
             --cdx-out compdb.cdx.json --spdx-out compdb.spdx.json
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
             compdb.cdx.json compdb.spdx.json
 
       - name: Per-HAL SBOM (make sbom-hal)
         run: |
           cp config/examples/sim.config .config
-          make sbom-hal TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          make sbom-hal TARGET=sim
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot-hal- \
             wolfboot-hal-sim-*.cdx.json wolfboot-hal-sim-*.spdx.json
 
       - name: Zephyr module SBOM
         run: |
-          python3 tools/scripts/ide-sbom/zephyr_sbom.py \
-            --gen-sbom "${{ steps.gensbom.outputs.path }}" \
+          python3 tools/sbom/frontends/zephyr_sbom.py \
+            --driver tools/sbom/sbom-driver \
+            --name wolfboot-zephyr \
+            --cmakelists zephyr/CMakeLists.txt \
+            --version-file include/wolfboot/version.h \
+            --version-macro LIBWOLFBOOT_VERSION_STRING \
             --cdx-out zephyr.cdx.json --spdx-out zephyr.spdx.json
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot-zephyr \
             zephyr.cdx.json zephyr.spdx.json
+
+      - name: Make vs CMake equivalence (sim, advisory)
+        continue-on-error: true
+        run: |
+          export SOURCE_DATE_EPOCH=1700000000
+          cp config/examples/sim.config .config
+          rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
+          make sbom TARGET=sim
+          cp wolfboot-*.cdx.json /tmp/make.cdx.json
+          cp wolfboot-*.spdx.json /tmp/make.spdx.json
+          rm -rf build-sim-compare
+          cmake -S . -B build-sim-compare -G "Unix Makefiles" \
+            -DWOLFBOOT_TARGET=sim -DARCH=HOST -DSIGN=ED25519 -DHASH=SHA256 \
+            -DWOLFBOOT_SECTOR_SIZE=256 -DWOLFBOOT_PARTITION_SIZE=0x6400 \
+            -DWOLFBOOT_PARTITION_BOOT_ADDRESS=0x08003000 \
+            -DWOLFBOOT_PARTITION_UPDATE_ADDRESS=0x08009400 \
+            -DWOLFBOOT_PARTITION_SWAP_ADDRESS=0x0800F800 \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build build-sim-compare --target sbom
+          cp build-sim-compare/wolfboot-*.cdx.json /tmp/cmake.cdx.json
+          cp build-sim-compare/wolfboot-*.spdx.json /tmp/cmake.spdx.json
+          diff -u /tmp/make.cdx.json /tmp/cmake.cdx.json
+          diff -u /tmp/make.spdx.json /tmp/cmake.spdx.json
 
       # Toolchain neutrality: the cross-toolchain that builds the firmware must
       # not change the SBOM. Capture the same config with gcc and with clang and
@@ -155,12 +180,10 @@ jobs:
           export SOURCE_DATE_EPOCH=1700000000
           cp config/examples/sim.config .config
           rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
-          make sbom TARGET=sim HOSTCC=gcc \
-            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          make sbom TARGET=sim HOSTCC=gcc
           mv wolfboot-*.cdx.json /tmp/gcc.cdx.json
           mv wolfboot-*.spdx.json /tmp/gcc.spdx.json
-          make sbom TARGET=sim HOSTCC=clang \
-            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          make sbom TARGET=sim HOSTCC=clang
           mv wolfboot-*.cdx.json /tmp/clang.cdx.json
           mv wolfboot-*.spdx.json /tmp/clang.spdx.json
           if ! diff -u /tmp/gcc.cdx.json /tmp/clang.cdx.json \
@@ -179,7 +202,7 @@ jobs:
           export SOURCE_DATE_EPOCH=1700000000
           cp config/examples/sim.config .config
           rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
-          make sbom TARGET=sim GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+          make sbom TARGET=sim
           cp wolfboot-*.cdx.json /tmp/repro-a.cdx.json
           rm -rf /tmp/wb-copy && mkdir -p /tmp/wb-copy
           cp -a . /tmp/wb-copy/
@@ -187,8 +210,7 @@ jobs:
           ( cd /tmp/wb-copy \
             && export SOURCE_DATE_EPOCH=1700000000 \
             && rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json \
-            && make sbom TARGET=sim \
-                 GEN_SBOM="${{ steps.gensbom.outputs.path }}" )
+            && make sbom TARGET=sim )
           cp /tmp/wb-copy/wolfboot-*.cdx.json /tmp/repro-b.cdx.json
           if ! diff -u /tmp/repro-a.cdx.json /tmp/repro-b.cdx.json; then
             echo "ERROR: SBOM is not reproducible across build paths." >&2
@@ -205,8 +227,7 @@ jobs:
           cp config/examples/rp2350.config .config
           rm -f wolfboot-*.cdx.json wolfboot-*.spdx.json
           PICO_SDK_PATH=/home/ci-secret/pico-sdk \
-            make sbom TARGET=rp2350 \
-              GEN_SBOM="${{ steps.gensbom.outputs.path }}"
+            make sbom TARGET=rp2350
           if grep -q 'ci-secret' wolfboot-*.cdx.json wolfboot-*.spdx.json; then
             echo "ERROR: absolute PICO_SDK_PATH leaked in a real rp2350 build." >&2
             exit 1
@@ -214,7 +235,8 @@ jobs:
           grep -q 'PICO_SDK_PATH' wolfboot-*.cdx.json || {
             echo "ERROR: PICO_SDK_PATH macro was dropped (should be redacted)." >&2
             exit 1; }
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
           echo "rp2350 scrub OK: path redacted, macro key preserved"
 
@@ -273,26 +295,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3
 
-      - name: Locate gen-sbom
-        id: gensbom
-        run: |
-          if [ -f lib/wolfssl/scripts/gen-sbom ]; then
-            echo "path=$GITHUB_WORKSPACE/lib/wolfssl/scripts/gen-sbom" >> "$GITHUB_OUTPUT"
-          else
-            mkdir -p .sbom-tools
-            curl -fsSL \
-              https://raw.githubusercontent.com/wolfSSL/wolfssl/master/scripts/gen-sbom \
-              -o .sbom-tools/gen-sbom
-            chmod +x .sbom-tools/gen-sbom
-            echo "path=$GITHUB_WORKSPACE/.sbom-tools/gen-sbom" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Verify vendored gen-sbom
+        run: test -f tools/sbom/gen-sbom
 
       - name: make sbom (no cross-toolchain present)
         run: |
           cp config/examples/${{ matrix.target }}.config .config
-          make sbom TARGET=${{ matrix.target }} \
-            GEN_SBOM="${{ steps.gensbom.outputs.path }}"
-          python3 tools/scripts/ide-sbom/validate_sbom.py \
+          make sbom TARGET=${{ matrix.target }}
+          python3 tools/sbom/validate_sbom.py \
+            --name-prefix wolfboot \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
 
       - name: Upload SBOM artifact
@@ -303,4 +314,45 @@ jobs:
           path: |
             wolfboot-*.cdx.json
             wolfboot-*.spdx.json
+          if-no-files-found: warn
+
+  windows_sbom:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Native driver path scrub
+        shell: pwsh
+        run: |
+          Set-Content -Path scrub-srcs.txt -Value "src/image.c"
+          python tools/sbom/sbom-driver.py `
+            --srcs-file scrub-srcs.txt `
+            --cflags "-DWOLFBOOT_HASH_SHA256 -DSDK_PATH=C:\Users\ci-secret\sdk -DSDK_SHARE=\\server\share\sdk" `
+            --name wolfboot `
+            --version-file include/wolfboot/version.h `
+            --version-macro LIBWOLFBOOT_VERSION_STRING `
+            --cdx-out wolfboot-win.cdx.json `
+            --spdx-out wolfboot-win.spdx.json
+          if (Select-String -Path wolfboot-win.cdx.json,wolfboot-win.spdx.json -Pattern 'ci-secret|server\\share' -Quiet) {
+            throw "Windows absolute path leaked into the SBOM."
+          }
+          python tools/sbom/validate_sbom.py --name-prefix wolfboot wolfboot-win.cdx.json wolfboot-win.spdx.json
+
+      - name: Upload Windows SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wolfboot-sbom-windows
+          path: |
+            wolfboot-win.cdx.json
+            wolfboot-win.spdx.json
           if-no-files-found: warn

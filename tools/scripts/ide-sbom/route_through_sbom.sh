@@ -18,8 +18,8 @@
 #   route_through_sbom.sh --no-config [MAKE_VAR=VAL ...]
 #
 # Everything after the flags is passed verbatim to `make sbom`, so the vendor
-# variables (CCS_ROOT, F021_DIR, TARGET, ...) and SBOM overrides (GEN_SBOM,
-# HOSTCC, ...) all work.
+# variables (CCS_ROOT, F021_DIR, TARGET, ...) and SBOM overrides (SBOM_GEN,
+# legacy GEN_SBOM, HOSTCC, ...) all work.
 #
 # Examples:
 #   # TI Hercules (CCS toolchain, built from the command line):
