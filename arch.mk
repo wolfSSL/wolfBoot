@@ -158,7 +158,11 @@ ifeq ($(ARCH),AARCH64)
   ifeq ($(TARGET),nxp_ls1028a)
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
-
+    # ZynqMP RVBAR (0xFD5C0040) does not exist on LS1028A -- the store faults
+    # pre-UART. Its reset vector comes from the boot ROM (DCFG BOOTLOCPTR).
+    CFLAGS+=-DSKIP_RVBAR=1
+    # MMU on (boot_aarch64_start.S LS1028A table): DDR Normal cacheable -- required
+    # for coherency with the ENETC coherent DMA (SICAR=0x27276767); CCSR/BAR Device.
     CFLAGS +=-ffunction-sections -fdata-sections
     LDFLAGS+=-Wl,--gc-sections
 

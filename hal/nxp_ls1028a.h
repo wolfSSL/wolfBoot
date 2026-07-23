@@ -268,7 +268,12 @@
 #define TZASC_REGION_ATTRIBUTES_0 *((volatile uint32_t*)(TZASC_BASE + 0x110))
 #define TZASC_ACTION_ENABLE_DECERR 0x1                 /* RM 32.4.3 */
 #define TZASC_GATE_KEEPER_REQUEST_OPEN 0x1             /* RM 32.4.3 */
-#define TZASC_REGION_ATTRIBUTES_ALLOW_SECRW 0xC0000001 /* RM 32.4.15 */
+#define TZASC_REGION_ATTRIBUTES_ALLOW_SECRW 0xC0000001 /* RM 32.4.15 (secure R/W only) */
+/* TZC-400 Region 0 ID-access register (non-secure permissions; 0x110 gates
+ * only SECURE). bits[15:0]=per-NSAID read en, bits[31:16]=per-NSAID write en;
+ * 0xFFFFFFFF = NS read+write for all NSAIDs, needed for ENETC bus-master DMA. */
+#define TZASC_REGION_ID_ACCESS_0  *((volatile uint32_t*)(TZASC_BASE + 0x114))
+#define TZASC_REGION_ID_ACCESS_ALL_NS 0xFFFFFFFF
 
 /* TZPC Trust Zone Protection Controller for OCRAM RM 32.6 */
 #define TZPC_OCRAM      (0x2200000)

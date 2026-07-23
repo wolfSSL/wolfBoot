@@ -45,8 +45,7 @@
 #elif defined(TARGET_lpc55s69)
     extern volatile uint64_t SysTick_time_ms;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
-    /* PPC timebase register for accurate timing.
-     * Timebase frequency = platform_clock / 16. */
+    /* PPC time base register for accurate timing (e6500). */
     static uint32_t ppc_tb_hz = 0;
     static unsigned long long ppc_start_ticks = 0;
 
@@ -66,18 +65,44 @@
 
     static uint32_t ppc_get_timebase_hz(void)
     {
-        /* Read Platform PLL ratio from CLOCKING_PLLPGSR register.
-         * CCSRBAR=0xFE000000, CLOCKING_BASE=CCSRBAR+0xE1000,
-         * PLLPGSR=CLOCKING_BASE+0xC00 */
-        volatile uint32_t *pllpgsr =
-            (volatile uint32_t *)(0xFE000000UL + 0xE1C00UL);
-        uint32_t plat_ratio = ((*pllpgsr) >> 1) & 0x1F;
+        /* CoreNet (e6500): platform PLL ratio in RCWSR0 (DCFG/GUTS + 0x100),
+         * bits (RCWSR0 >> 25) & 0x1f (U-Boot mpc85xx/speed.c). Platform clock =
+         * SYSCLK * ratio; time base = platform_clock / 16 (TBCLK_DIV = 16).
+         * CCSRBAR is board-relocated: CW VPX3-152 uses 0xEF000000; reading the
+         * RDB default 0xFE000000 there is unmapped (0xFFFFFFFF -> ratio 31). */
+    #ifdef BOARD_CW_VPX3152
+        uintptr_t ccsr = 0xEF000000UL;
+    #else
+        uintptr_t ccsr = 0xFE000000UL;
+    #endif
+        volatile uint32_t *rcwsr0 = (volatile uint32_t *)(ccsr + 0xE0100UL);
+        uint32_t plat_ratio = ((*rcwsr0) >> 25) & 0x1FU;
     #if defined(BOARD_NAII_68PPC2) || defined(TARGET_nxp_t1024)
         uint32_t sys_clk = 100000000; /* 100 MHz */
     #else
-        uint32_t sys_clk = 66666667;  /* 66.66 MHz (T2080 RDB) */
+        uint32_t sys_clk = 66666667;  /* 66.66 MHz */
     #endif
-        return (sys_clk * plat_ratio) / 16;
+        return (sys_clk * plat_ratio) / 16U;
+    }
+#elif defined(TARGET_nxp_ls1028a)
+    /* ARMv8 generic system counter (enabled by the wolfBoot HAL). */
+    static unsigned long long a64_tb_hz = 0;
+    static unsigned long long a64_start_ticks = 0;
+
+    static unsigned long long a64_get_ticks(void)
+    {
+        unsigned long long v;
+        __asm__ volatile ("mrs %0, cntpct_el0" : "=r"(v));
+        return v;
+    }
+
+    static unsigned long long a64_get_hz(void)
+    {
+        unsigned long long v;
+        __asm__ volatile ("mrs %0, cntfrq_el0" : "=r"(v));
+        /* wolfBoot programs CNTFRQ_EL0 from CNTFID0; fall back to the 25 MHz
+         * LS1028A default if it reads zero (matches now_ms). */
+        return v ? v : 25000000ULL;
     }
 #else
     /* Simple tick counter fallback */
@@ -107,6 +132,14 @@ unsigned long my_time(unsigned long* timer)
         ppc_tb_hz = ppc_get_timebase_hz();
     {
         unsigned long t = (unsigned long)(ppc_get_ticks() / ppc_tb_hz);
+        if (timer) *timer = t;
+        return t;
+    }
+#elif defined(TARGET_nxp_ls1028a)
+    if (a64_tb_hz == 0)
+        a64_tb_hz = a64_get_hz();
+    {
+        unsigned long t = (unsigned long)(a64_get_ticks() / a64_tb_hz);
         if (timer) *timer = t;
         return t;
     }
@@ -140,6 +173,12 @@ double current_time(int reset)
     if (reset)
         ppc_start_ticks = ppc_get_ticks();
     return (double)(ppc_get_ticks() - ppc_start_ticks) / (double)ppc_tb_hz;
+#elif defined(TARGET_nxp_ls1028a)
+    if (a64_tb_hz == 0)
+        a64_tb_hz = a64_get_hz();
+    if (reset)
+        a64_start_ticks = a64_get_ticks();
+    return (double)(a64_get_ticks() - a64_start_ticks) / (double)a64_tb_hz;
 #else
     /* Simple counter-based timing */
     if (reset)

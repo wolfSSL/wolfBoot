@@ -61,6 +61,11 @@ extern void gicv2_init_secure(void);
 extern void el2_flush_and_disable_mmu(void);
 #endif
 
+/* Clean & invalidate the data cache over [start,end) (in boot_aarch64_start.S).
+ * Used before jumping to a freshly-loaded image with MMU/caches still on, so the
+ * code reaches memory and the I-cache refills from it, not from stale lines. */
+extern void flush_dcache_range(unsigned long start, unsigned long end);
+
 /* SKIP_GIC_INIT - Skip GIC initialization before booting app
  * This is needed for:
  * - Versal: Uses GICv3, not GICv2. BL31 handles GIC setup.
@@ -198,6 +203,33 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 
     /* Non-Linux EL2 and EL3 path: legacy direct br x4 */
 
+#if defined(TARGET_nxp_ls1028a) && defined(MMU) && \
+    (!defined(EL2_HYPERVISOR) || EL2_HYPERVISOR == 0)
+    /* LS1028A EL3 path keeps MMU/caches ON (its ENETC needs coherent cacheable
+     * DMA). Scoped here because other MMU AArch64 parts (e.g. raspi3) tear the
+     * MMU down for Linux and do not define WOLFBOOT_PARTITION_SIZE. Clean the
+     * image + DTB from D-cache and invalidate I-cache before the jump, or the
+     * core fetches stale DRAM. Bound the app clean by WOLFBOOT_PARTITION_SIZE
+     * (over-cleaning is harmless; under-cleaning is the defect). */
+    #ifndef WOLFBOOT_MMU_FLUSH_APP_SIZE
+    #define WOLFBOOT_MMU_FLUSH_APP_SIZE WOLFBOOT_PARTITION_SIZE
+    #endif
+    #ifndef WOLFBOOT_MMU_FLUSH_DTS_SIZE
+    #define WOLFBOOT_MMU_FLUSH_DTS_SIZE 0x100000UL
+    #endif
+    flush_dcache_range((unsigned long)(uintptr_t)app_offset,
+                       (unsigned long)(uintptr_t)app_offset
+                           + (unsigned long)WOLFBOOT_MMU_FLUSH_APP_SIZE);
+    if ((uintptr_t)dts_offset != 0) {
+        flush_dcache_range((unsigned long)(uintptr_t)dts_offset,
+                           (unsigned long)(uintptr_t)dts_offset
+                               + (unsigned long)WOLFBOOT_MMU_FLUSH_DTS_SIZE);
+    }
+    asm volatile("ic iallu");
+    asm volatile("dsb ish");
+    asm volatile("isb");
+#endif
+
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
 
@@ -302,6 +334,37 @@ void IRQInterrupt(void) { hardfault_halt("IRQ"); }
 void FIQInterrupt(void) { hardfault_halt("FIQ"); }
 void SErrorInterrupt(void) { hardfault_halt("SERROR"); }
 
+#elif defined(DEBUG_UART) && (!defined(EL2_HYPERVISOR) || EL2_HYPERVISOR == 0)
+/* EL3 exception diagnostic: print the syndrome then halt -- catches a faulting
+ * datapath (ENETC DMA abort/SError) over UART before a watchdog reset masks it. */
+#ifndef READ_SYSREG
+#define READ_SYSREG(_out, _reg) __asm__ volatile("mrs %0, " #_reg : "=r"(_out))
+#endif
+static void el3_fault_halt(const char *type)
+{
+    uint64_t esr = 0, elr = 0, far = 0;
+    unsigned int el = current_el();
+
+    /* ESR_EL3/ELR_EL3/FAR_EL3 are only legal at EL3; guard on the runtime EL so
+     * a non-EL3 AArch64 target built with DEBUG_UART does not nested-trap. */
+    if (el == 3) {
+        READ_SYSREG(esr, ESR_EL3);
+        READ_SYSREG(elr, ELR_EL3);
+        READ_SYSREG(far, FAR_EL3);
+        wolfBoot_printf("\n*** %s EXCEPTION (EL3) ***\n", type);
+        wolfBoot_printf("ESR_EL3: 0x%08x%08x\n", (uint32_t)(esr >> 32), (uint32_t)esr);
+        wolfBoot_printf("ELR_EL3: 0x%08x%08x\n", (uint32_t)(elr >> 32), (uint32_t)elr);
+        wolfBoot_printf("FAR_EL3: 0x%08x%08x\n", (uint32_t)(far >> 32), (uint32_t)far);
+    }
+    else {
+        wolfBoot_printf("\n*** %s EXCEPTION (EL%d) ***\n", type, el);
+    }
+    while (1) { __asm__ volatile("wfi"); }
+}
+void SynchronousInterrupt(void) { el3_fault_halt("SYNCHRONOUS"); }
+void IRQInterrupt(void) { el3_fault_halt("IRQ"); }
+void FIQInterrupt(void) { el3_fault_halt("FIQ"); }
+void SErrorInterrupt(void) { el3_fault_halt("SERROR"); }
 #else
 /* Simple stubs when debug not enabled */
 void SynchronousInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
