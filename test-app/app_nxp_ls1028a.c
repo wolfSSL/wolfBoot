@@ -21,96 +21,58 @@
 
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
+#include "printf.h"
 
-/* P1021 */
-#define CCSRBAR (0x1000000)
-#define SYS_CLK (400000000)
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
 
-/* P1021 PC16552D Dual UART */
-#define BAUD_RATE 115200
-#define UART_SEL 0 /* select UART 0 or 1 */
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+#include <wolfssl/wolfcrypt/settings.h>
+#endif
+#ifdef WOLFCRYPT_TEST
+#include <wolfcrypt/test/test.h>
+int wolfcrypt_test(void *args);
+#endif
+#ifdef WOLFCRYPT_BENCHMARK
+#include <wolfcrypt/benchmark/benchmark.h>
+int benchmark_test(void *args);
+#endif
 
-#define UART_BASE(n) (0x21C0500 + (n * 100))
-
-#define UART_RBR(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* receiver buffer register */
-#define UART_THR(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* transmitter holding register */
-#define UART_IER(n)  *((volatile uint8_t*)(UART_BASE(n) + 1)) /* interrupt enable register */
-#define UART_FCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 2)) /* FIFO control register */
-#define UART_IIR(n)  *((volatile uint8_t*)(UART_BASE(n) + 2)) /* interrupt ID register */
-#define UART_LCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 3)) /* line control register */
-#define UART_LSR(n)  *((volatile uint8_t*)(UART_BASE(n) + 5)) /* line status register */
-#define UART_SCR(n)  *((volatile uint8_t*)(UART_BASE(n) + 7)) /* scratch register */
-
-/* enabled when UART_LCR_DLAB set */
-#define UART_DLB(n)  *((volatile uint8_t*)(UART_BASE(n) + 0)) /* divisor least significant byte register */
-#define UART_DMB(n)  *((volatile uint8_t*)(UART_BASE(n) + 1)) /* divisor most significant byte register */
-
-#define UART_FCR_TFR  (0x04) /* Transmitter FIFO reset */
-#define UART_FCR_RFR  (0x02) /* Receiver FIFO reset */
-#define UART_FCR_FEN  (0x01) /* FIFO enable */
-#define UART_LCR_DLAB (0x80) /* Divisor latch access bit */
-#define UART_LCR_WLS  (0x03) /* Word length select: 8-bits */
-#define UART_LSR_TEMT (0x40) /* Transmitter empty */
-#define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
-
-static void uart_init(void)
-{
-    /* calc divisor for UART
-     * example config values:
-     *  clock_div, baud, base_clk  163 115200 300000000
-     * +0.5 to round up
-     */
-    uint32_t div = (((SYS_CLK / 2.0) / (16 * BAUD_RATE)) + 0.5);
-
-    while (!(UART_LSR(UART_SEL) & UART_LSR_TEMT))
-       ;
-
-    /* set ier, fcr, mcr */
-    UART_IER(UART_SEL) = 0;
-    UART_FCR(UART_SEL) = (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN);
-
-    /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    UART_LCR(UART_SEL) = (UART_LCR_DLAB | UART_LCR_WLS);
-    /* set divisor */
-    UART_DLB(UART_SEL) = (div & 0xff);
-    UART_DMB(UART_SEL) = ((div >> 8) & 0xff);
-    /* disable rate access (DLAB=0) */
-    UART_LCR(UART_SEL) = (UART_LCR_WLS);
-}
-
-static void uart_write(const char* buf, uint32_t sz)
-{
-    uint32_t pos = 0;
-    while (sz-- > 0) {
-        while (!(UART_LSR(UART_SEL) & UART_LSR_THRE))
-            ;
-        UART_THR(UART_SEL) = buf[pos++];
-    }
-}
-
-static const char* hex_lut = "0123456789abcdef";
-
+/* UART is up from wolfBoot hal_init; wolfBoot_printf() routes to it (no-op
+ * when DEBUG_UART=0). */
 __attribute__((section(".boot")))
 void main(void)
 {
-    int i = 0;
-    int j = 0;
-    int k = 0;
-    char snum[8];
-    uint32_t bootver;
-    uint32_t updv;
+    /* App BSS lives in uninitialized DDR (no crt0 startup), so zero it. */
+    extern char _start_bss[], _end_bss[];
+    char *p;
 
-    uart_write("Test App\n", 9);
+    for (p = _start_bss; p < _end_bss; p++)
+        *p = 0;
 
-    /* Wait for reboot */
-    while(1) {
-        for (j=0; j<1000000; j++);
-        i++;
+    wolfBoot_printf("Test App\r\n");
 
-        uart_write("\r\n0x", 4);
-        for (k=0; k<8; k++) {
-            snum[7 - k] = hex_lut[(i >> 4*k) & 0xf];
-        }
-        uart_write(snum, 8);
-    }
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    wolfCrypt_Init();
+#ifdef WOLFCRYPT_TEST
+    wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");
+    wolfcrypt_test(NULL);
+    wolfBoot_printf("Tests complete.\r\n");
+#endif
+#ifdef WOLFCRYPT_BENCHMARK
+    wolfBoot_printf("\r\nRunning wolfCrypt benchmarks...\r\n");
+    benchmark_test(NULL);
+    wolfBoot_printf("Benchmarks complete.\r\n");
+#endif
+    wolfCrypt_Cleanup();
+#endif
+
+#ifdef ENABLE_WOLFIP
+    wolfip_tftp_test_report();
+#endif
+
+    wolfBoot_printf("Test App: idle\r\n");
+    while (1)
+        ;
 }

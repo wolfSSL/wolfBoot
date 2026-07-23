@@ -66,9 +66,10 @@ _start:
 
 .size _start, . - _start
 
-/* Provide _exit stub for bare-metal builds (required by some standard library code) */
+/* _exit stub for bare-metal builds (some libc code needs it). Weak so
+ * syscalls.c (wolfCrypt test/benchmark) can supply the strong _exit. */
 .section .text, "ax"
-.global _exit
+.weak _exit
 .type _exit, @function
 
 _exit:
