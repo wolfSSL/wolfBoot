@@ -882,83 +882,47 @@ pico-sdk-info: FORCE
 # targets that also have an arch.mk path (TI Hercules, Renesas RX, Zynq).  It
 # extracts the configuration-specific source list from OBJS (fully assembled by
 # this point: core wolfBoot + wolfcrypt + HAL) and passes it, together with the
-# build CFLAGS, to the shared SBOM driver (tools/scripts/wolfboot-sbom.sh) which
-# is the single engine reused by the CMake and IDE entry points too.
+# build CFLAGS, to the vendored wolfGlass driver under tools/sbom/.
 #
 # wolfcrypt sources are compiled directly into the wolfBoot image and are
 # therefore listed as wolfBoot's own sources, not as a separate component.
 #
 # Optional make variables:
 #   HOSTCC                 Host C compiler for macro capture (default: cc)
-#   GEN_SBOM               Path to wolfssl scripts/gen-sbom
-#                          (default: $(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom)
+#   SBOM_GEN               Path to gen-sbom
+#                          (default: tools/sbom/gen-sbom via driver discovery)
 #   CRA_PYTHON             Python interpreter (default: python3)
 
 HOSTCC?=cc
 WOLFBOOT_VERSION:=$(shell sed -n \
     's/.*LIBWOLFBOOT_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
     include/wolfboot/version.h)
-GEN_SBOM?=$(WOLFBOOT_LIB_WOLFSSL)/scripts/gen-sbom
+SBOM_ROOT:=$(WOLFBOOT_ROOT)
+SBOM_NAME:=wolfboot
+SBOM_SRCS=$(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS)))
+SBOM_CFLAGS=$(CFLAGS)
+SBOM_VERSION=$(WOLFBOOT_VERSION)
+SBOM_LICENSE_FILE=$(WOLFBOOT_ROOT)/LICENSE
 SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
-SBOM_PYTHON?=$(or $(CRA_PYTHON),python3)
-SBOM_DRIVER:=$(WOLFBOOT_ROOT)/tools/scripts/wolfboot-sbom.sh
+SBOM_GEN?=
 
-sbom:
-	@echo "wolfBoot SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET) sign=$(SIGN)"
-	$(eval _SBOM_SRCS := $(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS))))
-	@if [ -z "$(_SBOM_SRCS)" ]; then \
-	    echo "ERROR: no source files found in OBJS — check that TARGET and SIGN are correct." >&2; \
-	    exit 1; \
-	fi
-	@set -e; \
-	_sf=$$(mktemp /tmp/wolfboot-sbom-srcs.XXXXXX); \
-	trap 'rm -f "$$_sf"' EXIT; \
-	printf '%s\n' $(_SBOM_SRCS) >"$$_sf"; \
-	"$(SBOM_DRIVER)" \
-	    --srcs-file "$$_sf" \
-	    --cflags "$(CFLAGS)" \
-	    --name wolfboot \
-	    --version "$(WOLFBOOT_VERSION)" \
-	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
-	    --gen-sbom "$(GEN_SBOM)" \
-	    --python "$(SBOM_PYTHON)" \
-	    --hostcc "$(HOSTCC)" \
-	    --root "$(WOLFBOOT_ROOT)" \
-	    --cdx-out "$(SBOM_CDX_OUT)" \
-	    --spdx-out "$(SBOM_SPDX_OUT)"
+include tools/sbom/build/sbom.mk
 
 ## Per-HAL SBOM
 # Emits a standalone SBOM whose component is the HAL layer for the selected
 # TARGET (hal/hal.c, hal/$(TARGET).c, and any target flash/uart/board drivers),
 # separate from the full bootloader SBOM.  Uses the same build config (CFLAGS)
 # so the captured macros match the real build.  Run once per TARGET.
+SBOM_HAL_NAME:=wolfboot-hal-$(TARGET)
+SBOM_HAL_SRCS=$(filter hal/%,$(patsubst ./%,%,$(wildcard $(patsubst %.o,%.c,$(OBJS)) $(patsubst %.o,%.S,$(OBJS)))))
+SBOM_HAL_CFLAGS:=$(CFLAGS)
+SBOM_HAL_VERSION:=$(WOLFBOOT_VERSION)
+SBOM_HAL_LICENSE_FILE:=$(WOLFBOOT_ROOT)/LICENSE
 SBOM_HAL_CDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).cdx.json
 SBOM_HAL_SPDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).spdx.json
-
-sbom-hal:
-	@echo "wolfBoot HAL SBOM: version=$(WOLFBOOT_VERSION) target=$(TARGET)"
-	$(eval _HAL_SRCS := $(filter hal/%,$(patsubst ./%,%,$(wildcard $(patsubst %.o,%.c,$(OBJS)) $(patsubst %.o,%.S,$(OBJS))))))
-	@if [ -z "$(_HAL_SRCS)" ]; then \
-	    echo "ERROR: no HAL sources found in OBJS for TARGET=$(TARGET)." >&2; \
-	    exit 1; \
-	fi
-	@set -e; \
-	_sf=$$(mktemp /tmp/wolfboot-hal-sbom-srcs.XXXXXX); \
-	trap 'rm -f "$$_sf"' EXIT; \
-	printf '%s\n' $(_HAL_SRCS) >"$$_sf"; \
-	"$(SBOM_DRIVER)" \
-	    --srcs-file "$$_sf" \
-	    --cflags "$(CFLAGS)" \
-	    --name "wolfboot-hal-$(TARGET)" \
-	    --version "$(WOLFBOOT_VERSION)" \
-	    --license-file "$(WOLFBOOT_ROOT)/LICENSE" \
-	    --gen-sbom "$(GEN_SBOM)" \
-	    --python "$(SBOM_PYTHON)" \
-	    --hostcc "$(HOSTCC)" \
-	    --root "$(WOLFBOOT_ROOT)" \
-	    --cdx-out "$(SBOM_HAL_CDX_OUT)" \
-	    --spdx-out "$(SBOM_HAL_SPDX_OUT)"
+SBOM_HAL_GEN:=$(SBOM_GEN)
+$(eval $(call wolfglass_sbom_rule,sbom-hal,SBOM_HAL_))
 
 FORCE:
 

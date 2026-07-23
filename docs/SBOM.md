@@ -14,7 +14,7 @@ and gets back the same document:
 
 ```
 build system  ─┐
-                ├─►  tools/scripts/wolfboot-sbom.sh  ─►  wolfSSL gen-sbom  ─►  *.cdx.json + *.spdx.json
+                ├─►  tools/sbom/sbom-driver  ─►  tools/sbom/gen-sbom  ─►  *.cdx.json + *.spdx.json
 extractor     ─┘        (srcs list + build config)
 ```
 
@@ -29,13 +29,14 @@ The pieces:
 
 | File | Role |
 | --- | --- |
-| `tools/scripts/wolfboot-sbom.sh` | Canonical driver (srcs + config → gen-sbom). |
-| `cmake/sbom.cmake` | CMake `sbom` target. |
-| `tools/scripts/ide-sbom/iar_sbom.py` | Extracts srcs + defines from an IAR `.ewp`. |
-| `tools/scripts/ide-sbom/compdb_sbom.py` | Extracts srcs + defines from a `compile_commands.json`. |
-| `tools/scripts/ide-sbom/zephyr_sbom.py` | Extracts the Zephyr module sources from `zephyr/CMakeLists.txt`. |
-| `tools/scripts/ide-sbom/route_through_sbom.sh` | Stages a config and runs `make sbom` for IDE targets that build through the Makefile. |
-| `tools/scripts/ide-sbom/validate_sbom.py` | Structural sanity check used by CI. |
+| `tools/sbom/sbom-driver` | Vendored wolfGlass driver (srcs + config → gen-sbom). |
+| `tools/sbom/gen-sbom` | Vendored SBOM generator. |
+| `cmake/sbom.cmake` | wolfBoot wrapper around the vendored CMake helper. |
+| `tools/sbom/frontends/iar_sbom.py` | Extracts srcs + defines from an IAR `.ewp`. |
+| `tools/sbom/frontends/compdb_sbom.py` | Extracts srcs + defines from a `compile_commands.json`. |
+| `tools/sbom/frontends/zephyr_sbom.py` | Extracts the Zephyr module sources from `zephyr/CMakeLists.txt`. |
+| `tools/scripts/ide-sbom/route_through_sbom.sh` | wolfBoot-specific staging helper for IDE targets that build through the Makefile. It intentionally stays outside the vendored tree because it encodes wolfBoot config paths and Makefile entry points. |
+| `tools/sbom/validate_sbom.py` | Structural sanity check used by CI. |
 | `make sbom-hal` | Standalone SBOM for the HAL of a given target. |
 
 ## Prerequisites
@@ -43,28 +44,21 @@ The pieces:
 * `python3`
 * A host C compiler. The default is `cc`. To use a different compiler, set
   `HOSTCC=...`.
-* `gen-sbom`. This tool is part of wolfSSL. The build uses the copy in the
-  `lib/wolfssl` submodule. The pinned wolfSSL revision does not include
-  `gen-sbom` yet. Until a wolfSSL update adds it, give the path to a copy. Use
-  `GEN_SBOM=/path/to/wolfssl/scripts/gen-sbom` for Make and route-through. Use
-  `-DGEN_SBOM=...` for CMake. Use `--gen-sbom ...` for the Python tools.
-
-```sh
-git submodule update --init lib/wolfssl
-```
+* The vendored wolfGlass SBOM set under `tools/sbom/`.
 
 ## Limitations
 
 Obey these limitations when you make an SBOM.
 
-- `gen-sbom` is necessary. If the build does not find the tool, it stops and
-  shows an error. Give the path with `GEN_SBOM` or the equivalent option. A
-  wolfSSL submodule update removes this step.
+- `gen-sbom` is necessary. wolfBoot vendors it under `tools/sbom/`. If you
+  override it with `SBOM_GEN`, `-DGEN_SBOM=...`, or `--gen-sbom ...`, the
+  replacement copy must support the same flags as the vendored one.
 - A vendor SDK build lists only the source files that are on disk. If the SDK
   is not in the source tree, the SBOM does not include the SDK files. The SBOM
   always includes the wolfBoot, wolfCrypt, and HAL files.
-- The driver is a POSIX shell script. On Windows, run the tools in a POSIX
-  shell. Use WSL, MSYS, or Git Bash. As an alternative, use the compilation
+- `tools/sbom/sbom-driver` is a thin POSIX launcher for the vendored Python
+  engine. On Windows, run the launcher from WSL, MSYS, or Git Bash, or call
+  `tools/sbom/sbom-driver.py` directly. As an alternative, use the compilation
   database tool (`compdb_sbom.py`).
 
 ## Coverage: the 11 build methods
@@ -102,7 +96,7 @@ make sbom TARGET=<target> SIGN=<alg> HASH=<alg>
 line, environment, or `.config`) and must match the configuration you ship —
 the source set and artifact hash are configuration-specific.
 
-Useful overrides: `HOSTCC`, `GEN_SBOM`, `CRA_PYTHON`.
+Useful overrides: `HOSTCC`, `SBOM_GEN`, `CRA_PYTHON`.
 
 wolfcrypt sources are compiled directly into the wolfBoot image, so they are
 listed as wolfBoot's own sources rather than as a separate component.
@@ -111,19 +105,19 @@ listed as wolfBoot's own sources rather than as a separate component.
 
 The CMake build exposes an `sbom` target (`cmake/sbom.cmake`) that collects the
 compiled source set from the wolfBoot library targets and the effective
-configuration from `WOLFBOOT_DEFS` / `USER_SETTINGS`, then calls the shared
-driver — producing a document byte-comparable with the Make path.
+configuration from `WOLFBOOT_DEFS` / `USER_SETTINGS`, then calls the vendored
+driver. The intent is to converge with the Make path for the same
+configuration; CI compares the two outputs as an advisory check.
 
 ```sh
 cmake -S . -B build-sim -DWOLFBOOT_TARGET=sim ...   # your normal configure
 cmake --build build-sim --target sbom
 ```
 
-Outputs land in the build directory. Overrides: `-DGEN_SBOM=...`, `-DHOSTCC=...`,
-`-DSBOM_PYTHON=...`.
+Outputs land in the build directory. Overrides: `-DGEN_SBOM=...`, `-DHOSTCC=...`.
 
-> The driver is a POSIX shell script; on Windows run this target from WSL / MSYS
-> / Git-Bash, or use the Make path.
+> `tools/sbom/sbom-driver` is a POSIX launcher; on Windows run this target from
+> WSL / MSYS / Git-Bash, or call `tools/sbom/sbom-driver.py` directly.
 
 ### Pico SDK (method 6)
 
@@ -134,7 +128,11 @@ its SBOM from the compilation database (see Route 4):
 ```sh
 cd IDE/pico-sdk/rp2350/wolfboot
 cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ...   # your normal configure
-python3 <wolfboot>/tools/scripts/ide-sbom/compdb_sbom.py build/compile_commands.json
+python3 <wolfboot>/tools/sbom/frontends/compdb_sbom.py build/compile_commands.json \
+    --name wolfboot \
+    --driver <wolfboot>/tools/sbom/sbom-driver \
+    --version-file <wolfboot>/include/wolfboot/version.h \
+    --version-macro LIBWOLFBOOT_VERSION_STRING
 ```
 
 ## Route 3 — IAR extractor (method 7)
@@ -145,7 +143,11 @@ live in the `.ewp` project file. The extractor reads them out and feeds the
 shared driver:
 
 ```sh
-tools/scripts/ide-sbom/iar_sbom.py IDE/IAR/wolfboot.ewp
+tools/sbom/frontends/iar_sbom.py IDE/IAR/wolfboot.ewp \
+    --name wolfboot \
+    --driver tools/sbom/sbom-driver \
+    --version-file include/wolfboot/version.h \
+    --version-macro LIBWOLFBOOT_VERSION_STRING
 ```
 
 Options: `--config <name>` (defaults to the configuration with the most defines,
@@ -198,7 +200,11 @@ cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ...
 # Make-based IDE projects (MPLAB X nbproject, CCS, Vitis) via Bear:
 bear -- make            # produces compile_commands.json
 
-python3 tools/scripts/ide-sbom/compdb_sbom.py compile_commands.json \
+python3 tools/sbom/frontends/compdb_sbom.py compile_commands.json \
+    --name wolfboot \
+    --driver tools/sbom/sbom-driver \
+    --version-file include/wolfboot/version.h \
+    --version-macro LIBWOLFBOOT_VERSION_STRING \
     --exclude 'test-app/'      # optional: drop test sources
 ```
 
@@ -237,7 +243,12 @@ extractor reads the module's source list straight from `zephyr/CMakeLists.txt`
 (staying in sync automatically):
 
 ```sh
-tools/scripts/ide-sbom/zephyr_sbom.py
+tools/sbom/frontends/zephyr_sbom.py \
+    --name wolfboot-zephyr \
+    --cmakelists zephyr/CMakeLists.txt \
+    --driver tools/sbom/sbom-driver \
+    --version-file include/wolfboot/version.h \
+    --version-macro LIBWOLFBOOT_VERSION_STRING
 ```
 
 Output: `wolfboot-zephyr-<version>.{cdx,spdx}.json`.
@@ -250,7 +261,10 @@ that build's compilation database instead:
 
 ```sh
 west build ... -- -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-python3 tools/scripts/ide-sbom/compdb_sbom.py build/compile_commands.json \
+python3 tools/sbom/frontends/compdb_sbom.py build/compile_commands.json \
+    --driver tools/sbom/sbom-driver \
+    --version-file include/wolfboot/version.h \
+    --version-macro LIBWOLFBOOT_VERSION_STRING \
     --include 'zephyr/src/' --name wolfboot-zephyr
 ```
 
@@ -267,7 +281,9 @@ Every route writes, into the working/build directory:
 You can sanity-check any output:
 
 ```sh
-python3 tools/scripts/ide-sbom/validate_sbom.py wolfboot-*.cdx.json wolfboot-*.spdx.json
+python3 tools/sbom/validate_sbom.py \
+    --name-prefix wolfboot \
+    wolfboot-*.cdx.json wolfboot-*.spdx.json
 ```
 
 ## Continuous integration
@@ -275,7 +291,9 @@ python3 tools/scripts/ide-sbom/validate_sbom.py wolfboot-*.cdx.json wolfboot-*.s
 `.github/workflows/test-sbom.yml` is an SBOM canary that runs the Make, CMake,
 IAR, and compilation-database routes on every push/PR and validates each output,
 so a change to a build system, the shared driver, or an extractor cannot
-silently break SBOM generation. The generated SBOMs are uploaded as build
+silently break SBOM generation. It also diffs Make vs CMake output for the same
+sim configuration and runs a native-Windows scrub test against
+`tools/sbom/sbom-driver.py`. The generated SBOMs are uploaded as build
 artifacts.
 
 ## Reproducibility

@@ -401,6 +401,11 @@ language.settings.xml
 /**/build
 /**/build-**
 
+# Exception: vendored wolfGlass SBOM integration sources.
+# This directory contains tracked Make/CMake fragments, not generated output.
+!/tools/sbom/build/
+!/tools/sbom/build/**
+
 # User config
 # See cmake/config_defaults_user.cmake.sample
 /**/cmake/config_defaults_user.cmake
@@ -500,3 +505,7 @@ wolfboot-*.cdx.json
 wolfboot-*.spdx.json
 wolfboot-*.spdx
 wolfboot-sbom-srcs.txt
+
+# Python cache files
+__pycache__/
+*.py[cod]
