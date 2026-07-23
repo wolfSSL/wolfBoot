@@ -47,12 +47,9 @@ __asm__ (
     "    blr\n"
 );
 
-/* Assembly entry point: set stack pointer, enable FPU, and call main.
- * The linker script defines _stack_top at the end of the stack region.
- * PPC ABI: r1 = stack pointer, 16-byte aligned, back-chain to 0.
- * FPU must be enabled because GCC's variadic function ABI (used by
- * uart_printf/wolfBoot_printf) saves FP registers via stfd instructions.
- * Without MSR[FP], this causes a Floating-Point Unavailable exception. */
+/* Assembly entry: set SP (_stack_top, PPC ABI: 16-byte aligned, back-chain 0),
+ * enable the FPU (MSR[FP]) -- the variadic printf ABI saves FP regs via stfd
+ * and would otherwise fault -- then branch to main. */
 __asm__ (
     ".section .text._app_entry\n"
     ".global _app_entry\n"
@@ -72,6 +69,10 @@ __asm__ (
 #include "keystore.h"
 
 #include "../hal/nxp_ppc.h"
+
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
 
 static uint8_t boot_part_state = IMG_STATE_NEW;
 static uint8_t update_part_state = IMG_STATE_NEW;
@@ -173,6 +174,10 @@ void main(void)
     /* Mark boot partition as successful */
     wolfBoot_success();
     wolfBoot_printf("\r\nBoot partition marked successful\r\n");
+
+#ifdef ENABLE_WOLFIP
+    wolfip_tftp_test_report();
+#endif
 
     wolfBoot_printf("Test App: idle loop\r\n");
     while(1) {

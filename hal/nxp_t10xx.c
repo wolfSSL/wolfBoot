@@ -3293,9 +3293,9 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
         for (i=0; i<nwords; i++) {
             const uint8_t* ptr = &data[pos];
         #if FLASH_CFI_WIDTH == 16
-            FLASH_IO16_WRITE(sector, i, *((const uint16_t*)ptr));
+            FLASH_IO16_WRITE(sector, offset + i, *((const uint16_t*)ptr));
         #else
-            FLASH_IO8_WRITE(sector, i, *ptr);
+            FLASH_IO8_WRITE(sector, offset + i, *ptr);
         #endif
             pos += (FLASH_CFI_WIDTH/8);
         }
