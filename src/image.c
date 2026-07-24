@@ -1094,6 +1094,7 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
                 blksz = img->fw_size - position;
             wc_Sha256Update(&sha256_ctx, p, blksz);
             position += blksz;
+            wolfBoot_watchdog_feed();
         } while (position < img->fw_size);
     }
 #endif
@@ -1205,6 +1206,7 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
                 blksz = img->fw_size - position;
             wc_Sha384Update(&sha384_ctx, p, blksz);
             position += blksz;
+            wolfBoot_watchdog_feed();
         } while (position < img->fw_size);
     }
 #endif
@@ -1322,6 +1324,7 @@ static int image_sha3_384(struct wolfBoot_image *img, uint8_t *hash)
                 blksz = img->fw_size - position;
             wc_Sha3_384_Update(&sha3_ctx, p, blksz);
             position += blksz;
+            wolfBoot_watchdog_feed();
         } while (position < img->fw_size);
     }
 #endif

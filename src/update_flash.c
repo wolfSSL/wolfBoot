@@ -279,6 +279,9 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     wolfBoot_printf("Copy sector %d (part %d->%d)\n",
         sector, src->part, dst->part);
 
+    /* Kick the watchdog once per sector copy (no-op unless -DWATCHDOG) */
+    wolfBoot_watchdog_feed();
+
     if (src->part == PART_SWAP)
         src_sector_offset = 0;
     if (dst->part == PART_SWAP)
@@ -1213,6 +1216,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     ) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
+        wolfBoot_watchdog_feed();
         sector++;
     }
 #endif /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */

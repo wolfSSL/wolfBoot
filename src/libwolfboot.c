@@ -32,6 +32,15 @@
 #include "image.h"
 #include "printf.h"
 
+#ifdef WATCHDOG
+/* Weak no-op default; a port HAL overrides this to service the watchdog.
+ * RAMFUNCTION so the fallback is safe when called from the RAM-resident flash
+ * paths (update_flash.c) on RAM_CODE targets. */
+void RAMFUNCTION WEAKFUNCTION wolfBoot_watchdog_feed(void)
+{
+}
+#endif
+
 #ifdef UNIT_TEST
 /**
  * @def unit_dbg

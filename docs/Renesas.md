@@ -203,6 +203,17 @@ The key needed for the firmware signing tool is the 32 byte AES Key + 16 byte IV
 | RX65N    | 120MHz | ECDSA Verify P256 |  2.95 ms | 1208 ms  |  602 ms       |  517 ms       |
 
 
+## RX External Watchdog (MAX6316-MAX6322)
+
+An external windowed watchdog resets the MCU unless its `WDI` input sees an edge each timeout period, which image verification or a swap can exceed. Build with `WATCHDOG` and point it at the GPIO wired to `WDI`:
+
+```
+CFLAGS_EXTRA+=-DWATCHDOG -DWATCHDOG_WDI_PORT=0 -DWATCHDOG_WDI_PIN=5
+```
+
+`WATCHDOG_WDI_PORT` is the RX port number and `WATCHDOG_WDI_PIN` the bit (0-7). wolfBoot calls `wolfBoot_watchdog_feed()` from its hash and flash copy/erase loops; the RX HAL toggles `WDI` to restart the timer. The application must keep servicing `WDI` after boot. `wolfBoot_watchdog_feed()` is a weak no-op by default (`include/hal.h`), so any port can override it for a different watchdog.
+
+
 ## RX Production Protection (recommendations)
 
 1) Lockdown external serial programmer `SPCC.SPE = 0`
