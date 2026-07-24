@@ -869,3 +869,24 @@ jobs:
       arch: arm
       config-file: ./config/examples/rp2350.config
       target: rp2350
+
+  # Renesas RX builds using the ghcr.io/wolfssl/wolfboot-ci-rx image
+  # (GNURX toolchain; built from .github/docker/renesas-rx/).
+  renesas_rx65n_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx65n.config
+
+  renesas_rx65n_bigendian_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx65n.config
+      make-args: BIG_ENDIAN=1 DEBUG_SYMBOLS=1
+
+  renesas_rx72n_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx72n.config
