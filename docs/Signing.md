@@ -274,6 +274,17 @@ Provides a value to be set with a custom tag
    is 65524 bytes. Unlike `--custom-tlv-buffer`, the value is not passed on the command line,
    so large binary values are not subject to the OS argument length limits.
 
+   * `--custom-tlv-pubkey-der tag filename`: Adds a TLV entry to the manifest header,
+   corresponding to the type identified by `tag`, with the value extracted from the
+   DER-encoded public key (SubjectPublicKeyInfo) in `filename`. The tag is a 16-bit
+   number. Valid tags are in the range between 0x0030 and 0xFEFE. The key algorithm is
+   detected automatically (ECC, Ed25519, Ed448 or RSA) and the stored value uses the
+   same format as the wolfBoot keystore: the raw `X||Y` point coordinates for ECC, the
+   raw public key bytes for Ed25519/Ed448, and the DER-encoded public key for RSA.
+   This avoids a manual ASN.1-stripping step before `--custom-tlv-file` when embedding
+   an application-level public key (e.g. for verifying payloads at runtime, or for key
+   rotation) in the signed manifest.
+
    The 65524-byte maximum is the largest TLV value the wolfBoot header parser can walk
    past when locating the fields that follow it, such as the signature.
 

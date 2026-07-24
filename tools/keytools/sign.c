@@ -2706,6 +2706,156 @@ uint64_t arg2num(const char *arg, size_t len)
     return ret;
 }
 
+/* Load a DER-encoded public key (SubjectPublicKeyInfo), detect the algorithm
+ * and extract the public key in the same format used by the keystore:
+ * X||Y for ECC, raw bytes for Ed25519/Ed448, public key DER for RSA.
+ * On success stores a malloc'd buffer in *out and its size in *out_sz.
+ */
+static int extract_pubkey_from_der(const char *fname, uint8_t **out,
+    uint16_t *out_sz)
+{
+    FILE *f;
+    long fsz;
+    size_t rd;
+    uint8_t *der;
+    uint8_t *buf = NULL;
+    int len = -1;
+    const char *ktype = NULL;
+    word32 idx;
+
+    f = fopen(fname, "rb");
+    if (f == NULL) {
+        fprintf(stderr, "Cannot open public key DER file %s: %s\n",
+            fname, strerror(errno));
+        return -1;
+    }
+    fseek(f, 0, SEEK_END);
+    fsz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if ((fsz <= 0) || (fsz > (long)MAX_TLV_LEN)) {
+        fprintf(stderr, "Invalid public key DER file size %ld: %s\n",
+            fsz, fname);
+        fclose(f);
+        return -1;
+    }
+    der = malloc((size_t)fsz);
+    if (der == NULL) {
+        fprintf(stderr, "Error malloc for public key DER %ld\n", fsz);
+        fclose(f);
+        return -1;
+    }
+    rd = fread(der, 1, (size_t)fsz, f);
+    fclose(f);
+    if (rd != (size_t)fsz) {
+        fprintf(stderr, "Error reading public key DER file %s\n", fname);
+        free(der);
+        return -1;
+    }
+#ifdef HAVE_ECC
+    if (len < 0) {
+        ecc_key ecc;
+        if (wc_ecc_init(&ecc) == 0) {
+            idx = 0;
+            if (wc_EccPublicKeyDecode(der, &idx, &ecc, (word32)fsz) == 0) {
+                uint8_t qx[MAX_ECC_BYTES], qy[MAX_ECC_BYTES];
+                word32 qxsz = sizeof(qx), qysz = sizeof(qy);
+                if (wc_ecc_export_public_raw(&ecc, qx, &qxsz, qy, &qysz)
+                        == 0) {
+                    buf = malloc(qxsz + qysz);
+                    if (buf != NULL) {
+                        memcpy(buf, qx, qxsz);
+                        memcpy(buf + qxsz, qy, qysz);
+                        len = (int)(qxsz + qysz);
+                        ktype = "ECC";
+                    }
+                }
+            }
+            wc_ecc_free(&ecc);
+        }
+    }
+#endif
+#ifdef HAVE_ED25519
+    if (len < 0) {
+        ed25519_key ed;
+        if (wc_ed25519_init(&ed) == 0) {
+            idx = 0;
+            if (wc_Ed25519PublicKeyDecode(der, &idx, &ed, (word32)fsz) == 0) {
+                word32 osz = ED25519_PUB_KEY_SIZE;
+                buf = malloc(osz);
+                if (buf != NULL) {
+                    if (wc_ed25519_export_public(&ed, buf, &osz) == 0) {
+                        len = (int)osz;
+                        ktype = "Ed25519";
+                    } else {
+                        free(buf);
+                        buf = NULL;
+                    }
+                }
+            }
+            wc_ed25519_free(&ed);
+        }
+    }
+#endif
+#ifdef HAVE_ED448
+    if (len < 0) {
+        ed448_key ed4;
+        if (wc_ed448_init(&ed4) == 0) {
+            idx = 0;
+            if (wc_Ed448PublicKeyDecode(der, &idx, &ed4, (word32)fsz) == 0) {
+                word32 osz = ED448_PUB_KEY_SIZE;
+                buf = malloc(osz);
+                if (buf != NULL) {
+                    if (wc_ed448_export_public(&ed4, buf, &osz) == 0) {
+                        len = (int)osz;
+                        ktype = "Ed448";
+                    } else {
+                        free(buf);
+                        buf = NULL;
+                    }
+                }
+            }
+            wc_ed448_free(&ed4);
+        }
+    }
+#endif
+#ifndef NO_RSA
+    if (len < 0) {
+        RsaKey rsa;
+        if (wc_InitRsaKey(&rsa, NULL) == 0) {
+            idx = 0;
+            if (wc_RsaPublicKeyDecode(der, &idx, &rsa, (word32)fsz) == 0) {
+                int dsz = wc_RsaPublicKeyDerSize(&rsa, 1);
+                if (dsz > 0) {
+                    buf = malloc((size_t)dsz);
+                    if (buf != NULL) {
+                        len = wc_RsaKeyToPublicDer(&rsa, buf, (word32)dsz);
+                        if (len > 0) {
+                            ktype = "RSA";
+                        } else {
+                            free(buf);
+                            buf = NULL;
+                            len = -1;
+                        }
+                    }
+                }
+            }
+            wc_FreeRsaKey(&rsa);
+        }
+    }
+#endif
+    free(der);
+    if ((len <= 0) || (buf == NULL)) {
+        fprintf(stderr, "Unable to parse public key DER file %s "
+            "(tried ECC, Ed25519, Ed448, RSA)\n", fname);
+        return -1;
+    }
+    printf("Custom TLV: imported %s public key from %s (%d bytes)\n",
+        ktype, fname, len);
+    *out = buf;
+    *out_sz = (uint16_t)len;
+    return 0;
+}
+
 static void set_signature_sizes(int secondary)
 {
     uint32_t *sz = &CMD.signature_sz;
@@ -3375,6 +3525,33 @@ int main(int argc, char** argv)
                     argv[i + 2]);
                 exit(16);
             }
+            CMD.custom_tlvs++;
+            i += 2;
+        } else if (strcmp(argv[i], "--custom-tlv-pubkey-der") == 0) {
+            int p = CMD.custom_tlvs;
+            uint16_t tag;
+            if (p >= MAX_CUSTOM_TLVS) {
+                fprintf(stderr, "Too many custom TLVs.\n");
+                exit(16);
+            }
+            if (argc < (i + 3)) {
+                fprintf(stderr, "Invalid custom TLV fields. \n");
+                exit(16);
+            }
+            tag = (uint16_t)arg2num(argv[i + 1], 2);
+            if (tag < 0x0030) {
+                fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            if ( ((tag & 0xFF00) == 0xFF00) || ((tag & 0xFF) == 0xFF) ) {
+                fprintf(stderr, "Invalid custom tag: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            if (extract_pubkey_from_der(argv[i + 2],
+                    &CMD.custom_tlv[p].buffer, &CMD.custom_tlv[p].len) != 0) {
+                exit(16);
+            }
+            CMD.custom_tlv[p].tag = tag;
             CMD.custom_tlvs++;
             i += 2;
         }
