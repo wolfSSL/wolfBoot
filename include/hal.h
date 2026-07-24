@@ -119,6 +119,15 @@ void hal_prepare_boot(void);
     const char* hal_fit_config_name(void);
 #endif
 
+/* Optional watchdog kick. With -DWATCHDOG, wolfBoot calls this from its long
+ * hash and flash copy/erase loops; a port overrides the weak no-op default
+ * (see libwolfboot.c, hal/renesas-rx.c). Compiles out when WATCHDOG is unset. */
+#ifdef WATCHDOG
+void wolfBoot_watchdog_feed(void);
+#else
+#define wolfBoot_watchdog_feed() do {} while (0)
+#endif
+
 /* FPGA load mode constants + hal_fpga_load() prototype (kept in a standalone
  * header so the per-target HAL .c files can include just this, not all of
  * hal.h). Gated internally by WOLFBOOT_FPGA_BITSTREAM. */

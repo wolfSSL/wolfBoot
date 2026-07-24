@@ -6915,7 +6915,7 @@ The following build options are available for the S32K1xx HAL:
 | `RAM_CODE` | **Required for S32K1xx.** Run flash operations from RAM (no read-while-write on same block). |
 | `WOLFBOOT_RESTORE_CLOCK` | Restore clock to SIRC (8 MHz) before booting application. Recommended for applications that configure their own clocks. |
 | `WOLFBOOT_DISABLE_WATCHDOG_ON_BOOT` | Keep watchdog disabled when jumping to application. By default, the watchdog is re-enabled before boot since it is enabled out of reset. |
-| `WATCHDOG` | Enable watchdog during wolfBoot operation. Recommended for production. |
+| `WATCHDOG` | Enable the watchdog during wolfBoot operation. wolfBoot calls `wolfBoot_watchdog_feed()` from its hash and copy/erase loops -- a weak no-op a port overrides to service its watchdog (e.g. external MAX6316-MAX6322, see `hal/renesas-rx.c`). |
 | `WATCHDOG_TIMEOUT_MS` | Watchdog timeout in milliseconds when `WATCHDOG` is enabled (default: 1000ms). |
 | `S32K1XX_CLOCK_HSRUN` | Enable HSRUN mode (112 MHz). Requires external crystal and SPLL (not fully implemented). |
 | `DEBUG_UART` | Enable LPUART1 debug output. |
