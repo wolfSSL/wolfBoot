@@ -491,6 +491,17 @@ backup_on_failure:
 
         if (ih_load != 0) {
             load_address = (uint32_t*)(uintptr_t)ih_load;
+#ifdef WOLFBOOT_USE_RAMBOOT
+            /* RAMBOOT already staged the payload at os_image.fw_base, and the
+             * generic copy-to-RAM memcpy below is compiled out under RAMBOOT.
+             * Relocate the payload to ih_load ourselves when the two differ,
+             * mirroring the non-RAMBOOT memcpy. memmove: both ranges are in
+             * RAM and may overlap. */
+            if ((uintptr_t)ih_load != (uintptr_t)os_image.fw_base) {
+                memmove((void*)(uintptr_t)ih_load, os_image.fw_base,
+                    os_image.fw_size);
+            }
+#endif
         } else {
             /* Linux PPC path: leave load_address alone, just advance it
              * past the header to match upstream behaviour. load_address is
