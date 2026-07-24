@@ -936,7 +936,8 @@ ifeq ($(DEBUG_SYMBOLS),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)
     ifneq ($(USE_CLANG),1)
-    CFLAGS+=-gstabs
+    # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
+    CFLAGS+=-gdwarf-4
     endif
   endif
 endif

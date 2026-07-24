@@ -133,7 +133,9 @@ SECTIONS
         _edata = .;
     } > RAM
 
-    .bss :
+    /* Pin .bss LMA to its VMA; else it chains past ROM at the top of the
+     * address space and newer ld errors "LMA wraps around address space". */
+    .bss (NOLOAD) : AT (ADDR (.bss))
     {
         _bss = .;
         *(.dynbss)

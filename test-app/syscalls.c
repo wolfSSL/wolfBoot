@@ -125,6 +125,15 @@ void _exit(int status)
     }
 }
 
+#if defined(__RX__)
+/* GCC emits calls to abort() for trap paths; the RX app links without libc,
+ * so provide it here (halt). */
+void abort(void)
+{
+    _exit(1);
+}
+#endif
+
 int _kill(int pid, int sig)
 {
     errno = EINVAL;

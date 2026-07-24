@@ -39,6 +39,9 @@
         void uart_init(void);
     #endif
     void uart_write(const char* buf, unsigned int sz);
+    #if defined(__RX__)
+        void uart_read(char* buf, unsigned int sz);
+    #endif
 
     /* turn on small printf support in string.c */
     #if !defined(PRINTF_ENABLED) && !defined(NO_PRINTF_UART)

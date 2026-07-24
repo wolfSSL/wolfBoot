@@ -198,9 +198,9 @@ extern int tolower(int c);
 #       if !defined(WOLFBOOT_TPM)
 #          define NO_ECC_SIGN
 #          define NO_ECC_DHE
-           /* For Renesas RX do not enable the misc.c constant time code
-            * due to issue with 64-bit types */
-#          if defined(__RX__)
+           /* Old GNU RX 4.x miscompiled misc.c 64-bit constant-time ops;
+            * newer RX needs them (sp_int.c uses ctMaskLT). */
+#          if defined(__RX__) && defined(__GNUC__) && (__GNUC__ < 5)
 #              define WOLFSSL_NO_CT_OPS /* don't use constant time ops in misc.c */
 #          endif
 #          if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
