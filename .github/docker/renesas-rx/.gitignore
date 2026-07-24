@@ -1,0 +1,4 @@
+# Login-gated GNURX toolchain, supplied at image build time (see README.md).
+# Not redistributable here.
+gnurx-linux.tar.gz
+gnurx/
