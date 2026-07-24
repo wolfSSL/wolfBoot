@@ -34,8 +34,24 @@
 int write(int fileno, char *buf, int count)
 {
     (void)fileno;
+#ifdef DEBUG_UART
     uart_write(buf, count);
+#else
+    (void)buf;
+#endif
     return count;
+}
+
+/* wait for a single key from the UART (used to pause the demo) */
+int getchar(void)
+{
+#ifdef DEBUG_UART
+    char c = 0;
+    uart_read(&c, 1);
+    return (int)(unsigned char)c;
+#else
+    return -1;
+#endif
 }
 
 static const char* state2str(uint8_t s)
@@ -90,7 +106,9 @@ int main(void)
 {
     uint8_t firmware_version = 0;
 
+#ifdef DEBUG_UART
     uart_init();
+#endif
 
 #if !defined(WOLFBOOT_RENESAS_TSIP)
     printf("| ------------------------------------------------------------------- |\n");

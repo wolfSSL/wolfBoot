@@ -1393,11 +1393,11 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 off_t chain_file_sz = file_stat.st_size;
                 if (chain_file_sz < 0) {
                     printf("Warning: certificate chain file size is invalid "
-                        "(%jd)\n", (intmax_t)chain_file_sz);
+                        "(%" PRIdMAX ")\n", (intmax_t)chain_file_sz);
                 }
                 else if ((uintmax_t)chain_file_sz > (uintmax_t)MAX_TLV_LEN) {
                     printf("Error: Certificate chain too large for TLV encoding "
-                        "(%ju > %u)\n", (uintmax_t)chain_file_sz, MAX_TLV_LEN);
+                        "(%" PRIuMAX " > %u)\n", (uintmax_t)chain_file_sz, MAX_TLV_LEN);
                     goto failure;
                 }
                 else {
@@ -1584,7 +1584,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
         if ((file_stat.st_size < 0) ||
             ((uintmax_t)file_stat.st_size > (uintmax_t)UINT32_MAX)) {
-            printf("Error: Invalid certificate chain file size (%jd)\n",
+            printf("Error: Invalid certificate chain file size (%" PRIdMAX ")\n",
                    (intmax_t)file_stat.st_size);
             fclose(f);
             f = NULL;
@@ -2563,7 +2563,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
                 (cc_stat.st_size >= 0)) {
                 if ((uintmax_t)cc_stat.st_size > (uintmax_t)MAX_TLV_LEN) {
                     printf("Error: Certificate chain too large for TLV encoding "
-                        "(%ju > %u)\n", (uintmax_t)cc_stat.st_size, MAX_TLV_LEN);
+                        "(%" PRIuMAX " > %u)\n", (uintmax_t)cc_stat.st_size, MAX_TLV_LEN);
                     goto cleanup;
                 }
                 cert_chain_sz = (uint32_t)cc_stat.st_size;

@@ -214,6 +214,14 @@ void uart_write(const char* buf, unsigned int sz)
         SCI_TDR(DEBUG_UART_SCI) = c;
     }
 }
+void uart_read(char* buf, unsigned int sz)
+{
+    uint32_t pos = 0;
+    while (sz-- > 0) {
+        while ((SCI_SSR(DEBUG_UART_SCI) & SCI_SSR_RDRF) == 0);
+        buf[pos++] = (char)SCI_RDR(DEBUG_UART_SCI);
+    }
+}
 #endif /* DEBUG_UART */
 
 /* LOCO clock is used out of reset */

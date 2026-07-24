@@ -127,13 +127,9 @@ __rx_fini:
 
     .global _exit
     .type   _exit, @function
-/* call to exit */
+/* main never returns; halt. Don't call newlib __call_exitprocs -- wolfBoot
+ * does not link libc, so it fails to link on newer binutils. */
 _exit:
-    mov    #0, r2
-#ifndef NO_LEADING_UNDERSCORE
-    mov    #___call_exitprocs, r7
-#endif
-    jsr    r7
 _loop_here:
     bra    _loop_here
 

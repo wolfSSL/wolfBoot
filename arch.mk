@@ -721,8 +721,7 @@ ifeq ($(ARCH),RENESAS_RX)
     CFLAGS+=-ffunction-sections -fdata-sections
     CFLAGS+=-B$(dir $(CROSS_COMPILE))
     LDFLAGS+=-gc-sections -Map=wolfboot.map
-    LDFLAGS+=-T $(LSCRIPT) -L$(dir $(CROSS_COMPILE))../lib
-    LIBS+=-lgcc
+    LDFLAGS+=-T $(LSCRIPT)
   endif
 
   # Renesas specific files
@@ -751,10 +750,20 @@ ifeq ($(ARCH),RENESAS_RX)
     endif
   endif
 
+  # ld is invoked directly, so add libgcc for the selected multilib (GNU RX
+  # stores it per-endianness/-nofpu under lib/gcc/..., not in ../lib).
+  ifeq ($(USE_GCC),0)
+    LIBS+=$(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
+  endif
+
   ifeq ($(PKA),1)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
     CFLAGS+=-DWOLFBOOT_DEVID_PUBKEY=7890
     CFLAGS+=-DWOLFBOOT_DEVID_CRYPT=7891
+    # GCC RX 14.2 -Werror=enum-conversion trips on the wolfSSL TSIP port; add
+    # the relaxation only if the compiler knows the warning (RX 8.3 does not).
+    CFLAGS+=$(shell echo '' | $(CC) -xc -fsyntax-only \
+        -Wno-error=enum-conversion - >/dev/null 2>&1 && echo -Wno-error=enum-conversion)
     RX_DRIVER_PATH?=./lib
 
     OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \

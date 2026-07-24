@@ -86,13 +86,19 @@ else
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)
     ifneq ($(USE_CLANG),1)
-      CFLAGS+=-gstabs
+      # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
+      CFLAGS+=-gdwarf-4
     endif
   endif
 
   ifeq ($(ARCH),RENESAS_RX)
     APP_OBJS:=app_renesas_rx.o ../test-app/libwolfboot.o ../src/boot_renesas.o ../src/boot_renesas_start.o ../hal/renesas-rx.o
-    LDFLAGS+=-ffreestanding -nostartfiles
+    # -ffreestanding/-nostartfiles are gcc-driver flags. Only pass them when
+    # linking via gcc (USE_GCC=1); for USE_GCC=0 rx-elf-ld is invoked directly
+    # and rejects them (-ffreestanding is already in CFLAGS; ld adds no crt).
+    ifeq ($(USE_GCC),1)
+      LDFLAGS+=-ffreestanding -nostartfiles
+    endif
     CFLAGS+=-DWOLFBOOT_RENESAS_APP
   else ifeq ($(WOLFHAL),1)
     APP_OBJS:=app_wolfhal.o led.o system.o timer.o ../test-app/libwolfboot.o
@@ -102,6 +108,13 @@ else
 endif
 
 include ../arch.mk
+
+# The Renesas RX app links with ld directly (USE_GCC=0), with no gcc driver to
+# pull in newlib. syscalls.o provides a minimal stdio (printf/putchar/snprintf/
+# malloc) on top of uart_write, so the app links without libc.
+ifeq ($(ARCH),RENESAS_RX)
+  APP_OBJS+=syscalls.o
+endif
 
 ifeq ($(USE_CLANG),1)
   APP_NEEDS_STRING:=1
@@ -123,8 +136,12 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   WOLFCRYPT_TZ_WOLFHSM=1
 endif
 
-# Setup default linker flags
+# Setup default linker flags (gcc-driver form). Renesas RX links with ld
+# directly (USE_GCC=0) and gets its -T/-gc-sections/oformat from arch.mk, so
+# these gcc-driver flags (-Wl,/-nostartfiles and a duplicate -T) are skipped.
+ifneq ($(ARCH),RENESAS_RX)
 LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
+endif
 
 # Setup default objcopy flags
 OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
