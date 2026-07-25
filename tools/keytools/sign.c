@@ -2849,6 +2849,12 @@ static int extract_pubkey_from_der(const char *fname, uint8_t **out,
             "(tried ECC, Ed25519, Ed448, RSA)\n", fname);
         return -1;
     }
+    if (len > (int)MAX_TLV_LEN) {
+        fprintf(stderr, "extracted public key too big: %d bytes (max %u): "
+            "%s\n", len, MAX_TLV_LEN, fname);
+        free(buf);
+        return -1;
+    }
     printf("Custom TLV: imported %s public key from %s (%d bytes)\n",
         ktype, fname, len);
     *out = buf;
