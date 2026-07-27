@@ -1,10 +1,8 @@
-# wolfBoot SBOM Toolkit
+# share/
 
-This directory is the vendored wolfGlass SBOM layer for wolfBoot. It was synced
-into `tools/sbom/` and pinned with `VERSION` and `.wolfglass-rev`.
-
-For future updates, refresh this directory from wolfGlass with
-`tools/wolfglass-sync` rather than editing the shared files ad hoc.
+This is the only vendorable set. Use `tools/wolfglass-sync` to copy these files
+into a product at `tools/sbom/`, together with the pin files (`VERSION` and
+`.wolfglass-rev`). Do not copy the `share/` folder name; copy the files.
 
 ## Contents
 
@@ -49,7 +47,7 @@ The driver captures macros with the host compiler, so the SBOM is reproducible
 across toolchains. It scrubs absolute host paths from the captured macros unless
 you pass `--no-scrub`.
 
-The shared driver is product-neutral and calls the vendored `tools/sbom/gen-sbom` by
+The shared driver is product-neutral and calls the vendored `share/gen-sbom` by
 default. Pass `--gen-sbom` only when you want to override that copy.
 
 ## The manifest contract

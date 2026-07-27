@@ -120,7 +120,13 @@ def gen_sbom_supports(python, gen_sbom, flag):
 
 
 def capture_macros(hostcc, cflags):
-    """Expand the -D tokens of CFLAGS through the host compiler's -dM -E."""
+    """Expand the -D tokens of CFLAGS through the host compiler's -dM -E.
+
+    Only tokens that start with ``-D`` are kept. ``-I``, ``-include``, and
+    every other flag are dropped. Products whose configuration is expressed
+    by ``-include``'ing a settings header must capture that header themselves
+    (``hostcc -dM -E ... -include ...``) and pass the dump via ``--options-h``.
+    """
     defs = [t for t in cflags.split() if t.startswith("-D")]
     cmd = [hostcc, "-dM", "-E", "-DWOLFSSL_USER_SETTINGS", *defs,
            "-x", "c", os.devnull]

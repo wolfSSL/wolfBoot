@@ -83,7 +83,7 @@ jobs:
           cp config/examples/sim.config .config
           make sbom TARGET=sim
           python3 tools/sbom/validate_sbom.py \
-            --name-prefix wolfboot \
+            --name-prefix wolfboot --min-properties 20 \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
 
       - name: CMake path - cmake --target sbom (sim)
@@ -236,7 +236,7 @@ jobs:
             echo "ERROR: PICO_SDK_PATH macro was dropped (should be redacted)." >&2
             exit 1; }
           python3 tools/sbom/validate_sbom.py \
-            --name-prefix wolfboot \
+            --name-prefix wolfboot --min-properties 20 \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
           echo "rp2350 scrub OK: path redacted, macro key preserved"
 
@@ -303,7 +303,7 @@ jobs:
           cp config/examples/${{ matrix.target }}.config .config
           make sbom TARGET=${{ matrix.target }}
           python3 tools/sbom/validate_sbom.py \
-            --name-prefix wolfboot \
+            --name-prefix wolfboot --min-properties 20 \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
 
       - name: Upload SBOM artifact
