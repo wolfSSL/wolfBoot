@@ -15,7 +15,13 @@
 #
 # Config - set one:
 #   SBOM_CFLAGS      Build CFLAGS whose -D tokens describe the config.
-#   SBOM_OPTIONS_H   A pre-expanded flat #define header.
+#                    NOTE: the driver keeps ONLY -D tokens from SBOM_CFLAGS.
+#                    -I / -include / other flags are dropped. Products whose
+#                    config comes from -include'ing a settings header (e.g.
+#                    wolfHSM's wh_settings.h) MUST capture with
+#                    `$(HOSTCC) -dM -E ... -include ...` themselves and pass
+#                    the dump via SBOM_OPTIONS_H, not SBOM_CFLAGS.
+#   SBOM_OPTIONS_H   A pre-expanded flat #define header (verbatim, scrubbed).
 #   SBOM_USER_SETTINGS  A user_settings.h.
 #   SBOM_SOURCE_ONLY = 1   Source-inventory SBOM with no build-config macros.
 #
@@ -33,11 +39,28 @@
 #   SBOM_NO_ARTIFACT_HASH = 1   As-built FIPS/kernel: do not re-hash.
 #   SBOM_DEP_WOLFSSL      yes/no - record wolfSSL as a dependency.
 #   SBOM_DEP_OPENSSL      yes/no - record OpenSSL as a dependency.
+#   SBOM_WOLFSSL_VERSION  Explicit wolfSSL version for --dep-version. When
+#                         unset and SBOM_DEP_WOLFSSL=yes, falls back to
+#                         $(WOLFSSL_DIR)/wolfssl/version.h
+#                         (LIBWOLFSSL_VERSION_STRING), matching sbom.am.
+#   SBOM_DEP_VERSION      Extra --dep-version KEY=VER tokens (space-separated).
 #   HOSTCC                Host C compiler for macro capture. Default: cc.
 #   CRA_PYTHON            Python interpreter. Default: python3.
 #
 # The driver path is derived from this fragment's own location, so a product
 # that vendors share/ into tools/sbom/ needs no path configuration.
+#
+# Source-list staging uses $(CURDIR)/.<target>-wolfglass-srcs.txt (not mktemp).
+# GNU Make expands $${TMPDIR:-/tmp} as an empty Make variable named
+# "TMPDIR:-/tmp", which produced "/wolfglass-srcs.XXXXXX" and broke every
+# host. The CURDIR file is .gitignore'd; avoid parallel make -j of the *same*
+# SBOM target (two recipes would share one staging file). Distinct targets
+# (sbom vs sbom-hal) use distinct filenames via $(1).
+#
+# Shell variables inside wolfglass_sbom_rule need $$$$name (not $$name):
+# $(call)/$(eval) expands the define once, then the recipe expands again.
+# $$name becomes $n + ame (empty single-letter Make var) after that double
+# expansion; $$$$name survives as $name for the shell.
 #
 # To instantiate a second target, set another variable prefix and call:
 #   $(eval $(call wolfglass_sbom_rule,sbom-hal,SBOM_HAL_))
@@ -61,6 +84,23 @@ $(1):
 	    trap 'rm -f "$(CURDIR)/.$(1)-wolfglass-srcs.txt"' EXIT INT TERM HUP; \
 	    printf '%s\n' $($(2)SRCS) > "$(CURDIR)/.$(1)-wolfglass-srcs.txt"; \
 	fi; \
+	dep_ver=""; \
+	if [ -n "$($(2)DEP_VERSION)" ]; then \
+	    for dv in $($(2)DEP_VERSION); do \
+	        dep_ver="$$$$dep_ver --dep-version $$$$dv"; \
+	    done; \
+	fi; \
+	if [ "$($(2)DEP_WOLFSSL)" = "yes" ] || [ "$($(2)DEP_WOLFSSL)" = "1" ]; then \
+	    wv="$($(2)WOLFSSL_VERSION)"; \
+	    if [ -z "$$$$wv" ] && [ -n "$(WOLFSSL_DIR)" ] && \
+	        [ -f "$(WOLFSSL_DIR)/wolfssl/version.h" ]; then \
+	        wv=`sed -n 's/.*LIBWOLFSSL_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
+	            "$(WOLFSSL_DIR)/wolfssl/version.h" | head -1`; \
+	    fi; \
+	    if [ -n "$$$$wv" ]; then \
+	        dep_ver="$$$$dep_ver --dep-version wolfssl=$$$$wv"; \
+	    fi; \
+	fi; \
 	CRA_PYTHON="$(CRA_PYTHON)" HOSTCC="$(or $($(2)HOSTCC),$(HOSTCC))" \
 	"$(or $($(2)DRIVER),$(SBOM_DRIVER))" \
 	    --name "$($(2)NAME)" \
@@ -79,6 +119,7 @@ $(1):
 	    $(if $($(2)VERSION_MACRO),--version-macro "$($(2)VERSION_MACRO)") \
 	    $(if $($(2)DEP_WOLFSSL),--dep-wolfssl "$($(2)DEP_WOLFSSL)") \
 	    $(if $($(2)DEP_OPENSSL),--dep-openssl "$($(2)DEP_OPENSSL)") \
+	    $$$$dep_ver \
 	    $(if $(or $($(2)GEN),$(GEN_SBOM)),--gen-sbom "$(or $($(2)GEN),$(GEN_SBOM))") \
 	    $(if $($(2)CDX_OUT),--cdx-out "$($(2)CDX_OUT)") \
 	    $(if $($(2)SPDX_OUT),--spdx-out "$($(2)SPDX_OUT)")
