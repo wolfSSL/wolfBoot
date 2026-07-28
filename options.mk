@@ -1535,13 +1535,6 @@ ifeq ($(WOLFHSM_SERVER),1)
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
-  # SHA-384/512 are used by the wolfHSM crypto handlers (HKDF, larger
-  # ECDSA hash sizes, etc.). Always link sha512.o except when ED25519
-  # is the signature algorithm, which already pulls it in.
-  ifneq ($(SIGN),ED25519)
-    WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
-  endif
-
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
     # Large enough to handle the largest ML-DSA key/signature

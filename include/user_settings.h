@@ -870,12 +870,14 @@ extern int tolower(int c);
      * SHA384/SHA512 on the secure side, WC_MAX_DIGEST_SIZE caps at
      * SHA256's 32 and wc_ecc_sign_hash (ecc.c:7281) rejects legitimately
      * oversized hashes (e.g. ECDSA truncation tests) with BAD_LENGTH_E. */
-#   ifndef WOLFSSL_SHA384
-#       define WOLFSSL_SHA384
-#   endif
-#   ifndef WOLFSSL_SHA512
-#       define WOLFSSL_SHA512
-#   endif
+#   ifdef WOLFCRYPT_TZ_WOLFHSM
+#       ifndef WOLFSSL_SHA384
+#           define WOLFSSL_SHA384
+#       endif
+#       ifndef WOLFSSL_SHA512
+#           define WOLFSSL_SHA512
+#       endif
+#   endif /* WOLFCRYPT_TZ_WOLFHSM */
     /* Match the keycache sizing the wolfHSM test suite is validated
      * against (test/config/wolfhsm_cfg.h: 9 regular + 3 big). The
      * library defaults (8 + 1) are one regular slot short of the
