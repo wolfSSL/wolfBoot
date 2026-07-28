@@ -1888,6 +1888,11 @@ ifeq ($(ARCH), AURIX_TC3)
               -std=gnu99 -DPART_BOOT_EXT -DPART_UPDATE_EXT -DPART_SWAP_EXT \
               -DHAVE_TC3XX -DWOLFBOOT_LOADER_MAIN
 
+    # Set TC3_CFG_DFLASH_SINGLE_ENDED=1 for devices with DFLASH provisioned in single
+    # ended mode (default expects complement sensing)
+    ifeq ($(TC3_CFG_DFLASH_SINGLE_ENDED),1)
+      CFLAGS += -DTC3_CFG_DFLASH_SINGLE_ENDED
+    endif
 
     # Makefile shennanigans for "if (WOLFHSM_CLIENT==1 || WOLFHSM_SERVER==1)"
     ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
@@ -1902,7 +1907,12 @@ ifeq ($(ARCH), AURIX_TC3)
       # NVM image generation variables
       WH_NVM_BIN ?= whNvmImage.bin
       WH_NVM_HEX ?= whNvmImage.hex
-      WH_NVM_PART_SIZE ?= 0x8000
+      # NVM partition is half of DFLASH1; bank size depends on sensing mode
+      ifeq ($(TC3_CFG_DFLASH_SINGLE_ENDED),1)
+        WH_NVM_PART_SIZE ?= 0x10000
+      else
+        WH_NVM_PART_SIZE ?= 0x8000
+      endif
       # Default to base of HSM DFLASH1
       WH_NVM_BASE_ADDRESS ?= 0xAFC00000
 
