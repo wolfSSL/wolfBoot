@@ -509,3 +509,8 @@ wolfboot-sbom-srcs.txt
 # Python cache files
 __pycache__/
 *.py[cod]
+
+# CM4 disk-boot test artifacts (fetched RPi firmware, built/signed payloads)
+tools/scripts/cm4/fw/
+tools/scripts/cm4/*.elf
+tools/scripts/cm4/*.bin

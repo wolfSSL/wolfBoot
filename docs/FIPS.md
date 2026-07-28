@@ -45,7 +45,7 @@ make FIPS=1 WOLFBOOT_LIB_WOLFSSL=/path/to/wolfssl-5.9.2-gplv3-fips-ready \
      SIGN=ECC384 HASH=SHA384 SPMATH=1
 ```
 
-`-DHAVE_FIPS` is added by the `FIPS=1` block. `FIPS=1` also defaults `FIPS_READY=1`, which defines `WOLFSSL_FIPS_READY` (`include/user_settings.h`); that macro forces the evaluation bundle's `HAVE_FIPS_VERSION` to 7 and selects the FIPS-186-4 gating in `settings.h`. A production build with the licensed **validated** bundle (not a FIPS-ready drop) must pass `FIPS_READY=0` so the bundle keeps its own declared module version. The `HAVE_FIPS` block in `include/user_settings.h` also enables the module's algorithm set, keeps the RNG/DRBG enabled, and wires the entropy seed (below).
+`-DHAVE_FIPS` is added by the `FIPS=1` block. `FIPS=1` also defaults `FIPS_READY=1`, which defines `WOLFSSL_FIPS_READY` (`include/user_settings.h`); that macro forces the evaluation bundle's `HAVE_FIPS_VERSION` to 7 and selects the FIPS-186-4 gating in `settings.h`. `FIPS_READY=1` (the default) builds the evaluation FIPS-ready bundle. A production build with the licensed **validated** bundle (not a FIPS-ready drop) must pass both `FIPS_READY=0` and `FIPS_VERSION=<n>` (for example `FIPS_VERSION=7` for a 140-3 module), which `options.mk` turns into `-DHAVE_FIPS_VERSION=<n>` to pin the module version. This is required because under wolfBoot's `-DWOLFSSL_USER_SETTINGS` build `settings.h` includes only `user_settings.h` and never the configure-generated `wolfssl/options.h`, so the validated bundle does not self-declare `HAVE_FIPS_VERSION`; without it the module would silently build as FIPS v1 (140-2). `options.mk` therefore errors if `FIPS_READY=0` is passed without `FIPS_VERSION`. The `HAVE_FIPS` block in `include/user_settings.h` also enables the module's algorithm set, keeps the RNG/DRBG enabled, and wires the entropy seed (below).
 
 ## Entropy source (required)
 
@@ -55,11 +55,16 @@ The FIPS DRBG needs a seed. wolfBoot's lean configuration compiles out the OS se
 
 The module verifies an in-core integrity hash (HMAC-SHA-256 over the module's code and read-only data) at startup. A fresh build ships with a placeholder, so the first run reports a mismatch; capture the runtime hash and seal it:
 
-1. Build and run with a FIPS callback registered (wolfBoot does this in `src/loader.c`). On a mismatch the module reports the runtime hash; wolfBoot prints it (`FIPS in-core hash = ...`, from `wolfCrypt_GetCoreHash_fips()`), and on the CM4 the test app (`test-app/app_cm4.c`) prints it over UART.
+1. Build and run with a FIPS callback registered (wolfBoot does this in `src/loader.c`). On a mismatch the module reports the runtime hash; wolfBoot prints it (`FIPS in-core hash = ...`, from `wolfCrypt_GetCoreHash_fips()`) before halting.
 2. Copy the reported 64-hex-character hash into `verifyCore[]` in `wolfcrypt/src/fips_test.c`.
 3. Rebuild and re-run. `wolfCrypt_GetStatus_fips()` now returns 0 (operational).
 
 The seal is **specific to the exact binary layout**: any code change that shifts the FIPS module's link addresses changes the in-core hash and requires a re-seal. Re-sealing `verifyCore[]` itself does not shift addresses (same-size rewrite), so once the rest of the build is fixed the seal converges in one pass.
+
+Two practical traps when re-sealing (both cost time on the CM4 bring-up):
+
+- `verifyCore[]` can be sealed via a build define instead of editing the FIPS tree: `CFLAGS_EXTRA="-DWOLFCRYPT_FIPS_CORE_HASH_VALUE=<hash>"` (unquoted; `fips_test.c` stringifies it). But apply it by recompiling **only** `fips_test.o` - `rm "$WOLFBOOT_LIB_WOLFSSL/wolfcrypt/src/fips_test.o"` then rebuild. `verifyCore[]` lives *after* `wolfCrypt_FIPS_last`, so this leaves the hashed region byte-identical and converges in one pass. Passing the define through a **full** rebuild (`make clean` + build) recompiles the whole module and shifts its link addresses, so the hash never stabilizes.
+- `make clean` removes `$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o`. If you build with `WOLFBOOT_LIB_WOLFSSL=<fips-tree>` but run `make clean` **without** that variable, it cleans the default `lib/wolfssl` instead, leaving the stale FIPS `fips_test.o` in place - the new seal silently never lands. Pass `WOLFBOOT_LIB_WOLFSSL` to `clean` too, or `rm` the object directly.
 
 ## Bare-metal targets
 
