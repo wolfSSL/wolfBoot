@@ -755,14 +755,16 @@ For Visual Studio, the developer command prompt will need to be activated.
     * Added boot-benchmarking support
     * Added an `sbom` Makefile target for EU CRA compliance
     * wolfHSM: multi-root-CA verification, keystore-less operation, and related fixes
-    * IDevID: allow using pre-computed authentication values
+    * IDevID: allow using pre-computed authentication values (Reported-by: Asif Nadaf <postasif@protonmail.com>)
     * Added an option to persist boot/update failure diagnostics to a dedicated flash partition, with an API to retrieve logged events
     * Renamed ML-DSA (Dilithium) references throughout for consistency
   * Bug fixes and hardening
     * Continued Fenrir fuzzing-driven hardening across image parsing and update flows
-    * Bounded unauthenticated image size before RAM load, and enforced bounds over memcpy in the disk update path
-    * Added an integrity check in `wolfBoot_verify_authenticity()` and hardened the armored image integrity check against fault injection
-    * Fixed LMS/XMSS header includes, otp_keystore string initialization, and FDT compatible-string loop termination
+    * Bounded unauthenticated image size before RAM load, and enforced bounds over memcpy in the disk update path (Reported-by: Asif Nadaf <postasif@protonmail.com>)
+    * Added an integrity check in `wolfBoot_verify_authenticity()` (Reported-by: Asif Nadaf <postasif@protonmail.com>)
+    * Hardened the armored image integrity check against fault injection
+    * Fixed FDT compatible-string loop termination (Reported-by: Asif Nadaf <postasif@protonmail.com>)
+    * Fixed LMS/XMSS header includes and otp_keystore string initialization
     * Fixed multiple unit-test and self-update regressions; migrated Renode tests to a new container
     * Zeroized the DICE claim-collection buffer
   * Updated modules
