@@ -3815,14 +3815,14 @@ On CM4 modules with onboard eMMC the boot files live on the eMMC FAT boot partit
 
 ```
 cp config/examples/cm4.config .config
-make CROSS_COMPILE=aarch64-none-elf-
+make CROSS_COMPILE=aarch64-none-elf- DEBUG_UART=1
 ```
 
-The example uses `SIGN=ECC384 HASH=SHA384` (both FIPS-approved). wolfBoot is entered by the firmware at `0x80000` at EL2, matching `hal/cm4.ld`. The image is loaded from RAM: wolfBoot reads the signed application at `kernel_addr` (`0x140000`), verifies it, copies it to `WOLFBOOT_LOAD_ADDRESS`, and boots.
+`cm4.config` defaults `DEBUG?=0` and `DEBUG_UART?=0` for a silent, optimized release build; the `DEBUG_UART=1` above enables the boot log shown under "Boot output". The example uses `SIGN=ECC384 HASH=SHA384` (both FIPS-approved). wolfBoot is built as an AArch64 Linux kernel image (`kernel8.img`): `src/boot_aarch64_start.S` prepends the 64-byte ARM64 image header (`"ARM\x64"` magic), and `hal/cm4.ld` links at `0x200000`. The VideoCore firmware only transfers control to a 64-bit kernel that carries this header, and it runs the image in place at the 2 MB-aligned load address `0x200000` (it does not relocate a header image down to `0x80000`) at EL2. The image is loaded from RAM: wolfBoot reads the signed application at `kernel_addr` (`0x2C0000`), verifies it, copies it to `WOLFBOOT_LOAD_ADDRESS`, and boots.
 
 ### Signing and assembling the boot image
 
-Sign the application, then concatenate wolfBoot and the signed image so the signed image lands at `kernel_addr` (`0x140000` = `0x80000` load + `0xC0000`):
+Sign the application, then concatenate wolfBoot and the signed image so the signed image lands at `kernel_addr` (`0x2C0000` = `0x200000` load + `0xC0000`):
 
 ```
 make keytools tools/bin-assemble/bin-assemble
@@ -3835,17 +3835,21 @@ tools/bin-assemble/bin-assemble kernel8.img \
 
 ### config.txt
 
-The CM4 UART on GPIO14/15 defaults to the mini-UART because the PL011 is used by Bluetooth. wolfBoot drives the PL011, so route it to the header and fix a known UART clock:
+The debug console on GPIO14/15 is the BCM2711 mini-UART (AUX, Linux `ttyS0`); the PL011 is used by Bluetooth. wolfBoot drives the **mini-UART** by default (it inherits the firmware's stable baud, which `enable_uart=1` fixes by pinning `core_freq`), so no baud reprogramming is needed. Boards where `dtoverlay=disable-bt` actually routes the PL011 onto GPIO14/15 can build with `CFLAGS_EXTRA=-DCM4_UART_PL011` to use the PL011 instead.
 
 ```
 arm_64bit=1
 kernel=kernel8.img
+# wolfBoot is linked absolutely at 0x200000; pin the load address to match.
+kernel_address=0x200000
 enable_uart=1
 uart_2ndstage=1
 dtoverlay=disable-bt
 init_uart_clock=48000000
 init_uart_baud=115200
 ```
+
+`kernel_address=0x200000` is required: wolfBoot is linked absolutely at `0x200000`, and its startup code self-checks the runtime base against that link-time base. If the firmware loads the image at any other address the check fails and wolfBoot halts silently, before any UART output, so a missing or mismatched `kernel_address` looks like a dead board with no console log. All the `prepare_emmc*.sh` scripts emit this line.
 
 ### Flashing
 
@@ -3858,20 +3862,43 @@ With `DEBUG_UART=1`, a successful authenticated boot prints (115200 8N1):
 
 ```
 wolfBoot CM4 (BCM2711 Cortex-A72) hal_init, EL2
-Trying partition 0 at 0x140000
+Trying partition 0 at 0x2C0000
 Checking integrity...done
 Verifying signature...done
 Firmware Valid
 Booting at 0x3080000
 ```
 
-### Optional: eMMC/SD A/B updates
+### Optional: eMMC/SD A/B disk boot
 
-`config/examples/cm4_sdcard.config` enables the disk updater (`DISK_SDCARD`/`DISK_EMMC`), driving the BCM2711 EMMC2 controller through the generic SDHCI driver (`src/sdhci.c`) for A/B image partitions on the boot medium. This path is provided as bring-up scaffolding and is not yet hardware-validated.
+`config/examples/cm4_emmc.config` (onboard eMMC) and `config/examples/cm4_sdcard.config` (microSD) enable the disk updater (`DISK_EMMC`/`DISK_SDCARD`), driving the BCM2711 EMMC2 controller through the generic SDHCI driver (`src/sdhci.c` + the `hal/cm4.c` register glue) to read A/B signed images from GPT partitions. wolfBoot reads the GPT, selects the higher-version image, verifies it, ELF-loads it (`ELF=1`) to `WOLFBOOT_LOAD_ADDRESS`, and boots.
+
+The **eMMC** path (`cm4_emmc.config`) has been validated end to end on CM4 hardware: SDHCI/eMMC card init -> GPT parse -> A/B version select -> SHA-384 integrity -> ECDSA-P384 signature verify -> ELF64 load -> boot of a signed payload. `tools/scripts/cm4/prepare_emmc.sh` builds the GPT layout (FAT boot partition with `kernel8.img` + firmware, plus raw A/B image partitions), signs a minimal test payload (`tools/scripts/cm4/disk_app.S`), and writes it to the eMMC over `rpiboot`. Uncomment `DEBUG_SDHCI` / `DEBUG_DISK` / `DEBUG_GPT` in the config for verbose bring-up tracing. The **microSD** path shares the same driver but is validated only on modules whose SD lines reach the microSD slot (a CM4 with onboard eMMC disables that slot).
 
 ### FIPS 140-3
 
-The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform its signature verification with the wolfCrypt FIPS 140-3 module (build `config/examples/cm4.config` with `FIPS=1`, pointing `WOLFBOOT_LIB_WOLFSSL` at a FIPS wolfSSL tree). At boot the module runs its power-on self-test and in-core integrity check, and wolfBoot refuses to boot unless the module is operational. Entropy for the FIPS DRBG comes from the BCM2711 RNG200 hardware TRNG. The full flow has been brought up and exercised end to end on CM4 hardware using the FIPS-ready bundle: FIPS module operational -> SHA-384 integrity -> ECDSA-P384 signature verification -> boot handoff. A production, CMVP-validated deployment additionally requires the licensed validated wolfCrypt FIPS bundle at the validated revision (see [FIPS.md](FIPS.md)). The on-target harness in `test-app/app_cm4.c` prints the runtime in-core hash over the UART for the `verifyCore[]` seal. See [FIPS.md](FIPS.md) for the full build, entropy, and hash-sealing procedure.
+The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform its signature verification with the wolfCrypt FIPS 140-3 module (build `config/examples/cm4.config` with `FIPS=1`, pointing `WOLFBOOT_LIB_WOLFSSL` at a FIPS wolfSSL tree). At boot the module runs its power-on self-test and in-core integrity check, and wolfBoot refuses to boot unless the module is operational. Entropy for the FIPS DRBG comes from the BCM2711 RNG200 hardware TRNG. The FIPS configuration builds with the CM4 hardware-boot support (ARM64 image header, `0x200000` load address, mini-UART console) and has been validated end to end on CM4 hardware with the FIPS-ready bundle: after sealing the in-core integrity hash, wolfBoot reports `FIPS 140-3 module operational` and the module gates the boot with SHA-384 integrity and ECDSA-P384 signature verification of the eMMC A/B image (`cm4_emmc.config` with `FIPS=1`; wolfBoot's `src/loader.c` runs the power-on self-test and in-core check before booting). A production, CMVP-validated deployment additionally requires the licensed validated wolfCrypt FIPS bundle at the validated revision (see [FIPS.md](FIPS.md)). On an in-core hash mismatch, wolfBoot prints the runtime hash (`FIPS in-core hash = ...`, from `src/loader.c`) to seal into `verifyCore[]`. Re-seal by recompiling only `fips_test.o` with `-DWOLFCRYPT_FIPS_CORE_HASH_VALUE=<hash>` (a full rebuild shifts the module boundary and the hash); see [FIPS.md](FIPS.md) for the full build, entropy, and hash-sealing procedure.
+
+### Optional: Linux kernel FIT boot
+
+`config/examples/cm4_emmc_linux.config` boots a real Linux kernel instead of the `disk_app` prove-out stub. wolfBoot loads a wolfBoot-signed FIT (kernel-only, gzip-compressed) from an eMMC GPT partition, verifies the outer ECDSA-P384/SHA-384 signature, decompresses the kernel to `0x10000000`, relocates the RPi-firmware-provided DTB to `WOLFBOOT_LOAD_DTS_ADDRESS` (`0x08000000`) and injects the kernel command line (`root=`, `console=`) into `/chosen/bootargs`, then boots Linux at EL2.
+
+Key config points: `GZIP=1` (the FIT kernel subimage is `Image.gz`), `ELF=1`, `DISK_EMMC=1`, and `WOLFBOOT_LOAD_ADDRESS=0x18000000` - the FIT is staged above the decompressed kernel so gunzip does not overwrite its own compressed input mid-stream. `CFLAGS_EXTRA+=-DCM4_FIRMWARE_DTB` captures and reuses the firmware DTB (which already carries the RAM size and mini-UART clock), `CFLAGS_EXTRA+=-DCM4_UART_PL011` puts the Linux console on the PL011 (`ttyAMA0`, via `dtoverlay=disable-bt`), and `CFLAGS_EXTRA+=-DLINUX_BOOTARGS_ROOT=...` sets `root=`. The FIT is built from `hal/cm4.its` with `mkimage` and signed with the wolfBoot key; `tools/scripts/cm4/prepare_emmc_linux.sh` stages it on the eMMC. This path was hardware-validated booting a Yocto (Scarthgap, kernel 6.6) rootfs.
+
+### Optional: RAUC A/B redundant boot
+
+`config/examples/cm4_emmc_rauc.config` makes wolfBoot replace U-Boot as the RAUC slot arbiter. wolfBoot reads a raw U-Boot-environment partition (`mkenvimage`/`fw_setenv` compatible), runs the RAUC `BOOT_ORDER` / `BOOT_<slot>_LEFT` try-counter state machine, decrements the selected slot's counter and writes it back (so a hung slot fails over to the other on the next boot), then boots the shared signed kernel FIT with `root=` pointing at the active slot's rootfs and `rauc.slot=<name>` on the command line.
+
+The eMMC uses a 6-partition layout:
+
+- `p1` boot FAT: RPi firmware + `kernel8.img` + `config.txt`
+- `p2` uboot-env raw: RAUC `fw_env.config` target; its size must match wolfBoot's `UBOOT_ENV_SIZE` (`0x4000`)
+- `p3` fitImage raw: shared wolfBoot-signed kernel FIT
+- `p4` rootfs_A ext4: slot A
+- `p5` rootfs_B ext4: slot B
+- `p6` data ext4: persistent data
+
+Key config: `CM4_RAUC_AB=1` (a make var that pulls in `src/ubootenv.o` and the RAUC branch of `hal/cm4.c`), `CFLAGS_EXTRA+=-DCM4_UBOOT_ENV_PART=<n>` (0-based GPT index of `p2`), `CFLAGS_EXTRA+=-DCM4_ROOT_A=...` / `-DCM4_ROOT_B=...` (slot rootfs devices), and optionally `-DCM4_SLOT_A_NAME=...` / `-DCM4_SLOT_B_NAME=...` (RAUC bootnames, default `"A"` / `"B"`). `tools/scripts/cm4/prepare_emmc_rauc.sh` lays out the disk and writes an initial env (`BOOT_ORDER "A B"`, tries `3`). Both slot-switch and hung-slot failover were hardware-validated. On the Yocto side, RAUC's `fw_env.config` must point at the raw `p2` partition (offset `0`, size `0x4000`) and the `system.conf` slot devices must match `p4`/`p5`, so userspace (`rauc mark-good` / `fw_setenv`) and wolfBoot agree on the env layout.
 
 ## Xilinx Zynq UltraScale
 

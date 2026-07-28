@@ -3,10 +3,11 @@
  * HAL for the Raspberry Pi Compute Module 4 (CM4): Broadcom BCM2711,
  * quad-core Cortex-A72 (ARMv8-A).
  *
- * The VideoCore GPU firmware loads wolfBoot (as kernel8.img) to 0x80000 and
- * releases the A72 cores; wolfBoot verifies the appended signed payload and
- * boots it from RAM. hal_flash_* are no-ops (no in-place flash in this mode).
- * Optional eMMC/SD A/B via the generic SDHCI driver is at the end of the file.
+ * The VideoCore GPU firmware loads wolfBoot (an ARM64 kernel8.img carrying the
+ * Linux image header) to 0x200000 and enters it at EL2; wolfBoot verifies the
+ * signed payload and boots it from RAM, or from eMMC/SD A/B via the generic
+ * SDHCI driver (at the end of this file). hal_flash_* are no-ops (no in-place
+ * flash in this mode).
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -42,38 +43,66 @@
 /* Fixed addresses (provided by the linker script) */
 extern void *kernel_addr, *update_addr, *dts_addr;
 
-#if defined(HAVE_FIPS)
+/* Enable the identity MMU + caches when the build does more than the trivial
+ * RAM-boot: FIPS (unaligned/SIMD in the module), or the disk path (optimized
+ * code + SDHCI block-buffer memcpy fault on MMU-off Device memory). Normal
+ * cacheable memory permits those accesses and speeds up crypto/disk reads. */
+#if (defined(HAVE_FIPS) || defined(DISK_SDCARD) || defined(DISK_EMMC)) \
+    && defined(__aarch64__)
+#define CM4_USE_MMU
+#endif
+
+#if defined(CM4_USE_MMU)
 void cm4_mmu_enable(void);  /* defined below; called from hal_init */
 void cm4_mmu_disable(void); /* defined below; called from hal_prepare_boot */
 #endif
 
 #if defined(DEBUG_UART)
+/* Console UART select. On this bench CM4 the debug cable on GPIO14/15 is the
+ * BCM2711 mini-UART (AUX, Linux ttyS0), so that is the default. Boards where
+ * dtoverlay=disable-bt actually routes the PL011 onto GPIO14/15 can build with
+ * CM4_UART_PL011 to use the PL011 (0xFE201000) instead. */
+#if defined(CM4_UART_PL011)
 static void uart_tx(char c)
 {
     while (*UART0_FR & 0x20) /* TXFF: wait while FIFO full */
         ;
-    *UART0_DR = c;
-}
-
-void uart_write(const char* buf, uint32_t sz)
-{
-    while (sz-- > 0 && *buf)
-        uart_tx(*buf++);
+    *UART0_DR = (unsigned int)(unsigned char)c;
 }
 
 void uart_init(void)
 {
-    /* The VideoCore firmware has already routed the PL011 to GPIO14/15
-     * (dtoverlay=disable-bt) and set init_uart_clock=48MHz. Program the PL011
-     * for 115200 8N1 directly, without the VideoCore mailbox (a mailbox poll
-     * that never returns post-handoff would hang before any output).
-     * 48MHz UARTCLK: BAUDDIV = 48e6/(16*115200) = 26.04 -> IBRD 26, FBRD 3. */
+    /* Program the PL011 for 115200 8N1 assuming a 48MHz UARTCLK
+     * (init_uart_clock=48000000): BAUDDIV = 48e6/(16*115200) -> IBRD 26 FBRD 3. */
     *UART0_CR = 0;
     *UART0_ICR = 0x7FF;
     *UART0_IBRD = 26;
     *UART0_FBRD = 3;
     *UART0_LCRH = (1 << 4) | (1 << 5) | (1 << 6); /* FIFO, 8-bit */
     *UART0_CR = (1 << 0) | (1 << 8) | (1 << 9);   /* enable UART, TX, RX */
+}
+#else /* mini-UART (default) */
+static void uart_tx(char c)
+{
+    while ((*MU_LSR & MU_LSR_TXFF_EMPTY) == 0) /* wait until TX can accept */
+        ;
+    *MU_IO = (unsigned int)(unsigned char)c;
+}
+
+void uart_init(void)
+{
+    /* The firmware has already enabled the mini-UART at a stable baud
+     * (enable_uart=1 fixes core_freq), so - like the Linux 8250 console with
+     * "skip-init" - wolfBoot inherits that setup and just writes AUX_MU_IO.
+     * Reprogramming the baud here is unnecessary (and error-prone: the mini-UART
+     * clock is core_freq-derived, not a fixed rate). */
+}
+#endif /* CM4_UART_PL011 */
+
+void uart_write(const char* buf, uint32_t sz)
+{
+    while (sz-- > 0 && *buf)
+        uart_tx(*buf++);
 }
 #endif /* DEBUG_UART */
 
@@ -129,23 +158,29 @@ void hal_init(void)
 {
 #if defined(DEBUG_UART)
     unsigned long el;
+    /* The banner is emitted before cm4_mmu_enable() on purpose - it is the
+     * earliest bring-up signal. This is safe because wolfBoot's uart_printf
+     * (src/string.c) is built -mstrict-align and performs no unaligned / SIMD
+     * access; do NOT route the banner through a libc printf, which would fault
+     * on the MMU-off Device memory this runs on. */
     uart_init();
     __asm__ volatile("mrs %0, CurrentEL" : "=r"(el));
     wolfBoot_printf("wolfBoot CM4 (BCM2711 Cortex-A72) hal_init, EL%d\n",
         (int)((el >> 2) & 0x3));
 #endif
-#if defined(HAVE_FIPS)
-    /* Bring up Normal cacheable memory before the FIPS POST, which uses
-     * unaligned / SIMD accesses that the MMU-off Device memory rejects. */
+#if defined(CM4_USE_MMU)
+    /* Bring up Normal cacheable memory before any code that uses unaligned /
+     * SIMD accesses (FIPS module, optimized disk path) which the MMU-off
+     * Device memory rejects. */
     cm4_mmu_enable();
 #endif
 }
 
 void hal_prepare_boot(void)
 {
-#if defined(HAVE_FIPS)
-    /* Undo cm4_mmu_enable() before handoff: flush the app out of the D-cache
-     * and return to the MMU-off state the application expects. */
+#if defined(CM4_USE_MMU)
+    /* Undo cm4_mmu_enable() before handoff: flush the loaded image out of the
+     * D-cache and return to the MMU-off state the application expects. */
     cm4_mmu_disable();
 #endif
 }
@@ -153,7 +188,7 @@ void hal_prepare_boot(void)
 #if defined(HAVE_FIPS)
 /* Bounded heap for the FIPS module's malloc. wolfBoot builds the FIPS target
  * with --specs=nosys.specs, whose newlib _sbrk grows unbounded from the linker
- * 'end' symbol - toward the unverified image staged at kernel_addr (0x140000).
+ * 'end' symbol - toward the unverified image staged at kernel_addr (0x2C0000).
  * Provide our own _sbrk over a fixed static buffer (in .bss, well below the
  * image) so heap growth is bounded and can never reach kernel_addr. */
 #ifndef CM4_FIPS_HEAP_SIZE
@@ -166,20 +201,30 @@ void* _sbrk(int incr)
     static unsigned char* brk = cm4_fips_heap;
     unsigned char* prev = brk;
 
-    if (incr < 0)
-        return (void*)-1;
+    if (incr < 0) {
+        /* Heap trim: newlib's malloc returns memory on free() with a negative
+         * increment. Clamp to the heap base so brk cannot underflow. */
+        if ((size_t)(-incr) > (size_t)(brk - cm4_fips_heap))
+            brk = cm4_fips_heap;
+        else
+            brk += incr;
+        return (void*)prev;
+    }
     if ((size_t)(brk - cm4_fips_heap) + (size_t)incr > sizeof(cm4_fips_heap))
         return (void*)-1; /* out of heap */
     brk += incr;
     return (void*)prev;
 }
+#endif /* HAVE_FIPS */
 
+#if defined(CM4_USE_MMU)
 /* Minimal identity-mapped MMU + caches for the CM4. wolfBoot's simple startup
  * runs with the MMU off, so all memory is Device-nGnRnE, which faults on the
- * unaligned / 128-bit SIMD accesses the FIPS module and newlib printf perform.
- * Mapping DDR as Normal (cacheable) permits those accesses and speeds up the
- * crypto; the peripheral region (incl. 0xFE000000) stays Device.
- * Four 1GB block descriptors cover the 32-bit VA space at translation level 1. */
+ * unaligned / 128-bit SIMD accesses that the FIPS module, newlib printf, and
+ * the optimized disk/SDHCI code paths perform. Mapping DDR as Normal
+ * (cacheable) permits those accesses and speeds up crypto/disk reads; the
+ * peripheral region (incl. 0xFE000000) stays Device. Four 1GB block
+ * descriptors cover the 32-bit VA space at translation level 1. */
 #define MMU_BLOCK_NORMAL  0x0000000000000701ULL /* block, AttrIdx0, AF, SH inner */
 #define MMU_BLOCK_DEVICE  0x0000000000000405ULL /* block, AttrIdx1, AF, SH none  */
 
@@ -224,11 +269,29 @@ static void cm4_dcache_maint(int clean)
     __asm__ volatile("isb");
 }
 
+/* MMU/cache setup uses EL2 system registers; wolfBoot enters at EL2 on the CM4.
+ * Guard against an EL1 entry (a custom armstub) so the msr *_el2 below do not
+ * trap silently before anything can be reported. */
+static void cm4_require_el2(void)
+{
+    unsigned long el;
+    __asm__ volatile("mrs %0, CurrentEL" : "=r"(el));
+    if (((el >> 2) & 0x3) != 2) {
+#if defined(DEBUG_UART)
+        wolfBoot_printf("cm4: MMU setup requires EL2 (running at EL%d); halting\n",
+            (int)((el >> 2) & 0x3));
+#endif
+        while (1)
+            __asm__ volatile("wfi");
+    }
+}
+
 void cm4_mmu_enable(void)
 {
     unsigned long sctlr;
     int i;
 
+    cm4_require_el2();
     /* 0-3GB DDR -> Normal; 3-4GB peripherals (0xFE000000) -> Device. */
     for (i = 0; i < 4; i++) {
         uint64_t base = (uint64_t)i << 30;
@@ -239,8 +302,10 @@ void cm4_mmu_enable(void)
     __asm__ volatile("msr ttbr0_el2, %0"
         :: "r"((uint64_t)(uintptr_t)cm4_l1_table));
     /* TCR_EL2: T0SZ=32 (32-bit VA), 4KB granule, WB cacheable inner-shareable
-     * table walks, 36-bit PA. */
-    __asm__ volatile("msr tcr_el2, %0" :: "r"(0x0000000000013520UL));
+     * table walks, 36-bit PA. Bits 31 and 23 are RES1 for TCR_EL2 (E2H==0) and
+     * must be written as 1. */
+    __asm__ volatile("msr tcr_el2, %0"
+        :: "r"(0x0000000000013520UL | (1UL << 31) | (1UL << 23)));
     __asm__ volatile("isb");
     __asm__ volatile("tlbi alle2");
     __asm__ volatile("dsb sy");
@@ -265,6 +330,16 @@ void cm4_mmu_disable(void)
 {
     unsigned long sctlr;
 
+    cm4_require_el2();
+    /* Flush the loaded app to DRAM WHILE the D-cache is still enabled, then
+     * disable M/C/I together. The "textbook" order (clear SCTLR.C first, then
+     * flush) is UNSAFE here: cm4_dcache_maint() and this function use the stack,
+     * and once C is cleared, stack reads bypass the cache and return stale DRAM
+     * (the dirty lines - including this function's spilled return address - are
+     * not yet written back), so the function would return to garbage. That
+     * order is only safe in a pure-asm flush with no stack use (U-Boot). What
+     * must be coherent for the application is the loaded image, and it is fully
+     * flushed here with caches on. */
     cm4_dcache_maint(1); /* clean+invalidate: flush the loaded app to memory */
     __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
     sctlr &= ~((1UL << 0) | (1UL << 2) | (1UL << 12)); /* clear M, C, I */
@@ -275,7 +350,7 @@ void cm4_mmu_disable(void)
     __asm__ volatile("dsb sy");
     __asm__ volatile("isb");
 }
-#endif /* HAVE_FIPS */
+#endif /* CM4_USE_MMU */
 
 #if defined(DEBUG) && defined(DEBUG_UART)
 /* CM4 bring-up diagnostic: exception handler invoked from cm4_vectors in
@@ -371,9 +446,9 @@ int RAMFUNCTION hal_flash_erase(uintptr_t address, int len)
 /* BCM2711 EMMC2 platform glue for the generic SDHCI driver (src/sdhci.c).
  * EMMC2 is a standard SDHCI v3.0 Arasan block at 0xFE340000. The driver uses
  * Cadence-style SRS offsets (0x200 + std); translate them to the standard
- * Arasan layout, mirroring the ZynqMP path in hal/zynq.c. NOTE: not yet
- * hardware-validated; clock/caps/card-detect quirks may be required once
- * validated on hardware. */
+ * Arasan layout, mirroring the ZynqMP path in hal/zynq.c. The GPU firmware has
+ * already configured the EMMC2 clock/pinmux, so only a controller soft reset is
+ * needed here (hardware-validated on CM4 eMMC). */
 #include "sdhci.h"
 
 uint32_t sdhci_reg_read(uint32_t offset)

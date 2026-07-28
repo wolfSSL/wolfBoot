@@ -36,6 +36,10 @@
 #define BCM2711_MMIO_BASE       0xFE000000
 #define BCM2711_GPIO_BASE       (BCM2711_MMIO_BASE + 0x200000)
 #define BCM2711_UART0_BASE      (BCM2711_GPIO_BASE + 0x1000)   /* PL011 */
+/* The debug cable on GPIO14/15 is the BCM2711 mini-UART (AUX / 8250-style,
+ * Linux ttyS0), NOT the PL011. The firmware leaves it enabled with a stable
+ * baud (enable_uart=1 fixes core_freq), so wolfBoot inherits it. */
+#define BCM2711_AUX_BASE        (BCM2711_GPIO_BASE + 0x15000)  /* AUX (mini-UART) */
 /* Overridable so host unit tests can retarget the SDHCI glue at a mock buffer */
 #ifndef BCM2711_EMMC2_BASE
 #define BCM2711_EMMC2_BASE      (BCM2711_MMIO_BASE + 0x340000) /* Arasan SDHCI */
@@ -70,7 +74,7 @@
 #define STD_SDHCI_SRA           0x01  /* Software Reset for All */
 
 #ifndef __ASSEMBLER__
-/* PL011 UART0 register accessors */
+/* PL011 UART0 register accessors (not the debug console on this board) */
 #define UART0_DR    ((volatile unsigned int*)(BCM2711_UART0_BASE+0x00))
 #define UART0_FR    ((volatile unsigned int*)(BCM2711_UART0_BASE+0x18))
 #define UART0_IBRD  ((volatile unsigned int*)(BCM2711_UART0_BASE+0x24))
@@ -78,6 +82,12 @@
 #define UART0_LCRH  ((volatile unsigned int*)(BCM2711_UART0_BASE+0x2C))
 #define UART0_CR    ((volatile unsigned int*)(BCM2711_UART0_BASE+0x30))
 #define UART0_ICR   ((volatile unsigned int*)(BCM2711_UART0_BASE+0x44))
+
+/* Mini-UART (AUX) register accessors - the actual debug console (Linux ttyS0).
+ * 8250/16550-style: IO at +0x40 (data), LSR at +0x54 (bit5 = TX can accept). */
+#define MU_IO       ((volatile unsigned int*)(BCM2711_AUX_BASE+0x40))
+#define MU_LSR      ((volatile unsigned int*)(BCM2711_AUX_BASE+0x54))
+#define MU_LSR_TXFF_EMPTY  0x20  /* transmit FIFO can accept a byte */
 
 /* RNG200 hardware TRNG register accessors */
 #define RNG_CTRL        ((volatile unsigned int*)(BCM2711_RNG_BASE+RNG200_CTRL))

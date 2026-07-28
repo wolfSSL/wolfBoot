@@ -1227,9 +1227,44 @@ FPUStatus:
 .align 8
 #elif defined(USE_SIMPLE_STARTUP)
 .section ".boot"
+
 .global _vector_table
 _vector_table:
+#if defined(TARGET_cm4)
+   /* ARM64 Linux kernel image header (Documentation/arm64/booting.rst). The RPi
+    * VideoCore firmware (start4.elf) only enters a 64-bit kernel that carries
+    * this header (branch at off 0, "ARM\x64" magic at off 56); it then runs the
+    * image in place at its 2MB-aligned load address (0x200000) rather than
+    * relocating to 0x80000. code0 branches to the real entry. */
+   b      _cm4_entry
+   .long  0                  /* code1 */
+   .quad  0                  /* text_offset */
+   .quad  _end - _vector_table  /* image_size */
+   .quad  0xA                /* flags: LE, 4KB pages, load anywhere */
+   .quad  0                  /* res2 */
+   .quad  0                  /* res3 */
+   .quad  0                  /* res4 */
+   .ascii "ARM\x64"          /* magic 0x644d5241 at offset 56 */
+   .long  0                  /* res5 */
+_cm4_entry:
+#endif
    mov x21, x0        // read ATAG/FDT address
+
+#if defined(TARGET_cm4)
+   /* Load-address self-check: wolfBoot is linked absolutely at 0x200000 and is
+    * NOT position independent (the ldr =_vector_table below loads the absolute
+    * stack top). Compare the runtime address (PC-relative adr) with the linked
+    * address (from the literal pool); a mismatch means the firmware placed the
+    * image at a different 2MB base, so halt loudly instead of executing from the
+    * wrong VMA. The generated config.txt pins kernel_address=0x200000. */
+   adr x2, _vector_table
+   ldr x3, =_vector_table
+   cmp x2, x3
+   b.eq 5f
+6: wfi
+   b   6b
+5:
+#endif
 
 4: ldr x1, =_vector_table // get start of .text in x1
     // Read current EL
@@ -1319,12 +1354,25 @@ cm4_vectors:
     CM4_VEC cm4_v15   /*                   SError */
 
 cm4_fault_common:
+    /* Switch to a dedicated fault stack before calling the C handler: the
+     * exception may have been taken with SP unset (the window before 'mov sp,x1'
+     * or on a secondary core that never sets SP) or with SP overflowed, and
+     * cm4_fault_handler needs a valid stack for its wolfBoot_printf calls. */
+    ldr x3, =cm4_fault_stack_top
+    mov sp, x3
     mrs x0, esr_el2
     mrs x1, elr_el2
     mrs x2, far_el2
     bl  cm4_fault_handler   /* void cm4_fault_handler(esr, elr, far) */
 9:  wfi
     b   9b
+
+.section ".bss"
+.balign 16
+cm4_fault_stack:
+    .skip 1024
+cm4_fault_stack_top:
+.section ".boot"
 #endif /* TARGET_cm4 && DEBUG && DEBUG_UART */
 #if 0
 .section ".boot"

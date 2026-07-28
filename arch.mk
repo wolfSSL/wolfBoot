@@ -222,15 +222,19 @@ ifeq ($(ARCH),AARCH64)
   ifeq ($(TARGET),cm4)
     # Raspberry Pi Compute Module 4 - Broadcom BCM2711, Cortex-A72
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
-    # -mstrict-align: wolfBoot runs with the MMU off (simple startup), so data
-    # accesses are Device memory where unaligned access faults. Required for the
-    # FIPS in-core HMAC over the code region (NO_ARM_ASM drops the asm path that
-    # otherwise sets this).
+    # -mstrict-align: the plain RAM-boot config runs with the MMU off (simple
+    # startup), where all memory is Device-nGnRnE and unaligned access faults.
+    # The FIPS / disk configs bring up an identity MMU first (CM4_USE_MMU in
+    # hal/cm4.c). cm4 defaults to NO_ARM_ASM=1 (portable C, no NEON structure
+    # loads), so -mstrict-align keeps every config safe either way.
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -mstrict-align
   endif
 
-  # Default ARM ASM setting for unrecognized AARCH64 targets
-  ifeq ($(filter zynq versal nxp_ls1028a cm4,$(TARGET)),)
+  # Default ARM ASM setting for unrecognized AARCH64 targets. cm4 is excluded
+  # from the asm path (defaults NO_ARM_ASM=1): the plain config runs MMU-off
+  # where NEON multi-register loads would fault, and the FIPS path mandates
+  # portable-C crypto anyway.
+  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 
