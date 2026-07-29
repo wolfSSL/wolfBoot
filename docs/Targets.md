@@ -35,6 +35,7 @@ This README describes configuration of supported targets.
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
 * [NVIDIA Jetson Orin (aarch64_efi)](#nvidia-jetson-orin-aarch64_efi)
+* [NVIDIA Jetson Orin (NVIDIA Tegra234) BL33 firmware](#nvidia-jetson-orin-nvidia-tegra234-bl33-firmware)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
 * [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
@@ -7965,6 +7966,73 @@ TCG2: PCR 9 (SHA256):
 ```
 
 `activeBanks=0x6` is the SHA-256 (0x2) + SHA-384 (0x4) PCR banks; the kernel, its command line and the platform device tree are extended into PCR 9 in both, and wolfBoot then reads the PCR back (`TPM2_PCR_Read`) and prints it. An attestation client can compare PCR 9 -- and the TCG2 event log -- against known-good values to confirm exactly which kernel, command line and device tree wolfBoot verified and booted. Choose `MEASURED_PCR_A` to fit the platform's PCR allocation (0-7 are firmware-owned; 8-15 are for OS/loader use). Note the edk2 firmware separately measures the loaded `wolfboot.efi` image itself into its own PCRs via `LoadImage`, so the firmware-verifies-wolfBoot and wolfBoot-measures-kernel events are distinct entries in the log.
+
+## NVIDIA Jetson Orin (NVIDIA Tegra234) BL33 firmware
+
+wolfBoot can run on the NVIDIA Jetson Orin two ways: as an `aarch64_efi` UEFI application (documented separately), or - this `tegra234` target - as **bare-metal firmware** that replaces the **BL33** stage. BL33 is the normal-world bootloader that ARM Trusted Firmware (BL31) hands off to at EL2 non-secure with the MMU off; on Jetson it is the edk2 UEFI / cpu-bootloader (cpubl) slot. Running bare-metal instead of under UEFI puts wolfBoot much closer to the root of trust, with a far smaller trusted surface beneath it - wolfBoot owns its own console, clocks, and boot handoff.
+
+On an unfused developer board the BL33 slot is directly replaceable: MB2 and the earlier stages are inside NVIDIA's signed/fused root of trust and would require NVIDIA signing tooling, but BL33 is not signature-enforced. The bare-metal HAL (`hal/tegra234.c`) provides the Tegra Combined UART (TCU) console, the ARMv8 generic timer, a BPMP IPC driver (clocks/resets over the CPU-NS IVC channel), and a "handoff dump" (entry EL, SCTLR/MMU/cache bits, handoff `x0`) enabled with `TEGRA234_HANDOFF_DUMP=1`.
+
+Validated on hardware (Jetson Orin Nano dev kit, non-persistent RCM boot): wolfBoot runs as BL33 at EL2, verifies a signed payload with wolfCrypt (ECC384/SHA384), drops from EL2 to EL1, and hands off with a device tree in `x0` - the arm64 Linux boot contract - straight out of DRAM with no storage driver. The payload and DTB are bundled into the BL33 image (see `tools/scripts/tegra234-mkpoc.sh` and `config/examples/tegra234-linux.config`). Loading a full kernel from storage is still in progress, bounded by two limits: MB2 caps the BL33 image at 4 MB (so a full kernel cannot be bundled - it must be loaded from storage or a pre-staged DRAM location), and microSD (SDHCI, `DISK_SDCARD`) is blocked on the closed SDMMC1 controller bring-up. See `hal/tegra234.c` for the full boot-chain map and open questions.
+
+Build the bootloader binary (no hardware needed to compile):
+
+```
+cp config/examples/tegra234.config .config
+make wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+Three example configs ship for this target:
+
+| Config | Boot path |
+|---|---|
+| `tegra234.config` | Verify the bundled payload and boot it at EL2 (no exception-level change). The simplest path. |
+| `tegra234-linux.config` | Verify, drop EL2 -> EL1, hand off with the DTB in `x0` (the arm64 Linux boot contract). Validated on hardware. |
+| `tegra234-sdcard.config` | microSD (SDHCI) boot. **Work in progress** - it compiles and probes but does not boot from card yet; see the SDMMC1 note above. |
+
+By default all three enable `TEGRA234_HANDOFF_DUMP`, which prints the entry state read-only. Only the microSD config additionally runs the BPMP/SDMMC1 bring-up probe, because enabling the SDMMC1 clock and releasing its reset is a lasting change to SoC state that the booted OS would inherit.
+
+### BL33 image layout
+
+There is no storage driver yet, so the signed payload and the device tree are bundled into the BL33 image itself at fixed offsets and read straight out of DRAM. MB2 loads the whole image at `0x272000000` and BL31 enters it there:
+
+```
+offset      0x000000  wolfBoot (must fit below 0x200000)
+offset      0x200000  signed payload    <- hal_get_primary_address()
+offset      0x300000  raw DTB           <- hal_get_dts_address()
+            0x400000  MB2 cpubl size cap - the image must stay under this
+```
+
+The offsets are `TEGRA234_BL33_BASE`, `TEGRA234_BUNDLE_OFFSET` and `TEGRA234_DTB_OFFSET` in `hal/tegra234.h`; the two bundling scripts below use the same values and must be kept in sync with it. wolfBoot checks for the FDT magic at the DTB offset and reports no device tree if nothing was bundled there, so a plain `make wolfboot.bin` does not hand the payload a stale pointer.
+
+Note on what is signed: wolfBoot verifies the **payload** against its own key. The bundled **device tree** is not covered by that signature - it is protected only by whatever signs the BL33 image as a whole (on an unfused developer board, nothing). Treat the DTB as part of the firmware image's trust boundary, not the payload's.
+
+### Bundling scripts
+
+Both scripts take the same arguments and do the same work - copy a config into place, build wolfBoot and the signed test-app together (one `make` invocation, so both are signed with the same freshly generated key), check the size budget, then concatenate the pieces at the offsets above and overwrite `wolfboot.bin` with the finished BL33 image. They differ only in which config they build.
+
+The DTB is a required input: pass a path as the first argument, or set `L4T` to your `Linux_for_Tegra` directory and the script picks up `kernel/dtb/tegra234-p3768-0000+p3767-0005-nv.dtb` (Orin Nano dev kit) from it. Both scripts run `make keysclean` and `make clean` first, so **each run generates a new signing key** - build the bootloader and the payload from the same run.
+
+`tools/scripts/tegra234-mkbl33.sh` - uses `config/examples/tegra234.config`. wolfBoot verifies the bundled payload and boots it **at EL2**, i.e. at the same exception level it was entered at. The DTB pointer is still passed to the payload in `x0` (the FDT code path is enabled for every AArch64 target); what this config does not do is the EL2 -> EL1 drop. Useful for bringing up a new board or checking the console and the handoff dump.
+
+```
+tools/scripts/tegra234-mkbl33.sh /path/to/tegra234-<board>.dtb
+```
+
+`tools/scripts/tegra234-mkpoc.sh` - uses `config/examples/tegra234-linux.config` (`EL2_HYPERVISOR=1`, `BOOT_EL1=1`). wolfBoot verifies the payload, **drops from EL2 to EL1, and enters it with the DTB pointer in `x0`** - the arm64 Linux boot contract. This is the one to use for the Linux boot path.
+
+```
+# Pass your board's kernel DTB, or set L4T=/path/to/Linux_for_Tegra:
+tools/scripts/tegra234-mkpoc.sh /path/to/tegra234-<board>.dtb
+```
+
+Both scripts abort if wolfBoot has grown past the payload offset, if the payload runs into the DTB offset, or if the finished bundle exceeds MB2's 4 MB cap - a size overrun is a build error rather than a silently corrupted image - and both print a size breakdown of each piece.
+
+Useful environment variables: `L4T` (as above) and `CROSS_COMPILE` (the scripts default to `aarch64-linux-gnu-`, which is what CI uses; a bare-metal `aarch64-none-elf-` toolchain also works). Set `TEGRA234_HANDOFF_DUMP=0` in the config for a quiet build once the handoff is characterized.
+
+wolfBoot is linked into the 2 MB below the payload offset, so an image that outgrows its slot fails at link time (`region DDR_MEM overflowed`) rather than being assembled into a broken bundle.
+
+The resulting `wolfboot.bin` is flashed into the BL33 (`A_cpu-bootloader`) partition, or - as used for the validation above - loaded non-persistently over USB with the L4T `flash.sh --rcm-boot` flow, which leaves the on-board firmware untouched.
 
 ## Intel x86_64 with Intel FSP support
 

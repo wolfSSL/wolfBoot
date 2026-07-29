@@ -373,15 +373,25 @@ static int sdhci_set_power(uint32_t voltage)
  * Clock Control
  * ============================================================================ */
 
+/* Weak default: keep the CAPS-derived base clock and let the controller's
+ * internal divider produce the card clock. See include/sdhci.h. */
+__attribute__((weak))
+uint32_t sdhci_platform_set_clock(uint32_t clock_khz, uint32_t base_clk_khz)
+{
+    (void)clock_khz;
+    return base_clk_khz;
+}
+
 /* returns actual frequency in kHz */
 static uint32_t sdhci_set_clock(uint32_t clock_khz)
 {
     static uint32_t last_clock_khz = 0;
-    uint32_t reg, base_clk_khz, i, mclk, freq_khz;
+    uint32_t reg, base_clk_khz, i, mclk, freq_khz, to;
 
     if (last_clock_khz != 0 && last_clock_khz == clock_khz) {
-        /* clock already set */
-        return 0;
+        /* Already at this frequency. Return it (not 0) so that a 0 return is
+         * unambiguously an error for any caller that starts checking. */
+        return last_clock_khz;
     }
 
     /* disable clock */
@@ -390,11 +400,24 @@ static uint32_t sdhci_set_clock(uint32_t clock_khz)
     /* get base clock */
     reg = SDHCI_REG(SDHCI_SRS16);
     base_clk_khz = (reg & SDHCI_SRS16_BCSDCLK_MASK) >> SDHCI_SRS16_BCSDCLK_SHIFT;
-    if (base_clk_khz == 0) {
-        /* error getting base clock */
-        return -1;
-    }
     base_clk_khz *= 1000; /* convert MHz to kHz */
+
+    /* Let the platform drive its own clock tree if it needs to. Called before
+     * the base-clock check so a platform whose CAPS report 0 (because the
+     * module clock is owned by a PMC/BPMP and not yet running) can supply the
+     * real base instead of failing here. */
+    base_clk_khz = sdhci_platform_set_clock(clock_khz, base_clk_khz);
+    if (base_clk_khz == 0) {
+        /* No usable base clock. The SD clock was already disabled above, so
+         * the controller is left idle. NOTE: 0 is also what the "clock already
+         * set" path above returns, so callers cannot currently tell these
+         * apart - see the DEBUG_SDHCI log for which one happened. */
+#ifdef DEBUG_SDHCI
+        wolfBoot_printf("sdhci_set_clock: no usable base clock "
+                        "(CAPS and platform hook both 0)\n");
+#endif
+        return 0;
+    }
 
     /* calculate divider */
     for (i=1; i<2046; i++) {
@@ -415,8 +438,19 @@ static uint32_t sdhci_set_clock(uint32_t clock_khz)
     SDHCI_REG_SET(SDHCI_SRS11, reg);
     freq_khz = base_clk_khz / i;
 
-    /* wait for clock to stabilize */
-    while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_ICS) == 0);
+    /* wait for clock to stabilize (bounded: a controller whose base clock is
+     * supplied by a platform hook may never assert ICS if that clock is not
+     * actually running, and an unbounded spin here hangs the boot) */
+    to = 100000U;
+    while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_ICS) == 0 && to > 0U) {
+        to--;
+    }
+    if ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_ICS) == 0) {
+#ifdef DEBUG_SDHCI
+        wolfBoot_printf("sdhci_set_clock: internal clock never stabilized\n");
+#endif
+        return 0;
+    }
 
     /* enable clock */
     sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_SDCE);

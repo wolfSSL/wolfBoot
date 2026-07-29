@@ -385,6 +385,34 @@ jobs:
       config-file: ./config/examples/raspi3-encrypted.config
       make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  tegra234_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # Tegra234 bare-metal BL33: bootloader + signed payload (RAM boot, no
+      # contiguous factory.bin), mirroring raspi3. This is the target's full
+      # MAIN_TARGET, and what the bundling scripts build.
+      config-file: ./config/examples/tegra234.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
+
+  tegra234_linux_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # Tegra234 DRAM-staged Linux boot (MMU/EL2->EL1/DTB code path).
+      config-file: ./config/examples/tegra234-linux.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
+
+  tegra234_sdcard_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # Tegra234 microSD/SDHCI path. Hardware bring-up is still blocked, so
+      # this job exists to keep the Tegra SDHCI shim and the BPMP clock driver
+      # compiling.
+      config-file: ./config/examples/tegra234-sdcard.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
+
   sim_tfm_smallstack_test:
     uses: ./.github/workflows/test-build.yml
     with:
