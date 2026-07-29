@@ -38,6 +38,10 @@
 #include "hal/raspi3.h"
 #endif
 
+#ifdef TARGET_tegra234
+#include "hal/tegra234.h"
+#endif
+
 /* GICv2 Register Offsets */
 #ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
@@ -1257,7 +1261,21 @@ _vector_table:
 7: wfi                // infinite sleep
    b    7b
 
-8:  mov sp, x1         // set stack pointer
+8:
+#ifdef TARGET_tegra234
+    /* Use the reserved in-DRAM stack from hal/tegra234.ld. The generic path
+     * sets sp to the image base, which on this target is the BL33 load address
+     * - growing down from there runs into memory wolfBoot does not own. */
+    ldr x1, =END_STACK
+#endif
+    mov sp, x1         // set stack pointer
+#ifdef TARGET_tegra234
+    /* Stash the handoff x0 (DTB pointer, saved in x21 at reset) in a .data
+     * global so C can read it after boot_entry_C clears BSS. */
+    adrp x2, boot_handoff_x0
+    add  x2, x2, :lo12:boot_handoff_x0
+    str  x21, [x2]
+#endif
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 #if 0

@@ -26,6 +26,10 @@
 .type _start, @function
 
 _start:
+    /* Preserve the handoff x0 (DTB pointer, per the arm64 boot protocol) so
+     * the data/bss init below can use x0; restored before the jump to main. */
+    mov x19, x0
+
     /* Set up stack pointer */
     ldr x0, =__stack
     mov sp, x0
@@ -56,7 +60,9 @@ _start:
     b.lt 3b
 4:
 
-    /* Jump to main - never returns */
+    /* Restore x0 and jump to main - never returns. main(void) ignores it, but
+     * the tegra234 payload reads x0 to recover the DTB pointer. */
+    mov x0, x19
     bl main
 
     /* If main returns, loop forever */

@@ -184,6 +184,41 @@ ifeq ($(ARCH),AARCH64)
     SPI_TARGET=nxp
   endif
 
+  ifeq ($(TARGET),tegra234)
+    # NVIDIA Jetson Orin (Tegra234, Cortex-A78AE): bare-metal wolfBoot as the
+    # BL33 firmware stage. The UEFI-application alternative is the aarch64_efi
+    # target. See hal/tegra234.c.
+    # -mstrict-align: wolfBoot runs with the MMU off, where every access is
+    # Device-nGnRnE and an unaligned access takes an alignment fault. Without
+    # it the compiler is free to emit unaligned accesses for struct copies.
+    ARCH_FLAGS=-mcpu=cortex-a78+crypto -march=armv8.2-a+crypto -mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A78
+    # wolfBoot links and runs at the BL33 (cpubl) load address; must agree with
+    # ORIGIN in hal/tegra234.ld or the RAM-boot overlap guard misjudges where
+    # wolfBoot lives.
+    WOLFBOOT_ORIGIN=0x272000000
+    # Bring-up: dump the state the prior stage handed wolfBoot (entry EL,
+    # SCTLR/MMU/cache bits, handoff x0/DTB pointer). Read-only; opt out for a
+    # quiet build.
+    ifeq ($(TEGRA234_HANDOFF_DUMP),1)
+      CFLAGS+=-DTEGRA234_HANDOFF_DUMP
+    endif
+    # SDMMC1 bring-up probe. Separate from the dump above because it MUTATES
+    # SoC state the booted OS inherits: it enables the SDMMC1 clock, deasserts
+    # its reset, and drives the SD power-rail GPIO. Off unless asked for.
+    ifeq ($(TEGRA234_SDMMC_PROBE),1)
+      CFLAGS+=-DTEGRA234_SDMMC_PROBE
+    endif
+    # MMU/WOLFBOOT_FDT/DUALBOOT + fdt.o come from the shared AARCH64 block.
+    # tegra234 stays MMU-off at runtime (1:1 physical); those flags only pull
+    # in the FDT/DTS codepath. EL2_HYPERVISOR+BOOT_EL1 add the EL2->EL1 drop
+    # with the DTB in x0 (config/examples/tegra234-linux.config).
+    ifeq ($(EL2_HYPERVISOR),1)
+      CFLAGS+=-DEL2_HYPERVISOR=1
+    endif
+    # BOOT_EL1 itself is emitted by options.mk; nothing to add here.
+  endif
+
   # Default ARM ASM setting for unrecognized AARCH64 targets
   ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
     NO_ARM_ASM?=1

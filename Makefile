@@ -369,6 +369,13 @@ ifeq ($(TARGET),raspi3)
     MAIN_TARGET:=wolfboot.bin
 endif
 
+# Tegra234 bare-metal BL33 boots from RAM (loaded by an earlier stage), so
+# there is no contiguous flash factory.bin. Build the bootloader plus the
+# signed payload, which the bundling scripts concatenate into the BL33 image.
+ifeq ($(TARGET),tegra234)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),sim)
     CFLAGS+=-fno-pie
     LDFLAGS+=-no-pie

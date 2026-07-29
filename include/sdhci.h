@@ -474,6 +474,13 @@ void sdhci_reg_write(uint32_t offset, uint32_t val);
 /* Platform initialization (clocks, resets, pin mux, debounce) */
 void sdhci_platform_init(void);
 
+/* Optional platform clock hook (weak no-op default in src/sdhci.c). Called
+ * from sdhci_set_clock with the requested card clock and the CAPS-derived
+ * base; returns the base clock (kHz) to divide from, or 0 on error. Platforms
+ * whose clock tree is owned by a PMC/BPMP (Tegra) set the module clock equal
+ * to the card clock and return that, keeping the internal divider ~1. */
+uint32_t sdhci_platform_set_clock(uint32_t clock_khz, uint32_t base_clk_khz);
+
 /* Platform interrupt setup (PLIC/NVIC/GIC/etc.) */
 void sdhci_platform_irq_init(void);
 
