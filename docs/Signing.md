@@ -285,6 +285,14 @@ Provides a value to be set with a custom tag
    an application-level public key (e.g. for verifying payloads at runtime, or for key
    rotation) in the signed manifest.
 
+   * `--cmdline "ascii-string"`: Adds the OS command line as a signature-covered TLV using the
+   wolfBoot-reserved tag `HDR_CMDLINE` (0x0034). This is a shorthand for
+   `--custom-tlv-string 0x0034 "ascii-string"` (max 255 bytes). The EFI targets (`aarch64_efi`,
+   `x86_64_efi`) read this authenticated command line from the verified image and pass it to the
+   Linux kernel EFI stub via `LoadOptions`, so kernel arguments (e.g. `root=`, `init=`) cannot be
+   altered without breaking the image signature. Example:
+   `--cmdline "root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200"`.
+
    The 65524-byte maximum is the largest TLV value the wolfBoot header parser can walk
    past when locating the fields that follow it, such as the signature.
 
@@ -292,6 +300,9 @@ Provides a value to be set with a custom tag
    increases the size of the manifest header, rounding up to the next power of two. wolfBoot
    must be built with a matching `IMAGE_HEADER_SIZE`, or it will fail to locate the firmware
    image at boot.
+
+Note: all options, including `--cmdline` and the `--custom-tlv*` options, must appear **before**
+the positional `image key version` arguments.
 
 #### Three-steps signing using external provisioning tools
 
