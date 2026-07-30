@@ -901,8 +901,31 @@ SBOM_ROOT:=$(WOLFBOOT_ROOT)
 SBOM_NAME:=wolfboot
 SBOM_SRCS=$(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS)))
 SBOM_CFLAGS=$(CFLAGS)
+# wolfBoot's wolfCrypt configuration is derived, not literal: include/user_settings.h
+# turns WOLFBOOT_SIGN_ECC256 into HAVE_ECC, HAVE_ECC256, ECC_TIMING_RESISTANT and
+# the rest. Capturing CFLAGS alone would record the -D set and none of what it
+# selects, so the SBOM would report a bootloader with no signature algorithm.
+SBOM_SETTINGS_H:=$(WOLFBOOT_LIB_WOLFSSL)/wolfssl/wolfcrypt/settings.h
+SBOM_INCLUDE_DIRS:=$(WOLFBOOT_ROOT)/include $(WOLFBOOT_LIB_WOLFSSL)
+# user_settings.h includes the generated target.h, so it must exist before the
+# capture runs. It also carries the flash layout the SBOM records.
+SBOM_PREREQS:=include/target.h
+# wolfCrypt sources are compiled into the image rather than linked, so they are
+# listed as wolfBoot's own sources. Declaring wolfssl as a dependency component
+# as well is what lets a scanner match wolfSSL advisories against this firmware.
+SBOM_DEP_WOLFSSL?=yes
+SBOM_WOLFSSL_VERSION?=$(shell sed -n \
+    's/.*LIBWOLFSSL_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfssl/version.h 2>/dev/null | head -1)
 SBOM_VERSION=$(WOLFBOOT_VERSION)
 SBOM_LICENSE_FILE=$(WOLFBOOT_ROOT)/LICENSE
+# wolfBoot is a bootloader flashed as an image, not a library linked into one.
+SBOM_COMPONENT_TYPE?=firmware
+# LICENSE is the verbatim GPLv3, which says nothing about how wolfBoot licenses
+# under it, so inference falls back to GPL-3.0-only and understates the grant.
+# Every GPL-headered source says "either version 3 ... or (at your option) any
+# later version".
+SBOM_LICENSE_OVERRIDE?=GPL-3.0-or-later
 SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
 SBOM_GEN?=
@@ -916,9 +939,15 @@ include tools/sbom/build/sbom.mk
 # so the captured macros match the real build.  Run once per TARGET.
 SBOM_HAL_NAME:=wolfboot-hal-$(TARGET)
 SBOM_HAL_SRCS=$(filter hal/%,$(patsubst ./%,%,$(wildcard $(patsubst %.o,%.c,$(OBJS)) $(patsubst %.o,%.S,$(OBJS)))))
-SBOM_HAL_CFLAGS:=$(CFLAGS)
+SBOM_HAL_CFLAGS=$(CFLAGS)
+SBOM_HAL_SETTINGS_H:=$(SBOM_SETTINGS_H)
+SBOM_HAL_INCLUDE_DIRS:=$(SBOM_INCLUDE_DIRS)
+SBOM_HAL_PREREQS:=$(SBOM_PREREQS)
 SBOM_HAL_VERSION:=$(WOLFBOOT_VERSION)
 SBOM_HAL_LICENSE_FILE:=$(WOLFBOOT_ROOT)/LICENSE
+# Same sources, same grant: without this the HAL SBOM would infer
+# GPL-3.0-only and contradict the bootloader SBOM built from the same tree.
+SBOM_HAL_LICENSE_OVERRIDE:=$(SBOM_LICENSE_OVERRIDE)
 SBOM_HAL_CDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).cdx.json
 SBOM_HAL_SPDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).spdx.json
 SBOM_HAL_GEN:=$(SBOM_GEN)

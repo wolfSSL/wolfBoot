@@ -18,7 +18,10 @@ The driver covers every product tier:
 
 Config (choose one):
   --cflags "..."     Raw CFLAGS. -D tokens are expanded through the host
-                     compiler and scrubbed of absolute paths.
+                     compiler and scrubbed of absolute paths. Pair with
+                     --settings-h so the capture also sees the header those
+                     -D tokens are interpreted by; without it the dump is the
+                     -D list alone and every derived macro is missing.
   --options-h PATH   A pre-expanded flat #define header, used verbatim (scrubbed).
   --user-settings P  A user_settings.h. Passed to the generator, which captures it.
   --source-only      No build-config macros (e.g. a Kconfig-driven build).
@@ -119,22 +122,81 @@ def gen_sbom_supports(python, gen_sbom, flag):
     return flag in (res.stdout + res.stderr)
 
 
-def capture_macros(hostcc, cflags):
-    """Expand the -D tokens of CFLAGS through the host compiler's -dM -E.
+def split_cflags(cflags):
+    """Split a CFLAGS string on whitespace.
 
-    Only tokens that start with ``-D`` are kept. ``-I``, ``-include``, and
-    every other flag are dropped. Products whose configuration is expressed
-    by ``-include``'ing a settings header must capture that header themselves
-    (``hostcc -dM -E ... -include ...``) and pass the dump via ``--options-h``.
+    Deliberately a plain split rather than shlex: --cflags arrives from a Make
+    recipe, so the shell has already removed one layer of quoting. Re-lexing it
+    as shell words would strip a second layer, and shlex's POSIX escape
+    handling would eat the backslashes out of Windows paths --
+    -DPICO_SDK_PATH=C:\\Users\\ci\\sdk becomes C:Userscisdk, which is both
+    wrong and no longer matched by the absolute-path scrub, so a mangled host
+    path would leak into the SBOM.
     """
-    defs = [t for t in cflags.split() if t.startswith("-D")]
-    cmd = [hostcc, "-dM", "-E", "-DWOLFSSL_USER_SETTINGS", *defs,
-           "-x", "c", os.devnull]
+    return cflags.split()
+
+
+def capture_macros(hostcc, cflags, settings_h="", include_dirs=()):
+    """Expand a build configuration through the host compiler's -dM -E.
+
+    The capture must see BOTH inputs that determine the configuration:
+
+      * the ``-D`` tokens from CFLAGS, which select features
+        (``-DWOLFBOOT_SIGN_ECC256``), and
+      * the settings header those tokens are interpreted by, reached via
+        ``-include``.
+
+    Feeding only one of them yields a confident, well-formed, wrong document.
+    With no ``-include``, the compiler reads an empty translation unit and the
+    dump is just the ``-D`` list plus compiler built-ins, so every macro the
+    settings header derives is missing. With no ``-D`` tokens, every ``#if``
+    in that header is evaluated against an empty configuration and the dump
+    describes a product nobody built -- wolfBoot's user_settings.h gates
+    HAVE_ECC on WOLFBOOT_SIGN_ECC256, so a capture missing the latter silently
+    reports a secure bootloader with no signature algorithm.
+
+    ``-I`` and ``-isystem`` from CFLAGS are forwarded so the ``-include``
+    header can resolve the product headers it pulls in (user_settings.h,
+    target.h). Every other flag is dropped: they describe code generation,
+    not configuration, and cross-toolchain flags would break the host cc.
+    """
+    toks = split_cflags(cflags)
+    defs, incs = [], []
+    i = 0
+    while i < len(toks):
+        t = toks[i]
+        if t.startswith("-D"):
+            defs.append(t)
+        elif t in ("-I", "-isystem", "-include") and i + 1 < len(toks):
+            # Separated form: keep -I/-isystem, but never a second -include
+            # (the settings header below is the only one we want).
+            if t != "-include":
+                incs += [t, toks[i + 1]]
+            i += 1
+        elif t.startswith("-I"):
+            incs.append(t)
+        i += 1
+
+    for d in include_dirs:
+        incs += ["-I", d]
+
+    cmd = [hostcc, "-dM", "-E", "-DWOLFSSL_USER_SETTINGS", *incs, *defs]
+    if settings_h:
+        cmd += ["-include", settings_h]
+    cmd += ["-x", "c", os.devnull]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    except (OSError, subprocess.CalledProcessError):
+    except OSError:
         sys.exit(f"ERROR: '{hostcc} -dM -E' failed; install a host C compiler "
                  f"or set --hostcc.")
+    except subprocess.CalledProcessError as e:
+        detail = (e.stderr or "").strip()
+        hint = ""
+        if settings_h:
+            hint = (f"\n       The capture includes '{settings_h}'. Check that "
+                    f"--include-dir covers the headers it pulls in.")
+        sys.exit(f"ERROR: '{hostcc} -dM -E' failed while capturing the build "
+                 f"configuration.{hint}\n{detail}")
     return res.stdout
 
 
@@ -176,6 +238,16 @@ def main():
     grp = ap.add_mutually_exclusive_group()
     grp.add_argument("--cflags", default="",
                      help="Build CFLAGS; -D tokens expanded through the host cc.")
+    ap.add_argument("--settings-h", default="",
+                    help="Settings header -include'd during the --cflags "
+                         "capture, so macros the header derives from the -D "
+                         "set are recorded. Required for any product whose "
+                         "configuration lives in a user_settings.h.")
+    ap.add_argument("--include-dir", action="append", default=[],
+                    metavar="DIR",
+                    help="Extra -I path for the --cflags capture (repeatable). "
+                         "-I/-isystem already present in CFLAGS are forwarded "
+                         "automatically.")
     grp.add_argument("--options-h", default="",
                      help="A pre-expanded flat #define header, used verbatim.")
     grp.add_argument("--user-settings", default="",
@@ -189,6 +261,11 @@ def main():
     ap.add_argument("--version-file", default="")
     ap.add_argument("--version-macro", default="")
     ap.add_argument("--supplier", default="wolfSSL Inc.")
+    ap.add_argument("--component-type", default="",
+                    help="CycloneDX component.type, mirrored to SPDX "
+                         "primaryPackagePurpose. Use firmware for a "
+                         "bootloader. Passed through only if the generator "
+                         "supports it.")
     ap.add_argument("--license-file", default="")
     ap.add_argument("--license-override", default="")
     ap.add_argument("--license-text", default="")
@@ -263,6 +340,12 @@ def main():
             cmd += ["--no-artifact-hash"]
 
         # Config.
+        if args.settings_h and not args.cflags:
+            # --settings-h only feeds the --cflags capture. Ignoring it in
+            # silence is how a product ends up believing it recorded a
+            # configuration it never captured.
+            print("WARNING: --settings-h is only used with --cflags; "
+                  "ignoring it here.", file=sys.stderr)
         if args.user_settings:
             if not os.path.isfile(args.user_settings):
                 sys.exit(f"ERROR: --user-settings '{args.user_settings}' "
@@ -277,7 +360,13 @@ def main():
                 with open(args.options_h, encoding="utf-8", errors="replace") as f:
                     defines_text = f.read()
             elif args.cflags:
-                defines_text = capture_macros(args.hostcc, args.cflags)
+                if args.settings_h and not os.path.isfile(args.settings_h):
+                    sys.exit(f"ERROR: --settings-h '{args.settings_h}' "
+                             f"does not exist.")
+                defines_text = capture_macros(
+                    args.hostcc, args.cflags,
+                    settings_h=args.settings_h,
+                    include_dirs=args.include_dir)
             else:
                 sys.exit("ERROR: pass one of --cflags, --options-h, "
                          "--user-settings, or --source-only.")
@@ -295,6 +384,10 @@ def main():
             cmd += ["--license-override", args.license_override]
         if args.license_text:
             cmd += ["--license-text", args.license_text]
+
+        if args.component_type and gen_sbom_supports(
+                args.python, gen_sbom, "--component-type"):
+            cmd += ["--component-type", args.component_type]
 
         # Dependencies, only if the generator supports them.
         if args.dep_wolfssl and gen_sbom_supports(args.python, gen_sbom, "--dep-wolfssl"):

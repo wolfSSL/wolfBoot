@@ -58,6 +58,11 @@ A product does not copy logic. It describes itself:
   (`SBOM_VERSION`, or `SBOM_VERSION_FILE` + `SBOM_VERSION_MACRO`), then
   `include tools/sbom/build/sbom.mk`. For a second target, instantiate
   `$(eval $(call wolfglass_sbom_rule,<target>,<prefix>))`.
+  If the product's configuration lives in a `user_settings.h`, also set
+  `SBOM_SETTINGS_H` (and `SBOM_INCLUDE_DIRS` if that header needs paths the
+  CFLAGS do not already carry). `SBOM_CFLAGS` alone records the literal `-D`
+  set and nothing it derives, which for a gated header means the SBOM
+  describes a configuration nobody built.
 - CMake: `include(tools/sbom/build/sbom.cmake)` and call `wolfglass_add_sbom()`
   with `NAME`, `VERSION_FILE`, `VERSION_MACRO`, `TARGETS`, `DEFS`, `LICENSE`.
   `SBOM_GEN` is the canonical generator override; `GEN_SBOM` remains a legacy
