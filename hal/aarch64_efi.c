@@ -46,6 +46,10 @@
 #include <efi/efi.h>
 #include <efi/efilib.h>
 
+/* Shared EFI helper: read the authenticated kernel command line (HDR_CMDLINE
+ * TLV) from the verified manifest. Must follow the gnu-efi headers above. */
+#include "wolfboot_efi.h"
+
 #ifdef __WOLFBOOT
 void hal_init(void)
 {
@@ -66,8 +70,9 @@ static EFI_HANDLE gImageHandle;
 EFI_PHYSICAL_ADDRESS kernel_addr;
 EFI_PHYSICAL_ADDRESS update_addr;
 
-/* Optional Linux kernel command line, read from \cmdline.txt on the ESP and
- * handed to the kernel EFI stub via LoadOptions (see aarch64_efi_do_boot). */
+/* Linux kernel command line, read from the signed HDR_CMDLINE TLV of the
+ * verified image and handed to the kernel EFI stub via LoadOptions (see
+ * aarch64_efi_do_boot). NULL if the image carries no command line. */
 static CHAR16 *kernel_cmdline = NULL;
 static UINTN   kernel_cmdline_bytes = 0;
 
@@ -433,11 +438,13 @@ void RAMFUNCTION aarch64_efi_do_boot(const uint32_t *boot_addr)
         panic();
     }
 
-    /* Pass the kernel command line (from \cmdline.txt) to the loaded image via
-     * LoadOptions for the Linux EFI stub. For a production trust chain the
-     * cmdline should be authenticated (in the signed image or DT /chosen), not
-     * a plaintext file. A direct root= boot needs no initrd; an initramfs flow
-     * would add it via LINUX_EFI_INITRD_MEDIA_GUID (LoadFile2). */
+    /* Pass the authenticated kernel command line to the loaded image via
+     * LoadOptions for the Linux EFI stub. It comes from the HDR_CMDLINE TLV in
+     * the (already verified) manifest, so it is covered by the image signature.
+     * NULL if the image carries no command line (kernel uses CONFIG_CMDLINE).
+     * A direct root= boot needs no initrd; an initramfs flow would add it via
+     * LINUX_EFI_INITRD_MEDIA_GUID (LoadFile2). */
+    kernel_cmdline = wolfBoot_efi_get_cmdline(manifest, &kernel_cmdline_bytes);
     if (kernel_cmdline != NULL) {
         status = uefi_call_wrapper(gSystemTable->BootServices->HandleProtocol, 3,
                                    kernelImageHandle, &lipGuid,
@@ -583,64 +590,6 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     return 0;
 }
 
-/* Read an optional \cmdline.txt (ASCII) from the ESP into a widechar buffer
- * for the kernel LoadOptions. No-op (leaves kernel_cmdline NULL) if absent. */
-static void read_cmdline(EFI_FILE_HANDLE vol)
-{
-    EFI_FILE_HANDLE file;
-    EFI_STATUS status;
-    UINT64 sz;
-    UINTN readsz, i, n;
-    uint8_t *ascii = NULL;
-    CHAR16 *wide = NULL;
-
-    file = openFile(L"cmdline.txt", vol);
-    if (file == NULL)
-        return; /* optional */
-
-    sz = FileSize(file);
-    if (sz == 0 || sz > 4096) {
-        uefi_call_wrapper(file->Close, 1, file);
-        return;
-    }
-
-    status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
-                               (UINTN)sz, (void**)&ascii);
-    if (status != EFI_SUCCESS || ascii == NULL) {
-        uefi_call_wrapper(file->Close, 1, file);
-        return;
-    }
-
-    readsz = (UINTN)sz;
-    status = uefi_call_wrapper(file->Read, 3, file, &readsz, ascii);
-    uefi_call_wrapper(file->Close, 1, file); /* done with the file */
-    if (status != EFI_SUCCESS) {
-        FreePool(ascii);
-        return;
-    }
-
-    /* trim trailing CR/LF/whitespace */
-    n = (UINTN)readsz;
-    while (n > 0 && (ascii[n-1] == '\n' || ascii[n-1] == '\r' ||
-                     ascii[n-1] == ' '  || ascii[n-1] == '\t'))
-        n--;
-
-    status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
-                               (n + 1) * sizeof(CHAR16), (void**)&wide);
-    if (status != EFI_SUCCESS || wide == NULL) {
-        FreePool(ascii);
-        return;
-    }
-    for (i = 0; i < n; i++)
-        wide[i] = (CHAR16)ascii[i];
-    wide[n] = 0;
-    FreePool(ascii);
-
-    kernel_cmdline = wide;
-    kernel_cmdline_bytes = (n + 1) * sizeof(CHAR16);
-    wolfBoot_printf("Kernel cmdline (%d chars) from cmdline.txt\n", (int)n);
-}
-
 EFI_STATUS
 EFIAPI
 efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
@@ -665,7 +614,6 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (status == EFI_SUCCESS)
         wolfBoot_printf("Image base: 0x%lx\n", loaded_image->ImageBase);
     vol = GetVolume(ImageHandle);
-    read_cmdline(vol);
     /* open_kernel_image() leaves *_addr == 0 on failure (and frees any pages),
      * so the "no image" check below is reliable; the sizes are logged inside
      * and not needed here. */

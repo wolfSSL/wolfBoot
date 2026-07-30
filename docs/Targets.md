@@ -7782,6 +7782,8 @@ Staging kernel at address D630100, size: 6658016
 
 You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
+To pass an authenticated Linux kernel command line, sign the kernel with `--cmdline "..."` (before the positional `image key version` arguments; see [Signing](Signing.md)). wolfBoot reads the `HDR_CMDLINE` TLV from the verified image and applies it to the kernel EFI stub via `LoadOptions`, so it is covered by the image signature.
+
 
 
 ## NVIDIA Jetson Orin (aarch64_efi)
@@ -7844,8 +7846,9 @@ The Jetson UEFI auto-boots removable media via `\EFI\BOOT\BOOTAA64.EFI`. Place w
 ```
 \EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi
 \kernel.img              <- signed payload (read from the volume root)
-\cmdline.txt             <- optional Linux kernel command line (see below)
 ```
+
+The Linux kernel command line is signed into `kernel.img` itself (see "Booting Linux" below), so no separate file is placed on the ESP.
 
 Insert the card and power on; UEFI auto-launches wolfBoot, which verifies and boots the payload. The debug console on the Orin Nano Developer Kit is the J14 button header (not the 40-pin), 115200 8N1. Example output:
 
@@ -7866,32 +7869,28 @@ An AArch64 Linux `Image` carries a PE/COFF EFI stub, so wolfBoot boots it with t
 
 Obtain a Tegra234-compatible kernel and root filesystem from the [NVIDIA Jetson Linux (L4T)](https://developer.nvidia.com/embedded/jetson-linux) BSP. The driver package (`Jetson_Linux_R36.x.x_aarch64.tbz2`) contains `Linux_for_Tegra/kernel/Image` and `Linux_for_Tegra/kernel/dtb/tegra234-*.dtb`; the matching `Tegra_Linux_Sample-Root-Filesystem_*.tbz2` provides the rootfs.
 
-Sign the kernel `Image` with the wolfBoot key and name it `kernel.img`:
+Sign the kernel `Image` with the wolfBoot key, including the kernel command line as an authenticated TLV (`--cmdline`, before the positional arguments), and name it `kernel.img`:
 
 ```
-./tools/keytools/sign --ed25519 --sha256 Linux_for_Tegra/kernel/Image \
-    wolfboot_signing_private_key.der 1
+./tools/keytools/sign --ed25519 --sha256 \
+    --cmdline "root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200" \
+    Linux_for_Tegra/kernel/Image wolfboot_signing_private_key.der 1
 cp Linux_for_Tegra/kernel/Image_v1_signed.bin kernel.img
 ```
+
+The command line is stored in the signed manifest header (`HDR_CMDLINE` TLV) and is therefore covered by the image signature; wolfBoot reads it from the verified image and passes it to the kernel EFI stub via `LoadOptions`. For a long command line, set `IMAGE_HEADER_SIZE=512` when signing (the default 256-byte ED25519/SHA256 header holds roughly 70 command-line bytes).
 
 Lay out the microSD as a FAT ESP plus a rootfs partition and place:
 
 ```
 FAT (p1):   \EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi (UEFI auto-boots this)
-            \kernel.img              <- signed L4T kernel
-            \cmdline.txt             <- kernel command line (below)
+            \kernel.img              <- signed L4T kernel (command line inside)
 ext4 (p2):  the L4T sample root filesystem
-```
-
-`cmdline.txt` (read by wolfBoot and passed to the kernel via `LoadOptions`):
-
-```
-root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200
 ```
 
 On power-up the Jetson UEFI auto-boots `\EFI\BOOT\BOOTAA64.EFI`; wolfBoot verifies `kernel.img` and hands off to the kernel, which receives the real Tegra234 device tree from the UEFI configuration table (`EFI stub: Using DTB from configuration table`), mounts `mmcblk0p2`, and brings up systemd and the login on the J14 debug console (`ttyTCU0`).
 
-Security note: the plaintext `\cmdline.txt` is convenient for development but is not covered by the wolfBoot image signature (it is, however, measured into the TPM via TCG2, so it remains attestable). For a production trust chain, prefer an authenticated command line. The simplest and most robust option is to bake the command line into the kernel itself: build Linux with `CONFIG_CMDLINE="..."` together with `CONFIG_CMDLINE_FORCE`, which makes the kernel ignore any command line supplied by UEFI/wolfBoot entirely -- this is independent of wolfBoot and cannot be overridden by an attacker who controls the ESP. Alternatively, supply the arguments through the `/chosen` `bootargs` of a signed device tree, or carry them in a signed wolfBoot manifest TLV (a custom TLV added at sign time via `--custom-tlv` and passed by wolfBoot as `LoadOptions`, so it is covered by the image signature -- not currently implemented). An initramfs-based flow (rather than a direct `root=` mount) would additionally need initrd support via the `LINUX_EFI_INITRD_MEDIA_GUID` LoadFile2 protocol, which this target does not currently implement.
+Security note: because the command line lives in the signed manifest, kernel arguments (e.g. `root=`, `init=`, security flags) cannot be altered without breaking the image signature -- unlike an unauthenticated file on the ESP. If the image carries no `HDR_CMDLINE` TLV, wolfBoot boots with no command line and the kernel uses its built-in `CONFIG_CMDLINE`. As additional (independent) hardening you may also build Linux with `CONFIG_CMDLINE="..."` plus `CONFIG_CMDLINE_FORCE`, which makes the kernel ignore any externally supplied command line entirely. An initramfs-based flow (rather than a direct `root=` mount) would additionally need initrd support via the `LINUX_EFI_INITRD_MEDIA_GUID` LoadFile2 protocol, which this target does not currently implement.
 
 ### Root of trust: enrolling wolfBoot into UEFI Secure Boot
 

@@ -32,6 +32,10 @@
 #include <efi/efi.h>
 #include <efi/efilib.h>
 
+/* Shared EFI helper: read the authenticated kernel command line (HDR_CMDLINE
+ * TLV) from the verified manifest. Must follow the gnu-efi headers above. */
+#include "wolfboot_efi.h"
+
 #ifdef __WOLFBOOT
 void hal_init(void)
 {
@@ -105,8 +109,16 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     MEMMAP_DEVICE_PATH mem_path_device[2];
     EFI_HANDLE kernelImageHandle;
     EFI_STATUS status;
+    CHAR16 *kernel_cmdline;
+    UINTN kernel_cmdline_bytes = 0;
+    EFI_LOADED_IMAGE *kernel_li = NULL;
+    EFI_GUID lipGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 
     size = (uint32_t *)(manifest + 4);
+
+    /* Authenticated kernel command line from the verified image's HDR_CMDLINE
+     * TLV (covered by the signature); NULL if the image carries none. */
+    kernel_cmdline = wolfBoot_efi_get_cmdline(manifest, &kernel_cmdline_bytes);
 
     mem_path_device->Header.Type = EFI_DEVICE_PATH_PROTOCOL_HW_TYPE;
     mem_path_device->Header.SubType = EFI_DEVICE_PATH_PROTOCOL_MEM_SUBTYPE;
@@ -130,6 +142,18 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't load kernel image from memory\n");
         panic();
+    }
+
+    /* Hand the authenticated command line to the loaded image via LoadOptions
+     * for the Linux EFI stub. */
+    if (kernel_cmdline != NULL) {
+        status = uefi_call_wrapper(gSystemTable->BootServices->HandleProtocol, 3,
+                                   kernelImageHandle, &lipGuid,
+                                   (void**)&kernel_li);
+        if (status == EFI_SUCCESS && kernel_li != NULL) {
+            kernel_li->LoadOptions = kernel_cmdline;
+            kernel_li->LoadOptionsSize = (UINT32)kernel_cmdline_bytes;
+        }
     }
 
     status = uefi_call_wrapper(gSystemTable->BootServices->StartImage,

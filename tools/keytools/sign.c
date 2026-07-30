@@ -3572,6 +3572,38 @@ int main(int argc, char** argv)
             CMD.custom_tlvs++;
             i += 2;
         }
+        else if (strcmp(argv[i], "--cmdline") == 0) {
+            /* Shorthand for --custom-tlv-string HDR_CMDLINE "<args>": stores the
+             * OS command line as a signature-covered TLV in the manifest. */
+            int p = CMD.custom_tlvs;
+            uint16_t len;
+            uint32_t j;
+            if (p >= MAX_CUSTOM_TLVS) {
+                fprintf(stderr, "Too many custom TLVs.\n");
+                exit(16);
+            }
+            if (argc < (i + 2)) {
+                fprintf(stderr, "Missing --cmdline argument.\n");
+                exit(16);
+            }
+            len = (uint16_t)strlen(argv[i + 1]);
+            if (len == 0 || len > 255) {
+                fprintf(stderr, "cmdline must be 1..255 bytes: %s\n", argv[i + 1]);
+                exit(16);
+            }
+            CMD.custom_tlv[p].tag = HDR_CMDLINE;
+            CMD.custom_tlv[p].len = len;
+            CMD.custom_tlv[p].buffer = malloc(len);
+            if (CMD.custom_tlv[p].buffer == NULL) {
+                fprintf(stderr, "Error malloc for cmdline tlv buffer %d\n", len);
+                exit(16);
+            }
+            for (j = 0; j < len; j++) {
+                CMD.custom_tlv[p].buffer[j] = (uint8_t)argv[i + 1][j];
+            }
+            CMD.custom_tlvs++;
+            i += 1;
+        }
         else if (strcmp(argv[i], "--cert-chain") == 0) {
             if (argc <= (i + 1)) {
                 fprintf(stderr, "Missing certificate chain file argument\n");
