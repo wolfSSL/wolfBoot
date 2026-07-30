@@ -228,8 +228,10 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
         CFLAGS+=-DWOLFSSL_SP_PPC
       endif
 
-      # SHA256
+      # SHA-2
       APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha256-asm_c.o
+      # builds empty unless SHA-384/512 is enabled
+      APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ppc32/ppc32-sha512-asm_c.o
       CFLAGS+=-DWOLFSSL_PPC32_ASM
       CFLAGS+=-DWOLFSSL_PPC32_ASM_INLINE
       CFLAGS+=-DWOLFSSL_PPC32_ASM_SMALL
