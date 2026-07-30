@@ -550,7 +550,10 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
         wolfBoot_printf("AllocatePages failed: 0x%lx\n", (unsigned long)status);
         *_addr = 0;
         uefi_call_wrapper(file->Close, 1, file);
-        return status;
+        /* EFI_STATUS is an unsigned UINTN with the error high-bit set; returning
+         * it through this int would truncate to a positive (non-error) value.
+         * Return -1 so the caller's return-code check is reliable. */
+        return -1;
     }
 
     /* EFI_FILE Read() takes UINTN *BufferSize and VOID *Buffer. On AArch64
@@ -566,7 +569,8 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
         wolfBoot_printf("file Read failed: 0x%lx\n", (unsigned long)status);
         uefi_call_wrapper(BS->FreePages, 2, *_addr, pages);
         *_addr = 0;
-        return status;
+        /* Return -1, not the truncated EFI_STATUS (see note above). */
+        return -1;
     }
 
     if (*sz < IMAGE_HEADER_SIZE) {
