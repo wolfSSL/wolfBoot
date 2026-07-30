@@ -20,8 +20,17 @@ from datetime import datetime, timezone
 # `metadata.tools.components[].version` and SPDX `creationInfo.creators`
 # fields.  Reproducibility CI keys on byte-equal SBOMs across re-runs,
 # so this constant must change in lockstep with the output it produces.
+#
+# The CLI counts as auditor-visible: '1.2' shipped in two incompatible
+# shapes because dropping --dep-liboqs did not bump it, leaving vendored
+# copies indistinguishable by the only identifier the SBOM records.
+#
+# 1.3  Valueless '#define X' records an empty value instead of '1'.
+#      Warns when the licence file is the full GPL text, where the
+#      -only/-or-later distinction cannot be inferred.
+# 1.2  Dropped --dep-liboqs (unversioned; see above).
 GEN_SBOM_TOOL_NAME = 'wolfssl-sbom-gen'
-GEN_SBOM_VERSION = '1.2'
+GEN_SBOM_VERSION = '1.3'
 
 # Placeholder recorded in the component checksum fields when the operator
 # passes --no-artifact-hash: a build (ROM image, HSM firmware, binary-only
@@ -121,19 +130,6 @@ DEP_META = {
         'download': 'https://github.com/wolfSSL/wolfssl',
         'pkgconfig': 'wolfssl',
         'purl': lambda v: f'pkg:github/wolfSSL/wolfssl@v{v}',
-    },
-    # liboqs is the only PQ external dependency wolfSSL still links against
-    # after upstream PR #10293 collapsed the rest of the PQ surface into
-    # native wolfCrypt.  Today, --enable-falcon strictly implies --with-liboqs
-    # (configure.ac enforces both directions), so a build that links liboqs
-    # is precisely a build that exposed Falcon.
-    'liboqs': {
-        'name': 'liboqs',
-        'supplier': 'Open Quantum Safe',
-        'license': 'MIT',
-        'download': 'https://github.com/open-quantum-safe/liboqs',
-        'pkgconfig': 'liboqs',
-        'purl': lambda v: f'pkg:github/open-quantum-safe/liboqs@{v}',
     },
     'libz': {
         'name': 'zlib',
@@ -252,6 +248,22 @@ def cdx_license_block(license_expr, license_text):
     return [{'expression': license_expr}]
 
 
+# Section headings that appear only in the verbatim GNU licence text, never
+# in a short per-project licensing statement such as wolfSSL's LICENSING.
+_FULL_LICENSE_MARKERS = (
+    'terms and conditions for copying, distribution and modification',
+    'terms and conditions',
+    'how to apply these terms to your new programs',
+)
+
+
+def _is_full_license_text(text):
+    """True when the licence file is the verbatim GNU licence rather than a
+    statement about how the project licenses under it."""
+    low = text.lower()
+    return sum(marker in low for marker in _FULL_LICENSE_MARKERS) >= 2
+
+
 def detect_license(license_file):
     """Parse LICENSING file and return an SPDX license ID.
 
@@ -302,6 +314,24 @@ def detect_license(license_file):
     if re.search(r'or\s+(?:[^,.;\n]*?\s+)?(?:any\s+)?later',
                  excerpt, re.IGNORECASE):
         return f'GPL-{version}.0-or-later'
+    if _is_full_license_text(text):
+        # The verbatim GPL is the licence itself, not a statement about how
+        # this project licenses under it.  Whether the project grants "or any
+        # later version" appears only in the per-file headers, so -only here
+        # is a guess that silently narrows the grant.  wolfBoot ships the full
+        # GPLv3 as LICENSE while every source header says "either version 3
+        # ... or (at your option) any later version", i.e. GPL-3.0-or-later.
+        print(
+            f"WARNING: {license_file} is the full GPL text, not a licensing "
+            f"statement.\n"
+            f"         It cannot say whether this project grants "
+            f"'or any later version', so\n"
+            f"         GPL-{version}.0-only is assumed and may understate the "
+            f"grant. Confirm against\n"
+            f"         your source headers and pass --license-override "
+            f"GPL-{version}.0-or-later if so\n"
+            f"         (Make: SBOM_LICENSE_OVERRIDE).",
+            file=sys.stderr)
     return f'GPL-{version}.0-only'
 
 
@@ -799,10 +829,26 @@ def spdx_dep_package(key, dep_version_overrides=None):
     return spdx_id, pkg
 
 
+# CycloneDX 1.6 component.type -> SPDX 2.3 primaryPackagePurpose, so the two
+# documents agree on what kind of artifact this is.  A bootloader described as
+# a 'library' misfiles the product for anyone triaging by artifact class, which
+# under IEC 62443 is the difference between a component and the firmware it
+# boots.  Only the values a wolfSSL-stack product can legitimately be.
+SPDX_PACKAGE_PURPOSE = {
+    'library': 'LIBRARY',
+    'firmware': 'FIRMWARE',
+    'application': 'APPLICATION',
+    'framework': 'FRAMEWORK',
+    'device': 'DEVICE',
+    'file': 'FILE',
+}
+
+
 def generate_cdx(name, version, supplier, license_id, license_text, lib_hash,
                  timestamp, year, serial, enabled_deps, build_props,
                  dep_version_overrides=None, hash_kind='library-binary',
-                 hash_source='lib', srcs_basenames=None, file_entries=None):
+                 hash_source='lib', srcs_basenames=None, file_entries=None,
+                 component_type='library'):
     bom_ref = derived_uuid(name, version, 'package')
     urls = project_urls(name)
 
@@ -813,8 +859,14 @@ def generate_cdx(name, version, supplier, license_id, license_text, lib_hash,
         dep_bom_refs.append(ref)
         components.append(comp)
 
+    # A valueless `#define X` is recorded with an empty value, not '1'.
+    # Coercing to '1' made the two indistinguishable and produced actively
+    # misleading entries where the macro names a quantity: wolfBoot's
+    # target.h emits `#define WOLFBOOT_LOAD_ADDRESS` with nothing after it
+    # when the target does not set a load address, which an auditor then read
+    # as the address literally being 1.
     properties = [
-        {'name': f'wolfssl:build:{k}', 'value': v if v else '1'}
+        {'name': f'wolfssl:build:{k}', 'value': v}
         for k, v in build_props
     ]
     # Document what the SHA-256 in `hashes` represents, on every entry
@@ -845,7 +897,7 @@ def generate_cdx(name, version, supplier, license_id, license_text, lib_hash,
 
     main_component = {
         'bom-ref': bom_ref,
-        'type': 'library',
+        'type': component_type,
         'supplier': {'name': supplier},
         'name': name,
         'version': version,
@@ -916,7 +968,8 @@ def generate_spdx(name, version, supplier, license_id, license_text, lib_hash,
                   timestamp, year, doc_ns_uuid, enabled_deps, build_props,
                   dep_version_overrides=None, hash_kind='library-binary',
                   hash_source='lib', srcs_basenames=None,
-                  document_namespace=None, file_entries=None):
+                  document_namespace=None, file_entries=None,
+                  component_type='library'):
     build_defines = ', '.join(k for k, _ in build_props)
     # Hash-kind / source-set / bomsh-traced-binary information used to
     # be stuffed into the package `comment` as `key=value` slugs, which
@@ -965,6 +1018,8 @@ def generate_spdx(name, version, supplier, license_id, license_text, lib_hash,
         'licenseConcluded': license_id,
         'licenseDeclared': license_id,
         'copyrightText': f'Copyright (C) 2006-{year} wolfSSL Inc.',
+        'primaryPackagePurpose': SPDX_PACKAGE_PURPOSE.get(
+            component_type, 'LIBRARY'),
         'comment': f'Build configuration defines: {build_defines}',
         'annotations': annotations,
         'externalRefs': [
@@ -1078,7 +1133,7 @@ def _resolve_dep_versions(enabled_deps, overrides):
     value instead of each re-invoking pkg-config.  Caching the result
     (including None) means a later dep_version() lookup short-circuits on the
     membership check rather than re-shelling to `pkg-config --modversion`, so
-    a default --with-libz --with-liboqs build calls pkg-config once per dep
+    a default --with-libz build calls pkg-config once per dep
     (not once per dep per output format) and the two documents can never
     disagree if pkg-config output were ever non-deterministic."""
     for key in enabled_deps:
@@ -1101,6 +1156,12 @@ def main():
     parser.add_argument('--version', required=True, help='Package version')
     parser.add_argument('--supplier', default='wolfSSL Inc.',
                         help='Supplier name (default: wolfSSL Inc.)')
+    parser.add_argument('--component-type', default='library',
+                        choices=sorted(SPDX_PACKAGE_PURPOSE),
+                        help='What kind of artifact this is: CycloneDX '
+                             'component.type, mirrored to SPDX '
+                             'primaryPackagePurpose. Use firmware for a '
+                             'bootloader such as wolfBoot (default: library)')
     parser.add_argument('--license-file', required=True,
                         help='Path to LICENSING file for SPDX ID detection')
     parser.add_argument('--license-override', default='',
@@ -1185,10 +1246,6 @@ def main():
                              'openssl.pc.')
     parser.add_argument('--dep-libz', default='no',
                         help='yes if built with --with-libz')
-    parser.add_argument('--dep-liboqs', default='no',
-                        help='yes if built with --with-liboqs (the package '
-                             'wolfSSL links against; --enable-falcon implies '
-                             'this in any legal configuration)')
     parser.add_argument('--dep-version', action='append', default=[],
                         metavar='KEY=VERSION',
                         help='Override pkg-config version detection for a '
@@ -1257,7 +1314,6 @@ def main():
             ('wolfssl', args.dep_wolfssl),
             ('openssl', args.dep_openssl),
             ('libz',    args.dep_libz),
-            ('liboqs',  args.dep_liboqs),
         ]
         if flag.lower() == 'yes'
     ]
@@ -1380,6 +1436,7 @@ def main():
         hash_kind=hash_kind, hash_source=hash_source,
         srcs_basenames=srcs_basenames,
         file_entries=file_entries,
+        component_type=args.component_type,
     )
     spdx = generate_spdx(
         args.name, args.version, args.supplier,
@@ -1390,6 +1447,7 @@ def main():
         srcs_basenames=srcs_basenames,
         document_namespace=(args.document_namespace or None),
         file_entries=file_entries,
+        component_type=args.component_type,
     )
 
     try:

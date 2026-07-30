@@ -15,15 +15,24 @@
 #
 # Config - set one:
 #   SBOM_CFLAGS      Build CFLAGS whose -D tokens describe the config.
-#                    NOTE: the driver keeps ONLY -D tokens from SBOM_CFLAGS.
-#                    -I / -include / other flags are dropped. Products whose
-#                    config comes from -include'ing a settings header (e.g.
-#                    wolfHSM's wh_settings.h) MUST capture with
-#                    `$(HOSTCC) -dM -E ... -include ...` themselves and pass
-#                    the dump via SBOM_OPTIONS_H, not SBOM_CFLAGS.
+#                    The driver keeps the -D tokens and forwards -I/-isystem;
+#                    all other flags are dropped.
 #   SBOM_OPTIONS_H   A pre-expanded flat #define header (verbatim, scrubbed).
 #   SBOM_USER_SETTINGS  A user_settings.h.
 #   SBOM_SOURCE_ONLY = 1   Source-inventory SBOM with no build-config macros.
+#
+# Config, strongly recommended alongside SBOM_CFLAGS:
+#   SBOM_SETTINGS_H     Settings header -include'd during the capture, so the
+#                       macros it derives from the -D set are recorded too.
+#                       Any product whose configuration lives in a
+#                       user_settings.h MUST set this. Without it the capture
+#                       reads an empty translation unit and records only the
+#                       literal -D list, which for a gated header (wolfBoot's
+#                       user_settings.h derives HAVE_ECC from
+#                       WOLFBOOT_SIGN_ECC256) silently omits the entire
+#                       derived configuration.
+#   SBOM_INCLUDE_DIRS   Extra -I paths for the capture, space-separated, so
+#                       SBOM_SETTINGS_H can resolve the headers it pulls in.
 #
 # Version - set one:
 #   SBOM_VERSION         Literal version string, OR
@@ -32,8 +41,26 @@
 #                          SBOM_VERSION_MACRO = LIBWOLFBOOT_VERSION_STRING
 #
 # Optional (defaults shown):
+#   SBOM_PREREQS          Targets to build before the SBOM runs. Use this for
+#                         generated headers the capture needs: wolfBoot's
+#                         include/target.h carries the flash layout and is
+#                         #include'd by its user_settings.h, so the capture
+#                         cannot preprocess without it.
 #   SBOM_ROOT             Product root. Default: current directory.
 #   SBOM_LICENSE_FILE     License file. Default: $(SBOM_ROOT)/LICENSE.
+#   SBOM_COMPONENT_TYPE   What kind of artifact this is: CycloneDX
+#                         component.type, mirrored to SPDX
+#                         primaryPackagePurpose. Default: library. A
+#                         bootloader or a flashed image should say firmware.
+#   SBOM_LICENSE_OVERRIDE SPDX expression recorded instead of the one inferred
+#                         from SBOM_LICENSE_FILE. Needed whenever that file is
+#                         the *full* licence text rather than a licensing
+#                         statement: the GPL text never states whether the
+#                         project grants "or any later version", so inference
+#                         cannot distinguish GPL-3.0-only from
+#                         GPL-3.0-or-later and defaults to -only.
+#   SBOM_LICENSE_TEXT     Plain-text licence embedded for a LicenseRef-* used
+#                         in SBOM_LICENSE_OVERRIDE (required by SPDX 2.3).
 #   SBOM_GEN              Path to gen-sbom. Default: driver auto-discovery.
 #   GEN_SBOM              Legacy alias for SBOM_GEN.
 #   SBOM_NO_ARTIFACT_HASH = 1   As-built FIPS/kernel: do not re-hash.
@@ -62,6 +89,15 @@
 # $$name becomes $n + ame (empty single-letter Make var) after that double
 # expansion; $$$$name survives as $name for the shell.
 #
+# That same double expansion is why SBOM_CFLAGS is referenced as
+# $$($(2)CFLAGS) rather than $($(2)CFLAGS). A single $ interpolates the CFLAGS
+# *value* into the rule text at eval time, and the recipe expansion then
+# re-scans it. Any `$` surviving in that value is reinterpreted as a Make
+# reference: wolfBoot passes -DBOOTLOADER_PARTITION_SIZE=$$(( A - B )), whose
+# `$((` was read as a variable named `( A - B )`, expanded to nothing, and
+# left the SBOM recording the literal value `)`. Deferring with $$( ) hands
+# the arithmetic to the shell, which is what the compile recipes already do.
+#
 # To instantiate a second target, set another variable prefix and call:
 #   $(eval $(call wolfglass_sbom_rule,sbom-hal,SBOM_HAL_))
 # using SBOM_HAL_NAME, SBOM_HAL_SRCS, SBOM_HAL_CFLAGS, and so on.
@@ -75,7 +111,7 @@ HOSTCC        ?= cc
 
 define wolfglass_sbom_rule
 .PHONY: $(1)
-$(1):
+$(1): $($(2)PREREQS)
 	@test -n "$($(2)NAME)" || { echo "ERROR: set $(2)NAME"; exit 1; }
 	@test -n "$(strip $($(2)SRCS))$($(2)LIB)" || \
 	    { echo "ERROR: set $(2)SRCS or $(2)LIB"; exit 1; }
@@ -111,9 +147,14 @@ $(1):
 	    $(if $($(2)LIB),--lib "$($(2)LIB)") \
 	    $(if $(filter 1,$($(2)NO_ARTIFACT_HASH)),--no-artifact-hash) \
 	    $(if $(filter 1,$($(2)SOURCE_ONLY)),--source-only) \
-	    $(if $($(2)CFLAGS),--cflags="$($(2)CFLAGS)") \
+	    $(if $($(2)CFLAGS),--cflags="$$($(2)CFLAGS)") \
+	    $(if $($(2)SETTINGS_H),--settings-h "$($(2)SETTINGS_H)") \
+	    $(foreach d,$($(2)INCLUDE_DIRS),--include-dir "$(d)") \
 	    $(if $($(2)OPTIONS_H),--options-h "$($(2)OPTIONS_H)") \
 	    $(if $($(2)USER_SETTINGS),--user-settings "$($(2)USER_SETTINGS)") \
+	    $(if $($(2)COMPONENT_TYPE),--component-type "$($(2)COMPONENT_TYPE)") \
+	    $(if $($(2)LICENSE_OVERRIDE),--license-override '$($(2)LICENSE_OVERRIDE)') \
+	    $(if $($(2)LICENSE_TEXT),--license-text "$($(2)LICENSE_TEXT)") \
 	    $(if $($(2)VERSION),--version "$($(2)VERSION)") \
 	    $(if $($(2)VERSION_FILE),--version-file "$($(2)VERSION_FILE)") \
 	    $(if $($(2)VERSION_MACRO),--version-macro "$($(2)VERSION_MACRO)") \

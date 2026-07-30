@@ -99,7 +99,32 @@ the source set and artifact hash are configuration-specific.
 Useful overrides: `HOSTCC`, `SBOM_GEN`, `CRA_PYTHON`.
 
 wolfcrypt sources are compiled directly into the wolfBoot image, so they are
-listed as wolfBoot's own sources rather than as a separate component.
+listed as wolfBoot's own sources rather than as a separate component. wolfSSL
+is *also* recorded as a dependency component (`SBOM_DEP_WOLFSSL`, on by
+default) with the submodule's version, which is what lets a scanner match
+wolfSSL advisories against this firmware.
+
+### How the configuration is captured
+
+wolfBoot's configuration is derived rather than literal: `include/user_settings.h`
+turns `WOLFBOOT_SIGN_ECC256` into `HAVE_ECC`, `HAVE_ECC256`,
+`ECC_TIMING_RESISTANT` and the rest. So the capture preprocesses the real
+settings header with the real `-D` set, via `SBOM_SETTINGS_H` and
+`SBOM_INCLUDE_DIRS`:
+
+```
+cc -dM -E $(CFLAGS -D and -I tokens) -include wolfssl/wolfcrypt/settings.h
+```
+
+Capturing only the `-D` tokens (against an empty translation unit) records
+nothing that the header derives, and capturing only the header (with no `-D`
+set) evaluates every `#if` against an empty configuration. Either omission
+produces a well-formed SBOM describing a build nobody made — a signing
+bootloader with no signature algorithm, in wolfBoot's case. Both halves are
+required, and the capture aborts rather than emitting a partial dump.
+
+`include/target.h` is generated and `#include`d by `user_settings.h`, so the
+`sbom` target builds it first (`SBOM_PREREQS`).
 
 ## Route 2 — CMake (methods 5–6)
 
