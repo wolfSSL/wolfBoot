@@ -170,6 +170,11 @@
 #define ICC_CTRL_EN             (1UL << 0)          /* Cache enable */
 #define ICC_CTRL_RDY            (1UL << 16)         /* Cache ready */
 
+/* Test mode / trim registers */
+#define TME_CTRL                (*(volatile uint32_t *)0x40000C00UL)
+#define SIR_TRIM_ICC            (*(volatile uint32_t *)0x4000040CUL)
+#define SIR_TRIM_ICC_RB_DIS     (1UL << 6)          /* Read buffer disable */
+
 /* ============== WDT - Watchdog Timer ============== */
 /* MSDK: wdt_regs.h */
 #define WDT0_BASE               0x40003000UL

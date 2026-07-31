@@ -105,8 +105,9 @@ static void RAMFUNCTION icc_disable(void)
 
 static void RAMFUNCTION icc_enable(void)
 {
-    /* Invalidate and re-enable cache */
+    /* Invalidate cache, wait for completion, then re-enable */
     ICC0_INVALIDATE = 1;
+    while (!(ICC0_CTRL & ICC_CTRL_RDY)) {}
     ICC0_CTRL |= ICC_CTRL_EN;
     while (!(ICC0_CTRL & ICC_CTRL_RDY)) {}
 }
@@ -324,6 +325,14 @@ void hal_init(void)
     /* Set FLC clock dividers for both banks */
     FLC0_CLKDIV = FLC_CLKDIV_VALUE;
     FLC1_CLKDIV = FLC_CLKDIV_VALUE;
+
+    /* Point VTOR at our vector table so faults hit our handlers */
+    *(volatile uint32_t *)0xE000ED08 = 0x10000000;
+
+    /* Disable the ICC read buffer via TME before enabling the cache */
+    TME_CTRL = 1;
+    SIR_TRIM_ICC = SIR_TRIM_ICC_RB_DIS;
+    TME_CTRL = 0;
 
     /* Enable instruction cache */
     icc_enable();
