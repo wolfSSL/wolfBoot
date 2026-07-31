@@ -1255,8 +1255,9 @@ _cm4_entry:
     * NOT position independent (the ldr =_vector_table below loads the absolute
     * stack top). Compare the runtime address (PC-relative adr) with the linked
     * address (from the literal pool); a mismatch means the firmware placed the
-    * image at a different 2MB base, so halt loudly instead of executing from the
-    * wrong VMA. The generated config.txt pins kernel_address=0x200000. */
+    * image at a different 2MB base, so halt (silently, as this runs before any
+    * UART init) instead of executing from the wrong VMA. The generated
+    * config.txt pins kernel_address=0x200000. */
    adr x2, _vector_table
    ldr x3, =_vector_table
    cmp x2, x3
@@ -1264,6 +1265,11 @@ _cm4_entry:
 6: wfi
    b   6b
 5:
+   /* Persist the firmware-provided DTB pointer (captured in x21 at entry) so the
+    * FIT boot path can hand the RPi firmware's fully-patched DTB (RAM size,
+    * mini-UART clock, serial no.) to Linux when the FIT is kernel-only. */
+   ldr x2, =cm4_fw_dtb
+   str x21, [x2]
 #endif
 
 4: ldr x1, =_vector_table // get start of .text in x1
@@ -1374,6 +1380,17 @@ cm4_fault_stack:
 cm4_fault_stack_top:
 .section ".boot"
 #endif /* TARGET_cm4 && DEBUG && DEBUG_UART */
+#if defined(TARGET_cm4)
+/* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
+ * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to
+ * BSS clearing; the runtime store at entry sets the value regardless of load. */
+.section ".data"
+.balign 8
+.global cm4_fw_dtb
+cm4_fw_dtb:
+    .quad 0
+.section ".boot"
+#endif /* TARGET_cm4 */
 #if 0
 .section ".boot"
 .global _vector_table

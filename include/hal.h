@@ -111,6 +111,11 @@ void hal_prepare_boot(void);
 #ifdef MMU
     void *hal_get_dts_address(void);
     void *hal_get_dts_update_address(void);
+    /* Optional hook: supply a boot DTB when the loaded image carries none.
+     * update_disk.c calls it only when dts_addr is still NULL (i.e. the FIT had
+     * no fdt sub-image); the weak default returns NULL. A HAL may also run
+     * boot-slot bookkeeping here (see hal/cm4.c's firmware-DTB + RAUC path). */
+    void *hal_get_boot_dts(void);
 #endif
 
 #ifdef WOLFBOOT_FIT_CONFIG_SELECT

@@ -72,6 +72,21 @@ static void uart_tx(char c)
 
 void uart_init(void)
 {
+    /* Route GPIO14 (TXD0) and GPIO15 (RXD0) to the PL011 via ALT0, so wolfBoot's
+     * console reaches the 40-pin debug header even when the firmware has NOT
+     * applied dtoverlay=disable-bt (which needs overlays/disable-bt.dtbo on the
+     * boot FAT). Without this the PL011 stays wired to the Bluetooth pins and
+     * wolfBoot is silent on the header. GPFSEL1 (GPIO_BASE+0x04) holds FSEL10-19:
+     * FSEL14 = bits [14:12], FSEL15 = bits [17:15]; ALT0 = 0b100. */
+    volatile unsigned int *gpfsel1 =
+        (volatile unsigned int *)(BCM2711_GPIO_BASE + 0x04);
+    unsigned int fsel;
+
+    fsel = *gpfsel1;
+    fsel &= ~((7u << 12) | (7u << 15));
+    fsel |=  ((4u << 12) | (4u << 15));
+    *gpfsel1 = fsel;
+
     /* Program the PL011 for 115200 8N1 assuming a 48MHz UARTCLK
      * (init_uart_clock=48000000): BAUDDIV = 48e6/(16*115200) -> IBRD 26 FBRD 3. */
     *UART0_CR = 0;
@@ -125,6 +140,105 @@ void* hal_get_dts_update_address(void)
 {
     return NULL; /* Not yet supported */
 }
+
+#if defined(MMU)
+#include "fdt.h"
+
+/* Firmware-provided DTB pointer captured at _cm4_entry (boot_aarch64_start.S).
+ * The RPi VideoCore firmware hands this dtb (fully patched: RAM size, mini-UART
+ * clock, serial no.) to the kernel it loads - which is wolfBoot. */
+extern void* cm4_fw_dtb;
+
+/* Upper bound for the firmware DTB copy. fdt_check_header() does not validate
+ * totalsize, so cap it: a valid DTB is well under the arm64 boot-protocol 2MB
+ * limit, and this keeps a corrupt header from overrunning the DTS landing zone.
+ * Override with -DCM4_FDT_MAX_SIZE=<bytes>. */
+#ifndef CM4_FDT_MAX_SIZE
+#define CM4_FDT_MAX_SIZE 0x200000
+#endif
+
+/* Kernel command line for the kernel-only FIT boot path (the raw dtb carries
+ * neither root= nor console=). Override LINUX_BOOTARGS or just LINUX_BOOTARGS_ROOT
+ * in the .config. The console must match the wolfBoot UART build:
+ *   CM4_UART_PL011 (+ dtoverlay=disable-bt) -> PL011 on GPIO14/15 = ttyAMA0. The
+ *     PL011 registers cleanly in Linux; the mini-UART (bcm2835-aux) does not on
+ *     this DTB ("unable to register 8250 port").
+ *   default (mini-UART) -> serial0/ttyS0. */
+#ifndef LINUX_BOOTARGS
+#ifndef LINUX_BOOTARGS_ROOT
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p3"
+#endif
+#if defined(CM4_UART_PL011)
+#define LINUX_BOOTARGS \
+    "earlycon=pl011,mmio32,0xfe201000 console=ttyAMA0,115200 root=" \
+    LINUX_BOOTARGS_ROOT " rootfstype=ext4 rootwait"
+#else
+/* earlycon=uart8250,mmio32,0xfe215040: the mini-UART is 8250-driven with a 4-byte
+ * register stride, so LSR lands at 0xfe215054 - prints from MMIO before the dtb
+ * console driver is up. serial0 aliases the mini-UART (ttyS0) at runtime. */
+#define LINUX_BOOTARGS \
+    "earlycon=uart8250,mmio32,0xfe215040 console=serial0,115200 root=" \
+    LINUX_BOOTARGS_ROOT " rootfstype=ext4 rootwait"
+#endif
+#endif
+
+/* Supply Linux a bootable DTB when the FIT is kernel-only: relocate the
+ * firmware dtb to WOLFBOOT_LOAD_DTS_ADDRESS (headroom to grow /chosen without
+ * disturbing whatever the firmware placed after its copy) and inject the kernel
+ * command line. Called from update_disk.c BEFORE hal_prepare_boot(), so this
+ * runs with the MMU/caches on (FDT edits do unaligned accesses that would fault
+ * on the MMU-off Device memory wolfBoot hands off with); cm4_mmu_disable() then
+ * cleans it to DRAM for the MMU-off kernel. Returns NULL if no valid dtb, in
+ * which case do_boot() is handed a NULL dtb. */
+void* hal_get_boot_dts(void)
+{
+#if !defined(CM4_FIRMWARE_DTB)
+    /* Only the Linux (kernel-only FIT) config opts into using the firmware DTB.
+     * The stub/FIPS disk boots (cm4_emmc.config) leave this a no-op so their
+     * validated NULL-DTB handoff is unchanged. */
+    return NULL;
+#else
+    void *fdt = cm4_fw_dtb;
+    uint32_t sz;
+    int off;
+
+    if (fdt == NULL || fdt_check_header(fdt) != 0) {
+        wolfBoot_printf("cm4: no valid firmware DTB (%p)\n", fdt);
+        return NULL;
+    }
+    sz = (uint32_t)fdt_totalsize(fdt);
+    /* fdt_check_header() does not validate totalsize; bound it so a corrupt DTB
+     * header cannot make the copy/fixup clobber memory past the DTS landing
+     * zone (leaving room for the fixup headroom too). */
+    if (sz < sizeof(struct fdt_header) ||
+            sz > CM4_FDT_MAX_SIZE - WOLFBOOT_FDT_FIXUP_HEADROOM) {
+        wolfBoot_printf("cm4: firmware DTB size %u out of range\n",
+            (unsigned)sz);
+        return NULL;
+    }
+    memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, fdt, sz);
+    fdt = (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
+
+    /* Zero the appended headroom so the grown blob holds no uninitialized
+     * bytes, then record the new total size. */
+    memset((uint8_t*)fdt + sz, 0, WOLFBOOT_FDT_FIXUP_HEADROOM);
+    fdt_set_totalsize(fdt, sz + WOLFBOOT_FDT_FIXUP_HEADROOM);
+    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (off == -FDT_ERR_NOTFOUND) {
+        off = fdt_add_subnode(fdt, 0, "chosen");
+    }
+    if (off < 0) {
+        wolfBoot_printf("cm4: DTB /chosen error (%d)\n", off);
+        return fdt; /* still bootable; kernel falls back to built-in cmdline */
+    }
+    if (fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS) != 0) {
+        wolfBoot_printf("cm4: DTB bootargs fixup failed\n");
+    }
+    wolfBoot_printf("cm4: DTB relocated to %p, bootargs set\n", fdt);
+    return fdt;
+#endif /* CM4_FIRMWARE_DTB */
+}
+#endif /* MMU */
 
 #ifdef EXT_FLASH
 int ext_flash_read(unsigned long address, uint8_t *data, int len)
