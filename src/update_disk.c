@@ -248,6 +248,9 @@ static void disk_decrypted_header_clear(uint8_t *hdr)
 #endif /* DISK_ENCRYPT */
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
+#ifdef MMU
+extern void* hal_get_boot_dts(void);
+#endif
 
 #if defined(WOLFBOOT_NO_LOAD_ADDRESS) || !defined(WOLFBOOT_LOAD_ADDRESS)
 /* from the linker, where wolfBoot ends */
@@ -682,6 +685,16 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_crypto_clear();
 #endif
         wolfBoot_panic();
+    }
+#endif
+#ifdef MMU
+    /* If the loaded image carried no FDT (e.g. a kernel-only FIT), fall back to
+     * a DTB the boot firmware handed us. Done BEFORE hal_prepare_boot() so any
+     * FDT relocation/fixup runs while the MMU/caches are still enabled (some
+     * platforms, e.g. CM4, disable the MMU in hal_prepare_boot() and FDT edits
+     * would then fault on Device-nGnRnE memory). */
+    if (dts_addr == NULL) {
+        dts_addr = (uint8_t*)hal_get_boot_dts();
     }
 #endif
     hal_prepare_boot();

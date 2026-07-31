@@ -514,3 +514,4 @@ __pycache__/
 tools/scripts/cm4/fw/
 tools/scripts/cm4/*.elf
 tools/scripts/cm4/*.bin
+tools/scripts/cm4/linux/
