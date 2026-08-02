@@ -288,10 +288,7 @@ ifeq ($(ARCH),ARM)
     OBJS+=hal/pic32c.o
 
     ifeq ($(WOLFHSM_CLIENT),1)
-      ifeq ($(WOLFHSM_MICROCHIP_PIC32CZ),)
-        $(error WOLFHSM_MICROCHIP_PIC32CZ is not set: point it at the wolfHSM \
-                PIC32CZ client port directory (the one containing port/))
-      endif
+      WOLFHSM_MICROCHIP_PIC32CZ ?= ..
 
       CFLAGS+=-I$(WOLFHSM_MICROCHIP_PIC32CZ) \
               -DWOLFHSM_CFG_NO_SYS_TIME \
