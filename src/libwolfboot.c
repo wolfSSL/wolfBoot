@@ -178,7 +178,8 @@ int wolfBoot_initialize_encryption(void)
 #undef WOLFBOOT_FIXED_PARTITIONS
 #endif
 
-#if defined(EXT_FLASH) && !defined(WOLFBOOT_NO_PARTITIONS)
+#if defined(EXT_FLASH) && !defined(WOLFBOOT_NO_PARTITIONS) && \
+    !defined(CUSTOM_PARTITION_TRAILER)
 static uint32_t ext_cache;
 #endif
 
