@@ -941,6 +941,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     int fallback_image = 0;
 #ifndef DISABLE_BACKUP
     int rollback_needed = 0;
+#ifdef CUSTOM_PARTITION_TRAILER
+    (void)rollback_needed;
+#endif
     int bootStateRet = -1;
     uint8_t bootState = 0;
 #endif
@@ -1506,7 +1509,7 @@ void RAMFUNCTION wolfBoot_start(void)
     int bootRet;
 #ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
     int updateRet;
-#ifndef DISABLE_BACKUP
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     int resumedFinalErase;
 #endif
     uint8_t bootState;
