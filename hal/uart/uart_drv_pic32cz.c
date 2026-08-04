@@ -49,6 +49,7 @@
 #define SERCOM_SYNCBUSY (*(volatile uint32_t*)(SERCOM1 + 0x1CU))
 #define SERCOM_DATA    (*(volatile uint32_t*)(SERCOM1 + 0x28U))
 
+#define CTRLA_SWRST          (0x1U << 0)
 #define CTRLA_MODE_USART_INT (0x1U << 2)  /* USART with internal clock */
 #define CTRLA_ENABLE         (0x1U << 1)
 #define CTRLA_IBON           (0x1U << 8)
@@ -59,6 +60,7 @@
 #define CTRLB_TXEN           (0x1U << 16)
 
 #define INTFLAG_DRE          (0x1U << 0)  /* Data Register Empty */
+#define INTFLAG_TXC          (0x1U << 1)  /* Transmit Complete */
 
 /* GCLK: generator 1 sources SERCOM1 */
 #define GCLK_GENCTRL1 (*(volatile uint32_t*)(GCLK_BASE + 0x20U + (1 * 4)))
@@ -137,6 +139,35 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     }
 
     return 0;
+}
+
+#define TXC_WAIT_MAX (200000U)
+
+void uart_deinit(void)
+{
+    uint32_t spin;
+
+    /* drain tx */
+    for (spin = 0U; spin < TXC_WAIT_MAX; spin++) {
+        if ((SERCOM_INTFLAG & INTFLAG_TXC) != 0U) {
+            break;
+        }
+    }
+
+    SERCOM_CTRLA &= ~(uint32_t)CTRLA_ENABLE;
+    while (SERCOM_SYNCBUSY != 0U) {
+        /* wait sync */
+    }
+
+    SERCOM_CTRLA = CTRLA_SWRST;
+    while (SERCOM_SYNCBUSY != 0U) {
+        /* wait sync */
+    }
+
+    PORTC_PMUX(2)   = 0x0U;
+    PORTC_PMUX(3)   = 0x0U;
+    PORTC_PINCFG(4) = 0x0U;
+    PORTC_PINCFG(7) = 0x0U;
 }
 
 int uart_tx(const uint8_t c)
