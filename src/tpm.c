@@ -1334,14 +1334,27 @@ int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* 
 
 int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz)
 {
+    uint32_t certCapacity;
+    int rc;
+
     if (WOLFBOOT_TPM_NS_RW(certSz, sizeof(*certSz)) == NULL) {
         return BAD_FUNC_ARG;
     }
-    if (WOLFBOOT_TPM_NS_RW(cert, *certSz) == NULL) {
+    /* single-fetch *certSz so it cannot be re-read after validation: wolfTPM
+     * checks the capacity again before filling 'cert', and a racing non-secure
+     * agent would otherwise enlarge it in between to reopen the write past the
+     * range validated here */
+    certCapacity = *(volatile const uint32_t*)certSz;
+    if (certCapacity == 0) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(cert, certCapacity) == NULL) {
         return BAD_FUNC_ARG;
     }
     wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
-    return wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, certSz);
+    rc = wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, &certCapacity);
+    *certSz = certCapacity;
+    return rc;
 }
 
 #ifdef WOLFTPM_MFG_IDENTITY
