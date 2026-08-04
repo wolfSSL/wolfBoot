@@ -67,6 +67,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-tpm-nsc-cert
+TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
@@ -287,6 +288,17 @@ unit-tpm-nsc-cert: ../../include/target.h unit-tpm-nsc-cert.c ../../src/string.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# The PKCS#11 NSC veneers are exercised here through C_CreateObject_nsc_call
+# and C_DeriveKey_nsc_call only; --gc-sections drops the remaining veneers so
+# just those two wolfPKCS11 entry points need a stub.
+unit-pkcs11-nsc-zeroize: ../../include/target.h unit-pkcs11-nsc-zeroize.c
+	gcc -o $@ unit-pkcs11-nsc-zeroize.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/misc.c \
+		$(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPKCS11) -DSECURE_PKCS11 \
+		-DWOLFPKCS11_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c

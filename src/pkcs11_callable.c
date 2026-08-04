@@ -29,6 +29,7 @@
 #include <arm_cmse.h>
 #include <stddef.h>                  /* offsetof */
 #include <wolfssl/wolfcrypt/types.h> /* XMALLOC/XFREE/XMEMCPY, DYNAMIC_TYPE_* */
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
 /*
  * TrustZone-M PKCS#11 non-secure-callable (NSC) layer with pointer
@@ -130,6 +131,7 @@ static int ns_outlen_begin(const volatile void *pBuf, CK_ULONG_PTR pulLen,
 struct nsc_mech {
     CK_MECHANISM mech;                  /* secure mechanism passed to wolfPKCS11 */
     void        *alloc[NSC_MECH_MAX_ALLOC];
+    CK_ULONG     allocLen[NSC_MECH_MAX_ALLOC];
     int          nAlloc;
     struct {
         void    *dst;                   /* NS destination */
@@ -148,8 +150,10 @@ static void *nsc_alloc(struct nsc_mech *m, CK_ULONG len)
     if (m->nAlloc >= NSC_MECH_MAX_ALLOC)
         return NULL;
     p = XMALLOC((size_t)len, NULL, DYNAMIC_TYPE_TMP_BUFFER);
-    if (p != NULL)
+    if (p != NULL) {
+        m->allocLen[m->nAlloc] = len;
         m->alloc[m->nAlloc++] = p;
+    }
     return p;
 }
 
@@ -205,13 +209,17 @@ static CK_RV nsc_inout(struct nsc_mech *m, CK_VOID_PTR dst, CK_ULONG len,
     return CKR_OK;
 }
 
-/* Free all secure allocations without copying anything back (error path). */
+/* Free all secure allocations without copying anything back (error path).
+ * Parameter blobs can carry secrets (CKM_PKCS5_PBKD2 pPassword, HKDF salt,
+ * ...), so scrub every block before it goes back to the secure heap. */
 static void nsc_mech_free(struct nsc_mech *m)
 {
     int i;
 
-    for (i = 0; i < m->nAlloc; i++)
+    for (i = 0; i < m->nAlloc; i++) {
+        wc_ForceZero(m->alloc[i], (size_t)m->allocLen[i]);
         XFREE(m->alloc[i], NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    }
     m->nAlloc = 0;
     m->nCback = 0;
 }
@@ -551,8 +559,16 @@ static void nsc_tmpl_free(struct nsc_tmpl *t)
 
     if (t->work != NULL) {
         for (i = 0; i < t->count; i++) {
-            if (t->work[i].pValue != NULL)
+            if (t->work[i].pValue != NULL) {
+                /* Value buffers hold imported key material (CKA_VALUE, the RSA
+                 * private components, ...). Scrub before releasing, using the
+                 * snapshot length: that is what was allocated, and wolfPKCS11
+                 * rewrites work[].ulValueLen on the C_GetAttributeValue path. */
+                if (t->snap != NULL)
+                    wc_ForceZero(t->work[i].pValue,
+                            (size_t)t->snap[i].ulValueLen);
                 XFREE(t->work[i].pValue, NULL, DYNAMIC_TYPE_TMP_BUFFER);
+            }
         }
         XFREE(t->work, NULL, DYNAMIC_TYPE_TMP_BUFFER);
         t->work = NULL;
