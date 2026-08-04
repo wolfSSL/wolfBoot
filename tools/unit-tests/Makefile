@@ -62,6 +62,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
+       unit-sign-header-failure \
        unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
@@ -325,6 +326,14 @@ unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c 
 		$(LDFLAGS) -Wl,--gc-sections
 
 unit-sign-hybrid-keyload: ../../include/target.h unit-sign-hybrid-keyload.c \
+		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-sign-header-failure: ../../include/target.h unit-sign-header-failure.c \
 		$(KEYTOOLS_SIGN_SRCS)
 	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
 		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \

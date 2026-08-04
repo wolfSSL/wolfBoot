@@ -3746,8 +3746,8 @@ int main(int argc, char** argv)
             exit(1);
         }
         printf("Creating hybrid signature\n");
-        make_hybrid_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file,
-                pubkey2, pubkey_sz2);
+        ret = make_hybrid_header(pubkey, pubkey_sz, CMD.image_file,
+                CMD.output_image_file, pubkey2, pubkey_sz2);
         DEBUG_PRINT("Signature size: %u\n", CMD.signature_sz);
         DEBUG_PRINT("Secondary signature size: %u\n", CMD.secondary_signature_sz);
         DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
@@ -3756,11 +3756,13 @@ int main(int argc, char** argv)
         if (pubkey2)
             free(pubkey2);
     } else {
-        make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
+        ret = make_header(pubkey, pubkey_sz, CMD.image_file,
+                CMD.output_image_file);
     }
 
-
-    if (CMD.delta) {
+    /* Skip the delta step and propagate the failure to the caller if the
+     * signed image could not be created. */
+    if ((ret == 0) && CMD.delta) {
         if (CMD.encrypt)
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 64);
         else
