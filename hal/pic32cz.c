@@ -77,7 +77,7 @@ static void pic32_delay_cnt(uint32_t ticks)
 {
     uint32_t i = 0;
     for (i = 0; i < ticks; i++) {
-        __asm__("nop");
+        __asm__ __volatile__("nop");
     }
 }
 
@@ -159,11 +159,11 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-#ifdef WOLFBOOT_RESTORE_CLOCK
 #ifdef DEBUG_UART
     uart_deinit();
 #endif
 
+#ifdef WOLFBOOT_RESTORE_CLOCK
     pic32_clock_reset();
 
     if (!pic32_vreg_pll_was_enabled) {
