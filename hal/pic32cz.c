@@ -27,6 +27,7 @@
 
 #ifdef DEBUG_UART
 #include "uart_drv.h"
+void uart_deinit(void);
 #endif
 
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
@@ -60,6 +61,9 @@
 
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
+/* if the SUPC PLL regulator was already on at reset */
+static int pic32_vreg_pll_was_enabled = 0;
+
 #define SUPC_BASE (0x44020000U)
 #define SUPC_VREGCTRL (*(volatile uint32_t *)(SUPC_BASE + 0x1CU))
 #define SUPC_STATUS (*(volatile uint32_t *)(SUPC_BASE + 0x0CU))
@@ -69,14 +73,34 @@
 #define SUPC_STATUS_ADDVREGRDY_PLL (4)
 #define SUPC_STATUS_ADDVREGRDY_SHIFT (8)
 
+static void pic32_delay_cnt(uint32_t ticks)
+{
+    uint32_t i = 0;
+    for (i = 0; i < ticks; i++) {
+        __asm__("nop");
+    }
+}
+
+#define PLL_VREG_SETTLE_TICKS (4000)
+
 static void pic32_supc_vreg_pll_enable(void)
 {
+    pic32_vreg_pll_was_enabled =
+        ((SUPC_VREGCTRL >> SUPC_VREGCTRL_AVREGEN_SHIFT)
+         & SUPC_VREGCTRL_AVREGEN_PLLREG_EN) != 0;
+
+    if (pic32_vreg_pll_was_enabled) {
+        return;
+    }
+
     SUPC_VREGCTRL |= SUPC_VREGCTRL_AVREGEN_PLLREG_EN
         << SUPC_VREGCTRL_AVREGEN_SHIFT;
 
     /* wait for the vreg to be ready */
     while (!(SUPC_STATUS &
              (SUPC_STATUS_ADDVREGRDY_PLL << SUPC_STATUS_ADDVREGRDY_SHIFT))) {}
+
+    pic32_delay_cnt(PLL_VREG_SETTLE_TICKS);
 }
 
 #ifdef DUALBANK_SWAP
@@ -104,14 +128,6 @@ void hal_flash_lock(void)
 int hal_flash_erase(uint32_t addr, int len)
 {
     return pic32_flash_erase(addr, len);
-}
-
-static void pic32_delay_cnt(uint32_t ticks)
-{
-    uint32_t i = 0;
-    for (i = 0; i < ticks; i++) {
-        __asm__("nop");
-    }
 }
 
 void hal_init(void)
@@ -144,7 +160,16 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 #ifdef WOLFBOOT_RESTORE_CLOCK
+#ifdef DEBUG_UART
+    uart_deinit();
+#endif
+
     pic32_clock_reset();
+
+    if (!pic32_vreg_pll_was_enabled) {
+        SUPC_VREGCTRL &= ~((uint32_t)SUPC_VREGCTRL_AVREGEN_PLLREG_EN
+                           << SUPC_VREGCTRL_AVREGEN_SHIFT);
+    }
 #endif
 }
 
