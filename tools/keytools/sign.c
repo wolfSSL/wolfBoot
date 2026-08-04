@@ -639,6 +639,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
     /* open and load key buffer */
     *key_buffer = NULL;
+    *pubkey = NULL;
+    *pubkey_sz = 0;
     if (secondary) {
         key_file = CMD.secondary_key_file;
         sign = CMD.secondary_sign;
@@ -722,8 +724,10 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     wc_ed25519_free(&key.ed);
             }
 
-            if (ret != 0)
+            if (ret != 0) {
                 free(*pubkey);
+                *pubkey = NULL;
+            }
 
             /* break if we succeed or are not using auto */
             if (ret == 0 || sign != SIGN_AUTO) {
@@ -789,8 +793,10 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     wc_ed448_free(&key.ed4);
             }
 
-            if (ret != 0)
+            if (ret != 0) {
                 free(*pubkey);
+                *pubkey = NULL;
+            }
 
             /* break if we succeed or are not using auto */
             if (ret == 0 || sign != SIGN_AUTO) {
@@ -1051,6 +1057,11 @@ failure:
         zero_and_free(*key_buffer, *key_buffer_sz);
         *key_buffer = NULL;
     }
+    if (*pubkey != NULL) {
+        free(*pubkey);
+        *pubkey = NULL;
+    }
+    *pubkey_sz = 0;
     return NULL;
 }
 
@@ -3728,12 +3739,15 @@ int main(int argc, char** argv)
     if (CMD.hybrid) {
         uint8_t *kbuf2 = NULL;
         uint8_t *pubkey2 = NULL;
-        uint32_t pubkey_sz2;
+        uint32_t pubkey_sz2 = 0;
         DEBUG_PRINT("Loading secondary key\n");
         kbuf2 = load_key(&key_buffer2, &key_buffer_sz2, &pubkey2, &pubkey_sz2, 1);
+        if (!kbuf2) {
+            exit(1);
+        }
         printf("Creating hybrid signature\n");
-        make_hybrid_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file,
-                pubkey2, pubkey_sz2);
+        ret = make_hybrid_header(pubkey, pubkey_sz, CMD.image_file,
+                CMD.output_image_file, pubkey2, pubkey_sz2);
         DEBUG_PRINT("Signature size: %u\n", CMD.signature_sz);
         DEBUG_PRINT("Secondary signature size: %u\n", CMD.secondary_signature_sz);
         DEBUG_PRINT("Header size: %u\n", CMD.header_sz);
@@ -3742,11 +3756,13 @@ int main(int argc, char** argv)
         if (pubkey2)
             free(pubkey2);
     } else {
-        make_header(pubkey, pubkey_sz, CMD.image_file, CMD.output_image_file);
+        ret = make_header(pubkey, pubkey_sz, CMD.image_file,
+                CMD.output_image_file);
     }
 
-
-    if (CMD.delta) {
+    /* Skip the delta step and propagate the failure to the caller if the
+     * signed image could not be created. */
+    if ((ret == 0) && CMD.delta) {
         if (CMD.encrypt)
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 64);
         else

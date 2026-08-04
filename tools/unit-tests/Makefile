@@ -61,9 +61,13 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output \
+       unit-sign-hybrid-keyload \
+       unit-sign-header-failure \
        unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
+TESTS+=unit-tpm-nsc-cert
+TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
@@ -280,6 +284,23 @@ unit-tpm-api-names: ../../include/target.h unit-tpm-api-names.c ../../src/string
 		-DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
+unit-tpm-nsc-cert: ../../include/target.h unit-tpm-nsc-cert.c ../../src/string.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# The PKCS#11 NSC veneers are exercised here through C_CreateObject_nsc_call
+# and C_DeriveKey_nsc_call only; --gc-sections drops the remaining veneers so
+# just those two wolfPKCS11 entry points need a stub.
+unit-pkcs11-nsc-zeroize: ../../include/target.h unit-pkcs11-nsc-zeroize.c
+	gcc -o $@ unit-pkcs11-nsc-zeroize.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/misc.c \
+		$(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPKCS11) -DSECURE_PKCS11 \
+		-DWOLFPKCS11_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS -ffunction-sections -fdata-sections \
@@ -311,6 +332,22 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c \
 		$(KEYTOOLS_SIGN_SRCS)
 	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-sign-hybrid-keyload: ../../include/target.h unit-sign-hybrid-keyload.c \
+		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-sign-header-failure: ../../include/target.h unit-sign-header-failure.c \
+		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
 		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
 		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
 		-ffunction-sections -fdata-sections \
