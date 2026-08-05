@@ -4,6 +4,7 @@ This README describes configuration of supported targets.
 
 ## Supported Targets
 
+* [Altera Agilex 5](#altera-agilex-5-013b)
 * [Simulated](#simulated)
 * [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
@@ -9204,6 +9205,7 @@ The difference between the two timestamps is the cost of everything wolfBoot doe
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
 
+<<<<<<< HEAD
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
 wolfBoot runs on the Texas Instruments C2000 C28x DSP (TMS320F28P550SJ, 150 MHz) as a secure execute-in-place (XIP) bootloader. The C28x is word-addressed with `CHAR_BIT == 16` (no 8-bit type -- each octet occupies one 16-bit cell), built with the TI `cl2000` toolchain against wolfSSL's wide-byte (`CHAR_BIT != 8`) support.
@@ -9245,3 +9247,23 @@ The C28x boot ROM selects its boot source before any application code runs, so t
 | `DEBUG` | Enables verbose boot progress and a JTAG-readable survive-log mirror (`g_log`) for bring-up. |
 
 A/B update / rollback is a follow-on: the partitions are declared, but the update path (flash erase/write, swap, trailer) is not yet wide-byte-hardened.
+
+## Altera Agilex 5 (013B)
+
+The Agilex 5 DK-A5E013BM16AEA port runs as the signed BL33 payload in the
+GSRD handoff: SDM -> U-Boot SPL -> TF-A BL31 -> wolfBoot -> Linux FIT. SPL
+owns DDR and controller initialization; TF-A owns EL3, GICv3 and PSCI. The
+port keeps those responsibilities unchanged and loads signed A/B Linux FITs
+from raw MBR partitions on the SD card.
+
+Build the hosted configuration with:
+
+```sh
+cp config/examples/agilex5_013b_sdcard.config .config
+make clean
+make -j"$(nproc)"
+```
+
+See [docs/Agilex5.md](Agilex5.md) for the GSRD FIT/WIC layout, DT handoff,
+hardware test order, and the boundary between the bare-metal bootloader and
+the Linux libfcs/wolfSSL integration.

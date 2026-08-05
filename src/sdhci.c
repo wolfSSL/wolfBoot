@@ -585,6 +585,17 @@ static uint32_t sdhci_get_response_type(uint8_t resp_type)
 
 #define DEVICE_BUSY 1
 
+static int sdhci_reset_cmd_line(void)
+{
+    uint32_t timeout = 0x000FFFFF;
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_CMD);
+    while (((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_CMD) != 0U) &&
+            (--timeout > 0U)) {}
+
+    return (timeout > 0U) ? 0 : -1;
+}
+
 static int sdhci_send_cmd_internal(uint32_t cmd_type,
     uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
@@ -624,10 +635,18 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             "error SRS12=0x%08X\n",
             cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         status = -1; /* error */
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
     }
 
     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_CC); /* clear command complete */
-    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0);
+    timeout = 0x000FFFFF;
+    while (((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0U) &&
+            (--timeout > 0U)) {}
+    if (timeout == 0U) {
+        wolfBoot_printf("sdhci_send_cmd: command inhibit timeout\n");
+        status = -1;
+    }
 
     if (status == 0) {
         /* check for device busy */
@@ -639,6 +658,10 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             }
         }
     }
+
+#if SDHCI_WAIT_AFTER_CMD_US > 0U
+    udelay(SDHCI_WAIT_AFTER_CMD_US);
+#endif
 
     return status;
 }
@@ -801,9 +824,20 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* send the operating conditions command */
-        status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
-            SDHCI_RESP_R7);
+        /* Allow the card time to answer CMD8 after releasing the command line. */
+        for (retries = 0; retries < 10; retries++) {
+            status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
+                SDHCI_RESP_R7);
+            if (status == 0)
+                break;
+            udelay(10000);
+        }
+        if (status != 0) {
+            wolfBoot_printf("SD: CMD8 failed after %d retries\n", retries);
+        }
+        else if (retries > 0) {
+            wolfBoot_printf("SD: CMD8 succeeded after %d retries\n", retries);
+        }
     }
     return status;
 }
@@ -1732,10 +1766,12 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-    /* Reset the host controller */
+#if SDHCI_SKIP_HOST_RESET == 0
+    /* Reset the host controller unless an earlier boot stage initialized it. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);
+#endif
 
     /* Set debounce period to ~15ms (platform-specific value may be different) */
     SDHCI_REG_SET(SDHCI_HRS01, (0x300000UL << SDHCI_HRS01_DP_SHIFT) &

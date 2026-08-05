@@ -1,0 +1,22 @@
+name: Agilex 5 wolfBoot build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'arch.mk'
+      - 'config/examples/agilex5_013b_sdcard.config'
+      - 'hal/agilex5.*'
+      - 'include/sdhci.h'
+      - 'src/boot_aarch64*'
+      - 'src/sdhci.c'
+      - 'src/update_disk.c'
+      - 'test-app/app_agilex5.c'
+      - '.github/workflows/test-build-agilex5.yml'
+
+jobs:
+  build:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/agilex5_013b_sdcard.config
