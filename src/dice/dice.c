@@ -42,6 +42,8 @@
 #include <wolfssl/wolfcrypt/sha3.h>
 #endif
 
+#include <wolfcose/wolfcose.h>
+
 #ifndef PSA_INITIAL_ATTEST_CHALLENGE_SIZE_32
 #define PSA_INITIAL_ATTEST_CHALLENGE_SIZE_32 (32u)
 #define PSA_INITIAL_ATTEST_CHALLENGE_SIZE_48 (48u)
@@ -59,7 +61,6 @@
 #define WOLFBOOT_DICE_CDI_LEN 32
 #define WOLFBOOT_DICE_KEY_LEN 32
 #define WOLFBOOT_DICE_UEID_LEN 33
-#define WOLFBOOT_DICE_SIG_LEN 64
 
 #define WOLFBOOT_DICE_SUCCESS 0
 #define WOLFBOOT_DICE_ERR_INVALID_ARGUMENT -1
@@ -76,19 +77,17 @@ static NOINLINEFUNCTION void wolfboot_dice_zeroize(void *ptr, size_t len)
     }
 }
 
-#define COSE_LABEL_ALG 1
-#define COSE_ALG_ES256 (-7)
-
 #define EAT_CLAIM_NONCE 10
 #define EAT_CLAIM_UEID 256
 
 #define PSA_IAT_CLAIM_IMPLEMENTATION_ID 2396
-#define PSA_IAT_CLAIM_LIFECYCLE 2398
+#define PSA_IAT_CLAIM_LIFECYCLE 2395
 #define PSA_IAT_CLAIM_SW_COMPONENTS 2399
 
 #define PSA_SW_COMPONENT_MEASUREMENT_TYPE 1
 #define PSA_SW_COMPONENT_MEASUREMENT_VALUE 2
-#define PSA_SW_COMPONENT_MEASUREMENT_DESCRIPTION 5
+#define PSA_SW_COMPONENT_SIGNER_ID 5
+#define PSA_SW_COMPONENT_MEASUREMENT_DESCRIPTION 6
 
 #define WOLFBOOT_UEID_TYPE_RANDOM 0x01
 
@@ -115,6 +114,8 @@ struct wolfboot_dice_component {
     size_t measurement_desc_len;
     uint8_t measurement[WOLFBOOT_SHA_DIGEST_SIZE];
     size_t measurement_len;
+    uint8_t signer_id[WOLFBOOT_SHA_DIGEST_SIZE];
+    size_t signer_id_len;
 };
 
 struct wolfboot_dice_claims {
@@ -129,145 +130,6 @@ struct wolfboot_dice_claims {
     struct wolfboot_dice_component components[2];
     size_t component_count;
 };
-
-struct wolfboot_cbor_writer {
-    uint8_t *buf;
-    size_t size;
-    size_t offset;
-    int error;
-};
-
-static void wolfboot_cbor_init(struct wolfboot_cbor_writer *w,
-                               uint8_t *buf,
-                               size_t size)
-{
-    w->buf = buf;
-    w->size = size;
-    w->offset = 0;
-    w->error = 0;
-}
-
-static void wolfboot_cbor_reserve(struct wolfboot_cbor_writer *w, size_t len)
-{
-    if (w->error != 0) {
-        return;
-    }
-    if (w->buf == NULL || w->size == 0) {
-        w->offset += len;
-        return;
-    }
-    if (w->offset + len > w->size) {
-        w->error = WOLFBOOT_DICE_ERR_BUFFER_TOO_SMALL;
-        return;
-    }
-    w->offset += len;
-}
-
-static void wolfboot_cbor_put_type_val(struct wolfboot_cbor_writer *w,
-                                       uint8_t major,
-                                       uint64_t val)
-{
-    uint8_t tmp[9];
-    size_t len = 0;
-
-    if (val <= 23) {
-        tmp[len++] = (uint8_t)((major << 5) | (uint8_t)val);
-    }
-    else if (val <= 0xFF) {
-        tmp[len++] = (uint8_t)((major << 5) | 24);
-        tmp[len++] = (uint8_t)val;
-    }
-    else if (val <= 0xFFFF) {
-        tmp[len++] = (uint8_t)((major << 5) | 25);
-        tmp[len++] = (uint8_t)(val >> 8);
-        tmp[len++] = (uint8_t)(val & 0xFF);
-    }
-    else if (val <= 0xFFFFFFFFu) {
-        tmp[len++] = (uint8_t)((major << 5) | 26);
-        tmp[len++] = (uint8_t)(val >> 24);
-        tmp[len++] = (uint8_t)(val >> 16);
-        tmp[len++] = (uint8_t)(val >> 8);
-        tmp[len++] = (uint8_t)(val & 0xFF);
-    }
-    else {
-        tmp[len++] = (uint8_t)((major << 5) | 27);
-        tmp[len++] = (uint8_t)(val >> 56);
-        tmp[len++] = (uint8_t)(val >> 48);
-        tmp[len++] = (uint8_t)(val >> 40);
-        tmp[len++] = (uint8_t)(val >> 32);
-        tmp[len++] = (uint8_t)(val >> 24);
-        tmp[len++] = (uint8_t)(val >> 16);
-        tmp[len++] = (uint8_t)(val >> 8);
-        tmp[len++] = (uint8_t)(val & 0xFF);
-    }
-
-    wolfboot_cbor_reserve(w, len);
-    if (w->error != 0) {
-        return;
-    }
-    if (w->buf == NULL || w->size == 0) {
-        return;
-    }
-    XMEMCPY(w->buf + (w->offset - len), tmp, len);
-}
-
-static void wolfboot_cbor_put_uint(struct wolfboot_cbor_writer *w, uint64_t val)
-{
-    wolfboot_cbor_put_type_val(w, 0, val);
-}
-
-static void wolfboot_cbor_put_int(struct wolfboot_cbor_writer *w, int64_t val)
-{
-    if (val >= 0) {
-        wolfboot_cbor_put_uint(w, (uint64_t)val);
-    }
-    else {
-        uint64_t n = (uint64_t)(-1 - val);
-        wolfboot_cbor_put_type_val(w, 1, n);
-    }
-}
-
-static void wolfboot_cbor_put_bstr(struct wolfboot_cbor_writer *w,
-                                   const uint8_t *data,
-                                   size_t len)
-{
-    wolfboot_cbor_put_type_val(w, 2, len);
-    wolfboot_cbor_reserve(w, len);
-    if (w->error != 0) {
-        return;
-    }
-    if (w->buf == NULL || w->size == 0) {
-        return;
-    }
-    XMEMCPY(w->buf + (w->offset - len), data, len);
-}
-
-static void wolfboot_cbor_put_tstr(struct wolfboot_cbor_writer *w,
-                                   const char *data,
-                                   size_t len)
-{
-    wolfboot_cbor_put_type_val(w, 3, len);
-    wolfboot_cbor_reserve(w, len);
-    if (w->error != 0) {
-        return;
-    }
-    if (w->buf == NULL || w->size == 0) {
-        return;
-    }
-    XMEMCPY(w->buf + (w->offset - len), data, len);
-}
-
-static void wolfboot_cbor_put_array_start(struct wolfboot_cbor_writer *w,
-                                          size_t count)
-{
-    wolfboot_cbor_put_type_val(w, 4, count);
-}
-
-static void wolfboot_cbor_put_map_start(struct wolfboot_cbor_writer *w,
-                                        size_t count)
-{
-    wolfboot_cbor_put_type_val(w, 5, count);
-}
 
 static int wolfboot_hash_region(uintptr_t address, uint32_t size, uint8_t *out)
 {
@@ -336,13 +198,25 @@ static int wolfboot_hash_region(uintptr_t address, uint32_t size, uint8_t *out)
     return ret;
 }
 
-static int wolfboot_get_boot_image_hash(uint8_t *out, size_t *out_len)
+static int wolfboot_get_boot_image_claims(uint8_t *measurement,
+                                          size_t *measurement_len,
+                                          uint8_t *signer_id,
+                                          size_t *signer_id_len)
 {
     struct wolfBoot_image img;
     uint8_t *hash_ptr = NULL;
+#ifndef WOLFBOOT_NO_SIGN
+    uint8_t *signer_ptr = NULL;
+#endif
     uint16_t hash_len = 0;
+#ifndef WOLFBOOT_NO_SIGN
+    uint16_t signer_len = 0;
+#endif
 
-    if (out == NULL || out_len == NULL || *out_len < WOLFBOOT_SHA_DIGEST_SIZE) {
+    if (measurement == NULL || measurement_len == NULL || signer_id == NULL ||
+        signer_id_len == NULL ||
+        *measurement_len < WOLFBOOT_SHA_DIGEST_SIZE ||
+        *signer_id_len < WOLFBOOT_SHA_DIGEST_SIZE) {
         return -1;
     }
 
@@ -355,8 +229,19 @@ static int wolfboot_get_boot_image_hash(uint8_t *out, size_t *out_len)
         return -1;
     }
 
-    XMEMCPY(out, hash_ptr, hash_len);
-    *out_len = hash_len;
+    XMEMCPY(measurement, hash_ptr, hash_len);
+    *measurement_len = hash_len;
+#ifdef WOLFBOOT_NO_SIGN
+    XMEMSET(signer_id, 0, WOLFBOOT_SHA_DIGEST_SIZE);
+    *signer_id_len = WOLFBOOT_SHA_DIGEST_SIZE;
+#else
+    signer_len = wolfBoot_get_header(&img, HDR_PUBKEY, &signer_ptr);
+    if (signer_len != WOLFBOOT_SHA_DIGEST_SIZE || signer_ptr == NULL) {
+        return -1;
+    }
+    XMEMCPY(signer_id, signer_ptr, signer_len);
+    *signer_id_len = signer_len;
+#endif
     return 0;
 }
 
@@ -527,6 +412,8 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
     size_t wb_hash_len = sizeof(wb_hash);
     uint8_t boot_hash[WOLFBOOT_SHA_DIGEST_SIZE];
     size_t boot_hash_len = sizeof(boot_hash);
+    uint8_t boot_signer_id[WOLFBOOT_SHA_DIGEST_SIZE];
+    size_t boot_signer_id_len = sizeof(boot_signer_id);
 
     XMEMSET(claims, 0, sizeof(*claims));
 
@@ -569,35 +456,53 @@ static int wolfboot_dice_collect_claims(struct wolfboot_dice_claims *claims)
         claims->has_lifecycle = 1;
     }
 
-    if (wolfboot_get_wolfboot_hash(wb_hash, &wb_hash_len) == 0) {
-        claims->components[claims->component_count].measurement_type =
-            WOLFBOOT_MEASUREMENT_HASH_NAME;
-        claims->components[claims->component_count].measurement_type_len =
-            XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
-        claims->components[claims->component_count].measurement_desc =
-            WOLFBOOT_DICE_COMPONENT_WOLFBOOT;
-        claims->components[claims->component_count].measurement_desc_len =
-            XSTRLEN(WOLFBOOT_DICE_COMPONENT_WOLFBOOT);
-        XMEMCPY(claims->components[claims->component_count].measurement,
-                wb_hash, wb_hash_len);
-        claims->components[claims->component_count].measurement_len = wb_hash_len;
-        claims->component_count++;
+    /* A measurement that silently vanishes leaves a token a verifier cannot
+     * tell from one for a device with nothing to measure. */
+    if (wolfboot_get_wolfboot_hash(wb_hash, &wb_hash_len) != 0) {
+#ifndef WOLFBOOT_DICE_HW
+        wc_ForceZero(uds, sizeof(uds));
+#endif
+        return WOLFBOOT_DICE_ERR_HW;
     }
+    claims->components[claims->component_count].measurement_type =
+        WOLFBOOT_MEASUREMENT_HASH_NAME;
+    claims->components[claims->component_count].measurement_type_len =
+        XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
+    claims->components[claims->component_count].measurement_desc =
+        WOLFBOOT_DICE_COMPONENT_WOLFBOOT;
+    claims->components[claims->component_count].measurement_desc_len =
+        XSTRLEN(WOLFBOOT_DICE_COMPONENT_WOLFBOOT);
+    XMEMCPY(claims->components[claims->component_count].measurement,
+            wb_hash, wb_hash_len);
+    claims->components[claims->component_count].measurement_len = wb_hash_len;
+    claims->components[claims->component_count].signer_id_len =
+        WOLFBOOT_SHA_DIGEST_SIZE;
+    claims->component_count++;
 
-    if (wolfboot_get_boot_image_hash(boot_hash, &boot_hash_len) == 0) {
-        claims->components[claims->component_count].measurement_type =
-            WOLFBOOT_MEASUREMENT_HASH_NAME;
-        claims->components[claims->component_count].measurement_type_len =
-            XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
-        claims->components[claims->component_count].measurement_desc =
-            WOLFBOOT_DICE_COMPONENT_BOOTIMAGE;
-        claims->components[claims->component_count].measurement_desc_len =
-            XSTRLEN(WOLFBOOT_DICE_COMPONENT_BOOTIMAGE);
-        XMEMCPY(claims->components[claims->component_count].measurement,
-                boot_hash, boot_hash_len);
-        claims->components[claims->component_count].measurement_len = boot_hash_len;
-        claims->component_count++;
+    if (wolfboot_get_boot_image_claims(boot_hash, &boot_hash_len,
+                                       boot_signer_id,
+                                       &boot_signer_id_len) != 0) {
+#ifndef WOLFBOOT_DICE_HW
+        wc_ForceZero(uds, sizeof(uds));
+#endif
+        return WOLFBOOT_DICE_ERR_HW;
     }
+    claims->components[claims->component_count].measurement_type =
+        WOLFBOOT_MEASUREMENT_HASH_NAME;
+    claims->components[claims->component_count].measurement_type_len =
+        XSTRLEN(WOLFBOOT_MEASUREMENT_HASH_NAME);
+    claims->components[claims->component_count].measurement_desc =
+        WOLFBOOT_DICE_COMPONENT_BOOTIMAGE;
+    claims->components[claims->component_count].measurement_desc_len =
+        XSTRLEN(WOLFBOOT_DICE_COMPONENT_BOOTIMAGE);
+    XMEMCPY(claims->components[claims->component_count].measurement,
+            boot_hash, boot_hash_len);
+    claims->components[claims->component_count].measurement_len = boot_hash_len;
+    XMEMCPY(claims->components[claims->component_count].signer_id,
+            boot_signer_id, boot_signer_id_len);
+    claims->components[claims->component_count].signer_id_len =
+        boot_signer_id_len;
+    claims->component_count++;
 #ifndef WOLFBOOT_DICE_HW
     wc_ForceZero(uds, sizeof(uds));
 #endif
@@ -750,6 +655,11 @@ static int wolfboot_attest_get_private_key(ecc_key *key,
                                          key, ECC_SECP256R1) != 0) {
             goto cleanup;
         }
+        /* Import leaves the key ECC_PRIVATEKEY_ONLY; wolfCOSE treats a key as
+         * sign-capable only once the public point is present. */
+        if (wc_ecc_make_pub(key, NULL) != 0) {
+            goto cleanup;
+        }
         ret = 0;
 
 cleanup:
@@ -773,9 +683,10 @@ static int wolfboot_dice_encode_payload(uint8_t *buf,
                                         const struct wolfboot_dice_claims *claims,
                                         size_t *payload_len)
 {
-    struct wolfboot_cbor_writer w;
+    WOLFCOSE_CBOR_CTX ctx;
     size_t map_count = 2;
     size_t i;
+    int ret;
 
     if (claims->implementation_id_len > 0) {
         map_count++;
@@ -787,195 +698,163 @@ static int wolfboot_dice_encode_payload(uint8_t *buf,
         map_count++;
     }
 
-    wolfboot_cbor_init(&w, buf, buf_len);
-    wolfboot_cbor_put_map_start(&w, map_count);
+    XMEMSET(&ctx, 0, sizeof(ctx));
+    ctx.buf = buf;
+    ctx.bufSz = buf_len;
 
-    wolfboot_cbor_put_int(&w, EAT_CLAIM_NONCE);
-    wolfboot_cbor_put_bstr(&w, claims->challenge, claims->challenge_len);
-
-    wolfboot_cbor_put_int(&w, EAT_CLAIM_UEID);
-    wolfboot_cbor_put_bstr(&w, claims->ueid, claims->ueid_len);
-
-    if (claims->implementation_id_len > 0) {
-        wolfboot_cbor_put_int(&w, PSA_IAT_CLAIM_IMPLEMENTATION_ID);
-        wolfboot_cbor_put_bstr(&w,
-                               claims->implementation_id,
-                               claims->implementation_id_len);
+    ret = wc_CBOR_EncodeMapStart(&ctx, map_count);
+    if (ret == 0) {
+        ret = wc_CBOR_EncodeInt(&ctx, EAT_CLAIM_NONCE);
+    }
+    if (ret == 0) {
+        ret = wc_CBOR_EncodeBstr(&ctx, claims->challenge, claims->challenge_len);
+    }
+    if (ret == 0) {
+        ret = wc_CBOR_EncodeInt(&ctx, EAT_CLAIM_UEID);
+    }
+    if (ret == 0) {
+        ret = wc_CBOR_EncodeBstr(&ctx, claims->ueid, claims->ueid_len);
     }
 
-    if (claims->has_lifecycle) {
-        wolfboot_cbor_put_int(&w, PSA_IAT_CLAIM_LIFECYCLE);
-        wolfboot_cbor_put_uint(&w, claims->lifecycle);
-    }
-
-    if (claims->component_count > 0) {
-        wolfboot_cbor_put_int(&w, PSA_IAT_CLAIM_SW_COMPONENTS);
-        wolfboot_cbor_put_array_start(&w, claims->component_count);
-        for (i = 0; i < claims->component_count; i++) {
-            wolfboot_cbor_put_map_start(&w, 3);
-            wolfboot_cbor_put_uint(&w, PSA_SW_COMPONENT_MEASUREMENT_TYPE);
-            wolfboot_cbor_put_tstr(&w,
-                                   claims->components[i].measurement_type,
-                                   claims->components[i].measurement_type_len);
-            wolfboot_cbor_put_uint(&w, PSA_SW_COMPONENT_MEASUREMENT_VALUE);
-            wolfboot_cbor_put_bstr(&w,
-                                   claims->components[i].measurement,
-                                   claims->components[i].measurement_len);
-            wolfboot_cbor_put_uint(&w, PSA_SW_COMPONENT_MEASUREMENT_DESCRIPTION);
-            wolfboot_cbor_put_tstr(&w,
-                                   claims->components[i].measurement_desc,
-                                   claims->components[i].measurement_desc_len);
+    if ((ret == 0) && (claims->implementation_id_len > 0)) {
+        ret = wc_CBOR_EncodeInt(&ctx, PSA_IAT_CLAIM_IMPLEMENTATION_ID);
+        if (ret == 0) {
+            ret = wc_CBOR_EncodeBstr(&ctx, claims->implementation_id,
+                                     claims->implementation_id_len);
         }
     }
 
-    if (w.error != 0) {
-        return w.error;
+    if ((ret == 0) && claims->has_lifecycle) {
+        ret = wc_CBOR_EncodeInt(&ctx, PSA_IAT_CLAIM_LIFECYCLE);
+        if (ret == 0) {
+            ret = wc_CBOR_EncodeUint(&ctx, claims->lifecycle);
+        }
     }
 
-    *payload_len = w.offset;
+    if ((ret == 0) && (claims->component_count > 0)) {
+        ret = wc_CBOR_EncodeInt(&ctx, PSA_IAT_CLAIM_SW_COMPONENTS);
+        if (ret == 0) {
+            ret = wc_CBOR_EncodeArrayStart(&ctx, claims->component_count);
+        }
+        for (i = 0; (ret == 0) && (i < claims->component_count); i++) {
+            ret = wc_CBOR_EncodeMapStart(&ctx, 4);
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeUint(&ctx,
+                                         PSA_SW_COMPONENT_MEASUREMENT_TYPE);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeTstr(&ctx,
+                    (const uint8_t *)claims->components[i].measurement_type,
+                    claims->components[i].measurement_type_len);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeUint(&ctx,
+                                         PSA_SW_COMPONENT_MEASUREMENT_VALUE);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeBstr(&ctx,
+                    claims->components[i].measurement,
+                    claims->components[i].measurement_len);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeUint(&ctx, PSA_SW_COMPONENT_SIGNER_ID);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeBstr(&ctx,
+                    claims->components[i].signer_id,
+                    claims->components[i].signer_id_len);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeUint(&ctx,
+                    PSA_SW_COMPONENT_MEASUREMENT_DESCRIPTION);
+            }
+            if (ret == 0) {
+                ret = wc_CBOR_EncodeTstr(&ctx,
+                    (const uint8_t *)claims->components[i].measurement_desc,
+                    claims->components[i].measurement_desc_len);
+            }
+        }
+    }
+
+    if (ret != 0) {
+        return WOLFBOOT_DICE_ERR_BUFFER_TOO_SMALL;
+    }
+
+    *payload_len = ctx.idx;
     return 0;
 }
-
-static int wolfboot_dice_encode_protected(uint8_t *buf,
-                                          size_t buf_len,
-                                          size_t *prot_len)
-{
-    struct wolfboot_cbor_writer w;
-
-    wolfboot_cbor_init(&w, buf, buf_len);
-    wolfboot_cbor_put_map_start(&w, 1);
-    wolfboot_cbor_put_uint(&w, COSE_LABEL_ALG);
-    wolfboot_cbor_put_int(&w, COSE_ALG_ES256);
-
-    if (w.error != 0) {
-        return w.error;
-    }
-
-    *prot_len = w.offset;
-    return 0;
-}
-
-static int wolfboot_dice_build_sig_structure(uint8_t *buf,
-                                             size_t buf_len,
-                                             const uint8_t *prot,
-                                             size_t prot_len,
-                                             const uint8_t *payload,
-                                             size_t payload_len,
-                                             size_t *tbs_len)
-{
-    struct wolfboot_cbor_writer w;
-
-    wolfboot_cbor_init(&w, buf, buf_len);
-    wolfboot_cbor_put_array_start(&w, 4);
-    wolfboot_cbor_put_tstr(&w, "Signature1", 10);
-    wolfboot_cbor_put_bstr(&w, prot, prot_len);
-    wolfboot_cbor_put_bstr(&w, (const uint8_t *)"", 0);
-    wolfboot_cbor_put_bstr(&w, payload, payload_len);
-
-    if (w.error != 0) {
-        return w.error;
-    }
-
-    *tbs_len = w.offset;
-    return 0;
-}
-
-static int wolfboot_dice_sign_tbs(const uint8_t *tbs,
-                                  size_t tbs_len,
-                                  uint8_t *sig,
-                                  size_t *sig_len,
-                                  const struct wolfboot_dice_claims *claims)
-{
-    int ret = WOLFBOOT_DICE_ERR_CRYPTO;
-    uint8_t hash[SHA256_DIGEST_SIZE];
-#ifndef WOLFBOOT_DICE_HW
-    ecc_key key;
-    int key_inited = 0;
-    WC_RNG rng;
-    int wc_ret;
-    int rng_inited = 0;
-    uint8_t der_sig[128];
-    word32 der_sig_len = sizeof(der_sig);
-    uint8_t r[WOLFBOOT_DICE_SIG_LEN / 2];
-    uint8_t s[WOLFBOOT_DICE_SIG_LEN / 2];
-    word32 r_len = sizeof(r);
-    word32 s_len = sizeof(s);
-#endif /* !WOLFBOOT_DICE_HW */
-
-    if (sig == NULL || sig_len == NULL || *sig_len < WOLFBOOT_DICE_SIG_LEN) {
-        return WOLFBOOT_DICE_ERR_INVALID_ARGUMENT;
-    }
 
 #ifdef WOLFBOOT_DICE_HW
-    if (wolfboot_attest_get_private_key_hw(claims) != 0) {
-        ret = WOLFBOOT_DICE_ERR_HW;
-        goto cleanup;
+static int wolfboot_dice_hw_sign_cb(void *cbCtx, int32_t alg,
+                                    const uint8_t *tbs, size_t tbs_len,
+                                    uint8_t *sig, size_t sig_sz,
+                                    size_t *sig_len)
+{
+    int *sign_failed = (int *)cbCtx;
+    size_t out_len = sig_sz;
+
+    (void)alg;
+
+    /* wolfCOSE pre-hashes the Sig_structure for ES256, so tbs is the 32-byte
+     * digest. hal_dice_sign_hash() outputs 64-byte raw R||S and keeps the
+     * private key inside the platform boundary. */
+    if (hal_dice_sign_hash(tbs, tbs_len, sig, &out_len) != 0) {
+        if (sign_failed != NULL) {
+            *sign_failed = 1;
+        }
+        return -1;
     }
-#else
+    *sig_len = out_len;
+    return 0;
+}
+#endif /* WOLFBOOT_DICE_HW */
+
+#ifndef WOLFBOOT_DICE_HW
+/* Kept out of line so the secure-world sign path does not widen the caller's
+ * frame, which the size query also pays for. */
+static int NOINLINEFUNCTION wolfboot_dice_sign_payload(
+                                     WOLFCOSE_KEY *cose_key,
+                                     struct wolfboot_dice_claims *claims,
+                                     const uint8_t *payload,
+                                     size_t payload_len,
+                                     uint8_t *scratch,
+                                     size_t scratch_len,
+                                     uint8_t *token_buf,
+                                     size_t token_buf_size,
+                                     size_t *out_len)
+{
+    ecc_key key;
+    WC_RNG rng;
+    int key_inited = 0;
+    int rng_inited = 0;
+    int ret;
+
     wc_ecc_init(&key);
     key_inited = 1;
     if (wolfboot_attest_get_private_key(&key, claims) != 0) {
         ret = WOLFBOOT_DICE_ERR_HW;
         goto cleanup;
     }
-#endif
-
-#ifndef WOLFBOOT_DICE_HW
     (void)wc_ecc_set_deterministic(&key, 1);
     if (wc_InitRng(&rng) != 0) {
         ret = WOLFBOOT_DICE_ERR_HW;
         goto cleanup;
     }
     rng_inited = 1;
-#endif /* !WOLFBOOT_DICE_HW */
-
-    {
-        wc_Sha256 sha;
-        ret = wc_InitSha256(&sha);
-        if (ret == 0) {
-            ret = wc_Sha256Update(&sha, tbs, (word32)tbs_len);
-            if (ret == 0) {
-                ret = wc_Sha256Final(&sha, hash);
-            }
-            wc_Sha256Free(&sha);
-        }
-
-        if (ret != 0) {
-            ret = WOLFBOOT_DICE_ERR_CRYPTO;
-            goto cleanup;
-        }
-    }
-
-#ifdef WOLFBOOT_DICE_HW
-    /* Platform attestation key is ready. Sign pre-computed hash via HAL.
-     * hal_dice_sign_hash() MUST output 64-byte raw R||S (big-endian), NOT DER.
-     * This matches WOLFBOOT_DICE_SIG_LEN and the COSE_Sign1 signature field directly,
-     * bypassing the wc_ecc_sig_to_rs DER->raw conversion that the software path needs. */
-    ret = hal_dice_sign_hash(hash, sizeof(hash), sig, sig_len);
-    if (ret != 0)
-        ret = WOLFBOOT_DICE_ERR_HW;
-#else /* !WOLFBOOT_DICE_HW */
-    wc_ret = wc_ecc_sign_hash(hash, sizeof(hash), der_sig, &der_sig_len, &rng, &key);
-    if (wc_ret != 0) {
+    ret = wc_CoseKey_SetEcc(cose_key, WOLFCOSE_CRV_P256, &key);
+    if (ret != 0) {
         ret = WOLFBOOT_DICE_ERR_CRYPTO;
         goto cleanup;
     }
-
-    wc_ret = wc_ecc_sig_to_rs(der_sig, der_sig_len, r, &r_len, s, &s_len);
-    if (wc_ret != 0 || r_len > sizeof(r) || s_len > sizeof(s)) {
+    ret = wc_CoseSign1_Sign_ex(cose_key, WOLFCOSE_ALG_ES256, NULL, 0,
+                               payload, payload_len, NULL, 0, NULL, 0,
+                               scratch, scratch_len, token_buf, token_buf_size,
+                               out_len, &rng, WOLFCOSE_SIGN1_UNTAGGED);
+    if (ret != 0) {
         ret = WOLFBOOT_DICE_ERR_CRYPTO;
-        goto cleanup;
     }
-
-    XMEMSET(sig, 0, WOLFBOOT_DICE_SIG_LEN);
-    XMEMCPY(sig + (sizeof(r) - r_len), r, r_len);
-    XMEMCPY(sig + sizeof(r) + (sizeof(s) - s_len), s, s_len);
-    *sig_len = WOLFBOOT_DICE_SIG_LEN;
-    ret = WOLFBOOT_DICE_SUCCESS;
-#endif /* !WOLFBOOT_DICE_HW */
 
 cleanup:
-#ifndef WOLFBOOT_DICE_HW
     if (key_inited) {
         wc_ecc_free(&key);
         wolfboot_dice_zeroize(&key, sizeof(key));
@@ -983,11 +862,9 @@ cleanup:
     if (rng_inited) {
         wc_FreeRng(&rng);
     }
-    wolfboot_dice_zeroize(der_sig, sizeof(der_sig));
-#endif /* !WOLFBOOT_DICE_HW */
-    wolfboot_dice_zeroize(hash, sizeof(hash));
     return ret;
 }
+#endif /* !WOLFBOOT_DICE_HW */
 
 static int wolfboot_dice_build_token(uint8_t *token_buf,
                                      size_t token_buf_size,
@@ -998,13 +875,13 @@ static int wolfboot_dice_build_token(uint8_t *token_buf,
     struct wolfboot_dice_claims claims;
     uint8_t payload[WOLFBOOT_DICE_MAX_PAYLOAD];
     size_t payload_len = 0;
-    uint8_t protected_hdr[32];
-    size_t protected_len = 0;
-    uint8_t tbs[WOLFBOOT_DICE_MAX_TBS];
-    size_t tbs_len = 0;
-    uint8_t sig[WOLFBOOT_DICE_SIG_LEN];
-    size_t sig_len = sizeof(sig);
-    struct wolfboot_cbor_writer w;
+    uint8_t scratch[WOLFBOOT_DICE_MAX_TBS];
+    WOLFCOSE_KEY cose_key;
+    int cose_key_inited = 0;
+#ifdef WOLFBOOT_DICE_HW
+    int hw_sign_failed = 0;
+#endif
+    size_t out_len = 0;
     int ret;
 
     ret = wolfboot_dice_collect_claims(&claims);
@@ -1018,48 +895,71 @@ static int wolfboot_dice_build_token(uint8_t *token_buf,
     ret = wolfboot_dice_encode_payload(payload, sizeof(payload), &claims,
                                        &payload_len);
     if (ret != 0) {
-        return ret;
+        goto cleanup;
     }
 
-    ret = wolfboot_dice_encode_protected(protected_hdr, sizeof(protected_hdr),
-                                         &protected_len);
-    if (ret != 0) {
-        return ret;
-    }
-
-    ret = wolfboot_dice_build_sig_structure(tbs, sizeof(tbs),
-                                            protected_hdr, protected_len,
-                                            payload, payload_len, &tbs_len);
-    if (ret != 0) {
-        return ret;
-    }
-
-    if (token_buf != NULL) {
-        ret = wolfboot_dice_sign_tbs(tbs, tbs_len, sig, &sig_len, &claims);
-        if (ret != 0) {
-            return ret;
+    /* Size query returns the exact untagged COSE_Sign1 length without signing:
+     * the HW DICE engine must not run and the CDI must not advance while sizing. */
+    if (token_buf == NULL) {
+        ret = wc_CoseSign1_SignSize_ex(NULL, WOLFCOSE_ALG_ES256, 0,
+                                       payload_len, 0,
+                                       WOLFCOSE_SIGN1_UNTAGGED, &out_len);
+        if (ret == 0) {
+            *token_len = out_len;
         }
+        else {
+            ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        }
+        goto cleanup;
     }
 
-    wolfboot_cbor_init(&w, token_buf, token_buf_size);
-    wolfboot_cbor_put_array_start(&w, 4);
-    wolfboot_cbor_put_bstr(&w, protected_hdr, protected_len);
-    wolfboot_cbor_put_map_start(&w, 0);
-    wolfboot_cbor_put_bstr(&w, payload, payload_len);
-    if (token_buf != NULL) {
-        wolfboot_cbor_put_bstr(&w, sig, sig_len);
+    ret = wc_CoseKey_Init(&cose_key);
+    if (ret != 0) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
     }
-    else {
-        wolfboot_cbor_put_type_val(&w, 2, WOLFBOOT_DICE_SIG_LEN);
-        wolfboot_cbor_reserve(&w, WOLFBOOT_DICE_SIG_LEN);
-    }
+    cose_key_inited = 1;
 
-    if (w.error != 0) {
-        return w.error;
+#ifdef WOLFBOOT_DICE_HW
+    if (wolfboot_attest_get_private_key_hw(&claims) != 0) {
+        ret = WOLFBOOT_DICE_ERR_HW;
+        goto cleanup;
     }
+    ret = wc_CoseKey_SetExtSigner(&cose_key, wolfboot_dice_hw_sign_cb,
+                                  &hw_sign_failed);
+    if (ret != 0) {
+        ret = WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
+    }
+    ret = wc_CoseSign1_Sign_ex(&cose_key, WOLFCOSE_ALG_ES256, NULL, 0,
+                               payload, payload_len, NULL, 0, NULL, 0,
+                               scratch, sizeof(scratch), token_buf,
+                               token_buf_size, &out_len, NULL,
+                               WOLFCOSE_SIGN1_UNTAGGED);
+    if (ret != 0) {
+        ret = hw_sign_failed ? WOLFBOOT_DICE_ERR_HW :
+                               WOLFBOOT_DICE_ERR_CRYPTO;
+        goto cleanup;
+    }
+#else
+    ret = wolfboot_dice_sign_payload(&cose_key, &claims, payload, payload_len,
+                                     scratch, sizeof(scratch),
+                                     token_buf, token_buf_size, &out_len);
+    if (ret != 0) {
+        goto cleanup;
+    }
+#endif /* WOLFBOOT_DICE_HW */
 
-    *token_len = w.offset;
-    return WOLFBOOT_DICE_SUCCESS;
+    *token_len = out_len;
+    ret = WOLFBOOT_DICE_SUCCESS;
+
+cleanup:
+    if (cose_key_inited) {
+        wc_CoseKey_Free(&cose_key);
+    }
+    wolfboot_dice_zeroize(payload, sizeof(payload));
+    wolfboot_dice_zeroize(scratch, sizeof(scratch));
+    return ret;
 }
 
 int wolfBoot_dice_get_token(const uint8_t *challenge,

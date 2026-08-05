@@ -101,10 +101,16 @@ jobs:
 
       - name: Clean and build test with DICE attestation (stm32h5)
         run: |
+          set -o pipefail
           make clean distclean
           cp config/examples/stm32h5-tz-psa.config .config
           make
-          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600 \
+            | tee /tmp/m33mu-dice.log
+          grep -q "IAT size match: challenge=64 token=" /tmp/m33mu-dice.log
+          grep -q "PSA boot attestation: success" /tmp/m33mu-dice.log
+          grep -q "\\[BKPT\\] imm=0x7f" /tmp/m33mu-dice.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-dice.log
 
       - name: Clean and build test with fwTPM (stm32h5)
         run: |

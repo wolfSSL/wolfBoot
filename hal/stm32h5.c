@@ -167,10 +167,11 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return 0;
 }
 
-#define STM32H5_BSEC_BASE 0x46009000u
-#define STM32H5_BSEC_UID0 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x14))
-#define STM32H5_BSEC_UID1 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x18))
-#define STM32H5_BSEC_UID2 (*(volatile uint32_t *)(STM32H5_BSEC_BASE + 0x1C))
+/* STM32H5 96-bit unique device ID, factory-programmed (RM0481). */
+#define STM32H5_UID_BASE 0x08FFF800u
+#define STM32H5_UID0 (*(volatile uint32_t *)(STM32H5_UID_BASE + 0x0u))
+#define STM32H5_UID1 (*(volatile uint32_t *)(STM32H5_UID_BASE + 0x4u))
+#define STM32H5_UID2 (*(volatile uint32_t *)(STM32H5_UID_BASE + 0x8u))
 
 #ifdef WOLFBOOT_UDS_OBKEYS
 __attribute__((weak)) int stm32h5_obkeys_read_uds(uint8_t *out, size_t out_len)
@@ -205,18 +206,18 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
 #endif
     size_t copy_len;
 
-    uid[0] = (uint8_t)(STM32H5_BSEC_UID0 >> 0);
-    uid[1] = (uint8_t)(STM32H5_BSEC_UID0 >> 8);
-    uid[2] = (uint8_t)(STM32H5_BSEC_UID0 >> 16);
-    uid[3] = (uint8_t)(STM32H5_BSEC_UID0 >> 24);
-    uid[4] = (uint8_t)(STM32H5_BSEC_UID1 >> 0);
-    uid[5] = (uint8_t)(STM32H5_BSEC_UID1 >> 8);
-    uid[6] = (uint8_t)(STM32H5_BSEC_UID1 >> 16);
-    uid[7] = (uint8_t)(STM32H5_BSEC_UID1 >> 24);
-    uid[8] = (uint8_t)(STM32H5_BSEC_UID2 >> 0);
-    uid[9] = (uint8_t)(STM32H5_BSEC_UID2 >> 8);
-    uid[10] = (uint8_t)(STM32H5_BSEC_UID2 >> 16);
-    uid[11] = (uint8_t)(STM32H5_BSEC_UID2 >> 24);
+    uid[0] = (uint8_t)(STM32H5_UID0 >> 0);
+    uid[1] = (uint8_t)(STM32H5_UID0 >> 8);
+    uid[2] = (uint8_t)(STM32H5_UID0 >> 16);
+    uid[3] = (uint8_t)(STM32H5_UID0 >> 24);
+    uid[4] = (uint8_t)(STM32H5_UID1 >> 0);
+    uid[5] = (uint8_t)(STM32H5_UID1 >> 8);
+    uid[6] = (uint8_t)(STM32H5_UID1 >> 16);
+    uid[7] = (uint8_t)(STM32H5_UID1 >> 24);
+    uid[8] = (uint8_t)(STM32H5_UID2 >> 0);
+    uid[9] = (uint8_t)(STM32H5_UID2 >> 8);
+    uid[10] = (uint8_t)(STM32H5_UID2 >> 16);
+    uid[11] = (uint8_t)(STM32H5_UID2 >> 24);
 
 #if defined(WOLFBOOT_HASH_SHA256)
     wc_InitSha256(&hash);

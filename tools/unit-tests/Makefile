@@ -11,6 +11,7 @@ WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
 WOLFBOOT_LIB_WOLFHSM?=../../lib/wolfHSM
+WOLFBOOT_LIB_WOLFCOSE?=../../lib/wolfCOSE
 
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
 WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
@@ -21,6 +22,9 @@ endif
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFHSM)),)
 WOLFBOOT_LIB_WOLFHSM=../../../external-libs/wolfHSM
 endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFCOSE)),)
+WOLFBOOT_LIB_WOLFCOSE=../../../external-libs/wolfCOSE
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
@@ -28,6 +32,7 @@ WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
+WOLFBOOT_LIB_WOLFCOSE:=$(abspath $(WOLFBOOT_LIB_WOLFCOSE))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -84,6 +89,8 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
+TESTS+=unit-dice-token-size
+TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-samr21
@@ -330,6 +337,24 @@ unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/ar
 	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \
 		-ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections
+
+DICE_TOKEN_TEST_CFLAGS=-I$(WOLFBOOT_LIB_WOLFCOSE)/include \
+	-I$(WOLFBOOT_LIB_WOLFSSL) -DUNIT_TEST_AUTH -DWOLFBOOT_SIGN_ECC256 \
+	-DWOLFCRYPT_SECURE_MODE -DHAVE_HKDF -DWOLFBOOT_NO_PARTITIONS \
+	-DWOLFCOSE_LEAN -DWOLFCOSE_ENABLE_EXT_SIGN \
+	-ffunction-sections -fdata-sections
+unit-dice-token-size:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS)
+unit-dice-token-nosign:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS) -DWOLFBOOT_NO_SIGN
+DICE_TOKEN_TEST_SRC=unit-dice-token-size.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_cbor.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
+unit-dice-token-size unit-dice-token-nosign: ../../include/target.h \
+	$(DICE_TOKEN_TEST_SRC)
+	gcc -o $@ $(DICE_TOKEN_TEST_SRC) $(CFLAGS) $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-va416x0-fram: unit-va416x0-fram.c ../../hal/va416x0.c
 	gcc -o $@ unit-va416x0-fram.c $(CFLAGS) $(LDFLAGS)
