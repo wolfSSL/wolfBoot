@@ -166,6 +166,17 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS_EXTRA+=-DSDHCI_SDMA_DISABLED
   endif
 
+  ifeq ($(TARGET),agilex5)
+    # Altera Agilex 5: Cortex-A55, entered as non-secure BL33 at EL2 by
+    # the GSRD TF-A BL31 image. SPL owns DDR, clocks, pinmux and resets.
+    ARCH_FLAGS=-mcpu=cortex-a55+crypto -march=armv8.2-a+crypto \
+               -mtune=cortex-a55
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A55
+    CFLAGS+=-DWOLFBOOT_DUALBOOT -DWOLFBOOT_UBOOT_LEGACY
+    # BL31 owns GICv3 and secondary-core/PSCI setup. Do not touch RVBAR.
+    CFLAGS+=-DSKIP_RVBAR=1 -DSKIP_GIC_INIT=1
+  endif
+
   ifeq ($(TARGET),nxp_ls1028a)
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
@@ -245,7 +256,7 @@ ifeq ($(ARCH),AARCH64)
   # asm (sp_arm64.c / WOLFSSL_SP_ARM64_ASM); that is enabled independently on
   # __aarch64__ in include/user_settings.h, so a non-FIPS cm4 build still links
   # sp_arm64 asm.
-  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
+  ifeq ($(filter zynq versal agilex5 nxp_ls1028a,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 
