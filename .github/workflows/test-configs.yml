@@ -8,6 +8,12 @@ on:
 
 jobs:
 
+  agilex5_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/agilex5_013b_sdcard.config
+
   cypsoc6_test:
     uses: ./.github/workflows/test-build-psoc6.yml
     with:

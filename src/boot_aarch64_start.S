@@ -30,6 +30,10 @@
 #include "hal/versal.h"
 #endif
 
+#ifdef TARGET_agilex5
+#include "hal/agilex5.h"
+#endif
+
 #ifdef TARGET_nxp_ls1028a
 #include "hal/nxp_ls1028a.h"
 #endif
@@ -87,9 +91,9 @@
 .set L2Table,     MMUTableL2
 .set vector_base, _vector_table
 
-#ifdef TARGET_versal
+#if defined(TARGET_versal) || defined(TARGET_agilex5)
 /* Versal: RVBAR is handled by PLM, not accessible from APU in JTAG mode */
-/* Cortex-A72 timestamp clock frequency (from Versal HW) */
+/* BL31 has already programmed CNTFRQ_EL0 on BL33-entry platforms. */
 .set counterfreq, 100000000
 #else
 .set rvbar_base,  0xFD5C0040
@@ -676,6 +680,14 @@ MMUTableL2:
 
 .set SECT, 0
 
+#ifdef TARGET_agilex5
+/* Agilex 5 HPS peripherals and bridges occupy the low 2GiB. Keep them
+ * strongly ordered; cached HPS DDR starts at 0x8000_0000 below. */
+.rept   0x0400                 /* 0x0000_0000 - 0x7FFF_FFFF */
+.8byte  SECT + Device
+.set    SECT, SECT+0x200000
+.endr
+#else
 #ifdef XPAR_PSU_DDR_0_S_AXI_BASEADDR
 .set DDR_0_START, XPAR_PSU_DDR_0_S_AXI_BASEADDR
 .set DDR_0_END, XPAR_PSU_DDR_0_S_AXI_HIGHADDR
@@ -701,7 +713,15 @@ MMUTableL2:
 .8byte  SECT + reserved
 .set    SECT, SECT+0x200000
 .endr
+#endif /* TARGET_agilex5 */
 
+#ifdef TARGET_agilex5
+/* Agilex 5 GSRD maps the 2GiB HPS DDR window at 0x8000_0000. */
+.rept   0x0400                 /* 0x8000_0000 - 0xFFFF_FFFF */
+.8byte  SECT + Memory
+.set    SECT, SECT+0x200000
+.endr
+#else
 .rept   0x0200                 /* 0x8000_0000 - 0xBFFF_FFFF */
 .8byte  SECT + Device          /* 1GB lower PL */
 .set    SECT, SECT+0x200000
@@ -765,6 +785,7 @@ converted to 62MB */
 
 .set    SECT, SECT+0x200000    /* 0xFFE0_0000 - 0xFFFF_FFFF*/
 .8byte  SECT + Memory          /* 2MB OCM/TCM */
+#endif /* TARGET_agilex5 */
 
 #else /* TARGET_nxp_ls1028a */
 /* ============================================================================
