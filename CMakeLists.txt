@@ -566,6 +566,10 @@ endif()
 
 if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
     list(APPEND WOLFBOOT_SOURCES "src/dice/dice.c")
+    list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose.c")
+    list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_cbor.c")
+    list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT}/lib/wolfCOSE/include)
+    list(APPEND WOLFBOOT_DEFS WOLFCOSE_LEAN WOLFCOSE_ENABLE_EXT_SIGN)
 endif()
 
 # build bin-assemble tool Windows
