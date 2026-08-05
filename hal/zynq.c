@@ -2176,6 +2176,58 @@ static void zynq_phy_init(void)
 }
 #endif /* WOLFBOOT_ZYNQMP_PHY_INIT */
 
+#ifdef WOLFBOOT_ZYNQMP_GEM_INIT
+/* Bring up the listed GEM datapaths for a fixed-link SGMII connection, the way
+ * U-Boot's zynq_gem driver does: program NWCFG (SGMII + PCS + speed) and the
+ * PCS control register (fixed link, auto-neg off). RX/TX are left disabled -
+ * the OS driver enables them after programming its DMA descriptor rings; with
+ * no rings, enabling RX here could DMA a received frame to an arbitrary address
+ * during image verify. The GEM must already be clocked and out of reset (FSBL
+ * psu_init). See hal/zynq.h. */
+static void zynqmp_gem_init(void)
+{
+    static const struct {
+        uintptr_t base;
+        uint16_t  speed;
+    } gems[] = { ZYNQMP_GEM_INIT_LIST };
+    uint32_t i, nwcfg, pcs, rb;
+
+    for (i = 0; i < (sizeof(gems) / sizeof(gems[0])); i++) {
+        nwcfg = GEMI_CFG_SGMII_BASE;
+        if (gems[i].speed == 1000) {
+            nwcfg |= GEMI_CFG_GIGE;
+            pcs = GEMI_PCS_1000;
+        }
+        else if (gems[i].speed == 100) {
+            nwcfg |= GEMI_CFG_SPEED100;
+            pcs = GEMI_PCS_100;
+        }
+        else if (gems[i].speed == 10) {
+            pcs = GEMI_PCS_10;
+        }
+        else {
+            wolfBoot_printf("GEM init @0x%08x: bad speed %d, skipped\n",
+                (unsigned int)gems[i].base, (int)gems[i].speed);
+            continue;
+        }
+        /* NWCFG (with PCS_SEL) must be written before the PCS control write. */
+        *((volatile uint32_t*)(gems[i].base + GEMI_NWCFG)) = nwcfg;
+        *((volatile uint32_t*)(gems[i].base + GEMI_PCS)) = pcs;
+        /* Read NWCFG back: a clock-gated / in-reset GEM will not latch it. */
+        rb = *((volatile uint32_t*)(gems[i].base + GEMI_NWCFG));
+        if (rb != nwcfg) {
+            wolfBoot_printf("GEM init @0x%08x NWCFG 0x%08x != 0x%08x "
+                "(gated/in reset?)\n", (unsigned int)gems[i].base,
+                (unsigned int)rb, (unsigned int)nwcfg);
+        }
+        else {
+            wolfBoot_printf("GEM init @0x%08x %dMbps\n",
+                (unsigned int)gems[i].base, (int)gems[i].speed);
+        }
+    }
+}
+#endif /* WOLFBOOT_ZYNQMP_GEM_INIT */
+
 /* public HAL functions */
 void hal_init(void)
 {
@@ -2212,6 +2264,10 @@ void hal_init(void)
 
 #ifdef WOLFBOOT_ZYNQMP_PHY_INIT
     zynq_phy_init();
+#endif
+
+#ifdef WOLFBOOT_ZYNQMP_GEM_INIT
+    zynqmp_gem_init();
 #endif
 
 #if defined(EXT_FLASH) && (EXT_FLASH == 1)

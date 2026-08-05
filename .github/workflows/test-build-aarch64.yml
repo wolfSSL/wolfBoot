@@ -13,6 +13,11 @@ on:
       make-args:
         required: false
         type: string
+      extra-cflags:
+        # Extra flags appended to CFLAGS_EXTRA in .config (quoted, so spaces and
+        # multiple -D survive). Used for opt-in features such as GEM init.
+        required: false
+        type: string
       psu-init-stub:
         # Generate a build-only stub for the board psu_init_gpl.c (ZynqMP FSBL).
         required: false
@@ -93,6 +98,8 @@ jobs:
           make distclean
 
       - name: Select config
+        env:
+          EXTRA_CFLAGS: ${{inputs.extra-cflags}}
         run: |
           cp ${{inputs.config-file}} .config
           if [ -n "$EXTRA_CFLAGS" ]; then

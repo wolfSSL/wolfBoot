@@ -781,6 +781,13 @@ jobs:
       config-file: ./config/examples/zynqmp.config
       make-args: CFLAGS_EXTRA=-DWOLFBOOT_ZYNQMP_PHY_INIT
 
+  zynqmp_gem_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp.config
+      extra-cflags: '-DWOLFBOOT_ZYNQMP_GEM_INIT -DZYNQMP_GEM_INIT_LIST={0xFF0B0000UL,1000},{0xFF0C0000UL,100}'
+
   zynq7000_test:
     uses: ./.github/workflows/test-build.yml
     with:

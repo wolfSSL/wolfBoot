@@ -515,6 +515,69 @@
 #endif /* WOLFBOOT_ZYNQMP_PHY_INIT */
 
 
+#ifdef WOLFBOOT_ZYNQMP_GEM_INIT
+/* GEM (Ethernet MAC) datapath bring-up for fixed-link SGMII ports.
+ *
+ * Some ZynqMP boards have GEM ports on a fixed link (a backplane, or an SGMII
+ * connection with no PHY that the OS driver auto-configures) that rely on the
+ * bootloader having brought the GEM datapath up. U-Boot's zynq_gem driver does
+ * this the first time it uses an interface; wolfBoot has no network stack, so
+ * this option replays the equivalent register writes: NWCFG (SGMII + PCS +
+ * speed) and the PCS control register (fixed link, auto-negotiation disabled).
+ * The values mirror the Cadence GEM driver's zynq_gem_init(). RX/TX are left
+ * disabled: the OS driver enables them after it programs its DMA descriptor
+ * rings (wolfBoot has none), so enabling RX here would be unsafe. The GEM must
+ * already be clocked and out of reset by the FSBL psu_init.
+ *
+ * This is separate from WOLFBOOT_ZYNQMP_PHY_INIT: a GEM is either a PHY port
+ * (that helper) or a fixed-link port (this one) - the two must not name the
+ * same GEM base. If they do, this full NWCFG write wins and overrides the PHY
+ * init MDC divisor; override GEMI_CFG_MDCDIV to reconcile.
+ *
+ * The board supplies ZYNQMP_GEM_INIT_LIST as {gem_base, speed_mbps} rows,
+ * directly or from a header selected with one line:
+ *   CFLAGS_EXTRA+=-DZYNQMP_GEM_INIT_HEADER='"myboard_gem.h"'
+ * one row per GEM base (GEM0 0xFF0B0000 .. GEM3 0xFF0E0000) at 1000/100/10, e.g.
+ *   #define ZYNQMP_GEM_INIT_LIST \
+ *       { 0xFF0B0000UL, 1000 }, { 0xFF0C0000UL, 1000 }
+ */
+#ifdef ZYNQMP_GEM_INIT_HEADER
+#include ZYNQMP_GEM_INIT_HEADER
+#endif
+#ifndef ZYNQMP_GEM_INIT_LIST
+#error "WOLFBOOT_ZYNQMP_GEM_INIT set but ZYNQMP_GEM_INIT_LIST not defined (see hal/zynq.h)"
+#endif
+
+/* GEM register offsets from a GEM base. */
+#define GEMI_NWCFG          0x004
+#define GEMI_PCS            0x200
+
+/* NWCFG bits. */
+#define GEMI_CFG_SPEED100   (1UL << 0)
+#define GEMI_CFG_FDEN       (1UL << 1)
+#define GEMI_CFG_GIGE       (1UL << 10)
+#define GEMI_CFG_PCSSEL     (1UL << 11)
+#define GEMI_CFG_FCSREM     (1UL << 17)
+#define GEMI_CFG_DBUS64     (1UL << 21)
+#define GEMI_CFG_SGMIIEN    (1UL << 27)
+/* MDC divisor (NWCFG[20:18]); default pclk/64 as U-Boot uses. Overridable for
+ * a board whose pclk needs a different divisor to stay under the 2.5MHz MDC
+ * max (only relevant if MDIO is later used on the same GEM). */
+#ifndef GEMI_CFG_MDCDIV
+#define GEMI_CFG_MDCDIV     (0x4UL << 18)   /* MDC = pclk/64 */
+#endif
+/* Common config for all speeds (U-Boot NWCFG_INIT plus SGMII/PCS select). */
+#define GEMI_CFG_SGMII_BASE \
+    (GEMI_CFG_DBUS64 | GEMI_CFG_FDEN | GEMI_CFG_FCSREM | GEMI_CFG_MDCDIV | \
+     GEMI_CFG_SGMIIEN | GEMI_CFG_PCSSEL)
+
+/* PCS control (clause-22 BMCR layout), fixed full-duplex link, auto-neg off. */
+#define GEMI_PCS_1000       0x0140UL        /* 1Gbps,   full duplex */
+#define GEMI_PCS_100        0x2100UL        /* 100Mbps, full duplex */
+#define GEMI_PCS_10         0x0100UL        /* 10Mbps,  full duplex */
+#endif /* WOLFBOOT_ZYNQMP_GEM_INIT */
+
+
 /* Configuration Security Unit (CSU) */
 /* Triple-Dedundant MicroBlaze processor */
 /* 128 KB CSU ROM (immutable) */
