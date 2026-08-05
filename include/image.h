@@ -212,7 +212,7 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_signature_ok(
  * As with the signature flag, the value is redundant and wrapped between
  * canary variables, so that a single fault cannot forge a valid state.
  */
-static void NOINLINEFUNCTION wolfBoot_image_confirm_sha_ok(
+static void NOINLINEFUNCTION UNUSEDFUNCTION wolfBoot_image_confirm_sha_ok(
     struct wolfBoot_image *img)
 {
     img->canary_FEED89AB = 0xFEED89ABUL;
@@ -228,6 +228,31 @@ static void NOINLINEFUNCTION wolfBoot_image_clear_sha_ok(
     img->sha_ok = 0UL;
     img->canary_FEEDCAFE = 0xFEEDCAFEUL;
     img->not_sha_ok = 1UL;
+}
+
+/**
+ * Sets sha_ok from the value the digest comparison produced rather than from
+ * the control flow that reached here. Sole setter of sha_ok in the ARMORED
+ * integrity path, so skipping the call leaves the flag clear.
+ */
+static void NOINLINEFUNCTION wolfBoot_image_seal_sha_ok(
+    struct wolfBoot_image *img, uint32_t witness)
+{
+    volatile uint32_t z1 = 0U, z2 = 0U, z3 = 0U, ok = 0U;
+
+    z1 = (witness - 1U) >> 31;                       /* 1 iff witness == 0 */
+    z2 = 1U ^ ((witness | (0U - witness)) >> 31);    /* 1 iff witness == 0 */
+    z3 = (witness == 0U) ? 1U : 0U;                  /* 1 iff witness == 0 */
+
+    ok  = z1 & z2 & z3;
+    ok &= z1;
+    ok &= z2;
+    ok &= z3;
+
+    img->canary_FEED89AB = 0xFEED89ABUL;
+    img->sha_ok = ok;
+    img->canary_FEEDCAFE = 0xFEEDCAFEUL;
+    img->not_sha_ok = ~ok;
 }
 
 /**
@@ -647,19 +672,74 @@ static void NOINLINEFUNCTION wolfBoot_image_set_fw_base(
                       ((imgp)->not_sha_ok == ~(uint32_t)1))
 
 /**
+ * Digest comparison with no call and no return register, run inline as an
+ * additional gate. Emits a witness in `out`, zero only on a clean full pass.
+ * Branches to label 5 on mismatch, like the checks around it.
+ */
+#define CT_COMPARE_INLINE(out, a, b, len) \
+    asm volatile( \
+        "mov r0, %1\n"                  /* left  */ \
+        "mov r1, %2\n"                  /* right */ \
+        "mov r2, #0\n"                  /* index */ \
+        "mov r2, #0\n" \
+        "mov r2, #0\n" \
+        "mov r3, #0\n"                  /* difference accumulator */ \
+        "mov r3, #0\n" \
+        "mov r3, #0\n" \
+        "mov r6, %3\n"                  /* iteration budget */ \
+        "mov r6, %3\n" \
+        "mov r6, %3\n" \
+        "7:\n" \
+        "ldrb r4, [r0, r2]\n" \
+        "ldrb r5, [r1, r2]\n" \
+        "eors r4, r4, r5\n" \
+        "orrs r3, r3, r4\n" \
+        "adds r2, r2, #1\n" \
+        "subs r6, r6, #1\n" \
+        "beq  8f\n"                     /* budget spent: stop regardless */ \
+        "cmp  r2, %3\n" \
+        "blo  7b\n" \
+        "8:\n" \
+        /* witness = difference | iteration shortfall */ \
+        "eor r4, r2, %3\n" \
+        "orr %0, r3, r4\n" \
+        "orr %0, %0, r3\n" \
+        /* every byte matched */ \
+        "cmp r3, #0\n" \
+        "cmp r3, #0\n" \
+        "cmp r3, #0\n" \
+        "bne 5f\n" \
+        "cmp r3, #0\n" \
+        "cmp r3, #0\n" \
+        "cmp r3, #0\n" \
+        "bne 5f\n" \
+        /* and the loop really ran over the whole buffer */ \
+        "cmp r2, %3\n" \
+        "cmp r2, %3\n" \
+        "cmp r2, %3\n" \
+        "bne 5f\n" \
+        "cmp r2, %3\n" \
+        "cmp r2, %3\n" \
+        "cmp r2, %3\n" \
+        "bne 5f\n" \
+        : "=&r"(out) \
+        : "r"(a), "r"(b), "r"((uint32_t)(len)) \
+        : "r0", "r1", "r2", "r3", "r4", "r5", "r6", "cc", "memory")
+
+/**
  * Digest (integrity) verification.
  *
- * Compare the freshly computed digest against the stored one twice, and after
- * each call ensure via redundant checks that image_CT_compare() actually
- * returned 0. Only then record the verified digest and confirm sha_ok through
- * the unskippable callback. A single instruction skip can neither coerce
- * image_CT_compare() into a false match nor set the sha_ok flag on its own.
+ * Compare the freshly computed digest against the stored one twice through
+ * image_CT_compare(), checking each result redundantly, then a third time
+ * inline. Only then record the digest and raise sha_ok from the witness.
  *
- * Uses GAS local numeric labels (5f/5:) for safe multi-expansion.
+ * Uses GAS local numeric labels (5f/5:, 7f/7b, 8f/8:) for safe expansion.
  */
 #define VERIFY_INTEGRITY_FN(img, computed_digest, stored) \
     { \
         volatile int compare_res; \
+        /* Pre-set to "mismatch". */ \
+        volatile uint32_t ct_witness = 0xFFFFFFFFU; \
         if (!(img) || !(stored)) \
             asm volatile("b 5f"); \
         /* Redundant set of r0=50 */ \
@@ -706,9 +786,11 @@ static void NOINLINEFUNCTION wolfBoot_image_set_fw_base(
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("cmp r0, #0":::"cc"); \
         asm volatile("bne 5f"); \
-        /* Integrity confirmed: record verified digest and set sha_ok */ \
+        /* Third comparison, inline */ \
+        CT_COMPARE_INLINE(ct_witness, (computed_digest), (stored), \
+            WOLFBOOT_SHA_DIGEST_SIZE); \
         (img)->sha_hash = (stored); \
-        wolfBoot_image_confirm_sha_ok(img); \
+        wolfBoot_image_seal_sha_ok((img), ct_witness); \
         asm volatile("5:"); \
         asm volatile("nop"); \
     }
