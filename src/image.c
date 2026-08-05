@@ -58,6 +58,57 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
+#ifdef WOLFBOOT_ARMORED
+
+/* Accumulator seed. Low byte clear so byte differences are never masked. */
+#define CT_SENTINEL 0xA5C3F000U
+
+/**
+ * Constant-time buffer comparison, hardened against instruction skips.
+ * Returns 0 when equal, non-zero otherwise.
+ */
+int NOINLINEFUNCTION image_CT_compare(
+    const uint8_t *expected, const uint8_t *actual, uint32_t len)
+{
+    volatile uint32_t diff = CT_SENTINEL;
+    volatile uint32_t witness = 0U;
+    volatile uint32_t count = 0U;
+    volatile uint32_t i = 0U;
+    volatile uint32_t budget = len;
+    volatile uint32_t res = 0U;
+    uint32_t expected_witness;
+    uint32_t len_is_zero;
+
+    /* Two counters bound the loop, so either one can end it. */
+    for (i = 0; (i < len) && (budget != 0U); i++) {
+        diff |= (uint32_t)(expected[i] ^ actual[i]);
+        witness += i + 1U;
+        count++;
+        budget--;
+    }
+
+    expected_witness = (len * (len + 1U)) / 2U;   /* sum(1..len) */
+    len_is_zero = 1U ^ ((len | (0U - len)) >> 31);
+
+    /* Folded twice, branch-free. */
+    res  = (diff ^ CT_SENTINEL);
+    res |= (witness ^ expected_witness);
+    res |= (count ^ len);
+    res |= (i ^ len);
+    res |= len_is_zero;
+    res |= (diff ^ CT_SENTINEL);
+    res |= (witness ^ expected_witness);
+    res |= (count ^ len);
+    res |= (i ^ len);
+    res |= len_is_zero;
+
+    return (int)res;
+}
+
+#undef CT_SENTINEL
+
+#else
+
 int NOINLINEFUNCTION image_CT_compare(
     const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
@@ -70,6 +121,8 @@ int NOINLINEFUNCTION image_CT_compare(
 
     return (diff != 0U) ? 1 : 0;
 }
+
+#endif /* WOLFBOOT_ARMORED */
 
 /**
  * Fault-hardened equality check around image_CT_compare(): the constant-time
@@ -84,9 +137,7 @@ int NOINLINEFUNCTION wolfBoot_hardened_CT_compare(
     volatile int r1 = image_CT_compare(expected, actual, len);
     volatile int r2 = image_CT_compare(expected, actual, len);
     /* Combine both results without branching: non-zero if either independent
-     * comparison reported a mismatch. This preserves image_CT_compare()'s 0/1
-     * return semantics and avoids data-dependent control flow, while a single
-     * fault can still subvert at most one of the two calls. */
+     * comparison reported a mismatch. */
     return (r1 | r2);
 }
 
