@@ -704,6 +704,8 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         g_last_cmd_err = SDHCI_REG(SDHCI_SRS12) & SDHCI_SRS12_ERR_STAT;
         status = -1; /* error */
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
     }
 
     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_CC); /* clear command complete */
@@ -729,6 +731,10 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             }
         }
     }
+
+#if SDHCI_WAIT_AFTER_CMD_US > 0U
+    udelay(SDHCI_WAIT_AFTER_CMD_US);
+#endif
 
     return status;
 }
@@ -904,10 +910,19 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* send the operating conditions command */
-        status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
-            SDHCI_RESP_R7);
-        cmd8_err = g_last_cmd_err;
+        /* Some hosts need more settling after CMD0. Retry a failed CMD8
+         * before classifying a silent card as SD v1.x or a broken link. */
+        for (retries = 0; retries < 10; retries++) {
+            status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
+                SDHCI_RESP_R7);
+            cmd8_err = g_last_cmd_err;
+            if (status == 0)
+                break;
+            udelay(10000);
+        }
+        if (status == 0 && retries > 0) {
+            wolfBoot_printf("SD: CMD8 succeeded after %d retries\n", retries);
+        }
 #if defined(DISK_SDCARD) && defined(SDHCI_UHS_RECOVER_ON_INIT)
         if (status != 0) {
             /* Opt-in. A card a previous stage left in UHS-I is at 1.8V and
@@ -1918,10 +1933,12 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-    /* Reset the host controller */
+#if SDHCI_SKIP_HOST_RESET == 0
+    /* Reset the host controller unless an earlier boot stage initialized it. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);
+#endif
 
     /* Set debounce period to ~15ms (platform-specific value may be different) */
     SDHCI_REG_SET(SDHCI_HRS01, (0x300000UL << SDHCI_HRS01_DP_SHIFT) &
