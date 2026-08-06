@@ -26,6 +26,22 @@
 #   TARGET_NAME <n>   Name of the custom target (default: sbom).
 #   CDX_OUT  <path>   Explicit CycloneDX output path.
 #   SPDX_OUT <path>   Explicit SPDX output path.
+#   COMPONENT_TYPE <t>  CycloneDX component.type, e.g. firmware for a
+#                     bootloader (default: the generator's own default).
+#   DEP_WOLFSSL yes|no  Record wolfSSL as a dependency component.
+#   DEP_OPENSSL yes|no  Record OpenSSL as a dependency component.
+#   DEP_VERSION <KEY=VER>...  Explicit dependency versions. A cross build has
+#                     no pkg-config for the dependency, so without this the
+#                     dependency component carries no version, and therefore
+#                     no PURL and no CPE for a scanner to match.
+#   LICENSE_OVERRIDE <expr>  SPDX expression recorded instead of the one
+#                     inferred from LICENSE.
+#   LICENSE_TEXT <path>  Plain-text licence for a LicenseRef-* used in
+#                     LICENSE_OVERRIDE (required by SPDX 2.3).
+#
+# These mirror the SBOM_* variables of build/sbom.mk one for one; the two
+# fragments must accept the same product description, or the same product
+# yields two different documents depending on which build system generated it.
 #
 # NOTE: the driver is invoked as a program; on Windows run the target from a
 # shell environment (WSL/MSYS/Git-Bash) or use the Make/autotools path.
@@ -39,8 +55,9 @@ function(wolfglass_add_sbom)
     set(_opts NO_ARTIFACT_HASH SOURCE_ONLY)
     set(_one NAME TARGET_NAME VERSION VERSION_FILE VERSION_MACRO LICENSE
              SBOM_GEN GEN_SBOM HOSTCC ROOT LIB USER_SETTINGS OPTIONS_H
-             DEP_WOLFSSL DEP_OPENSSL CDX_OUT SPDX_OUT)
-    set(_multi TARGETS DEFS)
+             DEP_WOLFSSL DEP_OPENSSL CDX_OUT SPDX_OUT COMPONENT_TYPE
+             LICENSE_OVERRIDE LICENSE_TEXT)
+    set(_multi TARGETS DEFS DEP_VERSION)
     cmake_parse_arguments(SB "${_opts}" "${_one}" "${_multi}" ${ARGN})
 
     if(NOT SB_NAME)
@@ -140,12 +157,24 @@ function(wolfglass_add_sbom)
     if(SB_VERSION_MACRO)
         list(APPEND _cmd --version-macro ${SB_VERSION_MACRO})
     endif()
+    if(SB_COMPONENT_TYPE)
+        list(APPEND _cmd --component-type ${SB_COMPONENT_TYPE})
+    endif()
+    if(SB_LICENSE_OVERRIDE)
+        list(APPEND _cmd --license-override ${SB_LICENSE_OVERRIDE})
+    endif()
+    if(SB_LICENSE_TEXT)
+        list(APPEND _cmd --license-text ${SB_LICENSE_TEXT})
+    endif()
     if(SB_DEP_WOLFSSL)
         list(APPEND _cmd --dep-wolfssl ${SB_DEP_WOLFSSL})
     endif()
     if(SB_DEP_OPENSSL)
         list(APPEND _cmd --dep-openssl ${SB_DEP_OPENSSL})
     endif()
+    foreach(_dv IN LISTS SB_DEP_VERSION)
+        list(APPEND _cmd --dep-version ${_dv})
+    endforeach()
     if(SB_SBOM_GEN)
         list(APPEND _cmd --gen-sbom ${SB_SBOM_GEN})
     endif()

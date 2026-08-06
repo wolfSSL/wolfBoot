@@ -104,6 +104,19 @@ is *also* recorded as a dependency component (`SBOM_DEP_WOLFSSL`, on by
 default) with the submodule's version, which is what lets a scanner match
 wolfSSL advisories against this firmware.
 
+That dependency entry carries both machine-resolvable identifiers, because the
+two scanner families key on different ones:
+
+* `cpe:2.3:a:wolfssl:wolfssl:<version>:*:*:*:*:*:*:*` — the identifier NVD
+  registers, used by a CRA / IEC 62443 vulnerability-monitoring process.
+* `pkg:github/wolfssl/wolfssl@v<version>-stable` — the PURL, used by the
+  ecosystem scanners (OSV, Trivy, Dependency-Track). The namespace and the name
+  are lowercase per purl-spec, and the version is the real wolfSSL release tag.
+
+wolfCrypt is not a separate NVD product. It is built from the same wolfSSL
+release, and its advisories are published against `wolfssl:wolfssl`, so the
+wolfSSL identifiers above cover the wolfCrypt code in the image.
+
 ### How the configuration is captured
 
 wolfBoot's configuration is derived rather than literal: `include/user_settings.h`
