@@ -1,17 +1,23 @@
 name: Agilex 5 wolfBoot build
 
 on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
   workflow_dispatch:
   pull_request:
+    branches: [ '*' ]
     paths:
       - 'arch.mk'
       - 'config/examples/agilex5_013b_sdcard.config'
       - 'hal/agilex5.*'
+      - 'hal/board/agilex5/**'
       - 'include/sdhci.h'
       - 'src/boot_aarch64*'
       - 'src/sdhci.c'
       - 'src/update_disk.c'
       - 'test-app/app_agilex5.c'
+      - 'tools/bin-assemble/**'
+      - 'tools/keytools/**'
       - '.github/workflows/test-build-agilex5.yml'
 
 jobs:
