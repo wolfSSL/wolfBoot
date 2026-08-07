@@ -95,10 +95,11 @@
 .set L2Table,     MMUTableL2
 .set vector_base, _vector_table
 
-#if defined(TARGET_versal) || defined(TARGET_agilex5)
+#if defined(TARGET_versal)
 /* Versal: RVBAR is handled by PLM, not accessible from APU in JTAG mode */
-/* BL31 has already programmed CNTFRQ_EL0 on BL33-entry platforms. */
 .set counterfreq, 100000000
+#elif defined(TARGET_agilex5)
+/* BL31 has already programmed CNTFRQ_EL0 before entering wolfBoot. */
 #else
 .set rvbar_base,  0xFD5C0040
 /* Cortex-A53 timestamp clock frequency */
@@ -230,7 +231,7 @@ InitEL3:
      * sets it to the actual system-counter rate, which our usleep() needs for
      * accurate psu_init DDR-training delays. Hardcoding 100MHz here is wrong
      * when the counter runs at the BootROM (undivided) rate. */
-#ifndef WOLFBOOT_ZYNQMP_FSBL
+#if !defined(WOLFBOOT_ZYNQMP_FSBL) && !defined(TARGET_agilex5)
 #ifdef TARGET_nxp_ls1028a
     /* Read the true base frequency from the system counter (CNTFID0 @ SYSCNT
      * base+0x20 = SYS_REF_CLK/4); the counterfreq constant is the undivided
