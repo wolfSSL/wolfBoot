@@ -616,6 +616,8 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
     if (timeout == 0U) {
         wolfBoot_printf("sdhci_send_cmd: command inhibit timeout\n");
         status = -1;
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
     }
 
     if (status == 0) {

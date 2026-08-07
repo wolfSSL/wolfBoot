@@ -383,9 +383,11 @@ void RAMFUNCTION wolfBoot_start(void)
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
 #if DISK_BLOCK_SIZE < 1024
-    wolfBoot_printf("Load block size: %d bytes\r\n", DISK_BLOCK_SIZE);
+    wolfBoot_printf("Load block size: %u bytes\r\n",
+        (unsigned int)DISK_BLOCK_SIZE);
 #else
-    wolfBoot_printf("Load block size: %dKB\r\n", DISK_BLOCK_SIZE / 1024);
+    wolfBoot_printf("Load block size: %uKB\r\n",
+        (unsigned int)(DISK_BLOCK_SIZE / 1024U));
 #endif
     max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
 
