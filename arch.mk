@@ -225,15 +225,26 @@ ifeq ($(ARCH),AARCH64)
     # -mstrict-align: the plain RAM-boot config runs with the MMU off (simple
     # startup), where all memory is Device-nGnRnE and unaligned access faults.
     # The FIPS / disk configs bring up an identity MMU first (CM4_USE_MMU in
-    # hal/cm4.c). cm4 defaults to NO_ARM_ASM=1 (portable C, no NEON structure
-    # loads), so -mstrict-align keeps every config safe either way.
+    # hal/cm4.c). cm4 defaults to NO_ARM_ASM=1, which keeps it off the wolfcrypt
+    # ARM port asm (NEON structure loads); it does NOT disable the SP ECC
+    # AArch64 asm, which is gated on __aarch64__ in include/user_settings.h. So
+    # -mstrict-align keeps every config safe either way.
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72 -mstrict-align
+    # RAUC A/B slot selection via a raw U-Boot env partition (wolfBoot replaces
+    # U-Boot's boot script). Adds the env state-machine module + define.
+    ifeq ($(CM4_RAUC_AB),1)
+      OBJS+=src/ubootenv.o
+      CFLAGS+=-DCM4_RAUC_AB
+    endif
   endif
 
-  # Default ARM ASM setting for unrecognized AARCH64 targets. cm4 is excluded
-  # from the asm path (defaults NO_ARM_ASM=1): the plain config runs MMU-off
-  # where NEON multi-register loads would fault, and the FIPS path mandates
-  # portable-C crypto anyway.
+  # Default ARM ASM setting for unrecognized AARCH64 targets. cm4 defaults to
+  # NO_ARM_ASM=1, which keeps it off the wolfcrypt ARM port asm (WOLFSSL_ARMASM /
+  # wolfcrypt/src/port/arm/*, the NEON multi-register loads that would fault
+  # MMU-off in the plain config). NO_ARM_ASM does NOT disable the SP ECC AArch64
+  # asm (sp_arm64.c / WOLFSSL_SP_ARM64_ASM); that is enabled independently on
+  # __aarch64__ in include/user_settings.h, so a non-FIPS cm4 build still links
+  # sp_arm64 asm.
   ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
     NO_ARM_ASM?=1
   endif

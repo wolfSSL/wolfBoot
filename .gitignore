@@ -236,6 +236,8 @@ tools/unit-tests/unit-update-ram-enc
 tools/unit-tests/unit-update-ram-enc-nopart
 tools/unit-tests/unit-va416x0-fram
 tools/unit-tests/unit-wolfhsm_flash_hal
+tools/unit-tests/unit-ubootenv
+tools/unit-tests/unit-cm4-sdhci
 tools/unit-tests/__pycache__/*
 
 
@@ -515,3 +517,4 @@ tools/scripts/cm4/fw/
 tools/scripts/cm4/*.elf
 tools/scripts/cm4/*.bin
 tools/scripts/cm4/linux/
+tools/scripts/cm4/rauc/

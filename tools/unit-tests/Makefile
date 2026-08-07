@@ -76,6 +76,7 @@ TESTS+=unit-tpm-nsc-cert
 TESTS+=unit-tpm-advio-zeroize
 TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
+TESTS+=unit-ubootenv
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
@@ -552,6 +553,9 @@ unit-sdhci-dma-error: ../../include/target.h unit-sdhci-dma-error.c
 unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
 	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
+
+unit-ubootenv: unit-ubootenv.c
+	gcc -o $@ $< $(CFLAGS) -I../.. $(LDFLAGS)
 
 unit-aes128: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
