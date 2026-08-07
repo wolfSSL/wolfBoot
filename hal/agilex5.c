@@ -96,8 +96,15 @@ static uint64_t timer_frequency(void)
 uint64_t hal_get_timer_us(void)
 {
     uint64_t frequency = timer_frequency();
-    return (frequency != 0U) ?
-        ((timer_count() * 1000000ULL) / frequency) : 0U;
+    uint64_t count = timer_count();
+
+    /* BL31 normally programs CNTFRQ_EL0. Keep delay loops live even when a
+     * non-conforming handoff leaves it clear, and use a wide intermediate so
+     * long-running counters cannot overflow before conversion to microseconds.
+     */
+    if (frequency == 0U)
+        frequency = 100000000U;
+    return (uint64_t)(((__uint128_t)count * 1000000ULL) / frequency);
 }
 
 void hal_init(void)

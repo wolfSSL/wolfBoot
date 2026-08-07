@@ -60,10 +60,6 @@
 #define AGILEX5_SDHCI_BASE     0x10808000UL
 #define CACHE_LINE_SIZE        64UL
 
-/* Preserve the SPL-initialized host and apply the Cadence command delay. */
-#define SDHCI_SKIP_HOST_RESET   1
-#define SDHCI_WAIT_AFTER_CMD_US 1000U
-
 #ifndef __ASSEMBLER__
 unsigned int current_el(void);
 #endif
