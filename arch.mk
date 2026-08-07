@@ -2241,12 +2241,12 @@ ifeq ($(TARGET),aarch64_efi)
   # DEBUG=1: route wolfBoot_printf to the UEFI console (gnu-efi Print).
   ifeq ($(DEBUG),1)
     CFLAGS += -DWOLFBOOT_DEBUG_EFI=1
+    # Drop -Werror only here: WOLFBOOT_DEBUG_EFI pulls gnu-efi headers into every
+    # TU and efidebug.h redefines the -DDEBUG object macro (added by DEBUG=1) as
+    # a function macro. That cpp macro-redefinition warning has no -W name, so it
+    # can't be scoped with -Wno-error=<name>; our own sources stay warning-clean.
+    CFLAGS := $(filter-out -Werror,$(CFLAGS))
   endif
-  # Drop -Werror for this target: WOLFBOOT_DEBUG_EFI pulls gnu-efi headers into
-  # every TU and efidebug.h redefines the -DDEBUG object macro as a function
-  # macro. That cpp macro-redefinition warning has no -W name, so it can't be
-  # scoped with -Wno-error=<name>; our own sources are kept warning-clean.
-  CFLAGS := $(filter-out -Werror,$(CFLAGS))
 else
   CFLAGS+=-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_DUALBOOT
   OBJS+=src/fdt.o
