@@ -97,14 +97,20 @@ uint64_t hal_get_timer_us(void)
 {
     uint64_t frequency = timer_frequency();
     uint64_t count = timer_count();
+    uint64_t whole;
+    uint64_t rem;
 
     /* BL31 normally programs CNTFRQ_EL0. Keep delay loops live even when a
-     * non-conforming handoff leaves it clear, and use a wide intermediate so
-     * long-running counters cannot overflow before conversion to microseconds.
+     * non-conforming handoff leaves it clear.
      */
     if (frequency == 0U)
         frequency = 100000000U;
-    return (uint64_t)(((__uint128_t)count * 1000000ULL) / frequency);
+    /* Split the conversion so it stays in 64-bit math: a __uint128_t divide
+     * pulls in libgcc's __udivti3, which the bare-metal link has no runtime
+     * for. The whole and remainder parts are exact and cannot overflow. */
+    whole = count / frequency;
+    rem   = count % frequency;
+    return whole * 1000000ULL + (rem * 1000000ULL) / frequency;
 }
 
 void hal_init(void)
