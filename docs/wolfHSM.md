@@ -60,7 +60,7 @@ To use certificate verification with wolfHSM:
 
 1. Enable `WOLFBOOT_CERT_CHAIN_VERIFY` in your wolfBoot configuration
 2. Ensure the wolfHSM server is configured with certificate manager support (`WOLFHSM_CFG_CERTIFICATE_MANAGER`)
-3. Pre-provision one or more root CA certificates on the wolfHSM server at the NVM IDs listed in the HAL `hsmNvmIdCertRootCAList`. Verification succeeds if the embedded chain anchors to *any* root in the list (absent NVM IDs are silently skipped). The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8).
+3. Pre-provision one or more root CA certificates on the wolfHSM server at the NVM IDs listed in the HAL `hsmNvmIdCertRootCAList`. Verification succeeds if the embedded chain anchors to *any* root in the list (absent NVM IDs are silently skipped). The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (overridable in `.config`; see [Build Options](#build-options-config)).
 4. Sign firmware images with the `--cert-chain` option, providing a DER-encoded certificate chain
 
 The chain's CA certificates do not need to use the same algorithm as the leaf
@@ -79,13 +79,26 @@ verifier only needs the CA algorithms compiled in, via `AUX_PK_ALGOS` and
 
 To build the simulator using wolfHSM for certificate verification:
 
-- **Client Mode**: Use [config/examples/sim-wolfHSM-client-certchain.config](config/examples/sim-wolfHSM-client-certchain.config)
-- **Server Mode**: Use [config/examples/sim-wolfHSM-server-certchain.config](config/examples/sim-wolfHSM-server-certchain.config)
+- **Client Mode**: Use [config/examples/sim-wolfHSM-client-certchain-ecc.config](../config/examples/sim-wolfHSM-client-certchain-ecc.config)
+- **Server Mode**: Use [config/examples/sim-wolfHSM-server-certchain-ecc.config](../config/examples/sim-wolfHSM-server-certchain-ecc.config)
 - **Server Mode, mixed-algorithm chain**: Use [config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config](../config/examples/sim-wolfHSM-server-certchain-rsa2048-ca.config) (RSA2048/SHA-384 CA certs, ECC256 leaf)
 
 ## Configuration Options
 
-This section describes the configuration options available for wolfHSM integration. Note that these options should be configured automatically by the build system for each supported platform when wolfHSM support is enabled. Consult the platform-specific documentation for details on enabling wolfHSM support.
+This section describes the exposed configuration options available for wolfHSM integration. The build options below are set in the wolfBoot `.config` file (or on the make command line); the compile-time defines that follow are set automatically by the build system based on them. Consult the platform-specific documentation for details on enabling wolfHSM support.
+
+### Build Options (`.config`)
+
+- `WOLFHSM_CLIENT`: Set to 1 to build wolfBoot as a wolfHSM client (defines `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`). Mutually exclusive with `WOLFHSM_SERVER`.
+- `WOLFHSM_SERVER`: Set to 1 to build wolfBoot with an embedded wolfHSM server (defines `WOLFBOOT_ENABLE_WOLFHSM_SERVER`). Requires `CERT_CHAIN_VERIFY=1`, as certificate chain verification is the only authentication method supported in server mode. Mutually exclusive with `WOLFHSM_CLIENT`.
+- `WOLFHSM_CLIENT_ID` (default 1): Client ID wolfBoot presents to the HSM server during the connection handshake. Must match the client ID the server provisions the wolfBoot public key under, e.g. the whnvmtool `key <clientId> ...` field or the example POSIX TCP server's `--client <id>` argument. Client mode only.
+- `WOLFHSM_CFG_COMM_DATA_LEN` (default 5000): Size in bytes of the wolfHSM message data payload. The default fits a whole DER certificate chain or the largest ML-DSA keys/signatures in a single message. Targets with a smaller transport slot must lower it in their `.config`. In server mode the value is currently only applied to `SIGN=ML_DSA` builds; other server builds use the wolfHSM library default.
+- `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8): Maximum number of trusted root CA NVM IDs accepted for certificate chain verification; bounds the length of the HAL `hsmNvmIdCertRootCAList` and of `WOLFHSM_NVM_ROOT_CA_LIST`. Part of the client-server wire format (see note below).
+- `WOLFHSM_NVM_ROOT_CA_LIST` (default: HAL-provided list, `{ 1 }` for in-tree HALs): Overrides the NVM IDs of the trusted root CA certificates used for certificate chain verification. Takes a comma-separated initializer with no quotes and no spaces, e.g. `WOLFHSM_NVM_ROOT_CA_LIST=1,2,3`. The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. Only used when `CERT_CHAIN_VERIFY=1`.
+- `WOLFHSM_NVM_IMAGE` (default 1): Set to 0 to skip wolfHSM NVM image generation. Used by targets that do not provision keys from a pre-built NVM image, e.g. because the HAL loads the verification key into the server's key cache at boot (PIC32CZ).
+- `USER_NVM_INIT`: Path to a user-provided whnvmtool `.nvminit` file used to generate the wolfHSM NVM image in place of the default auto-generated one. Also re-enables NVM image generation when user-provided keys (`USER_PRIVATE_KEY`, `USER_PUBLIC_KEY`, `USER_CERT_CHAIN`) would otherwise skip it.
+
+Note that the STM32H5 TrustZone engine (`WOLFCRYPT_TZ_WOLFHSM`) relies on its own separate configuration; see [STM32H5 TrustZone Engine](#stm32h5-trustzone-engine).
 
 ### `WOLFBOOT_ENABLE_WOLFHSM_CLIENT`
 
@@ -109,7 +122,7 @@ In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms mu
 - `hsmDevIdHash`: The HSM device ID for hash operations. This is used to identify the HSM device to wolfBoot.
 - `hsmDevIdPubKey`: The HSM device ID for public key operations. This is used to identify the HSM device to wolfBoot.
 - `hsmKeyIdPubKey`: The HSM key ID for public key operations. This is used to identify the key to use for public key operations.
-- `hsmNvmIdCertRootCAList` / `hsmNvmIdCertRootCACount`: Array of NVM IDs identifying the trusted root CA certificate(s) and its element count. Only used when building with `WOLFBOOT_CERT_CHAIN_VERIFY`. The chain in the firmware header may anchor to any of the listed roots; the count is bounded by `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8). Each in-tree HAL provides a default of `{ 1 }`; override the list via the `WOLFHSM_NVM_ROOT_CA_LIST` build option, which takes a comma-separated initializer (no quotes, no spaces) and is propagated to the HAL as `-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=...`. Set it in `.config` (e.g. `WOLFHSM_NVM_ROOT_CA_LIST=1,2,3`) or on the make command line (`make WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 ...`).
+- `hsmNvmIdCertRootCAList` / `hsmNvmIdCertRootCACount`: Array of NVM IDs identifying the trusted root CA certificate(s) and its element count. Only used when building with `WOLFBOOT_CERT_CHAIN_VERIFY`. The chain in the firmware header may anchor to any of the listed roots; the count is bounded by `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. Each in-tree HAL provides a default of `{ 1 }`; override the list with the `WOLFHSM_NVM_ROOT_CA_LIST` build option, which is propagated to the HAL as `-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=...` (see [Build Options](#build-options-config)).
 
 ### Client HAL Functions
 
@@ -135,7 +148,7 @@ The simulator also supports an embedded wolfHSM server mode where wolfBoot inclu
 
 ### Building the simulator with wolfHSM support
 
-The wolfBoot simulator supports using wolfHSM with all algorithms mentioned in [Algorithm Support](#algorithm-support).
+The wolfBoot simulator supports using wolfHSM with all algorithms mentioned in [Client Algorithm Support](#client-algorithm-support).
 
 #### wolfHSM Client Mode Build
 
@@ -143,7 +156,7 @@ To build the simulator configured to use wolfHSM client mode, ensure you build w
 
 ```sh
 # Grab the HSM client simulator configuration
-cp config/examples/sim-wolfHSM-client.config .config
+cp config/examples/sim-wolfHSM-client-ecc.config .config
 
 # Build wolfBoot with the simulator HAL configured to use wolfHSM client, automatically generating keys
 make
@@ -162,7 +175,7 @@ To build the simulator configured to use embedded wolfHSM server mode, use the `
 
 ```sh
 # Grab the HSM server simulator configuration (with certificate chain verification)
-cp config/examples/sim-wolfHSM-server-certchain.config .config
+cp config/examples/sim-wolfHSM-server-certchain-ecc.config .config
 
 # Build wolfBoot with the embedded wolfHSM server.
 make
