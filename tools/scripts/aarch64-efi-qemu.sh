@@ -23,8 +23,6 @@ command -v qemu-system-aarch64 >/dev/null || { echo "Install qemu-system-arm"; e
 mkdir -p "$ESP"
 cp "$ROOT/wolfboot.efi" "$ESP"/
 cp "$ROOT/aarch64_efi-stage/kernel.img" "$ESP"/ 2>/dev/null || true
-# optional Linux kernel command line (M3): read by wolfboot as \cmdline.txt
-cp "$ROOT/aarch64_efi-stage/cmdline.txt" "$ESP"/ 2>/dev/null || true
 # auto-run wolfboot.efi from the UEFI shell
 printf 'fs0:\r\nwolfboot.efi\r\n' > "$ESP/startup.nsh"
 

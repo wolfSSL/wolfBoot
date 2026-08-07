@@ -240,12 +240,16 @@ static void tcg2_extend(WOLFBOOT_TCG2_PROTOCOL *tcg2, const void *addr,
     EFI_STATUS status;
     UINTN desclen = 0;
 
+    /* desclen is the description length capped at WOLFBOOT_TCG2_DESC_MAX - 1, so
+     * there is always room for a terminating NUL even when desc is longer. */
     while (desc[desclen] != '\0' && desclen < WOLFBOOT_TCG2_DESC_MAX - 1)
         desclen++;
-    desclen++; /* include the NUL terminator in the event data */
 
     ZeroMem(buf, sizeof(buf));
-    evt->Size = (UINT32)(__builtin_offsetof(WOLFBOOT_TCG2_EVENT, Event) + desclen);
+    /* Event data is the description plus a NUL. The buffer was just zeroed, so
+     * copying exactly desclen bytes leaves evt->Event[desclen] as that NUL. */
+    evt->Size = (UINT32)(__builtin_offsetof(WOLFBOOT_TCG2_EVENT, Event)
+                         + desclen + 1);
     evt->Header.HeaderSize = (UINT32)sizeof(WOLFBOOT_TCG2_EVENT_HEADER);
     evt->Header.HeaderVersion = 1;
     evt->Header.PCRIndex = (UINT32)WOLFBOOT_MEASURED_PCR_A;
@@ -333,40 +337,55 @@ static void tcg2_read_pcr(WOLFBOOT_TCG2_PROTOCOL *tcg2, uint32_t pcr,
     }
 }
 
+/* The platform publishes its device tree under this standard UEFI
+ * configuration-table GUID. It is stable across firmwares and bootloaders
+ * (u-boot, edk2, systemd-boot all agree on it), so we look the DTB up by GUID
+ * rather than scanning every table for the FDT magic. */
+#ifndef EFI_DTB_GUID
+#define EFI_DTB_GUID \
+    { 0xb1b621d5, 0xf19c, 0x41a5, \
+      { 0x83, 0x0b, 0xd9, 0x15, 0x2c, 0x69, 0xaa, 0xe0 } }
+#endif
+
 /* Measure the platform device tree the firmware published in the UEFI
  * configuration table (the kernel boots against it), extending the OS
  * measurement beyond the kernel image alone. */
 static void tcg2_measure_dtb(WOLFBOOT_TCG2_PROTOCOL *tcg2)
 {
+    EFI_GUID dtbGuid = EFI_DTB_GUID;
     UINTN i;
     uint32_t totalsize;
     const uint8_t *p;
 
-    /* The platform publishes its device tree in a UEFI configuration table
-     * (the kernel boots against it -- "Using DTB from configuration table").
-     * Rather than trust a specific vendor GUID (which varies), scan the tables
-     * for the entry whose contents start with the FDT magic (0xd00dfeed). */
+    /* Find the DTB config table by its stable EFI_DTB_GUID, then validate the
+     * FDT magic and size before hashing. Note gnu-efi's CompareGuid returns 1
+     * when the GUIDs are equal (0 otherwise), so skip the non-matching ones. */
     for (i = 0; i < gSystemTable->NumberOfTableEntries; i++) {
+        if (!CompareGuid(&gSystemTable->ConfigurationTable[i].VendorGuid,
+                         &dtbGuid))
+            continue;
         p = (const uint8_t *)gSystemTable->ConfigurationTable[i].VendorTable;
         if (p == NULL)
             continue;
-        if (p[0] == 0xd0 && p[1] == 0x0d && p[2] == 0xfe && p[3] == 0xed) {
-            totalsize = ((uint32_t)p[4] << 24) | ((uint32_t)p[5] << 16) |
-                        ((uint32_t)p[6] << 8)  | (uint32_t)p[7];
-            /* Bound the size before hashing: a corrupt header or a false magic
-             * match must not send HashLogExtendEvent over a huge/invalid range.
-             * Keep scanning in case another table holds a valid FDT. */
-            if (totalsize < WOLFBOOT_TCG2_FDT_MIN ||
-                totalsize > WOLFBOOT_TCG2_FDT_MAX) {
-                wolfBoot_printf("TCG2: FDT size %u out of range; skipped\n",
-                                (unsigned)totalsize);
-                continue;
-            }
-            tcg2_extend(tcg2, p, totalsize, "wolfBoot dtb");
+        /* GUID matched; the contents must still be a valid FDT. */
+        if (!(p[0] == 0xd0 && p[1] == 0x0d && p[2] == 0xfe && p[3] == 0xed)) {
+            wolfBoot_printf("TCG2: DTB table not a valid FDT; measure skipped\n");
             return;
         }
+        totalsize = ((uint32_t)p[4] << 24) | ((uint32_t)p[5] << 16) |
+                    ((uint32_t)p[6] << 8)  | (uint32_t)p[7];
+        /* Bound the size before hashing: a corrupt header must not send
+         * HashLogExtendEvent over a huge/invalid range. */
+        if (totalsize < WOLFBOOT_TCG2_FDT_MIN ||
+            totalsize > WOLFBOOT_TCG2_FDT_MAX) {
+            wolfBoot_printf("TCG2: FDT size %u out of range; skipped\n",
+                            (unsigned)totalsize);
+            return;
+        }
+        tcg2_extend(tcg2, p, totalsize, "wolfBoot dtb");
+        return;
     }
-    wolfBoot_printf("TCG2: no valid FDT in config tables; dtb measure skipped\n");
+    wolfBoot_printf("TCG2: no DTB config table (EFI_DTB_GUID); measure skipped\n");
 }
 
 /* Measure the full OS input set -- kernel image, kernel command line and the
@@ -419,12 +438,21 @@ void RAMFUNCTION aarch64_efi_do_boot(const uint32_t *boot_addr)
 
     SetDevicePathEndNode(&mem_path_device[1].Header);
 
+    /* Fetch the authenticated kernel command line from the (already verified)
+     * manifest BEFORE measuring, so it is covered by the TCG2 measurement and
+     * ready for LoadOptions after LoadImage. It comes from the HDR_CMDLINE TLV,
+     * so it is covered by the image signature. NULL if the image carries no
+     * command line (the kernel then uses its built-in CONFIG_CMDLINE). */
+    kernel_cmdline = wolfBoot_efi_get_cmdline(manifest, &kernel_cmdline_bytes);
+
 #ifdef WOLFBOOT_MEASURED_BOOT_EFI_TCG2
     /* Measure kernel + cmdline + DTB into the firmware TPM before handoff. */
     tcg2_measure_all(boot_addr, *size);
 #endif
 
-    wolfBoot_printf("Staging kernel at address %p, size: %u\n", (void*)boot_addr, *size);
+    /* gnu-efi Print truncates %p to 32 bits; use %lx for the full 64-bit addr. */
+    wolfBoot_printf("Staging kernel at address 0x%lx, size: %u\n",
+                    (unsigned long)(uintptr_t)boot_addr, *size);
     status = uefi_call_wrapper(gSystemTable->BootServices->LoadImage,
                                6,
                                0, /* bool */
@@ -438,13 +466,10 @@ void RAMFUNCTION aarch64_efi_do_boot(const uint32_t *boot_addr)
         panic();
     }
 
-    /* Pass the authenticated kernel command line to the loaded image via
-     * LoadOptions for the Linux EFI stub. It comes from the HDR_CMDLINE TLV in
-     * the (already verified) manifest, so it is covered by the image signature.
-     * NULL if the image carries no command line (kernel uses CONFIG_CMDLINE).
-     * A direct root= boot needs no initrd; an initramfs flow would add it via
-     * LINUX_EFI_INITRD_MEDIA_GUID (LoadFile2). */
-    kernel_cmdline = wolfBoot_efi_get_cmdline(manifest, &kernel_cmdline_bytes);
+    /* Pass the authenticated kernel command line (fetched above) to the loaded
+     * image via LoadOptions for the Linux EFI stub. A direct root= boot needs
+     * no initrd; an initramfs flow would add it via LINUX_EFI_INITRD_MEDIA_GUID
+     * (LoadFile2). */
     if (kernel_cmdline != NULL) {
         status = uefi_call_wrapper(gSystemTable->BootServices->HandleProtocol, 3,
                                    kernelImageHandle, &lipGuid,
@@ -536,6 +561,7 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     EFI_STATUS status;
     UINTN readsz;
     UINTN pages;
+    UINT64 filesz;
 
     /* Always leave *_addr well-defined so the caller's "no image" check is
      * reliable: 0 on any failure, the loaded address only on full success. */
@@ -545,8 +571,18 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     if (file == NULL)
         return -1;
 
-    *sz =  FileSize(file);
-    pages = (*sz / PAGE_SIZE) + 1;
+    /* FileSize() is 64-bit; the rest of the loader (header parsing, LoadImage
+     * size) works in uint32_t. Reject a size that would not fit rather than
+     * silently truncating it into *sz. */
+    filesz = FileSize(file);
+    if (filesz == 0 || filesz > 0xFFFFFFFFULL) {
+        wolfBoot_printf("Invalid file size: 0x%lx\n", (unsigned long)filesz);
+        uefi_call_wrapper(file->Close, 1, file);
+        return -1;
+    }
+    *sz = (uint32_t)filesz;
+    /* Round up to whole pages (no extra page when *sz is a page multiple). */
+    pages = ((UINTN)*sz + PAGE_SIZE - 1) / PAGE_SIZE;
     wolfBoot_printf("Opening file: %s, size: %u\n", filename, *sz);
     status = uefi_call_wrapper(BS->AllocatePages,
                           4,

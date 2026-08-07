@@ -42,7 +42,8 @@
  * built-in CONFIG_CMDLINE). The returned buffer is allocated with
  * BS->AllocatePool (EfiLoaderData) and includes the terminating NUL in
  * *out_bytes (a byte count). */
-static CHAR16 *wolfBoot_efi_get_cmdline(const uint8_t *manifest, UINTN *out_bytes)
+static inline CHAR16 *wolfBoot_efi_get_cmdline(const uint8_t *manifest,
+                                               UINTN *out_bytes)
 {
     uint8_t *val = NULL;
     uint16_t len;
