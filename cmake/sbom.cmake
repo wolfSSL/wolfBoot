@@ -24,15 +24,26 @@ endif()
 
 set(_sbom_defs ${WOLFBOOT_DEFS} ${WOLFBOOT_DEFS_PUBLIC} ${USER_SETTINGS} ${SIGN_OPTIONS})
 
+# wolfBoot's wolfCrypt configuration is derived, not literal: user_settings.h
+# turns WOLFBOOT_SIGN_ECC256 into HAVE_ECC and the rest, and gates
+# WOLFCRYPT_ONLY. Capturing the -D set alone would record none of it, which is
+# how this route used to describe a different configuration than the Makefile
+# for the same bootloader. Mirrors SBOM_SETTINGS_H / SBOM_INCLUDE_DIRS there.
+set(_sbom_settings_h ${WOLFBOOT_ROOT}/lib/wolfssl/wolfssl/wolfcrypt/settings.h)
+set(_sbom_include_dirs ${WOLFBOOT_ROOT}/include ${WOLFBOOT_ROOT}/lib/wolfssl)
+
 # The product description below must stay in step with the SBOM_* block of the
 # Makefile. Both routes describe the same bootloader, so a customer must not
 # get a different document depending on which build system they generated from.
 
-# wolfCrypt sources are compiled into the image rather than linked, so they are
-# listed as wolfBoot's own sources. Declaring wolfssl as a dependency component
-# as well is what lets a scanner match wolfSSL advisories against this firmware.
+# Coat: wolfCrypt sources stay in the source-set hash, and wolfcrypt is
+# declared as a component nested inside wolfssl, which is the release it ships
+# in and the only one of the pair NVD maps advisories to.
 if(NOT DEFINED SBOM_DEP_WOLFSSL)
     set(SBOM_DEP_WOLFSSL yes)
+endif()
+if(NOT DEFINED SBOM_DEP_WOLFCRYPT)
+    set(SBOM_DEP_WOLFCRYPT yes)
 endif()
 
 # A cross build has no pkg-config for the submodule, so the version has to come
@@ -55,6 +66,8 @@ set(_sbom_args
     VERSION_MACRO LIBWOLFBOOT_VERSION_STRING
     TARGETS       ${_sbom_targets}
     DEFS          ${_sbom_defs}
+    SETTINGS_H    ${_sbom_settings_h}
+    INCLUDE_DIRS  ${_sbom_include_dirs}
     LICENSE       ${WOLFBOOT_ROOT}/LICENSE
     ROOT          ${WOLFBOOT_ROOT}
     # wolfBoot is a bootloader flashed as an image, not a library linked into one.
@@ -65,12 +78,15 @@ set(_sbom_args
     # option) any later version".
     LICENSE_OVERRIDE GPL-3.0-or-later
     DEP_WOLFSSL   ${SBOM_DEP_WOLFSSL}
+    DEP_WOLFCRYPT ${SBOM_DEP_WOLFCRYPT}
     CDX_OUT       ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_wolfboot_sbom_version}.cdx.json
     SPDX_OUT      ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_wolfboot_sbom_version}.spdx.json
 )
 
 if(SBOM_WOLFSSL_VERSION AND NOT SBOM_WOLFSSL_VERSION STREQUAL "")
-    list(APPEND _sbom_args DEP_VERSION wolfssl=${SBOM_WOLFSSL_VERSION})
+    list(APPEND _sbom_args DEP_VERSION
+         wolfssl=${SBOM_WOLFSSL_VERSION}
+         wolfcrypt=${SBOM_WOLFSSL_VERSION})
 endif()
 
 if(DEFINED SBOM_GEN AND NOT SBOM_GEN STREQUAL "")

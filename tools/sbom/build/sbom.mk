@@ -65,11 +65,19 @@
 #   GEN_SBOM              Legacy alias for SBOM_GEN.
 #   SBOM_NO_ARTIFACT_HASH = 1   As-built FIPS/kernel: do not re-hash.
 #   SBOM_DEP_WOLFSSL      yes/no - record wolfSSL as a dependency.
+#   SBOM_DEP_WOLFCRYPT    yes/no - record wolfCrypt as a component (NVD CPE).
 #   SBOM_DEP_OPENSSL      yes/no - record OpenSSL as a dependency.
+#   SBOM_CRYPTO_ONLY      auto/yes/no - whether only the wolfCrypt subset of
+#                         the wolfSSL release is compiled in. Default auto:
+#                         read WOLFCRYPT_ONLY out of the captured macros,
+#                         which needs SBOM_SETTINGS_H to be set.
 #   SBOM_WOLFSSL_VERSION  Explicit wolfSSL version for --dep-version. When
 #                         unset and SBOM_DEP_WOLFSSL=yes, falls back to
 #                         $(WOLFSSL_DIR)/wolfssl/version.h
 #                         (LIBWOLFSSL_VERSION_STRING), matching sbom.am.
+#                         Also used as the wolfcrypt version when
+#                         SBOM_DEP_WOLFCRYPT=yes and no wolfcrypt= override
+#                         is in SBOM_DEP_VERSION.
 #   SBOM_DEP_VERSION      Extra --dep-version KEY=VER tokens (space-separated).
 #   HOSTCC                Host C compiler for macro capture. Default: cc.
 #   CRA_PYTHON            Python interpreter. Default: python3.
@@ -137,6 +145,22 @@ $(1): $($(2)PREREQS)
 	        dep_ver="$$$$dep_ver --dep-version wolfssl=$$$$wv"; \
 	    fi; \
 	fi; \
+	if [ "$($(2)DEP_WOLFCRYPT)" = "yes" ] || [ "$($(2)DEP_WOLFCRYPT)" = "1" ]; then \
+	    case " $$$$dep_ver " in \
+	        *" --dep-version wolfcrypt="*) ;; \
+	        *) \
+	            cv="$($(2)WOLFSSL_VERSION)"; \
+	            if [ -z "$$$$cv" ] && [ -n "$(WOLFSSL_DIR)" ] && \
+	                [ -f "$(WOLFSSL_DIR)/wolfssl/version.h" ]; then \
+	                cv=`sed -n 's/.*LIBWOLFSSL_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
+	                    "$(WOLFSSL_DIR)/wolfssl/version.h" | head -1`; \
+	            fi; \
+	            if [ -n "$$$$cv" ]; then \
+	                dep_ver="$$$$dep_ver --dep-version wolfcrypt=$$$$cv"; \
+	            fi; \
+	            ;; \
+	    esac; \
+	fi; \
 	CRA_PYTHON="$(CRA_PYTHON)" HOSTCC="$(or $($(2)HOSTCC),$(HOSTCC))" \
 	"$(or $($(2)DRIVER),$(SBOM_DRIVER))" \
 	    --name "$($(2)NAME)" \
@@ -159,7 +183,9 @@ $(1): $($(2)PREREQS)
 	    $(if $($(2)VERSION_FILE),--version-file "$($(2)VERSION_FILE)") \
 	    $(if $($(2)VERSION_MACRO),--version-macro "$($(2)VERSION_MACRO)") \
 	    $(if $($(2)DEP_WOLFSSL),--dep-wolfssl "$($(2)DEP_WOLFSSL)") \
+	    $(if $($(2)DEP_WOLFCRYPT),--dep-wolfcrypt "$($(2)DEP_WOLFCRYPT)") \
 	    $(if $($(2)DEP_OPENSSL),--dep-openssl "$($(2)DEP_OPENSSL)") \
+	    $(if $($(2)CRYPTO_ONLY),--crypto-only "$($(2)CRYPTO_ONLY)") \
 	    $$$$dep_ver \
 	    $(if $(or $($(2)GEN),$(GEN_SBOM)),--gen-sbom "$(or $($(2)GEN),$(GEN_SBOM))") \
 	    $(if $($(2)CDX_OUT),--cdx-out "$($(2)CDX_OUT)") \

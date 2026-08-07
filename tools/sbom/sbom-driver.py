@@ -272,9 +272,16 @@ def main():
 
     # Dependencies (feature-detected against the generator).
     ap.add_argument("--dep-wolfssl", default="")
+    ap.add_argument("--dep-wolfcrypt", default="")
     ap.add_argument("--dep-openssl", default="")
     ap.add_argument("--dep-version", action="append", default=[],
                     help="Dependency version, e.g. wolfssl=5.9.2 (repeatable).")
+    ap.add_argument("--crypto-only", default="",
+                    help="auto|yes|no. Whether only the wolfCrypt subset of "
+                         "the wolfSSL release is compiled in. The generator "
+                         "defaults to auto, reading WOLFCRYPT_ONLY out of the "
+                         "captured configuration; state it explicitly when "
+                         "the front end captures no macros (--source-only).")
 
     # Outputs and environment.
     ap.add_argument("--cdx-out", default="")
@@ -392,11 +399,17 @@ def main():
         # Dependencies, only if the generator supports them.
         if args.dep_wolfssl and gen_sbom_supports(args.python, gen_sbom, "--dep-wolfssl"):
             cmd += ["--dep-wolfssl", args.dep_wolfssl]
+        if args.dep_wolfcrypt and gen_sbom_supports(
+                args.python, gen_sbom, "--dep-wolfcrypt"):
+            cmd += ["--dep-wolfcrypt", args.dep_wolfcrypt]
         if args.dep_openssl and gen_sbom_supports(args.python, gen_sbom, "--dep-openssl"):
             cmd += ["--dep-openssl", args.dep_openssl]
         if args.dep_version and gen_sbom_supports(args.python, gen_sbom, "--dep-version"):
             for dv in args.dep_version:
                 cmd += ["--dep-version", dv]
+        if args.crypto_only and gen_sbom_supports(
+                args.python, gen_sbom, "--crypto-only"):
+            cmd += ["--crypto-only", args.crypto_only]
 
         print(f"SBOM: name={args.name} version={version}")
         if args.lib:

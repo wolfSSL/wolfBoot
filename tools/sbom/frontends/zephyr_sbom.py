@@ -77,6 +77,11 @@ def main():
     ap.add_argument('--version-macro', default=None)
     ap.add_argument('--root', default=None)
     ap.add_argument('--license-file', default=None)
+    # This front end is --source-only: no macros are captured, so the
+    # generator cannot read WOLFCRYPT_ONLY and will say so unless the
+    # operator states it here.
+    ap.add_argument('--crypto-only', default=None,
+                    help='auto|yes|no, forwarded to the generator.')
     ap.add_argument('--cdx-out', default=None)
     ap.add_argument('--spdx-out', default=None)
     ap.add_argument('--srcs-out', default=None)
@@ -117,6 +122,7 @@ def main():
                       ('--version-macro', args.version_macro),
                       ('--root', args.root),
                       ('--license-file', args.license_file),
+                      ('--crypto-only', args.crypto_only),
                       ('--gen-sbom', args.gen_sbom),
                       ('--cdx-out', args.cdx_out),
                       ('--spdx-out', args.spdx_out)):
