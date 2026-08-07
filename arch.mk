@@ -175,6 +175,9 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS+=-DWOLFBOOT_DUALBOOT -DWOLFBOOT_UBOOT_LEGACY
     # BL31 owns GICv3 and secondary-core/PSCI setup. Do not touch RVBAR.
     CFLAGS+=-DSKIP_RVBAR=1 -DSKIP_GIC_INIT=1
+    # SPL/TF-A leave the Cadence host initialized; retain its PHY state and
+    # allow the controller's required post-command settle time.
+    CFLAGS_EXTRA+=-DSDHCI_SKIP_HOST_RESET=1 -DSDHCI_WAIT_AFTER_CMD_US=1000
   endif
 
   ifeq ($(TARGET),nxp_ls1028a)

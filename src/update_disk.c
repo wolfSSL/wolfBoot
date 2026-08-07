@@ -405,8 +405,8 @@ void RAMFUNCTION wolfBoot_start(void)
     load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
 #endif
 
-    wolfBoot_printf("Load address 0x%lx\r\n",
-        (unsigned long)(uintptr_t)load_address);
+    wolfBoot_printf("Load address 0x%llx\r\n",
+        (unsigned long long)(uintptr_t)load_address);
     do {
         failures++;
         if (selected)
@@ -674,8 +674,8 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-    wolfBoot_printf("Booting at %08lx\r\n",
-        (unsigned long)(uintptr_t)load_address);
+    wolfBoot_printf("Booting at %08llx\r\n",
+        (unsigned long long)(uintptr_t)load_address);
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)hal_hsm_disconnect();
