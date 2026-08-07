@@ -7,7 +7,7 @@ not replace the platform first stage or TF-A:
 SDM -> U-Boot SPL -> TF-A BL31/EL3 -> wolfBoot BL33/EL2 -> signed Linux FIT
 ```
 
-SPL remains responsible for DDR, clocks, resets, pinmux, the SD6HC PHY and
+SPL remains responsible for DDR, clocks, resets, pinmux, the SDHCI PHY and
 loading the signed U-Boot FIT. BL31 remains responsible for EL3, GICv3, PSCI,
 secondary CPUs and security-controller setup. The U-Boot-proper payload in the
 FIT is replaced with `wolfboot.bin` at load/entry address `0x80200000`.
