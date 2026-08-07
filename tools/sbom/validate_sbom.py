@@ -13,7 +13,8 @@ on a broken generator. It is not a full schema validator.
     * at least one component or component property recorded
     * optional --min-properties N on metadata.component.properties
     * optional --require-dep-version NAME: a components[] entry with that
-      name must exist and carry a non-empty version
+      name must exist and carry a non-empty version and CPE. Nested
+      sub-components count, since wolfcrypt ships inside wolfssl.
 
   SPDX (*.spdx.json):
     * spdxVersion starts with "SPDX-2"
@@ -38,6 +39,17 @@ def fail(path, msg):
     sys.exit(1)
 
 
+def flatten_components(components):
+    """Yield every component, including sub-components.
+
+    CycloneDX nests a component that ships inside another one (wolfcrypt
+    inside the wolfssl release) under `components[]`. A check that reads only
+    the top level would report such a component as missing."""
+    for comp in components or []:
+        yield comp
+        yield from flatten_components(comp.get("components"))
+
+
 def validate_cyclonedx(path, d, name_prefix, min_properties, require_deps):
     if d.get("bomFormat") != "CycloneDX":
         fail(path, f"bomFormat != CycloneDX (got {d.get('bomFormat')!r})")
@@ -57,14 +69,21 @@ def validate_cyclonedx(path, d, name_prefix, min_properties, require_deps):
         fail(path, f"metadata.component.properties has {len(props)} entries, "
                    f"need at least {min_properties} (config capture likely "
                    f"empty — check --options-h vs --cflags)")
+    all_comps = list(flatten_components(d.get("components")))
     for dep_name in require_deps:
-        matches = [c for c in (d.get("components") or [])
-                   if c.get("name") == dep_name]
+        if not all_comps:
+            fail(path, "components[] is empty but --require-dep-version "
+                       f"{dep_name!r} was requested (dependency graph "
+                       "missing — check DEP_WOLFSSL / DEP_WOLFCRYPT wiring)")
+        matches = [c for c in all_comps if c.get("name") == dep_name]
         if not matches:
             fail(path, f"required dependency component {dep_name!r} missing")
         if not matches[0].get("version"):
             fail(path, f"dependency component {dep_name!r} has no version "
                        f"(pass --dep-version or set WOLFSSL_DIR)")
+        if not matches[0].get("cpe"):
+            fail(path, f"dependency component {dep_name!r} has no cpe "
+                       f"(CPE-driven scanners cannot match it)")
     print(f"OK   [{path}]: CycloneDX 1.6, component "
           f"{comp.get('name')} {comp.get('version')}, "
           f"{len(props)} properties")

@@ -98,24 +98,46 @@ the source set and artifact hash are configuration-specific.
 
 Useful overrides: `HOSTCC`, `SBOM_GEN`, `CRA_PYTHON`.
 
-wolfcrypt sources are compiled directly into the wolfBoot image, so they are
-listed as wolfBoot's own sources rather than as a separate component. wolfSSL
-is *also* recorded as a dependency component (`SBOM_DEP_WOLFSSL`, on by
-default) with the submodule's version, which is what lets a scanner match
-wolfSSL advisories against this firmware.
+wolfcrypt sources are compiled directly into the wolfBoot image. They remain in
+the source-set hash **and** are declared as a `wolfcrypt` component, nested
+inside the `wolfssl` component that represents the release they ship in
+(`SBOM_DEP_WOLFSSL` and `SBOM_DEP_WOLFCRYPT`, both on by default, sharing the
+submodule's version). CycloneDX expresses that as a sub-component plus a
+`wolfssl → wolfcrypt` dependency edge; SPDX as a `CONTAINS` relationship.
 
-That dependency entry carries both machine-resolvable identifiers, because the
-two scanner families key on different ones:
+That coat carries machine-resolvable identifiers for both scanner families:
 
-* `cpe:2.3:a:wolfssl:wolfssl:<version>:*:*:*:*:*:*:*` — the identifier NVD
-  registers, used by a CRA / IEC 62443 vulnerability-monitoring process.
-* `pkg:github/wolfssl/wolfssl@v<version>-stable` — the PURL, used by the
-  ecosystem scanners (OSV, Trivy, Dependency-Track). The namespace and the name
-  are lowercase per purl-spec, and the version is the real wolfSSL release tag.
+* `cpe:2.3:a:wolfssl:wolfssl:<version>:*:*:*:*:*:*:*` — NVD product for the
+  wolfSSL library, and the identifier that actually matches: wolfCrypt
+  advisories are filed against this product, not against the wolfcrypt one.
+* `cpe:2.3:a:wolfssl:wolfcrypt:<version>:*:*:*:*:*:*:*` — NVD product for
+  wolfCrypt. Registered, but no CVE is mapped to it today, so it documents
+  provenance rather than driving matches.
+* `pkg:github/wolfssl/wolfssl@v<version>-stable` — resolvable PURL for the
+  wolfssl release (lowercase per purl-spec; `-stable` is the real tag).
+* wolfBoot itself carries **no CPE**: NVD does not list the product, and an
+  unlisted CPE is indistinguishable to a scanner from a listed one with no
+  advisories. The submitted identifier is recorded as
+  `wolfssl:sbom:cpe-requested` with `wolfssl:sbom:cpe-status=pending` until the
+  dictionary entry is published (see wolfGlass `docs/cpe-requests/wolfboot.md`).
 
-wolfCrypt is not a separate NVD product. It is built from the same wolfSSL
-release, and its advisories are published against `wolfssl:wolfssl`, so the
-wolfSSL identifiers above cover the wolfCrypt code in the image.
+### Only wolfCrypt is compiled in
+
+`include/user_settings.h` defines `WOLFCRYPT_ONLY` for every configuration
+except a wolfHSM server with certificate-chain verification, so the image holds
+the crypto subset of wolfSSL and no TLS. `--crypto-only auto` (the default,
+`SBOM_CRYPTO_ONLY` to override) reads that macro out of the captured
+configuration and records:
+
+```
+wolfssl:sbom:wolfssl-subset=wolfcrypt-only
+wolfssl:sbom:wolfssl-subset-basis=captured
+```
+
+The `wolfssl` component stays in the document regardless. Dropping it would
+read as more precise and would take the scan from every wolfSSL advisory to
+none. Narrow the TLS-only CVEs with a VEX statement instead, which is the
+mechanism designed to say "present but not exploitable here".
 
 ### How the configuration is captured
 

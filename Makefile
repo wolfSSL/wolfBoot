@@ -884,8 +884,9 @@ pico-sdk-info: FORCE
 # this point: core wolfBoot + wolfcrypt + HAL) and passes it, together with the
 # build CFLAGS, to the vendored wolfGlass driver under tools/sbom/.
 #
-# wolfcrypt sources are compiled directly into the wolfBoot image and are
-# therefore listed as wolfBoot's own sources, not as a separate component.
+# wolfcrypt sources are compiled directly into the wolfBoot image.  They stay
+# in the source-set hash, and are also declared as a wolfcrypt component so a
+# CPE-driven scan can match the registered NVD product wolfssl:wolfcrypt.
 #
 # Optional make variables:
 #   HOSTCC                 Host C compiler for macro capture (default: cc)
@@ -910,10 +911,10 @@ SBOM_INCLUDE_DIRS:=$(WOLFBOOT_ROOT)/include $(WOLFBOOT_LIB_WOLFSSL)
 # user_settings.h includes the generated target.h, so it must exist before the
 # capture runs. It also carries the flash layout the SBOM records.
 SBOM_PREREQS:=include/target.h
-# wolfCrypt sources are compiled into the image rather than linked, so they are
-# listed as wolfBoot's own sources. Declaring wolfssl as a dependency component
-# as well is what lets a scanner match wolfSSL advisories against this firmware.
+# Coat: wolfssl (TLS/library CPE) + wolfcrypt (crypto CPE). Sources remain in
+# the merkle hash; the components give scanners resolvable identifiers.
 SBOM_DEP_WOLFSSL?=yes
+SBOM_DEP_WOLFCRYPT?=yes
 SBOM_WOLFSSL_VERSION?=$(shell sed -n \
     's/.*LIBWOLFSSL_VERSION_STRING[[:space:]]*"\([^"]*\)".*/\1/p' \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfssl/version.h 2>/dev/null | head -1)

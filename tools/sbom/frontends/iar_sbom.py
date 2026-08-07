@@ -95,6 +95,18 @@ def main():
     ap.add_argument('--version-macro', default=None)
     ap.add_argument('--root', default=None)
     ap.add_argument('--license-file', default=None)
+    # The .ewp records the -D tokens ICCARM was given, not the macros a
+    # settings header derives from them. Without these two the capture reads
+    # an empty translation unit and the recorded configuration is the -D list
+    # alone.
+    ap.add_argument('--settings-h', default=None,
+                    help='Settings header to -include during macro capture '
+                         '(e.g. wolfssl/wolfcrypt/settings.h).')
+    ap.add_argument('--include-dir', action='append', default=[],
+                    help='Include directory for the capture (repeatable), '
+                         'typically the directory holding user_settings.h.')
+    ap.add_argument('--crypto-only', default=None,
+                    help='auto|yes|no, forwarded to the generator.')
     ap.add_argument('--cdx-out', default=None)
     ap.add_argument('--spdx-out', default=None)
     ap.add_argument('--srcs-out', default=None)
@@ -163,11 +175,15 @@ def main():
                       ('--version-macro', args.version_macro),
                       ('--root', args.root),
                       ('--license-file', args.license_file),
+                      ('--settings-h', args.settings_h),
+                      ('--crypto-only', args.crypto_only),
                       ('--gen-sbom', args.gen_sbom),
                       ('--cdx-out', args.cdx_out),
                       ('--spdx-out', args.spdx_out)):
         if val:
             cmd += [flag, val]
+    for inc in args.include_dir:
+        cmd += ['--include-dir', inc]
 
     print(f"IAR SBOM: configuration={cfg_name} "
           f"({len(srcs)} sources, {len(defines)} defines)")
