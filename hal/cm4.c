@@ -164,23 +164,136 @@ extern void* cm4_fw_dtb;
  *     PL011 registers cleanly in Linux; the mini-UART (bcm2835-aux) does not on
  *     this DTB ("unable to register 8250 port").
  *   default (mini-UART) -> serial0/ttyS0. */
-#ifndef LINUX_BOOTARGS
-#ifndef LINUX_BOOTARGS_ROOT
-#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p3"
-#endif
+/* Console/earlycon base (no root=), shared by the static and RAUC A/B cmdlines. */
 #if defined(CM4_UART_PL011)
-#define LINUX_BOOTARGS \
-    "earlycon=pl011,mmio32,0xfe201000 console=ttyAMA0,115200 root=" \
-    LINUX_BOOTARGS_ROOT " rootfstype=ext4 rootwait"
+#define LINUX_BOOTARGS_BASE \
+    "earlycon=pl011,mmio32,0xfe201000 console=ttyAMA0,115200"
 #else
 /* earlycon=uart8250,mmio32,0xfe215040: the mini-UART is 8250-driven with a 4-byte
  * register stride, so LSR lands at 0xfe215054 - prints from MMIO before the dtb
  * console driver is up. serial0 aliases the mini-UART (ttyS0) at runtime. */
+#define LINUX_BOOTARGS_BASE \
+    "earlycon=uart8250,mmio32,0xfe215040 console=serial0,115200"
+#endif
+#ifndef LINUX_BOOTARGS
+#ifndef LINUX_BOOTARGS_ROOT
+#define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p3"
+#endif
 #define LINUX_BOOTARGS \
-    "earlycon=uart8250,mmio32,0xfe215040 console=serial0,115200 root=" \
-    LINUX_BOOTARGS_ROOT " rootfstype=ext4 rootwait"
+    LINUX_BOOTARGS_BASE " root=" LINUX_BOOTARGS_ROOT " rootfstype=ext4 rootwait"
 #endif
+
+#if defined(CM4_RAUC_AB)
+#include "disk.h"
+#include "ubootenv.h"
+
+/* 0-based GPT index of the raw U-Boot-env partition (RAUC fw_env.config target). */
+#ifndef CM4_UBOOT_ENV_PART
+#define CM4_UBOOT_ENV_PART 1
 #endif
+#ifndef BOOT_DISK
+#define BOOT_DISK 0
+#endif
+/* RAUC bootname -> rootfs device. Override in the .config for your layout. */
+#ifndef CM4_ROOT_A
+#define CM4_ROOT_A "/dev/mmcblk0p4"
+#endif
+#ifndef CM4_ROOT_B
+#define CM4_ROOT_B "/dev/mmcblk0p5"
+#endif
+/* RAUC bootnames (BOOT_ORDER tokens) that map to each rootfs. RAUC's own
+ * default is A/B; override to match a system.conf that uses other names
+ * (e.g. system0/system1). An unrecognised name fails loudly (static cmdline). */
+#ifndef CM4_SLOT_A_NAME
+#define CM4_SLOT_A_NAME "A"
+#endif
+#ifndef CM4_SLOT_B_NAME
+#define CM4_SLOT_B_NAME "B"
+#endif
+
+static uint8_t cm4_uboot_env[UBOOT_ENV_SIZE];
+
+/* Bounded append of src to dst starting at index at; returns the new index. */
+static size_t cm4_strcat(char *dst, size_t dstsz, size_t at, const char *src)
+{
+    while (*src != '\0' && at + 1 < dstsz)
+        dst[at++] = *src++;
+    dst[at] = '\0';
+    return at;
+}
+
+/* Read the raw U-Boot env, run the RAUC A/B state machine, persist the
+ * decremented try counter (so a hung slot fails over next boot), and build the
+ * kernel command line "<base> root=<slot dev> rauc.slot=<name> rootfstype=ext4
+ * rootwait" into out. Returns 0 on success, -1 on failure (caller falls back to
+ * the static LINUX_BOOTARGS). Runs with the MMU on and the disk already open
+ * (called from hal_get_boot_dts, before hal_prepare_boot). */
+static int cm4_rauc_build_bootargs(char *out, size_t outsz)
+{
+    struct uboot_slot slot;
+    const char *root;
+    size_t at;
+    int r;
+    int env_ok;
+
+    /* Require the FULL env: disk_part_read() clamps sz to the partition length,
+     * so a short read (partition smaller than UBOOT_ENV_SIZE) returns a positive
+     * count with the tail left zero - which would fail CRC and reset to defaults
+     * every boot. Treat anything but a complete read as "no env". */
+    r = disk_part_read(BOOT_DISK, CM4_UBOOT_ENV_PART, 0, UBOOT_ENV_SIZE,
+        cm4_uboot_env);
+    env_ok = (r == (int)UBOOT_ENV_SIZE);
+    if (!env_ok) {
+        /* Boot a default slot but do NOT persist a guess over RAUC state we did
+         * not successfully read (a transient read error must not roll back a
+         * "slot B good" system to "boot A"). */
+        wolfBoot_printf("cm4: uboot-env read failed (%d); default slot, no writeback\n",
+            r);
+        memset(cm4_uboot_env, 0, sizeof(cm4_uboot_env));
+    }
+    if (uboot_env_select_slot(cm4_uboot_env, UBOOT_ENV_SIZE, &slot) != 0)
+        return -1;
+    if (!slot.selected) {
+        /* All slots were exhausted; counters were re-armed - pick slot A now. */
+        wolfBoot_printf("cm4: all RAUC slots exhausted; re-armed, retrying\n");
+        if (uboot_env_select_slot(cm4_uboot_env, UBOOT_ENV_SIZE, &slot) != 0)
+            return -1;
+        if (!slot.selected)
+            return -1; /* malformed BOOT_ORDER -> static cmdline */
+    }
+    if (env_ok) {
+        /* Persist the decremented try counter. A short/failed write leaves the
+         * counter un-decremented, so booting the selected slot would loop into
+         * it forever - fall back to the static cmdline instead. */
+        r = disk_part_write(BOOT_DISK, CM4_UBOOT_ENV_PART, 0, UBOOT_ENV_SIZE,
+            cm4_uboot_env);
+        if (r != (int)UBOOT_ENV_SIZE) {
+            wolfBoot_printf("cm4: uboot-env write failed (%d); static cmdline\n",
+                r);
+            return -1;
+        }
+    }
+
+    if (strcmp(slot.name, CM4_SLOT_B_NAME) == 0)
+        root = CM4_ROOT_B;
+    else if (strcmp(slot.name, CM4_SLOT_A_NAME) == 0)
+        root = CM4_ROOT_A;
+    else {
+        wolfBoot_printf("cm4: unknown RAUC slot '%s'; static cmdline\n",
+            slot.name);
+        return -1;
+    }
+    at = 0;
+    at = cm4_strcat(out, outsz, at, LINUX_BOOTARGS_BASE);
+    at = cm4_strcat(out, outsz, at, " root=");
+    at = cm4_strcat(out, outsz, at, root);
+    at = cm4_strcat(out, outsz, at, " rauc.slot=");
+    at = cm4_strcat(out, outsz, at, slot.name);
+    (void)cm4_strcat(out, outsz, at, " rootfstype=ext4 rootwait");
+    wolfBoot_printf("cm4: RAUC slot %s -> root %s\n", slot.name, root);
+    return 0;
+}
+#endif /* CM4_RAUC_AB */
 
 /* Supply Linux a bootable DTB when the FIT is kernel-only: relocate the
  * firmware dtb to WOLFBOOT_LOAD_DTS_ADDRESS (headroom to grow /chosen without
@@ -231,9 +344,20 @@ void* hal_get_boot_dts(void)
         wolfBoot_printf("cm4: DTB /chosen error (%d)\n", off);
         return fdt; /* still bootable; kernel falls back to built-in cmdline */
     }
+#if defined(CM4_RAUC_AB)
+    {
+        static char cm4_bootargs[256];
+        const char *args = LINUX_BOOTARGS;
+        if (cm4_rauc_build_bootargs(cm4_bootargs, sizeof(cm4_bootargs)) == 0)
+            args = cm4_bootargs;
+        if (fdt_fixup_str(fdt, off, "chosen", "bootargs", args) != 0)
+            wolfBoot_printf("cm4: DTB bootargs fixup failed\n");
+    }
+#else
     if (fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS) != 0) {
         wolfBoot_printf("cm4: DTB bootargs fixup failed\n");
     }
+#endif
     wolfBoot_printf("cm4: DTB relocated to %p, bootargs set\n", fdt);
     return fdt;
 #endif /* CM4_FIRMWARE_DTB */
@@ -631,6 +755,10 @@ void sdhci_platform_init(void)
     for (i = 0; i < 100000; i++) {
         if ((*((volatile uint8_t *)(base + STD_SDHCI_SW_RESET)) & STD_SDHCI_SRA) == 0)
             break;
+    }
+    if ((*((volatile uint8_t *)(base + STD_SDHCI_SW_RESET)) & STD_SDHCI_SRA) != 0) {
+        wolfBoot_printf("sdhci_platform_init: SRA soft reset did not clear; "
+            "controller may be unresponsive\n");
     }
 }
 

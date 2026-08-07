@@ -1342,6 +1342,13 @@ static int emmc_card_full_init(void)
 #define SDHCI_DIR_READ  1
 #define SDHCI_DIR_WRITE 0
 
+/* Bounded spin for the multi-block write settle-wait (see sdhci_transfer): TC
+ * may not arrive until CMD12 on some controllers, so the pre-CMD12 wait is
+ * capped instead of spinning forever. Override per platform if needed. */
+#ifndef SDHCI_WRITE_SETTLE_SPINS
+#define SDHCI_WRITE_SETTLE_SPINS 1000000U
+#endif
+
 /* Unified internal transfer function for read and write operations
  * dir: SDHCI_DIR_READ or SDHCI_DIR_WRITE
  * cmd_index: command to send (e.g., MMC_CMD17_READ_SINGLE, MMC_CMD25_WRITE_MULTIPLE)
@@ -1568,10 +1575,21 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
         }
 
-        /* For write: wait for transfer complete before checking status */
+        /* Write completion: settle the data phase so the SRS12 error sample
+         * below is valid and a latched error (EINT) is caught. A single-block
+         * write (CMD24) sets TC after the data phase - wait for it. An open-ended
+         * multi-block write (CMD25, no Auto-CMD12) may not set TC until the CMD12
+         * stop issued below (observed on the CM4 EMMC2: SRS12 stuck at 0x51, TC
+         * never set), so its wait is BOUNDED: it still captures an EINT without
+         * deadlocking, and the CMD12 + wait-busy sequence below completes the
+         * transfer. */
         if (dir == SDHCI_DIR_WRITE) {
+            uint32_t spins = SDHCI_WRITE_SETTLE_SPINS;
             while (((reg = SDHCI_REG(SDHCI_SRS12)) &
-                (SDHCI_SRS12_TC | SDHCI_SRS12_EINT)) == 0);
+                    (SDHCI_SRS12_TC | SDHCI_SRS12_EINT)) == 0) {
+                if (is_multi_block && spins-- == 0)
+                    break;
+            }
         }
     }
 
