@@ -41,14 +41,14 @@ void main(void)
 
     hal_init();
     wolfBoot_printf("\nAgilex 5 BL33 smoke test\n");
-    wolfBoot_printf("Current EL: %d (expected 2)\n", current_el());
+    wolfBoot_printf("Current EL: %u (expected 2)\n", current_el());
 
     start = hal_get_timer_us();
     do {
         now = hal_get_timer_us();
     } while ((now - start) < 1000U);
-    wolfBoot_printf("Generic timer advanced by %d us\n",
-        (uint32_t)(now - start));
+    wolfBoot_printf("Generic timer advanced by %u us\n",
+        (unsigned int)(now - start));
     wolfBoot_printf("AGILEX5_BL33_SMOKE_PASS\n");
 
     while (1)

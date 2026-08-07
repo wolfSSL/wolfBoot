@@ -315,7 +315,7 @@ void sdhci_platform_dma_prepare(void *buf, uint32_t size, int is_write)
         if (is_write != 0)
             __asm__ volatile("dc cvac, %0" : : "r"(addr) : "memory");
         else
-            __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+            __asm__ volatile("dc ivac, %0" : : "r"(addr) : "memory");
     }
     __asm__ volatile("dsb sy" : : : "memory");
 }
@@ -329,7 +329,7 @@ void sdhci_platform_dma_complete(void *buf, uint32_t size, int is_write)
 
     if (is_write == 0) {
         for (addr = start; addr < end; addr += CACHE_LINE_SIZE)
-            __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+            __asm__ volatile("dc ivac, %0" : : "r"(addr) : "memory");
         __asm__ volatile("dsb sy" : : : "memory");
     }
 }
