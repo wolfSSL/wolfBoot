@@ -1518,6 +1518,12 @@ endif
 # also match the wolfHSM server's own build, or the two disagree on the layout.
 WOLFHSM_CFG_COMM_DATA_LEN ?= 5000
 
+# Maximum trusted-root count for wolfHSM cert-chain verification. Part of the
+# client<->server wire format, so every wolfHSM build in the system (wolfBoot
+# client or server, and any separately built HSM server firmware) must use
+# the same value.
+WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS ?= 8
+
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
@@ -1551,6 +1557,7 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # keystore.c are not supported.
   KEYGEN_OPTIONS += --nolocalkeys
   CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=$(WOLFHSM_CFG_COMM_DATA_LEN)
+  CFLAGS += -DWOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS=$(WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS)
 
   # wolfHSM client ID presented to the HSM server during the connection
   # handshake. Single value shared by all targets; defaults to 1. Override in the
@@ -1596,6 +1603,7 @@ ifeq ($(WOLFHSM_SERVER),1)
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_SERVER -DWOLFHSM_CFG_ENABLE_SERVER
+  CFLAGS += -DWOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS=$(WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS)
   # HAL crypto devId abstraction for wolfHSM server
   CFLAGS += -DWOLFBOOT_DEVID_HASH=hsmDevIdHash
   CFLAGS += -DWOLFBOOT_DEVID_PUBKEY=hsmDevIdPubKey
@@ -1655,8 +1663,8 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   # Optional override for the wolfHSM trusted-root NVM ID list used during
   # cert-chain verification. Expects a comma-separated initializer (no quotes,
   # no spaces), e.g. WOLFHSM_NVM_ROOT_CA_LIST=1,2,3. Bounded by
-  # WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS. When unset, falls back to a HAL-specified
-  # default
+  # WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS (settable in .config; must match the HSM
+  # server firmware's build). When unset, falls back to a HAL-specified default
   ifneq ($(strip $(WOLFHSM_NVM_ROOT_CA_LIST)),)
     CFLAGS += '-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=$(WOLFHSM_NVM_ROOT_CA_LIST)'
   endif
