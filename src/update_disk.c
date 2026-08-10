@@ -249,7 +249,15 @@ static void disk_decrypted_header_clear(uint8_t *hdr)
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
 #ifdef MMU
-extern void* hal_get_boot_dts(void);
+/* Platform hook: return a DTB the boot firmware handed us (e.g. the RPi
+ * firmware's fully-patched dtb), used below when the loaded image carries no
+ * FDT of its own. Weak default returns none; platform HALs (e.g. hal/cm4.c)
+ * override it. Defined here (not in an arch boot_*.c) so every MMU disk target -
+ * AArch64, ARM32, RISC-V - resolves the symbol. */
+void* WEAKFUNCTION hal_get_boot_dts(void)
+{
+    return NULL;
+}
 #endif
 
 #if defined(WOLFBOOT_NO_LOAD_ADDRESS) || !defined(WOLFBOOT_LOAD_ADDRESS)

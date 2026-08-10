@@ -138,14 +138,6 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
     (void)dts_addr;
     return 0;
 }
-
-/* Platform hook: return a DTB provided by the boot firmware (e.g. the RPi
- * VideoCore firmware's fully-patched dtb), used by the disk/FIT boot path when
- * the loaded image carries no FDT of its own. Default: none. */
-void* WEAKFUNCTION hal_get_boot_dts(void)
-{
-    return NULL;
-}
 #endif
 
 
