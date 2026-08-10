@@ -919,6 +919,16 @@ ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -D"ALLOW_DOWNGRADE"
 endif
 
+# Raw (non-FIT) device tree authentication (see docs/Signing.md '--dts'). A
+# device tree bound to the image via HDR_DEVICE_TREE_DIGEST is always verified;
+# WOLFBOOT_REQUIRE_SIGNED_DTB additionally makes a missing digest a hard failure
+# (fail-closed) instead of a warning, once every raw-DTB payload is signed with
+# 'sign --dts'.
+ifeq ($(WOLFBOOT_REQUIRE_SIGNED_DTB),1)
+  $(warning WOLFBOOT_REQUIRE_SIGNED_DTB=1 makes wolfBoot panic on a raw device tree that carries no authenticated HDR_DEVICE_TREE_DIGEST; sign every raw DTB payload with 'sign --dts' first or the target will not boot)
+  CFLAGS+= -D"WOLFBOOT_REQUIRE_SIGNED_DTB"
+endif
+
 ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
   ifneq ($(WOLFBOOT_SELF_HEADER),1)
     $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_HEADER=1)

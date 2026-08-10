@@ -1549,6 +1549,92 @@ int wolfBoot_get_dts_size(void *dts_addr)
     return ret;
 }
 
+/* Hash a raw buffer with the configured image hash (explicit per-algorithm API,
+ * since the generic update_hash macro's SHA3 mapping is wrong). 0 on success. */
+static int wolfBoot_hash_buffer(const void *buf, uint32_t len, uint8_t *out)
+{
+    const uint8_t *p = (const uint8_t *)buf;
+    int ret;
+
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256 ctx;
+    ret = wc_InitSha256_ex(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha256Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha256Final(&ctx, out);
+        wc_Sha256Free(&ctx);
+    }
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384 ctx;
+    ret = wc_InitSha384_ex(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha384Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha384Final(&ctx, out);
+        wc_Sha384Free(&ctx);
+    }
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3 ctx;
+    ret = wc_InitSha3_384(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha3_384_Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha3_384_Final(&ctx, out);
+        wc_Sha3_384_Free(&ctx);
+    }
+#else
+    (void)p;
+    ret = -1;
+#endif
+    return (ret == 0) ? 0 : -1;
+}
+
+/* Verify a raw DTB against a firmware-bound digest (from the image's
+ * HDR_DEVICE_TREE_DIGEST TLV, captured by the caller since the load may reuse
+ * the image struct). Returns 0 on match, -1 on mismatch/bad args/hash error. */
+int wolfBoot_verify_dts_digest(const uint8_t *expected_digest,
+    const void *dts_addr, uint32_t dts_size)
+{
+    uint8_t calc[WOLFBOOT_SHA_DIGEST_SIZE];
+
+    if (expected_digest == NULL || dts_addr == NULL || dts_size == 0)
+        return -1;
+
+    if (wolfBoot_hash_buffer(dts_addr, dts_size, calc) != 0)
+        return -1;
+
+    if (wolfBoot_hardened_CT_compare(expected_digest, calc,
+            WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
 #endif /* MMU || WOLFBOOT_FDT */
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS

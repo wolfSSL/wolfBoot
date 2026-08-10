@@ -1712,6 +1712,11 @@ int image_CT_compare(const uint8_t *expected, const uint8_t *actual,
     uint32_t len);
 int wolfBoot_hardened_CT_compare(const uint8_t *expected, const uint8_t *actual,
     uint32_t len);
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+int wolfBoot_get_dts_size(void *dts_addr);
+int wolfBoot_verify_dts_digest(const uint8_t *expected_digest,
+    const void *dts_addr, uint32_t dts_size);
+#endif
 int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 #ifdef EXT_FLASH
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);

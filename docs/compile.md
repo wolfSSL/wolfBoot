@@ -280,6 +280,10 @@ downgrades, compile with `ALLOW_DOWNGRADE=1`.
 Warning: this option will disable version checking before the updates, thus exposing the system to potential
 forced downgrade attacks.
 
+### Require an authenticated device tree (raw-DTB targets)
+
+On non-FIT MMU targets that load a raw device tree from flash, wolfBoot authenticates the DTB against the `HDR_DEVICE_TREE_DIGEST` TLV bound to the signed kernel (`sign --dts <board.dtb>`, see `docs/Signing.md`). A DTB carrying the digest is always verified; a raw DTB with no digest only warns and boots by default. Compile with `WOLFBOOT_REQUIRE_SIGNED_DTB=1` to make a missing digest a hard failure (fail-closed) once every raw-DTB payload is signed with `--dts`.
+
 ### Enable optional support for external flash memory
 
 WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
