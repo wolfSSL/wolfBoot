@@ -2591,7 +2591,12 @@ uint64_t hal_get_timer_us(void)
 
 void* hal_get_dts_address(void)
 {
-#ifdef WOLFBOOT_DTS_BOOT_ADDRESS
+#ifdef NO_XIP
+    /* QSPI is not memory-mapped: WOLFBOOT_DTS_BOOT_ADDRESS is a flash offset,
+     * not a CPU-dereferenceable address. Return NULL so update_ram.c reads and
+     * authenticates the DTB from external flash instead of dereferencing it. */
+    return NULL;
+#elif defined(WOLFBOOT_DTS_BOOT_ADDRESS)
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 #elif defined(WOLFBOOT_LOAD_DTS_ADDRESS)
     return (void*)WOLFBOOT_LOAD_DTS_ADDRESS;

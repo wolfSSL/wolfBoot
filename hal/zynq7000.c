@@ -826,9 +826,10 @@ void ext_flash_unlock(void) { }
 
 #ifdef MMU
 /* Memory-mapped DTB fallback. Not used on Zynq-7000 with EXT_FLASH=1: the
- * signed DTB is opened as PART_DTS_BOOT in update_ram.c and read out of
- * QSPI via ext_flash_check_read. Return NULL so the fallback path is a
- * no-op when the DTS partition is missing. */
+ * DTB is opened as PART_DTS_BOOT in update_ram.c and read out of QSPI via
+ * ext_flash_check_read, then authenticated against the boot image's
+ * HDR_DEVICE_TREE_DIGEST TLV before the kernel sees it. Return NULL so the
+ * fallback path is a no-op when the DTS partition is missing. */
 void *hal_get_dts_address(void)
 {
     return NULL;

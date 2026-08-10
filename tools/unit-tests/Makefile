@@ -63,7 +63,8 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
-       unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
+       unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
+       unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
@@ -147,6 +148,7 @@ run: $(TESTS)
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
+	python3 unit-sign-dts.py || exit 1
 
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
@@ -577,6 +579,26 @@ unit-image-sha3-384: ../../include/target.h unit-image.c unit-common.c
 	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
 		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
 		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DUNIT_IMAGE_KEYHASH_ONLY \
+		-DWOLFBOOT_HASH_SHA3_384 $(LDFLAGS)
+
+# Exercises the raw-DTB authentication helper wolfBoot_verify_dts_digest()
+# (Fenrir #7998). WOLFBOOT_FDT compiles the DTS helpers in image.c, which pull
+# in fdt.c for wolfBoot_get_dts_size(). The sha384/sha3-384 variants cover the
+# corresponding wolfBoot_hash_buffer() branches used by real MMU targets.
+unit-image-dts: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT $(LDFLAGS)
+
+unit-image-dts-sha384: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT -DUNIT_IMAGE_DTS_ONLY \
+		-DWOLFBOOT_HASH_SHA384 $(LDFLAGS)
+
+unit-image-dts-sha3-384: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT -DUNIT_IMAGE_DTS_ONLY \
 		-DWOLFBOOT_HASH_SHA3_384 $(LDFLAGS)
 
 unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048

@@ -46,10 +46,21 @@
 #endif
 
 extern void hal_flash_dualbank_swap(void);
-extern int wolfBoot_get_dts_size(void *dts_addr);
+/* DTS helpers declared in include/image.h under (MMU || WOLFBOOT_FDT). */
 
 extern uint32_t kernel_load_addr;
 extern uint32_t dts_load_addr;
+
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+/* Bounds for the attacker-influenced fdt_totalsize before relocating a DTB.
+ * MIN is the FDT v17 header size (also enforced by the signer): fdt_check_header
+ * validates magic/version but not totalsize, so a crafted header with a tiny
+ * totalsize must be rejected rather than loaded/forwarded as a partial tree. */
+#ifndef WOLFBOOT_DTS_MAX_SIZE
+#define WOLFBOOT_DTS_MAX_SIZE (1024U * 1024U)
+#endif
+#define WOLFBOOT_DTS_MIN_SIZE (40U)
+#endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
 extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
@@ -292,6 +303,14 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 #ifdef MMU
     uint32_t dts_size = 0;
+    /* HDR_DEVICE_TREE_DIGEST snapshot, taken before the raw DTB is loaded. */
+    uint8_t  dts_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    uint8_t *dts_tlv = NULL;
+    uint16_t dts_tlv_len = 0;
+    int      dts_digest_present = 0; /* 0 absent, 1 valid, -1 malformed */
+#if defined(EXT_FLASH) && defined(WOLFBOOT_DTS_BOOT_ADDRESS)
+    uint8_t  dts_hdr[64]; /* FDT header peek (fdt_check_header needs >= 40) */
+#endif
 #endif
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
     /* When wolfBoot is the FSBL, the boot FIT carries an "atf" (BL31)
@@ -573,6 +592,22 @@ backup_on_failure:
 #endif
 
 #ifdef MMU
+    /* Snapshot the digest from the verified header before os_image can be
+     * reused for the DTS partition below. (FIT DTBs are covered by the FIT.) */
+    dts_tlv_len = wolfBoot_get_header(&os_image, HDR_DEVICE_TREE_DIGEST,
+        &dts_tlv);
+    if (dts_tlv_len != 0 && dts_tlv != NULL) {
+        if (dts_tlv_len == WOLFBOOT_SHA_DIGEST_SIZE) {
+            memcpy(dts_digest, dts_tlv, WOLFBOOT_SHA_DIGEST_SIZE);
+            dts_digest_present = 1; /* present and well-formed */
+        }
+        else {
+            /* A present-but-malformed digest TLV must not silently downgrade
+             * to an unauthenticated DTB boot; treat it as a hard failure. */
+            dts_digest_present = -1;
+        }
+    }
+
     /* Is this a Flattened uImage Tree (FIT) image (FDT format) */
     if (wolfBoot_get_dts_size(load_address) > 0) {
         void* fit = (void*)load_address;
@@ -638,37 +673,75 @@ backup_on_failure:
 #endif
     }
     else {
-    /* Load DTS to RAM */
-    #ifdef EXT_FLASH
-        if (PART_IS_EXT(&os_image) &&
-            wolfBoot_open_image(&os_image, PART_DTS_BOOT) >= 0) {
-            dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
-            dts_size = (uint32_t)os_image.fw_size;
-
-            wolfBoot_printf("Loading DTS (size %lu) to RAM at %08lx\n",
-                (long unsigned int)dts_size, (long unsigned int)dts_addr);
-            ext_flash_check_read((uintptr_t)os_image.fw_base,
-                    (uint8_t*)dts_addr, dts_size);
+        /* Prefer the HAL's memory-mapped DTB (unchanged for XIP targets); fall
+         * back to external flash at WOLFBOOT_DTS_BOOT_ADDRESS when the HAL has
+         * no usable address (NULL, or a flash offset on NO_XIP targets). */
+        dts_addr = hal_get_dts_address();
+        if (dts_addr != NULL) {
+            ret = wolfBoot_get_dts_size(dts_addr);
+            if (ret < (int)WOLFBOOT_DTS_MIN_SIZE ||
+                    (uint32_t)ret > WOLFBOOT_DTS_MAX_SIZE) {
+                wolfBoot_printf("DTB parse/size check failed - ignoring\n");
+                dts_addr = NULL; /* never forward an unvalidated address */
+            }
+            else {
+                dts_size = (uint32_t)ret;
+                memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_addr, dts_size);
+                dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+            }
         }
-        else
-    #endif /* EXT_FLASH */
-        {
-            dts_addr = hal_get_dts_address();
-            if (dts_addr) {
-                ret = wolfBoot_get_dts_size(dts_addr);
-                if (ret < 0) {
-                    wolfBoot_printf("Failed parsing DTB to load\n");
-                    /* Allow failure, continue booting */
-                }
-                else {
-                    /* relocate DTS to RAM */
-                    uint8_t* dts_dst = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+    #if defined(EXT_FLASH) && defined(WOLFBOOT_DTS_BOOT_ADDRESS)
+        if (dts_addr == NULL) {
+            /* Peek the FDT header for the size, clamp it, then read the body.
+             * Each ext_flash_read length is checked so a short/failed read
+             * never yields a partial or oversized tree. */
+            ret = ext_flash_read((uintptr_t)WOLFBOOT_DTS_BOOT_ADDRESS,
+                    dts_hdr, (int)sizeof(dts_hdr));
+            if (ret == (int)sizeof(dts_hdr)) {
+                ret = wolfBoot_get_dts_size(dts_hdr);
+                if (ret >= (int)WOLFBOOT_DTS_MIN_SIZE &&
+                        (uint32_t)ret <= WOLFBOOT_DTS_MAX_SIZE) {
                     dts_size = (uint32_t)ret;
-                    wolfBoot_printf("Loading DTB (size %d) from %p to RAM at %p\n",
-                        dts_size, dts_addr, (void*)WOLFBOOT_LOAD_DTS_ADDRESS);
-                    memcpy(dts_dst, dts_addr, dts_size);
-                    dts_addr = dts_dst;
+                    if (ext_flash_read((uintptr_t)WOLFBOOT_DTS_BOOT_ADDRESS,
+                            (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS, (int)dts_size)
+                            == (int)dts_size)
+                        dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+                    else
+                        dts_size = 0;
                 }
+            }
+        }
+    #endif /* EXT_FLASH && WOLFBOOT_DTS_BOOT_ADDRESS */
+
+        /* Authenticate the raw DTB before boot. dts_size == 0 with a non-NULL
+         * address (e.g. a zeroed fdt totalsize) is rejected. A bound digest is
+         * always enforced; a missing one only panics under
+         * WOLFBOOT_REQUIRE_SIGNED_DTB, so unsigned raw-DTB targets keep booting
+         * until they adopt 'sign --dts'. */
+        if (dts_addr != NULL) {
+            if (dts_size == 0) {
+                wolfBoot_printf("DTB has zero size - rejecting\n");
+                wolfBoot_panic();
+            }
+            if (dts_digest_present == 1) {
+                if (wolfBoot_verify_dts_digest(dts_digest, dts_addr, dts_size)
+                        != 0) {
+                    wolfBoot_printf("DTB digest mismatch - rejecting\n");
+                    wolfBoot_panic();
+                }
+                wolfBoot_printf("DTB digest verified\n");
+            }
+            else if (dts_digest_present < 0) {
+                wolfBoot_printf("Malformed DTB digest TLV - rejecting\n");
+                wolfBoot_panic();
+            }
+            else {
+            #ifdef WOLFBOOT_REQUIRE_SIGNED_DTB
+                wolfBoot_printf("No DTB digest - rejecting\n");
+                wolfBoot_panic();
+            #else
+                wolfBoot_printf("Warning: DTB not authenticated (sign --dts)\n");
+            #endif
             }
         }
     }

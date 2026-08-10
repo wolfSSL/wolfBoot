@@ -1105,6 +1105,74 @@ START_TEST(test_open_image_address_without_partitions_rejects_oversized_fw_size)
 END_TEST
 #endif
 
+#if defined(WOLFBOOT_FDT) || defined(MMU)
+/* Exercises wolfBoot_verify_dts_digest(), the raw-DTB authentication used by
+ * the non-FIT MMU boot path in src/update_ram.c (Fenrir #7998). The reference
+ * digest is computed with whichever WOLFBOOT_HASH the build selected, so the
+ * SHA256, SHA384 and SHA3-384 variants of wolfBoot_hash_buffer() are all
+ * covered (see the unit-image-dts* Makefile targets). */
+START_TEST(test_verify_dts_digest)
+{
+    uint8_t dtb[256];
+    uint8_t tampered[256];
+    uint8_t good[WOLFBOOT_SHA_DIGEST_SIZE];
+    unsigned int i;
+
+    for (i = 0; i < sizeof(dtb); i++)
+        dtb[i] = (uint8_t)(i * 7U + 1U);
+
+    /* Reference digest computed the same way the signer does (image hash over
+     * the DTB bytes), using the configured hash algorithm. */
+#if defined(WOLFBOOT_HASH_SHA256)
+    {
+        wc_Sha256 sha;
+        ck_assert_int_eq(wc_InitSha256_ex(&sha, NULL, INVALID_DEVID), 0);
+        ck_assert_int_eq(wc_Sha256Update(&sha, dtb, sizeof(dtb)), 0);
+        ck_assert_int_eq(wc_Sha256Final(&sha, good), 0);
+        wc_Sha256Free(&sha);
+    }
+#elif defined(WOLFBOOT_HASH_SHA384)
+    {
+        wc_Sha384 sha;
+        ck_assert_int_eq(wc_InitSha384_ex(&sha, NULL, INVALID_DEVID), 0);
+        ck_assert_int_eq(wc_Sha384Update(&sha, dtb, sizeof(dtb)), 0);
+        ck_assert_int_eq(wc_Sha384Final(&sha, good), 0);
+        wc_Sha384Free(&sha);
+    }
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    {
+        wc_Sha3 sha;
+        ck_assert_int_eq(wc_InitSha3_384(&sha, NULL, INVALID_DEVID), 0);
+        ck_assert_int_eq(wc_Sha3_384_Update(&sha, dtb, sizeof(dtb)), 0);
+        ck_assert_int_eq(wc_Sha3_384_Final(&sha, good), 0);
+        wc_Sha3_384_Free(&sha);
+    }
+#else
+    #error "test_verify_dts_digest: no supported WOLFBOOT_HASH selected"
+#endif
+
+    /* Matching digest -> accept. */
+    ck_assert_int_eq(wolfBoot_verify_dts_digest(good, dtb, sizeof(dtb)), 0);
+
+    /* Tampered DTB (single flipped byte) -> reject. */
+    memcpy(tampered, dtb, sizeof(dtb));
+    tampered[100] ^= 0xFFU;
+    ck_assert_int_eq(
+        wolfBoot_verify_dts_digest(good, tampered, sizeof(tampered)), -1);
+
+    /* Wrong expected digest -> reject. */
+    good[0] ^= 0xFFU;
+    ck_assert_int_eq(wolfBoot_verify_dts_digest(good, dtb, sizeof(dtb)), -1);
+    good[0] ^= 0xFFU;
+
+    /* Bad arguments -> reject. */
+    ck_assert_int_eq(wolfBoot_verify_dts_digest(NULL, dtb, sizeof(dtb)), -1);
+    ck_assert_int_eq(wolfBoot_verify_dts_digest(good, NULL, sizeof(dtb)), -1);
+    ck_assert_int_eq(wolfBoot_verify_dts_digest(good, dtb, 0), -1);
+}
+END_TEST
+#endif /* WOLFBOOT_FDT || MMU */
+
 
 Suite *wolfboot_suite(void)
 {
@@ -1116,6 +1184,16 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(tcase_key_hash, 20);
     tcase_add_test(tcase_key_hash, test_key_hash_zeroes_output_on_invalid_slot);
     suite_add_tcase(s, tcase_key_hash);
+    return s;
+#endif
+
+#if defined(UNIT_IMAGE_DTS_ONLY) && (defined(WOLFBOOT_FDT) || defined(MMU))
+    /* Only the raw-DTB digest test. Used by the sha384/sha3-384 variants,
+     * whose non-SHA256 hash config would break the other unit-image tests. */
+    TCase* tcase_dts_only = tcase_create("dts_digest");
+    tcase_set_timeout(tcase_dts_only, 20);
+    tcase_add_test(tcase_dts_only, test_verify_dts_digest);
+    suite_add_tcase(s, tcase_dts_only);
     return s;
 #endif
 
@@ -1195,6 +1273,13 @@ Suite *wolfboot_suite(void)
         test_open_image_address_without_partitions_rejects_oversized_fw_size);
 #endif
     suite_add_tcase(s, tcase_open_image);
+#endif
+
+#if defined(WOLFBOOT_FDT) || defined(MMU)
+    TCase* tcase_dts_digest = tcase_create("dts_digest");
+    tcase_set_timeout(tcase_dts_digest, 20);
+    tcase_add_test(tcase_dts_digest, test_verify_dts_digest);
+    suite_add_tcase(s, tcase_dts_digest);
 #endif
     return s;
 }

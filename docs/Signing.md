@@ -293,6 +293,25 @@ Provides a value to be set with a custom tag
    altered without breaking the image signature. Example:
    `--cmdline "root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200"`.
 
+   * `--dts filename`: Binds a raw (non-FIT) device tree blob to the firmware image. The sign
+   tool hashes exactly the first `fdt_totalsize` bytes of the `.dtb` (validating the FDT magic
+   and version the same way the bootloader does) with the image hash algorithm and stores the
+   digest as a signature-covered TLV using the wolfBoot-reserved tag `HDR_DEVICE_TREE_DIGEST`
+   (0x35). At boot, the non-FIT MMU path (`src/update_ram.c`) hashes the DTB it loads from the
+   raw DTS partition or `hal_get_dts_address()` and compares it against this digest before
+   handing the tree to the kernel; a mismatch triggers `wolfBoot_panic()`. This prevents an
+   attacker who can write the DTS flash region from altering `/chosen/bootargs` or other
+   kernel-visible policy while leaving the signed kernel intact. Example: `--dts board.dtb`.
+   Note: the DTB and the kernel image are signed together, so re-signing the kernel is required
+   whenever the device tree changes. A DTB delivered inside a signed FIT image is already
+   covered by the FIT's signature and does not need `--dts`.
+
+   Enforcement of a *missing* digest is opt-in for backward compatibility: a firmware image that
+   carries the digest is always verified, but a raw DTB with no `HDR_DEVICE_TREE_DIGEST` only
+   warns and boots unless wolfBoot is built with `WOLFBOOT_REQUIRE_SIGNED_DTB=1` (see
+   `options.mk`), which makes the missing digest a hard failure. Adopt `--dts` on every raw-DTB
+   payload first, then set `WOLFBOOT_REQUIRE_SIGNED_DTB=1` to fail closed.
+
    The 65524-byte maximum is the largest TLV value the wolfBoot header parser can walk
    past when locating the fields that follow it, such as the signature.
 
@@ -301,8 +320,8 @@ Provides a value to be set with a custom tag
    must be built with a matching `IMAGE_HEADER_SIZE`, or it will fail to locate the firmware
    image at boot.
 
-Note: all options, including `--cmdline` and the `--custom-tlv*` options, must appear **before**
-the positional `image key version` arguments.
+Note: all options, including `--cmdline`, `--dts`, and the `--custom-tlv*` options, must appear
+**before** the positional `image key version` arguments.
 
 #### Three-steps signing using external provisioning tools
 

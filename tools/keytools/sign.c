@@ -163,6 +163,8 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define HDR_POLICY_SIGNATURE    0x21
 #define HDR_SECONDARY_SIGNATURE 0x22
 #define HDR_CERT_CHAIN          0x23
+/* HDR_DEVICE_TREE_DIGEST comes from wolfboot/wolfboot.h (included above),
+ * matching how HDR_CMDLINE is consumed. */
 
 
 #define HDR_SHA256_LEN    32
@@ -389,6 +391,7 @@ struct cmd_options {
     const char *encrypt_key_file;
     const char *delta_base_file;
     const char *cert_chain_file;
+    const char *dts_file;
     int no_base_sha;
     char output_image_file[PATH_MAX];
     char output_diff_file[PATH_MAX];
@@ -1333,6 +1336,147 @@ static uint32_t header_digest_size(int hash_algo)
     }
 }
 
+/* Hash the first fdt_totalsize bytes of a DTB with the image hash algorithm
+ * (the same span the bootloader hashes). Applies at least fdt_check_header()'s
+ * checks (magic, version range); intentionally stricter. Writes digest to out,
+ * length to out_sz. Returns 0 on success, -1 on error. */
+static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
+    uint32_t *out_sz)
+{
+    /* FDT header (big-endian, 40B): magic@0, totalsize@4, version@0x14,
+     * last_comp_version@0x18. */
+    const uint32_t FDT_MAGIC = 0xd00dfeedU;
+    const uint32_t FDT_HDR_SIZE = 40U;
+    const uint32_t FDT_FIRST_VER = 0x10U;
+    const uint32_t FDT_LAST_COMP_VER = 0x11U;
+    FILE *f;
+    uint8_t hdr[40];
+    uint8_t rbuf[4096];
+    uint32_t magic, total, version, last_comp, remain;
+    long fsz;
+    size_t rd, want;
+    int ret = -1;
+
+    f = fopen(file, "rb");
+    if (f == NULL) {
+        fprintf(stderr, "Cannot open device tree file %s: %s\n",
+            file, strerror(errno));
+        return -1;
+    }
+
+    if (fread(hdr, 1, sizeof(hdr), f) != sizeof(hdr)) {
+        fprintf(stderr, "Device tree file %s too small for an FDT header\n",
+            file);
+        fclose(f);
+        return -1;
+    }
+    magic = ((uint32_t)hdr[0] << 24) | ((uint32_t)hdr[1] << 16) |
+            ((uint32_t)hdr[2] << 8)  | (uint32_t)hdr[3];
+    total = ((uint32_t)hdr[4] << 24) | ((uint32_t)hdr[5] << 16) |
+            ((uint32_t)hdr[6] << 8)  | (uint32_t)hdr[7];
+    version = ((uint32_t)hdr[0x14] << 24) | ((uint32_t)hdr[0x15] << 16) |
+              ((uint32_t)hdr[0x16] << 8)  | (uint32_t)hdr[0x17];
+    last_comp = ((uint32_t)hdr[0x18] << 24) | ((uint32_t)hdr[0x19] << 16) |
+                ((uint32_t)hdr[0x1A] << 8) | (uint32_t)hdr[0x1B];
+    if (magic != FDT_MAGIC) {
+        fprintf(stderr, "Not a valid device tree (bad FDT magic): %s\n", file);
+        fclose(f);
+        return -1;
+    }
+    if (total < FDT_HDR_SIZE || version < FDT_FIRST_VER ||
+            last_comp > FDT_LAST_COMP_VER) {
+        fprintf(stderr, "Unsupported device tree (version %u, comp %u, "
+            "totalsize %u): %s -- the bootloader would reject it\n",
+            version, last_comp, total, file);
+        fclose(f);
+        return -1;
+    }
+    /* A file shorter than fdt_totalsize can't be hashed as declared (reject);
+     * a longer one (trailing padding) is hashed over the declared span (warn). */
+    fseek(f, 0, SEEK_END);
+    fsz = ftell(f);
+    if (fsz >= 0 && (uint32_t)fsz < total) {
+        fprintf(stderr, "Device tree file %s is %ld bytes but its FDT totalsize "
+            "is %u (truncated)\n", file, fsz, total);
+        fclose(f);
+        return -1;
+    }
+    if (fsz >= 0 && (uint32_t)fsz != total) {
+        fprintf(stderr, "Warning: device tree file %s is %ld bytes but its FDT "
+            "totalsize is %u; hashing the first %u bytes\n",
+            file, fsz, total, total);
+    }
+    if (fseek(f, 0, SEEK_SET) != 0) {
+        fclose(f);
+        return -1;
+    }
+    remain = total;
+
+    if (hash_algo == HASH_SHA256) {
+    #ifndef NO_SHA256
+        wc_Sha256 sha;
+        ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            while (remain > 0) {
+                want = (remain < sizeof(rbuf)) ? remain : sizeof(rbuf);
+                rd = fread(rbuf, 1, want, f);
+                if (rd == 0) { ret = -1; break; }
+                ret = wc_Sha256Update(&sha, rbuf, (word32)rd);
+                if (ret != 0) break;
+                remain -= (uint32_t)rd;
+            }
+            if (ret == 0)
+                ret = wc_Sha256Final(&sha, out);
+            wc_Sha256Free(&sha);
+        }
+        *out_sz = HDR_SHA256_LEN;
+    #endif
+    }
+    else if (hash_algo == HASH_SHA384) {
+    #ifndef NO_SHA384
+        wc_Sha384 sha;
+        ret = wc_InitSha384_ex(&sha, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            while (remain > 0) {
+                want = (remain < sizeof(rbuf)) ? remain : sizeof(rbuf);
+                rd = fread(rbuf, 1, want, f);
+                if (rd == 0) { ret = -1; break; }
+                ret = wc_Sha384Update(&sha, rbuf, (word32)rd);
+                if (ret != 0) break;
+                remain -= (uint32_t)rd;
+            }
+            if (ret == 0)
+                ret = wc_Sha384Final(&sha, out);
+            wc_Sha384Free(&sha);
+        }
+        *out_sz = HDR_SHA384_LEN;
+    #endif
+    }
+    else if (hash_algo == HASH_SHA3) {
+    #ifdef WOLFSSL_SHA3
+        wc_Sha3 sha;
+        ret = wc_InitSha3_384(&sha, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            while (remain > 0) {
+                want = (remain < sizeof(rbuf)) ? remain : sizeof(rbuf);
+                rd = fread(rbuf, 1, want, f);
+                if (rd == 0) { ret = -1; break; }
+                ret = wc_Sha3_384_Update(&sha, rbuf, (word32)rd);
+                if (ret != 0) break;
+                remain -= (uint32_t)rd;
+            }
+            if (ret == 0)
+                ret = wc_Sha3_384_Final(&sha, out);
+            wc_Sha3_384_Free(&sha);
+        }
+        *out_sz = HDR_SHA3_384_LEN;
+    #endif
+    }
+
+    fclose(f);
+    return ret;
+}
+
 static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
     uint32_t secondary_key_sz)
 {
@@ -1367,6 +1511,11 @@ static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
     for (i = 0; i < CMD.custom_tlvs; i++) {
         header_size_align_8(&idx);
         header_size_append_tag(&idx, CMD.custom_tlv[i].len);
+    }
+
+    if (CMD.dts_file != NULL && digest_sz > 0U) {
+        header_size_align_8(&idx);
+        header_size_append_tag(&idx, digest_sz);
     }
 
     if (cert_chain_sz > 0U) {
@@ -1446,7 +1595,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
     /* Check certificate chain file size before allocating header, and adjust
      * header size if needed */
-    if ((CMD.cert_chain_file != NULL) || (CMD.custom_tlvs > 0)) {
+    if ((CMD.cert_chain_file != NULL) || (CMD.custom_tlvs > 0) ||
+            (CMD.dts_file != NULL)) {
         uint32_t hdr_cert_chain_sz = 0;
         uint32_t required_space;
 
@@ -1517,7 +1667,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     image_sz = ftell(f);
     fseek(f, 0, SEEK_SET);
     fclose(f);
-    f = NULL;
+    f = NULL; /* avoid a double fclose() if a later step jumps to 'failure' */
 
     /* Append Magic header (spells 'WOLF') */
     header_append_u32(header, &header_idx, WOLFBOOT_MAGIC);
@@ -1624,6 +1774,21 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     CMD.custom_tlv[i].len, CMD.custom_tlv[i].buffer);
             }
         }
+    }
+
+    /* Signature-covered digest of a raw (non-FIT) device tree. */
+    if (CMD.dts_file != NULL) {
+        uint8_t  dts_digest[48]; /* max digest */
+        uint32_t dts_digest_sz = 0;
+        if (dts_hash_file(CMD.dts_file, CMD.hash_algo, dts_digest,
+                &dts_digest_sz) != 0 || dts_digest_sz == 0) {
+            printf("Error hashing device tree file %s\n", CMD.dts_file);
+            goto failure;
+        }
+        ALIGN_8(header_idx);
+        header_append_tag(header, &header_idx, HDR_DEVICE_TREE_DIGEST,
+            (uint16_t)dts_digest_sz, dts_digest);
+        printf("Device tree digest (%u bytes) bound to image\n", dts_digest_sz);
     }
 
     /* Read certificate chain if provided */
@@ -3447,6 +3612,14 @@ int main(int argc, char** argv)
             CMD.custom_tlv[p].buffer = NULL;
             CMD.custom_tlvs++;
             i += 3;
+        } else if (strcmp(argv[i], "--dts") == 0) {
+            if (argc < (i + 2)) {
+                fprintf(stderr, "Missing device tree file for --dts.\n");
+                exit(16);
+            }
+            /* Hashed in make_header_ex() once the hash algo is known. */
+            CMD.dts_file = argv[i + 1];
+            i += 1;
         } else if (strcmp(argv[i], "--custom-tlv-buffer") == 0) {
             int p = CMD.custom_tlvs;
             uint16_t tag, len;
@@ -3703,6 +3876,13 @@ int main(int argc, char** argv)
         CMD.image_file = argv[i+1];
         CMD.key_file = NULL;
         CMD.fw_version = argv[i+2];
+    }
+
+    /* --dts can grow the header after patch_inv_off is computed, so the delta
+     * inverse offset would be stale. Reject the combination. */
+    if (CMD.dts_file != NULL && CMD.delta) {
+        fprintf(stderr, "Error: --dts cannot be combined with --delta\n");
+        exit(16);
     }
 
     memset(buf, 0, sizeof(buf));
