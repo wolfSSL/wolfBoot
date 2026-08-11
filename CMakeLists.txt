@@ -413,6 +413,7 @@ if(NOT DEFINED ARM_TARGETS)
                             stm32u5
                             stm32wb
                             ti
+                            ti_am64x
                             zynqmp
     )
     set(ARM_TARGETS
