@@ -353,6 +353,26 @@ START_TEST(test_ext_enc_flash_short_unaligned_write) {
 END_TEST
 
 
+/* A single request longer than the staging cache must not overrun it */
+START_TEST(test_ext_enc_flash_oversized_write) {
+    uint32_t address = 0x1000;
+    static uint8_t dataw[3 * WOLFBOOT_SECTOR_SIZE];
+    static uint8_t data[3 * WOLFBOOT_SECTOR_SIZE];
+    int i, rres, wres;
+
+    for (i = 0; i < (int)sizeof(dataw); i++)
+        dataw[i] = (uint8_t)(i ^ (i >> 8));
+
+    wres = ext_flash_check_write(address, dataw, sizeof(dataw));
+    ck_assert_int_eq(wres, 0);
+
+    memset(data, 0xA5, sizeof(data));
+    rres = ext_flash_check_read(address, data, sizeof(data));
+    ck_assert_int_eq(rres, (int)sizeof(data));
+    ck_assert_mem_eq(data, dataw, sizeof(dataw));
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -365,6 +385,7 @@ Suite *wolfboot_suite(void)
     TCase *ext_enc_flash_operations  = tcase_create("External encrypted flash operations");
     TCase *ext_enc_flash_short_read  = tcase_create("External encrypted flash short unaligned read");
     TCase *ext_enc_flash_short_write = tcase_create("External encrypted flash short unaligned write");
+    TCase *ext_enc_flash_oversized_write = tcase_create("External encrypted flash oversized write");
 
     /* Set parameters + add to suite */
     tcase_add_test(ext_flash_operations, test_ext_flash_operations);
@@ -373,15 +394,19 @@ Suite *wolfboot_suite(void)
             test_ext_enc_flash_short_unaligned_read);
     tcase_add_test(ext_enc_flash_short_write,
             test_ext_enc_flash_short_unaligned_write);
+    tcase_add_test(ext_enc_flash_oversized_write,
+            test_ext_enc_flash_oversized_write);
 
     tcase_set_timeout(ext_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_short_read, 20);
     tcase_set_timeout(ext_enc_flash_short_write, 20);
+    tcase_set_timeout(ext_enc_flash_oversized_write, 20);
     suite_add_tcase(s, ext_flash_operations);
     suite_add_tcase(s, ext_enc_flash_operations);
     suite_add_tcase(s, ext_enc_flash_short_read);
     suite_add_tcase(s, ext_enc_flash_short_write);
+    suite_add_tcase(s, ext_enc_flash_oversized_write);
 
     return s;
 }

@@ -2634,15 +2634,27 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         sz = len - step;
     }
 
-    /* encrypt remainder */
+    /* encrypt remainder, staging at most one cache worth at a time */
+    ret = 0;
     step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
-    for (i = 0; i < step / ENCRYPT_BLOCK_SIZE; i++) {
-        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,
-            ENCRYPT_BLOCK_SIZE);
+    while (step > 0) {
+        int chunk = step;
+        if (chunk > NVM_CACHE_SIZE)
+            chunk = NVM_CACHE_SIZE;
+        for (i = 0; i < chunk / ENCRYPT_BLOCK_SIZE; i++) {
+            XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+            crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,
+                ENCRYPT_BLOCK_SIZE);
+        }
+        ret = ext_flash_write(address, ENCRYPT_CACHE, chunk);
+        if (ret < 0)
+            return ret;
+        address += chunk;
+        data += chunk;
+        step -= chunk;
     }
 
-    return ext_flash_write(address, ENCRYPT_CACHE, step);
+    return ret;
 }
 
 /**
