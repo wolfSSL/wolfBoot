@@ -633,6 +633,10 @@ void RAMFUNCTION wolfBoot_start(void)
                     dts_ptr, dts_addr, dts_size);
                 if (wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size) != 0) {
                     wolfBoot_printf("FIT: failed to load DTS\r\n");
+#ifdef DISK_ENCRYPT
+                    disk_decrypted_header_clear(dec_hdr);
+                    disk_crypto_clear();
+#endif
                     wolfBoot_panic();
                 }
             }

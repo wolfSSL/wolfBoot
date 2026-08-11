@@ -62,7 +62,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-oob unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output \
@@ -238,6 +238,12 @@ unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_M
 # RAM, the same bound update_disk.c and update_ram.c enforce.
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# FIT (flattened uImage tree) exits of the encrypted disk loader. The panic hook
+# is what lets the test observe the key material at the instant wolfBoot_panic()
+# is entered, since on target that call never returns.
+unit-update-disk-fit:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FDT \
+	-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x40 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
 # integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
@@ -674,6 +680,9 @@ unit-update-disk: ../../include/target.h unit-update-disk.c
 
 unit-update-disk-oob: ../../include/target.h unit-update-disk-oob.c
 	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
+	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) $(LDFLAGS)
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)

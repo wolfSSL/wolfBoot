@@ -224,6 +224,7 @@ tools/unit-tests/unit-flash-write-samr21
 tools/unit-tests/unit-image-elf-scatter
 tools/unit-tests/unit-image-hybrid
 tools/unit-tests/unit-imx-rt-cache-align
+tools/unit-tests/unit-update-disk-fit
 tools/unit-tests/unit-update-disk-oob
 tools/unit-tests/unit-update-ram-enc
 tools/unit-tests/unit-update-ram-enc-nopart
