@@ -73,6 +73,7 @@ TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-tpm-nsc-cert
 TESTS+=unit-tpm-advio-zeroize
+TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
@@ -331,6 +332,13 @@ unit-tpm-advio-zeroize: ../../include/target.h unit-tpm-advio-zeroize.c
 		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_ADV_IO \
 		-DWOLFTPM_CHECK_WAIT_STATE -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-mfgid-eh-zeroize: ../../include/target.h unit-tpm-mfgid-eh-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_MFG_IDENTITY \
+		-DWOLFBOOT_TPM_MFG_AUTH_DERIVE -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-policy-create: ../../include/target.h unit-policy-create.c \

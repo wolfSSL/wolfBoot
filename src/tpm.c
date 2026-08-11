@@ -1468,6 +1468,8 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
 
     wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
     wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
+    /* EH authValue consumed; clear it from the stack */
+    TPM2_ForceZero(&eh_handle, sizeof(eh_handle));
 
     return rc;
 }
