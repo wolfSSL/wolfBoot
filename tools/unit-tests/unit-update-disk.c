@@ -108,7 +108,7 @@ int wc_Chacha_Process(ChaCha* ctx, byte* output, const byte* input, word32 msgle
     return 0;
 }
 
-void ForceZero(void* mem, size_t len)
+void wc_ForceZero(void* mem, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)mem;
     while (len-- > 0) {
