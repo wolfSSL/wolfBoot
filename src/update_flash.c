@@ -1259,7 +1259,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;
     void*         base = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF Scattered image digest check\n");
+#endif /* DEBUG_ELF */
     if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
         wolfBoot_printf("ELF Scattered image digest check: failed. Restoring "
                         "scattered image...\n");
@@ -1602,7 +1604,9 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF Scattered image digest check\n");
+#endif /* DEBUG_ELF */
     if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
         wolfBoot_printf("ELF Scattered image digest check: failed. Restoring "
                         "scattered image...\n");

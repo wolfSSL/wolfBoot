@@ -434,12 +434,39 @@ wolfboot.efi: wolfboot.elf
 	$(Q)$(SIZE) wolfboot.efi
 	@echo
 
+ifeq ($(TARGET),ti_am64x)
+$(GENERATED_SRCS): 
+	@echo "\t[TI SYSCONFIG] generated/hal/"
+	$(Q)$(TI_SYSCONFIG)/nodejs/node \
+      $(TI_SYSCONFIG)/dist/cli.js -q \
+      --product $(TI_MCU_PLUS_SDK)/.metadata/product.json \
+      --context r5fss0-0 --part Default --package ALV \
+      --output generated/hal/ \
+      config/examples/ti-am64x/ti-am64x-r5_hal.syscfg
+endif
+
 wolfboot.bin: wolfboot.elf
+ifeq ($(TARGET),ti_am64x)
+	@echo "\t[BIN] wolfboot.tmp"
+	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ wolfboot.tmp
+	@echo "\t[TI BIN] ROM-bootable image: wolfboot.bin"
+	$(Q)python3 $(TI_MCU_PLUS_SDK)/source/security/security_common/tools/boot/signing/rom_image_gen.py \
+	  --swrv 1 \
+	  --sbl-bin wolfboot.tmp \
+	  --sysfw-bin $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sysfw-hs-fs-enc.bin \
+	  --sysfw-inner-cert $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sysfw-hs-fs-enc-cert.bin \
+	  --boardcfg-blob $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_default_boardcfg/am64x/boardcfg_blob.bin \
+	  --sbl-loadaddr 0x70000000 --sysfw-loadaddr 0x44000 --bcfg-loadaddr 0x7B000 \
+	  --key $(TI_MCU_PLUS_SDK)/source/security/security_common/tools/boot/signing/rom_degenerateKey.pem \
+	  --rom-image $@
+	$(Q)rm -f wolfboot.tmp
+else
 	@echo "\t[BIN] $@"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ $@
 ifeq ($(TARGET),nxp_lpc54s0xx)
 	@echo "\t[LPC] enhanced boot block"
 	$(Q)python3 tools/scripts/lpc54s0xx_patch_boot_block.py $@
+endif
 endif
 	@echo
 	@echo "\t[SIZE]"
@@ -583,7 +610,11 @@ endif
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" LIBERO_FPGA_CONFIG_DIR="$(LIBERO_FPGA_CONFIG_DIR)" image.elf
+ifeq ($(ELF_FLASH_SCATTER),1)
+	$(Q)$(SIZE) test-app/image-orig.elf
+else
 	$(Q)$(SIZE) test-app/image.elf
+endif
 
 ifeq ($(ELF_FLASH_SCATTER),1)
 test-app/image.elf: squashelf
@@ -714,6 +745,7 @@ clean:
 	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
 	$(Q)rm -f test-lib
 	$(Q)rm -f lib-fs
+	$(Q)rm -rf generated
 	$(Q)$(MAKE) -C test-app clean V=$(V)
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean

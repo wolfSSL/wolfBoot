@@ -1843,7 +1843,7 @@ static int read_flash_fwimage(struct wolfBoot_image* img, uint32_t offset,
  */
 static int read_flash_addr(void* src, void* buffer, uint32_t size, int src_ext)
 {
-    if (src == NULL || buffer == NULL) {
+    if (buffer == NULL) {
         return -1;
     }
 
@@ -2005,9 +2005,11 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             *entry_out    = eh->entry;
             entry_out_set = 1;
         }
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [CHECK] 32-bit, entry=0x%08X, "
                         "ph_offset=0x%08X, ph_count=%u\n",
                         (unsigned int)eh->entry, (unsigned int)entry_off, entry_count);
+#endif /* DEBUG_ELF */
     }
     else { /* 64-bit ELF */
         elf64_header* eh = (elf64_header*)elf_h;
@@ -2018,13 +2020,17 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             *entry_out    = eh->entry;
             entry_out_set = 1;
         }
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [CHECK] 64-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
                         (unsigned long)eh->entry, (unsigned long)entry_off, entry_count);
+#endif /* DEBUG_ELF */
     }
 
     elf_hdr_sz = (size_t)elf_hdr_pht_combined_size(elf_h);
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF: [CHECK] Header size: %zu bytes\n", elf_hdr_sz);
+#endif /* DEBUG_ELF */
 
     /* Hash the elf header and program header in the image, assuming the PHT
      * immediately follows the ELF header */
@@ -2045,9 +2051,11 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
         if (first_offset > elf_hdr_sz) {
             len = first_offset - elf_hdr_sz;
+#ifdef DEBUG_ELF
             wolfBoot_printf(
                 "ELF: [CHECK] Adding %d bytes padding before first segment\n",
                 (int32_t)len);
+#endif /* DEBUG_ELF */
             update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len); /* Hash actual file content */
         }
     }
@@ -2083,11 +2091,13 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         if (type == ELF_PT_LOAD) {
             uintptr_t load_addr = (uintptr_t)(paddr + BASE_OFF);
             /* Feed the loadable parts to the hash function */
+#ifdef DEBUG_ELF
             wolfBoot_printf("ELF: [CHECK] Hashing loadable segment: "
                             "paddr = 0x%08lx, loadaddr = 0x%08lx, "
                             "offset = 0x%08lx, size = %lu\n",
                             (unsigned long)paddr, (unsigned long)load_addr,
                             (unsigned long)offset, (unsigned long)filesz);
+#endif /* DEBUG_ELF */
             update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
                                    PART_IS_EXT(&boot));
         }
@@ -2109,10 +2119,12 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
             if (next_offset > (offset + filesz)) {
                 uint32_t padding = next_offset - (offset + filesz);
+#ifdef DEBUG_ELF
                 wolfBoot_printf("ELF: [CHECK] Adding padding: %u bytes (from "
                                 "0x%08lx to 0x%08lx)\n",
                                 padding, (unsigned long)(offset + filesz),
                                 (unsigned long)next_offset);
+#endif /* DEBUG_ELF */
                 update_hash_flash_fwimg(&ctx, &boot, offset + filesz, padding); /* Hash actual file content */
             }
         }
@@ -2134,17 +2146,21 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
     /* Check if final offset is valid */
     if (final_offset > (int64_t)boot.fw_size) {
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [CHECK] Final offset (%d) exceeds image size (%d)\n",
                         (int32_t)final_offset, (int32_t)boot.fw_size);
+#endif /* DEBUG_ELF */
         return -1;
     }
 
     /* Hash any trailing data after the last segment/header */
     len = boot.fw_size - final_offset;
     if (len > 0) {
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [CHECK] Hashing %u bytes of trailing data from "
                         "offset 0x%llX\n",
                         len, (unsigned long long)final_offset);
+#endif /* DEBUG_ELF */
         update_hash_flash_fwimg(&ctx, &boot, final_offset, len);
     }
 
@@ -2164,7 +2180,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             calc_digest[4], calc_digest[5], calc_digest[6], calc_digest[7]);
         return -2;
     }
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF: [CHECK] Verification successful\n");
+#endif /* DEBUG_ELF */
     return 0;
 }
 
@@ -2200,10 +2218,12 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         entry_off   = ((const elf32_header*)eh)->ph_offset;
         *entry_out  = (unsigned long)((const elf32_header*)eh)->entry;
 
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [STORE] 32-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
                         (unsigned long)((const elf32_header*)eh)->entry,
                         (unsigned long)entry_off, entry_count);
+#endif /* DEBUG_ELF */
     }
     else {
         eh          = (const elf64_header*)elfHdrBuf;
@@ -2211,10 +2231,12 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         entry_off   = ((const elf64_header*)eh)->ph_offset;
         *entry_out  = (unsigned long)((const elf64_header*)eh)->entry;
 
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [STORE] 64-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
                         (unsigned long)((const elf64_header*)eh)->entry,
                         (unsigned long)entry_off, entry_count);
+#endif /* DEBUG_ELF */
     }
 
     /* Walk the program header table and store each loadable segment */
@@ -2249,16 +2271,20 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         }
 
         load_addr = (uintptr_t)(paddr + BASE_OFF);
+#ifdef DEBUG_ELF
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
                         (unsigned long)load_addr, offset, filesz);
+#endif /* DEBUG_ELF */
         copy_flash_buffered((uintptr_t)(image + offset), load_addr, filesz,
                             ext_flash, ext_flash);
 
         entry_off += ph_size;
     }
 
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF: [STORE] Image loading complete\n");
+#endif /* DEBUG_ELF */
     return 0;
 }
 

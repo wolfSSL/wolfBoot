@@ -237,7 +237,9 @@ int elf_open(const unsigned char *ehdr, int *is_elf32)
     if (memcmp(ident, ELF_IDENT_STR, 4) != 0) {
         return -1; /* not valid header identifier */
     }
+#ifdef DEBUG_ELF
     wolfBoot_printf("ELF image found\n");
+#endif /* DEBUG_ELF */
     *is_elf32 = !!(ident[ELF_CLASS_OFF] == ELF_CLASS_32);
 
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER

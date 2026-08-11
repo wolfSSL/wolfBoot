@@ -441,7 +441,6 @@ ifeq ($(ARCH),ARM)
     ifneq ($(DEBUG),0)
         CFLAGS+=-DPKCS11_SMALL
     endif
-
   endif
 
   ifeq ($(TARGET),stm32n6)
@@ -585,8 +584,15 @@ ifeq ($(ARCH),ARM)
   endif
 
 ## Cortex CPU
-
-ifeq ($(CORTEX_A5),1)
+ifeq ($(CORTEX_R5),1)
+  CFLAGS+=-mcpu=cortex-r5 -DCORTEX_R5
+  LDFLAGS+=-mcpu=cortex-r5
+  ifeq ($(NO_ASM),1)
+    ifeq ($(SPMATH),1)
+      MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+    endif
+  endif
+else ifeq ($(CORTEX_A5),1)
   FPU=-mfpu=vfp4-d16
   CFLAGS+=-mcpu=cortex-a5  -mtune=cortex-a5 -static -z noexecstack \
 		  -mno-unaligned-access
@@ -1548,6 +1554,137 @@ ifeq ($(TARGET),ti_hercules)
   LD_END_GROUP= -llibc.a -l"$(F021_DIR)/F021_API_CortexR4_BE_L2FMC_V3D16.lib"
 
   OPTIMIZATION_LEVEL=2
+endif
+
+ifeq ($(TARGET),ti_am64x)
+  TI_MCU_PLUS_SDK=$(abspath $(wildcard $(PWD)/../TI/mcu_plus_sdk_am64x_*))
+  ifeq ($(TI_MCU_PLUS_SDK),)
+    $(error "No sdk found at $(PWD)/../TI/mcu_plus_sdk_am64x_*")
+  endif
+
+  TI_MPSDK_VERSION=$(shell grep version $(TI_MCU_PLUS_SDK)/.metadata/product.json | cut -c17-24)
+  ifneq ($(TI_MPSDK_VERSION),$(TI_MCU_PLUS_SDK_VERSION_REQUIRED))
+    $(error "TI MCU Plus SDK version $(TI_MCU_PLUS_SDK_VERSION_REQUIRED) required")
+  endif
+
+  TI_SYSCONFIG=$(abspath $(wildcard $(PWD)/../TI/tools/sysconfig_*))
+  ifeq ($(TI_SYSCONFIG),)
+    $(error "No sysconfig found at $(PWD)/../TI/tools/sysconfig_*")
+  endif
+
+  CROSS_COMPILE_PATH=$(abspath $(wildcard $(PWD)/../TI/tools/ti-cgt-armllvm_*))
+  ifeq ($(CROSS_COMPILE_PATH),)
+    $(error "No toolchain found at $(PWD)/../TI/tools/ti-cgt-armllvm_*")
+  endif
+
+  ARCH_FLASH_OFFSET=0x60000000
+  USE_GCC_HEADLESS=0
+
+  CROSS_COMPILE=$(CROSS_COMPILE_PATH)/bin
+  CC=$(CROSS_COMPILE)/tiarmclang
+  LD=$(CROSS_COMPILE)/tiarmclang
+  AS=$(CROSS_COMPILE)/tiarmasm
+  AR=$(CROSS_COMPILE)/tiarmar rc
+  OBJCOPY=$(CROSS_COMPILE)/tiarmobjcopy
+  SIZE=$(CROSS_COMPILE)/tiarmsize
+  OUTPUT_FLAG=-o
+  OPTIMIZATION_LEVEL=s
+
+  CFLAGS+=-DSOC_AM64X -DOS_NORTOS
+  CFLAGS+=-DTI_MCU_PLUS_SDK
+  CFLAGS+=-DWOLFBOOT_USE_STDLIBC
+  CFLAGS+=-DWOLFSSL_USE_ALIGN
+  CFLAGS+=-Wno-main-return-type -Wno-extra
+  CFLAGS+=\
+    -I$(CROSS_COMPILE_PATH)/include/c \
+    -I$(TI_MCU_PLUS_SDK)/source \
+    -I$(TI_MCU_PLUS_SDK)/source/kernel/dpl \
+    -I$(TI_MCU_PLUS_SDK)/source/security
+
+  LDFLAGS+=\
+    -Wl,--diag_suppress=10063 \
+    -Wl,--ram_model \
+    -Wl,--reread_libs \
+    -Wl,-i$(CROSS_COMPILE_PATH)/lib
+  LD_START_GROUP=
+  LD_END_GROUP=-Wl,$(LSCRIPT) -Wl,-m=wolfboot.map
+
+  LIBS+=-llibc.a -llibsysbm.a
+
+  GENERATED_SRCS=
+  GENERATED_SRCS+=generated/hal/ti_board_config.c
+  GENERATED_SRCS+=generated/hal/ti_board_open_close.c
+  GENERATED_SRCS+=generated/hal/ti_dpl_config.c
+  GENERATED_SRCS+=generated/hal/ti_drivers_config.c
+  GENERATED_SRCS+=generated/hal/ti_drivers_open_close.c
+  GENERATED_SRCS+=generated/hal/ti_pinmux_config.c
+  GENERATED_SRCS+=generated/hal/ti_power_clock_config.c
+
+  OBJS+=$(patsubst %.c,%.o,$(GENERATED_SRCS))
+  OBJS+=\
+    $(TI_MCU_PLUS_SDK)/source/drivers/bootloader/soc/am64x_am243x/bootloader_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/ospi_v0.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/dma/udma/ospi_udma_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_v0_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_boardcfg.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_firewall.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_procboot.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/firewall/v0/firewall.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/pinmux/am64x_am243x/pinmux.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/qos/v0/qos.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/csl_sec_proxy.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_pm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_rm_irq.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_fmwSecureProxyMap.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_irq_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_soc_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/soc/am64x_am243x/soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/uart_v0.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/uart_v0_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/dma/soc/am64x_am243x/uart_dma_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/dma/udma/uart_dma_udma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_bcdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_intaggr.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_lcdma_ringacc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_pktdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/udma_rmcfg_common.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/am64x_am243x/udma_rmcfg.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/am64x_am243x/udma_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ch.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_event.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_flow.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ring_common.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ring_lcdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_utils.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/AddrTranslateP.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/ClockP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_log.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_uartLogWriter.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/printf.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/SemaphoreP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TaskP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/ClockP_nortos_r5.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_handlers_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_handlers_nortos_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_vectors_nortos_sbl_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_vim.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/rng/rng.o
 endif
 
 ifeq ($(TARGET),lpc)
