@@ -85,6 +85,7 @@ TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
+TESTS+=unit-flash-erase-mcxw
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
@@ -457,6 +458,15 @@ unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
 # -I../../ so that #include "hal/stm32u3.h" resolves from the repo root.
 unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3.h
 	gcc -o $@ unit-flash-erase-u3.c -I../../ $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-mcxw includes hal/mcxw.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so mcxw.c is not a separate input and the
+# (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
+# takes a uint32_t flash address as a pointer, which is only a narrowing cast on
+# the 64-bit host.
+unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
+	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
+		$(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
