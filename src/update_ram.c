@@ -273,6 +273,10 @@ void RAMFUNCTION wolfBoot_start(void)
     BENCHMARK_DECLARE();
 #ifdef WOLFBOOT_UBOOT_LEGACY
     uint8_t *image_ptr;
+    /* uImage ih_load/ih_ep, kept only when the entry point differs from the
+     * load address (see the do_boot() entry override below). */
+    uint32_t *uboot_load = NULL;
+    uint32_t *uboot_entry = NULL;
 #endif
     uint32_t *load_address = NULL;
     uint32_t *source_address = NULL;
@@ -506,6 +510,14 @@ backup_on_failure:
                     os_image.fw_size);
             }
 #endif
+            /* bootm relocates to ih_load but enters at ih_ep: kernels built
+             * with a preamble ahead of the entry point set the two to
+             * different addresses. Remember the entry point; ih_load remains
+             * the relocation destination. */
+            if ((ih_ep != 0) && (ih_ep != ih_load)) {
+                uboot_load = load_address;
+                uboot_entry = (uint32_t*)(uintptr_t)ih_ep;
+            }
         } else {
             /* Linux PPC path: leave load_address alone, just advance it
              * past the header to match upstream behaviour. load_address is
@@ -513,7 +525,6 @@ backup_on_failure:
             load_address = (uint32_t*)((uint8_t*)load_address +
                 UBOOT_IMG_HDR_SZ);
         }
-        (void)ih_ep; /* TODO: pass through to do_boot when ih_ep != ih_load */
     }
 #endif
 
@@ -649,6 +660,14 @@ backup_on_failure:
         }
     }
 #endif /* MMU */
+
+#ifdef WOLFBOOT_UBOOT_LEGACY
+    /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) re-derived
+     * the load address, since that stage provides its own entry point. */
+    if ((uboot_entry != NULL) && (load_address == uboot_load)) {
+        load_address = uboot_entry;
+    }
+#endif
 
     wolfBoot_printf("Booting at %p\n", load_address);
 
