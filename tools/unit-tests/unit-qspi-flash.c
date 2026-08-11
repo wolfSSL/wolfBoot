@@ -113,6 +113,32 @@ START_TEST(test_qspi_write_splits_last_page_to_remaining_bytes)
 }
 END_TEST
 
+START_TEST(test_qspi_write_clips_first_page_at_page_boundary)
+{
+    uint8_t buf[FLASH_PAGE_SIZE + 32];
+    uint32_t off = FLASH_PAGE_SIZE - 16;
+    int ret;
+
+    memset(buf, 0x5A, sizeof(buf));
+
+    /* Start 16 bytes before a page boundary: the device's page program wraps
+     * within its own page, so the first transfer must stop at the boundary. */
+    ret = spi_flash_write(0x1000 + off, buf, sizeof(buf));
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(program_call_count, 3);
+    ck_assert_uint_eq(program_addrs[0], 0x1000 + off);
+    ck_assert_uint_eq(program_sizes[0], 16);
+    ck_assert_ptr_eq(program_ptrs[0], buf);
+    ck_assert_uint_eq(program_addrs[1], 0x1000 + FLASH_PAGE_SIZE);
+    ck_assert_uint_eq(program_sizes[1], FLASH_PAGE_SIZE);
+    ck_assert_ptr_eq(program_ptrs[1], buf + 16);
+    ck_assert_uint_eq(program_addrs[2], 0x1000 + (FLASH_PAGE_SIZE * 2));
+    ck_assert_uint_eq(program_sizes[2], 16);
+    ck_assert_ptr_eq(program_ptrs[2], buf + 16 + FLASH_PAGE_SIZE);
+}
+END_TEST
+
 START_TEST(test_qspi_write_stops_after_midloop_write_enable_failure)
 {
     uint8_t buf[FLASH_PAGE_SIZE * 3];
@@ -176,6 +202,7 @@ static Suite *qspi_flash_suite(void)
     tc = tcase_create("Write");
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_qspi_write_splits_last_page_to_remaining_bytes);
+    tcase_add_test(tc, test_qspi_write_clips_first_page_at_page_boundary);
     tcase_add_test(tc, test_qspi_write_stops_after_midloop_write_enable_failure);
     tcase_add_test(tc, test_qspi_read_rejects_address_at_device_size);
     tcase_add_test(tc, test_qspi_read_rejects_transfer_extending_past_device_size);
