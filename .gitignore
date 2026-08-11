@@ -191,6 +191,7 @@ tools/unit-tests/unit-update-flash-hwswap
 tools/unit-tests/unit-uart-flash
 tools/unit-tests/unit-max-space
 tools/unit-tests/unit-sdhci-disk-unaligned
+tools/unit-tests/unit-sdhci-dma-error
 tools/unit-tests/unit-fwtpm-stub
 tools/unit-tests/unit-gzip
 tools/unit-tests/unit-fit-gzip

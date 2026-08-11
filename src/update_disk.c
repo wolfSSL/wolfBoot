@@ -496,9 +496,15 @@ void RAMFUNCTION wolfBoot_start(void)
             load_off += ret;
         } while (load_off < os_image.fw_size);
 
-        if (ret < 0) {
-            wolfBoot_printf("Error reading image from disk: p%d\r\n",
-                    cur_part);
+        /* A short read must fail here, as an I/O error. `ret == 0` breaks the
+         * loop above without being negative, and a truncated load would
+         * otherwise sail through to the integrity check and be reported as a
+         * corrupt image -- pointing the operator at the wrong problem, and on
+         * a system with anti-rollback leaving no bootable slot at all. */
+        if (ret <= 0 || load_off != os_image.fw_size) {
+            wolfBoot_printf("Error reading image from disk: p%d "
+                    "(%u of %u bytes)\r\n", cur_part,
+                    (unsigned int)load_off, (unsigned int)os_image.fw_size);
             selected ^= 1;
             continue;
         }

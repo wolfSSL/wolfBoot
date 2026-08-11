@@ -76,6 +76,11 @@ static uint32_t g_sector_count;
 static uint32_t g_sector_size;
 static uint32_t g_bus_width = 1;
 static uint32_t g_rca = 0; /* SD Card Relative Address */
+#ifdef DISK_SDCARD
+/* Set once sdhci_uhs_recover() has switched the host to 1.8V signaling.
+ * SD-only: UHS-I signaling does not apply to eMMC. */
+static int g_uhs_recovered = 0;
+#endif /* DISK_SDCARD */
 
 /* MMC Interrupt state - volatile for interrupt handler access */
 static volatile uint32_t g_mmc_irq_status = 0;
@@ -368,6 +373,53 @@ static int sdhci_set_power(uint32_t voltage)
     }
     return 0;
 }
+
+#ifdef DISK_SDCARD
+/* Recover a card that a previous stage left in UHS-I 1.8V signaling.
+ *
+ * A card that negotiated UHS-I only returns to 3.3V when VDD is removed --
+ * CMD0 does not do it, and on boards where the card supply is a fixed rail
+ * (ZCU102 among them) software cannot remove it at all. After a warm reset
+ * following an OS that used UHS, the card is therefore still at 1.8V while
+ * the host has come up at 3.3V. The command path tolerates the mismatch, so
+ * initialization and isolated reads appear to work, but sustained data
+ * transfers corrupt: Data CRC Error (SRS12 error bit 5) on PIO, and on SDMA
+ * a transfer that never completes.
+ *
+ * The condition cannot be detected up front. The warm reset clears the
+ * controller registers, so the inherited 1.8V Signaling Enable bit is gone
+ * before the bootloader runs, and the corruption is marginal enough that a
+ * short probe read usually succeeds. So this is driven from an actual data
+ * failure: switch the host to meet the card, then let the caller retry.
+ *
+ * This restores signaling the card is already using rather than initiating a
+ * voltage switch, so no CMD11 sequence is involved. It runs at most once per
+ * boot, and only after a transfer has already failed, so a cold boot never
+ * reaches it.
+ *
+ * Returns 0 if the switch was applied and the caller should retry. */
+static int sdhci_uhs_recover(void)
+{
+    if (g_uhs_recovered) {
+        return -1; /* already tried; the failure is something else */
+    }
+    g_uhs_recovered = 1;
+
+    wolfBoot_printf("SDHCI: data transfer failed at 3.3V; card appears to be "
+                    "left in UHS-I by a previous stage, retrying at 1.8V\n");
+
+    /* Stop the SD clock while the signaling level changes */
+    sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
+
+    sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_V18SE);
+    udelay(5000); /* let the level shifter settle */
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_SDCE);
+    udelay(1000);
+
+    return 0;
+}
+#endif /* DISK_SDCARD */
 
 /* ============================================================================
  * Clock Control
@@ -1435,28 +1487,42 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         }
     }
 
-    /* Check for errors */
+    /* Check for errors.
+     *
+     * An earlier failure (e.g. the SDMA wait above timing out) must survive
+     * this block. A wolfBoot-side wait timeout does not necessarily set an
+     * SRS12 error bit, so without preserving `status` the CMD12 / wait-busy
+     * results below would overwrite it and sdhci_transfer() would report
+     * success for a transfer that never completed. The caller then uses a
+     * partially filled buffer, which surfaces much later as a bogus image
+     * integrity failure rather than as the I/O error it actually is. */
     reg = SDHCI_REG(SDHCI_SRS12);
     if ((reg & SDHCI_SRS12_ERR_STAT) == 0) {
-        /* If multi-block, send CMD12 to stop transfer */
+        /* If multi-block, send CMD12 to stop transfer. This is issued even
+         * when `status` is already an error, to leave the bus in a sane
+         * state, but its result must not clear that error. */
         if (is_multi_block) {
         #ifdef DISK_EMMC
             uint32_t stop_arg = 0;
         #else
             uint32_t stop_arg = (g_rca << SD_RCA_SHIFT);
         #endif
+            int stop_status;
 
             SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_TC); /* Clear transfer complete */
 
             /* Send stop multi-block transfer */
-            status = sdhci_send_cmd_internal(SDHCI_SRS03_CMD_ABORT,
+            stop_status = sdhci_send_cmd_internal(SDHCI_SRS03_CMD_ABORT,
                 MMC_CMD12_STOP_TRANS, stop_arg, SDHCI_RESP_R1B);
             /* Card may be busy programming data after CMD12 */
-            if (status == DEVICE_BUSY) {
-                status = sdhci_wait_busy(1);
+            if (stop_status == DEVICE_BUSY) {
+                stop_status = sdhci_wait_busy(1);
             }
-            if (status != 0) {
+            if (stop_status != 0) {
                 wolfBoot_printf("sdhci_transfer: CMD12 error\n");
+                if (status == 0) {
+                    status = stop_status;
+                }
             }
         }
         if (status == 0) {
@@ -1777,6 +1843,11 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
                 block_addr, (uint32_t*)buf, read_sz);
         #endif
         }
+#ifdef DISK_SDCARD
+        if (status != 0 && sdhci_uhs_recover() == 0) {
+            continue; /* retry this chunk with matched signaling */
+        }
+#endif /* DISK_SDCARD */
         if (status != 0) {
             break;
         }

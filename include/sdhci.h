@@ -313,6 +313,9 @@
 #define SDHCI_SRS15_HV4E        (1U << 28)  /* Host version 4 enable */
 #define SDHCI_SRS15_UMS_MASK    (0x7U << 16)
 #define SDHCI_SRS15_UMS_SDR25   (0x1U << 16)
+/* Host Control 2 occupies the upper 16 bits of SRS15, so 1.8V Signaling
+ * Enable (bit 3 of Host Control 2) lands at bit 19. */
+#define SDHCI_SRS15_V18SE       (1U << 19)  /* 1.8V signaling enable */
 #define SDHCI_SRS15_DSS_MASK    (0x3U << 20)
 #define SDHCI_SRS15_DSS_TYPE_B  (0x0U << 20)
 #define SDHCI_SRS15_EXTNG       (1U << 22)  /* Execute tuning */
