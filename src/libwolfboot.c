@@ -183,7 +183,10 @@ static uint32_t ext_cache;
 #endif
 
 
-#if defined(__WOLFBOOT) || defined(UNIT_TEST)
+/* EXT_ENCRYPTED is listed because the key-handling code below calls
+ * ForceZero() unconditionally, including from the test-app build of this file,
+ * where __WOLFBOOT is not defined. */
+#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED)
 #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/wc_port.h>
