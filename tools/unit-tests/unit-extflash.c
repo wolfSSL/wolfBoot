@@ -96,6 +96,9 @@ uint8_t flash[FLASH_SIZE];
 int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
     printf("Called ext_flash_read %p %p %d\n", (void *)address, (void *)data, len);
 
+    /* A negative length is never a valid request */
+    ck_assert_int_ge(len, 0);
+
     /* Check that the read address and size are within the bounds of the flash memory */
     ck_assert_int_le(address + len, FLASH_SIZE);
 
@@ -260,6 +263,37 @@ START_TEST(test_ext_enc_flash_operations) {
 }
 END_TEST
 
+START_TEST(test_ext_enc_flash_short_unaligned_read) {
+    uint32_t address = 0x1000;
+    uint32_t size = 64;
+    uint8_t data[64];
+    uint8_t dataw[64];
+    /* Reads shorter than the remainder of the encryption block they start in:
+     * { offset within the block, number of bytes requested } */
+    static const int cases[][2] = { {1, 1}, {4, 4}, {8, 3}, {15, 1} };
+    unsigned int c;
+    int i, rres, wres;
+
+    memcpy(dataw, test_buffer, size);
+    wres = ext_flash_check_write(address, dataw, size);
+    ck_assert_int_eq(wres, 0);
+
+    for (c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        int off = cases[c][0];
+        int len = cases[c][1];
+
+        memset(data, 0xA5, sizeof(data));
+        rres = ext_flash_check_read(address + off, data, len);
+        ck_assert_int_eq(rres, len);
+        ck_assert_mem_eq(data, test_buffer + off, len);
+
+        /* No byte past the requested length may be written */
+        for (i = len; i < (int)sizeof(data); i++)
+            ck_assert_uint_eq(data[i], 0xA5);
+    }
+}
+END_TEST
+
 
 
 Suite *wolfboot_suite(void)
@@ -271,15 +305,20 @@ Suite *wolfboot_suite(void)
     /* Test cases */
     TCase *ext_flash_operations  = tcase_create("External flash operations: API");
     TCase *ext_enc_flash_operations  = tcase_create("External encrypted flash operations");
+    TCase *ext_enc_flash_short_read  = tcase_create("External encrypted flash short unaligned read");
 
     /* Set parameters + add to suite */
     tcase_add_test(ext_flash_operations, test_ext_flash_operations);
     tcase_add_test(ext_enc_flash_operations, test_ext_enc_flash_operations);
+    tcase_add_test(ext_enc_flash_short_read,
+            test_ext_enc_flash_short_unaligned_read);
 
     tcase_set_timeout(ext_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_operations, 20);
+    tcase_set_timeout(ext_enc_flash_short_read, 20);
     suite_add_tcase(s, ext_flash_operations);
     suite_add_tcase(s, ext_enc_flash_operations);
+    suite_add_tcase(s, ext_enc_flash_short_read);
 
     return s;
 }

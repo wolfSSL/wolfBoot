@@ -2702,6 +2702,9 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
      */
     if (row_offset != 0) {
         unaligned_head_size = ENCRYPT_BLOCK_SIZE - row_offset;
+        /* Never copy more than the caller asked for */
+        if (unaligned_head_size > read_remaining)
+            unaligned_head_size = read_remaining;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
