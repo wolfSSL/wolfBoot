@@ -1358,6 +1358,67 @@ START_TEST (test_delta_base_version_match_accepts)
 }
 END_TEST
 
+START_TEST (test_delta_base_hash_missing_in_boot_header_rejected)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t word;
+    uint32_t delta_sz = 0x00001020;
+    uint32_t delta_base = 1;
+    uint8_t base_hash[SHA256_DIGEST_SIZE];
+    uint8_t *boot_base = (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    /* Remove the digest TLV from the boot header, keeping the TLV chain
+     * well-formed by retagging it to an unused custom type */
+    hal_flash_unlock();
+    word = SHA256_DIGEST_SIZE << 16 | 0x0031;
+    hal_flash_write((uintptr_t)boot_base + DIGEST_TLV_OFF_IN_HDR,
+        (void *)&word, 4);
+    hal_flash_lock();
+
+    /* The delta patch declares a base digest that cannot match */
+    memset(base_hash, 0xA5, sizeof(base_hash));
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_sz);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&word, sizeof(word));
+    word = (SHA256_DIGEST_SIZE << 16) | HDR_IMG_DELTA_BASE_HASH;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 80,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 84,
+        base_hash, sizeof(base_hash));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    memset(&swap, 0, sizeof(swap));
+    swap.part = PART_SWAP;
+    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_delta_inverse_values_passed_with_native_endian)
 {
     struct wolfBoot_image boot, update, swap;
@@ -1567,6 +1628,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(delta_zero_size, test_delta_zero_size_erased_header_uses_recovery_heuristic);
     tcase_add_test(delta_base_version, test_delta_base_version_mismatch_rejected);
     tcase_add_test(delta_base_version, test_delta_base_version_match_accepts);
+    tcase_add_test(delta_base_version, test_delta_base_hash_missing_in_boot_header_rejected);
     tcase_add_test(delta_base_version, test_delta_inverse_values_passed_with_native_endian);
     tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_update);
     tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_delta_base);
