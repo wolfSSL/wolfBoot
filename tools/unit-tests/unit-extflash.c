@@ -111,6 +111,9 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len) {
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len) {
     printf("Called ext_flash_write %p %p %d\n", (void *)address, (const void *)data, len);
 
+    /* A negative length is never a valid request */
+    ck_assert_int_ge(len, 0);
+
 
     /* Check that the write address and size are within the bounds of the flash memory */
     ck_assert_int_le(address + len, FLASH_SIZE);
@@ -294,6 +297,61 @@ START_TEST(test_ext_enc_flash_short_unaligned_read) {
 }
 END_TEST
 
+/* This test is also built without EXT_ENCRYPTED, where there is no block size */
+#ifdef ENCRYPT_BLOCK_SIZE
+    #define TEST_BLOCK_SIZE ENCRYPT_BLOCK_SIZE
+#else
+    #define TEST_BLOCK_SIZE 16
+#endif
+
+START_TEST(test_ext_enc_flash_short_unaligned_write) {
+    uint32_t address = 0x1000;
+    uint8_t data[TEST_BLOCK_SIZE];
+    uint8_t dataw[TEST_BLOCK_SIZE];
+    /* Writes shorter than the remainder of the encryption block they start in:
+     * { offset within the block, number of bytes provided } */
+    static const int cases[][2] = { {1, 1}, {0, 4}, {8, 3},
+        {TEST_BLOCK_SIZE - 1, 1} };
+    unsigned int c;
+    int i, rres, wres;
+
+    /* Prime the target block with known content */
+    memcpy(dataw, test_buffer, TEST_BLOCK_SIZE);
+    wres = ext_flash_check_write(address, dataw, TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+
+    for (c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        int off = cases[c][0];
+        int len = cases[c][1];
+        int tail = TEST_BLOCK_SIZE - (off + len);
+
+        /* Payload followed by a guard pattern that must never be consumed */
+        memset(dataw, 0x5A, sizeof(dataw));
+        for (i = 0; i < len; i++)
+            dataw[i] = (uint8_t)(0xC0 + i);
+
+        wres = ext_flash_check_write(address + off, dataw, len);
+        ck_assert_int_eq(wres, 0);
+
+        rres = ext_flash_check_read(address + off, data, len);
+        ck_assert_int_eq(rres, len);
+        ck_assert_mem_eq(data, dataw, len);
+
+        /* Bytes past the requested length must not have been taken from the
+         * caller's buffer */
+        if (tail > 0) {
+            rres = ext_flash_check_read(address + off + len, data, tail);
+            ck_assert_int_eq(rres, tail);
+            for (i = 0; i < tail; i++) {
+                if (data[i] != 0x5A)
+                    break;
+            }
+            ck_assert_int_lt(i, tail);
+        }
+    }
+}
+END_TEST
+
 
 
 Suite *wolfboot_suite(void)
@@ -306,19 +364,24 @@ Suite *wolfboot_suite(void)
     TCase *ext_flash_operations  = tcase_create("External flash operations: API");
     TCase *ext_enc_flash_operations  = tcase_create("External encrypted flash operations");
     TCase *ext_enc_flash_short_read  = tcase_create("External encrypted flash short unaligned read");
+    TCase *ext_enc_flash_short_write = tcase_create("External encrypted flash short unaligned write");
 
     /* Set parameters + add to suite */
     tcase_add_test(ext_flash_operations, test_ext_flash_operations);
     tcase_add_test(ext_enc_flash_operations, test_ext_enc_flash_operations);
     tcase_add_test(ext_enc_flash_short_read,
             test_ext_enc_flash_short_unaligned_read);
+    tcase_add_test(ext_enc_flash_short_write,
+            test_ext_enc_flash_short_unaligned_write);
 
     tcase_set_timeout(ext_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_short_read, 20);
+    tcase_set_timeout(ext_enc_flash_short_write, 20);
     suite_add_tcase(s, ext_flash_operations);
     suite_add_tcase(s, ext_enc_flash_operations);
     suite_add_tcase(s, ext_enc_flash_short_read);
+    suite_add_tcase(s, ext_enc_flash_short_write);
 
     return s;
 }

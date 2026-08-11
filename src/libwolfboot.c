@@ -2576,7 +2576,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
     uint32_t row_address = address, row_offset;
-    int sz = len, i, step;
+    int sz = len, i, step, ret;
     uint8_t part;
     uint32_t iv_counter = 0;
 #if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
@@ -2616,13 +2616,19 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     /* encrypt blocks */
     if (sz > len) {
         step = ENCRYPT_BLOCK_SIZE - row_offset;
+        /* Never consume more than the caller provided */
+        if (step > len)
+            step = len;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
         }
         XMEMCPY(block + row_offset, data, step);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
-        ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        /* The request fits entirely within this block: nothing left to do */
+        if (step == len)
+            return ret;
         address += step;
         data += step;
         sz = len - step;
