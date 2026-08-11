@@ -792,6 +792,13 @@ jobs:
       config-file: ./config/examples/zynqmp_sdcard.config
       make-args: ENCRYPT=1 ENCRYPT_WITH_AES256=1
 
+  zynqmp_sdcard_encrypt_chacha_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: ENCRYPT=1 ENCRYPT_WITH_CHACHA=1
+
   zynqmp_fsbl_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
