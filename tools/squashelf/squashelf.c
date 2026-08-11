@@ -39,6 +39,13 @@
 #include <stdbool.h> /* Needed for bool type */
 #include "../../include/elf.h"
 
+/* On Windows, fds default to text mode, which corrupts binary data by
+ * translating line endings. O_BINARY disables this; it doesn't exist on
+ * POSIX systems, where all I/O is already binary. */
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 /* Macro for verbose printing */
 #define DEBUG_PRINT(fmt, ...)                    \
     do {                                         \
@@ -481,7 +488,7 @@ int main(int argCount, char** argValues)
     }
 
     /* Open input ELF file for reading */
-    inputFd = open(inputFile, O_RDONLY);
+    inputFd = open(inputFile, O_RDONLY | O_BINARY);
     if (inputFd < 0) {
         perror("open inputFile");
         goto cleanup;
@@ -712,7 +719,7 @@ int main(int argCount, char** argValues)
     }
 
     /* Open output file for writing */
-    outputFd = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    outputFd = open(outputFile, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
     if (outputFd < 0) {
         perror("open outputFile");
         goto cleanup;
