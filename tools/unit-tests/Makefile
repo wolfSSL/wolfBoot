@@ -100,6 +100,7 @@ TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-mcxa
+TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
@@ -717,6 +718,9 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
+	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
 	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)

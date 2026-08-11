@@ -120,14 +120,18 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         } else {
             uint32_t val;
             uint8_t *vbytes = (uint8_t *)(&val);
-            int off = (address + i) - (((address + i) >> 2) << 2);
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE - off);
-            val = dst[i >> 2];
-            vbytes[off] = data[i];
+            uint32_t off = ((address + i) % 4);
+            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE + i - off);
+            val = *dst;
+            while (off < 4) {
+                if (i < len)
+                    vbytes[off++] = data[i++];
+                else
+                    off++;
+            }
             flash_wait_complete();
-            dst[i >> 2] = val;
+            *dst = val;
             flash_wait_complete();
-            i++;
         }
     }
     return 0;
