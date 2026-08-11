@@ -133,6 +133,122 @@ START_TEST(test_sign_main_fails_when_secondary_key_missing)
 }
 END_TEST
 
+/* Export a freshly generated ECC key as the raw Qx || Qy || d blob accepted
+ * by load_key(). */
+static int make_raw_ecc_key(int curve_id, int curve_sz, uint8_t *raw)
+{
+    WC_RNG rng;
+    ecc_key ek;
+    word32 qxSz = curve_sz, qySz = curve_sz, dSz = curve_sz;
+    int ret;
+
+    if (wc_InitRng(&rng) != 0) {
+        return -1;
+    }
+    if (wc_ecc_init(&ek) != 0) {
+        wc_FreeRng(&rng);
+        return -1;
+    }
+    ret = wc_ecc_make_key_ex(&rng, curve_sz, &ek, curve_id);
+    if (ret == 0) {
+        ret = wc_ecc_export_private_raw(&ek, raw, &qxSz, raw + curve_sz, &qySz,
+            raw + (curve_sz * 2), &dSz);
+    }
+    wc_ecc_free(&ek);
+    wc_FreeRng(&rng);
+
+    return ret;
+}
+
+/* Check a raw r || s signature against a raw Qx || Qy public key. */
+static int verify_raw_ecc(int curve_id, int curve_sz, const uint8_t *pubkey,
+    const uint8_t *signature, const uint8_t *digest, uint32_t digest_sz)
+{
+    ecc_key vk;
+    mp_int r, s;
+    int res = 0;
+    int ret;
+
+    if (wc_ecc_init(&vk) != 0) {
+        return -1;
+    }
+    ret = wc_ecc_import_unsigned(&vk, (byte*)pubkey, (byte*)pubkey + curve_sz,
+        NULL, curve_id);
+    if (ret == 0) {
+        mp_init(&r);
+        mp_init(&s);
+        mp_read_unsigned_bin(&r, signature, curve_sz);
+        mp_read_unsigned_bin(&s, signature + curve_sz, curve_sz);
+        ret = wc_ecc_verify_hash_ex(&r, &s, digest, digest_sz, &res, &vk);
+        mp_clear(&r);
+        mp_clear(&s);
+    }
+    wc_ecc_free(&vk);
+
+    if (ret != 0) {
+        return -1;
+    }
+    return res;
+}
+
+/* Hybrid signing loads both private keys before either signature is made, so
+ * the secondary key must not land on top of the decoded primary key. */
+START_TEST(test_hybrid_secondary_key_does_not_clobber_primary)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char primary_path[PATH_MAX];
+    char secondary_path[PATH_MAX];
+    uint8_t primary_raw[66 * 3];   /* ECC521 Qx + Qy + d */
+    uint8_t secondary_raw[32 * 3]; /* ECC256 Qx + Qy + d */
+    uint8_t *kbuf = NULL, *kbuf2 = NULL;
+    uint32_t kbuf_sz = 0, kbuf2_sz = 0;
+    uint8_t *pubkey = NULL, *pubkey2 = NULL;
+    uint32_t pubkey_sz = 0, pubkey_sz2 = 0;
+    uint8_t digest[32];
+    uint8_t signature[132];
+    uint8_t signature2[64];
+    uint32_t signature_sz = sizeof(signature);
+    uint32_t signature_sz2 = sizeof(signature2);
+
+    ck_assert_int_eq(make_raw_ecc_key(ECC_SECP521R1, 66, primary_raw), 0);
+    ck_assert_int_eq(make_raw_ecc_key(ECC_SECP256R1, 32, secondary_raw), 0);
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+    snprintf(primary_path, sizeof(primary_path), "%s/ecc521.raw", tempdir);
+    snprintf(secondary_path, sizeof(secondary_path), "%s/ecc256.raw", tempdir);
+    ck_assert_int_eq(write_file(primary_path, primary_raw,
+        sizeof(primary_raw)), 0);
+    ck_assert_int_eq(write_file(secondary_path, secondary_raw,
+        sizeof(secondary_raw)), 0);
+
+    reset_cmd_defaults();
+    CMD.sign = SIGN_ECC521;
+    CMD.key_file = primary_path;
+    CMD.hybrid = 1;
+    CMD.secondary_sign = SIGN_ECC256;
+    CMD.secondary_key_file = secondary_path;
+
+    ck_assert_ptr_nonnull(load_key(&kbuf, &kbuf_sz, &pubkey, &pubkey_sz, 0));
+    ck_assert_ptr_nonnull(load_key(&kbuf2, &kbuf2_sz, &pubkey2, &pubkey_sz2,
+        1));
+
+    memset(digest, 0x5C, sizeof(digest));
+    ck_assert_int_eq(sign_digest(CMD.sign, CMD.hash_algo, signature,
+        &signature_sz, digest, sizeof(digest), 0), 0);
+    ck_assert_int_eq(sign_digest(CMD.secondary_sign, CMD.hash_algo, signature2,
+        &signature_sz2, digest, sizeof(digest), 1), 0);
+
+    ck_assert_int_eq(verify_raw_ecc(ECC_SECP521R1, 66, pubkey, signature,
+        digest, sizeof(digest)), 1);
+    ck_assert_int_eq(verify_raw_ecc(ECC_SECP256R1, 32, pubkey2, signature2,
+        digest, sizeof(digest)), 1);
+
+    unlink(primary_path);
+    unlink(secondary_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-hybrid-keyload");
@@ -140,6 +256,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tcase, test_load_key_clears_pubkey_when_file_missing);
     tcase_add_test(tcase, test_load_key_clears_pubkey_when_decode_fails);
+    tcase_add_test(tcase, test_hybrid_secondary_key_does_not_clobber_primary);
     tcase_add_exit_test(tcase, test_sign_main_fails_when_secondary_key_missing,
         1);
     suite_add_tcase(s, tcase);

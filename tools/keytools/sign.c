@@ -307,7 +307,7 @@ static void header_append_tag_u64(uint8_t *header, uint32_t *idx, uint16_t tag,
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 
-static struct {
+struct signing_key {
     ed25519_key ed;
     ed448_key ed4;
     ecc_key ecc;
@@ -315,7 +315,51 @@ static struct {
     LmsKey lms;
     XmssKey xmss;
     wc_MlDsaKey ml_dsa;
-} key;
+};
+
+/* Hybrid signing keeps the primary and the secondary private key decoded at
+ * the same time, so the two signers must not share the same storage. */
+static struct signing_key key;
+static struct signing_key key2;
+
+static struct signing_key *key_obj(int secondary)
+{
+    return secondary ? &key2 : &key;
+}
+
+/* Run the algorithm specific (zeroizing) free on a decoded signing key. */
+static void free_key(int sign, int secondary)
+{
+    struct signing_key *k = key_obj(secondary);
+    if (sign == SIGN_ED25519) {
+        wc_ed25519_free(&k->ed);
+    }
+    else if (sign == SIGN_ED448) {
+        wc_ed448_free(&k->ed4);
+    }
+    else if (sign == SIGN_ECC256 ||
+             sign == SIGN_ECC384 ||
+             sign == SIGN_ECC521) {
+        wc_ecc_free(&k->ecc);
+    }
+    else if (sign == SIGN_RSA2048 ||
+             sign == SIGN_RSA3072 ||
+             sign == SIGN_RSA4096 ||
+             sign == SIGN_RSAPSS2048 ||
+             sign == SIGN_RSAPSS3072 ||
+             sign == SIGN_RSAPSS4096) {
+        wc_FreeRsaKey(&k->rsa);
+    }
+    else if (sign == SIGN_LMS) {
+        wc_LmsKey_Free(&k->lms);
+    }
+    else if (sign == SIGN_XMSS) {
+        wc_XmssKey_Free(&k->xmss);
+    }
+    else if (sign == SIGN_ML_DSA) {
+        wc_MlDsaKey_Free(&k->ml_dsa);
+    }
+}
 
 struct cmd_options {
     int manual_sign;
@@ -443,6 +487,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     uint32_t idx;
     uint32_t qxSz = curve_sz;
     uint32_t qySz = curve_sz;
+    struct signing_key *k = key_obj(secondary);
 
     *pubkey_sz = curve_sz * 2;
     *pubkey = malloc(*pubkey_sz); /* assume malloc works */
@@ -450,7 +495,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
         printf("Pubkey malloc error!\n");
         return -1;
     }
-    initRet = ret = wc_ecc_init(&key.ecc);
+    initRet = ret = wc_ecc_init(&k->ecc);
     if (CMD.manual_sign || CMD.sha_only) {
         /* raw (public x + public y) */
         if (*key_buffer_sz == (curve_sz * 2)) {
@@ -460,16 +505,16 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
         else {
             if (ret == 0) {
                 idx = 0;
-                ret = wc_EccPublicKeyDecode(*key_buffer, &idx, &key.ecc,
+                ret = wc_EccPublicKeyDecode(*key_buffer, &idx, &k->ecc,
                     *key_buffer_sz);
             }
 
             /* we could decode another type of key in auto so check */
-            if (ret == 0 && key.ecc.dp->id != curve_id) {
+            if (ret == 0 && k->ecc.dp->id != curve_id) {
                 ret = -1;
             }
             if (ret == 0) {
-                ret = wc_ecc_export_public_raw(&key.ecc,
+                ret = wc_ecc_export_public_raw(&k->ecc,
                     *pubkey, &qxSz,           /* public x */
                     *pubkey + curve_sz, &qySz /* public y */
                 );
@@ -481,7 +526,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
         memcpy(*pubkey, *key_buffer, *pubkey_sz);
 
         if (ret == 0) {
-            ret = wc_ecc_import_unsigned(&key.ecc,
+            ret = wc_ecc_import_unsigned(&k->ecc,
                 *key_buffer,                    /* public x */
                 (*key_buffer) + curve_sz,       /* public y */
                 (*key_buffer) + (curve_sz * 2), /* private d */
@@ -497,15 +542,15 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     else {
         if (ret == 0) {
             idx = 0;
-            ret = wc_EccPrivateKeyDecode(*key_buffer, &idx, &key.ecc,
+            ret = wc_EccPrivateKeyDecode(*key_buffer, &idx, &k->ecc,
                 *key_buffer_sz);
         }
         /* we could decode another type of key in auto so check */
-        if (ret == 0 && key.ecc.dp->id != curve_id) {
+        if (ret == 0 && k->ecc.dp->id != curve_id) {
             ret = -1;
         }
         if (ret == 0) {
-            ret = wc_ecc_export_public_raw(&key.ecc,
+            ret = wc_ecc_export_public_raw(&k->ecc,
                 *pubkey, &qxSz,           /* public x */
                 *pubkey + curve_sz, &qySz /* public y */
             );
@@ -517,7 +562,7 @@ static int load_key_ecc(int sign_type, uint32_t curve_sz, int curve_id,
     }
 
     if (ret != 0 && initRet == 0) {
-        wc_ecc_free(&key.ecc);
+        wc_ecc_free(&k->ecc);
     }
     if (ret != 0) {
         free(*pubkey);
@@ -549,6 +594,7 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
     int initRet = -1;
     uint32_t idx;
     uint32_t keySzOut = 0;
+    struct signing_key *k = key_obj(secondary);
 
     if (CMD.manual_sign || CMD.sha_only) {
         /* Allocate and copy pubkey instead of using key_buffer directly */
@@ -573,15 +619,15 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         ret = 0;
     }
     else {
-        initRet = ret = wc_InitRsaKey(&key.rsa, NULL);
+        initRet = ret = wc_InitRsaKey(&k->rsa, NULL);
         if (ret == 0) {
             idx = 0;
-            ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &key.rsa,
+            ret = wc_RsaPrivateKeyDecode(*key_buffer, &idx, &k->rsa,
                 *key_buffer_sz);
         }
 
         if (ret == 0) {
-            ret = wc_RsaKeyToPublicDer(&key.rsa, *key_buffer, *key_buffer_sz);
+            ret = wc_RsaKeyToPublicDer(&k->rsa, *key_buffer, *key_buffer_sz);
         }
 
         if (ret > 0) {
@@ -592,7 +638,7 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
                 printf("Pubkey malloc error!\n");
                 ret = -1;
                 if (initRet == 0) {
-                    wc_FreeRsaKey(&key.rsa);
+                    wc_FreeRsaKey(&k->rsa);
                 }
                 return -1;
             }
@@ -601,11 +647,11 @@ static int load_key_rsa(int sign_type, uint32_t rsa_keysz, uint32_t rsa_pubkeysz
         }
 
         if (ret == 0) {
-            keySzOut = wc_RsaEncryptSize(&key.rsa);
+            keySzOut = wc_RsaEncryptSize(&k->rsa);
         }
 
         if (ret != 0 && initRet == 0) {
-            wc_FreeRsaKey(&key.rsa);
+            wc_FreeRsaKey(&k->rsa);
         }
 
         if (ret == 0 || CMD.sign != SIGN_AUTO) {
@@ -636,6 +682,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
     word32 pub_sz = 0;
     int sign = CMD.sign;
     const char *key_file = CMD.key_file;
+    struct signing_key *k = key_obj(secondary);
 
     /* open and load key buffer */
     *key_buffer = NULL;
@@ -692,20 +739,20 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     ret = 0;
                 }
                 else {
-                    initRet = ret = wc_ed25519_init(&key.ed);
+                    initRet = ret = wc_ed25519_init(&k->ed);
                     if (ret == 0) {
                         idx = 0;
                         ret = wc_Ed25519PublicKeyDecode(*key_buffer, &idx,
-                            &key.ed, *key_buffer_sz);
+                            &k->ed, *key_buffer_sz);
                     }
                     if (ret == 0) {
-                        ret = wc_ed25519_export_public(&key.ed, *pubkey,
+                        ret = wc_ed25519_export_public(&k->ed, *pubkey,
                             pubkey_sz);
                     }
 
                     /* free key no matter what */
                     if (initRet == 0)
-                        wc_ed25519_free(&key.ed);
+                        wc_ed25519_free(&k->ed);
                 }
             }
             /* raw only */
@@ -713,15 +760,15 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 memcpy(*pubkey, *key_buffer + ED25519_KEY_SIZE,
                     KEYSTORE_PUBKEY_SIZE_ED25519);
 
-                initRet = ret = wc_ed25519_init(&key.ed);
+                initRet = ret = wc_ed25519_init(&k->ed);
                 if (ret == 0) {
                     ret = wc_ed25519_import_private_key(*key_buffer,
-                            ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed);
+                            ED25519_KEY_SIZE, *pubkey, *pubkey_sz, &k->ed);
                 }
 
                 /* only free the key if we failed after allocating */
                 if (ret != 0 && initRet == 0)
-                    wc_ed25519_free(&key.ed);
+                    wc_ed25519_free(&k->ed);
             }
 
             if (ret != 0) {
@@ -760,20 +807,20 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                     ret = 0;
                 }
                 else {
-                    initRet = ret = wc_ed448_init(&key.ed4);
+                    initRet = ret = wc_ed448_init(&k->ed4);
                     if (ret == 0) {
                         idx = 0;
                         ret = wc_Ed448PublicKeyDecode(*key_buffer, &idx,
-                            &key.ed4, *key_buffer_sz);
+                            &k->ed4, *key_buffer_sz);
                     }
                     if (ret == 0) {
-                        ret = wc_ed448_export_public(&key.ed4, *pubkey,
+                        ret = wc_ed448_export_public(&k->ed4, *pubkey,
                             pubkey_sz);
                     }
 
                     /* free key no matter what */
                     if (initRet == 0)
-                        wc_ed448_free(&key.ed4);
+                        wc_ed448_free(&k->ed4);
 
                 }
             }
@@ -782,15 +829,15 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
                 memcpy(*pubkey, *key_buffer + ED448_KEY_SIZE,
                     ED448_PUB_KEY_SIZE);
 
-                initRet = ret = wc_ed448_init(&key.ed4);
+                initRet = ret = wc_ed448_init(&k->ed4);
                 if (ret == 0) {
                     ret = wc_ed448_import_private_key(*key_buffer,
-                        ED448_KEY_SIZE, *pubkey, *pubkey_sz, &key.ed4);
+                        ED448_KEY_SIZE, *pubkey, *pubkey_sz, &k->ed4);
                 }
 
                 /* only free the key if we failed after allocating */
                 if (ret != 0 && initRet == 0)
-                    wc_ed448_free(&key.ed4);
+                    wc_ed448_free(&k->ed4);
             }
 
             if (ret != 0) {
@@ -935,7 +982,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
              * If both priv/pub are present:
              *  - The first ?? bytes is the private key.
              *  - The next 68 bytes is the public key. */
-            ret = wc_XmssKey_GetPrivLen(&key.xmss, &priv_sz);
+            ret = wc_XmssKey_GetPrivLen(&k->xmss, &priv_sz);
             if (ret != 0 || priv_sz <= 0) {
                 printf("error: wc_XmssKey_GetPrivLen returned %d\n", ret);
                 break;
@@ -977,7 +1024,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
             }
             FALL_THROUGH; /* we didn't solve the key, keep trying */
         case SIGN_ML_DSA:
-            ret = wc_MlDsaKey_GetPubLen(&key.ml_dsa, (int *)&pub_sz);
+            ret = wc_MlDsaKey_GetPubLen(&k->ml_dsa, (int *)&pub_sz);
 
             if (ret != 0 || pub_sz <= 0) {
                 printf("error: wc_MlDsaKey_GetPubLen returned %d\n", ret);
@@ -986,7 +1033,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             /* Get the ML-DSA private key length. This API returns
              * the public + private length. */
-            ret = wc_MlDsaKey_GetPrivLen(&key.ml_dsa, (int*)&priv_sz);
+            ret = wc_MlDsaKey_GetPrivLen(&k->ml_dsa, (int*)&priv_sz);
 
             if (ret != 0 || priv_sz <= 0) {
                 printf("error: wc_MlDsaKey_GetPrivLen returned %d\n", ret);
@@ -1007,7 +1054,7 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
 
             if (*key_buffer_sz == (priv_sz + pub_sz)) {
                 /* priv + pub */
-                ret = wc_MlDsaKey_ImportPrivRaw(&key.ml_dsa, *key_buffer,
+                ret = wc_MlDsaKey_ImportPrivRaw(&k->ml_dsa, *key_buffer,
                                                 priv_sz);
                 *pubkey_sz = pub_sz;
                 *pubkey = malloc(*pubkey_sz);
@@ -1072,8 +1119,8 @@ static int sign_digest(int sign, int hash_algo,
 {
     int ret;
     WC_RNG rng;
+    struct signing_key *k = key_obj(secondary);
     printf("Sign: %02x\n", sign >> 8);
-    (void)secondary;
 
     if ((ret = wc_InitRng(&rng)) != 0) {
         return ret;
@@ -1081,12 +1128,12 @@ static int sign_digest(int sign, int hash_algo,
 
     if (sign == SIGN_ED25519) {
         ret = wc_ed25519_sign_msg(digest, digest_sz, signature,
-                signature_sz, &key.ed);
+                signature_sz, &k->ed);
     }
     else
     if (sign == SIGN_ED448) {
         ret = wc_ed448_sign_msg(digest, digest_sz, signature,
-                signature_sz, &key.ed4, NULL, 0);
+                signature_sz, &k->ed4, NULL, 0);
     }
     else
     if (sign == SIGN_ECC256 ||
@@ -1103,7 +1150,7 @@ static int sign_digest(int sign, int hash_algo,
         memset(signature, 0, *signature_sz);
 
         mp_init(&r); mp_init(&s);
-        ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &key.ecc,
+        ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &k->ecc,
                 &r, &s);
         if (ret == 0) {
             word32 rSz, sSz;
@@ -1139,7 +1186,7 @@ static int sign_digest(int sign, int hash_algo,
             enchash = buf;
         }
         ret = wc_RsaSSL_Sign(enchash, enchash_sz, signature, *signature_sz,
-                &key.rsa, &rng);
+                &k->rsa, &rng);
         if (ret > 0) {
             *signature_sz = ret;
             ret = 0;
@@ -1163,7 +1210,7 @@ static int sign_digest(int sign, int hash_algo,
             return -1;
         }
         ret = wc_RsaPSS_Sign(digest, digest_sz, signature, *signature_sz,
-                hash_type, mgf, &key.rsa, &rng);
+                hash_type, mgf, &k->rsa, &rng);
         if (ret > 0) {
             *signature_sz = ret;
             ret = 0;
@@ -1176,18 +1223,18 @@ static int sign_digest(int sign, int hash_algo,
             key_file = CMD.secondary_key_file;
         }
         /* Set the callbacks, so LMS can update the private key while signing */
-        ret = wc_LmsKey_SetWriteCb(&key.lms, lms_write_key);
+        ret = wc_LmsKey_SetWriteCb(&k->lms, lms_write_key);
         if (ret == 0) {
-            ret = wc_LmsKey_SetReadCb(&key.lms, lms_read_key);
+            ret = wc_LmsKey_SetReadCb(&k->lms, lms_read_key);
         }
         if (ret == 0) {
-            ret = wc_LmsKey_SetContext(&key.lms, (void*)key_file);
+            ret = wc_LmsKey_SetContext(&k->lms, (void*)key_file);
         }
         if (ret == 0) {
-            ret = wc_LmsKey_Reload(&key.lms);
+            ret = wc_LmsKey_Reload(&k->lms);
         }
         if (ret == 0) {
-            ret = wc_LmsKey_Sign(&key.lms, signature, signature_sz, digest,
+            ret = wc_LmsKey_Sign(&k->lms, signature, signature_sz, digest,
                                  digest_sz);
         }
         if (ret != 0) {
@@ -1200,25 +1247,25 @@ static int sign_digest(int sign, int hash_algo,
         if (secondary) {
             key_file = CMD.secondary_key_file;
         }
-        ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
+        ret = wc_XmssKey_Init(&k->xmss, NULL, INVALID_DEVID);
         /* Set the callbacks, so XMSS can update the private key while signing */
         if (ret == 0) {
-            ret = wc_XmssKey_SetWriteCb(&key.xmss, xmss_write_key);
+            ret = wc_XmssKey_SetWriteCb(&k->xmss, xmss_write_key);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_SetReadCb(&key.xmss, xmss_read_key);
+            ret = wc_XmssKey_SetReadCb(&k->xmss, xmss_read_key);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_SetContext(&key.xmss, (void*)key_file);
+            ret = wc_XmssKey_SetContext(&k->xmss, (void*)key_file);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_SetParamStr(&key.xmss, WOLFBOOT_XMSS_PARAMS);
+            ret = wc_XmssKey_SetParamStr(&k->xmss, WOLFBOOT_XMSS_PARAMS);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_Reload(&key.xmss);
+            ret = wc_XmssKey_Reload(&k->xmss);
         }
         if (ret == 0) {
-            ret = wc_XmssKey_Sign(&key.xmss, signature, signature_sz, digest,
+            ret = wc_XmssKey_Sign(&k->xmss, signature, signature_sz, digest,
                                  digest_sz);
         }
         if (ret != 0) {
@@ -1229,7 +1276,7 @@ static int sign_digest(int sign, int hash_algo,
     if (sign == SIGN_ML_DSA) {
         /* Nothing else to do, ready to sign. */
         if (ret == 0) {
-            ret = wc_MlDsaKey_SignCtx(&key.ml_dsa, NULL, 0,
+            ret = wc_MlDsaKey_SignCtx(&k->ml_dsa, NULL, 0,
                                       signature, signature_sz,
                                       digest, digest_sz, &rng);
         }
@@ -2880,6 +2927,7 @@ static void set_signature_sizes(int secondary)
     int *sign = &CMD.sign;
     uint32_t suggested_sz = 0;
     char *env_image_header_size;
+    struct signing_key *k = key_obj(secondary);
     if (secondary) {
         sz = &CMD.secondary_signature_sz;
         sign = &CMD.secondary_sign;
@@ -2966,12 +3014,12 @@ static void set_signature_sizes(int secondary)
         else
             lms_winternitz = atoi(lms_winternitz_str);
 
-        lms_ret = wc_LmsKey_Init(&key.lms, NULL, INVALID_DEVID);
+        lms_ret = wc_LmsKey_Init(&k->lms, NULL, INVALID_DEVID);
         if (lms_ret != 0) {
             fprintf(stderr, "error: wc_LmsKey_Init returned %d\n", lms_ret);
             exit(1);
         }
-        lms_ret = wc_LmsKey_SetParameters(&key.lms, lms_levels, lms_height,
+        lms_ret = wc_LmsKey_SetParameters(&k->lms, lms_levels, lms_height,
                                           lms_winternitz);
         if (lms_ret != 0) {
             fprintf(stderr, "error: wc_LmsKey_SetParameters(%d, %d, %d)" \
@@ -2983,7 +3031,7 @@ static void set_signature_sizes(int secondary)
         printf("info: using LMS parameters: L%d-H%d-W%d\n", lms_levels,
                lms_height, lms_winternitz);
 
-        lms_ret = wc_LmsKey_GetSigLen(&key.lms, &sig_sz);
+        lms_ret = wc_LmsKey_GetSigLen(&k->lms, &sig_sz);
         if (lms_ret != 0) {
             fprintf(stderr, "error: wc_LmsKey_GetSigLen returned %d\n",
                     lms_ret);
@@ -3007,13 +3055,13 @@ static void set_signature_sizes(int secondary)
 
         printf("info: using XMSS parameters: %s\n", xmss_params);
 
-        xmss_ret = wc_XmssKey_Init(&key.xmss, NULL, INVALID_DEVID);
+        xmss_ret = wc_XmssKey_Init(&k->xmss, NULL, INVALID_DEVID);
         if (xmss_ret != 0) {
             fprintf(stderr, "error: wc_XmssKey_Init returned %d\n", xmss_ret);
             exit(1);
         }
 
-        xmss_ret = wc_XmssKey_SetParamStr(&key.xmss, xmss_params);
+        xmss_ret = wc_XmssKey_SetParamStr(&k->xmss, xmss_params);
         if (xmss_ret != 0) {
             fprintf(stderr, "error: wc_XmssKey_SetParamStr(%s)" \
                     " returned %d\n", xmss_params, xmss_ret);
@@ -3021,7 +3069,7 @@ static void set_signature_sizes(int secondary)
         }
 
 
-        xmss_ret = wc_XmssKey_GetSigLen(&key.xmss, &sig_sz);
+        xmss_ret = wc_XmssKey_GetSigLen(&k->xmss, &sig_sz);
         if (xmss_ret != 0) {
             fprintf(stderr, "error: wc_XmssKey_GetSigLen returned %d\n",
                     xmss_ret);
@@ -3043,13 +3091,13 @@ static void set_signature_sizes(int secondary)
         if (env_ml_dsa_level)
             ml_dsa_level = atoi(env_ml_dsa_level);
 
-        ml_dsa_ret = wc_MlDsaKey_Init(&key.ml_dsa, NULL, INVALID_DEVID);
+        ml_dsa_ret = wc_MlDsaKey_Init(&k->ml_dsa, NULL, INVALID_DEVID);
         if (ml_dsa_ret != 0) {
             fprintf(stderr, "error: wc_MlDsaKey_Init returned %d\n", ml_dsa_ret);
             exit(1);
         }
 
-        ml_dsa_ret = wc_MlDsaKey_SetParams(&key.ml_dsa, ml_dsa_level);
+        ml_dsa_ret = wc_MlDsaKey_SetParams(&k->ml_dsa, ml_dsa_level);
         if (ml_dsa_ret != 0) {
             fprintf(stderr, "error: wc_MlDsaKey_SetParamStr(%d)" \
                     " returned %d\n", ml_dsa_level, ml_dsa_ret);
@@ -3058,7 +3106,7 @@ static void set_signature_sizes(int secondary)
 
         printf("info: using ML-DSA parameters: %d\n", ml_dsa_level);
 
-        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&key.ml_dsa, (int *)&sig_sz);
+        ml_dsa_ret = wc_MlDsaKey_GetSigLen(&k->ml_dsa, (int *)&sig_sz);
         if (ml_dsa_ret != 0) {
             fprintf(stderr, "error: wc_MlDsaKey_GetSigLen returned %d\n",
                     ml_dsa_ret);
@@ -3808,33 +3856,9 @@ int main(int argc, char** argv)
 
     if (kbuf)
         zero_and_free(kbuf, key_buffer_sz);
-    if (CMD.sign == SIGN_ED25519) {
-        wc_ed25519_free(&key.ed);
-    }
-    else if (CMD.sign == SIGN_ED448) {
-        wc_ed448_free(&key.ed4);
-    }
-    else if (CMD.sign == SIGN_ECC256 ||
-             CMD.sign == SIGN_ECC384 ||
-             CMD.sign == SIGN_ECC521) {
-        wc_ecc_free(&key.ecc);
-    }
-    else if (CMD.sign == SIGN_RSA2048 ||
-             CMD.sign == SIGN_RSA3072 ||
-             CMD.sign == SIGN_RSA4096 ||
-             CMD.sign == SIGN_RSAPSS2048 ||
-             CMD.sign == SIGN_RSAPSS3072 ||
-             CMD.sign == SIGN_RSAPSS4096) {
-        wc_FreeRsaKey(&key.rsa);
-    }
-    else if (CMD.sign == SIGN_LMS) {
-        wc_LmsKey_Free(&key.lms);
-    }
-    else if (CMD.sign == SIGN_XMSS) {
-        wc_XmssKey_Free(&key.xmss);
-    }
-    else if (CMD.sign == SIGN_ML_DSA) {
-        wc_MlDsaKey_Free(&key.ml_dsa);
+    free_key(CMD.sign, 0);
+    if (CMD.hybrid) {
+        free_key(CMD.secondary_sign, 1);
     }
     return ret;
 }
