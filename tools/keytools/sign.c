@@ -1465,6 +1465,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     image_sz = ftell(f);
     fseek(f, 0, SEEK_SET);
     fclose(f);
+    f = NULL;
 
     /* Append Magic header (spells 'WOLF') */
     header_append_u32(header, &header_idx, WOLFBOOT_MAGIC);
@@ -1524,26 +1525,26 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             ALIGN_8(header_idx);
             if (!base_hash) {
                 fprintf(stderr, "Base hash for delta image not found.\n");
-                exit(1);
+                goto failure;
             }
             if (CMD.hash_algo == HASH_SHA256) {
                 if (base_hash_sz != HDR_SHA256_LEN) {
                     fprintf(stderr, "Invalid base hash size for SHA256.\n");
-                    exit(1);
+                    goto failure;
                 }
                 header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
                         HDR_SHA256_LEN, base_hash);
             } else if (CMD.hash_algo == HASH_SHA384) {
                 if  (base_hash_sz != HDR_SHA384_LEN) {
                     fprintf(stderr, "Invalid base hash size for SHA384.\n");
-                    exit(1);
+                    goto failure;
                 }
                 header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
                         HDR_SHA384_LEN, base_hash);
             } else if (CMD.hash_algo == HASH_SHA3) {
                 if (base_hash_sz != HDR_SHA3_384_LEN) {
                     fprintf(stderr, "Invalid base hash size for SHA3-384.\n");
-                    exit(1);
+                    goto failure;
                 }
                 header_append_tag(header, &header_idx, HDR_IMG_DELTA_BASE_HASH,
                         HDR_SHA3_384_LEN, base_hash);
