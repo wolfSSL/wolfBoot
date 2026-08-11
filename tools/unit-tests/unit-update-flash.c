@@ -787,6 +787,27 @@ START_TEST (test_forward_update_samesize) {
 }
 END_TEST
 
+/* A failing flash write must abort the swap instead of marking the sector as
+ * updated: the sector flags are the only record used to resume an
+ * interrupted swap. */
+START_TEST (test_update_aborts_on_sector_copy_failure) {
+    uint8_t flag = SECT_FLAG_NEW;
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger();
+    /* BOOT is the only internal partition here, so the first write to
+     * internal flash is the copy of sector 0 from SWAP into BOOT. */
+    hal_flash_write_fail = 1;
+    ck_assert_int_lt(wolfBoot_update(0), 0);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+    wolfBoot_get_update_sector_flag(0, &flag);
+    ck_assert_int_ne(flag, SECT_FLAG_UPDATED);
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_forward_update_tolarger) {
     reset_mock_stats();
     prepare_flash();
@@ -1602,6 +1623,7 @@ Suite *wolfboot_suite(void)
 #endif
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
+    tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
