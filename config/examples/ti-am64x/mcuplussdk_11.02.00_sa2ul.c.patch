@@ -1,0 +1,38 @@
+--- a/sa2ul.c	2026-08-05 22:36:06.345330013 -0400
++++ b/sa2ul.c	2026-08-06 18:28:41.124171790 -0400
+@@ -1123,7 +1123,7 @@
+                     sc.u.auth.authCtx1 =
+                         CSL_FMK(SA2UL_AUTHCTX1_MODESEL, 0u) |
+                         CSL_FMK(SA2UL_AUTHCTX1_DEFAULT_NEXT_ENGINE_ID, SA2UL_ENGINE_CODE_DEFAULT_EGRESS_PORT) |
+-                        CSL_FMK(SA2UL_AUTHCTX1_SW_CONTROL, 0x40u | ctxObj->ctxPrms.hashAlg);
++                        CSL_FMK(SA2UL_AUTHCTX1_SW_CONTROL, 0xc0u | ctxObj->ctxPrms.hashAlg);
+ 
+                     /* Authentication length in bits for basic hash, length in bits */
+                     sc.u.auth.authenticationLengthLo = authLen;
+@@ -1208,7 +1208,7 @@
+                         else
+                         {
+                             /* Copy IV */
+-                            SA2UL_u8LeToU32(sc.u.enc.encAux3, ctxObj->ctxPrms.iv,SA2UL_MAX_IV_SIZE_BYTES);
++                            SA2UL_u8LeToU32(sc.u.enc.encAux2, ctxObj->ctxPrms.iv,SA2UL_MAX_IV_SIZE_BYTES);
+                         }
+ 
+                         sc.scctl.scctl1 =
+@@ -1873,7 +1873,7 @@
+                 txDescr->exPktInfo.swWord0 |= (CSL_FMK(SA2UL_SWWORD0_BYP_CMD_LBL_LEN, 1u) | CSL_FMK(SA2UL_SWWORD0_FRAGMENT, 1u));
+             }
+ 
+-            if(pCtxObj->ctxPrms.inputLen > CSL_FEXT(0xffffffffu, SA2UL_CMDLBLHDR1_LEN_TO_BE_PROCESSESED))
++//            if(pCtxObj->ctxPrms.inputLen > CSL_FEXT(0xffffffffu, SA2UL_CMDLBLHDR1_LEN_TO_BE_PROCESSESED))
+             {
+                 /* Update protocol specific data length, add 8 */
+                 CSL_FINS(txDescr->pd.descInfo,
+@@ -2026,7 +2026,7 @@
+         reg = CSL_FEXT(rxDescr->pd.descInfo, PKTDMA_CPPI5_PD_DESCINFO_PKTLEN);
+         pCtxObj->rxBytesCnt += reg;
+ 
+-        if(pCtxObj->rxBytesCnt == pCtxObj->ctxPrms.inputLen)
++//        if(pCtxObj->rxBytesCnt == pCtxObj->ctxPrms.inputLen)
+         {
+             if(pCtxObj->ctxPrms.opType == SA2UL_OP_AUTH)
+             {
