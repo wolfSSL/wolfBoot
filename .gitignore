@@ -204,6 +204,7 @@ tools/unit-tests/unit-otp-keystore
 tools/unit-tests/unit-otp-keystore-gen-zeroize
 tools/unit-tests/unit-tpm-api-names
 tools/unit-tests/unit-tpm-nsc-cert
+tools/unit-tests/unit-tpm-advio-zeroize
 tools/unit-tests/unit-elf-bss-guard
 tools/unit-tests/unit-fit-fpga
 tools/unit-tests/unit-flash-erase-c0

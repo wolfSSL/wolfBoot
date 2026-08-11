@@ -72,6 +72,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-tpm-nsc-cert
+TESTS+=unit-tpm-advio-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
@@ -321,6 +322,13 @@ unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_SEAL -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-advio-zeroize: ../../include/target.h unit-tpm-advio-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_ADV_IO \
+		-DWOLFTPM_CHECK_WAIT_STATE -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 

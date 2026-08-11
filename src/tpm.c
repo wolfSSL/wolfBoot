@@ -202,6 +202,11 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
     /* On error make sure SPI is de-asserted */
     else {
         spi_xfer(SPI_CS_TPM, NULL, NULL, 0, 0);
+    #ifdef WOLFTPM_ADV_IO
+        /* don't leave the command (may hold an authValue) on the stack */
+        TPM2_ForceZero(txBuf, sizeof(txBuf));
+        TPM2_ForceZero(rxBuf, sizeof(rxBuf));
+    #endif
         return ret;
     }
 #else /* Send Entire Message - no wait states */
@@ -221,6 +226,10 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
         wolfBoot_print_bin(buf, size);
     #endif
     }
+    /* the staging buffers hold the raw command / response, which can carry
+     * a plaintext authValue - wipe them like TPM2_TIS_Read/Write() do */
+    TPM2_ForceZero(txBuf, sizeof(txBuf));
+    TPM2_ForceZero(rxBuf, sizeof(rxBuf));
 #endif
 
     return ret;
