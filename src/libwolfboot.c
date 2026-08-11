@@ -2587,6 +2587,13 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
 
+    /* A zero-length request must not turn into a read-modify-write of the
+     * containing block. */
+    if (len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
+
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
         row_address = address & ~(ENCRYPT_BLOCK_SIZE - 1);
@@ -2655,6 +2662,20 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         address += chunk;
         data += chunk;
         step -= chunk;
+    }
+
+    /* Trailing bytes that do not fill a whole block. "address" is block
+     * aligned here, so merge them into the block that already backs them,
+     * the same way the unaligned head above is handled. */
+    step = sz & (ENCRYPT_BLOCK_SIZE - 1);
+    if (step > 0) {
+        if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE) {
+            return -1;
+        }
+        XMEMCPY(block, data, step);
+        crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        ret = ext_flash_write(address, enc_block, ENCRYPT_BLOCK_SIZE);
     }
 
     return ret;

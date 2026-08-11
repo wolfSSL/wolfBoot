@@ -323,14 +323,16 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
               if (dst->part == PART_SWAP && SWAP_EXT) {
                   if (ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset +
                                        pos,
-                                 (void *)buffer, FLASHBUFFER_SIZE) < 0) {
+                                 (void *)buffer, FLASHBUFFER_SIZE)
+                          != FLASHBUFFER_SIZE) {
                       ret = -1;
                       goto out;
                   }
               } else {
                   if (ext_flash_check_read((uintptr_t)(src->hdr) +
                                          src_sector_offset + pos,
-                                     (void *)buffer, FLASHBUFFER_SIZE) < 0) {
+                                     (void *)buffer, FLASHBUFFER_SIZE)
+                          != FLASHBUFFER_SIZE) {
                       ret = -1;
                       goto out;
                   }

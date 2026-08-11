@@ -601,6 +601,67 @@ static int add_payload_encrypted(uint8_t part, uint32_t version, uint32_t size,
 }
 #endif
 
+#ifdef EXT_ENCRYPTED
+/* ext_flash_encrypt_write() writes whole ENCRYPT_BLOCK_SIZE blocks. A request
+ * whose length is not a multiple of the block size used to drop the trailing
+ * bytes, and a zero-length request used to rewrite the containing block. */
+START_TEST (test_encrypt_write_keeps_trailing_partial_block)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    int len = (2 * ENCRYPT_BLOCK_SIZE) + 5;
+    uint8_t out[(2 * ENCRYPT_BLOCK_SIZE) + 5];
+    uint8_t in[(2 * ENCRYPT_BLOCK_SIZE) + 5];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < len; i++)
+        in[i] = (uint8_t)(0x30 + i);
+
+    ext_flash_unlock();
+    ret = ext_flash_encrypt_write(base, in, len);
+    ext_flash_lock();
+    ck_assert_int_ge(ret, 0);
+
+    memset(out, 0, sizeof(out));
+    ck_assert_int_eq(ext_flash_decrypt_read(base, out, len), len);
+    ck_assert_int_eq(memcmp(out, in, len), 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_encrypt_write_zero_length_leaves_flash_untouched)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t before[ENCRYPT_BLOCK_SIZE];
+    uint8_t after[ENCRYPT_BLOCK_SIZE];
+    uint8_t in[ENCRYPT_BLOCK_SIZE];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < ENCRYPT_BLOCK_SIZE; i++)
+        in[i] = (uint8_t)(0x70 + i);
+
+    ext_flash_unlock();
+    ck_assert_int_ge(ext_flash_encrypt_write(base, in, ENCRYPT_BLOCK_SIZE), 0);
+    ck_assert_int_eq(ext_flash_read(base, before, ENCRYPT_BLOCK_SIZE),
+        ENCRYPT_BLOCK_SIZE);
+
+    ret = ext_flash_encrypt_write(base, in, 0);
+    ext_flash_lock();
+    ck_assert_int_eq(ret, 0);
+
+    ck_assert_int_eq(ext_flash_read(base, after, ENCRYPT_BLOCK_SIZE),
+        ENCRYPT_BLOCK_SIZE);
+    ck_assert_int_eq(memcmp(before, after, ENCRYPT_BLOCK_SIZE), 0);
+
+    cleanup_flash();
+}
+END_TEST
+#endif /* EXT_ENCRYPTED */
+
 START_TEST (test_empty_panic)
 {
     reset_mock_stats();
@@ -1604,6 +1665,9 @@ Suite *wolfboot_suite(void)
     TCase *fallback_verify = tcase_create("Fallback verify");
 #endif
 #endif
+#ifdef EXT_ENCRYPTED
+    TCase *encrypt_write_bounds = tcase_create("Encrypted write bounds");
+#endif
 
 
 #ifdef UNIT_TEST_FALLBACK_ONLY
@@ -1612,6 +1676,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
     suite_add_tcase(s, fallback_verify);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_keeps_trailing_partial_block);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_zero_length_leaves_flash_untouched);
+    suite_add_tcase(s, encrypt_write_bounds);
 #endif
     return s;
 #else
