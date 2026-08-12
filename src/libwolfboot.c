@@ -2560,6 +2560,18 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 }
 
 #ifdef EXT_FLASH
+
+/* ENCRYPT_CACHE is staged one whole encryption block at a time, so the amount
+ * written per pass must be a block multiple: a partial block at the end of a
+ * pass would be written as stale cache content and would leave the address
+ * unaligned, desynchronising the keystream from ext_flash_decrypt_read().
+ * NVM_CACHE_SIZE defaults to WOLFBOOT_SECTOR_SIZE, which is always a multiple,
+ * but it can be overridden. */
+#define ENCRYPT_STAGE_SIZE \
+    ((NVM_CACHE_SIZE) - ((NVM_CACHE_SIZE) % ENCRYPT_BLOCK_SIZE))
+typedef char wolfBoot_encrypt_stage_size_check[
+    (ENCRYPT_STAGE_SIZE >= ENCRYPT_BLOCK_SIZE) ? 1 : -1];
+
 /**
  * @brief Write encrypted data to an external flash.
  *
@@ -2636,6 +2648,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         XMEMCPY(block + row_offset, data, step);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        if (ret < 0)
+            return ret;
         /* The request fits entirely within this block: nothing left to do */
         if (step == len)
             return ret;
@@ -2649,8 +2663,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
     while (step > 0) {
         int chunk = step;
-        if (chunk > NVM_CACHE_SIZE)
-            chunk = NVM_CACHE_SIZE;
+        if (chunk > (int)ENCRYPT_STAGE_SIZE)
+            chunk = (int)ENCRYPT_STAGE_SIZE;
         for (i = 0; i < chunk / ENCRYPT_BLOCK_SIZE; i++) {
             XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
             crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,

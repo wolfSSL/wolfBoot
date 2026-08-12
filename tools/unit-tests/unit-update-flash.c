@@ -631,6 +631,34 @@ START_TEST (test_encrypt_write_keeps_trailing_partial_block)
 }
 END_TEST
 
+/* wb_flash_write() on an external encrypted partition is this function, and
+ * F-7987 makes wolfBoot_copy_sector() abort the swap on a negative return. A
+ * failure programming the unaligned head block must therefore propagate,
+ * rather than be overwritten by the remainder loop's own status. */
+START_TEST (test_encrypt_write_reports_head_block_write_failure)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t in[3 * ENCRYPT_BLOCK_SIZE];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < (int)sizeof(in); i++)
+        in[i] = (uint8_t)(0x10 + i);
+
+    ext_flash_unlock();
+    /* Start mid-block so the head path runs, and extend past it so the
+     * remainder loop runs too. */
+    ext_flash_write_fail = 1;
+    ret = ext_flash_encrypt_write(base + 4, in, (2 * ENCRYPT_BLOCK_SIZE));
+    ext_flash_lock();
+
+    ck_assert_int_lt(ret, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_encrypt_write_zero_length_leaves_flash_untouched)
 {
     uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
@@ -1680,6 +1708,8 @@ Suite *wolfboot_suite(void)
         test_encrypt_write_keeps_trailing_partial_block);
     tcase_add_test(encrypt_write_bounds,
         test_encrypt_write_zero_length_leaves_flash_untouched);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_reports_head_block_write_failure);
     suite_add_tcase(s, encrypt_write_bounds);
 #endif
     return s;
