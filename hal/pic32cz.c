@@ -205,6 +205,11 @@ int hal_hsm_init_connect(void)
     FCW_MUTEX = FCW_MUTEX_RELEASE;
 
 #if defined(HSM_FW_ADDR) && defined(HSM_FW_SIZE)
+    /* DEV/NON-PRODUCTION: This code path loads and boots the HSM firmware image
+     * from a raw address/size without performing any hash or signature
+     * verification. Production builds must authenticate the HSM firmware via
+     * ROM root-of-trust */
+
     /* Load/boot the HSM core from the firmware image; blocks until it has booted
      * and acknowledged. Skipped when HSM_FW_BIN is unset: the firmware is then
      * assumed already resident and wolfBoot connects to the running server. */
