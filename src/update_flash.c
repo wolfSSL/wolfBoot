@@ -236,6 +236,18 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
             wolfBoot_erase_partition(PART_UPDATE);
             return;
         }
+#ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+        /* Payload installs at ARCH_FLASH_OFFSET and may spill into the BOOT
+         * partition, but must never reach BOOT's last sector (reserved for
+         * the state trailer) or the UPDATE partition staging it */
+        if (update.fw_size > (uint32_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS -
+                ARCH_FLASH_OFFSET) + WOLFBOOT_PARTITION_SIZE -
+                WOLFBOOT_SECTOR_SIZE) {
+            wolfBoot_printf("Self update image too large: %u\n",
+                (unsigned int)update.fw_size);
+            return;
+        }
+#endif
         if (wolfBoot_verify_integrity(&update) < 0) {
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
             wolfBoot_record_verify_failure(WOLFBOOT_FAILURE_PHASE_SELF_UPDATE,

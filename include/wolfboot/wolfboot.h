@@ -544,6 +544,21 @@ extern "C" {
   #endif
 #endif
 
+/* The UPDATE partition may be sized independently of BOOT, but only in
+ * monolithic self-update mode: the swap-based update machinery requires
+ * equal-size partitions. Defaults to the symmetric layout. */
+#ifndef WOLFBOOT_PARTITION_UPDATE_SIZE
+#define WOLFBOOT_PARTITION_UPDATE_SIZE WOLFBOOT_PARTITION_SIZE
+#endif
+#if !defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && \
+    ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) != (WOLFBOOT_PARTITION_SIZE + 0))
+  #error "WOLFBOOT_PARTITION_UPDATE_SIZE != WOLFBOOT_PARTITION_SIZE requires SELF_UPDATE_MONOLITHIC=1"
+#endif
+#if defined(EXT_ENCRYPTED) && \
+    ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) != (WOLFBOOT_PARTITION_SIZE + 0))
+  #error "Asymmetric WOLFBOOT_PARTITION_UPDATE_SIZE is not supported with ENCRYPT"
+#endif
+
 #if defined(DISABLE_BACKUP) && defined(DELTA_UPDATES)
   #error "DELTA_UPDATES requires swap partition (incompatible with DISABLE_BACKUP)"
 #endif
