@@ -236,8 +236,13 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (sector_size == 0U)
         sector_size = WOLFBOOT_SECTOR_SIZE;
 
-    if (address % sector_size)
-        address -= address % sector_size;
+    /* Rounding the start down extends the range, so the length must grow by
+     * the same amount or the last sector of the request is left unerased. */
+    if (address % sector_size) {
+        uint32_t offset = address % sector_size;
+        address -= offset;
+        len += (int)offset;
+    }
     while (len > 0) {
         erase_flash_sector((uint32_t *)address);
         address += sector_size;

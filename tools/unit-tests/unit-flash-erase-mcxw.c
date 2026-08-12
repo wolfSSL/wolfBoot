@@ -122,16 +122,33 @@ START_TEST(test_erase_unaligned_start_rounds_down)
 }
 END_TEST
 
+/* Rounding the start down extends the range backwards, so the length has to
+ * grow by the same amount. A request that starts near the end of one sector
+ * and reaches into the next must erase both, not just the first. */
+START_TEST(test_erase_unaligned_start_spanning_next_sector)
+{
+    reset_mocks(0x1000);
+    ck_assert_int_eq(hal_flash_erase(FLASH_BASE + 0xF00, 0x200), 0);
+
+    ck_assert_int_eq(erase_log_n, 2);
+    ck_assert_uint_eq(erase_addr[0], FLASH_BASE);
+    ck_assert_uint_eq(erase_addr[1], FLASH_BASE + 0x1000U);
+}
+END_TEST
+
 /* FLASH_GetProperty() failing to report a size must not divide by zero:
- * fall back to WOLFBOOT_SECTOR_SIZE, as hal/mcxn.c does. */
+ * fall back to WOLFBOOT_SECTOR_SIZE, as hal/mcxn.c does. The requested range
+ * starts 0x10 into the first sector and so ends 0x10 into the second, which
+ * takes two erase commands. */
 START_TEST(test_erase_zero_runtime_sector_falls_back)
 {
     reset_mocks(0);
     ck_assert_int_eq(hal_flash_erase(FLASH_BASE + 0x10, WOLFBOOT_SECTOR_SIZE),
             0);
 
-    ck_assert_int_eq(erase_log_n, 1);
+    ck_assert_int_eq(erase_log_n, 2);
     ck_assert_uint_eq(erase_addr[0], FLASH_BASE);
+    ck_assert_uint_eq(erase_addr[1], FLASH_BASE + WOLFBOOT_SECTOR_SIZE);
 }
 END_TEST
 
@@ -144,6 +161,7 @@ Suite *flash_erase_suite(void)
     tcase_add_test(tc, test_erase_runtime_sector_smaller_covers_range);
     tcase_add_test(tc, test_erase_runtime_sector_larger_stays_aligned);
     tcase_add_test(tc, test_erase_unaligned_start_rounds_down);
+    tcase_add_test(tc, test_erase_unaligned_start_spanning_next_sector);
     tcase_add_test(tc, test_erase_zero_runtime_sector_falls_back);
 
     suite_add_tcase(s, tc);
