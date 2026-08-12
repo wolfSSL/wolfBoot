@@ -784,6 +784,21 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/zynqmp_sdcard.config
 
+  # Only build that compiles the DISK_ENCRYPT paths of src/update_disk.c.
+  zynqmp_sdcard_encrypt_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: ENCRYPT=1 ENCRYPT_WITH_AES256=1
+
+  zynqmp_sdcard_encrypt_chacha_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: ENCRYPT=1 ENCRYPT_WITH_CHACHA=1
+
   zynqmp_fsbl_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

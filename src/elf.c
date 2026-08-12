@@ -107,9 +107,6 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
         is_elf32 ? 32 : 64, is_le ? "little" : "big");
 #endif
 
-    /* set entry point */
-    *pentry = GET_H64(entry);
-
     /* programs */
     ph_offset = GET_H32(ph_offset);
     entry_size = GET_H16(ph_entry_size);
@@ -221,6 +218,11 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
         }
 #endif /* !ELF_PARSER */
     }
+
+    /* Publish the entry point only once every check above has passed: callers
+     * fall back to the raw binary on failure and must not be left with a
+     * partially validated ELF's declared entry. */
+    *pentry = GET_H64(entry);
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Entry point %p\r\n", (void*)*pentry);

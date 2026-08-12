@@ -56,6 +56,7 @@
     defined(ENCRYPT_WITH_CHACHA)
 #define DISK_ENCRYPT
 #include "encrypt.h"
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
 /* Module-level storage for encryption nonce */
 static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
@@ -235,13 +236,13 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
 
 static void disk_crypto_clear(void)
 {
-    ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
-    ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
+    wc_ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
+    wc_ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
 }
 
 static void disk_decrypted_header_clear(uint8_t *hdr)
 {
-    ForceZero(hdr, IMAGE_HEADER_SIZE);
+    wc_ForceZero(hdr, IMAGE_HEADER_SIZE);
 }
 
 #endif /* DISK_ENCRYPT */
@@ -633,6 +634,10 @@ void RAMFUNCTION wolfBoot_start(void)
                     dts_ptr, dts_addr, dts_size);
                 if (wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size) != 0) {
                     wolfBoot_printf("FIT: failed to load DTS\r\n");
+#ifdef DISK_ENCRYPT
+                    disk_decrypted_header_clear(dec_hdr);
+                    disk_crypto_clear();
+#endif
                     wolfBoot_panic();
                 }
             }

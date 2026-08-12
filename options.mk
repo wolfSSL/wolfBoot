@@ -1885,3 +1885,14 @@ endif
 # includers (test-app), where a self-referencing += would not terminate.
 AUX_WOLFCRYPT_OBJS_NEW:=$(filter-out $(WOLFCRYPT_OBJS),$(sort $(AUX_WOLFCRYPT_OBJS)))
 WOLFCRYPT_OBJS+=$(AUX_WOLFCRYPT_OBJS_NEW)
+
+# Under WOLFSSL_ARMASM, chacha.c defers the block function to
+# wc_chacha_crypt_bytes(), which lives in the port. arch.mk adds the aes/sha
+# equivalents unconditionally; ChaCha is only selected here, so add it last.
+ifeq ($(ARCH),AARCH64)
+  ifneq ($(NO_ARM_ASM),1)
+    ifneq (,$(filter %/wolfcrypt/src/chacha.o,$(WOLFCRYPT_OBJS)))
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha-asm_c.o
+    endif
+  endif
+endif

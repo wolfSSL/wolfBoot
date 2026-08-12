@@ -312,22 +312,37 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
 #define BUFFER_DECLARED
         static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
 #endif
-        wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
+        if (wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE) < 0) {
+            ret = -1;
+            goto out;
+        }
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
           if (src_sector_offset + pos <
               (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
               /* bypass decryption, copy encrypted data into swap if its external */
               if (dst->part == PART_SWAP && SWAP_EXT) {
-                  ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset + pos,
-                                 (void *)buffer, FLASHBUFFER_SIZE);
+                  if (ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset +
+                                       pos,
+                                 (void *)buffer, FLASHBUFFER_SIZE)
+                          != FLASHBUFFER_SIZE) {
+                      ret = -1;
+                      goto out;
+                  }
               } else {
-                  ext_flash_check_read((uintptr_t)(src->hdr) + src_sector_offset +
-                                         pos,
-                                     (void *)buffer, FLASHBUFFER_SIZE);
+                  if (ext_flash_check_read((uintptr_t)(src->hdr) +
+                                         src_sector_offset + pos,
+                                     (void *)buffer, FLASHBUFFER_SIZE)
+                          != FLASHBUFFER_SIZE) {
+                      ret = -1;
+                      goto out;
+                  }
               }
 
-              wb_flash_write(dst, dst_sector_offset + pos, buffer,
-                  FLASHBUFFER_SIZE);
+              if (wb_flash_write(dst, dst_sector_offset + pos, buffer,
+                  FLASHBUFFER_SIZE) < 0) {
+                  ret = -1;
+                  goto out;
+              }
             }
             pos += FLASHBUFFER_SIZE;
         }
@@ -335,19 +350,24 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         goto out;
     }
 #endif
-    wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE);
+    if (wb_flash_erase(dst, dst_sector_offset, WOLFBOOT_SECTOR_SIZE) < 0) {
+        ret = -1;
+        goto out;
+    }
     while (pos < WOLFBOOT_SECTOR_SIZE) {
         if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE +
             FLASHBUFFER_SIZE))  {
             uint8_t *orig = (uint8_t*)(src->hdr + src_sector_offset + pos);
-            wb_flash_write(dst, dst_sector_offset + pos, orig, FLASHBUFFER_SIZE);
+            if (wb_flash_write(dst, dst_sector_offset + pos, orig,
+                    FLASHBUFFER_SIZE) < 0) {
+                ret = -1;
+                goto out;
+            }
         }
         pos += FLASHBUFFER_SIZE;
     }
     ret = pos;
-#if defined(EXT_FLASH) || defined(EXT_ENCRYPTED)
 out:
-#endif
 #ifdef EXT_ENCRYPTED
     wolfBoot_zeroize(key, sizeof(key));
     wolfBoot_zeroize(nonce, sizeof(nonce));
@@ -605,6 +625,7 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
 {
     int sector = 0;
     int ret;
+    int copy_ret;
     uint8_t flag;
     uint8_t delta_blk[DELTA_BLOCK_SIZE];
     uint32_t *img_offset;
@@ -710,9 +731,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
                 cur_v, delta_base_v);
             ret = -1;
         } else if (!resume && delta_base_hash &&
-                wolfBoot_hardened_CT_compare(base_hash, delta_base_hash,
-                    base_hash_sz) != 0) {
-            /* Wrong base image digest, cannot apply delta patch */
+                ((base_hash == NULL) ||
+                 (base_hash_sz != WOLFBOOT_SHA_DIGEST_SIZE) ||
+                 (wolfBoot_hardened_CT_compare(base_hash, delta_base_hash,
+                    WOLFBOOT_SHA_DIGEST_SIZE) != 0))) {
+            /* Wrong or missing base image digest, cannot apply delta patch */
             wolfBoot_printf("Delta Base hash mismatch\n");
             ret = -1;
         } else {
@@ -775,7 +798,11 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
             }
         }
         if (flag == SECT_FLAG_SWAPPING) {
-           wolfBoot_copy_sector(swap, boot, sector);
+           copy_ret = wolfBoot_copy_sector(swap, boot, sector);
+           if (copy_ret < 0) {
+               ret = -1;
+               goto out;
+           }
            flag = SECT_FLAG_UPDATED;
            if (((sector + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
                wolfBoot_set_update_sector_flag(sector, flag);
@@ -917,6 +944,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     int bootStateRet = -1;
     uint8_t bootState = 0;
 #endif
+    int copy_ret = 0;
 #if defined(DISABLE_BACKUP) && defined(EXT_ENCRYPTED)
     uint8_t key[ENCRYPT_KEY_SIZE];
     uint8_t nonce[ENCRYPT_NONCE_SIZE];
@@ -1123,7 +1151,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         switch (flag) {
             case SECT_FLAG_NEW:
                flag = SECT_FLAG_SWAPPING;
-               wolfBoot_copy_sector(&update, &swap, sector);
+               copy_ret = wolfBoot_copy_sector(&update, &swap, sector);
+               if (copy_ret < 0)
+                   break;
                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                    wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
@@ -1143,11 +1173,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                      */
                     int prev_iv = wolfBoot_enable_fallback_iv(1);
 #endif
-                    wolfBoot_copy_sector(&boot, &update, sector);
+                    copy_ret = wolfBoot_copy_sector(&boot, &update, sector);
 #ifdef EXT_ENCRYPTED
                     wolfBoot_enable_fallback_iv(prev_iv);
 #endif
                 }
+                if (copy_ret < 0)
+                    break;
                 if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                     wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
@@ -1156,7 +1188,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 if (size > sector_size)
                     size = sector_size;
                 flag = SECT_FLAG_UPDATED;
-                wolfBoot_copy_sector(&swap, &boot, sector);
+                copy_ret = wolfBoot_copy_sector(&swap, &boot, sector);
+                if (copy_ret < 0)
+                    break;
                 if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
                     wolfBoot_set_update_sector_flag(sector, flag);
                 break;
@@ -1164,6 +1198,20 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 /* FALL THROUGH */
             default:
                 break;
+        }
+        if (copy_ret < 0) {
+            /* A flash operation failed: do not advance any further, the
+             * sector flags still describe the last completed step so the
+             * swap can be resumed from there. */
+            wolfBoot_printf("Sector %d copy failed, aborting swap\n", sector);
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+#ifdef EXT_ENCRYPTED
+            wolfBoot_enable_fallback_iv(0);
+#endif
+            return -1;
         }
         sector++;
 
@@ -1289,7 +1337,21 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Directly copy the content of the UPDATE partition into the BOOT
      * partition. */
     while ((sector * sector_size) < total_size) {
-        wolfBoot_copy_sector(&update, &boot, sector);
+        copy_ret = wolfBoot_copy_sector(&update, &boot, sector);
+        if (copy_ret < 0) {
+            /* Never confirm a boot image that was not fully written. */
+            wolfBoot_printf("Sector %d copy failed, aborting swap\n", sector);
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+#ifdef EXT_ENCRYPTED
+            wolfBoot_zeroize(key, sizeof(key));
+            wolfBoot_zeroize(nonce, sizeof(nonce));
+            wolfBoot_enable_fallback_iv(0);
+#endif
+            return -1;
+        }
         sector++;
     }
     /* erase remainder of partition */

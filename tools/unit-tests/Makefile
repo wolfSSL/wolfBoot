@@ -62,7 +62,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-oob unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sign-encrypted-output \
@@ -72,6 +72,8 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
 TESTS+=unit-tpm-nsc-cert
+TESTS+=unit-tpm-advio-zeroize
+TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
@@ -84,6 +86,7 @@ TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
+TESTS+=unit-flash-erase-mcxw
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
@@ -97,6 +100,7 @@ TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-mcxa
+TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
@@ -139,6 +143,7 @@ run: $(TESTS)
 	done
 	python3 unit-sign-delta-tlv.py || exit 1
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
+	python3 unit-sign-delta-basehash-cleanup.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
@@ -234,6 +239,12 @@ unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_M
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# FIT (flattened uImage tree) exits of the encrypted disk loader. The panic hook
+# is what lets the test observe the key material at the instant wolfBoot_panic()
+# is entered, since on target that call never returns.
+unit-update-disk-fit:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FDT \
+	-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x40 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
 # integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
 # signature verification is exercised by that function).
@@ -321,6 +332,20 @@ unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_SEAL -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-advio-zeroize: ../../include/target.h unit-tpm-advio-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_ADV_IO \
+		-DWOLFTPM_CHECK_WAIT_STATE -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-mfgid-eh-zeroize: ../../include/target.h unit-tpm-mfgid-eh-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_MFG_IDENTITY \
+		-DWOLFBOOT_TPM_MFG_AUTH_DERIVE -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-policy-create: ../../include/target.h unit-policy-create.c \
@@ -448,6 +473,15 @@ unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
 # -I../../ so that #include "hal/stm32u3.h" resolves from the repo root.
 unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3.h
 	gcc -o $@ unit-flash-erase-u3.c -I../../ $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-mcxw includes hal/mcxw.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so mcxw.c is not a separate input and the
+# (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
+# takes a uint32_t flash address as a pointer, which is only a narrowing cast on
+# the 64-bit host.
+unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
+	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
+		$(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
@@ -647,6 +681,9 @@ unit-update-disk: ../../include/target.h unit-update-disk.c
 unit-update-disk-oob: ../../include/target.h unit-update-disk-oob.c
 	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)
 
+unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
+	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) $(LDFLAGS)
+
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
@@ -690,6 +727,9 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
+	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
 	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)
