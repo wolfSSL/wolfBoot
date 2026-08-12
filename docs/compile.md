@@ -100,7 +100,19 @@ of its addressable space.
 
  - `WOLFBOOT_PARTITION_SIZE`
 
-The size of the BOOT and UPDATE partition. The size is the same for both partitions.
+The size of the BOOT and UPDATE partitions. The size is the same for both partitions unless using the monolithic
+self-update mode, in which case the UPDATE partition can optionally be sized independently.
+
+ - `WOLFBOOT_PARTITION_UPDATE_SIZE`
+
+Optional. Sizes the UPDATE partition independently of BOOT; defaults to
+`WOLFBOOT_PARTITION_SIZE`. A different value is only allowed together with
+`SELF_UPDATE_MONOLITHIC=1`, so the UPDATE partition can stage a monolithic
+payload (bootloader region + application) without inflating the BOOT
+partition. The staged payload also needs `IMAGE_HEADER_SIZE` plus one
+trailer sector of room on top — see the sizing guide in
+[firmware_update.md](firmware_update.md#independent-partition-sizing).
+Not supported with `ENCRYPT` or `PULL_LINKER_DEFINES`.
 
 ## Bootloader features
 

@@ -274,11 +274,111 @@ partition.
 
 - **Payload must fit in the UPDATE partition.** The signed monolithic
   image (header + bootloader + signed application) plus the 5-byte
-  `pBOOT` trailer must not exceed `WOLFBOOT_PARTITION_SIZE`.
+  `pBOOT` trailer must not exceed the UPDATE partition size
+  (`WOLFBOOT_PARTITION_SIZE`, or `WOLFBOOT_PARTITION_UPDATE_SIZE` when
+  set — see below). When the update is triggered with
+  `wolfBoot_update_trigger()`, the trigger erases the whole last sector
+  of the UPDATE partition, so the staged payload must also leave that
+  sector free.
+
+- **Payload must not reach the BOOT trailer sector when installed.** The
+  installed span (`fw_size` bytes written at `ARCH_FLASH_OFFSET`) must
+  not exceed the bootloader region plus the BOOT partition minus the
+  BOOT partition's last sector, which is reserved for the partition
+  state trailer (and, with `FLAGS_HOME`, the UPDATE partition flags).
+  wolfBoot rejects larger payloads before erasing anything.
+
+##### Independent partition sizing
+
+In monolithic mode the BOOT partition only ever holds the application,
+but the UPDATE partition has to stage the whole payload (bootloader
+region + application). By default both partitions share
+`WOLFBOOT_PARTITION_SIZE`, which forces BOOT to be as large as the
+payload. Set `WOLFBOOT_PARTITION_UPDATE_SIZE` to size the UPDATE
+partition independently and keep BOOT small:
+
+```
+WOLFBOOT_PARTITION_SIZE=0x60000          # BOOT: just the application slot
+WOLFBOOT_PARTITION_UPDATE_SIZE=0x80000   # UPDATE: bootloader region + BOOT
+```
+
+###### Sizing the UPDATE partition
+
+Just like with a regular application update, a staged monolithic update needs
+more room than the installed payload, because two extra regions share the
+UPDATE partition with it:
+
+```
+UPDATE partition layout while an update is staged
+(total size = WOLFBOOT_PARTITION_UPDATE_SIZE):
+
++---------------------+--------------------------------+----------------+
+| signed image header | payload: bootloader region     | trailer sector |
+| (IMAGE_HEADER_SIZE) | + application image            | (last sector)  |
++---------------------+--------------------------------+----------------+
+```
+
+- **Signed image header** (`IMAGE_HEADER_SIZE`): the signing tool
+  prepends the signed manifest to the payload. It is not part of the
+  installed span (with `WOLFBOOT_SELF_HEADER` it is persisted
+  separately), but it occupies staging space while the update is
+  pending.
+- **Trailer sector** (one `WOLFBOOT_SECTOR_SIZE`): the last sector of
+  the partition holds the partition state trailer, and
+  `wolfBoot_update_trigger()` erases the whole sector when arming the
+  update. The staged image must not extend into it.
+
+The largest payload that can be staged is therefore:
+
+```
+max_staged_payload = WOLFBOOT_PARTITION_UPDATE_SIZE
+                     - IMAGE_HEADER_SIZE - WOLFBOOT_SECTOR_SIZE
+```
+
+while the largest payload that can be installed (the install span:
+bootloader region plus BOOT partition, minus BOOT's own trailer
+sector) is:
+
+```
+max_install = (WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET)
+              + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE
+```
+
+The last sector of the BOOT partition is reserved for the partition
+state trailer (with `FLAGS_HOME` it also holds the UPDATE partition
+flags, and `wolfBoot_update_trigger()` erases the whole sector), so
+wolfBoot's oversize check rejects any payload that would reach it.
+
+To be able to deliver any payload the install span allows, including
+an application as large as the BOOT partition can hold, size the
+UPDATE partition so that `max_staged_payload >= max_install`:
+
+```
+WOLFBOOT_PARTITION_UPDATE_SIZE >=
+    (WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET)
+    + WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE
+```
+
+(the UPDATE trailer sector and the BOOT trailer sector cancel out:
+staging reserves one extra sector, installing needs one less.)
+
+Notes:
+
+- Only valid together with `SELF_UPDATE_MONOLITHIC=1`; the swap-based
+  update modes require equal-size partitions and fail to compile
+  otherwise.
+- Not supported with `ENCRYPT` or `PULL_LINKER_DEFINES`.
+- The partition state trailer sits at the end of the (now larger) UPDATE
+  partition (with `FLAGS_HOME` it stays at the end of the BOOT
+  partition), so the bootloader and the application must be built from
+  the same configuration to agree on its location.
 
 ##### Simulator test
 
-A simulator test is provided in `tools/test.mk` to exercise this use case:
+A simulator test is provided in `tools/test.mk` to exercise this use case.
+The example config uses the asymmetric layout shown above: the UPDATE
+partition is sized for the monolithic payload while BOOT stays
+application-sized:
 
 ```
 cp config/examples/sim-self-update-monolithic.config .config

@@ -138,8 +138,14 @@ int wolfBoot_initialize_encryption(void)
 
 
 
+/* Despite the name, ENCRYPT_TMP_SECRET_OFFSET* set the end-of-partition
+ * trailer position for all builds (PART_*_ENDFLAGS derive from them); only
+ * encrypted builds also keep the tmp key/nonce there. */
 #if defined(EXT_FLASH) && defined(EXT_ENCRYPTED)
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - \
+                         (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
+    /* Same trailer layout at the end of the (possibly larger) UPDATE slot */
+    #define ENCRYPT_TMP_SECRET_OFFSET_UPDATE (WOLFBOOT_PARTITION_UPDATE_SIZE - \
                          (TRAILER_SKIP + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
     #define TRAILER_OVERHEAD (4 + 1 + (WOLFBOOT_PARTITION_SIZE  / \
                              (2 * WOLFBOOT_SECTOR_SIZE)))
@@ -150,6 +156,8 @@ int wolfBoot_initialize_encryption(void)
     /* MAGIC (4B) + PART_FLAG (1B) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE */
 #else
     #define ENCRYPT_TMP_SECRET_OFFSET (WOLFBOOT_PARTITION_SIZE - (TRAILER_SKIP))
+    #define ENCRYPT_TMP_SECRET_OFFSET_UPDATE \
+        (WOLFBOOT_PARTITION_UPDATE_SIZE - (TRAILER_SKIP))
     #define SECTOR_FLAGS_SIZE (WOLFBOOT_SECTOR_SIZE - (4 + 1))
     /* MAGIC (4B) + PART_FLAG (1B) */
 #endif /* EXT_FLASH && EXT_ENCRYPTED */
@@ -232,7 +240,7 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_BOOT)
 #else
 /* FLAGS are at the end of each partition */
-#define PART_UPDATE_ENDFLAGS (WOLFBOOT_PARTITION_UPDATE_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET)
+#define PART_UPDATE_ENDFLAGS (WOLFBOOT_PARTITION_UPDATE_ADDRESS + ENCRYPT_TMP_SECRET_OFFSET_UPDATE)
 #define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_UPDATE)
 #endif
 
@@ -828,7 +836,7 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
             break;
         case PART_UPDATE:
             address = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
-            size = WOLFBOOT_PARTITION_SIZE;
+            size = WOLFBOOT_PARTITION_UPDATE_SIZE;
             break;
         case PART_SWAP:
             address = (uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
@@ -2583,7 +2591,7 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
         (a >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
     #endif
 #endif
-        (a < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE))
+        (a < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_UPDATE_SIZE))
         return PART_UPDATE;
     if ( 1 &&
 #if !defined(WOLFBOOT_PART_USE_ARCH_OFFSET) && !defined(PULL_LINKER_DEFINES)
@@ -2980,9 +2988,9 @@ int wolfBoot_nsc_erase_update(uint32_t address, uint32_t len)
 {
     int ret;
 
-    if (address > WOLFBOOT_PARTITION_SIZE)
+    if (address > WOLFBOOT_PARTITION_UPDATE_SIZE)
         return -1;
-    if (len > WOLFBOOT_PARTITION_SIZE - address)
+    if (len > WOLFBOOT_PARTITION_UPDATE_SIZE - address)
         return -1;
 
 #ifdef PART_UPDATE_EXT
@@ -3002,9 +3010,9 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
 {
     int ret;
 
-    if (address > WOLFBOOT_PARTITION_SIZE)
+    if (address > WOLFBOOT_PARTITION_UPDATE_SIZE)
         return -1;
-    if (len > WOLFBOOT_PARTITION_SIZE - address)
+    if (len > WOLFBOOT_PARTITION_UPDATE_SIZE - address)
         return -1;
     if (len > 0 && WOLFBOOT_NSC_NS_RW(buf, len) == NULL)
         return -1;

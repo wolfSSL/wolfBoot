@@ -84,7 +84,8 @@ EOF
 ```
 
 Change `WOLFBOOT_PARTITION_SIZE` accordingly. `wolfBoot_open_image_address()` will discard images larger than
-`WOLFBOOT_PARTITION_SIZE` - `IMAGE_HEADER_SIZE`.
+the target slot size (`WOLFBOOT_PARTITION_SIZE`, or `WOLFBOOT_PARTITION_UPDATE_SIZE` for the update slot)
+minus `IMAGE_HEADER_SIZE`.
 
 
 Step 3: compile keytools and create keys.

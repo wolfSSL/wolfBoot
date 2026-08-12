@@ -279,9 +279,9 @@ test-sim-self-update-monolithic: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@# Sign monolithic payload as wolfBoot self-update v2
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update monolithic_payload.bin $(PRIVATE_KEY) 2
 	@# Create update partition with signed monolithic image and "pBOOT" trailer
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(or $(WOLFBOOT_PARTITION_UPDATE_SIZE),$(WOLFBOOT_PARTITION_SIZE)))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
 	$(Q)dd if=monolithic_payload_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
-	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(or $(WOLFBOOT_PARTITION_UPDATE_SIZE),$(WOLFBOOT_PARTITION_SIZE)) - 5)) conv=notrunc
 	@# Create erased boot partition
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
 	@# Assemble flash: wolfboot.bin at 0, empty boot partition, update partition
@@ -315,9 +315,9 @@ test-sim-self-update-monolithic-self-header: wolfboot.bin test-app/image_v1_sign
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update monolithic_payload.bin $(PRIVATE_KEY) 2
 	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --wolfboot-update --header-only monolithic_payload.bin $(PRIVATE_KEY) 2
 	@# Create update partition with signed monolithic image and "pBOOT" trailer
-	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
+	$(Q)dd if=/dev/zero bs=$$(($(or $(WOLFBOOT_PARTITION_UPDATE_SIZE),$(WOLFBOOT_PARTITION_SIZE)))) count=1 2>/dev/null | tr '\000' '\377' > update_part.dd
 	$(Q)dd if=monolithic_payload_v2_signed.bin of=update_part.dd bs=1 conv=notrunc
-	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_SIZE) - 5)) conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(or $(WOLFBOOT_PARTITION_UPDATE_SIZE),$(WOLFBOOT_PARTITION_SIZE)) - 5)) conv=notrunc
 	@# Create erased boot partition and self-header sector
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > boot_part.dd
 	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null | tr '\000' '\377' > self_hdr.dd

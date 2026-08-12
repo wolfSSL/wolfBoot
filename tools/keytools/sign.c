@@ -1947,6 +1947,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 pos += read_sz;
             }
             fclose(f);
+            f = NULL;
             if (ret == 0) {
                 wc_Sha256Final(&sha, digest);
                 digest_sz = HDR_SHA256_LEN;
@@ -2023,6 +2024,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 pos += read_sz;
             }
             fclose(f);
+            f = NULL;
             if (ret == 0) {
                 wc_Sha384Final(&sha, digest);
                 digest_sz = HDR_SHA384_LEN;
@@ -2097,6 +2099,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 pos += read_sz;
             }
             fclose(f);
+            f = NULL;
             if (ret == 0) {
                 ret = wc_Sha3_384_Final(&sha, digest);
                 digest_sz = HDR_SHA3_384_LEN;
@@ -2311,8 +2314,18 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
 
     /* Check if signed image fits in partition */
     {
+        const char *psize_name = "WOLFBOOT_PARTITION_SIZE";
         const char *env_psize = getenv("WOLFBOOT_PARTITION_SIZE");
         const char *env_ssize = getenv("WOLFBOOT_SECTOR_SIZE");
+        if (CMD.self_update) {
+            /* self-update images are staged in the UPDATE partition, which
+             * may be larger than BOOT (monolithic self-update) */
+            const char *env_usize = getenv("WOLFBOOT_PARTITION_UPDATE_SIZE");
+            if (env_usize && *env_usize) {
+                env_psize = env_usize;
+                psize_name = "WOLFBOOT_PARTITION_UPDATE_SIZE";
+            }
+        }
         if (env_psize && *env_psize) {
             char *endptr;
             unsigned long tmp;
@@ -2325,8 +2338,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             tmp = strtoul(env_psize, &endptr, 0);
             if (endptr == env_psize || *endptr != '\0' ||
                     errno == ERANGE || tmp == 0 || tmp > UINT32_MAX) {
-                printf("Error: Invalid WOLFBOOT_PARTITION_SIZE '%s'\n",
-                    env_psize);
+                printf("Error: Invalid %s '%s'\n", psize_name, env_psize);
+                ret = -1;
                 goto failure;
             }
             partition_sz = (uint32_t)tmp;
@@ -2338,6 +2351,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                         errno == ERANGE || tmp == 0 || tmp > UINT32_MAX) {
                     printf("Error: Invalid WOLFBOOT_SECTOR_SIZE '%s'\n",
                         env_ssize);
+                    ret = -1;
                     goto failure;
                 }
                 sector_sz = (uint32_t)tmp;
@@ -2359,17 +2373,18 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (total_img_sz > max_img_sz) {
                     if (sector_sz < partition_sz) {
                         printf("Error: Image size %u (header %u + firmware %u) "
-                            "exceeds max %u (partition %u - %d x sector %u)\n",
+                            "exceeds max %u (%s %u - %d x sector %u)\n",
                             total_img_sz, CMD.header_sz, image_sz,
-                            max_img_sz, partition_sz,
+                            max_img_sz, psize_name, partition_sz,
                             nvm_writeonce ? 2 : 1,
                             sector_sz);
                     } else {
                         printf("Error: Image size %u (header %u + firmware %u) "
-                            "exceeds max %u (partition %u)\n",
+                            "exceeds max %u (%s %u)\n",
                             total_img_sz, CMD.header_sz, image_sz,
-                            max_img_sz, partition_sz);
+                            max_img_sz, psize_name, partition_sz);
                     }
+                    ret = -1;
                     goto failure;
                 }
             }

@@ -1482,6 +1482,11 @@ uint32_t wolfBoot_image_size(uint8_t *image)
 int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
     uint32_t *magic = (uint32_t *)(image);
+#ifdef WOLFBOOT_FIXED_PARTITIONS
+    /* The UPDATE slot may be larger than BOOT (monolithic self-update) */
+    uint32_t part_size = (img->part == PART_UPDATE) ?
+        WOLFBOOT_PARTITION_UPDATE_SIZE : WOLFBOOT_PARTITION_SIZE;
+#endif
     if (*magic != WOLFBOOT_MAGIC) {
         wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
             img->part, (unsigned int)*magic, img->hdr);
@@ -1490,17 +1495,17 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     img->fw_size = wolfBoot_image_size(image);
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
-    if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
+    if (img->fw_size > (part_size - IMAGE_HEADER_SIZE)) {
         wolfBoot_printf("Image size %u > max %u\n",
             (unsigned int)img->fw_size,
-            (unsigned int)(WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE));
-        img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
+            (unsigned int)(part_size - IMAGE_HEADER_SIZE));
+        img->fw_size = part_size - IMAGE_HEADER_SIZE;
         return -1;
     }
     if (!img->hdr_ok) {
         img->hdr = image;
     }
-    img->trailer = img->hdr + WOLFBOOT_PARTITION_SIZE;
+    img->trailer = img->hdr + part_size;
 #else
 #ifdef WOLFBOOT_RAMBOOT_MAX_SIZE
     if (img->fw_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
@@ -1792,10 +1797,25 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
     img->hdr     = hdr;
     img->fw_size = wolfBoot_image_size(hdr);
 #ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
+    /* A monolithic self image spans the bootloader region and the BOOT
+     * partition minus its trailer sector (header persisted separately,
+     * not part of the span) */
+    {
+        uint32_t max_span = (uint32_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS -
+            ARCH_FLASH_OFFSET) + WOLFBOOT_PARTITION_SIZE -
+            WOLFBOOT_SECTOR_SIZE;
+        if (img->fw_size > max_span) {
+            img->fw_size = max_span;
+            return -1;
+        }
+    }
+#else
     if (img->fw_size > (WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE)) {
         img->fw_size = WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE;
         return -1;
     }
+#endif
 #endif
     wolfBoot_image_set_fw_base(img, image);
     img->part    = PART_SELF;

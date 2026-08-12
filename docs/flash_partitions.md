@@ -13,6 +13,8 @@ For this reason, before proceeding with partitioning on a target system, the
 following aspects must be considered:
 
   - BOOT partition and UPDATE partition must have the same size, and be able to contain the running system
+    - exception: in monolithic self-update mode the UPDATE partition may be larger than BOOT, see
+      `WOLFBOOT_PARTITION_UPDATE_SIZE` in [firmware_update.md](firmware_update.md#independent-partition-sizing)
   - SWAP partition must be as big as the largest sector in both BOOT and UPDATE partition.
 
 The flash memory of the target is partitioned into the following areas:
@@ -20,7 +22,8 @@ The flash memory of the target is partitioned into the following areas:
   - Bootloader partition, at the beginning of the flash, generally very small (16-32KB)
   - Primary slot (BOOT partition) starting at address `WOLFBOOT_PARTITION_BOOT_ADDRESS`
   - Secondary slot (UPDATE partition) starting at address `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
-    - both partitions share the same size, defined as `WOLFBOOT_PARTITION_SIZE`
+    - both partitions share the same size, defined as `WOLFBOOT_PARTITION_SIZE` (unless
+      `WOLFBOOT_PARTITION_UPDATE_SIZE` is set, only allowed in monolithic self-update mode)
   - Swapping space (SWAP partition) starting at address `WOLFBOOT_PARTITION_SWAP_ADDRESS`
     - the swap space size is defined as `WOLFBOOT_SECTOR_SIZE` and must be as big as the
       largest sector used in either BOOT/UPDATE partitions.
