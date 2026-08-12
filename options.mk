@@ -1,4 +1,5 @@
-WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
+WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
+  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 
 # Shared wolfHSM client/server object lists. Defined here at the top so any
 # downstream block (legacy WOLFHSM_CLIENT/SERVER, or WOLFCRYPT_TZ_WOLFHSM TZ
@@ -1266,7 +1267,6 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   WOLFCRYPT_OBJS+=src/wolfhsm_callable.o
   WOLFCRYPT_OBJS+=src/wolfhsm_flash_hal.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   ifneq ($(SIGN),ED25519)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
@@ -1428,7 +1428,6 @@ ifeq ($(DISK_LOCK),1)
   ifneq ($(DISK_LOCK_PASSWORD),)
     CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
   endif
-  OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 endif
 
 ifeq ($(FSP), 1)
@@ -1527,8 +1526,7 @@ WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS ?= 8
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
@@ -1589,7 +1587,6 @@ ifeq ($(WOLFHSM_SERVER),1)
 
   WOLFCRYPT_OBJS += \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
