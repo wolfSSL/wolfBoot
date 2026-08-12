@@ -273,10 +273,12 @@ void RAMFUNCTION wolfBoot_start(void)
     BENCHMARK_DECLARE();
 #ifdef WOLFBOOT_UBOOT_LEGACY
     uint8_t *image_ptr;
-    /* uImage ih_load/ih_ep, kept only when the entry point differs from the
-     * load address (see the do_boot() entry override below). */
-    uint32_t *uboot_load = NULL;
+    /* uImage ih_ep, kept only when the entry point differs from the load
+     * address (see the do_boot() entry override below). */
     uint32_t *uboot_entry = NULL;
+    /* Set when a later stage (ELF/FIT) re-derives the load address and so
+     * supplies its own entry point, which then wins over ih_ep. */
+    int stage_entry_override = 0;
 #endif
     uint32_t *load_address = NULL;
     uint32_t *source_address = NULL;
@@ -515,13 +517,16 @@ backup_on_failure:
              * different addresses. Remember the entry point; ih_load remains
              * the relocation destination. */
             if ((ih_ep != 0) && (ih_ep != ih_load)) {
-                uboot_load = load_address;
                 uboot_entry = (uint32_t*)(uintptr_t)ih_ep;
             }
         } else {
             /* Linux PPC path: leave load_address alone, just advance it
              * past the header to match upstream behaviour. load_address is
-             * a uint32_t*, so advance by BYTES, not words. */
+             * a uint32_t*, so advance by BYTES, not words.
+             * ih_ep is deliberately ignored here: with ih_load == 0 there is
+             * no relocation destination to enter past, and upstream enters at
+             * the payload start. A uImage built with "mkimage -a 0 -e <ep>"
+             * is therefore entered at the header offset, not at ih_ep. */
             load_address = (uint32_t*)((uint8_t*)load_address +
                 UBOOT_IMG_HDR_SZ);
         }
@@ -560,6 +565,11 @@ backup_on_failure:
             (uintptr_t*)&load_address, NULL) != 0){
         wolfBoot_printf("Invalid elf, falling back to raw binary\n");
     }
+#ifdef WOLFBOOT_UBOOT_LEGACY
+    else {
+        stage_entry_override = 1;
+    }
+#endif
 #endif
 
 #ifdef MMU
@@ -595,6 +605,9 @@ backup_on_failure:
                 wolfBoot_panic();
             }
             load_address = new_load;
+#ifdef WOLFBOOT_UBOOT_LEGACY
+            stage_entry_override = 1;
+#endif
         }
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
         /* Load BL31 (ARM Trusted Firmware) to its DDR exec address. Its entry
@@ -663,8 +676,11 @@ backup_on_failure:
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
     /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) re-derived
-     * the load address, since that stage provides its own entry point. */
-    if ((uboot_entry != NULL) && (load_address == uboot_load)) {
+     * the load address, since that stage provides its own entry point. The
+     * flag is tracked explicitly rather than by comparing load_address:
+     * elf_load_image_mmu() publishes its entry point before it finishes
+     * validating, so a rejected ELF also leaves load_address rewritten. */
+    if ((uboot_entry != NULL) && !stage_entry_override) {
         load_address = uboot_entry;
     }
 #endif
