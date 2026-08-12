@@ -115,11 +115,8 @@ That coat carries machine-resolvable identifiers for both scanner families:
   provenance rather than driving matches.
 * `pkg:github/wolfssl/wolfssl@v<version>-stable` — resolvable PURL for the
   wolfssl release (lowercase per purl-spec; `-stable` is the real tag).
-* wolfBoot itself carries **no CPE**: NVD does not list the product, and an
-  unlisted CPE is indistinguishable to a scanner from a listed one with no
-  advisories. The submitted identifier is recorded as
-  `wolfssl:sbom:cpe-requested` with `wolfssl:sbom:cpe-status=pending` until the
-  dictionary entry is published (see wolfGlass `docs/cpe-requests/wolfboot.md`).
+* wolfBoot itself: `cpe:2.3:a:wolfssl:wolfboot:<version>:*:*:*:*:*:*:*` —
+  registered in the NVD Official CPE Dictionary (published 2026-08-10).
 
 ### Only wolfCrypt is compiled in
 
