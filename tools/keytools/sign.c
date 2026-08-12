@@ -328,6 +328,11 @@ static struct signing_key *key_obj(int secondary)
 }
 
 /* Run the algorithm specific (zeroizing) free on a decoded signing key. */
+/* Safe to call on an object that was never initialized, or twice: "key" and
+ * "key2" are zero-initialized file-scope statics and every wolfCrypt free
+ * below is NULL-checked and idempotent. load_key() has paths that never
+ * initialize the object (--manual-sign, --sha-only, raw-public-key inputs) and
+ * paths that already free it, so both cases do occur. */
 static void free_key(int sign, int secondary)
 {
     struct signing_key *k = key_obj(secondary);
@@ -3813,7 +3818,8 @@ int main(int argc, char** argv)
     } else {
         kbuf = load_key(&key_buffer, &key_buffer_sz, &pubkey, &pubkey_sz, 0);
         if (!kbuf) {
-            exit(1);
+            ret = 1;
+            goto cleanup;
         }
     } /* CMD.sign != NO_SIGN */
 
@@ -3824,7 +3830,11 @@ int main(int argc, char** argv)
         DEBUG_PRINT("Loading secondary key\n");
         kbuf2 = load_key(&key_buffer2, &key_buffer_sz2, &pubkey2, &pubkey_sz2, 1);
         if (!kbuf2) {
-            exit(1);
+            /* Fall through to the tail cleanup: the primary raw key buffer is
+             * still live and the primary key object is initialized, and
+             * exiting here would scrub neither. */
+            ret = 1;
+            goto cleanup;
         }
         printf("Creating hybrid signature\n");
         ret = make_hybrid_header(pubkey, pubkey_sz, CMD.image_file,
@@ -3850,6 +3860,7 @@ int main(int argc, char** argv)
             ret = base_diff(CMD.delta_base_file, pubkey, pubkey_sz, 16);
     }
 
+cleanup:
     /* Add pubkey cleanup */
     if (pubkey)
         free(pubkey);
