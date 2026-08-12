@@ -317,14 +317,18 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     while (i < len) {
         if ((len - i > 3) && ((((address + i) & 0x03) == 0)  &&
                       ((((uint32_t)data) + i) & 0x03) == 0)) {
-            src = (uint32_t *)data;
-            dst = (uint32_t *)address;
+            /* Index by "i" directly: the condition above only guarantees
+             * that "address + i" and "data + i" are word aligned, so
+             * dst[i >> 2] off the unaligned base would address the wrong
+             * word (and fault on a strict-alignment core). */
+            src = (uint32_t *)(data + i);
+            dst = (uint32_t *)(address + i);
 #if TZ_SECURE() || defined(TARGET_nrf5340_net)
             NVMC_CONFIG = NVMC_CONFIG_WEN;
 #endif
             NVMC_CONFIGNS = NVMC_CONFIG_WEN;
             while (NVMC_READY == 0);
-            dst[i >> 2] = src[i >> 2];
+            *dst = *src;
             while (NVMC_READY == 0);
             i+=4;
         } else {

@@ -140,6 +140,34 @@ START_TEST(test_unaligned_write_mismatched_alignment)
 }
 END_TEST
 
+/* Destination and source share the same non-zero misalignment, so once the
+ * byte-wise path has advanced i to the next word boundary both fast-path
+ * conditions hold and the 32-bit branch is entered with i != 0. Before the
+ * fix that branch indexed dst[i >> 2]/src[i >> 2] off the unaligned bases,
+ * writing data[0..3] to "address..address+3" instead of data[3..6] to
+ * "address+3..address+6" -- through a misaligned 32-bit flash access. */
+START_TEST(test_unaligned_write_matching_alignment_fast_path)
+{
+    uint8_t rawbuf[64];
+    uint8_t *data = rawbuf;
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+    int i;
+
+    while (((uintptr_t)data % 4) != 1)
+        data++;
+    for (i = 0; i < 12; i++)
+        data[i] = (uint8_t)(0xD0 + i);
+
+    ck_assert_int_eq(hal_flash_write(base + 1, data, 12), 0);
+
+    ck_assert_uint_eq(mock_flash[0], 0xFF);
+    for (i = 0; i < 12; i++)
+        ck_assert_uint_eq(mock_flash[1 + i], data[i]);
+    for (i = 13; i < MOCK_FLASH_SIZE; i++)
+        ck_assert_uint_eq(mock_flash[i], 0xFF);
+}
+END_TEST
+
 /* A write that fits entirely inside a single flash word must still work:
  * buggy and fixed forms agree here (i is always 0 in the byte-wise path),
  * guarding against a fix that breaks the common case. */
@@ -170,6 +198,7 @@ Suite *flash_write_suite(void)
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_aligned_write_unaligned_tail);
     tcase_add_test(tc, test_unaligned_write_mismatched_alignment);
+    tcase_add_test(tc, test_unaligned_write_matching_alignment_fast_path);
     tcase_add_test(tc, test_unaligned_write_single_word);
 
     suite_add_tcase(s, tc);
