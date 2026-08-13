@@ -31,6 +31,9 @@ name: Wolfboot SBOM Canary
 # spread of architectures (Arm-M, Arm-A, PowerPC, Renesas RX and RISC-V). The
 # driver never calls the cross compiler, so the SBOM is produced for a target
 # whose toolchain is absent.
+#
+# The wolfglass_drift job holds tools/sbom/ to the revision it claims, so the
+# vendored copy cannot drift from wolfGlass unnoticed.
 
 on:
   push:
@@ -315,6 +318,62 @@ jobs:
             wolfboot-*.cdx.json
             wolfboot-*.spdx.json
           if-no-files-found: warn
+
+  # tools/sbom/ is a vendored copy of the wolfGlass share/ set, pinned by
+  # tools/sbom/.wolfglass-rev.  Nothing else proves the copy still matches the
+  # pin, so a stale copy, a local patch, or an unresolvable revision would all
+  # pass unnoticed and wolfBoot would ship a different generator from the one
+  # wolfSSL controls.  wolfGlass owns the comparison: tools/wolfglass-sync
+  # --check diffs share/ against the vendored tree and compares HEAD against
+  # .wolfglass-rev.
+  wolfglass_drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the pinned wolfGlass revision
+        id: pin
+        run: |
+          rev="$(tr -d '[:space:]' < tools/sbom/.wolfglass-rev)"
+          if [ -z "$rev" ]; then
+            echo "ERROR: tools/sbom/.wolfglass-rev is empty." >&2
+            exit 1
+          fi
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+          echo "Pinned wolfGlass revision: $rev"
+
+      # A fork PR has no secret, so the pinned revision cannot be fetched. Skip
+      # rather than fail there; the run on wolfSSL/wolfBoot is the gate.
+      - name: Check out wolfGlass at the pinned revision
+        id: fetch
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: wolfSSL/wolfGlass
+          ref: ${{ steps.pin.outputs.rev }}
+          token: ${{ secrets.WOLFGLASS_TOKEN }}
+          path: .wolfglass-src
+
+      - name: Drift check against wolfGlass
+        env:
+          HAVE_TOKEN: ${{ secrets.WOLFGLASS_TOKEN != '' }}
+          PINNED_REV: ${{ steps.pin.outputs.rev }}
+        run: |
+          if [ ! -d .wolfglass-src/share ]; then
+            if [ "$HAVE_TOKEN" != "true" ]; then
+              echo "::notice::No WOLFGLASS_TOKEN available (fork PR); skipping the wolfGlass drift check."
+              exit 0
+            fi
+            echo "ERROR: wolfGlass revision $PINNED_REV does not resolve." >&2
+            echo "tools/sbom/.wolfglass-rev must name a commit that exists in" >&2
+            echo "wolfSSL/wolfGlass. Re-run tools/wolfglass-sync to re-pin." >&2
+            exit 1
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/.wolfglass-src"
+          python3 .wolfglass-src/tools/wolfglass-sync \
+            --check --src .wolfglass-src --dest .
 
   windows_sbom:
     runs-on: windows-latest
