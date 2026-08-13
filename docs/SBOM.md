@@ -56,6 +56,23 @@ Obey these limitations when you make an SBOM.
 - A vendor SDK build lists only the source files that are on disk. If the SDK
   is not in the source tree, the SBOM does not include the SDK files. The SBOM
   always includes the wolfBoot, wolfCrypt, and HAL files.
+- The compiler runtime is not a component. `libgcc`, `newlib`, and the
+  equivalent library of any other toolchain are linked into the image, but the
+  SBOM records the source set and does not see them.
+- Of the six wolfBoot submodules, only wolfSSL becomes a dependency component
+  today. wolfTPM, wolfPKCS11, wolfHSM, wolfPSA, and wolfHAL sources are folded
+  into the wolfBoot source set, so an advisory against one of those products
+  does not match the document. The captured configuration does record the
+  macros (`WOLFBOOT_TPM`, and the equivalents), so the build is still visible.
+  wolfGlass owns the component table, and this limitation goes away when it
+  gains the other entries.
+- The document records the source set, not each file. There is no per-file
+  hash, and SPDX reports `filesAnalyzed: false`. Use the source-set Merkle
+  hash to compare two documents; you cannot decompose it to one file.
+- Almost every wolfBoot configuration sets `WOLFCRYPT_ONLY`, so the image holds
+  no TLS. A scanner still reports the TLS advisories of the wolfSSL component
+  against it. Answer those with a VEX statement (`not_affected` /
+  `code_not_present`). wolfBoot does not generate one yet.
 - `tools/sbom/sbom-driver` is a thin POSIX launcher for the vendored Python
   engine. On Windows, run the launcher from WSL, MSYS, or Git Bash, or call
   `tools/sbom/sbom-driver.py` directly. As an alternative, use the compilation
