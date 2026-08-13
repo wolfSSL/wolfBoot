@@ -353,6 +353,13 @@ sim configuration and runs a native-Windows scrub test against
 `tools/sbom/sbom-driver.py`. The generated SBOMs are uploaded as build
 artifacts.
 
+The same workflow holds `tools/sbom/` to the revision in
+`tools/sbom/.wolfglass-rev`. It checks wolfGlass out at that revision and runs
+`tools/wolfglass-sync --check`, which fails if a vendored file differs from
+wolfGlass `share/`, or if the pinned revision does not resolve. A local patch to
+the vendored tooling therefore breaks CI instead of shipping quietly: fix
+wolfGlass and re-vendor.
+
 ## Reproducibility
 
 `gen-sbom` supports deterministic output (e.g. `SOURCE_DATE_EPOCH` and stable
