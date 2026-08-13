@@ -276,7 +276,13 @@ jobs:
         #   imx-rt1060 Arm Cortex-M7     sama5d3   Arm Cortex-A5
         #   nxp-t1040 PowerPC e5500      renesas-rx65n  Renesas RX
         #   hifive1   RISC-V
-        target:
+        #
+        # These are config file names, which are not always the TARGET the file
+        # selects: nrf52840.config sets TARGET=nrf52, imx-rt1060.config sets
+        # imx_rt, nxp-t1040.config sets nxp_t1040, renesas-rx65n.config sets
+        # rx65n. The config is the only source of truth, so the step below does
+        # not pass TARGET at all.
+        config:
           - stm32h7
           - nrf52840
           - imx-rt1060
@@ -301,10 +307,15 @@ jobs:
       - name: Verify vendored gen-sbom
         run: test -f tools/sbom/gen-sbom
 
+      # No TARGET= here on purpose. The config file sets it, and passing the
+      # config file name instead selects a HAL that does not exist: TARGET=
+      # nrf52840 asks for hal/nrf52840.c, which is really hal/nrf52.c, and the
+      # SBOM then described this bootloader with no target HAL at all (29
+      # sources, hal.c but no nrf52.c) while CI stayed green.
       - name: make sbom (no cross-toolchain present)
         run: |
-          cp config/examples/${{ matrix.target }}.config .config
-          make sbom TARGET=${{ matrix.target }}
+          cp config/examples/${{ matrix.config }}.config .config
+          make sbom
           python3 tools/sbom/validate_sbom.py \
             --name-prefix wolfboot --min-properties 20 \
             wolfboot-*.cdx.json wolfboot-*.spdx.json
@@ -313,7 +324,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wolfboot-sbom-${{ matrix.target }}
+          name: wolfboot-sbom-${{ matrix.config }}
           path: |
             wolfboot-*.cdx.json
             wolfboot-*.spdx.json
