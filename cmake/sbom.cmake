@@ -60,6 +60,21 @@ if(NOT DEFINED SBOM_WOLFSSL_VERSION OR SBOM_WOLFSSL_VERSION STREQUAL "")
     endif()
 endif()
 
+# Mirrors SBOM_CONFIG_TAG in the Makefile: one version of wolfBoot covers about
+# 100 configurations, and each is a different image, so the document is named
+# after the configuration rather than the version alone.
+if(DEFINED WOLFBOOT_TARGET AND NOT WOLFBOOT_TARGET STREQUAL "")
+    set(_sbom_config_tag "${WOLFBOOT_TARGET}")
+else()
+    set(_sbom_config_tag "notarget")
+endif()
+if(SIGN)
+    string(APPEND _sbom_config_tag "-${SIGN}")
+endif()
+if(HASH)
+    string(APPEND _sbom_config_tag "-${HASH}")
+endif()
+
 set(_sbom_args
     NAME          wolfboot
     VERSION_FILE  ${WOLFBOOT_ROOT}/include/wolfboot/version.h
@@ -79,8 +94,8 @@ set(_sbom_args
     LICENSE_OVERRIDE GPL-3.0-or-later
     DEP_WOLFSSL   ${SBOM_DEP_WOLFSSL}
     DEP_WOLFCRYPT ${SBOM_DEP_WOLFCRYPT}
-    CDX_OUT       ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_wolfboot_sbom_version}.cdx.json
-    SPDX_OUT      ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_wolfboot_sbom_version}.spdx.json
+    CDX_OUT       ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_sbom_config_tag}-${_wolfboot_sbom_version}.cdx.json
+    SPDX_OUT      ${CMAKE_CURRENT_BINARY_DIR}/wolfboot-${_sbom_config_tag}-${_wolfboot_sbom_version}.spdx.json
 )
 
 if(SBOM_WOLFSSL_VERSION AND NOT SBOM_WOLFSSL_VERSION STREQUAL "")

@@ -160,8 +160,10 @@ an identical CycloneDX 1.6 / SPDX 2.3 document however you build:
 | Zephyr TEE/PSA module | `tools/scripts/ide-sbom/zephyr_sbom.py` |
 
 Output files are written to the build directory as
-`wolfboot-<version>.cdx.json` (CycloneDX 1.6) and `wolfboot-<version>.spdx.json`
-(SPDX 2.3 JSON), where `<version>` is read from `include/wolfboot/version.h`.
+`wolfboot-<target>-<sign>-<hash>-<version>.cdx.json` (CycloneDX 1.6) and
+`wolfboot-<target>-<sign>-<hash>-<version>.spdx.json` (SPDX 2.3 JSON), where
+`<version>` is read from `include/wolfboot/version.h`. Each configuration is a
+different image, so each one gets its own document.
 
 See [docs/SBOM.md](./docs/SBOM.md) for the full per-build-system guide. For CRA
 guidance and worked SBOM examples, see the
