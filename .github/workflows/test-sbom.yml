@@ -363,8 +363,9 @@ jobs:
           echo "rev=$rev" >> "$GITHUB_OUTPUT"
           echo "Pinned wolfGlass revision: $rev"
 
-      # A fork PR has no secret, so the pinned revision cannot be fetched. Skip
-      # rather than fail there; the run on wolfSSL/wolfBoot is the gate.
+      # wolfGlass is public, so this needs no token and the check also runs on a
+      # fork PR. continue-on-error only defers an unresolvable pin to the step
+      # below, which can say what went wrong; it never skips the comparison.
       - name: Check out wolfGlass at the pinned revision
         id: fetch
         continue-on-error: true
@@ -372,19 +373,13 @@ jobs:
         with:
           repository: wolfSSL/wolfGlass
           ref: ${{ steps.pin.outputs.rev }}
-          token: ${{ secrets.WOLFGLASS_TOKEN }}
           path: .wolfglass-src
 
       - name: Drift check against wolfGlass
         env:
-          HAVE_TOKEN: ${{ secrets.WOLFGLASS_TOKEN != '' }}
           PINNED_REV: ${{ steps.pin.outputs.rev }}
         run: |
           if [ ! -d .wolfglass-src/share ]; then
-            if [ "$HAVE_TOKEN" != "true" ]; then
-              echo "::notice::No WOLFGLASS_TOKEN available (fork PR); skipping the wolfGlass drift check."
-              exit 0
-            fi
             echo "ERROR: wolfGlass revision $PINNED_REV does not resolve." >&2
             echo "tools/sbom/.wolfglass-rev must name a commit that exists in" >&2
             echo "wolfSSL/wolfGlass. Re-run tools/wolfglass-sync to re-pin." >&2
