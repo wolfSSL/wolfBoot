@@ -900,13 +900,26 @@ WOLFBOOT_VERSION:=$(shell sed -n \
     include/wolfboot/version.h)
 SBOM_ROOT:=$(WOLFBOOT_ROOT)
 SBOM_NAME:=wolfboot
-SBOM_SRCS=$(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS)))
-# $(wildcard) above drops every object whose source is absent, and it does so
-# before the driver can report it: --skip-missing then has nothing left to warn
-# about.  An absent submodule therefore shrinks the document silently.  A
-# sim-tpm build without lib/wolfTPM checked out loses all eight tpm2*.c sources,
-# emits no diagnostic, and still validates.  An object that maps to no source is
-# the signal, so compare the two lists and stop.
+# src/keystore.c carries the public keys that authorise a firmware update.  The
+# build generates it from the signing key, so a fresh tree does not hold it yet.
+# It is still a compiled source, and a bootloader SBOM that omits its own trust
+# anchor describes the wrong image, so name it and depend on it below.
+SBOM_GENERATED_SRCS=$(filter ./src/keystore.c src/keystore.c,\
+  $(patsubst %.o,%.c,$(OBJS)))
+# $(wildcard) cannot build this list.  GNU make 3.81 caches directory contents,
+# so a source generated during the same run stays invisible for the rest of it;
+# $(shell) re-reads the filesystem instead.  The generated sources go in
+# unconditionally because sbom.mk expands this list through $(call) while
+# reading the makefile, which is before any recipe can create them.  The driver
+# opens the file afterwards, by which time the guard has made it exist.
+SBOM_SRCS=$(sort $(SBOM_GENERATED_SRCS) $(shell for o in $(OBJS); do \
+    for e in c S; do s="$${o%.o}.$$e"; [ -f "$$s" ] && printf '%s ' "$$s"; done; \
+  done))
+# A source that is absent must not be dropped quietly.  Filtering the list to
+# what happens to be on disk shrinks the document with no diagnostic anywhere:
+# a sim-tpm build without lib/wolfTPM checked out loses all eight tpm2*.c
+# sources, emits nothing, and still validates.  An object that maps to no
+# source is the signal, so compare the two lists and stop.
 SBOM_SRCS_MISSING=$(filter-out $(basename $(SBOM_SRCS)),$(basename $(OBJS)))
 SBOM_CFLAGS=$(CFLAGS)
 # wolfBoot's wolfCrypt configuration is derived, not literal: include/user_settings.h
@@ -947,7 +960,7 @@ SBOM_GEN?=
 
 # Guards both SBOM targets: see SBOM_SRCS_MISSING above.  SBOM_ALLOW_MISSING=1
 # accepts the partial document, and still lists what is absent.
-sbom-check-sources:
+sbom-check-sources: $(SBOM_GENERATED_SRCS)
 	$(Q)if [ -n "$(strip $(SBOM_SRCS_MISSING))" ]; then \
 	    echo "sbom: $(words $(SBOM_SRCS_MISSING)) object(s) map to no source on disk:" >&2; \
 	    for o in $(SBOM_SRCS_MISSING); do echo "  $$o.c (or .S)" >&2; done; \
@@ -955,9 +968,10 @@ sbom-check-sources:
 	        echo "sbom: SBOM_ALLOW_MISSING=1 set; the SBOM will describe fewer" >&2; \
 	        echo "sbom: sources than the image really holds." >&2; \
 	    else \
-	        echo "sbom: a submodule or a vendor SDK is absent, so the SBOM would" >&2; \
-	        echo "sbom: under-report the image.  Check the tree out (git submodule" >&2; \
-	        echo "sbom: update --init), or set SBOM_ALLOW_MISSING=1 to accept it." >&2; \
+	        echo "sbom: the SBOM would under-report the image.  A submodule is" >&2; \
+	        echo "sbom: absent (git submodule update --init), a vendor SDK lives" >&2; \
+	        echo "sbom: outside the tree, or the build generates that source and" >&2; \
+	        echo "sbom: has not run yet.  Set SBOM_ALLOW_MISSING=1 to accept it." >&2; \
 	        exit 1; \
 	    fi; \
 	fi
