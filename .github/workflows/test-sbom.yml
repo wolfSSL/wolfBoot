@@ -290,6 +290,12 @@ jobs:
           - nxp-t1040
           - renesas-rx65n
           - hifive1
+        include:
+          # imx_rt compiles three MCUXpresso SDK drivers (fsl_clock, fsl_cache,
+          # fsl_flexspi) from outside the source tree. The SDK is not on a
+          # runner, so this target cannot produce a complete source set here.
+          - config: imx-rt1060
+            allow_missing: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -313,6 +319,8 @@ jobs:
       # SBOM then described this bootloader with no target HAL at all (29
       # sources, hal.c but no nrf52.c) while CI stayed green.
       - name: make sbom (no cross-toolchain present)
+        env:
+          SBOM_ALLOW_MISSING: ${{ matrix.allow_missing }}
         run: |
           cp config/examples/${{ matrix.config }}.config .config
           make sbom
