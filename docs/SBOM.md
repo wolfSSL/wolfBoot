@@ -61,6 +61,14 @@ Obey these limitations when you make an SBOM.
   `tools/sbom/sbom-driver.py` directly. As an alternative, use the compilation
   database tool (`compdb_sbom.py`).
 
+### Missing sources
+
+Each object that the build compiles must map to a source file on disk. If one
+does not, a submodule or a vendor SDK is absent, and the SBOM would record
+fewer sources than the image really holds. The `sbom` and `sbom-hal` targets
+stop and list the objects. Run `git submodule update --init`, or set
+`SBOM_ALLOW_MISSING=1` to accept a partial document.
+
 ## Coverage: the 11 build methods
 
 wolfBoot is built in many ways. Each maps to one of four SBOM routes:

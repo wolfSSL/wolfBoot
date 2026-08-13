@@ -901,6 +901,13 @@ WOLFBOOT_VERSION:=$(shell sed -n \
 SBOM_ROOT:=$(WOLFBOOT_ROOT)
 SBOM_NAME:=wolfboot
 SBOM_SRCS=$(wildcard $(patsubst %.o,%.c,$(OBJS))) $(wildcard $(patsubst %.o,%.S,$(OBJS)))
+# $(wildcard) above drops every object whose source is absent, and it does so
+# before the driver can report it: --skip-missing then has nothing left to warn
+# about.  An absent submodule therefore shrinks the document silently.  A
+# sim-tpm build without lib/wolfTPM checked out loses all eight tpm2*.c sources,
+# emits no diagnostic, and still validates.  An object that maps to no source is
+# the signal, so compare the two lists and stop.
+SBOM_SRCS_MISSING=$(filter-out $(basename $(SBOM_SRCS)),$(basename $(OBJS)))
 SBOM_CFLAGS=$(CFLAGS)
 # wolfBoot's wolfCrypt configuration is derived, not literal: include/user_settings.h
 # turns WOLFBOOT_SIGN_ECC256 into HAVE_ECC, HAVE_ECC256, ECC_TIMING_RESISTANT and
@@ -910,7 +917,7 @@ SBOM_SETTINGS_H:=$(WOLFBOOT_LIB_WOLFSSL)/wolfssl/wolfcrypt/settings.h
 SBOM_INCLUDE_DIRS:=$(WOLFBOOT_ROOT)/include $(WOLFBOOT_LIB_WOLFSSL)
 # user_settings.h includes the generated target.h, so it must exist before the
 # capture runs. It also carries the flash layout the SBOM records.
-SBOM_PREREQS:=include/target.h
+SBOM_PREREQS:=include/target.h sbom-check-sources
 # Coat: wolfssl (TLS/library CPE) + wolfcrypt (crypto CPE). Sources remain in
 # the merkle hash; the components give scanners resolvable identifiers.
 SBOM_DEP_WOLFSSL?=yes
@@ -930,6 +937,23 @@ SBOM_LICENSE_OVERRIDE?=GPL-3.0-or-later
 SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
 SBOM_GEN?=
+
+# Guards both SBOM targets: see SBOM_SRCS_MISSING above.  SBOM_ALLOW_MISSING=1
+# accepts the partial document, and still lists what is absent.
+sbom-check-sources:
+	$(Q)if [ -n "$(strip $(SBOM_SRCS_MISSING))" ]; then \
+	    echo "sbom: $(words $(SBOM_SRCS_MISSING)) object(s) map to no source on disk:" >&2; \
+	    for o in $(SBOM_SRCS_MISSING); do echo "  $$o.c (or .S)" >&2; done; \
+	    if [ "$(SBOM_ALLOW_MISSING)" = "1" ]; then \
+	        echo "sbom: SBOM_ALLOW_MISSING=1 set; the SBOM will describe fewer" >&2; \
+	        echo "sbom: sources than the image really holds." >&2; \
+	    else \
+	        echo "sbom: a submodule or a vendor SDK is absent, so the SBOM would" >&2; \
+	        echo "sbom: under-report the image.  Check the tree out (git submodule" >&2; \
+	        echo "sbom: update --init), or set SBOM_ALLOW_MISSING=1 to accept it." >&2; \
+	        exit 1; \
+	    fi; \
+	fi
 
 include tools/sbom/build/sbom.mk
 
@@ -956,4 +980,4 @@ $(eval $(call wolfglass_sbom_rule,sbom-hal,SBOM_HAL_))
 
 FORCE:
 
-.PHONY: FORCE clean keytool_check squashelf_check sbom sbom-hal
+.PHONY: FORCE clean keytool_check squashelf_check sbom sbom-hal sbom-check-sources
