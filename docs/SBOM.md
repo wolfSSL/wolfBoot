@@ -81,10 +81,15 @@ Obey these limitations when you make an SBOM.
 ### Missing sources
 
 Each object that the build compiles must map to a source file on disk. If one
-does not, a submodule or a vendor SDK is absent, and the SBOM would record
-fewer sources than the image really holds. The `sbom` and `sbom-hal` targets
-stop and list the objects. Run `git submodule update --init`, or set
-`SBOM_ALLOW_MISSING=1` to accept a partial document.
+does not, the SBOM would record fewer sources than the image really holds. The
+`sbom` and `sbom-hal` targets stop and list the objects. Run `git submodule
+update --init`, or set `SBOM_ALLOW_MISSING=1` to accept a partial document.
+
+`src/keystore.c` is the exception. wolfBoot generates it from the signing key,
+so a fresh tree does not hold it yet. It carries the public keys that authorise
+a firmware update, so the SBOM must describe it. Both targets generate it first,
+exactly as a build does, which means `make sbom` on a fresh tree also creates a
+signing key if none exists.
 
 ## Coverage: the 11 build methods
 
