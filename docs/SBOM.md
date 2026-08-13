@@ -337,11 +337,14 @@ python3 tools/sbom/frontends/compdb_sbom.py build/compile_commands.json \
 
 Every route writes, into the working/build directory:
 
-* `wolfboot-<version>.cdx.json` — CycloneDX 1.6
-* `wolfboot-<version>.spdx.json` — SPDX 2.3
+* `wolfboot-<target>-<sign>-<hash>-<version>.cdx.json` — CycloneDX 1.6
+* `wolfboot-<target>-<sign>-<hash>-<version>.spdx.json` — SPDX 2.3
 
-`<version>` is read from `include/wolfboot/version.h`. These are ignored by
-`.gitignore`.
+`<version>` is read from `include/wolfboot/version.h`. `<target>`, `<sign>`, and
+`<hash>` are the configuration you built. One version of wolfBoot covers about
+100 configurations, and each one is a different image with a different source
+set, so the configuration is part of the name. Without it, a second target
+overwrites the first. These files are ignored by `.gitignore`.
 
 You can sanity-check any output:
 

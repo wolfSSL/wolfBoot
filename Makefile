@@ -934,8 +934,15 @@ SBOM_COMPONENT_TYPE?=firmware
 # Every GPL-headered source says "either version 3 ... or (at your option) any
 # later version".
 SBOM_LICENSE_OVERRIDE?=GPL-3.0-or-later
-SBOM_CDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).cdx.json
-SBOM_SPDX_OUT:=wolfboot-$(WOLFBOOT_VERSION).spdx.json
+# One version of wolfBoot has about 100 configurations, and each one is a
+# different image with a different source set.  Name the document after the
+# configuration so a second target does not overwrite the first.  gen-sbom still
+# derives serialNumber and the SPDX documentNamespace from name and version
+# alone, which collides inside a scanner as well; that part is wolfGlass's to
+# fix, and this does not paper over it.
+SBOM_CONFIG_TAG:=$(TARGET)$(if $(SIGN),-$(SIGN))$(if $(HASH),-$(HASH))
+SBOM_CDX_OUT:=wolfboot-$(SBOM_CONFIG_TAG)-$(WOLFBOOT_VERSION).cdx.json
+SBOM_SPDX_OUT:=wolfboot-$(SBOM_CONFIG_TAG)-$(WOLFBOOT_VERSION).spdx.json
 SBOM_GEN?=
 
 # Guards both SBOM targets: see SBOM_SRCS_MISSING above.  SBOM_ALLOW_MISSING=1
