@@ -266,6 +266,9 @@ ifeq ($(USE_GCC_HEADLESS),1)
     # (.varname, not .bss.varname) that escape the iLLD linker script's
     # clear/copy tables, leaving statics uninitialized at boot.
     CFLAGS+=-ffunction-sections -fomit-frame-pointer
+  else ifeq ($(TARGET)-$(GCC),aurix_tc3xx-1)
+    # Same as above for the TC3xx host built with tricore-elf-gcc (GCC=1)
+    CFLAGS+=-ffunction-sections -fomit-frame-pointer
   else
     CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
   endif

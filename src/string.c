@@ -361,6 +361,54 @@ void *memmove(void *dst, const void *src, size_t n)
     }
 }
 #endif /* !IAR && !X86_64_EFI && !__CCRX__ */
+
+#if defined(__ARM_EABI__) && !defined(__IAR_SYSTEMS_ICC__)
+/* ARM EABI helpers the compiler may call instead of the plain names.
+ * Provided here so libc archive members (which define both the helper and
+ * the plain name, e.g. picolibc's memcpy.S.o) are never pulled in and
+ * cannot collide with the definitions above. */
+void RAMFUNCTION __aeabi_memcpy(void *dst, const void *src, size_t n)
+{
+    memcpy(dst, src, n);
+}
+void RAMFUNCTION __aeabi_memcpy4(void *dst, const void *src, size_t n)
+{
+    memcpy(dst, src, n);
+}
+void RAMFUNCTION __aeabi_memcpy8(void *dst, const void *src, size_t n)
+{
+    memcpy(dst, src, n);
+}
+void __aeabi_memmove(void *dst, const void *src, size_t n)
+{
+    memmove(dst, src, n);
+}
+/* note: __aeabi_memset argument order is (dst, n, c) */
+void __aeabi_memset(void *dst, size_t n, int c)
+{
+    memset(dst, c, n);
+}
+void __aeabi_memset4(void *dst, size_t n, int c)
+{
+    memset(dst, c, n);
+}
+void __aeabi_memset8(void *dst, size_t n, int c)
+{
+    memset(dst, c, n);
+}
+void __aeabi_memclr(void *dst, size_t n)
+{
+    memset(dst, 0, n);
+}
+void __aeabi_memclr4(void *dst, size_t n)
+{
+    memset(dst, 0, n);
+}
+void __aeabi_memclr8(void *dst, size_t n)
+{
+    memset(dst, 0, n);
+}
+#endif /* __ARM_EABI__ && !IAR */
 #endif /* WOLFBOOT_USE_STDLIBC */
 
 #if defined(PRINTF_ENABLED) && defined(DEBUG_UART)

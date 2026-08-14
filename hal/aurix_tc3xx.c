@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with wolfBoot.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -158,7 +159,10 @@ int hal_hsm_server_cleanup(void);
 /* Force longcall on printf functions (called from panic) */
 void uart_printf(const char* fmt, ...) TC3_LONGCALL;
 void uart_vprintf(const char* fmt, va_list argp) TC3_LONGCALL;
+#ifndef __clang__
+/* clang rejects adding attributes after loader.h's inline definition */
 void wolfBoot_panic(void) TC3_LONGCALL;
+#endif
 #endif
 
 /* RAM buffer to hold the contents of an entire flash sector*/
@@ -899,6 +903,11 @@ int hal_hsm_server_init(void)
             "[ERROR] cryptocb registration for HASH failed, rc=%d\n", rc);
         wolfBoot_panic();
     }
+#ifdef WOLF_CRYPTO_CB_FIND
+    /* Route INVALID_DEVID calls (cert manager, DRBG) to hardware since the
+     * CB-only ECC build has no software ECC to fall back to */
+    wc_CryptoCb_SetDeviceFindCb(hsmCryptoCbFind);
+#endif
 
     rc = wc_InitRng_ex(cryptoCtx->rng, NULL, INVALID_DEVID);
     if (rc != WH_ERROR_OK) {
