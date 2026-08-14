@@ -61,10 +61,10 @@ extern void (** const IV_RAM)(void);
 #ifdef HAVE_FIPS
 #include "printf.h"
 #include <wolfssl/wolfcrypt/fips_test.h>
-/* FIPS module power-on self-test entry. With NO_ATTRIBUTE_CONSTRUCTOR it is a
- * plain function (not an .init_array constructor) that wolfBoot calls at boot. */
-extern void fipsEntry(void);
-/* wolfCrypt FIPS in-core integrity / CAST callback. On a hash mismatch
+/* fipsEntry() - the FIPS power-on self-test entry, a plain function (not an
+ * .init_array constructor) under NO_ATTRIBUTE_CONSTRUCTOR that wolfBoot calls at
+ * boot - is declared by fips_test.h; no local extern needed.
+ * wolfBoot_fipsCb is the in-core integrity / CAST callback. On a hash mismatch
  * (IN_CORE_FIPS_E) the module reports the runtime hash here; copy it into
  * verifyCore[] in wolfcrypt/src/fips_test.c and rebuild (see docs/FIPS.md). */
 static void wolfBoot_fipsCb(int ok, int err, const char* hash)
@@ -110,6 +110,9 @@ int loader_main(void)
 int main(void)
 #endif
 {
+#ifdef HAVE_FIPS
+    int fips_status;
+#endif
 
 #ifdef TARGET_sim
     /* to forward arguments to the test-app for testing. See
@@ -124,12 +127,17 @@ int main(void)
     hal_init();
 #ifdef HAVE_FIPS
     /* Run the FIPS power-on self-test (in-core integrity + CASTs) and refuse
-     * to boot unless the module is operational. See docs/FIPS.md. */
-    wolfCrypt_SetCb_fips(wolfBoot_fipsCb);
+     * to boot unless the module is operational. See docs/FIPS.md. The seal
+     * callback is the only channel for the runtime in-core hash, so a failed
+     * registration is worth flagging. */
+    if (wolfCrypt_SetCb_fips(wolfBoot_fipsCb) != 0) {
+        wolfBoot_printf("FIPS: failed to register self-test callback\n");
+    }
     fipsEntry();
-    if (wolfCrypt_GetStatus_fips() != 0) {
+    fips_status = wolfCrypt_GetStatus_fips();
+    if (fips_status != 0) {
         wolfBoot_printf("FIPS 140-3 module NOT operational (status=%d); halting\n",
-            wolfCrypt_GetStatus_fips());
+            fips_status);
         /* On self-test failure this returns the runtime in-core hash to seal
          * into verifyCore[] in fips_test.c. */
         wolfBoot_printf("FIPS in-core hash = %s\n", wolfCrypt_GetCoreHash_fips());

@@ -55,6 +55,17 @@
 #define RNG200_FIFO_COUNT       0x24  /* [7:0] = words available */
 #define RNG200_CTRL_RBGEN       0x00000001
 
+/* SP800-90B health-test status bits in RNG200_INT_STATUS (iproc-rng200).
+ * MASTER_FAIL_LOCKOUT latches when the continuous test trips repeatedly;
+ * NIST_FAIL flags a startup/continuous health-test failure. Either means the
+ * entropy source is degraded and must not seed the FIPS DRBG. */
+#define RNG200_INT_MASTER_FAIL_LOCKOUT     0x80000000
+#define RNG200_INT_STARTUP_TRANSITIONS_MET 0x00020000
+#define RNG200_INT_NIST_FAIL               0x00000020
+#define RNG200_INT_TOTAL_BITS_COUNT        0x00000001
+#define RNG200_INT_HEALTH_FAIL \
+    (RNG200_INT_MASTER_FAIL_LOCKOUT | RNG200_INT_NIST_FAIL)
+
 /* BCM2711 system counter frequency (fallback if CNTFRQ_EL0 reads 0) */
 #define BCM2711_TIMER_CLK_FREQ  54000000ULL
 

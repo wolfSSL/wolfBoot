@@ -418,7 +418,8 @@ jobs:
     with:
       arch: aarch64
       config-file: ./config/examples/cm4.config
-      make-args: wolfboot.bin
+      # Also build the cm4 test-app (app_cm4.c) so it cannot silently rot.
+      make-args: wolfboot.bin test-app/image.bin
 
   cm4_sdcard_test:
     uses: ./.github/workflows/test-build-aarch64.yml

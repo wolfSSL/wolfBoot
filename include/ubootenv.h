@@ -58,6 +58,10 @@ struct uboot_slot {
     char name[UBOOT_ENV_VAL_MAX]; /* RAUC bootname, e.g. "A" or "B" */
     int  selected;                /* 1 if a slot with tries left was chosen */
     int  rearmed;                 /* 1 if all counters were exhausted+reset */
+    int  reinitialized;           /* 1 if the env failed CRC and was reset to
+                                   * defaults in memory: the caller must NOT
+                                   * persist the buffer (it would destroy the
+                                   * last-good on-disk RAUC state). */
 };
 
 /* Verify the leading CRC32 over the data region. Returns 1 if valid, else 0. */
