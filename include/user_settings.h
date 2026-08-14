@@ -92,21 +92,29 @@
      * word-size gate further below - which keys off WOLFSSL_HAVE_SP_ECC/RSA,
      * neither set in the FIPS build - unselected, so ECDSA verify would regress
      * to 32-bit limbs (~4x the multiply work) on the boot-critical path. */
+    /* Key the 64-bit limb selection off the compiler macro __x86_64__ as well
+     * as ARCH_x86_64: ARCH=sim emits only ARCH_SIM, so sim-fips on an x86_64
+     * host would otherwise fall back to 32-bit SP limbs. */
     #if !defined(SP_WORD_SIZE) && \
         (defined(__aarch64__) || defined(ARCH_RISCV64) || \
-         (defined(ARCH_x86_64) && !defined(FORCE_32BIT)))
+         ((defined(ARCH_x86_64) || defined(__x86_64__)) && \
+          !defined(FORCE_32BIT)))
         #define HAVE___UINT128_T
         #define SP_WORD_SIZE 64
     #endif
     /* FIPS DRBG entropy seed source. The RNG must NOT be disabled in FIPS mode
      * (see the undef block below which removes WC_NO_RNG/WC_NO_HASHDRBG). The
-     * seed comes from a HAL-provided source: /dev/urandom on sim, the BCM2711
-     * RNG200 hardware TRNG on CM4. */
-    #if defined(ARCH_SIM) || defined(TARGET_cm4)
+     * seed is a HAL hook: every FIPS target implements
+     *   int wolfBoot_fips_seed(unsigned char* output, unsigned int sz);
+     * (e.g. /dev/urandom on sim in hal/sim.c, the BCM2711 RNG200 TRNG on CM4 in
+     * hal/cm4.c). A new FIPS target just provides this function in its HAL - no
+     * wolfCrypt settings edit needed (a missing implementation is a clear link
+     * error). Allow a target to pre-define CUSTOM_RAND_GENERATE_SEED to opt out. */
+    #ifndef CUSTOM_RAND_GENERATE_SEED
         #define CUSTOM_RAND_GENERATE_SEED wolfBoot_fips_seed
+        #ifndef __ASSEMBLER__
         extern int wolfBoot_fips_seed(unsigned char* output, unsigned int sz);
-    #elif !defined(CUSTOM_RAND_GENERATE_SEED)
-        #error "FIPS=1 needs a DRBG seed: define CUSTOM_RAND_GENERATE_SEED for this target (see docs/FIPS.md)"
+        #endif
     #endif
 #endif /* HAVE_FIPS */
 

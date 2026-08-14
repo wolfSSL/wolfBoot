@@ -827,8 +827,15 @@ ifeq ($(WOLFBOOT_SELF_HEADER),1)
   APP_OBJS+=../src/image.o ../src/keystore.o
   # Only add wolfcrypt objs if WOLFHSM blocks won't provide them
   ifeq ($(WOLFHSM_CLIENT)$(WOLFHSM_SERVER),)
-    # remove duplicates for certain object files
-    APP_OBJS+=$(sort $(WOLFCRYPT_OBJS))
+    # remove duplicates for certain object files. Under FIPS the object list is a
+    # curated, link-ORDER-sensitive boundary (wolfcrypt_first.o ... _last.o, for
+    # the in-core integrity hash) with no duplicates, so it must NOT be $(sort)ed
+    # - sorting would move first/last and break the hash boundary.
+    ifeq ($(FIPS),1)
+      APP_OBJS+=$(WOLFCRYPT_OBJS)
+    else
+      APP_OBJS+=$(sort $(WOLFCRYPT_OBJS))
+    endif
   endif
 endif
 

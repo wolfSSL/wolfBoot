@@ -554,7 +554,7 @@ unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
 	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
-unit-ubootenv: unit-ubootenv.c
+unit-ubootenv: unit-ubootenv.c ../../src/ubootenv.c
 	gcc -o $@ $< $(CFLAGS) -I../.. $(LDFLAGS)
 
 unit-aes128: ../../include/target.h unit-extflash.c

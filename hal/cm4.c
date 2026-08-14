@@ -34,6 +34,9 @@
 #include "image.h"
 #include "printf.h"
 #include "hal/cm4.h"
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+#include "sdhci.h"   /* sdhci_shutdown(), called from hal_prepare_boot() */
+#endif
 #ifndef ARCH_AARCH64
 #   error "wolfBoot cm4 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
@@ -212,6 +215,11 @@ extern void* cm4_fw_dtb;
 #endif
 
 static uint8_t cm4_uboot_env[UBOOT_ENV_SIZE];
+/* Slot chosen by hal_boot_slot_select() (the A/B state machine), consumed by
+ * cm4_rauc_build_bootargs() when building the kernel-only-FIT command line. */
+static char cm4_rauc_slot_name[UBOOT_ENV_VAL_MAX];
+static const char *cm4_rauc_root;
+static int cm4_rauc_selected;
 
 /* Bounded append of src to dst starting at index at; returns the new index. */
 static size_t cm4_strcat(char *dst, size_t dstsz, size_t at, const char *src)
@@ -222,24 +230,53 @@ static size_t cm4_strcat(char *dst, size_t dstsz, size_t at, const char *src)
     return at;
 }
 
-/* Read the raw U-Boot env, run the RAUC A/B state machine, persist the
- * decremented try counter (so a hung slot fails over next boot), and build the
- * kernel command line "<base> root=<slot dev> rauc.slot=<name> rootfstype=ext4
- * rootwait" into out. Returns 0 on success, -1 on failure (caller falls back to
- * the static LINUX_BOOTARGS). Runs with the MMU on and the disk already open
- * (called from hal_get_boot_dts, before hal_prepare_boot). */
+/* Build the kernel command line "<base> root=<slot dev> rauc.slot=<name>
+ * rootfstype=ext4 rootwait" into out, from the slot hal_boot_slot_select()
+ * already chose. Returns 0 on success, -1 if no slot was selected (caller falls
+ * back to the static LINUX_BOOTARGS). Pure string assembly - no disk I/O. */
 static int cm4_rauc_build_bootargs(char *out, size_t outsz)
 {
-    struct uboot_slot slot;
-    const char *root;
     size_t at;
+
+    if (!cm4_rauc_selected)
+        return -1;
+    at = 0;
+    at = cm4_strcat(out, outsz, at, LINUX_BOOTARGS_BASE);
+    at = cm4_strcat(out, outsz, at, " root=");
+    at = cm4_strcat(out, outsz, at, cm4_rauc_root);
+    at = cm4_strcat(out, outsz, at, " rauc.slot=");
+    at = cm4_strcat(out, outsz, at, cm4_rauc_slot_name);
+    at = cm4_strcat(out, outsz, at, " rootfstype=ext4 rootwait");
+    if (at >= outsz - 1) {
+        /* Buffer filled: the command line was truncated (a cut root= or
+         * rauc.slot= would mis-boot silently). Fail so the caller falls back to
+         * the static LINUX_BOOTARGS. */
+        wolfBoot_printf("cm4: RAUC bootargs truncated (need > %u bytes)\n",
+            (unsigned)outsz);
+        return -1;
+    }
+    return 0;
+}
+
+/* Weak-hook override (see include/hal.h): read the raw U-Boot env, run the RAUC
+ * A/B state machine, and persist the decremented try counter - BEFORE any DTB
+ * handling and UNCONDITIONALLY (not gated on whether the FIT embedded an fdt),
+ * so adding an fdt sub-image cannot silently disable failover. Selects the slot
+ * into cm4_rauc_* for cm4_rauc_build_bootargs(). Runs with the MMU on and the
+ * boot disk still open (update_disk.c defers disk_close until after this).
+ * Returns 0. */
+int hal_boot_slot_select(void)
+{
+    struct uboot_slot slot;
     int r;
     int env_ok;
 
+    cm4_rauc_selected = 0;
+
     /* Require the FULL env: disk_part_read() clamps sz to the partition length,
      * so a short read (partition smaller than UBOOT_ENV_SIZE) returns a positive
-     * count with the tail left zero - which would fail CRC and reset to defaults
-     * every boot. Treat anything but a complete read as "no env". */
+     * count with the tail left zero - which would fail CRC. Treat anything but a
+     * complete read as "no env". */
     r = disk_part_read(BOOT_DISK, CM4_UBOOT_ENV_PART, 0, UBOOT_ENV_SIZE,
         cm4_uboot_env);
     env_ok = (r == (int)UBOOT_ENV_SIZE);
@@ -252,45 +289,46 @@ static int cm4_rauc_build_bootargs(char *out, size_t outsz)
         memset(cm4_uboot_env, 0, sizeof(cm4_uboot_env));
     }
     if (uboot_env_select_slot(cm4_uboot_env, UBOOT_ENV_SIZE, &slot) != 0)
-        return -1;
+        return 0; /* malformed BOOT_ORDER / redundant env -> static cmdline */
     if (!slot.selected) {
         /* All slots were exhausted; counters were re-armed - pick slot A now. */
         wolfBoot_printf("cm4: all RAUC slots exhausted; re-armed, retrying\n");
         if (uboot_env_select_slot(cm4_uboot_env, UBOOT_ENV_SIZE, &slot) != 0)
-            return -1;
+            return 0;
         if (!slot.selected)
-            return -1; /* malformed BOOT_ORDER -> static cmdline */
+            return 0;
     }
-    if (env_ok) {
-        /* Persist the decremented try counter. A short/failed write leaves the
-         * counter un-decremented, so booting the selected slot would loop into
-         * it forever - fall back to the static cmdline instead. */
+    /* Persist the decremented counter only when the env read a CRC-valid image.
+     * A bad-CRC full read leaves slot.reinitialized set: booting the default is
+     * fine, but writing the wiped buffer back would destroy the last-good RAUC
+     * state, so skip the writeback (see src/ubootenv.c). A short/failed write
+     * leaves the counter un-decremented, so fall back to the static cmdline. */
+    if (env_ok && !slot.reinitialized) {
         r = disk_part_write(BOOT_DISK, CM4_UBOOT_ENV_PART, 0, UBOOT_ENV_SIZE,
             cm4_uboot_env);
         if (r != (int)UBOOT_ENV_SIZE) {
             wolfBoot_printf("cm4: uboot-env write failed (%d); static cmdline\n",
                 r);
-            return -1;
+            return 0;
         }
+    }
+    else if (slot.reinitialized) {
+        wolfBoot_printf("cm4: uboot-env invalid CRC; default slot, not persisting reset\n");
     }
 
     if (strcmp(slot.name, CM4_SLOT_B_NAME) == 0)
-        root = CM4_ROOT_B;
+        cm4_rauc_root = CM4_ROOT_B;
     else if (strcmp(slot.name, CM4_SLOT_A_NAME) == 0)
-        root = CM4_ROOT_A;
+        cm4_rauc_root = CM4_ROOT_A;
     else {
         wolfBoot_printf("cm4: unknown RAUC slot '%s'; static cmdline\n",
             slot.name);
-        return -1;
+        return 0;
     }
-    at = 0;
-    at = cm4_strcat(out, outsz, at, LINUX_BOOTARGS_BASE);
-    at = cm4_strcat(out, outsz, at, " root=");
-    at = cm4_strcat(out, outsz, at, root);
-    at = cm4_strcat(out, outsz, at, " rauc.slot=");
-    at = cm4_strcat(out, outsz, at, slot.name);
-    (void)cm4_strcat(out, outsz, at, " rootfstype=ext4 rootwait");
-    wolfBoot_printf("cm4: RAUC slot %s -> root %s\n", slot.name, root);
+    memcpy(cm4_rauc_slot_name, slot.name, sizeof(cm4_rauc_slot_name));
+    cm4_rauc_slot_name[sizeof(cm4_rauc_slot_name) - 1] = '\0';
+    cm4_rauc_selected = 1;
+    wolfBoot_printf("cm4: RAUC slot %s -> root %s\n", slot.name, cm4_rauc_root);
     return 0;
 }
 #endif /* CM4_RAUC_AB */
@@ -329,6 +367,13 @@ void* hal_get_boot_dts(void)
             (unsigned)sz);
         return NULL;
     }
+    /* SECURITY: the firmware DTB lives on the unsigned FAT partition (unless
+     * the RPi EEPROM secure-boot is enabled), so it is NOT covered by wolfBoot's
+     * signature. Only /chosen/bootargs is overwritten below; /memory,
+     * /reserved-memory, per-device reg windows and initrd remain firmware /
+     * attacker controlled. This path is opt-in via CM4_FIRMWARE_DTB. See the
+     * trust-boundary note in docs/Targets.md. */
+    wolfBoot_printf("cm4: using UNVERIFIED firmware DTB (CM4_FIRMWARE_DTB)\n");
     memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, fdt, sz);
     fdt = (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
 
@@ -341,8 +386,12 @@ void* hal_get_boot_dts(void)
         off = fdt_add_subnode(fdt, 0, "chosen");
     }
     if (off < 0) {
-        wolfBoot_printf("cm4: DTB /chosen error (%d)\n", off);
-        return fdt; /* still bootable; kernel falls back to built-in cmdline */
+        /* Fail closed: without /chosen we cannot inject our known-good bootargs,
+         * so refuse to hand Linux the unverified firmware DTB (with its own,
+         * attacker-influenceable command line) rather than boot open. */
+        wolfBoot_printf("cm4: DTB /chosen error (%d); refusing firmware DTB\n",
+            off);
+        return NULL;
     }
 #if defined(CM4_RAUC_AB)
     {
@@ -350,12 +399,15 @@ void* hal_get_boot_dts(void)
         const char *args = LINUX_BOOTARGS;
         if (cm4_rauc_build_bootargs(cm4_bootargs, sizeof(cm4_bootargs)) == 0)
             args = cm4_bootargs;
-        if (fdt_fixup_str(fdt, off, "chosen", "bootargs", args) != 0)
-            wolfBoot_printf("cm4: DTB bootargs fixup failed\n");
+        if (fdt_fixup_str(fdt, off, "chosen", "bootargs", args) != 0) {
+            wolfBoot_printf("cm4: DTB bootargs fixup failed; refusing firmware DTB\n");
+            return NULL;
+        }
     }
 #else
     if (fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS) != 0) {
-        wolfBoot_printf("cm4: DTB bootargs fixup failed\n");
+        wolfBoot_printf("cm4: DTB bootargs fixup failed; refusing firmware DTB\n");
+        return NULL;
     }
 #endif
     wolfBoot_printf("cm4: DTB relocated to %p, bootargs set\n", fdt);
@@ -416,6 +468,14 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+    /* Hand the OS a clean SDHCI controller: wolfBoot just used it (PIO, clocked)
+     * for the image + env I/O, and the leftover state makes the OS driver's
+     * re-init / tuning intermittently flake. Must run BEFORE the MMU is torn
+     * down (the shutdown touches the controller through Normal-cacheable MMIO).
+     * disk_close() on this target is a no-op, so the reset happens here. */
+    sdhci_shutdown();
+#endif
 #if defined(CM4_USE_MMU)
     /* Undo cm4_mmu_enable() before handoff: flush the loaded image out of the
      * D-cache and return to the MMU-off state the application expects. */
@@ -464,7 +524,11 @@ void* _sbrk(int incr)
  * peripheral region (incl. 0xFE000000) stays Device. Four 1GB block
  * descriptors cover the 32-bit VA space at translation level 1. */
 #define MMU_BLOCK_NORMAL  0x0000000000000701ULL /* block, AttrIdx0, AF, SH inner */
-#define MMU_BLOCK_DEVICE  0x0000000000000405ULL /* block, AttrIdx1, AF, SH none  */
+/* Device MMIO: mark execute-never (UXN bit 54 | PXN bit 53). Instruction fetch
+ * from Device memory is CONSTRAINED UNPREDICTABLE and several BCM2711 registers
+ * are read-destructive, so a speculative fetch there is a real hazard. Matches
+ * the non-executable Device attributes in boot_aarch64_start.S. */
+#define MMU_BLOCK_DEVICE  (0x0000000000000405ULL | (1ULL << 54) | (1ULL << 53))
 
 static volatile uint64_t cm4_l1_table[512] __attribute__((aligned(4096)));
 
@@ -635,11 +699,28 @@ int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
         *RNG_SOFT_RESET = 0;
         *RNG_INT_STATUS = 0xFFFFFFFF; /* write-1-to-clear all pending status */
         *RNG_CTRL = RNG200_CTRL_RBGEN;
-        rng_inited = 1;
+        /* Do NOT latch rng_inited here: only treat the core as initialized
+         * once it has actually produced a word (see below), so a wedged core
+         * re-runs bring-up on the next call rather than being trusted. */
     }
 
     while (pos < sz) {
-        unsigned int word, n, i;
+        unsigned int word, n, i, st;
+        /* SP800-90B health status: fail closed on a degraded-but-clocking TRNG.
+         * A continuous-test lockout or NIST health-test failure must not seed
+         * the FIPS Hash-DRBG, even when the FIFO still has data. */
+        st = *RNG_INT_STATUS;
+        if ((st & RNG200_INT_HEALTH_FAIL) != 0) {
+#if defined(DEBUG_UART)
+            wolfBoot_printf("RNG200 health fail int=0x%08x; refusing seed\n",
+                (unsigned)st);
+#endif
+            /* Soft-reset and clear the latch so a later boot can re-init a
+             * healthy core; refuse this seed request. */
+            *RNG_CTRL = 0;
+            rng_inited = 0;
+            return -1;
+        }
         /* wait for at least one 32-bit word in the FIFO (bounded) */
         guard = 0;
         while ((*RNG_FIFO_COUNT & 0xFF) == 0) {
@@ -652,6 +733,7 @@ int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
             }
         }
         word = *RNG_FIFO_DATA;
+        rng_inited = 1; /* first successful word: safe to skip bring-up later */
         n = (sz - pos) < 4 ? (sz - pos) : 4;
         for (i = 0; i < n; i++)
             output[pos++] = (unsigned char)(word >> (i * 8));
@@ -772,8 +854,15 @@ void sdhci_platform_set_bus_mode(int is_emmc)
     (void)is_emmc; /* handled by the generic driver via Host Control 1 */
 }
 
-/* Microseconds from the ARMv8 generic timer (SDHCI udelay + disk updater).
- * Falls back to the BCM2711 system counter frequency if CNTFRQ_EL0 is 0. */
+#endif /* DISK_SDCARD || DISK_EMMC */
+
+/* Microseconds from the ARMv8 generic timer (SDHCI udelay + disk updater +
+ * boot benchmark). Falls back to the BCM2711 system counter frequency if
+ * CNTFRQ_EL0 is 0. Guard matches include/hal.h (WOLFBOOT_UPDATE_DISK ||
+ * BOOT_BENCHMARK) plus the disk backends, so a BOOT_BENCHMARK=1 build without a
+ * disk backend still links. */
+#if defined(DISK_SDCARD) || defined(DISK_EMMC) || \
+    defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
 uint64_t hal_get_timer_us(void)
 {
 #if defined(__aarch64__)
@@ -788,4 +877,4 @@ uint64_t hal_get_timer_us(void)
     return 0;
 #endif
 }
-#endif /* DISK_SDCARD || DISK_EMMC */
+#endif /* timer guard */

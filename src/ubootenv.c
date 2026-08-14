@@ -105,20 +105,27 @@ static void env_ltoa(long v, char *out)
     out[j] = '\0';
 }
 
-/* Build "BOOT_<name>_LEFT" into out. */
-static void env_leftkey(const char *name, char *out, size_t out_max)
+/* Build "BOOT_<name>_LEFT" into out. Returns 0 on success, -1 if it would not
+ * fit - refusing rather than silently dropping the "_LEFT" suffix (which would
+ * look up the wrong / a colliding counter key). The caller skips such a slot. */
+static int env_leftkey(const char *name, char *out, size_t out_max)
 {
     const char *pre = "BOOT_";
     const char *suf = "_LEFT";
+    size_t prel = 5; /* strlen("BOOT_") */
+    size_t sufl = 5; /* strlen("_LEFT") */
     size_t n = 0;
 
-    while (*pre != '\0' && n < out_max - 1)
+    if (prel + strlen(name) + sufl + 1 > out_max)
+        return -1;
+    while (*pre != '\0')
         out[n++] = *pre++;
-    while (*name != '\0' && n < out_max - 1)
+    while (*name != '\0')
         out[n++] = *name++;
-    while (*suf != '\0' && n < out_max - 1)
+    while (*suf != '\0')
         out[n++] = *suf++;
     out[n] = '\0';
+    return 0;
 }
 
 int uboot_env_verify(const uint8_t *env, size_t env_len)
@@ -126,6 +133,17 @@ int uboot_env_verify(const uint8_t *env, size_t env_len)
     if (env == NULL || env_len < 5)
         return 0;
     return (rd_le32(env) == ubootenv_crc32(env + 4, env_len - 4)) ? 1 : 0;
+}
+
+/* U-Boot's *redundant* environment layout is [crc32:4][flags:1][data]; its
+ * CRC covers the data starting at offset 5, not 4. Detect it so a valid
+ * redundant env (a common RAUC choice) is refused rather than misread as
+ * corruption and wiped. Returns 1 if the buffer validates as a redundant env. */
+static int uboot_env_is_redundant(const uint8_t *env, size_t env_len)
+{
+    if (env == NULL || env_len < 6)
+        return 0;
+    return (rd_le32(env) == ubootenv_crc32(env + 5, env_len - 5)) ? 1 : 0;
 }
 
 void uboot_env_reseal(uint8_t *env, size_t env_len)
@@ -281,14 +299,24 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
         return -1;
     memset(out, 0, sizeof(*out));
 
-    /* Corrupt / blank env: reinitialize with defaults. */
+    /* Corrupt / blank env: reinitialize with defaults - but never destroy a
+     * valid-but-different layout. */
     if (!uboot_env_verify(env, env_len)) {
+        /* A redundant-format env ([crc32][flags][data]) validates at offset 5.
+         * Refuse rather than wipe: overwriting it would destroy live RAUC
+         * state. The caller falls back to the static command line. */
+        if (uboot_env_is_redundant(env, env_len))
+            return -1;
+        /* Genuinely invalid: reinitialize defaults IN MEMORY so this boot can
+         * proceed, but flag it (out->reinitialized) so the caller does NOT
+         * persist the reset over on-disk state it could not validate. */
         env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval);
         memset(env, 0, env_len);
         (void)uboot_env_set(env, env_len, "BOOT_ORDER", "A B");
         (void)uboot_env_set(env, env_len, "BOOT_A_LEFT", leftval);
         (void)uboot_env_set(env, env_len, "BOOT_B_LEFT", leftval);
         uboot_env_reseal(env, env_len);
+        out->reinitialized = 1;
     }
 
     if (uboot_env_get(env, env_len, "BOOT_ORDER", order, sizeof(order)) < 0) {
@@ -306,13 +334,21 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
     /* Pass 1: first slot with tries left -> select + decrement. */
     o = order;
     while ((n = env_next_name(&o, name, sizeof(name))) > 0) {
-        env_leftkey(name, leftkey, sizeof(leftkey));
+        /* Skip a name too long to form a valid "BOOT_<name>_LEFT" key rather
+         * than looking up a truncated / colliding counter. */
+        if (env_leftkey(name, leftkey, sizeof(leftkey)) != 0)
+            continue;
         left = UBOOT_ENV_DEFAULT_TRIES;
         if (uboot_env_get(env, env_len, leftkey, leftval, sizeof(leftval)) >= 0)
             left = env_atol(leftval);
         if (left > 0) {
             env_ltoa(left - 1, leftval);
-            (void)uboot_env_set(env, env_len, leftkey, leftval);
+            /* If the decrement cannot be stored (env full), do NOT select this
+             * slot: booting it with an un-decremented counter would retry the
+             * same hung slot forever. Fail so the caller uses the static
+             * command line. (uboot_env_set is non-destructive on failure.) */
+            if (uboot_env_set(env, env_len, leftkey, leftval) != 0)
+                return -1;
             uboot_env_reseal(env, env_len);
             memcpy(out->name, name, (size_t)(n + 1));
             out->selected = 1;
@@ -324,7 +360,8 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
     env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval);
     o = order;
     while (env_next_name(&o, name, sizeof(name)) > 0) {
-        env_leftkey(name, leftkey, sizeof(leftkey));
+        if (env_leftkey(name, leftkey, sizeof(leftkey)) != 0)
+            continue;
         (void)uboot_env_set(env, env_len, leftkey, leftval);
     }
     uboot_env_reseal(env, env_len);

@@ -1918,7 +1918,7 @@ ifeq ($(FIPS),1)
   # Intercept impossible FIPS build cases early with a clear error. Skip for
   # clean-style goals (which do not compile/link) so 'make clean' still works
   # with FIPS=1 in .config.
-  ifeq ($(filter clean distclean keysclean,$(MAKECMDGOALS)),)
+  ifeq ($(filter %clean,$(MAKECMDGOALS)),)
     # NO_ARM_ASM is an ARM-only knob; the FIPS module is portable C on every
     # arch, but only the ARM/AArch64 builds have an asm crypto path to disable
     # (which would sit outside the validated module boundary). Force it on rather
@@ -1930,11 +1930,68 @@ ifeq ($(FIPS),1)
         $(error FIPS=1 on $(ARCH) requires NO_ARM_ASM=1 (the FIPS module uses portable-C crypto); NO_ARM_ASM=0 was set)
       endif
       NO_ARM_ASM=1
+      # Fail closed on include order: the top-level Makefile includes arch.mk
+      # BEFORE options.mk, so if NO_ARM_ASM was unset when arch.mk ran (e.g.
+      # TARGET=zynq/versal/nxp_ls1028a) it has already pulled the ARM asm crypto
+      # path into CFLAGS/OBJS - which the WOLFCRYPT_OBJS := reset below does NOT
+      # remove. Force-setting NO_ARM_ASM above is too late to unwind that, so
+      # refuse rather than link asm inside the validated boundary. Set
+      # NO_ARM_ASM=1 in your .config / on the command line (arch.mk sees it first).
+      ifneq ($(filter -DWOLFSSL_ARMASM,$(CFLAGS)),)
+        $(error FIPS=1 on $(ARCH): ARM asm crypto (-DWOLFSSL_ARMASM) was already selected before options.mk; set NO_ARM_ASM=1 explicitly so arch.mk sees it first (see docs/FIPS.md))
+      endif
     endif
     # Only the ECDSA object set is wired into the FIPS boundary below. RSA-PSS
     # would additionally need rsa.o inside the boundary and its own CI job.
     ifeq ($(filter $(SIGN),ECC256 ECC384 ECC521),)
       $(error FIPS=1 requires a FIPS-approved ECDSA SIGN (ECC256/ECC384/ECC521, see docs/FIPS.md); got $(SIGN))
+    endif
+    # The WOLFCRYPT_OBJS := reset below rebuilds ONLY the ECDSA FIPS boundary. It
+    # drops the objects the following features add while their -D CFLAGS survive,
+    # producing a confusing link error instead of a clear message. The FIPS
+    # boundary is ECDSA-only; reject unsupported combinations up front.
+    ifneq ($(SIGN_SECONDARY),)
+      $(error FIPS=1 does not support hybrid/secondary signatures (SIGN_SECONDARY=$(SIGN_SECONDARY)); see docs/FIPS.md)
+    endif
+    ifneq ($(strip $(AUX_PK_ALGOS)),)
+      $(error FIPS=1 does not support auxiliary public-key algorithms (AUX_PK_ALGOS=$(AUX_PK_ALGOS)); see docs/FIPS.md)
+    endif
+    ifeq ($(ENCRYPT),1)
+      $(error FIPS=1 does not support the image ENCRYPT path (its ChaCha/AES objects sit outside the FIPS boundary); see docs/FIPS.md)
+    endif
+    ifeq ($(WOLFTPM),1)
+      $(error FIPS=1 with WOLFTPM is not supported)
+    endif
+    ifeq ($(WOLFHSM_CLIENT),1)
+      $(error FIPS=1 with WOLFHSM_CLIENT is not supported)
+    endif
+    ifeq ($(WOLFHSM_SERVER),1)
+      $(error FIPS=1 with WOLFHSM_SERVER is not supported)
+    endif
+    # Non-wolfcrypt driver objects are appended to WOLFCRYPT_OBJS too and are
+    # likewise dropped by the reset while their src/*.o consumers stay in OBJS
+    # (undefined spi_init/spi_xfer/etc. at link). Reject them as well.
+    ifeq ($(SPI_FLASH),1)
+      $(error FIPS=1 with SPI_FLASH is not supported (driver object dropped by the FIPS WOLFCRYPT_OBJS reset))
+    endif
+    ifeq ($(QSPI_FLASH),1)
+      $(error FIPS=1 with QSPI_FLASH is not supported)
+    endif
+    ifeq ($(OCTOSPI_FLASH),1)
+      $(error FIPS=1 with OCTOSPI_FLASH is not supported)
+    endif
+    ifeq ($(UART_FLASH),1)
+      $(error FIPS=1 with UART_FLASH is not supported)
+    endif
+    ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
+      $(error FIPS=1 with WOLFCRYPT_TZ_PKCS11 (SECURE_PKCS11) is not supported)
+    endif
+    # M10: SPMATH must be on. The fastmath fallback (SPMATH!=1) defines
+    # WC_NO_HARDEN in user_settings.h, disabling the side-channel hardening a
+    # FIPS build must keep (it also does ECDSA signing in its CASTs). Shipped
+    # FIPS configs set SPMATH=1 (cm4.config, sim-fips.config).
+    ifneq ($(SPMATH),1)
+      $(error FIPS=1 requires SPMATH=1 (fastmath defines WC_NO_HARDEN, dropping side-channel hardening); see docs/FIPS.md)
     endif
   endif
   CFLAGS+=-DHAVE_FIPS
@@ -1953,12 +2010,28 @@ ifeq ($(FIPS),1)
     ifndef FIPS_VERSION
       $(error FIPS_READY=0 requires FIPS_VERSION=<n> to pin the validated wolfCrypt FIPS module version (e.g. FIPS_VERSION=7); see docs/FIPS.md)
     endif
+    # Emit the full MAJOR/MINOR/PATCH triplet. wolfSSL builds
+    # WOLFSSL_FIPS_VERSION_CODE from all three (settings.h); emitting only
+    # HAVE_FIPS_VERSION leaves MINOR/PATCH at 0, so every FIPS_VERSION_GE(major,
+    # minor) gate on a real validated bundle (e.g. 5.2.1) evaluates as n.0.0 and
+    # silently mis-versions. MINOR/PATCH default to 0 (matches a bundle whose
+    # settings.h pins them to 0); override for a minor/patch-versioned bundle.
+    FIPS_VERSION_MINOR ?= 0
+    FIPS_VERSION_PATCH ?= 0
     CFLAGS+=-DHAVE_FIPS_VERSION=$(FIPS_VERSION)
+    CFLAGS+=-DHAVE_FIPS_VERSION_MINOR=$(FIPS_VERSION_MINOR)
+    CFLAGS+=-DHAVE_FIPS_VERSION_PATCH=$(FIPS_VERSION_PATCH)
   endif
-  # The FIPS module pulls in libc malloc/printf. On bare-metal targets stub the
-  # newlib syscalls with nosys.specs; the HAL provides a bounded _sbrk so the
-  # heap cannot grow into the unverified image (see hal/cm4.c).
-  ifneq ($(ARCH),sim)
+  # The FIPS module pulls in libc malloc/printf. On a bare-metal newlib target,
+  # stub the syscalls with nosys.specs; the HAL provides a bounded _sbrk so the
+  # heap cannot grow into the unverified image (see hal/cm4.c). This is WRONG for
+  # a hosted / glibc-cross toolchain, so make it opt-in per target rather than
+  # "every non-sim ARCH" - a new bare-metal FIPS target sets FIPS_NOSYS_SPECS=1.
+  FIPS_NOSYS_SPECS ?= 0
+  ifeq ($(TARGET),cm4)
+    FIPS_NOSYS_SPECS = 1
+  endif
+  ifeq ($(FIPS_NOSYS_SPECS),1)
     LDFLAGS += --specs=nosys.specs
   endif
   WCDIR=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src

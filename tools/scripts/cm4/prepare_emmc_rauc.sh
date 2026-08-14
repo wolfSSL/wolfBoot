@@ -26,13 +26,19 @@ HERE="$ROOT/tools/scripts/cm4"
 CROSS="${CROSS_COMPILE:-aarch64-none-elf-}"
 KEY="${PRIVATE_KEY:-$ROOT/wolfboot_signing_private_key.der}"
 IMG_HDR="${IMAGE_HEADER_SIZE:-1024}"
-GCX_DEPLOY="${GCX_DEPLOY:-$HOME/Projects/GCX/iron-butterfly-os/build/tmp/deploy/images/raspberrypi4-64}"
+# Yocto deploy dir - REQUIRED (no default; set GCX_DEPLOY to the
+# deploy/images/<MACHINE> directory of your build).
+GCX_DEPLOY="${GCX_DEPLOY:-}"
 DEV="${1:-}"
 OUT="$HERE/rauc"
 
-KERNEL_GZ="$GCX_DEPLOY/fitImage-linux.bin-raspberrypi4-64"
-ROOTFS="$GCX_DEPLOY/core-image-ironbutterfly-raspberrypi4-64.rootfs.ext4"
-DTB="$GCX_DEPLOY/bcm2711-rpi-cm4.dtb"
+# Deploy artifact basenames; override per-name for a different recipe / machine.
+KERNEL_NAME="${KERNEL_NAME:-fitImage-linux.bin-raspberrypi4-64}"
+ROOTFS_NAME="${ROOTFS_NAME:-core-image-ironbutterfly-raspberrypi4-64.rootfs.ext4}"
+DTB_NAME="${DTB_NAME:-bcm2711-rpi-cm4.dtb}"
+KERNEL_GZ="$GCX_DEPLOY/$KERNEL_NAME"
+ROOTFS="$GCX_DEPLOY/$ROOTFS_NAME"
+DTB="$GCX_DEPLOY/$DTB_NAME"
 FW_START="$GCX_DEPLOY/bootfiles/start4.elf"
 FW_FIXUP="$GCX_DEPLOY/bootfiles/fixup4.dat"
 
@@ -48,8 +54,9 @@ prep_artifacts() {
     fi
     [ -f "$ROOT/wolfboot.bin" ] || { echo "!! build wolfboot.bin first (cm4_emmc_rauc.config)"; exit 1; }
     [ -f "$KEY" ] || { echo "!! signing key not found: $KEY"; exit 1; }
+    [ -n "$GCX_DEPLOY" ] || { echo "!! set GCX_DEPLOY=<yocto deploy/images/MACHINE dir> (no default)"; exit 1; }
     for f in "$KERNEL_GZ" "$DTB" "$FW_START" "$FW_FIXUP"; do
-        [ -f "$f" ] || { echo "!! missing GCX artifact: $f (set GCX_DEPLOY?)"; exit 1; }
+        [ -f "$f" ] || { echo "!! missing deploy artifact: $f (check GCX_DEPLOY / *_NAME overrides)"; exit 1; }
     done
     command -v mkimage >/dev/null || { echo "!! mkimage not found (u-boot-tools)"; exit 1; }
     command -v mkenvimage >/dev/null || { echo "!! mkenvimage not found (u-boot-tools)"; exit 1; }
@@ -86,7 +93,10 @@ EOF
 }
 
 write_device() {
-    local t root_src root_pk P1 P2 P3 P4 P5 P6 MP p ok
+    # MP is intentionally NOT local: the global EXIT trap below references it, and
+    # a function-local would be out of scope (set -u -> "unbound") when the trap
+    # fires on a set -e abort.
+    local t root_src root_pk P1 P2 P3 P4 P5 P6 p ok
     [ "$(id -u)" -eq 0 ] || { echo "!! writing $DEV requires root"; exit 1; }
     for t in sgdisk partprobe mkfs.vfat mkfs.ext4 lsblk udevadm dd tune2fs; do
         command -v "$t" >/dev/null || { echo "!! missing required tool: $t"; exit 1; }
@@ -104,6 +114,39 @@ write_device() {
             echo "!! refusing to erase the root disk $DEV (set ALLOW_ANY_DISK=1 to override)"; exit 1
         fi
     fi
+
+    # Fast iteration path: refresh only wolfBoot (p1 boot) + U-Boot env (p2) +
+    # signed FIT (p3) on an already-laid-out RAUC eMMC, WITHOUT repartitioning or
+    # re-writing the two 4GB rootfs slots. The root-disk guard above still runs.
+    P1="${DEV}1"; P2="${DEV}2"; P3="${DEV}3"
+    [ -b "$P1" ] || { P1="${DEV}p1"; P2="${DEV}p2"; P3="${DEV}p3"; }
+    if [ "${KERNEL_ONLY:-0}" = "1" ]; then
+        for p in "$P1" "$P2" "$P3"; do
+            [ -b "$p" ] || { echo "!! KERNEL_ONLY: $p not found (device not laid out yet)"; exit 1; }
+        done
+        echo "== KERNEL_ONLY target: $DEV =="; lsblk -o NAME,SIZE,FSTYPE,LABEL "$DEV"
+        if [ "${ASSUME_YES:-0}" = "1" ]; then
+            echo "ASSUME_YES=1: proceeding without prompt"
+        else
+            read -rp "Overwrite boot ($P1) + uboot-env ($P2) + FIT ($P3)? [type YES] " ok
+            [ "$ok" = "YES" ] || { echo "aborted"; exit 1; }
+        fi
+        MP=$(mktemp -d)
+        trap 'if [ -n "${MP:-}" ]; then mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true; fi' EXIT
+        echo "== KERNEL_ONLY: refresh boot files on $P1 =="
+        mount "$P1" "$MP"
+        cp "$OUT"/start4.elf "$OUT"/fixup4.dat "$OUT"/bcm2711-rpi-cm4.dtb \
+           "$OUT"/config.txt "$OUT"/kernel8.img "$MP"/
+        sync; umount "$MP"
+        echo "== U-Boot env -> uboot-env ($P2) =="
+        dd if="$OUT/uboot.env" of="$P2" bs=4k conv=fsync status=none
+        echo "== signed kernel FIT -> fitImage ($P3) =="
+        dd if="$OUT/cm4-fitImage_v1_signed.bin" of="$P3" bs=4k conv=fsync status=none
+        sync
+        echo "== KERNEL_ONLY done. Set BOOT OFF, power-cycle, watch the console. =="
+        return 0
+    fi
+
     echo "== target: $DEV =="; lsblk -o NAME,SIZE,FSTYPE,LABEL "$DEV"
     read -rp "Repartition and ERASE $DEV? [type YES] " ok
     [ "$ok" = "YES" ] || { echo "aborted"; exit 1; }
@@ -130,8 +173,9 @@ write_device() {
     MP=$(mktemp -d)
     # Clean up on exit even if mount/cp fails under set -e. A RETURN trap does NOT
     # fire when set -e aborts inside a function; EXIT does. The mountpoint -q guard
-    # makes it idempotent with the explicit umount below.
-    trap 'mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true' EXIT
+    # makes it idempotent with the explicit umount below. The ${MP:-} guard keeps
+    # the trap safe under set -u if it fires before MP is assigned.
+    trap 'if [ -n "${MP:-}" ]; then mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true; fi' EXIT
     mount "$P1" "$MP"
     cp "$OUT"/start4.elf "$OUT"/fixup4.dat "$OUT"/bcm2711-rpi-cm4.dtb \
        "$OUT"/config.txt "$OUT"/kernel8.img "$MP"/
@@ -166,7 +210,7 @@ write_device() {
         echo "   (tune2fs missing; A/B slots keep duplicate ext4 UUID/label)"
     fi
     echo "== data partition ($P6) =="
-    mkfs.ext4 -q -L data "$P6" >/dev/null 2>&1 || true
+    mkfs.ext4 -q -L data "$P6" >/dev/null 2>&1 || echo "   !! mkfs.ext4 failed on $P6 (no /data filesystem)"
     sync
     echo "== done. BOOT switch OFF, power-cycle, watch the CM4 PL011 console (ttyAMA0). =="
     echo "   wolfBoot picks the RAUC slot from p2 and boots root=/dev/mmcblk0p4|p5."

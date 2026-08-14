@@ -3892,7 +3892,7 @@ Key config points: `GZIP=1` (the FIT kernel subimage is `Image.gz`), `ELF=1`, `D
 The eMMC uses a 6-partition layout:
 
 - `p1` boot FAT: RPi firmware + `kernel8.img` + `config.txt`
-- `p2` uboot-env raw: RAUC `fw_env.config` target; its size must match wolfBoot's `UBOOT_ENV_SIZE` (`0x4000`)
+- `p2` uboot-env raw: RAUC `fw_env.config` target. wolfBoot and RAUC read the first `0x4000` bytes (= `UBOOT_ENV_SIZE`, the env-image size written by `mkenvimage -s 0x4000`); the partition itself only needs to be `>= 0x4000` (the layout script makes it 8 MB for alignment/headroom)
 - `p3` fitImage raw: shared wolfBoot-signed kernel FIT
 - `p4` rootfs_A ext4: slot A
 - `p5` rootfs_B ext4: slot B

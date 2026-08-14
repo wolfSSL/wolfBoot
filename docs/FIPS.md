@@ -55,7 +55,9 @@ The FIPS DRBG needs a seed. wolfBoot's lean configuration compiles out the OS se
 
 The module verifies an in-core integrity hash (HMAC-SHA-256 over the module's code and read-only data) at startup. A fresh build ships with a placeholder, so the first run reports a mismatch; capture the runtime hash and seal it:
 
-1. Build and run with a FIPS callback registered (wolfBoot does this in `src/loader.c`). On a mismatch the module reports the runtime hash; wolfBoot prints it (`FIPS in-core hash = ...`, from `wolfCrypt_GetCoreHash_fips()`) before halting.
+> **Console required for the seal.** The runtime hash is emitted with `wolfBoot_printf`, which compiles to a no-op when the console is disabled (`DEBUG_UART=0`, the default in `config/examples/cm4.config`). Build the seal-capture image with `DEBUG_UART=1` (bare-metal) or on the simulator, or the board just halts silently with no hash to copy. Once `verifyCore[]` is sealed you can rebuild with `DEBUG_UART=0` for production - the seal is independent of the console setting only if it does not shift the module's link addresses (it does not on cm4, where the console code is outside the FIPS boundary; re-confirm the hash after the final production build).
+
+1. Build and run with a FIPS callback registered (wolfBoot does this in `src/loader.c`) and the console enabled (see the note above). On a mismatch the module reports the runtime hash; wolfBoot prints it (`FIPS in-core hash = ...`, from `wolfCrypt_GetCoreHash_fips()`) before halting.
 2. Copy the reported 64-hex-character hash into `verifyCore[]` in `wolfcrypt/src/fips_test.c`.
 3. Rebuild and re-run. `wolfCrypt_GetStatus_fips()` now returns 0 (operational).
 

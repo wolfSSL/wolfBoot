@@ -1342,12 +1342,14 @@ static int emmc_card_full_init(void)
 #define SDHCI_DIR_READ  1
 #define SDHCI_DIR_WRITE 0
 
-/* Bounded spin for the multi-block write settle-wait (see sdhci_transfer): TC
- * may not arrive until CMD12 on some controllers, so the pre-CMD12 wait is
- * capped instead of spinning forever. Override per platform if needed. */
-#ifndef SDHCI_WRITE_SETTLE_SPINS
-#define SDHCI_WRITE_SETTLE_SPINS 1000000U
-#endif
+/* Bounded spin for the multi-block write settle-wait (see sdhci_transfer): on
+ * some controllers (e.g. the CM4 EMMC2) TC does not arrive until CMD12, so the
+ * pre-CMD12 wait is capped instead of spinning forever. This is OPT-IN per
+ * platform: define SDHCI_WRITE_SETTLE_SPINS in the target's config to enable
+ * the bound. Targets that do NOT define it keep the original spin-until-TC
+ * behavior, so the already-validated SDHCI targets (zynq/versal/mpfs250/
+ * zynq7000) are unaffected. When the bound fires, the write is not reported as
+ * complete until the card side is re-confirmed via CMD13 (see below). */
 
 /* Unified internal transfer function for read and write operations
  * dir: SDHCI_DIR_READ or SDHCI_DIR_WRITE
@@ -1362,6 +1364,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     int status;
     uint32_t block_count, reg, cmd_reg, bcr_reg;
     int is_multi_block;
+    int write_settle_timeout = 0;
 
     /* Determine if multi-block operation */
     is_multi_block = (dir == SDHCI_DIR_READ) ?
@@ -1548,10 +1551,12 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 }
                 sz -= xfer_sz;
 
-            #ifdef DISK_EMMC /* workaround for eMMC only */
-                /* For multi-block READ: clear BRR by writing 1 to it (W1C),
-                 * then the outer loop waits for BRR to be set again when the
-                 * next block's data is available from the card.
+            #if defined(DISK_EMMC) || defined(DISK_SDCARD)
+                /* Between-block workaround for the Arasan EMMC2 block (used for
+                 * both eMMC and the CM4 microSD path, which runs the same
+                 * controller in multi-block PIO). For multi-block READ: clear
+                 * BRR by writing 1 to it (W1C), then the outer loop waits for
+                 * BRR to be set again when the next block's data is available.
                  * For WRITE: BWR auto-clears when buffer full, don't touch. */
                 if (sz > 0 && dir == SDHCI_DIR_READ) {
                     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
@@ -1584,11 +1589,20 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
          * deadlocking, and the CMD12 + wait-busy sequence below completes the
          * transfer. */
         if (dir == SDHCI_DIR_WRITE) {
+#ifdef SDHCI_WRITE_SETTLE_SPINS
             uint32_t spins = SDHCI_WRITE_SETTLE_SPINS;
+#endif
             while (((reg = SDHCI_REG(SDHCI_SRS12)) &
                     (SDHCI_SRS12_TC | SDHCI_SRS12_EINT)) == 0) {
-                if (is_multi_block && spins-- == 0)
+#ifdef SDHCI_WRITE_SETTLE_SPINS
+                /* Bounded (opt-in): record the timeout rather than discarding
+                 * it silently, so the post-transfer path re-confirms the card
+                 * before declaring success. */
+                if (is_multi_block && spins-- == 0) {
+                    write_settle_timeout = 1;
                     break;
+                }
+#endif
             }
         }
     }
@@ -1634,6 +1648,24 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     else {
         wolfBoot_printf("sdhci_transfer: error SRS12: 0x%08X\n", reg);
         status = -1;
+    }
+
+    /* Host-side confirmation for a bounded-out multi-block write: the settle
+     * wait above capped instead of observing TC, so require positive evidence
+     * the card actually finished the program cycle (CMD13 -> READY_FOR_DATA via
+     * sdhci_wait_busy) before reporting success. A silently timed-out write must
+     * NOT be treated as landed - the RAUC try-counter writeback relies on a
+     * failed write propagating (see hal/cm4.c). Safe for the CM4 EMMC2 where TC
+     * legitimately never precedes CMD12: after CMD12 the card reports ready. */
+    if (write_settle_timeout) {
+        wolfBoot_printf("sdhci_transfer: multi-block write settle timeout "
+            "(SRS12=0x%08X); confirming completion via CMD13\n", reg);
+        if (status == 0) {
+            status = sdhci_wait_busy(0);
+        }
+        if (status != 0) {
+            wolfBoot_printf("sdhci_transfer: write completion NOT confirmed\n");
+        }
     }
 
 #ifdef DEBUG_SDHCI

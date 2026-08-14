@@ -212,6 +212,93 @@ START_TEST(test_select_nonnumeric_left)
 }
 END_TEST
 
+/* M4: a full-size env with a bad (non-redundant) CRC is reinitialized to
+ * defaults IN MEMORY and flagged reinitialized, so the caller skips writeback. */
+START_TEST(test_select_badcrc_sets_reinitialized)
+{
+    struct uboot_slot s;
+    memset(env, 0x5A, ENVLEN); /* garbage: invalid simple AND redundant CRC */
+    ck_assert_int_eq(uboot_env_select_slot(env, ENVLEN, &s), 0);
+    ck_assert_int_eq(s.reinitialized, 1);
+    ck_assert_int_eq(s.selected, 1);
+    ck_assert_str_eq(s.name, "A");
+}
+END_TEST
+
+/* M4: a valid REDUNDANT-layout env ([crc32][flags][data]) is refused (return
+ * -1) rather than wiped - overwriting it would destroy live RAUC state. */
+START_TEST(test_select_redundant_env_refused)
+{
+    struct uboot_slot s;
+    uint8_t before[ENVLEN];
+    uint32_t crc;
+    memset(env, 0, ENVLEN);
+    env[4] = 0x01; /* redundant flags byte */
+    memcpy(env + 5, "BOOT_ORDER=A B\0", 15);
+    crc = ubootenv_crc32(env + 5, ENVLEN - 5);
+    wr_le32(env, crc);
+    memcpy(before, env, ENVLEN);
+    ck_assert_int_eq(uboot_env_select_slot(env, ENVLEN, &s), -1);
+    ck_assert_int_eq(s.selected, 0);
+    ck_assert_mem_eq(env, before, ENVLEN); /* not wiped */
+}
+END_TEST
+
+/* M3: valid CRC, BOOT_ORDER present but BOOT_A_LEFT absent and no room to append
+ * the decremented counter -> the inner set fails and select must NOT report a
+ * slot (else the hung slot would retry forever). */
+START_TEST(test_select_innerset_failure_no_select)
+{
+    uint8_t small[28];
+    struct uboot_slot s;
+    memset(small, 0, sizeof(small));
+    ck_assert_int_eq(uboot_env_set(small, sizeof(small), "BOOT_ORDER", "A B"), 0);
+    uboot_env_reseal(small, sizeof(small));
+    ck_assert_int_eq(uboot_env_select_slot(small, sizeof(small), &s), -1);
+    ck_assert_int_eq(s.selected, 0);
+}
+END_TEST
+
+/* L11: valid CRC but no BOOT_ORDER key -> defaults to "A B" and selects A. */
+START_TEST(test_select_valid_crc_missing_bootorder)
+{
+    struct uboot_slot s;
+    memset(env, 0, ENVLEN);
+    uboot_env_set(env, ENVLEN, "SOMETHING", "x");
+    uboot_env_reseal(env, ENVLEN);
+    ck_assert_int_eq(uboot_env_select_slot(env, ENVLEN, &s), 0);
+    ck_assert_int_eq(s.selected, 1);
+    ck_assert_str_eq(s.name, "A");
+    ck_assert_int_eq(s.reinitialized, 0);
+}
+END_TEST
+
+/* L11: NULL / too-short buffers are rejected, not dereferenced. */
+START_TEST(test_select_null_and_short)
+{
+    struct uboot_slot s;
+    char v[8];
+    ck_assert_int_eq(uboot_env_select_slot(NULL, ENVLEN, &s), -1);
+    ck_assert_int_eq(uboot_env_select_slot(env, 4, &s), -1);
+    ck_assert_int_eq(uboot_env_verify(NULL, ENVLEN), 0);
+    ck_assert_int_eq(uboot_env_get(NULL, ENVLEN, "K", v, sizeof(v)), -1);
+}
+END_TEST
+
+/* L2/L11: env_leftkey bounds the name - a name too long to form
+ * "BOOT_<name>_LEFT" is refused (returns -1), never truncated into an alias. */
+START_TEST(test_leftkey_long_name_bounds)
+{
+    char key[UBOOT_ENV_VAL_MAX];
+    char longname[UBOOT_ENV_VAL_MAX];
+    ck_assert_int_eq(env_leftkey("A", key, sizeof(key)), 0);
+    ck_assert_str_eq(key, "BOOT_A_LEFT");
+    memset(longname, 'X', sizeof(longname) - 1);
+    longname[sizeof(longname) - 1] = '\0';
+    ck_assert_int_eq(env_leftkey(longname, key, sizeof(key)), -1);
+}
+END_TEST
+
 Suite *ubootenv_suite(void)
 {
     Suite *s = suite_create("ubootenv");
@@ -228,6 +315,12 @@ Suite *ubootenv_suite(void)
     tcase_add_test(tc, test_get_truncation);
     tcase_add_test(tc, test_select_empty_order);
     tcase_add_test(tc, test_select_nonnumeric_left);
+    tcase_add_test(tc, test_select_badcrc_sets_reinitialized);
+    tcase_add_test(tc, test_select_redundant_env_refused);
+    tcase_add_test(tc, test_select_innerset_failure_no_select);
+    tcase_add_test(tc, test_select_valid_crc_missing_bootorder);
+    tcase_add_test(tc, test_select_null_and_short);
+    tcase_add_test(tc, test_leftkey_long_name_bounds);
     suite_add_tcase(s, tc);
 
     return s;

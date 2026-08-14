@@ -2,7 +2,7 @@
 # prepare_emmc_linux.sh - build the CM4 eMMC layout to boot GCX Yocto Linux under
 # wolfBoot (as opposed to prepare_emmc.sh, which boots the disk_app prove-out stub).
 #
-# Simple first-boot GPT (see docs/Targets.md / the gcx-cm4-wolfboot-yocto skill):
+# Simple first-boot GPT (see docs/Targets.md):
 #   p1 = boot   (FAT32) : RPi firmware (start4.elf, fixup4.dat), bcm2711-rpi-cm4.dtb,
 #                         config.txt, kernel8.img (= wolfBoot, cm4_emmc_linux.config)
 #   p2 = image_a (raw)  : wolfBoot-signed kernel FIT (version 1)
@@ -32,15 +32,20 @@ HERE="$ROOT/tools/scripts/cm4"
 CROSS="${CROSS_COMPILE:-aarch64-none-elf-}"
 KEY="${PRIVATE_KEY:-$ROOT/wolfboot_signing_private_key.der}"
 IMG_HDR="${IMAGE_HEADER_SIZE:-1024}"
-# GCX Yocto deploy dir (override GCX_DEPLOY=... for a different build).
-GCX_DEPLOY="${GCX_DEPLOY:-$HOME/Projects/GCX/iron-butterfly-os/build/tmp/deploy/images/raspberrypi4-64}"
+# Yocto deploy dir - REQUIRED (no default; set GCX_DEPLOY to the
+# deploy/images/<MACHINE> directory of your build).
+GCX_DEPLOY="${GCX_DEPLOY:-}"
 DEV="${1:-}"
 OUT="$HERE/linux"        # staging dir for the assembled boot files
 
-# GCX deploy artifacts (machine-suffixed; the plain names are dangling symlinks)
-KERNEL_GZ="$GCX_DEPLOY/fitImage-linux.bin-raspberrypi4-64"
-ROOTFS="$GCX_DEPLOY/core-image-ironbutterfly-raspberrypi4-64.rootfs.ext4"
-DTB="$GCX_DEPLOY/bcm2711-rpi-cm4.dtb"
+# Deploy artifact basenames (machine-suffixed; the plain names are dangling
+# symlinks). Override per-name for a different image recipe / machine.
+KERNEL_NAME="${KERNEL_NAME:-fitImage-linux.bin-raspberrypi4-64}"
+ROOTFS_NAME="${ROOTFS_NAME:-core-image-ironbutterfly-raspberrypi4-64.rootfs.ext4}"
+DTB_NAME="${DTB_NAME:-bcm2711-rpi-cm4.dtb}"
+KERNEL_GZ="$GCX_DEPLOY/$KERNEL_NAME"
+ROOTFS="$GCX_DEPLOY/$ROOTFS_NAME"
+DTB="$GCX_DEPLOY/$DTB_NAME"
 FW_START="$GCX_DEPLOY/bootfiles/start4.elf"
 FW_FIXUP="$GCX_DEPLOY/bootfiles/fixup4.dat"
 
@@ -60,8 +65,9 @@ prep_artifacts() {
 
     [ -f "$ROOT/wolfboot.bin" ] || { echo "!! build wolfboot.bin first (cm4_emmc_linux.config)"; exit 1; }
     [ -f "$KEY" ] || { echo "!! signing key not found: $KEY"; exit 1; }
+    [ -n "$GCX_DEPLOY" ] || { echo "!! set GCX_DEPLOY=<yocto deploy/images/MACHINE dir> (no default)"; exit 1; }
     for f in "$KERNEL_GZ" "$ROOTFS" "$DTB" "$FW_START" "$FW_FIXUP"; do
-        [ -f "$f" ] || { echo "!! missing GCX artifact: $f (set GCX_DEPLOY?)"; exit 1; }
+        [ -f "$f" ] || { echo "!! missing deploy artifact: $f (check GCX_DEPLOY / *_NAME overrides)"; exit 1; }
     done
     command -v mkimage >/dev/null || { echo "!! mkimage not found (u-boot-tools)"; exit 1; }
 
@@ -103,9 +109,12 @@ EOF
 
 # ---- device write (root) --------------------------------------------------
 write_device() {
-    local t root_src root_pk P1 P2 P3 MP ok p
+    # MP is intentionally NOT local: the global EXIT trap references it, and a
+    # function-local would be out of scope (set -u -> "unbound") when the trap
+    # fires on a set -e abort.
+    local t root_src root_pk P1 P2 P3 ok p
     [ "$(id -u)" -eq 0 ] || { echo "!! writing $DEV requires root"; exit 1; }
-    for t in sgdisk partprobe mkfs.vfat lsblk udevadm dd; do
+    for t in sgdisk partprobe mkfs.vfat lsblk udevadm dd findmnt mountpoint; do
         command -v "$t" >/dev/null || { echo "!! missing required tool: $t"; exit 1; }
     done
     [ -b "$DEV" ] || { echo "!! not a block device: $DEV"; exit 1; }
@@ -114,6 +123,21 @@ write_device() {
     P1="${DEV}1"; P2="${DEV}2"; P3="${DEV}3"
     [ -b "${DEV}1" ] || { P1="${DEV}p1"; P2="${DEV}p2"; P3="${DEV}p3"; }
 
+    # Refuse the disk currently backing '/'. Hoisted ABOVE the KERNEL_ONLY branch
+    # so BOTH the fast path and the full repartition path are guarded - the
+    # KERNEL_ONLY path also writes $DEV (P1 files + P2 FIT) and must not be able
+    # to clobber a live system disk unguarded. Override with ALLOW_ANY_DISK=1.
+    root_src="$(findmnt -no SOURCE / 2>/dev/null || true)"
+    root_pk="$(lsblk -no PKNAME "$root_src" 2>/dev/null | head -1)"
+    if [ "${ALLOW_ANY_DISK:-0}" != "1" ]; then
+        # Fail closed: an empty PKNAME (LVM/btrfs/overlay root, empty root_src)
+        # would otherwise leave the guard comparing against a bare "/dev/".
+        [ -n "$root_pk" ] || { echo "!! cannot determine root disk (lsblk PKNAME empty); set ALLOW_ANY_DISK=1 to override"; exit 1; }
+        if [ "$DEV" = "/dev/$root_pk" ]; then
+            echo "!! refusing to write the root disk $DEV (set ALLOW_ANY_DISK=1 to override)"; exit 1
+        fi
+    fi
+
     # Fast iteration path: only wolfBoot (kernel8.img) changed - refresh the boot
     # partition + FIT without repartitioning or re-writing the 600MB rootfs.
     if [ "${KERNEL_ONLY:-0}" = "1" ]; then
@@ -121,11 +145,22 @@ write_device() {
         # Assert P2 too before the dd below: a missing node makes dd silently
         # create a regular file instead of writing the partition.
         [ -b "$P2" ] || { echo "!! partition node $P2 missing (partprobe/udev race?)"; exit 1; }
+        # Confirm before overwriting a live partition (no repartition, so a
+        # lighter prompt than the full-erase path, but still fail-safe). The
+        # root-disk guard above always runs; ASSUME_YES=1 skips only this
+        # interactive prompt (for scripted/known-good flashing).
+        echo "== KERNEL_ONLY target: $DEV =="; lsblk -o NAME,SIZE,FSTYPE,LABEL "$DEV"
+        if [ "${ASSUME_YES:-0}" = "1" ]; then
+            echo "ASSUME_YES=1: proceeding without prompt"
+        else
+            read -rp "Overwrite kernel8.img/config/dtb on $P1 and the signed FIT on $P2? [type YES] " ok
+            [ "$ok" = "YES" ] || { echo "aborted"; exit 1; }
+        fi
         MP=$(mktemp -d)
         # Clean up on exit even if mount/cp fails under set -e. A RETURN trap does
         # NOT fire when set -e aborts inside a function; EXIT does. The mountpoint
         # -q guard makes it idempotent with the explicit umount below.
-        trap 'mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true' EXIT
+        trap 'if [ -n "${MP:-}" ]; then mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true; fi' EXIT
         echo "== KERNEL_ONLY: refresh kernel8.img/config/dtb on $P1 + FIT on $P2 =="
         mount "$P1" "$MP"
         cp "$OUT"/kernel8.img "$OUT"/config.txt "$OUT"/bcm2711-rpi-cm4.dtb "$MP"/
@@ -137,17 +172,6 @@ write_device() {
     fi
 
     [ -f "$ROOTFS" ] || { echo "!! rootfs not found: $ROOTFS (set GCX_DEPLOY)"; exit 1; }
-    # Refuse the disk currently backing '/'. Override with ALLOW_ANY_DISK=1.
-    root_src="$(findmnt -no SOURCE / 2>/dev/null || true)"
-    root_pk="$(lsblk -no PKNAME "$root_src" 2>/dev/null | head -1)"
-    if [ "${ALLOW_ANY_DISK:-0}" != "1" ]; then
-        # Fail closed: an empty PKNAME (LVM/btrfs/overlay root, empty root_src)
-        # would otherwise leave the guard comparing against a bare "/dev/".
-        [ -n "$root_pk" ] || { echo "!! cannot determine root disk (lsblk PKNAME empty); set ALLOW_ANY_DISK=1 to override"; exit 1; }
-        if [ "$DEV" = "/dev/$root_pk" ]; then
-            echo "!! refusing to erase the root disk $DEV (set ALLOW_ANY_DISK=1 to override)"; exit 1
-        fi
-    fi
     echo "== target: $DEV =="; lsblk -o NAME,SIZE,FSTYPE,LABEL "$DEV"
     read -rp "Repartition and ERASE $DEV? [type YES] " ok
     [ "$ok" = "YES" ] || { echo "aborted"; exit 1; }
@@ -172,7 +196,7 @@ write_device() {
     # Clean up on exit even if mount/cp fails under set -e. A RETURN trap does NOT
     # fire when set -e aborts inside a function; EXIT does. The mountpoint -q guard
     # makes it idempotent with the explicit umount below.
-    trap 'mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true' EXIT
+    trap 'if [ -n "${MP:-}" ]; then mountpoint -q "$MP" && umount "$MP"; rmdir "$MP" 2>/dev/null || true; fi' EXIT
     mount "$P1" "$MP"
     cp "$OUT"/start4.elf "$OUT"/fixup4.dat "$OUT"/bcm2711-rpi-cm4.dtb \
        "$OUT"/config.txt "$OUT"/kernel8.img "$MP"/

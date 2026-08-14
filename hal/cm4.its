@@ -11,7 +11,7 @@
  */
 /*
  * The hash-1 { algo = "sha256"; } nodes below are informational only: mkimage
- * leaves them empty and wolfBoot does not re-verify per-image hashes here.
+ * populates their `value`, but wolfBoot does not re-verify per-image hashes here.
  * Authentication of the whole FIT comes from the outer wolfBoot signature; the
  * FIT hashes are best-effort defense-in-depth, not an enforced integrity check.
  */

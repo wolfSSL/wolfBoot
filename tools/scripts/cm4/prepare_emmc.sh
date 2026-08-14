@@ -62,10 +62,35 @@ prep_artifacts() {
         "$HERE/disk_app.elf" "$KEY" 2 >/dev/null )
     ls -la "$HERE"/disk_app_v1_signed.bin "$HERE"/disk_app_v2_signed.bin
 
-    echo "== fetching RPi BCM2711 firmware =="
+    echo "== fetching RPi BCM2711 firmware (ref $FWREF) =="
+    mkdir -p "$HERE/fw"
+    # These blobs are the FIRST link of the boot chain (start4.elf runs on the
+    # VideoCore before the ARM cores load wolfBoot), i.e. below wolfBoot's root
+    # of trust. Pinning a full commit SHA in FWREF and committing an integrity
+    # manifest (tools/scripts/cm4/fw.sha256, lines "<sha256>  <filename>") is
+    # strongly recommended; when the manifest is present each blob is verified.
     for f in start4.elf fixup4.dat bcm2711-rpi-cm4.dtb; do
-        [ -f "$HERE/fw/$f" ] || { mkdir -p "$HERE/fw"; curl -fsSL -o "$HERE/fw/$f" "$FWBASE/$f"; }
+        dst="$HERE/fw/$f"
+        # Re-fetch when forced or when the cached file is missing/empty. A
+        # truncated download leaves a short file that a plain [ -f ] would treat
+        # as present (poisoning the cache), so test [ -s ] and download to a temp
+        # file, renaming only on success so an interrupted transfer never lands.
+        if [ "${FORCE_PREP:-0}" = "1" ] || [ ! -s "$dst" ]; then
+            tmp="$(mktemp "$dst.XXXXXX")"
+            if ! curl -fsSL -o "$tmp" "$FWBASE/$f"; then
+                rm -f "$tmp"; echo "!! failed to download $f from $FWBASE"; exit 1
+            fi
+            [ -s "$tmp" ] || { rm -f "$tmp"; echo "!! downloaded $f is empty"; exit 1; }
+            mv -f "$tmp" "$dst"
+        fi
     done
+    if [ -f "$HERE/fw.sha256" ]; then
+        echo "== verifying firmware against fw.sha256 =="
+        ( cd "$HERE/fw" && sha256sum -c "$HERE/fw.sha256" ) || {
+            echo "!! firmware checksum verification FAILED"; exit 1; }
+    else
+        echo "   (no fw.sha256 manifest; firmware not integrity-checked - see comment above)"
+    fi
 
     cat > "$HERE/fw/config.txt" <<'EOF'
 arm_64bit=1
@@ -74,7 +99,10 @@ kernel=kernel8.img
 kernel_address=0x200000
 enable_uart=1
 uart_2ndstage=1
-dtoverlay=disable-bt
+# NOTE: this stub (cm4.config) uses the BCM2711 mini-UART (AUX, ttyS0) on
+# GPIO14/15 - do NOT add dtoverlay=disable-bt here (that routes the PL011 onto
+# GPIO14/15 instead and kills the mini-UART console). disable-bt belongs only to
+# the CM4_UART_PL011 Linux path (see prepare_emmc_linux.sh).
 init_uart_clock=48000000
 init_uart_baud=115200
 EOF
