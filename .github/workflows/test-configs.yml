@@ -827,6 +827,14 @@ jobs:
       config-file: ./config/examples/zynqmp_sdcard.config
       make-args: ENCRYPT=1 ENCRYPT_WITH_CHACHA=1
 
+  # The only build that compiles the WOLFBOOT_FIT_RAMDISK paths of src/fdt.c.
+  zynqmp_sdcard_ramdisk_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: FIT_RAMDISK=1 WOLFBOOT_LOAD_RAMDISK_ADDRESS=0x40000000
+
   zynqmp_fsbl_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
