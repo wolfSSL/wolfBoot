@@ -82,6 +82,15 @@ ifeq ($(TARGET),sim)
   STACK_USAGE_LIMIT:=4608
 endif
 
+# SP_MATH_ALL with RSA-2048 puts ~18 KB frames in sp_int.c. The PowerPC test
+# app runs from DDR with a 256 KB stack, so that is affordable here even
+# though it would not be on a small target.
+ifeq ($(ARCH),PPC)
+  ifeq ($(WOLFCRYPT_TEST),1)
+    STACK_USAGE_LIMIT:=20480
+  endif
+endif
+
 ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
@@ -203,6 +212,31 @@ ifeq ($(TARGET),max32666)
     CFLAGS += -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/
     WOLFCRYPT_SUPPORT=1
   endif
+endif
+
+# NXP QorIQ SEC hardware crypto, selected through the crypto callback layer.
+ifeq ($(SEC_QORIQ),1)
+  # CCSR base is board specific: the NXP RDBs leave it at the 0xFE000000
+  # reset value, the CW VPX3-152 U-Boot relocates it to 0xEF000000. A wrong
+  # base does not fail cleanly -- the driver reads an unmapped address and the
+  # core takes a data TLB error -- so there is deliberately no default. State
+  # it per build.
+  ifeq ($(SEC_QORIQ_CCSRBAR),)
+    $(error SEC_QORIQ=1 requires SEC_QORIQ_CCSRBAR to be set, e.g. \
+      SEC_QORIQ_CCSRBAR=0xFE000000UL for the NXP T1040/T2080 RDBs or \
+      SEC_QORIQ_CCSRBAR=0xEF000000UL for the CW VPX3-152)
+  endif
+  CFLAGS+=-DWOLFSSL_SEC_QORIQ -DWOLFSSL_SEC_QORIQ_BAREMETAL
+  CFLAGS+=-DSEC_QORIQ_CCSRBAR=$(SEC_QORIQ_CCSRBAR)
+  WOLFCRYPT_SUPPORT=1
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_cb.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_hash.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_aes.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_rng.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_pkha.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_baremetal.o
 endif
 
 ifeq ($(WOLFCRYPT_TEST),1)

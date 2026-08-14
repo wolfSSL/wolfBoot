@@ -105,7 +105,8 @@
     {
         (void)m7_get_ticks();
     }
-#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
+      defined(TARGET_nxp_t1040)
     /* PPC time base register for accurate timing (e6500). */
     static uint32_t ppc_tb_hz = 0;
     static unsigned long long ppc_start_ticks = 0;
@@ -138,7 +139,9 @@
     #endif
         volatile uint32_t *rcwsr0 = (volatile uint32_t *)(ccsr + 0xE0100UL);
         uint32_t plat_ratio = ((*rcwsr0) >> 25) & 0x1FU;
-    #if defined(BOARD_NAII_68PPC2) || defined(TARGET_nxp_t1024)
+    #if defined(BOARD_NAII_68PPC2) || defined(TARGET_nxp_t1024) || \
+        defined(TARGET_nxp_t1040)
+        /* T10xx boards run a 100 MHz SYSCLK; see SYS_CLK in hal/nxp_t10xx.c */
         uint32_t sys_clk = 100000000; /* 100 MHz */
     #else
         uint32_t sys_clk = 66666667;  /* 66.66 MHz */
@@ -214,7 +217,8 @@ unsigned long my_time(unsigned long* timer)
         if (timer) *timer = t;
         return t;
     }
-#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
+      defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();
     {
@@ -265,7 +269,8 @@ double current_time(int reset)
     if (reset)
         m7_start_ticks = m7_get_ticks();
     return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
-#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
+#elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
+      defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();
     if (reset)
