@@ -144,14 +144,18 @@ static void RAMFUNCTION octospi_write_enable(void)
                 NULL, 0, SPI_MODE_NONE, 0);
 }
 
-static void RAMFUNCTION octospi_wait_ready(void)
+static int RAMFUNCTION octospi_wait_ready(void)
 {
     uint8_t sr;
     do {
         sr = 0;
-        octospi_cmd(1, READ_SR_CMD, 0, SPI_MODE_NONE,
-                    &sr, 1, SPI_MODE_SINGLE, 0);
+        /* A failed status-register transfer must not read as "ready":
+         * sr stays zero and the loop would exit as if the flash were idle. */
+        if (octospi_cmd(1, READ_SR_CMD, 0, SPI_MODE_NONE,
+                        &sr, 1, SPI_MODE_SINGLE, 0) < 0)
+            return -1;
     } while (sr & FLASH_SR_BUSY);
+    return 0;
 }
 
 static void RAMFUNCTION octospi_enable_mmap(void)
@@ -737,7 +741,10 @@ static int RAMFUNCTION nor_flash_write(uint32_t offset, const uint8_t *data,
         if (ret < 0)
             break;
 
-        octospi_wait_ready();
+        if (octospi_wait_ready() < 0) {
+            ret = -1;
+            break;
+        }
 
         offset += write_sz;
         data += write_sz;
@@ -766,7 +773,10 @@ static int RAMFUNCTION nor_flash_erase(uint32_t offset, int len)
         if (ret < 0)
             break;
 
-        octospi_wait_ready();
+        if (octospi_wait_ready() < 0) {
+            ret = -1;
+            break;
+        }
         offset += FLASH_SECTOR_SIZE;
     }
 
