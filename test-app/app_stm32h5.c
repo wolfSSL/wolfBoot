@@ -754,7 +754,8 @@ static int run_psa_boot_attestation(void)
 #if (APP_HASH_SIZE > 0u)
     uint8_t hash_buf[APP_HASH_SIZE];
 #endif
-    size_t token_size = 0;
+    size_t queried_token_size;
+    size_t emitted_token_size;
     int ret = 0;
     size_t i;
 
@@ -802,30 +803,39 @@ static int run_psa_boot_attestation(void)
     }
 
     printf("  step 5: request IAT token size\r\n");
-    status = psa_initial_attest_get_token_size(sizeof(challenge), &token_size);
+    queried_token_size = 0;
+    status = psa_initial_attest_get_token_size(sizeof(challenge),
+                                               &queried_token_size);
     if (status != PSA_SUCCESS) {
         printf("  step 5: token size failed (%ld)\r\n", (long)status);
         ret = -1;
     } else {
         printf("  step 5: token size %lu bytes\r\n",
-               (unsigned long)token_size);
+               (unsigned long)queried_token_size);
     }
 
-    printf("  step 6: request IAT token\r\n");
-    if (ret == 0 && token_size <= sizeof(token)) {
+    printf("  step 6: request exact-size IAT token\r\n");
+    if (ret == 0 && queried_token_size <= sizeof(token)) {
+        emitted_token_size = 0;
         status = psa_initial_attest_get_token(challenge, sizeof(challenge),
-                                              token, sizeof(token), &token_size);
-        if (status != PSA_SUCCESS) {
-            printf("  step 6: token failed (%ld)\r\n", (long)status);
+                                              token, queried_token_size,
+                                              &emitted_token_size);
+        if (status != PSA_SUCCESS ||
+            emitted_token_size != queried_token_size) {
+            printf("  step 6: size mismatch (status=%ld size=%lu "
+                   "expected=%lu)\r\n", (long)status,
+                   (unsigned long)emitted_token_size,
+                   (unsigned long)queried_token_size);
             ret = -1;
         } else {
-            printf("  step 6: token received (%lu bytes)\r\n",
-                   (unsigned long)token_size);
-            print_hex(token, (uint32_t)token_size, 1);
+            printf("  IAT size match: challenge=64 token=%lu\r\n",
+                   (unsigned long)emitted_token_size);
+            print_hex(token, (uint32_t)emitted_token_size, 1);
         }
     } else if (ret == 0) {
         printf("  step 6: token buffer too small (%lu > %lu)\r\n",
-               (unsigned long)token_size, (unsigned long)sizeof(token));
+               (unsigned long)queried_token_size,
+               (unsigned long)sizeof(token));
         ret = -1;
     }
 

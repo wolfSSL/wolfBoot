@@ -170,11 +170,11 @@ static void cleanup_ram(void)
 
 #define DIGEST_TLV_OFF_IN_HDR 28
 /* Write a wolfBoot image to the BOOT partition whose firmware payload is a
- * uImage: [64-byte uImage header][KERNEL_LEN kernel bytes]. ih_load is set to
- * the caller-provided value; the uImage magic/size/header-CRC are made valid so
- * uboot_legacy_header_valid() accepts it. Fills expected_kernel[] with the
- * kernel pattern for later comparison. Returns 0 on success. */
-static int add_uimage_payload(uint32_t version, uint32_t ih_load)
+ * uImage: [64-byte uImage header][KERNEL_LEN kernel bytes]. ih_load/ih_ep are
+ * set to the caller-provided values; the uImage magic/size/header-CRC are made
+ * valid so uboot_legacy_header_valid() accepts it. Fills expected_kernel[] with
+ * the kernel pattern for later comparison. Returns 0 on success. */
+static int add_uimage_payload(uint32_t version, uint32_t ih_load, uint32_t ih_ep)
 {
     uint8_t *base = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint8_t uimg[UBOOT_IMG_HDR_SZ + KERNEL_LEN];
@@ -194,7 +194,7 @@ static int add_uimage_payload(uint32_t version, uint32_t ih_load)
     /* uimg[4..8] = ih_hcrc, left 0 while computing the header CRC. */
     store_be32(uimg + 0x0C, KERNEL_LEN);   /* ih_size */
     store_be32(uimg + 0x10, ih_load);      /* ih_load */
-    store_be32(uimg + 0x14, ih_load);      /* ih_ep (unused by wolfBoot) */
+    store_be32(uimg + 0x14, ih_ep);        /* ih_ep */
     for (i = 0; i < KERNEL_LEN; i++) {
         uint8_t b = (uint8_t)(0xA5u ^ (uint8_t)i);
         uimg[UBOOT_IMG_HDR_SZ + i] = b;
@@ -265,19 +265,26 @@ static void fixture_teardown(void)
     cleanup_flash();
 }
 
-/* Run the full wolfBoot_start() flow for a given uImage ih_load and check that
- * do_boot() was reached with expect_addr and the kernel payload is present
- * there. (mmap setup/teardown is handled by the checked fixture.) */
-static void run_and_check(uint32_t ih_load, uintptr_t expect_addr)
+/* Run the full wolfBoot_start() flow for a given uImage ih_load/ih_ep and check
+ * that the kernel payload landed at expect_load and that do_boot() was reached
+ * with expect_boot. (mmap setup/teardown is handled by the checked fixture.) */
+static void run_and_check_ep(uint32_t ih_load, uint32_t ih_ep,
+        uintptr_t expect_load, uintptr_t expect_boot)
 {
-    ck_assert_int_eq(add_uimage_payload(1, ih_load), 0);
+    ck_assert_int_eq(add_uimage_payload(1, ih_load, ih_ep), 0);
 
     wolfBoot_start();
 
     ck_assert_int_eq(g_boot_called, 1);
-    ck_assert_uint_eq((uintptr_t)g_boot_addr, expect_addr);
-    ck_assert_int_eq(memcmp((void *)expect_addr, expected_kernel, KERNEL_LEN),
+    ck_assert_uint_eq((uintptr_t)g_boot_addr, expect_boot);
+    ck_assert_int_eq(memcmp((void *)expect_load, expected_kernel, KERNEL_LEN),
             0);
+}
+
+/* Common case: entry point == load address. */
+static void run_and_check(uint32_t ih_load, uintptr_t expect_addr)
+{
+    run_and_check_ep(ih_load, ih_load, expect_addr, expect_addr);
 }
 
 /* Case 1: ih_load coincides with the staged kernel address -> no relocation
@@ -306,7 +313,21 @@ START_TEST (test_uboot_ihload_lower_overlap)
 }
 END_TEST
 
-/* Case 4: ih_load == 0 (Linux/PPC convention) -> load_address is only advanced
+/* Case 4: ih_ep distinct from ih_load (kernels built with a preamble ahead of
+ * the entry point). U-Boot bootm copies the payload to ih_load and jumps to
+ * ih_ep: the payload must land at ih_load, but do_boot() must be entered at
+ * ih_ep. */
+#define UIMAGE_EP_OFFSET 0x40
+START_TEST (test_uboot_ihep_distinct)
+{
+    run_and_check_ep((uint32_t)IHLOAD_HI_BASE,
+            (uint32_t)(IHLOAD_HI_BASE + UIMAGE_EP_OFFSET),
+            (uintptr_t)IHLOAD_HI_BASE,
+            (uintptr_t)(IHLOAD_HI_BASE + UIMAGE_EP_OFFSET));
+}
+END_TEST
+
+/* Case 5: ih_load == 0 (Linux/PPC convention) -> load_address is only advanced
  * past the 64-byte header; behavior is unchanged by the fix. */
 START_TEST (test_uboot_ihload_zero)
 {
@@ -320,26 +341,31 @@ Suite *wolfboot_suite(void)
     TCase *coincident = tcase_create("uImage ih_load coincident");
     TCase *higher = tcase_create("uImage ih_load higher");
     TCase *lower = tcase_create("uImage ih_load lower overlap");
+    TCase *ep = tcase_create("uImage ih_ep distinct");
     TCase *zero = tcase_create("uImage ih_load zero");
 
     tcase_add_checked_fixture(coincident, fixture_setup, fixture_teardown);
     tcase_add_checked_fixture(higher, fixture_setup, fixture_teardown);
     tcase_add_checked_fixture(lower, fixture_setup, fixture_teardown);
+    tcase_add_checked_fixture(ep, fixture_setup, fixture_teardown);
     tcase_add_checked_fixture(zero, fixture_setup, fixture_teardown);
 
     tcase_add_test(coincident, test_uboot_ihload_coincident);
     tcase_add_test(higher, test_uboot_ihload_higher);
     tcase_add_test(lower, test_uboot_ihload_lower_overlap);
+    tcase_add_test(ep, test_uboot_ihep_distinct);
     tcase_add_test(zero, test_uboot_ihload_zero);
 
     suite_add_tcase(s, coincident);
     suite_add_tcase(s, higher);
     suite_add_tcase(s, lower);
+    suite_add_tcase(s, ep);
     suite_add_tcase(s, zero);
 
     tcase_set_timeout(coincident, 5);
     tcase_set_timeout(higher, 5);
     tcase_set_timeout(lower, 5);
+    tcase_set_timeout(ep, 5);
     tcase_set_timeout(zero, 5);
 
     return s;

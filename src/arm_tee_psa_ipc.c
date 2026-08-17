@@ -395,7 +395,8 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         return psa_generate_random((uint8_t *)out_vec[0].base, out_vec[0].len);
 
     case ARM_TEE_CRYPTO_OPEN_KEY_SID:
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 || out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(psa_key_id_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         return wolfboot_psa_open_key(iov->key_id,
@@ -405,7 +406,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         return wolfboot_psa_close_key(iov->key_id);
 
     case ARM_TEE_CRYPTO_IMPORT_KEY_SID:
-        if (in_len < 3 || out_vec == NULL || out_len < 1) {
+        if (in_len < 3 || out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(psa_key_id_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         if (in_vec[1].base == NULL ||
@@ -425,7 +428,9 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
         }
 
     case ARM_TEE_CRYPTO_GENERATE_KEY_SID:
-        if (in_len < 2 || out_vec == NULL || out_len < 1) {
+        if (in_len < 2 || out_vec == NULL || out_len < 1 ||
+            out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(psa_key_id_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         if (in_vec[1].base == NULL ||
@@ -478,7 +483,8 @@ static psa_status_t wolfboot_crypto_dispatch(const psa_invec *in_vec,
     }
 
     case ARM_TEE_CRYPTO_GET_KEY_ATTRIBUTES_SID:
-        if (out_vec == NULL || out_len < 1) {
+        if (out_vec == NULL || out_len < 1 || out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(psa_key_attributes_t)) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
         return psa_get_key_attributes(iov->key_id,
@@ -1006,11 +1012,13 @@ static int32_t arm_tee_psa_ps_dispatch(int32_t type, const psa_invec *in_vec,
         return PSA_SUCCESS;
     }
     if (type == ARM_TEE_PS_GET_SUPPORT) {
-        if (out_vec != NULL && out_len >= 1 && out_vec[0].base != NULL) {
-            uint32_t support = 0;
-            XMEMCPY(out_vec[0].base, &support, sizeof(support));
-            out_vec[0].len = sizeof(support);
+        uint32_t support = 0;
+        if (out_vec == NULL || out_len < 1 || out_vec[0].base == NULL ||
+            out_vec[0].len < sizeof(support)) {
+            return PSA_ERROR_INVALID_ARGUMENT;
         }
+        XMEMCPY(out_vec[0].base, &support, sizeof(support));
+        out_vec[0].len = sizeof(support);
         return PSA_SUCCESS;
     }
     return PSA_ERROR_NOT_SUPPORTED;
@@ -1067,13 +1075,19 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
         out_vec_s[i] = out_vec[i];
     }
 
+    /* Every non-NULL .base must pass the non-secure attribution check, even
+     * when the declared .len is zero: a descriptor is not guaranteed to be
+     * accessed only within .len, so a zero-length descriptor would otherwise
+     * smuggle a Secure pointer past validation. At least one byte is always
+     * checked. */
     for (i = 0; i < in_len; i++) {
         if (in_vec_s[i].len > 0 && in_vec_s[i].base == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
-        if (in_vec_s[i].len > 0 &&
+        if (in_vec_s[i].base != NULL &&
             cmse_check_address_range((void *)in_vec_s[i].base,
-                                     in_vec_s[i].len,
+                                     in_vec_s[i].len > 0 ?
+                                         in_vec_s[i].len : 1,
                                      CMSE_NONSECURE) == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
@@ -1082,9 +1096,10 @@ int32_t arm_tee_psa_call(psa_handle_t handle, int32_t type,
         if (out_vec_s[i].len > 0 && out_vec_s[i].base == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
-        if (out_vec_s[i].len > 0 &&
+        if (out_vec_s[i].base != NULL &&
             cmse_check_address_range(out_vec_s[i].base,
-                                     out_vec_s[i].len,
+                                     out_vec_s[i].len > 0 ?
+                                         out_vec_s[i].len : 1,
                                      CMSE_NONSECURE) == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }

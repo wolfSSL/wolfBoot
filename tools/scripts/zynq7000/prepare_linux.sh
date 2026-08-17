@@ -113,11 +113,15 @@ else
         exit 1
     fi
 
-    echo "Mode  : RAW DTB (zImage signed alone, DTB staged separately at PART_DTS_BOOT)"
+    echo "Mode  : RAW DTB (zImage signed alone, DTB staged separately in flash"
+    echo "        at WOLFBOOT_DTS_BOOT_ADDRESS)"
     echo "zImage: $ZIMAGE  ($KSIZE bytes)"
     echo "DTB   : $DTB     ($DSIZE bytes)"
     echo "Signing kernel as PART_BOOT v$VERSION ..."
-    $SIGN_TOOL --ecc256 --sha256 "$ZIMAGE" "$KEY" "$VERSION"
+    # --dts binds the raw DTB's digest to the signed kernel (HDR_DEVICE_TREE_DIGEST),
+    # so wolfBoot authenticates the device tree before booting. Build wolfBoot with
+    # WOLFBOOT_REQUIRE_SIGNED_DTB=1 to make a missing digest fatal.
+    $SIGN_TOOL --ecc256 --sha256 --dts "$DTB" "$ZIMAGE" "$KEY" "$VERSION"
 
     SIGNED_OUT="${ZIMAGE%.*}_v${VERSION}_signed.bin"
     [ -f "$SIGNED_OUT" ] || SIGNED_OUT="${ZIMAGE}_v${VERSION}_signed.bin"

@@ -181,6 +181,11 @@ ifeq ($(DEBUG_UART),1)
     APP_NEEDS_STRING:=1
 endif
 
+ifeq ($(ARCH),AURIX_TC3)
+# AURIX RAM_CODE HAL flash drivers need wolfBoot memcpy
+    APP_NEEDS_STRING:=1
+endif
+
 ifeq ($(APP_NEEDS_STRING),1)
     APP_OBJS+=../src/string.o
 endif

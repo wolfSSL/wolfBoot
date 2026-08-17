@@ -601,6 +601,95 @@ static int add_payload_encrypted(uint8_t part, uint32_t version, uint32_t size,
 }
 #endif
 
+#ifdef EXT_ENCRYPTED
+/* ext_flash_encrypt_write() writes whole ENCRYPT_BLOCK_SIZE blocks. A request
+ * whose length is not a multiple of the block size used to drop the trailing
+ * bytes, and a zero-length request used to rewrite the containing block. */
+START_TEST (test_encrypt_write_keeps_trailing_partial_block)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    int len = (2 * ENCRYPT_BLOCK_SIZE) + 5;
+    uint8_t out[(2 * ENCRYPT_BLOCK_SIZE) + 5];
+    uint8_t in[(2 * ENCRYPT_BLOCK_SIZE) + 5];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < len; i++)
+        in[i] = (uint8_t)(0x30 + i);
+
+    ext_flash_unlock();
+    ret = ext_flash_encrypt_write(base, in, len);
+    ext_flash_lock();
+    ck_assert_int_ge(ret, 0);
+
+    memset(out, 0, sizeof(out));
+    ck_assert_int_eq(ext_flash_decrypt_read(base, out, len), len);
+    ck_assert_int_eq(memcmp(out, in, len), 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+/* wb_flash_write() on an external encrypted partition is this function, and
+ * F-7987 makes wolfBoot_copy_sector() abort the swap on a negative return. A
+ * failure programming the unaligned head block must therefore propagate,
+ * rather than be overwritten by the remainder loop's own status. */
+START_TEST (test_encrypt_write_reports_head_block_write_failure)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t in[3 * ENCRYPT_BLOCK_SIZE];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < (int)sizeof(in); i++)
+        in[i] = (uint8_t)(0x10 + i);
+
+    ext_flash_unlock();
+    /* Start mid-block so the head path runs, and extend past it so the
+     * remainder loop runs too. */
+    ext_flash_write_fail = 1;
+    ret = ext_flash_encrypt_write(base + 4, in, (2 * ENCRYPT_BLOCK_SIZE));
+    ext_flash_lock();
+
+    ck_assert_int_lt(ret, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_encrypt_write_zero_length_leaves_flash_untouched)
+{
+    uintptr_t base = (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    uint8_t before[ENCRYPT_BLOCK_SIZE];
+    uint8_t after[ENCRYPT_BLOCK_SIZE];
+    uint8_t in[ENCRYPT_BLOCK_SIZE];
+    int i, ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < ENCRYPT_BLOCK_SIZE; i++)
+        in[i] = (uint8_t)(0x70 + i);
+
+    ext_flash_unlock();
+    ck_assert_int_ge(ext_flash_encrypt_write(base, in, ENCRYPT_BLOCK_SIZE), 0);
+    ck_assert_int_eq(ext_flash_read(base, before, ENCRYPT_BLOCK_SIZE),
+        ENCRYPT_BLOCK_SIZE);
+
+    ret = ext_flash_encrypt_write(base, in, 0);
+    ext_flash_lock();
+    ck_assert_int_eq(ret, 0);
+
+    ck_assert_int_eq(ext_flash_read(base, after, ENCRYPT_BLOCK_SIZE),
+        ENCRYPT_BLOCK_SIZE);
+    ck_assert_int_eq(memcmp(before, after, ENCRYPT_BLOCK_SIZE), 0);
+
+    cleanup_flash();
+}
+END_TEST
+#endif /* EXT_ENCRYPTED */
+
 START_TEST (test_empty_panic)
 {
     reset_mock_stats();
@@ -783,6 +872,27 @@ START_TEST (test_forward_update_samesize) {
     ck_assert(!wolfBoot_panicked);
     ck_assert(wolfBoot_staged_ok);
     ck_assert(wolfBoot_current_firmware_version() == 2);
+    cleanup_flash();
+}
+END_TEST
+
+/* A failing flash write must abort the swap instead of marking the sector as
+ * updated: the sector flags are the only record used to resume an
+ * interrupted swap. */
+START_TEST (test_update_aborts_on_sector_copy_failure) {
+    uint8_t flag = SECT_FLAG_NEW;
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger();
+    /* BOOT is the only internal partition here, so the first write to
+     * internal flash is the copy of sector 0 from SWAP into BOOT. */
+    hal_flash_write_fail = 1;
+    ck_assert_int_lt(wolfBoot_update(0), 0);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+    wolfBoot_get_update_sector_flag(0, &flag);
+    ck_assert_int_ne(flag, SECT_FLAG_UPDATED);
     cleanup_flash();
 }
 END_TEST
@@ -1358,6 +1468,67 @@ START_TEST (test_delta_base_version_match_accepts)
 }
 END_TEST
 
+START_TEST (test_delta_base_hash_missing_in_boot_header_rejected)
+{
+    struct wolfBoot_image boot, update, swap;
+    uint32_t word;
+    uint32_t delta_sz = 0x00001020;
+    uint32_t delta_base = 1;
+    uint8_t base_hash[SHA256_DIGEST_SIZE];
+    uint8_t *boot_base = (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    /* Remove the digest TLV from the boot header, keeping the TLV chain
+     * well-formed by retagging it to an unused custom type */
+    hal_flash_unlock();
+    word = SHA256_DIGEST_SIZE << 16 | 0x0031;
+    hal_flash_write((uintptr_t)boot_base + DIGEST_TLV_OFF_IN_HDR,
+        (void *)&word, 4);
+    hal_flash_lock();
+
+    /* The delta patch declares a base digest that cannot match */
+    memset(base_hash, 0xA5, sizeof(base_hash));
+
+    ext_flash_unlock();
+    word = (4u << 16) | HDR_IMG_DELTA_SIZE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 64,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_sz);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 68,
+        (const uint8_t *)&word, sizeof(word));
+    word = (4u << 16) | HDR_IMG_DELTA_BASE;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 72,
+        (const uint8_t *)&word, sizeof(word));
+    word = host_to_img_u32(delta_base);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 76,
+        (const uint8_t *)&word, sizeof(word));
+    word = (SHA256_DIGEST_SIZE << 16) | HDR_IMG_DELTA_BASE_HASH;
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 80,
+        (const uint8_t *)&word, sizeof(word));
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 84,
+        base_hash, sizeof(base_hash));
+    ext_flash_lock();
+
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    memset(&swap, 0, sizeof(swap));
+    swap.part = PART_SWAP;
+    swap.hdr = (void *)(uintptr_t)WOLFBOOT_PARTITION_SWAP_ADDRESS;
+
+    ret = wolfBoot_delta_update(&boot, &update, &swap, 0, 0);
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(mock_wb_patch_init_calls, 0);
+
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_delta_inverse_values_passed_with_native_endian)
 {
     struct wolfBoot_image boot, update, swap;
@@ -1522,6 +1693,9 @@ Suite *wolfboot_suite(void)
     TCase *fallback_verify = tcase_create("Fallback verify");
 #endif
 #endif
+#ifdef EXT_ENCRYPTED
+    TCase *encrypt_write_bounds = tcase_create("Encrypted write bounds");
+#endif
 
 
 #ifdef UNIT_TEST_FALLBACK_ONLY
@@ -1530,6 +1704,13 @@ Suite *wolfboot_suite(void)
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
     suite_add_tcase(s, fallback_verify);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_keeps_trailing_partial_block);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_zero_length_leaves_flash_untouched);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_reports_head_block_write_failure);
+    suite_add_tcase(s, encrypt_write_bounds);
 #endif
     return s;
 #else
@@ -1541,6 +1722,7 @@ Suite *wolfboot_suite(void)
 #endif
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
+    tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
@@ -1567,6 +1749,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(delta_zero_size, test_delta_zero_size_erased_header_uses_recovery_heuristic);
     tcase_add_test(delta_base_version, test_delta_base_version_mismatch_rejected);
     tcase_add_test(delta_base_version, test_delta_base_version_match_accepts);
+    tcase_add_test(delta_base_version, test_delta_base_hash_missing_in_boot_header_rejected);
     tcase_add_test(delta_base_version, test_delta_inverse_values_passed_with_native_endian);
     tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_update);
     tcase_add_test(delta_base_version, test_delta_inverse_accepts_when_current_matches_delta_base);

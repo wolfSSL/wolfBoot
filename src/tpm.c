@@ -202,6 +202,11 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
     /* On error make sure SPI is de-asserted */
     else {
         spi_xfer(SPI_CS_TPM, NULL, NULL, 0, 0);
+    #ifdef WOLFTPM_ADV_IO
+        /* don't leave the command (may hold an authValue) on the stack */
+        TPM2_ForceZero(txBuf, sizeof(txBuf));
+        TPM2_ForceZero(rxBuf, sizeof(rxBuf));
+    #endif
         return ret;
     }
 #else /* Send Entire Message - no wait states */
@@ -221,6 +226,10 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
         wolfBoot_print_bin(buf, size);
     #endif
     }
+    /* the staging buffers hold the raw command / response, which can carry
+     * a plaintext authValue - wipe them like TPM2_TIS_Read/Write() do */
+    TPM2_ForceZero(txBuf, sizeof(txBuf));
+    TPM2_ForceZero(rxBuf, sizeof(rxBuf));
 #endif
 
     return ret;
@@ -1334,14 +1343,27 @@ int CSME_NSE_API wolfBoot_tpm2_read_pcr(uint8_t pcrIndex, uint8_t* digest, int* 
 
 int CSME_NSE_API wolfBoot_tpm2_read_cert(uint32_t handle, uint8_t* cert, uint32_t* certSz)
 {
+    uint32_t certCapacity;
+    int rc;
+
     if (WOLFBOOT_TPM_NS_RW(certSz, sizeof(*certSz)) == NULL) {
         return BAD_FUNC_ARG;
     }
-    if (WOLFBOOT_TPM_NS_RW(cert, *certSz) == NULL) {
+    /* single-fetch *certSz so it cannot be re-read after validation: wolfTPM
+     * checks the capacity again before filling 'cert', and a racing non-secure
+     * agent would otherwise enlarge it in between to reopen the write past the
+     * range validated here */
+    certCapacity = *(volatile const uint32_t*)certSz;
+    if (certCapacity == 0) {
+        return BAD_FUNC_ARG;
+    }
+    if (WOLFBOOT_TPM_NS_RW(cert, certCapacity) == NULL) {
         return BAD_FUNC_ARG;
     }
     wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
-    return wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, certSz);
+    rc = wolfTPM2_NVReadCert(&wolftpm_dev, handle, cert, &certCapacity);
+    *certSz = certCapacity;
+    return rc;
 }
 
 #ifdef WOLFTPM_MFG_IDENTITY
@@ -1446,6 +1468,8 @@ int CSME_NSE_API wolfBoot_tpm2_get_timestamp(WOLFTPM2_KEY* aik, GetTime_Out* get
 
     wolfTPM2_UnsetAuth(&wolftpm_dev, 1);
     wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
+    /* EH authValue consumed; clear it from the stack */
+    TPM2_ForceZero(&eh_handle, sizeof(eh_handle));
 
     return rc;
 }

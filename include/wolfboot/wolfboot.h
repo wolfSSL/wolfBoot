@@ -235,6 +235,13 @@ extern "C" {
 #define HDR_POLICY_SIGNATURE        0x21
 #define HDR_SECONDARY_SIGNATURE     0x22
 #define HDR_CERT_CHAIN              0x23
+/* OS command line (ASCII), a wolfBoot-reserved tag in the custom range
+ * (0x0030-0xFEFE). Signature-covered, unlike an external cmdline file; consumed
+ * by the EFI targets and passed to the kernel via LoadOptions. */
+#define HDR_CMDLINE                 0x0034
+/* Signature-covered digest of a raw (non-FIT) device tree, binding it to this
+ * image. Length = image hash size (WOLFBOOT_SHA_DIGEST_SIZE). */
+#define HDR_DEVICE_TREE_DIGEST      0x35
 #define HDR_PADDING                 0xFF
 
 /* Auth Key types */

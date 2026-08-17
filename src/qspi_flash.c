@@ -419,8 +419,8 @@ int spi_flash_write(uint32_t address, const void *data, int len)
 {
     int ret = 0;
     int remaining = len;
-    uint32_t xferSz, page, pages;
-    uintptr_t addr;
+    uint32_t xferSz;
+    uintptr_t addr = address;
     uint8_t* ptr = (uint8_t*)data;
 
 #ifdef DEBUG_QSPI
@@ -437,20 +437,18 @@ int spi_flash_write(uint32_t address, const void *data, int len)
         return -1;
     }
 
-    /* write by page */
-    pages = ((len + (FLASH_PAGE_SIZE-1)) / FLASH_PAGE_SIZE);
-    for (page = 0; page < pages; page++) {
+    /* write by page: the device's page program wraps within its own page, so
+     * each transfer must terminate at the next page boundary */
+    while (remaining > 0) {
         ret = qspi_write_enable();
         if (ret != 0) {
             break;
         }
 
-        xferSz = (uint32_t)remaining;
-        if (xferSz > FLASH_PAGE_SIZE) {
-            xferSz = FLASH_PAGE_SIZE;
+        xferSz = FLASH_PAGE_SIZE - ((uint32_t)addr % FLASH_PAGE_SIZE);
+        if (xferSz > (uint32_t)remaining) {
+            xferSz = (uint32_t)remaining;
         }
-
-        addr = address + (page * FLASH_PAGE_SIZE);
 
         /* ------ Write Flash (page at a time) ------ */
         ret = qspi_transfer(QSPI_MODE_WRITE, FLASH_WRITE_CMD,
@@ -463,7 +461,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
 #ifdef DEBUG_QSPI
         wolfBoot_printf("QSPI Flash Sector Write: "
             "Ret %d, Cmd 0x%x, Len %d, %p -> 0x%x\n",
-            ret, FLASH_WRITE_CMD, xferSz, ptr, address);
+            ret, FLASH_WRITE_CMD, xferSz, ptr, (uint32_t)addr);
 #endif
         if (ret != 0)
             break;
@@ -475,6 +473,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
         /* write disable is automatic */
         remaining -= (int)xferSz;
         ptr += xferSz;
+        addr += xferSz;
     }
 
     return ret;

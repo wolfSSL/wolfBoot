@@ -45,7 +45,10 @@ int uart_read_nonblock(char *c)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    FlashProgram(data, address, len);
+    /* driverlib's FlashProgram() takes a non-const buffer but only reads
+     * from it. */
+    if (FlashProgram((uint8_t *)data, address, len) != FAPI_STATUS_SUCCESS)
+        return -1;
     while(FlashCheckFsmForReady() != FAPI_STATUS_FSM_READY)
                 ;
     return 0;
@@ -64,7 +67,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int i = 0;
     while (len > 0) {
-        FlashSectorErase(address + (WOLFBOOT_SECTOR_SIZE * i++));
+        if (FlashSectorErase(address + (WOLFBOOT_SECTOR_SIZE * i++)) !=
+            FAPI_STATUS_SUCCESS)
+            return -1;
         while(FlashCheckFsmForReady() != FAPI_STATUS_FSM_READY)
             ;
 

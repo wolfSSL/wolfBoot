@@ -191,6 +191,7 @@ WOLFBOOT_LIB_WOLFTPM?=lib/wolfTPM
 WOLFBOOT_LIB_WOLFPKCS11?=lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=lib/wolfPSA
 WOLFBOOT_LIB_WOLFHSM?=lib/wolfHSM
+WOLFBOOT_LIB_WOLFCOSE?=lib/wolfCOSE
 
 # Convert to absolute paths using abspath function
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
@@ -198,6 +199,7 @@ WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
+WOLFBOOT_LIB_WOLFCOSE:=$(abspath $(WOLFBOOT_LIB_WOLFCOSE))
 
 # Export variables so they are available to sub-makefiles
 export WOLFBOOT_LIB_WOLFSSL
@@ -205,6 +207,7 @@ export WOLFBOOT_LIB_WOLFTPM
 export WOLFBOOT_LIB_WOLFPKCS11
 export WOLFBOOT_LIB_WOLFPSA
 export WOLFBOOT_LIB_WOLFHSM
+export WOLFBOOT_LIB_WOLFCOSE
 
 ## Architecture/CPU configuration
 include arch.mk
@@ -310,6 +313,9 @@ SIGN_ENV=IMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE) \
 
 
 MAIN_TARGET=factory.bin
+# PE/COFF output format for the wolfboot.efi objcopy rule. Overridden per
+# target in arch.mk (e.g. pei-aarch64-little for aarch64_efi).
+EFI_OBJCOPY_TARGET?=pei-x86-64
 TARGET_H_TEMPLATE:=include/target.h.in
 
 ifeq ($(TZEN),1)
@@ -339,6 +345,10 @@ ifeq ($(TARGET),pic32cz)
 endif
 
 ifeq ($(TARGET),x86_64_efi)
+    MAIN_TARGET:=wolfboot.efi
+endif
+
+ifeq ($(TARGET),aarch64_efi)
     MAIN_TARGET:=wolfboot.efi
 endif
 
@@ -428,7 +438,7 @@ wolfboot.efi: wolfboot.elf
 	$(Q)$(OBJCOPY) -j .rodata -j .text -j .sdata -j .data \
 					-j .dynamic -j .dynsym  -j .rel \
 					-j .rela -j .reloc -j .eh_frame \
-					-O pei-x86-64 --subsystem=10 $^ $@
+					-O $(EFI_OBJCOPY_TARGET) --subsystem=10 $^ $@
 	@echo
 	@echo "\t[SIZE]"
 	$(Q)$(SIZE) wolfboot.efi

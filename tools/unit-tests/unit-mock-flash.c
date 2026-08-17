@@ -25,6 +25,9 @@
 
 static int locked = 1;
 static int ext_locked = 1;
+/* When set, the next ext_flash_write() fails and the hook clears itself,
+ * so a test can target one specific write in a multi-write sequence. */
+static int ext_flash_write_fail = 0;
 static int erased_boot = 0;
 static int erased_update = 0;
 static int erased_swap = 0;
@@ -184,6 +187,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     uint8_t *a = (uint8_t *)address;
     ck_assert_msg(!ext_locked, "Attempting to write to a locked FLASH");
     ck_assert_msg(len >= 0, "ext_flash_write invalid len %d", len);
+    if (ext_flash_write_fail) {
+        ext_flash_write_fail = 0;
+        return -1;
+    }
     ck_assert_msg(
         ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
          (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE) &&

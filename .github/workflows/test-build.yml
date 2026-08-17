@@ -13,6 +13,9 @@ on:
       make-args:
         required: false
         type: string
+      prep-run:
+        required: false
+        type: string
 
 jobs:
 
@@ -41,6 +44,10 @@ jobs:
       - name: Build tools
         run: |
           make -C tools/keytools && make -C tools/bin-assemble
+
+      - name: Pre-build setup
+        if: inputs.prep-run != ''
+        run: ${{inputs.prep-run}}
 
       - name: Build wolfboot
         run: |

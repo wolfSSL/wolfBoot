@@ -58,6 +58,57 @@
 /* Globals */
 static uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE] XALIGNED(4);
 
+#ifdef WOLFBOOT_ARMORED
+
+/* Accumulator seed. Low byte clear so byte differences are never masked. */
+#define CT_SENTINEL 0xA5C3F000U
+
+/**
+ * Constant-time buffer comparison, hardened against instruction skips.
+ * Returns 0 when equal, non-zero otherwise.
+ */
+int NOINLINEFUNCTION image_CT_compare(
+    const uint8_t *expected, const uint8_t *actual, uint32_t len)
+{
+    volatile uint32_t diff = CT_SENTINEL;
+    volatile uint32_t witness = 0U;
+    volatile uint32_t count = 0U;
+    volatile uint32_t i = 0U;
+    volatile uint32_t budget = len;
+    volatile uint32_t res = 0U;
+    uint32_t expected_witness;
+    uint32_t len_is_zero;
+
+    /* Two counters bound the loop, so either one can end it. */
+    for (i = 0; (i < len) && (budget != 0U); i++) {
+        diff |= (uint32_t)(expected[i] ^ actual[i]);
+        witness += i + 1U;
+        count++;
+        budget--;
+    }
+
+    expected_witness = (len * (len + 1U)) / 2U;   /* sum(1..len) */
+    len_is_zero = 1U ^ ((len | (0U - len)) >> 31);
+
+    /* Folded twice, branch-free. */
+    res  = (diff ^ CT_SENTINEL);
+    res |= (witness ^ expected_witness);
+    res |= (count ^ len);
+    res |= (i ^ len);
+    res |= len_is_zero;
+    res |= (diff ^ CT_SENTINEL);
+    res |= (witness ^ expected_witness);
+    res |= (count ^ len);
+    res |= (i ^ len);
+    res |= len_is_zero;
+
+    return (int)res;
+}
+
+#undef CT_SENTINEL
+
+#else
+
 int NOINLINEFUNCTION image_CT_compare(
     const uint8_t *expected, const uint8_t *actual, uint32_t len)
 {
@@ -70,6 +121,8 @@ int NOINLINEFUNCTION image_CT_compare(
 
     return (diff != 0U) ? 1 : 0;
 }
+
+#endif /* WOLFBOOT_ARMORED */
 
 /**
  * Fault-hardened equality check around image_CT_compare(): the constant-time
@@ -84,9 +137,7 @@ int NOINLINEFUNCTION wolfBoot_hardened_CT_compare(
     volatile int r1 = image_CT_compare(expected, actual, len);
     volatile int r2 = image_CT_compare(expected, actual, len);
     /* Combine both results without branching: non-zero if either independent
-     * comparison reported a mismatch. This preserves image_CT_compare()'s 0/1
-     * return semantics and avoids data-dependent control flow, while a single
-     * fault can still subvert at most one of the two calls. */
+     * comparison reported a mismatch. */
     return (r1 | r2);
 }
 
@@ -1496,6 +1547,92 @@ int wolfBoot_get_dts_size(void *dts_addr)
         ret = fdt_totalsize(dts_addr);
     }
     return ret;
+}
+
+/* Hash a raw buffer with the configured image hash (explicit per-algorithm API,
+ * since the generic update_hash macro's SHA3 mapping is wrong). 0 on success. */
+static int wolfBoot_hash_buffer(const void *buf, uint32_t len, uint8_t *out)
+{
+    const uint8_t *p = (const uint8_t *)buf;
+    int ret;
+
+#if defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256 ctx;
+    ret = wc_InitSha256_ex(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha256Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha256Final(&ctx, out);
+        wc_Sha256Free(&ctx);
+    }
+#elif defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384 ctx;
+    ret = wc_InitSha384_ex(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha384Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha384Final(&ctx, out);
+        wc_Sha384Free(&ctx);
+    }
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3 ctx;
+    ret = wc_InitSha3_384(&ctx, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret == 0) {
+        while (len > 0) {
+            uint32_t sz = (len < WOLFBOOT_SHA_BLOCK_SIZE) ?
+                len : (uint32_t)WOLFBOOT_SHA_BLOCK_SIZE;
+            ret = wc_Sha3_384_Update(&ctx, p, sz);
+            if (ret != 0)
+                break;
+            p   += sz;
+            len -= sz;
+        }
+        if (ret == 0)
+            ret = wc_Sha3_384_Final(&ctx, out);
+        wc_Sha3_384_Free(&ctx);
+    }
+#else
+    (void)p;
+    ret = -1;
+#endif
+    return (ret == 0) ? 0 : -1;
+}
+
+/* Verify a raw DTB against a firmware-bound digest (from the image's
+ * HDR_DEVICE_TREE_DIGEST TLV, captured by the caller since the load may reuse
+ * the image struct). Returns 0 on match, -1 on mismatch/bad args/hash error. */
+int wolfBoot_verify_dts_digest(const uint8_t *expected_digest,
+    const void *dts_addr, uint32_t dts_size)
+{
+    uint8_t calc[WOLFBOOT_SHA_DIGEST_SIZE];
+
+    if (expected_digest == NULL || dts_addr == NULL || dts_size == 0)
+        return -1;
+
+    if (wolfBoot_hash_buffer(dts_addr, dts_size, calc) != 0)
+        return -1;
+
+    if (wolfBoot_hardened_CT_compare(expected_digest, calc,
+            WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
+        return -1;
+    }
+    return 0;
 }
 
 #endif /* MMU || WOLFBOOT_FDT */

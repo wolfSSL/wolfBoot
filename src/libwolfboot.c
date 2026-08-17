@@ -178,12 +178,16 @@ int wolfBoot_initialize_encryption(void)
 #undef WOLFBOOT_FIXED_PARTITIONS
 #endif
 
-#if defined(EXT_FLASH) && !defined(WOLFBOOT_NO_PARTITIONS)
+#if defined(EXT_FLASH) && !defined(WOLFBOOT_NO_PARTITIONS) && \
+    !defined(CUSTOM_PARTITION_TRAILER)
 static uint32_t ext_cache;
 #endif
 
 
-#if defined(__WOLFBOOT) || defined(UNIT_TEST)
+/* EXT_ENCRYPTED is listed because the key-handling code below calls
+ * ForceZero() unconditionally, including from the test-app build of this file,
+ * where __WOLFBOOT is not defined. */
+#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED)
 #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/wc_port.h>
@@ -2557,6 +2561,18 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
 }
 
 #ifdef EXT_FLASH
+
+/* ENCRYPT_CACHE is staged one whole encryption block at a time, so the amount
+ * written per pass must be a block multiple: a partial block at the end of a
+ * pass would be written as stale cache content and would leave the address
+ * unaligned, desynchronising the keystream from ext_flash_decrypt_read().
+ * NVM_CACHE_SIZE defaults to WOLFBOOT_SECTOR_SIZE, which is always a multiple,
+ * but it can be overridden. */
+#define ENCRYPT_STAGE_SIZE \
+    ((NVM_CACHE_SIZE) - ((NVM_CACHE_SIZE) % ENCRYPT_BLOCK_SIZE))
+typedef char wolfBoot_encrypt_stage_size_check[
+    (ENCRYPT_STAGE_SIZE >= ENCRYPT_BLOCK_SIZE) ? 1 : -1];
+
 /**
  * @brief Write encrypted data to an external flash.
  *
@@ -2576,13 +2592,20 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     uint8_t block[ENCRYPT_BLOCK_SIZE];
     uint8_t enc_block[ENCRYPT_BLOCK_SIZE];
     uint32_t row_address = address, row_offset;
-    int sz = len, i, step;
+    int sz = len, i, step, ret;
     uint8_t part;
     uint32_t iv_counter = 0;
 #if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
     !defined(NVM_FLASH_WRITEONCE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
+
+    /* A zero-length request must not turn into a read-modify-write of the
+     * containing block. */
+    if (len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
 
     row_offset = address & (ENCRYPT_BLOCK_SIZE - 1);
     if (row_offset != 0) {
@@ -2616,27 +2639,61 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     /* encrypt blocks */
     if (sz > len) {
         step = ENCRYPT_BLOCK_SIZE - row_offset;
+        /* Never consume more than the caller provided */
+        if (step > len)
+            step = len;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
         }
         XMEMCPY(block + row_offset, data, step);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
-        ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
+        if (ret < 0)
+            return ret;
+        /* The request fits entirely within this block: nothing left to do */
+        if (step == len)
+            return ret;
         address += step;
         data += step;
         sz = len - step;
     }
 
-    /* encrypt remainder */
+    /* encrypt remainder, staging at most one cache worth at a time */
+    ret = 0;
     step = sz & ~(ENCRYPT_BLOCK_SIZE - 1);
-    for (i = 0; i < step / ENCRYPT_BLOCK_SIZE; i++) {
-        XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
-        crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,
-            ENCRYPT_BLOCK_SIZE);
+    while (step > 0) {
+        int chunk = step;
+        if (chunk > (int)ENCRYPT_STAGE_SIZE)
+            chunk = (int)ENCRYPT_STAGE_SIZE;
+        for (i = 0; i < chunk / ENCRYPT_BLOCK_SIZE; i++) {
+            XMEMCPY(block, data + (ENCRYPT_BLOCK_SIZE * i), ENCRYPT_BLOCK_SIZE);
+            crypto_encrypt(ENCRYPT_CACHE + (ENCRYPT_BLOCK_SIZE * i), block,
+                ENCRYPT_BLOCK_SIZE);
+        }
+        ret = ext_flash_write(address, ENCRYPT_CACHE, chunk);
+        if (ret < 0)
+            return ret;
+        address += chunk;
+        data += chunk;
+        step -= chunk;
     }
 
-    return ext_flash_write(address, ENCRYPT_CACHE, step);
+    /* Trailing bytes that do not fill a whole block. "address" is block
+     * aligned here, so merge them into the block that already backs them,
+     * the same way the unaligned head above is handled. */
+    step = sz & (ENCRYPT_BLOCK_SIZE - 1);
+    if (step > 0) {
+        if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
+                != ENCRYPT_BLOCK_SIZE) {
+            return -1;
+        }
+        XMEMCPY(block, data, step);
+        crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        ret = ext_flash_write(address, enc_block, ENCRYPT_BLOCK_SIZE);
+    }
+
+    return ret;
 }
 
 /**
@@ -2702,6 +2759,9 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
      */
     if (row_offset != 0) {
         unaligned_head_size = ENCRYPT_BLOCK_SIZE - row_offset;
+        /* Never copy more than the caller asked for */
+        if (unaligned_head_size > read_remaining)
+            unaligned_head_size = read_remaining;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;

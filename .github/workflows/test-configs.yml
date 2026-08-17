@@ -764,6 +764,14 @@ jobs:
       arch: host
       config-file: ./config/examples/x86_64_efi.config
 
+  aarch64_efi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/aarch64_efi.config
+      # Build gnu-efi for aarch64 (pinned in the script) before wolfboot.efi.
+      prep-run: ./tools/scripts/build-gnu-efi-aarch64.sh
+
   zynqmp_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
@@ -775,6 +783,21 @@ jobs:
     with:
       arch: aarch64
       config-file: ./config/examples/zynqmp_sdcard.config
+
+  # Only build that compiles the DISK_ENCRYPT paths of src/update_disk.c.
+  zynqmp_sdcard_encrypt_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: ENCRYPT=1 ENCRYPT_WITH_AES256=1
+
+  zynqmp_sdcard_encrypt_chacha_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp_sdcard.config
+      make-args: ENCRYPT=1 ENCRYPT_WITH_CHACHA=1
 
   zynqmp_fsbl_test:
     uses: ./.github/workflows/test-build-aarch64.yml

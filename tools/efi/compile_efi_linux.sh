@@ -20,8 +20,13 @@ make -C $WORK_DIR/$BR_DIR O=$IMAGE_DIR
 
 SIGN_TOOL="./tools/keytools/sign"
 
-$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 1
-$SIGN_TOOL --ed25519 $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 2
+# Carry the kernel command line in the signed manifest (HDR_CMDLINE TLV) so it
+# is authenticated with the image; wolfBoot passes it to the kernel EFI stub
+# via LoadOptions. console=ttyS0 keeps the kernel log on the QEMU serial port.
+CMDLINE="console=ttyS0 wolfboot_efi_cmdline=1"
+
+$SIGN_TOOL --ed25519 --cmdline "$CMDLINE" $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 1
+$SIGN_TOOL --ed25519 --cmdline "$CMDLINE" $IMAGE_DIR/images/bzImage wolfboot_signing_private_key.der 2
 
 mkdir -p /tmp/efi
 sudo mount /tmp/efi.disk /tmp/efi

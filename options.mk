@@ -1,4 +1,5 @@
-WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o
+WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
+  $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 
 # Shared wolfHSM client/server object lists. Defined here at the top so any
 # downstream block (legacy WOLFHSM_CLIENT/SERVER, or WOLFCRYPT_TZ_WOLFHSM TZ
@@ -113,6 +114,16 @@ ifeq ($(MEASURED_BOOT),1)
   ifeq ($(MEASURED_BOOT_APP_PARTITION),1)
     CFLAGS+=-D"WOLFBOOT_MEASURED_BOOT_APP_PARTITION"
   endif
+endif
+
+## Measured boot via the platform firmware TPM behind EFI_TCG2_PROTOCOL, for
+## UEFI-application targets (e.g. aarch64_efi on NVIDIA Jetson). wolfBoot
+## measures the verified next-stage image into a PCR with HashLogExtendEvent;
+## the firmware / fTPM owns the TPM, so this pulls in NO wolfTPM transport.
+ifeq ($(MEASURED_BOOT_TCG2),1)
+  MEASURED_PCR_A ?= 9
+  CFLAGS+=-D"WOLFBOOT_MEASURED_BOOT_EFI_TCG2"
+  CFLAGS+=-D"WOLFBOOT_MEASURED_PCR_A=$(MEASURED_PCR_A)"
 endif
 
 ## TPM keystore
@@ -908,6 +919,16 @@ ifeq ($(ALLOW_DOWNGRADE),1)
   CFLAGS+= -D"ALLOW_DOWNGRADE"
 endif
 
+# Raw (non-FIT) device tree authentication (see docs/Signing.md '--dts'). A
+# device tree bound to the image via HDR_DEVICE_TREE_DIGEST is always verified;
+# WOLFBOOT_REQUIRE_SIGNED_DTB additionally makes a missing digest a hard failure
+# (fail-closed) instead of a warning, once every raw-DTB payload is signed with
+# 'sign --dts'.
+ifeq ($(WOLFBOOT_REQUIRE_SIGNED_DTB),1)
+  $(warning WOLFBOOT_REQUIRE_SIGNED_DTB=1 makes wolfBoot panic on a raw device tree that carries no authenticated HDR_DEVICE_TREE_DIGEST; sign every raw DTB payload with 'sign --dts' first or the target will not boot)
+  CFLAGS+= -D"WOLFBOOT_REQUIRE_SIGNED_DTB"
+endif
+
 ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
   ifneq ($(WOLFBOOT_SELF_HEADER),1)
     $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_HEADER=1)
@@ -1141,6 +1162,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   CFLAGS+=-DWOLFSSL_PSA_ENGINE
   CFLAGS+=-DWOLFPSA_CUSTOM_STORE
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
+  CFLAGS+=-I$(WOLFBOOT_LIB_WOLFCOSE)/include
+  CFLAGS+=-DWOLFCOSE_LEAN -DWOLFCOSE_ENABLE_EXT_SIGN
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)
   WOLFPSA_CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa
   ifeq ($(USE_CLANG),1)
@@ -1154,6 +1177,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_OBJS+=src/psa_store.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_ipc.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_cbor.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
@@ -1254,7 +1279,6 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   WOLFCRYPT_OBJS+=src/wolfhsm_callable.o
   WOLFCRYPT_OBJS+=src/wolfhsm_flash_hal.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   ifneq ($(SIGN),ED25519)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
@@ -1416,7 +1440,6 @@ ifeq ($(DISK_LOCK),1)
   ifneq ($(DISK_LOCK_PASSWORD),)
     CFLAGS+=-DWOLFBOOT_ATA_DISK_LOCK_PASSWORD=\"$(DISK_LOCK_PASSWORD)\"
   endif
-  OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
 endif
 
 ifeq ($(FSP), 1)
@@ -1506,11 +1529,16 @@ endif
 # also match the wolfHSM server's own build, or the two disagree on the layout.
 WOLFHSM_CFG_COMM_DATA_LEN ?= 5000
 
+# Maximum trusted-root count for wolfHSM cert-chain verification. Part of the
+# client<->server wire format, so every wolfHSM build in the system (wolfBoot
+# client or server, and any separately built HSM server firmware) must use
+# the same value.
+WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS ?= 8
+
 # wolfHSM client options
 ifeq ($(WOLFHSM_CLIENT),1)
   WOLFCRYPT_OBJS += \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
 
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
@@ -1539,6 +1567,7 @@ ifeq ($(WOLFHSM_CLIENT),1)
   # keystore.c are not supported.
   KEYGEN_OPTIONS += --nolocalkeys
   CFLAGS += -DWOLFHSM_CFG_COMM_DATA_LEN=$(WOLFHSM_CFG_COMM_DATA_LEN)
+  CFLAGS += -DWOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS=$(WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS)
 
   # wolfHSM client ID presented to the HSM server during the connection
   # handshake. Single value shared by all targets; defaults to 1. Override in the
@@ -1570,7 +1599,6 @@ ifeq ($(WOLFHSM_SERVER),1)
 
   WOLFCRYPT_OBJS += \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.o \
     $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   ifeq ($(SIGN),ML_DSA)
     WOLFCRYPT_OBJS += $(MATH_OBJS)
@@ -1584,6 +1612,7 @@ ifeq ($(WOLFHSM_SERVER),1)
   CFLAGS += -I"$(WOLFBOOT_LIB_WOLFHSM)"
   # defines
   CFLAGS += -DWOLFBOOT_ENABLE_WOLFHSM_SERVER -DWOLFHSM_CFG_ENABLE_SERVER
+  CFLAGS += -DWOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS=$(WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS)
   # HAL crypto devId abstraction for wolfHSM server
   CFLAGS += -DWOLFBOOT_DEVID_HASH=hsmDevIdHash
   CFLAGS += -DWOLFBOOT_DEVID_PUBKEY=hsmDevIdPubKey
@@ -1643,8 +1672,8 @@ ifneq ($(CERT_CHAIN_VERIFY),)
   # Optional override for the wolfHSM trusted-root NVM ID list used during
   # cert-chain verification. Expects a comma-separated initializer (no quotes,
   # no spaces), e.g. WOLFHSM_NVM_ROOT_CA_LIST=1,2,3. Bounded by
-  # WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS. When unset, falls back to a HAL-specified
-  # default
+  # WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS (settable in .config; must match the HSM
+  # server firmware's build). When unset, falls back to a HAL-specified default
   ifneq ($(strip $(WOLFHSM_NVM_ROOT_CA_LIST)),)
     CFLAGS += '-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=$(WOLFHSM_NVM_ROOT_CA_LIST)'
   endif
@@ -1865,3 +1894,14 @@ endif
 # includers (test-app), where a self-referencing += would not terminate.
 AUX_WOLFCRYPT_OBJS_NEW:=$(filter-out $(WOLFCRYPT_OBJS),$(sort $(AUX_WOLFCRYPT_OBJS)))
 WOLFCRYPT_OBJS+=$(AUX_WOLFCRYPT_OBJS_NEW)
+
+# Under WOLFSSL_ARMASM, chacha.c defers the block function to
+# wc_chacha_crypt_bytes(), which lives in the port. arch.mk adds the aes/sha
+# equivalents unconditionally; ChaCha is only selected here, so add it last.
+ifeq ($(ARCH),AARCH64)
+  ifneq ($(NO_ARM_ASM),1)
+    ifneq (,$(filter %/wolfcrypt/src/chacha.o,$(WOLFCRYPT_OBJS)))
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/arm/armv8-chacha-asm_c.o
+    endif
+  endif
+endif

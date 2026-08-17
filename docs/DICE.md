@@ -22,15 +22,24 @@ an attestation key derived by DICE or supplied as a provisioned IAK.
 
 The implementation lives under `src/dice/` and is shared across targets. The
 service is invoked through the PSA Initial Attestation API and builds the
-COSE_Sign1 token using a minimal CBOR encoder.
+EAT claim set with wolfCOSE's CBOR API. wolfCOSE then wraps and signs the
+payload as an untagged COSE_Sign1 object using ES256. Hardware DICE targets use
+wolfCOSE's external-signer callback so the attestation private key never leaves
+the platform security boundary. Token-size queries use wolfCOSE's prediction
+API and do not derive a key, advance the CDI, or invoke a signer.
 
 - Claim construction and COSE_Sign1 encoding: `src/dice/dice.c`.
 - PSA Initial Attestation service dispatch: `src/arm_tee_psa_ipc.c`.
 - NSC wrappers for the PSA Initial Attestation API: `zephyr/src/arm_tee_attest_api.c`.
 
 Measured boot claims reuse the image hashing pipeline already used by
-wolfBoot to validate images. Component claims include a measurement type,
-measurement value, and a description string.
+wolfBoot to validate images. Each software-component map includes measurement
+type (key 1), measurement value (key 2), signer ID (key 5), and measurement
+description (key 6). The boot-image signer ID is the authenticated `HDR_PUBKEY`
+hash from its wolfBoot image header. The running wolfBoot image has no retained
+signing manifest, so its signer ID is the zero-filled unknown-signer value used
+by TF-M for the same case. Unsigned `WOLFBOOT_NO_SIGN` boot images also use the
+unknown-signer value because no signing authority exists.
 
 ## Keying model
 

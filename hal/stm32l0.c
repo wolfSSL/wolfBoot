@@ -111,23 +111,31 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (i < len) {
         if ((len - i > 3) && ((((address + i) & 0x03) == 0)  && ((((uint32_t)data) + i) & 0x03) == 0)) {
-            src = (uint32_t *)data;
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
+            /* Index by "i" directly: the condition above only guarantees
+             * that "address + i" and "data + i" are word aligned, so
+             * dst[i >> 2] off the unaligned base would address the wrong
+             * word, and the Cortex-M0+ faults on the unaligned access. */
+            src = (uint32_t *)(data + i);
+            dst = (uint32_t *)(address + i + FLASHMEM_ADDRESS_SPACE);
             flash_wait_complete();
-            dst[i >> 2] = src[i >> 2];
+            *dst = *src;
             flash_wait_complete();
             i+=4;
         } else {
             uint32_t val;
             uint8_t *vbytes = (uint8_t *)(&val);
-            int off = (address + i) - (((address + i) >> 2) << 2);
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE - off);
-            val = dst[i >> 2];
-            vbytes[off] = data[i];
+            uint32_t off = ((address + i) % 4);
+            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE + i - off);
+            val = *dst;
+            while (off < 4) {
+                if (i < len)
+                    vbytes[off++] = data[i++];
+                else
+                    off++;
+            }
             flash_wait_complete();
-            dst[i >> 2] = val;
+            *dst = val;
             flash_wait_complete();
-            i++;
         }
     }
     return 0;

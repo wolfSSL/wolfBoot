@@ -11,6 +11,7 @@ WOLFBOOT_LIB_WOLFPKCS11?=../../lib/wolfPKCS11
 WOLFBOOT_LIB_WOLFPSA?=../../lib/wolfPSA
 WOLFBOOT_LIB_WOLFTPM?=../../lib/wolfTPM
 WOLFBOOT_LIB_WOLFHSM?=../../lib/wolfHSM
+WOLFBOOT_LIB_WOLFCOSE?=../../lib/wolfCOSE
 
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFPSA)),)
 WOLFBOOT_LIB_WOLFPSA=../../../external-libs/wolfPSA
@@ -21,6 +22,9 @@ endif
 ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFHSM)),)
 WOLFBOOT_LIB_WOLFHSM=../../../external-libs/wolfHSM
 endif
+ifeq ($(wildcard $(WOLFBOOT_LIB_WOLFCOSE)),)
+WOLFBOOT_LIB_WOLFCOSE=../../../external-libs/wolfCOSE
+endif
 
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
@@ -28,6 +32,7 @@ WOLFBOOT_LIB_WOLFPKCS11:=$(abspath $(WOLFBOOT_LIB_WOLFPKCS11))
 WOLFBOOT_LIB_WOLFPSA:=$(abspath $(WOLFBOOT_LIB_WOLFPSA))
 WOLFBOOT_LIB_WOLFTPM:=$(abspath $(WOLFBOOT_LIB_WOLFTPM))
 WOLFBOOT_LIB_WOLFHSM:=$(abspath $(WOLFBOOT_LIB_WOLFHSM))
+WOLFBOOT_LIB_WOLFCOSE:=$(abspath $(WOLFBOOT_LIB_WOLFCOSE))
 
 CFLAGS=-I. -I../../src -I../../include -I$(WOLFBOOT_LIB_WOLFSSL)
 CFLAGS+=-g -ggdb
@@ -57,13 +62,20 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-oob unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
-       unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-store-sbrk \
+       unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
+       unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
-       unit-sdhci-disk-unaligned unit-sign-encrypted-output \
+       unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-sign-encrypted-output \
+       unit-sign-hybrid-keyload \
+       unit-sign-header-failure \
        unit-keygen-xmss-params
 TESTS+=unit-tpm-check-rot-auth
 TESTS+=unit-tpm-api-names
+TESTS+=unit-tpm-nsc-cert
+TESTS+=unit-tpm-advio-zeroize
+TESTS+=unit-tpm-mfgid-eh-zeroize
+TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
@@ -75,6 +87,7 @@ TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
+TESTS+=unit-flash-erase-mcxw
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
@@ -84,8 +97,12 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
+TESTS+=unit-dice-token-size
+TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
+TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-flash-write-mcxa
+TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
@@ -128,9 +145,11 @@ run: $(TESTS)
 	done
 	python3 unit-sign-delta-tlv.py || exit 1
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
+	python3 unit-sign-delta-basehash-cleanup.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
+	python3 unit-sign-dts.py || exit 1
 
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
@@ -223,6 +242,12 @@ unit-update-disk:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_M
 unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# FIT (flattened uImage tree) exits of the encrypted disk loader. The panic hook
+# is what lets the test observe the key material at the instant wolfBoot_panic()
+# is entered, since on target that call never returns.
+unit-update-disk-fit:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FDT \
+	-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x40 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
 # integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
 # signature verification is exercised by that function).
@@ -280,6 +305,23 @@ unit-tpm-api-names: ../../include/target.h unit-tpm-api-names.c ../../src/string
 		-DWOLFBOOT_HASH_SHA256 \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
+unit-tpm-nsc-cert: ../../include/target.h unit-tpm-nsc-cert.c ../../src/string.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# The PKCS#11 NSC veneers are exercised here through C_CreateObject_nsc_call
+# and C_DeriveKey_nsc_call only; --gc-sections drops the remaining veneers so
+# just those two wolfPKCS11 entry points need a stub.
+unit-pkcs11-nsc-zeroize: ../../include/target.h unit-pkcs11-nsc-zeroize.c
+	gcc -o $@ unit-pkcs11-nsc-zeroize.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/misc.c \
+		$(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPKCS11) -DSECURE_PKCS11 \
+		-DWOLFPKCS11_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS -ffunction-sections -fdata-sections \
@@ -293,6 +335,20 @@ unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS -DWOLFBOOT_TPM_SEAL -DWOLFBOOT_SIGN_RSA2048 \
 		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-advio-zeroize: ../../include/target.h unit-tpm-advio-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_ADV_IO \
+		-DWOLFTPM_CHECK_WAIT_STATE -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-tpm-mfgid-eh-zeroize: ../../include/target.h unit-tpm-mfgid-eh-zeroize.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
+		-DWOLFTPM_USER_SETTINGS -DWOLFTPM_MFG_IDENTITY \
+		-DWOLFBOOT_TPM_MFG_AUTH_DERIVE -DWOLFBOOT_SIGN_RSA2048 \
+		-DWOLFBOOT_HASH_SHA256 -D__ARM_FEATURE_CMSE=3U -DCSME_NSE_API= \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-policy-create: ../../include/target.h unit-policy-create.c \
@@ -311,6 +367,22 @@ unit-policy-sign: ../../include/target.h unit-policy-sign.c \
 unit-sign-encrypted-output: ../../include/target.h unit-sign-encrypted-output.c \
 		$(KEYTOOLS_SIGN_SRCS)
 	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-sign-hybrid-keyload: ../../include/target.h unit-sign-hybrid-keyload.c \
+		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
+		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
+		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
+		-ffunction-sections -fdata-sections \
+		$(LDFLAGS) -Wl,--gc-sections
+
+unit-sign-header-failure: ../../include/target.h unit-sign-header-failure.c \
+		$(KEYTOOLS_SIGN_SRCS)
+	gcc -o $@ $^ -I../keytools $(CFLAGS) -DML_DSA_LEVEL=2 -DDELTA_UPDATES \
 		-D"LMS_LEVELS=1" -D"LMS_HEIGHT=10" -D"LMS_WINTERNITZ=8" \
 		-DWOLFBOOT_XMSS_PARAMS=\"XMSS-SHA2_10_256\" \
 		-ffunction-sections -fdata-sections \
@@ -338,6 +410,24 @@ unit-arm-tee-psa-ipc: ../../include/target.h unit-arm-tee-psa-ipc.c ../../src/ar
 	gcc -o $@ unit-arm-tee-psa-ipc.c $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPSA)/wolfpsa \
 		-ffunction-sections -fdata-sections \
 		$(LDFLAGS) -Wl,--gc-sections
+
+DICE_TOKEN_TEST_CFLAGS=-I$(WOLFBOOT_LIB_WOLFCOSE)/include \
+	-I$(WOLFBOOT_LIB_WOLFSSL) -DUNIT_TEST_AUTH -DWOLFBOOT_SIGN_ECC256 \
+	-DWOLFCRYPT_SECURE_MODE -DHAVE_HKDF -DWOLFBOOT_NO_PARTITIONS \
+	-DWOLFCOSE_LEAN -DWOLFCOSE_ENABLE_EXT_SIGN \
+	-ffunction-sections -fdata-sections
+unit-dice-token-size:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS)
+unit-dice-token-nosign:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS) -DWOLFBOOT_NO_SIGN
+DICE_TOKEN_TEST_SRC=unit-dice-token-size.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_cbor.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
+unit-dice-token-size unit-dice-token-nosign: ../../include/target.h \
+	$(DICE_TOKEN_TEST_SRC)
+	gcc -o $@ $(DICE_TOKEN_TEST_SRC) $(CFLAGS) $(LDFLAGS) \
+		-Wl,--gc-sections
 
 unit-va416x0-fram: unit-va416x0-fram.c ../../hal/va416x0.c
 	gcc -o $@ unit-va416x0-fram.c $(CFLAGS) $(LDFLAGS)
@@ -387,6 +477,15 @@ unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
 unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3.h
 	gcc -o $@ unit-flash-erase-u3.c -I../../ $(CFLAGS) $(LDFLAGS)
 
+# unit-flash-erase-mcxw includes hal/mcxw.c directly (guarded to hal_flash_erase
+# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so mcxw.c is not a separate input and the
+# (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
+# takes a uint32_t flash address as a pointer, which is only a narrowing cast on
+# the 64-bit host.
+unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
+	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
+		$(CFLAGS) $(LDFLAGS)
+
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a
 # separate input.
@@ -412,6 +511,10 @@ unit-sdhci-response-bits: ../../include/target.h unit-sdhci-response-bits.c
 		-Wl,--gc-sections
 
 unit-sdhci-disk-unaligned: ../../include/target.h unit-sdhci-disk-unaligned.c
+	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
+unit-sdhci-dma-error: ../../include/target.h unit-sdhci-dma-error.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
@@ -481,6 +584,26 @@ unit-image-sha3-384: ../../include/target.h unit-image.c unit-common.c
 	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) \
 		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
 		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DUNIT_IMAGE_KEYHASH_ONLY \
+		-DWOLFBOOT_HASH_SHA3_384 $(LDFLAGS)
+
+# Exercises the raw-DTB authentication helper wolfBoot_verify_dts_digest()
+# (Fenrir #7998). WOLFBOOT_FDT compiles the DTS helpers in image.c, which pull
+# in fdt.c for wolfBoot_get_dts_size(). The sha384/sha3-384 variants cover the
+# corresponding wolfBoot_hash_buffer() branches used by real MMU targets.
+unit-image-dts: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT $(LDFLAGS)
+
+unit-image-dts-sha384: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT -DUNIT_IMAGE_DTS_ONLY \
+		-DWOLFBOOT_HASH_SHA384 $(LDFLAGS)
+
+unit-image-dts-sha3-384: ../../include/target.h unit-image.c unit-common.c $(WOLFCRYPT_SRC)
+	gcc -o $@ unit-image.c unit-common.c $(WOLFCRYPT_SRC) ../../src/fdt.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+		$(CFLAGS) $(WOLFCRYPT_CFLAGS) -DWOLFBOOT_FDT -DUNIT_IMAGE_DTS_ONLY \
 		-DWOLFBOOT_HASH_SHA3_384 $(LDFLAGS)
 
 unit-image-rsa: CFLAGS += -DWOLFBOOT_SIGN_RSA2048
@@ -585,6 +708,9 @@ unit-update-disk: ../../include/target.h unit-update-disk.c
 unit-update-disk-oob: ../../include/target.h unit-update-disk-oob.c
 	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)
 
+unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
+	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) $(LDFLAGS)
+
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
@@ -624,10 +750,19 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 	gcc -o $@ unit-ata-security-passphrase-zeroize.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
+# unit-flash-write-cc26x2 includes hal/cc26x2.c directly, with cc26x2_ti_stub/
+# standing in for the (not vendored) TI CC26x2 SDK headers it includes. This
+# is also the only build coverage hal/cc26x2.c has.
+unit-flash-write-cc26x2: ../../include/target.h unit-flash-write-cc26x2.c ../../hal/cc26x2.c
+	gcc -o $@ unit-flash-write-cc26x2.c -Icc26x2_ti_stub $(CFLAGS) $(LDFLAGS)
+
 # unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+
+unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
+	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
 	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)

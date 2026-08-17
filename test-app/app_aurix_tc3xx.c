@@ -66,7 +66,9 @@ void tc3tc_main(void)
     /* disable external WATCHDOG on the board */
     bsp_board_wdg_Disable();
 
+#ifdef DEBUG_UART
     uart_init();
+#endif
     wolfBoot_printf("TC3xx Test Application\n");
     wolfBoot_printf("Version: %d\n", wolfBoot_current_firmware_version());
 
@@ -122,7 +124,9 @@ void tc3arm_main(void)
     /* disable external WATCHDOG on the board */
     bsp_board_wdg_Disable();
 
+#ifdef DEBUG_UART
     uart_init();
+#endif
     wolfBoot_printf("TC3xx HSM Test Application\n");
     wolfBoot_printf("Version: %d\n", wolfBoot_current_firmware_version());
 

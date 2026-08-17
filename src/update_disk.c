@@ -56,6 +56,7 @@
     defined(ENCRYPT_WITH_CHACHA)
 #define DISK_ENCRYPT
 #include "encrypt.h"
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
 /* Module-level storage for encryption nonce */
 static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
@@ -235,13 +236,13 @@ static int decrypt_header(const uint8_t *src, uint8_t *dst)
 
 static void disk_crypto_clear(void)
 {
-    ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
-    ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
+    wc_ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
+    wc_ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
 }
 
 static void disk_decrypted_header_clear(uint8_t *hdr)
 {
-    ForceZero(hdr, IMAGE_HEADER_SIZE);
+    wc_ForceZero(hdr, IMAGE_HEADER_SIZE);
 }
 
 #endif /* DISK_ENCRYPT */
@@ -496,9 +497,15 @@ void RAMFUNCTION wolfBoot_start(void)
             load_off += ret;
         } while (load_off < os_image.fw_size);
 
-        if (ret < 0) {
-            wolfBoot_printf("Error reading image from disk: p%d\r\n",
-                    cur_part);
+        /* A short read must fail here, as an I/O error. `ret == 0` breaks the
+         * loop above without being negative, and a truncated load would
+         * otherwise sail through to the integrity check and be reported as a
+         * corrupt image -- pointing the operator at the wrong problem, and on
+         * a system with anti-rollback leaving no bootable slot at all. */
+        if (ret <= 0 || load_off != os_image.fw_size) {
+            wolfBoot_printf("Error reading image from disk: p%d "
+                    "(%u of %u bytes)\r\n", cur_part,
+                    (unsigned int)load_off, (unsigned int)os_image.fw_size);
             selected ^= 1;
             continue;
         }
@@ -633,6 +640,10 @@ void RAMFUNCTION wolfBoot_start(void)
                     dts_ptr, dts_addr, dts_size);
                 if (wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size) != 0) {
                     wolfBoot_printf("FIT: failed to load DTS\r\n");
+#ifdef DISK_ENCRYPT
+                    disk_decrypted_header_clear(dec_hdr);
+                    disk_crypto_clear();
+#endif
                     wolfBoot_panic();
                 }
             }

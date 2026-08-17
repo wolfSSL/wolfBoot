@@ -34,6 +34,7 @@ This README describes configuration of supported targets.
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [NVIDIA Jetson Orin (aarch64_efi)](#nvidia-jetson-orin-aarch64_efi)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
 * [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
@@ -4331,7 +4332,7 @@ Key options in `config/examples/zynq7000.config`:
 - `MMU=1 ELF=1` - lets the same image boot Linux or bare-metal. `do_boot` always emits the ARM Linux boot ABI (`r0=0`, `r1=~0`, `r2=DTB_phys`, `r3=0`) on this target, which bare-metal apps simply ignore. `MMU=1` enables `update_ram.c`'s DTB-load codepath and pulls in `src/fdt.o`; wolfBoot does not manage page tables (it inherits FSBL's flat 1:1 DDR mapping). `ELF=1` lets wolfBoot understand ELF inputs (e.g. `vmlinux`) and load only their LOAD segments. Cost over a strictly bare-metal-only build: ~5 KB extra wolfBoot binary (31 KB -> 36 KB).
 - `EXT_FLASH=1` - QSPI as external flash via `XQspiPs`
 - `WOLFBOOT_LOAD_ADDRESS=0x10000000` - DDR offset 256 MB, where the verified app is staged before `do_boot`. Must be **above** wolfBoot's own region (`0x04000000`-`0x040FFFFF`) because `src/update_ram.c` enforces `dst > _end`.
-- `WOLFBOOT_LOAD_DTS_ADDRESS=0x11000000` - DDR offset 272 MB, where a DTB read out of `PART_DTS_BOOT` would be relocated. Ignored for bare-metal payloads and for the appended-DTB Linux flow (where the DTB lives at the end of the signed kernel image).
+- `WOLFBOOT_LOAD_DTS_ADDRESS=0x11000000` - DDR offset 272 MB, where a DTB read out of `PART_DTS_BOOT` would be relocated. Ignored for bare-metal payloads and for the appended-DTB Linux flow (where the DTB lives at the end of the signed kernel image). A DTB loaded this way (raw `PART_DTS_BOOT` or `hal_get_dts_address()`, i.e. not inside a signed FIT) is authenticated against the boot image's `HDR_DEVICE_TREE_DIGEST` TLV before the kernel sees it: sign the kernel with `sign --dts <board.dtb>` (see `docs/Signing.md`). When the image carries the digest it is always verified and a mismatch panics. A raw DTB with no digest only warns and boots by default (backward compatible); build with `WOLFBOOT_REQUIRE_SIGNED_DTB=1` to make a missing digest a hard failure once every raw-DTB payload is signed with `--dts`.
 - `WOLFBOOT_PARTITION_BOOT_ADDRESS=0x00100000` - 16 MB QSPI layout below
 - `CROSS_COMPILE=arm-none-eabi-`
 
@@ -7781,7 +7782,189 @@ Staging kernel at address D630100, size: 6658016
 
 You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
+To pass an authenticated Linux kernel command line, sign the kernel with `--cmdline "..."` (before the positional `image key version` arguments; see [Signing](Signing.md)). wolfBoot reads the `HDR_CMDLINE` TLV from the verified image and applies it to the kernel EFI stub via `LoadOptions`, so it is covered by the image signature.
 
+
+
+## NVIDIA Jetson Orin (aarch64_efi)
+
+The `aarch64_efi` target builds wolfBoot as an AArch64 UEFI application (`wolfboot.efi`), the direct counterpart of the [Qemu x86-64 UEFI](#qemu-x86-64-uefi) target. It uses only UEFI Boot Services (no SoC-specific registers), so the same binary runs on any AArch64 UEFI platform. It has been validated on the NVIDIA Jetson Orin Nano Developer Kit (Tegra234), where the on-module UEFI firmware (edk2-nvidia) launches it after the NVIDIA-signed early boot chain (BootROM -> MB1 -> MB2 -> UEFI). wolfBoot reads the next-stage image from the EFI Simple File System, authenticates it with wolfCrypt, and boots it via the UEFI `LoadImage`/`StartImage` services (an AArch64 Linux `Image` is itself a PE/COFF EFI-stub application).
+
+### Prerequisites
+
+ * An AArch64 GNU toolchain (`aarch64-linux-gnu-gcc`)
+ * gnu-efi built for AArch64 (the host distro package is usually x86-only, so build it with the helper script below)
+ * For emulation: `qemu-system-aarch64` plus the AArch64 UEFI firmware (AAVMF, package `qemu-efi-aarch64`)
+
+On a debian-like system:
+
+```
+apt install git make gcc-aarch64-linux-gnu dosfstools mtools
+apt install qemu-system-arm qemu-efi-aarch64   # emulation (optional)
+```
+
+Build the AArch64 gnu-efi runtime once (installs into `tools/gnu-efi-aarch64/`):
+
+```
+./tools/scripts/build-gnu-efi-aarch64.sh
+```
+
+### Configuration
+
+An example configuration is provided in [config/examples/aarch64_efi.config](config/examples/aarch64_efi.config). It selects `ARCH=AARCH64`, `TARGET=aarch64_efi`, and a signature/hash algorithm (ED25519/SHA256 by default). No partition addresses are required -- UEFI provides the storage and dynamic image placement.
+
+### Building
+
+```
+cp config/examples/aarch64_efi.config .config
+make
+```
+
+This produces `wolfboot.efi`, a PE32+ AArch64 EFI application (objcopy output format `pei-aarch64-little`).
+
+### Signing a payload
+
+Sign the image to boot (an AArch64 Linux `Image`, or any EFI application for testing) with the generated key, tagging it with a version. wolfBoot looks for `kernel.img` and `update.img` on the volume it was launched from and boots the higher valid version:
+
+```
+./tools/keytools/sign --ed25519 --sha256 Image wolfboot_signing_private_key.der 1
+cp Image_v1_signed.bin kernel.img
+```
+
+### Running in QEMU
+
+```
+./tools/scripts/aarch64-efi-qemu.sh        # add --gdb to debug with gdb-multiarch
+```
+
+The script exposes a scratch directory to the UEFI firmware as a FAT ESP, copies `wolfboot.efi` (and `kernel.img` from `aarch64_efi-stage/` if present), and auto-runs it.
+
+### Deploying on the Jetson Orin Nano
+
+The Jetson UEFI auto-boots removable media via `\EFI\BOOT\BOOTAA64.EFI`. Place wolfBoot and a signed payload on a FAT32 partition:
+
+```
+\EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi
+\kernel.img              <- signed payload (read from the volume root)
+```
+
+The Linux kernel command line is signed into `kernel.img` itself (see "Booting Linux" below), so no separate file is placed on the ESP.
+
+Insert the card and power on; UEFI auto-launches wolfBoot, which verifies and boots the payload. The debug console on the Orin Nano Developer Kit is the J14 button header (not the 40-pin), 115200 8N1. Example output:
+
+```
+Image base: 0x25E5D4000
+Opening file: kernel.img, size: 57969
+Checking integrity...done
+Verifying signature...done
+Successfully selected image in part: 0
+Firmware Valid
+Booting at 0x5E254100
+Staging kernel at address 5E254100, size: 57969
+```
+
+### Booting Linux
+
+An AArch64 Linux `Image` carries a PE/COFF EFI stub, so wolfBoot boots it with the same `LoadImage`/`StartImage` path used above -- no initrd or bare-metal handoff is needed when the kernel has built-in MMC/ext4 drivers (the NVIDIA L4T kernel does). This has been validated end to end on the Jetson Orin Nano: wolfBoot verifies the signed kernel and boots NVIDIA Jetson Linux (L4T R36.4.4, `5.15.148-tegra`) all the way to an Ubuntu 22.04 login prompt.
+
+Obtain a Tegra234-compatible kernel and root filesystem from the [NVIDIA Jetson Linux (L4T)](https://developer.nvidia.com/embedded/jetson-linux) BSP. The driver package (`Jetson_Linux_R36.x.x_aarch64.tbz2`) contains `Linux_for_Tegra/kernel/Image` and `Linux_for_Tegra/kernel/dtb/tegra234-*.dtb`; the matching `Tegra_Linux_Sample-Root-Filesystem_*.tbz2` provides the rootfs.
+
+Sign the kernel `Image` with the wolfBoot key, including the kernel command line as an authenticated TLV (`--cmdline`, before the positional arguments), and name it `kernel.img`:
+
+```
+./tools/keytools/sign --ed25519 --sha256 \
+    --cmdline "root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200" \
+    Linux_for_Tegra/kernel/Image wolfboot_signing_private_key.der 1
+cp Linux_for_Tegra/kernel/Image_v1_signed.bin kernel.img
+```
+
+The command line is stored in the signed manifest header (`HDR_CMDLINE` TLV) and is therefore covered by the image signature; wolfBoot reads it from the verified image and passes it to the kernel EFI stub via `LoadOptions`. For a long command line, set `IMAGE_HEADER_SIZE=512` when signing (the default 256-byte ED25519/SHA256 header holds roughly 70 command-line bytes).
+
+Lay out the microSD as a FAT ESP plus a rootfs partition and place:
+
+```
+FAT (p1):   \EFI\BOOT\BOOTAA64.EFI   <- wolfboot.efi (UEFI auto-boots this)
+            \kernel.img              <- signed L4T kernel (command line inside)
+ext4 (p2):  the L4T sample root filesystem
+```
+
+On power-up the Jetson UEFI auto-boots `\EFI\BOOT\BOOTAA64.EFI`; wolfBoot verifies `kernel.img` and hands off to the kernel, which receives the real Tegra234 device tree from the UEFI configuration table (`EFI stub: Using DTB from configuration table`), mounts `mmcblk0p2`, and brings up systemd and the login on the J14 debug console (`ttyTCU0`).
+
+Security note: because the command line lives in the signed manifest, kernel arguments (e.g. `root=`, `init=`, security flags) cannot be altered without breaking the image signature -- unlike an unauthenticated file on the ESP. If the image carries no `HDR_CMDLINE` TLV, wolfBoot boots with no command line and the kernel uses its built-in `CONFIG_CMDLINE`. As additional (independent) hardening you may also build Linux with `CONFIG_CMDLINE="..."` plus `CONFIG_CMDLINE_FORCE`, which makes the kernel ignore any externally supplied command line entirely. An initramfs-based flow (rather than a direct `root=` mount) would additionally need initrd support via the `LINUX_EFI_INITRD_MEDIA_GUID` LoadFile2 protocol, which this target does not currently implement.
+
+### Root of trust: enrolling wolfBoot into UEFI Secure Boot
+
+The steps above give wolfBoot verifying the kernel. To close the remaining gap -- the firmware verifying `wolfboot.efi` itself -- enroll wolfBoot into UEFI Secure Boot so the platform refuses to launch an unsigned or tampered `wolfboot.efi`. This makes the chain continuous: firmware -> `wolfboot.efi` -> kernel.
+
+`tools/scripts/sign-efi-secureboot.sh` generates a Platform Key (PK), Key Exchange Key (KEK) and signature-database (db) key/cert, signs `wolfboot.efi` with the db key, and emits the signed variable updates (`.auth`) for enrollment:
+
+```
+./tools/scripts/sign-efi-secureboot.sh wolfboot.efi
+```
+
+This produces `wolfboot.efi.signed` and, under `tools/efi-secureboot-keys/`, the `PK`/`KEK`/`db` key and cert plus the signed variable updates (`db.auth`, `KEK.auth`, `PK.auth`). (It requires `sbsigntool`, `efitools`, and `openssl`; `sbsign` may print benign "gaps between PE/COFF sections" warnings for gnu-efi images -- signing and `sbverify` still pass.)
+
+The Jetson edk2 UEFI Shell `setvar` cannot enroll authenticated variables (it has no file input and cannot set the time-based-authenticated attribute), so enroll from the UEFI **setup menu**, which reads the certificate files from the ESP. The menu's "Enroll ... Using File" expects DER-encoded certificates; convert the generated PEM certs once:
+
+```
+cd tools/efi-secureboot-keys
+for k in PK KEK db; do openssl x509 -in $k.crt -outform DER -out $k.cer; done
+```
+
+Copy `db.cer`, `KEK.cer`, `PK.cer` and `wolfboot.efi.signed` onto the ESP (deploy the signed image as `\EFI\BOOT\BOOTAA64.EFI`). Name the cert files with a **lowercase** `.cer` extension: the edk2 file explorer decides a file is a certificate by a case-sensitive suffix match against `.cer`/`.der`/`.crt`, so an uppercase `DB.CER` (as FAT stores a plain 8.3 name) is rejected with "Unsupported file type!". Copy them with lowercase names (e.g. `mcopy db.cer ::/db.cer`) so the VFAT lowercase flag is set. Then, on the board (over the serial console -- use `minicom` or `screen`, not a plain pass-through, so the full-screen menu renders):
+
+1. Reset and press `ESC` at the firmware banner (`ESC to enter Setup`) to enter Setup.
+2. `Device Manager` -> `Secure Boot Configuration`.
+3. Set `Secure Boot Mode` -> `Custom Mode` (reveals `Custom Secure Boot Options`).
+4. Under `Custom Secure Boot Options`, enroll in order -- `db`, then `KEK`, then `PK` (enrolling PK is what turns Secure Boot enforcing and exits Setup Mode):
+   - `DB Options` -> `Enroll Signature` -> `Enroll Signature Using File` -> select `db.cer` -> accept the default signature-owner GUID -> `Commit Changes and Exit`.
+   - `KEK Options` -> `Enroll KEK` -> `Enroll KEK Using File` -> `KEK.cer` -> `Commit Changes and Exit`.
+   - `PK Options` -> `Enroll PK` -> `Enroll PK Using File` -> `PK.cer` -> `Commit Changes and Exit`.
+5. Confirm `Current Secure Boot State: Enabled`, then reset.
+
+On reboot the firmware verifies `\EFI\BOOT\BOOTAA64.EFI` against `db`, so the signed wolfBoot launches (`Verifying signature...done`). To prove enforcement, replace `BOOTAA64.EFI` with an unsigned `wolfboot.efi`; the firmware refuses it with a Security Violation. Secure Boot is fully reversible: in the same menu set `Secure Boot Mode` -> `Standard Mode`, or delete the PK, to return the board to Setup Mode.
+
+Important -- sign the kernel for Secure Boot too. wolfBoot boots the kernel through the UEFI `LoadImage`/`StartImage` services, and with Secure Boot enforcing, `LoadImage` also verifies the kernel image against `db`. A kernel that is only wolfBoot-signed is rejected by `LoadImage` (wolfBoot prints `LoadImage failed: 0x<status>`), even though wolfBoot's own `Verifying signature...done` passed. Sign the raw `Image` with the db key (sbsign) first, then wolfBoot-sign the result, so the kernel is trusted by both UEFI (`db`, for `LoadImage`) and wolfBoot (wolfCrypt):
+
+```
+sbsign --key tools/efi-secureboot-keys/db.key --cert tools/efi-secureboot-keys/db.crt \
+    --output Image.sb Linux_for_Tegra/kernel/Image
+./tools/keytools/sign --ed25519 --sha256 Image.sb wolfboot_signing_private_key.der 1
+cp Image_v1_signed.bin kernel.img      # note: sign drops the .sb, output is Image_v1_signed.bin
+```
+
+The full enforced chain is then firmware -> (Secure Boot) -> wolfBoot -> (wolfCrypt + Secure Boot) -> kernel -> Linux.
+
+Test this without hardware first: the QEMU + AAVMF helper (`tools/scripts/aarch64-efi-qemu.sh`) uses OVMF/AAVMF variable storage that supports enrolling the same keys, so you can confirm the signed binary launches and a wrong-key binary is refused before touching the board.
+
+Note on the Jetson dev kit: the OP-TEE console prints "Test UEFI variable auth key is being used" / "UEFI variable protection is not fully enabled", i.e. the variable store is in a development state (`SetupMode=1`), which is why menu enrollment works without a prior platform key. A production device would additionally fuse-lock the variable store (see below).
+
+### Root of trust: NVIDIA fuse provisioning (production; not performed here)
+
+UEFI Secure Boot above is enforced by the edk2 firmware. On a production Jetson the firmware chain (BootROM -> MB1 -> MB2 -> cpu-bootloader/UEFI) is itself made tamper-resistant by burning the NVIDIA security fuses from the L4T BSP:
+
+- PKC (public-key crypto) fuses: burn the SHA of your signing public key so the BootROM only accepts an NVIDIA-signing-chain that you control.
+- SBK (secure boot key) fuses: optionally encrypt the boot binaries.
+
+These are burned with `odmfuse.sh`/`tegrasign` from `Linux_for_Tegra/` and are irreversible. They are the final production step and are intentionally NOT part of this port -- the development board stays in unfused/dev mode. Consult the NVIDIA Jetson Linux "Secure Boot" documentation for the current `odmfuse.sh` procedure for your module before burning anything. Once fused, the fused firmware enforces UEFI Secure Boot, which enforces `wolfboot.efi`, which enforces the kernel -- a complete hardware root of trust.
+
+### Measured boot (firmware TPM via EFI_TCG2)
+
+The Jetson firmware provides a TPM 2.0 (an OP-TEE fTPM) behind `EFI_TCG2_PROTOCOL` and already measures the early boot chain into PCRs. wolfBoot extends that chain to the OS: with `MEASURED_BOOT_TCG2=1` (default in `config/examples/aarch64_efi.config`), it measures the verified kernel image into PCR `MEASURED_PCR_A` (default 9) with `HashLogExtendEvent` just before handoff, appending a `wolfBoot kernel.img` record to the firmware event log. This is the same consumer pattern U-Boot uses -- the firmware / fTPM performs the hashing, PCR extend and log append, so wolfBoot needs no TPM transport driver of its own and pulls in no wolfTPM.
+
+It is best-effort and does not disturb boot: wolfBoot logs the TPM capability and, if the platform exposes no TCG2 protocol or reports no TPM present, skips the measurement and continues. On the Orin Nano the console shows:
+
+```
+TCG2: TPM present=1 activeBanks=0x6 banks=2
+TCG2: measured wolfBoot kernel.img (43091976 bytes) into PCR 9
+TCG2: measured wolfBoot cmdline (110 bytes) into PCR 9
+TCG2: measured wolfBoot dtb (997852 bytes) into PCR 9
+TCG2: PCR 9 (SHA256):
+  fef77532719dffa1e62567914d78e820
+  012406452ea644ff193cfc0475937732
+```
+
+`activeBanks=0x6` is the SHA-256 (0x2) + SHA-384 (0x4) PCR banks; the kernel, its command line and the platform device tree are extended into PCR 9 in both, and wolfBoot then reads the PCR back (`TPM2_PCR_Read`) and prints it. An attestation client can compare PCR 9 -- and the TCG2 event log -- against known-good values to confirm exactly which kernel, command line and device tree wolfBoot verified and booted. Choose `MEASURED_PCR_A` to fit the platform's PCR allocation (0-7 are firmware-owned; 8-15 are for OS/loader use). Note the edk2 firmware separately measures the loaded `wolfboot.efi` image itself into its own PCRs via `LoadImage`, so the firmware-verifies-wolfBoot and wolfBoot-measures-kernel events are distinct entries in the log.
 
 ## Intel x86_64 with Intel FSP support
 
