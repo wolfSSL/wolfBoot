@@ -103,6 +103,7 @@ TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
+TESTS+=unit-zynq-erase-loop
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -796,6 +797,17 @@ nxp_ls1028a_host.c: ../../hal/nxp_ls1028a.c
 
 unit-ls1028a-xspi-write: unit-ls1028a-xspi-write.c nxp_ls1028a_host.c
 	gcc -o $@ unit-ls1028a-xspi-write.c -DTARGET_nxp_ls1028a -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-zynq-erase-loop runs the real ext_flash_erase() from hal/zynq.c
+# against emulated qspi_* functions. zynq.c needs the Xilinx SDK headers
+# (board build tree) and cannot be compiled on the host, but the bug
+# under test is entirely in this one function, so it is extracted
+# verbatim by awk into zynq_erase_extract.h.
+zynq_erase_extract.h: ../../hal/zynq.c
+	awk '/^int RAMFUNCTION ext_flash_erase\(/{f=1} f{print} f&&/^\}/{exit}' $< > $@
+
+unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
+	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the

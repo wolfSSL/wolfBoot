@@ -2526,24 +2526,28 @@ int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
         qspiaddr = (mDev.stripe) ? address / 2 : address;
 
         ret = qspi_write_enable(&mDev);
+        if (ret != GQSPI_CODE_SUCCESS)
+            break;
+
+        /* ------ Erase Flash ------ */
+        memset(cmd, 0, sizeof(cmd));
+        idx = 0;
+        cmd[idx++] = SEC_ERASE_CMD;
+    #if GQPI_USE_4BYTE_ADDR == 1
+        cmd[idx++] = ((qspiaddr >> 24) & 0xFF);
+    #endif
+        cmd[idx++] = ((qspiaddr >> 16) & 0xFF);
+        cmd[idx++] = ((qspiaddr >> 8)  & 0xFF);
+        cmd[idx++] = ((qspiaddr >> 0)  & 0xFF);
+        ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
+            GQSPI_GEN_FIFO_MODE_SPI);
+        wolfBoot_printf("Flash Erase: Ret %d\n", ret);
         if (ret == GQSPI_CODE_SUCCESS) {
-            /* ------ Erase Flash ------ */
-            memset(cmd, 0, sizeof(cmd));
-            cmd[idx++] = SEC_ERASE_CMD;
-        #if GQPI_USE_4BYTE_ADDR == 1
-            cmd[idx++] = ((qspiaddr >> 24) & 0xFF);
-        #endif
-            cmd[idx++] = ((qspiaddr >> 16) & 0xFF);
-            cmd[idx++] = ((qspiaddr >> 8)  & 0xFF);
-            cmd[idx++] = ((qspiaddr >> 0)  & 0xFF);
-            ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
-                GQSPI_GEN_FIFO_MODE_SPI);
-            wolfBoot_printf("Flash Erase: Ret %d\n", ret);
-            if (ret == GQSPI_CODE_SUCCESS) {
-                ret = qspi_wait_ready(&mDev); /* Wait for not busy */
-            }
-            qspi_write_disable(&mDev);
+            ret = qspi_wait_ready(&mDev); /* Wait for not busy */
         }
+        qspi_write_disable(&mDev);
+        if (ret != GQSPI_CODE_SUCCESS)
+            break;
 
         address += WOLFBOOT_SECTOR_SIZE;
         len -= WOLFBOOT_SECTOR_SIZE;
