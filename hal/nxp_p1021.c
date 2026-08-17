@@ -688,31 +688,53 @@ static int hal_flash_command(uint8_t iswrite)
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_read_bytes(uint8_t* data, size_t len)
 {
+    uint32_t end = flash_idx + (uint32_t)len;
+
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("read %p to %p, len %d\n",
         &flash_buf[flash_idx], data, len);
 #endif
-    /* copy data from internal eLBC FCM buffer */
-    while (flash_idx < len) {
-        *((volatile uint32_t*)data) =
-            *(volatile uint32_t*)(&flash_buf[flash_idx]);
-        flash_idx += 4;
-        data += 4;
+    /* copy data from internal eLBC FCM buffer. flash_idx starts at the
+     * page column (see hal_flash_set_addr), so len is a relative count and
+     * the end must be flash_idx + len, not len. */
+    while (flash_idx < end) {
+        if (end - flash_idx >= 4) {
+            *((volatile uint32_t*)data) =
+                *(volatile uint32_t*)(&flash_buf[flash_idx]);
+            flash_idx += 4;
+            data += 4;
+        }
+        else {
+            *data = flash_buf[flash_idx];
+            flash_idx++;
+            data++;
+        }
     }
 }
 /* assume input/output buffers are 32-bit aligned */
 static void hal_flash_write_bytes(const uint8_t* data, size_t len)
 {
+    uint32_t end = flash_idx + (uint32_t)len;
+
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("write %p to %p, len %d\n",
         data, &flash_buf[flash_idx], len);
 #endif
-    /* copy data to internal eLBC FCM buffer */
-    while (flash_idx < len) {
-        *(volatile uint32_t*)(&flash_buf[flash_idx]) =
-            *((volatile uint32_t*)data);
-        flash_idx += 4;
-        data += 4;
+    /* copy data to internal eLBC FCM buffer. flash_idx starts at the
+     * page column (see hal_flash_set_addr), so len is a relative count and
+     * the end must be flash_idx + len, not len. */
+    while (flash_idx < end) {
+        if (end - flash_idx >= 4) {
+            *(volatile uint32_t*)(&flash_buf[flash_idx]) =
+                *((volatile uint32_t*)data);
+            flash_idx += 4;
+            data += 4;
+        }
+        else {
+            flash_buf[flash_idx] = *data;
+            flash_idx++;
+            data++;
+        }
     }
 }
 

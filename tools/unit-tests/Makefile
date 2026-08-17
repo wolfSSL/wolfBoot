@@ -101,6 +101,7 @@ TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-cc26x2
+TESTS+=unit-p1021-fcm-bytes
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -765,6 +766,19 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 # is also the only build coverage hal/cc26x2.c has.
 unit-flash-write-cc26x2: ../../include/target.h unit-flash-write-cc26x2.c ../../hal/cc26x2.c
 	gcc -o $@ unit-flash-write-cc26x2.c -Icc26x2_ti_stub $(CFLAGS) $(LDFLAGS)
+
+# unit-p1021-fcm-bytes drives the real FCM byte-copy helpers from
+# hal/nxp_p1021.c (PowerPC). The P1021 FCM helpers are plain memory
+# copies, so the HAL is compiled on the host: the PowerPC-asm accessors
+# from nxp_ppc.h are shadowed inside the test, and nxp_p1021_host.c
+# (generated below) is identical to hal/nxp_p1021.c except that the three
+# bare __asm__ cache-barrier statements (DDR init / multi-core boot) are
+# blanked out, as they cannot assemble on x86.
+nxp_p1021_host.c: ../../hal/nxp_p1021.c
+	sed -e 's/^[[:space:]]*__asm__[[:space:]]*__volatile__("[^"]*");[[:space:]]*$$//' $< > $@
+
+unit-p1021-fcm-bytes: unit-p1021-fcm-bytes.c nxp_p1021_host.c
+	gcc -o $@ unit-p1021-fcm-bytes.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
