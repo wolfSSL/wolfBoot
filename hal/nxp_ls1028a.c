@@ -537,6 +537,11 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
     while (len) {
         size = len > XSPI_IP_BUF_SIZE ? XSPI_IP_BUF_SIZE : len;
 
+        /* NOR flash clears its write-enable latch after each program
+         * operation, so enable writes for every page, not just the
+         * first (the prior program has completed by here) */
+        xspi_write_en(address);
+
         XSPI_IPCR0 = address;
         loop_cnt = size / XSPI_IP_WM_SIZE;
 
@@ -610,7 +615,6 @@ void hal_flash_lock(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    xspi_write_en(address);
     xspi_flash_write(address, data, len);
 
     return len;
@@ -650,7 +654,6 @@ void ext_flash_unlock(void)
 }
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    xspi_write_en(address);
     xspi_flash_write(address, data, len);
 
     return len;

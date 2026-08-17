@@ -102,6 +102,7 @@ TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-p1021-fcm-bytes
+TESTS+=unit-ls1028a-xspi-write
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -779,6 +780,22 @@ nxp_p1021_host.c: ../../hal/nxp_p1021.c
 
 unit-p1021-fcm-bytes: unit-p1021-fcm-bytes.c nxp_p1021_host.c
 	gcc -o $@ unit-p1021-fcm-bytes.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-ls1028a-xspi-write drives the real XSPI write/erase path from
+# hal/nxp_ls1028a.c. The driver is plain C register access apart from a
+# few bare `asm volatile("...")` barrier statements (DDR init, delay), so
+# nxp_ls1028a_host.c (generated below) is identical to the HAL file
+# except those statements are blanked out: they cannot assemble on x86.
+# The test rebases XSPI_BASE onto host memory and emulates the FlexSPI
+# controller (including the NOR write-enable latch) at the
+# XSPI_IPCMD_START() boundary.
+nxp_ls1028a_host.c: ../../hal/nxp_ls1028a.c
+	sed -e 's/^[[:space:]]*asm volatile("[^"]*");[[:space:]]*$$//' \
+	    -e 's/\*(volatile uint32_t \*)(addr) = val;/xspi_emu_tfd_write(addr, val);/' \
+	    $< > $@
+
+unit-ls1028a-xspi-write: unit-ls1028a-xspi-write.c nxp_ls1028a_host.c
+	gcc -o $@ unit-ls1028a-xspi-write.c -DTARGET_nxp_ls1028a -I../../hal $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
