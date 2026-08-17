@@ -101,6 +101,16 @@ TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-cc26x2
+
+# The x86-64 EFI unit test needs the gnu-efi development headers (same
+# dependency as the CMake x86_64_efi target). Probe and only add the test
+# when they are installed, so a default "make" stays portable on hosts
+# without them.
+HAVE_GNU_EFI := $(wildcard /usr/include/efi/efi.h)
+ifneq ($(HAVE_GNU_EFI),)
+TESTS+=unit-efi-x86-open-image
+endif
+
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
@@ -755,6 +765,17 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 # is also the only build coverage hal/cc26x2.c has.
 unit-flash-write-cc26x2: ../../include/target.h unit-flash-write-cc26x2.c ../../hal/cc26x2.c
 	gcc -o $@ unit-flash-write-cc26x2.c -Icc26x2_ti_stub $(CFLAGS) $(LDFLAGS)
+
+# unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
+# host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
+# x86-64 efi_callN() trampolines). This is the only host build coverage
+# hal/x86_64_efi.c has.
+#
+# -fshort-wchar matches the real x86_64_efi build (arch.mk), where the
+# 16-bit wchar_t is what makes efi_main's L"..." literals valid CHAR16
+# strings under gnu-efi 4.x (CHAR16 = uint16_t).
+unit-efi-x86-open-image: unit-efi-x86-open-image.c ../../hal/x86_64_efi.c
+	gcc -o $@ unit-efi-x86-open-image.c -I/usr/include/efi -I/usr/include/efi/x86_64 -DTARGET_X86_64_EFI -fshort-wchar $(CFLAGS) $(LDFLAGS)
 
 # unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.

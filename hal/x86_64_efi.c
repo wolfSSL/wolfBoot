@@ -233,6 +233,7 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
 {
     EFI_FILE_HANDLE file;
     EFI_STATUS status;
+    UINTN readsz;
 
     file = openFile(filename, vol);
     if (file == NULL)
@@ -250,11 +251,20 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
         return status;
     }
 
-    status = uefi_call_wrapper(file->Read, 3, file, sz, *_addr);
+    /* EFI_FILE_PROTOCOL.Read() takes a UINTN *BufferSize (64 bits on
+     * x86-64) and writes the bytes actually read through it. Passing the
+     * caller's uint32_t *sz would let an ordinary read store eight bytes
+     * through a four-byte stack object, and the 64-bit read of
+     * *BufferSize would see adjacent stack bytes. Same contract as the
+     * AArch64 sibling. */
+    readsz = (UINTN)*sz;
+    status = uefi_call_wrapper(file->Read, 3, file, &readsz,
+                               (void *)(uintptr_t)*_addr);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't read kernel image %d\n", status);
         return status;
     }
+    *sz = (uint32_t)readsz;
 
     if (*sz < IMAGE_HEADER_SIZE) {
         wolfBoot_printf("Image smaller than the header\n");
