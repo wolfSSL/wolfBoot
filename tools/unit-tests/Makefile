@@ -100,6 +100,7 @@ TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
+TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
@@ -748,6 +749,12 @@ unit-ahci-unlock-panic: ../../include/target.h unit-ahci-unlock-panic.c
 unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-passphrase-zeroize.c
 	gcc -o $@ unit-ata-security-passphrase-zeroize.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# unit-flash-write-cc26x2 includes hal/cc26x2.c directly, with cc26x2_ti_stub/
+# standing in for the (not vendored) TI CC26x2 SDK headers it includes. This
+# is also the only build coverage hal/cc26x2.c has.
+unit-flash-write-cc26x2: ../../include/target.h unit-flash-write-cc26x2.c ../../hal/cc26x2.c
+	gcc -o $@ unit-flash-write-cc26x2.c -Icc26x2_ti_stub $(CFLAGS) $(LDFLAGS)
 
 # unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.

@@ -45,7 +45,9 @@ int uart_read_nonblock(char *c)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    if (FlashProgram(data, address, len) != FAPI_STATUS_SUCCESS)
+    /* driverlib's FlashProgram() takes a non-const buffer but only reads
+     * from it. */
+    if (FlashProgram((uint8_t *)data, address, len) != FAPI_STATUS_SUCCESS)
         return -1;
     while(FlashCheckFsmForReady() != FAPI_STATUS_FSM_READY)
                 ;
