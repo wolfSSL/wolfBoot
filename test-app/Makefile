@@ -1066,6 +1066,7 @@ ifeq ($(TARGET),ti_am64x)
 
   ifeq ($(PKA),1)
     CFLAGS+=-DWOLFSSL_TI_AM64X
+    CFLAGS+=-DWOLFSSL_TI_AM64X_RNG_CTR_DRBG
     APP_OBJS+=\
       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ti/ti-sa2ul_port.o
