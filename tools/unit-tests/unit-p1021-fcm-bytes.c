@@ -1,7 +1,8 @@
 /* unit-p1021-fcm-bytes.c
  *
- * Regression test for F-7975: hal_flash_read_bytes() and
- * hal_flash_write_bytes() in hal/nxp_p1021.c loop on
+ * Regression test for F-7975 and F-7976 in hal/nxp_p1021.c.
+ *
+ * F-7975: hal_flash_read_bytes() and hal_flash_write_bytes() loop on
  * `while (flash_idx < len)`, comparing the FCM buffer index (which
  * hal_flash_set_addr() initializes to the page column, `flash_idx = col`)
  * against the caller's relative byte count. With col != 0:
@@ -15,6 +16,16 @@
  *
  * The fix computes an absolute end (flash_idx + len) and copies exactly
  * len bytes, handling the tail byte-wise.
+ *
+ * F-7976: the ext_flash_write()/ext_flash_read() page loops size every
+ * iteration from the total request length instead of the remaining
+ * length, do not cap it to the page, and program ELBC_FBCR with the
+ * column offset - which lands in the register's reserved bits 0-19,
+ * leaving the byte-count field (FBCR[31:20], P1021RM 12.3.30) at 0,
+ * i.e. "full page + spare" with FPAR[CI] ignored, on every transfer.
+ * The fix uses chunk = min(len - pos, page_size - col), programs the BC
+ * field (0 only for a full page from column 0 - the only
+ * ECC-generating/checking setting) and advances by chunk.
  *
  * hal/nxp_p1021.c is PowerPC code, but the FCM helpers under test are
  * plain byte copies. The test includes the HAL file (via nxp_p1021_host.c,
@@ -73,7 +84,11 @@ static uint32_t g_ccsr_regs[0x200000 / sizeof(uint32_t)];
 #define get16(addr)  (*(const volatile uint16_t *)(addr))
 #define set16(addr, v)  (*(volatile uint16_t *)(addr) = (uint16_t)(v))
 #define get32(addr)  (*(const volatile uint32_t *)(addr))
-#define set32(addr, v)  (*(volatile uint32_t *)(addr) = (uint32_t)(v))
+/* set32 goes through a host hook so the F-7976 tests can log FBCR
+ * writes and emulate the FCM<->NAND data move the hardware performs on
+ * an LSOR write (see p1021_set32() below). */
+static void p1021_set32(volatile uint32_t *addr, uint32_t v);
+#define set32(addr, v) p1021_set32((addr), (uint32_t)(v))
 #undef mtspr
 #define mtspr(rn, v) ((void)0)
 #undef mfspr
@@ -126,19 +141,101 @@ void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
     (void)reset;
 }
 
+/* Host stand-in for the eLBC FCM region (FLASH_BASE_ADDR): 8 1-KB FCM
+ * buffers, hal_flash_set_addr() picks one per NAND page. */
+static uint8_t g_fcm8k[8 * 1024];
+
+#undef FLASH_BASE_ADDR
+#define FLASH_BASE_ADDR ((uintptr_t)g_fcm8k)
+
 /* Pull in the code under test (its statics become visible here).
  * nxp_p1021_host.c is generated from hal/nxp_p1021.c by the Makefile
  * (see there for the single mechanical difference). */
 #include "nxp_p1021_host.c"
 
-/* Host stand-in for the eLBC FCM region (FLASH_BASE_ADDR). */
+/* Stand-in FCM buffer for the F-7975 helper tests (they drive
+ * flash_buf directly, without hal_flash_set_addr()). */
 static uint8_t fcm[1024];
+
+/* ---- F-7976: emulated NAND and FCM transfer hook ----
+ *
+ * The hardware moves data between the FCM buffer and the NAND page when
+ * hal_flash_command() writes the LSOR register. On the host that write
+ * is intercepted (p1021_set32) and the transfer is emulated from the
+ * programmed registers, following P1021RM 12.3.30:
+ *
+ *   BC = FBCR[31:20];  BC == 0 -> the whole 512-byte page (and spare)
+ *   is transferred and FPAR[CI] is ignored, otherwise BC bytes are
+ *   transferred starting at FPAR[CI].
+ *
+ * g_nand models 16 512-byte pages plus 64 spare bytes each. No bad
+ * blocks: the spare bytes stay 0xFF, so the bad-page check in
+ * ext_flash_read() does not trigger. */
+static uint8_t g_nand[16 * (512 + 64)];
+/* NAND byte at (page, col): each page is followed by 64 spare bytes. */
+#define NAND(page, col) g_nand[(page) * (512 + 64) + (col)]
+static uint32_t g_fbcr_log[16];
+static int g_fbcr_n;
+
+static void emulate_fcm_transfer(void)
+{
+    uint32_t fbar = *ELBC_FBAR;
+    uint32_t fpar = *ELBC_FPAR;
+    uint32_t fir  = *ELBC_FIR;
+    uint32_t bc   = *ELBC_FBCR >> 20;
+    uint32_t page, ci;
+    uint8_t *nand;
+    volatile uint8_t *fcmw = (volatile uint8_t *)flash_buf;
+
+    /* small-page decode (the test never builds the large-page variant):
+     * FBAR = page >> 5, FPAR[14:10] = page within block, FPAR[9:0] = col */
+    page = (fbar << 5) | ((fpar >> 10) & 0x1F);
+    ci   = fpar & 0x1FF;
+    if (bc == 0) {
+        ci = 0;
+        bc = 512;
+    }
+    if (ci + bc > 512) {
+        bc = 512 - ci;
+    }
+    nand = &g_nand[page * (512 + 64)];
+
+    if (((fir >> 16) & 0xF) == ELBC_FIR_OP_RBW) {
+        /* small-page read (RBW op in FIR slot 3): FCM <- NAND */
+        memcpy((void *)(fcmw + ci), nand + ci, bc);
+        if (ci == 0 && bc == 512) {
+            /* a full-page read loads the spare region as well */
+            memset((void *)(fcmw + 512), 0xFF, 64);
+        }
+    }
+    else if (((fir >> 12) & 0xF) == ELBC_FIR_OP_WB) {
+        /* small-page write (WB op in FIR slot 4): NAND <- FCM */
+        memcpy(nand + ci, (const void *)(fcmw + ci), bc);
+    }
+}
+
+static void p1021_set32(volatile uint32_t *addr, uint32_t v)
+{
+    *addr = v;
+
+    if (addr == ELBC_LSOR) {
+        emulate_fcm_transfer();
+    }
+    if (addr == ELBC_FBCR &&
+        g_fbcr_n < (int)(sizeof(g_fbcr_log) / sizeof(g_fbcr_log[0]))) {
+        g_fbcr_log[g_fbcr_n++] = v;
+    }
+}
 
 static void setup(void)
 {
     memset(fcm, 0x5A, sizeof(fcm));
+    memset(g_fcm8k, 0xFF, sizeof(g_fcm8k)); /* erased FCM, 0xFF spares */
+    memset(g_nand, 0xFF, sizeof(g_nand));
     flash_buf = (volatile uint8_t *)fcm;
     flash_idx = 0;
+    g_fbcr_n = 0;
+    set32(ELBC_LTESR, ELBC_LTESR_CC); /* FCM commands complete instantly */
 }
 
 static void teardown(void)
@@ -282,6 +379,147 @@ START_TEST(test_read_len_gt_col)
 }
 END_TEST
 
+/* ---- F-7976: ext_flash_write()/ext_flash_read() page loops ---- */
+
+/* A full-page write from column 0 must keep BC = 0 (full page + spare,
+ * the only ECC-generating setting). */
+START_TEST(test_p1021_write_full_page)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x10);
+
+    ck_assert_int_eq(ext_flash_write(0, data, 512), 0);
+
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(g_nand[i], data[i]);
+}
+END_TEST
+
+/* A partial write must program the byte count into FBCR[31:20] (the
+ * pre-fix code wrote the column into the reserved bits 0-19). With a
+ * stale FCM buffer the pre-fix full-page transfer also clobbered the
+ * page columns outside the request. */
+START_TEST(test_p1021_write_partial)
+{
+    uint8_t data[1024];
+    size_t i;
+
+    memset(g_fcm8k, 0x5A, 1024); /* stale FCM buffer 0 */
+    fill(data, sizeof(data), 0x20);
+
+    ck_assert_int_eq(ext_flash_write(100, data, 400), 0);
+
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 400u << 20);
+    for (i = 0; i < 400; i++)
+        ck_assert_uint_eq(g_nand[100 + i], data[i]);
+    for (i = 0; i < 100; i++)
+        ck_assert_uint_eq(g_nand[i], 0xFF);
+    for (i = 500; i < 512; i++)
+        ck_assert_uint_eq(g_nand[i], 0xFF);
+}
+END_TEST
+
+/* Multi-page write: each iteration must use the remaining length.
+ * Pre-fix, the second page transfer was sized from the total length,
+ * reading 424 bytes past the request and programming them to flash. */
+START_TEST(test_p1021_write_multipart)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x30);
+
+    ck_assert_int_eq(ext_flash_write(0, data, 600), 0);
+
+    ck_assert_int_eq(g_fbcr_n, 2);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);        /* page 0: full, BC = 0 */
+    ck_assert_uint_eq(g_fbcr_log[1], 88u << 20);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(g_nand[i], data[i]);
+    for (i = 0; i < 88; i++)
+        ck_assert_uint_eq(NAND(1, i), data[512 + i]);
+    for (i = 88; i < 512; i++)
+        ck_assert_uint_eq(NAND(1, i), 0xFF);
+}
+END_TEST
+
+/* Unaligned start: the first chunk is capped at the page end and the
+ * loop must continue on the next page with the true remaining length. */
+START_TEST(test_p1021_write_unaligned)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x40);
+
+    ck_assert_int_eq(ext_flash_write(100, data, 600), 0);
+
+    ck_assert_int_eq(g_fbcr_n, 2);
+    ck_assert_uint_eq(g_fbcr_log[0], 412u << 20);
+    ck_assert_uint_eq(g_fbcr_log[1], 188u << 20);
+    for (i = 0; i < 412; i++)
+        ck_assert_uint_eq(g_nand[100 + i], data[i]);
+    for (i = 0; i < 100; i++)
+        ck_assert_uint_eq(g_nand[i], 0xFF);
+    for (i = 412; i < 600; i++)
+        ck_assert_uint_eq(NAND(1, i - 412), data[i]);
+    for (i = 188; i < 512; i++)
+        ck_assert_uint_eq(NAND(1, i), 0xFF);
+}
+END_TEST
+
+/* A full-page read from column 0 must keep BC = 0 (full page + spare,
+ * the only ECC-checking setting). */
+START_TEST(test_p1021_read_full_page)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    for (i = 0; i < 512; i++)
+        g_nand[i] = (uint8_t)(0x50 + i);
+
+    ck_assert_int_eq(ext_flash_read(0, data, 512), 512);
+
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(data[i], g_nand[i]);
+}
+END_TEST
+
+/* Multi-page read: the second iteration must copy only the remaining
+ * 88 bytes. Pre-fix it copied a full page, writing 424 bytes past the
+ * caller's buffer. */
+START_TEST(test_p1021_read_multipart)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    for (i = 0; i < 512; i++)
+        g_nand[i] = (uint8_t)(0x60 + i);
+    for (i = 0; i < 512; i++)
+        NAND(1, i) = (uint8_t)(0x70 + i);
+    memset(data, 0xEE, sizeof(data));
+
+    ck_assert_int_eq(ext_flash_read(0, data, 600), 600);
+
+    ck_assert_int_eq(g_fbcr_n, 2);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    ck_assert_uint_eq(g_fbcr_log[1], 88u << 20);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(data[i], g_nand[i]);
+    for (i = 0; i < 88; i++)
+        ck_assert_uint_eq(data[512 + i], NAND(1, i));
+    for (i = 600; i < sizeof(data); i++)
+        ck_assert_uint_eq(data[i], 0xEE);
+}
+END_TEST
+
 Suite *p1021_fcm_suite(void)
 {
     Suite *s = suite_create("p1021-fcm-bytes");
@@ -295,6 +533,12 @@ Suite *p1021_fcm_suite(void)
     tcase_add_test(tc, test_read_col_zero_tail);
     tcase_add_test(tc, test_read_len_le_col);
     tcase_add_test(tc, test_read_len_gt_col);
+    tcase_add_test(tc, test_p1021_write_full_page);
+    tcase_add_test(tc, test_p1021_write_partial);
+    tcase_add_test(tc, test_p1021_write_multipart);
+    tcase_add_test(tc, test_p1021_write_unaligned);
+    tcase_add_test(tc, test_p1021_read_full_page);
+    tcase_add_test(tc, test_p1021_read_multipart);
 
     suite_add_tcase(s, tc);
     return s;

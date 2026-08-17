@@ -196,6 +196,11 @@
 #define ELBC_FBAR   ((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
 #define ELBC_FPAR   ((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register */
 #define ELBC_FBCR   ((volatile uint32_t*)(ELBC_BASE + 0xF4))  /* flash byte count register */
+/* FBCR[31:20] = byte count (P1021RM 12.3.30): 0 = full page + spare, the
+ * only setting that generates/checks ECC (FPAR[CI] then ignored);
+ * otherwise the number of bytes transferred starting at FPAR[CI].
+ * Bits 0-19 are reserved. */
+#define ELBC_FBCR_BC(n)   (((n) & 0xFFF) << 20)
 
 #define ELBC_LTESR  ((volatile uint32_t*)(ELBC_BASE + 0xB0))  /* transfer error status register */
 #define ELBC_LTEIR  ((volatile uint32_t*)(ELBC_BASE + 0xB8))  /* transfer error interrupt enable register */
@@ -1622,15 +1627,23 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         uint32_t col = (address % page_size);
         uint32_t status;
 
-        /* bytes to read */
-        write_size = len;
-        if (write_size > page_size) {
-            write_size = page_size;
+        /* bytes remaining in the request, capped to the current page */
+        write_size = len - pos;
+        if (write_size > page_size - col) {
+            write_size = page_size - col;
         }
         /* set page and FCM buffer */
         hal_flash_set_addr(page, col);
 
-        set32(ELBC_FBCR, col); /* size of write (0=full page) */
+        /* full page + spare (the only ECC-generating setting) only when
+         * the whole page is written from column 0; otherwise transfer
+         * exactly write_size bytes starting at column col */
+        if (col == 0 && write_size == page_size) {
+            set32(ELBC_FBCR, 0);
+        }
+        else {
+            set32(ELBC_FBCR, ELBC_FBCR_BC(write_size));
+        }
 
         /* copy page to FCM buffer */
         hal_flash_write_bytes(data, write_size);
@@ -1647,10 +1660,9 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
             page, col, status);
 #endif
         (void)status;
-        address += page_size - col;
-        pos += page_size - col;
-        data += page_size - col;
-        col = 0; /* remainder is page aligned */
+        address += write_size;
+        pos += write_size;
+        data += write_size;
     };
 
     return ret;
@@ -1701,16 +1713,25 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             uint32_t page = (address / page_size);
             uint32_t col = (address % page_size);
 
-            set32(ELBC_FBCR, col);
-
-            /* bytes to read */
-            read_size = len;
-            if (read_size > page_size) {
-                read_size = page_size;
+            /* bytes remaining in the request, capped to the current page */
+            read_size = len - pos;
+            if (read_size > page_size - col) {
+                read_size = page_size - col;
             }
 
             /* read page into FCM buffer */
             hal_flash_set_addr(page, col);
+
+            /* full page + spare (the only ECC-checking setting) only when
+             * the whole page is read from column 0; otherwise transfer
+             * exactly read_size bytes starting at column col */
+            if (col == 0 && read_size == page_size) {
+                set32(ELBC_FBCR, 0);
+            }
+            else {
+                set32(ELBC_FBCR, ELBC_FBCR_BC(read_size));
+            }
+
             ret = hal_flash_command(0);
             if (ret != 0)
                 break;
@@ -1726,10 +1747,9 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
             /* copy from FCM buffer to data buffer */
             hal_flash_read_bytes(data, read_size);
-            address += page_size - col;
-            pos += page_size - col;
-            data += page_size - col;
-            col = 0; /* remainder is page aligned */
+            address += read_size;
+            pos += read_size;
+            data += read_size;
 
         } while ((address & (block_size - 1)) && (pos < len));
     };
