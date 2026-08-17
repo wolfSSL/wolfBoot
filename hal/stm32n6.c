@@ -138,10 +138,14 @@ octospi_err:
     return -1;
 }
 
-static void RAMFUNCTION octospi_write_enable(void)
+static int RAMFUNCTION octospi_write_enable(void)
 {
-    octospi_cmd(0, WRITE_ENABLE_CMD, 0, SPI_MODE_NONE,
-                NULL, 0, SPI_MODE_NONE, 0);
+    /* A failed WREN leaves the write-enable latch clear: the device then
+     * silently ignores the program/erase that follows, never goes BUSY, and
+     * octospi_wait_ready() reports idle on its first poll. The command must
+     * fail the operation instead of being discarded. */
+    return octospi_cmd(0, WRITE_ENABLE_CMD, 0, SPI_MODE_NONE,
+                       NULL, 0, SPI_MODE_NONE, 0);
 }
 
 static int RAMFUNCTION octospi_wait_ready(void)
@@ -734,7 +738,10 @@ static int RAMFUNCTION nor_flash_write(uint32_t offset, const uint8_t *data,
 
         memcpy(page_buf, data, write_sz);
 
-        octospi_write_enable();
+        if (octospi_write_enable() < 0) {
+            ret = -1;
+            break;
+        }
         ret = octospi_cmd(0, PAGE_PROG_4B_CMD,
                  offset, SPI_MODE_SINGLE,
                  page_buf, write_sz, SPI_MODE_SINGLE, 0);
@@ -766,7 +773,10 @@ static int RAMFUNCTION nor_flash_erase(uint32_t offset, int len)
     end = offset + len;
 
     while (offset < end) {
-        octospi_write_enable();
+        if (octospi_write_enable() < 0) {
+            ret = -1;
+            break;
+        }
         ret = octospi_cmd(0, SEC_ERASE_4B_CMD,
                  offset, SPI_MODE_SINGLE,
                  NULL, 0, SPI_MODE_NONE, 0);
