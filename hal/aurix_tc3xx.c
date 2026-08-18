@@ -212,11 +212,11 @@ static void RAMFUNCTION cacheSector(uint32_t sectorAddress)
 
         ret = tc3_flash_BlankCheck(page, TC3_PFLASH_PAGE_SIZE);
         if (ret == 0) {
-            /* Page is erased, fill with erased value */
+            /* Page is erased, fill with the erased word value */
             {
                 uint32_t i;
                 for (i = 0; i < TC3_PFLASH_PAGE_SIZE / sizeof(uint32_t); i++) {
-                    pageInSectorBuffer[i] = FLASH_BYTE_ERASED;
+                    pageInSectorBuffer[i] = FLASH_WORD_ERASED;
                 }
             }
         }
@@ -406,11 +406,11 @@ static int RAMFUNCTION programBytesToErasedFlash(uint32_t       address,
             toWrite = (uint32_t)size;
         }
 
-        /* Fill the page buffer with the erased byte value */
+        /* Fill the page buffer with the erased word value */
         {
             uint32_t i;
             for (i = 0; i < TC3_PFLASH_PAGE_SIZE / sizeof(uint32_t); i++) {
-                pageBuffer[i] = FLASH_BYTE_ERASED;
+                pageBuffer[i] = FLASH_WORD_ERASED;
             }
         }
 

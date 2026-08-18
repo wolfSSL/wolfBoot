@@ -108,6 +108,8 @@ TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
+TESTS+=unit-aurix-erased-fill
+TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
@@ -884,6 +886,25 @@ t10xx_qe_firmware_extract.h: ../../hal/nxp_t10xx.c
 
 unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
 	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
+
+# unit-aurix-erased-fill runs the real cacheSector() and
+# programBytesToErasedFlash() from hal/aurix_tc3xx.c (F-9737: the
+# uint32_t page buffers were filled with the byte-valued
+# FLASH_BYTE_ERASED, so default-polarity builds got 0x000000FF words
+# instead of the erased 0xFFFFFFFF). The tc3_flash_* API is emulated
+# on a host flash array; the same source is built for both flag
+# polarities and the assertions key off FLASH_BYTE_ERASED.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space.
+aurix_erased_extract.h: ../../hal/aurix_tc3xx.c
+	awk '/^static void RAMFUNCTION cacheSector\(uint32_t sectorAddress\)/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
+	awk '/^static int RAMFUNCTION programBytesToErasedFlash/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+
+unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
+	gcc -o $@ unit-aurix-erased-fill.c $(CFLAGS) $(LDFLAGS)
+
+unit-aurix-erased-fill-invert: unit-aurix-erased-fill.c aurix_erased_extract.h
+	gcc -o $@ unit-aurix-erased-fill.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host
