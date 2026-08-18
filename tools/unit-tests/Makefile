@@ -111,6 +111,7 @@ TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
+TESTS+=unit-stm32l5-write
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
@@ -921,6 +922,23 @@ t2080_fman_extract.h: ../../hal/nxp_t2080.c
 
 unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
+# (F-9763: an 8-byte program unit was read whole even when len left a
+# partial unit, over-reading the caller's buffer and writing the excess
+# bytes to flash). The function and its wait/clear helpers are
+# extracted verbatim; FLASH_SR/CR live on a host register file and the
+# destination flash is a pre-filled host array, so the over-read is
+# observable through a canary after the source buffer.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space.
+stm32l5_write_extract.h: ../../hal/stm32l5.c
+	awk '/^void RAMFUNCTION hal_flash_wait_complete/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
+	awk '/^void RAMFUNCTION hal_flash_clear_errors/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	awk '/^int RAMFUNCTION hal_flash_write/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+
+unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
+	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host

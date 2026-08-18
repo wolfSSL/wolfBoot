@@ -78,7 +78,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
     uint32_t *src, *dst;
-    uint32_t dword[2];
     volatile uint32_t *sr, *cr;
 
     cr = &FLASH_CR;
@@ -90,22 +89,46 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 #if TZ_SECURE()
     if (address >= FLASH_BANK2_BASE)
-        hal_tz_claim_nonsecure_area(address, len);
+        /* Claim the flash span the program writes actually touch: the
+         * last partial word is programmed whole, up to the 4-byte
+         * boundary past len. */
+        hal_tz_claim_nonsecure_area(address, (len + 3) & ~3);
     /* Convert into secure address space */
     dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
 #endif
 
     while (i < len) {
-        dword[0] = src[i >> 2];
-        dword[1] = src[(i >> 2) + 1];
+        uint32_t rem = (uint32_t)(len - i);
+        uint32_t w0, w1;
+
+        /* Program the unit word by word and never read past len: the
+         * flash programs whole 32-bit words, so a partial final word is
+         * padded with the erased value (0xFF) in its upper bytes. */
+        w0 = src[i >> 2];
+        if (rem < 4)
+            w0 |= ~0u << (8 * rem);
+
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = dword[0];
+        dst[i >> 2] = w0;
         ISB();
-        dst[(i >> 2) + 1] = dword[1];
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
+
+        if (rem > 4) {
+            w1 = src[(i >> 2) + 1];
+            if (rem < 8)
+                w1 |= ~0u << (8 * (rem - 4));
+
+            *cr |= FLASH_CR_PG;
+            dst[(i >> 2) + 1] = w1;
+            ISB();
+            hal_flash_wait_complete(0);
+            if ((*sr & FLASH_SR_EOP) != 0)
+                *sr |= FLASH_SR_EOP;
+            *cr &= ~FLASH_CR_PG;
+        }
         i+=8;
     }
 #if TZ_SECURE()
