@@ -1246,7 +1246,12 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ECC384 LIMIT=19604 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15300 NO_ARM_ASM=1
+	# 15300 was exactly the measured size, i.e. zero headroom - the only
+	# entry here without any.  The lib/wolfssl bump this branch needs for
+	# CHAR_BIT!=8 support grows the no-ASM SP-math ECC384 path ~12 bytes
+	# (ECC384 with ASM is unchanged), so give it the same ~12 byte margin
+	# the other entries carry.
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15324 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=14252 NO_ARM_ASM=1
 	make keysclean
@@ -1275,5 +1280,8 @@ test-size-all:
 		LIMIT=8768 NO_ARM_ASM=1
 	make keysclean
 	make clean
-	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19578 \
+	# Same reason as the ECC384 NO_ASM entry above: the lib/wolfssl bump this
+	# branch needs rewrites wc_mldsa.c substantially (~1400 net lines), which
+	# costs ~48 bytes here.  No wolfBoot ML-DSA code changed.
+	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19626 \
 		IMAGE_SIGNATURE_SIZE=2420 IMAGE_HEADER_SIZE?=8192
