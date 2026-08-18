@@ -146,6 +146,15 @@ void FreePool(VOID *p)
 static const uint8_t *mock_data;
 static UINT64 mock_size;
 static UINT64 mock_pos;
+static EFI_STATUS mock_read_status = EFI_SUCCESS;
+static int mock_close_count;
+
+static EFI_STATUS EFIAPI mock_file_close(EFI_FILE_HANDLE This)
+{
+    (void)This;
+    mock_close_count++;
+    return EFI_SUCCESS;
+}
 
 static EFI_FILE_PROTOCOL mock_file_proto;
 
@@ -177,6 +186,8 @@ static EFI_STATUS EFIAPI mock_file_read(EFI_FILE_HANDLE This,
     (void)This;
     if (Buffer == NULL)
         return EFI_INVALID_PARAMETER;
+    if (mock_read_status != EFI_SUCCESS)
+        return mock_read_status;
     wanted = *BufferSize;
     if (wanted == 0)
         return EFI_INVALID_PARAMETER;
@@ -282,6 +293,7 @@ EFI_FILE_INFO *LibFileInfo(EFI_FILE_HANDLE FHand)
     return (EFI_FILE_INFO *)(mock_info_buf + sizeof(EFI_GUID));
 }
 
+static int mock_alloc_fail;
 static EFI_STATUS EFIAPI mock_allocate_pages(EFI_ALLOCATE_TYPE AllocateType,
         EFI_MEMORY_TYPE MemoryType, UINTN Pages,
         EFI_PHYSICAL_ADDRESS *Memory)
@@ -290,6 +302,8 @@ static EFI_STATUS EFIAPI mock_allocate_pages(EFI_ALLOCATE_TYPE AllocateType,
 
     (void)AllocateType;
     (void)MemoryType;
+    if (mock_alloc_fail)
+        return EFI_OUT_OF_RESOURCES;
     /* Cap so a broken caller cannot exhaust the host. */
     if (Pages == 0 || Pages > 0x10000)
         return EFI_INVALID_PARAMETER;
@@ -297,6 +311,16 @@ static EFI_STATUS EFIAPI mock_allocate_pages(EFI_ALLOCATE_TYPE AllocateType,
     if (p == NULL)
         return EFI_OUT_OF_RESOURCES;
     *Memory = (EFI_PHYSICAL_ADDRESS)(uintptr_t)p;
+    return EFI_SUCCESS;
+}
+
+static int mock_free_pages;
+static EFI_STATUS EFIAPI mock_free_pages_fn(EFI_PHYSICAL_ADDRESS Memory,
+        UINTN Pages)
+{
+    (void)Memory;
+    (void)Pages;
+    mock_free_pages++;
     return EFI_SUCCESS;
 }
 
@@ -366,11 +390,16 @@ static void setup(void)
 {
     memset(&mock_bs, 0, sizeof(mock_bs));
     mock_bs.AllocatePages = mock_allocate_pages;
+    mock_bs.FreePages = mock_free_pages_fn;
+    mock_alloc_fail = 0;
+    mock_free_pages = 0;
+    mock_close_count = 0;
+    mock_read_status = EFI_SUCCESS;
 
     memset(&mock_file_proto, 0, sizeof(mock_file_proto));
     mock_file_proto.Revision = 0x00120000;
     mock_file_proto.Open = mock_file_open;
-    mock_file_proto.Close = mock_file_dummy;
+    mock_file_proto.Close = mock_file_close;
     mock_file_proto.Delete = mock_file_dummy;
     mock_file_proto.Read = mock_file_read;
     mock_file_proto.Write = mock_file_write;
@@ -414,6 +443,8 @@ START_TEST(test_open_image_no_clobber)
     ck_assert(addr != 0);
     ck_assert_int_eq(memcmp((const void *)(uintptr_t)addr, data,
                             sizeof(data)), 0);
+    ck_assert_int_eq(mock_free_pages, 0);
+    ck_assert_int_eq(mock_close_count, 1);
 }
 END_TEST
 
@@ -440,6 +471,66 @@ START_TEST(test_open_image_too_small)
                             &addr, &canary.sz);
     ck_assert_int_eq(ret, -1);
     ck_assert(canary_intact(&canary));
+
+    /* F-9738: a rejected load must not publish the allocated address, and
+     * the pages plus the file handle must be released. */
+    ck_assert_uint_eq(addr, 0);
+    ck_assert_int_eq(mock_free_pages, 1);
+    ck_assert_int_eq(mock_close_count, 1);
+}
+END_TEST
+
+/* A failed Read() must not publish the allocated address, and must free
+ * the pages and close the file (F-9738). */
+START_TEST(test_open_image_read_failure)
+{
+    sz_canary_t canary;
+    EFI_PHYSICAL_ADDRESS addr;
+    uint8_t data[2 * 0x1000];
+    int ret;
+
+    memset(data, 0x33, sizeof(data));
+    mock_data = data;
+    mock_size = sizeof(data);
+    mock_pos = 0;
+    mock_read_status = EFI_DEVICE_ERROR;
+    addr = 0;
+    canary_reset(&canary);
+
+    ret = open_kernel_image(&mock_file_proto, (CHAR16 *)test_image_name,
+                            &addr, &canary.sz);
+    ck_assert_int_eq(ret, -1);
+    ck_assert(canary_intact(&canary));
+    ck_assert_uint_eq(addr, 0);
+    ck_assert_int_eq(mock_free_pages, 1);
+    ck_assert_int_eq(mock_close_count, 1);
+}
+END_TEST
+
+/* A failed allocation must not publish an address, and must close the
+ * file (F-9738). */
+START_TEST(test_open_image_alloc_failure)
+{
+    sz_canary_t canary;
+    EFI_PHYSICAL_ADDRESS addr;
+    uint8_t data[2 * 0x1000];
+    int ret;
+
+    memset(data, 0x44, sizeof(data));
+    mock_data = data;
+    mock_size = sizeof(data);
+    mock_pos = 0;
+    mock_alloc_fail = 1;
+    addr = 0;
+    canary_reset(&canary);
+
+    ret = open_kernel_image(&mock_file_proto, (CHAR16 *)test_image_name,
+                            &addr, &canary.sz);
+    ck_assert_int_eq(ret, -1);
+    ck_assert(canary_intact(&canary));
+    ck_assert_uint_eq(addr, 0);
+    ck_assert_int_eq(mock_free_pages, 0);
+    ck_assert_int_eq(mock_close_count, 1);
 }
 END_TEST
 
@@ -476,6 +567,8 @@ Suite *efi_x86_open_image_suite(void)
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_open_image_no_clobber);
     tcase_add_test(tc, test_open_image_too_small);
+    tcase_add_test(tc, test_open_image_read_failure);
+    tcase_add_test(tc, test_open_image_alloc_failure);
     tcase_add_test(tc, test_open_image_header_boundary);
 
     suite_add_tcase(s, tc);

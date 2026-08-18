@@ -234,21 +234,43 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     EFI_FILE_HANDLE file;
     EFI_STATUS status;
     UINTN readsz;
+    UINTN pages;
+    UINT64 filesz;
 
+    /* Always leave *_addr well-defined so the caller's "no image" check is
+     * reliable: 0 on any failure, the loaded address only on full success.
+     * (F-9738) */
+    *_addr = 0;
+    *sz = 0;
     file = openFile(filename, vol);
     if (file == NULL)
         return -1;
 
-    *sz =  FileSize(file);
+    /* FileSize() is 64-bit; the rest of the loader (header parsing, LoadImage
+     * size) works in uint32_t. Reject a size that would not fit rather than
+     * silently truncating it into *sz. */
+    filesz = FileSize(file);
+    if (filesz == 0 || filesz > 0xFFFFFFFFULL) {
+        wolfBoot_printf("Invalid file size: 0x%lx\n", (unsigned long)filesz);
+        uefi_call_wrapper(file->Close, 1, file);
+        return -1;
+    }
+    *sz = (uint32_t)filesz;
+    pages = (UINTN)(*sz / PAGE_SIZE) + 1;
     wolfBoot_printf("Opening file: %s, size: %u\n", filename, *sz);
     status = uefi_call_wrapper(BS->AllocatePages,
                           4,
                           AllocateAnyPages,
                           EfiLoaderData,
-                          (*sz/PAGE_SIZE) + 1, _addr);
+                          pages, _addr);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't get memory at specified address %d\n", status);
-        return status;
+        *_addr = 0;
+        uefi_call_wrapper(file->Close, 1, file);
+        /* EFI_STATUS is an unsigned UINTN with the error high-bit set;
+         * returning it through this int would truncate. Return -1 so the
+         * caller's return-code check is reliable. */
+        return -1;
     }
 
     /* EFI_FILE_PROTOCOL.Read() takes a UINTN *BufferSize (64 bits on
@@ -260,14 +282,19 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     readsz = (UINTN)*sz;
     status = uefi_call_wrapper(file->Read, 3, file, &readsz,
                                (void *)(uintptr_t)*_addr);
+    *sz = (uint32_t)readsz;
+    uefi_call_wrapper(file->Close, 1, file); /* done with the file */
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't read kernel image %d\n", status);
-        return status;
+        uefi_call_wrapper(BS->FreePages, 2, *_addr, pages);
+        *_addr = 0;
+        return -1;
     }
-    *sz = (uint32_t)readsz;
 
     if (*sz < IMAGE_HEADER_SIZE) {
         wolfBoot_printf("Image smaller than the header\n");
+        uefi_call_wrapper(BS->FreePages, 2, *_addr, pages);
+        *_addr = 0;
         return -1;
     }
 
@@ -301,8 +328,13 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (status == EFI_SUCCESS)
         wolfBoot_printf("Image base: 0x%lx\n", loaded_image->ImageBase);
     vol = GetVolume(ImageHandle);
-    open_kernel_image(vol, kernel_filename, &kernel_addr, &kernel_size);
-    open_kernel_image(vol, update_filename, &update_addr, &update_size);
+    /* open_kernel_image() leaves *_addr == 0 on failure (and frees any
+     * pages), so the "no image" check below is reliable; the sizes are
+     * logged inside and not needed here. */
+    (void)open_kernel_image(vol, kernel_filename, &kernel_addr, &kernel_size);
+    (void)open_kernel_image(vol, update_filename, &update_addr, &update_size);
+    (void)kernel_size;
+    (void)update_size;
 
     if (kernel_addr == 0 && update_addr == 0) {
         wolfBoot_printf("No image to load\n");
