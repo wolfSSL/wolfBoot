@@ -3755,8 +3755,11 @@ make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 * Create the decrypt key + nonce
 
 ```
-printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
+printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 ```
+
+  AES256-CTR takes a 32-byte key followed by a 16-byte IV, so the file is
+  48 bytes. A shorter one fails with `Error reading IV`.
 
 * Provision the same key into the bootloader
 

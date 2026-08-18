@@ -168,8 +168,6 @@ void uart_write(const char* buf, uint32_t sz) {
 
 void uart_init()
 {
-    register unsigned int c;
-
     /* initialize UART. turn off UART 0*/
     *UART0_CR = 0;
 
