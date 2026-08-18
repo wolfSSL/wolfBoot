@@ -39,6 +39,15 @@ SECTIONS
         . = ALIGN(8);
     } > ITCM
 
+    /* Public keys emitted by the keytool (KEYSTORE_SECTION). Placed
+     * explicitly so it cannot land after _stored_data as an orphan. */
+    .keystore :
+    {
+        . = ALIGN(8);
+        KEEP(*(.keystore*))
+        . = ALIGN(8);
+    } > ITCM
+
     .edidx :
     {
         . = ALIGN(4);
@@ -51,6 +60,8 @@ SECTIONS
     {
         _start_data = .;
         KEEP(*(.data*))
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
         . = ALIGN(4);
         _end_data = .;
     } > DTCM

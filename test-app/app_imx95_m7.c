@@ -35,11 +35,13 @@
  * wolfBoot writes its own progress codes at 0x80F10000, so a reader can tell
  * "bootloader ran" from "payload ran" with no peripheral wired up. The block
  * sits just above the console ring in the M7's DDR window, clear of the
- * RPMsg reservations at 0x88000000.
+ * RPMsg reservations at 0x88000000. The addresses come from hal/imx95_m7.h,
+ * which is also where the two blocks are asserted not to overlap.
  */
 
 #include <stdint.h>
 #include "wolfboot/wolfboot.h"
+#include "hal/imx95_m7.h"
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 #include <wolfssl/wolfcrypt/settings.h>
@@ -52,11 +54,38 @@ int wolfcrypt_test(void *args);
 int benchmark_test(void *args);
 #endif
 
-#define APP_STATUS_ADDR  0x80F10010UL
-#define APP_STATUS_MAGIC 0x41505031UL /* "APP1" */
+/* A heartbeat visible to a devmem poller does not need to run at core speed;
+ * an unthrottled loop just burns DDR bandwidth the A55 cluster shares. */
+#define APP_HEARTBEAT_CYCLES 0x04000000UL /* ~84 ms at 800 MHz */
 
 extern int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop);
 extern void uart_write(const char *buf, unsigned int len);
+
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+/* Defined in test-app/wolfcrypt_support.c: folds the 32-bit DWT counter into
+ * the 64-bit timebase. Called often enough here that a wrap cannot be missed
+ * between two timebase reads, however far apart those are. */
+extern void imx95_m7_cyc_sample(void);
+
+static void systick_start(void)
+{
+    /* Full 24-bit reload: ~21 ms at 800 MHz, far inside the ~5.4 s CYCCNT
+     * wrap, and it needs no knowledge of the actual core clock. */
+    SYST_RVR = SYST_RVR_MAX;
+    SYST_CVR = 0;
+    SYST_CSR = SYST_CSR_CLKSOURCE | SYST_CSR_TICKINT | SYST_CSR_ENABLE;
+}
+#endif
+
+/* The vector slot is claimed unconditionally (APP_HAS_SYSTICK in
+ * test-app/Makefile), so the handler must exist even in builds with no
+ * timebase to sample; SysTick is only started when there is one. */
+void isr_systick(void)
+{
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    imx95_m7_cyc_sample();
+#endif
+}
 
 /* Local, so the banner works in builds that do not link ../src/string.o. */
 static void say(const char *s)
@@ -72,22 +101,21 @@ void main(void)
 {
     volatile uint32_t *status = (volatile uint32_t *)APP_STATUS_ADDR;
     uint32_t heartbeat = 0;
-    /* remoteproc loads only PT_LOAD segments, and .bss is NOBITS - nothing
-     * zeroes it before entry, so do it here before any static is read. */
-    extern char _start_bss[], _end_bss[];
-    char *p;
 
-    for (p = _start_bss; p < _end_bss; p++)
-        *p = 0;
+    /* .data and .bss are already handled by test-app/startup_arm.c:isr_reset(),
+     * which runs from this image's own vector table before main(). */
 
     (void)uart_init(115200, 8, 'N', 1);
 
     status[0] = APP_STATUS_MAGIC;
     status[1] = heartbeat;
+    imx95_dcache_clean((const void *)status,
+        APP_STATUS_WORDS * sizeof(uint32_t));
 
     say("\r\nwolfBoot test app: i.MX95 Cortex-M7\r\n");
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    systick_start();
     wolfCrypt_Init();
 #ifdef WOLFCRYPT_TEST
     say("\r\nRunning wolfCrypt tests...\r\n");
@@ -107,7 +135,10 @@ void main(void)
     /* Confirm this image booted so wolfBoot does not roll it back. */
     wolfBoot_success();
 
+    imx95_dwt_init();
     while (1) {
         status[1] = ++heartbeat;
+        imx95_dcache_clean((const void *)&status[1], sizeof(uint32_t));
+        imx95_delay_cycles(APP_HEARTBEAT_CYCLES);
     }
 }
