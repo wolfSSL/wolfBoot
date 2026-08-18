@@ -104,6 +104,7 @@ TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
+TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-ti-hercules-write
@@ -813,6 +814,18 @@ zynq_erase_extract.h: ../../hal/zynq.c
 
 unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
+
+# unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
+# (F-7979: page chunks crossed physical NOR page boundaries and the
+# wrap clobbered the page start). Same extraction approach as the
+# erase test; the emulated NOR models the wrap.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space.
+zynq_write_extract.h: ../../hal/zynq.c
+	awk '/^int RAMFUNCTION ext_flash_write\(/ {f=1} f{print} f&&/^\}/{exit}' $< > $@
+
+unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
+	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
 # hal/versal.c (F-7982: an unaligned read larger than the 4096-byte
