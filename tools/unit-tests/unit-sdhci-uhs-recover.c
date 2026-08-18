@@ -136,6 +136,7 @@ static void script(const int *vals, int n)
         n = MAX_READ_CALLS;
     memcpy(g_read_script, vals, (size_t)n * sizeof(int));
     g_script_len = n;
+    g_read_calls = 0; /* a new script starts from its first entry */
 }
 
 /* A clean read must not touch the signaling level at all. */
@@ -205,6 +206,28 @@ START_TEST(test_later_failure_keeps_working_switch)
 }
 END_TEST
 
+/* After a rollback the recovery must be available again. The host is
+ * back at 3.3V, so leaving the one-shot spent would strand a genuinely
+ * UHS-I card at the wrong signaling level for the rest of the boot --
+ * a state the code before the rollback existed could not reach. */
+START_TEST(test_rollback_allows_later_retry)
+{
+    static uint8_t __attribute__((aligned(4))) buf1[SDHCI_BLOCK_SIZE];
+    static uint8_t __attribute__((aligned(4))) buf2[SDHCI_BLOCK_SIZE];
+
+    /* first read: both attempts fail, so the switch is rolled back */
+    script((int[]){ -1, -1 }, 2);
+    ck_assert_int_eq(disk_read(0, 0, sizeof(buf1), buf1), -1);
+    ck_assert_int_eq(g_sdhci_regs[SDHCI_SRS15 / 4] & SDHCI_SRS15_V18SE, 0);
+
+    /* second read: the 1.8V retry must be attempted again, and works */
+    script((int[]){ -1, 0 }, 2);
+    ck_assert_int_eq(disk_read(0, SDHCI_BLOCK_SIZE, sizeof(buf2), buf2), 0);
+    ck_assert_int_eq(g_sdhci_regs[SDHCI_SRS15 / 4] & SDHCI_SRS15_V18SE,
+        SDHCI_SRS15_V18SE);
+}
+END_TEST
+
 Suite *sdhci_uhs_suite(void)
 {
     Suite *s = suite_create("sdhci-uhs-recover");
@@ -215,6 +238,7 @@ Suite *sdhci_uhs_suite(void)
     tcase_add_test(tc, test_retry_success_keeps_switch);
     tcase_add_test(tc, test_retry_failure_rolls_back);
     tcase_add_test(tc, test_later_failure_keeps_working_switch);
+    tcase_add_test(tc, test_rollback_allows_later_retry);
 
     suite_add_tcase(s, tc);
     return s;

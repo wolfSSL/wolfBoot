@@ -432,6 +432,14 @@ static int sdhci_uhs_recover(void)
  * the next stage) in a voltage state the card is not using. */
 static void sdhci_uhs_recover_rollback(void)
 {
+    wolfBoot_printf("SDHCI: 1.8V retry failed, restoring 3.3V signaling\n");
+
+    /* Roll the one-shot back with the registers: leaving it set would
+     * put the host in a state the base code could not reach -- back at
+     * 3.3V but with the recovery spent -- so a genuinely UHS-I card
+     * could never be retried for the rest of the boot. */
+    g_uhs_recovered = 0;
+
     sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
 
     sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_V18SE);
