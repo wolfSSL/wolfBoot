@@ -3771,10 +3771,11 @@ printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
   from outside the firmware image (see
   [encrypted_partitions.md](encrypted_partitions.md)).
 
-  Note that CI builds this example but does not boot it, so the end-to-end
-  encrypted path above is not covered by an automated test. Adding runtime
-  coverage would need a provisioning hook the target does not currently
-  have.
+  CI builds this example and runs the signing, encryption and assembly
+  steps above (`.github/workflows/test-raspi3-encrypted.yml`), but does not
+  boot the result: the target produces no console output under QEMU, so
+  there is nothing for a boot test to assert on. Runtime coverage would
+  need that fixed and a provisioning hook the target does not have.
 
 * Sign and encrypt Linux kernel image
 ```

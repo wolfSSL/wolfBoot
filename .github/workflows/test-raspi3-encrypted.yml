@@ -1,0 +1,82 @@
+name: Test raspi3 encrypted image pipeline
+
+# Builds the raspi3 encrypted example the way docs/Targets.md documents it:
+# wolfBoot, then a signed-and-encrypted payload, then the assembled boot
+# image. The plain build is already covered by raspi3_encrypted_test in
+# test-configs.yml; what this adds is the keytools half of the procedure,
+# which nothing else exercises for an AArch64 target. It does not boot the
+# result -- the target produces no console output under QEMU today -- so
+# this stops at the artifacts.
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  raspi3_encrypted_pipeline:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.3
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: make clean
+        run: make distclean
+
+      - name: Select config
+        run: cp config/examples/raspi3-encrypted.config .config
+
+      - name: Build tools
+        run: make -C tools/keytools && make -C tools/bin-assemble
+
+      # DEBUG_UART=1 is built rather than the default: it is the mode the
+      # docs tell users to run, and it did not compile until recently.
+      - name: Build wolfboot and the test-app payload
+        run: |
+          make wolfboot.bin test-app/image.bin \
+              CROSS_COMPILE=aarch64-linux-gnu- DEBUG_UART=1
+
+      # AES256-CTR takes a 32-byte key followed by a 16-byte IV. A short
+      # file fails with "Error reading IV", which is how the documented
+      # 44-byte key went unnoticed.
+      - name: Create the encryption key and nonce
+        run: |
+          printf "0123456789abcdef0123456789abcdef0123456789abcdef" \
+              > /tmp/enc_key.der
+          test "$(wc -c < /tmp/enc_key.der)" -eq 48
+
+      - name: Sign and encrypt the payload
+        run: |
+          ./tools/keytools/sign --aes256 --encrypt /tmp/enc_key.der \
+              --rsa4096 --sha3 test-app/image.bin \
+              wolfboot_signing_private_key.der 1
+          test -s test-app/image_v1_signed_and_encrypted.bin
+
+      - name: Assemble the boot image
+        run: |
+          tools/bin-assemble/bin-assemble wolfboot_linux_raspi.bin \
+              0x0 wolfboot.bin \
+              0xc0000 test-app/image_v1_signed_and_encrypted.bin
+          test -s wolfboot_linux_raspi.bin
+
+      # The payload must land on WOLFBOOT_PARTITION_BOOT_ADDRESS once the
+      # blob is loaded at 0x80000: 0x80000 + 0xc0000 == 0x140000.
+      - name: Check the assembled layout
+        run: |
+          part_addr=$(sed -n 's/^WOLFBOOT_PARTITION_BOOT_ADDRESS=//p' \
+              config/examples/raspi3-encrypted.config)
+          expected=$(( 0x80000 + 0xc0000 ))
+          if [ "$(( part_addr ))" -ne "$expected" ]; then
+              echo "payload offset does not land on the boot partition:"
+              echo "  partition $part_addr, load 0x80000 + offset 0xc0000"
+              exit 1
+          fi
