@@ -1111,10 +1111,25 @@ ifeq ($(ARCH),RISCV64)
 
   ifneq ($(NO_ASM),1)
     CFLAGS+=-DWOLFSSL_RISCV_ASM
-    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+    # wolfSSL moved this port to wolfcrypt/src/port/riscv64/ and split each
+    # primitive into a generated <name>-asm.S plus a <name>-asm_c.c.  Only one
+    # is live: the .S builds unless WOLFSSL_RISCV_ASM_INLINE is defined, which
+    # wolfBoot does not define, and the _asm_c.c compiles to an empty
+    # translation unit in that case.  Pick whichever layout the pinned
+    # submodule actually has so this builds against wolfSSL before and after
+    # the move.
+    RISCV_ASM_DIR := $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv64
+    ifneq ($(wildcard $(RISCV_ASM_DIR)/riscv-64-sha256-asm.S),)
+      WOLFCRYPT_OBJS+=$(RISCV_ASM_DIR)/riscv-64-sha256-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-sha512-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-sha3-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-aes-asm.o
+    else
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+    endif
   endif
 endif
 

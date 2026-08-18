@@ -122,12 +122,18 @@
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
 
 #ifndef WOLFSSL_ARMASM
+/* Not when preprocessing a .S: this header is pulled into wolfSSL's generated
+ * assembly (riscv64 and others) via libwolfssl_sources_asm.h, and a C
+ * declaration reaching the assembler is a syntax error.  The macros below are
+ * harmless there; only the prototypes need hiding. */
+#ifndef __ASSEMBLER__
 #ifndef toupper
 extern int toupper(int c);
 #endif
 #ifndef tolower
 extern int tolower(int c);
 #endif
+#endif /* !__ASSEMBLER__ */
 #define XTOUPPER(c)     toupper((c))
 #define XTOLOWER(c)     tolower((c))
 #endif
