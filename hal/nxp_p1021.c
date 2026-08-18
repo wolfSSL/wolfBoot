@@ -692,7 +692,11 @@ static int hal_flash_command(uint8_t iswrite)
     return ret;
 }
 
-/* assume input/output buffers are 32-bit aligned */
+/* Uses 32-bit accesses only when both the FCM window offset and the
+ * caller's buffer are 4-byte aligned: flash_idx starts at the page
+ * column and the chunk lengths need not be multiples of 4, so either
+ * side can be odd. A misaligned 32-bit access to the cache-inhibited,
+ * guarded eLBC window raises an alignment interrupt on e500. */
 static void hal_flash_read_bytes(uint8_t* data, size_t len)
 {
     uint32_t end = flash_idx + (uint32_t)len;
@@ -705,7 +709,8 @@ static void hal_flash_read_bytes(uint8_t* data, size_t len)
      * page column (see hal_flash_set_addr), so len is a relative count and
      * the end must be flash_idx + len, not len. */
     while (flash_idx < end) {
-        if (end - flash_idx >= 4) {
+        if (end - flash_idx >= 4 &&
+                ((flash_idx | (uintptr_t)data) & 3) == 0) {
             *((volatile uint32_t*)data) =
                 *(volatile uint32_t*)(&flash_buf[flash_idx]);
             flash_idx += 4;
@@ -718,7 +723,8 @@ static void hal_flash_read_bytes(uint8_t* data, size_t len)
         }
     }
 }
-/* assume input/output buffers are 32-bit aligned */
+/* 32-bit accesses only when both sides are aligned; see
+ * hal_flash_read_bytes() above. */
 static void hal_flash_write_bytes(const uint8_t* data, size_t len)
 {
     uint32_t end = flash_idx + (uint32_t)len;
@@ -731,7 +737,8 @@ static void hal_flash_write_bytes(const uint8_t* data, size_t len)
      * page column (see hal_flash_set_addr), so len is a relative count and
      * the end must be flash_idx + len, not len. */
     while (flash_idx < end) {
-        if (end - flash_idx >= 4) {
+        if (end - flash_idx >= 4 &&
+                ((flash_idx | (uintptr_t)data) & 3) == 0) {
             *(volatile uint32_t*)(&flash_buf[flash_idx]) =
                 *((volatile uint32_t*)data);
             flash_idx += 4;

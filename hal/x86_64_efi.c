@@ -288,6 +288,7 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
         wolfBoot_printf("can't read kernel image %d\n", status);
         uefi_call_wrapper(BS->FreePages, 2, *_addr, pages);
         *_addr = 0;
+        *sz = 0; /* both outputs are 0 on failure, as documented */
         return -1;
     }
 
