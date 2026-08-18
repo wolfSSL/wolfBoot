@@ -108,6 +108,7 @@ TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
 TESTS+=unit-sdhci-uhs-recover
+TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
@@ -883,6 +884,14 @@ sdhci_host.c: ../../src/sdhci.c
 
 unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-wait-busy drives sdhci_wait_busy()'s DATA0/CMD13 loops
+# from the real src/sdhci.c (F-7984: neither loop had a timeout, so a
+# stuck/removed card spun forever). The controller is scripted through
+# the host register file and the timer advances 1us per read, with the
+# deadline built to 50ms so the loops hit it in wall milliseconds.
+unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
+	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF -DSDHCI_WAIT_BUSY_TIMEOUT_MS=50 $(CFLAGS) $(LDFLAGS)
 
 # unit-ti-hercules-write runs the real hal_flash_write() staging logic
 # from hal/ti_hercules.c (F-9736: a short write crossing a block

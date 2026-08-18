@@ -616,17 +616,33 @@ int sdhci_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
     return status;
 }
 
-/* TODO: Add timeout */
+/* Worst-case programming time (erase) in milliseconds. Finite, so a
+ * removed card or a card stuck in the programming state fails with an
+ * I/O error instead of spinning forever (F-7984). */
+#ifndef SDHCI_WAIT_BUSY_TIMEOUT_MS
+#define SDHCI_WAIT_BUSY_TIMEOUT_MS 30000
+#endif
+
 static int sdhci_wait_busy(int check_dat0)
 {
     uint32_t status;
+    uint64_t start = hal_get_timer_us();
+
     if (check_dat0) {
         /* wait for DATA0 not busy */
-        while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0);
+        while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0) {
+            if ((hal_get_timer_us() - start) / 1000 >
+                    SDHCI_WAIT_BUSY_TIMEOUT_MS)
+                return -1;
+        }
     }
     /* wait for CMD13 */
     while ((status = sdhci_cmd(MMC_CMD13_SEND_STATUS,
-        (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY);
+        (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY) {
+        if ((hal_get_timer_us() - start) / 1000 >
+                SDHCI_WAIT_BUSY_TIMEOUT_MS)
+            return -1;
+    }
     return status;
 }
 
