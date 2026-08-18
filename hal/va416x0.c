@@ -369,7 +369,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     (void)len;
     return 0;
 }
-
+#endif /* !WOLFBOOT_UNIT_TEST_VA416X0_FRAM */
 
 #ifdef EXT_FLASH
 void ext_flash_lock(void)
@@ -395,7 +395,9 @@ void ext_flash_unlock(void)
 static void iram_write(void *dst, const void *src, int len)
 {
     while (len > 0) {
-        uintptr_t addr = (uintptr_t)dst & ~3u;
+        /* Pointer-width mask: ~3u is 32 bits and would zero the high
+         * word of the address on 64-bit platforms. */
+        uintptr_t addr = (uintptr_t)dst & ~(uintptr_t)3;
         uint32_t  off  = (uintptr_t)dst &  3u;
         uint32_t  word = *(volatile uint32_t *)addr;
         uint8_t  *wp   = (uint8_t *)&word;
@@ -412,7 +414,8 @@ static void iram_write(void *dst, const void *src, int len)
 static void iram_fill(void *dst, uint8_t val, int len)
 {
     while (len > 0) {
-        uintptr_t addr = (uintptr_t)dst & ~3u;
+        /* Pointer-width mask (see iram_write). */
+        uintptr_t addr = (uintptr_t)dst & ~(uintptr_t)3;
         uint32_t  off  = (uintptr_t)dst &  3u;
         uint32_t  word = *(volatile uint32_t *)addr;
         uint8_t  *wp   = (uint8_t *)&word;
@@ -527,6 +530,7 @@ static int test_ext_flash(void)
 #endif /* TEST_EXT_FLASH */
 #endif /* EXT_FLASH */
 
+#ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
 #ifdef __WOLFBOOT /* build for wolfBoot only */
 /* Configure Error Detection and Correction (EDAC) */
 static void ConfigEdac(uint32_t ramScrub, uint32_t romScrub)
