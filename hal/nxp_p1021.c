@@ -196,11 +196,13 @@
 #define ELBC_FBAR   ((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
 #define ELBC_FPAR   ((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register */
 #define ELBC_FBCR   ((volatile uint32_t*)(ELBC_BASE + 0xF4))  /* flash byte count register */
-/* FBCR[31:20] = byte count (P1021RM 12.3.30): 0 = full page + spare, the
- * only setting that generates/checks ECC (FPAR[CI] then ignored);
+/* FBCR[BC] = byte count: 0 = full page + spare, the only setting that
+ * generates/checks ECC (FPAR[MS] and FPAR[CI] are then treated as 0);
  * otherwise the number of bytes transferred starting at FPAR[CI].
- * Bits 0-19 are reserved. */
-#define ELBC_FBCR_BC(n)   (((n) & 0xFFF) << 20)
+ * P1021RM 12.3.30 numbers it bits 20-31 MSB-first, i.e. the low 12 bits
+ * of the word -- unshifted, like ELBC_FPAR_*_CI below. Bits 0-19 are
+ * reserved. */
+#define ELBC_FBCR_BC(n)   ((n) & 0xFFF)
 
 #define ELBC_LTESR  ((volatile uint32_t*)(ELBC_BASE + 0xB0))  /* transfer error status register */
 #define ELBC_LTEIR  ((volatile uint32_t*)(ELBC_BASE + 0xB8))  /* transfer error interrupt enable register */

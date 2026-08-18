@@ -20,9 +20,9 @@
  * F-7976: the ext_flash_write()/ext_flash_read() page loops size every
  * iteration from the total request length instead of the remaining
  * length, do not cap it to the page, and program ELBC_FBCR with the
- * column offset - which lands in the register's reserved bits 0-19,
- * leaving the byte-count field (FBCR[31:20], P1021RM 12.3.30) at 0,
- * i.e. "full page + spare" with FPAR[CI] ignored, on every transfer.
+ * column offset - so the byte-count field (FBCR[BC], P1021RM 12.3.30
+ * bits 20-31 MSB-first, i.e. the low 12 bits) carries the column rather
+ * than a count: a nonsense transfer size whenever col is non-zero.
  * The fix uses chunk = min(len - pos, page_size - col), programs the BC
  * field (0 only for a full page from column 0 - the only
  * ECC-generating/checking setting) and advances by chunk.
@@ -164,9 +164,9 @@ static uint8_t fcm[1024];
  * is intercepted (p1021_set32) and the transfer is emulated from the
  * programmed registers, following P1021RM 12.3.30:
  *
- *   BC = FBCR[31:20];  BC == 0 -> the whole 512-byte page (and spare)
- *   is transferred and FPAR[CI] is ignored, otherwise BC bytes are
- *   transferred starting at FPAR[CI].
+ *   BC = FBCR & 0xFFF (RM bits 20-31, MSB-first);  BC == 0 -> the whole
+ *   512-byte page (and spare) is transferred and FPAR[CI] is ignored,
+ *   otherwise BC bytes are transferred starting at FPAR[CI].
  *
  * g_nand models 16 512-byte pages plus 64 spare bytes each. No bad
  * blocks: the spare bytes stay 0xFF, so the bad-page check in
@@ -182,7 +182,7 @@ static void emulate_fcm_transfer(void)
     uint32_t fbar = *ELBC_FBAR;
     uint32_t fpar = *ELBC_FPAR;
     uint32_t fir  = *ELBC_FIR;
-    uint32_t bc   = *ELBC_FBCR >> 20;
+    uint32_t bc   = *ELBC_FBCR & 0xFFF;
     uint32_t page, ci;
     uint8_t *nand;
     volatile uint8_t *fcmw = (volatile uint8_t *)flash_buf;
@@ -399,7 +399,7 @@ START_TEST(test_p1021_write_full_page)
 }
 END_TEST
 
-/* A partial write must program the byte count into FBCR[31:20] (the
+/* A partial write must program the byte count into FBCR[BC] (the
  * pre-fix code wrote the column into the reserved bits 0-19). With a
  * stale FCM buffer the pre-fix full-page transfer also clobbered the
  * page columns outside the request. */
@@ -414,7 +414,7 @@ START_TEST(test_p1021_write_partial)
     ck_assert_int_eq(ext_flash_write(100, data, 400), 0);
 
     ck_assert_int_eq(g_fbcr_n, 1);
-    ck_assert_uint_eq(g_fbcr_log[0], 400u << 20);
+    ck_assert_uint_eq(g_fbcr_log[0], 400u);
     for (i = 0; i < 400; i++)
         ck_assert_uint_eq(g_nand[100 + i], data[i]);
     for (i = 0; i < 100; i++)
@@ -438,7 +438,7 @@ START_TEST(test_p1021_write_multipart)
 
     ck_assert_int_eq(g_fbcr_n, 2);
     ck_assert_uint_eq(g_fbcr_log[0], 0);        /* page 0: full, BC = 0 */
-    ck_assert_uint_eq(g_fbcr_log[1], 88u << 20);
+    ck_assert_uint_eq(g_fbcr_log[1], 88u);
     for (i = 0; i < 512; i++)
         ck_assert_uint_eq(g_nand[i], data[i]);
     for (i = 0; i < 88; i++)
@@ -460,8 +460,8 @@ START_TEST(test_p1021_write_unaligned)
     ck_assert_int_eq(ext_flash_write(100, data, 600), 0);
 
     ck_assert_int_eq(g_fbcr_n, 2);
-    ck_assert_uint_eq(g_fbcr_log[0], 412u << 20);
-    ck_assert_uint_eq(g_fbcr_log[1], 188u << 20);
+    ck_assert_uint_eq(g_fbcr_log[0], 412u);
+    ck_assert_uint_eq(g_fbcr_log[1], 188u);
     for (i = 0; i < 412; i++)
         ck_assert_uint_eq(g_nand[100 + i], data[i]);
     for (i = 0; i < 100; i++)
@@ -510,7 +510,7 @@ START_TEST(test_p1021_read_multipart)
 
     ck_assert_int_eq(g_fbcr_n, 2);
     ck_assert_uint_eq(g_fbcr_log[0], 0);
-    ck_assert_uint_eq(g_fbcr_log[1], 88u << 20);
+    ck_assert_uint_eq(g_fbcr_log[1], 88u);
     for (i = 0; i < 512; i++)
         ck_assert_uint_eq(data[i], g_nand[i]);
     for (i = 0; i < 88; i++)
