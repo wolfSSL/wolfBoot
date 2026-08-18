@@ -394,8 +394,14 @@ static int sdhci_set_power(uint32_t voltage)
  *
  * This restores signaling the card is already using rather than initiating a
  * voltage switch, so no CMD11 sequence is involved. It runs at most once per
- * boot, and only after a transfer has already failed, so a cold boot never
- * reaches it.
+ * boot, and only after a transfer has already failed.
+ *
+ * Note: on a plain 3.3V cold boot this is a guess - any first transfer
+ * failure (CRC, DMA, media, controller) triggers it. The guess is
+ * self-correcting: the caller must undo the switch with
+ * sdhci_uhs_recover_rollback() if the retry fails, so a wrong guess
+ * leaves the host where it started rather than in a voltage state the
+ * card is not using.
  *
  * Returns 0 if the switch was applied and the caller should retry. */
 static int sdhci_uhs_recover(void)
@@ -418,6 +424,21 @@ static int sdhci_uhs_recover(void)
     udelay(1000);
 
     return 0;
+}
+
+/* Undo a failed sdhci_uhs_recover(): the retry at 1.8V did not fix the
+ * transfer, so this is not a warm-reset UHS condition. Restore 3.3V
+ * signaling and the clock so the host is not left (for this boot and
+ * the next stage) in a voltage state the card is not using. */
+static void sdhci_uhs_recover_rollback(void)
+{
+    sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
+
+    sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_V18SE);
+    udelay(5000); /* let the level shifter settle */
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_SDCE);
+    udelay(1000);
 }
 #endif /* DISK_SDCARD */
 
@@ -1739,6 +1760,9 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
     uint32_t read_sz, block_addr;
     uint32_t tmp_block[SDHCI_BLOCK_SIZE/sizeof(uint32_t)];
     uint32_t start_offset = (start % SDHCI_BLOCK_SIZE);
+#ifdef DISK_SDCARD
+    int uhs_switched = 0;
+#endif /* DISK_SDCARD */
     (void)drv; /* only one drive supported */
 
 #ifdef DEBUG_SDHCI
@@ -1844,8 +1868,14 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         #endif
         }
 #ifdef DISK_SDCARD
-        if (status != 0 && sdhci_uhs_recover() == 0) {
+        if (status != 0 && !uhs_switched && sdhci_uhs_recover() == 0) {
+            uhs_switched = 1;
             continue; /* retry this chunk with matched signaling */
+        }
+        if (status != 0 && uhs_switched) {
+            /* The 1.8V retry failed: this is not a warm-reset UHS
+             * condition, restore 3.3V signaling before giving up. */
+            sdhci_uhs_recover_rollback();
         }
 #endif /* DISK_SDCARD */
         if (status != 0) {
@@ -1855,6 +1885,9 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         start += read_sz;
         buf += read_sz;
         count -= read_sz;
+#ifdef DISK_SDCARD
+        uhs_switched = 0; /* chunk read cleanly */
+#endif /* DISK_SDCARD */
     }
     return status;
 }

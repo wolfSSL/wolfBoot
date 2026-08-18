@@ -105,6 +105,7 @@ TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-versal-qspi-dma
+TESTS+=unit-sdhci-uhs-recover
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -832,6 +833,22 @@ versal_host.c: ../../hal/versal.c versal_host.h
 
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
+# real src/sdhci.c (F-9735: any read error permanently switched the host
+# to 1.8V signaling with no rollback). sdhci_host.c (generated below) is
+# identical to the real file except the three `asm volatile` statements
+# are blanked (they cannot assemble on x86) and the real sdhci_read() is
+# renamed to sdhci_read_hw() so the test can provide a scripted one. The
+# platform-provided sdhci_reg_read()/sdhci_reg_write() are backed by a
+# host register array; hal_get_timer_us() and wolfBoot_printf() are
+# stubbed in the test.
+
+sdhci_host.c: ../../src/sdhci.c
+	sed -E -e 's/^[[:space:]]*asm volatile\("[^"]*"[^;]*\);[[:space:]]*//' -e 's/^int sdhci_read\(/int sdhci_read_hw(/' $< > $@
+
+unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
+	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
