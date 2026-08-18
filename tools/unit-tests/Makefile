@@ -107,6 +107,7 @@ TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
+TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
@@ -868,6 +869,21 @@ versal_ext_write_extract.h: ../../hal/versal.c
 
 unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_ext_write_extract.h versal_host.h
 	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-qe-firmware runs the real qe_check_firmware() from
+# hal/nxp_t10xx.c (F-8000: the per-microcode code_offset was never
+# bounded against the declared image, so a self-consistent blob could
+# make the upload copy arbitrary memory into QE IRAM). The qe_*
+# structures and the check function are extracted verbatim; the check
+# path needs no register access.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space; $$ is a literal $.
+t10xx_qe_firmware_extract.h: ../../hal/nxp_t10xx.c
+	awk '/^\/\* Structure packing \*\/$$/ {f=1} f {print} f && /^\} QE_PACKED;$$/ {n++; if (n == 4) exit}' $< > $@
+	awk '/^static int qe_check_firmware\(/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+
+unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
+	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host
