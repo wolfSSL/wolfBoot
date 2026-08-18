@@ -14,11 +14,15 @@
  *   - the command always "completes" (SDHCI_SRS12_CC preset) with the
  *     READY_FOR_DATA bit (bit 8) of the response register
  *     (SDHCI_SRS04) cleared, so every CMD13 reports DEVICE_BUSY.
- * The emulated hal_get_timer_us() advances one microsecond per read,
- * and SDHCI_WAIT_BUSY_TIMEOUT_MS is built to 50 so the loops hit the
- * deadline after ~50k iterations in milliseconds of wall time.
- * Pre-fix, both timeout cases never return (the test runner's timeout
- * kills them).
+ * The emulated hal_get_timer_us() advances by a settable step per read,
+ * so the shipped SDHCI_WAIT_BUSY_TIMEOUT_MS is exercised as built --
+ * a 1 ms step reaches the 30 s budget in ~30k iterations -- rather than
+ * against a shrunken stand-in value. Pre-fix, both timeout cases never
+ * return (the test runner's timeout kills them).
+ *
+ * The stub also counts sdhci_platform_wdt_pet() calls: a bounded wait
+ * this long must service the watchdog or it becomes a reset rather than
+ * the clean I/O error it is meant to be.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -60,12 +64,21 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
     g_sdhci_regs[offset / sizeof(uint32_t)] = val;
 }
 
-/* Timer: advance one microsecond on every read so the bounded busy
- * loops make progress. */
+/* Timer: advance by g_timer_step microseconds on every read, so a test
+ * can reach the shipped timeout in a sane number of iterations. */
 static uint64_t g_timer_us;
+static uint64_t g_timer_step = 1;
 uint64_t hal_get_timer_us(void)
 {
-    return ++g_timer_us;
+    g_timer_us += g_timer_step;
+    return g_timer_us;
+}
+
+/* Counts watchdog services performed inside the busy loops. */
+static unsigned int g_wdt_pets;
+void sdhci_platform_wdt_pet(void)
+{
+    g_wdt_pets++;
 }
 
 /* Platform hooks the SD init path touches; irrelevant here. */
@@ -99,6 +112,10 @@ static void setup(void)
 {
     memset(g_sdhci_regs, 0, sizeof(g_sdhci_regs));
     g_timer_us = 0;
+    g_wdt_pets = 0;
+    /* 1 ms per timer read: the shipped 30 s budget is reached in ~30k
+     * iterations, so the real value is what gets exercised. */
+    g_timer_step = 1000;
 }
 
 static void teardown(void)
@@ -112,6 +129,8 @@ START_TEST(test_wait_busy_dat0_timeout)
     g_sdhci_regs[SDHCI_SRS09 / 4] &= ~SDHCI_SRS09_DAT0_LVL;
 
     ck_assert_int_eq(sdhci_wait_busy(1), -1);
+    /* the wait ran to the shipped budget, so it must have petted */
+    ck_assert_uint_gt(g_wdt_pets, 0);
 }
 END_TEST
 
@@ -126,6 +145,7 @@ START_TEST(test_wait_busy_cmd13_timeout)
     g_sdhci_regs[SDHCI_SRS04 / 4] = 0;
 
     ck_assert_int_eq(sdhci_wait_busy(0), -1);
+    ck_assert_uint_gt(g_wdt_pets, 0);
 }
 END_TEST
 

@@ -114,6 +114,13 @@ int sdhci_read(uint32_t cmd_index, uint32_t block_addr, uint32_t *dst,
     return ret;
 }
 
+/* The busy waits service the watchdog; the generated copy renames the
+ * weak default away so a test can count calls (see unit-sdhci-wait-busy).
+ * This test does not care, so a no-op suffices. */
+void sdhci_platform_wdt_pet(void)
+{
+}
+
 /* The real HAL (identical to src/sdhci.c apart from the transforms
  * documented above). */
 #include "sdhci_host.c"

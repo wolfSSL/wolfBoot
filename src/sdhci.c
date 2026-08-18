@@ -63,10 +63,14 @@ int __attribute__((weak)) sdhci_platform_block_copy(
     memcpy(dst, src, len);
     return 0;
 }
+#endif
+
+/* Watchdog service hook. Not tied to SDHCI_BLOCK_VIA_PDMA: the bounded
+ * busy waits call it on every build, and a platform with a hardware
+ * watchdog overrides it. */
 void __attribute__((weak)) sdhci_platform_wdt_pet(void)
 {
 }
-#endif
 
 /* ============================================================================
  * Internal state
@@ -626,7 +630,10 @@ int sdhci_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 
 /* Worst-case programming time (erase) in milliseconds. Finite, so a
  * removed card or a card stuck in the programming state fails with an
- * I/O error instead of spinning forever (F-7984). */
+ * I/O error instead of spinning forever (F-7984). The budget is sized
+ * for an erase because sdhci_wait_busy() is the wait after every R1b
+ * command, erase included; the watchdog is serviced inside both loops
+ * so a long wait cannot turn into a reset. */
 #ifndef SDHCI_WAIT_BUSY_TIMEOUT_MS
 #define SDHCI_WAIT_BUSY_TIMEOUT_MS 30000
 #endif
@@ -642,13 +649,17 @@ static int sdhci_wait_busy(int check_dat0)
     if (check_dat0) {
         /* wait for DATA0 not busy */
         while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0) {
+            sdhci_platform_wdt_pet();
             if (hal_get_timer_us() - start > timeout_us)
                 return -1;
         }
     }
-    /* wait for CMD13 */
+    /* Wait for CMD13. The deadline is deliberately shared with the DAT0
+     * wait above rather than re-armed, so the whole call stays bounded
+     * by one timeout instead of two. */
     while ((status = sdhci_cmd(MMC_CMD13_SEND_STATUS,
         (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY) {
+        sdhci_platform_wdt_pet();
         if (hal_get_timer_us() - start > timeout_us)
             return -1;
     }

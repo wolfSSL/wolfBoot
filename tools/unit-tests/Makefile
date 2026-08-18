@@ -992,7 +992,9 @@ unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 # stubbed in the test.
 
 sdhci_host.c: ../../src/sdhci.c
-	sed -E -e 's/^[[:space:]]*asm volatile\("[^"]*"[^;]*\);[[:space:]]*//' -e 's/^int sdhci_read\(/int sdhci_read_hw(/' $< > $@
+	sed -E -e 's/^[[:space:]]*asm volatile\("[^"]*"[^;]*\);[[:space:]]*//' \
+	    -e 's/^int sdhci_read\(/int sdhci_read_hw(/' \
+	    -e 's/^void __attribute__\(\(weak\)\) sdhci_platform_wdt_pet\(void\)$$/void sdhci_platform_wdt_pet_unused(void)/' $< > $@
 
 unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
@@ -1000,10 +1002,11 @@ unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 # unit-sdhci-wait-busy drives sdhci_wait_busy()'s DATA0/CMD13 loops
 # from the real src/sdhci.c (F-7984: neither loop had a timeout, so a
 # stuck/removed card spun forever). The controller is scripted through
-# the host register file and the timer advances 1us per read, with the
-# deadline built to 50ms so the loops hit it in wall milliseconds.
+# the host register file. SDHCI_WAIT_BUSY_TIMEOUT_MS is deliberately
+# NOT overridden: the test's timer stub steps 1ms per read so the
+# shipped default is the value under test.
 unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
-	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF -DSDHCI_WAIT_BUSY_TIMEOUT_MS=50 $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-ti-hercules-write runs the real hal_flash_write() staging logic
 # from hal/ti_hercules.c (F-9736: a short write crossing a block
