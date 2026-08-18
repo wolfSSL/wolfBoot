@@ -112,6 +112,7 @@ TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
 TESTS+=unit-stm32l5-write
+TESTS+=unit-stm32u5-write
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
@@ -939,6 +940,20 @@ stm32l5_write_extract.h: ../../hal/stm32l5.c
 
 unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test
+# (F-9764): the real hal_flash_write() and its wait/clear helpers from
+# hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
+# flash at a 32-bit host address, canary after the source buffer.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space.
+stm32u5_write_extract.h: ../../hal/stm32u5.c
+	awk '/^void RAMFUNCTION hal_flash_wait_complete/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
+	awk '/^void RAMFUNCTION hal_flash_clear_errors/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	awk '/^int RAMFUNCTION hal_flash_write/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+
+unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
+	gcc -o $@ unit-stm32u5-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host

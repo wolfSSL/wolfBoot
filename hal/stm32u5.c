@@ -93,19 +93,41 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
 
     while (i < len) {
-        qword[0] = src[i >> 2];
-        qword[1] = src[(i >> 2) + 1];
-        qword[2] = src[(i >> 2) + 2];
-        qword[3] = src[(i >> 2) + 3];
+        uint32_t rem = (uint32_t)(len - i);
+        uint32_t w0, w1, w2, w3;
+
+        /* Program the unit word by word and never read past len: the
+         * flash programs whole 32-bit words, so a partial final word is
+         * padded with the erased value (0xFF) in its upper bytes, and
+         * words past the requested length are not programmed at all. */
+        w0 = src[i >> 2];
+        if (rem < 4)
+            w0 |= ~0u << (8 * rem);
+
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = qword[0];
+        dst[i >> 2] = w0;
         ISB();
-        dst[(i >> 2) + 1] = qword[1];
-        ISB();
-        dst[(i >> 2) + 2] = qword[2];
-        ISB();
-        dst[(i >> 2) + 3] = qword[3];
-        ISB();
+        if (rem > 4) {
+            w1 = src[(i >> 2) + 1];
+            if (rem < 8)
+                w1 |= ~0u << (8 * (rem - 4));
+            dst[(i >> 2) + 1] = w1;
+            ISB();
+        }
+        if (rem > 8) {
+            w2 = src[(i >> 2) + 2];
+            if (rem < 12)
+                w2 |= ~0u << (8 * (rem - 8));
+            dst[(i >> 2) + 2] = w2;
+            ISB();
+        }
+        if (rem > 12) {
+            w3 = src[(i >> 2) + 3];
+            if (rem < 16)
+                w3 |= ~0u << (8 * (rem - 12));
+            dst[(i >> 2) + 3] = w3;
+            ISB();
+        }
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
