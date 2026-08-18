@@ -1,22 +1,16 @@
 /* unit-ti-hercules-write.c
  *
- * Regression test: the short-write path of hal_flash_write()
- * in hal/ti_hercules.c checked only len < WRITE_BLOCK_SIZE, not whether
- * (address % WRITE_BLOCK_SIZE) + len stayed inside the block. A short
- * write starting near the end of a block copied past the end of the
- * WRITE_BLOCK_SIZE stack staging buffer (memcpy(temp + off, data, len))
- * and programmed only the first block, losing the bytes intended for
- * the next block.
+ * Regression test: the short-write path of hal_flash_write() in
+ * hal/ti_hercules.c checked only len < WRITE_BLOCK_SIZE, not whether
+ * the write stayed inside the block. A short write near a block end
+ * copied past the staging buffer and programmed only the first block,
+ * losing the bytes meant for the next one.
  *
- * hal/ti_hercules.c needs the TI FAPI vendor headers (board build tree)
- * and cannot be compiled on the host, but the bug is entirely in the
- * staging logic of hal_flash_write(), so the Makefile extracts
- * hal_flash_unlock_helper() and hal_flash_write() verbatim from
- * hal/ti_hercules.c (ti_hercules_write_extract.h) and runs them here
- * against emulated FAPI calls; Fapi_issueProgrammingCommand() performs
- * the program into a host flash array, so the test asserts on the
- * flash contents.
- *
+ * The HAL needs the TI FAPI vendor headers and cannot be built on the
+ * host, but the bug is in the staging logic, so the Makefile extracts
+ * hal_flash_write() and its unlock helper and runs them against an
+ * emulated FAPI. The emulated FSM stays busy for a few polls and holds
+ * the data back until it drains, so a missing wait is observable.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

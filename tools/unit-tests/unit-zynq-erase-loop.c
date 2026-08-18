@@ -1,21 +1,15 @@
 /* unit-zynq-erase-loop.c
  *
- * Regression test: ext_flash_erase() in hal/zynq.c initializes
- * idx once before the multi-sector while (len > 0) loop and never resets
- * it, even though cmd is memset to zero each iteration. From the second
- * sector on, the erase command is written at cmd[idx] (past the start of
- * the buffer): in three-byte address mode the flash receives leading zero
- * bytes before the opcode (malformed command, erase silently fails); in
- * four-byte address mode the writes run past the end of the 8-byte cmd
- * buffer. The loop also kept going - and could return success - after a
- * failed write-enable, transfer, or ready wait.
+ * Regression test: ext_flash_erase() in hal/zynq.c set idx once before
+ * the multi-sector loop and never reset it, though cmd is cleared each
+ * iteration. From the second sector on the opcode landed at cmd[idx]:
+ * malformed commands in three-byte address mode, writes past the 8-byte
+ * buffer in four-byte mode. The loop also continued, and could return
+ * success, after a failed write-enable, transfer or ready wait.
  *
- * hal/zynq.c cannot be compiled on the host (it needs the Xilinx SDK
- * headers, which are provided by the board build tree), but the bug is
- * entirely in the ext_flash_erase() loop, so the Makefile extracts that
- * one function verbatim from hal/zynq.c (zynq_erase_extract.h) and runs
- * it here against emulated qspi_* functions that record every operation.
- *
+ * hal/zynq.c needs the Xilinx SDK headers and cannot be built on the
+ * host, so the Makefile extracts the one function and runs it against
+ * emulated qspi_* calls that record every operation.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

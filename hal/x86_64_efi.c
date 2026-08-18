@@ -246,9 +246,8 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     if (file == NULL)
         return -1;
 
-    /* FileSize() is 64-bit; the rest of the loader (header parsing, LoadImage
-     * size) works in uint32_t. Reject a size that would not fit rather than
-     * silently truncating it into *sz. */
+    /* FileSize() is 64-bit but the loader works in uint32_t; reject a
+     * size that would not fit rather than truncating it. */
     filesz = FileSize(file);
     if (filesz == 0 || filesz > 0xFFFFFFFFULL) {
         wolfBoot_printf("Invalid file size: 0x%lx\n", (unsigned long)filesz);
@@ -273,12 +272,9 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
         return -1;
     }
 
-    /* EFI_FILE_PROTOCOL.Read() takes a UINTN *BufferSize (64 bits on
-     * x86-64) and writes the bytes actually read through it. Passing the
-     * caller's uint32_t *sz would let an ordinary read store eight bytes
-     * through a four-byte stack object, and the 64-bit read of
-     * *BufferSize would see adjacent stack bytes. Same contract as the
-     * AArch64 sibling. */
+    /* Read() takes a UINTN *BufferSize (64-bit here) and writes the
+     * byte count back through it; passing the caller's uint32_t *sz
+     * would store eight bytes through a four-byte object. */
     readsz = (UINTN)*sz;
     status = uefi_call_wrapper(file->Read, 3, file, &readsz,
                                (void *)(uintptr_t)*_addr);

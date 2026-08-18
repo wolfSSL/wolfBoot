@@ -678,12 +678,10 @@ static int hal_fman_init(void)
         return -1;
     }
 
-    /* Validate the container before uploading (the T10xx
-     * qe_check_firmware() path checks the same things): version,
-     * microcode count, self-consistent length, every code range inside
-     * the declared image, and the whole image inside the remaining NOR
-     * bank. 64-bit arithmetic so the sums cannot wrap. Fail closed:
-     * FMan stays unconfigured on any mismatch. */
+    /* Validate before uploading, as the T10xx qe_check_firmware() path
+     * does: version, count, self-consistent length, every code range
+     * inside the image, the image inside the NOR bank. 64-bit so the
+     * sums cannot wrap; FMan stays unconfigured on any mismatch. */
     if (hdr->version != 1) {
         wolfBoot_printf("FMAN: version %d unsupported\n", hdr->version);
         return -1;

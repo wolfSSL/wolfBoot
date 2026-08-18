@@ -256,14 +256,11 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
 
-/* Scrub the staging buffer without depending on wolfCrypt. ForceZero()
- * would drag <wolfssl/wolfcrypt/types.h> and <wolfcrypt/src/misc.c>
- * into every NVM_FLASH_WRITEONCE build of this file, including the two
- * that cannot supply them: tools/check_config (no wolfSSL include
- * path) and the STM32Cube test-app (no stm32*_hal_conf.h). A volatile
- * byte loop is also the right shape for a RAMFUNCTION caller, since
- * ForceZero() itself lives in flash and must not be called while the
- * flash is being programmed. */
+/* Scrub the staging buffer without depending on wolfCrypt: ForceZero()
+ * would pull wolfSSL headers into every NVM_FLASH_WRITEONCE build,
+ * including tools/check_config and the STM32Cube test-app, which cannot
+ * supply them. A volatile byte loop also suits the RAMFUNCTION callers,
+ * since ForceZero() lives in flash. */
 static void RAMFUNCTION nvm_cache_scrub(void)
 {
     volatile uint8_t *p = (volatile uint8_t *)NVM_CACHE;

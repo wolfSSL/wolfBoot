@@ -58,23 +58,18 @@ extern int tolower(int c);
 #endif
 
 #ifdef USE_FAST_MATH
-    /* WC_NO_HARDEN is intended only for verify-only builds: the image
-     * verification path performs public-key operations only, so timing
-     * resistance and hardening are not required there. Software DICE
-     * (WOLFCRYPT_TZ_PSA without WOLFBOOT_DICE_HW) is not verify-only:
-     * it signs the attestation claims with the private IAK via
-     * wc_CoseSign1_Sign_ex() and must keep the timing hardening, so
-     * exclude it. Hardware DICE (WOLFBOOT_DICE_HW) keeps the signing
-     * in the crypto engine and stays verify-only in fast math. */
+    /* WC_NO_HARDEN suits verify-only builds, which do public-key
+     * operations only. Software DICE (WOLFCRYPT_TZ_PSA without
+     * WOLFBOOT_DICE_HW) signs the attestation claims with the private
+     * IAK, so it is excluded; hardware DICE keeps signing in the crypto
+     * engine and stays verify-only. */
 #   if !defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_DICE_HW)
 #       define WC_NO_HARDEN
 #   else
-        /* Turn the hardening on rather than only dropping
-         * WC_NO_HARDEN: tfm.c never tests WC_NO_HARDEN, so removing it
-         * changes no code -- it only un-silences the advisory in
-         * settings.h, which -Werror then turns into a build failure.
-         * TFM_TIMING_RESISTANT is what actually makes tfm.c constant
-         * time (ECC_TIMING_RESISTANT is already set with HAVE_ECC). */
+        /* tfm.c never tests WC_NO_HARDEN, so dropping it alone changes
+         * no code and only un-silences an advisory that -Werror turns
+         * into a build failure. TFM_TIMING_RESISTANT is what makes
+         * tfm.c constant time. */
 #       define TFM_TIMING_RESISTANT
 #   endif
 #endif

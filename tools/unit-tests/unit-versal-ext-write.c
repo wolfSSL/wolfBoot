@@ -1,23 +1,15 @@
 /* unit-versal-ext-write.c
  *
- * Regression test: ext_flash_write() in hal/versal.c
- * chunked the request into length-based FLASH_PAGE_SIZE transfers
- * (page 0, page 1, ...) without accounting for the start address's
- * offset inside the physical page. A write starting mid-page sent a
- * full-page Page Program across the boundary; NOR wraps the write
- * pointer at the page start, so the excess bytes clobbered the
- * beginning of the page.
+ * Regression test: ext_flash_write() in hal/versal.c chunked by length
+ * alone, ignoring where the start address sat inside the physical page.
+ * A write starting mid-page sent a full-page Page Program across the
+ * boundary, and NOR wraps the write pointer, so the excess clobbered
+ * the start of the page.
  *
- * hal/versal.c cannot be compiled on the host in its entirety for
- * this test (the QspiDev_t typedef and the static qspi_* helpers are
- * file-local), so the Makefile extracts the QspiDev_t struct and the
- * real ext_flash_write() verbatim (versal_ext_write_extract.h) and
- * runs them against test-owned qspiDev/qspi_initialized state and
- * emulated qspi_write_enable()/qspi_transfer()/qspi_wait_ready()/
- * qspi_write_disable(). The emulated NOR models the real wrap: a
- * crossing program overwrites the page start it wraps into, so
- * pre-fix the corruption is observable in the flash image.
- *
+ * The QspiDev_t typedef and the qspi_* helpers are file-local, so the
+ * Makefile extracts the struct and ext_flash_write() verbatim and runs
+ * them against emulated qspi_* calls. The emulated NOR models the wrap,
+ * so pre-fix the corruption is visible in the flash image.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

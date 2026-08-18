@@ -1,29 +1,13 @@
 /* unit-sdhci-wait-busy.c
  *
- * Regression test: sdhci_wait_busy() had no timeout in
- * either its DATA0 polling loop or its repeated CMD13 loop (the
- * in-code TODO acknowledged it). A removed card, a controller fault,
- * or a card stuck in the programming state left wolfBoot spinning
- * forever instead of returning an I/O error.
+ * Regression test: sdhci_wait_busy() had no timeout in either the DAT0
+ * or the CMD13 loop, so a stuck or removed card spun forever.
  *
- * The test compiles the real src/sdhci.c (as sdhci_host.c, generated
- * by the Makefile: asm blanked, sdhci_read renamed to sdhci_read_hw)
- * and scripts the controller through the host register file:
- *   - the DATA0 level (SDHCI_SRS09_DAT0_LVL) stays low for the
- *     data-line timeout case;
- *   - the command always "completes" (SDHCI_SRS12_CC preset) with the
- *     READY_FOR_DATA bit (bit 8) of the response register
- *     (SDHCI_SRS04) cleared, so every CMD13 reports DEVICE_BUSY.
- * The emulated hal_get_timer_us() advances by a settable step per read,
- * so the shipped SDHCI_WAIT_BUSY_TIMEOUT_MS is exercised as built --
- * a 1 ms step reaches the 30 s budget in ~30k iterations -- rather than
- * against a shrunken stand-in value. Pre-fix, both timeout cases never
- * return (the test runner's timeout kills them).
- *
- * The stub also counts sdhci_platform_wdt_pet() calls: a bounded wait
- * this long must service the watchdog or it becomes a reset rather than
- * the clean I/O error it is meant to be.
- *
+ * The timer stub advances by a settable step, so the shipped
+ * SDHCI_WAIT_BUSY_TIMEOUT_MS is exercised as built rather than against
+ * a shrunken stand-in, and it counts sdhci_platform_wdt_pet() calls: a
+ * wait this long must service the watchdog or it becomes a reset
+ * instead of the clean I/O error it is meant to be.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

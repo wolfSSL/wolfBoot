@@ -1,23 +1,17 @@
 /* unit-efi-x86-open-image.c
  *
- * Regression test: open_kernel_image() in hal/x86_64_efi.c passed
- * the caller's uint32_t *sz directly as the BufferSize argument of
- * EFI_FILE_PROTOCOL.Read(). That parameter is a UINTN, which is 64 bits on
- * x86-64, and the UEFI spec requires the firmware to write the number of
- * bytes actually read back through it. An ordinary successful read therefore
- * stored eight bytes through the four-byte object, corrupting the stack bytes
- * immediately after kernel_size/update_size in efi_main on every image load.
+ * Regression test: open_kernel_image() in hal/x86_64_efi.c passed the
+ * caller's uint32_t *sz as the BufferSize argument of
+ * EFI_FILE_PROTOCOL.Read(). That is a UINTN -- 64 bits on x86-64 --
+ * and the firmware writes the byte count back through it, so every
+ * successful read stored eight bytes through a four-byte object and
+ * corrupted the stack after it. The fix passes a local UINTN and copies
+ * the count back, as the AArch64 sibling does.
  *
- * The fix passes a local UINTN to Read() and copies the completed byte count
- * back into *sz, exactly as the AArch64 sibling (hal/aarch64_efi.c) does.
- *
- * hal/x86_64_efi.c is normally only built by the CMake x86_64_efi target
- * (gnu-efi headers, -lgnuefi -lefi), so this test doubles as its only host
- * build coverage: it includes the HAL file directly and stands in for the
- * gnu-efi runtime with host mocks (BS, LibFileInfo, the x86-64 efi_callN()
- * trampolines, wolfBoot_start). The mock Read() follows the spec'd BufferSize
- * contract, so this test fails against the pre-fix code.
- *
+ * hal/x86_64_efi.c is normally built only by the CMake x86_64_efi
+ * target, so this doubles as its host build coverage: it includes the
+ * HAL directly and mocks the gnu-efi runtime. The mock Read() follows
+ * the spec'd BufferSize contract, so it fails against the pre-fix code.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

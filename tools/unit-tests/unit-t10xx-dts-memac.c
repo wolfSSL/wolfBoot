@@ -1,19 +1,14 @@
 /* unit-t10xx-dts-memac.c
  *
- * Regression test: the fsl,fman-memac loop in
- * hal_dts_fixup() (hal/nxp_t10xx.c) read the node's cell-index
- * straight from the device tree and used it to index the file-static
- * phydevs[5] with no bounds check - unlike the qman-portal loop right
- * above it. Standard NXP FMan device trees assign the 10G MACs
- * cell-index 8/9, so any such DTB read past the array and wrote the
- * result into the kernel device tree as a MAC address.
+ * Regression test: the fsl,fman-memac loop in hal_dts_fixup()
+ * (hal/nxp_t10xx.c) took the node's cell-index straight from the device
+ * tree and indexed the static phydevs[5] with it, unlike the qman-portal
+ * loop above. NXP device trees give the 10G MACs cell-index 8/9, so such
+ * a DTB read past the array and wrote the result back as a MAC address.
  *
- * The test compiles the real src/fdt.c (wolfBoot's libfdt subset) and
- * the real hal_dts_fixup() (extracted by the Makefile from
- * hal/nxp_t10xx.c, along with its liodn/qman static tables), feeds it
- * hand-built DTBs, and checks the resulting local-mac-address
- * properties.
- *
+ * Compiles the real src/fdt.c and hal_dts_fixup() (extracted by the
+ * Makefile with its static tables), feeds it hand-built DTBs and checks
+ * the resulting local-mac-address properties.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

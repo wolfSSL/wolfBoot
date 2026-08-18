@@ -1,20 +1,16 @@
 /* unit-sdhci-dma-error.c
  *
- * Regression test: a failed SDMA data transfer must be reported as an error.
+ * Regression test: a failed SDMA data transfer must be reported as an
+ * error. sdhci_transfer() sets status = -1 when the Transfer Complete
+ * wait times out, but the error-check block that follows runs
+ * unconditionally and a wolfBoot-side timeout need not leave an error
+ * bit in SRS12, so the CMD12 result overwrote the -1 and the function
+ * returned success for a transfer that moved nothing.
  *
- * sdhci_transfer() waits for Transfer Complete on the SDMA path and sets
- * status = -1 if that wait times out. The post-transfer "check for errors"
- * block then runs unconditionally, and a wolfBoot-side wait timeout does not
- * necessarily leave an error bit set in SRS12. Before the fix, the CMD12
- * (stop transmission) result overwrote that -1, so the function returned
- * success for a transfer that never moved any data.
- *
- * The caller then treats a partially filled buffer as a good read. On a
- * verified-boot target that surfaces much later as an image integrity
- * failure rather than as the I/O error it actually is -- and where
- * anti-rollback is enabled, the good lower-versioned slot is refused too,
- * leaving nothing bootable.
- *
+ * The caller then treats a partially filled buffer as a good read,
+ * which surfaces later as an integrity failure rather than the I/O
+ * error it is -- and with anti-rollback on, the good lower-versioned
+ * slot is refused too.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.

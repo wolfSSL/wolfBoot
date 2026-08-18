@@ -1541,15 +1541,11 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         }
     }
 
-    /* Check for errors.
-     *
-     * An earlier failure (e.g. the SDMA wait above timing out) must survive
-     * this block. A wolfBoot-side wait timeout does not necessarily set an
-     * SRS12 error bit, so without preserving `status` the CMD12 / wait-busy
-     * results below would overwrite it and sdhci_transfer() would report
-     * success for a transfer that never completed. The caller then uses a
-     * partially filled buffer, which surfaces much later as a bogus image
-     * integrity failure rather than as the I/O error it actually is. */
+    /* Check for errors. An earlier failure (e.g. the SDMA wait timing
+     * out) must survive this block: a wolfBoot-side timeout need not set
+     * an SRS12 error bit, so without preserving `status` the CMD12 and
+     * wait-busy results below would report success for a transfer that
+     * never completed. */
     reg = SDHCI_REG(SDHCI_SRS12);
     if ((reg & SDHCI_SRS12_ERR_STAT) == 0) {
         /* If multi-block, send CMD12 to stop transfer. This is issued even

@@ -1,20 +1,15 @@
 /* unit-zynq-ext-write.c
  *
- * Regression test: ext_flash_write() in hal/zynq.c divided
- * the request into length-based FLASH_PAGE_SIZE chunks (page 0, page
- * 1, ...) without accounting for the start address's offset inside
- * the device page. A write starting mid-page sent a full-page Page
- * Program across the boundary; NOR wraps the write pointer at the
- * page start, so the excess bytes clobbered the beginning of the
- * page.
+ * Regression test: ext_flash_write() in hal/zynq.c chunked by length
+ * alone, ignoring the start address's offset inside the device page. A
+ * write starting mid-page sent a full-page Page Program across the
+ * boundary, and NOR wraps the write pointer, so the excess clobbered
+ * the start of the page.
  *
- * As in unit-zynq-erase-loop, hal/zynq.c cannot be compiled on the
- * host (Xilinx SDK headers), so the Makefile extracts ext_flash_write()
- * verbatim (zynq_write_extract.h) and runs it against emulated
- * qspi_* functions. The emulated NOR models the real wrap: a Page
- * Program crossing the boundary overwrites the page start it wraps
- * into, so pre-fix the corruption is observable in the flash image.
- *
+ * As with unit-zynq-erase-loop the HAL cannot be built on the host, so
+ * the Makefile extracts ext_flash_write() and runs it against emulated
+ * qspi_* calls. The emulated NOR models the wrap, so pre-fix the
+ * corruption is visible in the flash image.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
