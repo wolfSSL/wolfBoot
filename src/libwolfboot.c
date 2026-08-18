@@ -186,8 +186,11 @@ static uint32_t ext_cache;
 
 /* EXT_ENCRYPTED is listed because the key-handling code below calls
  * ForceZero() unconditionally, including from the test-app build of this file,
- * where __WOLFBOOT is not defined. */
-#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED)
+ * where __WOLFBOOT is not defined. NVM_FLASH_WRITEONCE is listed for the
+ * same reason: the partition-trailer read-modify-write helpers scrub
+ * NVM_CACHE with ForceZero() in the test-app build too. */
+#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED) || \
+    defined(NVM_FLASH_WRITEONCE)
 #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/wc_port.h>
