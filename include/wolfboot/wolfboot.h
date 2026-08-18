@@ -567,8 +567,12 @@ extern "C" {
 /* now just an intermediary state, update state will always be either new or
  * updating before the application boots*/
 #define IMG_STATE_FINAL_FLAGS 0x30
-/* ELF loading state - only valid on boot partition so doesn't conflict with
- * IMAGE_STATE_UPDATING */
+/* Set on the BOOT partition after a swap, cleared by wolfBoot_success().
+ * If still present at the next boot, the previous boot attempt did not
+ * confirm success and a rollback to the alternate partition is
+ * triggered. Only valid on the boot partition so it doesn't conflict
+ * with IMAGE_STATE_UPDATING (which is only valid on the update
+ * partition). Not related to ELF loading. */
 #define IMG_STATE_TESTING   0x10
 #define IMG_STATE_SUCCESS   0x00
 #define FLASH_BYTE_ERASED   0xFF
