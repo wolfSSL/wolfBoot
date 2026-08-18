@@ -647,6 +647,7 @@ static int hal_fman_init(void)
 {
     const struct qe_firmware *fw = (const struct qe_firmware *)FMAN_FW_ADDR;
     const struct qe_header *hdr = &fw->header;
+    uint64_t fw_off, extent;
     unsigned int i;
 
     /* Guard: FMAN_FW_ADDR must lie in the NOR window, else the magic read
@@ -659,6 +660,17 @@ static int hal_fman_init(void)
             (uintptr_t)FLASH_BANK_SIZE) {
         wolfBoot_printf("FMAN: fw addr 0x%x outside NOR, skipping\n",
             (unsigned)FMAN_FW_ADDR);
+        return -1;
+    }
+
+    /* Everything below reads through fw. The guard above only proved
+     * that FMAN_FW_ADDR itself is inside the NOR window, so bound the
+     * fixed part of the container (header + first microcode entry)
+     * before dereferencing any of it. */
+    fw_off = (uint64_t)((uintptr_t)fw - (uintptr_t)FLASH_BASE_ADDR);
+    extent = (uint64_t)FLASH_BANK_SIZE - fw_off;
+    if (extent < (uint64_t)sizeof(struct qe_firmware)) {
+        wolfBoot_printf("FMAN: container truncated by NOR end, skipping\n");
         return -1;
     }
 
@@ -678,19 +690,27 @@ static int hal_fman_init(void)
         wolfBoot_printf("FMAN: version %d unsupported\n", hdr->version);
         return -1;
     }
-    if (fw->count < 1 || fw->count > 2) {
+    if (fw->count < 1 || fw->count > QE_MAX_RISC) {
         wolfBoot_printf("FMAN: count %d invalid\n", fw->count);
         return -1;
     }
     {
-        uint64_t calc = sizeof(struct qe_firmware);
-        uint64_t fw_off =
-            (uint64_t)((uintptr_t)fw - (uintptr_t)FLASH_BASE_ADDR);
-        uint64_t extent = (uint64_t)FLASH_BANK_SIZE - fw_off;
         uint64_t length = hdr->length;
+        uint64_t table = (uint64_t)sizeof(struct qe_firmware) +
+            (uint64_t)(fw->count - 1) * sizeof(struct qe_microcode);
+        uint64_t calc;
         unsigned int k;
 
-        calc += (uint64_t)(fw->count - 1) * sizeof(struct qe_microcode);
+        /* Bound the microcode table and the declared image against the
+         * NOR before either is walked -- the table sits past the fixed
+         * part checked above, and the loop below dereferences it. */
+        if (table > extent || length > extent) {
+            wolfBoot_printf("FMAN: image %lu exceeds NOR extent %lu\n",
+                (unsigned long)length, (unsigned long)extent);
+            return -1;
+        }
+
+        calc = table;
         for (k = 0; k < fw->count; k++)
             calc += (uint64_t)4 * fw->microcode[k].count;
 
@@ -705,11 +725,6 @@ static int hal_fman_init(void)
                 wolfBoot_printf("FMAN: microcode %u out of bounds\n", k);
                 return -1;
             }
-        }
-        if (length > extent) {
-            wolfBoot_printf("FMAN: image %lu exceeds NOR extent %lu\n",
-                (unsigned long)length, (unsigned long)extent);
-            return -1;
         }
     }
 

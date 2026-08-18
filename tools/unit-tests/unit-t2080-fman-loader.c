@@ -121,7 +121,8 @@ static uint32_t make_blob(uint32_t code_offset, uint32_t code_words,
     uint32_t version, uint8_t count)
 {
     struct qe_firmware *fw = slot();
-    uint64_t calc = sizeof(struct qe_firmware);
+    uint64_t calc = sizeof(struct qe_firmware) +
+        (uint64_t)(count ? count - 1 : 0) * sizeof(struct qe_microcode);
     uint32_t i;
 
     memset(g_nor, 0x00, sizeof(g_nor));
@@ -192,6 +193,21 @@ START_TEST(test_bad_version)
 }
 END_TEST
 
+/* A container declaring more than one RISC must be accepted up to
+ * QE_MAX_RISC, which this file defines as 4. The bound was a hand
+ * written 2, so a 3-RISC container was rejected even though the length
+ * formula (shared with the t10xx and p1021 siblings) handles it. Only
+ * entry 0 carries code here; the others are zeroed, which the loader
+ * skips via the !code_offset test. */
+START_TEST(test_multi_risc_blob_accepted)
+{
+    make_blob(sizeof(struct qe_firmware) +
+        2 * sizeof(struct qe_microcode), 8, 1, 3);
+
+    ck_assert_int_eq(hal_fman_init(), 0);
+}
+END_TEST
+
 /* count == 0 used to be accepted as a successful upload of nothing
  * (F-9762); it must now be rejected. */
 START_TEST(test_zero_count_rejected)
@@ -245,6 +261,7 @@ Suite *t2080_fman_loader_suite(void)
     tcase_add_test(tc, test_valid_blob);
     tcase_add_test(tc, test_bad_magic);
     tcase_add_test(tc, test_bad_version);
+    tcase_add_test(tc, test_multi_risc_blob_accepted);
     tcase_add_test(tc, test_zero_count_rejected);
     tcase_add_test(tc, test_mcode_offset_past_image_rejected);
     tcase_add_test(tc, test_image_past_nor_extent_rejected);
