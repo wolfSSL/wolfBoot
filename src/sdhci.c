@@ -627,20 +627,21 @@ static int sdhci_wait_busy(int check_dat0)
 {
     uint32_t status;
     uint64_t start = hal_get_timer_us();
+    /* Compare in microseconds: a 64-bit division inside the poll loop
+     * pulls in a libgcc helper call on 32-bit targets. */
+    const uint64_t timeout_us = (uint64_t)SDHCI_WAIT_BUSY_TIMEOUT_MS * 1000U;
 
     if (check_dat0) {
         /* wait for DATA0 not busy */
         while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0) {
-            if ((hal_get_timer_us() - start) / 1000 >
-                    SDHCI_WAIT_BUSY_TIMEOUT_MS)
+            if (hal_get_timer_us() - start > timeout_us)
                 return -1;
         }
     }
     /* wait for CMD13 */
     while ((status = sdhci_cmd(MMC_CMD13_SEND_STATUS,
         (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY) {
-        if ((hal_get_timer_us() - start) / 1000 >
-                SDHCI_WAIT_BUSY_TIMEOUT_MS)
+        if (hal_get_timer_us() - start > timeout_us)
             return -1;
     }
     return status;
