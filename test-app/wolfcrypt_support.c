@@ -44,6 +44,47 @@
     extern volatile uint64_t HAL_time_ms;
 #elif defined(TARGET_lpc55s69)
     extern volatile uint64_t SysTick_time_ms;
+#elif defined(TARGET_imx95_m7)
+    /* Cortex-M7 DWT cycle counter. Exact, free to read, and needs no
+     * peripheral - which matters here because the M7 has no console UART
+     * routed on this carrier. The core runs at 800 MHz (read from the board's
+     * clk_summary: "m7 800000000"), not assumed. CYCCNT is 32-bit and wraps
+     * every ~5.4 s at that rate, so accumulate into 64 bits on each read;
+     * benchmark intervals are shorter than one wrap, so sampling on every call
+     * is sufficient to catch it. */
+    #define IMX95_M7_HZ 800000000ULL
+    static uint64_t m7_cyc_hi = 0;
+    static uint32_t m7_cyc_last = 0;
+    static int m7_cyc_inited = 0;
+
+    static void m7_cyc_init(void);
+
+    static uint64_t m7_get_ticks(void)
+    {
+        uint32_t now;
+
+        if (!m7_cyc_inited) {
+            m7_cyc_init();
+            m7_cyc_inited = 1;
+        }
+        now = *(volatile uint32_t *)0xE0001004UL; /* DWT_CYCCNT */
+
+        if (now < m7_cyc_last)
+            m7_cyc_hi += 0x100000000ULL; /* wrapped since last read */
+        m7_cyc_last = now;
+        return m7_cyc_hi + now;
+    }
+
+    static void m7_cyc_init(void)
+    {
+        *(volatile uint32_t *)0xE000EDFCUL |= (1UL << 24); /* DEMCR.TRCENA */
+        *(volatile uint32_t *)0xE0001004UL = 0;            /* DWT_CYCCNT = 0 */
+        *(volatile uint32_t *)0xE0001000UL |= 1UL;         /* DWT_CTRL.CYCCNTENA */
+        m7_cyc_hi = 0;
+        m7_cyc_last = 0;
+    }
+
+    static uint64_t m7_start_ticks = 0;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     /* PPC time base register for accurate timing (e6500). */
     static uint32_t ppc_tb_hz = 0;
@@ -147,6 +188,12 @@ unsigned long my_time(unsigned long* timer)
     unsigned long t = (unsigned long)(SysTick_time_ms / 1000);
     if (timer) *timer = t;
     return t;
+#elif defined(TARGET_imx95_m7)
+    {
+        unsigned long t = (unsigned long)(m7_get_ticks() / IMX95_M7_HZ);
+        if (timer) *timer = t;
+        return t;
+    }
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();
@@ -191,6 +238,13 @@ double current_time(int reset)
 #elif defined(TARGET_lpc55s69)
     (void)reset;
     return (double)SysTick_time_ms / 1000.0;
+#elif defined(TARGET_imx95_m7)
+    if (reset) {
+        m7_cyc_init();
+        m7_cyc_inited = 1;
+        m7_start_ticks = 0;
+    }
+    return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();

@@ -284,6 +284,9 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),imx_rt)
     CORTEX_M7=1
   endif
+  ifeq ($(TARGET),imx95_m7)
+    CORTEX_M7=1
+  endif
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
     SPI_TARGET=stm32
