@@ -386,6 +386,10 @@ make clean && make
 make test-sim-self-update-monolithic
 ```
 
+A companion negative test, `test-sim-self-update-monolithic-oversize`, stages a
+signed payload larger than the install span and verifies that wolfBoot refuses
+it without touching the bootloader or the BOOT partition.
+
 #### Skipping boot image verification
 
 When wolfBoot is used together with the [self-header](#self-header-persisting-the-bootloader-manifest)
