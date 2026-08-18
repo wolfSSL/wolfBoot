@@ -227,6 +227,54 @@ START_TEST(test_iram_fill_unaligned_64bit_addr)
 }
 END_TEST
 
+/* A successful erase returns 0 and fills the shadow IRAM with 0xFF.
+ * The 64 byte erase spans two 32 byte FRAM chunks (six SPI transfers).
+ */
+START_TEST(test_ext_flash_erase_success_fills_iram)
+{
+    hal_status_t ok_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok,
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    int i;
+
+    reset_spi_mocks();
+    memset(g_iram, 0xA5, sizeof(g_iram));
+
+    set_transmit_script(ok_script, 6);
+    ck_assert_int_eq(ext_flash_erase((uintptr_t)g_iram, 64), 0);
+    ck_assert_int_eq(transmit_call_count, 6);
+    for (i = 0; i < 64; i++)
+        ck_assert_uint_eq(g_iram[i], 0xFF);
+}
+END_TEST
+
+/* A failed FRAM erase must make ext_flash_erase() return a negative
+ * error code. Pre-fix, FRAM_Erase() negated the hal_status_t and
+ * ext_flash_erase() negated it a second time, so a failure returned
+ * +1/+2 - a success-looking value to callers testing ret < 0 (e.g.
+ * diag_erase in src/libwolfboot.c). */
+START_TEST(test_ext_flash_erase_failure_returns_negative)
+{
+    hal_status_t fail_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_err
+    };
+    int i;
+    int ret;
+
+    reset_spi_mocks();
+    memset(g_iram, 0xA5, sizeof(g_iram));
+
+    set_transmit_script(fail_script, 3);
+    ret = ext_flash_erase((uintptr_t)g_iram, 32);
+    ck_assert_int_lt(ret, 0);
+
+    /* The shadow IRAM must be left untouched on failure. */
+    for (i = 0; i < 32; i++)
+        ck_assert_uint_eq(g_iram[i], 0xA5);
+}
+END_TEST
+
 Suite *va416x0_fram_suite(void)
 {
     Suite *s = suite_create("va416x0-fram");
@@ -235,6 +283,8 @@ Suite *va416x0_fram_suite(void)
     tcase_add_test(tc, test_fram_write_command_failure_aborts_split_transaction);
     tcase_add_test(tc, test_iram_write_unaligned_64bit_addr);
     tcase_add_test(tc, test_iram_fill_unaligned_64bit_addr);
+    tcase_add_test(tc, test_ext_flash_erase_success_fills_iram);
+    tcase_add_test(tc, test_ext_flash_erase_failure_returns_negative);
     suite_add_tcase(s, tc);
 
     return s;

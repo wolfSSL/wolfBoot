@@ -333,12 +333,14 @@ hal_status_t FRAM_Erase(uint8_t spiBank, uint32_t addr, uint32_t len)
         uint32_t erase_len = (len > sizeof(data)) ? sizeof(data) : len;
         status = FRAM_Write(ROM_SPI_BANK, addr, data, erase_len);
         if (status != hal_status_ok) {
-            return -(int)status; /* convert to negative error code */
+            /* Return the hal_status_t unmodified; ext_flash_erase() is
+             * the single negation point to a negative error code. */
+            return status;
         }
         addr += erase_len;
         len -= erase_len;
     }
-    return 0;
+    return hal_status_ok;
 }
 
 #ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
