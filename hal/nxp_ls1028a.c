@@ -535,7 +535,17 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
     uint32_t i = 0, j = 0;
 
     while (len) {
+        /* A NOR Page Program must not cross a physical page boundary:
+         * the write pointer wraps to the start of the page and the
+         * excess bytes clobber preceding data. Cap the chunk to the
+         * bytes left in the current page (XSPI_IP_BUF_SIZE equals the
+         * page size, so this only tightens the limit mid-page). */
+        uint32_t page_room =
+            FLASH_PAGE_SIZE - ((uint32_t)address % FLASH_PAGE_SIZE);
+
         size = len > XSPI_IP_BUF_SIZE ? XSPI_IP_BUF_SIZE : len;
+        if (size > page_room)
+            size = page_room;
 
         /* NOR flash clears its write-enable latch after each program
          * operation, so enable writes for every page, not just the

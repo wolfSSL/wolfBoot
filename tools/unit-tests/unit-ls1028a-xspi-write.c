@@ -107,6 +107,7 @@ static void xspi_emu_start(void)
     uint32_t seq = ipcr1 >> 16;
     uint32_t len = ipcr1 & 0xFFFF;
     uint32_t addr = XSPI_IPCR0;
+    uint32_t i;
     int e = g_xspi_log_n < XSPI_LOG_MAX ? g_xspi_log_n : XSPI_LOG_MAX - 1;
 
     if (g_xspi_log_n < XSPI_LOG_MAX)
@@ -122,7 +123,17 @@ static void xspi_emu_start(void)
     else if (seq == LUT_INDEX_PP) {
         g_xspi_log[e].cmd = XSPI_CMD_PP;
         if (g_wel) {
-            memcpy(&g_nor[addr], g_tfd_stream, len);
+            /* Real NOR behavior: the write pointer wraps to the start
+             * of the physical page it started in, so a Page Program
+             * crossing the boundary clobbers the beginning of that
+             * page. */
+            {
+                uint32_t base = addr & ~(uint32_t)(FLASH_PAGE_SIZE - 1);
+
+                for (i = 0; i < len; i++)
+                    g_nor[base + ((addr + i) & (FLASH_PAGE_SIZE - 1))] =
+                        g_tfd_stream[i];
+            }
             g_wel = 0; /* the program consumes the latch */
         }
         else {
@@ -258,7 +269,9 @@ START_TEST(test_write_multipart)
 }
 END_TEST
 
-/* Multi-page write starting at an unaligned address. */
+/* Multi-page write starting at an unaligned address. The first
+ * chunk must stop at the physical page boundary (156 bytes), not run
+ * a full 256-byte Page Program across it. */
 START_TEST(test_write_unaligned)
 {
     uint8_t data[1024];
@@ -274,8 +287,11 @@ START_TEST(test_write_unaligned)
         ck_assert_int_eq(g_xspi_log[2 * i + 1].cmd, XSPI_CMD_PP);
     }
     ck_assert_uint_eq(g_xspi_log[1].addr, 100);
-    ck_assert_uint_eq(g_xspi_log[3].addr, 356);
-    ck_assert_uint_eq(g_xspi_log[5].addr, 612);
+    ck_assert_uint_eq(g_xspi_log[1].len, 156);
+    ck_assert_uint_eq(g_xspi_log[3].addr, 256);
+    ck_assert_uint_eq(g_xspi_log[3].len, 256);
+    ck_assert_uint_eq(g_xspi_log[5].addr, 512);
+    ck_assert_uint_eq(g_xspi_log[5].len, 188);
     ck_assert_int_eq(any_rejected(), 0);
     for (i = 0; i < 600; i++)
         ck_assert_uint_eq(g_nor[100 + i], data[i]);
@@ -283,6 +299,47 @@ START_TEST(test_write_unaligned)
         ck_assert_uint_eq(g_nor[i], 0xFF);
     for (i = 700; i < sizeof(data); i++)
         ck_assert_uint_eq(g_nor[i], 0xFF);
+}
+END_TEST
+
+/* A write that crosses a page boundary must not clobber the start of
+ * the next page: NOR wraps the write pointer at the boundary, so a
+ * 256-byte Page Program starting 16 bytes short of it would overwrite
+ * the first 16 bytes of the page. */
+START_TEST(test_write_crossing_page_no_wrap)
+{
+    uint8_t data[256];
+    size_t i;
+
+    /* Pre-seed the whole flash with a pattern. */
+    memset(g_nor, 0x5A, sizeof(g_nor));
+    fill(data, sizeof(data), 0x60);
+
+    ck_assert_int_eq(hal_flash_write(240, data, 256), 256);
+
+    /* No Page Program may cross a physical page boundary. */
+    for (i = 0; i < g_xspi_log_n; i++) {
+        if (g_xspi_log[i].cmd == XSPI_CMD_PP)
+            ck_assert_int_le(
+                (int)(g_xspi_log[i].addr % FLASH_PAGE_SIZE) +
+                (int)g_xspi_log[i].len, FLASH_PAGE_SIZE);
+    }
+    ck_assert_int_eq(g_xspi_log_n, 4); /* WEN+PP x2 */
+    ck_assert_uint_eq(g_xspi_log[1].addr, 240);
+    ck_assert_uint_eq(g_xspi_log[1].len, 16);
+    ck_assert_uint_eq(g_xspi_log[3].addr, 256);
+    ck_assert_uint_eq(g_xspi_log[3].len, 240);
+    ck_assert_int_eq(any_rejected(), 0);
+
+    /* The written bytes. */
+    for (i = 0; i < 256; i++)
+        ck_assert_uint_eq(g_nor[240 + i], data[i]);
+
+    /* The page start that a wrapping program would clobber. */
+    for (i = 0; i < 240; i++)
+        ck_assert_uint_eq(g_nor[i], 0x5A);
+    for (i = 496; i < sizeof(g_nor); i++)
+        ck_assert_uint_eq(g_nor[i], 0x5A);
 }
 END_TEST
 
@@ -321,6 +378,7 @@ Suite *ls1028a_xspi_suite(void)
     tcase_add_test(tc, test_write_single_page);
     tcase_add_test(tc, test_write_multipart);
     tcase_add_test(tc, test_write_unaligned);
+    tcase_add_test(tc, test_write_crossing_page_no_wrap);
     tcase_add_test(tc, test_ext_write_multipart);
 
     suite_add_tcase(s, tc);
