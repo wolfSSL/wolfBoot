@@ -1,0 +1,408 @@
+/* unit-ls1028a-xspi-write.c
+ *
+ * Regression test: hal_flash_write()/ext_flash_write() in
+ * hal/nxp_ls1028a.c issued one Write Enable before xspi_flash_write(),
+ * which programs a page per chunk. NOR clears the write-enable latch
+ * after each program, so only the first page landed while the wrapper
+ * still reported success. The fix enables writes for every page.
+ *
+ * The HAL is plain register access apart from a few barrier asm
+ * statements, so the test includes it via nxp_ls1028a_host.c (generated
+ * by the Makefile with those blanked), rebases XSPI_BASE onto host
+ * memory, and emulates the controller at the XSPI_IPCMD_START()
+ * boundary. The emulated NOR keeps a real write-enable latch and a busy
+ * window, so a dropped WEN or a missing wait shows up as a rejection.
+ * Copyright (C) 2026 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+#include <check.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#define TARGET_nxp_ls1028a
+#define EXT_FLASH
+/* The HAL checks for the aarch64 build (ARCH_AARCH64 also selects the
+ * 64-bit hal.h prototypes); the DTS load address is a board setting the
+ * host test does not use. */
+#define ARCH_AARCH64
+#define WOLFBOOT_LOAD_DTS_ADDRESS 0
+
+#include "nxp_ls1028a.h"
+
+/* Rebase the FlexSPI register block onto host memory. */
+static uint32_t g_xspi_regs[0x1000 / sizeof(uint32_t)];
+
+#undef XSPI_BASE
+#define XSPI_BASE ((uintptr_t)g_xspi_regs)
+
+/* Command log (the sequence the driver asks the controller to run). */
+#define XSPI_LOG_MAX 64
+enum {
+    XSPI_CMD_WEN,
+    XSPI_CMD_PP,
+    XSPI_CMD_SE,
+    XSPI_CMD_RDSR,
+};
+static struct {
+    int cmd;
+    uint32_t addr;
+    uint32_t len;
+    int rejected;
+} g_xspi_log[XSPI_LOG_MAX];
+static int g_xspi_log_n;
+
+/* Emulated NOR flash plus the write-enable latch real NOR keeps. */
+static uint8_t g_nor[2 * 128 * 1024];
+static int g_wel;
+/* RDSR polls remaining before the emulated device reports WIP clear.
+ * A program or erase arms it; Write Enable and program/erase issued
+ * while it is armed are ignored, exactly as the device does. */
+#define NOR_BUSY_POLLS 2
+static int g_busy;
+
+/* The FlexSPI drains the TX FIFO while the command runs, so the flash
+ * receives the bytes in the order the driver hands them to the FIFO.
+ * xspi_emu_tfd_write() (called in place of the xspi_writereg() body in
+ * the generated host copy) captures that stream. */
+static uint8_t g_tfd_stream[XSPI_IP_BUF_SIZE];
+static uint32_t g_tfd_stream_len;
+
+static void xspi_emu_tfd_write(uint32_t *addr, uint32_t val)
+{
+    uint32_t i;
+
+    for (i = 0; i < 4; i++) {
+        if (g_tfd_stream_len < sizeof(g_tfd_stream))
+            g_tfd_stream[g_tfd_stream_len++] = (uint8_t)(val >> (8 * i));
+    }
+    *(volatile uint32_t *)(addr) = val;
+}
+
+static void xspi_emu_start(void)
+{
+    uint32_t ipcr1 = XSPI_IPCR1;
+    uint32_t seq = ipcr1 >> 16;
+    uint32_t len = ipcr1 & 0xFFFF;
+    uint32_t addr = XSPI_IPCR0;
+    uint32_t i;
+    int e;
+
+    /* Status polls are not operations: answer them without taking a
+     * log slot, so the assertions below stay about WEN/PP/SE order. */
+    if (seq == LUT_INDEX_RDSR) {
+        /* WIP stays set for a few polls after a program or erase */
+        XSPI_RFD(0) = g_busy ? FLASH_SR_WIP_MSK : 0;
+        if (g_busy)
+            g_busy--;
+        XSPI_INTR |= XSPI_IPCMDDONE;
+        g_tfd_stream_len = 0;
+        return;
+    }
+
+    e = g_xspi_log_n < XSPI_LOG_MAX ? g_xspi_log_n : XSPI_LOG_MAX - 1;
+    if (g_xspi_log_n < XSPI_LOG_MAX)
+        g_xspi_log_n++;
+    g_xspi_log[e].addr = addr;
+    g_xspi_log[e].len = len;
+    g_xspi_log[e].rejected = 0;
+
+    if (seq == LUT_INDEX_WRITE_EN) {
+        g_xspi_log[e].cmd = XSPI_CMD_WEN;
+        if (g_busy)
+            g_xspi_log[e].rejected = 1; /* WREN ignored while WIP set */
+        else
+            g_wel = 1;
+    }
+    else if (seq == LUT_INDEX_PP) {
+        g_xspi_log[e].cmd = XSPI_CMD_PP;
+        if (g_wel) {
+            /* Real NOR behavior: the write pointer wraps to the start
+             * of the physical page it started in, so a Page Program
+             * crossing the boundary clobbers the beginning of that
+             * page. */
+            {
+                uint32_t base = addr & ~(uint32_t)(FLASH_PAGE_SIZE - 1);
+
+                for (i = 0; i < len; i++)
+                    g_nor[base + ((addr + i) & (FLASH_PAGE_SIZE - 1))] =
+                        g_tfd_stream[i];
+            }
+            g_wel = 0; /* the program consumes the latch */
+            g_busy = NOR_BUSY_POLLS;
+        }
+        else {
+            g_xspi_log[e].rejected = 1; /* NOR ignores PP without WEN */
+        }
+    }
+    else if (seq == LUT_INDEX_SE) {
+        g_xspi_log[e].cmd = XSPI_CMD_SE;
+        if (g_wel) {
+            memset(&g_nor[addr], 0xFF, len);
+            g_wel = 0;
+            g_busy = NOR_BUSY_POLLS;
+        }
+        else {
+            g_xspi_log[e].rejected = 1;
+        }
+    }
+
+    XSPI_INTR |= XSPI_IPCMDDONE;
+    g_tfd_stream_len = 0; /* the FIFO was drained by the command */
+}
+
+/* The controller is told to run the sequence programmed in IPCR1/0
+ * only through XSPI_IPCMD_START(); the emulation runs there. */
+#undef XSPI_IPCMD_START
+#define XSPI_IPCMD_START() xspi_emu_start()
+
+/* The TX FIFO wait and "reset" both evaluate the TXWE mask; evaluating
+ * it re-arms the TXWE status bit so the waits cannot spin on the host
+ * (the real controller raises it when the FIFO has room). */
+#undef XSPI_INTR_IPTXWE_MASK
+#define XSPI_INTR_IPTXWE_MASK ({ g_xspi_regs[0x14 / 4] |= 0x1 << 6; 0x1 << 6; })
+
+/* Software reset completes immediately on the host. */
+static void xspi_emu_sw_reset(void)
+{
+    XSPI_MCR0 = 0;
+}
+#undef XSPI_SWRESET
+#define XSPI_SWRESET() xspi_emu_sw_reset()
+
+/* Pull in the code under test. nxp_ls1028a_host.c is generated from
+ * hal/nxp_ls1028a.c by the Makefile (see there for the single
+ * mechanical difference). */
+#include "nxp_ls1028a_host.c"
+
+static void setup(void)
+{
+    memset(g_xspi_regs, 0, sizeof(g_xspi_regs));
+    memset(g_nor, 0xFF, sizeof(g_nor));
+    g_xspi_log_n = 0;
+    g_wel = 0;
+    g_busy = 0;
+    g_tfd_stream_len = 0;
+    XSPI_INTR = 0x1 << 6; /* TX FIFO write enable */
+}
+
+static void teardown(void)
+{
+}
+
+static void fill(uint8_t *buf, size_t len, uint8_t base)
+{
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        buf[i] = (uint8_t)(base + i);
+}
+
+/* No command in the log may have been rejected by the flash. */
+static int any_rejected(void)
+{
+    int i;
+
+    for (i = 0; i < g_xspi_log_n; i++) {
+        if (g_xspi_log[i].rejected)
+            return 1;
+    }
+    return 0;
+}
+
+/* A single-page write: one WEN, one Page Program, data lands. */
+START_TEST(test_write_single_page)
+{
+    uint8_t data[512];
+    size_t i;
+
+    fill(data, sizeof(data), 0x10);
+
+    ck_assert_int_eq(hal_flash_write(0, data, 256), 256);
+
+    ck_assert_int_eq(g_xspi_log_n, 2);
+    ck_assert_int_eq(g_xspi_log[0].cmd, XSPI_CMD_WEN);
+    ck_assert_int_eq(g_xspi_log[1].cmd, XSPI_CMD_PP);
+    ck_assert_uint_eq(g_xspi_log[1].addr, 0);
+    ck_assert_uint_eq(g_xspi_log[1].len, 256);
+    ck_assert_int_eq(any_rejected(), 0);
+    for (i = 0; i < 256; i++)
+        ck_assert_uint_eq(g_nor[i], data[i]);
+}
+END_TEST
+
+/* Multi-page write: the pre-fix single WEN left the latch clear for
+ * every Page Program after the first, so the flash rejected them and
+ * the NOR kept 0xFF while hal_flash_write() returned success. */
+START_TEST(test_write_multipart)
+{
+    uint8_t data[1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x20);
+
+    ck_assert_int_eq(hal_flash_write(0, data, 600), 600);
+
+    /* WEN before each of the three Page Programs */
+    ck_assert_int_eq(g_xspi_log_n, 6);
+    for (i = 0; i < 3; i++) {
+        ck_assert_int_eq(g_xspi_log[2 * i].cmd, XSPI_CMD_WEN);
+        ck_assert_int_eq(g_xspi_log[2 * i + 1].cmd, XSPI_CMD_PP);
+    }
+    ck_assert_uint_eq(g_xspi_log[1].len, 256);
+    ck_assert_uint_eq(g_xspi_log[3].addr, 256);
+    ck_assert_uint_eq(g_xspi_log[3].len, 256);
+    ck_assert_uint_eq(g_xspi_log[5].addr, 512);
+    ck_assert_uint_eq(g_xspi_log[5].len, 88);
+    ck_assert_int_eq(any_rejected(), 0);
+    for (i = 0; i < 600; i++)
+        ck_assert_uint_eq(g_nor[i], data[i]);
+    for (i = 600; i < sizeof(data); i++)
+        ck_assert_uint_eq(g_nor[i], 0xFF);
+}
+END_TEST
+
+/* Multi-page write starting at an unaligned address. The first
+ * chunk must stop at the physical page boundary (156 bytes), not run
+ * a full 256-byte Page Program across it. */
+START_TEST(test_write_unaligned)
+{
+    uint8_t data[1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x30);
+
+    ck_assert_int_eq(hal_flash_write(100, data, 600), 600);
+
+    ck_assert_int_eq(g_xspi_log_n, 6);
+    for (i = 0; i < 3; i++) {
+        ck_assert_int_eq(g_xspi_log[2 * i].cmd, XSPI_CMD_WEN);
+        ck_assert_int_eq(g_xspi_log[2 * i + 1].cmd, XSPI_CMD_PP);
+    }
+    ck_assert_uint_eq(g_xspi_log[1].addr, 100);
+    ck_assert_uint_eq(g_xspi_log[1].len, 156);
+    ck_assert_uint_eq(g_xspi_log[3].addr, 256);
+    ck_assert_uint_eq(g_xspi_log[3].len, 256);
+    ck_assert_uint_eq(g_xspi_log[5].addr, 512);
+    ck_assert_uint_eq(g_xspi_log[5].len, 188);
+    ck_assert_int_eq(any_rejected(), 0);
+    for (i = 0; i < 600; i++)
+        ck_assert_uint_eq(g_nor[100 + i], data[i]);
+    for (i = 0; i < 100; i++)
+        ck_assert_uint_eq(g_nor[i], 0xFF);
+    for (i = 700; i < sizeof(data); i++)
+        ck_assert_uint_eq(g_nor[i], 0xFF);
+}
+END_TEST
+
+/* A write that crosses a page boundary must not clobber the start of
+ * the next page: NOR wraps the write pointer at the boundary, so a
+ * 256-byte Page Program starting 16 bytes short of it would overwrite
+ * the first 16 bytes of the page. */
+START_TEST(test_write_crossing_page_no_wrap)
+{
+    uint8_t data[256];
+    size_t i;
+
+    /* Pre-seed the whole flash with a pattern. */
+    memset(g_nor, 0x5A, sizeof(g_nor));
+    fill(data, sizeof(data), 0x60);
+
+    ck_assert_int_eq(hal_flash_write(240, data, 256), 256);
+
+    /* No Page Program may cross a physical page boundary. */
+    for (i = 0; i < g_xspi_log_n; i++) {
+        if (g_xspi_log[i].cmd == XSPI_CMD_PP)
+            ck_assert_int_le(
+                (int)(g_xspi_log[i].addr % FLASH_PAGE_SIZE) +
+                (int)g_xspi_log[i].len, FLASH_PAGE_SIZE);
+    }
+    ck_assert_int_eq(g_xspi_log_n, 4); /* WEN+PP x2 */
+    ck_assert_uint_eq(g_xspi_log[1].addr, 240);
+    ck_assert_uint_eq(g_xspi_log[1].len, 16);
+    ck_assert_uint_eq(g_xspi_log[3].addr, 256);
+    ck_assert_uint_eq(g_xspi_log[3].len, 240);
+    ck_assert_int_eq(any_rejected(), 0);
+
+    /* The written bytes. */
+    for (i = 0; i < 256; i++)
+        ck_assert_uint_eq(g_nor[240 + i], data[i]);
+
+    /* The page start that a wrapping program would clobber. */
+    for (i = 0; i < 240; i++)
+        ck_assert_uint_eq(g_nor[i], 0x5A);
+    for (i = 496; i < sizeof(g_nor); i++)
+        ck_assert_uint_eq(g_nor[i], 0x5A);
+}
+END_TEST
+
+/* The EXT_FLASH wrapper has the same single-WEN bug. */
+START_TEST(test_ext_write_multipart)
+{
+    uint8_t data[1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x40);
+
+    ck_assert_int_eq(ext_flash_write(0, data, 600), 600);
+
+    ck_assert_int_eq(g_xspi_log_n, 6);
+    for (i = 0; i < 3; i++) {
+        ck_assert_int_eq(g_xspi_log[2 * i].cmd, XSPI_CMD_WEN);
+        ck_assert_int_eq(g_xspi_log[2 * i + 1].cmd, XSPI_CMD_PP);
+    }
+    ck_assert_int_eq(any_rejected(), 0);
+    for (i = 0; i < 600; i++)
+        ck_assert_uint_eq(g_nor[i], data[i]);
+}
+END_TEST
+
+/* Note: hal_flash_erase() already issues a Write Enable per sector
+ * inside its loop, so it is not affected by this finding (and its SE
+ * command encoding is a separate matter, not covered here).
+ *
+ * Suite for the write path: */
+Suite *ls1028a_xspi_suite(void)
+{
+    Suite *s = suite_create("ls1028a-xspi-write");
+    TCase *tc = tcase_create("ls1028a-xspi-write");
+
+    tcase_add_checked_fixture(tc, setup, teardown);
+    tcase_add_test(tc, test_write_single_page);
+    tcase_add_test(tc, test_write_multipart);
+    tcase_add_test(tc, test_write_unaligned);
+    tcase_add_test(tc, test_write_crossing_page_no_wrap);
+    tcase_add_test(tc, test_ext_write_multipart);
+
+    suite_add_tcase(s, tc);
+    return s;
+}
+
+int main(void)
+{
+    int fails;
+    Suite *s = ls1028a_xspi_suite();
+    SRunner *sr = srunner_create(s);
+
+    srunner_run_all(sr, CK_NORMAL);
+    fails = srunner_ntests_failed(sr);
+    srunner_free(sr);
+
+    return fails;
+}

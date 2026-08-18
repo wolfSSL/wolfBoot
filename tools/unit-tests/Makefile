@@ -101,6 +101,37 @@ TESTS+=unit-dice-token-size
 TESTS+=unit-dice-token-nosign
 TESTS+=unit-va416x0-fram
 TESTS+=unit-flash-write-cc26x2
+TESTS+=unit-p1021-fcm-bytes
+TESTS+=unit-ls1028a-xspi-write
+TESTS+=unit-zynq-erase-loop
+TESTS+=unit-zynq-ext-write
+TESTS+=unit-versal-qspi-dma
+TESTS+=unit-versal-ext-write
+TESTS+=unit-t10xx-qe-firmware
+TESTS+=unit-aurix-erased-fill
+TESTS+=unit-aurix-erased-fill-invert
+TESTS+=unit-t2080-fman-loader
+TESTS+=unit-stm32l5-write
+TESTS+=unit-stm32u5-write
+TESTS+=unit-nvm-cache-scrub
+TESTS+=unit-sdhci-uhs-recover
+TESTS+=unit-sdhci-wait-busy
+TESTS+=unit-ti-hercules-write
+TESTS+=unit-p1021-qe-firmware
+TESTS+=unit-t10xx-dts-memac
+
+# The x86-64 EFI unit test needs the gnu-efi development headers (same
+# dependency as the CMake x86_64_efi target). Probe and only add the test
+# when they are installed, so a default "make" stays portable on hosts
+# without them.
+HAVE_GNU_EFI := $(wildcard /usr/include/efi/efi.h)
+ENABLE_EFI_TESTS ?= $(if $(HAVE_GNU_EFI),1,0)
+ifeq ($(ENABLE_EFI_TESTS),1)
+TESTS+=unit-efi-x86-open-image
+else
+$(info Skipping x86-64 EFI unit test: gnu-efi headers not found (set ENABLE_EFI_TESTS=1 to force))
+endif
+
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-flash-write-samr21
@@ -756,6 +787,284 @@ unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-p
 unit-flash-write-cc26x2: ../../include/target.h unit-flash-write-cc26x2.c ../../hal/cc26x2.c
 	gcc -o $@ unit-flash-write-cc26x2.c -Icc26x2_ti_stub $(CFLAGS) $(LDFLAGS)
 
+# unit-p1021-fcm-bytes drives the real FCM byte-copy helpers from
+# hal/nxp_p1021.c (PowerPC). The P1021 FCM helpers are plain memory
+# copies, so the HAL is compiled on the host: the PowerPC-asm accessors
+# from nxp_ppc.h are shadowed inside the test, and nxp_p1021_host.c
+# (generated below) is identical to hal/nxp_p1021.c except that the three
+# bare __asm__ cache-barrier statements (DDR init / multi-core boot) are
+# blanked out, as they cannot assemble on x86.
+nxp_p1021_host.c: ../../hal/nxp_p1021.c
+	sed -e 's/^[[:space:]]*__asm__[[:space:]]*__volatile__("[^"]*");[[:space:]]*$$//' $< > $@
+
+unit-p1021-fcm-bytes: unit-p1021-fcm-bytes.c nxp_p1021_host.c
+	gcc -o $@ unit-p1021-fcm-bytes.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-ls1028a-xspi-write drives the real XSPI write/erase path from
+# hal/nxp_ls1028a.c. The driver is plain C register access apart from a
+# few bare `asm volatile("...")` barrier statements (DDR init, delay), so
+# nxp_ls1028a_host.c (generated below) is identical to the HAL file
+# except those statements are blanked out: they cannot assemble on x86.
+# The test rebases XSPI_BASE onto host memory and emulates the FlexSPI
+# controller (including the NOR write-enable latch) at the
+# XSPI_IPCMD_START() boundary.
+nxp_ls1028a_host.c: ../../hal/nxp_ls1028a.c
+	sed -e 's/^[[:space:]]*asm volatile("[^"]*");[[:space:]]*$$//' \
+	    -e 's/\*(volatile uint32_t \*)(addr) = val;/xspi_emu_tfd_write(addr, val);/' \
+	    $< > $@
+
+unit-ls1028a-xspi-write: unit-ls1028a-xspi-write.c nxp_ls1028a_host.c
+	gcc -o $@ unit-ls1028a-xspi-write.c -DTARGET_nxp_ls1028a -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-zynq-erase-loop runs the real ext_flash_erase() from hal/zynq.c
+# against emulated qspi_* functions. zynq.c needs the Xilinx SDK headers
+# (board build tree) and cannot be compiled on the host, but the bug
+# under test is entirely in this one function, so it is extracted
+# verbatim by sed into zynq_erase_extract.h.
+zynq_erase_extract.h: ../../hal/zynq.c
+	sed -n '/^int RAMFUNCTION ext_flash_erase(/,/^}/p' $< > $@
+
+unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
+	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
+
+# unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
+# (page chunks crossed physical NOR page boundaries and the
+# wrap clobbered the page start). Same extraction approach as the
+# erase test; the emulated NOR models the wrap.
+zynq_write_extract.h: ../../hal/zynq.c
+	sed -n '/^int RAMFUNCTION ext_flash_write(/,/^}/p' $< > $@
+
+unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
+	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
+# hal/versal.c (an unaligned read larger than the 4096-byte
+# temp buffer copied the full requested length out of the buffer). The
+# generated host copies differ from the real files only in:
+#   - ARM asm statements blanked (cannot assemble on x86; the cache
+#     maintenance helpers become no-ops, which is harmless because the
+#     test emulates the DMA);
+#   - VERSAL_QSPI_BASE rebased onto host memory (register offsets kept);
+#   - the real qspi_dma_wait() renamed to qspi_dma_wait_hw() so the test
+#     can provide a qspi_dma_wait() that performs the DMA move;
+# The test is built with -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64
+# -DARCH_64BIT (the file is guarded by TARGET_versal, the QSPI section by
+# EXT_FLASH, and the architecture check / hal.h prototypes by the ARCH
+# defines).
+# Only operand-less asm (barriers) may be deleted outright. An asm with
+# an output operand must be replaced by an assignment, or the generated
+# copy reads an uninitialised automatic -- undefined behaviour, and at
+# -O0 a guaranteed infinite loop in the timer helpers.
+versal_host.h: ../../hal/versal.h
+	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' \
+	    -e 's/__asm__ volatile\("mrs %0, CurrentEL" : "=r" \(el\)\);/el = 3UL << 2; \/* host stands in at EL3 *\//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
+
+# See versal_host.h above for why the two "mrs" reads are rewritten
+# rather than deleted. The host counter advances one tick per read at a
+# nominal 1 MHz, so hal_delay_us() terminates instead of spinning.
+versal_host.c: ../../hal/versal.c versal_host.h
+	sed -E -e 's|#include "hal/versal.h"|#include "versal_host.h"\nstatic uint64_t versal_host_ticks;|' \
+	    -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
+	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
+	    -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
+
+unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
+	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-versal-ext-write runs the real ext_flash_write() from
+# hal/versal.c (page chunks crossed physical NOR page
+# boundaries and the wrap clobbered the page start). The QspiDev_t
+# struct and the function are extracted verbatim (the qspi_* helpers
+# are file-static, so the test provides emulated ones); the emulated
+# NOR models the wrap.
+versal_qspidev_extract.h: ../../hal/versal.c
+	sed -n '/^\/\* QSPI device structure \*\//,/^} QspiDev_t;/p' $< > $@
+
+versal_ext_write_extract.h: ../../hal/versal.c
+	sed -n '/^int ext_flash_write(/,/^}/p' $< > $@
+
+unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_ext_write_extract.h versal_host.h
+	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-qe-firmware runs the real qe_check_firmware() from
+# hal/nxp_t10xx.c (the per-microcode code_offset was never
+# bounded against the declared image, so a self-consistent blob could
+# make the upload copy arbitrary memory into QE IRAM). The qe_*
+# structures and the check function are extracted verbatim; the check
+# path needs no register access. The four qe_* structs end where the
+# check function's comment begins (a range cannot stop at the 4th
+# '} QE_PACKED;').
+t10xx_qe_firmware_extract.h: ../../hal/nxp_t10xx.c
+	sed -n '/^\/\* Structure packing \*\//,/^\/\* Checks for valid QE firmware \*\//p' $< > $@
+	sed -n '/^static int qe_check_firmware(/,/^}/p' $< >> $@
+
+unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
+	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
+
+# unit-aurix-erased-fill runs the real cacheSector() and
+# programBytesToErasedFlash() from hal/aurix_tc3xx.c (the
+# uint32_t page buffers were filled with the byte-valued
+# FLASH_BYTE_ERASED, so default-polarity builds got 0x000000FF words
+# instead of the erased 0xFFFFFFFF). The tc3_flash_* API is emulated
+# on a host flash array; the same source is built for both flag
+# polarities and the assertions key off FLASH_BYTE_ERASED.
+aurix_erased_extract.h: ../../hal/aurix_tc3xx.c
+	sed -n '/^static void RAMFUNCTION cacheSector(uint32_t sectorAddress)/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION programBytesToErasedFlash/,/^}/p' $< >> $@
+
+unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
+	gcc -o $@ unit-aurix-erased-fill.c $(CFLAGS) $(LDFLAGS)
+
+unit-aurix-erased-fill-invert: unit-aurix-erased-fill.c aurix_erased_extract.h
+	gcc -o $@ unit-aurix-erased-fill.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
+
+# unit-t2080-fman-loader runs the real hal_fman_init() from
+# hal/nxp_t2080.c (the loader checked only the QEF magic and
+# then copied attacker-shaped offsets/counts into FMan IRAM). The qe_*
+# structures and the function are extracted verbatim; the test owns the
+# NOR image (FMAN slot at a nonzero bank offset so the remaining-extent
+# check is exercised) and the FMan IRAM registers. The four qe_*
+# structs end where hal_fman_init() begins (a range cannot stop at
+# the 4th '} QE_PACKED;'); sed '$d' trims the function signature.
+t2080_fman_extract.h: ../../hal/nxp_t2080.c
+	sed -n '/^\/\* Reuse QE firmware structures/,/^static int hal_fman_init(/p' $< | sed '$$d' > $@
+	sed -n '/^static int hal_fman_init(void)/,/^}/p' $< >> $@
+
+unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
+	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
+# (an 8-byte program unit was read whole even when len left a
+# partial unit, over-reading the caller's buffer and writing the excess
+# bytes to flash). The function and its wait/clear helpers are
+# extracted verbatim; FLASH_SR/CR live on a host register file and the
+# destination flash is a pre-filled host array, so the over-read is
+# observable through a canary after the source buffer.
+stm32l5_write_extract.h: ../../hal/stm32l5.c
+	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
+	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test:
+# the real hal_flash_write() and its wait/clear helpers from
+# hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
+# flash at a 32-bit host address, canary after the source buffer.
+stm32u5_write_extract.h: ../../hal/stm32u5.c
+	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
+	gcc -o $@ unit-stm32u5-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-nvm-cache-scrub runs the real trailer_write() and
+# partition_magic_write() from src/libwolfboot.c (under
+# NVM_FLASH_WRITEONCE the staged sector can hold the firmware
+# key/nonce, and the buffer was never scrubbed on return). The test
+# owns NVM_CACHE, stages a key-bearing sector image, and stubs the
+# flash layer; after each call the whole buffer must be zeroed.
+nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION trailer_write(/,/^}/p' $< >> $@
+	sed -n '/^static int RAMFUNCTION partition_magic_write(/,/^}/p' $< >> $@
+
+unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
+	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
+# real src/sdhci.c (any read error permanently switched the host
+# to 1.8V signaling with no rollback). sdhci_host.c (generated below) is
+# identical to the real file except the three `asm volatile` statements
+# are blanked (they cannot assemble on x86) and the real sdhci_read() is
+# renamed to sdhci_read_hw() so the test can provide a scripted one. The
+# platform-provided sdhci_reg_read()/sdhci_reg_write() are backed by a
+# host register array; hal_get_timer_us() and wolfBoot_printf() are
+# stubbed in the test.
+
+sdhci_host.c: ../../src/sdhci.c
+	sed -E -e 's/^[[:space:]]*asm volatile\("[^"]*"[^;]*\);[[:space:]]*//' \
+	    -e 's/^int sdhci_read\(/int sdhci_read_hw(/' \
+	    -e 's/^void __attribute__\(\(weak\)\) sdhci_platform_wdt_pet\(void\)$$/void sdhci_platform_wdt_pet_unused(void)/' $< > $@
+
+unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
+	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-wait-busy drives sdhci_wait_busy()'s DATA0/CMD13 loops
+# from the real src/sdhci.c (neither loop had a timeout, so a
+# stuck/removed card spun forever). The controller is scripted through
+# the host register file. SDHCI_WAIT_BUSY_TIMEOUT_MS is deliberately
+# NOT overridden: the test's timer stub steps 1ms per read so the
+# shipped default is the value under test.
+unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
+	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
+
+# unit-ti-hercules-write runs the real hal_flash_write() staging logic
+# from hal/ti_hercules.c (a short write crossing a block
+# boundary overran the staging buffer and lost the next block's bytes).
+# ti_hercules.c needs the TI FAPI vendor headers (board build tree) and
+# cannot be compiled on the host, but the bug is entirely in this
+# function, so the Makefile extracts hal_flash_unlock_helper(), the
+# WRITE_BLOCK_SIZE define, and hal_flash_write() verbatim into
+# ti_hercules_write_extract.h; the FAPI calls are emulated in the test,
+# with Fapi_issueProgrammingCommand() performing the program into a host
+# flash array.
+
+ti_hercules_write_extract.h: ../../hal/ti_hercules.c
+	sed -n '/^static inline int RAMFUNCTION hal_flash_unlock_helper/,/^}/p' $< > $@
+	grep '^#define WRITE_BLOCK_SIZE' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write(/,/^}/p' $< >> $@
+
+unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
+	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-p1021-qe-firmware drives the real qe_upload_firmware() from
+# hal/nxp_p1021.c (microcode offsets/counts were
+# never bounded to the 64 KiB buffer read from the update partition).
+# Reuses the nxp_p1021_host.c generated for the FCM tests, with the
+# PowerPC accessors shadowed the same way.
+
+unit-p1021-qe-firmware: unit-p1021-qe-firmware.c nxp_p1021_host.c
+	gcc -o $@ unit-p1021-qe-firmware.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-dts-memac drives the real hal_dts_fixup() FDT memac loop
+# (unvalidated cell-index into phydevs[5]) with hand-built
+# DTBs. Extracts the function plus its liodn/qman static tables from
+# hal/nxp_t10xx.c.
+nxp_t10xx_fixup_extract.h: ../../hal/nxp_t10xx.c
+	sed -n '/^struct liodn_id_table {/,/^};/p' $< > $@
+	sed -n '/#define SET_LIODN(/,/reg_offset = (void\*)reg/p' $< >> $@
+	sed -n '/^static const struct liodn_id_table liodn_tbl\[\] = {/,/^};/p' $< >> $@
+	sed -n '/^struct qportal_info {/,/^};/p' $< >> $@
+	sed -n '/#define SET_QP_INFO(/,/sdest = dest/p' $< >> $@
+	sed -n '/^static const struct qportal_info qp_info\[QMAN_NUM_PORTALS\] = {/,/^};/p' $< >> $@
+	grep -E '^#define FM1_(DTSEC[0-9]|10GEC1) ' $< >> $@
+	sed -n '/^int hal_dts_fixup(/,/^}/p' $< >> $@
+
+unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src/fdt.c
+	gcc -o $@ unit-t10xx-dts-memac.c $(CFLAGS) $(LDFLAGS)
+
+# unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
+# host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
+# x86-64 efi_callN() trampolines). This is the only host build coverage
+# hal/x86_64_efi.c has.
+#
+# -fshort-wchar matches the real x86_64_efi build (arch.mk), where the
+# 16-bit wchar_t is what makes efi_main's L"..." literals valid CHAR16
+# strings under gnu-efi 4.x (CHAR16 = uint16_t).
+unit-efi-x86-open-image: unit-efi-x86-open-image.c ../../hal/x86_64_efi.c
+	gcc -o $@ unit-efi-x86-open-image.c -I/usr/include/efi -I/usr/include/efi/x86_64 -DTARGET_X86_64_EFI -fshort-wchar $(CFLAGS) $(LDFLAGS)
+
 # unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
 # standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
@@ -792,7 +1101,29 @@ covclean:
 	rm -f *.gcov *.gcno *.gcda coverage.*
 	rm -f unit-sign-encrypted-output-*
 
+# Sources the extraction rules generate into this directory. Listed here
+# so "clean" removes them and so there is one place that names them.
+GENERATED_SRC:=aurix_erased_extract.h nvm_cache_scrub_extract.h \
+	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
+	sdhci_host.c stm32l5_write_extract.h stm32u5_write_extract.h \
+	t10xx_qe_firmware_extract.h t2080_fman_extract.h \
+	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
+	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
+	zynq_write_extract.h
+
+# Tests that are only in $(TESTS) when their toolchain/headers are
+# present; clean must remove them regardless, or a host that has since
+# lost gnu-efi/multilib keeps a stale binary forever.
+CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
+	unit-linux-loader-syssize
+
 clean: covclean
-	rm -f $(TESTS) *.o *.gcno *.gcda coverage.*
+	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \
+		coverage.*
+
+# The extraction rules below build one header with several appending
+# commands. Without this, a failure partway through leaves a truncated
+# file with a fresh mtime that the next make treats as up to date.
+.DELETE_ON_ERROR:
 
 .PHONY: FORCE

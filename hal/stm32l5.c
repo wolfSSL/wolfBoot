@@ -77,27 +77,39 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *src, *dst;
+    uint32_t *dst;
     uint32_t dword[2];
+    uint8_t *dword_bytes = (uint8_t *)dword;
     volatile uint32_t *sr, *cr;
 
     cr = &FLASH_CR;
     sr = &FLASH_SR;
 
     hal_flash_clear_errors(0);
-    src = (uint32_t *)data;
     dst = (uint32_t *)address;
 
 #if TZ_SECURE()
     if (address >= FLASH_BANK2_BASE)
-        hal_tz_claim_nonsecure_area(address, len);
+        /* The last partial double word is programmed whole, so
+         * claim up to the 8-byte boundary past len. */
+        hal_tz_claim_nonsecure_area(address, (len + 7) & ~7);
     /* Convert into secure address space */
     dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
 #endif
 
     while (i < len) {
-        dword[0] = src[i >> 2];
-        dword[1] = src[(i >> 2) + 1];
+        int j;
+
+        /* Read-modify-write the whole 64-bit unit (as stm32h5.c):
+         * there is no 32-bit program mode, so both words must be
+         * stored inside one PG window or nothing is programmed. */
+        for (j = 0; j < 8; j++) {
+            if (i + j < len)
+                dword_bytes[j] = data[i + j];
+            else
+                dword_bytes[j] = ((const uint8_t *)dst)[i + j];
+        }
+
         *cr |= FLASH_CR_PG;
         dst[i >> 2] = dword[0];
         ISB();
@@ -106,7 +118,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
-        i+=8;
+        i += 8;
     }
 #if TZ_SECURE()
     hal_tz_release_nonsecure_area();

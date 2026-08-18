@@ -463,7 +463,10 @@
 #define FLASH_SECTOR_CNT  (FLASH_BANK_SIZE / FLASH_ERASE_SIZE)
 #define FLASH_ERASE_TOUT  60000 /* Flash Erase Timeout (ms) */
 #define FLASH_WRITE_TOUT  500   /* Flash Write Timeout (ms) */
-#define FLASH_READY_MSK   (0x1 << 0)
+/* RDSR (0x05) bit 0 is WIP: 1 while a program or erase is running,
+ * 0 when the device is ready. The device ignores Write Enable and any
+ * further program/erase while WIP is set. */
+#define FLASH_SR_WIP_MSK  (0x1 << 0)
 #define MASK_32BIT        0xffffffff
 
 /* LUT register helper */

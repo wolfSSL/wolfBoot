@@ -65,12 +65,12 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *src, *dst;
+    uint32_t *dst;
     uint32_t qword[4];
+    uint8_t *qword_bytes = (uint8_t *)qword;
     volatile uint32_t *sr, *cr;
 
     hal_flash_clear_errors(0);
-    src = (uint32_t*)data;
     dst = (uint32_t*)address;
 
 #if (TZ_SECURE())
@@ -93,19 +93,23 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
 
     while (i < len) {
-        qword[0] = src[i >> 2];
-        qword[1] = src[(i >> 2) + 1];
-        qword[2] = src[(i >> 2) + 2];
-        qword[3] = src[(i >> 2) + 3];
+        int j;
+
+        /* Read-modify-write the whole 128-bit unit (as stm32h5.c):
+         * the program only starts on the 4th word, and a partial
+         * quad-word leaves FLASH_SR_WDW set, hanging the wait. */
+        for (j = 0; j < 16; j++) {
+            if (i + j < len)
+                qword_bytes[j] = data[i + j];
+            else
+                qword_bytes[j] = ((const uint8_t *)dst)[i + j];
+        }
+
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = qword[0];
-        ISB();
-        dst[(i >> 2) + 1] = qword[1];
-        ISB();
-        dst[(i >> 2) + 2] = qword[2];
-        ISB();
-        dst[(i >> 2) + 3] = qword[3];
-        ISB();
+        for (j = 0; j < 4; j++) {
+            dst[(i >> 2) + j] = qword[j];
+            ISB();
+        }
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;

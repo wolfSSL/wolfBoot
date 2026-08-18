@@ -2045,6 +2045,7 @@ struct qe_firmware {
 static int qe_check_firmware(const struct qe_firmware *firmware, const char* t)
 {
     unsigned int i;
+    uint64_t mcode_end;
 #ifdef ENABLE_QE_CRC32
     uint32_t crc;
 #endif
@@ -2087,6 +2088,19 @@ static int qe_check_firmware(const struct qe_firmware *firmware, const char* t)
     if (length != calc_size + sizeof(uint32_t)) {
         wolfBoot_printf("%s: length %d invalid!\n", t, length);
         return -1;
+    }
+
+    /* The microcode must lie inside the declared image: the upload
+     * reads code_offset + 4*count bytes from the firmware start, so an
+     * out-of-image offset would copy arbitrary memory into QE IRAM and
+     * program arbitrary traps. 64-bit so the sum cannot wrap. */
+    for (i = 0; i < firmware->count; i++) {
+        mcode_end = (uint64_t)firmware->microcode[i].code_offset +
+            (uint64_t)4 * firmware->microcode[i].count;
+        if (mcode_end > length) {
+            wolfBoot_printf("%s: microcode %u out of bounds!\n", t, i);
+            return -1;
+        }
     }
 
 #ifdef ENABLE_QE_CRC32
@@ -3377,6 +3391,7 @@ int hal_dts_fixup(void* dts_addr)
 #ifndef BUILD_LOADER_STAGE1
     struct fdt_header *fdt = (struct fdt_header *)dts_addr;
     int off, i;
+    uint32_t cell;
     uint32_t *reg;
     const char* prev_compat;
 
@@ -3517,7 +3532,24 @@ int hal_dts_fixup(void* dts_addr)
         reg = (uint32_t*)fdt_getprop(fdt, off, "cell-index", NULL);
         if (reg == NULL)
             break;
-        i = (int)fdt32_to_cpu(*reg);
+        cell = fdt32_to_cpu(*reg);
+
+        /* NXP's qoriq-fman3 dtsi numbers the 1G memacs 0..3 and the
+         * 10G memacs 0x8/0x9; phydevs holds 1G at 0..3 and the single
+         * 10G port at FM1_10GEC1. Skip anything with no slot. */
+        if (cell <= FM1_DTSEC4)
+            i = (int)cell;
+        else if (cell == 8)
+            i = FM1_10GEC1;
+        else
+            i = -1;
+
+        if (i < 0 || i >= (int)(sizeof(phydevs) / sizeof(phydevs[0]))) {
+            wolfBoot_printf("FDT: Ethernet cell-index %u unsupported, "
+                "skipping\n", (unsigned)cell);
+            off = fdt_node_offset_by_compatible(fdt, off, "fsl,fman-memac");
+            continue;
+        }
 
         wolfBoot_printf("FDT: Ethernet%d: Offset %d\n", i, off);
 

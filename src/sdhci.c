@@ -63,10 +63,13 @@ int __attribute__((weak)) sdhci_platform_block_copy(
     memcpy(dst, src, len);
     return 0;
 }
+#endif
+
+/* Watchdog service hook, called by the bounded busy waits on every
+ * build. A platform with a hardware watchdog overrides it. */
 void __attribute__((weak)) sdhci_platform_wdt_pet(void)
 {
 }
-#endif
 
 /* ============================================================================
  * Internal state
@@ -394,8 +397,14 @@ static int sdhci_set_power(uint32_t voltage)
  *
  * This restores signaling the card is already using rather than initiating a
  * voltage switch, so no CMD11 sequence is involved. It runs at most once per
- * boot, and only after a transfer has already failed, so a cold boot never
- * reaches it.
+ * boot, and only after a transfer has already failed.
+ *
+ * Note: on a plain 3.3V cold boot this is a guess - any first transfer
+ * failure (CRC, DMA, media, controller) triggers it. The guess is
+ * self-correcting: the caller must undo the switch with
+ * sdhci_uhs_recover_rollback() if the retry fails, so a wrong guess
+ * leaves the host where it started rather than in a voltage state the
+ * card is not using.
  *
  * Returns 0 if the switch was applied and the caller should retry. */
 static int sdhci_uhs_recover(void)
@@ -418,6 +427,27 @@ static int sdhci_uhs_recover(void)
     udelay(1000);
 
     return 0;
+}
+
+/* Undo a failed sdhci_uhs_recover(): the retry at 1.8V did not fix the
+ * transfer, so this is not a warm-reset UHS condition. Restore 3.3V
+ * signaling and the clock so the host is not left (for this boot and
+ * the next stage) in a voltage state the card is not using. */
+static void sdhci_uhs_recover_rollback(void)
+{
+    wolfBoot_printf("SDHCI: 1.8V retry failed, restoring 3.3V signaling\n");
+
+    /* Roll the one-shot back with the registers: back at 3.3V with the
+     * recovery spent, a real UHS-I card could never be retried. */
+    g_uhs_recovered = 0;
+
+    sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
+
+    sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_V18SE);
+    udelay(5000); /* let the level shifter settle */
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_SDCE);
+    udelay(1000);
 }
 #endif /* DISK_SDCARD */
 
@@ -629,17 +659,41 @@ int sdhci_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
     return status;
 }
 
-/* TODO: Add timeout */
+/* Worst-case programming time (erase) in milliseconds. Finite, so a
+ * removed card or a card stuck in the programming state fails with an
+ * I/O error instead of spinning forever. The budget is sized
+ * for an erase because sdhci_wait_busy() is the wait after every R1b
+ * command, erase included; the watchdog is serviced inside both loops
+ * so a long wait cannot turn into a reset. */
+#ifndef SDHCI_WAIT_BUSY_TIMEOUT_MS
+#define SDHCI_WAIT_BUSY_TIMEOUT_MS 30000
+#endif
+
 static int sdhci_wait_busy(int check_dat0)
 {
     uint32_t status;
+    uint64_t start = hal_get_timer_us();
+    /* Compare in microseconds: a 64-bit division inside the poll loop
+     * pulls in a libgcc helper call on 32-bit targets. */
+    const uint64_t timeout_us = (uint64_t)SDHCI_WAIT_BUSY_TIMEOUT_MS * 1000U;
+
     if (check_dat0) {
         /* wait for DATA0 not busy */
-        while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0);
+        while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_DAT0_LVL) == 0) {
+            sdhci_platform_wdt_pet();
+            if (hal_get_timer_us() - start > timeout_us)
+                return -1;
+        }
     }
-    /* wait for CMD13 */
+    /* Wait for CMD13. The deadline is deliberately shared with the DAT0
+     * wait above rather than re-armed, so the whole call stays bounded
+     * by one timeout instead of two. */
     while ((status = sdhci_cmd(MMC_CMD13_SEND_STATUS,
-        (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY);
+        (g_rca << SD_RCA_SHIFT), SDHCI_RESP_R1)) == DEVICE_BUSY) {
+        sdhci_platform_wdt_pet();
+        if (hal_get_timer_us() - start > timeout_us)
+            return -1;
+    }
     return status;
 }
 
@@ -1521,15 +1575,11 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         }
     }
 
-    /* Check for errors.
-     *
-     * An earlier failure (e.g. the SDMA wait above timing out) must survive
-     * this block. A wolfBoot-side wait timeout does not necessarily set an
-     * SRS12 error bit, so without preserving `status` the CMD12 / wait-busy
-     * results below would overwrite it and sdhci_transfer() would report
-     * success for a transfer that never completed. The caller then uses a
-     * partially filled buffer, which surfaces much later as a bogus image
-     * integrity failure rather than as the I/O error it actually is. */
+    /* Check for errors. An earlier failure (e.g. the SDMA wait timing
+     * out) must survive this block: a wolfBoot-side timeout need not set
+     * an SRS12 error bit, so without preserving `status` the CMD12 and
+     * wait-busy results below would report success for a transfer that
+     * never completed. */
     reg = SDHCI_REG(SDHCI_SRS12);
     if ((reg & SDHCI_SRS12_ERR_STAT) == 0) {
         /* If multi-block, send CMD12 to stop transfer. This is issued even
@@ -1773,6 +1823,9 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
     uint32_t read_sz, block_addr;
     uint32_t tmp_block[SDHCI_BLOCK_SIZE/sizeof(uint32_t)];
     uint32_t start_offset = (start % SDHCI_BLOCK_SIZE);
+#ifdef DISK_SDCARD
+    int uhs_switched = 0;
+#endif /* DISK_SDCARD */
     (void)drv; /* only one drive supported */
 
 #ifdef DEBUG_SDHCI
@@ -1878,8 +1931,14 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         #endif
         }
 #ifdef DISK_SDCARD
-        if (status != 0 && sdhci_uhs_recover() == 0) {
+        if (status != 0 && !uhs_switched && sdhci_uhs_recover() == 0) {
+            uhs_switched = 1;
             continue; /* retry this chunk with matched signaling */
+        }
+        if (status != 0 && uhs_switched) {
+            /* The 1.8V retry failed: this is not a warm-reset UHS
+             * condition, restore 3.3V signaling before giving up. */
+            sdhci_uhs_recover_rollback();
         }
 #endif /* DISK_SDCARD */
         if (status != 0) {
@@ -1889,6 +1948,9 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         start += read_sz;
         buf += read_sz;
         count -= read_sz;
+#ifdef DISK_SDCARD
+        uhs_switched = 0; /* chunk read cleanly */
+#endif /* DISK_SDCARD */
     }
     return status;
 }

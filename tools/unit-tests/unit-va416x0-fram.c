@@ -4,8 +4,12 @@
 #include <string.h>
 
 #define WOLFBOOT_UNIT_TEST_VA416X0_FRAM
+#define EXT_FLASH
 
-#define FRAM_SIZE (256U * 1024U)
+/* The host shadow IRAM lives at a 64-bit pointer address, so keep the
+ * FRAM bounds check from rejecting the test buffer (the hardware value
+ * is 256 KiB). */
+#define FRAM_SIZE (0xFFFFFFFFU)
 #define ROM_SPI_BANK 0
 #define SPI_NUM_BANKS 1
 #define SPI_STATUS_TFE_Msk 0x01U
@@ -60,6 +64,16 @@ enum {
 
 static mock_spi_regs_t mock_vor_spi;
 #define VOR_SPI (&mock_vor_spi)
+
+/* Mock of the Vorago SYSCONFIG register block (vendor headers are not
+ * available on the host). */
+typedef struct {
+    uint32_t ROM_PROT;
+} mock_vor_sysconfig_t;
+
+static mock_vor_sysconfig_t mock_vor_sysconfig;
+#define VOR_SYSCONFIG (&mock_vor_sysconfig)
+#define SYSCONFIG_ROM_PROT_WREN_Msk (1U << 0)
 
 static hal_status_t transmit_script[8];
 static bool transmit_close_flags[8];
@@ -169,12 +183,108 @@ START_TEST(test_fram_write_command_failure_aborts_split_transaction)
 }
 END_TEST
 
+/* Shadow IRAM buffer for the ext_flash_erase() tests: the HAL writes
+ * the erased bytes through the raw address, so the address must point
+ * at real host memory. */
+static uint8_t g_iram[64];
+
+/* iram_write/iram_fill compute the enclosing word with
+ * (uintptr_t)dst & ~3u - a 32-bit mask. That is the whole pointer on
+ * the 32-bit va416x0 target, but on 64-bit platforms it zeroes the
+ * high word of the address. Unaligned start and end so off != 0 and
+ * the word boundary crossing are exercised. */
+START_TEST(test_iram_write_unaligned_64bit_addr)
+{
+    uint8_t data[12];
+    int i;
+
+    memset(g_iram, 0x00, sizeof(g_iram));
+    for (i = 0; i < 12; i++)
+        data[i] = (uint8_t)(0x40 + i);
+
+    iram_write((void *)(g_iram + 1), data, 12);
+
+    for (i = 0; i < 12; i++)
+        ck_assert_uint_eq(g_iram[1 + i], data[i]);
+    /* Neighboring bytes untouched. */
+    ck_assert_uint_eq(g_iram[0], 0x00);
+    ck_assert_uint_eq(g_iram[13], 0x00);
+}
+END_TEST
+
+START_TEST(test_iram_fill_unaligned_64bit_addr)
+{
+    int i;
+
+    memset(g_iram, 0x00, sizeof(g_iram));
+    iram_fill((void *)(g_iram + 2), 0xEE, 10);
+
+    for (i = 0; i < 10; i++)
+        ck_assert_uint_eq(g_iram[2 + i], 0xEE);
+    ck_assert_uint_eq(g_iram[0], 0x00);
+    ck_assert_uint_eq(g_iram[1], 0x00);
+    ck_assert_uint_eq(g_iram[12], 0x00);
+}
+END_TEST
+
+/* A successful erase returns 0 and fills the shadow IRAM with 0xFF.
+ * The 64 byte erase spans two 32 byte FRAM chunks (six SPI transfers).
+ */
+START_TEST(test_ext_flash_erase_success_fills_iram)
+{
+    hal_status_t ok_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok,
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    int i;
+
+    reset_spi_mocks();
+    memset(g_iram, 0xA5, sizeof(g_iram));
+
+    set_transmit_script(ok_script, 6);
+    ck_assert_int_eq(ext_flash_erase((uintptr_t)g_iram, 64), 0);
+    ck_assert_int_eq(transmit_call_count, 6);
+    for (i = 0; i < 64; i++)
+        ck_assert_uint_eq(g_iram[i], 0xFF);
+}
+END_TEST
+
+/* A failed FRAM erase must make ext_flash_erase() return a negative
+ * error code. Pre-fix, FRAM_Erase() negated the hal_status_t and
+ * ext_flash_erase() negated it a second time, so a failure returned
+ * +1/+2 - a success-looking value to callers testing ret < 0 (e.g.
+ * diag_erase in src/libwolfboot.c). */
+START_TEST(test_ext_flash_erase_failure_returns_negative)
+{
+    hal_status_t fail_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_err
+    };
+    int i;
+    int ret;
+
+    reset_spi_mocks();
+    memset(g_iram, 0xA5, sizeof(g_iram));
+
+    set_transmit_script(fail_script, 3);
+    ret = ext_flash_erase((uintptr_t)g_iram, 32);
+    ck_assert_int_lt(ret, 0);
+
+    /* The shadow IRAM must be left untouched on failure. */
+    for (i = 0; i < 32; i++)
+        ck_assert_uint_eq(g_iram[i], 0xA5);
+}
+END_TEST
+
 Suite *va416x0_fram_suite(void)
 {
     Suite *s = suite_create("va416x0-fram");
     TCase *tc = tcase_create("fram");
 
     tcase_add_test(tc, test_fram_write_command_failure_aborts_split_transaction);
+    tcase_add_test(tc, test_iram_write_unaligned_64bit_addr);
+    tcase_add_test(tc, test_iram_fill_unaligned_64bit_addr);
+    tcase_add_test(tc, test_ext_flash_erase_success_fills_iram);
+    tcase_add_test(tc, test_ext_flash_erase_failure_returns_negative);
     suite_add_tcase(s, tc);
 
     return s;

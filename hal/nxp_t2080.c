@@ -647,6 +647,7 @@ static int hal_fman_init(void)
 {
     const struct qe_firmware *fw = (const struct qe_firmware *)FMAN_FW_ADDR;
     const struct qe_header *hdr = &fw->header;
+    uint64_t fw_off, extent;
     unsigned int i;
 
     /* Guard: FMAN_FW_ADDR must lie in the NOR window, else the magic read
@@ -662,10 +663,64 @@ static int hal_fman_init(void)
         return -1;
     }
 
+    /* The guard above only proved FMAN_FW_ADDR itself is in the NOR
+     * window; bound the fixed part before dereferencing it. */
+    fw_off = (uint64_t)((uintptr_t)fw - (uintptr_t)FLASH_BASE_ADDR);
+    extent = (uint64_t)FLASH_BANK_SIZE - fw_off;
+    if (extent < (uint64_t)sizeof(struct qe_firmware)) {
+        wolfBoot_printf("FMAN: container truncated by NOR end, skipping\n");
+        return -1;
+    }
+
     /* Check firmware magic */
     if (hdr->magic[0] != 'Q' || hdr->magic[1] != 'E' || hdr->magic[2] != 'F') {
         wolfBoot_printf("FMAN: no firmware at 0x%x\n", (unsigned)FMAN_FW_ADDR);
         return -1;
+    }
+
+    /* Validate before uploading, as the T10xx qe_check_firmware() path
+     * does: version, count, self-consistent length, every code range
+     * inside the image, the image inside the NOR bank. 64-bit so the
+     * sums cannot wrap; FMan stays unconfigured on any mismatch. */
+    if (hdr->version != 1) {
+        wolfBoot_printf("FMAN: version %d unsupported\n", hdr->version);
+        return -1;
+    }
+    if (fw->count < 1 || fw->count > QE_MAX_RISC) {
+        wolfBoot_printf("FMAN: count %d invalid\n", fw->count);
+        return -1;
+    }
+    {
+        uint64_t length = hdr->length;
+        uint64_t table = (uint64_t)sizeof(struct qe_firmware) +
+            (uint64_t)(fw->count - 1) * sizeof(struct qe_microcode);
+        uint64_t calc;
+        unsigned int k;
+
+        /* Bound the table and the declared image before walking
+         * them: the table sits past the fixed part checked above. */
+        if (table > extent || length > extent) {
+            wolfBoot_printf("FMAN: image %lu exceeds NOR extent %lu\n",
+                (unsigned long)length, (unsigned long)extent);
+            return -1;
+        }
+
+        calc = table;
+        for (k = 0; k < fw->count; k++)
+            calc += (uint64_t)4 * fw->microcode[k].count;
+
+        if (length != calc + sizeof(uint32_t)) {
+            wolfBoot_printf("FMAN: length %lu invalid\n",
+                (unsigned long)length);
+            return -1;
+        }
+        for (k = 0; k < fw->count; k++) {
+            if ((uint64_t)fw->microcode[k].code_offset +
+                    (uint64_t)4 * fw->microcode[k].count > length) {
+                wolfBoot_printf("FMAN: microcode %u out of bounds\n", k);
+                return -1;
+            }
+        }
     }
 
     for (i = 0; i < fw->count; i++) {

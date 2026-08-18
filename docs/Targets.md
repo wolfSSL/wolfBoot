@@ -3756,8 +3756,27 @@ make wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 * Create the decrypt key + nonce
 
 ```
-printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
+printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
 ```
+
+  AES256-CTR takes a 32-byte key followed by a 16-byte IV, so the file is
+  48 bytes. A shorter one fails with `Error reading IV`.
+
+* Provision the same key into the bootloader
+
+  The raspi3 HAL no longer ships a hardcoded key, so the bootloader has
+  none until one is provisioned and encrypted updates fail closed. To run
+  this demo, call `wolfBoot_set_encrypt_key()` with the key and nonce from
+  the file above at the end of `hal_init()` in `hal/raspi3.c`. That is a
+  development-only shortcut; a real deployment provisions a per-device key
+  from outside the firmware image (see
+  [encrypted_partitions.md](encrypted_partitions.md)).
+
+  CI builds this example and runs the signing, encryption and assembly
+  steps above (`.github/workflows/test-raspi3-encrypted.yml`), but does not
+  boot the result: the target produces no console output under QEMU, so
+  there is nothing for a boot test to assert on. Runtime coverage would
+  need that fixed and a provisioning hook the target does not have.
 
 * Sign and encrypt Linux kernel image
 ```

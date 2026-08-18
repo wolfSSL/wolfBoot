@@ -1,0 +1,246 @@
+/* unit-p1021-qe-firmware.c
+ *
+ * Regression test (bounds part): qe_upload_firmware() in
+ * hal/nxp_p1021.c checked only the blob's self-consistency (magic,
+ * version, count, length, optional CRC32). The per-microcode
+ * code_offset/count and the total length were never bounded to the
+ * 64 KiB buffer read from NAND, so a structurally valid blob could make
+ * the upload loop read arbitrarily far past it.
+ *
+ * Authenticating the microcode before activation is a separate design
+ * question (keys, signed manifest, build flow); this covers only the
+ * fail-closed bounding.
+ *
+ * Compiles the real HAL via nxp_p1021_host.c with the PowerPC accessors
+ * shadowed, and drives qe_upload_firmware() with crafted blobs.
+ * Copyright (C) 2026 wolfSSL Inc.
+ *
+ * This file is part of wolfBoot.
+ *
+ * wolfBoot is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * wolfBoot is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ */
+
+#include <check.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#define TARGET_nxp_p1021
+
+/* Back the CCSR register space with host memory so MMIO-style accesses
+ * land somewhere harmless. */
+static uint32_t g_ccsr_regs[0x200000 / sizeof(uint32_t)];
+
+#include "nxp_ppc.h"
+
+#undef CCSRBAR
+#define CCSRBAR ((uintptr_t)g_ccsr_regs)
+
+/* Shadow the PowerPC asm accessors with host equivalents (see
+ * unit-p1021-fcm-bytes.c for the rationale). set32 goes through a hook
+ * so the tests can count writes to QE instruction RAM. */
+#define get8(addr)  (*(const volatile uint8_t *)(addr))
+#define set8(addr, v)  (*(volatile uint8_t *)(addr) = (uint8_t)(v))
+#define get16(addr)  (*(const volatile uint16_t *)(addr))
+#define set16(addr, v)  (*(volatile uint16_t *)(addr) = (uint16_t)(v))
+#define get32(addr)  (*(const volatile uint32_t *)(addr))
+
+static uint32_t g_iram_writes;
+/* Defined below, after the HAL include (needs the QE register macros). */
+static void p1021_set32(volatile uint32_t *addr, uint32_t v);
+#define set32(addr, v) p1021_set32((addr), (uint32_t)(v))
+#undef mtspr
+#define mtspr(rn, v) ((void)0)
+#undef mfspr
+#define mfspr(rn) (0)
+#undef mfmsr
+#define mfmsr() (0)
+#undef mtmsr
+#define mtmsr(v) ((void)0)
+
+/* PPC runtime symbols referenced by the emitted init code; never called
+ * by the tests. */
+uint32_t _secondary_start_page;
+uint32_t _second_half_boot_page;
+uint32_t _bootpg_addr;
+uint32_t _spin_table;
+uint32_t _spin_table_addr;
+
+unsigned long long get_ticks(void)
+{
+    return 0;
+}
+void wait_ticks(unsigned long long t)
+{
+    (void)t;
+}
+unsigned long get_pc(void)
+{
+    return 0;
+}
+void set_tlb(uint8_t tlb, uint8_t esel, uint32_t epn, uint32_t rpn,
+        uint32_t urpn, uint8_t perms, uint8_t wimge, uint8_t ts,
+        uint8_t tsize, uint8_t iprot)
+{
+    (void)tlb; (void)esel; (void)epn; (void)rpn; (void)urpn;
+    (void)perms; (void)wimge; (void)ts; (void)tsize; (void)iprot;
+}
+void disable_tlb1(uint8_t esel)
+{
+    (void)esel;
+}
+void flush_cache(uint32_t start_addr, uint32_t size)
+{
+    (void)start_addr; (void)size;
+}
+void set_law(uint8_t idx, uint32_t addr_h, uint32_t addr_l,
+        uint32_t trgt_id, uint32_t law_sz, int reset)
+{
+    (void)idx; (void)addr_h; (void)addr_l;
+    (void)trgt_id; (void)law_sz; (void)reset;
+}
+
+/* The code under test (its statics become visible here). */
+#include "nxp_p1021_host.c"
+
+static void p1021_set32(volatile uint32_t *addr, uint32_t v)
+{
+    if (addr == (volatile uint32_t *)QE_IRAM_IDATA)
+        g_iram_writes++;
+    *(volatile uint32_t *)addr = v;
+}
+
+/* Blob workspace: 512 KiB so that pre-fix out-of-bounds reads (up to
+ * 256 KiB past a 64 KiB blob) stay inside host memory. */
+static uint8_t g_blob[512 * 1024];
+
+static uint32_t consistent_length(uint32_t nwords)
+{
+    return sizeof(struct qe_firmware) + nwords * sizeof(uint32_t) +
+        sizeof(uint32_t);
+}
+
+static struct qe_firmware *make_blob(uint32_t code_offset,
+        uint32_t nwords, uint32_t length)
+{
+    struct qe_firmware *fw = (struct qe_firmware *)g_blob;
+
+    memset(g_blob, 0, sizeof(g_blob));
+    fw->header.length = length;
+    fw->header.magic[0] = 'Q';
+    fw->header.magic[1] = 'E';
+    fw->header.magic[2] = 'F';
+    fw->header.version = 1;
+    fw->split = 1;
+    fw->count = 1;
+    fw->microcode[0].code_offset = code_offset;
+    fw->microcode[0].count = nwords;
+
+    return fw;
+}
+
+static void setup(void)
+{
+    memset(g_ccsr_regs, 0, sizeof(g_ccsr_regs));
+    g_iram_writes = 0;
+}
+
+static void teardown(void)
+{
+}
+
+/* A well-formed blob with its code right after the header is accepted
+ * and its words are uploaded to instruction RAM. */
+START_TEST(test_valid_blob_accepted)
+{
+    const uint32_t n = 64;
+    struct qe_firmware *fw =
+        make_blob(sizeof(struct qe_firmware), n, consistent_length(n));
+
+    ck_assert_int_eq(qe_upload_firmware(fw), 0);
+    ck_assert_uint_eq(g_iram_writes, n);
+}
+END_TEST
+
+/* A blob whose microcode sits past the end of the declared length is
+ * rejected even though the length is self-consistent. Pre-fix this
+ * passed validation and read/copyed past the buffer. */
+START_TEST(test_mcode_out_of_bounds_rejected)
+{
+    const uint32_t n = 64;
+    const uint32_t offset = sizeof(struct qe_firmware) + 0x44;
+    struct qe_firmware *fw =
+        make_blob(offset, n, consistent_length(n));
+
+    ck_assert_int_eq(qe_upload_firmware(fw), -1);
+    ck_assert_uint_eq(g_iram_writes, 0);
+}
+END_TEST
+
+/* A self-consistent blob longer than the 64 KiB buffer that was read
+ * from NAND is rejected. Pre-fix this passed validation and the upload
+ * loop read up to 256 KiB past the buffer. */
+START_TEST(test_length_exceeds_buffer_rejected)
+{
+    const uint32_t n = QE_FW_LENGTH / sizeof(uint32_t); /* 16384 words */
+    struct qe_firmware *fw =
+        make_blob(sizeof(struct qe_firmware), n, consistent_length(n));
+
+    ck_assert_int_eq(qe_upload_firmware(fw), -1);
+    ck_assert_uint_eq(g_iram_writes, 0);
+}
+END_TEST
+
+/* A blob with a bad magic is rejected (existing behavior, guard). */
+START_TEST(test_bad_magic_rejected)
+{
+    const uint32_t n = 16;
+    struct qe_firmware *fw =
+        make_blob(sizeof(struct qe_firmware), n, consistent_length(n));
+    uint8_t *p = (uint8_t *)fw;
+
+    p[4] = 'X'; /* clobber the magic */
+    ck_assert_int_eq(qe_upload_firmware(fw), -1);
+    ck_assert_uint_eq(g_iram_writes, 0);
+}
+END_TEST
+
+Suite *p1021_qe_suite(void)
+{
+    Suite *s = suite_create("p1021-qe-firmware");
+    TCase *tc = tcase_create("p1021-qe-firmware");
+
+    tcase_add_checked_fixture(tc, setup, teardown);
+    tcase_add_test(tc, test_valid_blob_accepted);
+    tcase_add_test(tc, test_mcode_out_of_bounds_rejected);
+    tcase_add_test(tc, test_length_exceeds_buffer_rejected);
+    tcase_add_test(tc, test_bad_magic_rejected);
+
+    suite_add_tcase(s, tc);
+    return s;
+}
+
+int main(void)
+{
+    int fails;
+    Suite *s = p1021_qe_suite();
+    SRunner *sr = srunner_create(s);
+
+    srunner_run_all(sr, CK_NORMAL);
+    fails = srunner_ntests_failed(sr);
+    srunner_free(sr);
+
+    return fails;
+}

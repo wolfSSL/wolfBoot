@@ -28,8 +28,6 @@
 #   error "wolfBoot raspi3 HAL: wrong architecture selected. Please compile with ARCH=AARCH64."
 #endif
 
-#define TEST_ENCRYPT
-
 #if defined(DEBUG_UART)
     #define PRINTF_ENABLED
 #endif
@@ -170,8 +168,6 @@ void uart_write(const char* buf, uint32_t sz) {
 
 void uart_init()
 {
-    register unsigned int c;
-
     /* initialize UART. turn off UART 0*/
     *UART0_CR = 0;
 
@@ -296,11 +292,6 @@ static uint32_t getclocks(uint8_t cid)
 /* public HAL functions */
 void hal_init(void)
 {
-    #if defined(TEST_ENCRYPT) && defined (EXT_ENCRYPTED)
-    char enc_key[] = "0123456789abcdef0123456789abcdef"
-        "0123456789abcdef";
-    wolfBoot_set_encrypt_key((uint8_t *)enc_key,(uint8_t *)(enc_key +  32));
-    #endif
 #if defined(DEBUG_UART)
     uart_init();
 

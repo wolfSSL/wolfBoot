@@ -186,7 +186,10 @@ static uint32_t ext_cache;
 
 /* EXT_ENCRYPTED is listed because the key-handling code below calls
  * ForceZero() unconditionally, including from the test-app build of this file,
- * where __WOLFBOOT is not defined. */
+ * where __WOLFBOOT is not defined. NVM_FLASH_WRITEONCE is deliberately NOT
+ * listed: the partition-trailer helpers scrub with nvm_cache_scrub(), so the
+ * NVM path stays free of the wolfSSL headers that tools/check_config and the
+ * STM32Cube test-app cannot resolve. */
 #if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED)
 #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
 #include <wolfssl/wolfcrypt/types.h>
@@ -252,6 +255,20 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #include <string.h>
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
+
+/* Scrub the staging buffer without depending on wolfCrypt: ForceZero()
+ * would pull wolfSSL headers into every NVM_FLASH_WRITEONCE build,
+ * including tools/check_config and the STM32Cube test-app, which cannot
+ * supply them. A volatile byte loop also suits the RAMFUNCTION callers,
+ * since ForceZero() lives in flash. */
+static void RAMFUNCTION nvm_cache_scrub(void)
+{
+    volatile uint8_t *p = (volatile uint8_t *)NVM_CACHE;
+    unsigned int i;
+
+    for (i = 0; i < NVM_CACHE_SIZE; i++)
+        p[i] = 0;
+}
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
     return *(uint8_t*)((uintptr_t)base - off); /* ignore array bounds error */
@@ -389,12 +406,18 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 #else
     ret = hal_flash_write(addr_write, NVM_CACHE, NVM_CACHE_SIZE);
 #endif
-    if (ret != 0)
+    if (ret != 0) {
+        /* The staged sector may hold the firmware key/nonce (see
+         * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
+         * returning, success or not. */
+        nvm_cache_scrub();
         return ret;
+    }
 
     /* Once a copy has been written, erase the older sector */
     ret = hal_flash_erase(addr_read, NVM_CACHE_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
+    nvm_cache_scrub();
     return ret;
 }
 
@@ -420,10 +443,16 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
-    if (ret != 0)
+    if (ret != 0) {
+        /* The staged sector may hold the firmware key/nonce (see
+         * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
+         * returning, success or not. */
+        nvm_cache_scrub();
         return ret;
+    }
     nvm_cached_sector = !nvm_cached_sector;
     ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
+    nvm_cache_scrub();
     return ret;
 }
 #ifdef __CCRX__
@@ -2001,8 +2030,11 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
 exit_lock:
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
-    !defined(WOLFBOOT_ENCRYPT_CACHE)
+    /* Scrub the staged key/nonce on every build where wolfBoot owns the
+     * buffer. The static cases (NVM_FLASH_WRITEONCE aliases it to
+     * NVM_CACHE, WOLFBOOT_SMALL_STACK has its own array) are exactly
+     * where the plaintext would otherwise stay resident. */
+#if !defined(WOLFBOOT_ENCRYPT_CACHE)
     ForceZero(ENCRYPT_CACHE, NVM_CACHE_SIZE);
 #endif
     hal_flash_lock();
@@ -2068,8 +2100,13 @@ int RAMFUNCTION wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 /**
  * @brief Erase the encryption key.
  *
- * This function erases the encryption key and nonce, resetting them to all 0xFF
- * bytes.It ensures that the key and nonce cannot be accessed after erasure.
+ * This function erases the encryption key and nonce. On flash-backed
+ * targets the storage is reset to the flash-erased byte pattern
+ * (FLASH_BYTE_ERASED, 0xFF with the default flag polarity); on MMU
+ * targets the in-RAM copy is zeroized with ForceZero() (all-zero
+ * bytes); on TSIP targets the key lives in the crypto hardware and
+ * there is nothing to erase. Either way the plaintext key/nonce are
+ * no longer recoverable from this location.
  *
  * @return 0 on success, or the underlying flash error code on failure.
  *
@@ -2903,7 +2940,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
  * permission bits are deliberately not required, as they read back as 0 when the
  * NS MPU is disabled (NO_MPU) and do not constrain Secure accesses to NS memory
  * anyway. Outside a CMSE secure build there is no security boundary, so the check
- * collapses to a non-NULL pass-through. Same fix pattern as F-4416/F-4417/F-4644. */
+ * collapses to a non-NULL pass-through. Same fix pattern as earlier reports. */
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #include <arm_cmse.h>
 #define WOLFBOOT_NSC_NS_RW(p, sz) \

@@ -2370,7 +2370,7 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int ret = 0;
     uint8_t cmd[8]; /* size multiple of uint32_t */
-    uint32_t xferSz, page, pages, idx;
+    uint32_t xferSz, page_room, idx;
     uintptr_t addr;
 
 #if defined(DEBUG_ZYNQ) && DEBUG_ZYNQ >= 2
@@ -2378,18 +2378,21 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         address, data, len);
 #endif
 
-    /* write by page */
-    pages = ((len + (FLASH_PAGE_SIZE-1)) / FLASH_PAGE_SIZE);
-    for (page = 0; page < pages; page++) {
+    /* Write page by page. Each transfer must fit inside the physical
+     * page holding its start address: NOR wraps the write pointer at
+     * the page boundary, so a program crossing it clobbers the start
+     * of the page. */
+    while (len > 0) {
+        page_room = FLASH_PAGE_SIZE - ((uint32_t)address % FLASH_PAGE_SIZE);
+        xferSz = ((uint32_t)len > page_room) ? page_room
+                                             : (uint32_t)len;
+
         ret = qspi_write_enable(&mDev);
         if (ret != GQSPI_CODE_SUCCESS) {
             break;
         }
-        xferSz = len;
-        if (xferSz > FLASH_PAGE_SIZE)
-            xferSz = FLASH_PAGE_SIZE;
 
-        addr = address + (page * FLASH_PAGE_SIZE);
+        addr = address;
         if (mDev.stripe) {
             /* For dual parallel the address divide by 2 */
             addr /= 2;
@@ -2406,9 +2409,10 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         cmd[idx++] = ((addr >> 8)  & 0xFF);
         cmd[idx++] = ((addr >> 0)  & 0xFF);
         ret = qspi_transfer(&mDev, cmd, idx,
-            (const uint8_t*)(data + (page * FLASH_PAGE_SIZE)),
+            (const uint8_t*)data,
             xferSz, NULL, 0, 0, GQSPI_GEN_FIFO_MODE_SPI);
-        wolfBoot_printf("Flash Page %d Write: Ret %d\n", page, ret);
+        wolfBoot_printf("Flash Page Write: Addr 0x%llx, Len %u, Ret %d\n",
+            (unsigned long long)address, xferSz, ret);
         if (ret != GQSPI_CODE_SUCCESS)
             break;
 
@@ -2417,6 +2421,9 @@ int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t *data, int len)
             break;
         }
         qspi_write_disable(&mDev);
+
+        data += xferSz;
+        address += xferSz;
         len -= xferSz;
     }
 
@@ -2526,24 +2533,28 @@ int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
         qspiaddr = (mDev.stripe) ? address / 2 : address;
 
         ret = qspi_write_enable(&mDev);
+        if (ret != GQSPI_CODE_SUCCESS)
+            break;
+
+        /* ------ Erase Flash ------ */
+        memset(cmd, 0, sizeof(cmd));
+        idx = 0;
+        cmd[idx++] = SEC_ERASE_CMD;
+    #if GQPI_USE_4BYTE_ADDR == 1
+        cmd[idx++] = ((qspiaddr >> 24) & 0xFF);
+    #endif
+        cmd[idx++] = ((qspiaddr >> 16) & 0xFF);
+        cmd[idx++] = ((qspiaddr >> 8)  & 0xFF);
+        cmd[idx++] = ((qspiaddr >> 0)  & 0xFF);
+        ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
+            GQSPI_GEN_FIFO_MODE_SPI);
+        wolfBoot_printf("Flash Erase: Ret %d\n", ret);
         if (ret == GQSPI_CODE_SUCCESS) {
-            /* ------ Erase Flash ------ */
-            memset(cmd, 0, sizeof(cmd));
-            cmd[idx++] = SEC_ERASE_CMD;
-        #if GQPI_USE_4BYTE_ADDR == 1
-            cmd[idx++] = ((qspiaddr >> 24) & 0xFF);
-        #endif
-            cmd[idx++] = ((qspiaddr >> 16) & 0xFF);
-            cmd[idx++] = ((qspiaddr >> 8)  & 0xFF);
-            cmd[idx++] = ((qspiaddr >> 0)  & 0xFF);
-            ret = qspi_transfer(&mDev, cmd, idx, NULL, 0, NULL, 0, 0,
-                GQSPI_GEN_FIFO_MODE_SPI);
-            wolfBoot_printf("Flash Erase: Ret %d\n", ret);
-            if (ret == GQSPI_CODE_SUCCESS) {
-                ret = qspi_wait_ready(&mDev); /* Wait for not busy */
-            }
-            qspi_write_disable(&mDev);
+            ret = qspi_wait_ready(&mDev); /* Wait for not busy */
         }
+        qspi_write_disable(&mDev);
+        if (ret != GQSPI_CODE_SUCCESS)
+            break;
 
         address += WOLFBOOT_SECTOR_SIZE;
         len -= WOLFBOOT_SECTOR_SIZE;

@@ -520,6 +520,19 @@ void xspi_read_sr(uint8_t* rxbuf, uint32_t addr, uint32_t len)
     XSPI_INTR = XSPI_IPCMDDONE;
 }
 
+/* Block until the NOR device finishes its program/erase cycle.
+ * XSPI_IPCMDDONE only means the controller finished driving the bus;
+ * the device keeps WIP set for the ~ms the cycle takes and ignores
+ * Write Enable until it clears. */
+void xspi_wait_ready(uint32_t addr)
+{
+    uint8_t status[4] = {0, 0, 0, 0};
+
+    do {
+        xspi_read_sr(status, addr, 1);
+    } while (status[0] & FLASH_SR_WIP_MSK);
+}
+
 void xspi_sw_reset(void)
 {
     XSPI_SWRESET();
@@ -535,7 +548,22 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
     uint32_t i = 0, j = 0;
 
     while (len) {
+        /* A NOR Page Program must not cross a physical page boundary:
+         * the write pointer wraps to the start of the page and the
+         * excess bytes clobber preceding data. Cap the chunk to the
+         * bytes left in the current page (XSPI_IP_BUF_SIZE equals the
+         * page size, so this only tightens the limit mid-page). */
+        uint32_t page_room =
+            FLASH_PAGE_SIZE - ((uint32_t)address % FLASH_PAGE_SIZE);
+
         size = len > XSPI_IP_BUF_SIZE ? XSPI_IP_BUF_SIZE : len;
+        if (size > page_room)
+            size = page_room;
+
+        /* NOR flash clears its write-enable latch after each program
+         * operation, so enable writes for every page, not just the
+         * first (the prior program has completed by here) */
+        xspi_write_en(address);
 
         XSPI_IPCR0 = address;
         loop_cnt = size / XSPI_IP_WM_SIZE;
@@ -584,6 +612,10 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
         XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
         XSPI_INTR = XSPI_IPCMDDONE;
 
+        /* Else the next iteration's Write Enable is ignored and its
+         * Page Program dropped. */
+        xspi_wait_ready(address);
+
         len -= size;
         address += size;
     }
@@ -610,7 +642,6 @@ void hal_flash_lock(void)
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    xspi_write_en(address);
     xspi_flash_write(address, data, len);
 
     return len;
@@ -625,14 +656,10 @@ int hal_flash_erase(uintptr_t address, int len)
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
-        uint8_t status[4] = {0, 0, 0, 0};
-
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
-        while (!(status[0] & FLASH_READY_MSK))  {
-            xspi_read_sr(status, 0, 1);
-        }
+        xspi_wait_ready(address + i * FLASH_ERASE_SIZE);
     }
 
     xspi_sw_reset();
@@ -650,7 +677,6 @@ void ext_flash_unlock(void)
 }
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    xspi_write_en(address);
     xspi_flash_write(address, data, len);
 
     return len;
@@ -672,14 +698,10 @@ int ext_flash_erase(uintptr_t address, int len)
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
-        uint8_t status[4] = {0, 0, 0, 0};
-
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
-        while (!(status[0] & FLASH_READY_MSK))  {
-            xspi_read_sr(status, 0, 1);
-        }
+        xspi_wait_ready(address + i * FLASH_ERASE_SIZE);
     }
 
     xspi_sw_reset();

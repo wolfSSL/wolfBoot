@@ -58,9 +58,20 @@ extern int tolower(int c);
 #endif
 
 #ifdef USE_FAST_MATH
-    /* wolfBoot only does public asymmetric operations,
-     * so timing resistance and hardening is not required */
-#   define WC_NO_HARDEN
+    /* WC_NO_HARDEN suits verify-only builds, which do public-key
+     * operations only. Software DICE (WOLFCRYPT_TZ_PSA without
+     * WOLFBOOT_DICE_HW) signs the attestation claims with the private
+     * IAK, so it is excluded; hardware DICE keeps signing in the crypto
+     * engine and stays verify-only. */
+#   if !defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_DICE_HW)
+#       define WC_NO_HARDEN
+#   else
+        /* tfm.c never tests WC_NO_HARDEN, so dropping it alone changes
+         * no code and only un-silences an advisory that -Werror turns
+         * into a build failure. TFM_TIMING_RESISTANT is what makes
+         * tfm.c constant time. */
+#       define TFM_TIMING_RESISTANT
+#   endif
 #endif
 
 #if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
