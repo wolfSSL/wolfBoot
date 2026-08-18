@@ -38,6 +38,28 @@ jobs:
           cp config/examples/sim-self-update-monolithic.config .config
           make test-sim-self-update-monolithic
 
+      # Shrink BOOT below the payload size so staging only works because the
+      # UPDATE partition is sized independently (WOLFBOOT_PARTITION_UPDATE_SIZE)
+      - name: Run monolithic self-update test (payload exceeds a BOOT-sized slot)
+        run: |
+          make clean
+          cp config/examples/sim-self-update-monolithic.config .config
+          make test-sim-self-update-monolithic WOLFBOOT_PARTITION_SIZE=0x30000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x50000
+
+      # Unset WOLFBOOT_PARTITION_UPDATE_SIZE so it falls back to
+      # WOLFBOOT_PARTITION_SIZE, restoring the legacy symmetric layout
+      - name: Run monolithic self-update test (legacy symmetric layout)
+        run: |
+          make clean
+          cp config/examples/sim-self-update-monolithic.config .config
+          make test-sim-self-update-monolithic WOLFBOOT_PARTITION_SIZE=0x80000 WOLFBOOT_PARTITION_UPDATE_SIZE= WOLFBOOT_PARTITION_UPDATE_ADDRESS=0xA0000
+
+      - name: Run monolithic self-update oversize rejection test
+        run: |
+          make clean
+          cp config/examples/sim-self-update-monolithic.config .config
+          make test-sim-self-update-monolithic-oversize
+
       - name: Run self-header verification test (internal flash)
         run: |
           make clean
@@ -50,6 +72,9 @@ jobs:
           cp config/examples/sim-self-header-ext.config .config
           make test-sim-self-header-ext-verify
 
+      # With WOLFBOOT_SELF_HEADER=1 the app grows enough that the payload
+      # exceeds what a BOOT-sized slot could stage, so this step also covers
+      # asymmetric staging capacity
       - name: Run combined monolithic self-update + self-header test
         run: |
           make clean
