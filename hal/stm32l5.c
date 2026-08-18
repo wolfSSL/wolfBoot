@@ -77,59 +77,53 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *src, *dst;
+    uint32_t *dst;
+    uint32_t dword[2];
+    uint8_t *dword_bytes = (uint8_t *)dword;
     volatile uint32_t *sr, *cr;
 
     cr = &FLASH_CR;
     sr = &FLASH_SR;
 
     hal_flash_clear_errors(0);
-    src = (uint32_t *)data;
     dst = (uint32_t *)address;
 
 #if TZ_SECURE()
     if (address >= FLASH_BANK2_BASE)
-        /* Claim the flash span the program writes actually touch: the
-         * last partial word is programmed whole, up to the 4-byte
-         * boundary past len. */
-        hal_tz_claim_nonsecure_area(address, (len + 3) & ~3);
+        /* Claim the flash span the program touches: the last partial
+         * double word is read back and programmed whole, up to the
+         * 8-byte boundary past len. */
+        hal_tz_claim_nonsecure_area(address, (len + 7) & ~7);
     /* Convert into secure address space */
     dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
 #endif
 
     while (i < len) {
-        uint32_t rem = (uint32_t)(len - i);
-        uint32_t w0, w1;
+        int j;
 
-        /* Program the unit word by word and never read past len: the
-         * flash programs whole 32-bit words, so a partial final word is
-         * padded with the erased value (0xFF) in its upper bytes. */
-        w0 = src[i >> 2];
-        if (rem < 4)
-            w0 |= ~0u << (8 * rem);
+        /* Build the whole 64-bit unit before opening the PG window.
+         * The flash has no 32-bit program mode: both words of the
+         * double word must be stored inside one PG window or the
+         * operation never starts. Bytes outside [i, len) are read back
+         * from flash and written unchanged, so nothing past the
+         * requested length is modified and the source is never read
+         * past len (same read-modify-write shape as hal/stm32h5.c). */
+        for (j = 0; j < 8; j++) {
+            if (i + j < len)
+                dword_bytes[j] = data[i + j];
+            else
+                dword_bytes[j] = ((const uint8_t *)dst)[i + j];
+        }
 
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = w0;
+        dst[i >> 2] = dword[0];
         ISB();
+        dst[(i >> 2) + 1] = dword[1];
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
-
-        if (rem > 4) {
-            w1 = src[(i >> 2) + 1];
-            if (rem < 8)
-                w1 |= ~0u << (8 * (rem - 4));
-
-            *cr |= FLASH_CR_PG;
-            dst[(i >> 2) + 1] = w1;
-            ISB();
-            hal_flash_wait_complete(0);
-            if ((*sr & FLASH_SR_EOP) != 0)
-                *sr |= FLASH_SR_EOP;
-            *cr &= ~FLASH_CR_PG;
-        }
-        i+=8;
+        i += 8;
     }
 #if TZ_SECURE()
     hal_tz_release_nonsecure_area();

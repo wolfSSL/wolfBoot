@@ -14,8 +14,13 @@
  * registers on a host register file and the destination flash at a
  * host memory address pre-filled with stale data. The source buffer
  * is followed by a canary: pre-fix, a short write copies the canary
- * into the destination flash; post-fix the partial final word is
- * padded with the erased value (0xFF) and nothing past len is read.
+ * into the destination flash; post-fix the partial final unit is
+ * read-modify-written -- bytes outside [i, len) come from the current
+ * flash content and are stored back unchanged -- so nothing past len
+ * is read or changed. Both words are always stored inside one PG
+ * window, because the flash has no 32-bit program mode; that is a
+ * hardware sequencing property this host model cannot observe, so it
+ * is asserted by construction in hal/stm32l5.c, not here.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -128,8 +133,9 @@ START_TEST(test_write_60_no_overread)
 }
 END_TEST
 
-/* A write of 58 bytes: the final word is partial (2 bytes); its upper
- * bytes are padded with the erased value, nothing past len is read. */
+/* A write of 58 bytes: the final unit is partial (bytes 58,59 are
+ * outside the request); they are read back from flash and rewritten
+ * unchanged, and nothing past len is read. */
 START_TEST(test_write_58_partial_word_padded)
 {
     int i;
@@ -138,16 +144,18 @@ START_TEST(test_write_58_partial_word_padded)
         g_data, 58), 0);
 
     ck_assert_int_eq(memcmp(g_flash_mem, g_data, 58), 0);
-    /* word 14 (bytes 56..59): 58,59 padded to the erased value */
-    ck_assert_uint_eq(g_flash_mem[58], 0xFF);
-    ck_assert_uint_eq(g_flash_mem[59], 0xFF);
+    /* word 14 (bytes 56..59): 58,59 keep their flash content */
+    ck_assert_uint_eq(g_flash_mem[58], 0x12);
+    ck_assert_uint_eq(g_flash_mem[59], 0x12);
     for (i = 60; i < FLASH_MEM_SZ; i++)
         ck_assert_uint_eq(g_flash_mem[i], 0x12);
     ck_assert_int_eq(canary_in_flash(), 0);
 }
 END_TEST
 
-/* A write of 3 bytes: only one word, padded in its upper three bytes. */
+/* A write of 3 bytes: the whole 8-byte unit is programmed, but only
+ * bytes 0..2 take the requested value; the rest is rewritten with
+ * what flash already held. */
 START_TEST(test_write_3_single_word_padded)
 {
     int i;
@@ -156,9 +164,8 @@ START_TEST(test_write_3_single_word_padded)
         g_data, 3), 0);
 
     ck_assert_int_eq(memcmp(g_flash_mem, g_data, 3), 0);
-    /* word 0 (bytes 0..3) is programmed with byte 3 padded; word 1 is
-     * never programmed at all and keeps its stale value */
-    ck_assert_uint_eq(g_flash_mem[3], 0xFF);
+    /* byte 3 and the whole second word are rewritten unchanged */
+    ck_assert_uint_eq(g_flash_mem[3], 0x12);
     for (i = 4; i < FLASH_MEM_SZ; i++)
         ck_assert_uint_eq(g_flash_mem[i], 0x12);
     ck_assert_int_eq(canary_in_flash(), 0);

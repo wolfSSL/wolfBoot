@@ -65,12 +65,12 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
-    uint32_t *src, *dst;
+    uint32_t *dst;
     uint32_t qword[4];
+    uint8_t *qword_bytes = (uint8_t *)qword;
     volatile uint32_t *sr, *cr;
 
     hal_flash_clear_errors(0);
-    src = (uint32_t*)data;
     dst = (uint32_t*)address;
 
 #if (TZ_SECURE())
@@ -93,39 +93,26 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 #endif
 
     while (i < len) {
-        uint32_t rem = (uint32_t)(len - i);
-        uint32_t w0, w1, w2, w3;
+        int j;
 
-        /* Program the unit word by word and never read past len: the
-         * flash programs whole 32-bit words, so a partial final word is
-         * padded with the erased value (0xFF) in its upper bytes, and
-         * words past the requested length are not programmed at all. */
-        w0 = src[i >> 2];
-        if (rem < 4)
-            w0 |= ~0u << (8 * rem);
+        /* Build the whole 128-bit unit before opening the PG window.
+         * The controller only starts the program once all four words
+         * have been stored -- a partial quad-word leaves FLASH_SR_WDW
+         * set and hal_flash_wait_complete() never returns. Bytes
+         * outside [i, len) are read back from flash and written
+         * unchanged, so nothing past the requested length is modified
+         * and the source is never read past len (same read-modify-write
+         * shape as hal/stm32h5.c). */
+        for (j = 0; j < 16; j++) {
+            if (i + j < len)
+                qword_bytes[j] = data[i + j];
+            else
+                qword_bytes[j] = ((const uint8_t *)dst)[i + j];
+        }
 
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = w0;
-        ISB();
-        if (rem > 4) {
-            w1 = src[(i >> 2) + 1];
-            if (rem < 8)
-                w1 |= ~0u << (8 * (rem - 4));
-            dst[(i >> 2) + 1] = w1;
-            ISB();
-        }
-        if (rem > 8) {
-            w2 = src[(i >> 2) + 2];
-            if (rem < 12)
-                w2 |= ~0u << (8 * (rem - 8));
-            dst[(i >> 2) + 2] = w2;
-            ISB();
-        }
-        if (rem > 12) {
-            w3 = src[(i >> 2) + 3];
-            if (rem < 16)
-                w3 |= ~0u << (8 * (rem - 12));
-            dst[(i >> 2) + 3] = w3;
+        for (j = 0; j < 4; j++) {
+            dst[(i >> 2) + j] = qword[j];
             ISB();
         }
         hal_flash_wait_complete(0);
