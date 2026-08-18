@@ -1047,6 +1047,7 @@ nxp_t10xx_fixup_extract.h: ../../hal/nxp_t10xx.c
 	sed -n '/^struct qportal_info {/,/^};/p' $< >> $@
 	sed -n '/#define SET_QP_INFO(/,/sdest = dest/p' $< >> $@
 	sed -n '/^static const struct qportal_info qp_info\[QMAN_NUM_PORTALS\] = {/,/^};/p' $< >> $@
+	grep -E '^#define FM1_(DTSEC[0-9]|10GEC1) ' $< >> $@
 	sed -n '/^int hal_dts_fixup(/,/^}/p' $< >> $@
 
 unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src/fdt.c

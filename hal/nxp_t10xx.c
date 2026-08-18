@@ -3391,6 +3391,7 @@ int hal_dts_fixup(void* dts_addr)
 #ifndef BUILD_LOADER_STAGE1
     struct fdt_header *fdt = (struct fdt_header *)dts_addr;
     int off, i;
+    uint32_t cell;
     uint32_t *reg;
     const char* prev_compat;
 
@@ -3531,14 +3532,23 @@ int hal_dts_fixup(void* dts_addr)
         reg = (uint32_t*)fdt_getprop(fdt, off, "cell-index", NULL);
         if (reg == NULL)
             break;
-        i = (int)fdt32_to_cpu(*reg);
+        cell = fdt32_to_cpu(*reg);
 
-        /* Bound the index before touching phydevs, mirroring the
-         * qman-portal loop above: standard FMan DTBs give the 10G
-         * MACs cell-index 8/9, outside the 5-entry table. */
+        /* Translate the DTS cell-index into a phydevs slot before
+         * touching the table. NXP's qoriq-fman3 dtsi numbers the 1G
+         * memacs 0..3 and the 10G memacs 0x8/0x9, while phydevs holds
+         * the 1G ports at 0..3 and the single 10G port at FM1_10GEC1.
+         * Anything with no slot is skipped rather than indexed. */
+        if (cell <= FM1_DTSEC4)
+            i = (int)cell;
+        else if (cell == 8)
+            i = FM1_10GEC1;
+        else
+            i = -1;
+
         if (i < 0 || i >= (int)(sizeof(phydevs) / sizeof(phydevs[0]))) {
-            wolfBoot_printf("FDT: Ethernet%d: invalid cell-index, skipping\n",
-                i);
+            wolfBoot_printf("FDT: Ethernet cell-index %u unsupported, "
+                "skipping\n", (unsigned)cell);
             off = fdt_node_offset_by_compatible(fdt, off, "fsl,fman-memac");
             continue;
         }

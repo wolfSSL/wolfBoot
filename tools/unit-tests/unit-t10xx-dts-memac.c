@@ -357,16 +357,37 @@ static void teardown(void)
 {
 }
 
-/* A cell-index outside the 5-entry phydevs table must not produce a
- * local-mac-address. Pre-fix the loop read phydevs[8] out of bounds
- * and wrote the result into the device tree. */
-START_TEST(test_memac_oob_cell_index_skipped)
+/* NXP's qoriq-fman3 dtsi gives the first 10G memac cell-index 8, and
+ * phydevs holds that port at FM1_10GEC1 (slot 4). It must be mapped
+ * there, not skipped: skipping silently drops the 10G MAC fixup. Pre
+ * fix the loop read phydevs[8] out of bounds instead. */
+START_TEST(test_memac_10g_cell_index_mapped)
+{
+    struct dtb d;
+    int off, len;
+    const void *mac;
+
+    dtb_build_memac(&d, "memac0", 8);
+    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+
+    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
+    ck_assert_int_gt(off, 0);
+    mac = fdt_getprop(d.buf, off, "local-mac-address", &len);
+    ck_assert_ptr_nonnull(mac);
+    ck_assert_int_eq(len, 6);
+    ck_assert_int_eq(((const uint8_t *)mac)[5], 0x14); /* phydevs[4] */
+}
+END_TEST
+
+/* A cell-index with no phydevs slot at all (a second 10G port, or a
+ * malformed DTB) must produce no local-mac-address. */
+START_TEST(test_memac_unmapped_cell_index_skipped)
 {
     struct dtb d;
     int off;
     const void *mac;
 
-    dtb_build_memac(&d, "memac0", 8);
+    dtb_build_memac(&d, "memac0", 9);
     ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
 
     off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
@@ -395,15 +416,15 @@ START_TEST(test_memac_valid_cell_index_fixed)
 }
 END_TEST
 
-/* An out-of-bounds node must be skipped, not break the loop: the
- * following valid node still gets its MAC. */
+/* An unmapped node must be skipped, not break the loop: the following
+ * valid node still gets its MAC. */
 START_TEST(test_memac_mixed_oob_then_valid)
 {
     struct dtb d;
     int off0, off1, len;
     const void *mac;
 
-    dtb_build_memac2(&d, 8, 2);
+    dtb_build_memac2(&d, 9, 2);
     ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
 
     off0 = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
@@ -411,7 +432,7 @@ START_TEST(test_memac_mixed_oob_then_valid)
     ck_assert_int_gt(off0, 0);
     ck_assert_int_gt(off1, 0);
 
-    /* node 0 (index 8): skipped */
+    /* node 0 (index 9): no phydevs slot, skipped */
     mac = fdt_getprop(d.buf, off0, "local-mac-address", NULL);
     ck_assert_ptr_null(mac);
 
@@ -429,7 +450,8 @@ Suite *t10xx_dts_memac_suite(void)
     TCase *tc = tcase_create("memac");
 
     tcase_add_checked_fixture(tc, setup, teardown);
-    tcase_add_test(tc, test_memac_oob_cell_index_skipped);
+    tcase_add_test(tc, test_memac_10g_cell_index_mapped);
+    tcase_add_test(tc, test_memac_unmapped_cell_index_skipped);
     tcase_add_test(tc, test_memac_valid_cell_index_fixed);
     tcase_add_test(tc, test_memac_mixed_oob_then_valid);
     suite_add_tcase(s, tc);
