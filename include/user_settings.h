@@ -68,6 +68,14 @@ extern int tolower(int c);
      * in the crypto engine and stays verify-only in fast math. */
 #   if !defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_DICE_HW)
 #       define WC_NO_HARDEN
+#   else
+        /* Turn the hardening on rather than only dropping
+         * WC_NO_HARDEN: tfm.c never tests WC_NO_HARDEN, so removing it
+         * changes no code -- it only un-silences the advisory in
+         * settings.h, which -Werror then turns into a build failure.
+         * TFM_TIMING_RESISTANT is what actually makes tfm.c constant
+         * time (ECC_TIMING_RESISTANT is already set with HAVE_ECC). */
+#       define TFM_TIMING_RESISTANT
 #   endif
 #endif
 
