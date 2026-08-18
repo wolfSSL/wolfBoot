@@ -664,6 +664,7 @@ static int hal_flash_command(uint8_t iswrite)
 {
     int ret = 0;
     int timeout = 0;
+    uint32_t ltesr;
     uint32_t fmr =
         ELBC_FMR_CWTO(15) |       /* max timeout */
         ELBC_FMR_AL(2) |          /* 4 byte address */
@@ -681,12 +682,19 @@ static int hal_flash_command(uint8_t iswrite)
         timeout++ < FLASH_TIMEOUT_TRIES) {
         /* NOP */
     };
-    if (timeout == FLASH_TIMEOUT_TRIES) {
+
+    ltesr = get32(ELBC_LTESR);
+
+    /* Test the completion flag rather than the loop counter: on a
+     * timeout exit "timeout" has already been incremented past
+     * FLASH_TIMEOUT_TRIES, so the old "timeout == FLASH_TIMEOUT_TRIES"
+     * never matched and a command that never completed returned 0. */
+    if (!(ltesr & ELBC_LTESR_CC)) {
         ret = -1;
     }
 
     /* clear interrupt */
-    set32(ELBC_LTESR, get32(ELBC_LTESR) & ELBC_NAND_MASK);
+    set32(ELBC_LTESR, ltesr & ELBC_NAND_MASK);
     set32(ELBC_LTEATR, 0);
 
     return ret;
@@ -1760,7 +1768,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
             ret = hal_flash_command(0);
             if (ret != 0)
-                break;
+                goto read_done;
 
             /* check for bad page. if either of the first two pages are bad then
              * skip to next block */
@@ -1780,6 +1788,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         } while ((address & (block_size - 1)) && (pos < len));
     };
 
+read_done:
     /* on success return size read */
     if (ret == 0) {
         ret = len;

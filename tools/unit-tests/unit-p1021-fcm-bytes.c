@@ -558,6 +558,25 @@ START_TEST(test_p1021_read_multipart)
 }
 END_TEST
 
+/* An FCM command that never raises CC must fail, and must end the
+ * read. The completion test used to be "timeout ==
+ * FLASH_TIMEOUT_TRIES", but the loop increments timeout past that
+ * value on the way out, so the comparison never matched and a hung
+ * command reported success. Making it fail exposed the exit path: the
+ * old "break" left the inner block loop only, and the outer loop
+ * respun the same failing command forever. */
+START_TEST(test_p1021_command_never_completes)
+{
+    uint8_t data[4];
+
+    /* CC clear for the whole run: the controller never completes. */
+    set32(ELBC_LTESR, 0);
+    memset(data, 0xEE, sizeof(data));
+
+    ck_assert_int_lt(ext_flash_read(0, data, 4), 0);
+}
+END_TEST
+
 Suite *p1021_fcm_suite(void)
 {
     Suite *s = suite_create("p1021-fcm-bytes");
@@ -578,6 +597,7 @@ Suite *p1021_fcm_suite(void)
     tcase_add_test(tc, test_p1021_read_full_page);
     tcase_add_test(tc, test_p1021_read_short_spare_loaded);
     tcase_add_test(tc, test_p1021_read_multipart);
+    tcase_add_test(tc, test_p1021_command_never_completes);
 
     suite_add_tcase(s, tc);
     return s;
