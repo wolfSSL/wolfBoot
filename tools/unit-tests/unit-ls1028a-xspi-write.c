@@ -82,6 +82,11 @@ static int g_xspi_log_n;
 /* Emulated NOR flash plus the write-enable latch real NOR keeps. */
 static uint8_t g_nor[2 * 128 * 1024];
 static int g_wel;
+/* RDSR polls remaining before the emulated device reports WIP clear.
+ * A program or erase arms it; Write Enable and program/erase issued
+ * while it is armed are ignored, exactly as the device does. */
+#define NOR_BUSY_POLLS 2
+static int g_busy;
 
 /* The FlexSPI drains the TX FIFO while the command runs, so the flash
  * receives the bytes in the order the driver hands them to the FIFO.
@@ -108,8 +113,21 @@ static void xspi_emu_start(void)
     uint32_t len = ipcr1 & 0xFFFF;
     uint32_t addr = XSPI_IPCR0;
     uint32_t i;
-    int e = g_xspi_log_n < XSPI_LOG_MAX ? g_xspi_log_n : XSPI_LOG_MAX - 1;
+    int e;
 
+    /* Status polls are not operations: answer them without taking a
+     * log slot, so the assertions below stay about WEN/PP/SE order. */
+    if (seq == LUT_INDEX_RDSR) {
+        /* WIP stays set for a few polls after a program or erase */
+        XSPI_RFD(0) = g_busy ? FLASH_SR_WIP_MSK : 0;
+        if (g_busy)
+            g_busy--;
+        XSPI_INTR |= XSPI_IPCMDDONE;
+        g_tfd_stream_len = 0;
+        return;
+    }
+
+    e = g_xspi_log_n < XSPI_LOG_MAX ? g_xspi_log_n : XSPI_LOG_MAX - 1;
     if (g_xspi_log_n < XSPI_LOG_MAX)
         g_xspi_log_n++;
     g_xspi_log[e].addr = addr;
@@ -118,7 +136,10 @@ static void xspi_emu_start(void)
 
     if (seq == LUT_INDEX_WRITE_EN) {
         g_xspi_log[e].cmd = XSPI_CMD_WEN;
-        g_wel = 1;
+        if (g_busy)
+            g_xspi_log[e].rejected = 1; /* WREN ignored while WIP set */
+        else
+            g_wel = 1;
     }
     else if (seq == LUT_INDEX_PP) {
         g_xspi_log[e].cmd = XSPI_CMD_PP;
@@ -135,6 +156,7 @@ static void xspi_emu_start(void)
                         g_tfd_stream[i];
             }
             g_wel = 0; /* the program consumes the latch */
+            g_busy = NOR_BUSY_POLLS;
         }
         else {
             g_xspi_log[e].rejected = 1; /* NOR ignores PP without WEN */
@@ -145,14 +167,11 @@ static void xspi_emu_start(void)
         if (g_wel) {
             memset(&g_nor[addr], 0xFF, len);
             g_wel = 0;
+            g_busy = NOR_BUSY_POLLS;
         }
         else {
             g_xspi_log[e].rejected = 1;
         }
-    }
-    else if (seq == LUT_INDEX_RDSR) {
-        g_xspi_log[e].cmd = XSPI_CMD_RDSR;
-        XSPI_RFD(0) = FLASH_READY_MSK; /* status: READY */
     }
 
     XSPI_INTR |= XSPI_IPCMDDONE;
@@ -189,6 +208,7 @@ static void setup(void)
     memset(g_nor, 0xFF, sizeof(g_nor));
     g_xspi_log_n = 0;
     g_wel = 0;
+    g_busy = 0;
     g_tfd_stream_len = 0;
     XSPI_INTR = 0x1 << 6; /* TX FIFO write enable */
 }

@@ -520,6 +520,20 @@ void xspi_read_sr(uint8_t* rxbuf, uint32_t addr, uint32_t len)
     XSPI_INTR = XSPI_IPCMDDONE;
 }
 
+/* Block until the NOR device finishes its program/erase cycle.
+ * XSPI_IPCMDDONE only reports that the controller finished driving the
+ * sequence on the bus; the device keeps WIP set for the ~ms the cycle
+ * takes, and ignores Write Enable and further program/erase commands
+ * until it clears. */
+void xspi_wait_ready(uint32_t addr)
+{
+    uint8_t status[4] = {0, 0, 0, 0};
+
+    do {
+        xspi_read_sr(status, addr, 1);
+    } while (status[0] & FLASH_SR_WIP_MSK);
+}
+
 void xspi_sw_reset(void)
 {
     XSPI_SWRESET();
@@ -599,6 +613,10 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
         XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
         XSPI_INTR = XSPI_IPCMDDONE;
 
+        /* The program cycle is still running: the next iteration's
+         * Write Enable would be ignored and its Page Program dropped. */
+        xspi_wait_ready(address);
+
         len -= size;
         address += size;
     }
@@ -639,14 +657,10 @@ int hal_flash_erase(uintptr_t address, int len)
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
-        uint8_t status[4] = {0, 0, 0, 0};
-
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
-        while (!(status[0] & FLASH_READY_MSK))  {
-            xspi_read_sr(status, 0, 1);
-        }
+        xspi_wait_ready(address + i * FLASH_ERASE_SIZE);
     }
 
     xspi_sw_reset();
@@ -685,14 +699,10 @@ int ext_flash_erase(uintptr_t address, int len)
     num_sectors += (len % FLASH_ERASE_SIZE) ? 1 : 0;
 
     for (i = 0; i < num_sectors; i++) {
-        uint8_t status[4] = {0, 0, 0, 0};
-
         xspi_write_en(address + i * FLASH_ERASE_SIZE);
         xspi_flash_sec_erase(address + i * FLASH_ERASE_SIZE);
 
-        while (!(status[0] & FLASH_READY_MSK))  {
-            xspi_read_sr(status, 0, 1);
-        }
+        xspi_wait_ready(address + i * FLASH_ERASE_SIZE);
     }
 
     xspi_sw_reset();
