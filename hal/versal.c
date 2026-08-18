@@ -1407,7 +1407,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int ret = 0;
     uint8_t cmd[5];
-    uint32_t xferSz, page, pages;
+    uint32_t xferSz, page_room;
     uintptr_t addr;
     const uint8_t *pageData;
 
@@ -1425,17 +1425,19 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     QSPI_DEBUG_PRINTF("ext_flash_write: addr=0x%lx, len=%d\n",
                       (unsigned long)address, len);
 
-    /* Write by page */
-    pages = ((len + (FLASH_PAGE_SIZE - 1)) / FLASH_PAGE_SIZE);
-    for (page = 0; page < pages && ret == 0; page++) {
+    /* Write by page, capping each transfer at the end of the physical
+     * page holding its start address: NOR wraps the write pointer at
+     * the page boundary, so a program crossing it clobbers the start
+     * of the page. */
+    while (len > 0) {
+        page_room = FLASH_PAGE_SIZE - ((uint32_t)address % FLASH_PAGE_SIZE);
+        xferSz = ((uint32_t)len > page_room) ? page_room
+                                             : (uint32_t)len;
+
         ret = qspi_write_enable(&qspiDev);
         if (ret != 0) break;
 
-        xferSz = len;
-        if (xferSz > FLASH_PAGE_SIZE)
-            xferSz = FLASH_PAGE_SIZE;
-
-        addr = address + (page * FLASH_PAGE_SIZE);
+        addr = address;
         if (qspiDev.stripe) {
             /* For dual parallel the address is divided by 2 */
             addr /= 2;
@@ -1448,14 +1450,19 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         cmd[3] = (addr >> 8) & 0xFF;
         cmd[4] = addr & 0xFF;
 
-        pageData = data + (page * FLASH_PAGE_SIZE);
+        pageData = data;
         ret = qspi_transfer(&qspiDev, cmd, sizeof(cmd), NULL, 0, 0, pageData, xferSz);
 
-        QSPI_DEBUG_PRINTF("Flash Page %d Write: Ret %d\n", page, ret);
+        QSPI_DEBUG_PRINTF("Flash Page Write: addr=0x%lx, len=%u, ret=%d\n",
+                          (unsigned long)address, xferSz, ret);
         if (ret != 0) break;
 
         ret = qspi_wait_ready(&qspiDev);
         qspi_write_disable(&qspiDev);
+        if (ret != 0) break;
+
+        data = pageData + xferSz;
+        address += xferSz;
         len -= xferSz;
     }
 

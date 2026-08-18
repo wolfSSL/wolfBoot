@@ -106,6 +106,7 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
+TESTS+=unit-versal-ext-write
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
@@ -849,6 +850,23 @@ versal_host.c: ../../hal/versal.c versal_host.h
 
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
+
+# unit-versal-ext-write runs the real ext_flash_write() from
+# hal/versal.c (F-7981: page chunks crossed physical NOR page
+# boundaries and the wrap clobbered the page start). The QspiDev_t
+# struct and the function are extracted verbatim (the qspi_* helpers
+# are file-static, so the test provides emulated ones); the emulated
+# NOR models the wrap.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space.
+versal_qspidev_extract.h: ../../hal/versal.c
+	awk '/^\/\* QSPI device structure \*\/$$/ {f=1} f{print} f&&/^\} QspiDev_t;$$/{exit}' $< > $@
+
+versal_ext_write_extract.h: ../../hal/versal.c
+	awk '/^int ext_flash_write\(/ {f=1} f{print} f&&/^\}/ {exit}' $< > $@
+
+unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_ext_write_extract.h versal_host.h
+	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host
