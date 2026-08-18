@@ -125,8 +125,11 @@ TESTS+=unit-t10xx-dts-memac
 # when they are installed, so a default "make" stays portable on hosts
 # without them.
 HAVE_GNU_EFI := $(wildcard /usr/include/efi/efi.h)
-ifneq ($(HAVE_GNU_EFI),)
+ENABLE_EFI_TESTS ?= $(if $(HAVE_GNU_EFI),1,0)
+ifeq ($(ENABLE_EFI_TESTS),1)
 TESTS+=unit-efi-x86-open-image
+else
+$(info Skipping x86-64 EFI unit test: gnu-efi headers not found (set ENABLE_EFI_TESTS=1 to force))
 endif
 
 TESTS+=unit-flash-write-mcxa
@@ -848,11 +851,30 @@ unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
 # -DARCH_64BIT (the file is guarded by TARGET_versal, the QSPI section by
 # EXT_FLASH, and the architecture check / hal.h prototypes by the ARCH
 # defines).
+# Only operand-less asm (barriers) may be deleted outright. An asm with
+# an output operand must be replaced by an assignment, or the generated
+# copy reads an uninitialised automatic -- undefined behaviour, and at
+# -O0 a guaranteed infinite loop in the timer helpers.
 versal_host.h: ../../hal/versal.h
-	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[^;]*\);[[:space:]]*//' $< > $@
+	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' \
+	    -e 's/__asm__ volatile\("mrs %0, CurrentEL" : "=r" \(el\)\);/el = 3UL << 2; \/* host stands in at EL3 *\//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
 
+# See versal_host.h above for why the two "mrs" reads are rewritten
+# rather than deleted. The host counter advances one tick per read at a
+# nominal 1 MHz, so hal_delay_us() terminates instead of spinning.
 versal_host.c: ../../hal/versal.c versal_host.h
-	sed -E -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[^;]*\);[[:space:]]*//' -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' -e 's|#include "hal/versal.h"|#include "versal_host.h"|' $< > $@
+	sed -E -e 's|#include "hal/versal.h"|#include "versal_host.h"\nstatic uint64_t versal_host_ticks;|' \
+	    -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
+	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
+	    -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
 
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
@@ -1074,8 +1096,25 @@ covclean:
 	rm -f *.gcov *.gcno *.gcda coverage.*
 	rm -f unit-sign-encrypted-output-*
 
+# Sources the extraction rules generate into this directory. Listed here
+# so "clean" removes them and so there is one place that names them.
+GENERATED_SRC:=aurix_erased_extract.h nvm_cache_scrub_extract.h \
+	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
+	sdhci_host.c stm32l5_write_extract.h stm32u5_write_extract.h \
+	t10xx_qe_firmware_extract.h t2080_fman_extract.h \
+	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
+	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
+	zynq_write_extract.h
+
+# Tests that are only in $(TESTS) when their toolchain/headers are
+# present; clean must remove them regardless, or a host that has since
+# lost gnu-efi/multilib keeps a stale binary forever.
+CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
+	unit-linux-loader-syssize
+
 clean: covclean
-	rm -f $(TESTS) *.o *.gcno *.gcda coverage.*
+	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \
+		coverage.*
 
 # The extraction rules below build one header with several appending
 # commands. Without this, a failure partway through leaves a truncated
