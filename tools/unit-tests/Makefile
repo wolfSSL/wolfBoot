@@ -108,6 +108,7 @@ TESTS+=unit-versal-qspi-dma
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
+TESTS+=unit-t10xx-dts-memac
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -877,6 +878,24 @@ unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 
 unit-p1021-qe-firmware: unit-p1021-qe-firmware.c nxp_p1021_host.c
 	gcc -o $@ unit-p1021-qe-firmware.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-dts-memac drives the real hal_dts_fixup() FDT memac loop
+# (F-7052: unvalidated cell-index into phydevs[5]) with hand-built
+# DTBs. Extracts the function plus its liodn/qman static tables from
+# hal/nxp_t10xx.c.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex literal
+# ("unterminated regexp"), so each pattern is followed by a space.
+nxp_t10xx_fixup_extract.h: ../../hal/nxp_t10xx.c
+	awk '/^struct liodn_id_table \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c > nxp_t10xx_fixup_extract.h
+	awk '/#define SET_LIODN\(/ {f=1} f{print} f&&/reg_offset = \(void\*\)reg/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	awk '/^static const struct liodn_id_table liodn_tbl\[\] = \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	awk '/^struct qportal_info \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	awk '/#define SET_QP_INFO\(/ {f=1} f{print} f&&/sdest = dest/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	awk '/^static const struct qportal_info qp_info\[QMAN_NUM_PORTALS\] = \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	awk '/^int hal_dts_fixup\(/ {f=1} f{print} f&&/^}/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+
+unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src/fdt.c
+	gcc -o $@ unit-t10xx-dts-memac.c $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the

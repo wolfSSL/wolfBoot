@@ -3519,6 +3519,16 @@ int hal_dts_fixup(void* dts_addr)
             break;
         i = (int)fdt32_to_cpu(*reg);
 
+        /* Bound the index before touching phydevs, mirroring the
+         * qman-portal loop above: standard FMan DTBs give the 10G
+         * MACs cell-index 8/9, outside the 5-entry table. */
+        if (i < 0 || i >= (int)(sizeof(phydevs) / sizeof(phydevs[0]))) {
+            wolfBoot_printf("FDT: Ethernet%d: invalid cell-index, skipping\n",
+                i);
+            off = fdt_node_offset_by_compatible(fdt, off, "fsl,fman-memac");
+            continue;
+        }
+
         wolfBoot_printf("FDT: Ethernet%d: Offset %d\n", i, off);
 
         /* Set Ethernet MAC addresses */
