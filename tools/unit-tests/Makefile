@@ -817,9 +817,9 @@ unit-ls1028a-xspi-write: unit-ls1028a-xspi-write.c nxp_ls1028a_host.c
 # against emulated qspi_* functions. zynq.c needs the Xilinx SDK headers
 # (board build tree) and cannot be compiled on the host, but the bug
 # under test is entirely in this one function, so it is extracted
-# verbatim by awk into zynq_erase_extract.h.
+# verbatim by sed into zynq_erase_extract.h.
 zynq_erase_extract.h: ../../hal/zynq.c
-	awk '/^int RAMFUNCTION ext_flash_erase\(/{f=1} f{print} f&&/^\}/{exit}' $< > $@
+	sed -n '/^int RAMFUNCTION ext_flash_erase(/,/^}/p' $< > $@
 
 unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
@@ -828,10 +828,8 @@ unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 # (F-7979: page chunks crossed physical NOR page boundaries and the
 # wrap clobbered the page start). Same extraction approach as the
 # erase test; the emulated NOR models the wrap.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 zynq_write_extract.h: ../../hal/zynq.c
-	awk '/^int RAMFUNCTION ext_flash_write\(/ {f=1} f{print} f&&/^\}/{exit}' $< > $@
+	sed -n '/^int RAMFUNCTION ext_flash_write(/,/^}/p' $< > $@
 
 unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
 	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
@@ -865,13 +863,11 @@ unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 # struct and the function are extracted verbatim (the qspi_* helpers
 # are file-static, so the test provides emulated ones); the emulated
 # NOR models the wrap.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 versal_qspidev_extract.h: ../../hal/versal.c
-	awk '/^\/\* QSPI device structure \*\/$$/ {f=1} f{print} f&&/^\} QspiDev_t;$$/{exit}' $< > $@
+	sed -n '/^\/\* QSPI device structure \*\//,/^} QspiDev_t;/p' $< > $@
 
 versal_ext_write_extract.h: ../../hal/versal.c
-	awk '/^int ext_flash_write\(/ {f=1} f{print} f&&/^\}/ {exit}' $< > $@
+	sed -n '/^int ext_flash_write(/,/^}/p' $< > $@
 
 unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_ext_write_extract.h versal_host.h
 	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
@@ -881,12 +877,12 @@ unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_e
 # bounded against the declared image, so a self-consistent blob could
 # make the upload copy arbitrary memory into QE IRAM). The qe_*
 # structures and the check function are extracted verbatim; the check
-# path needs no register access.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space; $$ is a literal $.
+# path needs no register access. The four qe_* structs end where the
+# check function's comment begins (a range cannot stop at the 4th
+# '} QE_PACKED;').
 t10xx_qe_firmware_extract.h: ../../hal/nxp_t10xx.c
-	awk '/^\/\* Structure packing \*\/$$/ {f=1} f {print} f && /^\} QE_PACKED;$$/ {n++; if (n == 4) exit}' $< > $@
-	awk '/^static int qe_check_firmware\(/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^\/\* Structure packing \*\//,/^\/\* Checks for valid QE firmware \*\//p' $< > $@
+	sed -n '/^static int qe_check_firmware(/,/^}/p' $< >> $@
 
 unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
 	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
@@ -898,11 +894,9 @@ unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
 # instead of the erased 0xFFFFFFFF). The tc3_flash_* API is emulated
 # on a host flash array; the same source is built for both flag
 # polarities and the assertions key off FLASH_BYTE_ERASED.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 aurix_erased_extract.h: ../../hal/aurix_tc3xx.c
-	awk '/^static void RAMFUNCTION cacheSector\(uint32_t sectorAddress\)/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
-	awk '/^static int RAMFUNCTION programBytesToErasedFlash/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^static void RAMFUNCTION cacheSector(uint32_t sectorAddress)/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION programBytesToErasedFlash/,/^}/p' $< >> $@
 
 unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
 	gcc -o $@ unit-aurix-erased-fill.c $(CFLAGS) $(LDFLAGS)
@@ -915,12 +909,12 @@ unit-aurix-erased-fill-invert: unit-aurix-erased-fill.c aurix_erased_extract.h
 # then copied attacker-shaped offsets/counts into FMan IRAM). The qe_*
 # structures and the function are extracted verbatim; the test owns the
 # NOR image (FMAN slot at a nonzero bank offset so the remaining-extent
-# check is exercised) and the FMan IRAM registers.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space; $$ is a literal $.
+# check is exercised) and the FMan IRAM registers. The four qe_*
+# structs end where hal_fman_init() begins (a range cannot stop at
+# the 4th '} QE_PACKED;'); sed '$d' trims the function signature.
 t2080_fman_extract.h: ../../hal/nxp_t2080.c
-	awk '/^\/\* Reuse QE firmware structures/ {f=1} f {print} f && /^\} QE_PACKED;$$/ {n++; if (n == 4) exit}' $< > $@
-	awk '/^static int hal_fman_init\(void\)/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^\/\* Reuse QE firmware structures/,/^static int hal_fman_init(/p' $< | sed '$$d' > $@
+	sed -n '/^static int hal_fman_init(void)/,/^}/p' $< >> $@
 
 unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
@@ -932,12 +926,10 @@ unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 # extracted verbatim; FLASH_SR/CR live on a host register file and the
 # destination flash is a pre-filled host array, so the over-read is
 # observable through a canary after the source buffer.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 stm32l5_write_extract.h: ../../hal/stm32l5.c
-	awk '/^void RAMFUNCTION hal_flash_wait_complete/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
-	awk '/^void RAMFUNCTION hal_flash_clear_errors/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
-	awk '/^int RAMFUNCTION hal_flash_write/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
@@ -946,12 +938,10 @@ unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 # (F-9764): the real hal_flash_write() and its wait/clear helpers from
 # hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
 # flash at a 32-bit host address, canary after the source buffer.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 stm32u5_write_extract.h: ../../hal/stm32u5.c
-	awk '/^void RAMFUNCTION hal_flash_wait_complete/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
-	awk '/^void RAMFUNCTION hal_flash_clear_errors/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
-	awk '/^int RAMFUNCTION hal_flash_write/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
 	gcc -o $@ unit-stm32u5-write.c $(CFLAGS) $(LDFLAGS)
@@ -962,11 +952,9 @@ unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
 # key/nonce, and the buffer was never scrubbed on return). The test
 # owns NVM_CACHE, stages a key-bearing sector image, and stubs the
 # flash layer; after each call the whole buffer must be zeroed.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex
-# literal, so each pattern is followed by a space.
 nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
-	awk '/^static int RAMFUNCTION trailer_write\(/ {f=1} f {print} f && /^\}/ {exit}' $< > $@
-	awk '/^static int RAMFUNCTION partition_magic_write\(/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+	sed -n '/^static int RAMFUNCTION trailer_write(/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION partition_magic_write(/,/^}/p' $< >> $@
 
 unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
@@ -1000,14 +988,16 @@ unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
 # boundary overran the staging buffer and lost the next block's bytes).
 # ti_hercules.c needs the TI FAPI vendor headers (board build tree) and
 # cannot be compiled on the host, but the bug is entirely in this
-# function, so the Makefile extracts hal_flash_unlock_helper() and
-# hal_flash_write() verbatim (two column-0 closing braces) into
+# function, so the Makefile extracts hal_flash_unlock_helper(), the
+# WRITE_BLOCK_SIZE define, and hal_flash_write() verbatim into
 # ti_hercules_write_extract.h; the FAPI calls are emulated in the test,
 # with Fapi_issueProgrammingCommand() performing the program into a host
 # flash array.
 
 ti_hercules_write_extract.h: ../../hal/ti_hercules.c
-	awk '/^static inline int RAMFUNCTION hal_flash_unlock_helper/{f=1} f{print} f&&/^}/{c++; if (c == 2) exit}' $< > $@
+	sed -n '/^static inline int RAMFUNCTION hal_flash_unlock_helper/,/^}/p' $< > $@
+	grep '^#define WRITE_BLOCK_SIZE' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write(/,/^}/p' $< >> $@
 
 unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
@@ -1025,16 +1015,14 @@ unit-p1021-qe-firmware: unit-p1021-qe-firmware.c nxp_p1021_host.c
 # (F-7052: unvalidated cell-index into phydevs[5]) with hand-built
 # DTBs. Extracts the function plus its liodn/qman static tables from
 # hal/nxp_t10xx.c.
-# NB: gawk 5.x mis-lexes an action brace directly after a regex literal
-# ("unterminated regexp"), so each pattern is followed by a space.
 nxp_t10xx_fixup_extract.h: ../../hal/nxp_t10xx.c
-	awk '/^struct liodn_id_table \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c > nxp_t10xx_fixup_extract.h
-	awk '/#define SET_LIODN\(/ {f=1} f{print} f&&/reg_offset = \(void\*\)reg/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
-	awk '/^static const struct liodn_id_table liodn_tbl\[\] = \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
-	awk '/^struct qportal_info \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
-	awk '/#define SET_QP_INFO\(/ {f=1} f{print} f&&/sdest = dest/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
-	awk '/^static const struct qportal_info qp_info\[QMAN_NUM_PORTALS\] = \{/ {f=1} f{print} f&&/^\};/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
-	awk '/^int hal_dts_fixup\(/ {f=1} f{print} f&&/^}/{exit}' ../../hal/nxp_t10xx.c >> nxp_t10xx_fixup_extract.h
+	sed -n '/^struct liodn_id_table {/,/^};/p' $< > $@
+	sed -n '/#define SET_LIODN(/,/reg_offset = (void\*)reg/p' $< >> $@
+	sed -n '/^static const struct liodn_id_table liodn_tbl\[\] = {/,/^};/p' $< >> $@
+	sed -n '/^struct qportal_info {/,/^};/p' $< >> $@
+	sed -n '/#define SET_QP_INFO(/,/sdest = dest/p' $< >> $@
+	sed -n '/^static const struct qportal_info qp_info\[QMAN_NUM_PORTALS\] = {/,/^};/p' $< >> $@
+	sed -n '/^int hal_dts_fixup(/,/^}/p' $< >> $@
 
 unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src/fdt.c
 	gcc -o $@ unit-t10xx-dts-memac.c $(CFLAGS) $(LDFLAGS)
