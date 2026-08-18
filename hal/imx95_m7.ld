@@ -31,12 +31,18 @@ SECTIONS
     } > ITCM
 
     /* Consumed by the remoteproc ELF loader. Not required to start the core,
-     * but RPMsg needs it, so keep it even when empty. */
-    .resource_table :
+     * but RPMsg needs it, so keep it even when empty.
+     *
+     * Align the output SECTION, not the location counter inside it. Linux's
+     * rproc_elf_find_loaded_rsc_table() finds the table by the section
+     * header's sh_addr, so an inner ". = ALIGN(8)" that has to pad puts those
+     * pad bytes *inside* the section: the kernel then reads the padding as
+     * fw_rsc_hdr::ver, sees 0, rejects the table and never creates the vdev.
+     * This form keeps sh_addr and the resource_table symbol coincident
+     * whatever precedes the section. */
+    .resource_table ALIGN(8) :
     {
-        . = ALIGN(8);
         KEEP(*(.resource_table*))
-        . = ALIGN(8);
     } > ITCM
 
     /* Public keys emitted by the keytool (KEYSTORE_SECTION). Placed
