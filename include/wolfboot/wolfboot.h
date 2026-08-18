@@ -30,6 +30,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <limits.h>   /* CHAR_BIT */
 #ifdef __WOLFBOOT
 /* Either hand-craft a device target.h file in [WOLFBOOT_ROOT]/include
  * or let build process auto-create one from .config file or cmake presets.
@@ -59,6 +60,12 @@ extern "C" {
 #      endif
 #    elif defined(ARCH_PPC)
 #      define RAMFUNCTION __attribute__((used,section(".ramcode"),longcall))
+#    elif defined(__TMS320C28XX__)
+       /* TI C2000 cl2000: place in .TI.ramfunc; the linker LOAD/RUN pair + the
+        * device startup Ramfuncs memcpy relocate it to RAM (see hal/f28p55x.ld).
+        * Gated to the C28x specifically so the ti_hercules (armcl) .ramcode
+        * path above is not affected. */
+#      define RAMFUNCTION __attribute__((ramfunc))
 #    else
 #      define RAMFUNCTION __attribute__((used,section(".ramcode")))
 #    endif
@@ -68,7 +75,7 @@ extern "C" {
 #endif
 
 #ifndef WEAKFUNCTION
-#  if defined(__GNUC__) || defined(__CC_ARM)
+#  if defined(__GNUC__) || defined(__CC_ARM) || defined(__TMS320C28XX__)
 #    define WEAKFUNCTION __attribute__((weak))
 #  else
 #    define WEAKFUNCTION
@@ -101,7 +108,7 @@ extern "C" {
 /* Helpers for memory alignment */
 #ifndef XALIGNED
     #if defined(__GNUC__) || defined(__llvm__) || \
-            defined(__IAR_SYSTEMS_ICC__)
+            defined(__IAR_SYSTEMS_ICC__) || defined(__TMS320C28XX__)
         #define XALIGNED(x) __attribute__ ( (aligned (x)))
     #elif defined(__KEIL__)
         #define XALIGNED(x) __align(x)
@@ -168,7 +175,48 @@ extern "C" {
 #   endif
 
 #endif /* IMAGE_HEADER_SIZE */
-#define IMAGE_HEADER_OFFSET (2 * sizeof(uint32_t))
+
+/* Image-header fixed-field access.
+ *
+ * The header's serialized 32-/16-bit fields (magic, size, version, type) are a
+ * little-endian octet stream.  On normal targets one octet == one addressable
+ * byte; on the C28x (CHAR_BIT==16, header stored one octet per 16-bit cell) a
+ * u32 field spans 4 octets == 4 cells even though sizeof(uint32_t) is only 2
+ * cells.  So reconstruct each field from individually masked cells rather than
+ * a single (possibly unaligned) load:
+ *  - on the C28x a cell may carry non-octet upper bits - the & 0xFF keeps the
+ *    value octet-exact;
+ *  - on every other target the & 0xFF is a no-op and the byte reconstruction
+ *    avoids an unaligned 32/16-bit load (wolfBoot_find_header only guarantees
+ *    2-byte alignment) and is endian-neutral.
+ * The _SZ macros are the field's octet width (4 octets == 4 cells on the C28x),
+ * used for both pointer offsets and find_header() length checks.
+ *
+ * Only the wide-byte target needs the reconstruction.  Where one octet is one
+ * byte the field is read exactly as it always was, for two reasons: the
+ * assembled form costs code size on every target (it pushed the SIGN=NONE
+ * footprint build over its limit), and callers wrap these in im2n()/im2ns(),
+ * which convert little-endian to native - so an already-native result would be
+ * byte-swapped a second time on a big-endian target. */
+#define WOLFBOOT_HDR_U32_SZ 4
+#define WOLFBOOT_HDR_U16_SZ 2
+#if CHAR_BIT != 8
+/* A cell may carry non-octet upper bits, so mask each one; the result is
+ * native order already, and these parts are little-endian so the caller's
+ * im2n()/im2ns() is a no-op. */
+#define WOLFBOOT_HDR_GET_U32(p) \
+    (((uint32_t)(((const uint8_t*)(p))[0] & 0xFF))       | \
+     ((uint32_t)(((const uint8_t*)(p))[1] & 0xFF) << 8)  | \
+     ((uint32_t)(((const uint8_t*)(p))[2] & 0xFF) << 16) | \
+     ((uint32_t)(((const uint8_t*)(p))[3] & 0xFF) << 24))
+#define WOLFBOOT_HDR_GET_U16(p) \
+    ((uint16_t)((((const uint8_t*)(p))[0] & 0xFF) | \
+               ((((const uint8_t*)(p))[1] & 0xFF) << 8)))
+#else
+#define WOLFBOOT_HDR_GET_U32(p) (*(const uint32_t*)(const void*)(p))
+#define WOLFBOOT_HDR_GET_U16(p) (*(const uint16_t*)(const void*)(p))
+#endif
+#define IMAGE_HEADER_OFFSET (2 * WOLFBOOT_HDR_U32_SZ)
 
 #ifndef FLASHBUFFER_SIZE
 #    ifdef NVM_FLASH_WRITEONCE
