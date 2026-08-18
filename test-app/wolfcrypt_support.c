@@ -47,44 +47,64 @@
 #elif defined(TARGET_imx95_m7)
     /* Cortex-M7 DWT cycle counter. Exact, free to read, and needs no
      * peripheral - which matters here because the M7 has no console UART
-     * routed on this carrier. The core runs at 800 MHz (read from the board's
-     * clk_summary: "m7 800000000"), not assumed. CYCCNT is 32-bit and wraps
-     * every ~5.4 s at that rate, so accumulate into 64 bits on each read;
-     * benchmark intervals are shorter than one wrap, so sampling on every call
-     * is sufficient to catch it. */
+     * routed on this carrier.
+     *
+     * IMX95_M7_HZ is a build-time constant, not a run-time reading: the M7
+     * clock is owned by the System Manager on the M33 and the core cannot
+     * query it without an SCMI round trip. 800 MHz is what this board's
+     * clk_summary reports ("m7 800000000"); override with -DIMX95_M7_HZ if the
+     * System Manager is configured differently, or every reported figure
+     * scales by the ratio.
+     *
+     * CYCCNT is 32 bits and wraps every ~5.4 s at that rate, and the wrap
+     * accounting below can only recover one wrap per read. my_time() alone
+     * does not read often enough to guarantee that - it is called only when
+     * wolfCrypt validates a certificate date - so app_imx95_m7.c drives
+     * imx95_m7_cyc_sample() from SysTick to keep the invariant true. */
+    #include "hal/imx95_m7.h"
+
+    #ifndef IMX95_M7_HZ
     #define IMX95_M7_HZ 800000000ULL
+    #endif
+
     static uint64_t m7_cyc_hi = 0;
     static uint32_t m7_cyc_last = 0;
     static int m7_cyc_inited = 0;
+    static uint64_t m7_start_ticks = 0;
 
-    static void m7_cyc_init(void);
-
+    /* Reached from both thread and interrupt context, so the wrap accounting
+     * is a critical section. PRIMASK is saved and restored rather than
+     * unconditionally re-enabled, since the caller may already be masked. */
     static uint64_t m7_get_ticks(void)
     {
-        uint32_t now;
+        uint32_t now, primask;
+        uint64_t ticks;
+
+        __asm__ volatile ("mrs %0, primask" : "=r"(primask));
+        __asm__ volatile ("cpsid i" ::: "memory");
 
         if (!m7_cyc_inited) {
-            m7_cyc_init();
+            imx95_dwt_init();
+            m7_cyc_hi = 0;
+            m7_cyc_last = 0;
             m7_cyc_inited = 1;
         }
-        now = *(volatile uint32_t *)0xE0001004UL; /* DWT_CYCCNT */
-
+        now = DWT_CYCCNT;
         if (now < m7_cyc_last)
             m7_cyc_hi += 0x100000000ULL; /* wrapped since last read */
         m7_cyc_last = now;
-        return m7_cyc_hi + now;
+        ticks = m7_cyc_hi + now;
+
+        if ((primask & 1U) == 0U)
+            __asm__ volatile ("cpsie i" ::: "memory");
+        return ticks;
     }
 
-    static void m7_cyc_init(void)
+    /* Called from the app's SysTick handler; see app_imx95_m7.c. */
+    void imx95_m7_cyc_sample(void)
     {
-        *(volatile uint32_t *)0xE000EDFCUL |= (1UL << 24); /* DEMCR.TRCENA */
-        *(volatile uint32_t *)0xE0001004UL = 0;            /* DWT_CYCCNT = 0 */
-        *(volatile uint32_t *)0xE0001000UL |= 1UL;         /* DWT_CTRL.CYCCNTENA */
-        m7_cyc_hi = 0;
-        m7_cyc_last = 0;
+        (void)m7_get_ticks();
     }
-
-    static uint64_t m7_start_ticks = 0;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     /* PPC time base register for accurate timing (e6500). */
     static uint32_t ppc_tb_hz = 0;
@@ -239,11 +259,11 @@ double current_time(int reset)
     (void)reset;
     return (double)SysTick_time_ms / 1000.0;
 #elif defined(TARGET_imx95_m7)
-    if (reset) {
-        m7_cyc_init();
-        m7_cyc_inited = 1;
-        m7_start_ticks = 0;
-    }
+    /* Take a new origin rather than zeroing the counter: my_time() shares it
+     * and the benchmark resets once per algorithm, which would otherwise walk
+     * wolfCrypt's notion of wall-clock time backwards dozens of times a run. */
+    if (reset)
+        m7_start_ticks = m7_get_ticks();
     return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)

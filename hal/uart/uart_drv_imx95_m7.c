@@ -33,20 +33,24 @@
  * The buffer sits at the top of the M7's 16 MiB carveout (memory@80000000),
  * clear of the wolfBoot partitions lower down (BOOT 0x80100000, UPDATE
  * 0x80500000, SWAP 0x80900000). It deliberately does NOT use the RPMsg
- * vdevbuffer carveout, which belongs to the RPMsg transport.
+ * vdevbuffer carveout, which belongs to the RPMsg transport. The header plus
+ * the ring occupy exactly the 64 KiB page below the status block; see
+ * hal/imx95_m7.h, which holds the layout and asserts that they do not overlap.
  *
  * Reader contract: `wr` counts bytes ever written and never wraps within a run,
  * so a reader tracks its own position and copies (wr - pos) bytes from
- * data[pos % size]. Overrun is possible and expected for very chatty output;
- * the reader detects it when (wr - pos) > size and reports the gap rather than
- * silently printing corrupt text.
+ * data[pos % size]. `size` is published in the header rather than assumed.
+ * Overrun is possible and expected for very chatty output; the reader detects
+ * it when (wr - pos) > size and reports the gap rather than silently printing
+ * corrupt text.
+ *
+ * Publish ordering is enforced with DMB, not by `volatile`: volatile binds the
+ * compiler only, while the A55 reading this ring is a separate observer of a
+ * Normal-memory region the M7 may reorder stores to.
  */
 
 #include <stdint.h>
-
-#define CONSOLE_BASE  0x80F00000UL
-#define CONSOLE_MAGIC 0x4E4F4357UL /* "WCON" little-endian */
-#define CONSOLE_SIZE  0x10000UL    /* 64 KiB of text */
+#include "hal/imx95_m7.h"
 
 struct console_hdr {
     volatile uint32_t magic;
@@ -56,7 +60,7 @@ struct console_hdr {
 };
 
 #define CONSOLE_HDR  ((struct console_hdr *)CONSOLE_BASE)
-#define CONSOLE_DATA ((volatile uint8_t *)(CONSOLE_BASE + sizeof(struct console_hdr)))
+#define CONSOLE_DATA ((volatile uint8_t *)(CONSOLE_BASE + CONSOLE_HDR_SIZE))
 
 int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 {
@@ -69,9 +73,11 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 
     h->wr = 0;
     h->size = CONSOLE_SIZE;
-    /* Magic last: a reader that samples mid-init sees no valid console rather
-     * than a valid magic with a stale size. */
+    /* Magic last, and behind a barrier: a reader that samples mid-init sees no
+     * valid console rather than a valid magic with a stale size. */
+    DMB();
     h->magic = CONSOLE_MAGIC;
+    imx95_dcache_clean((const void *)h, sizeof(*h));
     return 0;
 }
 
@@ -79,15 +85,20 @@ int uart_tx(const uint8_t c)
 {
     struct console_hdr *h = CONSOLE_HDR;
     uint32_t w;
+    uint32_t idx;
 
     if (h->magic != CONSOLE_MAGIC)
         (void)uart_init(0, 0, 'N', 0);
 
     w = h->wr;
-    CONSOLE_DATA[w % CONSOLE_SIZE] = c;
+    idx = w % CONSOLE_SIZE;
+    CONSOLE_DATA[idx] = c;
+    imx95_dcache_clean((const void *)&CONSOLE_DATA[idx], 1);
     /* Publish the byte before advancing the counter, so a reader never sees a
      * count covering a byte that has not been stored yet. */
+    DMB();
     h->wr = w + 1;
+    imx95_dcache_clean((const void *)h, sizeof(*h));
     return 0;
 }
 

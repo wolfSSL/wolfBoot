@@ -622,6 +622,9 @@ endif
 # arch.mk via CORTEX_M7.
 ifeq ($(TARGET),imx95_m7)
   CFLAGS+=-I..
+  # The app owns isr_systick: it samples the DWT cycle counter often enough
+  # that the 32-bit counter cannot wrap unnoticed between timebase reads.
+  CFLAGS+=-DAPP_HAS_SYSTICK
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
   LSCRIPT_TEMPLATE=ARM-imx95_m7.ld
 endif

@@ -385,6 +385,15 @@ jobs:
       config-file: ./config/examples/raspi3-encrypted.config
       make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  imx95_m7_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      # i.MX95 Cortex-M7: wolfBoot runs from ITCM (loaded by remoteproc) and
+      # the payload lives in DDR, so there is no contiguous factory.bin.
+      config-file: ./config/examples/imx95-m7.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin
+
   tegra234_test:
     uses: ./.github/workflows/test-build.yml
     with:
