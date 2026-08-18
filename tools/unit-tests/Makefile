@@ -1077,4 +1077,9 @@ covclean:
 clean: covclean
 	rm -f $(TESTS) *.o *.gcno *.gcda coverage.*
 
+# The extraction rules below build one header with several appending
+# commands. Without this, a failure partway through leaves a truncated
+# file with a fresh mtime that the next make treats as up to date.
+.DELETE_ON_ERROR:
+
 .PHONY: FORCE
