@@ -1743,15 +1743,13 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             /* read page into FCM buffer */
             hal_flash_set_addr(page, col);
 
-            /* full page + spare (the only ECC-checking setting) only when
-             * the whole page is read from column 0; otherwise transfer
-             * exactly read_size bytes starting at column col */
-            if (col == 0 && read_size == page_size) {
-                set32(ELBC_FBCR, 0);
-            }
-            else {
-                set32(ELBC_FBCR, ELBC_FBCR_BC(read_size));
-            }
+            /* Always transfer the full page + spare (BC = 0). It is the
+             * only setting that checks ECC, and the bad-block marker
+             * tested below lives in the spare region, which a BC != 0
+             * transfer never loads -- the check would then sample stale
+             * FCM RAM. read_size still governs how much is copied out
+             * of the buffer and how far the loop advances. */
+            set32(ELBC_FBCR, 0);
 
             ret = hal_flash_command(0);
             if (ret != 0)

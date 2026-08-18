@@ -198,6 +198,13 @@ static void emulate_fcm_transfer(void)
     if (ci + bc > 512) {
         bc = 512 - ci;
     }
+    /* g_nand only models 16 pages. A page past the end means the code
+     * under test walked off the emulated device (e.g. a spurious
+     * bad-block skip): leave the FCM buffer alone rather than running
+     * off the array, so the caller's data assertions report it. */
+    if (page >= 16) {
+        return;
+    }
     nand = &g_nand[page * (512 + 64)];
 
     if (((fir >> 16) & 0xF) == ELBC_FIR_OP_RBW) {
@@ -492,6 +499,35 @@ START_TEST(test_p1021_read_full_page)
 }
 END_TEST
 
+/* A short read must still transfer the spare region, because the
+ * bad-block marker lives there. With BC != 0 the FCM only loads the
+ * requested main-area bytes and flash_buf[bad_marker] is leftover FCM
+ * RAM from an earlier operation: a stale non-0xFF byte then makes
+ * ext_flash_read() declare the block bad, skip to the next erase block
+ * and return data from the wrong address -- while still returning len.
+ * Here FCM buffer 0's marker byte is dirtied before the read. */
+START_TEST(test_p1021_read_short_spare_loaded)
+{
+    uint8_t data[16];
+    size_t i;
+
+    for (i = 0; i < 512; i++)
+        g_nand[i] = (uint8_t)(0x80 + i);
+    /* small page: bad marker at page_size + 5 in FCM buffer 0 */
+    g_fcm8k[512 + 5] = 0x00;
+    memset(data, 0xEE, sizeof(data));
+
+    ck_assert_int_eq(ext_flash_read(0, data, 4), 4);
+
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(data[i], g_nand[i]);
+    for (i = 4; i < sizeof(data); i++)
+        ck_assert_uint_eq(data[i], 0xEE);
+}
+END_TEST
+
 /* Multi-page read: the second iteration must copy only the remaining
  * 88 bytes. Pre-fix it copied a full page, writing 424 bytes past the
  * caller's buffer. */
@@ -509,8 +545,10 @@ START_TEST(test_p1021_read_multipart)
     ck_assert_int_eq(ext_flash_read(0, data, 600), 600);
 
     ck_assert_int_eq(g_fbcr_n, 2);
+    /* reads always transfer the full page + spare (BC = 0); read_size
+     * only bounds how much is copied out of the FCM buffer */
     ck_assert_uint_eq(g_fbcr_log[0], 0);
-    ck_assert_uint_eq(g_fbcr_log[1], 88u);
+    ck_assert_uint_eq(g_fbcr_log[1], 0);
     for (i = 0; i < 512; i++)
         ck_assert_uint_eq(data[i], g_nand[i]);
     for (i = 0; i < 88; i++)
@@ -538,6 +576,7 @@ Suite *p1021_fcm_suite(void)
     tcase_add_test(tc, test_p1021_write_multipart);
     tcase_add_test(tc, test_p1021_write_unaligned);
     tcase_add_test(tc, test_p1021_read_full_page);
+    tcase_add_test(tc, test_p1021_read_short_spare_loaded);
     tcase_add_test(tc, test_p1021_read_multipart);
 
     suite_add_tcase(s, tc);
