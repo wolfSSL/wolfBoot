@@ -389,12 +389,18 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 #else
     ret = hal_flash_write(addr_write, NVM_CACHE, NVM_CACHE_SIZE);
 #endif
-    if (ret != 0)
+    if (ret != 0) {
+        /* The staged sector may hold the firmware key/nonce (see
+         * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
+         * returning, success or not. */
+        ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
         return ret;
+    }
 
     /* Once a copy has been written, erase the older sector */
     ret = hal_flash_erase(addr_read, NVM_CACHE_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
+    ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
     return ret;
 }
 
@@ -420,10 +426,16 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     XMEMCPY(NVM_CACHE, (void*)addr_read, NVM_CACHE_SIZE);
     XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
     ret = hal_flash_write(addr_write, NVM_CACHE, WOLFBOOT_SECTOR_SIZE);
-    if (ret != 0)
+    if (ret != 0) {
+        /* The staged sector may hold the firmware key/nonce (see
+         * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
+         * returning, success or not. */
+        ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
         return ret;
+    }
     nvm_cached_sector = !nvm_cached_sector;
     ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
+    ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
     return ret;
 }
 #ifdef __CCRX__
