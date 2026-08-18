@@ -1,8 +1,9 @@
 /* unit-p1021-fcm-bytes.c
  *
- * Regression test for F-7975 and F-7976 in hal/nxp_p1021.c.
+ * Regression tests for the FCM byte helpers and page loops in
+ * hal/nxp_p1021.c.
  *
- * F-7975: hal_flash_read_bytes() and hal_flash_write_bytes() loop on
+ * hal_flash_read_bytes() and hal_flash_write_bytes() loop on
  * `while (flash_idx < len)`, comparing the FCM buffer index (which
  * hal_flash_set_addr() initializes to the page column, `flash_idx = col`)
  * against the caller's relative byte count. With col != 0:
@@ -17,7 +18,7 @@
  * The fix computes an absolute end (flash_idx + len) and copies exactly
  * len bytes, handling the tail byte-wise.
  *
- * F-7976: the ext_flash_write()/ext_flash_read() page loops size every
+ * the ext_flash_write()/ext_flash_read() page loops size every
  * iteration from the total request length instead of the remaining
  * length, do not cap it to the page, and program ELBC_FBCR with the
  * column offset - so the byte-count field (FBCR[BC], P1021RM 12.3.30
@@ -84,7 +85,7 @@ static uint32_t g_ccsr_regs[0x200000 / sizeof(uint32_t)];
 #define get16(addr)  (*(const volatile uint16_t *)(addr))
 #define set16(addr, v)  (*(volatile uint16_t *)(addr) = (uint16_t)(v))
 #define get32(addr)  (*(const volatile uint32_t *)(addr))
-/* set32 goes through a host hook so the F-7976 tests can log FBCR
+/* set32 goes through a host hook so the tests can log FBCR
  * writes and emulate the FCM<->NAND data move the hardware performs on
  * an LSOR write (see p1021_set32() below). */
 static void p1021_set32(volatile uint32_t *addr, uint32_t v);
@@ -153,11 +154,11 @@ static uint8_t g_fcm8k[8 * 1024];
  * (see there for the single mechanical difference). */
 #include "nxp_p1021_host.c"
 
-/* Stand-in FCM buffer for the F-7975 helper tests (they drive
+/* Stand-in FCM buffer for the helper tests (they drive
  * flash_buf directly, without hal_flash_set_addr()). */
 static uint8_t fcm[1024];
 
-/* ---- F-7976: emulated NAND and FCM transfer hook ----
+/* ---- emulated NAND and FCM transfer hook ----
  *
  * The hardware moves data between the FCM buffer and the NAND page when
  * hal_flash_command() writes the LSOR register. On the host that write
@@ -274,7 +275,7 @@ START_TEST(test_write_col_zero)
 }
 END_TEST
 
-/* The core F-7975 case: with col != 0 and len <= col the pre-fix loop
+/* The core case: with col != 0 and len <= col the pre-fix loop
  * ran zero times and the page program went ahead with stale FCM
  * contents. All len bytes must land at FCM offset col. */
 START_TEST(test_write_len_le_col)
@@ -386,7 +387,7 @@ START_TEST(test_read_len_gt_col)
 }
 END_TEST
 
-/* ---- F-7976: ext_flash_write()/ext_flash_read() page loops ---- */
+/* ---- ext_flash_write()/ext_flash_read() page loops ---- */
 
 /* A full-page write from column 0 must keep BC = 0 (full page + spare,
  * the only ECC-generating setting). */

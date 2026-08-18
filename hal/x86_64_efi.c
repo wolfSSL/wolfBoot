@@ -237,9 +237,9 @@ static int open_kernel_image(EFI_FILE_HANDLE vol, CHAR16 *filename,
     UINTN pages;
     UINT64 filesz;
 
-    /* Always leave *_addr well-defined so the caller's "no image" check is
-     * reliable: 0 on any failure, the loaded address only on full success.
-     * (F-9738) */
+    /* Always leave *_addr well-defined so the caller's "no image" check
+     * is reliable: 0 on any failure, the loaded address only on full
+     * success. */
     *_addr = 0;
     *sz = 0;
     file = openFile(filename, vol);

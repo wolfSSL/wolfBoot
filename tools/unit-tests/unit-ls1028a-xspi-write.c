@@ -1,6 +1,6 @@
 /* unit-ls1028a-xspi-write.c
  *
- * Regression test for F-7977: hal_flash_write() and ext_flash_write() in
+ * Regression test: hal_flash_write() and ext_flash_write() in
  * hal/nxp_ls1028a.c issue xspi_write_en() once before xspi_flash_write(),
  * but xspi_flash_write() issues one Page Program command per 256-byte
  * chunk when len > XSPI_IP_BUF_SIZE. NOR flash clears its
@@ -388,7 +388,7 @@ END_TEST
  * inside its loop, so it is not affected by this finding (and its SE
  * command encoding is a separate matter, not covered here).
  *
- * Suite for the F-7977 write path: */
+ * Suite for the write path: */
 Suite *ls1028a_xspi_suite(void)
 {
     Suite *s = suite_create("ls1028a-xspi-write");

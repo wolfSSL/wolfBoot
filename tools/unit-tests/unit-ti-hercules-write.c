@@ -1,6 +1,6 @@
 /* unit-ti-hercules-write.c
  *
- * Regression test for F-9736: the short-write path of hal_flash_write()
+ * Regression test: the short-write path of hal_flash_write()
  * in hal/ti_hercules.c checked only len < WRITE_BLOCK_SIZE, not whether
  * (address % WRITE_BLOCK_SIZE) + len stayed inside the block. A short
  * write starting near the end of a block copied past the end of the
@@ -200,7 +200,7 @@ START_TEST(test_short_write_fits_block)
 }
 END_TEST
 
-/* A short write crossing a block boundary (the F-9736 case): the first
+/* A short write crossing a block boundary (the case): the first
  * partial block and the remainder in the next block must both be
  * programmed, and nothing may be copied past the staging buffer. The
  * second program must also wait for the FSM: issued back-to-back it is

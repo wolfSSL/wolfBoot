@@ -196,12 +196,10 @@
 #define ELBC_FBAR   ((volatile uint32_t*)(ELBC_BASE + 0xEC))  /* flash address register - OR_PGS=0 (shift 5), OR_PGS=1 (shift 6) */
 #define ELBC_FPAR   ((volatile uint32_t*)(ELBC_BASE + 0xF0))  /* flash page address register */
 #define ELBC_FBCR   ((volatile uint32_t*)(ELBC_BASE + 0xF4))  /* flash byte count register */
-/* FBCR[BC] = byte count: 0 = full page + spare, the only setting that
- * generates/checks ECC (FPAR[MS] and FPAR[CI] are then treated as 0);
- * otherwise the number of bytes transferred starting at FPAR[CI].
- * P1021RM 12.3.30 numbers it bits 20-31 MSB-first, i.e. the low 12 bits
- * of the word -- unshifted, like ELBC_FPAR_*_CI below. Bits 0-19 are
- * reserved. */
+/* FBCR[BC] = byte count: 0 = full page + spare (the only ECC setting,
+ * FPAR[MS]/[CI] then read as 0), else bytes from FPAR[CI]. P1021RM
+ * 12.3.30 numbers it 20-31 MSB-first, i.e. the low 12 bits: unshifted,
+ * like ELBC_FPAR_*_CI below. */
 #define ELBC_FBCR_BC(n)   ((n) & 0xFFF)
 
 #define ELBC_LTESR  ((volatile uint32_t*)(ELBC_BASE + 0xB0))  /* transfer error status register */
@@ -685,10 +683,9 @@ static int hal_flash_command(uint8_t iswrite)
 
     ltesr = get32(ELBC_LTESR);
 
-    /* Test the completion flag rather than the loop counter: on a
-     * timeout exit "timeout" has already been incremented past
-     * FLASH_TIMEOUT_TRIES, so the old "timeout == FLASH_TIMEOUT_TRIES"
-     * never matched and a command that never completed returned 0. */
+    /* Test the completion flag, not the loop counter: on a timeout exit
+     * "timeout" has already passed FLASH_TIMEOUT_TRIES, so comparing it
+     * for equality never matched and a hung command returned 0. */
     if (!(ltesr & ELBC_LTESR_CC)) {
         ret = -1;
     }
@@ -700,11 +697,9 @@ static int hal_flash_command(uint8_t iswrite)
     return ret;
 }
 
-/* Uses 32-bit accesses only when both the FCM window offset and the
- * caller's buffer are 4-byte aligned: flash_idx starts at the page
- * column and the chunk lengths need not be multiples of 4, so either
- * side can be odd. A misaligned 32-bit access to the cache-inhibited,
- * guarded eLBC window raises an alignment interrupt on e500. */
+/* 32-bit accesses only when both the FCM offset and the caller's
+ * buffer are 4-byte aligned; either can be odd, and a misaligned
+ * access to the guarded eLBC window traps on e500. */
 static void hal_flash_read_bytes(uint8_t* data, size_t len)
 {
     uint32_t end = flash_idx + (uint32_t)len;
@@ -1758,12 +1753,9 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             /* read page into FCM buffer */
             hal_flash_set_addr(page, col);
 
-            /* Always transfer the full page + spare (BC = 0). It is the
-             * only setting that checks ECC, and the bad-block marker
-             * tested below lives in the spare region, which a BC != 0
-             * transfer never loads -- the check would then sample stale
-             * FCM RAM. read_size still governs how much is copied out
-             * of the buffer and how far the loop advances. */
+            /* Always full page + spare (BC = 0): the bad-block marker
+             * below lives in the spare region, which a BC != 0 transfer
+             * never loads. read_size still bounds the copy out. */
             set32(ELBC_FBCR, 0);
 
             ret = hal_flash_command(0);

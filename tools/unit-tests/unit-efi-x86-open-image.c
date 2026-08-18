@@ -1,6 +1,6 @@
 /* unit-efi-x86-open-image.c
  *
- * Regression test for F-9734: open_kernel_image() in hal/x86_64_efi.c passed
+ * Regression test: open_kernel_image() in hal/x86_64_efi.c passed
  * the caller's uint32_t *sz directly as the BufferSize argument of
  * EFI_FILE_PROTOCOL.Read(). That parameter is a UINTN, which is 64 bits on
  * x86-64, and the UEFI spec requires the firmware to write the number of
@@ -478,7 +478,7 @@ START_TEST(test_open_image_too_small)
     ck_assert_int_eq(ret, -1);
     ck_assert(canary_intact(&canary));
 
-    /* F-9738: a rejected load must not publish the allocated address, and
+    /* a rejected load must not publish the allocated address, and
      * the pages plus the file handle must be released. */
     ck_assert_uint_eq(addr, 0);
     ck_assert_int_eq(mock_free_pages, 1);
@@ -488,9 +488,9 @@ END_TEST
 
 /* A file larger than 4 GiB must be rejected before any allocation: the
  * loader's size type is uint32_t, and a 64-bit FileSize() truncated into
- * it would allocate and read a tiny fragment of the real image
- * (F-9739). The guard runs before AllocatePages, so nothing is
- * allocated and nothing must be freed. */
+ * it would allocate and read a tiny fragment of the real image. The
+ * guard runs before AllocatePages, so nothing is allocated and nothing
+ * must be freed. */
 START_TEST(test_open_image_oversized_rejected)
 {
     sz_canary_t canary;
@@ -514,7 +514,7 @@ START_TEST(test_open_image_oversized_rejected)
 END_TEST
 
 /* A failed Read() must not publish the allocated address, and must free
- * the pages and close the file (F-9738). */
+ * the pages and close the file. */
 START_TEST(test_open_image_read_failure)
 {
     sz_canary_t canary;
@@ -541,7 +541,7 @@ START_TEST(test_open_image_read_failure)
 END_TEST
 
 /* A failed allocation must not publish an address, and must close the
- * file (F-9738). */
+ * file. */
 START_TEST(test_open_image_alloc_failure)
 {
     sz_canary_t canary;

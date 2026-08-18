@@ -1,6 +1,6 @@
 /* unit-t10xx-dts-memac.c
  *
- * Regression test for F-7052: the fsl,fman-memac loop in
+ * Regression test: the fsl,fman-memac loop in
  * hal_dts_fixup() (hal/nxp_t10xx.c) read the node's cell-index
  * straight from the device tree and used it to index the file-static
  * phydevs[5] with no bounds check - unlike the qman-portal loop right

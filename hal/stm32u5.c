@@ -95,14 +95,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     while (i < len) {
         int j;
 
-        /* Build the whole 128-bit unit before opening the PG window.
-         * The controller only starts the program once all four words
-         * have been stored -- a partial quad-word leaves FLASH_SR_WDW
-         * set and hal_flash_wait_complete() never returns. Bytes
-         * outside [i, len) are read back from flash and written
-         * unchanged, so nothing past the requested length is modified
-         * and the source is never read past len (same read-modify-write
-         * shape as hal/stm32h5.c). */
+        /* Read-modify-write the whole 128-bit unit (as stm32h5.c):
+         * the program only starts on the 4th word, and a partial
+         * quad-word leaves FLASH_SR_WDW set, hanging the wait. */
         for (j = 0; j < 16; j++) {
             if (i + j < len)
                 qword_bytes[j] = data[i + j];

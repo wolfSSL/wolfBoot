@@ -1,6 +1,6 @@
 /* unit-versal-ext-write.c
  *
- * Regression test for F-7981: ext_flash_write() in hal/versal.c
+ * Regression test: ext_flash_write() in hal/versal.c
  * chunked the request into length-based FLASH_PAGE_SIZE transfers
  * (page 0, page 1, ...) without accounting for the start address's
  * offset inside the physical page. A write starting mid-page sent a

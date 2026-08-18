@@ -1,6 +1,6 @@
 /* unit-stm32u5-write.c
  *
- * Regression test for F-9764: hal_flash_write() in hal/stm32u5.c
+ * Regression test: hal_flash_write() in hal/stm32u5.c
  * looped while (i < len) but each iteration unconditionally read all
  * four 32-bit words of the 16-byte program unit (src[i>>2] through
  * src[(i>>2)+3]) and programmed the full quadword regardless of the

@@ -1,6 +1,6 @@
 /* unit-aurix-erased-fill.c
  *
- * Regression test for F-9737: cacheSector() and
+ * Regression test: cacheSector() and
  * programBytesToErasedFlash() in hal/aurix_tc3xx.c filled their
  * uint32_t page buffers with the byte-valued FLASH_BYTE_ERASED, so in
  * the default (non-inverted) build every 32-bit word became

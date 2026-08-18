@@ -663,10 +663,8 @@ static int hal_fman_init(void)
         return -1;
     }
 
-    /* Everything below reads through fw. The guard above only proved
-     * that FMAN_FW_ADDR itself is inside the NOR window, so bound the
-     * fixed part of the container (header + first microcode entry)
-     * before dereferencing any of it. */
+    /* The guard above only proved FMAN_FW_ADDR itself is in the NOR
+     * window; bound the fixed part before dereferencing it. */
     fw_off = (uint64_t)((uintptr_t)fw - (uintptr_t)FLASH_BASE_ADDR);
     extent = (uint64_t)FLASH_BANK_SIZE - fw_off;
     if (extent < (uint64_t)sizeof(struct qe_firmware)) {
@@ -685,7 +683,7 @@ static int hal_fman_init(void)
      * microcode count, self-consistent length, every code range inside
      * the declared image, and the whole image inside the remaining NOR
      * bank. 64-bit arithmetic so the sums cannot wrap. Fail closed:
-     * FMan stays unconfigured on any mismatch (F-9762). */
+     * FMan stays unconfigured on any mismatch. */
     if (hdr->version != 1) {
         wolfBoot_printf("FMAN: version %d unsupported\n", hdr->version);
         return -1;
@@ -701,9 +699,8 @@ static int hal_fman_init(void)
         uint64_t calc;
         unsigned int k;
 
-        /* Bound the microcode table and the declared image against the
-         * NOR before either is walked -- the table sits past the fixed
-         * part checked above, and the loop below dereferences it. */
+        /* Bound the table and the declared image before walking
+         * them: the table sits past the fixed part checked above. */
         if (table > extent || length > extent) {
             wolfBoot_printf("FMAN: image %lu exceeds NOR extent %lu\n",
                 (unsigned long)length, (unsigned long)extent);

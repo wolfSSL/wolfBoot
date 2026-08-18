@@ -1,6 +1,6 @@
 /* unit-stm32l5-write.c
  *
- * Regression test for F-9763: hal_flash_write() in hal/stm32l5.c
+ * Regression test: hal_flash_write() in hal/stm32l5.c
  * looped while (i < len) but each iteration unconditionally read both
  * 32-bit words of the 8-byte program unit (src[i>>2] and
  * src[(i>>2)+1]) and programmed both, regardless of how many bytes

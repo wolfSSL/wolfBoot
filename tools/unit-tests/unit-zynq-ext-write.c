@@ -1,6 +1,6 @@
 /* unit-zynq-ext-write.c
  *
- * Regression test for F-7979: ext_flash_write() in hal/zynq.c divided
+ * Regression test: ext_flash_write() in hal/zynq.c divided
  * the request into length-based FLASH_PAGE_SIZE chunks (page 0, page
  * 1, ...) without accounting for the start address's offset inside
  * the device page. A write starting mid-page sent a full-page Page

@@ -2033,12 +2033,10 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
 exit_lock:
-    /* The raw key and nonce were staged in ENCRYPT_CACHE above. Scrub it
-     * on every build where wolfBoot owns the buffer: the two static
-     * cases -- NVM_FLASH_WRITEONCE aliases ENCRYPT_CACHE to NVM_CACHE,
-     * WOLFBOOT_SMALL_STACK gives it its own static array -- are exactly
-     * the ones where the plaintext would otherwise stay resident for the
-     * rest of the boot. Only a caller-supplied buffer is left alone. */
+    /* Scrub the staged key/nonce on every build where wolfBoot owns the
+     * buffer. The static cases (NVM_FLASH_WRITEONCE aliases it to
+     * NVM_CACHE, WOLFBOOT_SMALL_STACK has its own array) are exactly
+     * where the plaintext would otherwise stay resident. */
 #if !defined(WOLFBOOT_ENCRYPT_CACHE)
     ForceZero(ENCRYPT_CACHE, NVM_CACHE_SIZE);
 #endif
@@ -2945,7 +2943,7 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
  * permission bits are deliberately not required, as they read back as 0 when the
  * NS MPU is disabled (NO_MPU) and do not constrain Secure accesses to NS memory
  * anyway. Outside a CMSE secure build there is no security boundary, so the check
- * collapses to a non-NULL pass-through. Same fix pattern as F-4416/F-4417/F-4644. */
+ * collapses to a non-NULL pass-through. Same fix pattern as earlier reports. */
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U)
 #include <arm_cmse.h>
 #define WOLFBOOT_NSC_NS_RW(p, sz) \

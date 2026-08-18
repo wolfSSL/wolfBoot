@@ -65,9 +65,8 @@ int __attribute__((weak)) sdhci_platform_block_copy(
 }
 #endif
 
-/* Watchdog service hook. Not tied to SDHCI_BLOCK_VIA_PDMA: the bounded
- * busy waits call it on every build, and a platform with a hardware
- * watchdog overrides it. */
+/* Watchdog service hook, called by the bounded busy waits on every
+ * build. A platform with a hardware watchdog overrides it. */
 void __attribute__((weak)) sdhci_platform_wdt_pet(void)
 {
 }
@@ -438,10 +437,8 @@ static void sdhci_uhs_recover_rollback(void)
 {
     wolfBoot_printf("SDHCI: 1.8V retry failed, restoring 3.3V signaling\n");
 
-    /* Roll the one-shot back with the registers: leaving it set would
-     * put the host in a state the base code could not reach -- back at
-     * 3.3V but with the recovery spent -- so a genuinely UHS-I card
-     * could never be retried for the rest of the boot. */
+    /* Roll the one-shot back with the registers: back at 3.3V with the
+     * recovery spent, a real UHS-I card could never be retried. */
     g_uhs_recovered = 0;
 
     sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
@@ -630,7 +627,7 @@ int sdhci_cmd(uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 
 /* Worst-case programming time (erase) in milliseconds. Finite, so a
  * removed card or a card stuck in the programming state fails with an
- * I/O error instead of spinning forever (F-7984). The budget is sized
+ * I/O error instead of spinning forever. The budget is sized
  * for an erase because sdhci_wait_busy() is the wait after every R1b
  * command, erase included; the watchdog is serviced inside both loops
  * so a long wait cannot turn into a reset. */

@@ -3760,17 +3760,18 @@ printf "0123456789abcdef0123456789abcdef0123456789ab" > /tmp/enc_key.der
 
 * Provision the same key into the bootloader
 
-  The raspi3 HAL does not ship a hardcoded key: `hal_init()` used to call
-  `wolfBoot_set_encrypt_key()` with a fixed test key compiled into the
-  image, which meant every build shared one publicly known secret. It was
-  removed, so the bootloader now has no key until one is provisioned and
-  encrypted updates fail closed.
+  The raspi3 HAL no longer ships a hardcoded key, so the bootloader has
+  none until one is provisioned and encrypted updates fail closed. To run
+  this demo, call `wolfBoot_set_encrypt_key()` with the key and nonce from
+  the file above at the end of `hal_init()` in `hal/raspi3.c`. That is a
+  development-only shortcut; a real deployment provisions a per-device key
+  from outside the firmware image (see
+  [encrypted_partitions.md](encrypted_partitions.md)).
 
-  To run this demo, call `wolfBoot_set_encrypt_key()` with the 32-byte key
-  and 12-byte nonce from the file above at the end of `hal_init()` in
-  `hal/raspi3.c`. That is a development-only shortcut: a real deployment
-  must provision a per-device key from a source that is not in the
-  firmware image (see [encrypted_partitions.md](encrypted_partitions.md)).
+  Note that CI builds this example but does not boot it, so the end-to-end
+  encrypted path above is not covered by an automated test. Adding runtime
+  coverage would need a provisioning hook the target does not currently
+  have.
 
 * Sign and encrypt Linux kernel image
 ```

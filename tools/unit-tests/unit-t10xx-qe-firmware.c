@@ -1,6 +1,6 @@
 /* unit-t10xx-qe-firmware.c
  *
- * Regression test for F-8000: qe_check_firmware() in hal/nxp_t10xx.c
+ * Regression test: qe_check_firmware() in hal/nxp_t10xx.c
  * validated the QE microcode header for self-consistency (magic,
  * version, count, length == computed size) but never bounded the
  * per-microcode code_offset against the declared image length.

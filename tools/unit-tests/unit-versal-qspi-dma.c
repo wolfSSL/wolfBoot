@@ -1,6 +1,6 @@
 /* unit-versal-qspi-dma.c
  *
- * Regression test for F-7982: the DMA RX path of qspi_transfer() in
+ * Regression test: the DMA RX path of qspi_transfer() in
  * hal/versal.c. For an unaligned destination or a length not divisible
  * by four, the transfer runs through the 4096-byte dma_tmpbuf. If the
  * requested rxLen exceeded the temp buffer, dmaLen was truncated to

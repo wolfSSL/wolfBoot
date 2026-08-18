@@ -828,7 +828,7 @@ unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
 
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
-# (F-7979: page chunks crossed physical NOR page boundaries and the
+# (page chunks crossed physical NOR page boundaries and the
 # wrap clobbered the page start). Same extraction approach as the
 # erase test; the emulated NOR models the wrap.
 zynq_write_extract.h: ../../hal/zynq.c
@@ -838,7 +838,7 @@ unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
 	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
-# hal/versal.c (F-7982: an unaligned read larger than the 4096-byte
+# hal/versal.c (an unaligned read larger than the 4096-byte
 # temp buffer copied the full requested length out of the buffer). The
 # generated host copies differ from the real files only in:
 #   - ARM asm statements blanked (cannot assemble on x86; the cache
@@ -880,7 +880,7 @@ unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
 # unit-versal-ext-write runs the real ext_flash_write() from
-# hal/versal.c (F-7981: page chunks crossed physical NOR page
+# hal/versal.c (page chunks crossed physical NOR page
 # boundaries and the wrap clobbered the page start). The QspiDev_t
 # struct and the function are extracted verbatim (the qspi_* helpers
 # are file-static, so the test provides emulated ones); the emulated
@@ -895,7 +895,7 @@ unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_e
 	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
 # unit-t10xx-qe-firmware runs the real qe_check_firmware() from
-# hal/nxp_t10xx.c (F-8000: the per-microcode code_offset was never
+# hal/nxp_t10xx.c (the per-microcode code_offset was never
 # bounded against the declared image, so a self-consistent blob could
 # make the upload copy arbitrary memory into QE IRAM). The qe_*
 # structures and the check function are extracted verbatim; the check
@@ -910,7 +910,7 @@ unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
 	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-aurix-erased-fill runs the real cacheSector() and
-# programBytesToErasedFlash() from hal/aurix_tc3xx.c (F-9737: the
+# programBytesToErasedFlash() from hal/aurix_tc3xx.c (the
 # uint32_t page buffers were filled with the byte-valued
 # FLASH_BYTE_ERASED, so default-polarity builds got 0x000000FF words
 # instead of the erased 0xFFFFFFFF). The tc3_flash_* API is emulated
@@ -927,7 +927,7 @@ unit-aurix-erased-fill-invert: unit-aurix-erased-fill.c aurix_erased_extract.h
 	gcc -o $@ unit-aurix-erased-fill.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
 
 # unit-t2080-fman-loader runs the real hal_fman_init() from
-# hal/nxp_t2080.c (F-9762: the loader checked only the QEF magic and
+# hal/nxp_t2080.c (the loader checked only the QEF magic and
 # then copied attacker-shaped offsets/counts into FMan IRAM). The qe_*
 # structures and the function are extracted verbatim; the test owns the
 # NOR image (FMAN slot at a nonzero bank offset so the remaining-extent
@@ -942,7 +942,7 @@ unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
 
 # unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
-# (F-9763: an 8-byte program unit was read whole even when len left a
+# (an 8-byte program unit was read whole even when len left a
 # partial unit, over-reading the caller's buffer and writing the excess
 # bytes to flash). The function and its wait/clear helpers are
 # extracted verbatim; FLASH_SR/CR live on a host register file and the
@@ -956,8 +956,8 @@ stm32l5_write_extract.h: ../../hal/stm32l5.c
 unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
 
-# unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test
-# (F-9764): the real hal_flash_write() and its wait/clear helpers from
+# unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test:
+# the real hal_flash_write() and its wait/clear helpers from
 # hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
 # flash at a 32-bit host address, canary after the source buffer.
 stm32u5_write_extract.h: ../../hal/stm32u5.c
@@ -969,7 +969,7 @@ unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
 	gcc -o $@ unit-stm32u5-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-nvm-cache-scrub runs the real trailer_write() and
-# partition_magic_write() from src/libwolfboot.c (F-9765: under
+# partition_magic_write() from src/libwolfboot.c (under
 # NVM_FLASH_WRITEONCE the staged sector can hold the firmware
 # key/nonce, and the buffer was never scrubbed on return). The test
 # owns NVM_CACHE, stages a key-bearing sector image, and stubs the
@@ -983,7 +983,7 @@ unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
-# real src/sdhci.c (F-9735: any read error permanently switched the host
+# real src/sdhci.c (any read error permanently switched the host
 # to 1.8V signaling with no rollback). sdhci_host.c (generated below) is
 # identical to the real file except the three `asm volatile` statements
 # are blanked (they cannot assemble on x86) and the real sdhci_read() is
@@ -1001,7 +1001,7 @@ unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-wait-busy drives sdhci_wait_busy()'s DATA0/CMD13 loops
-# from the real src/sdhci.c (F-7984: neither loop had a timeout, so a
+# from the real src/sdhci.c (neither loop had a timeout, so a
 # stuck/removed card spun forever). The controller is scripted through
 # the host register file. SDHCI_WAIT_BUSY_TIMEOUT_MS is deliberately
 # NOT overridden: the test's timer stub steps 1ms per read so the
@@ -1010,7 +1010,7 @@ unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
 	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-ti-hercules-write runs the real hal_flash_write() staging logic
-# from hal/ti_hercules.c (F-9736: a short write crossing a block
+# from hal/ti_hercules.c (a short write crossing a block
 # boundary overran the staging buffer and lost the next block's bytes).
 # ti_hercules.c needs the TI FAPI vendor headers (board build tree) and
 # cannot be compiled on the host, but the bug is entirely in this
@@ -1029,7 +1029,7 @@ unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-p1021-qe-firmware drives the real qe_upload_firmware() from
-# hal/nxp_p1021.c (F-9759 bounds part: microcode offsets/counts were
+# hal/nxp_p1021.c (microcode offsets/counts were
 # never bounded to the 64 KiB buffer read from the update partition).
 # Reuses the nxp_p1021_host.c generated for the FCM tests, with the
 # PowerPC accessors shadowed the same way.
@@ -1038,7 +1038,7 @@ unit-p1021-qe-firmware: unit-p1021-qe-firmware.c nxp_p1021_host.c
 	gcc -o $@ unit-p1021-qe-firmware.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 # unit-t10xx-dts-memac drives the real hal_dts_fixup() FDT memac loop
-# (F-7052: unvalidated cell-index into phydevs[5]) with hand-built
+# (unvalidated cell-index into phydevs[5]) with hand-built
 # DTBs. Extracts the function plus its liodn/qman static tables from
 # hal/nxp_t10xx.c.
 nxp_t10xx_fixup_extract.h: ../../hal/nxp_t10xx.c

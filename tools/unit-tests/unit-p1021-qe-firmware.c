@@ -1,6 +1,6 @@
 /* unit-p1021-qe-firmware.c
  *
- * Regression test for F-9759 (bounds part): qe_upload_firmware() in
+ * Regression test (bounds part): qe_upload_firmware() in
  * hal/nxp_p1021.c validated only the self-declared consistency of the
  * QE microcode blob (magic, version, count range, length == computed
  * size, optional CRC32). The per-microcode code_offset/count fields and
@@ -10,7 +10,7 @@
  * code_offset or word count made the upload loop read (and copy into
  * QE instruction RAM) arbitrarily far past the buffer.
  *
- * Note: the full F-9759 recommendation also calls for cryptographic
+ * Note: the full recommendation also calls for cryptographic
  * authentication of the microcode before activation. That is a design
  * decision (keys, signed manifest, build flow) beyond a minimal patch
  * and is tracked as a note on the finding; this test covers the

@@ -140,10 +140,9 @@ octospi_err:
 
 static int RAMFUNCTION octospi_write_enable(void)
 {
-    /* A failed WREN leaves the write-enable latch clear: the device then
-     * silently ignores the program/erase that follows, never goes BUSY, and
-     * octospi_wait_ready() reports idle on its first poll. The command must
-     * fail the operation instead of being discarded. */
+    /* A failed WREN leaves the latch clear: the device then ignores the
+     * program/erase, never goes BUSY, and octospi_wait_ready() reports
+     * idle on its first poll. */
     return octospi_cmd(0, WRITE_ENABLE_CMD, 0, SPI_MODE_NONE,
                        NULL, 0, SPI_MODE_NONE, 0);
 }

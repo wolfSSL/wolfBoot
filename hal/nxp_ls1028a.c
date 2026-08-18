@@ -521,10 +521,9 @@ void xspi_read_sr(uint8_t* rxbuf, uint32_t addr, uint32_t len)
 }
 
 /* Block until the NOR device finishes its program/erase cycle.
- * XSPI_IPCMDDONE only reports that the controller finished driving the
- * sequence on the bus; the device keeps WIP set for the ~ms the cycle
- * takes, and ignores Write Enable and further program/erase commands
- * until it clears. */
+ * XSPI_IPCMDDONE only means the controller finished driving the bus;
+ * the device keeps WIP set for the ~ms the cycle takes and ignores
+ * Write Enable until it clears. */
 void xspi_wait_ready(uint32_t addr)
 {
     uint8_t status[4] = {0, 0, 0, 0};
@@ -613,8 +612,8 @@ void xspi_flash_write(uintptr_t address, const uint8_t *data, uint32_t len)
         XSPI_IPTXFCR = XSPI_IPRCFCR_FLUSH;
         XSPI_INTR = XSPI_IPCMDDONE;
 
-        /* The program cycle is still running: the next iteration's
-         * Write Enable would be ignored and its Page Program dropped. */
+        /* Else the next iteration's Write Enable is ignored and its
+         * Page Program dropped. */
         xspi_wait_ready(address);
 
         len -= size;

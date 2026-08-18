@@ -1,6 +1,6 @@
 /* unit-flash-write-cc26x2.c
  *
- * Regression test for F-6869: hal_flash_write() and hal_flash_erase() in
+ * Regression test: hal_flash_write() and hal_flash_erase() in
  * hal/cc26x2.c discarded the Fapi status returned by FlashProgram() and
  * FlashSectorErase() and unconditionally returned 0, so a program or erase
  * that the flash controller rejected was reported to wolfBoot as a success.

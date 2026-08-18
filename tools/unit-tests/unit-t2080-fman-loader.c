@@ -1,6 +1,6 @@
 /* unit-t2080-fman-loader.c
  *
- * Regression test for F-9762: hal_fman_init() in hal/nxp_t2080.c
+ * Regression test: hal_fman_init() in hal/nxp_t2080.c
  * checked only the NOR window guard and the QEF magic, then copied
  * fw->microcode[i].count words from fw + code_offset into FMan
  * instruction RAM and marked the engine ready. No version, count,
@@ -209,7 +209,7 @@ START_TEST(test_multi_risc_blob_accepted)
 END_TEST
 
 /* count == 0 used to be accepted as a successful upload of nothing
- * (F-9762); it must now be rejected. */
+ *; it must now be rejected. */
 START_TEST(test_zero_count_rejected)
 {
     make_blob(0, 0, 1, 0);
@@ -219,7 +219,7 @@ START_TEST(test_zero_count_rejected)
 END_TEST
 
 /* A self-consistent blob whose microcode offset lies past the declared
- * image must be rejected (F-9762: the loader used to read from there
+ * image must be rejected (the loader used to read from there
  * straight into FMan IRAM). */
 START_TEST(test_mcode_offset_past_image_rejected)
 {
@@ -230,7 +230,7 @@ START_TEST(test_mcode_offset_past_image_rejected)
 END_TEST
 
 /* A self-consistent blob whose declared image extends past the end of
- * the NOR bank must be rejected (F-9762). */
+ * the NOR bank must be rejected. */
 START_TEST(test_image_past_nor_extent_rejected)
 {
     struct qe_firmware *fw;

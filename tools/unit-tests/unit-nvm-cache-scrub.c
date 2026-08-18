@@ -1,6 +1,6 @@
 /* unit-nvm-cache-scrub.c
  *
- * Regression test for F-9765: under NVM_FLASH_WRITEONCE the
+ * Regression test: under NVM_FLASH_WRITEONCE the
  * partition-trailer read-modify-write helpers stage a full flash
  * sector into the file-scope buffer NVM_CACHE. In EXT_ENCRYPTED
  * builds that same sector is where the firmware key/nonce live

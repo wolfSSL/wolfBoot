@@ -1,6 +1,6 @@
 /* unit-sdhci-uhs-recover.c
  *
- * Regression test for F-9735: disk_read() called sdhci_uhs_recover()
+ * Regression test: disk_read() called sdhci_uhs_recover()
  * after any nonzero status from a data transfer, which permanently
  * switched the host to 1.8V signaling (SDHCI_SRS15_V18SE) on a plain
  * 3.3V cold boot whenever the first transfer failed for any reason

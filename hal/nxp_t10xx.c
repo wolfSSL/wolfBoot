@@ -2093,7 +2093,7 @@ static int qe_check_firmware(const struct qe_firmware *firmware, const char* t)
     /* The microcode must lie inside the declared image: the upload
      * reads code_offset + 4*count bytes from the firmware start, so an
      * out-of-image offset would copy arbitrary memory into QE IRAM and
-     * program arbitrary traps (F-8000). 64-bit so the sum cannot wrap. */
+     * program arbitrary traps. 64-bit so the sum cannot wrap. */
     for (i = 0; i < firmware->count; i++) {
         mcode_end = (uint64_t)firmware->microcode[i].code_offset +
             (uint64_t)4 * firmware->microcode[i].count;
@@ -3534,11 +3534,9 @@ int hal_dts_fixup(void* dts_addr)
             break;
         cell = fdt32_to_cpu(*reg);
 
-        /* Translate the DTS cell-index into a phydevs slot before
-         * touching the table. NXP's qoriq-fman3 dtsi numbers the 1G
-         * memacs 0..3 and the 10G memacs 0x8/0x9, while phydevs holds
-         * the 1G ports at 0..3 and the single 10G port at FM1_10GEC1.
-         * Anything with no slot is skipped rather than indexed. */
+        /* NXP's qoriq-fman3 dtsi numbers the 1G memacs 0..3 and the
+         * 10G memacs 0x8/0x9; phydevs holds 1G at 0..3 and the single
+         * 10G port at FM1_10GEC1. Skip anything with no slot. */
         if (cell <= FM1_DTSEC4)
             i = (int)cell;
         else if (cell == 8)

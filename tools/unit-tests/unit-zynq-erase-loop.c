@@ -1,6 +1,6 @@
 /* unit-zynq-erase-loop.c
  *
- * Regression test for F-7980: ext_flash_erase() in hal/zynq.c initializes
+ * Regression test: ext_flash_erase() in hal/zynq.c initializes
  * idx once before the multi-sector while (len > 0) loop and never resets
  * it, even though cmd is memset to zero each iteration. From the second
  * sector on, the erase command is written at cmd[idx] (past the start of

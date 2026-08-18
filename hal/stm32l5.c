@@ -90,9 +90,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
 #if TZ_SECURE()
     if (address >= FLASH_BANK2_BASE)
-        /* Claim the flash span the program touches: the last partial
-         * double word is read back and programmed whole, up to the
-         * 8-byte boundary past len. */
+        /* The last partial double word is programmed whole, so
+         * claim up to the 8-byte boundary past len. */
         hal_tz_claim_nonsecure_area(address, (len + 7) & ~7);
     /* Convert into secure address space */
     dst = (uint32_t *)((address & (~FLASHMEM_ADDRESS_SPACE)) | FLASH_SECURE_MMAP_BASE);
@@ -101,13 +100,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     while (i < len) {
         int j;
 
-        /* Build the whole 64-bit unit before opening the PG window.
-         * The flash has no 32-bit program mode: both words of the
-         * double word must be stored inside one PG window or the
-         * operation never starts. Bytes outside [i, len) are read back
-         * from flash and written unchanged, so nothing past the
-         * requested length is modified and the source is never read
-         * past len (same read-modify-write shape as hal/stm32h5.c). */
+        /* Read-modify-write the whole 64-bit unit (as stm32h5.c):
+         * there is no 32-bit program mode, so both words must be
+         * stored inside one PG window or nothing is programmed. */
         for (j = 0; j < 8; j++) {
             if (i + j < len)
                 dword_bytes[j] = data[i + j];

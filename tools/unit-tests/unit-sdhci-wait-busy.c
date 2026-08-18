@@ -1,6 +1,6 @@
 /* unit-sdhci-wait-busy.c
  *
- * Regression test for F-7984: sdhci_wait_busy() had no timeout in
+ * Regression test: sdhci_wait_busy() had no timeout in
  * either its DATA0 polling loop or its repeated CMD13 loop (the
  * in-code TODO acknowledged it). A removed card, a controller fault,
  * or a card stuck in the programming state left wolfBoot spinning
