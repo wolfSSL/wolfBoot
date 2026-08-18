@@ -58,9 +58,17 @@ extern int tolower(int c);
 #endif
 
 #ifdef USE_FAST_MATH
-    /* wolfBoot only does public asymmetric operations,
-     * so timing resistance and hardening is not required */
-#   define WC_NO_HARDEN
+    /* WC_NO_HARDEN is intended only for verify-only builds: the image
+     * verification path performs public-key operations only, so timing
+     * resistance and hardening are not required there. Software DICE
+     * (WOLFCRYPT_TZ_PSA without WOLFBOOT_DICE_HW) is not verify-only:
+     * it signs the attestation claims with the private IAK via
+     * wc_CoseSign1_Sign_ex() and must keep the timing hardening, so
+     * exclude it. Hardware DICE (WOLFBOOT_DICE_HW) keeps the signing
+     * in the crypto engine and stays verify-only in fast math. */
+#   if !defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_DICE_HW)
+#       define WC_NO_HARDEN
+#   endif
 #endif
 
 #if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
