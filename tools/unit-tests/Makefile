@@ -106,6 +106,7 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-sdhci-uhs-recover
+TESTS+=unit-ti-hercules-write
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -849,6 +850,23 @@ sdhci_host.c: ../../src/sdhci.c
 
 unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
+
+# unit-ti-hercules-write runs the real hal_flash_write() staging logic
+# from hal/ti_hercules.c (F-9736: a short write crossing a block
+# boundary overran the staging buffer and lost the next block's bytes).
+# ti_hercules.c needs the TI FAPI vendor headers (board build tree) and
+# cannot be compiled on the host, but the bug is entirely in this
+# function, so the Makefile extracts hal_flash_unlock_helper() and
+# hal_flash_write() verbatim (two column-0 closing braces) into
+# ti_hercules_write_extract.h; the FAPI calls are emulated in the test,
+# with Fapi_issueProgrammingCommand() performing the program into a host
+# flash array.
+
+ti_hercules_write_extract.h: ../../hal/ti_hercules.c
+	awk '/^static inline int RAMFUNCTION hal_flash_unlock_helper/{f=1} f{print} f&&/^}/{c++; if (c == 2) exit}' $< > $@
+
+unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
+	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
