@@ -668,6 +668,51 @@ static int hal_fman_init(void)
         return -1;
     }
 
+    /* Validate the container before uploading (the T10xx
+     * qe_check_firmware() path checks the same things): version,
+     * microcode count, self-consistent length, every code range inside
+     * the declared image, and the whole image inside the remaining NOR
+     * bank. 64-bit arithmetic so the sums cannot wrap. Fail closed:
+     * FMan stays unconfigured on any mismatch (F-9762). */
+    if (hdr->version != 1) {
+        wolfBoot_printf("FMAN: version %d unsupported\n", hdr->version);
+        return -1;
+    }
+    if (fw->count < 1 || fw->count > 2) {
+        wolfBoot_printf("FMAN: count %d invalid\n", fw->count);
+        return -1;
+    }
+    {
+        uint64_t calc = sizeof(struct qe_firmware);
+        uint64_t fw_off =
+            (uint64_t)((uintptr_t)fw - (uintptr_t)FLASH_BASE_ADDR);
+        uint64_t extent = (uint64_t)FLASH_BANK_SIZE - fw_off;
+        uint64_t length = hdr->length;
+        unsigned int k;
+
+        calc += (uint64_t)(fw->count - 1) * sizeof(struct qe_microcode);
+        for (k = 0; k < fw->count; k++)
+            calc += (uint64_t)4 * fw->microcode[k].count;
+
+        if (length != calc + sizeof(uint32_t)) {
+            wolfBoot_printf("FMAN: length %lu invalid\n",
+                (unsigned long)length);
+            return -1;
+        }
+        for (k = 0; k < fw->count; k++) {
+            if ((uint64_t)fw->microcode[k].code_offset +
+                    (uint64_t)4 * fw->microcode[k].count > length) {
+                wolfBoot_printf("FMAN: microcode %u out of bounds\n", k);
+                return -1;
+            }
+        }
+        if (length > extent) {
+            wolfBoot_printf("FMAN: image %lu exceeds NOR extent %lu\n",
+                (unsigned long)length, (unsigned long)extent);
+            return -1;
+        }
+    }
+
     for (i = 0; i < fw->count; i++) {
         const struct qe_microcode *ucode = &fw->microcode[i];
         const uint32_t *code;

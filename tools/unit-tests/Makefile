@@ -110,6 +110,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
+TESTS+=unit-t2080-fman-loader
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-ti-hercules-write
@@ -905,6 +906,21 @@ unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
 
 unit-aurix-erased-fill-invert: unit-aurix-erased-fill.c aurix_erased_extract.h
 	gcc -o $@ unit-aurix-erased-fill.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
+
+# unit-t2080-fman-loader runs the real hal_fman_init() from
+# hal/nxp_t2080.c (F-9762: the loader checked only the QEF magic and
+# then copied attacker-shaped offsets/counts into FMan IRAM). The qe_*
+# structures and the function are extracted verbatim; the test owns the
+# NOR image (FMAN slot at a nonzero bank offset so the remaining-extent
+# check is exercised) and the FMan IRAM registers.
+# NB: gawk 5.x mis-lexes an action brace directly after a regex
+# literal, so each pattern is followed by a space; $$ is a literal $.
+t2080_fman_extract.h: ../../hal/nxp_t2080.c
+	awk '/^\/\* Reuse QE firmware structures/ {f=1} f {print} f && /^\} QE_PACKED;$$/ {n++; if (n == 4) exit}' $< > $@
+	awk '/^static int hal_fman_init\(void\)/ {f=1} f {print} f && /^\}/ {exit}' $< >> $@
+
+unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
+	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (F-9735: any read error permanently switched the host
