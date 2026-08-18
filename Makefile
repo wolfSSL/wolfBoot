@@ -21,7 +21,10 @@ ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
 endif
 
 CFLAGS:=-D"__WOLFBOOT"
+# gcc/clang warning flags; the TI cl2000 driver (ARCH=C2000) rejects them.
+ifneq ($(ARCH),C2000)
 CFLAGS+=-Werror -Wextra -Wno-array-bounds
+endif
 LSCRIPT:=config/target.ld
 LSCRIPT_FLAGS:=
 LDFLAGS:=
@@ -238,9 +241,12 @@ $(WOLFHSM_OBJS): CFLAGS += -Wno-error=unused-parameter
 
 CFLAGS+= \
   -I"." -I"include/" -I"$(WOLFBOOT_LIB_WOLFSSL)" \
-  -Wno-array-bounds \
   -D"WOLFSSL_USER_SETTINGS" \
   -D"WOLFTPM_USER_SETTINGS"
+# -Wno-array-bounds is a gcc/clang option; the TI cl2000 driver rejects it.
+ifneq ($(ARCH),C2000)
+CFLAGS+=-Wno-array-bounds
+endif
 CFLAGS+=$(WOLFPSA_CFLAGS)
 
 # Setup default optimizations (for GCC)
@@ -259,6 +265,10 @@ endif
 
 ifeq ($(TARGET),ti_hercules)
   LSCRIPT_FLAGS+=--run_linker $(LSCRIPT)
+endif
+ifeq ($(ARCH),C2000)
+  # cl2000 enters link mode via -z (in LDFLAGS); the .cmd is a positional arg.
+  LSCRIPT_FLAGS+=$(LSCRIPT)
 endif
 ifeq ($(ARCH),AURIX_TC3)
   ifneq ($(USE_GCC_HEADLESS),1)
@@ -385,6 +395,12 @@ endif
 # lives in DDR at 0x80100000, so there is no contiguous flash image to assemble.
 ifeq ($(TARGET),imx95_m7)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
+ifeq ($(TARGET),f28p55x)
+    # C28x flash is word-addressed; DSLite loads the cl2000 .out (ELF) directly.
+    # No objcopy / no flat .bin.
+    MAIN_TARGET:=wolfboot.elf
 endif
 
 ifeq ($(TARGET),sim)
@@ -732,6 +748,7 @@ keys: $(PRIVATE_KEY)
 clean:
 	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o hal/uart/*.o test-app/*.o src/x86/*.o
 	$(Q)rm -f src/wolfboot_tz_nsc.o
+	$(Q)rm -f *.asm  # TI cl2000 (ARCH=C2000) intermediate listings in repo root
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex wolfboot.srec factory.srec
