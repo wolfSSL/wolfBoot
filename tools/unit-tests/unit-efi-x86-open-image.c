@@ -193,8 +193,14 @@ static EFI_STATUS EFIAPI mock_file_read(EFI_FILE_HANDLE This,
         return EFI_INVALID_PARAMETER;
     avail = (UINTN)(mock_size - mock_pos);
     n = (wanted < avail) ? wanted : avail;
-    if (n > 0)
+    if (n > 0) {
+        /* No backing data (e.g. the oversized-file case, where a broken
+         * caller tries to read anyway): fail instead of dereferencing
+         * NULL. */
+        if (mock_data == NULL)
+            return EFI_INVALID_PARAMETER;
         memcpy(Buffer, mock_data + mock_pos, n);
+    }
     mock_pos += n;
     *BufferSize = n;
     return (n == wanted) ? EFI_SUCCESS : EFI_END_OF_FILE;
@@ -480,6 +486,33 @@ START_TEST(test_open_image_too_small)
 }
 END_TEST
 
+/* A file larger than 4 GiB must be rejected before any allocation: the
+ * loader's size type is uint32_t, and a 64-bit FileSize() truncated into
+ * it would allocate and read a tiny fragment of the real image
+ * (F-9739). The guard runs before AllocatePages, so nothing is
+ * allocated and nothing must be freed. */
+START_TEST(test_open_image_oversized_rejected)
+{
+    sz_canary_t canary;
+    EFI_PHYSICAL_ADDRESS addr;
+    int ret;
+
+    mock_data = NULL;
+    mock_size = 0x100000000ULL + 0x1000; /* 4 GiB + 4 KiB */
+    mock_pos = 0;
+    addr = 0;
+    canary_reset(&canary);
+
+    ret = open_kernel_image(&mock_file_proto, (CHAR16 *)test_image_name,
+                            &addr, &canary.sz);
+    ck_assert_int_eq(ret, -1);
+    ck_assert(canary_intact(&canary));
+    ck_assert_uint_eq(addr, 0);
+    ck_assert_int_eq(mock_free_pages, 0);
+    ck_assert_int_eq(mock_close_count, 1);
+}
+END_TEST
+
 /* A failed Read() must not publish the allocated address, and must free
  * the pages and close the file (F-9738). */
 START_TEST(test_open_image_read_failure)
@@ -567,6 +600,7 @@ Suite *efi_x86_open_image_suite(void)
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_open_image_no_clobber);
     tcase_add_test(tc, test_open_image_too_small);
+    tcase_add_test(tc, test_open_image_oversized_rejected);
     tcase_add_test(tc, test_open_image_read_failure);
     tcase_add_test(tc, test_open_image_alloc_failure);
     tcase_add_test(tc, test_open_image_header_boundary);
