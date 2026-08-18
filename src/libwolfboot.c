@@ -186,11 +186,11 @@ static uint32_t ext_cache;
 
 /* EXT_ENCRYPTED is listed because the key-handling code below calls
  * ForceZero() unconditionally, including from the test-app build of this file,
- * where __WOLFBOOT is not defined. NVM_FLASH_WRITEONCE is listed for the
- * same reason: the partition-trailer read-modify-write helpers scrub
- * NVM_CACHE with ForceZero() in the test-app build too. */
-#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED) || \
-    defined(NVM_FLASH_WRITEONCE)
+ * where __WOLFBOOT is not defined. NVM_FLASH_WRITEONCE is deliberately NOT
+ * listed: the partition-trailer helpers scrub with nvm_cache_scrub(), so the
+ * NVM path stays free of the wolfSSL headers that tools/check_config and the
+ * STM32Cube test-app cannot resolve. */
+#if defined(__WOLFBOOT) || defined(UNIT_TEST) || defined(EXT_ENCRYPTED)
 #define WOLFSSL_MISC_INCLUDED /* allow misc.c code to be inlined */
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/wc_port.h>
@@ -255,6 +255,23 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #include <string.h>
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
+
+/* Scrub the staging buffer without depending on wolfCrypt. ForceZero()
+ * would drag <wolfssl/wolfcrypt/types.h> and <wolfcrypt/src/misc.c>
+ * into every NVM_FLASH_WRITEONCE build of this file, including the two
+ * that cannot supply them: tools/check_config (no wolfSSL include
+ * path) and the STM32Cube test-app (no stm32*_hal_conf.h). A volatile
+ * byte loop is also the right shape for a RAMFUNCTION caller, since
+ * ForceZero() itself lives in flash and must not be called while the
+ * flash is being programmed. */
+static void RAMFUNCTION nvm_cache_scrub(void)
+{
+    volatile uint8_t *p = (volatile uint8_t *)NVM_CACHE;
+    unsigned int i;
+
+    for (i = 0; i < NVM_CACHE_SIZE; i++)
+        p[i] = 0;
+}
 static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
 {
     return *(uint8_t*)((uintptr_t)base - off); /* ignore array bounds error */
@@ -396,14 +413,14 @@ static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
         /* The staged sector may hold the firmware key/nonce (see
          * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
          * returning, success or not. */
-        ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
+        nvm_cache_scrub();
         return ret;
     }
 
     /* Once a copy has been written, erase the older sector */
     ret = hal_flash_erase(addr_read, NVM_CACHE_SIZE);
     nvm_cached_sector = !nvm_cached_sector;
-    ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
+    nvm_cache_scrub();
     return ret;
 }
 
@@ -433,12 +450,12 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
         /* The staged sector may hold the firmware key/nonce (see
          * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it before
          * returning, success or not. */
-        ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
+        nvm_cache_scrub();
         return ret;
     }
     nvm_cached_sector = !nvm_cached_sector;
     ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
-    ForceZero(NVM_CACHE, NVM_CACHE_SIZE);
+    nvm_cache_scrub();
     return ret;
 }
 #ifdef __CCRX__

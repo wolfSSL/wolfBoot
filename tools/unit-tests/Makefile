@@ -975,7 +975,8 @@ unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
 # owns NVM_CACHE, stages a key-bearing sector image, and stubs the
 # flash layer; after each call the whole buffer must be zeroed.
 nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
-	sed -n '/^static int RAMFUNCTION trailer_write(/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION trailer_write(/,/^}/p' $< >> $@
 	sed -n '/^static int RAMFUNCTION partition_magic_write(/,/^}/p' $< >> $@
 
 unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
