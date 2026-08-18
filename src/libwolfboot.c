@@ -2016,8 +2016,13 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #endif
 exit_lock:
-#if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
-    !defined(WOLFBOOT_ENCRYPT_CACHE)
+    /* The raw key and nonce were staged in ENCRYPT_CACHE above. Scrub it
+     * on every build where wolfBoot owns the buffer: the two static
+     * cases -- NVM_FLASH_WRITEONCE aliases ENCRYPT_CACHE to NVM_CACHE,
+     * WOLFBOOT_SMALL_STACK gives it its own static array -- are exactly
+     * the ones where the plaintext would otherwise stay resident for the
+     * rest of the boot. Only a caller-supplied buffer is left alone. */
+#if !defined(WOLFBOOT_ENCRYPT_CACHE)
     ForceZero(ENCRYPT_CACHE, NVM_CACHE_SIZE);
 #endif
     hal_flash_lock();
