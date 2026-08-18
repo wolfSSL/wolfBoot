@@ -700,67 +700,79 @@ static int qspi_transfer(QspiDev_t *dev, const uint8_t *txData, uint32_t txLen,
             if ((GQSPI_CFG & GQSPI_CFG_MODE_EN_MASK) == GQSPI_CFG_MODE_EN_DMA) {
                 uint8_t *dmaPtr;
                 uint32_t dmaLen;
+                uint32_t rxDone = 0;
                 int useTemp = 0;
 
                 /* Check alignment - DMA requires cache-line aligned buffer.
                  * If unaligned or not a multiple of 4 bytes, use temp buffer.
                  * CRITICAL: GenFIFO transfer size must match DMA size! */
-                if (((uintptr_t)rxData & (GQSPI_DMA_ALIGN - 1)) || (rxLen & 3)) {
-                    /* Use temp buffer for unaligned data */
-                    dmaPtr = dma_tmpbuf;
-                    /* Bounds check before alignment to prevent integer overflow */
-                    if (rxLen > sizeof(dma_tmpbuf)) {
-                        dmaLen = sizeof(dma_tmpbuf);
-                    } else {
-                        dmaLen = (rxLen + GQSPI_DMA_ALIGN - 1) & ~(GQSPI_DMA_ALIGN - 1);
-                        if (dmaLen > sizeof(dma_tmpbuf)) {
+                useTemp = (((uintptr_t)rxData & (GQSPI_DMA_ALIGN - 1)) ||
+                           (rxLen & 3)) ? 1 : 0;
+
+                /* Run the RX in passes: through the temp buffer (at most
+                 * sizeof(dma_tmpbuf) per pass) when the destination is
+                 * unaligned, directly into rxData otherwise. Only the
+                 * bytes actually DMA'd in a pass may be copied out. */
+                while (ret == 0 && rxDone < rxLen) {
+                    uint32_t copyLen = rxLen - rxDone;
+
+                    if (useTemp) {
+                        dmaPtr = dma_tmpbuf;
+                        if (copyLen > sizeof(dma_tmpbuf))
+                            copyLen = sizeof(dma_tmpbuf);
+                        /* Bounds check before alignment to prevent integer overflow */
+                        dmaLen = (copyLen + GQSPI_DMA_ALIGN - 1) &
+                                 ~(GQSPI_DMA_ALIGN - 1);
+                        if (dmaLen > sizeof(dma_tmpbuf))
                             dmaLen = sizeof(dma_tmpbuf);
-                        }
+                        if (copyLen > dmaLen)
+                            copyLen = dmaLen;
+                    } else {
+                        dmaPtr = rxData + rxDone;
+                        dmaLen = copyLen;
                     }
-                    useTemp = 1;
-                } else {
-                    dmaPtr = rxData;
-                    dmaLen = rxLen;
-                }
 
-                /* GenFIFO must request the same number of bytes as DMA expects */
-                remaining = dmaLen;
+                    /* GenFIFO must request the same number of bytes as DMA expects */
+                    remaining = dmaLen;
 
-                /* Setup DMA destination */
-                GQSPIDMA_DST = ((uintptr_t)dmaPtr & 0xFFFFFFFFUL);
-                GQSPIDMA_DST_MSB = ((uintptr_t)dmaPtr >> 32);
-                GQSPIDMA_SIZE = dmaLen;
+                    /* Setup DMA destination */
+                    GQSPIDMA_DST = ((uintptr_t)dmaPtr & 0xFFFFFFFFUL);
+                    GQSPIDMA_DST_MSB = ((uintptr_t)dmaPtr >> 32);
+                    GQSPIDMA_SIZE = dmaLen;
 
-                /* Enable DMA done interrupt */
-                GQSPIDMA_IER = GQSPIDMA_ISR_DONE;
+                    /* Enable DMA done interrupt */
+                    GQSPIDMA_IER = GQSPIDMA_ISR_DONE;
 
-                /* Flush dcache for DMA coherency */
-                flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
+                    /* Flush dcache for DMA coherency */
+                    flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
 
-                /* Push all GenFIFO entries first (use EXP mode for large transfers) */
-                while (ret == 0 && remaining > 0) {
-                    xferSz = qspi_calc_exp(remaining, &rxEntry);
-                    ret = qspi_gen_fifo_push(rxEntry);
-                    remaining -= xferSz;
-                }
+                    /* Push all GenFIFO entries first (use EXP mode for large transfers) */
+                    while (ret == 0 && remaining > 0) {
+                        xferSz = qspi_calc_exp(remaining, &rxEntry);
+                        ret = qspi_gen_fifo_push(rxEntry);
+                        remaining -= xferSz;
+                    }
 
-                /* Trigger GenFIFO */
-                if (ret == 0) {
-                    GQSPI_CFG |= GQSPI_CFG_START_GEN_FIFO;
-                    dsb();
-                }
+                    /* Trigger GenFIFO */
+                    if (ret == 0) {
+                        GQSPI_CFG |= GQSPI_CFG_START_GEN_FIFO;
+                        dsb();
+                    }
 
-                /* Wait for DMA completion */
-                if (ret == 0) {
-                    ret = qspi_dma_wait();
-                }
+                    /* Wait for DMA completion */
+                    if (ret == 0) {
+                        ret = qspi_dma_wait();
+                    }
 
-                /* Invalidate cache after DMA */
-                flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
+                    /* Invalidate cache after DMA */
+                    flush_dcache_range((uintptr_t)dmaPtr, (uintptr_t)dmaPtr + dmaLen);
 
-                /* Copy from temp buffer if needed (only copy requested bytes) */
-                if (ret == 0 && useTemp) {
-                    memcpy(rxData, dmaPtr, rxLen);
+                    /* Copy from temp buffer if needed (only the bytes this
+                     * pass actually transferred) */
+                    if (ret == 0 && useTemp) {
+                        memcpy(rxData + rxDone, dmaPtr, copyLen);
+                    }
+                    rxDone += copyLen;
                 }
             } else {
                 /* IO mode: Use FIFO polling (fallback when DMA mode not enabled) */

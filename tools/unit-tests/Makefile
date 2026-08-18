@@ -104,6 +104,7 @@ TESTS+=unit-flash-write-cc26x2
 TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
+TESTS+=unit-versal-qspi-dma
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -808,6 +809,29 @@ zynq_erase_extract.h: ../../hal/zynq.c
 
 unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
+
+# unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
+# hal/versal.c (F-7982: an unaligned read larger than the 4096-byte
+# temp buffer copied the full requested length out of the buffer). The
+# generated host copies differ from the real files only in:
+#   - ARM asm statements blanked (cannot assemble on x86; the cache
+#     maintenance helpers become no-ops, which is harmless because the
+#     test emulates the DMA);
+#   - VERSAL_QSPI_BASE rebased onto host memory (register offsets kept);
+#   - the real qspi_dma_wait() renamed to qspi_dma_wait_hw() so the test
+#     can provide a qspi_dma_wait() that performs the DMA move;
+# The test is built with -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64
+# -DARCH_64BIT (the file is guarded by TARGET_versal, the QSPI section by
+# EXT_FLASH, and the architecture check / hal.h prototypes by the ARCH
+# defines).
+versal_host.h: ../../hal/versal.h
+	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[^;]*\);[[:space:]]*//' $< > $@
+
+versal_host.c: ../../hal/versal.c versal_host.h
+	sed -E -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[^;]*\);[[:space:]]*//' -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' -e 's|#include "hal/versal.h"|#include "versal_host.h"|' $< > $@
+
+unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
+	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
