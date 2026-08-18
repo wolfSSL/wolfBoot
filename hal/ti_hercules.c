@@ -146,6 +146,12 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         /* A write that crosses a block boundary continues in the next
          * (aligned) block; len < WRITE_BLOCK_SIZE keeps it to one more */
         if (st == 0 && (uint32_t)len > first) {
+            /* The first program is still in flight: the FSM rejects a
+             * second command while busy, and a read from a bank under
+             * program returns undefined data -- which the read-modify-
+             * write below would then stage and program. */
+            while(FAPI_CHECK_FSM_READY_BUSY != Fapi_Status_FsmReady)
+                ;
             memcpy(temp, (void*)(address + first), WRITE_BLOCK_SIZE);
             memcpy(temp, data + first, len - first);
             st = Fapi_issueProgrammingCommand((void*)(address + first),

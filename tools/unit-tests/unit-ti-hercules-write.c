@@ -52,11 +52,17 @@
  * flash array at a fixed low address so those raw reads land in it. */
 #define G_FLASH_BASE 0x10000UL
 
-/* FAPI stubs: FSM always ready, banks trivial, one auto-ECC mode. */
+/* FAPI stubs: banks trivial, one auto-ECC mode, and an FSM that stays
+ * busy for a few polls after each program. The programmed data only
+ * lands in the array once the FSM reports ready, so code that issues a
+ * command or reads the array back while a program is in flight sees
+ * exactly what the hardware would give it: a rejected command and
+ * stale data. */
 typedef int Fapi_FlashBankType;
 #define Fapi_Status_FsmReady        0
-#define FAPI_CHECK_FSM_READY_BUSY   0
 #define Fapi_AutoEccGeneration      1
+#define FSM_BUSY_POLLS              3
+#define FAPI_CHECK_FSM_READY_BUSY   fapi_check_fsm()
 
 /* Emulated flash: 16 KB, erased (0xFF) initially. */
 #define G_FLASH_SZ (4 * FLASHBUFFER_SIZE)
@@ -71,6 +77,28 @@ struct prog_rec {
 static struct prog_rec g_progs[MAX_PROGS];
 static int g_progs_n;
 static int g_prog_fail; /* nonzero = Fapi_issueProgrammingCommand fails */
+
+/* FSM state: polls remaining, the program staged behind them, and a
+ * sticky flag set if a command was issued while the FSM was busy. */
+static int g_fsm_busy;
+static int g_prog_while_busy;
+static int g_pending;
+static uint32_t g_pending_addr;
+static uint32_t g_pending_size;
+static uint8_t g_pending_data[FLASHBUFFER_SIZE];
+
+static int fapi_check_fsm(void)
+{
+    if (g_fsm_busy > 0) {
+        if (--g_fsm_busy == 0 && g_pending) {
+            memcpy(g_flash + (g_pending_addr - G_FLASH_BASE),
+                g_pending_data, g_pending_size);
+            g_pending = 0;
+        }
+        return 1; /* not Fapi_Status_FsmReady */
+    }
+    return Fapi_Status_FsmReady;
+}
 
 static Fapi_FlashBankType f021_lookup_bank(uint32_t address)
 {
@@ -101,12 +129,19 @@ static int Fapi_issueProgrammingCommand(void *addr, uint8_t *data, int size,
         g_progs[g_progs_n].size = (uint32_t)size;
         g_progs_n++;
     }
+    if (g_fsm_busy > 0)
+        g_prog_while_busy = 1;
     if (g_prog_fail)
         return -1;
     if (a < G_FLASH_BASE ||
         a + (uint32_t)size > G_FLASH_BASE + G_FLASH_SZ)
         return -1;
-    memcpy(g_flash + (a - G_FLASH_BASE), data, (size_t)size);
+    /* staged until the FSM drains (see fapi_check_fsm) */
+    g_pending_addr = a;
+    g_pending_size = (uint32_t)size;
+    memcpy(g_pending_data, data, (size_t)size);
+    g_pending = 1;
+    g_fsm_busy = FSM_BUSY_POLLS;
     return 0;
 }
 
@@ -133,6 +168,9 @@ static void setup(void)
     memset(g_progs, 0, sizeof(g_progs));
     g_progs_n = 0;
     g_prog_fail = 0;
+    g_fsm_busy = 0;
+    g_prog_while_busy = 0;
+    g_pending = 0;
 }
 
 static void teardown(void)
@@ -164,7 +202,10 @@ END_TEST
 
 /* A short write crossing a block boundary (the F-9736 case): the first
  * partial block and the remainder in the next block must both be
- * programmed, and nothing may be copied past the staging buffer. */
+ * programmed, and nothing may be copied past the staging buffer. The
+ * second program must also wait for the FSM: issued back-to-back it is
+ * rejected by the hardware, and the read-modify-write that stages the
+ * next block would read the array while a program is in flight. */
 START_TEST(test_short_write_crosses_block)
 {
     uint8_t data[200];
@@ -175,6 +216,7 @@ START_TEST(test_short_write_crosses_block)
         data[i] = (uint8_t)(0x40 + i);
 
     ck_assert_int_eq(hal_flash_write(addr, data, 200), 0);
+    ck_assert_int_eq(g_prog_while_busy, 0);
 
     /* first block: bytes 0-99 of data at the tail; next block: 100-199 */
     for (i = 0; i < 200; i++)
