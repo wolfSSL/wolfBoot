@@ -509,3 +509,6 @@ wolfboot-sbom-srcs.txt
 # Python cache files
 __pycache__/
 *.py[cod]
+
+# TI cl2000 (ARCH=C2000) intermediate assembly listings left in the repo root
+/*.asm

@@ -43,6 +43,33 @@
 #define HAVE_EMPTY_AGGREGATES 0
 #define HAVE_ANONYMOUS_INLINE_AGGREGATES 0
 
+/* TI C2000 C28x: word-addressed, 16-bit int, CHAR_BIT==16.  wolfCrypt's
+ * WOLFSSL_WIDE_BYTE support auto-enables on __TMS320C28XX__; configure the
+ * integer widths, pull in <limits.h> (for CHAR_BIT and sp_int size detection),
+ * and disable asm/inline paths that don't apply. */
+#if defined(WOLFBOOT_ARCH_C2000) || defined(__TMS320C28XX__)
+#   undef  SIZEOF_LONG
+#   define SIZEOF_LONG 4
+#   undef  HAVE_LIMITS_H
+#   define HAVE_LIMITS_H
+#   undef  WC_16BIT_CPU
+#   define WC_16BIT_CPU
+#   undef  WOLFSSL_GENERAL_ALIGNMENT
+#   define WOLFSSL_GENERAL_ALIGNMENT 2
+#   undef  WOLFSSL_NO_ASM
+#   define WOLFSSL_NO_ASM
+#   undef  WC_SHA3_NO_ASM
+#   define WC_SHA3_NO_ASM
+    /* cl2000 treats plain inline as C99 extern-inline, leaving misc.c helpers
+     * unresolved at link; make them ordinary extern functions (misc.o linked). */
+#   undef  NO_INLINE
+#   define NO_INLINE
+#   undef  WOLFSSL_SP_ALLOW_16BIT_CPU
+#   define WOLFSSL_SP_ALLOW_16BIT_CPU
+#   undef  WOLFSSL_SP_NO_MALLOC
+#   define WOLFSSL_SP_NO_MALLOC
+#endif
+
 /* Stdlib Types */
 #define CTYPE_USER /* don't let wolfCrypt types.h include ctype.h */
 
@@ -482,8 +509,10 @@ extern int tolower(int c);
 #       define SP_WORD_SIZE 32
 #   endif
 
-    /* SP Math needs to understand long long */
-#   ifndef ULLONG_MAX
+    /* SP Math needs to understand long long. Skip this fallback when limits.h
+     * is available (HAVE_LIMITS_H), which defines ULLONG_MAX itself - otherwise
+     * the two definitions clash (e.g. TI cl2000 / CHAR_BIT!=8 builds). */
+#   if !defined(ULLONG_MAX) && !defined(HAVE_LIMITS_H)
 #       define ULLONG_MAX 18446744073709551615ULL
 #   endif
 #endif

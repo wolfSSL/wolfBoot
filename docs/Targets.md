@@ -58,6 +58,7 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
+* [TI C2000 C28x (LAUNCHXL-F28P55X)](#ti-c2000-c28x-launchxl-f28p55x)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Vorago VA416x0](#vorago-va416x0)
 * [Xilinx Zynq UltraScale](#xilinx-zynq-ultrascale)
@@ -8977,3 +8978,45 @@ Boot success marked. Version: 1
 | `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
+
+## TI C2000 C28x (LAUNCHXL-F28P55X)
+
+wolfBoot runs on the Texas Instruments C2000 C28x DSP (TMS320F28P550SJ, 150 MHz) as a secure execute-in-place (XIP) bootloader. The C28x is word-addressed with `CHAR_BIT == 16` (no 8-bit type -- each octet occupies one 16-bit cell), built with the TI `cl2000` toolchain against wolfSSL's wide-byte (`CHAR_BIT != 8`) support.
+
+### Flash layout
+
+wolfBoot owns flash bank0 (`0x80000`); the signed application lives in the BOOT partition at bank1 (`0xA0000`). Because an octet-per-cell header and a native-word executable cannot share one representation, the BOOT partition uses a split layout: the 256-cell image header is stored one octet per 16-bit cell (so wolfBoot's generic octet parser and hash work byte-identically to the host), and the firmware follows at `0xA0100` as native 16-bit words that execute in place.
+
+| Region | Address | Contents |
+|--------|---------|----------|
+| wolfBoot (bank0) | `0x80000` | bootloader code + keystore |
+| BOOT header | `0xA0000` | 256-cell signed header (one octet per cell) |
+| BOOT firmware | `0xA0100` | native XIP application |
+
+### Build
+
+```
+cp config/examples/f28p55x.config .config
+make CGT_ROOT=/path/to/ti-cgt-c2000 C2000WARE=/path/to/C2000Ware
+```
+
+This produces `wolfboot.elf` (the cl2000 `.out`); DSLite loads it directly, since C28x flash is word-addressed there is no objcopy / flat `.bin` step.
+
+### Sign and flash the application
+
+The test application (`test-app/app_f28p55x.c`) is linked to execute in place at `0xA0100`. `test-app/f28p55x_sign.sh` documents the flow: compile the XIP app, extract its firmware as the host octet stream, sign it (ECC P-256 + SHA-256), and emit the octet-per-cell header blob for `0xA0000`. Flash `wolfboot.elf` and the application image with DSLite over the onboard XDS110.
+
+### Boot mode
+
+The C28x boot ROM selects its boot source before any application code runs, so the device must be told to boot from flash. Under a debug session CCS/DSLite (via the device GEL) writes a volatile flash-boot override -- `EMU_BOOTPIN_KEY (0xD00) = 0x5AFFFFFF`, `EMU_BOOTPIN_CONFIG (0xD04) = 0x0003` (boot mode 3, flash entry `0x080000`) -- so wolfBoot boots from `0x80000` whenever a debugger has connected. That override is volatile and is not present on a bare power-on-reset. For **standalone** flash boot the device's persistent boot mode must be provisioned to flash (boot mode `0x03`) via the DCSM boot OTP, or set with the board's boot-mode straps where available; until then a bare power-up waits in the boot ROM. The SCIA console (GPIO28/29, 115200 8N1) is on the XDS110 virtual COM port; a live debug session garbles that backchannel, so read it with the probe detached.
+
+### Configuration options
+
+| Option | Description |
+|--------|-------------|
+| `SIGN=ECC256` / `HASH=SHA256` | Signature and hash for the secure-boot MVP. |
+| `RAM_CODE` | **Required.** Flash program/erase (TI Fapi) runs from RAM. |
+| `NVM_FLASH_WRITEONCE` | Flash is written once between erases. |
+| `DEBUG` | Enables verbose boot progress and a JTAG-readable survive-log mirror (`g_log`) for bring-up. |
+
+A/B update / rollback is a follow-on: the partitions are declared, but the update path (flash erase/write, swap, trailer) is not yet wide-byte-hardened.
