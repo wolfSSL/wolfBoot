@@ -1229,6 +1229,7 @@ static void qe_upload_microcode(const struct qe_firmware *firmware,
 static int qe_upload_firmware(const struct qe_firmware *firmware)
 {
     unsigned int i, j;
+    uint64_t mcode_end;
 #ifdef ENABLE_QE_CRC32
     uint32_t crc;
 #endif
@@ -1271,6 +1272,24 @@ static int qe_upload_firmware(const struct qe_firmware *firmware)
     if (length != calc_size + sizeof(uint32_t)) {
         wolfBoot_printf("QE length %d invalid!\n", length);
         return -1;
+    }
+
+    /* The blob must fit in the buffer actually read from NAND, and every
+     * microcode (and the trailing CRC) must stay inside it: count and
+     * code_offset are attacker-controlled until proven otherwise. */
+    if (length > QE_FW_LENGTH) {
+        wolfBoot_printf("QE length %d exceeds the %d byte buffer\n",
+            length, QE_FW_LENGTH);
+        return -1;
+    }
+    for (i = 0; i < firmware->count; i++) {
+        mcode_end = (uint64_t)firmware->microcode[i].code_offset +
+            (uint64_t)sizeof(uint32_t) * firmware->microcode[i].count;
+
+        if (mcode_end > length) {
+            wolfBoot_printf("QE microcode %d out of bounds\n", i);
+            return -1;
+        }
     }
 
 #ifdef ENABLE_QE_CRC32

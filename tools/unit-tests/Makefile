@@ -107,6 +107,7 @@ TESTS+=unit-zynq-erase-loop
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-ti-hercules-write
+TESTS+=unit-p1021-qe-firmware
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -867,6 +868,15 @@ ti_hercules_write_extract.h: ../../hal/ti_hercules.c
 
 unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-p1021-qe-firmware drives the real qe_upload_firmware() from
+# hal/nxp_p1021.c (F-9759 bounds part: microcode offsets/counts were
+# never bounded to the 64 KiB buffer read from the update partition).
+# Reuses the nxp_p1021_host.c generated for the FCM tests, with the
+# PowerPC accessors shadowed the same way.
+
+unit-p1021-qe-firmware: unit-p1021-qe-firmware.c nxp_p1021_host.c
+	gcc -o $@ unit-p1021-qe-firmware.c -DTARGET_nxp_p1021 -I../../hal $(CFLAGS) $(LDFLAGS)
 
 # unit-efi-x86-open-image includes hal/x86_64_efi.c directly, with in-test
 # host mocks standing in for the gnu-efi runtime (BS, LibFileInfo, the
