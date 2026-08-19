@@ -89,8 +89,10 @@ else
   CFLAGS+=-Wall -ffreestanding -Wno-unused -ffunction-sections -fdata-sections
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX_TC3)
-    ifneq ($(USE_CLANG),1)
-      CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
+    ifneq ($(TARGET),ti_am64x)
+      ifneq ($(USE_CLANG),1)
+        CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
+      endif
     endif
   endif
   CFLAGS+=-DTARGET_$(TARGET) -I../include
@@ -98,9 +100,11 @@ else
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX_TC3)
-    ifneq ($(USE_CLANG),1)
-      # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
-      CFLAGS+=-gdwarf-4
+    ifneq ($(TARGET),ti_am64x)
+      ifneq ($(USE_CLANG),1)
+        # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
+        CFLAGS+=-gdwarf-4
+      endif
     endif
   endif
 
@@ -159,8 +163,10 @@ endif
 # Setup default linker flags (gcc-driver form). Renesas RX links with ld
 # directly (USE_GCC=0) and gets its -T/-gc-sections/oformat from arch.mk, so
 # these gcc-driver flags (-Wl,/-nostartfiles and a duplicate -T) are skipped.
-ifneq ($(ARCH),RENESAS_RX)
-LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
+ifeq ($(TARGET),ti_am64x)
+  LDFLAGS+=-Wl,$(LSCRIPT) -Wl,-m=image.map -Wl,--symbol_map=putchar_=putchar__
+else ifneq ($(ARCH),RENESAS_RX)
+  LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 endif
 
 # Setup default objcopy flags
@@ -225,7 +231,9 @@ endif
 ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add support infrastructure
   APP_OBJS+=wolfcrypt_support.o
+  ifneq ($(TARGET),ti_am64x)
   APP_OBJS+=syscalls.o
+  endif
 
   # Add wolfCrypt core implementation files
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.o
@@ -249,6 +257,9 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
 
   # Add AES support (needed by benchmark for AES-CBC etc.)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o
+
+  # Add CMAC support
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cmac.o
 
   # Add ECC support (needed by test suite)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o
@@ -750,6 +761,10 @@ ifeq ($(TARGET),ti_hercules)
   OBJCOPY_FLAGS=
 endif
 
+ifeq ($(TARGET),ti_am64x)
+  LSCRIPT_TEMPLATE=ARM-ti_am64x.ld
+endif
+
 ifeq ($(TARGET),va416x0)
   APP_OBJS+=$(SDK_OBJS)
   LSCRIPT_TEMPLATE=ARM-va416x0.ld
@@ -978,6 +993,89 @@ ifeq ($(TARGET),mcxn)
     ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
       LDFLAGS+=--specs=nosys.specs
     endif
+endif
+
+ifeq ($(TARGET),ti_am64x)
+  GENERATED_APP_SRCS=
+  GENERATED_APP_SRCS+=../generated/test-app/ti_board_config.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_board_open_close.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_dpl_config.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_drivers_config.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_drivers_open_close.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_pinmux_config.c
+  GENERATED_APP_SRCS+=../generated/test-app/ti_power_clock_config.c
+
+  ORIGINAL_SA2UL_C=$(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/sa2ul/sa2ul.c
+  PATCHED_SA2UL_C=$(abspath ../generated/common/sa2ul.c)
+  PATCHFILE_SA2UL_C=$(abspath ../config/examples/ti-am64x/mcuplussdk_11.02.00_sa2ul.c.patch)
+
+  APP_OBJS+=$(patsubst %.c,%.o,$(GENERATED_APP_SRCS))
+  APP_OBJS+=$(patsubst %.c,%.o,$(PATCHED_SA2UL_C))
+  APP_OBJS+=\
+    $(TI_MCU_PLUS_SDK)/source/drivers/firewall/v0/firewall.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/pinmux/am64x_am243x/pinmux.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/csl_sec_proxy.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_pm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_rm_irq.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_fmwSecureProxyMap.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_irq_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/soc/am64x_am243x/sciclient_soc_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/soc/am64x_am243x/soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/uart_v0.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/uart_v0_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/dma/soc/am64x_am243x/uart_dma_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/uart/v0/lld/dma/udma/uart_dma_udma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_bcdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_intaggr.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_lcdma_ringacc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/hw_include/csl_pktdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/udma_rmcfg_common.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/am64x_am243x/udma_rmcfg.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/soc/am64x_am243x/udma_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ch.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_event.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_flow.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ring_common.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_ring_lcdma.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_rm.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/udma/v0/udma_utils.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/AddrTranslateP.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/ClockP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_log.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/DebugP_uartLogWriter.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/printf.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/SemaphoreP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TaskP_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/ClockP_nortos_r5.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_handlers_nortos.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_handlers_nortos_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_vectors_nortos_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_vim.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/crypto.o \
+    $(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/rng/rng.o
+
+  ifeq ($(PKA),1)
+    CFLAGS+=-DWOLFSSL_TI_AM64X
+    CFLAGS+=-DWOLFSSL_TI_AM64X_RNG_CTR_DRBG
+    APP_OBJS+=\
+      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
+      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ti/ti-sa2ul_port.o
+  endif
 endif
 
 ifeq ($(TARGET),lpc55s69)
@@ -1360,6 +1458,22 @@ ifeq ($(WOLFHSM_SERVER),1)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
+ifeq ($(TARGET),ti_am64x)
+$(GENERATED_APP_SRCS):
+	@echo "\t[TI SYSCONFIG] ../generated/test-app/"
+	$(Q)$(TI_SYSCONFIG)/nodejs/node \
+      $(TI_SYSCONFIG)/dist/cli.js -q \
+      --product $(TI_MCU_PLUS_SDK)/.metadata/product.json \
+      --context r5fss0-0 --part Default --package ALV \
+      --output ../generated/test-app/ \
+      ../config/examples/ti-am64x/ti-am64x-r5_test-app.syscfg
+
+$(PATCHED_SA2UL_C): $(ORIGINAL_SA2UL_C) $(PATCHFILE_SA2UL_C)
+	@echo "\t[PATCH]  $(PATCHED_SA2UL_C)"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)patch -s -o $@ $< $(PATCHFILE_SA2UL_C)
+endif
+
 
 standalone:CFLAGS+=-D"TEST_APP_STANDALONE"
 standalone:LDFLAGS:=-T standalone.ld -Wl,-gc-sections -Wl,-Map=image.map
@@ -1477,9 +1591,9 @@ wolfip_tftp_test.o: wolfip_tftp_test.c
 
 
 clean:
-	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
+	$(Q)rm -f *.bin *.elf *.map tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
-		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR)
+		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR) ../generated/test-app
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
@@ -1494,6 +1608,10 @@ ifdef WOLFBOOT_ELF_EXEC_ADDRESS
 	$(Q)printf "0x%X" `cat .entry-point` > .entry-point
 	$(Q)printf "%d" $(WOLFBOOT_ELF_EXEC_SIZE) > .app-size
 	$(Q)printf "0x%X" `cat .app-size` > .app-size
+else
+  # eliminate make errors...
+	$(Q)printf "0x0" > .entry-point
+	$(Q)printf "0x0" > .app-size
 endif
 else
 	# Standard mode: boot partition address + header offset

@@ -401,6 +401,9 @@ language.settings.xml
 /**/build
 /**/build-**
 
+# Any generated directories
+/**/generated
+
 # User config
 # See cmake/config_defaults_user.cmake.sample
 /**/cmake/config_defaults_user.cmake
@@ -436,6 +439,10 @@ port/stmicro/stm32h5-tz-wolfhsm/out/
 
 # CI-only generated Libero settings stub (see tools/ci/gen_mpfs_libero_stub.sh)
 tools/ci/mpfs_libero_stub/
+
+# VS Code
+.vscode/
+
 # gnu-efi built for the AArch64 UEFI target and its cloned source
 tools/gnu-efi-aarch64/
 tools/gnu-efi-src/

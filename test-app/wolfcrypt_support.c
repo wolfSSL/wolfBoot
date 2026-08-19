@@ -124,6 +124,8 @@
         return (uint64_t)csr_read(time);
     #endif
     }
+#elif defined(TARGET_ti_am64x)
+    #define RTI_RTIFRC0 0x0e080010ul    /* free running counter at 1000 Hz */
 #else
     /* Simple tick counter fallback */
     static volatile unsigned int tick_counter = 0;
@@ -165,6 +167,8 @@ unsigned long my_time(unsigned long* timer)
     }
 #elif defined(TARGET_mpfs250)
     unsigned long t = (unsigned long)(mpfs_get_ticks() / RISCV_SMODE_TIMER_FREQ);
+#elif defined(TARGET_ti_am64x)
+    unsigned long t = (unsigned long)(*((volatile uint32_t *)RTI_RTIFRC0) / 1000);
     if (timer) *timer = t;
     return t;
 #else
@@ -207,6 +211,9 @@ double current_time(int reset)
     if (reset)
         mpfs_start_ticks = mpfs_get_ticks();
     return (double)(mpfs_get_ticks() - mpfs_start_ticks) / (double)RISCV_SMODE_TIMER_FREQ;
+#elif defined(TARGET_ti_am64x)
+    (void)reset;
+    return (double)*((volatile uint32_t *)RTI_RTIFRC0) / 1000.0;
 #else
     /* Simple counter-based timing */
     if (reset)
