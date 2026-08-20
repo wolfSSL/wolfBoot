@@ -655,10 +655,17 @@ backup_on_failure:
         }
 #endif
         if (flat_dt != NULL) {
-            uint8_t *dts_ptr = fit_load_image(fit, flat_dt, (int*)&dts_size);
-            if (dts_ptr != NULL && wolfBoot_get_dts_size(dts_ptr) >= 0) {
-                /* relocate to load DTS address */
+            uint8_t *dts_ptr = fit_load_image(fit, flat_dt, NULL);
+            int parsed = (dts_ptr != NULL)
+                ? wolfBoot_get_dts_size(dts_ptr) : -1;
+            if (dts_ptr != NULL &&
+                    parsed >= (int)WOLFBOOT_DTS_MIN_SIZE &&
+                    (uint32_t)parsed <= WOLFBOOT_DTS_MAX_SIZE) {
+                /* Relocate to the load DTS address. The copy length is
+                 * the parsed DTB size (bounded by the staging region),
+                 * not the FIT-declared property length. */
                 dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+                dts_size = (uint32_t)parsed;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
                     dts_ptr, dts_addr, dts_size);
                 memcpy(dts_addr, dts_ptr, dts_size);
