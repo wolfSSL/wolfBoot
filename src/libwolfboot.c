@@ -2621,13 +2621,13 @@ typedef char wolfBoot_encrypt_stage_size_check[
 /**
  * @brief Write encrypted data to an external flash.
  *
- * This function encrypts the provided data using the AES encryption algorithm
- * and writes it to the external flash.
+ * This function encrypts the provided data using the configured external-flash
+ * encryption cipher (ChaCha20, AES-CTR, or a PKCS#11-backed cipher, per build
+ * configuration) and writes it to the external flash.
  *
  * @param address The address in the external flash to write the data to.
  * @param data Pointer to the data buffer to be written.
  * @param len The length of the data to be written.
- * @param forcedEnc force writing encryption, used during final swap
  *
  *  @return int 0 if successful, -1 on failure.
  */
