@@ -940,6 +940,22 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name,
 
 
 /* FIT Specific */
+
+/* Returns the property value only when it is a NUL-terminated C string
+ * within its declared length, else NULL: property values are opaque
+ * byte arrays and the names taken from them are passed to
+ * fdt_find_node_offset()/strcmp(), which strlen() them. */
+static const char* fit_getprop_string(const void* fdt, int offset,
+    const char* name)
+{
+    int len = 0;
+    const char* val = (const char*)fdt_getprop(fdt, offset, name, &len);
+
+    if (val == NULL || len <= 0 || memchr(val, '\0', len) == NULL)
+        return NULL;
+    return val;
+}
+
 const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
     const char** pramdisk, const char** pfpga)
 {
@@ -968,19 +984,16 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
         if (conf == NULL)
 #endif
         {
-            val = fdt_getprop(fdt, off, "default", &len);
-            if (val != NULL && len > 0) {
-                conf = (const char*)val;
-            }
+            conf = fit_getprop_string(fdt, off, "default");
         }
     }
     if (conf != NULL) {
         off = fdt_find_node_offset(fdt, -1, conf);
         if (off > 0) {
-            kernel = fdt_getprop(fdt, off, "kernel", &len);
-            flat_dt = fdt_getprop(fdt, off, "fdt", &len);
-            ramdisk = fdt_getprop(fdt, off, "ramdisk", &len);
-            fpga = fdt_getprop(fdt, off, "fpga", &len);
+            kernel = fit_getprop_string(fdt, off, "kernel");
+            flat_dt = fit_getprop_string(fdt, off, "fdt");
+            ramdisk = fit_getprop_string(fdt, off, "ramdisk");
+            fpga = fit_getprop_string(fdt, off, "fpga");
         }
     }
     if (kernel == NULL) {
@@ -1219,11 +1232,20 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
              * raw. */
             comp = (const char*)fdt_getprop(fdt, off, "compression",
                 &complen);
-            if (comp != NULL && complen > 0) {
-                if (strcmp(comp, "gzip") == 0) {
+            /* Compare within the declared property length: the value
+             * must be exactly "gzip" or "none" (NUL-terminated). Any
+             * other shape - including an unterminated value - fails
+             * closed instead of being strncmp()'d past the property. */
+            if (comp != NULL) {
+                if (complen == 5 && comp[4] == '\0' &&
+                    memcmp(comp, "gzip", 4) == 0) {
                     is_gzip = 1;
                 }
-                else if (strcmp(comp, "none") != 0) {
+                else if (complen == 5 && comp[4] == '\0' &&
+                    memcmp(comp, "none", 4) == 0) {
+                    /* uncompressed */
+                }
+                else {
                     is_unknown_comp = 1;
                 }
             }

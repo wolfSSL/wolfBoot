@@ -269,6 +269,44 @@ END_TEST
 
 #endif /* WOLFBOOT_GZIP */
 
+START_TEST(test_fit_to_none_unterminated_fails_closed)
+{
+    /* The `compression` property is truncated to 4 bytes ("none" with
+     * no NUL): the declared length no longer covers the terminator.
+     * Before the fix the value was strcmp()'d and the following byte
+     * (the dropped NUL) terminated it, so the subimage was passed
+     * through as raw; a malformed value must fail closed. */
+    uint8_t buf[64];
+    int len = -1;
+    void *ret;
+    static uint8_t fit_scratch[sizeof(fit_with_none_comp)];
+    uint8_t *p;
+    unsigned i;
+
+    memcpy(fit_scratch, fit_with_none_comp, sizeof(fit_scratch));
+
+    /* the "none" value appears once in the blob (not as a C string -
+     * scan raw bytes); the property length word sits 8 bytes before
+     * the data */
+    p = NULL;
+    for (i = 0; i + 4 <= sizeof(fit_scratch); i++) {
+        if (memcmp(fit_scratch + i, "none", 4) == 0) {
+            p = fit_scratch + i;
+            break;
+        }
+    }
+    ck_assert_ptr_nonnull(p);
+    p[-8] = 0;
+    p[-7] = 0;
+    p[-6] = 0;
+    p[-5] = 4;
+
+    ret = fit_load_image_to(fit_scratch, "kernel-1",
+                            buf, (uint32_t)sizeof(buf), &len);
+    ck_assert_ptr_null(ret);
+}
+END_TEST
+
 START_TEST(test_fit_to_lzma_unknown_returns_null)
 {
     /* Independent of WOLFBOOT_GZIP - any unknown compression scheme is
@@ -320,6 +358,7 @@ static Suite *fit_gzip_suite(void)
     tcase_add_test(tc, test_fit_to_gzip_disabled_returns_null);
 #endif
     tcase_add_test(tc, test_fit_to_lzma_unknown_returns_null);
+    tcase_add_test(tc, test_fit_to_none_unterminated_fails_closed);
     tcase_add_test(tc, test_fit_to_none_oversized_rejected);
 
     suite_add_tcase(s, tc);
