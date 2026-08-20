@@ -949,10 +949,10 @@ SBOM_COMPONENT_TYPE?=firmware
 SBOM_LICENSE_OVERRIDE?=GPL-3.0-or-later
 # One version of wolfBoot has about 100 configurations, and each one is a
 # different image with a different source set.  Name the document after the
-# configuration so a second target does not overwrite the first.  gen-sbom still
-# derives serialNumber and the SPDX documentNamespace from name and version
-# alone, which collides inside a scanner as well; that part is wolfGlass's to
-# fix, and this does not paper over it.
+# configuration so a second target does not overwrite the first.  gen-sbom
+# folds the build configuration into the serialNumber and the SPDX
+# documentNamespace too, so the documents stay distinct inside a scanner and
+# not only on disk.
 SBOM_CONFIG_TAG:=$(TARGET)$(if $(SIGN),-$(SIGN))$(if $(HASH),-$(HASH))
 SBOM_CDX_OUT:=wolfboot-$(SBOM_CONFIG_TAG)-$(WOLFBOOT_VERSION).cdx.json
 SBOM_SPDX_OUT:=wolfboot-$(SBOM_CONFIG_TAG)-$(WOLFBOOT_VERSION).spdx.json
