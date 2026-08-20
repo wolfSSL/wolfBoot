@@ -2242,7 +2242,35 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
         /* Handle loadable segments */
         if (type == ELF_PT_LOAD) {
-            uintptr_t load_addr = (uintptr_t)(paddr + BASE_OFF);
+            uint64_t seg_start;
+            uintptr_t load_addr;
+
+            /* Validate the segment before hashing: the flash-address hash
+             * reader consumes a uint32_t length, the file layout must stay
+             * inside the manifest image, and the paddr range must not
+             * overflow. Reject instead of continuing. */
+            if (filesz > UINT32_MAX) {
+                wolfBoot_printf("ELF: [CHECK] ERROR: segment file_size "
+                                "%lu does not fit a 32-bit length\n",
+                                (unsigned long)filesz);
+                return -1;
+            }
+            if (offset > (uint64_t)boot.fw_size ||
+                filesz > (uint64_t)boot.fw_size - offset) {
+                wolfBoot_printf("ELF: [CHECK] ERROR: segment offset %lu + "
+                                "size %lu exceeds image size %u\n",
+                                (unsigned long)offset,
+                                (unsigned long)filesz, boot.fw_size);
+                return -1;
+            }
+            seg_start = paddr + (uint64_t)BASE_OFF;
+            if (seg_start < paddr || seg_start > UINT64_MAX - filesz) {
+                wolfBoot_printf("ELF: [CHECK] ERROR: segment paddr range "
+                                "overflows\n");
+                return -1;
+            }
+
+            load_addr = (uintptr_t)seg_start;
             /* Feed the loadable parts to the hash function */
             wolfBoot_printf("ELF: [CHECK] Hashing loadable segment: "
                             "paddr = 0x%08lx, loadaddr = 0x%08lx, "
@@ -2315,14 +2343,6 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     if (wolfBoot_hardened_CT_compare(exp_digest, calc_digest,
             WOLFBOOT_SHA_DIGEST_SIZE) != 0) {
         wolfBoot_printf("ELF: [CHECK] SHA verification FAILED\n");
-        wolfBoot_printf(
-            "ELF: [CHECK] Expected   %02x%02x%02x%02x%02x%02x%02x%02x\n",
-            exp_digest[0], exp_digest[1], exp_digest[2], exp_digest[3],
-            exp_digest[4], exp_digest[5], exp_digest[6], exp_digest[7]);
-        wolfBoot_printf(
-            "ELF: [CHECK] Calculated %02x%02x%02x%02x%02x%02x%02x%02x\n",
-            calc_digest[0], calc_digest[1], calc_digest[2], calc_digest[3],
-            calc_digest[4], calc_digest[5], calc_digest[6], calc_digest[7]);
         return -2;
     }
     wolfBoot_printf("ELF: [CHECK] Verification successful\n");
