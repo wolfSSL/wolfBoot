@@ -2314,12 +2314,18 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
         iv_buf[i] = wb_reverse_word32(iv_buf[i]);
     }
 #endif
-    iv_buf[3] += iv_ctr;
-    if (iv_buf[3] < iv_ctr) { /* overflow */
+    /* Add the block counter with an unconditional, branch-free carry:
+     * a conditional carry loop's trip count would depend on the nonce
+     * content and leak it through timing. */
+    {
+        uint32_t carry;
+        uint32_t old = iv_buf[3];
+        iv_buf[3] = old + iv_ctr;
+        carry = (uint32_t)(iv_buf[3] < old);
         for (i = 2; i >= 0; i--) {
-            iv_buf[i]++;
-            if (iv_buf[i] != 0)
-                break;
+            uint32_t prev = iv_buf[i];
+            iv_buf[i] = prev + carry;
+            carry = (uint32_t)(iv_buf[i] < prev);
         }
     }
 #ifndef BIG_ENDIAN_ORDER
@@ -2474,12 +2480,16 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
             cb_words[i] = wb_reverse_word32(cb_words[i]);
         }
 #endif
-        cb_words[3] += iv_ctr;
-        if (cb_words[3] < iv_ctr) { /* overflow */
+        /* Unconditional, branch-free carry (see aes_set_iv) */
+        {
+            uint32_t carry;
+            uint32_t old = cb_words[3];
+            cb_words[3] = old + iv_ctr;
+            carry = (uint32_t)(cb_words[3] < old);
             for (i = 2; i >= 0; i--) {
-                cb_words[i]++;
-                if (cb_words[i] != 0)
-                    break;
+                uint32_t prev = cb_words[i];
+                cb_words[i] = prev + carry;
+                carry = (uint32_t)(cb_words[i] < prev);
             }
         }
 #ifndef BIG_ENDIAN_ORDER
