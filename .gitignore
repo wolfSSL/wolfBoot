@@ -238,6 +238,7 @@ tools/unit-tests/unit-va416x0-fram
 tools/unit-tests/unit-wolfhsm_flash_hal
 tools/unit-tests/unit-ubootenv
 tools/unit-tests/unit-cm4-sdhci
+tools/unit-tests/unit-cm4-rauc-slot
 tools/unit-tests/__pycache__/*
 
 

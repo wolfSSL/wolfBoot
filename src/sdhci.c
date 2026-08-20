@@ -1551,12 +1551,17 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 }
                 sz -= xfer_sz;
 
-            #if defined(DISK_EMMC) || defined(DISK_SDCARD)
-                /* Between-block workaround for the Arasan EMMC2 block (used for
-                 * both eMMC and the CM4 microSD path, which runs the same
-                 * controller in multi-block PIO). For multi-block READ: clear
-                 * BRR by writing 1 to it (W1C), then the outer loop waits for
-                 * BRR to be set again when the next block's data is available.
+            #if defined(DISK_EMMC) || defined(SDHCI_PIO_BRR_CLEAR)
+                /* Between-block workaround for the Arasan EMMC2 block. This is
+                 * a controller quirk, NOT a generic SD behavior, so it is scoped
+                 * rather than keyed off DISK_SDCARD: that macro is also set by
+                 * the polarfire/zynqmp/versal/zynq7000/tegra234 SD targets,
+                 * whose multi-block PIO reads are already validated without it.
+                 * Platforms needing the quirk opt in with SDHCI_PIO_BRR_CLEAR
+                 * (the CM4 microSD path, which drives the same EMMC2 block).
+                 * For multi-block READ: clear BRR by writing 1 to it (W1C),
+                 * then the outer loop waits for BRR to be set again when the
+                 * next block's data is available.
                  * For WRITE: BWR auto-clears when buffer full, don't touch. */
                 if (sz > 0 && dir == SDHCI_DIR_READ) {
                     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);

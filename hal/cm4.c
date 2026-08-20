@@ -673,6 +673,8 @@ void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far)
 #endif /* DEBUG && DEBUG_UART */
 
 #if defined(HAVE_FIPS)
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
+
 /* Upper bound on the busy-wait for the RNG200 FIFO to fill. This is a coarse,
  * A72-clock-dependent spin count (not a wall-clock timeout); it only guards
  * against a wedged RNG so the seed read cannot hang forever. Tune if needed. */
@@ -737,6 +739,10 @@ int wolfBoot_fips_seed(unsigned char* output, unsigned int sz)
         n = (sz - pos) < 4 ? (sz - pos) : 4;
         for (i = 0; i < n; i++)
             output[pos++] = (unsigned char)(word >> (i * 8));
+        /* Raw TRNG output seeds the FIPS Hash-DRBG: do not leave the last word
+         * on the stack for a later frame to observe. wc_ForceZero (not memset)
+         * so the compiler cannot elide the dead store. */
+        wc_ForceZero(&word, sizeof(word));
     }
     return 0;
 }
