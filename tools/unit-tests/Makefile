@@ -150,6 +150,7 @@ ENABLE_32BIT_TESTS ?= $(HAVE_M32)
 ifeq ($(ENABLE_32BIT_TESTS),1)
 TESTS+=unit-linux-loader-e820
 TESTS+=unit-linux-loader-syssize
+TESTS+=unit-sama5d3-ext-read
 else
 $(info Skipping 32-bit x86 linux-loader unit tests: 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
 endif
@@ -836,6 +837,20 @@ zynq_write_extract.h: ../../hal/zynq.c
 
 unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
 	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-sama5d3-ext-read runs the real ext_flash_read() from hal/sama5d3.c
+# (the intra-page offset of the start address was never applied, sub-page
+# reads were copied in 32-bit words, and a multi-page read ending
+# mid-page wrote a full page past the caller's buffer). The function and
+# the nand_flash geometry struct are extracted verbatim; the test provides
+# host div_u()/mod() and emulated nand_read_page()/nand_check_bad_block()
+# backed by a byte array.
+sama5d3_read_extract.h: ../../hal/sama5d3.c
+	sed -n '/^struct nand_flash {/,/^} nand_flash = { 0 };/p' $< > $@
+	sed -n '/^int ext_flash_read(/,/^}/p' $< >> $@
+
+unit-sama5d3-ext-read: unit-sama5d3-ext-read.c sama5d3_read_extract.h
+	gcc -o $@ unit-sama5d3-ext-read.c $(CFLAGS) $(LDFLAGS)
 
 # unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
 # hal/versal.c (an unaligned read larger than the 4096-byte

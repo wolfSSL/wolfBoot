@@ -601,28 +601,29 @@ static int nand_check_bad_block(uint32_t block)
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
-    uint32_t block = div_u(address, nand_flash.block_size); /* The block where the address falls in */
-    uint32_t page = div_u(address, nand_flash.page_size); /* The page where the address falls in */
-    uint32_t start_page_in_block = mod(page, nand_flash.pages_per_block); /* The start page within this block */
-    uint32_t in_block_offset = mod(address, nand_flash.block_size); /* The offset of the address within the block */
-    uint32_t remaining = nand_flash.block_size - in_block_offset; /* How many bytes remaining to read in the first block */
-    int len_to_read = len;
-    uint8_t *buffer = data;
-    uint32_t i;
-    int copy = 0;
+    uintptr_t addr = address;
+    uint8_t *dst = data;
+    uint32_t in_page = mod(address, nand_flash.page_size); /* The offset of the address within the page */
+    int remaining = len;
     int ret;
 
-    if (len < (int)nand_flash.page_size) {
-        buffer = buffer_page;
-        copy = 1;
-        len_to_read = nand_flash.page_size;
-    }
+    if (len <= 0)
+        return 0;
 
-    while (len_to_read > 0) {
-        uint32_t sz = len_to_read;
-        uint32_t pages_to_read;
-        if (sz > remaining)
-            sz = remaining;
+    while (remaining > 0) {
+        uint32_t block;
+        uint32_t page;
+        uint32_t page_in_block;
+        uint32_t chunk;
+
+        /* Bytes available from the current address to the end of its page */
+        chunk = nand_flash.page_size - in_page;
+        if (chunk > (uint32_t)remaining)
+            chunk = (uint32_t)remaining;
+
+        block = div_u(addr, nand_flash.block_size);
+        page = div_u(addr, nand_flash.page_size);
+        page_in_block = mod(page, nand_flash.pages_per_block);
 
         do {
             ret = nand_check_bad_block(block);
@@ -632,32 +633,23 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             }
         } while (ret < 0);
 
-        /* Amount of pages to be read from this block */
-        pages_to_read = div_u((sz + nand_flash.page_size - 1), nand_flash.page_size);
-
-        if (pages_to_read * nand_flash.page_size > remaining)
-            pages_to_read--;
-
-        /* Read (remaining) pages off a block */
-        for (i = 0; i < pages_to_read; i++) {
-            nand_read_page(block, start_page_in_block + i, buffer);
-            if (sz > nand_flash.page_size)
-                sz = nand_flash.page_size;
-            len_to_read -= sz;
-            buffer += sz;
+        if ((in_page == 0) && (chunk == nand_flash.page_size)) {
+            /* Full page at the page head: read straight into the caller's
+             * buffer. */
+            nand_read_page(block, page_in_block, dst);
         }
-        /* The block is over, move to the next one */
-        block++;
-        start_page_in_block = 0;
-        remaining = nand_flash.block_size;
-    }
-    if (copy) {
-        uint32_t *dst = (uint32_t *)data;
-        uint32_t *src = (uint32_t *)buffer_page;
-        uint32_t tot_len = (uint32_t)len;
-        for (i = 0; i < (tot_len >> 2); i++) {
-            dst[i] = src[i];
+        else {
+            /* Partial first/last page: stage through the page buffer and
+             * copy from the column offset, so a full page is never written
+             * past the end of the caller's buffer. */
+            nand_read_page(block, page_in_block, buffer_page);
+            memcpy(dst, buffer_page + in_page, chunk);
         }
+
+        dst += chunk;
+        remaining -= (int)chunk;
+        addr += chunk;
+        in_page = mod(addr, nand_flash.page_size);
     }
     return len;
 }
