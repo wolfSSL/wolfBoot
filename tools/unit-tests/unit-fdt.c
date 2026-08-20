@@ -43,8 +43,12 @@ START_TEST(test_fdt_get_string_rejects_out_of_range_offset)
     const char *s;
 
     memset(&blob, 0, sizeof(blob));
+    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
     fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
     fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
+    fdt_set_magic(&blob, FDT_MAGIC);
+    fdt_set_version(&blob, 17);
+    fdt_set_last_comp_version(&blob, 16);
     memcpy(blob.strings, "chosen", sizeof("chosen"));
     blob.after[0] = 'X';
     blob.after[1] = '\0';
@@ -66,8 +70,12 @@ START_TEST(test_fdt_get_string_returns_string_with_valid_offset)
     const char *s;
 
     memset(&blob, 0, sizeof(blob));
+    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
     fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
     fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
+    fdt_set_magic(&blob, FDT_MAGIC);
+    fdt_set_version(&blob, 17);
+    fdt_set_last_comp_version(&blob, 16);
     memcpy(blob.strings, "serial\0console\0", 15);
 
     s = fdt_get_string(&blob, 7, &len);
@@ -218,6 +226,7 @@ static void build_compat_fdt(uint8_t *buf, size_t size,
     memset(buf, 0, size);
 
     hdr = (struct fdt_header *)buf;
+    hdr->magic = fdt32_to_cpu(FDT_MAGIC);
     fdt_set_totalsize(hdr, 0x100);
     fdt_set_off_dt_struct(hdr, struct_off);
     fdt_set_off_dt_strings(hdr, strings_off);
@@ -296,6 +305,41 @@ START_TEST(test_fdt_compatible_prefix_entry_no_match)
     off = fdt_node_offset_by_compatible(buf, -1, "abc");
     ck_assert_int_lt(off, 0);
 }
+END_TEST
+
+/* A finalized DTB whose string table lies past the declared end of
+ * the blob must be rejected: before the fix fdt_check_header()
+ * validated only magic and version, and fdt_get_string() formed the
+ * string-table pointer from the unvalidated header fields. */
+START_TEST(test_fdt_check_header_rejects_unbounded_string_area)
+{
+    static uint8_t buf[0x100];
+    int len = 0;
+    const char *s;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    /* push the string table past the declared end of the blob */
+    fdt_set_off_dt_strings((struct fdt_header *)buf, 0x100);
+
+    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+
+    s = fdt_get_string(buf, 0, &len);
+    ck_assert_ptr_null(s);
+    ck_assert_int_lt(len, 0);
+}
+END_TEST
+
+/* The structure block must not overlap the string table. */
+START_TEST(test_fdt_check_header_rejects_overlapping_areas)
+{
+    static uint8_t buf[0x100];
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    fdt_set_size_dt_struct((struct fdt_header *)buf, 0x100);
+
+    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+}
+END_TEST
 
 static Suite *fdt_suite(void)
 {
@@ -313,6 +357,8 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_compatible_terminated_exact_len_match);
     tcase_add_test(tc, test_fdt_compatible_multi_string_list_match);
     tcase_add_test(tc, test_fdt_compatible_prefix_entry_no_match);
+    tcase_add_test(tc, test_fdt_check_header_rejects_unbounded_string_area);
+    tcase_add_test(tc, test_fdt_check_header_rejects_overlapping_areas);
     suite_add_tcase(s, tc);
 
     tcase_set_timeout(tc_dos, 5);

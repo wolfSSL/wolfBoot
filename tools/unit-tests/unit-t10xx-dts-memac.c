@@ -261,7 +261,9 @@ static void dtb_finalize(struct dtb *d)
     hdr->totalsize = cpu_to_fdt32(0x2000);
     hdr->off_dt_struct = cpu_to_fdt32(d->struct_off);
     hdr->off_dt_strings = cpu_to_fdt32(d->strings_off);
-    hdr->off_mem_rsvmap = cpu_to_fdt32(d->strings_off); /* no reservations */
+    hdr->off_mem_rsvmap = cpu_to_fdt32(0x28);
+    /* the 8 bytes after the 40-byte header are zero: an empty
+     * reservation list at the canonical spot */
     hdr->version = cpu_to_fdt32(17);
     hdr->last_comp_version = cpu_to_fdt32(16);
     hdr->boot_cpuid_phys = cpu_to_fdt32(0);
