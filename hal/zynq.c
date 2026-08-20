@@ -2584,17 +2584,11 @@ void RAMFUNCTION ext_flash_unlock(void)
 
 }
 
-/* The following helpers (hal_get_timer_us, hal_get_dts_address, hal_dts_fixup)
- * are only compiled into the wolfBoot binary. The test-app build also links
- * hal/zynq.o but must not pull in FDT/MMU-specific code, so __WOLFBOOT gates
- * these symbols out of that build. */
-#if defined(MMU) && defined(__WOLFBOOT)
-/* Fallback timer frequency if CNTFRQ_EL0 is not configured (e.g. boot path
- * that did not run ATF/BL31). ZynqMP system counter is 100 MHz. */
-#ifndef ZYNQMP_TIMER_CLK_FREQ
-#define ZYNQMP_TIMER_CLK_FREQ 100000000ULL
-#endif
-
+/* hal_get_timer_us serves the BENCHMARK_* macros and update_disk
+ * (include/hal.h); the extra gate terms keep it available to every build
+ * variant that can reference it, including the test-app link. */
+#if (defined(MMU) && defined(__WOLFBOOT)) || \
+    defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
 /* Get current time in microseconds using ARMv8 generic timer */
 uint64_t hal_get_timer_us(void)
 {
@@ -2606,10 +2600,18 @@ uint64_t hal_get_timer_us(void)
      * (matches hal/versal.c). */
     if (freq == 0)
         freq = ZYNQMP_TIMER_CLK_FREQ;
-    /* Use __uint128_t to avoid overflow of (count * 1e6) at long uptimes
-     * (would overflow uint64_t after ~51h at 100MHz). */
-    return (uint64_t)(((__uint128_t)count * 1000000ULL) / freq);
+    /* Split divide: no (count * 1e6) uint64 overflow at long uptimes and
+     * no libgcc 128-bit helper (__udivti3) in links without one */
+    return (count / freq) * 1000000ULL +
+           ((count % freq) * 1000000ULL) / freq;
 }
+#endif /* (MMU && __WOLFBOOT) || WOLFBOOT_UPDATE_DISK || BOOT_BENCHMARK */
+
+/* The following helpers (hal_get_dts_address, hal_dts_fixup) are only
+ * compiled into the wolfBoot binary. The test-app build also links
+ * hal/zynq.o but must not pull in FDT/MMU-specific code, so __WOLFBOOT gates
+ * these symbols out of that build. */
+#if defined(MMU) && defined(__WOLFBOOT)
 
 void* hal_get_dts_address(void)
 {

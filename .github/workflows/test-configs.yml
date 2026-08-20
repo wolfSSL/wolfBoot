@@ -866,6 +866,15 @@ jobs:
       config-file: ./config/examples/zynqmp.config
       make-args: CFLAGS_EXTRA=-DWOLFBOOT_ZYNQMP_PHY_INIT
 
+  zynqmp_phy_delay_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp.config
+      # Exercise a custom step list using every op (GPIO, WR, RD, DELAY)
+      # plus BOOT_BENCHMARK's hal_get_timer_us dependency.
+      make-args: BOOT_BENCHMARK=1 CFLAGS_EXTRA="-DWOLFBOOT_ZYNQMP_PHY_INIT -DZYNQMP_PHY_INIT_STEPS={ZYNQMP_PHY_OP_GPIO,0,1},{ZYNQMP_PHY_OP_DELAY,0,10},{ZYNQMP_PHY_OP_WR,0x1E,0x0819},{ZYNQMP_PHY_OP_RD,0x1F,0}"
+
   zynq7000_test:
     uses: ./.github/workflows/test-build.yml
     with:
