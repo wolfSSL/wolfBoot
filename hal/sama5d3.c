@@ -708,20 +708,23 @@ static void dbgu_init(void) {
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    /* TODO */
+    /* SAMA5D3 NAND page program is not implemented: this HAL only
+     * supports reading NAND. Report failure instead of pretending the
+     * data was programmed. */
     (void)address;
     (void)data;
     (void)len;
 
-    return 0;
+    return -1;
 }
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    /* TODO */
+    /* SAMA5D3 NAND block erase is not implemented: see ext_flash_write. */
     (void)address;
     (void)len;
-    return 0;
+
+    return -1;
 }
 
 /* SAMA5D3 NAND flash does not have an enable pin */
