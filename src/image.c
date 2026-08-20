@@ -691,6 +691,7 @@ static void wolfBoot_verify_signature_lms(uint8_t key_slot,
         wolfBoot_printf("error: wc_LmsKey_SetParameters(%d, %d, %d)" \
                         " returned %d\n", LMS_LEVELS, LMS_HEIGHT,
                         LMS_WINTERNITZ, ret);
+        wc_LmsKey_Free(&lms);
         return;
     }
 
@@ -703,6 +704,7 @@ static void wolfBoot_verify_signature_lms(uint8_t key_slot,
         /* Something is wrong with the pub key or LMS parameters. */
         wolfBoot_printf("error: wc_LmsKey_ImportPubRaw" \
                         " returned %d\n", ret);
+        wc_LmsKey_Free(&lms);
         return;
     }
 
