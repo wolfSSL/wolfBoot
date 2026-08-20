@@ -526,6 +526,8 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     if ((resume == 1) && (swapDone == 0) &&
         (updateState != IMG_STATE_FINAL_FLAGS)
     ) {
+        /* Keep the invariant that every exit scrubs the staging buffer */
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
         return -1;
     }
 
