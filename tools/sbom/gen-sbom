@@ -25,6 +25,12 @@ from datetime import datetime, timezone
 # shapes because dropping --dep-liboqs did not bump it, leaving vendored
 # copies indistinguishable by the only identifier the SBOM records.
 #
+# 1.8  CPE and PURL identifiers drop `+` build metadata (OpenSSL
+#      BUILD_METADATA, PEP 440 local versions). A raw `+` is not legal
+#      in CPE 2.3 and does not match an upstream git tag. version /
+#      versionInfo still records the full string. Constructors (cpe23_uri,
+#      wolfssl_project_purl, DEP_META lambdas) strip; this is not a
+#      full CPE sanitizer.
 # 1.7  wolfBoot CPE is registered in the NVD Official CPE Dictionary
 #      (published 2026-08-10). PRODUCT_CPE status flips to registered so
 #      the main package emits `cpe` and the pending properties stop.
@@ -50,7 +56,7 @@ from datetime import datetime, timezone
 #      -only/-or-later distinction cannot be inferred.
 # 1.2  Dropped --dep-liboqs (unversioned; see above).
 GEN_SBOM_TOOL_NAME = 'wolfssl-sbom-gen'
-GEN_SBOM_VERSION = '1.7'
+GEN_SBOM_VERSION = '1.8'
 
 # Placeholder recorded in the component checksum fields when the operator
 # passes --no-artifact-hash: a build (ROM image, HSM firmware, binary-only
@@ -129,9 +135,32 @@ def github_purl(namespace, repo, tag):
     return f'pkg:github/{namespace.lower()}/{repo.lower()}@{tag}'
 
 
+def identifier_version(version):
+    """Return the version used in CPE 2.3 and PURL identifiers.
+
+    OpenSSL BUILD_METADATA and PEP 440 local versions append `+...`.
+    A raw `+` is not a legal CPE 2.3 version character, and the suffix
+    is not an upstream git tag, so NVD / OSV cannot match it. Keep the
+    full string in version / versionInfo; use this for identifiers.
+
+    This is not a full CPE 2.3 sanitizer: other illegal characters
+    (`:`, `*`, whitespace) are not rewritten.
+    """
+    if not version:
+        return version
+    return version.split('+', 1)[0]
+
+
+def cpe23_uri(vendor, product, version):
+    """CPE 2.3 application URI. Version uses identifier_version()."""
+    ident = identifier_version(version)
+    return f'cpe:2.3:a:{vendor}:{product}:{ident}:*:*:*:*:*:*:*'
+
+
 def wolfssl_project_purl(name, version):
     """Canonical pkg:github PURL for a wolfSSL-stack project."""
-    return github_purl('wolfSSL', name, github_release_tag(name, version))
+    return github_purl(
+        'wolfSSL', name, github_release_tag(name, identifier_version(version)))
 
 
 # Official CPE 2.3 vendor:product pairs.  Main-package CPEs are emitted only
@@ -165,9 +194,7 @@ PRODUCT_CPE = {
 
 
 def _product_cpe_string(meta, version):
-    return (
-        f"cpe:2.3:a:{meta['vendor']}:{meta['product']}:{version}:*:*:*:*:*:*:*"
-    )
+    return cpe23_uri(meta['vendor'], meta['product'], version)
 
 
 def product_cpe(name, version):
@@ -243,6 +270,59 @@ def derived_uuid(*parts):
     return str(uuid.uuid5(SBOM_UUID_NAMESPACE, '\x00'.join(parts)))
 
 
+def config_identity(lib_hash, license_id, build_props, enabled_deps,
+                    dep_versions, *, supplier=None, component_type=None,
+                    license_text=None, hash_kind=None, hash_source=None,
+                    file_names=None, wolfssl_subset=None, subset_basis=None):
+    """Stable digest of the build configuration behind one name+version.
+
+    Folded into the SBOM serialNumber / SPDX documentNamespace so two builds
+    of one release with different configuration (FIPS vs non-FIPS, a different
+    --srcs set, a different feature-flag set) get distinct identifiers, while
+    an identical configuration still reproduces byte-for-byte.  Fields are
+    tagged and NUL-delimited so no two configurations serialize alike.
+
+    Invariant: every CLI input that can change the document body reaches this
+    digest.  One that does not is a collision -- two documents with differing
+    content under one serialNumber.  tests/test_sbom_identity.py classifies
+    the whole option set and fails on an unclassified new option.
+
+    lib_hash is folded in deliberately, so on the --lib path the identity
+    follows the built binary: the same sources under a different toolchain get
+    a different serialNumber.  An SBOM from --lib describes one artefact.  The
+    --srcs and --no-artifact-hash paths do not have this property."""
+    h = hashlib.sha256()
+
+    def _field(tag, value):
+        h.update(tag.encode())
+        h.update(b'\0')
+        h.update((value or '').encode())
+        h.update(b'\0')
+
+    _field('lib_hash', lib_hash)
+    _field('license', license_id)
+    for k, v in sorted(build_props):
+        _field('prop', f'{k}={v}')
+    for key in sorted(enabled_deps):
+        _field('dep', f'{key}={dep_versions.get(key) or ""}')
+    _field('supplier', supplier)
+    _field('component_type', component_type)
+    # Digested, not embedded: the text is a document field of its own and can
+    # differ while the SPDX identifier is unchanged.
+    _field('license_text',
+           hashlib.sha256(license_text.encode()).hexdigest()
+           if license_text else '')
+    _field('hash_kind', hash_kind)
+    _field('hash_source', hash_source)
+    # Filenames reach the document body without passing through lib_hash,
+    # which covers bytes only: a rename changes the body but not the hash.
+    for fname in sorted(file_names or []):
+        _field('file', fname)
+    _field('wolfssl_subset', wolfssl_subset)
+    _field('subset_basis', subset_basis)
+    return h.hexdigest()
+
+
 def build_timestamp():
     """Return (datetime, ISO-8601-Z string) honoring SOURCE_DATE_EPOCH.
     Reproducible Builds convention: if the env var is set to a valid
@@ -294,7 +374,7 @@ DEP_META = {
         'pkgconfig': 'wolfssl',
         'purl': lambda v: wolfssl_project_purl('wolfssl', v),
         # The CPE NVD registers for the wolfSSL library.
-        'cpe': lambda v: f'cpe:2.3:a:wolfssl:wolfssl:{v}:*:*:*:*:*:*:*',
+        'cpe': lambda v: cpe23_uri('wolfssl', 'wolfssl', v),
     },
     # wolfCrypt is a separate NVD product (cpe:2.3:a:wolfssl:wolfcrypt).
     # Embedders such as wolfBoot compile wolfcrypt sources into the image;
@@ -315,7 +395,7 @@ DEP_META = {
         # does not collide with the wolfssl component's own PURL.  NVD
         # matching keys on the wolfcrypt CPE below.
         'purl': lambda v: wolfssl_project_purl('wolfssl', v) + '#wolfcrypt',
-        'cpe': lambda v: f'cpe:2.3:a:wolfssl:wolfcrypt:{v}:*:*:*:*:*:*:*',
+        'cpe': lambda v: cpe23_uri('wolfssl', 'wolfcrypt', v),
     },
     'libz': {
         'name': 'zlib',
@@ -326,8 +406,9 @@ DEP_META = {
         # pkg:github resolves in OSV / GHSA / Snyk / Trivy without the
         # vendor:product mapping a pkg:generic PURL would force.  zlib tags
         # its releases `vX.Y.Z`, so the bare pkg-config version needs the `v`.
-        'purl': lambda v: github_purl('madler', 'zlib', f'v{v}'),
-        'cpe': lambda v: f'cpe:2.3:a:zlib:zlib:{v}:*:*:*:*:*:*:*',
+        'purl': lambda v: github_purl(
+            'madler', 'zlib', f'v{identifier_version(v)}'),
+        'cpe': lambda v: cpe23_uri('zlib', 'zlib', v),
     },
     # openssl, declared as a dependency by the OpenSSL-compat products
     # (wolfProvider, wolfEngine) that link libcrypto/libssl alongside wolfSSL.
@@ -342,8 +423,9 @@ DEP_META = {
         'license': 'Apache-2.0',
         'download': 'https://github.com/openssl/openssl',
         'pkgconfig': 'openssl',
-        'purl': lambda v: github_purl('openssl', 'openssl', f'openssl-{v}'),
-        'cpe': lambda v: f'cpe:2.3:a:openssl:openssl:{v}:*:*:*:*:*:*:*',
+        'purl': lambda v: github_purl(
+            'openssl', 'openssl', f'openssl-{identifier_version(v)}'),
+        'cpe': lambda v: cpe23_uri('openssl', 'openssl', v),
     },
 }
 
@@ -988,6 +1070,8 @@ def cdx_dep_component(name, pkg_version, key, dep_version_overrides=None):
         'externalReferences': [{'type': 'vcs', 'url': meta['download']}],
     }
     if version:
+        # Pass the full version: constructors apply identifier_version().
+        # version / versionInfo keep the local string (BUILD_METADATA).
         comp['version'] = version
         comp['purl'] = meta['purl'](version)
         # Both identifiers are version-bearing, so neither can be emitted
@@ -1435,6 +1519,53 @@ def _resolve_dep_versions(enabled_deps, overrides):
     return overrides
 
 
+def _inherit_wolfcrypt_version(enabled_deps, overrides, name, version):
+    """Give wolfcrypt a version so its CPE and PURL are not dropped.
+
+    wolfcrypt has no pkg-config file of its own, so `dep_version` can never
+    resolve it.  Prefer an explicit `--dep-version wolfcrypt=`, else the
+    wolfssl dependency's version, else (for wolfSSL's own SBOM) the package
+    version.
+
+    MUST be called AFTER `_resolve_dep_versions`.  The wolfssl version
+    normally arrives from pkg-config rather than from `--dep-version`, so
+    inheriting before the resolve step only ever saw an explicit override: a
+    downstream embedder such as wolfBoot that did not pass
+    `--dep-version wolfssl=` emitted a wolfcrypt component with no version,
+    no purl and no cpe, and still exited 0.
+
+    Tests the value rather than the key, because `_resolve_dep_versions`
+    caches a None for every dep pkg-config cannot resolve, so by this point
+    'wolfcrypt' is always present in `overrides`.
+    """
+    if 'wolfcrypt' not in enabled_deps or overrides.get('wolfcrypt'):
+        return overrides
+    if overrides.get('wolfssl'):
+        overrides['wolfcrypt'] = overrides['wolfssl']
+    elif name.lower() == 'wolfssl':
+        overrides['wolfcrypt'] = version
+    return overrides
+def _enabled_deps(dep_flags):
+    """Return the enabled dependency keys, rejecting values outside {yes, no}.
+
+    Treating anything that is not 'yes' as 'no' loses a dependency silently.
+    A build fragment wiring `--dep-wolfssl=$(HAVE_WOLFSSL)` where the variable
+    expands to 1, true, on or Y would drop a CVE-bearing component from the
+    SBOM with no diagnostic, which is the one failure mode a CRA tool must
+    never have.  Fail loudly instead.
+    """
+    enabled = []
+    for key, flag_name, value in dep_flags:
+        normalized = (value or '').strip().lower()
+        if normalized not in ('yes', 'no'):
+            sys.exit(f"ERROR: {flag_name} expects 'yes' or 'no', got {value!r}. "
+                     f"A value outside that set would silently drop {key} from "
+                     f"the SBOM.")
+        if normalized == 'yes':
+            enabled.append(key)
+    return enabled
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Generate CycloneDX and SPDX SBOMs for wolfssl. '
@@ -1618,28 +1749,19 @@ def main():
                 "https://example.com/sbom/wolfssl-X.Y.Z.spdx.json or "
                 "urn:uuid:00000000-0000-0000-0000-000000000000.")
 
-    enabled_deps = [
-        key for key, flag in [
-            ('wolfssl',   args.dep_wolfssl),
-            ('wolfcrypt', args.dep_wolfcrypt),
-            ('openssl',   args.dep_openssl),
-            ('libz',      args.dep_libz),
-        ]
-        if flag.lower() == 'yes'
-    ]
+    enabled_deps = _enabled_deps([
+        ('wolfssl',   '--dep-wolfssl',   args.dep_wolfssl),
+        ('wolfcrypt', '--dep-wolfcrypt', args.dep_wolfcrypt),
+        ('openssl',   '--dep-openssl',   args.dep_openssl),
+        ('libz',      '--dep-libz',      args.dep_libz),
+    ])
     dep_version_overrides = _parse_dep_version_overrides(args.dep_version)
-    # wolfcrypt has no pkg-config.  Inherit a version so the CPE/PURL are
-    # not dropped: prefer an explicit --dep-version wolfcrypt=, else the
-    # wolfssl dep version, else (for wolfSSL's own SBOM) the package version.
-    if 'wolfcrypt' in enabled_deps and 'wolfcrypt' not in dep_version_overrides:
-        if dep_version_overrides.get('wolfssl'):
-            dep_version_overrides['wolfcrypt'] = dep_version_overrides['wolfssl']
-        elif args.name.lower() == 'wolfssl':
-            dep_version_overrides['wolfcrypt'] = args.version
     # Resolve each enabled dependency's version once, here, and feed the
     # result to both the CDX and SPDX emitters via the overrides map (see
     # _resolve_dep_versions for the once-per-dep pkg-config rationale).
     _resolve_dep_versions(enabled_deps, dep_version_overrides)
+    _inherit_wolfcrypt_version(enabled_deps, dep_version_overrides,
+                               args.name, args.version)
 
     if args.license_override:
         license_id = args.license_override
@@ -1756,8 +1878,28 @@ def main():
 
     dt, timestamp = build_timestamp()
     year = dt.year
-    serial = derived_uuid(args.name, args.version, 'serial')
-    doc_ns_uuid = derived_uuid(args.name, args.version, 'document')
+    # SPDX 2.3 6.5 requires documentNamespace to be unique, and a CycloneDX
+    # version:1 sharing a serialNumber over differing content is
+    # self-contradictory.  Every body-affecting input goes into the digest;
+    # see config_identity for the invariant.
+    identity_file_names = (
+        [fe['name'] for fe in file_entries] if file_entries
+        else (srcs_basenames or [])
+    )
+    config_id = config_identity(
+        lib_hash, license_id, build_props, enabled_deps,
+        dep_version_overrides,
+        supplier=args.supplier,
+        component_type=args.component_type,
+        license_text=license_text,
+        hash_kind=hash_kind,
+        hash_source=hash_source,
+        file_names=identity_file_names,
+        wolfssl_subset=wolfssl_subset,
+        subset_basis=subset_basis,
+    )
+    serial = derived_uuid(args.name, args.version, 'serial', config_id)
+    doc_ns_uuid = derived_uuid(args.name, args.version, 'document', config_id)
 
     cdx = generate_cdx(
         args.name, args.version, args.supplier,

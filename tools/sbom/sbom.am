@@ -10,7 +10,7 @@
 # build-time dependency on a separate wolfSSL checkout.
 #
 # ---------------------------------------------------------------------------
-# The including Makefile.am MUST set, before `include scripts/sbom.am`:
+# The including Makefile.am MUST set, before `include tools/sbom/sbom.am`:
 #   SBOM_PKGNAME        Product name recorded in the SBOM (e.g. wolfssh).  Drives
 #                       the output filenames and gen-sbom --name.
 #   SBOM_LICENSE_FILE   Path to the product's LICENSING file
@@ -44,15 +44,23 @@
 #                       captured (e.g. wolfEngine: $(abs_builddir)/include/config.h;
 #                       wolfCLU: $(abs_builddir)/src/config.h).
 #                       Default: $(abs_builddir)/config.h.
+#   SBOM_HOSTCC         Host C compiler used to expand the build macros (the
+#                       -D/-U/-I tokens only, never the configured cross $(CC)),
+#                       so the SBOM is byte-reproducible across toolchains.
+#                       Default: cc.
 #
 # The wolfSSL/OpenSSL dependency flags are feature-detected against gen-sbom
 # --help, so a product wired for them still produces a valid SBOM (with a NOTE)
 # against a gen-sbom that predates the flag.
 #
-# gen-sbom is located next to this fragment in the vendored `tools/sbom/`
-# directory unless SBOM_GEN is overridden. GEN_SBOM is accepted as a legacy
-# alias. python3, pyspdxtools and git come from configure (AC_PATH_PROG); git
-# is used only to derive SOURCE_DATE_EPOCH.
+# gen-sbom is located in the vendored directory (SBOM_VENDOR_DIR, default
+# $(srcdir)/tools/sbom), or, if not vendored, in a wolfSSL source tree via
+# WOLFSSL_DIR (the wolfSSH-style route); SBOM_GEN overrides both.  NOTE: this
+# fragment cannot locate itself at make time -- Automake's `include` is textual,
+# so $(MAKEFILE_LIST) resolves to the top Makefile, not this file -- which is why
+# the vendored directory is named explicitly rather than derived from the
+# fragment's own path.  python3, pyspdxtools and git come from configure
+# (AC_PATH_PROG); git is used only to derive SOURCE_DATE_EPOCH.
 #
 # NOTE: this fragment requires GNU make.  It uses GNU conditional assignment
 # (?=) and the GNU make functions $(wildcard), $(if), $(firstword) and
@@ -65,7 +73,16 @@ SBOM_BIN_NAME ?= $(SBOM_PKGNAME)
 SBOM_DEP_WOLFSSL ?= no
 SBOM_DEP_OPENSSL ?= no
 SBOM_CONFIG_H ?= $(abs_builddir)/config.h
-SBOM_AM_DIR ?= $(dir $(lastword $(MAKEFILE_LIST)))
+# Host C compiler used to capture the build macros (matching the Make/CMake
+# paths' HOSTCC), NOT the configured $(CC): on a cross build $(CC) would bake
+# the cross compiler's target-specific predefined macros into the SBOM, so the
+# same product built through a different toolchain would produce a different
+# document.  Only the -D/-U/-I tokens are fed to it (see the capture below), so
+# it never sees target arch flags it cannot parse.
+SBOM_HOSTCC ?= cc
+# Directory the wolfGlass tooling (gen-sbom) is vendored into. Products that
+# vendor elsewhere override this (or SBOM_GEN directly).
+SBOM_VENDOR_DIR ?= $(srcdir)/tools/sbom
 
 SBOM_CDX     = $(SBOM_PKGNAME)-$(PACKAGE_VERSION).cdx.json
 SBOM_SPDX    = $(SBOM_PKGNAME)-$(PACKAGE_VERSION).spdx.json
@@ -74,8 +91,12 @@ SBOM_SPDX_TV = $(SBOM_PKGNAME)-$(PACKAGE_VERSION).spdx
 # equals $(datadir)/doc/$(PACKAGE) by default).
 sbomdir      = $(docdir)
 
-# Prefer the vendored sibling copy. Callers may override SBOM_GEN explicitly.
-SBOM_GEN := $(or $(SBOM_GEN),$(GEN_SBOM),$(abspath $(SBOM_AM_DIR)/gen-sbom))
+# Prefer the vendored copy; else fall back to a wolfSSL source tree via
+# WOLFSSL_DIR. Empty if neither exists -- the `test -f "$(SBOM_GEN)"` check in
+# the recipe then fails with a clear error. Callers may override SBOM_GEN.
+SBOM_GEN ?= $(abspath $(firstword \
+    $(wildcard $(SBOM_VENDOR_DIR)/gen-sbom) \
+    $(if $(WOLFSSL_DIR),$(wildcard $(WOLFSSL_DIR)/scripts/gen-sbom))))
 
 # Library artifact search order (versioned first) covering ELF, Mach-O and PE.
 # Windows import libs (.lib) come with and without the "lib" prefix.
@@ -92,16 +113,18 @@ SBOM_LIB_GLOBS = \
 
 # Automake requires CLEANFILES to be initialised with `=` before `+=`; the
 # including Makefile.am must declare `CLEANFILES =` (typically in its primaries
-# init block) before `include scripts/sbom.am`.
+# init block) before `include tools/sbom/sbom.am`.
 CLEANFILES += $(SBOM_CDX) $(SBOM_SPDX) $(SBOM_SPDX_TV)
 
 .PHONY: sbom install-sbom uninstall-sbom
 
 # Stage a `make install` into a private tree, discover the installed artifact
 # (shared/static library or program; ELF/Mach-O/PE), hash it, capture the
-# configured build macros (from SBOM_OPTIONS_H if set, else AM_CPPFLAGS/
-# AM_CFLAGS/CFLAGS + config.h; some products carry their feature -D flags in
-# AM_CFLAGS rather than AM_CPPFLAGS, and some outside config.h entirely),
+# configured build macros (from SBOM_OPTIONS_H if set, else the -D/-U/-I tokens
+# of AM_CPPFLAGS/AM_CFLAGS/CFLAGS + config.h, expanded through the HOST compiler
+# SBOM_HOSTCC so the SBOM is reproducible across cross toolchains; some products
+# carry their feature -D flags in AM_CFLAGS rather than AM_CPPFLAGS, and some
+# outside config.h entirely),
 # generate SPDX+CDX, validate
 # the SPDX, then convert to tag-value.  The staging tree and temp defines file
 # are removed unconditionally via `trap`, even on failure.  SOURCE_DATE_EPOCH is
@@ -147,8 +170,11 @@ sbom:
 	opts_h="$(SBOM_OPTIONS_H)"; \
 	if test -z "$$opts_h"; then \
 	    opts_h="$$_defines"; \
-	    $(CC) -dM -E $(DEFAULT_INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) \
-	        $(AM_CFLAGS) $(CFLAGS) \
+	    sbom_cpp=""; \
+	    for f in $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS); do \
+	        case "$$f" in -D*|-U*|-I*) sbom_cpp="$$sbom_cpp $$f";; esac; \
+	    done; \
+	    $(SBOM_HOSTCC) -dM -E $(DEFAULT_INCLUDES) $$sbom_cpp \
 	        $(if $(wildcard $(SBOM_CONFIG_H)),-include $(SBOM_CONFIG_H)) \
 	        -x c /dev/null > "$$_defines"; \
 	fi; \
