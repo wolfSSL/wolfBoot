@@ -726,21 +726,28 @@ int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
         int len;
         const char *prop = (const char*)fdt_getprop(fdt, offset, "compatible",
             &len);
-        /* property list may contain multiple null terminated strings */
-        while (prop != NULL && len >= complen) {
+        /* property list may contain multiple null terminated strings.
+         * Locate each entry's NUL terminator within the declared length
+         * first, then compare: the entry must be exactly as long as the
+         * wanted string, so no byte is ever read past the property and
+         * an unterminated trailing entry can neither match nor be
+         * misread as one. */
+        while (prop != NULL && len > 0) {
             const char* nextprop;
-            if (memcmp(compatible, prop, complen+1) == 0) {
-                return offset;
-            }
+            int entrylen;
+
             nextprop = memchr(prop, '\0', len);
-            if (nextprop != NULL) {
-                len -= (nextprop - prop) + 1;
-                prop = nextprop + 1;
-            }
-            else {
+            if (nextprop == NULL) {
                 /* No NUL terminator within the declared length, break. */
                 break;
             }
+            entrylen = (int)(nextprop - prop);
+            if (entrylen == complen &&
+                memcmp(compatible, prop, complen) == 0) {
+                return offset;
+            }
+            len -= entrylen + 1;
+            prop = nextprop + 1;
         }
     }
     return offset;

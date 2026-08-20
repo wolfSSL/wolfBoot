@@ -203,6 +203,100 @@ START_TEST(test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop)
 }
 END_TEST
 
+/* Build a minimal FDT in buf (zero-initialized, so padding bytes are
+ * 0x00): root node with a `compatible` property whose raw value is
+ * `len` bytes at `val`. */
+static void build_compat_fdt(uint8_t *buf, size_t size,
+    const uint8_t *val, uint32_t len)
+{
+    struct fdt_header *hdr;
+    uint32_t *s;
+    uint32_t val_aligned = (len + 3u) & ~3u;
+    uint32_t struct_off = 0x40;
+    uint32_t strings_off = 0x80;
+
+    memset(buf, 0, size);
+
+    hdr = (struct fdt_header *)buf;
+    fdt_set_totalsize(hdr, 0x100);
+    fdt_set_off_dt_struct(hdr, struct_off);
+    fdt_set_off_dt_strings(hdr, strings_off);
+    fdt_set_off_mem_rsvmap(hdr, 0x28);
+    fdt_set_version(hdr, 17);
+    fdt_set_last_comp_version(hdr, 16);
+    fdt_set_size_dt_struct(hdr,
+        8u + 12u + val_aligned + 4u + 4u); /* node hdr, prop, end, FDT_END */
+    fdt_set_size_dt_strings(hdr, sizeof("compatible"));
+    memcpy(buf + strings_off, "compatible", sizeof("compatible"));
+
+    s = (uint32_t *)(buf + struct_off);
+    s[0] = fdt32_to_cpu(FDT_BEGIN_NODE); /* root */
+    s[1] = 0;                            /* empty name */
+    s[2] = fdt32_to_cpu(FDT_PROP);
+    s[3] = fdt32_to_cpu(len);
+    s[4] = fdt32_to_cpu(0);              /* nameoff of "compatible" */
+    memcpy(buf + struct_off + 8 + 12, val, len);
+    s[5 + val_aligned / 4u] = fdt32_to_cpu(FDT_END_NODE);
+    s[6 + val_aligned / 4u] = fdt32_to_cpu(FDT_END);
+}
+
+/* A compatible entry whose declared length equals the search string
+ * (no room for a NUL) must not match: before the fix the comparison
+ * read one byte past the declared length (the 4-byte alignment
+ * padding, zero here) as if it were the terminator and accepted the
+ * entry. */
+START_TEST(test_fdt_compatible_unterminated_exact_len_no_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc", 3);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_lt(off, 0);
+}
+END_TEST
+
+/* A properly terminated entry of exactly the search length matches. */
+START_TEST(test_fdt_compatible_terminated_exact_len_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_eq(off, 0); /* the root node */
+}
+END_TEST
+
+/* Multi-string compatible lists keep working: the second entry
+ * matches. */
+START_TEST(test_fdt_compatible_multi_string_list_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"xy\0abc\0", 8);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_eq(off, 0);
+}
+END_TEST
+
+/* A terminated entry that merely starts with the search string does
+ * not match (the entry is longer). */
+START_TEST(test_fdt_compatible_prefix_entry_no_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abcd\0", 5);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_lt(off, 0);
+}
+
 static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
@@ -215,6 +309,10 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
     tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
     tcase_add_test(tc, test_fdt_shrink_rejects_dt_strings_area_overflow);
+    tcase_add_test(tc, test_fdt_compatible_unterminated_exact_len_no_match);
+    tcase_add_test(tc, test_fdt_compatible_terminated_exact_len_match);
+    tcase_add_test(tc, test_fdt_compatible_multi_string_list_match);
+    tcase_add_test(tc, test_fdt_compatible_prefix_entry_no_match);
     suite_add_tcase(s, tc);
 
     tcase_set_timeout(tc_dos, 5);
