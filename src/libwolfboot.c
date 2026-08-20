@@ -1950,6 +1950,7 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
     uint8_t local_nonce[ENCRYPT_NONCE_SIZE];
     XMEMCPY(local_nonce, nonce, ENCRYPT_NONCE_SIZE);
     crypto_set_iv(local_nonce, iv_counter + encrypt_iv_offset);
+    ForceZero(local_nonce, sizeof(local_nonce));
 #else
     (void)nonce;
     (void)iv_counter;
@@ -2328,6 +2329,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #endif
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
     wc_AesSetIV(&aes_dec, (byte *)iv_buf);
+    ForceZero(iv_buf, sizeof(iv_buf));
 }
 
 #elif defined(ENCRYPT_PKCS11)
