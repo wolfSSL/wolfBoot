@@ -355,6 +355,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         #endif
     #endif /* !WOLFBOOT_CERT_CHAIN_VERIFY */
         if (ret != 0) {
+            wc_ecc_free(&ecc);
             return;
         }
     #else
@@ -364,6 +365,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
                                      ECC_KEY_TYPE);
         if (ret != 0) {
+            wc_ecc_free(&ecc);
             return;
         }
 
