@@ -1402,7 +1402,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 
 #ifdef EXT_FLASH
 uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
-uint32_t hdr_cpy_done = 0;
+int hdr_cpy_done = 0;
 #endif
 
 /**
