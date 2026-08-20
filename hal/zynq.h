@@ -501,6 +501,8 @@
 #define ZYNQMP_PHY_OP_GPIO      0   /* write arg1 to ZYNQMP_PHY_GPIO_ADDR */
 #define ZYNQMP_PHY_OP_WR        1   /* MDIO write: reg=arg0, val=arg1 */
 #define ZYNQMP_PHY_OP_RD        2   /* MDIO read:  reg=arg0 (arg1 ignored) */
+#define ZYNQMP_PHY_OP_DELAY     3   /* delay arg1 ms, max 65535 (arg0
+                                     * ignored); e.g. PHY reset settle */
 
 /* Default sequence: read the PHY ID registers (2, 3) as a diagnostic. With
  * DEBUG_UART=1 this prints the ID and confirms MDIO reached the PHY. Override

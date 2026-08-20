@@ -1998,6 +1998,11 @@ void hal_delay_ms(uint64_t ms)
     }
 }
 
+/* Fallback if CNTFRQ_EL0 is unset (no ATF/BL31); ZynqMP counter is 100 MHz */
+#ifndef ZYNQMP_TIMER_CLK_FREQ
+#define ZYNQMP_TIMER_CLK_FREQ 100000000ULL
+#endif
+
 uint64_t hal_timer_ms(void)
 {
     uint64_t val;
@@ -2005,6 +2010,9 @@ uint64_t hal_timer_ms(void)
     unsigned long cntpct;
     asm volatile("mrs %0, cntfrq_el0" : "=r" (cntfrq));
     asm volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
+    /* AArch64 UDIV by 0 yields 0, which would hang hal_delay_ms() */
+    if (cntfrq == 0)
+        cntfrq = ZYNQMP_TIMER_CLK_FREQ;
     val = cntpct * 1000;
     val /= cntfrq;
     return val;
@@ -2168,6 +2176,9 @@ static void zynq_phy_init(void)
                 wolfBoot_printf("PHY reg 0x%02x = 0x%04x\n",
                     (int)steps[i].arg0, (int)rval);
             }
+            break;
+        case ZYNQMP_PHY_OP_DELAY:
+            hal_delay_ms(steps[i].arg1);
             break;
         default:
             break;
