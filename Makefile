@@ -377,6 +377,10 @@ ifeq ($(TARGET),tegra234)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),cm4)
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 ifeq ($(TARGET),sim)
     CFLAGS+=-fno-pie
     LDFLAGS+=-no-pie

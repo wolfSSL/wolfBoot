@@ -248,6 +248,25 @@ static void disk_decrypted_header_clear(uint8_t *hdr)
 #endif /* DISK_ENCRYPT */
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
+#ifdef MMU
+/* Platform hook: return a DTB the boot firmware handed us (e.g. the RPi
+ * firmware's fully-patched dtb), used below when the loaded image carries no
+ * FDT of its own. Weak default returns none; platform HALs (e.g. hal/cm4.c)
+ * override it. Defined here (not in an arch boot_*.c) so every MMU disk target -
+ * AArch64, ARM32, RISC-V - resolves the symbol. */
+void* WEAKFUNCTION hal_get_boot_dts(void)
+{
+    return NULL;
+}
+
+/* Weak default: no A/B boot-slot bookkeeping. Platform HALs (e.g. hal/cm4.c's
+ * RAUC path) override it. Defined here so every MMU disk target resolves the
+ * symbol. */
+int WEAKFUNCTION hal_boot_slot_select(void)
+{
+    return 0;
+}
+#endif
 
 #if defined(WOLFBOOT_NO_LOAD_ADDRESS) || !defined(WOLFBOOT_LOAD_ADDRESS)
 /* from the linker, where wolfBoot ends */
@@ -574,8 +593,10 @@ void RAMFUNCTION wolfBoot_start(void)
         return;
     }
 
-    disk_close(BOOT_DISK);
-
+    /* NOTE: the boot disk is intentionally kept open here. A/B boot-slot
+     * bookkeeping (hal_boot_slot_select) and the firmware-DTB / RAUC bootargs
+     * path (hal_get_boot_dts) below still need to read/write the env partition;
+     * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
 
     load_address = (uint32_t*)os_image.fw_base;
@@ -684,6 +705,22 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 #endif
+#ifdef MMU
+    /* If the loaded image carried no FDT (e.g. a kernel-only FIT), fall back to
+     * a DTB the boot firmware handed us. Done BEFORE hal_prepare_boot() so any
+     * FDT relocation/fixup runs while the MMU/caches are still enabled (some
+     * platforms, e.g. CM4, disable the MMU in hal_prepare_boot() and FDT edits
+     * would then fault on Device-nGnRnE memory). */
+    /* Run A/B boot-slot bookkeeping unconditionally (not gated on dts_addr), so
+     * failover works whether or not the FIT embedded its own fdt. */
+    (void)hal_boot_slot_select();
+    if (dts_addr == NULL) {
+        dts_addr = (uint8_t*)hal_get_boot_dts();
+    }
+#endif
+    /* Deferred from just after verification (see NOTE above): close the boot
+     * disk now that all env / DTB reads and writes are done, before handoff. */
+    disk_close(BOOT_DISK);
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT

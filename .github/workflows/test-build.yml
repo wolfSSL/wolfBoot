@@ -16,6 +16,11 @@ on:
       prep-run:
         required: false
         type: string
+      fips:
+        # Download the FIPS-ready wolfSSL tree into ../ before building.
+        required: false
+        type: boolean
+        default: false
 
 jobs:
 
@@ -48,6 +53,32 @@ jobs:
       - name: Pre-build setup
         if: inputs.prep-run != ''
         run: ${{inputs.prep-run}}
+      - name: Download FIPS-ready wolfSSL
+        if: ${{ inputs.fips }}
+        env:
+          WOLFSSL_FIPS_READY_VER: "5.9.2-gplv3-fips-ready"
+          # Pin the archive SHA-256 in the repo Actions variable
+          # WOLFSSL_FIPS_READY_SHA256 (Settings > Secrets and variables >
+          # Actions > Variables). When set, a mismatch fails the job; when unset,
+          # the job prints the computed hash to pin and warns instead of silently
+          # trusting a mutable download that becomes the FIPS boundary.
+          WOLFSSL_FIPS_READY_SHA256: ${{ vars.WOLFSSL_FIPS_READY_SHA256 }}
+        run: |
+          set -euxo pipefail
+          zip=/tmp/wolfssl-fips-ready.zip
+          curl -fsSL --retry 3 --retry-delay 5 -o "$zip" \
+            "https://www.wolfssl.com/wolfssl-${WOLFSSL_FIPS_READY_VER}.zip"
+          got="$(sha256sum "$zip" | awk '{print $1}')"
+          echo "wolfssl-${WOLFSSL_FIPS_READY_VER}.zip sha256=$got"
+          if [ -n "${WOLFSSL_FIPS_READY_SHA256:-}" ]; then
+            echo "${WOLFSSL_FIPS_READY_SHA256}  $zip" | sha256sum -c -
+          else
+            echo "::warning::WOLFSSL_FIPS_READY_SHA256 not set; archive not pinned. Set the repo Actions variable to $got to enforce."
+          fi
+          # Runs inside the CI container (no sudo/apt); unpack with python3,
+          # which is already a build dependency.
+          python3 -m zipfile -e "$zip" ..
+          test -f "../wolfssl-${WOLFSSL_FIPS_READY_VER}/wolfcrypt/src/fips.c"
 
       - name: Build wolfboot
         run: |

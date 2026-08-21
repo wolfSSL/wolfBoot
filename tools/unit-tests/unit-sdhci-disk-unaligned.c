@@ -22,6 +22,9 @@
  */
 
 #define DISK_SDCARD 1
+/* Enable the opt-in bounded multi-block write settle-wait with a tiny bound so
+ * the withheld-TC path (H1) is reachable and fast in the test. */
+#define SDHCI_WRITE_SETTLE_SPINS 16U
 
 #include <check.h>
 #include <stdint.h>
@@ -41,6 +44,11 @@ struct transfer_state {
 };
 
 static struct transfer_state xfer;
+
+/* Test knobs for the multi-block write settle-wait path (H1). */
+static int mock_withhold_write_tc;    /* don't raise TC on a write data phase */
+static int mock_fail_after_write_dps; /* fail non-data cmds after a write DPS */
+static int mock_write_dps_seen;       /* a write data phase has been issued */
 
 uint64_t hal_get_timer_us(void)
 {
@@ -94,13 +102,30 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
             xfer.block_addr = mock_regs[SDHCI_SRS02 / sizeof(uint32_t)];
             xfer.word_index = 0;
             xfer.word_count = SDHCI_BLOCK_SIZE / sizeof(uint32_t);
-            mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= xfer.is_read ?
-                (SDHCI_SRS12_BRR | SDHCI_SRS12_TC) :
-                (SDHCI_SRS12_BWR | SDHCI_SRS12_TC);
+            if (xfer.is_read) {
+                mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |=
+                    (SDHCI_SRS12_BRR | SDHCI_SRS12_TC);
+            }
+            else {
+                mock_write_dps_seen = 1;
+                mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_BWR;
+                /* Optionally withhold TC to exercise the bounded settle-wait. */
+                if (!mock_withhold_write_tc) {
+                    mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_TC;
+                }
+            }
         }
         else {
-            mock_regs[SDHCI_SRS04 / sizeof(uint32_t)] = (1U << 8);
-            mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_CC;
+            /* Non-data command (CMD13/CMD12/...). Optionally fail once a write
+             * data phase has occurred, to exercise the post-timeout
+             * "completion NOT confirmed" path. */
+            if (mock_fail_after_write_dps && mock_write_dps_seen) {
+                mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_EINT;
+            }
+            else {
+                mock_regs[SDHCI_SRS04 / sizeof(uint32_t)] = (1U << 8);
+                mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_CC;
+            }
         }
     }
 }
@@ -126,6 +151,9 @@ static void reset_mock_state(void)
 
     memset(mock_regs, 0, sizeof(mock_regs));
     memset(&xfer, 0, sizeof(xfer));
+    mock_withhold_write_tc = 0;
+    mock_fail_after_write_dps = 0;
+    mock_write_dps_seen = 0;
     for (i = 0; i < sizeof(mock_disk); i++) {
         mock_disk[i] = (uint8_t)i;
     }
@@ -199,6 +227,45 @@ START_TEST(test_disk_write_rejects_block_addr_overflow)
 }
 END_TEST
 
+/* H1: a multi-block (CMD25) write whose controller withholds TC until CMD12
+ * must not hang - the bounded settle-wait fires and completion is re-confirmed
+ * via CMD13. Returns success because the card side completes. */
+START_TEST(test_multiblock_write_tc_withheld_confirms)
+{
+    uint32_t buf[(2 * SDHCI_BLOCK_SIZE) / sizeof(uint32_t)];
+    uint32_t i;
+
+    reset_mock_state();
+    for (i = 0; i < sizeof(buf) / sizeof(buf[0]); i++)
+        buf[i] = 0xC5A50000U + i;
+
+    mock_withhold_write_tc = 1;
+
+    ck_assert_int_eq(
+        sdhci_write(MMC_CMD25_WRITE_MULTIPLE, 0, buf, sizeof(buf)), 0);
+}
+END_TEST
+
+/* H1: same withheld-TC bound, but the card fails to confirm completion (the
+ * CMD12 after the data phase errors). The write must be reported as FAILED, not
+ * silently landed - distinguishing it from the confirmed case above. */
+START_TEST(test_multiblock_write_tc_withheld_unconfirmed_fails)
+{
+    uint32_t buf[(2 * SDHCI_BLOCK_SIZE) / sizeof(uint32_t)];
+    uint32_t i;
+
+    reset_mock_state();
+    for (i = 0; i < sizeof(buf) / sizeof(buf[0]); i++)
+        buf[i] = 0x5A5A0000U + i;
+
+    mock_withhold_write_tc = 1;
+    mock_fail_after_write_dps = 1;
+
+    ck_assert_int_ne(
+        sdhci_write(MMC_CMD25_WRITE_MULTIPLE, 0, buf, sizeof(buf)), 0);
+}
+END_TEST
+
 Suite *sdhci_disk_suite(void)
 {
     Suite *s = suite_create("sdhci-disk");
@@ -208,6 +275,8 @@ Suite *sdhci_disk_suite(void)
     tcase_add_test(tc, test_disk_write_unaligned_spans_blocks);
     tcase_add_test(tc, test_disk_read_rejects_block_addr_overflow);
     tcase_add_test(tc, test_disk_write_rejects_block_addr_overflow);
+    tcase_add_test(tc, test_multiblock_write_tc_withheld_confirms);
+    tcase_add_test(tc, test_multiblock_write_tc_withheld_unconfirmed_fails);
     suite_add_tcase(s, tc);
 
     return s;

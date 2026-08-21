@@ -66,7 +66,8 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
-       unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-sign-encrypted-output \
+       unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-cm4-sdhci unit-cm4-rauc-slot \
+       unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
        unit-sign-header-failure \
        unit-keygen-xmss-params
@@ -76,6 +77,7 @@ TESTS+=unit-tpm-nsc-cert
 TESTS+=unit-tpm-advio-zeroize
 TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
+TESTS+=unit-ubootenv
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
@@ -548,6 +550,17 @@ unit-sdhci-disk-unaligned: ../../include/target.h unit-sdhci-disk-unaligned.c
 unit-sdhci-dma-error: ../../include/target.h unit-sdhci-dma-error.c
 	gcc -o $@ $^ $(CFLAGS) -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
+
+unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
+	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
+		-Wl,--gc-sections
+
+unit-cm4-rauc-slot: ../../include/target.h unit-cm4-rauc-slot.c ../../src/ubootenv.c
+	gcc -o $@ unit-cm4-rauc-slot.c ../../src/ubootenv.c $(CFLAGS) -I../.. \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-ubootenv: unit-ubootenv.c ../../src/ubootenv.c
+	gcc -o $@ $< $(CFLAGS) -I../.. $(LDFLAGS)
 
 unit-aes128: ../../include/target.h unit-extflash.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)

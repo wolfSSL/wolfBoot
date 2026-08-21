@@ -1342,6 +1342,15 @@ static int emmc_card_full_init(void)
 #define SDHCI_DIR_READ  1
 #define SDHCI_DIR_WRITE 0
 
+/* Bounded spin for the multi-block write settle-wait (see sdhci_transfer): on
+ * some controllers (e.g. the CM4 EMMC2) TC does not arrive until CMD12, so the
+ * pre-CMD12 wait is capped instead of spinning forever. This is OPT-IN per
+ * platform: define SDHCI_WRITE_SETTLE_SPINS in the target's config to enable
+ * the bound. Targets that do NOT define it keep the original spin-until-TC
+ * behavior, so the already-validated SDHCI targets (zynq/versal/mpfs250/
+ * zynq7000) are unaffected. When the bound fires, the write is not reported as
+ * complete until the card side is re-confirmed via CMD13 (see below). */
+
 /* Unified internal transfer function for read and write operations
  * dir: SDHCI_DIR_READ or SDHCI_DIR_WRITE
  * cmd_index: command to send (e.g., MMC_CMD17_READ_SINGLE, MMC_CMD25_WRITE_MULTIPLE)
@@ -1355,6 +1364,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     int status;
     uint32_t block_count, reg, cmd_reg, bcr_reg;
     int is_multi_block;
+    int write_settle_timeout = 0;
 
     /* Determine if multi-block operation */
     is_multi_block = (dir == SDHCI_DIR_READ) ?
@@ -1541,10 +1551,17 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 }
                 sz -= xfer_sz;
 
-            #ifdef DISK_EMMC /* workaround for eMMC only */
-                /* For multi-block READ: clear BRR by writing 1 to it (W1C),
+            #if defined(DISK_EMMC) || defined(SDHCI_PIO_BRR_CLEAR)
+                /* Between-block workaround for the Arasan EMMC2 block. This is
+                 * a controller quirk, NOT a generic SD behavior, so it is scoped
+                 * rather than keyed off DISK_SDCARD: that macro is also set by
+                 * the polarfire/zynqmp/versal/zynq7000/tegra234 SD targets,
+                 * whose multi-block PIO reads are already validated without it.
+                 * Platforms needing the quirk opt in with SDHCI_PIO_BRR_CLEAR
+                 * (the CM4 microSD path, which drives the same EMMC2 block).
+                 * For multi-block READ: clear BRR by writing 1 to it (W1C),
                  * then the outer loop waits for BRR to be set again when the
-                 * next block's data is available from the card.
+                 * next block's data is available.
                  * For WRITE: BWR auto-clears when buffer full, don't touch. */
                 if (sz > 0 && dir == SDHCI_DIR_READ) {
                     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
@@ -1568,10 +1585,37 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
         }
 
-        /* For write: wait for transfer complete before checking status */
+        /* Write completion: settle the data phase so the SRS12 error sample
+         * below is valid and a latched error (EINT) is caught. A single-block
+         * write (CMD24) sets TC after the data phase - wait for it. An open-ended
+         * multi-block write (CMD25, no Auto-CMD12) may not set TC until the CMD12
+         * stop issued below (observed on the CM4 EMMC2: SRS12 stuck at 0x51, TC
+         * never set), so its wait is BOUNDED: it still captures an EINT without
+         * deadlocking, and the CMD12 + wait-busy sequence below completes the
+         * transfer.
+         * SCOPE: SDHCI_WRITE_SETTLE_SPINS bounds the MULTI-BLOCK wait only. The
+         * single-block wait is intentionally left unbounded, because a CMD24
+         * that never raises TC means the controller is wedged with no stop
+         * command to recover it - there is no CMD12 follow-up to complete the
+         * transfer, so capping the spin would report a write as done with no
+         * evidence it landed. The macro name says "settle spins", not "all
+         * writes are bounded"; a wedged single-block write still hangs. */
         if (dir == SDHCI_DIR_WRITE) {
+#ifdef SDHCI_WRITE_SETTLE_SPINS
+            uint32_t spins = SDHCI_WRITE_SETTLE_SPINS;
+#endif
             while (((reg = SDHCI_REG(SDHCI_SRS12)) &
-                (SDHCI_SRS12_TC | SDHCI_SRS12_EINT)) == 0);
+                    (SDHCI_SRS12_TC | SDHCI_SRS12_EINT)) == 0) {
+#ifdef SDHCI_WRITE_SETTLE_SPINS
+                /* Bounded (opt-in): record the timeout rather than discarding
+                 * it silently, so the post-transfer path re-confirms the card
+                 * before declaring success. */
+                if (is_multi_block && spins-- == 0) {
+                    write_settle_timeout = 1;
+                    break;
+                }
+#endif
+            }
         }
     }
 
@@ -1616,6 +1660,26 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     else {
         wolfBoot_printf("sdhci_transfer: error SRS12: 0x%08X\n", reg);
         status = -1;
+    }
+
+    /* Report a bounded-out multi-block write. The settle wait above capped
+     * instead of observing TC, so success here rests on positive evidence that
+     * the card finished the program cycle. That evidence is the CMD13 ->
+     * READY_FOR_DATA poll ALREADY performed on the non-error path above
+     * (sdhci_wait_busy(0) after CMD12); this block deliberately does not repeat
+     * it - an earlier revision issued a second, redundant CMD13 here. It only
+     * surfaces the bounded-out transfer and makes sure a card that never came
+     * ready propagates as a failure: a silently timed-out write must NOT be
+     * treated as landed, because the RAUC try-counter writeback relies on a
+     * failed write propagating (see hal/cm4.c). Safe for the CM4 EMMC2 where TC
+     * legitimately never precedes CMD12: after CMD12 the card reports ready. */
+    if (write_settle_timeout) {
+        wolfBoot_printf("sdhci_transfer: multi-block write settle timeout "
+            "(SRS12=0x%08X); completion confirmed via the post-CMD12 CMD13\n",
+            reg);
+        if (status != 0) {
+            wolfBoot_printf("sdhci_transfer: write completion NOT confirmed\n");
+        }
     }
 
 #ifdef DEBUG_SDHCI

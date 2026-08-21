@@ -42,6 +42,10 @@
 #include "hal/tegra234.h"
 #endif
 
+#ifdef TARGET_cm4
+#include "hal/cm4.h"
+#endif
+
 /* GICv2 Register Offsets */
 #ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
@@ -1223,9 +1227,59 @@ FPUStatus:
 .align 8
 #elif defined(USE_SIMPLE_STARTUP)
 .section ".boot"
+
 .global _vector_table
 _vector_table:
+#if defined(TARGET_cm4)
+   /* ARM64 Linux kernel image header (Documentation/arm64/booting.rst). The RPi
+    * VideoCore firmware (start4.elf) only enters a 64-bit kernel that carries
+    * this header (branch at off 0, "ARM\x64" magic at off 56); it then runs the
+    * image in place at its 2MB-aligned load address (0x200000) rather than
+    * relocating to 0x80000. code0 branches to the real entry. */
+   b      _cm4_entry
+   .long  0                  /* code1 */
+   .quad  0                  /* text_offset */
+   .quad  _end - _vector_table  /* image_size */
+   .quad  0x2                /* flags: LE, 4KB pages, 2MB-aligned (NOT
+                              * position-independent: the image checks its
+                              * runtime vs link-time _vector_table and wfi-spins
+                              * on mismatch, so bit 3 "load anywhere" is wrong) */
+   .quad  0                  /* res2 */
+   .quad  0                  /* res3 */
+   .quad  0                  /* res4 */
+   .ascii "ARM\x64"          /* magic 0x644d5241 at offset 56 */
+   .long  0                  /* res5 */
+_cm4_entry:
+#endif
    mov x21, x0        // read ATAG/FDT address
+
+#if defined(TARGET_cm4)
+   /* Load-address self-check: wolfBoot is linked absolutely at 0x200000 and is
+    * NOT position independent (the ldr =_vector_table below loads the absolute
+    * stack top). Compare the runtime address (PC-relative adr) with the linked
+    * address (from the literal pool); a mismatch means the firmware placed the
+    * image at a different 2MB base, so halt (silently, as this runs before any
+    * UART init) instead of executing from the wrong VMA. The generated
+    * config.txt pins kernel_address=0x200000. */
+   adr x2, _vector_table
+   ldr x3, =_vector_table
+   cmp x2, x3
+   b.eq 5f
+6: wfi
+   b   6b
+5:
+   /* Persist the firmware-provided DTB pointer (captured in x21 at entry) so the
+    * FIT boot path can hand the RPi firmware's fully-patched DTB (RAM size,
+    * mini-UART clock, serial no.) to Linux when the FIT is kernel-only. Only
+    * CPU0 stores it: a secondary core released with x0=0 (ARM64 boot protocol)
+    * would otherwise clobber CPU0's captured pointer. */
+   mrs x3, mpidr_el1
+   and x3, x3, #3
+   cbnz x3, 9f
+   ldr x2, =cm4_fw_dtb
+   str x21, [x2]
+9:
+#endif
 
 4: ldr x1, =_vector_table // get start of .text in x1
     // Read current EL
@@ -1248,6 +1302,15 @@ _vector_table:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
+#if defined(TARGET_cm4)
+    /* Always install a valid EL2 vector base: the reset VBAR_EL2 is UNKNOWN, so
+     * without this a fault in the parsing-heavy boot code branches to an
+     * undefined address. The table halts cleanly (and, under DEBUG+DEBUG_UART,
+     * dumps ESR/ELR/FAR first). */
+    ldr x2, =cm4_vectors
+    msr VBAR_EL2, x2
+    isb                        /* ensure new vector base is in effect */
+#endif
     b 0f
 
 1:  mov x0, #3 << 20
@@ -1278,6 +1341,73 @@ _vector_table:
 #endif
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
+
+#if defined(TARGET_cm4)
+/* Minimal always-on EL2 exception vectors. On any exception (data/instruction
+ * abort, etc.) halt cleanly rather than branch to the UNKNOWN reset VBAR_EL2.
+ * Under DEBUG+DEBUG_UART the handler additionally dumps ESR/ELR/FAR over UART. */
+.macro CM4_VEC label
+    .align 7
+\label:
+    b   cm4_fault_common
+.endm
+
+.align 11
+.global cm4_vectors
+cm4_vectors:
+    CM4_VEC cm4_v0    /* Current EL, SP0:  Sync */
+    CM4_VEC cm4_v1    /*                   IRQ  */
+    CM4_VEC cm4_v2    /*                   FIQ  */
+    CM4_VEC cm4_v3    /*                   SError */
+    CM4_VEC cm4_v4    /* Current EL, SPx:  Sync */
+    CM4_VEC cm4_v5    /*                   IRQ  */
+    CM4_VEC cm4_v6    /*                   FIQ  */
+    CM4_VEC cm4_v7    /*                   SError */
+    CM4_VEC cm4_v8    /* Lower EL, AArch64: Sync */
+    CM4_VEC cm4_v9    /*                   IRQ  */
+    CM4_VEC cm4_v10   /*                   FIQ  */
+    CM4_VEC cm4_v11   /*                   SError */
+    CM4_VEC cm4_v12   /* Lower EL, AArch32: Sync */
+    CM4_VEC cm4_v13   /*                   IRQ  */
+    CM4_VEC cm4_v14   /*                   FIQ  */
+    CM4_VEC cm4_v15   /*                   SError */
+
+cm4_fault_common:
+#if defined(DEBUG) && defined(DEBUG_UART)
+    /* Switch to a dedicated fault stack before calling the C handler: the
+     * exception may have been taken with SP unset (the window before 'mov sp,x1'
+     * or on a secondary core that never sets SP) or with SP overflowed, and
+     * cm4_fault_handler needs a valid stack for its wolfBoot_printf calls. */
+    ldr x3, =cm4_fault_stack_top
+    mov sp, x3
+    mrs x0, esr_el2
+    mrs x1, elr_el2
+    mrs x2, far_el2
+    bl  cm4_fault_handler   /* void cm4_fault_handler(esr, elr, far) */
+#endif
+9:  wfi
+    b   9b
+
+#if defined(DEBUG) && defined(DEBUG_UART)
+.section ".bss"
+.balign 16
+cm4_fault_stack:
+    .skip 1024
+cm4_fault_stack_top:
+.section ".boot"
+#endif
+#endif /* TARGET_cm4 */
+#if defined(TARGET_cm4)
+/* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
+ * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to
+ * BSS clearing; the runtime store at entry sets the value regardless of load. */
+.section ".data"
+.balign 8
+.global cm4_fw_dtb
+cm4_fw_dtb:
+    .quad 0
+.section ".boot"
+#endif /* TARGET_cm4 */
 #if 0
 .section ".boot"
 .global _vector_table
