@@ -2723,7 +2723,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             step = len;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
-            return -1;
+            ret = -1;
+            goto exit;
         }
         /* The stored block is ciphertext: decrypt it so the untouched bytes
          * can be patched as plaintext and re-encrypted. Re-encrypting the
@@ -2740,10 +2741,10 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         if (ret < 0)
-            return ret;
+            goto exit;
         /* The request fits entirely within this block: nothing left to do */
         if (step == len)
-            return ret;
+            goto exit;
         address += step;
         data += step;
         sz = len - step;
@@ -2763,7 +2764,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         }
         ret = ext_flash_write(address, ENCRYPT_CACHE, chunk);
         if (ret < 0)
-            return ret;
+            goto exit;
         address += chunk;
         data += chunk;
         step -= chunk;
@@ -2779,7 +2780,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             ENCRYPT_BLOCK_SIZE;
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
-            return -1;
+            ret = -1;
+            goto exit;
         }
         /* Sync the decrypt context to this block (on backends with separate
          * encrypt/decrypt contexts it did not advance with the full-block
@@ -2796,6 +2798,12 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         ret = ext_flash_write(address, enc_block, ENCRYPT_BLOCK_SIZE);
     }
 
+exit:
+    /* The head/tail RMW paths above decrypted the stored neighbour blocks
+     * into block/enc_block; scrub the plaintext (and any stale copies)
+     * on every exit so it does not outlive the write on the stack. */
+    ForceZero(block, sizeof(block));
+    ForceZero(enc_block, sizeof(enc_block));
     return ret;
 }
 
