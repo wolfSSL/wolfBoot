@@ -1537,7 +1537,6 @@ static int decrypt_header(uint8_t *src)
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
     uint32_t *volatile version_field = NULL;
-    uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
     if (blob == NULL)
         return 0;
@@ -1547,14 +1546,13 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     decrypt_header(blob);
     img_bin = dec_hdr;
 #endif
-    magic = (uint32_t *)img_bin;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (WOLFBOOT_HDR_GET_U32(img_bin) != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
-            (void *)&version_field) != sizeof(uint32_t))
+            (void *)&version_field) != WOLFBOOT_HDR_U32_SZ)
         return 0;
     if (version_field)
-        return im2n(*version_field);
+        return im2n(WOLFBOOT_HDR_GET_U32(version_field));
     return 0;
 }
 
@@ -1572,7 +1570,6 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 uint16_t wolfBoot_get_blob_type(uint8_t *blob)
 {
     uint16_t *volatile type_field = NULL;
-    uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (wolfBoot_initialize_encryption() < 0)
@@ -1580,14 +1577,13 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     decrypt_header(blob);
     img_bin = dec_hdr;
 #endif
-    magic = (uint32_t *)img_bin;
-    if (*magic != WOLFBOOT_MAGIC)
+    if (WOLFBOOT_HDR_GET_U32(img_bin) != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
-            (void *)&type_field) != sizeof(uint16_t))
+            (void *)&type_field) != WOLFBOOT_HDR_U16_SZ)
         return 0;
     if (type_field)
-        return im2ns(*type_field);
+        return im2ns(WOLFBOOT_HDR_GET_U16(type_field));
 
     return 0;
 }
@@ -1673,7 +1669,7 @@ uint8_t* wolfBoot_get_self_header(void)
 
     ext_flash_read((uintptr_t)WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS, hdr_buf,
                    IMAGE_HEADER_SIZE);
-    magic = *((uint32_t*)hdr_buf);
+    magic = WOLFBOOT_HDR_GET_U32(hdr_buf);
     if (magic != WOLFBOOT_MAGIC) {
         return NULL;
     }
@@ -1681,7 +1677,7 @@ uint8_t* wolfBoot_get_self_header(void)
     return hdr_buf;
 #else
     uint8_t* hdr   = (uint8_t*)WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
-    uint32_t magic = *((uint32_t*)hdr);
+    uint32_t magic = WOLFBOOT_HDR_GET_U32(hdr);
 
     if (magic != WOLFBOOT_MAGIC) {
         return NULL;

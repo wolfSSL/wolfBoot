@@ -282,7 +282,17 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         struct wolfBoot_image *img, uint8_t *sig)
 {
     int ret, verify_res = 0;
+#if defined(__TMS320C28XX__) || defined(WOLFBOOT_ARCH_C2000)
+    /* C28x: the ecc_key struct is large relative to the 16-bit-SP low-RAM stack
+     * (WOLFSSL_NO_MALLOC keeps SP-256 verify temporaries on the stack too), so
+     * keep it in .bss to avoid overflowing the stack into adjacent RAM during
+     * verify.  wolfBoot verifies images sequentially and wc_ecc_init_ex/
+     * wc_ecc_free bracket each use, so a single shared instance is safe.  The
+     * mp_ints r/s are small and stay on the stack, freshly mp_init'd per call. */
+    static ecc_key ecc;
+#else
     ecc_key ecc;
+#endif
     mp_int  r, s;
 #if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
@@ -1103,7 +1113,7 @@ static int header_sha256(wc_Sha256 *sha256_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA256, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    end_sha = stored_sha - (2 * WOLFBOOT_HDR_U16_SZ); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (end_sha <= p) {
         return -1;
@@ -1140,7 +1150,39 @@ static int image_sha256(struct wolfBoot_image *img, uint8_t *hash)
 
     if (header_sha256(&sha256_ctx, img) != 0)
         return -1;
-#ifdef WOLFBOOT_IMG_HASH_ONESHOT
+#if defined(WOLFBOOT_ARCH_C2000)
+    /* C28x (CHAR_BIT==16): the firmware is stored as native, executable 16-bit
+     * program words, but the host signed an octet stream in which each program
+     * word was serialized low-octet-then-high-octet.  Reproduce that ordering
+     * so the on-target digest matches the host's.  img->fw_size is the octet
+     * count (2 octets per program word); each buf[] cell holds one octet, and
+     * the wide-byte wc_Sha256Update consumes one octet per cell. */
+    {
+        const uint16_t *w = (const uint16_t *)img->fw_base;
+        uint32_t position = 0;
+        uint8_t  buf[64]; /* even; each cell holds one octet */
+        int      n;
+        uint16_t val;
+        if (img->fw_base == NULL) {
+            wc_Sha256Free(&sha256_ctx);
+            return -1;
+        }
+        while (position < img->fw_size) {
+            n = 0;
+            while ((n <= (int)sizeof(buf) - 2) && (position < img->fw_size)) {
+                val = *w++;
+                buf[n++] = (uint8_t)(val & 0xFF);          /* low octet  */
+                position++;
+                if (position < img->fw_size) {
+                    buf[n++] = (uint8_t)((val >> 8) & 0xFF); /* high octet */
+                    position++;
+                }
+            }
+            wc_Sha256Update(&sha256_ctx, buf, n);
+            wolfBoot_watchdog_feed();
+        }
+    }
+#elif defined(WOLFBOOT_IMG_HASH_ONESHOT)
     if (img->fw_base == NULL) {
         wc_Sha256Free(&sha256_ctx);
         return -1;
@@ -1212,7 +1254,7 @@ static int header_sha384(wc_Sha384 *sha384_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA384, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    end_sha = stored_sha - (2 * WOLFBOOT_HDR_U16_SZ); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (end_sha <= p) {
         return -1;
@@ -1334,7 +1376,7 @@ static int header_sha3_384(wc_Sha3 *sha3_ctx, struct wolfBoot_image *img)
     stored_sha_len = get_header(img, HDR_SHA3_384, &stored_sha);
     if (stored_sha_len != WOLFBOOT_SHA_DIGEST_SIZE)
         return -1;
-    end_sha = stored_sha - (2 * sizeof(uint16_t)); /* Subtract 2 Type + 2 Len */
+    end_sha = stored_sha - (2 * WOLFBOOT_HDR_U16_SZ); /* Subtract 2 Type + 2 Len */
 #ifdef WOLFBOOT_IMG_HASH_ONESHOT
     if (end_sha <= p) {
         return -1;
@@ -1462,8 +1504,7 @@ static inline uint32_t im2n(uint32_t val)
  */
 uint32_t wolfBoot_image_size(uint8_t *image)
 {
-    uint32_t *size = (uint32_t *)(image + sizeof (uint32_t));
-    return im2n(*size);
+    return im2n(WOLFBOOT_HDR_GET_U32(image + WOLFBOOT_HDR_U32_SZ));
 }
 
 /**
@@ -1481,15 +1522,17 @@ uint32_t wolfBoot_image_size(uint8_t *image)
  */
 int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
 {
-    uint32_t *magic = (uint32_t *)(image);
+    /* Read the magic an octet at a time: a uint8_t* cannot be cast to
+     * uint32_t* where CHAR_BIT != 8 (C28x). */
+    uint32_t magic = WOLFBOOT_HDR_GET_U32(image);
 #ifdef WOLFBOOT_FIXED_PARTITIONS
     /* The UPDATE slot may be larger than BOOT (monolithic self-update) */
     uint32_t part_size = (img->part == PART_UPDATE) ?
         WOLFBOOT_PARTITION_UPDATE_SIZE : WOLFBOOT_PARTITION_SIZE;
 #endif
-    if (*magic != WOLFBOOT_MAGIC) {
+    if (magic != WOLFBOOT_MAGIC) {
         wolfBoot_printf("Partition %d header magic 0x%08x invalid at %p\n",
-            img->part, (unsigned int)*magic, img->hdr);
+            img->part, (unsigned int)magic, img->hdr);
         return -1;
     }
     img->fw_size = wolfBoot_image_size(image);
@@ -1789,7 +1832,7 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
 
     XMEMSET(img, 0, sizeof(struct wolfBoot_image));
 
-    magic = *((uint32_t*)hdr);
+    magic = WOLFBOOT_HDR_GET_U32(hdr);
     if (magic != WOLFBOOT_MAGIC) {
         return -1;
     }
@@ -2507,7 +2550,7 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
         return -1; /* Invalid hash size for public key hint */
     }
     image_type_size = get_header(img, HDR_IMG_TYPE, &image_type_buf);
-    if (image_type_size != sizeof(uint16_t))
+    if (image_type_size != WOLFBOOT_HDR_U16_SZ)
         return -1;
     image_type = (uint16_t)(image_type_buf[0] + (image_type_buf[1] << 8));
     if ((image_type & HDR_IMG_TYPE_AUTH_MASK) != HDR_IMG_TYPE_AUTH)

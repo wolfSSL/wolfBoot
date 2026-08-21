@@ -288,6 +288,15 @@ size_t strlen(const char *s)
  #define RAMFUNCTION
  #pragma section FRAM
 #endif
+#if defined(__TMS320C28XX__)
+ /* On the C28x, the C-runtime device init copies the .TI.ramfunc section into
+  * RAM using memcpy() at startup.  memcpy() must therefore stay in flash - if
+  * it were a RAMFUNCTION it would live in the not-yet-copied .TI.ramfunc region
+  * and the copy would call an uninitialized RAM address, ITRAPing on a cold
+  * flash boot (a JTAG load masks this by pre-copying every section). */
+ #undef  RAMFUNCTION
+ #define RAMFUNCTION
+#endif
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;

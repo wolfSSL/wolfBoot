@@ -1083,10 +1083,25 @@ ifeq ($(ARCH),RISCV64)
 
   ifneq ($(NO_ASM),1)
     CFLAGS+=-DWOLFSSL_RISCV_ASM
-    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
-                    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+    # wolfSSL moved this port to wolfcrypt/src/port/riscv64/ and split each
+    # primitive into a generated <name>-asm.S plus a <name>-asm_c.c.  Only one
+    # is live: the .S builds unless WOLFSSL_RISCV_ASM_INLINE is defined, which
+    # wolfBoot does not define, and the _asm_c.c compiles to an empty
+    # translation unit in that case.  Pick whichever layout the pinned
+    # submodule actually has so this builds against wolfSSL before and after
+    # the move.
+    RISCV_ASM_DIR := $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv64
+    ifneq ($(wildcard $(RISCV_ASM_DIR)/riscv-64-sha256-asm.S),)
+      WOLFCRYPT_OBJS+=$(RISCV_ASM_DIR)/riscv-64-sha256-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-sha512-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-sha3-asm.o \
+                      $(RISCV_ASM_DIR)/riscv-64-aes-asm.o
+    else
+      WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+                      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+    endif
   endif
 endif
 
@@ -2063,6 +2078,67 @@ ifeq ($(ARCH),sim)
 
     CFLAGS += -DWOLFHSM_CFG_NO_SYS_TIME
   endif
+endif
+
+# TI C2000 C28x DSP (TMS320F28P550SJ / LAUNCHXL-F28P55X), cl2000 toolchain.
+# Word-addressed, CHAR_BIT==16.  Modeled on the ti_hercules (armcl) TI-CGT flow.
+ifeq ($(ARCH),C2000)
+  # cl2000 is not gcc: turn off the gcc/headless CFLAGS+LDFLAGS blocks that
+  # follow the arch.mk include (Makefile ~line 247) before they are evaluated.
+  USE_GCC:=0
+  USE_GCC_HEADLESS:=0
+
+  C2000WARE?=$(HOME)/ti/C2000Ware_26_01_00_00
+  ifeq ($(CGT_ROOT),)
+    $(error Set CGT_ROOT to a TI C2000 codegen install (the dir with bin/cl2000))
+  endif
+  C2000_DEV:=$(C2000WARE)/device_support/f28p55x
+  C2000_DRV:=$(C2000WARE)/driverlib/f28p55x/driverlib
+  C2000_FAPI:=$(C2000WARE)/libraries/flash_api/f28p55x
+
+  CC=$(CGT_ROOT)/bin/cl2000
+  LD=$(CGT_ROOT)/bin/cl2000
+  AS=$(CGT_ROOT)/bin/cl2000
+  AR=$(CGT_ROOT)/bin/ar2000
+  OUTPUT_FLAG=--output_file
+
+  # --float_support/--abi must match the prebuilt driverlib.lib + Fapi lib (EABI).
+  ARCH_FLAGS=-v28 --float_support=fpu32 --tmu_support=tmu1 --abi=eabi \
+             --gen_func_subsections=on
+  # Set the level here so options.mk emits -O2 (matching cl2000) instead of its
+  # default gcc-only -Os, which would otherwise be appended after our flags.
+  OPTIMIZATION_LEVEL=2
+  CFLAGS+=$(ARCH_FLAGS) -D_LAUNCHXL_F28P55X -D_FLASH \
+          -I$(CGT_ROOT)/include -I$(C2000_DRV) \
+          -I$(C2000_DEV)/common/include -I$(C2000_DEV)/headers/include \
+          -I$(C2000_FAPI)/include -I$(C2000_FAPI)/include/FlashAPI
+  # The C28x has no 8-bit type, so ISO <stdint.h> omits int8_t/uint8_t; supply
+  # them (as 16-bit) via a preinclude for every TU.  #303 is the harmless
+  # "typedef already declared (same type)" clash with driverlib's hw_types.h.
+  # #169 is the expected uint8_t*(=uint16_t*) vs wolfSSL byte*(=unsigned char*)
+  # pointer mismatch; both are 16-bit cells holding one octet, so it is safe.
+  CFLAGS+=--preinclude=c2000_stdint.h --diag_suppress=303 --diag_suppress=169
+  LDFLAGS+=$(ARCH_FLAGS) -z --reread_libs --warn_sections \
+           -i$(CGT_ROOT)/lib -i$(C2000_DRV)/ccs/Release -i$(C2000_FAPI)/lib \
+           -m wolfboot.map
+  LD_START_GROUP:=
+  LD_END_GROUP:=-l driverlib.lib -l FAPI_F28P55x_EABI_v4.00.00.lib -l libc.a
+  ARCH_FLASH_OFFSET=0x80000
+
+  # TI device startup: reset codestart -> _c_int00 (RTS) -> main.
+  OBJS+=$(C2000_DEV)/common/source/device.o
+  OBJS+=$(C2000_DEV)/common/source/f28p55x_codestartbranch.o
+  OBJS+=src/boot_c2000.o
+
+  ifeq ($(SPMATH),1)
+    # SECP256R1 fast SP path (wide-byte hand-patched octet masks live here).
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+  endif
+
+  # TI assembler sources use the .asm suffix.
+%.o:%.asm
+	@echo "\t[AS-C2000] $@"
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 endif
 
 # Infineon AURIX Tricore
