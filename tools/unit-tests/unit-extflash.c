@@ -373,6 +373,111 @@ START_TEST(test_ext_enc_flash_oversized_write) {
 }
 END_TEST
 
+/* A mid-block patch must not destroy the untouched bytes of a block that
+ * already holds encrypted content: the read-modify-write has to decrypt the
+ * stored block, splice the patch in, and re-encrypt. Re-encrypting the
+ * ciphertext as-is double-XORs the untouched bytes and stores plaintext,
+ * which then reads back as raw ciphertext. */
+START_TEST(test_ext_enc_flash_rmw_head_preserves_neighbors) {
+    uint32_t address = 0x1000;
+    uint8_t block_a[TEST_BLOCK_SIZE];
+    uint8_t block_p[TEST_BLOCK_SIZE];
+    uint8_t expect[TEST_BLOCK_SIZE];
+    uint8_t data[TEST_BLOCK_SIZE];
+    const int off = 4, len = 8;
+    int i, rres, wres;
+
+    for (i = 0; i < TEST_BLOCK_SIZE; i++) {
+        block_a[i] = (uint8_t)(0xA0 + i);
+        block_p[i] = (uint8_t)(0xB0 + i);
+    }
+
+    /* Prime the block with known content */
+    wres = ext_flash_check_write(address, block_a, TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+
+    /* Patch an unaligned mid-block subrange */
+    wres = ext_flash_check_write(address + off, block_p, len);
+    ck_assert_int_eq(wres, 0);
+
+    memcpy(expect, block_a, TEST_BLOCK_SIZE);
+    memcpy(expect + off, block_p, len);
+    rres = ext_flash_check_read(address, data, TEST_BLOCK_SIZE);
+    ck_assert_int_eq(rres, TEST_BLOCK_SIZE);
+    ck_assert_mem_eq(data, expect, TEST_BLOCK_SIZE);
+}
+END_TEST
+
+/* A write whose trailing partial block lands on a block that already holds
+ * encrypted content: the untouched tail of that block must survive. */
+START_TEST(test_ext_enc_flash_rmw_tail_preserves_neighbors) {
+    uint32_t address = 0x1000;
+    uint8_t block_b[TEST_BLOCK_SIZE];
+    uint8_t payload[2 * TEST_BLOCK_SIZE];
+    uint8_t expect[2 * TEST_BLOCK_SIZE];
+    uint8_t data[2 * TEST_BLOCK_SIZE];
+    const int tail = 8;
+    int i, rres, wres;
+
+    for (i = 0; i < TEST_BLOCK_SIZE; i++) {
+        block_b[i] = (uint8_t)(0xC0 + i);
+        payload[i] = (uint8_t)(0xD0 + i);
+        payload[TEST_BLOCK_SIZE + i] = (uint8_t)(0xE0 + i);
+    }
+
+    /* Two primed blocks */
+    wres = ext_flash_check_write(address, payload, TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+    wres = ext_flash_check_write(address + TEST_BLOCK_SIZE, block_b,
+        TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+
+    /* Aligned write of one full block plus a partial tail into block two */
+    wres = ext_flash_check_write(address, payload, TEST_BLOCK_SIZE + tail);
+    ck_assert_int_eq(wres, 0);
+
+    /* Block one is fully replaced; block two holds the spliced tail and the
+     * original bytes beyond it. */
+    memcpy(expect, payload, TEST_BLOCK_SIZE + tail);
+    memcpy(expect + TEST_BLOCK_SIZE + tail, block_b + tail,
+        TEST_BLOCK_SIZE - tail);
+    rres = ext_flash_check_read(address, data, 2 * TEST_BLOCK_SIZE);
+    ck_assert_int_eq(rres, 2 * TEST_BLOCK_SIZE);
+    ck_assert_mem_eq(data, expect, 2 * TEST_BLOCK_SIZE);
+}
+END_TEST
+
+/* A stream written in small, unaligned chunks must round-trip: every chunk
+ * boundary exercises the partial-block read-modify-write against content the
+ * previous chunks already encrypted. */
+START_TEST(test_ext_enc_flash_chunked_stream_roundtrip) {
+    uint32_t address = 0x1000;
+    const uint32_t total = 3 * TEST_BLOCK_SIZE + 7;
+    static uint8_t payload[3 * TEST_BLOCK_SIZE + 7];
+    static uint8_t data[3 * TEST_BLOCK_SIZE + 7];
+    uint32_t written = 0;
+    int i, rres, wres;
+
+    for (i = 0; i < (int)total; i++)
+        payload[i] = (uint8_t)(i * 7 + 3);
+
+    while (written < total) {
+        uint32_t chunk = total - written;
+        if (chunk > 13)
+            chunk = 13;
+        wres = ext_flash_check_write(address + written, payload + written,
+            chunk);
+        ck_assert_int_eq(wres, 0);
+        written += chunk;
+    }
+
+    memset(data, 0xA5, sizeof(data));
+    rres = ext_flash_check_read(address, data, total);
+    ck_assert_int_eq(rres, (int)total);
+    ck_assert_mem_eq(data, payload, total);
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -386,6 +491,7 @@ Suite *wolfboot_suite(void)
     TCase *ext_enc_flash_short_read  = tcase_create("External encrypted flash short unaligned read");
     TCase *ext_enc_flash_short_write = tcase_create("External encrypted flash short unaligned write");
     TCase *ext_enc_flash_oversized_write = tcase_create("External encrypted flash oversized write");
+    TCase *ext_enc_flash_rmw = tcase_create("External encrypted flash RMW neighbour preservation");
 
     /* Set parameters + add to suite */
     tcase_add_test(ext_flash_operations, test_ext_flash_operations);
@@ -396,17 +502,25 @@ Suite *wolfboot_suite(void)
             test_ext_enc_flash_short_unaligned_write);
     tcase_add_test(ext_enc_flash_oversized_write,
             test_ext_enc_flash_oversized_write);
+    tcase_add_test(ext_enc_flash_rmw,
+            test_ext_enc_flash_rmw_head_preserves_neighbors);
+    tcase_add_test(ext_enc_flash_rmw,
+            test_ext_enc_flash_rmw_tail_preserves_neighbors);
+    tcase_add_test(ext_enc_flash_rmw,
+            test_ext_enc_flash_chunked_stream_roundtrip);
 
     tcase_set_timeout(ext_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_operations, 20);
     tcase_set_timeout(ext_enc_flash_short_read, 20);
     tcase_set_timeout(ext_enc_flash_short_write, 20);
     tcase_set_timeout(ext_enc_flash_oversized_write, 20);
+    tcase_set_timeout(ext_enc_flash_rmw, 20);
     suite_add_tcase(s, ext_flash_operations);
     suite_add_tcase(s, ext_enc_flash_operations);
     suite_add_tcase(s, ext_enc_flash_short_read);
     suite_add_tcase(s, ext_enc_flash_short_write);
     suite_add_tcase(s, ext_enc_flash_oversized_write);
+    suite_add_tcase(s, ext_enc_flash_rmw);
 
     return s;
 }

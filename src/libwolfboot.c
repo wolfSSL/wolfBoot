@@ -2720,7 +2720,19 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
         }
+        /* The stored block is ciphertext: decrypt it so the untouched bytes
+         * can be patched as plaintext and re-encrypted. Re-encrypting the
+         * ciphertext as-is would double-XOR the untouched bytes and store
+         * them in plaintext. */
+        crypto_decrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(block, enc_block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block + row_offset, data, step);
+        /* The decrypt above consumed keystream on backends that share one
+         * stream state between encrypt and decrypt; re-sync the stream to
+         * this block before re-encrypting. */
+        if (fallback_iv_forced)
+            encrypt_iv_offset = FALLBACK_IV_OFFSET;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         if (ret < 0)
@@ -2758,11 +2770,26 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
      * the same way the unaligned head above is handled. */
     step = sz & (ENCRYPT_BLOCK_SIZE - 1);
     if (step > 0) {
+        /* "address" is block-aligned here; index of the block being patched */
+        uint32_t tail_iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
+            ENCRYPT_BLOCK_SIZE;
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
             return -1;
         }
+        /* Sync the decrypt context to this block (on backends with separate
+         * encrypt/decrypt contexts it did not advance with the full-block
+         * writes above), then decrypt the stored ciphertext so the untouched
+         * tail bytes survive the re-encryption. */
+        if (fallback_iv_forced)
+            encrypt_iv_offset = FALLBACK_IV_OFFSET;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, tail_iv_counter);
+        crypto_decrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(block, enc_block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block, data, step);
+        if (fallback_iv_forced)
+            encrypt_iv_offset = FALLBACK_IV_OFFSET;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, tail_iv_counter);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(address, enc_block, ENCRYPT_BLOCK_SIZE);
     }
