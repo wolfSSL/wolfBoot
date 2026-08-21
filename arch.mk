@@ -166,6 +166,20 @@ ifeq ($(ARCH),AARCH64)
     CFLAGS_EXTRA+=-DSDHCI_SDMA_DISABLED
   endif
 
+  ifeq ($(TARGET),agilex5)
+    # Altera Agilex 5: Cortex-A55, entered as non-secure BL33 at EL2 by
+    # the GSRD TF-A BL31 image. SPL owns DDR, clocks, pinmux and resets.
+    ARCH_FLAGS=-mcpu=cortex-a55+crypto -march=armv8.2-a+crypto \
+               -mtune=cortex-a55
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A55
+    CFLAGS+=-DWOLFBOOT_DUALBOOT -DWOLFBOOT_UBOOT_LEGACY
+    # BL31 owns GICv3 and secondary-core/PSCI setup. Do not touch RVBAR.
+    CFLAGS+=-DSKIP_RVBAR=1 -DSKIP_GIC_INIT=1
+    # SPL/TF-A leave the Cadence host initialized; retain its PHY state and
+    # allow the controller's required post-command settle time.
+    CFLAGS_EXTRA+=-DSDHCI_SKIP_HOST_RESET=1 -DSDHCI_WAIT_AFTER_CMD_US=1000
+  endif
+
   ifeq ($(TARGET),nxp_ls1028a)
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
@@ -220,7 +234,7 @@ ifeq ($(ARCH),AARCH64)
   endif
 
   # Default ARM ASM setting for unrecognized AARCH64 targets
-  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
+  ifeq ($(filter zynq versal agilex5 nxp_ls1028a,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 

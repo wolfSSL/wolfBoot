@@ -4,6 +4,7 @@ This README describes configuration of supported targets.
 
 ## Supported Targets
 
+* [Altera Agilex 5](#altera-agilex-5-013b)
 * [Simulated](#simulated)
 * [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
@@ -8977,3 +8978,22 @@ Boot success marked. Version: 1
 | `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
+## Altera Agilex 5 (013B)
+
+The Agilex 5 DK-A5E013BM16AEA port runs as the signed BL33 payload in the
+GSRD handoff: SDM -> U-Boot SPL -> TF-A BL31 -> wolfBoot -> Linux FIT. SPL
+owns DDR and controller initialization; TF-A owns EL3, GICv3 and PSCI. The
+port keeps those responsibilities unchanged and loads signed A/B Linux FITs
+from raw MBR partitions on the SD card.
+
+Build the hosted configuration with:
+
+```sh
+cp config/examples/agilex5_013b_sdcard.config .config
+make clean
+make -j"$(nproc)"
+```
+
+See [docs/Agilex5.md](Agilex5.md) for the GSRD FIT/WIC layout, DT handoff,
+hardware test order, and the boundary between the bare-metal bootloader and
+the Linux libfcs/wolfSSL integration.
