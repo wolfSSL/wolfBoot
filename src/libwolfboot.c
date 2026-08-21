@@ -1521,6 +1521,15 @@ static int decrypt_header(uint8_t *src)
     return 0;
 }
 
+/* Scrub the decrypted manifest once the fields of interest have been
+ * extracted, so no plaintext header survives in .bss through the boot
+ * handoff (same treatment as disk_decrypted_header_clear in
+ * update_disk.c). */
+static void dec_hdr_clear(void)
+{
+    ForceZero(dec_hdr, IMAGE_HEADER_SIZE);
+}
+
 #endif
 /**
  * @brief Get blob version.
@@ -1539,6 +1548,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     uint32_t *volatile version_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint32_t version = 0;
     if (blob == NULL)
         return 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
@@ -1551,11 +1561,12 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
-            (void *)&version_field) != sizeof(uint32_t))
-        return 0;
-    if (version_field)
-        return im2n(*version_field);
-    return 0;
+            (void *)&version_field) == sizeof(uint32_t) && version_field)
+        version = im2n(*version_field);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return version;
 }
 
 /**
@@ -1574,6 +1585,7 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     uint16_t *volatile type_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint16_t type = 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
@@ -1584,12 +1596,12 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
-            (void *)&type_field) != sizeof(uint16_t))
-        return 0;
-    if (type_field)
-        return im2ns(*type_field);
-
-    return 0;
+            (void *)&type_field) == sizeof(uint16_t) && type_field)
+        type = im2ns(*type_field);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return type;
 }
 
 /**
@@ -1611,6 +1623,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     uint32_t *volatile delta_base = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint32_t delta_base_ver = 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
@@ -1621,11 +1634,12 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
-            (void *)&delta_base) != sizeof(uint32_t))
-        return 0;
-    if (delta_base)
-        return im2n(*delta_base);
-    return 0;
+            (void *)&delta_base) == sizeof(uint32_t) && delta_base)
+        delta_base_ver = im2n(*delta_base);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return delta_base_ver;
 }
 
 
@@ -2912,6 +2926,9 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
      * unaligned cast, then convert to native byte order. */
     XMEMCPY(&len, dec_hdr + sizeof(uint32_t), sizeof(len));
     len = im2n(len);
+    /* The length is the only field taken from the decrypted manifest;
+     * scrub it before it can outlive this function in .bss. */
+    dec_hdr_clear();
 
 #if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
 #  error "WOLFBOOT_FIXED_PARTITIONS or WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the RAM load"
