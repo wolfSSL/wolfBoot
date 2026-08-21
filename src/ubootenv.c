@@ -63,10 +63,23 @@ static void wr_le32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)(v >> 24);
 }
 
-/* Parse a small non-negative decimal; -1 on a non-numeric value. */
+/* Longest counter accepted by env_atol(). Chosen so the value always fits a
+ * 16-bit-int platform's 32-bit long (999999999 < LONG_MAX), which also keeps
+ * env_ltoa()'s output well inside the caller's buffer. RAUC try counters are
+ * single digits, so this is far above any real value. */
+#define ENV_DIGITS_MAX 9
+
+/* Parse a non-negative decimal counter. Returns -1 unless the value is
+ * ENTIRELY digits (leading/trailing spaces allowed): a trailing-garbage value
+ * such as "1x" is a malformed counter, not 1, and a value longer than
+ * ENV_DIGITS_MAX digits is refused rather than silently wrapping. A -1 makes
+ * the caller treat the slot as having no tries left and skip it; if that leaves
+ * no candidate, pass 2 re-arms every counter, so a corrupt value degrades to a
+ * re-arm rather than to an arbitrary try count. */
 static long env_atol(const char *s)
 {
     long v;
+    int n;
 
     if (s == NULL)
         return -1;
@@ -75,32 +88,48 @@ static long env_atol(const char *s)
     if (*s < '0' || *s > '9')
         return -1;
     v = 0;
+    n = 0;
     while (*s >= '0' && *s <= '9') {
+        if (++n > ENV_DIGITS_MAX)
+            return -1; /* too long to represent or to round-trip */
         v = (v * 10) + (long)(*s - '0');
         s++;
     }
+    while (*s == ' ')
+        s++;
+    if (*s != '\0')
+        return -1; /* trailing non-digit: malformed, not a partial parse */
     return v;
 }
 
-/* Format a non-negative decimal into out (caller supplies >= 16 bytes). */
-static void env_ltoa(long v, char *out)
+/* Format a non-negative decimal into out, never writing more than out_max
+ * bytes including the terminator. The bound is explicit rather than an implied
+ * contract with the caller's buffer size: previously this assumed >= 16 bytes
+ * and relied on env_atol()'s input having been clamped elsewhere, so a longer
+ * value would have written one byte past the buffer. Digits that do not fit are
+ * dropped from the most significant end, which cannot happen for any value
+ * env_atol() accepts (ENV_DIGITS_MAX). */
+static void env_ltoa(long v, char *out, size_t out_max)
 {
-    char tmp[16];
+    char tmp[ENV_DIGITS_MAX + 1];
     int i;
     int j;
 
+    if (out_max == 0)
+        return;
     i = 0;
     j = 0;
     if (v <= 0) {
-        out[0] = '0';
-        out[1] = '\0';
+        if (out_max > 1)
+            out[j++] = '0';
+        out[j] = '\0';
         return;
     }
     while (v > 0 && i < (int)sizeof(tmp)) {
         tmp[i++] = (char)('0' + (v % 10));
         v /= 10;
     }
-    while (i > 0)
+    while (i > 0 && (size_t)j + 1 < out_max)
         out[j++] = tmp[--i];
     out[j] = '\0';
 }
@@ -310,7 +339,7 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
         /* Genuinely invalid: reinitialize defaults IN MEMORY so this boot can
          * proceed, but flag it (out->reinitialized) so the caller does NOT
          * persist the reset over on-disk state it could not validate. */
-        env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval);
+        env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval, sizeof(leftval));
         memset(env, 0, env_len);
         (void)uboot_env_set(env, env_len, "BOOT_ORDER", "A B");
         (void)uboot_env_set(env, env_len, "BOOT_A_LEFT", leftval);
@@ -342,7 +371,7 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
         if (uboot_env_get(env, env_len, leftkey, leftval, sizeof(leftval)) >= 0)
             left = env_atol(leftval);
         if (left > 0) {
-            env_ltoa(left - 1, leftval);
+            env_ltoa(left - 1, leftval, sizeof(leftval));
             /* If the decrement cannot be stored (env full), do NOT select this
              * slot: booting it with an un-decremented counter would retry the
              * same hung slot forever. Fail so the caller uses the static
@@ -357,7 +386,7 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
     }
 
     /* Pass 2: none left -> re-arm every counter, ask the caller to reboot. */
-    env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval);
+    env_ltoa(UBOOT_ENV_DEFAULT_TRIES, leftval, sizeof(leftval));
     o = order;
     while (env_next_name(&o, name, sizeof(name)) > 0) {
         if (env_leftkey(name, leftkey, sizeof(leftkey)) != 0)

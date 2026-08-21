@@ -37,9 +37,9 @@ static void init_env(const char *order, int a, int b)
     char v[16];
     memset(env, 0, ENVLEN);
     uboot_env_set(env, ENVLEN, "BOOT_ORDER", order);
-    env_ltoa(a, v);
+    env_ltoa(a, v, sizeof(v));
     uboot_env_set(env, ENVLEN, "BOOT_A_LEFT", v);
-    env_ltoa(b, v);
+    env_ltoa(b, v, sizeof(v));
     uboot_env_set(env, ENVLEN, "BOOT_B_LEFT", v);
     uboot_env_reseal(env, ENVLEN);
 }
@@ -299,6 +299,80 @@ START_TEST(test_leftkey_long_name_bounds)
 }
 END_TEST
 
+/* env_atol() promises -1 on a non-numeric value; make sure that is what it
+ * does. "1x" used to parse as 1 (only the first char was checked), which then
+ * selected the slot and rewrote the counter, laundering a malformed value into
+ * a valid one. */
+START_TEST(test_atol_rejects_trailing_garbage)
+{
+    ck_assert_int_eq((int)env_atol("1x"), -1);
+    ck_assert_int_eq((int)env_atol("3 junk"), -1);
+    ck_assert_int_eq((int)env_atol("12-"), -1);
+    ck_assert_int_eq((int)env_atol(""), -1);
+    ck_assert_int_eq((int)env_atol("x"), -1);
+    ck_assert_int_eq((int)env_atol(NULL), -1);
+    /* Still accepts well-formed values, with surrounding spaces. */
+    ck_assert_int_eq((int)env_atol("0"), 0);
+    ck_assert_int_eq((int)env_atol("3"), 3);
+    ck_assert_int_eq((int)env_atol("  7  "), 7);
+}
+END_TEST
+
+/* Over-long counters are refused instead of wrapping or being truncated into a
+ * different number on writeback. */
+START_TEST(test_atol_rejects_overlong)
+{
+    ck_assert_int_eq((int)env_atol("999999999"), 999999999); /* 9 digits: ok */
+    ck_assert_int_eq((int)env_atol("1000000000"), -1);       /* 10 digits */
+    ck_assert_int_eq((int)env_atol("9999999999999999"), -1); /* 16 digits */
+}
+END_TEST
+
+/* env_ltoa() must honour the caller's buffer size. The old version wrote
+ * tmp[16] plus a terminator into a 16-byte buffer for a 16-digit value. */
+START_TEST(test_ltoa_respects_bound)
+{
+    char buf[8];
+    char guard[16];
+
+    memset(guard, 0xAA, sizeof(guard));
+    env_ltoa(0, guard, sizeof(guard));
+    ck_assert_str_eq(guard, "0");
+
+    env_ltoa(12345, buf, sizeof(buf));
+    ck_assert_str_eq(buf, "12345");
+
+    /* Tight buffer: must still terminate inside it, never past it. */
+    memset(buf, 0xAA, sizeof(buf));
+    env_ltoa(123456789, buf, 4);
+    ck_assert_uint_lt(strlen(buf), 4);
+    ck_assert_uint_eq((unsigned char)buf[7], 0xAA); /* tail untouched */
+
+    /* Zero-length buffer must not be written at all. */
+    memset(buf, 0xAA, sizeof(buf));
+    env_ltoa(5, buf, 0);
+    ck_assert_uint_eq((unsigned char)buf[0], 0xAA);
+}
+END_TEST
+
+/* A malformed counter degrades to "no tries left" for that slot, so selection
+ * falls through to the next one rather than trusting the garbage. */
+START_TEST(test_select_malformed_counter_skips_slot)
+{
+    struct uboot_slot slot;
+
+    memset(env, 0, ENVLEN);
+    uboot_env_set(env, ENVLEN, "BOOT_ORDER", "A B");
+    uboot_env_set(env, ENVLEN, "BOOT_A_LEFT", "2x");
+    uboot_env_set(env, ENVLEN, "BOOT_B_LEFT", "3");
+    uboot_env_reseal(env, ENVLEN);
+
+    ck_assert_int_eq(uboot_env_select_slot(env, ENVLEN, &slot), 0);
+    ck_assert_int_eq(slot.selected, 1);
+    ck_assert_str_eq(slot.name, "B");
+}
+END_TEST
+
 Suite *ubootenv_suite(void)
 {
     Suite *s = suite_create("ubootenv");
@@ -321,6 +395,10 @@ Suite *ubootenv_suite(void)
     tcase_add_test(tc, test_select_valid_crc_missing_bootorder);
     tcase_add_test(tc, test_select_null_and_short);
     tcase_add_test(tc, test_leftkey_long_name_bounds);
+    tcase_add_test(tc, test_atol_rejects_trailing_garbage);
+    tcase_add_test(tc, test_atol_rejects_overlong);
+    tcase_add_test(tc, test_ltoa_respects_bound);
+    tcase_add_test(tc, test_select_malformed_counter_skips_slot);
     suite_add_tcase(s, tc);
 
     return s;
@@ -329,7 +407,9 @@ Suite *ubootenv_suite(void)
 int main(void)
 {
     int fails;
-    Suite *s = ubootenv_suite();
+    
+
+Suite *s = ubootenv_suite();
     SRunner *sr = srunner_create(s);
 
     srunner_run_all(sr, CK_NORMAL);

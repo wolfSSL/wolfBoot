@@ -3885,6 +3885,21 @@ The CM4 target uses `SIGN=ECC384 HASH=SHA384` (FIPS-approved) and can perform it
 
 Key config points: `GZIP=1` (the FIT kernel subimage is `Image.gz`), `ELF=1`, `DISK_EMMC=1`, and `WOLFBOOT_LOAD_ADDRESS=0x18000000` - the FIT is staged above the decompressed kernel so gunzip does not overwrite its own compressed input mid-stream. `CFLAGS_EXTRA+=-DCM4_FIRMWARE_DTB` captures and reuses the firmware DTB (which already carries the RAM size and mini-UART clock), `CFLAGS_EXTRA+=-DCM4_UART_PL011` puts the Linux console on the PL011 (`ttyAMA0`, via `dtoverlay=disable-bt`), and `CFLAGS_EXTRA+=-DLINUX_BOOTARGS_ROOT=...` sets `root=`. The FIT is built from `hal/cm4.its` with `mkimage` and signed with the wolfBoot key; `tools/scripts/cm4/prepare_emmc_linux.sh` stages it on the eMMC. This path was hardware-validated booting a Yocto (Scarthgap, kernel 6.6) rootfs.
 
+### Device tree trust boundary
+
+wolfBoot's signature covers the kernel FIT it loads from the raw eMMC partition. It does **not** cover the device tree used on the Linux paths. Both shipped Linux configurations (`cm4_emmc_linux.config` and `cm4_emmc_rauc.config`) enable `CM4_FIRMWARE_DTB`, so this applies to anyone following the recipes above - it is a compile-time switch, not a default-off feature.
+
+On this path wolfBoot reuses the device tree that the VideoCore firmware left in memory, relocates it, and overwrites only `/chosen/bootargs`. Everything else in that DTB - `/memory`, `/reserved-memory`, per-device `reg` windows, and any `initrd` pointers - reaches the kernel exactly as the firmware supplied it, from the unsigned FAT boot partition. Anyone who can write that partition can influence how Linux sees the machine, without invalidating any wolfBoot signature.
+
+wolfBoot does provide a mechanism to bind a raw DTB to a signed image (`HDR_DEVICE_TREE_DIGEST`, produced by `sign --dts`), but it does not apply here, for two independent reasons:
+
+1. The digest is verified only on the RAM-boot path (`src/update_ram.c`). The CM4 boots through `src/update_disk.c`, which performs no device-tree digest check.
+2. Even with that plumbing in place, the hash is not predictable when the image is signed. The VideoCore firmware patches the DTB at runtime: the shipped `bcm2711-rpi-cm4.dtb` declares `/memory@0 reg = <0 0 0>` and receives the real RAM size, the mini-UART clock and the board serial number before handoff. The blob wolfBoot receives is therefore never byte-identical to any blob that could have been signed.
+
+That runtime patching is also *why* the firmware DTB is used rather than one carried inside the signed FIT: a FIT-carried device tree boots with no RAM size.
+
+The only thing that actually closes this boundary on a CM4 is the **Raspberry Pi EEPROM secure boot**, which authenticates the boot partition itself; with it enabled, the firmware and the DTB it hands over are covered by the platform's own root of trust. Deployments that need the device tree to be within the verified boundary should enable it. Note that the bring-up board used for this port has secure boot disabled (its OTP customer key hash reads all zeros), so the validation described above was performed with this boundary open.
+
 ### Optional: RAUC A/B redundant boot
 
 `config/examples/cm4_emmc_rauc.config` makes wolfBoot replace U-Boot as the RAUC slot arbiter. wolfBoot reads a raw U-Boot-environment partition (`mkenvimage`/`fw_setenv` compatible), runs the RAUC `BOOT_ORDER` / `BOOT_<slot>_LEFT` try-counter state machine, decrements the selected slot's counter and writes it back (so a hung slot fails over to the other on the next boot), then boots the shared signed kernel FIT with `root=` pointing at the active slot's rootfs and `rauc.slot=<name>` on the command line.
