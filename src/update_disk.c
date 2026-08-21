@@ -249,17 +249,6 @@ static void disk_decrypted_header_clear(uint8_t *hdr)
 
 extern int wolfBoot_get_dts_size(void *dts_addr);
 
-#if defined(MMU) || defined(WOLFBOOT_FDT)
-/* Bounds for the attacker-influenced fdt_totalsize before relocating a DTB.
- * MIN is the FDT v17 header size (also enforced by the signer): fdt_check_header
- * validates magic/version but not totalsize, so a crafted header with a tiny
- * totalsize must be rejected rather than loaded/forwarded as a partial tree. */
-#ifndef WOLFBOOT_DTS_MAX_SIZE
-#define WOLFBOOT_DTS_MAX_SIZE (1024U * 1024U)
-#endif
-#define WOLFBOOT_DTS_MIN_SIZE (40U)
-#endif
-
 #if defined(WOLFBOOT_NO_LOAD_ADDRESS) || !defined(WOLFBOOT_LOAD_ADDRESS)
 /* from the linker, where wolfBoot ends */
 extern uint8_t _end_wb[];
@@ -650,8 +639,10 @@ void RAMFUNCTION wolfBoot_start(void)
                     parsed >= (int)WOLFBOOT_DTS_MIN_SIZE &&
                     (uint32_t)parsed <= WOLFBOOT_DTS_MAX_SIZE) {
                 /* Relocate to the load DTS address. The copy length is
-                 * the parsed DTB size (bounded by the staging region),
-                 * not the FIT-declared property length. */
+                 * the parsed DTB size, clamped to WOLFBOOT_DTS_MAX_SIZE,
+                 * not the FIT-declared property length. The staging window
+                 * at WOLFBOOT_LOAD_DTS_ADDRESS must be at least that large
+                 * (or the bound must be overridden for the target). */
                 dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                 dts_size = (uint32_t)parsed;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
