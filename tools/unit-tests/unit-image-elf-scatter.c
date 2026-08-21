@@ -535,6 +535,39 @@ START_TEST(test_elf_scatter_paddr_range_overflow_rejected)
 }
 END_TEST
 
+#if UINTPTR_MAX < UINT64_MAX
+/* A paddr that fits in 64 bits but not in the destination (uintptr_t)
+ * width must be rejected: the load_addr cast after the check would
+ * silently wrap and the hash walk would read the wrapped address.
+ * 32-bit builds only: on 64-bit builds UINTPTR_MAX == UINT64_MAX and
+ * the case above already covers it. */
+START_TEST(test_elf_scatter_paddr_beyond_pointer_width_rejected)
+{
+    unsigned long entry = 0;
+    uint32_t fw_size = IMG_FW_SIZE;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG_SIZE;
+    segs[0].paddr  = 1ULL << 32; /* fits uint64_t, exceeds 32-bit width */
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = SEG_SIZE;
+
+    build_scattered_image_n(segs, 1, fw_size);
+
+    ret = wolfBoot_check_flash_image_elf(PART_BOOT, &entry);
+
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+#endif
+
 Suite *elf_scatter_suite(void)
 {
     Suite *s  = suite_create("ELF flash-scatter image check");
@@ -544,6 +577,9 @@ Suite *elf_scatter_suite(void)
     tcase_add_test(tc, test_elf_scatter_filesz_over_32bit_rejected);
     tcase_add_test(tc, test_elf_scatter_segment_beyond_fw_size_rejected);
     tcase_add_test(tc, test_elf_scatter_paddr_range_overflow_rejected);
+#if UINTPTR_MAX < UINT64_MAX
+    tcase_add_test(tc, test_elf_scatter_paddr_beyond_pointer_width_rejected);
+#endif
     tcase_set_timeout(tc, 10);
     suite_add_tcase(s, tc);
     return s;

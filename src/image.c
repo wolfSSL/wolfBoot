@@ -2247,8 +2247,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
             /* Validate the segment before hashing: the flash-address hash
              * reader consumes a uint32_t length, the file layout must stay
-             * inside the manifest image, and the paddr range must not
-             * overflow. Reject instead of continuing. */
+             * inside the manifest image, and the paddr range must fit the
+             * destination (uintptr_t) address width so the load_addr cast
+             * below cannot wrap. Reject instead of continuing. */
             if (filesz > UINT32_MAX) {
                 wolfBoot_printf("ELF: [CHECK] ERROR: segment file_size "
                                 "%lu does not fit a 32-bit length\n",
@@ -2264,7 +2265,8 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                 return -1;
             }
             seg_start = paddr + (uint64_t)BASE_OFF;
-            if (seg_start < paddr || seg_start > UINT64_MAX - filesz) {
+            if (seg_start < paddr ||
+                seg_start > (uint64_t)UINTPTR_MAX - filesz) {
                 wolfBoot_printf("ELF: [CHECK] ERROR: segment paddr range "
                                 "overflows\n");
                 return -1;
