@@ -447,6 +447,63 @@ START_TEST(test_ext_enc_flash_rmw_tail_preserves_neighbors) {
 }
 END_TEST
 
+/* A fallback-IV write whose head and tail partial blocks land on blocks
+ * that already hold encrypted content: the RMW re-syncs must re-apply the
+ * one-shot IV offset (wolfBoot_crypto_set_iv consumes it), or the partial
+ * blocks are re-anchored at the standard-IV position and only those blocks
+ * read back wrong under the forced fallback-IV read. */
+#ifdef EXT_ENCRYPTED
+START_TEST(test_ext_enc_flash_rmw_fallback_iv_preserves_neighbors) {
+    uint32_t address = 0x1000;
+    uint8_t block_a[TEST_BLOCK_SIZE];
+    uint8_t block_b[TEST_BLOCK_SIZE];
+    uint8_t payload[TEST_BLOCK_SIZE + 7];
+    uint8_t expect[2 * TEST_BLOCK_SIZE];
+    uint8_t data[2 * TEST_BLOCK_SIZE];
+    const int off = 4;
+    const int head_len = TEST_BLOCK_SIZE - off;
+    const int tail_len = 7 + off; /* len - head_len, block-size independent */
+    const int len = TEST_BLOCK_SIZE + 7;
+    int prevf, i, rres, wres;
+
+    for (i = 0; i < TEST_BLOCK_SIZE; i++) {
+        block_a[i] = (uint8_t)(0xF0 + i);
+        block_b[i] = (uint8_t)(0xF8 + i);
+    }
+    for (i = 0; i < (int)sizeof(payload); i++)
+        payload[i] = (uint8_t)(0x0F + i);
+
+    /* Prime both blocks under the fallback IV (aligned full-block writes;
+     * the offset is one-shot, so re-enable it before every write). */
+    wolfBoot_enable_fallback_iv(1);
+    wres = ext_flash_check_write(address, block_a, TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+    wolfBoot_enable_fallback_iv(1);
+    wres = ext_flash_check_write(address + TEST_BLOCK_SIZE, block_b,
+        TEST_BLOCK_SIZE);
+    ck_assert_int_eq(wres, 0);
+
+    /* One unaligned write: head RMW in block zero, tail RMW in block one */
+    wolfBoot_enable_fallback_iv(1);
+    wres = ext_flash_check_write(address + off, payload, len);
+    ck_assert_int_eq(wres, 0);
+
+    memcpy(expect, block_a, off);
+    memcpy(expect + off, payload, head_len);
+    memcpy(expect + TEST_BLOCK_SIZE, payload + head_len, tail_len);
+    memcpy(expect + TEST_BLOCK_SIZE + tail_len, block_b + tail_len,
+        TEST_BLOCK_SIZE - tail_len);
+
+    /* The update flow reads a fallback image with the fallback IV forced */
+    prevf = wolfBoot_force_fallback_iv(1);
+    rres = ext_flash_check_read(address, data, 2 * TEST_BLOCK_SIZE);
+    wolfBoot_force_fallback_iv(prevf);
+    ck_assert_int_eq(rres, 2 * TEST_BLOCK_SIZE);
+    ck_assert_mem_eq(data, expect, 2 * TEST_BLOCK_SIZE);
+}
+END_TEST
+#endif /* EXT_ENCRYPTED */
+
 /* A stream written in small, unaligned chunks must round-trip: every chunk
  * boundary exercises the partial-block read-modify-write against content the
  * previous chunks already encrypted. */
@@ -506,6 +563,10 @@ Suite *wolfboot_suite(void)
             test_ext_enc_flash_rmw_head_preserves_neighbors);
     tcase_add_test(ext_enc_flash_rmw,
             test_ext_enc_flash_rmw_tail_preserves_neighbors);
+#ifdef EXT_ENCRYPTED
+    tcase_add_test(ext_enc_flash_rmw,
+            test_ext_enc_flash_rmw_fallback_iv_preserves_neighbors);
+#endif
     tcase_add_test(ext_enc_flash_rmw,
             test_ext_enc_flash_chunked_stream_roundtrip);
 
