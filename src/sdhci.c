@@ -1592,7 +1592,14 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
          * stop issued below (observed on the CM4 EMMC2: SRS12 stuck at 0x51, TC
          * never set), so its wait is BOUNDED: it still captures an EINT without
          * deadlocking, and the CMD12 + wait-busy sequence below completes the
-         * transfer. */
+         * transfer.
+         * SCOPE: SDHCI_WRITE_SETTLE_SPINS bounds the MULTI-BLOCK wait only. The
+         * single-block wait is intentionally left unbounded, because a CMD24
+         * that never raises TC means the controller is wedged with no stop
+         * command to recover it - there is no CMD12 follow-up to complete the
+         * transfer, so capping the spin would report a write as done with no
+         * evidence it landed. The macro name says "settle spins", not "all
+         * writes are bounded"; a wedged single-block write still hangs. */
         if (dir == SDHCI_DIR_WRITE) {
 #ifdef SDHCI_WRITE_SETTLE_SPINS
             uint32_t spins = SDHCI_WRITE_SETTLE_SPINS;
@@ -1655,19 +1662,21 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         status = -1;
     }
 
-    /* Host-side confirmation for a bounded-out multi-block write: the settle
-     * wait above capped instead of observing TC, so require positive evidence
-     * the card actually finished the program cycle (CMD13 -> READY_FOR_DATA via
-     * sdhci_wait_busy) before reporting success. A silently timed-out write must
-     * NOT be treated as landed - the RAUC try-counter writeback relies on a
+    /* Report a bounded-out multi-block write. The settle wait above capped
+     * instead of observing TC, so success here rests on positive evidence that
+     * the card finished the program cycle. That evidence is the CMD13 ->
+     * READY_FOR_DATA poll ALREADY performed on the non-error path above
+     * (sdhci_wait_busy(0) after CMD12); this block deliberately does not repeat
+     * it - an earlier revision issued a second, redundant CMD13 here. It only
+     * surfaces the bounded-out transfer and makes sure a card that never came
+     * ready propagates as a failure: a silently timed-out write must NOT be
+     * treated as landed, because the RAUC try-counter writeback relies on a
      * failed write propagating (see hal/cm4.c). Safe for the CM4 EMMC2 where TC
      * legitimately never precedes CMD12: after CMD12 the card reports ready. */
     if (write_settle_timeout) {
         wolfBoot_printf("sdhci_transfer: multi-block write settle timeout "
-            "(SRS12=0x%08X); confirming completion via CMD13\n", reg);
-        if (status == 0) {
-            status = sdhci_wait_busy(0);
-        }
+            "(SRS12=0x%08X); completion confirmed via the post-CMD12 CMD13\n",
+            reg);
         if (status != 0) {
             wolfBoot_printf("sdhci_transfer: write completion NOT confirmed\n");
         }

@@ -86,7 +86,15 @@ int uboot_env_set(uint8_t *env, size_t env_len, const char *key,
  *   - pick the first name in BOOT_ORDER whose BOOT_<name>_LEFT > 0, decrement
  *     that counter, and report it in *out (out->selected = 1);
  *   - if none have tries left, re-arm every counter to the default, set
- *     out->rearmed = 1 and out->selected = 0 (the caller should reboot);
+ *     out->rearmed = 1 and out->selected = 0. The caller decides what to do
+ *     with a re-armed environment: a full bootloader may reboot, but wolfBoot
+ *     has nowhere else to go, so hal/cm4.c instead calls this a second time and
+ *     boots the now-re-armed first slot. The consequence is deliberate and
+ *     worth stating: a board whose slots are BOTH broken keeps booting the
+ *     first one, cycling 3 -> 2 -> 1 -> 0 -> re-arm -> 3 forever, rather than
+ *     escalating to any other action. There is no "give up" state - refusing
+ *     to boot would leave an unrecoverable device, so the retry loop is the
+ *     safer failure mode;
  *   - reseal the CRC32.
  * The env buffer is modified in place; the caller writes it back to storage.
  * Returns 0 on success, -1 on a malformed BOOT_ORDER / buffer error. */

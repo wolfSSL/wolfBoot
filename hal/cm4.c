@@ -307,7 +307,16 @@ int hal_boot_slot_select(void)
         r = disk_part_write(BOOT_DISK, CM4_UBOOT_ENV_PART, 0, UBOOT_ENV_SIZE,
             cm4_uboot_env);
         if (r != (int)UBOOT_ENV_SIZE) {
-            wolfBoot_printf("cm4: uboot-env write failed (%d); static cmdline\n",
+            /* Loud on purpose: this is the failure mode the whole A/B feature
+             * exists to prevent. The counter did not reach storage, so nothing
+             * decrements and the SAME slot is chosen again on every boot -
+             * redundancy is silently gone until the env partition is writable
+             * again (worn flash, read-only media, wrong partition index). This
+             * printf is the only evidence, so it names the consequence rather
+             * than just the errno. */
+            wolfBoot_printf("cm4: WARNING uboot-env write failed (%d): RAUC try "
+                "counter NOT persisted; A/B failover is DISABLED until the env "
+                "partition is writable. Falling back to the static cmdline\n",
                 r);
             return 0;
         }
@@ -371,8 +380,26 @@ void* hal_get_boot_dts(void)
      * the RPi EEPROM secure-boot is enabled), so it is NOT covered by wolfBoot's
      * signature. Only /chosen/bootargs is overwritten below; /memory,
      * /reserved-memory, per-device reg windows and initrd remain firmware /
-     * attacker controlled. This path is opt-in via CM4_FIRMWARE_DTB. See the
-     * trust-boundary note in docs/Targets.md. */
+     * attacker controlled.
+     * This is NOT effectively optional: CM4_FIRMWARE_DTB is enabled by default
+     * in both shipped Linux configurations (cm4_emmc_linux.config and
+     * cm4_emmc_rauc.config), so anyone following the documented Linux recipe is
+     * on this path. It is a compile-time switch, not a default-off feature.
+     * Why the signed-DTB mechanism is not used here: master carries
+     * HDR_DEVICE_TREE_DIGEST plus "sign --dts" to bind a raw DTB to the signed
+     * image, but it does not apply to this path for two independent reasons.
+     * (1) The digest is only checked by the RAM-boot path (src/update_ram.c);
+     * the CM4 boots via src/update_disk.c, which has no such check. (2) Even
+     * with the plumbing, the hash is not predictable at signing time: the
+     * VideoCore firmware patches the DTB at runtime (the shipped
+     * bcm2711-rpi-cm4.dtb ships /memory@0 reg = <0 0 0> and gets the real RAM
+     * size, mini-UART clock and board serial injected before handoff), so the
+     * blob wolfBoot receives is never the blob that was signed. That runtime
+     * patching is exactly why the firmware DTB is used instead of one carried
+     * inside the FIT - a FIT-carried DTB boots with no RAM size.
+     * The only thing that actually closes this boundary on a CM4 is the
+     * Raspberry Pi EEPROM secure-boot, which authenticates the boot partition
+     * itself. See "Device tree trust boundary" in docs/Targets.md. */
     wolfBoot_printf("cm4: using UNVERIFIED firmware DTB (CM4_FIRMWARE_DTB)\n");
     memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS, fdt, sz);
     fdt = (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
