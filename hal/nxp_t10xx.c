@@ -3522,7 +3522,7 @@ int hal_dts_fixup(void* dts_addr)
 
     /* fixup the fman clock */
     off = fdt_node_offset_by_compatible(fdt, -1, "fsl,fman");
-    if (off != !FDT_ERR_NOTFOUND) {
+    if (off != -FDT_ERR_NOTFOUND) {
         fdt_fixup_val(fdt, off, "fman@", "clock-frequency", hal_get_bus_clk());
     }
 
@@ -3617,9 +3617,9 @@ int hal_dts_fixup(void* dts_addr)
 
     /* fix SDHC */
     off = fdt_node_offset_by_compatible(fdt, -1, "fsl,esdhc");
-    if (off != !FDT_ERR_NOTFOUND) {
+    if (off != -FDT_ERR_NOTFOUND) {
         fdt_fixup_val(fdt, off, "sdhc@", "clock-frequency", hal_get_bus_clk());
-        fdt_fixup_str(fdt, off, "cpu", "status", "okay");
+        fdt_fixup_str(fdt, off, "sdhc@", "status", "okay");
     }
 
 #endif /* !BUILD_LOADER_STAGE1 */

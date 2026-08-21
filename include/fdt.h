@@ -73,6 +73,18 @@ struct fdt_property {
 #define FDT_ALIGN(x, a) (((x) + (a) - 1) & ~((a) - 1))
 #define FDT_TAGALIGN(x) (FDT_ALIGN((x), FDT_TAGSIZE))
 
+/* Bounds for the attacker-influenced fdt_totalsize before relocating or
+ * forwarding a DTB. MIN is the FDT v17 header size (also enforced by the
+ * signer): fdt_check_header validates magic/version but not totalsize, so a
+ * crafted header with a tiny totalsize must be rejected rather than
+ * loaded/forwarded as a partial tree. The MAX default assumes a staging
+ * window at WOLFBOOT_LOAD_DTS_ADDRESS of at least 1 MiB; targets with a
+ * smaller window must override WOLFBOOT_DTS_MAX_SIZE (see hal/nxp_ppc.h). */
+#ifndef WOLFBOOT_DTS_MAX_SIZE
+#define WOLFBOOT_DTS_MAX_SIZE (1024U * 1024U)
+#endif
+#define WOLFBOOT_DTS_MIN_SIZE (40U)
+
 #define FDT_FIRST_SUPPORTED_VERSION 0x10
 #define FDT_LAST_SUPPORTED_VERSION  0x11
 

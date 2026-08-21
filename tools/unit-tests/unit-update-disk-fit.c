@@ -54,17 +54,26 @@
 #include <wolfssl/wolfcrypt/chacha.h>
 
 #define TEST_PAYLOAD_SIZE 64
-#define TEST_DTS_SIZE 32
+/* A plausible DTB size: at least WOLFBOOT_DTS_MIN_SIZE (the 40-byte
+ * FDT v17 header). */
+#define TEST_DTS_SIZE 48
+/* Staging-region stand-in. The oversized test relies on it being big
+ * enough that the pre-fix unbounded copy lands fully inside it, so the
+ * regression is observable as "a copy happened" rather than a crash. */
+#define TEST_DTS_STAGE_SIZE (2U * 1024U * 1024U)
 
 static uint8_t load_buffer[TEST_PAYLOAD_SIZE];
 #define WOLFBOOT_LOAD_ADDRESS ((uintptr_t)load_buffer)
 
-static uint8_t dts_buffer[TEST_DTS_SIZE];
+static uint8_t dts_buffer[TEST_DTS_STAGE_SIZE];
 #define WOLFBOOT_LOAD_DTS_ADDRESS ((uintptr_t)dts_buffer)
 
 static uint8_t part_a_image[IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE];
 static uint8_t part_b_image[IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE];
-static uint8_t fit_dts_image[TEST_DTS_SIZE];
+static uint8_t fit_dts_image[TEST_DTS_STAGE_SIZE];
+/* Parsed DTB size the wolfBoot_get_dts_size() stub reports, and (pre
+ * fix) the FIT-declared length the fit_load_image() stub returns. */
+static int mock_dts_size;
 static int mock_do_boot_called;
 static int mock_fit_memcpy_ret;
 static int mock_fit_memcpy_called;
@@ -107,6 +116,7 @@ static void reset_mocks(void)
     build_image(part_a_image, 1, 0xA1);
     build_image(part_b_image, 2, 0xB2);
     memset(fit_dts_image, 0xDD, sizeof(fit_dts_image));
+    mock_dts_size = TEST_DTS_SIZE;
     mock_do_boot_called = 0;
     mock_fit_memcpy_ret = 0;
     mock_fit_memcpy_called = 0;
@@ -217,11 +227,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 }
 
 /* The loaded payload is treated as a FIT container, and the sub-image
- * returned by fit_load_image() is a valid flat device tree. */
+ * returned by fit_load_image() is a flat device tree whose parsed
+ * size is mock_dts_size. */
 int wolfBoot_get_dts_size(void *dts_addr)
 {
     (void)dts_addr;
-    return TEST_DTS_SIZE;
+    return mock_dts_size;
 }
 
 /* Only reached through the fdt_version()/fdt_totalsize() trace macros here. */
@@ -251,7 +262,7 @@ void* fit_load_image(void* fdt, const char* image, int* lenp)
     (void)fdt;
     (void)image;
     if (lenp != NULL)
-        *lenp = TEST_DTS_SIZE;
+        *lenp = mock_dts_size;
     return fit_dts_image;
 }
 
@@ -331,12 +342,47 @@ START_TEST(test_update_disk_fit_dts_copy_success_boots)
 }
 END_TEST
 
+/* A parsed DTB larger than the staging bound (WOLFBOOT_DTS_MAX_SIZE)
+ * must be rejected rather than copied: before the fix the copy length
+ * came from the FIT-declared property length, unbounded against the
+ * staging region. */
+START_TEST(test_update_disk_fit_dts_oversized_rejected)
+{
+    reset_mocks();
+    mock_dts_size = (1024 * 1024) + 4; /* > WOLFBOOT_DTS_MAX_SIZE */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    /* nothing may have been copied into the staging region */
+    ck_assert_uint_eq(dts_buffer[0], 0);
+}
+END_TEST
+
+/* A parsed DTB smaller than the FDT header size is a partial tree and
+ * must be rejected. */
+START_TEST(test_update_disk_fit_dts_below_min_rejected)
+{
+    reset_mocks();
+    mock_dts_size = 32; /* < WOLFBOOT_DTS_MIN_SIZE (40) */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_eq(dts_buffer[0], 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
     TCase *tc = tcase_create("update-disk-fit");
 
     tcase_add_test(tc, test_update_disk_fit_dts_copy_failure_zeroizes_key_material);
+    tcase_add_test(tc, test_update_disk_fit_dts_oversized_rejected);
+    tcase_add_test(tc, test_update_disk_fit_dts_below_min_rejected);
     tcase_add_test(tc, test_update_disk_fit_dts_copy_success_boots);
     suite_add_tcase(s, tc);
 
