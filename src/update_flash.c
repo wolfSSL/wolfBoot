@@ -571,18 +571,20 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
 #ifdef EXT_ENCRYPTED
-    /* Initialize encryption with the saved key */
+    /* Initialize encryption with the saved key. The default backend
+     * manages the internal flash lock itself around the key write (it ends
+     * with the flash locked), so call it with the flash locked and re-unlock
+     * afterwards for the remaining writes. */
+    hal_flash_lock();
     ret = wolfBoot_set_encrypt_key((uint8_t*)tmpBuffer,
         (uint8_t*)&tmpBuffer[ENCRYPT_KEY_SIZE / sizeof(uint32_t)]);
     if (ret != 0) {
 #ifdef EXT_FLASH
         ext_flash_lock();
 #endif
-        hal_flash_lock();
         wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
         return ret;
     }
-    /* wolfBoot_set_encrypt_key calls hal_flash_unlock, need to unlock again */
     hal_flash_unlock();
 #endif
     /* Restore the original contents of the staging sector (with the magic trailer if encrypted) */
