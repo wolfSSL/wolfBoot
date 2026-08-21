@@ -659,7 +659,8 @@ RAMFUNCTION int ext_flash_write(uintptr_t address, const uint8_t* data, int len)
 
 /*
  * Reads data from flash memory, first checking if the data is erased and
- * returning dummy erased byte values to prevent ECC errors
+ * returning dummy erased byte values to prevent ECC errors. Returns the
+ * number of bytes read, or -1 on error
  */
 int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
 {
@@ -714,7 +715,7 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
     }
 
     LED_OFF(LED_READ);
-    return 0;
+    return bytesRead;
 }
 
 RAMFUNCTION int ext_flash_erase(uintptr_t address, int len)
