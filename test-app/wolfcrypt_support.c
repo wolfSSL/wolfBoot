@@ -44,6 +44,67 @@
     extern volatile uint64_t HAL_time_ms;
 #elif defined(TARGET_lpc55s69)
     extern volatile uint64_t SysTick_time_ms;
+#elif defined(TARGET_imx95_m7)
+    /* Cortex-M7 DWT cycle counter. Exact, free to read, and needs no
+     * peripheral - which matters here because the M7 has no console UART
+     * routed on this carrier.
+     *
+     * IMX95_M7_HZ is a build-time constant, not a run-time reading: the M7
+     * clock is owned by the System Manager on the M33 and the core cannot
+     * query it without an SCMI round trip. 800 MHz is what this board's
+     * clk_summary reports ("m7 800000000"); override with -DIMX95_M7_HZ if the
+     * System Manager is configured differently, or every reported figure
+     * scales by the ratio.
+     *
+     * CYCCNT is 32 bits and wraps every ~5.4 s at that rate, and the wrap
+     * accounting below can only recover one wrap per read. my_time() alone
+     * does not read often enough to guarantee that - it is called only when
+     * wolfCrypt validates a certificate date - so app_imx95_m7.c drives
+     * imx95_m7_cyc_sample() from SysTick to keep the invariant true. */
+    #include "hal/imx95_m7.h"
+
+    #ifndef IMX95_M7_HZ
+    #define IMX95_M7_HZ 800000000ULL
+    #endif
+
+    static uint64_t m7_cyc_hi = 0;
+    static uint32_t m7_cyc_last = 0;
+    static int m7_cyc_inited = 0;
+    static uint64_t m7_start_ticks = 0;
+
+    /* Reached from both thread and interrupt context, so the wrap accounting
+     * is a critical section. PRIMASK is saved and restored rather than
+     * unconditionally re-enabled, since the caller may already be masked. */
+    static uint64_t m7_get_ticks(void)
+    {
+        uint32_t now, primask;
+        uint64_t ticks;
+
+        __asm__ volatile ("mrs %0, primask" : "=r"(primask));
+        __asm__ volatile ("cpsid i" ::: "memory");
+
+        if (!m7_cyc_inited) {
+            imx95_dwt_init();
+            m7_cyc_hi = 0;
+            m7_cyc_last = 0;
+            m7_cyc_inited = 1;
+        }
+        now = DWT_CYCCNT;
+        if (now < m7_cyc_last)
+            m7_cyc_hi += 0x100000000ULL; /* wrapped since last read */
+        m7_cyc_last = now;
+        ticks = m7_cyc_hi + now;
+
+        if ((primask & 1U) == 0U)
+            __asm__ volatile ("cpsie i" ::: "memory");
+        return ticks;
+    }
+
+    /* Called from the app's SysTick handler; see app_imx95_m7.c. */
+    void imx95_m7_cyc_sample(void)
+    {
+        (void)m7_get_ticks();
+    }
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     /* PPC time base register for accurate timing (e6500). */
     static uint32_t ppc_tb_hz = 0;
@@ -147,6 +208,12 @@ unsigned long my_time(unsigned long* timer)
     unsigned long t = (unsigned long)(SysTick_time_ms / 1000);
     if (timer) *timer = t;
     return t;
+#elif defined(TARGET_imx95_m7)
+    {
+        unsigned long t = (unsigned long)(m7_get_ticks() / IMX95_M7_HZ);
+        if (timer) *timer = t;
+        return t;
+    }
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();
@@ -191,6 +258,13 @@ double current_time(int reset)
 #elif defined(TARGET_lpc55s69)
     (void)reset;
     return (double)SysTick_time_ms / 1000.0;
+#elif defined(TARGET_imx95_m7)
+    /* Take a new origin rather than zeroing the counter: my_time() shares it
+     * and the benchmark resets once per algorithm, which would otherwise walk
+     * wolfCrypt's notion of wall-clock time backwards dozens of times a run. */
+    if (reset)
+        m7_start_ticks = m7_get_ticks();
+    return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024)
     if (ppc_tb_hz == 0)
         ppc_tb_hz = ppc_get_timebase_hz();

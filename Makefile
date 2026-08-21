@@ -377,6 +377,12 @@ ifeq ($(TARGET),tegra234)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+# i.MX95 M7 runs from ITCM (loaded by the Linux remoteproc driver); the payload
+# lives in DDR at 0x80100000, so there is no contiguous flash image to assemble.
+ifeq ($(TARGET),imx95_m7)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),sim)
     CFLAGS+=-fno-pie
     LDFLAGS+=-no-pie

@@ -616,6 +616,19 @@ ifeq ($(TARGET),stm32l5)
   APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
 endif
 
+# i.MX95 Cortex-M7. The console is a shared-memory ring buffer rather than an
+# LPUART: no M7 UART is routed to a host-accessible channel on the Toradex SMARC
+# carrier, and Linux owns all four LPUART instances. -mcpu/-mfpu come from
+# arch.mk via CORTEX_M7.
+ifeq ($(TARGET),imx95_m7)
+  CFLAGS+=-I..
+  # The app owns isr_systick: it samples the DWT cycle counter often enough
+  # that the 32-bit counter cannot wrap unnoticed between timebase reads.
+  CFLAGS+=-DAPP_HAS_SYSTICK
+  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  LSCRIPT_TEMPLATE=ARM-imx95_m7.ld
+endif
+
 ifeq ($(TARGET),stm32h5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32h5-ns.ld

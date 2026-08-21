@@ -19,6 +19,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
+* [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP Kinetis KL26Z](#nxp-kinetis-kl26z)
@@ -8977,3 +8978,94 @@ Boot success marked. Version: 1
 | `FLAGS_HOME` | Keep boot flags in internal flash (required when `EXT_FLASH=1`). |
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
+
+
+## NXP i.MX95 Cortex-M7
+
+The i.MX95 pairs an A55 cluster running Linux with a real-time Cortex-M7 and a Cortex-M33 System Manager. The M7 has no dedicated flash: it is loaded into TCM by the Linux `remoteproc` driver on the A55 side, so wolfBoot is the ELF that `remoteproc` loads, and the images it verifies live in the DDR region the device tree reserves for the M7.
+
+Validated on a Toradex SMARC i.MX95 module with `TARGET=imx95_m7`.
+
+### i.MX95: Chain of trust
+
+The M7 has no flash of its own - wolfBoot and the images it verifies are placed in TCM and DDR by the A55 cluster - so trust in what runs on the M7 is anchored on the A55 side. Three mechanisms provide it:
+
+- **AHAB**, anchored in the SRK fuses, authenticates the boot containers the ROM and SPL load.
+- **wolfBoot on the A55**, replacing U-Boot, verifying and staging the M7 image under its own partition id before Linux starts. Planned; this is the piece we intend to support.
+- **TRDC**, configured by the System Manager on the M33, restricting the M7 TCM and DDR carveout to the M7 domain.
+
+Until those are in place the M7 image is selected by Linux, so verification here protects against corruption and mis-staged updates rather than against a compromised A55.
+
+### i.MX95: Memory layout
+
+wolfBoot is linked for the *core* view of TCM. `remoteproc` loads through the *system* view and `imx_rproc` translates between the two; linking for the system view produces an image that loads cleanly and faults on the first instruction fetch.
+
+| Region | Core view | System view | Size |
+|--------|-----------|-------------|------|
+| ITCM (wolfBoot text) | `0x00000000` | `0x203C0000` | 256 KiB |
+| DTCM (wolfBoot data, app data/heap/stack) | `0x20000000` | `0x20400000` | 256 KiB |
+| Reserved DDR (`memory@80000000`) | `0x80000000` | - | 16 MiB |
+
+The TCM split assumes `M7_CFG[TCM_SIZE] = 000b` (256 KiB + 256 KiB), the reset default. That field lives in `BLK_CTRL_Secure_AON` and is owned by the System Manager running on the M33, not by wolfBoot.
+
+The "flash" wolfBoot writes is ordinary DDR: writes are copies and erases are fills. Linux stages an update by writing the UPDATE partition before restarting the core.
+
+| Block | Address | Size |
+|-------|---------|------|
+| BOOT partition | `0x80100000` | 4 MiB |
+| UPDATE partition | `0x80500000` | 4 MiB |
+| SWAP | `0x80900000` | 16 KiB sector |
+| Console header + ring | `0x80F00000` | 64 KiB |
+| wolfBoot status block | `0x80F10000` | 4 words |
+| Test-app status block | `0x80F10010` | 2 words |
+
+The RPMsg carveouts at `0x88000000` (vrings) and `0x88020000` (vdevbuffer) belong to the RPMsg transport and are deliberately not used for the console or status blocks. wolfBoot still carries the `remoteproc` resource table declaring them, because Linux looks for `.resource_table` in the ELF *it* loads - without it the kernel logs `No resource table in elf` and never creates the virtio device.
+
+### i.MX95: Building
+
+```sh
+cp config/examples/imx95-m7.config .config
+make
+```
+
+This produces `wolfboot.elf` (the image `remoteproc` loads) and `test-app/image_v1_signed.bin` (the payload Linux writes to `0x80100000`). There is no `factory.bin`: wolfBoot runs from ITCM and the payload lives in DDR, so there is no contiguous flash image to assemble.
+
+To build the test app with the wolfCrypt test suite and benchmark:
+
+```sh
+make WOLFCRYPT_TEST=1 WOLFCRYPT_BENCHMARK=1
+```
+
+Benchmark timing comes from the Cortex-M7 DWT cycle counter, scaled by `IMX95_M7_HZ` (800 MHz by default, matching this board's `clk_summary` entry `m7 800000000`). The M7 cannot read its own clock rate without an SCMI round trip to the System Manager, so if that rate is configured differently the constant must be overridden or every reported figure scales by the ratio:
+
+```sh
+make WOLFCRYPT_BENCHMARK=1 CFLAGS_EXTRA=-DIMX95_M7_HZ=1000000000ULL
+```
+
+### i.MX95: Console and status
+
+The M7's LPUART is not routed to a host-accessible header on this carrier, and Linux owns all four LPUART instances, so the console is a ring buffer in the M7's own DDR window rather than a peripheral driver. Its header is:
+
+| Offset | Field | Meaning |
+|--------|-------|---------|
+| `0x00` | `magic` | `0x4E4F4357` - the stored bytes read `WCON` in a hexdump |
+| `0x04` | `wr` | Total bytes ever written, monotonic within a run |
+| `0x08` | `size` | Ring size in bytes; read it rather than assuming |
+| `0x0C` | `rsvd` | Reserved |
+
+A reader tracks its own position `pos` and copies `wr - pos` bytes starting at `data[pos % size]`. Overrun is possible for very chatty output and is detected when `wr - pos > size`, so the reader reports the gap instead of printing corrupt text.
+
+Progress is also published as plain 32-bit words that Linux can poll with `devmem` without parsing console text:
+
+```sh
+devmem 0x80F10000    # 0x57424F54 "WBOT" - wolfBoot status block valid
+devmem 0x80F10004    # progress code: 1 = hal_init, 2 = hal_prepare_boot
+devmem 0x80F10008    # DWT cycle count at hal_init
+devmem 0x80F1000C    # DWT cycle count at hal_prepare_boot
+devmem 0x80F10010    # 0x41505031 "APP1" - the payload is running
+devmem 0x80F10014    # heartbeat, incrementing
+```
+
+The difference between the two timestamps is the cost of everything wolfBoot does in between, which is dominated by signature verification. Note that these magics are spelled to read correctly as `devmem` 32-bit words, the opposite convention from the console magic, which is read from a hexdump of the ring.
+
+Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
