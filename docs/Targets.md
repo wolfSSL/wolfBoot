@@ -1120,13 +1120,15 @@ sudo dd if=wolfboot.bin of=/dev/sdc1 bs=512 && sudo cmp wolfboot.bin /dev/sdc1
 make test-app/image_v1_signed.bin
 ```
 
-**Flash the signed application to QSPI:**
+**Flash the signed application to QSPI** using the UART programmer (enabled by default via
+`UART_QSPI_PROGRAM=1`; requires `pyserial` installed):
 ```sh
 python3 tools/scripts/mpfs_qspi_prog.py /dev/ttyUSB1 \
     test-app/image_v1_signed.bin 0x20000
 ```
 
 **Notes:**
+- `UART_QSPI_PROGRAM=1` adds a 3-second boot pause every time. Set to `0` once the flash contents are stable.
 - `ELF=0` is required: the test-app linker script (`test-app/RISCV64-mpfs250.ld`) places `.init`
   (containing `_reset()`) first so the raw binary entry point is at offset 0. The full ELF with
   debug symbols exceeds L2-LIM capacity.
