@@ -133,6 +133,7 @@ int unit_test_wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
 static int mock_get_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_calls = 0;
+static int mock_erase_encrypt_key_calls = 0;
 
 int wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
@@ -158,6 +159,7 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
 
 int wolfBoot_erase_encrypt_key(void)
 {
+    mock_erase_encrypt_key_calls++;
     return 0;
 }
 #endif
@@ -177,6 +179,32 @@ START_TEST (test_boot_success_sets_state)
 
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &state), 0);
     ck_assert_uint_eq(state, IMG_STATE_SUCCESS);
+
+    cleanup_flash();
+}
+END_TEST
+#endif
+
+#ifdef CUSTOM_ENCRYPT_KEY
+/* wolfBoot_success() must erase the temporary firmware-decryption key
+ * from the partition trailer as part of confirming an update. The mock
+ * records the call; without the erase the plaintext key would stay
+ * resident in flash. */
+START_TEST (test_boot_success_erases_encrypt_key)
+{
+    uint8_t state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    hal_flash_lock();
+
+    wolfBoot_success();
+
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &state), 0);
+    ck_assert_uint_eq(state, IMG_STATE_SUCCESS);
+    ck_assert_int_eq(mock_erase_encrypt_key_calls, 1);
 
     cleanup_flash();
 }
@@ -234,6 +262,7 @@ static void reset_mock_stats(void)
     mock_get_encrypt_key_ret = 0;
     mock_set_encrypt_key_ret = 0;
     mock_set_encrypt_key_calls = 0;
+    mock_erase_encrypt_key_calls = 0;
 #endif
 #ifndef ARCH_SIM
     wolfBoot_panicked = 0;
@@ -1703,6 +1732,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
+#ifdef CUSTOM_ENCRYPT_KEY
+    tcase_add_test(fallback_verify, test_boot_success_erases_encrypt_key);
+#endif
     suite_add_tcase(s, fallback_verify);
     tcase_add_test(encrypt_write_bounds,
         test_encrypt_write_keeps_trailing_partial_block);
