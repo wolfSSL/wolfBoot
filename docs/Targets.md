@@ -9102,6 +9102,16 @@ The i.MX95 pairs an A55 cluster running Linux with a real-time Cortex-M7 and a C
 
 Validated on a Toradex SMARC i.MX95 module with `TARGET=imx95_m7`.
 
+### i.MX95: Chain of trust
+
+The M7 has no flash of its own - wolfBoot and the images it verifies are placed in TCM and DDR by the A55 cluster - so trust in what runs on the M7 is anchored on the A55 side. Three mechanisms provide it:
+
+- **AHAB**, anchored in the SRK fuses, authenticates the boot containers the ROM and SPL load.
+- **wolfBoot on the A55**, replacing U-Boot, verifying and staging the M7 image under its own partition id before Linux starts. Planned; this is the piece we intend to support.
+- **TRDC**, configured by the System Manager on the M33, restricting the M7 TCM and DDR carveout to the M7 domain.
+
+Until those are in place the M7 image is selected by Linux, so verification here protects against corruption and mis-staged updates rather than against a compromised A55.
+
 ### i.MX95: Memory layout
 
 wolfBoot is linked for the *core* view of TCM. `remoteproc` loads through the *system* view and `imx_rproc` translates between the two; linking for the system view produces an image that loads cleanly and faults on the first instruction fetch.
