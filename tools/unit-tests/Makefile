@@ -153,7 +153,7 @@ TESTS+=unit-linux-loader-e820
 TESTS+=unit-linux-loader-syssize
 TESTS+=unit-sama5d3-ext-read
 else
-$(info Skipping 32-bit x86 linux-loader unit tests: 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
+$(info Skipping 32-bit x86 unit tests (linux-loader, sama5d3-ext-read): 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
 endif
 
 include unit-sign-encrypted-output.mkfrag
