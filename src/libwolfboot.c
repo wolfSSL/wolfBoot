@@ -1374,8 +1374,11 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
         }
 
         len = p[2] | (p[3] << 8);
-        /* check len */
-        if ((4U + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+        /* check len (compare in a 32-bit domain: a uint16_t cast of the
+         * header budget wraps for headers >= 64 KiB and rejects every
+         * field) */
+        if ((uint32_t)(4U + len) >
+            (uint32_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available "
                      "in the current header)\n");
             unit_dbg("%u %u %u\n", (unsigned int)len,

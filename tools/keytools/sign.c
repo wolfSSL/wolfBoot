@@ -458,8 +458,11 @@ static uint16_t sign_tool_find_header(uint8_t *haystack, uint16_t type, uint8_t 
         }
 
         len = p[2] | (p[3] << 8);
-        /* check len */
-        if ((4 + len) > (uint16_t)(CMD.header_sz - IMAGE_HEADER_OFFSET)) {
+        /* check len (compare in a 32-bit domain: a uint16_t cast of the
+         * header budget wraps for headers >= 64 KiB and rejects every
+         * field) */
+        if ((uint32_t)(4 + len) >
+            (uint32_t)(CMD.header_sz - IMAGE_HEADER_OFFSET)) {
             fprintf(stderr, "This field too large to fit into header "
                 "(%d > %d)\n",
                 (int)(4 + len), (int)(CMD.header_sz - IMAGE_HEADER_OFFSET));
