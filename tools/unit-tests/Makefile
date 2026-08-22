@@ -144,10 +144,16 @@ TESTS+=unit-fs-malicious
 # therefore unconditional.
 HAVE_MKFS_VFAT := $(shell command -v mkfs.vfat 2>/dev/null)
 HAVE_MCOPY     := $(shell command -v mcopy 2>/dev/null)
+HAVE_MKE2FS    := $(shell command -v mke2fs 2>/dev/null)
 ifneq ($(and $(HAVE_MKFS_VFAT),$(HAVE_MCOPY)),)
 TESTS+=unit-fat32
 else
 $(warning Skipping unit-fat32: mkfs.vfat and/or mtools unavailable)
+endif
+ifneq ($(HAVE_MKE2FS),)
+TESTS+=unit-ext4
+else
+$(warning Skipping unit-ext4: mke2fs unavailable)
 endif
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
@@ -874,7 +880,7 @@ unit-fs-probe: ../../include/target.h unit-fs-probe.c
 # metadata in C, so unlike the interop suites it is never skipped.
 unit-fs-malicious: ../../include/target.h unit-fs-malicious.c
 	gcc -o $@ unit-fs-malicious.c $(CFLAGS) -DWOLFBOOT_DISK_FS \
-		-DWOLFBOOT_FAT32 $(LDFLAGS)
+		-DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 $(LDFLAGS)
 
 # A conformant FAT32 volume needs at least 65525 clusters, so even with
 # one 512-byte sector per cluster the smallest valid image is about 33 MB.
@@ -904,6 +910,31 @@ fat32-test.img:
 
 unit-fat32: ../../include/target.h unit-fat32.c fat32-test.img
 	gcc -o $@ unit-fat32.c $(CFLAGS) -DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 \
+		$(LDFLAGS)
+
+# Two ext4 fixtures. The first uses the smallest feature set the parser
+# accepts; the second uses mke2fs's stock ext4 profile, which on a current
+# e2fsprogs sets 64bit + metadata_csum + flex_bg -- that one is what proves
+# a plain "mkfs.ext4" volume is readable. "mke2fs -d" populates from a
+# directory with no root privileges and no loop mount (e2fsprogs >= 1.43).
+ext4-fixtures.stamp:
+	rm -rf .ext4-root ext4-min.img ext4-stock.img
+	mkdir -p .ext4-root/boot/sub
+	( head -c 4096 /dev/urandom; head -c 61440 /dev/zero; \
+	  head -c 262144 /dev/urandom; head -c 131072 /dev/zero; \
+	  head -c 589824 /dev/urandom ) > ext4-payload.bin
+	head -c 4096 /dev/urandom > ext4-nested.bin
+	cp ext4-payload.bin .ext4-root/boot/image.itb
+	cp ext4-nested.bin .ext4-root/boot/sub/nested.bin
+	mke2fs -q -F -t ext4 -O ^64bit,^metadata_csum -b 1024 -I 128 \
+		-L WBEXT1 -d .ext4-root ext4-min.img 16384 2>/dev/null
+	mke2fs -q -F -t ext4 -b 4096 -L WBEXT2 -d .ext4-root \
+		ext4-stock.img 8192 2>/dev/null
+	rm -rf .ext4-root
+	touch $@
+
+unit-ext4: ../../include/target.h unit-ext4.c ext4-fixtures.stamp
+	gcc -o $@ unit-ext4.c $(CFLAGS) -DWOLFBOOT_DISK_FS -DWOLFBOOT_EXT4 \
 		$(LDFLAGS)
 
 unit-multiboot: unit-multiboot.c
@@ -1423,7 +1454,8 @@ GENERATED_SRC:=aurix_erased_extract.h fdt_memrsv_extract.h \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
 	zynq_write_extract.h \
 	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \
-	fat32-short.bin
+	fat32-short.bin ext4-min.img ext4-stock.img ext4-payload.bin \
+	ext4-nested.bin ext4-fixtures.stamp
 
 # Tests that are only in $(TESTS) when their toolchain/headers are
 # present; clean must remove them regardless, or a host that has since

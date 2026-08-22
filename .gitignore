@@ -147,6 +147,12 @@ tools/unit-tests/unit-disk
 tools/unit-tests/unit-fs-probe
 tools/unit-tests/unit-fat32
 tools/unit-tests/unit-fs-malicious
+tools/unit-tests/unit-ext4
+tools/unit-tests/ext4-min.img
+tools/unit-tests/ext4-stock.img
+tools/unit-tests/ext4-payload.bin
+tools/unit-tests/ext4-nested.bin
+tools/unit-tests/ext4-fixtures.stamp
 tools/unit-tests/fat32-test.img
 tools/unit-tests/fat32-payload.bin
 tools/unit-tests/fat32-nested.bin
