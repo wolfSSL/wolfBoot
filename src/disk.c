@@ -436,4 +436,49 @@ int disk_find_partition_by_label(int drv, const char *label)
     return -1;
 }
 
+/**
+ * @brief Get the size in bytes of a disk partition.
+ *
+ * The partition table stores the first and last valid byte offsets, so the
+ * size is the inclusive difference plus one. Used by the read-only
+ * filesystem layer to bound every offset it computes from on-media
+ * metadata.
+ *
+ * @param[in] drv The drive number (0 to `MAX_DISKS - 1`).
+ * @param[in] part The partition number (0 to `MAX_PARTITIONS - 1`).
+ * @param[out] size The partition size in bytes.
+ *
+ * @return 0 on success, or -1 if the partition is not accessible.
+ */
+int disk_part_size(int drv, int part, uint64_t *size)
+{
+    struct disk_partition *p = open_part(drv, part);
+    if ((p == NULL) || (size == NULL)) {
+        return -1;
+    }
+    if (p->end < p->start) {
+        return -1;
+    }
+    *size = (p->end - p->start) + 1;
+    return 0;
+}
+
+/**
+ * @brief Get the number of partitions found on a drive.
+ *
+ * @param[in] drv The drive number (0 to `MAX_DISKS - 1`).
+ *
+ * @return The number of partitions, or -1 if the drive is not open.
+ */
+int disk_part_count(int drv)
+{
+    if ((drv < 0) || (drv >= MAX_DISKS)) {
+        return -1;
+    }
+    if (Drives[drv].is_open == 0) {
+        return -1;
+    }
+    return Drives[drv].n_parts;
+}
+
 #endif /* _WOLFBOOT_DISK_C_ */

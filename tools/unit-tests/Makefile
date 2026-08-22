@@ -135,6 +135,20 @@ TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
+TESTS+=unit-fs-probe
+TESTS+=unit-fs-malicious
+
+# The filesystem interop tests build their fixtures with the host's real
+# mkfs tools, so they are only added when those tools exist. The hostile
+# input coverage lives in unit-fs-malicious, which needs no tools and is
+# therefore unconditional.
+HAVE_MKFS_VFAT := $(shell command -v mkfs.vfat 2>/dev/null)
+HAVE_MCOPY     := $(shell command -v mcopy 2>/dev/null)
+ifneq ($(and $(HAVE_MKFS_VFAT),$(HAVE_MCOPY)),)
+TESTS+=unit-fat32
+else
+$(warning Skipping unit-fat32: mkfs.vfat and/or mtools unavailable)
+endif
 
 # The x86-64 EFI unit test needs the gnu-efi development headers (same
 # dependency as the CMake x86_64_efi target). Probe and only add the test
@@ -850,6 +864,48 @@ gpt-sfdisk-test.h:
 unit-disk: unit-disk.c gpt-sfdisk-test.h
 	gcc -o $@ $< $(CFLAGS) $(LDFLAGS)
 
+# Backend-independent half of the read-only filesystem layer. Built with
+# neither WOLFBOOT_FAT32 nor WOLFBOOT_EXT4, so it also pins the behaviour
+# of a DISK_FS build with no parser selected: everything probes as raw.
+unit-fs-probe: ../../include/target.h unit-fs-probe.c
+	gcc -o $@ unit-fs-probe.c $(CFLAGS) -DWOLFBOOT_DISK_FS $(LDFLAGS)
+
+# Hostile-input coverage for every parser bound. Builds all of its
+# metadata in C, so unlike the interop suites it is never skipped.
+unit-fs-malicious: ../../include/target.h unit-fs-malicious.c
+	gcc -o $@ unit-fs-malicious.c $(CFLAGS) -DWOLFBOOT_DISK_FS \
+		-DWOLFBOOT_FAT32 $(LDFLAGS)
+
+# A conformant FAT32 volume needs at least 65525 clusters, so even with
+# one 512-byte sector per cluster the smallest valid image is about 33 MB.
+# That is far too large to embed as a C array the way gpt-sfdisk-test.h
+# does, so the image stays a file and the test reads it through a
+# file-backed mock disk_read().
+fat32-test.img:
+	rm -f $@ $@.tmp fat32-payload.bin fat32-nested.bin fat32-short.bin
+	truncate -s 40M $@.tmp
+	mkfs.vfat -F 32 -s 1 -S 512 -n WBTEST $@.tmp >/dev/null
+	head -c 1048576 /dev/urandom > fat32-payload.bin
+	head -c 4096 /dev/urandom > fat32-nested.bin
+	head -c 777 /dev/urandom > fat32-short.bin
+	MTOOLS_SKIP_CHECK=1 mmd -i $@.tmp ::/boot
+	MTOOLS_SKIP_CHECK=1 mmd -i $@.tmp ::/boot/sub
+	MTOOLS_SKIP_CHECK=1 mcopy -i $@.tmp fat32-payload.bin \
+		::/boot/a-very-long-image-name-for-lfn.itb
+	MTOOLS_SKIP_CHECK=1 mcopy -i $@.tmp fat32-nested.bin \
+		::/boot/sub/nested.bin
+	MTOOLS_SKIP_CHECK=1 mcopy -i $@.tmp fat32-short.bin ::/SHORT.BIN
+	# 60 characters, so five LFN entries. Names of 53-64 characters fit
+	# WOLFBOOT_FS_MAX_NAME but need the fifth entry, which is the band a
+	# too-eager ordinal bound silently drops.
+	MTOOLS_SKIP_CHECK=1 mcopy -i $@.tmp fat32-nested.bin \
+		"::/boot/a-deliberately-long-filename-that-needs-five-lfn-entries.itb"
+	mv $@.tmp $@
+
+unit-fat32: ../../include/target.h unit-fat32.c fat32-test.img
+	gcc -o $@ unit-fat32.c $(CFLAGS) -DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 \
+		$(LDFLAGS)
+
 unit-multiboot: unit-multiboot.c
 	gcc -o $@ unit-multiboot.c $(CFLAGS) $(LDFLAGS)
 
@@ -1365,7 +1421,9 @@ GENERATED_SRC:=aurix_erased_extract.h fdt_memrsv_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
-	zynq_write_extract.h
+	zynq_write_extract.h \
+	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \
+	fat32-short.bin
 
 # Tests that are only in $(TESTS) when their toolchain/headers are
 # present; clean must remove them regardless, or a host that has since
