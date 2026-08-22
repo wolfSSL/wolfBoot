@@ -111,6 +111,14 @@ else
 fi
 
 if [ "$ENABLE_TPM" = true ]; then
+    # Fail fast if swtpm is missing. Without this QEMU still starts, then
+    # blocks forever on a TPM socket that will never appear, which shows up
+    # as a CI timeout rather than a missing dependency.
+    if ! command -v swtpm >/dev/null 2>&1; then
+        echo "ERROR: swtpm not found, but TPM emulation was requested (-t)." >&2
+        echo "Install swtpm, or drop -t if this target has no TPM." >&2
+        exit 1
+    fi
     killall swtpm || true
     sleep 1
     echo TPM Emulation ON

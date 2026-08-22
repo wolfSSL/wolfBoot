@@ -872,6 +872,8 @@ add-symbol-file test-app/image.elf 0x20020100
 
 ## Microchip PolarFire SoC
 
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
+
 The PolarFire SoC is a 64-bit RISC-V SoC featuring a five-core CPU cluster (1× E51 monitor core and 4× U54 application cores) and FPGA fabric. Tested with MPFS250.
 
 ### Features
@@ -3806,6 +3808,8 @@ qemu-system-aarch64 -M raspi3b -m 1024 -serial stdio -kernel wolfboot_linux_rasp
 
 ## Cortex-A72 / Raspberry Pi Compute Module 4 (BCM2711)
 
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
+
 wolfBoot runs on the Raspberry Pi Compute Module 4 (CM4), a Broadcom BCM2711 with a quad-core Cortex-A72 (AArch64). wolfBoot takes the place of the second-stage OS loader: the BCM2711 boot ROM loads the VideoCore firmware, the firmware loads `kernel8.img` from the boot partition, and that `kernel8.img` is wolfBoot. wolfBoot then verifies the signed application image and boots it, extending the platform root of trust into the OS.
 
 ```
@@ -3920,6 +3924,8 @@ The eMMC uses a 6-partition layout:
 Key config: `CM4_RAUC_AB=1` (a make var that pulls in `src/ubootenv.o` and the RAUC branch of `hal/cm4.c`), `CFLAGS_EXTRA+=-DCM4_UBOOT_ENV_PART=<n>` (0-based GPT index of `p2`), `CFLAGS_EXTRA+=-DCM4_ROOT_A=...` / `-DCM4_ROOT_B=...` (slot rootfs devices), and optionally `-DCM4_SLOT_A_NAME=...` / `-DCM4_SLOT_B_NAME=...` (RAUC bootnames, default `"A"` / `"B"`). `tools/scripts/cm4/prepare_emmc_rauc.sh` lays out the disk and writes an initial env (`BOOT_ORDER "A B"`, tries `3`). Both slot-switch and hung-slot failover were hardware-validated. On the Yocto side, RAUC's `fw_env.config` must point at the raw `p2` partition (offset `0`, size `0x4000`) and the `system.conf` slot devices must match `p4`/`p5`, so userspace (`rauc mark-good` / `fw_setenv`) and wolfBoot agree on the env layout.
 
 ## Xilinx Zynq UltraScale
+
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
 
 AMD Zynq UltraScale+ MPSoC ZCU102 Evaluation Kit - Quad-core ARM Cortex-A53 (plus dual Cortex-R5).
 
@@ -4423,6 +4429,8 @@ FIT: FPGA programmed
 
 ## Xilinx Zynq-7000 (ZC702)
 
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
+
 AMD/Xilinx Zynq-7000 (XC7Z020) on the ZC702 Evaluation Kit - dual ARM Cortex-A9 (ARMv7-A 32-bit), 1 GB DDR3, 16 MB QSPI NOR (N25Q128A), SDIO, dual UART. Older sibling of the ZynqMP family - distinct silicon, different controllers (`XQspiPs` not `XQspiPsu`, Arasan SDHCI v2.0 not v3.0, no CSU/PMU/PUF, PL310 L2).
 
 wolfBoot replaces U-Boot in the Zynq-7000 boot flow -- there is no
@@ -4729,6 +4737,8 @@ sudo ./tools/scripts/zynq7000/prepare_sdcard.sh /dev/sdX test-app/zImage_signed.
 
 
 ## Versal Gen 1 VMK180
+
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
 
 AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA2197 Adaptive SoC - Dual ARM Cortex-A72.
 
@@ -8123,6 +8133,8 @@ TCG2: PCR 9 (SHA256):
 
 ## NVIDIA Jetson Orin (NVIDIA Tegra234) BL33 firmware
 
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
+
 wolfBoot can run on the NVIDIA Jetson Orin two ways: as an `aarch64_efi` UEFI application (documented separately), or - this `tegra234` target - as **bare-metal firmware** that replaces the **BL33** stage. BL33 is the normal-world bootloader that ARM Trusted Firmware (BL31) hands off to at EL2 non-secure with the MMU off; on Jetson it is the edk2 UEFI / cpu-bootloader (cpubl) slot. Running bare-metal instead of under UEFI puts wolfBoot much closer to the root of trust, with a far smaller trusted surface beneath it - wolfBoot owns its own console, clocks, and boot handoff.
 
 On an unfused developer board the BL33 slot is directly replaceable: MB2 and the earlier stages are inside NVIDIA's signed/fused root of trust and would require NVIDIA signing tooling, but BL33 is not signature-enforced. The bare-metal HAL (`hal/tegra234.c`) provides the Tegra Combined UART (TCU) console, the ARMv8 generic timer, a BPMP IPC driver (clocks/resets over the CPU-NS IVC channel), and a "handoff dump" (entry EL, SCTLR/MMU/cache bits, handoff `x0`) enabled with `TEGRA234_HANDOFF_DUMP=1`.
@@ -8189,6 +8201,8 @@ wolfBoot is linked into the 2 MB below the payload offset, so an image that outg
 The resulting `wolfboot.bin` is flashed into the BL33 (`A_cpu-bootloader`) partition, or - as used for the validation above - loaded non-persistently over USB with the L4T `flash.sh --rcm-boot` flow, which leaves the on-board firmware untouched.
 
 ## Intel x86_64 with Intel FSP support
+
+> **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
 
 This setup is more complex than the UEFI approach described earlier, but allows
 for complete control of the machine since the very first stage after poweron.
@@ -8527,7 +8541,7 @@ make
 After running the above commands, you should find a file named `final_image.bin` in the root folder of the repository. The image can be flashed directly into the board.
 By default wolfBoot tries to read a wolfBoot image from the SATA drive.
 The drive should be partitioned with a GPT table, wolfBoot tries to load an image saved in the 5th or the 6th partition.
-You can find more details in `src/update_disk.c`. wolfBoot doesn't try to read from a filesystem and the images need to be written directly into the partition.
+You can find more details in `src/update_disk.c`. By default wolfBoot reads the image from the very start of the partition, so it has to be written there directly with `dd`. Building with `DISK_FS=fat32|ext4|both` instead probes each slot's partition for a read-only FAT32 or ext4 filesystem and, when one is present, loads the file named by `BOOT_FILE_A` / `BOOT_FILE_B`; a partition holding no supported filesystem is still read raw. See [compile.md](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
 This is an example boot log:
 ```
 Press any key within 2 seconds to toogle BIOS flash chip

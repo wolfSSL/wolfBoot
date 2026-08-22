@@ -233,6 +233,11 @@ ifeq ($(WOLFHAL),1)
   include hal/boards/$(BOARD)/board.mk
 endif
 
+# Set only here, so that host-tool sub-makes which also include options.mk
+# (tools/bin-assemble, tools/bin2hex) skip the checks that only make sense
+# once arch.mk has run. Deliberately not exported.
+WOLFBOOT_TARGET_BUILD=1
+
 # Parse config options
 include options.mk
 
