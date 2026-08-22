@@ -70,6 +70,8 @@ int disk_open(int drv);
 int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf);
 int disk_part_write(int drv, int part, uint64_t off, uint64_t sz, const uint8_t *buf);
 int disk_find_partition_by_label(int drv, const char *label);
+int disk_part_size(int drv, int part, uint64_t *size);
+int disk_part_count(int drv);
 
 #endif /* _WOLFBOOT_DISK_H */
 
