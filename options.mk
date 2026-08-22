@@ -804,6 +804,43 @@ ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
   OBJS+= src/sdhci.o
 endif
 
+# Optional read-only filesystem support for disk boot (src/update_disk.c),
+# so a boot slot can name a file instead of requiring the signed image at
+# raw offset 0 of a partition. DISK_FS = fat32 | ext4 | both. Leaving it
+# unset keeps raw partition access completely unchanged.
+#
+# The WOLFBOOT_UPDATE_DISK test works because arch.mk is included before
+# this file (see the Makefile) and every disk-capable arch block puts that
+# define into CFLAGS. Gating here rather than in arch.mk keeps the knob in
+# one place instead of four.
+DISK_FS ?=
+ifneq ($(DISK_FS),)
+  ifeq (,$(filter fat32 ext4 both,$(DISK_FS)))
+    $(error DISK_FS must be one of: fat32, ext4, both)
+  endif
+  ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+    ifeq (,$(findstring WOLFBOOT_UPDATE_DISK,$(CFLAGS)))
+      $(error DISK_FS requires a disk-boot target (DISK_SDCARD=1, DISK_EMMC=1, or an x86 FSP/AHCI target))
+    endif
+  endif
+  CFLAGS+=-D"WOLFBOOT_DISK_FS=1"
+  OBJS+= src/disk_fs.o
+  ifneq (,$(filter fat32 both,$(DISK_FS)))
+    CFLAGS+=-D"WOLFBOOT_FAT32=1"
+    OBJS+= src/fat32.o
+  endif
+  ifneq (,$(filter ext4 both,$(DISK_FS)))
+    CFLAGS+=-D"WOLFBOOT_EXT4=1"
+    OBJS+= src/ext4.o
+  endif
+  ifneq ($(WOLFBOOT_FS_CACHE_SIZE),)
+    CFLAGS+=-D"WOLFBOOT_FS_CACHE_SIZE=$(WOLFBOOT_FS_CACHE_SIZE)"
+  endif
+  ifneq ($(DEBUG_FS),)
+    CFLAGS+=-D"DEBUG_FS=$(DEBUG_FS)"
+  endif
+endif
+
 ifeq ($(UART_FLASH),1)
   EXT_FLASH=1
 endif

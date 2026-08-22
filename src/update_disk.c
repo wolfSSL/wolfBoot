@@ -44,6 +44,9 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include "disk.h"
+#ifdef WOLFBOOT_DISK_FS
+#include "disk_fs.h"
+#endif
 #ifdef WOLFBOOT_ELF
 #include "elf.h"
 #endif
@@ -88,6 +91,25 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #endif
 #ifndef BOOT_PART_B
 #define BOOT_PART_B 1
+#endif
+
+/* Optional read-only filesystem support. When a slot's partition holds a
+ * supported filesystem, the signed image is read from BOOT_FILE_x instead
+ * of from the start of the partition. A partition that holds no
+ * filesystem is read exactly as before. */
+#ifndef BOOT_FILE_A
+#define BOOT_FILE_A NULL
+#endif
+#ifndef BOOT_FILE_B
+#define BOOT_FILE_B NULL
+#endif
+/* Optional partition selection by name, overriding BOOT_PART_x. Matches
+ * the GPT partition label first, then the filesystem volume label. */
+#ifndef BOOT_LABEL_A
+#define BOOT_LABEL_A NULL
+#endif
+#ifndef BOOT_LABEL_B
+#define BOOT_LABEL_B NULL
 #endif
 
 #ifndef MAX_FAILURES
@@ -274,6 +296,153 @@ extern uint8_t _end_wb[];
 #endif
 
 /**
+ * @brief One A/B boot slot: a partition, and optionally a file on it.
+ *
+ * The whole point of this indirection is that the retry loop below reads
+ * through slot_read() and so is written once, whether the image lives at
+ * the start of a partition or in a file on a filesystem.
+ */
+struct boot_slot {
+    int part;
+    int ready;
+#ifdef WOLFBOOT_DISK_FS
+    const char *file;
+    struct fs_volume vol;
+    struct fs_file f;
+#endif
+};
+
+/* File scope, not stack: several disk targets build with
+ * WOLFBOOT_SMALL_STACK=1. */
+static struct boot_slot boot_slots[2];
+
+/**
+ * @brief Read from a boot slot.
+ *
+ * With WOLFBOOT_DISK_FS undefined, or on a partition that holds no
+ * filesystem, this is exactly the disk_part_read() call the loader has
+ * always made.
+ */
+static int slot_read(struct boot_slot *s, uint64_t off, uint64_t sz,
+                     uint8_t *buf)
+{
+    if (s->ready == 0) {
+        return -1;
+    }
+#ifdef WOLFBOOT_DISK_FS
+    if (s->vol.type != FS_TYPE_RAW) {
+        return fs_read(&s->f, off, sz, buf);
+    }
+#endif
+    return disk_part_read(BOOT_DISK, s->part, off, sz, buf);
+}
+
+#ifdef WOLFBOOT_DISK_FS
+/**
+ * @brief Find a partition by name.
+ *
+ * The GPT partition label is tried first. MBR disks have no partition
+ * names at all -- src/disk.c zeroes that field on the MBR path -- so the
+ * filesystem's own volume label is tried next, which is what makes name
+ * based selection usable on the MBR layouts the SD card targets use.
+ */
+/* Not on the stack: this runs on the same WOLFBOOT_SMALL_STACK disk
+ * targets that boot_slots and the filesystem metadata cache are kept off
+ * the stack for. */
+static struct fs_volume slot_label_probe;
+
+static int slot_find_by_label(const char *label)
+{
+    int n;
+    int i;
+
+    i = disk_find_partition_by_label(BOOT_DISK, label);
+    if (i >= 0) {
+        return i;
+    }
+    n = disk_part_count(BOOT_DISK);
+    for (i = 0; i < n; i++) {
+        if (fs_mount(&slot_label_probe, BOOT_DISK, i) != WOLFBOOT_FS_OK) {
+            continue;
+        }
+        if (fs_label_eq(&slot_label_probe, label) == 1) {
+            return i;
+        }
+    }
+    return -1;
+}
+#endif /* WOLFBOOT_DISK_FS */
+
+/**
+ * @brief Resolve, mount and open one boot slot.
+ *
+ * @param max_size Upper bound on the image size, applied to the size the
+ *                 filesystem reports before it can drive any I/O. The
+ *                 payload lands in RAM before its signature is checked,
+ *                 so this bound has to come from the build, not the media.
+ *
+ * @return 0 when the slot can be read from, -1 otherwise.
+ */
+static int slot_prepare(struct boot_slot *s, int part, const char *label,
+                        const char *file, uint64_t max_size)
+{
+#ifdef WOLFBOOT_DISK_FS
+    int ret;
+#endif
+
+    memset(s, 0, sizeof(*s));
+    s->part = part;
+
+#ifdef WOLFBOOT_DISK_FS
+    s->file = file;
+    if (label != NULL) {
+        s->part = slot_find_by_label(label);
+        if (s->part < 0) {
+            wolfBoot_printf("No partition named %s\r\n", label);
+            return -1;
+        }
+    }
+    ret = fs_mount(&s->vol, BOOT_DISK, s->part);
+    if (ret != WOLFBOOT_FS_OK) {
+        /* Neutral wording: fs_mount() also reports E_IO for a partition that
+         * does not exist or cannot be read, which a mis-set BOOT_PART_x or
+         * BOOT_LABEL_x produces. The code distinguishes the cases. */
+        wolfBoot_printf("p%d: cannot mount (%d)\r\n", s->part, ret);
+        return -1;
+    }
+    if (s->vol.type == FS_TYPE_RAW) {
+        if (file != NULL) {
+            wolfBoot_printf("p%d: no filesystem, reading raw\r\n", s->part);
+        }
+    }
+    else if (file == NULL) {
+        /* Falling back to a raw read here would parse the filesystem's own
+         * boot sector as an image header. Say why instead. */
+        wolfBoot_printf("p%d: %s filesystem but no boot file set\r\n",
+            s->part, fs_type_name(&s->vol));
+        return -1;
+    }
+    ret = fs_open(&s->vol, &s->f, file, max_size);
+    if (ret != WOLFBOOT_FS_OK) {
+        wolfBoot_printf("p%d: cannot open %s (%d)\r\n", s->part,
+            (file != NULL) ? file : "image", ret);
+        return -1;
+    }
+    if (s->vol.type != FS_TYPE_RAW) {
+        wolfBoot_printf("p%d: %s, %s\r\n", s->part, fs_type_name(&s->vol),
+            file);
+    }
+#else
+    (void)label;
+    (void)file;
+    (void)max_size;
+#endif
+
+    s->ready = 1;
+    return 0;
+}
+
+/**
  * @brief function for starting the boot process.
  *
  * This function starts the boot process by attempting to read and load
@@ -290,6 +459,8 @@ void RAMFUNCTION wolfBoot_start(void)
     struct stage2_parameter *stage2_params;
 #endif
     struct wolfBoot_image os_image;
+    struct boot_slot *slot;
+    uint64_t slot_max;
     uint32_t pA_ver = 0U, pB_ver = 0U;
     uint32_t pA_ver_u = 0U, pB_ver_u = 0U;
     uint32_t cur_part = 0;
@@ -355,9 +526,47 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_panic();
     }
 
+#ifdef WOLFBOOT_FSP
+    stage2_params = stage2_get_parameters();
+#endif
+
+#if !defined(WOLFBOOT_NO_LOAD_ADDRESS) && defined(WOLFBOOT_LOAD_ADDRESS)
+    load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
+#else
+    /* load the image just after wolfboot, 16 bytes aligned */
+    load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
+#endif
+
+    wolfBoot_printf("Load address 0x%x\r\n", load_address);
+
+    /* Upper bound on anything the media may claim about the image size.
+     * The payload is copied into the load region before its signature is
+     * checked, so this has to come from the build rather than the media.
+     * The header sits ahead of the payload in the same file, hence the
+     * IMAGE_HEADER_SIZE. */
+#if defined(WOLFBOOT_FSP)
+    /* Fail closed on an inverted tolum: the subtraction would otherwise wrap
+     * to a near-2^64 bound, which is the opposite of a cap. */
+    if ((uintptr_t)(stage2_params->tolum) > (uintptr_t)load_address) {
+        slot_max = (uint64_t)(uintptr_t)(stage2_params->tolum) -
+                   (uint64_t)(uintptr_t)load_address;
+    }
+    else {
+        slot_max = 0;
+    }
+#else
+    slot_max = (uint64_t)WOLFBOOT_RAMBOOT_MAX_SIZE +
+               (uint64_t)IMAGE_HEADER_SIZE;
+#endif
+
+    (void)slot_prepare(&boot_slots[0], BOOT_PART_A, BOOT_LABEL_A,
+        BOOT_FILE_A, slot_max);
+    (void)slot_prepare(&boot_slots[1], BOOT_PART_B, BOOT_LABEL_B,
+        BOOT_FILE_B, slot_max);
+
     wolfBoot_printf("Checking primary OS image in %d,%d...\r\n", BOOT_DISK,
-            BOOT_PART_A);
-    if (disk_part_read(BOOT_DISK, BOOT_PART_A, 0, IMAGE_HEADER_SIZE, p_hdr)
+            boot_slots[0].part);
+    if (slot_read(&boot_slots[0], 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
         if (decrypt_header(p_hdr, dec_hdr) == 0) {
@@ -371,8 +580,8 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 
     wolfBoot_printf("Checking secondary OS image in %d,%d...\r\n", BOOT_DISK,
-            BOOT_PART_B);
-    if (disk_part_read(BOOT_DISK, BOOT_PART_B, 0, IMAGE_HEADER_SIZE, p_hdr)
+            boot_slots[1].part);
+    if (slot_read(&boot_slots[1], 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
         if (decrypt_header(p_hdr, dec_hdr) == 0) {
@@ -391,7 +600,7 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_crypto_clear();
 #endif
         wolfBoot_printf("No valid OS image found in either partition %d or %d\r\n",
-            BOOT_PART_A, BOOT_PART_B);
+            boot_slots[0].part, boot_slots[1].part);
         wolfBoot_panic();
     }
 
@@ -407,24 +616,10 @@ void RAMFUNCTION wolfBoot_start(void)
     /* Choose partition with higher version */
     selected = (pB_ver_u > pA_ver_u) ? 1 : 0;
 
-#ifdef WOLFBOOT_FSP
-    stage2_params = stage2_get_parameters();
-#endif
-
-#if !defined(WOLFBOOT_NO_LOAD_ADDRESS) && defined(WOLFBOOT_LOAD_ADDRESS)
-    load_address = (uint32_t*)WOLFBOOT_LOAD_ADDRESS;
-#else
-    /* load the image just after wolfboot, 16 bytes aligned */
-    load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
-#endif
-
-    wolfBoot_printf("Load address 0x%x\r\n", load_address);
     do {
         failures++;
-        if (selected)
-            cur_part = BOOT_PART_B;
-        else
-            cur_part = BOOT_PART_A;
+        slot = &boot_slots[selected];
+        cur_part = (uint32_t)slot->part;
 #ifndef ALLOW_DOWNGRADE
         {
             uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
@@ -445,7 +640,7 @@ void RAMFUNCTION wolfBoot_start(void)
         wolfBoot_printf("Attempting boot from %s\r\n", part_name);
 
         /* Fetch header only */
-        if (disk_part_read(BOOT_DISK, cur_part, 0, IMAGE_HEADER_SIZE, p_hdr)
+        if (slot_read(slot, 0, IMAGE_HEADER_SIZE, p_hdr)
             != IMAGE_HEADER_SIZE) {
             wolfBoot_printf("Error reading image header from disk: p%d\r\n",
                     cur_part);
@@ -477,6 +672,19 @@ void RAMFUNCTION wolfBoot_start(void)
          * load region before any integrity or signature check runs. Mirrors
          * the cap update_ram.c applies to RAMBOOT loads; on FSP the tolum
          * check below applies in addition (whichever is tighter wins). */
+#ifdef WOLFBOOT_DISK_FS
+        /* A file too short to hold what its header declares is a truncated
+         * image. Failing the slot here reports the real reason, instead of
+         * the short read further down that looks like an I/O error. */
+        if ((slot->vol.type != FS_TYPE_RAW) &&
+                (((uint64_t)os_image.fw_size + (uint64_t)IMAGE_HEADER_SIZE) >
+                    fs_size(&slot->f))) {
+            wolfBoot_printf("Image larger than file for %s\r\n", part_name);
+            selected ^= 1;
+            continue;
+        }
+#endif
+
 #ifdef WOLFBOOT_RAMBOOT_MAX_SIZE
         if (os_image.fw_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
             wolfBoot_printf("Image size %u exceeds max RAM load size\r\n",
@@ -508,8 +716,7 @@ void RAMFUNCTION wolfBoot_start(void)
             uint32_t chunk = os_image.fw_size - load_off;
             if (chunk > DISK_BLOCK_SIZE)
                 chunk = DISK_BLOCK_SIZE;
-            ret = disk_part_read(BOOT_DISK, cur_part,
-                IMAGE_HEADER_SIZE + load_off, chunk,
+            ret = slot_read(slot, IMAGE_HEADER_SIZE + load_off, chunk,
                 ((uint8_t *)load_address) + load_off);
             if (ret <= 0)
                 break;

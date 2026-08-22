@@ -350,6 +350,69 @@ ChaCha20 symmetric key to access the content of the updates.
 For more details about this optional feature, please refer to the [Encrypted external partitions](encrypted_partitions.md) manual page.
 
 
+### Disk boot from a read-only filesystem (FAT32 / ext4)
+
+Targets that boot from a disk (`DISK_SDCARD=1`, `DISK_EMMC=1`, or an x86 FSP/AHCI target) use `src/update_disk.c`, which by default reads the signed image from **raw offset 0 of a partition**: the image has to be written there with `dd`, and the partition cannot hold anything else.
+
+Setting `DISK_FS` adds an optional read-only filesystem layer. Each boot slot's partition is probed for a supported filesystem and, if one is found, the signed image is read from the file named by `BOOT_FILE_A` / `BOOT_FILE_B` instead. A partition holding no supported filesystem is read raw exactly as before, so an existing configuration that does not set `DISK_FS` is unaffected.
+
+```
+DISK_FS=both
+CFLAGS_EXTRA+=-DBOOT_FILE_A='"/boot/fitImage_A.itb"'
+CFLAGS_EXTRA+=-DBOOT_FILE_B='"/boot/fitImage_B.itb"'
+```
+
+| Option | Meaning |
+| --- | --- |
+| `DISK_FS` | `fat32`, `ext4` or `both`. Unset (the default) leaves raw partition access unchanged. |
+| `BOOT_FILE_A` / `BOOT_FILE_B` | Absolute path of the signed image within each slot's filesystem. Required once a slot's partition holds a filesystem. |
+| `BOOT_LABEL_A` / `BOOT_LABEL_B` | Select the partition by name instead of by `BOOT_PART_A` / `BOOT_PART_B` index. The GPT partition label is matched first, then the filesystem volume label. |
+| `WOLFBOOT_FS_CACHE_SIZE` | Filesystem metadata cache, in bytes. A multiple of 512; 512 is the minimum and the default. Raising it reduces metadata reads on a heavily fragmented file. |
+| `DEBUG_FS` | Verbose filesystem tracing on the boot console. |
+
+The file is an ordinary wolfBoot-signed image: the header sits at offset 0 of the file and the payload follows it, exactly as it would at the start of a raw partition. Nothing about signing or the A/B version selection changes.
+
+#### What is supported
+
+| | Supported | Refused |
+| --- | --- | --- |
+| FAT | FAT32, including VFAT long filenames | FAT12, FAT16 |
+| ext | ext4 with extent-mapped files; `64bit`, `metadata_csum`, `flex_bg` and every `ro_compat` feature | ext2 / ext3 indirect block maps, `inline_data`, `encrypt`, `casefold`, `META_BG`, `MMP`, a dirty (unreplayed) journal, volumes over 16 TiB |
+| Both | 512-byte logical sectors; sparse files (a hole reads as zeros, which is the file's true content) | 4Kn media, symbolic links, uninitialized extents |
+
+A volume created by a plain `mkfs.vfat -F 32` or `mkfs.ext4` is readable as-is.
+
+#### Byte order
+
+Every on-disk field is little-endian, in the MBR and GPT partition tables as well as in the FAT32 and ext4 structures. All of them are read byte-wise rather than by casting a sector to a packed struct, so the whole disk path works on big-endian and little-endian targets alike. `tools/fs-test` runs the same parsers as big-endian PowerPC, both under `qemu-user` in CI and natively on an NXP QorIQ T1040 RDB.
+
+Anything in the refused column produces a clear error and fails that boot slot. It never silently falls back to reading the partition raw, because doing so would parse the filesystem's own boot sector as an image header.
+
+#### Security notes
+
+Everything this layer parses is attacker-controlled and is read **before** the image signature is verified, so the parsers are written to fail closed:
+
+- The file size reported by the filesystem is bounded against `WOLFBOOT_RAMBOOT_MAX_SIZE` before it can drive any read into the load region, exactly as the raw path bounds the header's `fw_size`.
+- Volume geometry is validated at mount, so every later cluster or block to byte conversion is bounded by the partition.
+- A file's FAT cluster chain and its ext4 extent map are both walked once at open, so a cycle, a truncated chain, an out-of-range block or a hole is a clean error before any payload is loaded.
+- Directory scans, path depth and path length are all bounded by the `WOLFBOOT_FS_MAX_*` knobs in `include/disk_fs.h`.
+- ext4 `INCOMPAT` features are checked against a whitelist, so a feature added after this code was written is refused rather than ignored.
+
+#### Performance
+
+Contiguous clusters and extents are coalesced into a single media read, so an unfragmented file loads with the same number of disk transfers as a raw partition would. A badly fragmented file degrades into many small reads, which is slow on the SD targets that clock the controller conservatively -- copy the boot image onto a freshly formatted partition, and use `DEBUG_FS` to see the run count if a load is slower than expected.
+
+#### Example
+
+```sh
+# One ext4 partition per slot, populated with an ordinary cp.
+mkfs.ext4 -L boot_a /dev/sdX2
+mount /dev/sdX2 /mnt
+mkdir -p /mnt/boot
+cp fitImage_v1_signed.itb /mnt/boot/fitImage_A.itb
+umount /mnt
+```
+
 ### Executing flash access code from RAM
 
 On some platform, flash access code requires to be executed from RAM, to avoid conflict e.g. when writing

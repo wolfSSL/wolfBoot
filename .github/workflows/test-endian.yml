@@ -1,0 +1,55 @@
+name: Big-endian disk/filesystem test
+
+# Everything on a disk is little-endian: the MBR table, the GPT header and
+# entries, and every FAT32 and ext4 field. wolfBoot reads all of it byte-wise
+# so the stack is endian-neutral, but nothing in a little-endian CI run proves
+# that. This job builds the real parsers as big-endian PowerPC and reads real
+# mkfs-created volumes under qemu-user, which catches any future change that
+# reintroduces a native multi-byte read of on-disk data.
+
+on:
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  bigendian_fs_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: install req
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --no-install-recommends -y -q \
+            -o Acquire::Retries=3 \
+            gcc-powerpc-linux-gnu libc6-dev-powerpc-cross qemu-user-static \
+            dosfstools mtools e2fsprogs
+
+      # Fixture generation takes minutes, so prove the cross toolchain works
+      # first. A missing libc6-dev-powerpc-cross shows up here in seconds,
+      # clearly labelled, instead of as failing filesystem cases later.
+      - name: verify big-endian toolchain
+        run: |
+          printf 'int main(void){return 0;}' > /tmp/be_probe.c
+          powerpc-linux-gnu-gcc -static -o /tmp/be_probe /tmp/be_probe.c
+          file /tmp/be_probe | grep -q 'MSB' \
+            || { echo "cross-compiler did not produce a big-endian binary"; exit 1; }
+          qemu-ppc-static /tmp/be_probe \
+            || { echo "qemu-ppc-static cannot run a big-endian binary"; exit 1; }
+          echo "big-endian toolchain OK"
+
+      - name: generate filesystem fixtures
+        run: |
+          cd tools/fs-test
+          QUICK=1 ./mkfixtures.sh
+
+      - name: little-endian and big-endian read-back
+        run: |
+          cd tools/fs-test
+          make
+          ./runtests.sh

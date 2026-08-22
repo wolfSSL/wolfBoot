@@ -53,3 +53,27 @@ jobs:
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh
+
+  # Same target, but wolfBoot reads its image from a file on a read-only
+  # filesystem instead of from raw offset 0 of a partition. The job above
+  # is left untouched, so it stays the regression check for the raw path.
+  fsp_qemu_fs_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: install req
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 uuid-dev dosfstools mtools e2fsprogs
+      - name: setup git
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+      - name: run test
+        run: |
+          ./tools/scripts/x86_fsp/qemu/test_qemu.sh -f
