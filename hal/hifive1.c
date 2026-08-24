@@ -492,7 +492,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     page = address >> 8;
 
     while (j < (uint32_t)len) {
-        if ((off > 0) || (len < FLASH_PAGE_SIZE)) {
+        uint32_t remaining = (uint32_t)len - j;
+
+        if ((off > 0) || (remaining < FLASH_PAGE_SIZE)) {
             uint8_t *orig = (uint8_t *)(FLASH_BASE + (page << 8));
             int rel_len;
             rel_len = FLASH_PAGE_SIZE - off;
@@ -500,8 +502,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 fespi_hwmode();
                 swmode = 0;
             }
-            if (rel_len > len)
-                rel_len = len;
+            if (rel_len > (int)remaining)
+                rel_len = (int)remaining;
             for (i = 0; i < off; i++)
                 data_copy[i] = orig[i];
             for (i = off; i < off + rel_len; i++)

@@ -115,6 +115,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
+TESTS+=unit-hifive1-flash-write
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -1047,6 +1048,16 @@ p1021_erase_fn_extract.h: ../../hal/nxp_p1021.c
 unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 	p1021_erase_fn_extract.h
 	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
+
+# unit-hifive1-flash-write runs the real hal_flash_write() from
+# hal/hifive1.c against a mock fespi model (F-11035: the final partial
+# page of a multi-page write took the full-page branch, over-reading
+# the input and over-programming flash).
+hifive1_flash_write_extract.h: ../../hal/hifive1.c
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< > $@
+
+unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
+	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
 # verification (F-11024: the wolfHSM verify path in src/image.c passed
