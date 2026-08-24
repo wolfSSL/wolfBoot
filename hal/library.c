@@ -165,7 +165,9 @@ int wolfBoot_start(void)
                         (int)os_image.signature_ok);
     }
 
-    return 0;
+    /* The error paths reach this point with ret < 0; propagate it so a
+     * rejected image does not look like a successful boot to the caller. */
+    return ret;
 }
 
 
