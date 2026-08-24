@@ -63,11 +63,15 @@ static uint32_t mod(uint32_t dividend, uint32_t divisor)
 }
 
 /* Emulated NAND primitives: a full page read from column 0, like the
- * hardware path; every block is good. */
+ * hardware path. Blocks marked in emu_bad[] report a bad-block marker,
+ * so the read has to relocate past them. */
+static int emu_bad[EMU_BLOCKS];
+
 static int nand_check_bad_block(uint32_t block)
 {
-    (void)block;
-    return 0;
+    if (block >= EMU_BLOCKS)
+        return 0; /* off the end of the emulated device: treat as good */
+    return emu_bad[block] ? -1 : 0;
 }
 
 static int nand_read_page(uint32_t block, uint32_t page, uint8_t *data)
@@ -84,7 +88,7 @@ static int nand_read_page(uint32_t block, uint32_t page, uint8_t *data)
 
 /* Read buffer plus an adjacent canary region: a multi-page read ending
  * mid-page used to write a full page past the requested length. */
-#define SCRATCH_LEN (EMU_PAGE_SIZE * 4)
+#define SCRATCH_LEN (EMU_BLOCK_SIZE * 4)
 static uint8_t scratch[SCRATCH_LEN + 64];
 #define CANARY (scratch + SCRATCH_LEN)
 #define CANARY_LEN 64
@@ -103,6 +107,8 @@ static void setup(void)
     nand_flash.pages_per_block = EMU_PAGES_PER_BLK;
     nand_flash.pages_per_device = EMU_BLOCKS * EMU_PAGES_PER_BLK;
     nand_flash.total_size    = EMU_TOTAL;
+
+    memset(emu_bad, 0, sizeof(emu_bad));
 }
 
 static void teardown(void)
@@ -117,10 +123,51 @@ static void fill_expected(uint8_t *dst, uint32_t address, uint32_t len)
         dst[i] = emu_nand[address + i];
 }
 
+/* Expected bytes when bad blocks are present: start at the block the
+ * address divides into, then walk forward page by page, skipping every
+ * bad block encountered. The skip is cumulative - once a block has been
+ * stepped over, the whole remainder of the read is shifted with it. */
+static void fill_expected_skip(uint8_t *dst, uint32_t address, uint32_t len)
+{
+    uint32_t block = address / EMU_BLOCK_SIZE;
+    uint32_t page_in_block = (address / EMU_PAGE_SIZE) % EMU_PAGES_PER_BLK;
+    uint32_t in_page = address % EMU_PAGE_SIZE;
+    uint32_t remaining = len;
+    int check_block = 1;
+
+    while (remaining > 0) {
+        uint32_t chunk = EMU_PAGE_SIZE - in_page;
+        uint32_t row;
+
+        if (check_block) {
+            while (nand_check_bad_block(block) < 0)
+                block++;
+            check_block = 0;
+        }
+        if (chunk > remaining)
+            chunk = remaining;
+
+        row = block * EMU_PAGES_PER_BLK + page_in_block;
+        memcpy(dst, emu_nand + row * EMU_PAGE_SIZE + in_page, chunk);
+
+        dst += chunk;
+        remaining -= chunk;
+        in_page += chunk;
+        if (in_page == EMU_PAGE_SIZE) {
+            in_page = 0;
+            if (++page_in_block == EMU_PAGES_PER_BLK) {
+                page_in_block = 0;
+                block++;
+                check_block = 1;
+            }
+        }
+    }
+}
+
 /* Run one read and compare against the emulated device byte for byte. */
 static void read_case(uint32_t address, int len)
 {
-    uint8_t expected[SCRATCH_LEN];
+    static uint8_t expected[SCRATCH_LEN];
     int i;
     int ret;
 
@@ -134,6 +181,25 @@ static void read_case(uint32_t address, int len)
         ck_assert_mem_eq(scratch, expected, (size_t)len);
 
     /* The canary must be untouched: nothing may be written past len. */
+    for (i = 0; i < CANARY_LEN; i++)
+        ck_assert_uint_eq(CANARY[i], 0xEE);
+}
+
+/* Same, but against the bad-block relocation model. */
+static void read_case_skip(uint32_t address, int len)
+{
+    static uint8_t expected[SCRATCH_LEN];
+    int i;
+    int ret;
+
+    ck_assert_int_lt(len, SCRATCH_LEN);
+    memset(scratch, 0xEE, sizeof(scratch));
+    fill_expected_skip(expected, address, (uint32_t)len);
+
+    ret = ext_flash_read(address, scratch, len);
+    ck_assert_int_eq(ret, len);
+    ck_assert_mem_eq(scratch, expected, (size_t)len);
+
     for (i = 0; i < CANARY_LEN; i++)
         ck_assert_uint_eq(CANARY[i], 0xEE);
 }
@@ -211,6 +277,45 @@ START_TEST(test_read_cross_block)
 }
 END_TEST
 
+START_TEST(test_read_bad_block_skip_is_cumulative)
+{
+    /* Block 1 is bad: logical block 1 must come from physical block 2,
+     * and - the part that regressed - so must every block after it in
+     * the same read. Recomputing the physical block from the current
+     * address on each page aliases logical block 2 back onto physical
+     * block 2, which is logical block 1's data. */
+    emu_bad[1] = 1;
+
+    read_case_skip(0, EMU_BLOCK_SIZE);                 /* before the skip */
+    read_case_skip(0, 2 * EMU_BLOCK_SIZE);             /* across the skip */
+    read_case_skip(0, 3 * EMU_BLOCK_SIZE);             /* two blocks past it */
+    read_case_skip(EMU_BLOCK_SIZE - 0x40, 0x80);       /* straddling it */
+}
+END_TEST
+
+START_TEST(test_read_bad_block_consecutive)
+{
+    /* Two bad blocks in a row shift the remainder by two, not by one. */
+    emu_bad[1] = 1;
+    emu_bad[2] = 1;
+
+    read_case_skip(0, 3 * EMU_BLOCK_SIZE);
+    read_case_skip(EMU_PAGE_SIZE, 2 * EMU_BLOCK_SIZE);
+}
+END_TEST
+
+START_TEST(test_read_bad_block_partial_pages)
+{
+    /* The column offset and the sub-page tail still have to be right on
+     * the far side of a relocation. */
+    emu_bad[1] = 1;
+
+    read_case_skip(EMU_BLOCK_SIZE + 0x123, 64);
+    read_case_skip(EMU_BLOCK_SIZE - 1, 3);
+    read_case_skip(0x40, EMU_BLOCK_SIZE + 0x905);
+}
+END_TEST
+
 Suite *sama5d3_ext_read_suite(void)
 {
     Suite *s = suite_create("sama5d3-ext-read");
@@ -225,6 +330,9 @@ Suite *sama5d3_ext_read_suite(void)
     tcase_add_test(tc, test_read_page_boundaries);
     tcase_add_test(tc, test_read_multipage_partial_tail);
     tcase_add_test(tc, test_read_cross_block);
+    tcase_add_test(tc, test_read_bad_block_skip_is_cumulative);
+    tcase_add_test(tc, test_read_bad_block_consecutive);
+    tcase_add_test(tc, test_read_bad_block_partial_pages);
     suite_add_tcase(s, tc);
 
     return s;

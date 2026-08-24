@@ -601,9 +601,15 @@ static int nand_check_bad_block(uint32_t block)
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
-    uintptr_t addr = address;
     uint8_t *dst = data;
+    /* block/page_in_block are a running cursor, not a function of the
+     * current address: every bad block skipped shifts the rest of this
+     * read forward by one block, so the skip has to accumulate. */
+    uint32_t block = div_u(address, nand_flash.block_size);
+    uint32_t page_in_block = mod(div_u(address, nand_flash.page_size),
+                                 nand_flash.pages_per_block);
     uint32_t in_page = mod(address, nand_flash.page_size); /* The offset of the address within the page */
+    int check_block = 1;
     int remaining = len;
     int ret;
 
@@ -611,27 +617,23 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
         return 0;
 
     while (remaining > 0) {
-        uint32_t block;
-        uint32_t page;
-        uint32_t page_in_block;
         uint32_t chunk;
+
+        if (check_block) {
+            do {
+                ret = nand_check_bad_block(block);
+                if (ret < 0) {
+                    /* Block is bad, skip it */
+                    block++;
+                }
+            } while (ret < 0);
+            check_block = 0;
+        }
 
         /* Bytes available from the current address to the end of its page */
         chunk = nand_flash.page_size - in_page;
         if (chunk > (uint32_t)remaining)
             chunk = (uint32_t)remaining;
-
-        block = div_u(addr, nand_flash.block_size);
-        page = div_u(addr, nand_flash.page_size);
-        page_in_block = mod(page, nand_flash.pages_per_block);
-
-        do {
-            ret = nand_check_bad_block(block);
-            if (ret < 0) {
-                /* Block is bad, skip it */
-                block++;
-            }
-        } while (ret < 0);
 
         if ((in_page == 0) && (chunk == nand_flash.page_size)) {
             /* Full page at the page head: read straight into the caller's
@@ -648,8 +650,18 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
         dst += chunk;
         remaining -= (int)chunk;
-        addr += chunk;
-        in_page = mod(addr, nand_flash.page_size);
+        in_page += chunk;
+        if (in_page == nand_flash.page_size) {
+            /* Page consumed: advance, and re-check for a bad block only
+             * when the cursor rolls over into the next one. */
+            in_page = 0;
+            page_in_block++;
+            if (page_in_block == nand_flash.pages_per_block) {
+                page_in_block = 0;
+                block++;
+                check_block = 1;
+            }
+        }
     }
     return len;
 }
