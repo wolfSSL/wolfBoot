@@ -77,6 +77,8 @@ static void fespi_write_enable(void)    { }
 #define ERASED 0xEE
 #define DATA_B 0xA1
 #define CANARY 0x5A
+#define REQ_LEN 356
+#define CANARY_LEN 160
 
 static void model_reset(void)
 {
@@ -92,23 +94,24 @@ static void model_reset(void)
  * erased pattern, and nothing past the requested bytes may change. */
 START_TEST (test_final_partial_page_not_overread)
 {
-    uint8_t data[356];
-    uint8_t canary[160];
+    /* One contiguous buffer so the canary is guaranteed to sit right
+     * after the requested data: an out-of-range read lands on known
+     * bytes instead of unspecified stack layout. */
+    uint8_t buf[REQ_LEN + CANARY_LEN];
+    uint8_t *data = buf;
+    uint8_t *canary = buf + REQ_LEN;
     int i;
     int ret;
 
-    /* data is exactly the request length; a canary sits right after it
-     * so any out-of-range read is observable. */
-    for (i = 0; i < (int)sizeof(data); i++)
+    for (i = 0; i < REQ_LEN; i++)
         data[i] = DATA_B;
-    for (i = 0; i < (int)sizeof(canary); i++)
+    for (i = 0; i < CANARY_LEN; i++)
         canary[i] = CANARY;
-    (void)canary;
 
     /* Relative offsets are accepted as-is (address < FLASH_BASE), which
      * keeps the 32-bit address parameter away from 64-bit host pointers. */
     model_reset();
-    ret = hal_flash_write(0, data, sizeof(data));
+    ret = hal_flash_write(0, data, REQ_LEN);
     ck_assert_int_eq(ret, 0);
 
     /* Page 0: full page of data. */
@@ -120,6 +123,11 @@ START_TEST (test_final_partial_page_not_overread)
                      100);
     for (i = 100; i < FLASH_PAGE_SIZE; i++) {
         ck_assert_uint_eq(g_flash[FLASH_PAGE_SIZE + i], ERASED);
+    }
+
+    /* Nothing past the request was written in the buffer. */
+    for (i = 0; i < CANARY_LEN; i++) {
+        ck_assert_uint_eq(canary[i], CANARY);
     }
 }
 END_TEST

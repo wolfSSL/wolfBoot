@@ -159,6 +159,7 @@ START_TEST(rsp_fitting_capacity_gets_response)
 {
     uint8_t *rsp = g_mem + RSP_OFF;
     uint32_t rspSz = 16;
+    uint32_t cap;
     uint8_t cmd[4] = { 0x80, 0x01, 0x00, 0x04 };
     int i;
     int rc;
@@ -166,14 +167,18 @@ START_TEST(rsp_fitting_capacity_gets_response)
     mem_reset();
     wcs_fwtpm_init();
 
+    /* The call overwrites rspSz with the produced size; keep the
+     * offered capacity for the guard check below. */
+    cap = rspSz;
+
     rc = wcs_fwtpm_transmit(cmd, sizeof(cmd), rsp, &rspSz);
     ck_assert_int_eq(rc, TPM_RC_SUCCESS);
     ck_assert_uint_eq(rspSz, TPM2_HEADER_SIZE);
     for (i = 0; i < TPM2_HEADER_SIZE; i++)
         ck_assert_uint_eq(rsp[i], g_err_rsp[i]);
 
-    /* Nothing past the produced response. */
-    for (i = TPM2_HEADER_SIZE; i < (int)rspSz; i++)
+    /* Nothing past the produced response, up to the offered capacity. */
+    for (i = TPM2_HEADER_SIZE; i < (int)cap; i++)
         ck_assert_uint_eq(g_mem[RSP_OFF + i], GUARD_B);
 }
 END_TEST

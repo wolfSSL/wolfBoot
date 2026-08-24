@@ -52,12 +52,6 @@
 #define BUF_SZ 96
 static uint8_t g_buf[BUF_SZ];
 
-/* Store a 32-bit field in FDT (big-endian) byte order. */
-static uint32_t put32(uint32_t v)
-{
-    return fdt32_to_cpu(v);
-}
-
 /* Craft a header with the given layout fields. The blocks are laid
  * out as: 40-byte header, reserve map (16-byte terminator), a 4-byte
  * structure block, a 4-byte string block, trailing slack. */
@@ -68,16 +62,16 @@ static void make_fdt(uint32_t total, uint32_t off_rsv, uint32_t off_dt,
 
     memset(g_buf, 0x77, sizeof(g_buf));
 
-    h->magic           = put32(FDT_MAGIC_V);
-    h->totalsize       = put32(total);
-    h->off_dt_struct   = put32(off_dt);
-    h->off_dt_strings  = put32(off_str);
-    h->off_mem_rsvmap  = put32(off_rsv);
-    h->version         = put32(17);
-    h->last_comp_version = put32(16);
-    h->boot_cpuid_phys = put32(0);
-    h->size_dt_strings = put32(size_str);
-    h->size_dt_struct  = put32(0);
+    h->magic           = cpu_to_fdt32(FDT_MAGIC_V);
+    h->totalsize       = cpu_to_fdt32(total);
+    h->off_dt_struct   = cpu_to_fdt32(off_dt);
+    h->off_dt_strings  = cpu_to_fdt32(off_str);
+    h->off_mem_rsvmap  = cpu_to_fdt32(off_rsv);
+    h->version         = cpu_to_fdt32(17);
+    h->last_comp_version = cpu_to_fdt32(16);
+    h->boot_cpuid_phys = cpu_to_fdt32(0);
+    h->size_dt_strings = cpu_to_fdt32(size_str);
+    h->size_dt_struct  = cpu_to_fdt32(0);
 
     /* Block contents only where they fit: the malformed-layout tests
      * carry out-of-buffer offsets, and the code under test must reject

@@ -1296,11 +1296,14 @@ covclean:
 
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
-GENERATED_SRC:=aurix_erased_extract.h nvm_cache_scrub_extract.h \
+GENERATED_SRC:=aurix_erased_extract.h fdt_memrsv_extract.h \
+	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	sdhci_host.c stm32g4_write_extract.h stm32l5_write_extract.h \
+	p1021_erase_extract.h p1021_erase_fn_extract.h sdhci_host.c \
+	stm32g4_write_extract.h stm32l5_write_extract.h \
 	stm32u5_write_extract.h \
-	t10xx_qe_firmware_extract.h t2080_fman_extract.h \
+	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
+	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
 	zynq_write_extract.h
