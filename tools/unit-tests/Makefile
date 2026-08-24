@@ -118,6 +118,7 @@ TESTS+=unit-p1021-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
+TESTS+=unit-fdt-memrsv-wrap
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -392,6 +393,18 @@ unit-fwtpm-rsp-overrun: ../../include/target.h unit-fwtpm-rsp-overrun.c
 unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fdt-memrsv-wrap: a wrapped string-block end in fdt_add_mem_rsv()
+# must be rejected, not turned into a huge memmove (F-11045).
+fdt_memrsv_extract.h: ../../src/fdt.c
+	sed -n '/^uint32_t cpu_to_fdt32/,/^}/p' $< > $@
+	sed -n '/^uint64_t cpu_to_fdt64/,/^}/p' $< >> $@
+	sed -n '/^uint32_t fdt32_to_cpu/,/^}/p' $< >> $@
+	sed -n '/^uint64_t fdt64_to_cpu/,/^}/p' $< >> $@
+	sed -n '/^int fdt_add_mem_rsv/,/^}/p' $< >> $@
+
+unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c fdt_memrsv_extract.h
+	gcc -o $@ unit-fdt-memrsv-wrap.c -I../../include $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
