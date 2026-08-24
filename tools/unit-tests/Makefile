@@ -113,6 +113,7 @@ TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
+TESTS+=unit-t10xx-flash-status
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -1004,6 +1005,19 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
+# and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
+# status model (F-11033: a timed-out program/erase used to report
+# success because the wait result was discarded).
+t10xx_flash_status_extract.h: ../../hal/nxp_t10xx.c
+	sed -n '/^static void hal_flash_unlock_sector/,/^}/p' $< > $@
+	sed -n '/^static int hal_flash_status_wait/,/^}/p' $< >> $@
+	sed -n '/^int hal_flash_write/,/^}/p' $< >> $@
+	sed -n '/^int hal_flash_erase/,/^}/p' $< >> $@
+
+unit-t10xx-flash-status: unit-t10xx-flash-status.c t10xx_flash_status_extract.h
+	gcc -o $@ unit-t10xx-flash-status.c $(CFLAGS) $(LDFLAGS)
 
 # unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
 # verification (F-11024: the wolfHSM verify path in src/image.c passed
