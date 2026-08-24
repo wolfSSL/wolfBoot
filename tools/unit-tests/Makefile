@@ -117,6 +117,7 @@ TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
+TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -382,6 +383,13 @@ unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
 # response must not be overrun by the fwTPM processor (F-11043); the
 # veneer processes into a staging buffer and copies only what fits.
 unit-fwtpm-rsp-overrun: ../../include/target.h unit-fwtpm-rsp-overrun.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fwtpm-cmd-toctou: a midflight NS rewrite of the command buffer
+# must not change what the processor executes (F-11044); the veneer
+# stages the command in secure memory before processing.
+unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
 

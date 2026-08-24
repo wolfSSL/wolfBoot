@@ -49,6 +49,12 @@ static int fwtpm_ready;
  * checked against the snapshotted capacity. */
 static uint8_t g_fwtpm_rsp_stage[WCS_FWTPM_MAX_COMMAND_SIZE];
 
+/* Command staging: the processor parses the packet more than once
+ * (authentication, then execution), and a DMA-capable non-secure
+ * attacker cannot rewrite secure memory, so both parses see the same
+ * bytes even if the NS command buffer changes in between. */
+static uint8_t g_fwtpm_cmd_stage[WCS_FWTPM_MAX_COMMAND_SIZE];
+
 extern unsigned int _start_heap;
 extern unsigned int _heap_size;
 
@@ -171,8 +177,12 @@ int CSME_NSE_API wcs_fwtpm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         return BAD_FUNC_ARG;
     }
 
+    /* Stage the command before invoking the processor (see the staging
+     * buffer comment above). */
+    memcpy(g_fwtpm_cmd_stage, cmd, cmdSz);
+
     rspLen = (int)WCS_FWTPM_MAX_COMMAND_SIZE;
-    rc = FWTPM_ProcessCommand(&fwtpm_ctx, cmd, (int)cmdSz,
+    rc = FWTPM_ProcessCommand(&fwtpm_ctx, g_fwtpm_cmd_stage, (int)cmdSz,
                               g_fwtpm_rsp_stage, &rspLen, 0);
     if (rc == TPM_RC_SUCCESS) {
         wireSz = fwtpm_rsp_size(g_fwtpm_rsp_stage, rspLen);
@@ -188,6 +198,10 @@ int CSME_NSE_API wcs_fwtpm_transmit(const uint8_t *cmd, uint32_t cmdSz,
             rc = TPM_RC_FAILURE;
         }
     }
+    /* Zero the staging before returning: the response may carry
+     * sensitive material (auth tags, unsealed data). */
+    memset(g_fwtpm_cmd_stage, 0, sizeof(g_fwtpm_cmd_stage));
+    memset(g_fwtpm_rsp_stage, 0, sizeof(g_fwtpm_rsp_stage));
     return rc;
 }
 
