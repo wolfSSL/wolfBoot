@@ -2324,6 +2324,7 @@ exit:
 void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
+    uint32_t carry, old, prev;
     int i;
     XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
@@ -2334,16 +2335,13 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
     /* Add the block counter with an unconditional, branch-free carry:
      * a conditional carry loop's trip count would depend on the nonce
      * content and leak it through timing. */
-    {
-        uint32_t carry;
-        uint32_t old = iv_buf[3];
-        iv_buf[3] = old + iv_ctr;
-        carry = (uint32_t)(iv_buf[3] < old);
-        for (i = 2; i >= 0; i--) {
-            uint32_t prev = iv_buf[i];
-            iv_buf[i] = prev + carry;
-            carry = (uint32_t)(iv_buf[i] < prev);
-        }
+    old = iv_buf[3];
+    iv_buf[3] = old + iv_ctr;
+    carry = (uint32_t)(iv_buf[3] < old);
+    for (i = 2; i >= 0; i--) {
+        prev = iv_buf[i];
+        iv_buf[i] = prev + carry;
+        carry = (uint32_t)(iv_buf[i] < prev);
     }
 #ifndef BIG_ENDIAN_ORDER
     for (i = 0; i < 4; i++) {
@@ -2490,6 +2488,7 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #if ENCRYPT_PKCS11_MECHANISM == CKM_AES_CTR
     {
         uint32_t *cb_words = (uint32_t *)pkcs11_params.cb;
+        uint32_t carry, old, prev;
         int i;
         XMEMCPY(cb_words, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
@@ -2498,16 +2497,13 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
         }
 #endif
         /* Unconditional, branch-free carry (see aes_set_iv) */
-        {
-            uint32_t carry;
-            uint32_t old = cb_words[3];
-            cb_words[3] = old + iv_ctr;
-            carry = (uint32_t)(cb_words[3] < old);
-            for (i = 2; i >= 0; i--) {
-                uint32_t prev = cb_words[i];
-                cb_words[i] = prev + carry;
-                carry = (uint32_t)(cb_words[i] < prev);
-            }
+        old = cb_words[3];
+        cb_words[3] = old + iv_ctr;
+        carry = (uint32_t)(cb_words[3] < old);
+        for (i = 2; i >= 0; i--) {
+            prev = cb_words[i];
+            cb_words[i] = prev + carry;
+            carry = (uint32_t)(cb_words[i] < prev);
         }
 #ifndef BIG_ENDIAN_ORDER
         for (i = 0; i < 4; i++) {
