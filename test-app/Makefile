@@ -388,11 +388,21 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
     # wolfcrypt C sources expect these asm symbols; provide the objects here.
     ifeq ($(ARCH),RISCV64)
       CFLAGS+=-DWOLFSSL_RISCV_ASM
-      APP_OBJS+= \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+      # Same pre/post-move layout probe as arch.mk, which is included above and
+      # has already set RISCV_ASM_DIR.
+      ifneq ($(wildcard $(RISCV_ASM_DIR)/riscv-64-sha256-asm.S),)
+        APP_OBJS+= \
+              $(RISCV_ASM_DIR)/riscv-64-sha256-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-sha512-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-sha3-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-aes-asm.o
+      else
+        APP_OBJS+= \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+      endif
     endif
   endif
 
