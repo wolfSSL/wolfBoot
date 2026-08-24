@@ -114,6 +114,7 @@ TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
+TESTS+=unit-p1021-erase-advance
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -1018,6 +1019,34 @@ t10xx_flash_status_extract.h: ../../hal/nxp_t10xx.c
 
 unit-t10xx-flash-status: unit-t10xx-flash-status.c t10xx_flash_status_extract.h
 	gcc -o $@ unit-t10xx-flash-status.c $(CFLAGS) $(LDFLAGS)
+
+# unit-p1021-erase-advance runs the real ext_flash_erase() from
+# hal/nxp_p1021.c against mocked ELBC access (F-11034: the loop never
+# advanced the address, re-erasing the first block of the range).
+p1021_erase_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/#define ELBC_BASE /p' $< > $@
+	sed -n '/#define ELBC_MDR /p' $< >> $@
+	sed -n '/#define ELBC_FIR /p' $< >> $@
+	sed -n '/#define ELBC_FCR /p' $< >> $@
+	sed -n '/#define ELBC_FBCR /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP(/p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_PA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM2 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CW1 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_RS /p' $< >> $@
+	sed -n '/#define ELBC_FCR_CMD(/p' $< >> $@
+	sed -n '/#define NAND_CMD_STATUS /p' $< >> $@
+	sed -n '/#define NAND_CMD_BLOCK_ERASE1 /p' $< >> $@
+	sed -n '/#define NAND_CMD_BLOCK_ERASE2 /p' $< >> $@
+	sed -n '/#define FLASH_PAGE_SIZE /p' $< >> $@
+
+p1021_erase_fn_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/^int ext_flash_erase/,/^}/p' $< > $@
+
+unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
+	p1021_erase_fn_extract.h
+	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
 
 # unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
 # verification (F-11024: the wolfHSM verify path in src/image.c passed
