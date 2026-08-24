@@ -66,6 +66,7 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
     uint16_t entry_count, entry_size;
     uint8_t *entry_off;
     uint32_t ph_offset;
+    uintptr_t entry_point;
     int is_elf32, is_le, i;
     /* Cache for program headers: 
      * Allows safe in-place ELF loading (e.g. RAM boot) where segment 
@@ -106,6 +107,13 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
     wolfBoot_printf("Found valid elf%d (%s endian)\r\n",
         is_elf32 ? 32 : 64, is_le ? "little" : "big");
 #endif
+
+    /* Read the entry point before any segment is copied. On an in-place
+     * load the first PT_LOAD segment's destination is the image buffer
+     * itself, so the memmove below overwrites this header -- reading
+     * e_entry afterwards yields whatever segment data landed on it. The
+     * program headers are already cached for the same reason. */
+    entry_point = GET_H64(entry);
 
     /* programs */
     ph_offset = GET_H32(ph_offset);
@@ -222,7 +230,7 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
     /* Publish the entry point only once every check above has passed: callers
      * fall back to the raw binary on failure and must not be left with a
      * partially validated ELF's declared entry. */
-    *pentry = GET_H64(entry);
+    *pentry = entry_point;
 
 #ifdef DEBUG_ELF
     wolfBoot_printf("Entry point %p\r\n", (void*)*pentry);

@@ -98,6 +98,7 @@ TESTS+=unit-ahci-unlock-panic
 TESTS+=unit-ata-security-passphrase-zeroize
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
+TESTS+=unit-elf-entry-inplace
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-dice-token-size
@@ -1133,6 +1134,10 @@ unit-imx-rt-cache-align: unit-imx-rt-cache-align.c ../../hal/imx_rt.h
 	gcc -o $@ unit-imx-rt-cache-align.c $(CFLAGS) $(LDFLAGS)
 
 unit-elf-bss-guard: unit-elf-bss-guard.c
+	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
+		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
+unit-elf-entry-inplace: unit-elf-entry-inplace.c
 	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
 		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
