@@ -115,6 +115,7 @@ TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
+TESTS+=unit-stm32g4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
@@ -989,6 +990,19 @@ t2080_fman_extract.h: ../../hal/nxp_t2080.c
 unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32g4-write runs the real hal_flash_write() from hal/stm32g4.c
+# (F-11023: the double-word fast path was selected on "len - i > 3" but
+# consumed eight bytes, so an aligned 4-7 byte tail over-read the
+# caller's buffer and over-programmed flash). Same harness as the
+# STM32L5/STM32U5 twins; the g4 helpers are static and un-prefixed.
+stm32g4_write_extract.h: ../../hal/stm32g4.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
+	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
 # (an 8-byte program unit was read whole even when len left a
 # partial unit, over-reading the caller's buffer and writing the excess
@@ -1157,7 +1171,8 @@ covclean:
 # so "clean" removes them and so there is one place that names them.
 GENERATED_SRC:=aurix_erased_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	sdhci_host.c stm32l5_write_extract.h stm32u5_write_extract.h \
+	sdhci_host.c stm32g4_write_extract.h stm32l5_write_extract.h \
+	stm32u5_write_extract.h \
 	t10xx_qe_firmware_extract.h t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
