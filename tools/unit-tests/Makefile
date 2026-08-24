@@ -115,6 +115,7 @@ TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
+TESTS+=unit-ecc-raw-der
 TESTS+=unit-stm32g4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
@@ -1002,6 +1003,41 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
+# verification (F-11024: the wolfHSM verify path in src/image.c passed
+# minimal field sizes with field-start pointers to
+# wc_ecc_rs_raw_to_sig, corrupting signatures with leading zeros). It
+# links the same wolfSSL sources the sign tool uses.
+unit-ecc-raw-der: unit-ecc-raw-der.c
+	# WOLFSSL_NO_DER_TO_PEM: the test config's NO_CODING drops base64, which
+	# DER-to-PEM (pulled in by WOLFSSL_KEY_GEN) needs; the test uses no PEM.
+	gcc -o $@ unit-ecc-raw-der.c $(CFLAGS) -DWOLFCRYPT_TEST -DWOLFSSL_NO_DER_TO_PEM \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_operations.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_operations.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.c $(LDFLAGS)
 
 # unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
 # (an 8-byte program unit was read whole even when len left a

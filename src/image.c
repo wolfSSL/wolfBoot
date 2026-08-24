@@ -382,15 +382,12 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
     #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT || (SERVER && CERT_CHAIN) */
         /* wc_ecc_verify_hash_ex() doesn't trigger a crypto callback, so we need
            to use wc_ecc_verify_hash instead. Unfortunately, that requires
-           converting the signature to intermediate DER format first */
-        mp_init(&r);
-        mp_init(&s);
-        mp_read_unsigned_bin(&r, sig, point_sz);
-        mp_read_unsigned_bin(&s, sig + point_sz, point_sz);
-        uint32_t rSz = mp_unsigned_bin_size(&r);
-        uint32_t sSz = mp_unsigned_bin_size(&s);
-        ret          = wc_ecc_rs_raw_to_sig(sig, rSz, &sig[point_sz], sSz,
-                                            (byte*)&tmpSigBuf, (word32*)&tmpSigSz);
+           converting the signature to intermediate DER format first. Both
+           fields are passed at full width: the raw signature is fixed-width
+           and left-zero-padded, and the conversion strips the padding. */
+        ret = wc_ecc_rs_raw_to_sig(sig, (word32)point_sz, &sig[point_sz],
+                                   (word32)point_sz,
+                                   (byte*)&tmpSigBuf, (word32*)&tmpSigSz);
         /* Verify the (temporary) DER representation of the signature */
         if (ret == 0) {
             VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, tmpSigBuf, tmpSigSz,
