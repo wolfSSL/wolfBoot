@@ -67,12 +67,14 @@ void uart_write(const char *buf, uint32_t len)
         if (buf[i] == '\n') {
             while (((UART_REG(UART_LSR) & UART_LSR_THRE) == 0U) &&
                     (--timeout != 0U)) {}
-            UART_REG(UART_THR) = '\r';
+            if (timeout != 0U)
+                UART_REG(UART_THR) = '\r';
             timeout = UART_TIMEOUT;
         }
         while (((UART_REG(UART_LSR) & UART_LSR_THRE) == 0U) &&
                 (--timeout != 0U)) {}
-        UART_REG(UART_THR) = (uint32_t)(uint8_t)buf[i];
+        if (timeout != 0U)
+            UART_REG(UART_THR) = (uint32_t)(uint8_t)buf[i];
     }
 }
 #else

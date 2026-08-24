@@ -591,6 +591,9 @@ static uint32_t sdhci_get_response_type(uint8_t resp_type)
 
 #define DEVICE_BUSY 1
 
+/* Set only while sdhci_init() runs the card-identification sequence. */
+static int sdhci_in_init = 0;
+
 /* Register-read budget for the inhibit/reset waits below. Large, because it
  * bounds a wedged controller rather than a normal one; the loops that spend it
  * pet the watchdog, or on a platform whose watchdog cannot be disabled (the
@@ -704,8 +707,6 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         g_last_cmd_err = SDHCI_REG(SDHCI_SRS12) & SDHCI_SRS12_ERR_STAT;
         status = -1; /* error */
-        if (sdhci_reset_cmd_line() != 0)
-            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
     }
 
     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_CC); /* clear command complete */
@@ -732,8 +733,11 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
         }
     }
 
-#if SDHCI_WAIT_AFTER_CMD_US > 0U
-    udelay(SDHCI_WAIT_AFTER_CMD_US);
+#if defined(SDHCI_WAIT_AFTER_CMD_US) && ((SDHCI_WAIT_AFTER_CMD_US + 0) != 0)
+    /* Cadence controllers need a settle window after the card-init sequence;
+     * confine it to init so bulk data commands do not pay it per block. */
+    if (sdhci_in_init != 0)
+        udelay(SDHCI_WAIT_AFTER_CMD_US);
 #endif
 
     return status;
@@ -1896,6 +1900,19 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     return status;
 }
 
+static int sdhci_init_internal(void);
+
+int sdhci_init(void)
+{
+    int status;
+
+    sdhci_in_init = 1;
+    status = sdhci_init_internal();
+    sdhci_in_init = 0;
+
+    return status;
+}
+
 /* Public API: Read from MMC/SD card */
 int sdhci_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst, uint32_t sz)
 {
@@ -1912,7 +1929,7 @@ int sdhci_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src, ui
  * Controller Initialization
  * ============================================================================ */
 
-int sdhci_init(void)
+static int sdhci_init_internal(void)
 {
     int status = 0;
     uint32_t reg, cap;
@@ -1933,7 +1950,7 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-#if SDHCI_SKIP_HOST_RESET == 0
+#ifndef SDHCI_SKIP_HOST_RESET_ENABLED
     /* Reset the host controller unless an earlier boot stage initialized it. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
