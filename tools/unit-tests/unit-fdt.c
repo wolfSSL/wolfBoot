@@ -43,8 +43,12 @@ START_TEST(test_fdt_get_string_rejects_out_of_range_offset)
     const char *s;
 
     memset(&blob, 0, sizeof(blob));
+    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
     fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
     fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
+    fdt_set_magic(&blob, FDT_MAGIC);
+    fdt_set_version(&blob, 17);
+    fdt_set_last_comp_version(&blob, 16);
     memcpy(blob.strings, "chosen", sizeof("chosen"));
     blob.after[0] = 'X';
     blob.after[1] = '\0';
@@ -66,8 +70,12 @@ START_TEST(test_fdt_get_string_returns_string_with_valid_offset)
     const char *s;
 
     memset(&blob, 0, sizeof(blob));
+    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
     fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
     fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
+    fdt_set_magic(&blob, FDT_MAGIC);
+    fdt_set_version(&blob, 17);
+    fdt_set_last_comp_version(&blob, 16);
     memcpy(blob.strings, "serial\0console\0", 15);
 
     s = fdt_get_string(&blob, 7, &len);
@@ -203,6 +211,202 @@ START_TEST(test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop)
 }
 END_TEST
 
+/* Build a minimal FDT in buf (zero-initialized, so padding bytes are
+ * 0x00): root node with a `compatible` property whose raw value is
+ * `len` bytes at `val`. */
+static void build_compat_fdt(uint8_t *buf, size_t size,
+    const uint8_t *val, uint32_t len)
+{
+    struct fdt_header *hdr;
+    uint32_t *s;
+    uint32_t val_aligned = (len + 3u) & ~3u;
+    uint32_t struct_off = 0x40;
+    uint32_t strings_off = 0x80;
+
+    memset(buf, 0, size);
+
+    hdr = (struct fdt_header *)buf;
+    hdr->magic = fdt32_to_cpu(FDT_MAGIC);
+    fdt_set_totalsize(hdr, 0x100);
+    fdt_set_off_dt_struct(hdr, struct_off);
+    fdt_set_off_dt_strings(hdr, strings_off);
+    fdt_set_off_mem_rsvmap(hdr, 0x28);
+    fdt_set_version(hdr, 17);
+    fdt_set_last_comp_version(hdr, 16);
+    fdt_set_size_dt_struct(hdr,
+        8u + 12u + val_aligned + 4u + 4u); /* node hdr, prop, end, FDT_END */
+    fdt_set_size_dt_strings(hdr, sizeof("compatible"));
+    memcpy(buf + strings_off, "compatible", sizeof("compatible"));
+
+    s = (uint32_t *)(buf + struct_off);
+    s[0] = fdt32_to_cpu(FDT_BEGIN_NODE); /* root */
+    s[1] = 0;                            /* empty name */
+    s[2] = fdt32_to_cpu(FDT_PROP);
+    s[3] = fdt32_to_cpu(len);
+    s[4] = fdt32_to_cpu(0);              /* nameoff of "compatible" */
+    memcpy(buf + struct_off + 8 + 12, val, len);
+    s[5 + val_aligned / 4u] = fdt32_to_cpu(FDT_END_NODE);
+    s[6 + val_aligned / 4u] = fdt32_to_cpu(FDT_END);
+}
+
+/* A compatible entry whose declared length equals the search string
+ * (no room for a NUL) must not match: before the fix the comparison
+ * read one byte past the declared length (the 4-byte alignment
+ * padding, zero here) as if it were the terminator and accepted the
+ * entry. */
+START_TEST(test_fdt_compatible_unterminated_exact_len_no_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc", 3);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_lt(off, 0);
+}
+END_TEST
+
+/* A properly terminated entry of exactly the search length matches. */
+START_TEST(test_fdt_compatible_terminated_exact_len_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_eq(off, 0); /* the root node */
+}
+END_TEST
+
+/* Multi-string compatible lists keep working: the second entry
+ * matches. */
+START_TEST(test_fdt_compatible_multi_string_list_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"xy\0abc\0", 8);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_eq(off, 0);
+}
+END_TEST
+
+/* A terminated entry that merely starts with the search string does
+ * not match (the entry is longer). */
+START_TEST(test_fdt_compatible_prefix_entry_no_match)
+{
+    static uint8_t buf[0x100];
+    int off;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abcd\0", 5);
+
+    off = fdt_node_offset_by_compatible(buf, -1, "abc");
+    ck_assert_int_lt(off, 0);
+}
+END_TEST
+
+/* A finalized DTB whose string table lies past the declared end of
+ * the blob must be rejected: before the fix fdt_check_header()
+ * validated only magic and version, and fdt_get_string() formed the
+ * string-table pointer from the unvalidated header fields. */
+START_TEST(test_fdt_check_header_rejects_unbounded_string_area)
+{
+    static uint8_t buf[0x100];
+    int len = 0;
+    const char *s;
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    /* push the string table past the declared end of the blob */
+    fdt_set_off_dt_strings((struct fdt_header *)buf, 0x100);
+
+    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+
+    s = fdt_get_string(buf, 0, &len);
+    ck_assert_ptr_null(s);
+    ck_assert_int_lt(len, 0);
+}
+END_TEST
+
+/* The structure block must not overlap the string table. */
+START_TEST(test_fdt_check_header_rejects_overlapping_areas)
+{
+    static uint8_t buf[0x100];
+
+    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    fdt_set_size_dt_struct((struct fdt_header *)buf, 0x100);
+
+    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+}
+END_TEST
+
+/* FIT whose configuration `kernel` property is not NUL-terminated
+ * within its declared length: fit_find_images() must still honor the
+ * valid `default` but reject the malformed image name instead of
+ * passing it on as a C string. */
+static const uint8_t fit_cfg_unterminated_kernel[] = {
+    /* header */
+    0xd0, 0x0d, 0xfe, 0xed, /* magic */
+    0x00, 0x00, 0x00, 0xa7, /* totalsize = 167 */
+    0x00, 0x00, 0x00, 0x38, /* off_dt_struct = 56 */
+    0x00, 0x00, 0x00, 0x98, /* off_dt_strings = 152 */
+    0x00, 0x00, 0x00, 0x28, /* off_mem_rsvmap = 40 */
+    0x00, 0x00, 0x00, 0x11, /* version = 17 */
+    0x00, 0x00, 0x00, 0x10, /* last_comp_version = 16 */
+    0x00, 0x00, 0x00, 0x00, /* boot_cpuid_phys */
+    0x00, 0x00, 0x00, 0x0f, /* size_dt_strings = 15 */
+    0x00, 0x00, 0x00, 0x60, /* size_dt_struct = 96 */
+    /* mem_rsvmap terminator (offset 40) */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    /* struct block (offset 56) */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE root */
+    0x00, 0x00, 0x00, 0x00,                         /* "" */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE */
+    0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72,
+    0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x00, 0x00, /* "configurations\0" */
+    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
+    0x00, 0x00, 0x00, 0x07,                         /* len = 7 */
+    0x00, 0x00, 0x00, 0x00,                         /* nameoff = 0 ("default") */
+    0x63, 0x6f, 0x6e, 0x66, 0x2d, 0x31, 0x00, 0x00, /* "conf-1\0" */
+    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE */
+    0x63, 0x6f, 0x6e, 0x66, 0x2d, 0x31, 0x00, 0x00, /* "conf-1\0" */
+    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
+    0x00, 0x00, 0x00, 0x08,                         /* len = 8 */
+    0x00, 0x00, 0x00, 0x08,                         /* nameoff = 8 ("kernel") */
+    0x6b, 0x65, 0x72, 0x6e, 0x65, 0x6c, 0x2d, 0x31, /* "kernel-1" -- no NUL */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE conf-1 */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE configurations */
+    0x00, 0x00, 0x00, 0x02,                         /* END_NODE root */
+    0x00, 0x00, 0x00, 0x09,                         /* FDT_END */
+    /* strings block (offset 152) */
+    0x64, 0x65, 0x66, 0x61, 0x75, 0x6c, 0x74, 0x00, /* "default\0" */
+    0x6b, 0x65, 0x72, 0x6e, 0x65, 0x6c, 0x00,       /* "kernel\0" */
+};
+
+START_TEST(test_fit_find_images_rejects_unterminated_image_name)
+{
+    static uint8_t fit_scratch[sizeof(fit_cfg_unterminated_kernel)];
+    const char *conf = NULL, *kern = NULL, *fdt = NULL;
+    const char *rd = NULL, *fpga = NULL;
+
+    memcpy(fit_scratch, fit_cfg_unterminated_kernel, sizeof(fit_scratch));
+
+    conf = fit_find_images(fit_scratch, &kern, &fdt, &rd, &fpga);
+
+    /* The valid `default` is still honored... */
+    ck_assert_str_eq(conf, "conf-1");
+    /* ...but the config's `kernel` property is not NUL-terminated
+     * within its declared length, so it must be rejected rather than
+     * passed on to fdt_find_node_offset()/strlen(). */
+    ck_assert_ptr_null(kern);
+    ck_assert_ptr_null(fdt);
+    ck_assert_ptr_null(rd);
+    ck_assert_ptr_null(fpga);
+}
+END_TEST
+
 static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
@@ -215,6 +419,13 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
     tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
     tcase_add_test(tc, test_fdt_shrink_rejects_dt_strings_area_overflow);
+    tcase_add_test(tc, test_fdt_compatible_unterminated_exact_len_no_match);
+    tcase_add_test(tc, test_fdt_compatible_terminated_exact_len_match);
+    tcase_add_test(tc, test_fdt_compatible_multi_string_list_match);
+    tcase_add_test(tc, test_fdt_compatible_prefix_entry_no_match);
+    tcase_add_test(tc, test_fdt_check_header_rejects_unbounded_string_area);
+    tcase_add_test(tc, test_fdt_check_header_rejects_overlapping_areas);
+    tcase_add_test(tc, test_fit_find_images_rejects_unterminated_image_name);
     suite_add_tcase(s, tc);
 
     tcase_set_timeout(tc_dos, 5);

@@ -462,10 +462,24 @@ static int fdt_subnode_offset_namelen(const void *fdt, int offset,
 int fdt_check_header(const void *fdt)
 {
     if (fdt_magic(fdt) == FDT_MAGIC) {
+        uint32_t off_rsv = fdt_off_mem_rsvmap(fdt);
+        uint32_t off_struct = fdt_off_dt_struct(fdt);
+        uint32_t size_struct = fdt_size_dt_struct(fdt);
+        uint32_t off_strings = fdt_off_dt_strings(fdt);
+        uint32_t size_strings = fdt_size_dt_strings(fdt);
+
         if (fdt_version(fdt) < FDT_FIRST_SUPPORTED_VERSION)
             return -FDT_ERR_BADVERSION;
         if (fdt_last_comp_version(fdt) > FDT_LAST_SUPPORTED_VERSION)
             return -FDT_ERR_BADVERSION;
+        /* The three structural areas must sit inside the blob and not
+         * overlap: reservation map, structure block and string table,
+         * in that order. The additions are made in 64-bit so the size
+         * fields cannot wrap around the comparison. */
+        if (off_rsv > off_struct
+            || (uint64_t)off_struct + size_struct > off_strings
+            || (uint64_t)off_strings + size_strings > fdt_totalsize(fdt))
+            return -FDT_ERR_BADSTRUCTURE;
     }
     else if (fdt_magic(fdt) == FDT_SW_MAGIC) {
         if (fdt_size_dt_struct(fdt) == 0)
@@ -579,6 +593,17 @@ const char* fdt_get_string(const void *fdt, int stroffset, int *lenp)
     uint32_t strsize = fdt_size_dt_strings(fdt);
     const char *s;
     const char *end;
+    int err;
+
+    /* off_dt_strings/size_dt_strings are attacker-influenceable header
+     * fields; validate the layout against totalsize before forming the
+     * string-table pointer. */
+    err = fdt_check_header(fdt);
+    if (err != 0) {
+        if (lenp)
+            *lenp = err;
+        return NULL;
+    }
 
     if ((stroffset < 0) || ((uint32_t)stroffset >= strsize)) {
         if (lenp)
@@ -726,21 +751,28 @@ int fdt_node_offset_by_compatible(const void *fdt, int startoffset,
         int len;
         const char *prop = (const char*)fdt_getprop(fdt, offset, "compatible",
             &len);
-        /* property list may contain multiple null terminated strings */
-        while (prop != NULL && len >= complen) {
+        /* property list may contain multiple null terminated strings.
+         * Locate each entry's NUL terminator within the declared length
+         * first, then compare: the entry must be exactly as long as the
+         * wanted string, so no byte is ever read past the property and
+         * an unterminated trailing entry can neither match nor be
+         * misread as one. */
+        while (prop != NULL && len > 0) {
             const char* nextprop;
-            if (memcmp(compatible, prop, complen+1) == 0) {
-                return offset;
-            }
+            int entrylen;
+
             nextprop = memchr(prop, '\0', len);
-            if (nextprop != NULL) {
-                len -= (nextprop - prop) + 1;
-                prop = nextprop + 1;
-            }
-            else {
+            if (nextprop == NULL) {
                 /* No NUL terminator within the declared length, break. */
                 break;
             }
+            entrylen = (int)(nextprop - prop);
+            if (entrylen == complen &&
+                memcmp(compatible, prop, complen) == 0) {
+                return offset;
+            }
+            len -= entrylen + 1;
+            prop = nextprop + 1;
         }
     }
     return offset;
@@ -908,6 +940,22 @@ int fdt_fixup_val64(void* fdt, int off, const char* node, const char* name,
 
 
 /* FIT Specific */
+
+/* Returns the property value only when it is a NUL-terminated C string
+ * within its declared length, else NULL: property values are opaque
+ * byte arrays and the names taken from them are passed to
+ * fdt_find_node_offset()/strcmp(), which strlen() them. */
+static const char* fit_getprop_string(const void* fdt, int offset,
+    const char* name)
+{
+    int len = 0;
+    const char* val = (const char*)fdt_getprop(fdt, offset, name, &len);
+
+    if (val == NULL || len <= 0 || memchr(val, '\0', len) == NULL)
+        return NULL;
+    return val;
+}
+
 const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_dt,
     const char** pramdisk, const char** pfpga)
 {
@@ -936,19 +984,16 @@ const char* fit_find_images(void* fdt, const char** pkernel, const char** pflat_
         if (conf == NULL)
 #endif
         {
-            val = fdt_getprop(fdt, off, "default", &len);
-            if (val != NULL && len > 0) {
-                conf = (const char*)val;
-            }
+            conf = fit_getprop_string(fdt, off, "default");
         }
     }
     if (conf != NULL) {
         off = fdt_find_node_offset(fdt, -1, conf);
         if (off > 0) {
-            kernel = fdt_getprop(fdt, off, "kernel", &len);
-            flat_dt = fdt_getprop(fdt, off, "fdt", &len);
-            ramdisk = fdt_getprop(fdt, off, "ramdisk", &len);
-            fpga = fdt_getprop(fdt, off, "fpga", &len);
+            kernel = fit_getprop_string(fdt, off, "kernel");
+            flat_dt = fit_getprop_string(fdt, off, "fdt");
+            ramdisk = fit_getprop_string(fdt, off, "ramdisk");
+            fpga = fit_getprop_string(fdt, off, "fpga");
         }
     }
     if (kernel == NULL) {
@@ -1187,11 +1232,20 @@ static void* fit_load_image_inner(void* fdt, const char* image, int* lenp,
              * raw. */
             comp = (const char*)fdt_getprop(fdt, off, "compression",
                 &complen);
-            if (comp != NULL && complen > 0) {
-                if (strcmp(comp, "gzip") == 0) {
+            /* Compare within the declared property length: the value
+             * must be exactly "gzip" or "none" (NUL-terminated). Any
+             * other shape - including an unterminated value - fails
+             * closed instead of being strncmp()'d past the property. */
+            if (comp != NULL) {
+                if (complen == 5 && comp[4] == '\0' &&
+                    memcmp(comp, "gzip", 4) == 0) {
                     is_gzip = 1;
                 }
-                else if (strcmp(comp, "none") != 0) {
+                else if (complen == 5 && comp[4] == '\0' &&
+                    memcmp(comp, "none", 4) == 0) {
+                    /* uncompressed */
+                }
+                else {
                     is_unknown_comp = 1;
                 }
             }

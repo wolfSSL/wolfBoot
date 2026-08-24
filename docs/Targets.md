@@ -5855,6 +5855,14 @@ A first stage loader is required to load the wolfBoot image into DDR for executi
 | fsl_qe_ucode_1021_10_A.bin   | 0x01F00000  |
 | swap block                   | 0x02200000  |
 
+The QE microcode programmed at `0x01F00000` is validated only for
+structural integrity (header magic, version, and size bounds) before it
+is activated; it is not cryptographically authenticated. This is out of
+scope for the example configuration: the microcode region sits inside
+the update partition, so replacing it requires the same flash write
+access that would let an attacker replace the update image itself,
+which wolfBoot's image authentication already protects against.
+
 ### Building wolfBoot for NXP P1021 PPC
 
 By default wolfBoot will use `powerpc-linux-gnu-` cross-compiler prefix. These tools can be installed with the Debian package `gcc-powerpc-linux-gnu` (`sudo apt install gcc-powerpc-linux-gnu`).
@@ -6006,6 +6014,13 @@ Flash is NOR on IFC CS0 (0x0_E800_0000) 128MB (Micron JS28F00AM29EWHA, 16-bit, A
 Note: On T1040, FMAN and QE firmware share the same 128KB NOR erase sector
 (0xEFF00000-0xEFF1FFFF). They must be programmed together in a single
 erase/write operation.
+
+The QE and FMan microcode in these NOR regions is validated only for
+structural integrity (header magic, version, and size bounds) before it
+is activated; it is not cryptographically authenticated. This is out of
+scope for the example configurations: programming these regions requires
+local write access to the board's flash, which also allows replacing the
+wolfBoot image itself - a threat the signed image flow already covers.
 
 ### Design
 

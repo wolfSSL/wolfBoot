@@ -1374,8 +1374,11 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
         }
 
         len = p[2] | (p[3] << 8);
-        /* check len */
-        if ((4U + len) > (uint16_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
+        /* check len (compare in a 32-bit domain: a uint16_t cast of the
+         * header budget wraps for headers >= 64 KiB and rejects every
+         * field) */
+        if ((uint32_t)(4U + len) >
+            (uint32_t)(IMAGE_HEADER_SIZE - IMAGE_HEADER_OFFSET)) {
             unit_dbg("This field is too large (bigger than the space available "
                      "in the current header)\n");
             unit_dbg("%u %u %u\n", (unsigned int)len,
@@ -1402,7 +1405,7 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 
 #ifdef EXT_FLASH
 uint8_t hdr_cpy[IMAGE_HEADER_SIZE] XALIGNED(4);
-uint32_t hdr_cpy_done = 0;
+int hdr_cpy_done = 0;
 #endif
 
 /**
@@ -1521,6 +1524,15 @@ static int decrypt_header(uint8_t *src)
     return 0;
 }
 
+/* Scrub the decrypted manifest once the fields of interest have been
+ * extracted, so no plaintext header survives in .bss through the boot
+ * handoff (same treatment as disk_decrypted_header_clear in
+ * update_disk.c). */
+static void dec_hdr_clear(void)
+{
+    ForceZero(dec_hdr, IMAGE_HEADER_SIZE);
+}
+
 #endif
 /**
  * @brief Get blob version.
@@ -1539,6 +1551,7 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     uint32_t *volatile version_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint32_t version = 0;
     if (blob == NULL)
         return 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
@@ -1551,11 +1564,12 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_VERSION,
-            (void *)&version_field) != sizeof(uint32_t))
-        return 0;
-    if (version_field)
-        return im2n(*version_field);
-    return 0;
+            (void *)&version_field) == sizeof(uint32_t) && version_field)
+        version = im2n(*version_field);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return version;
 }
 
 /**
@@ -1574,6 +1588,7 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     uint16_t *volatile type_field = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint16_t type = 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
@@ -1584,12 +1599,12 @@ uint16_t wolfBoot_get_blob_type(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
-            (void *)&type_field) != sizeof(uint16_t))
-        return 0;
-    if (type_field)
-        return im2ns(*type_field);
-
-    return 0;
+            (void *)&type_field) == sizeof(uint16_t) && type_field)
+        type = im2ns(*type_field);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return type;
 }
 
 /**
@@ -1611,6 +1626,7 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     uint32_t *volatile delta_base = NULL;
     uint32_t *magic = NULL;
     uint8_t *img_bin = blob;
+    uint32_t delta_base_ver = 0;
 #if defined(EXT_ENCRYPTED) && defined(MMU)
     if (wolfBoot_initialize_encryption() < 0)
         return 0;
@@ -1621,11 +1637,12 @@ uint32_t wolfBoot_get_blob_diffbase_version(uint8_t *blob)
     if (*magic != WOLFBOOT_MAGIC)
         return 0;
     if (wolfBoot_find_header(img_bin + IMAGE_HEADER_OFFSET, HDR_IMG_DELTA_BASE,
-            (void *)&delta_base) != sizeof(uint32_t))
-        return 0;
-    if (delta_base)
-        return im2n(*delta_base);
-    return 0;
+            (void *)&delta_base) == sizeof(uint32_t) && delta_base)
+        delta_base_ver = im2n(*delta_base);
+#if defined(EXT_ENCRYPTED) && defined(MMU)
+    dec_hdr_clear();
+#endif
+    return delta_base_ver;
 }
 
 
@@ -1950,6 +1967,7 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
     uint8_t local_nonce[ENCRYPT_NONCE_SIZE];
     XMEMCPY(local_nonce, nonce, ENCRYPT_NONCE_SIZE);
     crypto_set_iv(local_nonce, iv_counter + encrypt_iv_offset);
+    ForceZero(local_nonce, sizeof(local_nonce));
 #else
     (void)nonce;
     (void)iv_counter;
@@ -2306,6 +2324,7 @@ exit:
 void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 {
     uint32_t iv_buf[ENCRYPT_BLOCK_SIZE / sizeof(uint32_t)];
+    uint32_t carry, old, prev;
     int i;
     XMEMCPY(iv_buf, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
@@ -2313,13 +2332,16 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
         iv_buf[i] = wb_reverse_word32(iv_buf[i]);
     }
 #endif
-    iv_buf[3] += iv_ctr;
-    if (iv_buf[3] < iv_ctr) { /* overflow */
-        for (i = 2; i >= 0; i--) {
-            iv_buf[i]++;
-            if (iv_buf[i] != 0)
-                break;
-        }
+    /* Add the block counter with an unconditional, branch-free carry:
+     * a conditional carry loop's trip count would depend on the nonce
+     * content and leak it through timing. */
+    old = iv_buf[3];
+    iv_buf[3] = old + iv_ctr;
+    carry = (uint32_t)(iv_buf[3] < old);
+    for (i = 2; i >= 0; i--) {
+        prev = iv_buf[i];
+        iv_buf[i] = prev + carry;
+        carry = (uint32_t)(iv_buf[i] < prev);
     }
 #ifndef BIG_ENDIAN_ORDER
     for (i = 0; i < 4; i++) {
@@ -2328,6 +2350,7 @@ void aes_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #endif
     wc_AesSetIV(&aes_enc, (byte *)iv_buf);
     wc_AesSetIV(&aes_dec, (byte *)iv_buf);
+    ForceZero(iv_buf, sizeof(iv_buf));
 }
 
 #elif defined(ENCRYPT_PKCS11)
@@ -2465,6 +2488,7 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
 #if ENCRYPT_PKCS11_MECHANISM == CKM_AES_CTR
     {
         uint32_t *cb_words = (uint32_t *)pkcs11_params.cb;
+        uint32_t carry, old, prev;
         int i;
         XMEMCPY(cb_words, nonce, ENCRYPT_NONCE_SIZE);
 #ifndef BIG_ENDIAN_ORDER
@@ -2472,13 +2496,14 @@ void pkcs11_crypto_set_iv(uint8_t *nonce, uint32_t iv_ctr)
             cb_words[i] = wb_reverse_word32(cb_words[i]);
         }
 #endif
-        cb_words[3] += iv_ctr;
-        if (cb_words[3] < iv_ctr) { /* overflow */
-            for (i = 2; i >= 0; i--) {
-                cb_words[i]++;
-                if (cb_words[i] != 0)
-                    break;
-            }
+        /* Unconditional, branch-free carry (see aes_set_iv) */
+        old = cb_words[3];
+        cb_words[3] = old + iv_ctr;
+        carry = (uint32_t)(cb_words[3] < old);
+        for (i = 2; i >= 0; i--) {
+            prev = cb_words[i];
+            cb_words[i] = prev + carry;
+            carry = (uint32_t)(cb_words[i] < prev);
         }
 #ifndef BIG_ENDIAN_ORDER
         for (i = 0; i < 4; i++) {
@@ -2621,13 +2646,13 @@ typedef char wolfBoot_encrypt_stage_size_check[
 /**
  * @brief Write encrypted data to an external flash.
  *
- * This function encrypts the provided data using the AES encryption algorithm
- * and writes it to the external flash.
+ * This function encrypts the provided data using the configured external-flash
+ * encryption cipher (ChaCha20, AES-CTR, or a PKCS#11-backed cipher, per build
+ * configuration) and writes it to the external flash.
  *
  * @param address The address in the external flash to write the data to.
  * @param data Pointer to the data buffer to be written.
  * @param len The length of the data to be written.
- * @param forcedEnc force writing encryption, used during final swap
  *
  *  @return int 0 if successful, -1 on failure.
  */
@@ -2640,6 +2665,10 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
     int sz = len, i, step, ret;
     uint8_t part;
     uint32_t iv_counter = 0;
+    /* The one-shot IV offset (fallback IV) is consumed by the set_iv below;
+     * the partial-block re-syncs further down must re-apply the same offset
+     * or they would re-anchor the stream at the standard-IV position. */
+    uint32_t iv_offset_at_entry = 0;
 #if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_SMALL_STACK) && \
     !defined(NVM_FLASH_WRITEONCE)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
@@ -2672,6 +2701,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             }
             if (wolfBoot_initialize_encryption() < 0)
                 return -1;
+            iv_offset_at_entry = encrypt_iv_offset;
             wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
             break;
         case PART_SWAP:
@@ -2689,16 +2719,28 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             step = len;
         if (ext_flash_read(row_address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
-            return -1;
+            ret = -1;
+            goto exit;
         }
+        /* The stored block is ciphertext: decrypt it so the untouched bytes
+         * can be patched as plaintext and re-encrypted. Re-encrypting the
+         * ciphertext as-is would double-XOR the untouched bytes and store
+         * them in plaintext. */
+        crypto_decrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(block, enc_block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block + row_offset, data, step);
+        /* The decrypt above consumed keystream on backends that share one
+         * stream state between encrypt and decrypt; re-sync the stream to
+         * this block before re-encrypting. */
+        encrypt_iv_offset = iv_offset_at_entry;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(row_address, enc_block, ENCRYPT_BLOCK_SIZE);
         if (ret < 0)
-            return ret;
+            goto exit;
         /* The request fits entirely within this block: nothing left to do */
         if (step == len)
-            return ret;
+            goto exit;
         address += step;
         data += step;
         sz = len - step;
@@ -2718,7 +2760,7 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
         }
         ret = ext_flash_write(address, ENCRYPT_CACHE, chunk);
         if (ret < 0)
-            return ret;
+            goto exit;
         address += chunk;
         data += chunk;
         step -= chunk;
@@ -2729,15 +2771,35 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
      * the same way the unaligned head above is handled. */
     step = sz & (ENCRYPT_BLOCK_SIZE - 1);
     if (step > 0) {
+        /* "address" is block-aligned here; index of the block being patched */
+        uint32_t tail_iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
+            ENCRYPT_BLOCK_SIZE;
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE) {
-            return -1;
+            ret = -1;
+            goto exit;
         }
+        /* Sync the decrypt context to this block (on backends with separate
+         * encrypt/decrypt contexts it did not advance with the full-block
+         * writes above), then decrypt the stored ciphertext so the untouched
+         * tail bytes survive the re-encryption. */
+        encrypt_iv_offset = iv_offset_at_entry;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, tail_iv_counter);
+        crypto_decrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
+        XMEMCPY(block, enc_block, ENCRYPT_BLOCK_SIZE);
         XMEMCPY(block, data, step);
+        encrypt_iv_offset = iv_offset_at_entry;
+        wolfBoot_crypto_set_iv(encrypt_iv_nonce, tail_iv_counter);
         crypto_encrypt(enc_block, block, ENCRYPT_BLOCK_SIZE);
         ret = ext_flash_write(address, enc_block, ENCRYPT_BLOCK_SIZE);
     }
 
+exit:
+    /* The head/tail RMW paths above decrypted the stored neighbour blocks
+     * into block/enc_block; scrub the plaintext (and any stale copies)
+     * on every exit so it does not outlive the write on the stack. */
+    ForceZero(block, sizeof(block));
+    ForceZero(enc_block, sizeof(enc_block));
     return ret;
 }
 
@@ -2900,6 +2962,9 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
      * unaligned cast, then convert to native byte order. */
     XMEMCPY(&len, dec_hdr + sizeof(uint32_t), sizeof(len));
     len = im2n(len);
+    /* The length is the only field taken from the decrypted manifest;
+     * scrub it before it can outlive this function in .bss. */
+    dec_hdr_clear();
 
 #if !defined(WOLFBOOT_FIXED_PARTITIONS) && !defined(WOLFBOOT_RAMBOOT_MAX_SIZE)
 #  error "WOLFBOOT_FIXED_PARTITIONS or WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the RAM load"

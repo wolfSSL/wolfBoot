@@ -53,7 +53,8 @@ endif
 
 
 
-TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128 \
+TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
+       unit-spi-flash unit-aes128 \
        unit-uart-flash \
        unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
        unit-max-space \
@@ -61,7 +62,7 @@ TESTS:=unit-parser unit-fdt unit-extflash unit-string unit-spi-flash unit-aes128
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
@@ -152,8 +153,9 @@ ENABLE_32BIT_TESTS ?= $(HAVE_M32)
 ifeq ($(ENABLE_32BIT_TESTS),1)
 TESTS+=unit-linux-loader-e820
 TESTS+=unit-linux-loader-syssize
+TESTS+=unit-sama5d3-ext-read
 else
-$(info Skipping 32-bit x86 linux-loader unit tests: 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
+$(info Skipping 32-bit x86 unit tests (linux-loader, sama5d3-ext-read): 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
 endif
 
 include unit-sign-encrypted-output.mkfrag
@@ -196,6 +198,7 @@ unit-aes128:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES128
 unit-aes256:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_AES256
 unit-chacha20:CFLAGS+=-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA
 unit-parser:CFLAGS+=-DNVM_FLASH_WRITEONCE
+unit-parser-large-header:CFLAGS+=-DNVM_FLASH_WRITEONCE
 unit-fdt:CFLAGS+=-DWOLFBOOT_FDT
 unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
@@ -302,6 +305,9 @@ unit-extflash.o: FORCE
 	gcc -c -o $@ unit-extflash.c $(CFLAGS)
 
 unit-parser: ../../include/target.h unit-parser.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
+
+unit-parser-large-header: ../../include/target.h unit-parser-large-header.c
 	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 unit-fdt: ../../include/target.h unit-fdt.c ../../src/fdt.c
@@ -719,6 +725,20 @@ unit-update-flash-enc: ../../include/target.h unit-update-flash.c
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
 	$(CFLAGS) $(LDFLAGS)
 
+# Same encrypted target without UNIT_TEST_FALLBACK_ONLY, so the full
+# end-to-end suite (forward updates, rollback, ...) runs against the
+# encrypted swap and its IV derivation.
+unit-update-flash-enc-full:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
+	-DCUSTOM_ENCRYPT_KEY \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-enc-full: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+	$(CFLAGS) $(LDFLAGS)
+
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
@@ -849,6 +869,20 @@ zynq_write_extract.h: ../../hal/zynq.c
 
 unit-zynq-ext-write: unit-zynq-ext-write.c zynq_write_extract.h
 	gcc -o $@ unit-zynq-ext-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-sama5d3-ext-read runs the real ext_flash_read() from hal/sama5d3.c
+# (the intra-page offset of the start address was never applied, sub-page
+# reads were copied in 32-bit words, and a multi-page read ending
+# mid-page wrote a full page past the caller's buffer). The function and
+# the nand_flash geometry struct are extracted verbatim; the test provides
+# host div_u()/mod() and emulated nand_read_page()/nand_check_bad_block()
+# backed by a byte array.
+sama5d3_read_extract.h: ../../hal/sama5d3.c
+	sed -n '/^struct nand_flash {/,/^} nand_flash = { 0 };/p' $< > $@
+	sed -n '/^int ext_flash_read(/,/^}/p' $< >> $@
+
+unit-sama5d3-ext-read: unit-sama5d3-ext-read.c sama5d3_read_extract.h
+	gcc -o $@ unit-sama5d3-ext-read.c $(CFLAGS) $(LDFLAGS)
 
 # unit-versal-qspi-dma drives the real DMA RX path of qspi_transfer() in
 # hal/versal.c (an unaligned read larger than the 4096-byte

@@ -601,62 +601,66 @@ static int nand_check_bad_block(uint32_t block)
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     uint8_t buffer_page[NAND_FLASH_PAGE_SIZE];
-    uint32_t block = div_u(address, nand_flash.block_size); /* The block where the address falls in */
-    uint32_t page = div_u(address, nand_flash.page_size); /* The page where the address falls in */
-    uint32_t start_page_in_block = mod(page, nand_flash.pages_per_block); /* The start page within this block */
-    uint32_t in_block_offset = mod(address, nand_flash.block_size); /* The offset of the address within the block */
-    uint32_t remaining = nand_flash.block_size - in_block_offset; /* How many bytes remaining to read in the first block */
-    int len_to_read = len;
-    uint8_t *buffer = data;
-    uint32_t i;
-    int copy = 0;
+    uint8_t *dst = data;
+    /* block/page_in_block are a running cursor, not a function of the
+     * current address: every bad block skipped shifts the rest of this
+     * read forward by one block, so the skip has to accumulate. */
+    uint32_t block = div_u(address, nand_flash.block_size);
+    uint32_t page_in_block = mod(div_u(address, nand_flash.page_size),
+                                 nand_flash.pages_per_block);
+    uint32_t in_page = mod(address, nand_flash.page_size); /* The offset of the address within the page */
+    int check_block = 1;
+    int remaining = len;
     int ret;
 
-    if (len < (int)nand_flash.page_size) {
-        buffer = buffer_page;
-        copy = 1;
-        len_to_read = nand_flash.page_size;
-    }
+    if (len <= 0)
+        return 0;
 
-    while (len_to_read > 0) {
-        uint32_t sz = len_to_read;
-        uint32_t pages_to_read;
-        if (sz > remaining)
-            sz = remaining;
+    while (remaining > 0) {
+        uint32_t chunk;
 
-        do {
-            ret = nand_check_bad_block(block);
-            if (ret < 0) {
-                /* Block is bad, skip it */
-                block++;
-            }
-        } while (ret < 0);
-
-        /* Amount of pages to be read from this block */
-        pages_to_read = div_u((sz + nand_flash.page_size - 1), nand_flash.page_size);
-
-        if (pages_to_read * nand_flash.page_size > remaining)
-            pages_to_read--;
-
-        /* Read (remaining) pages off a block */
-        for (i = 0; i < pages_to_read; i++) {
-            nand_read_page(block, start_page_in_block + i, buffer);
-            if (sz > nand_flash.page_size)
-                sz = nand_flash.page_size;
-            len_to_read -= sz;
-            buffer += sz;
+        if (check_block) {
+            do {
+                ret = nand_check_bad_block(block);
+                if (ret < 0) {
+                    /* Block is bad, skip it */
+                    block++;
+                }
+            } while (ret < 0);
+            check_block = 0;
         }
-        /* The block is over, move to the next one */
-        block++;
-        start_page_in_block = 0;
-        remaining = nand_flash.block_size;
-    }
-    if (copy) {
-        uint32_t *dst = (uint32_t *)data;
-        uint32_t *src = (uint32_t *)buffer_page;
-        uint32_t tot_len = (uint32_t)len;
-        for (i = 0; i < (tot_len >> 2); i++) {
-            dst[i] = src[i];
+
+        /* Bytes available from the current address to the end of its page */
+        chunk = nand_flash.page_size - in_page;
+        if (chunk > (uint32_t)remaining)
+            chunk = (uint32_t)remaining;
+
+        if ((in_page == 0) && (chunk == nand_flash.page_size)) {
+            /* Full page at the page head: read straight into the caller's
+             * buffer. */
+            nand_read_page(block, page_in_block, dst);
+        }
+        else {
+            /* Partial first/last page: stage through the page buffer and
+             * copy from the column offset, so a full page is never written
+             * past the end of the caller's buffer. */
+            nand_read_page(block, page_in_block, buffer_page);
+            memcpy(dst, buffer_page + in_page, chunk);
+        }
+
+        dst += chunk;
+        remaining -= (int)chunk;
+        in_page += chunk;
+        if (in_page == nand_flash.page_size) {
+            /* Page consumed: advance, and re-check for a bad block only
+             * when the cursor rolls over into the next one. */
+            in_page = 0;
+            page_in_block++;
+            if (page_in_block == nand_flash.pages_per_block) {
+                page_in_block = 0;
+                block++;
+                check_block = 1;
+            }
         }
     }
     return len;
@@ -716,20 +720,23 @@ static void dbgu_init(void) {
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    /* TODO */
+    /* SAMA5D3 NAND page program is not implemented: this HAL only
+     * supports reading NAND. Report failure instead of pretending the
+     * data was programmed. */
     (void)address;
     (void)data;
     (void)len;
 
-    return 0;
+    return -1;
 }
 
 int ext_flash_erase(uintptr_t address, int len)
 {
-    /* TODO */
+    /* SAMA5D3 NAND block erase is not implemented: see ext_flash_write. */
     (void)address;
     (void)len;
-    return 0;
+
+    return -1;
 }
 
 /* SAMA5D3 NAND flash does not have an enable pin */

@@ -261,7 +261,9 @@ static void dtb_finalize(struct dtb *d)
     hdr->totalsize = cpu_to_fdt32(0x2000);
     hdr->off_dt_struct = cpu_to_fdt32(d->struct_off);
     hdr->off_dt_strings = cpu_to_fdt32(d->strings_off);
-    hdr->off_mem_rsvmap = cpu_to_fdt32(d->strings_off); /* no reservations */
+    hdr->off_mem_rsvmap = cpu_to_fdt32(0x28);
+    /* the 8 bytes after the 40-byte header are zero: an empty
+     * reservation list at the canonical spot */
     hdr->version = cpu_to_fdt32(17);
     hdr->last_comp_version = cpu_to_fdt32(16);
     hdr->boot_cpuid_phys = cpu_to_fdt32(0);
@@ -439,6 +441,121 @@ START_TEST(test_memac_mixed_oob_then_valid)
 }
 END_TEST
 
+/* Build a DTB with a memory node and one node with the given
+ * compatible. */
+static void dtb_build_compat_node(struct dtb *d, const char *node,
+    const char *compat)
+{
+    uint32_t reg[4] = {cpu_to_fdt32(0), cpu_to_fdt32(0), cpu_to_fdt32(0),
+        cpu_to_fdt32(0x10000000U)};
+
+    dtb_init(d);
+    dtb_begin_node(d, "");
+    dtb_begin_node(d, "memory");
+    dtb_prop_raw(d, "reg", reg, sizeof(reg));
+    dtb_end_node(d);
+    dtb_begin_node(d, node);
+    dtb_prop_raw(d, "compatible", compat, strlen(compat) + 1);
+    dtb_end_node(d);
+    dtb_end_node(d); /* root */
+    dtb_finalize(d);
+}
+
+/* Build a DTB whose root node (struct offset 0) carries the given
+ * compatible. */
+static void dtb_build_root_compat(struct dtb *d, const char *compat)
+{
+    dtb_init(d);
+    dtb_begin_node(d, "");
+    dtb_prop_raw(d, "compatible", compat, strlen(compat) + 1);
+    dtb_end_node(d);
+    dtb_finalize(d);
+}
+
+/* The fman/esdhc node-found guards used `off != !FDT_ERR_NOTFOUND`,
+ * which is `off != 0`: a node at struct offset 0 (the root) was
+ * skipped even when it matched, and the fixup ran with a negative
+ * offset when no node matched. A root node compatible with fsl,fman
+ * must get the clock fixup. */
+START_TEST(test_fman_root_node_compatible_fixed)
+{
+    struct dtb d;
+    int off, len;
+    const void *clk;
+
+    dtb_build_root_compat(&d, "fsl,fman");
+    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+
+    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman");
+    ck_assert_int_eq(off, 0); /* the root node */
+    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    ck_assert_ptr_nonnull(clk);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
+}
+END_TEST
+
+/* A child fman node gets the clock fixup. */
+START_TEST(test_fman_child_node_fixed)
+{
+    struct dtb d;
+    int off, len;
+    const void *clk;
+
+    dtb_build_compat_node(&d, "fman", "fsl,fman");
+    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+
+    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman");
+    ck_assert_int_gt(off, 0);
+    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    ck_assert_ptr_nonnull(clk);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
+}
+END_TEST
+
+/* An esdhc node gets the clock fixup and status=okay. */
+START_TEST(test_esdhc_node_fixed)
+{
+    struct dtb d;
+    int off, len;
+    const void *clk;
+    const void *status;
+
+    dtb_build_compat_node(&d, "esdhc", "fsl,esdhc");
+    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+
+    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,esdhc");
+    ck_assert_int_gt(off, 0);
+    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    ck_assert_ptr_nonnull(clk);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
+    status = fdt_getprop(d.buf, off, "status", &len);
+    ck_assert_ptr_nonnull(status);
+    ck_assert_int_eq(len, 5);
+    ck_assert_str_eq(status, "okay");
+}
+END_TEST
+
+/* No fman/esdhc nodes: the fixups are skipped cleanly and the fixup
+ * still succeeds. */
+START_TEST(test_fman_esdhc_absent_skipped)
+{
+    struct dtb d;
+    int off;
+
+    dtb_build_compat_node(&d, "ethernet", "fsl,eth");
+    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+
+    ck_assert_int_eq(fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman"),
+        -FDT_ERR_NOTFOUND);
+    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,eth");
+    ck_assert_int_gt(off, 0);
+    ck_assert_ptr_null(fdt_getprop(d.buf, off, "clock-frequency", NULL));
+}
+END_TEST
+
 Suite *t10xx_dts_memac_suite(void)
 {
     Suite *s = suite_create("t10xx-dts-memac");
@@ -449,6 +566,10 @@ Suite *t10xx_dts_memac_suite(void)
     tcase_add_test(tc, test_memac_unmapped_cell_index_skipped);
     tcase_add_test(tc, test_memac_valid_cell_index_fixed);
     tcase_add_test(tc, test_memac_mixed_oob_then_valid);
+    tcase_add_test(tc, test_fman_root_node_compatible_fixed);
+    tcase_add_test(tc, test_fman_child_node_fixed);
+    tcase_add_test(tc, test_esdhc_node_fixed);
+    tcase_add_test(tc, test_fman_esdhc_absent_skipped);
     suite_add_tcase(s, tc);
 
     return s;

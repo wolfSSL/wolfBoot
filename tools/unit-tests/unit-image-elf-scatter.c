@@ -258,6 +258,74 @@ static void patch_expected_digest(const uint8_t *digest)
     memcpy(manifest + 12, digest, WOLFBOOT_SHA_DIGEST_SIZE);
 }
 
+/* --- Multi-segment fixtures for the PT_LOAD bounds-rejection tests ---
+ *
+ * The manifest holds image header + ELF header + N program headers
+ * (tightly packed). Each segment's flash-resident payload lives in its
+ * own static array referenced by ph.paddr. */
+#define SEG1_SIZE 0x2000U
+#define SEG2_SIZE 64U
+
+static uint8_t seg1_flash[SEG1_SIZE];
+static uint8_t seg2_flash[SEG2_SIZE];
+
+struct seg_spec {
+    uint64_t offset;
+    uint64_t filesz;
+    uint64_t paddr;
+    uint8_t *payload; /* pattern-filled for fillsz bytes */
+    uint32_t fillsz;
+};
+
+static void build_scattered_image_n(const struct seg_spec *segs, unsigned n,
+                                    uint32_t fw_size)
+{
+    uint8_t *manifest = (uint8_t *)(uintptr_t)MOCK_ADDRESS_BOOT;
+    uint32_t magic = WOLFBOOT_MAGIC;
+    size_t pht_sz = sizeof(elf64_header) + n * sizeof(elf64_program_header);
+    elf64_header *eh;
+    elf64_program_header *ph;
+    unsigned i, j;
+
+    memset(manifest, 0, IMAGE_HEADER_SIZE + pht_sz);
+
+    /* manifest header with a zeroed HDR_HASH TLV (patched by caller) */
+    memcpy(manifest + 0, &magic, sizeof(magic));
+    memcpy(manifest + 4, &fw_size, sizeof(fw_size));
+    write_le16(manifest + 8, HDR_HASH);
+    write_le16(manifest + 10, WOLFBOOT_SHA_DIGEST_SIZE);
+
+    eh = (elf64_header *)(manifest + IMAGE_HEADER_SIZE);
+    memcpy(eh->ident, ELF_IDENT_STR, 4);
+    eh->ident[ELF_CLASS_OFF] = ELF_CLASS_64;
+    eh->ident[5]             = ELF_ENDIAN_LITTLE;
+    eh->type                 = ELF_HET_EXEC;
+    eh->machine              = 0;
+    eh->version              = 1;
+    eh->entry                = 0x2000;
+    eh->ph_offset            = sizeof(elf64_header);
+    eh->flags                = 0;
+    eh->header_size          = sizeof(elf64_header);
+    eh->ph_entry_size        = sizeof(elf64_program_header);
+    eh->ph_entry_count       = n;
+
+    ph = (elf64_program_header *)((uint8_t *)eh + sizeof(elf64_header));
+    for (i = 0; i < n; i++) {
+        memset(&ph[i], 0, sizeof(ph[i]));
+        ph[i].type      = ELF_PT_LOAD;
+        ph[i].offset    = segs[i].offset;
+        ph[i].paddr     = segs[i].paddr;
+        ph[i].file_size = segs[i].filesz;
+        ph[i].mem_size  = segs[i].filesz;
+        ph[i].align     = 1;
+        for (j = 0; j < segs[i].fillsz; j++) {
+            segs[i].payload[j] = (uint8_t)(0x60U + i + j);
+        }
+    }
+}
+
+#define ELF_HDR_SZ_2 (sizeof(elf64_header) + 2 * sizeof(elf64_program_header))
+
 static void map_boot_partition(void)
 {
     int ret = mmap_file("/tmp/wolfboot-unit-elf-scatter-boot.bin",
@@ -330,12 +398,188 @@ START_TEST(test_elf_scatter_corrupted_segment_rejected)
 }
 END_TEST
 
+/* A segment whose 64-bit file_size does not fit the uint32_t length the
+ * flash hash reader consumes must be rejected outright. Pre-fix, the
+ * size was silently truncated (2^32 -> 0 bytes hashed) and an image
+ * whose stored digest matched the truncated walk verified OK. */
+START_TEST(test_elf_scatter_filesz_over_32bit_rejected)
+{
+    uint8_t expected_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    unsigned long entry = 0;
+    uint32_t fw_size = (uint32_t)ELF_HDR_SZ_2 + SEG2_SIZE;
+    struct seg_spec segs[2];
+    struct wolfBoot_image boot;
+    wolfBoot_hash_t ctx;
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg1_flash, 0, sizeof(seg1_flash));
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ_2 + 0x1000U; /* layout gap, never hashed */
+    segs[0].filesz = 0x100000000ULL;         /* 2^32: truncates to 0 */
+    segs[0].paddr  = (uint64_t)(uintptr_t)seg2_flash; /* 0 bytes read */
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = 0;
+    segs[1].offset = ELF_HDR_SZ_2;
+    segs[1].filesz = SEG2_SIZE;
+    segs[1].paddr  = (uint64_t)(uintptr_t)seg2_flash;
+    segs[1].payload = seg2_flash;
+    segs[1].fillsz  = SEG2_SIZE;
+
+    build_scattered_image_n(segs, 2, fw_size);
+
+    /* Replay the pre-fix walk: the oversized segment contributes zero
+     * hashed bytes, only seg2 does. */
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(header_hash(&ctx, &boot), 0);
+    ck_assert_int_eq(update_hash_flash_fwimg(&ctx, &boot, 0, (uint32_t)ELF_HDR_SZ_2), 0);
+    ck_assert_int_eq(
+        update_hash_flash_addr(&ctx, (uintptr_t)seg2_flash, SEG2_SIZE,
+                               PART_IS_EXT(&boot)),
+        0);
+    ck_assert_int_eq(final_hash(&ctx, expected_digest), 0);
+    patch_expected_digest(expected_digest);
+
+    ret = wolfBoot_check_flash_image_elf(PART_BOOT, &entry);
+
+    /* Pre-fix this verified OK (ret 0) with the truncated size. */
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
+/* A segment whose file layout (offset + file_size) extends past the
+ * manifest image must be rejected. Pre-fix, intermediate segments were
+ * never bounds-checked (only the last one, after the loop) and an image
+ * whose stored digest matched the out-of-layout walk verified OK. */
+START_TEST(test_elf_scatter_segment_beyond_fw_size_rejected)
+{
+    uint8_t expected_digest[WOLFBOOT_SHA_DIGEST_SIZE];
+    unsigned long entry = 0;
+    uint32_t fw_size = (uint32_t)ELF_HDR_SZ_2 + SEG2_SIZE;
+    struct seg_spec segs[2];
+    struct wolfBoot_image boot;
+    wolfBoot_hash_t ctx;
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg1_flash, 0, sizeof(seg1_flash));
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ_2;
+    segs[0].filesz = SEG1_SIZE; /* 0x2000 > the 64-byte layout slack */
+    segs[0].paddr  = (uint64_t)(uintptr_t)seg1_flash;
+    segs[0].payload = seg1_flash;
+    segs[0].fillsz  = SEG1_SIZE;
+    segs[1].offset = ELF_HDR_SZ_2;
+    segs[1].filesz = SEG2_SIZE;
+    segs[1].paddr  = (uint64_t)(uintptr_t)seg2_flash;
+    segs[1].payload = seg2_flash;
+    segs[1].fillsz  = SEG2_SIZE;
+
+    build_scattered_image_n(segs, 2, fw_size);
+
+    /* Replay the pre-fix walk: both segments are hashed in full at their
+     * paddr locations despite seg0's layout extending past fw_size. */
+    ck_assert_int_eq(wolfBoot_open_image(&boot, PART_BOOT), 0);
+    ck_assert_int_eq(header_hash(&ctx, &boot), 0);
+    ck_assert_int_eq(update_hash_flash_fwimg(&ctx, &boot, 0, (uint32_t)ELF_HDR_SZ_2), 0);
+    ck_assert_int_eq(
+        update_hash_flash_addr(&ctx, (uintptr_t)seg1_flash, SEG1_SIZE,
+                               PART_IS_EXT(&boot)),
+        0);
+    ck_assert_int_eq(
+        update_hash_flash_addr(&ctx, (uintptr_t)seg2_flash, SEG2_SIZE,
+                               PART_IS_EXT(&boot)),
+        0);
+    ck_assert_int_eq(final_hash(&ctx, expected_digest), 0);
+    patch_expected_digest(expected_digest);
+
+    ret = wolfBoot_check_flash_image_elf(PART_BOOT, &entry);
+
+    /* Pre-fix this verified OK (ret 0). */
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
+/* A paddr whose segment range overflows the address space must be
+ * rejected before any flash read. Pre-fix this walked off into
+ * unmapped memory (segfault here; bus fault/hang on target). */
+START_TEST(test_elf_scatter_paddr_range_overflow_rejected)
+{
+    unsigned long entry = 0;
+    uint32_t fw_size = IMG_FW_SIZE;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG_SIZE;
+    segs[0].paddr  = UINT64_MAX - 4; /* +SEG_SIZE wraps past UINT64_MAX */
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = SEG_SIZE;
+
+    build_scattered_image_n(segs, 1, fw_size);
+
+    ret = wolfBoot_check_flash_image_elf(PART_BOOT, &entry);
+
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
+#if UINTPTR_MAX < UINT64_MAX
+/* A paddr that fits in 64 bits but not in the destination (uintptr_t)
+ * width must be rejected: the load_addr cast after the check would
+ * silently wrap and the hash walk would read the wrapped address.
+ * 32-bit builds only: on 64-bit builds UINTPTR_MAX == UINT64_MAX and
+ * the case above already covers it. */
+START_TEST(test_elf_scatter_paddr_beyond_pointer_width_rejected)
+{
+    unsigned long entry = 0;
+    uint32_t fw_size = IMG_FW_SIZE;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG_SIZE;
+    segs[0].paddr  = 1ULL << 32; /* fits uint64_t, exceeds 32-bit width */
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = SEG_SIZE;
+
+    build_scattered_image_n(segs, 1, fw_size);
+
+    ret = wolfBoot_check_flash_image_elf(PART_BOOT, &entry);
+
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+#endif
+
 Suite *elf_scatter_suite(void)
 {
     Suite *s  = suite_create("ELF flash-scatter image check");
     TCase *tc = tcase_create("wolfBoot_check_flash_image_elf");
     tcase_add_test(tc, test_elf_scatter_valid_image_verifies_ok);
     tcase_add_test(tc, test_elf_scatter_corrupted_segment_rejected);
+    tcase_add_test(tc, test_elf_scatter_filesz_over_32bit_rejected);
+    tcase_add_test(tc, test_elf_scatter_segment_beyond_fw_size_rejected);
+    tcase_add_test(tc, test_elf_scatter_paddr_range_overflow_rejected);
+#if UINTPTR_MAX < UINT64_MAX
+    tcase_add_test(tc, test_elf_scatter_paddr_beyond_pointer_width_rejected);
+#endif
     tcase_set_timeout(tc, 10);
     suite_add_tcase(s, tc);
     return s;

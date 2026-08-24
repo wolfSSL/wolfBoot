@@ -85,12 +85,21 @@ static uint16_t host_to_img_u16(uint16_t val)
 #endif
 }
 
+/* The update partition is written by the update tool through the
+ * encryption-aware writer: in EXT_ENCRYPTED builds a raw write would leave
+ * plaintext in flash that the bootloader then decrypts. The swap partition
+ * is written raw, since its content is already encrypted when staged. */
+static int update_part_write(uintptr_t addr, const void *buf, int len)
+{
+    return ext_flash_check_write(addr, buf, len);
+}
+
 static void ext_flash_write_le16(uintptr_t addr, uint16_t val)
 {
     uint8_t le[2];
     le[0] = (uint8_t)(val & 0xFFu);
     le[1] = (uint8_t)((val >> 8) & 0xFFu);
-    ext_flash_write(addr, le, sizeof(le));
+    update_part_write(addr, le, sizeof(le));
 }
 
 static void ext_flash_write_le32(uintptr_t addr, uint32_t val)
@@ -100,7 +109,7 @@ static void ext_flash_write_le32(uintptr_t addr, uint32_t val)
     le[1] = (uint8_t)((val >> 8) & 0xFFu);
     le[2] = (uint8_t)((val >> 16) & 0xFFu);
     le[3] = (uint8_t)((val >> 24) & 0xFFu);
-    ext_flash_write(addr, le, sizeof(le));
+    update_part_write(addr, le, sizeof(le));
 }
 
 #ifdef DELTA_UPDATES
@@ -133,6 +142,7 @@ int unit_test_wb_patch(WB_PATCH_CTX *ctx, uint8_t *dst, uint32_t len)
 static int mock_get_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_ret = 0;
 static int mock_set_encrypt_key_calls = 0;
+static int mock_erase_encrypt_key_calls = 0;
 
 int wolfBoot_get_encrypt_key(uint8_t *k, uint8_t *nonce)
 {
@@ -158,6 +168,7 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
 
 int wolfBoot_erase_encrypt_key(void)
 {
+    mock_erase_encrypt_key_calls++;
     return 0;
 }
 #endif
@@ -177,6 +188,32 @@ START_TEST (test_boot_success_sets_state)
 
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &state), 0);
     ck_assert_uint_eq(state, IMG_STATE_SUCCESS);
+
+    cleanup_flash();
+}
+END_TEST
+#endif
+
+#ifdef CUSTOM_ENCRYPT_KEY
+/* wolfBoot_success() must erase the temporary firmware-decryption key
+ * from the partition trailer as part of confirming an update. The mock
+ * records the call; without the erase the plaintext key would stay
+ * resident in flash. */
+START_TEST (test_boot_success_erases_encrypt_key)
+{
+    uint8_t state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    hal_flash_lock();
+
+    wolfBoot_success();
+
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &state), 0);
+    ck_assert_uint_eq(state, IMG_STATE_SUCCESS);
+    ck_assert_int_eq(mock_erase_encrypt_key_calls, 1);
 
     cleanup_flash();
 }
@@ -234,6 +271,7 @@ static void reset_mock_stats(void)
     mock_get_encrypt_key_ret = 0;
     mock_set_encrypt_key_ret = 0;
     mock_set_encrypt_key_calls = 0;
+    mock_erase_encrypt_key_calls = 0;
 #endif
 #ifndef ARCH_SIM
     wolfBoot_panicked = 0;
@@ -299,6 +337,11 @@ static void cleanup_flash(void)
 
 
 #define DIGEST_TLV_OFF_IN_HDR 28
+#ifdef EXT_ENCRYPTED
+static int add_payload_encrypted(uint8_t part, uint32_t version, uint32_t size,
+    int use_fallback_iv);
+#endif
+
 static int add_payload(uint8_t part, uint32_t version, uint32_t size)
 {
     return add_payload_type(part, version, size,
@@ -308,6 +351,15 @@ static int add_payload(uint8_t part, uint32_t version, uint32_t size)
 static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     uint16_t img_type)
 {
+#ifdef EXT_ENCRYPTED
+    /* The update partition holds ciphertext in EXT_ENCRYPTED builds (the
+     * update tool writes through the encryption-aware writer); build the
+     * plaintext image and encrypt it in. add_payload_encrypted builds the
+     * AUTH_NONE|APP image type, which is what every PART_UPDATE caller
+     * compiled in the encrypted targets uses. */
+    if (part == PART_UPDATE)
+        return add_payload_encrypted(part, version, size, 0);
+#endif
     uint32_t word;
     uint32_t magic = WOLFBOOT_MAGIC;
     uint32_t size_img = host_to_img_u32(size);
@@ -445,7 +497,7 @@ START_TEST (test_self_update_newversion_invalid_integrity_denied)
         HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
     memset(bad_digest, 0xBA, sizeof(bad_digest));
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4,
         bad_digest, sizeof(bad_digest));
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
     ext_flash_lock();
@@ -759,6 +811,59 @@ START_TEST (test_fallback_image_verification_rejects_corruption)
 }
 END_TEST
 
+/* Positive counterpart of the corruption test above: an image written with
+ * the fallback IV must read back byte-for-byte through the product's
+ * decryption path with the fallback IV forced, the way the update flow does
+ * when the standard-IV open fails. */
+START_TEST (test_fallback_iv_image_roundtrips)
+{
+    uint32_t size = TEST_SIZE_SMALL;
+    uint32_t total = size + IMAGE_HEADER_SIZE;
+    uint8_t *plain = malloc(total);
+    uint8_t *readback = malloc(total);
+    struct wolfBoot_image img;
+    int prev, ret;
+    uint32_t i;
+
+    reset_mock_stats();
+    prepare_flash();
+    ck_assert(plain != NULL && readback != NULL);
+
+    /* build_image_buffer is deterministic (srandom(part)), so this is the
+     * same plaintext add_payload_encrypted writes with the fallback IV */
+    ret = build_image_buffer(PART_UPDATE, 2, size, plain, total);
+    ck_assert_int_eq(ret, 0);
+    ret = add_payload_encrypted(PART_UPDATE, 2, size, 1);
+    ck_assert_int_eq(ret, 0);
+
+    /* The update flow verifies and reads a fallback image with the fallback
+     * IV forced for the whole operation (persistent flag, re-applied by the
+     * decrypt path on every block). */
+    prev = wolfBoot_force_fallback_iv(1);
+    ret = wolfBoot_open_image(&img, PART_UPDATE);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_uint_eq(img.fw_size, size);
+    for (i = 0; i < total; i += WOLFBOOT_SECTOR_SIZE) {
+        uint32_t chunk = total - i;
+        if (chunk > WOLFBOOT_SECTOR_SIZE)
+            chunk = WOLFBOOT_SECTOR_SIZE;
+        ret = ext_flash_check_read(
+            (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS + i,
+            readback + i, (int)chunk);
+        ck_assert_int_eq(ret, (int)chunk);
+    }
+    wolfBoot_enable_fallback_iv(prev);
+
+    i = 0;
+    while (i < total && readback[i] == plain[i])
+        i++;
+    ck_assert_mem_eq(readback, plain, total);
+    free(plain);
+    free(readback);
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_final_swap_propagates_encrypt_key_persist_failure)
 {
     int ret;
@@ -961,7 +1066,7 @@ START_TEST (test_invalid_update_type) {
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
@@ -978,7 +1083,7 @@ START_TEST (test_invalid_update_auth_type) {
     add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, (void *)&word16, 2);
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
@@ -996,7 +1101,7 @@ START_TEST (test_update_toolarge) {
     add_payload(PART_UPDATE, 2, TEST_SIZE_LARGE);
     /* Change the size in the header to be larger than the actual size */
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, (void *)&very_large, 4);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, (void *)&very_large, 4);
     ext_flash_lock();
 
     wolfBoot_update_trigger();
@@ -1066,7 +1171,7 @@ START_TEST (test_invalid_sha) {
 
     memset(bad_digest, 0xBA, SHA256_DIGEST_SIZE);
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
     ext_flash_lock();
     wolfBoot_update_trigger();
     wolfBoot_start();
@@ -1085,8 +1190,9 @@ START_TEST (test_emergency_rollback) {
     add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
     /* Set the testing flag in the last five bytes of the BOOT partition */
     hal_flash_unlock();
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
-            testing_flags, 5);
+    /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
+     * the key/nonce trailer sits between the state trailer and the end. */
+    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
     hal_flash_lock();
 
     wolfBoot_start();
@@ -1107,8 +1213,9 @@ START_TEST (test_emergency_rollback_equal_versions) {
     add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
     /* Set the testing flag in the last five bytes of the BOOT partition */
     hal_flash_unlock();
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
-            testing_flags, 5);
+    /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
+     * the key/nonce trailer sits between the state trailer and the end. */
+    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
     hal_flash_lock();
 
     wolfBoot_start();
@@ -1129,13 +1236,14 @@ START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
     add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL);
     /* Set the testing flag in the last five bytes of the BOOT partition */
     hal_flash_unlock();
-    hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 5,
-            testing_flags, 5);
+    /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
+     * the key/nonce trailer sits between the state trailer and the end. */
+    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
     hal_flash_lock();
 
     /* Corrupt the update */
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS, wrong_update_magic, 4);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS, wrong_update_magic, 4);
     ext_flash_lock();
 
     wolfBoot_start();
@@ -1163,7 +1271,7 @@ START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
     add_payload(PART_UPDATE, 5, TEST_SIZE_SMALL);
     memset(bad_digest, 0xBA, SHA256_DIGEST_SIZE);
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
     ext_flash_lock();
     wolfBoot_start();
     /* We expect to panic */
@@ -1200,33 +1308,38 @@ START_TEST (test_diffbase_version_reads)
     prepare_flash();
 
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
             (const uint8_t *)&magic, sizeof(magic));
     version_le = host_to_img_u32(version);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4,
             (const uint8_t *)&version_le, sizeof(version_le));
 
     word = (4u << 16) | HDR_VERSION;
     word_le = word;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 8,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 8,
             (const uint8_t *)&word_le, sizeof(word_le));
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 12,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 12,
             (const uint8_t *)&version_le, sizeof(version_le));
 
     word = (2u << 16) | HDR_IMG_TYPE;
     word_le = word;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 16,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 16,
             (const uint8_t *)&word_le, sizeof(word_le));
     img_type_le = host_to_img_u16(img_type);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20,
             (const uint8_t *)&img_type_le, sizeof(img_type_le));
 
+    /* The TLVs follow the sign tool's dense layout: the delta-base TLV
+     * starts right after the image-type TLV (offset 22). A gap here would
+     * be padding that only reads as 0xFF in plaintext builds; in encrypted
+     * builds the gap is ciphertext and the header walker would skip past
+     * the next TLV. */
     word = (4u << 16) | HDR_IMG_DELTA_BASE;
     word_le = word;
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 24,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 22,
             (const uint8_t *)&word_le, sizeof(word_le));
     delta_base_le = host_to_img_u32(delta_base);
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 28,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 26,
             (const uint8_t *)&delta_base_le, sizeof(delta_base_le));
     ext_flash_lock();
 
@@ -1270,7 +1383,7 @@ START_TEST (test_diffbase_version_reads_from_little_endian_bytes)
     prepare_flash();
 
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+    update_part_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
         (const uint8_t *)&magic, sizeof(magic));
     ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 4, TEST_SIZE_SMALL);
 
@@ -1283,14 +1396,26 @@ START_TEST (test_diffbase_version_reads_from_little_endian_bytes)
     ext_flash_write_le16(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 20, img_type);
 
     tag = (4u << 16) | HDR_IMG_DELTA_BASE;
-    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 24, tag);
-    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 28, delta_base);
+    /* Dense TLV layout, as in the sign tool: no padding gap before the
+     * delta-base TLV (see test_diffbase_version_reads). */
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 22, tag);
+    ext_flash_write_le32(WOLFBOOT_PARTITION_UPDATE_ADDRESS + 26, delta_base);
     ext_flash_lock();
 
     ck_assert_uint_eq(wolfBoot_get_image_version(PART_UPDATE), version);
     ck_assert_uint_eq(wolfBoot_get_diffbase_version(PART_UPDATE), delta_base);
-    ck_assert_uint_eq(wolfBoot_get_blob_diffbase_version(
-        (uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS), delta_base);
+
+    /* The blob accessor expects a plaintext header; in EXT_ENCRYPTED
+     * builds the partition itself holds ciphertext, so hand it the
+     * decrypted copy. */
+    {
+        uint8_t hdr[IMAGE_HEADER_SIZE];
+        ext_flash_unlock();
+        ext_flash_check_read((uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS, hdr,
+            IMAGE_HEADER_SIZE);
+        ext_flash_lock();
+        ck_assert_uint_eq(wolfBoot_get_blob_diffbase_version(hdr), delta_base);
+    }
 
     cleanup_flash();
 }
@@ -1701,8 +1826,12 @@ Suite *wolfboot_suite(void)
 #ifdef UNIT_TEST_FALLBACK_ONLY
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_fallback_iv_image_roundtrips);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
+#ifdef CUSTOM_ENCRYPT_KEY
+    tcase_add_test(fallback_verify, test_boot_success_erases_encrypt_key);
+#endif
     suite_add_tcase(s, fallback_verify);
     tcase_add_test(encrypt_write_bounds,
         test_encrypt_write_keeps_trailing_partial_block);
@@ -1764,8 +1893,19 @@ Suite *wolfboot_suite(void)
 #endif
 #ifdef EXT_ENCRYPTED
     tcase_add_test(fallback_verify, test_fallback_image_verification_rejects_corruption);
+    tcase_add_test(fallback_verify, test_fallback_iv_image_roundtrips);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_read_failure);
     tcase_add_test(fallback_verify, test_final_swap_propagates_encrypt_key_persist_failure);
+#ifdef CUSTOM_ENCRYPT_KEY
+    tcase_add_test(fallback_verify, test_boot_success_erases_encrypt_key);
+#endif
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_keeps_trailing_partial_block);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_zero_length_leaves_flash_untouched);
+    tcase_add_test(encrypt_write_bounds,
+        test_encrypt_write_reports_head_block_write_failure);
+    suite_add_tcase(s, encrypt_write_bounds);
 #endif
 
     suite_add_tcase(s, empty_panic);
