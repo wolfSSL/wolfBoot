@@ -42,6 +42,13 @@
 static FWTPM_CTX fwtpm_ctx;
 static int fwtpm_ready;
 
+/* Staging buffer for FWTPM_ProcessCommand(): the processor writes up to
+ * a max-sized response regardless of the capacity the caller offers, so
+ * it must never write into the caller's (possibly shorter) buffer. The
+ * response is copied out only after the produced length has been
+ * checked against the snapshotted capacity. */
+static uint8_t g_fwtpm_rsp_stage[WCS_FWTPM_MAX_COMMAND_SIZE];
+
 extern unsigned int _start_heap;
 extern unsigned int _heap_size;
 
@@ -164,14 +171,17 @@ int CSME_NSE_API wcs_fwtpm_transmit(const uint8_t *cmd, uint32_t cmdSz,
         return BAD_FUNC_ARG;
     }
 
-    rspLen = (int)rspCapacity;
-    rc = FWTPM_ProcessCommand(&fwtpm_ctx, cmd, (int)cmdSz, rsp, &rspLen, 0);
+    rspLen = (int)WCS_FWTPM_MAX_COMMAND_SIZE;
+    rc = FWTPM_ProcessCommand(&fwtpm_ctx, cmd, (int)cmdSz,
+                              g_fwtpm_rsp_stage, &rspLen, 0);
     if (rc == TPM_RC_SUCCESS) {
-        wireSz = fwtpm_rsp_size(rsp, rspLen);
+        wireSz = fwtpm_rsp_size(g_fwtpm_rsp_stage, rspLen);
         if (wireSz > 0U && wireSz <= rspCapacity) {
+            memcpy(rsp, g_fwtpm_rsp_stage, wireSz);
             *rspSz = wireSz;
         }
         else if (rspLen >= 0 && (uint32_t)rspLen <= rspCapacity) {
+            memcpy(rsp, g_fwtpm_rsp_stage, (uint32_t)rspLen);
             *rspSz = (uint32_t)rspLen;
         }
         else {

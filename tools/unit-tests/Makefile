@@ -116,6 +116,7 @@ TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-hifive1-flash-write
+TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -374,6 +375,13 @@ unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 		$(LDFLAGS) -Wl,--gc-sections
 
 unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fwtpm-rsp-overrun: a response capacity below the 10-byte minimum
+# response must not be overrun by the fwTPM processor (F-11043); the
+# veneer processes into a staging buffer and copies only what fits.
+unit-fwtpm-rsp-overrun: ../../include/target.h unit-fwtpm-rsp-overrun.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
 
