@@ -26,12 +26,40 @@
 
 #include <stdint.h>
 
+/* Every field in an MBR, a GPT structure, a FAT32 BPB and an ext4 superblock
+ * is little-endian ON DISK. Casting a sector to a packed struct and
+ * dereferencing it is therefore only correct on a little-endian host, so all
+ * on-disk values are read through these instead. One definition, used by the
+ * partition layer and by the filesystem parsers alike. */
+static inline uint16_t gpt_le16(const uint8_t *p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+static inline uint32_t gpt_le32(const uint8_t *p)
+{
+    return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static inline uint64_t gpt_le64(const uint8_t *p)
+{
+    return (uint64_t)gpt_le32(p) | ((uint64_t)gpt_le32(p + 4) << 32);
+}
+
+
 /* GPT Constants */
 #define GPT_SECTOR_SIZE        512 /* 0x200 */
 #define GPT_SIGNATURE          0x5452415020494645ULL /* "EFI PART" */
 #define GPT_PTYPE_PROTECTIVE   0xEE
 #define GPT_PART_NAME_SIZE     36
 #define GPT_MBR_ENTRY_START    0x01BE
+
+/* MBR partition entry field offsets, shared by src/gpt.c and src/disk.c. */
+#define GPT_MBR_PTE_PTYPE      0x04
+#define GPT_MBR_PTE_LBA_FIRST  0x08
+#define GPT_MBR_PTE_LBA_SIZE   0x0C
+#define GPT_MBR_PTE_SIZE       0x10
 #define GPT_MBR_BOOTSIG_OFFSET 0x01FE
 #define GPT_MBR_BOOTSIG_VALUE  0xAA55
 #define GPT_PART_ENTRY_SIZE    256
