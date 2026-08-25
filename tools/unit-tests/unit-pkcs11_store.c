@@ -511,6 +511,90 @@ START_TEST(test_shorter_overwrite_erases_residual_key_material)
 }
 END_TEST
 
+/* A second write window opened while the first is still open must not
+ * discard the first window's pending writes: both objects survive. */
+START_TEST(test_interleaved_write_windows_both_persist)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 60;
+    void *store_a = NULL;
+    void *store_b = NULL;
+    void *store = NULL;
+    char first[] = "first window payload";
+    char second[] = "second window payload";
+    char rd[64];
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Window A: open + write, left open (dirty sector cache). */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 0, &store_a);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_a, first, (int)strlen(first) + 1);
+    ck_assert_int_eq(ret, (int)strlen(first) + 1);
+
+    /* Window B while A is still open: the open re-validates the vault
+     * and must commit A's batch, not drop it. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 2, 0, &store_b);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_b, second, (int)strlen(second) + 1);
+    ck_assert_int_eq(ret, (int)strlen(second) + 1);
+    wolfPKCS11_Store_Close(store_b);
+    wolfPKCS11_Store_Close(store_a);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Read(store, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(first) + 1);
+    ck_assert(strcmp(first, rd) == 0);
+    wolfPKCS11_Store_Close(store);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 2, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Read(store, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(second) + 1);
+    ck_assert(strcmp(second, rd) == 0);
+    wolfPKCS11_Store_Close(store);
+}
+END_TEST
+
+/* A reader opened on the same object while a write window holds it must
+ * see that window's writes (committed by the reader's own vault
+ * validation), not a NOT_AVAILABLE error or erased flash. */
+START_TEST(test_concurrent_reader_sees_pending_writes)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 70;
+    void *store_w = NULL;
+    void *store_r = NULL;
+    char secret[] = "pending write";
+    char rd[64];
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 0, &store_w);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_w, secret, (int)strlen(secret) + 1);
+    ck_assert_int_eq(ret, (int)strlen(secret) + 1);
+
+    /* The write is still pending in the write window. A concurrent
+     * reader on the same object must observe it, not erased flash. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store_r);
+    ck_assert_int_eq(ret, 0);
+    memset(rd, 0, sizeof(rd));
+    ret = wolfPKCS11_Store_Read(store_r, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(secret) + 1);
+    ck_assert(strcmp(secret, rd) == 0);
+    wolfPKCS11_Store_Close(store_r);
+    wolfPKCS11_Store_Close(store_w);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -523,6 +607,8 @@ Suite *wolfboot_suite(void)
     TCase* tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase* tcase_find_bounds = tcase_create("find_bounds");
     TCase* tcase_remanence = tcase_create("shorter_overwrite_erases_residual");
+    TCase* tcase_interleaved = tcase_create("interleaved_windows");
+    TCase* tcase_concurrent_read = tcase_create("concurrent_reader");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -530,6 +616,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     tcase_add_test(tcase_remanence, test_shorter_overwrite_erases_residual_key_material);
+    tcase_add_test(tcase_interleaved, test_interleaved_write_windows_both_persist);
+    tcase_add_test(tcase_concurrent_read, test_concurrent_reader_sees_pending_writes);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
@@ -537,6 +625,8 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
     suite_add_tcase(s, tcase_remanence);
+    suite_add_tcase(s, tcase_interleaved);
+    suite_add_tcase(s, tcase_concurrent_read);
     return s;
 }
 

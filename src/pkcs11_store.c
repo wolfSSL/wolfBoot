@@ -336,15 +336,6 @@ static void cache_flush_all(void)
     }
 }
 
-static void cache_reset(void)
-{
-    int i;
-
-    for (i = 0; i < WOLFBOOT_PKCS11_STORE_CACHE_SECTORS; i++) {
-        store_cache[i].sector = NULL;
-    }
-}
-
 /*
  * Read access to a vault sector: the RAM copy when the sector is
  * cached, flash otherwise. Writes must go through cache_get_sector().
@@ -385,7 +376,12 @@ static void check_vault(void)
     uint8_t *s0 = NULL;
     uint32_t total_vault_size = KEYVAULT_MAX_ITEMS * KEYVAULT_OBJ_SIZE;
 
-    cache_reset();
+    /* The cache is shared across all open windows: commit any pending
+     * sectors before (re)validating instead of dropping them, or a
+     * still-open window would silently lose its writes. The flush is
+     * atomic (header last), so this only moves that window's commit
+     * point earlier, it never mixes batches. */
+    cache_flush_all();
 
     if ((total_vault_size % WOLFBOOT_SECTOR_SIZE) != 0)
         total_vault_size = (total_vault_size / WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE + WOLFBOOT_SECTOR_SIZE;
@@ -418,8 +414,8 @@ static void delete_object(int32_t type, uint32_t tok_id, uint32_t obj_id)
     uint8_t *s0;
 
     /* Deletions are durable on return, like the historical per-write
-     * commits: validate the vault (resets the cache) and commit the
-     * whole batch before returning. */
+     * commits: validate the vault (commits pending sectors) and commit
+     * the whole batch before returning. */
     check_vault();
     s0 = cache_get_sector(0);
     hdr = (struct obj_hdr *)(s0 + STORE_PRIV_HDR_OFFSET);
@@ -707,6 +703,8 @@ int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
 {
     struct store_handle *handle = store;
     uint32_t obj_size = 0;
+    uint32_t src_off;
+    uint32_t remaining;
     if ((handle == NULL) || (handle->hdr == NULL) || (handle->buffer == NULL))
        return -1;
 
@@ -722,7 +720,26 @@ int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
         len = (obj_size - handle->in_buffer_offset);
 
     if (len > 0) {
-        memcpy(buffer, (uint8_t *)(handle->buffer) + handle->in_buffer_offset, len);
+        /* Read through sector_ptr() like every other read in this file:
+         * the RAM copy when the sector is cached, flash otherwise, so a
+         * cached (not yet committed) sector can never be read stale. */
+        src_off = (uint32_t)((uintptr_t)handle->buffer +
+            handle->in_buffer_offset - (uintptr_t)vault_base);
+        remaining = (uint32_t)len;
+        while (remaining > 0) {
+            uint32_t in_sector = src_off % WOLFBOOT_SECTOR_SIZE;
+            uint32_t chunk = WOLFBOOT_SECTOR_SIZE - in_sector;
+            uint8_t *s;
+
+            if (chunk > remaining) {
+                chunk = remaining;
+            }
+            s = sector_ptr(src_off - in_sector);
+            memcpy(buffer, s + in_sector, chunk);
+            buffer += chunk;
+            src_off += chunk;
+            remaining -= chunk;
+        }
         handle->in_buffer_offset += len;
     }
     return len;
