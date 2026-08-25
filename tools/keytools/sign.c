@@ -1339,8 +1339,8 @@ static uint32_t header_digest_size(int hash_algo)
     }
 }
 
-/* Hash the first fdt_totalsize bytes of a DTB with the image hash algorithm
- * (the same span the bootloader hashes). Applies at least fdt_check_header()'s
+/* Hash the first `totalsize` header-field bytes of a DTB with the image hash
+ * algorithm (the same span the bootloader hashes). Applies at least fdt_open()'s
  * checks (magic, version range); intentionally stricter. Writes digest to out,
  * length to out_sz. Returns 0 on success, -1 on error. */
 static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
@@ -1350,7 +1350,10 @@ static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
      * last_comp_version@0x18. */
     const uint32_t FDT_MAGIC = 0xd00dfeedU;
     const uint32_t FDT_HDR_SIZE = 40U;
-    const uint32_t FDT_FIRST_VER = 0x10U;
+    /* Must track include/fdt.h's FDT_SUPPORTED_VERSION: the bootloader
+     * parser accepts v17 and later only, so signing a v16 blob here would
+     * produce an image that fails to boot. */
+    const uint32_t FDT_FIRST_VER = 0x11U;
     const uint32_t FDT_LAST_COMP_VER = 0x11U;
     FILE *f;
     uint8_t hdr[40];
@@ -1394,7 +1397,8 @@ static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
         fclose(f);
         return -1;
     }
-    /* A file shorter than fdt_totalsize can't be hashed as declared (reject);
+    /* A file shorter than the declared totalsize can't be hashed as
+     * declared (reject);
      * a longer one (trailing padding) is hashed over the declared span (warn). */
     fseek(f, 0, SEEK_END);
     fsz = ftell(f);

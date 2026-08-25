@@ -295,13 +295,16 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 #ifdef MMU
     uint32_t dts_size = 0;
+    /* Validated view of the FIT staged at load_address. */
+    fdt_ctx  fit_ctx;
     /* HDR_DEVICE_TREE_DIGEST snapshot, taken before the raw DTB is loaded. */
     uint8_t  dts_digest[WOLFBOOT_SHA_DIGEST_SIZE];
     uint8_t *dts_tlv = NULL;
     uint16_t dts_tlv_len = 0;
     int      dts_digest_present = 0; /* 0 absent, 1 valid, -1 malformed */
 #if defined(EXT_FLASH) && defined(WOLFBOOT_DTS_BOOT_ADDRESS)
-    uint8_t  dts_hdr[64]; /* FDT header peek (fdt_check_header needs >= 40) */
+    /* FDT header peek (fdt_peek_size needs >= 40 bytes, 4-byte aligned) */
+    uint8_t  dts_hdr[64] __attribute__((aligned(4)));
 #endif
 #endif
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
@@ -612,17 +615,20 @@ backup_on_failure:
         }
     }
 
-    /* Is this a Flattened uImage Tree (FIT) image (FDT format) */
-    if (wolfBoot_get_dts_size(load_address) > 0) {
-        void* fit = (void*)load_address;
+    /* Is this a Flattened uImage Tree (FIT) image (FDT format)? The
+     * capacity handed to the parser is the number of verified bytes
+     * staged at load_address, so a FIT that overstates its own size is
+     * rejected here rather than read past. */
+    if (fdt_open(&fit_ctx, (void*)load_address, os_image.fw_size) == 0) {
+        fdt_ctx* fit = &fit_ctx;
         const char *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
         const char *fpga = NULL;
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
         void *atf_load;
 #endif
 
-        wolfBoot_printf("Flattened uImage Tree: Version %d, Size %d\n",
-            fdt_version(fit), fdt_totalsize(fit));
+        wolfBoot_printf("Flattened uImage Tree: Size %d\n",
+            (int)fdt_size(fit));
 
         (void)fit_find_images(fit, &kernel, &flat_dt, &ramdisk, &fpga);
 #ifdef WOLFBOOT_FPGA_BITSTREAM
@@ -659,9 +665,13 @@ backup_on_failure:
         }
 #endif
         if (flat_dt != NULL) {
-            uint8_t *dts_ptr = fit_load_image(fit, flat_dt, NULL);
-            int parsed = (dts_ptr != NULL)
-                ? wolfBoot_get_dts_size(dts_ptr) : -1;
+            int dt_len = 0;
+            uint8_t *dts_ptr = fit_load_image(fit, flat_dt, &dt_len);
+            /* Bound the parse by the sub-image's own declared length,
+             * not by the generic staging maximum: that is the tightest
+             * bound available here. */
+            int parsed = (dts_ptr != NULL && dt_len > 0)
+                ? wolfBoot_get_dts_size(dts_ptr, (uint32_t)dt_len) : -1;
             if (dts_ptr != NULL &&
                     parsed >= (int)WOLFBOOT_DTS_MIN_SIZE &&
                     (uint32_t)parsed <= WOLFBOOT_DTS_MAX_SIZE) {
@@ -679,7 +689,16 @@ backup_on_failure:
         }
 #ifdef WOLFBOOT_FIT_RAMDISK
         if (ramdisk != NULL) {
-            (void)fit_load_ramdisk(fit, ramdisk, (void*)dts_addr);
+            fdt_ctx dts_ctx;
+            fdt_ctx* dts_for_initrd = NULL;
+
+            /* The relocated DTB sits in the staging window, so that is
+             * the capacity the initrd fixup may grow into. */
+            if (dts_addr != NULL &&
+                    fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
+                dts_for_initrd = &dts_ctx;
+            }
+            (void)fit_load_ramdisk(fit, ramdisk, dts_for_initrd);
         }
 #else
         (void)ramdisk;
@@ -691,7 +710,7 @@ backup_on_failure:
          * no usable address (NULL, or a flash offset on NO_XIP targets). */
         dts_addr = hal_get_dts_address();
         if (dts_addr != NULL) {
-            ret = wolfBoot_get_dts_size(dts_addr);
+            ret = wolfBoot_get_dts_size(dts_addr, WOLFBOOT_DTS_MAX_SIZE);
             if (ret < (int)WOLFBOOT_DTS_MIN_SIZE ||
                     (uint32_t)ret > WOLFBOOT_DTS_MAX_SIZE) {
                 wolfBoot_printf("DTB parse/size check failed - ignoring\n");
@@ -711,13 +730,20 @@ backup_on_failure:
             ret = ext_flash_read((uintptr_t)WOLFBOOT_DTS_BOOT_ADDRESS,
                     dts_hdr, (int)sizeof(dts_hdr));
             if (ret == (int)sizeof(dts_hdr)) {
-                ret = wolfBoot_get_dts_size(dts_hdr);
-                if (ret >= (int)WOLFBOOT_DTS_MIN_SIZE &&
-                        (uint32_t)ret <= WOLFBOOT_DTS_MAX_SIZE) {
-                    dts_size = (uint32_t)ret;
+                uint32_t peeked = 0;
+                /* Only the header has been read so far; fdt_peek_size
+                 * validates just that much and reports the size to
+                 * fetch. The complete blob is validated below. */
+                ret = fdt_peek_size(dts_hdr, (uint32_t)sizeof(dts_hdr),
+                    &peeked);
+                if (ret == 0) {
+                    dts_size = peeked;
                     if (ext_flash_read((uintptr_t)WOLFBOOT_DTS_BOOT_ADDRESS,
                             (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS, (int)dts_size)
-                            == (int)dts_size)
+                            == (int)dts_size &&
+                            wolfBoot_get_dts_size(
+                                (void*)WOLFBOOT_LOAD_DTS_ADDRESS, dts_size)
+                                == (int)dts_size)
                         dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
                     else
                         dts_size = 0;

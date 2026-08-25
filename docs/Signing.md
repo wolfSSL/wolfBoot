@@ -294,7 +294,7 @@ Provides a value to be set with a custom tag
    `--cmdline "root=/dev/mmcblk0p2 rw rootwait console=ttyTCU0,115200"`.
 
    * `--dts filename`: Binds a raw (non-FIT) device tree blob to the firmware image. The sign
-   tool hashes exactly the first `fdt_totalsize` bytes of the `.dtb` (validating the FDT magic
+   tool hashes exactly the first `totalsize` bytes of the `.dtb`, per that header field (validating the FDT magic
    and version the same way the bootloader does) with the image hash algorithm and stores the
    digest as a signature-covered TLV using the wolfBoot-reserved tag `HDR_DEVICE_TREE_DIGEST`
    (0x35). At boot, the non-FIT MMU path (`src/update_ram.c`) hashes the DTB it loads from the

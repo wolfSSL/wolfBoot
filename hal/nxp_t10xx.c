@@ -3397,29 +3397,33 @@ void* hal_get_dts_address(void)
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
 
-int hal_dts_fixup(void* dts_addr)
+int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
 #ifndef BUILD_LOADER_STAGE1
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    fdt_ctx ctx;
+    fdt_ctx* fdt = &ctx;
     int off, i;
     uint32_t cell;
     uint32_t *reg;
     const char* prev_compat;
 
-    /* verify the FTD is valid */
-    off = fdt_check_header(dts_addr);
+    /* Validate the blob against the window it actually occupies. */
+    off = fdt_open(&ctx, dts_addr, capacity);
     if (off != 0) {
         wolfBoot_printf("FDT: Invalid header! %d\n", off);
         return off;
     }
 
     /* display FTD information */
-    wolfBoot_printf("FDT: Version %d, Size %d\n",
-        fdt_version(fdt), fdt_totalsize(fdt));
+    wolfBoot_printf("FDT: Size %d\n", (int)fdt_size(fdt));
 
-    /* expand total size */
-    fdt->totalsize += 2048; /* expand by 2KB */
-    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", fdt->totalsize);
+    /* Reserve headroom for the fixups below. */
+    off = fdt_grow(fdt, 2048U);
+    if (off != 0) {
+        wolfBoot_printf("FDT: No headroom for fixups (%d)\n", off);
+        return off;
+    }
+    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", (int)fdt_size(fdt));
 
     /* fixup the memory region - single bank */
     off = fdt_find_devtype(fdt, -1, "memory");
@@ -3516,6 +3520,11 @@ int hal_dts_fixup(void* dts_addr)
 
         wolfBoot_printf("FDT: Set %s@%d (%d), %s=%d,%d\n",
             "qman-portal", i, off, "fsl,liodn", liodns[0], liodns[1]);
+        /* Property cells are big-endian on the wire. Identity on the
+         * PowerPC targets that run this, but without it the host tests
+         * write host-order bytes that hardware never produces. */
+        liodns[0] = cpu_to_fdt32(liodns[0]);
+        liodns[1] = cpu_to_fdt32(liodns[1]);
         fdt_setprop(fdt, off, "fsl,liodn", liodns, sizeof(liodns));
 
         /* Add fman@0 node and fsl,liodon = FMAN_DMA_LIODN + index */
@@ -3524,6 +3533,7 @@ int hal_dts_fixup(void* dts_addr)
             liodns[0] = FMAN_DMA_LIODN + i + 1;
             wolfBoot_printf("FDT: Set %s@%d/%s (%d), %s=%d\n",
                 "qman-portal", i, "fman@0", childoff, "fsl,liodn", liodns[0]);
+            liodns[0] = cpu_to_fdt32(liodns[0]);
             fdt_setprop(fdt, childoff, "fsl,liodn", liodns, sizeof(liodns[0]));
             off = childoff;
         }
@@ -3588,8 +3598,14 @@ int hal_dts_fixup(void* dts_addr)
                         0x10, 0x00,       0x00, 0x00,       0x00, 0x80000000
         };
         uint32_t bus_range[2], base;
-        bus_range[0] = 0;
-        bus_range[1] = i-1;
+        unsigned int c;
+
+        /* Cells are big-endian on the wire; a no-op on PowerPC. */
+        for (c = 0; c < sizeof(dma_ranges)/sizeof(dma_ranges[0]); c++) {
+            dma_ranges[c] = cpu_to_fdt32(dma_ranges[c]);
+        }
+        bus_range[0] = cpu_to_fdt32(0);
+        bus_range[1] = cpu_to_fdt32((uint32_t)(i-1));
 
         /* find offset for pci controlller base register */
         off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qoriq-pcie");
@@ -3635,6 +3651,7 @@ int hal_dts_fixup(void* dts_addr)
 
 #endif /* !BUILD_LOADER_STAGE1 */
     (void)dts_addr;
+    (void)capacity;
     return 0;
 }
 #endif /* MMU */
