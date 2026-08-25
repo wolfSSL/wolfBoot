@@ -301,9 +301,8 @@ void sdhci_reg_write(uint32_t offset, uint32_t value)
 
 void sdhci_platform_init(void)
 {
-    /* SPL initialized the host, clocks, reset and pinmux while loading BL31
-     * and BL33. Preserve that live host state and restore the 013B PHY timing
-     * required after wolfBoot takes ownership from TF-A. */
+    /* SPL initialized the clocks and pinmux; the generic driver then soft
+     * resets the host, so restore the 013B PHY timing here. */
     if (agilex5_sdhci_phy_init() != 0)
         wolfBoot_printf("SDHCI: Cadence PHY initialization timed out\n");
 }

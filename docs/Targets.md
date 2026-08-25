@@ -9205,7 +9205,6 @@ The difference between the two timestamps is the cost of everything wolfBoot doe
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
 
-<<<<<<< HEAD
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
 wolfBoot runs on the Texas Instruments C2000 C28x DSP (TMS320F28P550SJ, 150 MHz) as a secure execute-in-place (XIP) bootloader. The C28x is word-addressed with `CHAR_BIT == 16` (no 8-bit type -- each octet occupies one 16-bit cell), built with the TI `cl2000` toolchain against wolfSSL's wide-byte (`CHAR_BIT != 8`) support.
