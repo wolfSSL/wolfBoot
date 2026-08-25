@@ -99,6 +99,7 @@ TESTS+=unit-ata-security-passphrase-zeroize
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
+TESTS+=unit-elf-mmu-fail
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-dice-token-size
@@ -112,9 +113,17 @@ TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
+TESTS+=unit-t10xx-flash-status
+TESTS+=unit-p1021-erase-advance
+TESTS+=unit-hifive1-flash-write
+TESTS+=unit-fwtpm-rsp-overrun
+TESTS+=unit-fwtpm-cmd-toctou
+TESTS+=unit-fdt-memrsv-wrap
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
+TESTS+=unit-ecc-raw-der
+TESTS+=unit-stm32g4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
@@ -370,6 +379,32 @@ unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 unit-fwtpm-nv-oob: ../../include/target.h unit-fwtpm-nv-oob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fwtpm-rsp-overrun: a response capacity below the 10-byte minimum
+# response must not be overrun by the fwTPM processor (F-11043); the
+# veneer processes into a staging buffer and copies only what fits.
+unit-fwtpm-rsp-overrun: ../../include/target.h unit-fwtpm-rsp-overrun.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fwtpm-cmd-toctou: a midflight NS rewrite of the command buffer
+# must not change what the processor executes (F-11044); the veneer
+# stages the command in secure memory before processing.
+unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
+	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
+		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-fdt-memrsv-wrap: a wrapped string-block end in fdt_add_mem_rsv()
+# must be rejected, not turned into a huge memmove (F-11045).
+fdt_memrsv_extract.h: ../../src/fdt.c
+	sed -n '/^uint32_t cpu_to_fdt32/,/^}/p' $< > $@
+	sed -n '/^uint64_t cpu_to_fdt64/,/^}/p' $< >> $@
+	sed -n '/^uint32_t fdt32_to_cpu/,/^}/p' $< >> $@
+	sed -n '/^uint64_t fdt64_to_cpu/,/^}/p' $< >> $@
+	sed -n '/^int fdt_add_mem_rsv/,/^}/p' $< >> $@
+
+unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c fdt_memrsv_extract.h
+	gcc -o $@ unit-fdt-memrsv-wrap.c -I../../include $(CFLAGS) $(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
@@ -989,6 +1024,105 @@ t2080_fman_extract.h: ../../hal/nxp_t2080.c
 unit-t2080-fman-loader: unit-t2080-fman-loader.c t2080_fman_extract.h
 	gcc -o $@ unit-t2080-fman-loader.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32g4-write runs the real hal_flash_write() from hal/stm32g4.c
+# (F-11023: the double-word fast path was selected on "len - i > 3" but
+# consumed eight bytes, so an aligned 4-7 byte tail over-read the
+# caller's buffer and over-programmed flash). Same harness as the
+# STM32L5/STM32U5 twins; the g4 helpers are static and un-prefixed.
+stm32g4_write_extract.h: ../../hal/stm32g4.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
+	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
+# and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
+# status model (F-11033: a timed-out program/erase used to report
+# success because the wait result was discarded).
+t10xx_flash_status_extract.h: ../../hal/nxp_t10xx.c
+	sed -n '/^static void hal_flash_unlock_sector/,/^}/p' $< > $@
+	sed -n '/^static int hal_flash_status_wait/,/^}/p' $< >> $@
+	sed -n '/^int hal_flash_write/,/^}/p' $< >> $@
+	sed -n '/^int hal_flash_erase/,/^}/p' $< >> $@
+
+unit-t10xx-flash-status: unit-t10xx-flash-status.c t10xx_flash_status_extract.h
+	gcc -o $@ unit-t10xx-flash-status.c $(CFLAGS) $(LDFLAGS)
+
+# unit-p1021-erase-advance runs the real ext_flash_erase() from
+# hal/nxp_p1021.c against mocked ELBC access (F-11034: the loop never
+# advanced the address, re-erasing the first block of the range).
+p1021_erase_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/#define ELBC_BASE /p' $< > $@
+	sed -n '/#define ELBC_MDR /p' $< >> $@
+	sed -n '/#define ELBC_FIR /p' $< >> $@
+	sed -n '/#define ELBC_FCR /p' $< >> $@
+	sed -n '/#define ELBC_FBCR /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP(/p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_PA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM2 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CW1 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_RS /p' $< >> $@
+	sed -n '/#define ELBC_FCR_CMD(/p' $< >> $@
+	sed -n '/#define NAND_CMD_STATUS /p' $< >> $@
+	sed -n '/#define NAND_CMD_BLOCK_ERASE1 /p' $< >> $@
+	sed -n '/#define NAND_CMD_BLOCK_ERASE2 /p' $< >> $@
+	sed -n '/#define FLASH_PAGE_SIZE /p' $< >> $@
+
+p1021_erase_fn_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/^int ext_flash_erase/,/^}/p' $< > $@
+
+unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
+	p1021_erase_fn_extract.h
+	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
+
+# unit-hifive1-flash-write runs the real hal_flash_write() from
+# hal/hifive1.c against a mock fespi model (F-11035: the final partial
+# page of a multi-page write took the full-page branch, over-reading
+# the input and over-programming flash).
+hifive1_flash_write_extract.h: ../../hal/hifive1.c
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< > $@
+
+unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
+	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
+# verification (F-11024: the wolfHSM verify path in src/image.c passed
+# minimal field sizes with field-start pointers to
+# wc_ecc_rs_raw_to_sig, corrupting signatures with leading zeros). It
+# links the same wolfSSL sources the sign tool uses.
+unit-ecc-raw-der: unit-ecc-raw-der.c
+	# WOLFSSL_NO_DER_TO_PEM: the test config's NO_CODING drops base64, which
+	# DER-to-PEM (pulled in by WOLFSSL_KEY_GEN) needs; the test uses no PEM.
+	gcc -o $@ unit-ecc-raw-der.c $(CFLAGS) -DWOLFCRYPT_TEST -DWOLFSSL_NO_DER_TO_PEM \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/coding.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed25519.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ed448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/fe_operations.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_448.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ge_operations.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/rsa.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.c $(LDFLAGS)
+
 # unit-stm32l5-write runs the real hal_flash_write() from hal/stm32l5.c
 # (an 8-byte program unit was read whole even when len left a
 # partial unit, over-reading the caller's buffer and writing the excess
@@ -1141,6 +1275,13 @@ unit-elf-entry-inplace: unit-elf-entry-inplace.c
 	gcc -o $@ $< -I../../include -DWOLFBOOT_ELF -DARCH_FLASH_OFFSET=0 \
 		-DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
+# unit-elf-mmu-fail: a failing mmu_cb must abort the whole ELF load
+# (F-11027: the failed mapping used to be skipped with continue, and
+# the entry point was published for a partially loaded image).
+unit-elf-mmu-fail: unit-elf-mmu-fail.c ../../src/elf.c
+	gcc -o $@ unit-elf-mmu-fail.c -I../../include -DWOLFBOOT_ELF \
+		-DARCH_FLASH_OFFSET=0 -DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
 unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
 	gcc -o $@ unit-image-elf-scatter.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 		$(CFLAGS) $(LDFLAGS)
@@ -1155,10 +1296,14 @@ covclean:
 
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
-GENERATED_SRC:=aurix_erased_extract.h nvm_cache_scrub_extract.h \
+GENERATED_SRC:=aurix_erased_extract.h fdt_memrsv_extract.h \
+	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	sdhci_host.c stm32l5_write_extract.h stm32u5_write_extract.h \
-	t10xx_qe_firmware_extract.h t2080_fman_extract.h \
+	p1021_erase_extract.h p1021_erase_fn_extract.h sdhci_host.c \
+	stm32g4_write_extract.h stm32l5_write_extract.h \
+	stm32u5_write_extract.h \
+	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
+	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
 	zynq_write_extract.h

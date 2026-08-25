@@ -174,16 +174,8 @@ jobs:
 
           echo "$output"
 
-          # TODO hal/library.c does not currently return an error code during failure
-          # Test only looks for the word "Failure"
-          # See https://github.com/wolfSSL/wolfBoot/pull/625
-
-          # If the tool printed "Failure", treat it as a failure regardless of exit code
-          if echo "$output" | grep -F "Failure" >/dev/null; then
-              status=1
-          fi
-
-          # Must have failed (non-zero exit)
+          # A rejected image must exit non-zero: wolfBoot_start() propagates
+          # the verify error to the process exit code
           if [ "$status" -eq 0 ]; then
             echo "Expected failure, but exit code was 0"
             exit 1

@@ -3249,6 +3249,7 @@ static int hal_flash_status_wait(uint32_t sector, uint16_t mask, uint32_t timeou
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     uint32_t i, pos, sector, offset, xfer, nwords;
+    int ret = 0;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -3288,7 +3289,9 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
             FLASH_IO16_WRITE(sector, offset, 0);
             FLASH_IO16_WRITE(sector, offset, word);
             FLASH_IO8_WRITE(sector, offset, AMD_CMD_WRITE_BUFFER_CONFIRM);
-            hal_flash_status_wait(sector, 0x44, 200*1000);
+            ret = hal_flash_status_wait(sector, 0x44, 200*1000);
+            if (ret != 0)
+                return ret;
             address++;
             pos++;
             len--;
@@ -3317,7 +3320,9 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
         /* Typical 410us */
 
         /* poll for program completion - max 200ms */
-        hal_flash_status_wait(sector, 0x44, 200*1000);
+        ret = hal_flash_status_wait(sector, 0x44, 200*1000);
+        if (ret != 0)
+            return ret;
 
         address += xfer;
         len -= xfer;
@@ -3328,6 +3333,7 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 int hal_flash_erase(uint32_t address, int len)
 {
     uint32_t sector;
+    int ret = 0;
 
     /* adjust for flash base */
     if (address >= FLASH_BASE_ADDR)
@@ -3350,7 +3356,9 @@ int hal_flash_erase(uint32_t address, int len)
         /* Typical is 200ms (max 1100ms) */
 
         /* poll for erase completion - max 1.1 sec */
-        hal_flash_status_wait(sector, 0x4C, 1100*1000);
+        ret = hal_flash_status_wait(sector, 0x4C, 1100*1000);
+        if (ret != 0)
+            return ret;
 
         address += FLASH_SECTOR_SIZE;
         len -= FLASH_SECTOR_SIZE;

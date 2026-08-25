@@ -269,6 +269,9 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
 void RAMFUNCTION wolfBoot_start(void)
 {
     int active = -1, ret = 0;
+    /* Candidates already tried this boot; a failed RAM image cannot be
+     * erased to invalidate it like the flash path does. */
+    int tried_boot = 0, tried_update = 0;
     struct wolfBoot_image os_image;
     BENCHMARK_DECLARE();
 #ifdef WOLFBOOT_UBOOT_LEGACY
@@ -425,12 +428,24 @@ backup_on_failure:
             wolfBoot_printf("Impossible recovery with fallback.\n");
             wolfBoot_panic();
             break;
-        } else {
-            /* Invalidate failing image and switch to the other partition */
-            active ^= 1;
-            wolfBoot_printf("Active is now: %d\n", active);
-            continue;
         }
+        if (active == PART_BOOT)
+            tried_boot = 1;
+        else
+            tried_update = 1;
+        if (tried_boot && tried_update) {
+            /* Both partitions were tried and both failed: the images that
+             * made fallback look possible are invalid, and nothing left to
+             * boot. */
+            wolfBoot_printf(
+                "Both images failed verification; no valid image to boot.\n");
+            wolfBoot_panic();
+            break;
+        }
+        /* Switch to the other partition */
+        active ^= 1;
+        wolfBoot_printf("Active is now: %d\n", active);
+        continue;
     }
 #ifdef UNIT_TEST
     if (wolfBoot_panicked != 0) {

@@ -157,10 +157,18 @@ typedef struct {
     volatile uint32_t init_magic;
     volatile int      hart_state[MPFS_NUM_HARTS];
     volatile uint32_t ipi_ops[MPFS_NUM_HARTS];
+    /* Fence-completion protocol: ipi_done[h] is incremented by hart h
+     * only after it has executed the fence ops it consumed; a requester
+     * snapshots it into ipi_wait_gen[h] before posting and waits until
+     * ipi_done[h] passes the snapshot. */
+    volatile uint32_t ipi_done[MPFS_NUM_HARTS];
+    volatile uint32_t ipi_wait_gen[MPFS_NUM_HARTS];
 } sbi_shared_state_t;
 #define SBI_SHARED ((sbi_shared_state_t *)SBI_SHARED_DTIM_ADDR)
-#define sbi_hart_state (SBI_SHARED->hart_state)
-#define sbi_ipi_ops    (SBI_SHARED->ipi_ops)
+#define sbi_hart_state   (SBI_SHARED->hart_state)
+#define sbi_ipi_ops      (SBI_SHARED->ipi_ops)
+#define sbi_ipi_done     (SBI_SHARED->ipi_done)
+#define sbi_ipi_wait_gen (SBI_SHARED->ipi_wait_gen)
 
 /* Per-hart IPI work flags, set by a requesting hart and consumed in the
  * target hart's M-mode software-interrupt handler. */
@@ -189,6 +197,8 @@ void sbi_hart_mark_started(unsigned long hartid)
         for (k = 0; k < (unsigned int)MPFS_NUM_HARTS; k++) {
             sbi_hart_state[k] = SBI_HSM_STOPPED;
             sbi_ipi_ops[k] = 0;
+            sbi_ipi_done[k] = 0;
+            sbi_ipi_wait_gen[k] = 0;
         }
         __asm__ volatile("fence rw, rw" ::: "memory");
         SBI_SHARED->init_magic = SBI_SHARED_MAGIC;
@@ -465,6 +475,12 @@ void sbi_ipi_irq(unsigned long hartid)
     if ((ops & SBI_IPI_OP_SSIP) != 0U || ops == 0U) {
         csr_set_bits(mip, MIP_SSIP);
     }
+    /* Publish completion only after the requested fences have executed:
+     * a requester treats the increment as this hart being done. */
+    if ((ops & (SBI_IPI_OP_FENCE_I | SBI_IPI_OP_SFENCE)) != 0U) {
+        (void)__atomic_add_fetch(&sbi_ipi_done[hartid], 1U,
+                                 __ATOMIC_ACQ_REL);
+    }
 }
 
 /* Post an IPI op to every hart in (mask << base) and ring its MSIP.
@@ -501,6 +517,11 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
         if (sbi_hart_state[h] != SBI_HSM_STARTED) {
             continue; /* parked harts consume MSIP in their wake loop */
         }
+        /* Snapshot the completion counter before posting: the wait below
+         * completes when the target increments past this value. */
+        if ((op & (SBI_IPI_OP_FENCE_I | SBI_IPI_OP_SFENCE)) != 0U) {
+            sbi_ipi_wait_gen[h] = sbi_ipi_done[h];
+        }
         /* Atomic OR (amoor.w, rv64a): two harts may post to the same target
          * concurrently, and the target may be consuming (sbi_ipi_irq) at the
          * same time - a plain |= read-modify-write could drop an op. */
@@ -511,9 +532,11 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
-/* Wait (bounded) for the posted fence ops to be consumed by the targets.
- * The SBI remote-fence calls are synchronous; the bound guards against a
- * wedged target turning into a wedged caller. */
+/* Wait (bounded) for the posted fence ops to be consumed by the targets:
+ * the targets increment ipi_done after executing the fences, so this
+ * completes only when every target has finished its fence. The SBI
+ * remote-fence calls are synchronous; the bound guards against a wedged
+ * target turning into a wedged caller. */
 static void sbi_wait_ipi_done(unsigned long mask, unsigned long base,
     unsigned long self)
 {
@@ -535,7 +558,7 @@ static void sbi_wait_ipi_done(unsigned long mask, unsigned long base,
             continue;
         }
         spin = 10000000U;
-        while (sbi_ipi_ops[h] != 0U && spin > 0U) {
+        while (sbi_ipi_done[h] <= sbi_ipi_wait_gen[h] && spin > 0U) {
             spin--;
         }
     }

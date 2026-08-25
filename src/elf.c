@@ -183,12 +183,14 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
 #ifndef ELF_PARSER
         if (mmu_cb != NULL) {
             if (mmu_cb(vaddr, paddr, mem_size) != 0) {
-#ifdef DEBUG_ELF
-            wolfBoot_printf(
-                "Fail to map %u bytes to %p (p %p)\r\n",
-                (uint32_t)mem_size, (void*)vaddr, (void*)paddr);
-#endif
-            continue;
+                /* Never silently drop a PT_LOAD segment: a failed mapping
+                 * leaves a hole in the image, and publishing the entry
+                 * point for a partially loaded ELF is worse than failing
+                 * the load. */
+                wolfBoot_printf("ELF: failed to map %u bytes to %p "
+                    "(p %p) -- aborting ELF load\r\n",
+                    (uint32_t)mem_size, (void*)vaddr, (void*)paddr);
+                return -6;
             }
         }
 

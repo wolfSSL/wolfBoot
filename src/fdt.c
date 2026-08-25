@@ -864,7 +864,7 @@ int fdt_add_mem_rsv(void* fdt, uint64_t address, uint64_t size)
     uint32_t off_str;
     uint32_t size_str;
     uint32_t total;
-    uint32_t data_end;
+    uint64_t data_end;
     uint32_t shift;
     uint32_t i;
 
@@ -877,9 +877,18 @@ int fdt_add_mem_rsv(void* fdt, uint64_t address, uint64_t size)
     off_str     = fdt_off_dt_strings(fdt);
     size_str    = fdt_size_dt_strings(fdt);
     total       = fdt_totalsize(fdt);
-    data_end    = off_str + size_str;
+    /* 64-bit: a wrapped 32-bit end would slip past the checks below
+     * and re-wrap into the memmove length. */
+    data_end    = (uint64_t)off_str + (uint64_t)size_str;
     shift       = (uint32_t)sizeof(struct fdt_reserve_entry); /* 16 */
 
+    /* Validate the layout before using it: the structure block must
+     * start after the reserve map's terminator, and the string block
+     * after the structure block. 64-bit comparisons: a wrapped 32-bit
+     * sum would pass the check. */
+    if (((uint64_t)off_rsv + shift > off_dt) || (off_str < off_dt)) {
+        return -FDT_ERR_BADSTRUCTURE;
+    }
     if ((data_end + shift) > total) {
         return -FDT_ERR_NOSPACE;
     }
@@ -889,14 +898,15 @@ int fdt_add_mem_rsv(void* fdt, uint64_t address, uint64_t size)
     i = 0;
     while ((rsv[i].address != 0ULL) || (rsv[i].size != 0ULL)) {
         i++;
-        if ((off_rsv + (i + 1U) * shift) > off_dt) {
+        if (((uint64_t)off_rsv + (uint64_t)(i + 1U) * shift) > off_dt) {
             return -FDT_ERR_BADSTRUCTURE;
         }
     }
 
-    /* Shift structure + strings down by 16 bytes. memmove handles overlap. */
+    /* Shift structure + strings down by 16 bytes. memmove handles overlap.
+     * The length comes from the validated 64-bit end. */
     memmove(base + off_dt + shift, base + off_dt,
-        (size_t)((off_str + size_str) - off_dt));
+        (size_t)(data_end - off_dt));
 
     /* Insert new entry where the old terminator was, write new terminator. */
     rsv[i].address = cpu_to_fdt64(address);

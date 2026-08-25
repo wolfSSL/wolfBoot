@@ -1835,6 +1835,7 @@ int ext_flash_erase(uintptr_t address, int len)
         wolfBoot_printf("erase page %d, status %x\n", page, status);
 #endif
         (void)status;
+        address += block_size;
         len -= block_size;
     }
 

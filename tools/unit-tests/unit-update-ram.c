@@ -476,6 +476,32 @@ START_TEST (test_invalid_sha) {
     cleanup_flash();
 }
 
+START_TEST (test_both_images_corrupted_panics) {
+    uint8_t bad_digest[SHA256_DIGEST_SIZE];
+    reset_mock_stats();
+    prepare_flash();
+    /* Same version in both partitions: after a failure the loop must not
+     * be stopped by the anti-rollback guard, only by noticing that both
+     * candidates have already failed. */
+    add_payload(PART_BOOT, 2, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    /* Corrupt both digests: two present images (nonzero versions, so the
+     * fallback check passes) that both fail verification. The boot loop
+     * must panic once both have been tried, not alternate forever. */
+    memset(bad_digest, 0xBA, SHA256_DIGEST_SIZE);
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4, bad_digest, SHA256_DIGEST_SIZE);
+    ext_flash_lock();
+
+    wolfBoot_start();
+    ck_assert(!wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 1);
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_emergency_rollback_to_older_version_denied) {
     uint8_t testing_flags[5] = { IMG_STATE_TESTING, 'B', 'O', 'O', 'T' };
     reset_mock_stats();
@@ -597,6 +623,7 @@ Suite *wolfboot_suite(void)
     TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
     TCase *empty_boot_partition_update = tcase_create("Empty boot partition update");
     TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
+    TCase *both_images_corrupted = tcase_create("Both images corrupted");
 
 
 
@@ -620,6 +647,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
+    tcase_add_test(both_images_corrupted, test_both_images_corrupted_panics);
 
 
 
@@ -642,6 +670,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
     suite_add_tcase(s, empty_boot_partition_update);
     suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);
+    suite_add_tcase(s, both_images_corrupted);
 
 
     /* Set timeout for tests */
@@ -664,6 +693,7 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(emergency_rollback_failure_due_to_bad_update, 5);
     tcase_set_timeout(empty_boot_partition_update, 5);
     tcase_set_timeout(empty_boot_but_update_sha_corrupted_denied, 5);
+    tcase_set_timeout(both_images_corrupted, 5);
 
 
     return s;
