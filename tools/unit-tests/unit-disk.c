@@ -86,18 +86,67 @@ static uint32_t test_crc32(const uint8_t *data, uint32_t len)
     return ~crc;
 }
 
-static void finalize_gpt_header_crc(struct guid_ptable *hdr)
+/* Every on-disk field is little-endian regardless of host byte order, so the
+ * fixture writes bytes explicitly instead of assigning packed struct members.
+ * Assigning members only produces correct on-disk bytes on a little-endian
+ * host, which would make these tests unable to run big-endian. */
+static void d_put16(uint8_t *p, uint16_t v)
 {
-    hdr->hdr_crc32 = 0;
-    hdr->hdr_crc32 = test_crc32((const uint8_t *)hdr, hdr->hdr_size);
+    p[0] = (uint8_t)(v & 0xFFU);
+    p[1] = (uint8_t)((v >> 8) & 0xFFU);
 }
 
-static void finalize_gpt_part_array_crc(struct guid_ptable *hdr)
+static void d_put32(uint8_t *p, uint32_t v)
 {
-    uint32_t array_len = hdr->n_part * hdr->array_sz;
-    uint8_t *array = fake_disk + (hdr->start_array * GPT_SECTOR_SIZE);
+    p[0] = (uint8_t)(v & 0xFFU);
+    p[1] = (uint8_t)((v >> 8) & 0xFFU);
+    p[2] = (uint8_t)((v >> 16) & 0xFFU);
+    p[3] = (uint8_t)((v >> 24) & 0xFFU);
+}
 
-    hdr->part_crc = test_crc32(array, array_len);
+static void d_put64(uint8_t *p, uint64_t v)
+{
+    d_put32(p, (uint32_t)(v & 0xFFFFFFFFU));
+    d_put32(p + 4, (uint32_t)((v >> 32) & 0xFFFFFFFFU));
+}
+
+/* GPT on-disk offsets (see src/gpt.c) */
+#define D_HDR_SIGNATURE   0x00
+#define D_HDR_REVISION    0x08
+#define D_HDR_SIZE        0x0C
+#define D_HDR_CRC32       0x10
+#define D_HDR_START_ARRAY 0x48
+#define D_HDR_N_PART      0x50
+#define D_HDR_ARRAY_SZ    0x54
+#define D_HDR_PART_CRC    0x58
+#define D_PE_TYPE         0x00
+#define D_PE_UUID         0x10
+#define D_PE_FIRST        0x20
+#define D_PE_LAST         0x28
+#define D_PE_NAME         0x38
+
+static void finalize_gpt_header_crc(uint8_t *hdr)
+{
+    uint32_t hdr_size = 92;
+
+    d_put32(hdr + D_HDR_CRC32, 0);
+    d_put32(hdr + D_HDR_CRC32, test_crc32(hdr, hdr_size));
+}
+
+static uint32_t d_get32(const uint8_t *p)
+{
+    return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) |
+           ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+static void finalize_gpt_part_array_crc(uint8_t *hdr)
+{
+    uint32_t start_array = d_get32(hdr + D_HDR_START_ARRAY);
+    uint32_t n_part = d_get32(hdr + D_HDR_N_PART);
+    uint32_t array_sz = d_get32(hdr + D_HDR_ARRAY_SZ);
+    uint8_t *array = fake_disk + (start_array * GPT_SECTOR_SIZE);
+
+    d_put32(hdr + D_HDR_PART_CRC, test_crc32(array, n_part * array_sz));
 }
 
 /* --- Helpers to build fake disk layouts --- */
@@ -106,60 +155,57 @@ static void finalize_gpt_part_array_crc(struct guid_ptable *hdr)
  * Uses memcpy to avoid unaligned-pointer warnings on packed structs. */
 static void write_utf16(void *dst, const char *ascii, unsigned int max)
 {
-    uint16_t *p = (uint16_t *)dst;
+    uint8_t *p = (uint8_t *)dst;
     unsigned int i;
-    uint16_t val;
+
     memset(dst, 0, max * sizeof(uint16_t));
     for (i = 0; i < max && ascii[i]; i++) {
-        val = (uint16_t)ascii[i];
-        memcpy(&p[i], &val, sizeof(val));
+        d_put16(p + (i * 2U), (uint16_t)ascii[i]);
     }
 }
 
 /* Populate fake_disk with a valid protective-MBR + GPT header + N entries. */
 static void build_gpt_disk(void)
 {
-    struct gpt_mbr_part_entry *mbr_entry;
-    uint16_t *boot_sig;
-    struct guid_ptable *gpt_hdr;
-    struct gpt_part_entry *pe;
+    uint8_t *mbr_entry;
+    uint8_t *gpt_hdr;
+    uint8_t *pe;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
 
     /* --- Sector 0: MBR --- */
-    mbr_entry = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
-    mbr_entry->ptype = GPT_PTYPE_PROTECTIVE; /* 0xEE */
-    mbr_entry->lba_first = 1;
-    mbr_entry->lba_size = 0xFFFFFFFF;
+    mbr_entry = fake_disk + GPT_MBR_ENTRY_START;
+    mbr_entry[0x04] = GPT_PTYPE_PROTECTIVE; /* 0xEE */
+    d_put32(mbr_entry + 0x08, 1);           /* lba_first */
+    d_put32(mbr_entry + 0x0C, 0xFFFFFFFF);  /* lba_size */
 
-    boot_sig = (uint16_t *)(fake_disk + GPT_MBR_BOOTSIG_OFFSET);
-    *boot_sig = GPT_MBR_BOOTSIG_VALUE; /* 0xAA55 */
+    d_put16(fake_disk + GPT_MBR_BOOTSIG_OFFSET, GPT_MBR_BOOTSIG_VALUE);
 
     /* --- Sector 1: GPT header --- */
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->signature = GPT_SIGNATURE;
-    gpt_hdr->revision = 0x00010000;
-    gpt_hdr->hdr_size = 92;
-    gpt_hdr->start_array = 2; /* partition entries start at LBA 2 */
-    gpt_hdr->n_part = 2;
-    gpt_hdr->array_sz = 128; /* bytes per entry */
+    gpt_hdr = fake_disk + GPT_SECTOR_SIZE;
+    d_put64(gpt_hdr + D_HDR_SIGNATURE, GPT_SIGNATURE);
+    d_put32(gpt_hdr + D_HDR_REVISION, 0x00010000);
+    d_put32(gpt_hdr + D_HDR_SIZE, 92);
+    d_put64(gpt_hdr + D_HDR_START_ARRAY, 2); /* entries start at LBA 2 */
+    d_put32(gpt_hdr + D_HDR_N_PART, 2);
+    d_put32(gpt_hdr + D_HDR_ARRAY_SZ, 128);  /* bytes per entry */
 
     /* --- Sector 2: Partition entries --- */
     /* Entry 0: name "boot" */
-    pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE);
-    pe->type[0] = 0x0001020304050607ULL; /* non-zero type GUID */
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = PART0_OFF;
-    pe->last = PART0_END;
-    write_utf16(pe->name, "boot", GPT_PART_NAME_SIZE);
+    pe = fake_disk + (2 * GPT_SECTOR_SIZE);
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL); /* non-zero type GUID */
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, PART0_OFF);
+    d_put64(pe + D_PE_LAST, PART0_END);
+    write_utf16(pe + D_PE_NAME, "boot", GPT_PART_NAME_SIZE);
 
     /* Entry 1: name "rootfs" */
-    pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE + 128);
-    pe->type[0] = 0x1011121314151617ULL;
-    pe->type[1] = 0x18191A1B1C1D1E1FULL;
-    pe->first = PART1_OFF;
-    pe->last = PART1_END;
-    write_utf16(pe->name, "rootfs", GPT_PART_NAME_SIZE);
+    pe = fake_disk + (2 * GPT_SECTOR_SIZE) + 128;
+    d_put64(pe + D_PE_TYPE, 0x1011121314151617ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x18191A1B1C1D1E1FULL);
+    d_put64(pe + D_PE_FIRST, PART1_OFF);
+    d_put64(pe + D_PE_LAST, PART1_END);
+    write_utf16(pe + D_PE_NAME, "rootfs", GPT_PART_NAME_SIZE);
 
     /* Fill partition data areas with known patterns for read tests.
      * GPT last LBA is inclusive, so partition spans
@@ -179,23 +225,23 @@ static void build_gpt_disk(void)
  */
 static void build_mbr_disk(void)
 {
-    struct gpt_mbr_part_entry *pte;
+    uint8_t *pte;
     uint16_t *boot_sig;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
 
     /* MBR entry 0: FAT32 LBA */
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
-    pte->ptype = 0x0C; /* FAT32 LBA */
-    pte->lba_first = 16;
-    pte->lba_size = 32;
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START);
+    pte[0x04] = (uint8_t)(0x0C); /* FAT32 LBA */
+    d_put32(pte + 0x08, 16);
+    d_put32(pte + 0x0C, 32);
 
     /* MBR entry 1: Linux */
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START +
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START +
         sizeof(struct gpt_mbr_part_entry));
-    pte->ptype = 0x83; /* Linux */
-    pte->lba_first = 48;
-    pte->lba_size = 64;
+    pte[0x04] = (uint8_t)(0x83); /* Linux */
+    d_put32(pte + 0x08, 48);
+    d_put32(pte + 0x0C, 64);
 
     boot_sig = (uint16_t *)(fake_disk + GPT_MBR_BOOTSIG_OFFSET);
     *boot_sig = GPT_MBR_BOOTSIG_VALUE;
@@ -240,23 +286,21 @@ START_TEST(test_gpt_parse_header)
 
     /* Corrupt a header field without updating CRC */
     {
-        struct guid_ptable *gpt_hdr =
-            (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-        gpt_hdr->n_part = 3;
+        uint8_t *gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+        d_put32(gpt_hdr + D_HDR_N_PART, 3);
         ck_assert_int_eq(
             gpt_parse_header(fake_disk + GPT_SECTOR_SIZE, &hdr), -1);
-        gpt_hdr->n_part = 2;
+        d_put32(gpt_hdr + D_HDR_N_PART, 2);
         finalize_gpt_header_crc(gpt_hdr);
     }
 
     /* Corrupt signature in the real header */
     {
-        struct guid_ptable *gpt_hdr =
-            (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-        gpt_hdr->signature = 0;
+        uint8_t *gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+        d_put64(gpt_hdr + D_HDR_SIGNATURE, 0);
         ck_assert_int_eq(
             gpt_parse_header(fake_disk + GPT_SECTOR_SIZE, &hdr), -1);
-        gpt_hdr->signature = GPT_SIGNATURE;
+        d_put64(gpt_hdr + D_HDR_SIGNATURE, GPT_SIGNATURE);
         finalize_gpt_header_crc(gpt_hdr);
     }
 
@@ -342,13 +386,13 @@ END_TEST
 
 START_TEST(test_disk_open_gpt_rejects_part_array_crc_mismatch)
 {
-    struct gpt_part_entry *pe;
+    uint8_t *pe;
 
     build_gpt_disk();
 
-    pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE);
-    pe->first = PART1_OFF;
-    pe->last = PART1_END;
+    pe = (uint8_t *)(fake_disk + 2 * GPT_SECTOR_SIZE);
+    d_put64(pe + D_PE_FIRST, PART1_OFF);
+    d_put64(pe + D_PE_LAST, PART1_END);
 
     ck_assert_int_eq(disk_open(0), -1);
     ck_assert_int_eq(Drives[0].is_open, 0);
@@ -512,14 +556,14 @@ START_TEST(test_gpt_partition_end_inclusive)
     /* GPT spec: last LBA is inclusive. A partition with first=10, last=20
      * spans 11 sectors. End byte = (20+1)*512 - 1. */
     uint8_t entry[128];
-    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    uint8_t *pe = (uint8_t *)entry;
     struct gpt_part_info info;
 
     memset(entry, 0, sizeof(entry));
-    pe->type[0] = 0x0001020304050607ULL;
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = 10;
-    pe->last = 20;
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, 10);
+    d_put64(pe + D_PE_LAST, 20);
 
     ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), 0);
     ck_assert_uint_eq(info.start, 10 * 512);
@@ -532,13 +576,13 @@ END_TEST
 START_TEST(test_disk_open_failure_clears_is_open)
 {
     /* If GPT header parse fails, is_open must be reset to 0. */
-    struct guid_ptable *gpt_hdr;
+    uint8_t *gpt_hdr;
 
     build_gpt_disk();
 
     /* Corrupt the GPT header signature */
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->signature = 0xDEADBEEF;
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+    d_put64(gpt_hdr + D_HDR_SIGNATURE, 0xDEADBEEF);
 
     ck_assert_int_eq(disk_open(0), -1);
     ck_assert_int_eq(Drives[0].is_open, 0);
@@ -550,14 +594,14 @@ START_TEST(test_gpt_parse_partition_last_zero)
     /* If first=0, last=0 with non-zero type GUID, (last+1)*512 - 1 would
      * be 511 but LBA 0 is the protective MBR — must reject. */
     uint8_t entry[128];
-    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    uint8_t *pe = (uint8_t *)entry;
     struct gpt_part_info info;
 
     memset(entry, 0, sizeof(entry));
-    pe->type[0] = 0x0001020304050607ULL;
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = 0;
-    pe->last = 0;
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, 0);
+    d_put64(pe + D_PE_LAST, 0);
 
     ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), -1);
 }
@@ -565,18 +609,18 @@ END_TEST
 
 START_TEST(test_gpt_parse_partition_last_overflow)
 {
-    /* pe->last = UINT64_MAX passes the first>last and last==0 guards, but
-     * (pe->last + 1) * GPT_SECTOR_SIZE - 1 would wrap to UINT64_MAX, defeating
+    /* last = UINT64_MAX passes the first>last and last==0 guards, but
+     * (last + 1) * GPT_SECTOR_SIZE - 1 would wrap to UINT64_MAX, defeating
      * the bounds check in disk_part_read. Must be rejected. */
     uint8_t entry[128];
-    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    uint8_t *pe = (uint8_t *)entry;
     struct gpt_part_info info;
 
     memset(entry, 0, sizeof(entry));
-    pe->type[0] = 0x0001020304050607ULL;
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = 1;
-    pe->last = 0xFFFFFFFFFFFFFFFFULL;
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, 1);
+    d_put64(pe + D_PE_LAST, 0xFFFFFFFFFFFFFFFFULL);
 
     ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), -1);
 }
@@ -597,13 +641,13 @@ START_TEST(test_disk_open_mbr_bad_bootsig)
 {
     /* MBR disk without valid 0xAA55 boot signature and no protective 0xEE.
      * Falls through GPT check, then fails on boot_sig validation. */
-    struct gpt_mbr_part_entry *pte;
+    uint8_t *pte;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
-    pte->ptype = 0x0C;
-    pte->lba_first = 16;
-    pte->lba_size = 32;
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START);
+    pte[0x04] = (uint8_t)(0x0C);
+    d_put32(pte + 0x08, 16);
+    d_put32(pte + 0x0C, 32);
     /* No boot signature set — 0x0000 instead of 0xAA55 */
 
     ck_assert_int_eq(disk_open(0), -1);
@@ -615,12 +659,12 @@ START_TEST(test_disk_open_gpt_excess_partitions)
 {
     /* GPT header claims more partitions than MAX_PARTITIONS. disk_open
      * must cap n_parts to MAX_PARTITIONS. */
-    struct guid_ptable *gpt_hdr;
+    uint8_t *gpt_hdr;
 
     build_gpt_disk();
 
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->n_part = MAX_PARTITIONS + 10;
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+    d_put32(gpt_hdr + D_HDR_N_PART, MAX_PARTITIONS + 10);
     finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 
@@ -635,12 +679,12 @@ START_TEST(test_disk_open_gpt_large_array_sz)
 {
     /* GPT header with array_sz larger than GPT_PART_ENTRY_SIZE (256).
      * Loop must break immediately without reading entries. */
-    struct guid_ptable *gpt_hdr;
+    uint8_t *gpt_hdr;
 
     build_gpt_disk();
 
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->array_sz = GPT_PART_ENTRY_SIZE + 1; /* 257 > 256 */
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+    d_put32(gpt_hdr + D_HDR_ARRAY_SZ, GPT_PART_ENTRY_SIZE + 1); /* 257 > 256 */
     finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 
@@ -654,13 +698,13 @@ START_TEST(test_disk_open_gpt_rejects_huge_part_array)
      * enormous n_part * array_sz must be rejected before the partition-entry
      * CRC scan loop runs, otherwise it forces a pre-auth DoS via one disk
      * read per 512-byte chunk of the (here 8 MB) declared array. */
-    struct guid_ptable *gpt_hdr;
+    uint8_t *gpt_hdr;
 
     build_gpt_disk();
 
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->n_part = 0x10000;        /* 65536 entries ... */
-    gpt_hdr->array_sz = 128;          /* ... * 128 bytes = 8 MB */
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+    d_put32(gpt_hdr + D_HDR_N_PART, 0x10000);        /* 65536 entries ... */
+    d_put32(gpt_hdr + D_HDR_ARRAY_SZ, 128);          /* ... * 128 bytes = 8 MB */
     finalize_gpt_header_crc(gpt_hdr); /* attacker can always fix header CRC */
 
     disk_read_count = 0;
@@ -680,14 +724,14 @@ START_TEST(test_disk_open_gpt_lba_no_overflow)
      * gpt_lba >= 0x800000: 512 * 0x800001 wraps to 0x200, silently
      * redirecting the read back to LBA 1 (the real GPT header) instead of
      * the out-of-range LBA the field actually names. */
-    struct gpt_mbr_part_entry *mbr_entry;
+    uint8_t *mbr_entry;
 
     build_gpt_disk();
 
     /* Point the protective entry at an LBA whose 512* product overflows a
      * 32-bit unsigned back to 0x200 (LBA 1). */
-    mbr_entry = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
-    mbr_entry->lba_first = 0x800001;
+    mbr_entry = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START);
+    d_put32(mbr_entry + 0x08, 0x800001);
 
     /* With correct 64-bit arithmetic the header read targets byte
      * 0x100000200, far past the fake disk, so disk_open must fail rather
@@ -701,19 +745,19 @@ START_TEST(test_disk_open_gpt_empty_entry_mid_table)
 {
     /* GPT header says 3 partitions but entry[1] has zeroed type GUID.
      * gpt_parse_partition returns -1 → loop breaks, only 1 partition found. */
-    struct guid_ptable *gpt_hdr;
-    struct gpt_part_entry *pe;
+    uint8_t *gpt_hdr;
+    uint8_t *pe;
 
     build_gpt_disk();
 
-    gpt_hdr = (struct guid_ptable *)(fake_disk + GPT_SECTOR_SIZE);
-    gpt_hdr->n_part = 3;
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+    d_put32(gpt_hdr + D_HDR_N_PART, 3);
     finalize_gpt_header_crc(gpt_hdr);
 
     /* Zero out entry 1's type GUID */
-    pe = (struct gpt_part_entry *)(fake_disk + 2 * GPT_SECTOR_SIZE + 128);
-    pe->type[0] = 0;
-    pe->type[1] = 0;
+    pe = (uint8_t *)(fake_disk + 2 * GPT_SECTOR_SIZE + 128);
+    d_put64(pe + D_PE_TYPE, 0);
+    d_put64(pe + D_PE_TYPE + 8, 0);
     finalize_gpt_part_array_crc(gpt_hdr);
     finalize_gpt_header_crc(gpt_hdr);
 
@@ -724,30 +768,30 @@ END_TEST
 START_TEST(test_disk_open_mbr_zero_lba_entry)
 {
     /* MBR entry with lba_first=0 must be skipped. */
-    struct gpt_mbr_part_entry *pte;
+    uint8_t *pte;
     uint16_t *boot_sig;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
 
     /* Entry 0: valid */
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START);
-    pte->ptype = 0x0C;
-    pte->lba_first = 16;
-    pte->lba_size = 32;
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START);
+    pte[0x04] = (uint8_t)(0x0C);
+    d_put32(pte + 0x08, 16);
+    d_put32(pte + 0x0C, 32);
 
     /* Entry 1: lba_first=0, should be skipped */
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START +
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START +
         sizeof(struct gpt_mbr_part_entry));
-    pte->ptype = 0x83;
-    pte->lba_first = 0;
-    pte->lba_size = 64;
+    pte[0x04] = (uint8_t)(0x83);
+    d_put32(pte + 0x08, 0);
+    d_put32(pte + 0x0C, 64);
 
     /* Entry 2: lba_size=0, should also be skipped */
-    pte = (struct gpt_mbr_part_entry *)(fake_disk + GPT_MBR_ENTRY_START +
+    pte = (uint8_t *)(fake_disk + GPT_MBR_ENTRY_START +
         2 * sizeof(struct gpt_mbr_part_entry));
-    pte->ptype = 0x83;
-    pte->lba_first = 48;
-    pte->lba_size = 0;
+    pte[0x04] = (uint8_t)(0x83);
+    d_put32(pte + 0x08, 48);
+    d_put32(pte + 0x0C, 0);
 
     boot_sig = (uint16_t *)(fake_disk + GPT_MBR_BOOTSIG_OFFSET);
     *boot_sig = GPT_MBR_BOOTSIG_VALUE;
@@ -864,11 +908,10 @@ START_TEST(test_gpt_check_mbr_bad_bootsig)
     /* Valid MBR structure but corrupt boot signature */
     memset(sector, 0, sizeof(sector));
     {
-        struct gpt_mbr_part_entry *pte =
-            (struct gpt_mbr_part_entry *)(sector + GPT_MBR_ENTRY_START);
-        pte->ptype = GPT_PTYPE_PROTECTIVE;
-        pte->lba_first = 1;
-        pte->lba_size = 0xFFFFFFFF;
+        uint8_t *pte = (uint8_t *)(sector + GPT_MBR_ENTRY_START);
+        pte[0x04] = (uint8_t)(GPT_PTYPE_PROTECTIVE);
+        d_put32(pte + 0x08, 1);
+        d_put32(pte + 0x0C, 0xFFFFFFFF);
     }
     /* boot sig left as 0x0000 — not 0xAA55 */
 
@@ -879,14 +922,14 @@ END_TEST
 START_TEST(test_gpt_parse_partition_first_gt_last)
 {
     uint8_t entry[128];
-    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    uint8_t *pe = (uint8_t *)entry;
     struct gpt_part_info info;
 
     memset(entry, 0, sizeof(entry));
-    pe->type[0] = 0x0001020304050607ULL;
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = 100;
-    pe->last = 50; /* first > last → invalid */
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, 100);
+    d_put64(pe + D_PE_LAST, 50); /* first > last → invalid */
 
     ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), -1);
 }
@@ -895,14 +938,14 @@ END_TEST
 START_TEST(test_gpt_parse_partition_first_eq_last)
 {
     uint8_t entry[128];
-    struct gpt_part_entry *pe = (struct gpt_part_entry *)entry;
+    uint8_t *pe = (uint8_t *)entry;
     struct gpt_part_info info;
 
     memset(entry, 0, sizeof(entry));
-    pe->type[0] = 0x0001020304050607ULL;
-    pe->type[1] = 0x08090A0B0C0D0E0FULL;
-    pe->first = 5;
-    pe->last = 5; /* first == last is a valid single-sector partition */
+    d_put64(pe + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(pe + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(pe + D_PE_FIRST, 5);
+    d_put64(pe + D_PE_LAST, 5); /* first == last is a valid single-sector partition */
 
     ck_assert_int_eq(gpt_parse_partition(entry, 128, &info), 0);
     ck_assert_uint_eq(info.start, 5 * GPT_SECTOR_SIZE);
@@ -995,6 +1038,79 @@ START_TEST(test_sfdisk_gpt_last_lba_access)
 }
 END_TEST
 
+/* Lock the on-disk field offsets. Everything below is written as explicit
+ * little-endian bytes and then read back through the parser, so a change to
+ * an offset, a width, or the byte order fails here rather than silently
+ * mis-parsing a real disk. This is what guards the byte-wise conversion in
+ * src/gpt.c against a future refactor. */
+START_TEST(test_gpt_header_field_offsets)
+{
+    uint8_t sector[GPT_SECTOR_SIZE];
+    struct guid_ptable hdr;
+
+    memset(sector, 0, sizeof(sector));
+    d_put64(sector + D_HDR_SIGNATURE, GPT_SIGNATURE);
+    d_put32(sector + D_HDR_REVISION, 0x00010000);
+    d_put32(sector + D_HDR_SIZE, 92);
+    d_put64(sector + D_HDR_START_ARRAY, 0x1122334455667788ULL);
+    d_put32(sector + D_HDR_N_PART, 0x11223344);
+    d_put32(sector + D_HDR_ARRAY_SZ, 128);
+    finalize_gpt_header_crc(sector);
+
+    ck_assert_int_eq(gpt_parse_header(sector, &hdr), 0);
+    /* Values come back in HOST order, whatever the host byte order is. */
+    ck_assert_uint_eq(hdr.hdr_size, 92);
+    ck_assert(hdr.signature == GPT_SIGNATURE);
+    ck_assert_uint_eq(hdr.revision, 0x00010000U);
+    ck_assert(hdr.start_array == 0x1122334455667788ULL);
+    ck_assert_uint_eq(hdr.n_part, 0x11223344U);
+    ck_assert_uint_eq(hdr.array_sz, 128U);
+}
+END_TEST
+
+/* A single flipped byte in the header must fail the CRC. */
+START_TEST(test_gpt_header_crc_rejects_tamper)
+{
+    uint8_t sector[GPT_SECTOR_SIZE];
+    struct guid_ptable hdr;
+
+    memset(sector, 0, sizeof(sector));
+    d_put64(sector + D_HDR_SIGNATURE, GPT_SIGNATURE);
+    d_put32(sector + D_HDR_SIZE, 92);
+    d_put64(sector + D_HDR_START_ARRAY, 2);
+    d_put32(sector + D_HDR_N_PART, 2);
+    d_put32(sector + D_HDR_ARRAY_SZ, 128);
+    finalize_gpt_header_crc(sector);
+    ck_assert_int_eq(gpt_parse_header(sector, &hdr), 0);
+
+    /* Flip one bit in a field the CRC covers. */
+    sector[D_HDR_N_PART] ^= 0x01;
+    ck_assert_int_eq(gpt_parse_header(sector, &hdr), -1);
+}
+END_TEST
+
+START_TEST(test_gpt_partition_field_offsets)
+{
+    uint8_t entry[128];
+    struct gpt_part_info info;
+
+    memset(entry, 0, sizeof(entry));
+    d_put64(entry + D_PE_TYPE, 0x0001020304050607ULL);
+    d_put64(entry + D_PE_TYPE + 8, 0x08090A0B0C0D0E0FULL);
+    d_put64(entry + D_PE_FIRST, 0x0000000000000022ULL);
+    d_put64(entry + D_PE_LAST, 0x0000000000000041ULL);
+    write_utf16(entry + D_PE_NAME, "rootfs", GPT_PART_NAME_SIZE);
+
+    ck_assert_int_eq(gpt_parse_partition(entry, sizeof(entry), &info), 0);
+    ck_assert(info.start == 0x22ULL * GPT_SECTOR_SIZE);
+    ck_assert(info.end == ((0x41ULL + 1U) * GPT_SECTOR_SIZE) - 1U);
+    /* The name is UTF-16LE on disk and host-order after parsing. */
+    ck_assert_int_eq(gpt_part_name_eq(info.name, "rootfs"), 1);
+    ck_assert_int_eq(gpt_part_name_eq(info.name, "boot"), 0);
+}
+END_TEST
+
+
 /* ============================================================
  *  Suite setup
  * ============================================================ */
@@ -1050,6 +1166,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_cov, test_gpt_parse_partition_first_gt_last);
     tcase_add_test(tc_cov, test_gpt_parse_partition_first_eq_last);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_label_too_long);
+    tcase_add_test(tc_cov, test_gpt_header_field_offsets);
+    tcase_add_test(tc_cov, test_gpt_header_crc_rejects_tamper);
+    tcase_add_test(tc_cov, test_gpt_partition_field_offsets);
     tcase_add_test(tc_cov, test_gpt_part_name_eq_not_null_terminated);
     suite_add_tcase(s, tc_cov);
 
