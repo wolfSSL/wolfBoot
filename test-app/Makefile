@@ -399,6 +399,9 @@ ifeq ($(TZEN),1)
         ifeq ($(WOLFCRYPT_TZ_PKCS11),1)
             CFLAGS+=-DWOLFSSL_USER_SETTINGS -DWOLFTPM_USER_SETTINGS
             CFLAGS+=-DWOLFBOOT_PKCS11_APP -DSECURE_PKCS11 -DWOLFBOOT_TZ_PKCS11
+            ifeq ($(PKCS11_STORE_STATS),1)
+                CFLAGS+=-DPKCS11_STORE_STATS
+            endif
             ifeq ($(PKCS11_TESTAPP),1)
                 CFLAGS+=-DWOLFBOOT_PKCS11_TESTAPP
             endif
