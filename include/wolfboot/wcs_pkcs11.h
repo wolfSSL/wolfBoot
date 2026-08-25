@@ -343,5 +343,11 @@ CK_RV CSME_NSE_API C_GetFunctionStatus_nsc_call(CK_SESSION_HANDLE hSession);
 CK_RV CSME_NSE_API C_CancelFunction_nsc_call(CK_SESSION_HANDLE hSession);
 CK_RV CSME_NSE_API C_WaitForSlotEvent_nsc_call(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot, CK_VOID_PTR pReserved);
 
+#ifdef PKCS11_STORE_STATS
+CK_RV CSME_NSE_API C_StoreGetStats_nsc_call(uint32_t *pCommits,
+        uint32_t *pErases, uint32_t *pPrograms);
+CK_RV CSME_NSE_API C_StoreResetStats_nsc_call(void);
+#endif
+
 #endif /* SECURE_PKCS11 */
 #endif /* !WOLFBOOT_PKCS11_H */

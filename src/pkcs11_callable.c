@@ -1506,6 +1506,30 @@ CK_RV CSME_NSE_API C_CancelFunction_nsc_call(CK_SESSION_HANDLE hSession)
     return C_CancelFunction(hSession);
 }
 
+#ifdef PKCS11_STORE_STATS
+/* Flash-activity counters, implemented in src/pkcs11_store.c (the wolfBoot
+ * store backend); declared here to keep the wolfPKCS11 submodule untouched. */
+void wolfPKCS11_Store_GetStats(uint32_t *commits, uint32_t *erases,
+        uint32_t *programs);
+void wolfPKCS11_Store_ResetStats(void);
+
+CK_RV CSME_NSE_API C_StoreGetStats_nsc_call(uint32_t *pCommits,
+        uint32_t *pErases, uint32_t *pPrograms)
+{
+    NSC_CHK(ns_ok(pCommits, sizeof(uint32_t)));
+    NSC_CHK(ns_ok(pErases, sizeof(uint32_t)));
+    NSC_CHK(ns_ok(pPrograms, sizeof(uint32_t)));
+    wolfPKCS11_Store_GetStats(pCommits, pErases, pPrograms);
+    return CKR_OK;
+}
+
+CK_RV CSME_NSE_API C_StoreResetStats_nsc_call(void)
+{
+    wolfPKCS11_Store_ResetStats();
+    return CKR_OK;
+}
+#endif
+
 CK_RV CSME_NSE_API C_WaitForSlotEvent_nsc_call(CK_FLAGS flags, CK_SLOT_ID_PTR pSlot, CK_VOID_PTR pReserved)
 {
     /* pReserved must be NULL; the underlying call rejects anything else. */
