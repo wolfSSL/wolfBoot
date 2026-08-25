@@ -46,3 +46,17 @@ jobs:
       - name: Run fdt-parser test (nxp_t1024.dtb)
         run: |
           ./tools/fdt-parser/fdt-parser ./tools/fdt-parser/nxp_t1024.dtb -t
+
+      - name: Run fdt-parser malformed-input corpus under ASan/UBSan
+        run: |
+          # -fno-sanitize-recover=all is required: by default UBSan only
+          # prints "runtime error" and carries on, so a violation would
+          # leave the exit status 0 and this job would pass regardless.
+          gcc -o /tmp/fdt-parser-asan -Wall -Werror -g -O1 \
+            -fsanitize=address,undefined -fno-sanitize-recover=all \
+            -fno-omit-frame-pointer \
+            -I include -DWOLFBOOT_FDT -DWOLFBOOT_FDT_CORPUS -DPRINTF_ENABLED \
+            tools/fdt-parser/fdt-parser.c src/fdt.c
+          ASAN_OPTIONS=detect_leaks=0 \
+          UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+            /tmp/fdt-parser-asan ./tools/fdt-parser/nxp_t1024.dtb -f

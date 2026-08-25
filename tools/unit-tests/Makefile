@@ -429,17 +429,12 @@ unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
 
-# unit-fdt-memrsv-wrap: a wrapped string-block end in fdt_add_mem_rsv()
-# must be rejected, not turned into a huge memmove (F-11045).
-fdt_memrsv_extract.h: ../../src/fdt.c
-	sed -n '/^uint32_t cpu_to_fdt32/,/^}/p' $< > $@
-	sed -n '/^uint64_t cpu_to_fdt64/,/^}/p' $< >> $@
-	sed -n '/^uint32_t fdt32_to_cpu/,/^}/p' $< >> $@
-	sed -n '/^uint64_t fdt64_to_cpu/,/^}/p' $< >> $@
-	sed -n '/^int fdt_add_mem_rsv/,/^}/p' $< >> $@
-
-unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c fdt_memrsv_extract.h
-	gcc -o $@ unit-fdt-memrsv-wrap.c -I../../include $(CFLAGS) $(LDFLAGS)
+# unit-fdt-memrsv-wrap: layout validation in front of fdt_add_mem_rsv()
+# (F-11045). Links the real parser rather than extracting one function.
+unit-fdt-memrsv-wrap:CFLAGS+=-DWOLFBOOT_FDT
+unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c ../../src/fdt.c
+	gcc -o $@ unit-fdt-memrsv-wrap.c ../../src/fdt.c -I../../include \
+		$(CFLAGS) $(LDFLAGS)
 
 unit-tpm-blob: ../../include/target.h unit-tpm-blob.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_TPM \
@@ -1466,7 +1461,7 @@ covclean:
 
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
-GENERATED_SRC:=aurix_erased_extract.h fdt_memrsv_extract.h \
+GENERATED_SRC:=aurix_erased_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h sdhci_host.c \

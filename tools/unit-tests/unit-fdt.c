@@ -1,6 +1,6 @@
 /* unit-fdt.c
  *
- * Unit tests for flattened device tree helpers.
+ * Unit tests for the flattened device tree parser.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -32,314 +32,806 @@ void wolfBoot_printf(const char *fmt, ...)
     (void)fmt;
 }
 
+/* ------------------------------------------------------------------ */
+/* Blob construction helpers                                           */
+/* ------------------------------------------------------------------ */
+
+
+static void be32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static uint32_t rd_be32(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16)
+         | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static void hdr_set(uint8_t *buf, uint32_t field, uint32_t v)
+{
+    be32(buf + field, v);
+}
+
+/* Lay out a well-formed v17 blob in buf: header, an empty reservation
+ * block, the caller's structure block and the caller's strings block.
+ * Returns the total size written. */
+static uint32_t build_fdt(uint8_t *buf, uint32_t bufsz,
+    const uint8_t *sblk, uint32_t slen,
+    const char *strblk, uint32_t strsz)
+{
+    uint32_t off_rsv = FDT_HEADER_SIZE;
+    uint32_t off_struct = off_rsv + FDT_RSV_ENTRY_SIZE;
+    uint32_t off_strings = off_struct + slen;
+    uint32_t total = off_strings + strsz;
+
+    ck_assert_uint_le(total, bufsz);
+    memset(buf, 0, bufsz);
+
+    hdr_set(buf, FDT_H_MAGIC, (uint32_t)FDT_MAGIC);
+    hdr_set(buf, FDT_H_TOTALSIZE, total);
+    hdr_set(buf, FDT_H_OFF_STRUCT, off_struct);
+    hdr_set(buf, FDT_H_OFF_STRINGS, off_strings);
+    hdr_set(buf, FDT_H_OFF_RSVMAP, off_rsv);
+    hdr_set(buf, FDT_H_VERSION, 17);
+    hdr_set(buf, FDT_H_LAST_COMP, 16);
+    hdr_set(buf, FDT_H_SIZE_STRUCT, slen);
+    hdr_set(buf, FDT_H_SIZE_STRINGS, strsz);
+    memcpy(buf + off_struct, sblk, slen);
+    memcpy(buf + off_strings, strblk, strsz);
+    return total;
+}
+
+/* Structure block for a root node carrying one property: the raw `len`
+ * bytes at `val`, named by string offset `nameoff`. */
+static uint32_t build_root_prop_struct(uint8_t *sblk, uint32_t nameoff,
+    const uint8_t *val, uint32_t len)
+{
+    uint32_t pad = FDT_TAGALIGN(len);
+    uint32_t i = 0;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4; /* empty root name */
+    be32(sblk + i, FDT_PROP);       i += 4;
+    be32(sblk + i, len);            i += 4;
+    be32(sblk + i, nameoff);        i += 4;
+    memset(sblk + i, 0, pad);
+    memcpy(sblk + i, val, len);     i += pad;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_END);        i += 4;
+    return i;
+}
+
+/* A root node whose `compatible` property holds the raw bytes val/len. */
+static uint32_t build_compat_fdt(uint8_t *buf, uint32_t bufsz,
+    const uint8_t *val, uint32_t len)
+{
+    uint8_t sblk[128];
+    uint32_t slen = build_root_prop_struct(sblk, 0, val, len);
+
+    return build_fdt(buf, bufsz, sblk, slen,
+        "compatible", (uint32_t)sizeof("compatible"));
+}
+
+/* ------------------------------------------------------------------ */
+/* fdt_open: the capacity bound                                        */
+/* ------------------------------------------------------------------ */
+
+/* The check that did not exist before the rewrite: a blob may not
+ * declare itself larger than the buffer it lives in. Every other bound
+ * in the parser is derived from this one. */
+START_TEST(test_fdt_open_rejects_totalsize_beyond_capacity)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+
+    /* honest capacity: accepted */
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_uint_eq(fdt_size(&ctx), total);
+
+    /* one byte short of what the header claims: rejected */
+    ck_assert_int_lt(fdt_open(&ctx, buf, total - 1), 0);
+    ck_assert_ptr_null(ctx.blob);
+
+    /* header claims far more than the caller can address */
+    hdr_set(buf, FDT_H_TOTALSIZE, 0x10000000);
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+START_TEST(test_fdt_open_rejects_unaligned_blob)
+{
+    static uint8_t buf[0x200 + 4];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf) - 4,
+        (const uint8_t *)"abc\0", 4);
+    /* the parser makes aligned 32-bit loads, so it must refuse a base
+     * it cannot make them from */
+    memmove(buf + 1, buf, total);
+    ck_assert_int_lt(fdt_open(&ctx, buf + 1, total), 0);
+}
+END_TEST
+
+/* A structure block whose string table lies past the declared end of
+ * the blob must be rejected. */
+START_TEST(test_fdt_open_rejects_unbounded_string_area)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    hdr_set(buf, FDT_H_OFF_STRINGS, total);
+
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+/* The structure block must not overlap the string table. */
+START_TEST(test_fdt_open_rejects_overlapping_areas)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    hdr_set(buf, FDT_H_SIZE_STRUCT, total);
+
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+/* off_dt_strings + size_dt_strings must not wrap uint32_t. */
+START_TEST(test_fdt_open_rejects_dt_strings_area_overflow)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    hdr_set(buf, FDT_H_SIZE_STRINGS, 0xFFFFFFFC);
+
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+/* A property length that wraps the cursor arithmetic must be caught by
+ * the structural walk, not handed to a caller as a negative int that
+ * becomes a ~4GB memcpy size. */
+START_TEST(test_fdt_open_rejects_oversized_prop_len)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    /* the property record starts 8 bytes into the structure block, so
+     * its length field is at +12 */
+    be32(buf + rd_be32(buf + FDT_H_OFF_STRUCT) + 12, 0xFFFFFFFF);
+
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+/* A tree with no properties has an empty strings block, which is legal
+ * and must be accepted - the parser's "strings block ends in a NUL"
+ * invariant only applies when there are strings. */
+START_TEST(test_fdt_open_accepts_empty_strings_block)
+{
+    static uint8_t buf[0x200];
+    uint8_t sblk[4 * 4];
+    uint32_t i = 0, total;
+    fdt_ctx ctx;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_END);        i += 4;
+
+    total = build_fdt(buf, sizeof(buf), sblk, i, "", 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_path_offset(&ctx, "/"), 0);
+    /* with no strings, every string offset is out of range */
+    ck_assert_ptr_null(fdt_get_string(&ctx, 0, NULL));
+    ck_assert_ptr_null(fdt_getprop(&ctx, 0, "compatible", NULL));
+}
+END_TEST
+
+/* Nesting must balance and there must be exactly one root. */
+START_TEST(test_fdt_open_rejects_two_roots)
+{
+    static uint8_t buf[0x200];
+    uint8_t sblk[7 * 4];
+    uint32_t i = 0, total;
+    fdt_ctx ctx;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4; /* a second root */
+    be32(sblk + i, 0);              i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_END);        i += 4;
+
+    total = build_fdt(buf, sizeof(buf), sblk, i, "", 1);
+    ck_assert_int_lt(fdt_open(&ctx, buf, total), 0);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* fdt_get_string                                                      */
+/* ------------------------------------------------------------------ */
+
+static uint32_t build_strings_fdt(uint8_t *buf, uint32_t bufsz)
+{
+    uint8_t sblk[64];
+    uint32_t i = 0;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_END);        i += 4;
+
+    return build_fdt(buf, bufsz, sblk, i, "serial\0console", 15);
+}
+
 START_TEST(test_fdt_get_string_rejects_out_of_range_offset)
 {
-    struct {
-        struct fdt_header hdr;
-        char strings[8];
-        char after[4];
-    } blob;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
     int len = 1234;
     const char *s;
 
-    memset(&blob, 0, sizeof(blob));
-    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
-    fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
-    fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
-    fdt_set_magic(&blob, FDT_MAGIC);
-    fdt_set_version(&blob, 17);
-    fdt_set_last_comp_version(&blob, 16);
-    memcpy(blob.strings, "chosen", sizeof("chosen"));
-    blob.after[0] = 'X';
-    blob.after[1] = '\0';
+    total = build_strings_fdt(buf, sizeof(buf));
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
 
-    s = fdt_get_string(&blob, (int)sizeof(blob.strings), &len);
-
+    s = fdt_get_string(&ctx, 15, &len); /* exactly one past the block */
     ck_assert_ptr_null(s);
     ck_assert_int_eq(len, -FDT_ERR_BADOFFSET);
+
+    s = fdt_get_string(&ctx, -1, &len);
+    ck_assert_ptr_null(s);
+    ck_assert_int_lt(len, 0);
 }
 END_TEST
 
 START_TEST(test_fdt_get_string_returns_string_with_valid_offset)
 {
-    struct {
-        struct fdt_header hdr;
-        char strings[16];
-    } blob;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
     int len = -1;
     const char *s;
 
-    memset(&blob, 0, sizeof(blob));
-    fdt_set_totalsize(&blob, sizeof(blob.hdr) + sizeof(blob.strings));
-    fdt_set_off_dt_strings(&blob, sizeof(blob.hdr));
-    fdt_set_size_dt_strings(&blob, sizeof(blob.strings));
-    fdt_set_magic(&blob, FDT_MAGIC);
-    fdt_set_version(&blob, 17);
-    fdt_set_last_comp_version(&blob, 16);
-    memcpy(blob.strings, "serial\0console\0", 15);
+    total = build_strings_fdt(buf, sizeof(buf));
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
 
-    s = fdt_get_string(&blob, 7, &len);
-
+    s = fdt_get_string(&ctx, 7, &len);
     ck_assert_ptr_nonnull(s);
     ck_assert_str_eq(s, "console");
     ck_assert_int_eq(len, 7);
 }
 END_TEST
 
-/* Minimal FIT with a single /images/kernel-1 node whose `data` property
- * declares len=0xFFFFFFFF. There is no `load` (and no `compression`), so
- * fit_load_image_inner() takes the pass-through branch. Before the
- * fdt_next_tag() length check, the oversized len wrapped the cursor
- * arithmetic, slipped past the bounds check, and was handed back as
- * *lenp = -1 - which update_ram.c then aliased into a ~4GB memcpy size.
- * The loader must instead fail closed (return NULL). */
-static const uint8_t fit_data_len_overflow[] = {
-    /* header */
-    0xd0, 0x0d, 0xfe, 0xed, /* magic */
-    0x00, 0x00, 0x00, 0x81, /* totalsize = 129 */
-    0x00, 0x00, 0x00, 0x38, /* off_dt_struct = 56 */
-    0x00, 0x00, 0x00, 0x7c, /* off_dt_strings = 124 */
-    0x00, 0x00, 0x00, 0x28, /* off_mem_rsvmap = 40 */
-    0x00, 0x00, 0x00, 0x11, /* version = 17 */
-    0x00, 0x00, 0x00, 0x10, /* last_comp_version = 16 */
-    0x00, 0x00, 0x00, 0x00, /* boot_cpuid_phys */
-    0x00, 0x00, 0x00, 0x05, /* size_dt_strings = 5 */
-    0x00, 0x00, 0x00, 0x44, /* size_dt_struct = 68 */
-    /* mem_rsvmap terminator (offset 40) */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    /* struct block (offset 56) */
-    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE root */
-    0x00, 0x00, 0x00, 0x00,                         /* "" */
-    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE images */
-    0x69, 0x6d, 0x61, 0x67, 0x65, 0x73, 0x00, 0x00, /* "images\0\0" */
-    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE kernel-1 */
-    0x6b, 0x65, 0x72, 0x6e, 0x65, 0x6c, 0x2d, 0x31,
-    0x00, 0x00, 0x00, 0x00,                         /* "kernel-1\0\0\0\0" */
-    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
-    0xff, 0xff, 0xff, 0xff,                         /* len = 0xFFFFFFFF */
-    0x00, 0x00, 0x00, 0x00,                         /* nameoff = 0 ("data") */
-    0x00, 0x00, 0x00, 0x00,                         /* data (4 bytes) */
-    0x00, 0x00, 0x00, 0x02,                         /* END_NODE kernel-1 */
-    0x00, 0x00, 0x00, 0x02,                         /* END_NODE images */
-    0x00, 0x00, 0x00, 0x02,                         /* END_NODE root */
-    0x00, 0x00, 0x00, 0x09,                         /* FDT_END */
-    /* strings block (offset 124) */
-    0x64, 0x61, 0x74, 0x61, 0x00,                   /* "data\0" */
-};
+/* ------------------------------------------------------------------ */
+/* compatible string-list matching                                     */
+/* ------------------------------------------------------------------ */
 
-START_TEST(test_fit_load_image_rejects_oversized_prop_len)
-{
-    static uint8_t fit_scratch[sizeof(fit_data_len_overflow)];
-    int len = 0;
-    void *ret;
-
-    memcpy(fit_scratch, fit_data_len_overflow, sizeof(fit_scratch));
-
-    ret = fit_load_image_ex(fit_scratch, "kernel-1", &len, 64 * 1024);
-
-    /* Must fail closed: never return a live pointer with a negative
-     * length that a caller could turn into a giant memcpy size. */
-    ck_assert_ptr_null(ret);
-}
-END_TEST
-
-/* off_dt_strings=4, size_dt_strings=0xFFFFFFFC: sum overflows uint32_t to 0.
- * Before the fix, fdt_data_size_() returned 0 and fdt_shrink() silently set
- * totalsize=0.  After the fix fdt_shrink() must return an error and leave
- * totalsize unchanged. */
-START_TEST(test_fdt_shrink_rejects_dt_strings_area_overflow)
-{
-    static uint8_t buf[256];
-    int rc;
-
-    memset(buf, 0, sizeof(buf));
-    fdt_set_totalsize(buf, sizeof(buf));
-    fdt_set_off_dt_strings(buf, 4);
-    fdt_set_size_dt_strings(buf, 0xFFFFFFFC);
-
-    rc = fdt_shrink(buf);
-
-    ck_assert_int_lt(rc, 0);
-    ck_assert_uint_eq(fdt_totalsize(buf), sizeof(buf));
-}
-END_TEST
-
-/* Minimal FDT whose root node carries a `compatible` property whose value has
- * no NUL terminator within its declared length (len=4, "AAAA").
- * fdt_node_offset_by_compatible() walks the (possibly multi-string) compatible
- * value with memchr(prop, '\0', len); */
-static const uint8_t fdt_compatible_no_terminator[] = {
-    /* header */
-    0xd0, 0x0d, 0xfe, 0xed, /* magic */
-    0x00, 0x00, 0x00, 0x63, /* totalsize = 99 */
-    0x00, 0x00, 0x00, 0x38, /* off_dt_struct = 56 */
-    0x00, 0x00, 0x00, 0x58, /* off_dt_strings = 88 */
-    0x00, 0x00, 0x00, 0x28, /* off_mem_rsvmap = 40 */
-    0x00, 0x00, 0x00, 0x11, /* version = 17 */
-    0x00, 0x00, 0x00, 0x10, /* last_comp_version = 16 */
-    0x00, 0x00, 0x00, 0x00, /* boot_cpuid_phys */
-    0x00, 0x00, 0x00, 0x0b, /* size_dt_strings = 11 */
-    0x00, 0x00, 0x00, 0x20, /* size_dt_struct = 32 */
-    /* mem_rsvmap terminator (offset 40) */
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    /* struct block (offset 56) */
-    0x00, 0x00, 0x00, 0x01,                         /* BEGIN_NODE root */
-    0x00, 0x00, 0x00, 0x00,                         /* "" */
-    0x00, 0x00, 0x00, 0x03,                         /* FDT_PROP */
-    0x00, 0x00, 0x00, 0x04,                         /* len = 4 */
-    0x00, 0x00, 0x00, 0x00,                         /* nameoff = 0 ("compatible") */
-    0x41, 0x41, 0x41, 0x41,                         /* value "AAAA" -- no NUL */
-    0x00, 0x00, 0x00, 0x02,                         /* END_NODE root */
-    0x00, 0x00, 0x00, 0x09,                         /* FDT_END */
-    /* strings block (offset 88) */
-    0x63, 0x6f, 0x6d, 0x70, 0x61, 0x74, 0x69, 0x62, /* "compatib" */
-    0x6c, 0x65, 0x00,                               /* "le\0" */
-};
-
-START_TEST(test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop)
-{
-    int off;
-
-    /* complen = strlen("foo") = 3 <= 4 = declared property length, so the
-     * inner walk loop is entered; "foo" != "AAAA" so it does not match and
-     * falls through to the memchr() advance  */
-    off = fdt_node_offset_by_compatible(fdt_compatible_no_terminator, -1, "foo");
-
-    ck_assert_int_lt(off, 0);
-}
-END_TEST
-
-/* Build a minimal FDT in buf (zero-initialized, so padding bytes are
- * 0x00): root node with a `compatible` property whose raw value is
- * `len` bytes at `val`. */
-static void build_compat_fdt(uint8_t *buf, size_t size,
-    const uint8_t *val, uint32_t len)
-{
-    struct fdt_header *hdr;
-    uint32_t *s;
-    uint32_t val_aligned = (len + 3u) & ~3u;
-    uint32_t struct_off = 0x40;
-    uint32_t strings_off = 0x80;
-
-    memset(buf, 0, size);
-
-    hdr = (struct fdt_header *)buf;
-    hdr->magic = fdt32_to_cpu(FDT_MAGIC);
-    fdt_set_totalsize(hdr, 0x100);
-    fdt_set_off_dt_struct(hdr, struct_off);
-    fdt_set_off_dt_strings(hdr, strings_off);
-    fdt_set_off_mem_rsvmap(hdr, 0x28);
-    fdt_set_version(hdr, 17);
-    fdt_set_last_comp_version(hdr, 16);
-    fdt_set_size_dt_struct(hdr,
-        8u + 12u + val_aligned + 4u + 4u); /* node hdr, prop, end, FDT_END */
-    fdt_set_size_dt_strings(hdr, sizeof("compatible"));
-    memcpy(buf + strings_off, "compatible", sizeof("compatible"));
-
-    s = (uint32_t *)(buf + struct_off);
-    s[0] = fdt32_to_cpu(FDT_BEGIN_NODE); /* root */
-    s[1] = 0;                            /* empty name */
-    s[2] = fdt32_to_cpu(FDT_PROP);
-    s[3] = fdt32_to_cpu(len);
-    s[4] = fdt32_to_cpu(0);              /* nameoff of "compatible" */
-    memcpy(buf + struct_off + 8 + 12, val, len);
-    s[5 + val_aligned / 4u] = fdt32_to_cpu(FDT_END_NODE);
-    s[6 + val_aligned / 4u] = fdt32_to_cpu(FDT_END);
-}
-
-/* A compatible entry whose declared length equals the search string
- * (no room for a NUL) must not match: before the fix the comparison
- * read one byte past the declared length (the 4-byte alignment
- * padding, zero here) as if it were the terminator and accepted the
- * entry. */
+/* An entry whose declared length equals the search string leaves no
+ * room for a NUL, so it must not match: the comparison must not read
+ * the alignment padding as if it were the terminator. */
 START_TEST(test_fdt_compatible_unterminated_exact_len_no_match)
 {
-    static uint8_t buf[0x100];
-    int off;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc", 3);
-
-    off = fdt_node_offset_by_compatible(buf, -1, "abc");
-    ck_assert_int_lt(off, 0);
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc", 3);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_lt(fdt_node_offset_by_compatible(&ctx, -1, "abc"), 0);
 }
 END_TEST
 
 /* A properly terminated entry of exactly the search length matches. */
 START_TEST(test_fdt_compatible_terminated_exact_len_match)
 {
-    static uint8_t buf[0x100];
-    int off;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
-
-    off = fdt_node_offset_by_compatible(buf, -1, "abc");
-    ck_assert_int_eq(off, 0); /* the root node */
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_node_offset_by_compatible(&ctx, -1, "abc"), 0);
 }
 END_TEST
 
-/* Multi-string compatible lists keep working: the second entry
- * matches. */
+/* Multi-string lists keep working: the second entry matches. */
 START_TEST(test_fdt_compatible_multi_string_list_match)
 {
-    static uint8_t buf[0x100];
-    int off;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"xy\0abc\0", 8);
-
-    off = fdt_node_offset_by_compatible(buf, -1, "abc");
-    ck_assert_int_eq(off, 0);
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"xy\0abc\0", 8);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_node_offset_by_compatible(&ctx, -1, "abc"), 0);
 }
 END_TEST
 
-/* A terminated entry that merely starts with the search string does
- * not match (the entry is longer). */
+/* A terminated entry that merely starts with the search string does not
+ * match - the entry is longer. */
 START_TEST(test_fdt_compatible_prefix_entry_no_match)
 {
-    static uint8_t buf[0x100];
-    int off;
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abcd\0", 5);
-
-    off = fdt_node_offset_by_compatible(buf, -1, "abc");
-    ck_assert_int_lt(off, 0);
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abcd\0", 5);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_lt(fdt_node_offset_by_compatible(&ctx, -1, "abc"), 0);
 }
 END_TEST
 
-/* A finalized DTB whose string table lies past the declared end of
- * the blob must be rejected: before the fix fdt_check_header()
- * validated only magic and version, and fdt_get_string() formed the
- * string-table pointer from the unvalidated header fields. */
-START_TEST(test_fdt_check_header_rejects_unbounded_string_area)
+/* A value with no NUL inside its declared length is a legal property
+ * (values are opaque byte arrays), so the blob is accepted - but the
+ * string-list walk must terminate rather than run past the property. */
+START_TEST(test_fdt_node_offset_by_compatible_terminates_on_unterminated_prop)
 {
-    static uint8_t buf[0x100];
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"AAAA", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_lt(fdt_node_offset_by_compatible(&ctx, -1, "foo"), 0);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* Path lookup                                                         */
+/* ------------------------------------------------------------------ */
+
+/* Build /soc/serial@100 plus a decoy node also named "serial@100" at the
+ * top level, so a name-anywhere search and a path search disagree. */
+static uint32_t build_path_fdt(uint8_t *buf, uint32_t bufsz)
+{
+    uint8_t sblk[128];
+    uint32_t i = 0;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4;          /* root */
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    memcpy(sblk + i, "serial@100\0\0", 12); i += 12; /* decoy at /serial@100 */
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    memcpy(sblk + i, "soc\0", 4);   i += 4;
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    memcpy(sblk + i, "serial@100\0\0", 12); i += 12; /* /soc/serial@100 */
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;          /* close soc */
+
+    be32(sblk + i, FDT_END_NODE);   i += 4;          /* close root */
+    be32(sblk + i, FDT_END);        i += 4;
+
+    return build_fdt(buf, bufsz, sblk, i, "", 1);
+}
+
+START_TEST(test_fdt_path_offset_resolves_by_path)
+{
+    static uint8_t buf[0x200];
+    uint32_t total;
+    fdt_ctx ctx;
+    int by_path, by_name, soc;
+
+    total = build_path_fdt(buf, sizeof(buf));
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+
+    ck_assert_int_eq(fdt_path_offset(&ctx, "/"), 0);
+
+    by_path = fdt_path_offset(&ctx, "/soc/serial@100");
+    ck_assert_int_gt(by_path, 0);
+
+    /* The tree-wide name search finds the decoy first; the path lookup
+     * does not. That difference is the point of having both. */
+    by_name = fdt_find_node_offset(&ctx, -1, "serial@100");
+    ck_assert_int_gt(by_name, 0);
+    ck_assert_int_ne(by_path, by_name);
+
+    /* a unit address may be omitted from a path component */
+    ck_assert_int_eq(fdt_path_offset(&ctx, "/soc/serial"), by_path);
+
+    /* the public direct-child lookup agrees with the path lookup */
+    soc = fdt_path_offset(&ctx, "/soc");
+    ck_assert_int_gt(soc, 0);
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, soc, "serial"), by_path);
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, soc, "serial@100"), by_path);
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, 0, "missing"),
+        -FDT_ERR_NOTFOUND);
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, 0, NULL), -FDT_ERR_BADARG);
+    /* asked at the root it finds the decoy, not the /soc one - a direct
+     * child lookup never descends */
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, 0, "serial"), by_name);
+
+    ck_assert_int_lt(fdt_path_offset(&ctx, "/soc/nope"), 0);
+    ck_assert_int_lt(fdt_path_offset(&ctx, "soc"), 0); /* must be absolute */
+
+    /* A component far longer than any name in the tree must not match,
+     * and must not compare past the end of the name it is tested
+     * against. The lookup names come from attacker-influenced places
+     * (a FIT's `default` string, for one), so the length is not bounded
+     * by anything in the blob. */
+    ck_assert_int_lt(fdt_path_offset(&ctx,
+        "/soc/serial@100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 0);
+    ck_assert_int_lt(fdt_find_node_offset(&ctx,
+        -1, "serial@100aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), 0);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* Writing is bounded by the capacity, not by the header               */
+/* ------------------------------------------------------------------ */
+
+START_TEST(test_fdt_setprop_bounded_by_capacity)
+{
+    static uint8_t buf[0x400];
+    uint8_t big[0x400];
+    uint32_t total;
+    fdt_ctx ctx;
     int len = 0;
-    const char *s;
+    const void *val;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
-    /* push the string table past the declared end of the blob */
-    fdt_set_off_dt_strings((struct fdt_header *)buf, 0x100);
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
 
-    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+    /* Capacity exactly the blob: there is no room to grow, so adding a
+     * property must fail closed rather than write past the end. */
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "status", "okay", 5),
+        -FDT_ERR_NOSPACE);
 
-    s = fdt_get_string(buf, 0, &len);
-    ck_assert_ptr_null(s);
-    ck_assert_int_lt(len, 0);
+    /* Same blob, honest larger window: the write now fits. */
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "status", "okay", 5), 0);
+
+    val = fdt_getprop(&ctx, 0, "status", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 5);
+    ck_assert_str_eq((const char *)val, "okay");
+
+    /* The original property is still readable and unchanged. */
+    val = fdt_getprop(&ctx, 0, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 4);
+    ck_assert_str_eq((const char *)val, "abc");
+
+    /* A value that cannot fit in the window fails closed too. */
+    memset(big, 'x', sizeof(big));
+    ck_assert_int_lt(fdt_setprop(&ctx, 0, "blob", big, (int)sizeof(big)), 0);
+
+    /* ...and the tree is still intact after the refusal. */
+    val = fdt_getprop(&ctx, 0, "status", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 5);
 }
 END_TEST
 
-/* The structure block must not overlap the string table. */
-START_TEST(test_fdt_check_header_rejects_overlapping_areas)
+/* fdt_grow() must refuse headroom the window cannot hold, where the old
+ * blind totalsize bump would have silently promised it. */
+START_TEST(test_fdt_grow_bounded_by_capacity)
 {
-    static uint8_t buf[0x100];
+    static uint8_t buf[0x400];
+    uint32_t total;
+    fdt_ctx ctx;
 
-    build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
-    fdt_set_size_dt_struct((struct fdt_header *)buf, 0x100);
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
 
-    ck_assert_int_eq(fdt_check_header(buf), -FDT_ERR_BADSTRUCTURE);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_grow(&ctx, 1024), -FDT_ERR_NOSPACE);
+    ck_assert_uint_eq(fdt_size(&ctx), total);
+
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_eq(fdt_grow(&ctx, 64), 0);
+    ck_assert_uint_eq(fdt_size(&ctx), total + 64);
+    ck_assert_int_eq(fdt_shrink(&ctx), 0);
+    ck_assert_uint_eq(fdt_size(&ctx), total);
 }
 END_TEST
+
+
+/* ------------------------------------------------------------------ */
+/* Node insertion and removal                                          */
+/* ------------------------------------------------------------------ */
+
+/* Root with two children, "keep" (carrying a property) and "drop". */
+static uint32_t build_two_child_fdt(uint8_t *buf, uint32_t bufsz)
+{
+    uint8_t sblk[128];
+    uint32_t i = 0;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    be32(sblk + i, 0);              i += 4;          /* root */
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    memcpy(sblk + i, "keep\0\0\0\0", 8); i += 8;
+    be32(sblk + i, FDT_PROP);       i += 4;
+    be32(sblk + i, 4);              i += 4;          /* len */
+    be32(sblk + i, 0);              i += 4;          /* nameoff "compatible" */
+    memcpy(sblk + i, "abc\0", 4);   i += 4;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+
+    be32(sblk + i, FDT_BEGIN_NODE); i += 4;
+    memcpy(sblk + i, "drop\0\0\0\0", 8); i += 8;
+    be32(sblk + i, FDT_END_NODE);   i += 4;
+
+    be32(sblk + i, FDT_END_NODE);   i += 4;          /* close root */
+    be32(sblk + i, FDT_END);        i += 4;
+
+    return build_fdt(buf, bufsz, sblk, i, "compatible",
+        (uint32_t)sizeof("compatible"));
+}
+
+START_TEST(test_fdt_del_node_removes_subtree)
+{
+    static uint8_t buf[0x400];
+    uint32_t total;
+    fdt_ctx ctx;
+    int drop, keep, len = 0;
+    const void *val;
+
+    total = build_two_child_fdt(buf, sizeof(buf));
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+
+    drop = fdt_path_offset(&ctx, "/drop");
+    ck_assert_int_gt(drop, 0);
+    ck_assert_int_eq(fdt_del_node(&ctx, drop), 0);
+
+    /* the blob is still well formed, and only that node is gone */
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_lt(fdt_path_offset(&ctx, "/drop"), 0);
+    ck_assert_int_lt(fdt_find_node_offset(&ctx, -1, "drop"), 0);
+
+    keep = fdt_path_offset(&ctx, "/keep");
+    ck_assert_int_gt(keep, 0);
+    val = fdt_getprop(&ctx, keep, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 4);
+    ck_assert_str_eq((const char *)val, "abc");
+
+    /* the content shrank; totalsize only follows once asked to, since
+     * mutations never pull it below what a consumer was promised */
+    ck_assert_uint_eq(fdt_size(&ctx), total);
+    ck_assert_int_eq(fdt_shrink(&ctx), 0);
+    ck_assert_uint_lt(fdt_size(&ctx), total);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_gt(fdt_path_offset(&ctx, "/keep"), 0);
+}
+END_TEST
+
+START_TEST(test_fdt_del_node_rejects_bad_offset)
+{
+    static uint8_t buf[0x400];
+    fdt_ctx ctx;
+    int keep;
+
+    (void)build_two_child_fdt(buf, sizeof(buf));
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+
+    keep = fdt_path_offset(&ctx, "/keep");
+    ck_assert_int_gt(keep, 0);
+
+    /* not a node token, and a wildly out-of-range offset */
+    ck_assert_int_lt(fdt_del_node(&ctx, keep + 4), 0);
+    ck_assert_int_lt(fdt_del_node(&ctx, 0x7000), 0);
+    /* nothing was disturbed */
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_gt(fdt_path_offset(&ctx, "/keep"), 0);
+}
+END_TEST
+
+/* fdt_add_subnode() is on the common boot path: every HAL that inserts
+ * /chosen into a DTB that lacks one goes through it. */
+START_TEST(test_fdt_add_subnode)
+{
+    static uint8_t buf[0x400];
+    fdt_ctx ctx;
+    int off, again, len = 0;
+    const void *val;
+
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_lt(fdt_path_offset(&ctx, "/chosen"), 0);
+
+    off = fdt_add_subnode(&ctx, 0, "chosen");
+    ck_assert_int_gt(off, 0);
+
+    /* the new node is reachable both ways, and takes properties */
+    ck_assert_int_eq(fdt_path_offset(&ctx, "/chosen"), off);
+    ck_assert_int_eq(fdt_subnode_offset(&ctx, 0, "chosen"), off);
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "bootargs", "console=ttyS0", 14),
+        0);
+
+    /* adding it twice is refused, and the tree is unchanged */
+    again = fdt_add_subnode(&ctx, 0, "chosen");
+    ck_assert_int_eq(again, -FDT_ERR_EXISTS);
+
+    /* still parses, and the root's original property survived */
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    off = fdt_path_offset(&ctx, "/chosen");
+    ck_assert_int_gt(off, 0);
+    val = fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_str_eq((const char *)val, "console=ttyS0");
+    val = fdt_getprop(&ctx, 0, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_str_eq((const char *)val, "abc");
+}
+END_TEST
+
+START_TEST(test_fdt_add_subnode_bounded_by_capacity)
+{
+    static uint8_t buf[0x400];
+    uint32_t total;
+    fdt_ctx ctx;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+
+    /* no room to grow: must fail closed and leave the tree intact */
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_eq(fdt_add_subnode(&ctx, 0, "chosen"), -FDT_ERR_NOSPACE);
+    ck_assert_int_eq(fdt_open(&ctx, buf, total), 0);
+    ck_assert_int_lt(fdt_path_offset(&ctx, "/chosen"), 0);
+    ck_assert_uint_eq(fdt_size(&ctx), total);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* Property resize                                                     */
+/* ------------------------------------------------------------------ */
+
+/* Overwriting an existing property is the branch that runs on every real
+ * boot (a DTB that already ships bootargs, T10xx rewriting reg/status).
+ * Exercise both directions, since grow and shrink use the same splice
+ * arithmetic with opposite signs. */
+START_TEST(test_fdt_setprop_resizes_existing_property)
+{
+    static uint8_t buf[0x400];
+    fdt_ctx ctx;
+    int len = 0;
+    const void *val;
+
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "status", "okay", 5), 0);
+
+    /* grow `compatible` past its original length */
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "compatible",
+        "a-much-longer-compatible-string", 32), 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    val = fdt_getprop(&ctx, 0, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 32);
+    ck_assert_str_eq((const char *)val, "a-much-longer-compatible-string");
+    /* the sibling property moved intact */
+    val = fdt_getprop(&ctx, 0, "status", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 5);
+    ck_assert_str_eq((const char *)val, "okay");
+
+    /* now shrink it back */
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "compatible", "xy", 3), 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    val = fdt_getprop(&ctx, 0, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 3);
+    ck_assert_str_eq((const char *)val, "xy");
+    val = fdt_getprop(&ctx, 0, "status", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 5);
+    ck_assert_str_eq((const char *)val, "okay");
+
+    /* a zero-length property is legal */
+    ck_assert_int_eq(fdt_setprop(&ctx, 0, "compatible", NULL, 0), 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    val = fdt_getprop(&ctx, 0, "compatible", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 0);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* initrd fixup                                                        */
+/* ------------------------------------------------------------------ */
+
+static uint64_t rd_be64(const uint8_t *p)
+{
+    uint64_t v = 0;
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        v = (v << 8) | (uint64_t)p[i];
+    }
+    return v;
+}
+
+START_TEST(test_fdt_fixup_initrd)
+{
+    static uint8_t buf[0x400];
+    fdt_ctx ctx;
+    int off, len = 0;
+    const void *val;
+
+    /* /chosen absent: it must be created */
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_eq(fdt_fixup_initrd(&ctx, 0x10000000ULL, 0x2000ULL), 0);
+
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    off = fdt_path_offset(&ctx, "/chosen");
+    ck_assert_int_gt(off, 0);
+
+    val = fdt_getprop(&ctx, off, "linux,initrd-start", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 8);
+    ck_assert_uint_eq(rd_be64((const uint8_t *)val), 0x10000000ULL);
+
+    val = fdt_getprop(&ctx, off, "linux,initrd-end", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 8);
+    ck_assert_uint_eq(rd_be64((const uint8_t *)val), 0x10002000ULL);
+
+    /* /chosen already present: the values are replaced in place */
+    ck_assert_int_eq(fdt_fixup_initrd(&ctx, 0x20000000ULL, 0x100ULL), 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    off = fdt_path_offset(&ctx, "/chosen");
+    ck_assert_int_gt(off, 0);
+    val = fdt_getprop(&ctx, off, "linux,initrd-end", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_uint_eq(rd_be64((const uint8_t *)val), 0x20000100ULL);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* fdt_peek_size                                                       */
+/* ------------------------------------------------------------------ */
+
+START_TEST(test_fdt_peek_size_header_only)
+{
+    static uint8_t buf[0x200];
+    uint32_t total, peeked = 0;
+
+    total = build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+
+    /* Reports the declared size from the header alone - the caller has
+     * not fetched the body yet. */
+    ck_assert_int_eq(fdt_peek_size(buf, FDT_HEADER_SIZE, &peeked), 0);
+    ck_assert_uint_eq(peeked, total);
+
+    /* Fewer bytes than a header is not enough to answer. */
+    ck_assert_int_lt(fdt_peek_size(buf, FDT_HEADER_SIZE - 1, &peeked), 0);
+
+    /* Bad magic and out-of-range sizes are still rejected. */
+    hdr_set(buf, FDT_H_TOTALSIZE, WOLFBOOT_DTS_MAX_SIZE + 1);
+    ck_assert_int_lt(fdt_peek_size(buf, FDT_HEADER_SIZE, &peeked), 0);
+    hdr_set(buf, FDT_H_TOTALSIZE, total);
+    hdr_set(buf, FDT_H_MAGIC, 0xDEADBEEF);
+    ck_assert_int_lt(fdt_peek_size(buf, FDT_HEADER_SIZE, &peeked), 0);
+}
+END_TEST
+
+/* ------------------------------------------------------------------ */
+/* FIT                                                                 */
+/* ------------------------------------------------------------------ */
 
 /* FIT whose configuration `kernel` property is not NUL-terminated
  * within its declared length: fit_find_images() must still honor the
@@ -387,21 +879,26 @@ static const uint8_t fit_cfg_unterminated_kernel[] = {
 
 START_TEST(test_fit_find_images_rejects_unterminated_image_name)
 {
-    static uint8_t fit_scratch[sizeof(fit_cfg_unterminated_kernel)];
-    const char *conf = NULL, *kern = NULL, *fdt = NULL;
+    static uint8_t fit_scratch[sizeof(fit_cfg_unterminated_kernel)]
+        __attribute__((aligned(4)));
+    const char *conf = NULL, *kern = NULL, *dt = NULL;
     const char *rd = NULL, *fpga = NULL;
+    fdt_ctx ctx;
 
     memcpy(fit_scratch, fit_cfg_unterminated_kernel, sizeof(fit_scratch));
+    ck_assert_int_eq(fdt_open(&ctx, fit_scratch,
+        (uint32_t)sizeof(fit_scratch)), 0);
 
-    conf = fit_find_images(fit_scratch, &kern, &fdt, &rd, &fpga);
+    conf = fit_find_images(&ctx, &kern, &dt, &rd, &fpga);
 
     /* The valid `default` is still honored... */
+    ck_assert_ptr_nonnull(conf);
     ck_assert_str_eq(conf, "conf-1");
     /* ...but the config's `kernel` property is not NUL-terminated
      * within its declared length, so it must be rejected rather than
-     * passed on to fdt_find_node_offset()/strlen(). */
+     * passed on to a lookup that would strlen() it. */
     ck_assert_ptr_null(kern);
-    ck_assert_ptr_null(fdt);
+    ck_assert_ptr_null(dt);
     ck_assert_ptr_null(rd);
     ck_assert_ptr_null(fpga);
 }
@@ -411,20 +908,34 @@ static Suite *fdt_suite(void)
 {
     Suite *s = suite_create("fdt");
     TCase *tc = tcase_create("fdt");
-    /* Separate case with a hard timeout so an unterminated-property
-     * regression is reported as a failure rather than hanging the suite. */
+    /* Separate case with a hard timeout so a non-terminating walk is
+     * reported as a failure rather than hanging the suite. */
     TCase *tc_dos = tcase_create("fdt-dos");
 
+    tcase_add_test(tc, test_fdt_open_rejects_totalsize_beyond_capacity);
+    tcase_add_test(tc, test_fdt_open_rejects_unaligned_blob);
+    tcase_add_test(tc, test_fdt_open_rejects_unbounded_string_area);
+    tcase_add_test(tc, test_fdt_open_rejects_overlapping_areas);
+    tcase_add_test(tc, test_fdt_open_rejects_dt_strings_area_overflow);
+    tcase_add_test(tc, test_fdt_open_rejects_oversized_prop_len);
+    tcase_add_test(tc, test_fdt_open_accepts_empty_strings_block);
+    tcase_add_test(tc, test_fdt_open_rejects_two_roots);
     tcase_add_test(tc, test_fdt_get_string_rejects_out_of_range_offset);
     tcase_add_test(tc, test_fdt_get_string_returns_string_with_valid_offset);
-    tcase_add_test(tc, test_fit_load_image_rejects_oversized_prop_len);
-    tcase_add_test(tc, test_fdt_shrink_rejects_dt_strings_area_overflow);
     tcase_add_test(tc, test_fdt_compatible_unterminated_exact_len_no_match);
     tcase_add_test(tc, test_fdt_compatible_terminated_exact_len_match);
     tcase_add_test(tc, test_fdt_compatible_multi_string_list_match);
     tcase_add_test(tc, test_fdt_compatible_prefix_entry_no_match);
-    tcase_add_test(tc, test_fdt_check_header_rejects_unbounded_string_area);
-    tcase_add_test(tc, test_fdt_check_header_rejects_overlapping_areas);
+    tcase_add_test(tc, test_fdt_path_offset_resolves_by_path);
+    tcase_add_test(tc, test_fdt_setprop_bounded_by_capacity);
+    tcase_add_test(tc, test_fdt_grow_bounded_by_capacity);
+    tcase_add_test(tc, test_fdt_del_node_removes_subtree);
+    tcase_add_test(tc, test_fdt_del_node_rejects_bad_offset);
+    tcase_add_test(tc, test_fdt_add_subnode);
+    tcase_add_test(tc, test_fdt_add_subnode_bounded_by_capacity);
+    tcase_add_test(tc, test_fdt_setprop_resizes_existing_property);
+    tcase_add_test(tc, test_fdt_fixup_initrd);
+    tcase_add_test(tc, test_fdt_peek_size_header_only);
     tcase_add_test(tc, test_fit_find_images_rejects_unterminated_image_name);
     suite_add_tcase(s, tc);
 

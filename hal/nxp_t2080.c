@@ -1725,31 +1725,33 @@ void* hal_get_dts_address(void)
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
 }
 
-int hal_dts_fixup(void* dts_addr)
+int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
 #ifndef BUILD_LOADER_STAGE1
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    fdt_ctx ctx;
+    fdt_ctx* fdt = &ctx;
     int off;
     uint32_t *reg;
 
-    /* verify the FDT is valid */
-    off = fdt_check_header(dts_addr);
+    /* Validate the blob against the window it actually occupies. */
+    off = fdt_open(&ctx, dts_addr, capacity);
     if (off != 0) {
         wolfBoot_printf("FDT: Invalid header! %d\n", off);
         return off;
     }
 
     /* display FDT information */
-    wolfBoot_printf("FDT: Version %d, Size %d\n",
-        fdt_version(fdt), fdt_totalsize(fdt));
+    wolfBoot_printf("FDT: Size %d\n", (int)fdt_size(fdt));
 
-    /* expand total size */
-    {
-        uint32_t new_size = (uint32_t)fdt_totalsize(fdt) + 2048U;
-        fdt_set_totalsize(fdt, new_size);
-        wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n",
-            fdt_totalsize(fdt));
+    /* Reserve headroom for the fixups below. The /memreserve/ inserts in
+     * particular shift the whole tree down, so this must succeed before
+     * any of them run. */
+    off = fdt_grow(fdt, 2048U);
+    if (off != 0) {
+        wolfBoot_printf("FDT: No headroom for fixups (%d)\n", off);
+        return off;
     }
+    wolfBoot_printf("FDT: Expanded (2KB) to %d bytes\n", (int)fdt_size(fdt));
 
 #ifdef ENABLE_OS64BIT
     /* /memreserve/ entries: keep VxWorks/Linux away from the spin-table
@@ -1931,7 +1933,7 @@ memory_fixup_done:
      * the DTB value untouched during bootm; we override here so users
      * can change boot parameters without reflashing the DTB. */
 #ifdef WOLFBOOT_BOOTARGS
-    off = fdt_find_node_offset(fdt, -1, "chosen");
+    off = fdt_subnode_offset(fdt, 0, "chosen");
     if (off < 0) {
         off = fdt_add_subnode(fdt, 0, "chosen");
     }
@@ -1942,6 +1944,7 @@ memory_fixup_done:
 
 #endif /* !BUILD_LOADER_STAGE1 */
     (void)dts_addr;
+    (void)capacity;
     return 0;
 }
 #endif /* MMU */

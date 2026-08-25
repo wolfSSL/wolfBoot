@@ -6,6 +6,15 @@ Use `-i` to parse a Flattened uImage Tree (FIT) image.
 
 There is also a `-t` option that tests making several updates to the device tree (useful with the nxp_t1024.dtb).
 
+Use `-f` to check the parser's handling of malformed input: it derives a corpus of deliberately-invalid blobs (the generator lives in `src/fdt.c` under `WOLFBOOT_FDT_CORPUS`) from the supplied file (bad magic, truncated buffers, wrapped offsets, unbalanced nesting, oversized property lengths, unterminated names, and so on) and reports whether each is rejected. Every case must be rejected; the tool exits non-zero if any is accepted or faults. Build it with `-fsanitize=address,undefined` to catch reads past a blob's real end:
+
+```sh
+gcc -o /tmp/fdt-parser-asan -Wall -g -O1 -fsanitize=address,undefined \
+    -I include -DWOLFBOOT_FDT -DWOLFBOOT_FDT_CORPUS -DPRINTF_ENABLED \
+    tools/fdt-parser/fdt-parser.c src/fdt.c
+/tmp/fdt-parser-asan ./tools/fdt-parser/nxp_t1024.dtb -f
+```
+
 ## Building fdt-parser
 
 From root: `make fdt-parser`

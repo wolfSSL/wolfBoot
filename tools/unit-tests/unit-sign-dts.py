@@ -7,11 +7,11 @@
 # Covers:
 #   1. A valid DTB is bound to the image: the HDR_DEVICE_TREE_DIGEST TLV
 #      (tag 0x35) holds the image-hash (SHA256) of exactly the first
-#      fdt_totalsize bytes of the .dtb.
+#      `totalsize` header-field bytes of the .dtb.
 #   2. A bad-magic file is rejected with a clean non-zero exit -- NOT a signal
 #      (the dangling-FILE double free previously aborted with SIGABRT).
 #   3. A truncated FDT (valid magic, shorter than the 40-byte header) is
-#      rejected cleanly, matching what the bootloader's fdt_check_header()
+#      rejected cleanly, matching what the bootloader's fdt_open()
 #      would reject.
 #
 # Copyright (C) 2026 wolfSSL Inc.

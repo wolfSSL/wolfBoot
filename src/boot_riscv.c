@@ -358,9 +358,10 @@ uint64_t hal_get_timer_us(void)
 }
 
 #if defined(MMU) || defined(WOLFBOOT_FDT)
-int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
+int WEAKFUNCTION hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     (void)dts_addr;
+    (void)capacity;
     return 0;
 }
 #endif
@@ -468,7 +469,9 @@ void do_boot(const uint32_t *app_offset)
     /* dts_offset is NULL when the loaded image was not a FIT (or had no
      * flat_dt): skip the fixup and hand off with dtb=0 rather than deref. */
     if (dts_offset != NULL) {
-        hal_dts_fixup((uint32_t*)dts_offset);
+        /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window
+         * size (see include/fdt.h); it bounds the fixups below. */
+        hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE);
     }
     dts_addr = (unsigned long)dts_offset;
 #elif defined(WOLFBOOT_RISCV_MMODE) || __riscv_xlen == 64

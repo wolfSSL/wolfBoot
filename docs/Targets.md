@@ -5017,7 +5017,7 @@ Image kernel-1: 0x200000 (24617472 bytes)
 Loading Image fdt-1: 0x1177A3DC -> 0x1000 (39384 bytes)
 Image fdt-1: 0x1000 (39384 bytes)
 Loading DTS: 0x1000 -> 0x1000 (39384 bytes)
-FDT: Version 17, Size 39384
+FDT: Size 39384
 FDT: Setting bootargs: earlycon root=/dev/mmcblk0p2 rootwait
 FDT: Set chosen (28076), bootargs=earlycon root=/dev/mmcblk0p2 rootwait
 Booting at 0x200000

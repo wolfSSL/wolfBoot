@@ -1271,40 +1271,44 @@ void* hal_get_dts_update_address(void)
  * Called from do_boot() before jumping to the kernel.
  *
  * @param dts_addr: Pointer to the device tree blob in memory
+ * @param capacity: Bytes readable/writable at dts_addr; bounds every
+ *                  in-place fixup made here
  * @return: 0 on success, negative error code on failure
  */
-int hal_dts_fixup(void* dts_addr)
+int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
+    fdt_ctx ctx;
     int off, ret;
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
 
-    /* Verify FDT header */
-    ret = fdt_check_header(dts_addr);
+    /* Validate the blob against the window it actually occupies. */
+    ret = fdt_open(&ctx, dts_addr, capacity);
     if (ret != 0) {
         wolfBoot_printf("FDT: Invalid header! %d\n", ret);
         return ret;
     }
 
-    wolfBoot_printf("FDT: Version %d, Size %d\n",
-        fdt_version(fdt), fdt_totalsize(fdt));
+    wolfBoot_printf("FDT: Size %d\n", (int)fdt_size(&ctx));
 
-    /* Expand total size to allow adding/modifying properties (bootargs and,
-     * when WOLFBOOT_FIT_RAMDISK is in play, linux,initrd-{start,end}).
+    /* Reserve free space to allow adding/modifying properties (bootargs
+     * and, when WOLFBOOT_FIT_RAMDISK is in play, linux,initrd-{start,end}).
      * Sizing comes from WOLFBOOT_FDT_FIXUP_HEADROOM in include/fdt.h. */
-    fdt_set_totalsize(fdt,
-        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
+    ret = fdt_grow(&ctx, WOLFBOOT_FDT_FIXUP_HEADROOM);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: No headroom for fixups (%d)\n", ret);
+        return ret;
+    }
 
     /* Find /chosen node; create it only if genuinely missing. Any other
      * negative return (malformed FDT, etc.) is surfaced directly rather
      * than masked by a follow-on fdt_add_subnode() failure. */
-    off = fdt_find_node_offset(fdt, -1, "chosen");
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
     if (off == -FDT_ERR_NOTFOUND) {
-        off = fdt_add_subnode(fdt, 0, "chosen");
+        off = fdt_add_subnode(&ctx, 0, "chosen");
     }
 
     if (off >= 0) {
         /* Set bootargs property */
-        fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+        fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
     } else {
         wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
         return off;

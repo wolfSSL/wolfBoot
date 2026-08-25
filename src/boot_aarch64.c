@@ -133,9 +133,10 @@ void boot_entry_C(void)
 
 
 #ifdef MMU
-int WEAKFUNCTION hal_dts_fixup(void* dts_addr)
+int WEAKFUNCTION hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     (void)dts_addr;
+    (void)capacity;
     return 0;
 }
 #endif
@@ -158,7 +159,9 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
         (uint32_t)(uintptr_t)app_offset, current_el());
 #ifdef MMU
     wolfBoot_printf("do_boot: dts=0x%08x\n", (uint32_t)(uintptr_t)dts_offset);
-    hal_dts_fixup((uint32_t*)dts_offset);
+    /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window size
+     * (see include/fdt.h); it bounds the fixups below. */
+    hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE);
 #endif
 
 #ifndef SKIP_GIC_INIT

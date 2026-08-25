@@ -1594,14 +1594,22 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
  * This function retrieves the size of the Device Tree Blob (DTB) from
  * the given DTB address.
  *
- * @param dts_addr The pointer to the Device Tree Blob (DTB) address.
- * @return The size of the DTB in bytes, or -1 if the magic number is invalid.
+ * Fully validates the blob (header layout plus a structural walk) before
+ * reporting its size. Every bound is checked against `capacity`, the
+ * bytes actually readable at dts_addr, not against the size the blob
+ * claims for itself.
+ *
+ * @param dts_addr Device Tree Blob (DTB) address.
+ * @param capacity Bytes available at dts_addr.
+ * @return DTB size in bytes, or a negative FDT_ERR_*.
  */
-int wolfBoot_get_dts_size(void *dts_addr)
+int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
 {
-    int ret = fdt_check_header(dts_addr);
+    fdt_ctx ctx;
+    int ret = fdt_open(&ctx, dts_addr, capacity);
+
     if (ret == 0) {
-        ret = fdt_totalsize(dts_addr);
+        ret = (int)fdt_size(&ctx);
     }
     return ret;
 }
@@ -1728,6 +1736,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     }
 #ifdef MMU
     if (part == PART_DTS_BOOT || part == PART_DTS_UPDATE) {
+        uint32_t dts_sz = 0;
         img->hdr = (part == PART_DTS_BOOT) ?
             (void*)WOLFBOOT_DTS_BOOT_ADDRESS :
             (void*)WOLFBOOT_DTS_UPDATE_ADDRESS;
@@ -1737,9 +1746,19 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
             image = fetch_hdr_cpy(img);
         else
             image = (uint8_t*)img->hdr;
-        ret = wolfBoot_get_dts_size(image);
-        if (ret < 0)
-            return -1;
+        /* Only the header is readable here: `image` may be
+         * fetch_hdr_cpy()'s IMAGE_HEADER_SIZE copy. The blob is validated
+         * in full when it is loaded. Copy into an aligned local first,
+         * because a memory-mapped partition base is not guaranteed to be
+         * 4-byte aligned and fdt_peek_size() requires that. */
+        {
+            uint8_t hdr[FDT_HEADER_SIZE] XALIGNED(4);
+
+            memcpy(hdr, image, sizeof(hdr));
+            if (fdt_peek_size(hdr, (uint32_t)sizeof(hdr), &dts_sz) != 0)
+                return -1;
+        }
+        ret = (int)dts_sz;
         img->hdr_ok = 1;
         wolfBoot_image_set_fw_base(img, img->hdr);
         img->fw_size = (uint32_t)ret;

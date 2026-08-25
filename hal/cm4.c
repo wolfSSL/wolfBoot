@@ -152,9 +152,9 @@ void* hal_get_dts_update_address(void)
  * clock, serial no.) to the kernel it loads - which is wolfBoot. */
 extern void* cm4_fw_dtb;
 
-/* Upper bound for the firmware DTB copy. fdt_check_header() does not validate
- * totalsize, so cap it: a valid DTB is well under the arm64 boot-protocol 2MB
- * limit, and this keeps a corrupt header from overrunning the DTS landing zone.
+/* Size of the DTS landing zone, and so the capacity handed to fdt_open()
+ * for the firmware DTB: a valid DTB is well under the arm64 boot-protocol
+ * 2MB limit, and this keeps a corrupt header from overrunning the zone.
  * Override with -DCM4_FDT_MAX_SIZE=<bytes>. */
 #ifndef CM4_FDT_MAX_SIZE
 #define CM4_FDT_MAX_SIZE 0x200000
@@ -358,24 +358,25 @@ void* hal_get_boot_dts(void)
      * validated NULL-DTB handoff is unchanged. */
     return NULL;
 #else
+    fdt_ctx ctx;
     void *fdt = cm4_fw_dtb;
     uint32_t sz;
     int off;
 
-    if (fdt == NULL || fdt_check_header(fdt) != 0) {
+    if (fdt == NULL) {
+        wolfBoot_printf("cm4: no firmware DTB\n");
+        return NULL;
+    }
+    /* Bound the parse by the largest DTB this path can ever accept: the
+     * DTS landing zone less the fixup headroom. A corrupt header can then
+     * neither be walked out of bounds here nor make the copy below clobber
+     * memory past that zone. */
+    if (fdt_open(&ctx, fdt,
+            CM4_FDT_MAX_SIZE - WOLFBOOT_FDT_FIXUP_HEADROOM) != 0) {
         wolfBoot_printf("cm4: no valid firmware DTB (%p)\n", fdt);
         return NULL;
     }
-    sz = (uint32_t)fdt_totalsize(fdt);
-    /* fdt_check_header() does not validate totalsize; bound it so a corrupt DTB
-     * header cannot make the copy/fixup clobber memory past the DTS landing
-     * zone (leaving room for the fixup headroom too). */
-    if (sz < sizeof(struct fdt_header) ||
-            sz > CM4_FDT_MAX_SIZE - WOLFBOOT_FDT_FIXUP_HEADROOM) {
-        wolfBoot_printf("cm4: firmware DTB size %u out of range\n",
-            (unsigned)sz);
-        return NULL;
-    }
+    sz = fdt_size(&ctx);
     /* SECURITY: the firmware DTB lives on the unsigned FAT partition (unless
      * the RPi EEPROM secure-boot is enabled), so it is NOT covered by wolfBoot's
      * signature. Only /chosen/bootargs is overwritten below; /memory,
@@ -405,12 +406,16 @@ void* hal_get_boot_dts(void)
     fdt = (void*)WOLFBOOT_LOAD_DTS_ADDRESS;
 
     /* Zero the appended headroom so the grown blob holds no uninitialized
-     * bytes, then record the new total size. */
+     * bytes, then re-open on the landing zone and record the new size. */
     memset((uint8_t*)fdt + sz, 0, WOLFBOOT_FDT_FIXUP_HEADROOM);
-    fdt_set_totalsize(fdt, sz + WOLFBOOT_FDT_FIXUP_HEADROOM);
-    off = fdt_find_node_offset(fdt, -1, "chosen");
+    if (fdt_open(&ctx, fdt, CM4_FDT_MAX_SIZE) != 0 ||
+            fdt_grow(&ctx, WOLFBOOT_FDT_FIXUP_HEADROOM) != 0) {
+        wolfBoot_printf("cm4: relocated DTB rejected; refusing firmware DTB\n");
+        return NULL;
+    }
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
     if (off == -FDT_ERR_NOTFOUND) {
-        off = fdt_add_subnode(fdt, 0, "chosen");
+        off = fdt_add_subnode(&ctx, 0, "chosen");
     }
     if (off < 0) {
         /* Fail closed: without /chosen we cannot inject our known-good bootargs,
@@ -426,13 +431,13 @@ void* hal_get_boot_dts(void)
         const char *args = LINUX_BOOTARGS;
         if (cm4_rauc_build_bootargs(cm4_bootargs, sizeof(cm4_bootargs)) == 0)
             args = cm4_bootargs;
-        if (fdt_fixup_str(fdt, off, "chosen", "bootargs", args) != 0) {
+        if (fdt_fixup_str(&ctx, off, "chosen", "bootargs", args) != 0) {
             wolfBoot_printf("cm4: DTB bootargs fixup failed; refusing firmware DTB\n");
             return NULL;
         }
     }
 #else
-    if (fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS) != 0) {
+    if (fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS) != 0) {
         wolfBoot_printf("cm4: DTB bootargs fixup failed; refusing firmware DTB\n");
         return NULL;
     }

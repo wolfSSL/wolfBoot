@@ -30,12 +30,23 @@
 #include <stdlib.h>
 #include <limits.h>
 
+/* The corpus runner (-f) forks a child per case so a fault in one does not
+ * stop the sweep and a sanitizer abort stays observable. That is POSIX
+ * only; elsewhere -f reports that it is unavailable and the normal parse
+ * modes still build. */
+#if defined(__unix__) || defined(__APPLE__)
+    #define FDT_CORPUS_RUNNER
+    #include <unistd.h>
+    #include <sys/wait.h>
+#endif
+
 static int gEnableUnitTest = 0;
 static int gParseFit = 0;
+static int gRunCorpus = 0;
 #define UNIT_TEST_GROW_SIZE 1024
 
 /* Test case for "nxp_t1024.dtb" */
-static int fdt_test(void* fdt)
+static int fdt_test(fdt_ctx* ctx)
 {
     int ret = 0, off, i;
     uint32_t *reg, oldsize;
@@ -99,12 +110,13 @@ static int fdt_test(void* fdt)
         SET_LIODN("fsl,qoriq-pcie-v2.4", 308),
     };
 
-    /* expand total size to allow growth */
-    oldsize = fdt_totalsize(fdt);
-    fdt_set_totalsize(fdt, oldsize + UNIT_TEST_GROW_SIZE);
+    /* reserve headroom so the fixups below have somewhere to grow */
+    oldsize = fdt_size(ctx);
+    ret = fdt_grow(ctx, UNIT_TEST_GROW_SIZE);
+    if (ret != 0) goto exit;
 
     /* fixup the memory region - single bank */
-    off = fdt_find_devtype(fdt, -1, "memory");
+    off = fdt_find_devtype(ctx, -1, "memory");
     if (off != -FDT_ERR_NOTFOUND) {
         /* build addr/size as 64-bit */
         uint8_t ranges[sizeof(uint64_t) * 2], *p = ranges;
@@ -112,19 +124,19 @@ static int fdt_test(void* fdt)
         p += sizeof(uint64_t);
         *(uint64_t*)p = cpu_to_fdt64(DDR_SIZE);
         p += sizeof(uint64_t);
-        ret = fdt_setprop(fdt, off, "reg", ranges, (int)(p - ranges));
+        ret = fdt_setprop(ctx, off, "reg", ranges, (int)(p - ranges));
         if (ret != 0) goto exit;
         printf("FDT: Set memory, start=0x%x, size=0x%x\n",
             DDR_ADDRESS, (uint32_t)DDR_SIZE);
     }
 
     /* fixup CPU status and, release address and enable method */
-    off = fdt_find_devtype(fdt, -1, "cpu");
+    off = fdt_find_devtype(ctx, -1, "cpu");
     while (off != -FDT_ERR_NOTFOUND) {
         int core;
         uint64_t core_spin_table_addr;
 
-        reg = (uint32_t*)fdt_getprop(fdt, off, "reg", NULL);
+        reg = (uint32_t*)fdt_getprop(ctx, off, "reg", NULL);
         if (reg == NULL)
             break;
         core = (int)fdt32_to_cpu(*reg);
@@ -136,62 +148,62 @@ static int fdt_test(void* fdt)
         core_spin_table_addr = (uint64_t)((uintptr_t)(
             SPIN_TABLE_ADDR + (core * ENTRY_SIZE)));
 
-        ret = fdt_fixup_str(fdt, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
+        ret = fdt_fixup_str(ctx, off, "cpu", "status", (core == 0) ? "okay" : "disabled");
         if (ret == 0)
-            ret = fdt_fixup_val64(fdt, off, "cpu", "cpu-release-addr", core_spin_table_addr);
+            ret = fdt_fixup_val64(ctx, off, "cpu", "cpu-release-addr", core_spin_table_addr);
         if (ret == 0)
-            ret = fdt_fixup_str(fdt, off, "cpu", "enable-method", "spin-table");
+            ret = fdt_fixup_str(ctx, off, "cpu", "enable-method", "spin-table");
         if (ret == 0)
-            ret = fdt_fixup_val(fdt, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
+            ret = fdt_fixup_val(ctx, off, "cpu", "timebase-frequency", TIMEBASE_HZ);
         if (ret == 0)
-            ret = fdt_fixup_val(fdt, off, "cpu", "clock-frequency", PLAT_CLK);
+            ret = fdt_fixup_val(ctx, off, "cpu", "clock-frequency", PLAT_CLK);
         if (ret == 0)
-            ret = fdt_fixup_val(fdt, off, "cpu", "bus-frequency", PLAT_CLK);
+            ret = fdt_fixup_val(ctx, off, "cpu", "bus-frequency", PLAT_CLK);
         if (ret != 0) goto exit;
 
-        off = fdt_find_devtype(fdt, off, "cpu");
+        off = fdt_find_devtype(ctx, off, "cpu");
     }
 
     /* fixup the soc clock */
-    off = fdt_find_devtype(fdt, -1, "soc");
+    off = fdt_find_devtype(ctx, -1, "soc");
     if (off != -FDT_ERR_NOTFOUND) {
-        ret = fdt_fixup_val(fdt, off, "soc", "bus-frequency", PLAT_CLK);
+        ret = fdt_fixup_val(ctx, off, "soc", "bus-frequency", PLAT_CLK);
         if (ret != 0) goto exit;
     }
 
     /* fixup the serial clocks */
-    off = fdt_find_devtype(fdt, -1, "serial");
+    off = fdt_find_devtype(ctx, -1, "serial");
     while (off != -FDT_ERR_NOTFOUND) {
-        ret = fdt_fixup_val(fdt, off, "serial", "clock-frequency", BUS_CLK);
+        ret = fdt_fixup_val(ctx, off, "serial", "clock-frequency", BUS_CLK);
         if (ret != 0) goto exit;
-        off = fdt_find_devtype(fdt, off, "serial");
+        off = fdt_find_devtype(ctx, off, "serial");
     }
 
     /* fixup the QE bridge and bus blocks */
-    off = fdt_find_devtype(fdt, -1, "qe");
+    off = fdt_find_devtype(ctx, -1, "qe");
     if (off != -FDT_ERR_NOTFOUND) {
-        ret = fdt_fixup_val(fdt, off, "qe", "clock-frequency", BUS_CLK);
+        ret = fdt_fixup_val(ctx, off, "qe", "clock-frequency", BUS_CLK);
         if (ret == 0)
-            ret = fdt_fixup_val(fdt, off, "qe", "bus-frequency", BUS_CLK);
+            ret = fdt_fixup_val(ctx, off, "qe", "bus-frequency", BUS_CLK);
         if (ret == 0)
-            ret = fdt_fixup_val(fdt, off, "qe", "brg-frequency", BUS_CLK/2);
+            ret = fdt_fixup_val(ctx, off, "qe", "brg-frequency", BUS_CLK/2);
         if (ret != 0) goto exit;
     }
 
     /* fixup the LIODN */
     for (i=0; i<(int)(sizeof(liodn_tbl)/sizeof(struct liodn_id_table)); i++) {
-        off = fdt_node_offset_by_compatible(fdt, -1, liodn_tbl[i].compat);
+        off = fdt_node_offset_by_compatible(ctx, -1, liodn_tbl[i].compat);
         if (off >= 0) {
-            ret = fdt_fixup_val(fdt, off, liodn_tbl[i].compat, "fsl,liodn",
+            ret = fdt_fixup_val(ctx, off, liodn_tbl[i].compat, "fsl,liodn",
                 liodn_tbl[i].id);
             if (ret != 0) goto exit;
         }
     }
 
     /* fixup the QMAN portals */
-    off = fdt_node_offset_by_compatible(fdt, -1, "fsl,qman-portal");
+    off = fdt_node_offset_by_compatible(ctx, -1, "fsl,qman-portal");
     while (off != -FDT_ERR_NOTFOUND) {
-        const int *ci = fdt_getprop(fdt, off, "cell-index", NULL);
+        const int *ci = fdt_getprop(ctx, off, "cell-index", NULL);
         uint32_t portal_idx;
         uint32_t liodns[2];
         if (!ci)
@@ -209,24 +221,28 @@ static int fdt_test(void* fdt)
         liodns[1] = qp_info[i].fliodn;
         printf("FDT: Set %s@%d (%d), %s=%d,%d\n",
             "qman-portal", i, off, "fsl,liodn", liodns[0], liodns[1]);
-        ret = fdt_setprop(fdt, off, "fsl,liodn", liodns, sizeof(liodns));
+        /* big-endian on the wire, matching hal/nxp_t10xx.c */
+        liodns[0] = cpu_to_fdt32(liodns[0]);
+        liodns[1] = cpu_to_fdt32(liodns[1]);
+        ret = fdt_setprop(ctx, off, "fsl,liodn", liodns, sizeof(liodns));
         if (ret != 0) goto exit;
 
-        off = fdt_node_offset_by_compatible(fdt, off, "fsl,qman-portal");
+        off = fdt_node_offset_by_compatible(ctx, off, "fsl,qman-portal");
     }
 
     /* mpic clock */
-    off = fdt_find_devtype(fdt, -1, "open-pic");
+    off = fdt_find_devtype(ctx, -1, "open-pic");
     if (off != -FDT_ERR_NOTFOUND) {
-        ret = fdt_fixup_val(fdt, off, "open-pic", "clock-frequency", BUS_CLK);
+        ret = fdt_fixup_val(ctx, off, "open-pic", "clock-frequency", BUS_CLK);
         if (ret != 0) goto exit;
     }
 
     /* resize the device tree */
-    fdt_shrink(fdt);
+    fdt_shrink(ctx);
 
     /* display information */
-    printf("FDT Updated: Size %d -> %d\n", oldsize, fdt_totalsize(fdt));
+    printf("FDT Updated: Size %u -> %u\n",
+        (unsigned int)oldsize, (unsigned int)fdt_size(ctx));
 
 exit:
     printf("FDT Test Result: %d\n", ret);
@@ -328,17 +344,17 @@ static int load_file(const char* filename, uint8_t** buf, size_t* bufLen)
     return ret;
 }
 
-static void* dts_fit_image_addr(void* fit, uint32_t off, const char* prop)
+static void* dts_fit_image_addr(const fdt_ctx* ctx, int off, const char* prop)
 {
-    void* val = fdt_getprop_address(fit, off, prop);
+    void* val = fdt_getprop_address(ctx, off, prop);
     printf("\t%s: %p\n", prop, val);
     return val;
 }
 
-static const void* dts_fit_image_item(void* fit, uint32_t off, const char* prop)
+static const void* dts_fit_image_item(const fdt_ctx* ctx, int off, const char* prop)
 {
     int len = 0;
-    const void* val = fdt_getprop(fit, off, prop, &len);
+    const void* val = fdt_getprop(ctx, off, prop, &len);
     if (val != NULL && len > 0) {
         if (len < 256)
             printf("\t%s (len %d): %s\n", prop, len, (const char*)val);
@@ -348,71 +364,71 @@ static const void* dts_fit_image_item(void* fit, uint32_t off, const char* prop)
     return val;
 }
 
-void dts_parse_fit_image(void* fit, const char* image, const char* desc)
+void dts_parse_fit_image(fdt_ctx* ctx, const char* image, const char* desc)
 {
     int off;
 
-    if (fit != NULL) {
-        printf("%s Image: %s\n", desc, image);
+    if (image == NULL) {
+        return;
     }
+    printf("%s Image: %s\n", desc, image);
 
-    off = fdt_find_node_offset(fit, -1, image);
-    if (off > 0) {
-        dts_fit_image_item(fit, off, "description");
-        dts_fit_image_item(fit, off, "type");
-        dts_fit_image_item(fit, off, "os");
-        dts_fit_image_item(fit, off, "arch");
-        dts_fit_image_item(fit, off, "compression");
-        dts_fit_image_addr(fit, off, "load");
-        dts_fit_image_addr(fit, off, "entry");
-        dts_fit_image_item(fit, off, "padding");
-        dts_fit_image_item(fit, off, "data");
+    off = fdt_find_node_offset(ctx, -1, image);
+    if (off >= 0) {
+        dts_fit_image_item(ctx, off, "description");
+        dts_fit_image_item(ctx, off, "type");
+        dts_fit_image_item(ctx, off, "os");
+        dts_fit_image_item(ctx, off, "arch");
+        dts_fit_image_item(ctx, off, "compression");
+        dts_fit_image_addr(ctx, off, "load");
+        dts_fit_image_addr(ctx, off, "entry");
+        dts_fit_image_item(ctx, off, "padding");
+        dts_fit_image_item(ctx, off, "data");
     }
 }
 
-int dts_parse_fit(void* image)
+int dts_parse_fit(fdt_ctx* ctx)
 {
     const char *conf = NULL, *kernel = NULL, *flat_dt = NULL, *ramdisk = NULL;
     const char *fpga = NULL;
 
-    conf = fit_find_images(image, &kernel, &flat_dt, &ramdisk, &fpga);
+    conf = fit_find_images(ctx, &kernel, &flat_dt, &ramdisk, &fpga);
     if (conf != NULL) {
         printf("FIT: Found '%s' configuration\n", conf);
-        dts_fit_image_item(image, fdt_find_node_offset(image, -1, conf),
+        dts_fit_image_item(ctx, fdt_find_node_offset(ctx, -1, conf),
             "description");
     }
 
     /* dump image information */
-    dts_parse_fit_image(image, kernel, "Kernel");
-    dts_parse_fit_image(image, flat_dt, "FDT");
+    dts_parse_fit_image(ctx, kernel, "Kernel");
+    dts_parse_fit_image(ctx, flat_dt, "FDT");
     if (ramdisk != NULL) {
-        dts_parse_fit_image(image, ramdisk, "Ramdisk");
+        dts_parse_fit_image(ctx, ramdisk, "Ramdisk");
     }
     if (fpga != NULL) {
-        dts_parse_fit_image(image, fpga, "FPGA");
+        dts_parse_fit_image(ctx, fpga, "FPGA");
     }
 
     return 0;
 }
 
-int dts_parse(void* image)
+int dts_parse(fdt_ctx* ctx)
 {
     int ret = 0;
-    struct fdt_header *fdt = (struct fdt_header *)image;
-    const struct fdt_property* prop;
-    int nlen, plen, slen;
-    int noff, poff, soff;
-    const char* nstr = NULL, *pstr = NULL;
+    int nlen, plen;
+    int noff, poff;
+    const char *nstr = NULL, *pstr = NULL;
+    const void* pval;
     int depth = 0;
     #define MAX_DEPTH 24
     char tabs[MAX_DEPTH+1] = "\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t\t";
 
     /* walk tree */
-    for (noff = fdt_next_node(fdt, -1, &depth);
+    for (noff = fdt_next_node(ctx, -1, &depth);
          noff >= 0;
-         noff = fdt_next_node(fdt, noff, &depth))
+         noff = fdt_next_node(ctx, noff, &depth))
     {
-        nstr = fdt_get_name(fdt, noff, &nlen);
+        nstr = fdt_get_name(ctx, noff, &nlen);
         if (depth > MAX_DEPTH)
             depth = MAX_DEPTH;
 
@@ -421,15 +437,12 @@ int dts_parse(void* image)
         printf("%s%s (node offset %d, depth %d, len %d):\n",
             &tabs[MAX_DEPTH-depth+1], nstr, noff, depth, nlen);
 
-        for (poff = fdt_first_property_offset(fdt, noff);
+        for (poff = fdt_first_property_offset(ctx, noff);
             poff >= 0;
-            poff = fdt_next_property_offset(fdt, poff))
+            poff = fdt_next_property_offset(ctx, poff))
         {
-            prop = fdt_get_property_by_offset(fdt, poff, &plen);
-            if (prop != NULL) {
-                soff = fdt32_to_cpu(prop->nameoff);
-                pstr = fdt_get_string(fdt, soff, &slen);
-
+            pval = fdt_getprop_by_offset(ctx, poff, &pstr, &plen);
+            if (pval != NULL) {
                 printf("%s%s (prop offset %d, len %d): ",
                     &tabs[MAX_DEPTH-depth], pstr, poff, plen);
                 if (plen > 32)
@@ -438,10 +451,10 @@ int dts_parse(void* image)
                     char file[260+1];
                     snprintf(file, sizeof(file), "%s.%s.bin", nstr, pstr);
                     printf("Saving to file %s\n", file);
-                    write_bin(file, (const uint8_t*)prop->data, plen);
+                    write_bin(file, (const uint8_t*)pval, plen);
                 }
                 else {
-                    print_bin((const uint8_t*)prop->data, plen);
+                    print_bin((const uint8_t*)pval, plen);
                     printf("\n");
                 }
             }
@@ -451,12 +464,190 @@ int dts_parse(void* image)
     return ret;
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Malformed-input corpus (-f)                                         */
+/* ------------------------------------------------------------------ */
+
+/* Exit codes used by the forked child below. A distinct value for
+ * "accepted" keeps it apart from the 1 a sanitizer exits with. */
+#define CORPUS_REJECTED 0
+#define CORPUS_ACCEPTED 42
+
+/* Open a corpus blob and, if it is accepted, read everything a real
+ * consumer would touch. `len` is the exact allocation size, so any read
+ * past it is a genuine heap overrun for ASan to catch. */
+static int corpus_parse(uint8_t* buf, uint32_t len)
+{
+    fdt_ctx ctx;
+    int noff, poff, plen, nlen;
+    const char *nstr, *pstr;
+    const void* pval;
+    int depth = 0;
+    int nodes = 0;
+
+    if (fdt_open(&ctx, buf, len) != 0) {
+        return CORPUS_REJECTED;
+    }
+
+    for (noff = fdt_next_node(&ctx, -1, &depth);
+         noff >= 0;
+         noff = fdt_next_node(&ctx, noff, &depth))
+    {
+        nstr = fdt_get_name(&ctx, noff, &nlen);
+        (void)nstr;
+        if (++nodes > 200000) {
+            break; /* runaway guard */
+        }
+        for (poff = fdt_first_property_offset(&ctx, noff);
+             poff >= 0;
+             poff = fdt_next_property_offset(&ctx, poff))
+        {
+            pval = fdt_getprop_by_offset(&ctx, poff, &pstr, &plen);
+            if (pval == NULL) {
+                break;
+            }
+            (void)pstr;
+            /* touch the payload the way a consumer would */
+            if (plen > 0) {
+                volatile char sink = 0;
+                int i;
+                for (i = 0; i < plen; i++) {
+                    sink = ((const char*)pval)[i];
+                }
+                (void)sink;
+            }
+        }
+    }
+    return CORPUS_ACCEPTED;
+}
+
+#ifdef FDT_CORPUS_RUNNER
+/* Lookups on a VALID blob, with names far longer than anything in the
+ * tree. Search names reach the parser from attacker-influenced places (a
+ * FIT's `default` string, for one), so their length is not bounded by the
+ * blob - a comparison that trusted it would read past a node name. Run
+ * under ASan this is a real out-of-bounds check, not just a return-value
+ * check. */
+static void probe_hostile_lookups(uint8_t* blob, uint32_t len)
+{
+    static char big[4096];
+    fdt_ctx ctx;
+    char path[4200];
+
+    if (fdt_open(&ctx, blob, len) != 0) {
+        return;
+    }
+    memset(big, 'a', sizeof(big) - 1);
+    big[sizeof(big) - 1] = '\0';
+
+    (void)fdt_find_node_offset(&ctx, -1, big);
+    (void)fdt_find_prop_offset(&ctx, -1, big, big);
+    (void)fdt_node_offset_by_compatible(&ctx, -1, big);
+    (void)fdt_getprop(&ctx, 0, big, NULL);
+    (void)fdt_subnode_offset(&ctx, 0, big);
+    snprintf(path, sizeof(path), "/%s", big);
+    (void)fdt_path_offset(&ctx, path);
+    snprintf(path, sizeof(path), "/cpus/%s", big);
+    (void)fdt_path_offset(&ctx, path);
+}
+
+static int run_corpus(const uint8_t* base, uint32_t baselen)
+{
+    int i, n, accepted = 0, rejected = 0, faulted = 0;
+
+    n = fdt_corpus_count();
+    printf("Malformed-DTB corpus: %d cases\n\n", n);
+    printf("%-22s %-38s %s\n", "CASE", "WHAT", "RESULT");
+    printf("%-22s %-38s %s\n", "----", "----", "------");
+
+    for (i = 0; i < n; i++) {
+        uint32_t len = 0;
+        uint8_t* buf;
+        const char* result;
+        pid_t pid;
+        int status = 0;
+
+        buf = fdt_corpus_build(i, base, baselen, &len);
+        if (buf == NULL) {
+            printf("%-22s %-38s %s\n", fdt_corpus_name(i),
+                fdt_corpus_desc(i), "SKIP");
+            continue;
+        }
+
+        /* Each case runs in its own process so a fault in one does not
+         * stop the sweep, and so a sanitizer abort is observable. */
+        fflush(stdout);
+        pid = fork();
+        if (pid == 0) {
+            _exit(corpus_parse(buf, len));
+        }
+        free(buf);
+        if (pid < 0) {
+            printf("fork failed\n");
+            return -1;
+        }
+        waitpid(pid, &status, 0);
+
+        if (WIFSIGNALED(status)) {
+            result = "FAULT";
+            faulted++;
+        }
+        else if (WEXITSTATUS(status) == CORPUS_REJECTED) {
+            result = "rejected";
+            rejected++;
+        }
+        else if (WEXITSTATUS(status) == CORPUS_ACCEPTED) {
+            result = "ACCEPTED";
+            accepted++;
+        }
+        else {
+            result = "SANITIZER";
+            faulted++;
+        }
+        printf("%-22s %-38s %s\n", fdt_corpus_name(i), fdt_corpus_desc(i),
+            result);
+    }
+
+    printf("\nrejected=%d accepted=%d faulted=%d (of %d)\n",
+        rejected, accepted, faulted, n);
+
+    {
+        uint32_t len = 0;
+        uint8_t* good = malloc(baselen);
+
+        if (good != NULL) {
+            memcpy(good, base, baselen);
+            len = baselen;
+            probe_hostile_lookups(good, len);
+            free(good);
+            printf("hostile-lookup probes on a valid blob: done\n");
+        }
+    }
+
+    /* Every case in the corpus is invalid, so anything not rejected is
+     * a failure of the parser. */
+    return (accepted == 0 && faulted == 0) ? 0 : -1;
+}
+#else /* !FDT_CORPUS_RUNNER */
+static int run_corpus(const uint8_t* base, uint32_t baselen)
+{
+    (void)base;
+    (void)baselen;
+    printf("-f (malformed-input corpus) needs fork()/waitpid(); "
+        "not available on this platform\n");
+    return -1;
+}
+#endif /* FDT_CORPUS_RUNNER */
+
 static void Usage(void)
 {
     printf("Expected usage:\n");
     printf("./tools/fdt-parser/fdt-parser [-t] [-i] filename\n");
     printf("\t* -i: Parse Flattened uImage Tree (FIT) image\n");
     printf("\t* -t: Test several updates (used with nxp_t1024.dtb)\n");
+    printf("\t* -f: Check that malformed variants of the file are "
+        "rejected\n");
 }
 
 int main(int argc, char *argv[])
@@ -464,6 +655,8 @@ int main(int argc, char *argv[])
     int ret = 0;
     uint8_t *image = NULL;
     size_t imageSz = 0;
+    uint32_t capacity = 0;
+    fdt_ctx ctx;
     const char* filename = NULL;
 
     if (argc == 1 || (argc >= 2 &&
@@ -480,6 +673,9 @@ int main(int argc, char *argv[])
         else if (strcmp(argv[argc-1], "-i") == 0) {
             gParseFit = 1;
         }
+        else if (strcmp(argv[argc-1], "-f") == 0) {
+            gRunCorpus = 1;
+        }
         else if (*argv[argc-1] != '-') {
             filename = argv[argc-1];
         }
@@ -489,27 +685,48 @@ int main(int argc, char *argv[])
         argc--;
     }
 
-    printf("FDT Parser (%s):\n", filename);
     if (filename == NULL) {
         printf("Usage: fdt-parser [filename.dtb]\n");
         return 0;
     }
+    printf("FDT Parser (%s):\n", filename);
 
     ret = load_file(filename, &image, &imageSz);
     if (ret == 0) {
-        /* check header */
-        ret = fdt_check_header(image);
+        /* Must equal what load_file() allocated, which is imageSz plus
+         * UNIT_TEST_GROW_SIZE when -t is in use (see load_file). Every
+         * bound the parser applies comes from this, not from the blob's
+         * own totalsize, so it must neither overstate the allocation nor
+         * wrap while being narrowed from size_t. */
+        if (imageSz > (size_t)(UINT32_MAX - UNIT_TEST_GROW_SIZE)) {
+            printf("File too large to parse (%llu bytes)\n",
+                (unsigned long long)imageSz);
+            free(image);
+            return -1;
+        }
+        capacity = (uint32_t)imageSz;
+        if (gEnableUnitTest)
+            capacity += UNIT_TEST_GROW_SIZE;
+
+        ret = fdt_open(&ctx, image, capacity);
         if (ret != 0) {
             printf("FDT check failed %d!\n", ret);
+            free(image);
             return ret;
         }
 
         /* display information */
-        printf("FDT Version %d, Size %d\n",
-            fdt_version(image), fdt_totalsize(image));
+        printf("FDT Version %d, Size %u\n",
+            FDT_SUPPORTED_VERSION, (unsigned int)fdt_size(&ctx));
+    }
+    if (ret == 0 && gRunCorpus) {
+        ret = run_corpus(image, (uint32_t)imageSz);
+        free(image);
+        printf("Return %d\n", ret);
+        return ret;
     }
     if (ret == 0 && gEnableUnitTest) {
-        ret = fdt_test(image);
+        ret = fdt_test(&ctx);
         if (ret == 0) {
             char outfilename[PATH_MAX];
             strncpy(outfilename, filename, sizeof(outfilename)-1);
@@ -523,10 +740,10 @@ int main(int argc, char *argv[])
     }
     if (ret == 0) {
         if (gParseFit) {
-            ret = dts_parse_fit(image);
+            ret = dts_parse_fit(&ctx);
         }
         else {
-            ret = dts_parse(image);
+            ret = dts_parse(&ctx);
         }
     }
     free(image);

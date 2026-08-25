@@ -215,8 +215,9 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
     return mock_verify_authenticity_ret;
 }
 
-int wolfBoot_get_dts_size(void *dts_addr)
+int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
 {
+    (void)capacity;
     (void)dts_addr;
     return -1;
 }

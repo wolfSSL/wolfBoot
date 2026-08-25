@@ -229,23 +229,33 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 /* The loaded payload is treated as a FIT container, and the sub-image
  * returned by fit_load_image() is a flat device tree whose parsed
  * size is mock_dts_size. */
-int wolfBoot_get_dts_size(void *dts_addr)
+int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
 {
     (void)dts_addr;
+    (void)capacity;
     return mock_dts_size;
 }
 
-/* Only reached through the fdt_version()/fdt_totalsize() trace macros here. */
-uint32_t fdt32_to_cpu(uint32_t x)
+/* Accept the staged payload as a FIT. The real parser validates it; here
+ * we only need update_disk.c to take the FIT branch. */
+int fdt_open(fdt_ctx* ctx, void* blob, uint32_t capacity)
 {
-    return ((x & 0x000000FFU) << 24) | ((x & 0x0000FF00U) << 8) |
-           ((x & 0x00FF0000U) >> 8)  | ((x & 0xFF000000U) >> 24);
+    memset(ctx, 0, sizeof(*ctx));
+    ctx->blob = (uint8_t*)blob;
+    ctx->capacity = capacity;
+    ctx->totalsize = mock_dts_size;
+    return 0;
 }
 
-const char* fit_find_images(void* fdt, const char** pkernel,
+uint32_t fdt_size(const fdt_ctx* ctx)
+{
+    return (ctx != NULL) ? ctx->totalsize : 0;
+}
+
+const char* fit_find_images(fdt_ctx* ctx, const char** pkernel,
     const char** pflat_dt, const char** pramdisk, const char** pfpga)
 {
-    (void)fdt;
+    (void)ctx;
     if (pkernel != NULL)
         *pkernel = NULL;
     if (pflat_dt != NULL)
@@ -257,9 +267,9 @@ const char* fit_find_images(void* fdt, const char** pkernel,
     return "conf";
 }
 
-void* fit_load_image(void* fdt, const char* image, int* lenp)
+void* fit_load_image(fdt_ctx* ctx, const char* image, int* lenp)
 {
-    (void)fdt;
+    (void)ctx;
     (void)image;
     if (lenp != NULL)
         *lenp = mock_dts_size;

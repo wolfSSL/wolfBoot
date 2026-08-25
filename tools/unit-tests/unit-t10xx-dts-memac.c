@@ -130,7 +130,7 @@ static struct phy_device phydevs[5];
 #define DTB_BUF_SIZE (16 * 1024)
 
 struct dtb {
-    uint8_t buf[DTB_BUF_SIZE];
+    uint8_t buf[DTB_BUF_SIZE] __attribute__((aligned(4)));
     uint32_t struct_off;   /* absolute */
     uint32_t struct_end;   /* relative to the struct block */
     uint32_t strings_off;  /* absolute */
@@ -150,7 +150,10 @@ static uint32_t align4(uint32_t v)
 static void dtb_init(struct dtb *d)
 {
     memset(d, 0, sizeof(*d));
-    d->struct_off  = 0x30;
+    /* 0x28 (the reservation block) + one 16-byte (0,0) terminator entry:
+     * the spec requires that entry, and the parser checks there is room
+     * for it before the structure block starts. */
+    d->struct_off  = 0x38;
     d->struct_end  = 0;
     d->strings_off = 0x400;
     d->strings_end = 1; /* offset 0 is the empty name */
@@ -262,8 +265,8 @@ static void dtb_finalize(struct dtb *d)
     hdr->off_dt_struct = cpu_to_fdt32(d->struct_off);
     hdr->off_dt_strings = cpu_to_fdt32(d->strings_off);
     hdr->off_mem_rsvmap = cpu_to_fdt32(0x28);
-    /* the 8 bytes after the 40-byte header are zero: an empty
-     * reservation list at the canonical spot */
+    /* the 16 bytes after the 40-byte header are zero: an empty
+     * reservation list (its (0,0) terminator) at the canonical spot */
     hdr->version = cpu_to_fdt32(17);
     hdr->last_comp_version = cpu_to_fdt32(16);
     hdr->boot_cpuid_phys = cpu_to_fdt32(0);
@@ -358,6 +361,16 @@ static void teardown(void)
  * phydevs holds that port at FM1_10GEC1 (slot 4). It must be mapped
  * there, not skipped: skipping silently drops the 10G MAC fixup. Pre
  * fix the loop read phydevs[8] out of bounds instead. */
+/* A validated view of the built blob. The whole buffer is the window the
+ * fixups may use, which is what hal_dts_fixup() is told below. */
+static fdt_ctx* dtb_ctx(struct dtb *d)
+{
+    static fdt_ctx ctx;
+
+    ck_assert_int_eq(fdt_open(&ctx, d->buf, (uint32_t)DTB_BUF_SIZE), 0);
+    return &ctx;
+}
+
 START_TEST(test_memac_10g_cell_index_mapped)
 {
     struct dtb d;
@@ -365,11 +378,11 @@ START_TEST(test_memac_10g_cell_index_mapped)
     const void *mac;
 
     dtb_build_memac(&d, "memac0", 8);
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman-memac");
     ck_assert_int_gt(off, 0);
-    mac = fdt_getprop(d.buf, off, "local-mac-address", &len);
+    mac = fdt_getprop(dtb_ctx(&d), off, "local-mac-address", &len);
     ck_assert_ptr_nonnull(mac);
     ck_assert_int_eq(len, 6);
     ck_assert_int_eq(((const uint8_t *)mac)[5], 0x14); /* phydevs[4] */
@@ -385,11 +398,11 @@ START_TEST(test_memac_unmapped_cell_index_skipped)
     const void *mac;
 
     dtb_build_memac(&d, "memac0", 9);
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman-memac");
     ck_assert_int_gt(off, 0);
-    mac = fdt_getprop(d.buf, off, "local-mac-address", NULL);
+    mac = fdt_getprop(dtb_ctx(&d), off, "local-mac-address", NULL);
     ck_assert_ptr_null(mac);
 }
 END_TEST
@@ -402,11 +415,11 @@ START_TEST(test_memac_valid_cell_index_fixed)
     const void *mac;
 
     dtb_build_memac(&d, "memac0", 1);
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman-memac");
     ck_assert_int_gt(off, 0);
-    mac = fdt_getprop(d.buf, off, "local-mac-address", &len);
+    mac = fdt_getprop(dtb_ctx(&d), off, "local-mac-address", &len);
     ck_assert_ptr_nonnull(mac);
     ck_assert_int_eq(len, 6);
     ck_assert_int_eq(((const uint8_t *)mac)[5], 0x11); /* phydevs[1] */
@@ -422,19 +435,19 @@ START_TEST(test_memac_mixed_oob_then_valid)
     const void *mac;
 
     dtb_build_memac2(&d, 9, 2);
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off0 = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman-memac");
-    off1 = fdt_node_offset_by_compatible(d.buf, off0, "fsl,fman-memac");
+    off0 = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman-memac");
+    off1 = fdt_node_offset_by_compatible(dtb_ctx(&d), off0, "fsl,fman-memac");
     ck_assert_int_gt(off0, 0);
     ck_assert_int_gt(off1, 0);
 
     /* node 0 (index 9): no phydevs slot, skipped */
-    mac = fdt_getprop(d.buf, off0, "local-mac-address", NULL);
+    mac = fdt_getprop(dtb_ctx(&d), off0, "local-mac-address", NULL);
     ck_assert_ptr_null(mac);
 
     /* node 1 (index 2): fixed from phydevs[2] */
-    mac = fdt_getprop(d.buf, off1, "local-mac-address", &len);
+    mac = fdt_getprop(dtb_ctx(&d), off1, "local-mac-address", &len);
     ck_assert_ptr_nonnull(mac);
     ck_assert_int_eq(len, 6);
     ck_assert_int_eq(((const uint8_t *)mac)[5], 0x12);
@@ -484,11 +497,11 @@ START_TEST(test_fman_root_node_compatible_fixed)
     const void *clk;
 
     dtb_build_root_compat(&d, "fsl,fman");
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman");
     ck_assert_int_eq(off, 0); /* the root node */
-    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    clk = fdt_getprop(dtb_ctx(&d), off, "clock-frequency", &len);
     ck_assert_ptr_nonnull(clk);
     ck_assert_int_eq(len, 4);
     ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
@@ -503,11 +516,11 @@ START_TEST(test_fman_child_node_fixed)
     const void *clk;
 
     dtb_build_compat_node(&d, "fman", "fsl,fman");
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman");
     ck_assert_int_gt(off, 0);
-    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    clk = fdt_getprop(dtb_ctx(&d), off, "clock-frequency", &len);
     ck_assert_ptr_nonnull(clk);
     ck_assert_int_eq(len, 4);
     ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
@@ -523,15 +536,15 @@ START_TEST(test_esdhc_node_fixed)
     const void *status;
 
     dtb_build_compat_node(&d, "esdhc", "fsl,esdhc");
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,esdhc");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,esdhc");
     ck_assert_int_gt(off, 0);
-    clk = fdt_getprop(d.buf, off, "clock-frequency", &len);
+    clk = fdt_getprop(dtb_ctx(&d), off, "clock-frequency", &len);
     ck_assert_ptr_nonnull(clk);
     ck_assert_int_eq(len, 4);
     ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)clk), 100000000U);
-    status = fdt_getprop(d.buf, off, "status", &len);
+    status = fdt_getprop(dtb_ctx(&d), off, "status", &len);
     ck_assert_ptr_nonnull(status);
     ck_assert_int_eq(len, 5);
     ck_assert_str_eq(status, "okay");
@@ -546,13 +559,62 @@ START_TEST(test_fman_esdhc_absent_skipped)
     int off;
 
     dtb_build_compat_node(&d, "ethernet", "fsl,eth");
-    ck_assert_int_eq(hal_dts_fixup(d.buf), 0);
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
 
-    ck_assert_int_eq(fdt_node_offset_by_compatible(d.buf, -1, "fsl,fman"),
+    ck_assert_int_eq(fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,fman"),
         -FDT_ERR_NOTFOUND);
-    off = fdt_node_offset_by_compatible(d.buf, -1, "fsl,eth");
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,eth");
     ck_assert_int_gt(off, 0);
-    ck_assert_ptr_null(fdt_getprop(d.buf, off, "clock-frequency", NULL));
+    ck_assert_ptr_null(fdt_getprop(dtb_ctx(&d), off, "clock-frequency", NULL));
+}
+END_TEST
+
+/* The qman-portal fixup writes fsl,liodn as raw cells rather than through
+ * fdt_fixup_val(), so those writes carry their own big-endian conversion.
+ * Device tree cells are big-endian on the wire; a host build writing host
+ * order would produce a tree hardware never sees. Lock the byte order in,
+ * for the portal itself and for the fman@0 child it inserts. */
+START_TEST(test_qman_portal_liodn_is_big_endian)
+{
+    struct dtb d;
+    const char *compat = "fsl,qman-portal";
+    uint32_t reg[4] = {cpu_to_fdt32(0), cpu_to_fdt32(0), cpu_to_fdt32(0),
+        cpu_to_fdt32(0x10000000U)};
+    const void *liodn;
+    int off, child, len;
+
+    dtb_init(&d);
+    dtb_begin_node(&d, "");
+    dtb_begin_node(&d, "memory");
+    dtb_prop_raw(&d, "reg", reg, sizeof(reg));
+    dtb_end_node(&d);
+    dtb_begin_node(&d, "qportal0");
+    dtb_prop_raw(&d, "compatible", compat, strlen(compat) + 1);
+    dtb_prop_u32(&d, "cell-index", 0);
+    dtb_end_node(&d);
+    dtb_end_node(&d); /* root */
+    dtb_finalize(&d);
+
+    ck_assert_int_eq(hal_dts_fixup(d.buf, (uint32_t)DTB_BUF_SIZE), 0);
+
+    off = fdt_node_offset_by_compatible(dtb_ctx(&d), -1, "fsl,qman-portal");
+    ck_assert_int_gt(off, 0);
+
+    /* qp_info[0] is {dliodn 1, fliodn 27} */
+    liodn = fdt_getprop(dtb_ctx(&d), off, "fsl,liodn", &len);
+    ck_assert_ptr_nonnull(liodn);
+    ck_assert_int_eq(len, 8);
+    ck_assert_uint_eq(fdt32_to_cpu(((const uint32_t *)liodn)[0]), 1U);
+    ck_assert_uint_eq(fdt32_to_cpu(((const uint32_t *)liodn)[1]), 27U);
+
+    /* the inserted fman@0 child carries FMAN_DMA_LIODN + index + 1 */
+    child = fdt_subnode_offset(dtb_ctx(&d), off, "fman@0");
+    ck_assert_int_gt(child, 0);
+    liodn = fdt_getprop(dtb_ctx(&d), child, "fsl,liodn", &len);
+    ck_assert_ptr_nonnull(liodn);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(fdt32_to_cpu(*(const uint32_t *)liodn),
+        (uint32_t)(FMAN_DMA_LIODN + 1));
 }
 END_TEST
 
@@ -570,6 +632,7 @@ Suite *t10xx_dts_memac_suite(void)
     tcase_add_test(tc, test_fman_child_node_fixed);
     tcase_add_test(tc, test_esdhc_node_fixed);
     tcase_add_test(tc, test_fman_esdhc_absent_skipped);
+    tcase_add_test(tc, test_qman_portal_liodn_is_big_endian);
     suite_add_tcase(s, tc);
 
     return s;

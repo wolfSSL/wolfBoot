@@ -601,10 +601,10 @@ int mpfs_read_serial_number(uint8_t *serial)
 #define MICROCHIP_OUI_1 0x04
 #define MICROCHIP_OUI_2 0xA3
 
-static int mpfs_dts_fixup_inplace(void* dts_addr)
+static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
 {
+    fdt_ctx ctx;
     int off, ret;
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
     uint8_t device_serial_number[DEVICE_SERIAL_NUMBER_SIZE];
     uint8_t mac_addr[6];
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
@@ -620,31 +620,33 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
     unsigned int i;
 #endif
 
-    /* Verify FDT header */
-    ret = fdt_check_header(dts_addr);
+    /* Validate the blob against the window it actually occupies. */
+    ret = fdt_open(&ctx, dts_addr, capacity);
     if (ret != 0) {
         wolfBoot_printf("FDT: Invalid header! %d\n", ret);
         return ret;
     }
 
-    wolfBoot_printf("FDT: Version %d, Size %d\n",
-        fdt_version(fdt), fdt_totalsize(fdt));
+    wolfBoot_printf("FDT: Size %d\n", (int)fdt_size(&ctx));
 
-    /* Expand total size to allow adding/modifying properties.
+    /* Reserve free space to allow adding/modifying properties.
      * Sizing comes from WOLFBOOT_FDT_FIXUP_HEADROOM in include/fdt.h. */
-    fdt_set_totalsize(fdt,
-        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
+    ret = fdt_grow(&ctx, WOLFBOOT_FDT_FIXUP_HEADROOM);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: No headroom for fixups (%d)\n", ret);
+        return ret;
+    }
 
     /* Find /chosen node */
-    off = fdt_find_node_offset(fdt, -1, "chosen");
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
     if (off < 0) {
         /* Create /chosen node if it doesn't exist */
-        off = fdt_add_subnode(fdt, 0, "chosen");
+        off = fdt_add_subnode(&ctx, 0, "chosen");
     }
 
     if (off >= 0) {
         /* Set bootargs property */
-        fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+        fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
     }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
@@ -665,9 +667,9 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
      * parked harts on the kernel's request (SMP).  cpu@0 (E51) is already
      * disabled in the Yocto DTB; cpu@1 stays enabled so Linux boots on it. */
     for (i = 0; i < sizeof(cpu_off) / sizeof(cpu_off[0]); i++) {
-        off = fdt_find_node_offset(fdt, -1, cpu_off[i]);
+        off = fdt_find_node_offset(&ctx, -1, cpu_off[i]);
         if (off >= 0) {
-            ret = fdt_fixup_str(fdt, off, cpu_off[i], "status",
+            ret = fdt_fixup_str(&ctx, off, cpu_off[i], "status",
                                 "disabled");
             if (ret != 0) {
                 wolfBoot_printf("FDT: Failed to disable %s (%d)\n",
@@ -713,9 +715,9 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
         mac_addr[3], mac_addr[4], mac_addr[5]);
 
     /* Set local-mac-address for ethernet@20110000 (mac0) */
-    off = fdt_find_node_offset(fdt, -1, "ethernet@20110000");
+    off = fdt_find_node_offset(&ctx, -1, "ethernet@20110000");
     if (off >= 0) {
-        ret = fdt_setprop(fdt, off, "local-mac-address", mac_addr, 6);
+        ret = fdt_setprop(&ctx, off, "local-mac-address", mac_addr, 6);
         if (ret != 0) {
             wolfBoot_printf("FDT: Failed to set mac0 address (%d)\n", ret);
         }
@@ -732,9 +734,9 @@ static int mpfs_dts_fixup_inplace(void* dts_addr)
         mac_addr[0], mac_addr[1], mac_addr[2],
         mac_addr[3], mac_addr[4], mac_addr[5]);
 
-    off = fdt_find_node_offset(fdt, -1, "ethernet@20112000");
+    off = fdt_find_node_offset(&ctx, -1, "ethernet@20112000");
     if (off >= 0) {
-        ret = fdt_setprop(fdt, off, "local-mac-address", mac_addr, 6);
+        ret = fdt_setprop(&ctx, off, "local-mac-address", mac_addr, 6);
         if (ret != 0) {
             wolfBoot_printf("FDT: Failed to set mac1 address (%d)\n", ret);
         }
@@ -824,9 +826,10 @@ int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
  * (WOLFBOOT_LOAD_DTS_ADDRESS) but CPU writes to DDR do not land here, so copy
  * it (non-cached read) into an L2 scratch buffer, run the FDT fixups there
  * (CPU L2 writes work), then PDMA the result back to DDR. */
-int hal_dts_fixup(void* dts_addr)
+int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     static uint8_t l2_dtb[64 * 1024] __attribute__((aligned(8)));
+    fdt_ctx ctx;
     const uint8_t *ddr_nc;
     uint32_t sz;
     int ret;
@@ -835,29 +838,29 @@ int hal_dts_fixup(void* dts_addr)
         return -1;
     }
     ddr_nc = (const uint8_t *)((uintptr_t)dts_addr | 0x40000000UL);
-    if (fdt_check_header((void *)ddr_nc) != 0) {
+    /* The source is bounded by whichever is smaller: the caller's DDR
+     * window, or what the L2 scratch buffer can hold once the fixup
+     * headroom is set aside.  fdt_open() enforces it, so the memcpy below
+     * cannot overrun l2_dtb however corrupt the header is. */
+    sz = (uint32_t)(sizeof(l2_dtb) - WOLFBOOT_FDT_FIXUP_HEADROOM);
+    if (capacity < sz) {
+        sz = capacity;
+    }
+    if (fdt_open(&ctx, (void *)ddr_nc, sz) != 0) {
         wolfBoot_printf("FDT: invalid header at %p\n", dts_addr);
         return -1;
     }
-    sz = (uint32_t)fdt_totalsize((void *)ddr_nc);
-    /* Overflow-safe bound: compare without adding.  A near-UINT32_MAX
-     * totalsize (fdt_check_header does not bound it) would make
-     * sz + WOLFBOOT_FDT_FIXUP_HEADROOM wrap to a small value that passes the
-     * check, after which memcpy(l2_dtb, ., sz) overruns the 64 KB buffer.
-     * sizeof(l2_dtb) (64 KB) is always greater than the headroom. */
-    if (sz > sizeof(l2_dtb) - WOLFBOOT_FDT_FIXUP_HEADROOM) {
-        wolfBoot_printf("FDT: dtb too large for L2 fixup (%u > %u)\n",
-            (unsigned)sz,
-            (unsigned)(sizeof(l2_dtb) - WOLFBOOT_FDT_FIXUP_HEADROOM));
-        return -1;
-    }
+    sz = fdt_size(&ctx);
     /* DDR (non-cached) -> L2 */
     memcpy(l2_dtb, ddr_nc, sz);
-    /* fixup in the CPU-writable L2 buffer */
-    ret = mpfs_dts_fixup_inplace(l2_dtb);
+    /* fixup in the CPU-writable L2 buffer, which may use the whole of it */
+    ret = mpfs_dts_fixup_inplace(l2_dtb, (uint32_t)sizeof(l2_dtb));
     /* L2 -> DDR via PDMA (expanded totalsize) */
-    if (wolfBoot_fit_memcpy(dts_addr, l2_dtb,
-            (uint32_t)fdt_totalsize(l2_dtb)) != 0) {
+    if (fdt_open(&ctx, l2_dtb, (uint32_t)sizeof(l2_dtb)) != 0) {
+        wolfBoot_printf("FDT: fixed-up dtb rejected\n");
+        return -1;
+    }
+    if (wolfBoot_fit_memcpy(dts_addr, l2_dtb, fdt_size(&ctx)) != 0) {
         wolfBoot_printf("FDT: dtb copy-back to DDR failed\n");
         return -1;
     }
@@ -868,12 +871,12 @@ int hal_dts_fixup(void* dts_addr)
  * run the fixups directly in place (the original behavior, kept so
  * FDT-enabled non-DDR builds do not silently fall back to the weak
  * no-op hal_dts_fixup). */
-int hal_dts_fixup(void* dts_addr)
+int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     if (dts_addr == NULL) {
         return -1;
     }
-    return mpfs_dts_fixup_inplace(dts_addr);
+    return mpfs_dts_fixup_inplace(dts_addr, capacity);
 }
 #endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
 
