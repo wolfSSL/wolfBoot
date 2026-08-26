@@ -52,13 +52,18 @@
 static uint8_t NVM_CACHE[NVM_CACHE_SIZE];
 
 /* The staged sector image: the boot/update trailer sector carrying
- * the firmware key/nonce pattern at a fixed offset. */
+ * the firmware key/nonce pattern at a fixed offset.  Sector-aligned:
+ * wolfBoot_update_trigger() derives the staged sector by rounding the
+ * flag address down to a sector boundary, and the sector copy must
+ * stay inside this array. */
 #define KEY_OFF 0x0F00
 #define KEY_LEN 64
-static uint8_t g_sector[NVM_CACHE_SIZE];
+static uint8_t g_sector[NVM_CACHE_SIZE]
+    __attribute__((aligned(WOLFBOOT_SECTOR_SIZE)));
 
 /* The update partition flags end at the top of the staged sector, so
- * lastSector in wolfBoot_update_trigger() resolves to g_sector. */
+ * lastSector in wolfBoot_update_trigger() resolves to the base of
+ * g_sector (the alignment above makes that true by construction). */
 #define PART_UPDATE_ENDFLAGS ((uintptr_t)(g_sector + WOLFBOOT_SECTOR_SIZE))
 
 /* Stubbed flash layer: records calls. */
