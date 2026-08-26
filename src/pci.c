@@ -109,7 +109,7 @@ static inline uint32_t align_down(uint32_t address, uint32_t alignment) {
 }
 
 static int pci_align_check_up(uint32_t address, uint32_t alignment,
-                              uint32_t limit, uint32_t *aligned)
+                              uint64_t limit, uint32_t *aligned)
 {
     uint32_t a;
     a = align_up(address, alignment);
@@ -364,7 +364,7 @@ static int pci_enum_is_mmio(uint32_t value)
 }
 
 static int pci_enum_next_aligned32(uint32_t address, uint32_t *next,
-                                   uint32_t align, uint32_t limit)
+                                   uint32_t align, uint64_t limit)
 {
     uintptr_t addr;
 
@@ -422,7 +422,7 @@ static int pci_program_bar(uint8_t bus, uint8_t dev, uint8_t fun,
     uint8_t bar_off;
     int is_prefetch;
     uint32_t *base;
-    uint32_t limit;
+    uint64_t limit;
     uint32_t reg;
     int is_mmio;
     int ret = 0;
@@ -937,11 +937,13 @@ int pci_enum_do(void)
      * when its end is <= limit (pci_enum_next_aligned32, the BAR end
      * check, pci_align_check_up) and the IO limit is the 16-bit IO
      * ceiling, not the last usable address.  A region ending exactly
-     * at base + length must fit, so initialize base + length; reject
-     * a pool whose end would wrap the 32-bit address space. */
-    if ((uint64_t)PCI_MMIO32_BASE + PCI_MMIO32_LENGTH > 0xFFFFFFFFULL ||
+     * at base + length must fit, so initialize base + length.  The
+     * limit fields are 64-bit because a pool may end exactly at
+     * 0x100000000 (4 GiB), the top of the 32-bit space; reject only
+     * pools whose end is above it. */
+    if ((uint64_t)PCI_MMIO32_BASE + PCI_MMIO32_LENGTH > 0x100000000ULL ||
         (uint64_t)PCI_MMIO32_PREFETCH_BASE +
-            PCI_MMIO32_PREFETCH_LENGTH > 0xFFFFFFFFULL)
+            PCI_MMIO32_PREFETCH_LENGTH > 0x100000000ULL)
     {
         PCI_DEBUG_PRINTF("PCI MMIO pool overflows the 32-bit address "
                          "space\r\n");
@@ -949,9 +951,9 @@ int pci_enum_do(void)
     }
 
     enum_info.mem = PCI_MMIO32_BASE;
-    enum_info.mem_limit = enum_info.mem + PCI_MMIO32_LENGTH;
+    enum_info.mem_limit = (uint64_t)enum_info.mem + PCI_MMIO32_LENGTH;
     enum_info.mem_pf = PCI_MMIO32_PREFETCH_BASE;
-    enum_info.mem_pf_limit = enum_info.mem_pf +
+    enum_info.mem_pf_limit = (uint64_t)enum_info.mem_pf +
         PCI_MMIO32_PREFETCH_LENGTH;
     enum_info.io = PCI_IO32_BASE;
     enum_info.curr_bus_number = 0;

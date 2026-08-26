@@ -90,10 +90,12 @@ typedef  struct {
 
 struct pci_enum_info {
     uint32_t mem;
-    uint32_t mem_limit;
+    /* Exclusive pool ends.  64-bit: a pool may end exactly at 4 GiB
+     * (0x100000000), which a 32-bit field cannot represent. */
+    uint64_t mem_limit;
     uint32_t io;
     uint32_t mem_pf;
-    uint32_t mem_pf_limit;
+    uint64_t mem_pf_limit;
     uint8_t curr_bus_number;
 };
 

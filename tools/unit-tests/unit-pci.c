@@ -1731,6 +1731,36 @@ START_TEST(test_enum_do_pool_fill)
 }
 END_TEST
 
+#ifdef UNIT_TEST_PCI_POOL_4GIB
+/* Compiled only in the unit-pci-4gib build, where the MMIO pool is
+ * [0xC0000000, 0x100000000): its exclusive end sits exactly on the
+ * 4 GiB boundary.  A 32-bit limit field cannot represent that end, so
+ * the pool may be rejected only when the end is above the boundary,
+ * and a BAR must still be mappable from such a pool. */
+START_TEST (test_pool_end_4gib)
+{
+    struct test_pci_topology t;
+    int dev_node;
+    uint32_t bar_val;
+    int ret;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x00100000, TEST_PCI_BAR_MMIO);
+    test_pci_commit(&t);
+
+    ret = pci_enum_do();
+    ck_assert_int_eq(ret, 0);
+
+    /* The BAR is allocated at the pool base */
+    bar_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0xC0000000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+#endif /* UNIT_TEST_PCI_POOL_4GIB */
+
 /* test_enum_do_nested_bridges: end-to-end nested bridge enumeration */
 
 START_TEST(test_enum_do_nested_bridges)
@@ -2059,6 +2089,7 @@ Suite *wolfboot_suite(void)
     return s;
 }
 
+#ifndef UNIT_TEST_PCI_POOL_4GIB
 int main(void)
 {
     int fails;
@@ -2069,3 +2100,23 @@ int main(void)
     srunner_free(sr);
     return fails;
 }
+#else
+/* The 4 GiB-end pool build runs only the pool-end test: the rest of
+ * the suite assumes the default 128 MB pool layout. */
+int main(void)
+{
+    int fails;
+    Suite *s = suite_create("pci-pool-4gib");
+    TCase *tc = tcase_create("pool-end-4gib");
+    SRunner *sr;
+
+    tcase_add_test(tc, test_pool_end_4gib);
+    suite_add_tcase(s, tc);
+
+    sr = srunner_create(s);
+    srunner_run_all(sr, CK_NORMAL);
+    fails = srunner_ntests_failed(sr);
+    srunner_free(sr);
+    return fails;
+}
+#endif /* UNIT_TEST_PCI_POOL_4GIB */

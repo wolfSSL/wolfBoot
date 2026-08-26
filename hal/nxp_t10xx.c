@@ -1796,10 +1796,13 @@ static int hal_pcie_init(void)
         memset(&enum_info, 0, sizeof(enum_info));
         enum_info.curr_bus_number = 0;
         enum_info.mem = CONFIG_PCIE_MEM_BUS;
-        enum_info.mem_limit = enum_info.mem + (CONFIG_PCIE_MEM_LENGTH - 1);
+        /* Pool limits are exclusive ends (the allocator accepts a
+         * region when its end is <= limit). */
+        enum_info.mem_limit = (uint64_t)enum_info.mem +
+            CONFIG_PCIE_MEM_LENGTH;
         enum_info.mem_pf = (enum_info.mem + CONFIG_PCIE_MEM_PREFETCH_LENGTH);
-        enum_info.mem_pf_limit = enum_info.mem_pf +
-            (CONFIG_PCIE_MEM_PREFETCH_LENGTH - 1);
+        enum_info.mem_pf_limit = (uint64_t)enum_info.mem_pf +
+            CONFIG_PCIE_MEM_PREFETCH_LENGTH;
         enum_info.io = CONFIG_PCIE_IO_BASE;
 
         /* Setup PCIe Output Windows */

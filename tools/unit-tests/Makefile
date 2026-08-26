@@ -56,8 +56,8 @@ endif
 TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-spi-flash unit-aes128 \
        unit-uart-flash \
-       unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
-       unit-max-space \
+       unit-aes256 unit-chacha20 unit-pci unit-pci-4gib unit-mock-state \
+       unit-sectorflags unit-max-space \
        unit-image unit-image-hybrid unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
@@ -618,6 +618,18 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
+
+# unit-pci-4gib reruns the same test file with the MMIO pool ending
+# exactly at the 4 GiB boundary ([0xC0000000, 0x100000000)), which a
+# 32-bit pool limit cannot represent. Only the pool-end test runs.
+unit-pci-4gib:  unit-pci.c ../../src/pci.c
+	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI \
+	    -DUNIT_TEST_PCI_POOL_4GIB \
+	    -DPCI_MMIO32_BASE=0xC0000000ULL \
+	    -DPCI_MMIO32_LENGTH=0x40000000ULL \
+	    -DPCI_MMIO32_PREFETCH_BASE=0x80000000ULL \
+	    -DPCI_MMIO32_PREFETCH_LENGTH=0x40000000ULL \
+	    $(LDFLAGS)
 
 # linux_loader.c is x86 32bit only and pulls in inline asm guarded on 32bit;
 # build standalone with -m32 and without coverage (no 32bit gcov/check libs).
