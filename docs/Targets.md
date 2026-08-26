@@ -10,6 +10,7 @@ This README describes configuration of supported targets.
 * [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
+* [Infineon AURIX TC4xx](#infineon-aurix-tc4xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
 * [Kontron VX3060-S2](#kontron-vx3060-s2)
 * [Microchip PIC32CK](#microchip-pic32ck)
@@ -8681,6 +8682,17 @@ Currently, wolfBoot for TC3xx is distributed as part of the wolfHSM TC3xx platfo
 
 For access to the TC3xx platform release or for more information on using wolfBoot and wolfHSM on AURIX devices, contact [facts@wolfssl.com](mailto:facts@wolfssl.com).
 
+## Infineon AURIX TC4xx
+
+wolfBoot supports the Infineon AURIX TC4xx family and includes a demo application for the TC4D7 AURIX LiteKit-V2.1. It can be configured to run on either the TriCore application cores or the CSRM core.
+
+Both cores build with `ARCH=AURIX`. `TARGET` selects the core: `aurix_tc4xx` for the TriCore application cores and `aurix_tc4xx_csrm` for the CSRM core. Example configurations are in `config/examples/aurix-tc4xx-*.config`.
+
+On AURIX TC4xx devices, wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) to offload cryptographic operations and key management to the CSRM core.
+
+Currently, wolfBoot for TC4xx is distributed as part of the wolfHSM TC4xx platform release bundle, not as a standalone package. This bundle is under NDA and is not publicly available.
+
+For access to the TC4xx platform release or for more information on using wolfBoot and wolfHSM on AURIX devices, contact [facts@wolfssl.com](mailto:facts@wolfssl.com).
 
 ## Vorago VA416x0
 
