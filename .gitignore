@@ -492,12 +492,15 @@ tools/unit-tests/nxp_ls1028a_host.c
 tools/unit-tests/nxp_p1021_host.c
 tools/unit-tests/nxp_t10xx_fixup_extract.h
 tools/unit-tests/sama5d3_read_extract.h
+tools/unit-tests/samr21_erase_extract.h
+tools/unit-tests/samr21_erase_fn_extract.h
 tools/unit-tests/sdhci_host.c
 tools/unit-tests/stm32l5_write_extract.h
 tools/unit-tests/stm32u5_write_extract.h
 tools/unit-tests/t10xx_qe_firmware_extract.h
 tools/unit-tests/t2080_fman_extract.h
 tools/unit-tests/ti_hercules_write_extract.h
+tools/unit-tests/update_trigger_scrub_extract.h
 tools/unit-tests/versal_ext_write_extract.h
 tools/unit-tests/versal_host.c
 tools/unit-tests/versal_host.h

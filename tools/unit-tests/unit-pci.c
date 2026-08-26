@@ -59,6 +59,7 @@ struct test_pci_bar_info {
     uint32_t upper_mask;  /* 64-bit BARs: upper half probe mask (0 = use default 0xFFFFFFFF) */
     uint8_t  has_raw_probe;/* 1=override probe readback with raw_probe (hostile/malformed BAR) */
     uint32_t raw_probe;   /* raw value returned on probe when has_raw_probe is set */
+    uint32_t preset;      /* initial BAR register value (previously programmed) */
 };
 
 struct test_pci_node {
@@ -146,9 +147,19 @@ static void test_pci_dev_set_bar(struct test_pci_topology *t, int node_idx,
     b->is_prefetch = (type & TEST_PCI_BAR_PF) != 0;
 }
 
+static void test_pci_dev_set_bar_preset(struct test_pci_topology *t,
+                                        int node_idx, int bar_idx,
+                                        uint32_t value)
+{
+    ck_assert(node_idx >= 0 && node_idx < t->count);
+    ck_assert(bar_idx >= 0 && bar_idx < TEST_PCI_MAX_BARS);
+    t->nodes[node_idx].bars[bar_idx].preset = value;
+}
+
 static void test_pci_commit(struct test_pci_topology *t)
 {
     int i;
+    int j;
     for (i = 0; i < t->count; i++) {
         struct test_pci_node *n = &t->nodes[i];
         if (!n->in_use)
@@ -163,6 +174,8 @@ static void test_pci_commit(struct test_pci_topology *t)
             n->cfg[PCI_CLASS_CODE_BYTE_OFFSET] = 0x06;
             n->cfg[PCI_SUBCLASS_BYTE_OFFSET] = 0x04;
         }
+        for (j = 0; j < TEST_PCI_MAX_BARS; j++)
+            memcpy(&n->cfg[PCI_BAR0_OFFSET + j * 4], &n->bars[j].preset, 4);
     }
     current_topology = t;
 }
@@ -1539,6 +1552,74 @@ START_TEST(test_program_bridge_oom_post_enum)
 }
 END_TEST
 
+/* test_program_bridge_bus_exhaustion: curr_bus_number is one bus per
+ * bridge level; at 0xFF the next increment wraps to 0, writing
+ * SECONDARY_BUS 0 and re-enumerating bus 0 over the already configured
+ * tree (unbounded recursion).  The bridge at the exhaustion boundary
+ * must take the error path (bridge disabled, info restored); one below
+ * it the last usable number 0xFF is assigned. */
+START_TEST(test_program_bridge_bus_exhaustion)
+{
+    struct {
+        const char *label;
+        uint8_t curr;
+        int exp_ret;
+        uint8_t exp_curr;
+    } cases[] = {
+        { "last usable bus number 0xFE", 0xFE, 0, 0xFF },
+        { "exhausted at 0xFF", 0xFF, -1, 0xFF },
+    };
+    int i;
+
+    for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+        struct test_pci_topology t;
+        struct pci_enum_info info;
+        int br, ret;
+        uint16_t cmd_before = 0x0007;
+        uint8_t sec, sub;
+
+        test_pci_init(&t);
+        br = test_pci_add_bridge(&t, 1, 0, 0xAAAA, 0xBBBB, TEST_PCI_ROOT_BUS);
+        test_pci_commit(&t);
+        memcpy(&t.nodes[br].cfg[PCI_COMMAND_OFFSET], &cmd_before, 2);
+
+        memset(&info, 0, sizeof(info));
+        info.mem = 0x80000000;
+        info.mem_limit = 0x88000000;
+        info.mem_pf = 0x90000000;
+        info.mem_pf_limit = 0xFFFFFFFF;
+        info.io = 0x2000;
+        info.curr_bus_number = cases[i].curr;
+
+        ret = pci_program_bridge(0, 1, 0, &info);
+        ck_assert_msg(ret == cases[i].exp_ret,
+                      "%s: ret", cases[i].label);
+        ck_assert_msg(info.curr_bus_number == cases[i].exp_curr,
+                      "%s: curr_bus_number", cases[i].label);
+
+        /* command register restored on both paths */
+        ck_assert_msg(pci_config_read16(0, 1, 0, PCI_COMMAND_OFFSET)
+                      == cmd_before, "%s: cmd", cases[i].label);
+
+        if (cases[i].exp_ret != 0) {
+            /* the exhausted bridge must be left disabled */
+            sec = pci_config_read8(0, 1, 0, PCI_SECONDARY_BUS);
+            sub = pci_config_read8(0, 1, 0, PCI_SUB_SEC_BUS);
+            ck_assert_msg(sec == 0, "%s: secondary not cleared",
+                          cases[i].label);
+            ck_assert_msg(sub == 0, "%s: subordinate not cleared",
+                          cases[i].label);
+        }
+        else {
+            ck_assert_msg(pci_config_read8(0, 1, 0, PCI_SECONDARY_BUS)
+                          == 0xFF, "%s: secondary", cases[i].label);
+        }
+
+        test_pci_cleanup(&t);
+    }
+}
+END_TEST
+
 /* test_enum_bus_topology: device dispatch + multifunction handling */
 START_TEST(test_enum_bus_topology)
 {
@@ -1630,6 +1711,79 @@ START_TEST(test_enum_do_full)
     test_pci_cleanup(&t);
 }
 END_TEST
+
+/* test_enum_do_pool_fill: a BAR that exactly fills the configured MMIO
+ * pool [PCI_MMIO32_BASE, PCI_MMIO32_BASE + PCI_MMIO32_LENGTH) must be
+ * mapped.  The pool limits are exclusive ends: the allocator accepts a
+ * region when its end is <= limit (pci_enum_next_aligned32, the BAR
+ * end check, pci_align_check_up) and the IO pool limit is the 16-bit
+ * ceiling, not the last usable address.  Initializing the MMIO limits
+ * as base + length - 1 rejects this BAR and strands the last byte of
+ * the pool. */
+START_TEST(test_enum_do_pool_fill)
+{
+    struct test_pci_topology t;
+    int dev_node;
+    uint32_t bar_val;
+    int ret;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    /* 128 MB MMIO BAR: exactly the default pool size */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x08000000, TEST_PCI_BAR_MMIO);
+    test_pci_commit(&t);
+
+    ret = pci_enum_do();
+    ck_assert_int_eq(ret, 0);
+
+    /* The BAR must be programmed at the pool base */
+    bar_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0x80000000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
+#ifdef UNIT_TEST_PCI_POOL_4GIB
+/* Compiled only in the unit-pci-4gib build, where the MMIO pool is
+ * [0xC0000000, 0x100000000): its exclusive end sits exactly on the
+ * 4 GiB boundary.  A 32-bit limit field cannot represent that end, so
+ * the pool may be rejected only when the end is above the boundary,
+ * and a BAR must still be mappable from such a pool. */
+START_TEST (test_pool_end_4gib)
+{
+    struct test_pci_topology t;
+    int dev_node, dev_next;
+    uint32_t bar_val;
+    int ret;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    dev_next = test_pci_add_dev(&t, 1, 0, 0x9ABC, 0xDEF0, TEST_PCI_ROOT_BUS);
+    /* 1 GB BAR: exactly fills the [0xC0000000, 0x100000000) pool */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x40000000, TEST_PCI_BAR_MMIO);
+    /* The next device's BAR was programmed by a previous boot */
+    test_pci_dev_set_bar(&t, dev_next, 0, 0x00100000, TEST_PCI_BAR_MMIO);
+    test_pci_dev_set_bar_preset(&t, dev_next, 0, 0x40000000);
+    test_pci_commit(&t);
+
+    ret = pci_enum_do();
+    ck_assert_int_eq(ret, 0);
+
+    /* The 1 GB BAR is allocated at the pool base */
+    bar_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0xC0000000);
+
+    /* The pool is now exhausted exactly at 4 GiB.  The allocation
+     * cursor must stay at the pool end, not wrap to 0 and program
+     * the next BAR over address 0: the second BAR is left untouched. */
+    bar_val = pci_config_read32(0, 1, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0x40000000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+#endif /* UNIT_TEST_PCI_POOL_4GIB */
 
 /* test_enum_do_nested_bridges: end-to-end nested bridge enumeration */
 
@@ -1792,7 +1946,7 @@ END_TEST
 /* test_pci_align_check_up_overflow: edge cases for pci_align_check_up */
 START_TEST(test_pci_align_check_up_overflow)
 {
-    uint32_t aligned;
+    uint64_t aligned;
     int ret;
 
     /* Normal case: already aligned */
@@ -1924,6 +2078,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_oom_post, test_program_bridge_oom_post_enum);
     suite_add_tcase(s, tc_oom_post);
 
+    TCase *tc_bus_exhaust = tcase_create("bridge-bus-exhaustion");
+    tcase_add_test(tc_bus_exhaust, test_program_bridge_bus_exhaustion);
+    suite_add_tcase(s, tc_bus_exhaust);
+
     TCase *tc_enum_topo = tcase_create("enum-bus-topology");
     tcase_add_test(tc_enum_topo, test_enum_bus_topology);
     suite_add_tcase(s, tc_enum_topo);
@@ -1935,6 +2093,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_enum_nested = tcase_create("enum-do-nested-bridges");
     tcase_add_test(tc_enum_nested, test_enum_do_nested_bridges);
     suite_add_tcase(s, tc_enum_nested);
+
+    TCase *tc_enum_pool = tcase_create("enum-do-pool-fill");
+    tcase_add_test(tc_enum_pool, test_enum_do_pool_fill);
+    suite_add_tcase(s, tc_enum_pool);
 
     TCase *tc_rw8 = tcase_create("config-rw-8bit-positions");
     tcase_add_test(tc_rw8, test_config_rw_8bit_all_positions);
@@ -1951,6 +2113,7 @@ Suite *wolfboot_suite(void)
     return s;
 }
 
+#ifndef UNIT_TEST_PCI_POOL_4GIB
 int main(void)
 {
     int fails;
@@ -1961,3 +2124,23 @@ int main(void)
     srunner_free(sr);
     return fails;
 }
+#else
+/* The 4 GiB-end pool build runs only the pool-end test: the rest of
+ * the suite assumes the default 128 MB pool layout. */
+int main(void)
+{
+    int fails;
+    Suite *s = suite_create("pci-pool-4gib");
+    TCase *tc = tcase_create("pool-end-4gib");
+    SRunner *sr;
+
+    tcase_add_test(tc, test_pool_end_4gib);
+    suite_add_tcase(s, tc);
+
+    sr = srunner_create(s);
+    srunner_run_all(sr, CK_NORMAL);
+    fails = srunner_ntests_failed(sr);
+    srunner_free(sr);
+    return fails;
+}
+#endif /* UNIT_TEST_PCI_POOL_4GIB */

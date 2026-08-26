@@ -56,8 +56,8 @@ endif
 TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-spi-flash unit-aes128 \
        unit-uart-flash \
-       unit-aes256 unit-chacha20 unit-pci unit-mock-state unit-sectorflags \
-       unit-max-space \
+       unit-aes256 unit-chacha20 unit-pci unit-pci-4gib unit-mock-state \
+       unit-sectorflags unit-max-space \
        unit-image unit-image-hybrid unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
@@ -115,6 +115,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
+TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
@@ -127,8 +128,10 @@ TESTS+=unit-stm32g4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
+TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
+TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
@@ -616,6 +619,18 @@ unit-chacha20: ../../include/target.h unit-extflash.c
 unit-pci:  unit-pci.c ../../src/pci.c
 	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI $(LDFLAGS)
 
+# unit-pci-4gib reruns the same test file with the MMIO pool ending
+# exactly at the 4 GiB boundary ([0xC0000000, 0x100000000)), which a
+# 32-bit pool limit cannot represent. Only the pool-end test runs.
+unit-pci-4gib:  unit-pci.c ../../src/pci.c
+	gcc -o $@ $< $(CFLAGS) -DWOLFBOOT_USE_PCI \
+	    -DUNIT_TEST_PCI_POOL_4GIB \
+	    -DPCI_MMIO32_BASE=0xC0000000ULL \
+	    -DPCI_MMIO32_LENGTH=0x40000000ULL \
+	    -DPCI_MMIO32_PREFETCH_BASE=0x80000000ULL \
+	    -DPCI_MMIO32_PREFETCH_LENGTH=0x40000000ULL \
+	    $(LDFLAGS)
+
 # linux_loader.c is x86 32bit only and pulls in inline asm guarded on 32bit;
 # build standalone with -m32 and without coverage (no 32bit gcov/check libs).
 unit-linux-loader-e820: ../../include/target.h unit-linux-loader-e820.c
@@ -1078,6 +1093,27 @@ unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 	p1021_erase_fn_extract.h
 	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
 
+# unit-samr21-erase-advance runs the real hal_flash_erase() from
+# hal/samr21.c against a host NVMCTRL register window (F-11036: the
+# length decrement was the body of the NVMREADY wait and the address
+# never advanced, so the loop re-erased the first page forever).
+samr21_erase_extract.h: ../../hal/samr21.c
+	sed -n '/#define FLASH_PAGESIZE /p' $< > $@
+	sed -n '/#define FLASH_ROW_SIZE /p' $< >> $@
+	sed -n '/#define NVMCTRLA_REG /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
+	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
+	sed -n '/#define NVMCMD_KEY /p' $< >> $@
+	sed -n '/#define NVMCMD_ERASE /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG_NVMREADY /p' $< >> $@
+
+samr21_erase_fn_extract.h: ../../hal/samr21.c
+	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< > $@
+
+unit-samr21-erase-advance: unit-samr21-erase-advance.c samr21_erase_extract.h \
+	samr21_erase_fn_extract.h
+	gcc -o $@ unit-samr21-erase-advance.c $(CFLAGS) $(LDFLAGS)
+
 # unit-hifive1-flash-write runs the real hal_flash_write() from
 # hal/hifive1.c against a mock fespi model (F-11035: the final partial
 # page of a multi-page write took the full-page branch, over-reading
@@ -1164,6 +1200,19 @@ nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
 unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
 
+# unit-update-trigger-scrub runs the real wolfBoot_update_trigger()
+# from src/libwolfboot.c over the NVM_FLASH_WRITEONCE branch
+# (F-11037: the staged trailer sector, which in EXT_ENCRYPTED builds
+# carries the firmware key/nonce, was never scrubbed from NVM_CACHE).
+# The function is extracted together with nvm_cache_scrub(); the build
+# defines NVM_FLASH_WRITEONCE so the write-once branch compiles.
+update_trigger_scrub_extract.h: ../../src/libwolfboot.c
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION wolfBoot_update_trigger(/,/^}/p' $< >> $@
+
+unit-update-trigger-scrub: unit-update-trigger-scrub.c update_trigger_scrub_extract.h
+	gcc -o $@ unit-update-trigger-scrub.c -DNVM_FLASH_WRITEONCE $(CFLAGS) $(LDFLAGS)
+
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (any read error permanently switched the host
 # to 1.8V signaling with no rollback). sdhci_host.c (generated below) is
@@ -1190,6 +1239,16 @@ unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 # shipped default is the value under test.
 unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
 	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-acmd41-timeout drives sdcard_card_full_init()'s ACMD41 OCR
+# readiness poll from the real src/sdhci.c (F-11032: the do/while had no
+# bound, so a card answering ACMD41 without ever setting OCR ready held
+# the boot forever). Same sdhci_host.c generation as the wait-busy test;
+# the card model sets OCR ready after N scripted ACMD41 polls, the timer
+# stub steps 10 ms per read, and a command-write cap turns the pre-fix
+# infinite loop into an abort.
+unit-sdhci-acmd41-timeout: unit-sdhci-acmd41-timeout.c sdhci_host.c
+	gcc -o $@ unit-sdhci-acmd41-timeout.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-ti-hercules-write runs the real hal_flash_write() staging logic
 # from hal/ti_hercules.c (a short write crossing a block

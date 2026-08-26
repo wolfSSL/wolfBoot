@@ -914,6 +914,11 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         /* erase the previously selected sector */
         hal_flash_erase(lastSector - WOLFBOOT_SECTOR_SIZE * selSec,
             WOLFBOOT_SECTOR_SIZE);
+        /* The staged sector may hold the firmware key/nonce (see
+         * ENCRYPT_CACHE under NVM_FLASH_WRITEONCE): scrub it, as the
+         * partition-trailer helpers do, before releasing the flash
+         * lock. */
+        nvm_cache_scrub();
 #endif
     }
 

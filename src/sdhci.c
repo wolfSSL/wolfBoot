@@ -829,6 +829,13 @@ static int sdcard_card_init(uint32_t acmd41_arg, uint32_t *ocr_reg)
 static int sdcard_set_bus_width(uint32_t bus_width);
 static int sdcard_set_function(uint32_t function_number, uint32_t group_number);
 
+/* A card that answers ACMD41 forever without setting OCR ready must
+ * not hold the boot. The budget matches the sdhci_wait_busy() wait;
+ * a healthy card reports ready in milliseconds. */
+#ifndef SDCARD_ACMD41_TIMEOUT_MS
+#define SDCARD_ACMD41_TIMEOUT_MS 30000
+#endif
+
 /* Full SD card initialization sequence
  * Returns 0 on success */
 static int sdcard_card_full_init(void)
@@ -898,6 +905,9 @@ static int sdcard_card_full_init(void)
     }
 
     if (status == 0) {
+        uint64_t start = hal_get_timer_us();
+        const uint64_t timeout_us =
+            (uint64_t)SDCARD_ACMD41_TIMEOUT_MS * 1000U;
         /* configure operating conditions */
         uint32_t cmd_arg = SDCARD_ACMD41_HCS;
         cmd_arg |= card_volts;
@@ -911,10 +921,17 @@ static int sdcard_card_full_init(void)
         wolfBoot_printf("sdcard_init: sending OCR arg: 0x%08X\n", cmd_arg);
     #endif
 
-        /* retry until OCR ready */
+        /* retry until OCR ready; a card that never sets it must not
+         * hold the boot, so bound the poll like sdhci_wait_busy() and
+         * service the watchdog inside it */
         do {
             status = sdcard_card_init(cmd_arg, &reg);
-        } while (status == 0 && (reg & SDCARD_REG_OCR_READY) == 0);
+            if (status != 0 || (reg & SDCARD_REG_OCR_READY) != 0)
+                break;
+            sdhci_platform_wdt_pet();
+            if (hal_get_timer_us() - start > timeout_us)
+                status = -1;
+        } while (status == 0);
     }
 
     if (status == 0) {
