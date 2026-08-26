@@ -128,6 +128,7 @@ TESTS+=unit-stm32g4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
+TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-sdhci-acmd41-timeout
@@ -1185,6 +1186,19 @@ nvm_cache_scrub_extract.h: ../../src/libwolfboot.c
 
 unit-nvm-cache-scrub: unit-nvm-cache-scrub.c nvm_cache_scrub_extract.h
 	gcc -o $@ unit-nvm-cache-scrub.c $(CFLAGS) $(LDFLAGS)
+
+# unit-update-trigger-scrub runs the real wolfBoot_update_trigger()
+# from src/libwolfboot.c over the NVM_FLASH_WRITEONCE branch
+# (F-11037: the staged trailer sector, which in EXT_ENCRYPTED builds
+# carries the firmware key/nonce, was never scrubbed from NVM_CACHE).
+# The function is extracted together with nvm_cache_scrub(); the build
+# defines NVM_FLASH_WRITEONCE so the write-once branch compiles.
+update_trigger_scrub_extract.h: ../../src/libwolfboot.c
+	sed -n '/^static void RAMFUNCTION nvm_cache_scrub(/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION wolfBoot_update_trigger(/,/^}/p' $< >> $@
+
+unit-update-trigger-scrub: unit-update-trigger-scrub.c update_trigger_scrub_extract.h
+	gcc -o $@ unit-update-trigger-scrub.c -DNVM_FLASH_WRITEONCE $(CFLAGS) $(LDFLAGS)
 
 # unit-sdhci-uhs-recover drives disk_read()'s UHS recovery path from the
 # real src/sdhci.c (any read error permanently switched the host
