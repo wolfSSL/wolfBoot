@@ -1087,6 +1087,7 @@ unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 # never advanced, so the loop re-erased the first page forever).
 samr21_erase_extract.h: ../../hal/samr21.c
 	sed -n '/#define FLASH_PAGESIZE /p' $< > $@
+	sed -n '/#define FLASH_ROW_SIZE /p' $< >> $@
 	sed -n '/#define NVMCTRLA_REG /p' $< >> $@
 	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
 	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
