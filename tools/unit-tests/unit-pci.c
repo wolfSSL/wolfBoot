@@ -1539,6 +1539,74 @@ START_TEST(test_program_bridge_oom_post_enum)
 }
 END_TEST
 
+/* test_program_bridge_bus_exhaustion: curr_bus_number is one bus per
+ * bridge level; at 0xFF the next increment wraps to 0, writing
+ * SECONDARY_BUS 0 and re-enumerating bus 0 over the already configured
+ * tree (unbounded recursion).  The bridge at the exhaustion boundary
+ * must take the error path (bridge disabled, info restored); one below
+ * it the last usable number 0xFF is assigned. */
+START_TEST(test_program_bridge_bus_exhaustion)
+{
+    struct {
+        const char *label;
+        uint8_t curr;
+        int exp_ret;
+        uint8_t exp_curr;
+    } cases[] = {
+        { "last usable bus number 0xFE", 0xFE, 0, 0xFF },
+        { "exhausted at 0xFF", 0xFF, -1, 0xFF },
+    };
+    int i;
+
+    for (i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+        struct test_pci_topology t;
+        struct pci_enum_info info;
+        int br, ret;
+        uint16_t cmd_before = 0x0007;
+        uint8_t sec, sub;
+
+        test_pci_init(&t);
+        br = test_pci_add_bridge(&t, 1, 0, 0xAAAA, 0xBBBB, TEST_PCI_ROOT_BUS);
+        test_pci_commit(&t);
+        memcpy(&t.nodes[br].cfg[PCI_COMMAND_OFFSET], &cmd_before, 2);
+
+        memset(&info, 0, sizeof(info));
+        info.mem = 0x80000000;
+        info.mem_limit = 0x88000000;
+        info.mem_pf = 0x90000000;
+        info.mem_pf_limit = 0xFFFFFFFF;
+        info.io = 0x2000;
+        info.curr_bus_number = cases[i].curr;
+
+        ret = pci_program_bridge(0, 1, 0, &info);
+        ck_assert_msg(ret == cases[i].exp_ret,
+                      "%s: ret", cases[i].label);
+        ck_assert_msg(info.curr_bus_number == cases[i].exp_curr,
+                      "%s: curr_bus_number", cases[i].label);
+
+        /* command register restored on both paths */
+        ck_assert_msg(pci_config_read16(0, 1, 0, PCI_COMMAND_OFFSET)
+                      == cmd_before, "%s: cmd", cases[i].label);
+
+        if (cases[i].exp_ret != 0) {
+            /* the exhausted bridge must be left disabled */
+            sec = pci_config_read8(0, 1, 0, PCI_SECONDARY_BUS);
+            sub = pci_config_read8(0, 1, 0, PCI_SUB_SEC_BUS);
+            ck_assert_msg(sec == 0, "%s: secondary not cleared",
+                          cases[i].label);
+            ck_assert_msg(sub == 0, "%s: subordinate not cleared",
+                          cases[i].label);
+        }
+        else {
+            ck_assert_msg(pci_config_read8(0, 1, 0, PCI_SECONDARY_BUS)
+                          == 0xFF, "%s: secondary", cases[i].label);
+        }
+
+        test_pci_cleanup(&t);
+    }
+}
+END_TEST
+
 /* test_enum_bus_topology: device dispatch + multifunction handling */
 START_TEST(test_enum_bus_topology)
 {
@@ -1955,6 +2023,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_oom_post = tcase_create("bridge-oom-post-enum");
     tcase_add_test(tc_oom_post, test_program_bridge_oom_post_enum);
     suite_add_tcase(s, tc_oom_post);
+
+    TCase *tc_bus_exhaust = tcase_create("bridge-bus-exhaustion");
+    tcase_add_test(tc_bus_exhaust, test_program_bridge_bus_exhaustion);
+    suite_add_tcase(s, tc_bus_exhaust);
 
     TCase *tc_enum_topo = tcase_create("enum-bus-topology");
     tcase_add_test(tc_enum_topo, test_enum_bus_topology);

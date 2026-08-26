@@ -635,6 +635,13 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     orig_cmd = pci_config_read16(bus, dev, fun, PCI_COMMAND_OFFSET);
     pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, 0);
 
+    /* curr_bus_number is one bus per bridge level; at 0xFF the next
+     * increment wraps to 0, which would write SECONDARY_BUS 0 and
+     * re-enumerate bus 0 over the already configured tree.  Disable
+     * this bridge instead. */
+    if (info->curr_bus_number == 0xFF)
+        goto err;
+
     info->curr_bus_number++;
     PCI_DEBUG_PRINTF("Bridge: %x.%x.%x (using bus number: %d)\r\n",
                      (int)bus, (int)dev, (int)fun, info->curr_bus_number);
