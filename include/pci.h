@@ -89,12 +89,14 @@ typedef  struct {
 } pci_ctrlr_info_t;
 
 struct pci_enum_info {
-    uint32_t mem;
-    /* Exclusive pool ends.  64-bit: a pool may end exactly at 4 GiB
-     * (0x100000000), which a 32-bit field cannot represent. */
+    /* Allocation cursors and exclusive pool ends.  All 64-bit: a pool
+     * may end exactly at 4 GiB (0x100000000), which a 32-bit value
+     * cannot represent, and an exhausted cursor must stay at the pool
+     * end instead of wrapping to 0 and re-allocating over address 0. */
+    uint64_t mem;
     uint64_t mem_limit;
-    uint32_t io;
-    uint32_t mem_pf;
+    uint64_t io;
+    uint64_t mem_pf;
     uint64_t mem_pf_limit;
     uint8_t curr_bus_number;
 };

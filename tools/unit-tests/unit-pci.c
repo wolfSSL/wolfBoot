@@ -59,6 +59,7 @@ struct test_pci_bar_info {
     uint32_t upper_mask;  /* 64-bit BARs: upper half probe mask (0 = use default 0xFFFFFFFF) */
     uint8_t  has_raw_probe;/* 1=override probe readback with raw_probe (hostile/malformed BAR) */
     uint32_t raw_probe;   /* raw value returned on probe when has_raw_probe is set */
+    uint32_t preset;      /* initial BAR register value (previously programmed) */
 };
 
 struct test_pci_node {
@@ -146,9 +147,19 @@ static void test_pci_dev_set_bar(struct test_pci_topology *t, int node_idx,
     b->is_prefetch = (type & TEST_PCI_BAR_PF) != 0;
 }
 
+static void test_pci_dev_set_bar_preset(struct test_pci_topology *t,
+                                        int node_idx, int bar_idx,
+                                        uint32_t value)
+{
+    ck_assert(node_idx >= 0 && node_idx < t->count);
+    ck_assert(bar_idx >= 0 && bar_idx < TEST_PCI_MAX_BARS);
+    t->nodes[node_idx].bars[bar_idx].preset = value;
+}
+
 static void test_pci_commit(struct test_pci_topology *t)
 {
     int i;
+    int j;
     for (i = 0; i < t->count; i++) {
         struct test_pci_node *n = &t->nodes[i];
         if (!n->in_use)
@@ -163,6 +174,8 @@ static void test_pci_commit(struct test_pci_topology *t)
             n->cfg[PCI_CLASS_CODE_BYTE_OFFSET] = 0x06;
             n->cfg[PCI_SUBCLASS_BYTE_OFFSET] = 0x04;
         }
+        for (j = 0; j < TEST_PCI_MAX_BARS; j++)
+            memcpy(&n->cfg[PCI_BAR0_OFFSET + j * 4], &n->bars[j].preset, 4);
     }
     current_topology = t;
 }
@@ -1740,21 +1753,32 @@ END_TEST
 START_TEST (test_pool_end_4gib)
 {
     struct test_pci_topology t;
-    int dev_node;
+    int dev_node, dev_next;
     uint32_t bar_val;
     int ret;
 
     test_pci_init(&t);
     dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
-    test_pci_dev_set_bar(&t, dev_node, 0, 0x00100000, TEST_PCI_BAR_MMIO);
+    dev_next = test_pci_add_dev(&t, 1, 0, 0x9ABC, 0xDEF0, TEST_PCI_ROOT_BUS);
+    /* 1 GB BAR: exactly fills the [0xC0000000, 0x100000000) pool */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x40000000, TEST_PCI_BAR_MMIO);
+    /* The next device's BAR was programmed by a previous boot */
+    test_pci_dev_set_bar(&t, dev_next, 0, 0x00100000, TEST_PCI_BAR_MMIO);
+    test_pci_dev_set_bar_preset(&t, dev_next, 0, 0x40000000);
     test_pci_commit(&t);
 
     ret = pci_enum_do();
     ck_assert_int_eq(ret, 0);
 
-    /* The BAR is allocated at the pool base */
+    /* The 1 GB BAR is allocated at the pool base */
     bar_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
     ck_assert_uint_eq(bar_val, 0xC0000000);
+
+    /* The pool is now exhausted exactly at 4 GiB.  The allocation
+     * cursor must stay at the pool end, not wrap to 0 and program
+     * the next BAR over address 0: the second BAR is left untouched. */
+    bar_val = pci_config_read32(0, 1, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0x40000000);
 
     test_pci_cleanup(&t);
 }
@@ -1922,7 +1946,7 @@ END_TEST
 /* test_pci_align_check_up_overflow: edge cases for pci_align_check_up */
 START_TEST(test_pci_align_check_up_overflow)
 {
-    uint32_t aligned;
+    uint64_t aligned;
     int ret;
 
     /* Normal case: already aligned */
