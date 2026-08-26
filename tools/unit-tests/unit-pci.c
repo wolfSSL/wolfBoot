@@ -1631,6 +1631,38 @@ START_TEST(test_enum_do_full)
 }
 END_TEST
 
+/* test_enum_do_pool_fill: a BAR that exactly fills the configured MMIO
+ * pool [PCI_MMIO32_BASE, PCI_MMIO32_BASE + PCI_MMIO32_LENGTH) must be
+ * mapped.  The pool limits are exclusive ends: the allocator accepts a
+ * region when its end is <= limit (pci_enum_next_aligned32, the BAR
+ * end check, pci_align_check_up) and the IO pool limit is the 16-bit
+ * ceiling, not the last usable address.  Initializing the MMIO limits
+ * as base + length - 1 rejects this BAR and strands the last byte of
+ * the pool. */
+START_TEST(test_enum_do_pool_fill)
+{
+    struct test_pci_topology t;
+    int dev_node;
+    uint32_t bar_val;
+    int ret;
+
+    test_pci_init(&t);
+    dev_node = test_pci_add_dev(&t, 0, 0, 0x1234, 0x5678, TEST_PCI_ROOT_BUS);
+    /* 128 MB MMIO BAR: exactly the default pool size */
+    test_pci_dev_set_bar(&t, dev_node, 0, 0x08000000, TEST_PCI_BAR_MMIO);
+    test_pci_commit(&t);
+
+    ret = pci_enum_do();
+    ck_assert_int_eq(ret, 0);
+
+    /* The BAR must be programmed at the pool base */
+    bar_val = pci_config_read32(0, 0, 0, PCI_BAR0_OFFSET);
+    ck_assert_uint_eq(bar_val, 0x80000000);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_enum_do_nested_bridges: end-to-end nested bridge enumeration */
 
 START_TEST(test_enum_do_nested_bridges)
@@ -1935,6 +1967,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_enum_nested = tcase_create("enum-do-nested-bridges");
     tcase_add_test(tc_enum_nested, test_enum_do_nested_bridges);
     suite_add_tcase(s, tc_enum_nested);
+
+    TCase *tc_enum_pool = tcase_create("enum-do-pool-fill");
+    tcase_add_test(tc_enum_pool, test_enum_do_pool_fill);
+    suite_add_tcase(s, tc_enum_pool);
 
     TCase *tc_rw8 = tcase_create("config-rw-8bit-positions");
     tcase_add_test(tc_rw8, test_config_rw_8bit_all_positions);

@@ -926,11 +926,26 @@ int pci_enum_do(void)
     struct pci_enum_info enum_info;
     int ret;
 
+    /* Pool limits are exclusive ends: the allocator accepts a region
+     * when its end is <= limit (pci_enum_next_aligned32, the BAR end
+     * check, pci_align_check_up) and the IO limit is the 16-bit IO
+     * ceiling, not the last usable address.  A region ending exactly
+     * at base + length must fit, so initialize base + length; reject
+     * a pool whose end would wrap the 32-bit address space. */
+    if ((uint64_t)PCI_MMIO32_BASE + PCI_MMIO32_LENGTH > 0xFFFFFFFFULL ||
+        (uint64_t)PCI_MMIO32_PREFETCH_BASE +
+            PCI_MMIO32_PREFETCH_LENGTH > 0xFFFFFFFFULL)
+    {
+        PCI_DEBUG_PRINTF("PCI MMIO pool overflows the 32-bit address "
+                         "space\r\n");
+        return -1;
+    }
+
     enum_info.mem = PCI_MMIO32_BASE;
-    enum_info.mem_limit = enum_info.mem + (PCI_MMIO32_LENGTH - 1);
+    enum_info.mem_limit = enum_info.mem + PCI_MMIO32_LENGTH;
     enum_info.mem_pf = PCI_MMIO32_PREFETCH_BASE;
     enum_info.mem_pf_limit = enum_info.mem_pf +
-        (PCI_MMIO32_PREFETCH_LENGTH - 1);
+        PCI_MMIO32_PREFETCH_LENGTH;
     enum_info.io = PCI_IO32_BASE;
     enum_info.curr_bus_number = 0;
 
