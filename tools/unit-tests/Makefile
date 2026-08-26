@@ -115,6 +115,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
+TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
@@ -1077,6 +1078,26 @@ p1021_erase_fn_extract.h: ../../hal/nxp_p1021.c
 unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 	p1021_erase_fn_extract.h
 	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
+
+# unit-samr21-erase-advance runs the real hal_flash_erase() from
+# hal/samr21.c against a host NVMCTRL register window (F-11036: the
+# length decrement was the body of the NVMREADY wait and the address
+# never advanced, so the loop re-erased the first page forever).
+samr21_erase_extract.h: ../../hal/samr21.c
+	sed -n '/#define FLASH_PAGESIZE /p' $< > $@
+	sed -n '/#define NVMCTRLA_REG /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
+	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
+	sed -n '/#define NVMCMD_KEY /p' $< >> $@
+	sed -n '/#define NVMCMD_ERASE /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG_NVMREADY /p' $< >> $@
+
+samr21_erase_fn_extract.h: ../../hal/samr21.c
+	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< > $@
+
+unit-samr21-erase-advance: unit-samr21-erase-advance.c samr21_erase_extract.h \
+	samr21_erase_fn_extract.h
+	gcc -o $@ unit-samr21-erase-advance.c $(CFLAGS) $(LDFLAGS)
 
 # unit-hifive1-flash-write runs the real hal_flash_write() from
 # hal/hifive1.c against a mock fespi model (F-11035: the final partial

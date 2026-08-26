@@ -210,7 +210,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     while (len > 0) {
         NVMCTRL_ADDR = (address >> 1); /* This register holds the address of a 16-bit row */
         NVMCTRLA_REG = NVMCMD_ERASE | NVMCMD_KEY;
-        while(!(NVMCTRL_INTFLAG & NVMCTRL_INTFLAG_NVMREADY))
+        while (!(NVMCTRL_INTFLAG & NVMCTRL_INTFLAG_NVMREADY)) { }
+        address += FLASH_PAGESIZE;
         len -= FLASH_PAGESIZE;
     }
     return 0;
