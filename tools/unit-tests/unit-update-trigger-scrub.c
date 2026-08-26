@@ -12,8 +12,12 @@
  *
  * The real function is extracted by the Makefile (together with
  * nvm_cache_scrub()) and run with a test-owned NVM_CACHE, a staged
- * sector carrying a key pattern and stubbed flash calls; the buffer
- * must be zero after the call.
+ * sector carrying a key pattern and stubbed flash calls.  The stub
+ * captures the written sector: it must carry the staged payload
+ * (key pattern plus the fresh flags), which pins the scrub-after-
+ * write ordering - a scrub that ran first would program an
+ * all-zero sector and destroy the key that persists in the trailer
+ * - and NVM_CACHE must be zero after the call.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -66,14 +70,18 @@ static uint8_t g_sector[NVM_CACHE_SIZE]
  * g_sector (the alignment above makes that true by construction). */
 #define PART_UPDATE_ENDFLAGS ((uintptr_t)(g_sector + WOLFBOOT_SECTOR_SIZE))
 
-/* Stubbed flash layer: records calls. */
+/* Stubbed flash layer: records calls and captures the written
+ * sector at call time, before the function under test can scrub it. */
 static int g_flash_writes;
 static int g_flash_erases;
+static uint8_t g_written[WOLFBOOT_SECTOR_SIZE];
 
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    (void)address; (void)data; (void)len;
+    ck_assert_int_eq(len, WOLFBOOT_SECTOR_SIZE);
+    memcpy(g_written, data, WOLFBOOT_SECTOR_SIZE);
     g_flash_writes++;
+    (void)address;
     return 0;
 }
 
@@ -151,6 +159,8 @@ static void teardown(void)
  * before rewriting the flags. Pre-fix the staged pattern remained. */
 START_TEST(test_update_trigger_scrubs_cache)
 {
+    uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
+
     ck_assert_int_eq(cache_scrubbed(), 1);
 
     wolfBoot_update_trigger();
@@ -159,6 +169,19 @@ START_TEST(test_update_trigger_scrubs_cache)
      * both candidate sectors */
     ck_assert_int_eq(g_flash_writes, 1);
     ck_assert_int_eq(g_flash_erases, 2);
+
+    /* The written sector carries the staged payload: the sector fill
+     * and key pattern intact, the fresh state and magic in place.
+     * A scrub before the write would have programmed all zeros and
+     * destroyed the key that persists in the trailer. */
+    ck_assert_int_eq(g_written[0], 0x11);
+    ck_assert_int_eq(g_written[KEY_OFF], 0xA5);
+    ck_assert_int_eq(g_written[KEY_OFF + KEY_LEN - 1], 0xA5);
+    ck_assert_int_eq(g_written[SECTOR_FLAGS_SIZE], IMG_STATE_UPDATING);
+    ck_assert_mem_eq(g_written + SECTOR_FLAGS_SIZE + 1, &magic,
+                     sizeof(magic));
+
+    /* and the RAM copy of that sector is gone */
     ck_assert_int_eq(cache_scrubbed(), 1);
 }
 END_TEST
