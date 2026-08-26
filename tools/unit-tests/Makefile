@@ -130,6 +130,7 @@ TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-wait-busy
+TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
@@ -1211,6 +1212,16 @@ unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 # shipped default is the value under test.
 unit-sdhci-wait-busy: unit-sdhci-wait-busy.c sdhci_host.c
 	gcc -o $@ unit-sdhci-wait-busy.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
+
+# unit-sdhci-acmd41-timeout drives sdcard_card_full_init()'s ACMD41 OCR
+# readiness poll from the real src/sdhci.c (F-11032: the do/while had no
+# bound, so a card answering ACMD41 without ever setting OCR ready held
+# the boot forever). Same sdhci_host.c generation as the wait-busy test;
+# the card model sets OCR ready after N scripted ACMD41 polls, the timer
+# stub steps 10 ms per read, and a command-write cap turns the pre-fix
+# infinite loop into an abort.
+unit-sdhci-acmd41-timeout: unit-sdhci-acmd41-timeout.c sdhci_host.c
+	gcc -o $@ unit-sdhci-acmd41-timeout.c -DDISK_SDCARD -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
 # unit-ti-hercules-write runs the real hal_flash_write() staging logic
 # from hal/ti_hercules.c (a short write crossing a block
