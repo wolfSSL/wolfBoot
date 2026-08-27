@@ -293,7 +293,6 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
 #else
     ecc_key ecc;
 #endif
-    mp_int  r, s;
 #if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
     !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     uint8_t* pubkey    = keystore_get_buffer(key_slot);
@@ -405,6 +404,8 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
         }
     #endif
     #else
+        mp_int r, s;
+
         /* Import public key */
         ret = wc_ecc_import_unsigned(&ecc, pubkey, pubkey + point_sz, NULL,
             ECC_KEY_TYPE);
