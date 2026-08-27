@@ -4,7 +4,6 @@ Instead of building as standalone repository, wolfBoot can be built as
 a secure-boot library and integrated in third party bootloaders, custom
 staging solutions etc.
 
-
 ## Library API
 
 The wolfBoot secure-boot image verification has a very simple interface.
