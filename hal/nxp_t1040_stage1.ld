@@ -26,7 +26,7 @@ MEMORY
 
     /* DDR - 8GB physical, 32-bit addressing limits window to <2GB.
      * Start at 16MB to avoid using 0x0 (NULL) addresses */
-    DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x7FFFFFFF - 0x1000000
+    DRAM (rwx) : ORIGIN = 0x1000000, LENGTH = 0x80000000 - 0x1000000
 }
 
 SECTIONS

@@ -1550,7 +1550,19 @@ ifneq ($(filter nxp_t1024 nxp_t1040,$(TARGET)),)
   OBJS+=src/fdt.o
   OBJS+=src/pci.o
   CFLAGS+=-DWOLFBOOT_USE_PCI
-  UPDATE_OBJS:=src/update_ram.o
+  # Disk boot from SD card (eSDHC controller, driver hal/nxp_esdhc.c).
+  # src/gpt.o is already linked for all PPC targets above. The driver is
+  # kept out of the size-constrained stage1 loader.
+  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+    CFLAGS+=-D"WOLFBOOT_UPDATE_DISK" -D"MAX_DISKS=1"
+    UPDATE_OBJS:=src/update_disk.o
+    OBJS+=src/disk.o
+    ifneq ($(STAGE1),1)
+      OBJS+=hal/nxp_esdhc.o
+    endif
+  else
+    UPDATE_OBJS:=src/update_ram.o
+  endif
 
   SPI_TARGET=nxp
   OPTIMIZATION_LEVEL=0 # using default -Os causes issues with alignment
