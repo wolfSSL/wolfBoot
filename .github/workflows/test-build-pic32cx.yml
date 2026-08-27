@@ -19,3 +19,13 @@ jobs:
       arch: ARM
       config-file: config/examples/pic32ck.config
       make-args: "TARGET=pic32ck"
+  # The PIC32CZ wolfHSM port (WOLFHSM_MICROCHIP_PIC32CZ) is not public: build the
+  # wolfHSM-client configuration against the compile-only stub in
+  # tools/ci/pic32cz-wolfhsm-stub so the WOLFBOOT_ENABLE_WOLFHSM_CLIENT code
+  # paths for this target are still compile-checked (see its README.md).
+  build-pic32cz-wolfhsm:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: ARM
+      config-file: config/examples/pic32cz-wolfHSM.config
+      make-args: "TARGET=pic32cz WOLFHSM_MICROCHIP_PIC32CZ=tools/ci/pic32cz-wolfhsm-stub"
