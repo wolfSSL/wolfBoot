@@ -362,6 +362,8 @@ ifeq ($(ARCH),ARM)
     OBJS+=hal/pic32c.o
 
     ifeq ($(WOLFHSM_CLIENT),1)
+      # Normally already resolved to an absolute path (and exported) by the
+      # top-level Makefile; this default only covers a standalone test-app make.
       WOLFHSM_MICROCHIP_PIC32CZ ?= ..
 
       CFLAGS+=-I$(WOLFHSM_MICROCHIP_PIC32CZ) \
