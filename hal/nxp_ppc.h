@@ -769,6 +769,19 @@
 
 #ifndef __ASSEMBLER__
 
+#include <stdint.h>
+
+/* Clock helpers, defined in nxp_ppc.c (built into the target HAL) when
+ * ENABLE_BUS_CLK_CALC is set. Prototyped here so drivers compiled as
+ * standalone objects (e.g. hal/nxp_esdhc.c) can use them. */
+#if defined(CORE_E5500) || defined(CORE_E6500)
+uint32_t hal_get_plat_clk(void);
+uint32_t hal_get_bus_clk(void);
+/* The e5500/e6500 time base increments at the platform clock / 16 */
+#define TIMEBASE_CLK_DIV 16
+#define TIMEBASE_HZ (hal_get_plat_clk() / TIMEBASE_CLK_DIV)
+#endif
+
 /* The data barrier / coherency safe functions for reading and writing */
 static inline int get8(const volatile unsigned char *addr)
 {

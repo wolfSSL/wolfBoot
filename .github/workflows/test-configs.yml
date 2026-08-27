@@ -205,6 +205,19 @@ jobs:
       arch: ppc
       config-file: ./config/examples/nxp-t1024.config
 
+  nxp_t1040_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t1040.config
+
+  # SD card disk boot via the eSDHC driver (hal/nxp_esdhc.o)
+  nxp_t1040_sdcard_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t1040-sdcard.config
+
   nxp_t2080_test:
     uses: ./.github/workflows/test-build-powerpc.yml
     with:

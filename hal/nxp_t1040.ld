@@ -6,7 +6,7 @@ MEMORY
 {
     /* DDR4 - 8GB physical (32-bit addressing limits window to <2GB) */
     DRAM (rwx) : ORIGIN = @WOLFBOOT_STAGE1_LOAD_ADDR@,
-                 LENGTH = 0x7FFFFFFF - 4K - @WOLFBOOT_STAGE1_LOAD_ADDR@
+                 LENGTH = 0x80000000 - 4K - @WOLFBOOT_STAGE1_LOAD_ADDR@
 
     /* L1 locked dcache - 16KB */
     L1RAM (rwx) : ORIGIN = 0xFDFC0000, LENGTH = 0x4000
