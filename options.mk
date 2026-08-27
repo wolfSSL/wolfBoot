@@ -801,9 +801,14 @@ ifeq ($(DISK_EMMC),1)
   CFLAGS+=-D"DISK_EMMC=1"
 endif
 
-# Add SDHCI driver if SD card or eMMC is enabled (only add once)
+# Add SDHCI driver if SD card or eMMC is enabled (only add once).
+# PPC targets provide their own eSDHC driver inside the HAL translation
+# unit (hal/nxp_esdhc.c), so the Cadence SDHCI driver must not be linked
+# there (its disk_* entry points would collide).
 ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
-  OBJS+= src/sdhci.o
+  ifneq ($(ARCH),PPC)
+    OBJS+= src/sdhci.o
+  endif
 endif
 
 # Optional read-only filesystem support for disk boot (src/update_disk.c),
