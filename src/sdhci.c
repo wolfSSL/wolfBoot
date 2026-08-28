@@ -585,6 +585,28 @@ static uint32_t sdhci_get_response_type(uint8_t resp_type)
 
 #define DEVICE_BUSY 1
 
+/* When an earlier boot stage owns the controller (skip host reset), engage
+ * per-command line-reset recovery; the other targets still soft-reset at init. */
+#if defined(SDHCI_SKIP_HOST_RESET) && ((SDHCI_SKIP_HOST_RESET + 0) != 0)
+#define SDHCI_SKIP_HOST_RESET_ENABLED
+#endif
+
+/* Set only while sdhci_init() runs the card-identification sequence. */
+static int sdhci_in_init = 0;
+
+#ifdef SDHCI_SKIP_HOST_RESET_ENABLED
+static int sdhci_reset_cmd_line(void)
+{
+    uint32_t timeout = 0x000FFFFF;
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_CMD);
+    while (((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_CMD) != 0U) &&
+            (--timeout > 0U)) {}
+
+    return (timeout > 0U) ? 0 : -1;
+}
+#endif
+
 static int sdhci_send_cmd_internal(uint32_t cmd_type,
     uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
@@ -598,7 +620,16 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
 #endif
 
     /* wait for command line to be idle */
-    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0);
+    while (((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0U) &&
+            (--timeout > 0U)) {}
+    if (timeout == 0U) {
+        wolfBoot_printf("sdhci_send_cmd: command inhibit timeout on entry\n");
+#ifdef SDHCI_SKIP_HOST_RESET_ENABLED
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
+#endif
+    }
+    timeout = 0x000FFFFF;
 
     /* set command argument and command transfer registers */
     SDHCI_REG_SET(SDHCI_SRS02, cmd_arg);
@@ -624,10 +655,24 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             "error SRS12=0x%08X\n",
             cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
         status = -1; /* error */
+#ifdef SDHCI_SKIP_HOST_RESET_ENABLED
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
+#endif
     }
 
     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_CC); /* clear command complete */
-    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0);
+    timeout = 0x000FFFFF;
+    while (((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0U) &&
+            (--timeout > 0U)) {}
+    if (timeout == 0U) {
+        wolfBoot_printf("sdhci_send_cmd: command inhibit timeout\n");
+        status = -1;
+#ifdef SDHCI_SKIP_HOST_RESET_ENABLED
+        if (sdhci_reset_cmd_line() != 0)
+            wolfBoot_printf("sdhci_send_cmd: command line reset timeout\n");
+#endif
+    }
 
     if (status == 0) {
         /* check for device busy */
@@ -639,6 +684,13 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             }
         }
     }
+
+#if defined(SDHCI_WAIT_AFTER_CMD_US) && ((SDHCI_WAIT_AFTER_CMD_US + 0) != 0)
+    /* Cadence controllers need a settle window after the card-init sequence;
+     * confine it to init so bulk data commands do not pay it per block. */
+    if (sdhci_in_init != 0)
+        udelay(SDHCI_WAIT_AFTER_CMD_US);
+#endif
 
     return status;
 }
@@ -719,8 +771,13 @@ void sdhci_shutdown(void)
 /* Reset data and command lines to recover from errors */
 static inline void sdhci_reset_lines(void)
 {
+    uint32_t timeout = 0x000FFFFF;
+
     sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_DAT_CMD);
-    while (SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD);
+    while (((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD) != 0U) &&
+            (--timeout > 0U)) {}
+    if (timeout == 0U)
+        wolfBoot_printf("sdhci_reset_lines: reset timeout\n");
 }
 
 /* ============================================================================
@@ -801,9 +858,24 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* send the operating conditions command */
-        status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
-            SDHCI_RESP_R7);
+        /* Allow the card time to answer CMD8 after releasing the command line. */
+        for (retries = 0; retries < 10; retries++) {
+            status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
+                SDHCI_RESP_R7);
+            if (status == 0)
+                break;
+            udelay(10000);
+        }
+        if (status != 0) {
+            wolfBoot_printf("SD: CMD8 failed after %d retries\n", retries);
+            wolfBoot_printf("SD: SRS09=0x%08X SRS10=0x%08X SRS11=0x%08X "
+                "SRS15=0x%08X\n",
+                SDHCI_REG(SDHCI_SRS09), SDHCI_REG(SDHCI_SRS10),
+                SDHCI_REG(SDHCI_SRS11), SDHCI_REG(SDHCI_SRS15));
+        }
+        else if (retries > 0) {
+            wolfBoot_printf("SD: CMD8 succeeded after %d retries\n", retries);
+        }
     }
     return status;
 }
@@ -1712,6 +1784,19 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     return status;
 }
 
+static int sdhci_init_internal(void);
+
+int sdhci_init(void)
+{
+    int status;
+
+    sdhci_in_init = 1;
+    status = sdhci_init_internal();
+    sdhci_in_init = 0;
+
+    return status;
+}
+
 /* Public API: Read from MMC/SD card */
 int sdhci_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst, uint32_t sz)
 {
@@ -1728,7 +1813,7 @@ int sdhci_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src, ui
  * Controller Initialization
  * ============================================================================ */
 
-int sdhci_init(void)
+static int sdhci_init_internal(void)
 {
     int status = 0;
     uint32_t reg, cap;
@@ -1749,10 +1834,12 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-    /* Reset the host controller */
+#ifndef SDHCI_SKIP_HOST_RESET_ENABLED
+    /* Reset the host controller unless an earlier boot stage initialized it. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);
+#endif
 
     /* Set debounce period to ~15ms (platform-specific value may be different) */
     SDHCI_REG_SET(SDHCI_HRS01, (0x300000UL << SDHCI_HRS01_DP_SHIFT) &

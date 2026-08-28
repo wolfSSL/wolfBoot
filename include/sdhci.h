@@ -247,6 +247,8 @@
 #define SDHCI_SRS11_SDCFSH_MASK     (0x03U << 6)
 #define SDHCI_SRS11_DTCV_SHIFT  16
 #define SDHCI_SRS11_DTCV_MASK   (0x0FU << 16)
+#define SDHCI_SRS11_RESET_CMD       (1U << 25)
+#define SDHCI_SRS11_RESET_DAT       (1U << 26)
 #define SDHCI_SRS11_RESET_DAT_CMD   ((1U << 25) | (1U << 26))
 #define SDHCI_SRS11_RESET_ALL       (1U << 24)
 
@@ -481,6 +483,12 @@ void sdhci_platform_init(void);
  * to the card clock and return that, keeping the internal divider ~1. */
 uint32_t sdhci_platform_set_clock(uint32_t clock_khz, uint32_t base_clk_khz);
 
+/* Preserve a host controller initialized by an earlier boot stage.
+ * Opt in with -DSDHCI_SKIP_HOST_RESET=1. */
+
+/* Optional controller settle time in microseconds after each init command.
+ * Opt in with -DSDHCI_WAIT_AFTER_CMD_US=<us>. */
+
 /* Platform interrupt setup (PLIC/NVIC/GIC/etc.) */
 void sdhci_platform_irq_init(void);
 
@@ -490,4 +498,3 @@ void sdhci_platform_set_bus_mode(int is_emmc);
 #endif /* DISK_SDCARD || DISK_EMMC */
 
 #endif /* SDHCI_H */
-

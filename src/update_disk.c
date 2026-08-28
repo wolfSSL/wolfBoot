@@ -401,7 +401,13 @@ void RAMFUNCTION wolfBoot_start(void)
         pB_ver_u = pB_ver;
 
     wolfBoot_printf("Versions, A:%u B:%u\r\n", pA_ver_u, pB_ver_u);
-    wolfBoot_printf("Load block size: %dKB\r\n", DISK_BLOCK_SIZE / 1024);
+#if DISK_BLOCK_SIZE < 1024
+    wolfBoot_printf("Load block size: %u bytes\r\n",
+        (unsigned int)DISK_BLOCK_SIZE);
+#else
+    wolfBoot_printf("Load block size: %uKB\r\n",
+        (unsigned int)(DISK_BLOCK_SIZE / 1024U));
+#endif
     max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
 
     /* Choose partition with higher version */
@@ -418,7 +424,8 @@ void RAMFUNCTION wolfBoot_start(void)
     load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
 #endif
 
-    wolfBoot_printf("Load address 0x%x\r\n", load_address);
+    wolfBoot_printf("Load address 0x%llx\r\n",
+        (unsigned long long)(uintptr_t)load_address);
     do {
         failures++;
         if (selected)
@@ -697,7 +704,8 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-    wolfBoot_printf("Booting at %08lx\r\n", load_address);
+    wolfBoot_printf("Booting at %08llx\r\n",
+        (unsigned long long)(uintptr_t)load_address);
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)hal_hsm_disconnect();
