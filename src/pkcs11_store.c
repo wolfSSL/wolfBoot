@@ -33,6 +33,7 @@
 
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/types.h>
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
 #ifndef KEYVAULT_OBJ_SIZE
     #define KEYVAULT_OBJ_SIZE 0x1000 /* 4KB per object */
@@ -268,6 +269,39 @@ static void cache_commit_entry(struct cache_entry *entry)
 }
 
 /*
+ * Release a cache slot: zeroize the sector buffer before marking the slot
+ * free. The buffer may hold private-key bytes (staged by Store_Write), and a
+ * released slot is not overwritten until the next object is cached, so the
+ * material would otherwise linger in secure-world SRAM. The single staging
+ * buffer this cache replaced was self-cleaning (overwritten by the header
+ * sector on every size update); per-sector slots are not, so the scrub moves
+ * here, mirroring the wc_ForceZero() in wolfhsm_flash_hal.c.
+ */
+static void cache_release(int i)
+{
+    if (store_cache[i].sector != NULL) {
+        wc_ForceZero(store_cache[i].sector, WOLFBOOT_SECTOR_SIZE);
+        store_cache[i].sector = NULL;
+    }
+}
+
+/*
+ * Commit one cached sector to flash and release its slot. Used to make the
+ * Open-time truncation (size = 8) durable before the payload is erased, so
+ * the empty state survives a power loss independent of the header-last batch
+ * flush at Store_Close.
+ */
+static void cache_commit_offset(uint32_t offset)
+{
+    struct cache_entry *entry = cache_find(offset);
+
+    if (entry != NULL) {
+        cache_commit_entry(entry);
+        cache_release((int)(entry - store_cache));
+    }
+}
+
+/*
  * Get a RAM copy of the vault sector at the given offset. Modifications
  * stay in RAM until cache_flush_all() (or LRU eviction) commits them.
  */
@@ -290,17 +324,30 @@ static uint8_t *cache_get_sector(uint32_t offset)
         }
     }
     if (free_slot < 0) {
-        /* No free slot: commit the least recently used entry */
-        int oldest = 0;
+        /* No free slot: commit the least recently used entry. The header
+         * sector (offset 0) is never a victim: committing it before the
+         * payload would break the header-last atomic commit point that
+         * cache_flush_all() relies on. If it is the only cached sector,
+         * flush the whole batch instead (header-last is then trivial). */
+        int oldest = -1;
 
-        for (i = 1; i < WOLFBOOT_PKCS11_STORE_CACHE_SECTORS; i++) {
-            if (store_cache[i].lru < store_cache[oldest].lru) {
+        for (i = 0; i < WOLFBOOT_PKCS11_STORE_CACHE_SECTORS; i++) {
+            if (store_cache[i].offset == 0) {
+                continue;
+            }
+            if ((oldest < 0) ||
+                    (store_cache[i].lru < store_cache[oldest].lru)) {
                 oldest = i;
             }
         }
-        cache_commit_entry(&store_cache[oldest]);
-        store_cache[oldest].sector = NULL;
-        free_slot = oldest;
+        if (oldest < 0) {
+            cache_flush_all();
+            free_slot = 0;
+        } else {
+            cache_commit_entry(&store_cache[oldest]);
+            cache_release(oldest);
+            free_slot = oldest;
+        }
     }
 
     entry = &store_cache[free_slot];
@@ -330,7 +377,7 @@ static void cache_flush_all(void)
                 continue;
             }
             cache_commit_entry(&store_cache[i]);
-            store_cache[i].sector = NULL;
+            cache_release(i);
         }
     }
 }
@@ -668,6 +715,11 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         handle->flags &= ~STORE_FLAGS_READONLY;
         /* Truncate the slot when opening in write mode */
         update_store_size(handle->hdr, 2 * sizeof(uint32_t));
+        /* Make the truncation (size = 8) durable before erasing the
+         * payload: the empty state is the crash fallback, so a power loss
+         * during the erase/rewrite must leave the object reading back
+         * empty, never the old size over a partly erased payload. */
+        cache_commit_offset(0);
         /* Erase object data sectors to clear residual key material from a
          * prior (longer) payload. New objects are already in a fresh sector
          * from create_object(), so only do this for existing objects. */
