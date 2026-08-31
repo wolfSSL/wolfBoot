@@ -315,9 +315,10 @@ START_TEST(test_cross_sector_write_preserves_length)
     handle = store;
     ck_assert_uint_eq(handle->in_buffer_offset,
         2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
-    /* The size is tracked live in the handle; the flash node is updated
-     * when the window is closed. */
-    ck_assert_uint_eq(handle->size,
+    /* The size is tracked live in the (cached) header node; the flash
+     * node is committed when the window is closed. */
+    ck_assert_uint_eq(
+        ((struct obj_hdr *)(sector0_ptr() + STORE_PRIV_HDR_OFFSET))->size,
         2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
     wolfPKCS11_Store_Close(store);
 

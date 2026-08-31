@@ -109,7 +109,6 @@ struct obj_hdr
 struct store_handle {
     uint32_t flags;
     uint32_t pos;
-    uint32_t size;  /* live object size; the flash node is updated at commit */
     void     *buffer;
     struct obj_hdr *hdr;
     uint32_t in_buffer_offset;
@@ -550,8 +549,7 @@ static struct obj_hdr *create_object(int32_t type, uint32_t tok_id, uint32_t obj
     return NULL; /* No space left in the nodes table */
 }
 
-static void update_store_size(struct store_handle *handle,
-        struct obj_hdr *hdr, uint32_t size)
+static void update_store_size(struct obj_hdr *hdr, uint32_t size)
 {
     uint32_t off;
     uint8_t *s0;
@@ -565,7 +563,6 @@ static void update_store_size(struct store_handle *handle,
     s0 = cache_get_sector(0);
     hdr_mem = (struct obj_hdr *)(s0 + off);
     hdr_mem->size = size;
-    handle->size = size;
 }
 
 static void erase_object_payload(uint8_t *buf)
@@ -620,7 +617,6 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 {
     struct store_handle *handle;
     uint8_t *buf;
-    uint32_t hdr_off;
     int is_new = 0;
 
     /* Check if there is one handle available to open the slot */
@@ -668,13 +664,10 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     /* Set the 'readonly' flag in this handle if open with 'r' */
     if (read) {
         handle->flags |= STORE_FLAGS_READONLY;
-        /* Live size from the (possibly cached) header sector */
-        hdr_off = (uintptr_t)handle->hdr - (uintptr_t)vault_base;
-        handle->size = ((struct obj_hdr *)(sector0_ptr() + hdr_off))->size;
     } else {
         handle->flags &= ~STORE_FLAGS_READONLY;
         /* Truncate the slot when opening in write mode */
-        update_store_size(handle, handle->hdr, 2 * sizeof(uint32_t));
+        update_store_size(handle->hdr, 2 * sizeof(uint32_t));
         /* Erase object data sectors to clear residual key material from a
          * prior (longer) payload. New objects are already in a fresh sector
          * from create_object(), so only do this for existing objects. */
@@ -699,6 +692,21 @@ void wolfPKCS11_Store_Close(void* store)
     memset(handle, 0, sizeof(*handle));
 }
 
+/* Live object size from the (possibly cached) header sector: the same
+ * source of truth as the payload path, so a window's size and data
+ * cannot diverge while another window's batch is pending in the cache. */
+static uint32_t store_live_size(struct store_handle *handle)
+{
+    uint32_t off;
+
+    if (((uint8_t *)handle->hdr) < vault_base ||
+        ((uint8_t *)handle->hdr > vault_base + WOLFBOOT_SECTOR_SIZE)) {
+        return 0;
+    }
+    off = (uint32_t)((uintptr_t)handle->hdr - (uintptr_t)vault_base);
+    return ((struct obj_hdr *)(sector0_ptr() + off))->size;
+}
+
 int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
 {
     struct store_handle *handle = store;
@@ -708,7 +716,7 @@ int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
     if ((handle == NULL) || (handle->hdr == NULL) || (handle->buffer == NULL))
        return -1;
 
-    obj_size = handle->size;
+    obj_size = store_live_size(handle);
     if (obj_size > KEYVAULT_OBJ_SIZE)
         return -1;
 
@@ -761,7 +769,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     if ((handle->flags & STORE_FLAGS_READONLY) != 0)
         return -1;
 
-    obj_size = handle->size;
+    obj_size = store_live_size(handle);
     if (obj_size > KEYVAULT_OBJ_SIZE)
         return -1;
 
@@ -790,7 +798,7 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
         written += in_sector_len;
     }
     obj_size += written;
-    update_store_size(handle, handle->hdr, obj_size);
+    update_store_size(handle->hdr, obj_size);
     return len;
 }
 
