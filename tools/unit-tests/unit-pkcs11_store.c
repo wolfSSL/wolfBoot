@@ -562,8 +562,11 @@ START_TEST(test_interleaved_write_windows_both_persist)
 END_TEST
 
 /* A reader opened on the same object while a write window holds it must
- * see that window's writes (committed by the reader's own vault
- * validation), not a NOT_AVAILABLE error or erased flash. */
+ * see that window's writes, not a NOT_AVAILABLE error or erased flash.
+ * The first write is committed by the reader's own vault validation; the
+ * second is issued after the reader is open, so it sits only in the sector
+ * cache and must be read back through the cache (and the live header
+ * size), not from the pre-write flash. */
 START_TEST(test_concurrent_reader_sees_pending_writes)
 {
     const int type = DYNAMIC_TYPE_RSA;
@@ -571,6 +574,7 @@ START_TEST(test_concurrent_reader_sees_pending_writes)
     void *store_w = NULL;
     void *store_r = NULL;
     char secret[] = "pending write";
+    char more[] = " more";
     char rd[64];
     int ret;
 
@@ -591,6 +595,17 @@ START_TEST(test_concurrent_reader_sees_pending_writes)
     ret = wolfPKCS11_Store_Read(store_r, rd, (int)sizeof(rd));
     ck_assert_int_eq(ret, (int)strlen(secret) + 1);
     ck_assert(strcmp(secret, rd) == 0);
+
+    /* Write more on the still-open writer: this lands only in the sector
+     * cache (the reader's open already flushed the earlier batch to
+     * flash). The reader must see it through the cache and the live
+     * header size; a flash-only or snapshot-size read returns EOF here. */
+    ret = wolfPKCS11_Store_Write(store_w, more, (int)strlen(more));
+    ck_assert_int_eq(ret, (int)strlen(more));
+    memset(rd, 0, sizeof(rd));
+    ret = wolfPKCS11_Store_Read(store_r, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(more));
+    ck_assert(memcmp(more, rd, strlen(more)) == 0);
     wolfPKCS11_Store_Close(store_r);
     wolfPKCS11_Store_Close(store_w);
 }
