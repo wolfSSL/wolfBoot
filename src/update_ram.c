@@ -573,7 +573,9 @@ backup_on_failure:
         os_image.fw_base, load_address, os_image.fw_size);
     ret = ext_flash_read((uintptr_t)os_image.fw_base, (uint8_t*)load_address,
         os_image.fw_size);
-    if (ret < 0){
+    /* Backends return the number of bytes read: a positive short read
+     * leaves a truncated image in RAM, so require the full size. */
+    if (ret != os_image.fw_size) {
         wolfBoot_printf("Error loading image at %p (ret %d)\n",
             os_image.fw_base, ret);
         return;
