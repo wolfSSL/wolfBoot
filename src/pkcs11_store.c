@@ -715,15 +715,23 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
         handle->flags &= ~STORE_FLAGS_READONLY;
         /* Truncate the slot when opening in write mode */
         update_store_size(handle->hdr, 2 * sizeof(uint32_t));
-        /* Make the truncation (size = 8) durable before erasing the
-         * payload: the empty state is the crash fallback, so a power loss
-         * during the erase/rewrite must leave the object reading back
-         * empty, never the old size over a partly erased payload. */
-        cache_commit_offset(0);
-        /* Erase object data sectors to clear residual key material from a
-         * prior (longer) payload. New objects are already in a fresh sector
-         * from create_object(), so only do this for existing objects. */
         if (!is_new) {
+            /* Existing object: its committed payload is about to be
+             * destroyed, so make the truncation (size = 8) durable first.
+             * The empty state is the crash fallback, and a power loss
+             * during the erase/rewrite must leave the object reading back
+             * empty, never the old size over a partly erased payload.
+             *
+             * A new object needs no such commit: nothing of it is in flash
+             * yet, so its crash fallback is already "object absent", and
+             * the node claimed by create_object() is only published by the
+             * header-last flush at Store_Close. Committing the header here
+             * would cost a sector erase + program (twice, with the backup
+             * sector) on every create for no added guarantee. */
+            cache_commit_offset(0);
+            /* Erase object data sectors to clear residual key material from
+             * a prior (longer) payload. New objects are already in a fresh
+             * sector from create_object(). */
             erase_object_payload(buf);
         }
     }

@@ -37,6 +37,31 @@ static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
 const char *argv0;
 
+#ifdef MOCK_KEYVAULT
+/* Power-fail injection for the keyvault (pkcs11 store) tests.
+ *
+ * When vault_powerfail_at is >= 0, the vault flash operation with that
+ * 0-based index, and every operation after it, is abandoned: the mock
+ * longjmp()s back to the arming point instead of touching the backing
+ * store. That models a power loss part-way through a sector commit, which
+ * is the only way to observe the store's crash-consistency ordering.
+ *
+ * Disabled (-1) by default, so tests that do not arm it are unaffected.
+ */
+#include <setjmp.h>
+static int vault_powerfail_at = -1;
+static int vault_flash_ops;
+static jmp_buf vault_powerfail_jmp;
+
+static void vault_flash_op(void)
+{
+    vault_flash_ops++;
+    if ((vault_powerfail_at >= 0) && (vault_flash_ops > vault_powerfail_at)) {
+        longjmp(vault_powerfail_jmp, 1);
+    }
+}
+#endif
+
 #include <sys/stat.h>
 
 
@@ -73,6 +98,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     }
 #ifdef MOCK_KEYVAULT
     if ((address >= (const uintptr_t)vault_base) && (address < (const uintptr_t)vault_base + keyvault_size)) {
+        vault_flash_op();
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
@@ -116,6 +142,7 @@ int hal_flash_erase(haladdr_t address, int len)
         memset((void *)(uintptr_t)address, 0xFF, len);
 #ifdef MOCK_KEYVAULT
     } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
+        vault_flash_op();
         printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
         memset((void *)(uintptr_t)address, 0xFF, len);
