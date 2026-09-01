@@ -117,6 +117,7 @@ TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
+TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
@@ -1230,6 +1231,16 @@ hifive1_flash_write_extract.h: ../../hal/hifive1.c
 unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
 	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-rp2350-flash-write runs the real hal_flash_write() from
+# hal/rp2350.c against a mock flash_range_program() that enforces the
+# ROM contract (F-12061: unaligned / non page-multiple writes from
+# the partition-state path violate the 256-byte page requirement).
+rp2350_flash_write_extract.h: ../../hal/rp2350.c
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< > $@
+
+unit-rp2350-flash-write: unit-rp2350-flash-write.c rp2350_flash_write_extract.h
+	gcc -o $@ unit-rp2350-flash-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
 # verification (F-11024: the wolfHSM verify path in src/image.c passed
 # minimal field sizes with field-start pointers to
@@ -1464,7 +1475,8 @@ covclean:
 GENERATED_SRC:=aurix_erased_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	p1021_erase_extract.h p1021_erase_fn_extract.h sdhci_host.c \
+	p1021_erase_extract.h p1021_erase_fn_extract.h rp2350_flash_write_extract.h \
+	sdhci_host.c \
 	stm32g4_write_extract.h stm32l5_write_extract.h \
 	stm32u5_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \

@@ -225,20 +225,57 @@ void hal_prepare_boot(void)
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     uint8_t cache[WOLFBOOT_SECTOR_SIZE];
+    uint32_t flash_addr = address - XIP_BASE;
     uint32_t written = 0;
     uint32_t sz;
-    if (((uintptr_t)data & 0x20000000UL) == 0) {
-        /* Not in RAM: copy to cache before writing */
-        while (written < len) {
-            sz = WOLFBOOT_SECTOR_SIZE;
-            if (sz > (len - written))
-                sz = len - written;
-            memcpy(cache, data + written, sz);
-            flash_range_program(address - XIP_BASE + written, cache, sz);
-            written += sz;
+    uint32_t addr;
+    uint32_t page_off;
+    uint32_t page_addr;
+    uint32_t remaining;
+
+    if (len > 0) {
+        if ((flash_addr & (FLASH_PAGE_SIZE - 1)) == 0 &&
+                ((uint32_t)len & (FLASH_PAGE_SIZE - 1)) == 0) {
+            /* Page aligned start, page multiple length: program
+             * directly. */
+            if (((uintptr_t)data & 0x20000000UL) == 0) {
+                /* Not in RAM: copy to cache before writing, XIP is
+                 * disabled while the flash is programmed. */
+                while (written < (uint32_t)len) {
+                    sz = WOLFBOOT_SECTOR_SIZE;
+                    if (sz > (uint32_t)len - written)
+                        sz = (uint32_t)len - written;
+                    memcpy(cache, data + written, sz);
+                    flash_range_program(flash_addr + written, cache, sz);
+                    written += sz;
+                }
+            } else {
+                flash_range_program(flash_addr, data, len);
+            }
+        } else {
+            /* Partial page at the start and/or end: read the page
+             * back from XIP, merge in the write, program the whole
+             * page. flash_range_program() only accepts page aligned
+             * addresses and page multiple lengths. The AND program
+             * keeps the trailer flag accumulation intact. */
+            while (written < (uint32_t)len) {
+                addr = flash_addr + written;
+                page_off = addr & (FLASH_PAGE_SIZE - 1);
+                page_addr = addr & ~(FLASH_PAGE_SIZE - 1);
+                remaining = (uint32_t)len - written;
+
+                sz = FLASH_PAGE_SIZE - page_off;
+                if (sz > remaining)
+                    sz = remaining;
+
+                memcpy(cache, (const uint8_t *)(XIP_BASE + page_addr),
+                       FLASH_PAGE_SIZE);
+                memcpy(cache + page_off, data + written, sz);
+                flash_range_program(page_addr, cache, FLASH_PAGE_SIZE);
+                written += sz;
+            }
         }
-    } else
-        flash_range_program(address - XIP_BASE, data, len);
+    }
     return 0;
 }
 
