@@ -133,7 +133,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (i < len) {
         flash_clear_errors();
-        if ((len - i > 3) && ((((address + i) & 0x07) == 0)  && ((((uint32_t)data) + i) & 0x07) == 0)) {
+        if ((len - i >= 8) && ((((address + i) & 0x07) == 0) &&
+                ((((uint32_t)data) + i) & 0x07) == 0)) {
             uint32_t idx = i >> 2;
             src = (uint32_t *)data;
             dst = (uint32_t *)(address);

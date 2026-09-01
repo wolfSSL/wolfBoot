@@ -126,6 +126,7 @@ TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
 TESTS+=unit-ecc-raw-der
 TESTS+=unit-stm32g4-write
+TESTS+=unit-stm32l4-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
@@ -1159,6 +1160,19 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32l4-write runs the real hal_flash_write() from hal/stm32l4.c
+# (F-12062: the double-word fast path was selected on "len - i > 3" but
+# consumed eight bytes, so an aligned 4-7 byte tail over-read the
+# caller's buffer and over-programmed flash). Same harness as the
+# STM32G4 twin (F-11023); the l4 helpers are static and un-prefixed.
+stm32l4_write_extract.h: ../../hal/stm32l4.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32l4-write: unit-stm32l4-write.c stm32l4_write_extract.h
+	gcc -o $@ unit-stm32l4-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
 # and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
 # status model (F-11033: a timed-out program/erase used to report
@@ -1477,7 +1491,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h rp2350_flash_write_extract.h \
 	sdhci_host.c \
-	stm32g4_write_extract.h stm32l5_write_extract.h \
+	stm32g4_write_extract.h stm32l4_write_extract.h stm32l5_write_extract.h \
 	stm32u5_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
