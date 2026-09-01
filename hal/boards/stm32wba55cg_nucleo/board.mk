@@ -19,8 +19,8 @@ CFLAGS+=-DWHAL_CFG_STM32WBA_FLASH_DIRECT_API_MAPPING
 # underlying stm32wb_gpio.c must be given the WB-prefixed flag directly.
 CFLAGS+=-DWHAL_CFG_STM32WB_GPIO_DIRECT_API_MAPPING
 CFLAGS+=-DWHAL_CFG_STM32WBA_UART_DIRECT_API_MAPPING
-# UART is single-instance — reads its singleton from board.h instead of the
-# passed dev pointer.
+# UART is single-instance — reads its singleton from wolfHAL_board.h
+# instead of the passed dev pointer.
 CFLAGS+=-DWHAL_CFG_STM32WBA_UART_SINGLE_INSTANCE
 
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/reg.o

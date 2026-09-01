@@ -10,8 +10,8 @@ CFLAGS+=-DWHAL_CFG_NO_TIMEOUT
 CFLAGS+=-DWHAL_CFG_STM32WB_FLASH_DIRECT_API_MAPPING
 CFLAGS+=-DWHAL_CFG_STM32WB_GPIO_DIRECT_API_MAPPING
 CFLAGS+=-DWHAL_CFG_STM32WB_UART_DIRECT_API_MAPPING
-# UART driver is single-instance — reads whal_Stm32wb_Uart_Dev from board.h
-# instead of the passed dev pointer.
+# UART driver is single-instance — reads whal_Stm32wb_Uart_Dev from
+# wolfHAL_board.h instead of the passed dev pointer.
 CFLAGS+=-DWHAL_CFG_STM32WB_UART_SINGLE_INSTANCE
 
 WOLFHAL_OBJS+=$(WOLFHAL_ROOT)/src/reg.o

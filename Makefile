@@ -227,9 +227,9 @@ ifeq ($(WOLFHAL),1)
     $(error BOARD=$(BOARD) has no hal/boards/$(BOARD)/board.mk)
   endif
   # wolfHAL backend: hal/wolfhal.o replaces hal/$(TARGET).o above. The
-  # board's board.c provides hal_init/hal_prepare_boot and the wolfHAL
+  # board's wolfHAL_board.c provides hal_init/hal_prepare_boot and the wolfHAL
   # device handles; board.mk pulls in chip drivers.
-  OBJS+=./hal/boards/$(BOARD)/board.o
+  OBJS+=./hal/boards/$(BOARD)/wolfHAL_board.o
   include hal/boards/$(BOARD)/board.mk
 endif
 
