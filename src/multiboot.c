@@ -253,6 +253,7 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
     struct mb2_boot_info_header *hdr =
         (struct mb2_boot_info_header *)mb2_boot_info;
     struct mb2_tag_info_req *info_req_tag;
+    struct mb2_tag *end_tag;
     int requested_tags, i, r;
     uint32_t header_length;
     uint8_t *idx;
@@ -298,6 +299,20 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
             return -1;
         }
     }
+
+    /* The Multiboot2 spec requires the tag list to be terminated by an
+     * end tag (type 0, size 8); reserve its space and include it in
+     * total_size. */
+    if (max_size < sizeof(struct mb2_tag)) {
+        MB2_DEBUG_PRINTF("Not enough size to build mb2 end tag\r\n");
+        return -1;
+    }
+    max_size -= sizeof(struct mb2_tag);
+    end_tag = (struct mb2_tag *)idx;
+    end_tag->type = 0;
+    end_tag->flags = 0;
+    end_tag->size = sizeof(*end_tag);
+    idx += sizeof(*end_tag);
 
     hdr->total_size = idx - (uint8_t*)hdr;
 
