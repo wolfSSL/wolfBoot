@@ -78,6 +78,7 @@ TESTS+=unit-tpm-nsc-cert
 TESTS+=unit-tpm-advio-zeroize
 TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
+TESTS+=unit-pkcs11-pin-zeroize
 TESTS+=unit-ubootenv
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
@@ -410,6 +411,16 @@ unit-pkcs11-nsc-zeroize: ../../include/target.h unit-pkcs11-nsc-zeroize.c
 		$(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPKCS11) -DSECURE_PKCS11 \
 		-DWOLFPKCS11_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# The pin-zeroize test pulls libwolfboot.c into the test translation
+# unit; --gc-sections drops the unused boot paths so only the crypto
+# init/deinit dependency set must link.
+unit-pkcs11-pin-zeroize: ../../include/target.h unit-pkcs11-pin-zeroize.c
+	gcc -o $@ unit-pkcs11-pin-zeroize.c $(CFLAGS) -DMOCK_PARTITIONS \
+		-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 \
+		-DPRINTF_ENABLED -DEXT_FLASH -I$(WOLFBOOT_LIB_WOLFPKCS11) \
+		-DSECURE_PKCS11 -DWOLFPKCS11_USER_SETTINGS -ffunction-sections \
+		-fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
