@@ -315,9 +315,17 @@ START_TEST(test_cross_sector_write_preserves_length)
     handle = store;
     ck_assert_uint_eq(handle->in_buffer_offset,
         2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
-    ck_assert_uint_eq(handle->hdr->size,
+    /* The size is tracked live in the (cached) header node; the flash
+     * node is committed when the window is closed. */
+    ck_assert_uint_eq(
+        ((struct obj_hdr *)(sector0_ptr() + STORE_PRIV_HDR_OFFSET))->size,
         2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
     wolfPKCS11_Store_Close(store);
+
+    /* After the close the committed node must carry the same size */
+    ck_assert_uint_eq(
+        ((struct obj_hdr *)(vault_base + STORE_PRIV_HDR_OFFSET))->size,
+        2 * sizeof(uint32_t) + WOLFBOOT_SECTOR_SIZE);
 
     free(payload);
 }
@@ -504,6 +512,218 @@ START_TEST(test_shorter_overwrite_erases_residual_key_material)
 }
 END_TEST
 
+/* A second write window opened while the first is still open must not
+ * discard the first window's pending writes: both objects survive. */
+START_TEST(test_interleaved_write_windows_both_persist)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 60;
+    void *store_a = NULL;
+    void *store_b = NULL;
+    void *store = NULL;
+    char first[] = "first window payload";
+    char second[] = "second window payload";
+    char rd[64];
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Window A: open + write, left open (dirty sector cache). */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 0, &store_a);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_a, first, (int)strlen(first) + 1);
+    ck_assert_int_eq(ret, (int)strlen(first) + 1);
+
+    /* Window B while A is still open: the open re-validates the vault
+     * and must commit A's batch, not drop it. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 2, 0, &store_b);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_b, second, (int)strlen(second) + 1);
+    ck_assert_int_eq(ret, (int)strlen(second) + 1);
+    wolfPKCS11_Store_Close(store_b);
+    wolfPKCS11_Store_Close(store_a);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Read(store, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(first) + 1);
+    ck_assert(strcmp(first, rd) == 0);
+    wolfPKCS11_Store_Close(store);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 2, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Read(store, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(second) + 1);
+    ck_assert(strcmp(second, rd) == 0);
+    wolfPKCS11_Store_Close(store);
+}
+END_TEST
+
+/* A reader opened on the same object while a write window holds it must
+ * see that window's writes, not a NOT_AVAILABLE error or erased flash.
+ * The first write is committed by the reader's own vault validation; the
+ * second is issued after the reader is open, so it sits only in the sector
+ * cache and must be read back through the cache (and the live header
+ * size), not from the pre-write flash. */
+START_TEST(test_concurrent_reader_sees_pending_writes)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 70;
+    void *store_w = NULL;
+    void *store_r = NULL;
+    char secret[] = "pending write";
+    char more[] = " more";
+    char rd[64];
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 0, &store_w);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store_w, secret, (int)strlen(secret) + 1);
+    ck_assert_int_eq(ret, (int)strlen(secret) + 1);
+
+    /* The write is still pending in the write window. A concurrent
+     * reader on the same object must observe it, not erased flash. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store_r);
+    ck_assert_int_eq(ret, 0);
+    memset(rd, 0, sizeof(rd));
+    ret = wolfPKCS11_Store_Read(store_r, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(secret) + 1);
+    ck_assert(strcmp(secret, rd) == 0);
+
+    /* Write more on the still-open writer: this lands only in the sector
+     * cache (the reader's open already flushed the earlier batch to
+     * flash). The reader must see it through the cache and the live
+     * header size; a flash-only or snapshot-size read returns EOF here. */
+    ret = wolfPKCS11_Store_Write(store_w, more, (int)strlen(more));
+    ck_assert_int_eq(ret, (int)strlen(more));
+    memset(rd, 0, sizeof(rd));
+    ret = wolfPKCS11_Store_Read(store_r, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen(more));
+    ck_assert(memcmp(more, rd, strlen(more)) == 0);
+    wolfPKCS11_Store_Close(store_r);
+    wolfPKCS11_Store_Close(store_w);
+}
+END_TEST
+
+/* A power cycle loses every byte of RAM state the store keeps: the sector
+ * cache and the open-handle table. Flash content survives. */
+static void vault_power_cycle(void)
+{
+    memset(store_cache, 0, sizeof(store_cache));
+    memset(cache_sector_mem, 0, sizeof(cache_sector_mem));
+    memset(openstores_handles, 0, sizeof(openstores_handles));
+    cache_lru_tick = 0;
+    locked = 1;
+}
+
+static int vault_obj_write(int type, CK_ULONG tok, CK_ULONG obj,
+        const uint8_t *payload, int len)
+{
+    void *store = NULL;
+    int ret = wolfPKCS11_Store_Open(type, tok, obj, 0, &store);
+
+    if (ret != 0)
+        return ret;
+    ret = wolfPKCS11_Store_Write(store, (unsigned char *)payload, len);
+    wolfPKCS11_Store_Close(store);
+    return ret;
+}
+
+static int vault_obj_read(int type, CK_ULONG tok, CK_ULONG obj,
+        uint8_t *out, int max)
+{
+    void *store = NULL;
+    int ret = wolfPKCS11_Store_Open(type, tok, obj, 1, &store);
+
+    if (ret != 0)
+        return -1;
+    ret = wolfPKCS11_Store_Read(store, out, max);
+    wolfPKCS11_Store_Close(store);
+    return ret;
+}
+
+/* Rewriting an existing object destroys its committed payload. Whatever the
+ * moment power is lost inside the Open/Write/Close window, the next boot must
+ * read the object back as the complete old payload, the complete new payload,
+ * or empty - never a mix of old, new and erased bytes.
+ *
+ * That is what the Open-time commit of the truncated header (size = 8) buys:
+ * without it the previous generation's size stays committed over a payload
+ * that is being erased and rewritten underneath it. This test drives a power
+ * failure at every single flash operation of the window to pin the property.
+ */
+START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
+    static uint8_t old_p[2000], new_p[300], rd[KEYVAULT_OBJ_SIZE];
+    static uint8_t snapshot[KEYVAULT_OBJ_SIZE * KEYVAULT_MAX_ITEMS +
+                            2 * WOLFBOOT_SECTOR_SIZE];
+    const int type = DYNAMIC_TYPE_ECC;
+    const CK_ULONG tok = 7, obj = 77;
+    int i, ret, ops, crash;
+
+    for (i = 0; i < (int)sizeof(old_p); i++)
+        old_p[i] = (uint8_t)('A' + (i % 23));
+    for (i = 0; i < (int)sizeof(new_p); i++)
+        new_p[i] = (uint8_t)('a' + (i % 19));
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert(ret == 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Lay down the previous generation, no faults. */
+    vault_power_cycle();
+    vault_powerfail_at = -1;
+    ret = vault_obj_write(type, tok, obj, old_p, (int)sizeof(old_p));
+    ck_assert_int_eq(ret, (int)sizeof(old_p));
+    memcpy(snapshot, vault_base, keyvault_size);
+
+    /* Count the flash operations a clean rewrite takes. */
+    vault_power_cycle();
+    vault_flash_ops = 0;
+    vault_powerfail_at = -1;
+    vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
+    ops = vault_flash_ops;
+    ck_assert_int_gt(ops, 0);
+
+    for (crash = 0; crash <= ops; crash++) {
+        memcpy(vault_base, snapshot, keyvault_size);
+        vault_power_cycle();
+        vault_flash_ops = 0;
+        vault_powerfail_at = crash;
+        if (setjmp(vault_powerfail_jmp) == 0) {
+            vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
+        }
+        /* Power returns. */
+        vault_powerfail_at = -1;
+        vault_power_cycle();
+        memset(rd, 0, sizeof(rd));
+        ret = vault_obj_read(type, tok, obj, rd, (int)sizeof(rd));
+
+        if (ret == (int)sizeof(old_p)) {
+            ck_assert_msg(memcmp(rd, old_p, sizeof(old_p)) == 0,
+                "power fail at op %d: old-sized payload is not the old "
+                "payload", crash);
+        }
+        else if (ret == (int)sizeof(new_p)) {
+            ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
+                "power fail at op %d: new-sized payload is not the new "
+                "payload", crash);
+        }
+        else {
+            ck_assert_msg(ret <= 0,
+                "power fail at op %d: object read back %d bytes, neither "
+                "generation nor empty", crash, ret);
+        }
+    }
+}
+END_TEST
+
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -516,6 +736,9 @@ Suite *wolfboot_suite(void)
     TCase* tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase* tcase_find_bounds = tcase_create("find_bounds");
     TCase* tcase_remanence = tcase_create("shorter_overwrite_erases_residual");
+    TCase* tcase_interleaved = tcase_create("interleaved_windows");
+    TCase* tcase_concurrent_read = tcase_create("concurrent_reader");
+    TCase* tcase_power_fail = tcase_create("power_fail_rewrite");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -523,6 +746,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     tcase_add_test(tcase_remanence, test_shorter_overwrite_erases_residual_key_material);
+    tcase_add_test(tcase_interleaved, test_interleaved_write_windows_both_persist);
+    tcase_add_test(tcase_concurrent_read, test_concurrent_reader_sees_pending_writes);
+    tcase_add_test(tcase_power_fail,
+        test_power_fail_during_rewrite_never_mixes_generations);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
@@ -530,6 +757,9 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
     suite_add_tcase(s, tcase_remanence);
+    suite_add_tcase(s, tcase_interleaved);
+    suite_add_tcase(s, tcase_concurrent_read);
+    suite_add_tcase(s, tcase_power_fail);
     return s;
 }
 

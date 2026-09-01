@@ -18,6 +18,7 @@
 #include "test_pkcs11.h"
 
 #include "wolfpkcs11/pkcs11.h"
+#include "wolfboot/wcs_pkcs11.h"
 
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/settings.h>
@@ -508,6 +509,196 @@ static int test_pkcs11_log_key_attrs(CK_SESSION_HANDLE session,
     return 0;
 }
 
+#ifdef PKCS11_STORE_STATS
+/*
+ * Store-traffic benchmark: C_CreateObject and C_DestroyObject of
+ * persistent (CKA_TOKEN=true) ECC P-256 objects.
+ *
+ * The target emits one marker line per completed operation plus the
+ * store's flash commit/erase/program counts; the host timestamps the
+ * serial lines, so wall time is measured outside the DUT (the secure
+ * world owns its own timers and must not be touched from here).
+ * The store runs in the secure world; every C_* call below crosses
+ * the NSC boundary, so the measured times include the transition
+ * overhead.
+ */
+#define PKCS11_BENCH_ROUNDS 3
+
+static int bench_get_stats(uint32_t *commits, uint32_t *erases,
+        uint32_t *programs)
+{
+    return (int)C_StoreGetStats_nsc_call(commits, erases, programs);
+}
+
+static void bench_log_op(const char *label, int round,
+        uint32_t c0, uint32_t e0, uint32_t p0,
+        uint32_t c1, uint32_t e1, uint32_t p1)
+{
+    printf("bench r%d %s commits=%lu erases=%lu programs=%lu\r\n",
+        round, label,
+        (unsigned long)(c1 - c0),
+        (unsigned long)(e1 - e0),
+        (unsigned long)(p1 - p0));
+}
+
+static int bench_create_pair(CK_SESSION_HANDLE session, int round,
+        CK_OBJECT_HANDLE *pub_obj, CK_OBJECT_HANDLE *priv_obj)
+{
+    CK_RV rv;
+    CK_OBJECT_CLASS pub_class = CKO_PUBLIC_KEY;
+    CK_OBJECT_CLASS priv_class = CKO_PRIVATE_KEY;
+    CK_KEY_TYPE key_type = CKK_EC;
+    CK_BBOOL ck_true = CK_TRUE;
+    CK_BYTE id[4];
+    CK_BYTE label[20];
+    int label_len = 0;
+    uint32_t c0, e0, p0, c1, e1, p1;
+    int ret;
+    CK_ATTRIBUTE pub_tmpl[] = {
+        { CKA_CLASS, &pub_class, sizeof(pub_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+        { CKA_EC_PARAMS, (CK_VOID_PTR)test_ecc_p256_params,
+            sizeof(test_ecc_p256_params) },
+        { CKA_VERIFY, &ck_true, sizeof(ck_true) },
+        { CKA_TOKEN, &ck_true, sizeof(ck_true) },
+        { CKA_ID, (CK_VOID_PTR)id, sizeof(id) },
+        { CKA_LABEL, (CK_VOID_PTR)label, (CK_ULONG)label_len },
+        { CKA_EC_POINT, (CK_VOID_PTR)test_ecc_p256_pub,
+            sizeof(test_ecc_p256_pub) }
+    };
+    CK_ATTRIBUTE priv_tmpl[] = {
+        { CKA_CLASS, &priv_class, sizeof(priv_class) },
+        { CKA_KEY_TYPE, &key_type, sizeof(key_type) },
+        { CKA_EC_PARAMS, (CK_VOID_PTR)test_ecc_p256_params,
+            sizeof(test_ecc_p256_params) },
+        { CKA_SIGN, &ck_true, sizeof(ck_true) },
+        { CKA_TOKEN, &ck_true, sizeof(ck_true) },
+        { CKA_PRIVATE, &ck_true, sizeof(ck_true) },
+        { CKA_ID, (CK_VOID_PTR)id, sizeof(id) },
+        { CKA_LABEL, (CK_VOID_PTR)label, (CK_ULONG)label_len },
+        { CKA_VALUE, (CK_VOID_PTR)test_ecc_p256_priv,
+            sizeof(test_ecc_p256_priv) }
+    };
+
+    *pub_obj = CK_INVALID_HANDLE;
+    *priv_obj = CK_INVALID_HANDLE;
+
+    id[0] = 0xB0;
+    id[1] = 0;
+    id[2] = 0;
+    id[3] = (CK_BYTE)(round + 1);
+    label_len = (int)snprintf((char *)label, sizeof(label),
+        "bench priv r%d", round);
+    priv_tmpl[7].ulValueLen = (CK_ULONG)label_len;
+
+    ret = bench_get_stats(&c0, &e0, &p0);
+    if (ret != 0)
+        return -1;
+
+    rv = wolfpkcs11nsFunctionList.C_CreateObject(session, priv_tmpl,
+        (CK_ULONG)(sizeof(priv_tmpl) / sizeof(priv_tmpl[0])), priv_obj);
+    ret = bench_get_stats(&c1, &e1, &p1);
+    if (ret != 0)
+        return -1;
+    bench_log_op("create_priv", round, c0, e0, p0, c1, e1, p1);
+    if (rv != CKR_OK) {
+        test_pkcs11_dump_rv("C_CreateObject(bench priv)", rv);
+        return -1;
+    }
+
+    label_len = (int)snprintf((char *)label, sizeof(label),
+        "bench pub r%d", round);
+    pub_tmpl[6].ulValueLen = (CK_ULONG)label_len;
+
+    ret = bench_get_stats(&c0, &e0, &p0);
+    if (ret != 0)
+        return -1;
+
+    rv = wolfpkcs11nsFunctionList.C_CreateObject(session, pub_tmpl,
+        (CK_ULONG)(sizeof(pub_tmpl) / sizeof(pub_tmpl[0])), pub_obj);
+    ret = bench_get_stats(&c1, &e1, &p1);
+    if (ret != 0) {
+        (void)wolfpkcs11nsFunctionList.C_DestroyObject(session,
+            *priv_obj);
+        return -1;
+    }
+    bench_log_op("create_pub", round, c0, e0, p0, c1, e1, p1);
+    if (rv != CKR_OK) {
+        test_pkcs11_dump_rv("C_CreateObject(bench pub)", rv);
+        (void)wolfpkcs11nsFunctionList.C_DestroyObject(session,
+            *priv_obj);
+        *priv_obj = CK_INVALID_HANDLE;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int bench_destroy_pair(CK_SESSION_HANDLE session, int round,
+        CK_OBJECT_HANDLE pub_obj, CK_OBJECT_HANDLE priv_obj)
+{
+    CK_RV rv;
+    uint32_t c0, e0, p0, c1, e1, p1;
+    int ret;
+
+    ret = bench_get_stats(&c0, &e0, &p0);
+    if (ret != 0)
+        return -1;
+
+    rv = wolfpkcs11nsFunctionList.C_DestroyObject(session, priv_obj);
+    ret = bench_get_stats(&c1, &e1, &p1);
+    if (ret != 0)
+        return -1;
+    bench_log_op("destroy_priv", round, c0, e0, p0, c1, e1, p1);
+    if (rv != CKR_OK) {
+        test_pkcs11_dump_rv("C_DestroyObject(bench priv)", rv);
+        return -1;
+    }
+
+    ret = bench_get_stats(&c0, &e0, &p0);
+    if (ret != 0)
+        return -1;
+
+    rv = wolfpkcs11nsFunctionList.C_DestroyObject(session, pub_obj);
+    ret = bench_get_stats(&c1, &e1, &p1);
+    if (ret != 0)
+        return -1;
+    bench_log_op("destroy_pub", round, c0, e0, p0, c1, e1, p1);
+    if (rv != CKR_OK) {
+        test_pkcs11_dump_rv("C_DestroyObject(bench pub)", rv);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int test_pkcs11_bench(CK_SESSION_HANDLE session)
+{
+    int round;
+    int ret;
+
+    printf("bench: start rounds=%d\r\n", PKCS11_BENCH_ROUNDS);
+
+    (void)C_StoreResetStats_nsc_call();
+
+    for (round = 0; round < PKCS11_BENCH_ROUNDS; round++) {
+        CK_OBJECT_HANDLE pub_obj = CK_INVALID_HANDLE;
+        CK_OBJECT_HANDLE priv_obj = CK_INVALID_HANDLE;
+
+        ret = bench_create_pair(session, round, &pub_obj, &priv_obj);
+        if (ret < 0)
+            return -1;
+        ret = bench_destroy_pair(session, round, pub_obj, priv_obj);
+        if (ret < 0)
+            return -1;
+    }
+
+    printf("bench: done\r\n");
+    return 0;
+}
+
+#endif /* PKCS11_STORE_STATS */
+
 int test_pkcs11_start(void)
 {
     int wc_ret;
@@ -555,6 +746,12 @@ int test_pkcs11_start(void)
         goto cleanup;
     }
     session_logged_in = 1;
+
+#ifdef PKCS11_STORE_STATS
+    if (test_pkcs11_bench(session) < 0) {
+        printf("bench: failure (continuing)\r\n");
+    }
+#endif
 
     key_state = test_pkcs11_find_keypair(session, &pub_obj, &priv_obj);
     if (key_state < 0) {
