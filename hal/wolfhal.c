@@ -4,7 +4,7 @@
  * (hal_flash_*, uart_write) is satisfied here by forwarding to the
  * wolfHAL API. The chip drivers behind the wolfHAL API are singletons,
  * instantiated by the driver .c files from initializer macros in
- * board.h; this file passes the BOARD_*_DEV handles defined there.
+ * wolfHAL_board.h; this file passes the BOARD_*_DEV handles defined there.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -28,7 +28,7 @@
 #include <stdint.h>
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
-#include "board.h"
+#include "wolfHAL_board.h"
 
 void RAMFUNCTION hal_flash_unlock(void)
 {
