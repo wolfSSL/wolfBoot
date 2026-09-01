@@ -30,6 +30,7 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
+#include "encrypt.h"
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
 #include "gpt.h" /* gpt_crc32_* helpers (reflected CRC-32, poly 0xEDB88320) */
@@ -805,6 +806,10 @@ backup_on_failure:
     (void)hal_hsm_disconnect();
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
+#endif
+
+#ifdef ENCRYPT_PKCS11
+    pkcs11_crypto_deinit();
 #endif
 
 #ifndef TZEN

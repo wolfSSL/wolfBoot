@@ -29,6 +29,7 @@
 #include "spi_flash.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
+#include "encrypt.h"
 #ifdef SECURE_PKCS11
 int WP11_Library_Init(void);
 #endif
@@ -124,6 +125,10 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_hsm_disconnect();
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
+#endif
+
+#ifdef ENCRYPT_PKCS11
+    pkcs11_crypto_deinit();
 #endif
 #ifndef TZEN
     if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0)
