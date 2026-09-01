@@ -116,6 +116,7 @@ TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-p1021-read-badblock
+TESTS+=unit-kontron-tgl-spi
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-rp2350-flash-write
@@ -1259,6 +1260,22 @@ unit-p1021-read-badblock: unit-p1021-read-badblock.c p1021_read_extract.h \
 	p1021_read_fn_extract.h
 	gcc -o $@ unit-p1021-read-badblock.c $(CFLAGS) $(LDFLAGS)
 
+# unit-kontron-tgl-spi runs the real tgl_lock_bios_region() from
+# hal/kontron_vx3060_s2.c against mocked PCI config space and an
+# MMIO array at the SPI BAR address (F-12104: the lock was never
+# applied - no hal_flash_protect() override - and targeted the
+# wrong register space).
+kontron_spi_extract.h: ../../hal/kontron_vx3060_s2.c
+	sed -n '/^#define SPI_PCI_DEV/,/^#define SPI_FLOCKDN/p' $< > $@
+
+kontron_spi_fn_extract.h: ../../hal/kontron_vx3060_s2.c
+	sed -n '/^int tgl_lock_bios_region/,/^}/p' $< > $@
+	sed -n '/^int hal_flash_protect/,/^}/p' $< >> $@
+
+unit-kontron-tgl-spi: unit-kontron-tgl-spi.c kontron_spi_extract.h \
+	kontron_spi_fn_extract.h
+	gcc -o $@ unit-kontron-tgl-spi.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1536,6 +1553,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \
 	p1021_read_extract.h p1021_read_fn_extract.h \
+	kontron_spi_extract.h kontron_spi_fn_extract.h \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32g4_write_extract.h stm32l4_write_extract.h stm32l5_write_extract.h \
