@@ -115,6 +115,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
+TESTS+=unit-p1021-read-badblock
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-rp2350-flash-write
@@ -1228,6 +1229,36 @@ unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 	p1021_erase_fn_extract.h
 	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
 
+# unit-p1021-read-badblock runs the real ext_flash_read() from
+# hal/nxp_p1021.c against a simulated NAND (F-12064: the bad-block
+# marker counter was kept for the whole request, so only the first
+# two pages read were checked, and a skip rewound the position but
+# not the output pointer).
+p1021_read_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/#define ELBC_BASE /p' $< > $@
+	sed -n '/#define ELBC_MDR /p' $< >> $@
+	sed -n '/#define ELBC_FIR /p' $< >> $@
+	sed -n '/#define ELBC_FCR /p' $< >> $@
+	sed -n '/#define ELBC_FBCR /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP(/p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_PA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM1 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CW0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_RBW /p' $< >> $@
+	sed -n '/#define ELBC_FCR_CMD(/p' $< >> $@
+	sed -n '/#define NAND_CMD_READA /p' $< >> $@
+	sed -n '/#define NAND_CMD_READSTART /p' $< >> $@
+	sed -n '/#define FLASH_PAGE_SIZE /p' $< >> $@
+
+p1021_read_fn_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/^int ext_flash_read(uintptr_t address, uint8_t \*data, int len)$$/,/^}/p' $< > $@
+
+unit-p1021-read-badblock: unit-p1021-read-badblock.c p1021_read_extract.h \
+	p1021_read_fn_extract.h
+	gcc -o $@ unit-p1021-read-badblock.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1503,7 +1534,9 @@ covclean:
 GENERATED_SRC:=aurix_erased_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	p1021_erase_extract.h p1021_erase_fn_extract.h rp2350_flash_write_extract.h \
+	p1021_erase_extract.h p1021_erase_fn_extract.h \
+	p1021_read_extract.h p1021_read_fn_extract.h \
+	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32g4_write_extract.h stm32l4_write_extract.h stm32l5_write_extract.h \
 	stm32u5_write_extract.h stm32wb_write_extract.h \

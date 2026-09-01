@@ -1738,6 +1738,10 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
     /* total download loop */
     while (pos < len) {
+        /* the bad-block marker only exists on the first pages of each
+         * erase block: restart the per-block page counter */
+        i = 0;
+
         /* block loop */
         do {
             /* Calculate page address */
@@ -1765,9 +1769,11 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             /* check for bad page. if either of the first two pages are bad then
              * skip to next block */
             if (i++ < 2 && flash_buf[bad_marker] != 0xFF) {
-                /* skip block - advance address by block and restart position */
+                /* skip block: the bad block's bytes are not delivered
+                 * and the read continues at the next block. pos and
+                 * data already agree (data = original + pos), so only
+                 * the source address moves. */
                 address = (address + block_size) & ~(block_size - 1);
-                pos &= ~(block_size - 1);
                 break;
             }
 
