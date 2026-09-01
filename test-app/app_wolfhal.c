@@ -28,10 +28,10 @@
 #include "wolfboot/wolfboot.h"
 #include "target.h"
 
-#include "board.h"
+#include "wolfHAL_board.h"
 
 /* Chip drivers behind the wolfHAL API are singletons (configured via
- * board.h). Use the BOARD_*_DEV handles defined there. */
+ * wolfHAL_board.h). Use the BOARD_*_DEV handles defined there. */
 
 /* Matches all keys:
  *    - chacha (32 + 12)

@@ -1,9 +1,9 @@
-/* board.h
+/* wolfHAL_board.h
  *
  * STM32WBA55CG Nucleo wolfHAL board header. Provides the WHAL_CFG_*_DEV
  * initializer macros that the upstream chip drivers use to instantiate the
  * device singletons (in their own .c file), plus the BOARD_X_DEV handles
- * that the wolfBoot adapter (hal/wolfhal.c) and board.c pass into the
+ * that the wolfBoot adapter (hal/wolfhal.c) and wolfHAL_board.c pass into the
  * wolfHAL API.
  *
  * The STM32WBA GPIO/UART peripherals are register-compatible with the
