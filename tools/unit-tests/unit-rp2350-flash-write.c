@@ -194,11 +194,11 @@ START_TEST(test_aligned_page_multiple_write_xip)
     int i;
 
     for (i = 0; i < 512; i++)
-        g_flash[3 * FLASH_PAGE_SIZE + i] = (uint8_t)(0x80 ^ (i & 0x3F));
+        g_flash[2 * FLASH_PAGE_SIZE + i] = (uint8_t)(0x80 ^ (i & 0x3F));
 
     ck_assert_int_eq(hal_flash_write((uint32_t)XIP_BASE,
                                      (uint8_t *)(XIP_BASE +
-                                                 3 * FLASH_PAGE_SIZE),
+                                                 2 * FLASH_PAGE_SIZE),
                                      512), 0);
     ck_assert_int_eq(g_violations, 0);
     for (i = 0; i < 512; i++)
