@@ -4,9 +4,9 @@
  * SPI BIOS-region lock was never applied - no hal_flash_protect()
  * override existed, so the weak no-op default ran before handoff -
  * and the only helper, tgl_lock_bios_region(), wrote the protected
- * range and lock values through PCI configuration space (offsets
- * 0x48/0x04) instead of the SPI BAR's memory-mapped register space,
- * and took the range from FREG1 (non-BIOS) instead of FREG0 (BIOS).
+ * range and lock values through PCI configuration space instead of
+ * the SPI BAR's memory-mapped register space, using 0x48 for FPR0
+ * (a FDATA scratch register in the SPI map, FPR0 lives at 0x84).
  *
  * The real function is extracted by the Makefile and run against
  * mocked PCI config space and an MMIO array at the BAR address.
@@ -43,14 +43,15 @@ typedef uintptr_t haladdr_t;
 #include "kontron_spi_extract.h"
 
 /* TGL register offsets used by the model. */
-#define TGL_FREG0_OFF 0x50
+#define TGL_FREG0_OFF 0x54
 #define TGL_FREG1_OFF 0x58
-#define TGL_FPR0_OFF 0x48
+#define TGL_FPR0_OFF 0x84
 #define TGL_SFSTS_CTL_OFF 0x04
 
-/* FREG0: BIOS region, base/limit fields (14 bits each, shifted 12).
- * FREG1: a different range, so a test that compares the FPR0 value
- * against FREG0 also proves FREG1 was not the source. */
+/* FREG1: BIOS region (Intel flash region 1; region 0 is the flash
+ * descriptor), base/limit fields (15 bits each, shifted 12). FREG0:
+ * a different range, so a test that compares the FPR0 value against
+ * FREG1 also proves FREG0 was not the source. */
 #define FREG0_INIT 0x7FFF7400U
 #define FREG1_INIT 0x3FFF0000U
 
@@ -124,13 +125,13 @@ static uint32_t mmio_read32(uintptr_t address)
  * hal/kontron_vx3060_s2.c (extracted). */
 #include "kontron_spi_fn_extract.h"
 
-/* The lock must land in the MMIO space: FPR0 carries the FREG0
+/* The lock must land in the MMIO space: FPR0 carries the FREG1
  * (BIOS region) base/limit with RPE/WPE set, FLOCKDN is set in
  * BIOS/H SFSTS/CTL, and PCI config space sees only the COMMAND
- * enable/restore. Pre-fix the values went to config offsets 0x48
- * and 0x04 and FPR0 was never written. */
+ * enable/restore. Pre-fix the values went to PCI config offsets
+ * 0x48 and 0x04 and FPR0 was never written. */
 START_TEST (test_lock_written_to_mmio){
-    uint32_t expected_fpr0 = FREG0_INIT | SPI_FPR_RPE | SPI_FPR_WPE;
+    uint32_t expected_fpr0 = FREG1_INIT | SPI_FPR_RPE | SPI_FPR_WPE;
     int i, ret;
     int cmd_restored = 1;
 
@@ -141,8 +142,8 @@ START_TEST (test_lock_written_to_mmio){
     ck_assert_uint_eq(g_mmio[TGL_FPR0_OFF / 4], expected_fpr0);
     ck_assert_uint_eq(g_mmio[TGL_SFSTS_CTL_OFF / 4] &
                       SPI_FLOCKDN, SPI_FLOCKDN);
-    /* FREG0 itself is not modified */
-    ck_assert_uint_eq(g_mmio[TGL_FREG0_OFF / 4], FREG0_INIT);
+    /* FREG1 itself is not modified */
+    ck_assert_uint_eq(g_mmio[TGL_FREG1_OFF / 4], FREG1_INIT);
     /* config space: only the COMMAND register is written, and the
      * final write restores the original value */
     for (i = 0; i < g_cfg_write_count; i++)
@@ -159,7 +160,7 @@ END_TEST
  * call actually establishes protection. */
 START_TEST(test_hal_flash_protect_wires_lock)
 {
-    uint32_t expected_fpr0 = FREG0_INIT | SPI_FPR_RPE | SPI_FPR_WPE;
+    uint32_t expected_fpr0 = FREG1_INIT | SPI_FPR_RPE | SPI_FPR_WPE;
     int ret;
 
     sim_reset();

@@ -35,14 +35,18 @@
 #define SPI_PCI_FUN 5
 #define SPI_BAR_OFF 0x10
 /* Tiger Lake SPI controller register offsets, memory-mapped at the
- * BAR0 base. FREG0 holds the BIOS flash region base/limit; FPR0 is
- * the protected range register with the same base/limit layout. */
-#define SPI_FREG0 0x50
+ * BAR0 base. FREG1 holds the BIOS flash region base/limit (region 0
+ * is the flash descriptor); FPR0 is the protected range register
+ * with the same base/limit layout. Offsets per the Intel PCH SPI
+ * register map (see drivers/spi/spi-intel.c in the Linux kernel):
+ * FDATA0-15 at 0x10-0x4C, FRACC at 0x50, FREG0-7 at 0x54-0x74,
+ * FPR0-4 at 0x84-0x9C. */
+#define SPI_FREG1 0x58
 #define SPI_FREG_BASE_MASK (0x7fffU << 0)
 #define SPI_FREG_LIMIT_MASK (0x7fffU << 16)
 #define SPI_FREG_LIMIT_SHIFT (16)
 #define SPI_FREG_ADDR_SHIFT (12)
-#define SPI_FPR0 (0x48)
+#define SPI_FPR0 (0x84)
 #define SPI_FPR_WPE (1U << 31)
 #define SPI_FPR_RPE (1U << 15)
 #define SPI_BIOS_HSFSTS_CTL (0x4)
@@ -67,10 +71,10 @@ int tgl_lock_bios_region()
 
     /* The Flash Protected Range register has the same base/limit
      * layout as the Flash Region register: take the BIOS region
-     * (FREG0) and enable read and write protection on it. The SPI
-     * registers live in the BAR's memory-mapped space, not in PCI
-     * configuration space. */
-    reg = mmio_read32(spi_bar + SPI_FREG0);
+     * (FREG1, flash region 1) and enable read and write protection
+     * on it. The SPI registers live in the BAR's memory-mapped
+     * space, not in PCI configuration space. */
+    reg = mmio_read32(spi_bar + SPI_FREG1);
 #if defined(DEBUG)
     bios_reg_base = (reg & SPI_FREG_BASE_MASK) << SPI_FREG_ADDR_SHIFT;
     bios_reg_lim = ((reg & SPI_FREG_LIMIT_MASK) >> SPI_FREG_LIMIT_SHIFT)
@@ -104,7 +108,7 @@ int hal_flash_protect(haladdr_t address, int len)
     (void)len;
 
     /* The TGL BIOS region covers the bootloader partition, so the
-     * hook's address/len are the same range FREG0 describes. */
+     * hook's address/len are the same range FREG1 describes. */
     return tgl_lock_bios_region();
 }
 
