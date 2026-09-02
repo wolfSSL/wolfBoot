@@ -768,6 +768,7 @@ clean:
 	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
 	$(Q)rm -f test-lib
 	$(Q)rm -f lib-fs
+	$(Q)rm -f libwolfboot.a
 	$(Q)$(MAKE) -C test-app clean V=$(V)
 	$(Q)$(MAKE) -C tools/check_config -s clean
 	$(Q)$(MAKE) -C stage1 -s clean

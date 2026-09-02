@@ -26,6 +26,8 @@ WOLFHSM_SERVER_OBJS := \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_keyid.o \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_flash_unit.o \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_crypto.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_dma.o \
+  $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_dma.o \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server.o \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_nvm.o \
   $(WOLFBOOT_LIB_WOLFHSM)/src/wh_server_crypto.o \
