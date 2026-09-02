@@ -1180,6 +1180,18 @@ void hal_init(void)
 #endif
         "========================================\n");
     wolfBoot_printf("Current EL: %d\n", current_el());
+
+    /* BL31 enters wolfBoot with all of DAIF masked (SPSR 0x3c9), so an
+     * asynchronous external abort - e.g. a DDR uncorrectable ECC error
+     * returned to the A72 - stays pending and invisible while the boot
+     * dies downstream. Unmask SError now that the console is up so it is
+     * taken at EL2 and reported by SErrorInterrupt() instead. */
+#if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    if (current_el() == 2) {
+        __asm__ volatile("msr daifclr, #4");
+        __asm__ volatile("isb");
+    }
+#endif
 #endif
 
 #ifdef EXT_FLASH
@@ -1306,12 +1318,17 @@ int hal_dts_fixup(void* dts_addr, uint32_t capacity)
         off = fdt_add_subnode(&ctx, 0, "chosen");
     }
 
-    if (off >= 0) {
-        /* Set bootargs property */
-        fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
-    } else {
+    if (off < 0) {
         wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
         return off;
+    }
+
+    /* Set bootargs property - overrides the PetaLinux default root= with
+     * the wolfBoot partition layout. */
+    ret = fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    if (ret < 0) {
+        wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
+        return ret;
     }
 
     return 0;

@@ -62,6 +62,12 @@
 #define WOLFBOOT_FIT_MAX_DECOMP (256U * 1024U * 1024U)
 #endif
 
+/* Start of wolfBoot's own image (linker script _start_text). Weak so hosted
+ * builds (sim, unit tests) without the symbol resolve it to NULL and skip the
+ * bound derived from it. */
+extern char _start_text[] __attribute__((weak));
+#define wolfboot_start_text ((void*)_start_text)
+
 /* ------------------------------------------------------------------ */
 /* Byte order                                                          */
 /* ------------------------------------------------------------------ */
@@ -1299,6 +1305,10 @@ int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size)
     if (ret < 0) {
         return ret;
     }
+    if (start + size < start) {
+        /* Wrapped initrd end: linux,initrd-end would precede -start. */
+        return -FDT_ERR_BADARG;
+    }
     ret = fdt_fixup_val64(ctx, off, "chosen", "linux,initrd-end",
         start + size);
     if (ret < 0) {
@@ -1609,12 +1619,33 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 if (is_gzip) {
 #ifdef WOLFBOOT_GZIP
                     uint32_t out_len = 0;
+                    uint32_t gz_max = out_max;
+                    uintptr_t gap;
                     int rc;
+                    /* out_max is only a sanity ceiling. Cap the output below
+                     * anything above the destination that must survive the
+                     * inflate: the staged compressed input, and wolfBoot's own
+                     * image (a corrupted stream can emit garbage at full match
+                     * speed, and without this cap the window reaches straight
+                     * through the bootloader before the decoder trips on an
+                     * invalid code). Conservative lower bounds. */
+                    if ((uintptr_t)data > (uintptr_t)load) {
+                        gap = (uintptr_t)data - (uintptr_t)load;
+                        if (gap < (uintptr_t)gz_max) {
+                            gz_max = (uint32_t)gap;
+                        }
+                    }
+                    if ((uintptr_t)wolfboot_start_text > (uintptr_t)load) {
+                        gap = (uintptr_t)wolfboot_start_text - (uintptr_t)load;
+                        if (gap < (uintptr_t)gz_max) {
+                            gz_max = (uint32_t)gap;
+                        }
+                    }
                     wolfBoot_printf("Decompressing Image %s (gzip): "
                         "%p -> %p (%d bytes)\n", image, data, load, len);
                     BENCHMARK_START();
                     rc = wolfBoot_gunzip((const uint8_t*)data,
-                        (uint32_t)len, (uint8_t*)load, out_max, &out_len);
+                        (uint32_t)len, (uint8_t*)load, gz_max, &out_len);
                     if (rc != 0) {
                         wolfBoot_printf("FIT gunzip failed for %s: rc=%d "
                             "(wrote %u bytes)\n", image, rc, out_len);
