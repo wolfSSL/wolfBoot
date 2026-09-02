@@ -1706,6 +1706,8 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     uint32_t block_size, page_size, read_size;
     int ret = 0, pos = 0, i = 0;
     int bad_marker;
+    uint8_t *block_start_data;
+    int block_start_pos;
 
 #ifdef DEBUG_EXT_FLASH
     wolfBoot_printf("ext read: addr 0x%x, dst 0x%x, len %d\n",
@@ -1739,8 +1741,13 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     /* total download loop */
     while (pos < len) {
         /* the bad-block marker only exists on the first pages of each
-         * erase block: restart the per-block page counter */
+         * erase block: restart the per-block page counter. Record the
+         * output position at the start of the block so that, if the
+         * block turns out to be bad, the pages already copied from it
+         * can be discarded. */
         i = 0;
+        block_start_data = data;
+        block_start_pos = pos;
 
         /* block loop */
         do {
@@ -1769,10 +1776,14 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
             /* check for bad page. if either of the first two pages are bad then
              * skip to next block */
             if (i++ < 2 && flash_buf[bad_marker] != 0xFF) {
-                /* skip block: the bad block's bytes are not delivered
-                 * and the read continues at the next block. pos and
-                 * data already agree (data = original + pos), so only
-                 * the source address moves. */
+                /* bad block: discard the pages already copied from it
+                 * (the marker is only checked on the first two pages, so
+                 * a page may have been delivered before detection) and
+                 * continue at the next block. Rewind pos and data to the
+                 * block start (data = original + pos is preserved) and
+                 * move the source address past the bad block. */
+                pos = block_start_pos;
+                data = block_start_data;
                 address = (address + block_size) & ~(block_size - 1);
                 break;
             }

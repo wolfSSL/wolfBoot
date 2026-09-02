@@ -1,12 +1,15 @@
 /* unit-p1021-read-badblock.c
  *
- * Regression test for F-12064: ext_flash_read() in hal/nxp_p1021.c
- * kept its bad-block page counter for the whole request, so the
- * marker was inspected only on the first two pages read and a bad
- * block later in the request was copied as valid data. When a
- * marker did cause a skip, the logical position was rewound to a
- * block boundary while the output pointer was not, so the read
- * continued past the end of the caller's buffer.
+ * Regression test for F-12064 (and the follow-up bad-block skip
+ * review): ext_flash_read() in hal/nxp_p1021.c kept its bad-block
+ * page counter for the whole request, so the marker was inspected
+ * only on the first two pages read and a bad block later in the
+ * request was copied as valid data. When a marker did cause a skip,
+ * the logical position was rewound to a block boundary while the
+ * output pointer was not, so the read continued past the end of the
+ * caller's buffer. A related defect kept the pages of a bad block
+ * that were already delivered before the marker was found on its
+ * second page; those pages must be discarded as well.
  *
  * The real function is extracted by the Makefile together with the
  * ELBC register macros it uses; the ELBC register access and the
@@ -157,12 +160,12 @@ START_TEST (test_bad_block_in_later_block_skipped){
 }
 END_TEST
 
-/* Bad marker on the second page of the first block: one page was
- * already delivered when the skip fires. Post-fix the output
- * pointer and the position stay consistent and nothing is written
- * past the buffer; pre-fix the position was rewound while the
- * pointer was not, overflowing the buffer by one page. */
-START_TEST(test_bad_marker_second_page_no_overflow)
+/* Bad marker on the second page of the first block: page 0 was
+ * already delivered when the skip fires, so it must be discarded
+ * along with the rest of the bad block. The output is the first two
+ * pages of block 1, nothing is written past the buffer, and the
+ * return value is still the full requested length. */
+START_TEST(test_bad_marker_second_page_dropped)
 {
     uint8_t out[1024 + 64];
     int ret, i;
@@ -175,9 +178,11 @@ START_TEST(test_bad_marker_second_page_no_overflow)
     ret = ext_flash_read(0, out, 1024);
 
     ck_assert_int_eq(ret, 1024);
-    /* page 0 of block 0, then block 1 from its first page */
-    ck_assert_int_eq(memcmp(out, g_nand[0], SIM_PAGE_SIZE), 0);
-    ck_assert_int_eq(memcmp(out + SIM_PAGE_SIZE, g_nand[SIM_BLOCK_PAGES],
+    /* block 0 fully skipped: output starts at block 1 page 0 */
+    ck_assert_int_eq(memcmp(out, g_nand[SIM_BLOCK_PAGES],
+                            SIM_PAGE_SIZE), 0);
+    ck_assert_int_eq(memcmp(out + SIM_PAGE_SIZE,
+                            g_nand[SIM_BLOCK_PAGES + 1],
                             SIM_PAGE_SIZE), 0);
     for (i = 1024; i < (int)sizeof(out); i++)
         ck_assert_uint_eq(out[i], 0xEE);
@@ -253,7 +258,7 @@ Suite *p1021_read_badblock_suite(void)
     TCase *tc = tcase_create("bad-block");
 
     tcase_add_test(tc, test_bad_block_in_later_block_skipped);
-    tcase_add_test(tc, test_bad_marker_second_page_no_overflow);
+    tcase_add_test(tc, test_bad_marker_second_page_dropped);
     tcase_add_test(tc, test_bad_first_block_page0);
     tcase_add_test(tc, test_all_good_two_blocks);
     tcase_add_test(tc, test_unaligned_start_across_pages);
