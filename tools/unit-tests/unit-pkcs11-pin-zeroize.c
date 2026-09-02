@@ -201,17 +201,25 @@ START_TEST(test_pkcs11_pin_wiped_on_deinit){
 END_TEST
 
 /* deinit without an established session must not touch the token
- * (no C_CloseSession) and is safe to call repeatedly. */
+ * (no C_CloseSession), is safe to call repeatedly, and still wipes
+ * the pre-populated credential copy. */
 START_TEST(test_pkcs11_deinit_no_session)
 {
+    size_t i;
+
     reset_stub_state();
     encrypt_initialized = 0;
+    memcpy(pkcs11_pin, ENCRYPT_PKCS11_PIN, sizeof(ENCRYPT_PKCS11_PIN));
 
     pkcs11_crypto_deinit();
     pkcs11_crypto_deinit();
 
     ck_assert_int_eq(encrypt_initialized, 0);
     ck_assert_int_eq(stub_close_session_calls, 0);
+    for (i = 0; i < sizeof(pkcs11_pin); i++) {
+        ck_assert_msg(pkcs11_pin[i] == 0,
+                      "pkcs11_pin byte %zu not wiped", i);
+    }
 }
 END_TEST
 

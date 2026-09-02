@@ -2605,8 +2605,11 @@ void pkcs11_crypto_deinit(void)
     if (encrypt_initialized) {
         pkcs11_function_list->C_CloseSession(pkcs11_session);
         encrypt_initialized = 0;
-        pkcs11_pin_wipe();
     }
+    /* pkcs11_pin is pre-populated from the compile-time credential,
+     * so wipe it even when no session was ever established: the
+     * pre-handoff paths must not leave it in retained memory. */
+    pkcs11_pin_wipe();
 }
 
 #endif
