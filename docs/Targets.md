@@ -4968,6 +4968,12 @@ sf erase 0x800000 +${filesize}
 sf write ${loadaddr} 0x800000 ${filesize}
 ```
 
+##### Ramdisk (initramfs)
+
+A stock PetaLinux `image.ub` carries a `ramdisk` sub-image that `bootm` passes to the kernel via `/chosen/linux,initrd-{start,end}`. wolfBoot does the same with `FIT_RAMDISK=1`, enabled by default in both Versal example configs. Add the node plus a `ramdisk = "ramdisk-1";` reference to your configuration node; `hal/versal.its` carries a commented example.
+
+`WOLFBOOT_LOAD_RAMDISK_ADDRESS` defaults to 0, which uses the ramdisk in place inside the staged FIT. Set it to a DDR address clear of the kernel, DTB and staging area if the payload needs a fixed location.
+
 **DTB Fixup for Root Filesystem**
 
 wolfBoot automatically modifies the device tree to set the kernel command line (`bootargs`). The default configuration mounts the root filesystem from SD card partition 2:
@@ -5029,6 +5035,39 @@ PetaLinux 2024.2 xilinx-vmk180 ttyAMA0
 
 xilinx-vmk180 login:
 ```
+
+**Example Linux Boot Output (`GZIP=1` + `FIT_RAMDISK=1`)**
+
+```
+Decompressing Image kernel-1 (gzip): 0x100000E4 -> 0x200000 (10623118 bytes)
+Decompressed kernel-1: 24617472 bytes (7363 ms)
+Loading DTS: 0x1000 -> 0x1000 (39384 bytes)
+Loaded ramdisk: 0x10A2B540 (5647828 bytes)
+FDT: Set chosen (28076), linux,initrd-start=279098688
+FDT: Set chosen (28076), linux,initrd-end=284746516
+Booting at 0x200000
+do_boot: EL2->EL1 via ERET
+[    0.856319] Freeing initrd memory: 5512K
+[    3.315791] Run /init as init process
+
+xilinx-vmk180-20242 login:
+```
+
+Inflating a 24 MB kernel takes about 7 s on the A72, spent entirely between the `Decompressing` and `Decompressed` lines with no intermediate output. Do not mistake that gap for a hang.
+
+**Diagnosing a boot that stops with no message**
+
+wolfBoot runs at EL2 on Versal, where any abort is fatal. With `DEBUG_UART=1` (the default in both Versal example configs) the handlers print the syndrome:
+
+```
+*** SYNCHRONOUS EXCEPTION ***
+ESR_EL2: 0x0000000096000006
+ELR_EL2: 0x0000000008005910
+FAR_EL2: 0x00000000F9200000
+*** SYSTEM HALTED ***
+```
+
+`ESR_EL2[31:26]` is the exception class, `[5:0]` the fault status, and `FAR_EL2` the faulting address. A stop with no such banner is not an exception - check the PLM's `PMC EAM` output on the same UART. Error IDs `0xA`/`0xB` are `DDRMB_CR`/`DDRMB_NCR`, DDR controller correctable and uncorrectable errors, which the PLM logs without acting on.
 
 **Boot Performance**
 

@@ -36,6 +36,10 @@ SECTIONS
    PROVIDE (_MEMORY_SIZE = LENGTH(psu_ocm_ram_0_MEM_0));
 
 .text : {
+   /* Exported for the gzip inflate bound in src/fdt.c (weak _start_text):
+    * marks the start of wolfBoot's own image so a runaway decompression
+    * fails closed instead of overwriting the bootloader. */
+   _start_text = .;
    KEEP (*(.vectors))
    *(.boot)
    *(.text)

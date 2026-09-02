@@ -801,6 +801,19 @@ START_TEST(test_fdt_fixup_initrd)
 }
 END_TEST
 
+/* A start+size that wraps must be rejected: linux,initrd-end would
+ * otherwise precede linux,initrd-start. */
+START_TEST(test_fdt_fixup_initrd_rejects_wrapped_end)
+{
+    static uint8_t buf[0x800];
+    fdt_ctx ctx;
+
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_lt(fdt_fixup_initrd(&ctx, ~0ULL - 1U, 0x1000ULL), 0);
+}
+END_TEST
+
 /* ------------------------------------------------------------------ */
 /* fdt_peek_size                                                       */
 /* ------------------------------------------------------------------ */
@@ -935,6 +948,7 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_add_subnode_bounded_by_capacity);
     tcase_add_test(tc, test_fdt_setprop_resizes_existing_property);
     tcase_add_test(tc, test_fdt_fixup_initrd);
+    tcase_add_test(tc, test_fdt_fixup_initrd_rejects_wrapped_end);
     tcase_add_test(tc, test_fdt_peek_size_header_only);
     tcase_add_test(tc, test_fit_find_images_rejects_unterminated_image_name);
     suite_add_tcase(s, tc);
