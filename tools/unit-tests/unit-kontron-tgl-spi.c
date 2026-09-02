@@ -55,7 +55,7 @@ typedef uintptr_t haladdr_t;
 #define FREG1_INIT 0x3FFF0000U
 
 static uint32_t g_pci_cfg[16]; /* 64 bytes of config space */
-static uint8_t g_mmio[256];
+static uint32_t g_mmio[64]; /* 256 bytes of SPI BAR MMIO, 32-bit regs */
 static uint8_t g_cfg_write_off[16];
 static int g_cfg_write_count;
 static int g_fail_fpr_readback;
@@ -69,9 +69,8 @@ static void sim_reset(void)
     /* memory BAR, read-write (type bit 0 set), 32-bit: the code's
      * PCI_BAR_MASK strips the type bits */
     g_pci_cfg[PCI_BAR0_OFFSET / 4] = (uint32_t)(MMIO_BASE) | 0x1;
-    g_mmio[TGL_FREG0_OFF] = 0;
-    *(uint32_t *)&g_mmio[TGL_FREG0_OFF] = FREG0_INIT;
-    *(uint32_t *)&g_mmio[TGL_FREG1_OFF] = FREG1_INIT;
+    g_mmio[TGL_FREG0_OFF / 4] = FREG0_INIT;
+    g_mmio[TGL_FREG1_OFF / 4] = FREG1_INIT;
     g_cfg_write_count = 0;
     g_fail_fpr_readback = 0;
     g_fail_lockdn_readback = 0;
@@ -106,14 +105,12 @@ void pci_config_write32(uint8_t bus, uint8_t dev, uint8_t fun,
 /* Mocks for the MMIO accessors (src/x86/common.c). */
 static void mmio_write32(uintptr_t address, uint32_t value)
 {
-    uint32_t *slot = (uint32_t *)&g_mmio[address - MMIO_BASE];
-
-    *slot = value;
+    g_mmio[(address - MMIO_BASE) / 4] = value;
 }
 
 static uint32_t mmio_read32(uintptr_t address)
 {
-    uint32_t val = *(uint32_t *)&g_mmio[address - MMIO_BASE];
+    uint32_t val = g_mmio[(address - MMIO_BASE) / 4];
 
     if (g_fail_fpr_readback && (address - MMIO_BASE) == TGL_FPR0_OFF)
         val &= ~SPI_FPR_WPE;
@@ -141,11 +138,11 @@ START_TEST (test_lock_written_to_mmio){
     ret = tgl_lock_bios_region();
 
     ck_assert_int_eq(ret, 0);
-    ck_assert_uint_eq(*(uint32_t *)&g_mmio[TGL_FPR0_OFF], expected_fpr0);
-    ck_assert_uint_eq(*(uint32_t *)&g_mmio[TGL_SFSTS_CTL_OFF] &
+    ck_assert_uint_eq(g_mmio[TGL_FPR0_OFF / 4], expected_fpr0);
+    ck_assert_uint_eq(g_mmio[TGL_SFSTS_CTL_OFF / 4] &
                       SPI_FLOCKDN, SPI_FLOCKDN);
     /* FREG0 itself is not modified */
-    ck_assert_uint_eq(*(uint32_t *)&g_mmio[TGL_FREG0_OFF], FREG0_INIT);
+    ck_assert_uint_eq(g_mmio[TGL_FREG0_OFF / 4], FREG0_INIT);
     /* config space: only the COMMAND register is written, and the
      * final write restores the original value */
     for (i = 0; i < g_cfg_write_count; i++)
@@ -169,8 +166,8 @@ START_TEST(test_hal_flash_protect_wires_lock)
     ret = hal_flash_protect(0xFFF00000, 0x600000);
 
     ck_assert_int_eq(ret, 0);
-    ck_assert_uint_eq(*(uint32_t *)&g_mmio[TGL_FPR0_OFF], expected_fpr0);
-    ck_assert_uint_eq(*(uint32_t *)&g_mmio[TGL_SFSTS_CTL_OFF] &
+    ck_assert_uint_eq(g_mmio[TGL_FPR0_OFF / 4], expected_fpr0);
+    ck_assert_uint_eq(g_mmio[TGL_SFSTS_CTL_OFF / 4] &
                       SPI_FLOCKDN, SPI_FLOCKDN);
 }
 END_TEST
