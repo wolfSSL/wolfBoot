@@ -67,9 +67,13 @@ SECTIONS
     /* Heap for _sbrk (used by syscalls.c malloc) */
     _Min_Heap_Size = 0x10000; /* 64KB */
 
-    /* Stack: 64KB, grows downward from _stack_top.
-     * wolfCrypt ECC384 operations need deep stack (~11KB per frame). */
-    _Min_Stack_Size = 0x10000; /* 64KB */
+    /* Stack: 256KB, grows downward from _stack_top.
+     * wolfCrypt ECC384 operations need deep stack (~11KB per frame), and an
+     * RSA-enabled wolfcrypt_test build needs far more again: SP_INT_BITS
+     * rises to the RSA key size, which enlarges every mp_int the PBKDF and
+     * PKCS#12 paths put on the stack. The app runs from DDR, so the space
+     * costs nothing. */
+    _Min_Stack_Size = 0x40000; /* 256KB */
     _stack_end = _end + _Min_Heap_Size;
     _stack_top = _stack_end + _Min_Stack_Size;
 }

@@ -665,6 +665,11 @@ extern int tolower(int c);
 #   define WOLFSSL_BASE64_ENCODE
 #else
 #   define NO_CODING
+    /* WOLFSSL_KEY_GEN (SECURE_PKCS11, wolfHSM, ...) otherwise turns on
+     * WOLFSSL_DER_TO_PEM, whose wc_DerToPem() calls Base64_Encode() - which
+     * NO_CODING has just compiled out of coding.h. wolfBoot never emits PEM,
+     * so decline the conversion rather than the encoder. */
+#   define WOLFSSL_NO_DER_TO_PEM
 #endif
 
 #if defined(WOLFBOOT_TPM) && !defined(WOLFBOOT_TZ_FWTPM)

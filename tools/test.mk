@@ -1238,9 +1238,9 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=12228 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=18924 NO_ARM_ASM=1
+	make test-size SIGN=ECC256  LIMIT=19024 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=13968 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=14068 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA2048 LIMIT=11816 NO_ARM_ASM=1
 	make clean
@@ -1250,9 +1250,9 @@ test-size-all:
 	make clean
 	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=12660 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=19608 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 LIMIT=19708 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15328 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15428 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=14256 NO_ARM_ASM=1
 	make keysclean
@@ -1260,21 +1260,21 @@ test-size-all:
 	make clean
 	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=12480 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS2048 LIMIT=13748 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS2048 LIMIT=13756 NO_ARM_ASM=1
 	make clean
 	make test-size SIGN=RSAPSS2048 NO_ASM=1 LIMIT=14304 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS3072 LIMIT=13916 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 LIMIT=13920 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14436 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14444 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS4096 LIMIT=14088 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 LIMIT=14092 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14628 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14636 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 \
 		WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 \
-		IMAGE_HEADER_SIZE?=5288 LIMIT=8120 NO_ARM_ASM=1
+		IMAGE_HEADER_SIZE?=5288 LIMIT=8136 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' \
 		IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE?=4096 \

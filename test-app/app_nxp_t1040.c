@@ -27,6 +27,23 @@
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 
+/* wolfCrypt test/benchmark support */
+#ifdef WOLFCRYPT_TEST
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/test/test.h>
+int wolfcrypt_test(void *args);
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfcrypt/benchmark/benchmark.h>
+int benchmark_test(void *args);
+#endif
+
+#ifdef WOLFSSL_SEC_QORIQ
+#include <wolfssl/wolfcrypt/port/nxp/sec_qoriq.h>
+#endif
+
 /* wait_ticks: spin for r3 ticks using PPC timebase.
  * Required by udelay() in nxp_ppc.c (linked via HAL). */
 __asm__ (
@@ -47,9 +64,8 @@ __asm__ (
     "    blr\n"
 );
 
-/* Assembly entry: set SP (_stack_top, PPC ABI: 16-byte aligned, back-chain 0),
- * enable the FPU (MSR[FP]) -- the variadic printf ABI saves FP regs via stfd
- * and would otherwise fault -- then branch to main. */
+/* Entry: set SP (PPC ABI, 16-byte aligned, back-chain 0), enable MSR[FP] so
+ * the variadic printf ABI can save FP regs with stfd, then branch to main. */
 __asm__ (
     ".section .text._app_entry\n"
     ".global _app_entry\n"
@@ -152,14 +168,17 @@ static int print_info(void)
 
 void main(void)
 {
-    /* Zero BSS - required for bare-metal since there's no crt0 startup.
-     * Without this, static variables contain DDR garbage. */
     extern char _start_bss[], _end_bss[];
-    {
-        char *p = _start_bss;
-        while (p < _end_bss)
-            *p++ = 0;
-    }
+    char *p;
+#if (defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)) && \
+    defined(WOLFSSL_SEC_QORIQ)
+    SecQoriqDev* d;
+    int secRet;
+#endif
+
+    /* No crt0 on bare metal, so statics start as DDR garbage. */
+    for (p = _start_bss; p < _end_bss; p++)
+        *p = 0;
 
     uart_init();
 
@@ -169,11 +188,66 @@ void main(void)
     wolfBoot_printf("GPL v3\r\n");
     wolfBoot_printf("========================\r\n");
 
+#ifndef APP_SKIP_WOLFBOOT_STATE
     print_info();
 
     /* Mark boot partition as successful */
     wolfBoot_success();
     wolfBoot_printf("\r\nBoot partition marked successful\r\n");
+#else
+    /* Loaded from a debugger, not wolfBoot: the partition headers are not
+     * mapped at their runtime addresses, so reading them would fault. */
+    wolfBoot_printf("(wolfBoot state skipped, loaded directly)\r\n");
+#endif
+
+#if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
+    wolfCrypt_Init();
+
+#ifdef WOLFSSL_SEC_QORIQ
+    secRet = wc_SecQoriqInit();
+    if (secRet == 0) {
+        wolfBoot_printf("QorIQ SEC: enabled, devId 0x%x\r\n",
+            (unsigned int)WOLFSSL_SEC_QORIQ_DEVID);
+    }
+    else {
+        wolfBoot_printf("QorIQ SEC: init failed (%d), software only\r\n",
+            secRet);
+    }
+#endif
+
+#ifdef WOLFCRYPT_TEST
+    wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");
+    wolfcrypt_test(NULL);
+    wolfBoot_printf("Tests complete.\r\n\r\n");
+#endif
+
+#ifdef WOLFCRYPT_BENCHMARK
+    wolfBoot_printf("Running wolfCrypt benchmarks...\r\n");
+    benchmark_test(NULL);
+    wolfBoot_printf("Benchmarks complete.\r\n\r\n");
+#endif
+
+#ifdef WOLFSSL_SEC_QORIQ
+    /* Report what actually reached the engine: a passing test proves nothing
+     * about offload, since every unhandled case falls back to software. */
+    d = wc_SecQoriqGetDev();
+    if (d != NULL) {
+        wolfBoot_printf("SEC offload counters:\r\n");
+        wolfBoot_printf("  jobs submitted : %u\r\n",
+            (unsigned int)d->jobCount);
+        wolfBoot_printf("  hash   seen %u offloaded %u\r\n",
+            (unsigned int)d->cbHashCount, (unsigned int)d->cbHashOffload);
+        wolfBoot_printf("  cipher seen %u offloaded %u\r\n",
+            (unsigned int)d->cbCipherCount, (unsigned int)d->cbCipherOffload);
+        wolfBoot_printf("  pk     seen %u offloaded %u\r\n",
+            (unsigned int)d->cbPkCount, (unsigned int)d->cbPkOffload);
+        wolfBoot_printf("  seed   seen %u\r\n",
+            (unsigned int)d->cbSeedCount);
+    }
+#endif
+
+    wolfCrypt_Cleanup();
+#endif
 
 #ifdef ENABLE_WOLFIP
     wolfip_tftp_test_report();

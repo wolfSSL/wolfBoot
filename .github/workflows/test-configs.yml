@@ -229,6 +229,31 @@ jobs:
       config-file: ./config/examples/nxp-t2080.config
       make-args: CFLAGS_EXTRA=-DBOARD_CW_VPX3152
 
+  # TEMPORARY: these two build the bare-metal test app against the QorIQ SEC
+  # port, which lives in wolfSSL PR #11199. The lib/wolfssl submodule is pinned
+  # to that PR's head, rebased on wolfSSL master, so CI can prove the
+  # integration before it merges. That pin is also what carries the RISC-V
+  # object-list rewiring and the raised footprint limits in this branch. Once
+  # #11199 lands, repin lib/wolfssl to a wolfSSL master commit containing it
+  # and re-measure the footprint limits against that commit; these two jobs
+  # then keep working unchanged and stop being temporary.
+  nxp_t2080_sec_qoriq_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t2080.config
+      # Build the test app only. The full target would also sign it, and
+      # signing a WOLFCRYPT_TEST=1 T2080 image aborts in tools/keytools/sign
+      # on a pre-existing double free unrelated to this change.
+      make-args: SEC_QORIQ=1 SEC_QORIQ_CCSRBAR=0xEF000000UL WOLFCRYPT_TEST=1 test-app/image.bin
+
+  nxp_t1040_sec_qoriq_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t1040.config
+      make-args: SEC_QORIQ=1 SEC_QORIQ_CCSRBAR=0xFE000000UL WOLFCRYPT_TEST=1 test-app/image.bin
+
   nxp_lpc54s0xx_test:
     uses: ./.github/workflows/test-build.yml
     with:
