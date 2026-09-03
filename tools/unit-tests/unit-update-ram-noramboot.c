@@ -233,9 +233,12 @@ START_TEST (test_noramboot_ext_flash_short_read_rejected) {
 
     wolfBoot_start();
 
-    ck_assert_int_eq(wolfBoot_staged_ok, 0);
+    /* Clear the short-read mock before asserting: the suite runs CK_NOFORK,
+     * so a failing ck_assert longjmps past any cleanup below and would leave
+     * every full-size ext_flash_read truncated for the next test. */
     mock_ext_flash_short_len = 0;
     mock_ext_flash_short_bytes = 0;
+    ck_assert_int_eq(wolfBoot_staged_ok, 0);
     cleanup_flash();
 }
 END_TEST
