@@ -623,7 +623,8 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     uint64_t prefetch_start;
     uint64_t mem_start;
     uint64_t io_start;
-    uint32_t orig_cmd;
+    uint32_t saved_cmd;
+    uint32_t new_cmd;
     uint8_t  saved_bus;
     uint64_t saved_mem;
     uint64_t saved_pf;
@@ -635,8 +636,12 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     saved_pf  = info->mem_pf;
     saved_io  = info->io;
 
-    orig_cmd = pci_config_read16(bus, dev, fun, PCI_COMMAND_OFFSET);
+    saved_cmd = pci_config_read16(bus, dev, fun, PCI_COMMAND_OFFSET);
     pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, 0);
+    /* decode bits are accumulated from the original value so the
+     * success path preserves the bits it did not manage; the error
+     * path restores saved_cmd itself */
+    new_cmd = saved_cmd;
 
     /* curr_bus_number is one bus per bridge level; at 0xFF the next
      * increment wraps to 0, which would write SECONDARY_BUS 0 and
@@ -699,7 +704,7 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                            prefetch_start >> 16);
         pci_config_write16(bus, dev, fun, PCI_PREFETCH_LIMIT_OFF,
                            (info->mem_pf - 1) >> 16);
-        orig_cmd |= PCI_COMMAND_MEM_SPACE;
+        new_cmd |= PCI_COMMAND_MEM_SPACE;
     } else {
         /* disable prefetch */
         pci_config_write16(bus, dev, fun, PCI_PREFETCH_BASE_OFF,
@@ -719,7 +724,7 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                            mem_start >> 16);
         pci_config_write16(bus, dev, fun, PCI_MMIO_LIMIT_OFF,
                            (info->mem - 1) >> 16);
-        orig_cmd |= PCI_COMMAND_MEM_SPACE;
+        new_cmd |= PCI_COMMAND_MEM_SPACE;
     } else {
         /* disable mem */
         pci_config_write16(bus, dev, fun, PCI_MMIO_BASE_OFF,
@@ -739,7 +744,7 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                            io_start >> 8);
         pci_config_write8(bus, dev, fun, PCI_IO_LIMIT_OFF,
                           (info->io - 1) >> 8);
-        orig_cmd |= PCI_COMMAND_IO_SPACE;
+        new_cmd |= PCI_COMMAND_IO_SPACE;
     }
     else {
         pci_config_write8(bus, dev, fun, PCI_IO_BASE_OFF,
@@ -748,8 +753,8 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
                           0x0);
     }
 
-    orig_cmd |= PCI_COMMAND_BUS_MASTER;
-    pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, orig_cmd);
+    new_cmd |= PCI_COMMAND_BUS_MASTER;
+    pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, new_cmd);
 
     pci_dump_bridge(bus,dev,fun);
     return 0;
@@ -759,10 +764,21 @@ static int pci_program_bridge(uint8_t bus, uint8_t dev, uint8_t fun,
     info->mem     = saved_mem;
     info->mem_pf  = saved_pf;
     info->io      = saved_io;
+    /* Disable every window that may have been programmed before the
+     * error: the allocator cursors are rolled back, so the bridge must
+     * not keep decoding the returned address ranges. */
+    pci_config_write16(bus, dev, fun, PCI_PREFETCH_BASE_OFF, 0xffff);
+    pci_config_write16(bus, dev, fun, PCI_PREFETCH_LIMIT_OFF, 0x0);
+    pci_config_write16(bus, dev, fun, PCI_MMIO_BASE_OFF, 0xffff);
+    pci_config_write16(bus, dev, fun, PCI_MMIO_LIMIT_OFF, 0x0);
+    pci_config_write8(bus, dev, fun, PCI_IO_BASE_OFF, 0xff);
+    pci_config_write8(bus, dev, fun, PCI_IO_LIMIT_OFF, 0x0);
     pci_config_write8(bus, dev, fun, PCI_PRIMARY_BUS, 0);
     pci_config_write8(bus, dev, fun, PCI_SECONDARY_BUS, 0);
     pci_config_write8(bus, dev, fun, PCI_SUB_SEC_BUS, 0);
-    pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, orig_cmd);
+    /* restore the original COMMAND value, not the decode bits
+     * accumulated for the discarded windows */
+    pci_config_write16(bus, dev, fun, PCI_COMMAND_OFFSET, saved_cmd);
     return -1;
 }
 

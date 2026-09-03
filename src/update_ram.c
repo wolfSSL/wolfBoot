@@ -30,6 +30,7 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include <string.h>
+#include "encrypt.h"
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
 #include "gpt.h" /* gpt_crc32_* helpers (reflected CRC-32, poly 0xEDB88320) */
@@ -573,7 +574,11 @@ backup_on_failure:
         os_image.fw_base, load_address, os_image.fw_size);
     ret = ext_flash_read((uintptr_t)os_image.fw_base, (uint8_t*)load_address,
         os_image.fw_size);
-    if (ret < 0){
+    /* Backends return the number of bytes read: a positive short read
+     * leaves a truncated image in RAM, so require the full size.
+     * ret is int, fw_size uint32_t: check the error range first and
+     * cast for the size comparison to keep -Wsign-compare quiet. */
+    if (ret < 0 || (uint32_t)ret != os_image.fw_size) {
         wolfBoot_printf("Error loading image at %p (ret %d)\n",
             os_image.fw_base, ret);
         return;
@@ -803,6 +808,10 @@ backup_on_failure:
     (void)hal_hsm_disconnect();
 #elif defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
     (void)hal_hsm_server_cleanup();
+#endif
+
+#ifdef ENCRYPT_PKCS11
+    pkcs11_crypto_deinit();
 #endif
 
 #ifndef TZEN

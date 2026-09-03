@@ -212,14 +212,24 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     return 0;
 }
 
+/* When mock_ext_flash_short_len > 0, ext_flash_read() calls of
+ * exactly that length return len - mock_ext_flash_short_bytes (a
+ * short positive read, F-12065). Other lengths read in full. */
+int mock_ext_flash_short_len = 0;
+int mock_ext_flash_short_bytes = 0;
+
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     int i;
+    int ret = len;
     uint8_t *a = (uint8_t *)address;
-    for (i = 0; i < len; i++) {
+
+    if (mock_ext_flash_short_len == len && mock_ext_flash_short_bytes > 0)
+        ret = len - mock_ext_flash_short_bytes;
+    for (i = 0; i < ret; i++) {
          data[i] = a[i];
     }
-    return len;
+    return ret;
 }
 
 void ext_flash_unlock(void)

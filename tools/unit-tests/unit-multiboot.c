@@ -699,6 +699,7 @@ START_TEST(test_build_info_basic_mem)
     struct stage2_parameter p = make_stage2();
     struct mb2_boot_info_header *bih;
     struct mb2_basic_memory_info *meminfo;
+    struct mb2_tag *end_tag;
     struct mock_mem_region regions[] = {
         {0, 640 * 1024, EFI_RESOURCE_SYSTEM_MEMORY},
         {1024 * 1024, 127ULL * 1024 * 1024, EFI_RESOURCE_SYSTEM_MEMORY}
@@ -713,13 +714,22 @@ START_TEST(test_build_info_basic_mem)
                                    sizeof(boot_info)), 0);
 
     bih = (struct mb2_boot_info_header *)boot_info;
+    /* header + basic mem info + end tag (F-12060) */
     ck_assert_uint_eq(bih->total_size,
-                      sizeof(*bih) + sizeof(struct mb2_basic_memory_info));
+                      sizeof(*bih) + sizeof(struct mb2_basic_memory_info) +
+                      sizeof(struct mb2_tag));
 
     meminfo = (struct mb2_basic_memory_info *)(boot_info + sizeof(*bih));
     ck_assert_uint_eq(meminfo->type, 4);
     ck_assert_uint_eq(meminfo->mem_lower, 640);
     ck_assert_uint_eq(meminfo->mem_upper, 127 * 1024);
+
+    /* F-12060: the tag list must end with a proper end tag */
+    end_tag = (struct mb2_tag *)(boot_info + sizeof(*bih) +
+                                 sizeof(struct mb2_basic_memory_info));
+    ck_assert_uint_eq(end_tag->type, 0);
+    ck_assert_uint_eq(end_tag->flags, 0);
+    ck_assert_uint_eq(end_tag->size, sizeof(*end_tag));
 
     mock_regions = NULL;
     mock_region_count = 0;
@@ -747,6 +757,11 @@ START_TEST(test_build_info_mem_map)
                                    sizeof(boot_info)), 0);
 
     bih = (struct mb2_boot_info_header *)boot_info;
+    /* header + mem map (1 entry) + end tag (F-12060) */
+    ck_assert_uint_eq(bih->total_size,
+                      sizeof(*bih) + sizeof(struct mb2_mem_map_header) +
+                      sizeof(struct mb2_mem_map_entry) +
+                      sizeof(struct mb2_tag));
     map_hdr = (struct mb2_mem_map_header *)(boot_info + sizeof(*bih));
     ck_assert_uint_eq(map_hdr->type, 6);
     ck_assert_uint_eq(map_hdr->entry_size, sizeof(struct mb2_mem_map_entry));
@@ -758,6 +773,86 @@ START_TEST(test_build_info_mem_map)
     ck_assert(entry->base_addr == 0x100000);
     ck_assert(entry->length == 127ULL * 1024 * 1024);
     ck_assert_uint_eq(entry->type, 1);
+
+    mock_regions = NULL;
+    mock_region_count = 0;
+}
+END_TEST
+
+/* F-12060: consumer-style tag walk over the generated output section.
+ * A strict Multiboot2 consumer walks 8-byte-aligned tags until the end
+ * tag (type 0, size 8); the walk must find both requested tags, stop at
+ * a well-formed end tag, and the end tag must be the last structure
+ * inside total_size. */
+START_TEST(test_build_info_end_tag_walk)
+{
+    uint8_t header[64] __attribute__((aligned(8)));
+    uint8_t boot_info[256] __attribute__((aligned(8)));
+    struct stage2_parameter p = make_stage2();
+    struct mb2_header *h;
+    struct mb2_tag_info_req *info;
+    struct mb2_tag *term;
+    struct mb2_boot_info_header *bih;
+    struct mb2_tag *tag;
+    uint8_t *end;
+    int seen_basic = 0;
+    int seen_mmap = 0;
+    int seen_end = 0;
+    struct mock_mem_region regions[] = {
+        {0, 640 * 1024, EFI_RESOURCE_SYSTEM_MEMORY},
+        {1024 * 1024, 127ULL * 1024 * 1024, EFI_RESOURCE_SYSTEM_MEMORY}
+    };
+    mock_regions = regions;
+    mock_region_count = 2;
+
+    /* header requesting both basic mem info (4) and mem map (6) */
+    memset(header, 0, sizeof(header));
+    h = (struct mb2_header *)header;
+    h->magic = MB2_MAGIC;
+    h->architecture = 0;
+    h->header_length = 40; /* header(16) + info_req(16) + term(8) */
+    h->checksum = 0;
+    info = (struct mb2_tag_info_req *)(header + 16);
+    info->type = 1;
+    info->flags = 0;
+    info->size = 16; /* 8 + two uint32_t */
+    info->mbi_tag_types[0] = 4; /* MB2_REQ_TAG_BASIC_MEM_INFO */
+    info->mbi_tag_types[1] = 6; /* MB2_REQ_TAG_MEM_MAP */
+    term = (struct mb2_tag *)(header + 32);
+    term->type = 0;
+    term->flags = 0;
+    term->size = 8;
+
+    memset(boot_info, 0, sizeof(boot_info));
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, &p,
+                                   sizeof(boot_info)), 0);
+
+    bih = (struct mb2_boot_info_header *)boot_info;
+    end = boot_info + bih->total_size;
+    tag = (struct mb2_tag *)(boot_info + sizeof(*bih));
+    while ((uint8_t *)tag + sizeof(*tag) <= end) {
+        if (tag->type == 0) {
+            seen_end = 1;
+            ck_assert_uint_eq(tag->size, sizeof(*tag));
+            break;
+        }
+        if (tag->size < sizeof(*tag) ||
+                (uint8_t *)tag + tag->size > end)
+            fail("tag overruns total_size");
+        if (tag->type == 4)
+            seen_basic = 1;
+        if (tag->type == 6)
+            seen_mmap = 1;
+        tag = (struct mb2_tag *)mb2_align_address_up(
+            (uint8_t *)tag + tag->size, 8);
+    }
+
+    ck_assert_int_eq(seen_basic, 1);
+    ck_assert_int_eq(seen_mmap, 1);
+    ck_assert_int_eq(seen_end, 1);
+    /* the end tag must be the last structure in total_size */
+    ck_assert_ptr_eq((uint8_t *)tag + tag->size, end);
 
     mock_regions = NULL;
     mock_region_count = 0;
@@ -824,6 +919,7 @@ Suite *wolfboot_suite(void)
     TCase *tc_hob = tcase_create("mb2_build_boot_info_with_hob");
     tcase_add_test(tc_hob, test_build_info_basic_mem);
     tcase_add_test(tc_hob, test_build_info_mem_map);
+    tcase_add_test(tc_hob, test_build_info_end_tag_walk);
     suite_add_tcase(s, tc_hob);
 
     return s;

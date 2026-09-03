@@ -78,6 +78,7 @@ TESTS+=unit-tpm-nsc-cert
 TESTS+=unit-tpm-advio-zeroize
 TESTS+=unit-tpm-mfgid-eh-zeroize
 TESTS+=unit-pkcs11-nsc-zeroize
+TESTS+=unit-pkcs11-pin-zeroize
 TESTS+=unit-ubootenv
 TESTS+=unit-diagnostics
 TESTS+=unit-diagnostics-256
@@ -115,8 +116,11 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
+TESTS+=unit-p1021-read-badblock
+TESTS+=unit-kontron-tgl-spi
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
+TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
@@ -125,6 +129,8 @@ TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
 TESTS+=unit-ecc-raw-der
 TESTS+=unit-stm32g4-write
+TESTS+=unit-stm32l4-write
+TESTS+=unit-stm32wb-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-nvm-cache-scrub
@@ -405,6 +411,16 @@ unit-pkcs11-nsc-zeroize: ../../include/target.h unit-pkcs11-nsc-zeroize.c
 		$(CFLAGS) -I$(WOLFBOOT_LIB_WOLFPKCS11) -DSECURE_PKCS11 \
 		-DWOLFPKCS11_USER_SETTINGS -DWOLFCRYPT_SECURE_MODE \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+# The pin-zeroize test pulls libwolfboot.c into the test translation
+# unit; --gc-sections drops the unused boot paths so only the crypto
+# init/deinit dependency set must link.
+unit-pkcs11-pin-zeroize: ../../include/target.h unit-pkcs11-pin-zeroize.c
+	gcc -o $@ unit-pkcs11-pin-zeroize.c $(CFLAGS) -DMOCK_PARTITIONS \
+		-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 \
+		-DPRINTF_ENABLED -DEXT_FLASH -I$(WOLFBOOT_LIB_WOLFPKCS11) \
+		-DSECURE_PKCS11 -DWOLFPKCS11_USER_SETTINGS -ffunction-sections \
+		-fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-fwtpm-stub: ../../include/target.h unit-fwtpm-stub.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
@@ -1158,6 +1174,32 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32l4-write runs the real hal_flash_write() from hal/stm32l4.c
+# (F-12062: the double-word fast path was selected on "len - i > 3" but
+# consumed eight bytes, so an aligned 4-7 byte tail over-read the
+# caller's buffer and over-programmed flash). Same harness as the
+# STM32G4 twin (F-11023); the l4 helpers are static and un-prefixed.
+stm32l4_write_extract.h: ../../hal/stm32l4.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32l4-write: unit-stm32l4-write.c stm32l4_write_extract.h
+	gcc -o $@ unit-stm32l4-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32wb-write runs the real hal_flash_write() from hal/stm32wb.c
+# (F-12063: the double-word fast path was selected on "len - i > 3" but
+# consumed eight bytes, so an aligned 4-7 byte tail over-read the
+# caller's buffer and over-programmed flash). Same harness as the
+# STM32G4/STM32L4 twins; the wb helpers are static and un-prefixed.
+stm32wb_write_extract.h: ../../hal/stm32wb.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32wb-write: unit-stm32wb-write.c stm32wb_write_extract.h
+	gcc -o $@ unit-stm32wb-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
 # and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
 # status model (F-11033: a timed-out program/erase used to report
@@ -1199,6 +1241,52 @@ unit-p1021-erase-advance: unit-p1021-erase-advance.c p1021_erase_extract.h \
 	p1021_erase_fn_extract.h
 	gcc -o $@ unit-p1021-erase-advance.c $(CFLAGS) $(LDFLAGS)
 
+# unit-p1021-read-badblock runs the real ext_flash_read() from
+# hal/nxp_p1021.c against a simulated NAND (F-12064: the bad-block
+# marker counter was kept for the whole request, so only the first
+# two pages read were checked, and a skip rewound the position but
+# not the output pointer).
+p1021_read_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/#define ELBC_BASE /p' $< > $@
+	sed -n '/#define ELBC_MDR /p' $< >> $@
+	sed -n '/#define ELBC_FIR /p' $< >> $@
+	sed -n '/#define ELBC_FCR /p' $< >> $@
+	sed -n '/#define ELBC_FBCR /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP(/p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_PA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CA /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CM1 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_CW0 /p' $< >> $@
+	sed -n '/#define ELBC_FIR_OP_RBW /p' $< >> $@
+	sed -n '/#define ELBC_FCR_CMD(/p' $< >> $@
+	sed -n '/#define NAND_CMD_READA /p' $< >> $@
+	sed -n '/#define NAND_CMD_READSTART /p' $< >> $@
+	sed -n '/#define FLASH_PAGE_SIZE /p' $< >> $@
+
+p1021_read_fn_extract.h: ../../hal/nxp_p1021.c
+	sed -n '/^int ext_flash_read(uintptr_t address, uint8_t \*data, int len)$$/,/^}/p' $< > $@
+
+unit-p1021-read-badblock: unit-p1021-read-badblock.c p1021_read_extract.h \
+	p1021_read_fn_extract.h
+	gcc -o $@ unit-p1021-read-badblock.c $(CFLAGS) $(LDFLAGS)
+
+# unit-kontron-tgl-spi runs the real tgl_lock_bios_region() from
+# hal/kontron_vx3060_s2.c against mocked PCI config space and an
+# MMIO array at the SPI BAR address (F-12104: the lock was never
+# applied - no hal_flash_protect() override - and targeted the
+# wrong register space).
+kontron_spi_extract.h: ../../hal/kontron_vx3060_s2.c
+	sed -n '/^#define SPI_PCI_DEV/,/^#define SPI_FLOCKDN/p' $< > $@
+
+kontron_spi_fn_extract.h: ../../hal/kontron_vx3060_s2.c
+	sed -n '/^int tgl_lock_bios_region/,/^}/p' $< > $@
+	sed -n '/^int hal_flash_protect/,/^}/p' $< >> $@
+
+unit-kontron-tgl-spi: unit-kontron-tgl-spi.c kontron_spi_extract.h \
+	kontron_spi_fn_extract.h
+	gcc -o $@ unit-kontron-tgl-spi.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1229,6 +1317,16 @@ hifive1_flash_write_extract.h: ../../hal/hifive1.c
 
 unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
 	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-rp2350-flash-write runs the real hal_flash_write() from
+# hal/rp2350.c against a mock flash_range_program() that enforces the
+# ROM contract (F-12061: unaligned / non page-multiple writes from
+# the partition-state path violate the 256-byte page requirement).
+rp2350_flash_write_extract.h: ../../hal/rp2350.c
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< > $@
+
+unit-rp2350-flash-write: unit-rp2350-flash-write.c rp2350_flash_write_extract.h
+	gcc -o $@ unit-rp2350-flash-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-ecc-raw-der runs the real wolfCrypt raw-to-DER conversion and
 # verification (F-11024: the wolfHSM verify path in src/image.c passed
@@ -1464,9 +1562,13 @@ covclean:
 GENERATED_SRC:=aurix_erased_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
-	p1021_erase_extract.h p1021_erase_fn_extract.h sdhci_host.c \
-	stm32g4_write_extract.h stm32l5_write_extract.h \
-	stm32u5_write_extract.h \
+	p1021_erase_extract.h p1021_erase_fn_extract.h \
+	p1021_read_extract.h p1021_read_fn_extract.h \
+	kontron_spi_extract.h kontron_spi_fn_extract.h \
+	rp2350_flash_write_extract.h \
+	sdhci_host.c \
+	stm32g4_write_extract.h stm32l4_write_extract.h stm32l5_write_extract.h \
+	stm32u5_write_extract.h stm32wb_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \

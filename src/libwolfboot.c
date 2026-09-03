@@ -2585,12 +2585,31 @@ int pkcs11_crypto_decrypt(uint8_t *out, uint8_t *in, size_t size)
     return 0;
 }
 
+/* Erase the live copy of the login credential: bootloader memory is
+ * retained after the handoff, and the credential must not survive in
+ * it.  The volatile store keeps the zeroize from being optimized
+ * away. */
+static void pkcs11_pin_wipe(void)
+{
+    volatile uint8_t *pin;
+    size_t i;
+
+    pin = (volatile uint8_t *)pkcs11_pin;
+    for (i = 0; i < sizeof(pkcs11_pin); i++) {
+        pin[i] = 0;
+    }
+}
+
 void pkcs11_crypto_deinit(void)
 {
     if (encrypt_initialized) {
         pkcs11_function_list->C_CloseSession(pkcs11_session);
         encrypt_initialized = 0;
     }
+    /* pkcs11_pin is pre-populated from the compile-time credential,
+     * so wipe it even when no session was ever established: the
+     * pre-handoff paths must not leave it in retained memory. */
+    pkcs11_pin_wipe();
 }
 
 #endif

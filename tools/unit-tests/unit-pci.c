@@ -1552,6 +1552,73 @@ START_TEST(test_program_bridge_oom_post_enum)
 }
 END_TEST
 
+/* F-12066: on a post-enum error the bridge must be left fully
+ * disabled.  The prefetch window is programmed (and the MEM_SPACE
+ * decode bit accumulated) before the MMIO post-enum alignment fails;
+ * the error path must restore the original COMMAND register value and
+ * disable every window, not restore a mutated COMMAND with the
+ * programmed prefetch window still active for an address range the
+ * allocator rollback just returned. */
+START_TEST(test_program_bridge_oom_late_restore)
+{
+    struct test_pci_topology t;
+    struct pci_enum_info info;
+    int br, ep, ret;
+    uint16_t cmd_before = 0x0004; /* master only: no decode bits */
+    uint16_t cmd, pfbase, pflimit, mbase, mlimit;
+    uint8_t iobase, iolimit;
+
+    test_pci_init(&t);
+    br = test_pci_add_bridge(&t, 1, 0, 0xAAAA, 0xBBBB, TEST_PCI_ROOT_BUS);
+    ep = test_pci_add_dev(&t, 0, 0, 0xCCCC, 0xDDDD, br);
+    /* 64KB prefetchable BAR: programs the bridge prefetch window */
+    test_pci_dev_set_bar(&t, ep, 0, 0x10000, TEST_PCI_BAR_PF);
+    /* 64KB MMIO BAR: consumes the whole 1MB pool, so the post-enum
+     * MMIO alignment (aligned start == limit) fails after the
+     * prefetch window was programmed. */
+    test_pci_dev_set_bar(&t, ep, 1, 0x10000, TEST_PCI_BAR_MMIO);
+    test_pci_commit(&t);
+    memcpy(&t.nodes[br].cfg[PCI_COMMAND_OFFSET], &cmd_before, 2);
+
+    memset(&info, 0, sizeof(info));
+    info.mem = 0x80000000;
+    info.mem_limit = 0x80100000;
+    info.mem_pf = 0x90000000;
+    info.mem_pf_limit = 0xFFFFFFFF;
+    info.io = 0x2000;
+    info.curr_bus_number = 0;
+
+    ret = pci_program_bridge(0, 1, 0, &info);
+    ck_assert_int_eq(ret, -1);
+
+    /* original COMMAND restored, not the value with MEM_SPACE added */
+    cmd = pci_config_read16(0, 1, 0, PCI_COMMAND_OFFSET);
+    ck_assert_uint_eq(cmd, cmd_before);
+
+    /* every bridge window disabled */
+    pfbase = pci_config_read16(0, 1, 0, PCI_PREFETCH_BASE_OFF);
+    pflimit = pci_config_read16(0, 1, 0, PCI_PREFETCH_LIMIT_OFF);
+    ck_assert_uint_eq(pfbase, 0xFFFF);
+    ck_assert_uint_eq(pflimit, 0x0000);
+    mbase = pci_config_read16(0, 1, 0, PCI_MMIO_BASE_OFF);
+    mlimit = pci_config_read16(0, 1, 0, PCI_MMIO_LIMIT_OFF);
+    ck_assert_uint_eq(mbase, 0xFFFF);
+    ck_assert_uint_eq(mlimit, 0x0000);
+    iobase = pci_config_read8(0, 1, 0, PCI_IO_BASE_OFF);
+    iolimit = pci_config_read8(0, 1, 0, PCI_IO_LIMIT_OFF);
+    ck_assert_uint_eq(iobase, 0xFF);
+    ck_assert_uint_eq(iolimit, 0x00);
+
+    /* allocator cursors rolled back */
+    ck_assert_uint_eq(info.mem, 0x80000000);
+    ck_assert_uint_eq(info.mem_pf, 0x90000000);
+    ck_assert_uint_eq(info.io, 0x2000);
+    ck_assert_uint_eq(info.curr_bus_number, 0);
+
+    test_pci_cleanup(&t);
+}
+END_TEST
+
 /* test_program_bridge_bus_exhaustion: curr_bus_number is one bus per
  * bridge level; at 0xFF the next increment wraps to 0, writing
  * SECONDARY_BUS 0 and re-enumerating bus 0 over the already configured
@@ -2077,6 +2144,10 @@ Suite *wolfboot_suite(void)
     TCase *tc_oom_post = tcase_create("bridge-oom-post-enum");
     tcase_add_test(tc_oom_post, test_program_bridge_oom_post_enum);
     suite_add_tcase(s, tc_oom_post);
+
+    TCase *tc_oom_late = tcase_create("bridge-oom-late-restore");
+    tcase_add_test(tc_oom_late, test_program_bridge_oom_late_restore);
+    suite_add_tcase(s, tc_oom_late);
 
     TCase *tc_bus_exhaust = tcase_create("bridge-bus-exhaustion");
     tcase_add_test(tc_bus_exhaust, test_program_bridge_bus_exhaustion);

@@ -220,18 +220,47 @@ START_TEST (test_noramboot_highversion_rollback_denied) {
 }
 END_TEST
 
+/* F-12065: a short positive ext_flash_read() result on the
+copy-to-RAM path must abort the boot, not continue with a
+truncated image. Only the full-image copy read (fw_size bytes)
+is short; the smaller integrity reads are unaffected. */
+START_TEST (test_noramboot_ext_flash_short_read_rejected) {
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    mock_ext_flash_short_len = TEST_SIZE_SMALL;
+    mock_ext_flash_short_bytes = 1;
+
+    wolfBoot_start();
+
+    /* Clear the short-read mock before asserting: the suite runs CK_NOFORK,
+     * so a failing ck_assert longjmps past any cleanup below and would leave
+     * every full-size ext_flash_read truncated for the next test. */
+    mock_ext_flash_short_len = 0;
+    mock_ext_flash_short_bytes = 0;
+    ck_assert_int_eq(wolfBoot_staged_ok, 0);
+    cleanup_flash();
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-noramboot");
     TCase *sunnyday = tcase_create("Non-RAMBOOT sunny day");
+    TCase *ext_short_read =
+        tcase_create("Non-RAMBOOT short ext flash read rejected");
     TCase *rollback_denied =
         tcase_create("Non-RAMBOOT high-version rollback denied");
 
     tcase_add_test(sunnyday, test_noramboot_sunnyday);
+    tcase_add_test(ext_short_read,
+        test_noramboot_ext_flash_short_read_rejected);
     tcase_add_test(rollback_denied, test_noramboot_highversion_rollback_denied);
     suite_add_tcase(s, sunnyday);
+    suite_add_tcase(s, ext_short_read);
     suite_add_tcase(s, rollback_denied);
     tcase_set_timeout(sunnyday, 5);
+    tcase_set_timeout(ext_short_read, 5);
     tcase_set_timeout(rollback_denied, 5);
     return s;
 }

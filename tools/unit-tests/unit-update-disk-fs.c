@@ -682,9 +682,10 @@ uint32_t wolfBoot_get_blob_version(uint8_t *blob)
     return version;
 }
 
-int wolfBoot_get_dts_size(void *dts_addr)
+int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
 {
     (void)dts_addr;
+    (void)capacity;
     return -1;
 }
 
