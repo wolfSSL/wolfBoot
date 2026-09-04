@@ -222,6 +222,7 @@ run: $(TESTS)
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
 	python3 unit-sign-delta-basehash-cleanup.py || exit 1
 	python3 unit-delta-sector-align.py || exit 1
+	python3 unit-elf-scatter-db-build.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
@@ -272,6 +273,15 @@ unit-update-flash-delta:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST
 unit-update-flash-delta-misalign:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DDELTA_UPDATES -DDELTA_BLOCK_SIZE=1536 -D__WOLFBOOT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Compile-only check for the DISABLE_BACKUP + WOLFBOOT_ELF_FLASH_SCATTER +
+# EXT_FLASH combination: the ELF restore block in wolfBoot_update() must
+# compile (it used to pass a struct where PART_IS_EXT expects a pointer).
+# Used by unit-elf-scatter-db-build.py only, so it is not part of $(TESTS).
+unit-update-flash-elf-scatter-db:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ELF_FLASH_SCATTER -DWOLFBOOT_ELF -DIMAGE_HEADER_SIZE=256 \
+	-DDISABLE_BACKUP -D__WOLFBOOT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-flash-self-update:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -820,6 +830,9 @@ unit-update-flash-delta: ../../include/target.h unit-update-flash.c
 unit-update-flash-delta-misalign: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c ../../src/delta.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-elf-scatter-db: ../../include/target.h unit-update-flash.c FORCE
+	gcc -c -o /dev/null unit-update-flash.c $(CFLAGS)
 
 unit-update-flash-enc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \

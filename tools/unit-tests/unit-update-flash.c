@@ -1280,6 +1280,7 @@ START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
     cleanup_flash();
 }
 
+#ifndef DISABLE_BACKUP
 START_TEST (test_swap_resume_noop)
 {
     reset_mock_stats();
@@ -1291,6 +1292,7 @@ START_TEST (test_swap_resume_noop)
     cleanup_flash();
 }
 END_TEST
+#endif
 
 START_TEST (test_diffbase_version_reads)
 {
@@ -1868,7 +1870,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
+#ifndef DISABLE_BACKUP
     tcase_add_test(swap_resume, test_swap_resume_noop);
+#endif
     tcase_add_test(diffbase_version, test_diffbase_version_reads);
     tcase_add_test(diffbase_version, test_diffbase_version_reads_from_little_endian_bytes);
     tcase_add_test(get_total_size, test_get_total_size_preserves_uint32_range);
