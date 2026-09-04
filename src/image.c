@@ -2438,7 +2438,11 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
     /* Get the elf header from the image into a local buffer. We may overread
      * the buffer depending on architecture */
     memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
-    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    if (read_flash_fwimage(&boot, 0, elfHdrBuf,
+                           sizeof(elfHeaderMaxBuf)) != 0) {
+        wolfBoot_printf("ELF: [STORE] ERROR: could not read ELF header\n");
+        return -1;
+    }
     if (elf_open(elfHdrBuf, &is_elf32) != 0) {
         return -1;
     }
@@ -2472,11 +2476,17 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         unsigned long paddr, filesz, offset;
         int           is_loadable;
         uintptr_t     load_addr;
+        uint64_t      seg_start;
 
         /* Read the current program header into a local buffer */
         if (is_elf32) {
             elf32_program_header p32;
-            read_flash_fwimage(&boot, entry_off, &p32, sizeof(p32));
+            if (read_flash_fwimage(&boot, entry_off, &p32,
+                                   sizeof(p32)) != 0) {
+                wolfBoot_printf("ELF: [STORE] ERROR: could not read "
+                                "program header\n");
+                return -1;
+            }
             is_loadable = (p32.type == ELF_PT_LOAD);
             paddr       = (unsigned long)p32.paddr;
             offset      = (unsigned long)p32.offset;
@@ -2485,7 +2495,12 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         }
         else {
             elf64_program_header p64;
-            read_flash_fwimage(&boot, entry_off, &p64, sizeof(p64));
+            if (read_flash_fwimage(&boot, entry_off, &p64,
+                                   sizeof(p64)) != 0) {
+                wolfBoot_printf("ELF: [STORE] ERROR: could not read "
+                                "program header\n");
+                return -1;
+            }
             is_loadable = (p64.type == ELF_PT_LOAD);
             paddr       = (unsigned long)p64.paddr;
             offset      = (unsigned long)p64.offset;
@@ -2498,12 +2513,49 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
             return -1;
         }
 
-        load_addr = (uintptr_t)(paddr + BASE_OFF);
+        /* Validate the segment before writing: the source must stay
+         * inside the manifest image, the paddr range must fit the
+         * destination (uintptr_t) width, and the destination must stay
+         * inside the boot partition. Reject instead of writing. */
+        if (filesz > UINT32_MAX) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment file_size "
+                            "%lu does not fit a 32-bit length\n",
+                            (unsigned long)filesz);
+            return -1;
+        }
+        if (offset > (uint64_t)boot.fw_size ||
+            filesz > (uint64_t)boot.fw_size - offset) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment offset %lu + "
+                            "size %lu exceeds image size %u\n",
+                            (unsigned long)offset,
+                            (unsigned long)filesz, boot.fw_size);
+            return -1;
+        }
+        seg_start = paddr + (uint64_t)BASE_OFF;
+        if (seg_start < paddr ||
+            seg_start > (uint64_t)UINTPTR_MAX - filesz) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment paddr range "
+                            "overflows\n");
+            return -1;
+        }
+        load_addr = (uintptr_t)seg_start;
+        if (load_addr < (uintptr_t)boot.hdr ||
+            load_addr + filesz >
+                (uintptr_t)boot.hdr + (uintptr_t)WOLFBOOT_PARTITION_SIZE) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment destination "
+                            "outside boot partition\n");
+            return -1;
+        }
+
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
                         (unsigned long)load_addr, offset, filesz);
-        copy_flash_buffered((uintptr_t)(image + offset), load_addr, filesz,
-                            ext_flash, ext_flash);
+        if (copy_flash_buffered((uintptr_t)(image + offset), load_addr,
+                                filesz, ext_flash, ext_flash) != 0) {
+            wolfBoot_printf("ELF: [STORE] ERROR: could not write "
+                            "loadable segment\n");
+            return -1;
+        }
 
         entry_off += ph_size;
     }
