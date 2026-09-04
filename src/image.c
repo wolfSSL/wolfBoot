@@ -2555,7 +2555,8 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
 
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
-                        (unsigned long)load_addr, offset, filesz);
+                        (unsigned long)load_addr, (unsigned long)offset,
+                        (unsigned long)filesz);
         if (copy_flash_buffered((uintptr_t)(image + offset), load_addr,
                                 filesz, ext_flash, ext_flash) != 0) {
             wolfBoot_printf("ELF: [STORE] ERROR: could not write "
