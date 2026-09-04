@@ -1499,7 +1499,11 @@ int wolfBoot_unlock_disk(void)
         /* TODO: Unlock disk */
 
 
-        /* Extend a PCR from the mask to prevent future unsealing */
+        /* Extend a PCR from the mask to prevent future unsealing.
+         * Non-sim only: extending on the simulator would lock the
+         * PCR and block future unseals (eb2978ab). The function is
+         * ARCH_SIM-only today, so the block is inert until the
+         * unlock path is ported. */
     #if !defined(ARCH_SIM) && !defined(WOLFBOOT_NO_UNSEAL_PCR_EXTEND)
         {
         uint32_t pcrMask;
