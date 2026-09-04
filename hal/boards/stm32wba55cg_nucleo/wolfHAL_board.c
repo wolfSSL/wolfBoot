@@ -1,10 +1,10 @@
-/* board.c
+/* wolfHAL_board.c
  *
  * STM32WBA55CG Nucleo board configuration using upstream wolfHAL drivers.
  * Flash/Gpio/Uart singletons are instantiated by the driver .c files from
- * the WHAL_CFG_* initializer macros in board.h; board.c uses the
- * BOARD_*_DEV handles for the rest. RCC is header-inlined and hardcodes
- * its base — no dev pointer needed.
+ * the WHAL_CFG_* initializer macros in wolfHAL_board.h; wolfHAL_board.c
+ * uses the BOARD_*_DEV handles for the rest. RCC is header-inlined and
+ * hardcodes its base — no dev pointer needed.
  *
  * Clock target: HSE32 -> PLL1 (M=1, N=24, R=3) -> SYSCLK = 100 MHz, which
  * requires PWR voltage scaling Range 1 and 3 flash wait states (RM0493).
@@ -30,7 +30,7 @@
 
 #include <stddef.h>
 #include "hal.h"
-#include "board.h"
+#include "wolfHAL_board.h"
 
 /* Flash clock gate — enabled before raising the wait-state count. */
 static const whal_Stm32wba_Rcc_PeriphClk g_flashClock = {WHAL_STM32WBA55_FLASH_CLOCK};

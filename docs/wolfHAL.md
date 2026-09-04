@@ -30,10 +30,10 @@ The integration consists of four parts:
 
 2. **Board directory** (`hal/boards/<board>/`) — contains three files that fully
    describe a board:
-   - `board.h` — includes the chip-specific wolfHAL driver headers and defines
-     any board-level pin/peripheral enums.
-   - `board.c` — device instances (clock, flash, GPIO, UART), configuration
-     structs, and `hal_init`/`hal_prepare_boot` implementations.
+   - `wolfHAL_board.h` — includes the chip-specific wolfHAL driver headers
+     and defines any board-level pin/peripheral enums.
+   - `wolfHAL_board.c` — device instances (clock, flash, GPIO, UART),
+     configuration structs, and `hal_init`/`hal_prepare_boot` implementations.
    - `board.mk` — build variables (`ARCH_FLASH_OFFSET`, `LSCRIPT_IN`, the
      `WHAL_CFG_*_API_MAPPING_*` flags, wolfHAL driver objects, `RAM_CODE`
      linker rules).
@@ -56,16 +56,16 @@ arch.mk
 
 Makefile
   └─ OBJS += hal/wolfhal.o (replaces hal/$(TARGET).o)
-  └─ OBJS += hal/boards/$(BOARD)/board.o
+  └─ OBJS += hal/boards/$(BOARD)/wolfHAL_board.o
   └─ include hal/boards/$(BOARD)/board.mk
 
 hal/wolfhal.c  (generic — calls whal_Flash_Write, whal_Uart_Send, etc.)
-  └─ #include "board.h"  (resolved via -I to the board directory)
+  └─ #include "wolfHAL_board.h"  (resolved via -I to the board directory)
 
 hal/boards/<board>/
-  ├─ board.h   (includes wolfHAL driver headers, pin enums)
-  ├─ board.c   (device instances, hal_init, hal_prepare_boot)
-  └─ board.mk  (WHAL_CFG_*_API_MAPPING_*, driver objects, RAM_CODE rules)
+  ├─ wolfHAL_board.h  (includes wolfHAL driver headers, pin enums)
+  ├─ wolfHAL_board.c  (device instances, hal_init, hal_prepare_boot)
+  └─ board.mk         (WHAL_CFG_*_API_MAPPING_*, driver objects, RAM_CODE rules)
 ```
 
 The `WHAL_CFG_*_API_MAPPING_*` flags cause each wolfHAL driver source to emit
@@ -95,7 +95,7 @@ See `config/examples/*_wolfhal_*.config` for complete examples.
 
 To add a new board, create a directory `hal/boards/<board_name>/` with three files:
 
-### 1. `board.h` — Driver Headers and Pin Enums
+### 1. `wolfHAL_board.h` — Driver Headers and Pin Enums
 
 Include the chip-specific wolfHAL driver headers and declare any board-level
 enums (pin indices, peripheral identifiers):
@@ -109,7 +109,7 @@ enums (pin indices, peripheral identifiers):
 #include <wolfHAL/gpio/<family>_gpio.h>
 #include <wolfHAL/uart/<family>_uart.h>
 
-/* GPIO pin indices (matches pin array in board.c) */
+/* GPIO pin indices (matches pin array in wolfHAL_board.c) */
 enum {
     BOARD_LED_PIN,
     BOARD_UART_TX_PIN,
@@ -120,7 +120,7 @@ enum {
 #endif /* WOLFHAL_BOARD_H */
 ```
 
-### 2. `board.c` — Device Instances and Initialization
+### 2. `wolfHAL_board.c` — Device Instances and Initialization
 
 Define the wolfHAL device instances and implement `hal_init` and `hal_prepare_boot`
 using the top-level wolfHAL API. The file must export `g_wbFlash` (and `g_wbUart`
@@ -129,7 +129,7 @@ when `DEBUG_UART` is enabled) as non-static globals — these are referenced by
 
 ```c
 #include "hal.h"
-#include "board.h"
+#include "wolfHAL_board.h"
 
 /* Clock controller */
 whal_Clock g_wbClock = {

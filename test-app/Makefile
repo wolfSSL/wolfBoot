@@ -1442,7 +1442,7 @@ delta-extra-data: image.bin
 ../hal/uart/uart_drv_$(UART_TARGET)_ns.o: ../hal/uart/uart_drv_$(UART_TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/uart/uart_drv_$(UART_TARGET).c -DNONSECURE_APP
 
-board_$(BOARD).o: ../hal/boards/$(BOARD)/board.c
+board_$(BOARD).o: ../hal/boards/$(BOARD)/wolfHAL_board.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -DDEBUG_UART -c $(OUTPUT_FLAG) $@ $<
 
