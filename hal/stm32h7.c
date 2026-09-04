@@ -560,7 +560,11 @@ static void hal_flash_otp_lock(void)
 
 int hal_flash_otp_set_readonly(uint32_t flashAddress, uint16_t length)
 {
-    /* TODO: set WP on OTP if needed */
+    /* The STM32H7 OTP memory is one-time programmable: once the keystore
+     * and UDS are written, the data is permanent and cannot be overwritten.
+     * Unlike the STM32H5, the H7 has no OTP block-lock register, so there
+     * is no explicit write-protection step to perform. The anchor is
+     * protected by the inherent immutability of the programmed OTP. */
     return 0;
 }
 
