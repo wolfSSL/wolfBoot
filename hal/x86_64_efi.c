@@ -158,6 +158,7 @@ void RAMFUNCTION x86_64_efi_do_boot(const uint32_t *boot_addr)
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't load kernel image from memory\n");
         panic();
+        return; /* Never reached on target, where panic() does not return */
     }
 
     /* Hand the authenticated command line to the loaded image via LoadOptions
