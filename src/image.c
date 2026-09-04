@@ -1028,12 +1028,21 @@ static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
     uint8_t *p;
-    if (offset > img->fw_size)
+#ifdef EXT_FLASH
+    uint32_t read_sz;
+#endif
+
+    if (offset >= img->fw_size)
         return NULL;
 #ifdef EXT_FLASH
     if (PART_IS_EXT(img)) {
-        ext_flash_check_read((uintptr_t)(img->fw_base) + offset, ext_hash_block,
-                WOLFBOOT_SHA_BLOCK_SIZE);
+        /* Read only the bytes that remain in the image: the block
+         * window must not extend past fw_size. */
+        read_sz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (read_sz > img->fw_size - offset)
+            read_sz = img->fw_size - offset;
+        ext_flash_check_read((uintptr_t)(img->fw_base) + offset,
+                ext_hash_block, read_sz);
         return ext_hash_block;
     }
 #endif
@@ -2882,8 +2891,18 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     uint32_t* sz)
 {
     uint8_t* p = get_sha_block(img, offset);
-    if (sz)
-        *sz = WOLFBOOT_SHA_BLOCK_SIZE;
+
+    if (sz) {
+        if (p == NULL) {
+            *sz = 0;
+        }
+        else {
+            *sz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (*sz > img->fw_size - offset) {
+                *sz = img->fw_size - offset;
+            }
+        }
+    }
     return p;
 }
 
