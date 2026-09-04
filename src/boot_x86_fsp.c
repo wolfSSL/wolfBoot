@@ -48,12 +48,12 @@
 
 
 #ifndef STAGE1_AUTH
-/* When STAGE1_AUTH is disabled, create dummy images to fill
- * the space used by wolfBoot manifest headers to authenticate FSPs
+/* When STAGE1_AUTH is disabled, fill the stage2 manifest header slot with
+ * a zeroed placeholder so the image layout matches the authenticated build.
+ * Only the stage2 wolfBoot payload is authenticated; the FSP-M and FSP-S
+ * blobs are outside the scope of STAGE1_AUTH.
  */
 #define HEADER_SIZE IMAGE_HEADER_SIZE
-const uint8_t __attribute__((section(".sig_fsp_s")))
-    empty_sig_fsp_s[HEADER_SIZE] = {};
 const uint8_t __attribute__((section(".sig_wolfboot_raw")))
     empty_sig_wolfboot_raw[HEADER_SIZE] = {};
 #endif
@@ -542,11 +542,6 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint32_t status;
     uint16_t type;
     uint32_t esp;
-
-#ifdef STAGE1_AUTH
-    int ret;
-    struct wolfBoot_image fsp_m;
-#endif
 
     (void)stack_top;
     (void)timestamp;

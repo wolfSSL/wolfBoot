@@ -223,6 +223,7 @@ run: $(TESTS)
 	python3 unit-sign-delta-basehash-cleanup.py || exit 1
 	python3 unit-delta-sector-align.py || exit 1
 	python3 unit-elf-scatter-db-build.py || exit 1
+	python3 unit-x86-fsp-stage1auth-build.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
@@ -709,6 +710,15 @@ unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
 		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
+
+# Compile-only check for the STAGE1_AUTH variant of boot_x86_fsp.c. The real
+# stage1 authentication build needs an i686 toolchain the unit test CI does
+# not have, so this keeps the variant from silently rotting. Used by
+# unit-x86-fsp-stage1auth-build.py only, so it is not part of $(TESTS).
+unit-boot-x86-fsp-stage1auth: ../../include/target.h unit-boot-x86_fsp.c FORCE
+	gcc -c -o /dev/null unit-boot-x86_fsp.c $(CFLAGS) \
+		-DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DSTAGE1_AUTH
 
 unit-loader-tpm-init: ../../include/target.h unit-loader-tpm-init.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
