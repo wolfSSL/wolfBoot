@@ -223,6 +223,7 @@ run: $(TESTS)
 	python3 unit-sign-delta-basehash-cleanup.py || exit 1
 	python3 unit-delta-sector-align.py || exit 1
 	python3 unit-elf-scatter-db-build.py || exit 1
+	python3 unit-image-wolfhsm-client-build.py || exit 1
 	python3 unit-x86-fsp-stage1auth-build.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
@@ -843,6 +844,13 @@ unit-update-flash-delta-misalign: ../../include/target.h unit-update-flash.c
 
 unit-update-flash-elf-scatter-db: ../../include/target.h unit-update-flash.c FORCE
 	gcc -c -o /dev/null unit-update-flash.c $(CFLAGS)
+
+unit-image-wolfhsm-client-build:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFHSM) \
+	-DWOLFHSM_CFG_NO_SYS_TIME -DMOCK_PARTITIONS -DWOLFBOOT_HASH_SHA256 \
+	-DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT \
+	-DIMAGE_HEADER_SIZE=256 -D__WOLFBOOT
+unit-image-wolfhsm-client-build: ../../include/target.h ../../src/image.c FORCE
+	gcc -c -o /dev/null ../../src/image.c $(CFLAGS)
 
 unit-update-flash-enc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \

@@ -326,7 +326,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
           defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 
         uint8_t tmpSigBuf[ECC_MAX_SIG_SIZE] = {0};
-        size_t  tmpSigSz                    = sizeof(tmpSigBuf);
+        word32  tmpSigSz                    = sizeof(tmpSigBuf);
 
     #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
         (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
@@ -386,7 +386,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
            and left-zero-padded, and the conversion strips the padding. */
         ret = wc_ecc_rs_raw_to_sig(sig, (word32)point_sz, &sig[point_sz],
                                    (word32)point_sz,
-                                   (byte*)&tmpSigBuf, (word32*)&tmpSigSz);
+                                   (byte*)&tmpSigBuf, &tmpSigSz);
         /* Verify the (temporary) DER representation of the signature */
         if (ret == 0) {
             VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, tmpSigBuf, tmpSigSz,
