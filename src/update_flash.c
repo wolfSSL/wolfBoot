@@ -623,6 +623,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     #   define DELTA_BLOCK_SIZE 1024
     #endif
 
+    /* The per-sector fill loop advances in DELTA_BLOCK_SIZE steps, so a
+     * sector that is not a multiple of the block size would be written
+     * past the one-sector SWAP partition and misalign the resume path. */
+    #if (WOLFBOOT_SECTOR_SIZE % DELTA_BLOCK_SIZE) != 0
+    #error "Delta update: WOLFBOOT_SECTOR_SIZE % DELTA_BLOCK_SIZE != 0"
+    #endif
+
 static inline uint32_t wb_delta_im2n(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
