@@ -36,6 +36,7 @@ def main():
     if p.returncode != 0:
         print("FAIL: STAGE1_AUTH variant of boot_x86_fsp.c "
               "does not compile:\n")
+        print(p.stdout[-2000:])
         print(p.stderr[-2000:])
         return 1
     print("PASS: STAGE1_AUTH variant of boot_x86_fsp.c compiles")

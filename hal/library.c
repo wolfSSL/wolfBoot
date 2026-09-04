@@ -131,6 +131,7 @@ static const uint8_t test_img[] = {
 int wolfBoot_start(void)
 {
     struct wolfBoot_image os_image;
+    size_t max_payload;
     int ret = 0;
     memset(&os_image, 0, sizeof(os_image));
 
@@ -141,9 +142,16 @@ int wolfBoot_start(void)
     }
 
     /* The loaded file may be shorter than the firmware size the header
-     * claims; bound the hash range to the bytes actually loaded. */
-    if (os_image.fw_size > (uint32_t)(gImageSize - IMAGE_HEADER_SIZE)) {
-        os_image.fw_size = (uint32_t)(gImageSize - IMAGE_HEADER_SIZE);
+     * claims; bound the hash range to the bytes actually loaded. Compute
+     * the payload in size_t and cap at UINT32_MAX so a > 4 GiB file
+     * clamps to the maximum firmware size rather than truncating to a
+     * small value. */
+    max_payload = gImageSize - IMAGE_HEADER_SIZE;
+    if (max_payload > UINT32_MAX) {
+        max_payload = UINT32_MAX;
+    }
+    if (os_image.fw_size > (uint32_t)max_payload) {
+        os_image.fw_size = (uint32_t)max_payload;
     }
 
     if ((ret = wolfBoot_verify_integrity(&os_image)) < 0) {

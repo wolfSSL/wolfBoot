@@ -36,6 +36,7 @@ def main():
     if p.returncode != 0:
         print("FAIL: DISABLE_BACKUP + ELF scatter + EXT_FLASH "
               "does not compile:\n")
+        print(p.stdout[-2000:])
         print(p.stderr[-2000:])
         return 1
     print("PASS: DISABLE_BACKUP + ELF scatter + EXT_FLASH compiles")

@@ -36,6 +36,7 @@ def main():
     if p.returncode != 0:
         print("FAIL: WOLFBOOT_ENABLE_WOLFHSM_CLIENT image.c "
               "does not compile:\n")
+        print(p.stdout[-2000:])
         print(p.stderr[-2000:])
         return 1
     print("PASS: WOLFBOOT_ENABLE_WOLFHSM_CLIENT image.c compiles")

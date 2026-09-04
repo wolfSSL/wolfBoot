@@ -1339,7 +1339,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         if (wolfBoot_load_flash_image_elf(PART_BOOT, &entry,
                                           PART_IS_EXT(&boot)) < 0) {
             wolfBoot_printf(
-                "ELF: [UPDATE] ERROR: could not store scattered image\n");
+                "ELF: [UPDATE] ERROR: could not restore scattered image\n");
             wolfBoot_panic();
         }
         if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
