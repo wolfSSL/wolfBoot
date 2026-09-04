@@ -2482,10 +2482,10 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
 
     /* Walk the program header table and store each loadable segment */
     for (i = 0; i < entry_count; ++i) {
-        unsigned long paddr, filesz, offset;
-        int           is_loadable;
-        uintptr_t     load_addr;
-        uint64_t      seg_start;
+        uint64_t paddr, filesz, offset;
+        int      is_loadable;
+        uintptr_t load_addr;
+        uint64_t  seg_start;
 
         /* Read the current program header into a local buffer */
         if (is_elf32) {
@@ -2497,9 +2497,9 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
                 return -1;
             }
             is_loadable = (p32.type == ELF_PT_LOAD);
-            paddr       = (unsigned long)p32.paddr;
-            offset      = (unsigned long)p32.offset;
-            filesz      = (unsigned long)p32.file_size;
+            paddr       = p32.paddr;
+            offset      = p32.offset;
+            filesz      = p32.file_size;
             ph_size     = sizeof(p32);
         }
         else {
@@ -2511,9 +2511,9 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
                 return -1;
             }
             is_loadable = (p64.type == ELF_PT_LOAD);
-            paddr       = (unsigned long)p64.paddr;
-            offset      = (unsigned long)p64.offset;
-            filesz      = (unsigned long)p64.file_size;
+            paddr       = p64.paddr;
+            offset      = p64.offset;
+            filesz      = p64.file_size;
             ph_size     = sizeof(p64);
         }
         /* Skip non-loadable segments */
