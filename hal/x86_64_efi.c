@@ -210,19 +210,25 @@ static EFI_FILE_HANDLE GetVolume(EFI_HANDLE image)
 
     status = uefi_call_wrapper(BS->HandleProtocol, 3,
                                image, &lipGuid, (void **) &loaded_image);
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     status = uefi_call_wrapper(BS->HandleProtocol, 3,
                                loaded_image->DeviceHandle,
                                &fsGuid, (VOID*)&IOVolume);
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     status = uefi_call_wrapper(IOVolume->OpenVolume, 2, IOVolume, &Volume);
 
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     return Volume;
 }
@@ -353,6 +359,8 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (kernel_addr == 0 && update_addr == 0) {
         wolfBoot_printf("No image to load\n");
         panic();
+        return EFI_LOAD_ERROR; /* Never reached on target (panic() does not
+                                * return) */
     }
 
     wolfBoot_start();
