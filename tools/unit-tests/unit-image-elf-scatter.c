@@ -572,13 +572,14 @@ END_TEST
  *
  * The load function walks the same program header table and copies each
  * PT_LOAD segment from the manifest (fw_base + offset) to its scattered
- * destination (paddr + BASE_OFF). In this harness the boot partition is
- * mmap'd at MOCK_ADDRESS_BOOT (== WOLFBOOT_PARTITION_BOOT_ADDRESS) and
- * BASE_OFF is 0, so a valid destination is any address inside
- * [MOCK_ADDRESS_BOOT, MOCK_ADDRESS_BOOT + WOLFBOOT_PARTITION_SIZE).
- * The mock flash layer fails the test on any erase/write outside the
- * known partition ranges, so an unvalidated paddr cannot walk off into
- * unmapped memory here. */
+ * destination (paddr + BASE_OFF). In reality that destination is the exec
+ * region, which sits outside the boot partition; the harness models it as
+ * an address inside the mmap'd boot partition (MOCK_ADDRESS_BOOT, BASE_OFF
+ * 0) so the mock flash layer can service the write. The load function does
+ * not bound the destination (the paddr is signature-protected); it rejects
+ * a source that runs past fw_size, a paddr range that overflows the address
+ * width, and a program header that cannot be read. The mock flash layer
+ * fails the test on any erase/write outside the known partition ranges. */
 
 #define LOAD_DEST (MOCK_ADDRESS_BOOT + 0x4000)
 
@@ -678,36 +679,6 @@ START_TEST(test_elf_scatter_load_paddr_range_overflow_rejected)
 }
 END_TEST
 
-/* A destination outside the boot partition must be rejected before any
- * flash access. Pre-fix the mock's out-of-range erase check caught it
- * with fail("Invalid address"); on real hardware this is an
- * erase/write at an unintended location. */
-START_TEST(test_elf_scatter_load_dest_outside_partition_rejected)
-{
-    unsigned long entry = 0;
-    struct seg_spec segs[1];
-    int ret;
-
-    map_boot_partition();
-
-    memset(seg2_flash, 0, sizeof(seg2_flash));
-    segs[0].offset = ELF_HDR_SZ;
-    segs[0].filesz = SEG_SIZE;
-    segs[0].paddr  = (uint64_t)(MOCK_ADDRESS_BOOT + WOLFBOOT_PARTITION_SIZE +
-                                0x1000);
-    segs[0].payload = seg2_flash;
-    segs[0].fillsz  = SEG_SIZE;
-
-    build_scattered_image_n(segs, 1, IMG_FW_SIZE);
-
-    ret = wolfBoot_load_flash_image_elf(PART_BOOT, &entry, 0);
-
-    ck_assert_int_eq(ret, -1);
-
-    unmap_boot_partition();
-}
-END_TEST
-
 /* A program header that lies past the end of the manifest image cannot
  * be read; the load must abort instead of consuming the uninitialized
  * header locals. The PHT sits at fw offset 64 (right after the 64-byte
@@ -762,8 +733,6 @@ Suite *elf_scatter_suite(void)
                    test_elf_scatter_load_segment_beyond_fw_size_rejected);
     tcase_add_test(tc_load,
                    test_elf_scatter_load_paddr_range_overflow_rejected);
-    tcase_add_test(tc_load,
-                   test_elf_scatter_load_dest_outside_partition_rejected);
     tcase_add_test(tc_load, test_elf_scatter_load_phdr_read_failure_rejected);
     tcase_set_timeout(tc_load, 10);
     suite_add_tcase(s, tc_load);

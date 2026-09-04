@@ -2523,9 +2523,13 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
         }
 
         /* Validate the segment before writing: the source must stay
-         * inside the manifest image, the paddr range must fit the
-         * destination (uintptr_t) width, and the destination must stay
-         * inside the boot partition. Reject instead of writing. */
+         * inside the manifest image and the paddr range must fit the
+         * destination (uintptr_t) width so the load_addr cast below
+         * cannot wrap. The scatter destination is the exec region, which
+         * sits outside the boot partition that stores the signed ELF, so
+         * it is not bounded here: the program-header paddr values are
+         * covered by the image signature verified before this restore
+         * path. Reject instead of writing. */
         if (filesz > UINT32_MAX) {
             wolfBoot_printf("ELF: [STORE] ERROR: segment file_size "
                             "%lu does not fit a 32-bit length\n",
@@ -2548,13 +2552,6 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
             return -1;
         }
         load_addr = (uintptr_t)seg_start;
-        if (load_addr < (uintptr_t)boot.hdr ||
-            load_addr + filesz >
-                (uintptr_t)boot.hdr + (uintptr_t)WOLFBOOT_PARTITION_SIZE) {
-            wolfBoot_printf("ELF: [STORE] ERROR: segment destination "
-                            "outside boot partition\n");
-            return -1;
-        }
 
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
