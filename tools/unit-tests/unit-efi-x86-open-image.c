@@ -388,6 +388,11 @@ uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 /* Pull in the code under test (its statics become visible here). */
 #include "../../hal/x86_64_efi.c"
 
+/* The caller too: with the definition already in this translation unit,
+ * its extern declaration is checked against it, so a prototype drift
+ * between the two files is a compile error. */
+#include "../../src/boot_x86_64.c"
+
 /* The tests pass their own CHAR16 filename (the mock ignores the content).
  * The build rule uses -fshort-wchar like the real x86_64_efi build, so
  * efi_main's L"..." literals are valid 16-bit CHAR16 strings here too. */
@@ -653,7 +658,7 @@ START_TEST(test_do_boot_mem_path_end_inclusive)
         image[IMAGE_HEADER_SIZE + i] = (uint8_t)(i & 0xFF);
     boot_addr = (uint32_t *)(image + IMAGE_HEADER_SIZE);
 
-    x86_64_efi_do_boot(boot_addr, NULL);
+    x86_64_efi_do_boot(boot_addr);
 
     ck_assert_int_eq(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_load_image_calls, 1);
@@ -689,11 +694,40 @@ START_TEST(test_do_boot_zero_size_panics)
     memcpy(image + 4, &fw_size, sizeof(fw_size));
     boot_addr = (uint32_t *)(image + IMAGE_HEADER_SIZE);
 
-    x86_64_efi_do_boot(boot_addr, NULL);
+    x86_64_efi_do_boot(boot_addr);
 
     ck_assert_int_gt(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_load_image_calls, 0);
     ck_assert_int_eq(mock_start_image_calls, 0);
+}
+END_TEST
+
+/* The caller (do_boot in src/boot_x86_64.c) must hand its app_offset to
+ * the HAL unmodified: same pointer in LoadImage's SourceBuffer and in the
+ * memory device path. A caller/callee prototype mismatch (e.g. the old
+ * uint8_t * declaration) would truncate or reinterpret it. */
+START_TEST(test_do_boot_transfers_app_offset)
+{
+    uint32_t fw_size = 1024;
+    uint32_t *boot_addr;
+    uint8_t image[IMAGE_HEADER_SIZE + 1024];
+    int i;
+
+    memset(image, 0, sizeof(image));
+    memcpy(image, "WOLF", 4);
+    memcpy(image + 4, &fw_size, sizeof(fw_size));
+    for (i = 0; i < 1024; i++)
+        image[IMAGE_HEADER_SIZE + i] = (uint8_t)(i & 0xFF);
+    boot_addr = (uint32_t *)(image + IMAGE_HEADER_SIZE);
+
+    do_boot(boot_addr);
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_load_image_calls, 1);
+    ck_assert_uint_eq(captured_src_addr,
+        (EFI_PHYSICAL_ADDRESS)(uintptr_t)boot_addr);
+    ck_assert_uint_eq(captured_dp[0].StartingAddress,
+        (EFI_PHYSICAL_ADDRESS)(uintptr_t)boot_addr);
 }
 END_TEST
 
@@ -711,6 +745,7 @@ Suite *efi_x86_open_image_suite(void)
     tcase_add_test(tc, test_open_image_header_boundary);
     tcase_add_test(tc, test_do_boot_mem_path_end_inclusive);
     tcase_add_test(tc, test_do_boot_zero_size_panics);
+    tcase_add_test(tc, test_do_boot_transfers_app_offset);
 
     suite_add_tcase(s, tc);
     return s;
