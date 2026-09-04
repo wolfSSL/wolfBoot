@@ -489,6 +489,9 @@ int wolfPKCS11_Store_Read(void* store, unsigned char* buffer, int len)
     if ((handle == NULL) || (handle->hdr == NULL) || (handle->buffer == NULL))
        return -1;
 
+    if (len < 0)
+        return -1;
+
     obj_size = handle->hdr->size;
     if (obj_size > KEYVAULT_OBJ_SIZE)
         return -1;
@@ -520,6 +523,9 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
     if ((handle == NULL) || (handle->hdr == NULL) || (handle->buffer == NULL))
        return -1;
     if ((handle->flags & STORE_FLAGS_READONLY) != 0)
+        return -1;
+
+    if (len < 0)
         return -1;
 
     obj_size = handle->hdr->size;
