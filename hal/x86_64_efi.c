@@ -96,7 +96,14 @@ void *hal_get_dts_update_address(void)
 
 static void panic()
 {
+#ifdef UNIT_TEST
+    /* The unit test observes wolfBoot_panicked and needs to get back;
+     * on target this never returns. */
+    wolfBoot_panic();
+    return;
+#else
     while(1) {}
+#endif
 }
 
 void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
@@ -116,6 +123,14 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
 
     size = (uint32_t *)(manifest + 4);
 
+    /* Guard against a zero-size image: EndingAddress below would underflow
+     * and an empty range would be handed to LoadImage. */
+    if (*size == 0) {
+        wolfBoot_printf("invalid zero-size image\n");
+        panic();
+        return; /* Never reached on target, where panic() does not return */
+    }
+
     /* Authenticated kernel command line from the verified image's HDR_CMDLINE
      * TLV (covered by the signature); NULL if the image carries none. */
     kernel_cmdline = wolfBoot_efi_get_cmdline(manifest, &kernel_cmdline_bytes);
@@ -124,7 +139,9 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     mem_path_device->Header.SubType = EFI_DEVICE_PATH_PROTOCOL_MEM_SUBTYPE;
     mem_path_device->MemoryType = EfiLoaderData;
     mem_path_device->StartingAddress = (EFI_PHYSICAL_ADDRESS)boot_addr;
-    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)((uint8_t*)boot_addr+*size);
+    /* MEMMAP_DEVICE_PATH EndingAddress is inclusive (last valid byte). */
+    mem_path_device->EndingAddress =
+        (EFI_PHYSICAL_ADDRESS)((uintptr_t)boot_addr + *size - 1);
     SetDevicePathNodeLength(&mem_path_device->Header,
                             sizeof(MEMMAP_DEVICE_PATH));
 
