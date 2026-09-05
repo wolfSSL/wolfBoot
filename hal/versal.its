@@ -29,6 +29,23 @@
                 algo = "sha256";
             };
         };
+        /* Ramdisk (initramfs) sub-image; requires FIT_RAMDISK=1 (default in
+         * the Versal example configs). wolfBoot uses it in place and patches
+         * /chosen/linux,initrd-{start,end}. Add the "ramdisk = ..." reference
+         * to the configuration node below to enable it.
+         *
+         * ramdisk-1 {
+         *     description = "petalinux-image-minimal";
+         *     data = /incbin/("../rootfs.cpio.gz");
+         *     type = "ramdisk";
+         *     arch = "arm64";
+         *     os = "linux";
+         *     compression = "none";
+         *     hash-1 {
+         *         algo = "sha256";
+         *     };
+         * };
+         */
         /* FPGA bitstream sub-image (requires FPGA_BITSTREAM=1). Add the
          * "fpga = ..." reference to the configuration node below. The
          * bitstream must be a bootgen .bin staged to its load address.
@@ -60,6 +77,7 @@
             description = "Linux kernel and FDT blob";
             kernel = "kernel-1";
             fdt = "fdt-1";
+            /* ramdisk = "ramdisk-1"; */
             /* fpga = "fpga-1"; */
             hash-1 {
                 algo = "sha256";

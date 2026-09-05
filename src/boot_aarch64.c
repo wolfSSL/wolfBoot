@@ -186,6 +186,13 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
         uintptr_t dts = 0;
     #endif
         wolfBoot_printf("do_boot: EL2->EL1 via ERET\n");
+        /* Clean the EL2 D-cache and drop the MMU before the ERET: Linux
+         * enters at EL1 with SCTLR_EL1.M/C clear and reads memory uncached,
+         * so the kernel and DTB must be clean to PoC (ARM64 booting.rst).
+         * hal_prepare_boot() cleans only a fixed window at
+         * WOLFBOOT_LOAD_ADDRESS, which on a FIT boot is the staging buffer,
+         * not the load destinations. */
+        el2_flush_and_disable_mmu();
         el2_to_el1_boot((uintptr_t)app_offset, dts);
     }
 #else
@@ -273,7 +280,7 @@ void RAMFUNCTION arch_reboot(void)
 #endif
 
 /* ============================================================================
- * Exception Handlers for EL2 (optional DEBUG_HARDFAULT)
+ * Exception Handlers for EL2 / EL3
  * ============================================================================
  */
 
@@ -307,7 +314,11 @@ void FIQInterrupt(void)
 void SErrorInterrupt(void)
     { print_exception_info_el3("SERROR"); while (1) { __asm__ volatile("wfi"); } }
 
-#elif defined(DEBUG_HARDFAULT) && defined(DEBUG_UART) && defined(EL2_HYPERVISOR)
+#elif defined(DEBUG_UART) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+
+/* EL2 counterpart of the EL3 block above. Gated on DEBUG_UART alone: without
+ * it an abort taken at EL2 (ZynqMP, Versal) lands in the silent wfi stub and
+ * the boot just stops with no output. */
 
 #define READ_SYSREG(_out, _reg) __asm__ volatile("mrs %0, " #_reg : "=r"(_out))
 
@@ -374,4 +385,4 @@ void SynchronousInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
 void IRQInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
 void FIQInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
 void SErrorInterrupt(void) { while (1) { __asm__ volatile("wfi"); } }
-#endif /* DEBUG_HARDFAULT && DEBUG_UART && EL2_HYPERVISOR */
+#endif /* exception handler variants */
