@@ -43,7 +43,9 @@ static uint32_t hal_get_core_clk(void)
     core_clk = SYS_CLK * core_ratio;
     return core_clk;
 }
-static uint32_t RAMFUNCTION hal_get_plat_clk(void)
+/* Non-static: prototyped in nxp_ppc.h so drivers built as standalone
+ * objects (e.g. hal/nxp_esdhc.c) can use the clock helpers. */
+uint32_t RAMFUNCTION hal_get_plat_clk(void)
 {
     /* compute platform clock: system_input * (SYS_PLL_RAT / 2) */
     uint32_t plat_clk;
@@ -52,14 +54,12 @@ static uint32_t RAMFUNCTION hal_get_plat_clk(void)
     plat_clk = SYS_CLK * plat_ratio;
     return plat_clk;
 }
-static uint32_t hal_get_bus_clk(void)
+uint32_t hal_get_bus_clk(void)
 {
     return hal_get_plat_clk() / 2;
 }
 #endif /* ENABLE_BUS_CLK_CALC */
 
-#define TIMEBASE_CLK_DIV 16
-#define TIMEBASE_HZ (hal_get_plat_clk() / TIMEBASE_CLK_DIV)
 #define DELAY_US    (TIMEBASE_HZ / 1000000)
 static void RAMFUNCTION udelay(uint32_t delay_us)
 {

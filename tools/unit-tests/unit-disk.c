@@ -125,23 +125,28 @@ static void d_put64(uint8_t *p, uint64_t v)
 #define D_PE_LAST         0x28
 #define D_PE_NAME         0x38
 
-static void finalize_gpt_header_crc(uint8_t *hdr)
-{
-    uint32_t hdr_size = 92;
-
-    d_put32(hdr + D_HDR_CRC32, 0);
-    d_put32(hdr + D_HDR_CRC32, test_crc32(hdr, hdr_size));
-}
-
 static uint32_t d_get32(const uint8_t *p)
 {
     return ((uint32_t)p[0]) | ((uint32_t)p[1] << 8) |
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+static uint64_t d_get64(const uint8_t *p)
+{
+    return ((uint64_t)d_get32(p)) | ((uint64_t)d_get32(p + 4) << 32);
+}
+
+static void finalize_gpt_header_crc(uint8_t *hdr)
+{
+    uint32_t hdr_size = d_get32(hdr + D_HDR_SIZE);
+
+    d_put32(hdr + D_HDR_CRC32, 0);
+    d_put32(hdr + D_HDR_CRC32, test_crc32(hdr, hdr_size));
+}
+
 static void finalize_gpt_part_array_crc(uint8_t *hdr)
 {
-    uint32_t start_array = d_get32(hdr + D_HDR_START_ARRAY);
+    uint64_t start_array = d_get64(hdr + D_HDR_START_ARRAY);
     uint32_t n_part = d_get32(hdr + D_HDR_N_PART);
     uint32_t array_sz = d_get32(hdr + D_HDR_ARRAY_SZ);
     uint8_t *array = fake_disk + (start_array * GPT_SECTOR_SIZE);
@@ -226,7 +231,6 @@ static void build_gpt_disk(void)
 static void build_mbr_disk(void)
 {
     uint8_t *pte;
-    uint16_t *boot_sig;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
 
@@ -243,8 +247,7 @@ static void build_mbr_disk(void)
     d_put32(pte + 0x08, 48);
     d_put32(pte + 0x0C, 64);
 
-    boot_sig = (uint16_t *)(fake_disk + GPT_MBR_BOOTSIG_OFFSET);
-    *boot_sig = GPT_MBR_BOOTSIG_VALUE;
+    d_put16(fake_disk + GPT_MBR_BOOTSIG_OFFSET, GPT_MBR_BOOTSIG_VALUE);
 }
 
 /* ============================================================
@@ -769,7 +772,6 @@ START_TEST(test_disk_open_mbr_zero_lba_entry)
 {
     /* MBR entry with lba_first=0 must be skipped. */
     uint8_t *pte;
-    uint16_t *boot_sig;
 
     memset(fake_disk, 0, FAKE_DISK_SIZE);
 
@@ -793,8 +795,7 @@ START_TEST(test_disk_open_mbr_zero_lba_entry)
     d_put32(pte + 0x08, 48);
     d_put32(pte + 0x0C, 0);
 
-    boot_sig = (uint16_t *)(fake_disk + GPT_MBR_BOOTSIG_OFFSET);
-    *boot_sig = GPT_MBR_BOOTSIG_VALUE;
+    d_put16(fake_disk + GPT_MBR_BOOTSIG_OFFSET, GPT_MBR_BOOTSIG_VALUE);
 
     ck_assert_int_eq(disk_open(0), 1); /* only entry 0 counted */
 }

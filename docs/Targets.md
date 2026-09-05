@@ -6231,6 +6231,23 @@ Flash factory_custom.bin to NOR base 0xEC00_0000
 
 Flash factory_custom.bin to NOR base 0xE800_0000
 
+### T1040 SD Card Boot (eSDHC)
+
+The T1040 can also load the signed application image from an SD card using the on-chip Freescale eSDHC controller (driver: `hal/nxp_esdhc.c`, included by the HAL translation unit). Use `config/examples/nxp-t1040-sdcard.config`, which enables `DISK_SDCARD=1` so wolfBoot links the disk boot path (`src/update_disk.c`) instead of the RAM loader.
+
+The card is GPT (or MBR) partitioned. The signed image is written at offset 0 of the boot partitions; `BOOT_PART_A` and `BOOT_PART_B` are 0-based indexes into the partition table. wolfBoot reads the image header from both slots, picks the higher version, loads it to `WOLFBOOT_LOAD_ADDRESS`, verifies the signature and boots it.
+
+Example card layout with two 16 MB raw slots:
+
+```
+sgdisk -Z /dev/sdX
+sgdisk -n 1:0:+16M -t 1:8300 -n 2:0:+16M -t 2:8300 /dev/sdX
+dd if=test-app/image_v1_signed.bin of=/dev/sdX1
+dd if=test-app/image_v2_signed.bin of=/dev/sdX2
+```
+
+`WOLFBOOT_RAMBOOT_MAX_SIZE` bounds the image size read from disk before authentication. Define `DEBUG_ESDHC` (see the config) for controller bring-up trace on the DUART console.
+
 
 ## NXP QorIQ T2080 PPC
 
