@@ -702,7 +702,8 @@ void RAMFUNCTION wolfBoot_start(void)
                                            (uint32_t)(uintptr_t)load_address)) {
             wolfBoot_printf("Image size %u doesn't fit in low memory\r\n",
                 os_image.fw_size);
-            break;
+            selected ^= 1;
+            continue;
         }
         /* Log memory load */
         x86_log_memory_load((uint32_t)(uintptr_t)load_address,

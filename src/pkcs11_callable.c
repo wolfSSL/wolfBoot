@@ -602,6 +602,12 @@ static CK_RV nsc_tmpl_prepare(CK_ATTRIBUTE_PTR ns, CK_ULONG count, int isOut,
             NULL, DYNAMIC_TYPE_TMP_BUFFER);
     t->work = (CK_ATTRIBUTE *)XMALLOC((size_t)(count * sizeof(CK_ATTRIBUTE)),
             NULL, DYNAMIC_TYPE_TMP_BUFFER);
+    if (t->work != NULL) {
+        /* Zero before any path can reach nsc_tmpl_free(): if the snap
+         * allocation failed, the initialisation loop below never runs, and
+         * free() would release indeterminate work[].pValue pointers. */
+        XMEMSET(t->work, 0, (size_t)(count * sizeof(CK_ATTRIBUTE)));
+    }
     if (t->snap == NULL || t->work == NULL) {
         rv = CKR_HOST_MEMORY;
         goto fail;

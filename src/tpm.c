@@ -393,7 +393,7 @@ int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
     uint32_t key_type;
     int key_slot = -1;
     uint8_t *hdr;
-    uint16_t hdrSz;
+    int hdrSz;
 
     *pAlg = TPM_ALG_NULL;
 
@@ -406,7 +406,7 @@ int wolfBoot_load_pubkey(const uint8_t* pubkey_hint, WOLFTPM2_KEY* pubKey,
         key_type = keystore_get_key_type(key_slot);
         hdr = keystore_get_buffer(key_slot);
         hdrSz = keystore_get_size(key_slot);
-        if (hdr == NULL || hdrSz <= 0)
+        if (hdr == NULL || hdrSz <= 0 || hdrSz > KEYSTORE_PUBKEY_SIZE)
             rc = -1;
     }
     /* Parse public key to TPM public key. Note: this loads as temp handle,

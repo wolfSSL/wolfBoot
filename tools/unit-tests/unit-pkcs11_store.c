@@ -504,6 +504,52 @@ START_TEST(test_shorter_overwrite_erases_residual_key_material)
 }
 END_TEST
 
+/* A negative length must be rejected before it enters the unsigned
+ * offset arithmetic: pre-fix, a sufficiently negative len wrapped to a
+ * large unsigned value in 'in_buffer_offset + len', entered the
+ * truncation branch, and was silently replaced by the remaining object
+ * bytes (Read) or the remaining capacity (Write, bypassing the later
+ * len < 0 guard). */
+START_TEST(test_store_rejects_negative_len)
+{
+    CK_ULONG id_tok = 1;
+    CK_ULONG id_obj = 42;
+    int type = DYNAMIC_TYPE_ECC;
+    int ret;
+    void *store = NULL;
+    unsigned char rd[16];
+    unsigned char wr[16];
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert(ret == 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Create the object with 3 bytes of content */
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 0, &store);
+    ck_assert_msg(ret == 0, "Failed to open the vault: %d", ret);
+    ret = wolfPKCS11_Store_Write(store, (unsigned char *)"abc", 3);
+    ck_assert_int_eq(ret, 3);
+    wolfPKCS11_Store_Close(store);
+
+    /* Read: pre-fix the negative len was replaced by the 3 remaining
+     * bytes and copied out; post-fix it is rejected. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 1, &store);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault: %d", ret);
+    ret = wolfPKCS11_Store_Read(store, rd, -32768);
+    ck_assert_int_eq(ret, -1);
+    wolfPKCS11_Store_Close(store);
+
+    /* Write: pre-fix the negative len was clamped to the remaining
+     * capacity (4088) and read that many bytes from the 16-byte buffer
+     * below; post-fix it is rejected. */
+    ret = wolfPKCS11_Store_Open(type, id_tok, id_obj, 0, &store);
+    ck_assert_msg(ret == 0, "Failed to reopen the vault for write: %d", ret);
+    ret = wolfPKCS11_Store_Write(store, wr, -32768);
+    ck_assert_int_eq(ret, -1);
+    wolfPKCS11_Store_Close(store);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     /* Suite initialization */
@@ -516,6 +562,7 @@ Suite *wolfboot_suite(void)
     TCase* tcase_delete_corrupted = tcase_create("delete_corrupted_pos");
     TCase* tcase_find_bounds = tcase_create("find_bounds");
     TCase* tcase_remanence = tcase_create("shorter_overwrite_erases_residual");
+    TCase* tcase_neg_len = tcase_create("rejects_negative_len");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -523,6 +570,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
     tcase_add_test(tcase_remanence, test_shorter_overwrite_erases_residual_key_material);
+    tcase_add_test(tcase_neg_len, test_store_rejects_negative_len);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
@@ -530,6 +578,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tcase_delete_corrupted);
     suite_add_tcase(s, tcase_find_bounds);
     suite_add_tcase(s, tcase_remanence);
+    suite_add_tcase(s, tcase_neg_len);
     return s;
 }
 

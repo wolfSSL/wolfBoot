@@ -96,15 +96,20 @@ void *hal_get_dts_update_address(void)
 
 static void panic()
 {
+#ifdef UNIT_TEST
+    /* The unit test observes wolfBoot_panicked and needs to get back;
+     * on target this never returns. */
+    wolfBoot_panic();
+    return;
+#else
     while(1) {}
+#endif
 }
 
-void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
+void RAMFUNCTION x86_64_efi_do_boot(const uint32_t *boot_addr)
 {
-    uint32_t *size;
-    uint8_t* manifest = ((uint8_t*)boot_addr) - IMAGE_HEADER_SIZE;
-
-    (void)dts_address; /* Unused for now */
+    const uint32_t *size;
+    const uint8_t* manifest = ((const uint8_t*)boot_addr) - IMAGE_HEADER_SIZE;
 
     MEMMAP_DEVICE_PATH mem_path_device[2];
     EFI_HANDLE kernelImageHandle;
@@ -114,7 +119,15 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     EFI_LOADED_IMAGE *kernel_li = NULL;
     EFI_GUID lipGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
 
-    size = (uint32_t *)(manifest + 4);
+    size = (const uint32_t *)(manifest + 4);
+
+    /* Guard against a zero-size image: EndingAddress below would underflow
+     * and an empty range would be handed to LoadImage. */
+    if (*size == 0) {
+        wolfBoot_printf("invalid zero-size image\n");
+        panic();
+        return; /* Never reached on target, where panic() does not return */
+    }
 
     /* Authenticated kernel command line from the verified image's HDR_CMDLINE
      * TLV (covered by the signature); NULL if the image carries none. */
@@ -123,8 +136,11 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
     mem_path_device->Header.Type = EFI_DEVICE_PATH_PROTOCOL_HW_TYPE;
     mem_path_device->Header.SubType = EFI_DEVICE_PATH_PROTOCOL_MEM_SUBTYPE;
     mem_path_device->MemoryType = EfiLoaderData;
-    mem_path_device->StartingAddress = (EFI_PHYSICAL_ADDRESS)boot_addr;
-    mem_path_device->EndingAddress = (EFI_PHYSICAL_ADDRESS)((uint8_t*)boot_addr+*size);
+    mem_path_device->StartingAddress =
+        (EFI_PHYSICAL_ADDRESS)(uintptr_t)boot_addr;
+    /* MEMMAP_DEVICE_PATH EndingAddress is inclusive (last valid byte). */
+    mem_path_device->EndingAddress =
+        (EFI_PHYSICAL_ADDRESS)((uintptr_t)boot_addr + *size - 1);
     SetDevicePathNodeLength(&mem_path_device->Header,
                             sizeof(MEMMAP_DEVICE_PATH));
 
@@ -136,12 +152,13 @@ void RAMFUNCTION x86_64_efi_do_boot(uint32_t *boot_addr, uint8_t *dts_address)
                                0, /* bool */
                                gImageHandle,
                                (EFI_DEVICE_PATH*)mem_path_device,
-                               boot_addr,
+                               (void*)(uintptr_t)boot_addr,
                                *size,
                                &kernelImageHandle);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("can't load kernel image from memory\n");
         panic();
+        return; /* Never reached on target, where panic() does not return */
     }
 
     /* Hand the authenticated command line to the loaded image via LoadOptions
@@ -193,19 +210,25 @@ static EFI_FILE_HANDLE GetVolume(EFI_HANDLE image)
 
     status = uefi_call_wrapper(BS->HandleProtocol, 3,
                                image, &lipGuid, (void **) &loaded_image);
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     status = uefi_call_wrapper(BS->HandleProtocol, 3,
                                loaded_image->DeviceHandle,
                                &fsGuid, (VOID*)&IOVolume);
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     status = uefi_call_wrapper(IOVolume->OpenVolume, 2, IOVolume, &Volume);
 
-    if (status != EFI_SUCCESS)
+    if (status != EFI_SUCCESS) {
         panic();
+        return NULL; /* Never reached on target (panic() does not return) */
+    }
 
     return Volume;
 }
@@ -336,6 +359,8 @@ efi_main (EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
     if (kernel_addr == 0 && update_addr == 0) {
         wolfBoot_printf("No image to load\n");
         panic();
+        return EFI_LOAD_ERROR; /* Never reached on target (panic() does not
+                                * return) */
     }
 
     wolfBoot_start();

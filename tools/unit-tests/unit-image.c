@@ -648,6 +648,9 @@ START_TEST(test_sha_ops)
     ck_assert_ptr_eq(retp, ext_hash_block);
     retp = wolfBoot_peek_image(&test_img, offset, &sz);
     ck_assert_ptr_eq(retp, ext_hash_block);
+    /* Full block fits in this image (fw_size 0x1000): the reported
+     * size stays the block size. The clamped tail case is covered by
+     * test_peek_image_bounds. */
     ck_assert_uint_eq(sz, WOLFBOOT_SHA_BLOCK_SIZE);
 
     /* Test image hash */
@@ -679,6 +682,61 @@ START_TEST(test_sha_ops)
     /* Only the SHA-256 ECC256 fixture has a fixed expected digest here. */
     (void)hash;
 #endif
+}
+END_TEST
+
+START_TEST(test_peek_image_bounds)
+{
+    static uint8_t FlashImg[0x1000];
+    struct wolfBoot_image test_img;
+    uint32_t sz;
+    uint8_t *retp;
+
+    /* Internal image: a peek at offset == fw_size must be rejected
+     * (no bytes remain) and the reported size must be clamped to the
+     * bytes that remain in the image. */
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.part = PART_BOOT;
+    test_img.fw_size = 0x100;
+    test_img.fw_base = FlashImg;
+
+    sz = 0xFFFF;
+    retp = wolfBoot_peek_image(&test_img, 0x100, &sz);
+    ck_assert_ptr_null(retp);
+    ck_assert_uint_eq(sz, 0);
+
+    sz = 0xFFFF;
+    retp = wolfBoot_peek_image(&test_img, 0xF0, &sz);
+    ck_assert_ptr_nonnull(retp);
+    ck_assert_uint_eq(sz, 0x10);
+
+    /* A block that fits fully must still report the full block size. */
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.part = PART_BOOT;
+    test_img.fw_size = 0x1000;
+    test_img.fw_base = FlashImg;
+
+    sz = 0xFFFF;
+    retp = wolfBoot_peek_image(&test_img, 0, &sz);
+    ck_assert_ptr_nonnull(retp);
+    ck_assert_uint_eq(sz, WOLFBOOT_SHA_BLOCK_SIZE);
+
+    /* External image: same contract through the ext flash reader. */
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.part = PART_UPDATE;
+    test_img.fw_base = 0;
+    test_img.fw_size = test_img_len;
+    ext_flash_write(0, test_img_v200000000_signed_bin, test_img_len);
+
+    sz = 0xFFFF;
+    retp = wolfBoot_peek_image(&test_img, test_img_len, &sz);
+    ck_assert_ptr_null(retp);
+    ck_assert_uint_eq(sz, 0);
+
+    sz = 0xFFFF;
+    retp = wolfBoot_peek_image(&test_img, test_img_len - 10, &sz);
+    ck_assert_ptr_nonnull(retp);
+    ck_assert_uint_eq(sz, 10);
 }
 END_TEST
 
@@ -1250,6 +1308,7 @@ Suite *wolfboot_suite(void)
     TCase* tcase_sha_ops = tcase_create("sha_ops");
     tcase_set_timeout(tcase_sha_ops, 20);
     tcase_add_test(tcase_sha_ops, test_sha_ops);
+    tcase_add_test(tcase_sha_ops, test_peek_image_bounds);
     suite_add_tcase(s, tcase_sha_ops);
 
     TCase* tcase_headers = tcase_create("headers");

@@ -63,7 +63,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-noramboot unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-disk unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -221,6 +221,10 @@ run: $(TESTS)
 	python3 unit-sign-delta-tlv.py || exit 1
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
 	python3 unit-sign-delta-basehash-cleanup.py || exit 1
+	python3 unit-delta-sector-align.py || exit 1
+	python3 unit-elf-scatter-db-build.py || exit 1
+	python3 unit-image-wolfhsm-client-build.py || exit 1
+	python3 unit-x86-fsp-stage1auth-build.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
@@ -263,6 +267,23 @@ unit-update-flash-hook:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_
 unit-update-flash-delta:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512 -D__WOLFBOOT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Intentionally misaligned config: the mock WOLFBOOT_SECTOR_SIZE (0x400) is
+# not a multiple of DELTA_BLOCK_SIZE (1536). Must fail to build with the
+# delta alignment #error. Used by unit-delta-sector-align.py only, so it is
+# not part of $(TESTS).
+unit-update-flash-delta-misalign:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DDELTA_UPDATES -DDELTA_BLOCK_SIZE=1536 -D__WOLFBOOT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Compile-only check for the DISABLE_BACKUP + WOLFBOOT_ELF_FLASH_SCATTER +
+# EXT_FLASH combination: the ELF restore block in wolfBoot_update() must
+# compile (it used to pass a struct where PART_IS_EXT expects a pointer).
+# Used by unit-elf-scatter-db-build.py only, so it is not part of $(TESTS).
+unit-update-flash-elf-scatter-db:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ELF_FLASH_SCATTER -DWOLFBOOT_ELF -DIMAGE_HEADER_SIZE=256 \
+	-DDISABLE_BACKUP -D__WOLFBOOT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-flash-self-update:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -691,6 +712,15 @@ unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 		-DUCODE0_ADDRESS=0 -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
+# Compile-only check for the STAGE1_AUTH variant of boot_x86_fsp.c. The real
+# stage1 authentication build needs an i686 toolchain the unit test CI does
+# not have, so this keeps the variant from silently rotting. Used by
+# unit-x86-fsp-stage1auth-build.py only, so it is not part of $(TESTS).
+unit-boot-x86-fsp-stage1auth: ../../include/target.h unit-boot-x86_fsp.c FORCE
+	gcc -c -o /dev/null unit-boot-x86_fsp.c $(CFLAGS) \
+		-DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DSTAGE1_AUTH
+
 unit-loader-tpm-init: ../../include/target.h unit-loader-tpm-init.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFBOOT_LOADER_MAIN -DWOLFBOOT_TPM \
 		-DWOLFTPM_USER_SETTINGS \
@@ -808,6 +838,20 @@ unit-update-flash-delta: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c ../../src/delta.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
+unit-update-flash-delta-misalign: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c ../../src/delta.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-elf-scatter-db: ../../include/target.h unit-update-flash.c FORCE
+	gcc -c -o /dev/null unit-update-flash.c $(CFLAGS)
+
+unit-image-wolfhsm-client-build:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFHSM) \
+	-DWOLFHSM_CFG_NO_SYS_TIME -DMOCK_PARTITIONS -DWOLFBOOT_HASH_SHA256 \
+	-DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_ENABLE_WOLFHSM_CLIENT \
+	-DIMAGE_HEADER_SIZE=256 -D__WOLFBOOT
+unit-image-wolfhsm-client-build: ../../include/target.h ../../src/image.c FORCE
+	gcc -c -o /dev/null ../../src/image.c $(CFLAGS)
+
 unit-update-flash-enc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
@@ -862,6 +906,16 @@ unit-update-flash-hwswap: ../../include/target.h unit-update-flash-hwswap.c
 
 unit-update-disk: ../../include/target.h unit-update-disk.c
 	gcc -o $@ unit-update-disk.c $(CFLAGS) $(LDFLAGS)
+
+# WOLFBOOT_FSP (x86) boot path of update_disk.c: the low-memory (tolum)
+# size check must reject a slot and fall back to the other one, like every
+# other per-slot rejection in the retry loop.
+unit-update-disk-fsp:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FSP \
+	-DUCODE0_ADDRESS=0 -DWOLFBOOT_LOAD_BASE=0x100000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-fsp: ../../include/target.h unit-update-disk-fsp.c
+	gcc -o $@ unit-update-disk-fsp.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk-oob: ../../include/target.h unit-update-disk-oob.c
 	gcc -o $@ unit-update-disk-oob.c $(CFLAGS) $(LDFLAGS)

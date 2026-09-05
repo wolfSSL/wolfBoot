@@ -568,10 +568,155 @@ START_TEST(test_elf_scatter_paddr_beyond_pointer_width_rejected)
 END_TEST
 #endif
 
+/* --- wolfBoot_load_flash_image_elf() (the store/restore path) ---
+ *
+ * The load function walks the same program header table and copies each
+ * PT_LOAD segment from the manifest (fw_base + offset) to its scattered
+ * destination (paddr + BASE_OFF). In reality that destination is the exec
+ * region, which sits outside the boot partition; the harness models it as
+ * an address inside the mmap'd boot partition (MOCK_ADDRESS_BOOT, BASE_OFF
+ * 0) so the mock flash layer can service the write. The load function does
+ * not bound the destination (the paddr is signature-protected); it rejects
+ * a source that runs past fw_size, a paddr range that overflows the address
+ * width, and a program header that cannot be read. The mock flash layer
+ * fails the test on any erase/write outside the known partition ranges. */
+
+#define LOAD_DEST (MOCK_ADDRESS_BOOT + 0x4000)
+
+static void set_load_paddr(uint64_t paddr)
+{
+    uint8_t *manifest = (uint8_t *)(uintptr_t)MOCK_ADDRESS_BOOT;
+    elf64_program_header *ph = (elf64_program_header *)
+        (manifest + IMAGE_HEADER_SIZE + sizeof(elf64_header));
+
+    ph->paddr = paddr;
+}
+
+START_TEST(test_elf_scatter_load_valid_image_restores)
+{
+    unsigned long entry = 0;
+    uint8_t *manifest = (uint8_t *)(uintptr_t)MOCK_ADDRESS_BOOT;
+    uint8_t *source   = manifest + IMAGE_HEADER_SIZE + ELF_HDR_SZ;
+    uint8_t *dest     = (uint8_t *)(uintptr_t)LOAD_DEST;
+    unsigned int i;
+    int ret;
+
+    map_boot_partition();
+
+    build_scattered_image();
+    set_load_paddr(LOAD_DEST);
+    for (i = 0; i < SEG_SIZE; i++) {
+        source[i] = (uint8_t)(0x30U + i);
+    }
+
+    ret = wolfBoot_load_flash_image_elf(PART_BOOT, &entry, 0);
+
+    ck_assert_int_eq(ret, 0);
+    for (i = 0; i < SEG_SIZE; i++) {
+        ck_assert_uint_eq(dest[i], source[i]);
+    }
+
+    unmap_boot_partition();
+}
+END_TEST
+
+/* A segment whose file layout (offset + file_size) extends past the
+ * manifest image must be rejected before any flash write. Pre-fix the
+ * source read walked past fw_size and the copy still "succeeded"
+ * (ret 0). */
+START_TEST(test_elf_scatter_load_segment_beyond_fw_size_rejected)
+{
+    unsigned long entry = 0;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG1_SIZE; /* 0x2000 > the manifest layout slack */
+    segs[0].paddr  = LOAD_DEST;
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = 0;
+
+    build_scattered_image_n(segs, 1, IMG_FW_SIZE);
+
+    ret = wolfBoot_load_flash_image_elf(PART_BOOT, &entry, 0);
+
+    /* Pre-fix this returned 0: the mock happily erased/wrote the valid
+     * destination with bytes read past fw_size. */
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
+/* A paddr whose segment range overflows the address space must be
+ * rejected before any flash access. Pre-fix the wrapped load_addr drove
+ * the mock into its out-of-range erase check (fail("Invalid address")). */
+START_TEST(test_elf_scatter_load_paddr_range_overflow_rejected)
+{
+    unsigned long entry = 0;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG_SIZE;
+    segs[0].paddr  = UINT64_MAX - 4; /* +SEG_SIZE wraps past UINT64_MAX */
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = SEG_SIZE;
+
+    build_scattered_image_n(segs, 1, IMG_FW_SIZE);
+
+    ret = wolfBoot_load_flash_image_elf(PART_BOOT, &entry, 0);
+
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
+/* A program header that lies past the end of the manifest image cannot
+ * be read; the load must abort instead of consuming the uninitialized
+ * header locals. The PHT sits at fw offset 64 (right after the 64-byte
+ * ELF header, the only offset check_scatter_format accepts), so a
+ * fw_size of 100 makes the 56-byte phdr read (64 + 56) run past
+ * fw_size. Pre-fix the read failure was ignored and p64 held
+ * indeterminate stack data (valgrind: conditional jump on uninitialised
+ * value at the is_loadable check). */
+START_TEST(test_elf_scatter_load_phdr_read_failure_rejected)
+{
+    unsigned long entry = 0;
+    struct seg_spec segs[1];
+    int ret;
+
+    map_boot_partition();
+
+    memset(seg2_flash, 0, sizeof(seg2_flash));
+    segs[0].offset = ELF_HDR_SZ;
+    segs[0].filesz = SEG_SIZE;
+    segs[0].paddr  = LOAD_DEST;
+    segs[0].payload = seg2_flash;
+    segs[0].fillsz  = SEG_SIZE;
+
+    build_scattered_image_n(segs, 1, 100); /* PHT extends past fw_size */
+
+    ret = wolfBoot_load_flash_image_elf(PART_BOOT, &entry, 0);
+
+    ck_assert_int_eq(ret, -1);
+
+    unmap_boot_partition();
+}
+END_TEST
+
 Suite *elf_scatter_suite(void)
 {
-    Suite *s  = suite_create("ELF flash-scatter image check");
-    TCase *tc = tcase_create("wolfBoot_check_flash_image_elf");
+    Suite *s       = suite_create("ELF flash-scatter image check");
+    TCase *tc      = tcase_create("wolfBoot_check_flash_image_elf");
+    TCase *tc_load = tcase_create("wolfBoot_load_flash_image_elf");
     tcase_add_test(tc, test_elf_scatter_valid_image_verifies_ok);
     tcase_add_test(tc, test_elf_scatter_corrupted_segment_rejected);
     tcase_add_test(tc, test_elf_scatter_filesz_over_32bit_rejected);
@@ -582,6 +727,15 @@ Suite *elf_scatter_suite(void)
 #endif
     tcase_set_timeout(tc, 10);
     suite_add_tcase(s, tc);
+
+    tcase_add_test(tc_load, test_elf_scatter_load_valid_image_restores);
+    tcase_add_test(tc_load,
+                   test_elf_scatter_load_segment_beyond_fw_size_rejected);
+    tcase_add_test(tc_load,
+                   test_elf_scatter_load_paddr_range_overflow_rejected);
+    tcase_add_test(tc_load, test_elf_scatter_load_phdr_read_failure_rejected);
+    tcase_set_timeout(tc_load, 10);
+    suite_add_tcase(s, tc_load);
     return s;
 }
 

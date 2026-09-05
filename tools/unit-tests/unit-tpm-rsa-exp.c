@@ -30,6 +30,8 @@ static uint8_t test_nv_digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint32_t captured_exponent;
 static int forbidden_memcmp_calls;
 static uint32_t mock_nv_digest_sz;
+static int mock_keystore_size;
+static int decode_calls;
 
 int keyslot_id_by_sha(const uint8_t* pubkey_hint)
 {
@@ -52,7 +54,7 @@ uint8_t *keystore_get_buffer(int id)
 int keystore_get_size(int id)
 {
     ck_assert_int_eq(id, 0);
-    return (int)sizeof(test_hdr);
+    return mock_keystore_size;
 }
 
 int wc_RsaPublicKeyDecode_ex(const byte* input, word32* inOutIdx, word32 inSz,
@@ -61,6 +63,7 @@ int wc_RsaPublicKeyDecode_ex(const byte* input, word32* inOutIdx, word32 inSz,
     (void)input;
     (void)inSz;
 
+    decode_calls++;
     *inOutIdx = 0;
     *n = test_modulus;
     *nSz = sizeof(test_modulus);
@@ -175,6 +178,8 @@ static void setup(void)
     captured_exponent = 0;
     forbidden_memcmp_calls = 0;
     mock_nv_digest_sz = WOLFBOOT_SHA_DIGEST_SIZE;
+    mock_keystore_size = (int)sizeof(test_hdr);
+    decode_calls = 0;
 }
 
 START_TEST(test_wolfBoot_load_pubkey_decodes_der_exponent_bytes)
@@ -191,6 +196,26 @@ START_TEST(test_wolfBoot_load_pubkey_decodes_der_exponent_bytes)
     ck_assert_int_eq(rc, 0);
     ck_assert_int_eq(alg, TPM_ALG_RSA);
     ck_assert_uint_eq(captured_exponent, 65537U);
+}
+END_TEST
+
+/* A failed keystore_get_size() (-1: invalid or oversized OTP slot) must be
+ * rejected, not narrowed to uint16_t (65535) and fed to the key parser. */
+START_TEST(test_wolfBoot_load_pubkey_rejects_failed_keystore_size)
+{
+    uint8_t hint[WOLFBOOT_SHA_DIGEST_SIZE] = { 0 };
+    WOLFTPM2_KEY key;
+    TPM_ALG_ID alg = TPM_ALG_NULL;
+    int rc;
+
+    memset(&key, 0, sizeof(key));
+    mock_keystore_size = -1;
+
+    rc = wolfBoot_load_pubkey(hint, &key, &alg);
+
+    ck_assert_int_eq(rc, -1);
+    ck_assert_uint_eq(decode_calls, 0);
+    ck_assert_int_eq(alg, TPM_ALG_NULL);
 }
 END_TEST
 
@@ -245,6 +270,7 @@ static Suite *tpm_suite(void)
     tc = tcase_create("wolfBoot_load_pubkey");
     tcase_add_checked_fixture(tc, setup, NULL);
     tcase_add_test(tc, test_wolfBoot_load_pubkey_decodes_der_exponent_bytes);
+    tcase_add_test(tc, test_wolfBoot_load_pubkey_rejects_failed_keystore_size);
     tcase_add_test(tc, test_wolfBoot_check_rot_avoids_memcmp_on_digest_compare);
     tcase_add_test(tc, test_wolfBoot_check_rot_rejects_mismatched_digest);
     tcase_add_test(tc, test_wolfBoot_check_rot_rejects_wrong_digest_size);

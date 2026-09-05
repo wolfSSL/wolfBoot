@@ -326,7 +326,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
           defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
 
         uint8_t tmpSigBuf[ECC_MAX_SIG_SIZE] = {0};
-        size_t  tmpSigSz                    = sizeof(tmpSigBuf);
+        word32  tmpSigSz                    = sizeof(tmpSigBuf);
 
     #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) || \
         (defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER) && \
@@ -386,7 +386,7 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
            and left-zero-padded, and the conversion strips the padding. */
         ret = wc_ecc_rs_raw_to_sig(sig, (word32)point_sz, &sig[point_sz],
                                    (word32)point_sz,
-                                   (byte*)&tmpSigBuf, (word32*)&tmpSigSz);
+                                   (byte*)&tmpSigBuf, &tmpSigSz);
         /* Verify the (temporary) DER representation of the signature */
         if (ret == 0) {
             VERIFY_FN(img, &verify_res, wc_ecc_verify_hash, tmpSigBuf, tmpSigSz,
@@ -1028,12 +1028,21 @@ static uint8_t ext_hash_block[WOLFBOOT_SHA_BLOCK_SIZE] XALIGNED(4);
 static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
 {
     uint8_t *p;
-    if (offset > img->fw_size)
+#ifdef EXT_FLASH
+    uint32_t read_sz;
+#endif
+
+    if (offset >= img->fw_size)
         return NULL;
 #ifdef EXT_FLASH
     if (PART_IS_EXT(img)) {
-        ext_flash_check_read((uintptr_t)(img->fw_base) + offset, ext_hash_block,
-                WOLFBOOT_SHA_BLOCK_SIZE);
+        /* Read only the bytes that remain in the image: the block
+         * window must not extend past fw_size. */
+        read_sz = WOLFBOOT_SHA_BLOCK_SIZE;
+        if (read_sz > img->fw_size - offset)
+            read_sz = img->fw_size - offset;
+        ext_flash_check_read((uintptr_t)(img->fw_base) + offset,
+                ext_hash_block, read_sz);
         return ext_hash_block;
     }
 #endif
@@ -2438,7 +2447,11 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
     /* Get the elf header from the image into a local buffer. We may overread
      * the buffer depending on architecture */
     memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
-    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    if (read_flash_fwimage(&boot, 0, elfHdrBuf,
+                           sizeof(elfHeaderMaxBuf)) != 0) {
+        wolfBoot_printf("ELF: [STORE] ERROR: could not read ELF header\n");
+        return -1;
+    }
     if (elf_open(elfHdrBuf, &is_elf32) != 0) {
         return -1;
     }
@@ -2469,27 +2482,38 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
 
     /* Walk the program header table and store each loadable segment */
     for (i = 0; i < entry_count; ++i) {
-        unsigned long paddr, filesz, offset;
-        int           is_loadable;
-        uintptr_t     load_addr;
+        uint64_t paddr, filesz, offset;
+        int      is_loadable;
+        uintptr_t load_addr;
+        uint64_t  seg_start;
 
         /* Read the current program header into a local buffer */
         if (is_elf32) {
             elf32_program_header p32;
-            read_flash_fwimage(&boot, entry_off, &p32, sizeof(p32));
+            if (read_flash_fwimage(&boot, entry_off, &p32,
+                                   sizeof(p32)) != 0) {
+                wolfBoot_printf("ELF: [STORE] ERROR: could not read "
+                                "program header\n");
+                return -1;
+            }
             is_loadable = (p32.type == ELF_PT_LOAD);
-            paddr       = (unsigned long)p32.paddr;
-            offset      = (unsigned long)p32.offset;
-            filesz      = (unsigned long)p32.file_size;
+            paddr       = p32.paddr;
+            offset      = p32.offset;
+            filesz      = p32.file_size;
             ph_size     = sizeof(p32);
         }
         else {
             elf64_program_header p64;
-            read_flash_fwimage(&boot, entry_off, &p64, sizeof(p64));
+            if (read_flash_fwimage(&boot, entry_off, &p64,
+                                   sizeof(p64)) != 0) {
+                wolfBoot_printf("ELF: [STORE] ERROR: could not read "
+                                "program header\n");
+                return -1;
+            }
             is_loadable = (p64.type == ELF_PT_LOAD);
-            paddr       = (unsigned long)p64.paddr;
-            offset      = (unsigned long)p64.offset;
-            filesz      = (unsigned long)p64.file_size;
+            paddr       = p64.paddr;
+            offset      = p64.offset;
+            filesz      = p64.file_size;
             ph_size     = sizeof(p64);
         }
         /* Skip non-loadable segments */
@@ -2498,12 +2522,47 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
             return -1;
         }
 
-        load_addr = (uintptr_t)(paddr + BASE_OFF);
+        /* Validate the segment before writing: the source must stay
+         * inside the manifest image and the paddr range must fit the
+         * destination (uintptr_t) width so the load_addr cast below
+         * cannot wrap. The scatter destination is the exec region, which
+         * sits outside the boot partition that stores the signed ELF, so
+         * it is not bounded here: the program-header paddr values are
+         * covered by the image signature verified before this restore
+         * path. Reject instead of writing. */
+        if (filesz > UINT32_MAX) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment file_size "
+                            "%lu does not fit a 32-bit length\n",
+                            (unsigned long)filesz);
+            return -1;
+        }
+        if (offset > (uint64_t)boot.fw_size ||
+            filesz > (uint64_t)boot.fw_size - offset) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment offset %lu + "
+                            "size %lu exceeds image size %u\n",
+                            (unsigned long)offset,
+                            (unsigned long)filesz, boot.fw_size);
+            return -1;
+        }
+        seg_start = paddr + (uint64_t)BASE_OFF;
+        if (seg_start < paddr ||
+            seg_start > (uint64_t)UINTPTR_MAX - filesz) {
+            wolfBoot_printf("ELF: [STORE] ERROR: segment paddr range "
+                            "overflows\n");
+            return -1;
+        }
+        load_addr = (uintptr_t)seg_start;
+
         wolfBoot_printf("ELF: [STORE] Writing loadable segment: "
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
-                        (unsigned long)load_addr, offset, filesz);
-        copy_flash_buffered((uintptr_t)(image + offset), load_addr, filesz,
-                            ext_flash, ext_flash);
+                        (unsigned long)load_addr, (unsigned long)offset,
+                        (unsigned long)filesz);
+        if (copy_flash_buffered((uintptr_t)(image + offset), load_addr,
+                                filesz, ext_flash, ext_flash) != 0) {
+            wolfBoot_printf("ELF: [STORE] ERROR: could not write "
+                            "loadable segment\n");
+            return -1;
+        }
 
         entry_off += ph_size;
     }
@@ -2830,8 +2889,18 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
     uint32_t* sz)
 {
     uint8_t* p = get_sha_block(img, offset);
-    if (sz)
-        *sz = WOLFBOOT_SHA_BLOCK_SIZE;
+
+    if (sz) {
+        if (p == NULL) {
+            *sz = 0;
+        }
+        else {
+            *sz = WOLFBOOT_SHA_BLOCK_SIZE;
+            if (*sz > img->fw_size - offset) {
+                *sz = img->fw_size - offset;
+            }
+        }
+    }
     return p;
 }
 

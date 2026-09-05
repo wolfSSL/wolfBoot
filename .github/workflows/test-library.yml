@@ -158,6 +158,18 @@ jobs:
 
           echo "./test-lib test_v1_signed.bin"
           ./test-lib test_v1_signed.bin
+
+          # A file smaller than the image header must be rejected up front
+          # instead of being parsed (header fields would be read past the
+          # end of the allocation).
+          printf 'WOLF' > tiny.bin
+          ./test-lib tiny.bin > tiny.out 2>&1 || true
+          if ! grep -q "too small" tiny.out; then
+            echo "FAIL: undersized file was not rejected before parsing"
+            cat tiny.out
+            exit 1
+          fi
+          echo "PASS: undersized file rejected"
           ./test-lib test_v1_signed.bin 2>&1 | grep "Firmware Valid"
 
       - name: Run test-lib (expect failure)

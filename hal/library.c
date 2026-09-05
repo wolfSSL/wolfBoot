@@ -102,6 +102,7 @@ int do_boot(uint32_t* v)
 }
 
 static uintptr_t gImage;
+static size_t gImageSize;
 #ifdef NO_FILESYSTEM
 static const uint8_t test_img[] = {
     0x57, 0x4F, 0x4C, 0x46, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x00, 0x01,
@@ -130,6 +131,7 @@ static const uint8_t test_img[] = {
 int wolfBoot_start(void)
 {
     struct wolfBoot_image os_image;
+    size_t max_payload;
     int ret = 0;
     memset(&os_image, 0, sizeof(os_image));
 
@@ -137,6 +139,19 @@ int wolfBoot_start(void)
 
     if ((ret = wolfBoot_open_image_address(&os_image, (uint8_t*)gImage)) < 0) {
         goto exit;
+    }
+
+    /* The loaded file may be shorter than the firmware size the header
+     * claims; bound the hash range to the bytes actually loaded. Compute
+     * the payload in size_t and cap at UINT32_MAX so a > 4 GiB file
+     * clamps to the maximum firmware size rather than truncating to a
+     * small value. */
+    max_payload = gImageSize - IMAGE_HEADER_SIZE;
+    if (max_payload > UINT32_MAX) {
+        max_payload = UINT32_MAX;
+    }
+    if (os_image.fw_size > (uint32_t)max_payload) {
+        os_image.fw_size = (uint32_t)max_payload;
     }
 
     if ((ret = wolfBoot_verify_integrity(&os_image)) < 0) {
@@ -177,17 +192,27 @@ int main(int argc, const char* argv[])
 
 #ifdef NO_FILESYSTEM
     gImage = (uintptr_t)test_img;
+    gImageSize = sizeof(test_img);
 #else
     if (argc > 1) {
         size_t sz = 0, bread;
+        long fsz;
         FILE* img = fopen(argv[1], "rb");
         if (img == NULL) {
             wolfBoot_printf("failed to open %s!\n", argv[1]);
             return -3;
         }
         fseek(img, 0, SEEK_END);
-        sz = ftell(img);
+        fsz = ftell(img);
         fseek(img, 0, SEEK_SET);
+
+        if ((fsz < 0) || ((size_t)fsz < IMAGE_HEADER_SIZE)) {
+            wolfBoot_printf("image file too small: %ld bytes "
+                            "(minimum %d)\n", fsz, IMAGE_HEADER_SIZE);
+            ret = -4;
+            goto close_img;
+        }
+        sz = (size_t)fsz;
 
         gImage = (uintptr_t)malloc(sz);
         if (((void*)gImage) == NULL) {
@@ -195,6 +220,7 @@ int main(int argc, const char* argv[])
             ret = -1;
             goto close_img;
         }
+        gImageSize = sz;
 
         bread = fread((void*)gImage, 1, sz, img);
         if (bread != sz) {

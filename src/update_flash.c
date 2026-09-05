@@ -623,6 +623,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     #   define DELTA_BLOCK_SIZE 1024
     #endif
 
+    /* The per-sector fill loop advances in DELTA_BLOCK_SIZE steps, so a
+     * sector that is not a multiple of the block size would be written
+     * past the one-sector SWAP partition and misalign the resume path. */
+    #if (WOLFBOOT_SECTOR_SIZE % DELTA_BLOCK_SIZE) != 0
+    #error "Delta update: WOLFBOOT_SECTOR_SIZE % DELTA_BLOCK_SIZE != 0"
+    #endif
+
 static inline uint32_t wb_delta_im2n(uint32_t val)
 {
 #ifdef BIG_ENDIAN_ORDER
@@ -1325,12 +1332,16 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #else /* DISABLE_BACKUP */
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
     unsigned long entry;
-    void*         base = (void*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
     wolfBoot_printf("ELF Scattered image digest check\n");
     if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
         wolfBoot_printf("ELF Scattered image digest check: failed. Restoring "
                         "scattered image...\n");
-        wolfBoot_load_flash_image_elf(PART_BOOT, &entry, PART_IS_EXT(boot));
+        if (wolfBoot_load_flash_image_elf(PART_BOOT, &entry,
+                                          PART_IS_EXT(&boot)) < 0) {
+            wolfBoot_printf(
+                "ELF: [UPDATE] ERROR: could not restore scattered image\n");
+            wolfBoot_panic();
+        }
         if (wolfBoot_check_flash_image_elf(PART_BOOT, &entry) < 0) {
             wolfBoot_printf(
                 "Fatal: Could not verify digest after scattering. Panic().\n");
@@ -1488,7 +1499,11 @@ int wolfBoot_unlock_disk(void)
         /* TODO: Unlock disk */
 
 
-        /* Extend a PCR from the mask to prevent future unsealing */
+        /* Extend a PCR from the mask to prevent future unsealing.
+         * Non-sim only: extending on the simulator would lock the
+         * PCR and block future unseals (eb2978ab). The function is
+         * ARCH_SIM-only today, so the block is inert until the
+         * unlock path is ported. */
     #if !defined(ARCH_SIM) && !defined(WOLFBOOT_NO_UNSEAL_PCR_EXTEND)
         {
         uint32_t pcrMask;

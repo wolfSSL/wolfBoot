@@ -42,11 +42,18 @@
  */
 static uint8_t sec_pool[4096];
 static size_t sec_pool_used;
+static int malloc_fail_next;
+static void *freed_ptrs[64];
+static int freed_count;
 
 static void *sec_malloc(size_t n)
 {
     void *p;
 
+    if (malloc_fail_next) {
+        malloc_fail_next = 0;
+        return NULL;
+    }
     if (n == 0)
         n = 1;
     n = (n + 7U) & ~(size_t)7U;          /* keep allocations aligned */
@@ -59,7 +66,7 @@ static void *sec_malloc(size_t n)
 
 #define XMALLOC_OVERRIDE
 #define XMALLOC(n, h, t) sec_malloc((size_t)(n))
-#define XFREE(p, h, t)   do { (void)(p); } while (0)
+#define XFREE(p, h, t)   do { if ((p) != NULL && freed_count < 64) freed_ptrs[freed_count++] = (void *)(p); } while (0)
 #define XREALLOC(p, n, h, t) NULL
 
 #include "user_settings.h"
@@ -160,6 +167,9 @@ static void reset_state(void)
 {
     memset(sec_pool, 0, sizeof(sec_pool));
     sec_pool_used = 0;
+    malloc_fail_next = 0;
+    memset(freed_ptrs, 0, sizeof(freed_ptrs));
+    freed_count = 0;
     stub_saw_secret = 0;
     memset(&ns_mem, 0, sizeof(ns_mem));
 }
@@ -246,6 +256,52 @@ START_TEST(test_mech_password_zeroized)
 }
 END_TEST
 
+/*
+ * Partial allocation failure: the pool is pre-filled with 0xDE so any block
+ * the allocator hands out holds non-NULL garbage. If the snapshot
+ * allocation fails while the work allocation succeeds, the cleanup must not
+ * pass the indeterminate work[].pValue pointers to XFREE: every released
+ * pointer must be one this allocator actually handed out.
+ */
+START_TEST(test_tmpl_partial_alloc_no_garbage_free)
+{
+    CK_ATTRIBUTE *tmpl = ns_mem.tmpl;
+    uint8_t *nsKey = ns_mem.bytes + 3 * sizeof(CK_ATTRIBUTE);
+    CK_OBJECT_HANDLE *nsHandle;
+    CK_OBJECT_CLASS *nsClass;
+    CK_KEY_TYPE *nsType;
+    CK_RV rv;
+    int i;
+
+    reset_state();
+    memset(sec_pool, 0xDE, sizeof(sec_pool));
+    malloc_fail_next = 1;                       /* fail the snap alloc */
+    memcpy(nsKey, secret_key, sizeof(secret_key));
+    nsClass = (CK_OBJECT_CLASS *)(nsKey + sizeof(secret_key));
+    nsType = (CK_KEY_TYPE *)(nsClass + 1);
+    nsHandle = (CK_OBJECT_HANDLE *)(nsType + 1);
+    *nsClass = CKO_SECRET_KEY;
+    *nsType = CKK_AES;
+    tmpl[0].type = CKA_CLASS;
+    tmpl[0].pValue = nsClass;
+    tmpl[0].ulValueLen = sizeof(*nsClass);
+    tmpl[1].type = CKA_KEY_TYPE;
+    tmpl[1].pValue = nsType;
+    tmpl[1].ulValueLen = sizeof(*nsType);
+    tmpl[2].type = CKA_VALUE;
+    tmpl[2].pValue = nsKey;
+    tmpl[2].ulValueLen = sizeof(secret_key);
+
+    rv = C_CreateObject_nsc_call(1, tmpl, 3, nsHandle);
+    ck_assert_int_eq((int)rv, (int)CKR_HOST_MEMORY);
+    for (i = 0; i < freed_count; i++) {
+        uint8_t *p = freed_ptrs[i];
+        ck_assert_msg(p >= sec_pool && p < sec_pool + sizeof(sec_pool),
+            "XFREE got indeterminate pointer %p", (void *)p);
+    }
+}
+END_TEST
+
 Suite *pkcs11_nsc_suite(void)
 {
     Suite *s = suite_create("pkcs11-nsc-zeroize");
@@ -253,6 +309,7 @@ Suite *pkcs11_nsc_suite(void)
 
     tcase_add_test(tc, test_create_object_value_zeroized);
     tcase_add_test(tc, test_mech_password_zeroized);
+    tcase_add_test(tc, test_tmpl_partial_alloc_no_garbage_free);
     suite_add_tcase(s, tc);
     return s;
 }
