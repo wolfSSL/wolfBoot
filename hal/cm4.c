@@ -379,8 +379,11 @@ void* hal_get_boot_dts(void)
     sz = fdt_size(&ctx);
     /* SECURITY: the firmware DTB lives on the unsigned FAT partition (unless
      * the RPi EEPROM secure-boot is enabled), so it is NOT covered by wolfBoot's
-     * signature. Only /chosen/bootargs is overwritten below; /memory,
-     * /reserved-memory, per-device reg windows and initrd remain firmware /
+     * signature. Only /chosen/bootargs is overwritten below, and the
+     * /chosen/linux,initrd-{start,end} pointers are zeroed: this path never
+     * loads an authenticated ramdisk, so a non-zero firmware value would
+     * direct the signed kernel to an unauthenticated initramfs in RAM.
+     * /memory, /reserved-memory and per-device reg windows remain firmware /
      * attacker controlled.
      * This is NOT effectively optional: CM4_FIRMWARE_DTB is enabled by default
      * in both shipped Linux configurations (cm4_emmc_linux.config and
@@ -442,6 +445,19 @@ void* hal_get_boot_dts(void)
         return NULL;
     }
 #endif
+    /* Zero the initrd pointers the firmware DTB may carry. This path never
+     * attaches an authenticated ramdisk (a FIT ramdisk subimage is only
+     * fixup'd into an FIT-embedded DTB, which bypasses this fallback), so
+     * any non-zero value here would point the signed kernel at an
+     * unauthenticated initramfs in RAM. The kernel loads no initrd from a
+     * zero range, and the properties are zeroed, not deleted, so the
+     * existing fdt_fixup_val64() covers both the present and absent case.
+     * Fail closed, like the bootargs fixup above. */
+    if (fdt_fixup_val64(&ctx, off, "chosen", "linux,initrd-start", 0) != 0 ||
+            fdt_fixup_val64(&ctx, off, "chosen", "linux,initrd-end", 0) != 0) {
+        wolfBoot_printf("cm4: DTB initrd fixup failed; refusing firmware DTB\n");
+        return NULL;
+    }
     wolfBoot_printf("cm4: DTB relocated to %p, bootargs set\n", fdt);
     return fdt;
 #endif /* CM4_FIRMWARE_DTB */
