@@ -236,6 +236,22 @@ START_TEST(test_fsp_both_slots_oversized_panics)
 }
 END_TEST
 
+START_TEST(test_fsp_inverted_tolum_rejects_both_slots)
+{
+    /* tolum below the load address inverts the low-memory limit. The
+     * limit must fail closed (no slot may load), not wrap into a
+     * near-2^32 limit that accepts any image. */
+    reset_mocks();
+    mock_stage2_params.tolum =
+        (uint32_t)((uintptr_t)load_buffer - 1);
+
+    wolfBoot_start();
+
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
+}
+END_TEST
+
 START_TEST(test_fsp_fitting_slot_boots)
 {
     /* Both slots fit and versions are equal: primary (A) boots. */
@@ -258,6 +274,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tc, test_fsp_oversized_slot_falls_back_to_other_slot);
     tcase_add_test(tc, test_fsp_both_slots_oversized_panics);
+    tcase_add_test(tc, test_fsp_inverted_tolum_rejects_both_slots);
     tcase_add_test(tc, test_fsp_fitting_slot_boots);
     suite_add_tcase(s, tc);
 
