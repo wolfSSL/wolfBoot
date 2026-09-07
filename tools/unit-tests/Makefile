@@ -1440,20 +1440,23 @@ unit-ecc-raw-der: unit-ecc-raw-der.c
 # destination flash is a pre-filled host array, so the over-read is
 # observable through a canary after the source buffer.
 stm32l5_write_extract.h: ../../hal/stm32l5.c
-	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
-	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	# hal_flash_wait_complete is mocked in the test (program-window
+	# check), so only the real clear_errors + write are extracted.
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< > $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test:
-# the real hal_flash_write() and its wait/clear helpers from
-# hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
-# flash at a 32-bit host address, canary after the source buffer.
+# the real hal_flash_write() and clear_errors from hal/stm32u5.c
+# (hal_flash_wait_complete is mocked in the test for the
+# program-window check), FLASH_NS_SR/CR on a host register file,
+# destination flash at a 32-bit host address, canary after the source.
 stm32u5_write_extract.h: ../../hal/stm32u5.c
-	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
-	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	# hal_flash_wait_complete is mocked in the test (program-window
+	# check), so only the real clear_errors + write are extracted.
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< > $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h

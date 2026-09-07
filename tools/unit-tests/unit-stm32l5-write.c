@@ -12,12 +12,14 @@
  * The fix read-modify-writes the whole unit: the destination is
  * aligned down to the unit, the bytes outside the requested span come
  * from flash and go back unchanged, and both words are stored through
- * the aligned pointer. That is asserted here for unaligned starts
- * (the host data model cannot observe the program-unit split itself,
- * only where the bytes end up). Both words are always stored in one
- * PG window -- the flash has no 32-bit program mode -- which this
- * host model cannot observe, so that is asserted by construction
- * in the HAL, not here.
+ * the aligned pointer. That is asserted here for unaligned starts.
+ * The program-window invariant is enforced by the mock
+ * hal_flash_wait_complete below: the real one only spins on
+ * FLASH_SR_BSY (never set on the host register file), so the mock
+ * diffs the flash against the previous window and asserts that the
+ * changed bytes fit in one aligned 8-byte unit. A pre-fix HAL split
+ * the two word stores across two units for an unaligned start, and
+ * the 20-byte unaligned test goes red on it.
  *
  * Same harness as the STM32U5 twin: extracted functions, registers on
  * a host file, stale destination flash, canary after the source.
@@ -75,12 +77,41 @@ static uint32_t g_flash_regs[0x40 / sizeof(uint32_t)];
 #define FLASH_MEM_ADDR 0x10000000UL
 static uint8_t *g_flash_mem;
 
+/* Snapshot of the flash at the last program-window boundary; the
+ * mock hal_flash_wait_complete() diffs against it. */
+static uint8_t g_flash_prev[FLASH_MEM_SZ];
+
 /* Source buffer followed by a canary: a pre-fix short write reads the
  * canary and lands it in the destination flash. */
 #define DATA_SZ 64
 #define CANARY_SZ 32
 static uint8_t g_data[DATA_SZ + CANARY_SZ];
 #define g_canary (g_data + DATA_SZ)
+
+/* Mock hal_flash_wait_complete(): the real one (hal/stm32l5.c) only
+ * spins on FLASH_SR_BSY, which the host register file never sets. This
+ * one adds the program-window check the host model cannot see any
+ * other way: the bytes changed since the previous window must fit
+ * within one aligned 8-byte program unit. The pre-fix HAL issued its
+ * two word stores relative to the caller address, so an unaligned
+ * start split them across two units and this assertion goes red. */
+static void hal_flash_wait_complete(uint8_t bank)
+{
+    int i;
+    int first = -1;
+    int last = -1;
+
+    for (i = 0; i < FLASH_MEM_SZ; i++) {
+        if (g_flash_mem[i] != g_flash_prev[i]) {
+            if (first < 0)
+                first = i;
+            last = i;
+        }
+    }
+    if (first >= 0)
+        ck_assert_int_le(last, (first & ~0x07) + 7);
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+}
 
 /* The real functions from hal/stm32l5.c (extracted by the Makefile). */
 #include "stm32l5_write_extract.h"
@@ -92,6 +123,7 @@ static void setup(void)
     memset(g_flash_regs, 0, sizeof(g_flash_regs));
     for (i = 0; i < FLASH_MEM_SZ; i++)
         g_flash_mem[i] = 0x12; /* stale */
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
     for (i = 0; i < DATA_SZ; i++)
         g_data[i] = (uint8_t)(0x30 + i);
     /* 0x70..0x8F: distinct from the data bytes (0x30..0x6F), the stale
