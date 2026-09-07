@@ -536,13 +536,16 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
  * the targets increment ipi_done after executing the fences, so this
  * completes only when every target has finished its fence. The SBI
  * remote-fence calls are synchronous; the bound guards against a wedged
- * target turning into a wedged caller. */
-static void sbi_wait_ipi_done(unsigned long mask, unsigned long base,
+ * target turning into a wedged caller.  Returns SBI_SUCCESS when every
+ * target completed, SBI_ERR_FAILED when any target did not complete
+ * within the bound. */
+static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
     unsigned long self)
 {
     unsigned long i;
     unsigned long h;
     uint32_t spin;
+    long err = SBI_SUCCESS;
     /* SBI v0.2: hart_mask_base == -1 selects all harts (see sbi_post_ipi). */
     if (base == (unsigned long)-1) {
         base = 0;
@@ -561,7 +564,11 @@ static void sbi_wait_ipi_done(unsigned long mask, unsigned long base,
         while (sbi_ipi_done[h] <= sbi_ipi_wait_gen[h] && spin > 0U) {
             spin--;
         }
+        if (sbi_ipi_done[h] <= sbi_ipi_wait_gen[h]) {
+            err = SBI_ERR_FAILED;
+        }
     }
+    return err;
 }
 
 /* Returns the (possibly advanced) PC to resume at.  For ecall we skip the
@@ -658,7 +665,7 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             break;
         }
         sbi_post_ipi(regs[A0], regs[A1], op, hartid);
-        sbi_wait_ipi_done(regs[A0], regs[A1], hartid);
+        err = sbi_wait_ipi_done(regs[A0], regs[A1], hartid);
         break;
     }
 
@@ -786,9 +793,9 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             sbi_post_ipi(fmask, 0,
                 (eid == SBI_EXT_0_1_REMOTE_FENCE_I) ?
                     SBI_IPI_OP_FENCE_I : SBI_IPI_OP_SFENCE, hartid);
-            sbi_wait_ipi_done(fmask, 0, hartid);
+            err = sbi_wait_ipi_done(fmask, 0, hartid);
         }
-        regs[A0] = 0;
+        regs[A0] = (unsigned long)err;
         return epc + 4;
     case SBI_EXT_0_1_SHUTDOWN:
         wolfBoot_printf("[SBI] legacy SHUTDOWN requested\n");
