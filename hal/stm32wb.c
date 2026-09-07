@@ -254,11 +254,17 @@ static void clock_pll_off(void)
     /* Enable internal high-speed oscillator. */
     RCC_CR |= RCC_CR_MSION;
     DMB();
-    while ((RCC_CFGR & RCC_CR_MSIRDY) == 0) {};
+    /* Wait for MSI to be ready. */
+    while ((RCC_CR & RCC_CR_MSIRDY) == 0)
+        ;
     /* Select MSI as SYSCLK source. */
     reg32 = RCC_CFGR;
     reg32 &= ~(RCC_CFGR_SW_MASK);
+    RCC_CFGR = reg32;
     DMB();
+    /* Wait for the switch to be confirmed (SWS, bits 3:2). */
+    while (((RCC_CFGR >> 2) & RCC_CFGR_SW_MASK) != RCC_CFGR_SW_MSI)
+        ;
     /* Turn off PLL */
     RCC_CR &= ~RCC_CR_PLLON;
     DMB();
