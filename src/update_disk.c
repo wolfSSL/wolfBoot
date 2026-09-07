@@ -547,11 +547,15 @@ void RAMFUNCTION wolfBoot_start(void)
      * The header sits ahead of the payload in the same file, hence the
      * IMAGE_HEADER_SIZE. */
 #if defined(WOLFBOOT_FSP)
-    /* Fail closed on an inverted tolum: the subtraction would otherwise wrap
-     * to a near-2^64 bound, which is the opposite of a cap. */
-    if ((uintptr_t)(stage2_params->tolum) > (uintptr_t)load_address) {
-        slot_max = (uint64_t)(uintptr_t)(stage2_params->tolum) -
-                   (uint64_t)(uintptr_t)load_address;
+    /* Fail closed on an inverted tolum: with tolum at or below the load
+     * address there is no low-memory window, so the cap is zero.  Both
+     * are low-memory addresses, so compare them in their 32-bit form.
+     * The subtraction would otherwise wrap into a near-2^32 bound, which
+     * is the opposite of a cap. */
+    if ((uint32_t)(uintptr_t)(stage2_params->tolum) >
+            (uint32_t)(uintptr_t)load_address) {
+        slot_max = (uint64_t)(uint32_t)(uintptr_t)(stage2_params->tolum) -
+                   (uint64_t)(uint32_t)(uintptr_t)load_address;
     }
     else {
         slot_max = 0;
@@ -697,9 +701,10 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
 #ifdef WOLFBOOT_FSP
-        /* Verify image size fits in low memory */
-        if (os_image.fw_size > ((uint32_t)(stage2_params->tolum) -
-                                           (uint32_t)(uintptr_t)load_address)) {
+        /* Verify image size fits in low memory. Reuse the validated
+         * slot_max: it is zero when tolum is inverted, where the raw
+         * subtraction would wrap into a near-2^32 limit. */
+        if (os_image.fw_size > slot_max) {
             wolfBoot_printf("Image size %u doesn't fit in low memory\r\n",
                 os_image.fw_size);
             selected ^= 1;
