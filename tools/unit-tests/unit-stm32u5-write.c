@@ -118,7 +118,8 @@ static int canary_in_flash(void)
 /* A write of 60 bytes (not a multiple of 16): the requested bytes
  * land, the partial final word is padded to the erased value, and
  * nothing past len is read or written. */
-START_TEST(test_write_60_no_overread){
+START_TEST(test_write_60_no_overread)
+{
     int i;
 
     ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
