@@ -94,27 +94,33 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (i < len) {
         int j;
+        uintptr_t cur_addr = (uintptr_t)dst + i;
+        uint32_t *unit = (uint32_t *)(cur_addr & (~0x0FUL));
+        int off = (int)(cur_addr & 0x0FUL);
+        int i_aligned = i - off;
 
         /* Read-modify-write the whole 128-bit unit (as stm32h5.c):
          * the program only starts on the 4th word, and a partial
-         * quad-word leaves FLASH_SR_WDW set, hanging the wait. */
+         * quad-word leaves FLASH_SR_WDW set, hanging the wait. The
+         * unit is aligned down from the next byte, so an unaligned
+         * start keeps the bytes before the request. */
         for (j = 0; j < 16; j++) {
-            if (i + j < len)
-                qword_bytes[j] = data[i + j];
+            if ((j >= off) && (i_aligned + j < len))
+                qword_bytes[j] = data[i_aligned + j];
             else
-                qword_bytes[j] = ((const uint8_t *)dst)[i + j];
+                qword_bytes[j] = ((const uint8_t *)unit)[j];
         }
 
         *cr |= FLASH_CR_PG;
         for (j = 0; j < 4; j++) {
-            dst[(i >> 2) + j] = qword[j];
+            unit[j] = qword[j];
             ISB();
         }
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
-        i += 16;
+        i = i_aligned + 16;
     }
 
     return 0;

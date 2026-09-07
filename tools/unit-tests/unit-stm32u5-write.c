@@ -3,18 +3,24 @@
  * Regression test: hal_flash_write() in hal/stm32u5.c read all four
  * words of the 16-byte program unit regardless of the remaining
  * length, so a write not a multiple of 16 read up to 12 bytes past the
- * caller's buffer and programmed them.
+ * caller's buffer and programmed them. It also programmed through the
+ * caller's address without aligning it down to the 16-byte program
+ * unit, so a write starting inside a unit issued its four word stores
+ * across two different units, leaving partial quad-words that set
+ * FLASH_SR_WDW and hang the wait for completion.
  *
- * The fix read-modify-writes the whole unit: bytes outside [i, len)
- * come from flash and go back unchanged. All four words are always
- * stored -- the controller only starts the program on the fourth --
- * which this host model cannot observe, so that part is asserted by
- * construction in the HAL, not here.
+ * The fix read-modify-writes the whole unit: the destination is
+ * aligned down to the unit, the bytes outside the requested span come
+ * from flash and go back unchanged, and all four words are stored
+ * through the aligned pointer. That is asserted here for unaligned
+ * starts (the host data model cannot observe the program-unit split
+ * itself, only where the bytes end up). All four words are always
+ * stored in one program -- the controller only starts it on the
+ * fourth word -- which this host model cannot observe, so that is
+ * asserted by construction in the HAL, not here.
  *
- * The real functions are extracted by the Makefile and run with the
- * FLASH registers on a host register file and the destination flash
- * pre-filled with stale data; a canary after the source buffer catches
- * any read past len.
+ * Same harness as the STM32L5 twin: extracted functions, registers on
+ * a host file, stale destination flash, canary after the source.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -42,7 +48,7 @@
 /* Host stand-ins for the ARM primitives and the TZ build selection
  * (non-secure path: FLASH_NS_CR / FLASH_NS_SR). */
 #define RAMFUNCTION
-#define ISB() do {} while (0)
+#define ISB() do { } while (0)
 #define TZ_SECURE() (0)
 
 /* Host FLASH register file (offsets as in hal/stm32u5.h). */
@@ -112,8 +118,7 @@ static int canary_in_flash(void)
 /* A write of 60 bytes (not a multiple of 16): the requested bytes
  * land, the partial final word is padded to the erased value, and
  * nothing past len is read or written. */
-START_TEST(test_write_60_no_overread)
-{
+START_TEST(test_write_60_no_overread){
     int i;
 
     ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
@@ -199,6 +204,43 @@ START_TEST(test_write_64_full_units)
 }
 END_TEST
 
+/* A write of 20 bytes starting 4 bytes into a 16-byte unit: the
+ * first unit is only partly requested, the rest of it keeps its stale
+ * value, and the request runs on through the following units. */
+START_TEST(test_write_20_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 20), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 20), 0);
+    for (i = 24; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
+/* A 3-byte write starting 4 bytes into a 16-byte unit: one partial
+ * unit, the rest of it rewritten unchanged. */
+START_TEST(test_write_3_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 3), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 3), 0);
+    for (i = 7; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
 Suite *stm32u5_write_suite(void)
 {
     Suite *s = suite_create("stm32u5-write");
@@ -210,6 +252,8 @@ Suite *stm32u5_write_suite(void)
     tcase_add_test(tc, test_write_18_second_word_padded);
     tcase_add_test(tc, test_write_3_single_word_padded);
     tcase_add_test(tc, test_write_64_full_units);
+    tcase_add_test(tc, test_write_20_unaligned4);
+    tcase_add_test(tc, test_write_3_unaligned4);
     suite_add_tcase(s, tc);
 
     return s;
