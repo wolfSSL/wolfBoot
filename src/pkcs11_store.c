@@ -571,6 +571,9 @@ int wolfPKCS11_Store_Remove(int type, CK_ULONG id1, CK_ULONG id2)
     if (buf == NULL)
         return NOT_AVAILABLE_E;
 
+    /* Erase the payload before invalidating the metadata, so key
+     * material does not remain recoverable in flash after removal. */
+    erase_object_payload(buf);
     delete_object((int32_t)type, (uint32_t)id1, (uint32_t)id2);
     return 0;
 }
