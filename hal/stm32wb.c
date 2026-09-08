@@ -63,6 +63,9 @@ PKA_HandleTypeDef hpka = { };
 #define RCC_CFGR_SW_MSI               0x0
 #define RCC_CFGR_SW_PLL               0x3
 #define RCC_CFGR_SW_MASK              0x3
+/* SWS (bits 3:2, read-only) mirrors the SW encoding (RM0434 6.4.3): */
+#define RCC_CFGR_SWS_MSI              0x0
+#define RCC_CFGR_SWS_MASK             0x3
 
 #define RCC_CFGR_HPRE_MASK  0x0F
 #define RCC_CFGR_PPRE1_MASK 0x07
@@ -254,11 +257,17 @@ static void clock_pll_off(void)
     /* Enable internal high-speed oscillator. */
     RCC_CR |= RCC_CR_MSION;
     DMB();
-    while ((RCC_CFGR & RCC_CR_MSIRDY) == 0) {};
+    /* Wait for MSI to be ready. */
+    while ((RCC_CR & RCC_CR_MSIRDY) == 0)
+        ;
     /* Select MSI as SYSCLK source. */
     reg32 = RCC_CFGR;
     reg32 &= ~(RCC_CFGR_SW_MASK);
+    RCC_CFGR = reg32;
     DMB();
+    /* Wait for the switch to be confirmed (SWS, bits 3:2). */
+    while (((RCC_CFGR >> 2) & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_MSI)
+        ;
     /* Turn off PLL */
     RCC_CR &= ~RCC_CR_PLLON;
     DMB();

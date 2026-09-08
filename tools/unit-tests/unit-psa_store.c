@@ -337,6 +337,90 @@ START_TEST(test_store_rejects_negative_len)
 }
 END_TEST
 
+/* Removing an object must erase the payload from flash, not just
+ * invalidate the metadata: key material must not remain recoverable
+ * after the API reports a successful deletion. */
+START_TEST(test_remove_erases_payload_from_flash)
+{
+    const int type = WOLFPSA_STORE_KEY;
+    const unsigned long id1_a = 10;
+    const unsigned long id2_a = 20;
+    const unsigned long id1_b = 30;
+    const unsigned long id2_b = 40;
+    void *store = NULL;
+    unsigned char key_a[256];
+    unsigned char key_b[128];
+    uint8_t *buf_a;
+    uint8_t *buf_b;
+    uint32_t i;
+    int ret;
+
+    memset(key_a, 0xAB, sizeof(key_a));
+    memset(key_b, 0xCD, sizeof(key_b));
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Two live objects: A gets slot 0, B gets the adjacent slot 1 */
+    ret = wolfPSA_Store_Open(type, id1_a, id2_a, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPSA_Store_Write(store, key_a, sizeof(key_a));
+    ck_assert_int_eq(ret, (int)sizeof(key_a));
+    wolfPSA_Store_Close(store);
+
+    ret = wolfPSA_Store_Open(type, id1_b, id2_b, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPSA_Store_Write(store, key_b, sizeof(key_b));
+    ck_assert_int_eq(ret, (int)sizeof(key_b));
+    wolfPSA_Store_Close(store);
+
+    buf_a = find_object_buffer(type, id1_a, id2_a);
+    buf_b = find_object_buffer(type, id1_b, id2_b);
+    ck_assert_ptr_nonnull(buf_a);
+    ck_assert_ptr_nonnull(buf_b);
+    ck_assert_ptr_eq(buf_a, vault_base + 2 * WOLFBOOT_SECTOR_SIZE);
+    ck_assert_ptr_eq(buf_b, vault_base + 2 * WOLFBOOT_SECTOR_SIZE +
+        KEYVAULT_OBJ_SIZE);
+
+    /* Remove A: the payload must be erased from the raw flash */
+    ret = wolfPSA_Store_Remove(type, id1_a, id2_a);
+    ck_assert_int_eq(ret, 0);
+
+    /* The 8-byte id prefix is preserved by the erase (it keeps the slot
+     * identity used by the backup-recovery check); the payload region
+     * itself must be erased to 0xFF across the whole slot. */
+    ck_assert_uint_eq(((uint32_t *)buf_a)[0], (uint32_t)id1_a);
+    ck_assert_uint_eq(((uint32_t *)buf_a)[1], (uint32_t)id2_a);
+    for (i = 2 * sizeof(uint32_t); i < KEYVAULT_OBJ_SIZE; i++) {
+        ck_assert_msg(buf_a[i] == 0xFF,
+            "Payload survives removal at slot offset %u: 0x%02x",
+            i, buf_a[i]);
+    }
+
+    /* The sector read-modify-write must leave the neighboring object B
+     * intact in flash */
+    for (i = 2 * sizeof(uint32_t);
+         i < 2 * sizeof(uint32_t) + sizeof(key_b); i++) {
+        ck_assert_msg(buf_b[i] == 0xCD,
+            "Neighbor object clobbered at slot offset %u: 0x%02x",
+            i, buf_b[i]);
+    }
+    ret = wolfPSA_Store_Open(type, id1_b, id2_b, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPSA_Store_Read(store, key_b, sizeof(key_b));
+    ck_assert_int_eq(ret, (int)sizeof(key_b));
+    wolfPSA_Store_Close(store);
+
+    /* A is no longer addressable */
+    ret = wolfPSA_Store_Open(type, id1_a, id2_a, 1, &store);
+    ck_assert_int_eq(ret, NOT_AVAILABLE_E);
+    ret = wolfPSA_Store_Remove(type, id1_a, id2_a);
+    ck_assert_int_eq(ret, NOT_AVAILABLE_E);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot-psa-store");
@@ -348,6 +432,7 @@ Suite *wolfboot_suite(void)
     TCase *tcase_tail = tcase_create("shorter_overwrite_clears_tail");
     TCase *tcase_zeroize = tcase_create("cache_commit_zeroizes_cached_sector");
     TCase *tcase_neg_len = tcase_create("rejects_negative_len");
+    TCase *tcase_remove_erase = tcase_create("remove_erases_payload");
 
     tcase_add_test(tcase_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -357,6 +442,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_tail, test_shorter_overwrite_clears_tail);
     tcase_add_test(tcase_zeroize, test_cache_commit_zeroizes_cached_sector);
     tcase_add_test(tcase_neg_len, test_store_rejects_negative_len);
+    tcase_add_test(tcase_remove_erase, test_remove_erases_payload_from_flash);
     suite_add_tcase(s, tcase_write);
     suite_add_tcase(s, tcase_close);
     suite_add_tcase(s, tcase_delete);
@@ -365,6 +451,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tcase_tail);
     suite_add_tcase(s, tcase_zeroize);
     suite_add_tcase(s, tcase_neg_len);
+    suite_add_tcase(s, tcase_remove_erase);
     return s;
 }
 

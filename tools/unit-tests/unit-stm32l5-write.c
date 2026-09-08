@@ -3,13 +3,23 @@
  * Regression test: hal_flash_write() in hal/stm32l5.c read both words
  * of the 8-byte program unit regardless of the remaining length, so a
  * write not a multiple of 8 read up to 4 bytes past the caller's
- * buffer and programmed them.
+ * buffer and programmed them. It also programmed through the caller's
+ * address without aligning it down to the 8-byte program unit, so a
+ * write starting inside a unit issued its two word stores in two
+ * different units: the flash has no 32-bit program mode, so nothing
+ * is programmed and the second store faults on alignment.
  *
- * The fix read-modify-writes the whole unit: bytes outside [i, len)
- * come from flash and go back unchanged. Both words are always stored
- * in one PG window -- the flash has no 32-bit program mode -- which
- * this host model cannot observe, so that is asserted by construction
- * in the HAL, not here.
+ * The fix read-modify-writes the whole unit: the destination is
+ * aligned down to the unit, the bytes outside the requested span come
+ * from flash and go back unchanged, and both words are stored through
+ * the aligned pointer. That is asserted here for unaligned starts.
+ * The program-window invariant is enforced by the mock
+ * hal_flash_wait_complete below: the real one only spins on
+ * FLASH_SR_BSY (never set on the host register file), so the mock
+ * diffs the flash against the previous window and asserts that the
+ * changed bytes fit in one aligned 8-byte unit. A pre-fix HAL split
+ * the two word stores across two units for an unaligned start, and
+ * the 20-byte unaligned test goes red on it.
  *
  * Same harness as the STM32U5 twin: extracted functions, registers on
  * a host file, stale destination flash, canary after the source.
@@ -39,7 +49,7 @@
 
 /* Host stand-ins for the ARM primitives and the TZ build selection. */
 #define RAMFUNCTION
-#define ISB() do {} while (0)
+#define ISB() do { } while (0)
 #define TZ_SECURE() (0)
 
 /* Host FLASH register file (offsets as in hal/stm32l5.h, non-secure
@@ -67,12 +77,41 @@ static uint32_t g_flash_regs[0x40 / sizeof(uint32_t)];
 #define FLASH_MEM_ADDR 0x10000000UL
 static uint8_t *g_flash_mem;
 
+/* Snapshot of the flash at the last program-window boundary; the
+ * mock hal_flash_wait_complete() diffs against it. */
+static uint8_t g_flash_prev[FLASH_MEM_SZ];
+
 /* Source buffer followed by a canary: a pre-fix short write reads the
  * canary and lands it in the destination flash. */
 #define DATA_SZ 64
 #define CANARY_SZ 32
 static uint8_t g_data[DATA_SZ + CANARY_SZ];
 #define g_canary (g_data + DATA_SZ)
+
+/* Mock hal_flash_wait_complete(): the real one (hal/stm32l5.c) only
+ * spins on FLASH_SR_BSY, which the host register file never sets. This
+ * one adds the program-window check the host model cannot see any
+ * other way: the bytes changed since the previous window must fit
+ * within one aligned 8-byte program unit. The pre-fix HAL issued its
+ * two word stores relative to the caller address, so an unaligned
+ * start split them across two units and this assertion goes red. */
+static void hal_flash_wait_complete(uint8_t bank)
+{
+    int i;
+    int first = -1;
+    int last = -1;
+
+    for (i = 0; i < FLASH_MEM_SZ; i++) {
+        if (g_flash_mem[i] != g_flash_prev[i]) {
+            if (first < 0)
+                first = i;
+            last = i;
+        }
+    }
+    if (first >= 0)
+        ck_assert_int_le(last, (first & ~0x07) + 7);
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+}
 
 /* The real functions from hal/stm32l5.c (extracted by the Makefile). */
 #include "stm32l5_write_extract.h"
@@ -84,6 +123,7 @@ static void setup(void)
     memset(g_flash_regs, 0, sizeof(g_flash_regs));
     for (i = 0; i < FLASH_MEM_SZ; i++)
         g_flash_mem[i] = 0x12; /* stale */
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
     for (i = 0; i < DATA_SZ; i++)
         g_data[i] = (uint8_t)(0x30 + i);
     /* 0x70..0x8F: distinct from the data bytes (0x30..0x6F), the stale
@@ -110,8 +150,7 @@ static int canary_in_flash(void)
 /* A write of 60 bytes (not a multiple of 8): the last complete word
  * lands, the bytes past len keep their stale value, and no canary
  * byte is read or written. */
-START_TEST(test_write_60_no_overread)
-{
+START_TEST(test_write_60_no_overread){
     int i;
 
     ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
@@ -177,6 +216,43 @@ START_TEST(test_write_64_full_units)
 }
 END_TEST
 
+/* A write of 20 bytes starting 4 bytes into an 8-byte unit: the
+ * first unit is only half requested, the rest of it keeps its stale
+ * value, and the request runs on through the following units. */
+START_TEST(test_write_20_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 20), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 20), 0);
+    for (i = 24; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
+/* A 3-byte write starting 4 bytes into an 8-byte unit: one partial
+ * unit, the rest of it rewritten unchanged. */
+START_TEST(test_write_3_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 3), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 3), 0);
+    for (i = 7; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
 Suite *stm32l5_write_suite(void)
 {
     Suite *s = suite_create("stm32l5-write");
@@ -187,6 +263,8 @@ Suite *stm32l5_write_suite(void)
     tcase_add_test(tc, test_write_58_partial_word_padded);
     tcase_add_test(tc, test_write_3_single_word_padded);
     tcase_add_test(tc, test_write_64_full_units);
+    tcase_add_test(tc, test_write_20_unaligned4);
+    tcase_add_test(tc, test_write_3_unaligned4);
     suite_add_tcase(s, tc);
 
     return s;

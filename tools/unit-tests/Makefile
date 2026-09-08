@@ -133,6 +133,7 @@ TESTS+=unit-stm32l4-write
 TESTS+=unit-stm32wb-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
+TESTS+=unit-stm32c0-write
 TESTS+=unit-nvm-cache-scrub
 TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
@@ -1254,6 +1255,20 @@ stm32wb_write_extract.h: ../../hal/stm32wb.c
 unit-stm32wb-write: unit-stm32wb-write.c stm32wb_write_extract.h
 	gcc -o $@ unit-stm32wb-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32c0-write runs the real hal_flash_write() from hal/stm32c0.c
+# (the double-word fast path added the flash base to an already
+# absolute address, targeting an address space past the flash, and the
+# read-modify-write path located its unit from the request base instead
+# of from the destination). Same harness as the STM32L4/STM32WB twins;
+# the c0 helpers are static and un-prefixed.
+stm32c0_write_extract.h: ../../hal/stm32c0.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32c0-write: unit-stm32c0-write.c stm32c0_write_extract.h
+	gcc -o $@ unit-stm32c0-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
 # and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
 # status model (F-11033: a timed-out program/erase used to report
@@ -1425,20 +1440,23 @@ unit-ecc-raw-der: unit-ecc-raw-der.c
 # destination flash is a pre-filled host array, so the over-read is
 # observable through a canary after the source buffer.
 stm32l5_write_extract.h: ../../hal/stm32l5.c
-	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
-	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	# hal_flash_wait_complete is mocked in the test (program-window
+	# check), so only the real clear_errors + write are extracted.
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< > $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32l5-write: unit-stm32l5-write.c stm32l5_write_extract.h
 	gcc -o $@ unit-stm32l5-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-stm32u5-write is the 16-byte-unit twin of the STM32L5 test:
-# the real hal_flash_write() and its wait/clear helpers from
-# hal/stm32u5.c, FLASH_NS_SR/CR on a host register file, destination
-# flash at a 32-bit host address, canary after the source buffer.
+# the real hal_flash_write() and clear_errors from hal/stm32u5.c
+# (hal_flash_wait_complete is mocked in the test for the
+# program-window check), FLASH_NS_SR/CR on a host register file,
+# destination flash at a 32-bit host address, canary after the source.
 stm32u5_write_extract.h: ../../hal/stm32u5.c
-	sed -n '/^void RAMFUNCTION hal_flash_wait_complete/,/^}/p' $< > $@
-	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< >> $@
+	# hal_flash_wait_complete is mocked in the test (program-window
+	# check), so only the real clear_errors + write are extracted.
+	sed -n '/^void RAMFUNCTION hal_flash_clear_errors/,/^}/p' $< > $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
 unit-stm32u5-write: unit-stm32u5-write.c stm32u5_write_extract.h
@@ -1621,8 +1639,8 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	kontron_spi_extract.h kontron_spi_fn_extract.h \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
-	stm32g4_write_extract.h stm32l4_write_extract.h stm32l5_write_extract.h \
-	stm32u5_write_extract.h stm32wb_write_extract.h \
+	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
+	stm32l5_write_extract.h stm32u5_write_extract.h stm32wb_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \

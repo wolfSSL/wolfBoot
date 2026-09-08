@@ -80,7 +80,6 @@
 #define FLASH_SECR          (*(volatile uint32_t *)(FLASH_BASE + 0x80)) /* RM0490 - 3.7.13 - FLASH_SECR */
 #endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
-#define FLASHMEM_ADDRESS_SPACE (0x08000000)
 #define FLASH_PAGE_SIZE        (0x800) /* 2KB */
 #define FLASH_PAGE_SIZE_SHIFT  11  /* (1 << FLASH_PAGE_SIZE_SHIFT) == FLASH_PAGE_SIZE*/
 
@@ -152,26 +151,25 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         flash_clear_errors();
         if ((len - i >= 8) && ((((address + i) & 0x07) == 0) &&
                 ((((uint32_t)data) + i) & 0x07) == 0)) {
-            src = (uint32_t *)data;
-            dst = (uint32_t *)(address + FLASHMEM_ADDRESS_SPACE);
+            src = (uint32_t *)(data + i);
+            dst = (uint32_t *)(address + i);
             flash_wait_complete();
-            dst[i >> 2] = src[i >> 2];
-            dst[(i >> 2) + 1] = src[(i >> 2) + 1];
+            dst[0] = src[0];
+            dst[1] = src[1];
             flash_wait_complete();
-            i+=8;
+            i += 8;
         } else {
+            uint32_t unit_addr = (address + i) & (~0x07);
+            int off = (address + i) - unit_addr;
             uint32_t val[2];
             uint8_t *vbytes = (uint8_t *)(val);
-            int off = (address + i) - (((address + i) >> 3) << 3);
-            uint32_t base_addr = address & (~0x07); /* aligned to 64 bit */
-            int u32_idx = (i >> 2);
-            dst = (uint32_t *)(base_addr);
-            val[0] = dst[u32_idx];
-            val[1] = dst[u32_idx + 1];
+            dst = (uint32_t *)unit_addr;
+            val[0] = dst[0];
+            val[1] = dst[1];
             while ((off < 8) && (i < len))
                 vbytes[off++] = data[i++];
-            dst[u32_idx] = val[0];
-            dst[u32_idx + 1] = val[1];
+            dst[0] = val[0];
+            dst[1] = val[1];
             flash_wait_complete();
         }
     }

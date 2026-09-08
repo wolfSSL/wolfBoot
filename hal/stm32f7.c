@@ -177,7 +177,7 @@ void fork_bootloader(void);
 #   define FLASH_SECTOR_8  0x8100000 /* 256 Kb  */
 #   define FLASH_SECTOR_9  0x8140000 /* 256 Kb  */
 #   define FLASH_SECTOR_10 0x8180000 /* 256 Kb  */
-#   define FLASH_SECTOR_11 0x818C000 /* 256 Kb  */
+#   define FLASH_SECTOR_11 0x81C0000 /* 256 Kb  */
 #endif
 #   define FLASH_TOP       0x8200000
 

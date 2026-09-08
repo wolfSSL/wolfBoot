@@ -3,18 +3,26 @@
  * Regression test: hal_flash_write() in hal/stm32u5.c read all four
  * words of the 16-byte program unit regardless of the remaining
  * length, so a write not a multiple of 16 read up to 12 bytes past the
- * caller's buffer and programmed them.
+ * caller's buffer and programmed them. It also programmed through the
+ * caller's address without aligning it down to the 16-byte program
+ * unit, so a write starting inside a unit issued its four word stores
+ * across two different units, leaving partial quad-words that set
+ * FLASH_SR_WDW and hang the wait for completion.
  *
- * The fix read-modify-writes the whole unit: bytes outside [i, len)
- * come from flash and go back unchanged. All four words are always
- * stored -- the controller only starts the program on the fourth --
- * which this host model cannot observe, so that part is asserted by
- * construction in the HAL, not here.
+ * The fix read-modify-writes the whole unit: the destination is
+ * aligned down to the unit, the bytes outside the requested span come
+ * from flash and go back unchanged, and all four words are stored
+ * through the aligned pointer. That is asserted here for unaligned
+ * starts. The program-window invariant is enforced by the mock
+ * hal_flash_wait_complete below: the real one only spins on
+ * FLASH_SR_BSY (never set on the host register file), so the mock
+ * diffs the flash against the previous window and asserts that the
+ * changed bytes fit in one aligned 16-byte unit. A pre-fix HAL split
+ * the four word stores across two units for an unaligned start, and
+ * the 20-byte unaligned test goes red on it.
  *
- * The real functions are extracted by the Makefile and run with the
- * FLASH registers on a host register file and the destination flash
- * pre-filled with stale data; a canary after the source buffer catches
- * any read past len.
+ * Same harness as the STM32L5 twin: extracted functions, registers on
+ * a host file, stale destination flash, canary after the source.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -42,7 +50,7 @@
 /* Host stand-ins for the ARM primitives and the TZ build selection
  * (non-secure path: FLASH_NS_CR / FLASH_NS_SR). */
 #define RAMFUNCTION
-#define ISB() do {} while (0)
+#define ISB() do { } while (0)
 #define TZ_SECURE() (0)
 
 /* Host FLASH register file (offsets as in hal/stm32u5.h). */
@@ -70,6 +78,10 @@ static uint32_t g_flash_regs[0x40 / sizeof(uint32_t)];
 #define FLASH_MEM_ADDR 0x11000000UL
 static uint8_t *g_flash_mem;
 
+/* Snapshot of the flash at the last program-window boundary; the
+ * mock hal_flash_wait_complete() diffs against it. */
+static uint8_t g_flash_prev[FLASH_MEM_SZ];
+
 /* Source buffer followed by a canary: pre-fix, a short write reads
  * bytes past len and lands them in the destination flash. The canary
  * range avoids the data bytes (0x30..0x6F), the stale fill (0x12) and
@@ -78,6 +90,31 @@ static uint8_t *g_flash_mem;
 #define CANARY_SZ 32
 static uint8_t g_data[DATA_SZ + CANARY_SZ];
 #define g_canary (g_data + DATA_SZ)
+
+/* Mock hal_flash_wait_complete(): the real one (hal/stm32u5.c) only
+ * spins on FLASH_SR_BSY, which the host register file never sets. This
+ * one adds the program-window check the host model cannot see any
+ * other way: the bytes changed since the previous window must fit
+ * within one aligned 16-byte program unit. The pre-fix HAL issued its
+ * four word stores relative to the caller address, so an unaligned
+ * start split them across two units and this assertion goes red. */
+static void hal_flash_wait_complete(uint8_t bank)
+{
+    int i;
+    int first = -1;
+    int last = -1;
+
+    for (i = 0; i < FLASH_MEM_SZ; i++) {
+        if (g_flash_mem[i] != g_flash_prev[i]) {
+            if (first < 0)
+                first = i;
+            last = i;
+        }
+    }
+    if (first >= 0)
+        ck_assert_int_le(last, (first & ~0x0F) + 15);
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+}
 
 /* The real functions from hal/stm32u5.c (extracted by the Makefile). */
 #include "stm32u5_write_extract.h"
@@ -89,6 +126,7 @@ static void setup(void)
     memset(g_flash_regs, 0, sizeof(g_flash_regs));
     for (i = 0; i < FLASH_MEM_SZ; i++)
         g_flash_mem[i] = 0x12; /* stale */
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
     for (i = 0; i < DATA_SZ; i++)
         g_data[i] = (uint8_t)(0x30 + i);
     for (i = 0; i < CANARY_SZ; i++)
@@ -199,6 +237,43 @@ START_TEST(test_write_64_full_units)
 }
 END_TEST
 
+/* A write of 20 bytes starting 4 bytes into a 16-byte unit: the
+ * first unit is only partly requested, the rest of it keeps its stale
+ * value, and the request runs on through the following units. */
+START_TEST(test_write_20_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 20), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 20), 0);
+    for (i = 24; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
+/* A 3-byte write starting 4 bytes into a 16-byte unit: one partial
+ * unit, the rest of it rewritten unchanged. */
+START_TEST(test_write_3_unaligned4)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 3), 0);
+
+    for (i = 0; i < 4; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 3), 0);
+    for (i = 7; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
 Suite *stm32u5_write_suite(void)
 {
     Suite *s = suite_create("stm32u5-write");
@@ -210,6 +285,8 @@ Suite *stm32u5_write_suite(void)
     tcase_add_test(tc, test_write_18_second_word_padded);
     tcase_add_test(tc, test_write_3_single_word_padded);
     tcase_add_test(tc, test_write_64_full_units);
+    tcase_add_test(tc, test_write_20_unaligned4);
+    tcase_add_test(tc, test_write_3_unaligned4);
     suite_add_tcase(s, tc);
 
     return s;

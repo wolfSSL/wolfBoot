@@ -99,26 +99,32 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     while (i < len) {
         int j;
+        uintptr_t cur_addr = (uintptr_t)dst + i;
+        uint32_t *unit = (uint32_t *)(cur_addr & (~0x07UL));
+        int off = (int)(cur_addr & 0x07UL);
+        int i_aligned = i - off;
 
         /* Read-modify-write the whole 64-bit unit (as stm32h5.c):
          * there is no 32-bit program mode, so both words must be
-         * stored inside one PG window or nothing is programmed. */
+         * stored inside one PG window or nothing is programmed. The
+         * unit is aligned down from the next byte, so an unaligned
+         * start keeps the bytes before the request. */
         for (j = 0; j < 8; j++) {
-            if (i + j < len)
-                dword_bytes[j] = data[i + j];
+            if ((j >= off) && (i_aligned + j < len))
+                dword_bytes[j] = data[i_aligned + j];
             else
-                dword_bytes[j] = ((const uint8_t *)dst)[i + j];
+                dword_bytes[j] = ((const uint8_t *)unit)[j];
         }
 
         *cr |= FLASH_CR_PG;
-        dst[i >> 2] = dword[0];
+        unit[0] = dword[0];
         ISB();
-        dst[(i >> 2) + 1] = dword[1];
+        unit[1] = dword[1];
         hal_flash_wait_complete(0);
         if ((*sr & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
-        i += 8;
+        i = i_aligned + 8;
     }
 #if TZ_SECURE()
     hal_tz_release_nonsecure_area();
