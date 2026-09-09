@@ -25,6 +25,7 @@ This README describes configuration of supported targets.
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP Kinetis KL26Z](#nxp-kinetis-kl26z)
 * [NXP LPC546xx](#nxp-lpc546xx)
+* [Nuvoton NuMaker M2354](#nuvoton-numaker-m2354-numicro-m2354)
 * [NXP LPC540xx / LPC54S0xx (SPIFI boot)](#nxp-lpc540xx--lpc54s0xx-spifi-boot)
 * [NXP LPC55S69](#nxp-lpc55s69)
 * [NXP LS1028A](#nxp-ls1028a)
@@ -2702,6 +2703,159 @@ arm-none-eabi-gdb wolfboot.elf -ex "target remote localhost:3333"
 (gdb) add-symbol-file test-app/image.elf 0x0000a100
 ```
 
+
+## Nuvoton NuMaker M2354 (NuMicro M2354)
+
+The NuMicro M2354 is a Cortex-M23 (ARMv8-M baseline) part with 1 MB of APROM in two 512 KB banks, 16 KB of LDROM, and 256 KB of SRAM, running at up to 96 MHz. The reference board is the NuMaker-M2354. Flash erases in 2048 byte pages and programs one 32-bit word at a time through the FMC ISP engine.
+
+wolfBoot drives the hardware directly and does **not** build against the Nuvoton M2354 BSP. The ISP engine is a four register handshake and the clock tree needs three writes, so the HAL in `hal/m2354.c` is self-contained. The BSP is useful as a register reference only.
+
+This is currently a non-TrustZone target: `TZEN` is 0 and wolfBoot plus the application both run in the secure world, which is where a non-TrustZone M2354 application runs anyway.
+
+### Flash layout (m2354.config)
+
+```
+0x00000000  wolfBoot            64 KB
+0x00010000  BOOT partition     448 KB
+0x00080000  UPDATE partition   448 KB   <- start of APROM bank 1
+0x000F0000  SWAP                 2 KB   (one page)
+0x000F0800  unused              62 KB
+```
+
+The UPDATE partition deliberately begins on the bank 1 boundary so that a future `DUALBANK_SWAP` configuration remains possible.
+
+### Clock and UART
+
+Out of reset HCLK runs from HIRC, the 12 MHz internal RC oscillator. `hal_init()` starts the 12 MHz crystal, runs it through the PLL to 96 MHz (NR=2, NF=16, output divider 2) and switches HCLK over. Each wait is bounded and falls through on timeout, so a board with no crystal populated still boots at the reset clock rather than hanging in the bootloader.
+
+UART0 is deliberately left on HIRC rather than HCLK, so the console baud rate does not move when the PLL engages and a failed PLL bring-up still prints.
+
+The console is UART0 at 115200 8N1 on **PA6 (RXD) / PA7 (TXD)**, which the NuMaker-M2354 routes to the Nu-Link2-Me virtual COM port. These were confirmed on the board. UART0 has eleven possible pin pairs on this part and choosing the wrong one fails silently: the UART reports its transmitter empty exactly as it would if the bytes had reached the host.
+
+### Building
+
+```
+cp config/examples/m2354.config .config
+make keysclean
+make
+```
+
+`IMAGE_HEADER_SIZE` is 1024 rather than the wolfBoot default of 256. `do_boot()` programs VTOR with the application's address, and the low bits of VTOR are RES0: the M2354 implements 132 exceptions (16 system plus 116 external), so the vector table must be 1024-aligned. At the default header size the application would land 256-aligned and its exception fetches would resolve to the wrong address.
+
+The default configuration signs with ECC256 / SHA256 and builds with `NO_ASM=0`, which selects `sp_armthumb.c`, the Thumb-1 SP assembly tier shared with Cortex-M0. Do not select the Cortex-M33 tier: `sp_cortexm.S` is Thumb-2 and will not assemble for ARMv8-M baseline.
+
+The assembly tier matters at boot, because signature verification is the one latency a user notices. Measured on a NuMaker-M2354, from reset to the application's first output, with a small test image:
+
+| SP math | Boot latency | wolfBoot size |
+|---|---|---|
+| `NO_ASM=1` (`sp_c32.c`, portable C) | 2619 ms | 19,192 bytes |
+| `NO_ASM=0` (`sp_armthumb.c`, Thumb-1 assembly) | 623 ms | 22,084 bytes |
+
+That is one ECDSA P-256 verification plus a SHA-256 over the image, so the absolute saving grows with firmware size while the extra 2,892 bytes does not. `NO_ASM=1` still builds and boots if a smaller bootloader matters more than boot time.
+
+`NO_MPU=1` is required. wolfBoot's MPU code uses the ARMv7-M `MPU_RASR` programming model, which is not valid on any ARMv8-M part.
+
+### Flashing
+
+Use pyOCD, which ships a builtin target definition for this part:
+
+```
+pyocd erase -t m2354kjfae --chip
+pyocd flash -t m2354kjfae factory.bin
+```
+
+Upstream OpenOCD cannot program the M2354: its `numicro` flash driver has no entry for this part. The NuMaker-M2354's on-board Nu-Link2-Me also presents a USB mass-storage device that programs APROM from a dropped `.bin`, which works without any host tool.
+
+### Flash programming performance
+
+A full update cycle - swap, verify and boot - takes about 4 seconds on the
+board with a small application image.
+
+Two things get it there, and it is worth knowing which one mattered. The
+obvious optimisation was the write path: `hal_flash_write()` uses the FMC
+multi-word command to program 16 bytes per ISP operation instead of one
+32-bit word, cutting ISP round trips by 4x. Measured on hardware, that made
+**no difference at all** to update time.
+
+The cost was in the erase. After a swap, wolfBoot erases the remainder of
+both partitions, which is 440 page erases at roughly 88 ms each, and that
+alone accounted for 39 of the original 47 seconds. Reading a 2 KB page back
+to check whether it is already blank takes tens of microseconds, so
+`hal_flash_erase()` skips pages that already read as erased. In the common
+case most of an update partition is already blank and the erase phase all but
+disappears: 47 seconds down to 4.
+
+The multi-word write path is kept because it is correct and tested, and it
+will matter for application images large enough for programming time to
+register. It simply is not what dominates a typical update on this part.
+
+### Testing an update
+
+```
+make test-app/image_v2_signed.bin WOLFBOOT_VERSION=2
+pyocd flash -t m2354kjfae --base-address 0x80000 test-app/image_v2_signed.bin
+```
+
+The test application prints its version over UART0. Version 1 sets the update flag and resets; wolfBoot then performs the swap and boots version 2, which calls `wolfBoot_success()` so the update sticks.
+
+### TrustZone (m2354-tz.config)
+
+`config/examples/m2354-tz.config` builds wolfBoot into the secure world, with the application non-secure.
+
+Note the alias polarity, which is the **opposite** of the NXP ARMv8-M parts: on the M2354 the secure view is the base address and the non-secure view is base + `0x10000000`. Secure flash is `0x00000000`, non-secure flash `0x10000000`; secure SRAM is `0x20000000`, non-secure SRAM `0x30000000`; non-secure peripherals are at `0x50000000`.
+
+```
+Secure (bank 0, NSCBA = 0x00080000):
+  0x00000000  wolfBoot secure image        120 KB
+  0x0001E000  NSC secure-gateway veneers     8 KB
+  SRAM 0x20000000                           96 KB
+
+Non-secure (bank 1, at the +0x10000000 alias):
+  0x10080000  BOOT partition               252 KB
+  0x100BF000  UPDATE partition             252 KB
+  0x100FE000  SWAP                           2 KB
+  SRAM 0x30018000                          160 KB
+```
+
+`hal_init()` programs the SAU and the SCU on every boot. `hal_prepare_boot()` then hands UART0 and its pins to the non-secure world, so wolfBoot keeps the console for the whole of verification.
+
+`IMAGE_HEADER_SIZE` is 1024 because the non-secure vector table must be aligned to a power of two at least its own size, and the M2354 has 132 vector entries.
+
+#### NSCBA is a provisioning step
+
+The secure/non-secure flash split is fixed by **NSCBA, a flash configuration word at `0x00210800`**, not by a register, and it only takes effect after a chip reset. wolfBoot **only ever reads it back**: `hal_init()` compares the live value in `SCU->FNSADDR` against what the build was linked for and panics on a mismatch, because the SAU regions and the linker script would otherwise describe a layout the hardware does not have. A bootloader that reprograms its own secure boundary at runtime is a good way to brick a part.
+
+Provision it once, before the first TrustZone boot:
+
+```
+./tools/scripts/set-m2354-nscba.sh 0x80000
+```
+
+Set `M2354_PROBE` first if more than one debug probe is attached. The script drives the FMC ISP engine over SWD to erase and reprogram the config word, then resets and prints `SCU->FNSADDR` so you can confirm the boundary took. This mirrors what `tools/scripts/set-stm32-tz-option-bytes.sh` does for the STM32 TrustZone targets.
+
+A wrong value is not permanent: `pyocd erase -t m2354kjfae --chip` returns NSCBA to its erased state. Note that a chip erase therefore also *removes* the provisioning, so it must be re-run after one.
+
+#### Hardware validation
+
+The TrustZone configuration has been run on a NuMaker-M2354. wolfBoot boots
+secure, verifies the signed image, and hands off to the non-secure application
+through `BLXNS`; the application reads its version back through the
+`wolfBoot_nsc_*` secure-gateway veneers. A full update completes across the
+security boundary: the update partition lives in non-secure flash, and the
+secure world programs it through the FMC ISP engine without difficulty, so
+there is no equivalent of the STM32 `SECBB` claim/release dance.
+
+#### Building and flashing
+
+Because the secure and non-secure views are 256 MB apart in the address map, no contiguous `factory.bin` is produced. Flash the two images separately, at their **physical** addresses:
+
+```
+cp config/examples/m2354-tz.config .config
+make keysclean
+make
+pyocd flash -t m2354kjfae --base-address 0x0     wolfboot.bin
+pyocd flash -t m2354kjfae --base-address 0x80000 test-app/image_v1_signed.bin
+```
 
 ## NXP LPC540xx / LPC54S0xx (SPIFI boot)
 

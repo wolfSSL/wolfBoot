@@ -605,6 +605,21 @@ ifeq ($(TARGET),stm32l4)
     -I$(STM32CUBE)/Drivers/CMSIS/Include/
 endif
 
+ifeq ($(TARGET),m2354)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-m2354-ns.ld
+    # -mcmse is a secure-world flag; arch.mk adds it under TZEN=1 and the
+    # non-secure application must not be built with it.
+    CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+  else
+    LSCRIPT_TEMPLATE=ARM-m2354.ld
+  endif
+  CFLAGS+=-mcpu=cortex-m23 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m23
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
 ifeq ($(TARGET),stm32l5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32l5-ns.ld

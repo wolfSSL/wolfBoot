@@ -499,6 +499,15 @@ ifeq ($(ARCH),ARM)
     LSCRIPT_IN=hal/$(TARGET).ld
     SPI_TARGET=stm32
   endif
+  ifeq ($(TARGET),m2354)
+    CORTEX_M23=1
+    CFLAGS+=-Ihal
+    ARCH_FLASH_OFFSET=0x00000000
+    WOLFBOOT_ORIGIN=0x00000000
+    ifneq ($(TZEN),1)
+      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    endif
+  endif
 
   ifeq ($(TARGET),stm32h5)
     CORTEX_M33=1
@@ -748,6 +757,41 @@ else
     CFLAGS+=-mcpu=cortex-m55 -DCORTEX_M55
     LDFLAGS+=-mcpu=cortex-m55
   endif
+  ifeq ($(CORTEX_M23),1)
+    # wolfBoot's mpu_init() uses the ARMv7-M MPU_RASR model, which would
+    # mis-program the ARMv8-M MPU_RBAR/MPU_RLAR regions on this core.
+    ifneq ($(NO_MPU),1)
+      $(error CORTEX_M23 (ARMv8-M baseline) requires NO_MPU=1)
+    endif
+    CFLAGS+=-mcpu=cortex-m23 -DCORTEX_M23
+    LDFLAGS+=-mcpu=cortex-m23
+    # ARMv8-M baseline is Thumb-1 only: none of the Thumb-2 assembly in
+    # CORTEXM_ARM_EXTRA_OBJS will assemble for this core.
+    CORTEXM_ARM_EXTRA_OBJS=
+    CORTEXM_ARM_EXTRA_CFLAGS=
+    ifeq ($(TZEN),1)
+      # ARMv8-M baseline has the Security Extension, so the same TrustZone
+      # machinery as CORTEX_M33 applies. Kept separate from the M33 block so
+      # that adding this arm cannot change any existing target.
+      CFLAGS+=-mcmse
+      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
+      ifeq ($(WOLFCRYPT_TZ),1)
+        SECURE_OBJS+=./src/wc_callable.o
+        WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
+        CFLAGS+=-DWOLFCRYPT_SECURE_MODE
+      endif
+    endif # TZEN=1
+    ifeq ($(SPMATH),1)
+      ifeq ($(NO_ASM),1)
+        MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+      else
+        # Same SP tier as Cortex-M0: Thumb-1. sp_cortexm.o is Thumb-2 and
+        # will not assemble here. No ARMASM support for ARMv8-M baseline.
+        CFLAGS+=-DWOLFSSL_SP_ASM -DWOLFSSL_SP_ARM_THUMB_ASM
+        MATH_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_armthumb.o
+      endif
+    endif
+  else
   ifeq ($(CORTEX_M33),1)
     CFLAGS+=-DCORTEX_M33
     ifneq ($(CORTEX_M55),1)
@@ -843,6 +887,7 @@ else
       endif
     endif
   endif
+endif
 endif
 endif
 endif

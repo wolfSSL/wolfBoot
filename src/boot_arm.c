@@ -462,10 +462,18 @@ void isr_empty(void)
     /* Ignore unmapped event and continue */
 }
 
+#ifdef TARGET_m2354
+/* Overridden by the M2354 HAL when CRPT offload is built. */
+void isr_crpt(void) __attribute__((weak, alias("isr_empty")));
+#endif
 
 
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
+
+/* ARMv8-M baseline (Cortex-M23) has no SecureFault: slot 7 is reserved and
+ * secure faults escalate to HardFault. */
+#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+    defined(TZEN) && !defined(CORTEX_M23)
 #   define isr_securefault isr_fault
 #else
 #   define isr_securefault 0
@@ -493,6 +501,9 @@ void isr_empty(void)
 
 static void  *app_entry;
 static uint32_t app_end_stack;
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
+static uint32_t ns_entry;
+#endif
 
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
@@ -504,7 +515,9 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("do_boot_r5:\n"
                  "  mov     pc, r0\n");
 
-#elif defined(CORTEX_M33) || defined(CORTEX_M55) /* Armv8 boot procedure */
+#elif defined(CORTEX_M33) || defined(CORTEX_M55) || defined(CORTEX_M23)
+      /* Armv8 boot procedure. CORTEX_M23 is ARMv8-M baseline: same sequence,
+       * different instruction encodings where noted. */
 
     /* Get stack pointer, entry point */
     app_end_stack = (*((uint32_t *)(app_offset)));
@@ -547,9 +560,10 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
         asm volatile("isb");
     }
 #endif
-    /* Jump to non secure app_entry */
-    asm volatile("mov r7, %0" ::"r"(app_entry));
-    asm volatile("bic.w   r7, r7, #1");
+    /* BLXNS requires bit 0 clear. Masked in C rather than with "bic.w",
+     * which does not exist on ARMv8-M baseline, and into a local so
+     * app_entry is left unmodified. */
+    ns_entry = ((uint32_t)app_entry) & ~1UL;
 #if !defined(TARGET_stm32n6)
     /* Re-enable interrupts to allow non-secure OS handlers. Skipped
      * for N6: cpsie here can dispatch a pending NS exception before
@@ -558,7 +572,9 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
      * Reset_Handler will re-enable interrupts itself. */
     asm volatile("cpsie i");
 #endif
-    asm volatile("blxns   r7" );
+    /* One asm holding the branch register, so the compiler cannot place a
+     * live value in it between the load and BLXNS. */
+    asm volatile("blxns %0" :: "r"(ns_entry) : "memory");
 #   else
     asm volatile("msr msp, %0" ::"r"(app_end_stack));
     asm volatile("mov pc, %0":: "r"(app_entry));
@@ -658,6 +674,125 @@ void (* const IV[])(void) =
     isr_empty,
     isr_empty,
     isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+#elif defined(TARGET_m2354)
+    /* Nuvoton M2354 external interrupts, IRQ 0 through TMR5_IRQn (115).
+     * Slot 71 is CRPT_IRQn, which crypto offload needs a real handler for. */
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_empty,
+    isr_crpt,                    /* 71 CRPT */
     isr_empty,
     isr_empty,
     isr_empty,
