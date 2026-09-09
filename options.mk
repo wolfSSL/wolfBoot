@@ -801,12 +801,14 @@ ifeq ($(DISK_EMMC),1)
   CFLAGS+=-D"DISK_EMMC=1"
 endif
 
-# Add SDHCI driver if SD card or eMMC is enabled (only add once).
-# PPC targets provide their own eSDHC driver (hal/nxp_esdhc.o, added in
-# arch.mk), so the Cadence SDHCI driver must not be linked there (its
-# disk_* entry points would collide).
+# Add the SD/eMMC block driver if SD card or eMMC is enabled (only once).
+# DISK_DRIVER selects which one: the Cadence SDHCI driver (src/sdhci.c,
+# the default) or the Freescale eSDHC driver (hal/nxp_esdhc.o, added by
+# the target's arch.mk block, which also sets DISK_DRIVER=esdhc). Exactly
+# one may link: both define the disk_* entry points.
+DISK_DRIVER?=cadence
 ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
-  ifneq ($(ARCH),PPC)
+  ifeq ($(DISK_DRIVER),cadence)
     OBJS+= src/sdhci.o
   endif
 endif

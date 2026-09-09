@@ -262,6 +262,14 @@ jobs:
       config-file: ./config/examples/nxp-ls1028a-tpm.config
       make-args: CROSS_COMPILE=aarch64-linux-gnu-
 
+  # SD card disk boot via the Freescale eSDHC driver (hal/nxp_esdhc.o)
+  nxp_ls1028a_sdcard_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/nxp-ls1028a-sdcard.config
+      make-args: CROSS_COMPILE=aarch64-linux-gnu-
+
   nxp_mcxa_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
