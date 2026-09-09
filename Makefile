@@ -358,6 +358,11 @@ ifeq ($(TARGET),stm32n6)
 	# Don't build a contiguous image
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
+
+ifeq ($(TARGET),m2354)
+	# Secure and non-secure views are 256MB apart in the address map
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
 endif # TZEN=1
 
 ifeq ($(TARGET),pic32cz)
