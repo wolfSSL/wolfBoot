@@ -3543,6 +3543,11 @@ The LS1028A is a AARCH64 armv8-a Cortex-A72 processor. Support has been tested w
 Example configurations for this target are provided in:
 * NXP LS1028A: [/config/examples/nxp-ls1028a.config](/config/examples/nxp-ls1028a.config).
 * NXP LS1028A with TPM: [/config/examples/nxp-ls1028a-tpm.config](/config/examples/nxp-ls1028a-tpm.config).
+* NXP LS1028A with SD card boot: [/config/examples/nxp-ls1028a-sdcard.config](/config/examples/nxp-ls1028a-sdcard.config).
+
+### LS1028A SD Card Boot (eSDHC)
+
+The LS1028A can load the signed application image from the SD card slot (eSDHC1) using the same Freescale eSDHC driver as the T1040 (`hal/nxp_esdhc.c`, built as its own object). The card layout is identical to the T1040 SD target: GPT (or MBR) partitioned, with the signed image at offset 0 of the first two partitions (`BOOT_PART_A`/`BOOT_PART_B`, 0-based). wolfBoot reads both headers, picks the higher version, loads it to DDR (`WOLFBOOT_LOAD_ADDRESS=0x80100000`), verifies the signature and boots it. The driver reprograms the eSDHC source clock (HWA2) at init, because the NOR-boot RCW leaves it on a source too fast for card identification. Define `DEBUG_ESDHC` (see the config) for controller bring-up trace on the DUART console. Validated on the LS1028ARDB booting a signed image from SD.
 
 ### Building wolfBoot for NXP LS1028A
 
