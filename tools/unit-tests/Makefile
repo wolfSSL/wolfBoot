@@ -124,6 +124,7 @@ TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
+TESTS+=unit-pkcs11_store-stalecache
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
@@ -257,6 +258,10 @@ unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
 unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
 unit-pkcs11_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11 -DWOLFPKCS11_USER_SETTINGS
+# Same suite against a flash-read cache that only refreshes on
+# hal_cache_invalidate(): fails if the store reads back a sector it just
+# committed without dropping the cache first.
+unit-pkcs11_store-stalecache:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11 -DWOLFPKCS11_USER_SETTINGS -DMOCK_STALE_CACHE
 unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DWOLFCRYPT_TZ_PSA
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -937,6 +942,9 @@ unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
 	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) $(LDFLAGS)
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-pkcs11_store-stalecache: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 unit-psa_store: ../../include/target.h unit-psa_store.c

@@ -37,6 +37,110 @@ static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
 const char *argv0;
 
+#ifdef MOCK_KEYVAULT
+/* Power-fail injection for the keyvault (pkcs11 store) tests.
+ *
+ * When vault_powerfail_at is >= 0, the vault flash operation with that
+ * 0-based index, and every operation after it, is abandoned: the mock
+ * longjmp()s back to the arming point instead of touching the backing
+ * store. That models a power loss part-way through a sector commit, which
+ * is the only way to observe the store's crash-consistency ordering.
+ *
+ * Disabled (-1) by default, so tests that do not arm it are unaffected.
+ */
+#include <setjmp.h>
+static int vault_powerfail_at = -1;
+static int vault_flash_ops;
+static jmp_buf vault_powerfail_jmp;
+
+/* Stale-cache model (MOCK_STALE_CACHE).
+ *
+ * Models a part that caches flash reads, such as the STM32 ICACHE: flash
+ * operations land in a shadow buffer (the real flash contents) while
+ * vault_base keeps whatever the CPU last saw, and only
+ * hal_cache_invalidate() refreshes it. Code that writes a sector and reads
+ * it back without invalidating therefore observes pre-erase bytes, exactly
+ * as it would on silicon. Off by default, so the ordinary suite is
+ * unaffected.
+ */
+#ifdef MOCK_STALE_CACHE
+static uint8_t *vault_shadow;
+static int vault_shadow_valid;
+
+static void vault_cache_prime(void)
+{
+    if (!vault_shadow_valid) {
+        if (vault_shadow == NULL) {
+            vault_shadow = malloc(keyvault_size);
+            ck_assert_ptr_nonnull(vault_shadow);
+        }
+        memcpy(vault_shadow, vault_base, keyvault_size);
+        vault_shadow_valid = 1;
+    }
+}
+
+/* Flash side of a vault write/erase: the CPU view is left untouched. */
+static uint8_t *vault_flash_at(uintptr_t address)
+{
+    vault_cache_prime();
+    return vault_shadow + (address - (uintptr_t)vault_base);
+}
+#endif
+
+/* Restore a snapshot into every representation of the vault flash.
+ *
+ * Under MOCK_STALE_CACHE the shadow *is* the flash array and vault_base is
+ * only the CPU's cached view of it, so putting the snapshot back into
+ * vault_base alone leaves the previous contents in the shadow -- and the
+ * next hal_cache_invalidate() (a power cycle does one) copies them straight
+ * back over the snapshot. A test that restores a known state before each
+ * injected fault must therefore reset both. */
+static void vault_restore_snapshot(const uint8_t *snapshot)
+{
+    memcpy(vault_base, snapshot, keyvault_size);
+#ifdef MOCK_STALE_CACHE
+    vault_cache_prime();
+    memcpy(vault_shadow, snapshot, keyvault_size);
+#endif
+}
+
+/* Torn-operation mode.
+ *
+ * By default an injected fault abandons the whole flash operation, so the
+ * sector is either untouched or fully written -- which real silicon does
+ * not promise. With vault_powerfail_torn set, the faulting operation
+ * instead applies vault_torn_num/vault_torn_den of its bytes and only then
+ * loses power, leaving a half-erased or half-programmed sector behind.
+ */
+static int vault_powerfail_torn;
+static int vault_torn_num = 1;
+static int vault_torn_den = 2;
+
+/* How many of an operation's len bytes actually reach flash.
+ *
+ * Returns len when no fault is due on this operation. When one is: in the
+ * default atomic mode this longjmp()s and never returns, leaving flash
+ * untouched; in torn mode it returns a short count, and the caller applies
+ * that prefix and then calls vault_flash_torn_abort().
+ */
+static int vault_flash_op_len(int len)
+{
+    vault_flash_ops++;
+    if ((vault_powerfail_at >= 0) && (vault_flash_ops > vault_powerfail_at)) {
+        if (!vault_powerfail_torn) {
+            longjmp(vault_powerfail_jmp, 1);
+        }
+        return (int)(((long)len * vault_torn_num) / vault_torn_den);
+    }
+    return len;
+}
+
+static void vault_flash_torn_abort(void)
+{
+    longjmp(vault_powerfail_jmp, 1);
+}
+#endif
+
 #include <sys/stat.h>
 
 
@@ -73,8 +177,15 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     }
 #ifdef MOCK_KEYVAULT
     if ((address >= (const uintptr_t)vault_base) && (address < (const uintptr_t)vault_base + keyvault_size)) {
-        for (i = 0; i < len; i++) {
+        int n = vault_flash_op_len(len);
+#ifdef MOCK_STALE_CACHE
+        a = vault_flash_at(address);
+#endif
+        for (i = 0; i < n; i++) {
             a[i] = data[i];
+        }
+        if (n != len) {
+            vault_flash_torn_abort();
         }
     }
 #endif
@@ -116,9 +227,17 @@ int hal_flash_erase(haladdr_t address, int len)
         memset((void *)(uintptr_t)address, 0xFF, len);
 #ifdef MOCK_KEYVAULT
     } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
+        int n = vault_flash_op_len(len);
         printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
-        memset((void *)(uintptr_t)address, 0xFF, len);
+#ifdef MOCK_STALE_CACHE
+        memset(vault_flash_at(address), 0xFF, n);
+#else
+        memset((void *)(uintptr_t)address, 0xFF, n);
+#endif
+        if (n != len) {
+            vault_flash_torn_abort();
+        }
 #endif
 #ifdef WOLFBOOT_DIAGNOSTICS_ADDRESS
     } else if ((address >= (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS) &&
@@ -142,6 +261,20 @@ void hal_flash_lock(void)
     ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
+
+#ifdef MOCK_KEYVAULT
+/* src/libwolfboot.c carries the weak default, but the keyvault suites do not
+ * include it (suites that do already have the symbol, hence the guard).
+ * Under MOCK_STALE_CACHE this is what makes flash visible to the CPU again. */
+void hal_cache_invalidate(void)
+{
+#ifdef MOCK_STALE_CACHE
+    if (vault_shadow_valid) {
+        memcpy(vault_base, vault_shadow, keyvault_size);
+    }
+#endif
+}
+#endif /* MOCK_KEYVAULT */
 
 void hal_prepare_boot(void)
 {
@@ -285,6 +418,11 @@ static int mmap_file(const char *path, uint8_t *address, uint32_t len,
 
     if (ret_address)
         *ret_address = mmaped_addr;
+
+#if defined(MOCK_KEYVAULT) && defined(MOCK_STALE_CACHE)
+    /* New backing store: the shadow is re-primed from it on first use. */
+    vault_shadow_valid = 0;
+#endif
 
     close(fd);
     return 0;

@@ -244,6 +244,14 @@ static const uint32_t wolfboot_magic_trail = WOLFBOOT_MAGIC_TRAIL;
 #define FLAGS_UPDATE_EXT() PARTN_IS_EXT(PART_UPDATE)
 #endif
 
+/* Weak no-op default: targets whose flash reads are not cached need not
+ * implement this. It lives outside NVM_FLASH_WRITEONCE because callers such
+ * as src/pkcs11_store.c are built independently of that option. */
+void WEAKFUNCTION hal_cache_invalidate(void)
+{
+    /* if cache flushing is required implement in hal */
+}
+
 #ifdef NVM_FLASH_WRITEONCE
 /* Some internal FLASH memory models don't allow
  * multiple writes after erase in the same page/area.
@@ -282,10 +290,6 @@ static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
     return *(uint8_t*)((uintptr_t)base - off); /* ignore array bounds error */
 }
 
-void WEAKFUNCTION hal_cache_invalidate(void)
-{
-    /* if cache flushing is required implement in hal */
-}
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
