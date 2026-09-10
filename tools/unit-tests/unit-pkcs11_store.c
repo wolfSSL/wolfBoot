@@ -766,14 +766,22 @@ static int vault_obj_write(int type, CK_ULONG tok, CK_ULONG obj,
     return ret;
 }
 
+/* "The object is not in the vault" is a legitimate state after a power cut,
+ * but any other open/read failure means the vault or its metadata is
+ * damaged. Report the two distinctly so the power-fail test can insist on
+ * the former and fail on the latter. */
+#define VAULT_OBJ_ABSENT (-1000)
+
 static int vault_obj_read(int type, CK_ULONG tok, CK_ULONG obj,
         uint8_t *out, int max)
 {
     void *store = NULL;
     int ret = wolfPKCS11_Store_Open(type, tok, obj, 1, &store);
 
+    if (ret == NOT_AVAILABLE_E)
+        return VAULT_OBJ_ABSENT;
     if (ret != 0)
-        return -1;
+        return ret;
     ret = wolfPKCS11_Store_Read(store, out, max);
     wolfPKCS11_Store_Close(store);
     return ret;
@@ -846,9 +854,14 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
                 "payload", crash);
         }
         else {
-            ck_assert_msg(ret <= 0,
-                "power fail at op %d: object read back %d bytes, neither "
-                "generation nor empty", crash, ret);
+            /* Only two other outcomes are crash-safe: the object was never
+             * published, or it is present but truncated to empty by the
+             * Open-time durability commit. Every other return (a negative
+             * read error, or a partial payload length) means the vault came
+             * back damaged. */
+            ck_assert_msg(ret == VAULT_OBJ_ABSENT || ret == 0,
+                "power fail at op %d: object read back %d, neither old "
+                "payload, new payload, empty, nor absent", crash, ret);
         }
     }
 }

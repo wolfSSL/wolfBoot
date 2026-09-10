@@ -196,26 +196,28 @@ void RAMFUNCTION hal_flash_unlock(void)
     FLASH_KEYR = FLASH_KEY2;
 }
 
+#if ((FLASH_ACR_ENABLE_INST_CACHE << 2) != FLASH_ACR_RESET_INST_CACHE) || \
+    ((FLASH_ACR_ENABLE_DATA_CACHE << 2) != FLASH_ACR_RESET_DATA_CACHE)
+#error "STM32F4: flash cache reset bits are not two positions above the enables"
+#endif
 /* RM0090 3.5.1: the instruction and data caches keep lines fetched before an
  * erase/program, so a read-back through the flash memory map can return
- * pre-erase bytes. The reset bits are only writable while the corresponding
- * cache is disabled, hence the disable/reset/re-enable dance. */
+ * pre-erase bytes. A cache reset bit is only writable while its cache is
+ * disabled, and the reset bits sit two positions above the enable bits
+ * (ICEN 9 -> ICRST 11, DCEN 10 -> DCRST 12), so one shift covers both. */
 void RAMFUNCTION hal_cache_invalidate(void)
 {
     uint32_t acr = FLASH_ACR;
+    uint32_t en = acr & (FLASH_ACR_ENABLE_INST_CACHE |
+                         FLASH_ACR_ENABLE_DATA_CACHE);
+    uint32_t off = acr & ~en;
 
-    if (acr & FLASH_ACR_ENABLE_INST_CACHE) {
-        FLASH_ACR &= ~FLASH_ACR_ENABLE_INST_CACHE;
-        FLASH_ACR |= FLASH_ACR_RESET_INST_CACHE;
-        FLASH_ACR &= ~FLASH_ACR_RESET_INST_CACHE;
-        FLASH_ACR |= FLASH_ACR_ENABLE_INST_CACHE;
-    }
-    if (acr & FLASH_ACR_ENABLE_DATA_CACHE) {
-        FLASH_ACR &= ~FLASH_ACR_ENABLE_DATA_CACHE;
-        FLASH_ACR |= FLASH_ACR_RESET_DATA_CACHE;
-        FLASH_ACR &= ~FLASH_ACR_RESET_DATA_CACHE;
-        FLASH_ACR |= FLASH_ACR_ENABLE_DATA_CACHE;
-    }
+    if (en == 0)
+        return;
+    FLASH_ACR = off;             /* disable the caches that were on */
+    FLASH_ACR = off | (en << 2); /* set their reset bits */
+    FLASH_ACR = off;             /* release reset */
+    FLASH_ACR = acr;             /* restore the original enables */
 }
 
 void RAMFUNCTION hal_flash_lock(void)
