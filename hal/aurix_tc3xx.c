@@ -37,7 +37,8 @@
 #ifdef TC3_CFG_HAVE_BOARD
 #include "tc3/tc3_board.h"
 #endif
-#ifdef WOLFBOOT_AURIX_TC3XX_HSM
+/* TARGET_aurix_tc3xx_hsm: HSM core build, see hal/aurix_tc3xx_hsm.c */
+#ifdef TARGET_aurix_tc3xx_hsm
 #include "tc3/tc3arm.h"
 #else
 #include "tc3/tc3tc.h"
@@ -297,7 +298,7 @@ void uart_write(const char* buf, unsigned int sz)
  * the firmware images*/
 void hal_init(void)
 {
-#ifndef WOLFBOOT_AURIX_TC3XX_HSM
+#ifndef TARGET_aurix_tc3xx_hsm
     /* Update BTV to use RAM Trap Table */
     tc3tc_traps_InitBTV();
 
@@ -322,7 +323,7 @@ void hal_init(void)
 
 #ifdef DEBUG_UART
     uart_init();
-#ifndef WOLFBOOT_AURIX_TC3XX_HSM
+#ifndef TARGET_aurix_tc3xx_hsm
     wolfBoot_printf("Hello from TC3xx wolfBoot on Tricore: V%d\n",
                     WOLFBOOT_VERSION);
 #else
@@ -356,7 +357,7 @@ void hal_prepare_boot(void)
 
     tc3_clock_SetBoot();
 
-#ifndef WOLFBOOT_AURIX_TC3XX_HSM
+#ifndef TARGET_aurix_tc3xx_hsm
     tc3tc_isr_Cleanup();
     tc3tc_traps_DeinitBTV();
 
@@ -368,7 +369,7 @@ void hal_prepare_boot(void)
     TC3_ENFORCE_BUS_ERRORS();
 }
 
-#ifndef WOLFBOOT_AURIX_TC3XX_HSM
+#ifndef TARGET_aurix_tc3xx_hsm
 void do_boot(const uint32_t* app_offset)
 {
     LED_OFF(LED_WOLFBOOT);
@@ -378,7 +379,7 @@ void do_boot(const uint32_t* app_offset)
 
 RAMFUNCTION void arch_reboot(void)
 {
-#ifdef WOLFBOOT_AURIX_TC3XX_HSM
+#ifdef TARGET_aurix_tc3xx_hsm
     tc3arm_HsmBridgeSysReset();
 #else
     tc3_Scu_TriggerSwReset(1, WOLFBOOT_AURIX_RESET_REASON);

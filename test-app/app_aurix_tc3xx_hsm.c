@@ -1,6 +1,6 @@
-/* tc3_cfg.h
+/* app_aurix_tc3xx_hsm.c
  *
- * Copyright (C) 2014-2025 wolfSSL Inc.
+ * Copyright (C) 2014-2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
  *
@@ -17,17 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with wolfBoot.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef TC3_CFG_H
-#define TC3_CFG_H
 
-#if defined(TARGET_aurix_tc3xx_hsm)
-#define TC3_CFG_HAVE_ARM
-#else
-#define TC3_CFG_HAVE_TRICORE
-#endif
-
-#define TC3_CFG_HAVE_BOARD
-#define TC3_BOARD_TC375LITEKIT 1
-#define TC3_CFG_HAVE_WOLFBOOT
-
-#endif /* TC3_CFG_H */
+/* TC3xx HSM core build of the test application; see app_aurix_tc3xx.c. */
+#include "app_aurix_tc3xx.c"

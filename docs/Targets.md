@@ -8603,6 +8603,8 @@ At this point, the kernel image in partition "A" is verified and staged and you 
 
 wolfBoot supports the Infineon AURIX TC3xx family and includes a demo application for the TC375 AURIX LiteKit-V2. It can be configured to run on either the TriCore application cores or the HSM core.
 
+Both cores build with `ARCH=AURIX`. `TARGET` selects the core: `aurix_tc3xx` for the TriCore application cores and `aurix_tc3xx_hsm` for the HSM core. Example configurations are in `config/examples/aurix-tc375-*.config`.
+
 On AURIX TC3xx devices, wolfBoot can also integrate with [wolfHSM](https://www.wolfssl.com/products/wolfhsm/) to offload cryptographic operations and key management to the HSM core.
 
 Currently, wolfBoot for TC3xx is distributed as part of the wolfHSM TC3xx platform release bundle, not as a standalone package. This bundle is under NDA and is not publicly available.

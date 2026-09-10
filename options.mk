@@ -970,7 +970,7 @@ ifeq ($(DEBUG_SYMBOLS),1)
   CFLAGS+=-g -DDEBUG_SYMBOLS
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
-  else ifneq ($(ARCH),AURIX_TC3)
+  else ifneq ($(ARCH),AURIX)
     ifneq ($(USE_CLANG),1)
     # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
     CFLAGS+=-gdwarf-4
@@ -1480,7 +1480,7 @@ ifeq ($(USE_GCC_HEADLESS),1)
   ifeq ($(USE_GCC),1)
     ifneq ($(USE_CLANG),1)
       ifneq ($(ARCH),RENESAS_RX)
-        ifneq ($(ARCH),AURIX_TC3)
+        ifneq ($(ARCH),AURIX)
           CFLAGS+="-Wstack-usage=$(STACK_USAGE)"
         endif
       endif

@@ -88,7 +88,7 @@ ifeq ($(TARGET),ti_hercules)
 else
   CFLAGS+=-Wall -ffreestanding -Wno-unused -ffunction-sections -fdata-sections
   # Stack usage computation not supported on TriCore
-  ifneq ($(ARCH),AURIX_TC3)
+  ifneq ($(ARCH),AURIX)
     ifneq ($(USE_CLANG),1)
       CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
     endif
@@ -97,7 +97,7 @@ else
   CFLAGS+=-g
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
-  else ifneq ($(ARCH),AURIX_TC3)
+  else ifneq ($(ARCH),AURIX)
     ifneq ($(USE_CLANG),1)
       # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
       CFLAGS+=-gdwarf-4
@@ -175,7 +175,7 @@ ifeq ($(DEBUG_UART),1)
     APP_NEEDS_STRING:=1
 endif
 
-ifeq ($(ARCH),AURIX_TC3)
+ifeq ($(ARCH),AURIX)
 # AURIX RAM_CODE HAL flash drivers need wolfBoot memcpy
     APP_NEEDS_STRING:=1
 endif
@@ -1251,7 +1251,7 @@ endif
 
 CFLAGS+=-I"$(WOLFBOOT_LIB_WOLFSSL)"
 
-ifeq ($(TARGET),aurix_tc3xx)
+ifneq (,$(filter aurix_tc3xx aurix_tc3xx_hsm,$(TARGET)))
   # Add BSP objects (same as in arch.mk for wolfBoot)
   APP_OBJS += $(TC3_DIR)/src/tc3_clock.o \
               $(TC3_DIR)/src/tc3_flash.o \
@@ -1259,7 +1259,7 @@ ifeq ($(TARGET),aurix_tc3xx)
               $(TC3_DIR)/src/tc3_uart.o \
               $(TC3_DIR)/src/tc3.o
 
-  ifeq ($(AURIX_TC3_HSM),1)
+  ifeq ($(TARGET),aurix_tc3xx_hsm)
     APP_OBJS += $(TC3_DIR)/src/tc3arm_crt.o \
                 $(TC3_DIR)/src/tc3arm.o
 	# Use TC3 Arm app linker script

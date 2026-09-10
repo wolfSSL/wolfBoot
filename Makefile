@@ -274,7 +274,7 @@ ifeq ($(ARCH),C2000)
   # cl2000 enters link mode via -z (in LDFLAGS); the .cmd is a positional arg.
   LSCRIPT_FLAGS+=$(LSCRIPT)
 endif
-ifeq ($(ARCH),AURIX_TC3)
+ifeq ($(ARCH),AURIX)
   ifneq ($(USE_GCC_HEADLESS),1)
     LSCRIPT_FLAGS+=-T $(LSCRIPT)
   endif
