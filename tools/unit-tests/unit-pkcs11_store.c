@@ -821,13 +821,22 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
     ck_assert_int_eq(ret, (int)sizeof(old_p));
     memcpy(snapshot, vault_base, keyvault_size);
 
-    /* Count the flash operations a clean rewrite takes. */
+    /* Count the flash operations a clean rewrite takes, and confirm the
+     * uninjected rewrite actually lands: every fault iteration below is
+     * measured against this baseline, so if the fault-free path could not
+     * store new_p the whole test would be vacuous. */
     vault_power_cycle();
     vault_flash_ops = 0;
     vault_powerfail_at = -1;
-    vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
+    ret = vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
+    ck_assert_int_eq(ret, (int)sizeof(new_p));
     ops = vault_flash_ops;
     ck_assert_int_gt(ops, 0);
+    vault_power_cycle();
+    memset(rd, 0, sizeof(rd));
+    ret = vault_obj_read(type, tok, obj, rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)sizeof(new_p));
+    ck_assert_mem_eq(rd, new_p, sizeof(new_p));
 
     for (crash = 0; crash <= ops; crash++) {
         vault_restore_snapshot(snapshot);
@@ -843,7 +852,22 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
         memset(rd, 0, sizeof(rd));
         ret = vault_obj_read(type, tok, obj, rd, (int)sizeof(rd));
 
-        if (ret == (int)sizeof(old_p)) {
+        if (crash == ops) {
+            /* No fault can land on this iteration: vault_flash_op() only
+             * jumps once the op counter exceeds vault_powerfail_at, and a
+             * clean rewrite performs exactly ops operations. It is the
+             * no-fault control, so the rewrite ran to completion and the
+             * new payload must be there. Letting it take the empty/absent
+             * branch below would let a silently lost write pass. */
+            ck_assert_msg(ret == (int)sizeof(new_p),
+                "no-fault control (op %d): object read back %d, expected "
+                "the new payload (%d bytes)", crash, ret,
+                (int)sizeof(new_p));
+            ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
+                "no-fault control (op %d): payload is not the new payload",
+                crash);
+        }
+        else if (ret == (int)sizeof(old_p)) {
             ck_assert_msg(memcmp(rd, old_p, sizeof(old_p)) == 0,
                 "power fail at op %d: old-sized payload is not the old "
                 "payload", crash);
