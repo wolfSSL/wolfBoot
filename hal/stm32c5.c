@@ -123,7 +123,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         if ((sr & FLASH_SR_ERR_MASK) != 0) {
             flash_clear_errors();
             FLASH_CR &= ~FLASH_CR_PG;
-            hal_cache_invalidate();
             return -1;
         }
 
@@ -131,7 +130,6 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         i += write_len;
         DSB();
     }
-    hal_cache_invalidate();
     return 0;
 }
 
@@ -153,6 +151,12 @@ void RAMFUNCTION hal_flash_lock(void)
     flash_wait_complete();
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
+    /* Drop the flash read cache at the end of the batch rather than in
+     * hal_flash_write()/hal_flash_erase(): every write/erase sequence
+     * ends with a lock, so one invalidate per batch replaces one per
+     * operation (and per error return), and every consumer is covered,
+     * not just the ones that remember to ask. */
+    hal_cache_invalidate();
 }
 
 void RAMFUNCTION hal_flash_opt_unlock(void)
@@ -231,12 +235,10 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         if ((sr & FLASH_SR_ERR_MASK) != 0) {
             flash_clear_errors();
             FLASH_CR &= ~FLASH_CR_PER;
-            hal_cache_invalidate();
             return -1;
         }
     }
     FLASH_CR &= ~FLASH_CR_PER;
-    hal_cache_invalidate();
     return 0;
 }
 

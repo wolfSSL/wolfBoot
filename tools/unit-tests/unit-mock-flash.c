@@ -53,6 +53,40 @@ static int vault_powerfail_at = -1;
 static int vault_flash_ops;
 static jmp_buf vault_powerfail_jmp;
 
+/* Stale-cache model (MOCK_STALE_CACHE).
+ *
+ * Models a part that caches flash reads, such as the STM32 ICACHE: flash
+ * operations land in a shadow buffer (the real flash contents) while
+ * vault_base keeps whatever the CPU last saw, and only
+ * hal_cache_invalidate() refreshes it. Code that writes a sector and reads
+ * it back without invalidating therefore observes pre-erase bytes, exactly
+ * as it would on silicon. Off by default, so the ordinary suite is
+ * unaffected.
+ */
+#ifdef MOCK_STALE_CACHE
+static uint8_t *vault_shadow;
+static int vault_shadow_valid;
+
+static void vault_cache_prime(void)
+{
+    if (!vault_shadow_valid) {
+        if (vault_shadow == NULL) {
+            vault_shadow = malloc(keyvault_size);
+            ck_assert_ptr_nonnull(vault_shadow);
+        }
+        memcpy(vault_shadow, vault_base, keyvault_size);
+        vault_shadow_valid = 1;
+    }
+}
+
+/* Flash side of a vault write/erase: the CPU view is left untouched. */
+static uint8_t *vault_flash_at(uintptr_t address)
+{
+    vault_cache_prime();
+    return vault_shadow + (address - (uintptr_t)vault_base);
+}
+#endif
+
 static void vault_flash_op(void)
 {
     vault_flash_ops++;
@@ -99,6 +133,9 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 #ifdef MOCK_KEYVAULT
     if ((address >= (const uintptr_t)vault_base) && (address < (const uintptr_t)vault_base + keyvault_size)) {
         vault_flash_op();
+#ifdef MOCK_STALE_CACHE
+        a = vault_flash_at(address);
+#endif
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
@@ -145,7 +182,11 @@ int hal_flash_erase(haladdr_t address, int len)
         vault_flash_op();
         printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
+#ifdef MOCK_STALE_CACHE
+        memset(vault_flash_at(address), 0xFF, len);
+#else
         memset((void *)(uintptr_t)address, 0xFF, len);
+#endif
 #endif
 #ifdef WOLFBOOT_DIAGNOSTICS_ADDRESS
     } else if ((address >= (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS) &&
@@ -169,6 +210,20 @@ void hal_flash_lock(void)
     ck_assert_msg(!locked, "Double lock detected\n");
     locked++;
 }
+
+#ifdef MOCK_KEYVAULT
+/* src/libwolfboot.c carries the weak default, but the keyvault suites do not
+ * include it (suites that do already have the symbol, hence the guard).
+ * Under MOCK_STALE_CACHE this is what makes flash visible to the CPU again. */
+void hal_cache_invalidate(void)
+{
+#ifdef MOCK_STALE_CACHE
+    if (vault_shadow_valid) {
+        memcpy(vault_base, vault_shadow, keyvault_size);
+    }
+#endif
+}
+#endif /* MOCK_KEYVAULT */
 
 void hal_prepare_boot(void)
 {
@@ -312,6 +367,11 @@ static int mmap_file(const char *path, uint8_t *address, uint32_t len,
 
     if (ret_address)
         *ret_address = mmaped_addr;
+
+#if defined(MOCK_KEYVAULT) && defined(MOCK_STALE_CACHE)
+    /* New backing store: the shadow is re-primed from it on first use. */
+    vault_shadow_valid = 0;
+#endif
 
     close(fd);
     return 0;

@@ -93,6 +93,20 @@ uint64_t hal_get_timer_us(void);
 void hal_flash_unlock(void);
 void hal_flash_lock(void);
 /*
+ * Drop any CPU-side cache of flash contents.
+ *
+ * On parts where flash reads are cached (e.g. the STM32 ICACHE), the CPU can
+ * still see pre-erase bytes after hal_flash_write()/hal_flash_erase() have
+ * completed. Any code that writes flash and then reads it back through the
+ * memory map must call this in between.
+ *
+ * src/libwolfboot.c provides a weak no-op, so targets without such a cache
+ * need not implement it; a HAL that has one overrides it and must also call
+ * it from its own hal_flash_lock(), which is where every write/erase batch
+ * ends.
+ */
+void hal_cache_invalidate(void);
+/*
  * Lock the flash region [address, address + len) against writes.
  * Return 0 on success, or a negative value on failure.
  */

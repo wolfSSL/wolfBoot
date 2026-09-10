@@ -158,6 +158,12 @@ void RAMFUNCTION hal_flash_lock(void)
 #endif
      if ((FLASH_NS_CR & FLASH_CR_LOCK) == 0)
         FLASH_NS_CR |= FLASH_CR_LOCK;
+    /* Drop the flash read cache at the end of the batch rather than in
+     * hal_flash_write()/hal_flash_erase(): every write/erase sequence
+     * ends with a lock, so one invalidate per batch replaces one per
+     * operation (and per error return), and every consumer is covered,
+     * not just the ones that remember to ask. */
+    hal_cache_invalidate();
 }
 
 void RAMFUNCTION hal_flash_opt_unlock(void)
@@ -619,7 +625,7 @@ void hal_cache_disable(void)
     ICACHE_CR &= ~ICACHE_CR_CEN;
 }
 
-void hal_cache_invalidate(void)
+void RAMFUNCTION hal_cache_invalidate(void)
 {
     /* only try and invalidate cache if enabled */
     if ((ICACHE_CR & ICACHE_CR_CEN) == 0)

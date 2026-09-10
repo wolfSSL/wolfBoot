@@ -749,6 +749,8 @@ static void vault_power_cycle(void)
     memset(openstores_handles, 0, sizeof(openstores_handles));
     cache_lru_tick = 0;
     locked = 1;
+    /* A reboot also drops any CPU-side cache of flash. */
+    hal_cache_invalidate();
 }
 
 static int vault_obj_write(int type, CK_ULONG tok, CK_ULONG obj,

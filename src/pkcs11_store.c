@@ -245,6 +245,21 @@ static struct cache_entry *cache_find(uint32_t offset)
     return NULL;
 }
 
+/*
+ * End a flash-mutating batch. Every sequence in this file is bracketed by
+ * hal_flash_unlock() ... store_flash_lock(), and the store reads committed
+ * sectors back through the memory map (sector_ptr(), cache_get_sector()'s
+ * refill, and the raw magic reads in check_vault()). On a part that caches
+ * flash reads those reads can return pre-erase bytes, so the cache is
+ * dropped here rather than relying on the HAL to do it internally: the
+ * store's correctness must not depend on which HAL it is linked against.
+ */
+static void store_flash_lock(void)
+{
+    hal_flash_lock();
+    hal_cache_invalidate();
+}
+
 static void cache_commit_entry(struct cache_entry *entry)
 {
     hal_flash_unlock();
@@ -260,7 +275,7 @@ static void cache_commit_entry(struct cache_entry *entry)
     hal_flash_write((uintptr_t)vault_base + entry->offset, entry->sector,
         WOLFBOOT_SECTOR_SIZE);
 
-    hal_flash_lock();
+    store_flash_lock();
 #ifdef PKCS11_STORE_STATS
     stats_commits++;
     stats_erases += 2;
@@ -408,7 +423,7 @@ static void restore_backup(uint32_t offset)
     hal_flash_erase((uintptr_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
     hal_flash_write((uintptr_t)vault_base + offset, BACKUP_SECTOR_ADDRESS,
             WOLFBOOT_SECTOR_SIZE);
-    hal_flash_lock();
+    store_flash_lock();
 #ifdef PKCS11_STORE_STATS
     stats_erases++;
     stats_programs++;
@@ -447,7 +462,7 @@ static void check_vault(void)
         cache_flush_all();
         hal_flash_unlock();
         hal_flash_erase((uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE * 2, total_vault_size);
-        hal_flash_lock();
+        store_flash_lock();
 #ifdef PKCS11_STORE_STATS
         stats_erases += total_vault_size / WOLFBOOT_SECTOR_SIZE;
 #endif
