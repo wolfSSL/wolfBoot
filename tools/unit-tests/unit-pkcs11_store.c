@@ -772,6 +772,19 @@ static int vault_obj_write(int type, CK_ULONG tok, CK_ULONG obj,
  * the former and fail on the latter. */
 #define VAULT_OBJ_ABSENT (-1000)
 
+/* Committed (on-flash) header size for an object, or -1 when the vault holds
+ * no node for it at all. Read after a power cycle, so the sector cache is
+ * empty and this is what actually survived in flash. */
+static int vault_obj_committed_size(int type, CK_ULONG tok, CK_ULONG obj)
+{
+    struct obj_hdr *hdr = find_object_header(type, (uint32_t)tok,
+            (uint32_t)obj);
+
+    if (hdr == NULL)
+        return -1;
+    return (int)hdr->size;
+}
+
 static int vault_obj_read(int type, CK_ULONG tok, CK_ULONG obj,
         uint8_t *out, int max)
 {
@@ -803,7 +816,11 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
                             2 * WOLFBOOT_SECTOR_SIZE];
     const int type = DYNAMIC_TYPE_ECC;
     const CK_ULONG tok = 7, obj = 77;
-    int i, ret, ops, crash;
+    static const char *modestr[] = { "atomic", "torn 1/4", "torn 1/2",
+                                     "torn 3/4" };
+    static const int torn_num[] = { 0, 1, 1, 3 };
+    static const int torn_den[] = { 1, 4, 2, 4 };
+    int i, ret, ops, crash, hdr_size, mode;
 
     for (i = 0; i < (int)sizeof(old_p); i++)
         old_p[i] = (uint8_t)('A' + (i % 23));
@@ -838,56 +855,76 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
     ck_assert_int_eq(ret, (int)sizeof(new_p));
     ck_assert_mem_eq(rd, new_p, sizeof(new_p));
 
-    for (crash = 0; crash <= ops; crash++) {
-        vault_restore_snapshot(snapshot);
-        vault_power_cycle();
-        vault_flash_ops = 0;
-        vault_powerfail_at = crash;
-        if (setjmp(vault_powerfail_jmp) == 0) {
-            vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
-        }
-        /* Power returns. */
-        vault_powerfail_at = -1;
-        vault_power_cycle();
-        memset(rd, 0, sizeof(rd));
-        ret = vault_obj_read(type, tok, obj, rd, (int)sizeof(rd));
+    /* Sweep every crash point once per fault shape: first with the faulting
+     * flash operation abandoned whole, then with it torn part-way through,
+     * so half-erased and half-programmed sectors are covered as well. Real
+     * silicon does not promise that a sector write is all-or-nothing. */
+    for (mode = 0; mode < (int)(sizeof(torn_num) / sizeof(torn_num[0]));
+            mode++) {
+        vault_powerfail_torn = (mode != 0);
+        vault_torn_num = torn_num[mode];
+        vault_torn_den = torn_den[mode];
+        for (crash = 0; crash <= ops; crash++) {
+            vault_restore_snapshot(snapshot);
+            vault_power_cycle();
+            vault_flash_ops = 0;
+            vault_powerfail_at = crash;
+            if (setjmp(vault_powerfail_jmp) == 0) {
+                vault_obj_write(type, tok, obj, new_p, (int)sizeof(new_p));
+            }
+            /* Power returns. */
+            vault_powerfail_at = -1;
+            vault_power_cycle();
+            memset(rd, 0, sizeof(rd));
+            ret = vault_obj_read(type, tok, obj, rd, (int)sizeof(rd));
 
-        if (crash == ops) {
-            /* No fault can land on this iteration: vault_flash_op() only
-             * jumps once the op counter exceeds vault_powerfail_at, and a
-             * clean rewrite performs exactly ops operations. It is the
-             * no-fault control, so the rewrite ran to completion and the
-             * new payload must be there. Letting it take the empty/absent
-             * branch below would let a silently lost write pass. */
-            ck_assert_msg(ret == (int)sizeof(new_p),
-                "no-fault control (op %d): object read back %d, expected "
-                "the new payload (%d bytes)", crash, ret,
-                (int)sizeof(new_p));
-            ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
-                "no-fault control (op %d): payload is not the new payload",
-                crash);
-        }
-        else if (ret == (int)sizeof(old_p)) {
-            ck_assert_msg(memcmp(rd, old_p, sizeof(old_p)) == 0,
-                "power fail at op %d: old-sized payload is not the old "
-                "payload", crash);
-        }
-        else if (ret == (int)sizeof(new_p)) {
-            ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
-                "power fail at op %d: new-sized payload is not the new "
-                "payload", crash);
-        }
-        else {
-            /* Only two other outcomes are crash-safe: the object was never
-             * published, or it is present but truncated to empty by the
-             * Open-time durability commit. Every other return (a negative
-             * read error, or a partial payload length) means the vault came
-             * back damaged. */
-            ck_assert_msg(ret == VAULT_OBJ_ABSENT || ret == 0,
-                "power fail at op %d: object read back %d, neither old "
-                "payload, new payload, empty, nor absent", crash, ret);
+            if (crash == ops) {
+                /* No fault can land on this iteration: vault_flash_op() only
+                 * jumps once the op counter exceeds vault_powerfail_at, and a
+                 * clean rewrite performs exactly ops operations. It is the
+                 * no-fault control, so the rewrite ran to completion and the
+                 * new payload must be there. Letting it take the empty/absent
+                 * branch below would let a silently lost write pass. */
+                ck_assert_msg(ret == (int)sizeof(new_p),
+                    "%s no-fault control (op %d): object read back %d, "
+                    "expected the new payload (%d bytes)", modestr[mode],
+                    crash, ret, (int)sizeof(new_p));
+                ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
+                    "%s no-fault control (op %d): payload is not the new "
+                    "payload", modestr[mode], crash);
+            }
+            else if (ret == (int)sizeof(old_p)) {
+                ck_assert_msg(memcmp(rd, old_p, sizeof(old_p)) == 0,
+                    "%s power fail at op %d: old-sized payload is not the old "
+                    "payload", modestr[mode], crash);
+            }
+            else if (ret == (int)sizeof(new_p)) {
+                ck_assert_msg(memcmp(rd, new_p, sizeof(new_p)) == 0,
+                    "%s power fail at op %d: new-sized payload is not the new "
+                    "payload", modestr[mode], crash);
+            }
+            else {
+                /* The one crash-safe alternative to a whole generation is the
+                 * truncated-but-present object the Open-time commit
+                 * guarantees. The node must still be there -- the rewrite
+                 * never calls create_object() for an existing object, so
+                 * losing it outright (VAULT_OBJ_ABSENT) would be a real
+                 * fault, not an empty
+                 * rewrite -- and its committed size must be exactly the 8-byte
+                 * tok/obj prefix, or the header itself came back torn. */
+                ck_assert_msg(ret == 0,
+                    "%s power fail at op %d: object read back %d, neither old "
+                    "payload, new payload, nor empty", modestr[mode], crash,
+                    ret);
+                hdr_size = vault_obj_committed_size(type, tok, obj);
+                ck_assert_msg(hdr_size == (int)(2 * sizeof(uint32_t)),
+                    "%s power fail at op %d: empty read but committed header "
+                    "size is %d, expected %d", modestr[mode], crash, hdr_size,
+                    (int)(2 * sizeof(uint32_t)));
+            }
         }
     }
+    vault_powerfail_torn = 0;
 }
 END_TEST
 

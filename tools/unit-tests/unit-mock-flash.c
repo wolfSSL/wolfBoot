@@ -104,12 +104,40 @@ static void vault_restore_snapshot(const uint8_t *snapshot)
 #endif
 }
 
-static void vault_flash_op(void)
+/* Torn-operation mode.
+ *
+ * By default an injected fault abandons the whole flash operation, so the
+ * sector is either untouched or fully written -- which real silicon does
+ * not promise. With vault_powerfail_torn set, the faulting operation
+ * instead applies vault_torn_num/vault_torn_den of its bytes and only then
+ * loses power, leaving a half-erased or half-programmed sector behind.
+ */
+static int vault_powerfail_torn;
+static int vault_torn_num = 1;
+static int vault_torn_den = 2;
+
+/* How many of an operation's len bytes actually reach flash.
+ *
+ * Returns len when no fault is due on this operation. When one is: in the
+ * default atomic mode this longjmp()s and never returns, leaving flash
+ * untouched; in torn mode it returns a short count, and the caller applies
+ * that prefix and then calls vault_flash_torn_abort().
+ */
+static int vault_flash_op_len(int len)
 {
     vault_flash_ops++;
     if ((vault_powerfail_at >= 0) && (vault_flash_ops > vault_powerfail_at)) {
-        longjmp(vault_powerfail_jmp, 1);
+        if (!vault_powerfail_torn) {
+            longjmp(vault_powerfail_jmp, 1);
+        }
+        return (int)(((long)len * vault_torn_num) / vault_torn_den);
     }
+    return len;
+}
+
+static void vault_flash_torn_abort(void)
+{
+    longjmp(vault_powerfail_jmp, 1);
 }
 #endif
 
@@ -149,12 +177,15 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     }
 #ifdef MOCK_KEYVAULT
     if ((address >= (const uintptr_t)vault_base) && (address < (const uintptr_t)vault_base + keyvault_size)) {
-        vault_flash_op();
+        int n = vault_flash_op_len(len);
 #ifdef MOCK_STALE_CACHE
         a = vault_flash_at(address);
 #endif
-        for (i = 0; i < len; i++) {
+        for (i = 0; i < n; i++) {
             a[i] = data[i];
+        }
+        if (n != len) {
+            vault_flash_torn_abort();
         }
     }
 #endif
@@ -196,14 +227,17 @@ int hal_flash_erase(haladdr_t address, int len)
         memset((void *)(uintptr_t)address, 0xFF, len);
 #ifdef MOCK_KEYVAULT
     } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
-        vault_flash_op();
+        int n = vault_flash_op_len(len);
         printf("Erasing vault from %p : %p bytes\n", address, len);
         erased_vault++;
 #ifdef MOCK_STALE_CACHE
-        memset(vault_flash_at(address), 0xFF, len);
+        memset(vault_flash_at(address), 0xFF, n);
 #else
-        memset((void *)(uintptr_t)address, 0xFF, len);
+        memset((void *)(uintptr_t)address, 0xFF, n);
 #endif
+        if (n != len) {
+            vault_flash_torn_abort();
+        }
 #endif
 #ifdef WOLFBOOT_DIAGNOSTICS_ADDRESS
     } else if ((address >= (haladdr_t)WOLFBOOT_DIAGNOSTICS_ADDRESS) &&
