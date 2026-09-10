@@ -830,7 +830,7 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
     ck_assert_int_gt(ops, 0);
 
     for (crash = 0; crash <= ops; crash++) {
-        memcpy(vault_base, snapshot, keyvault_size);
+        vault_restore_snapshot(snapshot);
         vault_power_cycle();
         vault_flash_ops = 0;
         vault_powerfail_at = crash;

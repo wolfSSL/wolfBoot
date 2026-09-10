@@ -87,6 +87,23 @@ static uint8_t *vault_flash_at(uintptr_t address)
 }
 #endif
 
+/* Restore a snapshot into every representation of the vault flash.
+ *
+ * Under MOCK_STALE_CACHE the shadow *is* the flash array and vault_base is
+ * only the CPU's cached view of it, so putting the snapshot back into
+ * vault_base alone leaves the previous contents in the shadow -- and the
+ * next hal_cache_invalidate() (a power cycle does one) copies them straight
+ * back over the snapshot. A test that restores a known state before each
+ * injected fault must therefore reset both. */
+static void vault_restore_snapshot(const uint8_t *snapshot)
+{
+    memcpy(vault_base, snapshot, keyvault_size);
+#ifdef MOCK_STALE_CACHE
+    vault_cache_prime();
+    memcpy(vault_shadow, snapshot, keyvault_size);
+#endif
+}
+
 static void vault_flash_op(void)
 {
     vault_flash_ops++;
