@@ -98,11 +98,37 @@ void RAMFUNCTION hal_flash_unlock(void)
     }
 }
 
+/* RM0440 3.3.3: the instruction and data caches keep lines fetched before an
+ * erase/program, so a read-back through the flash memory map can return
+ * pre-erase bytes. The reset bits are only writable while the corresponding
+ * cache is disabled, hence the disable/reset/re-enable dance. */
+void RAMFUNCTION hal_cache_invalidate(void)
+{
+    uint32_t acr = FLASH_ACR;
+
+    if (acr & FLASH_ACR_ICEN) {
+        FLASH_ACR &= ~FLASH_ACR_ICEN;
+        FLASH_ACR |= FLASH_ACR_ICRST;
+        FLASH_ACR &= ~FLASH_ACR_ICRST;
+        FLASH_ACR |= FLASH_ACR_ICEN;
+    }
+    if (acr & FLASH_ACR_DCEN) {
+        FLASH_ACR &= ~FLASH_ACR_DCEN;
+        FLASH_ACR |= FLASH_ACR_DCRST;
+        FLASH_ACR &= ~FLASH_ACR_DCRST;
+        FLASH_ACR |= FLASH_ACR_DCEN;
+    }
+}
+
 void RAMFUNCTION hal_flash_lock(void)
 {
     flash_wait_complete();
     if ((FLASH_CR & FLASH_CR_LOCK) == 0)
         FLASH_CR |= FLASH_CR_LOCK;
+    /* Drop the stale cache lines at the end of the write/erase batch: every
+     * sequence in wolfBoot ends with a lock, so one invalidate per batch
+     * covers every consumer that reads flash back. */
+    hal_cache_invalidate();
 }
 
 
