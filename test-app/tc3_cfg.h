@@ -21,7 +21,7 @@
 #ifndef TC3_CFG_H
 #define TC3_CFG_H
 
-#if defined(WOLFBOOT_AURIX_TC3XX_HSM)
+#if defined(TARGET_aurix_tc3xx_hsm)
 #define TC3_CFG_HAVE_ARM
 #else
 #define TC3_CFG_HAVE_TRICORE

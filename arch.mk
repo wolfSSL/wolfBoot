@@ -2183,10 +2183,30 @@ ifeq ($(ARCH),C2000)
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $^
 endif
 
-# Infineon AURIX Tricore
-ifeq ($(ARCH), AURIX_TC3)
-  # TC3xx specific
-  ifeq ($(TARGET), aurix_tc3xx)
+# Infineon AURIX platforms
+#
+# TC3xx SoCs are a heterogeneous architecture with ARM and Tricore CPUs, but are
+# grouped together in wolfBoot under ARCH=AURIX, since platform support is
+# different enough from existing ARCH variants to not share things like compiler
+# flags or startup code.
+#
+# TARGET=aurix_tc3xx: AURIX TC3xx TriCore host
+# TARGET=aurix_tc3xx_hsm: AURIX TC3xx Cortex-M3 HSM core
+# TARGET=aurix_tc4xx: AURIX TC4xx Tricore host (coming soon)
+
+# Backwards compatibility migration error for legacy ARCH=AURIX_TC3
+ifeq ($(filter clean keysclean,$(MAKECMDGOALS)),)
+  ifeq ($(ARCH),AURIX_TC3)
+    $(error ARCH=AURIX_TC3 was renamed to ARCH=AURIX)
+  endif
+  ifeq ($(AURIX_TC3_HSM),1)
+    $(error AURIX_TC3_HSM=1 was replaced by TARGET=aurix_tc3xx_hsm)
+  endif
+endif
+
+ifeq ($(ARCH), AURIX)
+  # TC3xx HSM and host cores
+  ifneq (,$(filter aurix_tc3xx aurix_tc3xx_hsm,$(TARGET)))
     USE_GCC?=1
 
     CFLAGS += -I$(TC3_DIR) -Ihal
@@ -2242,7 +2262,8 @@ ifeq ($(ARCH), AURIX_TC3)
       BOOT_IMG=test-app/image.elf
     endif
 
-    ifeq ($(AURIX_TC3_HSM),1)
+    ifeq ($(TARGET), aurix_tc3xx_hsm)
+      # HSM core (ARM Cortex-M3)
       ARCH_FLASH_OFFSET?=0x80028000
       # HSM compiler flags, build options, source code, etc
       ifeq ($(USE_GCC),1)
@@ -2265,7 +2286,7 @@ ifeq ($(ARCH), AURIX_TC3)
       endif
 
       CFLAGS += -march=armv7-m -mcpu=cortex-m3 -mthumb -mlittle-endian \
-                -fno-builtin -DWOLFBOOT_AURIX_TC3XX_HSM
+                -fno-builtin
 
       # Temporary fix masking wolfCrypt unused function warning with RSA_LOW_MEM
       CFLAGS += -Wno-unused-function
@@ -2277,8 +2298,6 @@ ifeq ($(ARCH), AURIX_TC3)
                 -Wl,-Map="wolfboot.map" \
                 -Wl,-L$(TC3_DIR)/tc3
 
-      LSCRIPT_IN=hal/$(TARGET)_hsm.ld
-
       # wolfHSM port server-specific files
       ifeq ($(WOLFHSM_SERVER),1)
         USE_GCC_HEADLESS=0
@@ -2286,7 +2305,6 @@ ifeq ($(ARCH), AURIX_TC3)
         CFLAGS += -I$(WOLFHSM_INFINEON_TC3XX)/port/server
 
         OBJS += $(WOLFHSM_INFINEON_TC3XX)/port/server/port_halflash_df1.o \
-          $(WOLFHSM_INFINEON_TC3XX)/port/server/io.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/sysmem.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_hh_hsm.o \
           $(WOLFHSM_INFINEON_TC3XX)/port/server/tchsm_utils.o\
@@ -2309,7 +2327,7 @@ ifeq ($(ARCH), AURIX_TC3)
               $(TC3_DIR)/../tc3arm_bootloader/tc3arm_bootloader.o
 
     else
-      # Tricore compiler settings
+      # TriCore host core
       ARCH_FLASH_OFFSET?=0x800A0000
       ifeq ($(USE_GCC),1)
         HT_ROOT?=/opt/hightec/gnutri_v4.9.4.1-11fcedf-lin64
@@ -2369,8 +2387,8 @@ ifeq ($(ARCH), AURIX_TC3)
                 $(WOLFHSM_INFINEON_TC3XX)/port/client/tchsm_hh_host.o
       endif
 
-    endif # !AURIX_TC3_HSM
-  endif
+    endif # aurix_tc3xx_hsm
+  endif # TC3xx
 
   # TC4xx specific
   ifeq ($(TARGET), aurix_tc4xx)
