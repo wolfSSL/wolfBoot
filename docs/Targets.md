@@ -21,6 +21,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
+* [NXP i.MX95 Cortex-A55 (BL33)](#nxp-imx95-cortex-a55-bl33)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP Kinetis KL26Z](#nxp-kinetis-kl26z)
@@ -9275,6 +9276,18 @@ devmem 0x80F10014    # heartbeat, incrementing
 The difference between the two timestamps is the cost of everything wolfBoot does in between, which is dominated by signature verification. Note that these magics are spelled to read correctly as `devmem` 32-bit words, the opposite convention from the console magic, which is read from a hexdump of the ring.
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
+
+## NXP i.MX95 Cortex-A55 (BL33)
+
+wolfBoot replaces U-Boot proper on the i.MX95's Cortex-A55 cluster: it is the third image in AHAB container 2 (after BL31 and OP-TEE), entered by BL31 at `0x90200000` in NS-EL2, where it verifies a Linux FIT (kernel + DTB + initramfs) with ML-DSA-87 and boots it at EL2. SPL/ELE authenticate the container itself (AHAB), so the chain is ROM -> ELE -> SPL -> BL31 -> wolfBoot -> Linux once SRK fuses are programmed. NXP also documents an OEM PQC SRK hybrid (ML-DSA) AHAB flow, so the container half of the chain can be post-quantum as well.
+
+Validated on a Toradex SMARC iMX95 with `TARGET=imx95_a55` (`config/examples/imx95-a55.config`): full boot to Linux userspace with the FIT on the carrier SD (uSDHC2, `hal/imx95_usdhc.c` - i.MX uSDHC, not SDHCI-compatible).
+
+Notes:
+- The FIT DTB gets `/chosen` bootargs, initrd properties and a `/memory` node from `hal_dts_fixup()`; deployment DTBs commonly ship without `/memory` (the bootloader is expected to add it) and the kernel hangs silently without one.
+- The EL2 exit is a fused asm routine (flush, DAIF mask, TLB invalidate, jump) that touches no memory after the D-cache goes off; set/way cleaning does not reach the A55 cluster's DSU system cache, so payload ranges are also cleaned by VA.
+- Use plain `earlycon` (DTB-derived); an explicit `earlycon=lpuart32,mmio32,<addr>` uses the wrong register layout on i.MX and silences all console output.
+- Storage requires the prior stage to have brought up uSDHC2 (clock/pinmux/card power are System Manager-owned via SCMI); a cold-boot SCMI client is follow-on work.
 
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
