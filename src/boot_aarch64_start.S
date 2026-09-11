@@ -46,6 +46,10 @@
 #include "hal/cm4.h"
 #endif
 
+#ifdef TARGET_imx8qm
+#include "hal/imx8qm.h"
+#endif
+
 /* GICv2 Register Offsets */
 #ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
@@ -1302,12 +1306,14 @@ _cm4_entry:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
-#if defined(TARGET_cm4)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
     /* Always install a valid EL2 vector base: the reset VBAR_EL2 is UNKNOWN, so
      * without this a fault in the parsing-heavy boot code branches to an
      * undefined address. The table halts cleanly (and, under DEBUG+DEBUG_UART,
-     * dumps ESR/ELR/FAR first). */
-    ldr x2, =cm4_vectors
+     * dumps ESR/ELR/FAR first). el2_to_el1_boot copies VBAR_EL2 into VBAR_EL1,
+     * so this also covers the window between the drop to EL1 and the payload
+     * installing its own vectors. */
+    ldr x2, =simple_el2_vectors
     msr VBAR_EL2, x2
     isb                        /* ensure new vector base is in effect */
 #endif
@@ -1325,14 +1331,13 @@ _cm4_entry:
    b    7b
 
 8:
-#ifdef TARGET_tegra234
-    /* Use the reserved in-DRAM stack from hal/tegra234.ld. The generic path
-     * sets sp to the image base, which on this target is the BL33 load address
-     * - growing down from there runs into memory wolfBoot does not own. */
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm)
+    /* Reserved in-DRAM stack from the linker script: the generic path sets sp
+     * to the image base, which here is the BL33 load address. */
     ldr x1, =END_STACK
 #endif
     mov sp, x1         // set stack pointer
-#ifdef TARGET_tegra234
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm)
     /* Stash the handoff x0 (DTB pointer, saved in x21 at reset) in a .data
      * global so C can read it after boot_entry_C clears BSS. */
     adrp x2, boot_handoff_x0
@@ -1342,48 +1347,53 @@ _cm4_entry:
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 
-#if defined(TARGET_cm4)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
 /* Minimal always-on EL2 exception vectors. On any exception (data/instruction
  * abort, etc.) halt cleanly rather than branch to the UNKNOWN reset VBAR_EL2.
- * Under DEBUG+DEBUG_UART the handler additionally dumps ESR/ELR/FAR over UART. */
-.macro CM4_VEC label
+ * Under DEBUG+DEBUG_UART the handler additionally dumps ESR/ELR/FAR over UART.
+ *
+ * Each entry passes its slot number, which distinguishes a fault inside
+ * wolfBoot (slots 0-7) from one in the payload after the drop to EL1 (8-15). */
+.macro EL2_VEC label, idx
     .align 7
 \label:
-    b   cm4_fault_common
+    mov x3, #\idx
+    b   simple_el2_fault_common
 .endm
 
 .align 11
-.global cm4_vectors
-cm4_vectors:
-    CM4_VEC cm4_v0    /* Current EL, SP0:  Sync */
-    CM4_VEC cm4_v1    /*                   IRQ  */
-    CM4_VEC cm4_v2    /*                   FIQ  */
-    CM4_VEC cm4_v3    /*                   SError */
-    CM4_VEC cm4_v4    /* Current EL, SPx:  Sync */
-    CM4_VEC cm4_v5    /*                   IRQ  */
-    CM4_VEC cm4_v6    /*                   FIQ  */
-    CM4_VEC cm4_v7    /*                   SError */
-    CM4_VEC cm4_v8    /* Lower EL, AArch64: Sync */
-    CM4_VEC cm4_v9    /*                   IRQ  */
-    CM4_VEC cm4_v10   /*                   FIQ  */
-    CM4_VEC cm4_v11   /*                   SError */
-    CM4_VEC cm4_v12   /* Lower EL, AArch32: Sync */
-    CM4_VEC cm4_v13   /*                   IRQ  */
-    CM4_VEC cm4_v14   /*                   FIQ  */
-    CM4_VEC cm4_v15   /*                   SError */
+.global simple_el2_vectors
+simple_el2_vectors:
+    EL2_VEC el2_v0,  0    /* Current EL, SP0:  Sync */
+    EL2_VEC el2_v1,  1    /*                   IRQ  */
+    EL2_VEC el2_v2,  2    /*                   FIQ  */
+    EL2_VEC el2_v3,  3    /*                   SError */
+    EL2_VEC el2_v4,  4    /* Current EL, SPx:  Sync */
+    EL2_VEC el2_v5,  5    /*                   IRQ  */
+    EL2_VEC el2_v6,  6    /*                   FIQ  */
+    EL2_VEC el2_v7,  7    /*                   SError */
+    EL2_VEC el2_v8,  8    /* Lower EL, AArch64: Sync */
+    EL2_VEC el2_v9,  9    /*                   IRQ  */
+    EL2_VEC el2_v10, 10   /*                   FIQ  */
+    EL2_VEC el2_v11, 11   /*                   SError */
+    EL2_VEC el2_v12, 12   /* Lower EL, AArch32: Sync */
+    EL2_VEC el2_v13, 13   /*                   IRQ  */
+    EL2_VEC el2_v14, 14   /*                   FIQ  */
+    EL2_VEC el2_v15, 15   /*                   SError */
 
-cm4_fault_common:
+simple_el2_fault_common:
 #if defined(DEBUG) && defined(DEBUG_UART)
     /* Switch to a dedicated fault stack before calling the C handler: the
      * exception may have been taken with SP unset (the window before 'mov sp,x1'
      * or on a secondary core that never sets SP) or with SP overflowed, and
-     * cm4_fault_handler needs a valid stack for its wolfBoot_printf calls. */
-    ldr x3, =cm4_fault_stack_top
-    mov sp, x3
+     * the handler needs a valid stack. x3 already carries the vector slot, so
+     * read the system registers into x0-x2 without disturbing it. */
+    ldr x4, =simple_el2_fault_stack_top
+    mov sp, x4
     mrs x0, esr_el2
     mrs x1, elr_el2
     mrs x2, far_el2
-    bl  cm4_fault_handler   /* void cm4_fault_handler(esr, elr, far) */
+    bl  simple_el2_fault_handler /* void (esr, elr, far, vector) */
 #endif
 9:  wfi
     b   9b
@@ -1391,12 +1401,12 @@ cm4_fault_common:
 #if defined(DEBUG) && defined(DEBUG_UART)
 .section ".bss"
 .balign 16
-cm4_fault_stack:
+simple_el2_fault_stack:
     .skip 1024
-cm4_fault_stack_top:
+simple_el2_fault_stack_top:
 .section ".boot"
 #endif
-#endif /* TARGET_cm4 */
+#endif /* TARGET_cm4 || TARGET_imx8qm */
 #if defined(TARGET_cm4)
 /* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
  * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to
@@ -1665,7 +1675,10 @@ el2_to_el1_boot:
  * AAPCS64: clobbers x0-x7, x9-x11; x30 (LR) is preserved because the
  * set/way loop body does not touch it.
  */
-#if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/* Also built for imx8qm regardless of EL2_HYPERVISOR: its IMX8QM_MMU teardown
+ * needs this routine's stack-free property (see hal/imx8qm.c), and IMX8QM_MMU
+ * is orthogonal to whether that build hands off at EL1. */
+#if (defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1) || defined(TARGET_imx8qm)
 .global el2_flush_and_disable_mmu
 el2_flush_and_disable_mmu:
     /* ---- 1. Clean & invalidate entire data cache to PoC by set/way ----
@@ -1746,7 +1759,7 @@ el2_flush_and_disable_mmu:
     isb
 
     ret
-#endif /* EL2_HYPERVISOR */
+#endif /* EL2_HYPERVISOR || TARGET_imx8qm */
 
 #if defined(WOLFBOOT_ZYNQMP_FSBL)
 /*

@@ -20,6 +20,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
+* [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP Kinetis](#nxp-kinetis)
@@ -9185,6 +9186,424 @@ Boot success marked. Version: 1
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
 
+
+## NXP i.MX 8QuadMax
+
+wolfBoot runs on the NXP i.MX 8QuadMax (MIMX8QM: 2x Cortex-A72 + 4x Cortex-A53) as the bare-metal **BL33** firmware stage, replacing U-Boot inside the NXP boot container. Developed against the i.MX 8QuadMax Multisensory Enablement Kit (MCIMX8QM-CPU, "MEK").
+
+This SoC is not like i.MX 8M. The boot ROM runs on the Cortex-M4 System Controller Unit (SCU), and the SCU firmware trains DDR before any application core executes, so there is no SPL stage and no DDR training blob on the A-cores. By the time wolfBoot is entered, DRAM is up and ATF has already configured EL3:
+
+```
+Boot ROM (on the SCU Cortex-M4)
+  -> SCFW  (scfw_tcm.bin)     DDR init, power/clock/pad ownership
+  -> SECO firmware            AHAB container authentication
+  -> ATF BL31 (bl31.bin)      EL3, PSCI, SMP
+  -> BL33 = wolfBoot          EL2 non-secure, entered at 0x80020000
+       -> verify -> Linux FIT (EL2->EL1, DTB in x0) or bare-metal payload
+```
+
+`imx-mkimage` combines SCFW, the SECO container, ATF BL31 and BL33 into a single `flash.bin`. wolfBoot links at `0x80020000`, which is where `u-boot.bin` links on this SoC (`imx8qm_mek_defconfig`, `CONFIG_TEXT_BASE`), so it drops into the BL33 slot with no change to the stock recipe.
+
+wolfBoot runs with the MMU off and 1:1 physical, which is also what the arm64 Linux boot protocol wants at the handoff. The HAL (`hal/imx8qm.c`) provides the LPUART0 console, the ARMv8 generic timer, an optional System Controller (SCU) client over the MU1_A mailbox, a uSDHC-to-SDHCI register shim for SD/eMMC, a FlexSPI0 serial NOR driver, and a "handoff dump" (entry EL, SCTLR MMU/cache bits, handoff `x0`) enabled with `IMX8QM_HANDOFF_DUMP=1`.
+
+### Example configurations
+
+Two configs, because there are two memory maps. Everything else is a build option:
+
+| Config | Memory map |
+|---|---|
+| [/config/examples/imx8qm-mek.config](/config/examples/imx8qm-mek.config) | The template. `WOLFBOOT_NO_PARTITIONS`, payload staged in DRAM. Covers the bundled bring-up build and every disk variant below. |
+| [/config/examples/imx8qm-mek-qspi.config](/config/examples/imx8qm-mek-qspi.config) | Boot/update/swap partitions in the on-board MT35XU512ABA serial NOR on FlexSPI0, with the partition-based A/B update flow. A different layout, not a toggle. |
+
+Variants are selected on the make command line, so CI and a local build agree:
+
+| Build | Boot path |
+|---|---|
+| `make` | Verify a payload bundled into the BL33 image in DRAM and boot it at EL2. No storage driver. The bring-up path. |
+| `make DISK_SDCARD=1` | Read the signed image from the SD card socket (uSDHC2) via the generic SDHCI driver. |
+| `make DISK_EMMC=1` | Read the signed image from the soldered 8-bit eMMC (uSDHC1). |
+| `make DISK_SDCARD=1 IMX8QM_MMU=1 EL2_HYPERVISOR=1 BOOT_EL1=1` | The Linux FIT path: drop EL2 -> EL1 and hand off with the DTB in `x0` (the arm64 Linux boot contract). |
+| `... DISK_FS=fat32\|ext4\|both` | Read the image from a file on a read-only FAT32 or ext4 filesystem rather than a raw partition offset. See [compile.md](compile.md). |
+| `... IMX8QM_SCU=0` | Chainload: assume an earlier stage already powered, clocked and pad-muxed the console and the boot device. |
+| `... IMX8QM_SD_NO_UHS=1` | Pin the SD node to 3.3V high-speed (`no-1-8-v` plus `max-frequency`) and drop wolfBoot's own ceiling to 25 MHz. **Off by default**: the board runs the card at DDR50, 1.8V, 50 MHz. Turn it on for a signal path that cannot carry UHS-I, such as an SD multiplexer in line with the socket. |
+| `... IMX8QM_HANDOFF_DUMP=0` | Quiet build. |
+| `... IMX8QM_USDHC_MAX_CLK_KHZ=<n>` | Override the uSDHC clock ceiling. `arch.mk` defaults it per medium: 50000 for the SD socket (25000 with `IMX8QM_SD_NO_UHS=1`) and 52000 for the soldered eMMC. |
+| `... IMX8QM_FLEXSPI_PROBE=1` | Read-only FlexSPI bring-up probe: granted root clock, controller registers before and after the command, the LUT entry, the NOR status register and the first bytes of the AHB window. Pass it as a make variable, **not** as `CFLAGS_EXTRA=-DIMX8QM_FLEXSPI_PROBE`: a command-line `CFLAGS_EXTRA` replaces the config's own and the link then fails. |
+| `... BOOT_BENCHMARK=1` | Time the payload read, the hash and the signature check, printing milliseconds after each. |
+| `... IMX8QM_CRYPTO_SELFTEST=1` | Run an ECDSA P-384 known-answer test on the board before any image is touched. Tells a crypto fault apart from a wolfBoot data-path fault, which is exactly the confusion a stale signing key creates. |
+| `... NO_ARM_ASM=1` | Turn the wolfcrypt ARMv8 assembly back off. It is on by default when `IMX8QM_MMU=1`. |
+| `... IMX8QM_STACK_PROBE=1` | Paint the stack in `hal_init()` and report the high-water mark at handoff, and on the panic path via `WOLFBOOT_HOOK_PANIC`. Measures the peak across the load, the hash and the signature verify. |
+| `... IMX8QM_FLEXSPI_WRITE_TEST=1` | **Destructive.** Erases and reprograms the first NOR sector at boot to exercise `ext_flash_erase`/`ext_flash_write`/`ext_flash_read` against the real device, which host unit tests cannot do. Implies the probe. |
+
+The config header lists the full set. Note `IMX8QM_MMU=1` is effectively required for a Linux-sized payload, not optional: MMU-off DRAM is uncached, and a 32 MB FIT takes over fifteen minutes to hash that way against about thirty seconds with it.
+
+Do not pass `CFLAGS_EXTRA=` on the make command line. `options.mk` does `CFLAGS+=$(CFLAGS_EXTRA)` with no `override`, so a command-line value *replaces* every `CFLAGS_EXTRA+=` in the config and in `arch.mk` rather than adding to it. The uSDHC board flags (`SDHCI_SDMA_DISABLED`, `SDHCI_FORCE_CARD_DETECT`, `IMX8QM_USDHC_MAX_CLK_KHZ`) are set in `arch.mk` for any `DISK_SDCARD`/`DISK_EMMC` build of this target precisely so a command-line variant selection cannot lose them.
+
+The disk builds expect two dedicated boot partitions labelled `boot_a` and `boot_b`, each holding a signed image at raw offset 0, with the rootfs and anything else alongside them. They are selected by label rather than by partition index, so the layout survives repartitioning and does not assume the boot slots come first; `BOOT_PART_A`/`BOOT_PART_B` are available (commented out) for media with no labels.
+
+### Building wolfBoot for i.MX 8QuadMax
+
+No hardware is needed to compile.
+
+```
+cp config/examples/imx8qm-mek.config .config
+make distclean
+make keytools
+make
+```
+
+For a variant, append its options to the final `make` (see the table above), for
+example `make DISK_SDCARD=1 IMX8QM_MMU=1 EL2_HYPERVISOR=1 BOOT_EL1=1`.
+
+This produces `wolfboot.bin` (the BL33 bootloader) and `test-app/image_v1_signed.bin` (the signed payload). There is no contiguous `factory.bin`: wolfBoot is loaded into DRAM by ATF, so there is no flash image to assemble.
+
+### What is signed by what
+
+Two independent signature layers are in play, and it is worth being explicit about the boundary:
+
+- **AHAB** authenticates the boot *container* - SCFW, ATF and wolfBoot itself - against a Super Root Key hash burnt into SoC fuses, before any A-core runs. This is what protects wolfBoot.
+- **wolfBoot** authenticates the OS or application image it goes on to boot, with its own key and the wolfCrypt verification in this repository.
+
+In the bundled configurations the payload sits inside the BL33 image, so it is covered by both. A DTB bundled at `IMX8QM_DTB_OFFSET` is covered by AHAB only, **not** by wolfBoot's payload signature - the same trade-off the Tegra234 target documents.
+
+### Image layout
+
+In the no-storage-driver configurations the packaging script bundles the payload and, for a Linux boot, the device tree into the BL33 image at fixed offsets (`hal/imx8qm.h`), so wolfBoot reads them straight out of DRAM:
+
+```
+0x80020000  +--------------------------+
+            | wolfBoot (BL33)          |   linker cap: 2 MB
+0x80220000  +--------------------------+   IMX8QM_BUNDLE_OFFSET
+            | signed payload           |
+0x80320000  +--------------------------+   IMX8QM_DTB_OFFSET
+            | device tree (optional)   |
+0x80420000  +--------------------------+   IMX8QM_BL33_MAX_SIZE
+```
+
+`hal/imx8qm.ld` sets the memory region length to the payload offset, so wolfBoot growing into the payload slot is a link error rather than an image the packaging script silently assembles wrong.
+
+### Building the boot container
+
+`tools/scripts/imx8qm/imx8qm-mkflashbin.sh` builds wolfBoot and the signed payload against one freshly generated key, bundles them, and hands the result to `imx-mkimage` as the BL33 input:
+
+```
+IMX_MKIMAGE=/path/to/imx-mkimage \
+IMX_FIRMWARE=/path/to/firmware \
+  tools/scripts/imx8qm/imx8qm-mkflashbin.sh [device-tree.dtb]
+```
+
+`IMX_FIRMWARE` must hold three binaries from the NXP BSP, none of which are redistributable: `scfw_tcm.bin` (System Controller firmware), `mx8qmb0-ahab-container.img` (SECO firmware, B0 silicon) and `bl31.bin` (ATF). Without `IMX_MKIMAGE`/`IMX_FIRMWARE` the script stops after producing the BL33 bundle in `wolfboot.bin`, which can then be passed to `imx-mkimage` by hand in place of `u-boot.bin`.
+
+> **Use the Linux BSP's `bl31.bin`, and check which one you have.** The NXP BSPs ship two ATF builds of the *same size* for this SoC, and only one of them will hand off to BL33 here. A container built with the Android build produces **no console output whatsoever**: BL31 runs before BL33, so wolfBoot never starts and the symptom is indistinguishable from a dead board, a bad container offset or a broken wolfBoot binary. Identify the build before using it, because the sizes match and a size check will not catch the mix-up:
+>
+> ```
+> strings bl31.bin | grep '^v2\.'
+> v2.8(release):                                              <- use this
+> v2.8(release):android-13.0.0_2.0.0-rc1-1-g99195a23d          <- will not boot
+> ```
+>
+> Always let the packaging script copy `bl31.bin` from `$IMX_FIRMWARE` rather than relying on whatever is already staged in `imx-mkimage/iMX8QM/`, which is where a stale blob survives between builds.
+
+#### Why wolfBoot links at 0x80020000
+
+`imx-mkimage`'s own recipe for this SoC concatenates the two A-core stages into a single container image:
+
+```
+u-boot-atf.bin: u-boot-hash.bin bl31.bin
+        cp bl31.bin u-boot-atf.bin
+        dd if=u-boot-hash.bin of=u-boot-atf.bin bs=1K seek=128
+```
+
+so BL31 sits at offset 0, padding runs to 128 KB, and BL33 starts at `0x20000`. The container loads the whole blob at `0x80000000`, which puts BL33 - and therefore wolfBoot - at `0x80020000`. The same address appears independently as `load = <0x80020000>` in `mkimage_fit_atf.sh`, and the layout is visible in a stock NXP container: in the `imx-boot-imx8qmmek-sd.bin-flash` image from the LF v6.1.22 release, the A-core image is 44 KB of BL31, zero padding to `0x20000`, then U-Boot. BL31 must fit the 128 KB slot.
+
+#### Obtaining the NXP firmware binaries
+
+The three inputs `imx8qm-mkflashbin.sh` needs come from two NXP archives and
+one local build. For the LF v6.1.22-2.0.0 BSP the versions are pinned by the
+matching Yocto layer (`nxp-imx/meta-imx`, branch `mickledore-6.1.22-2.0.0`):
+
+| File | Source |
+|---|---|
+| `scfw_tcm.bin` | `imx-sc-firmware-1.15.0.bin`, member `mx8qm-mek-scfw-tcm.bin` |
+| `mx8qmb0-ahab-container.img` | `imx-seco-5.9.0.bin`, under `firmware/seco/` |
+| `bl31.bin` | built from `nxp-imx/imx-atf`, tag `lf-6.1.22-2.0.0` |
+
+The two archives are self-extracting shell scripts behind an NXP EULA prompt:
+
+```
+wget https://www.nxp.com/lgfiles/NMG/MAD/YOCTO/imx-sc-firmware-1.15.0.bin
+wget https://www.nxp.com/lgfiles/NMG/MAD/YOCTO/imx-seco-5.9.0.bin
+sh imx-sc-firmware-1.15.0.bin --auto-accept
+sh imx-seco-5.9.0.bin --auto-accept
+```
+
+sha256, from the recipes, so a truncated download is caught:
+`imx-sc-firmware-1.15.0.bin` =
+`1272ac5c31a88017ef548721f3acf930a7eda6ac73aa9f41b5f0cade9d5c0e5f`,
+`imx-seco-5.9.0.bin` =
+`c3bd761f457e939035b01a0ab36e79064a2a1bc6c3cdb3cd847f7f38df0964df`.
+
+Note the SECO container is **not** in `firmware-imx`, despite that package
+being the obvious-looking candidate: `firmware-imx-8.20` carries only the DDR,
+HDMI, VPU and SDMA firmware and has no `seco/` directory at all. It comes from
+the separate `imx-seco` recipe.
+
+BL31 builds locally and needs no download:
+
+```
+git clone https://github.com/nxp-imx/imx-atf.git
+git -C imx-atf checkout lf-6.1.22-2.0.0
+make -C imx-atf PLAT=imx8qm bl31 CROSS_COMPILE=aarch64-none-elf-
+# -> imx-atf/build/imx8qm/release/bl31.bin, ~41 KB
+```
+
+It must fit the 128 KB slot the container recipe leaves for it; the stock
+LF v6.1.22 container carries a 44 KB BL31, and this build is 41 KB.
+
+### Hardware setup (MEK)
+
+Boot mode is set on **SW2**:
+
+| Boot device | POS-1 | POS-2 | POS-3 | POS-4 | POS-5 | POS-6 |
+|---|---|---|---|---|---|---|
+| Boot from fuse | OFF | OFF | OFF | OFF | OFF | OFF |
+| Serial download (SDP) | OFF | OFF | **ON** | OFF | OFF | OFF |
+| eMMC0 (uSDHC1) | OFF | OFF | OFF | **ON** | OFF | OFF |
+| SD1 (uSDHC2) | OFF | OFF | **ON** | **ON** | OFF | OFF |
+| Octal SPI (FlexSPI0) | OFF | OFF | OFF | **ON** | **ON** | OFF |
+
+Taken from Table 3 of the i.MX 8QuadMax MEK Quick Start Guide, restated here
+per switch position because the guide prints that table **POS-6 first**. Order
+matters: serial download and eMMC0 are exact mirror images of each other, so
+reading the row backwards silently selects the wrong one. The guide's own
+prose agrees with the table -- it describes the SD card setting as
+"OFF, OFF, ON, ON, OFF, OFF (from 1-6 bit)".
+
+The micro-B debug port (J18) drives an **FT4232H**, which enumerates **four** serial ports, one per FTDI channel. The Cortex-A console (LPUART0) is one of them; which tty number it lands on depends on enumeration order, so identify it by watching per-port byte counts on a boot rather than assuming the lowest number. Console settings are 115200 baud, 8 data bits, no parity, 1 stop bit.
+
+Power is a 12 V supply into the 4-pin DIN connector J16. The kit ships an 11.5 A brick, and the board starts booting as soon as power is applied -- there is no need to press SW1. SW3 is reset.
+
+### Programming
+
+The safe way to try a build is SDP: set SW2 to `000100`, connect the J17 USB port, and load the container straight into RAM over USB. Nothing on the board is written, so a power cycle returns to the previous image.
+
+```
+tools/scripts/imx8qm/imx8qm-flash.sh sdp flash.bin
+```
+
+To boot from a microSD card, write the container at the 32 KB offset the boot ROM reads from and set SW2 to `001100`:
+
+```
+tools/scripts/imx8qm/imx8qm-flash.sh sd /dev/sdX flash.bin
+```
+
+The script refuses any target that is not a removable device and asks for confirmation, because the container is written to raw sectors with no filesystem in the way to make a typo fail safely.
+
+The on-board eMMC and the FlexSPI NOR are deliberately not written by that script. Overwriting the on-board boot device is how a board stops booting, so do it from a system already running on the board (or from a U-Boot already in place), with SDP available as the recovery path.
+
+### Design notes
+
+Constraints that are not obvious from the code, in roughly the order a port hits
+them.
+
+**The SCU owns power, clocks and pad mux.** Powering and clocking a block is not
+enough: its pads must be routed out of the pad ring with `sc_pad_set`, and its
+LPCG cell opened, or the peripheral accepts register writes and drives nothing.
+This applies to the console as much as to storage, which is why `IMX8QM_SCU`
+defaults to on.
+
+**BL33 owns SMMU bring-up, and that has two halves.** Power `SC_R_SMMU` and set
+`sCR0.CLIENTPD`, as U-Boot does in `arch/arm/mach-imx/imx8/cpu.c`; the OS aborts
+reading `SMMU_IDR0` off an unpowered block. Then publish each bus master's stream
+ID with `sc_rm_set_master_sid()`. The ID a master actually emits is owned by the
+SCU's resource manager, not by the SMMU and not by the device tree, so without it
+the OS programs the SMMU for the `iommus` ID, the master emits something else,
+and that master's DMA faults. Both uSDHC controllers are published, not just the
+one a given build boots from, because the OS brings up every controller the
+device tree enables.
+
+**Never disable the D-cache from C.** A set/way cache walk written in C keeps its
+loop counters in stack slots and so re-dirties lines behind itself; clearing
+`SCTLR_EL2.C` then strands them while later stack reads go to DRAM, and any frame
+sharing a 64-byte line with the walk - the caller's included - reads stale values.
+`hal_prepare_boot()` calls the stack-free assembly `el2_flush_and_disable_mmu()`
+in `src/boot_aarch64_start.S` for this reason.
+
+**RAM staging must avoid the device tree's carveouts.** The stock
+`imx8qm-mek.dtb` reserves roughly `0x90000000` to `0x9c000000` (rpmsg, DSP and
+VPU regions) and a CMA pool at `0xc0000000`; staging sits at `0xa0000000` and
+`0xa8000000`, in the gap. An overlap raises no overlap error: the OS reserves the
+device tree it was handed, so the *colliding carveout's* reservation fails and
+whichever driver owned that region faults later.
+
+**`hal_dts_fixup()` supplies what U-Boot would have.** The stock device tree
+depends on being patched at runtime, so wolfBoot sets `/chosen/bootargs`, the
+real two-bank `/memory` map (2 GB at `0x80000000`, 4 GB at `0x880000000`), and
+`no-1-8-v` plus `max-frequency` on the SD node. Without the DTB fixups the OS
+comes up with 1 GB and an empty command line.
+
+**`IMX8QM_MMU` for anything but a small payload.** The simple startup runs
+MMU-off, making DRAM Device-nGnRnE and uncached; hashing a 32 MB image that way
+takes over fifteen minutes. `IMX8QM_MMU=1` identity-maps the low 4 GB Normal
+cacheable for load-and-verify and tears it down before handoff, bringing the same
+image to about thirty seconds. Off by default because it changes the memory type
+wolfBoot runs under; the Linux variant sets it. With it on, the
+`NO_ARM_ASM=1` default is worth revisiting: the wolfcrypt NEON loads are only
+unsafe while memory is Device-typed.
+
+### SD signalling
+
+The SD path runs at **DDR50, 1.8V, 50 MHz** by default, and the board sustains it. Two restraints are available but **off** by default, both behind `IMX8QM_SD_NO_UHS=1`: `no-1-8-v` plus `max-frequency` on the SD node, and a 25 MHz ceiling on wolfBoot's own reads.
+
+They exist because a test harness can need them even when the board does not. The measurements that establish this, on one SanDisk `SS16G`:
+
+| Card | Signal path | Settings | Result |
+|---|---|---|---|
+| 16 GB | through an SDWire multiplexer | UHS allowed | `ultra high speed DDR50`, then `mmcblk1: unable to read partition table` |
+| 16 GB | through an SDWire multiplexer | `IMX8QM_SD_NO_UHS=1` | `sd high-speed`, 3.3V, reads reliably |
+| 16 GB | directly in the socket | UHS allowed | `ultra high speed DDR50`, 1.8V, 50 MHz, boots to a login, **43.3 MB/s** |
+| 64 GB | directly in the socket | UHS allowed | `ultra high speed SDR104`, boots to a login |
+| 64 GB | through an SDWire multiplexer | UHS allowed | wolfBoot's **own** init fails: `Error opening disk 0`, panic |
+| 64 GB | through an SDWire multiplexer | `IMX8QM_SD_NO_UHS=1` | `sd high-speed`, boots to a login |
+
+So the failure belonged to the multiplexer, not to the board or the card, and it is not specific to one card: a faster card that manages SDR104 when plugged in directly still cannot be reached through the multiplexer. Note the last two rows are the wolfBoot driver failing, not Linux. `IMX8QM_SD_NO_UHS=1` also drops wolfBoot's own ceiling from 50 MHz to 25 MHz, and 50 MHz is already too fast for that signal path at card init. The same conclusion explains a second symptom: with the multiplexer in line, `sdhci_uhs_recover()` fired on what should have been a cold boot, because that hardware powers the card from the host side and removing board power does not reset it. Directly connected, the recovery path never triggers.
+
+If you are bringing this up through any kind of SD switch, extender or adapter and see DDR50 failures, set `IMX8QM_SD_NO_UHS=1` rather than concluding the board is at fault.
+
+### FlexSPI NOR and the AHB prefetch buffers
+
+Reads through the memory-mapped AHB window are served from prefetch buffers that an IP-path command does not invalidate. Erase and program go over the IP path, so without an explicit flush the window keeps returning the previous contents, and the driver appears not to work while the device is in fact correct.
+
+That is what a first hardware run looked like: a freshly programmed pattern read back as the pre-program data, and a read after an erase still showed the old pattern. Both were stale views. The pattern survived a power cycle and read back correctly on the next boot, which is what identified the buffers rather than the device as the problem.
+
+`ext_flash_write()` and `ext_flash_erase()` therefore end with a software reset of the controller, which flushes the buffers and leaves the configuration registers and the LUT in place. Host unit tests cannot cover this, because they stub the controller and never exercise the AHB path.
+
+### Boot timing
+
+Measured with `BOOT_BENCHMARK=1` on the Linux variant, reading a 32298615-byte signed FIT from the SD card:
+
+| Stage | Time |
+|---|---|
+| Payload read from SD | 1535 ms (21.0 MB/s) |
+| SHA-384 over the image | 557 ms |
+| ECDSA P-384 signature verify | 7 ms |
+
+That is about 2.1 seconds in total, down from roughly 25.3 seconds before the SD and hash work. Measured on a 64 GB SDXC card in the socket, which the OS runs at SDR104.
+
+Getting the read there took two changes, and the order in which they were found matters more than either on its own:
+
+| Configuration | Payload read |
+|---|---|
+| PIO, 512-byte blocks, 25 MHz | 21320 ms |
+| PIO, 512-byte blocks, 50 MHz | 19775 ms |
+| SDMA enabled, 512-byte blocks | 19527 ms |
+| **SDMA enabled, 64 KB blocks** | **1554 ms** |
+
+Doubling the bus clock bought 7%, and enabling SDMA on its own bought almost nothing, because **`DISK_BLOCK_SIZE` defaulted to 512 bytes while `SDHCI_DMA_THRESHOLD` is 4 KB**: every one of the 63083 reads fell below the threshold and took the PIO path regardless. The cost was per-command overhead, not the copy loop and not the bus rate. Reading in 64 KB chunks cuts the transfer count to about 500 and puts each one over the DMA threshold, which is where the 13.7x comes from.
+
+`arch.mk` therefore sets `DISK_BLOCK_SIZE=65536` for this target and leaves SDMA on. `IMX8QM_SDHCI_PIO=1` forces the PIO path back for debugging.
+
+Signature verification is 7 ms, so it is not worth optimising. The hash was the next dominant cost at about 72% of the total once the read was fixed, and the ARMv8 assembly took it from 4011 ms to 558 ms (see below), leaving the read dominant again at roughly three quarters of a much smaller total.
+
+**SHA-384 runs on the ARMv8 assembly** whenever `IMX8QM_MMU=1`, which every Linux build sets. `arch.mk` defaults `NO_ARM_ASM=0` in that case, against the shared AArch64 default of 1: the hazard that default guards against is NEON multi-register loads while memory is Device-typed, which does not apply once the MMU is on and DRAM is Normal cacheable. Non-MMU builds keep the assembly off, and `NO_ARM_ASM=1` opts out explicitly.
+
+This is worth roughly 3.5 seconds of a 5.6 second boot, and was validated on hardware together with an on-target ECDSA known-answer test (`IMX8QM_CRYPTO_SELFTEST=1`) so that a crypto fault and a data-path fault could be told apart.
+
+DMA reads land in DRAM behind the cache, so `hal/imx8qm.c` implements `sdhci_platform_dma_prepare()` and `sdhci_platform_dma_complete()` with range-based clean and invalidate. They use virtual-address range operations rather than the set/way walk used at handoff, which would cost more per transfer than the DMA saves.
+
+### Peripheral map
+
+Register bases used by the HAL, taken from the upstream device tree (`imx8-ss-{lsio,conn,dma}.dtsi`, `imx8qm-mek.dts`):
+
+| Block | Address | Note |
+|---|---|---|
+| LPUART0 | `0x5A060000` | console (`stdout-path`) |
+| uSDHC1 | `0x5B010000` | eMMC, 8-bit, non-removable |
+| uSDHC2 | `0x5B020000` | SD card, 4-bit |
+| FlexSPI0 registers | `0x5D120000` | MT35XU512ABA, 64 MB octal NOR |
+| FlexSPI0 AHB window | `0x08000000` | memory-mapped reads |
+| MU1_A | `0x5D1C0000` | mailbox to the System Controller |
+| DRAM | `0x80000000` | trained by SCFW before BL33 runs |
+
+### System Controller (SCU)
+
+The SCU owns power, clocks and pad mux on this SoC; nothing else can turn a peripheral on. wolfBoot supports both approaches:
+
+- **`IMX8QM_SCU=1` (the default - `arch.mk` sets `IMX8QM_SCU ?= 1`)**: wolfBoot opens the MU1_A mailbox and brings up the resources it uses itself (`sc_pm_set_resource_power_mode`, `sc_pm_set_clock_rate`, `sc_pm_clock_enable`, `sc_pad_set`, plus the LPCG cell). This is what a real BL33 needs - the console alone will not emit a character without all of it - and it is also what lets wolfBoot drive a medium the ROM never booted from, for example reading an update from FlexSPI NOR on a board that booted from SD.
+- **`IMX8QM_SCU=0`**: wolfBoot assumes an earlier stage already left the console and the boot device powered and clocked, and touches none of it. Valid only when something really has done that work - chainloading from U-Boot is the case that motivates it - and it keeps wolfBoot from making lasting changes to SoC state the booted OS would inherit. Compiled in CI by the `imx8qm_no_scu_test` job.
+
+MU1_A is the channel free for BL33: the upstream device tree binds `fsl,imx-scu` to `lsio_mu1` and U-Boot uses the same mailbox, while TF-A's `plat/imx/imx8qm` defines `SC_IPC_BASE` as `0x5d1b0000` (MU0), so wolfBoot cannot collide with the EL3 firmware still resident underneath. The RPC framing, resource IDs and per-call payload layouts follow U-Boot's `drivers/misc/imx8/scu_api.c` and the upstream `dt-bindings/firmware/imx/rsrc.h`.
+
+### SD / eMMC driver
+
+i.MX uSDHC is the little-endian descendant of the QorIQ eSDHC and is close to, but not the same as, standard SDHCI. Rather than duplicating the SD and eMMC card-initialization state machines, this target reuses the generic driver in `src/sdhci.c` and translates the register map in `hal/imx8qm.c` (`sdhci_reg_read` / `sdhci_reg_write`), the same approach `hal/cm4.c` and `hal/tegra234.c` take for their controllers. Four differences are handled there:
+
+1. The command register's transfer-mode half lives in `MIX_CTRL` (0x48), not in the low half of 0x0C. The command half at 0x0C is bit-identical to standard SDHCI.
+2. `PROT_CTRL` encodes bus width as a 2-bit field and has no bus-power or bus-voltage fields at all.
+3. `SYS_CTRL` uses a DVS/SDCLKFS divider pair rather than the standard 10-bit divisor. The reset and data-timeout fields do line up, and pass through untranslated.
+4. There is no error-interrupt summary bit, and the DMA error moves from bit 25 to bit 28.
+
+`arch.mk` runs the controller in PIO (`SDHCI_SDMA_DISABLED`) for any `DISK_SDCARD`/`DISK_EMMC` build of this target, which keeps DMA descriptors and cache maintenance out of the boot path; boot-time throughput is dominated by media latency rather than by the copy.
+
+### FlexSPI serial NOR
+
+The MEK fits an MT35XU512ABA (64 MB octal NOR) on FlexSPI0. Reads come straight out of the memory-mapped AHB window at `0x08000000`; erase and page program go through the LUT-driven IP command path. This is the same IP as the Layerscape LS1028A "XSPI" block, and the driver follows `hal/nxp_ls1028a.c`.
+
+All LUT sequences use single-pad (1-1-1) SPI with 4-byte addressing: the part powers up in extended SPI mode, and 64 MB is past the 16 MB limit of 3-byte addressing. Octal mode would need a mode-register write first and buys nothing at boot.
+
+The QSPI config leaves the first 1 MB of the NOR free for the boot container the ROM reads from offset 0, and places the boot, update and swap partitions above it.
+
+### AHAB secure boot
+
+AHAB is the SoC's own secure boot: the SECO firmware authenticates the boot container against a Super Root Key hash burnt into fuses, before any A-core runs. It is the layer below wolfBoot's own signature checking (see "What is signed by what" above).
+
+A container built by `imx8qm-mkflashbin.sh` is unsigned and boots on a board whose SRK fuses are blank ("open" lifecycle). To sign one:
+
+```
+CST_PATH=/path/to/cst-<ver> \
+SRK_TABLE=/path/to/SRK_1_2_3_4_table.bin \
+SRK_KEY=/path/to/SRK1_..._ca_crt.pem \
+CERT_KEY=/path/to/SGK1_..._usr_crt.pem \
+  tools/scripts/imx8qm/imx8qm-ahab-sign.sh flash.bin [mkimage.log]
+```
+
+The SRK table and keys come from the NXP Code Signing Tool's own PKI scripts; the script does not generate them, because the key material has to outlive any one build. Passing the saved `imx-mkimage` output as the second argument lets the script pick up the container and signature-block offsets it printed, instead of assuming the stock ones.
+
+A signed container boots on an open part exactly like an unsigned one. It only becomes *required* once the SRK hash is fused and the part is closed.
+
+> **Fusing is irreversible.** Burning the SRK hash and closing the part are one-way operations that permanently reject any container not signed by the matching key. A mistake at either step - a wrong hash, a lost private key, a container that was not actually verified to boot while the part was still open - bricks the board with no recovery path, SDP included. Confirm the signed container boots on the open part first, back up the key material, and only then fuse. For this reason wolfBoot ships no script that burns fuses; use NXP's own tooling deliberately.
+
+### Known limitations
+
+- **FlexSPI NOR is hardware-validated** for read, erase and program.
+  `IMX8QM_FLEXSPI_WRITE_TEST=1` erases the first sector, programs a pattern and
+  reads it back through the AHB window.
+- **eMMC is validated as a payload source, not yet as a ROM boot medium.**
+  wolfBoot reads its GPT, loads a signed 32 MB FIT from a `boot_a` partition on
+  the eMMC, verifies it and boots Linux to a login, with the boot container
+  itself still fetched from the SD. Only the ROM fetching the *container* from
+  eMMC is unproven, and that needs the SW2 strap change.
+- **A/B failover completes only between equal-version slots.** This is the
+  anti-rollback policy, not a gap: `src/update_disk.c` starts at the
+  higher-versioned slot, and if that slot fails the retry is refused by the
+  `ALLOW_DOWNGRADE` guard (`Rollback to lower version not allowed`) whenever the
+  fallback carries a lower version. Both paths are hardware-validated: with
+  matching versions a corrupted signature in the first slot falls through to the
+  second and boots; with differing versions the fallback is refused.
+- **AHAB signing has not been run against a closed part.** The script is included
+  and produces a signed container; no board here has fused SRKs.
+- **The QSPI config's swap partition is reserved but unused.** The shared AArch64
+  block in `arch.mk` selects `src/update_ram.o` for every non-disk aarch64
+  target, which version-selects and RAM-boots rather than running the sector-swap
+  update and rollback flow.
+- The FIT's kernel load address is not 2 MB aligned, so the kernel relocates
+  itself and warns. That belongs in the FIT, not in wolfBoot.
+
+### Debugging
+
+`IMX8QM_HANDOFF_DUMP=1` (on by default in every shipped config) prints the state ATF handed wolfBoot before anything else happens - the entry exception level, the SCTLR MMU/I-cache/D-cache bits, `MPIDR`, `CNTFRQ_EL0`, `CPTR_EL2` with its `TFP`/`TTA`/`TZ` bits decoded (whether FP/SIMD or SVE are trapped, which decides whether the wolfcrypt ARM assembly can run at all), and the `x0` handoff pointer with the first 16 bytes it points at. It is read-only and changes no SoC state, so it is safe to leave enabled. It is the first thing to look at when a new BSP or a new silicon revision changes the BL33 entry contract.
+
+For the storage paths, `-DDEBUG_SDHCI -DDEBUG_DISK -DDEBUG_GPT` add command-level tracing, and `-DDEBUG_FS` traces the filesystem layer when `DISK_FS` is enabled.
 
 ## NXP i.MX95 Cortex-M7
 

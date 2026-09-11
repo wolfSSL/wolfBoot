@@ -481,6 +481,8 @@ tools/unit-tests/unit-dice-token-size
 tools/unit-tests/unit-efi-x86-open-image
 tools/unit-tests/unit-flash-write-cc26x2
 tools/unit-tests/unit-ls1028a-xspi-write
+tools/unit-tests/unit-imx8qm-usdhc-shim
+tools/unit-tests/unit-imx8qm-flexspi-write
 tools/unit-tests/unit-nvm-cache-scrub
 tools/unit-tests/unit-p1021-fcm-bytes
 tools/unit-tests/unit-p1021-qe-firmware

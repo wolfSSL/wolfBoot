@@ -769,6 +769,12 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
         os_image.fw_base = (uint8_t*)load_address;
+        /* The image now lives in RAM, so mark it no longer external. Without
+         * this an EXT_FLASH build routes every verification read through
+         * ext_flash_check_read(), hashing external flash instead of the image
+         * that was just staged, and integrity fails on a good image. Same
+         * reason update_ram.c sets it after its copy. */
+        os_image.not_ext = 1;
 
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         wolfBoot_printf("Checking image integrity...");

@@ -705,6 +705,22 @@ static int sdhci_wait_busy(int check_dat0)
 void sdhci_shutdown(void)
 {
     uint32_t to = 100000U;
+
+#ifdef DISK_SDCARD
+    /* If sdhci_uhs_recover() moved the host to 1.8V, put it back before handing
+     * over: a software reset does not clear 1.8V Signaling Enable, so the next
+     * stage would inherit a 1.8V host and an OS that powers the card at 3.3V
+     * could not talk to it. 3.3V is right even though the card is still at
+     * 1.8V - the card returns only on a VDD cycle, which is the next stage's
+     * job (Linux does it via vmmc-supply), and that pair is what a cold boot
+     * looks like. Clock left stopped; RESET_ALL follows. */
+    if (g_uhs_recovered) {
+        sdhci_reg_and(SDHCI_SRS11, ~SDHCI_SRS11_SDCE);
+        sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_V18SE);
+        udelay(5000);   /* let the level shifter settle */
+    }
+#endif
+
     sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_ALL);
     while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_ALL) != 0U &&
            to > 0U) {
@@ -1572,7 +1588,8 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 /* Between-block workaround for the Arasan EMMC2 block. This is
                  * a controller quirk, NOT a generic SD behavior, so it is scoped
                  * rather than keyed off DISK_SDCARD: that macro is also set by
-                 * the polarfire/zynqmp/versal/zynq7000/tegra234 SD targets,
+                 * the polarfire/zynqmp/versal/zynq7000/tegra234/imx8qm SD
+                 * targets,
                  * whose multi-block PIO reads are already validated without it.
                  * Platforms needing the quirk opt in with SDHCI_PIO_BRR_CLEAR
                  * (the CM4 microSD path, which drives the same EMMC2 block).
