@@ -1,10 +1,10 @@
-/* board.c
+/* wolfHAL_board.c
  *
  * STM32WB55 Nucleo board configuration using upstream wolfHAL drivers.
  * Gpio/Flash/Uart singletons are instantiated by the driver .c files
- * from WHAL_CFG_STM32WB_*_DEV initializer macros in board.h; board.c
- * uses the BOARD_*_DEV handles for the rest. RCC is header-inlined and
- * hardcodes WHAL_STM32WB_RCC_BASE — no dev pointer needed.
+ * from WHAL_CFG_STM32WB_*_DEV initializer macros in wolfHAL_board.h;
+ * wolfHAL_board.c uses the BOARD_*_DEV handles for the rest. RCC is
+ * header-inlined and hardcodes WHAL_STM32WB_RCC_BASE — no dev pointer needed.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -27,7 +27,7 @@
 
 #include <stddef.h>
 #include "hal.h"
-#include "board.h"
+#include "wolfHAL_board.h"
 
 #ifdef DEBUG_UART
 static const whal_Stm32wb_Rcc_PeriphClk g_periphClks[] = {
