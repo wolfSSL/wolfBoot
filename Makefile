@@ -400,6 +400,13 @@ ifeq ($(TARGET),cm4)
     MAIN_TARGET:=wolfboot.bin
 endif
 
+# i.MX 8QuadMax runs as the bare-metal BL33 loaded into DRAM by ATF, so there
+# is no contiguous flash factory.bin. Build the bootloader plus the signed
+# payload, which the packaging script assembles into the BL33 image.
+ifeq ($(TARGET),imx8qm)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 # i.MX95 M7 runs from ITCM (loaded by the Linux remoteproc driver); the payload
 # lives in DDR at 0x80100000, so there is no contiguous flash image to assemble.
 ifeq ($(TARGET),imx95_m7)

@@ -112,6 +112,8 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
+TESTS+=unit-imx8qm-usdhc-shim
+TESTS+=unit-imx8qm-flexspi-write
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
@@ -1159,6 +1161,34 @@ versal_host.c: ../../hal/versal.c versal_host.h
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
 
+# unit-imx8qm-usdhc-shim drives the real uSDHC-to-SDHCI translation from
+# hal/imx8qm.c against an emulated register file. The shim block is extracted
+# verbatim rather than host-copying the whole HAL: the rest of the file has
+# multi-line asm (the cache maintenance in hal_prepare_boot) that a line-based
+# rewrite cannot blank, while the shim itself is plain register access.
+# The trailing #endif of the enclosing "#if defined(DISK_SDCARD) ..." is
+# dropped, since its opening #if is outside the extracted range.
+imx8qm_usdhc_extract.h: ../../hal/imx8qm.c
+	sed -n '/^#ifndef CADENCE_SRS_OFFSET$$/,/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/p' $< \
+	    | sed '/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted shim"; false; }
+
+unit-imx8qm-usdhc-shim: unit-imx8qm-usdhc-shim.c imx8qm_usdhc_extract.h
+	gcc -o $@ unit-imx8qm-usdhc-shim.c -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-imx8qm-flexspi-write drives the real FlexSPI NOR driver from
+# hal/imx8qm.c against an emulated controller and NOR device. Extracted rather
+# than host-copied for the same reason as the uSDHC shim above.
+imx8qm_flexspi_extract.h: ../../hal/imx8qm.c
+	sed -n '/^#define FSPI_REG(off)/,/^#endif \/\* EXT_FLASH \*\/$$/p' $< \
+	    | sed '/^#endif \/\* EXT_FLASH \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted driver"; false; }
+
+unit-imx8qm-flexspi-write: unit-imx8qm-flexspi-write.c imx8qm_flexspi_extract.h
+	gcc -o $@ unit-imx8qm-flexspi-write.c -I../../hal $(CFLAGS) $(LDFLAGS)
+
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
@@ -1640,6 +1670,7 @@ covclean:
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
 GENERATED_SRC:=aurix_erased_extract.h \
+	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \

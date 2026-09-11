@@ -441,6 +441,69 @@ jobs:
       config-file: ./config/examples/tegra234-sdcard.config
       make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  imx8qm_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Bundled payload in DRAM, no storage driver. The target's full
+      # MAIN_TARGET and what the packaging script builds.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_linux_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Linux FIT off the SD card: MMU, EL2->EL1 and the DTB code path.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: DISK_SDCARD=1 IMX8QM_MMU=1 EL2_HYPERVISOR=1 BOOT_EL1=1 wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_sdcard_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # SD card (uSDHC2): keeps the uSDHC-to-SDHCI register shim compiled.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: DISK_SDCARD=1 wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_emmc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # eMMC (uSDHC1): the only imx8qm build that compiles the DISK_EMMC
+      # branches of src/sdhci.c.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: DISK_EMMC=1 wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_sdcard_fs_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Keeps the read-only filesystem layer (src/disk_fs.c, src/fat32.c,
+      # src/ext4.c) compiled against this target.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: DISK_SDCARD=1 DISK_FS=both wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_qspi_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # FlexSPI0 serial NOR: the only imx8qm build that compiles the
+      # ext_flash_* FlexSPI driver and the partition-based update flow. Its
+      # memory map differs enough to warrant its own config.
+      config-file: ./config/examples/imx8qm-mek-qspi.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8qm_no_scu_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # arch.mk sets IMX8QM_SCU ?= 1, so every other imx8qm job already compiles
+      # the SCU (MU1_A) client. This is the one job that builds it OUT, which is
+      # the chainload path and is otherwise never compiled in CI.
+      config-file: ./config/examples/imx8qm-mek.config
+      make-args: DISK_SDCARD=1 IMX8QM_SCU=0 wolfboot.bin test-app/image_v1_signed.bin
+
   cm4_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

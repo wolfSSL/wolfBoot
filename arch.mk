@@ -219,6 +219,98 @@ ifeq ($(ARCH),AARCH64)
     # BOOT_EL1 itself is emitted by options.mk; nothing to add here.
   endif
 
+  ifeq ($(TARGET),imx8qm)
+    # Bare-metal wolfBoot as BL33, replacing U-Boot in the NXP boot container.
+    # SCFW trains DDR before any A-core runs. A53 is the lowest common
+    # denominator across the cluster pair; -mstrict-align because the MMU is off.
+    ARCH_FLAGS=-mcpu=cortex-a53+crypto -march=armv8-a+crypto -mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A53
+    # BL33 entry address. Must agree with ORIGIN in hal/imx8qm.ld.
+    WOLFBOOT_ORIGIN=0x80020000
+    # The RVBAR write in the full startup path is a ZynqMP register.
+    CFLAGS+=-DSKIP_RVBAR=1
+    ifeq ($(IMX8QM_HANDOFF_DUMP),1)
+      CFLAGS+=-DIMX8QM_HANDOFF_DUMP
+    endif
+    # On by default: the SCU owns the console's power, clock and pads, so this
+    # is not optional at real BL33 entry.
+    IMX8QM_SCU ?= 1
+    ifeq ($(IMX8QM_SCU),1)
+      CFLAGS+=-DIMX8QM_SCU=1
+    endif
+    # Cacheable DRAM for load-and-verify, torn down before handoff.
+    ifeq ($(IMX8QM_MMU),1)
+      CFLAGS+=-DIMX8QM_MMU
+      # With the MMU on, DRAM is Normal cacheable and the wolfcrypt ARMv8
+      # assembly is safe: its NEON multi-register loads are only a problem
+      # while memory is Device-typed, which is why the shared AArch64 block
+      # defaults NO_ARM_ASM=1. Worth having, because SHA-384 dominates this
+      # target's boot: 4011 ms to 557 ms over a 32 MB image, hardware
+      # measured, with the signature still verifying. Set NO_ARM_ASM=1 to
+      # opt back out. This is first, so it wins the later ?= default.
+      NO_ARM_ASM ?= 0
+    endif
+    # Opt-in: pin the SD node to 3.3V high-speed and cap its clock, for a
+    # signal path that cannot carry UHS-I. The board itself runs DDR50 at
+    # 50 MHz, so this is off by default; an SD multiplexer in the path needs it.
+    ifeq ($(IMX8QM_SD_NO_UHS),1)
+      CFLAGS+=-DIMX8QM_SD_NO_UHS
+    endif
+    # Read-only FlexSPI bring-up probe. A make knob, not a CFLAGS_EXTRA define:
+    # a command-line CFLAGS_EXTRA= replaces the config's and breaks the build.
+    ifeq ($(IMX8QM_FLEXSPI_PROBE),1)
+      CFLAGS+=-DIMX8QM_FLEXSPI_PROBE
+    endif
+    # Stack high-water measurement: paints the stack in hal_init and reports
+    # the peak at handoff, so the span covers load, hash and signature verify.
+    # On-target ECDSA known-answer test, to separate a crypto fault on the
+    # board from a wolfBoot data-path fault.
+    ifeq ($(IMX8QM_CRYPTO_SELFTEST),1)
+      CFLAGS+=-DIMX8QM_CRYPTO_SELFTEST
+    endif
+    ifeq ($(IMX8QM_STACK_PROBE),1)
+      CFLAGS+=-DIMX8QM_STACK_PROBE -DWOLFBOOT_HOOK_PANIC
+    endif
+    # DESTRUCTIVE: erases and reprograms the first NOR sector at boot.
+    ifeq ($(IMX8QM_FLEXSPI_WRITE_TEST),1)
+      CFLAGS+=-DIMX8QM_FLEXSPI_PROBE -DIMX8QM_FLEXSPI_WRITE_TEST
+    endif
+    # uSDHC board facts. Here rather than in the config because a command-line
+    # CFLAGS_EXTRA= would replace the config's, whereas CFLAGS is additive.
+    ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+      # Card detect is lsio_gpio5[22], so PRES_STATE bit 16 never sets.
+      # SDMA is on: the read is the dominant boot cost and PIO caps it near
+      # 1.6 MB/s regardless of bus clock. IMX8QM_SDHCI_PIO=1 falls back.
+      CFLAGS+=-DSDHCI_FORCE_CARD_DETECT
+      ifeq ($(IMX8QM_SDHCI_PIO),1)
+        CFLAGS+=-DSDHCI_SDMA_DISABLED
+      endif
+      # Read the payload in 64 KB chunks rather than the 512-byte default.
+      # A 32 MB image is 63083 separate commands at 512 bytes, and every one
+      # of them is below SDHCI_DMA_THRESHOLD (4 KB), so the transfer never
+      # reaches the SDMA path and pays full per-command overhead instead.
+      DISK_BLOCK_SIZE ?= 65536
+      CFLAGS+=-DDISK_BLOCK_SIZE=$(DISK_BLOCK_SIZE)
+      # Clock ceiling per medium: the SD is a removable slot whose sustained
+      # reads fail CRC above 25 MHz here; the soldered 8-bit eMMC has no such
+      # limit and takes the 3.3V high-speed rate. DISK_EMMC wins if both are
+      # set, matching the base-address selection in hal/imx8qm.c.
+      ifeq ($(DISK_EMMC),1)
+        IMX8QM_USDHC_MAX_CLK_KHZ ?= 52000
+      else ifeq ($(IMX8QM_SD_NO_UHS),1)
+        IMX8QM_USDHC_MAX_CLK_KHZ ?= 25000
+      else
+        IMX8QM_USDHC_MAX_CLK_KHZ ?= 50000
+      endif
+      CFLAGS+=-DIMX8QM_USDHC_MAX_CLK_KHZ=$(IMX8QM_USDHC_MAX_CLK_KHZ)
+    endif
+    # MMU/WOLFBOOT_FDT/DUALBOOT come from the shared AARCH64 block and only pull
+    # in the FDT codepath; imx8qm still runs MMU-off, 1:1.
+    ifeq ($(EL2_HYPERVISOR),1)
+      CFLAGS+=-DEL2_HYPERVISOR=1
+    endif
+  endif
+
   ifeq ($(TARGET),cm4)
     # Raspberry Pi Compute Module 4 - Broadcom BCM2711, Cortex-A72
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72

@@ -703,14 +703,17 @@ void cm4_mmu_disable(void)
 #endif /* CM4_USE_MMU */
 
 #if defined(DEBUG) && defined(DEBUG_UART)
-/* CM4 bring-up diagnostic: exception handler invoked from cm4_vectors in
+/* CM4 bring-up diagnostic: exception handler invoked from simple_el2_vectors in
  * src/boot_aarch64_start.S. Dumps the fault syndrome so a data/instruction
  * abort shows up over UART instead of hanging silently. Built only with
- * DEBUG + DEBUG_UART. ESR_EL2[31:26] = exception class. */
-void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far);
-void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far)
+ * DEBUG + DEBUG_UART. ESR_EL2[31:26] = exception class; vector is the 0-15 slot
+ * in the table, so >= 8 means the fault came from a lower EL. */
+void simple_el2_fault_handler(unsigned long esr, unsigned long elr,
+    unsigned long far, unsigned long vector);
+void simple_el2_fault_handler(unsigned long esr, unsigned long elr,
+    unsigned long far, unsigned long vector)
 {
-    wolfBoot_printf("\n*** CM4 EXCEPTION ***\n");
+    wolfBoot_printf("\n*** CM4 EXCEPTION *** vector=%d\n", (int)vector);
     wolfBoot_printf("ESR_EL2=0x%08x EC=0x%02x\n",
         (unsigned)esr, (unsigned)((esr >> 26) & 0x3F));
     wolfBoot_printf("ELR_EL2=0x%08x%08x\n",

@@ -61,7 +61,8 @@ _start:
 4:
 
     /* Restore x0 and jump to main - never returns. main(void) ignores it, but
-     * the tegra234 payload reads x0 to recover the DTB pointer. */
+     * the tegra234 and imx8qm payloads read x0 to recover the DTB
+     * pointer. */
     mov x0, x19
     bl main
 
