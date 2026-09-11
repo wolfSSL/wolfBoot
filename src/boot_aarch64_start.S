@@ -42,6 +42,10 @@
 #include "hal/tegra234.h"
 #endif
 
+#ifdef TARGET_imx95_a55
+#include "hal/imx95_a55.h"
+#endif
+
 #ifdef TARGET_cm4
 #include "hal/cm4.h"
 #endif
@@ -1325,14 +1329,15 @@ _cm4_entry:
    b    7b
 
 8:
-#ifdef TARGET_tegra234
-    /* Use the reserved in-DRAM stack from hal/tegra234.ld. The generic path
-     * sets sp to the image base, which on this target is the BL33 load address
-     * - growing down from there runs into memory wolfBoot does not own. */
+#if defined(TARGET_tegra234) || defined(TARGET_imx95_a55)
+    /* Use the reserved in-DRAM stack from the target's linker script. The
+     * generic path sets sp to the image base, which on these targets is the
+     * BL33 load address - growing down from there runs into memory wolfBoot
+     * does not own (OP-TEE, on i.MX95). */
     ldr x1, =END_STACK
 #endif
     mov sp, x1         // set stack pointer
-#ifdef TARGET_tegra234
+#if defined(TARGET_tegra234) || defined(TARGET_imx95_a55)
     /* Stash the handoff x0 (DTB pointer, saved in x21 at reset) in a .data
      * global so C can read it after boot_entry_C clears BSS. */
     adrp x2, boot_handoff_x0
@@ -1746,6 +1751,91 @@ el2_flush_and_disable_mmu:
     isb
 
     ret
+
+/* el2_flush_disable_mmu_and_boot(entry, dts): fused flush + MMU-off + jump
+ * (x0 = dts, x1-x3 zeroed) touching NO memory after the disable. With the
+ * D-cache off, a stack reload of entry/dts between a flush call and a
+ * separate C jump can read stale DRAM (set/way misses a DSU system cache).
+ * The set/way loop clobbers x0-x11 only; x20/x21 carry the values. */
+.global el2_flush_disable_mmu_and_boot
+el2_flush_disable_mmu_and_boot:
+    /* arm64 boot protocol: all DAIF exceptions masked at kernel entry. */
+    msr     daifset, #0xf
+    mov     x20, x0                 /* entry */
+    mov     x21, x1                 /* dts   */
+    bl      el2_flush_and_disable_mmu
+    /* MMU off; registers only from here. Drop stale EL2 TLB entries. */
+    tlbi    alle2
+    dsb     sy
+    isb
+#if defined(TARGET_imx95_a55) && defined(IMX95_HANDOFF_DUMP)
+    /* Debug crash catcher: report early payload faults via LPUART. */
+    adr     x9, imx95_catch_vectors
+    msr     vbar_el2, x9
+    isb
+#endif
+    mov     x0, x21
+    mov     x1, xzr
+    mov     x2, xzr
+    mov     x3, xzr
+    br      x20
+
+#if defined(TARGET_imx95_a55) && defined(IMX95_HANDOFF_DUMP)
+/* EL2 crash catcher: dump ESR/ELR/FAR over the polled LPUART and park.
+ * Registers only - safe with MMU and caches off. */
+.macro IMX95_CATCH_PUTC reg
+9:  ldr     w11, [x26]
+    tbz     w11, #23, 9b
+    str     \reg, [x27]
+.endm
+
+.balign 2048
+imx95_catch_vectors:
+    .rept 16
+    b       imx95_catch_common
+    .balign 0x80
+    .endr
+
+imx95_catch_common:
+    ldr     x26, =(IMX95_LPUART1_BASE + LPUART_STAT_OFF)
+    ldr     x27, =(IMX95_LPUART1_BASE + LPUART_DATA_OFF)
+    /* "\r\nVEC " */
+    mov     w10, #'\r'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'\n'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'V'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'E'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'C'
+    IMX95_CATCH_PUTC w10
+    mrs     x12, esr_el2
+    bl      imx95_catch_hex
+    mrs     x12, elr_el2
+    bl      imx95_catch_hex
+    mrs     x12, far_el2
+    bl      imx95_catch_hex
+1:  wfe
+    b       1b
+
+/* print ' ' + x12 as 16 hex digits; clobbers x10-x14, uses x30 */
+imx95_catch_hex:
+    mov     w10, #' '
+    IMX95_CATCH_PUTC w10
+    mov     x13, #60
+2:  lsr     x14, x12, x13
+    and     x14, x14, #0xf
+    cmp     x14, #10
+    b.lt    3f
+    add     w10, w14, #('a' - 10)
+    b       4f
+3:  add     w10, w14, #'0'
+4:  IMX95_CATCH_PUTC w10
+    subs    x13, x13, #4
+    b.ge    2b
+    ret
+#endif /* TARGET_imx95_a55 && IMX95_HANDOFF_DUMP */
 #endif /* EL2_HYPERVISOR */
 
 #if defined(WOLFBOOT_ZYNQMP_FSBL)

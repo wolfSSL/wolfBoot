@@ -219,6 +219,32 @@ ifeq ($(ARCH),AARCH64)
     # BOOT_EL1 itself is emitted by options.mk; nothing to add here.
   endif
 
+  ifeq ($(TARGET),imx95_a55)
+    # NXP i.MX95 Cortex-A55 cluster, running as BL33 in AHAB container 2.
+    # -mstrict-align because this stage runs with the MMU off, so every access
+    # is Device-nGnRnE and unaligned ones fault.
+    ARCH_FLAGS=-mcpu=cortex-a55+crypto -march=armv8.2-a+crypto -mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A55
+    LDFLAGS+=$(ARCH_FLAGS)
+    # BL31 loads and enters this image here; must match ORIGIN in
+    # hal/imx95_a55.ld and IMX95_BL33_BASE in hal/imx95_a55.h.
+    WOLFBOOT_ORIGIN=0x90200000
+    # Bring-up aid: print the entry EL, SCTLR and handoff x0 that BL31 passed.
+    ifeq ($(IMX95_HANDOFF_DUMP),1)
+      CFLAGS+=-DIMX95_HANDOFF_DUMP
+    endif
+    # i.MX95 is GICv3 and BL31 already configured it. EL2_HYPERVISOR is not a
+    # generic options.mk variable, so it is emitted here as tegra234 does.
+    ifeq ($(EL2_HYPERVISOR),1)
+      CFLAGS+=-DEL2_HYPERVISOR=1
+    endif
+    # i.MX uSDHC is not SDHCI-compatible: skip src/sdhci.c, use our driver.
+    ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+      DISK_DRIVER=usdhc
+      OBJS+=hal/imx95_usdhc.o
+    endif
+  endif
+
   ifeq ($(TARGET),cm4)
     # Raspberry Pi Compute Module 4 - Broadcom BCM2711, Cortex-A72
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72

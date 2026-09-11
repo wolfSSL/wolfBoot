@@ -396,6 +396,12 @@ ifeq ($(TARGET),tegra234)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+# i.MX95 A55 is a RAM-resident BL33 loaded by SPL inside an AHAB container, so
+# there is no contiguous flash image to assemble into a factory.bin.
+ifeq ($(TARGET),imx95_a55)
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 ifeq ($(TARGET),cm4)
     MAIN_TARGET:=wolfboot.bin
 endif
