@@ -88,6 +88,34 @@ jobs:
         run: |
           TARGET=stm32u5 ./test.sh
 
+      # NuMaker-M2354 (Cortex-M23). This is the only ARMv8-M Baseline target,
+      # and the only one whose secure view is the base address with the
+      # non-secure world aliased at +0x10000000. Both worlds are covered:
+      # TZEN=0 runs wolfBoot and the app entirely in the secure world, TZEN=1
+      # runs a non-secure app that reaches wolfBoot through the secure gateway
+      # veneers. Requires an m33mu with m2354 support (wolfboot-ci >= 1.19).
+      - name: Clean and build m2354 (Cortex-M23, secure world only)
+        run: |
+          make clean distclean
+          cp config/examples/m2354.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (m2354, S mode)
+        working-directory: test-app/emu-test-apps
+        run: |
+          TARGET=m2354 ./test.sh
+
+      - name: Clean and build m2354 (Cortex-M23, TrustZone)
+        run: |
+          make clean distclean
+          cp config/examples/m2354-tz.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (m2354, NS mode)
+        working-directory: test-app/emu-test-apps
+        run: |
+          TARGET=m2354 ./test.sh
+
       - name: Clean and build stm32l5 (TZ + wolfcrypt)
         run: |
           make clean distclean

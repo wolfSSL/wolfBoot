@@ -65,6 +65,7 @@ get_m33mu_target() {
     stm32l552|stm32l5) echo "stm32l552" ;;
     nrf5340) echo "nrf5340" ;;
     mcxw|mcxw71) echo "mcxw71c" ;;
+    m2354) echo "m2354" ;;
     *) echo "" ;;
   esac
 }
@@ -75,6 +76,7 @@ case "$TARGET" in
   stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
+  m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -106,14 +108,25 @@ TZEN="$(cfg_get TZEN)"
 
 # If ARCH_OFFSET is unset/0 but partitions are in 0x0800_0000 (STM32), use that
 # as the base so bin-assemble offsets stay within the flash image.
+# M2354 is excluded: its flash starts at 0 and the high partition addresses are
+# the non-secure alias, not a different flash base.
 if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
-  if (( BOOT_ADDR >= 0x08000000 )); then
+  if [[ "$TARGET" != "m2354" ]] && (( BOOT_ADDR >= 0x08000000 )); then
     ARCH_OFFSET=0x08000000
   fi
 fi
 
 normalize_flash_addr() {
   local addr="$1"
+  if [[ "$TARGET" == "m2354" ]]; then
+    # Base is Secure and base + 0x10000000 is the non-secure alias; the flash
+    # image is physical APROM, so strip the alias bit to get a file offset.
+    if (( addr >= 0x10000000 && addr < 0x20000000 )); then
+      addr=$((addr - 0x10000000))
+    fi
+    echo "$addr"
+    return 0
+  fi
   if [[ "$ARCH_OFFSET" == "0x08000000" ]]; then
     if (( addr >= 0x0c000000 && addr < 0x10000000 )); then
       addr=$((addr - 0x04000000))
@@ -200,6 +213,7 @@ write_target_ld() {
     stm32l552|stm32l5) base="ARM-stm32l5" ;;
     nrf5340) base="ARM-nrf5340" ;;
     mcxw|mcxw71) base="ARM-mcxw" ;;
+    m2354) base="ARM-m2354" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
@@ -220,6 +234,10 @@ write_target_ld() {
 
   sed -e "s/@WOLFBOOT_TEST_APP_ADDRESS@/0x$(printf '%x' "$addr")/g" \
       -e "s/@WOLFBOOT_TEST_APP_SIZE@/0x$(printf '%x' "$size")/g" \
+      -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/${BOOT_ADDR}/g" \
+      -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/${UPDATE_ADDR}/g" \
+      -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(cfg_get WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
+      -e "s/@WOLFBOOT_PARTITION_SIZE@/${PART_SIZE}/g" \
       "$tpl" > "$EMU_PATH/target.ld"
   cat <<'SYM' >> "$EMU_PATH/target.ld"
 
