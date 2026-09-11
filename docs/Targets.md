@@ -8693,10 +8693,12 @@ Default flash layout:
 
 | Partition   | Size  | Address | Description |
 |-------------|-------|---------|-------------|
-| Bootloader  | 38KB  | 0x0     | Bootloader partition |
-| Application | 108KB | 0x9800  | Boot partition |
-| Update      | 108KB | 0x24800 | Update partition |
+| Bootloader  | 46KB  | 0x0     | Bootloader partition |
+| Application | 104KB | 0xB800  | Boot partition |
+| Update      | 104KB | 0x25800 | Update partition |
 | Swap        | 2KB   | 0x3F800 | Swap area |
+
+**Note**: To address vector table alignment requirements, the default image header size (IMAGE_HEADER_SIZE) has been increased to 1024 bytes. Alternatively, the SWAP partition size (WOLFBOOT_SECTOR_SIZE) can be reduced and partition addresses can be adjusted to ensure that the application address is aligned to a 256-word (1024 byte) boundary.
 
 SRAM: 64KB on-chip SRAM and 256KB on-chip instruction/program memory
 
