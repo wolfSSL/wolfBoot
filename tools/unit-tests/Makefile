@@ -92,6 +92,7 @@ TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-flash-erase-mcxw
+TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
@@ -633,6 +634,13 @@ unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3
 unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
 	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
 		$(CFLAGS) $(LDFLAGS)
+
+# unit-flash-m2354 includes hal/m2354.c directly (guarded to the flash driver
+# via WOLFBOOT_UNIT_TEST_FLASH), so m2354.c is not a separate input and the
+# register-bound clock, UART and TrustZone code is excluded. hal/m2354.h is
+# still compiled, for the flash geometry and the NS alias bit.
+unit-flash-m2354: unit-flash-m2354.c ../../hal/m2354.c ../../hal/m2354.h
+	gcc -o $@ unit-flash-m2354.c -I../.. $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore includes src/flash_otp_keystore.c directly (guarded to its
 # host-portable code via WOLFBOOT_UNIT_TEST_OTP_KEYSTORE), so it is not a

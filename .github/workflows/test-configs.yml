@@ -151,6 +151,18 @@ jobs:
       config-file: ./config/examples/lpc55s69-tz.config
       board-name: lpcxpresso55s69
 
+  m2354_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/m2354.config
+
+  m2354_tz_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/m2354-tz.config
+
   nrf52840_test:
     uses: ./.github/workflows/test-build.yml
     with:
