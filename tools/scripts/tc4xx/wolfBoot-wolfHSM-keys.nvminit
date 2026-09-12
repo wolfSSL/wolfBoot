@@ -1,0 +1,9 @@
+# NVM config for whnvmtool.
+#
+# Key format
+# key <clientId> <keyId> <access> <flags> <label> <file>
+# WH_NVM_FLAGS_USAGE_VERIFY is 0x100.
+#
+# clientId matches WOLFHSM_CLIENT_ID.
+# keyId matches hsmKeyIdPubKey and TCHSM_CFG_CROSS_VERIFY_KEY_ID.
+key 0x1 0xFF 0xFF 0x100 "wolfBoot Pubkey" wolfboot_signing_private_key_pub.der

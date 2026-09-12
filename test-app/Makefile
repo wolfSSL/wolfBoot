@@ -1295,6 +1295,52 @@ ifneq (,$(filter aurix_tc3xx aurix_tc3xx_hsm,$(TARGET)))
   endif
 endif
 
+ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
+  # TC4 startup tables miss some sections emitted by -fdata-sections.
+  CFLAGS:=$(filter-out -fdata-sections,$(CFLAGS))
+  # Flash helpers run from PSPR.
+  # Limit __WOLFBOOT to objects that define RAMFUNCTION helpers.
+  ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  ifeq ($(TARGET),aurix_tc4xx_csrm)
+    # CSRM app uses the shared startup and driver objects.
+    APP_OBJS += $(TC4_LLD_SRCS:.c=.o)
+    APP_OBJS += $(TC4_WB_DIR)/csrm/Cfg_Ssw/Ifx_Cfg_Ssw.o
+    # CSRM app linker script ships with the port.
+    LSCRIPT_TEMPLATE = $(TC4_WB_DIR)/csrm/tc4cs_app.ld
+  else
+    # Host test-app uses patched iLLD startup and drivers from the TC4 port.
+    # Drop Ifx_Ssw_Tc0.o and replace with patched aurix_tc4xx_ssw_tc0.o below
+    APP_OBJS += $(filter-out %/Ifx_Ssw_Tc0.o,$(TC4_LLD_SRCS:.c=.o))
+    APP_OBJS += $(TC4_WB_DIR)/Cfg_Ssw/Ifx_Cfg_Ssw.o
+    APP_OBJS += aurix_tc4xx_ssw_tc0.o
+    # Host app linker script ships with the port.
+    LSCRIPT_TEMPLATE = $(TC4_WB_DIR)/tc4tc_app.ld
+  endif
+
+  # TC4 wolfHSM port objects used by the HAL.
+  ifeq ($(WOLFHSM_CLIENT),1)
+    APP_OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/tchsm_hsmhost.o \
+                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_client.o \
+                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_hh_host.o \
+                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_spr_apu.o \
+                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_dma_client.o \
+                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_time.o \
+                $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+  endif
+
+# Build Ifx_Ssw_Tc0.c a second time as aurix_tc4xx_ssw_tc0.o with the
+# hypervisor exit compiled out, since wolfBoot already ran it before
+# jumping to the app. The new name keeps it from conflicting with the
+# bootloader's Ifx_Ssw_Tc0.o, which is built from the same file
+aurix_tc4xx_ssw_tc0.o: $(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Tricore/Ifx_Ssw_Tc0.c
+	@echo "\t[CC-APP] $@"
+	$(Q)$(CC) $(CFLAGS) -DIFX_CFG_SSW_SKIP_DISABLE_VIRTUALIZATION -c -o $@ $<
+
+# Default goal for argument-less sub-makes.
+.DEFAULT_GOAL := image.bin
+endif
+
 # On PPC64 (e5500/e6500) arch.mk turns on PPC32 SHA asm for the bootloader's
 # image-verify link; strip it from the test-app's wolfCrypt so PPC_ASM alone
 # controls the app's AES/SHA asm.

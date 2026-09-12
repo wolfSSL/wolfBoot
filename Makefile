@@ -261,7 +261,14 @@ CFLAGS+=$(WOLFPSA_CFLAGS)
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
   CFLAGS+=-Wall -Wextra -Wno-main -ffreestanding
-  CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
+  ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
+    # No -fdata-sections: tricore-elf-gcc 13 emits bare-named data sections
+    # (.varname, not .bss.varname) that escape the iLLD linker script's
+    # clear/copy tables, leaving statics uninitialized at boot.
+    CFLAGS+=-ffunction-sections -fomit-frame-pointer
+  else
+    CFLAGS+=-ffunction-sections -fdata-sections -fomit-frame-pointer
+  endif
   # Allow unused parameters and functions
   CFLAGS+=-Wno-unused-parameter -Wno-unused-function
   # Error on unused variables
@@ -587,31 +594,34 @@ endif
 ifeq ($(WOLFHSM_SERVER),1)
     _DO_WH_NVMTOOL:=1
 endif
-# Not every wolfHSM port provisions keys from a pre-built NVM image. A HAL may
-# instead install the verification key into the server's key cache at boot (see
-# hal_hsm_init_connect on pic32cz), which is the only option on targets whose
-# server wipes its NVM partition on startup. Those set WOLFHSM_NVM_IMAGE=0.
+# Some wolfHSM ports do not provision keys from a pre-built NVM image.
+# Their HAL installs the verification key into the server key cache at boot.
+# Set WOLFHSM_NVM_IMAGE=0 for those targets.
 WOLFHSM_NVM_IMAGE?=1
 ifeq ($(WOLFHSM_NVM_IMAGE),0)
     _DO_WH_NVMTOOL:=
 endif
-# Disable NVM image generation if user-provided keys without explicit USER_NVM_INIT
-# (providing USER_NVM_INIT allows users to supply keys and still generate a custom NVM image)
+# Disable NVM image generation for user-provided keys unless
+# USER_NVM_INIT is set.
 ifeq ($(_USER_PROVIDED_KEYS),1)
   ifeq ($(USER_NVM_INIT),)
     _DO_WH_NVMTOOL:=
   endif
 endif
 ifeq ($(_DO_WH_NVMTOOL),1)
+WH_NVM_TOOL_FLAGS ?= --invert-erased-byte
+WH_NVM_HEX_ALIGN ?= 8
+
 whnvmtool:
 	@echo "Building wolfHSM NVM tool"
 	@$(MAKE) -C $(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool
 
 nvm-image: $(PRIVATE_KEY) whnvmtool
 	@echo "Generating wolfHSM NVM image"
-	$(Q)$(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool/whnvmtool --image=$(WH_NVM_BIN) --size=$(WH_NVM_PART_SIZE) --invert-erased-byte $(NVM_CONFIG)
-	@echo "Converting NVM image to Intel HEX format"
-	$(Q)$(OBJCOPY) -I binary -O ihex --change-address $(WH_NVM_BASE_ADDRESS) $(WH_NVM_BIN) $(WH_NVM_HEX)
+	$(Q)rm -f $(WH_NVM_BIN) $(WH_NVM_HEX)
+	$(Q)$(WOLFBOOT_LIB_WOLFHSM)/tools/whnvmtool/whnvmtool --image=$(WH_NVM_BIN) --size=$(WH_NVM_PART_SIZE) \
+		--hex=$(WH_NVM_HEX) --hex-base=$(WH_NVM_BASE_ADDRESS) --hex-align=$(WH_NVM_HEX_ALIGN) \
+		$(WH_NVM_TOOL_FLAGS) $(NVM_CONFIG)
 	@echo "NVM images generated: $(WH_NVM_BIN) and $(WH_NVM_HEX)"
 endif
 

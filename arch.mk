@@ -2192,7 +2192,8 @@ endif
 #
 # TARGET=aurix_tc3xx: AURIX TC3xx TriCore host
 # TARGET=aurix_tc3xx_hsm: AURIX TC3xx Cortex-M3 HSM core
-# TARGET=aurix_tc4xx: AURIX TC4xx Tricore host (coming soon)
+# TARGET=aurix_tc4xx: AURIX TC4xx TriCore host
+# TARGET=aurix_tc4xx_csrm: AURIX TC4xx CSRM (TriCore CPU6)
 
 # Backwards compatibility migration error for legacy ARCH=AURIX_TC3
 ifeq ($(filter clean keysclean,$(MAKECMDGOALS)),)
@@ -2387,13 +2388,203 @@ ifeq ($(ARCH), AURIX)
                 $(WOLFHSM_INFINEON_TC3XX)/port/client/tchsm_hh_host.o
       endif
 
-    endif # aurix_tc3xx_hsm
+    endif # !aurix_tc3xx_hsm
   endif # TC3xx
 
-  # TC4xx specific
-  ifeq ($(TARGET), aurix_tc4xx)
-    # Coming soon ;-)
-  endif
+  ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
+	# TC4xx
+    USE_GCC?=1
+    ARCH_FLASH_OFFSET?=0x80000000
+
+    # wolfHSM TC4xx port root. Expected that wolfBoot is inside as a submodule.
+    WOLFHSM_INFINEON_TC4XX?=$(abspath ..)
+    TC4_LLD_DIR?=$(WOLFHSM_INFINEON_TC4XX)/drivers
+    TC4_WB_DIR?=$(WOLFHSM_INFINEON_TC4XX)/port/wolfboot
+
+    # TC4 derivative device selection from the port device.mk.
+    include $(WOLFHSM_INFINEON_TC4XX)/device.mk
+
+    CROSS_COMPILE?=tricore-elf-
+
+    CFLAGS += -mcpu=$(DEV_MCPU) -D$(DEV_MACRO) $(DEV_XTAL_DEF) \
+              $(DEV_GCC13_CFLAGS)
+    CFLAGS += -Wall -fno-common -fstrict-volatile-bitfields \
+              -ffunction-sections -fno-builtin -std=gnu99 \
+              -DPART_BOOT_EXT -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+              -DWOLFBOOT_LOADER_MAIN
+    # Vendor iLLD sources trip some -Wextra diagnostics
+    CFLAGS += -Wno-missing-field-initializers -Wno-unused-parameter \
+              -Wno-unused-variable -Wno-sign-compare -Wno-type-limits
+
+    # iLLD include paths. SSW configuration differs per core.
+    ifeq ($(TARGET), aurix_tc4xx_csrm)
+      CFLAGS += -I$(TC4_WB_DIR)/csrm -I$(TC4_WB_DIR)/csrm/Cfg_Ssw
+    else
+      CFLAGS += -I$(TC4_WB_DIR) -I$(TC4_WB_DIR)/Cfg_Ssw
+    endif
+
+    # Linker scripts ship with the port, not in hal/.
+    ifeq ($(TARGET), aurix_tc4xx_csrm)
+      LSCRIPT_IN=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm.ld
+    else
+      LSCRIPT_IN=$(TC4_WB_DIR)/aurix_tc4xx.ld
+    endif
+    CFLAGS += \
+      -I$(TC4_LLD_DIR) \
+      -I$(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Csrm \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Csrm \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Csrm/Cpu/Trap \
+      -I$(TC4_LLD_DIR)/Infra \
+      -I$(TC4_LLD_DIR)/Infra/Platform \
+      -I$(TC4_LLD_DIR)/Infra/Platform/Compilers \
+      -I$(TC4_LLD_DIR)/Infra/Sfr \
+      -I$(TC4_LLD_DIR)/Infra/Sfr/$(DEV_DERIV) \
+      -I$(TC4_LLD_DIR)/Infra/Ssw \
+      -I$(TC4_LLD_DIR)/Infra/Ssw/TC4xx \
+      -I$(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Tricore \
+      -I$(TC4_LLD_DIR)/Service \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/If \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/If/Ccu6If \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/StdIf \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/SysSe \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/SysSe/Bsp \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/SysSe/General \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/SysSe/Time \
+      -I$(TC4_LLD_DIR)/Service/CpuGeneric/_Utilities \
+      -I$(TC4_LLD_DIR)/Service/Tricore \
+      -I$(TC4_LLD_DIR)/Service/Tricore/Comm \
+      -I$(TC4_LLD_DIR)/Service/Tricore/Math \
+      -I$(TC4_LLD_DIR)/iLLD \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Ap \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Ap/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Asclin \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Asclin/Asc \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Asclin/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Clock \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Clock/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Egtm \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Egtm/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Geth \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Geth/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Port \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Port/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Src \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Src/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Impl \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Impl/$(DEV_DERIV) \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Lib \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Lib/DataHandling \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Lib/Timer \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_PinMap \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_PinMap/$(DEV_DERIV) \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Irq \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Trap \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Flash/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Smu \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Smu/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Stm \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Stm/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Vmt \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Vmt/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Wtu \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Wtu/Std \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/_Impl \
+      -I$(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/_Impl/$(DEV_DERIV)
+
+    # No TriCore asm in wolfCrypt
+    MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
+
+    # wolfHSM support
+    ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
+      # Common wolfHSM port files.
+      CFLAGS += -I$(WOLFHSM_INFINEON_TC4XX)/port -DWOLFHSM_CFG_DMA \
+                -DWOLFHSM_CFG_NO_SYS_TIME
+      OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/tchsm_hsmhost.o
+      OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
+
+      # NVM image variables for the server key store.
+      WH_NVM_BIN ?= whNvmImage.bin
+      WH_NVM_HEX ?= whNvmImage.hex
+      WH_NVM_PART_SIZE ?= 0x8000
+      WH_NVM_BASE_ADDRESS ?= 0xAE800000
+      WH_NVM_TOOL_FLAGS ?=
+      WH_NVM_HEX_ALIGN ?= 8
+      NVM_CONFIG ?= tools/scripts/tc4xx/wolfBoot-wolfHSM-keys.nvminit
+    endif
+
+    ifeq ($(WOLFHSM_CLIENT),1)
+      # Client transport bring-up files.
+      CFLAGS += -I$(WOLFHSM_INFINEON_TC4XX)/port/client
+      OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_client.o \
+              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_hh_host.o \
+              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_spr_apu.o \
+              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_dma_client.o \
+              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_time.o
+    endif
+
+    ifeq ($(TARGET), aurix_tc4xx_csrm)
+      CFLAGS += -msoft-sp-float -msoft-dp-float
+      LDFLAGS += -msoft-sp-float -msoft-dp-float
+      # Full-system CSRM wolfBoot target leaves host release to tchsm-server.
+      ifeq ($(AURIX_TC4_FULLSYS),1)
+        CFLAGS += -DWOLFBOOT_AURIX_TC4XX_FULLSYS
+        LSCRIPT_IN=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm_fullsys.ld
+      endif
+    endif
+
+    LDFLAGS += -mcpu=$(DEV_MCPU) -Wl,--cref -Wl,-Map="wolfboot.map"
+
+	# Remove UCB, BMHD, and other empty but loadable elf sections from wolfBoot.bin
+	# such that the binary image can be contiguous
+    OBJCOPY_FLAGS+=-R '.bmhd*' -R '.usercfg*' -R '.csusercfg*' -R '.sdata4' -R '.sdata' -R '.zdata'
+
+    # iLLD startup software and drivers used by the HAL.
+    TC4_LLD_SRCS := \
+      $(wildcard $(TC4_LLD_DIR)/Infra/Platform/Compilers/*.c) \
+      $(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Tricore/Ifx_Ssw_Infra.c \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Ap/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Asclin/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Clock/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Port/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/Src/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Impl/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_Impl/$(DEV_DERIV)/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_PinMap/IfxAsclin_PinMap*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/CpuGeneric/_PinMap/$(DEV_DERIV)/IfxAsclin_PinMap*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Stm/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Wtu/Std/*.c) \
+      $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/_Impl/*.c)
+
+    ifeq ($(TARGET), aurix_tc4xx_csrm)
+      # CSRM (CPU6) startup software + trap table
+      TC4_LLD_SRCS += \
+        $(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Csrm/Ifx_Ssw_Tc6.c \
+        $(TC4_LLD_DIR)/iLLD/TC4xx/Csrm/Cpu/Trap/IfxCpu_Trap_Cs.c
+      OBJS += $(TC4_LLD_SRCS:.c=.o)
+      OBJS += $(TC4_WB_DIR)/csrm/Cfg_Ssw/Ifx_Cfg_Ssw.o \
+              $(TC4_WB_DIR)/csrm/Cfg_Ssw/Ifx_Cfg_SswBmhdCs.o \
+              $(TC4_WB_DIR)/csrm/tc4_wolfboot_csrm_main.o
+    else
+      # Host CPU0 startup software and trap table.
+      TC4_LLD_SRCS += \
+        $(TC4_LLD_DIR)/Infra/Ssw/TC4xx/Tricore/Ifx_Ssw_Tc0.c \
+        $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Irq/*.c) \
+        $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Cpu/Trap/*.c) \
+        $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Smu/Std/*.c) \
+        $(wildcard $(TC4_LLD_DIR)/iLLD/TC4xx/Tricore/Vmt/Std/*.c)
+      OBJS += $(TC4_LLD_SRCS:.c=.o)
+      OBJS += $(TC4_WB_DIR)/Cfg_Ssw/Ifx_Cfg_Ssw.o \
+              $(TC4_WB_DIR)/Cfg_Ssw/Ifx_Cfg_SswBmhd.o \
+              $(TC4_WB_DIR)/tc4_wolfboot_main.o
+    endif
+  endif # TC4xx
 endif
 
 CFLAGS+=-DARCH_FLASH_OFFSET=$(ARCH_FLASH_OFFSET)
