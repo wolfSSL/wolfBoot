@@ -19,7 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Freescale/NXP eSDHC block driver for QorIQ (T1040, T1024, T2080).
+/* Freescale/NXP eSDHC block driver for QorIQ PPC (T1040, T1024, T2080)
+ * and Layerscape (LS1028A).
  *
  * Provides the four entry points src/disk.c expects (disk_init, disk_read,
  * disk_write, disk_close) so the disk boot path, and therefore DISK_FS, can
@@ -30,9 +31,9 @@
  * one XFERTYP register, combines block size and count into BLKATTR, and has
  * a watermark register with no standard-SDHCI equivalent.
  *
- * Compiled as its own object (arch.mk adds hal/nxp_esdhc.o when
- * DISK_SDCARD or DISK_EMMC is set); the clock helpers it needs are
- * exported by nxp_ppc.h.
+ * Compiled as its own object (the target's arch.mk block adds
+ * hal/nxp_esdhc.o and sets DISK_DRIVER=esdhc when DISK_SDCARD is set);
+ * per-target base address, clocks and byte order are selected below.
  *
  * Transfers use PIO through DATPORT rather than DMA. On e5500 with the MMU
  * enabled a DMA descriptor would need cache maintenance on the destination,
@@ -47,7 +48,37 @@
 
 #include "disk.h"
 #include "printf.h"
+
+/* Per-target selection. The eSDHC block is the same IP on big-endian QorIQ
+ * PPC and little-endian Layerscape; the register file follows the
+ * integration, so a native 32-bit access reads it correctly on both. Only
+ * the base address, source clock and DATPORT byte order move per target. */
+#if defined(TARGET_nxp_ls1028a)
+
+/* eSDHC1 is the SD card slot; eSDHC2 (0x02150000) is eMMC, not supported. */
+#define ESDHC_CTRL_BASE     0x02140000UL
+#define ESDHC_EMODE_SEL     ESDHC_PROCTL_EMODE_LE
+#ifndef ESDHC_REF_CLK
+#define ESDHC_REF_CLK       400000000UL
+#endif
+/* The block is clocked by hardware-accelerator mux HWA2 (the device tree
+ * binds mmc@2140000 to QORIQ_CLK_HWACCEL index 1). The NOR-boot RCW leaves
+ * it on CGA_PLL2 (1.2 GHz), which overruns the card during identification;
+ * CLKSEL=7 selects CGA_PLL1/3. Set at runtime so SD works whichever RCW
+ * booted us. hwaccel[idx] = clockgen + 0x20*idx + 0x10, eSDHC is idx 1. */
+#define LS1028A_HWA2CSR     (0x01300000UL + 0x30)
+#define HWA_CLKSEL_MASK     0x78000000U
+#define HWA_CLKSEL_SHIFT    27
+#define HWA_CLKSEL_ESDHC    7U
+
+#else
+
+/* QorIQ PPC T-series: big-endian core and registers. */
 #include "nxp_ppc.h"
+#define ESDHC_CTRL_BASE     (CCSRBAR + 0x114000)
+#define ESDHC_EMODE_SEL     ESDHC_PROCTL_EMODE_BE
+
+#endif /* target selection */
 
 #ifdef DEBUG_ESDHC
 #define ESDHC_DBG(_f_, ...) wolfBoot_printf(_f_, ##__VA_ARGS__)
@@ -55,18 +86,7 @@
 #define ESDHC_DBG(_f_, ...) do{}while(0)
 #endif
 
-/* ---------------------------------------------------------------------
- * Register map. CCSRBAR comes from nxp_ppc.h for the selected target.
- *
- * The block presents its registers big-endian and the e5500 is big-endian,
- * so a native 32-bit access reads them correctly with no swapping. The one
- * exception is DATPORT, whose byte order is selected by PROCTL[EMODE] and is
- * configured below.
- * --------------------------------------------------------------------- */
-#ifndef ESDHC_BASE
-#define ESDHC_BASE          (CCSRBAR + 0x114000)
-#endif
-#define ESDHC_REG(off)      ((volatile uint32_t*)(ESDHC_BASE + (off)))
+#define ESDHC_REG(off)      ((volatile uint32_t*)(ESDHC_CTRL_BASE + (off)))
 
 #define ESDHC_DSADDR        0x00
 #define ESDHC_BLKATTR       0x04
@@ -117,11 +137,11 @@
 #define ESDHC_PROCTL_DTW_1BIT   (0U << 1)
 #define ESDHC_PROCTL_DTW_4BIT   (1U << 1)
 #define ESDHC_PROCTL_DTW_MASK   (3U << 1)
-/* EMODE selects the byte order of DATPORT. Big-endian mode delivers bytes
- * in media order when the word is stored natively by this big-endian core.
- * Verified on T1040D4RDB silicon: little-endian mode read every aligned
- * 4-byte group byte-reversed (MBR signature came back AA55). */
+/* EMODE sets DATPORT byte order; ESDHC_EMODE_SEL picks the mode giving
+ * media order for a native word store. Silicon-verified: BE on the T1040
+ * (LE there returned every aligned 4-byte group reversed). */
 #define ESDHC_PROCTL_EMODE_BE   (0U << 4)
+#define ESDHC_PROCTL_EMODE_LE   (2U << 4)
 #define ESDHC_PROCTL_EMODE_MASK (3U << 4)
 
 /* SYSCTL */
@@ -186,6 +206,27 @@ static int      g_esdhc_ready;
  * 37500000 Hz (600 MHz / 16).
  * --------------------------------------------------------------------- */
 
+#if defined(TARGET_nxp_ls1028a)
+
+/* ARM generic timer; hal_init() enables the system counter first. */
+static uint64_t esdhc_timebase(void)
+{
+    uint64_t cnt;
+
+    __asm__ __volatile__("isb; mrs %0, cntpct_el0" : "=r"(cnt));
+    return cnt;
+}
+
+static uint32_t esdhc_read_tb_hz(void)
+{
+    uint64_t frq;
+
+    __asm__ __volatile__("mrs %0, cntfrq_el0" : "=r"(frq));
+    return (uint32_t)frq;
+}
+
+#else
+
 static uint64_t esdhc_timebase(void)
 {
     uint32_t hi, lo, hi2;
@@ -200,6 +241,13 @@ static uint64_t esdhc_timebase(void)
 
     return ((uint64_t)hi << 32) | (uint64_t)lo;
 }
+
+static uint32_t esdhc_read_tb_hz(void)
+{
+    return TIMEBASE_HZ;
+}
+
+#endif /* target timebase */
 
 /* Timebase frequency, cached by disk_init(). TIMEBASE_HZ reads clock
  * registers and divides on every use; the value cannot change at runtime,
@@ -311,7 +359,11 @@ static int esdhc_send_cmd(uint32_t idx, uint32_t arg, uint32_t xfertyp,
 /* Set the SD clock. The divider is SDCLKFS (base 2 prescaler) times DVS. */
 static void esdhc_set_clock(uint32_t target_hz)
 {
+#if defined(TARGET_nxp_ls1028a)
+    uint32_t base = ESDHC_REF_CLK;
+#else
     uint32_t base = hal_get_bus_clk();
+#endif
     uint32_t pre = 2, div = 1, sysctl;
 
     if (target_hz == 0U) {
@@ -341,8 +393,9 @@ static void esdhc_set_clock(uint32_t target_hz)
         ESDHC_SYSCTL_SDCLKEN;
     esdhc_udelay(100);
 
-    ESDHC_DBG("esdhc: clock %u Hz (pre %u, div %u)\r\n",
-        (base / pre) / div, pre, div);
+    ESDHC_DBG("esdhc: clock %u Hz (pre %u, div %u) SYSCTL %x PROCTL %x\r\n",
+        (base / pre) / div, pre, div,
+        *ESDHC_REG(ESDHC_SYSCTL), *ESDHC_REG(ESDHC_PROCTL));
 }
 
 
@@ -376,7 +429,7 @@ static int esdhc_host_init(void)
     /* 1-bit bus for identification, and set the data-port byte order. */
     proctl = *ESDHC_REG(ESDHC_PROCTL);
     proctl &= ~(ESDHC_PROCTL_DTW_MASK | ESDHC_PROCTL_EMODE_MASK);
-    proctl |= ESDHC_PROCTL_DTW_1BIT | ESDHC_PROCTL_EMODE_BE;
+    proctl |= ESDHC_PROCTL_DTW_1BIT | ESDHC_EMODE_SEL;
     *ESDHC_REG(ESDHC_PROCTL) = proctl;
 
     esdhc_set_clock(400000U);
@@ -403,6 +456,7 @@ static int esdhc_send_acmd(uint32_t idx, uint32_t arg, uint32_t xfertyp,
         ESDHC_XFERTYP_RSPTYP_48 | ESDHC_XFERTYP_CICEN | ESDHC_XFERTYP_CCCEN,
         NULL);
     if (ret != 0) {
+        ESDHC_DBG("esdhc: CMD55 (for ACMD%u) failed\r\n", idx);
         return ret;
     }
     return esdhc_send_cmd(idx, arg, xfertyp, resp);
@@ -442,8 +496,10 @@ static int esdhc_card_init(void)
             return -1;
         }
         v2 = 1;
+        ESDHC_DBG("esdhc: CMD8 ok resp %x\r\n", resp[0]);
     }
     else {
+        ESDHC_DBG("esdhc: CMD8 no response (v1 or signalling)\r\n");
         /* CMD8 leaves the command line in error state on a v1 card. */
         *ESDHC_REG(ESDHC_SYSCTL) = *ESDHC_REG(ESDHC_SYSCTL) |
             ESDHC_SYSCTL_RSTC;
@@ -529,7 +585,7 @@ static int esdhc_card_init(void)
 
 /* Drain one block from the data port.
  *
- * PROCTL[EMODE] is set to big-endian above, so a native 32-bit read of
+ * PROCTL[EMODE] is set per target above, so a native 32-bit read of
  * DATPORT returns the four media bytes already in order and they can be
  * stored as-is. Silicon-verified: little-endian mode returned every
  * aligned 4-byte group byte-reversed. */
@@ -662,6 +718,19 @@ static int esdhc_read_blocks(uint64_t lba, uint32_t count, uint8_t *buf)
  * disk.c interface
  * --------------------------------------------------------------------- */
 
+#if defined(TARGET_nxp_ls1028a)
+/* Route a usable source clock to the eSDHC block (see HWA2CSR above). */
+static void esdhc_clock_src_init(void)
+{
+    volatile uint32_t *hwa2 = (volatile uint32_t*)LS1028A_HWA2CSR;
+    uint32_t val = (*hwa2 & ~HWA_CLKSEL_MASK) |
+        (HWA_CLKSEL_ESDHC << HWA_CLKSEL_SHIFT);
+
+    *hwa2 = val;
+    ESDHC_DBG("esdhc: HWA2CSR %x\r\n", *hwa2);
+}
+#endif
+
 int disk_init(int drv)
 {
     if (drv != 0) {
@@ -673,7 +742,10 @@ int disk_init(int drv)
     /* Cache the timebase frequency for every delay and timeout below. A
      * zero reading means no timeout in this driver could ever expire, so
      * fail here and let the caller panic instead of spinning forever. */
-    g_esdhc_tb_hz = TIMEBASE_HZ;
+#if defined(TARGET_nxp_ls1028a)
+    esdhc_clock_src_init();
+#endif
+    g_esdhc_tb_hz = esdhc_read_tb_hz();
     if (g_esdhc_tb_hz == 0U) {
         return -1;
     }

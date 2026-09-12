@@ -181,6 +181,18 @@ ifeq ($(ARCH),AARCH64)
       CFLAGS+=-fno-builtin-printf
     endif
 
+    # SD card disk boot uses the Freescale eSDHC driver, not the Cadence
+    # SDHCI one (the shared AARCH64 block below wires update_disk.o).
+    # hal/nxp_esdhc.c is SD card only, so DISK_EMMC has no driver here:
+    # reject it rather than silently link the wrong controller driver.
+    ifeq ($(DISK_EMMC),1)
+      $(error DISK_EMMC is not supported on nxp_ls1028a (hal/nxp_esdhc.c is SD card only))
+    endif
+    ifeq ($(DISK_SDCARD),1)
+      DISK_DRIVER=esdhc
+      OBJS+=hal/nxp_esdhc.o
+    endif
+
     SPI_TARGET=nxp
   endif
 
@@ -1553,10 +1565,16 @@ ifneq ($(filter nxp_t1024 nxp_t1040,$(TARGET)),)
   # Disk boot from SD card (eSDHC controller, driver hal/nxp_esdhc.c).
   # src/gpt.o is already linked for all PPC targets above. The driver is
   # kept out of the size-constrained stage1 loader.
-  ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+  # hal/nxp_esdhc.c drives SD cards only: it has no eMMC (CMD1/EXT_CSD)
+  # initialization, so DISK_EMMC has no driver on this arch.
+  ifeq ($(DISK_EMMC),1)
+    $(error DISK_EMMC is not supported on PPC (hal/nxp_esdhc.c is SD card only))
+  endif
+  ifeq ($(DISK_SDCARD),1)
     CFLAGS+=-D"WOLFBOOT_UPDATE_DISK" -D"MAX_DISKS=1"
     UPDATE_OBJS:=src/update_disk.o
     OBJS+=src/disk.o
+    DISK_DRIVER=esdhc
     ifneq ($(STAGE1),1)
       OBJS+=hal/nxp_esdhc.o
     endif
