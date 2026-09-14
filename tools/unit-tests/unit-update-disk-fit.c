@@ -236,6 +236,14 @@ int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
     return mock_dts_size;
 }
 
+/* update_disk.c reports DTB provenance to the bootargs policy; this test
+ * stubs the FDT layer, so just record it. */
+int mock_dtb_authenticated = 0;
+void fdt_set_dtb_authenticated(int authenticated)
+{
+    mock_dtb_authenticated = authenticated;
+}
+
 /* Accept the staged payload as a FIT. The real parser validates it; here
  * we only need update_disk.c to take the FIT branch. */
 int fdt_open(fdt_ctx* ctx, void* blob, uint32_t capacity)

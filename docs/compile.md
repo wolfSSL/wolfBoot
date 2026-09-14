@@ -292,6 +292,18 @@ downgrades, compile with `ALLOW_DOWNGRADE=1`.
 Warning: this option will disable version checking before the updates, thus exposing the system to potential
 forced downgrade attacks.
 
+### Linux kernel command line (bootargs)
+
+On the FIT Linux-boot targets whose DTB comes from the signed FIT (Versal, ZynqMP, PolarFire SoC), a DTB that already carries a non-empty `/chosen/bootargs` keeps it by default - the image boots with the arguments its kernel was validated with, and wolfBoot logs `FDT: using DTB bootargs: ...`. Three macros control this:
+
+- `LINUX_BOOTARGS` - the full command line wolfBoot injects. Setting it (via `CFLAGS_EXTRA+=-DLINUX_BOOTARGS='"..."'`) replaces the DTB's value; the replaced value is logged.
+- `LINUX_BOOTARGS_ROOT` - shorthand that only swaps the `root=` device in the HAL's default command line; setting it also selects replace semantics.
+- `LINUX_BOOTARGS_OVERRIDE` - explicit polarity control: `1` forces replacement, `0` demotes `LINUX_BOOTARGS` to a fallback used only when the DTB carries no bootargs. Unset, it defaults to `1` when either macro above is configured and `0` otherwise.
+
+Upgrade note: before this behavior existed, these targets always overwrote `/chosen/bootargs`. A build that sets neither macro therefore changes on upgrade from "HAL default always wins" to "the authenticated DTB's own bootargs win". If a deployment relied on the HAL default to correct a `root=` baked into its DTB, set `LINUX_BOOTARGS_ROOT` (or `LINUX_BOOTARGS`) to restore the previous behavior.
+
+Keeping a DTB's bootargs requires the DTB to be authenticated: a FIT DTB (covered by the outer image signature) or a raw DTB with a verified `HDR_DEVICE_TREE_DIGEST`. An unauthenticated raw DTB always has its bootargs replaced regardless of these macros, so a writable DTB partition cannot inject `root=`, `init=` or console policy into a signed kernel's command line; wolfBoot logs `FDT: DTB not authenticated, forcing bootargs` when that happens. The Raspberry Pi CM4 firmware-DTB path likewise always injects wolfBoot's command line, because that DTB is firmware-provided and unverified.
+
 ### Require an authenticated device tree (raw-DTB targets)
 
 On non-FIT MMU targets that load a raw device tree from flash, wolfBoot authenticates the DTB against the `HDR_DEVICE_TREE_DIGEST` TLV bound to the signed kernel (`sign --dts <board.dtb>`, see `docs/Signing.md`). A DTB carrying the digest is always verified; a raw DTB with no digest only warns and boots by default. Compile with `WOLFBOOT_REQUIRE_SIGNED_DTB=1` to make a missing digest a hard failure (fail-closed) once every raw-DTB payload is signed with `--dts`.

@@ -801,6 +801,116 @@ START_TEST(test_fdt_fixup_initrd)
 }
 END_TEST
 
+/* fdt_fixup_bootargs(): DTB-provided bootargs win unless force is set;
+ * a missing property is always filled in. */
+START_TEST(test_fdt_fixup_bootargs_keep_and_force)
+{
+    static uint8_t buf[0x800];
+    fdt_ctx ctx;
+    const char *val;
+    int off, len;
+
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    fdt_set_dtb_authenticated(1);
+
+    /* absent: set regardless of force */
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "one=1", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    ck_assert_int_gt(off, 0);
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "one=1");
+
+    /* present + force 0: existing value kept */
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "two=2", 0), 0);
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "one=1");
+
+    /* present + force 1: replaced */
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "two=2", 1), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "two=2");
+
+    /* empty (lone NUL) value counts as missing: filled even with force 0 */
+    ck_assert_int_eq(fdt_fixup_str(&ctx, off, "chosen", "bootargs", ""), 0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "three=3", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "three=3");
+
+    /* NULL args and a closed/uninitialized context are rejected */
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, NULL, 0), -FDT_ERR_BADARG);
+    {
+        fdt_ctx closed;
+        memset(&closed, 0, sizeof(closed));
+        ck_assert_int_eq(fdt_fixup_bootargs(&closed, "x=1", 0),
+            -FDT_ERR_BADARG);
+    }
+
+    /* a value with no NUL inside its declared length is malformed and is
+     * replaced even with force 0 */
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "bootargs", "abc", 3), 0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "four=4", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "four=4");
+
+    /* an empty string padded to length 2 is still empty: replaced */
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "bootargs", "\0", 2), 0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "five=5", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "five=5");
+
+    /* leading NUL with trailing content is empty as a command line: replaced */
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "bootargs", "\0foo", 5), 0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "six=6", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "six=6");
+
+    /* an embedded NUL makes it a string list, not one command line: replaced */
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "bootargs", "a=1\0b=2", 8), 0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "seven=7", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "seven=7");
+
+    /* leave the process-global provenance at its default for later tests */
+    fdt_set_dtb_authenticated(0);
+}
+END_TEST
+
+/* An unauthenticated DTB never supplies the kernel command line, even with
+ * force == 0: its bootargs are attacker-influenceable. */
+START_TEST(test_fdt_fixup_bootargs_unauthenticated_is_forced)
+{
+    static uint8_t buf[0x800];
+    fdt_ctx ctx;
+    const char *val;
+    int off, len;
+
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    fdt_set_dtb_authenticated(1);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "root=/dev/good", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "root=/dev/good");
+
+    /* same blob, now reported unauthenticated: the DTB value loses */
+    fdt_set_dtb_authenticated(0);
+    ck_assert_int_eq(fdt_fixup_bootargs(&ctx, "root=/dev/trusted", 0), 0);
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
+    val = (const char *)fdt_getprop(&ctx, off, "bootargs", &len);
+    ck_assert_str_eq(val, "root=/dev/trusted");
+
+    /* restore for any later test in the suite */
+    fdt_set_dtb_authenticated(1);
+}
+END_TEST
+
 /* A start+size that wraps must be rejected: linux,initrd-end would
  * otherwise precede linux,initrd-start. */
 START_TEST(test_fdt_fixup_initrd_rejects_wrapped_end)
@@ -1359,6 +1469,8 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_add_subnode_bounded_by_capacity);
     tcase_add_test(tc, test_fdt_setprop_resizes_existing_property);
     tcase_add_test(tc, test_fdt_fixup_initrd);
+    tcase_add_test(tc, test_fdt_fixup_bootargs_keep_and_force);
+    tcase_add_test(tc, test_fdt_fixup_bootargs_unauthenticated_is_forced);
     tcase_add_test(tc, test_fdt_fixup_initrd_rejects_wrapped_end);
     tcase_add_test(tc, test_fdt_peek_size_header_only);
     tcase_add_test(tc, test_fit_find_images_rejects_unterminated_image_name);

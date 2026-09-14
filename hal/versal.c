@@ -64,6 +64,8 @@
  */
 
 /* Linux kernel command line arguments */
+/* Must stay below the fdt.h include: the LINUX_BOOTARGS_OVERRIDE default
+ * there keys off build-supplied macros only, not this fallback. */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
 /* Default Versal SD layout: rootfs on partition 2. Configurations that use
@@ -1279,7 +1281,7 @@ void* hal_get_dts_update_address(void)
 int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     fdt_ctx ctx;
-    int off, ret;
+    int ret;
 
     /* Validate the blob against the window it actually occupies. */
     ret = fdt_open(&ctx, dts_addr, capacity);
@@ -1299,22 +1301,7 @@ int hal_dts_fixup(void* dts_addr, uint32_t capacity)
         return ret;
     }
 
-    /* Find /chosen node; create it only if genuinely missing. Any other
-     * negative return (malformed FDT, etc.) is surfaced directly rather
-     * than masked by a follow-on fdt_add_subnode() failure. */
-    off = fdt_subnode_offset(&ctx, 0, "chosen");
-    if (off == -FDT_ERR_NOTFOUND) {
-        off = fdt_add_subnode(&ctx, 0, "chosen");
-    }
-
-    if (off < 0) {
-        wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
-        return off;
-    }
-
-    /* Set bootargs property - overrides the PetaLinux default root= with
-     * the wolfBoot partition layout. */
-    ret = fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    ret = fdt_fixup_bootargs(&ctx, LINUX_BOOTARGS, LINUX_BOOTARGS_OVERRIDE);
     if (ret < 0) {
         wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
         return ret;
