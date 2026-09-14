@@ -130,6 +130,7 @@ _Static_assert(WOLFBOOT_WOLFHSM_CLIENT_ID == TCHSM_HSMHOST_CLIENT_APP0,
 
 #define TC4_ERR_OPFAIL_MASK \
     (0x00010077u) /* ADER|SQER|PROER|ABER|CLER|PVER|OPER */
+#define TC4_ERR_PVER (1u << 6)
 #define TC4_ERR_EVER (1u << 7)
 #define TC4_CLRERR_ALL (0xF7u) /* OPER (bit16) has no clear bit */
 
@@ -137,6 +138,10 @@ _Static_assert(WOLFBOOT_WOLFHSM_CLIENT_ID == TCHSM_HSMHOST_CLIENT_APP0,
  * reports EVER at least once, since slow cells may need more erase time.
  * A second EVER means the sector is bad. */
 #define TC4_ERASE_ATTEMPTS (2u)
+
+/* Program attempts per page or burst. AN0019 gives the same advice for a
+ * write that reports PVER: repeat it once with the same data. */
+#define TC4_PROGRAM_ATTEMPTS (2u)
 
 /* Bounded wait limits for flash commands */
 #define TC4_BUSY_SPIN_LIMIT (50000000u)
@@ -247,42 +252,55 @@ static int RAMFUNCTION flashEraseSector(uint32_t sectorAddr)
 
 /* Program a naturally aligned group of pages (one page or one burst) that
  * is already erased. data must hold size bytes; size is either
- * TC4_PFLASH_PAGE_SIZE or TC4_PFLASH_BURST_SIZE. Returns 0 on success. */
+ * TC4_PFLASH_PAGE_SIZE or TC4_PFLASH_BURST_SIZE. A program verify error
+ * (PVER) is retried with the same data. Returns 0 on success. */
 static int RAMFUNCTION flashProgramAligned(uint32_t addr, const uint32_t* data,
                                            uint32_t size)
 {
-    uint32_t i;
-    uint32_t err;
-    uint32_t spins;
+    uint32_t attempt;
 
-    /* Enter page mode and wait for the assembly buffer to be ready */
-    flashClearStatus();
-    *TC4_CMD_MODE = TC4_MODE_PF_PAGEMODE;
-    TC4_DSYNC();
-    spins = TC4_REQDONE_SPIN_LIMIT;
-    while (((*TC4_HCI_STATUS & TC4_STATUS_PFPAGE) == 0u) && (--spins != 0u)) {
-    }
-    if (spins == 0u) {
-        return -1;
-    }
+    for (attempt = 0; attempt < TC4_PROGRAM_ATTEMPTS; attempt++) {
+        uint32_t i;
+        uint32_t err;
+        uint32_t spins;
 
-    /* Fill the page assembly buffer, two 32-bit words per cycle */
-    for (i = 0; i < (size / sizeof(uint32_t)); i += 2u) {
-        *TC4_CMD_LOAD2X32 = data[i];
-        *TC4_CMD_LOAD2X32 = data[i + 1u];
-    }
-    TC4_DSYNC();
+        /* Enter page mode and wait for the assembly buffer to be ready */
+        flashClearStatus();
+        *TC4_CMD_MODE = TC4_MODE_PF_PAGEMODE;
+        TC4_DSYNC();
+        spins = TC4_REQDONE_SPIN_LIMIT;
+        while (((*TC4_HCI_STATUS & TC4_STATUS_PFPAGE) == 0u) &&
+               (--spins != 0u)) {
+        }
+        if (spins == 0u) {
+            return -1;
+        }
 
-    /* Write Page (0xAA) or Write Burst (0xA6) */
-    err = flashCommand(addr, 0u, 0xA0u,
-                       (size == TC4_PFLASH_BURST_SIZE) ? 0xA6u : 0xAAu);
-    if ((err & TC4_ERR_OPFAIL_MASK) != 0u) {
+        /* Fill the page assembly buffer, two 32-bit words per cycle */
+        for (i = 0; i < (size / sizeof(uint32_t)); i += 2u) {
+            *TC4_CMD_LOAD2X32 = data[i];
+            *TC4_CMD_LOAD2X32 = data[i + 1u];
+        }
+        TC4_DSYNC();
+
+        /* Write Page (0xAA) or Write Burst (0xA6) */
+        err = flashCommand(addr, 0u, 0xA0u,
+                           (size == TC4_PFLASH_BURST_SIZE) ? 0xA6u : 0xAAu);
+        if ((err & TC4_ERR_OPFAIL_MASK) == 0u) {
+            return 0;
+        }
+
         /* Leave page mode so the interface is not stuck */
         *TC4_CMD_MODE = TC4_MODE_RESET_READ;
         TC4_DSYNC();
-        return -1;
+
+        if ((err & (TC4_ERR_OPFAIL_MASK & ~TC4_ERR_PVER)) != 0u) {
+            /* Sequence, protection, address or timeout: not retryable */
+            return -1;
+        }
     }
-    return 0;
+    /* PVER persisted: the page did not program reliably */
+    return -1;
 }
 
 /* Read len bytes at address, which must not span an erased page (callers
