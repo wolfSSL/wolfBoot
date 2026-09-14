@@ -689,6 +689,9 @@ backup_on_failure:
                 dts_size = (uint32_t)parsed;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
                     dts_ptr, dts_addr, dts_size);
+                /* The FIT is signature-verified as a whole, so its DTB (and
+                 * the bootargs inside it) are authenticated. */
+                fdt_set_dtb_authenticated(1);
                 memcpy(dts_addr, dts_ptr, dts_size);
             }
         }
@@ -774,6 +777,7 @@ backup_on_failure:
                     wolfBoot_panic();
                 }
                 wolfBoot_printf("DTB digest verified\n");
+                fdt_set_dtb_authenticated(1);
             }
             else if (dts_digest_present < 0) {
                 wolfBoot_printf("Malformed DTB digest TLV - rejecting\n");

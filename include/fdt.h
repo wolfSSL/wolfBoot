@@ -331,6 +331,32 @@ int fdt_del_node(fdt_ctx* ctx, int nodeoffset);
 int fdt_add_mem_rsv(fdt_ctx* ctx, uint64_t address, uint64_t size);
 
 /* Logging wrappers around fdt_setprop() used by the HAL dts fixups. */
+/* LINUX_BOOTARGS_OVERRIDE: nonzero replaces the DTB's own bootargs, zero
+ * keeps them when present (LINUX_BOOTARGS then only fills a missing value).
+ * Defaults to replace when the build supplies LINUX_BOOTARGS or
+ * LINUX_BOOTARGS_ROOT, and to keep when only the HAL fallback exists. */
+#ifndef LINUX_BOOTARGS_OVERRIDE
+    #if defined(LINUX_BOOTARGS) || defined(LINUX_BOOTARGS_ROOT)
+        #define LINUX_BOOTARGS_OVERRIDE 1
+    #else
+        #define LINUX_BOOTARGS_OVERRIDE 0
+    #endif
+#endif
+
+/* Set /chosen bootargs; force 0 keeps an existing non-empty DTB value.
+ * Evaluated here (before any HAL fallback LINUX_BOOTARGS definition) so
+ * the default reflects only build-supplied macros. */
+/* Report whether the DTB about to be fixed up is authenticated (FIT DTB or a
+ * raw DTB with a verified digest). Unauthenticated DTBs always have their
+ * bootargs replaced regardless of force.
+ *
+ * Ordering contract: the loader must call this for the DTB it is about to
+ * boot before hal_dts_fixup() runs on that DTB. The state is global and
+ * defaults to unauthenticated, so a path that never calls it fails safe
+ * (bootargs are replaced) rather than trusting an unverified command line. */
+void fdt_set_dtb_authenticated(int authenticated);
+int fdt_fixup_bootargs(fdt_ctx* ctx, const char* args, int force);
+
 int fdt_fixup_str(fdt_ctx* ctx, int off, const char* node, const char* name,
     const char* str);
 int fdt_fixup_val(fdt_ctx* ctx, int off, const char* node, const char* name,

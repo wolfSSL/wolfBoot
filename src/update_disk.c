@@ -903,6 +903,9 @@ void RAMFUNCTION wolfBoot_start(void)
                 dts_size = (uint32_t)parsed;
                 wolfBoot_printf("Loading DTS: %p -> %p (%d bytes)\n",
                     dts_ptr, dts_addr, dts_size);
+                /* The FIT is signature-verified as a whole, so its DTB (and
+                 * the bootargs inside it) are authenticated. */
+                fdt_set_dtb_authenticated(1);
                 if (wolfBoot_fit_memcpy(dts_addr, dts_ptr, dts_size) != 0) {
                     wolfBoot_printf("FIT: failed to load DTS\r\n");
 #ifdef DISK_ENCRYPT

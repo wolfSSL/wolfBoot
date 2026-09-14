@@ -1415,6 +1415,64 @@ int fdt_fixup_val64(fdt_ctx* ctx, int off, const char* node, const char* name,
     return fdt_setprop(ctx, off, name, &be, (int)sizeof(be));
 }
 
+/* Set /chosen bootargs. With force nonzero the DTB's existing value is
+ * replaced by `args` (and logged); with force 0 an existing non-empty
+ * value wins, so an image keeps the arguments its kernel was validated
+ * with unless the build explicitly overrides them. */
+/* DTB provenance for the bootargs policy below. Keeping a DTB's own bootargs
+ * is only safe when its contents are authenticated: a FIT DTB (covered by the
+ * outer image signature) or a raw DTB with a verified HDR_DEVICE_TREE_DIGEST.
+ * Defaults to unauthenticated, so a target that never reports provenance keeps
+ * the historical always-replace behavior. */
+static int fdt_dtb_authenticated = 0;
+
+void fdt_set_dtb_authenticated(int authenticated)
+{
+    fdt_dtb_authenticated = (authenticated != 0);
+}
+
+int fdt_fixup_bootargs(fdt_ctx* ctx, const char* args, int force)
+{
+    const char* old_args;
+    int off, old_len = 0;
+
+    if (!fdt_ctx_ok(ctx) || args == NULL) {
+        return -FDT_ERR_BADARG;
+    }
+    off = fdt_subnode_offset(ctx, 0, "chosen");
+    if (off == -FDT_ERR_NOTFOUND) {
+        off = fdt_add_subnode(ctx, 0, "chosen");
+    }
+    if (off < 0) {
+        wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
+        return off;
+    }
+    /* An unauthenticated DTB never gets to supply the kernel command line:
+     * its bootargs are attacker-influenceable, so honoring them would let a
+     * DTB-partition write change root=/init=/console= without touching the
+     * signed kernel. */
+    if (!force && !fdt_dtb_authenticated) {
+        wolfBoot_printf("FDT: DTB not authenticated, forcing bootargs\n");
+        force = 1;
+    }
+    /* Treat the existing value as present only when it is a non-empty string
+     * terminated at the end of the property: property bytes are opaque, and
+     * %s printing or keeping a value that is unterminated (or is a multi-part
+     * string list rather than one command line) would be wrong either way.
+     * Malformed or empty bootargs are simply replaced. */
+    old_args = (const char*)fdt_getprop(ctx, off, "bootargs", &old_len);
+    if (old_args != NULL && old_len > 1 && old_args[0] != '\0' &&
+            old_args[old_len - 1] == '\0' &&
+            memchr(old_args, '\0', (size_t)(old_len - 1)) == NULL) {
+        if (!force) {
+            wolfBoot_printf("FDT: using DTB bootargs: %s\n", old_args);
+            return 0;
+        }
+        wolfBoot_printf("FDT: replacing DTB bootargs: %s\n", old_args);
+    }
+    return fdt_fixup_str(ctx, off, "chosen", "bootargs", args);
+}
+
 int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size)
 {
     int off, ret;
