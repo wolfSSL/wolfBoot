@@ -133,6 +133,11 @@ _Static_assert(WOLFBOOT_WOLFHSM_CLIENT_ID == TCHSM_HSMHOST_CLIENT_APP0,
 #define TC4_ERR_EVER (1u << 7)
 #define TC4_CLRERR_ALL (0xF7u) /* OPER (bit16) has no clear bit */
 
+/* Erase attempts per sector. Infineon AN0019 says to repeat an erase that
+ * reports EVER at least once, since slow cells may need more erase time.
+ * A second EVER means the sector is bad. */
+#define TC4_ERASE_ATTEMPTS (2u)
+
 /* Bounded wait limits for flash commands */
 #define TC4_BUSY_SPIN_LIMIT (50000000u)
 #define TC4_REQDONE_SPIN_LIMIT (1000000u)
@@ -219,14 +224,25 @@ static int RAMFUNCTION flashIsPageErased(uint32_t pageAddr)
 }
 
 /* Erase one 16KB logical sector. Sectors are erased one at a time due to issues
- * with multi-sector erases leaving the busy flag set. Returns 0 on success. */
+ * with multi-sector erases leaving the busy flag set. The erase command runs
+ * its own erase verify and reports EVER if the sector did not fully erase. The
+ * erase is retried on EVER. Returns 0 on success. */
 static int RAMFUNCTION flashEraseSector(uint32_t sectorAddr)
 {
-    uint32_t err = flashCommand(sectorAddr, 1u, 0x80u, 0x50u);
-    if ((err & TC4_ERR_OPFAIL_MASK) != 0u) {
-        return -1;
+    uint32_t attempt;
+
+    for (attempt = 0; attempt < TC4_ERASE_ATTEMPTS; attempt++) {
+        uint32_t err = flashCommand(sectorAddr, 1u, 0x80u, 0x50u);
+        if ((err & TC4_ERR_OPFAIL_MASK) != 0u) {
+            /* Sequence, protection, address or timeout: not retryable */
+            return -1;
+        }
+        if ((err & TC4_ERR_EVER) == 0u) {
+            return 0;
+        }
     }
-    return 0;
+    /* EVER persisted: the sector is not reliably erased */
+    return -1;
 }
 
 /* Program a naturally aligned group of pages (one page or one burst) that
