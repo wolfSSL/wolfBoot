@@ -153,29 +153,34 @@ void *hal_get_dts_update_address(void)
 }
 
 #ifdef __WOLFBOOT
-int hal_dts_fixup(void *dts_addr)
+int hal_dts_fixup(void *dts_addr, uint32_t capacity)
 {
-    struct fdt_header *fdt = (struct fdt_header *)dts_addr;
+    fdt_ctx ctx;
     int off;
-    int ret = fdt_check_header(dts_addr);
+    int ret;
 
+    /* Validate the blob against the window it actually occupies. */
+    ret = fdt_open(&ctx, dts_addr, capacity);
     if (ret != 0) {
         wolfBoot_printf("FDT: invalid header (%d)\n", ret);
         return ret;
     }
-    fdt_set_totalsize(fdt,
-        fdt_totalsize(fdt) + WOLFBOOT_FDT_FIXUP_HEADROOM);
+    ret = fdt_grow(&ctx, WOLFBOOT_FDT_FIXUP_HEADROOM);
+    if (ret != 0) {
+        wolfBoot_printf("FDT: no headroom for fixups (%d)\n", ret);
+        return ret;
+    }
 
     /* U-Boot normally patches the memory node after SPL has measured the
      * LPDDR4.  wolfBoot bypasses U-Boot and passes this DTB directly to
      * Linux, so preserve the board's 1792 MiB memory map explicitly. */
-    off = fdt_find_devtype(fdt, -1, "memory");
+    off = fdt_find_devtype(&ctx, -1, "memory");
     if (off >= 0) {
         uint64_t reg[2];
 
         reg[0] = cpu_to_fdt64(AGILEX5_DDR_BASE);
         reg[1] = cpu_to_fdt64(AGILEX5_DDR_SIZE);
-        ret = fdt_setprop(fdt, off, "reg", reg, sizeof(reg));
+        ret = fdt_setprop(&ctx, off, "reg", reg, sizeof(reg));
         if (ret != 0) {
             wolfBoot_printf("FDT: failed to set memory (%d)\n", ret);
             return ret;
@@ -190,21 +195,21 @@ int hal_dts_fixup(void *dts_addr)
      * direct wolfBoot handoff does not yet program that optional design.
      * Keep Linux from touching an unconfigured fabric register while the
      * HPS, FCS and storage paths remain available. */
-    off = fdt_find_node_offset(fdt, -1, "leds");
+    off = fdt_find_node_offset(&ctx, -1, "leds");
     if (off >= 0) {
-        ret = fdt_fixup_str(fdt, off, "leds", "status", "disabled");
+        ret = fdt_fixup_str(&ctx, off, "leds", "status", "disabled");
         if (ret != 0) {
             wolfBoot_printf("FDT: failed to disable FPGA LEDs (%d)\n", ret);
             return ret;
         }
     }
 
-    off = fdt_find_node_offset(fdt, -1, "chosen");
+    off = fdt_subnode_offset(&ctx, 0, "chosen");
     if (off == -FDT_ERR_NOTFOUND)
-        off = fdt_add_subnode(fdt, 0, "chosen");
+        off = fdt_add_subnode(&ctx, 0, "chosen");
     if (off < 0)
         return off;
-    return fdt_fixup_str(fdt, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    return fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
 }
 #endif
 #endif
