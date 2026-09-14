@@ -5416,11 +5416,11 @@ To build wolfBoot for the PIC32CZ:
    make
    ```
 
-2. Sign the application:
+2. Sign the application. The key tools must use the same 1024-byte image header configured for PIC32CZ:
 
    ```sh
-   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 1
-   ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 2
+   IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 1
+   IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ed25519 --sha256 ./test-app/image.bin wolfboot_signing_private_key.der 2
    ```
 
 ### Programming and Testing
