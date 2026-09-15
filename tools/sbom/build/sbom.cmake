@@ -37,7 +37,8 @@
 #   INCLUDE_DIRS <dir>...  Include directories for that capture (typically the
 #                     directory holding user_settings.h).
 #   DEP_WOLFSSL yes|no  Record wolfSSL as a dependency component.
-#   DEP_WOLFCRYPT yes|no  Record wolfCrypt as a component (registered NVD CPE).
+#   DEP_WOLFCRYPT yes|no  Record wolfCrypt as a nested component (PURL;
+#                         matching uses the wolfssl CPE).
 #   DEP_OPENSSL yes|no  Record OpenSSL as a dependency component.
 #   CRYPTO_ONLY auto|yes|no  Whether only the wolfCrypt subset of wolfSSL is
 #                     compiled in (default auto: read from the capture).

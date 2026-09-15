@@ -135,16 +135,17 @@ inside the `wolfssl` component that represents the release they ship in
 submodule's version). CycloneDX expresses that as a sub-component plus a
 `wolfssl → wolfcrypt` dependency edge; SPDX as a `CONTAINS` relationship.
 
-That coat carries machine-resolvable identifiers for both scanner families:
+That coat carries machine-resolvable identifiers:
 
 * `cpe:2.3:a:wolfssl:wolfssl:<version>:*:*:*:*:*:*:*` — NVD product for the
-  wolfSSL library, and the identifier that actually matches: wolfCrypt
-  advisories are filed against this product, not against the wolfcrypt one.
-* `cpe:2.3:a:wolfssl:wolfcrypt:<version>:*:*:*:*:*:*:*` — NVD product for
-  wolfCrypt. Registered, but no CVE is mapped to it today, so it documents
-  provenance rather than driving matches.
+  wolfSSL library, and the identifier that matches: wolfCrypt advisories
+  are filed against this product, not against wolfcrypt.
 * `pkg:github/wolfssl/wolfssl@v<version>-stable` — resolvable PURL for the
   wolfssl release (lowercase per purl-spec; `-stable` is the real tag).
+* `pkg:github/wolfssl/wolfssl@v<version>-stable#wolfcrypt` — nested
+  wolfcrypt provenance (supplier, version, PURL). No wolfcrypt CPE: that
+  product has no mapped CVEs today, and a second CPE on the same sources
+  is a future double-match risk.
 * wolfBoot itself: `cpe:2.3:a:wolfssl:wolfboot:<version>:*:*:*:*:*:*:*` —
   registered in the NVD Official CPE Dictionary (published 2026-08-10).
 
@@ -163,8 +164,9 @@ wolfssl:sbom:wolfssl-subset-basis=captured
 
 The `wolfssl` component stays in the document regardless. Dropping it would
 read as more precise and would take the scan from every wolfSSL advisory to
-none. Narrow the TLS-only CVEs with a VEX statement instead, which is the
-mechanism designed to say "present but not exploitable here".
+none. A crypto-only image versus TLS firmware is a disposition you record
+on your product. A VEX feed that states `not_affected` / `code_not_present`
+for TLS-only CVEs is separate work.
 
 ### How the configuration is captured
 
