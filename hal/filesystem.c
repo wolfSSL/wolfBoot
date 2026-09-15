@@ -28,6 +28,12 @@
 #error "WOLFBOOT_PARTITION_FILENAME needs to be defined for filesystem HAL"
 #endif
 
+/* The backing store. Defaults to the compile-time image, and
+ * hal_filesystem_set_target() can point it at something else at runtime -
+ * a raw partition device, for instance, so one binary can address several
+ * boot slots in turn. Changing it closes any file already open. */
+static const char *fs_target = WOLFBOOT_PARTITION_FILENAME;
+
 #ifndef MIN
    #define MIN(x,y) ((x)<(y)?(x):(y))
 #endif
@@ -88,7 +94,7 @@ static int setup_file(byte read_only)
         }
     }
     if (fp == XBADFILE) {
-        fp = XFOPEN(WOLFBOOT_PARTITION_FILENAME, read_only ? "rb" : "r+b");
+        fp = XFOPEN(fs_target, read_only ? "rb" : "r+b");
         if (fp != XBADFILE) {
             fp_write = !read_only;
             if (XFSEEK(fp, 0, XSEEK_END) < 0 || (fp_size = XFTELL(fp)) < 0 ||
@@ -99,11 +105,24 @@ static int setup_file(byte read_only)
             }
         }
         else {
-            wolfBoot_printf("Failed to open file %s\n",
-                WOLFBOOT_PARTITION_FILENAME);
+            wolfBoot_printf("Failed to open file %s\n", fs_target);
         }
     }
     return fp != XBADFILE ? 0 : -1;
+}
+
+/* Point the HAL at a different backing store. Closes any open handle so the
+ * next access reopens against the new target. */
+void hal_filesystem_set_target(const char *path)
+{
+    if (path == NULL) {
+        return;
+    }
+    if (fp != XBADFILE) {
+        XFCLOSE(fp);
+        fp = XBADFILE;
+    }
+    fs_target = path;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)

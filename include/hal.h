@@ -59,6 +59,12 @@ void hal_deinit();
 
 void hal_init(void);
 
+#ifdef WOLFBOOT_PARTITION_FILENAME
+/* Repoint the filesystem HAL's backing store at runtime, so one binary can
+ * address several boot slots in turn. Implemented by hal/filesystem.c. */
+void hal_filesystem_set_target(const char *path);
+#endif
+
 /* Timer functions (platform-specific, used for benchmarking) */
 #if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
 uint64_t hal_get_timer_us(void);
