@@ -119,6 +119,7 @@ BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
 vpath %.c ../src
 vpath %.c ../hal
+vpath %.c ../hal/uart
 vpath %.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src $(WOLFBOOT_LIB_WOLFTPM)/src
 vpath %.c ../src/x86
 vpath %.S ../src
@@ -196,6 +197,10 @@ $(BUILD_DIR)/%.o: ../src/%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 $(BUILD_DIR)/%.o: ../hal/%.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+# The QorIQ console driver lives in hal/uart/.
+$(BUILD_DIR)/%.o: ../hal/uart/%.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 $(BUILD_DIR)/%.o: $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/%.c

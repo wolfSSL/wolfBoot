@@ -129,6 +129,7 @@ TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
+TESTS+=unit-ns16550
 TESTS+=unit-pkcs11_store-stalecache
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
@@ -510,6 +511,11 @@ unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
 
 # unit-fdt-memrsv-wrap: layout validation in front of fdt_add_mem_rsv()
 # (F-11045). Links the real parser rather than extracting one function.
+# unit-ns16550: generic NS16550 driver (divisor math, reg-shift/reg-offset
+# arithmetic, CRLF, RX, bounded busy-waits) against an emulated register block
+unit-ns16550: unit-ns16550.c ../../hal/uart/ns16550.c
+	gcc -o $@ unit-ns16550.c $(CFLAGS) $(LDFLAGS)
+
 unit-fdt-memrsv-wrap:CFLAGS+=-DWOLFBOOT_FDT
 unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c ../../src/fdt.c
 	gcc -o $@ unit-fdt-memrsv-wrap.c ../../src/fdt.c -I../../include \

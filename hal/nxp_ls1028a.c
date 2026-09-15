@@ -43,42 +43,25 @@
 void hal_flash_init(void);
 
 #ifdef DEBUG_UART
+#include "ns16550.h"
+
+static struct ns16550_dev uart_console;
+
 void uart_init(void)
 {
-    /* calc divisor for UART
-     * example config values:
-     *  clock_div, baud, base_clk  163 115200 400000000
-     * +0.5 to round up
-     */
-    uint32_t div = (((SYS_CLK / 2.0) / (16 * BAUD_RATE)) + 0.5);
-
-    while (!(UART_LSR(UART_SEL) & UART_LSR_TEMT));
-
-    /* set ier, fcr, mcr */
-    UART_IER(UART_SEL) = 0;
-    UART_FCR(UART_SEL) = (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN);
-
-    /* enable baud rate access (DLAB=1) - divisor latch access bit*/
-    UART_LCR(UART_SEL) = (UART_LCR_DLAB | UART_LCR_WLS);
-    /* set divisor */
-    UART_DLB(UART_SEL) = (div & 0xff);
-    UART_DMB(UART_SEL) = ((div>>8) & 0xff);
-    /* disable rate access (DLAB=0) */
-    UART_LCR(UART_SEL) = (UART_LCR_WLS);
+    memset(&uart_console, 0, sizeof(uart_console));
+    uart_console.base = (uintptr_t)UART_BASE(UART_SEL);
+    uart_console.io_width = 1;       /* byte-spaced registers */
+    /* Integer, not floating point: this is a bootloader. DUART is
+     * SYS_CLK/2. */
+    uart_console.clk_hz = (uint32_t)(SYS_CLK / 2);
+    uart_console.crlf = 1;
+    (void)ns16550_init(&uart_console, BAUD_RATE);
 }
 
 void uart_write(const char* buf, uint32_t sz)
 {
-    uint32_t pos = 0;
-    while (sz-- > 0) {
-        char c = buf[pos++];
-        if (c == '\n') { /* handle CRLF */
-            while (!(UART_LSR(UART_SEL) & UART_LSR_THRE));
-            UART_THR(UART_SEL) = '\r';
-        }
-        while (!(UART_LSR(UART_SEL) & UART_LSR_THRE));
-        UART_THR(UART_SEL) = c;
-    }
+    (void)ns16550_write(&uart_console, buf, sz);
 }
 #endif /* DEBUG_UART */
 
