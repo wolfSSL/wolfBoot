@@ -350,6 +350,55 @@ ChaCha20 symmetric key to access the content of the updates.
 For more details about this optional feature, please refer to the [Encrypted external partitions](encrypted_partitions.md) manual page.
 
 
+### Disk boot confirmation and rollback
+
+Targets that boot from a disk (`DISK_SDCARD=1`, `DISK_EMMC=1`, or an x86 FSP/AHCI target) use `src/update_disk.c`, which by default is stateless: it selects the highest-versioned slot, verifies it, and falls over to the other slot when *verification* fails. It writes nothing back, so an image that verifies and then fails to **boot** is retried indefinitely.
+
+`DISK_BOOT_CONFIRM=1` closes that gap using the **same partition trailer** the sector-swap flow in `src/update_flash.c` already keeps, placed in the tail of the raw boot partition:
+
+| Offset from the end of the partition | Size | Meaning |
+| --- | --- | --- |
+| -4 | 4 | Magic, the ASCII `BOOT` (`WOLFBOOT_MAGIC_TRAIL`) |
+| -5 | 1 | Partition state |
+
+The states are the `IMG_STATE_*` values: `0xFF` new, `0x70` updating, `0x10` testing, `0x00` success. They are written at their default polarity regardless of `WOLFBOOT_FLAGS_INVERT`, because a format an external tool reads must not change meaning with a build option. On a default-polarity build the bytes are identical to a flash trailer's.
+
+The magic is load-bearing rather than decorative. A freshly imaged partition tail is usually `0x00`, and `0x00` is `IMG_STATE_SUCCESS`, so without a magic to gate the read a blank slot would look already confirmed.
+
+#### The cycle
+
+1. Something writes a new image into the idle slot and marks that slot **`updating`**.
+2. wolfBoot selects it on version as usual, verifies it, and promotes `updating` to **`testing`** before handing over.
+3. Whatever comes up clears it to **`success`**.
+4. If the next boot still finds **`testing`**, that slot did not come up. wolfBoot skips it and boots the other slot.
+
+**A slot is only ever put on probation if an update was staged into it.** A slot that is `new`, or already `success`, is booted without anything being written, so a device that never stages an update is never probated and a steady-state boot performs no writes at all. This mirrors `src/update_ram.c`, which also promotes only `updating`. The consequence is deliberate: enabling this cannot strand a system whose OS does not confirm, but an integrator who writes an image with plain `dd` and never marks the slot gets no protection either.
+
+Skipping an unconfirmed slot writes nothing. Its version is dropped from the election in memory, which also removes it from the anti-rollback ceiling, and that is what lets an older confirmed slot boot. **Anti-rollback itself is not relaxed**: a slot that merely fails verification keeps its version and still blocks an older slot, exactly as before.
+
+#### Staging and confirming
+
+The `library_fs` target builds `lib-fs`, a userspace tool that speaks this format. Point it at the slot's partition device with `--dev`:
+
+```
+lib-fs --dev /dev/mmcblk1p1 stage      # after writing a new image to the slot
+lib-fs --dev /dev/mmcblk1p1 success    # once the system is known good
+lib-fs --dev /dev/mmcblk1p1 status     # read the current state
+```
+
+`update-trigger` is refused with `--dev`: it marks the separate UPDATE partition at a compile-time offset, which against a raw slot device is just somewhere in the middle of the slot. `stage` is the disk analogue.
+
+Order the `success` call after whatever the system treats as proof of a healthy boot; a systemd unit ordered after the services that matter is the usual place.
+
+The tool needs no configuration to match the loader's layout and no rebuild per slot. With `--dev` it locates the trailer from the size of the device it was handed, which is how wolfBoot locates it too, and it writes the pinned state values rather than the `IMG_STATE_*` of its own build. `include/disk_trailer.h` holds the offset, the magic and the four state values, and both the loader and the tool include it, so there is one definition to disagree with rather than two.
+
+#### Constraints
+
+- The trailer must not overlap the image, so the partition has to be larger than the signed image by at least the 8 bytes of the trailer. wolfBoot refuses the write and reports it rather than corrupting the image, and still boots: the consequence of no trailer is no confirmation, not a dead system.
+- A partition smaller than one 512-byte sector cannot carry a trailer and is likewise never armed.
+- **Raw partitions only.** A `DISK_FS` slot is a file inside a filesystem and has no partition tail to claim.
+- A slot left in `testing` is refused on every path into it, including the failover after another slot fails verification, so it stays out of the boot even in an `ALLOW_DOWNGRADE` build where the version guard is compiled out.
+
 ### Disk boot from a read-only filesystem (FAT32 / ext4)
 
 Targets that boot from a disk (`DISK_SDCARD=1`, `DISK_EMMC=1`, or an x86 FSP/AHCI target) use `src/update_disk.c`, which by default reads the signed image from **raw offset 0 of a partition**: the image has to be written there with `dd`, and the partition cannot hold anything else.

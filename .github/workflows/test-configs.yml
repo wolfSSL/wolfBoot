@@ -461,6 +461,15 @@ jobs:
       config-file: ./config/examples/tegra234-sdcard.config
       make-args: wolfboot.bin test-app/image_v1_signed.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  disk_boot_confirm_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Boot confirmation and rollback on the disk path: the only job that
+      # compiles the DISK_BOOT_CONFIRM state-record code in src/update_disk.c.
+      config-file: ./config/examples/cm4_sdcard.config
+      make-args: DISK_BOOT_CONFIRM=1 wolfboot.bin
+
   cm4_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
