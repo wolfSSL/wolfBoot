@@ -59,6 +59,11 @@ SECTIONS
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
 
+/* The stack grows down from END_STACK into .bss with nothing reserved, so a
+ * large .bss (the fwTPM context) silently corrupts under deep call chains. */
+_min_stack = 0x8000;
+ASSERT(_end + _min_stack <= END_STACK, "stm32h5 secure RAM: .bss leaves less than _min_stack for the stack (fwTPM context too large)")
+
 _flash_keyvault = ORIGIN(FLASH_KEYVAULT);
 _flash_keyvault_size = LENGTH(FLASH_KEYVAULT);
 
