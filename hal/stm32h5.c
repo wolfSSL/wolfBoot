@@ -247,14 +247,15 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
 
 static int buffer_is_all_value(const uint8_t *buf, size_t len, uint8_t value)
 {
+    volatile uint8_t diff = 0U;
     size_t i;
 
+    /* Constant-time scan: the buffer holds the UDS, the DICE root
+     * secret, so the loop must not early-exit on a data-dependent byte. */
     for (i = 0; i < len; i++) {
-        if (buf[i] != value) {
-            return 0;
-        }
+        diff |= (uint8_t)(buf[i] ^ value);
     }
-    return 1;
+    return diff == 0;
 }
 
 int hal_uds_derive_key(uint8_t *out, size_t out_len)
