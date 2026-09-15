@@ -167,6 +167,7 @@ tools/unit-tests/unit-libwolfboot-extra
 tools/unit-tests/unit-mock-state
 tools/unit-tests/unit-nvm
 tools/unit-tests/unit-nvm-flagshome
+tools/unit-tests/unit-ns16550
 tools/unit-tests/unit-parser
 tools/unit-tests/unit-parser-large-header
 tools/unit-tests/unit-pci

@@ -167,6 +167,10 @@ ifeq ($(ARCH),AARCH64)
   endif
 
   ifeq ($(TARGET),nxp_ls1028a)
+    # DUART console on the generic driver (plain MMIO on AArch64).
+    ifeq ($(DEBUG_UART),1)
+      OBJS+=hal/uart/ns16550.o
+    endif
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
     CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A72
     # ZynqMP RVBAR (0xFD5C0040) does not exist on LS1028A -- the store faults
@@ -1277,6 +1281,17 @@ ifeq ($(ARCH),PPC)
 
   ifeq ($(DEBUG_UART),0)
     CFLAGS+=-fno-builtin-printf
+  endif
+
+  # QorIQ DUART console on the generic NS16550 driver. PowerPC MMIO needs
+  # get8()/set8() (sync/twi/isync, sync/eieio), not a plain volatile access.
+  # stage1 is size-constrained (P1021 gets 4KB total) and keeps its own
+  # copy, so the generic driver is only linked into the full loader.
+  ifeq ($(DEBUG_UART),1)
+    CFLAGS+=-DNS16550_IO_H='"nxp_ppc_io.h"'
+    ifneq ($(STAGE1),1)
+      OBJS+=hal/uart/ns16550.o
+    endif
   endif
 
   # Target-specific CPU flags

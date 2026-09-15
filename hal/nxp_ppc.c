@@ -67,30 +67,67 @@ static void RAMFUNCTION udelay(uint32_t delay_us)
 }
 #endif /* CORE_E5500 || CORE_E6500 */
 
-/* ---- Shared PC16552D-compatible DUART driver ----
- * Each target must define before including this file:
- *   UART_SEL, BAUD_RATE, UART_THR(n), UART_IER(n), UART_FCR(n),
- *   UART_LCR(n), UART_DLB(n), UART_DMB(n), UART_LSR(n),
- *   UART_FCR_TFR, UART_FCR_RFR, UART_FCR_FEN,
- *   UART_LCR_DLAB, UART_LCR_WLS, UART_LSR_TEMT, UART_LSR_THRE */
+/* ---- PC16552D DUART console ----
+ * Each target defines UART_BASE(n), UART_SEL and BAUD_RATE. The full loader
+ * uses hal/uart/ns16550.c with get8()/set8() kept as the accessors via
+ * NS16550_IO_H, so MMIO ordering is unchanged. stage1 keeps a specialised
+ * copy: P1021 gives it 4KB of flash in total and the generic driver does
+ * not fit. */
 #ifdef DEBUG_UART
+#ifndef BUILD_LOADER_STAGE1
+
+#include "ns16550.h"
+
+static struct ns16550_dev uart_console;
+
+/* The bus clock is only known once the PLLs have been read. */
+uint32_t ns16550_hal_clk_hz(void)
+{
+    return (uint32_t)hal_get_bus_clk();
+}
+
 void uart_init(void)
 {
-    /* baud rate = bus_clk / (16 * div); round up */
+    /* Every field is set explicitly rather than memset first: this file is
+     * included as source by four HALs and not all of them pull in string.h. */
+    uart_console.base = (uintptr_t)UART_BASE(UART_SEL);
+    uart_console.reg_shift = 0; /* byte-spaced registers */
+    uart_console.reg_off = 0;
+    uart_console.clk_hz = 0;    /* ask ns16550_hal_clk_hz() */
+    uart_console.io_width = 1;
+    uart_console.crlf = 1;      /* console duty */
+    (void)ns16550_init(&uart_console, BAUD_RATE);
+}
+
+void uart_write(const char* buf, uint32_t sz)
+{
+    (void)ns16550_write(&uart_console, buf, sz);
+}
+
+#else /* BUILD_LOADER_STAGE1 */
+
+/* Minimal driver for the size-constrained first stage. */
+#define S1_UART(off)  ((volatile unsigned char*)(UART_BASE(UART_SEL) + (off)))
+#define S1_THR        S1_UART(0)
+#define S1_IER        S1_UART(1)
+#define S1_FCR        S1_UART(2)
+#define S1_LCR        S1_UART(3)
+#define S1_LSR        S1_UART(5)
+#define S1_DLL        S1_UART(0)
+#define S1_DLM        S1_UART(1)
+
+void uart_init(void)
+{
     uint32_t div = (hal_get_bus_clk() + (8 * BAUD_RATE)) / (16 * BAUD_RATE);
 
-    while (!(get8(UART_LSR(UART_SEL)) & UART_LSR_TEMT))
+    while (!(get8(S1_LSR) & 0x40))
         ;
-
-    set8(UART_IER(UART_SEL), 0);
-    set8(UART_FCR(UART_SEL), (UART_FCR_TFR | UART_FCR_RFR | UART_FCR_FEN));
-
-    /* enable baud rate access (DLAB=1) */
-    set8(UART_LCR(UART_SEL), (UART_LCR_DLAB | UART_LCR_WLS));
-    set8(UART_DLB(UART_SEL), (div & 0xff));
-    set8(UART_DMB(UART_SEL), ((div >> 8) & 0xff));
-    /* disable baud rate access (DLAB=0) */
-    set8(UART_LCR(UART_SEL), (UART_LCR_WLS));
+    set8(S1_IER, 0);
+    set8(S1_FCR, 0x07);          /* FIFO enable + RX/TX reset */
+    set8(S1_LCR, 0x83);          /* DLAB | 8 data bits */
+    set8(S1_DLL, (div & 0xff));
+    set8(S1_DLM, ((div >> 8) & 0xff));
+    set8(S1_LCR, 0x03);          /* 8 data bits, DLAB clear */
 }
 
 void uart_write(const char* buf, uint32_t sz)
@@ -98,12 +135,14 @@ void uart_write(const char* buf, uint32_t sz)
     uint32_t pos = 0;
     while (sz-- > 0) {
         char c = buf[pos++];
-        if (c == '\n') { /* handle CRLF */
-            while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-            set8(UART_THR(UART_SEL), '\r');
+        if (c == '\n') {
+            while ((get8(S1_LSR) & 0x20) == 0);
+            set8(S1_THR, '\r');
         }
-        while ((get8(UART_LSR(UART_SEL)) & UART_LSR_THRE) == 0);
-        set8(UART_THR(UART_SEL), c);
+        while ((get8(S1_LSR) & 0x20) == 0);
+        set8(S1_THR, c);
     }
 }
+
+#endif /* !BUILD_LOADER_STAGE1 */
 #endif /* DEBUG_UART */
