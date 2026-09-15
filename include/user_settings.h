@@ -167,18 +167,17 @@ extern int tolower(int c);
 
 #ifdef USE_FAST_MATH
     /* WC_NO_HARDEN suits verify-only builds, which do public-key
-     * operations only. Software DICE (WOLFCRYPT_TZ_PSA without
-     * WOLFBOOT_DICE_HW) signs the attestation claims with the private
-     * IAK, so it is excluded; hardware DICE keeps signing in the crypto
+     * operations only. Secure-mode worlds (TZ_PSA/PKCS11/FWTPM/WOLFHSM)
+     * process private keys in software, so they keep the timing-
+     * resistant TFM path; hardware DICE keeps signing in the crypto
      * engine and stays verify-only. */
-#   if !defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_DICE_HW)
-#       define WC_NO_HARDEN
+#   if defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_DICE_HW)
+#       define TFM_TIMING_RESISTANT
 #   else
         /* tfm.c never tests WC_NO_HARDEN, so dropping it alone changes
          * no code and only un-silences an advisory that -Werror turns
-         * into a build failure. TFM_TIMING_RESISTANT is what makes
-         * tfm.c constant time. */
-#       define TFM_TIMING_RESISTANT
+         * into a build failure. */
+#       define WC_NO_HARDEN
 #   endif
 #endif
 
