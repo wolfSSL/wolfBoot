@@ -30,6 +30,13 @@ else
     fi
 fi
 
+# Select a specific probe when more than one J-Link is attached:
+#   JLINK_SN=660016516 tools/scripts/va416x0/build_test.sh clean
+JLINK_SEL=""
+if [ -n "${JLINK_SN}" ]; then
+    JLINK_SEL="-SelectEmuBySN ${JLINK_SN}"
+fi
+
 # Function to get value from .config file
 get_config_value() {
     grep "^${1}" .config | sed -E "s/^${1}[?]?=//" | head -n1
@@ -46,15 +53,35 @@ HASH=$(get_config_value "HASH")
 SIGN_ARG="--$(echo "${SIGN}" | tr '[:upper:]' '[:lower:]')"
 HASH_ARG="--$(echo "${HASH}" | tr '[:upper:]' '[:lower:]')"
 
-# Common build steps
-make clean && make wolfboot.bin && make test-app/image.bin
+# Keep as separate statements: under `set -e` a failure mid `a && b` does not
+# exit, which would let a broken build sign and flash a stale image.
+make clean
+make wolfboot.bin
+make test-app/image.bin
+
+# The sign tool reads several settings from the environment at run time, so
+# mirror SIGN_ENV from the top-level Makefile. Only non-empty values are
+# forwarded: sign.c uses getenv(), where an empty string is not the same as
+# unset -- ML_DSA_LEVEL="" would parse as level 0 rather than the built-in
+# default. Without ML_DSA_LEVEL an ML-DSA key is rejected with
+# "unrecognized ml-dsa key size".
+SIGN_ENV=""
+for _sign_var in ML_DSA_LEVEL IMAGE_SIGNATURE_SIZE NVM_FLASH_WRITEONCE \
+                 WOLFBOOT_PARTITION_UPDATE_SIZE LMS_LEVELS LMS_HEIGHT \
+                 LMS_WINTERNITZ XMSS_PARAMS; do
+    _sign_val=$(get_config_value "${_sign_var}")
+    if [ -n "${_sign_val}" ]; then
+        SIGN_ENV="${SIGN_ENV} ${_sign_var}=${_sign_val}"
+    fi
+done
 
 # Function to sign image
 sign_image() {
-    IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE}" \
-    WOLFBOOT_PARTITION_SIZE="${PARTITION_SIZE}" \
-    WOLFBOOT_SECTOR_SIZE="${SECTOR_SIZE}" \
-    ./tools/keytools/sign "${SIGN_ARG}" "${HASH_ARG}" test-app/image.bin wolfboot_signing_private_key.der "$1"
+    env IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE}" \
+        WOLFBOOT_PARTITION_SIZE="${PARTITION_SIZE}" \
+        WOLFBOOT_SECTOR_SIZE="${SECTOR_SIZE}" \
+        ${SIGN_ENV} \
+        ./tools/keytools/sign "${SIGN_ARG}" "${HASH_ARG}" test-app/image.bin wolfboot_signing_private_key.der "$1"
 }
 
 # Function to print summary
@@ -72,21 +99,25 @@ print_summary() {
 
 if [ "$MODE" = "clean" ]; then
     sign_image "${VERSION}"
-    dd if=/dev/zero of=blank_update.bin bs=1K count=108
+    # Blank the update partition so the header magic reads invalid. Exactly
+    # PARTITION_SIZE bytes: rounding up would overrun the partition into swap.
+    dd if=/dev/zero of=blank_update.bin bs=$((PARTITION_SIZE)) \
+        count=1 2>/dev/null
     ./tools/bin-assemble/bin-assemble factory.bin 0x0 wolfboot.bin \
         "${BOOT_ADDRESS}" test-app/image_v${VERSION}_signed.bin \
         "${UPDATE_ADDRESS}" blank_update.bin
-    "${JLINK}" -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
+    "${JLINK}" ${JLINK_SEL} -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink
     print_summary
 else
     TRIGGER_ADDRESS=$(printf "0x%X" $(("${UPDATE_ADDRESS}" + "${PARTITION_SIZE}" - 5)))
     PREV_VERSION=$(("${VERSION}" - 1))
-    sign_image "${PREV_VERSION}" && sign_image "${VERSION}"
+    sign_image "${PREV_VERSION}"
+    sign_image "${VERSION}"
     echo -n "pBOOT" > trigger_magic.bin
     ./tools/bin-assemble/bin-assemble update.bin 0x0 wolfboot.bin \
         "${BOOT_ADDRESS}" test-app/image_v${PREV_VERSION}_signed.bin \
         "${UPDATE_ADDRESS}" test-app/image_v${VERSION}_signed.bin \
         "${TRIGGER_ADDRESS}" trigger_magic.bin
-    "${JLINK}" -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
+    "${JLINK}" ${JLINK_SEL} -CommanderScript tools/scripts/va416x0/flash_va416xx_update.jlink
     print_summary "${TRIGGER_ADDRESS}" "${PREV_VERSION}"
 fi

@@ -41,6 +41,15 @@
 
 #include "printf.h"
 #include "loader.h"
+
+/* The application vector table must be 1024-aligned: this core ORs the vector
+ * offset into VTOR rather than adding it, so with 212 entries every IRQ >= 112
+ * misdispatches otherwise. See docs/Targets.md. */
+#if defined(WOLFBOOT_PARTITION_BOOT_ADDRESS) && defined(IMAGE_HEADER_SIZE)
+#if (((WOLFBOOT_PARTITION_BOOT_ADDRESS) + (IMAGE_HEADER_SIZE)) & 0x3FF) != 0
+#error "VA416x0: application vector table must be 1024-aligned. Raise IMAGE_HEADER_SIZE (1024) or move WOLFBOOT_PARTITION_BOOT_ADDRESS."
+#endif
+#endif
 #endif
 
 #ifndef WOLFBOOT_UNIT_TEST_VA416X0_FRAM
@@ -117,21 +126,10 @@ static void UartInit(VOR_UART_Type* uart, uint32_t baudrate)
     uart->CTRL |= UART_CTRL_AUTORTS_Msk;
 #endif
 
-    /* Enable RX interrupts as soon as a character is received */
-    uart->IRQ_ENB = UART_IRQ_ENB_IRQ_RX_Msk;
-    uart->RXFIFOIRQTRG = 1;
+    /* Transmit-only: nothing reads the UART, and __HAL_DISABLE_UART0/1/2
+     * means the SDK builds no UART IRQ handler to vector to. */
+    uart->IRQ_ENB = 0;
     uart->TXFIFOIRQTRG = 8;
-
-    if (VOR_UART0 == uart) {
-        NVIC_SetPriority(UART0_RX_IRQn, 1);
-        NVIC_EnableIRQ(UART0_RX_IRQn);
-    } else if (VOR_UART1 == uart) {
-        NVIC_SetPriority(UART1_RX_IRQn, 1);
-        NVIC_EnableIRQ(UART1_RX_IRQn);
-    } else {
-        NVIC_SetPriority(UART2_RX_IRQn, 1);
-        NVIC_EnableIRQ(UART2_RX_IRQn);
-    }
 
     /* Enable UART */
     uart->ENABLE = (UART_ENABLE_RXENABLE_Msk |
@@ -181,7 +179,10 @@ void uart_flush(void)
 #define FRAM_SLEEP      0xB9
 
 #ifndef USE_HAL_SPI_FRAM
+/* One FRAM device at a time: transmits always use spiHandle, so record its
+ * bank and reject any other rather than drain one bank and transmit on it. */
 static hal_spi_handle_t spiHandle;
+static uint8_t spiFramBank = SPI_NUM_BANKS; /* invalid until a good init */
 
 static void FRAM_WaitIdle(uint8_t spiBank)
 {
@@ -213,6 +214,11 @@ hal_status_t FRAM_Init(uint8_t spiBank, uint8_t csNum)
     hal_status_t status = hal_status_ok;
     uint8_t spiData[2];
 
+    /* Bounds check before indexing BANK[], as FRAM_WaitIdle() does */
+    if (spiBank >= SPI_NUM_BANKS) {
+        return hal_status_badParam;
+    }
+
     /* Initialize the SPI handle */
     memset(&spiHandle, 0, sizeof(spiHandle));
     spiHandle.locked = false;
@@ -243,6 +249,16 @@ hal_status_t FRAM_Init(uint8_t spiBank, uint8_t csNum)
         FRAM_WaitIdle(spiBank);
         spiHandle.state = hal_spi_state_ready;
     }
+    if (status == hal_status_ok) {
+        /* Only bind on success: a failed init must not leave the gate open */
+        spiFramBank = spiBank;
+    }
+    else {
+        /* spiHandle was already repointed at spiBank but never brought up.
+         * Close the gate rather than leave it naming a previously good
+         * bank that the handle no longer refers to. */
+        spiFramBank = SPI_NUM_BANKS;
+    }
     wolfBoot_printf("FRAM_Init: status %d\n", status);
     return status;
 }
@@ -254,11 +270,11 @@ hal_status_t FRAM_Write(uint8_t spiBank, uint32_t addr, uint8_t *buf,
     uint8_t spiData[4];
 
     /* Validate input parameters */
-    if (buf == NULL || len == 0) {
+    if (buf == NULL || len == 0 || spiBank != spiFramBank) {
         return hal_status_badParam;
     }
-    /* Bounds check: ensure write doesn't exceed FRAM size */
-    if (addr >= FRAM_SIZE || (addr + len) > FRAM_SIZE) {
+    /* Compare against the space remaining: addr + len could wrap */
+    if (addr >= FRAM_SIZE || len > (uint32_t)FRAM_SIZE - addr) {
         return hal_status_badParam;
     }
 
@@ -291,11 +307,11 @@ hal_status_t FRAM_Read(uint8_t spiBank, uint32_t addr, uint8_t *buf,
     uint8_t spiData[4];
 
     /* Validate input parameters */
-    if (buf == NULL || len == 0) {
+    if (buf == NULL || len == 0 || spiBank != spiFramBank) {
         return hal_status_badParam;
     }
-    /* Bounds check: ensure read doesn't exceed FRAM size */
-    if (addr >= FRAM_SIZE || (addr + len) > FRAM_SIZE) {
+    /* Compare against the space remaining: addr + len could wrap */
+    if (addr >= FRAM_SIZE || len > (uint32_t)FRAM_SIZE - addr) {
         return hal_status_badParam;
     }
 
@@ -331,7 +347,7 @@ hal_status_t FRAM_Erase(uint8_t spiBank, uint32_t addr, uint32_t len)
 
     while (len > 0) {
         uint32_t erase_len = (len > sizeof(data)) ? sizeof(data) : len;
-        status = FRAM_Write(ROM_SPI_BANK, addr, data, erase_len);
+        status = FRAM_Write(spiBank, addr, data, erase_len);
         if (status != hal_status_ok) {
             /* Return the hal_status_t unmodified; ext_flash_erase() is
              * the single negation point to a negative error code. */
@@ -355,21 +371,21 @@ void RAMFUNCTION hal_flash_lock(void)
 
 }
 
+/* No internal flash. All partitions are external (PART_*_EXT), so these are
+ * unreachable; return an error so a config that reaches them fails loudly. */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    /* not supported - no internal flash */
     (void)address;
     (void)data;
     (void)len;
-    return 0;
+    return -1;
 }
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    /* not supported - no internal flash */
     (void)address;
     (void)len;
-    return 0;
+    return -1;
 }
 #endif /* !WOLFBOOT_UNIT_TEST_VA416X0_FRAM */
 
@@ -448,6 +464,8 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     return len;
 }
 
+/* The shadow update below re-syncs IRAM from FRAM, so it is a repair rather
+ * than a cache fill, and is a no-op unless the caller holds ROM_PROT.WREN. */
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     hal_status_t status;
@@ -494,7 +512,8 @@ static int test_ext_flash(void)
 {
     int ret;
     uint32_t i;
-    uint8_t pageData[WOLFBOOT_SECTOR_SIZE] = { 0 };
+    /* static: WOLFBOOT_SECTOR_SIZE is far too large for the stack */
+    static uint8_t pageData[WOLFBOOT_SECTOR_SIZE];
 
 #ifndef READONLY
     /* Erase sector */
@@ -563,7 +582,7 @@ void hal_init(void)
     /* Configure PLL to set CPU clock to 100MHz - 40MHz crystal * 2.5 */
     status = HAL_Clkgen_PLL(CLK_CTRL0_XTAL_N_PLL2P5X);
     if (status != hal_status_ok) {
-        /* continue anyways */
+        /* continue anyways: no UART yet, so this cannot be reported */
     }
 
     /* Disable Watchdog - should be already disabled out of reset */
@@ -581,13 +600,13 @@ void hal_init(void)
     /* Call SDK HAL initialization function */
     status = HAL_Init();
     if (status != hal_status_ok) {
-        /* continue anyways */
+        /* continue anyways: no UART yet, so this cannot be reported */
     }
 
     /* Configure the pins */
     status = HAL_Iocfg_SetupPins(bootDefaultConfig);
     if (status != hal_status_ok) {
-        /* continue anyways */
+        /* continue anyways: no UART yet, so this cannot be reported */
     }
 
 #ifdef DEBUG_UART
@@ -600,10 +619,8 @@ void hal_init(void)
     /* Init the FRAM SPI device */
     status = FRAM_Init(ROM_SPI_BANK, ROM_SPI_CSN);
     if (status != hal_status_ok) {
-    #ifdef DEBUG
-        wolfBoot_printf("FRAM_Init failed\n");
-    #endif
-        /* continue anyways */
+        wolfBoot_printf("FRAM_Init failed: status %d\n", status);
+        /* Continue: the image checks fail closed if FRAM is unreadable */
     }
 
 #ifdef TEST_EXT_FLASH
@@ -616,19 +633,10 @@ void hal_prepare_boot(void)
 #ifdef DEBUG_UART
     uart_flush();
 
-    /* Disable UART to give app a clean state */
+    /* Disable UART to give app a clean state. UartInit() enables no UART
+     * interrupt, so there is no NVIC state to unwind here. */
     DEBUG_UART_BASE->IRQ_ENB = 0;
     DEBUG_UART_BASE->ENABLE = 0;
-    #if defined(DEBUG_UART_NUM) && DEBUG_UART_NUM == 1
-        NVIC_DisableIRQ(UART1_RX_IRQn);
-        NVIC_ClearPendingIRQ(UART1_RX_IRQn);
-    #elif defined(DEBUG_UART_NUM) && DEBUG_UART_NUM == 2
-        NVIC_DisableIRQ(UART2_RX_IRQn);
-        NVIC_ClearPendingIRQ(UART2_RX_IRQn);
-    #else /* default: UART0 */
-        NVIC_DisableIRQ(UART0_RX_IRQn);
-        NVIC_ClearPendingIRQ(UART0_RX_IRQn);
-    #endif
 #endif
 
 #ifdef WOLFBOOT_RESTORE_CLOCK
