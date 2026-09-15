@@ -68,7 +68,7 @@
 
 /* Assembly helpers */
 #define DMB() __asm__ volatile ("dmb")
-#define DSB() __asm__ volatile ("dsb")
+#define DSB() __asm__ volatile ("dsb" ::: "memory")
 #define ISB() __asm__ volatile ("isb")
 #define NOP() __asm__ volatile ("nop")
 
