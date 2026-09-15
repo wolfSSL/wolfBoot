@@ -25,6 +25,10 @@ from datetime import datetime, timezone
 # shapes because dropping --dep-liboqs did not bump it, leaving vendored
 # copies indistinguishable by the only identifier the SBOM records.
 #
+# 1.9  Nested wolfcrypt keeps name, version, supplier and PURL, but no
+#      longer emits cpe:2.3:a:wolfssl:wolfcrypt. NVD files crypto CVEs
+#      against wolfssl, not wolfcrypt; a second CPE on the same sources
+#      is a future double-match risk. Matching stays on the wolfssl CPE.
 # 1.8  CPE and PURL identifiers drop `+` build metadata (OpenSSL
 #      BUILD_METADATA, PEP 440 local versions). A raw `+` is not legal
 #      in CPE 2.3 and does not match an upstream git tag. version /
@@ -56,7 +60,7 @@ from datetime import datetime, timezone
 #      -only/-or-later distinction cannot be inferred.
 # 1.2  Dropped --dep-liboqs (unversioned; see above).
 GEN_SBOM_TOOL_NAME = 'wolfssl-sbom-gen'
-GEN_SBOM_VERSION = '1.8'
+GEN_SBOM_VERSION = '1.9'
 
 # Placeholder recorded in the component checksum fields when the operator
 # passes --no-artifact-hash: a build (ROM image, HSM firmware, binary-only
@@ -376,11 +380,12 @@ DEP_META = {
         # The CPE NVD registers for the wolfSSL library.
         'cpe': lambda v: cpe23_uri('wolfssl', 'wolfssl', v),
     },
-    # wolfCrypt is a separate NVD product (cpe:2.3:a:wolfssl:wolfcrypt).
-    # Embedders such as wolfBoot compile wolfcrypt sources into the image;
-    # wolfSSL itself co-ships wolfCrypt.  Emitting it as a component lets a
-    # CPE-driven scan match wolfCrypt advisories, which NVD indexes under
-    # wolfcrypt rather than only under wolfssl.
+    # wolfCrypt is co-shipped in the wolfSSL tree. Embedders compile those
+    # sources into the image. Record it as a nested component so the SBOM
+    # shows provenance (supplier, version, PURL). Do not emit a wolfcrypt
+    # CPE: NVD files crypto CVEs against cpe:2.3:a:wolfssl:wolfssl, not
+    # wolfcrypt (zero CVEs on that product today). A second CPE on the same
+    # sources is a future double-match risk once a CNA starts filing there.
     'wolfcrypt': {
         'name': 'wolfcrypt',
         'supplier': 'wolfSSL Inc.',
@@ -392,10 +397,9 @@ DEP_META = {
         'pkgconfig': None,
         # wolfcrypt lives in the wolfssl repository.  The resolvable PURL is
         # the wolfssl release that ships it, with a #wolfcrypt subpath so it
-        # does not collide with the wolfssl component's own PURL.  NVD
-        # matching keys on the wolfcrypt CPE below.
+        # does not collide with the wolfssl component's own PURL. Matching
+        # keys on the wolfssl CPE of the parent component.
         'purl': lambda v: wolfssl_project_purl('wolfssl', v) + '#wolfcrypt',
-        'cpe': lambda v: cpe23_uri('wolfssl', 'wolfcrypt', v),
     },
     'libz': {
         'name': 'zlib',
@@ -1074,10 +1078,12 @@ def cdx_dep_component(name, pkg_version, key, dep_version_overrides=None):
         # version / versionInfo keep the local string (BUILD_METADATA).
         comp['version'] = version
         comp['purl'] = meta['purl'](version)
-        # Both identifiers are version-bearing, so neither can be emitted
+        # Identifiers are version-bearing, so they cannot be emitted
         # without a resolved version: a CPE with an empty version field
         # matches every release of the dependency in an NVD scan.
-        comp['cpe'] = meta['cpe'](version)
+        # wolfcrypt has no CPE: matching rides on the parent wolfssl CPE.
+        if meta.get('cpe'):
+            comp['cpe'] = meta['cpe'](version)
     else:
         print(f"WARNING: version unknown for {meta['name']}; "
               "omitting version, purl and cpe", file=sys.stderr)
@@ -1101,18 +1107,19 @@ def spdx_dep_package(key, dep_version_overrides=None):
         'copyrightText': 'NOASSERTION',
     }
     if version:
-        pkg['externalRefs'] = [
-            {
+        refs = []
+        if meta.get('cpe'):
+            refs.append({
                 'referenceCategory': 'SECURITY',
                 'referenceType': 'cpe23Type',
                 'referenceLocator': meta['cpe'](version),
-            },
-            {
-                'referenceCategory': 'PACKAGE-MANAGER',
-                'referenceType': 'purl',
-                'referenceLocator': meta['purl'](version),
-            },
-        ]
+            })
+        refs.append({
+            'referenceCategory': 'PACKAGE-MANAGER',
+            'referenceType': 'purl',
+            'referenceLocator': meta['purl'](version),
+        })
+        pkg['externalRefs'] = refs
     return spdx_id, pkg
 
 
@@ -1520,7 +1527,7 @@ def _resolve_dep_versions(enabled_deps, overrides):
 
 
 def _inherit_wolfcrypt_version(enabled_deps, overrides, name, version):
-    """Give wolfcrypt a version so its CPE and PURL are not dropped.
+    """Give wolfcrypt a version so its PURL is not dropped.
 
     wolfcrypt has no pkg-config file of its own, so `dep_version` can never
     resolve it.  Prefer an explicit `--dep-version wolfcrypt=`, else the
@@ -1531,8 +1538,8 @@ def _inherit_wolfcrypt_version(enabled_deps, overrides, name, version):
     normally arrives from pkg-config rather than from `--dep-version`, so
     inheriting before the resolve step only ever saw an explicit override: a
     downstream embedder such as wolfBoot that did not pass
-    `--dep-version wolfssl=` emitted a wolfcrypt component with no version,
-    no purl and no cpe, and still exited 0.
+    `--dep-version wolfssl=` emitted a wolfcrypt component with no version
+    and no purl, and still exited 0.
 
     Tests the value rather than the key, because `_resolve_dep_versions`
     caches a None for every dep pkg-config cannot resolve, so by this point
@@ -1663,10 +1670,12 @@ def main():
                              'with --dep-version wolfssl=X.Y.Z on hosts '
                              'without wolfssl.pc.')
     parser.add_argument('--dep-wolfcrypt', default='no',
-                        help='yes to record wolfcrypt as a component with its '
-                             'registered NVD CPE (cpe:2.3:a:wolfssl:wolfcrypt). '
-                             'Use for embedders (wolfBoot) and for wolfSSL\'s '
-                             'own SBOM (containment). Combine with '
+                        help='yes to record wolfcrypt as a nested component '
+                             '(supplier, version, PURL). Matching stays on '
+                             'the wolfssl CPE; this flag does not emit '
+                             'cpe:2.3:a:wolfssl:wolfcrypt. Use for embedders '
+                             '(wolfBoot) and for wolfSSL\'s own SBOM '
+                             '(containment). Combine with '
                              '--dep-version wolfcrypt=X.Y.Z, or inherit the '
                              'wolfssl / package version when unset.')
     parser.add_argument('--crypto-only', default='auto',

@@ -13,8 +13,10 @@ on a broken generator. It is not a full schema validator.
     * at least one component or component property recorded
     * optional --min-properties N on metadata.component.properties
     * optional --require-dep-version NAME: a components[] entry with that
-      name must exist and carry a non-empty version and CPE. Nested
-      sub-components count, since wolfcrypt ships inside wolfssl.
+      name must exist and carry a non-empty version. Nested sub-components
+      count, since wolfcrypt ships inside wolfssl. wolfcrypt is provenance
+      only (PURL, no CPE); matching rides on the parent wolfssl CPE. Every
+      other required dep must also carry a CPE.
 
   SPDX (*.spdx.json):
     * spdxVersion starts with "SPDX-2"
@@ -32,6 +34,12 @@ Usage:
 import argparse
 import json
 import sys
+
+
+# Nested wolfcrypt is a provenance component. NVD files crypto CVEs against
+# wolfssl, not wolfcrypt; requiring a wolfcrypt CPE would fail a correct
+# SBOM and would later double-match. The unique id is the PURL.
+_CPE_OPTIONAL_DEPS = frozenset({"wolfcrypt"})
 
 
 def fail(path, msg):
@@ -81,6 +89,11 @@ def validate_cyclonedx(path, d, name_prefix, min_properties, require_deps):
         if not matches[0].get("version"):
             fail(path, f"dependency component {dep_name!r} has no version "
                        f"(pass --dep-version or set WOLFSSL_DIR)")
+        if dep_name in _CPE_OPTIONAL_DEPS:
+            if not matches[0].get("purl"):
+                fail(path, f"dependency component {dep_name!r} has no purl "
+                           f"(provenance id; matching uses the wolfssl CPE)")
+            continue
         if not matches[0].get("cpe"):
             fail(path, f"dependency component {dep_name!r} has no cpe "
                        f"(CPE-driven scanners cannot match it)")
