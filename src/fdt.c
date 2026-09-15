@@ -894,6 +894,134 @@ int fdt_path_offset(const fdt_ctx* ctx, const char* path)
     return off;
 }
 
+int fdt_parent_offset(const fdt_ctx* ctx, int nodeoffset)
+{
+    int off, depth, target_depth, parent;
+
+    if (!fdt_ctx_ok(ctx) || nodeoffset < 0) {
+        return -FDT_ERR_BADARG;
+    }
+    if (nodeoffset == 0) {
+        return -FDT_ERR_NOTFOUND; /* the root node has no parent */
+    }
+    /* No back-pointers in a flat tree: walk down from the root. Pass one
+     * finds the target's depth (root 0, children 1). */
+    target_depth = -1;
+    depth = 0;
+    for (off = fdt_next_node(ctx, 0, &depth); off >= 0;
+            off = fdt_next_node(ctx, off, &depth)) {
+        if (off == nodeoffset) {
+            target_depth = depth;
+            break;
+        }
+    }
+    if (target_depth < 1) {
+        return -FDT_ERR_NOTFOUND;
+    }
+    if (target_depth == 1) {
+        return 0; /* direct child of the root */
+    }
+    /* Pass two: the last node seen one level shallower. */
+    parent = -FDT_ERR_NOTFOUND;
+    depth = 0;
+    for (off = fdt_next_node(ctx, 0, &depth); off >= 0;
+            off = fdt_next_node(ctx, off, &depth)) {
+        if (off == nodeoffset) {
+            return parent;
+        }
+        if (depth == target_depth - 1) {
+            parent = off;
+        }
+    }
+    return -FDT_ERR_NOTFOUND;
+}
+
+int fdt_get_alias(const fdt_ctx* ctx, const char* name)
+{
+    const char* path;
+    int aliases, len = 0;
+
+    if (!fdt_ctx_ok(ctx) || name == NULL) {
+        return -FDT_ERR_BADARG;
+    }
+    aliases = fdt_subnode_offset(ctx, 0, "aliases");
+    if (aliases < 0) {
+        return aliases;
+    }
+    path = (const char*)fdt_getprop(ctx, aliases, name, &len);
+    if (path == NULL || len <= 1) {
+        return -FDT_ERR_NOTFOUND;
+    }
+    /* Must be a NUL-terminated absolute path. */
+    if (path[len - 1] != '\0' || path[0] != '/') {
+        return -FDT_ERR_BADSTRUCTURE;
+    }
+    return fdt_path_offset(ctx, path);
+}
+
+int fdt_get_reg(const fdt_ctx* ctx, int nodeoffset, int index,
+    uint64_t* addr, uint64_t* size)
+{
+    const uint8_t* reg;
+    const uint8_t* cell;
+    const void* val;
+    /* Devicetree spec defaults when a parent omits the properties. */
+    uint32_t ac = 2, sc = 1;
+    uint32_t entry;
+    int parent, len = 0;
+
+    if (!fdt_ctx_ok(ctx) || index < 0) {
+        return -FDT_ERR_BADARG;
+    }
+    parent = fdt_parent_offset(ctx, nodeoffset);
+    if (parent >= 0) {
+        val = fdt_getprop(ctx, parent, "#address-cells", &len);
+        if (val != NULL && len == 4) {
+            ac = fdt_rd32(val);
+        }
+        len = 0;
+        val = fdt_getprop(ctx, parent, "#size-cells", &len);
+        if (val != NULL && len == 4) {
+            sc = fdt_rd32(val);
+        }
+    }
+    /* Only 1 or 2 cells fit uint64_t. sc may be 0; ac may not. */
+    if (ac < 1U || ac > 2U || sc > 2U) {
+        return -FDT_ERR_BADSTRUCTURE;
+    }
+    entry = (ac + sc) * 4U;
+
+    len = 0;
+    reg = (const uint8_t*)fdt_getprop(ctx, nodeoffset, "reg", &len);
+    if (reg == NULL || len <= 0) {
+        return -FDT_ERR_NOTFOUND;
+    }
+    /* A whole number of entries, or the property is malformed: trailing
+     * cells would otherwise be ignored silently. */
+    if (((uint32_t)len % entry) != 0U) {
+        return -FDT_ERR_BADSTRUCTURE;
+    }
+    /* By division: (index + 1) * entry is 32-bit and a large index wraps. */
+    if ((uint32_t)index >= ((uint32_t)len / entry)) {
+        return -FDT_ERR_NOTFOUND;
+    }
+    cell = reg + ((uint32_t)index * entry);
+
+    if (addr != NULL) {
+        *addr = (ac == 2U) ? fdt_rd64u(cell) : (uint64_t)fdt_rd32(cell);
+    }
+    if (size != NULL) {
+        cell += ac * 4U;
+        if (sc == 0U) {
+            *size = 0;
+        }
+        else {
+            *size = (sc == 2U) ? fdt_rd64u(cell) : (uint64_t)fdt_rd32(cell);
+        }
+    }
+    return 0;
+}
+
 /* Shared walk for the tree-wide searches. `propname` NULL matches the
  * node name; otherwise the named property must equal `needle` whole. The
  * compatible search keeps its own loop so a target that never does one

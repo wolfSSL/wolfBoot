@@ -15,6 +15,7 @@ failure, etc.
 |------|-------|-----------|------------|
 | Preinit | `WOLFBOOT_HOOK_LOADER_PREINIT` | `void wolfBoot_hook_preinit(void)` | Before `hal_init()` in the loader |
 | Postinit | `WOLFBOOT_HOOK_LOADER_POSTINIT` | `void wolfBoot_hook_postinit(void)` | After all loader initialization, just before `wolfBoot_start()` |
+| Preboot | `WOLFBOOT_HOOK_PREBOOT` | `void wolfBoot_hook_preboot(struct wolfBoot_image *boot_img)` | After verification, immediately **before** `hal_prepare_boot()` |
 | Boot | `WOLFBOOT_HOOK_BOOT` | `void wolfBoot_hook_boot(struct wolfBoot_image *boot_img)` | After `hal_prepare_boot()` but before `do_boot()` |
 | Panic | `WOLFBOOT_HOOK_PANIC` | `void wolfBoot_hook_panic(void)` | Inside `wolfBoot_panic()`, before halt |
 
@@ -35,6 +36,8 @@ loader main()
   +-- wolfBoot_start()
         |
         +-- (image verification, update logic)
+        |
+        +-- [HOOK: wolfBoot_hook_preboot()] <-- WOLFBOOT_HOOK_PREBOOT
         |
         +-- hal_prepare_boot()
         |
@@ -60,6 +63,7 @@ WOLFBOOT_HOOKS_FILE=path/to/my_hooks.c
 # Enable individual hooks (each is independent)
 WOLFBOOT_HOOK_LOADER_PREINIT=1
 WOLFBOOT_HOOK_LOADER_POSTINIT=1
+WOLFBOOT_HOOK_PREBOOT=1
 WOLFBOOT_HOOK_BOOT=1
 WOLFBOOT_HOOK_PANIC=1
 ```
@@ -82,6 +86,8 @@ make WOLFBOOT_HOOKS_FILE=my_hooks.c WOLFBOOT_HOOK_LOADER_PREINIT=1
   use functionality that does not depend on `hal_init()` having been called.
 - The boot hook receives a pointer to the verified `wolfBoot_image` struct,
   allowing inspection of firmware version, type, and other metadata before boot.
+- The preboot hook gets the same struct but fires on the other side of `hal_prepare_boot()`, where a port tears the environment down for handoff: flushing or disabling caches, disabling the MMU (`hal/cm4.c`), leaving 4-byte flash addressing (`hal/zynq.c`). Anything touching DMA, a live MMU mapping or external flash belongs in the preboot hook; use the boot hook only for the last thing before `do_boot()`.
+- On `MMU` / `WOLFBOOT_FDT` builds, `wolfBoot_get_dts_address()` returns the device tree wolfBoot is about to pass to the OS, or `NULL`. It is published just before the preboot hook, so it is only meaningful from there on. Parse it with the `fdt_*` API in `include/fdt.h`; `fdt_get_alias()` and `fdt_get_reg()` turn a board label into a peripheral base address.
 - The panic hook fires inside `wolfBoot_panic()` just before the system halts.
   Use it to set the system to a safe state, log errors, toggle GPIOs, notify
   external systems, etc.

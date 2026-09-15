@@ -449,6 +449,17 @@ static int slot_prepare(struct boot_slot *s, int part, const char *label,
  * the OS image from disk partitions. It then verifies the integrity and
  * authenticity of the loaded image before initiating the boot.
  */
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+/* File scope so wolfBoot_get_dts_address() can hand it to a hook; exactly
+ * one update strategy object is linked per build. */
+static void* wolfboot_dts_addr = NULL;
+
+void* wolfBoot_get_dts_address(void)
+{
+    return wolfboot_dts_addr;
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
@@ -964,6 +975,16 @@ void RAMFUNCTION wolfBoot_start(void)
     /* Deferred from just after verification (see NOTE above): close the boot
      * disk now that all env / DTB reads and writes are done, before handoff. */
     disk_close(BOOT_DISK);
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+    /* After every relocation/fallback/digest check, so a hook never sees
+     * an unvalidated blob. */
+    wolfboot_dts_addr = (void*)dts_addr;
+#endif
+#ifdef WOLFBOOT_HOOK_PREBOOT
+    /* Before hal_prepare_boot(), so a hook still has the MMU and caches as
+     * wolfBoot set them up. */
+    wolfBoot_hook_preboot(&os_image);
+#endif
     hal_prepare_boot();
 
 #ifdef WOLFBOOT_HOOK_BOOT

@@ -267,6 +267,17 @@ static int uboot_legacy_header_valid(const uint8_t *hdr, uint32_t total)
 }
 #endif /* WOLFBOOT_UBOOT_LEGACY */
 
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+/* File scope so wolfBoot_get_dts_address() can hand it to a hook; exactly
+ * one update strategy object is linked per build. */
+static void* wolfboot_dts_addr = NULL;
+
+void* wolfBoot_get_dts_address(void)
+{
+    return wolfboot_dts_addr;
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     int active = -1, ret = 0;
@@ -807,6 +818,16 @@ backup_on_failure:
         wolfBoot_printf("Error protecting bootloader flash region\n");
         wolfBoot_panic();
     }
+#endif
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+    /* After every relocation/fallback/digest check, so a hook never sees
+     * an unvalidated blob. */
+    wolfboot_dts_addr = (void*)dts_addr;
+#endif
+#ifdef WOLFBOOT_HOOK_PREBOOT
+    /* Before hal_prepare_boot(), so a hook still has the MMU and caches as
+     * wolfBoot set them up. */
+    wolfBoot_hook_preboot(&os_image);
 #endif
     hal_prepare_boot();
 
