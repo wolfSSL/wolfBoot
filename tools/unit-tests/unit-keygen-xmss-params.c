@@ -22,8 +22,10 @@ static void mock_exit(int code);
 #define wc_XmssKey_ExportPubRaw mock_wc_XmssKey_ExportPubRaw
 #define wc_XmssKey_Free mock_wc_XmssKey_Free
 #define wc_ForceZero mock_wc_ForceZero
+#define wc_FreeRng mock_wc_FreeRng
 #include "../keytools/keygen.c"
 #undef wc_ForceZero
+#undef wc_FreeRng
 #undef wc_XmssKey_Free
 #undef wc_XmssKey_ExportPubRaw
 #undef wc_XmssKey_GetPrivLen
@@ -115,6 +117,12 @@ void mock_wc_ForceZero(void *mem, size_t len)
 {
     (void)mem;
     (void)len;
+}
+
+int mock_wc_FreeRng(WC_RNG *rng)
+{
+    (void)rng;
+    return 0;
 }
 
 static void setup(void)
