@@ -6,8 +6,9 @@ MEMORY
 {
   IRAM  (rx)    :ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
   EBI   (xrw)   :ORIGIN = 0x10000000, LENGTH = 16M
-  RAM0  (xrw)   :ORIGIN = 0x1FFF8000, LENGTH = 32K
-  RAM1  (xrw)   :ORIGIN = 0x20000000, LENGTH = 32K
+  /* SRAM_0 (0x1FFF8000) and SRAM_1 (0x20000000) are contiguous, so they are
+     pooled as one 64K region. They stay separate EDAC scrub banks. */
+  RAM0  (xrw)   :ORIGIN = 0x1FFF8000, LENGTH = 64K
 }
 
 /* Define output sections */
@@ -132,13 +133,13 @@ SECTIONS
     __bss_end__ = _end_bss;
   } >RAM0
 
-  /* DMA control block, goes into fixed location in RAM1 */
+  /* DMA control block. Empty unless the SDK DMA driver is linked in; the
+     engine only requires the 128 byte alignment. */
   .dma_blk (NOLOAD) :
   {
     . = ALIGN(128);
-    /**(.ARM.__at_0x20000000) */
     *(dma_blk)
-  } >RAM1
+  } >RAM0
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :

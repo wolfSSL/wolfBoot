@@ -55,6 +55,44 @@ int benchmark_test(void *args);
 #include "va416xx_hal_timer.h"
 #include "va416xx_hal_ioconfig.h"
 
+/* Confirm VTOR points at the application's table and that exceptions reach it.
+ * SysTick advances HAL_time_ms, so a frozen counter means they do not. */
+static void print_vector_table_info(void)
+{
+    uint32_t vtor;
+    uint32_t expect;
+    uint32_t t0, t1;   /* short delta; keeps the print 32-bit */
+    volatile uint32_t spin;
+
+    vtor = SCB->VTOR;
+    expect = (uint32_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE);
+
+    wolfBoot_printf("\r\n");
+    wolfBoot_printf("Vector table\r\n");
+    wolfBoot_printf("====================================\r\n");
+    wolfBoot_printf("VTOR            : 0x%08lx (expected 0x%08lx) %s\r\n",
+        (unsigned long)vtor, (unsigned long)expect,
+        (vtor == expect) ? "OK" : "MISMATCH");
+
+    /* The core ORs the vector offset into VTOR rather than adding it, so a
+     * 212-entry table that is not 1024-aligned misdispatches every IRQ from
+     * 112 up while SysTick and the EDAC IRQs still look healthy. */
+    wolfBoot_printf("VT alignment    : %lu %s\r\n",
+        (unsigned long)(vtor & 0x3FFU),
+        ((vtor & 0x3FFU) == 0) ? "(1024-aligned) OK"
+                               : "*** NOT 1024-ALIGNED: IRQ >= 112 broken ***");
+
+    t0 = (uint32_t)HAL_time_ms;
+    /* Bounded: HAL_Timer_DelayMs() spins on HAL_time_ms and would hang */
+    for (spin = 0; spin < 2000000UL; spin++) {
+    }
+    t1 = (uint32_t)HAL_time_ms;
+
+    wolfBoot_printf("SysTick         : %s (%lu -> %lu ms)\r\n",
+        (t1 != t0) ? "ticking" : "STOPPED",
+        (unsigned long)t0, (unsigned long)t1);
+}
+
 static uint8_t boot_part_state = IMG_STATE_NEW;
 static uint8_t update_part_state = IMG_STATE_NEW;
 
@@ -87,10 +125,9 @@ static const char *part_state_name(uint8_t state)
 
 static int print_info(void)
 {
-    int i, j;
+    uint32_t i, j;
     uint32_t cur_fw_version, update_fw_version;
     uint32_t n_keys;
-    uint16_t hdrSz;
 
     cur_fw_version = wolfBoot_current_firmware_version();
     update_fw_version = wolfBoot_update_firmware_version();
@@ -130,8 +167,8 @@ static int print_info(void)
         uint8_t *keybuf = keystore_get_buffer(i);
 
         wolfBoot_printf("\r\n");
-        wolfBoot_printf("  Public Key #%d: size %lu, type %lx, mask %08lx\r\n", i,
-                size, type, mask);
+        wolfBoot_printf("  Public Key #%lu: size %lu, type %lx, mask %08lx\r\n",
+                (unsigned long)i, size, type, mask);
         wolfBoot_printf("  ====================================\r\n  ");
         for (j = 0; j < size; j++) {
             wolfBoot_printf("%02X ", keybuf[j]);
@@ -163,6 +200,8 @@ void main(void)
     wolfBoot_printf("========================\r\n");
 
     print_info();
+
+    print_vector_table_info();
 
 #ifdef WOLFCRYPT_TEST
     wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");

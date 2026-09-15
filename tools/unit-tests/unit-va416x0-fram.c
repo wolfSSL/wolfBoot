@@ -10,8 +10,8 @@
  * FRAM bounds check from rejecting the test buffer (the hardware value
  * is 256 KiB). */
 #define FRAM_SIZE (0xFFFFFFFFU)
-#define ROM_SPI_BANK 0
-#define SPI_NUM_BANKS 1
+#define ROM_SPI_BANK 3
+#define SPI_NUM_BANKS 4
 #define SPI_STATUS_TFE_Msk 0x01U
 #define SPI_STATUS_BUSY_Msk 0x02U
 #define SPI_FIFO_CLR_RXFIFO_Msk 0x01U
@@ -142,8 +142,11 @@ int wolfBoot_printf(const char *fmt, ...)
 
 static void reset_spi_mocks(void)
 {
+    int i;
+
     memset(&mock_vor_spi, 0, sizeof(mock_vor_spi));
-    mock_vor_spi.BANK[0].STATUS = SPI_STATUS_TFE_Msk;
+    for (i = 0; i < SPI_NUM_BANKS; i++)
+        mock_vor_spi.BANK[i].STATUS = SPI_STATUS_TFE_Msk;
 }
 
 START_TEST(test_fram_write_command_failure_aborts_split_transaction)
@@ -232,11 +235,18 @@ END_TEST
  */
 START_TEST(test_ext_flash_erase_success_fills_iram)
 {
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
     hal_status_t ok_script[] = {
         hal_status_ok, hal_status_ok, hal_status_ok,
         hal_status_ok, hal_status_ok, hal_status_ok
     };
     int i;
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(ROM_SPI_BANK, 0), hal_status_ok);
 
     reset_spi_mocks();
     memset(g_iram, 0xA5, sizeof(g_iram));
@@ -256,11 +266,18 @@ END_TEST
  * diag_erase in src/libwolfboot.c). */
 START_TEST(test_ext_flash_erase_failure_returns_negative)
 {
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
     hal_status_t fail_script[] = {
         hal_status_ok, hal_status_ok, hal_status_err
     };
     int i;
     int ret;
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(ROM_SPI_BANK, 0), hal_status_ok);
 
     reset_spi_mocks();
     memset(g_iram, 0xA5, sizeof(g_iram));
@@ -275,6 +292,150 @@ START_TEST(test_ext_flash_erase_failure_returns_negative)
 }
 END_TEST
 
+/* FRAM_Erase() must drive the bank it was handed; pre-fix it hardcoded
+ * ROM_SPI_BANK. FRAM_WaitIdle() clears that bank's FIFO, so it is visible. */
+START_TEST(test_fram_erase_uses_requested_bank)
+{
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    hal_status_t ok_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+
+    reset_spi_mocks();
+
+    /* Bind the driver to bank 1, not the default ROM_SPI_BANK. */
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(1, 0), hal_status_ok);
+
+    reset_spi_mocks();
+    set_transmit_script(ok_script, 3);
+    ck_assert_int_eq(FRAM_Erase(1, 0x40, 32), hal_status_ok);
+
+    ck_assert_uint_eq(mock_vor_spi.BANK[1].FIFO_CLR,
+        SPI_FIFO_CLR_RXFIFO_Msk | SPI_FIFO_CLR_TXFIFO_Msk);
+    ck_assert_uint_eq(mock_vor_spi.BANK[ROM_SPI_BANK].FIFO_CLR, 0);
+}
+END_TEST
+
+/* One device at a time: a bank other than the one FRAM_Init() bound to must
+ * be rejected, not drained while transmitting on the init handle's bank. */
+START_TEST(test_fram_rejects_bank_other_than_initialized)
+{
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    uint8_t buf[4] = { 1, 2, 3, 4 };
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(1, 0), hal_status_ok);
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 0);
+    ck_assert_int_eq(FRAM_Write(2, 0x40, buf, sizeof(buf)),
+        hal_status_badParam);
+    ck_assert_int_eq(FRAM_Read(2, 0x40, buf, sizeof(buf)),
+        hal_status_badParam);
+    /* No SPI traffic at all on a rejected request. */
+    ck_assert_int_eq(transmit_call_count, 0);
+}
+END_TEST
+
+/* FRAM_Init() must bounds check spiBank before indexing BANK[], as
+ * FRAM_WaitIdle() already did. */
+START_TEST(test_fram_init_rejects_out_of_range_bank)
+{
+    reset_spi_mocks();
+    set_transmit_script(NULL, 0);
+    ck_assert_int_eq(FRAM_Init(SPI_NUM_BANKS, 0), hal_status_badParam);
+    ck_assert_int_eq(transmit_call_count, 0);
+}
+END_TEST
+
+/* NULL buffer and zero length must be rejected before any SPI traffic. */
+START_TEST(test_fram_rejects_null_buffer_and_zero_length)
+{
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    uint8_t buf[4] = { 0 };
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(ROM_SPI_BANK, 0), hal_status_ok);
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 0);
+    ck_assert_int_eq(FRAM_Write(ROM_SPI_BANK, 0x40, NULL, 4),
+        hal_status_badParam);
+    ck_assert_int_eq(FRAM_Write(ROM_SPI_BANK, 0x40, buf, 0),
+        hal_status_badParam);
+    ck_assert_int_eq(FRAM_Read(ROM_SPI_BANK, 0x40, NULL, 4),
+        hal_status_badParam);
+    ck_assert_int_eq(FRAM_Read(ROM_SPI_BANK, 0x40, buf, 0),
+        hal_status_badParam);
+    ck_assert_int_eq(transmit_call_count, 0);
+}
+END_TEST
+
+/* addr 0xFFFFFFF0 leaves 15 bytes, so a 32 byte request must be rejected.
+ * The pre-fix `(addr + len) > FRAM_SIZE` wrapped to 0x10 and allowed it. */
+START_TEST(test_fram_bounds_check_survives_address_wrap)
+{
+    hal_status_t init_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    uint8_t buf[32] = { 0 };
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 3);
+    ck_assert_int_eq(FRAM_Init(ROM_SPI_BANK, 0), hal_status_ok);
+
+    reset_spi_mocks();
+    set_transmit_script(init_script, 0);
+    ck_assert_int_eq(
+        FRAM_Write(ROM_SPI_BANK, 0xFFFFFFF0U, buf, sizeof(buf)),
+        hal_status_badParam);
+    ck_assert_int_eq(
+        FRAM_Read(ROM_SPI_BANK, 0xFFFFFFF0U, buf, sizeof(buf)),
+        hal_status_badParam);
+    ck_assert_int_eq(transmit_call_count, 0);
+}
+END_TEST
+
+/* A failed FRAM_Init() must not bind the bank: doing so would let a later
+ * transfer through the gate onto an incompletely initialized handle. */
+START_TEST(test_failed_init_does_not_bind_bank)
+{
+    hal_status_t ok_script[] = {
+        hal_status_ok, hal_status_ok, hal_status_ok
+    };
+    hal_status_t fail_script[] = { hal_status_err };
+    uint8_t buf[4] = { 1, 2, 3, 4 };
+
+    reset_spi_mocks();
+    set_transmit_script(ok_script, 3);
+    ck_assert_int_eq(FRAM_Init(ROM_SPI_BANK, 0), hal_status_ok);
+
+    /* Now fail an init on a different bank. */
+    reset_spi_mocks();
+    set_transmit_script(fail_script, 1);
+    ck_assert_int_ne(FRAM_Init(1, 0), hal_status_ok);
+
+    /* The failed init leaves spiHandle pointing at bank 1, so the gate must
+     * close entirely rather than keep naming ROM_SPI_BANK. */
+    reset_spi_mocks();
+    set_transmit_script(fail_script, 0);
+    ck_assert_int_eq(FRAM_Write(1, 0x40, buf, sizeof(buf)),
+        hal_status_badParam);
+    ck_assert_int_eq(FRAM_Write(ROM_SPI_BANK, 0x40, buf, sizeof(buf)),
+        hal_status_badParam);
+    ck_assert_int_eq(transmit_call_count, 0);
+}
+END_TEST
+
 Suite *va416x0_fram_suite(void)
 {
     Suite *s = suite_create("va416x0-fram");
@@ -285,6 +446,12 @@ Suite *va416x0_fram_suite(void)
     tcase_add_test(tc, test_iram_fill_unaligned_64bit_addr);
     tcase_add_test(tc, test_ext_flash_erase_success_fills_iram);
     tcase_add_test(tc, test_ext_flash_erase_failure_returns_negative);
+    tcase_add_test(tc, test_fram_erase_uses_requested_bank);
+    tcase_add_test(tc, test_fram_rejects_bank_other_than_initialized);
+    tcase_add_test(tc, test_fram_init_rejects_out_of_range_bank);
+    tcase_add_test(tc, test_fram_rejects_null_buffer_and_zero_length);
+    tcase_add_test(tc, test_fram_bounds_check_survives_address_wrap);
+    tcase_add_test(tc, test_failed_init_does_not_bind_bank);
     suite_add_tcase(s, tc);
 
     return s;
