@@ -21,6 +21,7 @@ jobs:
             test_script: sim-sunnyday-update.sh
             expected_preinit: 2
             expected_postinit: 2
+            expected_preboot: 2
             expected_boot: 2
             expected_panic: 0
           - mechanism: dualbank
@@ -28,6 +29,7 @@ jobs:
             test_script: sim-dualbank-swap-update.sh
             expected_preinit: 3
             expected_postinit: 3
+            expected_preboot: 3
             expected_boot: 3
             expected_panic: 0
           - mechanism: panic
@@ -35,6 +37,7 @@ jobs:
             test_script: ""
             expected_preinit: 1
             expected_postinit: 1
+            expected_preboot: 0
             expected_boot: 0
             expected_panic: 1
 
@@ -67,9 +70,33 @@ jobs:
 
           void wolfBoot_hook_preinit(void)  { log_hook("preinit"); }
           void wolfBoot_hook_postinit(void) { log_hook("postinit"); }
+          void wolfBoot_hook_preboot(struct wolfBoot_image *boot_img)
+          {
+              (void)boot_img;
+          #if defined(MMU) || defined(WOLFBOOT_FDT)
+              (void)wolfBoot_get_dts_address();
+          #endif
+              log_hook("preboot");
+          }
           void wolfBoot_hook_boot(struct wolfBoot_image *boot_img) { (void)boot_img; log_hook("boot"); }
           void wolfBoot_hook_panic(void)    { log_hook("panic"); }
           EOF
+
+      - name: Every update strategy defines wolfBoot_get_dts_address()
+        run: |
+          # hooks.h advertises it for any MMU/WOLFBOOT_FDT build, so each
+          # strategy must define it or a conforming hook fails to link.
+          fail=0
+          for f in src/update_ram.c src/update_disk.c src/update_flash.c \
+                   src/update_flash_hwswap.c; do
+            # Tolerate either pointer spelling: void* x() and void *x().
+            if ! grep -Eq 'void[[:space:]]*\*[[:space:]]*wolfBoot_get_dts_address\(void\)' "$f"; then
+              echo "FAIL: $f does not define wolfBoot_get_dts_address()"
+              fail=1
+            fi
+          done
+          test "$fail" = "0" || exit 1
+          echo "OK: all four update strategies define the accessor"
 
       - name: Select config
         run: |
@@ -85,6 +112,7 @@ jobs:
             WOLFBOOT_HOOKS_FILE=test_hooks.c \
             WOLFBOOT_HOOK_LOADER_PREINIT=1 \
             WOLFBOOT_HOOK_LOADER_POSTINIT=1 \
+            WOLFBOOT_HOOK_PREBOOT=1 \
             WOLFBOOT_HOOK_BOOT=1 \
             WOLFBOOT_HOOK_PANIC=1
 
@@ -146,6 +174,7 @@ jobs:
 
           check_count "preinit"  ${{ matrix.expected_preinit }}
           check_count "postinit" ${{ matrix.expected_postinit }}
+          check_count "preboot"  ${{ matrix.expected_preboot }}
           check_count "boot"     ${{ matrix.expected_boot }}
           check_count "panic"    ${{ matrix.expected_panic }}
 
