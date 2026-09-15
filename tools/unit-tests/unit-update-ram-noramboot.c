@@ -184,16 +184,15 @@ START_TEST (test_noramboot_sunnyday) {
 }
 END_TEST
 
-/* Regression test for F-4410: firmware versions with the high bit set
- * (>= 0x80000000) must still feed the anti-rollback guard in wolfBoot_start.
+/* Regression test for F-4410 + F-12922: firmware versions with the high
+ * bit set (>= 0x80000000) must be read without signed-int clamping (the
+ * two version asserts below), and a failed high-version image must not
+ * block fallback to the lower-versioned (but valid) UPDATE partition.
  *
- * BOOT carries the higher version but is marked oversize so wolfBoot_open_image()
- * rejects it and the boot path falls back to the lower-versioned (but valid)
- * UPDATE partition. That downgrade must be denied. Before the fix the versions
- * were cast through a signed int and clamped to 0, collapsing max_v to 0 and
- * silently bypassing the "(max_v > 0U)" guard, so the lower UPDATE image was
- * staged for boot. */
-START_TEST (test_noramboot_highversion_rollback_denied) {
+ * BOOT carries the higher version but is marked oversize so
+ * wolfBoot_open_image() rejects it; the boot path must fall back to the
+ * valid UPDATE image instead of panicking on the version difference. */
+START_TEST (test_noramboot_fallback_to_lower_version) {
     uint32_t oversize = WOLFBOOT_PARTITION_SIZE;
 
     reset_mock_stats();
@@ -212,10 +211,10 @@ START_TEST (test_noramboot_highversion_rollback_denied) {
 
     wolfBoot_start();
 
-    /* Rollback to the lower UPDATE version must be denied: wolfBoot panics and
-     * stages nothing. */
-    ck_assert(!wolfBoot_staged_ok);
-    ck_assert_int_eq(wolfBoot_panicked, 1);
+    /* A failed high-version boot image must not block fallback to the
+     * valid lower-version update image (F-12922). */
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
     cleanup_flash();
 }
 END_TEST
@@ -255,7 +254,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday, test_noramboot_sunnyday);
     tcase_add_test(ext_short_read,
         test_noramboot_ext_flash_short_read_rejected);
-    tcase_add_test(rollback_denied, test_noramboot_highversion_rollback_denied);
+    tcase_add_test(rollback_denied, test_noramboot_fallback_to_lower_version);
     suite_add_tcase(s, sunnyday);
     suite_add_tcase(s, ext_short_read);
     suite_add_tcase(s, rollback_denied);

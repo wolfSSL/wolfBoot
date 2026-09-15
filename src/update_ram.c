@@ -314,12 +314,6 @@ void RAMFUNCTION wolfBoot_start(void)
      * kernel directly. */
     uintptr_t bl31_entry = 0;
 #endif
-#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
-    uint32_t boot_v = wolfBoot_current_firmware_version();
-    uint32_t update_v = wolfBoot_update_firmware_version();
-    uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
-#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
-
     for (;;) {
         /* Each open needs fresh image state: wolfBoot_open_image_address()
          * adopts load_address only when hdr is NULL, and the external
@@ -349,17 +343,6 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
             break;
         }
-#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
-        {
-            uint32_t active_v = (active == PART_UPDATE) ? update_v : boot_v;
-            if ((max_v > 0U) && (active_v < max_v)) {
-                wolfBoot_printf("Rollback to lower version not allowed\n");
-                wolfBoot_panic();
-                break;
-            }
-        }
-#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
-
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         wolfBoot_printf("Trying %s partition at %p\n",
                 active == PART_BOOT ? "Boot" : "Update", source_address);
