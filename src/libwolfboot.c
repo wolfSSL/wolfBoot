@@ -2369,6 +2369,8 @@ static int pkcs11_enc_initialized = 0, pkcs11_dec_initialized = 0;
 static CK_AES_CTR_PARAMS pkcs11_params;
 #endif
 
+static void pkcs11_pin_wipe(void);
+
 int pkcs11_crypto_init(void)
 {
     CK_RV ret = 0;
@@ -2462,6 +2464,9 @@ int pkcs11_crypto_init(void)
         if (pkcs11_initialized) {
             pkcs11_function_list->C_Finalize(NULL);
         }
+        /* terminal failure: the credential must not survive in retained
+         * memory (same reason as the deinit wipe) */
+        pkcs11_pin_wipe();
     }
 
     return ret;

@@ -1,6 +1,7 @@
 /* unit-pkcs11-pin-zeroize.c
  *
- * Unit test for the PKCS#11 login credential lifetime (F-12114).
+ * Unit test for the PKCS#11 login credential lifetime (F-12114,
+ * F-12942).
  *
  * pkcs11_pin is a file-scope copy of the credential supplied to
  * C_Login() for the token holding the firmware-decryption key.
@@ -58,6 +59,7 @@ static uint8_t test_encrypt_key[ENCRYPT_PKCS11_KEY_ID_SIZE +
 /* ---- PKCS#11 stubs ---- */
 
 static int stub_close_session_calls;
+static int stub_login_fail;
 
 static CK_RV stub_C_Initialize(CK_VOID_PTR pInitArgs)
 {
@@ -98,6 +100,9 @@ static CK_RV stub_C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
     (void)userType;
     (void)pPin;
     (void)ulPinLen;
+    if (stub_login_fail) {
+        return CKR_PIN_INCORRECT;
+    }
     return CKR_OK;
 }
 
@@ -171,6 +176,7 @@ void panic(void)
 static void reset_stub_state(void)
 {
     stub_close_session_calls = 0;
+    stub_login_fail = 0;
 }
 
 /* F-12114: the pre-handoff deinitializer must erase the PKCS#11
@@ -223,6 +229,32 @@ START_TEST(test_pkcs11_deinit_no_session)
 }
 END_TEST
 
+/* F-12942: a terminal initialization failure after C_Login() was
+ * attempted (login rejected) tears the session down and must also
+ * erase the credential copy: the bootloader memory is retained
+ * after the handoff, as on the deinit path. */
+START_TEST(test_pkcs11_pin_wiped_on_init_failure)
+{
+    int ret;
+    size_t i;
+
+    reset_stub_state();
+    encrypt_initialized = 0;
+    memcpy(pkcs11_pin, ENCRYPT_PKCS11_PIN, sizeof(ENCRYPT_PKCS11_PIN));
+    stub_login_fail = 1;
+
+    ret = pkcs11_crypto_init();
+    stub_login_fail = 0;
+
+    ck_assert_int_eq(ret, CKR_PIN_INCORRECT);
+    ck_assert_int_eq(encrypt_initialized, 0);
+    for (i = 0; i < sizeof(pkcs11_pin); i++) {
+        ck_assert_msg(pkcs11_pin[i] == 0,
+                      "pkcs11_pin byte %zu not wiped", i);
+    }
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-pkcs11-pin");
@@ -230,6 +262,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tc, test_pkcs11_pin_wiped_on_deinit);
     tcase_add_test(tc, test_pkcs11_deinit_no_session);
+    tcase_add_test(tc, test_pkcs11_pin_wiped_on_init_failure);
     suite_add_tcase(s, tc);
     return s;
 }
