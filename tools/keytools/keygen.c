@@ -812,7 +812,7 @@ cleanup:
         wc_ed25519_free(&k);
     wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 static void keygen_ed448(const char *privkey, uint32_t id_mask)
@@ -873,7 +873,7 @@ cleanup:
         wc_ed448_free(&k);
     wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 #include "../lms/lms_common.h"
@@ -995,7 +995,7 @@ cleanup:
         wc_ForceZero(&key, sizeof(key));
     }
     if (exit_code)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 #include "../xmss/xmss_common.h"
@@ -1114,7 +1114,7 @@ cleanup:
         wc_ForceZero(&key, sizeof(key));
     }
     if (exit_code)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 
@@ -1325,7 +1325,7 @@ cleanup:
         priv = NULL;
     }
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 static void key_gen_check(const char *kfilename)
