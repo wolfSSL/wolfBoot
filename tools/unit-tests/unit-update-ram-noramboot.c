@@ -248,19 +248,20 @@ Suite *wolfboot_suite(void)
     TCase *sunnyday = tcase_create("Non-RAMBOOT sunny day");
     TCase *ext_short_read =
         tcase_create("Non-RAMBOOT short ext flash read rejected");
-    TCase *rollback_denied =
-        tcase_create("Non-RAMBOOT high-version rollback denied");
+    TCase *fallback_to_lower_version =
+        tcase_create("Non-RAMBOOT fallback to lower version");
 
     tcase_add_test(sunnyday, test_noramboot_sunnyday);
     tcase_add_test(ext_short_read,
         test_noramboot_ext_flash_short_read_rejected);
-    tcase_add_test(rollback_denied, test_noramboot_fallback_to_lower_version);
+    tcase_add_test(fallback_to_lower_version,
+        test_noramboot_fallback_to_lower_version);
     suite_add_tcase(s, sunnyday);
     suite_add_tcase(s, ext_short_read);
-    suite_add_tcase(s, rollback_denied);
+    suite_add_tcase(s, fallback_to_lower_version);
     tcase_set_timeout(sunnyday, 5);
     tcase_set_timeout(ext_short_read, 5);
-    tcase_set_timeout(rollback_denied, 5);
+    tcase_set_timeout(fallback_to_lower_version, 5);
     return s;
 }
 
