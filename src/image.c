@@ -1090,6 +1090,18 @@ static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
     return hdr_cpy;
 }
 
+/**
+ * @brief Invalidate the cached external image header.
+ *
+ * fetch_hdr_cpy() loads the header of the first image it sees and serves
+ * it to every later get_header() call. Call this before opening a
+ * different image so TLV lookups do not read the stale header.
+ */
+void wolfBoot_invalidate_hdr_cache(void)
+{
+    hdr_cpy_done = 0;
+}
+
 static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
         uint8_t **ptr)
 {

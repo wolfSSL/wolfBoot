@@ -320,9 +320,15 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
 #endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
 
-    memset(&os_image, 0, sizeof(struct wolfBoot_image));
-
     for (;;) {
+        /* Each open needs fresh image state: wolfBoot_open_image_address()
+         * adopts load_address only when hdr is NULL, and the external
+         * header cache keeps the first image opened, so without this the
+         * fallback re-verifies the previous partition's header. */
+        memset(&os_image, 0, sizeof(struct wolfBoot_image));
+#ifdef EXT_FLASH
+        wolfBoot_invalidate_hdr_cache();
+#endif
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         if (active < 0)
             active = wolfBoot_dualboot_candidate();

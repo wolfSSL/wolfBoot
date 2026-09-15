@@ -1748,6 +1748,11 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 /* get header type for image */
 uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
 
+#ifdef EXT_FLASH
+/* Drop the cached external image header so the next open reloads it. */
+void wolfBoot_invalidate_hdr_cache(void);
+#endif
+
 /* Find the key slot ID based on the SHA hash of the key. */
 int keyslot_id_by_sha(const uint8_t *hint);
 

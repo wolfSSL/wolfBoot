@@ -1,0 +1,340 @@
+/* unit-update-ram-nofixed-noramboot.c
+ *
+ * Reproducer for fallback selection in update_ram.c without fixed
+ * partitions and without RAMBOOT (XIP): the configuration in which
+ * wolfBoot_open_image_address() is called with a varying load_address
+ * on every retry iteration.
+ *
+ * Pins F-13604: os_image was zeroed once, before the retry loop, so the
+ * fallback iteration kept the stale img->hdr of the failed partition
+ * and re-verified the wrong image. wolfBoot_open_image_address() only
+ * adopts the address when img->hdr is NULL (documented precondition:
+ * the struct is memset to 0 before each call), so the second
+ * partition was never examined and a valid alternate image could not
+ * boot.
+ */
+#ifndef WOLFBOOT_HASH_SHA256
+    #define WOLFBOOT_HASH_SHA256
+#endif
+
+#define IMAGE_HEADER_SIZE 256
+#define MOCK_ADDRESS_UPDATE 0xCC000000
+#define MOCK_ADDRESS_BOOT 0xCD000000
+#define MOCK_ADDRESS_SWAP 0xCE000000
+#define NO_FORK 1
+
+#include <check.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include "target.h"
+
+#define TEST_SIZE_SMALL 5300
+#define DIGEST_TLV_OFF_IN_HDR 28
+#define STAGE_ADDR_SENTINEL UINTPTR_MAX
+
+#include "user_settings.h"
+#include "wolfboot/wolfboot.h"
+
+#define wolfBoot_dualboot_candidate_addr wolfBoot_dualboot_candidate_addr_impl
+#include "libwolfboot.c"
+#undef wolfBoot_dualboot_candidate_addr
+
+static int dualboot_candidate_addr_calls;
+
+int wolfBoot_dualboot_candidate_addr(void** addr)
+{
+    dualboot_candidate_addr_calls++;
+    ck_assert_msg(dualboot_candidate_addr_calls == 1,
+        "wolfBoot_dualboot_candidate_addr() called %d times",
+        dualboot_candidate_addr_calls);
+    return wolfBoot_dualboot_candidate_addr_impl(addr);
+}
+
+#include "update_ram.c"
+#include "unit-mock-flash.c"
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/sha256.h>
+
+int wolfBoot_staged_ok = 0;
+const uint32_t *wolfBoot_stage_address =
+    (const uint32_t *)(uintptr_t)STAGE_ADDR_SENTINEL;
+
+void* hal_get_primary_address(void)
+{
+    return (void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+}
+
+void* hal_get_update_address(void)
+{
+    return (void *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+}
+
+void do_boot(const uint32_t *address)
+{
+    if (wolfBoot_panicked)
+        return;
+
+    wolfBoot_staged_ok++;
+    wolfBoot_stage_address = address;
+}
+
+static int mock_flash_protect_called = 0;
+static haladdr_t mock_flash_protect_addr = 0;
+static int mock_flash_protect_len = 0;
+
+int hal_flash_protect(haladdr_t address, int len)
+{
+    mock_flash_protect_called++;
+    mock_flash_protect_addr = address;
+    mock_flash_protect_len = len;
+    return 0;
+}
+
+static void reset_mock_stats(void)
+{
+    wolfBoot_panicked = 0;
+    wolfBoot_staged_ok = 0;
+    dualboot_candidate_addr_calls = 0;
+    mock_flash_protect_called = 0;
+    mock_flash_protect_addr = 0;
+    mock_flash_protect_len = 0;
+}
+
+static void prepare_flash(void)
+{
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-ext-file-nofixed-noramboot.bin",
+        (void *)(uintptr_t)MOCK_ADDRESS_UPDATE,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
+    ck_assert_int_ge(ret, 0);
+    ret = mmap_file("/tmp/wolfboot-unit-int-file-nofixed-noramboot.bin",
+        (void *)(uintptr_t)MOCK_ADDRESS_BOOT,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
+    ck_assert_int_ge(ret, 0);
+
+    ext_flash_unlock();
+    ext_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+    ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+    ext_flash_lock();
+}
+
+static void cleanup_flash(void)
+{
+    munmap((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+    munmap((void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+}
+
+static int add_payload(uint8_t part, uint32_t version, uint32_t size)
+{
+    uint32_t word;
+    uint16_t word16;
+    int i;
+    int ret;
+    uint8_t *base = (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    wc_Sha256 sha;
+    uint8_t digest[SHA256_DIGEST_SIZE];
+
+    ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
+    if (ret != 0)
+        return ret;
+
+    if (part == PART_UPDATE)
+        base = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS;
+    srandom(part);
+
+    ext_flash_unlock();
+    ext_flash_write((uintptr_t)base, "WOLF", 4);
+    ext_flash_write((uintptr_t)base + 4, (void *)&size, 4);
+
+    word = 4 << 16 | HDR_VERSION;
+    ext_flash_write((uintptr_t)base + 8, (void *)&word, 4);
+    ext_flash_write((uintptr_t)base + 12, (void *)&version, 4);
+
+    word = 2 << 16 | HDR_IMG_TYPE;
+    ext_flash_write((uintptr_t)base + 16, (void *)&word, 4);
+    word16 = HDR_IMG_TYPE_AUTH_NONE | HDR_IMG_TYPE_APP;
+    ext_flash_write((uintptr_t)base + 20, (void *)&word16, 2);
+
+    ret = wc_Sha256Update(&sha, base, DIGEST_TLV_OFF_IN_HDR);
+    if (ret != 0)
+        return ret;
+
+    size += IMAGE_HEADER_SIZE;
+    for (i = IMAGE_HEADER_SIZE; i < (int)size; i += 4) {
+        uint32_t rand_word = (random() << 16) | random();
+        ext_flash_write((uintptr_t)base + i, (void *)&rand_word, 4);
+    }
+    for (i = IMAGE_HEADER_SIZE; i < (int)size; i += WOLFBOOT_SHA_BLOCK_SIZE) {
+        int len = WOLFBOOT_SHA_BLOCK_SIZE;
+
+        if (((int)size - i) < len)
+            len = (int)size - i;
+        ret = wc_Sha256Update(&sha, base + i, len);
+        if (ret != 0)
+            return ret;
+    }
+
+    ret = wc_Sha256Final(&sha, digest);
+    if (ret != 0)
+        return ret;
+    wc_Sha256Free(&sha);
+
+    word = SHA256_DIGEST_SIZE << 16 | HDR_SHA256;
+    ext_flash_write((uintptr_t)base + DIGEST_TLV_OFF_IN_HDR, (void *)&word, 4);
+    ext_flash_write((uintptr_t)base + DIGEST_TLV_OFF_IN_HDR + 4, digest,
+        SHA256_DIGEST_SIZE);
+    ext_flash_lock();
+
+    return 0;
+}
+
+START_TEST(test_invalid_boot_falls_back_to_update)
+{
+    uint8_t bad_digest[SHA256_DIGEST_SIZE];
+
+    reset_mock_stats();
+    prepare_flash();
+    /* BOOT is the newer image but carries a corrupted digest: the
+     * candidate selection picks it first, and the fallback must boot
+     * the valid, older UPDATE image. */
+    ck_assert_int_eq(add_payload(PART_BOOT, 2, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL), 0);
+
+    memset(bad_digest, 0xBA, sizeof(bad_digest));
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4,
+        bad_digest, sizeof(bad_digest));
+    ext_flash_lock();
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(wolfBoot_staged_ok, 1);
+    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address,
+        (uintptr_t)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + IMAGE_HEADER_SIZE));
+#ifndef TZEN
+    ck_assert_int_eq(mock_flash_protect_called, 1);
+    ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
+        (uintptr_t)WOLFBOOT_ORIGIN);
+    ck_assert_int_eq(mock_flash_protect_len, BOOTLOADER_PARTITION_SIZE);
+#endif
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST(test_invalid_update_falls_back_to_boot)
+{
+    uint8_t bad_digest[SHA256_DIGEST_SIZE];
+
+    reset_mock_stats();
+    prepare_flash();
+    /* Mirror of the previous case: the newer UPDATE image is corrupt,
+     * the fallback must boot the valid, older BOOT image. */
+    ck_assert_int_eq(add_payload(PART_BOOT, 1, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL), 0);
+
+    memset(bad_digest, 0xBA, sizeof(bad_digest));
+    ext_flash_unlock();
+    ext_flash_write(WOLFBOOT_PARTITION_UPDATE_ADDRESS + DIGEST_TLV_OFF_IN_HDR + 4,
+        bad_digest, sizeof(bad_digest));
+    ext_flash_lock();
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(wolfBoot_staged_ok, 1);
+    ck_assert_uint_eq((uintptr_t)wolfBoot_stage_address,
+        (uintptr_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE));
+#ifndef TZEN
+    ck_assert_int_eq(mock_flash_protect_called, 1);
+    ck_assert_uint_eq((uintptr_t)mock_flash_protect_addr,
+        (uintptr_t)WOLFBOOT_ORIGIN);
+    ck_assert_int_eq(mock_flash_protect_len, BOOTLOADER_PARTITION_SIZE);
+#endif
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST(test_candidate_addr_equal_versions_prefers_boot)
+{
+    void *addr = NULL;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    ck_assert_int_eq(add_payload(PART_BOOT, 1, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 1, TEST_SIZE_SMALL), 0);
+
+    ret = wolfBoot_dualboot_candidate_addr_impl(&addr);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_ptr_eq(addr, hal_get_primary_address());
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST(test_candidate_addr_newer_update_prefers_update)
+{
+    void *addr = NULL;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    ck_assert_int_eq(add_payload(PART_BOOT, 1, TEST_SIZE_SMALL), 0);
+    ck_assert_int_eq(add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL), 0);
+
+    ret = wolfBoot_dualboot_candidate_addr_impl(&addr);
+
+    ck_assert_int_eq(ret, 1);
+    ck_assert_ptr_eq(addr, hal_get_update_address());
+    cleanup_flash();
+}
+END_TEST
+
+static Suite *wolfboot_suite(void)
+{
+    Suite *s = suite_create("wolfboot-update-ram-nofixed-noramboot");
+    TCase *tc = tcase_create("fallback");
+    TCase *tc_candidate = tcase_create("candidate_addr");
+
+    tcase_add_test(tc, test_invalid_boot_falls_back_to_update);
+    tcase_add_test(tc, test_invalid_update_falls_back_to_boot);
+    tcase_set_timeout(tc, 5);
+    suite_add_tcase(s, tc);
+
+    tcase_add_test(tc_candidate, test_candidate_addr_equal_versions_prefers_boot);
+    tcase_add_test(tc_candidate, test_candidate_addr_newer_update_prefers_update);
+    tcase_set_timeout(tc_candidate, 5);
+    suite_add_tcase(s, tc_candidate);
+
+    return s;
+}
+
+int main(int argc, char *argv[])
+{
+    int fails;
+    Suite *s;
+    SRunner *sr;
+
+    argv0 = strdup(argv[0]);
+    (void)argc;
+
+    s = wolfboot_suite();
+    sr = srunner_create(s);
+#if (NO_FORK == 1)
+    srunner_set_fork_status(sr, CK_NOFORK);
+#endif
+    srunner_run_all(sr, CK_NORMAL);
+    fails = srunner_ntests_failed(sr);
+    srunner_free(sr);
+    return fails;
+}
