@@ -65,7 +65,8 @@
 #   GEN_SBOM              Legacy alias for SBOM_GEN.
 #   SBOM_NO_ARTIFACT_HASH = 1   As-built FIPS/kernel: do not re-hash.
 #   SBOM_DEP_WOLFSSL      yes/no - record wolfSSL as a dependency.
-#   SBOM_DEP_WOLFCRYPT    yes/no - record wolfCrypt as a component (NVD CPE).
+#   SBOM_DEP_WOLFCRYPT    yes/no - record wolfCrypt as a nested component
+#                         (PURL; matching uses the wolfssl CPE).
 #   SBOM_DEP_OPENSSL      yes/no - record OpenSSL as a dependency.
 #   SBOM_CRYPTO_ONLY      auto/yes/no - whether only the wolfCrypt subset of
 #                         the wolfSSL release is compiled in. Default auto:

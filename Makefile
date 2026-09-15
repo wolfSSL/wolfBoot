@@ -1003,8 +1003,8 @@ SBOM_INCLUDE_DIRS:=$(WOLFBOOT_ROOT)/include $(WOLFBOOT_LIB_WOLFSSL)
 # user_settings.h includes the generated target.h, so it must exist before the
 # capture runs. It also carries the flash layout the SBOM records.
 SBOM_PREREQS:=include/target.h sbom-check-sources
-# Coat: wolfssl (TLS/library CPE) + wolfcrypt (crypto CPE). Sources remain in
-# the merkle hash; the components give scanners resolvable identifiers.
+# Coat: wolfssl (matching CPE) + nested wolfcrypt (PURL / provenance).
+# Sources remain in the merkle hash; the wolfssl CPE is what NVD matches.
 SBOM_DEP_WOLFSSL?=yes
 SBOM_DEP_WOLFCRYPT?=yes
 SBOM_WOLFSSL_VERSION?=$(shell sed -n \
