@@ -95,6 +95,32 @@ The current wolfBoot integration builds the secure fwTPM service with
 NV storage, provide a flash-backed `FWTPM_NV_HAL` implementation and remove
 `FWTPM_NO_NV` from the fwTPM build flags.
 
+### Secure RAM footprint
+
+The secure image keeps one `FWTPM_CTX` in `.bss`, and wolfTPM 4.2.0 grew it to
+about 93 KB with the library defaults. The STM32H5 secure RAM region is 128 KB
+and the stack grows down from the top of it, so the default context left under
+12 KB for the stack. Deep call chains then overran the tail of the context,
+where the auth session slots live, and `StartAuthSession` failed with
+`TPM_RC_SESSION_HANDLES` on a fresh TPM.
+
+The build trims the NV index slots, which are dead weight under `FWTPM_NO_NV`:
+
+| Flag | wolfTPM default | wolfBoot fwTPM build |
+| ---- | --------------- | -------------------- |
+| `FWTPM_MAX_NV_INDICES` | 16 | 2 |
+| `FWTPM_MAX_NV_DATA` | 2048 | 512 |
+
+That brings the context to about 60 KB and leaves roughly 45 KB of stack.
+`hal/stm32h5.ld` also reserves `_min_stack` (32 KB) below the top of RAM and
+asserts at link time that `.bss` does not encroach on it, so an oversized
+context fails the build instead of corrupting memory at run time.
+
+If you re-enable persistent NV, raise `FWTPM_MAX_NV_INDICES` and
+`FWTPM_MAX_NV_DATA` to what the deployment needs and re-check the link assert.
+The other `FWTPM_MAX_*` limits in `wolftpm/fwtpm/fwtpm.h` are `#ifndef`-guarded
+and can be tuned the same way on the compile line.
+
 `WOLFCRYPT_TZ_FWTPM` is mutually exclusive with `WOLFCRYPT_TZ_PKCS11` and
 `WOLFCRYPT_TZ_PSA` because each option selects a different TrustZone secure
 service surface for the test application.
