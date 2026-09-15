@@ -41,6 +41,10 @@ CFLAGS+=-ftest-coverage
 CFLAGS+=--coverage
 CFLAGS+=-DUNIT_TEST_COVERAGE
 CFLAGS+=-DUNIT_TEST -DWOLFSSL_USER_SETTINGS
+# Pin the standard: GCC 14+ defaults to gnu23, where glibc string.h defines
+# memchr/memcpy as _Generic macros that clash with wolfBoot's own declarations
+# in tests that #include a .c file. gnu17 matches the CI toolchain default.
+CFLAGS+=-std=gnu17
 LDFLAGS+=-fprofile-arcs
 LDFLAGS+=-ftest-coverage
 
