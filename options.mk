@@ -1269,6 +1269,10 @@ ifeq ($(WOLFCRYPT_TZ_FWTPM),1)
   CFLAGS+=-DWC_RSA_PSS
   CFLAGS+=-DWOLFSSL_PSS_SALT_LEN_DISCOVER
   CFLAGS+=-DFWTPM_MAX_COMMAND_SIZE=4096
+  # NV is disabled here; the default 16x2KB NV index slots are dead weight that
+  # pushes the fwTPM context into the secure stack on the 128KB STM32H5 RAM.
+  CFLAGS+=-DFWTPM_MAX_NV_INDICES=2
+  CFLAGS+=-DFWTPM_MAX_NV_DATA=512
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
   ifeq ($(USE_CLANG),1)
     CLANG_MULTILIB_FLAGS:=$(filter -mthumb -mlittle-endian,$(LDFLAGS)) $(filter -mcpu=%,$(CFLAGS))
