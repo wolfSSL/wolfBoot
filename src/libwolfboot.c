@@ -692,7 +692,6 @@ static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
  *
  * @param[in] pos Update sector position.
  * @param[in] val New flags value to set.
- * @return 0 on success, -1 on failure.
  */
 static void RAMFUNCTION set_update_sector_flags(uint32_t pos, uint8_t val)
 {
