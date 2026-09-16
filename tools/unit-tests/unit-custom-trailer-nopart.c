@@ -125,5 +125,5 @@ int main(int argc, char *argv[])
     srunner_free(sr);
     (void)argc;
     (void)argv;
-    return (failed == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return (failed == 0) ? 0 : 1;
 }
