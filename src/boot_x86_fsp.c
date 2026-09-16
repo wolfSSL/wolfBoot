@@ -533,7 +533,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     struct stage2_ptr_holder stage2_holder;
     struct stage2_parameter temp_params;
     uint8_t *fsp_m_base, done = 0;
-    struct efi_hob *hobList, *it;
+    /* FspMemInit writes hobList only on EFI_SUCCESS; init so the reset-required
+     * and error paths never carry a stale pointer. */
+    struct efi_hob *hobList = NULL, *it;
     memory_init_cb MemoryInit;
     uint64_t top_address = MEMORY_4GB;
     uint32_t new_stack;
