@@ -173,7 +173,7 @@ static void mpu_init(void)
     mpu_setattr(6, MPUSIZE_1G | MPU_RASR_ENABLE | MPU_RASR_ATTR_S |
         MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
 
-    /* System control 0xE0000000:0xEFFFFFF */
+    /* System control 0xE0000000:0xEFFFFFFF (256M) */
     mpu_setaddr(7, 0xE0000000);
     mpu_setattr(7, MPUSIZE_256M | MPU_RASR_ENABLE | MPU_RASR_ATTR_S |
         MPU_RASR_ATTR_B | MPU_RASR_ATTR_AP_PRW_UNO | MPU_RASR_ATTR_XN);
