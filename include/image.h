@@ -133,10 +133,10 @@ extern "C" {
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_tpm
 #endif
 
-/* Validate sector size is larger than image header size */
+/* Validate sector size is at least as large as the image header size */
 #if defined(WOLFBOOT_SECTOR_SIZE) && defined(IMAGE_HEADER_SIZE) && \
     (WOLFBOOT_SECTOR_SIZE < IMAGE_HEADER_SIZE)
-#error WOLFBOOT_SECTOR_SIZE must be larger than IMAGE_HEADER_SIZE
+#error WOLFBOOT_SECTOR_SIZE must be at least as large as IMAGE_HEADER_SIZE
 #endif
 
 
