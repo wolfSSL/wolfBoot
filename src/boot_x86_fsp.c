@@ -147,11 +147,10 @@ static int get_top_address(uint64_t *top, struct efi_hob *hoblist)
  * \brief Change the stack and invoke a function with the new stack.
  *
  * This function changes the stack to the specified 'new_stack' value and then
- * calls the function pointed to by 'other_func', passing the 'ptr' parameter as an argument.
+ * calls the function pointed to by 'other_func'.
  *
  * \param new_stack The new stack address.
  * \param other_func Pointer to the function to be invoked with the new stack.
- * \param ptr Pointer to the parameter to be passed to the invoked function.
  */
 static void change_stack_and_invoke(uint32_t new_stack,
                                     void (*other_func)(void))
