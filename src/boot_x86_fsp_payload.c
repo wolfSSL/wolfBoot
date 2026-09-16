@@ -105,7 +105,8 @@ void do_boot(const uint32_t *app)
     stage2_params = stage2_get_parameters();
 #if defined(WOLFBOOT_LINUX_PAYLOAD)
     mptable_setup();
-    load_linux((uint8_t *)app, stage2_params, cmdline);
+    load_linux((uint8_t *)app, stage2_params->payload_size, stage2_params,
+               cmdline);
 #elif defined(WOLFBOOT_ELF)
     int r;
     uint64_t e;
