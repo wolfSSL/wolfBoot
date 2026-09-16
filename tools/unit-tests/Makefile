@@ -66,7 +66,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
-       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
@@ -359,6 +359,16 @@ unit-update-ram-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
 	-DWOLFBOOT_FIXED_PARTITIONS \
 	-DCUSTOM_PARTITION_TRAILER \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# CUSTOM_PARTITION_TRAILER + WOLFBOOT_NO_PARTITIONS: no WOLFBOOT_FIXED_PARTITIONS,
+# so wolfboot_magic_trail and the fixed partition addresses are excluded from
+# libwolfboot.c. Proves the partition state API compiles and works through the
+# custom get/set_trailer_at backend without fixed partitions (F-1130279967).
+unit-custom-trailer-nopart:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DWOLFBOOT_NO_PARTITIONS \
+	-DCUSTOM_PARTITION_TRAILER \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
 	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Bound the non-FSP disk load to this test's 64-byte load_buffer (TEST_PAYLOAD_SIZE),
@@ -945,6 +955,9 @@ unit-update-ram-noramboot: ../../include/target.h unit-update-ram-noramboot.c
 
 unit-update-ram-custom-trailer: ../../include/target.h unit-update-ram-custom-trailer.c
 	gcc -o $@ unit-update-ram-custom-trailer.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-custom-trailer-nopart: ../../include/target.h unit-custom-trailer-nopart.c
+	gcc -o $@ unit-custom-trailer-nopart.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-hwswap: ../../include/target.h unit-update-flash-hwswap.c
 	gcc -o $@ unit-update-flash-hwswap.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)

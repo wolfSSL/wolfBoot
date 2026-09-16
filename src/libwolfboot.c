@@ -685,6 +685,11 @@ static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
     set_trailer_at(part, 1, val);
 }
 
+/* Update-sector flag helpers and the fixed-partition APIs below need the
+ * fixed partition addresses and wolfboot_magic_trail, which a
+ * CUSTOM_PARTITION_TRAILER / WOLFBOOT_NO_PARTITIONS build does not define.
+ * The partition state APIs above stay available to custom-trailer builds. */
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Set the flags of an update sector.
  *
@@ -710,6 +715,7 @@ static uint8_t* RAMFUNCTION get_update_sector_flags(uint32_t pos)
 {
     return (uint8_t *)get_trailer_at(PART_UPDATE, 2 + pos);
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**
  * @brief Set the state of a partition.
@@ -735,6 +741,7 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Set the flag for sector
  *
@@ -765,6 +772,7 @@ int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector,
         set_update_sector_flags(pos, fl_value);
     return 0;
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**
  * @brief Get the state of a partition.
@@ -789,6 +797,7 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Get the flag for sector
  *
@@ -956,6 +965,7 @@ void RAMFUNCTION wolfBoot_success(void)
     wolfBoot_erase_encrypt_key();
 #endif
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 #ifdef __CCRX__
 #pragma section
 #endif
