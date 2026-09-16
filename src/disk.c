@@ -117,7 +117,8 @@ static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
  * @param[in] drv The drive number to open (0 to `MAX_DISKS - 1`).
  *
  * @return The number of partitions found and initialized on success, or -1 if
- * the drive cannot be opened or no valid GPT partition table is found.
+ * the drive cannot be opened or no valid partition table (GPT or MBR) is
+ * found.
  */
 int disk_open(int drv)
 {
