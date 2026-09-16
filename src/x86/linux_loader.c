@@ -18,7 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
  *
- * Linux x86 32bit protocol implementation
+ * Linux x86 boot protocol implementation (32-bit and 64-bit entry)
  */
 
 #include <loader.h>
@@ -27,6 +27,9 @@
 #include <printf.h>
 
 #include <x86/linux_loader.h>
+#ifdef WOLFBOOT_64BIT
+#include <x86/paging.h>
+#endif
 
 #ifdef WOLFBOOT_FSP
 #include <x86/hob.h>
@@ -35,22 +38,32 @@
 
 #define ENDLINE "\r\n"
 
-#ifdef WOLFBOOT_64BIT
-#error "Linux loader 64bit is not supported"
-#endif
-static void jump_to_linux(uint32_t kernel_addr, struct boot_params *p)
-{
-    (void)kernel_addr;
-    (void)p;
+/* XLF_KERNEL_64: the kernel has a 64-bit entry point (boot protocol >= 2.12,
+ * xloadflags bit 0). Without it a 64-bit loader has nothing to jump to. */
+#define XLF_KERNEL_64 (1u << 0)
 
-#if !defined(WOLFBOOT_64BIT)
+static void jump_to_linux(uint64_t kernel_addr, struct boot_params *p)
+{
+#if defined(WOLFBOOT_64BIT)
+    /* 64-bit boot protocol: in long mode already, so pass the zero page in RSI,
+     * clear RDI as the protocol requires, and jump to the 64-bit entry (0x200
+     * past the loaded kernel), interrupts off. The kernel sets up its own GDT
+     * and stack. */
+    __asm__ __volatile__("cli\n\t"
+                         "movq %0, %%rsi\n\t"
+                         "xorl %%edi, %%edi\n\t"
+                         "jmp *%1"
+                         :
+                         : "r"(p), "r"(kernel_addr)
+                         : "rsi", "rdi", "memory");
+#else
     __asm__ __volatile__("movl %0, %%esi\n\t"
                          "xorl %%ebp, %%ebp\n\t"
                          "xorl %%edi, %%edi\n\t"
                          "xorl %%ebx, %%ebx\n\t"
                          "jmp *%1"
                          :
-                         : "r"(p), "r"(kernel_addr)
+                         : "r"((uint32_t)p), "r"((uint32_t)kernel_addr)
                          : "esi", "edi", "ebx");
 #endif /* WOLFBOOT_64BIT */
 }
@@ -145,8 +158,11 @@ void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
     uint8_t *image_boot_param;
     uint16_t end_of_header_off;
     uint8_t *_cmd_line;
-    (void)cmd_line;
     int ret;
+#if defined(WOLFBOOT_64BIT)
+    uint32_t map_size;
+#endif
+    (void)cmd_line;
 
     wolfBoot_printf("linux payload" ENDLINE);
 
@@ -185,6 +201,30 @@ void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
     memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, linux_image + param_size,
            kernel_size);
 
+#if defined(WOLFBOOT_64BIT)
+    /* A 64-bit build needs the kernel's 64-bit entry point. */
+    if ((param.hdr.xloadflags & XLF_KERNEL_64) == 0) {
+        wolfBoot_printf("kernel has no 64-bit entry (xloadflags 0x%x)" ENDLINE,
+                        param.hdr.xloadflags);
+        wolfBoot_panic();
+    }
+
+    /* Identity-map the load region (init_size bytes of scratch), the command
+     * line and the zero page; the kernel cannot fault these in itself. */
+    map_size = param.hdr.init_size;
+    if (kernel_size > map_size) {
+        map_size = kernel_size;
+    }
+    x86_paging_map_memory(KERNEL_LOAD_ADDRESS, KERNEL_LOAD_ADDRESS, map_size);
+    x86_paging_map_memory(KERNEL_CMDLINE_ADDRESS, KERNEL_CMDLINE_ADDRESS, 0x1000);
+    x86_paging_map_memory((uint64_t)(uintptr_t)&param,
+                          (uint64_t)(uintptr_t)&param, sizeof(param));
+
+    /* 64-bit entry point: 0x200 past the loaded protected-mode kernel. */
+    wolfBoot_printf("booting (64-bit entry)..." ENDLINE);
+    jump_to_linux((uint64_t)KERNEL_LOAD_ADDRESS + 0x200, &param);
+#else
     wolfBoot_printf("booting..." ENDLINE);
     jump_to_linux(param.hdr.code32_start, &param);
+#endif
 }
