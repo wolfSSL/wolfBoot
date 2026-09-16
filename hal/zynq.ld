@@ -19,6 +19,11 @@ MEMORY
     *   Must match WOLFBOOT_ORIGIN in the target .config.
     */
    psu_ddr_0_MEM_0 : ORIGIN = 0x8000000, LENGTH = 0x200000
+   /* Non-cacheable DDR for bus-master DMA. Its own 2MB-aligned block: 2MB
+    * is the smallest granule the translation table can re-attribute, and it
+    * must stay clear of .text so the image hash is not run uncached.
+    * NOLOAD, so an unused region costs nothing. */
+   psu_ddr_dma_MEM_0 : ORIGIN = @WOLFBOOT_DMA_BUFFER_ADDRESS@, LENGTH = 0x200000
    psu_ddr_1_MEM_0 : ORIGIN = 0x800000000, LENGTH = 0x80000000
    psu_ocm_ram_0_MEM_0 : ORIGIN = 0xFFFC0000, LENGTH = 0x40000
    psu_qspi_linear_0_MEM_0 : ORIGIN = 0xC0000000, LENGTH = 0x20000000
@@ -292,6 +297,24 @@ SECTIONS
 _SDA_BASE_ = __sdata_start + ((__sbss_end - __sdata_start) / 2 );
 
 _SDA2_BASE_ = __sdata2_start + ((__sbss2_end - __sdata2_start) / 2 );
+
+/* Its own MEMORY region so hal_dma_set_noncached() can mark the enclosing
+ * 2MB block Normal-NC without touching wolfBoot's code or data. */
+.dma_buffers (NOLOAD) : {
+   . = ALIGN(64);
+   _dma_buffers_start = .;
+   *(.dma_buffers)
+   *(.dma_buffers.*)
+   . = ALIGN(64);
+   _dma_buffers_end = .;
+} > psu_ddr_dma_MEM_0
+
+/* hal_dma_set_noncached() rounds the range outward to the enclosing 2MB
+ * block and re-attributes the whole block. A misaligned override would put
+ * the region in wolfBoot's own block, and the break-before-make step would
+ * unmap live code. Fail the build instead. */
+ASSERT((_dma_buffers_start & 0x1FFFFF) == 0,
+   "WOLFBOOT_DMA_BUFFER_ADDRESS must be 2MB aligned")
 
 /* Generate Stack and Heap definitions */
 
