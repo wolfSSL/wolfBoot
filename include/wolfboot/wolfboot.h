@@ -665,10 +665,8 @@ extern "C" {
     #include "image.h"
 #endif
 
-#ifdef WOLFBOOT_FIXED_PARTITIONS
 void wolfBoot_update_trigger(void);
 void wolfBoot_success(void);
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
 uint32_t wolfBoot_image_size(uint8_t *image);
 uint32_t wolfBoot_get_blob_version(uint8_t *blob);
 uint16_t wolfBoot_get_blob_type(uint8_t *blob);

@@ -941,6 +941,8 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     }
 }
 
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+
 /**
  * @brief Success function.
  *
@@ -965,7 +967,6 @@ void RAMFUNCTION wolfBoot_success(void)
     wolfBoot_erase_encrypt_key();
 #endif
 }
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
 #ifdef __CCRX__
 #pragma section
 #endif

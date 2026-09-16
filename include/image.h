@@ -1732,10 +1732,8 @@ int wolfBoot_open_self_address(struct wolfBoot_image *img, uint8_t *hdr,
 int wolfBoot_verify_integrity(struct wolfBoot_image *img);
 int wolfBoot_verify_authenticity(struct wolfBoot_image *img);
 int wolfBoot_set_partition_state(uint8_t part, uint8_t newst);
-#ifdef WOLFBOOT_FIXED_PARTITIONS
 int wolfBoot_get_update_sector_flag(uint16_t sector, uint8_t *flag);
 int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
 /* Support for ELF scatter/gather format */
