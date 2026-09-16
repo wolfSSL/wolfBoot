@@ -2959,7 +2959,8 @@ typedef char wolfBoot_ramboot_blockalign_check[
 /**
  * @brief Decrypt data from RAM.
  *
- * This function decrypts data from the RAM using the AES decryption algorithm.
+ * This function decrypts data from the RAM using the configured decryption
+ * algorithm (ChaCha20, AES-CTR, or PKCS#11).
  *
  * @param src Pointer to the source buffer containing the encrypted data.
  * @param dst Pointer to the destination buffer to store the decrypted data.
