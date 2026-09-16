@@ -78,8 +78,7 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 /* offset of the header from the base image  */
 #define FSP_INFO_HEADER_OFFSET 0x94
 #define EFI_SUCCESS 0x0
-#define FSP_STATUS_RESET_REQUIRED_COLD  0x40000001
-#define FSP_STATUS_RESET_REQUIRED_WARM  0x40000002
+/* FSP_STATUS_RESET_REQUIRED_* are defined in x86/fsp.h */
 #define MEMORY_4GB (4ULL * 1024 * 1024 * 1024)
 #define ENDLINE "\r\n"
 /* Standard PCI capabilities live in conventional config space at 0x40-0xFC,
