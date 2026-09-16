@@ -865,8 +865,8 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 /**
  * @brief Update trigger function.
  *
- * This function updates the boot partition state to "IMG_STATE_UPDATING".
- * If the FLAGS_HOME macro is defined, it erases the last sector of the boot
+ * This function sets the update partition state to "IMG_STATE_UPDATING".
+ * If the FLAGS_HOME macro is defined, it erases the last sector of the update
  * partition before updating the partition state. It also checks FLAGS_UPDATE_EXT
  * and calls the appropriate flash unlock and lock functions before
  * updating the partition state.
