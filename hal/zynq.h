@@ -689,6 +689,37 @@
 #define CRL_APB_DBG_LPD_CTRL (CRL_APB_BASE + 0x00B0U)
 #define CRL_APB_RST_LPD_DBG  (CRL_APB_BASE + 0x0240U)
 
+#ifndef __ASSEMBLER__
+#include <stdint.h>
+#include <stddef.h>
 
+/* 2MB: the smallest granule this translation table can re-attribute. */
+#define ZYNQMP_L2_BLOCK_SHIFT 21
+/* Four contiguous 512-entry tables covering 0x0-0xFFFFFFFF. */
+#define ZYNQMP_L2_ENTRIES     2048
+
+/* [start,end) to the inclusive 2MB block indices covering it. Split out so
+ * it can be unit tested: these indices decide which physical blocks get
+ * re-attributed. Returns 0, or -1 for an empty range or one past 4GB. */
+static inline int zynqmp_l2_block_range(uint64_t start, uint64_t end,
+    uint64_t* first, uint64_t* last)
+{
+    uint64_t f, l;
+
+    if (end <= start || first == NULL || last == NULL) {
+        return -1;
+    }
+    f = start >> ZYNQMP_L2_BLOCK_SHIFT;
+    l = (end - 1) >> ZYNQMP_L2_BLOCK_SHIFT;
+    if (l >= ZYNQMP_L2_ENTRIES) {
+        return -1;
+    }
+    /* Only on success, so a caller that ignores the return does not act on
+     * half-written indices. */
+    *first = f;
+    *last = l;
+    return 0;
+}
+#endif /* !__ASSEMBLER__ */
 
 #endif /* _ZYNQMP_H_ */
