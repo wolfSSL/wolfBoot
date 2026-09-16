@@ -134,7 +134,7 @@ static void spi_push_tx(unsigned int sel, unsigned int pcs, unsigned char data,
             | SPI_PUSHR_PCS(pcs) | data;
 }
 
-/* Perform a SPI transaction.  Set cont!=0 to not let CS go low after this*/
+/* Perform a SPI transaction.  Set cont!=0 to keep CS low (asserted) after this */
 static void spi_transaction(unsigned int sel, unsigned int pcs,
         const unsigned char *out, unsigned char *in, unsigned int size,
         int cont)
