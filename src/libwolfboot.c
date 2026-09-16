@@ -657,7 +657,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 
 
 
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -959,7 +959,7 @@ void RAMFUNCTION wolfBoot_success(void)
 #ifdef __CCRX__
 #pragma section
 #endif
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
+#endif /* HAVE_PARTITION_TRAILERS */
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
 /* Persistent failure diagnostics.

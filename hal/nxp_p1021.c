@@ -336,11 +336,11 @@ enum elbc_amask_sizes {
 
 #define NAND_CMD_READSTART    0x30 /* Extended command for large page devices */
 
-/* NAND device status byte (JEDEC), returned in MDR by the RS/RSW ops:
- * DQ0 clear = program/erase failed, DQ1 clear = write protected. A good
- * status has both bits set. */
-#define NAND_STATUS_FAIL      (1 << 0) /* DQ0: 0 = program/erase fail */
-#define NAND_STATUS_WPS       (1 << 1) /* DQ1: 0 = write protected */
+/* NAND device status byte (ONFI): bit 0 set = program/erase failed,
+ * bit 7 clear = write protected. Success requires bit 0 clear and
+ * bit 7 set. */
+#define NAND_STATUS_FAIL      (1 << 0) /* DQ0: 1 = program/erase fail */
+#define NAND_STATUS_WP_N      (1 << 7) /* DQ7: 0 = write protected */
 
 
 /* DDR */
@@ -1711,11 +1711,10 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
 #endif
-        /* DQ0 clear = program failed, DQ1 clear = write protected: the
+        /* DQ0 set = program failed, DQ7 clear = write protected: the
          * page did not program. Stop; retrying the same page fails the
          * same way. */
-        if ((status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) !=
-            (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
+        if ((status & NAND_STATUS_FAIL) || !(status & NAND_STATUS_WP_N)) {
             ret = -1;
             break;
         }
@@ -1879,10 +1878,9 @@ int ext_flash_erase(uintptr_t address, int len)
 #ifdef DEBUG_EXT_FLASH
         wolfBoot_printf("erase page %d, status %x\n", page, status);
 #endif
-        /* DQ0 clear = erase failed, DQ1 clear = write protected: the block
+        /* DQ0 set = erase failed, DQ7 clear = write protected: the block
          * did not erase. Stop; erasing the same block fails the same way. */
-        if ((status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) !=
-            (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
+        if ((status & NAND_STATUS_FAIL) || !(status & NAND_STATUS_WP_N)) {
             ret = -1;
             break;
         }

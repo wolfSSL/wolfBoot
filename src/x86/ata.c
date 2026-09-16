@@ -532,9 +532,12 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     } else if (ret == ATA_ERR_BUSY) {
         /* Command is in flight: scrub once the HBA retires it. */
         ata_async_info.scrub_buffer = 1;
+    } else if (ata_async_info.in_progress) {
+        /* Another async op is in progress: the buffer is still owned
+         * by its in-flight DMA transfer. Do not zeroize. */
     } else {
-        /* Command never started (another async op in progress): the
-         * buffer is not referenced by any in-flight transfer. */
+        /* Command failed to start and no async op is in progress:
+         * the buffer is not referenced by any in-flight transfer. */
         ata_security_buffer_zeroize();
     }
     return ret;

@@ -134,10 +134,19 @@ static void prepare_flash(void)
 
 static void cleanup_flash(void)
 {
+    char ext_path[64];
+    char int_path[64];
+
     munmap((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
     munmap((void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+    snprintf(ext_path, sizeof(ext_path),
+        "/tmp/wolfboot-unit-ext-file-nofixed-noramboot-%d.bin", (int)getpid());
+    snprintf(int_path, sizeof(int_path),
+        "/tmp/wolfboot-unit-int-file-nofixed-noramboot-%d.bin", (int)getpid());
+    unlink(ext_path);
+    unlink(int_path);
 }
 
 static int add_payload(uint8_t part, uint32_t version, uint32_t size)

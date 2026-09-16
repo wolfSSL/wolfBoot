@@ -47,10 +47,11 @@ static int g_cmd_calls;
 static int g_cmd_ret;
 static uint32_t g_status;
 
-/* JEDEC status byte: DQ0 set = program/erase ok, DQ1 set = not protected.
- * 0x03 is a clean success; 0x02 is an erase/program failure (DQ0 clear). */
-#define STATUS_OK      0x03
-#define STATUS_ERASE_FAIL 0x02
+/* ONFI status byte: DQ0 set = program/erase fail, DQ7 clear = protected.
+ * 0x80 is a clean success (no fail, not protected); 0x81 is an
+ * erase/program failure (DQ0 set). */
+#define STATUS_OK      0x80
+#define STATUS_ERASE_FAIL 0x81
 
 static void mock_reset(int cmd_ret, uint32_t status)
 {

@@ -130,6 +130,8 @@ static void reset_mock_stats(void)
     mock_flash_protect_called = 0;
     mock_flash_protect_addr = 0;
     mock_flash_protect_len = 0;
+    mock_max_read_addr = 0;
+    mock_max_read_len = 0;
     memset(mock_trailer_boot, 0, sizeof(mock_trailer_boot));
     memset(mock_trailer_update, 0, sizeof(mock_trailer_update));
 }
@@ -137,12 +139,19 @@ static void reset_mock_stats(void)
 static void prepare_flash(void)
 {
     int ret;
+    char ext_path[64];
+    char int_path[64];
 
-    ret = mmap_file("/tmp/wolfboot-unit-ext-file-custom-trailer.bin",
+    snprintf(ext_path, sizeof(ext_path),
+        "/tmp/wolfboot-unit-ext-file-custom-trailer-%d.bin", (int)getpid());
+    snprintf(int_path, sizeof(int_path),
+        "/tmp/wolfboot-unit-int-file-custom-trailer-%d.bin", (int)getpid());
+
+    ret = mmap_file(ext_path,
         (void *)(uintptr_t)MOCK_ADDRESS_UPDATE,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
     ck_assert_int_ge(ret, 0);
-    ret = mmap_file("/tmp/wolfboot-unit-int-file-custom-trailer.bin",
+    ret = mmap_file(int_path,
         (void *)(uintptr_t)MOCK_ADDRESS_BOOT,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
     ck_assert_int_ge(ret, 0);
@@ -157,10 +166,19 @@ static void prepare_flash(void)
 
 static void cleanup_flash(void)
 {
+    char ext_path[64];
+    char int_path[64];
+
     munmap((void *)WOLFBOOT_PARTITION_BOOT_ADDRESS,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
     munmap((void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE);
+    snprintf(ext_path, sizeof(ext_path),
+        "/tmp/wolfboot-unit-ext-file-custom-trailer-%d.bin", (int)getpid());
+    snprintf(int_path, sizeof(int_path),
+        "/tmp/wolfboot-unit-int-file-custom-trailer-%d.bin", (int)getpid());
+    unlink(ext_path);
+    unlink(int_path);
 }
 
 static int add_payload(uint8_t part, uint32_t version, uint32_t size)
@@ -271,9 +289,12 @@ START_TEST(test_custom_trailer_invalid_update_falls_back_to_boot)
 
     wolfBoot_start();
 
-    /* Falls back to boot partition (version 1) */
+    /* Falls back to boot partition (version 1): the image loaded to RAM
+     * must come from the BOOT partition payload, not the corrupted UPDATE. */
     ck_assert_int_eq(wolfBoot_staged_ok, 1);
     ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_uint_eq(mock_max_read_addr,
+        (uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS);
 
     cleanup_flash();
 }

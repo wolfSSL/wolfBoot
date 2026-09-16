@@ -1349,7 +1349,7 @@ p1021_erase_extract.h: ../../hal/nxp_p1021.c
 	sed -n '/#define NAND_CMD_BLOCK_ERASE1 /p' $< >> $@
 	sed -n '/#define NAND_CMD_BLOCK_ERASE2 /p' $< >> $@
 	sed -n '/#define FLASH_PAGE_SIZE /p' $< >> $@
-	sed -n '/#define NAND_STATUS_WPS /p' $< >> $@
+	sed -n '/#define NAND_STATUS_WP_N /p' $< >> $@
 	sed -n '/#define NAND_STATUS_FAIL /p' $< >> $@
 
 p1021_erase_fn_extract.h: ../../hal/nxp_p1021.c
