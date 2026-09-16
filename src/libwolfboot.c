@@ -2835,8 +2835,8 @@ exit:
  * @brief Read and decrypt data from an external flash.
  *
  * This function reads the encrypted data from the external flash,
- * decrypts it using the AES decryption algorithm, and stores the decrypted data
- * in the provided buffer.
+ * decrypts it using the configured decryption algorithm (ChaCha20, AES-CTR,
+ * or PKCS#11), and stores the decrypted data in the provided buffer.
 
  * @param address The address in the external flash to read the encrypted data from.
  * @param data Pointer to the buffer to store the decrypted data.
