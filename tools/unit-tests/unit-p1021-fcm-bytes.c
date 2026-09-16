@@ -220,6 +220,8 @@ static void setup(void)
     flash_idx = 0;
     g_fbcr_n = 0;
     set32(ELBC_LTESR, ELBC_LTESR_CC); /* FCM commands complete instantly */
+    /* MDR: DQ0+DQ1 set = program/erase success, not write-protected */
+    set32(ELBC_MDR, 0x03);
 }
 
 static void teardown(void)

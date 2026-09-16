@@ -336,9 +336,11 @@ enum elbc_amask_sizes {
 
 #define NAND_CMD_READSTART    0x30 /* Extended command for large page devices */
 
-/* NAND device status byte (JEDEC), returned in MDR by the RS/RSW ops */
-#define NAND_STATUS_WPS       (1 << 1) /* write protect status */
-#define NAND_STATUS_FAIL      (1 << 3) /* P: program/erase fail */
+/* NAND device status byte (JEDEC), returned in MDR by the RS/RSW ops:
+ * DQ0 clear = program/erase failed, DQ1 clear = write protected. A good
+ * status has both bits set. */
+#define NAND_STATUS_FAIL      (1 << 0) /* DQ0: 0 = program/erase fail */
+#define NAND_STATUS_WPS       (1 << 1) /* DQ1: 0 = write protected */
 
 
 /* DDR */
@@ -1709,9 +1711,11 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
 #endif
-        /* P (program fail) or WPS (write protect) set: the page did not
-         * program. Stop; retrying the same page fails the same way. */
-        if (status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
+        /* DQ0 clear = program failed, DQ1 clear = write protected: the
+         * page did not program. Stop; retrying the same page fails the
+         * same way. */
+        if ((status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) !=
+            (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
             ret = -1;
             break;
         }
@@ -1875,9 +1879,10 @@ int ext_flash_erase(uintptr_t address, int len)
 #ifdef DEBUG_EXT_FLASH
         wolfBoot_printf("erase page %d, status %x\n", page, status);
 #endif
-        /* P (erase fail) or WPS (write protect) set: the block did not
-         * erase. Stop; erasing the same block fails the same way. */
-        if (status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
+        /* DQ0 clear = erase failed, DQ1 clear = write protected: the block
+         * did not erase. Stop; erasing the same block fails the same way. */
+        if ((status & (NAND_STATUS_FAIL | NAND_STATUS_WPS)) !=
+            (NAND_STATUS_FAIL | NAND_STATUS_WPS)) {
             ret = -1;
             break;
         }

@@ -81,6 +81,8 @@ static void reset_mock_stats(void)
 {
     wolfBoot_panicked = 0;
     wolfBoot_staged_ok = 0;
+    mock_max_read_addr = 0;
+    mock_max_read_len = 0;
 }
 
 static void prepare_flash(void)
@@ -212,9 +214,13 @@ START_TEST (test_noramboot_fallback_to_lower_version) {
     wolfBoot_start();
 
     /* A failed high-version boot image must not block fallback to the
-     * valid lower-version update image (F-12922). */
+     * valid lower-version update image (F-12922). The image loaded to RAM
+     * must come from the UPDATE partition payload, not the oversize BOOT
+     * partition. */
     ck_assert(wolfBoot_staged_ok);
     ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_uint_eq(mock_max_read_addr,
+        (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS + IMAGE_HEADER_SIZE);
     cleanup_flash();
 }
 END_TEST
