@@ -1097,7 +1097,7 @@ static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
  * it to every later get_header() call. Call this before opening a
  * different image so TLV lookups do not read the stale header.
  */
-void wolfBoot_invalidate_hdr_cache(void)
+void RAMFUNCTION wolfBoot_invalidate_hdr_cache(void)
 {
     hdr_cpy_done = 0;
 }
