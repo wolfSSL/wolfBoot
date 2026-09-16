@@ -497,7 +497,14 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     struct ata_drive *ata = &ATA_Drv[drv];
     size_t passphrase_len = 0;
     int ret;
-    int slot = prepare_cmd_h2d_slot(drv, buffer,
+    int slot;
+
+    /* A second security command must not touch the shared buffer while
+     * an async transfer is in flight: prepare_cmd_h2d_slot() and the
+     * memcpy below would clobber the passphrase still being DMA'd. */
+    if (ata_async_info.in_progress)
+        return ATA_ERR_OP_IN_PROGRESS;
+    slot = prepare_cmd_h2d_slot(drv, buffer,
             ATA_SECURITY_COMMAND_LEN, 1);
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
     if (master)
@@ -529,16 +536,9 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
      * the HBA and could corrupt the command still in progress. */
     if (!async) {
         ata_security_buffer_zeroize();
-    } else if (ret == ATA_ERR_BUSY) {
+    } else {
         /* Command is in flight: scrub once the HBA retires it. */
         ata_async_info.scrub_buffer = 1;
-    } else if (ata_async_info.in_progress) {
-        /* Another async op is in progress: the buffer is still owned
-         * by its in-flight DMA transfer. Do not zeroize. */
-    } else {
-        /* Command failed to start and no async op is in progress:
-         * the buffer is not referenced by any in-flight transfer. */
-        ata_security_buffer_zeroize();
     }
     return ret;
 }
