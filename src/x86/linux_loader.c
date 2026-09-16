@@ -38,6 +38,17 @@
 
 #define ENDLINE "\r\n"
 
+/* Optional container so one signed image can carry a kernel plus an initrd:
+ * a linux_payload_hdr, then the bzImage, then the initrd. Without the magic the
+ * image is a bare bzImage (no initrd), so existing payloads still boot. */
+#define LINUX_PAYLOAD_MAGIC 0x3150584Cu /* "LXP1" */
+struct linux_payload_hdr {
+    uint32_t magic;
+    uint32_t kernel_size;
+    uint32_t initrd_size;
+    uint32_t reserved;
+};
+
 /* XLF_KERNEL_64: the kernel has a 64-bit entry point (boot protocol >= 2.12,
  * xloadflags bit 0). Without it a 64-bit loader has nothing to jump to. */
 #define XLF_KERNEL_64 (1u << 0)
@@ -151,9 +162,39 @@ static int linux_kernel_size(uint32_t syssize, uint32_t load_limit,
     return 0;
 }
 
-void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
+/* Pick the initrd load address: as high as possible, page-aligned, below the
+ * smaller of the kernel's initrd_addr_max and the top of usable low RAM
+ * (ram_limit, i.e. tolum; 0 if unknown), without overlapping the kernel.
+ * Rejects a zero size and any size that cannot fit, so the placement can never
+ * underflow past the fit test. Returns 0 and *out on success, -1 otherwise. */
+static int linux_initrd_place(uint32_t initrd_addr_max, uint64_t ram_limit,
+                              uint32_t initrd_size, uint64_t kernel_end,
+                              uint64_t *out)
+{
+    uint64_t limit; /* first byte past the highest allowed placement */
+
+    if (initrd_size == 0)
+        return -1;
+    limit = (initrd_addr_max != 0) ? ((uint64_t)initrd_addr_max + 1)
+                                   : 0x38000000ULL; /* pre-2.03 default + 1 */
+    if (ram_limit != 0 && ram_limit < limit)
+        limit = ram_limit;
+    if ((uint64_t)initrd_size > limit)
+        return -1;
+    *out = (limit - initrd_size) & ~0xfffULL;
+    if (*out < kernel_end)
+        return -1;
+    return 0;
+}
+
+void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
+                const char *cmd_line)
 {
     struct boot_params param = { 0 };
+    struct linux_payload_hdr *phdr;
+    uint8_t *kernel_image;
+    uint8_t *initrd_image = NULL;
+    uint32_t initrd_size = 0;
     uint32_t kernel_size, param_size, load_limit;
     uint8_t *image_boot_param;
     uint16_t end_of_header_off;
@@ -166,8 +207,28 @@ void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
 
     wolfBoot_printf("linux payload" ENDLINE);
 
-    image_boot_param = linux_image + 0x1f1;
-    end_of_header_off = *(linux_image + 0x201) + 0x202;
+    /* Unwrap the optional kernel+initrd container; a bare bzImage has no magic. */
+    kernel_image = linux_image;
+    phdr = (struct linux_payload_hdr *)linux_image;
+    if (phdr->magic == LINUX_PAYLOAD_MAGIC) {
+        /* Bound the trusted header fields against the verified image so a
+         * malformed container cannot make the kernel or initrd reads run past
+         * it (or wrap the pointer arithmetic). Sum in 64-bit. */
+        uint64_t need = (uint64_t)sizeof(*phdr) + phdr->kernel_size
+                        + phdr->initrd_size;
+        if (image_size == 0 || phdr->kernel_size == 0 ||
+                need > (uint64_t)image_size) {
+            wolfBoot_printf("invalid linux payload container" ENDLINE);
+            wolfBoot_panic();
+        }
+        kernel_image = linux_image + sizeof(*phdr);
+        initrd_image = kernel_image + phdr->kernel_size;
+        initrd_size = phdr->initrd_size;
+        wolfBoot_printf("initrd: %d bytes" ENDLINE, initrd_size);
+    }
+
+    image_boot_param = kernel_image + 0x1f1;
+    end_of_header_off = *(kernel_image + 0x201) + 0x202;
     memcpy((uint8_t*)&param.hdr,
             image_boot_param, sizeof(struct setup_header));
 
@@ -198,8 +259,31 @@ void load_linux(uint8_t *linux_image, void *params, const char *cmd_line)
         wolfBoot_printf("invalid kernel size" ENDLINE);
         wolfBoot_panic();
     }
-    memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, linux_image + param_size,
+    memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, kernel_image + param_size,
            kernel_size);
+
+    /* Place the initrd high in usable low RAM, copy it there, and hand its
+     * address to the kernel via the ramdisk fields. */
+    if (initrd_size != 0) {
+        uint64_t initrd_addr;
+        /* The kernel occupies init_size (decompression + BSS + heap), which is
+         * normally larger than the compressed kernel_size; floor above both. */
+        uint32_t kernel_span = (param.hdr.init_size > kernel_size)
+                                   ? param.hdr.init_size : kernel_size;
+        if (linux_initrd_place(param.hdr.initrd_addr_max, (uint64_t)load_limit,
+                               initrd_size,
+                               (uint64_t)KERNEL_LOAD_ADDRESS + kernel_span,
+                               &initrd_addr) != 0) {
+            wolfBoot_printf("initrd does not fit in usable RAM" ENDLINE);
+            wolfBoot_panic();
+        }
+#if defined(WOLFBOOT_64BIT)
+        x86_paging_map_memory(initrd_addr, initrd_addr, initrd_size);
+#endif
+        memcpy((uint8_t *)(uintptr_t)initrd_addr, initrd_image, initrd_size);
+        param.hdr.ramdisk_image = (uint32_t)initrd_addr;
+        param.hdr.ramdisk_size = initrd_size;
+    }
 
 #if defined(WOLFBOOT_64BIT)
     /* A 64-bit build needs the kernel's 64-bit entry point. */

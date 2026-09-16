@@ -120,6 +120,7 @@ struct boot_params {
     uint8_t _pad9[276];
 } __attribute__((packed));
 
-void load_linux(uint8_t *linux_image, void *params, const char *cmd_line);
+void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
+                const char *cmd_line);
 
 #endif /* LINUX_LOADER_H */

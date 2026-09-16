@@ -1039,6 +1039,11 @@ void RAMFUNCTION wolfBoot_start(void)
             (uintptr_t)dts_addr, ZYNQMP_ATF_EL2);
     }
 #endif
+#ifdef WOLFBOOT_FSP
+    /* Hand the verified payload length to the Linux loader (via do_boot) so it
+     * can bound the signed container header against the image. */
+    stage2_params->payload_size = (uint32_t)os_image.fw_size;
+#endif
     do_boot((uint32_t*)load_address
     #if defined(MMU) || defined(WOLFBOOT_FDT)
         ,(uint32_t*)dts_addr
