@@ -60,6 +60,9 @@ uint16_t io_read16(uint16_t port);
 void io_write32(uint16_t port, uint32_t value);
 uint32_t io_read32(uint16_t port);
 void reset(uint8_t warm);
+#ifdef WOLFBOOT_TGL
+int global_reset(void);
+#endif
 void delay(int msec);
 __attribute__((noreturn)) void panic(void);
 void cpuid(uint32_t eax_param,
