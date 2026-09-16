@@ -146,6 +146,24 @@ implementation in new ports must return immediately without performing any actio
 if the content of the bootloader partition in the two banks already match.
 
 
+### Optional support for non-coherent DMA
+
+`int hal_dma_set_noncached(uintptr_t start, uintptr_t end)`
+
+Re-attribute `[start, end)` as non-cacheable. Only needed by ports that run with the MMU and D-cache enabled and that hand memory to a bus master which is not coherent with the CPU caches, such as an Ethernet MAC driven from a hook. Returns 0 on success, or negative if the port cannot satisfy the request.
+
+A weak default in `src/libwolfboot.c` returns an error, so the symbol always links. It deliberately does **not** succeed silently: a no-op would leave the caller sharing write-back memory with a non-coherent master, which is the failure this function exists to prevent.
+
+A port implementing it must:
+
+- Round the range **outward** to whatever granule its translation tables can express. On ZynqMP (`hal/zynq.c`) that is a 2MB block, so the caller has to give the region an aligned block of its own rather than placing it next to other data.
+- Clean and invalidate the affected range **before** changing the attribute, so a line still dirty at the switch cannot later be written back over what the bus master has since put there.
+- Push the modified table entries out and invalidate the TLB at the exception level that owns the translation.
+
+Callers place their buffers with a dedicated linker section. The ZynqMP port provides `.dma_buffers` in `hal/zynq.ld`, based at `WOLFBOOT_DMA_BUFFER_ADDRESS` (default `0x8200000`, clear of the kernel, the FIT staging area and the DTS) and exporting `_dma_buffers_start` / `_dma_buffers_end`.
+
+Because the attribute change unmaps and remaps whole blocks, a range outside that window would take the bootloader's own code or stack down with it. The ZynqMP port therefore rejects any range not contained in `[_dma_buffers_start, _dma_buffers_end)`, and the linker script refuses at build time to place the window unaligned or overlapping wolfBoot's own DDR block. A port implementing this function for other hardware should fail closed in the same way rather than trusting the caller.
+
 ### wolfHSM HAL extensions
 
 Refer to [wolfHSM.md](wolfHSM.md) for the wolfHSM-specific HAL functions and an overview of wolfHSM compatibility.

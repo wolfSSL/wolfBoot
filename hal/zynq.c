@@ -3063,4 +3063,109 @@ void sdhci_platform_dma_complete(void *buf, uint32_t sz, int is_write)
 #endif /* DISK_SDCARD || DISK_EMMC */
 
 
+#if defined(MMU) && defined(__WOLFBOOT)
+/* wolfBoot maps DDR write-back in 2MB blocks from the static MMUTableL2. A
+ * non-coherent DMA master cannot share 8-byte descriptors through that:
+ * several fall in one cache line, so cleaning one clobbers its neighbours'
+ * ownership bits. Re-attribute the whole block Normal-NC instead.
+ *
+ * Valid block, AttrIndx=0 (MAIR[0] is Normal-NC), AF set, never executable.
+ * Shareability is ignored for Non-Cacheable memory. */
+#define ZYNQMP_L2_BLOCK_NORMAL_NC \
+    (0x401ULL | (1ULL << 53) | (1ULL << 54))
+
+
+/* From src/boot_aarch64_start.S: four contiguous 512-entry tables off
+ * L1[0..3] mapping 0x0-0xFFFFFFFF, so the index is addr >> 21. */
+extern uint64_t MMUTableL2[];
+
+/* Make the table entries [first,last] visible to the table walker, which may
+ * not snoop the caches: push them out before anything relies on them. */
+static void zynqmp_mmu_publish(uint64_t first, uint64_t last)
+{
+    uint64_t i;
+
+    __asm__ volatile("dsb ishst" : : : "memory");
+    for (i = first; i <= last; i++) {
+        __asm__ volatile("dc civac, %0"
+            : : "r"((uintptr_t)&MMUTableL2[i]) : "memory");
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+}
+
+/* wolfBoot runs at EL3 as an FSBL replacement, at EL2 under BL31. */
+static void zynqmp_mmu_tlbi(void)
+{
+    switch (current_el()) {
+        case 3:
+            __asm__ volatile("tlbi alle3" : : : "memory");
+            break;
+        case 2:
+            __asm__ volatile("tlbi alle2" : : : "memory");
+            break;
+        default:
+            __asm__ volatile("tlbi vmalle1" : : : "memory");
+            break;
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+    __asm__ volatile("isb" : : : "memory");
+}
+
+/* Mark every 2MB block overlapping [start,end) Normal-NC. Cleans the range
+ * first: a line still dirty at the moment of the change could otherwise land
+ * on top of what the bus master has since written. */
+/* Bounds of the .dma_buffers carve-out, from hal/zynq.ld. */
+extern uint8_t _dma_buffers_start[];
+extern uint8_t _dma_buffers_end[];
+
+int hal_dma_set_noncached(uintptr_t start, uintptr_t end)
+{
+    uintptr_t addr;
+    uintptr_t win_start, win_end;
+    uint64_t first, last, i;
+
+    /* Only the dedicated carve-out may be re-attributed. The sequence below
+     * unmaps whole 2MB blocks, so a range outside it would take wolfBoot's
+     * own code or stack down with it. Fail closed instead. */
+    win_start = (uintptr_t)_dma_buffers_start;
+    win_end = (uintptr_t)_dma_buffers_end;
+    if (end <= start || start < win_start || end > win_end) {
+        return -1;
+    }
+
+    if (zynqmp_l2_block_range((uint64_t)start, (uint64_t)end, &first, &last)
+            != 0) {
+        return -1;
+    }
+
+    /* Whole blocks: the attribute applies per block. */
+    for (addr = (uintptr_t)(first << ZYNQMP_L2_BLOCK_SHIFT);
+         addr < (uintptr_t)((last + 1) << ZYNQMP_L2_BLOCK_SHIFT);
+         addr += CACHE_LINE_SIZE) {
+        __asm__ volatile("dc civac, %0" : : "r"(addr) : "memory");
+    }
+    __asm__ volatile("dsb sy" : : : "memory");
+
+    /* Break-before-make: valid -> valid memory-type changes are CONSTRAINED
+     * UNPREDICTABLE on ARMv8-A. Nothing may touch the range while it is
+     * unmapped; the caller owns a dedicated region and wolfBoot's own code
+     * and data are in a different block. */
+    for (i = first; i <= last; i++) {
+        MMUTableL2[i] = 0;
+    }
+    zynqmp_mmu_publish(first, last);
+    zynqmp_mmu_tlbi();
+
+    for (i = first; i <= last; i++) {
+        MMUTableL2[i] = (i << ZYNQMP_L2_BLOCK_SHIFT)
+            | ZYNQMP_L2_BLOCK_NORMAL_NC;
+    }
+    zynqmp_mmu_publish(first, last);
+    zynqmp_mmu_tlbi();
+
+    return 0;
+}
+#endif /* MMU && __WOLFBOOT */
+
+
 #endif /* TARGET_zynq */

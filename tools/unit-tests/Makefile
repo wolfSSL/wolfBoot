@@ -134,6 +134,7 @@ TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
 TESTS+=unit-ns16550
+TESTS+=unit-zynq-dma-range
 TESTS+=unit-pkcs11_store-stalecache
 TESTS+=unit-aurix-erased-fill
 TESTS+=unit-aurix-erased-fill-invert
@@ -519,6 +520,10 @@ unit-fwtpm-rsp-overrun: ../../include/target.h unit-fwtpm-rsp-overrun.c
 unit-fwtpm-cmd-toctou: ../../include/target.h unit-fwtpm-cmd-toctou.c
 	gcc -o $@ $^ $(CFLAGS) -I$(WOLFBOOT_LIB_WOLFTPM) \
 		-DWOLFTPM_USER_SETTINGS $(LDFLAGS)
+
+# unit-zynq-dma-range: block-index math behind hal_dma_set_noncached()
+unit-zynq-dma-range: unit-zynq-dma-range.c
+	gcc -o $@ $^ $(CFLAGS) $(LDFLAGS)
 
 # unit-fdt-memrsv-wrap: layout validation in front of fdt_add_mem_rsv()
 # (F-11045). Links the real parser rather than extracting one function.

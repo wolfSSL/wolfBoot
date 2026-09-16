@@ -252,6 +252,16 @@ void WEAKFUNCTION hal_cache_invalidate(void)
     /* if cache flushing is required implement in hal */
 }
 
+/* Weak default; a port with the MMU and D-cache on overrides it. Fails
+ * rather than succeeding: a silent no-op would leave the caller sharing
+ * write-back memory with a non-coherent master. */
+int WEAKFUNCTION hal_dma_set_noncached(uintptr_t start, uintptr_t end)
+{
+    (void)start;
+    (void)end;
+    return -1;
+}
+
 #ifdef NVM_FLASH_WRITEONCE
 /* Some internal FLASH memory models don't allow
  * multiple writes after erase in the same page/area.

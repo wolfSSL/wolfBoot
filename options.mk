@@ -1718,6 +1718,10 @@ ifeq ($(NS16550),1)
     OBJS += hal/uart/ns16550.o
   endif
 endif
+# Non-cacheable DDR carve-out for bus-master DMA (hal/zynq.ld). Substituted
+# into the linker script only; code uses the _dma_buffers_start/_end symbols
+# the script exports rather than this address.
+WOLFBOOT_DMA_BUFFER_ADDRESS?=0x8200000
 
 # wolfBoot hooks framework
 # WOLFBOOT_HOOKS_FILE: path to a single .c file containing hook definitions
