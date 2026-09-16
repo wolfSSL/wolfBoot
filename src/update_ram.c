@@ -781,11 +781,10 @@ backup_on_failure:
 #endif /* MMU */
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
-    /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) re-derived
-     * the load address, since that stage provides its own entry point. The
-     * flag is tracked explicitly rather than by comparing load_address:
-     * elf_load_image_mmu() publishes its entry point before it finishes
-     * validating, so a rejected ELF also leaves load_address rewritten. */
+    /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) succeeded
+     * and re-derived the load address, since that stage provides its own
+     * entry point. Tracked with an explicit flag set on each stage's success
+     * path rather than by comparing load_address. */
     if ((uboot_entry != NULL) && !stage_entry_override) {
         load_address = uboot_entry;
     }
