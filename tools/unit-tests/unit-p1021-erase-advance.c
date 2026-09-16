@@ -136,7 +136,7 @@ START_TEST (test_erase_stops_on_status_fail)
     int ret;
 
     /* The command sequence completes (cmd_ret 0) but the NAND reports an
-     * erase failure in the status byte (DQ0 clear). */
+     * erase failure in the status byte (DQ0 set). */
     mock_reset(0, STATUS_ERASE_FAIL);
 
     ret = ext_flash_erase(0, 2 * (int)TEST_BLOCK_SIZE);
