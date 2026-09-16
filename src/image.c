@@ -776,7 +776,7 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
     /* Set the public key. */
     ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE);
     if (ret != 0) {
-        /* Something is wrong with the pub key or LMS parameters. */
+        /* Something is wrong with the pub key or XMSS parameters. */
         wolfBoot_printf("error: wc_XmssKey_ImportPubRaw" \
                         " returned %d\n", ret);
         return;
