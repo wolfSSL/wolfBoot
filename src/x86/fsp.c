@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <x86/fsp/FspCommon.h>
+#include <x86/fsp.h>
 #include <stage2_params.h>
 #include <x86/common.h>
 #include <pci.h>
@@ -99,6 +100,39 @@ void print_fsp_image_revision(struct fsp_info_header *h)
     wolfBoot_printf("%x.%x.%x build %x\r\n", maj, min, rev, build);
 }
 
+/* Act on a reset request returned by an FSP NotifyPhase call. WARM/COLD do the
+ * matching reset; RESET_REQUIRED_3 is the Tiger Lake global reset (host + CSME)
+ * needed after the FSP-S ChipsetInit sync. A non-success, non-reset status is
+ * fatal. Returns only on EFI_SUCCESS. */
+static void notify_phase_handle_reset(uint32_t status)
+{
+    if (status == FSP_STATUS_RESET_REQUIRED_WARM) {
+        wolfBoot_printf("notify phase: warm reset required\n");
+        reset(1);
+    }
+    if (status == FSP_STATUS_RESET_REQUIRED_COLD) {
+        wolfBoot_printf("notify phase: cold reset required\n");
+        reset(0);
+    }
+    if (status == FSP_STATUS_RESET_REQUIRED_3) {
+        wolfBoot_printf("notify phase: global reset required\n");
+#ifdef WOLFBOOT_TGL
+        /* global_reset() returns only if ETR3 is locked and the global bit
+         * could not be armed. A plain reset would not satisfy the FSP-S
+         * request and would loop forever, so halt instead (fail-secure). */
+        global_reset();
+        wolfBoot_printf("ETR3 is locked, cannot arm a global reset\n");
+        panic();
+#else
+        reset(0);
+#endif
+    }
+    if (status != EFI_SUCCESS) {
+        wolfBoot_printf("notify phase failed %d\n", status);
+        panic();
+    }
+}
+
 void fsp_init_silicon(void)
 {
     uint8_t silicon_init_parameter[FSP_S_PARAM_SIZE];
@@ -167,20 +201,11 @@ void fsp_init_silicon(void)
     notify_phase = _start_fsp_s + notify_phase_off;
     param.Phase = EnumInitPhaseAfterPciEnumeration;
     status = x86_run_fsp_32bit(notify_phase, &param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
-        panic();
-    }
+    notify_phase_handle_reset(status);
     param.Phase = EnumInitPhaseReadyToBoot;
     status = x86_run_fsp_32bit(notify_phase, &param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
-        panic();
-    }
+    notify_phase_handle_reset(status);
     param.Phase = EnumInitPhaseEndOfFirmware;
     status = x86_run_fsp_32bit(notify_phase, &param);
-    if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
-        panic();
-    }
+    notify_phase_handle_reset(status);
 }
