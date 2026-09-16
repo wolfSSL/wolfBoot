@@ -298,13 +298,19 @@ int ata_cmd_complete_async()
     if (!ata_async_info.in_progress)
         return ATA_ERR_OP_NOT_IN_PROGRESS;
     ata = &ATA_Drv[ata_async_info.drv];
+    slot = ata_async_info.slot;
     if (mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port)) & AHCI_PORT_IS_TFES) {
+        /* Task-file error: verify the HBA has retired the command (PxCI
+         * clear) before scrubbing the DMA buffer it may still reference. */
+        if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) &
+            (1 << slot)) != 0)
+            return ATA_ERR_BUSY;
         ret = -1;
         goto done;
     }
 
-    slot = ata_async_info.slot;
-    if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) & (1 << slot)) != 0)
+    if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) &
+        (1 << slot)) != 0)
         return ATA_ERR_BUSY;
 
     ret = 0;

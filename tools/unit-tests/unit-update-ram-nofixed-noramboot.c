@@ -107,12 +107,19 @@ static void reset_mock_stats(void)
 static void prepare_flash(void)
 {
     int ret;
+    char ext_path[64];
+    char int_path[64];
 
-    ret = mmap_file("/tmp/wolfboot-unit-ext-file-nofixed-noramboot.bin",
+    snprintf(ext_path, sizeof(ext_path),
+        "/tmp/wolfboot-unit-ext-file-nofixed-noramboot-%d.bin", (int)getpid());
+    snprintf(int_path, sizeof(int_path),
+        "/tmp/wolfboot-unit-int-file-nofixed-noramboot-%d.bin", (int)getpid());
+
+    ret = mmap_file(ext_path,
         (void *)(uintptr_t)MOCK_ADDRESS_UPDATE,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
     ck_assert_int_ge(ret, 0);
-    ret = mmap_file("/tmp/wolfboot-unit-int-file-nofixed-noramboot.bin",
+    ret = mmap_file(int_path,
         (void *)(uintptr_t)MOCK_ADDRESS_BOOT,
         WOLFBOOT_PARTITION_SIZE + IMAGE_HEADER_SIZE, NULL);
     ck_assert_int_ge(ret, 0);
