@@ -43,6 +43,15 @@ extern "C" {
 #include "wolfboot/version.h"
 #include "wolfboot/wc_secure.h"
 
+/* Partition trailers (magic + state flags) are persisted in flash only when
+ * the target has fixed partitions or supplies a custom trailer backend.
+ * Without either, get/set_trailer_at() are no-op stubs and the
+ * wolfBoot_{get,set}_partition_state() API is absent, so the fallback
+ * decision must be made on version + image validity alone. */
+#if defined(WOLFBOOT_FIXED_PARTITIONS) || defined(CUSTOM_PARTITION_TRAILER)
+    #define HAVE_PARTITION_TRAILERS 1
+#endif
+
 
 #ifndef RAMFUNCTION
 #  if defined(__WOLFBOOT) && defined(RAM_CODE)

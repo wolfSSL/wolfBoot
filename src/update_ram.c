@@ -286,7 +286,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     uint32_t *load_address = NULL;
     uint32_t *source_address = NULL;
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
     uint8_t p_state;
 #endif
 #if defined(MMU) || defined(WOLFBOOT_FDT)
@@ -452,7 +452,7 @@ backup_on_failure:
     /* First time we boot this update, set to TESTING to await
      * confirmation from the system
      */
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
     if ((wolfBoot_get_partition_state(active, &p_state) == 0) &&
         (p_state == IMG_STATE_UPDATING))
     {
