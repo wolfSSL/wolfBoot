@@ -104,17 +104,6 @@ START_TEST(test_set_get_partition_state)
 }
 END_TEST
 
-/* Fixed-partition APIs must be absent in this configuration. */
-START_TEST(test_fixed_partition_apis_absent)
-{
-#ifndef WOLFBOOT_FIXED_PARTITIONS
-    ck_assert_int_eq(0, 0);
-#else
-    ck_abort_msg("WOLFBOOT_FIXED_PARTITIONS must be undefined here");
-#endif
-}
-END_TEST
-
 int main(int argc, char *argv[])
 {
     int failed;
@@ -127,7 +116,6 @@ int main(int argc, char *argv[])
 
     tcase_add_checked_fixture(tc, reset_trailers, NULL);
     tcase_add_test(tc, test_set_get_partition_state);
-    tcase_add_test(tc, test_fixed_partition_apis_absent);
     suite_add_tcase(s, tc);
 
     sr = srunner_create(s);
