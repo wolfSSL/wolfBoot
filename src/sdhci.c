@@ -1170,7 +1170,7 @@ static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
 
         response = SDHCI_REG(SDHCI_SRS04);
 
-        /* Check if device is ready (busy bit cleared = ready) */
+        /* Check if device is ready (OCR bit 31 set = ready) */
         if (response & MMC_OCR_BUSY_BIT) {
             /* Device is ready */
             if (ocr_reg != NULL) {
