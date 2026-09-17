@@ -350,14 +350,16 @@ def build_timestamp():
 # / Dependency-Track resolve CVEs against the right package).  Algorithm
 # enablement is captured separately via build_props (HAVE_FALCON, ...).
 #
-# Every entry carries both machine-resolvable identifiers, because the two
-# scanner families do not agree on one.  PURL serves the ecosystem scanners
-# (OSV, GHSA, Trivy, Dependency-Track); CPE serves NVD, which is what a CRA /
-# IEC 62443 vulnerability-monitoring process keys on.  A dependency with only
-# a PURL is invisible to a CPE-driven scan, so wolfSSL advisories never reach
-# the integrator of a product that embeds wolfSSL.  Each `cpe` value must be
-# the vendor:product pair NVD actually registers for that dependency; never
-# synthesize one.
+# Every linked-library entry carries both machine-resolvable identifiers,
+# because the two scanner families do not agree on one.  PURL serves the
+# ecosystem scanners (OSV, GHSA, Trivy, Dependency-Track); CPE serves NVD,
+# which is what a CRA / IEC 62443 vulnerability-monitoring process keys on.
+# Nested wolfcrypt is the exception: it is provenance (PURL only). NVD files
+# crypto CVEs against the parent wolfssl CPE, and a second CPE on the same
+# sources is a future double-match risk.  A linked dependency with only a
+# PURL is still invisible to a CPE-driven scan, so wolfssl itself must keep
+# its CPE.  Each `cpe` value must be the vendor:product pair NVD actually
+# registers; never synthesize one.  Omit `cpe` from DEP_META to skip it.
 DEP_META = {
     # wolfssl itself, declared as a dependency by downstream wolfSSL-stack
     # products (wolfSSH, wolfMQTT, wolfTPM, ...) that link libwolfssl.  Only
@@ -1078,10 +1080,10 @@ def cdx_dep_component(name, pkg_version, key, dep_version_overrides=None):
         # version / versionInfo keep the local string (BUILD_METADATA).
         comp['version'] = version
         comp['purl'] = meta['purl'](version)
-        # Identifiers are version-bearing, so they cannot be emitted
-        # without a resolved version: a CPE with an empty version field
-        # matches every release of the dependency in an NVD scan.
-        # wolfcrypt has no CPE: matching rides on the parent wolfssl CPE.
+        # Emit CPE only when DEP_META provides a constructor. Nested
+        # wolfcrypt has none; matching rides on the parent wolfssl CPE.
+        # A versionless CPE matches every release, so never emit one
+        # without a resolved version.
         if meta.get('cpe'):
             comp['cpe'] = meta['cpe'](version)
     else:
