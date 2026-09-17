@@ -585,6 +585,8 @@ int mpfs_read_serial_number(uint8_t *serial)
 }
 
 /* Linux kernel command line arguments */
+/* Must stay below the fdt.h include: the LINUX_BOOTARGS_OVERRIDE default
+ * there keys off build-supplied macros only, not this fallback. */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
 /* wolfBoot SD layout (tools/scripts/program-sdcard.sh): p1=boot FIT,
@@ -637,16 +639,11 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
         return ret;
     }
 
-    /* Find /chosen node */
-    off = fdt_subnode_offset(&ctx, 0, "chosen");
-    if (off < 0) {
-        /* Create /chosen node if it doesn't exist */
-        off = fdt_add_subnode(&ctx, 0, "chosen");
-    }
-
-    if (off >= 0) {
-        /* Set bootargs property */
-        fdt_fixup_str(&ctx, off, "chosen", "bootargs", LINUX_BOOTARGS);
+    /* Later fixups (watchdog disable, serial number) must run even if the
+     * bootargs fixup fails, so log and continue rather than return. */
+    ret = fdt_fixup_bootargs(&ctx, LINUX_BOOTARGS, LINUX_BOOTARGS_OVERRIDE);
+    if (ret < 0) {
+        wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
     }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)

@@ -1290,7 +1290,9 @@ power-on.
   `0x01000000`, which is uncached and coherent for all harts. Cacheable L2-scratchpad memory
   must not be used for cross-hart signalling (stores can be lost on dirty-line eviction).
 
-**Device-tree fixups** applied to the loaded dtb (`hal/mpfs250.c`): bootargs/root device,
+**Device-tree fixups** applied to the loaded dtb (`hal/mpfs250.c`): bootargs/root device
+(the DTB's own `/chosen/bootargs` win unless `LINUX_BOOTARGS`/`LINUX_BOOTARGS_ROOT` is set;
+see "Linux kernel command line (bootargs)" in `docs/compile.md`),
 MAC addresses from the device serial number, and all five MSS watchdog nodes are disabled.
 
 **Watchdog policy:** the MSS watchdogs always count and reset the chip on timeout (they cannot
@@ -4453,7 +4455,10 @@ images {
 that wolfBoot decompresses straight to the kernel load address at boot.
 See the [Versal "Booting Linux via FIT image"](#versal-gen-1-vmk180)
 section for a full walkthrough - the flow is identical apart from the
-load addresses and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain. Set
+load addresses and the `bl31`/`fsbl` versus `bl31`/`plm` boot chain,
+including the bootargs handling (the FIT DTB's own `/chosen/bootargs`
+win unless `LINUX_BOOTARGS`/`LINUX_BOOTARGS_ROOT` is set; see
+"Linux kernel command line (bootargs)" in `docs/compile.md`). Set
 `GZIP=0` in
 `.config` if you want to keep using an uncompressed `Image` plus
 `compression = "none"`.
@@ -5134,20 +5139,16 @@ A stock PetaLinux `image.ub` carries a `ramdisk` sub-image that `bootm` passes t
 
 `WOLFBOOT_LOAD_RAMDISK_ADDRESS` defaults to 0, which uses the ramdisk in place inside the staged FIT. Set it to a DDR address clear of the kernel, DTB and staging area if the payload needs a fixed location.
 
-**DTB Fixup for Root Filesystem**
+**Kernel Command Line (bootargs)**
 
-wolfBoot automatically modifies the device tree to set the kernel command line (`bootargs`). The default configuration mounts the root filesystem from SD card partition 2:
-
-```
-earlycon root=/dev/mmcblk0p2 rootwait
-```
-
-To customize the root device, add to your config:
+If the FIT's DTB carries `/chosen/bootargs`, wolfBoot keeps them by default - an image boots with the arguments its kernel was validated with. Setting `LINUX_BOOTARGS` or `LINUX_BOOTARGS_ROOT` in the config replaces the DTB's value (the replaced value is logged); `CFLAGS_EXTRA+=-DLINUX_BOOTARGS_OVERRIDE=0` demotes an explicit `LINUX_BOOTARGS` to a fallback used only when the DTB has none.
 
 ```makefile
-# Mount root from SD card partition 4
+# Replace the image's bootargs, mounting root from SD card partition 4
 CFLAGS_EXTRA+=-DLINUX_BOOTARGS_ROOT=\"/dev/mmcblk0p4\"
 ```
+
+On Versal the PS UART console is `ttyAMA0` (PL011); when supplying your own bootargs prefer an explicit `earlycon=pl011,mmio32,0xFF000000,115200n8 console=ttyAMA0,115200`.
 
 **Automated Testing**
 

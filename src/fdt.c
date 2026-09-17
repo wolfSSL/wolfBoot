@@ -1287,6 +1287,42 @@ int fdt_fixup_val64(fdt_ctx* ctx, int off, const char* node, const char* name,
     return fdt_setprop(ctx, off, name, &be, (int)sizeof(be));
 }
 
+/* Set /chosen bootargs. With force nonzero the DTB's existing value is
+ * replaced by `args` (and logged); with force 0 an existing non-empty
+ * value wins, so an image keeps the arguments its kernel was validated
+ * with unless the build explicitly overrides them. */
+int fdt_fixup_bootargs(fdt_ctx* ctx, const char* args, int force)
+{
+    const char* old_args;
+    int off, old_len = 0;
+
+    if (!fdt_ctx_ok(ctx) || args == NULL) {
+        return -FDT_ERR_BADARG;
+    }
+    off = fdt_subnode_offset(ctx, 0, "chosen");
+    if (off == -FDT_ERR_NOTFOUND) {
+        off = fdt_add_subnode(ctx, 0, "chosen");
+    }
+    if (off < 0) {
+        wolfBoot_printf("FDT: Failed to find/create chosen node (%d)\n", off);
+        return off;
+    }
+    /* Treat the existing value as present only when it is a non-empty,
+     * NUL-terminated string: property bytes are opaque, and %s printing or
+     * keeping an unterminated value would be wrong either way. Malformed
+     * or empty bootargs are simply replaced. */
+    old_args = (const char*)fdt_getprop(ctx, off, "bootargs", &old_len);
+    if (old_args != NULL && old_len > 1 && old_args[0] != '\0' &&
+            memchr(old_args, '\0', (size_t)old_len) != NULL) {
+        if (!force) {
+            wolfBoot_printf("FDT: using DTB bootargs: %s\n", old_args);
+            return 0;
+        }
+        wolfBoot_printf("FDT: replacing DTB bootargs: %s\n", old_args);
+    }
+    return fdt_fixup_str(ctx, off, "chosen", "bootargs", args);
+}
+
 int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size)
 {
     int off, ret;
