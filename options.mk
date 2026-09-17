@@ -813,6 +813,22 @@ ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
   endif
 endif
 
+# Optional boot confirmation and rollback for disk boot (src/update_disk.c).
+# wolfBoot marks the slot it boots as TESTING in the last sector of that raw
+# partition; the OS clears it to SUCCESS once it is up. A slot still marked
+# TESTING on the next boot did not come up and is failed over. Off by default,
+# so every existing disk target keeps its stateless select-verify-boot
+# behaviour. Raw partitions only: a DISK_FS slot has no partition tail to use.
+DISK_BOOT_CONFIRM ?= 0
+ifeq ($(DISK_BOOT_CONFIRM),1)
+  ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+    ifeq (,$(findstring WOLFBOOT_UPDATE_DISK,$(CFLAGS)))
+      $(error DISK_BOOT_CONFIRM requires a disk-boot target (DISK_SDCARD=1, DISK_EMMC=1, or an x86 FSP/AHCI target))
+    endif
+  endif
+  CFLAGS+=-D"DISK_BOOT_CONFIRM=1"
+endif
+
 # Optional read-only filesystem support for disk boot (src/update_disk.c),
 # so a boot slot can name a file instead of requiring the signed image at
 # raw offset 0 of a partition. DISK_FS = fat32 | ext4 | both. Leaving it
