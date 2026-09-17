@@ -858,6 +858,15 @@ extern int tolower(int c);
     #define HAVE_PBKDF2
 #endif /* HAVE_FIPS */
 
+/* wolfSSL derives WOLFSSL_DER_TO_PEM from WOLFSSL_KEY_GEN (see settings.h), but
+ * wc_DerToPemEx() calls Base64_Encode(), which NO_CODING compiles out of
+ * coding.c.  wolfBoot never emits PEM, so drop the conversion rather than pull
+ * base64 back in.  Checked after the FIPS block above, which may undef
+ * NO_CODING. */
+#if defined(NO_CODING) && !defined(WOLFSSL_NO_DER_TO_PEM)
+#   define WOLFSSL_NO_DER_TO_PEM
+#endif
+
 /* wolfCrypt Test/Benchmark Configuration */
 #ifdef WOLFCRYPT_TEST
     /* Skip extended tests to save memory */
