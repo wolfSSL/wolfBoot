@@ -70,11 +70,13 @@
 
 /** Default pin IOCONFIG register. type: un_iocfg_reg_t - see va416xx_hal_ioconfig.h */
 /** A pin's IOCONFIG is set to this by HAL_Iocfg_Init() if that pin is not in the cfg array */
-#define DEFAULT_PIN_IOCFG   (IOCFG_REG_PULLDN) // internal pulldown enabled for input pin
+/* internal pulldown enabled for input pin */
+#define DEFAULT_PIN_IOCFG   (IOCFG_REG_PULLDN)
 
 /** Default pin direction (input/output) type: en_iocfg_dir_t - see va416xx_hal_ioconfig.h */
 /** A pin's DIR is set to this by HAL_Iocfg_Init() if that pin is not in the cfg array */
-#define DEFAULT_PIN_DIR     (en_iocfg_dir__input) // default pin input
+/* default pin direction is input */
+#define DEFAULT_PIN_DIR     (en_iocfg_dir__input)
 
 
 /* PEB1-VA416XX-EVK */

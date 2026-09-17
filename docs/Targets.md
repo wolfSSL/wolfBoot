@@ -8860,18 +8860,45 @@ Tested on VA41620 and VA41630 MCU's.
 MCU: Cortex-M4 with Triple-Mode Redundancy (TMR) RAD hardening at up to 100MHz.
 FLASH: The VA41630 has 256KB of internal SPI FRAM (for the VA41620 its external). FRAM is Infineon FM25V20A.
 
-Default flash layout:
+Default flash layout, which fills the 256KB FRAM exactly:
 
 | Partition   | Size  | Address | Description |
 |-------------|-------|---------|-------------|
-| Bootloader  | 38KB  | 0x0     | Bootloader partition |
-| Application | 108KB | 0x9800  | Boot partition |
-| Update      | 108KB | 0x24800 | Update partition |
+| Bootloader  | 46KB  | 0x0     | Bootloader partition |
+| Application | 104KB | 0xB800  | Boot partition |
+| Update      | 104KB | 0x25800 | Update partition |
 | Swap        | 2KB   | 0x3F800 | Swap area |
+
+The sector size is 2KB (`WOLFBOOT_SECTOR_SIZE=0x800`) and the manifest header is 1KB (`IMAGE_HEADER_SIZE=1024`), so the application image starts at 0xBC00 and has 0x19C00 bytes of usable space.
 
 SRAM: 64KB on-chip SRAM and 256KB on-chip instruction/program memory
 
+The 64KB of SRAM is two contiguous 32KB banks, SRAM_0 at 0x1FFF8000 and SRAM_1 at 0x20000000. The linker scripts pool them into a single region so that data and stack can span both; they remain separate EDAC scrub banks (`RAM0_SCRUB` and `RAM1_SCRUB`). The ML-DSA Level 5 configuration needs about 48KB of it and does not fit in one bank alone.
+
 Boot ROM loads at 20MHz from SPI bus to internal data SRAM.
+
+#### Interrupt vector tables
+
+The VA416xx implements 212 exceptions: the 16 Cortex-M4 system exceptions plus 196 external interrupts, IRQ 0 through `TXEV_IRQn`. Both vector tables are sized for all of them, wolfBoot's in `src/boot_arm.c` and the application's in `test-app/startup_arm.c`. wolfBoot enables the EDAC single-bit and multi-bit error interrupts (76 and 77) when it configures scrubbing, and those vector fetches land at offsets 0x170 and 0x174, so a shorter table sends them into `.text`.
+
+The application's vector table sits at `WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE` and `do_boot()` writes that address into `SCB->VTOR`. ARMv7-M requires a table this size to be aligned to the next power of two at or above (number of exceptions x 4), which is 1024 bytes for 212 entries, and this part enforces it in a way that is easy to miss.
+
+`VTOR` itself accepts a finer value: writing `0xFFFFFFFF` reads back `0xFFFFFF80`, so the implemented field is `VTOR[31:7]`. The vector *fetch*, however, ORs the vector offset into `VTOR` rather than adding it, so any vector whose byte offset shares a set bit with the low bits of `VTOR` resolves to the wrong entry. Measured on a VA41630 with a relocated 212-entry table at a 512-aligned (not 1024-aligned) address:
+
+| IRQ | Vector offset | Result |
+|-----|---------------|--------|
+| 77 (`EDAC_SBE`) | 0x174 | dispatched |
+| 111 | 0x1FC | dispatched |
+| 112 | 0x200 | hard fault (fetches vector 0, the initial MSP) |
+| 128 (`PORTD2`) | 0x240 | wrong handler |
+
+The same table at a 1024-aligned address dispatches IRQ 128 correctly. So a 512-aligned table appears to work -- SysTick, the EDAC interrupts and anything below IRQ 112 are fine -- while every IRQ from 112 upward is silently broken. That covers the PORTA through PORTG pin interrupts, the DMA interrupts and the ADC/DAC interrupts.
+
+The default layout raises `IMAGE_HEADER_SIZE` to 1024 so that `0xB800 + 0x400 = 0xBC00` satisfies this. That costs 512 bytes of each partition. If you need those bytes back, the alternative is to keep a smaller header and move `WOLFBOOT_PARTITION_BOOT_ADDRESS` instead, so long as the sum stays 1024-aligned; `WOLFBOOT_SECTOR_SIZE` can be reduced to give finer placement, subject to `WOLFBOOT_SECTOR_SIZE >= IMAGE_HEADER_SIZE`. Either way keep `(WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE) % 1024 == 0`. `hal/va416x0.c` checks this at build time, so a layout that breaks the rule fails to compile rather than shipping.
+
+This applies whichever startup file the application uses. Linking against the Vorago SDK's `startup_va416xx.s` rather than `test-app/startup_arm.c` does not change where wolfBoot places the image, and the SDK's `SystemInit()` sets `VTOR` to the same address wolfBoot already wrote.
+
+The demo application prints `VTOR`, whether it is 1024-aligned, and a SysTick liveness check at startup, so a truncated or misplaced table is visible on the console. Note that SysTick alone does not prove the table is placed correctly: it is exception 15 at offset 0x3C, below the bit that alignment affects. Testing dispatch properly means triggering an IRQ at or above 112, for example with `NVIC_SetPendingIRQ()`.
 
 By default the bootloader is built showing logs on UART0. To use UART1 set `DEBUG_UART_NUM=1`. To disable the bootloader UART change `DEBUG_UART=0` in the `.config`.
 
@@ -8943,6 +8970,10 @@ Example of wolfBoot binary sizes based on algorithms:
 | RSA4096 | SHA3-384 | 19,216 |
 | ML-DSA 87 | SHA256 | 25,168 |
 
+#### Post-quantum (ML-DSA) configuration
+
+The example config carries a commented-out ML-DSA Level 5 block: uncomment it, comment out the ECC384/SHA384 lines and the default layout, and use the larger sector and partition sizes it lists. The `sign` tool reads `ML_DSA_LEVEL` from the environment and otherwise falls back to level 2, which rejects a level 5 key with `error: unrecognized ml-dsa key size: 7488`. The top-level Makefile and `tools/scripts/va416x0/build_test.sh` both pass it for you; a hand-run `sign` needs it on the command line.
+
 ### Flashing Vorago VA416x0
 
 Flash using Segger JLink: `JLinkExe -CommanderScript tools/scripts/va416x0/flash_va416xx.jlink`
@@ -8967,14 +8998,16 @@ The `loader.elf` programs the external SPI FRAM with the IRAM image. It is creat
 
 See `tools/scripts/va416x0/build_test.sh clean` for flashing examples.
 
-Example boot ouput on UART 0 (MCU TX):
+Example boot output on UART 0 (MCU TX):
 
 ```
 wolfBoot HAL Init
-Boot partition: 0x9800 (sz 5060, ver 0x1, type 0x601)
-Partition 1 header magic 0x00000000 invalid at 0x24800
-Boot partition: 0x9800 (sz 5060, ver 0x1, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x1, type 0x601)
+Partition 1 header magic 0x00000000 invalid at 0x25800
+Boot partition: 0xB800 (sz 5600, ver 0x1, type 0x601)
 Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
 ========================
 VA416x0 wolfBoot demo Application
 Copyright 2025 wolfSSL Inc
@@ -9000,7 +9033,18 @@ Number of public keys: 1
   9B BE B7 BB 11 75 01 81 45 14 19 7E B2 BD C0 A6
   11 0C FA F6 B5 F9 59 BA B9 A5 8E 34 4A CD C5 83
   7E 43 EF 61 6E C4 15 88 3C FE D6 76 47 D9 82 A4
+
+Vector table
+====================================
+VTOR            : 0x0000BC00 (expected 0x0000BC00) OK
+SysTick         : ticking (113 -> 1738 ms)
 ```
+
+`VTOR` is the address the core fetches exceptions from, and it must match
+`WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE`. The SysTick line is a
+liveness check: `HAL_Init()` starts SysTick and `SysTick_Handler()` advances
+`HAL_time_ms`, so a counter that never moves means exceptions are not reaching
+the application's vector table.
 
 ### Debugging Vorago VA416x0
 
@@ -9014,7 +9058,7 @@ See `tools/scripts/va416x0/build_test.sh update`:
 
 ```sh
 # Sign a new test app with version 2
-IMAGE_HEADER_SIZE=512 ./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
 
 # Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING)
 echo -n "pBOOT" > trigger_magic.bin
@@ -9046,17 +9090,17 @@ Example update output:
 
 ```
 wolfBoot HAL Init
-Boot partition: 0x9800 (sz 5060, ver 0x1, type 0x601)
-Update partition: 0x24800 (sz 5060, ver 0x2, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x1, type 0x601)
+Update partition: 0x25800 (sz 5600, ver 0x2, type 0x601)
 Starting Update (fallback allowed 0)
-Update partition: 0x24800 (sz 5060, ver 0x2, type 0x601)
-Boot partition: 0x9800 (sz 5060, ver 0x1, type 0x601)
+Update partition: 0x25800 (sz 5600, ver 0x2, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x1, type 0x601)
 Versions: Current 0x1, Update 0x2
 Copy sector 0 (part 1->2)
 Copy sector 0 (part 0->1)
 Copy sector 0 (part 2->0)
-Boot partition: 0x9800 (sz 5060, ver 0x2, type 0x601)
-Update partition: 0x24800 (sz 5060, ver 0x1, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x2, type 0x601)
+Update partition: 0x25800 (sz 5600, ver 0x1, type 0x601)
 Copy sector 1 (part 1->2)
 Copy sector 1 (part 0->1)
 Copy sector 1 (part 2->0)
@@ -9064,11 +9108,11 @@ Copy sector 2 (part 1->2)
 Copy sector 2 (part 0->1)
 Copy sector 2 (part 2->0)
 Erasing remainder of partition (50 sectors)...
-Boot partition: 0x9800 (sz 5060, ver 0x2, type 0x601)
-Update partition: 0x24800 (sz 5060, ver 0x1, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x2, type 0x601)
+Update partition: 0x25800 (sz 5600, ver 0x1, type 0x601)
 Copy sector 52 (part 0->2)
 Copied boot sector to swap
-Boot partition: 0x9800 (sz 5060, ver 0x2, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x2, type 0x601)
 Booting version: 0x1
 ========================
 VA416x0 wolfBoot demo Application
@@ -9105,9 +9149,9 @@ Boot logs after hard reset:
 
 ```
 wolfBoot HAL Init
-Boot partition: 0x9800 (sz 5060, ver 0x2, type 0x601)
-Update partition: 0x24800 (sz 5060, ver 0x1, type 0x601)
-Boot partition: 0x9800 (sz 5060, ver 0x2, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x2, type 0x601)
+Update partition: 0x25800 (sz 5600, ver 0x1, type 0x601)
+Boot partition: 0xB800 (sz 5600, ver 0x2, type 0x601)
 Booting version: 0x2
 ========================
 VA416x0 wolfBoot demo Application
