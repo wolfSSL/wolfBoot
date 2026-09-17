@@ -200,6 +200,7 @@ ENABLE_32BIT_TESTS ?= $(HAVE_M32)
 ifeq ($(ENABLE_32BIT_TESTS),1)
 TESTS+=unit-linux-loader-e820
 TESTS+=unit-linux-loader-syssize
+TESTS+=unit-linux-loader-initrd
 TESTS+=unit-sama5d3-ext-read
 else
 $(info Skipping 32-bit x86 unit tests (linux-loader, sama5d3-ext-read): 'gcc -m32' unavailable (set ENABLE_32BIT_TESTS=1 to force))
@@ -753,6 +754,11 @@ unit-linux-loader-e820: ../../include/target.h unit-linux-loader-e820.c
 
 unit-linux-loader-syssize: ../../include/target.h unit-linux-loader-syssize.c
 	gcc -m32 -o $@ unit-linux-loader-syssize.c -I. -I../../src -I../../include \
+		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-DWOLFBOOT_LOAD_BASE=0x100000
+
+unit-linux-loader-initrd: ../../include/target.h unit-linux-loader-initrd.c
+	gcc -m32 -o $@ unit-linux-loader-initrd.c -I. -I../../src -I../../include \
 		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
 		-DWOLFBOOT_LOAD_BASE=0x100000
 

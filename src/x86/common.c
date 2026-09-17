@@ -251,6 +251,33 @@ void reset(uint8_t warm)
     while(1){};
 }
 
+#ifdef WOLFBOOT_TGL
+/* PMC ETR3 (PWRMBASE 0xFE000000 + 0x1048). CF9_GLB_RST makes the next 0xCF9
+ * full reset a global reset (host + CSME); CF9_LOCK makes ETR3 read-only. */
+#define TGL_PCH_PWRM_BASE   0xFE000000u
+#define TGL_PWRM_ETR3       0x1048u
+#define ETR3_CF9_GLB_RST    (1u << 20)
+#define ETR3_CF9_LOCK       (1u << 31)
+
+/* Global reset (host + CSME), which FSP-S needs after a ChipsetInit sync.
+ * Returns non-zero if ETR3 is locked and the global bit could not be set;
+ * otherwise does not return. */
+int global_reset(void)
+{
+    volatile uint32_t *etr3 =
+        (volatile uint32_t *)(uintptr_t)(TGL_PCH_PWRM_BASE + TGL_PWRM_ETR3);
+    uint32_t v;
+
+    v = *etr3;
+    if ((v & ETR3_CF9_LOCK) != 0) {
+        return -1;
+    }
+    *etr3 = v | ETR3_CF9_GLB_RST;
+    reset(0);
+    return 0;
+}
+#endif /* WOLFBOOT_TGL */
+
 /**
  * @brief Delay the execution for a specified number of milliseconds.
  *

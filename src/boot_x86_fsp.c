@@ -78,8 +78,7 @@ const uint8_t __attribute__((section(".sig_wolfboot_raw")))
 /* offset of the header from the base image  */
 #define FSP_INFO_HEADER_OFFSET 0x94
 #define EFI_SUCCESS 0x0
-#define FSP_STATUS_RESET_REQUIRED_COLD  0x40000001
-#define FSP_STATUS_RESET_REQUIRED_WARM  0x40000002
+/* FSP_STATUS_RESET_REQUIRED_* are defined in x86/fsp.h */
 #define MEMORY_4GB (4ULL * 1024 * 1024 * 1024)
 #define ENDLINE "\r\n"
 /* Standard PCI capabilities live in conventional config space at 0x40-0xFC,
@@ -534,7 +533,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     struct stage2_ptr_holder stage2_holder;
     struct stage2_parameter temp_params;
     uint8_t *fsp_m_base, done = 0;
-    struct efi_hob *hobList, *it;
+    /* FspMemInit writes hobList only on EFI_SUCCESS; init so the reset-required
+     * and error paths never carry a stale pointer. */
+    struct efi_hob *hobList = NULL, *it;
     memory_init_cb MemoryInit;
     uint64_t top_address = MEMORY_4GB;
     uint32_t new_stack;

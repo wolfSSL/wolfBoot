@@ -8457,6 +8457,52 @@ Note:
 - This feature requires `NASM` to be installed on the machine building wolfBoot.
 
 
+### Booting a Linux bzImage payload (with an optional initrd)
+
+Set `LINUX_PAYLOAD=1` to boot a signed Linux `bzImage` from the disk A/B slot
+instead of an ELF/Multiboot2 image. Both the 32-bit and the 64-bit (`64BIT=1`)
+boot protocols are supported; a 64-bit build requires a kernel with a 64-bit
+entry point (`xloadflags` bit 0).
+
+The kernel must be able to reach its root filesystem. A monolithic kernel with
+the storage and filesystem drivers built in needs nothing further. To boot a
+modular distribution kernel that relies on an initramfs, wrap the kernel and
+the initrd into a single signed image using the container header below, then
+sign that image as usual (all fields little-endian):
+
+```
+magic       u32  0x3150584C  ("LXP1")
+kernel_size u32  exact bzImage byte length
+initrd_size u32  exact initrd byte length
+reserved    u32  0
+<bzImage bytes>
+<initrd bytes>
+```
+
+wolfBoot detects the magic, loads the kernel, places the initrd below the
+kernel's `initrd_addr_max` (and below the top of usable RAM), and hands its
+address to the kernel. An image without the magic is treated as a bare bzImage
+with no initrd, so existing payloads are unaffected.
+
+### Measuring the OS image into a PCR
+
+With `MEASURED_BOOT=1`, set `MEASURED_PCR_OS=<n>` to extend the verified disk OS
+image digest into PCR `<n>`, in addition to the firmware measurement in
+`MEASURED_PCR_A`. PCR 4 follows the TCG PC Client convention for the boot
+payload the boot manager launches. The digest is re-hashed into the PCR bank
+algorithm when it is wider than the bank. A failed extend is fail-secure: the
+image is not booted.
+
+### Debugging the FSP UPD configuration
+
+`tools/x86_fsp/decode_fsp_upd.py` decodes an FSP UPD block into named fields,
+using the offset comments that ship in `FspmUpd.h` / `FspsUpd.h`. It accepts
+either the hex block a bootloader prints over the debug UART or a UPD region
+lifted from a flash image, and `--diff` reports only the fields that differ
+between two captures. This is useful when tuning the memory or silicon
+configuration for a new board.
+
+
 ### Running on 64-bit QEMU
 
 Two example configuration files are available: `config/examples/x86_fsp_qemu.config` and `config/examples/x86_fsp_qemu_seal.config`.

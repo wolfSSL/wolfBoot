@@ -56,7 +56,10 @@ int NOINLINEFUNCTION wolfBoot_constant_compare(const uint8_t* a, const uint8_t* 
 
     return (diff != 0U) ? 1 : 0;
 }
+#endif
 
+#if defined(WOLFBOOT_TPM_SEAL) || defined(WOLFBOOT_TPM_KEYSTORE) || \
+    defined(WOLFBOOT_MEASURED_BOOT)
 void wolfBoot_print_hexstr(const unsigned char* bin, unsigned long sz,
     unsigned long maxLine)
 {
