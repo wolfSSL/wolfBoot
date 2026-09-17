@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <x86/ahci.h>
 #include <x86/ata.h>
 
 #define WOLFBOOT_ATA_DISK_LOCK
@@ -25,10 +26,18 @@
  * slot" error path. */
 static int mock_slots_full;
 
+/* When set, port IS reads report a task-file error so
+ * ata_cmd_complete_async() takes its error exit. */
+static int mock_tfes;
+
 uint32_t mmio_read32(uintptr_t address)
 {
     (void)address;
-    return mock_slots_full ? 0xFFFFFFFF : 0;
+    if (mock_slots_full)
+        return 0xFFFFFFFF;
+    if (mock_tfes)
+        return AHCI_PORT_IS_TFES;
+    return 0;
 }
 
 void mmio_write32(uintptr_t address, uint32_t value)
@@ -54,6 +63,7 @@ static uint8_t *ctable_mem;
 static void setup(void)
 {
     mock_slots_full = 0;
+    mock_tfes = 0;
     clb_mem = mmap(NULL, sizeof(struct hba_cmd_header) * 32,
             PROT_READ | PROT_WRITE,
             MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
@@ -120,6 +130,45 @@ START_TEST(test_unlock_zeroizes_passphrase_on_no_free_slot)
 }
 END_TEST
 
+START_TEST(test_erase_unit_async_zeroizes_on_completion)
+{
+    static const char passphrase[] = "unit-test-disk-secret";
+    volatile uint8_t *pw =
+        (volatile uint8_t *)buffer + ATA_SECURITY_PASSWORD_OFFSET;
+    int r;
+    int i;
+
+    r = ata_security_erase_unit(0, passphrase, 0);
+    ck_assert_int_eq(r, ATA_ERR_BUSY);
+
+    /* Command is in flight: scrubbing now would race the HBA DMA, so
+     * the passphrase must still be present until completion. */
+    for (i = 0; i < (int)strlen(passphrase); i++)
+        ck_assert_uint_eq(pw[i], (uint8_t)passphrase[i]);
+
+    r = ata_cmd_complete_async();
+    ck_assert_int_eq(r, 0);
+
+    assert_password_field_zero("after async SECURITY ERASE UNIT completion");
+}
+END_TEST
+
+START_TEST(test_erase_unit_async_zeroizes_on_port_error)
+{
+    static const char passphrase[] = "unit-test-disk-secret";
+    int r;
+
+    r = ata_security_erase_unit(0, passphrase, 0);
+    ck_assert_int_eq(r, ATA_ERR_BUSY);
+
+    mock_tfes = 1;
+    r = ata_cmd_complete_async();
+    ck_assert_int_eq(r, -1);
+
+    assert_password_field_zero("after async port-error completion");
+}
+END_TEST
+
 static Suite *ata_security_passphrase_zeroize_suite(void)
 {
     Suite *s = suite_create("ata_security_passphrase_zeroize");
@@ -127,6 +176,8 @@ static Suite *ata_security_passphrase_zeroize_suite(void)
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_unlock_zeroizes_passphrase_after_command_completes);
     tcase_add_test(tc, test_unlock_zeroizes_passphrase_on_no_free_slot);
+    tcase_add_test(tc, test_erase_unit_async_zeroizes_on_completion);
+    tcase_add_test(tc, test_erase_unit_async_zeroizes_on_port_error);
     suite_add_tcase(s, tc);
     return s;
 }

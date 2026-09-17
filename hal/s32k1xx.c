@@ -519,12 +519,13 @@ void hal_prepare_boot(void)
         WDOG_CNT = WDOG_CNT_UNLOCK;
         while (!(WDOG_CS & WDOG_CS_ULK)) {}
 
-        /* Enable watchdog with ~2 second timeout (256k ticks at 128kHz LPO)
-         * Application should either service or reconfigure the watchdog
-         */
-        WDOG_TOVAL = 0xFFFF;  /* Max timeout ~512ms without prescaler */
+        /* Enable watchdog with 65535 ticks at 128kHz LPO: ~512ms
+         * without the prescaler, ~131 seconds with the 1:256 prescaler
+         * (WDOG_CS_PRES). Application should either service or
+         * reconfigure the watchdog. */
+        WDOG_TOVAL = 0xFFFF;
         WDOG_CS = WDOG_CS_EN | WDOG_CS_UPDATE | WDOG_CS_CMD32EN |
-                  WDOG_CS_CLK_LPO | WDOG_CS_PRES;  /* With prescaler: ~131 sec */
+                  WDOG_CS_CLK_LPO | WDOG_CS_PRES;
 
         /* Wait for reconfiguration to complete */
         while (!(WDOG_CS & WDOG_CS_RCS)) {}

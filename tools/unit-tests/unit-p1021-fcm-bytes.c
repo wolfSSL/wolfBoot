@@ -220,6 +220,8 @@ static void setup(void)
     flash_idx = 0;
     g_fbcr_n = 0;
     set32(ELBC_LTESR, ELBC_LTESR_CC); /* FCM commands complete instantly */
+    /* MDR: DQ0 clear = no fail, DQ7 set = not write protected */
+    set32(ELBC_MDR, 0x80);
 }
 
 static void teardown(void)
@@ -457,6 +459,52 @@ START_TEST(test_p1021_write_unaligned)
 }
 END_TEST
 
+/* A program that reports failure in the status byte (DQ0 set) must stop:
+ * the first page is the last programmed, the loop does not advance to the
+ * next page. setup() pins MDR to 0x80 (success), so override it here. */
+START_TEST(test_p1021_write_status_fail)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x50);
+    /* DQ0 set = program failed, DQ7 set = not protected. */
+    set32(ELBC_MDR, 0x81);
+
+    ck_assert_int_eq(ext_flash_write(0, data, 600), -1);
+
+    /* Only the first page was programmed; the loop stopped before page 1. */
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(g_nand[i], data[i]);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(NAND(1, i), 0xFF);
+}
+END_TEST
+
+/* A program on a write-protected block (DQ7 clear) must stop the same way:
+ * no later page is programmed. */
+START_TEST(test_p1021_write_write_protected)
+{
+    uint8_t data[2 * 1024];
+    size_t i;
+
+    fill(data, sizeof(data), 0x60);
+    /* DQ0 clear = no fail, DQ7 clear = write protected. */
+    set32(ELBC_MDR, 0x00);
+
+    ck_assert_int_eq(ext_flash_write(0, data, 600), -1);
+
+    ck_assert_int_eq(g_fbcr_n, 1);
+    ck_assert_uint_eq(g_fbcr_log[0], 0);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(g_nand[i], data[i]);
+    for (i = 0; i < 512; i++)
+        ck_assert_uint_eq(NAND(1, i), 0xFF);
+}
+END_TEST
+
 /* A full-page read from column 0 must keep BC = 0 (full page + spare,
  * the only ECC-checking setting). */
 START_TEST(test_p1021_read_full_page)
@@ -571,6 +619,8 @@ Suite *p1021_fcm_suite(void)
     tcase_add_test(tc, test_p1021_write_partial);
     tcase_add_test(tc, test_p1021_write_multipart);
     tcase_add_test(tc, test_p1021_write_unaligned);
+    tcase_add_test(tc, test_p1021_write_status_fail);
+    tcase_add_test(tc, test_p1021_write_write_protected);
     tcase_add_test(tc, test_p1021_read_full_page);
     tcase_add_test(tc, test_p1021_read_short_spare_loaded);
     tcase_add_test(tc, test_p1021_read_multipart);

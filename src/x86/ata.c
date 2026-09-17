@@ -61,9 +61,16 @@ struct ata_async_info{
     int in_progress;
     int drv;
     int slot;
+    /* 1 when the in-flight async command carries a passphrase in the
+     * static DMA buffer and it must be scrubbed at completion. */
+    int scrub_buffer;
 };
 
 static struct ata_async_info ata_async_info;
+
+#ifdef WOLFBOOT_ATA_DISK_LOCK
+static void ata_security_buffer_zeroize(void);
+#endif
 /**
  * @brief This structure holds the necessary information for an ATA drive,
  * including AHCI base address, AHCI port number, and sector cache.
@@ -286,21 +293,39 @@ int ata_cmd_complete_async()
 {
     struct ata_drive *ata;
     int slot;
+    int ret;
 
     if (!ata_async_info.in_progress)
         return ATA_ERR_OP_NOT_IN_PROGRESS;
     ata = &ATA_Drv[ata_async_info.drv];
+    slot = ata_async_info.slot;
     if (mmio_read32(AHCI_PxIS(ata->ahci_base, ata->ahci_port)) & AHCI_PORT_IS_TFES) {
-        ata_async_info.in_progress = 0;
-        return -1;
+        /* Task-file error: verify the HBA has retired the command (PxCI
+         * clear) before scrubbing the DMA buffer it may still reference. */
+        if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) &
+            (1 << slot)) != 0)
+            return ATA_ERR_BUSY;
+        ret = -1;
+        goto done;
     }
 
-    slot = ata_async_info.slot;
-    if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) & (1 << slot)) != 0)
+    if ((mmio_read32(AHCI_PxCI(ata->ahci_base, ata->ahci_port)) &
+        (1 << slot)) != 0)
         return ATA_ERR_BUSY;
 
+    ret = 0;
+done:
+    /* The HBA has retired the command (success or task-file error), so
+     * the static DMA buffer is no longer in flight: scrub the passphrase
+     * it carried before it can be read back from SRAM. */
     ata_async_info.in_progress = 0;
-    return 0;
+#ifdef WOLFBOOT_ATA_DISK_LOCK
+    if (ata_async_info.scrub_buffer) {
+        ata_async_info.scrub_buffer = 0;
+        ata_security_buffer_zeroize();
+    }
+#endif
+    return ret;
 }
 
 /**
@@ -472,7 +497,14 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
     struct ata_drive *ata = &ATA_Drv[drv];
     size_t passphrase_len = 0;
     int ret;
-    int slot = prepare_cmd_h2d_slot(drv, buffer,
+    int slot;
+
+    /* A second security command must not touch the shared buffer while
+     * an async transfer is in flight: prepare_cmd_h2d_slot() and the
+     * memcpy below would clobber the passphrase still being DMA'd. */
+    if (ata_async_info.in_progress)
+        return ATA_ERR_OP_IN_PROGRESS;
+    slot = prepare_cmd_h2d_slot(drv, buffer,
             ATA_SECURITY_COMMAND_LEN, 1);
     memset(buffer, 0, ATA_SECURITY_COMMAND_LEN);
     if (master)
@@ -502,8 +534,12 @@ static int security_command_passphrase(int drv, uint8_t ata_cmd,
      * may still be in flight when we return (the caller polls completion
      * via ata_cmd_complete_async()), so clearing the buffer now would race
      * the HBA and could corrupt the command still in progress. */
-    if (!async)
+    if (!async) {
         ata_security_buffer_zeroize();
+    } else {
+        /* Command is in flight: scrub once the HBA retires it. */
+        ata_async_info.scrub_buffer = 1;
+    }
     return ret;
 }
 

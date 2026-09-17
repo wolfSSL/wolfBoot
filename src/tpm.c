@@ -336,7 +336,7 @@ static int self_sha384(uint8_t *hash)
  * TPM2_PCR_Extend. Optionally, if DEBUG_WOLFTPM or WOLFBOOT_DEBUG_TPM defined,
  * prints debug info.
  *
- * @param[in] pcrIndex The PCR Index (0-24 is valid range).
+ * @param[in] pcrIndex The PCR Index (0-23 is valid range).
  * @param[in] hash Pointer to the hash value to extend into the PCR.
  * @param[in] line Line number where the function is called (for debugging).
  * @return 0 on success, an error code on failure.

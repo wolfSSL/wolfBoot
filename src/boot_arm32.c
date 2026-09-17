@@ -72,7 +72,7 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
      * removes the need for a separate LINUX_PAYLOAD switch per target.
      *
      * Without MMU there is no DTB to pass, so we fall back to a minimal
-     * handoff (all GPRs cleared) used by targets like sama5d3. */
+     * handoff (r0-r3 cleared) used by targets like sama5d3. */
 #ifdef MMU
     register const uint32_t *dts_in = dts_offset;
     asm volatile (

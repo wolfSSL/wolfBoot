@@ -336,6 +336,12 @@ enum elbc_amask_sizes {
 
 #define NAND_CMD_READSTART    0x30 /* Extended command for large page devices */
 
+/* NAND device status byte (ONFI): bit 0 set = program/erase failed,
+ * bit 7 clear = write protected. Success requires bit 0 clear and
+ * bit 7 set. */
+#define NAND_STATUS_FAIL      (1 << 0) /* DQ0: 1 = program/erase fail */
+#define NAND_STATUS_WP_N      (1 << 7) /* DQ7: 0 = write protected */
+
 
 /* DDR */
 /* DDR3: 512MB, 333.333 MHz (666.667 MT/s) */
@@ -687,6 +693,15 @@ static int hal_flash_command(uint8_t iswrite)
      * "timeout" has already passed FLASH_TIMEOUT_TRIES, so comparing it
      * for equality never matched and a hung command returned 0. */
     if (!(ltesr & ELBC_LTESR_CC)) {
+        ret = -1;
+    }
+    else if (ltesr & ELBC_LTESR_FCT) {
+        /* a CW/RSW wait timed out: the device never became ready */
+        ret = -1;
+    }
+    else if (iswrite == 0 && (ltesr & ELBC_LTESR_PAR)) {
+        /* uncorrectable ECC error during the FCM read: the data in the
+         * FCM buffer cannot be trusted */
         ret = -1;
     }
 
@@ -1063,18 +1078,18 @@ static void config_io_pin(uint8_t port, uint8_t pin, int dir, int open_drain,
     pin_2bit_dir =  (uint32_t)(dir << (NUM_OF_PINS -
         (pin % (NUM_OF_PINS / 2) + 1) * 2));
 
-    /* Setup the direction */
+    /* Setup the direction: one masked store - a clear-then-set pair
+     * would drop a concurrent update to another pin in the same
+     * register */
     tmp_val = (pin > (NUM_OF_PINS / 2) - 1) ?
         get32(GUTS_CPDIR2(port)) :
         get32(GUTS_CPDIR1(port));
 
     if (pin > (NUM_OF_PINS / 2) - 1) {
-        set32(GUTS_CPDIR2(port), ~pin_2bit_mask & tmp_val);
-        set32(GUTS_CPDIR2(port),  pin_2bit_dir  | tmp_val);
+        set32(GUTS_CPDIR2(port), (~pin_2bit_mask & tmp_val) | pin_2bit_dir);
     }
     else {
-        set32(GUTS_CPDIR1(port), ~pin_2bit_mask & tmp_val);
-        set32(GUTS_CPDIR1(port),  pin_2bit_dir  | tmp_val);
+        set32(GUTS_CPDIR1(port), (~pin_2bit_mask & tmp_val) | pin_2bit_dir);
     }
 
     /* Calculate pin location for 1bit mask */
@@ -1089,21 +1104,21 @@ static void config_io_pin(uint8_t port, uint8_t pin, int dir, int open_drain,
         set32(GUTS_CPODR(port), ~pin_1bit_mask & tmp_val);
     }
 
-    /* Setup the assignment */
+    /* Setup the assignment: one masked store (same reason as the
+     * direction write above) */
     tmp_val = (pin > (NUM_OF_PINS/2) - 1) ?
         get32(GUTS_CPPAR2(port)):
         get32(GUTS_CPPAR1(port));
     pin_2bit_assign = (uint32_t)(assign <<
         (NUM_OF_PINS - (pin % (NUM_OF_PINS / 2) + 1) * 2));
 
-    /* Clear and set 2 bits mask */
     if (pin > (NUM_OF_PINS/2) - 1) {
-        set32(GUTS_CPPAR2(port), ~pin_2bit_mask   & tmp_val);
-        set32(GUTS_CPPAR2(port),  pin_2bit_assign | tmp_val);
+        set32(GUTS_CPPAR2(port), (~pin_2bit_mask & tmp_val) |
+            pin_2bit_assign);
     }
     else {
-        set32(GUTS_CPPAR1(port), ~pin_2bit_mask   & tmp_val);
-        set32(GUTS_CPPAR1(port),  pin_2bit_assign | tmp_val);
+        set32(GUTS_CPPAR1(port), (~pin_2bit_mask & tmp_val) |
+            pin_2bit_assign);
     }
 }
 
@@ -1641,13 +1656,19 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     page_size = 512;
     set32(ELBC_FCR, ELBC_FCR_CMD(0, NAND_CMD_READA) |
                     ELBC_FCR_CMD(1, NAND_CMD_PAGE_PROG2) |
-                    ELBC_FCR_CMD(2, NAND_CMD_PAGE_PROG1));
+                    ELBC_FCR_CMD(2, NAND_CMD_PAGE_PROG1) |
+                    ELBC_FCR_CMD(3, NAND_CMD_STATUS));
+    /* the CM3+RSW pair issues the status command after the program
+     * execute and waits for it, so MDR holds the page status like the
+     * large page path */
     set32(ELBC_FIR, ELBC_FIR_OP(0, ELBC_FIR_OP_CW0) |
                     ELBC_FIR_OP(1, ELBC_FIR_OP_CM2) |
                     ELBC_FIR_OP(2, ELBC_FIR_OP_CA) |
                     ELBC_FIR_OP(3, ELBC_FIR_OP_PA) |
                     ELBC_FIR_OP(4, ELBC_FIR_OP_WB) |
-                    ELBC_FIR_OP(5, ELBC_FIR_OP_CW1));
+                    ELBC_FIR_OP(5, ELBC_FIR_OP_CW1) |
+                    ELBC_FIR_OP(6, ELBC_FIR_OP_CM3) |
+                    ELBC_FIR_OP(7, ELBC_FIR_OP_RSW));
 #endif
     (void)block_size; /* not used - shown for reference */
 
@@ -1690,7 +1711,13 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
         wolfBoot_printf("write page %d, col %d, status %x\n",
             page, col, status);
 #endif
-        (void)status;
+        /* DQ0 set = program failed, DQ7 clear = write protected: the
+         * page did not program. Stop; retrying the same page fails the
+         * same way. */
+        if ((status & NAND_STATUS_FAIL) || !(status & NAND_STATUS_WP_N)) {
+            ret = -1;
+            break;
+        }
         address += write_size;
         pos += write_size;
         data += write_size;
@@ -1851,7 +1878,12 @@ int ext_flash_erase(uintptr_t address, int len)
 #ifdef DEBUG_EXT_FLASH
         wolfBoot_printf("erase page %d, status %x\n", page, status);
 #endif
-        (void)status;
+        /* DQ0 set = erase failed, DQ7 clear = write protected: the block
+         * did not erase. Stop; erasing the same block fails the same way. */
+        if ((status & NAND_STATUS_FAIL) || !(status & NAND_STATUS_WP_N)) {
+            ret = -1;
+            break;
+        }
         address += block_size;
         len -= block_size;
     }

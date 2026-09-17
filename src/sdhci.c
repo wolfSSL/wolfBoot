@@ -491,9 +491,9 @@ static uint32_t sdhci_set_clock(uint32_t clock_khz)
     base_clk_khz = sdhci_platform_set_clock(clock_khz, base_clk_khz);
     if (base_clk_khz == 0) {
         /* No usable base clock. The SD clock was already disabled above, so
-         * the controller is left idle. NOTE: 0 is also what the "clock already
-         * set" path above returns, so callers cannot currently tell these
-         * apart - see the DEBUG_SDHCI log for which one happened. */
+         * the controller is left idle. This path returns 0 (error), unlike
+         * the "clock already set" path above which returns last_clock_khz,
+         * so a 0 return is unambiguously an error for callers. */
 #ifdef DEBUG_SDHCI
         wolfBoot_printf("sdhci_set_clock: no usable base clock "
                         "(CAPS and platform hook both 0)\n");
@@ -1170,7 +1170,7 @@ static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
 
         response = SDHCI_REG(SDHCI_SRS04);
 
-        /* Check if device is ready (busy bit cleared = ready) */
+        /* Check if device is ready (OCR bit 31 set = ready) */
         if (response & MMC_OCR_BUSY_BIT) {
             /* Device is ready */
             if (ocr_reg != NULL) {

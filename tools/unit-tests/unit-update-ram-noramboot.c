@@ -81,6 +81,8 @@ static void reset_mock_stats(void)
 {
     wolfBoot_panicked = 0;
     wolfBoot_staged_ok = 0;
+    mock_max_read_addr = 0;
+    mock_max_read_len = 0;
 }
 
 static void prepare_flash(void)
@@ -184,16 +186,15 @@ START_TEST (test_noramboot_sunnyday) {
 }
 END_TEST
 
-/* Regression test for F-4410: firmware versions with the high bit set
- * (>= 0x80000000) must still feed the anti-rollback guard in wolfBoot_start.
+/* Regression test for F-4410 + F-12922: firmware versions with the high
+ * bit set (>= 0x80000000) must be read without signed-int clamping (the
+ * two version asserts below), and a failed high-version image must not
+ * block fallback to the lower-versioned (but valid) UPDATE partition.
  *
- * BOOT carries the higher version but is marked oversize so wolfBoot_open_image()
- * rejects it and the boot path falls back to the lower-versioned (but valid)
- * UPDATE partition. That downgrade must be denied. Before the fix the versions
- * were cast through a signed int and clamped to 0, collapsing max_v to 0 and
- * silently bypassing the "(max_v > 0U)" guard, so the lower UPDATE image was
- * staged for boot. */
-START_TEST (test_noramboot_highversion_rollback_denied) {
+ * BOOT carries the higher version but is marked oversize so
+ * wolfBoot_open_image() rejects it; the boot path must fall back to the
+ * valid UPDATE image instead of panicking on the version difference. */
+START_TEST (test_noramboot_fallback_to_lower_version) {
     uint32_t oversize = WOLFBOOT_PARTITION_SIZE;
 
     reset_mock_stats();
@@ -212,10 +213,14 @@ START_TEST (test_noramboot_highversion_rollback_denied) {
 
     wolfBoot_start();
 
-    /* Rollback to the lower UPDATE version must be denied: wolfBoot panics and
-     * stages nothing. */
-    ck_assert(!wolfBoot_staged_ok);
-    ck_assert_int_eq(wolfBoot_panicked, 1);
+    /* A failed high-version boot image must not block fallback to the
+     * valid lower-version update image (F-12922). The image loaded to RAM
+     * must come from the UPDATE partition payload, not the oversize BOOT
+     * partition. */
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_uint_eq(mock_max_read_addr,
+        (uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS + IMAGE_HEADER_SIZE);
     cleanup_flash();
 }
 END_TEST
@@ -249,19 +254,20 @@ Suite *wolfboot_suite(void)
     TCase *sunnyday = tcase_create("Non-RAMBOOT sunny day");
     TCase *ext_short_read =
         tcase_create("Non-RAMBOOT short ext flash read rejected");
-    TCase *rollback_denied =
-        tcase_create("Non-RAMBOOT high-version rollback denied");
+    TCase *fallback_to_lower_version =
+        tcase_create("Non-RAMBOOT fallback to lower version");
 
     tcase_add_test(sunnyday, test_noramboot_sunnyday);
     tcase_add_test(ext_short_read,
         test_noramboot_ext_flash_short_read_rejected);
-    tcase_add_test(rollback_denied, test_noramboot_highversion_rollback_denied);
+    tcase_add_test(fallback_to_lower_version,
+        test_noramboot_fallback_to_lower_version);
     suite_add_tcase(s, sunnyday);
     suite_add_tcase(s, ext_short_read);
-    suite_add_tcase(s, rollback_denied);
+    suite_add_tcase(s, fallback_to_lower_version);
     tcase_set_timeout(sunnyday, 5);
     tcase_set_timeout(ext_short_read, 5);
-    tcase_set_timeout(rollback_denied, 5);
+    tcase_set_timeout(fallback_to_lower_version, 5);
     return s;
 }
 

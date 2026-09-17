@@ -45,12 +45,21 @@ static int g_pages[MAX_TRACKED_PAGES];
 static int g_page_calls;
 static int g_cmd_calls;
 static int g_cmd_ret;
+static uint32_t g_status;
 
-static void mock_reset(int cmd_ret)
+/* ONFI status byte: DQ0 set = program/erase fail, DQ7 clear = protected.
+ * 0x80 is a clean success (no fail, not protected); 0x81 is an
+ * erase/program failure (DQ0 set); 0x00 is write-protected (DQ7 clear). */
+#define STATUS_OK      0x80
+#define STATUS_ERASE_FAIL 0x81
+#define STATUS_WP_PROTECTED 0x00
+
+static void mock_reset(int cmd_ret, uint32_t status)
 {
     g_page_calls = 0;
     g_cmd_calls = 0;
     g_cmd_ret = cmd_ret;
+    g_status = status;
 }
 
 static void hal_flash_set_addr(int page, int col)
@@ -81,7 +90,7 @@ static void set32(volatile unsigned int *addr, unsigned int val)
 static uint32_t get32(volatile unsigned int *addr)
 {
     (void)addr;
-    return 0; /* MDR status: no error */
+    return g_status; /* MDR: the NAND status byte */
 }
 
 /* The real ext_flash_erase() from hal/nxp_p1021.c (extracted). */
@@ -96,7 +105,7 @@ START_TEST (test_erase_advances_through_blocks)
 {
     int ret;
 
-    mock_reset(0);
+    mock_reset(0, STATUS_OK);
 
     ret = ext_flash_erase(0, 2 * (int)TEST_BLOCK_SIZE);
 
@@ -112,7 +121,40 @@ START_TEST (test_erase_stops_on_command_error)
 {
     int ret;
 
-    mock_reset(-1);
+    mock_reset(-1, STATUS_OK);
+
+    ret = ext_flash_erase(0, 2 * (int)TEST_BLOCK_SIZE);
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(g_page_calls, 1);
+    ck_assert_int_eq(g_pages[0], 0);
+}
+END_TEST
+
+START_TEST (test_erase_stops_on_status_fail)
+{
+    int ret;
+
+    /* The command sequence completes (cmd_ret 0) but the NAND reports an
+     * erase failure in the status byte (DQ0 set). */
+    mock_reset(0, STATUS_ERASE_FAIL);
+
+    ret = ext_flash_erase(0, 2 * (int)TEST_BLOCK_SIZE);
+
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(g_page_calls, 1);
+    ck_assert_int_eq(g_pages[0], 0);
+}
+END_TEST
+
+START_TEST (test_erase_stops_on_write_protected)
+{
+    int ret;
+
+    /* The command sequence completes (cmd_ret 0) but the NAND reports the
+     * block as write-protected in the status byte (DQ7 clear). The erase
+     * must fail and not advance to the next block. */
+    mock_reset(0, STATUS_WP_PROTECTED);
 
     ret = ext_flash_erase(0, 2 * (int)TEST_BLOCK_SIZE);
 
@@ -129,6 +171,8 @@ Suite *p1021_erase_suite(void)
 
     tcase_add_test(tc, test_erase_advances_through_blocks);
     tcase_add_test(tc, test_erase_stops_on_command_error);
+    tcase_add_test(tc, test_erase_stops_on_status_fail);
+    tcase_add_test(tc, test_erase_stops_on_write_protected);
     tcase_set_timeout(tc, 10);
     suite_add_tcase(s, tc);
     return s;

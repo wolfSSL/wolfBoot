@@ -204,6 +204,11 @@ exit:
     wolfTPM2_UnloadHandle(&dev, &tpmSession.handle);
     wolfTPM2_Cleanup(&dev);
 
+    /* Scrub the NV auth copy and the session state from the stack on
+     * every exit path. */
+    wc_ForceZero(&nv, sizeof(nv));
+    wc_ForceZero(&tpmSession, sizeof(tpmSession));
+
     return rc;
 }
 

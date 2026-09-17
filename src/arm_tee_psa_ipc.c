@@ -925,6 +925,10 @@ static int32_t arm_tee_psa_ps_dispatch(int32_t type, const psa_invec *in_vec,
         if (data_len > 0 && data == NULL) {
             return PSA_ERROR_INVALID_ARGUMENT;
         }
+        /* Scrub the previous value before overwriting: a SET that stores
+         * less data (or zero) must not leave the tail of the old object
+         * readable via GET. Runs only after every validation check. */
+        wc_ForceZero(entry->data, sizeof(entry->data));
         if (data_len > 0) {
             XMEMCPY(entry->data, data, data_len);
         }

@@ -587,11 +587,14 @@ static void hal_shm_init(void)
 
 static void hal_shm_status_set(ShmInfo_t* info, uint32_t status)
 {
-    IPC_TASKS_SEND(USE_IPC_SEND) = 1;
     if (info != NULL) {
         info->magic = SHAREM_MEM_MAGIC;
         info->status = status;
     }
+    /* publish the fields before signaling: the peer reads them right
+     * after seeing the IPC event */
+    DSB();
+    IPC_TASKS_SEND(USE_IPC_SEND) = 1;
 }
 
 static uint32_t hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
@@ -616,6 +619,9 @@ static uint32_t hal_shm_status_wait(ShmInfo_t* info, uint32_t status,
         }
         /* clear event */
         IPC_EVENTS_RECEIVE(USE_IPC_RECV) = 0;
+        /* the sender published the fields before the event: order this
+         * core's field reads after the event observation */
+        DSB();
         /* if we got an event and "info" not provided, just return status to
          * signal event occurred */
         if (info == NULL) {

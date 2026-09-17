@@ -351,6 +351,11 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 int mock_ext_flash_short_len = 0;
 int mock_ext_flash_short_bytes = 0;
 
+/* Records the source address of the largest ext_flash_read() call (the
+ * image load to RAM), so a test can verify which partition was booted. */
+uintptr_t mock_max_read_addr = 0;
+int mock_max_read_len = 0;
+
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 {
     int i;
@@ -359,6 +364,10 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
     if (mock_ext_flash_short_len == len && mock_ext_flash_short_bytes > 0)
         ret = len - mock_ext_flash_short_bytes;
+    if (ret > mock_max_read_len) {
+        mock_max_read_len = ret;
+        mock_max_read_addr = address;
+    }
     for (i = 0; i < ret; i++) {
          data[i] = a[i];
     }

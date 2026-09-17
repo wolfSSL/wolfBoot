@@ -3125,21 +3125,23 @@ int mpfs_ddr_init(unsigned int outer_retry)
     DDRPHY_REG(PHY_TIP_CFG_PARAMS) = LIBERO_SETTING_TIP_CFG_PARAMS;
     mb();
 
-    /* Step 9: Run training + post-training + MTC sanity, with retry on
-     * MTC failure.
+    /* Step 9: Run training + post-training write calibration, with retry on
+     * calibration failure.
      *
-     * Why MTC is the retry trigger (not PHY_TRAINING_STATUS): when the
-     * manual ADDCMD training picks a marginal phase/dly that doesn't
-     * resolve into a usable DRAM alignment, train_stat sticks at 0x1
-     * (BCLK_SCLK only).  But TIP keeps spinning in the background and
-     * eventually flips the WRLVL/RDGATE/DQ_DQS bits to read 0x1D, even
-     * though the alignment is bogus.  An outer retry keyed on
-     * PHY_TRAINING_STATUS sees that bogus 0x1D and stops.  MTC actually
-     * exercises the DDR controller -- it times out unambiguously when
-     * training was bad, and is the reliable signal.
+     * The reliability gate is WRCALIB (the per-lane write-cal sweep must
+     * calibrate all lanes), not PHY_TRAINING_STATUS: when the manual ADDCMD
+     * training picks a marginal phase/dly that doesn't resolve into a usable
+     * DRAM alignment, TIP's train_stat self-report can still read "complete"
+     * even though the write path is bad.  Gating on train_stat alone let bad
+     * boots through and the 19 MB load then hard-failed every block.
      *
-     * Empirical baseline: ~30% per-attempt training failure rate -> 5
-     * retries gives ~99.7% cumulative success rate.
+     * MTC sanity is a secondary gate, run only when TIP did not report full
+     * training (0x1C).  When TIP does complete full training, MTC is skipped:
+     * the MTC engine has a separate DDRC-internal access issue and would just
+     * burn all retries and end in a WDT reset.
+     *
+     * Empirical baseline: ~30% per-attempt training failure rate; 3 inner x
+     * 6 outer retries (up to 18 attempts) covers it with margin.
      */
     {
         uint32_t train_retry = 0;

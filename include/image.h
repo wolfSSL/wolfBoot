@@ -133,10 +133,10 @@ extern "C" {
 #define wolfBoot_verify_signature_primary wolfBoot_verify_signature_tpm
 #endif
 
-/* Validate sector size is larger than image header size */
+/* Validate sector size is at least as large as the image header size */
 #if defined(WOLFBOOT_SECTOR_SIZE) && defined(IMAGE_HEADER_SIZE) && \
     (WOLFBOOT_SECTOR_SIZE < IMAGE_HEADER_SIZE)
-#error WOLFBOOT_SECTOR_SIZE must be larger than IMAGE_HEADER_SIZE
+#error WOLFBOOT_SECTOR_SIZE must be at least as large as IMAGE_HEADER_SIZE
 #endif
 
 
@@ -1747,6 +1747,11 @@ uint8_t* wolfBoot_peek_image(struct wolfBoot_image *img, uint32_t offset,
 
 /* get header type for image */
 uint16_t wolfBoot_get_header(struct wolfBoot_image *img, uint16_t type, uint8_t **ptr);
+
+#ifdef EXT_FLASH
+/* Drop the cached external image header so the next open reloads it. */
+void RAMFUNCTION wolfBoot_invalidate_hdr_cache(void);
+#endif
 
 /* Find the key slot ID based on the SHA hash of the key. */
 int keyslot_id_by_sha(const uint8_t *hint);

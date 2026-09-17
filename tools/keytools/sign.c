@@ -1218,13 +1218,15 @@ static int sign_digest(int sign, int hash_algo,
             mgf = WC_MGF1SHA384;
         } else {
             fprintf(stderr, "RSA-PSS requires SHA-256 or SHA-384\n");
-            return -1;
+            ret = -1;
         }
-        ret = wc_RsaPSS_Sign(digest, digest_sz, signature, *signature_sz,
-                hash_type, mgf, &k->rsa, &rng);
-        if (ret > 0) {
-            *signature_sz = ret;
-            ret = 0;
+        if (ret == 0) {
+            ret = wc_RsaPSS_Sign(digest, digest_sz, signature, *signature_sz,
+                    hash_type, mgf, &k->rsa, &rng);
+            if (ret > 0) {
+                *signature_sz = ret;
+                ret = 0;
+            }
         }
     }
     else

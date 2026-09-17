@@ -286,7 +286,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     uint32_t *load_address = NULL;
     uint32_t *source_address = NULL;
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
     uint8_t p_state;
 #endif
 #if defined(MMU) || defined(WOLFBOOT_FDT)
@@ -314,15 +314,15 @@ void RAMFUNCTION wolfBoot_start(void)
      * kernel directly. */
     uintptr_t bl31_entry = 0;
 #endif
-#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
-    uint32_t boot_v = wolfBoot_current_firmware_version();
-    uint32_t update_v = wolfBoot_update_firmware_version();
-    uint32_t max_v = (boot_v > update_v) ? boot_v : update_v;
-#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
-
-    memset(&os_image, 0, sizeof(struct wolfBoot_image));
-
     for (;;) {
+        /* Each open needs fresh image state: wolfBoot_open_image_address()
+         * adopts load_address only when hdr is NULL, and the external
+         * header cache keeps the first image opened, so without this the
+         * fallback re-verifies the previous partition's header. */
+        memset(&os_image, 0, sizeof(struct wolfBoot_image));
+#ifdef EXT_FLASH
+        wolfBoot_invalidate_hdr_cache();
+#endif
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         if (active < 0)
             active = wolfBoot_dualboot_candidate();
@@ -343,17 +343,6 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
             break;
         }
-#if !defined(ALLOW_DOWNGRADE) && defined(WOLFBOOT_FIXED_PARTITIONS)
-        {
-            uint32_t active_v = (active == PART_UPDATE) ? update_v : boot_v;
-            if ((max_v > 0U) && (active_v < max_v)) {
-                wolfBoot_printf("Rollback to lower version not allowed\n");
-                wolfBoot_panic();
-                break;
-            }
-        }
-#endif /* !ALLOW_DOWNGRADE && WOLFBOOT_FIXED_PARTITIONS */
-
     #if defined(WOLFBOOT_DUALBOOT) && defined(WOLFBOOT_FIXED_PARTITIONS)
         wolfBoot_printf("Trying %s partition at %p\n",
                 active == PART_BOOT ? "Boot" : "Update", source_address);
@@ -463,7 +452,7 @@ backup_on_failure:
     /* First time we boot this update, set to TESTING to await
      * confirmation from the system
      */
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
     if ((wolfBoot_get_partition_state(active, &p_state) == 0) &&
         (p_state == IMG_STATE_UPDATING))
     {
@@ -792,11 +781,10 @@ backup_on_failure:
 #endif /* MMU */
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
-    /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) re-derived
-     * the load address, since that stage provides its own entry point. The
-     * flag is tracked explicitly rather than by comparing load_address:
-     * elf_load_image_mmu() publishes its entry point before it finishes
-     * validating, so a rejected ELF also leaves load_address rewritten. */
+    /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) succeeded
+     * and re-derived the load address, since that stage provides its own
+     * entry point. Tracked with an explicit flag set on each stage's success
+     * path rather than by comparing load_address. */
     if ((uboot_entry != NULL) && !stage_entry_override) {
         load_address = uboot_entry;
     }

@@ -1703,8 +1703,8 @@ void hal_prepare_boot(void)
  * profile when chasing VxWorks 7 64-bit silent boot:
  *   - DUART1 MCR = 3   (DTR+RTS asserted; U-Boot sets this, our driver
  *                       leaves it at the post-reset 0)
- *   - TCR = 0x04000000 (matches U-Boot's leftover; wolfBoot was clearing
- *                       it; VxWorks 7 BSP early code may inherit) */
+ *   - TCR = 0 (matches CW U-Boot's pre-bootm value; a nonzero WRC would let
+ *                       the watchdog fire silently after VxWorks starts) */
 void RAMFUNCTION hal_flash_cache_disable_pre_os(void)
 {
     hal_flash_cache_disable();

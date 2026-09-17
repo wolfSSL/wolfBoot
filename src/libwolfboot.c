@@ -657,7 +657,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 
 
 
-#ifdef WOLFBOOT_FIXED_PARTITIONS
+#ifdef HAVE_PARTITION_TRAILERS
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -685,6 +685,11 @@ static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
     set_trailer_at(part, 1, val);
 }
 
+/* Update-sector flag helpers and the fixed-partition APIs below need the
+ * fixed partition addresses and wolfboot_magic_trail, which a
+ * CUSTOM_PARTITION_TRAILER / WOLFBOOT_NO_PARTITIONS build does not define.
+ * The partition state APIs above stay available to custom-trailer builds. */
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Set the flags of an update sector.
  *
@@ -692,7 +697,6 @@ static void RAMFUNCTION set_partition_state(uint8_t part, uint8_t val)
  *
  * @param[in] pos Update sector position.
  * @param[in] val New flags value to set.
- * @return 0 on success, -1 on failure.
  */
 static void RAMFUNCTION set_update_sector_flags(uint32_t pos, uint8_t val)
 {
@@ -711,6 +715,7 @@ static uint8_t* RAMFUNCTION get_update_sector_flags(uint32_t pos)
 {
     return (uint8_t *)get_trailer_at(PART_UPDATE, 2 + pos);
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**
  * @brief Set the state of a partition.
@@ -736,6 +741,7 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
     return 0;
 }
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Set the flag for sector
  *
@@ -766,6 +772,7 @@ int RAMFUNCTION wolfBoot_set_update_sector_flag(uint16_t sector,
         set_update_sector_flags(pos, fl_value);
     return 0;
 }
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
 
 /**
  * @brief Get the state of a partition.
@@ -790,6 +797,7 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
     return 0;
 }
 
+#ifdef WOLFBOOT_FIXED_PARTITIONS
 /**
  * @brief Get the flag for sector
  *
@@ -866,8 +874,8 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 /**
  * @brief Update trigger function.
  *
- * This function updates the boot partition state to "IMG_STATE_UPDATING".
- * If the FLAGS_HOME macro is defined, it erases the last sector of the boot
+ * This function sets the update partition state to "IMG_STATE_UPDATING".
+ * If the FLAGS_HOME macro is defined, it erases the last sector of the update
  * partition before updating the partition state. It also checks FLAGS_UPDATE_EXT
  * and calls the appropriate flash unlock and lock functions before
  * updating the partition state.
@@ -933,6 +941,8 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     }
 }
 
+#endif /* WOLFBOOT_FIXED_PARTITIONS */
+
 /**
  * @brief Success function.
  *
@@ -960,7 +970,7 @@ void RAMFUNCTION wolfBoot_success(void)
 #ifdef __CCRX__
 #pragma section
 #endif
-#endif /* WOLFBOOT_FIXED_PARTITIONS */
+#endif /* HAVE_PARTITION_TRAILERS */
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
 /* Persistent failure diagnostics.
@@ -2369,6 +2379,8 @@ static int pkcs11_enc_initialized = 0, pkcs11_dec_initialized = 0;
 static CK_AES_CTR_PARAMS pkcs11_params;
 #endif
 
+static void pkcs11_pin_wipe(void);
+
 int pkcs11_crypto_init(void)
 {
     CK_RV ret = 0;
@@ -2462,6 +2474,9 @@ int pkcs11_crypto_init(void)
         if (pkcs11_initialized) {
             pkcs11_function_list->C_Finalize(NULL);
         }
+        /* terminal failure: the credential must not survive in retained
+         * memory (same reason as the deinit wipe) */
+        pkcs11_pin_wipe();
     }
 
     return ret;
@@ -2831,8 +2846,8 @@ exit:
  * @brief Read and decrypt data from an external flash.
  *
  * This function reads the encrypted data from the external flash,
- * decrypts it using the AES decryption algorithm, and stores the decrypted data
- * in the provided buffer.
+ * decrypts it using the configured decryption algorithm (ChaCha20, AES-CTR,
+ * or PKCS#11), and stores the decrypted data in the provided buffer.
 
  * @param address The address in the external flash to read the encrypted data from.
  * @param data Pointer to the buffer to store the decrypted data.
@@ -2955,7 +2970,8 @@ typedef char wolfBoot_ramboot_blockalign_check[
 /**
  * @brief Decrypt data from RAM.
  *
- * This function decrypts data from the RAM using the AES decryption algorithm.
+ * This function decrypts data from the RAM using the configured decryption
+ * algorithm (ChaCha20, AES-CTR, or PKCS#11).
  *
  * @param src Pointer to the source buffer containing the encrypted data.
  * @param dst Pointer to the destination buffer to store the decrypted data.

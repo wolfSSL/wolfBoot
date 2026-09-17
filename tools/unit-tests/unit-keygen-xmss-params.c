@@ -7,6 +7,8 @@
 static const char *mock_xmss_param;
 static int mock_exit_code;
 static jmp_buf mock_exit_env;
+static int mock_force_zero_count;
+static int mock_free_rng_count;
 
 static void mock_exit(int code);
 
@@ -22,8 +24,10 @@ static void mock_exit(int code);
 #define wc_XmssKey_ExportPubRaw mock_wc_XmssKey_ExportPubRaw
 #define wc_XmssKey_Free mock_wc_XmssKey_Free
 #define wc_ForceZero mock_wc_ForceZero
+#define wc_FreeRng mock_wc_FreeRng
 #include "../keytools/keygen.c"
 #undef wc_ForceZero
+#undef wc_FreeRng
 #undef wc_XmssKey_Free
 #undef wc_XmssKey_ExportPubRaw
 #undef wc_XmssKey_GetPrivLen
@@ -115,12 +119,22 @@ void mock_wc_ForceZero(void *mem, size_t len)
 {
     (void)mem;
     (void)len;
+    mock_force_zero_count++;
+}
+
+int mock_wc_FreeRng(WC_RNG *rng)
+{
+    (void)rng;
+    mock_free_rng_count++;
+    return 0;
 }
 
 static void setup(void)
 {
     mock_xmss_param = NULL;
     mock_exit_code = 0;
+    mock_force_zero_count = 0;
+    mock_free_rng_count = 0;
     unsetenv("XMSS_PARAMS");
 }
 
@@ -140,6 +154,11 @@ static void run_keygen_xmss(void)
 
     ck_assert_int_eq(jumped, 1);
     ck_assert_int_eq(mock_exit_code, 1);
+    /* The RNG must be freed (wc_FreeRng) and zeroized (wc_ForceZero) after
+     * key generation (F-12883). keygen_die() frees+zeroizes the RNG; the
+     * key is also zeroized in the caller's cleanup. */
+    ck_assert_int_ge(mock_force_zero_count, 1);
+    ck_assert_int_eq(mock_free_rng_count, 1);
 }
 
 START_TEST(test_keygen_xmss_uses_env_param_when_set)

@@ -109,6 +109,15 @@ static int exportPubKey = 0;
 static WC_RNG rng;
 static int noLocalKeys = 0;
 
+/* Exit after the RNG has been initialised: free the DRBG state first so
+ * it is not left resident in process memory, then terminate. */
+static void keygen_die(int code)
+{
+    wc_FreeRng(&rng);
+    wc_ForceZero(&rng, sizeof(rng));
+    exit(code);
+}
+
 /* ML-DSA pub keys are big. */
 #define KEYSLOT_MAX_PUBKEY_SIZE ML_DSA_L5_PUBKEY_SIZE
 
@@ -567,7 +576,7 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask,
     ret = wc_InitRsaKey(&k, NULL);
     if (ret != 0) {
         fprintf(stderr, "Unable to initialize RSA%d key\n", kbits);
-        exit(1);
+        keygen_die(1);
     }
     rsa_init = 1;
 
@@ -616,7 +625,7 @@ cleanup:
         wc_FreeRsaKey(&k);
     wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 #define MAX_ECC_KEY_SIZE 66
@@ -731,7 +740,7 @@ cleanup:
     wc_ForceZero(priv_der, sizeof(priv_der));
 
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 
     memcpy(k_buffer,                Qx, ecc_key_size);
     memcpy(k_buffer + ecc_key_size, Qy, ecc_key_size);
@@ -803,7 +812,7 @@ cleanup:
         wc_ed25519_free(&k);
     wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 static void keygen_ed448(const char *privkey, uint32_t id_mask)
@@ -864,7 +873,7 @@ cleanup:
         wc_ed448_free(&k);
     wc_ForceZero(&k, sizeof(k));
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 #include "../lms/lms_common.h"
@@ -986,7 +995,7 @@ cleanup:
         wc_ForceZero(&key, sizeof(key));
     }
     if (exit_code)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 #include "../xmss/xmss_common.h"
@@ -1105,7 +1114,7 @@ cleanup:
         wc_ForceZero(&key, sizeof(key));
     }
     if (exit_code)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 
@@ -1316,7 +1325,7 @@ cleanup:
         priv = NULL;
     }
     if (exit_code != 0)
-        exit(exit_code);
+        keygen_die(exit_code);
 }
 
 static void key_gen_check(const char *kfilename)

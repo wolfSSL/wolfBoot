@@ -776,7 +776,7 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
     /* Set the public key. */
     ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE);
     if (ret != 0) {
-        /* Something is wrong with the pub key or LMS parameters. */
+        /* Something is wrong with the pub key or XMSS parameters. */
         wolfBoot_printf("error: wc_XmssKey_ImportPubRaw" \
                         " returned %d\n", ret);
         return;
@@ -1088,6 +1088,18 @@ static uint8_t *fetch_hdr_cpy(struct wolfBoot_image *img)
             hdr_cpy_done = 1;
     }
     return hdr_cpy;
+}
+
+/**
+ * @brief Invalidate the cached external image header.
+ *
+ * fetch_hdr_cpy() loads the header of the first image it sees and serves
+ * it to every later get_header() call. Call this before opening a
+ * different image so TLV lookups do not read the stale header.
+ */
+void RAMFUNCTION wolfBoot_invalidate_hdr_cache(void)
+{
+    hdr_cpy_done = 0;
 }
 
 static uint16_t get_header_ext(struct wolfBoot_image *img, uint16_t type,
