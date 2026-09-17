@@ -937,8 +937,9 @@ pico-sdk-info: FORCE
 # build CFLAGS, to the vendored wolfGlass driver under tools/sbom/.
 #
 # wolfcrypt sources are compiled directly into the wolfBoot image.  They stay
-# in the source-set hash, and are also declared as a wolfcrypt component so a
-# CPE-driven scan can match the registered NVD product wolfssl:wolfcrypt.
+# in the source-set hash, and are also declared as a nested wolfcrypt
+# component (PURL / provenance). Matching uses the wolfssl CPE. Do not emit
+# a wolfcrypt CPE: NVD files crypto CVEs against wolfssl, not wolfcrypt.
 #
 # Optional make variables:
 #   HOSTCC                 Host C compiler for macro capture (default: cc)
