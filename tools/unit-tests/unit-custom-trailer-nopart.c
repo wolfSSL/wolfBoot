@@ -94,6 +94,11 @@ START_TEST(test_set_get_partition_state)
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &st), 0);
     ck_assert_uint_eq(st, IMG_STATE_UPDATING);
 
+    /* Writing UPDATE must not clobber BOOT: re-read BOOT and confirm it
+     * still holds TESTING, not the UPDATE value. */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+    ck_assert_uint_eq(st, IMG_STATE_TESTING);
+
     /* PART_NONE is rejected. */
     ck_assert_int_eq(wolfBoot_set_partition_state(PART_NONE, 0), -1);
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_NONE, &st), -1);
