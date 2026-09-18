@@ -165,29 +165,32 @@
      */
     #if !defined(WOLFBOOT_ALLOW_PART_OVERLAP)
     #if defined(WOLFBOOT_ORIGIN) && \
-        (WOLFBOOT_ORIGIN + 0) < (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) && \
         !defined(PART_BOOT_EXT) && \
         ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) != 0) && \
-        ((WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0) > \
-         (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0))
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+        ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
         #error "Boot partition overlaps the bootloader region"
     #endif
 
     #if defined(WOLFBOOT_ORIGIN) && \
-        (WOLFBOOT_ORIGIN + 0) < (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) && \
         !defined(PART_UPDATE_EXT) && \
         ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) != 0) && \
-        ((WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0) > \
-         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0))
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
         #error "Update partition overlaps the bootloader region"
     #endif
 
     #if defined(WOLFBOOT_ORIGIN) && \
-        (WOLFBOOT_ORIGIN + 0) < (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) && \
         !defined(PART_SWAP_EXT) && \
         ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) != 0) && \
-        ((WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0) > \
-         (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0))
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
         #error "Swap partition overlaps the bootloader region"
     #endif
     #endif /* !WOLFBOOT_ALLOW_PART_OVERLAP */

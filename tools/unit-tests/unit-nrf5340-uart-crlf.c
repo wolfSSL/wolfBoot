@@ -56,6 +56,7 @@ START_TEST(test_crlf_multiline)
     /* both lines preserved, each CRLF-terminated, nothing dropped */
     ck_assert_str_eq(cap, "abc\r\ndef\r\n");
 }
+END_TEST
 
 START_TEST(test_crlf_single_line_no_nl)
 {
@@ -63,6 +64,7 @@ START_TEST(test_crlf_single_line_no_nl)
     nrf5340_uart_crlf("hello", 5, sink);
     ck_assert_str_eq(cap, "hello");
 }
+END_TEST
 
 START_TEST(test_crlf_single_line_with_nl)
 {
@@ -70,6 +72,7 @@ START_TEST(test_crlf_single_line_with_nl)
     nrf5340_uart_crlf("hello\n", 6, sink);
     ck_assert_str_eq(cap, "hello\r\n");
 }
+END_TEST
 
 START_TEST(test_crlf_leading_nl)
 {
@@ -77,6 +80,7 @@ START_TEST(test_crlf_leading_nl)
     nrf5340_uart_crlf("\nabc", 4, sink);
     ck_assert_str_eq(cap, "\r\nabc");
 }
+END_TEST
 
 START_TEST(test_crlf_consecutive_nl)
 {
@@ -84,6 +88,7 @@ START_TEST(test_crlf_consecutive_nl)
     nrf5340_uart_crlf("a\n\nb\n", 5, sink);
     ck_assert_str_eq(cap, "a\r\n\r\nb\r\n");
 }
+END_TEST
 
 int main(void)
 {
