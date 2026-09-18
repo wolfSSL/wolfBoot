@@ -184,6 +184,7 @@ endif
 
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-nrf52
+TESTS+=unit-nrf5340-uart-crlf
 TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
@@ -1651,6 +1652,9 @@ unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 
 unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
 	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
+
+unit-nrf5340-uart-crlf: unit-nrf5340-uart-crlf.c ../../hal/nrf5340_uart.c
+	gcc -o $@ unit-nrf5340-uart-crlf.c -DDEBUG_UART $(CFLAGS) $(LDFLAGS)
 
 unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
 	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)

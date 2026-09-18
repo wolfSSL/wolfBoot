@@ -282,27 +282,14 @@ void uart_write_sz(const char* c, unsigned int sz)
     }
 }
 
+/* CRLF conversion lives in nrf5340_uart.c so it can be unit-tested on the
+ * host without the nrfx register access the rest of this HAL needs. */
+void nrf5340_uart_crlf(const char* buf, unsigned int sz,
+        void (*sink)(const char*, unsigned int));
+
 void uart_write(const char* buf, unsigned int sz)
 {
-    const char* line;
-    unsigned int lineSz;
-    do {
-        /* find `\n` */
-        line = memchr(buf, '\n', sz);
-        if (line == NULL) {
-            uart_write_sz(buf, sz);
-            break;
-        }
-        lineSz = line - buf;
-        if (lineSz > sz-1)
-            lineSz = sz-1;
-
-        uart_write_sz(buf, lineSz);
-        uart_write_sz("\r\n", 2); /* handle CRLF */
-
-        buf = line;
-        sz -= lineSz + 1; /* skip \n, already sent */
-    } while ((int)sz > 0);
+    nrf5340_uart_crlf(buf, sz, uart_write_sz);
 }
 #endif /* DEBUG_UART */
 
