@@ -42,6 +42,10 @@
 #include "hal/tegra234.h"
 #endif
 
+#ifdef TARGET_imx95_a55
+#include "hal/imx95_a55.h"
+#endif
+
 #ifdef TARGET_cm4
 #include "hal/cm4.h"
 #endif
@@ -599,6 +603,10 @@ invalidatecaches_end:
  * ENETC) needs Outer-Shareable to snoop the A72 caches; Inner-Shareable only
  * covers the CPU cluster. */
 .set MemoryOSH, 0x405 | (2 << 8) | (0x0)
+/* Normal Non-Cacheable, inner shareable (MAIR index 0). For DRAM shared with
+ * a core or an agent outside this cluster's coherency, where a cached copy
+ * would simply not be seen. */
+.set MemoryNC,  0x401 | (3 << 8) | (0x0)
 
 #ifndef TARGET_nxp_ls1028a
 .section .mmu_tbl0,"a"
@@ -1331,18 +1339,66 @@ _cm4_entry:
    b    7b
 
 8:
-#if defined(TARGET_tegra234) || defined(TARGET_imx8qm)
-    /* Reserved in-DRAM stack from the linker script: the generic path sets sp
-     * to the image base, which here is the BL33 load address. */
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || defined(TARGET_imx95_a55)
+    /* Use the reserved in-DRAM stack from the target's linker script. The
+     * generic path sets sp to the image base, which on these targets is the
+     * BL33 load address - growing down from there runs into memory wolfBoot
+     * does not own (OP-TEE, on i.MX95). */
     ldr x1, =END_STACK
 #endif
     mov sp, x1         // set stack pointer
-#if defined(TARGET_tegra234) || defined(TARGET_imx8qm)
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || defined(TARGET_imx95_a55)
     /* Stash the handoff x0 (DTB pointer, saved in x21 at reset) in a .data
      * global so C can read it after boot_entry_C clears BSS. */
     adrp x2, boot_handoff_x0
     add  x2, x2, :lo12:boot_handoff_x0
     str  x21, [x2]
+#endif
+#if defined(TARGET_imx95_a55) && !defined(NO_MMU) && \
+    defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+    /* Identity-map DRAM as Normal cacheable before entering C. BL31 hands over
+     * with the MMU and caches off, so wolfBoot would otherwise hash a FIT one
+     * uncached DRAM access at a time. Everything below runs at EL2.
+     *
+     * Gated on EL2_HYPERVISOR because that is what compiles the teardown the
+     * ARM64 boot protocol requires (el2_flush_disable_mmu_and_boot, called from
+     * do_boot). Turning the MMU on without it would hand Linux a live MMU and
+     * dirty caches, so the two must not be able to drift apart. */
+    dsb     sy
+    isb
+    tlbi    alle2
+    dsb     sy
+    isb
+    ic      iallu                  /* the I-cache is about to be enabled */
+    dsb     sy
+    isb
+    /* The cache RAMs hold random tags out of a cold reset and the previous
+     * stage cleaned what it owned before turning the cache off, so invalidate
+     * rather than clean: there is nothing of ours to preserve, and a stale
+     * dirty line would later be written back over live DRAM. */
+    bl      imx95_dcache_invalidate_all
+    dsb     sy
+    isb
+
+    ldr     x1, =MMUTableL0
+    msr     TTBR0_EL2, x1
+    /* MAIR: 0 Normal NC, 1 Normal WB/WA/RA, 2 Device-nGnRnE, 3 Device-nGnRE,
+     * 4 Normal WT/WA/RA - the indices the block attributes above use. */
+    ldr     x1, =0x000000BB0400FF44
+    msr     MAIR_EL2, x1
+    /* 4KB granule, T0SZ=24 (40-bit VA), PS=010 (40-bit PA), inner-shareable
+     * WB walks. */
+    ldr     x1, =0x80823518
+    msr     TCR_EL2, x1
+    isb
+
+    mrs     x1, SCTLR_EL2
+    orr     x1, x1, #(1 << 12)     /* I-cache */
+    orr     x1, x1, #(1 << 2)      /* D-cache */
+    orr     x1, x1, #(1 << 0)      /* MMU */
+    msr     SCTLR_EL2, x1
+    dsb     sy
+    isb
 #endif
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
@@ -1424,6 +1480,129 @@ cm4_fw_dtb:
 _vector_table:
     bl boot_entry_C   // boot_entry_C never returns
 #endif
+
+#if defined(TARGET_imx95_a55) && !defined(NO_MMU) && \
+    defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+/* Invalidate every data cache level by set/way. Used once, before the D-cache
+ * is enabled: out of a cold reset the cache RAMs hold random tags and dirty
+ * bits, and the stage that handed over cleaned what it owned before turning
+ * the cache off, so there is nothing to preserve and a stale dirty line would
+ * otherwise be written back over live DRAM. */
+.section ".boot"
+.globl imx95_dcache_invalidate_all
+imx95_dcache_invalidate_all:
+    dmb     ISH
+    mrs     x0, CLIDR_EL1
+    ubfx    w2, w0, #24, #3        /* LoC */
+    cmp     w2, #0
+    b.eq    9f
+    mov     w1, #0                 /* level */
+1:  add     w3, w1, w1, lsl #1
+    lsr     w3, w0, w3
+    ubfx    w3, w3, #0, #3         /* cache type at this level */
+    cmp     w3, #2
+    b.lt    4f
+    lsl     w4, w1, #1
+    msr     CSSELR_EL1, x4
+    isb
+    mrs     x4, CCSIDR_EL1
+    ubfx    w3, w4, #0, #3
+    add     w3, w3, #2             /* log2(line size) */
+    ubfx    w5, w4, #13, #15       /* max set */
+    ubfx    w4, w4, #3, #10        /* max way */
+    clz     w6, w4
+2:  mov     w8, w4
+3:  lsl     w7, w1, #1
+    lsl     w9, w5, w3
+    orr     w7, w7, w9
+    lsl     w9, w8, w6
+    orr     w7, w7, w9
+    dc      ISW, x7
+    subs    w8, w8, #1
+    b.ge    3b
+    subs    w5, w5, #1
+    b.ge    2b
+4:  add     w1, w1, #1
+    cmp     w2, w1
+    b.gt    1b
+9:  dsb     sy
+    isb
+    ret
+
+/* ============================================================================
+ * i.MX95 translation tables (4KB granule, 40-bit VA/PA, T0SZ=24).
+ *
+ * wolfBoot ran MMU-off here originally, which cost far more than it saved: the
+ * SHA-256 over a FIT is a DRAM round trip per load, and arch.mk has to keep the
+ * target off the wolfcrypt ARM assembly because its NEON loads fault without a
+ * map. An identity map with DRAM marked Normal cacheable fixes both.
+ *
+ *   0x00000000-0x7FFFFFFF  Device (boot ROM, OCRAM, M7 TCM system view,
+ *                                  LPUART1 0x44380000, MU2 0x445B0000 and its
+ *                                  SCMI shared buffer, RGPIO3 0x43820000,
+ *                                  uSDHC, PCIe/ENETC 0x4CA00000)
+ *   0x80000000-0xBFFFFFFF  DRAM, via L2 so the shared carveout can differ
+ *   0xC0000000-0xFFFFFFFF  DRAM  Normal WB cacheable
+ *   0x100000000-0x27FFFFFFF DRAM bank 1 (6 GiB) Normal WB cacheable
+ *   everything above       invalid - a stray access should fault, not wander
+ *
+ * The SCMI shared buffer stays Device: the System Manager on the M33 writes it
+ * from outside this cluster's coherency, so a cached view could be stale.
+ * ========================================================================== */
+/* Block descriptors: valid + AF, with the MAIR index in bits [4:2] and the
+ * shareability in [9:8]. Device blocks are also PXN/UXN. */
+.set imx95_Memory,   0x405 | (3 << 8)                     /* Normal WB, ISH  */
+.set imx95_MemoryNC, 0x401 | (3 << 8)                     /* Normal NC, ISH  */
+.set imx95_Device,   0x409 | (1 << 53) | (1 << 54)        /* Device-nGnRnE   */
+
+.section .mmu_tbl0,"a"
+MMUTableL0:
+.set   SECT, MMUTableL1
+.8byte SECT + 0x3              /* 0x00_0000_0000 - 0x7F_FFFF_FFFF -> L1 */
+.8byte 0x0                     /* 0x80_0000_0000 - 0xFF_FFFF_FFFF invalid */
+
+.section .mmu_tbl1,"a"
+MMUTableL1:
+.set    SECT, 0x0
+.8byte  SECT + imx95_Device          /* 0x00000000 - 0x3FFFFFFF */
+.set    SECT, SECT+0x40000000
+.8byte  SECT + imx95_Device          /* 0x40000000 - 0x7FFFFFFF  peripherals */
+.set    SECT, MMUTableL2
+.8byte  SECT + 0x3             /* 0x80000000 - 0xBFFFFFFF -> L2 */
+.set    SECT, 0xC0000000
+.8byte  SECT + imx95_Memory          /* 0xC0000000 - 0xFFFFFFFF  DRAM */
+.set    SECT, 0x100000000
+.rept   6                      /* 0x1_00000000 - 0x2_7FFFFFFF  DRAM bank 1 */
+.8byte  SECT + imx95_Memory
+.set    SECT, SECT+0x40000000
+.endr
+.rept   502                    /* remainder of the 512 GiB L1: unmapped */
+.8byte  0x0
+.endr
+
+.section .mmu_tbl2,"a"
+MMUTableL2:
+/* 0x80000000 + 16 MiB: the carveout the DTB reserves for the Cortex-M7. It
+ * holds that core's console ring, wolfBoot's own log ring and the M7 payload
+ * Linux loads later, all read by software this cache cannot reach. Normal
+ * Non-Cacheable so a write is visible without maintenance. */
+.set    SECT, 0x80000000
+.rept   8                      /* 8 x 2 MiB = 16 MiB */
+.8byte  SECT + imx95_MemoryNC
+.set    SECT, SECT+0x200000
+.endr
+.rept   504                    /* rest of the 1 GiB block: normal DRAM */
+.8byte  SECT + imx95_Memory
+.set    SECT, SECT+0x200000
+.endr
+
+
+/* Back to the section the surrounding startup code lives in: the routines that
+ * follow carry no .section of their own and would otherwise be assembled into
+ * the table above. */
+.section ".boot"
+#endif /* TARGET_imx95_a55 && !NO_MMU */
+
 #endif /* !USE_BUILTIN_STARTUP */
 
 
@@ -1760,6 +1939,91 @@ el2_flush_and_disable_mmu:
     isb
 
     ret
+
+/* el2_flush_disable_mmu_and_boot(entry, dts): fused flush + MMU-off + jump
+ * (x0 = dts, x1-x3 zeroed) touching NO memory after the disable. With the
+ * D-cache off, a stack reload of entry/dts between a flush call and a
+ * separate C jump can read stale DRAM (set/way misses a DSU system cache).
+ * The set/way loop clobbers x0-x11 only; x20/x21 carry the values. */
+.global el2_flush_disable_mmu_and_boot
+el2_flush_disable_mmu_and_boot:
+    /* arm64 boot protocol: all DAIF exceptions masked at kernel entry. */
+    msr     daifset, #0xf
+    mov     x20, x0                 /* entry */
+    mov     x21, x1                 /* dts   */
+    bl      el2_flush_and_disable_mmu
+    /* MMU off; registers only from here. Drop stale EL2 TLB entries. */
+    tlbi    alle2
+    dsb     sy
+    isb
+#if defined(TARGET_imx95_a55) && defined(IMX95_HANDOFF_DUMP)
+    /* Debug crash catcher: report early payload faults via LPUART. */
+    adr     x9, imx95_catch_vectors
+    msr     vbar_el2, x9
+    isb
+#endif
+    mov     x0, x21
+    mov     x1, xzr
+    mov     x2, xzr
+    mov     x3, xzr
+    br      x20
+
+#if defined(TARGET_imx95_a55) && defined(IMX95_HANDOFF_DUMP)
+/* EL2 crash catcher: dump ESR/ELR/FAR over the polled LPUART and park.
+ * Registers only - safe with MMU and caches off. */
+.macro IMX95_CATCH_PUTC reg
+9:  ldr     w11, [x26]
+    tbz     w11, #23, 9b
+    str     \reg, [x27]
+.endm
+
+.balign 2048
+imx95_catch_vectors:
+    .rept 16
+    b       imx95_catch_common
+    .balign 0x80
+    .endr
+
+imx95_catch_common:
+    ldr     x26, =(IMX95_LPUART1_BASE + LPUART_STAT_OFF)
+    ldr     x27, =(IMX95_LPUART1_BASE + LPUART_DATA_OFF)
+    /* "\r\nVEC " */
+    mov     w10, #'\r'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'\n'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'V'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'E'
+    IMX95_CATCH_PUTC w10
+    mov     w10, #'C'
+    IMX95_CATCH_PUTC w10
+    mrs     x12, esr_el2
+    bl      imx95_catch_hex
+    mrs     x12, elr_el2
+    bl      imx95_catch_hex
+    mrs     x12, far_el2
+    bl      imx95_catch_hex
+1:  wfe
+    b       1b
+
+/* print ' ' + x12 as 16 hex digits; clobbers x10-x14, uses x30 */
+imx95_catch_hex:
+    mov     w10, #' '
+    IMX95_CATCH_PUTC w10
+    mov     x13, #60
+2:  lsr     x14, x12, x13
+    and     x14, x14, #0xf
+    cmp     x14, #10
+    b.lt    3f
+    add     w10, w14, #('a' - 10)
+    b       4f
+3:  add     w10, w14, #'0'
+4:  IMX95_CATCH_PUTC w10
+    subs    x13, x13, #4
+    b.ge    2b
+    ret
+#endif /* TARGET_imx95_a55 && IMX95_HANDOFF_DUMP */
 #endif /* EL2_HYPERVISOR || WOLFBOOT_AARCH64_MMU_TEARDOWN */
 
 #if defined(WOLFBOOT_ZYNQMP_FSBL)
