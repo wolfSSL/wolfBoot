@@ -122,9 +122,25 @@
 
 /* DDR defines for MMU table setup (used by boot_aarch64_start.S)
  * These macros enable proper DDR mapping in the page tables.
- * Without these, the MMU tables would have DDR_0_REG=0 and no DDR mapped! */
+ * Without these, the MMU tables would have DDR_0_REG=0 and no DDR mapped!
+ * VERSAL_NO_DDR_LOW leaves the low window (0x0-0x7FFFFFFF) unmapped, for
+ * designs whose DDR aperture lives entirely above 4 GB; pair it with
+ * VERSAL_DDR_HIGH_BASE/VERSAL_DDR_HIGH_SIZE (512 GB aligned, plain hex
+ * literals with no UL/ULL suffix - they are consumed by the assembler),
+ * which map an additional Normal-memory window in the translation table. */
+#if defined(VERSAL_DDR_HIGH_BASE) && !defined(VERSAL_DDR_HIGH_SIZE)
+#error "VERSAL_DDR_HIGH_BASE requires VERSAL_DDR_HIGH_SIZE"
+#endif
+#if defined(VERSAL_DDR_HIGH_SIZE) && !defined(VERSAL_DDR_HIGH_BASE)
+#error "VERSAL_DDR_HIGH_SIZE requires VERSAL_DDR_HIGH_BASE"
+#endif
+#if defined(VERSAL_NO_DDR_LOW) && !defined(VERSAL_DDR_HIGH_BASE)
+#error "VERSAL_NO_DDR_LOW without VERSAL_DDR_HIGH_BASE maps no DDR at all"
+#endif
+#ifndef VERSAL_NO_DDR_LOW
 #define XPAR_PSU_DDR_0_S_AXI_BASEADDR   VERSAL_DDR_0_BASE
 #define XPAR_PSU_DDR_0_S_AXI_HIGHADDR   VERSAL_DDR_0_HIGH
+#endif
 
 
 /* ============================================================================

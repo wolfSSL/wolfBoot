@@ -6,7 +6,9 @@
  * This script is for production boot where:
  *   - PLM/PSM have initialized DDR
  *   - BL31 runs at EL3 and transitions to EL2
- *   - wolfBoot runs at EL2 from DDR at 0x8000000 (replacing U-Boot)
+ *   - wolfBoot runs at EL2 from DDR (replacing U-Boot). The DDR region
+ *     ORIGIN below follows WOLFBOOT_ORIGIN from the .config, which defaults
+ *     to 0x8000000; a high-DDR design sets it into its own aperture.
  *
  * Memory Map:
  *   0x00000000 - 0x07FFFFFF : Reserved / Low DDR
@@ -36,7 +38,7 @@ _EL2_STACK_SIZE = DEFINED(_EL2_STACK_SIZE) ? _EL2_STACK_SIZE : 0x8000;  /* Prima
  */
 MEMORY
 {
-    DDR (rwx) : ORIGIN = 0x8000000, LENGTH = 0x200000
+    DDR (rwx) : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 0x200000
 }
 
 /* Sections */

@@ -4927,6 +4927,7 @@ Note: If using QSPI there are bootgen issues with 2025.1+, so recommend 2024.1 o
 ### Common Notes
 
 - Debugging with OCRAM (OCM): set `WOLFBOOT_ORIGIN=0xFFFC0000` (OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`).
+- **High DDR apertures**: designs whose DDR window lives above the default map (for example DDR at `0x400_0000_0000`) add `CFLAGS_EXTRA+=-DVERSAL_DDR_HIGH_BASE=...` and `-DVERSAL_DDR_HIGH_SIZE=...` (512 GB aligned, plain hex literals with no `UL` suffix) to map the window in the translation table, plus `-DVERSAL_NO_DDR_LOW` when nothing remains at `0x0`. Move `WOLFBOOT_ORIGIN`, `WOLFBOOT_LOAD_ADDRESS` and `WOLFBOOT_LOAD_DTS_ADDRESS` into the window (`hal/versal.ld` follows `WOLFBOOT_ORIGIN` from the config), update the bootgen BIF load/exec and the BL31 BL33 entry to match, and switch the FIT ITS to `#address-cells = <2>` with two-cell `load`/`entry` values since 32-bit cells cannot hold addresses above 4 GB. A commented recipe is in `config/examples/versal_vmk180.config`; the DDR aperture itself must be routed to the APU by the design's PDI.
 - Test application uses generic `boot_arm64_start.S` and `AARCH64.ld` and prints EL + version.
   - Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
 
