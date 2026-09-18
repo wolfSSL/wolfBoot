@@ -61,6 +61,11 @@ static void RAMFUNCTION hal_flash_nonsecure_lock(void)
 
 static int is_range_nonsecure(uint32_t address, int len)
 {
+#if defined(WOLFBOOT_SECURE_APP)
+    (void)address;
+    (void)len;
+    return 0;
+#else
 #ifndef DUALBANK_SWAP
     /* The non secure area begins at the BOOT partition */
     uint32_t min = WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -89,6 +94,7 @@ static int is_range_nonsecure(uint32_t address, int len)
         return 1;
     return 0;
 #endif
+#endif /* WOLFBOOT_SECURE_APP */
 }
 
 
@@ -215,11 +221,16 @@ void hal_gtzc_init(void)
      * 0: Non-secure access only to block
      */
 
-    /* Configure SRAM1 as secure (Low 256 KB).
-     * wolfBoot links its own RAM/RAM_HEAP into the SRAM1 secure alias
-     * (0x30000000-0x3003FFFF, see hal/stm32h5.ld), so SRAM1 must stay
-     * secure for wolfBoot's .bss/stack/heap to remain accessible. */
+    /* Configure SRAM1 as secure. The secure application handoff enters with
+     * its MSP at 0x300A0000, so the whole 512-KiB SRAM1 window must stay
+     * Secure until the secure runtime installs its own memory split. */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 32; i++) {
+#else
+    /* wolfBoot links its own RAM/RAM_HEAP into the lower SRAM1 secure alias
+     * (0x30000000-0x3003FFFF, see hal/stm32h5.ld). */
     for (i = 0; i < 16; i++) {
+#endif
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
@@ -230,10 +241,16 @@ void hal_gtzc_init(void)
      * unprivileged; with the reset default (PRIVCFGR=0xFFFFFFFF) the
      * DMA's descriptor/buffer reads from SRAM2 raise illegal-access
      * (TZIC1_SR4 bit 26) and the channel suspends with TPS=6 (TBU). */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 4; i++) {
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0xFFFFFFFF);
+    }
+#else
     for (i = 0; i < 4; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0x0);
         SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(2, i, 0x0);
     }
+#endif
 
     /* Configure SRAM3 as non-secure (320 KB) but PRIVILEGED. The NS CPU
      * runs privileged (Thread mode) and can use SRAM3 freely; only the
@@ -241,9 +258,15 @@ void hal_gtzc_init(void)
      * descriptors/buffers are pinned to SRAM2 (.eth_buffers). Leaving
      * SRAM3 privileged lets a future NS OS own the unprivileged
      * boundary. */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 20; i++) {
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0xFFFFFFFF);
+    }
+#else
     for (i = 0; i < 20; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
     }
+#endif
 }
 
 #elif defined(TARGET_stm32u5)
@@ -327,9 +350,12 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure flash alias (boot partition only) */
+    /* Non-secure flash alias (boot partition only). A secure application is
+     * deliberately kept out of the SAU NS window and is entered Secure. */
+#if !defined(WOLFBOOT_SECURE_APP)
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
+#endif
 
     /* Non-secure RAM region: SRAM2 (64 KB) + SRAM3 (320 KB).
      * Lower bound widened from 0x20050000 to 0x20040000 to cover SRAM2,

@@ -49,12 +49,17 @@
 #if TZ_SECURE()
 static int is_flash_nonsecure(uint32_t address)
 {
+#if defined(WOLFBOOT_SECURE_APP)
+    (void)address;
+    return 0;
+#else
     if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
             address < WOLFBOOT_PARTITION_BOOT_ADDRESS +
             WOLFBOOT_PARTITION_SIZE) {
         return 1;
     }
     return 0;
+#endif
 }
 #endif
 
@@ -301,11 +306,17 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {
+    uint32_t debugAuthStatus;
+    uint32_t productState;
+
     if (lifecycle == NULL) {
         return -1;
     }
 
-    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
+    productState = (FLASH_OPTSR_CUR & FLASH_OPTSR_PRODUCT_STATE_MASK) >>
+        FLASH_OPTSR_PRODUCT_STATE_SHIFT;
+    debugAuthStatus = *(volatile uint32_t *)CORTEX_M_DAUTHSTATUS_ADDRESS;
+    *lifecycle = stm32h5_attestation_lifecycle(productState, debugAuthStatus);
     return 0;
 }
 
@@ -776,9 +787,12 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 
-    /* Keep clock settings when staging a NS-application */
+    /* Keep clock settings when staging a NS-application. A secure application
+     * owns the TrustZone peripherals after the handoff. */
 #if (TZ_SECURE())
+#if !defined(WOLFBOOT_SECURE_APP)
     periph_unsecure();
+#endif
 #else
     #ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
