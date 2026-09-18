@@ -1863,6 +1863,12 @@ ifeq ($(TARGET),lpc)
   endif
 endif
 
+ifeq ($(TARGET),imx_rt7xx)
+  CORTEX_M33=1
+  LDFLAGS+=-Wl,--no-warn-rwx-segments
+  # Bare-metal HAL for the i.MX RT700 (MIMXRT798S) XSPI0 octal NOR; no NXP SDK.
+endif
+
 ifeq ($(TARGET),nxp_lpc54s0xx)
   ARCH_FLASH_OFFSET=0x10000000
   LDFLAGS+=-Wl,--no-warn-rwx-segments
