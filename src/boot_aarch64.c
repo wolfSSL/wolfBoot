@@ -59,6 +59,8 @@ extern void gicv2_init_secure(void);
  * boot_aarch64_start.S (e.g. via hal/zynq.h on ZynqMP). */
 #if defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
 extern void el2_flush_and_disable_mmu(void);
+extern void el2_flush_disable_mmu_and_boot(uintptr_t entry, uintptr_t dts)
+    __attribute__((noreturn));
 #endif
 
 /* Clean & invalidate the data cache over [start,end) (in boot_aarch64_start.S).
@@ -160,8 +162,12 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #ifdef MMU
     wolfBoot_printf("do_boot: dts=0x%08x\n", (uint32_t)(uintptr_t)dts_offset);
     /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window size
-     * (see include/fdt.h); it bounds the fixups below. */
-    hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE);
+     * (see include/fdt.h); it bounds the fixups below. A failed fixup must
+     * not boot with an unpatched DTB - Linux may lack its memory node. */
+    if (hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE) != 0) {
+        wolfBoot_printf("hal_dts_fixup failed; aborting boot\n");
+        wolfBoot_panic();
+    }
 #endif
 
 #ifndef SKIP_GIC_INIT
@@ -207,7 +213,11 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #if defined(MMU) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
     if (current_el() == 2) {
         wolfBoot_printf("do_boot: flushing caches, disabling MMU\n");
-        el2_flush_and_disable_mmu();
+        /* Fused flush+disable+jump: a stack reload between a separate
+         * flush and jump can read stale DRAM once the D-cache is off
+         * (set/way misses a DSU system cache). See the asm routine. */
+        el2_flush_disable_mmu_and_boot((uintptr_t)app_offset,
+                                       (uintptr_t)dts_offset);
     }
 #endif
 
