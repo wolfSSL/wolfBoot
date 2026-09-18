@@ -118,6 +118,12 @@ else
   else
     APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
   endif
+  # nRF5340 debug-UART CRLF conversion (host-testable, no nrfx registers)
+  ifneq ($(filter nrf5340%, $(TARGET)),)
+    ifeq ($(DEBUG_UART),1)
+      APP_OBJS+=../hal/nrf5340_uart.o
+    endif
+  endif
 endif
 
 # Disable Thumb2 ASM for MAX32666 before arch.mk: hardware TPU handles AES

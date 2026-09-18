@@ -80,7 +80,9 @@ ifneq ($(TARGET),library)
   endif
   # nRF5340 debug-UART CRLF conversion (host-testable, no nrfx registers)
   ifneq ($(filter nrf5340%, $(TARGET)),)
-    OBJS+=./hal/nrf5340_uart.o
+    ifeq ($(DEBUG_UART),1)
+      OBJS+=./hal/nrf5340_uart.o
+    endif
   endif
 endif
 
