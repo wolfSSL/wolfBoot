@@ -197,6 +197,7 @@ TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
 TESTS+=unit-xspi-tfd-index
 TESTS+=unit-pic32-pfswap
+TESTS+=unit-secure-handoff
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -233,6 +234,7 @@ run: $(TESTS)
 	for unit in $(TESTS); do \
 		WOLFBOOT_SECTOR_SIZE=0x400 ./$$unit || exit 1; \
 	done
+	./test-secure-handoff-config.sh
 	python3 unit-sign-delta-tlv.py || exit 1
 	python3 unit-sign-delta-cert-inv-off.py || exit 1
 	python3 unit-sign-delta-basehash-cleanup.py || exit 1
@@ -899,6 +901,9 @@ unit-update-flash: ../../include/target.h unit-update-flash.c
 # test the NSC update-partition bounds checks against the mock flash.
 unit-nsc-update: ../../include/target.h unit-nsc-update.c
 	gcc -o $@ unit-nsc-update.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-secure-handoff: unit-secure-handoff.c
+	gcc -o $@ unit-secure-handoff.c $(CFLAGS)
 
 unit-update-flash-hook: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
