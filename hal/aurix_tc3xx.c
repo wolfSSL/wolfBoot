@@ -161,6 +161,28 @@ void uart_vprintf(const char* fmt, va_list argp) TC3_LONGCALL;
 void wolfBoot_panic(void) TC3_LONGCALL;
 #endif
 
+#ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
+/* Set while the HSM connection is up. While set, every flash command from
+ * this core first parks the HSM in RAM (see tchsmHhHost_HsmPark) so a
+ * busy PFLASH bank cannot fault it, and releases it afterwards. */
+static int hsmParkEnabled = 0;
+#define HSM_PARK()                              \
+    do {                                        \
+        if (hsmParkEnabled) {                   \
+            (void)tchsmHhHost_HsmPark();        \
+        }                                       \
+    } while (0)
+#define HSM_RELEASE()                           \
+    do {                                        \
+        if (hsmParkEnabled) {                   \
+            (void)tchsmHhHost_HsmRelease();     \
+        }                                       \
+    } while (0)
+#else
+#define HSM_PARK()
+#define HSM_RELEASE()
+#endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
+
 /* RAM buffer to hold the contents of an entire flash sector*/
 static uint32_t sectorBuffer[WOLFBOOT_SECTOR_SIZE / sizeof(uint32_t)];
 
@@ -461,7 +483,13 @@ static void RAMFUNCTION programCachedSector(uint32_t sectorAddress)
  * interface, and len is the size of the payload. hal_flash_write should return
  * 0 upon success, or a negative value in case of failure.
  */
-int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
+/* Write, erase and the blank-checked read below are each split into a worker
+ * and a public wrapper. The wrapper parks the HSM for the whole call, so the
+ * workers can call each other without nesting park requests. */
+static int RAMFUNCTION _flashErase(uint32_t address, int len);
+
+static int RAMFUNCTION _flashWrite(uint32_t address, const uint8_t* data,
+                                   int size)
 {
     int      ret               = 0;
     uint32_t currentAddress    = address;
@@ -510,7 +538,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
             cacheSector(currentSectorAddress);
 
             /* Erase the entire sector */
-            ret = hal_flash_erase(currentSectorAddress, WOLFBOOT_SECTOR_SIZE);
+            ret = _flashErase(currentSectorAddress, WOLFBOOT_SECTOR_SIZE);
             if (ret != 0) {
                 break;
             }
@@ -544,13 +572,24 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
     return ret;
 }
 
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
+{
+    int ret;
+
+    HSM_PARK();
+    ret = _flashWrite(address, data, size);
+    HSM_RELEASE();
+
+    return ret;
+}
+
 /* Called by the bootloader to erase part of the flash memory to allow
  * subsequent boots. Erase operations must be performed via the specific IAP
  * interface of the target microcontroller. address marks the start of the area
  * that the bootloader wants to erase, and len specifies the size of the area to
  * be erased. This function must take into account the geometry of the flash
  * sectors, and erase all the sectors in between. */
-int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+static int RAMFUNCTION _flashErase(uint32_t address, int len)
 {
     LED_ON(LED_ERASE);
 
@@ -641,6 +680,17 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     return ret;
 }
 
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+{
+    int ret;
+
+    HSM_PARK();
+    ret = _flashErase(address, len);
+    HSM_RELEASE();
+
+    return ret;
+}
+
 
 /* If the IAP interface of the flash memory of the target requires it, this
  * function is called before every write and erase operations to unlock write
@@ -663,7 +713,8 @@ RAMFUNCTION int ext_flash_write(uintptr_t address, const uint8_t* data, int len)
  * returning dummy erased byte values to prevent ECC errors. Returns the
  * number of bytes read, or -1 on error
  */
-int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
+static int RAMFUNCTION _extFlashRead(uintptr_t address, uint8_t* data,
+                                     int len)
 {
     int bytesRead;
 
@@ -717,6 +768,17 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
 
     LED_OFF(LED_READ);
     return bytesRead;
+}
+
+int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
+{
+    int ret;
+
+    HSM_PARK();
+    ret = _extFlashRead(address, data, len);
+    HSM_RELEASE();
+
+    return ret;
 }
 
 RAMFUNCTION int ext_flash_erase(uintptr_t address, int len)
@@ -806,12 +868,17 @@ int hal_hsm_init_connect(void)
         return rc;
     }
 
+    /* Server is up and answering the bridge, flash commands may park it */
+    hsmParkEnabled = 1;
+
     return rc;
 }
 
 int hal_hsm_disconnect(void)
 {
     int rc;
+
+    hsmParkEnabled = 0;
 
     rc = wh_Client_CommClose(&hsmClientCtx);
     if (rc != 0) {
