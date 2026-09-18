@@ -1011,7 +1011,11 @@ END_TEST
  * sector==1 fw_size re-swap. Only the BACKUP state is a recoverable power
  * fail: faulting the BOOT->update copy instead (SWAPPING state) erases the
  * update header, so the resume's re-open fails and the device cannot
- * recover - that entry point is not testable as a roundtrip. */
+ * recover - that entry point is not testable as a roundtrip.
+ * Guarded out of the EXT_ENCRYPTED targets: the resume logic is identical
+ * with or without encryption, but this test stages a plain image, which the
+ * encrypted swap path does not accept. */
+#ifndef EXT_ENCRYPTED
 static uint8_t resume_boot_snap[WOLFBOOT_PARTITION_SIZE];
 static uint8_t resume_update_snap[WOLFBOOT_PARTITION_SIZE];
 
@@ -1055,6 +1059,7 @@ START_TEST (test_update_resume_from_backup_flag)
     resume_verify();
 }
 END_TEST
+#endif /* !EXT_ENCRYPTED */
 
 START_TEST (test_forward_update_tolarger) {
     reset_mock_stats();
@@ -1908,7 +1913,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
+#ifndef EXT_ENCRYPTED
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
+#endif
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
