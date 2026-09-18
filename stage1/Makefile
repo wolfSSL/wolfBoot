@@ -9,6 +9,10 @@ include ../tools/config.mk
 
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
+# Set by the top-level Makefile; defaulted here so this sub-make also works
+# when it is invoked directly.
+WOLFBOOT_LIB_WOLFSSL?=$(abspath ../lib/wolfssl)
+WOLFBOOT_LIB_WOLFTPM?=$(abspath ../lib/wolfTPM)
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra -nostdlib
 LDFLAGS:=
@@ -76,9 +80,15 @@ CFLAGS+=-D"WOLFBOOT_TPM_NO_CHG_PLAT_AUTH"
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -Wno-unused
+  # -ffreestanding is not optional: without it the compiler recognizes the
+  # byte-scan loop in src/string.c as the strlen idiom and rewrites it into a
+  # call to strlen, so strlen becomes a branch to itself. -nostartfiles keeps
+  # the C runtime's startup objects, and the libc they drag in, out of the
+  # link. The top-level Makefile passes both; this one has to as well.
+  CFLAGS+=-Wall -Wextra -Wno-main -Wno-unused -ffreestanding
   CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=loader_stage1.map
+  LDFLAGS+=-ffreestanding -nostartfiles
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
