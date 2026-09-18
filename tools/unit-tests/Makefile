@@ -125,6 +125,7 @@ TESTS+=unit-p1021-erase-advance
 TESTS+=unit-p1021-read-badblock
 TESTS+=unit-kontron-tgl-spi
 TESTS+=unit-nrf5340-flash-protect
+TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-rp2350-flash-write
@@ -1442,6 +1443,23 @@ unit-nrf5340-flash-protect: unit-nrf5340-flash-protect.c \
 	nrf5340_protect_fn_extract.h
 	gcc -o $@ unit-nrf5340-flash-protect.c $(CFLAGS) $(LDFLAGS)
 
+# unit-keygen-keystore compiles the REAL accessors emitted by keygen's
+# Keystore_API template (F-13624: the generated keystore's accessors lacked
+# the id < 0 guard the OTP backend has). The generator extracts the template
+# from keygen.c and emits a self-contained keystore.c with a one-key PubKeys
+# array; the test compiles it and asserts the out-of-range contract.
+keystore_api_extract.h: ../../tools/keytools/keygen.c
+	sed -n '/^const char Keystore_API\[\]/,/[;]$$/p' $< > $@
+
+keystore_gen: keystore_gen.c keystore_api_extract.h
+	gcc -o $@ keystore_gen.c $(CFLAGS)
+
+keystore_emitted.c: keystore_gen
+	./keystore_gen > $@
+
+unit-keygen-keystore: unit-keygen-keystore.c keystore_emitted.c
+	gcc -o $@ unit-keygen-keystore.c keystore_emitted.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1727,6 +1745,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	p1021_read_extract.h p1021_read_fn_extract.h \
 	kontron_spi_extract.h kontron_spi_fn_extract.h \
 	nrf5340_protect_fn_extract.h \
+	keystore_api_extract.h keystore_emitted.c keystore_gen \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
