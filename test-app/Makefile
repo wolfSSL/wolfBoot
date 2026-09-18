@@ -539,6 +539,9 @@ else
     else
         APP_OBJS+=../hal/$(TARGET).o
     endif
+    ifneq ($(filter nrf5340%,$(TARGET)),)
+        APP_OBJS+=../hal/nrf5340_uart.o
+    endif
 endif
 
 ifeq ($(ARCH),RISCV)

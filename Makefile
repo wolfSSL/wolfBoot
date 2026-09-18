@@ -25,6 +25,9 @@ override WOLFHSM_MICROCHIP_PIC32CZ := $(abspath $(WOLFHSM_MICROCHIP_PIC32CZ))
 export WOLFHSM_MICROCHIP_PIC32CZ
 
 CFLAGS:=-D"__WOLFBOOT"
+ifeq ($(WOLFBOOT_ALLOW_PART_OVERLAP),1)
+CFLAGS+=-DWOLFBOOT_ALLOW_PART_OVERLAP=1
+endif
 # gcc/clang warning flags; the TI cl2000 driver (ARCH=C2000) rejects them.
 ifneq ($(ARCH),C2000)
 CFLAGS+=-Werror -Wextra -Wno-array-bounds
@@ -74,6 +77,10 @@ ifneq ($(TARGET),library)
     OBJS+=./hal/wolfhal.o
   else
     OBJS+=./hal/$(TARGET).o
+  endif
+  # nRF5340 debug-UART CRLF conversion (host-testable, no nrfx registers)
+  ifneq ($(filter nrf5340%, $(TARGET)),)
+    OBJS+=./hal/nrf5340_uart.o
   endif
 endif
 

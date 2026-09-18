@@ -159,7 +159,11 @@
      * WOLFBOOT_ORIGIN + BOOTLOADER_PARTITION_SIZE) must not overlap any
      * partition: an undersized value leaves the bootloader tail writable,
      * an over-sized one write-protects the head of the partition.
+     * WOLFBOOT_ALLOW_PART_OVERLAP disables these checks for targets that
+     * deliberately place a partition inside the region (e.g. cypsoc6,
+     * where hal_flash_protect() is a no-op).
      */
+    #if !defined(WOLFBOOT_ALLOW_PART_OVERLAP)
     #if defined(WOLFBOOT_ORIGIN) && \
         (WOLFBOOT_ORIGIN + 0) < (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) && \
         !defined(PART_BOOT_EXT) && \
@@ -186,6 +190,7 @@
          (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0))
         #error "Swap partition overlaps the bootloader region"
     #endif
+    #endif /* !WOLFBOOT_ALLOW_PART_OVERLAP */
 #endif
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
