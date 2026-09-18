@@ -98,6 +98,8 @@
 #ifndef __ASSEMBLER__
 /* Point ordinary reads at the eMMC user area (0), boot0 (1) or boot1 (2).
  * The SoC's own boot containers live in the boot partitions. */
+int imx95_emmc_select_partition(int part);
+int imx95_emmc_boot_partition(void);
 #endif
 
 /* M7 TCMs through the system aperture (M7 links for its core view). */
