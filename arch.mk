@@ -270,6 +270,12 @@ ifeq ($(ARCH),AARCH64)
     ifneq ($(filter 1,$(IMX95_SCMI_COLD_INIT) $(IMX95_INIT_M7)),)
       OBJS+=hal/imx95_scmi.o
     endif
+    # One-shot diagnostic: read the AHAB container out of the eMMC boot
+    # partitions and report it, from inside an image that boots from SD.
+    ifeq ($(IMX95_EMMC_PROBE),1)
+      CFLAGS+=-DIMX95_EMMC_PROBE
+      OBJS+=hal/imx95_ahab.o
+    endif
     # Mirror the console into a DDR ring that survives the handoff to Linux.
     ifeq ($(IMX95_LOG_RING),1)
       CFLAGS+=-DIMX95_LOG_RING
