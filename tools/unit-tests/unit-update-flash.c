@@ -1002,6 +1002,60 @@ START_TEST (test_update_aborts_on_sector_copy_failure) {
 }
 END_TEST
 
+/* F-9752: an interrupted per-sector swap must resume from the sector-flag
+ * fall-through entry points and end with the partitions swapped. The
+ * single-shot hal_flash_write_fail faults the first internal write (the
+ * swap->BOOT copy of sector 0), leaving sector 0 at SECT_FLAG_BACKUP;
+ * re-running wolfBoot_update re-enters the sector loop at case
+ * SECT_FLAG_BACKUP (a path no prior test reached) and exercises the
+ * sector==1 fw_size re-swap. Only the BACKUP state is a recoverable power
+ * fail: faulting the BOOT->update copy instead (SWAPPING state) erases the
+ * update header, so the resume's re-open fails and the device cannot
+ * recover - that entry point is not testable as a roundtrip. */
+static uint8_t resume_boot_snap[WOLFBOOT_PARTITION_SIZE];
+static uint8_t resume_update_snap[WOLFBOOT_PARTITION_SIZE];
+
+static void resume_setup(void)
+{
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger();
+    memcpy(resume_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE);
+    memcpy(resume_update_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE);
+}
+
+static void resume_verify(void)
+{
+    /* Compare the image (header + payload), not the full partition: the
+     * trailer sector (sector flags, partition state) is rewritten by the
+     * swap and legitimately differs from the pre-swap snapshot. */
+    uint32_t total_size = TEST_SIZE_SMALL + IMAGE_HEADER_SIZE;
+    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+        WOLFBOOT_PARTITION_BOOT_ADDRESS, resume_update_snap, total_size), 0);
+    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+        WOLFBOOT_PARTITION_UPDATE_ADDRESS, resume_boot_snap, total_size), 0);
+    cleanup_flash();
+}
+
+START_TEST (test_update_resume_from_backup_flag)
+{
+    uint8_t flag;
+    reset_mock_stats();
+    resume_setup();
+    hal_flash_write_fail = 1;
+    ck_assert_int_lt(wolfBoot_update(0), 0);
+    wolfBoot_get_update_sector_flag(0, &flag);
+    ck_assert_int_eq(flag, SECT_FLAG_BACKUP);
+    ck_assert_int_ge(wolfBoot_update(0), 0);
+    resume_verify();
+}
+END_TEST
+
 START_TEST (test_forward_update_tolarger) {
     reset_mock_stats();
     prepare_flash();
@@ -1854,6 +1908,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
+    tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
