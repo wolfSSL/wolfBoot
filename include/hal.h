@@ -60,7 +60,8 @@ void hal_deinit();
 void hal_init(void);
 
 /* Timer functions (platform-specific, used for benchmarking) */
-#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
+#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK) || \
+    defined(PREBOOT_NETCHECK)
 uint64_t hal_get_timer_us(void);
 #endif
 
@@ -112,6 +113,12 @@ void hal_cache_invalidate(void);
  */
 int hal_flash_protect(haladdr_t address, int len);
 void hal_prepare_boot(void);
+
+/* Re-attribute [start,end) non-cacheable, for memory shared with a
+ * non-coherent bus master. Returns 0, or negative if the port cannot; see
+ * docs/HAL.md. The weak default fails rather than doing nothing, so a caller
+ * never silently runs DMA through write-back memory. */
+int hal_dma_set_noncached(uintptr_t start, uintptr_t end);
 
 #ifdef DUALBANK_SWAP
     void hal_flash_dualbank_swap(void);
