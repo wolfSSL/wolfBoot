@@ -442,6 +442,24 @@ jobs:
       config-file: ./config/examples/imx95-a55.config
       make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
 
+  imx95_a55_stage1_emmc_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # The stage 1 that replaces U-Boot SPL, reading the containers from the
+      # eMMC boot partition. Nothing else compiles the AHAB parser or the
+      # OCRAM link, so this keeps both from rotting.
+      config-file: ./config/examples/imx95-a55.config
+      make-args: -C stage1 DISK_EMMC=1 DISK_SDCARD=0 loader_stage1.bin CROSS_COMPILE=aarch64-linux-gnu-
+
+  imx95_a55_stage1_sd_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # Same stage 1 against the SD controller rather than the eMMC one.
+      config-file: ./config/examples/imx95-a55.config
+      make-args: -C stage1 DISK_SDCARD=1 DISK_EMMC=0 loader_stage1.bin CROSS_COMPILE=aarch64-linux-gnu-
+
   tegra234_test:
     uses: ./.github/workflows/test-build.yml
     with:

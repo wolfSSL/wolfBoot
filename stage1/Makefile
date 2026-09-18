@@ -56,6 +56,26 @@ include ../arch.mk
 # Parse config options
 include ../options.mk
 
+# NXP i.MX95: stage 1 replaces U-Boot SPL in AHAB container 0. It is a
+# standalone image with its own entry, so the object list is stated outright
+# rather than inherited from the BL33 build.
+ifeq ($(TARGET),imx95_a55)
+  OBJS:= \
+	./hal/imx95_a55_stage1.o \
+	./hal/imx95_a55_stage1_start.o \
+	./hal/imx95_ahab.o \
+	./hal/imx95_lpuart.o \
+	./hal/imx95_scmi.o \
+	./hal/imx95_usdhc.o \
+	./src/string.o
+  CFLAGS+=-DIMX95_STAGE1
+  ASFLAGS+=-DIMX95_STAGE1
+  # OCRAM, where the boot ROM loads the container's A55 image. Overridable so
+  # the same build can be linked elsewhere for bring-up.
+  WOLFBOOT_STAGE1_BASE_ADDR?=0x20480000
+  WOLFBOOT_STAGE1_SIZE?=0x30000
+endif
+
 ifeq ($(WOLFTPM),1)
   LS1_OBJS += \
     tpm_io.o \
