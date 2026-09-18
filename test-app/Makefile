@@ -538,6 +538,13 @@ else
         APP_OBJS+=../hal/wolfhal.o
     else
         APP_OBJS+=../hal/$(TARGET).o
+        # The test-app links the same HAL object, so HALs using the
+        # generic NS16550 console need it here too.
+        ifneq (,$(filter $(TARGET),nxp_ls1028a nxp_t2080 nxp_t1024 nxp_t1040 nxp_p1021))
+            ifeq ($(DEBUG_UART),1)
+                APP_OBJS+=../hal/uart/ns16550.o
+            endif
+        endif
     endif
 endif
 

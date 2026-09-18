@@ -154,32 +154,10 @@
 /* P1021 PC16552D Dual UART */
 #define BAUD_RATE    115200
 #define UART_SEL     0 /* select UART 0 or 1 */
-#define UART_LCR_VAL (UART_LCR_WLS) /* data=8 bits, stop-1 bit, no parity */
 
 #define UART_BASE(n) (CCSRBAR + 0x4500 + (n * 0x100))
 
-#define UART_RBR(n)  ((volatile uint8_t*)(UART_BASE(n) + 0)) /* receiver buffer register */
-#define UART_THR(n)  ((volatile uint8_t*)(UART_BASE(n) + 0)) /* transmitter holding register */
-#define UART_IER(n)  ((volatile uint8_t*)(UART_BASE(n) + 1)) /* interrupt enable register */
-#define UART_IIR(n)  ((volatile uint8_t*)(UART_BASE(n) + 2)) /* interrupt ID register */
-#define UART_FCR(n)  ((volatile uint8_t*)(UART_BASE(n) + 2)) /* FIFO control register */
-#define UART_LCR(n)  ((volatile uint8_t*)(UART_BASE(n) + 3)) /* line control register */
-#define UART_MCR(n)  ((volatile uint8_t*)(UART_BASE(n) + 4)) /* modem control register */
-#define UART_LSR(n)  ((volatile uint8_t*)(UART_BASE(n) + 5)) /* line status register */
-
-/* enabled when UART_LCR_DLAB set */
-#define UART_DLB(n)  ((volatile uint8_t*)(UART_BASE(n) + 0)) /* divisor least significant byte register */
-#define UART_DMB(n)  ((volatile uint8_t*)(UART_BASE(n) + 1)) /* divisor most significant byte register */
-
-#define UART_FCR_TFR  (0x04) /* Transmitter FIFO reset */
-#define UART_FCR_RFR  (0x02) /* Receiver FIFO reset */
-#define UART_FCR_FEN  (0x01) /* FIFO enable */
-#define UART_LCR_DLAB (0x80) /* Divisor latch access bit */
-#define UART_LCR_WLS  (0x03) /* Word length select: 8-bits */
-#define UART_LSR_TEMT (0x40) /* Transmitter empty */
-#define UART_LSR_THRE (0x20) /* Transmitter holding register empty */
-
-/* P1021 eLBC (Enhanced Local Bus Controller) - RM 12.3 */
+/* Register layout and bit names live in include/ns16550.h. */
 #define ELBC_BASE        (CCSRBAR + 0x5000UL)
 #define ELBC_MAX_BANKS   8
 #define ELBC_BANK_SZ     8192

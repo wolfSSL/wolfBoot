@@ -25,6 +25,9 @@
 #include "image.h" /* for RAMFUNCTION */
 #include "nxp_ppc.h"
 #include "nxp_t2080.h"
+/* Register names for the DUART MCR poke in hal_flash_cache_disable_pre_os();
+ * nxp_ppc.c pulls this in too, but only when DEBUG_UART is set. */
+#include "ns16550.h"
 
 #define ENABLE_IFC
 #define ENABLE_BUS_CLK_CALC
@@ -1701,8 +1704,10 @@ void hal_prepare_boot(void)
  *
  * Also aligns small but observable pre-jump state items to CW U-Boot's
  * profile when chasing VxWorks 7 64-bit silent boot:
- *   - DUART1 MCR = 3   (DTR+RTS asserted; U-Boot sets this, our driver
- *                       leaves it at the post-reset 0)
+ *   - DUART1 MCR = 3   (DTR+RTS asserted, as U-Boot leaves it). The shared
+ *                       NS16550 driver already does this in ns16550_init(),
+ *                       but only when DEBUG_UART builds the console in, so
+ *                       the poke below still covers a console-less build.
  *   - TCR = 0 (matches CW U-Boot's pre-bootm value; a nonzero WRC would let
  *                       the watchdog fire silently after VxWorks starts) */
 void RAMFUNCTION hal_flash_cache_disable_pre_os(void)
@@ -1710,8 +1715,9 @@ void RAMFUNCTION hal_flash_cache_disable_pre_os(void)
     hal_flash_cache_disable();
 #ifdef ENABLE_OS64BIT
     /* DUART1 modem control: DTR+RTS asserted, matching CW U-Boot's
-     * pre-bootm value. */
-    set8(UART_MCR(0), 0x03);
+     * pre-bootm value, which VxWorks 7 inherits. */
+    set8((volatile unsigned char*)(UART_BASE(0) + NS16550_MCR),
+        NS16550_MCR_DTR | NS16550_MCR_RTS);
     /* TCR=0 matches CW U-Boot's pre-bootm value. WRC != 0 would let
      * the watchdog fire silently after VxWorks starts. */
     mtspr(SPRN_TCR, 0);

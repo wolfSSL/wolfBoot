@@ -1689,6 +1689,20 @@ ifeq ($(WOLFHSM_SERVER),1)
 
 endif
 
+# NS16550-compatible UART, as an additional instance-based port (see
+# include/ns16550.h). Independent of DEBUG_UART: that selects the single
+# global debug console, this adds a driver for a second port whose base
+# address may only be known at runtime (e.g. read from the device tree).
+ifeq ($(NS16550),1)
+  CFLAGS += -DWOLFBOOT_NS16550
+  # arch.mk (included first) already adds this object on targets that put
+  # their debug console on the same driver, so only add it when absent -
+  # naming it twice makes the link fail with multiple definitions.
+  ifeq (,$(filter hal/uart/ns16550.o,$(OBJS)))
+    OBJS += hal/uart/ns16550.o
+  endif
+endif
+
 # wolfBoot hooks framework
 # WOLFBOOT_HOOKS_FILE: path to a single .c file containing hook definitions
 WOLFBOOT_HOOKS_ENABLED :=
