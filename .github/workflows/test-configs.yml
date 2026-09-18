@@ -433,6 +433,15 @@ jobs:
       config-file: ./config/examples/imx95-m7.config
       make-args: wolfboot.bin test-app/image_v1_signed.bin
 
+  imx95_a55_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: aarch64
+      # i.MX95 Cortex-A55 as BL33. The payload is a Linux FIT on the boot
+      # medium, so there is no test app and no contiguous factory.bin.
+      config-file: ./config/examples/imx95-a55.config
+      make-args: wolfboot.bin CROSS_COMPILE=aarch64-linux-gnu-
+
   tegra234_test:
     uses: ./.github/workflows/test-build.yml
     with:
