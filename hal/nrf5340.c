@@ -833,16 +833,26 @@ int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
     /* only application core supports SPU */
 #ifdef TARGET_nrf5340_app
     uint32_t region, n, i;
+    uint32_t tail;
 
     /* limit check */
     if (start > FLASH_SIZE)
         return -1;
+    if (len < 0)
+        return -1;
     /* truncate if exceeds flash size */
-    if (start + len > FLASH_SIZE)
+    if (start + (uint32_t)len > FLASH_SIZE)
         len = FLASH_SIZE - start;
 
     region = (start / SPU_FLASH_BLOCK_SIZE);
-    n = (len / SPU_FLASH_BLOCK_SIZE);
+    /* SPU regions are SPU_FLASH_BLOCK_SIZE-aligned. Round the block count up
+     * so the locked range covers [start, start+len) whole: start may sit
+     * mid-block and len may not be a whole number of blocks, so the partial
+     * blocks at both ends are locked whole (safe: it only ever widens
+     * protection). The old `len / SPU_FLASH_BLOCK_SIZE` truncated, leaving
+     * the tail block writable while still returning success. */
+    tail = (start % SPU_FLASH_BLOCK_SIZE) + (uint32_t)len;
+    n = (tail + SPU_FLASH_BLOCK_SIZE - 1) / SPU_FLASH_BLOCK_SIZE;
 
     for (i = 0; i < n; i++) {
         /* do not allow write to this region and lock till next reset */

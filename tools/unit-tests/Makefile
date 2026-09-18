@@ -124,6 +124,7 @@ TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-p1021-read-badblock
 TESTS+=unit-kontron-tgl-spi
+TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-rp2350-flash-write
@@ -1430,6 +1431,17 @@ unit-kontron-tgl-spi: unit-kontron-tgl-spi.c kontron_spi_extract.h \
 	kontron_spi_fn_extract.h
 	gcc -o $@ unit-kontron-tgl-spi.c $(CFLAGS) $(LDFLAGS)
 
+# unit-nrf5340-flash-protect runs the real hal_flash_protect() from
+# hal/nrf5340.c against a mock SPU region-permission array (F-13623: the
+# region count truncated, so a sub-block or partial-tail len left flash
+# writable while the function reported success).
+nrf5340_protect_fn_extract.h: ../../hal/nrf5340.c
+	sed -n '/^int RAMFUNCTION hal_flash_protect/,/^}/p' $< > $@
+
+unit-nrf5340-flash-protect: unit-nrf5340-flash-protect.c \
+	nrf5340_protect_fn_extract.h
+	gcc -o $@ unit-nrf5340-flash-protect.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1714,6 +1726,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \
 	p1021_read_extract.h p1021_read_fn_extract.h \
 	kontron_spi_extract.h kontron_spi_fn_extract.h \
+	nrf5340_protect_fn_extract.h \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
