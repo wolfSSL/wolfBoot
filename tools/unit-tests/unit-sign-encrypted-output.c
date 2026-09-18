@@ -541,6 +541,84 @@ START_TEST(test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser)
 }
 END_TEST
 
+/* F-13646: HDR_CMDLINE encode/decode roundtrip. The sign --cmdline option
+ * stores the OS command line as a signature-covered TLV with the reserved
+ * tag HDR_CMDLINE; the bootloader recovers it via wolfBoot_find_header()
+ * (wolfBoot_efi_get_cmdline). For every valid 1..255-byte command line the
+ * decoder must return exactly those bytes. Lengths 1, 2, 3, 69, 70, 71, 255
+ * exercise the extremes and the odd/even boundary that forces the walker to
+ * byte-step over the ALIGN_8 padding between TLVs; 255 also forces the
+ * header to auto-grow past the 256-byte default (the ~70-byte default
+ * capacity is the common case, so a silent header/bootloader IMAGE_HEADER_
+ * SIZE mismatch is the realistic failure). */
+START_TEST(test_make_header_ex_roundtrip_cmdline_tlv)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    uint8_t *output_buf = NULL;
+    uint8_t image_buf[] = { 0x01, 0x02, 0x03, 0x04 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t cmdline[255];
+    size_t output_len;
+    uint16_t lens[] = { 1, 2, 3, 69, 70, 71, 255 };
+    uint16_t i;
+    uint16_t j;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)),
+        0);
+
+    /* Deterministic, non-zero pattern across the full 255 bytes. */
+    for (j = 0; j < 255; j++) {
+        cmdline[j] = (uint8_t)(0x10 + (j % 240));
+    }
+
+    for (i = 0; i < sizeof(lens) / sizeof(lens[0]); i++) {
+        uint16_t len = lens[i];
+
+        reset_cmd_defaults();
+        CMD.header_sz = 256;
+        CMD.custom_tlvs = 1;
+        CMD.custom_tlv[0].tag = HDR_CMDLINE;
+        CMD.custom_tlv[0].len = len;
+        CMD.custom_tlv[0].buffer = malloc(len);
+        memcpy(CMD.custom_tlv[0].buffer, cmdline, len);
+
+        reset_mocks(NULL, 0);
+        ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path,
+            output_path, 0, 0, 0, 0, NULL, 0, NULL, 0);
+        ck_assert_int_eq(ret, 0);
+        ck_assert_int_eq(read_file(output_path, &output_buf, &output_len), 0);
+        ck_assert_uint_eq(output_len, CMD.header_sz + sizeof(image_buf));
+        /* The decoder must recover exactly the signed bytes. */
+        assert_header_bytes(output_buf, HDR_CMDLINE, cmdline, len);
+
+        /* A 255-byte command line cannot fit the 256-byte default header
+         * (signature + TLV on top), so sign auto-grows it to 512. Short
+         * lines stay at the default. 69..71 are the borderline and are not
+         * asserted here. */
+        if (len == 255) {
+            ck_assert_uint_eq(CMD.header_sz, 512);
+        } else if (len <= 3) {
+            ck_assert_uint_eq(CMD.header_sz, 256);
+        }
+
+        free(output_buf);
+        output_buf = NULL;
+        free_custom_tlv_buffers();
+        unlink(output_path);
+    }
+
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 START_TEST(test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header)
 {
     char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
@@ -758,6 +836,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase, test_header_append_helpers_emit_little_endian_bytes);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser);
+    tcase_add_test(tcase,
+        test_make_header_ex_roundtrip_cmdline_tlv);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header);
     tcase_add_test(tcase,
