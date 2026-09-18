@@ -31,4 +31,10 @@
 #define IMX_RT7XX_XSPI0_REGS_S    0x50184000u
 #define IMX_RT7XX_XSPI0_REGS_NS   0x40184000u
 
+/* Compute-domain register blocks, Non-secure aliases (TZEN=0 boot). */
+#define IMX_RT7XX_RSTCTL0_NS      0x40000000u
+#define IMX_RT7XX_CLKCTL0_NS      0x40001000u
+#define IMX_RT7XX_IOPCTL0_NS      0x40004000u
+#define IMX_RT7XX_LPFC0_NS        0x40110000u /* LP_FLEXCOMM0 / LPUART0 */
+
 #endif /* IMX_RT7XX_H */
