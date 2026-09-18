@@ -491,7 +491,7 @@ void isr_crpt(void) __attribute__((weak, alias("isr_empty")));
  */
 
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
-    defined(TZEN)
+    defined(TZEN) && !defined(WOLFBOOT_SECURE_APP)
 #include "hal.h"
 #define VTOR (*(volatile uint32_t *)(0xE002ED08)) /* Non-secure VTOR */
 #else
@@ -501,7 +501,8 @@ void isr_crpt(void) __attribute__((weak, alias("isr_empty")));
 
 static void  *app_entry;
 static uint32_t app_end_stack;
-#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN)
+#if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && defined(TZEN) && \
+    !defined(WOLFBOOT_SECURE_APP)
 static uint32_t ns_entry;
 #endif
 
@@ -544,7 +545,15 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
      * and VTOR_NS points there directly. */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+#   if defined(WOLFBOOT_SECURE_APP)
+    /* A secure application is a signed Secure runtime, not a Non-secure guest:
+     * stay in Secure state and branch through its own reset vector. wolfBoot's
+     * MPU stays off across the jump; the runtime installs its own map. */
+    mpu_off();
+    asm volatile("msr msp, %0" :: "r"(app_end_stack));
+    asm volatile("cpsie i");
+    asm volatile("mov pc, %0" :: "r"(app_entry));
+#   elif defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
        defined(TZEN)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
 #if defined(TARGET_stm32n6)
