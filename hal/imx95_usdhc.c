@@ -32,18 +32,21 @@
 #include "printf.h"
 #include "hal/imx95_a55.h"
 
-#if defined(DISK_EMMC) && !defined(DISK_SDCARD)
-#error "imx95_usdhc.c is SD-only (uSDHC2); DISK_EMMC needs CMD1/EXT_CSD init"
-#endif
-
 #if defined(IMX95_SCMI_COLD_INIT) && defined(DISK_SDCARD)
 extern int imx95_usdhc2_cold_init(void);
 #endif
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 
+/* uSDHC1 carries the eMMC on this module, uSDHC2 the carrier SD slot. A build
+ * selects one: the two are separate controllers and the driver keeps a single
+ * card's state. */
 #ifndef USDHC_BASE
+#ifdef DISK_EMMC
+#define USDHC_BASE          IMX95_USDHC1_BASE   /* eMMC (uSDHC1) */
+#else
 #define USDHC_BASE          IMX95_USDHC2_BASE   /* carrier SD (uSDHC2) */
+#endif
 #endif
 
 /* --- uSDHC registers (offsets from the instance base) -------------------- */
@@ -223,6 +226,38 @@ static void usdhc_reset(uint32_t bits)
 #define USDHC_CLK_25MHZ 1
 #define USDHC_CLK_50MHZ 2
 
+/* RSTA does not touch the vendor registers, so a controller the boot ROM has
+ * already driven comes back still in its fast-boot mode, with the HS400 DLL
+ * and tuning it selected. The first command then never completes. U-Boot's
+ * esdhc_init() puts the same five registers back by hand for this reason; a
+ * stage that runs after U-Boot inherits them already clean, which is why this
+ * only shows up when nothing ran first. */
+/* The 80 startup clocks a card needs before its first command. The SD clock
+ * is normally gated when idle, so it is forced on across the sequence the way
+ * U-Boot's esdhc_init() does - INITA on its own is not enough on a controller
+ * the boot ROM has already used. */
+static void usdhc_init_clocks(void)
+{
+    volatile uint32_t d;
+
+    wr(USDHC_VEND_SPEC, rd(USDHC_VEND_SPEC) | VEND_SPEC_FRC_SDCLK_ON);
+    wr(USDHC_SYS_CTRL, rd(USDHC_SYS_CTRL) | SYS_CTRL_INITA);
+    (void)usdhc_wait_clear(USDHC_SYS_CTRL, SYS_CTRL_INITA);
+    /* Caches are off in this stage, so a plain loop is well over the 1 ms
+     * U-Boot waits here. */
+    for (d = 0; d < 200000U; d++) { }
+    wr(USDHC_VEND_SPEC, rd(USDHC_VEND_SPEC) & ~VEND_SPEC_FRC_SDCLK_ON);
+}
+
+static void usdhc_vendor_reset(void)
+{
+    wr(USDHC_MMC_BOOT, 0);
+    wr(USDHC_MIX_CTRL, 0);
+    wr(USDHC_CLK_TUNE_CTRL, 0);
+    wr(USDHC_DLL_CTRL, 0);
+    wr(USDHC_VEND_SPEC, VEND_SPEC_INIT);
+}
+
 static void usdhc_set_clock(int speed)
 {
     uint32_t v;
@@ -362,6 +397,185 @@ restore:
     return -1;
 }
 
+#ifdef DISK_EMMC
+
+/* EXT_CSD byte 179. Bits [2:0] select which partition ordinary read commands
+ * address; bits [5:3] select which one the boot ROM loads from. Only the
+ * access bits may be touched here - rewriting the enable bits would change
+ * where the SoC boots from next reset. */
+#define EXT_CSD_PARTITION_CONFIG    179
+#define EXT_CSD_BUS_WIDTH           183
+#define EXT_CSD_PART_ACCESS_MASK    0x07U
+#define EXT_CSD_BUS_WIDTH_4BIT      1
+#define MMC_SWITCH_WRITE_BYTE       (3UL << 24)
+
+static uint8_t emmc_part_config;    /* EXT_CSD[179] as read at init */
+
+/* CMD6 in the "write byte" form: index in [23:16], value in [15:8]. R1b, so
+ * the card holds DAT0 low while it applies the change. */
+static int emmc_switch(uint32_t index, uint32_t value)
+{
+    uint32_t arg = MMC_SWITCH_WRITE_BYTE | (index << 16) | (value << 8);
+
+    return usdhc_cmd(SD_CMD6_SWITCH, arg, 0, 1, 0, 0, 1);
+}
+
+/* CMD8 on eMMC returns the 512-byte EXT_CSD as a data block, unlike the SD
+ * CMD8 which is an interface-condition check with no data. */
+static int emmc_read_ext_csd(uint8_t *buf)
+{
+    uint32_t n, st, i;
+    uint32_t *out = (uint32_t *)(void *)buf;
+
+    wr(USDHC_BLK_ATT, (1UL << 16) | SD_BLOCK_SIZE);
+    if (usdhc_cmd(MMC_CMD8_SEND_EXT_CSD, 0, 0, 0, 1, 0, 1) != 0)
+        return -1;
+
+    for (n = 0; n < USDHC_TIMEOUT_LOOPS; n++) {
+        st = rd(USDHC_INT_STATUS);
+        if (st & INT_DATA_ERRS) {
+            wr(USDHC_INT_STATUS, INT_DATA_ERRS);
+            usdhc_reset(SYS_CTRL_RSTC | SYS_CTRL_RSTD);
+            return -1;
+        }
+        if (rd(USDHC_PRES_STATE) & PRES_BREN)
+            break;
+    }
+    if (n == USDHC_TIMEOUT_LOOPS)
+        return -1;
+    wr(USDHC_INT_STATUS, INT_BRR);
+    for (i = 0; i < SD_BLOCK_SIZE / 4; i++)
+        out[i] = rd(USDHC_DATA_BUFF_ACC);
+    if (usdhc_wait_set(USDHC_INT_STATUS, INT_TC) != 0)
+        return -1;
+    wr(USDHC_INT_STATUS, INT_TC);
+    return 0;
+}
+
+/* Point ordinary reads at the user area (0), boot0 (1) or boot1 (2). The boot
+ * partitions are where the SoC's own boot containers live, so this is what
+ * lets wolfBoot read them. */
+int imx95_emmc_select_partition(int part)
+{
+    uint8_t cfg;
+
+    if (!card_ready)
+        return -1;
+    if (part < 0 || part > 2)
+        return -1;
+
+    cfg = (uint8_t)((emmc_part_config & (uint8_t)~EXT_CSD_PART_ACCESS_MASK) |
+                    (uint8_t)part);
+    if (emmc_switch(EXT_CSD_PARTITION_CONFIG, cfg) != 0) {
+        wolfBoot_printf("emmc: partition switch to %d failed\n", part);
+        return -1;
+    }
+    emmc_part_config = cfg;
+    return 0;
+}
+
+/* Which boot partition the SoC loads from, 1 for boot0 or 2 for boot1, taken
+ * from the enable field the ROM itself reads. 0 means none is enabled. */
+int imx95_emmc_boot_partition(void)
+{
+    if (!card_ready)
+        return -1;
+    return (int)((emmc_part_config >> 3) & 0x07U);
+}
+
+static int emmc_card_init(void)
+{
+    static uint8_t ext_csd[SD_BLOCK_SIZE] __attribute__((aligned(4)));
+    uint32_t rsp;
+    uint32_t n;
+    int ret;
+
+    card_rca = 1;           /* the host assigns it on eMMC, unlike SD */
+    card_high_cap = 0;
+
+    usdhc_reset(SYS_CTRL_RSTA | SYS_CTRL_RSTT);
+    usdhc_vendor_reset();
+    wr(USDHC_PROT_CTRL, PROT_CTRL_EMODE_LE | PROT_CTRL_DTW_1BIT |
+                        PROT_CTRL_CDTL | PROT_CTRL_CDSS);
+    wr(USDHC_WTMK_LVL, (128UL << 16) | 128UL);
+    wr(USDHC_INT_STATUS_EN, 0xFFFFFFFFUL);
+    wr(USDHC_INT_SIGNAL_EN, 0);
+
+    usdhc_set_clock(USDHC_CLK_ID);
+    usdhc_init_clocks();
+
+    DISK_DBG("emmc: SYS_CTRL=%08x PRES=%08x VEND=%08x\n",
+        (unsigned)rd(USDHC_SYS_CTRL), (unsigned)rd(USDHC_PRES_STATE),
+        (unsigned)rd(USDHC_VEND_SPEC));
+
+    (void)usdhc_cmd(SD_CMD0_GO_IDLE, 0, 0, 0, 0, 0, 0);
+
+    /* CMD1 rather than ACMD41, and with the sector-address bit set: parts this
+     * size are always block addressed, and asking for byte addressing would be
+     * refused. R3 carries no CRC. */
+    rsp = 0;
+    for (n = 0; n < 1000; n++) {
+        ret = usdhc_cmd(MMC_CMD1_SEND_OP_COND, 0x40FF8080UL, 0, 0, 0, 0, 0);
+        if (ret != 0) {
+            wolfBoot_printf("emmc: CMD1 failed (%d) PRES=%08x INT=%08x\n",
+                ret, (unsigned)rd(USDHC_PRES_STATE),
+                (unsigned)rd(USDHC_INT_STATUS));
+            return -1;
+        }
+        rsp = rd(USDHC_CMD_RSP0);
+        if (rsp & 0x80000000UL)
+            break;
+    }
+    if (!(rsp & 0x80000000UL)) {
+        wolfBoot_printf("emmc: card stuck busy in CMD1 (OCR 0x%08x)\n",
+            (unsigned)rsp);
+        return -1;
+    }
+    card_high_cap = (rsp & 0x40000000UL) ? 1 : 0;
+
+    ret = usdhc_cmd(SD_CMD2_ALL_SEND_CID, 0, 1, 0, 0, 0, 0);
+    if (ret != 0) {
+        wolfBoot_printf("emmc: CMD2 failed (%d)\n", ret);
+        return -1;
+    }
+    /* The host chooses the address on eMMC and tells the card. */
+    ret = usdhc_cmd(SD_CMD3_SEND_REL_ADDR, (uint32_t)card_rca << 16,
+                    0, 0, 0, 0, 1);
+    if (ret != 0) {
+        wolfBoot_printf("emmc: CMD3 failed (%d)\n", ret);
+        return -1;
+    }
+    (void)usdhc_cmd(SD_CMD9_SEND_CSD, (uint32_t)card_rca << 16, 1, 0, 0, 0, 0);
+    ret = usdhc_cmd(SD_CMD7_SELECT, (uint32_t)card_rca << 16, 0, 1, 0, 0, 1);
+    if (ret != 0) {
+        wolfBoot_printf("emmc: CMD7 failed (%d)\n", ret);
+        return -1;
+    }
+
+    usdhc_set_clock(USDHC_CLK_25MHZ);
+
+    /* 4-bit: the SMARC carrier routes four eMMC data lines, and the wider bus
+     * is a device-side setting the card has to be told about. */
+    if (emmc_switch(EXT_CSD_BUS_WIDTH, EXT_CSD_BUS_WIDTH_4BIT) == 0) {
+        wr(USDHC_PROT_CTRL,
+           (rd(USDHC_PROT_CTRL) & ~PROT_CTRL_DTW_MASK) | PROT_CTRL_DTW_4BIT);
+    }
+
+    (void)usdhc_cmd(SD_CMD16_SET_BLOCKLEN, SD_BLOCK_SIZE, 0, 0, 0, 0, 1);
+
+    if (emmc_read_ext_csd(ext_csd) != 0) {
+        wolfBoot_printf("emmc: EXT_CSD read failed\n");
+        return -1;
+    }
+    emmc_part_config = ext_csd[EXT_CSD_PARTITION_CONFIG];
+
+    wolfBoot_printf("emmc: ready, rca=0x%x part_config=0x%02x\n",
+        (unsigned)card_rca, (unsigned)emmc_part_config);
+    return 0;
+}
+
+#endif /* DISK_EMMC */
+
 static int sd_card_init(void)
 {
     uint32_t rsp;
@@ -371,7 +585,8 @@ static int sd_card_init(void)
     card_rca = 0;
     card_high_cap = 0;
 
-    usdhc_reset(SYS_CTRL_RSTA);
+    usdhc_reset(SYS_CTRL_RSTA | SYS_CTRL_RSTT);
+    usdhc_vendor_reset();
 
     /* CDTL+CDSS force card-present: boards routing CD to a GPIO leave the
      * dedicated CD pad floating, so CINST never sets. The card answering
@@ -393,8 +608,7 @@ static int sd_card_init(void)
         (unsigned)rd(USDHC_HOST_CTRL_CAP));
 
     /* Emit the 80 startup clocks a cold card needs before CMD0/CMD8. */
-    wr(USDHC_SYS_CTRL, rd(USDHC_SYS_CTRL) | SYS_CTRL_INITA);
-    (void)usdhc_wait_clear(USDHC_SYS_CTRL, SYS_CTRL_INITA);
+    usdhc_init_clocks();
 
     /* CMD0: idle */
     (void)usdhc_cmd(SD_CMD0_GO_IDLE, 0, 0, 0, 0, 0, 0);
@@ -622,8 +836,13 @@ int disk_init(int drv)
     if (card_ready)
         return 0;
 #endif
+#ifdef DISK_EMMC
+    if (emmc_card_init() != 0)
+        return -1;
+#else
     if (sd_card_init() != 0)
         return -1;
+#endif
     card_ready = 1;
     return 0;
 }
