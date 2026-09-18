@@ -606,6 +606,35 @@ MMUTableL0:
 .set   SECT, MMUTableL1+0x1000 /* 0x80_0000_0000 - 0xFF_FFFF_FFFF */
 .8byte SECT + 0x3
 
+#if defined(TARGET_versal) && defined(VERSAL_DDR_HIGH_BASE)
+/* Optional high DDR window (designs whose DDR aperture sits above 1 TB).
+ * One L0 descriptor per 512 GB, pointing at MMUTableL1_HI pages below.
+ * Base and size must be 512 GB aligned and end within the 44-bit space. */
+.if (VERSAL_DDR_HIGH_BASE % 0x8000000000) != 0
+.error "VERSAL_DDR_HIGH_BASE must be 512GB aligned"
+.endif
+.if VERSAL_DDR_HIGH_SIZE < 0x8000000000
+.error "VERSAL_DDR_HIGH_SIZE must be at least 512GB (one L0 granule)"
+.endif
+.if (VERSAL_DDR_HIGH_SIZE % 0x8000000000) != 0
+.error "VERSAL_DDR_HIGH_SIZE must be a multiple of 512GB"
+.endif
+.if (VERSAL_DDR_HIGH_BASE + VERSAL_DDR_HIGH_SIZE) > 0x100000000000
+.error "VERSAL_DDR_HIGH window exceeds the 44-bit address space"
+.endif
+.if VERSAL_DDR_HIGH_BASE < 0x10000000000
+.error "VERSAL_DDR_HIGH_BASE must be at least 1TB (the first two L0 entries are fixed)"
+.endif
+.rept ((VERSAL_DDR_HIGH_BASE / 0x8000000000) - 2)
+.8byte 0                       /* invalid up to the high window */
+.endr
+.set   SECT, MMUTableL1_HI
+.rept (VERSAL_DDR_HIGH_SIZE / 0x8000000000)
+.8byte SECT + 0x3
+.set   SECT, SECT + 0x1000
+.endr
+#endif /* TARGET_versal && VERSAL_DDR_HIGH_BASE */
+
 .section .mmu_tbl1,"a"
 
 MMUTableL1:
@@ -673,6 +702,17 @@ MMUTableL1:
 .set    SECT, SECT + 0x40000000
 .endr
 
+
+#if defined(TARGET_versal) && defined(VERSAL_DDR_HIGH_BASE)
+/* 1 GB Normal-memory blocks covering the high DDR window. */
+.balign 4096
+MMUTableL1_HI:
+.set    SECT, VERSAL_DDR_HIGH_BASE
+.rept   (VERSAL_DDR_HIGH_SIZE / 0x40000000)
+.8byte  SECT + Memory
+.set    SECT, SECT + 0x40000000
+.endr
+#endif /* TARGET_versal && VERSAL_DDR_HIGH_BASE */
 
 .section .mmu_tbl2,"a"
 
