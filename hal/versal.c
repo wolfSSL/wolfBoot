@@ -240,21 +240,10 @@ void uart_write(const char *buf, uint32_t len)
  * ============================================================================
  */
 
-/* Get current timer count (physical counter) */
-static inline uint64_t timer_get_count(void)
-{
-    uint64_t cntpct;
-    __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
-    return cntpct;
-}
-
-/* Get timer frequency with fallback to TIMER_CLK_FREQ if not configured */
-static inline uint64_t timer_get_freq(void)
-{
-    uint64_t cntfrq;
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r" (cntfrq));
-    return cntfrq ? cntfrq : TIMER_CLK_FREQ;
-}
+/* The counter accessors come from the shared AArch64 helpers. The three
+ * conversions below stay local: each picks a different way to avoid overflow,
+ * and the header deliberately takes no position on that. */
+#include "aarch64_arch.h"
 
 /* Get current time in milliseconds */
 uint64_t hal_timer_ms(void)

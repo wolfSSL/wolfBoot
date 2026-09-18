@@ -35,6 +35,10 @@ static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
 static int mock_fail_payload_part;
 static int mock_verify_integrity_ret;
+/* not_ext as the verify calls saw it: the staged image lives in RAM, so an
+ * EXT_FLASH build must not route these reads back through external flash. */
+static int mock_integrity_saw_not_ext;
+static int mock_authenticity_saw_not_ext;
 static int mock_verify_authenticity_ret;
 
 ChaCha chacha;
@@ -82,6 +86,8 @@ static void reset_mocks(void)
     mock_fail_payload_part = -1;
     mock_verify_integrity_ret = 0;
     mock_verify_authenticity_ret = 0;
+    mock_integrity_saw_not_ext = -1;
+    mock_authenticity_saw_not_ext = -1;
     mock_flash_protect_called = 0;
     mock_flash_protect_addr = 0;
     mock_flash_protect_len = 0;
@@ -181,6 +187,7 @@ int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image)
 
 int wolfBoot_verify_integrity(struct wolfBoot_image* img)
 {
+    mock_integrity_saw_not_ext = img->not_ext;
     if (mock_verify_integrity_ret == 0)
         img->sha_ok = 1;
     return mock_verify_integrity_ret;
@@ -188,6 +195,7 @@ int wolfBoot_verify_integrity(struct wolfBoot_image* img)
 
 int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 {
+    mock_authenticity_saw_not_ext = img->not_ext;
     if (mock_verify_authenticity_ret == 0)
         img->signature_ok = 1;
     return mock_verify_authenticity_ret;
@@ -316,6 +324,24 @@ START_TEST(test_update_disk_boots_from_B_when_A_is_blank)
 }
 END_TEST
 
+START_TEST(test_update_disk_marks_staged_image_not_external)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    memset(part_b_image, 0, sizeof(part_b_image));
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    /* Both verification passes must run against the RAM copy. Leaving not_ext
+     * clear makes an EXT_FLASH build hash external flash instead of the image
+     * just staged, so a good image fails integrity. */
+    ck_assert_int_eq(mock_integrity_saw_not_ext, 1);
+    ck_assert_int_eq(mock_authenticity_saw_not_ext, 1);
+}
+END_TEST
+
 START_TEST(test_get_decrypted_blob_version_rejects_truncated_version_tlv)
 {
     uint8_t hdr[IMAGE_HEADER_SIZE + 2];
@@ -420,6 +446,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_prefers_primary_partition_when_versions_equal);
     tcase_add_test(tc, test_update_disk_boots_from_A_when_B_is_blank);
     tcase_add_test(tc, test_update_disk_boots_from_B_when_A_is_blank);
+    tcase_add_test(tc, test_update_disk_marks_staged_image_not_external);
     tcase_add_test(tc, test_get_decrypted_blob_version_rejects_truncated_version_tlv);
     tcase_add_test(tc, test_update_disk_highbit_version_selects_higher_partition);
     tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
