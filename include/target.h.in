@@ -178,7 +178,7 @@
         !defined(PART_UPDATE_EXT) && \
         ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) != 0) && \
         ((WOLFBOOT_ORIGIN + 0) < \
-         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_UPDATE_SIZE + 0)) && \
         ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) < \
          (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
         #error "Update partition overlaps the bootloader region"
@@ -188,7 +188,7 @@
         !defined(PART_SWAP_EXT) && \
         ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) != 0) && \
         ((WOLFBOOT_ORIGIN + 0) < \
-         (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+         (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE)) && \
         ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) < \
          (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
         #error "Swap partition overlaps the bootloader region"

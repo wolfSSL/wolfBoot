@@ -44,6 +44,11 @@ ifeq ($(TZEN),1)
   CFLAGS:=-I./wcs $(CFLAGS)
 endif
 CFLAGS+=-I. -I..
+# Same opt-out as the bootloader build: target.h is shared, so the
+# partition-vs-bootloader-region guards must be suppressed here too.
+ifeq ($(WOLFBOOT_ALLOW_PART_OVERLAP),1)
+  CFLAGS+=-DWOLFBOOT_ALLOW_PART_OVERLAP=1
+endif
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_CLANG?=0
@@ -544,9 +549,6 @@ else
         APP_OBJS+=../hal/wolfhal.o
     else
         APP_OBJS+=../hal/$(TARGET).o
-    endif
-    ifneq ($(filter nrf5340%,$(TARGET)),)
-        APP_OBJS+=../hal/nrf5340_uart.o
     endif
 endif
 
