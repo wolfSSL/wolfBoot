@@ -71,9 +71,13 @@ uint64_t hal_get_timer_us(void);
 #ifdef BOOT_BENCHMARK
     #define BENCHMARK_DECLARE() uint64_t _boot_bench_start
     #define BENCHMARK_START() (_boot_bench_start = hal_get_timer_us())
+    /* wolfBoot_printf compiles to nothing on a build without printf, which
+     * leaves _elapsed_ms unreferenced; keep it used so the macro is valid
+     * there too. */
     #define BENCHMARK_END(msg) do { \
         uint64_t _elapsed_ms = (hal_get_timer_us() - _boot_bench_start) / 1000; \
         wolfBoot_printf(msg " (%lu ms)\r\n", (unsigned long)_elapsed_ms); \
+        (void)_elapsed_ms; \
     } while(0)
 #else
     #define BENCHMARK_DECLARE() do {} while(0)
