@@ -265,6 +265,14 @@ extern "C" {
 #error "WOLFBOOT_SKIP_BOOT_VERIFY requires WOLFBOOT_SELF_UPDATE_MONOLITHIC"
 #endif
 
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY) && defined(WOLFBOOT_SECURE_APP)
+#error "WOLFBOOT_SECURE_APP handoff requires wolfBoot image verification"
+#endif
+
+#if defined(WOLFBOOT_NO_SIGN) && defined(WOLFBOOT_SECURE_APP)
+#error "WOLFBOOT_SECURE_APP handoff requires signed images"
+#endif
+
 #ifdef BIG_ENDIAN_ORDER
 #    define WOLFBOOT_MAGIC          0x574F4C46 /* WOLF */
 #    define WOLFBOOT_MAGIC_TRAIL    0x424F4F54 /* BOOT */

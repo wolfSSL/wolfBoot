@@ -30,6 +30,9 @@
 #include "spi_flash.h"
 #include "target.h"
 #include "wolfboot/wolfboot.h"
+#if defined(WOLFBOOT_SECURE_APP)
+#include "wolfboot/secure_handoff.h"
+#endif
 
 #include "delta.h"
 #include "printf.h"
@@ -1544,6 +1547,27 @@ void* wolfBoot_get_dts_address(void)
 }
 #endif
 
+#if defined(WOLFBOOT_SECURE_APP)
+static int wolfBoot_prepare_secure_handoff(
+    const struct wolfBoot_image* boot)
+{
+    volatile wolfBoot_secure_handoff_t* handoff =
+        (volatile wolfBoot_secure_handoff_t*)
+            WOLFBOOT_SECURE_HANDOFF_ADDRESS;
+    uint32_t lifecycle = WOLFBOOT_SECURE_HANDOFF_LIFECYCLE_UNKNOWN;
+
+    if ((boot == NULL) || (boot->sha_hash == NULL)) {
+        return -1;
+    }
+
+    if (hal_attestation_get_lifecycle(&lifecycle) != 0) {
+        lifecycle = WOLFBOOT_SECURE_HANDOFF_LIFECYCLE_UNKNOWN;
+    }
+    return wolfBoot_secure_handoff_build(handoff, boot->sha_hash,
+        wolfBoot_get_blob_version(boot->hdr), lifecycle);
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     int bootRet;
@@ -1764,6 +1788,11 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
     PART_SANITY_CHECK(&boot);
     FW_BASE_SANITY_CHECK(&boot);
+#endif
+#if defined(WOLFBOOT_SECURE_APP)
+    if (wolfBoot_prepare_secure_handoff(&boot) != 0) {
+        wolfBoot_panic();
+    }
 #endif
     do_boot((void *)boot.fw_base);
 }
