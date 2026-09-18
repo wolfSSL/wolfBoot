@@ -115,6 +115,14 @@ static inline void imx95_dcache_clean(const void *addr, uint32_t len)
 
     if (len == 0)
         return;
+    /* Nothing to clean while the cache is off - every store already reached
+     * memory. It is also unsafe: the M7 does maintenance by address even with
+     * the cache disabled, and out of a cold reset the cache RAMs hold random
+     * tags and dirty bits until hal_cache_enable() invalidates them, so a hit
+     * writes garbage to a random address and the bus error comes back as an
+     * imprecise BusFault. */
+    if ((SCB_CCR & CCR_DC) == 0UL)
+        return;
     line = ((uint32_t)(uintptr_t)addr) & ~(IMX95_CACHE_LINE - 1UL);
     end = (uint32_t)(uintptr_t)addr + len;
     for (; line < end; line += IMX95_CACHE_LINE) {
@@ -146,6 +154,12 @@ static inline void imx95_dwt_init(void)
     DWT_CYCCNT = 0;
     DWT_CTRL |= DWT_CYCCNTENA;
 }
+
+/* The M7 core clock on this part. Only used to turn cycle counts into
+ * microseconds for the boot benchmark; override for a different clock. */
+#ifndef IMX95_M7_CORE_HZ
+#define IMX95_M7_CORE_HZ 800000000UL
+#endif
 
 /* Bounded spin. Wrap-safe for any delay shorter than a full 32-bit period
  * (~5.4 s at 800 MHz) because the comparison is done on the difference. */
