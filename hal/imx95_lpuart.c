@@ -37,12 +37,18 @@ static inline void wr32(uintptr_t a, uint32_t v)
 
 #if defined(DEBUG_UART)
 
-/* SPL, BL31 and OP-TEE have all driven this port already, so it is clocked
- * and at 115200; rewriting BAUD would need the reference rate the System
- * Manager owns and risks garbling a console that works. */
+/* Stage 1 runs before anything has touched the port, so it programs it; as
+ * BL33 the earlier stages left it clocked and at 115200, and rewriting BAUD
+ * would need the reference rate the System Manager owns. */
 void uart_init(void)
 {
-    /* The prior stages configured the port. */
+#ifdef IMX95_STAGE1
+    /* 24 MHz / (16 * 13) = 115385, inside what an 8N1 receiver tolerates. */
+    wr32(IMX95_LPUART1_BASE + LPUART_CTRL_OFF, 0);
+    wr32(IMX95_LPUART1_BASE + LPUART_BAUD_OFF,
+         ((LPUART_BAUD_OSR - 1UL) << 24) | LPUART_BAUD_SBR);
+    wr32(IMX95_LPUART1_BASE + LPUART_CTRL_OFF, LPUART_CTRL_TE);
+#endif
 }
 
 static void uart_tx(char c)

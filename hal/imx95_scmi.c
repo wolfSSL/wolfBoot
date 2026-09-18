@@ -32,7 +32,8 @@
 #include "printf.h"
 #include "hal/imx95_a55.h"
 
-#if defined(IMX95_SCMI_COLD_INIT) || defined(IMX95_INIT_M7)
+#if defined(IMX95_SCMI_COLD_INIT) || defined(IMX95_INIT_M7) || \
+    defined(IMX95_STAGE1)
 
 #define MU2_BASE        0x445B0000UL
 #define MU2_GCR         (MU2_BASE + 0x114)   /* set BIT0: ring A2P doorbell */
@@ -139,7 +140,8 @@ static int scmi_cmd(uint32_t proto, uint32_t msg_id,
     return (int)payload[0];                      /* SCMI status, 0 = OK */
 }
 
-#if defined(DISK_SDCARD) && defined(IMX95_SCMI_COLD_INIT)
+#if (defined(DISK_SDCARD) && defined(IMX95_SCMI_COLD_INIT)) || \
+    defined(IMX95_STAGE1)
 static int scmi_clock_enable(uint32_t clock_id)
 {
     uint32_t p[3];
@@ -287,4 +289,145 @@ int imx95_m7_tcm_init(void)
 }
 #endif /* IMX95_INIT_M7 */
 
-#endif /* IMX95_SCMI_COLD_INIT || IMX95_INIT_M7 */
+#ifdef IMX95_STAGE1
+/* Report what the System Manager currently has a clock running at. */
+static uint32_t scmi_clock_rate(uint32_t clock_id)
+{
+    uint32_t p[3];
+
+    p[0] = clock_id;
+    if (scmi_cmd(SCMI_PROTO_CLOCK, CLOCK_RATE_GET, p, 1, 3) != 0)
+        return 0;
+    return p[1];
+}
+
+/* Parent a peripheral clock and give it a rate, then enable it. Enabling alone
+ * leaves whatever the previous owner set, which is invisible when a stage runs
+ * after U-Boot SPL and fatal when it runs instead of it. */
+static int scmi_clock_setup(uint32_t clock_id, uint32_t parent_id,
+                            uint32_t rate)
+{
+    uint32_t p[4];
+    int ret;
+
+    p[0] = clock_id;
+    p[1] = 0;                  /* attributes: off while reparenting */
+    p[2] = 0;
+    ret = scmi_cmd(SCMI_PROTO_CLOCK, CLOCK_CONFIG_SET, p, 3, 1);
+    if (ret != 0)
+        return ret;
+
+    p[0] = clock_id;
+    p[1] = parent_id;
+    ret = scmi_cmd(SCMI_PROTO_CLOCK, CLOCK_PARENT_SET, p, 2, 1);
+    if (ret != 0)
+        return ret;
+
+    p[0] = CLOCK_RATE_ROUND_CLOSEST;
+    p[1] = clock_id;
+    p[2] = rate;
+    p[3] = 0;
+    ret = scmi_cmd(SCMI_PROTO_CLOCK, CLOCK_RATE_SET, p, 4, 1);
+    if (ret != 0)
+        return ret;
+
+    return scmi_clock_enable(clock_id);
+}
+
+/* uSDHC1 is the on-module eMMC. The ROM has already read the first container
+ * through it, so this only makes the state explicit rather than depending on
+ * whatever the ROM happened to leave behind. Eight data lines, no card detect
+ * and no card power to switch - it is soldered down. */
+int imx95_usdhc1_cold_init(void)
+{
+    static const uint32_t pads[11][2] = {
+        { 0x128, 0x158e }, /* SD1_CLK    */
+        { 0x12C, 0x138e }, /* SD1_CMD    */
+        { 0x130, 0x138e }, /* SD1_DATA0  */
+        { 0x134, 0x138e }, /* SD1_DATA1  */
+        { 0x138, 0x138e }, /* SD1_DATA2  */
+        { 0x13C, 0x138e }, /* SD1_DATA3  */
+        { 0x140, 0x138e }, /* SD1_DATA4  */
+        { 0x144, 0x138e }, /* SD1_DATA5  */
+        { 0x148, 0x138e }, /* SD1_DATA6  */
+        { 0x14C, 0x138e }, /* SD1_DATA7  */
+        { 0x150, 0x158e }  /* SD1_STROBE */
+    };
+    uint32_t was;
+    int i, ret;
+
+    /* The divider in hal/imx95_usdhc.c is written against a 400 MHz module
+     * clock, which is what U-Boot's init_clk_usdhc() sets. */
+    was = scmi_clock_rate(IMX95_CLK_USDHC1);
+    ret = scmi_clock_setup(IMX95_CLK_USDHC1, IMX95_CLK_SYSPLL1_PFD1,
+                           400000000UL);
+    if (ret != 0) {
+        wolfBoot_printf("scmi: uSDHC1 clock setup failed (%d)\n", ret);
+        return ret;
+    }
+    wolfBoot_printf("scmi: uSDHC1 clock %u -> %u Hz\n",
+        (unsigned)was, (unsigned)scmi_clock_rate(IMX95_CLK_USDHC1));
+
+    for (i = 0; i < 11; i++) {
+        ret = scmi_pin_config(pads[i][0], PAD_ALT_USDHC1, pads[i][1]);
+        if (ret != 0) {
+            wolfBoot_printf("scmi: pad 0x%x config failed (%d)\n",
+                (unsigned)pads[i][0], ret);
+            return ret;
+        }
+    }
+
+    wolfBoot_printf("scmi: uSDHC1 clock+pinmux up\n");
+    return 0;
+}
+
+/* Parent the console UART to the 24 MHz oscillator and enable it. Stage 1 runs
+ * before anything else has touched the clock tree, so the console is silent
+ * until this has been done. Mirrors U-Boot's init_uart_clk(). */
+int imx95_scmi_uart_clk_init(void)
+{
+    /* SMARC SER1 on the AONMIX LPUART1 pads, both at ALT0. */
+    static const uint32_t pads[2][2] = {
+        { 0x1D0, 0x31e },  /* UART1_RXD */
+        { 0x1D4, 0x31e }   /* UART1_TXD */
+    };
+    int i, ret;
+
+    for (i = 0; i < 2; i++) {
+        ret = scmi_pin_config(pads[i][0], PAD_ALT_LPUART1, pads[i][1]);
+        if (ret != 0)
+            return ret;
+    }
+
+    return scmi_clock_setup(IMX95_CLK_LPUART1, IMX95_CLK_24M, 24000000UL);
+}
+
+/* Raise the A55 cluster to its maximum operating point. Nothing before stage 1
+ * does this, so without it the whole boot runs at the reset rate. */
+int imx95_scmi_arm_max_clk(void)
+{
+    uint32_t p[2];
+
+    p[0] = IMX95_PERF_DOM_ARM;
+    p[1] = IMX95_PERF_LVL_MAX;
+    return scmi_cmd(SCMI_PROTO_PERF, PERF_LEVEL_SET, p, 2, 1);
+}
+
+/* 1 when the DDR mix is powered, 0 when it is off, negative if the System
+ * Manager would not answer. The OEI is what brings DDR up, so an off domain
+ * means it did not run and nothing loaded into DRAM would survive. */
+int imx95_scmi_ddr_powered(void)
+{
+    uint32_t p[2];
+    int ret;
+
+    p[0] = IMX95_PD_DDR;
+    ret = scmi_cmd(SCMI_PROTO_POWER, PWD_STATE_GET, p, 1, 2);
+    if (ret != 0)
+        return ret;
+    /* Reply word 1 is the power state; bit 30 set means off. */
+    return ((p[1] & (1UL << 30)) != 0UL) ? 0 : 1;
+}
+#endif /* IMX95_STAGE1 */
+
+#endif /* IMX95_SCMI_COLD_INIT || IMX95_INIT_M7 || IMX95_STAGE1 */

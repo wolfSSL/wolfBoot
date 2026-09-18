@@ -9461,6 +9461,20 @@ Notes:
 - uSDHC2's clock, pinmux and card power are owned by the M33 System Manager, and its pad registers data-abort on direct access from BL33. `IMX95_SCMI_COLD_INIT=1` brings them up over SCMI (`hal/imx95_scmi.c`), which is what lets wolfBoot boot from SD on a cold power-on rather than only after a stage that already initialized the controller.
 - `IMX95_INIT_M7=1` powers the Cortex-M7 mix and scrubs its TCM for ECC, matching what U-Boot's board init does, for boards that launch an M7 image from Linux later.
 
+### Stage 1: replacing U-Boot SPL
+
+The boot device holds a set of AHAB containers. The first one is what the boot ROM reads: it carries the ELE firmware, the M33 System Manager, the OEI that trains DDR, and one A55 image loaded into OCRAM at `0x20480000`. That last image is U-Boot SPL, and its whole job is to find the next container and load BL31, OP-TEE and BL33 out of it. wolfBoot can take that slot instead:
+
+```
+cp config/examples/imx95-a55.config .config
+make                              # BL33, loaded into DRAM by BL31
+make stage1 DISK_EMMC=1           # stage1/loader_stage1.bin, the SPL slot
+```
+
+DDR is up before stage 1 runs, because the OEI did it, so stage 1 only needs the boot device and the container walk. Nothing records where the next container starts: it is derived by taking the end of the first container - the furthest of its header, its images and its signature block - and rounding up to 1 KiB. `hal/imx95_ahab.c` is that walk, and `hal/imx95_a55_stage1.c` is the rest: the watchdog, GPIO and SMMU state a warm reset out of Linux leaves behind, the SCMI calls for the console clock and the A55 performance level, and the ELE call that starts its random generator.
+
+Two things differ from the BL33 build. The console is programmed rather than inherited, since nothing has configured LPUART1 yet. And on eMMC the containers live in a boot partition, not the user area: `imx95_emmc_boot_partition()` reads back the same `PARTITION_CONFIG` field that told the ROM which one to load from, and reads follow it.
+
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
 wolfBoot runs on the Texas Instruments C2000 C28x DSP (TMS320F28P550SJ, 150 MHz) as a secure execute-in-place (XIP) bootloader. The C28x is word-addressed with `CHAR_BIT == 16` (no 8-bit type -- each octet occupies one 16-bit cell), built with the TI `cl2000` toolchain against wolfSSL's wide-byte (`CHAR_BIT != 8`) support.

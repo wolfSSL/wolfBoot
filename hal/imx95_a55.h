@@ -82,6 +82,7 @@
  * NXP LPUART v2 register block (same layout as hal/s32k1xx.h). */
 #define IMX95_LPUART1_BASE     0x44380000
 
+#define LPUART_BAUD_OFF        0x10
 #define LPUART_STAT_OFF        0x14
 #define LPUART_CTRL_OFF        0x18UL
 #define LPUART_DATA_OFF        0x1C
@@ -90,6 +91,9 @@
 #define LPUART_STAT_TC         (1UL << 22)  /* Transmission Complete */
 #define LPUART_CTRL_TE         (1UL << 19)  /* Transmitter Enable */
 
+/* Stage 1 programs the port itself: 24 MHz reference, oversample 16. */
+#define LPUART_BAUD_OSR        16UL
+#define LPUART_BAUD_SBR        13UL
 
 /* Storage: uSDHC1 = module eMMC, uSDHC2 = carrier SD slot. */
 #define IMX95_USDHC1_BASE      0x42850000UL   /* eMMC */
