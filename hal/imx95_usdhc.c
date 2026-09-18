@@ -31,6 +31,9 @@
 #include <stddef.h>
 #include "printf.h"
 #include "hal/imx95_a55.h"
+#ifdef IMX95_EMMC_PROBE
+#include "hal/imx95_ahab.h"
+#endif
 
 #if defined(IMX95_SCMI_COLD_INIT) && defined(DISK_SDCARD)
 extern int imx95_usdhc2_cold_init(void);
@@ -397,7 +400,7 @@ restore:
     return -1;
 }
 
-#ifdef DISK_EMMC
+#if defined(DISK_EMMC) || defined(IMX95_EMMC_PROBE)
 
 /* EXT_CSD byte 179. Bits [2:0] select which partition ordinary read commands
  * address; bits [5:3] select which one the boot ROM loads from. Only the
@@ -574,7 +577,7 @@ static int emmc_card_init(void)
     return 0;
 }
 
-#endif /* DISK_EMMC */
+#endif /* DISK_EMMC || IMX95_EMMC_PROBE */
 
 static int sd_card_init(void)
 {
@@ -819,6 +822,75 @@ void imx95_usdhc_cold_probe(void)
 }
 #endif /* IMX95_COLD_PROBE */
 
+#ifdef IMX95_EMMC_PROBE
+/* Block-granular read of the currently selected eMMC partition, in the shape
+ * the container parser asks for. */
+static int emmc_ahab_read(void *ctx, uint32_t off, uint32_t len, void *buf)
+{
+    (void)ctx;
+    if ((off % SD_BLOCK_SIZE) != 0U || (len % SD_BLOCK_SIZE) != 0U)
+        return -1;
+    return sd_read_blocks(off / SD_BLOCK_SIZE, len / SD_BLOCK_SIZE,
+                          (uint8_t *)buf);
+}
+
+/* Read the SoC's own boot containers out of an eMMC boot partition and report
+ * what is there. This is how the eMMC path is proven before anything depends
+ * on it: it runs inside an SD-booting image, against the other controller, and
+ * restores the SD selection afterwards, so a failure here cannot disturb the
+ * boot in progress. Nothing is loaded - only the offsets are walked. */
+void imx95_emmc_probe(void)
+{
+    static struct imx95_ahab_container ctnr;
+    uintptr_t saved_base = usdhc_base;
+    int saved_ready = card_ready;
+    int saved_rca = card_rca;
+    int saved_cap = card_high_cap;
+    uint32_t off, i;
+    int part, n;
+
+    usdhc_base = IMX95_USDHC1_BASE;
+    card_ready = 0;
+
+    if (emmc_card_init() != 0) {
+        wolfBoot_printf("emmc probe: init failed\n");
+        goto restore;
+    }
+    card_ready = 1;
+
+    for (part = 1; part <= 2; part++) {
+        if (imx95_emmc_select_partition(part) != 0)
+            continue;
+        off = IMX95_AHAB_MMC_OFFSET;
+        for (n = 0; n < 2; n++) {
+            if (imx95_ahab_parse(&ctnr, off, emmc_ahab_read, NULL) != 0) {
+                wolfBoot_printf("emmc probe: boot%d no container at 0x%x\n",
+                    part - 1, (unsigned)off);
+                break;
+            }
+            wolfBoot_printf("emmc probe: boot%d ctnr%d @0x%x size=0x%x images=%u\n",
+                part - 1, n, (unsigned)ctnr.base, (unsigned)ctnr.size,
+                (unsigned)ctnr.count);
+            for (i = 0; i < ctnr.count; i++) {
+                wolfBoot_printf("  img%u +0x%x size=0x%x dst=0x%x core=%u\n",
+                    (unsigned)i, (unsigned)ctnr.img[i].offset,
+                    (unsigned)ctnr.img[i].size,
+                    (unsigned)ctnr.img[i].dst,
+                    (unsigned)IMX95_AHAB_CORE(ctnr.img[i].flags));
+            }
+            off = imx95_ahab_next(&ctnr);
+        }
+    }
+    (void)imx95_emmc_select_partition(0);
+
+restore:
+    usdhc_base = saved_base;
+    card_ready = saved_ready;
+    card_rca = saved_rca;
+    card_high_cap = saved_cap;
+}
+#endif /* IMX95_EMMC_PROBE */
+
 int disk_init(int drv)
 {
     (void)drv;
@@ -835,6 +907,9 @@ int disk_init(int drv)
     imx95_usdhc_cold_probe();
     if (card_ready)
         return 0;
+#endif
+#ifdef IMX95_EMMC_PROBE
+    imx95_emmc_probe();
 #endif
 #ifdef DISK_EMMC
     if (emmc_card_init() != 0)
