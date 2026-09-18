@@ -1052,7 +1052,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 update_type, HDR_IMG_TYPE_AUTH);
             return -1;
         }
-        if (update.fw_size > MAX_UPDATE_SIZE - 1) {
+        if (update.fw_size > MAX_UPDATE_SIZE) {
             wolfBoot_printf("Invalid update size %u\n", update.fw_size);
             return -1;
         }

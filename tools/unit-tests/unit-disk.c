@@ -314,6 +314,37 @@ START_TEST(test_gpt_parse_header)
 }
 END_TEST
 
+/* F-6759: gpt_parse_header() must reject an out-of-range hdr_size before the
+ * header CRC pass. Without the upper bound (hdr_size > GPT_SECTOR_SIZE) a
+ * crafted 0xFFFFFFFF hdr_size would drive gpt_crc32_update() to read ~4GB
+ * past the 512-byte stack header; without the lower bound (< 0x5C) fields
+ * outside the CRC-protected region would be accepted. Both clauses were
+ * untested. The guard rejects before the CRC, so these assert -1 without
+ * triggering the OOB. */
+START_TEST(test_gpt_parse_header_hdr_size_bounds)
+{
+    struct guid_ptable hdr;
+    uint8_t *gpt_hdr;
+
+    build_gpt_disk();
+    gpt_hdr = (uint8_t *)(fake_disk + GPT_SECTOR_SIZE);
+
+    /* hdr_size above GPT_SECTOR_SIZE: rejected before the CRC pass. Under an
+     * ASAN build this also flags the ~4GB OOB stack read the deletion would
+     * cause (a plain build still returns -1 via the CRC mismatch). */
+    d_put32(gpt_hdr + D_HDR_SIZE, GPT_SECTOR_SIZE + 1);
+    ck_assert_int_eq(gpt_parse_header(gpt_hdr, &hdr), -1);
+
+    /* hdr_size below 0x5C: rejected. The CRC is recomputed over the reduced
+     * size, so a valid-CRC header would be *accepted* if the lower clause
+     * were deleted - which pins the clause (the plain CRC mismatch would
+     * otherwise mask the deletion). */
+    d_put32(gpt_hdr + D_HDR_SIZE, 0x5B);
+    finalize_gpt_header_crc(gpt_hdr);
+    ck_assert_int_eq(gpt_parse_header(gpt_hdr, &hdr), -1);
+}
+END_TEST
+
 START_TEST(test_gpt_parse_partition)
 {
     struct gpt_part_info info;
@@ -1125,6 +1156,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(tc_gpt, test_gpt_check_mbr_protective);
     tcase_add_test(tc_gpt, test_gpt_parse_header);
+    tcase_add_test(tc_gpt, test_gpt_parse_header_hdr_size_bounds);
     tcase_add_test(tc_gpt, test_gpt_parse_partition);
     tcase_add_test(tc_gpt, test_gpt_part_name_eq);
     tcase_add_test(tc_gpt, test_gpt_part_name_eq_bom_boundary);

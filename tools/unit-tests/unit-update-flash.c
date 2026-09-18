@@ -1002,6 +1002,126 @@ START_TEST (test_update_aborts_on_sector_copy_failure) {
 }
 END_TEST
 
+/* F-9752: an interrupted per-sector swap must resume from the sector-flag
+ * fall-through entry points and end with the partitions swapped. The
+ * single-shot hal_flash_write_fail faults the first internal write (the
+ * swap->BOOT copy of sector 0), leaving sector 0 at SECT_FLAG_BACKUP;
+ * re-running wolfBoot_update re-enters the sector loop at case
+ * SECT_FLAG_BACKUP (a path no prior test reached) and exercises the
+ * sector==1 fw_size re-swap. Only the BACKUP state is a recoverable power
+ * fail: faulting the BOOT->update copy instead (SWAPPING state) erases the
+ * update header, so the resume's re-open fails and the device cannot
+ * recover - that entry point is not testable as a roundtrip.
+ * Guarded out of the EXT_ENCRYPTED targets: the resume logic is identical
+ * with or without encryption, but this test stages a plain image, which the
+ * encrypted swap path does not accept. */
+#ifndef EXT_ENCRYPTED
+static uint8_t resume_boot_snap[WOLFBOOT_PARTITION_SIZE];
+static uint8_t resume_update_snap[WOLFBOOT_PARTITION_SIZE];
+
+static void resume_setup(void)
+{
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    wolfBoot_update_trigger();
+    memcpy(resume_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE);
+    memcpy(resume_update_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        WOLFBOOT_PARTITION_SIZE);
+}
+
+static void resume_verify(void)
+{
+    /* Compare the image (header + payload), not the full partition: the
+     * trailer sector (sector flags, partition state) is rewritten by the
+     * swap and legitimately differs from the pre-swap snapshot. */
+    uint32_t total_size = TEST_SIZE_SMALL + IMAGE_HEADER_SIZE;
+    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+        WOLFBOOT_PARTITION_BOOT_ADDRESS, resume_update_snap, total_size), 0);
+    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+        WOLFBOOT_PARTITION_UPDATE_ADDRESS, resume_boot_snap, total_size), 0);
+    cleanup_flash();
+}
+
+START_TEST (test_update_resume_from_backup_flag)
+{
+    uint8_t flag;
+    reset_mock_stats();
+    resume_setup();
+    hal_flash_write_fail = 1;
+    ck_assert_int_lt(wolfBoot_update(0), 0);
+    wolfBoot_get_update_sector_flag(0, &flag);
+    ck_assert_int_eq(flag, SECT_FLAG_BACKUP);
+    ck_assert_int_ge(wolfBoot_update(0), 0);
+    resume_verify();
+}
+END_TEST
+#endif /* !EXT_ENCRYPTED */
+
+/* F-13643: a completed swap must leave the update partition as a faithful
+ * copy of the previous boot image, so the emergency-rollback path (the
+ * IMG_STATE_TESTING branch calling wolfBoot_update(1) to swap back) can
+ * restore the original boot image byte-for-byte. The backup half of the
+ * swap (the boot->update copy, which under EXT_ENCRYPTED runs under
+ * wolfBoot_enable_fallback_iv(1)) is otherwise never read back: the
+ * forward direction is implicitly checked by wolfBoot_verify_integrity,
+ * but the reverse direction has no such backstop. Parameterised over
+ * same-size, larger and smaller update payloads to cover the tail-sector
+ * copy guard in both directions. */
+static uint8_t roundtrip_boot_snap[WOLFBOOT_PARTITION_SIZE];
+
+static void roundtrip_run(uint32_t update_size)
+{
+    uint32_t total_size = TEST_SIZE_SMALL + IMAGE_HEADER_SIZE;
+
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, update_size);
+    /* Snapshot the original boot image (version 1) before the swap. */
+    memcpy(roundtrip_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        total_size);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
+    /* Second start: the trailer holds IMG_STATE_TESTING, so this takes the
+     * fallback branch (wolfBoot_update(1)) and swaps back. */
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 1);
+    /* The boot partition must be restored to the original byte-for-byte. */
+    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+        WOLFBOOT_PARTITION_BOOT_ADDRESS, roundtrip_boot_snap, total_size), 0);
+    cleanup_flash();
+}
+
+START_TEST (test_update_then_rollback_samesize)
+{
+    reset_mock_stats();
+    roundtrip_run(TEST_SIZE_SMALL);
+}
+END_TEST
+
+START_TEST (test_update_then_rollback_larger)
+{
+    reset_mock_stats();
+    roundtrip_run(TEST_SIZE_LARGE);
+}
+END_TEST
+
+START_TEST (test_update_then_rollback_smaller)
+{
+    reset_mock_stats();
+    roundtrip_run(TEST_SIZE_SMALL / 2);
+}
+END_TEST
+
 START_TEST (test_forward_update_tolarger) {
     reset_mock_stats();
     prepare_flash();
@@ -1129,9 +1249,26 @@ START_TEST (test_update_max_size_minus_one_accepted)
 }
 END_TEST
 
-START_TEST (test_update_max_size_rejected)
+START_TEST (test_update_max_size_accepted)
 {
-    uint32_t boundary_reject = (uint32_t)MAX_UPDATE_SIZE;
+    uint32_t boundary_ok = (uint32_t)MAX_UPDATE_SIZE;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, boundary_ok);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert(wolfBoot_current_firmware_version() == 2);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_update_max_size_plus_one_rejected)
+{
+    uint32_t boundary_reject = (uint32_t)(MAX_UPDATE_SIZE + 1U);
 
     reset_mock_stats();
     prepare_flash();
@@ -1854,6 +1991,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
+#ifndef EXT_ENCRYPTED
+    tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
+#endif
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
     tcase_add_test(forward_update_sameversion_denied, test_forward_update_sameversion_denied);
@@ -1862,11 +2002,15 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_update_auth_type, test_invalid_update_auth_type);
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(update_toolarge, test_update_max_size_minus_one_accepted);
-    tcase_add_test(update_toolarge, test_update_max_size_rejected);
+    tcase_add_test(update_toolarge, test_update_max_size_accepted);
+    tcase_add_test(update_toolarge, test_update_max_size_plus_one_rejected);
     tcase_add_test(zero_size_update, test_zero_size_update_rejected);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
     tcase_add_test(emergency_rollback, test_emergency_rollback_equal_versions);
+    tcase_add_test(emergency_rollback, test_update_then_rollback_samesize);
+    tcase_add_test(emergency_rollback, test_update_then_rollback_larger);
+    tcase_add_test(emergency_rollback, test_update_then_rollback_smaller);
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);

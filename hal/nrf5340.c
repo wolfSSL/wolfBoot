@@ -282,27 +282,14 @@ void uart_write_sz(const char* c, unsigned int sz)
     }
 }
 
+/* CRLF conversion lives in nrf5340_uart.c so it can be unit-tested on the
+ * host without the nrfx register access the rest of this HAL needs. */
+void nrf5340_uart_crlf(const char* buf, unsigned int sz,
+        void (*sink)(const char*, unsigned int));
+
 void uart_write(const char* buf, unsigned int sz)
 {
-    const char* line;
-    unsigned int lineSz;
-    do {
-        /* find `\n` */
-        line = memchr(buf, '\n', sz);
-        if (line == NULL) {
-            uart_write_sz(buf, sz);
-            break;
-        }
-        lineSz = line - buf;
-        if (lineSz > sz-1)
-            lineSz = sz-1;
-
-        uart_write_sz(buf, lineSz);
-        uart_write_sz("\r\n", 2); /* handle CRLF */
-
-        buf = line;
-        sz -= lineSz + 1; /* skip \n, already sent */
-    } while ((int)sz > 0);
+    nrf5340_uart_crlf(buf, sz, uart_write_sz);
 }
 #endif /* DEBUG_UART */
 
@@ -840,22 +827,43 @@ void hal_init(void)
 }
 
 #ifdef __WOLFBOOT
-/* enable write protection for the region of flash specified */
+/* Enable write protection for the region of flash specified.
+ *
+ * Contract: protects [start, start+len). A zero len protects nothing and
+ * succeeds; a negative len is rejected. Protection is granted in whole
+ * SPU_FLASH_BLOCK_SIZE blocks, so a partial block at either end is locked
+ * whole - the locked range may be wider than requested, never narrower.
+ */
 int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
 {
     /* only application core supports SPU */
 #ifdef TARGET_nrf5340_app
     uint32_t region, n, i;
+    uint32_t tail;
 
     /* limit check */
     if (start > FLASH_SIZE)
         return -1;
+    if (len < 0)
+        return -1;
+    /* An empty range protects nothing. Return before the region math below:
+     * `tail` carries the start offset, so an unaligned start would round up
+     * to one block and lock 16 KiB the caller never asked to protect. */
+    if (len == 0)
+        return 0;
     /* truncate if exceeds flash size */
-    if (start + len > FLASH_SIZE)
+    if (start + (uint32_t)len > FLASH_SIZE)
         len = FLASH_SIZE - start;
 
     region = (start / SPU_FLASH_BLOCK_SIZE);
-    n = (len / SPU_FLASH_BLOCK_SIZE);
+    /* SPU regions are SPU_FLASH_BLOCK_SIZE-aligned. Round the block count up
+     * so the locked range covers [start, start+len) whole: start may sit
+     * mid-block and len may not be a whole number of blocks, so the partial
+     * blocks at both ends are locked whole (safe: it only ever widens
+     * protection). The old `len / SPU_FLASH_BLOCK_SIZE` truncated, leaving
+     * the tail block writable while still returning success. */
+    tail = (start % SPU_FLASH_BLOCK_SIZE) + (uint32_t)len;
+    n = (tail + SPU_FLASH_BLOCK_SIZE - 1) / SPU_FLASH_BLOCK_SIZE;
 
     for (i = 0; i < n; i++) {
         /* do not allow write to this region and lock till next reset */

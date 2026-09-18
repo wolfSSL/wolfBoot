@@ -66,6 +66,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-hook \
        unit-update-flash-self-update \
+       unit-nsc-update \
        unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
@@ -123,6 +124,8 @@ TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-p1021-read-badblock
 TESTS+=unit-kontron-tgl-spi
+TESTS+=unit-nrf5340-flash-protect
+TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-rp2350-flash-write
@@ -184,6 +187,7 @@ endif
 
 TESTS+=unit-flash-write-mcxa
 TESTS+=unit-flash-write-nrf52
+TESTS+=unit-nrf5340-uart-crlf
 TESTS+=unit-flash-write-samr21
 TESTS+=unit-flash-write-same51
 TESTS+=unit-imx-rt-cache-align
@@ -270,6 +274,10 @@ unit-pkcs11_store-stalecache:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITI
 unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DWOLFCRYPT_TZ_PSA
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-nsc-update:CFLAGS+=-DMOCK_PARTITIONS -D__WOLFBOOT -DTZEN \
+	-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-flash-hook:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -880,6 +888,12 @@ unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
 unit-update-flash: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
+# F-13636: first unit target that defines TZEN. Compiles libwolfboot.c with
+# __WOLFBOOT + TZEN (non-CMSE: WOLFBOOT_NSC_NS_RW is a pass-through) to unit
+# test the NSC update-partition bounds checks against the mock flash.
+unit-nsc-update: ../../include/target.h unit-nsc-update.c
+	gcc -o $@ unit-nsc-update.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
 unit-update-flash-hook: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
@@ -1418,6 +1432,34 @@ unit-kontron-tgl-spi: unit-kontron-tgl-spi.c kontron_spi_extract.h \
 	kontron_spi_fn_extract.h
 	gcc -o $@ unit-kontron-tgl-spi.c $(CFLAGS) $(LDFLAGS)
 
+# unit-nrf5340-flash-protect runs the real hal_flash_protect() from
+# hal/nrf5340.c against a mock SPU region-permission array (F-13623: the
+# region count truncated, so a sub-block or partial-tail len left flash
+# writable while the function reported success).
+nrf5340_protect_fn_extract.h: ../../hal/nrf5340.c
+	sed -n '/^int RAMFUNCTION hal_flash_protect/,/^}/p' $< > $@
+
+unit-nrf5340-flash-protect: unit-nrf5340-flash-protect.c \
+	nrf5340_protect_fn_extract.h
+	gcc -o $@ unit-nrf5340-flash-protect.c $(CFLAGS) $(LDFLAGS)
+
+# unit-keygen-keystore compiles the REAL accessors emitted by keygen's
+# Keystore_API template (F-13624: the generated keystore's accessors lacked
+# the id < 0 guard the OTP backend has). The generator extracts the template
+# from keygen.c and emits a self-contained keystore.c with a one-key PubKeys
+# array; the test compiles it and asserts the out-of-range contract.
+keystore_api_extract.h: ../../tools/keytools/keygen.c
+	sed -n '/^const char Keystore_API\[\]/,/[;]$$/p' $< > $@
+
+keystore_gen: keystore_gen.c keystore_api_extract.h
+	gcc -o $@ keystore_gen.c $(CFLAGS)
+
+keystore_emitted.c: keystore_gen
+	./keystore_gen > $@
+
+unit-keygen-keystore: unit-keygen-keystore.c keystore_emitted.c
+	gcc -o $@ unit-keygen-keystore.c keystore_emitted.c $(CFLAGS) $(LDFLAGS)
+
 # unit-samr21-erase-advance runs the real hal_flash_erase() from
 # hal/samr21.c against a host NVMCTRL register window (F-11036: the
 # length decrement was the body of the NVMREADY wait and the address
@@ -1652,6 +1694,9 @@ unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
 unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
 	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
+unit-nrf5340-uart-crlf: unit-nrf5340-uart-crlf.c ../../hal/nrf5340_uart.c
+	gcc -o $@ unit-nrf5340-uart-crlf.c -DDEBUG_UART $(CFLAGS) $(LDFLAGS)
+
 unit-flash-write-samr21: unit-flash-write-samr21.c ../../hal/samr21.c
 	gcc -o $@ unit-flash-write-samr21.c $(CFLAGS) $(LDFLAGS)
 
@@ -1699,6 +1744,8 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \
 	p1021_read_extract.h p1021_read_fn_extract.h \
 	kontron_spi_extract.h kontron_spi_fn_extract.h \
+	nrf5340_protect_fn_extract.h \
+	keystore_api_extract.h keystore_emitted.c keystore_gen \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
