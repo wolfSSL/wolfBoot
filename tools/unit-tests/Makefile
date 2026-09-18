@@ -56,7 +56,6 @@ endif
 
 
 
-
 TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-spi-flash unit-aes128 \
        unit-uart-flash \
@@ -117,6 +116,8 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-versal-qspi-dma
+TESTS+=unit-imx8qm-usdhc-shim
+TESTS+=unit-imx8qm-flexspi-write
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
@@ -143,6 +144,8 @@ TESTS+=unit-stm32c0-write
 TESTS+=unit-nvm-cache-scrub
 TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
+TESTS+=unit-sdhci-cmd-inhibit
+TESTS+=unit-sdhci-cmd-inhibit-uhs
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
@@ -236,7 +239,6 @@ run: $(TESTS)
 	python3 unit-sign-custom-tlv-large.py || exit 1
 	python3 unit-sign-custom-tlv-pubkey-der.py || exit 1
 	python3 unit-sign-dts.py || exit 1
-
 
 WOLFCRYPT_SRC:=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha.c \
                $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
@@ -406,9 +408,7 @@ unit-image-elf-scatter:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_
 	-DIMAGE_HEADER_SIZE=256
 unit-string:CFLAGS+=-fno-builtin
 
-
 WOLFCRYPT_CFLAGS+=-DWOLFBOOT_SIGN_ECC256 -DWOLFBOOT_SIGN_ECC256 -DHAVE_ECC_KEY_IMPORT -D__WOLFBOOT
-
 
 
 ../../include/target.h: FORCE
@@ -1190,6 +1190,21 @@ unit-sama5d3-ext-read: unit-sama5d3-ext-read.c sama5d3_read_extract.h
 # an output operand must be replaced by an assignment, or the generated
 # copy reads an uninitialised automatic -- undefined behaviour, and at
 # -O0 a guaranteed infinite loop in the timer helpers.
+# hal/versal.c now gets its counter accessors from include/aarch64_arch.h.
+# The generator only rewrites the .c and .h it copies, so the header needs the
+# same treatment: its two "mrs" reads have output operands and must become
+# assignments, not deletions (see the note above versal_host.h).
+aarch64_arch_host.h: ../../include/aarch64_arch.h
+	sed -E -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
+	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
+	    -e 's/__asm__ volatile\("mrs %0, clidr_el1" : "=r"\(clidr\)\);/clidr = 0; \/* host: report no cache levels, so the walk is a no-op *\//' \
+	    -e 's/__asm__ volatile\("mrs %0, ccsidr_el1" : "=r"\(ccsidr\)\);/ccsidr = 0;/' \
+	    -e 's/__asm__ volatile\("dc (cisw|isw), %0" :: "r"\(val\)\);/(void)val;/' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
+	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
+
 versal_host.h: ../../hal/versal.h
 	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' \
 	    -e 's/__asm__ volatile\("mrs %0, CurrentEL" : "=r" \(el\)\);/el = 3UL << 2; \/* host stands in at EL3 *\//' \
@@ -1201,8 +1216,9 @@ versal_host.h: ../../hal/versal.h
 # See versal_host.h above for why the two "mrs" reads are rewritten
 # rather than deleted. The host counter advances one tick per read at a
 # nominal 1 MHz, so hal_delay_us() terminates instead of spinning.
-versal_host.c: ../../hal/versal.c versal_host.h
+versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 	sed -E -e 's|#include "hal/versal.h"|#include "versal_host.h"\nstatic uint64_t versal_host_ticks;|' \
+	    -e 's|#include "aarch64_arch.h"|#include "aarch64_arch_host.h"|' \
 	    -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
 	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
 	    -e 's/^static int qspi_dma_wait\(void\)$$/static int qspi_dma_wait_hw(void)/' \
@@ -1210,6 +1226,47 @@ versal_host.c: ../../hal/versal.c versal_host.h
 	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
+
+# unit-imx8qm-usdhc-shim drives the real uSDHC-to-SDHCI translation from
+# hal/imx8qm.c against an emulated register file. The shim block is extracted
+# verbatim rather than host-copying the whole HAL: the rest of the file has
+# multi-line asm (the cache maintenance in hal_prepare_boot) that a line-based
+# rewrite cannot blank, while the shim itself is plain register access.
+# The trailing #endif of the enclosing "#if defined(DISK_SDCARD) ..." is
+# dropped, since its opening #if is outside the extracted range.
+#
+# The anchors are literal source lines, so a refactor can move them. "test -s"
+# catches an anchor that stops matching, but not a range that still matches
+# and silently truncates, so each rule also asserts the entry points its test
+# drives are present.
+imx8qm_usdhc_extract.h: ../../hal/imx8qm.c
+	sed -n '/^#ifndef CADENCE_SRS_OFFSET$$/,/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/p' $< \
+	    | sed '/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted shim"; false; }
+	@for f in sdhci_reg_read sdhci_reg_write sdhci_platform_init \
+	          sdhci_platform_set_clock; do \
+	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole shim"; false; }; \
+	done
+
+unit-imx8qm-usdhc-shim: unit-imx8qm-usdhc-shim.c imx8qm_usdhc_extract.h
+	gcc -o $@ unit-imx8qm-usdhc-shim.c -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-imx8qm-flexspi-write drives the real FlexSPI NOR driver from
+# hal/imx8qm.c against an emulated controller and NOR device. Extracted rather
+# than host-copied for the same reason as the uSDHC shim above.
+imx8qm_flexspi_extract.h: ../../hal/imx8qm.c
+	sed -n '/^#define FSPI_REG(off)/,/^#endif \/\* EXT_FLASH \*\/$$/p' $< \
+	    | sed '/^#endif \/\* EXT_FLASH \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted driver"; false; }
+	@for f in flexspi_init ext_flash_read ext_flash_write ext_flash_erase \
+	          ext_flash_unlock; do \
+	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole driver"; false; }; \
+	done
+
+unit-imx8qm-flexspi-write: unit-imx8qm-flexspi-write.c imx8qm_flexspi_extract.h
+	gcc -o $@ unit-imx8qm-flexspi-write.c -I../../hal $(CFLAGS) $(LDFLAGS)
 
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
@@ -1569,6 +1626,14 @@ sdhci_host.c: ../../src/sdhci.c
 unit-sdhci-uhs-recover: unit-sdhci-uhs-recover.c sdhci_host.c
 	gcc -o $@ unit-sdhci-uhs-recover.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
 
+unit-sdhci-cmd-inhibit: unit-sdhci-cmd-inhibit.c sdhci_host.c
+	gcc -o $@ unit-sdhci-cmd-inhibit.c -DDISK_SDCARD $(CFLAGS) $(LDFLAGS)
+
+# Twin of the above with the opt-in init-time UHS recovery compiled in.
+unit-sdhci-cmd-inhibit-uhs: unit-sdhci-cmd-inhibit.c sdhci_host.c
+	gcc -o $@ unit-sdhci-cmd-inhibit.c -DDISK_SDCARD \
+	    -DSDHCI_UHS_RECOVER_ON_INIT $(CFLAGS) $(LDFLAGS)
+
 # unit-sdhci-wait-busy drives sdhci_wait_busy()'s DATA0/CMD13 loops
 # from the real src/sdhci.c (neither loop had a timeout, so a
 # stuck/removed card spun forever). The controller is scripted through
@@ -1686,7 +1751,6 @@ unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
 %.o:%.c
 	gcc -c -o $@ $^ $(CFLAGS)
 
-
 covclean:
 	rm -f *.gcov *.gcno *.gcda coverage.*
 	rm -f unit-sign-encrypted-output-*
@@ -1694,6 +1758,7 @@ covclean:
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
 GENERATED_SRC:=aurix_erased_extract.h \
+	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \

@@ -395,6 +395,12 @@ static int sdhci_set_power(uint32_t voltage)
  * short probe read usually succeeds. So this is driven from an actual data
  * failure: switch the host to meet the card, then let the caller retry.
  *
+ * This does not help a card whose *initialization* fails for the same reason:
+ * a card that has negotiated UHS-I returns to 3.3V only on a VDD cycle, and
+ * on a board where the card supply is a fixed rail nothing in software can
+ * produce one. Hardware-checked on an i.MX 8QuadMax MEK: switching the host
+ * to 1.8V does not make the card answer CMD8 after a warm reset.
+ *
  * This restores signaling the card is already using rather than initiating a
  * voltage switch, so no CMD11 sequence is involved. It runs at most once per
  * boot, and only after a transfer has already failed.
@@ -585,6 +591,72 @@ static uint32_t sdhci_get_response_type(uint8_t resp_type)
 
 #define DEVICE_BUSY 1
 
+/* Register-read budget for the inhibit/reset waits below. Large, because it
+ * bounds a wedged controller rather than a normal one; the loops that spend it
+ * pet the watchdog, or on a platform whose watchdog cannot be disabled (the
+ * PolarFire MSS pair) error recovery would be cut short by a chip reset. */
+#ifndef SDHCI_INHIBIT_TIMEOUT
+#define SDHCI_INHIBIT_TIMEOUT   1000000U
+#endif
+
+/* SRS12 error bits from the last command. sdhci_cmd() clears SRS12 as soon as
+ * the command returns, so a caller that needs to tell a silent card from a
+ * broken link has to be handed the bits rather than read them back. */
+static uint32_t g_last_cmd_err;
+
+/* Reset data and command lines to recover from errors.
+ *
+ * Returns 0 once the lines are idle, -1 if either the reset or the inhibit
+ * bits never clear. The post-reset wait belongs here rather than at the call
+ * sites: a bounded reset that leaves the caller spinning on CICMD/CIDAT moves
+ * the hang instead of removing it. */
+static int sdhci_reset_lines(void)
+{
+    uint32_t to = SDHCI_INHIBIT_TIMEOUT;
+
+    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_DAT_CMD);
+    while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD) != 0 &&
+           to > 0) {
+        sdhci_platform_wdt_pet();
+        to--;
+    }
+    if ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD) != 0) {
+        return -1;
+    }
+    to = SDHCI_INHIBIT_TIMEOUT;
+    while ((SDHCI_REG(SDHCI_SRS09) &
+            (SDHCI_SRS09_CICMD | SDHCI_SRS09_CIDAT)) != 0 && to > 0) {
+        sdhci_platform_wdt_pet();
+        to--;
+    }
+    if ((SDHCI_REG(SDHCI_SRS09) &
+            (SDHCI_SRS09_CICMD | SDHCI_SRS09_CIDAT)) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+/* Wait for the command line to leave the inhibited state.
+ *
+ * A command that timed out leaves Command Inhibit (CMD) set, and only a
+ * CMD-line reset clears it. An unbounded wait here therefore hangs the boot
+ * on the first failed command instead of returning the error: the caller
+ * never sees it, so nothing can retry or recover. Bound the wait and reset
+ * the lines if it does not clear. */
+static int sdhci_wait_cmd_idle(void)
+{
+    uint32_t to = SDHCI_INHIBIT_TIMEOUT;
+
+    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0 && to > 0) {
+        sdhci_platform_wdt_pet();
+        to--;
+    }
+    if ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0) {
+        return sdhci_reset_lines();
+    }
+    return 0;
+}
+
 static int sdhci_send_cmd_internal(uint32_t cmd_type,
     uint32_t cmd_index, uint32_t cmd_arg, uint8_t resp_type)
 {
@@ -592,13 +664,20 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
     uint32_t cmd_reg;
     uint32_t timeout = 0x000FFFFF;
 
+    g_last_cmd_err = 0;
+
 #ifdef DEBUG_SDHCI
     wolfBoot_printf("sdhci_send_cmd: cmd_index: %d, cmd_arg: %08X, resp_type: %d\n",
         cmd_index, cmd_arg, resp_type);
 #endif
 
-    /* wait for command line to be idle */
-    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0);
+    /* wait for command line to be idle. A line that will not come back
+     * cannot carry a command, so fail rather than write SRS03 into it. */
+    if (sdhci_wait_cmd_idle() != 0) {
+        wolfBoot_printf("sdhci_send_cmd: cmd %u: command line stuck busy\n",
+            cmd_index);
+        return -1;
+    }
 
     /* set command argument and command transfer registers */
     SDHCI_REG_SET(SDHCI_SRS02, cmd_arg);
@@ -623,11 +702,22 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
         wolfBoot_printf("sdhci_send_cmd: cmd %u arg 0x%08X resp %u: "
             "error SRS12=0x%08X\n",
             cmd_index, cmd_arg, resp_type, SDHCI_REG(SDHCI_SRS12));
+        g_last_cmd_err = SDHCI_REG(SDHCI_SRS12) & SDHCI_SRS12_ERR_STAT;
         status = -1; /* error */
     }
 
     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_CC); /* clear command complete */
-    while ((SDHCI_REG(SDHCI_SRS09) & SDHCI_SRS09_CICMD) != 0);
+    if (sdhci_wait_cmd_idle() != 0) {
+        /* Reported even when the command itself already failed: a line that
+         * will not go idle afterwards is a separate fault, and it is the
+         * next command that pays for it. g_last_cmd_err stays 0 here - the
+         * controller raised no error, the line simply never released. */
+        wolfBoot_printf("sdhci_send_cmd: cmd %u: command line stuck busy "
+            "after completion\n", cmd_index);
+        if (status == 0) {
+            status = -1;
+        }
+    }
 
     if (status == 0) {
         /* check for device busy */
@@ -705,6 +795,22 @@ static int sdhci_wait_busy(int check_dat0)
 void sdhci_shutdown(void)
 {
     uint32_t to = 100000U;
+
+#ifdef DISK_SDCARD
+    /* If sdhci_uhs_recover() moved the host to 1.8V, put it back before handing
+     * over: a software reset does not clear 1.8V Signaling Enable, so the next
+     * stage would inherit a 1.8V host and an OS that powers the card at 3.3V
+     * could not talk to it. 3.3V is right even though the card is still at
+     * 1.8V - the card returns only on a VDD cycle, which is the next stage's
+     * job (Linux does it via vmmc-supply), and that pair is what a cold boot
+     * looks like. Clock left stopped; RESET_ALL follows. */
+    if (g_uhs_recovered) {
+        sdhci_reg_and(SDHCI_SRS11, ~(uint32_t)SDHCI_SRS11_SDCE);
+        sdhci_reg_and(SDHCI_SRS15, ~(uint32_t)SDHCI_SRS15_V18SE);
+        udelay(5000);   /* let the level shifter settle */
+    }
+#endif
+
     sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_ALL);
     while ((SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_ALL) != 0U &&
            to > 0U) {
@@ -714,13 +820,6 @@ void sdhci_shutdown(void)
         wolfBoot_printf("sdhci_shutdown: RESET_ALL did not clear; "
             "OS may inherit a controller still in reset\n");
     }
-}
-
-/* Reset data and command lines to recover from errors */
-static inline void sdhci_reset_lines(void)
-{
-    sdhci_reg_or(SDHCI_SRS11, SDHCI_SRS11_RESET_DAT_CMD);
-    while (SDHCI_REG(SDHCI_SRS11) & SDHCI_SRS11_RESET_DAT_CMD);
 }
 
 /* ============================================================================
@@ -763,6 +862,10 @@ static uint32_t sdhci_get_response_bits(int from, int count)
 static int sdcard_power_init_seq(uint32_t voltage)
 {
     int retries;
+    /* SRS12 errors from the CMD8 attempt, snapshotted at the call: any later
+     * command overwrites g_last_cmd_err, and on the UHS retry path a CMD0
+     * runs in between. */
+    uint32_t cmd8_err = 0;
     /* Set power to specified voltage */
     int status = sdhci_set_power(voltage);
 #ifdef DEBUG_SDHCI
@@ -804,6 +907,57 @@ static int sdcard_power_init_seq(uint32_t voltage)
         /* send the operating conditions command */
         status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
             SDHCI_RESP_R7);
+        cmd8_err = g_last_cmd_err;
+#if defined(DISK_SDCARD) && defined(SDHCI_UHS_RECOVER_ON_INIT)
+        if (status != 0) {
+            /* Opt-in. A card a previous stage left in UHS-I is at 1.8V and
+             * does not answer a 3.3V CMD8, so meet the card and retry once.
+             *
+             * Off by default because it cannot work where software has no way
+             * to cycle card VDD, which is the only thing that returns a UHS-I
+             * card to 3.3V. Hardware-checked ineffective on the i.MX 8QuadMax
+             * MEK, whose card supply is a fixed rail; kept for hosts that do
+             * drive bus power, where it is untested. */
+            if (sdhci_uhs_recover() == 0) {
+                status = sdhci_cmd(MMC_CMD0_GO_IDLE, 0, SDHCI_RESP_NONE);
+                if (status == 0) {
+                    udelay(200);
+                    status = sdhci_cmd(SD_CMD8_SEND_IF_COND,
+                        SD_IF_COND_27V_33V, SDHCI_RESP_R7);
+                    cmd8_err = g_last_cmd_err;
+                }
+                if (status != 0) {
+                    /* Not a UHS card. Restore 3.3V and put the card back in
+                     * idle, since it saw a CMD0 at the wrong signaling. */
+                    sdhci_uhs_recover_rollback();
+                    (void)sdhci_cmd(MMC_CMD0_GO_IDLE, 0, SDHCI_RESP_NONE);
+                    udelay(200);
+                }
+            }
+        }
+#endif
+        if (status != 0) {
+            /* An SD v1.x card does not implement CMD8 and never answers it.
+             * Nothing below reads the CMD8 response - ACMD41 carries HCS,
+             * which a v1.x card ignores - so a missing answer is not fatal.
+             * Treating it as fatal rejected every legacy card.
+             *
+             * Only silence is excused. A command timeout on its own is a card
+             * that did not answer; a CRC, end-bit or index error means the
+             * card DID answer and the link mangled it, and continuing then
+             * would run the whole init over a known-broken bus. */
+            if ((cmd8_err & SDHCI_SRS12_ECT) != 0 &&
+                (cmd8_err & (SDHCI_SRS12_ECCRC | SDHCI_SRS12_ECEB |
+                             SDHCI_SRS12_ECI)) == 0) {
+                wolfBoot_printf("SD: no CMD8 response, continuing as v1.x "
+                    "card\n");
+                status = 0;
+            }
+            else {
+                wolfBoot_printf("SD: CMD8 failed, SRS12 errors 0x%08X\n",
+                    cmd8_err);
+            }
+        }
     }
     return status;
 }
@@ -1406,11 +1560,12 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         return status;
     }
 
-    /* Reset data and command lines */
-    sdhci_reset_lines();
-
-    /* Wait for command and data line busy to clear */
-    while ((SDHCI_REG(SDHCI_SRS09) & (SDHCI_SRS09_CICMD | SDHCI_SRS09_CIDAT)) != 0);
+    /* Reset data and command lines, which also waits for the inhibit bits
+     * to clear. A stuck line is reported, not spun on. */
+    if (sdhci_reset_lines() != 0) {
+        wolfBoot_printf("sdhci_transfer: lines stuck busy after reset\n");
+        return -1;
+    }
 
     /* Setup default transfer block count and block size */
     bcr_reg = (block_count << SDHCI_SRS01_BCCT_SHIFT) | sz;
@@ -1572,7 +1727,8 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 /* Between-block workaround for the Arasan EMMC2 block. This is
                  * a controller quirk, NOT a generic SD behavior, so it is scoped
                  * rather than keyed off DISK_SDCARD: that macro is also set by
-                 * the polarfire/zynqmp/versal/zynq7000/tegra234 SD targets,
+                 * the polarfire/zynqmp/versal/zynq7000/tegra234/imx8qm SD
+                 * targets,
                  * whose multi-block PIO reads are already validated without it.
                  * Platforms needing the quirk opt in with SDHCI_PIO_BRR_CLEAR
                  * (the CM4 microSD path, which drives the same EMMC2 block).
@@ -1704,8 +1860,10 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
         (dir == SDHCI_DIR_READ) ? "read" : "write", status);
 #endif
 
-    /* Clear status interrupts (except current limit, card interrupt/removal/insert) */
-    sdhci_reset_lines();
+    /* Clear status interrupts (except current limit, card interrupt/removal/insert).
+     * Teardown: the transfer result is already decided, so a stuck line here
+     * cannot change it and the next command reports it. */
+    (void)sdhci_reset_lines();
     SDHCI_REG_SET(SDHCI_SRS12, ~(SDHCI_SRS12_ECL | SDHCI_SRS12_CINT |
                       SDHCI_SRS12_CR | SDHCI_SRS12_CIN));
 

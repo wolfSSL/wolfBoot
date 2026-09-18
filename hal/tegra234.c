@@ -70,39 +70,14 @@ static inline void dmb_sy(void) { __asm__ volatile("dmb sy" ::: "memory"); }
 static inline uint32_t rd32(uintptr_t a) { return *(volatile uint32_t*)a; }
 static inline void wr32(uintptr_t a, uint32_t v) { *(volatile uint32_t*)a = v; }
 
-/* --------------------------------------------------------------------------
- * ARMv8 generic timer (architectural; no SoC register needed)
- * -------------------------------------------------------------------------- */
-
-static inline uint64_t timer_get_count(void)
-{
-    uint64_t cntpct;
-    __asm__ volatile("mrs %0, cntpct_el0" : "=r" (cntpct));
-    return cntpct;
-}
-
-static inline uint64_t timer_get_freq(void)
-{
-    uint64_t cntfrq;
-    __asm__ volatile("mrs %0, cntfrq_el0" : "=r" (cntfrq));
-    return cntfrq ? cntfrq : TIMER_CLK_FREQ;
-}
+/* Generic timer primitives come from the shared AArch64 helpers; only the two
+ * HAL entry points are defined here, because include/hal.h gives them
+ * external linkage. */
+#include "aarch64_arch.h"
 
 uint64_t hal_get_timer_us(void)
 {
     return (timer_get_count() * 1000000ULL) / timer_get_freq();
-}
-
-/* Deadline helpers for the polling loops below: one division at setup, none
- * in the loop itself. */
-static uint64_t timer_deadline_us(uint32_t us)
-{
-    return timer_get_count() + (((uint64_t)us * timer_get_freq()) / 1000000ULL);
-}
-
-static int timer_expired(uint64_t deadline)
-{
-    return timer_get_count() > deadline;
 }
 
 void hal_delay_us(uint32_t us)
