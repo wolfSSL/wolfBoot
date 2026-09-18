@@ -26,6 +26,9 @@
 #include "string.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
+#if defined(WOLFBOOT_SECURE_APP) && defined(TZEN)
+#include "armv8m_tz.h"
+#endif
 
 /* Test for internal flash erase/write */
 /* Use TEST_EXT_FLASH to test ext flash (see spi_flash.c or qspi_flash.c) */
@@ -300,6 +303,14 @@ WEAKFUNCTION int hal_attestation_get_lifecycle(uint32_t *lifecycle)
     (void)lifecycle;
     return -1;
 }
+
+#if defined(WOLFBOOT_SECURE_APP) && defined(TZEN)
+WEAKFUNCTION void hal_sau_init(void)
+{
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+}
+#endif
 
 WEAKFUNCTION int hal_attestation_get_implementation_id(uint8_t *buf, size_t *len)
 {

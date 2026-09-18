@@ -198,6 +198,12 @@ void hal_tz_claim_nonsecure_area(uint32_t address, int len);
 void hal_tz_release_nonsecure_area(void);
 void hal_tz_sau_init(void);
 void hal_tz_sau_ns_region(void);
+#if defined(WOLFBOOT_SECURE_APP)
+/* Weak default SAU setup for a secure-application handoff: a port gets a
+ * fully Secure hand-off with no work of its own, and overrides this only
+ * to expose Non-secure regions before the jump. */
+void hal_sau_init(void);
+#endif
 void hal_gtzc_init(void);
 
 /* Needed by TZ to claim/release nonsecure flash areas */

@@ -207,6 +207,9 @@ endif
 
 ## DSA Settings
 ifeq ($(SIGN),NONE)
+  ifeq ($(WOLFBOOT_SECURE_APP),1)
+    $(error SIGN=NONE is incompatible with the authenticated secure-app handoff)
+  endif
   $(warning SIGN=NONE / WOLFBOOT_NO_SIGN=1 disables firmware signature verification; images are NOT authenticated. Do not use in production.)
   SIGN_OPTIONS+=--no-sign
   ifeq ($(HASH),SHA384)
@@ -976,6 +979,9 @@ ifeq ($(WOLFBOOT_REQUIRE_SIGNED_DTB),1)
 endif
 
 ifeq ($(WOLFBOOT_SKIP_BOOT_VERIFY),1)
+  ifeq ($(WOLFBOOT_SECURE_APP),1)
+    $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 is incompatible with the authenticated secure-app handoff)
+  endif
   ifneq ($(WOLFBOOT_SELF_HEADER),1)
     $(error WOLFBOOT_SKIP_BOOT_VERIFY=1 requires WOLFBOOT_SELF_HEADER=1)
   endif
@@ -1528,6 +1534,16 @@ endif
 CFLAGS+=$(CFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
 
+# The authenticated STM32H5 ECC256 secure-app path retains certificate parsing.
+# Do not lower the larger stack thresholds selected by other signature schemes.
+ifeq ($(WOLFBOOT_SECURE_APP),1)
+  ifeq ($(TARGET),stm32h5)
+    ifeq ($(SIGN),ECC256)
+      STACK_USAGE=16688
+    endif
+  endif
+endif
+
 ifeq ($(USE_GCC_HEADLESS),1)
   ifeq ($(USE_GCC),1)
     ifneq ($(USE_CLANG),1)
@@ -1847,6 +1863,13 @@ endif
 
 ifeq ($(TZEN),1)
   CFLAGS+=-DTZEN
+endif
+
+ifeq ($(WOLFBOOT_SECURE_APP),1)
+  CFLAGS+=-DWOLFBOOT_SECURE_APP
+  ifneq ($(WOLFBOOT_SECURE_HANDOFF_ADDRESS),)
+    CFLAGS+=-D"WOLFBOOT_SECURE_HANDOFF_ADDRESS=$(WOLFBOOT_SECURE_HANDOFF_ADDRESS)"
+  endif
 endif
 
 # Auxiliary algorithms: compile extra wolfCrypt code beyond what SIGN/HASH
