@@ -1866,7 +1866,19 @@ endif
 ifeq ($(TARGET),imx_rt7xx)
   CORTEX_M33=1
   LDFLAGS+=-Wl,--no-warn-rwx-segments
-  # Bare-metal HAL for the i.MX RT700 (MIMXRT798S) XSPI0 octal NOR; no NXP SDK.
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_DRIVERS)/periph \
+      -I$(MCUXPRESSO_CMSIS)
+  CFLAGS+=-Wno-attributes
+  CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DNDEBUG -DSDK_DEBUGCONSOLE=0 \
+      -DCONFIG_FLASH_DRIVER_EXECUTES_FROM_RAM=1
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_xspi.o
 endif
 
 ifeq ($(TARGET),nxp_lpc54s0xx)

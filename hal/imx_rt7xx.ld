@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = @ARCH_FLASH_OFFSET@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    RAM (rwx)  : ORIGIN = 0x20080000, LENGTH = 128K
+    RAM (rwx)  : ORIGIN = 0x20080000, LENGTH = 256K
 }
 
 SECTIONS
@@ -11,8 +11,8 @@ SECTIONS
         _start_text = .;
         KEEP(*(.isr_vector))
         . = ALIGN(0x8);
-        *(.text*)
-        *(.rodata*)
+        *(EXCLUDE_FILE(*fsl_*.o) .text*)
+        *(EXCLUDE_FILE(*fsl_*.o) .rodata*)
         *(.init*)
         *(.fini*)
         . = ALIGN(4);
@@ -30,6 +30,8 @@ SECTIONS
     {
         _start_data = .;
         KEEP(*(.ramcode*))
+        *(.ramfunc*)
+        *fsl_*.o(.text* .rodata*)
         . = ALIGN(4);
         KEEP(*(.data*))
         . = ALIGN(4);
