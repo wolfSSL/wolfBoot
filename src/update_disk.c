@@ -769,6 +769,9 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
         os_image.fw_base = (uint8_t*)load_address;
+        /* Now in RAM: an EXT_FLASH build would otherwise verify through
+         * ext_flash_check_read() and hash flash, not the staged image. */
+        os_image.not_ext = 1;
 
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         wolfBoot_printf("Checking image integrity...");

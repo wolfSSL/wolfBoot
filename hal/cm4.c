@@ -564,6 +564,15 @@ void* _sbrk(int incr)
 #endif /* HAVE_FIPS */
 
 #if defined(CM4_USE_MMU)
+/* Set/way cache maintenance comes from the shared AArch64 helpers. The
+ * include sits inside this guard because the host unit test compiles this
+ * whole file, where the header's TIMER_CLK_FREQ requirement does not apply;
+ * cm4 keeps its own hal_get_timer_us(), which needs 128-bit math. */
+#ifndef TIMER_CLK_FREQ
+#define TIMER_CLK_FREQ BCM2711_TIMER_CLK_FREQ
+#endif
+#include "aarch64_arch.h"
+
 /* Minimal identity-mapped MMU + caches for the CM4. wolfBoot's simple startup
  * runs with the MMU off, so all memory is Device-nGnRnE, which faults on the
  * unaligned / 128-bit SIMD accesses that the FIPS module, newlib printf, and
@@ -580,44 +589,6 @@ void* _sbrk(int incr)
 
 static volatile uint64_t cm4_l1_table[512] __attribute__((aligned(4096)));
 
-/* Data-cache maintenance by set/way over all levels to the point of coherency.
- * clean != 0 -> clean+invalidate (dc cisw); else invalidate-only (dc isw). */
-static void cm4_dcache_maint(int clean)
-{
-    uint64_t clidr, ccsidr;
-    unsigned int level, loc, ctype, linesize, ways, sets, way, set, wayshift;
-
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("mrs %0, clidr_el1" : "=r"(clidr));
-    loc = (unsigned int)((clidr >> 24) & 0x7); /* Level of Coherency */
-    for (level = 0; level < loc; level++) {
-        ctype = (unsigned int)((clidr >> (level * 3)) & 0x7);
-        if (ctype < 2) /* no data/unified cache at this level */
-            continue;
-        __asm__ volatile("msr csselr_el1, %0" :: "r"((uint64_t)(level << 1)));
-        __asm__ volatile("isb");
-        __asm__ volatile("mrs %0, ccsidr_el1" : "=r"(ccsidr));
-        linesize = (unsigned int)(ccsidr & 0x7) + 4;          /* log2(bytes) */
-        ways     = (unsigned int)((ccsidr >> 3) & 0x3FF);     /* assoc - 1 */
-        sets     = (unsigned int)((ccsidr >> 13) & 0x7FFF);   /* sets - 1 */
-        /* __builtin_clz(0) is UB; a direct-mapped cache (ways==0) never uses
-         * the way field (way stays 0), so the shift amount is irrelevant. */
-        wayshift = (ways == 0) ? 32u : (unsigned int)__builtin_clz(ways);
-        for (set = 0; set <= sets; set++) {
-            for (way = 0; way <= ways; way++) {
-                uint64_t val = ((uint64_t)(level << 1))
-                    | ((uint64_t)way << wayshift)
-                    | ((uint64_t)set << linesize);
-                if (clean)
-                    __asm__ volatile("dc cisw, %0" :: "r"(val));
-                else
-                    __asm__ volatile("dc isw, %0" :: "r"(val));
-            }
-        }
-    }
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
-}
 
 /* MMU/cache setup uses EL2 system registers; wolfBoot enters at EL2 on the CM4.
  * Guard against an EL1 entry (a custom armstub) so the msr *_el2 below do not
@@ -661,7 +632,7 @@ void cm4_mmu_enable(void)
     __asm__ volatile("dsb sy");
     /* Invalidate the D-cache (and I-cache) before enabling them, so no stale
      * lines left by an earlier boot stage surface once caching is on. */
-    cm4_dcache_maint(0);
+    aarch64_dcache_maint(0);
     __asm__ volatile("ic iallu");
     __asm__ volatile("dsb sy");
     __asm__ volatile("isb");
@@ -683,14 +654,14 @@ void cm4_mmu_disable(void)
     cm4_require_el2();
     /* Flush the loaded app to DRAM WHILE the D-cache is still enabled, then
      * disable M/C/I together. The "textbook" order (clear SCTLR.C first, then
-     * flush) is UNSAFE here: cm4_dcache_maint() and this function use the stack,
+     * flush) is UNSAFE here: aarch64_dcache_maint() and this function use the stack,
      * and once C is cleared, stack reads bypass the cache and return stale DRAM
      * (the dirty lines - including this function's spilled return address - are
      * not yet written back), so the function would return to garbage. That
      * order is only safe in a pure-asm flush with no stack use (U-Boot). What
      * must be coherent for the application is the loaded image, and it is fully
      * flushed here with caches on. */
-    cm4_dcache_maint(1); /* clean+invalidate: flush the loaded app to memory */
+    aarch64_dcache_maint(1); /* clean+invalidate: flush the app to memory */
     __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
     sctlr &= ~((1UL << 0) | (1UL << 2) | (1UL << 12)); /* clear M, C, I */
     __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr));
@@ -703,14 +674,17 @@ void cm4_mmu_disable(void)
 #endif /* CM4_USE_MMU */
 
 #if defined(DEBUG) && defined(DEBUG_UART)
-/* CM4 bring-up diagnostic: exception handler invoked from cm4_vectors in
+/* CM4 bring-up diagnostic: exception handler invoked from simple_el2_vectors in
  * src/boot_aarch64_start.S. Dumps the fault syndrome so a data/instruction
  * abort shows up over UART instead of hanging silently. Built only with
- * DEBUG + DEBUG_UART. ESR_EL2[31:26] = exception class. */
-void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far);
-void cm4_fault_handler(unsigned long esr, unsigned long elr, unsigned long far)
+ * DEBUG + DEBUG_UART. ESR_EL2[31:26] = exception class; vector is the 0-15 slot
+ * in the table, so >= 8 means the fault came from a lower EL. */
+void simple_el2_fault_handler(unsigned long esr, unsigned long elr,
+    unsigned long far, unsigned long vector);
+void simple_el2_fault_handler(unsigned long esr, unsigned long elr,
+    unsigned long far, unsigned long vector)
 {
-    wolfBoot_printf("\n*** CM4 EXCEPTION ***\n");
+    wolfBoot_printf("\n*** CM4 EXCEPTION *** vector=%d\n", (int)vector);
     wolfBoot_printf("ESR_EL2=0x%08x EC=0x%02x\n",
         (unsigned)esr, (unsigned)((esr >> 26) & 0x3F));
     wolfBoot_printf("ELR_EL2=0x%08x%08x\n",

@@ -481,11 +481,15 @@ tools/unit-tests/unit-dice-token-size
 tools/unit-tests/unit-efi-x86-open-image
 tools/unit-tests/unit-flash-write-cc26x2
 tools/unit-tests/unit-ls1028a-xspi-write
+tools/unit-tests/unit-imx8qm-usdhc-shim
+tools/unit-tests/unit-imx8qm-flexspi-write
 tools/unit-tests/unit-nvm-cache-scrub
 tools/unit-tests/unit-p1021-fcm-bytes
 tools/unit-tests/unit-p1021-qe-firmware
 tools/unit-tests/unit-pic32-pfswap
 tools/unit-tests/unit-pkcs11-nsc-zeroize
+tools/unit-tests/unit-sdhci-cmd-inhibit
+tools/unit-tests/unit-sdhci-cmd-inhibit-uhs
 tools/unit-tests/unit-sdhci-uhs-recover
 tools/unit-tests/unit-sdhci-wait-busy
 tools/unit-tests/unit-stm32l5-write
@@ -555,3 +559,6 @@ tools/fs-test/fixtures/
 # x86 FSP QEMU filesystem test images (make_hd.sh FS=1)
 fs_a.img
 fs_b.img
+tools/unit-tests/aarch64_arch_host.h
+tools/unit-tests/imx8qm_usdhc_extract.h
+tools/unit-tests/imx8qm_flexspi_extract.h
