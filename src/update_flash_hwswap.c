@@ -42,6 +42,15 @@ static inline void boot_panic(void)
         ;
 }
 
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+/* No device tree here, but hooks.h advertises the accessor for every
+ * MMU/WOLFBOOT_FDT build, so a conforming hook must still link. */
+void* wolfBoot_get_dts_address(void)
+{
+    return NULL;
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     int active;
@@ -133,6 +142,11 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifndef TZEN
     if (hal_flash_protect(WOLFBOOT_ORIGIN, BOOTLOADER_PARTITION_SIZE) < 0)
         boot_panic();
+#endif
+#ifdef WOLFBOOT_HOOK_PREBOOT
+    /* Before hal_prepare_boot(), so a hook still has the MMU and caches as
+     * wolfBoot set them up. */
+    wolfBoot_hook_preboot(&fw_image);
 #endif
     hal_prepare_boot();
 #ifdef WOLFBOOT_HOOK_BOOT

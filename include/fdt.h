@@ -272,6 +272,23 @@ int fdt_path_offset(const fdt_ctx* ctx, const char* path);
 /* Direct child of `parentoff` by name. */
 int fdt_subnode_offset(const fdt_ctx* ctx, int parentoff, const char* name);
 
+/* Offset of the node containing `nodeoffset`. Walks from the root (no
+ * back-pointers in a flat tree), so O(tree). -FDT_ERR_NOTFOUND for root. */
+int fdt_parent_offset(const fdt_ctx* ctx, int nodeoffset);
+
+/* Resolve an /aliases entry to the node it names. Returns the node offset,
+ * -FDT_ERR_NOTFOUND if there is no /aliases or no such entry, or
+ * -FDT_ERR_BADSTRUCTURE if the value is not a NUL-terminated abs path. */
+int fdt_get_alias(const fdt_ctx* ctx, const char* name);
+
+/* Decode entry `index` of a node's "reg", honoring the parent's
+ * #address-cells / #size-cells (spec defaults 2 and 1). Handles the 2+2 cell
+ * shape fdt_getprop_address() cannot. `addr` and `size` are optional. Cell
+ * counts above 2 do not fit uint64_t and give -FDT_ERR_BADSTRUCTURE, as does
+ * a "reg" that is not a whole number of entries. */
+int fdt_get_reg(const fdt_ctx* ctx, int nodeoffset, int index,
+    uint64_t* addr, uint64_t* size);
+
 /* Search the whole tree from `startoff` (< 0 for the beginning) for an
  * exact node-name match, at any depth - prefer fdt_path_offset() when
  * the location is known. This and the two searches below report a
