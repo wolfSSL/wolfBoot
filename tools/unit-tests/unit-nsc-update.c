@@ -43,11 +43,17 @@
 
 const char *argv0;
 
+/* Per-run backing file: a fixed path is rewritten (O_TRUNC|MAP_SHARED) by
+ * every concurrent run, so two suites in parallel would share one mapping.
+ * Set once in main() before Check forks, so the child that creates the file
+ * and the parent that unlinks it agree on the name. */
+static char update_flash_file[PATH_MAX];
+
 static void prepare_update_flash(void)
 {
     int ret;
 
-    ret = mmap_file("/tmp/wolfboot-nsc-update.bin",
+    ret = mmap_file(update_flash_file,
                     (void *)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
                     WOLFBOOT_PARTITION_SIZE,
                     NULL);
@@ -126,6 +132,8 @@ int main(int argc, char *argv[])
     SRunner *sr;
 
     argv0 = strdup(argv[0]);
+    snprintf(update_flash_file, sizeof(update_flash_file),
+             "/tmp/wolfboot-unit-nsc-update-%d.bin", (int)getpid());
     s = wolfboot_suite();
     sr = srunner_create(s);
 #if (NO_FORK == 1)
@@ -134,5 +142,6 @@ int main(int argc, char *argv[])
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);
+    unlink(update_flash_file);
     return fails;
 }

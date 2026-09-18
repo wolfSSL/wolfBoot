@@ -31,6 +31,7 @@
  */
 
 #include <check.h>
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 #include <unistd.h>
@@ -124,6 +125,37 @@ START_TEST(test_unaligned_start_covers_range)
 }
 END_TEST
 
+/* A zero-length range protects nothing, so no region may be locked - not
+ * even when start sits mid-block. The round-up introduced for F-13623 made
+ * `tail` carry the start offset, so an unaligned start with len 0 rounded up
+ * to one block and locked 16 KiB that the caller never asked for. */
+START_TEST(test_zero_len_locks_nothing)
+{
+    sim_reset();
+    ck_assert_int_eq(hal_flash_protect(0, 0), 0);
+    ck_assert_int_eq(locked_count(), 0);
+
+    sim_reset();
+    ck_assert_int_eq(hal_flash_protect(0x2000, 0), 0);
+    ck_assert_int_eq(locked_count(), 0);
+}
+END_TEST
+
+/* A negative len is rejected outright. Without the guard the cast to
+ * uint32_t turns -1 into ~4 GiB, which truncates to FLASH_SIZE and locks
+ * every region while still returning success. */
+START_TEST(test_negative_len_rejected)
+{
+    sim_reset();
+    ck_assert_int_eq(hal_flash_protect(0, -1), -1);
+    ck_assert_int_eq(locked_count(), 0);
+
+    sim_reset();
+    ck_assert_int_eq(hal_flash_protect(0x2000, INT_MIN), -1);
+    ck_assert_int_eq(locked_count(), 0);
+}
+END_TEST
+
 /* start past the end of flash is rejected and nothing is locked. */
 START_TEST(test_start_past_flash_rejected)
 {
@@ -154,6 +186,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_sub_block_len_locks_containing_block);
     tcase_add_test(tc, test_partial_tail_block_is_locked);
     tcase_add_test(tc, test_unaligned_start_covers_range);
+    tcase_add_test(tc, test_zero_len_locks_nothing);
+    tcase_add_test(tc, test_negative_len_rejected);
     tcase_add_test(tc, test_start_past_flash_rejected);
     tcase_add_test(tc, test_range_past_flash_truncated);
     suite_add_tcase(s, tc);

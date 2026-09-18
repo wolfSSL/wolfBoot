@@ -827,7 +827,13 @@ void hal_init(void)
 }
 
 #ifdef __WOLFBOOT
-/* enable write protection for the region of flash specified */
+/* Enable write protection for the region of flash specified.
+ *
+ * Contract: protects [start, start+len). A zero len protects nothing and
+ * succeeds; a negative len is rejected. Protection is granted in whole
+ * SPU_FLASH_BLOCK_SIZE blocks, so a partial block at either end is locked
+ * whole - the locked range may be wider than requested, never narrower.
+ */
 int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
 {
     /* only application core supports SPU */
@@ -840,6 +846,11 @@ int RAMFUNCTION hal_flash_protect(haladdr_t start, int len)
         return -1;
     if (len < 0)
         return -1;
+    /* An empty range protects nothing. Return before the region math below:
+     * `tail` carries the start offset, so an unaligned start would round up
+     * to one block and lock 16 KiB the caller never asked to protect. */
+    if (len == 0)
+        return 0;
     /* truncate if exceeds flash size */
     if (start + (uint32_t)len > FLASH_SIZE)
         len = FLASH_SIZE - start;
