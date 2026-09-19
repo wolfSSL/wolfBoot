@@ -67,6 +67,17 @@ extern WOLFTPM2_KEY     wolftpm_srk;
     #endif
 #endif
 
+/* The measured-boot extend path hands wolfBoot_tpm2_extend() the image's own
+ * hash buffer and the TPM reads WOLFBOOT_TPM_PCR_DIG_SZ bytes from it, so an
+ * image hash narrower than the selected PCR bank would read past the buffer
+ * and extend the PCR with adjacent memory. Require the image hash to be at
+ * least as wide as the bank. */
+#if defined(WOLFBOOT_MEASURED_BOOT) && \
+    (WOLFBOOT_SHA_DIGEST_SIZE < WOLFBOOT_TPM_PCR_DIG_SZ)
+    #error "measured boot: image hash is narrower than the TPM PCR bank; " \
+           "widen the image HASH or select a smaller WOLFBOOT_TPM_PCR_ALG"
+#endif
+
 #define WOLFBOOT_MAX_SEAL_SZ              MAX_SYM_DATA
 
 /* API's that are callable from non-secure code */
