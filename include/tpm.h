@@ -40,10 +40,31 @@ extern WOLFTPM2_KEY     wolftpm_srk;
 #ifndef WOLFBOOT_TPM_SEAL_NV_BASE
     #define WOLFBOOT_TPM_SEAL_NV_BASE     0x01400300
 #endif
+/* The PCR bank algorithm and its digest size must always agree. They used to
+ * be defined together under a single #ifndef on the algorithm, which meant
+ * overriding only WOLFBOOT_TPM_PCR_ALG left WOLFBOOT_TPM_PCR_DIG_SZ undefined
+ * - and an undefined macro is 0 to the preprocessor, so the size checks
+ * downstream silently changed meaning. Select the pair with one switch, and
+ * refuse a half-specified override.
+ *
+ * Note the algorithm cannot be tested with #if: TPM_ALG_SHA256 and friends are
+ * enum constants, not macros, so every #if comparison against them evaluates
+ * 0 == 0 and is always true. */
+#if defined(WOLFBOOT_TPM_PCR_ALG) != defined(WOLFBOOT_TPM_PCR_DIG_SZ)
+    #error "Define both WOLFBOOT_TPM_PCR_ALG and WOLFBOOT_TPM_PCR_DIG_SZ, or neither"
+#endif
 #ifndef WOLFBOOT_TPM_PCR_ALG
-    /* Prefer SHA2-256 for PCR's, and all TPM 2.0 devices support it */
-    #define WOLFBOOT_TPM_PCR_ALG          TPM_ALG_SHA256
-    #define WOLFBOOT_TPM_PCR_DIG_SZ       32
+    #ifdef WOLFBOOT_TPM_PCR_SHA384
+        /* SHA2-384 bank. Present on parts like the Infineon SLB9672, absent on
+         * the SLB9670 - selecting it on a part with no such bank makes every
+         * extend fail, which measured boot treats as fatal. */
+        #define WOLFBOOT_TPM_PCR_ALG      TPM_ALG_SHA384
+        #define WOLFBOOT_TPM_PCR_DIG_SZ   48
+    #else
+        /* Prefer SHA2-256 for PCR's, and all TPM 2.0 devices support it */
+        #define WOLFBOOT_TPM_PCR_ALG      TPM_ALG_SHA256
+        #define WOLFBOOT_TPM_PCR_DIG_SZ   32
+    #endif
 #endif
 
 #define WOLFBOOT_MAX_SEAL_SZ              MAX_SYM_DATA
