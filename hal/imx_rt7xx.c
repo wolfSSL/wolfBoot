@@ -27,6 +27,9 @@
 #include "fsl_common.h"
 #include "fsl_clock.h"
 #include "fsl_xspi.h"
+#ifdef TZEN
+#include "armv8m_tz.h"
+#endif
 
 /* The BootROM configures the compute-domain clocks and the XSPI0 XIP window
  * from the flash config block before handing control to this image. The XSPI
@@ -117,6 +120,11 @@ void uart_write(const char* buf, unsigned int sz)
 #define NOR_SIZE_KB    0x10000u
 #define NOR_PAGE       256u
 #define NOR_SECTOR     0x1000u
+
+/* Both apertures map the same NOR, bit 28 only carries the security
+ * attribute, so the device offset is the low 26 bits either way. */
+#define NOR_OFFSET(a)   ((a) & (NOR_SIZE - 1u))
+#define NOR_APERTURE(a) ((a) & ~(NOR_SIZE - 1u))
 
 #define XSPI_NOR       ((XSPI_Type *)IMX_RT7XX_XSPI0_REGS_NS)
 
@@ -408,8 +416,12 @@ static void RAMFUNCTION xspi_nor_init(void)
 
 static int RAMFUNCTION xspi_addr_ok(uint32_t address, int len)
 {
-    if ((len <= 0) || (address < NOR_BASE) ||
-        ((address - NOR_BASE) + (uint32_t)len > NOR_SIZE)) {
+    uint32_t aperture = NOR_APERTURE(address);
+
+    if ((len <= 0) ||
+        ((aperture != IMX_RT7XX_XSPI0_NS_BASE) &&
+         (aperture != IMX_RT7XX_XSPI0_S_BASE)) ||
+        (NOR_OFFSET(address) + (uint32_t)len > NOR_SIZE)) {
         return -1;
     }
     return 0;
@@ -442,6 +454,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     if (g_xspi_ready == 0) {
         xspi_nor_init();
     }
+    address = NOR_BASE + NOR_OFFSET(address);
     while ((len > 0) && (ret == 0)) {
         page = address & ~(NOR_PAGE - 1u);
         off = address & (NOR_PAGE - 1u);
@@ -481,6 +494,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (g_xspi_ready == 0) {
         xspi_nor_init();
     }
+    address = NOR_BASE + NOR_OFFSET(address);
     sector = address & ~(NOR_SECTOR - 1u);
     end = address + (uint32_t)len;
     while ((sector < end) && (ret == 0)) {
@@ -555,11 +569,24 @@ static void xspi_flash_selftest(void)
 }
 #endif
 
+#ifdef TZEN
+/* Hand off fully Secure: no Non-secure regions here, the secure application
+ * carves out the Non-secure world for its own guests. */
+static void hal_sau_init(void)
+{
+    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
+    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+}
+#endif
+
 void hal_init(void)
 {
 #ifdef DEBUG_UART
     uart_init();
     wolfBoot_printf("wolfBoot HAL init: MIMXRT798S\n");
+#endif
+#ifdef TZEN
+    hal_sau_init();
 #endif
 #ifdef XSPI_FLASH_SELFTEST
     xspi_flash_selftest();
