@@ -43,6 +43,7 @@
 
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/hmac.h>
+#include <wolfssl/wolfcrypt/misc.h>
 
 #ifdef WOLFSSL_HWPUF
 #include <wolfssl/wolfcrypt/hwpuf.h>
@@ -271,6 +272,7 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
     uint8_t digest[SHA3_384_DIGEST_SIZE];
 #endif
     size_t copy_len = sizeof(digest);
+    int ret;
 
     flashInit();
 
@@ -281,25 +283,43 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
 #if defined(WOLFBOOT_HASH_SHA256)
     {
         wc_Sha256 hash;
-        wc_InitSha256(&hash);
-        wc_Sha256Update(&hash, uid, sizeof(uid));
-        wc_Sha256Final(&hash, digest);
+        ret = wc_InitSha256(&hash);
+        if (ret == 0) {
+            ret = wc_Sha256Update(&hash, uid, sizeof(uid));
+            if (ret == 0)
+                ret = wc_Sha256Final(&hash, digest);
+            wc_Sha256Free(&hash);
+        }
     }
 #elif defined(WOLFBOOT_HASH_SHA384)
     {
         wc_Sha384 hash;
-        wc_InitSha384(&hash);
-        wc_Sha384Update(&hash, uid, sizeof(uid));
-        wc_Sha384Final(&hash, digest);
+        ret = wc_InitSha384(&hash);
+        if (ret == 0) {
+            ret = wc_Sha384Update(&hash, uid, sizeof(uid));
+            if (ret == 0)
+                ret = wc_Sha384Final(&hash, digest);
+            wc_Sha384Free(&hash);
+        }
     }
 #elif defined(WOLFBOOT_HASH_SHA3_384)
     {
         wc_Sha3 hash;
-        wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
-        wc_Sha3_384_Update(&hash, uid, sizeof(uid));
-        wc_Sha3_384_Final(&hash, digest);
+        ret = wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
+        if (ret == 0) {
+            ret = wc_Sha3_384_Update(&hash, uid, sizeof(uid));
+            if (ret == 0)
+                ret = wc_Sha3_384_Final(&hash, digest);
+            wc_Sha3_384_Free(&hash);
+        }
     }
 #endif
+
+    if (ret != 0) {
+        ForceZero(uid, sizeof(uid));
+        ForceZero(digest, sizeof(digest));
+        return -1;
+    }
 
     if (copy_len > out_len) {
         copy_len = out_len;
@@ -426,10 +446,16 @@ void hal_init(void)
 #endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_HWPUF_PROVISION)
-    if (hwpuf_provision_set(0) != 0)
+    if (hwpuf_provision_set(0) != 0) {
+# ifdef DEBUG_UART
         uart_write("hwpuf provision failure (already provisioned?)\n", 47);
-    else
+# endif
+    }
+    else {
+# ifdef DEBUG_UART
         uart_write("hwpuf provision success\n", 24);
+# endif
+    }
 #endif
 }
 
