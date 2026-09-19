@@ -19,6 +19,12 @@ SECTIONS
         _end_text = .;
     } > FLASH
 
+    .gnu.sgstubs :
+    {
+        . = ALIGN(32);
+        *(.gnu.sgstubs*)
+    } > FLASH
+
     .edidx :
     {
         . = ALIGN(4);
