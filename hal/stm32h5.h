@@ -23,6 +23,8 @@
 #ifndef STM32H5_DEF_INCLUDED
 #define STM32H5_DEF_INCLUDED
 
+#include "stm32h5_lifecycle.h"
+
 #define PERIPH_CLOCK_FREQ (64000000)
 
 /* Assembly helpers */
@@ -280,7 +282,8 @@
 #define FLASH_OPTSR_CUR   (*(volatile uint32_t *)(FLASH_BASE + 0x50))
 #define FLASH_OPTSR_PRG   (*(volatile uint32_t *)(FLASH_BASE + 0x54))
 #define FLASH_OPTSR_SWAP_BANK (1 << 31)
-
+#define FLASH_OPTSR_PRODUCT_STATE_SHIFT 8
+#define FLASH_OPTSR_PRODUCT_STATE_MASK  (0xFFu << FLASH_OPTSR_PRODUCT_STATE_SHIFT)
 
 /* Register values (for both secure and non secure registers)
  * RM0481 Table 75 */

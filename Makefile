@@ -358,7 +358,11 @@ endif
 
 ifeq ($(TARGET),stm32h5)
 	# Don't build a contiguous image
-    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    ifeq ($(WOLFBOOT_SECURE_APP),1)
+        MAIN_TARGET:=wolfboot.bin
+    else
+        MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    endif
 endif
 
 ifeq ($(TARGET),stm32n6)
