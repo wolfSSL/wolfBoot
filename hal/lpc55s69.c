@@ -43,7 +43,7 @@
 
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/hmac.h>
-#include <wolfssl/wolfcrypt/misc.h>
+#include <wolfssl/wolfcrypt/memory.h>
 
 #ifdef WOLFSSL_HWPUF
 #include <wolfssl/wolfcrypt/hwpuf.h>
@@ -316,8 +316,8 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
 #endif
 
     if (ret != 0) {
-        ForceZero(uid, sizeof(uid));
-        ForceZero(digest, sizeof(digest));
+        wc_ForceZero(uid, sizeof(uid));
+        wc_ForceZero(digest, sizeof(digest));
         return -1;
     }
 
