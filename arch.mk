@@ -1816,10 +1816,10 @@ ifeq ($(TARGET),lpc55s69)
       $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
       $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
       $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o \
-      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
+      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
   ifeq ($(DEBUG_UART),1)
     OBJS+=\
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
       $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
       $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
   endif
