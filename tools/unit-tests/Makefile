@@ -198,6 +198,7 @@ TESTS+=unit-imx-rt-cache-align
 TESTS+=unit-xspi-tfd-index
 TESTS+=unit-pic32-pfswap
 TESTS+=unit-secure-handoff
+TESTS+=unit-imx-rt700
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -1851,3 +1852,6 @@ clean: covclean
 .DELETE_ON_ERROR:
 
 .PHONY: FORCE
+
+unit-imx-rt700: unit-imx-rt700.c ../../hal/imx_rt7xx.h
+	gcc -o $@ unit-imx-rt700.c $(CFLAGS)

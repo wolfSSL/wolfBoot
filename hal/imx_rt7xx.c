@@ -294,7 +294,6 @@ static status_t RAMFUNCTION cache_invalidate(volatile uint32_t *ccr,
 
 static status_t RAMFUNCTION xspi_ahb_flush(void)
 {
-    status_t status;
     uint32_t t = RT7XX_REG_POLL_LIMIT;
 
     XSPI_NOR->SPTRCLR |= XSPI_SPTRCLR_ABRT_CLR_MASK;
@@ -305,21 +304,13 @@ static status_t RAMFUNCTION xspi_ahb_flush(void)
     if (t == 0u) {
         return kStatus_Timeout;
     }
-    /* CACHE64_CTRL0 backs the XSPI0 aperture; XCACHE0/1 are the core caches.
-     * Invalidate all three so an AHB read after a program or erase sees the
-     * new NOR contents. */
-    status = cache_invalidate(&CACHE64_CTRL0->CCR,
+    /* Invalidate only CACHE64_CTRL0, which backs the XSPI0 aperture, so an
+     * AHB read after a program or erase sees the new NOR contents. The core
+     * XCACHE controllers also cache SRAM, so a whole-cache invalidate there
+     * could discard dirty stack or globals; leave them to the MPU/attributes. */
+    return cache_invalidate(&CACHE64_CTRL0->CCR,
         CACHE64_CTRL_CCR_INVW0_MASK | CACHE64_CTRL_CCR_INVW1_MASK,
         CACHE64_CTRL_CCR_GO_MASK);
-    if (status == kStatus_Success) {
-        status = cache_invalidate(&XCACHE0->CCR,
-            XCACHE_CCR_INVW0_MASK | XCACHE_CCR_INVW1_MASK, XCACHE_CCR_GO_MASK);
-    }
-    if (status == kStatus_Success) {
-        status = cache_invalidate(&XCACHE1->CCR,
-            XCACHE_CCR_INVW0_MASK | XCACHE_CCR_INVW1_MASK, XCACHE_CCR_GO_MASK);
-    }
-    return status;
 }
 
 void RAMFUNCTION hal_cache_invalidate(void)
@@ -711,6 +702,17 @@ static status_t RAMFUNCTION xspi_nor_init(void)
     return status;
 }
 
+static status_t RAMFUNCTION xspi_nor_init_guarded(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    status_t status;
+
+    __disable_irq();
+    status = xspi_nor_init();
+    __set_PRIMASK(primask);
+    return status;
+}
+
 static int RAMFUNCTION xspi_addr_ok(uint32_t address, int len)
 {
     return imx_rt7xx_xspi0_addr_ok(address, len);
@@ -719,7 +721,7 @@ static int RAMFUNCTION xspi_addr_ok(uint32_t address, int len)
 void RAMFUNCTION hal_flash_unlock(void)
 {
     if (g_xspi_ready == 0) {
-        (void)xspi_nor_init();
+        (void)xspi_nor_init_guarded();
     }
 }
 
@@ -876,7 +878,7 @@ int RAMFUNCTION hal_flash_protect(uint32_t address, int len)
     if ((end & (FRAD_GRANULE - 1u)) != 0u) {
         return -1;
     }
-    if ((g_xspi_ready == 0) && (xspi_nor_init() != kStatus_Success)) {
+    if ((g_xspi_ready == 0) && (xspi_nor_init_guarded() != kStatus_Success)) {
         return -1;
     }
 
