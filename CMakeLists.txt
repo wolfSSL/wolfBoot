@@ -766,6 +766,14 @@ list(APPEND WOLFBOOT_DEFS
     WOLFBOOT_ORIGIN=${WOLFBOOT_ORIGIN}
     BOOTLOADER_PARTITION_SIZE=${BOOTLOADER_PARTITION_SIZE})
 
+# Opt-out for targets that deliberately place a partition inside the
+# bootloader write-protect region (e.g. cypsoc6). Mirrors the GNU Make
+# WOLFBOOT_ALLOW_PART_OVERLAP flag; without it the geometry guards in
+# include/target.h fire on those layouts.
+if(WOLFBOOT_ALLOW_PART_OVERLAP)
+    list(APPEND WOLFBOOT_DEFS WOLFBOOT_ALLOW_PART_OVERLAP=1)
+endif()
+
 if(${WOLFBOOT_TARGET} STREQUAL "x86_64_efi")
     if(NOT DEFINED GNU_EFI_LIB_PATH)
         set(GNU_EFI_LIB_PATH /usr/lib)
@@ -1156,8 +1164,15 @@ if(TZEN)
     endif()
 endif()
 
+# nRF5340 debug-UART CRLF conversion (host-testable, no nrfx registers)
+set(WOLFBOOT_NRF5340_UART_SRC "")
+if(WOLFBOOT_TARGET MATCHES "^nrf5340")
+    set(WOLFBOOT_NRF5340_UART_SRC hal/nrf5340_uart.c)
+endif()
+
 target_sources(wolfboothal PRIVATE include/hal.h hal/hal.c hal/${WOLFBOOT_TARGET}.c ${WOLFBOOT_FLASH_SOURCES}
-                                   ${PARTITION_SOURCE} ${WOLFBOOT_TZ_HAL_SOURCES})
+                                   ${PARTITION_SOURCE} ${WOLFBOOT_TZ_HAL_SOURCES}
+                                   ${WOLFBOOT_NRF5340_UART_SRC})
 
 
 #---------------------------------------------------------------------------------------------

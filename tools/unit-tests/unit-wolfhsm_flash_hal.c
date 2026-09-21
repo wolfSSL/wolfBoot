@@ -243,6 +243,13 @@ START_TEST(test_erase_alignment)
     ck_assert_int_eq(whFlashH5_Cb.Erase(&ctx, 0U, 100U), WH_ERROR_BADARGS);
     ck_assert_int_eq(whFlashH5_Cb.Erase(&ctx, 0U, MOCK_FLASH_SECTOR),
                      WH_ERROR_OK);
+    /* Aligned OOB: offset at the end (bounds guard must fire before the
+     * alignment checks, which would otherwise pass an aligned OOB erase). */
+    ck_assert_int_eq(whFlashH5_Cb.Erase(&ctx, ctx.size, MOCK_FLASH_SECTOR),
+                     WH_ERROR_BADARGS);
+    /* Aligned OOB: size one sector past the end. */
+    ck_assert_int_eq(whFlashH5_Cb.Erase(&ctx, 0U, ctx.size + MOCK_FLASH_SECTOR),
+                     WH_ERROR_BADARGS);
     mock_flash_fini();
 }
 END_TEST
@@ -252,6 +259,7 @@ START_TEST(test_verify)
     whFlashH5Ctx ctx;
     uint8_t      data[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
     uint8_t      bad[8]  = { 0 };
+    uint8_t      vbuf[MOCK_FLASH_SECTOR];
 
     mock_flash_init();
     ctx.base           = MOCK_FLASH_BASE;
@@ -264,6 +272,10 @@ START_TEST(test_verify)
                      WH_ERROR_OK);
     ck_assert_int_eq(whFlashH5_Cb.Verify(&ctx, 0U, sizeof(bad), bad),
                      WH_ERROR_NOTVERIFIED);
+    /* OOB: offset at the end (bounds guard must fire before the
+     * constant-time compare walks OOB key material). */
+    ck_assert_int_eq(whFlashH5_Cb.Verify(&ctx, ctx.size, MOCK_FLASH_SECTOR,
+                                         vbuf), WH_ERROR_BADARGS);
     mock_flash_fini();
 }
 END_TEST
@@ -284,6 +296,11 @@ START_TEST(test_blank_check)
                      WH_ERROR_OK);
     ck_assert_int_eq(whFlashH5_Cb.BlankCheck(&ctx, 0U, sizeof(data)),
                      WH_ERROR_NOTBLANK);
+    /* OOB: offset at the end (bounds guard must fire before the scan walks
+     * OOB). */
+    ck_assert_int_eq(whFlashH5_Cb.BlankCheck(&ctx, ctx.size,
+                                             MOCK_FLASH_SECTOR),
+                     WH_ERROR_BADARGS);
     mock_flash_fini();
 }
 END_TEST

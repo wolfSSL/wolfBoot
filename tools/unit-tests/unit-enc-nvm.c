@@ -348,6 +348,31 @@ START_TEST(test_erase_encrypt_key_propagates_flash_write_error)
 }
 END_TEST
 
+/* F-13633: encrypt_key_is_valid() rejects an erased key (all 0x00 or all
+ * 0xFF) and accepts a key that is neither. It was untested, so deleting the
+ * check or flipping its && to || would survive. Under a ||, both the all-0x00
+ * and all-0xFF cases have one true operand and would be (wrongly) accepted,
+ * which pins the &&. */
+START_TEST(test_encrypt_key_is_valid)
+{
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint32_t i;
+
+    for (i = 0; i < ENCRYPT_KEY_SIZE; i++)
+        key[i] = 0x00;
+    ck_assert_int_eq(encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE), 0);
+
+    for (i = 0; i < ENCRYPT_KEY_SIZE; i++)
+        key[i] = 0xFF;
+    ck_assert_int_eq(encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE), 0);
+
+    for (i = 0; i < ENCRYPT_KEY_SIZE; i++)
+        key[i] = 0x00;
+    key[0] = 0x42;
+    ck_assert_int_eq(encrypt_key_is_valid(key, ENCRYPT_KEY_SIZE), 1);
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -361,6 +386,7 @@ Suite *wolfboot_suite(void)
             test_set_encrypt_key_propagates_flash_write_error);
     tcase_add_test(nvm_update_with_encryption,
             test_erase_encrypt_key_propagates_flash_write_error);
+    tcase_add_test(nvm_update_with_encryption, test_encrypt_key_is_valid);
     suite_add_tcase(s, nvm_update_with_encryption);
 
     return s;

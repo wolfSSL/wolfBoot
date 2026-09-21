@@ -541,6 +541,84 @@ START_TEST(test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser)
 }
 END_TEST
 
+/* F-13646: HDR_CMDLINE encode/decode roundtrip. The sign --cmdline option
+ * stores the OS command line as a signature-covered TLV with the reserved
+ * tag HDR_CMDLINE; the bootloader recovers it via wolfBoot_find_header()
+ * (wolfBoot_efi_get_cmdline). For every valid 1..255-byte command line the
+ * decoder must return exactly those bytes. Lengths 1, 2, 3, 69, 70, 71, 255
+ * exercise the extremes and the odd/even boundary that forces the walker to
+ * byte-step over the ALIGN_8 padding between TLVs; 255 also forces the
+ * header to auto-grow past the 256-byte default (the ~70-byte default
+ * capacity is the common case, so a silent header/bootloader IMAGE_HEADER_
+ * SIZE mismatch is the realistic failure). */
+START_TEST(test_make_header_ex_roundtrip_cmdline_tlv)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    uint8_t *output_buf = NULL;
+    uint8_t image_buf[] = { 0x01, 0x02, 0x03, 0x04 };
+    uint8_t pubkey[] = { 0xA5 };
+    uint8_t cmdline[255];
+    size_t output_len;
+    uint16_t lens[] = { 1, 2, 3, 69, 70, 71, 255 };
+    uint16_t i;
+    uint16_t j;
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)),
+        0);
+
+    /* Deterministic, non-zero pattern across the full 255 bytes. */
+    for (j = 0; j < 255; j++) {
+        cmdline[j] = (uint8_t)(0x10 + (j % 240));
+    }
+
+    for (i = 0; i < sizeof(lens) / sizeof(lens[0]); i++) {
+        uint16_t len = lens[i];
+
+        reset_cmd_defaults();
+        CMD.header_sz = 256;
+        CMD.custom_tlvs = 1;
+        CMD.custom_tlv[0].tag = HDR_CMDLINE;
+        CMD.custom_tlv[0].len = len;
+        CMD.custom_tlv[0].buffer = malloc(len);
+        memcpy(CMD.custom_tlv[0].buffer, cmdline, len);
+
+        reset_mocks(NULL, 0);
+        ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path,
+            output_path, 0, 0, 0, 0, NULL, 0, NULL, 0);
+        ck_assert_int_eq(ret, 0);
+        ck_assert_int_eq(read_file(output_path, &output_buf, &output_len), 0);
+        ck_assert_uint_eq(output_len, CMD.header_sz + sizeof(image_buf));
+        /* The decoder must recover exactly the signed bytes. */
+        assert_header_bytes(output_buf, HDR_CMDLINE, cmdline, len);
+
+        /* A 255-byte command line cannot fit the 256-byte default header
+         * (signature + TLV on top), so sign auto-grows it to 512. Short
+         * lines stay at the default. 69..71 are the borderline and are not
+         * asserted here. */
+        if (len == 255) {
+            ck_assert_uint_eq(CMD.header_sz, 512);
+        } else if (len <= 3) {
+            ck_assert_uint_eq(CMD.header_sz, 256);
+        }
+
+        free(output_buf);
+        output_buf = NULL;
+        free_custom_tlv_buffers();
+        unlink(output_path);
+    }
+
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 START_TEST(test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header)
 {
     char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
@@ -746,6 +824,173 @@ START_TEST(test_make_header_ex_rejects_signature_tlv_length_overflow)
 }
 END_TEST
 
+/* F-13644: header_required_size() is a hand-maintained shadow of the manifest
+ * layout make_header_ex() writes; the auto-grow block sizes the buffer from
+ * the model, so an under-counted branch makes header_append_tag() exit(1)
+ * after all the hashing/signing. The existing boundary tests only cover
+ * NO_SIGN/no-ts/non-delta. This drives the cross product of the untested
+ * branches (sign, policy, timestamp, delta, dts, hash algo) and asserts the
+ * writer's final content size stays <= the model. CMD.header_sz is set large
+ * to bypass the auto-grow exit(1) so an under-count surfaces as an assertion
+ * failure instead of a process abort. Hybrid is excluded: its secondary
+ * signature is always computed by sign_digest, which needs a real key context
+ * the unit build does not set up. */
+START_TEST(test_header_required_size_covers_all_branches)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char dts_path[PATH_MAX];
+    char sig_path[PATH_MAX];
+    char policy_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x01, 0x02, 0x03, 0x04 };
+    uint8_t dts_buf[40];
+    uint8_t sig_buf[64];
+    uint8_t policy_buf[68];
+    uint8_t pubkey[] = { 0xA5 };
+    static const int sign_opts[] = { NO_SIGN, SIGN_ED25519, SIGN_ECC256,
+        SIGN_RSA2048 };
+    static const int hash_opts[] = { HASH_SHA256, HASH_SHA384, HASH_SHA3 };
+    int s, h, policy, no_ts, is_diff, has_dts;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(dts_path, sizeof(dts_path), "%s/board.dtb", tempdir);
+    snprintf(sig_path, sizeof(sig_path), "%s/sig.bin", tempdir);
+    snprintf(policy_path, sizeof(policy_path), "%s/policy.bin", tempdir);
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    /* Minimal valid FDT: magic 0xd00dfeed, totalsize 40, version 17,
+     * last_comp 17 (dts_hash_file rejects anything else). */
+    memset(dts_buf, 0, sizeof(dts_buf));
+    dts_buf[0] = 0xD0; dts_buf[1] = 0x0D; dts_buf[2] = 0xFE; dts_buf[3] = 0xED;
+    dts_buf[7] = 40;         /* totalsize, big-endian */
+    dts_buf[0x17] = 17;      /* version, big-endian */
+    dts_buf[0x1B] = 17;      /* last_comp_version, big-endian */
+    ck_assert_int_eq(write_file(dts_path, dts_buf, sizeof(dts_buf)), 0);
+    memset(sig_buf, 0x5A, sizeof(sig_buf));
+    ck_assert_int_eq(write_file(sig_path, sig_buf, sizeof(sig_buf)), 0);
+    memset(policy_buf, 0x3C, sizeof(policy_buf));
+    ck_assert_int_eq(write_file(policy_path, policy_buf,
+        sizeof(policy_buf)), 0);
+
+    for (s = 0; s < 4; s++) {
+        for (h = 0; h < 3; h++) {
+            for (policy = 0; policy <= 1; policy++) {
+                for (no_ts = 0; no_ts <= 1; no_ts++) {
+                    for (is_diff = 0; is_diff <= 1; is_diff++) {
+                        for (has_dts = 0; has_dts <= 1; has_dts++) {
+                            uint32_t required;
+                            uint32_t idx;
+                            int ret;
+
+                            reset_cmd_defaults();
+                            CMD.sign = sign_opts[s];
+                            CMD.hash_algo = hash_opts[h];
+                            CMD.no_ts = no_ts;
+                            /* Bypass the auto-grow exit(1): the writer uses
+                             * this fixed size, so a model under-count shows
+                             * up as idx > required, not a process abort. */
+                            CMD.header_sz = 4096;
+                            if (CMD.sign != NO_SIGN) {
+                                CMD.manual_sign = 1;
+                                CMD.signature_file = sig_path;
+                                CMD.signature_sz = 64;
+                            }
+                            if (policy && CMD.sign != NO_SIGN) {
+                                CMD.policy_sign = 1;
+                                CMD.policy_file = policy_path;
+                                CMD.policy_sz = 64;
+                            }
+                            if (has_dts) {
+                                CMD.dts_file = dts_path;
+                            }
+                            /* Delta cases: skip the base-hash TLV (both the
+                             * model and the writer gate it on !no_base_sha),
+                             * so no base image is needed to exercise the
+                             * delta-size branch. */
+                            if (is_diff) {
+                                CMD.no_base_sha = 1;
+                            }
+
+                            /* Model first, on the clean CMD we just set. */
+                            required = header_required_size(is_diff, 0, 0);
+                            reset_mocks(NULL, 0);
+                            ret = make_header_ex(is_diff, pubkey,
+                                sizeof(pubkey), image_path, output_path,
+                                0, 0, 0, 0, NULL, 0, NULL, 0);
+                            ck_assert_int_eq(ret, 0);
+                            idx = test_last_header_idx;
+                            ck_assert_uint_le(idx, required);
+                            unlink(output_path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    unlink(policy_path);
+    unlink(sig_path);
+    unlink(dts_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
+/* F-9754: a custom TLV reusing the device-tree-digest tag (0x35) would
+ * serialize ahead of the --dts digest and shadow it (wolfBoot_find_header
+ * returns the first tag match), so DTB verification would use the operator
+ * value. make_header_ex must reject the collision before serializing. */
+START_TEST(test_make_header_ex_rejects_custom_tlv_shadowing_dts_digest)
+{
+    char tempdir[] = "/tmp/wolfboot-sign-XXXXXX";
+    char image_path[PATH_MAX];
+    char output_path[PATH_MAX];
+    char dts_path[PATH_MAX];
+    uint8_t image_buf[] = { 0x01, 0x02, 0x03, 0x04 };
+    uint8_t dts_buf[40];
+    uint8_t pubkey[] = { 0xA5 };
+    int ret;
+
+    ck_assert_ptr_nonnull(mkdtemp(tempdir));
+
+    snprintf(image_path, sizeof(image_path), "%s/image.bin", tempdir);
+    snprintf(output_path, sizeof(output_path), "%s/output.bin", tempdir);
+    snprintf(dts_path, sizeof(dts_path), "%s/board.dtb", tempdir);
+    ck_assert_int_eq(write_file(image_path, image_buf, sizeof(image_buf)), 0);
+    /* Minimal valid FDT (see test_header_required_size_covers_all_branches). */
+    memset(dts_buf, 0, sizeof(dts_buf));
+    dts_buf[0] = 0xD0; dts_buf[1] = 0x0D; dts_buf[2] = 0xFE; dts_buf[3] = 0xED;
+    dts_buf[7] = 40;
+    dts_buf[0x17] = 17;
+    dts_buf[0x1B] = 17;
+    ck_assert_int_eq(write_file(dts_path, dts_buf, sizeof(dts_buf)), 0);
+
+    reset_cmd_defaults();
+    CMD.header_sz = 256;
+    CMD.dts_file = dts_path;
+    CMD.custom_tlvs = 1;
+    CMD.custom_tlv[0].tag = HDR_DEVICE_TREE_DIGEST;
+    CMD.custom_tlv[0].len = 2;
+    CMD.custom_tlv[0].val = 0xDEAD;
+    CMD.custom_tlv[0].buffer = NULL;
+
+    reset_mocks(NULL, 0);
+    ret = make_header_ex(0, pubkey, sizeof(pubkey), image_path, output_path,
+        0, 0, 0, 0, NULL, 0, NULL, 0);
+
+    ck_assert_int_ne(ret, 0);
+
+    free_custom_tlv_buffers();
+    unlink(output_path);
+    unlink(dts_path);
+    unlink(image_path);
+    rmdir(tempdir);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("sign-encrypted-output");
@@ -754,10 +999,16 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase, test_make_header_ex_fails_when_encrypted_output_open_fails);
     tcase_add_test(tcase, test_make_header_ex_fails_when_image_reopen_fails);
     tcase_add_test(tcase,
+        test_header_required_size_covers_all_branches);
+    tcase_add_test(tcase,
+        test_make_header_ex_rejects_custom_tlv_shadowing_dts_digest);
+    tcase_add_test(tcase,
         test_make_header_ex_grows_header_for_cert_chain_and_digest_tlvs);
     tcase_add_test(tcase, test_header_append_helpers_emit_little_endian_bytes);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_custom_tlvs_via_wolfboot_parser);
+    tcase_add_test(tcase,
+        test_make_header_ex_roundtrip_cmdline_tlv);
     tcase_add_test(tcase,
         test_make_header_ex_roundtrip_finds_tlv_that_exactly_fills_header);
     tcase_add_test(tcase,

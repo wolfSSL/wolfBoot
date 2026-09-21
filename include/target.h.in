@@ -153,6 +153,47 @@
          (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE))
         #error "Update and swap partitions overlap"
     #endif
+
+    /*
+     * The bootloader write-protect region [WOLFBOOT_ORIGIN,
+     * WOLFBOOT_ORIGIN + BOOTLOADER_PARTITION_SIZE) must not overlap any
+     * partition: an undersized value leaves the bootloader tail writable,
+     * an over-sized one write-protects the head of the partition.
+     * WOLFBOOT_ALLOW_PART_OVERLAP disables these checks for targets that
+     * deliberately place a partition inside the region (e.g. cypsoc6,
+     * where hal_flash_protect() is a no-op).
+     */
+    #if !defined(WOLFBOOT_ALLOW_PART_OVERLAP)
+    #if defined(WOLFBOOT_ORIGIN) && \
+        !defined(PART_BOOT_EXT) && \
+        ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) != 0) && \
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_BOOT_ADDRESS + 0 + WOLFBOOT_PARTITION_SIZE + 0)) && \
+        ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+        #error "Boot partition overlaps the bootloader region"
+    #endif
+
+    #if defined(WOLFBOOT_ORIGIN) && \
+        !defined(PART_UPDATE_EXT) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) != 0) && \
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0 + WOLFBOOT_PARTITION_UPDATE_SIZE + 0)) && \
+        ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+        #error "Update partition overlaps the bootloader region"
+    #endif
+
+    #if defined(WOLFBOOT_ORIGIN) && \
+        !defined(PART_SWAP_EXT) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) != 0) && \
+        ((WOLFBOOT_ORIGIN + 0) < \
+         (WOLFBOOT_PARTITION_SWAP_ADDRESS + 0 + WOLFBOOT_SECTOR_SIZE)) && \
+        ((WOLFBOOT_PARTITION_SWAP_ADDRESS + 0) < \
+         (WOLFBOOT_ORIGIN + 0 + BOOTLOADER_PARTITION_SIZE + 0))
+        #error "Swap partition overlaps the bootloader region"
+    #endif
+    #endif /* !WOLFBOOT_ALLOW_PART_OVERLAP */
 #endif
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS

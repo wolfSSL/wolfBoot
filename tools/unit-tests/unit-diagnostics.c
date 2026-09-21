@@ -174,6 +174,64 @@ START_TEST(test_crc_rejection)
 }
 END_TEST
 
+/* F-13635: diag_read_header() has three independent content gates after the
+ * read gate - magic, format_version, and CRC. The pre-existing negative test
+ * corrupts byte 0, which trips the magic and CRC gates at once, so it cannot
+ * isolate a single gate: deleting any one of them would still be caught by
+ * the others. These three tests isolate each gate. Each corrupts one field
+ * and then recomputes the header CRC over the 12-byte header, so the CRC gate
+ * stays satisfied and only the corrupted field's gate can reject. With that
+ * gate deleted the header would be accepted and the count would stay at 1. */
+START_TEST(test_diag_header_gate_magic)
+{
+    struct wolfBoot_diag_header *hdr;
+
+    diag_mmap("/tmp/wolfboot-unit-diag-gate-magic.bin");
+    ck_assert_int_eq(wolfBoot_clear_failures(), 0);
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 1);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 1);
+
+    hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
+    hdr->magic = 0xDEADBEEFUL;
+    hdr->crc = diag_crc32(hdr, 12);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
+}
+END_TEST
+
+START_TEST(test_diag_header_gate_version)
+{
+    struct wolfBoot_diag_header *hdr;
+
+    diag_mmap("/tmp/wolfboot-unit-diag-gate-version.bin");
+    ck_assert_int_eq(wolfBoot_clear_failures(), 0);
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 1);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 1);
+
+    hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
+    hdr->format_version = 99U;
+    hdr->crc = diag_crc32(hdr, 12);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
+}
+END_TEST
+
+START_TEST(test_diag_header_gate_crc)
+{
+    struct wolfBoot_diag_header *hdr;
+
+    diag_mmap("/tmp/wolfboot-unit-diag-gate-crc.bin");
+    ck_assert_int_eq(wolfBoot_clear_failures(), 0);
+    record_one(WOLFBOOT_FAILURE_PHASE_UPDATE,
+            WOLFBOOT_FAILURE_CAUSE_HASH, PART_UPDATE, 1);
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 1);
+
+    hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
+    hdr->crc = diag_crc32(hdr, 12) + 1U;
+    ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
+}
+END_TEST
+
 START_TEST(test_clear)
 {
     struct wolfBoot_failure_record rec;
@@ -257,6 +315,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(diag, test_record_and_read_newest_first);
     tcase_add_test(diag, test_ring_wrap_and_ordering);
     tcase_add_test(diag, test_crc_rejection);
+    tcase_add_test(diag, test_diag_header_gate_magic);
+    tcase_add_test(diag, test_diag_header_gate_version);
+    tcase_add_test(diag, test_diag_header_gate_crc);
     tcase_add_test(diag, test_clear);
     tcase_add_test(diag, test_torn_write_recovery);
     suite_add_tcase(s, diag);

@@ -1486,6 +1486,11 @@ static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
     return ret;
 }
 
+/* Test hook: the content header_idx from the last successful make_header_ex()
+ * (recorded before the 0xFF padding), so unit tests can compare the writer
+ * against header_required_size() without the auto-grow exit(1) path. */
+static uint32_t test_last_header_idx;
+
 static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
     uint32_t secondary_key_sz)
 {
@@ -1766,6 +1771,21 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     /* Add custom TLVs */
     if (CMD.custom_tlvs > 0) {
         uint32_t i;
+        /* A custom TLV reusing a built-in tag is serialized before the
+         * generated TLV and shadows it: wolfBoot_find_header() walks from the
+         * start and returns the first match. The device-tree digest (0x35) is
+         * the reserved tag reachable from --custom-tlv (tags >= 0x30); a
+         * custom 0x35 ahead of the --dts digest would make DTB verification
+         * use the operator-supplied value. Reject the collision. */
+        for (i = 0; i < CMD.custom_tlvs; i++) {
+            if (CMD.dts_file != NULL &&
+                CMD.custom_tlv[i].tag == HDR_DEVICE_TREE_DIGEST) {
+                fprintf(stderr,
+                    "Error: custom TLV tag 0x%04x is reserved for --dts\n",
+                    (unsigned)HDR_DEVICE_TREE_DIGEST);
+                goto failure;
+            }
+        }
         for (i = 0; i < CMD.custom_tlvs; i++) {
             /* require 8-byte alignment */
             /* The offset '4' takes into account 2B Tag + 2B Len, so that the
@@ -2315,6 +2335,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 CMD.policy_sz + (uint16_t)sizeof(uint32_t), policy);
         }
     } /* end if(sign != NO_SIGN) */
+
+    test_last_header_idx = header_idx;
 
     /* Add padded header at end */
     while (header_idx < CMD.header_sz) {

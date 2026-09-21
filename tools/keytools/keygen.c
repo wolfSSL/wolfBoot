@@ -221,7 +221,7 @@ const char Keystore_API[] =
     "    return (uint8_t*)RENESAS_RSIP_INSTALLEDKEY_RAM_ADDR;\n"
     "#else\n"
 #endif
-    "    if (id >= keystore_num_pubkeys())\n"
+    "    if (id < 0 || id >= keystore_num_pubkeys())\n"
     "        return (uint8_t *)0;\n"
     "    return (uint8_t *)PubKeys[id].pubkey;\n"
 #ifdef RENESAS_KEY
@@ -241,7 +241,7 @@ const char Keystore_API[] =
     "    return (int)sizeof(rsa_public_t);\n"
     "#else\n"
 #endif
-    "    if (id >= keystore_num_pubkeys())\n"
+    "    if (id < 0 || id >= keystore_num_pubkeys())\n"
     "        return -1;\n"
     "    return (int)PubKeys[id].pubkey_size;\n"
 #ifdef RENESAS_KEY
@@ -251,13 +251,15 @@ const char Keystore_API[] =
     "\n"
     "uint32_t keystore_get_mask(int id)\n"
     "{\n"
-    "    if (id >= keystore_num_pubkeys())\n"
+    "    if (id < 0 || id >= keystore_num_pubkeys())\n"
     "        return 0;\n"
     "    return PubKeys[id].part_id_mask;\n"
     "}\n"
     "\n"
     "uint32_t keystore_get_key_type(int id)\n"
     "{\n"
+    "    if (id < 0 || id >= keystore_num_pubkeys())\n"
+    "        return (uint32_t)-1;\n"
     "    return PubKeys[id].key_type;\n"
     "}\n"
     "\n"

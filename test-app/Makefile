@@ -44,6 +44,11 @@ ifeq ($(TZEN),1)
   CFLAGS:=-I./wcs $(CFLAGS)
 endif
 CFLAGS+=-I. -I..
+# Same opt-out as the bootloader build: target.h is shared, so the
+# partition-vs-bootloader-region guards must be suppressed here too.
+ifeq ($(WOLFBOOT_ALLOW_PART_OVERLAP),1)
+  CFLAGS+=-DWOLFBOOT_ALLOW_PART_OVERLAP=1
+endif
 DEBUG?=1
 DELTA_DATA_SIZE?=2000
 USE_CLANG?=0
@@ -117,6 +122,12 @@ else
     APP_OBJS:=app_wolfhal.o led.o system.o timer.o ../test-app/libwolfboot.o
   else
     APP_OBJS:=app_$(TARGET).o led.o system.o timer.o ../test-app/libwolfboot.o
+  endif
+  # nRF5340 debug-UART CRLF conversion (host-testable, no nrfx registers)
+  ifneq ($(filter nrf5340%, $(TARGET)),)
+    ifeq ($(DEBUG_UART),1)
+      APP_OBJS+=../hal/nrf5340_uart.o
+    endif
   endif
 endif
 
