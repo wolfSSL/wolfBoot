@@ -27,9 +27,6 @@
 #include "fsl_common.h"
 #include "fsl_clock.h"
 #include "fsl_xspi.h"
-#ifdef TZEN
-#include "armv8m_tz.h"
-#endif
 
 /* The BootROM configures the compute-domain clocks and the XSPI0 XIP window
  * from the flash config block before handing control to this image. The XSPI
@@ -566,16 +563,6 @@ static void xspi_flash_selftest(void)
     wolfBoot_printf("xspi selftest %s (ret %d, mismatch %d, clk %u)\n",
         (ST(7) == 0x40AAu) ? "PASS" : "FAIL", ret, bad,
         (unsigned)deviceConfig.xspiRootClk);
-}
-#endif
-
-#ifdef TZEN
-/* Hand off fully Secure: no Non-secure regions here, the secure application
- * carves out the Non-secure world for its own guests. */
-static void hal_sau_init(void)
-{
-    SAU_CTRL = SAU_INIT_CTRL_ENABLE;
-    SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
 }
 #endif
 
