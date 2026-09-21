@@ -447,14 +447,8 @@ void hal_init(void)
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_HWPUF_PROVISION)
     if (hwpuf_provision_set(0) != 0) {
-# ifdef DEBUG_UART
-        uart_write("hwpuf provision failure (already provisioned?)\n", 47);
-# endif
     }
     else {
-# ifdef DEBUG_UART
-        uart_write("hwpuf provision success\n", 24);
-# endif
     }
 #endif
 }
