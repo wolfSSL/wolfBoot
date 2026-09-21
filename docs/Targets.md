@@ -24,6 +24,7 @@ This README describes configuration of supported targets.
 * [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP iMX-RT](#nxp-imx-rt)
+* [NXP i.MX RT700](#nxp-imx-rt700)
 * [NXP Kinetis](#nxp-kinetis)
 * [NXP Kinetis KL26Z](#nxp-kinetis-kl26z)
 * [NXP LPC546xx](#nxp-lpc546xx)
@@ -5844,6 +5845,83 @@ b main
 c
 ```
 
+
+## NXP i.MX RT700
+
+The NXP i.MX RT700 (MIMXRT798S) is a crossover MCU built around a Cortex-M33
+(Armv8-M with TrustZone-M) application core. Unlike the Cortex-M7 i.MX RT10xx
+family above, wolfBoot runs on the RT700 as a TrustZone-aware first-stage loader
+and boots execute-in-place from the external octal SPI NOR (MX25UM51345G, 64 MB)
+on XSPI0. It is validated on the MIMXRT700-EVK.
+
+### Building wolfBoot
+
+The MCUXpresso SDK supplies the XSPI, clock, and reset drivers wolfBoot links
+against. Obtain it either from the [MCUXpresso SDK Builder](https://mcuxpresso.nxp.com/en/welcome)
+for `MIMXRT798S`, or from the west manifests using the `mimxrt700evk` board:
+
+* https://github.com/nxp-mcuxpresso/mcuxsdk-manifests
+* https://github.com/nxp-mcuxpresso/CMSIS_5
+
+Point the wolfBoot `MCUXPRESSO`, `MCUXPRESSO_DRIVERS`, and `MCUXPRESSO_CMSIS`
+variables at the extracted SDK (see `config/examples/imx-rt700.config`), then run
+`make`. Use `MCUXSDK=1` with the west layout, since the pack paths differ.
+
+Three example configurations are provided:
+
+* `config/examples/imx-rt700.config` — ECC256, TrustZone disabled. The plain
+  first-stage loader.
+* `config/examples/imx-rt700-tz.config` — TrustZone enabled with the secure
+  application handoff (see below).
+* `config/examples/imx-rt700-mldsa.config` — ML-DSA (Dilithium) level 5
+  signatures for a CNSA 2.0 / post-quantum boot chain.
+
+### Flash memory map
+
+XSPI0 external NOR is mapped at `0x28000000` (Non-secure) and aliased at
+`0x38000000` (Secure). The default layout:
+
+| Region | Address | Size |
+| --- | --- | --- |
+| Flash config block (FCB) | 0x28000000 | 16 KB |
+| wolfBoot | 0x28004000 | 240 KB |
+| Boot partition | 0x28040000 | 256 KB |
+| Update partition | 0x28180000 | 256 KB |
+| Swap | 0x281C0000 | 4 KB |
+
+The sector size is 4 KB. With `RAM_CODE=1` the flash routines run from RAM so the
+XSPI can be reconfigured for erase and program while execution continues from
+internal SRAM.
+
+### TrustZone secure application handoff
+
+`imx-rt700-tz.config` builds wolfBoot for Secure state (`TZEN=1`) and enables the
+generic secure application handoff (`WOLFBOOT_SECURE_APP=1`). wolfBoot
+authenticates and measures the boot image, writes a measured-boot record to
+`WOLFBOOT_SECURE_HANDOFF_ADDRESS` (`0x30180000`, in secure SRAM), then jumps to
+the image while staying in Secure state. A Secure runtime such as wolfTrust
+consumes the record. In this configuration the boot, update, and swap partitions
+are addressed through the Secure alias (`0x38040000`, `0x38180000`, `0x381C0000`).
+
+Before handoff wolfBoot programs and locks the XSPI Secure Flash Protection
+(FRAD/MDAD) descriptors so the wolfBoot region is read-only to the application,
+and refuses to continue if that protection cannot be verified.
+
+### Flashing the EVK
+
+Build wolfBoot and the signed application, wrap wolfBoot as a bootable image with
+the FCB using NXP's `nxpimage` tool, then program the external flash over SWD:
+
+```sh
+# Program the bootable wolfBoot image (FCB + MBI) at the base of XSPI0
+pyocd flash -t mimxrt798sgfob -a 0x28000000 -e sector wolfboot_bootable.bin
+
+# Program the signed application at the boot partition
+pyocd flash -t mimxrt798sgfob -a 0x28040000 signed_app.bin
+```
+
+Reset the board to boot. When built with `DEBUG_UART=1`, wolfBoot prints its
+banner and verification progress on LPUART0 (the MCU-Link virtual COM port).
 
 ## NXP Kinetis
 
