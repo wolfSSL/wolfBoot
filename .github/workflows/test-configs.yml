@@ -111,7 +111,6 @@ jobs:
       arch: arm
       config-file: ./config/examples/imx-rt700.config
       board-name: mimxrt700evk
-      make-args: wolfboot.bin
 
   imx_rt700_tz_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
@@ -119,7 +118,6 @@ jobs:
       arch: arm
       config-file: ./config/examples/imx-rt700-tz.config
       board-name: mimxrt700evk
-      make-args: wolfboot.bin
 
   imx_rt700_mldsa_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
@@ -127,7 +125,6 @@ jobs:
       arch: arm
       config-file: ./config/examples/imx-rt700-mldsa.config
       board-name: mimxrt700evk
-      make-args: wolfboot.bin
 
   kinetis_k64f_test:
     uses: ./.github/workflows/test-build-mcux-sdk.yml
