@@ -1086,6 +1086,27 @@ ifeq ($(TARGET),nxp_lpc54s0xx)
     LDFLAGS+=-Wl,--no-warn-rwx-segments
 endif
 
+ifeq ($(TARGET),imx_rt7xx)
+  # XIP test app: linker template at the boot partition, shared startup_arm.o
+  # (ARCH=ARM) supplies the vector table, and the HAL the app links pulls in the
+  # same MCUXpresso XSPI/clock drivers as the bootloader.
+  LSCRIPT_TEMPLATE=ARM-imx_rt7xx.ld
+  LDFLAGS+=-Wl,--no-warn-rwx-segments
+  APP_OBJS+=\
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+    $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
+  ifeq ($(MCUXSDK),1)
+    APP_OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_power.o \
+      $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
+      $(MCUXPRESSO)/drivers/xspi/fsl_xspi.o
+  else
+    APP_OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_common_arm.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_xspi.o
+  endif
+endif
+
 ifeq ($(TARGET),imx_rt)
   LDFLAGS+=\
     -mcpu=cortex-m7 -Wall --specs=nosys.specs -fno-common -ffunction-sections -fdata-sections \
