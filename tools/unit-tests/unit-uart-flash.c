@@ -69,12 +69,45 @@ START_TEST(test_ext_flash_read_timeout_returns_error)
 }
 END_TEST
 
+START_TEST(test_ext_flash_erase_success)
+{
+    uint8_t script[11];
+    int ret;
+
+    /* 10 command ACKs + the erase-completion ACK */
+    memset(script, CMD_ACK, sizeof(script));
+    reset_uart_script(script, sizeof(script));
+
+    ret = ext_flash_erase(0x1000, 0x1000);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(rx_script_pos, 11);
+}
+END_TEST
+
+START_TEST(test_ext_flash_erase_timeout_returns_error)
+{
+    uint8_t script[10];
+    int ret;
+
+    /* Command ACKs only: the erase-completion ACK never arrives */
+    memset(script, CMD_ACK, sizeof(script));
+    reset_uart_script(script, sizeof(script));
+
+    ret = ext_flash_erase(0x1000, 0x1000);
+
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
     TCase *uart_flash = tcase_create("UART flash");
 
     tcase_add_test(uart_flash, test_ext_flash_read_timeout_returns_error);
+    tcase_add_test(uart_flash, test_ext_flash_erase_success);
+    tcase_add_test(uart_flash, test_ext_flash_erase_timeout_returns_error);
     tcase_set_timeout(uart_flash, 20);
     suite_add_tcase(s, uart_flash);
 

@@ -47,15 +47,20 @@
 int uart_tx(const uint8_t c);
 int uart_rx(uint8_t *c);
 
-static int wait_ack(void)
+static int wait_ack_cycles(int cycles)
 {
+    uint8_t c;
     volatile int count = 0;
-    while(++count < WAIT_CYCLES) {
-        uint8_t c;
+    while(++count < cycles) {
         if ((uart_rx(&c) == 1) && (c == CMD_ACK))
             return 0;
     }
     return -1;
+}
+
+static int wait_ack(void)
+{
+    return wait_ack_cycles(WAIT_CYCLES);
 }
 
 static int uart_rx_timeout(uint8_t *c)
@@ -144,7 +149,7 @@ int  ext_flash_erase(uintptr_t address, int len)
             return -1;
     }
     /* Wait for extra ack at the end of Erase */
-    if (wait_ack() == 0)
+    if (wait_ack_cycles(WAIT_CYCLES * ERASE_TIMEOUT) == 0)
         return 0;
     return -1;
 }
