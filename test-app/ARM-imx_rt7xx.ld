@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx) : ORIGIN = 0x20080000, LENGTH = 128K
+    RAM (rwx)  : ORIGIN = 0x20080000, LENGTH = 256K
 }
 
 SECTIONS
@@ -10,10 +10,13 @@ SECTIONS
     {
         _start_text = .;
         KEEP(*(.isr_vector))
-        *(.init)
-        *(.fini)
-        *(.text*)
-        KEEP(*(.rodata*))
+        . = ALIGN(0x8);
+        /* XIP: keep the flash-mutating code out of the NOR it programs, so
+         * only non-flash code and constants stay in FLASH. */
+        *(EXCLUDE_FILE(*fsl_*.o) .text*)
+        *(EXCLUDE_FILE(*fsl_*.o) .rodata*)
+        *(.init*)
+        *(.fini*)
         . = ALIGN(4);
         _end_text = .;
     } > FLASH
@@ -30,9 +33,11 @@ SECTIONS
     .data : AT (_stored_data)
     {
         _start_data = .;
-        KEEP(*(.data*))
+        KEEP(*(.ramcode*))
+        *(.ramfunc*)
+        *fsl_*.o(.text* .rodata*)
         . = ALIGN(4);
-        KEEP(*(.ramcode))
+        KEEP(*(.data*))
         . = ALIGN(4);
         _end_data = .;
     } > RAM
