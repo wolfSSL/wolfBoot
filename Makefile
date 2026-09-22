@@ -383,6 +383,16 @@ ifeq ($(TARGET),m2354)
 	# Secure and non-secure views are 256MB apart in the address map
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
+
+ifeq ($(TARGET),imx_rt7xx)
+	# Secure and non-secure XSPI0 views are 256MB apart in the address map,
+	# and the secure-app payload is a Secure runtime rather than a test app.
+    ifeq ($(WOLFBOOT_SECURE_APP),1)
+        MAIN_TARGET:=wolfboot.bin
+    else
+        MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    endif
+endif
 endif # TZEN=1
 
 ifeq ($(TARGET),pic32cz)
