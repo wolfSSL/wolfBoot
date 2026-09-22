@@ -1092,6 +1092,10 @@ ifeq ($(TARGET),imx_rt7xx)
   # same MCUXpresso XSPI/clock drivers as the bootloader.
   LSCRIPT_TEMPLATE=ARM-imx_rt7xx.ld
   LDFLAGS+=-Wl,--no-warn-rwx-segments
+  # The flash path runs from the same NOR it programs, so RAMFUNCTION must be
+  # active in the HAL and libwolfboot objects the app links.
+  ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   APP_OBJS+=\
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o
