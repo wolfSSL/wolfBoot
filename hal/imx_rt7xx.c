@@ -29,6 +29,13 @@
 #include "fsl_clock.h"
 #include "fsl_xspi.h"
 
+/* This target's TrustZone support is the secure application handoff; classic
+ * TrustZone (TZEN without a secure app) is not implemented here, and the shared
+ * hal_sau_init() weak default only exists for WOLFBOOT_SECURE_APP. */
+#if defined(TZEN) && !defined(WOLFBOOT_SECURE_APP)
+#error "i.MX RT700 TrustZone builds require WOLFBOOT_SECURE_APP (see config/examples/imx-rt700-tz.config)"
+#endif
+
 /* The BootROM configures the compute-domain clocks and the XSPI0 XIP window
  * from the flash config block before handing control to this image. The XSPI
  * controller is re-initialized here with the NXP SDK driver so the IP command
