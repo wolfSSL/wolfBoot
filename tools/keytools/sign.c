@@ -2973,6 +2973,7 @@ uint64_t arg2num(const char *arg, size_t len)
             break;
         case 4:
             ret &= 0xFFFFFFFF;
+            break;
         case 8:
             break;
         default:
