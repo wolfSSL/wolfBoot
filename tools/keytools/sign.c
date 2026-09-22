@@ -4013,7 +4013,7 @@ int main(int argc, char** argv)
     }
     if (CMD.delta) {
         printf("Delta Base file:      %s\n", CMD.delta_base_file);
-        snprintf(CMD.output_diff_file, sizeof(CMD.output_image_file),
+        snprintf(CMD.output_diff_file, sizeof(CMD.output_diff_file),
                 "%s_v%s_signed_diff.bin",
                 (char*)buf, CMD.fw_version);
         snprintf(CMD.output_encrypted_image_file,
