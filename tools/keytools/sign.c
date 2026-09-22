@@ -1968,7 +1968,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 32)
                     read_sz = 32;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
@@ -2045,7 +2045,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 32)
                     read_sz = 32;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
@@ -2120,7 +2120,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 128)
                     read_sz = 128;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
