@@ -25,7 +25,7 @@ Design based on [RFC 9019](https://datatracker.ietf.org/doc/rfc9019/) - A Firmwa
 
 This repository contains the following components:
    - the wolfBoot bootloader
-   - key generator and image signing tools (requires python 3.x and wolfcrypt-py https://github.com/wolfSSL/wolfcrypt-py)
+   - key generator and image signing tools
    - Baremetal test applications
 
 ### wolfBoot bootloader
@@ -63,17 +63,17 @@ Additional examples available on our GitHub wolfBoot-examples repository [here](
 The following steps are automated in the default `Makefile` target, using the baremetal test
 application as an example to create the factory image. By running `make`, the build system will:
 
-   - Create a Ed25519 Key-pair using the `ed25519_keygen` tool
+   - Create a Ed25519 Key-pair using the `keygen` tool
    - Compile the bootloader. The public key generated in the step above is included in the build
    - Compile the firmware image from the test application in [test\_app](test-app/)
    - Re-link the firmware to change the entry-point to the start address of the primary partition
-   - Sign the firmware image using the `ed25519_sign` tool
+   - Sign the firmware image using the `sign` tool
    - Create a factory image by concatenating the bootloader and the firmware image
 
 The factory image can be flashed to the target device. It contains the bootloader and the signed initial
 firmware at the specified address on the flash.
 
-The `sign.py` tool transforms a bootable firmware image to comply with the firmware image format required by the bootloader.
+The `sign` tool transforms a bootable firmware image to comply with the firmware image format required by the bootloader.
 
 For detailed information about the firmware image format, see [Firmware image](docs/firmware_image.md)
 
@@ -82,7 +82,7 @@ For detailed information about the configuration options for the target system, 
 ### Upgrading the firmware
 
    - Compile the new firmware image, and link it so that its entry point is at the start address of the primary partition
-   - Sign the firmware using the `sign.py` tool and the private key generated for the factory image
+   - Sign the firmware using the `sign` tool and the private key generated for the factory image
    - Transfer the image using a secure connection, and store it to the secondary firmware slot
    - Trigger the image swap using libwolfboot `wolfBoot_update_trigger()` function. See [wolfBoot library API](docs/API.md) for a description of the operation
    - Reboot to let the bootloader begin the image swap
@@ -171,45 +171,13 @@ guidance and worked SBOM examples, see the
 
 ## Troubleshooting
 
-1. Python errors when signing a key:
-
-```
-Traceback (most recent call last):
-  File "tools/keytools/keygen.py", line 135, in <module>
-    rsa = ciphers.RsaPrivate.make_key(2048)
-AttributeError: type object 'RsaPrivate' has no attribute 'make_key'
-```
-
-```
-Traceback (most recent call last):
-  File "tools/keytools/sign.py", line 189, in <module>
-    r, s = ecc.sign_raw(digest)
-AttributeError: 'EccPrivate' object has no attribute 'sign_raw'
-```
-
-You need to install the latest wolfcrypt-py here: https://github.com/wolfSSL/wolfcrypt-py
-
-Use `pip3 install wolfcrypt`.
-
-Or to install based on a local wolfSSL installation use:
-
-```sh
-cd wolfssl
-./configure --enable-keygen --enable-rsa --enable-ecc --enable-ed25519 --enable-des3 CFLAGS="-DFP_MAX_BITS=8192 -DWOLFSSL_PUBLIC_MP"
-make
-sudo make install
-
-cd wolfcrypt-py
-USE_LOCAL_WOLFSSL=/usr/local pip3 install .
-```
-
-2. Key algorithm mismatch:
+1. Key algorithm mismatch:
 
 The error `Key algorithm mismatch. Remove old keys via 'make keysclean'` indicates the current `.config` `SIGN` algorithm does not match what is in the generated `src/keystore.c` file.
 Use `make keysclean` to delete keys and regenerate.
 
 
-3.  Cannot open compiler generated file ... Permission denied
+2.  Cannot open compiler generated file ... Permission denied
 
 This may occur due to multiple environments being opened concurrently, or anti-virus software.
 Try manually deleting the respective build directories and/or restarting your IDE.
