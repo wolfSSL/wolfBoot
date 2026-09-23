@@ -4134,5 +4134,11 @@ cleanup:
     if (CMD.hybrid) {
         free_key(CMD.secondary_sign, 1);
     }
+    /* Defence in depth: scrub the decoded key objects regardless of the
+     * algorithm dispatch above, so no key residue survives. */
+    wc_ForceZero(&key, sizeof(key));
+    if (CMD.hybrid) {
+        wc_ForceZero(&key2, sizeof(key2));
+    }
     return ret;
 }
