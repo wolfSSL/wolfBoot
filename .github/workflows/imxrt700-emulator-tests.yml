@@ -50,16 +50,20 @@ jobs:
           sed -i '/se_hostlib\|emwin/d' manifests/boards/mimxrt700evk.yml
           west update_board --set board mimxrt700evk
 
-      - name: Configure ${{ matrix.config }}
+      - name: Use the MCUXpresso SDK for the wolfBoot build
+        run: |
+          echo "MCUXSDK=1" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO=$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO_CMSIS=$GITHUB_WORKSPACE/CMSIS_5/CMSIS" >> "$GITHUB_ENV"
+
+      - name: Configure ${{ matrix.config }} and build wolfboot
         run: |
           cp config/examples/${{ matrix.config }}.config .config
+          make wolfboot.bin
 
       - name: Run emu test (${{ matrix.config }})
         working-directory: test-app/emu-test-apps
         run: |
-          export MCUXSDK=1
-          export MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk"
-          export MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS"
           BOOT_TIMEOUT=30 UPDATE_TIMEOUT=60 REBOOT_TIMEOUT=30 ./test.sh
 
       - name: Upload emulator logs on failure
