@@ -14,6 +14,7 @@ static const uint8_t CMD_ACK = 0x06;
 static uint8_t rx_script[16];
 static int rx_script_len;
 static int rx_script_pos;
+static int rx_delay[16];
 static uint8_t tx_log[32];
 static int tx_log_len;
 
@@ -34,6 +35,12 @@ int uart_rx(uint8_t *c)
     if (rx_script_pos >= rx_script_len)
         return 0;
 
+    /* Empty polls before this script byte is delivered */
+    if (rx_delay[rx_script_pos] > 0) {
+        rx_delay[rx_script_pos]--;
+        return 0;
+    }
+
     *c = rx_script[rx_script_pos++];
     return 1;
 }
@@ -47,6 +54,7 @@ static void reset_uart_script(const uint8_t *script, int len)
     memcpy(rx_script, script, len);
     rx_script_len = len;
     rx_script_pos = 0;
+    memset(rx_delay, 0, sizeof(rx_delay));
     memset(tx_log, 0, sizeof(tx_log));
     tx_log_len = 0;
 }
@@ -85,6 +93,25 @@ START_TEST(test_ext_flash_erase_success)
 }
 END_TEST
 
+START_TEST(test_ext_flash_erase_ack_late_budget)
+{
+    uint8_t script[11];
+    int ret;
+
+    /* 10 command ACKs + the erase-completion ACK, which arrives only
+     * after more than WAIT_CYCLES empty polls: the pre-PR short budget
+     * would time out here, the extended one must not. */
+    memset(script, CMD_ACK, sizeof(script));
+    reset_uart_script(script, sizeof(script));
+    rx_delay[10] = WAIT_CYCLES + 1;
+
+    ret = ext_flash_erase(0x1000, 0x1000);
+
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(rx_script_pos, 11);
+}
+END_TEST
+
 START_TEST(test_ext_flash_erase_timeout_returns_error)
 {
     uint8_t script[10];
@@ -107,6 +134,7 @@ Suite *wolfboot_suite(void)
 
     tcase_add_test(uart_flash, test_ext_flash_read_timeout_returns_error);
     tcase_add_test(uart_flash, test_ext_flash_erase_success);
+    tcase_add_test(uart_flash, test_ext_flash_erase_ack_late_budget);
     tcase_add_test(uart_flash, test_ext_flash_erase_timeout_returns_error);
     tcase_set_timeout(uart_flash, 20);
     suite_add_tcase(s, uart_flash);
