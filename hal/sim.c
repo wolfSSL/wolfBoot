@@ -539,6 +539,10 @@ void hal_init(void)
 
     for (i = 1; i < main_argc; i++) {
         if (strcmp(main_argv[i], "powerfail") == 0) {
+            if ((i + 1) >= main_argc) {
+                wolfBoot_printf( "powerfail requires a hex address argument\n");
+                exit(-1);
+            }
             erasefail_address = strtol(main_argv[++i], NULL,  16);
             wolfBoot_printf( "Set power fail to erase at address %x\n",
                 erasefail_address);
