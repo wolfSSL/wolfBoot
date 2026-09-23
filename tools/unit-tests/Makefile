@@ -116,6 +116,7 @@ TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
+TESTS+=unit-ct-compare
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -1172,6 +1173,17 @@ zynq_erase_extract.h: ../../hal/zynq.c
 
 unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
+
+# unit-ct-compare runs the WOLFBOOT_ARMORED image_CT_compare() self-check
+# at the 32-bit witness wrap boundary (len >= 65536). image.c drags in
+# the full image dependency tree, so the ARMORED function (the first
+# definition in the file) is extracted verbatim.
+ct_compare_extract.h: ../../src/image.c
+	sed -n '/^int NOINLINEFUNCTION image_CT_compare(/,/^}/p' $< \
+	    | sed -n '1,/^}/p' > $@
+
+unit-ct-compare: unit-ct-compare.c ct_compare_extract.h
+	gcc -o $@ unit-ct-compare.c $(CFLAGS) $(LDFLAGS)
 
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the

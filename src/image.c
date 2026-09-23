@@ -87,7 +87,9 @@ int NOINLINEFUNCTION image_CT_compare(
         budget--;
     }
 
-    expected_witness = (len * (len + 1U)) / 2U;   /* sum(1..len) */
+    /* 64-bit product: the triangular number overflows 32 bits at
+     * len >= 65536, which would poison the self-check below. */
+    expected_witness = (uint32_t)(((uint64_t)len * ((uint64_t)len + 1U)) / 2U);
     len_is_zero = 1U ^ ((len | (0U - len)) >> 31);
 
     /* Folded twice, branch-free. */
