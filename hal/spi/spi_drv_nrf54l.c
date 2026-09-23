@@ -96,8 +96,14 @@ void RAMFUNCTION spi_write(const char byte)
         ;
     SPI_EVENTS_STOPPED = 0;
 
-    if (SPI_EVENTS_DMA_RX_BUSERROR == 0 && SPI_EVENTS_DMA_TX_BUSERROR == 0)
+    if (SPI_EVENTS_DMA_RX_BUSERROR == 0 && SPI_EVENTS_DMA_TX_BUSERROR == 0) {
         spi_rx_ready = 1;
+    } else {
+        /* DMA bus error: force a defined byte and unblock the caller, or
+         * spi_read() would spin forever on spi_rx_ready == 0. */
+        spi_rx_byte = 0xFF;
+        spi_rx_ready = 1;
+    }
 }
 
 
