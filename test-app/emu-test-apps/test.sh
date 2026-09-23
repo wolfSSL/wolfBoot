@@ -66,6 +66,7 @@ get_m33mu_target() {
     nrf5340) echo "nrf5340" ;;
     mcxw|mcxw71) echo "mcxw71c" ;;
     m2354) echo "m2354" ;;
+    imx_rt7xx) echo "imxrt700" ;;
     *) echo "" ;;
   esac
 }
@@ -77,6 +78,7 @@ case "$TARGET" in
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
+  imx_rt7xx) EMU_DIR=imxrt700; UART_BASE=40110000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -111,8 +113,19 @@ TZEN="$(cfg_get TZEN)"
 # M2354 is excluded: its flash starts at 0 and the high partition addresses are
 # the non-secure alias, not a different flash base.
 if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
-  if [[ "$TARGET" != "m2354" ]] && (( BOOT_ADDR >= 0x08000000 )); then
+  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" ]] && (( BOOT_ADDR >= 0x08000000 )); then
     ARCH_OFFSET=0x08000000
+  fi
+fi
+
+# i.MX RT700 executes in place from the XSPI0 NOR. The boot/update/swap
+# addresses are the NOR base alias (0x28000000 non-secure, 0x38000000
+# secure); the flash image offsets are taken from that base.
+if [[ "$TARGET" == "imx_rt7xx" ]]; then
+  if [[ "${TZEN}" == "1" ]]; then
+    ARCH_OFFSET=0x38000000
+  else
+    ARCH_OFFSET=0x28000000
   fi
 fi
 
@@ -214,12 +227,14 @@ write_target_ld() {
     nrf5340) base="ARM-nrf5340" ;;
     mcxw|mcxw71) base="ARM-mcxw" ;;
     m2354) base="ARM-m2354" ;;
+    imx_rt7xx) base="ARM-imx_rt7xx" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
   emu_tpl="$EMU_PATH/target.ld.in"
   if [[ -f "$emu_tpl" ]]; then
     sed -e "s/@FLASH_ORIGIN@/0x$(printf '%x' "$addr")/g" \
+        -e "s/@FLASH_SIZE@/0x$(printf '%x' "$size")/g" \
         "$emu_tpl" > "$EMU_PATH/target.ld"
     return 0
   fi
@@ -470,8 +485,15 @@ run_update_scenario() {
   fi
 }
 
+WB_MAKE_ARGS=()
+# m33mu has no RT700 boot ROM or FCB: it takes the reset vector from the
+# start of the NOR, so wolfBoot links there instead of 0x28004000, and the
+# bootloader region is rounded to the 64 KB XSPI protection granule.
+if [[ "$TARGET" == "imx_rt7xx" ]]; then
+  WB_MAKE_ARGS+=(ARCH_FLASH_OFFSET=0x28000000 BOOTLOADER_PARTITION_SIZE=0x40000)
+fi
 log "Rebuilding wolfboot.bin (TZEN=${TZEN:-0})"
-make -C "$WOLFBOOT_ROOT" clean wolfboot.bin
+make -C "$WOLFBOOT_ROOT" "${WB_MAKE_ARGS[@]}" clean wolfboot.bin
 
 log "Building emu-test-apps images"
 write_target_ld

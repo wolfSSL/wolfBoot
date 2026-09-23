@@ -93,6 +93,109 @@ void hal_prepare_boot(void)
 {
 }
 
+#if defined(EMU_IMXRT700)
+/* XSPI0 target-group 0 IP commands, secure alias. The NOR is read-only through
+ * the XIP window, so program and erase run as IP commands on LUT sequences the
+ * app installs itself. The RT700 test app runs in the secure world in both
+ * configurations, so it drives XSPI0 directly. */
+#define XSPI0_BASE          0x50184000u
+#define XSPI0_TBDR          (*(volatile uint32_t *)(XSPI0_BASE + 0x154u))
+#define XSPI0_LUT(n)        (*(volatile uint32_t *)(XSPI0_BASE + 0x310u + 4u * (n)))
+#define XSPI0_SFP_TG_IPCR   (*(volatile uint32_t *)(XSPI0_BASE + 0x958u))
+#define XSPI0_SFP_TG_SFAR   (*(volatile uint32_t *)(XSPI0_BASE + 0x95Cu))
+/* IP commands take the NOR address in the non-secure numbering the wolfBoot
+ * HAL uses (and its flash protection windows match), whichever alias the
+ * partitions are configured at. */
+#define XSPI0_NOR_BASE_NS   0x28000000u
+#define XSPI0_NOR_WINDOW    0x07FFFFFFu
+#define XSPI_LUT_WORDS      5u
+#define XSPI_LUT_CMD_SDR    0x01u
+#define XSPI_LUT_RADDR_SDR  0x02u
+#define XSPI_LUT_WRITE_SDR  0x08u
+#define XSPI_LUT(instr, operand) ((((uint32_t)(instr)) << 10) | (uint32_t)(operand))
+#define XSPI_SEQ_WREN       10u
+#define XSPI_SEQ_ERASE      11u
+#define XSPI_SEQ_PROGRAM    12u
+#define NOR_OP_WREN         0x06u
+#define NOR_OP_SE_4K        0x21u
+#define NOR_OP_PP           0x12u
+#define NOR_PAGE_SIZE       256u
+#define NOR_SECTOR_SIZE     4096u
+
+static void imxrt700_lut_install(void)
+{
+    uint32_t i;
+
+    for (i = 0u; i < 3u * XSPI_LUT_WORDS; i++) {
+        XSPI0_LUT(XSPI_SEQ_WREN * XSPI_LUT_WORDS + i) = 0u;
+    }
+    XSPI0_LUT(XSPI_SEQ_WREN * XSPI_LUT_WORDS) =
+        XSPI_LUT(XSPI_LUT_CMD_SDR, NOR_OP_WREN);
+    XSPI0_LUT(XSPI_SEQ_ERASE * XSPI_LUT_WORDS) =
+        XSPI_LUT(XSPI_LUT_CMD_SDR, NOR_OP_SE_4K) |
+        (XSPI_LUT(XSPI_LUT_RADDR_SDR, 32u) << 16);
+    XSPI0_LUT(XSPI_SEQ_PROGRAM * XSPI_LUT_WORDS) =
+        XSPI_LUT(XSPI_LUT_CMD_SDR, NOR_OP_PP) |
+        (XSPI_LUT(XSPI_LUT_RADDR_SDR, 32u) << 16);
+    XSPI0_LUT(XSPI_SEQ_PROGRAM * XSPI_LUT_WORDS + 1u) =
+        XSPI_LUT(XSPI_LUT_WRITE_SDR, 4u);
+}
+
+static void imxrt700_ip_command(uint32_t seq, uint32_t address, uint32_t size)
+{
+    XSPI0_SFP_TG_SFAR = XSPI0_NOR_BASE_NS + (address & XSPI0_NOR_WINDOW);
+    XSPI0_SFP_TG_IPCR = (seq << 24) | (size & 0xFFFFu);
+}
+
+/* One page-program: the NOR wraps within a 256-byte page, so the caller keeps
+ * each chunk inside one page. */
+static void imxrt700_program_page(uint32_t address, const uint8_t *data,
+    uint32_t len)
+{
+    uint32_t i;
+    uint32_t word;
+
+    imxrt700_ip_command(XSPI_SEQ_WREN, address, 0u);
+    imxrt700_ip_command(XSPI_SEQ_PROGRAM, address, len);
+    for (i = 0u; i < len; i += 4u) {
+        word = 0xFFFFFFFFu;
+        memcpy(&word, data + i, ((len - i) < 4u) ? (len - i) : 4u);
+        XSPI0_TBDR = word;
+    }
+}
+
+static int imxrt700_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t done = 0u;
+    uint32_t chunk;
+
+    imxrt700_lut_install();
+    while (done < (uint32_t)len) {
+        chunk = NOR_PAGE_SIZE - ((address + done) & (NOR_PAGE_SIZE - 1u));
+        if (chunk > ((uint32_t)len - done)) {
+            chunk = (uint32_t)len - done;
+        }
+        imxrt700_program_page(address + done, data + done, chunk);
+        done += chunk;
+    }
+    return 0;
+}
+
+static int imxrt700_flash_erase(uint32_t address, int len)
+{
+    uint32_t p;
+    uint32_t end;
+
+    imxrt700_lut_install();
+    end = address + (uint32_t)len;
+    for (p = address & ~(NOR_SECTOR_SIZE - 1u); p < end; p += NOR_SECTOR_SIZE) {
+        imxrt700_ip_command(XSPI_SEQ_WREN, p, 0u);
+        imxrt700_ip_command(XSPI_SEQ_ERASE, p, 0u);
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -117,6 +220,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
             }
         }
     }
+#elif defined(EMU_IMXRT700)
+    return imxrt700_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -143,6 +248,11 @@ int hal_flash_erase(uint32_t address, int len)
     (void)address;
     (void)len;
     return 0;
+#elif defined(EMU_IMXRT700)
+    if (len <= 0) {
+        return 0;
+    }
+    return imxrt700_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
