@@ -310,16 +310,20 @@ void RAMFUNCTION hal_flash_lock(void)
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t sector_size = pflash_sector_size;
+    uint32_t end;
 
     if (sector_size == 0U) {
         sector_size = WOLFBOOT_SECTOR_SIZE;
     }
 
+    /* Drive the loop from the end of the requested range so the tail is
+     * erased when the start address is rounded back to a sector. */
+    end = address + (uint32_t)len;
     if ((address % sector_size) != 0U) {
         address -= address % sector_size;
     }
 
-    while (len > 0) {
+    while (address < end) {
         if (FLASH_Erase(&pflash, address, sector_size,
                         kFLASH_ApiEraseKey) != kStatus_FLASH_Success) {
             return -1;
@@ -329,7 +333,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
             return -1;
         }
         address += sector_size;
-        len -= (int)sector_size;
     }
 
     return 0;

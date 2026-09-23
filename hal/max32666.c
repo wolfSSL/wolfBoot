@@ -421,6 +421,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int ret;
     volatile uint32_t *flc_base;
+    uint32_t end;
+
+    /* Drive the loop from the end of the requested range so the tail is
+     * erased when the start address is rounded back to a page. */
+    end = address + (uint32_t)len;
 
     /* Align to page boundary */
     if (address & (FLASH_PAGE_SIZE - 1)) {
@@ -429,7 +434,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     icc_disable();
 
-    while (len > 0) {
+    while (address < end) {
         flc_base = flc_base_for_addr(address);
 
         ret = flc_page_erase(address, flc_base);
@@ -439,7 +444,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         }
 
         address += FLASH_PAGE_SIZE;
-        len -= FLASH_PAGE_SIZE;
     }
 
     icc_enable();
