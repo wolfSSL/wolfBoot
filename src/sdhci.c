@@ -1235,7 +1235,7 @@ static int sdcard_send_switch_function(uint32_t mode, uint32_t function_number,
     uint32_t func_status[64/sizeof(uint32_t)]; /* fixed 512 bits */
     uint8_t* p_func_status = (uint8_t*)func_status;
 
-    if (group_number > 6 || function_number > 15) {
+    if (group_number < 1 || group_number > 6 || function_number > 15) {
         return -1; /* Invalid group or function number */
     }
 
