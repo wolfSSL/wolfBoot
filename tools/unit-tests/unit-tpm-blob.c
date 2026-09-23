@@ -38,6 +38,7 @@ static int unexpected_nvdelete_calls;
 static int oversized_pub_read_attempted;
 static int oversized_priv_read_attempted;
 static int forcezero_calls;
+static word32 first_forcezero_len;
 static word32 last_forcezero_len;
 static word32 last_pub_read_request_sz;
 static int unload_handle_calls;
@@ -331,6 +332,9 @@ TPM_RC TPM2_Unseal(Unseal_In* in, Unseal_Out* out)
 
 void TPM2_ForceZero(void* mem, word32 len)
 {
+    if (forcezero_calls == 0) {
+        first_forcezero_len = len;
+    }
     forcezero_calls++;
     last_forcezero_len = len;
     memset(mem, 0, len);
@@ -501,6 +505,7 @@ static void setup(void)
     oversized_pub_read_attempted = 0;
     oversized_priv_read_attempted = 0;
     forcezero_calls = 0;
+    first_forcezero_len = 0;
     last_forcezero_len = 0;
     last_pub_read_request_sz = 0;
     unload_handle_calls = 0;
@@ -637,8 +642,10 @@ START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
 
     ck_assert_int_eq(rc, 0);
     ck_assert_int_eq(secret_sz, 4);
-    /* unsealOut scrub + the policy_session scrub in the exit path */
+    /* unsealOut scrub first, then the policy_session scrub in the
+     * exit path: assert both lengths, not just the last one. */
     ck_assert_int_eq(forcezero_calls, 2);
+    ck_assert_uint_eq(first_forcezero_len, sizeof(Unseal_Out));
     ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_SESSION));
 }
 END_TEST
@@ -737,8 +744,10 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity)
 
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(secret_sz, 0);
-    /* unsealOut scrub + the policy_session scrub in the exit path */
+    /* unsealOut scrub first, then the policy_session scrub in the
+     * exit path: assert both lengths, not just the last one. */
     ck_assert_int_eq(forcezero_calls, 2);
+    ck_assert_uint_eq(first_forcezero_len, sizeof(Unseal_Out));
     ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_SESSION));
     for (i = 0; i < (int)sizeof(output.canary); i++) {
         ck_assert_uint_eq(output.canary[i], 0xA5);
