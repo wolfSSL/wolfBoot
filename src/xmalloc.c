@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 #ifndef USE_FAST_MATH
     #include <wolfssl/wolfcrypt/sp.h>
     #include <wolfssl/wolfcrypt/sp_int.h>
@@ -514,6 +515,9 @@ void XFREE(void *ptr, void *heap, int type)
 #endif
     while (xmalloc_pool[i].addr) {
         if ((ptr == (void *)(xmalloc_pool[i].addr)) && xmalloc_pool[i].in_use) {
+            /* Scrub the slot before releasing it: it may hold crypto
+             * workspace (hash blocks, signature verification state). */
+            wc_ForceZero(xmalloc_pool[i].addr, xmalloc_pool[i].size);
             xmalloc_pool[i].in_use = 0;
             return;
         }
