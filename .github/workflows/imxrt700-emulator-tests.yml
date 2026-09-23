@@ -1,0 +1,70 @@
+name: imxrt700-emulator-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Boot, update and rollback on the m33mu i.MX RT700 model: the plain
+  # (secure-world) config, the TrustZone secure-payload config and the
+  # ML-DSA config.
+  imxrt700-emulator-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [imx-rt700, imx-rt700-tz, imx-rt700-mldsa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nxp-mcuxpresso/CMSIS_5
+          path: CMSIS_5
+
+      - name: Cache MCUXpresso SDK
+        id: cache-mcuxpresso
+        uses: actions/cache@v4
+        with:
+          path: |
+            mcuxpresso-sdk
+            venv
+          key: mcuxpresso-sdk-mimxrt700evk-emu-${{ hashFiles('.github/workflows/imxrt700-emulator-tests.yml') }}
+
+      - name: Setup MCUXpresso SDK
+        if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install west
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          cd mcuxpresso-sdk
+          sed -i '/se_hostlib\|emwin/d' manifests/boards/mimxrt700evk.yml
+          west update_board --set board mimxrt700evk
+
+      - name: Configure ${{ matrix.config }}
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+
+      - name: Run emu test (${{ matrix.config }})
+        working-directory: test-app/emu-test-apps
+        run: |
+          export MCUXSDK=1
+          export MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk"
+          export MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS"
+          BOOT_TIMEOUT=30 UPDATE_TIMEOUT=60 REBOOT_TIMEOUT=30 ./test.sh
+
+      - name: Upload emulator logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: imxrt700-emu-logs-${{ matrix.config }}
+          path: test-app/emu-test-apps/imxrt700/*.log
