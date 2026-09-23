@@ -637,8 +637,9 @@ START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
 
     ck_assert_int_eq(rc, 0);
     ck_assert_int_eq(secret_sz, 4);
-    ck_assert_int_eq(forcezero_calls, 1);
-    ck_assert_uint_eq(last_forcezero_len, sizeof(Unseal_Out));
+    /* unsealOut scrub + the policy_session scrub in the exit path */
+    ck_assert_int_eq(forcezero_calls, 2);
+    ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_SESSION));
 }
 END_TEST
 
@@ -736,8 +737,9 @@ START_TEST(test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity)
 
     ck_assert_int_eq(rc, BUFFER_E);
     ck_assert_int_eq(secret_sz, 0);
-    ck_assert_int_eq(forcezero_calls, 1);
-    ck_assert_uint_eq(last_forcezero_len, sizeof(Unseal_Out));
+    /* unsealOut scrub + the policy_session scrub in the exit path */
+    ck_assert_int_eq(forcezero_calls, 2);
+    ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_SESSION));
     for (i = 0; i < (int)sizeof(output.canary); i++) {
         ck_assert_uint_eq(output.canary[i], 0xA5);
     }

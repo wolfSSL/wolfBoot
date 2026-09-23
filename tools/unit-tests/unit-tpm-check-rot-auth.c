@@ -168,6 +168,15 @@ int ConstantCompare(const byte* a, const byte* b, int length)
     return diff;
 }
 
+void TPM2_ForceZero(void* mem, word32 len)
+{
+    volatile uint8_t* p = (volatile uint8_t*)mem;
+    word32 i;
+
+    for (i = 0; i < len; i++)
+        p[i] = 0;
+}
+
 #include "../../src/tpm.c"
 
 static void setup(void)

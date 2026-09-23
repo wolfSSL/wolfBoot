@@ -109,6 +109,15 @@ int wolfTPM2_NVReadCert(WOLFTPM2_DEV* dev, TPM_HANDLE handle,
     return 0;
 }
 
+void TPM2_ForceZero(void* mem, word32 len)
+{
+    volatile uint8_t* p = (volatile uint8_t*)mem;
+    word32 i;
+
+    for (i = 0; i < len; i++)
+        p[i] = 0;
+}
+
 #include "../../src/tpm.c"
 
 static void setup_ns_edge(uint32_t certSz, uint32_t race, uint32_t nvSize)
