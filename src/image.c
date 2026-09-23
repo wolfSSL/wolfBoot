@@ -417,6 +417,9 @@ static void wolfBoot_verify_signature_ecc(uint8_t key_slot,
             mp_read_unsigned_bin(&s, sig + point_sz, point_sz);
             VERIFY_FN(img, &verify_res, wc_ecc_verify_hash_ex, &r, &s,
                 img->sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, &verify_res, &ecc);
+            /* Signature scalars: scrub before the stack frame retires. */
+            mp_clear(&r);
+            mp_clear(&s);
         }
     #endif
     }
