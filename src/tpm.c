@@ -1652,6 +1652,14 @@ void wolfBoot_tpm2_deinit(void)
 #endif /* WOLFBOOT_TPM_KEYSTORE */
 
     wolfTPM2_Cleanup(&wolftpm_dev);
+
+#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+    /* The OS takes over from here: leave no session key or SRK auth in
+     * SRAM. UnloadHandle flushes the TPM-side context but is not
+     * documented to clear handle->auth. */
+    TPM2_ForceZero(&wolftpm_session, sizeof(wolftpm_session));
+    TPM2_ForceZero(&wolftpm_srk, sizeof(wolftpm_srk));
+#endif
 }
 
 /**
