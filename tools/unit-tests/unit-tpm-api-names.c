@@ -37,6 +37,15 @@ const char* TPM2_GetRCString(int rc)
     return NULL;
 }
 
+void TPM2_ForceZero(void* mem, word32 len)
+{
+    volatile uint8_t* p = (volatile uint8_t*)mem;
+    word32 i;
+
+    for (i = 0; i < len; i++)
+        p[i] = 0;
+}
+
 #include "../../src/tpm.c"
 
 static void setup_small_buf(struct small_buf* buf)

@@ -533,7 +533,7 @@ static int test_ext_flash(void)
     #endif
         if (pageData[i] != (i & 0xff)) {
             wolfBoot_printf("Check Data @ %d failed\n", i);
-            return -i;
+            return -1;
         }
     }
 

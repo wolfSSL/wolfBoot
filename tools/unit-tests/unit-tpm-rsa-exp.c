@@ -167,6 +167,15 @@ static int forbidden_memcmp(const void *a, const void *b, size_t n)
 }
 
 #define memcmp forbidden_memcmp
+void TPM2_ForceZero(void* mem, word32 len)
+{
+    volatile uint8_t* p = (volatile uint8_t*)mem;
+    word32 i;
+
+    for (i = 0; i < len; i++)
+        p[i] = 0;
+}
+
 #include "../../src/tpm.c"
 #undef memcmp
 

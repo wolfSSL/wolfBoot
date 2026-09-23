@@ -9,7 +9,7 @@
  *
  * Compile with DELTA_UPDATES=1
  *
- * Use tools/sign.py or tool/sign.c on the host to provide small
+ * Use the sign tool (tools/keytools/sign.c) on the host to provide small
  * secure update packages containing only binary difference, using the
  * --delta option.
  *

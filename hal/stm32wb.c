@@ -204,18 +204,17 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             flash_wait_complete();
             i+=8;
         } else {
+            uint32_t unit_addr = (address + i) & (~0x07);
+            int off = (address + i) - unit_addr;
             uint32_t val[2];
             uint8_t *vbytes = (uint8_t *)(val);
-            int off = (address + i) - (((address + i) >> 3) << 3);
-            uint32_t base_addr = address & (~0x07); /* aligned to 64 bit */
-            int u32_idx = (i >> 2);
-            dst = (uint32_t *)(base_addr);
-            val[0] = dst[u32_idx];
-            val[1] = dst[u32_idx + 1];
+            dst = (uint32_t *)unit_addr;
+            val[0] = dst[0];
+            val[1] = dst[1];
             while ((off < 8) && (i < len))
                 vbytes[off++] = data[i++];
-            dst[u32_idx] = val[0];
-            dst[u32_idx + 1] = val[1];
+            dst[0] = val[0];
+            dst[1] = val[1];
             flash_wait_complete();
         }
     }

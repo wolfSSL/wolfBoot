@@ -1187,7 +1187,10 @@ static int sdcard_card_full_init(void)
     }
 
     if (status == 0) {
-        sdhci_set_clock(SDHCI_CLK_50MHZ);
+        if (sdhci_set_clock(SDHCI_CLK_50MHZ) == 0) {
+            wolfBoot_printf("UHS-I: failed to set 50MHz clock\n");
+            status = -1;
+        }
     }
 
     SDHCI_REG_SET(SDHCI_SRS13, irq_restore); /* re-enable interrupt */
@@ -1235,7 +1238,7 @@ static int sdcard_send_switch_function(uint32_t mode, uint32_t function_number,
     uint32_t func_status[64/sizeof(uint32_t)]; /* fixed 512 bits */
     uint8_t* p_func_status = (uint8_t*)func_status;
 
-    if (group_number > 6 || function_number > 15) {
+    if (group_number < 1 || group_number > 6 || function_number > 15) {
         return -1; /* Invalid group or function number */
     }
 
@@ -1268,6 +1271,11 @@ static int sdcard_send_switch_function(uint32_t mode, uint32_t function_number,
             break;
         }
     } while (status == 0 && --timeout > 0); /* retry until function not busy */
+
+    if (timeout == 0) {
+        /* Card stayed busy until the retry budget ran out. */
+        status = -1;
+    }
     return status;
 }
 
@@ -1495,7 +1503,10 @@ static int emmc_card_full_init(void)
     }
 
     /* Set clock to 25MHz for legacy mode */
-    sdhci_set_clock(SDHCI_CLK_25MHZ);
+    if (sdhci_set_clock(SDHCI_CLK_25MHZ) == 0) {
+        wolfBoot_printf("eMMC: failed to set 25MHz clock\n");
+        return -1;
+    }
 
     /* Enable high speed if desired (optional for legacy mode) */
     sdhci_reg_or(SDHCI_SRS10, SDHCI_SRS10_HSE);
@@ -2000,7 +2011,10 @@ int sdhci_init(void)
     SDHCI_REG_SET(SDHCI_SRS10, reg);
 
     /* Setup 400khz starting clock */
-    sdhci_set_clock(SDHCI_CLK_400KHZ);
+    if (sdhci_set_clock(SDHCI_CLK_400KHZ) == 0) {
+        wolfBoot_printf("Failed to set 400kHz starting clock\n");
+        return -1;
+    }
 
     /* Allow clock to stabilize before issuing first command */
     udelay(1000); /* 1ms */

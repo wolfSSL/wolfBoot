@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 # unit-sign-delta-tlv.py
 #
-# Regression test for the Python signing tool delta header encoding.
+# Regression test for the signing tool delta header encoding.
 #
-# tools/keytools/sign.py emits the HDR_IMG_DELTA_SIZE and
+# tools/keytools/sign.c emits the HDR_IMG_DELTA_SIZE and
 # HDR_IMG_DELTA_INVERSE_SIZE TLVs that describe the size of a delta patch.
 # wolfBoot_get_delta_info() (src/libwolfboot.c) only accepts those tags when
 # wolfBoot_find_header() reports a value length of sizeof(uint32_t) (4 bytes),
 # matching the C signing tool (tools/keytools/sign.c, header_append_tag_u32()).
 #
-# This test signs a real delta image with sign.py, parses the resulting header
-# exactly the way wolfBoot_find_header() does, and asserts that every delta TLV
-# carries the 4-byte length the bootloader requires. Before the fix sign.py
-# emitted these two tags with length 2, so the bootloader rejected otherwise
-# valid delta images; this test fails in that case.
+# This test signs a real delta image with the C sign tool, parses the
+# resulting header exactly the way wolfBoot_find_header() does, and asserts
+# that every delta TLV carries the 4-byte length the bootloader requires. If
+# the tool ever emits these two tags with a length other than 4, the
+# bootloader rejects otherwise valid delta images; this test fails in that
+# case.
 #
 # Copyright (C) 2026 wolfSSL Inc.
 #
@@ -30,15 +31,12 @@
 # GNU General Public License for more details.
 
 import os
-import struct
 import subprocess
 import sys
 import tempfile
 
 # Tags from include/wolfboot/wolfboot.h
-HDR_IMG_DELTA_BASE         = 0x05
 HDR_IMG_DELTA_SIZE         = 0x06
-HDR_IMG_DELTA_INVERSE      = 0x15
 HDR_IMG_DELTA_INVERSE_SIZE = 0x16
 HDR_PADDING                = 0xFF
 
@@ -50,8 +48,9 @@ IMAGE_HEADER_SIZE = 256
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(THIS_DIR, "..", ".."))
-SIGN_PY = os.path.join(ROOT, "tools", "keytools", "sign.py")
-BMDIFF = os.path.join(ROOT, "tools", "delta", "bmdiff")
+KEYTOOLS = os.path.join(ROOT, "tools", "keytools")
+SIGN = os.path.join(KEYTOOLS, "sign")
+KEYGEN = os.path.join(KEYTOOLS, "keygen")
 
 
 def skip(msg):
@@ -79,42 +78,30 @@ def find_tlv(header, want_type):
     return None
 
 
-def ensure_bmdiff():
-    if os.path.exists(BMDIFF):
+def ensure_tool(path, target):
+    if os.path.exists(path):
         return True
-    delta_dir = os.path.join(ROOT, "tools", "delta")
     try:
-        subprocess.run(
-            ["gcc", "-o", "delta.o", "-c", os.path.join(ROOT, "src", "delta.c"),
-             "-I" + os.path.join(ROOT, "include"), "-DDELTA_UPDATES",
-             "-DWOLFBOOT_SECTOR_SIZE=0x%x" % SECTOR_SIZE],
-            cwd=delta_dir, check=True)
-        subprocess.run(
-            ["gcc", "-o", "bmdiff.o", "-c", "bmdiff.c",
-             "-I" + os.path.join(ROOT, "include"), "-DDELTA_UPDATES",
-             "-DWOLFBOOT_SECTOR_SIZE=0x%x" % SECTOR_SIZE],
-            cwd=delta_dir, check=True)
-        subprocess.run(["gcc", "-o", "bmdiff", "delta.o", "bmdiff.o"],
-                       cwd=delta_dir, check=True)
+        subprocess.run(["make", target], cwd=KEYTOOLS,
+                       check=True, capture_output=True, text=True)
     except (subprocess.CalledProcessError, OSError):
         return False
-    return os.path.exists(BMDIFF)
+    return os.path.exists(path)
 
 
 def main():
-    try:
-        import wolfcrypt  # noqa: F401
-    except Exception:
-        skip("python wolfcrypt module not available")
-    if not os.path.exists(SIGN_PY):
-        skip("sign.py not found")
-    if not ensure_bmdiff():
-        skip("could not build tools/delta/bmdiff")
+    if not ensure_tool(SIGN, "sign"):
+        skip("could not build tools/keytools/sign")
+    if not ensure_tool(KEYGEN, "keygen"):
+        skip("could not build tools/keytools/keygen")
 
     with tempfile.TemporaryDirectory() as work:
         key = os.path.join(work, "priv.der")
-        with open(key, "wb") as f:
-            f.write(b"\x42" * 32)  # 32-byte raw ed25519 private seed
+        r = subprocess.run([KEYGEN, "--ed25519", "-g", key,
+                            "-keystoreDir", work],
+                           cwd=work, capture_output=True, text=True)
+        if r.returncode != 0 or not os.path.exists(key):
+            skip("keygen failed: " + r.stderr.strip())
 
         base = os.path.join(work, "image_v1.bin")
         upd = os.path.join(work, "image_v2.bin")
@@ -129,25 +116,23 @@ def main():
         env["WOLFBOOT_SECTOR_SIZE"] = str(SECTOR_SIZE)
 
         # Sign the base image (v1) so it can be used as the delta base.
-        r = subprocess.run(
-            [sys.executable, SIGN_PY, "--ed25519", "--sha256", base, key, "1"],
-            cwd=ROOT, env=env, capture_output=True, text=True)
+        r = subprocess.run([SIGN, "--ed25519", "--sha256", base, key, "1"],
+                           cwd=ROOT, env=env, capture_output=True, text=True)
         if r.returncode != 0:
-            skip("sign.py base sign failed: " + r.stderr.strip())
+            skip("sign base failed: " + r.stderr.strip())
         signed_base = base.replace(".bin", "_v1_signed.bin")
         if not os.path.exists(signed_base):
-            skip("sign.py did not produce a signed base image")
+            skip("sign did not produce a signed base image")
 
         # Sign the delta image (v2) against the signed base.
-        r = subprocess.run(
-            [sys.executable, SIGN_PY, "--ed25519", "--sha256", "--delta",
-             signed_base, upd, key, "2"],
-            cwd=ROOT, env=env, capture_output=True, text=True)
+        r = subprocess.run([SIGN, "--ed25519", "--sha256", "--delta",
+                            signed_base, upd, key, "2"],
+                           cwd=ROOT, env=env, capture_output=True, text=True)
         if r.returncode != 0:
-            skip("sign.py delta sign failed: " + r.stderr.strip())
+            skip("sign delta failed: " + r.stderr.strip())
         diff = upd.replace(".bin", "_v2_signed_diff.bin")
         if not os.path.exists(diff):
-            skip("sign.py did not produce a delta image")
+            skip("sign did not produce a delta image")
 
         with open(diff, "rb") as f:
             header = f.read(IMAGE_HEADER_SIZE)

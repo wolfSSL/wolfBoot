@@ -1968,7 +1968,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 32)
                     read_sz = 32;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
@@ -2045,7 +2045,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 32)
                     read_sz = 32;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
@@ -2120,7 +2120,7 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 if (read_sz > 128)
                     read_sz = 128;
                 io_sz = (int)fread(buf, 1, read_sz, f);
-                if ((io_sz < 0) && !feof(f)) {
+                if (io_sz != (int)read_sz) {
                     ret = -1;
                     break;
                 }
@@ -2973,6 +2973,7 @@ uint64_t arg2num(const char *arg, size_t len)
             break;
         case 4:
             ret &= 0xFFFFFFFF;
+            break;
         case 8:
             break;
         default:
@@ -3357,6 +3358,8 @@ int main(int argc, char** argv)
 {
     int ret = 0;
     int i;
+    int pos_args;
+    int need;
     char* tmpstr;
     const char* sign_str = "AUTO";
     const char* hash_str = "SHA256";
@@ -3581,6 +3584,10 @@ int main(int argc, char** argv)
             CMD.header_only = 1;
         }
         else if (strcmp(argv[i], "--id") == 0) {
+            if (argc <= (i + 1)) {
+                fprintf(stderr, "Missing --id argument\n");
+                exit(16);
+            }
             long id = strtol(argv[++i], NULL, 10);
             if ((id < 0 || id > 15) || ((id == 0) && (argv[i][0] != '0'))) {
                 fprintf(stderr, "Invalid partition id: %s\n", argv[i]);
@@ -3597,6 +3604,10 @@ int main(int argc, char** argv)
             CMD.manual_sign = 1;
         }
         else if (strcmp(argv[i], "--encrypt") == 0) {
+            if (argc <= (i + 1)) {
+                fprintf(stderr, "Missing --encrypt key file argument\n");
+                exit(16);
+            }
             if (CMD.encrypt == ENC_OFF)
                 CMD.encrypt = ENC_CHACHA;
             CMD.encrypt_key_file = argv[++i];
@@ -3611,6 +3622,10 @@ int main(int argc, char** argv)
             CMD.encrypt = ENC_CHACHA;
         }
         else if (strcmp(argv[i], "--delta") == 0) {
+            if (argc <= (i + 1)) {
+                fprintf(stderr, "Missing --delta base file argument\n");
+                exit(16);
+            }
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
         } else if (strcmp(argv[i], "--no-base-sha") == 0) {
@@ -3620,6 +3635,10 @@ int main(int argc, char** argv)
             CMD.no_ts = 1;
         }
         else if (strcmp(argv[i], "--policy") == 0) {
+            if (argc <= (i + 1)) {
+                fprintf(stderr, "Missing --policy file argument\n");
+                exit(16);
+            }
             CMD.policy_sign = 1;
             CMD.policy_file = argv[++i];
         }
@@ -3896,6 +3915,24 @@ int main(int argc, char** argv)
         CMD.secondary_signature_sz = 0;
     }
 
+    /* Validate the positional argument count for the selected mode: image +
+     * version, plus key (and secondary key when hybrid) when signing, plus
+     * the precomputed signature file with --manual-sign. */
+    pos_args = argc - (i + 1);
+    need = 2; /* image file + version */
+    if (CMD.sign != NO_SIGN) {
+        need += 1; /* key file */
+        if (CMD.hybrid)
+            need += 1; /* secondary key file */
+        if (CMD.manual_sign)
+            need += 1; /* precomputed signature file */
+    }
+    if (pos_args < need) {
+        fprintf(stderr, "Missing positional arguments: need %d, got %d "
+            "(image key version)\n", need, pos_args);
+        exit(1);
+    }
+
 
     if (CMD.sign != NO_SIGN) {
         if (CMD.hybrid) {
@@ -3976,7 +4013,7 @@ int main(int argc, char** argv)
     }
     if (CMD.delta) {
         printf("Delta Base file:      %s\n", CMD.delta_base_file);
-        snprintf(CMD.output_diff_file, sizeof(CMD.output_image_file),
+        snprintf(CMD.output_diff_file, sizeof(CMD.output_diff_file),
                 "%s_v%s_signed_diff.bin",
                 (char*)buf, CMD.fw_version);
         snprintf(CMD.output_encrypted_image_file,
@@ -4096,6 +4133,12 @@ cleanup:
     free_key(CMD.sign, 0);
     if (CMD.hybrid) {
         free_key(CMD.secondary_sign, 1);
+    }
+    /* Defence in depth: scrub the decoded key objects regardless of the
+     * algorithm dispatch above, so no key residue survives. */
+    wc_ForceZero(&key, sizeof(key));
+    if (CMD.hybrid) {
+        wc_ForceZero(&key2, sizeof(key2));
     }
     return ret;
 }

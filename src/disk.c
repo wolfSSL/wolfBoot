@@ -104,6 +104,10 @@ static int disk_open_mbr(struct disk_drive *drive, const uint8_t *mbr_sector)
         }
     }
 
+    if (drive->n_parts == 0) {
+        return -1; /* no usable partition entries */
+    }
+
     return drive->n_parts;
 }
 

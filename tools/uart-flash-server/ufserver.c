@@ -217,11 +217,12 @@ uint8_t *mmap_firmware(const char *fname)
         valid_update = 0;
     } else {
         int i;
+        uint8_t pad = 0xFF;
         const char update_flags[] = "pBOOT";
         lseek(fd, FIRMWARE_PARTITION_SIZE - 5, SEEK_SET);
         write(fd, update_flags, 5);
         for (i = 0; i < SWAP_SIZE; i++)
-            write(fd, update_flags, 5);
+            write(fd, &pad, 1);
     }
     base_fw = mmap(NULL, FIRMWARE_PARTITION_SIZE + SWAP_SIZE,
         (PROT_READ | PROT_WRITE), MAP_SHARED, fd, 0);

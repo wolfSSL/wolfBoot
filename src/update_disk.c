@@ -226,6 +226,9 @@ static void disk_crypto_set_iv(uint32_t block_offset)
     iv[15] = (uint8_t)(ctr);
 
     wc_AesSetIV(&aes_dec, iv);
+    /* Scrub the stack copy: the counter bytes are derived from the
+     * secret disk-encryption nonce (matches aes_set_iv in libwolfboot.c). */
+    wc_ForceZero(iv, sizeof(iv));
 #endif
 }
 
