@@ -1268,6 +1268,11 @@ static int sdcard_send_switch_function(uint32_t mode, uint32_t function_number,
             break;
         }
     } while (status == 0 && --timeout > 0); /* retry until function not busy */
+
+    if (timeout == 0) {
+        /* Card stayed busy until the retry budget ran out. */
+        status = -1;
+    }
     return status;
 }
 
