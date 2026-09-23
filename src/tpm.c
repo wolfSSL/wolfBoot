@@ -720,6 +720,8 @@ int wolfBoot_store_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
         wolfBoot_printf("Error %d writing blob to NV index %x (error %s)\n",
             rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
     }
+    /* Scrub the stack NV handle: it carries the authValue copy. */
+    TPM2_ForceZero(&nv, sizeof(nv));
     return rc;
 }
 
@@ -792,6 +794,7 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
         wolfBoot_printf("Error %d reading blob from NV index %x (error %s)\n",
             rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
     }
+    TPM2_ForceZero(&nv, sizeof(nv));
     return rc;
 }
 
@@ -825,6 +828,7 @@ int wolfBoot_delete_blob(TPMI_RH_NV_AUTH authHandle, uint32_t nvIndex,
         wolfBoot_printf("Error %d deleting blob from NV index %x (error %s)\n",
             rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
     }
+    TPM2_ForceZero(&nv, sizeof(nv));
     return rc;
 }
 
@@ -973,6 +977,8 @@ int wolfBoot_seal_auth(const uint8_t* pubkey_hint,
         wolfBoot_printf("Error %d sealing secret! (%s)\n",
             rc, wolfTPM2_GetRCString(rc));
     }
+    /* The blob holds the plaintext authValue copy used for the seal. */
+    TPM2_ForceZero(&seal_blob, sizeof(seal_blob));
     return rc;
 }
 int wolfBoot_seal(const uint8_t* pubkey_hint,
@@ -1202,6 +1208,7 @@ int wolfBoot_unseal_auth(const uint8_t* pubkey_hint,
         wolfBoot_printf("Error %d unsealing secret! (%s)\n",
             rc, wolfTPM2_GetRCString(rc));
     }
+    TPM2_ForceZero(&seal_blob, sizeof(seal_blob));
     return rc;
 }
 int wolfBoot_unseal(const uint8_t* pubkey_hint,
@@ -1729,6 +1736,7 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     }
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
+    TPM2_ForceZero(&nv, sizeof(nv));
     return rc;
 }
 #endif
