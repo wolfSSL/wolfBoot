@@ -912,6 +912,8 @@ int wolfBoot_seal_blob(const uint8_t* pubkey_hint,
 
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
+    /* Scrub the session object: it holds the SRK-derived session key. */
+    TPM2_ForceZero(&policy_session, sizeof(policy_session));
 
     return rc;
 }
@@ -1175,6 +1177,7 @@ exit:
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
+    TPM2_ForceZero(&policy_session, sizeof(policy_session));
 
     return rc;
 }
