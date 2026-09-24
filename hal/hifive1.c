@@ -485,6 +485,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint8_t data_copy[FLASH_PAGE_SIZE];
     int swmode = 0;
 
+    if (len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
 
     if (address >= FLASH_BASE)
         address -= FLASH_BASE;
