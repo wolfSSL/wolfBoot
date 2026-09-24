@@ -2218,7 +2218,6 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     uint8_t*              exp_digest;
     int32_t               stored_sha_len;
     int                   i;
-    int32_t               entry_out_set = 0;
     uint8_t               elfHdrBuf[sizeof(elfHeaderMaxBuf)];
     uint8_t ph_buf[sizeof(elf64_program_header)]; /* Buffer for current PH */
     uint8_t ph_next_buf[sizeof(elf64_program_header)]; /* Buffer for next PH */
@@ -2255,10 +2254,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         entry_count      = eh->ph_entry_count;
         entry_off        = eh->ph_offset;
         ph_size          = sizeof(elf32_program_header);
-        if (!entry_out_set) {
-            *entry_out    = eh->entry;
-            entry_out_set = 1;
-        }
+        *entry_out       = eh->entry;
         wolfBoot_printf("ELF: [CHECK] 32-bit, entry=0x%08X, "
                         "ph_offset=0x%08X, ph_count=%u\n",
                         (unsigned int)eh->entry, (unsigned int)entry_off, entry_count);
@@ -2268,10 +2264,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         entry_count      = eh->ph_entry_count;
         entry_off        = eh->ph_offset;
         ph_size          = sizeof(elf64_program_header);
-        if (!entry_out_set) {
-            *entry_out    = eh->entry;
-            entry_out_set = 1;
-        }
+        *entry_out       = eh->entry;
         wolfBoot_printf("ELF: [CHECK] 64-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
                         (unsigned long)eh->entry, (unsigned long)entry_off, entry_count);
