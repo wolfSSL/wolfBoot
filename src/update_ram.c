@@ -85,6 +85,7 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
     int ret;
     uint32_t img_size;
+    uint32_t version;
     BENCHMARK_DECLARE();
 
     /* read header into RAM */
@@ -101,8 +102,8 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #endif
 
     /* check for valid header and version */
-    ret = wolfBoot_get_blob_version((uint8_t*)dst);
-    if (ret <= 0) {
+    version = wolfBoot_get_blob_version((uint8_t*)dst);
+    if (version == 0) {
         wolfBoot_printf("No valid image found at %p\n", src);
         return -1;
     }
