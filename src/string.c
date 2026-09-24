@@ -586,10 +586,12 @@ void uart_vprintf(const char* fmt, va_list argp)
                     uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
                 }
                 else if (islong == 1 || iszl || *fmtp == 'p') {
-                    /* %lx / %zx / %p: long/pointer is 64-bit here */
+                    /* %lx / %zx / %p: consume at the type's natural width
+                     * via va_arg, then widen to 64 bits for the printer */
                     unsigned long long val;
                     if (*fmtp == 'p') {
-                        val = (unsigned long long)va_arg(argp, void *);
+                        val = (unsigned long long)(uintptr_t)
+                            va_arg(argp, void *);
                     }
                     else {
                         val = (unsigned long long)va_arg(argp,
