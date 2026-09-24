@@ -111,22 +111,29 @@ void uart_write_device(int device, const char* buf, unsigned int sz)
 {
     static char buffer[UART_WRITE_BUF_SIZE];
     int bufsz = 0;
+    int i;
 
-    for (int i = 0; i < (int)sz && bufsz < UART_WRITE_BUF_SIZE; i++) {
+    for (i = 0; i < (int)sz; i++) {
         char ch = (char) buf[i];
 
         if (ch == '\r')
             continue;
 
         if (ch == '\n') {
-            if (bufsz >= (UART_WRITE_BUF_SIZE - 1))
-                break;
-
+            if (bufsz >= (UART_WRITE_BUF_SIZE - 1)) {
+                uart_write_raw(device, buffer, bufsz);
+                bufsz = 0;
+            }
             buffer[bufsz++] = '\r';
+        }
+        if (bufsz >= UART_WRITE_BUF_SIZE) {
+            uart_write_raw(device, buffer, bufsz);
+            bufsz = 0;
         }
         buffer[bufsz++] = ch;
     }
-    uart_write_raw(device, buffer, bufsz);
+    if (bufsz > 0)
+        uart_write_raw(device, buffer, bufsz);
 }
 
 void uart_write(const char* buf, unsigned int sz)

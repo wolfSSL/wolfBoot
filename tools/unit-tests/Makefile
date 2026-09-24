@@ -107,6 +107,7 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
+TESTS+=unit-nrf54l-uart-write
 TESTS+=unit-elf-phentsize
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
@@ -1387,6 +1388,14 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
 	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+# unit-nrf54l-uart-write: the conversion buffer must flush when full so
+# long lines are not truncated (F-12884); uart_write_raw is mocked.
+nrf54l_uart_write_extract.h: ../../hal/nrf54l.c
+	sed -n '/^void uart_write_device/,/^}/p' $< > $@
+
+unit-nrf54l-uart-write: unit-nrf54l-uart-write.c nrf54l_uart_write_extract.h
+	gcc -o $@ unit-nrf54l-uart-write.c $(CFLAGS) $(LDFLAGS)
 
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
