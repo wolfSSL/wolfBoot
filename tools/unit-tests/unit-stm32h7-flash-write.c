@@ -7,7 +7,8 @@
  * FLASH_BANK2_BASE_REL.
  *
  * The dispatcher is extracted by the Makefile; hal_flash_write_part()
- * is a recording mock.
+ * is a recording mock. Addresses are absolute, as passed by callers
+ * (FLASHMEM_ADDRESS_SPACE based); the split point is FLASH_BANK2_BASE.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -35,7 +36,8 @@
 #define RAMFUNCTION
 #define FLASH_BANK_1 0
 #define FLASH_BANK_2 1
-#define FLASH_BANK2_BASE_REL 0x100000u
+#define FLASHMEM_ADDRESS_SPACE 0x08000000u
+#define FLASH_BANK2_BASE 0x08100000u
 
 /* The real dispatcher from hal/stm32h7.c (extracted by the Makefile);
  * it calls hal_flash_write_part(), mocked below (prototype first). */
@@ -80,16 +82,17 @@ static void teardown(void)
 
 /* A request crossing the boundary must be split: first pass up to the
  * boundary on bank 1, remainder starting at the boundary on bank 2. */
-START_TEST(test_write_crosses_boundary){
+START_TEST(test_write_crosses_boundary)
+{
     uint8_t data[64];
 
     memset(data, 0xAA, sizeof(data));
 
-    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE_REL - 16, data, 32), 0);
+    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE - 16, data, 32), 0);
     ck_assert_int_eq(g_calls, 2);
-    ck_assert_uint_eq(g_addr[0], FLASH_BANK2_BASE_REL - 16);
+    ck_assert_uint_eq(g_addr[0], FLASH_BANK2_BASE - 16);
     ck_assert_int_eq(g_len[0], 16);
-    ck_assert_uint_eq(g_addr[1], FLASH_BANK2_BASE_REL);
+    ck_assert_uint_eq(g_addr[1], FLASH_BANK2_BASE);
     ck_assert_int_eq(g_len[1], 16);
 }
 END_TEST
@@ -101,9 +104,10 @@ START_TEST(test_write_bank1_only)
 
     memset(data, 0xAA, sizeof(data));
 
-    ck_assert_int_eq(hal_flash_write(0x400, data, 16), 0);
+    ck_assert_int_eq(hal_flash_write(FLASHMEM_ADDRESS_SPACE + 0x400, data, 16),
+                     0);
     ck_assert_int_eq(g_calls, 1);
-    ck_assert_uint_eq(g_addr[0], 0x400);
+    ck_assert_uint_eq(g_addr[0], FLASHMEM_ADDRESS_SPACE + 0x400);
     ck_assert_int_eq(g_len[0], 16);
 }
 END_TEST
@@ -115,10 +119,9 @@ START_TEST(test_write_bank2_only)
 
     memset(data, 0xAA, sizeof(data));
 
-    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE_REL + 0x400, data, 16),
-                     0);
+    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE + 0x400, data, 16), 0);
     ck_assert_int_eq(g_calls, 1);
-    ck_assert_uint_eq(g_addr[0], FLASH_BANK2_BASE_REL + 0x400);
+    ck_assert_uint_eq(g_addr[0], FLASH_BANK2_BASE + 0x400);
     ck_assert_int_eq(g_len[0], 16);
 }
 END_TEST
@@ -131,8 +134,7 @@ START_TEST(test_write_first_part_fails)
     memset(data, 0xAA, sizeof(data));
     g_first_ret = -1;
 
-    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE_REL - 16, data, 32),
-                     -1);
+    ck_assert_int_eq(hal_flash_write(FLASH_BANK2_BASE - 16, data, 32), -1);
     ck_assert_int_eq(g_calls, 1);
 }
 END_TEST

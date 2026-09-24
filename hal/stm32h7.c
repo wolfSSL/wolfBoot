@@ -96,13 +96,14 @@ static int RAMFUNCTION hal_flash_write_part(uint32_t address,
 /*
  * hal_flash_write() dispatches across the bank boundary: a request that
  * starts in bank 1 and extends into bank 2 is split at
- * FLASH_BANK2_BASE_REL, because the programming path below selects one
+ * FLASH_BANK2_BASE, because the programming path below selects one
  * bank (FLASH_CR1/CR2) for the whole request and would write the tail
- * into the wrong bank (F-12871).
+ * into the wrong bank (F-12871). The comparison is against the absolute
+ * bank 2 base: callers pass flash addresses in FLASHMEM_ADDRESS_SPACE.
  */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    uint32_t bank2 = FLASH_BANK2_BASE_REL;
+    uint32_t bank2 = FLASH_BANK2_BASE;
 
     if ((address < bank2) && ((address + (uint32_t)len) > bank2)) {
         uint32_t first = bank2 - address;
