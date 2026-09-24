@@ -1655,7 +1655,6 @@ void RAMFUNCTION wolfBoot_start(void)
     WP11_Library_Init();
 #endif
 #endif /* !WOLFBOOT_SELF_UPDATE_MONOLITHIC */
-
     bootRet = wolfBoot_open_image(&boot, PART_BOOT);
     wolfBoot_printf("Booting version: 0x%x\n",
         wolfBoot_get_blob_version(boot.hdr));
