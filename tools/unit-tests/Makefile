@@ -148,6 +148,7 @@ TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
 TESTS+=unit-ecc-raw-der
 TESTS+=unit-stm32g4-write
+TESTS+=unit-stm32g0-write
 TESTS+=unit-stm32l4-write
 TESTS+=unit-stm32wb-write
 TESTS+=unit-stm32l5-write
@@ -1428,6 +1429,16 @@ unit-stm32u3-flash-write: unit-stm32u3-flash-write.c stm32u3_flash_write_extract
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32g0-write: the G0 copy of the F-11023 double-word fast path;
+# same harness as unit-stm32g4-write.
+stm32g0_write_extract.h: ../../hal/stm32g0.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32g0-write: unit-stm32g0-write.c stm32g0_write_extract.h
+	gcc -o $@ unit-stm32g0-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-stm32l4-write runs the real hal_flash_write() from hal/stm32l4.c
 # (F-12062: the double-word fast path was selected on "len - i > 3" but
 # consumed eight bytes, so an aligned 4-7 byte tail over-read the
@@ -1910,7 +1921,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	keystore_api_extract.h keystore_emitted.c keystore_gen \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
-	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
+	stm32c0_write_extract.h stm32g0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
 	stm32l5_write_extract.h stm32u5_write_extract.h stm32wb_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
