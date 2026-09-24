@@ -109,8 +109,8 @@ static uint8_t hal_bl_scratch[2048]
  * The SDK struct sizes are only known in the SDK backend -- when SPIC
  * adaptor reuse is enabled, re-derive the slots from sizeof() of the real
  * structs and keep this budget check. */
-_Static_assert(sizeof(hal_bl_scratch) >= 6 * 256 + 512,
-               "hal_bl_scratch must cover the seven bootloader slots");
+typedef char hal_bl_scratch_budget_check[
+    (sizeof(hal_bl_scratch) >= 6 * 256 + 512) ? 1 : -1];
 
 /* Exactly the 10 bytes "AmebaPro2\xff" (the trailing 0xff matters; a NUL pad
  * fails as "Invalid FW Image Signature"). */
@@ -512,7 +512,7 @@ int ext_flash_erase(uintptr_t address, int len)
     uint32_t sector_addr;
     uint32_t end_addr;
 
-    if (len < 0 || (uint32_t)len > UINT32_MAX - (uint32_t)address) {
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {
