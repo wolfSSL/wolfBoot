@@ -92,9 +92,12 @@ START_TEST(test_uart_init_parity_and_stops)
 }
 END_TEST
 
-/* Stop counts other than 1 and 2 are not representable in the LCR. */
+/* Stop counts other than 1 and 2 are not representable in the LCR.
+ * The fixture runs once per case, so reset the write counter here for
+ * the no-fork (ASAN) run where earlier tests already wrote the LCR. */
 START_TEST(test_uart_init_bad_stop_count)
 {
+    lcr_writes = 0;
     ck_assert_int_eq(uart_init(115200, 8, 'N', 0), -1);
     ck_assert_int_eq(uart_init(115200, 8, 'N', 3), -1);
     ck_assert_int_eq(lcr_writes, 0);
@@ -104,6 +107,7 @@ END_TEST
 /* Existing rejections must be untouched. */
 START_TEST(test_uart_init_bad_args)
 {
+    lcr_writes = 0;
     ck_assert_int_eq(uart_init(0, 8, 'N', 1), -1);
     ck_assert_int_eq(uart_init(115200, 9, 'N', 1), -1);
     ck_assert_int_eq(uart_init(115200, 8, 'X', 1), -1);
