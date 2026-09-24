@@ -2942,7 +2942,6 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
     unaligned_trailer_size = read_remaining;
     if (unaligned_trailer_size > 0)
     {
-        uint8_t dec_block[ENCRYPT_BLOCK_SIZE] XALIGNED_STACK(4);
         if (ext_flash_read(address, block, ENCRYPT_BLOCK_SIZE)
                 != ENCRYPT_BLOCK_SIZE)
             return -1;
