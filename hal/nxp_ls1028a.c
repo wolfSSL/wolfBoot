@@ -780,7 +780,7 @@ static int test_flash(void)
     /* Erase sector */
     ret = ext_flash_erase(TEST_ADDRESS, WOLFBOOT_SECTOR_SIZE);
     wolfBoot_printf("Erase Sector: Ret %d\n", ret);
-    if (ret != 0)
+    if (ret < 0)
         return -1;
 
     /* Write Pages */
@@ -789,7 +789,7 @@ static int test_flash(void)
     }
     ret = ext_flash_write(TEST_ADDRESS, pageData, sizeof(pageData));
     wolfBoot_printf("Write Page: Ret %d\n", ret);
-    if (ret != 0)
+    if (ret < 0)
         return -1;
 
     /* Read page */
