@@ -120,9 +120,14 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
     entry_size = GET_H16(ph_entry_size);
     entry_count = GET_H16(ph_entry_count);
 
-    /* Validate program header table is within image bounds */
+    /* Validate program header table is within image bounds and that
+     * each entry is big enough to hold one program header: a smaller
+     * e_phentsize would make the last loop iteration read past the
+     * validated table. */
     if (ph_offset >= image_sz ||
         entry_size == 0 ||
+        entry_size < (is_elf32 ? (uint16_t)sizeof(elf32_program_header) :
+                            (uint16_t)sizeof(elf64_program_header)) ||
         entry_count > (image_sz / entry_size) ||
         ((uint32_t)entry_count * entry_size) > (image_sz - ph_offset)) {
         return -3; /* program header table out of bounds */

@@ -107,6 +107,7 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
+TESTS+=unit-elf-phentsize
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-dice-token-size
@@ -1817,6 +1818,12 @@ unit-elf-entry-inplace: unit-elf-entry-inplace.c
 # the entry point was published for a partially loaded image).
 unit-elf-mmu-fail: unit-elf-mmu-fail.c ../../src/elf.c
 	gcc -o $@ unit-elf-mmu-fail.c -I../../include -DWOLFBOOT_ELF \
+		-DARCH_FLASH_OFFSET=0 -DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
+# unit-elf-phentsize: an undersized e_phentsize must be rejected before
+# the program-header loop reads past the validated table (F-13656).
+unit-elf-phentsize: unit-elf-phentsize.c ../../src/elf.c
+	gcc -o $@ unit-elf-phentsize.c -I../../include -DWOLFBOOT_ELF \
 		-DARCH_FLASH_OFFSET=0 -DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
 unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
