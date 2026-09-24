@@ -104,6 +104,14 @@ extern void wolfboot_ram_entry(void);
 static uint8_t hal_bl_scratch[2048]
     __attribute__((section(".ram.noinit"), aligned(32)));
 
+/* The bootloader writes seven fixed slots into hal_bl_scratch at 256-byte
+ * strides; the last one (phal_spic_adaptor) gets the remaining 512 bytes.
+ * The SDK struct sizes are only known in the SDK backend -- when SPIC
+ * adaptor reuse is enabled, re-derive the slots from sizeof() of the real
+ * structs and keep this budget check. */
+_Static_assert(sizeof(hal_bl_scratch) >= 6 * 256 + 512,
+               "hal_bl_scratch must cover the seven bootloader slots");
+
 /* Exactly the 10 bytes "AmebaPro2\xff" (the trailing 0xff matters; a NUL pad
  * fails as "Invalid FW Image Signature"). */
 const unsigned char hal_ram_img_sig[10]
