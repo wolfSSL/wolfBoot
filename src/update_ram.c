@@ -83,10 +83,12 @@ static inline int ramboot_region_overlap(uintptr_t img_lo, uintptr_t img_hi,
 /* Function to load image from flash to ram */
 int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 {
-    int ret;
     uint32_t img_size;
     uint32_t version;
     BENCHMARK_DECLARE();
+#if defined(EXT_FLASH) && defined(NO_XIP)
+    int ret;
+#endif
 
     /* read header into RAM */
     wolfBoot_printf("Loading header %d bytes from %p to %p\n",
