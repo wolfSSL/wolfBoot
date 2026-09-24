@@ -617,14 +617,17 @@ static struct obj_hdr *create_object(int32_t type, uint32_t tok_id, uint32_t obj
 
 static void update_store_size(struct obj_hdr *hdr, uint32_t size)
 {
-    uint32_t off;
+    uintptr_t off;
+    uint8_t *h = (uint8_t *)hdr;
     uint8_t *s0;
     struct obj_hdr *hdr_mem;
 
-    off = (uint32_t)((uint8_t *)hdr - vault_base);
-    if (off > WOLFBOOT_SECTOR_SIZE - (uint32_t)sizeof(struct obj_hdr)) {
+    if (h < vault_base ||
+            h + sizeof(struct obj_hdr) >
+            vault_base + WOLFBOOT_SECTOR_SIZE) {
         return;
     }
+    off = (uintptr_t)(h - vault_base);
     s0 = cache_get_sector(0);
     hdr_mem = (struct obj_hdr *)(s0 + off);
     hdr_mem->size = size;
