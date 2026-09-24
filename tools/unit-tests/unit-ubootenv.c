@@ -374,9 +374,9 @@ START_TEST(test_select_malformed_counter_skips_slot)
 END_TEST
 
 /* env_next_name() is static; the test includes the .c directly, so drive it
- * with a token longer than the name buffer: the whole token must be
- * consumed and reported as truncated (-1), not left to resurface as a
- * second, spurious slot name. */
+ * with a token longer than the name buffer: the token is truncated to
+ * name_max - 1, the whole remainder is consumed, and the next token is
+ * still parsed - nothing resurfaces as a spurious slot name. */
 START_TEST(test_next_name_overlong_consumed_whole)
 {
     const char *s = "xxxxxxxxxx" "xxxxxxxxxx" "xxxxxxxxxx"
@@ -387,14 +387,15 @@ START_TEST(test_next_name_overlong_consumed_whole)
     int n;
 
     n = env_next_name(&o, name, sizeof(name));
-    ck_assert_int_eq(n, -1);
+    ck_assert_int_eq(n, UBOOT_ENV_VAL_MAX - 1);
+    ck_assert_int_eq(name[UBOOT_ENV_VAL_MAX - 2], 'x');
     n = env_next_name(&o, name, sizeof(name));
     ck_assert_int_eq(n, 1);
     ck_assert_str_eq(name, "A");
 }
 END_TEST
 
-/* A stream of a single over-long token: truncated (-1), then end of stream.
+/* A stream of a single over-long token: truncated, then end of stream.
  * No spurious second token. */
 START_TEST(test_next_name_only_overlong)
 {
@@ -406,7 +407,7 @@ START_TEST(test_next_name_only_overlong)
     int n;
 
     n = env_next_name(&o, name, sizeof(name));
-    ck_assert_int_eq(n, -1);
+    ck_assert_int_eq(n, UBOOT_ENV_VAL_MAX - 1);
     n = env_next_name(&o, name, sizeof(name));
     ck_assert_int_eq(n, 0);
 }
