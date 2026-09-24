@@ -358,13 +358,18 @@ void RAMFUNCTION hal_flash_lock(void)
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     int idx = 0;
+
     do_flash_init();
-    do {
+    /* Pre-test guard: a do/while would erase one full sector for a
+     * zero/negative length request. */
+    if (len <= 0)
+        return -1;
+    while (len > 0) {
         if (FLASH_Erase(&pflash, address + WOLFBOOT_SECTOR_SIZE * idx, WOLFBOOT_SECTOR_SIZE, kFTFx_ApiEraseKey) != kStatus_FTFx_Success)
             return -1;
         len -= WOLFBOOT_SECTOR_SIZE;
         idx++;
-    } while (len > 0);
+    }
     FTFx_CACHE_ClearCachePrefetchSpeculation(&pcache, 1);
     return 0;
 }

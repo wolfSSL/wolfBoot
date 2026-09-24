@@ -430,6 +430,13 @@ int main(int argCount, char** argValues)
                 noSht = 1;
                 break;
             case 'r': {
+                if (ranges != NULL) {
+                    fprintf(stderr,
+                        "Only one -r option is supported: use a single "
+                        "comma-separated range list\n");
+                    free(ranges);
+                    return EXIT_FAILURE;
+                }
                 hasRange = 1;
                 if (!parseRangeArgument(optarg, &ranges, &rangeCount,
                                         verbose)) {

@@ -433,6 +433,117 @@ START_TEST(test_delete_object_corrupted_pos_no_oob)
 }
 END_TEST
 
+/* F-12070: a corrupted 'pos' in the node table must not be used to
+ * compute the object address. find_object_buffer() must reject it and
+ * delete the node, not dereference an out-of-range slot. */
+START_TEST(test_find_object_buffer_corrupted_pos_no_oob)
+{
+    const int32_t type = DYNAMIC_TYPE_RSA;
+    const uint32_t tok_id = 0x21222324U;
+    const uint32_t obj_id = 0x60616263U;
+    struct obj_hdr *hdr;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    hdr = NODES_TABLE;
+    hdr->token_id = tok_id;
+    hdr->object_id = obj_id;
+    hdr->type = type;
+    hdr->pos = KEYVAULT_MAX_ITEMS;
+    hdr->size = 2 * sizeof(uint32_t);
+
+    /* Seed the backup sector with the object id's: without the range
+     * check, the restore path would use the out-of-range slot. */
+    ((uint32_t *)BACKUP_SECTOR_ADDRESS)[0] = tok_id;
+    ((uint32_t *)BACKUP_SECTOR_ADDRESS)[1] = obj_id;
+
+    ck_assert_ptr_null(find_object_buffer(type, tok_id, obj_id));
+    ck_assert_uint_eq(NODES_TABLE->token_id, PKCS11_INVALID_ID);
+    ck_assert_uint_eq(NODES_TABLE->object_id, PKCS11_INVALID_ID);
+}
+END_TEST
+
+/* F-13607: update_store_size() must reject a header pointer whose
+ * 'size' field (offset 16) lands past the end of the header sector.
+ * The old guard only bounded the first byte of the 32-byte struct. */
+START_TEST(test_update_store_size_oob_header_rejected)
+{
+    struct obj_hdr *forged;
+    uint8_t *s0;
+    int slot = -1;
+    int i;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    s0 = cache_get_sector(0);
+    for (i = 0; i < WOLFBOOT_PKCS11_STORE_CACHE_SECTORS; i++) {
+        if (store_cache[i].sector == s0) {
+            slot = i;
+            break;
+        }
+    }
+    ck_assert_int_ge(slot, 0);
+    ck_assert_int_lt(slot + 1, WOLFBOOT_PKCS11_STORE_CACHE_SECTORS);
+    memset(cache_sector_mem[slot + 1], 0, WOLFBOOT_SECTOR_SIZE);
+
+    /* off = SECTOR_SIZE - 16: the 'size' field lands at SECTOR_SIZE,
+     * the first word of the adjacent cache slot. */
+    forged = (struct obj_hdr *)(vault_base + WOLFBOOT_SECTOR_SIZE - 16);
+    update_store_size(forged, 0x12345678);
+    ck_assert_uint_eq(((uint32_t *)cache_sector_mem[slot + 1])[0], 0);
+}
+END_TEST
+
+/* F-13607: store_live_size() must reject a header pointer past the
+ * end of the header sector instead of reading the adjacent slot. */
+START_TEST(test_store_live_size_oob_header_rejected)
+{
+    struct store_handle handle;
+    uint8_t *s0;
+    int slot = -1;
+    int i;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base,
+            keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    s0 = cache_get_sector(0);
+    for (i = 0; i < WOLFBOOT_PKCS11_STORE_CACHE_SECTORS; i++) {
+        if (store_cache[i].sector == s0) {
+            slot = i;
+            break;
+        }
+    }
+    ck_assert_int_ge(slot, 0);
+    ck_assert_int_lt(slot + 1, WOLFBOOT_PKCS11_STORE_CACHE_SECTORS);
+    ((uint32_t *)cache_sector_mem[slot + 1])[0] = 0xDEADBEEF;
+
+    memset(&handle, 0, sizeof(handle));
+    handle.hdr = (struct obj_hdr *)(vault_base +
+        WOLFBOOT_SECTOR_SIZE - 16);
+    ck_assert_uint_eq(store_live_size(&handle), 0);
+}
+END_TEST
+
 START_TEST(test_find_object_search_stops_at_header_sector)
 {
     const int32_t type = DYNAMIC_TYPE_RSA;
@@ -951,7 +1062,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete_object, test_delete_object_ignores_metadata_prefix);
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
+    tcase_add_test(tcase_delete_corrupted,
+        test_find_object_buffer_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
+    tcase_add_test(tcase_find_bounds, test_update_store_size_oob_header_rejected);
+    tcase_add_test(tcase_find_bounds, test_store_live_size_oob_header_rejected);
     tcase_add_test(tcase_remanence, test_shorter_overwrite_erases_residual_key_material);
     tcase_add_test(tcase_neg_len, test_store_rejects_negative_len);
     tcase_add_test(tcase_remove_erase, test_remove_erases_payload_from_flash);

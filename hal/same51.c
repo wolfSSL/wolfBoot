@@ -352,9 +352,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     NVMCTRLB  = (NVMCMD_PBC | NVMCMD_KEY);
     while (i < len) {
         if ((len - i > 3) && ((((address + i) & 0x03) == 0)  && ((((uint32_t)data) + i) & 0x03) == 0)) {
-            dst = (uint32_t *)address;
-            src = (uint32_t *)data;
-            dst[i >> 2] = src[i >> 2];
+            dst = (uint32_t *)(address + i);
+            src = (uint32_t *)(data + i);
+            *dst = *src;
             i+=4;
         } else {
             uint32_t val;

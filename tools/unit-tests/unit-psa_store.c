@@ -192,6 +192,70 @@ START_TEST(test_delete_object_corrupted_pos_no_oob)
 }
 END_TEST
 
+/* F-12070: a corrupted 'pos' in the node table must not be used to
+ * compute the object address. find_object_buffer() must reject it and
+ * delete the node, not dereference an out-of-range slot. */
+START_TEST(test_find_object_buffer_corrupted_pos_no_oob)
+{
+    enum { type = WOLFPSA_STORE_KEY };
+    const uint32_t tok_id = 0x21222324U;
+    const uint32_t obj_id = 0x60616263U;
+    struct obj_hdr *hdr;
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    hdr = NODES_TABLE;
+    hdr->token_id = tok_id;
+    hdr->object_id = obj_id;
+    hdr->type = type;
+    hdr->pos = KEYVAULT_MAX_ITEMS;
+    hdr->size = 2 * sizeof(uint32_t);
+
+    /* Seed the backup sector with the object id's: without the range
+     * check, the restore path would use the out-of-range slot. */
+    ((uint32_t *)BACKUP_SECTOR_ADDRESS)[0] = tok_id;
+    ((uint32_t *)BACKUP_SECTOR_ADDRESS)[1] = obj_id;
+
+    ck_assert_ptr_null(find_object_buffer(type, tok_id, obj_id));
+    ck_assert_uint_eq(NODES_TABLE->token_id, WOLFPSA_INVALID_ID);
+    ck_assert_uint_eq(NODES_TABLE->object_id, WOLFPSA_INVALID_ID);
+}
+END_TEST
+
+/* F-13607: update_store_size() must reject a header pointer whose
+ * 'size' field (offset 16) lands past the end of the header sector.
+ * The old guard only bounded the first byte of the 32-byte struct. */
+START_TEST(test_update_store_size_oob_header_rejected)
+{
+    struct obj_hdr *forged;
+    int erased_before;
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    erased_before = erased_vault;
+    /* off = SECTOR_SIZE - 16: the 'size' field lands at SECTOR_SIZE,
+     * one word past the header sector. The guard must reject before
+     * any flash traffic. */
+    forged = (struct obj_hdr *)(vault_base + WOLFBOOT_SECTOR_SIZE - 16);
+    update_store_size(forged, 0x12345678);
+    ck_assert_int_eq(erased_vault, erased_before);
+}
+END_TEST
+
 START_TEST(test_find_object_search_stops_at_header_sector)
 {
     enum { type = WOLFPSA_STORE_KEY };
@@ -438,7 +502,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_close, test_close_clears_handle_state);
     tcase_add_test(tcase_delete, test_delete_object_ignores_metadata_prefix);
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
+    tcase_add_test(tcase_delete_corrupted,
+        test_find_object_buffer_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
+    tcase_add_test(tcase_find_bounds, test_update_store_size_oob_header_rejected);
     tcase_add_test(tcase_tail, test_shorter_overwrite_clears_tail);
     tcase_add_test(tcase_zeroize, test_cache_commit_zeroizes_cached_sector);
     tcase_add_test(tcase_neg_len, test_store_rejects_negative_len);

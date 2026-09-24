@@ -28,6 +28,7 @@ debug: all
 test: $(TARGET)
 	python3 test-range-overflow.py ./$(TARGET)
 	python3 test-align-overflow.py ./$(TARGET)
+	python3 test-repeat-range.py ./$(TARGET)
 
 $(TARGET): $(TARGET).o
 	@echo "Building squashelf tool"

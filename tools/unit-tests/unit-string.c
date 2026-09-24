@@ -454,6 +454,59 @@ START_TEST(test_uart_printf_formats)
 }
 END_TEST
 
+/* F-11030: %ld/%lu/%zd/%zu/%lx/%p must consume the full-width
+ * argument, not int (truncation on 64-bit hosts). */
+START_TEST(test_uart_printf_64bit_args)
+{
+    reset_uart_buf();
+    uart_printf("%ld", (long)1234567890123LL);
+    ck_assert_str_eq(uart_buf, "1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%lu", (unsigned long)18446744073709551615ULL);
+    ck_assert_str_eq(uart_buf, "18446744073709551615");
+
+    reset_uart_buf();
+    uart_printf("%zu", (size_t)4294967296ULL);
+    ck_assert_str_eq(uart_buf, "4294967296");
+
+    reset_uart_buf();
+    uart_printf("%p", (void*)(uintptr_t)0x1234567890ULL);
+    ck_assert_str_eq(uart_buf, "0x1234567890");
+
+    reset_uart_buf();
+    uart_printf("%lx", (unsigned long)0xABCDEF0123ULL);
+    ck_assert_str_eq(uart_buf, "ABCDEF0123");
+
+    reset_uart_buf();
+    uart_printf("%ld", (long)-1234567890123LL);
+    ck_assert_str_eq(uart_buf, "-1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%lld", (long long)-1234567890123LL);
+    ck_assert_str_eq(uart_buf, "-1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%d", 42);
+    ck_assert_str_eq(uart_buf, "42");
+}
+END_TEST
+
+/* F-11048: a negative '*' width must not reach the zero-pad memset
+ * as a huge size_t. */
+START_TEST(test_uart_printf_negative_star_width)
+{
+    reset_uart_buf();
+    uart_printf("%0*x", -3, 0x2a);
+    /* clamped to 0 -> default 8-digit zero pad */
+    ck_assert_str_eq(uart_buf, "0000002A");
+
+    reset_uart_buf();
+    uart_printf("%0*llu", -1, 0x123ULL);
+    ck_assert_str_eq(uart_buf, "00000291");
+}
+END_TEST
+
 Suite *string_suite(void)
 {
     Suite *s = suite_create("String");
@@ -488,6 +541,8 @@ Suite *string_suite(void)
     tcase_add_test(tcase_misc, test_memcpy_aligned_buffers);
     tcase_add_test(tcase_misc, test_uart_writenum_basic);
     tcase_add_test(tcase_misc, test_uart_printf_formats);
+    tcase_add_test(tcase_misc, test_uart_printf_64bit_args);
+    tcase_add_test(tcase_misc, test_uart_printf_negative_star_width);
 
     suite_add_tcase(s, tcase_strncasecmp);
     suite_add_tcase(s, tcase_misc);

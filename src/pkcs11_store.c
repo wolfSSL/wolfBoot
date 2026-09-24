@@ -514,6 +514,10 @@ static uint8_t *find_object_buffer(int32_t type, uint32_t tok_id, uint32_t obj_i
             uint32_t in_sector_off = obj_off % WOLFBOOT_SECTOR_SIZE;
             uint32_t sector_base = obj_off - in_sector_off;
 
+            if (hdr->pos >= KEYVAULT_MAX_ITEMS) {
+                delete_object(type, tok_id, obj_id);
+                return NULL; /* Corrupted slot position */
+            }
             tok_obj_stored = (uint32_t *)(sector_ptr(sector_base) +
                 in_sector_off);
             if ((tok_obj_stored[0] != tok_id) || (tok_obj_stored[1] != obj_id)) {
@@ -613,15 +617,17 @@ static struct obj_hdr *create_object(int32_t type, uint32_t tok_id, uint32_t obj
 
 static void update_store_size(struct obj_hdr *hdr, uint32_t size)
 {
-    uint32_t off;
+    uintptr_t off;
+    uint8_t *h = (uint8_t *)hdr;
     uint8_t *s0;
     struct obj_hdr *hdr_mem;
 
-    if (((uint8_t *)hdr) < vault_base ||
-        ((uint8_t *)hdr > vault_base + WOLFBOOT_SECTOR_SIZE)) {
+    if (h < vault_base ||
+            h + sizeof(struct obj_hdr) >
+            vault_base + WOLFBOOT_SECTOR_SIZE) {
         return;
     }
-    off = (uintptr_t)hdr - (uintptr_t)vault_base;
+    off = (uintptr_t)(h - vault_base);
     s0 = cache_get_sector(0);
     hdr_mem = (struct obj_hdr *)(s0 + off);
     hdr_mem->size = size;
@@ -774,11 +780,10 @@ static uint32_t store_live_size(struct store_handle *handle)
 {
     uint32_t off;
 
-    if (((uint8_t *)handle->hdr) < vault_base ||
-        ((uint8_t *)handle->hdr > vault_base + WOLFBOOT_SECTOR_SIZE)) {
+    off = (uint32_t)((uint8_t *)handle->hdr - vault_base);
+    if (off > WOLFBOOT_SECTOR_SIZE - (uint32_t)sizeof(struct obj_hdr)) {
         return 0;
     }
-    off = (uint32_t)((uintptr_t)handle->hdr - (uintptr_t)vault_base);
     return ((struct obj_hdr *)(sector0_ptr() + off))->size;
 }
 

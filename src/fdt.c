@@ -1692,6 +1692,8 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
     int off, len = 0;
     const char *comp;
     int complen = 0;
+    char compstr[24];
+    int n;
 #ifdef WOLFBOOT_GZIP
     BENCHMARK_DECLARE();
 #endif
@@ -1742,6 +1744,16 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 else {
                     is_unknown_comp = 1;
                 }
+
+                /* Bounded NUL-terminated copy for the diagnostics: the
+                 * raw property is only known to be terminated for the
+                 * recognized values. */
+                n = complen;
+                if (n > 23) {
+                    n = 23;
+                }
+                memcpy(compstr, comp, (size_t)n);
+                compstr[n] = '\0';
             }
             if (load != NULL && data != load) {
                 if (is_gzip) {
@@ -1804,7 +1816,7 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                     /* Unknown compression scheme; fail closed rather
                      * than silently memcpy compressed bytes as raw. */
                     wolfBoot_printf("FIT: subimage '%s' has unsupported "
-                        "compression=\"%s\"\n", image, comp);
+                        "compression=\"%s\"\n", image, compstr);
                     return NULL;
                 }
                 else {
@@ -1847,7 +1859,7 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                     "compression=\"%s\" but has no distinct load "
                     "destination (load=%p, data=%p); refusing to pass "
                     "compressed bytes through as raw\n",
-                    image, comp, load, data);
+                    image, compstr, load, data);
                 return NULL;
             }
         }

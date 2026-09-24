@@ -251,7 +251,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t _address, int len)
         if ((end_address >= flash_sector[i]) && (end_address < flash_sector[i + 1])) {
             end = i;
         }
-        if (start > 0 && end > 0)
+        if (start >= 0 && end >= 0)
             break;
     }
     if (start < 0 || end < 0)
