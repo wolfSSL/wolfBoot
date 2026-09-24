@@ -179,6 +179,25 @@ START_TEST(test_write_64_full_units)
 }
 END_TEST
 
+/* A write starting at an address with mod-8 residue 1: the byte-wise
+ * prefix leaves i = 7, where the fast path fires with i % 4 != 0.
+ * Pre-fix the double word was programmed 3 bytes below the intended
+ * address and the last 3 bytes of the unit were never programmed. */
+START_TEST(test_write_unaligned_start)
+{
+    int i;
+
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 1),
+        g_data + 1, 16), 0);
+
+    ck_assert_int_eq(memcmp(g_flash_mem + 1, g_data + 1, 16), 0);
+    ck_assert_uint_eq(g_flash_mem[0], 0x12);
+    for (i = 17; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    ck_assert_int_eq(canary_in_flash(), 0);
+}
+END_TEST
+
 Suite *stm32g4_write_suite(void)
 {
     Suite *s = suite_create("stm32g4-write");
@@ -189,6 +208,7 @@ Suite *stm32g4_write_suite(void)
     tcase_add_test(tc, test_write_58_partial_word_padded);
     tcase_add_test(tc, test_write_3_single_word_padded);
     tcase_add_test(tc, test_write_64_full_units);
+    tcase_add_test(tc, test_write_unaligned_start);
     suite_add_tcase(s, tc);
 
     return s;

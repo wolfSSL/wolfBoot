@@ -56,11 +56,11 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         flash_clear_errors();
         if ((len - i >= 8) && ((((address + i) & 0x07) == 0) &&
                 ((((uint32_t)data) + i) & 0x07) == 0)) {
-            src = (uint32_t *)data;
-            dst = (uint32_t *)address;
+            src = (uint32_t *)(data + i);
+            dst = (uint32_t *)(address + i);
             flash_wait_complete();
-            dst[i >> 2] = src[i >> 2];
-            dst[(i >> 2) + 1] = src[(i >> 2) + 1];
+            dst[0] = src[0];
+            dst[1] = src[1];
             flash_wait_complete();
             i += 8;
         } else {
