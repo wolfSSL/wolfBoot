@@ -164,8 +164,12 @@ int wolfBoot_ramboot(struct wolfBoot_image *img, uint8_t *src, uint8_t *dst)
 #if defined(EXT_FLASH) && defined(NO_XIP)
     ret = ext_flash_read((uintptr_t)src + IMAGE_HEADER_SIZE,
                                     dst + IMAGE_HEADER_SIZE, img_size);
-    if (ret < 0) {
-        wolfBoot_printf("Error reading image at %p\n", src);
+    /* Backends return the number of bytes read: a positive short read
+     * leaves a truncated image in the RAM load region, so require the
+     * full size. Check the signed error range before the unsigned
+     * comparison. */
+    if (ret < 0 || (uint32_t)ret != img_size) {
+        wolfBoot_printf("Error reading image at %p (ret %d)\n", src, ret);
         return -1;
     }
 #else
