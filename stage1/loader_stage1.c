@@ -107,9 +107,9 @@ int main(void)
         (uint8_t*)WOLFBOOT_ORIGIN,          /* flash offset */
         BOOTLOADER_PARTITION_SIZE           /* boot-loader partition (entire) */
     );
-    ret = 0;
+    ret = (int)BOOTLOADER_PARTITION_SIZE;
 #endif
-    if (ret >= 0) {
+    if (ret == (int)BOOTLOADER_PARTITION_SIZE) {
         wolfboot_start = (uint32_t*)WOLFBOOT_STAGE1_LOAD_ADDR;
     #ifdef PRINTF_ENABLED
         wolfBoot_printf("Jumping to full wolfBoot at %p\n", wolfboot_start);
