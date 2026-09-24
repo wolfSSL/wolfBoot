@@ -2241,7 +2241,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     /* Get the elf header from the image into a local buffer. We may overread
      * the buffer depending on architecture */
     memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
-    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    if (read_flash_fwimage(&boot, 0, elfHdrBuf,
+                           sizeof(elfHeaderMaxBuf)) != 0) {
+        return -1;
+    }
     elf_h = elfHdrBuf;
 
     if (elf_open(elf_h, &is_elf32) < 0) {
@@ -2275,14 +2278,18 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
     /* Hash the elf header and program header in the image, assuming the PHT
      * immediately follows the ELF header */
-    update_hash_flash_fwimg(&ctx, &boot, 0, elf_hdr_sz);
+    if (update_hash_flash_fwimg(&ctx, &boot, 0, elf_hdr_sz) != 0) {
+        return -1;
+    }
 
     current_ph_offset = entry_off;
 
     /* Calculate padding between ELF+PHT header and first segment */
     if (entry_count > 0) {
         uint64_t first_offset;
-        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+        if (read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size) != 0) {
+            return -1;
+        }
         if (is_elf32) {
             first_offset = ((elf32_program_header*)ph_buf)->offset;
         }
@@ -2295,7 +2302,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             wolfBoot_printf(
                 "ELF: [CHECK] Adding %d bytes padding before first segment\n",
                 (int32_t)len);
-            update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len); /* Hash actual file content */
+            /* Hash actual file content */
+            if (update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len) != 0) {
+                return -1;
+            }
         }
     }
 
@@ -2308,7 +2318,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         uint64_t next_offset = 0; /* Initialize */
 
         /* read the current program header into a local buffer */
-        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+        if (read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size) != 0) {
+            return -1;
+        }
 
         /* Extract common fields based on ELF type */
         if (is_elf32) {
@@ -2375,8 +2387,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
         /* Add padding until next program header, if any. */
         if (i < entry_count - 1) {
-            read_flash_fwimage(&boot, current_ph_offset + ph_size, ph_next_buf,
-                               ph_size);
+            if (read_flash_fwimage(&boot, current_ph_offset + ph_size,
+                                   ph_next_buf, ph_size) != 0) {
+                return -1;
+            }
             if (is_elf32) {
                 next_offset = ((elf32_program_header*)ph_next_buf)->offset;
             }
@@ -2390,7 +2404,11 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                                 "0x%08lx to 0x%08lx)\n",
                                 padding, (unsigned long)(offset + filesz),
                                 (unsigned long)next_offset);
-                update_hash_flash_fwimg(&ctx, &boot, offset + filesz, padding); /* Hash actual file content */
+                /* Hash actual file content */
+                if (update_hash_flash_fwimg(&ctx, &boot, offset + filesz,
+                                            padding) != 0) {
+                    return -1;
+                }
             }
         }
 
@@ -2422,7 +2440,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         wolfBoot_printf("ELF: [CHECK] Hashing %u bytes of trailing data from "
                         "offset 0x%llX\n",
                         len, (unsigned long long)final_offset);
-        update_hash_flash_fwimg(&ctx, &boot, final_offset, len);
+        if (update_hash_flash_fwimg(&ctx, &boot, final_offset, len) != 0) {
+            return -1;
+        }
     }
 
 
