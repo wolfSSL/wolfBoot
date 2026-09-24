@@ -47,6 +47,7 @@ static uint32_t mock_FLASH_SR;
 #define FLASH_SR mock_FLASH_SR
 
 /* Constants from hal/stm32c0.c (must mirror exactly). */
+#define FLASHMEM_ADDRESS_SPACE (0x08000000)
 #define FLASH_CR_STRT           (1 << 16)
 #define FLASH_CR_PER            (1 << 1)
 #define FLASH_CR_PNB_SHIFT      3
@@ -70,7 +71,9 @@ static void flash_wait_complete(void)
     }
     mock_FLASH_CR &= ~FLASH_CR_STRT;
 }
-static void flash_clear_errors(void) {}
+static void flash_clear_errors(void)
+{
+}
 
 #include "../../hal/stm32c0.c"
 
@@ -88,8 +91,7 @@ static void reset_mocks(void)
 }
 
 /* Erasing exactly one page must issue exactly one erase command. */
-START_TEST(test_erase_single_page_aligned)
-{
+START_TEST(test_erase_single_page_aligned){
     reset_mocks();
     hal_flash_erase(0x08000000UL, FLASH_PAGE_SIZE);
 
@@ -125,6 +127,24 @@ START_TEST(test_erase_unaligned_len_covers_last_page)
 }
 END_TEST
 
+/* Regression: the page number must be derived from the flash-relative
+ * offset and confined to the PNB field (bits 9:3). Deriving it from the
+ * absolute 0x08000000 address ORs bit 19 (a reserved FLASH_CR bit) into
+ * every page-erase command. */
+START_TEST(test_erase_cr_no_stray_bits)
+{
+    uint32_t allowed;
+
+    reset_mocks();
+    hal_flash_erase(0x08000000UL, FLASH_PAGE_SIZE);
+
+    ck_assert_int_eq(erase_log_n, 1);
+    allowed = FLASH_CR_PER |
+              (FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT) | FLASH_CR_STRT;
+    ck_assert_uint_eq(erase_cr[0] & ~allowed, 0);
+}
+END_TEST
+
 Suite *flash_erase_c0_suite(void)
 {
     Suite *s  = suite_create("flash-erase-c0");
@@ -133,6 +153,7 @@ Suite *flash_erase_c0_suite(void)
     tcase_add_test(tc, test_erase_single_page_aligned);
     tcase_add_test(tc, test_erase_two_pages_aligned);
     tcase_add_test(tc, test_erase_unaligned_len_covers_last_page);
+    tcase_add_test(tc, test_erase_cr_no_stray_bits);
 
     suite_add_tcase(s, tc);
     return s;
