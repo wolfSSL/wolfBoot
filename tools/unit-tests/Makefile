@@ -108,6 +108,7 @@ TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
 TESTS+=unit-nrf54l-uart-write
+TESTS+=unit-stm32h7-flash-write
 TESTS+=unit-elf-phentsize
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
@@ -1396,6 +1397,14 @@ nrf54l_uart_write_extract.h: ../../hal/nrf54l.c
 
 unit-nrf54l-uart-write: unit-nrf54l-uart-write.c nrf54l_uart_write_extract.h
 	gcc -o $@ unit-nrf54l-uart-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32h7-flash-write: the bank-boundary dispatcher splits cross-bank
+# requests (F-12871); hal_flash_write_part is mocked.
+stm32h7_flash_write_extract.h: ../../hal/stm32h7.c
+	sed -n '/^int RAMFUNCTION hal_flash_write(/,/^}/p' $< > $@
+
+unit-stm32h7-flash-write: unit-stm32h7-flash-write.c stm32h7_flash_write_extract.h
+	gcc -o $@ unit-stm32h7-flash-write.c $(CFLAGS) $(LDFLAGS)
 
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)

@@ -90,7 +90,33 @@ static void RAMFUNCTION flash_program_off(uint8_t bank)
     }
 }
 
+static int RAMFUNCTION hal_flash_write_part(uint32_t address,
+                                            const uint8_t *data, int len);
+
+/*
+ * hal_flash_write() dispatches across the bank boundary: a request that
+ * starts in bank 1 and extends into bank 2 is split at
+ * FLASH_BANK2_BASE_REL, because the programming path below selects one
+ * bank (FLASH_CR1/CR2) for the whole request and would write the tail
+ * into the wrong bank (F-12871).
+ */
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t bank2 = FLASH_BANK2_BASE_REL;
+
+    if ((address < bank2) && ((address + (uint32_t)len) > bank2)) {
+        uint32_t first = bank2 - address;
+
+        if (hal_flash_write_part(address, data, (int)first) != 0)
+            return -1;
+        return hal_flash_write_part(bank2, data + first,
+                                    len - (int)first);
+    }
+    return hal_flash_write_part(address, data, len);
+}
+
+static int RAMFUNCTION hal_flash_write_part(uint32_t address, const uint8_t *data,
+                                            int len)
 {
     int i = 0, ii =0;
     uint32_t *src, *dst;
