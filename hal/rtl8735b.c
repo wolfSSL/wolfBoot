@@ -433,9 +433,28 @@ void ext_flash_lock(void)
 #endif
 }
 
-int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+/* Physical SPI NOR capacity (16 MB) -- the ext_flash_* window. */
+#define RTL8735B_EXT_FLASH_SIZE 0x1000000
+
+/* All ext_flash callers derive (address, len) from the partition layout in
+ * target.h; reject anything past the device end before it reaches the SDK. */
+static int ext_flash_in_layout(uintptr_t address, int len)
 {
     if (len < 0) {
+        return 0;
+    }
+    if ((uint32_t)address >= RTL8735B_EXT_FLASH_SIZE) {
+        return 0;
+    }
+    if ((uint32_t)len > RTL8735B_EXT_FLASH_SIZE - (uint32_t)address) {
+        return 0;
+    }
+    return 1;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {
@@ -459,7 +478,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    if (len < 0) {
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {
