@@ -161,6 +161,7 @@ TESTS+=unit-sdhci-cmd-inhibit-uhs
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
+TESTS+=unit-ti-hercules-erase
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
 TESTS+=unit-fs-probe
@@ -1789,6 +1790,20 @@ ti_hercules_write_extract.h: ../../hal/ti_hercules.c
 
 unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-ti-hercules-erase runs the real hal_flash_erase() bank handling
+# from hal/ti_hercules.c (a range crossing the end of the starting
+# flash bank was partially erased and reported as success).
+# Same extraction trick as the write test; the FAPI calls are
+# emulated with a two-bank geometry.
+
+ti_hercules_erase_extract.h: ../../hal/ti_hercules.c
+	sed -n '/^static inline Fapi_FlashBankType RAMFUNCTION f021_lookup_bank/,/^}/p' $< > $@
+	sed -n '/^static inline int RAMFUNCTION hal_flash_unlock_helper/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< >> $@
+
+unit-ti-hercules-erase: unit-ti-hercules-erase.c ti_hercules_erase_extract.h
+	gcc -o $@ unit-ti-hercules-erase.c $(CFLAGS) $(LDFLAGS)
 
 # unit-p1021-qe-firmware drives the real qe_upload_firmware() from
 # hal/nxp_p1021.c (microcode offsets/counts were
