@@ -137,7 +137,7 @@
 #define HFROSCCFG_TRIM           0x001F0000UL
 #define HFROSCCFG_EN             (1UL << 30UL)
 #define HFROSCCFG_READY          (1UL << 31UL)
-#define HFROSCCFG_DIV_SHIFT(d)   ((d << 0) & HFROSCCFG_TRIM)
+#define HFROSCCFG_DIV_SHIFT(d)   ((d << 0) & HFROSCCFG_DIV)
 #define HFROSCCFG_TRIM_SHIFT(t)  ((t << 16) & HFROSCCFG_TRIM)
 
 #define HFXOSCCFG_EN             (1 << 30)

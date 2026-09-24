@@ -136,6 +136,7 @@ TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
+TESTS+=unit-hifive1-hfrosccfg
 TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
@@ -1613,6 +1614,15 @@ hifive1_flash_write_extract.h: ../../hal/hifive1.c
 
 unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
 	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-hifive1-hfrosccfg pins the HFROSCCFG field macros extracted from
+# hal/hifive1.c (F-9743: the divider field was masked with the trim
+# mask, so the divider always programmed zero).
+hifive1_hfrosccfg_extract.h: ../../hal/hifive1.c
+	sed -n '/^#define HFROSCCFG_DIV            0x0000001FUL/,/^#define HFROSCCFG_TRIM_SHIFT(t)/p' $< > $@
+
+unit-hifive1-hfrosccfg: unit-hifive1-hfrosccfg.c hifive1_hfrosccfg_extract.h
+	gcc -o $@ unit-hifive1-hfrosccfg.c $(CFLAGS) $(LDFLAGS)
 
 # unit-rp2350-flash-write runs the real hal_flash_write() from
 # hal/rp2350.c against a mock flash_range_program() that enforces the
