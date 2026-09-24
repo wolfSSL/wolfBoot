@@ -799,12 +799,12 @@ static int test_flash(void)
         wolfBoot_printf("check[%3d] %02x\n", i, pageData[i]);
         if (pageData[i] != (i & 0xff)) {
             wolfBoot_printf("Check Data @ %d failed\n", i);
-            return -i;
+            return -1;
         }
     }
 
     wolfBoot_printf("Flash Test Passed\n");
-    return ret;
+    return 0;
 }
 #endif /* TEST_EXT_FLASH */
 
@@ -951,7 +951,9 @@ void hal_init(void)
     wolfBoot_printf("Flash init done\n");
 
 #ifdef TEST_EXT_FLASH
-    test_flash();
+    if (test_flash() != 0) {
+        wolfBoot_printf("External flash test FAILED\n");
+    }
 #endif
 
 #ifdef TPM_TEST
