@@ -96,6 +96,7 @@ TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-flash-erase-mcxw
+TESTS+=unit-flash-erase-kinetis
 TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
@@ -683,6 +684,12 @@ unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3
 # (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
 # takes a uint32_t flash address as a pointer, which is only a narrowing cast on
 # the 64-bit host.
+kinetis_erase_extract.h: ../../hal/kinetis.c
+	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< > $@
+
+unit-flash-erase-kinetis: unit-flash-erase-kinetis.c kinetis_erase_extract.h
+	gcc -o $@ unit-flash-erase-kinetis.c $(CFLAGS) $(LDFLAGS)
+
 unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
 	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
 		$(CFLAGS) $(LDFLAGS)
