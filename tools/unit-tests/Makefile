@@ -108,6 +108,7 @@ TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
 TESTS+=unit-nrf54l-uart-write
+TESTS+=unit-x86-uart
 TESTS+=unit-stm32h7-flash-write
 TESTS+=unit-stm32u3-flash-write
 TESTS+=unit-elf-phentsize
@@ -1398,6 +1399,11 @@ nrf54l_uart_write_extract.h: ../../hal/nrf54l.c
 
 unit-nrf54l-uart-write: unit-nrf54l-uart-write.c nrf54l_uart_write_extract.h
 	gcc -o $@ unit-nrf54l-uart-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-x86-uart: uart_init() must derive the stop-bit field from the
+# requested stop count (F-12885); port I/O is mocked.
+unit-x86-uart: unit-x86-uart.c ../../hal/x86_uart.c
+	gcc -o $@ unit-x86-uart.c ../../hal/x86_uart.c $(CFLAGS) $(LDFLAGS)
 
 # unit-stm32h7-flash-write: the bank-boundary dispatcher splits cross-bank
 # requests (F-12871); hal_flash_write_part is mocked.

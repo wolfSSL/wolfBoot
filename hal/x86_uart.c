@@ -127,12 +127,18 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
         return -1;
     }
 
-    stops = 0;
-    if (stops > 1)
-        stops = 0x01;
-
-    if (bitrate == 0)
+    if (stop != 1 && stop != 2) {
         return -1;
+    }
+
+    stops = 0;
+    if (stop == 2) {
+        stops = 1;
+    }
+
+    if (bitrate == 0) {
+        return -1;
+    }
     divisor = 115200 / bitrate;
 
     write_reg(X86_UART_LCR, ENABLE_DLA);
