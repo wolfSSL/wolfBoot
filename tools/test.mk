@@ -1238,7 +1238,9 @@ test-size-all:
 	# Measured with the CI container (ghcr.io/wolfssl/wolfboot-ci-arm).
 	# Re-measured after the lib/wolfssl bump to master 4aa1ad7a5, which adds
 	# 8-136 bytes per configuration.
-	make test-size SIGN=NONE LIMIT=5172 NO_ARM_ASM=1
+	# Re-measured 2026-09-24: SIGN=NONE +8B (5180) from the Fenrir fix batch;
+	# all other configurations measured smaller than their limits.
+	make test-size SIGN=NONE LIMIT=5180 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=12356 NO_ARM_ASM=1
 	make keysclean
