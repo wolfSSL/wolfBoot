@@ -514,6 +514,10 @@ static uint8_t *find_object_buffer(int32_t type, uint32_t tok_id, uint32_t obj_i
             uint32_t in_sector_off = obj_off % WOLFBOOT_SECTOR_SIZE;
             uint32_t sector_base = obj_off - in_sector_off;
 
+            if (hdr->pos >= KEYVAULT_MAX_ITEMS) {
+                delete_object(type, tok_id, obj_id);
+                return NULL; /* Corrupted slot position */
+            }
             tok_obj_stored = (uint32_t *)(sector_ptr(sector_base) +
                 in_sector_off);
             if ((tok_obj_stored[0] != tok_id) || (tok_obj_stored[1] != obj_id)) {
