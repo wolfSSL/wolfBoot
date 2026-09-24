@@ -310,6 +310,14 @@ static int env_next_name(const char **po, char *name, size_t name_max)
     while (*o != '\0' && *o != ' ' && n < (int)name_max - 1)
         name[n++] = *o++;
     name[n] = '\0';
+    if (*o != '\0' && *o != ' ') {
+        /* Token longer than the buffer: consume the remainder so it
+         * does not resurface as a second, spurious slot name. */
+        while (*o != '\0' && *o != ' ')
+            o++;
+        *po = o;
+        return -1;
+    }
     *po = o;
     return n;
 }
@@ -357,7 +365,7 @@ int uboot_env_select_slot(uint8_t *env, size_t env_len, struct uboot_slot *out)
     /* Malformed (empty / whitespace-only) BOOT_ORDER yields no tokens: report
      * failure per the header contract rather than "success, no slot". */
     o = order;
-    if (env_next_name(&o, name, sizeof(name)) == 0)
+    if (env_next_name(&o, name, sizeof(name)) <= 0)
         return -1;
 
     /* Pass 1: first slot with tries left -> select + decrement. */
