@@ -109,6 +109,7 @@ TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
 TESTS+=unit-nrf54l-uart-write
 TESTS+=unit-stm32h7-flash-write
+TESTS+=unit-stm32u3-flash-write
 TESTS+=unit-elf-phentsize
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
@@ -1405,6 +1406,16 @@ stm32h7_flash_write_extract.h: ../../hal/stm32h7.c
 
 unit-stm32h7-flash-write: unit-stm32h7-flash-write.c stm32h7_flash_write_extract.h
 	gcc -o $@ unit-stm32h7-flash-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32u3-flash-write: post-program status must be checked and
+# misaligned addresses rejected (F-12106); flash registers are stubbed.
+stm32u3_flash_write_extract.h: ../../hal/stm32u3.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32u3-flash-write: unit-stm32u3-flash-write.c stm32u3_flash_write_extract.h
+	gcc -o $@ unit-stm32u3-flash-write.c $(CFLAGS) $(LDFLAGS)
 
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
