@@ -108,7 +108,6 @@ START_TEST(test_write_newline_expansion)
     char in[200];
     uint8_t exp[400];
     int explen;
-    int i;
 
     memset(in, '\n', sizeof(in));
     explen = build_expected(in, 200, exp);
