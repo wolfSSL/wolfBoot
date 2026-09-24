@@ -7,7 +7,8 @@
 status_t FLASH_ProgramPhrase(flash_config_t *config, uint32_t start,
         uint8_t *src, uint32_t len);
 status_t FLASH_EraseSector(flash_config_t *config, uint32_t start,
-        uint32_t len, uint32_t key);
+        uint32_t sector_count, uint32_t key);
+status_t FLASH_GetFlashConfig(flash_config_t *state, flash_config_t *config);
 
 #define kFLASH_ApiEraseKey 0x6b65796b
 

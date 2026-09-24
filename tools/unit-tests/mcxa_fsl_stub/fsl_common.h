@@ -11,7 +11,7 @@ typedef int status_t;
 #define kStatus_Success 0
 
 typedef struct {
-    int dummy;
+    uint32_t sectorSize;
 } flash_config_t;
 
 #endif /* FSL_COMMON_STUB_H */
