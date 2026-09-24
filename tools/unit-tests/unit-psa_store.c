@@ -229,6 +229,33 @@ START_TEST(test_find_object_buffer_corrupted_pos_no_oob)
 }
 END_TEST
 
+/* F-13607: update_store_size() must reject a header pointer whose
+ * 'size' field (offset 16) lands past the end of the header sector.
+ * The old guard only bounded the first byte of the 32-byte struct. */
+START_TEST(test_update_store_size_oob_header_rejected)
+{
+    struct obj_hdr *forged;
+    int erased_before;
+    int ret;
+
+    ret = mmap_file("/tmp/wolfboot-unit-psa-keyvault.bin", vault_base,
+        keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xFF, keyvault_size);
+
+    ((uint32_t *)vault_base)[0] = VAULT_HEADER_MAGIC;
+    memset(vault_base + sizeof(uint32_t), 0x00, BITMAP_SIZE);
+
+    erased_before = erased_vault;
+    /* off = SECTOR_SIZE - 16: the 'size' field lands at SECTOR_SIZE,
+     * one word past the header sector. The guard must reject before
+     * any flash traffic. */
+    forged = (struct obj_hdr *)(vault_base + WOLFBOOT_SECTOR_SIZE - 16);
+    update_store_size(forged, 0x12345678);
+    ck_assert_int_eq(erased_vault, erased_before);
+}
+END_TEST
+
 START_TEST(test_find_object_search_stops_at_header_sector)
 {
     enum { type = WOLFPSA_STORE_KEY };
@@ -478,6 +505,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_delete_corrupted,
         test_find_object_buffer_corrupted_pos_no_oob);
     tcase_add_test(tcase_find_bounds, test_find_object_search_stops_at_header_sector);
+    tcase_add_test(tcase_find_bounds, test_update_store_size_oob_header_rejected);
     tcase_add_test(tcase_tail, test_shorter_overwrite_clears_tail);
     tcase_add_test(tcase_zeroize, test_cache_commit_zeroizes_cached_sector);
     tcase_add_test(tcase_neg_len, test_store_rejects_negative_len);

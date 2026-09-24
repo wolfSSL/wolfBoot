@@ -621,11 +621,10 @@ static void update_store_size(struct obj_hdr *hdr, uint32_t size)
     uint8_t *s0;
     struct obj_hdr *hdr_mem;
 
-    if (((uint8_t *)hdr) < vault_base ||
-        ((uint8_t *)hdr > vault_base + WOLFBOOT_SECTOR_SIZE)) {
+    off = (uint32_t)((uint8_t *)hdr - vault_base);
+    if (off > WOLFBOOT_SECTOR_SIZE - (uint32_t)sizeof(struct obj_hdr)) {
         return;
     }
-    off = (uintptr_t)hdr - (uintptr_t)vault_base;
     s0 = cache_get_sector(0);
     hdr_mem = (struct obj_hdr *)(s0 + off);
     hdr_mem->size = size;
@@ -778,11 +777,10 @@ static uint32_t store_live_size(struct store_handle *handle)
 {
     uint32_t off;
 
-    if (((uint8_t *)handle->hdr) < vault_base ||
-        ((uint8_t *)handle->hdr > vault_base + WOLFBOOT_SECTOR_SIZE)) {
+    off = (uint32_t)((uint8_t *)handle->hdr - vault_base);
+    if (off > WOLFBOOT_SECTOR_SIZE - (uint32_t)sizeof(struct obj_hdr)) {
         return 0;
     }
-    off = (uint32_t)((uintptr_t)handle->hdr - (uintptr_t)vault_base);
     return ((struct obj_hdr *)(sector0_ptr() + off))->size;
 }
 

@@ -357,11 +357,10 @@ static void update_store_size(struct obj_hdr *hdr, uint32_t size)
 {
     uint32_t off;
     struct obj_hdr *hdr_mem;
-    if (((uint8_t *)hdr) < vault_base ||
-        ((uint8_t *)hdr > vault_base + WOLFBOOT_SECTOR_SIZE))
+    off = (uint32_t)((uint8_t *)hdr - vault_base);
+    if (off > WOLFBOOT_SECTOR_SIZE - (uint32_t)sizeof(struct obj_hdr))
         return;
     check_vault();
-    off = (uintptr_t)hdr - (uintptr_t)vault_base;
     memcpy(cached_sector, vault_base, WOLFBOOT_SECTOR_SIZE);
     hdr_mem = (struct obj_hdr *)(cached_sector + off);
     hdr_mem->size = size;
