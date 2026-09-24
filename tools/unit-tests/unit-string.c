@@ -454,6 +454,44 @@ START_TEST(test_uart_printf_formats)
 }
 END_TEST
 
+/* F-11030: %ld/%lu/%zd/%zu/%lx/%p must consume the full-width
+ * argument, not int (truncation on 64-bit hosts). */
+START_TEST(test_uart_printf_64bit_args)
+{
+    reset_uart_buf();
+    uart_printf("%ld", (long)1234567890123LL);
+    ck_assert_str_eq(uart_buf, "1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%lu", (unsigned long)18446744073709551615ULL);
+    ck_assert_str_eq(uart_buf, "18446744073709551615");
+
+    reset_uart_buf();
+    uart_printf("%zu", (size_t)4294967296ULL);
+    ck_assert_str_eq(uart_buf, "4294967296");
+
+    reset_uart_buf();
+    uart_printf("%p", (void*)(uintptr_t)0x1234567890ULL);
+    ck_assert_str_eq(uart_buf, "0x1234567890");
+
+    reset_uart_buf();
+    uart_printf("%lx", (unsigned long)0xABCDEF0123ULL);
+    ck_assert_str_eq(uart_buf, "ABCDEF0123");
+
+    reset_uart_buf();
+    uart_printf("%ld", (long)-1234567890123LL);
+    ck_assert_str_eq(uart_buf, "-1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%lld", (long long)-1234567890123LL);
+    ck_assert_str_eq(uart_buf, "-1234567890123");
+
+    reset_uart_buf();
+    uart_printf("%d", 42);
+    ck_assert_str_eq(uart_buf, "42");
+}
+END_TEST
+
 Suite *string_suite(void)
 {
     Suite *s = suite_create("String");
@@ -488,6 +526,7 @@ Suite *string_suite(void)
     tcase_add_test(tcase_misc, test_memcpy_aligned_buffers);
     tcase_add_test(tcase_misc, test_uart_writenum_basic);
     tcase_add_test(tcase_misc, test_uart_printf_formats);
+    tcase_add_test(tcase_misc, test_uart_printf_64bit_args);
 
     suite_add_tcase(s, tcase_strncasecmp);
     suite_add_tcase(s, tcase_misc);

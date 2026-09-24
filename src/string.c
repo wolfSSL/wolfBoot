@@ -449,7 +449,7 @@ static void uart_writenum_ll(unsigned long long val, int is_negative,
 void uart_vprintf(const char* fmt, va_list argp)
 {
     char* fmtp = (char*)fmt;
-    int zeropad, maxdigits, precision, leftjust, islong;
+    int zeropad, maxdigits, precision, leftjust, islong, iszl;
     while (fmtp != NULL && *fmtp != '\0') {
         /* print non formatting characters */
         if (*fmtp != '%') {
@@ -459,7 +459,7 @@ void uart_vprintf(const char* fmt, va_list argp)
         fmtp++; /* skip % */
 
         /* find formatters */
-        zeropad = maxdigits = leftjust = islong = 0;
+        zeropad = maxdigits = leftjust = islong = iszl = 0;
         precision = -1; /* -1 = not specified */
         /* check for left-justify flag */
         if (*fmtp == '-') {
@@ -500,7 +500,8 @@ void uart_vprintf(const char* fmt, va_list argp)
                 fmtp++;
             }
             else if (*fmtp == 'z') {
-                /* auto type - skip */
+                /* size_t - consume as long */
+                iszl = 1;
                 fmtp++;
             }
             else {
@@ -538,6 +539,26 @@ void uart_vprintf(const char* fmt, va_list argp)
                     }
                     uart_writenum_ll(val, is_neg, 10, zeropad, maxdigits);
                 }
+                else if (islong == 1 || iszl) {
+                    /* %ld / %lu / %zd / %zu: long is 64-bit here */
+                    int is_neg = 0;
+                    unsigned long long val;
+                    if (*fmtp != 'u') {
+                        long sl = va_arg(argp, long);
+                        if (sl < 0) {
+                            is_neg = 1;
+                            val = 0ULL - (unsigned long long)sl;
+                        }
+                        else {
+                            val = (unsigned long long)sl;
+                        }
+                    }
+                    else {
+                        val = (unsigned long long)va_arg(argp,
+                            unsigned long);
+                    }
+                    uart_writenum_ll(val, is_neg, 10, zeropad, maxdigits);
+                }
                 else
             #endif
                 {
@@ -559,10 +580,28 @@ void uart_vprintf(const char* fmt, va_list argp)
                         va_arg(argp, unsigned long long);
                     uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
                 }
+                else if (islong == 1 || iszl || *fmtp == 'p') {
+                    /* %lx / %zx / %p: long/pointer is 64-bit here */
+                    unsigned long long val;
+                    if (*fmtp == 'p') {
+                        val = (unsigned long long)va_arg(argp, void *);
+                    }
+                    else {
+                        val = (unsigned long long)va_arg(argp,
+                            unsigned long);
+                    }
+                    uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
+                }
                 else
             #endif
                 {
-                    int n = (int)va_arg(argp, int);
+                    int n;
+                    if (*fmtp == 'p') {
+                        n = (int)(uintptr_t)va_arg(argp, void *);
+                    }
+                    else {
+                        n = (int)va_arg(argp, int);
+                    }
                     uart_writenum(n, 16, zeropad, maxdigits);
                 }
                 break;
