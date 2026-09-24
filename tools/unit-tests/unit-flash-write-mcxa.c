@@ -52,7 +52,7 @@
 /* Records of the (mock) ROM erase calls issued by hal_flash_erase(). */
 static int erase_calls;
 static uint32_t last_erase_start;
-static uint32_t last_erase_count;
+static uint32_t last_erase_len;
 
 status_t FLASH_ProgramPhrase(flash_config_t *config, uint32_t start,
         uint8_t *src, uint32_t len)
@@ -63,20 +63,12 @@ status_t FLASH_ProgramPhrase(flash_config_t *config, uint32_t start,
 }
 
 status_t FLASH_EraseSector(flash_config_t *config, uint32_t start,
-        uint32_t sector_count, uint32_t key)
+        uint32_t length_in_bytes, uint32_t key)
 {
     (void)config; (void)key;
     erase_calls++;
     last_erase_start = start;
-    last_erase_count = sector_count;
-    return kStatus_Success;
-}
-
-status_t FLASH_GetFlashConfig(flash_config_t *state, flash_config_t *config)
-{
-    (void)state;
-    /* i.MX RT5xx internal flash sector size */
-    config->sectorSize = 4096U;
+    last_erase_len = length_in_bytes;
     return kStatus_Success;
 }
 
@@ -98,7 +90,7 @@ static void setup(void)
     memset(mock_flash, 0xFF, MOCK_FLASH_SIZE);
     erase_calls = 0;
     last_erase_start = 0;
-    last_erase_count = 0;
+    last_erase_len = 0;
 }
 
 static void teardown(void)
@@ -180,32 +172,26 @@ START_TEST(test_aligned_write_bulk_then_tail)
 }
 END_TEST
 
-/* hal_flash_erase() must hand FLASH_EraseSector a sector count, not a byte
- * length (the ROM API erases one sector per count unit). A 4 KiB request is
- * one sector; a partial extra byte rounds up to the next sector. */
-START_TEST(test_erase_byte_len_converted_to_sector_count){
+/* hal_flash_erase() must hand FLASH_EraseSector the byte length
+ * unconverted (the MCXA ROM API takes lengthInBytes, not a sector
+ * count). */
+START_TEST(test_erase_passes_byte_length){
     uint32_t base = (uint32_t)(uintptr_t)mock_flash;
 
     ck_assert_int_eq(hal_flash_erase(base, 4096), 0);
     ck_assert_int_eq(erase_calls, 1);
     ck_assert_uint_eq(last_erase_start, base);
-    ck_assert_uint_eq(last_erase_count, 1);
-
-    erase_calls = 0;
-    ck_assert_int_eq(hal_flash_erase(base, 4097), 0);
-    ck_assert_int_eq(erase_calls, 1);
-    ck_assert_uint_eq(last_erase_count, 2);
+    ck_assert_uint_eq(last_erase_len, 4096);
 
     erase_calls = 0;
     ck_assert_int_eq(hal_flash_erase(base, 8192), 0);
     ck_assert_int_eq(erase_calls, 1);
-    ck_assert_uint_eq(last_erase_count, 2);
+    ck_assert_uint_eq(last_erase_len, 8192);
 }
 END_TEST
 
 /* A zero-length erase request must be rejected without touching the ROM
- * API (before the fix the old alignment loop ran and the byte length was
- * passed straight through as the sector count). */
+ * API. */
 START_TEST(test_erase_zero_len){
     uint32_t base = (uint32_t)(uintptr_t)mock_flash;
 
@@ -231,7 +217,7 @@ Suite *flash_write_suite(void)
     tcase_add_test(tc, test_unaligned_write_spanning_two_words);
     tcase_add_test(tc, test_unaligned_write_single_word);
     tcase_add_test(tc, test_aligned_write_bulk_then_tail);
-    tcase_add_test(tc, test_erase_byte_len_converted_to_sector_count);
+    tcase_add_test(tc, test_erase_passes_byte_length);
     tcase_add_test(tc, test_erase_zero_len);
     tcase_add_test(tc, test_erase_negative_len);
 
