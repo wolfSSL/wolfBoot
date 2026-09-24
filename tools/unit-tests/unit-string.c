@@ -492,6 +492,21 @@ START_TEST(test_uart_printf_64bit_args)
 }
 END_TEST
 
+/* F-11048: a negative '*' width must not reach the zero-pad memset
+ * as a huge size_t. */
+START_TEST(test_uart_printf_negative_star_width)
+{
+    reset_uart_buf();
+    uart_printf("%0*x", -3, 0x2a);
+    /* clamped to 0 -> default 8-digit zero pad */
+    ck_assert_str_eq(uart_buf, "0000002A");
+
+    reset_uart_buf();
+    uart_printf("%0*llu", -1, 0x123ULL);
+    ck_assert_str_eq(uart_buf, "00000291");
+}
+END_TEST
+
 Suite *string_suite(void)
 {
     Suite *s = suite_create("String");
@@ -527,6 +542,7 @@ Suite *string_suite(void)
     tcase_add_test(tcase_misc, test_uart_writenum_basic);
     tcase_add_test(tcase_misc, test_uart_printf_formats);
     tcase_add_test(tcase_misc, test_uart_printf_64bit_args);
+    tcase_add_test(tcase_misc, test_uart_printf_negative_star_width);
 
     suite_add_tcase(s, tcase_strncasecmp);
     suite_add_tcase(s, tcase_misc);

@@ -470,6 +470,11 @@ void uart_vprintf(const char* fmt, va_list argp)
             if (*fmtp == '*') {
                 /* width from argument */
                 maxdigits = va_arg(argp, int);
+                if (maxdigits < 0) {
+                    /* F-11048: a negative width would become a huge
+                     * size_t in the zero-pad memset below. */
+                    maxdigits = 0;
+                }
                 fmtp++;
             }
             else if (*fmtp >= '0' && *fmtp <= '9') {
