@@ -573,8 +573,14 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end;
     uint32_t p;
-    if (address >= FLASH_BASE)
+
+    /* A non-positive length would underflow the inclusive end below. */
+    if (len <= 0) {
+        return 0;
+    }
+    if (address >= FLASH_BASE) {
         address -= FLASH_BASE;
+    }
     end = address + len - 1;
 
     FESPI_REG_TXMARK = 1;
