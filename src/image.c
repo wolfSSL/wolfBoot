@@ -2377,8 +2377,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                             "offset = 0x%08lx, size = %lu\n",
                             (unsigned long)paddr, (unsigned long)load_addr,
                             (unsigned long)offset, (unsigned long)filesz);
-            update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
-                                   PART_IS_EXT(&boot));
+            if (update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
+                                       PART_IS_EXT(&boot)) != 0) {
+                return -1;
+            }
         }
         else {
             wolfBoot_printf("ELF: [CHECK] ERROR: non-loadable segment\n");
