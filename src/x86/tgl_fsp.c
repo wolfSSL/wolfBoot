@@ -210,7 +210,7 @@ FSPT_UPD TempRamInitParams = {
   },
   .FsptConfig = {
     .PcdSerialIoUartDebugEnable = 1,
-    .PcdSerialIoUartNumber      = 0,
+    .PcdSerialIoUartNumber      = X86_UART_NUMBER,
     .PcdSerialIoUartMode        = 1,
     .PcdSerialIoUartBaudRate    = 115200,
     .PcdPciExpressBaseAddress   = PCI_ECAM_BASE,
@@ -534,6 +534,10 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
     upd->SerialIoUartMode[4] = 0;
     upd->SerialIoUartMode[5] = 0;
     upd->SerialIoUartMode[6] = 0;
+    /* Whatever X86_UART_NUMBER selects must be enabled. Leave a board-tuned
+     * mode (e.g. UART0's SkipInit) alone, but never leave the debug UART off. */
+    if (upd->SerialIoUartMode[X86_UART_NUMBER] == 0)
+        upd->SerialIoUartMode[X86_UART_NUMBER] = 1; /* SerialIoUartPci */
     upd->SerialIoUartAutoFlow[0] = 0;
     upd->SerialIoUartAutoFlow[1] = 0;
     upd->SerialIoUartAutoFlow[2] = 0;
@@ -968,6 +972,8 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 
     upd->EnableMultiPhaseSiliconInit = 0;
     upd->SerialIoUartMode[1] = upd->SerialIoUartMode[2] = 0x1;
+    if (upd->SerialIoUartMode[X86_UART_NUMBER] == 0)
+        upd->SerialIoUartMode[X86_UART_NUMBER] = 0x1; /* enable the debug UART */
     upd->SerialIoDebugUartNumber = X86_UART_NUMBER;
 
     memset(upd->PcieRpHotPlug, 0, sizeof(upd->PcieRpHotPlug));
