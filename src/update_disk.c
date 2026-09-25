@@ -44,6 +44,9 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include "disk.h"
+#ifdef DISK_BOOT_CONFIRM
+#include "disk_trailer.h"
+#endif
 #ifdef WOLFBOOT_DISK_FS
 #include "disk_fs.h"
 #endif
@@ -318,6 +321,119 @@ struct boot_slot {
 /* File scope, not stack: several disk targets build with
  * WOLFBOOT_SMALL_STACK=1. */
 static struct boot_slot boot_slots[2];
+
+#ifdef DISK_BOOT_CONFIRM
+/* Boot confirmation for the disk path. include/disk_trailer.h owns the
+ * format: the offset, the magic and the four state values are defined there
+ * once and shared with the userspace tool that stages and confirms. */
+
+/* Not on the stack: the disk targets that build WOLFBOOT_SMALL_STACK=1 keep
+ * boot_slots and the filesystem cache off it for the same reason. */
+static uint8_t disk_trailer[DISK_TRAILER_SZ];
+
+/* Last known state of each slot, filled in by disk_boot_state_reap(). */
+static uint8_t slot_state[2];
+
+/* Byte offset of the trailer within the slot's partition, or -1 when the slot
+ * cannot carry one. */
+static int slot_trailer_off(struct boot_slot *s, uint64_t *off)
+{
+    uint64_t sz = 0;
+
+    if ((s == NULL) || (off == NULL) || (s->ready == 0)) {
+        return -1;
+    }
+#ifdef WOLFBOOT_DISK_FS
+    /* A file-backed slot has no partition tail to claim: the filesystem owns
+     * it. Boot confirmation is raw-partition only. */
+    if (s->vol.type != FS_TYPE_RAW) {
+        return -1;
+    }
+#endif
+    if (disk_part_size(BOOT_DISK, s->part, &sz) != 0) {
+        return -1;
+    }
+    return disk_trailer_offset(sz, off);
+}
+
+/* Current state of a slot. */
+static int slot_state_read(struct boot_slot *s, uint8_t *state)
+{
+    uint64_t off = 0;
+
+    if (state == NULL) {
+        return -1;
+    }
+    *state = DISK_STATE_NEW;
+    if (slot_trailer_off(s, &off) != 0) {
+        return -1;
+    }
+    if (disk_part_read(BOOT_DISK, s->part, off, DISK_TRAILER_SZ,
+            disk_trailer) != (int)DISK_TRAILER_SZ) {
+        return -1;
+    }
+    *state = disk_trailer_decode(disk_trailer);
+    return 0;
+}
+
+/* Record a slot's state. img_end is the first byte past the image, so a
+ * trailer that would land inside it is refused rather than corrupting it. */
+static int slot_state_write(struct boot_slot *s, uint8_t state,
+    uint64_t img_end)
+{
+    uint64_t off = 0;
+
+    if (slot_trailer_off(s, &off) != 0) {
+        return -1;
+    }
+    if (off < img_end) {
+        wolfBoot_printf("Boot state would overlap the image on p%d\r\n",
+            s->part);
+        return -1;
+    }
+    disk_trailer_encode(disk_trailer, state);
+    if (disk_part_write(BOOT_DISK, s->part, off, DISK_TRAILER_SZ,
+            disk_trailer) != (int)DISK_TRAILER_SZ) {
+        return -1;
+    }
+    return 0;
+}
+
+/* Read both slots' states, and drop any slot still marked TESTING out of the
+ * election. Such a slot was armed before the previous boot and nothing
+ * confirmed it, so whatever it started did not come up.
+ *
+ * Nothing is written here. Zeroing the version in memory removes the slot
+ * from the selection AND from max_ver, which is what lets an older surviving
+ * slot boot without relaxing the anti-rollback guard for anything still live.
+ * A slot that merely fails verification keeps its version and still blocks an
+ * older one, exactly as before. */
+static void disk_boot_state_reap(uint32_t *pA_ver, uint32_t *pB_ver)
+{
+    uint8_t st;
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        st = DISK_STATE_NEW;
+        slot_state[i] = DISK_STATE_NEW;
+        if (slot_state_read(&boot_slots[i], &st) != 0) {
+            continue;
+        }
+        slot_state[i] = st;
+        if (st != DISK_STATE_TESTING) {
+            continue;
+        }
+        wolfBoot_printf("Slot %c was not confirmed; skipping it\r\n",
+            'A' + i);
+        if (i == 0) {
+            *pA_ver = 0;
+        }
+        else {
+            *pB_ver = 0;
+        }
+    }
+}
+#endif /* DISK_BOOT_CONFIRM */
 
 /**
  * @brief Read from a boot slot.
@@ -614,6 +730,10 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
     }
 
+#ifdef DISK_BOOT_CONFIRM
+    disk_boot_state_reap(&pA_ver, &pB_ver);
+#endif
+
     if ((pB_ver == 0) && (pA_ver == 0)) {
 #ifdef DISK_ENCRYPT
         disk_decrypted_header_clear(dec_hdr);
@@ -640,6 +760,20 @@ void RAMFUNCTION wolfBoot_start(void)
         failures++;
         slot = &boot_slots[selected];
         cur_part = (uint32_t)slot->part;
+#ifdef DISK_BOOT_CONFIRM
+        /* A slot still in TESTING did not confirm last boot. Zeroing its
+         * version in disk_boot_state_reap() takes it out of the election,
+         * but a failover below (selected ^= 1) can still land on it, and
+         * with ALLOW_DOWNGRADE defined the version guard that would other-
+         * wise refuse it is compiled out. Refuse it here so the exclusion
+         * holds on every path into the slot, not just the first choice. */
+        if (slot_state[selected] == DISK_STATE_TESTING) {
+            wolfBoot_printf("Slot %c was not confirmed; not booting it\r\n",
+                'A' + selected);
+            selected ^= 1;
+            continue;
+        }
+#endif
 #ifndef ALLOW_DOWNGRADE
         {
             uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
@@ -830,6 +964,27 @@ void RAMFUNCTION wolfBoot_start(void)
      * path (hal_get_boot_dts) below still need to read/write the env partition;
      * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
+
+#ifdef DISK_BOOT_CONFIRM
+    /* Put the slot on probation, but only if an update was staged into it.
+     * This mirrors update_ram.c, which promotes UPDATING to TESTING and
+     * nothing else: a device that never stages an update is never probated,
+     * so enabling this cannot strand a system whose OS does not confirm. A
+     * slot already SUCCESS, or never written, is left untouched and a
+     * steady-state boot writes nothing at all. */
+    if (slot_state[selected] == DISK_STATE_UPDATING) {
+        if (slot_state_write(&boot_slots[selected], DISK_STATE_TESTING,
+                (uint64_t)IMAGE_HEADER_SIZE + (uint64_t)os_image.fw_size)
+                != 0) {
+            /* Loud, because the consequence is silent: without the TESTING
+             * mark a failed boot of this image is never detected and the
+             * slot is retried for ever. */
+            wolfBoot_printf("WARNING: could not arm boot confirmation on "
+                "p%d; a failed boot of this image will not be detected\r\n",
+                boot_slots[selected].part);
+        }
+    }
+#endif
 
     load_address = (uint32_t*)os_image.fw_base;
 
