@@ -29,6 +29,10 @@ int fsp_get_image_revision(struct fsp_info_header *h, int *build,
 void print_fsp_image_revision(struct fsp_info_header *h);
 void fsp_init_silicon(void);
 
+/* Act on a reset request from any FSP entry point; returns for a non-reset
+ * status so the caller still checks for EFI_SUCCESS. */
+void fsp_handle_reset(uint32_t status);
+
 /* Reset requests (not failures) from FspMemInit and NotifyPhase. */
 #define FSP_STATUS_RESET_REQUIRED_COLD  0x40000001
 #define FSP_STATUS_RESET_REQUIRED_WARM  0x40000002
