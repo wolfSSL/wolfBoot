@@ -44,8 +44,7 @@
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
 #include "tpm.h"
-#if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS) && \
-    (WOLFBOOT_SHA_DIGEST_SIZE > WOLFBOOT_TPM_PCR_DIG_SZ)
+#if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS)
 #include <wolfssl/wolfcrypt/sha256.h>
 #endif
 #include "disk.h"
@@ -497,13 +496,11 @@ void RAMFUNCTION wolfBoot_start(void)
 #if WOLFBOOT_SHA_DIGEST_SIZE < WOLFBOOT_TPM_PCR_DIG_SZ
 #error "measured boot: image digest narrower than the PCR bank is not supported"
 #endif
-#if WOLFBOOT_SHA_DIGEST_SIZE > WOLFBOOT_TPM_PCR_DIG_SZ
 #if WOLFBOOT_TPM_PCR_DIG_SZ != 32
-#error "measured boot: the re-hash path only implements a SHA-256 PCR bank"
+#error "measured boot: the OS re-hash path only implements a SHA-256 PCR bank"
 #endif
     uint8_t os_pcr[WOLFBOOT_TPM_PCR_DIG_SZ];
     wc_Sha256 os_sha;
-#endif
 #endif
     BENCHMARK_DECLARE();
 
@@ -838,16 +835,15 @@ void RAMFUNCTION wolfBoot_start(void)
 #if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS)
     /* Measure the verified OS image into its own PCR, separate from the
      * firmware measurement in WOLFBOOT_MEASURED_PCR_A. PCR4 is the TCG slot for
-     * the boot payload the boot manager launches. Re-hash to the PCR bank
-     * algorithm when the image digest is wider, so a SHA-256 bank is not
-     * extended with a truncated wider digest. */
+     * the boot payload the boot manager launches. The authenticated digest is
+     * always re-hashed into the PCR bank algorithm and that value extended, so
+     * the measurement is derived the same way whatever the image hash width. */
     /* sha_hash is set only by a successful verify; NULL under
      * WOLFBOOT_SKIP_BOOT_VERIFY. Fail-secure rather than dereference it. */
     if (os_image.sha_hash == NULL) {
         wolfBoot_printf("No OS digest available to measure\r\n");
         wolfBoot_panic();
     }
-#if WOLFBOOT_SHA_DIGEST_SIZE > WOLFBOOT_TPM_PCR_DIG_SZ
     if (wc_InitSha256(&os_sha) != 0 ||
         wc_Sha256Update(&os_sha, os_image.sha_hash,
                         WOLFBOOT_SHA_DIGEST_SIZE) != 0 ||
@@ -857,10 +853,6 @@ void RAMFUNCTION wolfBoot_start(void)
     }
     measure_ret = wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_OS, os_pcr,
                                        __LINE__);
-#else
-    measure_ret = wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_OS,
-                                       os_image.sha_hash, __LINE__);
-#endif
     if (measure_ret != 0) {
         /* Fail-secure, as stage1 does for its own measurement: a working
          * TPM that cannot record the OS measurement must not boot it. */

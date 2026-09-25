@@ -601,15 +601,8 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     MemoryInit = (memory_init_cb)(fsp_m_base +
                                   fsp_m_info_header->FspMemoryInitEntryOffset);
     status = MemoryInit((void *)udp_m_parameter, &hobList);
-    if (status == FSP_STATUS_RESET_REQUIRED_WARM) {
-        wolfBoot_printf("warm reset required" ENDLINE);
-        reset(1);
-    }
-    else if (status == FSP_STATUS_RESET_REQUIRED_COLD) {
-        wolfBoot_printf("cold reset required" ENDLINE);
-        reset(0);
-    }
-    else if (status != EFI_SUCCESS) {
+    fsp_handle_reset(status);
+    if (status != EFI_SUCCESS) {
         wolfBoot_printf("failed: 0x%x" ENDLINE, status);
         panic();
     }
