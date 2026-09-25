@@ -43,6 +43,10 @@
 #include "spi_flash.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
+#include "tpm.h"
+#if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS)
+#include <wolfssl/wolfcrypt/sha256.h>
+#endif
 #include "disk.h"
 #ifdef WOLFBOOT_DISK_FS
 #include "disk_fs.h"
@@ -498,6 +502,20 @@ void RAMFUNCTION wolfBoot_start(void)
     uintptr_t bl31_entry = 0;
 #endif
     char part_name[4] = {'P', ':', 'X', '\0'};
+#if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS)
+    int measure_ret;
+#if defined(WOLFBOOT_SKIP_BOOT_VERIFY)
+#error "measured boot: WOLFBOOT_MEASURED_PCR_OS needs the OS digest, which WOLFBOOT_SKIP_BOOT_VERIFY does not produce"
+#endif
+#if WOLFBOOT_SHA_DIGEST_SIZE < WOLFBOOT_TPM_PCR_DIG_SZ
+#error "measured boot: image digest narrower than the PCR bank is not supported"
+#endif
+#if WOLFBOOT_TPM_PCR_DIG_SZ != 32
+#error "measured boot: the OS re-hash path only implements a SHA-256 PCR bank"
+#endif
+    uint8_t os_pcr[WOLFBOOT_TPM_PCR_DIG_SZ];
+    wc_Sha256 os_sha;
+#endif
     BENCHMARK_DECLARE();
 
 #ifdef DISK_ENCRYPT
@@ -831,6 +849,35 @@ void RAMFUNCTION wolfBoot_start(void)
      * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
 
+#if defined(WOLFBOOT_MEASURED_BOOT) && defined(WOLFBOOT_MEASURED_PCR_OS)
+    /* Measure the verified OS image into its own PCR, separate from the
+     * firmware measurement in WOLFBOOT_MEASURED_PCR_A. PCR4 is the TCG slot for
+     * the boot payload the boot manager launches. The authenticated digest is
+     * always re-hashed into the PCR bank algorithm and that value extended, so
+     * the measurement is derived the same way whatever the image hash width. */
+    /* sha_hash is set only by a successful verify; NULL under
+     * WOLFBOOT_SKIP_BOOT_VERIFY. Fail-secure rather than dereference it. */
+    if (os_image.sha_hash == NULL) {
+        wolfBoot_printf("No OS digest available to measure\r\n");
+        wolfBoot_panic();
+    }
+    if (wc_InitSha256(&os_sha) != 0 ||
+        wc_Sha256Update(&os_sha, os_image.sha_hash,
+                        WOLFBOOT_SHA_DIGEST_SIZE) != 0 ||
+        wc_Sha256Final(&os_sha, os_pcr) != 0) {
+        wolfBoot_printf("Failed to re-hash the OS digest\r\n");
+        wolfBoot_panic();
+    }
+    measure_ret = wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_OS, os_pcr,
+                                       __LINE__);
+    if (measure_ret != 0) {
+        /* Fail-secure, as stage1 does for its own measurement: a working
+         * TPM that cannot record the OS measurement must not boot it. */
+        wolfBoot_printf("Failed to measure the OS image into its PCR\r\n");
+        wolfBoot_panic();
+    }
+#endif /* WOLFBOOT_MEASURED_BOOT && WOLFBOOT_MEASURED_PCR_OS */
+
     load_address = (uint32_t*)os_image.fw_base;
 
 #ifdef WOLFBOOT_FDT
@@ -1013,6 +1060,11 @@ void RAMFUNCTION wolfBoot_start(void)
         zynqmp_atf_handoff(bl31_entry, (uintptr_t)load_address,
             (uintptr_t)dts_addr, ZYNQMP_ATF_EL2);
     }
+#endif
+#ifdef WOLFBOOT_FSP
+    /* Hand the verified payload length to the Linux loader (via do_boot) so it
+     * can bound the signed container header against the image. */
+    stage2_params->payload_size = (uint32_t)os_image.fw_size;
 #endif
     do_boot((uint32_t*)load_address
     #if defined(MMU) || defined(WOLFBOOT_FDT)

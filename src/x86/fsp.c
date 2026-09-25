@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 #include <x86/fsp/FspCommon.h>
+#include <x86/fsp.h>
 #include <stage2_params.h>
 #include <x86/common.h>
 #include <pci.h>
@@ -99,6 +100,36 @@ void print_fsp_image_revision(struct fsp_info_header *h)
     wolfBoot_printf("%x.%x.%x build %x\r\n", maj, min, rev, build);
 }
 
+/* Act on a reset request returned by any FSP entry point (FspMemInit,
+ * FspSiliconInit or NotifyPhase). WARM/COLD do the matching reset;
+ * RESET_REQUIRED_3 is the Tiger Lake global reset (host + CSME) needed after the
+ * FSP-S ChipsetInit sync. Any other status - EFI_SUCCESS or a real error - is
+ * left to the caller, so this returns in those cases. */
+void fsp_handle_reset(uint32_t status)
+{
+    if (status == FSP_STATUS_RESET_REQUIRED_WARM) {
+        wolfBoot_printf("fsp: warm reset required\n");
+        reset(1);
+    }
+    if (status == FSP_STATUS_RESET_REQUIRED_COLD) {
+        wolfBoot_printf("fsp: cold reset required\n");
+        reset(0);
+    }
+    if (status == FSP_STATUS_RESET_REQUIRED_3) {
+        wolfBoot_printf("fsp: global reset required\n");
+#ifdef WOLFBOOT_TGL
+        /* global_reset() returns only if ETR3 is locked and the global bit
+         * could not be armed. A plain reset would not satisfy the FSP-S
+         * request and would loop forever, so halt instead (fail-secure). */
+        global_reset();
+        wolfBoot_printf("ETR3 is locked, cannot arm a global reset\n");
+        panic();
+#else
+        reset(0);
+#endif
+    }
+}
+
 void fsp_init_silicon(void)
 {
     uint8_t silicon_init_parameter[FSP_S_PARAM_SIZE];
@@ -152,6 +183,7 @@ void fsp_init_silicon(void)
     wolfBoot_printf("call silicon...");
     silicon_init = _fsp_s_base_start + silicon_init_off;
     status = x86_run_fsp_32bit(silicon_init, silicon_init_parameter);
+    fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("silicon init failed returned %d\n", status);
         panic();
@@ -167,20 +199,23 @@ void fsp_init_silicon(void)
     notify_phase = _start_fsp_s + notify_phase_off;
     param.Phase = EnumInitPhaseAfterPciEnumeration;
     status = x86_run_fsp_32bit(notify_phase, &param);
+    fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
+        wolfBoot_printf("notify phase (after pci enum) failed %d\n", status);
         panic();
     }
     param.Phase = EnumInitPhaseReadyToBoot;
     status = x86_run_fsp_32bit(notify_phase, &param);
+    fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
+        wolfBoot_printf("notify phase (ready to boot) failed %d\n", status);
         panic();
     }
     param.Phase = EnumInitPhaseEndOfFirmware;
     status = x86_run_fsp_32bit(notify_phase, &param);
+    fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
-        wolfBoot_printf("notify phase failed %d\n", status);
+        wolfBoot_printf("notify phase (end of firmware) failed %d\n", status);
         panic();
     }
 }

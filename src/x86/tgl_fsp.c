@@ -158,6 +158,15 @@ SI_PCH_DEVICE_INTERRUPT_CONFIG mPchHDevIntConfig[] = {
     {30, 0, SiPchIntA, 16},
 };
 
+/* Which PCH LPSS SerialIo UART the FSP brings up for debug output. This is a
+ * controller index, not an address: the FSP maps whichever one is selected at
+ * PcdSerialIoUartDebugMmioBase, which we set from X86_UART_BASE. The two are
+ * independent, and getting the index wrong yields a silent console on a board
+ * whose UART base is perfectly correct. */
+#ifndef X86_UART_NUMBER
+#define X86_UART_NUMBER 0
+#endif
+
 #if defined(BUILD_LOADER_STAGE1)
 #define FIT_NUM_ENTRIES 2
 __attribute__((__section__(".boot"))) const struct fit_table_entry fit_table[FIT_NUM_ENTRIES] =
@@ -201,7 +210,7 @@ FSPT_UPD TempRamInitParams = {
   },
   .FsptConfig = {
     .PcdSerialIoUartDebugEnable = 1,
-    .PcdSerialIoUartNumber      = 0,
+    .PcdSerialIoUartNumber      = X86_UART_NUMBER,
     .PcdSerialIoUartMode        = 1,
     .PcdSerialIoUartBaudRate    = 115200,
     .PcdPciExpressBaseAddress   = PCI_ECAM_BASE,
@@ -421,7 +430,10 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->PcieClkSrcUsage[15] = 128;
     mem_cfg->PcieRpEnableMask = 1520787455;
     mem_cfg->PcdDebugInterfaceFlags = 16;
-    mem_cfg->SerialIoUartDebugControllerNumber = 0;
+    /* FSP-M and FSP-S each carry their own debug UART selector; both must be
+     * set from X86_UART_NUMBER or the console changes between phases - output
+     * appears for part of the boot and then stops, reading as a hang. */
+    mem_cfg->SerialIoUartDebugControllerNumber = X86_UART_NUMBER;
     mem_cfg->MrcSafeConfig = 1;
     mem_cfg->TcssItbtPcie0En = 0;
     mem_cfg->TcssItbtPcie1En = 0;
@@ -522,6 +534,10 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
     upd->SerialIoUartMode[4] = 0;
     upd->SerialIoUartMode[5] = 0;
     upd->SerialIoUartMode[6] = 0;
+    /* Whatever X86_UART_NUMBER selects must be enabled. Leave a board-tuned
+     * mode (e.g. UART0's SkipInit) alone, but never leave the debug UART off. */
+    if (upd->SerialIoUartMode[X86_UART_NUMBER] == 0)
+        upd->SerialIoUartMode[X86_UART_NUMBER] = 1; /* SerialIoUartPci */
     upd->SerialIoUartAutoFlow[0] = 0;
     upd->SerialIoUartAutoFlow[1] = 0;
     upd->SerialIoUartAutoFlow[2] = 0;
@@ -557,7 +573,7 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
     upd->SerialIoUartTxPinMuxPolicy[4] = 0;
     upd->SerialIoUartTxPinMuxPolicy[5] = 0;
     upd->SerialIoUartTxPinMuxPolicy[6] = 0;
-    upd->SerialIoDebugUartNumber = 0;
+    upd->SerialIoDebugUartNumber = X86_UART_NUMBER;
     upd->SerialIoI2cMode[0] = 0;
     upd->SerialIoI2cMode[1] = 0;
     upd->SerialIoI2cMode[2] = 0;
@@ -956,7 +972,9 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 
     upd->EnableMultiPhaseSiliconInit = 0;
     upd->SerialIoUartMode[1] = upd->SerialIoUartMode[2] = 0x1;
-    upd->SerialIoDebugUartNumber = 0x0;
+    if (upd->SerialIoUartMode[X86_UART_NUMBER] == 0)
+        upd->SerialIoUartMode[X86_UART_NUMBER] = 0x1; /* enable the debug UART */
+    upd->SerialIoDebugUartNumber = X86_UART_NUMBER;
 
     memset(upd->PcieRpHotPlug, 0, sizeof(upd->PcieRpHotPlug));
     memset(upd->CpuPcieRpHotPlug, 0, sizeof(upd->CpuPcieRpHotPlug));
