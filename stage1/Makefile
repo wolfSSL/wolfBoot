@@ -9,6 +9,10 @@ include ../tools/config.mk
 
 ## Initializers
 WOLFBOOT_ROOT?=$(PWD)
+# Set by the top-level Makefile; defaulted here so this sub-make also works
+# when it is invoked directly.
+WOLFBOOT_LIB_WOLFSSL?=$(abspath ../lib/wolfssl)
+WOLFBOOT_LIB_WOLFTPM?=$(abspath ../lib/wolfTPM)
 CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra -nostdlib
 LDFLAGS:=
@@ -52,6 +56,26 @@ include ../arch.mk
 # Parse config options
 include ../options.mk
 
+# NXP i.MX95: stage 1 replaces U-Boot SPL in AHAB container 0. It is a
+# standalone image with its own entry, so the object list is stated outright
+# rather than inherited from the BL33 build.
+ifeq ($(TARGET),imx95_a55)
+  OBJS:= \
+	./hal/imx95_a55_stage1.o \
+	./hal/imx95_a55_stage1_start.o \
+	./hal/imx95_ahab.o \
+	./hal/imx95_lpuart.o \
+	./hal/imx95_scmi.o \
+	./hal/imx95_usdhc.o \
+	./src/string.o
+  CFLAGS+=-DIMX95_STAGE1
+  ASFLAGS+=-DIMX95_STAGE1
+  # OCRAM, where the boot ROM loads the container's A55 image. Overridable so
+  # the same build can be linked elsewhere for bring-up.
+  WOLFBOOT_STAGE1_BASE_ADDR?=0x20480000
+  WOLFBOOT_STAGE1_SIZE?=0x30000
+endif
+
 ifeq ($(WOLFTPM),1)
   LS1_OBJS += \
     tpm_io.o \
@@ -76,9 +100,15 @@ CFLAGS+=-D"WOLFBOOT_TPM_NO_CHG_PLAT_AUTH"
 
 # Setup default optimizations (for GCC)
 ifeq ($(USE_GCC_HEADLESS),1)
-  CFLAGS+=-Wall -Wextra -Wno-main -Wno-unused
+  # -ffreestanding is not optional: without it the compiler recognizes the
+  # byte-scan loop in src/string.c as the strlen idiom and rewrites it into a
+  # call to strlen, so strlen becomes a branch to itself. -nostartfiles keeps
+  # the C runtime's startup objects, and the libc they drag in, out of the
+  # link. The top-level Makefile passes both; this one has to as well.
+  CFLAGS+=-Wall -Wextra -Wno-main -Wno-unused -ffreestanding
   CFLAGS+=-ffunction-sections -fdata-sections
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=loader_stage1.map
+  LDFLAGS+=-ffreestanding -nostartfiles
   LSCRIPT_FLAGS+=-T $(LSCRIPT)
   OBJCOPY_FLAGS+=--gap-fill $(FILL_BYTE)
 endif
