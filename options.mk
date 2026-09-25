@@ -1341,6 +1341,9 @@ ifeq ($(WOLFCRYPT_TZ_WOLFHSM),1)
   ifneq ($(SIGN),ED25519)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.o
   endif
+  ifneq ($(HASH),SHA3)
+    WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
+  endif
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_encrypt.o
   ifeq ($(ENCRYPT_WITH_AES128)$(ENCRYPT_WITH_AES256),)
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o

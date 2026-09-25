@@ -1046,6 +1046,10 @@ extern int tolower(int c);
 #       ifndef WOLFSSL_SHA512
 #           define WOLFSSL_SHA512
 #       endif
+        /* The NS client's direct SHA3 requests need a SHA3-capable server */
+#       ifndef WOLFSSL_SHA3
+#           define WOLFSSL_SHA3
+#       endif
 #   endif /* WOLFCRYPT_TZ_WOLFHSM */
     /* Match the keycache sizing the wolfHSM test suite is validated
      * against (test/config/wolfhsm_cfg.h: 9 regular + 3 big). The
