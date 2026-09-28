@@ -2341,7 +2341,7 @@ static int read_flash_fwimage(struct wolfBoot_image* img, uint32_t offset,
  */
 static int read_flash_addr(void* src, void* buffer, uint32_t size, int src_ext)
 {
-    if (buffer == NULL) {
+    if (src == NULL || buffer == NULL) {
         return -1;
     }
 
