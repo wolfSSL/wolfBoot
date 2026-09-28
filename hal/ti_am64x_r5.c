@@ -1,4 +1,4 @@
-/* ti_am64x.c
+/* ti_am64x_r5.c
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -27,29 +27,10 @@
 
 #include <wolfssl/wolfcrypt/types.h>
 
-// static flash_config_t pflash;
-// static const uint32_t pflash_page_size = 512U;
-// uint32_t SystemCoreClock; /* set in clock_config.c */
-
-// static void hal_flash_fix_ecc(void)
-// {
-//     uint8_t page_buf[512];
-//     uint32_t addr;
-//     uint32_t start = WOLFBOOT_PARTITION_BOOT_ADDRESS;
-//     uint32_t end   = WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE;
-
-//     memset(page_buf, 0xFF, sizeof(page_buf));
-
-//     for (addr = start; addr < end; addr += pflash_page_size) {
-//         if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
-//                 == kStatus_FLASH_Success) {
-//             FLASH_Program(&pflash, addr, page_buf, pflash_page_size);
-//         }
-//     }
-// }
-
 #include "DebugP.h"
+#include "board/flash.h"
 #include "drivers/sciclient.h"
+#include "drivers/ospi.h"
 #include "drivers/bootloader/soc/am64x_am243x/bootloader_soc.h"
 #include "kernel/dpl/ClockP.h"
 #include "security/security_common/drivers/crypto/rng/rng.h"
@@ -57,9 +38,9 @@
 
 void System_init(void);
 void Drivers_open(void);
-void Drivers_udmaOpen(void);
-void Drivers_uartOpen(void);
-extern ClockP_Config gClockConfig;
+int32_t Board_driversOpen(void);
+extern OSPI_Handle gOspiHandle[1];
+extern Flash_Handle gFlashHandle[1];
 
 #ifndef __WOLFBOOT
 #include <stdio.h>
@@ -75,6 +56,32 @@ void putchar__(char character)
 }
 #endif
 
+static void flashFixUpOspiBoot(OSPI_Handle oHandle)
+{
+    int32_t status = SystemP_FAILURE;
+    OSPI_setProtocol(oHandle, OSPI_NOR_PROTOCOL(8,8,8,1));
+    OSPI_enableDDR(oHandle);
+    OSPI_setDualOpCodeMode(oHandle);
+
+    /* Do a soft reset of the OSPI flash */
+    OSPI_WriteCmdParams wrParams;
+
+    OSPI_WriteCmdParams_init(&wrParams);
+    wrParams.cmd = 0x66;
+    status = OSPI_writeCmd(oHandle, &wrParams);
+    if(status == SystemP_SUCCESS)
+    {
+        wrParams.cmd = 0x99;
+        status = OSPI_writeCmd(oHandle, &wrParams);
+    }
+    /* Wait for the flash to reset */
+    ClockP_usleep(100);
+
+    OSPI_enableSDR(oHandle);
+    OSPI_clearDualOpCodeMode(oHandle);
+    OSPI_setProtocol(oHandle, OSPI_NOR_PROTOCOL(1,1,1,0));
+}
+
 void hal_init(void)
 {
 #ifdef __WOLFBOOT
@@ -85,12 +92,6 @@ void hal_init(void)
 //    );
 
     Sciclient_waitForBootNotification();
-
-    /* Warm Reset Workaround to prevent CPSW register lockup */
-    if (!Bootloader_socIsMCUResetIsoEnabled())
-    {
-        Bootloader_socResetWorkaround();
-    }
 
     if (!Bootloader_socIsMCUResetIsoEnabled())
     {
@@ -116,41 +117,28 @@ void hal_init(void)
 
         (void)Sciclient_boardCfgRm(&boardCfgPrms_rm);
 
-        /* Enable MCU PLL. MCU PLL will not be enabled by DMSC when devGrp is set
-        to Main in boardCfg */
         Bootloader_enableMCUPLL();
     }
 
     System_init();
-
     Bootloader_socOpenFirewalls();
-    Bootloader_socNotifyFirewallOpen();
+    Drivers_open();
 
-    Drivers_udmaOpen();
-    Drivers_uartOpen();
-
+    uart_write("ti_am64x_r5 init\n", 14);
     Sciclient_getVersionCheck(1);
-
 #else
-    gClockConfig.timerBaseAddr = 0x0e080000UL; /* fixes sdk syscfg bug */
+    // asm(
+    //     "_debug_loop_start:\n"
+    //     "  b _debug_loop_start\n"
+    // );
+    
     System_init();
     Drivers_open();
 #endif /* __WOLFBOOT */
 
-#ifdef __WOLFBOOT
-
-# ifdef DEBUG_UART
-    uart_init();
-    uart_write("ti_am64x init\n", 14);
-# endif
-
-#endif /* __WOLFBOOT */
-
-#if defined(__WOLFBOOT)
-    // memset(&pflash, 0, sizeof(pflash));
-    // FLASH_Init(&pflash);
-    // hal_flash_fix_ecc();
-#endif
+    flashFixUpOspiBoot(gOspiHandle[0]);
+    Board_driversOpen();
+    OSPI_enableDacMode(gOspiHandle[0]);
 }
 
 #ifdef __WOLFBOOT
@@ -171,10 +159,36 @@ void hal_prepare_boot(void)
 }
 #endif
 
+#define PAGE_SIZE 256
+
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
+    int status = 0;
+    uint32_t page_addr;
+    uint32_t offset;
+    uint32_t chunk;
+    uint8_t page_buf[PAGE_SIZE];
 
-    return 0;
+    while (len > 0) {
+        page_addr = address & ~(PAGE_SIZE - 1);
+        offset = address - page_addr;
+        chunk = PAGE_SIZE - offset;
+        if ((uint32_t)len < chunk)
+            chunk = (uint32_t)len;
+
+        memcpy(page_buf, (void *)page_addr, PAGE_SIZE);
+        memcpy(page_buf + offset, data, chunk);
+
+        OSPI_disableDacMode(gOspiHandle[0]);
+        status |= Flash_write(gFlashHandle[0], page_addr - ARCH_FLASH_OFFSET, page_buf, PAGE_SIZE);
+        OSPI_enableDacMode(gOspiHandle[0]);
+
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+
+    return status;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -187,9 +201,18 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    uint32_t offset = address - ARCH_FLASH_OFFSET;
+    uint32_t blk, page;
+    int status;
 
+    OSPI_disableDacMode(gOspiHandle[0]);
+    status = Flash_offsetToBlkPage(gFlashHandle[0], offset, &blk, &page);
+    if (status == 0) {
+        status = Flash_eraseBlk(gFlashHandle[0], blk);
+    }
+    OSPI_enableDacMode(gOspiHandle[0]);
 
-    return 0;
+    return status;
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
@@ -278,34 +301,6 @@ void uart_write(const char *buf, unsigned int sz)
 }
 #endif
 
-#ifdef EXT_FLASH
-int ext_flash_read(uintptr_t address, uint8_t *data, int len)
-{
-    XMEMCPY(data, (void *)address, len);
-    return len;
-}
-
-int ext_flash_erase(uintptr_t address, int len)
-{
-    XMEMSET((void *)address, 0xFF, len);
-    return len;
-}
-
-int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
-{
-    XMEMCPY((void *)address, data, len);
-    return len;
-}
-
-void ext_flash_lock(void)
-{
-}
-
-void ext_flash_unlock(void)
-{
-}
-#endif /* EXT_FLASH */
-
 
 #include <kernel/dpl/HwiP.h>
 #include <kernel/dpl/CacheP.h>
@@ -316,5 +311,8 @@ void do_boot(const uint32_t *app_offset)
     HwiP_disable();
     CacheP_wbInvAll(CacheP_TYPE_ALL);
     Bootloader_socCpuResetReleaseSelf();
+    while (1) {
+        asm("nop");
+    }
 }
 #endif /* __WOLFBOOT */
