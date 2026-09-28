@@ -103,7 +103,7 @@ else
   CFLAGS+=-Wall -ffreestanding -Wno-unused -ffunction-sections -fdata-sections
   # Stack usage computation not supported on TriCore
   ifneq ($(ARCH),AURIX)
-    ifneq ($(TARGET),ti_am64x)
+    ifneq ($(TARGET),ti_am64x_r5)
       ifneq ($(USE_CLANG),1)
         CFLAGS+=-Wstack-usage=$(STACK_USAGE_LIMIT)
       endif
@@ -114,7 +114,7 @@ else
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX)
-    ifneq ($(TARGET),ti_am64x)
+    ifneq ($(TARGET),ti_am64x_r5)
       ifneq ($(USE_CLANG),1)
         # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
         CFLAGS+=-gdwarf-4
@@ -183,8 +183,8 @@ endif
 # Setup default linker flags (gcc-driver form). Renesas RX links with ld
 # directly (USE_GCC=0) and gets its -T/-gc-sections/oformat from arch.mk, so
 # these gcc-driver flags (-Wl,/-nostartfiles and a duplicate -T) are skipped.
-ifeq ($(TARGET),ti_am64x)
-  LDFLAGS+=-Wl,$(LSCRIPT) -Wl,-m=image.map -Wl,--symbol_map=putchar_=putchar__
+ifeq ($(TARGET),ti_am64x_r5)
+  LDFLAGS+=-Wl,$(LSCRIPT) -Wl,-m=image.map -Wl,--symbol_map=putchar_=putchar__ -Wl,--honor_cmdfile_order
 else ifneq ($(ARCH),RENESAS_RX)
   LDFLAGS+=-T $(LSCRIPT) -Wl,-gc-sections -Wl,-Map=image.map -nostartfiles
 endif
@@ -284,7 +284,7 @@ endif
 ifeq ($(WOLFCRYPT_SUPPORT),1)
   # Add support infrastructure
   APP_OBJS+=wolfcrypt_support.o
-  ifneq ($(TARGET),ti_am64x)
+  ifneq ($(TARGET),ti_am64x_r5)
   APP_OBJS+=syscalls.o
   endif
 
@@ -899,8 +899,8 @@ ifeq ($(TARGET),ti_hercules)
   OBJCOPY_FLAGS=
 endif
 
-ifeq ($(TARGET),ti_am64x)
-  LSCRIPT_TEMPLATE=ARM-ti_am64x.ld
+ifeq ($(TARGET),ti_am64x_r5)
+  LSCRIPT_TEMPLATE=ARM-ti_am64x_r5.ld
 endif
 
 ifeq ($(TARGET),va416x0)
@@ -1185,7 +1185,7 @@ ifeq ($(TARGET),rw612)
     endif
 endif
 
-ifeq ($(TARGET),ti_am64x)
+ifeq ($(TARGET),ti_am64x_r5)
   GENERATED_APP_SRCS=
   GENERATED_APP_SRCS+=../generated/test-app/ti_board_config.c
   GENERATED_APP_SRCS+=../generated/test-app/ti_board_open_close.c
@@ -1197,13 +1197,22 @@ ifeq ($(TARGET),ti_am64x)
 
   ORIGINAL_SA2UL_C=$(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/sa2ul/sa2ul.c
   PATCHED_SA2UL_C=$(abspath ../generated/common/sa2ul.c)
-  PATCHFILE_SA2UL_C=$(abspath ../config/examples/ti-am64x/mcuplussdk_11.02.00_sa2ul.c.patch)
+  PATCHFILE_SA2UL_C=$(abspath ../config/examples/ti-am64x-r5/mcuplussdk_11.02.00_sa2ul.c.patch)
 
   APP_OBJS+=$(patsubst %.c,%.o,$(GENERATED_APP_SRCS))
   APP_OBJS+=$(patsubst %.c,%.o,$(PATCHED_SA2UL_C))
   APP_OBJS+=\
+    $(TI_MCU_PLUS_SDK)/source/board/flash/flash.o \
+    $(TI_MCU_PLUS_SDK)/source/board/flash/ospi/flash_nor_ospi.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/firewall/v0/firewall.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/ospi_phy_dqs.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/ospi_v0.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/dma/udma/ospi_udma_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_phy_dqs_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_v0_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_tuning/ospi_tuning_algo/algo_v1/ospi_phy_tuning.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/pinmux/am64x_am243x/pinmux.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/qos/v0/qos.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/csl_sec_proxy.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_pm.o \
@@ -1240,8 +1249,7 @@ ifeq ($(TARGET),ti_am64x)
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/printf.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/SemaphoreP_nortos.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TaskP_nortos.o \
-    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_nortos.o \
-    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r_asm.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r.o \
@@ -1260,11 +1268,11 @@ ifeq ($(TARGET),ti_am64x)
     $(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/rng/rng.o
 
   ifeq ($(PKA),1)
-    CFLAGS+=-DWOLFSSL_TI_AM64X
+    CFLAGS+=-DWOLFSSL_TI_AM64X_R5
     CFLAGS+=-DWOLFSSL_TI_AM64X_RNG_CTR_DRBG
     APP_OBJS+=\
       $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ti/ti-sa2ul_port.o
+      $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/ti/ti-sa2ul_r5_port.o
   endif
 endif
 
@@ -1743,7 +1751,7 @@ ifeq ($(WOLFHSM_SERVER),1)
   APP_OBJS += $(sort $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFBOOT_LIB_WOLFSSL)/%, $(WOLFCRYPT_OBJS)))
 endif
 
-ifeq ($(TARGET),ti_am64x)
+ifeq ($(TARGET),ti_am64x_r5)
 $(GENERATED_APP_SRCS):
 	@echo "\t[TI SYSCONFIG] ../generated/test-app/"
 	$(Q)$(TI_SYSCONFIG)/nodejs/node \
@@ -1751,7 +1759,7 @@ $(GENERATED_APP_SRCS):
       --product $(TI_MCU_PLUS_SDK)/.metadata/product.json \
       --context r5fss0-0 --part Default --package ALV \
       --output ../generated/test-app/ \
-      ../config/examples/ti-am64x/ti-am64x-r5_test-app.syscfg
+      ../config/examples/ti-am64x-r5/ti-am64x-r5_test-app.syscfg
 
 $(PATCHED_SA2UL_C): $(ORIGINAL_SA2UL_C) $(PATCHFILE_SA2UL_C)
 	@echo "\t[PATCH]  $(PATCHED_SA2UL_C)"
@@ -1789,8 +1797,8 @@ APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFSSL)/%, \
 APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFIP)/%, \
     $(WOLFIP_LOCAL_OBJDIR)/%, $(APP_OBJS))
 
-ifeq ($(ELF_FLASH_SCATTER),1)
-# When ELF_FLASH_SCATTER=1, preprocess the ELF file with the squashelf tool
+# squashelf if either ELF_FLASH_SCATTER==1 or TARGET==ti_am64x_r5
+ifneq (,$(ELF_FLASH_SCATTER)$(filter ti_am64x_r5,$(TARGET)))
 SQUASHELF_TOOL = ../tools/squashelf/squashelf
 OBJCOPY_SRC_ELF=image-orig.elf
 image-orig.elf: $(APP_OBJS) $(LSCRIPT)
@@ -1801,7 +1809,7 @@ image.elf: image-orig.elf
 	@echo "\t[SQUASHELF] $@"
 	$(Q)$(SQUASHELF_TOOL) -v --nosht $< $@
 else
-# Default behavior when ELF_FLASH_SCATTER is not set
+# Default behavior
 image.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"
 	$(Q)$(LD) $(LDFLAGS) $(APP_OBJS) $(LIBS) $(OUTPUT_FLAG) $@

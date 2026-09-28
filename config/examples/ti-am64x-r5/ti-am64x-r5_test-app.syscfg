@@ -23,8 +23,12 @@ scripting.excludeFromBuild("linker_defines.h");
 /**
  * Import the modules used in this configuration.
  */
+const flash           = scripting.addModule("/board/flash/flash", {}, false);
+const flash1          = flash.addInstance();
 const firewall        = scripting.addModule("/drivers/firewall/firewall", {}, false);
 const firewall1       = firewall.addInstance();
+const qos             = scripting.addModule("/drivers/qos/qos", {}, false);
+const qos1            = qos.addInstance();
 const debug_log       = scripting.addModule("/kernel/dpl/debug_log");
 const dpl_cfg         = scripting.addModule("/kernel/dpl/dpl_cfg");
 const mpu_armv7       = scripting.addModule("/kernel/dpl/mpu_armv7", {}, false);
@@ -33,7 +37,6 @@ const mpu_armv72      = mpu_armv7.addInstance();
 const mpu_armv73      = mpu_armv7.addInstance();
 const mpu_armv74      = mpu_armv7.addInstance();
 const mpu_armv75      = mpu_armv7.addInstance();
-const mpu_armv76      = mpu_armv7.addInstance();
 const default_linker  = scripting.addModule("/memory_configurator/default_linker", {}, false);
 const default_linker1 = default_linker.addInstance();
 const general         = scripting.addModule("/memory_configurator/general", {}, false);
@@ -58,6 +61,14 @@ const crypto1         = crypto.addInstance();
 /**
  * Write custom configuration values to the imported modules.
  */
+flash1.$name                         = "CONFIG_FLASH0";
+flash1.peripheralDriver.$name        = "CONFIG_OSPI0";
+flash1.peripheralDriver.phyEnable    = true;
+flash1.peripheralDriver.advanced     = true;
+flash1.peripheralDriver.inputClkFreq = 166666666;
+flash1.peripheralDriver.dmaEnable    = true;
+flash1.peripheralDriver.child.$name  = "drivers_ospi_v0_ospi_v0_template0";
+
 firewall1.$name               = "CONFIG_FIREWALL0";
 firewall1.regCfg.create(1);
 firewall1.regCfg[0].$name     = "FWL_REG_CFG0";
@@ -66,6 +77,13 @@ firewall1.regCfg[0].instName  = "SA2_UL0";
 firewall1.regCfg[0].interName = "MMRA";
 firewall1.regCfg[0].fwlCache  = true;
 firewall1.regCfg[0].fwlPriv1  = "MAIN_0_R5_0_SECURE";
+
+qos1.$name = "CONFIG_QOS0";
+
+const udma                         = scripting.addModule("/drivers/udma/udma", {}, false);
+const udma1                        = udma.addInstance({}, false);
+udma1.$name                        = "CONFIG_UDMA0";
+flash1.peripheralDriver.udmaDriver = udma1;
 
 debug_log.enableUartLog        = true;
 debug_log.uartLog.$name        = "CONFIG_UART_CONSOLE";
@@ -96,14 +114,9 @@ mpu_armv74.baseAddr          = 0x70000000;
 mpu_armv74.size              = 21;
 mpu_armv74.accessPermissions = "Supervisor RD+WR, User RD";
 
-mpu_armv75.$name             = "CONFIG_MPU_REGION4";
-mpu_armv75.baseAddr          = 0x60000000;
-mpu_armv75.size              = 28;
-mpu_armv75.accessPermissions = "Supervisor RD, User RD";
-
-mpu_armv76.$name    = "CONFIG_MPU_REGION5";
-mpu_armv76.baseAddr = 0x80000000;
-mpu_armv76.size     = 31;
+mpu_armv75.baseAddr = 0x80000000;
+mpu_armv75.size     = 31;
+mpu_armv75.$name    = "CONFIG_MPU_REGION4";
 
 default_linker1.$name = "memory_configurator_default_linker0";
 
@@ -275,15 +288,26 @@ section11.output_section[0].alignment = 0;
 crypto1.$name       = "CONFIG_CRYPTO0";
 crypto1.sa2ul.$name = "CONFIG_SA2UL0";
 
-const udma               = scripting.addModule("/drivers/udma/udma", {}, false);
-const udma1              = udma.addInstance({}, false);
-udma1.$name              = "CONFIG_UDMA0";
-crypto1.sa2ul.udmaPKTDMA = udma1;
+const udma2              = udma.addInstance({}, false);
+udma2.$name              = "CONFIG_UDMA1";
+crypto1.sa2ul.udmaPKTDMA = udma2;
 
 /**
  * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
  * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
  * re-solve from scratch.
  */
-debug_log.uartLog.UART.RXD.$suggestSolution = "UART0_RXD";
-debug_log.uartLog.UART.TXD.$suggestSolution = "UART0_TXD";
+flash1.peripheralDriver.OSPI.$suggestSolution      = "OSPI0";
+flash1.peripheralDriver.OSPI.CLK.$suggestSolution  = "OSPI0_CLK";
+flash1.peripheralDriver.OSPI.CSn0.$suggestSolution = "OSPI0_CSn0";
+flash1.peripheralDriver.OSPI.DQS.$suggestSolution  = "OSPI0_DQS";
+flash1.peripheralDriver.OSPI.D7.$suggestSolution   = "OSPI0_D7";
+flash1.peripheralDriver.OSPI.D6.$suggestSolution   = "OSPI0_D6";
+flash1.peripheralDriver.OSPI.D5.$suggestSolution   = "OSPI0_D5";
+flash1.peripheralDriver.OSPI.D4.$suggestSolution   = "OSPI0_D4";
+flash1.peripheralDriver.OSPI.D3.$suggestSolution   = "OSPI0_D3";
+flash1.peripheralDriver.OSPI.D2.$suggestSolution   = "OSPI0_D2";
+flash1.peripheralDriver.OSPI.D1.$suggestSolution   = "OSPI0_D1";
+flash1.peripheralDriver.OSPI.D0.$suggestSolution   = "OSPI0_D0";
+debug_log.uartLog.UART.RXD.$suggestSolution        = "UART0_RXD";
+debug_log.uartLog.UART.TXD.$suggestSolution        = "UART0_TXD";
