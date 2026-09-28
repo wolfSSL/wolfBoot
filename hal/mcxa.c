@@ -120,9 +120,14 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
+    if (len <= 0)
+        return -1;
     while ((address % 4) != 0)
-        address --;
-    if (FLASH_EraseSector(&pflash, address, len, kFLASH_ApiEraseKey) != kStatus_Success)
+        address--;
+    /* FLASH_EraseSector takes the length in bytes (4-byte aligned),
+     * not a sector count (MCXA ROM API, fsl_romapi.h). */
+    if (FLASH_EraseSector(&pflash, address, (uint32_t)len, kFLASH_ApiEraseKey)
+            != kStatus_Success)
         return -1;
     return 0;
 }

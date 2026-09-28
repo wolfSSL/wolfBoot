@@ -794,7 +794,7 @@ endif()
 #---------------------------------------------------------------------------------------------
 if(SIGN STREQUAL "NONE")
     list(APPEND KEYTOOL_OPTIONS --no-sign)
-    message(STATUS "Image signing disabled")
+    message(WARNING "SIGN=NONE / WOLFBOOT_NO_SIGN=1 disables firmware signature verification; images are NOT authenticated. Do not use in production.")
     set(WOLFBOOT_SIGNING_PRIVATE_KEY
         ""
         CACHE INTERNAL "")
@@ -1023,6 +1023,7 @@ if(EXT_FLASH)
 endif()
 
 if(ALLOW_DOWNGRADE)
+    message(WARNING "ALLOW_DOWNGRADE=1 disables anti-rollback enforcement; signed older firmware images can replace newer ones")
     list(APPEND WOLFBOOT_DEFS ALLOW_DOWNGRADE)
 endif()
 
@@ -1031,6 +1032,7 @@ if(NVM_FLASH_WRITEONCE)
 endif()
 
 if(DISABLE_BACKUP)
+    message(WARNING "DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable")
     list(APPEND WOLFBOOT_DEFS DISABLE_BACKUP)
 endif()
 

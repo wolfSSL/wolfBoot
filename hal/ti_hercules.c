@@ -244,11 +244,22 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
     uint32_t cur = 0;
     uint32_t end = address + len;
+    uint32_t bank_end = 0;
     Fapi_StatusType st = Fapi_getBankSectors(bank, &bank_sectors);
     if (st != Fapi_Status_Success) {
         return -1;
     }
     cur = bank_sectors.u32BankStartAddress;
+
+    /* Cross-bank erase is not supported: reject a range that extends
+     * past the end of the starting bank before erasing anything. */
+    bank_end = cur;
+    for (i = 0; i < (int)bank_sectors.u32NumberOfSectors; i++) {
+        bank_end += (uint32_t)bank_sectors.au16SectorSizes[i] * 1024U;
+    }
+    if (end > bank_end) {
+        return -1;
+    }
 
     hal_flash_unlock_helper(address);
     for(i=0; i < bank_sectors.u32NumberOfSectors; i++) {

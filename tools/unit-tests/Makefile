@@ -96,6 +96,7 @@ TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
 TESTS+=unit-flash-erase-mcxw
+TESTS+=unit-flash-erase-kinetis
 TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
 TESTS+=unit-otp-keystore-gen-zeroize
@@ -106,6 +107,11 @@ TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
+TESTS+=unit-nrf54l-uart-write
+TESTS+=unit-x86-uart
+TESTS+=unit-stm32h7-flash-write
+TESTS+=unit-stm32u3-flash-write
+TESTS+=unit-elf-phentsize
 TESTS+=unit-image-elf-scatter
 TESTS+=unit-arm-tee-psa-ipc
 TESTS+=unit-dice-token-size
@@ -116,6 +122,7 @@ TESTS+=unit-p1021-fcm-bytes
 TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
+TESTS+=unit-ct-compare
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -129,6 +136,7 @@ TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
 TESTS+=unit-hifive1-flash-write
+TESTS+=unit-hifive1-hfrosccfg
 TESTS+=unit-rp2350-flash-write
 TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
@@ -141,6 +149,7 @@ TESTS+=unit-aurix-erased-fill-invert
 TESTS+=unit-t2080-fman-loader
 TESTS+=unit-ecc-raw-der
 TESTS+=unit-stm32g4-write
+TESTS+=unit-stm32g0-write
 TESTS+=unit-stm32l4-write
 TESTS+=unit-stm32wb-write
 TESTS+=unit-stm32l5-write
@@ -154,6 +163,7 @@ TESTS+=unit-sdhci-cmd-inhibit-uhs
 TESTS+=unit-sdhci-wait-busy
 TESTS+=unit-sdhci-acmd41-timeout
 TESTS+=unit-ti-hercules-write
+TESTS+=unit-ti-hercules-erase
 TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
 TESTS+=unit-fs-probe
@@ -688,6 +698,12 @@ unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3
 # (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
 # takes a uint32_t flash address as a pointer, which is only a narrowing cast on
 # the 64-bit host.
+kinetis_erase_extract.h: ../../hal/kinetis.c
+	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< > $@
+
+unit-flash-erase-kinetis: unit-flash-erase-kinetis.c kinetis_erase_extract.h
+	gcc -o $@ unit-flash-erase-kinetis.c $(CFLAGS) $(LDFLAGS)
+
 unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
 	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
 		$(CFLAGS) $(LDFLAGS)
@@ -1179,6 +1195,17 @@ zynq_erase_extract.h: ../../hal/zynq.c
 unit-zynq-erase-loop: unit-zynq-erase-loop.c zynq_erase_extract.h
 	gcc -o $@ unit-zynq-erase-loop.c $(CFLAGS) $(LDFLAGS)
 
+# unit-ct-compare runs the WOLFBOOT_ARMORED image_CT_compare() self-check
+# at the 32-bit witness wrap boundary (len >= 65536). image.c drags in
+# the full image dependency tree, so the ARMORED function (the first
+# definition in the file) is extracted verbatim.
+ct_compare_extract.h: ../../src/image.c
+	sed -n '/^int NOINLINEFUNCTION image_CT_compare(/,/^}/p' $< \
+	    | sed -n '1,/^}/p' > $@
+
+unit-ct-compare: unit-ct-compare.c ct_compare_extract.h
+	gcc -o $@ unit-ct-compare.c $(CFLAGS) $(LDFLAGS)
+
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the
 # wrap clobbered the page start). Same extraction approach as the
@@ -1374,8 +1401,49 @@ stm32g4_write_extract.h: ../../hal/stm32g4.c
 	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
 	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
 
+# unit-nrf54l-uart-write: the conversion buffer must flush when full so
+# long lines are not truncated (F-12884); uart_write_raw is mocked.
+nrf54l_uart_write_extract.h: ../../hal/nrf54l.c
+	sed -n '/^void uart_write_device/,/^}/p' $< > $@
+
+unit-nrf54l-uart-write: unit-nrf54l-uart-write.c nrf54l_uart_write_extract.h
+	gcc -o $@ unit-nrf54l-uart-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-x86-uart: uart_init() must derive the stop-bit field from the
+# requested stop count (F-12885); port I/O is mocked.
+unit-x86-uart: unit-x86-uart.c ../../hal/x86_uart.c
+	gcc -o $@ unit-x86-uart.c ../../hal/x86_uart.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32h7-flash-write: the bank-boundary dispatcher splits cross-bank
+# requests (F-12871); hal_flash_write_part is mocked.
+stm32h7_flash_write_extract.h: ../../hal/stm32h7.c
+	sed -n '/^int RAMFUNCTION hal_flash_write(/,/^}/p' $< > $@
+
+unit-stm32h7-flash-write: unit-stm32h7-flash-write.c stm32h7_flash_write_extract.h
+	gcc -o $@ unit-stm32h7-flash-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32u3-flash-write: post-program status must be checked and
+# misaligned addresses rejected (F-12106); flash registers are stubbed.
+stm32u3_flash_write_extract.h: ../../hal/stm32u3.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32u3-flash-write: unit-stm32u3-flash-write.c stm32u3_flash_write_extract.h
+	gcc -o $@ unit-stm32u3-flash-write.c $(CFLAGS) $(LDFLAGS)
+
 unit-stm32g4-write: unit-stm32g4-write.c stm32g4_write_extract.h
 	gcc -o $@ unit-stm32g4-write.c $(CFLAGS) $(LDFLAGS)
+
+# unit-stm32g0-write: the G0 copy of the F-11023 double-word fast path;
+# same harness as unit-stm32g4-write.
+stm32g0_write_extract.h: ../../hal/stm32g0.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32g0-write: unit-stm32g0-write.c stm32g0_write_extract.h
+	gcc -o $@ unit-stm32g0-write.c $(CFLAGS) $(LDFLAGS)
 
 # unit-stm32l4-write runs the real hal_flash_write() from hal/stm32l4.c
 # (F-12062: the double-word fast path was selected on "len - i > 3" but
@@ -1565,6 +1633,15 @@ hifive1_flash_write_extract.h: ../../hal/hifive1.c
 unit-hifive1-flash-write: unit-hifive1-flash-write.c hifive1_flash_write_extract.h
 	gcc -o $@ unit-hifive1-flash-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-hifive1-hfrosccfg pins the HFROSCCFG field macros extracted from
+# hal/hifive1.c (F-9743: the divider field was masked with the trim
+# mask, so the divider always programmed zero).
+hifive1_hfrosccfg_extract.h: ../../hal/hifive1.c
+	sed -n '/^#define HFROSCCFG_DIV            0x0000001FUL/,/^#define HFROSCCFG_TRIM_SHIFT(t)/p' $< > $@
+
+unit-hifive1-hfrosccfg: unit-hifive1-hfrosccfg.c hifive1_hfrosccfg_extract.h
+	gcc -o $@ unit-hifive1-hfrosccfg.c $(CFLAGS) $(LDFLAGS)
+
 # unit-rp2350-flash-write runs the real hal_flash_write() from
 # hal/rp2350.c against a mock flash_range_program() that enforces the
 # ROM contract (F-12061: unaligned / non page-multiple writes from
@@ -1731,6 +1808,20 @@ ti_hercules_write_extract.h: ../../hal/ti_hercules.c
 unit-ti-hercules-write: unit-ti-hercules-write.c ti_hercules_write_extract.h
 	gcc -o $@ unit-ti-hercules-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-ti-hercules-erase runs the real hal_flash_erase() bank handling
+# from hal/ti_hercules.c (a range crossing the end of the starting
+# flash bank was partially erased and reported as success).
+# Same extraction trick as the write test; the FAPI calls are
+# emulated with a two-bank geometry.
+
+ti_hercules_erase_extract.h: ../../hal/ti_hercules.c
+	sed -n '/^static inline Fapi_FlashBankType RAMFUNCTION f021_lookup_bank/,/^}/p' $< > $@
+	sed -n '/^static inline int RAMFUNCTION hal_flash_unlock_helper/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< >> $@
+
+unit-ti-hercules-erase: unit-ti-hercules-erase.c ti_hercules_erase_extract.h
+	gcc -o $@ unit-ti-hercules-erase.c $(CFLAGS) $(LDFLAGS)
+
 # unit-p1021-qe-firmware drives the real qe_upload_firmware() from
 # hal/nxp_p1021.c (microcode offsets/counts were
 # never bounded to the 64 KiB buffer read from the update partition).
@@ -1806,6 +1897,12 @@ unit-elf-mmu-fail: unit-elf-mmu-fail.c ../../src/elf.c
 	gcc -o $@ unit-elf-mmu-fail.c -I../../include -DWOLFBOOT_ELF \
 		-DARCH_FLASH_OFFSET=0 -DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
 
+# unit-elf-phentsize: an undersized e_phentsize must be rejected before
+# the program-header loop reads past the validated table (F-13656).
+unit-elf-phentsize: unit-elf-phentsize.c ../../src/elf.c
+	gcc -o $@ unit-elf-phentsize.c -I../../include -DWOLFBOOT_ELF \
+		-DARCH_FLASH_OFFSET=0 -DWOLFBOOT_NO_PRINTF -g $(LDFLAGS)
+
 unit-image-elf-scatter: ../../include/target.h unit-image-elf-scatter.c
 	gcc -o $@ unit-image-elf-scatter.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 		$(CFLAGS) $(LDFLAGS)
@@ -1830,7 +1927,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	keystore_api_extract.h keystore_emitted.c keystore_gen \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
-	stm32c0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
+	stm32c0_write_extract.h stm32g0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
 	stm32l5_write_extract.h stm32u5_write_extract.h stm32wb_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \

@@ -373,6 +373,46 @@ START_TEST(test_select_malformed_counter_skips_slot)
 }
 END_TEST
 
+/* env_next_name() is static; the test includes the .c directly, so drive it
+ * with a token longer than the name buffer: the token is truncated to
+ * name_max - 1, the whole remainder is consumed, and the next token is
+ * still parsed - nothing resurfaces as a spurious slot name. */
+START_TEST(test_next_name_overlong_consumed_whole)
+{
+    const char *s = "xxxxxxxxxx" "xxxxxxxxxx" "xxxxxxxxxx"
+                    "xxxxxxxxxx" "xxxxxxxxxx" "xxxxxxxxxx"
+                    "xxxxxxxxxx" " A"; /* 70 x's, then A */
+    const char *o = s;
+    char name[UBOOT_ENV_VAL_MAX];
+    int n;
+
+    n = env_next_name(&o, name, sizeof(name));
+    ck_assert_int_eq(n, UBOOT_ENV_VAL_MAX - 1);
+    ck_assert_int_eq(name[UBOOT_ENV_VAL_MAX - 2], 'x');
+    n = env_next_name(&o, name, sizeof(name));
+    ck_assert_int_eq(n, 1);
+    ck_assert_str_eq(name, "A");
+}
+END_TEST
+
+/* A stream of a single over-long token: truncated, then end of stream.
+ * No spurious second token. */
+START_TEST(test_next_name_only_overlong)
+{
+    const char *s = "xxxxxxxxxx" "xxxxxxxxxx" "xxxxxxxxxx"
+                    "xxxxxxxxxx" "xxxxxxxxxx" "xxxxxxxxxx"
+                    "xxxxxxxxxx"; /* 70 x's */
+    const char *o = s;
+    char name[UBOOT_ENV_VAL_MAX];
+    int n;
+
+    n = env_next_name(&o, name, sizeof(name));
+    ck_assert_int_eq(n, UBOOT_ENV_VAL_MAX - 1);
+    n = env_next_name(&o, name, sizeof(name));
+    ck_assert_int_eq(n, 0);
+}
+END_TEST
+
 Suite *ubootenv_suite(void)
 {
     Suite *s = suite_create("ubootenv");
@@ -399,6 +439,8 @@ Suite *ubootenv_suite(void)
     tcase_add_test(tc, test_atol_rejects_overlong);
     tcase_add_test(tc, test_ltoa_respects_bound);
     tcase_add_test(tc, test_select_malformed_counter_skips_slot);
+    tcase_add_test(tc, test_next_name_overlong_consumed_whole);
+    tcase_add_test(tc, test_next_name_only_overlong);
     suite_add_tcase(s, tc);
 
     return s;

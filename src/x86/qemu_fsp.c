@@ -108,7 +108,7 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 
 int post_temp_ram_init_cb(void)
 {
-    uart_init(115200, 8, 'N', 0);
+    uart_init(115200, 8, 'N', 1);
     return 0;
 }
 

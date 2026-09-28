@@ -80,6 +80,8 @@
 #define FLASH_SECR          (*(volatile uint32_t *)(FLASH_BASE + 0x80)) /* RM0490 - 3.7.13 - FLASH_SECR */
 #endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
 
+#define FLASHMEM_ADDRESS_SPACE (0x08000000)
+
 #define FLASH_PAGE_SIZE        (0x800) /* 2KB */
 #define FLASH_PAGE_SIZE_SHIFT  11  /* (1 << FLASH_PAGE_SIZE_SHIFT) == FLASH_PAGE_SIZE*/
 
@@ -207,10 +209,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t p;
     if (len == 0)
         return -1;
+    address -= FLASHMEM_ADDRESS_SPACE;
     end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
         uint32_t reg = FLASH_CR & (~(FLASH_CR_PNB_MASK << FLASH_CR_PNB_SHIFT));
-        FLASH_CR = reg | ((p >> FLASH_PAGE_SIZE_SHIFT) << FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
+        FLASH_CR = reg | (((p >> FLASH_PAGE_SIZE_SHIFT) & FLASH_CR_PNB_MASK) <<
+                FLASH_CR_PNB_SHIFT) | FLASH_CR_PER;
         DMB();
         FLASH_CR |= FLASH_CR_STRT;
         flash_wait_complete();

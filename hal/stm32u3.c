@@ -71,6 +71,11 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     int i = 0;
     uint32_t *dst;
 
+    /* Programming unit is a double word: the address must be 8-byte
+     * aligned, the stores below assume it. */
+    if ((address & 7) != 0)
+        return -1;
+
     dst = (uint32_t *)address;
 
     while (i < len) {
@@ -103,6 +108,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
         /* RM step 10: clear PG */
         FLASH_NS_CR &= ~FLASH_CR_PG;
+
+        /* RM step 11: a programming fault must be reported to the
+         * caller, not swallowed (F-12106). */
+        if ((FLASH_NS_SR & (FLASH_SR_OPERR | FLASH_SR_PROGERR |
+                            FLASH_SR_WRPERR | FLASH_SR_PGAERR |
+                            FLASH_SR_SIZERR | FLASH_SR_PGSERR)) != 0) {
+            flash_clear_errors();
+            return -1;
+        }
         i += 8;
     }
     return 0;

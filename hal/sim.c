@@ -343,8 +343,10 @@ static int mmap_file(const char *path, uint8_t *address, uint8_t** ret_address)
 
     mmaped_addr = mmap(address, st.st_size, PROT_READ | PROT_WRITE,
                        MAP_SHARED, fd, 0);
-    if (mmaped_addr == MAP_FAILED)
+    if (mmaped_addr == MAP_FAILED) {
+        close(fd);
         return -1;
+    }
 
     wolfBoot_printf( "Simulator assigned %s to base %p\n", path, mmaped_addr);
 

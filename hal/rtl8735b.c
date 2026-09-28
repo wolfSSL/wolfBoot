@@ -104,6 +104,14 @@ extern void wolfboot_ram_entry(void);
 static uint8_t hal_bl_scratch[2048]
     __attribute__((section(".ram.noinit"), aligned(32)));
 
+/* The bootloader writes seven fixed slots into hal_bl_scratch at 256-byte
+ * strides; the last one (phal_spic_adaptor) gets the remaining 512 bytes.
+ * The SDK struct sizes are only known in the SDK backend -- when SPIC
+ * adaptor reuse is enabled, re-derive the slots from sizeof() of the real
+ * structs and keep this budget check. */
+typedef char hal_bl_scratch_budget_check[
+    (sizeof(hal_bl_scratch) >= 6 * 256 + 512) ? 1 : -1];
+
 /* Exactly the 10 bytes "AmebaPro2\xff" (the trailing 0xff matters; a NUL pad
  * fails as "Invalid FW Image Signature"). */
 const unsigned char hal_ram_img_sig[10]
@@ -433,9 +441,28 @@ void ext_flash_lock(void)
 #endif
 }
 
-int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+/* Physical SPI NOR capacity (16 MB) -- the ext_flash_* window. */
+#define RTL8735B_EXT_FLASH_SIZE 0x1000000
+
+/* All ext_flash callers derive (address, len) from the partition layout in
+ * target.h; reject anything past the device end before it reaches the SDK. */
+static int ext_flash_in_layout(uintptr_t address, int len)
 {
     if (len < 0) {
+        return 0;
+    }
+    if ((uint32_t)address >= RTL8735B_EXT_FLASH_SIZE) {
+        return 0;
+    }
+    if ((uint32_t)len > RTL8735B_EXT_FLASH_SIZE - (uint32_t)address) {
+        return 0;
+    }
+    return 1;
+}
+
+int ext_flash_read(uintptr_t address, uint8_t *data, int len)
+{
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {
@@ -459,7 +486,7 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
-    if (len < 0) {
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {
@@ -485,7 +512,7 @@ int ext_flash_erase(uintptr_t address, int len)
     uint32_t sector_addr;
     uint32_t end_addr;
 
-    if (len < 0 || (uint32_t)len > UINT32_MAX - (uint32_t)address) {
+    if (!ext_flash_in_layout(address, len)) {
         return -1;
     }
     if (len == 0) {

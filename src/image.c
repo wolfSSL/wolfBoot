@@ -87,7 +87,9 @@ int NOINLINEFUNCTION image_CT_compare(
         budget--;
     }
 
-    expected_witness = (len * (len + 1U)) / 2U;   /* sum(1..len) */
+    /* 64-bit product: the triangular number overflows 32 bits at
+     * len >= 65536, which would poison the self-check below. */
+    expected_witness = (uint32_t)(((uint64_t)len * ((uint64_t)len + 1U)) / 2U);
     len_is_zero = 1U ^ ((len | (0U - len)) >> 31);
 
     /* Folded twice, branch-free. */
@@ -2216,7 +2218,6 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     uint8_t*              exp_digest;
     int32_t               stored_sha_len;
     int                   i;
-    int32_t               entry_out_set = 0;
     uint8_t               elfHdrBuf[sizeof(elfHeaderMaxBuf)];
     uint8_t ph_buf[sizeof(elf64_program_header)]; /* Buffer for current PH */
     uint8_t ph_next_buf[sizeof(elf64_program_header)]; /* Buffer for next PH */
@@ -2240,7 +2241,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
     /* Get the elf header from the image into a local buffer. We may overread
      * the buffer depending on architecture */
     memset(elfHdrBuf, 0, sizeof(elfHdrBuf));
-    read_flash_fwimage(&boot, 0, elfHdrBuf, sizeof(elfHeaderMaxBuf));
+    if (read_flash_fwimage(&boot, 0, elfHdrBuf,
+                           sizeof(elfHeaderMaxBuf)) != 0) {
+        return -1;
+    }
     elf_h = elfHdrBuf;
 
     if (elf_open(elf_h, &is_elf32) < 0) {
@@ -2253,10 +2257,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         entry_count      = eh->ph_entry_count;
         entry_off        = eh->ph_offset;
         ph_size          = sizeof(elf32_program_header);
-        if (!entry_out_set) {
-            *entry_out    = eh->entry;
-            entry_out_set = 1;
-        }
+        *entry_out       = eh->entry;
         wolfBoot_printf("ELF: [CHECK] 32-bit, entry=0x%08X, "
                         "ph_offset=0x%08X, ph_count=%u\n",
                         (unsigned int)eh->entry, (unsigned int)entry_off, entry_count);
@@ -2266,10 +2267,7 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         entry_count      = eh->ph_entry_count;
         entry_off        = eh->ph_offset;
         ph_size          = sizeof(elf64_program_header);
-        if (!entry_out_set) {
-            *entry_out    = eh->entry;
-            entry_out_set = 1;
-        }
+        *entry_out       = eh->entry;
         wolfBoot_printf("ELF: [CHECK] 64-bit, entry=0x%08lx, "
                         "ph_offset=0x%08lx, ph_count=%d\n",
                         (unsigned long)eh->entry, (unsigned long)entry_off, entry_count);
@@ -2280,14 +2278,18 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
     /* Hash the elf header and program header in the image, assuming the PHT
      * immediately follows the ELF header */
-    update_hash_flash_fwimg(&ctx, &boot, 0, elf_hdr_sz);
+    if (update_hash_flash_fwimg(&ctx, &boot, 0, elf_hdr_sz) != 0) {
+        return -1;
+    }
 
     current_ph_offset = entry_off;
 
     /* Calculate padding between ELF+PHT header and first segment */
     if (entry_count > 0) {
         uint64_t first_offset;
-        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+        if (read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size) != 0) {
+            return -1;
+        }
         if (is_elf32) {
             first_offset = ((elf32_program_header*)ph_buf)->offset;
         }
@@ -2300,7 +2302,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
             wolfBoot_printf(
                 "ELF: [CHECK] Adding %d bytes padding before first segment\n",
                 (int32_t)len);
-            update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len); /* Hash actual file content */
+            /* Hash actual file content */
+            if (update_hash_flash_fwimg(&ctx, &boot, elf_hdr_sz, len) != 0) {
+                return -1;
+            }
         }
     }
 
@@ -2313,7 +2318,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         uint64_t next_offset = 0; /* Initialize */
 
         /* read the current program header into a local buffer */
-        read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size);
+        if (read_flash_fwimage(&boot, current_ph_offset, ph_buf, ph_size) != 0) {
+            return -1;
+        }
 
         /* Extract common fields based on ELF type */
         if (is_elf32) {
@@ -2370,8 +2377,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                             "offset = 0x%08lx, size = %lu\n",
                             (unsigned long)paddr, (unsigned long)load_addr,
                             (unsigned long)offset, (unsigned long)filesz);
-            update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
-                                   PART_IS_EXT(&boot));
+            if (update_hash_flash_addr(&ctx, load_addr, (uint32_t)filesz,
+                                       PART_IS_EXT(&boot)) != 0) {
+                return -1;
+            }
         }
         else {
             wolfBoot_printf("ELF: [CHECK] ERROR: non-loadable segment\n");
@@ -2380,8 +2389,10 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
 
         /* Add padding until next program header, if any. */
         if (i < entry_count - 1) {
-            read_flash_fwimage(&boot, current_ph_offset + ph_size, ph_next_buf,
-                               ph_size);
+            if (read_flash_fwimage(&boot, current_ph_offset + ph_size,
+                                   ph_next_buf, ph_size) != 0) {
+                return -1;
+            }
             if (is_elf32) {
                 next_offset = ((elf32_program_header*)ph_next_buf)->offset;
             }
@@ -2395,7 +2406,11 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
                                 "0x%08lx to 0x%08lx)\n",
                                 padding, (unsigned long)(offset + filesz),
                                 (unsigned long)next_offset);
-                update_hash_flash_fwimg(&ctx, &boot, offset + filesz, padding); /* Hash actual file content */
+                /* Hash actual file content */
+                if (update_hash_flash_fwimg(&ctx, &boot, offset + filesz,
+                                            padding) != 0) {
+                    return -1;
+                }
             }
         }
 
@@ -2427,7 +2442,9 @@ int wolfBoot_check_flash_image_elf(uint8_t part, unsigned long* entry_out)
         wolfBoot_printf("ELF: [CHECK] Hashing %u bytes of trailing data from "
                         "offset 0x%llX\n",
                         len, (unsigned long long)final_offset);
-        update_hash_flash_fwimg(&ctx, &boot, final_offset, len);
+        if (update_hash_flash_fwimg(&ctx, &boot, final_offset, len) != 0) {
+            return -1;
+        }
     }
 
 

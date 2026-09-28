@@ -118,6 +118,34 @@ START_TEST(test_unaligned_write_mismatched_alignment)
 }
 END_TEST
 
+/* Destination misaligned by 1 (mod 4), source buffer also misaligned by
+ * 1 (mod 4): after the first partial word the fast 32-bit path re-syncs
+ * with i % 4 != 0. Pre-fix the word was stored i % 4 bytes below the
+ * intended address and the tail bytes of the unit were never
+ * programmed. */
+START_TEST(test_unaligned_write_matched_alignment)
+{
+    uint8_t rawbuf[64];
+    uint8_t *data = rawbuf;
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+    int i;
+
+    while (((uintptr_t)data % 4) != 1)
+        data++;
+    for (i = 0; i < 12; i++)
+        data[i] = (uint8_t)(0xC0 + i);
+
+    ck_assert_int_eq(hal_flash_write(base + 5, data, 8), 0);
+
+    for (i = 0; i < 5; i++)
+        ck_assert_uint_eq(mock_flash[i], 0xFF);
+    for (i = 0; i < 8; i++)
+        ck_assert_uint_eq(mock_flash[5 + i], data[i]);
+    for (i = 13; i < MOCK_FLASH_SIZE; i++)
+        ck_assert_uint_eq(mock_flash[i], 0xFF);
+}
+END_TEST
+
 /* A write that fits entirely inside a single flash word must still work:
  * buggy and fixed forms agree here (the fill loop runs to completion on
  * the first iteration), guarding against a fix that breaks the common
@@ -148,6 +176,7 @@ Suite *flash_write_suite(void)
 
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_unaligned_write_mismatched_alignment);
+    tcase_add_test(tc, test_unaligned_write_matched_alignment);
     tcase_add_test(tc, test_unaligned_write_single_word);
 
     suite_add_tcase(s, tc);

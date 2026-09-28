@@ -311,7 +311,7 @@ static int sdhci_set_timeout(uint32_t timeout_us)
     }
 
     /* calculate the data timeout counter value */
-    dtcv = 8192; /* 2*13 */
+    dtcv = 8192; /* 2^13 */
     for (i=0; i<15; i++) {
         if (timeout_val < (dtcv / tcfclk)) {
             break;

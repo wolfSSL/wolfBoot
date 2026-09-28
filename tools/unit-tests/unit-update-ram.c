@@ -287,6 +287,52 @@ START_TEST (test_ramboot_success)
 }
 END_TEST
 
+/* F-13606: the version is a full 32-bit value; a version with the
+ * high bit set must not be rejected by a signed int comparison. */
+START_TEST (test_ramboot_high_bit_version)
+{
+    struct wolfBoot_image img;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 0x80000001, TEST_SIZE_SMALL);
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_ramboot(&img,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS, wolfboot_ram);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(img.not_ext, 1);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_ramboot_short_read_rejected)
+{
+    struct wolfBoot_image img;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    mock_ext_flash_short_len = TEST_SIZE_SMALL;
+    mock_ext_flash_short_bytes = 1;
+
+    memset(&img, 0, sizeof(img));
+    ret = wolfBoot_ramboot(&img,
+            (uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS, wolfboot_ram);
+
+    /* Clear the short-read mock before asserting: the suite runs CK_NOFORK,
+     * so a failing ck_assert longjmps past any cleanup below and would leave
+     * every full-size ext_flash_read truncated for the next test. */
+    mock_ext_flash_short_len = 0;
+    mock_ext_flash_short_bytes = 0;
+    ck_assert_int_eq(ret, -1);
+    ck_assert_int_eq(img.not_ext, 0);
+    cleanup_flash();
+}
+END_TEST
+
 START_TEST (test_ramboot_overlap_predicate)
 {
     /* wolfBoot occupies [0x1000, 0x2000) for these checks (the two-sided
@@ -606,6 +652,8 @@ Suite *wolfboot_suite(void)
     TCase *ramboot_invalid_header = tcase_create("Ramboot invalid header");
     TCase *ramboot_oversize = tcase_create("Ramboot oversize");
     TCase *ramboot_success = tcase_create("Ramboot success");
+    TCase *ramboot_high_bit = tcase_create("Ramboot high-bit version");
+    TCase *ramboot_short_read = tcase_create("Ramboot short read");
     TCase *ramboot_overlap = tcase_create("Ramboot overlap predicate");
     TCase *sunnyday_noupdate =
         tcase_create("Sunny day test with no update available");
@@ -636,6 +684,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(ramboot_invalid_header, test_ramboot_invalid_header);
     tcase_add_test(ramboot_oversize, test_ramboot_oversize_rejected);
     tcase_add_test(ramboot_success, test_ramboot_success);
+    tcase_add_test(ramboot_high_bit, test_ramboot_high_bit_version);
+    tcase_add_test(ramboot_short_read, test_ramboot_short_read_rejected);
     tcase_add_test(ramboot_overlap, test_ramboot_overlap_predicate);
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
@@ -660,6 +710,8 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, ramboot_invalid_header);
     suite_add_tcase(s, ramboot_oversize);
     suite_add_tcase(s, ramboot_success);
+    suite_add_tcase(s, ramboot_high_bit);
+    suite_add_tcase(s, ramboot_short_read);
     suite_add_tcase(s, ramboot_overlap);
     suite_add_tcase(s, sunnyday_noupdate);
     suite_add_tcase(s, forward_update_samesize);
@@ -683,6 +735,7 @@ Suite *wolfboot_suite(void)
     tcase_set_timeout(ramboot_invalid_header, 5);
     tcase_set_timeout(ramboot_oversize, 5);
     tcase_set_timeout(ramboot_success, 5);
+    tcase_set_timeout(ramboot_short_read, 5);
     tcase_set_timeout(ramboot_overlap, 5);
     tcase_set_timeout(sunnyday_noupdate, 5);
     tcase_set_timeout(forward_update_samesize, 5);

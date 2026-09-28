@@ -1,13 +1,12 @@
-/* unit-stm32g4-write.c
+/* unit-stm32g0-write.c
  *
- * Regression test for F-11023: the double-word fast path of
- * hal_flash_write() in hal/stm32g4.c was selected on "len - i > 3"
- * but consumed eight bytes, so an aligned 4-7 byte tail read up to
- * four bytes past the caller's buffer and programmed them into
- * flash. The fix requires at least eight remaining bytes before
- * taking the fast path; shorter tails fall to the RMW branch, which
- * rewrites the unit with the out-of-range bytes read back from
- * flash.
+ * Regression test for F-11023 on the STM32G0 copy of the double-word
+ * fast path: the fast path of hal_flash_write() in hal/stm32g0.c must
+ * be taken only with at least eight bytes remaining, so an aligned
+ * 4-7 byte tail falls to the RMW branch and reads nothing past the
+ * caller's buffer. The G4/G0 files carry the same fast path and were
+ * fixed in the same commit (6025f354); this harness mirrors
+ * unit-stm32g4-write for the G0 copy.
  *
  * Same harness as the STM32L5/STM32U5 twins: extracted functions,
  * registers on a host file, stale destination flash, canary after
@@ -40,23 +39,17 @@
 /* Host stand-in for the ARM build attribute. */
 #define RAMFUNCTION
 
-/* Host FLASH register file (offsets as in hal/stm32g4.h). */
+/* Host FLASH register file (offsets as in hal/stm32g0.c). */
 static uint32_t g_flash_regs[0x20 / sizeof(uint32_t)];
 #define FLASH_BASE ((uintptr_t)g_flash_regs)
 #define FLASH_SR   (*(volatile uint32_t *)(FLASH_BASE + 0x10))
 #define FLASH_CR   (*(volatile uint32_t *)(FLASH_BASE + 0x14))
 #define FLASH_SR_EOP     (1 << 0)
-#define FLASH_SR_OPERR   (1 << 1)
 #define FLASH_SR_PROGERR (1 << 3)
 #define FLASH_SR_WRPERR  (1 << 4)
 #define FLASH_SR_PGAERR  (1 << 5)
 #define FLASH_SR_SIZERR  (1 << 6)
-#define FLASH_SR_PGSERR  (1 << 7)
-#define FLASH_SR_MISERR  (1 << 8)
-#define FLASH_SR_FASTERR (1 << 9)
-#define FLASH_SR_RDERR   (1 << 14)
-#define FLASH_SR_OPTVERR (1 << 15)
-#define FLASH_SR_BSY     (1 << 16)
+#define FLASH_SR_BSY1    (1 << 16)
 #define FLASH_CR_PG      (1 << 0)
 
 /* Destination flash: pre-filled with stale data (rewrite scenario).
@@ -74,8 +67,8 @@ static uint8_t *g_flash_mem;
 static uint8_t g_data[DATA_SZ + CANARY_SZ] __attribute__((aligned(8)));
 #define g_canary (g_data + DATA_SZ)
 
-/* The real functions from hal/stm32g4.c (extracted by the Makefile). */
-#include "stm32g4_write_extract.h"
+/* The real functions from hal/stm32g0.c (extracted by the Makefile). */
+#include "stm32g0_write_extract.h"
 
 static void setup(void)
 {
@@ -198,10 +191,19 @@ START_TEST(test_write_unaligned_start)
 }
 END_TEST
 
-Suite *stm32g4_write_suite(void)
+int main(void)
 {
-    Suite *s = suite_create("stm32g4-write");
-    TCase *tc = tcase_create("stm32g4-write");
+    int fails;
+    SRunner *sr;
+    Suite *s = suite_create("stm32g0_write");
+    TCase *tc = tcase_create("stm32g0_write");
+
+    g_flash_mem = (uint8_t *)mmap((void *)FLASH_MEM_ADDR, FLASH_MEM_SZ,
+                                  PROT_READ | PROT_WRITE,
+                                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
+                                  -1, 0);
+    if (g_flash_mem == MAP_FAILED)
+        return 77;
 
     tcase_add_checked_fixture(tc, setup, teardown);
     tcase_add_test(tc, test_write_60_no_overread);
@@ -211,25 +213,10 @@ Suite *stm32g4_write_suite(void)
     tcase_add_test(tc, test_write_unaligned_start);
     suite_add_tcase(s, tc);
 
-    return s;
-}
-
-int main(void)
-{
-    int fails;
-    Suite *s = stm32g4_write_suite();
-    SRunner *sr = srunner_create(s);
-
-    g_flash_mem = mmap((void *)FLASH_MEM_ADDR, FLASH_MEM_SZ,
-        PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED,
-        -1, 0);
-    if (g_flash_mem == MAP_FAILED)
-        return 99;
-
+    sr = srunner_create(s);
     srunner_run_all(sr, CK_NORMAL);
     fails = srunner_ntests_failed(sr);
     srunner_free(sr);
-
     munmap(g_flash_mem, FLASH_MEM_SZ);
 
     return fails;

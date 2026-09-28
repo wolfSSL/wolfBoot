@@ -137,7 +137,7 @@
 #define HFROSCCFG_TRIM           0x001F0000UL
 #define HFROSCCFG_EN             (1UL << 30UL)
 #define HFROSCCFG_READY          (1UL << 31UL)
-#define HFROSCCFG_DIV_SHIFT(d)   ((d << 0) & HFROSCCFG_TRIM)
+#define HFROSCCFG_DIV_SHIFT(d)   ((d << 0) & HFROSCCFG_DIV)
 #define HFROSCCFG_TRIM_SHIFT(t)  ((t << 16) & HFROSCCFG_TRIM)
 
 #define HFXOSCCFG_EN             (1 << 30)
@@ -485,6 +485,10 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint8_t data_copy[FLASH_PAGE_SIZE];
     int swmode = 0;
 
+    if (len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
 
     if (address >= FLASH_BASE)
         address -= FLASH_BASE;
@@ -573,8 +577,14 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end;
     uint32_t p;
-    if (address >= FLASH_BASE)
+
+    /* A non-positive length would underflow the inclusive end below. */
+    if (len <= 0) {
+        return 0;
+    }
+    if (address >= FLASH_BASE) {
         address -= FLASH_BASE;
+    }
     end = address + len - 1;
 
     FESPI_REG_TXMARK = 1;
