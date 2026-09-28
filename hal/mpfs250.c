@@ -46,6 +46,26 @@
 #include "gpt.h"
 #include "fdt.h"
 
+#ifdef MPFS_ATHENA
+#include <wolfssl/wolfcrypt/cryptocb.h>
+/* Microchip's CAL library drives the Athena F5200.  Its caltypes.h and
+ * wolfSSL's types.h both define a type named uint128_t (a union of words there,
+ * __uint128_t here), so CAL's is renamed for the span of its headers.  CAL is
+ * referenced, never vendored: it carries a Mercury Systems notice.
+ * INC_STDINT_H makes caltypes.h use <stdint.h>; both are guarded because the
+ * HSS copy of calpolicy.h already defines them. */
+#ifndef CALCONFIGH
+#define CALCONFIGH "config_user.h"
+#endif
+#ifndef INC_STDINT_H
+#define INC_STDINT_H
+#endif
+#define uint128_t cal_uint128_t
+#include "calini.h"
+#include "hash.h"
+#include "sym.h"
+#undef uint128_t
+#endif
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 #include "sdhci.h"
@@ -119,7 +139,6 @@ __attribute__((noinline)) void udelay(uint32_t us)
 }
 
 #endif /* WOLFBOOT_RISCV_MMODE */
-
 
 /* Multi-Hart Support */
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -362,6 +381,554 @@ static int test_ext_flash(void);
 static void qspi_uart_program(void);
 #endif
 
+#ifdef MPFS_ATHENA
+/* Ungate and release the Athena F5200 (sequence per HSS opensbi_crypto_ecall.c;
+ * CRYPTO_CR_INFO.MSS_MODE is informational, software does the un-reset).
+ * Idempotent: ATHENA_CR_RESET after CALIni() silently kills AES, not hashing.
+ * The SCA stall countermeasure (Security UG Table 7-7/7-8) is always on at
+ * rate 0 (1 in 8); DPA resistance is what the "S" part is for.  rdcycle, not
+ * mcycle: an mcycle read traps in the S-mode builds. */
+static void mpfs_athena_enable(void)
+{
+    static int athena_enabled;
+    uint64_t cyc;
+
+    if (athena_enabled) {
+        return;
+    }
+
+    SYSREG_SUBBLK_CLOCK_CR |= MSS_PERIPH_ATHENA;
+    SYSREG_SOFT_RESET_CR &= ~MSS_PERIPH_ATHENA;
+    __asm__ volatile("rdcycle %0" : "=r"(cyc));
+    ATHENA_STALL_CR = (uint32_t)(cyc ^ (cyc >> 32));
+    ATHENA_CR = ATHENA_CR_RESET | ATHENA_CR_RINGOSCON;
+    ATHENA_CR = ATHENA_CR_RINGOSCON | ATHENA_CR_STALL_EN;
+    athena_enabled = 1;
+}
+
+/* CAL finds the engine through this global: the User Crypto base in the Libero
+ * design.  The HSS build has it compiled in and ignores this symbol. */
+uint32_t g_user_crypto_base_addr = 0x22000000UL;
+
+/* Hash context handed to CAL; sized for SATRESCONTEXT and checked below so a
+ * CAL update cannot silently overflow it. */
+#define MPFS_ATHENA_CTX_SIZE 256
+typedef char athena_ctx_size_check[
+    (MPFS_ATHENA_CTX_SIZE >= (int)sizeof(SATRESCONTEXT)) ? 1 : -1];
+
+static int mpfs_athena_engine_init(void)
+{
+    /* CALIni() must follow the un-reset, and the core must not be reset after
+     * it: that silently kills AES (writes nothing, returns success). */
+    mpfs_athena_enable();
+    if (CALIni() != SATR_SUCCESS) {
+        return -1;
+    }
+    return 0;
+}
+
+/* CAL status of the last call that failed, reported by the self-check. */
+static int athena_last_cal_rc;
+
+static int mpfs_athena_sha384_init(void *ctx)
+{
+    SATR rc = CALHashCtxIni((SATRESCONTEXTPTR)ctx, SATHASHTYPE_SHA384);
+
+    if (rc != SATR_SUCCESS) {
+        athena_last_cal_rc = (int)rc;
+        return -1;
+    }
+    return 0;
+}
+
+/* len must be a whole number of blocks; a partial non-final chunk is rejected
+ * by the engine with SATR_BADHASHLEN. */
+static int mpfs_athena_sha384_update(void *ctx, const void *in, uint32_t len)
+{
+    SATR rc = CALHashCtx((SATRESHANDLE)0, (SATRESCONTEXTPTR)ctx, in,
+        (SATUINT32_t)len, NULL, SAT_FALSE);
+
+    if (rc != SATR_SUCCESS) {
+        athena_last_cal_rc = (int)rc;
+        return -1;
+    }
+    return 0;
+}
+
+/* The final call may carry any remaining length, including zero. */
+static int mpfs_athena_sha384_final(void *ctx, const void *in, uint32_t len,
+    void *digest)
+{
+    SATR rc = CALHashCtx((SATRESHANDLE)0, (SATRESCONTEXTPTR)ctx, in,
+        (SATUINT32_t)len, digest, SAT_TRUE);
+
+    if (rc != SATR_SUCCESS) {
+        athena_last_cal_rc = (int)rc;
+        return -1;
+    }
+    return 0;
+}
+
+#ifdef MPFS_ATHENA_AES
+/* AES-256-CTR. CTR is symmetric, so this serves encrypt and decrypt alike.
+ * iv is advanced in place by the engine, so a caller may chain calls. */
+static int mpfs_athena_aes256_ctr(const void *key, void *iv, const void *in,
+    void *out, uint32_t len)
+{
+    if (CALSymEncrypt(SATSYMTYPE_AES256, (const SATUINT32_t *)key,
+            SATSYMMODE_CTR, iv, SAT_TRUE, in, out, (SATUINT32_t)len)
+            != SATR_SUCCESS) {
+        return -1;
+    }
+    /* CALSymEncrypt only starts the transfer.  Without this wait the output
+     * buffer is never written while both calls still report SATR_SUCCESS. */
+    if (CALSymTrfRes(SAT_TRUE) != SATR_SUCCESS) {
+        return -1;
+    }
+    return 0;
+}
+#endif /* MPFS_ATHENA_AES */
+#endif /* MPFS_ATHENA */
+
+#ifdef MPFS_ATHENA
+/* wolfCrypt crypto callback backed by the Athena F5200: SHA-384 and
+ * AES-256-CTR, which together are most of wolfBoot's per-image crypto cost.
+ *
+ * The engine is reached only through the plain-C mpfs_athena_* API, because
+ * CAL's headers cannot share a translation unit with wolfSSL's.
+ *
+ * Hash contract (established empirically; CAL does not document it): a
+ * non-final update must be a whole number of blocks, 128 bytes for SHA-384,
+ * and only the final call may carry a remainder.  wolfBoot feeds
+ * WOLFBOOT_SHA_BLOCK_SIZE (4096) chunks, already a multiple of 128, but an
+ * image tail and short hashes such as a public key are not - hence the
+ * partial-block buffer below. */
+#define ATHENA_SHA384_BLOCK 128
+#define ATHENA_HASH_SLOTS   2
+
+struct athena_hash_slot {
+    void *owner;                        /* wc_Sha384* that owns this slot */
+    uint8_t ctx[MPFS_ATHENA_CTX_SIZE];  /* opaque CAL hash context */
+    uint8_t part[ATHENA_SHA384_BLOCK];  /* partial block awaiting more data */
+    uint32_t part_len;
+};
+
+static struct athena_hash_slot athena_hash_slots[ATHENA_HASH_SLOTS];
+
+/* Set once the self-check has passed: from then on a SHA-384 request the
+ * engine cannot take is a hardware error, never a silent software fallback. */
+static int athena_ready;
+
+/* Counts callback entries actually serviced by the engine, so a correct
+ * digest cannot be mistaken for hardware use when the callback never ran. */
+static uint32_t athena_cb_calls;
+
+static struct athena_hash_slot *athena_slot_find(void *owner)
+{
+    int i;
+
+    for (i = 0; i < ATHENA_HASH_SLOTS; i++) {
+        if (athena_hash_slots[i].owner == owner) {
+            return &athena_hash_slots[i];
+        }
+    }
+    return NULL;
+}
+
+/* Feed whole blocks from the slot buffer plus the caller's data.  Anything
+ * short of a block is retained for the next call or the final. */
+static int athena_hash_feed(struct athena_hash_slot *slot, const uint8_t *in,
+    uint32_t len)
+{
+    uint32_t take;
+
+    if (slot->part_len > 0) {
+        take = ATHENA_SHA384_BLOCK - slot->part_len;
+        if (take > len) {
+            take = len;
+        }
+        memcpy(&slot->part[slot->part_len], in, take);
+        slot->part_len += take;
+        in += take;
+        len -= take;
+        if (slot->part_len < ATHENA_SHA384_BLOCK) {
+            return 0;               /* still short of a block */
+        }
+        if (mpfs_athena_sha384_update(slot->ctx, slot->part,
+                ATHENA_SHA384_BLOCK) != 0) {
+            return -1;
+        }
+        slot->part_len = 0;
+    }
+
+    take = len - (len % ATHENA_SHA384_BLOCK);
+    if (take > 0) {
+        if (mpfs_athena_sha384_update(slot->ctx, in, take) != 0) {
+            return -1;
+        }
+        in += take;
+        len -= take;
+    }
+
+    if (len > 0) {
+        memcpy(slot->part, in, len);
+        slot->part_len = len;
+    }
+    return 0;
+}
+
+#if defined(MPFS_ATHENA_AES) && defined(WOLFSSL_AES_COUNTER) && !defined(NO_AES)
+/* AES-256-CTR.  CTR is symmetric, so one path serves wolfBoot's encrypt and
+ * decrypt (both go through wc_AesCtrEncrypt).  The raw key comes from
+ * aes->devKey, the field wolfCrypt fills for exactly this purpose; reading it
+ * does not depend on the key-schedule layout, and because wolfCrypt still runs
+ * its own key setup afterwards, declining a call here stays safe.  The
+ * WOLF_CRYPTO_CB_SETKEY hook is deliberately not used: returning success from
+ * it makes wolfCrypt skip software key setup and strands the fallback.
+ *
+ * Every bail-out happens before any data reaches the engine.  Afterwards
+ * wolfCrypt's counter no longer matches the data, so a late
+ * CRYPTOCB_UNAVAILABLE would silently corrupt the stream - a failure at that
+ * point has to be reported as an error instead. */
+static int athena_aesctr(wc_CryptoInfo *info)
+{
+    Aes *aes;
+    word32 sz;
+    word32 whole;
+
+    if (info->cipher.type != WC_CIPHER_AES_CTR) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    aes = info->cipher.aesctr.aes;
+    if (aes == NULL) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    /* AES-256 only; the engine supports 128/192 but wolfBoot's encrypted
+     * images are AES-256 and an untested path is worse than none. */
+    if (aes->keylen != 32) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    /* aes->left != 0 means wolfCrypt holds keystream from a previous partial
+     * block; picking up mid-keystream would desync the counter. */
+    if (aes->left != 0) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+    sz = info->cipher.aesctr.sz;
+    if (sz == 0) {
+        return 0;
+    }
+
+    /* The engine advances the counter in place, so aes->reg stays correct for
+     * any subsequent call on the same context. */
+    whole = sz - (sz % WC_AES_BLOCK_SIZE);
+    if (whole > 0) {
+        if (mpfs_athena_aes256_ctr(aes->devKey, aes->reg,
+                info->cipher.aesctr.in, info->cipher.aesctr.out,
+                whole) != 0) {
+            return WC_HW_E;
+        }
+    }
+    if (whole < sz) {
+        /* Trailing partial block: take one keystream block from the engine
+         * and leave the unused bytes where wolfCrypt keeps its own (aes->tmp
+         * with aes->left counting them), so the next call on this context
+         * continues the stream whichever path serves it. */
+        uint8_t ks[WC_AES_BLOCK_SIZE];
+        word32 i;
+
+        memset(ks, 0, sizeof(ks));
+        if (mpfs_athena_aes256_ctr(aes->devKey, aes->reg, ks, ks,
+                WC_AES_BLOCK_SIZE) != 0) {
+            return WC_HW_E;
+        }
+        for (i = whole; i < sz; i++) {
+            info->cipher.aesctr.out[i] = info->cipher.aesctr.in[i] ^
+                ks[i - whole];
+        }
+        memcpy(aes->tmp, ks, WC_AES_BLOCK_SIZE);
+        aes->left = WC_AES_BLOCK_SIZE - (sz - whole);
+        memset(ks, 0, sizeof(ks));
+    }
+    athena_cb_calls++;
+    return 0;
+}
+#endif /* MPFS_ATHENA_AES && WOLFSSL_AES_COUNTER && !NO_AES */
+
+static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
+{
+    struct athena_hash_slot *slot;
+
+    (void)devIdArg;
+    (void)ctx;
+
+    if (info == NULL) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+#if defined(MPFS_ATHENA_AES) && defined(WOLFSSL_AES_COUNTER) && !defined(NO_AES)
+    if (info->algo_type == WC_ALGO_TYPE_CIPHER) {
+        return athena_aesctr(info);
+    }
+#endif
+
+    if (info->algo_type != WC_ALGO_TYPE_HASH ||
+            info->hash.type != WC_HASH_TYPE_SHA384) {
+        return CRYPTOCB_UNAVAILABLE;
+    }
+
+    slot = athena_slot_find(info->hash.sha384);
+    if ((slot != NULL) && (info->hash.sha384->devCtx != slot)) {
+        /* Same address, but a context initialized after the one that held
+         * the slot was abandoned without a final: start over. */
+        slot->owner = NULL;
+        slot = NULL;
+    }
+    if (slot == NULL) {
+        /* First call for this context.  This is the only point where falling
+         * back to software is still safe: once any data has gone into the
+         * engine, wolfCrypt's own state is incomplete and a later
+         * CRYPTOCB_UNAVAILABLE would silently produce a wrong digest. */
+        slot = athena_slot_find(NULL);
+        if (slot == NULL) {
+            return athena_ready ? WC_HW_E : CRYPTOCB_UNAVAILABLE;
+        }
+        if (mpfs_athena_sha384_init(slot->ctx) != 0) {
+            return athena_ready ? WC_HW_E : CRYPTOCB_UNAVAILABLE;
+        }
+        slot->owner = info->hash.sha384;
+        info->hash.sha384->devCtx = slot;
+        slot->part_len = 0;
+    }
+
+    if (info->hash.in != NULL && info->hash.inSz > 0) {
+        if (athena_hash_feed(slot, info->hash.in, info->hash.inSz) != 0) {
+            slot->owner = NULL;
+            return WC_HW_E;
+        }
+    }
+
+    athena_cb_calls++;
+
+    if (info->hash.digest != NULL) {
+        int ret = mpfs_athena_sha384_final(slot->ctx, slot->part,
+            slot->part_len, info->hash.digest);
+        slot->owner = NULL;         /* release for reuse */
+        slot->part_len = 0;
+        if (ret != 0) {
+            return WC_HW_E;
+        }
+    }
+
+    return 0;
+}
+
+/* Known answers for the self-check below.  SHA-384 of the bytes 0x00..0xFF:
+ * a multi-block vector, hashed in chunks that straddle the 128-byte block so
+ * the intermediate state has to be carried across calls. */
+static const uint8_t athena_kat_sha384_256b[48] = {
+    0xff, 0xda, 0xeb, 0xff, 0x65, 0xed, 0x05, 0xcf,
+    0x40, 0x0f, 0x02, 0x21, 0xc4, 0xcc, 0xfb, 0x4b,
+    0x21, 0x04, 0xfb, 0x6a, 0x51, 0xf8, 0x7e, 0x40,
+    0xbe, 0x6c, 0x43, 0x09, 0x38, 0x6b, 0xfd, 0xec,
+    0x28, 0x92, 0xe9, 0x17, 0x9b, 0x34, 0x63, 0x23,
+    0x31, 0xa5, 0x95, 0x92, 0x73, 0x7d, 0xb5, 0xc5
+};
+#ifdef MPFS_ATHENA_AES
+/* AES-256-CTR of the bytes 0x00..0x1F under key 0x00..0x1F, counter 0x00..0x0F. */
+static const uint8_t athena_kat_aesctr[32] = {
+    0x5a, 0x6f, 0x06, 0x54, 0x0c, 0xfe, 0x77, 0x91,
+    0xf8, 0x27, 0x5f, 0x36, 0x0e, 0xce, 0xa8, 0x9d,
+    0x70, 0xe2, 0x02, 0xc6, 0xd7, 0x90, 0x4e, 0x4a,
+    0x4d, 0x0f, 0xe1, 0x4a, 0x6e, 0xf8, 0x3e, 0xd0
+};
+#endif
+
+/* Run the offload through the wolfCrypt callback path once and compare with
+ * the known answers.  The callback entry count is part of the check: wolfCrypt
+ * falls back to software silently when no device serves a call, and a correct
+ * result alone would not show that the hardware ran. */
+/* What the self-check tripped on, for the panic message. */
+static const char *athena_fail_what;
+static int athena_fail_rc;
+
+static int mpfs_athena_selfcheck(void)
+{
+    wc_Sha384 sha;
+    uint8_t buf[256];
+    uint8_t digest[48];
+    int ret;
+    int i;
+
+    athena_fail_what = NULL;
+    athena_fail_rc = 0;
+    athena_last_cal_rc = 0;
+
+    for (i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = (uint8_t)i;
+    }
+    athena_cb_calls = 0;
+    ret = wc_InitSha384_ex(&sha, NULL, WOLFBOOT_DEVID_HASH);
+    if (ret != 0) {
+        athena_fail_what = "SHA-384 init";
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Update(&sha, buf, 100);
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Update(&sha, &buf[100], 100);
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Update(&sha, &buf[200], 56);
+    }
+    if ((ret != 0) && (athena_fail_what == NULL)) {
+        athena_fail_what = "SHA-384 update";
+    }
+    if (ret == 0) {
+        ret = wc_Sha384Final(&sha, digest);
+        if (ret != 0) {
+            athena_fail_what = "SHA-384 final";
+        }
+    }
+    wc_Sha384Free(&sha);
+    if (ret != 0) {
+        athena_fail_rc = ret;
+        return -1;
+    }
+    if (athena_cb_calls == 0) {
+        athena_fail_what = "SHA-384 callback never serviced (software fallback)";
+        return -1;
+    }
+    if (memcmp(digest, athena_kat_sha384_256b, sizeof(digest)) != 0) {
+        athena_fail_what = "SHA-384 digest mismatch";
+        return -1;
+    }
+
+#ifdef MPFS_ATHENA_AES
+    {
+        Aes aes;
+        uint8_t key[32], ctr[16], out[32], out2[32];
+
+        for (i = 0; i < 32; i++) {
+            key[i] = (uint8_t)i;
+        }
+        for (i = 0; i < 16; i++) {
+            ctr[i] = (uint8_t)i;
+        }
+        athena_cb_calls = 0;
+        ret = wc_AesInit(&aes, NULL, WOLFBOOT_DEVID_CRYPT);
+        if (ret == 0) {
+            ret = wc_AesSetKeyDirect(&aes, key, 32, ctr, AES_ENCRYPTION);
+        }
+        if (ret == 0) {
+            ret = wc_AesCtrEncrypt(&aes, out, buf, 32);
+        }
+        wc_AesFree(&aes);
+        /* The disk decrypt path calls CTR once per chunk, so the counter
+         * must carry across calls: two 16-byte calls equal one 32-byte call. */
+        if (ret == 0) {
+            ret = wc_AesInit(&aes, NULL, WOLFBOOT_DEVID_CRYPT);
+        }
+        if (ret == 0) {
+            ret = wc_AesSetKeyDirect(&aes, key, 32, ctr, AES_ENCRYPTION);
+        }
+        if (ret == 0) {
+            ret = wc_AesCtrEncrypt(&aes, out2, buf, 16);
+        }
+        if (ret == 0) {
+            ret = wc_AesCtrEncrypt(&aes, out2 + 16, buf + 16, 16);
+        }
+        wc_AesFree(&aes);
+        if (ret != 0) {
+            athena_fail_what = "AES-256-CTR";
+            athena_fail_rc = ret;
+            return -1;
+        }
+        if (athena_cb_calls == 0) {
+            athena_fail_what = "AES-256-CTR callback never serviced (software fallback)";
+            return -1;
+        }
+        if (memcmp(out, athena_kat_aesctr, sizeof(out)) != 0) {
+            athena_fail_what = "AES-256-CTR known-answer mismatch";
+            return -1;
+        }
+        if (memcmp(out, out2, sizeof(out)) != 0) {
+            athena_fail_what = "AES-256-CTR counter does not carry across calls";
+            return -1;
+        }
+        /* A length that is not a whole number of blocks, then the rest: the
+         * second call starts from the keystream the first one left behind. */
+        memset(out2, 0, sizeof(out2));
+        ret = wc_AesInit(&aes, NULL, WOLFBOOT_DEVID_CRYPT);
+        if (ret == 0) {
+            ret = wc_AesSetKeyDirect(&aes, key, 32, ctr, AES_ENCRYPTION);
+        }
+        if (ret == 0) {
+            ret = wc_AesCtrEncrypt(&aes, out2, buf, 20);
+        }
+        if (ret == 0) {
+            ret = wc_AesCtrEncrypt(&aes, out2 + 20, buf + 20, 12);
+        }
+        wc_AesFree(&aes);
+        if (ret != 0) {
+            athena_fail_what = "AES-256-CTR partial block";
+            athena_fail_rc = ret;
+            return -1;
+        }
+        if (memcmp(out2, athena_kat_aesctr, sizeof(out2)) != 0) {
+            athena_fail_what = "AES-256-CTR partial block mismatch";
+            return -1;
+        }
+    }
+#endif
+    return 0;
+}
+
+/* A build that asks for the hardware must not fall through to software
+ * crypto unnoticed: every failure here halts. */
+static void mpfs_athena_init(void)
+{
+    int i;
+
+    for (i = 0; i < ATHENA_HASH_SLOTS; i++) {
+        athena_hash_slots[i].owner = NULL;
+        athena_hash_slots[i].part_len = 0;
+    }
+
+    /* Free slots hold INVALID_DEVID (-2), not 0, so registration returns
+     * BUFFER_E until the zero-initialised device table is initialised. */
+    wc_CryptoCb_Init();
+
+    if (mpfs_athena_engine_init() != 0) {
+        wolfBoot_printf("Athena: engine init failed\n");
+        wolfBoot_panic();
+    }
+    if (wc_CryptoCb_RegisterDevice(WOLFBOOT_DEVID_HASH, mpfs_athena_cryptocb,
+            NULL) != 0) {
+        wolfBoot_printf("Athena: RegisterDevice failed\n");
+        wolfBoot_panic();
+    }
+#if defined(WOLFBOOT_DEVID_CRYPT) && (WOLFBOOT_DEVID_CRYPT != WOLFBOOT_DEVID_HASH)
+    if (wc_CryptoCb_RegisterDevice(WOLFBOOT_DEVID_CRYPT, mpfs_athena_cryptocb,
+            NULL) != 0) {
+        wolfBoot_printf("Athena: cipher RegisterDevice failed\n");
+        wolfBoot_panic();
+    }
+#endif
+    if (mpfs_athena_selfcheck() != 0) {
+        wolfBoot_printf("Athena: self-check failed: %s (rc %d, CAL rc %d, "
+            "callbacks %u)\n", athena_fail_what, athena_fail_rc,
+            athena_last_cal_rc, (unsigned)athena_cb_calls);
+        wolfBoot_panic();
+    }
+    athena_ready = 1;
+#ifdef MPFS_ATHENA_AES
+    wolfBoot_printf("Athena: SHA-384 + AES-256-CTR offload active\n");
+#else
+    wolfBoot_printf("Athena: SHA-384 offload active\n");
+#endif
+}
+#endif /* MPFS_ATHENA */
+
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -458,6 +1025,10 @@ void hal_init(void)
 #else
     wolfBoot_printf("wolfBoot Version: %s (%s %s)\n",
         LIBWOLFBOOT_VERSION_STRING, __DATE__, __TIME__);
+#endif
+
+#ifdef MPFS_ATHENA
+    mpfs_athena_init();
 #endif
 
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -934,7 +1505,6 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     (void)len;
     return 0;
 }
-
 
 /* Wait for SCB register bits to clear, with timeout */
 static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
@@ -1453,7 +2023,6 @@ int ext_flash_erase(uintptr_t address, int len)
 #define QSPI_PROG_ACK          0x06
 #define QSPI_RX_TIMEOUT_MS     10000U  /* 10 s per byte -- aborts if host disappears */
 
-
 /* Returns 0-255 on success, -1 on timeout (so the boot path is never deadlocked). */
 static int uart_qspi_rx(void)
 {
@@ -1875,7 +2444,6 @@ void mpfs_iomux_init(void)
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 /* SDHCI Platform HAL */
-
 
 /* MSS MPU base + per-master offset.  Each AXI master (FIC0/1/2, CRYPTO,
  * GEM0/1, USB, MMC, SCB, TRACE) has 16 PMPCFG entries (uint64_t each) at
