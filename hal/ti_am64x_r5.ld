@@ -6,36 +6,47 @@ __SVC_STACK_SIZE = 256;
 __ABORT_STACK_SIZE = 256;
 __UNDEFINED_STACK_SIZE = 256;
 
--e_vectors
+-e_vectors_sbl
 
 MEMORY
 {
-    R5F_VECS    : ORIGIN = 0x0 , LENGTH = 0x40 
-    MSRAM       : ORIGIN = 0x70080000 , LENGTH = 0x80000 
+    MSRAM_VECS  : ORIGIN = 0x70000000 , LENGTH = 0x100 
+    MSRAM_0     : ORIGIN = 0x70000100 , LENGTH = 0x1FF00 
+    MSRAM_01    : ORIGIN = 0x70020000 , LENGTH = 0x60000 
 }
 
 SECTIONS
 {
-    .vectors  : {
-    } > R5F_VECS , palign(8) 
+    .vectors :
+    {
+    } > MSRAM_VECS , palign(8) 
 
     .text :
     {
+        *(.keystore*)
+        . = ALIGN(8);
         *(.text*)
+        . = ALIGN(8);
         *(.rodata*)
+        . = ALIGN(8);
         *(.data*)
-    } > MSRAM , palign(8)
+        . = ALIGN(8);
+    } > MSRAM_0 , palign(8)
 
     .bss :
     {
+        _start_bss = .;
         *(.bss*)
-    } > MSRAM , palign(8)
+        . = ALIGN(4);
+        _end_bss = .;
+        _end = .;
+    } > MSRAM_01 , palign(8)
     RUN_START(__BSS_START)
     RUN_END(__BSS_END)
 
     .stack :
     {
-    } > MSRAM , palign(8)
+    } > MSRAM_01 , palign(8)
 
     GROUP  :   {
     .irqstack : {
@@ -63,10 +74,5 @@ SECTIONS
     } align(8)
     RUN_START(__UNDEFINED_STACK_START)
     RUN_END(__UNDEFINED_STACK_END)
-    } > MSRAM  
+    } > MSRAM_01  
 }
-
-_wolfboot_partition_boot_address = @WOLFBOOT_PARTITION_BOOT_ADDRESS@;
-_wolfboot_partition_size = @WOLFBOOT_PARTITION_SIZE@;
-_wolfboot_partition_update_address = @WOLFBOOT_PARTITION_UPDATE_ADDRESS@;
-_wolfboot_partition_swap_address = @WOLFBOOT_PARTITION_SWAP_ADDRESS@;
