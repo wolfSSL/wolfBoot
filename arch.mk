@@ -1233,9 +1233,19 @@ ifeq ($(ARCH),RISCV64)
     CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
     LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
   else
-    # U54 cores: rv64gc (with FPU)
-    CFLAGS+=-march=rv64imafd$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64d -mcmodel=medany
-    LDFLAGS+=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+    # U54 cores: soft-float lp64, matching Microchip's published user-crypto
+    # (CAL) archives - both are lp64 (bare-metal-examples is rv64imafd/lp64,
+    # hart-software-services is rv64imac/lp64).  An lp64d build cannot link
+    # against either.  wolfBoot does no floating point, so nothing is lost.
+    #
+    # rv64imac rather than rv64imafd because this toolchain ships no
+    # F/D-ISA + soft-float-ABI multilib: every rv64i*f*d* variant is paired
+    # with lp64f/lp64d, so -march=rv64imafd -mabi=lp64 compiles but fails to
+    # link ("can\'t link double-float modules with soft-float modules" against
+    # libgcc).  The U54 keeps its FPU; wolfBoot simply does not emit FP
+    # instructions, and CAL\'s own F/D instructions still execute fine.
+    CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
+    LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
 
     # FDT support for DDR S-mode (not needed for L2-LIM bare-metal boot)
     ifneq ($(MPFS_L2LIM),1)
