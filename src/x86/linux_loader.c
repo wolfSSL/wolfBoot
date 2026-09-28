@@ -187,6 +187,34 @@ static int linux_initrd_place(uint32_t initrd_addr_max, uint64_t ram_limit,
     return 0;
 }
 
+extern uint8_t _start_wolfboot[];
+extern uint8_t _end_wb[];
+
+/* True if [a, a+alen) and [b, b+blen) overlap; zero-length ranges never do. */
+static int ranges_overlap(uint64_t a, uint64_t alen, uint64_t b, uint64_t blen)
+{
+    if (alen == 0 || blen == 0)
+        return 0;
+    return (a < b + blen) && (b < a + alen);
+}
+
+/* Reject a kernel/initrd load target that would land on wolfBoot's own image
+ * (code, rodata, data, bss) or on the verified payload being copied from.
+ * Returns nonzero on conflict. */
+static int linux_load_conflicts(uint64_t dst, uint64_t len,
+                                const uint8_t *payload, uint32_t payload_len)
+{
+    uint64_t wb = (uint64_t)(uintptr_t)_start_wolfboot;
+    uint64_t wb_len = (uint64_t)(uintptr_t)_end_wb - wb;
+
+    if (ranges_overlap(dst, len, wb, wb_len))
+        return 1;
+    if (ranges_overlap(dst, len, (uint64_t)(uintptr_t)payload,
+                       (uint64_t)payload_len))
+        return 1;
+    return 0;
+}
+
 void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
                 const char *cmd_line)
 {
@@ -196,6 +224,7 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     uint8_t *initrd_image = NULL;
     uint32_t initrd_size = 0;
     uint32_t kernel_size, param_size, load_limit;
+    uint32_t kernel_span;
     uint8_t *image_boot_param;
     uint16_t end_of_header_off;
     uint8_t *_cmd_line;
@@ -259,6 +288,16 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
         wolfBoot_printf("invalid kernel size" ENDLINE);
         wolfBoot_panic();
     }
+    /* The kernel occupies init_size at runtime (decompression + BSS + heap),
+     * normally larger than the copied kernel_size; guard the larger span. */
+    kernel_span = (param.hdr.init_size > kernel_size)
+                      ? param.hdr.init_size : kernel_size;
+    /* Refuse a load target that overlaps wolfBoot's own image or the payload. */
+    if (linux_load_conflicts((uint64_t)KERNEL_LOAD_ADDRESS, kernel_span,
+                             linux_image, image_size)) {
+        wolfBoot_printf("kernel load target overlaps wolfBoot or payload" ENDLINE);
+        wolfBoot_panic();
+    }
     memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, kernel_image + param_size,
            kernel_size);
 
@@ -266,15 +305,17 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
      * address to the kernel via the ramdisk fields. */
     if (initrd_size != 0) {
         uint64_t initrd_addr;
-        /* The kernel occupies init_size (decompression + BSS + heap), which is
-         * normally larger than the compressed kernel_size; floor above both. */
-        uint32_t kernel_span = (param.hdr.init_size > kernel_size)
-                                   ? param.hdr.init_size : kernel_size;
         if (linux_initrd_place(param.hdr.initrd_addr_max, (uint64_t)load_limit,
                                initrd_size,
                                (uint64_t)KERNEL_LOAD_ADDRESS + kernel_span,
                                &initrd_addr) != 0) {
             wolfBoot_printf("initrd does not fit in usable RAM" ENDLINE);
+            wolfBoot_panic();
+        }
+        /* Refuse a target that overlaps wolfBoot's own image or the payload. */
+        if (linux_load_conflicts(initrd_addr, initrd_size,
+                                 linux_image, image_size)) {
+            wolfBoot_printf("initrd load target overlaps wolfBoot or payload" ENDLINE);
             wolfBoot_panic();
         }
 #if defined(WOLFBOOT_64BIT)
