@@ -1,4 +1,4 @@
-/* app_ti_am64x.c
+/* app_ti_am64x_r5.c
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -77,37 +77,37 @@ void main(void)
     wolfBoot_printf("Copyright 2026 wolfSSL Inc\n");
     wolfBoot_printf("==================================\n");
 
-//     check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
+    check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
-//     if (
-//         boot_ver != 0 &&
-//         (boot_state == IMG_STATE_TESTING || boot_state == IMG_STATE_NEW)
-//     )
-//     {
-// #ifdef WOLFCRYPT_SECURE_MODE
-//         wolfBoot_printf("Calling wolfBoot_nsc_success()\n");
-//         wolfBoot_nsc_success();
-// #else
-//         wolfBoot_printf("Calling wolfBoot_success()\n");
-//         wolfBoot_success();
-// #endif
-//         check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
-//     }
+    if (
+        boot_ver != 0 &&
+        (boot_state == IMG_STATE_TESTING || boot_state == IMG_STATE_NEW)
+    )
+    {
+#ifdef WOLFCRYPT_SECURE_MODE
+        wolfBoot_printf("Calling wolfBoot_nsc_success()\n");
+        wolfBoot_nsc_success();
+#else
+        wolfBoot_printf("Calling wolfBoot_success()\n");
+        wolfBoot_success();
+#endif
+        check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
+    }
 
-//     if (boot_ver == 1)
-//     {
-//         if (update_ver != 0) {
-//             wolfBoot_printf("Update detected, version: 0x%lx\n", update_ver);
-//             wolfBoot_printf("Triggering update...\n");
-// #ifdef WOLFCRYPT_SECURE_MODE
-//             wolfBoot_nsc_update_trigger();
-// #else
-//             wolfBoot_update_trigger();
-// #endif
-//             check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
-//             wolfBoot_printf("...done. Reboot to apply.\n");
-//         }
-//     }
+    if (boot_ver == 1)
+    {
+        if (update_ver != 0) {
+            wolfBoot_printf("Update detected, version: 0x%lx\n", update_ver);
+            wolfBoot_printf("Triggering update...\n");
+#ifdef WOLFCRYPT_SECURE_MODE
+            wolfBoot_nsc_update_trigger();
+#else
+            wolfBoot_update_trigger();
+#endif
+            check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
+            wolfBoot_printf("...done. Reboot to apply.\n");
+        }
+    }
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
     wolfCrypt_Init();
@@ -120,7 +120,18 @@ void main(void)
 
 # ifdef WOLFCRYPT_BENCHMARK
     wolfBoot_printf("\nRunning wolfCrypt benchmarks...\n");
+#if 1
     benchmark_test(NULL);
+#else
+    {
+        word32 bs;
+        for (bs = BENCH_SIZE_EMBEDDED; bs >= 16; bs >>= 1) {
+            wolfBoot_printf("\n");
+            benchmark_configure(bs);
+            benchmark_test(NULL);
+        }
+    }
+#endif
     wolfBoot_printf("Benchmarks complete.\n\n");
 # endif
 

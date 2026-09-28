@@ -529,7 +529,7 @@ wolfboot.efi: wolfboot.elf
 	$(Q)$(SIZE) wolfboot.efi
 	@echo
 
-ifeq ($(TARGET),ti_am64x)
+ifeq ($(TARGET),ti_am64x_r5)
 $(GENERATED_SRCS): 
 	@echo "\t[TI SYSCONFIG] generated/hal/"
 	$(Q)$(TI_SYSCONFIG)/nodejs/node \
@@ -537,11 +537,11 @@ $(GENERATED_SRCS):
       --product $(TI_MCU_PLUS_SDK)/.metadata/product.json \
       --context r5fss0-0 --part Default --package ALV \
       --output generated/hal/ \
-      config/examples/ti-am64x/ti-am64x-r5_hal.syscfg
+      config/examples/ti-am64x-r5/ti-am64x-r5_hal.syscfg
 endif
 
 wolfboot.bin: wolfboot.elf
-ifeq ($(TARGET),ti_am64x)
+ifeq ($(TARGET),ti_am64x_r5)
 	@echo "\t[BIN] wolfboot.tmp"
 	$(Q)$(OBJCOPY) $(OBJCOPY_FLAGS) -O binary $^ wolfboot.tmp
 	@echo "\t[TI BIN] ROM-bootable image: wolfboot.bin"
@@ -708,7 +708,7 @@ endif
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" LIBERO_FPGA_CONFIG_DIR="$(LIBERO_FPGA_CONFIG_DIR)" WOLFHSM_MICROCHIP_PIC32CZ="$(WOLFHSM_MICROCHIP_PIC32CZ)" image.elf
-ifeq ($(ELF_FLASH_SCATTER),1)
+ifneq (,$(ELF_FLASH_SCATTER)$(filter ti_am64x_r5,$(TARGET)))
 	$(Q)$(SIZE) test-app/image-orig.elf
 else
 	$(Q)$(SIZE) test-app/image.elf

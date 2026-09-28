@@ -1807,7 +1807,7 @@ ifeq ($(TARGET),ti_hercules)
   OPTIMIZATION_LEVEL=2
 endif
 
-ifeq ($(TARGET),ti_am64x)
+ifeq ($(TARGET),ti_am64x_r5)
   TI_MCU_PLUS_SDK=$(abspath $(wildcard $(PWD)/../TI/mcu_plus_sdk_am64x_*))
   ifeq ($(TI_MCU_PLUS_SDK),)
     $(error "No sdk found at $(PWD)/../TI/mcu_plus_sdk_am64x_*")
@@ -1871,12 +1871,20 @@ ifeq ($(TARGET),ti_am64x)
   GENERATED_SRCS+=generated/hal/ti_pinmux_config.c
   GENERATED_SRCS+=generated/hal/ti_power_clock_config.c
 
+  UPDATE_OBJS:=src/update_ram.o
+  CFLAGS+=-DWOLFBOOT_DUALBOOT -DWOLFBOOT_NO_RAMBOOT
+
   OBJS+=$(patsubst %.c,%.o,$(GENERATED_SRCS))
   OBJS+=\
+    $(TI_MCU_PLUS_SDK)/source/board/flash/flash.o \
+    $(TI_MCU_PLUS_SDK)/source/board/flash/ospi/flash_nor_ospi.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/bootloader/soc/am64x_am243x/bootloader_soc.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/ospi_phy_dqs.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/ospi_v0.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/dma/udma/ospi_udma_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_phy_dqs_lld.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_v0_lld.o \
+    $(TI_MCU_PLUS_SDK)/source/drivers/ospi/v0/lld/ospi_tuning/ospi_tuning_algo/algo_v1/ospi_phy_tuning.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_boardcfg.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_firewall.o \
     $(TI_MCU_PLUS_SDK)/source/drivers/sciclient/sciclient_procboot.o \
@@ -1919,8 +1927,7 @@ ifeq ($(TARGET),ti_am64x)
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/printf.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/SemaphoreP_nortos.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TaskP_nortos.o \
-    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_nortos.o \
-    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP_rti_priv.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/common/TimerP.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/boot_armv7r_asm.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/CacheP_armv7r.o \
