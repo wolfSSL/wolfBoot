@@ -170,7 +170,6 @@
 #define MMUART_THR(base) *((volatile uint8_t*)((base)) + 0x100) /* Transmitter holding register */
 #define MMUART_FCR(base) *((volatile uint8_t*)((base)) + 0x104) /* FIFO control register */
 
-
 /* LCR (Line Control Register) */
 #define MSS_UART_DATA_8_BITS        ((uint8_t)0x03)
 #define MSS_UART_NO_PARITY          ((uint8_t)0x00)
@@ -268,6 +267,31 @@ int mpfs_read_serial_number(uint8_t *serial);
 /* Crypto Engine: Athena F5200 (200 MHz) */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
 
+/* Athena control block.  Layout and bit names match athenareg_t /
+ * SYSREG_ATHENACR_* in config_athena.h from the Microchip user-crypto
+ * (CAL) library, where BASE32_ADDR_ATHENAREG is 0x20127000. */
+#define ATHENA_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x00)))
+#define ATHENA_STALL_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x04)))
+#define ATHENA_UPPER_ADDRESS (*((volatile uint32_t*)(ATHENA_BASE + 0x08)))
+/* Security UG Table 7-7, MSS Crypto Control Register.  RESET reads 1 out of
+ * power-on reset; MSS_OWNER reports that the MSS, not the fabric, holds the
+ * core, which is set by the Libero crypto ownership mode. */
+#define ATHENA_CR_RESET        (1U << 0)
+#define ATHENA_CR_PURGE        (1U << 1)
+#define ATHENA_CR_GO           (1U << 2)
+#define ATHENA_CR_RINGOSCON    (1U << 3)
+#define ATHENA_CR_STREAM_EN    (1U << 4)
+#define ATHENA_CR_STALL_EN     (1U << 5)
+#define ATHENA_CR_STALL_RATE_SHIFT 6
+#define ATHENA_CR_STALL_RATE_MASK  (3U << ATHENA_CR_STALL_RATE_SHIFT)
+#define ATHENA_CR_COMPLETE     (1U << 8)
+#define ATHENA_CR_ALARM        (1U << 9)
+#define ATHENA_CR_BUSERROR     (1U << 10)
+#define ATHENA_CR_STREAM_ENABLED (1U << 11)
+#define ATHENA_CR_BUSY         (1U << 12)
+#define ATHENA_CR_MSS_OWNER    (1U << 28)
+#define ATHENA_CR_FAB_OWNER    (1U << 29)
+
 
 /* L2 Cache Controller (CACHE_CTRL @ 0x02010000) */
 #define L2_CACHE_BASE               0x02010000UL
@@ -305,7 +329,6 @@ int mpfs_read_serial_number(uint8_t *serial);
 #define L2_WAY_ENABLE_WITH_SCRATCH  0x0FFF
 #define L2_WAY_MASK_CACHE_ONLY      0xFF
 
-
 /* CLINT - Core Local Interruptor */
 #ifndef CLINT_BASE
 #define CLINT_BASE                  0x02000000UL
@@ -319,7 +342,6 @@ int mpfs_read_serial_number(uint8_t *serial);
 #if defined(WOLFBOOT_RISCV_MMODE) && !defined(RISCV_SMODE_TIMER_FREQ)
 #define RISCV_SMODE_TIMER_FREQ      MSS_CPU_CLK
 #endif
-
 
 /* Hart Local Storage (HLS) - per-hart communication structure, 64 bytes at top of stack */
 #define HLS_DEBUG_AREA_SIZE         64
@@ -374,7 +396,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #endif /* __ASSEMBLER__ */
 
 
-
 /* PLIC - Platform-Level Interrupt Controller (base 0x0C000000, 64MB) */
 #define PLIC_BASE               0x0C000000UL
 #define PLIC_SIZE               0x04000000UL
@@ -384,7 +405,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define OFFSET_TO_MSS_GLOBAL_INTS   13
 
 #define PLIC_INT_MMC_MAIN       88
-
 
 /* ============================================================================
  * DDR Controller and PHY (LPDDR4) - Video Kit MPFS250T
@@ -561,7 +581,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define IOSCB_IOC_REG0              0x004
 #define IOSCB_IOC_REG1              0x008
 
-
 /* DDR Segment Register Offsets.
  * SEG is a 256-byte-stride peripheral pair (mss_seg.h:54): seg_t has
  * 8 x u32 control regs + 56 x u32 fill = 256 B.  SEG[0] is at base
@@ -598,7 +617,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define DDR_INIT_TIMEOUT            -1
 #define DDR_INIT_TRAINING_FAIL      -2
 #define DDR_INIT_MEM_TEST_FAIL      -3
-
 
 /* ============================================================================
  * Video Kit Clock/DDR Configuration
@@ -659,7 +677,6 @@ void mpfs_iomux_init(void);
 int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 #endif
 #endif /* __ASSEMBLER__ */
-
 
 #ifdef EXT_FLASH
 /* QSPI Flash Controller
@@ -777,6 +794,5 @@ int qspi_init(void);
 #endif /* __ASSEMBLER__ */
 
 #endif /* EXT_FLASH */
-
 
 #endif /* MPFS250_DEF_INCLUDED */

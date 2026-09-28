@@ -1629,6 +1629,35 @@ ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
 endif
 endif
 
+# Athena F5200 (TeraFire) offload.  MPFS_ATHENA_CAL_DIR points at Microchip's
+# user-crypto (CAL) directory, e.g. <hart-software-services>/services/crypto.
+# Not vendored: it carries a Mercury Systems licence.
+ifeq ($(MPFS_ATHENA),1)
+  ifeq ($(MPFS_ATHENA_CAL_DIR),)
+    $(error MPFS_ATHENA=1 requires MPFS_ATHENA_CAL_DIR to point at the \
+      Microchip user-crypto (CAL) directory)
+  endif
+  # Both CAL archives are soft-float lp64, so callers must be too (see arch.mk).
+  # M-mode: hart-software-services/services/crypto.  S-mode: the rv64imafd
+  # build from polarfire-soc-bare-metal-examples .../middleware/cal.
+  CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
+  CFLAGS += -DWOLF_CRYPTO_CB
+  CFLAGS += -DWOLFBOOT_DEVID_HASH=0xA7
+  CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
+  WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  # Archive name differs between Microchip's two published builds.
+  MPFS_ATHENA_CAL_LIB ?= mpfs-rv64imac-user-crypto-lib.a
+  LIBS += $(MPFS_ATHENA_CAL_DIR)/$(MPFS_ATHENA_CAL_LIB)
+  # AES-256-CTR offload rides on the AES-CTR path an AES-256 ENCRYPT build
+  # compiles; other builds offload the hash only.  MPFS_ATHENA_AES=0 opts out.
+  ifeq ($(ENCRYPT_WITH_AES256),1)
+    MPFS_ATHENA_AES ?= 1
+    ifeq ($(MPFS_ATHENA_AES),1)
+      CFLAGS += -DMPFS_ATHENA_AES
+    endif
+  endif
+endif
+
 # Size of the wolfHSM comm data payload, shared by the client and server blocks
 # below. The default is sized for certificate chains (the whole DER chain is
 # shipped to the HSM in a single message) and for ML-DSA keys/signatures.
