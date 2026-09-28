@@ -914,14 +914,19 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* Some hosts need more settling after CMD0. Retry a failed CMD8
-         * before classifying a silent card as SD v1.x or a broken link. */
+        /* A corrupted CMD8 response can be transient while the card settles
+         * after CMD0. A timeout alone is how an SD v1.x card reports that it
+         * does not implement CMD8, so do not repeat that silent probe. */
         for (retries = 0; retries < 10; retries++) {
             status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
                 SDHCI_RESP_R7);
             cmd8_err = g_last_cmd_err;
-            if (status == 0)
+            if (status == 0 ||
+                ((cmd8_err & SDHCI_SRS12_ECT) != 0 &&
+                 (cmd8_err & (SDHCI_SRS12_ECCRC | SDHCI_SRS12_ECEB |
+                              SDHCI_SRS12_ECI)) == 0)) {
                 break;
+            }
             udelay(10000);
         }
         if (status == 0 && retries > 0) {
