@@ -483,9 +483,6 @@ void sdhci_platform_init(void);
  * to the card clock and return that, keeping the internal divider ~1. */
 uint32_t sdhci_platform_set_clock(uint32_t clock_khz, uint32_t base_clk_khz);
 
-/* Preserve a host controller initialized by an earlier boot stage.
- * Opt in with -DSDHCI_SKIP_HOST_RESET=1. */
-
 /* Optional controller settle time in microseconds after each init command.
  * Opt in with -DSDHCI_WAIT_AFTER_CMD_US=<us>. */
 

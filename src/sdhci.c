@@ -1950,12 +1950,10 @@ static int sdhci_init_internal(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-#ifndef SDHCI_SKIP_HOST_RESET_ENABLED
-    /* Reset the host controller unless an earlier boot stage initialized it. */
+    /* Restore host controller state after the earlier boot stage. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);
-#endif
 
     /* Set debounce period to ~15ms (platform-specific value may be different) */
     SDHCI_REG_SET(SDHCI_HRS01, (0x300000UL << SDHCI_HRS01_DP_SHIFT) &
