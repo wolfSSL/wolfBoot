@@ -1316,6 +1316,10 @@ target-independent `src/ddr_cadence.c` / `include/ddr_cadence.h` (controller bas
 board's `LIBERO_SETTING_*` values, stay in `hal/mpfs250_ddr.c`, which builds the controller
 register table and composes the generic calls. Both compile only when `MPFS_DDR_INIT` is set.
 
+### PolarFire SoC hardware root of trust (PUF KEK, sNVM keystore, wrapped encryption key)
+
+The System Controller SRAM-PUF, secure NVM (sNVM), and TeraFire crypto can anchor key material in hardware: serve the verification public keys from sNVM, derive a device-unique KEK from the PUF, and store the AES image-encryption key in sNVM wrapped by that KEK. See [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+
 ### PolarFire testing
 
 This section describes how to build the test-application, create a custom uSD with required partitions and copying signed test-application to uSD partitions.

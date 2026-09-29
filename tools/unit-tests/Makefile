@@ -102,6 +102,8 @@ TESTS+=unit-flash-erase-mcxw
 TESTS+=unit-flash-erase-kinetis
 TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
+TESTS+=unit-snvm-keystore
+TESTS+=unit-snvm-kek
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-ahci-unlock-panic
@@ -760,6 +762,28 @@ unit-flash-m2354: unit-flash-m2354.c ../../hal/m2354.c ../../hal/m2354.h
 # separate input.
 unit-otp-keystore: unit-otp-keystore.c ../../src/flash_otp_keystore.c
 	gcc -o $@ unit-otp-keystore.c $(CFLAGS) $(LDFLAGS)
+
+# unit-snvm-keystore includes hal/mpfs250_snvm.c directly and mocks
+# mpfs_snvm_read, so it is not a separate input.  -I../.. resolves
+# hal/mpfs250.h, which mpfs250_snvm.h includes.  Four modules so the
+# page-spanning reads are exercised.
+unit-snvm-keystore: unit-snvm-keystore.c ../../hal/mpfs250_snvm.c
+	gcc -o $@ unit-snvm-keystore.c -I../.. -DSNVM_KEYSTORE_MAX_MODULES=4 \
+		$(CFLAGS) $(LDFLAGS)
+
+# unit-snvm-kek includes hal/mpfs250_snvm.c (KEK and encryption-key provider)
+# directly with the PUF and sNVM services mocked.  SHA-384 and AES key-wrap
+# come from wolfCrypt, built from source like the image tests.
+unit-snvm-kek: unit-snvm-kek.c ../../hal/mpfs250_snvm.c
+	gcc -o $@ unit-snvm-kek.c -I../.. \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		-DSNVM_KEK -DWOLFBOOT_ENABLE_HASH_SHA384 -DWOLFSSL_AES_256 \
+		-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
+		-DHAVE_AES_DECRYPT -DCUSTOM_ENCRYPT_KEY -DEXT_ENCRYPTED \
+		-DENCRYPT_WITH_AES256 -DSNVM_ENCKEY_PROVISION \
+		-DSNVM_ENCKEY_INSECURE_TEST_KEY $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore-gen-zeroize includes the host tool
 # tools/keytools/otp/otp-keystore-gen.c directly (via #define main) and

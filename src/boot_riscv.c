@@ -381,11 +381,27 @@ int WEAKFUNCTION hal_dts_fixup(void* dts_addr, uint32_t capacity)
 #endif
 
 #ifdef WOLFBOOT_RISCV_MMODE
-/* Configure PMP entry 0: NAPOT full address space, RWX, for S-mode access */
+/* Configure PMP for S-mode access: NAPOT full address space, RWX.  With
+ * WOLFBOOT_PMP_DENY_BASE/SIZE the window is carved out first (entries match
+ * lowest-numbered first), so S-mode cannot touch it; M-mode is unaffected. */
 static void setup_pmp_for_smode(void)
 {
+#if defined(WOLFBOOT_PMP_DENY_BASE) && defined(WOLFBOOT_PMP_DENY_SIZE)
+    unsigned long lo = (unsigned long)WOLFBOOT_PMP_DENY_BASE >> 2;
+    unsigned long hi = ((unsigned long)WOLFBOOT_PMP_DENY_BASE +
+                        (unsigned long)WOLFBOOT_PMP_DENY_SIZE) >> 2;
+    /* entry 0: TOR below the window, RWX; entry 1: TOR the window, no
+     * access; entry 2: NAPOT everything else, RWX */
+    unsigned long cfg = (0x1FUL << 16) | (0x08UL << 8) | 0x0FUL;
+
+    csr_write(pmpaddr0, lo);
+    csr_write(pmpaddr1, hi);
+    csr_write(pmpaddr2, -1UL);
+    csr_write(pmpcfg0, cfg);
+#else
     csr_write(pmpaddr0, -1UL);  /* all-ones = cover entire address space (NAPOT) */
     csr_write(pmpcfg0, 0x1F);   /* A=NAPOT(3), R=1, W=1, X=1 */
+#endif
     __asm__ volatile("sfence.vma" ::: "memory");
 }
 

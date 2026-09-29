@@ -432,6 +432,23 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 WOLFBOOT_SECTOR_SIZE=0x4000
+  # Trust anchor served from sNVM with the production hardenings: ROM-flag
+  # enforcement and the S-mode fence around the System Controller mailbox.
+  microchip_mpfs250_m_snvm_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub SNVM_KEYSTORE=1 SNVM_KEYSTORE_REQUIRE_ROM=1 MPFS_SCB_SMODE_DENY=1
+  # Encrypted disk image with the AES key unwrapped by the PUF-derived KEK.
+  microchip_mpfs250_m_enc_kek_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub ENCRYPT=1 ENCRYPT_WITH_AES256=1 CUSTOM_ENCRYPT_KEY=1 SNVM_KEK=1
   microchip_mpfs250_m_qspi_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
