@@ -162,22 +162,12 @@ void wolfBoot_panic(void) TC3_LONGCALL;
 #endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-/* Set while the HSM connection is up. While set, every flash command from
- * this core first parks the HSM in RAM (see tchsmHhHost_HsmPark) so a
- * busy PFLASH bank cannot fault it, and releases it afterwards. */
-static int hsmParkEnabled = 0;
-#define HSM_PARK()                              \
-    do {                                        \
-        if (hsmParkEnabled) {                   \
-            (void)tchsmHhHost_HsmPark();        \
-        }                                       \
-    } while (0)
-#define HSM_RELEASE()                           \
-    do {                                        \
-        if (hsmParkEnabled) {                   \
-            (void)tchsmHhHost_HsmRelease();     \
-        }                                       \
-    } while (0)
+/* Every flash command from this core most be wrapped in a park/unpark sequence
+ * to force the HSM core to execute from RAM while the host-driven flash
+ * command completes.
+ * The server app must be running first to process a park request */
+#define HSM_PARK() (void)tchsmHhHost_HsmPark()
+#define HSM_RELEASE() (void)tchsmHhHost_HsmRelease()
 #else
 #define HSM_PARK()
 #define HSM_RELEASE()
@@ -868,17 +858,12 @@ int hal_hsm_init_connect(void)
         return rc;
     }
 
-    /* Server is up and answering the bridge, flash commands may park it */
-    hsmParkEnabled = 1;
-
     return rc;
 }
 
 int hal_hsm_disconnect(void)
 {
     int rc;
-
-    hsmParkEnabled = 0;
 
     rc = wh_Client_CommClose(&hsmClientCtx);
     if (rc != 0) {
