@@ -223,8 +223,7 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     uint8_t *kernel_image;
     uint8_t *initrd_image = NULL;
     uint32_t initrd_size = 0;
-    uint32_t kernel_size, param_size, load_limit;
-    uint32_t kernel_span;
+    uint32_t kernel_size, param_size, load_limit, kernel_avail;
     uint8_t *image_boot_param;
     uint16_t end_of_header_off;
     uint8_t *_cmd_line;
@@ -238,6 +237,7 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
 
     /* Unwrap the optional kernel+initrd container; a bare bzImage has no magic. */
     kernel_image = linux_image;
+    kernel_avail = image_size;
     phdr = (struct linux_payload_hdr *)linux_image;
     if (phdr->magic == LINUX_PAYLOAD_MAGIC) {
         /* Bound the trusted header fields against the verified image so a
@@ -251,6 +251,7 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
             wolfBoot_panic();
         }
         kernel_image = linux_image + sizeof(*phdr);
+        kernel_avail = phdr->kernel_size;
         initrd_image = kernel_image + phdr->kernel_size;
         initrd_size = phdr->initrd_size;
         wolfBoot_printf("initrd: %d bytes" ENDLINE, initrd_size);
@@ -260,6 +261,14 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     end_of_header_off = *(kernel_image + 0x201) + 0x202;
     memcpy((uint8_t*)&param.hdr,
             image_boot_param, sizeof(struct setup_header));
+
+    /* pref_address and init_size are boot-protocol 2.10+ fields; refuse an
+     * older kernel rather than trust uninitialised header bytes. (The 64-bit
+     * boot path already implies >= 2.12, but check explicitly at point of use.) */
+    if (param.hdr.version < 0x020a) {
+        wolfBoot_printf("linux boot protocol < 2.10 unsupported" ENDLINE);
+        wolfBoot_panic();
+    }
 
     ret = linux_boot_params_fill_memory_map(&param,
                                             (struct efi_hob*)
@@ -288,14 +297,25 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
         wolfBoot_printf("invalid kernel size" ENDLINE);
         wolfBoot_panic();
     }
-    /* The kernel occupies init_size at runtime (decompression + BSS + heap),
-     * normally larger than the copied kernel_size; guard the larger span. */
-    kernel_span = (param.hdr.init_size > kernel_size)
-                      ? param.hdr.init_size : kernel_size;
-    /* Refuse a load target that overlaps wolfBoot's own image or the payload. */
-    if (linux_load_conflicts((uint64_t)KERNEL_LOAD_ADDRESS, kernel_span,
+    /* The kernel bytes read for the copy must stay within the verified image. */
+    if ((uint64_t)param_size + kernel_size > (uint64_t)kernel_avail) {
+        wolfBoot_printf("linux kernel extent exceeds image" ENDLINE);
+        wolfBoot_panic();
+    }
+    /* wolfBoot writes the compressed image to [KERNEL_LOAD_ADDRESS, +kernel_size)
+     * while it is still running: that must not land on wolfBoot or the payload.
+     * linux_kernel_size already bounded it below the top of usable low RAM. */
+    if (linux_load_conflicts((uint64_t)KERNEL_LOAD_ADDRESS, kernel_size,
                              linux_image, image_size)) {
-        wolfBoot_printf("kernel load target overlaps wolfBoot or payload" ENDLINE);
+        wolfBoot_printf("kernel copy target overlaps wolfBoot or payload" ENDLINE);
+        wolfBoot_panic();
+    }
+    /* The kernel then decompresses itself into [pref_address, +init_size). That
+     * may overlap wolfBoot (already handed off) but must stay within usable RAM
+     * and, below, clear of the initrd. */
+    if (load_limit != 0 &&
+            (uint64_t)param.hdr.pref_address + param.hdr.init_size > load_limit) {
+        wolfBoot_printf("kernel decompress extent exceeds usable RAM" ENDLINE);
         wolfBoot_panic();
     }
     memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, kernel_image + param_size,
@@ -305,9 +325,17 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
      * address to the kernel via the ramdisk fields. */
     if (initrd_size != 0) {
         uint64_t initrd_addr;
+        /* The initrd must sit above both the compressed copy at
+         * KERNEL_LOAD_ADDRESS and the kernel's runtime decompress region at
+         * pref_address, so the kernel clobbers neither the copy it reads nor
+         * the initrd it consumes. */
+        uint64_t kernel_top = (uint64_t)KERNEL_LOAD_ADDRESS + kernel_size;
+        uint64_t decompress_top = (uint64_t)param.hdr.pref_address
+                                  + param.hdr.init_size;
+        if (decompress_top > kernel_top)
+            kernel_top = decompress_top;
         if (linux_initrd_place(param.hdr.initrd_addr_max, (uint64_t)load_limit,
-                               initrd_size,
-                               (uint64_t)KERNEL_LOAD_ADDRESS + kernel_span,
+                               initrd_size, kernel_top,
                                &initrd_addr) != 0) {
             wolfBoot_printf("initrd does not fit in usable RAM" ENDLINE);
             wolfBoot_panic();

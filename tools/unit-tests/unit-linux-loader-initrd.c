@@ -21,6 +21,12 @@
 #include "../../src/x86/hob.c"
 #include "../../src/x86/linux_loader.c"
 
+/* linux_loader.c references the wolfBoot extent symbols from the linker
+ * script. Provide a stand-in region for the host test; _end_wb is defined by
+ * the Makefile via --defsym at _start_wolfboot + this size (1 MB). */
+#define TEST_WB_SIZE 0x100000
+uint8_t _start_wolfboot[TEST_WB_SIZE];
+
 static int fail(const char *msg)
 {
     printf("FAIL: %s\n", msg);
@@ -72,6 +78,32 @@ int main(void)
      * kernel-end floor. */
     if (linux_initrd_place(0x00000fffu, 0, 0x1000u, 0x1000u, &out) == 0)
         return fail("zero-address placement accepted");
+
+    /* ranges_overlap: adjacency does not overlap, one byte of overlap does,
+     * and a zero-length range never overlaps. */
+    if (ranges_overlap(0x1000, 0x1000, 0x2000, 0x1000) != 0)
+        return fail("adjacent ranges reported as overlapping");
+    if (ranges_overlap(0x1000, 0x1001, 0x2000, 0x1000) == 0)
+        return fail("one-byte overlap missed");
+    if (ranges_overlap(0x2000, 0, 0x2000, 0x1000) != 0)
+        return fail("zero-length range reported as overlapping");
+
+    /* linux_load_conflicts: the wolfBoot region is [_start_wolfboot, _end_wb);
+     * a target inside it, or inside the payload, conflicts; one clear of both
+     * does not. */
+    {
+        static uint8_t payload[0x1000];
+        uint64_t wb = (uint64_t)(uintptr_t)_start_wolfboot;
+        if (linux_load_conflicts(wb + 0x1000, 0x1000, payload,
+                                 (uint32_t)sizeof(payload)) == 0)
+            return fail("overlap with wolfBoot not caught");
+        if (linux_load_conflicts((uint64_t)(uintptr_t)payload, 0x10, payload,
+                                 (uint32_t)sizeof(payload)) == 0)
+            return fail("overlap with payload not caught");
+        if (linux_load_conflicts(0x1000, 0x1000, payload,
+                                 (uint32_t)sizeof(payload)) != 0)
+            return fail("false conflict for a clear target");
+    }
 
     printf("PASS\n");
     return 0;
