@@ -535,17 +535,9 @@ static void setup_segments(void)
     mb();
 }
 
-/* DDR controller configuration, in HSS init_ddrc() order.
- *
- * Values come from the Video Kit Libero header
- *   hart-software-services/build/boards/mpfs-video-kit/fpga_design_config/
- *   ddr/hw_ddrc.h
- *
- * ddr_cadence_controller_setup() writes the table in array order, so row
- * order is write order.  That matters at CTRLR_SOFT_RESET_N below: the PHY
- * training, MTC and AXI_IF blocks are programmed only after the controller
- * is released from soft reset.
- */
+/* DDR controller configuration in HSS init_ddrc() order, values from the Libero
+ * ddr/hw_ddrc.h.  Row order is write order, which matters at
+ * CTRLR_SOFT_RESET_N: PHY training and MTC must be programmed after it. */
 static const ddr_cadence_reg_t mpfs_ddrc_regs[] = {
     { 0x2400, LIBERO_SETTING_CFG_MANUAL_ADDRESS_MAP },
     { 0x2404, LIBERO_SETTING_CFG_CHIPADDR_MAP },
@@ -655,10 +647,8 @@ static const ddr_cadence_reg_t mpfs_ddrc_regs[] = {
     { 0x3D74, LIBERO_SETTING_CFG_FAW_DLR },
     { 0x3D98, LIBERO_SETTING_CFG_ADVANCE_ACTIVATE_READY },
 
-    /* Everything above is programmed with the controller still in soft
-     * reset.  This write releases it; HSS init_ddrc() programs the PHY
-     * training, MTC and AXI_IF blocks only after this point, so the order
-     * of the rows below is a sequencing requirement, not a preference. */
+    /* Releases the controller from soft reset.  Rows below are the PHY
+     * training, MTC and AXI_IF blocks and must follow it, not precede it. */
     { MC_CTRLR_SOFT_RESET_N, LIBERO_SETTING_CTRLR_SOFT_RESET_N },
 
     { MC_CFG_LOOKAHEAD_PCH, LIBERO_SETTING_CFG_LOOKAHEAD_PCH },

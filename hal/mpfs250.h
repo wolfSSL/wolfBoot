@@ -236,13 +236,39 @@
 /* System Service command opcodes */
 #define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
 #define SYS_SERV_CMD_SPI_COPY      0x50u /* SCB mailbox SPI copy service */
+#define SYS_SERV_CMD_SNVM_WRITE_PLAIN  0x10u /* non-authenticated plaintext */
+#define SYS_SERV_CMD_SNVM_WRITE_AUTH   0x11u /* authenticated plaintext */
+#define SYS_SERV_CMD_SNVM_WRITE_CIPHER 0x12u /* authenticated ciphertext */
+#define SYS_SERV_CMD_SNVM_READ         0x18u
+#define SYS_SERV_CMD_PUF_EMULATION     0x20u
+#define SYS_SERV_CMD_NONCE             0x21u
+
+/* sNVM service parameters (see Microchip system services spec) */
+#define MPFS_SNVM_MODULE_MAX     221  /* modules 0..220 */
+#define MPFS_SNVM_USK_LEN        12   /* user secret key (authenticated modes) */
+#define MPFS_SNVM_AUTH_DATA_LEN  236  /* data bytes per authenticated page */
+#define MPFS_SNVM_PLAIN_DATA_LEN 252  /* data bytes per non-authenticated page */
+#define MPFS_SNVM_ADMIN_LEN      4    /* page admin bytes returned by read */
+/* Mailbox response byte offsets (mb_offset 0) */
+#define MPFS_SNVM_READ_RET_OFFSET 16
+#define MPFS_PUF_RET_OFFSET       20
+
+/* PUF emulation / nonce service sizes */
+#define MPFS_PUF_CHALLENGE_LEN   16
+#define MPFS_PUF_RESPONSE_LEN    32
+#define MPFS_NONCE_LEN           32
 
 /* Device serial number size in bytes */
 #define DEVICE_SERIAL_NUMBER_SIZE 16
 
 /* Timeout loop iteration counts (override at build time via CFLAGS) */
 #ifndef MPFS_SCB_TIMEOUT
-#define MPFS_SCB_TIMEOUT          10000     /* SCB mailbox polling */
+#define MPFS_SCB_TIMEOUT          10000     /* SCB request-accept polling */
+#endif
+/* Completion (BUSY) wait.  TRNG and PUF services are far slower than
+ * serial/sNVM reads; only a wedged controller reaches this bound. */
+#ifndef MPFS_SCB_BUSY_TIMEOUT
+#define MPFS_SCB_BUSY_TIMEOUT     20000000
 #endif
 #ifndef QSPI_TIMEOUT_TRIES
 #define QSPI_TIMEOUT_TRIES       100000    /* QSPI controller/TX polling */
@@ -256,26 +282,40 @@
 #define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
 #define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
 
-/* System Controller Mailbox API */
+/* System Controller mailbox, polling mode at word offset 0.  Returns 0, a
+ * negative transport error, or a positive 16-bit service status. */
 #ifndef __ASSEMBLER__
-int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data,
-    uint32_t mb_len, uint32_t timeout);
-int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len);
 int mpfs_read_serial_number(uint8_t *serial);
+
+/* Read one sNVM module.  data_len 236 (AUTH, needs usk) or 252 (PLAIN, usk
+ * may be NULL); admin is 4 bytes and optional. */
+int mpfs_snvm_read(uint8_t module, const uint8_t *usk, uint8_t *admin,
+    uint8_t *data, uint16_t data_len);
+
+/* Write one sNVM module.  data is 252 bytes for PLAIN, else 236; the 12-byte
+ * usk is required for AUTH/CIPHER. */
+int mpfs_snvm_write(uint8_t format, uint8_t module, const uint8_t *data,
+    const uint8_t *usk);
+
+/* PUF emulation: 16-byte challenge -> 32-byte device-unique response. */
+int mpfs_puf_emulation(const uint8_t *challenge, uint8_t op_type,
+    uint8_t *response);
+
+/* Nonce service: 32-byte random value. */
+int mpfs_nonce(uint8_t *nonce);
+
 #endif /* __ASSEMBLER__ */
 
 /* Crypto Engine: Athena F5200 (200 MHz) */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
 
-/* Athena control block.  Layout and bit names match athenareg_t /
- * SYSREG_ATHENACR_* in config_athena.h from the Microchip user-crypto
- * (CAL) library, where BASE32_ADDR_ATHENAREG is 0x20127000. */
+/* Athena control block, matching athenareg_t in the CAL library's
+ * config_athena.h (BASE32_ADDR_ATHENAREG = 0x20127000). */
 #define ATHENA_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x00)))
 #define ATHENA_STALL_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x04)))
 #define ATHENA_UPPER_ADDRESS (*((volatile uint32_t*)(ATHENA_BASE + 0x08)))
-/* Security UG Table 7-7, MSS Crypto Control Register.  RESET reads 1 out of
- * power-on reset; MSS_OWNER reports that the MSS, not the fabric, holds the
- * core, which is set by the Libero crypto ownership mode. */
+/* Security UG Table 7-7.  RESET reads 1 out of power-on reset; MSS_OWNER says
+ * the Libero ownership mode gave the core to the MSS rather than the fabric. */
 #define ATHENA_CR_RESET        (1U << 0)
 #define ATHENA_CR_PURGE        (1U << 1)
 #define ATHENA_CR_GO           (1U << 2)

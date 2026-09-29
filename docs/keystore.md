@@ -222,6 +222,10 @@ wolfBoot supports certain platforms that contain connected HSMs (Hardware Securi
 
 To support this mode of operation, the `keygen` tool supports the `--nolocalkeys` option, which instructs the tool to generate a keystore entry with a zeroed key material. It still generates the `.der` files for private and public keys, so the wolfBoot key tools can sign images, but the `keystore.c` file that is linked into wolfBoot will contain all zeros in the `pubkey` field. Because the key material isn't present in the keystore, the keypair used to sign the image and stored on the HSM for verification can be updated in the field without needing to rebuild wolfBoot against a new `keystore.c`, as long as the signature algorithm and key size does not change. Most targets that use this option will automatically add it to the key generation options or explicitly mention this step in the build documentation.
 
+### Using KeyStore in secure NVM (PolarFire SoC sNVM)
+
+On Microchip PolarFire SoC the trust anchor can be served from the System Controller secure NVM (sNVM) instead of being compiled into the bootloader, using the `SNVM_KEYSTORE` backend. See [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+
 ## Build System Integration
 
 By default, when running `make` to build the default target (`factory.bin`) for the first time, wolfBoot automatically generates a signing keypair and creates a single-key keystore as a "demonstration". This is distinct from using `keygen` directly with `-g` or `-i` options, which provides full control over keystore creation.

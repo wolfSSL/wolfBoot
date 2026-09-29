@@ -131,10 +131,33 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #  error "WOLFBOOT_RAMBOOT_MAX_SIZE required to bound the disk image RAM load"
 #endif
 
+/* Address for the in-place decrypt; a platform that cannot store to the normal
+ * load view overrides it (see the crypto_decrypt call below). */
+/* DISK_DECRYPT_STAGING: on targets where CPU stores into the load region are
+ * not coherent with the DMA that filled it, the ciphertext is read through
+ * the view hal_disk_decrypt_addr() names, decrypted into a staging buffer and
+ * landed with hal_disk_decrypt_copy() (the same copy the load used). */
+#ifdef DISK_DECRYPT_STAGING
+#define DISK_DECRYPT_ADDR(a) hal_disk_decrypt_addr((uintptr_t)(a))
+#define DISK_DECRYPT_COPY(d, s, n) hal_disk_decrypt_copy((d), (s), (n))
+#ifndef DISK_DECRYPT_STAGE_SZ
+#define DISK_DECRYPT_STAGE_SZ 4096
+#endif
+#else
+#define DISK_DECRYPT_ADDR(a) (a)
+#endif
+
 #ifdef DISK_ENCRYPT
 
 /* Module-level storage for encryption key */
 static uint8_t disk_encrypt_key[ENCRYPT_KEY_SIZE];
+
+#ifdef DISK_DECRYPT_STAGE_SZ
+/* Every non-final chunk must be whole cipher blocks or the counter desyncs. */
+#if (DISK_DECRYPT_STAGE_SZ % ENCRYPT_BLOCK_SIZE) != 0
+#error "DISK_DECRYPT_STAGE_SZ must be a multiple of ENCRYPT_BLOCK_SIZE"
+#endif
+#endif
 
 static uint16_t get_hdr_u16(const uint8_t *p)
 {
@@ -922,8 +945,40 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_panic();
         }
         disk_crypto_set_iv(IMAGE_HEADER_SIZE / ENCRYPT_BLOCK_SIZE);
-        crypto_decrypt((uint8_t*)load_address, (uint8_t*)load_address,
-            os_image.fw_size);
+        /* DISK_DECRYPT_ADDR aliases the read; DISK_DECRYPT_COPY lands the
+         * plaintext when the CPU cannot write that view.  The stage size is a
+         * multiple of both ENCRYPT_BLOCK_SIZE values, keeping the counter in step. */
+#ifdef DISK_DECRYPT_COPY
+        {
+            static uint8_t dec_stage[DISK_DECRYPT_STAGE_SZ];
+            uint32_t dec_off = 0;
+            uint32_t dec_chunk;
+
+            while (dec_off < os_image.fw_size) {
+                dec_chunk = os_image.fw_size - dec_off;
+                if (dec_chunk > (uint32_t)DISK_DECRYPT_STAGE_SZ) {
+                    dec_chunk = (uint32_t)DISK_DECRYPT_STAGE_SZ;
+                }
+                crypto_decrypt(dec_stage,
+                    (uint8_t*)DISK_DECRYPT_ADDR((uint8_t*)load_address + dec_off),
+                    dec_chunk);
+                if (DISK_DECRYPT_COPY((uint8_t*)load_address + dec_off,
+                        dec_stage, dec_chunk) != 0) {
+                    wc_ForceZero(dec_stage, sizeof(dec_stage));
+                    disk_decrypted_header_clear(dec_hdr);
+                    disk_crypto_clear();
+                    wolfBoot_printf("Decrypt copy to load address failed\r\n");
+                    wolfBoot_panic();
+                }
+                dec_off += dec_chunk;
+                wolfBoot_watchdog_feed();
+            }
+            wc_ForceZero(dec_stage, sizeof(dec_stage));
+        }
+#else
+        crypto_decrypt((uint8_t*)DISK_DECRYPT_ADDR(load_address),
+            (uint8_t*)DISK_DECRYPT_ADDR(load_address), os_image.fw_size);
+#endif
         BENCHMARK_END("done");
 #endif
 

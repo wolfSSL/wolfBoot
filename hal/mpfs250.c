@@ -45,6 +45,9 @@
 #include "hal.h"
 #include "gpt.h"
 #include "fdt.h"
+#if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION)
+#include "mpfs250_snvm.h"
+#endif
 
 #ifdef MPFS_ATHENA
 #include <wolfssl/wolfcrypt/cryptocb.h>
@@ -66,6 +69,7 @@
 #include "sym.h"
 #undef uint128_t
 #endif
+
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 #include "sdhci.h"
@@ -139,6 +143,7 @@ __attribute__((noinline)) void udelay(uint32_t us)
 }
 
 #endif /* WOLFBOOT_RISCV_MMODE */
+
 
 /* Multi-Hart Support */
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -485,18 +490,9 @@ static int mpfs_athena_aes256_ctr(const void *key, void *iv, const void *in,
 #endif /* MPFS_ATHENA */
 
 #ifdef MPFS_ATHENA
-/* wolfCrypt crypto callback backed by the Athena F5200: SHA-384 and
- * AES-256-CTR, which together are most of wolfBoot's per-image crypto cost.
- *
- * The engine is reached only through the plain-C mpfs_athena_* API, because
- * CAL's headers cannot share a translation unit with wolfSSL's.
- *
- * Hash contract (established empirically; CAL does not document it): a
- * non-final update must be a whole number of blocks, 128 bytes for SHA-384,
- * and only the final call may carry a remainder.  wolfBoot feeds
- * WOLFBOOT_SHA_BLOCK_SIZE (4096) chunks, already a multiple of 128, but an
- * image tail and short hashes such as a public key are not - hence the
- * partial-block buffer below. */
+/* SHA-384 + AES-256-CTR via the plain-C mpfs_athena_* API (CAL headers cannot
+ * share a TU with wolfSSL's).  Undocumented CAL contract: a non-final update
+ * must be whole 128-byte blocks, so short tails need the buffer below. */
 #define ATHENA_SHA384_BLOCK 128
 #define ATHENA_HASH_SLOTS   2
 
@@ -513,6 +509,9 @@ static struct athena_hash_slot athena_hash_slots[ATHENA_HASH_SLOTS];
  * digest cannot be mistaken for hardware use when the callback never ran. */
 static uint32_t athena_cb_calls;
 
+/* Keyed by wc_Sha384 address; the cryptocb has no free event, so a context
+ * freed without Final strands its slot and a later one at that address would
+ * resume stale CAL state (wrong digest).  Only reachable via ONESHOT today. */
 static struct athena_hash_slot *athena_slot_find(void *owner)
 {
     int i;
@@ -568,18 +567,9 @@ static int athena_hash_feed(struct athena_hash_slot *slot, const uint8_t *in,
 }
 
 #if defined(MPFS_ATHENA_AES) && defined(WOLFSSL_AES_COUNTER) && !defined(NO_AES)
-/* AES-256-CTR.  CTR is symmetric, so one path serves wolfBoot's encrypt and
- * decrypt (both go through wc_AesCtrEncrypt).  The raw key comes from
- * aes->devKey, the field wolfCrypt fills for exactly this purpose; reading it
- * does not depend on the key-schedule layout, and because wolfCrypt still runs
- * its own key setup afterwards, declining a call here stays safe.  The
- * WOLF_CRYPTO_CB_SETKEY hook is deliberately not used: returning success from
- * it makes wolfCrypt skip software key setup and strands the fallback.
- *
- * Every bail-out happens before any data reaches the engine.  Afterwards
- * wolfCrypt's counter no longer matches the data, so a late
- * CRYPTOCB_UNAVAILABLE would silently corrupt the stream - a failure at that
- * point has to be reported as an error instead. */
+/* AES-256-CTR, one path for both directions.  Key from aes->devKey, not the
+ * WOLF_CRYPTO_CB_SETKEY hook: succeeding there strands the software fallback.
+ * All bail-outs precede any data entering the engine (counter would desync). */
 static int athena_aesctr(wc_CryptoInfo *info)
 {
     Aes *aes;
@@ -644,10 +634,8 @@ static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
 
     slot = athena_slot_find(info->hash.sha384);
     if (slot == NULL) {
-        /* First call for this context.  This is the only point where falling
-         * back to software is still safe: once any data has gone into the
-         * engine, wolfCrypt's own state is incomplete and a later
-         * CRYPTOCB_UNAVAILABLE would silently produce a wrong digest. */
+        /* First call: the only safe point to decline, since afterwards
+         * wolfCrypt's own state is incomplete and the digest would be wrong. */
         slot = athena_slot_find(NULL);
         if (slot == NULL) {
             return CRYPTOCB_UNAVAILABLE;
@@ -826,6 +814,7 @@ static void mpfs_athena_init(void)
 }
 #endif /* MPFS_ATHENA */
 
+
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -974,6 +963,25 @@ void hal_init(void)
 #endif
 #endif
 
+
+#ifdef SNVM_KEYSTORE_PROVISION
+    /* One-time: write the compiled-in trust anchor into sNVM so a subsequent
+     * SNVM_KEYSTORE build serves its keys from sNVM.  Stop on failure so a
+     * provisioning run cannot look successful. */
+    if (snvm_keystore_provision() != 0) {
+        wolfBoot_printf("snvm provision: FAILED\n");
+        wolfBoot_panic();
+    }
+#endif
+
+#ifdef SNVM_ENCKEY_PROVISION
+    /* One-time: store the PUF-wrapped image-encryption key in sNVM. */
+    if (snvm_enckey_provision() != 0) {
+        wolfBoot_printf("enckey provision: FAILED\n");
+        wolfBoot_panic();
+    }
+#endif
+
 #ifdef EXT_FLASH
     if (qspi_init() != 0) {
         wolfBoot_printf("QSPI: Init failed\n");
@@ -995,62 +1003,218 @@ static int mpfs_scb_mailbox_busy(void)
     return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
 }
 
-/* Read 16-byte device serial number via SCB system service (opcode 0x00). */
-int mpfs_read_serial_number(uint8_t *serial)
+/* System Controller service, polling mode, mailbox word offset 0.  Returns the
+ * 16-bit service status (0 = success) or a negative transport error. */
+static int mpfs_scb_request(uint8_t opcode, const uint8_t *req,
+    uint32_t req_len)
 {
-    uint32_t cmd, status;
-    int i, timeout;
+    uint32_t cmd, words, rem, i, v;
+    int timeout;
 
-    if (serial == NULL) {
-        return -1;
-    }
-
-    /* Check if mailbox is busy */
     if (mpfs_scb_mailbox_busy()) {
         wolfBoot_printf("SCB mailbox busy\n");
         return -2;
     }
 
-    /* Send serial number request command (opcode 0x00)
-     * Command format: [31:16] = opcode, [0] = request bit */
-    cmd = (SYS_SERV_CMD_SERIAL_NUMBER << SERVICES_CR_COMMAND_SHIFT) |
+    /* Write request words into the mailbox (RMW for a non-word-aligned tail). */
+    words = req_len / 4u;
+    for (i = 0; i < words; i++) {
+        v  =  (uint32_t)req[(i * 4u) + 0u];
+        v |= ((uint32_t)req[(i * 4u) + 1u]) << 8;
+        v |= ((uint32_t)req[(i * 4u) + 2u]) << 16;
+        v |= ((uint32_t)req[(i * 4u) + 3u]) << 24;
+        SCBMBOX_REG(i * 4u) = v;
+    }
+    rem = req_len - (words * 4u);
+    if (rem > 0u) {
+        v = SCBMBOX_REG(words * 4u);
+        for (i = 0; i < rem; i++) {
+            v &= ~(((uint32_t)0xFFu) << (i * 8u));
+            v |= ((uint32_t)req[(words * 4u) + i]) << (i * 8u);
+        }
+        SCBMBOX_REG(words * 4u) = v;
+    }
+
+    /* Ensure mailbox writes land before the request is raised. */
+    __asm__ volatile("fence w,w" ::: "memory");
+
+    /* Command: opcode in [22:16] (SERVICES_CR_COMMAND_SHIFT), REQ in bit 0;
+     * the mailbox word-offset field is left 0. */
+    cmd = (((uint32_t)(opcode & 0x7Fu)) << SERVICES_CR_COMMAND_SHIFT) |
           SERVICES_CR_REQ_MASK;
     SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
 
-    /* Wait for request bit to clear (command accepted) */
+    /* Wait for request bit to clear (command accepted). */
     timeout = MPFS_SCB_TIMEOUT;
-    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) && timeout > 0) {
+    while ((SCBCTRL_REG(SERVICES_CR_OFFSET) & SERVICES_CR_REQ_MASK) &&
+           (timeout > 0)) {
         timeout--;
     }
     if (timeout == 0) {
-        wolfBoot_printf("SCB mailbox request timeout\n");
+        wolfBoot_printf("SCB request timeout\n");
         return -3;
     }
 
-    /* Wait for busy bit to clear (command completed) */
-    timeout = MPFS_SCB_TIMEOUT;
-    while (mpfs_scb_mailbox_busy() && timeout > 0) {
+    /* Wait for busy bit to clear (service complete).  Uses the larger
+     * completion bound: nonce/PUF take much longer than serial/sNVM-read. */
+    timeout = MPFS_SCB_BUSY_TIMEOUT;
+    while (mpfs_scb_mailbox_busy() && (timeout > 0)) {
         timeout--;
     }
     if (timeout == 0) {
-        wolfBoot_printf("SCB mailbox busy timeout\n");
+        wolfBoot_printf("SCB busy timeout\n");
         return -4;
     }
 
-    /* Check status (upper 16 bits of status register) */
-    status = (SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT) & 0xFFFF;
-    if (status != 0) {
-        wolfBoot_printf("SCB mailbox error: 0x%x\n", status);
-        return -5;
+    return (int)((SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT)
+                 & 0xFFFFu);
+}
+
+/* Read len response bytes from the mailbox at byte offset off (mb word 0). */
+static void mpfs_scb_read(uint8_t *out, uint32_t off, uint32_t len)
+{
+    uint32_t i;
+    for (i = 0; i < len; i++) {
+        out[i] = SCBMBOX_BYTE(off + i);
+    }
+}
+
+/* Read 16-byte device serial number via SCB system service (opcode 0x00). */
+int mpfs_read_serial_number(uint8_t *serial)
+{
+    int ret;
+
+    if (serial == NULL) {
+        return -1;
+    }
+    ret = mpfs_scb_request(SYS_SERV_CMD_SERIAL_NUMBER, NULL, 0);
+    if (ret == 0) {
+        mpfs_scb_read(serial, 0, DEVICE_SERIAL_NUMBER_SIZE);
+    }
+    return ret;
+}
+
+int mpfs_snvm_read(uint8_t module, const uint8_t *usk, uint8_t *admin,
+    uint8_t *data, uint16_t data_len)
+{
+    uint8_t frame[16];
+    int ret, i;
+
+    if ((data == NULL) || (module >= MPFS_SNVM_MODULE_MAX)) {
+        return -1;
+    }
+    if ((data_len != MPFS_SNVM_AUTH_DATA_LEN) &&
+        (data_len != MPFS_SNVM_PLAIN_DATA_LEN)) {
+        return -1;
+    }
+    if ((data_len == MPFS_SNVM_AUTH_DATA_LEN) && (usk == NULL)) {
+        return -1;
     }
 
-    /* Read serial number from mailbox RAM (16 bytes) */
-    for (i = 0; i < DEVICE_SERIAL_NUMBER_SIZE; i++) {
-        serial[i] = SCBMBOX_BYTE(i);
+    for (i = 0; i < (int)sizeof(frame); i++) {
+        frame[i] = 0;
+    }
+    frame[0] = module;                       /* bytes 1..3 reserved (0) */
+    if (data_len == MPFS_SNVM_AUTH_DATA_LEN) {
+        for (i = 0; i < MPFS_SNVM_USK_LEN; i++) {
+            frame[4 + i] = usk[i];
+        }
     }
 
+    ret = mpfs_scb_request(SYS_SERV_CMD_SNVM_READ, frame, sizeof(frame));
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* Response: 4 admin bytes then data_len data bytes at READ_RET_OFFSET. */
+    if (admin != NULL) {
+        mpfs_scb_read(admin, MPFS_SNVM_READ_RET_OFFSET, MPFS_SNVM_ADMIN_LEN);
+    }
+    mpfs_scb_read(data, MPFS_SNVM_READ_RET_OFFSET + MPFS_SNVM_ADMIN_LEN,
+        data_len);
     return 0;
 }
+
+int mpfs_snvm_write(uint8_t format, uint8_t module, const uint8_t *data,
+    const uint8_t *usk)
+{
+    uint8_t frame[256];
+    uint32_t datalen, total;
+    int i;
+
+    if ((data == NULL) || (module >= MPFS_SNVM_MODULE_MAX)) {
+        return -1;
+    }
+    if (format == SYS_SERV_CMD_SNVM_WRITE_PLAIN) {
+        datalen = MPFS_SNVM_PLAIN_DATA_LEN;
+        total = 4u + MPFS_SNVM_PLAIN_DATA_LEN;                 /* 256 */
+    }
+    else if ((format == SYS_SERV_CMD_SNVM_WRITE_AUTH) ||
+             (format == SYS_SERV_CMD_SNVM_WRITE_CIPHER)) {
+        if (usk == NULL) {
+            return -1;
+        }
+        datalen = MPFS_SNVM_AUTH_DATA_LEN;
+        total = 4u + MPFS_SNVM_AUTH_DATA_LEN + MPFS_SNVM_USK_LEN; /* 252 */
+    }
+    else {
+        return -1;
+    }
+
+    for (i = 0; i < (int)sizeof(frame); i++) {
+        frame[i] = 0;
+    }
+    frame[0] = module;                       /* bytes 1..3 reserved (0) */
+    for (i = 0; i < (int)datalen; i++) {
+        frame[4 + i] = data[i];
+    }
+    if (datalen == MPFS_SNVM_AUTH_DATA_LEN) {
+        for (i = 0; i < MPFS_SNVM_USK_LEN; i++) {
+            frame[4 + MPFS_SNVM_AUTH_DATA_LEN + i] = usk[i];
+        }
+    }
+
+    return mpfs_scb_request(format, frame, total);
+}
+
+int mpfs_puf_emulation(const uint8_t *challenge, uint8_t op_type,
+    uint8_t *response)
+{
+    uint8_t frame[20];
+    int ret, i;
+
+    if ((challenge == NULL) || (response == NULL)) {
+        return -1;
+    }
+    for (i = 0; i < (int)sizeof(frame); i++) {
+        frame[i] = 0;
+    }
+    frame[0] = op_type;                      /* bytes 1..3 reserved (0) */
+    for (i = 0; i < MPFS_PUF_CHALLENGE_LEN; i++) {
+        frame[4 + i] = challenge[i];
+    }
+
+    ret = mpfs_scb_request(SYS_SERV_CMD_PUF_EMULATION, frame, sizeof(frame));
+    if (ret == 0) {
+        mpfs_scb_read(response, MPFS_PUF_RET_OFFSET, MPFS_PUF_RESPONSE_LEN);
+    }
+    return ret;
+}
+
+int mpfs_nonce(uint8_t *nonce)
+{
+    int ret;
+
+    if (nonce == NULL) {
+        return -1;
+    }
+    ret = mpfs_scb_request(SYS_SERV_CMD_NONCE, NULL, 0);
+    if (ret == 0) {
+        mpfs_scb_read(nonce, 0, MPFS_NONCE_LEN);
+    }
+    return ret;
+}
+
 
 /* Linux kernel command line arguments */
 /* Must stay below the fdt.h include: the LINUX_BOOTARGS_OVERRIDE default
@@ -1212,6 +1376,21 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
 
     return 0;
 }
+
+#ifdef DISK_DECRYPT_STAGING
+/* Ciphertext is read through the non-cached DDR alias and plaintext is landed
+ * with the PDMA copy below: CPU stores into DDR are not coherent with what the
+ * SD controller wrote (see polarfire_mpfs250_m.config). */
+uintptr_t hal_disk_decrypt_addr(uintptr_t addr)
+{
+    return addr | 0x40000000UL;
+}
+
+int hal_disk_decrypt_copy(void *dst, const void *src, uint32_t len)
+{
+    return wolfBoot_fit_memcpy(dst, src, len);
+}
+#endif
 
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 /* FIT subimage copy via PDMA (overrides the weak default in src/fdt.c).
@@ -1406,6 +1585,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     (void)len;
     return 0;
 }
+
 
 /* Wait for SCB register bits to clear, with timeout */
 static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
@@ -1924,6 +2104,7 @@ int ext_flash_erase(uintptr_t address, int len)
 #define QSPI_PROG_ACK          0x06
 #define QSPI_RX_TIMEOUT_MS     10000U  /* 10 s per byte -- aborts if host disappears */
 
+
 /* Returns 0-255 on success, -1 on timeout (so the boot path is never deadlocked). */
 static int uart_qspi_rx(void)
 {
@@ -2345,6 +2526,7 @@ void mpfs_iomux_init(void)
 
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
 /* SDHCI Platform HAL */
+
 
 /* MSS MPU base + per-master offset.  Each AXI master (FIC0/1/2, CRYPTO,
  * GEM0/1, USB, MMC, SCB, TRACE) has 16 PMPCFG entries (uint64_t each) at

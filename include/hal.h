@@ -43,6 +43,12 @@ extern int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif
+#ifdef DISK_DECRYPT_STAGING
+/* Disk decrypt staging (src/update_disk.c): the address the ciphertext is read
+ * through, and the copy that lands plaintext in the load region. */
+uintptr_t hal_disk_decrypt_addr(uintptr_t addr);
+int hal_disk_decrypt_copy(void *dst, const void *src, uint32_t len);
+#endif
 extern void arch_reboot(void);
 
 /* Simulator-only calls */

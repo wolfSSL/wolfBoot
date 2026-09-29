@@ -67,28 +67,12 @@ _reset:
     sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
     fence
 
-    /* Populate the scratchpad ways one way at a time, so every line of
-     * the Zero Device (0x0A000000) is resident before anything else runs.
-     *
-     * With the default mask (0xFF = cache ways 0-7), a store to the Zero
-     * Device allocates in an ordinary cache way; that line is evictable and
-     * its writeback is discarded, so the store is silently lost. Selecting
-     * all four scratchpad ways at once (0xF00) is not enough either: it only
-     * covers the stores made while the mask is set, which used to be the
-     * .text copy alone. Everything after the mask was restored -- .data,
-     * .bss (including the SDHCI PDMA staging buffer), the heap and the E51
-     * stack -- still allocated in evictable ways.
-     *
-     * Walking one way at a time is what makes the whole 512 KB resident: a
-     * store can only allocate in the single enabled way, so 2048 blocks x 4
-     * ways fills each way exactly once. Once resident, later stores hit and
-     * the mask no longer matters. This is HSS config_l2_cache(), see
-     * mss_l2_cache.c; the marker value matches its INIT_MARKER.
-     *
-     * Constants for WAY_ENABLE=0x0B, NUM_SCRATCH_PAD_WAYS=4:
-     *   first way = 1 << ((WAY_ENABLE + 1) - NUM_SCRATCH_PAD_WAYS) = 1 << 8
-     *   blocks per way = WAY_BYTE_LENGTH / CACHE_BLOCK_BYTE_LENGTH
-     *                  = 0x20000 / 64 = 2048 */
+    /* Make all 512 KB of the Zero Device resident by enabling one scratchpad
+     * way at a time and storing a marker every 64 bytes: a store can only
+     * allocate in the enabled way, so 2048 blocks x 4 ways fills each once.
+     * A mask of 0xF00 covers only the stores made while it is set, leaving
+     * .data/.bss/heap/stack in evictable ways whose writeback is discarded.
+     * This is HSS config_l2_cache(); the marker matches its INIT_MARKER. */
     li    t0, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
     li    t1, 0x100                   /* scratchpad way 8 */
     li    t2, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
