@@ -1424,6 +1424,15 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
 
+    /* Consume the update: reset the update partition state to NEW, as the
+     * swap path's final erase does, so the next boot does not re-run
+     * wolfBoot_update(0) on the same image (a wasted verification, and a
+     * full BOOT re-flash on every boot with ALLOW_DOWNGRADE). Best effort:
+     * in setups where the bootloader cannot write the update partition -
+     * the reason DISABLE_BACKUP exists - the application owns the update
+     * partition and must clear the state itself. */
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+
     #ifdef EXT_FLASH
     ext_flash_lock();
     #endif
