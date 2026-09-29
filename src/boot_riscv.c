@@ -60,6 +60,8 @@ extern void reloc_trap_vector(const uint32_t *address);
 /* Minimal SBI runtime (src/riscv_sbi.c): services S-mode ecalls and the
  * M-mode timer/software interrupts that back the S-mode timer and IPIs. */
 extern unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc);
+extern unsigned long sbi_redirect_trap(unsigned long cause, unsigned long epc,
+    unsigned long tval);
 extern void sbi_timer_irq(void);
 extern void sbi_ipi_irq(unsigned long hartid);
 extern unsigned long sbi_illegal_insn(unsigned long *regs, unsigned long epc,
@@ -224,6 +226,17 @@ unsigned long WEAKFUNCTION handle_trap_ex(unsigned long cause, unsigned long epc
         }
         /* not handled: fall through to the fatal dump below */
     }
+
+    /* These harts cannot delegate access faults (medeleg reads back 0xB109):
+     * a supervisor exception M-mode has nothing to do with is handed to the
+     * supervisor's own vector, so the OS gets its fault instead of a parked
+     * hart.  Environment calls from S-mode were serviced above. */
+    if ((cause & MCAUSE_INT) == 0UL && ec != 9UL) {
+        unsigned long nepc = sbi_redirect_trap(cause, epc, tval);
+        if (nepc != 0UL) {
+            return nepc;
+        }
+    }
 #endif
 
     /* Halt on synchronous exceptions to prevent infinite trap-mret loops
@@ -245,8 +258,9 @@ unsigned long WEAKFUNCTION handle_trap_ex(unsigned long cause, unsigned long epc
         }
 #if defined(DEBUG_BOOT)
         unsigned long sp_now;
-        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx mstatus=%lx\n",
-            cause, epc, tval, csr_read(mstatus));
+        wolfBoot_printf("TRAP: cause=%lx epc=%lx tval=%lx mstatus=%lx "
+            "medeleg=%lx\n", cause, epc, tval, csr_read(mstatus),
+            csr_read(medeleg));
         __asm__ volatile("mv %0, sp" : "=r"(sp_now));
         wolfBoot_printf("      sp=%lx\n", sp_now);
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250)
