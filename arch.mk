@@ -1940,6 +1940,7 @@ ifeq ($(TARGET),ti_am64x_r5)
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/HwiP_armv7r_vim.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/MpuP_armv7r_asm.o \
+    $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/Mutex_armv7r_asm.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r.o \
     $(TI_MCU_PLUS_SDK)/source/kernel/nortos/dpl/r5/PmuP_armv7r_asm.o \
     $(TI_MCU_PLUS_SDK)/source/security/security_common/drivers/crypto/rng/rng.o
