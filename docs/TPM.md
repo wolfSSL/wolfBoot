@@ -7,6 +7,7 @@ In wolfBoot we support TPM based root of trust, sealing/unsealing, cryptographic
 | Config Option | Preprocessor Macro | Description                         |
 | ------------- | ------------------ | ----------------------------------- |
 | `WOLFTPM=1`   | `WOLFBOOT_TPM`     | Enables wolfTPM support |
+| `WOLFBOOT_TPM_I2C=1` | `WOLFBOOT_TPM_I2C` | Use the TIS-over-I2C transport instead of SPI. Builds `hal/i2c/i2c_drv_$(I2C_TARGET).c` in place of the SPI driver and also defines `WOLFTPM_ADV_IO`, which the I2C transport requires. Only targets that provide an I2C back-end can use it. |
 | `WOLFBOOT_TPM_VERIFY=1` | `WOLFBOOT_TPM_VERIFY` | Enables cryptographic offloading for RSA2048 and ECC256/384 to the TPM. |
 | `WOLFBOOT_TPM_KEYSTORE=1` | `WOLFBOOT_TPM_KEYSTORE` | Enables TPM based root of trust. NV Index must store a hash of the trusted public key. |
 | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | `WOLFBOOT_TPM_KEYSTORE_NV_BASE=0x` | NV index in platform range 0x1400000 - 0x17FFFFF. |
