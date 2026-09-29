@@ -87,6 +87,7 @@ TESTS+=unit-pkcs11-nsc-zeroize
 TESTS+=unit-pkcs11-pin-zeroize
 TESTS+=unit-ubootenv
 TESTS+=unit-diagnostics
+TESTS+=unit-psoc-c3-divider
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-fit-fpga
@@ -546,6 +547,9 @@ unit-zynq-dma-range: unit-zynq-dma-range.c
 # arithmetic, CRLF, RX, bounded busy-waits) against an emulated register block
 unit-ns16550: unit-ns16550.c ../../hal/uart/ns16550.c
 	gcc -o $@ unit-ns16550.c $(CFLAGS) $(LDFLAGS)
+
+unit-psoc-c3-divider: unit-psoc-c3-divider.c ../../hal/psoc_c3.h
+	gcc -o $@ unit-psoc-c3-divider.c $(CFLAGS) $(LDFLAGS)
 
 unit-fdt-memrsv-wrap:CFLAGS+=-DWOLFBOOT_FDT
 unit-fdt-memrsv-wrap: unit-fdt-memrsv-wrap.c ../../src/fdt.c

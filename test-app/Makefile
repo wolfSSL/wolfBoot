@@ -745,6 +745,14 @@ ifeq ($(TARGET),stm32c5)
   CFLAGS+=-I..
 endif
 
+ifeq ($(TARGET),psoc_c3)
+  LSCRIPT_TEMPLATE=ARM-psoc_c3.ld
+  CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
 ifeq ($(TARGET),nrf5340)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-nrf5340-ns.ld
