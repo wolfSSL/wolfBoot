@@ -544,7 +544,15 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     if (updateState != IMG_STATE_FINAL_FLAGS) {
         /* First, backup the staging sector (sector at tmpBootPos) into swap partition */
         /* This sector will be modified with the magic trailer, so we need to preserve it */
-        wolfBoot_backup_last_boot_sector(tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        ret = wolfBoot_backup_last_boot_sector(tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        if (ret < 0) {
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+            wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+            return ret;
+        }
         wolfBoot_printf("Copied boot sector to swap\n");
         /* Mark update as being in final swap phase to allow resumption if power fails */
         wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
@@ -571,7 +579,15 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     }
 #endif
     /* Erase the last sector(s) of boot partition (where partition state is stored) */
-    wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    ret = wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    if (ret < 0) {
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+        return ret;
+    }
 
 #ifdef EXT_ENCRYPTED
     /* Initialize encryption with the saved key. The default backend
@@ -593,7 +609,15 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     /* Restore the original contents of the staging sector (with the magic trailer if encrypted) */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
         wolfBoot_printf("Restoring last boot sector from swap\n");
-        wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        ret = wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        if (ret < 0) {
+#ifdef EXT_FLASH
+            ext_flash_lock();
+#endif
+            hal_flash_lock();
+            wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+            return ret;
+        }
     }
     else {
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
@@ -612,7 +636,6 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     hal_flash_lock();
 
     wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
-    (void)ret;
     return 0;
 }
 #ifdef __CCRX__

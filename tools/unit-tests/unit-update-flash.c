@@ -917,6 +917,85 @@ START_TEST (test_final_swap_propagates_encrypt_key_read_failure)
 END_TEST
 #endif
 
+/* A failed backup copy must abort the final swap before the update
+ * partition advances to FINAL_FLAGS: the SWAP copy of the staging sector
+ * is the only resume record for the restore step. The staging sector
+ * (partition end minus two sectors) only overlaps the image data when the
+ * payload reaches it, so use a near-max payload: with sector 1024 and
+ * partition 32768 the staging sector starts at 30720, and the copy's
+ * chunk guard only writes chunks below fw_size + header + buffer. In this
+ * mock config SWAP is external, so the backup's write goes through
+ * ext_flash_write and the one-shot ext_flash_write_fail hooks it.
+ * Guarded out of the EXT_ENCRYPTED variants: the resume logic is identical
+ * with or without encryption, but this test stages a plain image, which
+ * the encrypted swap path does not accept. */
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER) && \
+    !defined(EXT_ENCRYPTED)
+START_TEST (test_final_swap_aborts_on_backup_copy_failure)
+{
+    int ret;
+    uint8_t update_state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, 30700);
+
+    ext_flash_write_fail = 1;
+    ret = wolfBoot_swap_and_final_erase(0);
+
+    ck_assert_int_lt(ret, 0);
+    ck_assert_int_eq(ext_flash_write_fail, 0);
+    /* The update state must be unset: a failed backup must not leave the
+     * update partition marked FINAL_FLAGS. */
+    ck_assert_int_ne(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
+        0);
+
+    cleanup_flash();
+}
+END_TEST
+
+/* A failed restore copy must abort before BOOT is marked TESTING: with a
+ * partially written staging sector and TESTING set, the device would roll
+ * back silently on the next boot instead of resuming the restore from SWAP.
+ * Resume mode with FINAL_FLAGS pre-set skips the backup block, so the
+ * one-shot hal_flash_write_fail hooks the restore's swap->boot internal
+ * write. Near-max payload so the staging sector overlaps the image and the
+ * restore copy runs (boundary math in the backup test above). */
+START_TEST (test_final_swap_aborts_on_restore_copy_failure)
+{
+    int ret;
+    uint8_t boot_state = 0;
+    uint8_t update_state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, 30700);
+
+    ext_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    ext_flash_lock();
+
+    hal_flash_write_fail = 1;
+    ret = wolfBoot_swap_and_final_erase(1);
+
+    ck_assert_int_lt(ret, 0);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+    /* The boot state must be unset: the state sector was erased before the
+     * restore and TESTING must not be written after a failed restore. */
+    ck_assert_int_ne(wolfBoot_get_partition_state(PART_BOOT, &boot_state), 0);
+    /* The backup completed, so FINAL_FLAGS is set: the next boot's resume
+     * path re-enters and retries the restore from SWAP. */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
+        0);
+    ck_assert_int_eq(update_state, IMG_STATE_FINAL_FLAGS);
+
+    cleanup_flash();
+}
+END_TEST
+#endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER && !EXT_ENCRYPTED */
+
 START_TEST (test_sunnyday_noupdate)
 {
     reset_mock_stats();
@@ -1991,6 +2070,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER) && \
+    !defined(EXT_ENCRYPTED)
+    tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_backup_copy_failure);
+    tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_restore_copy_failure);
+#endif
 #ifndef EXT_ENCRYPTED
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
 #endif
