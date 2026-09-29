@@ -1394,15 +1394,27 @@ ifeq ($(WOLFTPM),1)
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFTPM)
   CFLAGS+=-D"WOLFBOOT_TPM"
   CFLAGS+=-D"WOLFTPM_SMALL_STACK"
+  # The TPM transport is chosen independently of SPI flash, because a board
+  # can carry SPI flash and still reach its TPM over I2C. WOLFTPM_I2C is what
+  # selects the TCG PTP I2C register map inside wolfTPM; without it the
+  # transport would use the SPI offsets.
+  ifeq ($(WOLFBOOT_TPM_I2C),1)
+    CFLAGS+=-DWOLFBOOT_TPM_I2C -DWOLFTPM_I2C -DWOLFTPM_ADV_IO
+    WOLFCRYPT_OBJS+=hal/i2c/i2c_drv_$(I2C_TARGET).o
+  endif
   ifneq ($(SPI_FLASH),1)
-    # don't use spi if we're using simulator
+    # don't use spi if we're using simulator, unless an explicit transport was
+    # asked for: WOLFBOOT_TPM_I2C=1 on the simulator builds the I2C transport
+    # against the stub back-end, which is how that code path is build-tested.
     ifeq ($(TARGET),sim)
-      SIM_TPM=1
+      ifneq ($(WOLFBOOT_TPM_I2C),1)
+        SIM_TPM=1
+      endif
     endif
     ifeq ($(SIM_TPM),1)
       CFLAGS+=-DWOLFTPM_SWTPM -DTPM_TIMEOUT_TRIES=0 -DHAVE_NETDB_H -DHAVE_UNISTD_H
       OBJS+=$(WOLFBOOT_LIB_WOLFTPM)/src/tpm2_swtpm.o
-    else
+    else ifneq ($(WOLFBOOT_TPM_I2C),1)
       # Use memory-mapped WOLFTPM on x86-64
         ifeq ($(ARCH),x86_64)
           CFLAGS+=-DWOLFTPM_MMIO -DWOLFTPM_EXAMPLE_HAL -DWOLFTPM_INCLUDE_IO_FILE

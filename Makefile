@@ -801,7 +801,7 @@ src/flash_otp_keystore.o: $(PRIVATE_KEY) src/flash_otp_keystore.c
 keys: $(PRIVATE_KEY)
 
 clean:
-	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o hal/uart/*.o test-app/*.o src/x86/*.o
+	$(Q)rm -f src/*.o hal/*.o hal/spi/*.o hal/i2c/*.o hal/uart/*.o test-app/*.o src/x86/*.o
 	$(Q)rm -f src/wolfboot_tz_nsc.o
 	$(Q)rm -f *.asm  # TI cl2000 (ARCH=C2000) intermediate listings in repo root
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
@@ -923,7 +923,7 @@ cppcheck:
 		--suppress="uninitvar" \
 		--suppress="zerodiv" \
 		--check-level=exhaustive \
-		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/uart/*.c
+		--error-exitcode=89 --std=c89 src/*.c hal/*.c hal/spi/*.c hal/i2c/*.c hal/uart/*.c
 
 otp: tools/keytools/otp/otp-keystore-primer.bin FORCE
 

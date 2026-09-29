@@ -21,6 +21,7 @@ ARCH_FLASH_OFFSET?=0x0
 
 # Default SPI driver name
 SPI_TARGET=$(TARGET)
+I2C_TARGET=$(TARGET)
 
 # Default UART driver name
 UART_TARGET=$(TARGET)
@@ -588,6 +589,7 @@ ifeq ($(ARCH),ARM)
     LSCRIPT_IN=hal/$(TARGET).ld
     SPI_TARGET=stm32
   endif
+
   ifeq ($(TARGET),m2354)
     CORTEX_M23=1
     CFLAGS+=-Ihal

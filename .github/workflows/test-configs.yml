@@ -863,6 +863,14 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32c5.config
 
+  # Builds the TIS-over-I2C transport itself, with no target port involved.
+  sim_tpm_i2c_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-tpm.config
+      make-args: WOLFBOOT_TPM_I2C=1
+
   stm32c5_no_clock_restore_test:
     uses: ./.github/workflows/test-build.yml
     with:

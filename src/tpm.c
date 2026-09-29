@@ -115,10 +115,137 @@ void wolfBoot_print_bin(const uint8_t* buffer, uint32_t length)
 }
 #endif /* WOLFTPM_DEBUG_IO || WOLFBOOT_DEBUG_TPM */
 
-#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
+#if defined(WOLFBOOT_TPM_I2C)
+
+/* TPM 2.0 over I2C. The TIS register address is carried as the low byte of a
+ * transfer rather than in a SPI header, so this needs the advanced callback
+ * form, which reports the register and direction separately. */
+#include "i2c_drv.h"
+
+/* The advanced callback form is what carries the register and direction
+ * separately. wolfTPM implies it from WOLFTPM_I2C, so a build that reaches
+ * here without it would compile a callback whose signature does not match
+ * the typedef. */
+#ifndef WOLFTPM_ADV_IO
+#error "WOLFBOOT_TPM_I2C requires WOLFTPM_ADV_IO"
+#endif
+
+#ifndef TPM2_I2C_ADDR
+#define TPM2_I2C_ADDR       0x2E    /* 7-bit TCG TIS address */
+#endif
+#ifndef TPM_I2C_TRIES
+#define TPM_I2C_TRIES       10
+#endif
+/* The part answers with a NAK for roughly 80us after it is addressed while it
+ * wakes, and the specification asks for a guard time between transfers. This
+ * is a bounded spin rather than a calibrated delay: it only has to be long
+ * enough, and the retry loop covers the rest. */
+#ifndef TPM_I2C_GUARD_LOOPS
+#define TPM_I2C_GUARD_LOOPS 20000
+#endif
+
+static void tpm_i2c_guard(void)
+{
+    volatile uint32_t i;
+
+    for (i = 0; i < (uint32_t)TPM_I2C_GUARD_LOOPS; i++)
+        ;
+}
+
+static int tpm_i2c_read(uint32_t reg, uint8_t* data, int len)
+{
+    uint8_t regbuf = (uint8_t)(reg & 0xFF);
+    int tries = TPM_I2C_TRIES;
+    int ret;
+
+    if ((len < 0) || (len > (int)MAX_SPI_FRAMESIZE))
+        return BAD_FUNC_ARG;
+
+    /* Address the register and release the bus, rather than holding it for a
+     * repeated start: this part answers NAK while it wakes and needs the guard
+     * time between the two transfers, which a repeated start cannot provide.
+     * A read always needs that guard, whether this transfer woke the part or
+     * was the real thing. */
+    do {
+        ret = i2c_write(TPM2_I2C_ADDR, &regbuf, 1, 1);
+        tpm_i2c_guard();
+    } while ((ret != I2C_OK) && (--tries > 0));
+
+    if (ret != I2C_OK)
+        return TPM_RC_FAILURE;
+
+    tries = TPM_I2C_TRIES;
+    do {
+        ret = i2c_read(TPM2_I2C_ADDR, data, (uint32_t)len, 1);
+        if (ret != I2C_OK)
+            tpm_i2c_guard();
+    } while ((ret != I2C_OK) && (--tries > 0));
+
+    return (ret == I2C_OK) ? TPM_RC_SUCCESS : TPM_RC_FAILURE;
+}
+
+static int tpm_i2c_write(uint32_t reg, const uint8_t* data, int len)
+{
+    uint8_t buf[MAX_SPI_FRAMESIZE + 1];
+    int tries = TPM_I2C_TRIES;
+    int ret;
+
+    if ((len < 0) || (len > (int)MAX_SPI_FRAMESIZE))
+        return BAD_FUNC_ARG;
+
+    /* One transfer: the register byte followed by the payload. */
+    buf[0] = (uint8_t)(reg & 0xFF);
+    memcpy(&buf[1], data, (size_t)len);
+
+    do {
+        ret = i2c_write(TPM2_I2C_ADDR, buf, (uint32_t)len + 1, 1);
+        if (ret != I2C_OK)
+            tpm_i2c_guard();
+    } while ((ret != I2C_OK) && (--tries > 0));
+
+    /* The command payload can carry an authValue; do not leave it on the
+     * stack. */
+    TPM2_ForceZero(buf, sizeof(buf));
+    return (ret == I2C_OK) ? TPM_RC_SUCCESS : TPM_RC_FAILURE;
+}
+
+/* Types match TPM2HalIoCb exactly: INT32 and int are distinct for pointer
+ * compatibility even where both are 32-bit. */
+static int TPM2_IoCb(TPM2_CTX* ctx, INT32 isRead, UINT32 addr, BYTE* buf,
+    UINT16 size, void* userCtx)
+{
+    int ret;
+
+    if ((buf == NULL) || (size == 0))
+        return BAD_FUNC_ARG;
+
+#ifdef WOLFTPM_DEBUG_IO
+    wolfBoot_printf("TPM2_IoCb (I2C): Read %d, Addr %x, Size %d\n",
+        isRead ? 1 : 0, addr, size);
+#endif
+
+    if (isRead)
+        ret = tpm_i2c_read(addr, buf, (int)size);
+    else
+        ret = tpm_i2c_write(addr, buf, (int)size);
+
+#ifdef WOLFTPM_DEBUG_IO
+    if (isRead && ret == TPM_RC_SUCCESS)
+        wolfBoot_print_bin(buf, size);
+#endif
+
+    (void)ctx;
+    (void)userCtx;
+    return ret;
+}
+
+#elif !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
 #ifdef WOLFTPM_ADV_IO
-static int TPM2_IoCb(TPM2_CTX* ctx, int isRead, uint32_t addr, uint8_t* buf,
-    word16 size, void* userCtx)
+/* Types match TPM2HalIoCb exactly. int and INT32 are distinct types for
+ * pointer compatibility even where both are 32-bit, so spelling these as
+ * plain int makes the callback unassignable to wolfTPM2_Init(). */
+static int TPM2_IoCb(TPM2_CTX* ctx, INT32 isRead, UINT32 addr, BYTE* buf,
+    UINT16 size, void* userCtx)
 #else
 
 /**
@@ -237,7 +364,7 @@ static int TPM2_IoCb(TPM2_CTX* ctx, const uint8_t* txBuf, uint8_t* rxBuf,
 
     return ret;
 }
-#endif /* !ARCH_SIM && !WOLFTPM_MMIO */
+#endif /* WOLFBOOT_TPM_I2C */
 
 #ifdef WOLFBOOT_MEASURED_BOOT
 
@@ -1562,7 +1689,9 @@ int wolfBoot_tpm2_init(void)
     uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
 #endif
 
-#if !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
+#if defined(WOLFBOOT_TPM_I2C)
+    i2c_init();
+#elif !defined(ARCH_SIM) && !defined(WOLFTPM_MMIO)
     spi_init(0,0);
 #endif
 
@@ -1573,7 +1702,9 @@ int wolfBoot_tpm2_init(void)
 
     /* Init the TPM2 device */
     /* simulator should use the network connection, not spi */
-#if defined(ARCH_SIM) || defined(WOLFTPM_MMIO)
+#if defined(WOLFBOOT_TPM_I2C)
+    rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
+#elif defined(ARCH_SIM) || defined(WOLFTPM_MMIO)
     rc = wolfTPM2_Init(&wolftpm_dev, NULL, NULL);
 #else
     rc = wolfTPM2_Init(&wolftpm_dev, TPM2_IoCb, NULL);
