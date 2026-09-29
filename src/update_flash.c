@@ -986,11 +986,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
+#ifdef DISABLE_BACKUP
     int eraseLen = (WOLFBOOT_SECTOR_SIZE
 #ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
         * 2
 #endif
     );
+#endif
 #if defined(DELTA_UPDATES)
     int inverse = 0;
 #endif

@@ -3065,9 +3065,9 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     /* The decrypt loop writes whole ENCRYPT_BLOCK_SIZE blocks, so the last
      * block can land up to a block past the nominal end: round the image
      * size up before the overlap test. */
-    img_hi = img_lo + ((uintptr_t)IMAGE_HEADER_SIZE + (uintptr_t)len +
-                       (uintptr_t)ENCRYPT_BLOCK_SIZE - 1) &
-             ~((uintptr_t)ENCRYPT_BLOCK_SIZE - 1);
+    img_hi = img_lo + (((uintptr_t)IMAGE_HEADER_SIZE + (uintptr_t)len +
+                        (uintptr_t)ENCRYPT_BLOCK_SIZE - 1) &
+                       ~((uintptr_t)ENCRYPT_BLOCK_SIZE - 1));
     if (ramboot_region_overlap(img_lo, img_hi, wb_lo, wb_hi)) {
         wolfBoot_printf("Error: image %p-%p overlaps wolfBoot %p-%p\n",
             (void*)img_lo, (void*)img_hi, (void*)wb_lo, (void*)wb_hi);
