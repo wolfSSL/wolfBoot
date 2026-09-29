@@ -370,12 +370,12 @@ static int wolfboot_dice_fixup_priv(uint8_t *priv, size_t priv_len)
     }
     ret = mp_init(&order);
     if (ret != MP_OKAY) {
-        mp_clear(&k);
+        mp_forcezero(&k);
         return -1;
     }
     ret = mp_init(&mod);
     if (ret != MP_OKAY) {
-        mp_clear(&k);
+        mp_forcezero(&k);
         mp_clear(&order);
         return -1;
     }
@@ -395,9 +395,9 @@ static int wolfboot_dice_fixup_priv(uint8_t *priv, size_t priv_len)
         ret = mp_to_unsigned_bin_len(&mod, priv, (int)priv_len);
     }
 
-    mp_clear(&mod);
+    mp_forcezero(&mod);
     mp_clear(&order);
-    mp_clear(&k);
+    mp_forcezero(&k);
 
     return ret == MP_OKAY ? 0 : -1;
 }
