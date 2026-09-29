@@ -1874,10 +1874,13 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 static inline int ramboot_region_overlap(uintptr_t img_lo, uintptr_t img_hi,
     uintptr_t wb_lo, uintptr_t wb_hi)
 {
-    if (img_hi < img_lo)
-        return 1; /* header+size wrapped the end address: reject conservatively */
-    if (wb_lo == 0)
+    if (img_hi < img_lo) {
+        /* header+size wrapped the end address: reject conservatively */
+        return 1;
+    }
+    if (wb_lo == 0) {
         return (img_lo < wb_hi);
+    }
     return (img_lo < wb_hi && img_hi > wb_lo);
 }
 
