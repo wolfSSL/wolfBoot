@@ -24,6 +24,11 @@
 #include "../../src/x86/hob.c"
 #include "../../src/x86/linux_loader.c"
 
+/* linux_loader.c references the wolfBoot extent symbols from the linker
+ * script; define a stand-in so this test links. _end_wb is provided by the
+ * Makefile via --defsym. */
+uint8_t _start_wolfboot[0x100000];
+
 /* A generous low-memory window (256 MiB) used as the destination limit. */
 #define LOAD_LIMIT 0x10000000u
 
