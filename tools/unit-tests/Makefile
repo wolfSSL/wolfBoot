@@ -801,7 +801,8 @@ unit-linux-loader-syssize: ../../include/target.h unit-linux-loader-syssize.c
 unit-linux-loader-initrd: ../../include/target.h unit-linux-loader-initrd.c
 	gcc -m32 -o $@ unit-linux-loader-initrd.c -I. -I../../src -I../../include \
 		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
-		-DWOLFBOOT_LOAD_BASE=0x100000
+		-DWOLFBOOT_LOAD_BASE=0x100000 \
+		-Wl,--defsym,_end_wb=_start_wolfboot+0x100000
 
 unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \
