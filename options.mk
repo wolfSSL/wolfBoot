@@ -1566,6 +1566,14 @@ ifneq (,$(filter RISCV RISCV64,$(ARCH)))
   CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
 endif
 
+# L2 scratchpad region size and boot-hart stack size, substituted into the
+# linker script.  The scratchpad is capped by the number of scratchpad ways
+# the startup asm populates (4 ways x 128 KB on MPFS250); the linker script
+# asserts the limit.  Defaults keep the pre-existing layout for targets that
+# do not override them.
+WOLFBOOT_L2SCRATCH_SIZE ?= 256k
+STACK_SIZE ?= 32k
+
 CFLAGS+=$(CFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
 
