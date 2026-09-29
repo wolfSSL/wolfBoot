@@ -169,9 +169,11 @@ extern int tolower(int c);
     /* WC_NO_HARDEN suits verify-only builds, which do public-key
      * operations only. Secure-mode worlds (TZ_PSA/PKCS11/FWTPM/WOLFHSM)
      * process private keys in software, so they keep the timing-
-     * resistant TFM path; hardware DICE keeps signing in the crypto
-     * engine and stays verify-only. */
-#   if defined(WOLFCRYPT_SECURE_MODE) && !defined(WOLFBOOT_DICE_HW)
+     * resistant TFM path. Hardware DICE (WOLFBOOT_DICE_HW) only moves the
+     * DICE attestation key to the crypto engine; the secure PSA service
+     * still runs software RSA/ECC on keys created or imported through the
+     * IPC, so it needs the hardening too. */
+#   if defined(WOLFCRYPT_SECURE_MODE)
 #       define TFM_TIMING_RESISTANT
 #   else
         /* tfm.c never tests WC_NO_HARDEN, so dropping it alone changes
