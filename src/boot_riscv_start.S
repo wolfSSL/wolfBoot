@@ -67,16 +67,50 @@ _reset:
     sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
     fence
 
-    /* Route E51 D-cache to scratchpad ways (8-11) for the copy.
-     * With the default mask (0xFF = cache ways 0-7), stores to the
-     * Zero Device (0x0A000000) land in cache and never reach the
-     * scratchpad SRAM. The I-cache later fetches from scratchpad and
-     * gets uninitialized data (zeros), causing illegal-instruction
-     * traps. Setting the mask to 0xF00 forces stores into the actual
-     * scratchpad SRAM. See HSS mss_l2_cache.c config_l2_cache(). */
-    li    t4, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
-    li    t5, 0xF00                   /* scratchpad ways 8-11 */
-    sd    t5, 0(t4)
+    /* Populate the scratchpad ways one way at a time, so every line of
+     * the Zero Device (0x0A000000) is resident before anything else runs.
+     *
+     * With the default mask (0xFF = cache ways 0-7), a store to the Zero
+     * Device allocates in an ordinary cache way; that line is evictable and
+     * its writeback is discarded, so the store is silently lost. Selecting
+     * all four scratchpad ways at once (0xF00) is not enough either: it only
+     * covers the stores made while the mask is set, which used to be the
+     * .text copy alone. Everything after the mask was restored -- .data,
+     * .bss (including the SDHCI PDMA staging buffer), the heap and the E51
+     * stack -- still allocated in evictable ways.
+     *
+     * Walking one way at a time is what makes the whole 512 KB resident: a
+     * store can only allocate in the single enabled way, so 2048 blocks x 4
+     * ways fills each way exactly once. Once resident, later stores hit and
+     * the mask no longer matters. This is HSS config_l2_cache(), see
+     * mss_l2_cache.c; the marker value matches its INIT_MARKER.
+     *
+     * Constants for WAY_ENABLE=0x0B, NUM_SCRATCH_PAD_WAYS=4:
+     *   first way = 1 << ((WAY_ENABLE + 1) - NUM_SCRATCH_PAD_WAYS) = 1 << 8
+     *   blocks per way = WAY_BYTE_LENGTH / CACHE_BLOCK_BYTE_LENGTH
+     *                  = 0x20000 / 64 = 2048 */
+    li    t0, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
+    li    t1, 0x100                   /* scratchpad way 8 */
+    li    t2, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
+    li    t3, 0xC0FFEEBEC0010000      /* INIT_MARKER */
+    li    t4, 4                       /* NUM_SCRATCH_PAD_WAYS */
+.L_pin_way:
+    sd    t1, 0(t0)                   /* evictions allowed from this way only */
+    fence
+    li    t5, 2048                    /* blocks per way */
+.L_pin_block:
+    sd    t3, 0(t2)                   /* first 64-bit word of each block */
+    addi  t2, t2, 64
+    addi  t5, t5, -1
+    bnez  t5, .L_pin_block
+    slli  t1, t1, 1
+    fence
+    addi  t4, t4, -1
+    bnez  t4, .L_pin_way
+
+    /* Prevent the E51 from evicting from the scratchpad ways. */
+    li    t1, 0xFF                    /* cache ways 0-7 */
+    sd    t1, 0(t0)
     fence
 #endif
 
@@ -97,11 +131,6 @@ _reset:
     addi  t1, t1, 8
     j     .L_copy_text
 .L_copy_text_done:
-#ifdef TARGET_mpfs250
-    /* Restore D-cache to cache-only ways before normal execution */
-    li    t5, 0xFF                    /* cache ways 0-7 */
-    sd    t5, 0(t4)                   /* WAY_MASK_E51_DCACHE = cache-only */
-#endif
     fence rw, rw
     fence.i                           /* flush icache before jumping to SRAM */
 

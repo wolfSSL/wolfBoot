@@ -1217,6 +1217,17 @@ ifeq ($(ARCH),RISCV64)
     # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated
     # fpga_design_config.h. Setting LIBERO_FPGA_CONFIG_DIR enables DDR init
     # and adds the directory to the include search path.
+    #
+    # Booting an S-mode OS means running from DDR, so an empty
+    # LIBERO_FPGA_CONFIG_DIR here would silently produce a bootloader with no
+    # DDR controller init at all. Fail the build instead.
+    ifeq ($(LIBERO_FPGA_CONFIG_DIR),)
+      ifneq (,$(findstring WOLFBOOT_MMODE_SMODE_BOOT,$(CFLAGS_EXTRA) $(CFLAGS)))
+        $(error WOLFBOOT_MMODE_SMODE_BOOT requires LIBERO_FPGA_CONFIG_DIR: \
+          point it at the board's fpga_design_config directory, e.g. \
+          <hss>/build/boards/mpfs-video-kit/fpga_design_config)
+      endif
+    endif
     ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
       CFLAGS+=-DMPFS_DDR_INIT -I$(LIBERO_FPGA_CONFIG_DIR)
       # Generic Cadence DDR controller driver + the MPFS PHY/PLL/training

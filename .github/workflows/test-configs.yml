@@ -425,6 +425,13 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
+  microchip_mpfs250_m_mldsa_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 WOLFBOOT_SECTOR_SIZE=0x4000
   microchip_mpfs250_m_qspi_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
