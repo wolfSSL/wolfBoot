@@ -1337,13 +1337,9 @@ ifeq ($(ARCH),RISCV64)
     endif
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
-    # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated
-    # fpga_design_config.h. Setting LIBERO_FPGA_CONFIG_DIR enables DDR init
-    # and adds the directory to the include search path.
-    #
-    # Booting an S-mode OS means running from DDR, so an empty
-    # LIBERO_FPGA_CONFIG_DIR here would silently produce a bootloader with no
-    # DDR controller init at all. Fail the build instead.
+    # LIBERO_FPGA_CONFIG_DIR supplies fpga_design_config.h and enables DDR init.
+    # An S-mode OS runs from DDR, so an empty value would silently build a
+    # bootloader with no DDR init at all -- fail instead.
     ifeq ($(LIBERO_FPGA_CONFIG_DIR),)
       ifneq (,$(findstring WOLFBOOT_MMODE_SMODE_BOOT,$(CFLAGS_EXTRA) $(CFLAGS)))
         ifeq ($(filter clean keysclean distclean,$(MAKECMDGOALS)),)
@@ -1405,19 +1401,16 @@ ifeq ($(ARCH),RISCV64)
     CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
     LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
   else
-    # U54 cores: soft-float lp64, matching Microchip's published user-crypto
-    # (CAL) archives - both are lp64 (bare-metal-examples is rv64imafd/lp64,
-    # hart-software-services is rv64imac/lp64).  An lp64d build cannot link
-    # against either.  wolfBoot does no floating point, so nothing is lost.
-    #
-    # rv64imac rather than rv64imafd because this toolchain ships no
-    # F/D-ISA + soft-float-ABI multilib: every rv64i*f*d* variant is paired
-    # with lp64f/lp64d, so -march=rv64imafd -mabi=lp64 compiles but fails to
-    # link ("can\'t link double-float modules with soft-float modules" against
-    # libgcc).  The U54 keeps its FPU; wolfBoot simply does not emit FP
-    # instructions, and CAL\'s own F/D instructions still execute fine.
-    CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
-    LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
+    # U54.  Microchip's CAL archive is built rv64imac soft-float, so a build
+    # that links it has to match; rv64imac not rv64imafd because the toolchain
+    # ships no F/D-ISA + soft-float multilib.  wolfBoot emits no FP either way.
+    ifeq ($(MPFS_ATHENA),1)
+      CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
+      LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
+    else
+      CFLAGS+=-march=rv64imafd$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64d -mcmodel=medany
+      LDFLAGS+=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+    endif
 
     # FDT support for DDR S-mode (not needed for L2-LIM bare-metal boot)
     ifneq ($(MPFS_L2LIM),1)

@@ -105,6 +105,89 @@ ifeq ($(FLASH_OTP_KEYSTORE),1)
     CFLAGS+=-D"FLASH_OTP_KEYSTORE"
 endif
 
+# PolarFire SoC: trust anchor in secure NVM (sNVM).  SNVM_KEYSTORE serves keys at runtime.
+ifeq ($(SNVM_KEYSTORE),1)
+    CFLAGS+=-D"SNVM_KEYSTORE"
+endif
+# Shared refusal text for every knob below that writes sNVM.
+SNVM_WRITE_GATE_MSG=writes sNVM: irreversible, and a brownout mid-write can lock the page \
+        read-only. Re-run with WOLFBOOT_SNVM_WRITE_APPROVED=1 to confirm
+# sNVM page numbers, overridable per board; the headers range-check them.
+ifneq ($(SNVM_KEYSTORE_MODULE),)
+    CFLAGS+=-DSNVM_KEYSTORE_MODULE=$(SNVM_KEYSTORE_MODULE)
+endif
+ifneq ($(SNVM_KEYSTORE_MAX_MODULES),)
+    CFLAGS+=-DSNVM_KEYSTORE_MAX_MODULES=$(SNVM_KEYSTORE_MAX_MODULES)
+endif
+ifneq ($(SNVM_ENCKEY_MODULE),)
+    CFLAGS+=-DSNVM_ENCKEY_MODULE=$(SNVM_ENCKEY_MODULE)
+endif
+ifeq ($(SNVM_KEYSTORE_PROVISION),1)
+    ifeq ($(SNVM_KEYSTORE),1)
+        $(error SNVM_KEYSTORE_PROVISION writes the compiled-in keystore to sNVM \
+                and cannot be combined with SNVM_KEYSTORE=1, which serves keys \
+                from sNVM instead of compiling them in.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_KEYSTORE_PROVISION $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"SNVM_KEYSTORE_PROVISION"
+endif
+
+# Production hardening: REQUIRE_ROM needs every keystore page ROM-flagged (bitstream only), and
+# MPFS_SCB_SMODE_DENY PMP-fences the System Controller mailbox off S-mode and drops its OS nodes.
+ifeq ($(SNVM_KEYSTORE_REQUIRE_ROM),1)
+    ifneq ($(SNVM_KEYSTORE),1)
+        $(error SNVM_KEYSTORE_REQUIRE_ROM=1 needs SNVM_KEYSTORE=1)
+    endif
+    CFLAGS+=-D"SNVM_KEYSTORE_REQUIRE_ROM"
+endif
+ifeq ($(MPFS_SCB_SMODE_DENY),1)
+    # The fence is installed at the M->S hand-off, so an S-mode build under HSS cannot claim it.
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SCB_SMODE_DENY=1 needs the M-mode target (RISCV_MMODE=1))
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SCB_SMODE_DENY" -DWOLFBOOT_PMP_DENY_BASE=0x37020000UL \
+            -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
+endif
+
+# PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
+ifeq ($(SNVM_KEK),1)
+    # The KEK only wraps the image-encryption key, so it rides on the AES-256 ENCRYPT build's AES.
+    ifneq ($(ENCRYPT)$(ENCRYPT_WITH_AES256)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_KEK=1 requires ENCRYPT=1 ENCRYPT_WITH_AES256=1 \
+                CUSTOM_ENCRYPT_KEY=1)
+    endif
+    CFLAGS+=-D"SNVM_KEK"
+    CFLAGS+=-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
+            -DHAVE_AES_DECRYPT
+    # The KEK derivation is SHA-384 whatever the image hash is.
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+# One-time writer for the PUF-wrapped image-encryption key into sNVM.
+ifeq ($(SNVM_ENCKEY_PROVISION),1)
+    ifneq ($(SNVM_KEK)$(ENCRYPT)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_ENCKEY_PROVISION requires SNVM_KEK=1 ENCRYPT=1 \
+                CUSTOM_ENCRYPT_KEY=1, which build the provider it calls.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_ENCKEY_PROVISION $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"SNVM_ENCKEY_PROVISION"
+    # Second acknowledgement: the built-in key is a public test vector, so no confidentiality.
+    ifeq ($(SNVM_ENCKEY_INSECURE_TEST_KEY),1)
+        CFLAGS+=-D"SNVM_ENCKEY_INSECURE_TEST_KEY"
+    endif
+    # Production path: the integrator's object defines snvm_enckey_prov_key/_nonce.
+    ifeq ($(SNVM_ENCKEY_PROVISION_EXTERN),1)
+        CFLAGS+=-D"SNVM_ENCKEY_PROVISION_EXTERN"
+    endif
+endif
+
 ifeq ($(WOLFBOOT_TEST_FILLER),1)
     CFLAGS+=-D"WOLFBOOT_TEST_FILLER"
 endif
@@ -1754,11 +1837,8 @@ ifneq (,$(filter RISCV RISCV64,$(ARCH)))
   CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
 endif
 
-# L2 scratchpad region size and boot-hart stack size, substituted into the
-# linker script.  The scratchpad is capped by the number of scratchpad ways
-# the startup asm populates (4 ways x 128 KB on MPFS250); the linker script
-# asserts the limit.  Defaults keep the pre-existing layout for targets that
-# do not override them.
+# Substituted into the linker script.  The scratchpad is capped at the 4 x 128 KB
+# of ways the startup asm populates; the linker script asserts it.
 WOLFBOOT_L2SCRATCH_SIZE ?= 256k
 STACK_SIZE ?= 32k
 
