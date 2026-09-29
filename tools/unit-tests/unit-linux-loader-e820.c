@@ -19,6 +19,11 @@
 #include "../../src/x86/hob.c"
 #include "../../src/x86/linux_loader.c"
 
+/* linux_loader.c references the wolfBoot extent symbols from the linker
+ * script; define a stand-in so this test links. _end_wb is provided by the
+ * Makefile via --defsym. */
+uint8_t _start_wolfboot[0x100000];
+
 /* More descriptors than the table can hold, to force the overflow path. */
 #define N_ENTRIES 200
 #define CANARY_LEN 2048

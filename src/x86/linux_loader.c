@@ -257,6 +257,12 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
         wolfBoot_printf("initrd: %d bytes" ENDLINE, initrd_size);
     }
 
+    /* The setup header lives at offset 0x1f1; refuse an image too small to
+     * hold it before dereferencing into it. */
+    if ((uint64_t)0x1f1 + sizeof(struct setup_header) > (uint64_t)kernel_avail) {
+        wolfBoot_printf("linux image too small for setup header" ENDLINE);
+        wolfBoot_panic();
+    }
     image_boot_param = kernel_image + 0x1f1;
     end_of_header_off = *(kernel_image + 0x201) + 0x202;
     memcpy((uint8_t*)&param.hdr,
