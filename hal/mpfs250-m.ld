@@ -26,18 +26,13 @@ MEMORY
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
     FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
 
-    /* L2 Scratchpad SRAM.  Size is bounded by the number of scratchpad ways
-     * the startup asm populates one way at a time (see the pin loop in
-     * src/boot_riscv_start.S); MPFS250 hardwires ways 8-11 as scratchpad, so
-     * 4 x WAY_BYTE_LENGTH = 512 KB is the ceiling.  Set per target with
-     * WOLFBOOT_L2SCRATCH_SIZE; the ASSERT below enforces the ceiling. */
+    /* L2 scratchpad.  MPFS250 hardwires ways 8-11, so 4 x 128 KB is the
+     * ceiling the startup pin loop can make resident; ASSERT below enforces it. */
     L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @WOLFBOOT_L2SCRATCH_SIZE@
 }
 
-/* Stack size for the boot hart (E51 in M-mode).  Set per target with
- * STACK_SIZE: ECC384 + SHA384 needs only a few KB, but ML-DSA-87 adds its
- * own working set plus two IMAGE_HEADER_SIZE buffers that src/update_disk.c
- * places on the stack. */
+/* Boot-hart stack.  ECC384+SHA384 needs a few KB; ML-DSA-87 adds its working
+ * set plus the two IMAGE_HEADER_SIZE buffers update_disk.c puts on the stack. */
 PROVIDE(STACK_SIZE = @STACK_SIZE@);
 
 /* 4 scratchpad ways x 128 KB (WAY_BYTE_LENGTH).  Going past this hands out
