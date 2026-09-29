@@ -2997,6 +2997,21 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint8_t *row_address = src;
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t len;
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    uintptr_t wb_hi  = (uintptr_t)_end;
+    uintptr_t img_lo = (uintptr_t)dst;
+    uintptr_t img_hi;
+#if defined(WOLFBOOT_ORIGIN)
+    /* wolfBoot spans [WOLFBOOT_ORIGIN, _end]; range-intersect so it holds
+     * whether wolfBoot is below or above the image -- e.g. ZynqMP FSBL
+     * runs from high OCM while the image loads to low DDR, where the
+     * plain "dst < _end" test gave a false positive. */
+    uintptr_t wb_lo = (uintptr_t)(WOLFBOOT_ORIGIN);
+#else
+    /* Without WOLFBOOT_ORIGIN, wb_lo=0 keeps the original low-addr guard. */
+    uintptr_t wb_lo = 0;
+#endif
+#endif
 
     if (!encrypt_initialized) {
         if (crypto_init() < 0) {
@@ -3047,26 +3062,11 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
      * length comes from the unauthenticated header, so a bit-flipped size
      * field must not reach the decrypt loop. The image occupies
      * [dst, dst+header+len]. */
-    {
-        uintptr_t wb_hi  = (uintptr_t)_end;
-        uintptr_t img_lo = (uintptr_t)dst;
-        uintptr_t img_hi = img_lo + (uintptr_t)IMAGE_HEADER_SIZE +
-                           (uintptr_t)len;
-#if defined(WOLFBOOT_ORIGIN)
-        /* wolfBoot spans [WOLFBOOT_ORIGIN, _end]; range-intersect so it holds
-         * whether wolfBoot is below or above the image -- e.g. ZynqMP FSBL
-         * runs from high OCM while the image loads to low DDR, where the
-         * plain "dst < _end" test gave a false positive. */
-        uintptr_t wb_lo = (uintptr_t)(WOLFBOOT_ORIGIN);
-#else
-        /* Without WOLFBOOT_ORIGIN, wb_lo=0 keeps the original low-addr guard. */
-        uintptr_t wb_lo = 0;
-#endif
-        if (ramboot_region_overlap(img_lo, img_hi, wb_lo, wb_hi)) {
-            wolfBoot_printf("Error: image %p-%p overlaps wolfBoot %p-%p\n",
-                (void*)img_lo, (void*)img_hi, (void*)wb_lo, (void*)wb_hi);
-            return -1;
-        }
+    img_hi = img_lo + (uintptr_t)IMAGE_HEADER_SIZE + (uintptr_t)len;
+    if (ramboot_region_overlap(img_lo, img_hi, wb_lo, wb_hi)) {
+        wolfBoot_printf("Error: image %p-%p overlaps wolfBoot %p-%p\n",
+            (void*)img_lo, (void*)img_hi, (void*)wb_lo, (void*)wb_hi);
+        return -1;
     }
 #endif
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
