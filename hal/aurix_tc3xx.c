@@ -162,7 +162,7 @@ void wolfBoot_panic(void) TC3_LONGCALL;
 #endif
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
-/* Every flash command from this core most be wrapped in a park/unpark sequence
+/* Every flash command from this core must be wrapped in a park/unpark sequence
  * to force the HSM core to execute from RAM while the host-driven flash
  * command completes.
  * The server app must be running first to process a park request */
