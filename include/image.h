@@ -1866,6 +1866,24 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
 #include "fdt.h"
 #endif
 
+/* Return non-zero if the RAM load region [img_lo, img_hi) overlaps wolfBoot's
+ * own region [wb_lo, wb_hi). wb_lo == 0 means the origin is unknown, so guard
+ * only that the image loads above wolfBoot's end (wb_hi). Pure arithmetic,
+ * exposed at file scope for unit testing (tools/unit-tests/unit-update-ram.c).
+ * Shared by the ramboot loader and the encrypted ram_decrypt path. */
+static inline int ramboot_region_overlap(uintptr_t img_lo, uintptr_t img_hi,
+    uintptr_t wb_lo, uintptr_t wb_hi)
+{
+    if (img_hi < img_lo) {
+        /* header+size wrapped the end address: reject conservatively */
+        return 1;
+    }
+    if (wb_lo == 0) {
+        return (img_lo < wb_hi);
+    }
+    return (img_lo < wb_hi && img_hi > wb_lo);
+}
+
 #ifndef EXT_ENCRYPTED
 #define WOLFBOOT_MAX_SPACE (WOLFBOOT_PARTITION_SIZE - \
     (TRAILER_SKIP + sizeof(uint32_t) + \

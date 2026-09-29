@@ -917,6 +917,117 @@ START_TEST (test_final_swap_propagates_encrypt_key_read_failure)
 END_TEST
 #endif
 
+/* A failed backup copy must abort the final swap before the update
+ * partition advances to FINAL_FLAGS: the SWAP copy of the staging sector
+ * is the only resume record for the restore step. The staging sector
+ * (partition end minus two sectors) only overlaps the image data when the
+ * payload reaches it, so use a near-max payload: with sector 1024 and
+ * partition 32768 the staging sector starts at 30720, and the copy's
+ * chunk guard only writes chunks below fw_size + header + buffer. In this
+ * mock config SWAP is external, so the backup's write goes through
+ * ext_flash_write and the one-shot ext_flash_write_fail hooks it.
+ * Guarded out of the EXT_ENCRYPTED variants: the resume logic is identical
+ * with or without encryption, but this test stages a plain image, which
+ * the encrypted swap path does not accept. */
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER) && \
+    !defined(EXT_ENCRYPTED)
+START_TEST (test_final_swap_aborts_on_backup_copy_failure)
+{
+    int ret;
+    uint8_t update_state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, 30700);
+
+    ext_flash_write_fail = 1;
+    ret = wolfBoot_swap_and_final_erase(0);
+
+    ck_assert_int_lt(ret, 0);
+    ck_assert_int_eq(ext_flash_write_fail, 0);
+    /* The update state must be unset: a failed backup must not leave the
+     * update partition marked FINAL_FLAGS. */
+    ck_assert_int_ne(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
+        0);
+
+    cleanup_flash();
+}
+END_TEST
+
+/* A failed restore copy must abort before BOOT is marked TESTING: with a
+ * partially written staging sector and TESTING set, the device would roll
+ * back silently on the next boot instead of resuming the restore from SWAP.
+ * Resume mode with FINAL_FLAGS pre-set skips the backup block, so the
+ * one-shot hal_flash_write_fail hooks the restore's swap->boot internal
+ * write. Near-max payload so the staging sector overlaps the image and the
+ * restore copy runs (boundary math in the backup test above). */
+START_TEST (test_final_swap_aborts_on_restore_copy_failure)
+{
+    int ret;
+    uint8_t boot_state = 0;
+    uint8_t update_state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, 30700);
+
+    ext_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    ext_flash_lock();
+
+    hal_flash_write_fail = 1;
+    ret = wolfBoot_swap_and_final_erase(1);
+
+    ck_assert_int_lt(ret, 0);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+    /* The boot state must be unset: the state sector was erased before the
+     * restore and TESTING must not be written after a failed restore. */
+    ck_assert_int_ne(wolfBoot_get_partition_state(PART_BOOT, &boot_state), 0);
+    /* The backup completed, so FINAL_FLAGS is set: the next boot's resume
+     * path re-enters and retries the restore from SWAP. */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
+        0);
+    ck_assert_int_eq(update_state, IMG_STATE_FINAL_FLAGS);
+
+    cleanup_flash();
+}
+END_TEST
+#endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER && !EXT_ENCRYPTED */
+
+/* A completed DISABLE_BACKUP update must consume the update partition:
+ * its trailer sector is erased (as the swap path's final erase does),
+ * resetting the state to NEW, otherwise wolfBoot_start() re-enters
+ * wolfBoot_update(0) on every boot - a wasted verification, and with
+ * ALLOW_DOWNGRADE a full re-flash of BOOT on every power-up. The state
+ * must be reset by erase, not by programming 0xFF: NOR can only clear
+ * bits, so a raw write of NEW over UPDATING is a no-op. */
+#if defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
+START_TEST (test_disable_backup_update_consumes_update_state)
+{
+    uint8_t update_state = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+
+    wolfBoot_update_trigger();
+    ck_assert_int_ge(wolfBoot_update(0), 0);
+    /* the update trailer sector must have been erased: the magic is gone,
+     * so the state read fails and wolfBoot_start() sees the update
+     * partition as NEW (its initial state) */
+    ck_assert_int_ge(erased_update, 1);
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
+        -1);
+
+    cleanup_flash();
+}
+END_TEST
+#endif /* DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER */
+
 START_TEST (test_sunnyday_noupdate)
 {
     reset_mock_stats();
@@ -1011,11 +1122,12 @@ END_TEST
  * sector==1 fw_size re-swap. Only the BACKUP state is a recoverable power
  * fail: faulting the BOOT->update copy instead (SWAPPING state) erases the
  * update header, so the resume's re-open fails and the device cannot
- * recover - that entry point is not testable as a roundtrip.
- * Guarded out of the EXT_ENCRYPTED targets: the resume logic is identical
- * with or without encryption, but this test stages a plain image, which the
- * encrypted swap path does not accept. */
-#ifndef EXT_ENCRYPTED
+ * recover - that entry point is not testable as a roundtrip. Guarded out of
+ * the EXT_ENCRYPTED targets: the resume logic is identical with or without
+ * encryption, but this test stages a plain image, which the encrypted swap
+ * path does not accept. Guarded out of DISABLE_BACKUP: the sector-flag
+ * swap machinery does not exist in that build. */
+#if !defined(EXT_ENCRYPTED) && !defined(DISABLE_BACKUP)
 static uint8_t resume_boot_snap[WOLFBOOT_PARTITION_SIZE];
 static uint8_t resume_update_snap[WOLFBOOT_PARTITION_SIZE];
 
@@ -1059,7 +1171,7 @@ START_TEST (test_update_resume_from_backup_flag)
     resume_verify();
 }
 END_TEST
-#endif /* !EXT_ENCRYPTED */
+#endif /* !EXT_ENCRYPTED && !DISABLE_BACKUP */
 
 /* F-13643: a completed swap must leave the update partition as a faithful
  * copy of the previous boot image, so the emergency-rollback path (the
@@ -1070,7 +1182,9 @@ END_TEST
  * forward direction is implicitly checked by wolfBoot_verify_integrity,
  * but the reverse direction has no such backstop. Parameterised over
  * same-size, larger and smaller update payloads to cover the tail-sector
- * copy guard in both directions. */
+ * copy guard in both directions. Guarded out of DISABLE_BACKUP: that path
+ * has no backup copy and no swap-back rollback. */
+#if !defined(DISABLE_BACKUP)
 static uint8_t roundtrip_boot_snap[WOLFBOOT_PARTITION_SIZE];
 
 static void roundtrip_run(uint32_t update_size)
@@ -1121,6 +1235,7 @@ START_TEST (test_update_then_rollback_smaller)
     roundtrip_run(TEST_SIZE_SMALL / 2);
 }
 END_TEST
+#endif /* !DISABLE_BACKUP */
 
 START_TEST (test_forward_update_tolarger) {
     reset_mock_stats();
@@ -1991,7 +2106,16 @@ Suite *wolfboot_suite(void)
     tcase_add_test(sunnyday_noupdate, test_sunnyday_noupdate);
     tcase_add_test(forward_update_samesize, test_forward_update_samesize);
     tcase_add_test(forward_update_samesize, test_update_aborts_on_sector_copy_failure);
-#ifndef EXT_ENCRYPTED
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER) && \
+    !defined(EXT_ENCRYPTED)
+    tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_backup_copy_failure);
+    tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_restore_copy_failure);
+#endif
+#if defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
+    tcase_add_test(forward_update_samesize,
+        test_disable_backup_update_consumes_update_state);
+#endif
+#if !defined(EXT_ENCRYPTED) && !defined(DISABLE_BACKUP)
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
 #endif
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
@@ -2008,9 +2132,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
     tcase_add_test(emergency_rollback, test_emergency_rollback_equal_versions);
+#if !defined(DISABLE_BACKUP)
     tcase_add_test(emergency_rollback, test_update_then_rollback_samesize);
     tcase_add_test(emergency_rollback, test_update_then_rollback_larger);
     tcase_add_test(emergency_rollback, test_update_then_rollback_smaller);
+#endif
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);

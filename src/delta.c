@@ -272,8 +272,6 @@ int wb_diff(WB_DIFF_CTX *ctx, uint8_t *patch, uint32_t len)
         uintptr_t page_start = ctx->off_b / wolfboot_sector_size;
         uintptr_t pa_start;
         found = 0;
-        if (p_off + BLOCK_HDR_SIZE >  len)
-            return (int)p_off;
 
         /* 'A' Patch base is valid for addresses in blocks ahead.
          * For matching previous blocks, 'B' is used as base instead.

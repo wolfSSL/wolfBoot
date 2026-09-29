@@ -52,6 +52,8 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
             return WC_LMS_RC_WRITE_FAIL;
         }
     }
+    /* Unbuffered: keep no libc-owned copy of the private state. */
+    setvbuf(file, NULL, _IONBF, 0);
 
     n_write = fwrite(priv, 1, privSz, file);
 
@@ -74,6 +76,8 @@ static int lms_write_key(const byte * priv, word32 privSz, void * context)
         fprintf(stderr, "error: fopen(%s, \"r+\") failed.\n", filename);
         return WC_LMS_RC_WRITE_FAIL;
     }
+    /* Unbuffered: keep no libc-owned copy of the private state. */
+    setvbuf(file, NULL, _IONBF, 0);
 
     XMEMSET(buff, 0, n_write);
 
@@ -128,6 +132,8 @@ static int lms_read_key(byte * priv, word32 privSz, void * context)
         fprintf(stderr, "error: fopen(%s, \"rb\") failed\n", filename);
         return WC_LMS_RC_READ_FAIL;
     }
+    /* Unbuffered: keep no libc-owned copy of the private state. */
+    setvbuf(file, NULL, _IONBF, 0);
 
     n_read = fread(priv, 1, privSz, file);
 

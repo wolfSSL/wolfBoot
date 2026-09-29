@@ -607,6 +607,8 @@ static void keygen_rsa(const char *keyfile, int kbits, uint32_t id_mask,
         exit_code = 4;
         goto cleanup;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key. */
+    setvbuf(fpriv, NULL, _IONBF, 0);
     fwrite(priv_der, privlen, 1, fpriv);
     fclose(fpriv);
     fpriv = NULL;
@@ -687,6 +689,8 @@ static void keygen_ecc(const char *priv_fname, uint16_t ecc_key_size,
         exit_code = 3;
         goto cleanup;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key. */
+    setvbuf(fpriv, NULL, _IONBF, 0);
 
     if (saveAsDer) {
         /* save file as standard ASN.1 / DER */
@@ -794,6 +798,8 @@ static void keygen_ed25519(const char *privkey, uint32_t id_mask)
         exit_code = 3;
         goto cleanup;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key. */
+    setvbuf(fpriv, NULL, _IONBF, 0);
     fwrite(priv, 32, 1, fpriv);
     fwrite(pub, 32, 1, fpriv);
     fclose(fpriv);
@@ -855,6 +861,8 @@ static void keygen_ed448(const char *privkey, uint32_t id_mask)
         exit_code = 3;
         goto cleanup;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key. */
+    setvbuf(fpriv, NULL, _IONBF, 0);
     fwrite(priv, ED448_KEY_SIZE, 1, fpriv);
     fwrite(pub, ED448_PUB_KEY_SIZE, 1, fpriv);
     fclose(fpriv);
@@ -1243,6 +1251,8 @@ static void keygen_ml_dsa(const char *priv_fname, uint32_t id_mask)
         exit_code = 1;
         goto cleanup;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key. */
+    setvbuf(fpriv, NULL, _IONBF, 0);
 
     fwrite(priv, priv_len, 1, fpriv);
     fwrite(pub, pub_len, 1, fpriv);

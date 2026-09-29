@@ -45,6 +45,7 @@ static int unload_handle_calls;
 static int unload_seal_blob_calls;
 static int unload_policy_session_calls;
 static int unload_auth_key_calls;
+static int unset_auth0_calls;
 static uint8_t test_hdr[64];
 static uint8_t test_modulus[256];
 static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
@@ -67,7 +68,9 @@ int wolfTPM2_SetAuthHandle(WOLFTPM2_DEV* dev, int index,
 int wolfTPM2_UnsetAuth(WOLFTPM2_DEV* dev, int index)
 {
     (void)dev;
-    (void)index;
+    if (index == 0) {
+        unset_auth0_calls++;
+    }
     return 0;
 }
 
@@ -87,6 +90,12 @@ int wolfTPM2_UnsetAuthSession(WOLFTPM2_DEV* dev, int index,
     (void)dev;
     (void)index;
     (void)tpmSession;
+    return 0;
+}
+
+int wolfTPM2_Cleanup(WOLFTPM2_DEV* dev)
+{
+    (void)dev;
     return 0;
 }
 
@@ -512,6 +521,7 @@ static void setup(void)
     unload_seal_blob_calls = 0;
     unload_policy_session_calls = 0;
     unload_auth_key_calls = 0;
+    unset_auth0_calls = 0;
     memset(test_hdr, 0x22, sizeof(test_hdr));
     memset(test_modulus, 0x33, sizeof(test_modulus));
 }
@@ -530,6 +540,8 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_public_area)
     ck_assert_int_eq(nvread_calls, 1);
     ck_assert_uint_eq(last_pub_read_request_sz, 0);
     ck_assert_int_eq(oversized_pub_read_attempted, 0);
+    /* the NV auth slot must be unset on the way out, even on failure */
+    ck_assert_int_ge(unset_auth0_calls, 1);
 }
 END_TEST
 
@@ -647,6 +659,8 @@ START_TEST(test_wolfBoot_unseal_blob_zeroes_unseal_output)
     ck_assert_int_eq(forcezero_calls, 2);
     ck_assert_uint_eq(first_forcezero_len, sizeof(Unseal_Out));
     ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_SESSION));
+    /* the auth slot (password or policy session) must be unset on exit */
+    ck_assert_int_ge(unset_auth0_calls, 1);
 }
 END_TEST
 
@@ -772,6 +786,15 @@ START_TEST(test_wolfBoot_read_blob_rejects_oversized_private_area)
 }
 END_TEST
 
+START_TEST(test_tpm2_deinit_clears_device_object)
+{
+    wolfBoot_tpm2_deinit();
+    /* The device object holds the last auth slot contents and command
+     * buffer: it must be scrubbed last, on every build path. */
+    ck_assert_uint_eq(last_forcezero_len, sizeof(WOLFTPM2_DEV));
+}
+END_TEST
+
 static Suite *tpm_blob_suite(void)
 {
     Suite *s;
@@ -792,6 +815,7 @@ static Suite *tpm_blob_suite(void)
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_negative_auth_size);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_short_policy);
     tcase_add_test(tc, test_wolfBoot_unseal_blob_rejects_output_larger_than_capacity);
+    tcase_add_test(tc, test_tpm2_deinit_clears_device_object);
     suite_add_tcase(s, tc);
     return s;
 }

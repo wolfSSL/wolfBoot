@@ -271,6 +271,8 @@ The associated compile-time option is
 
 `DISABLE_BACKUP=1`
 
+When the update is installed, the bootloader resets the update partition state so that the update is not re-applied on the next boot. In setups where the bootloader cannot write the update partition, the application must reset the update partition state itself (for example by erasing the update partition) after the update succeeds: otherwise wolfBoot re-attempts the update on every boot, which with `ALLOW_DOWNGRADE=1` re-flashes the boot partition on every power-up.
+
 ### Enable workaround for 'write once' flash memories
 
 On some microcontrollers, the internal flash memory does not allow subsequent writes (adding zeroes) to a

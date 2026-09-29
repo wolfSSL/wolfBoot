@@ -709,6 +709,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         printf("Open key file %s failed\n", key_file);
         goto failure;
     }
+    /* Unbuffered: keep no libc-owned copy of the private key bytes. */
+    setvbuf(f, NULL, _IONBF, 0);
     fseek(f, 0, SEEK_END);
     *key_buffer_sz = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -717,6 +719,8 @@ static uint8_t *load_key(uint8_t **key_buffer, uint32_t *key_buffer_sz,
         io_sz = (int)fread(*key_buffer, 1, *key_buffer_sz, f);
         if (io_sz != (int)*key_buffer_sz) {
             printf("Key file read error!\n");
+            fclose(f);
+            f = NULL;
             goto failure;
         }
     }
@@ -2480,6 +2484,8 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                     CMD.encrypt_key_file, strerror(errno));
             goto failure;
         }
+        /* Unbuffered: keep no libc-owned copy of the key/IV bytes. */
+        setvbuf(fek, NULL, _IONBF, 0);
         ret = (int)fread(key, 1, keySz, fek);
         if (ret != keySz) {
             fprintf(stderr, "Error reading key from %s\n", CMD.encrypt_key_file);

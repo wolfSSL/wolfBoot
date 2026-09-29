@@ -1535,6 +1535,9 @@ int wolfBoot_get_delta_info(uint8_t part, int inverse, uint32_t **img_offset,
 
 
 #if defined(EXT_ENCRYPTED) && defined(MMU)
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
+#endif
 static uint8_t dec_hdr[IMAGE_HEADER_SIZE];
 
 static int decrypt_header(uint8_t *src)
@@ -2994,6 +2997,21 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
     uint8_t *row_address = src;
     uint32_t dst_offset = 0, iv_counter = 0;
     uint32_t len;
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    uintptr_t wb_hi  = (uintptr_t)_end;
+    uintptr_t img_lo = (uintptr_t)dst;
+    uintptr_t img_hi;
+#if defined(WOLFBOOT_ORIGIN)
+    /* wolfBoot spans [WOLFBOOT_ORIGIN, _end]; range-intersect so it holds
+     * whether wolfBoot is below or above the image -- e.g. ZynqMP FSBL
+     * runs from high OCM while the image loads to low DDR, where the
+     * plain "dst < _end" test gave a false positive. */
+    uintptr_t wb_lo = (uintptr_t)(WOLFBOOT_ORIGIN);
+#else
+    /* Without WOLFBOOT_ORIGIN, wb_lo=0 keeps the original low-addr guard. */
+    uintptr_t wb_lo = 0;
+#endif
+#endif
 
     if (!encrypt_initialized) {
         if (crypto_init() < 0) {
@@ -3038,6 +3056,24 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif
 
     /* decrypt content */
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_LOAD_ADDRESS)
+    /* Overlap check: the image destination must not overwrite wolfBoot's own
+     * code/data/bss (ends at _end), mirroring the ramboot loader guard. The
+     * length comes from the unauthenticated header, so a bit-flipped size
+     * field must not reach the decrypt loop. The image occupies
+     * [dst, dst+header+len]. */
+    /* The decrypt loop writes whole ENCRYPT_BLOCK_SIZE blocks, so the last
+     * block can land up to a block past the nominal end: round the image
+     * size up before the overlap test. */
+    img_hi = img_lo + (((uintptr_t)IMAGE_HEADER_SIZE + (uintptr_t)len +
+                        (uintptr_t)ENCRYPT_BLOCK_SIZE - 1) &
+                       ~((uintptr_t)ENCRYPT_BLOCK_SIZE - 1));
+    if (ramboot_region_overlap(img_lo, img_hi, wb_lo, wb_hi)) {
+        wolfBoot_printf("Error: image %p-%p overlaps wolfBoot %p-%p\n",
+            (void*)img_lo, (void*)img_hi, (void*)wb_lo, (void*)wb_hi);
+        return -1;
+    }
+#endif
     while (dst_offset < (len + IMAGE_HEADER_SIZE)) {
         wolfBoot_crypto_set_iv(encrypt_iv_nonce, iv_counter);
         crypto_decrypt(dec_block, row_address, ENCRYPT_BLOCK_SIZE);

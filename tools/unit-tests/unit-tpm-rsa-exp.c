@@ -29,6 +29,7 @@ static uint8_t test_exponent_der[] = { 0xAA, 0x01, 0x00, 0x01, 0x7B };
 static uint8_t test_nv_digest[WOLFBOOT_SHA_DIGEST_SIZE];
 static uint32_t captured_exponent;
 static int forbidden_memcmp_calls;
+static int unset_auth0_calls;
 static uint32_t mock_nv_digest_sz;
 static int mock_keystore_size;
 static int decode_calls;
@@ -109,7 +110,9 @@ int wolfTPM2_SetAuthSession(WOLFTPM2_DEV* dev, int index,
 int wolfTPM2_UnsetAuth(WOLFTPM2_DEV* dev, int index)
 {
     (void)dev;
-    (void)index;
+    if (index == 0) {
+        unset_auth0_calls++;
+    }
     return 0;
 }
 
@@ -186,6 +189,7 @@ static void setup(void)
     memset(test_nv_digest, 0x7C, sizeof(test_nv_digest));
     captured_exponent = 0;
     forbidden_memcmp_calls = 0;
+    unset_auth0_calls = 0;
     mock_nv_digest_sz = WOLFBOOT_SHA_DIGEST_SIZE;
     mock_keystore_size = (int)sizeof(test_hdr);
     decode_calls = 0;
@@ -239,6 +243,8 @@ START_TEST(test_wolfBoot_check_rot_avoids_memcmp_on_digest_compare)
 
     ck_assert_int_eq(rc, 0);
     ck_assert_int_eq(forbidden_memcmp_calls, 0);
+    /* the NV auth slot must be unset before returning */
+    ck_assert_int_ge(unset_auth0_calls, 1);
 }
 END_TEST
 

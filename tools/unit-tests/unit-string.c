@@ -385,31 +385,31 @@ END_TEST
 START_TEST(test_uart_writenum_basic)
 {
     reset_uart_buf();
-    uart_writenum(0, 10, 0, 0);
+    uart_writenum(0, 10, 0, 0, 1);
     ck_assert_str_eq(uart_buf, "0");
 
     reset_uart_buf();
-    uart_writenum(255, 16, 0, 0);
+    uart_writenum(255, 16, 0, 0, 0);
     ck_assert_str_eq(uart_buf, "FF");
 
     reset_uart_buf();
-    uart_writenum(-5, 10, 0, 0);
+    uart_writenum(-5, 10, 0, 0, 1);
     ck_assert_str_eq(uart_buf, "-5");
 
     reset_uart_buf();
-    uart_writenum(7, 10, 1, 4);
+    uart_writenum(7, 10, 1, 4, 1);
     ck_assert_str_eq(uart_buf, "0007");
 
     reset_uart_buf();
-    uart_writenum(1, 10, 1, 2);
+    uart_writenum(1, 10, 1, 2, 1);
     ck_assert_str_eq(uart_buf, "01");
 
     reset_uart_buf();
-    uart_writenum(0x1234, 16, 1, 6);
+    uart_writenum(0x1234, 16, 1, 6, 0);
     ck_assert_str_eq(uart_buf, "001234");
 
     reset_uart_buf();
-    uart_writenum(1, 10, 1, 64);
+    uart_writenum(1, 10, 1, 64, 1);
     ck_assert_int_eq(uart_buf[0], '0');
 }
 END_TEST
@@ -451,6 +451,20 @@ START_TEST(test_uart_printf_formats)
     reset_uart_buf();
     uart_printf("%i", -1);
     ck_assert_str_eq(uart_buf, "-1");
+
+    /* %u must print the full unsigned range, not the signed interpretation:
+     * values >= 2^31 used to come out negative. */
+    reset_uart_buf();
+    uart_printf("%u", 0x80000000u);
+    ck_assert_str_eq(uart_buf, "2147483648");
+
+    reset_uart_buf();
+    uart_printf("%u", 0xFFFFFFFFu);
+    ck_assert_str_eq(uart_buf, "4294967295");
+
+    reset_uart_buf();
+    uart_printf("%010u", 0xFFFFFFFFu);
+    ck_assert_str_eq(uart_buf, "4294967295");
 }
 END_TEST
 

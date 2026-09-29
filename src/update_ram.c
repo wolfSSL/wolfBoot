@@ -56,20 +56,6 @@ extern uint32_t dts_load_addr;
 extern uint8_t _end[];  /* linker symbol: end of wolfBoot BSS */
 #endif
 
-/* Return non-zero if the RAM load region [img_lo, img_hi) overlaps wolfBoot's
- * own region [wb_lo, wb_hi). wb_lo == 0 means the origin is unknown, so guard
- * only that the image loads above wolfBoot's end (wb_hi). Pure arithmetic,
- * exposed at file scope for unit testing (tools/unit-tests/unit-update-ram.c). */
-static inline int ramboot_region_overlap(uintptr_t img_lo, uintptr_t img_hi,
-    uintptr_t wb_lo, uintptr_t wb_hi)
-{
-    if (img_hi < img_lo)
-        return 1; /* header+size wrapped the end address: reject conservatively */
-    if (wb_lo == 0)
-        return (img_lo < wb_hi);
-    return (img_lo < wb_hi && img_hi > wb_lo);
-}
-
 #if ((defined(EXT_FLASH) && defined(NO_XIP)) || \
     (defined(EXT_ENCRYPTED) && defined(MMU))) && \
     !defined(WOLFBOOT_NO_RAMBOOT)
