@@ -1240,13 +1240,16 @@ test-size-all:
 	# 8-136 bytes per configuration.
 	# Re-measured 2026-09-24: SIGN=NONE +8B (5180) from the Fenrir fix batch;
 	# all other configurations measured smaller than their limits.
-	make test-size SIGN=NONE LIMIT=5180 NO_ARM_ASM=1
+	# Re-measured 2026-09-29: NONE +24B (5204), ECC256/ECC384 +12B each, from
+	# the uart printf %u/is_signed change compiled into every build; RSA,
+	# RSAPSS, LMS and ML_DSA measured 8B smaller than their limits.
+	make test-size SIGN=NONE LIMIT=5204 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=12356 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=19064 NO_ARM_ASM=1
+	make test-size SIGN=ECC256  LIMIT=19076 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=14108 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=14120 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=RSA2048 LIMIT=11984 NO_ARM_ASM=1
 	make clean
@@ -1256,9 +1259,9 @@ test-size-all:
 	make clean
 	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=12828 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=19748 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 LIMIT=19760 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15464 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15476 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED448 LIMIT=14424 NO_ARM_ASM=1
 	make keysclean
