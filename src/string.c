@@ -382,7 +382,8 @@ static void uart_writenum_emit(char *buf, int bufsize, int i, int sz,
     uart_write(buf, i + sz);
 }
 
-void uart_writenum(int num, int base, int zeropad, int maxdigits)
+void uart_writenum(int num, int base, int zeropad, int maxdigits,
+    int is_signed)
 {
     int i = 0, sz = 0;
     /* Sized for decimal (3 chars/byte) plus sign -- wider than hex. */
@@ -391,7 +392,7 @@ void uart_writenum(int num, int base, int zeropad, int maxdigits)
     if (maxdigits == 0)
         maxdigits = 8;
     memset(buf, 0, sizeof(buf));
-    if (base == 10 && num < 0) {
+    if (base == 10 && is_signed && num < 0) {
         buf[i++] = '-';
         /* Negate in unsigned space so INT_MIN does not overflow. */
         val = 0U - (unsigned int)num;
@@ -567,8 +568,15 @@ void uart_vprintf(const char* fmt, va_list argp)
                 else
             #endif
                 {
-                    int n = (int)va_arg(argp, int);
-                    uart_writenum(n, 10, zeropad, maxdigits);
+                    int n;
+                    if (*fmtp == 'u') {
+                        n = (int)va_arg(argp, unsigned int);
+                        uart_writenum(n, 10, zeropad, maxdigits, 0);
+                    }
+                    else {
+                        n = (int)va_arg(argp, int);
+                        uart_writenum(n, 10, zeropad, maxdigits, 1);
+                    }
                 }
                 break;
             }
@@ -609,7 +617,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                     else {
                         n = (int)va_arg(argp, int);
                     }
-                    uart_writenum(n, 16, zeropad, maxdigits);
+                    uart_writenum(n, 16, zeropad, maxdigits, 0);
                 }
                 break;
             }
@@ -656,7 +664,7 @@ void uart_vprintf(const char* fmt, va_list argp)
 
                 /* integer part */
                 ipart = (unsigned int)val;
-                uart_writenum((int)ipart, 10, 0, 0);
+                uart_writenum((int)ipart, 10, 0, 0, 0);
 
                 /* fractional part */
                 if (prec > 0) {
