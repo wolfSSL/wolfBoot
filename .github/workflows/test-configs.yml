@@ -863,6 +863,35 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32c5.config
 
+  psoc_c3_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3.config
+
+  # 128 KB part: same target, smaller partitions.
+  psoc_c3_128k_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3.config
+      make-args: WOLFBOOT_PARTITION_SIZE=0xB000 WOLFBOOT_PARTITION_BOOT_ADDRESS=0x12008000 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x12013000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0x1201E000
+
+  # A TPM over each of the two serial back-ends.
+  psoc_c3_tpm_spi_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3.config
+      make-args: WOLFTPM=1
+
+  psoc_c3_tpm_i2c_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3.config
+      make-args: WOLFTPM=1 WOLFBOOT_TPM_I2C=1
+
   # Builds the TIS-over-I2C transport itself, with no target port involved.
   sim_tpm_i2c_test:
     uses: ./.github/workflows/test-build.yml

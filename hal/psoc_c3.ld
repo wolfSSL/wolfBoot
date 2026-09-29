@@ -1,0 +1,58 @@
+MEMORY
+{
+    FLASH (rx) : ORIGIN = 0x12000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+    RAM (rwx) : ORIGIN = 0x34000000, LENGTH = 0x00020000 /* 128 KB SRAM */
+}
+
+SECTIONS
+{
+    .text :
+    {
+        _start_text = .;
+        KEEP(*(.isr_vector))
+        *(.text*)
+        *(.rodata*)
+        . = ALIGN(4);
+        _end_text = .;
+    } > FLASH
+
+    .edidx :
+    {
+        . = ALIGN(4);
+        *(.ARM.exidx*)
+    } > FLASH
+
+    .keystore :
+    {
+        . = ALIGN(4);
+        KEEP(*(.keystore*))
+    } > FLASH
+
+    _stored_data = .;
+
+    .data : AT (_stored_data)
+    {
+        _start_data = .;
+        KEEP(*(.data*))
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
+        _end_data = .;
+    } > RAM
+
+    .bss (NOLOAD) :
+    {
+        _start_bss = .;
+        __bss_start__ = .;
+        *(.bss*)
+        *(COMMON)
+        . = ALIGN(4);
+        _end_bss = .;
+        __bss_end__ = .;
+        _end = .;
+    } > RAM
+
+    . = ALIGN(4);
+}
+
+END_STACK = ORIGIN(RAM) + LENGTH(RAM);
