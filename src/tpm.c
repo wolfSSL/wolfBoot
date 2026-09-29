@@ -795,6 +795,8 @@ int wolfBoot_read_blob(uint32_t nvIndex, WOLFTPM2_KEYBLOB* blob,
             rc, nv.handle.hndl, wolfTPM2_GetRCString(rc));
     }
     TPM2_ForceZero(&nv, sizeof(nv));
+    /* Clear the NV auth value from the device auth slot before returning. */
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
     return rc;
 }
 
@@ -1177,6 +1179,9 @@ exit:
     wolfTPM2_UnloadHandle(&wolftpm_dev, &seal_blob->handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &policy_session.handle);
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
+    /* Slot 0 held the seal auth (password path) or the policy session:
+     * clear it so no auth value outlives the unseal. */
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
     TPM2_ForceZero(&policy_session, sizeof(policy_session));
 
     return rc;
@@ -1670,6 +1675,9 @@ void wolfBoot_tpm2_deinit(void)
     TPM2_ForceZero(&wolftpm_session, sizeof(wolftpm_session));
     TPM2_ForceZero(&wolftpm_srk, sizeof(wolftpm_srk));
 #endif
+    /* The device object also holds the last auth slot contents and the
+     * last command/response buffer: scrub it on every build path. */
+    TPM2_ForceZero(&wolftpm_dev, sizeof(wolftpm_dev));
 }
 
 /**
@@ -1740,6 +1748,8 @@ int wolfBoot_check_rot(int key_slot, uint8_t* pubkey_hint)
     wolfTPM2_UnsetAuthSession(&wolftpm_dev, 1, &wolftpm_session);
 
     TPM2_ForceZero(&nv, sizeof(nv));
+    /* Clear the NV auth value from the device auth slot before returning. */
+    wolfTPM2_UnsetAuth(&wolftpm_dev, 0);
     return rc;
 }
 #endif
