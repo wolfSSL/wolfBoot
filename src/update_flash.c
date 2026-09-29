@@ -544,7 +544,8 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     if (updateState != IMG_STATE_FINAL_FLAGS) {
         /* First, backup the staging sector (sector at tmpBootPos) into swap partition */
         /* This sector will be modified with the magic trailer, so we need to preserve it */
-        ret = wolfBoot_backup_last_boot_sector(tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        ret = wolfBoot_backup_last_boot_sector(
+            tmpBootPos / WOLFBOOT_SECTOR_SIZE);
         if (ret < 0) {
 #ifdef EXT_FLASH
             ext_flash_lock();
@@ -609,7 +610,8 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     /* Restore the original contents of the staging sector (with the magic trailer if encrypted) */
     if (tmpBootPos < boot->fw_size + IMAGE_HEADER_SIZE) {
         wolfBoot_printf("Restoring last boot sector from swap\n");
-        ret = wolfBoot_copy_sector(swap, boot, tmpBootPos / WOLFBOOT_SECTOR_SIZE);
+        ret = wolfBoot_copy_sector(swap, boot,
+            tmpBootPos / WOLFBOOT_SECTOR_SIZE);
         if (ret < 0) {
 #ifdef EXT_FLASH
             ext_flash_lock();
@@ -984,6 +986,11 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
+    int eraseLen = (WOLFBOOT_SECTOR_SIZE
+#ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
+        * 2
+#endif
+    );
 #if defined(DELTA_UPDATES)
     int inverse = 0;
 #endif
@@ -1424,14 +1431,16 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
 
-    /* Consume the update: reset the update partition state to NEW, as the
-     * swap path's final erase does, so the next boot does not re-run
+    /* Consume the update: erase the update partition's trailer sector(s),
+     * as the swap path does, so the next boot does not re-run
      * wolfBoot_update(0) on the same image (a wasted verification, and a
-     * full BOOT re-flash on every boot with ALLOW_DOWNGRADE). Best effort:
-     * in setups where the bootloader cannot write the update partition -
-     * the reason DISABLE_BACKUP exists - the application owns the update
-     * partition and must clear the state itself. */
-    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+     * full BOOT re-flash on every boot with ALLOW_DOWNGRADE). Erasing, not
+     * programming IMG_STATE_NEW: NOR can only clear bits, so a raw write of
+     * 0xFF over UPDATING is a no-op. Best effort: in setups where the
+     * bootloader cannot write the update partition - the reason
+     * DISABLE_BACKUP exists - the application owns the update partition and
+     * must clear the state itself. */
+    wb_flash_erase(&update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
 
     #ifdef EXT_FLASH
     ext_flash_lock();

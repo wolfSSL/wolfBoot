@@ -997,10 +997,12 @@ END_TEST
 #endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER && !EXT_ENCRYPTED */
 
 /* A completed DISABLE_BACKUP update must consume the update partition:
- * the state is reset to NEW (as the swap path's final erase does),
- * otherwise wolfBoot_start() re-enters wolfBoot_update(0) on every boot -
- * a wasted verification, and with ALLOW_DOWNGRADE a full re-flash of BOOT
- * on every power-up. */
+ * its trailer sector is erased (as the swap path's final erase does),
+ * resetting the state to NEW, otherwise wolfBoot_start() re-enters
+ * wolfBoot_update(0) on every boot - a wasted verification, and with
+ * ALLOW_DOWNGRADE a full re-flash of BOOT on every power-up. The state
+ * must be reset by erase, not by programming 0xFF: NOR can only clear
+ * bits, so a raw write of NEW over UPDATING is a no-op. */
 #if defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
 START_TEST (test_disable_backup_update_consumes_update_state)
 {
@@ -1014,9 +1016,12 @@ START_TEST (test_disable_backup_update_consumes_update_state)
 
     wolfBoot_update_trigger();
     ck_assert_int_ge(wolfBoot_update(0), 0);
+    /* the update trailer sector must have been erased: the magic is gone,
+     * so the state read fails and wolfBoot_start() sees the update
+     * partition as NEW (its initial state) */
+    ck_assert_int_ge(erased_update, 1);
     ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
-        0);
-    ck_assert_int_eq(update_state, IMG_STATE_NEW);
+        -1);
 
     cleanup_flash();
 }
