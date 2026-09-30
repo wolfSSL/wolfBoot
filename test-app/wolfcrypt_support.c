@@ -234,6 +234,8 @@ unsigned long my_time(unsigned long* timer)
     }
 #elif defined(TARGET_mpfs250)
     unsigned long t = (unsigned long)(mpfs_get_ticks() / RISCV_SMODE_TIMER_FREQ);
+    if (timer) *timer = t;
+    return t;
 #elif defined(TARGET_ti_am64x_r5)
     unsigned long t = (unsigned long)(ClockP_getTimeUsec() / 1000000);
     if (timer) *timer = t;

@@ -86,10 +86,12 @@ void hal_init(void)
 {
 #ifdef __WOLFBOOT
 
-//    asm(
-//        "_debug_loop_start:\n"
-//        "  b _debug_loop_start\n"
-//    );
+#if 0
+    asm(
+        "_debug_loop_start:\n"
+        "  b _debug_loop_start\n"
+    );
+#endif
 
     Sciclient_waitForBootNotification();
 
@@ -127,11 +129,14 @@ void hal_init(void)
     uart_write("ti_am64x_r5 init\n", 14);
     Sciclient_getVersionCheck(1);
 #else
-    // asm(
-    //     "_debug_loop_start:\n"
-    //     "  b _debug_loop_start\n"
-    // );
-    
+
+#if 0
+    asm(
+        "_debug_loop_start:\n"
+        "  b _debug_loop_start\n"
+    );
+#endif
+
     System_init();
     Drivers_open();
 #endif /* __WOLFBOOT */
@@ -201,14 +206,29 @@ void RAMFUNCTION hal_flash_lock(void)
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    uint32_t offset = address - ARCH_FLASH_OFFSET;
-    uint32_t blk, page;
-    int status;
+    int status = 0;
+
+    if (len == 0)
+        return 0;
+
+    address -= ARCH_FLASH_OFFSET;
 
     OSPI_disableDacMode(gOspiHandle[0]);
-    status = Flash_offsetToBlkPage(gFlashHandle[0], offset, &blk, &page);
-    if (status == 0) {
-        status = Flash_eraseBlk(gFlashHandle[0], blk);
+    while (len > 0) {
+        uint32_t blk, page;
+        uint32_t block = address & ~(WOLFBOOT_SECTOR_SIZE - 1);
+        uint32_t offset = address - block;
+        uint32_t chunk = WOLFBOOT_SECTOR_SIZE - offset;
+        if ((uint32_t)len < chunk)
+            chunk = (uint32_t)len;
+        status = Flash_offsetToBlkPage(gFlashHandle[0], address, &blk, &page);
+        if (status == 0) {
+            status = Flash_eraseBlk(gFlashHandle[0], blk);
+            if (status != 0)
+                break;
+        }
+        address += chunk;
+        len -= (int)chunk;
     }
     OSPI_enableDacMode(gOspiHandle[0]);
 
