@@ -53,7 +53,7 @@ struct mb2_tag_info_req {
     uint16_t type;
     uint16_t flags;
     uint32_t size;
-    uint32_t mbi_tag_types[];
+    uint16_t mbi_tag_types[]; /* spec: 16-bit tag type values */
 };
 
 struct mb2_tag {
@@ -158,7 +158,8 @@ static int mb2_add_mem_entry_cb(uint64_t baseAddr, uint64_t length,
     e->base_addr = baseAddr;
     e->length = length;
     e->type =
-        (type == EFI_RESOURCE_SYSTEM_MEMORY) ? MB2_MEM_INFO_MEM_RAM : MB2_MEM_INFO_MEM_RESERVED;
+        (type == EFI_RESOURCE_SYSTEM_MEMORY) ? MB2_MEM_INFO_MEM_RAM :
+        MB2_MEM_INFO_MEM_RESERVED;
     e->reserved = 0;
     mem_map->size += sizeof(struct mb2_mem_map_entry);
 
@@ -184,7 +185,8 @@ static int mb2_add_basic_mem_info(uint8_t **idx, void *stage2_param,
                                   unsigned *max_size)
 {
 #ifdef WOLFBOOT_FSP
-    struct mb2_basic_memory_info *meminfo = (struct mb2_basic_memory_info*)(*idx);
+    struct mb2_basic_memory_info *meminfo =
+        (struct mb2_basic_memory_info*)(*idx);
     struct stage2_parameter *p = (struct stage2_parameter*)stage2_param;
     struct efi_hob *hobs = (struct efi_hob*)(uintptr_t)p->hobList;
     int r;
@@ -213,7 +215,8 @@ static int mb2_add_basic_mem_info(uint8_t **idx, void *stage2_param,
 #endif /* WOLFBOOT_FSP */
 }
 
-static int mb2_add_mem_map(uint8_t **idx, void *stage2_param, unsigned *max_size)
+static int mb2_add_mem_map(uint8_t **idx, void *stage2_param,
+                           unsigned *max_size)
 {
 #ifdef WOLFBOOT_FSP
     struct mb2_mem_map_header *map_hdr = (struct mb2_mem_map_header*)(*idx);
@@ -256,6 +259,7 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
     struct mb2_tag *end_tag;
     int requested_tags, i, r;
     uint32_t header_length;
+    uint32_t req;
     uint8_t *idx;
 
     if (max_size < sizeof(*hdr)) {
@@ -271,18 +275,41 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
      * the tag walker inside the header window and prevents an oversized value
      * (e.g. 0xFFFFFFFF) from inflating its end pointer into an OOB read. */
     if (header_length < sizeof(struct mb2_header) ||
-            header_length > MB2_HEADER_MAX_OFF)
+        header_length > MB2_HEADER_MAX_OFF)
         return -1;
     info_req_tag =
         (struct mb2_tag_info_req *)mb2_find_tag_by_type(
             mb2_header + sizeof(struct mb2_header),
             header_length - sizeof(struct mb2_header),
             MB2_TAG_TYPE_INFO_REQ);
-    if (info_req_tag == NULL)
-        return -1;
-    requested_tags = (info_req_tag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint32_t);
+    /* The information request tag is optional per the Multiboot2 spec:
+     * a header without one requests nothing. A tag that is present but
+     * shorter than its fixed fields is corrupt, not absent: reject. */
+    if (info_req_tag == NULL) {
+        /* The finder returns NULL both when the tag is absent and when
+         * the tag list is malformed; walk the list to tell the two
+         * apart. A corrupt list is rejected, a clean list without an
+         * info request tag requests nothing. */
+        struct mb2_tag *tag =
+            (struct mb2_tag *)(mb2_header + sizeof(struct mb2_header));
+        uint8_t *end = mb2_header + header_length;
+
+        while ((uint8_t *)tag + sizeof(*tag) <= end && tag->type != 0) {
+            if (tag->size < sizeof(*tag) ||
+                tag->size > (uint32_t)(end - (uint8_t *)tag))
+                return -1;
+            tag = (struct mb2_tag *)mb2_align_address_up(
+                (uint8_t *)tag + tag->size, 8);
+        }
+        requested_tags = 0;
+    }
+    else {
+        requested_tags = (info_req_tag->size -
+            sizeof(struct mb2_tag_info_req)) / sizeof(uint16_t);
+    }
     for (i = 0; i < requested_tags; i++) {
-        switch (info_req_tag->mbi_tag_types[i]) {
+        req = info_req_tag->mbi_tag_types[i];
+        switch (req) {
         case MB2_REQ_TAG_BASIC_MEM_INFO:
             r = mb2_add_basic_mem_info(&idx, stage2_params, &max_size);
             if (r != 0)
@@ -294,8 +321,14 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
                 return r;
             break;
         default:
-            wolfBoot_printf("mb2: unsupported info request tag: %d\r\n",
-                          info_req_tag->mbi_tag_types[i]);
+            /* The optional flag lives in the tag's own flags field and
+             * applies to every requested type; a mandatory request we
+             * cannot fulfil must reject the image. */
+            if (info_req_tag->flags & 1)
+                continue;
+            wolfBoot_printf(
+                "mb2: unsupported mandatory info request tag: %d\r\n",
+                (int)req);
             return -1;
         }
     }
@@ -324,7 +357,7 @@ static void mb2_parse_info_request_tag(void* tag) {
     struct mb2_tag_info_req *infoTag = (struct mb2_tag_info_req*)tag;
 
     uint32_t numTagTypes =
-        (infoTag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint32_t);
+        (infoTag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint16_t);
 
     MB2_DEBUG_PRINTF("Information Request Tag:\r\n");
     MB2_DEBUG_PRINTF("Tag Type: %u\r\n", infoTag->type);
