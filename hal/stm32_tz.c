@@ -404,6 +404,7 @@ void hal_tz_sau_init(void)
 #endif
 
 #ifdef WOLFCRYPT_SECURE_MODE
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
 #define TRNG_BASE 0x520C0800
 #define TRNG_CR *((volatile uint32_t *)(TRNG_BASE + 0x00))
@@ -477,6 +478,10 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len)
         else
             memcpy(out + i, &rand_seed, 4);
     }
+    /* Raw TRNG output seeds the FIPS Hash-DRBG: do not leave the last word
+     * on the stack for a later frame to observe. wc_ForceZero (not memset)
+     * so the compiler cannot elide the dead store. */
+    wc_ForceZero(&rand_seed, sizeof(rand_seed));
     return 0;
 }
 
