@@ -40,6 +40,7 @@ extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
  * Returns 0 on success or a negative value if the copy failed, so callers can
  * fail closed instead of running on stale data. */
 extern int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
+extern int wolfBoot_fit_check_dest(void *dst, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif
