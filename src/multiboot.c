@@ -305,10 +305,15 @@ int mb2_build_boot_info_header(uint8_t *mb2_boot_info,
     }
     else {
         requested_tags = (info_req_tag->size -
-            sizeof(struct mb2_tag_info_req)) / sizeof(uint16_t);
+                          sizeof(struct mb2_tag_info_req)) / sizeof(uint16_t);
     }
     for (i = 0; i < requested_tags; i++) {
         req = info_req_tag->mbi_tag_types[i];
+        if (req == 0) {
+            /* Tag type 0 is the end tag: a zero entry in the request
+             * list is padding, not a request. */
+            continue;
+        }
         switch (req) {
         case MB2_REQ_TAG_BASIC_MEM_INFO:
             r = mb2_add_basic_mem_info(&idx, stage2_params, &max_size);

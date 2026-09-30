@@ -465,6 +465,41 @@ START_TEST(test_build_info_malformed_other_tag)
 }
 END_TEST
 
+/* The spec encodes the request list as 16-bit values; real firmware
+ * (Intel FSP) pads the list so the last entry is zero (the end-tag
+ * type). A zero entry is padding, not a mandatory request: the valid
+ * entries before it must still be honoured. */
+START_TEST(test_build_info_zero_entry_padding)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    uint8_t boot_info[512] __attribute__((aligned(8)));
+    struct stage2_parameter p = make_stage2();
+    struct mb2_tag_info_req *info;
+    struct mb2_tag *t;
+    struct mock_mem_region regions[] = {
+        {0, 640 * 1024, EFI_RESOURCE_SYSTEM_MEMORY},
+        {0x100000, 127ULL * 1024 * 1024, EFI_RESOURCE_SYSTEM_MEMORY}
+    };
+
+    mock_regions = regions;
+    mock_region_count = 2;
+    build_header_with_info_req(header, 4, 0); /* basic memory info */
+    info = (struct mb2_tag_info_req *)(header + 16);
+    info->size = 12; /* 8 + two 16-bit entries */
+    info->mbi_tag_types[1] = 0; /* zero padding, as emitted by FSP */
+    memset(boot_info, 0, sizeof(boot_info));
+
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, &p,
+                                   sizeof(boot_info)), 0);
+    t = (struct mb2_tag *)(boot_info + sizeof(struct mb2_boot_info_header));
+    ck_assert_uint_eq(t->type, 4);
+
+    mock_regions = NULL;
+    mock_region_count = 0;
+}
+END_TEST
+
 /* check that header_length < sizeof(struct mb2_header) do not causes uint32_t
  * underflow in the subtraction header_length - sizeof(struct mb2_header),
  * wrapping to ~4GB and defeating the bounds check in mb2_find_tag_by_type.
@@ -978,6 +1013,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_build, test_build_info_two_requests_16bit);
     tcase_add_test(tc_build, test_build_info_malformed_size);
     tcase_add_test(tc_build, test_build_info_malformed_other_tag);
+    tcase_add_test(tc_build, test_build_info_zero_entry_padding);
     tcase_add_test(tc_build, test_build_info_header_length_underflow);
     tcase_add_test(tc_build, test_build_info_header_length_overflow);
     tcase_add_test(tc_build, test_dump_header_length_underflow);
