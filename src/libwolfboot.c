@@ -332,7 +332,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
 #else
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
-            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+            WOLFBOOT_PARTITION_UPDATE_SIZE - WOLFBOOT_SECTOR_SIZE;
 #endif
     }
 
