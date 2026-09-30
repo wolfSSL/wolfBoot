@@ -357,7 +357,7 @@ static void mb2_parse_info_request_tag(void* tag) {
     struct mb2_tag_info_req *infoTag = (struct mb2_tag_info_req*)tag;
 
     uint32_t numTagTypes =
-        (infoTag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint16_t);
+        (infoTag->size - sizeof(struct mb2_tag_info_req)) / sizeof(uint32_t);
 
     MB2_DEBUG_PRINTF("Information Request Tag:\r\n");
     MB2_DEBUG_PRINTF("Tag Type: %u\r\n", infoTag->type);
