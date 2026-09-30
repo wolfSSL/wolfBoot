@@ -304,10 +304,9 @@ void hal_init(void)
 }
 
 #if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
-/* Microseconds from the DWT cycle counter hal_init() starts. The counter is
- * 32-bit and wraps about every 5.4 s at 800 MHz, which bounds any single
- * measurement rather than the boot as a whole - each BENCHMARK_END subtracts
- * two reads, so a wrap only matters for an interval longer than that. */
+/* Microseconds from the DWT cycle counter hal_init() starts. 32-bit, wrapping
+ * every ~5.4 s at 800 MHz, which bounds a single measurement rather than the
+ * boot: BENCHMARK_END subtracts two reads. */
 uint64_t hal_get_timer_us(void)
 {
     return (uint64_t)DWT_CYCCNT / (IMX95_M7_CORE_HZ / 1000000UL);
