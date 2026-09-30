@@ -181,6 +181,8 @@ static void hal_spu_init(void)
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
+
 static uint32_t cryptocell_enable_prev = 0;
 
 void hal_trng_init(void)
@@ -225,6 +227,10 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
         for (byte = 0; byte < 4 * CC_RNG_EHR_DATA_LEN && i < len; byte++) {
             out[i++] = (unsigned char)data_bytes[byte];
         }
+        /* Raw TRNG output seeds the FIPS Hash-DRBG: do not leave the last
+         * batch on the stack for a later frame to observe. wc_ForceZero
+         * (not memset) so the compiler cannot elide the dead store. */
+        wc_ForceZero(data, sizeof(data));
     }
 
     return 0;
