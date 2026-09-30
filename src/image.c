@@ -463,28 +463,55 @@ static inline int DecodeAsn1Tag(const uint8_t* input, int inputSz, int* inOutIdx
     }
     return 0;
 }
+/* AlgorithmIdentifier (SEQUENCE + OID) of the DigestInfo for the
+ * configured hash. The recovered payload must match it byte for byte,
+ * with no extra bytes before, inside or after: any free byte in the
+ * message is forgeable with a low-exponent key (Bleichenbacher 2006).
+ */
+#if defined(WOLFBOOT_HASH_SHA256)
+static const uint8_t rsa_digest_info_algoid[] =
+    { 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04,
+      0x02, 0x01, 0x05, 0x00 };
+#elif defined(WOLFBOOT_HASH_SHA384)
+static const uint8_t rsa_digest_info_algoid[] =
+    { 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04,
+      0x02, 0x02, 0x05, 0x00 };
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+static const uint8_t rsa_digest_info_algoid[] =
+    { 0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04,
+      0x02, 0x09, 0x05, 0x00 };
+#endif
+
 static int RsaDecodeSignature(uint8_t** pInput, int inputSz)
 {
     uint8_t* input = *pInput;
     int idx = 0;
-    int digest_len = 0, algo_len, tot_len;
+    int digest_len = 0;
+    int tot_len;
 
-    /* sequence - total size */
+    /* sequence - total size, must span the whole payload */
     if (DecodeAsn1Tag(input, inputSz, &idx, &tot_len,
             ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
         return -1;
     }
-
-    /* sequence - algoid */
-    if (DecodeAsn1Tag(input, inputSz, &idx, &algo_len,
-            ASN_SEQUENCE | ASN_CONSTRUCTED) != 0) {
+    if (tot_len + 2 != inputSz) {
         return -1;
     }
-    idx += algo_len; /* skip algoid */
 
-    /* digest */
+    /* algorithm identifier, pinned to the configured hash OID */
+    if (idx + (int)sizeof(rsa_digest_info_algoid) > inputSz ||
+            memcmp(input + idx, rsa_digest_info_algoid,
+                sizeof(rsa_digest_info_algoid)) != 0) {
+        return -1;
+    }
+    idx += (int)sizeof(rsa_digest_info_algoid);
+
+    /* digest, must end exactly at the end of the payload */
     if (DecodeAsn1Tag(input, inputSz, &idx, &digest_len,
             ASN_OCTET_STRING) != 0) {
+        return -1;
+    }
+    if (idx + digest_len != inputSz) {
         return -1;
     }
     /* return digest buffer pointer */

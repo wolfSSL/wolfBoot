@@ -601,6 +601,89 @@ START_TEST(test_decode_asn1_tag_start_bounds)
     free(input);
 }
 END_TEST
+
+START_TEST(test_rsa_decode_signature_pins_digest_info)
+{
+    /* DigestInfo as produced by wc_EncodeSignature():
+     * SEQUENCE(49) { SEQUENCE(13) { OID, NULL }, OCTET STRING(32) } */
+    static const uint8_t valid[] = {
+        0x30, 0x31,
+        0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00,
+        0x04, 0x20
+    };
+    uint8_t msg[sizeof(valid) + WOLFBOOT_SHA_DIGEST_SIZE + 1];
+    uint8_t *in = NULL;
+    int i;
+    int ret;
+
+    memcpy(msg, valid, sizeof(valid));
+    for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++)
+        msg[sizeof(valid) + i] = (uint8_t)(0xA0 + i);
+
+    /* The valid encoding is accepted and yields the digest */
+    in = msg;
+    ret = RsaDecodeSignature(&in,
+        (int)sizeof(valid) + WOLFBOOT_SHA_DIGEST_SIZE);
+    ck_assert_int_eq(ret, WOLFBOOT_SHA_DIGEST_SIZE);
+    ck_assert_ptr_eq(in, msg + sizeof(valid));
+
+    /* Trailing byte after the SEQUENCE: rejected */
+    msg[sizeof(valid) + WOLFBOOT_SHA_DIGEST_SIZE] = 0x00;
+    in = msg;
+    ret = RsaDecodeSignature(&in,
+        (int)sizeof(valid) + WOLFBOOT_SHA_DIGEST_SIZE + 1);
+    ck_assert_int_eq(ret, -1);
+
+    /* Trailing byte inside the SEQUENCE: rejected */
+    msg[1] = 0x32;
+    in = msg;
+    ret = RsaDecodeSignature(&in,
+        (int)sizeof(valid) + WOLFBOOT_SHA_DIGEST_SIZE + 1);
+    ck_assert_int_eq(ret, -1);
+    msg[1] = 0x31;
+
+    /* Empty AlgorithmIdentifier (the forgeable shape): rejected */
+    memcpy(msg, valid, 2);
+    msg[1] = 0x24;
+    msg[2] = 0x30;
+    msg[3] = 0x00;
+    msg[4] = 0x04;
+    msg[5] = 0x20;
+    for (i = 0; i < WOLFBOOT_SHA_DIGEST_SIZE; i++)
+        msg[6 + i] = (uint8_t)(0xA0 + i);
+    in = msg;
+    ret = RsaDecodeSignature(&in, 6 + WOLFBOOT_SHA_DIGEST_SIZE);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
+/* The pinned AlgorithmIdentifier tables must match the spec bytes for
+ * the configured hash. */
+START_TEST(test_rsa_digest_info_table_matches_spec)
+{
+#if defined(WOLFBOOT_HASH_SHA256)
+    static const uint8_t expected[] = {
+        0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x01, 0x05, 0x00 /* SHA-256 */
+    };
+#elif defined(WOLFBOOT_HASH_SHA384)
+    static const uint8_t expected[] = {
+        0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x02, 0x05, 0x00 /* SHA-384 */
+    };
+#elif defined(WOLFBOOT_HASH_SHA3_384)
+    static const uint8_t expected[] = {
+        0x30, 0x0D, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03,
+        0x04, 0x02, 0x09, 0x05, 0x00 /* SHA3-384 */
+    };
+#endif
+    ck_assert_int_eq((int)sizeof(rsa_digest_info_algoid),
+                     (int)sizeof(expected));
+    ck_assert_int_eq(memcmp(rsa_digest_info_algoid, expected,
+                             sizeof(expected)), 0);
+}
+END_TEST
 #endif
 
 
@@ -1280,6 +1363,8 @@ Suite *wolfboot_suite(void)
     TCase* tcase_rsa_asn1 = tcase_create("rsa_asn1");
     tcase_set_timeout(tcase_rsa_asn1, 20);
     tcase_add_test(tcase_rsa_asn1, test_decode_asn1_tag_start_bounds);
+    tcase_add_test(tcase_rsa_asn1, test_rsa_decode_signature_pins_digest_info);
+    tcase_add_test(tcase_rsa_asn1, test_rsa_digest_info_table_matches_spec);
     suite_add_tcase(s, tcase_rsa_asn1);
 #endif
 
