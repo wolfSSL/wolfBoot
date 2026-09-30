@@ -45,6 +45,10 @@ static size_t sec_pool_used;
 static int malloc_fail_next;
 static void *freed_ptrs[64];
 static int freed_count;
+/* Allocation log: tests that need to know the size of a secure copy. */
+static void *alloc_ptrs[64];
+static size_t alloc_sizes[64];
+static int alloc_count;
 
 static void *sec_malloc(size_t n)
 {
@@ -61,6 +65,11 @@ static void *sec_malloc(size_t n)
         return NULL;
     p = &sec_pool[sec_pool_used];
     sec_pool_used += n;
+    if (alloc_count < 64) {
+        alloc_ptrs[alloc_count] = p;
+        alloc_sizes[alloc_count] = n;
+        alloc_count++;
+    }
     return p;
 }
 
@@ -90,6 +99,12 @@ static union {
     } derive;
 } ns_mem;
 
+/* When set, cmse_check_address_range() rewrites the CK_ULONG at this
+ * address during its second check: a non-secure writer racing between
+ * the two fetches of the legacy PBKDF2 length pointer. */
+static CK_ULONG *race_mutate;
+static int race_mutate_seen;
+
 void *cmse_check_address_range(void *ptr, size_t size, int flags)
 {
     uint8_t *start = (uint8_t *)ptr;
@@ -102,6 +117,11 @@ void *cmse_check_address_range(void *ptr, size_t size, int flags)
     if (start < ns_mem.bytes ||
             start + size > ns_mem.bytes + sizeof(ns_mem.bytes))
         return NULL;
+    if (race_mutate == (CK_ULONG *)ptr) {
+        if (race_mutate_seen)
+            *race_mutate = 32;
+        race_mutate_seen = 1;
+    }
     return ptr;
 }
 
@@ -121,6 +141,11 @@ static const uint8_t secret_pwd[16] = {
 
 /* Set when the wolfPKCS11 stub actually saw the secret in the secure copy. */
 static int stub_saw_secret;
+/* Values captured from the marshaled (secure) mechanism inside the stub:
+ * the secure length word's value (nsc_mech_free force-zeroes it before the
+ * test can read it) and the secure password copy pointer. */
+static CK_ULONG stub_secure_len;
+static CK_UTF8CHAR *stub_pwd;
 
 CK_RV C_CreateObject(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE_PTR pTemplate,
         CK_ULONG ulCount, CK_OBJECT_HANDLE_PTR phObject)
@@ -152,7 +177,23 @@ CK_RV C_DeriveKey(CK_SESSION_HANDLE hSession, CK_MECHANISM_PTR pMechanism,
     (void)pTemplate;
     (void)ulAttributeCount;
     p = (CK_PKCS5_PBKD2_PARAMS2 *)pMechanism->pParameter;
-    if (p->ulPasswordLen == sizeof(secret_pwd) &&
+    if (pMechanism->mechanism == CKM_PKCS5_PBKD2) {
+        CK_PKCS5_PBKD2_PARAMS *lg = (CK_PKCS5_PBKD2_PARAMS *)pMechanism->pParameter;
+        stub_pwd = p->pPassword;
+        /* Legacy heuristic: only then is the length field a pointer. */
+        if (lg->ulPasswordLen > CK_PKCS5_PBKD2_PARAMS_MAX_PWD_LEN)
+            stub_secure_len = *(CK_ULONG_PTR)lg->ulPasswordLen;
+    }
+    if (p->ulPasswordLen > CK_PKCS5_PBKD2_PARAMS_MAX_PWD_LEN) {
+        /* Legacy CK_PKCS5_PBKD2_PARAMS: the field is a (now secure)
+         * pointer to the password length, as wolfPKCS11 consumes it. */
+        CK_ULONG len = *(CK_ULONG_PTR)p->ulPasswordLen;
+        if (len == sizeof(secret_pwd) &&
+                memcmp(p->pPassword, secret_pwd, sizeof(secret_pwd)) == 0) {
+            stub_saw_secret = 1;
+        }
+    }
+    else if (p->ulPasswordLen == sizeof(secret_pwd) &&
             memcmp(p->pPassword, secret_pwd, sizeof(secret_pwd)) == 0) {
         stub_saw_secret = 1;
     }
@@ -168,9 +209,14 @@ static void reset_state(void)
     memset(sec_pool, 0, sizeof(sec_pool));
     sec_pool_used = 0;
     malloc_fail_next = 0;
+    race_mutate = NULL;
+    race_mutate_seen = 0;
+    alloc_count = 0;
     memset(freed_ptrs, 0, sizeof(freed_ptrs));
     freed_count = 0;
     stub_saw_secret = 0;
+    stub_secure_len = 0;
+    stub_pwd = NULL;
     memset(&ns_mem, 0, sizeof(ns_mem));
 }
 
@@ -302,6 +348,88 @@ START_TEST(test_tmpl_partial_alloc_no_garbage_free)
 }
 END_TEST
 
+START_TEST(test_mech_legacy_pbkdf2_password_len_bounced)
+{
+    CK_RV rv;
+    CK_ULONG *nsPwdLen;
+
+    reset_state();
+    memcpy(ns_mem.derive.password, secret_pwd, sizeof(secret_pwd));
+    /* Legacy CK_PKCS5_PBKD2_PARAMS: ulPasswordLen is a non-secure pointer
+     * to the length, so the value exceeds the inline max. */
+    nsPwdLen = (CK_ULONG *)(ns_mem.derive.password + sizeof(secret_pwd));
+    *nsPwdLen = sizeof(secret_pwd);
+    ns_mem.derive.params.saltSource = CKZ_DATA_SPECIFIED;
+    ns_mem.derive.params.iterations = 1000;
+    ns_mem.derive.params.prf = CKP_PKCS5_PBKD2_HMAC_SHA256;
+    ns_mem.derive.params.pPassword = ns_mem.derive.password;
+    ns_mem.derive.params.ulPasswordLen = (CK_ULONG)(uintptr_t)nsPwdLen;
+    ns_mem.derive.mech.mechanism = CKM_PKCS5_PBKD2;
+    ns_mem.derive.mech.pParameter = &ns_mem.derive.params;
+    ns_mem.derive.mech.ulParameterLen = sizeof(ns_mem.derive.params);
+    ns_mem.derive.args.hSession = 1;
+    ns_mem.derive.args.pMechanism = &ns_mem.derive.mech;
+    ns_mem.derive.args.phKey = &ns_mem.derive.hKey;
+
+    rv = C_DeriveKey_nsc_call(&ns_mem.derive.args);
+    ck_assert_int_eq((int)rv, (int)CKR_OK);
+    /* The library saw the password and the length through secure memory. */
+    ck_assert_int_eq(stub_saw_secret, 1);
+    /* And the bounce buffers are scrubbed on the way out. */
+    ck_assert_int_eq(pool_has(secret_pwd, sizeof(secret_pwd)), 0);
+}
+END_TEST
+
+/*
+ * The legacy PBKDF2 length pointer is non-secure memory: a writer there
+ * (interrupt, DMA) can change it between two fetches. The veneer must
+ * use a single snapshot for both the password copy size and the length
+ * word the library sees, or the two desync. race_mutate flips the
+ * length during the address check; the invariant is that the secure
+ * length word equals the password copy allocation size.
+ */
+START_TEST(test_mech_legacy_pbkdf2_race_snapshot)
+{
+    CK_RV rv;
+    CK_ULONG *nsPwdLen;
+    size_t copy_size = 0;
+    int i;
+
+    reset_state();
+    memcpy(ns_mem.derive.password, secret_pwd, sizeof(secret_pwd));
+    nsPwdLen = (CK_ULONG *)(ns_mem.derive.password + sizeof(secret_pwd));
+    *nsPwdLen = sizeof(secret_pwd);
+    ns_mem.derive.params.saltSource = CKZ_DATA_SPECIFIED;
+    ns_mem.derive.params.iterations = 1000;
+    ns_mem.derive.params.prf = CKP_PKCS5_PBKD2_HMAC_SHA256;
+    ns_mem.derive.params.pPassword = ns_mem.derive.password;
+    ns_mem.derive.params.ulPasswordLen = (CK_ULONG)(uintptr_t)nsPwdLen;
+    ns_mem.derive.mech.mechanism = CKM_PKCS5_PBKD2;
+    ns_mem.derive.mech.pParameter = &ns_mem.derive.params;
+    ns_mem.derive.mech.ulParameterLen = sizeof(ns_mem.derive.params);
+    ns_mem.derive.args.hSession = 1;
+    ns_mem.derive.args.pMechanism = &ns_mem.derive.mech;
+    ns_mem.derive.args.phKey = &ns_mem.derive.hKey;
+
+    race_mutate = nsPwdLen;
+    rv = C_DeriveKey_nsc_call(&ns_mem.derive.args);
+    race_mutate = NULL;
+    ck_assert_int_eq((int)rv, (int)CKR_OK);
+
+    /* The stub captured the secure length word's value and the secure
+     * password copy pointer; the copy allocation size must match. */
+    for (i = 0; i < alloc_count; i++) {
+        if (alloc_ptrs[i] <= (void *)stub_pwd &&
+                (void *)stub_pwd <
+                    (void *)((uint8_t *)alloc_ptrs[i] + alloc_sizes[i])) {
+            copy_size = alloc_sizes[i];
+            break;
+        }
+    }
+    ck_assert_uint_eq(stub_secure_len, (CK_ULONG)copy_size);
+}
+END_TEST
+
 Suite *pkcs11_nsc_suite(void)
 {
     Suite *s = suite_create("pkcs11-nsc-zeroize");
@@ -309,6 +437,8 @@ Suite *pkcs11_nsc_suite(void)
 
     tcase_add_test(tc, test_create_object_value_zeroized);
     tcase_add_test(tc, test_mech_password_zeroized);
+    tcase_add_test(tc, test_mech_legacy_pbkdf2_password_len_bounced);
+    tcase_add_test(tc, test_mech_legacy_pbkdf2_race_snapshot);
     tcase_add_test(tc, test_tmpl_partial_alloc_no_garbage_free);
     suite_add_tcase(s, tc);
     return s;

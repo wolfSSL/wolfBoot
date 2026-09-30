@@ -486,10 +486,19 @@ static CK_RV nsc_mech_prepare(CK_MECHANISM_PTR ns, struct nsc_mech *m)
                         rv = CKR_ARGUMENTS_BAD;
                     }
                     else {
+                        /* Single snapshot of the NS length: the value read
+                         * here sizes the password copy and is what the
+                         * library sees, so a concurrent non-secure write
+                         * cannot desync the two. */
                         pwLen = *nsLen;
-                        rv = nsc_in(m, nsLen, sizeof(CK_ULONG), &q);
-                        if (rv == CKR_OK)
+                        q = nsc_alloc(m, sizeof(CK_ULONG));
+                        if (q == NULL) {
+                            rv = CKR_HOST_MEMORY;
+                        }
+                        else {
+                            *(CK_ULONG_PTR)q = pwLen;
                             legacy->ulPasswordLen = (CK_ULONG_PTR)q;
+                        }
                     }
                 }
                 else {
