@@ -892,6 +892,14 @@ jobs:
       config-file: ./config/examples/psoc_c3.config
       make-args: WOLFTPM=1 WOLFBOOT_TPM_I2C=1
 
+  # The same transport over the bit-banged back-end instead of the controller.
+  psoc_c3_tpm_i2c_bitbang_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3.config
+      make-args: WOLFTPM=1 WOLFBOOT_TPM_I2C=1 I2C_BITBANG=1
+
   # Builds the TIS-over-I2C transport itself, with no target port involved.
   sim_tpm_i2c_test:
     uses: ./.github/workflows/test-build.yml

@@ -1416,7 +1416,15 @@ ifeq ($(WOLFTPM),1)
   # transport would use the SPI offsets.
   ifeq ($(WOLFBOOT_TPM_I2C),1)
     CFLAGS+=-DWOLFBOOT_TPM_I2C -DWOLFTPM_I2C -DWOLFTPM_ADV_IO
-    WOLFCRYPT_OBJS+=hal/i2c/i2c_drv_$(I2C_TARGET).o
+    # The bit-banged back-end needs only two open-drain GPIOs, so it is the
+    # fallback where the controller is unavailable or not worth configuring.
+    ifeq ($(I2C_BITBANG),1)
+      CFLAGS+=-DI2C_BITBANG
+      WOLFCRYPT_OBJS+=hal/i2c/i2c_drv_bitbang.o
+      WOLFCRYPT_OBJS+=hal/i2c/i2c_bitbang_$(I2C_TARGET).o
+    else
+      WOLFCRYPT_OBJS+=hal/i2c/i2c_drv_$(I2C_TARGET).o
+    endif
   endif
   ifneq ($(SPI_FLASH),1)
     # don't use spi if we're using simulator, unless an explicit transport was

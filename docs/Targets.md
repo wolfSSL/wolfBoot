@@ -9111,6 +9111,10 @@ Two SCB back-ends ship with the target, both configured entirely through make op
 
 A TPM is added with `make WOLFTPM=1`, which uses the SPI back-end. Adding `WOLFBOOT_TPM_I2C=1` selects the I2C back-end and the TIS-over-I2C transport instead. CI builds both. See [docs/TPM.md](TPM.md) for the option itself.
 
+Adding `I2C_BITBANG=1` swaps the SCB controller for a bit-banged master on the same two pins, so the back-ends are interchangeable without rewiring. It needs only open-drain GPIO and is the fallback where a controller is unavailable, unreliable, or not worth configuring for the handful of transfers a bootloader makes. The bus rate is a spin count (`I2C_BITBANG_DELAY`) rather than a calibrated divider, so it varies with core clock; I2C has no minimum clock rate, so erring slow costs time and nothing else. Clock stretching is honoured, bounded by `I2C_BITBANG_STRETCH`.
+
+A target supplies the two pins by implementing the five functions in `hal/i2c/i2c_bitbang.h`; `hal/i2c/i2c_bitbang_psoc_c3.c` is the example.
+
 A TPM that offers both buses latches its choice from a strap while its own reset is low, so the host has to drive that strap before the part leaves reset rather than before the first transfer. `hal_init()` does this first, driving `PSOC_C3_TPM_SEL_PORT`/`_PIN` high for SPI and low for I2C; on the evaluation kit the strap arrives on mikroBUS INT, which is P7.7. A part left to its own pull-up comes up on SPI, so an I2C transport that never gets an acknowledgement is worth checking here before the bus timing.
 
 Every FIFO and bus wait in both drivers is bounded, so a device that is absent or unpowered makes `wolfBoot_tpm2_init()` report a failure rather than wedging the bootloader in a spin loop.

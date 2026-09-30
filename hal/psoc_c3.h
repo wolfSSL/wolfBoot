@@ -138,6 +138,8 @@
 /* GPIO: one 0x80 block per port. CFG holds 4 bits of drive mode per pin. */
 #define GPIO_PRT_OUT(p) \
     (*(volatile uint32_t *)(GPIO_BASE + ((uint32_t)(p) * 0x80UL) + 0x00UL))
+#define GPIO_PRT_IN(p) \
+    (*(volatile uint32_t *)(GPIO_BASE + ((uint32_t)(p) * 0x80UL) + 0x10UL))
 #define GPIO_PRT_CFG(p) \
     (*(volatile uint32_t *)(GPIO_BASE + ((uint32_t)(p) * 0x80UL) + 0x44UL))
 
