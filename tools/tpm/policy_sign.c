@@ -71,6 +71,8 @@ static int loadFile(const char* fname, byte** buf, size_t* bufLen)
         fprintf(stderr, "Error loading %s\n", fname);
         return BUFFER_E;
     }
+    /* Unbuffered: keep no libc-owned copy of the key material. */
+    setvbuf(fp, NULL, _IONBF, 0);
 
     fseek(fp, 0, SEEK_END);
     fileSz = ftell(fp);

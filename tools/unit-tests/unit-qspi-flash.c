@@ -18,6 +18,9 @@ static int write_enable_call_count;
 static int write_enable_status_seq[8];
 static int current_write_enable_call;
 static int read_call_count;
+static uint8_t sr2_value;
+static uint8_t sr2_written;
+static int sr2_write_count;
 
 void spi_init(int polarity, int phase)
 {
@@ -64,6 +67,21 @@ int qspi_transfer(uint8_t fmode, const uint8_t cmd,
         return 0;
     }
 
+    if (cmd == READ_SR2_CMD) {
+        ck_assert_ptr_nonnull(data);
+        ck_assert_uint_ge(dataSz, 1);
+        data[0] = sr2_value;
+        return 0;
+    }
+
+    if (cmd == WRITE_SR2_CMD) {
+        ck_assert_ptr_nonnull(data);
+        ck_assert_uint_ge(dataSz, 1);
+        sr2_written = data[0];
+        sr2_write_count++;
+        return 0;
+    }
+
     if (cmd == FLASH_WRITE_CMD) {
         ck_assert_int_lt(program_call_count, (int)(sizeof(program_sizes) / sizeof(program_sizes[0])));
         program_sizes[program_call_count] = dataSz;
@@ -91,6 +109,9 @@ static void setup(void)
     current_write_enable_call = 0;
     memset(write_enable_status_seq, 0, sizeof(write_enable_status_seq));
     read_call_count = 0;
+    sr2_value = 0;
+    sr2_written = 0;
+    sr2_write_count = 0;
 }
 
 START_TEST(test_qspi_write_splits_last_page_to_remaining_bytes)
@@ -193,6 +214,27 @@ START_TEST(test_qspi_write_rejects_transfer_extending_past_device_size)
 }
 END_TEST
 
+START_TEST(test_qspi_quad_enable_preserves_status_bits)
+{
+    int ret;
+
+    /* QE clear, other SR2 bits set (SUS): the enable write must be a
+     * read-modify-write, not a zeroed register with only the QE bit. */
+    sr2_value = 0x80;
+    ret = qspi_quad_enable();
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(sr2_write_count, 1);
+    ck_assert_uint_eq(sr2_written, 0x80 | FLASH_SR2_QE);
+
+    /* QE already set: no write at all */
+    sr2_value = FLASH_SR2_QE;
+    sr2_write_count = 0;
+    ret = qspi_quad_enable();
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(sr2_write_count, 0);
+}
+END_TEST
+
 static Suite *qspi_flash_suite(void)
 {
     Suite *s;
@@ -205,6 +247,7 @@ static Suite *qspi_flash_suite(void)
     tcase_add_test(tc, test_qspi_write_clips_first_page_at_page_boundary);
     tcase_add_test(tc, test_qspi_write_stops_after_midloop_write_enable_failure);
     tcase_add_test(tc, test_qspi_read_rejects_address_at_device_size);
+    tcase_add_test(tc, test_qspi_quad_enable_preserves_status_bits);
     tcase_add_test(tc, test_qspi_read_rejects_transfer_extending_past_device_size);
     tcase_add_test(tc, test_qspi_write_rejects_transfer_extending_past_device_size);
     suite_add_tcase(s, tc);

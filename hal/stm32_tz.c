@@ -463,6 +463,19 @@ void hal_trng_fini(void)
     TRNG_CR &= (~TRNG_CR_RNGEN);
 }
 
+/* Scrub the staging buffer without depending on wolfCrypt: the hal
+ * layer is linked into builds (e.g. the OTP keystore primer) that have
+ * no wolfCrypt. The volatile loop also keeps the compiler from eliding
+ * the dead store. */
+static void trng_scrub(uint8_t *p, unsigned int len)
+{
+    volatile uint8_t *v = (volatile uint8_t *)p;
+    unsigned int i;
+
+    for (i = 0; i < len; i++)
+        v[i] = 0;
+}
+
 int hal_trng_get_entropy(unsigned char *out, unsigned len)
 {
     unsigned i;
@@ -477,6 +490,9 @@ int hal_trng_get_entropy(unsigned char *out, unsigned len)
         else
             memcpy(out + i, &rand_seed, 4);
     }
+    /* Raw TRNG output seeds the FIPS Hash-DRBG: do not leave the last
+     * word on the stack for a later frame to observe. */
+    trng_scrub((uint8_t *)&rand_seed, sizeof(rand_seed));
     return 0;
 }
 

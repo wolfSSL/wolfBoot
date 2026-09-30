@@ -275,8 +275,9 @@ static uint8_t erased_trailer[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 
 static uint8_t* get_trailer_at(uint8_t part, uint32_t at)
 {
-    //ck_assert_uint_lt(part, PART_TOTAL_IDS);
-    if (part >= PART_TOTAL_IDS)
+    /* Match the real get_trailer_at(): only BOOT and UPDATE have a
+     * trailer, every other part (SWAP, SELF, unknown) maps to NULL. */
+    if (part != PART_BOOT && part != PART_UPDATE)
         return NULL;
     if (at == 1)
         mock_state[part].getstate_called++;
@@ -355,6 +356,22 @@ START_TEST(test_wolfBoot_get_partition_state_rejects_erased_magic)
 }
 END_TEST
 
+START_TEST(test_wolfBoot_get_partition_state_rejects_unknown_part)
+{
+    uint8_t st = 0x0D;
+
+    mock_reset_partition_states();
+
+    /* Parts without a trailer must be rejected, not dereferenced:
+     * the real get_trailer_at() returns NULL for them, and the NSC
+     * veneer passes non-secure part bytes straight in. */
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_SWAP, &st), -1);
+    ck_assert_int_eq(wolfBoot_get_partition_state(0x10, &st), -1);
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_NONE, &st), -1);
+    ck_assert_uint_eq(st, 0x0D);
+}
+END_TEST
+
 START_TEST(test_wolfBoot_misc_utils)
 {
     uint16_t word2 = 0xA0B1;
@@ -388,6 +405,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_wolfBoot_set_partition_state, test_wolfBoot_set_partition_state);
     tcase_add_test(tcase_wolfBoot_set_partition_state,
         test_wolfBoot_get_partition_state_rejects_erased_magic);
+    tcase_add_test(tcase_wolfBoot_set_partition_state,
+        test_wolfBoot_get_partition_state_rejects_unknown_part);
     suite_add_tcase(s, tcase_wolfBoot_set_partition_state);
     
     TCase* tcase_wolfBoot_misc_utils = tcase_create("wolfBoot_misc_utils");

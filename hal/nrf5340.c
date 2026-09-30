@@ -181,6 +181,7 @@ static void hal_spu_init(void)
 }
 
 #ifdef WOLFCRYPT_SECURE_MODE
+
 static uint32_t cryptocell_enable_prev = 0;
 
 void hal_trng_init(void)
@@ -208,6 +209,19 @@ void hal_trng_fini(void)
     CRYPTOCELL_ENABLE = cryptocell_enable_prev;
 }
 
+/* Scrub the staging buffer without depending on wolfCrypt: the hal
+ * layer is linked into builds (e.g. the OTP keystore primer) that have
+ * no wolfCrypt. The volatile loop also keeps the compiler from eliding
+ * the dead store. */
+static void trng_scrub(uint8_t *p, unsigned int len)
+{
+    volatile uint8_t *v = (volatile uint8_t *)p;
+    unsigned int i;
+
+    for (i = 0; i < len; i++)
+        v[i] = 0;
+}
+
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
     unsigned int i = 0;
@@ -225,6 +239,9 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
         for (byte = 0; byte < 4 * CC_RNG_EHR_DATA_LEN && i < len; byte++) {
             out[i++] = (unsigned char)data_bytes[byte];
         }
+        /* Raw TRNG output seeds the FIPS Hash-DRBG: do not leave the last
+         * batch on the stack for a later frame to observe. */
+        trng_scrub(data_bytes, 4 * CC_RNG_EHR_DATA_LEN);
     }
 
     return 0;

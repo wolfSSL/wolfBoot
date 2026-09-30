@@ -332,7 +332,7 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
             WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
 #else
         addrErase = (uint8_t *)WOLFBOOT_PARTITION_UPDATE_ADDRESS +
-            WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE;
+            WOLFBOOT_PARTITION_UPDATE_SIZE - WOLFBOOT_SECTOR_SIZE;
 #endif
     }
 
@@ -740,7 +740,7 @@ int RAMFUNCTION wolfBoot_set_partition_state(uint8_t part, uint8_t newst)
 {
     uint32_t *magic;
     uint8_t *state;
-    if (part == PART_NONE)
+    if (part != PART_BOOT && part != PART_UPDATE)
         return -1;
     magic = get_partition_magic(part);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)
@@ -797,7 +797,7 @@ int RAMFUNCTION wolfBoot_get_partition_state(uint8_t part, uint8_t *st)
 {
     uint32_t *magic;
     uint8_t *state;
-    if (part == PART_NONE)
+    if (part != PART_BOOT && part != PART_UPDATE)
         return -1;
     magic = get_partition_magic(part);
     if (*magic != WOLFBOOT_MAGIC_TRAIL)

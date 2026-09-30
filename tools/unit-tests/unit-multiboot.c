@@ -285,8 +285,10 @@ END_TEST
 /* ---- Group 4: mb2_build_boot_info_header ---- */
 
 /* Helper: build a mb2 header + info_req tag requesting one tag type,
- * followed by a terminator.  buf must be >= 48 bytes and 8-byte aligned. */
-static void build_header_with_info_req(uint8_t *buf, uint32_t req_type)
+ * followed by a terminator.  buf must be >= 48 bytes and 8-byte aligned.
+ * Requested types are 32-bit values per the Multiboot2 spec. */
+static void build_header_with_info_req(uint8_t *buf, uint16_t req_type,
+                                       uint16_t flags)
 {
     struct mb2_header *h = (struct mb2_header *)buf;
     struct mb2_tag_info_req *info;
@@ -301,8 +303,8 @@ static void build_header_with_info_req(uint8_t *buf, uint32_t req_type)
     /* Info request tag at offset 16 */
     info = (struct mb2_tag_info_req *)(buf + 16);
     info->type = 1; /* MB2_TAG_TYPE_INFO_REQ */
-    info->flags = 0;
-    info->size = 12; /* 8 + one uint32_t */
+    info->flags = flags;
+    info->size = 12; /* 8 + one 32-bit request */
     info->mbi_tag_types[0] = req_type;
 
     /* Terminator at offset 32 (12 bytes rounded up to 8-byte alignment) */
@@ -334,13 +336,26 @@ START_TEST(test_build_info_no_info_req_tag)
     memset(header, 0, sizeof(header));
     h->magic = MB2_MAGIC;
     h->header_length = sizeof(struct mb2_header) + 8; /* header + terminator */
-    /* Only a terminator tag — no info request */
+    /* Only a terminator tag - no info request. The tag is optional per
+     * the Multiboot2 spec: the header requests nothing and must be
+     * accepted. */
     t = (struct mb2_tag *)(header + sizeof(struct mb2_header));
     t->type = 0; t->flags = 0; t->size = 8;
 
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, NULL,
-                                   sizeof(boot_info)), -1);
+                                   sizeof(boot_info)), 0);
+}
+END_TEST
+
+START_TEST(test_build_info_optional_unsupported_tag_skipped)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    uint8_t boot_info[256];
+    build_header_with_info_req(header, 99, 1); /* unknown type, optional */
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, NULL,
+                                   sizeof(boot_info)), 0);
 }
 END_TEST
 
@@ -348,15 +363,50 @@ START_TEST(test_build_info_unsupported_tag)
 {
     uint8_t header[48] __attribute__((aligned(8)));
     uint8_t boot_info[256];
-    build_header_with_info_req(header, 99); /* unknown type */
+    build_header_with_info_req(header, 99, 0); /* unknown type, mandatory */
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, NULL,
                                    sizeof(boot_info)), -1);
 }
 END_TEST
 
-/* Bug 2: info_req tag with size < sizeof(struct mb2_tag) is rejected by the
- * size guard in mb2_find_tag_by_type, so the tag is never found. */
+/* The spec encodes the requested tag types as 32-bit values; two
+ * requests in one tag must both be honoured. */
+START_TEST(test_build_info_two_requests_32bit)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    uint8_t boot_info[512] __attribute__((aligned(8)));
+    struct stage2_parameter p = make_stage2();
+    struct mb2_tag_info_req *info;
+    struct mb2_tag *t;
+    struct mock_mem_region regions[] = {
+        {0, 640 * 1024, EFI_RESOURCE_SYSTEM_MEMORY},
+        {0x100000, 127ULL * 1024 * 1024, EFI_RESOURCE_SYSTEM_MEMORY}
+    };
+
+    mock_regions = regions;
+    mock_region_count = 2;
+    build_header_with_info_req(header, 4, 0);
+    info = (struct mb2_tag_info_req *)(header + 16);
+    info->size = 16; /* 8 + two 32-bit requests */
+    info->mbi_tag_types[1] = 6; /* MB2_REQ_TAG_MEM_MAP */
+    memset(boot_info, 0, sizeof(boot_info));
+
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, &p,
+                                   sizeof(boot_info)), 0);
+    t = (struct mb2_tag *)(boot_info + sizeof(struct mb2_boot_info_header));
+    ck_assert_uint_eq(t->type, 4);
+    t = (struct mb2_tag *)mb2_align_address_up((uint8_t *)t + t->size, 8);
+    ck_assert_uint_eq(t->type, 6);
+
+    mock_regions = NULL;
+    mock_region_count = 0;
+}
+END_TEST
+
+/* A present info_req tag shorter than its fixed fields is corrupt, not
+ * absent: the header must be rejected. */
 START_TEST(test_build_info_malformed_size)
 {
     uint8_t header[48] __attribute__((aligned(8)));
@@ -380,10 +430,38 @@ START_TEST(test_build_info_malformed_size)
     term = (struct mb2_tag *)(header + 24);
     term->type = 0; term->flags = 0; term->size = 8;
 
-    /* Malformed tag is skipped, info_req not found → returns -1 */
+    /* The tag is present but shorter than its fixed fields: corrupt,
+     * not absent, so the header is rejected. */
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, NULL,
                                     sizeof(boot_info)), -1);
+}
+END_TEST
+
+/* A malformed tag anywhere in the list corrupts the walk: the header
+ * must be rejected even when the info request tag itself is absent. */
+START_TEST(test_build_info_malformed_other_tag)
+{
+    uint8_t header[48] __attribute__((aligned(8)));
+    uint8_t boot_info[256];
+    struct mb2_header *h = (struct mb2_header *)header;
+    struct mb2_tag *bad;
+
+    memset(header, 0, sizeof(header));
+    h->magic = MB2_MAGIC;
+    h->architecture = 0;
+    h->header_length = 40;
+    h->checksum = 0;
+
+    /* A type-6 (memory map) tag with an impossibly small size */
+    bad = (struct mb2_tag *)(header + 16);
+    bad->type = 6;
+    bad->flags = 0;
+    bad->size = 4;
+
+    ck_assert_int_eq(
+        mb2_build_boot_info_header(boot_info, header, NULL,
+                                   sizeof(boot_info)), -1);
 }
 END_TEST
 
@@ -707,7 +785,7 @@ START_TEST(test_build_info_basic_mem)
     mock_regions = regions;
     mock_region_count = 2;
 
-    build_header_with_info_req(header, 4);
+    build_header_with_info_req(header, 4, 0);
     memset(boot_info, 0, sizeof(boot_info));
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, &p,
@@ -750,7 +828,7 @@ START_TEST(test_build_info_mem_map)
     mock_regions = regions;
     mock_region_count = 1;
 
-    build_header_with_info_req(header, 6);
+    build_header_with_info_req(header, 6, 0);
     memset(boot_info, 0, sizeof(boot_info));
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, &p,
@@ -815,7 +893,7 @@ START_TEST(test_build_info_end_tag_walk)
     info = (struct mb2_tag_info_req *)(header + 16);
     info->type = 1;
     info->flags = 0;
-    info->size = 16; /* 8 + two uint32_t */
+    info->size = 16; /* 8 + two 32-bit requests */
     info->mbi_tag_types[0] = 4; /* MB2_REQ_TAG_BASIC_MEM_INFO */
     info->mbi_tag_types[1] = 6; /* MB2_REQ_TAG_MEM_MAP */
     term = (struct mb2_tag *)(header + 32);
@@ -895,8 +973,11 @@ Suite *wolfboot_suite(void)
     TCase *tc_build = tcase_create("mb2_build_boot_info_header");
     tcase_add_test(tc_build, test_build_info_max_size_too_small);
     tcase_add_test(tc_build, test_build_info_no_info_req_tag);
+    tcase_add_test(tc_build, test_build_info_optional_unsupported_tag_skipped);
     tcase_add_test(tc_build, test_build_info_unsupported_tag);
+    tcase_add_test(tc_build, test_build_info_two_requests_32bit);
     tcase_add_test(tc_build, test_build_info_malformed_size);
+    tcase_add_test(tc_build, test_build_info_malformed_other_tag);
     tcase_add_test(tc_build, test_build_info_header_length_underflow);
     tcase_add_test(tc_build, test_build_info_header_length_overflow);
     tcase_add_test(tc_build, test_dump_header_length_underflow);

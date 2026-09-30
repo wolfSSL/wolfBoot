@@ -280,7 +280,6 @@ static int qspi_quad_enable(void)
     if (ret == 0 && (data[0] & QE_SR_BIT) == 0) {
         ret = qspi_write_enable();
         if (ret == 0) {
-            memset(data, 0, sizeof(data));
             data[0] |= QE_SR_BIT;
             ret = qspi_command_simple(QSPI_MODE_WRITE, QE_SR_WRITE, data, 1);
 #ifdef DEBUG_QSPI
