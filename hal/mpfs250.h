@@ -56,7 +56,7 @@
 #define MPFS_CPU_FREQ_RESET_MHZ     80U
 #endif
 
-/* Full-DDRC-reinit attempts in hal_init() (per-attempt failure rate ~30%). */
+/* Full-DDRC-reinit attempts in hal_init(). */
 #ifndef MPFS_DDR_MAX_OUTER_RETRY
 #define MPFS_DDR_MAX_OUTER_RETRY    6U
 #endif
@@ -413,6 +413,19 @@ typedef struct {
  * No UL suffix: also used from assembly (boot_riscv_start.S). */
 #define MPFS_DTIM_MAIN_STARTED_ADDR 0x010000F0
 
+/* DTIM bytes hal_init() zeroes at boot (SBI shared block + hart mailboxes). */
+#define MPFS_DTIM_BOOT_CLEAR_SIZE   0x200U
+/* DTIM pair (count, ~count) just above the cleared block, so it survives an
+ * MSS reset: DDR training restarts by reset since the last accepted training. */
+#define MPFS_DTIM_DDR_RESET_CNT_ADDR (0x01000000UL + MPFS_DTIM_BOOT_CLEAR_SIZE)
+#ifndef MPFS_DDR_EYE_RESET_MAX
+#define MPFS_DDR_EYE_RESET_MAX      5U
+#endif
+/* Minimum per-lane DQ/DQS window, HSS DQ_DQS_NUM_TAPS. */
+#ifndef MPFS_DDR_EYE_MIN_TAPS
+#define MPFS_DDR_EYE_MIN_TAPS       5U
+#endif
+
 /* Number of harts on MPFS */
 #define MPFS_NUM_HARTS              5
 #define MPFS_FIRST_HART             0   /* E51 is hart 0 */
@@ -569,7 +582,25 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define PHY_TRAINING_START          0x810
 #define PHY_TRAINING_STATUS         0x814
 #define PHY_TRAINING_RESET          0x818
-#define PHY_TIP_CFG                 0x828
+/* Per-lane TIP status, selected via PHY_LANE_SELECT.  Offsets taken from
+ * CFG_DDR_SGMII_PHY_TypeDef in mss_ddr_sgmii_phy_defs.h. */
+#define PHY_GT_ERR_COMB             0x81C
+#define PHY_GT_CLK_SEL              0x820
+#define PHY_GT_TXDLY                0x824
+#define PHY_GT_STEPS_180            0x828
+#define PHY_GT_STATE                0x82C
+#define PHY_WL_DELAY_0              0x830
+#define PHY_DQ_DQS_ERR_DONE         0x834
+#define PHY_DQDQS_WINDOW            0x838   /* [7:0] left, [15:8] right edge */
+#define PHY_DQDQS_STATE             0x83C
+#define PHY_DELTA0                  0x840
+#define PHY_DELTA1                  0x844
+#define PHY_DQDQS_STATUS1           0x84C
+#define PHY_DQDQS_STATUS2           0x850
+#define PHY_ADDCMD_STATUS0          0x864
+#define PHY_ADDCMD_STATUS1          0x868
+#define PHY_ADDCMD_ANSWER           0x86C
+#define PHY_IOC_REG5                0x218   /* SRO slew readback */
 #define PHY_TIP_CFG_PARAMS          0x8D0
 #define PHY_EXPERT_MODE_EN          0x878
 #define PHY_EXPERT_DLYCNT_MOVE0     0x87C

@@ -852,7 +852,7 @@ void hal_init(void)
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
     /* Clear the DTIM-resident cross-hart state (start mailboxes + SBI
      * shared block): DTIM content is undefined at power-on. */
-    for (k = 0; k < (0x200U / sizeof(uint32_t)); k++) {
+    for (k = 0; k < (MPFS_DTIM_BOOT_CLEAR_SIZE / sizeof(uint32_t)); k++) {
         dtim[k] = 0;
     }
     __asm__ volatile("fence iorw, iorw" ::: "memory");
@@ -929,12 +929,8 @@ void hal_init(void)
 #ifdef MPFS_DDR_INIT
     /* Bring up LPDDR4 before any DDR-resident operations.
      *
-     * Outer retry loop: each call to mpfs_ddr_init() does a SYSREG DDRC
-     * soft-reset pulse, which clears the MTC engine state.  If the
-     * inner retry inside mpfs_ddr_init() exhausts (typically because
-     * MTC wedged after the first failure), come back here for a full
-     * controller re-init.  Empirical: per-attempt failure rate ~30%, so
-     * MPFS_DDR_MAX_OUTER_RETRY (6) outer attempts cover ~99.9% of boots. */
+     * Each mpfs_ddr_init() call pulses the SYSREG DDRC soft reset; a rejected
+     * training only recovers through this full controller re-init. */
     for (outer_retry = 0; outer_retry < MPFS_DDR_MAX_OUTER_RETRY;
          outer_retry++) {
         if (outer_retry > 0) {
