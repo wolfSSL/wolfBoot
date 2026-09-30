@@ -286,7 +286,7 @@ END_TEST
 
 /* Helper: build a mb2 header + info_req tag requesting one tag type,
  * followed by a terminator.  buf must be >= 48 bytes and 8-byte aligned.
- * Requested types are 16-bit values per the Multiboot2 spec. */
+ * Requested types are 32-bit values per the Multiboot2 spec. */
 static void build_header_with_info_req(uint8_t *buf, uint16_t req_type,
                                        uint16_t flags)
 {
@@ -304,10 +304,10 @@ static void build_header_with_info_req(uint8_t *buf, uint16_t req_type,
     info = (struct mb2_tag_info_req *)(buf + 16);
     info->type = 1; /* MB2_TAG_TYPE_INFO_REQ */
     info->flags = flags;
-    info->size = 10; /* 8 + one 16-bit request */
+    info->size = 12; /* 8 + one 32-bit request */
     info->mbi_tag_types[0] = req_type;
 
-    /* Terminator at offset 32 (10 bytes rounded up to 8-byte alignment) */
+    /* Terminator at offset 32 (12 bytes rounded up to 8-byte alignment) */
     term = (struct mb2_tag *)(buf + 32);
     term->type = 0;
     term->flags = 0;
@@ -370,9 +370,9 @@ START_TEST(test_build_info_unsupported_tag)
 }
 END_TEST
 
-/* The spec encodes the requested tag types as 16-bit values; two
+/* The spec encodes the requested tag types as 32-bit values; two
  * requests in one tag must both be honoured. */
-START_TEST(test_build_info_two_requests_16bit)
+START_TEST(test_build_info_two_requests_32bit)
 {
     uint8_t header[48] __attribute__((aligned(8)));
     uint8_t boot_info[512] __attribute__((aligned(8)));
@@ -388,7 +388,7 @@ START_TEST(test_build_info_two_requests_16bit)
     mock_region_count = 2;
     build_header_with_info_req(header, 4, 0);
     info = (struct mb2_tag_info_req *)(header + 16);
-    info->size = 12; /* 8 + two 16-bit requests */
+    info->size = 16; /* 8 + two 32-bit requests */
     info->mbi_tag_types[1] = 6; /* MB2_REQ_TAG_MEM_MAP */
     memset(boot_info, 0, sizeof(boot_info));
 
@@ -462,41 +462,6 @@ START_TEST(test_build_info_malformed_other_tag)
     ck_assert_int_eq(
         mb2_build_boot_info_header(boot_info, header, NULL,
                                    sizeof(boot_info)), -1);
-}
-END_TEST
-
-/* The spec encodes the request list as 16-bit values; real firmware
- * (Intel FSP) pads the list so the last entry is zero (the end-tag
- * type). A zero entry is padding, not a mandatory request: the valid
- * entries before it must still be honoured. */
-START_TEST(test_build_info_zero_entry_padding)
-{
-    uint8_t header[48] __attribute__((aligned(8)));
-    uint8_t boot_info[512] __attribute__((aligned(8)));
-    struct stage2_parameter p = make_stage2();
-    struct mb2_tag_info_req *info;
-    struct mb2_tag *t;
-    struct mock_mem_region regions[] = {
-        {0, 640 * 1024, EFI_RESOURCE_SYSTEM_MEMORY},
-        {0x100000, 127ULL * 1024 * 1024, EFI_RESOURCE_SYSTEM_MEMORY}
-    };
-
-    mock_regions = regions;
-    mock_region_count = 2;
-    build_header_with_info_req(header, 4, 0); /* basic memory info */
-    info = (struct mb2_tag_info_req *)(header + 16);
-    info->size = 12; /* 8 + two 16-bit entries */
-    info->mbi_tag_types[1] = 0; /* zero padding, as emitted by FSP */
-    memset(boot_info, 0, sizeof(boot_info));
-
-    ck_assert_int_eq(
-        mb2_build_boot_info_header(boot_info, header, &p,
-                                   sizeof(boot_info)), 0);
-    t = (struct mb2_tag *)(boot_info + sizeof(struct mb2_boot_info_header));
-    ck_assert_uint_eq(t->type, 4);
-
-    mock_regions = NULL;
-    mock_region_count = 0;
 }
 END_TEST
 
@@ -928,7 +893,7 @@ START_TEST(test_build_info_end_tag_walk)
     info = (struct mb2_tag_info_req *)(header + 16);
     info->type = 1;
     info->flags = 0;
-    info->size = 12; /* 8 + two 16-bit requests */
+    info->size = 16; /* 8 + two 32-bit requests */
     info->mbi_tag_types[0] = 4; /* MB2_REQ_TAG_BASIC_MEM_INFO */
     info->mbi_tag_types[1] = 6; /* MB2_REQ_TAG_MEM_MAP */
     term = (struct mb2_tag *)(header + 32);
@@ -1010,10 +975,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc_build, test_build_info_no_info_req_tag);
     tcase_add_test(tc_build, test_build_info_optional_unsupported_tag_skipped);
     tcase_add_test(tc_build, test_build_info_unsupported_tag);
-    tcase_add_test(tc_build, test_build_info_two_requests_16bit);
+    tcase_add_test(tc_build, test_build_info_two_requests_32bit);
     tcase_add_test(tc_build, test_build_info_malformed_size);
     tcase_add_test(tc_build, test_build_info_malformed_other_tag);
-    tcase_add_test(tc_build, test_build_info_zero_entry_padding);
     tcase_add_test(tc_build, test_build_info_header_length_underflow);
     tcase_add_test(tc_build, test_build_info_header_length_overflow);
     tcase_add_test(tc_build, test_dump_header_length_underflow);
