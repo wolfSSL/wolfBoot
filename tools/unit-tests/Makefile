@@ -255,6 +255,7 @@ run: $(TESTS)
 	python3 unit-delta-sector-align.py || exit 1
 	python3 unit-elf-scatter-db-build.py || exit 1
 	python3 unit-image-wolfhsm-client-build.py || exit 1
+	python3 unit-update-flash-diag-build.py || exit 1
 	python3 unit-x86-fsp-stage1auth-build.py || exit 1
 	python3 unit-sign-custom-tlv-le.py || exit 1
 	python3 unit-sign-custom-tlv-large.py || exit 1
@@ -960,6 +961,16 @@ unit-update-flash-delta-misalign: ../../include/target.h unit-update-flash.c
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-elf-scatter-db: ../../include/target.h unit-update-flash.c FORCE
+	gcc -c -o /dev/null unit-update-flash.c $(CFLAGS)
+
+unit-update-flash-diag-build:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_PERSIST_FAILURE_STATUS \
+	-DWOLFBOOT_DIAGNOSTICS_ADDRESS=0xD0000000 -DWOLFBOOT_DIAGNOSTICS_SECTORS=2 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-diag-build: ../../include/target.h unit-update-flash.c FORCE
 	gcc -c -o /dev/null unit-update-flash.c $(CFLAGS)
 
 unit-image-wolfhsm-client-build:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFHSM) \

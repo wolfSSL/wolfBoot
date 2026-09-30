@@ -963,7 +963,7 @@ static void RAMFUNCTION wolfBoot_record_verify_failure(uint8_t phase,
         cause = WOLFBOOT_FAILURE_CAUSE_HASH;
     else
         cause = WOLFBOOT_FAILURE_CAUSE_SIGNATURE;
-    version = img->hdr_ok ? wolfBoot_get_blob_version(img->hdr) : 0;
+    version = img->hdr_ok ? wolfBoot_get_image_version(part) : 0;
     wolfBoot_record_failure(phase, cause, part, version);
 }
 #endif
