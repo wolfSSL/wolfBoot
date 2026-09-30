@@ -76,7 +76,7 @@ ifeq ($(ARCH),AARCH64)
     # Skip the bare-metal reset (boot_aarch64_start.S) and EL2/GIC glue.
     OBJS+=src/boot_aarch64_efi.o
   else
-    OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o
+    OBJS+=src/boot_aarch64.o src/boot_aarch64_start.o src/boot_aarch64_cache.o
   endif
 
   ifeq ($(TARGET),zynq)
@@ -309,6 +309,61 @@ ifeq ($(ARCH),AARCH64)
     endif
   endif
 
+  ifeq ($(TARGET),imx95_a55)
+    # NXP i.MX95 Cortex-A55 cluster, running as BL33 in AHAB container 2.
+    # -mstrict-align because this stage runs with the MMU off, so every access
+    # is Device-nGnRnE and unaligned ones fault.
+    ARCH_FLAGS=-mcpu=cortex-a55+crypto -march=armv8.2-a+crypto -mstrict-align
+    CFLAGS+=$(ARCH_FLAGS) -DCORTEX_A55
+    LDFLAGS+=$(ARCH_FLAGS)
+    # BL31 loads and enters this image here; must match ORIGIN in
+    # hal/imx95_a55.ld and IMX95_BL33_BASE in hal/imx95_a55.h.
+    WOLFBOOT_ORIGIN=0x90200000
+    # Console, SCMI client and uSDHC driver all live in hal/imx95_a55.c, so none
+    # needs its own object; the switches below pick which paths compile in.
+    # Bring-up aid: print the entry EL, SCTLR and handoff x0 that BL31 passed.
+    ifeq ($(IMX95_HANDOFF_DUMP),1)
+      CFLAGS+=-DIMX95_HANDOFF_DUMP
+    endif
+    # i.MX95 is GICv3 and BL31 already configured it. EL2_HYPERVISOR is not a
+    # generic options.mk variable, so it is emitted here as tegra234 does.
+    ifeq ($(EL2_HYPERVISOR),1)
+      CFLAGS+=-DEL2_HYPERVISOR=1
+    endif
+    # i.MX uSDHC is not SDHCI-compatible: skip src/sdhci.c, use our driver.
+    ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+      DISK_DRIVER=usdhc
+      # SCMI cold-init of uSDHC2 (clock+pinmux) when no prior stage did it.
+      ifeq ($(IMX95_SCMI_COLD_INIT),1)
+        CFLAGS+=-DIMX95_SCMI_COLD_INIT
+      endif
+    endif
+    # SCMI M7 power-on + TCM ECC scrub (U-Boot's power_on_m7 equivalent) for a
+    # Cortex-M7 that Linux launches later. Independent of the disk driver.
+    ifeq ($(IMX95_INIT_M7),1)
+      CFLAGS+=-DIMX95_INIT_M7
+    endif
+    # One-shot diagnostic: read the AHAB container out of the eMMC boot
+    # partitions and report it, from inside an image that boots from SD.
+    ifeq ($(IMX95_EMMC_PROBE),1)
+      CFLAGS+=-DIMX95_EMMC_PROBE
+      OBJS+=hal/imx95_ahab.o
+    endif
+    # Mirror the console into a DDR ring that survives the handoff to Linux.
+    ifeq ($(IMX95_LOG_RING),1)
+      CFLAGS+=-DIMX95_LOG_RING
+    endif
+    # Stage 1 and BL33 must agree on where the ring lives, and both read this
+    # from arch.mk, which stage1/Makefile includes.
+    ifneq ($(IMX95_LOG_RING_BASE),)
+      CFLAGS+=-DIMX95_LOG_RING_BASE=$(IMX95_LOG_RING_BASE)
+    endif
+    # Verbose per-step trace of the SCMI cold-init and SD bring-up.
+    ifeq ($(IMX95_SCMI_DEBUG),1)
+      CFLAGS+=-DIMX95_SCMI_DEBUG
+    endif
+  endif
+
   ifeq ($(TARGET),cm4)
     # Raspberry Pi Compute Module 4 - Broadcom BCM2711, Cortex-A72
     ARCH_FLAGS=-mcpu=cortex-a72+crypto -march=armv8-a+crypto -mtune=cortex-a72
@@ -335,7 +390,7 @@ ifeq ($(ARCH),AARCH64)
   # asm (sp_arm64.c / WOLFSSL_SP_ARM64_ASM); that is enabled independently on
   # __aarch64__ in include/user_settings.h, so a non-FIPS cm4 build still links
   # sp_arm64 asm.
-  ifeq ($(filter zynq versal nxp_ls1028a,$(TARGET)),)
+  ifeq ($(filter zynq versal nxp_ls1028a imx95_a55,$(TARGET)),)
     NO_ARM_ASM?=1
   endif
 

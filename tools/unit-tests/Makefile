@@ -73,6 +73,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-cm4-sdhci unit-cm4-rauc-slot \
+       unit-imx95-ahab \
        unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
        unit-sign-header-failure \
@@ -791,6 +792,10 @@ unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
 	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
+unit-imx95-ahab: ../../include/target.h unit-imx95-ahab.c
+	gcc -o $@ unit-imx95-ahab.c $(CFLAGS) -I../.. -ffunction-sections \
+		-fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-cm4-rauc-slot: ../../include/target.h unit-cm4-rauc-slot.c ../../src/ubootenv.c
 	gcc -o $@ unit-cm4-rauc-slot.c ../../src/ubootenv.c $(CFLAGS) -I../.. \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
@@ -1366,15 +1371,18 @@ versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 # The anchors are literal source lines, so a refactor can move them. "test -s"
 # catches an anchor that stops matching, but not a range that still matches
 # and silently truncates, so each rule also asserts the entry points its test
-# drives are present.
+# drives are present. Two details of that form matter: the assertion exits
+# rather than returning false, since a false in a for-body is discarded by the
+# next iteration's status and only the last item would fail the build; and it
+# matches the call syntax, since a bare name still matches a renamed one.
 imx8qm_usdhc_extract.h: ../../hal/imx8qm.c
 	sed -n '/^#ifndef CADENCE_SRS_OFFSET$$/,/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/p' $< \
 	    | sed '/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/d' > $@
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted shim"; false; }
-	@for f in sdhci_reg_read sdhci_reg_write sdhci_platform_init \
-	          sdhci_platform_set_clock; do \
-	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole shim"; false; }; \
+	@for f in 'sdhci_reg_read(' 'sdhci_reg_write(' 'sdhci_platform_init(' \
+	          'sdhci_platform_set_clock('; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole shim"; exit 1; }; \
 	done
 
 unit-imx8qm-usdhc-shim: unit-imx8qm-usdhc-shim.c imx8qm_usdhc_extract.h
@@ -1388,9 +1396,9 @@ imx8qm_flexspi_extract.h: ../../hal/imx8qm.c
 	    | sed '/^#endif \/\* EXT_FLASH \*\/$$/d' > $@
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted driver"; false; }
-	@for f in flexspi_init ext_flash_read ext_flash_write ext_flash_erase \
-	          ext_flash_unlock; do \
-	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole driver"; false; }; \
+	@for f in 'flexspi_init(' 'ext_flash_read(' 'ext_flash_write(' \
+	          'ext_flash_erase(' 'ext_flash_unlock('; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole driver"; exit 1; }; \
 	done
 
 unit-imx8qm-flexspi-write: unit-imx8qm-flexspi-write.c imx8qm_flexspi_extract.h

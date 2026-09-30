@@ -115,12 +115,9 @@ static inline void imx95_dcache_clean(const void *addr, uint32_t len)
 
     if (len == 0)
         return;
-    /* Nothing to clean while the cache is off - every store already reached
-     * memory. It is also unsafe: the M7 does maintenance by address even with
-     * the cache disabled, and out of a cold reset the cache RAMs hold random
-     * tags and dirty bits until hal_cache_enable() invalidates them, so a hit
-     * writes garbage to a random address and the bus error comes back as an
-     * imprecise BusFault. */
+    /* Nothing to clean with the cache off, and unsafe: the M7 maintains by
+     * address regardless, and out of cold reset the cache RAMs hold random tags
+     * and dirty bits, so a hit writes garbage and faults imprecisely. */
     if ((SCB_CCR & CCR_DC) == 0UL)
         return;
     line = ((uint32_t)(uintptr_t)addr) & ~(IMX95_CACHE_LINE - 1UL);
