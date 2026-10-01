@@ -560,16 +560,15 @@ set(WOLFBOOT_SOURCES "include/loader.h"
                      "src/loader.c")
 
 if((DEFINED WOLFCRYPT_TZ_PKCS11 AND NOT WOLFCRYPT_TZ_PKCS11 STREQUAL "0") OR
-   (DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0"))
+   WOLFCRYPT_TZ_PSA)
     list(APPEND WOLFBOOT_SOURCES "src/store_sbrk.c")
 endif()
 
-if(WOLFBOOT_DICE_HW AND NOT
-   (DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0"))
+if(WOLFBOOT_DICE_HW AND NOT WOLFCRYPT_TZ_PSA)
     message(FATAL_ERROR "WOLFBOOT_DICE_HW requires WOLFCRYPT_TZ_PSA=1")
 endif()
 
-if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
+if(WOLFCRYPT_TZ_PSA)
     list(APPEND WOLFBOOT_SOURCES "src/dice/dice.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_cbor.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_util.c")
@@ -586,7 +585,8 @@ if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_mac0.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_encrypt.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_mac.c")
-    file(GLOB WOLFPSA_SRCS ${WOLFBOOT_ROOT}/lib/wolfPSA/src/*.c)
+    # Relative glob: WOLFBOOT_SOURCES entries get ${WOLFBOOT_ROOT}/ prepended below
+    file(GLOB WOLFPSA_SRCS RELATIVE ${WOLFBOOT_ROOT} ${WOLFBOOT_ROOT}/lib/wolfPSA/src/*.c)
     list(FILTER WOLFPSA_SRCS EXCLUDE REGEX "(posix|zephyr)\\.c$")
     list(APPEND WOLFBOOT_SOURCES ${WOLFPSA_SRCS})
     list(APPEND WOLFBOOT_SOURCES
@@ -601,6 +601,31 @@ if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
         WOLFCOSE_LEAN WOLFCOSE_ENABLE_EXT_SIGN)
     if(WOLFBOOT_DICE_HW)
         list(APPEND WOLFBOOT_DEFS WOLFBOOT_DICE_HW)
+        if(WOLFBOOT_TARGET STREQUAL "mcxn")
+            # DICE_HW on MCXN derives the UDS through the ELS PKC component
+            # of the NXP MCUXpresso SDK.
+            set(MCUX_SDK_ROOT "" CACHE PATH "Path to MCUXpresso SDK for MCXN")
+
+            if(NOT MCUX_SDK_ROOT OR NOT EXISTS "${MCUX_SDK_ROOT}")
+                message(FATAL_ERROR
+                    "WOLFBOOT_TARGET=mcxn with WOLFBOOT_DICE_HW requires MCUX_SDK_ROOT "
+                    "to point to a valid MCUXpresso SDK for MCXN (components/els_pkc)."
+                )
+            endif()
+
+            set(ELS_PKC ${MCUX_SDK_ROOT}/components/els_pkc)
+            list(APPEND WOLFBOOT_INCLUDE_DIRS
+                ${ELS_PKC}/includes
+                ${ELS_PKC}/src/comps/mcuxClEls/inc
+                ${ELS_PKC}/src/platforms/mcxn
+                ${ELS_PKC}/src/platforms/mcxn/inc)
+            # Absolute SDK paths: appended after the WOLFBOOT_ROOT prefix is applied
+            set(MCXN_ELS_SOURCES
+                ${ELS_PKC}/src/comps/mcuxClEls/src/mcuxClEls_Common.c
+                ${ELS_PKC}/src/comps/mcuxClEls/src/mcuxClEls_Kdf.c
+                ${ELS_PKC}/src/comps/mcuxClEls/src/mcuxClEls_KeyManagement.c
+                ${ELS_PKC}/src/comps/mcuxClEls/src/mcuxClEls_Ecc.c)
+        endif()
     endif()
 endif()
 
@@ -1093,6 +1118,7 @@ endif()
 list(APPEND WOLFBOOT_SOURCES ${UPDATE_SOURCES})
 
 list(TRANSFORM WOLFBOOT_SOURCES PREPEND ${WOLFBOOT_ROOT}/)
+list(APPEND WOLFBOOT_SOURCES ${MCXN_ELS_SOURCES})
 
 #---------------------------------------------------------------------------------------------
 # Hash settings

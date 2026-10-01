@@ -208,7 +208,11 @@ if(WOLFCRYPT_TZ_PSA)
     list(APPEND WOLFCRYPT_SOURCES
         wolfssl/wolfcrypt/src/random.c
         wolfssl/wolfcrypt/src/wc_encrypt.c
-        wolfssl/wolfcrypt/src/aes.c)
+        wolfssl/wolfcrypt/src/aes.c
+        wolfssl/wolfcrypt/src/chacha.c
+        wolfssl/wolfcrypt/src/pwdbased.c
+        wolfssl/wolfcrypt/src/hmac.c
+        wolfssl/wolfcrypt/src/dh.c)
     list(REMOVE_DUPLICATES WOLFCRYPT_SOURCES)
 endif()
 
