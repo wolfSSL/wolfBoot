@@ -1600,7 +1600,7 @@ See the [Encrypted Partitions](encrypted_partitions.md) documentation for additi
 
 #### Configuration
 
-Update your `.config` file with the following ML-DSA settings:
+Update your `.config` file with the following ML-DSA settings, or pass them as `make` arguments on top of `config/examples/polarfire_mpfs250_m.config` (the standalone M-mode E51 target verifies ML-DSA-87 this way, with SHA-384 as the image hash):
 
 ```makefile
 # ML-DSA 87 (Category 5)
@@ -1654,6 +1654,20 @@ Boot time measurements on PolarFire SoC (RISC-V 64-bit U54 @ 625 MHz) for a 19MB
 |-------------|---------|-----------|--------------|-----------------|------------------|-----------------|
 | ECC384      | SHA384  | ~800 ms   | ~2900 ms     | ~1500 ms        | ~70 ms           | ~5.3 seconds    |
 | ML-DSA 87   | SHA256  | ~835 ms   | ~2900 ms     | ~2100 ms        | ~22 ms           | ~5.9 seconds    |
+
+Standalone M-mode (`polarfire_mpfs250_m.config`, E51 @ 600 MHz, no HSS) measured from power-on on the Video Kit for the same 19.7 MB FIT, plaintext, ECC384/SHA384, with the DDR training and SD-card load included:
+
+| Phase                                         | Software crypto | Athena offload |
+|-----------------------------------------------|-----------------|----------------|
+| DDR training, SD init, GPT read               | ~1.5 s          | ~1.5 s         |
+| SD load of the FIT (CMD17 single block + PDMA staging) | ~15.5 s | ~15.5 s        |
+| SHA384 integrity (reads through the non-cached alias) | ~4.1 s  | ~4.8 s         |
+| ECC384 signature verify                       | ~0.7 s          | ~0.7 s         |
+| FIT kernel copy to its load address (PDMA + read-back verify) | ~9.1 s | ~9.1 s   |
+| M-mode -> S-mode handoff                      | ~31 s           | ~32 s          |
+| Linux login prompt                            | ~53-62 s        | ~53 s          |
+
+The offload does not shorten the integrity check on this path because the time is in reading the image through the non-cached DDR alias, not in the hashing; measured on a buffer in L2 scratch the Athena SHA384 is about 1.3x the software rate and AES-256-CTR about 4.4x. The SD read and the PDMA copy with its byte-wise verify are the dominant costs; both exist because of the CPU-write-to-DDR coherence workaround (`SDHCI_BLOCK_VIA_PDMA`). ML-DSA-87 on this target (`SIGN=ML_DSA` on `polarfire_mpfs250_m.config`) links to a smaller image than ECC384 because no big-number code is needed.
 
 ### PolarFire Soc Debugging
 
