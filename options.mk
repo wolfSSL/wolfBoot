@@ -1233,6 +1233,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
     CFLAGS+=-DWOLFBOOT_DICE_HW
   endif
   CFLAGS+=-DWOLFSSL_PSA_ENGINE
+  CFLAGS+=-DWC_ALLOW_ECC_ZERO_HASH
+  CFLAGS+=-DWOLFPSA_AES_FAST
   CFLAGS+=-DWOLFPSA_CUSTOM_STORE
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFCOSE)/include
@@ -1272,7 +1274,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   endif
-  WOLFPSA_SRCS := $(filter-out $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_posix.c, \
+  WOLFPSA_SRCS := $(filter-out $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_posix.c \
+      $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_zephyr.c, \
     $(wildcard $(WOLFBOOT_LIB_WOLFPSA)/src/*.c))
   WOLFPSA_OBJS := $(patsubst %.c,%.o,$(WOLFPSA_SRCS))
   WOLFCRYPT_OBJS+=$(WOLFPSA_OBJS)
