@@ -271,7 +271,7 @@ static int run_attest_verify_test(void)
         return -1;
     }
 
-    /* 6. Import IAK public key and verify ES256 signature (raw R||S, 64 bytes) */
+    /* 6. Import IAK public key and verify the ESP256 signature (raw R||S, 64 bytes) */
     psa_set_key_type(&attrs, PSA_KEY_TYPE_ECC_PUBLIC_KEY(PSA_ECC_FAMILY_SECP_R1));
     psa_set_key_bits(&attrs, 256);
     psa_set_key_usage_flags(&attrs, PSA_KEY_USAGE_VERIFY_HASH);
