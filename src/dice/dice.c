@@ -795,7 +795,7 @@ static int wolfboot_dice_hw_sign_cb(void *cbCtx, int32_t alg,
 
     (void)alg;
 
-    /* wolfCOSE pre-hashes the Sig_structure for ES256, so tbs is the 32-byte
+    /* wolfCOSE pre-hashes the Sig_structure for ESP256, so tbs is the 32-byte
      * digest. hal_dice_sign_hash() outputs 64-byte raw R||S and keeps the
      * private key inside the platform boundary. */
     if (hal_dice_sign_hash(tbs, tbs_len, sig, &out_len) != 0) {
@@ -846,7 +846,7 @@ static int NOINLINEFUNCTION wolfboot_dice_sign_payload(
         ret = WOLFBOOT_DICE_ERR_CRYPTO;
         goto cleanup;
     }
-    ret = wc_CoseSign1_Sign_ex(cose_key, WOLFCOSE_ALG_ES256, NULL, 0,
+    ret = wc_CoseSign1_Sign_ex(cose_key, WOLFCOSE_ALG_ESP256, NULL, 0,
                                payload, payload_len, NULL, 0, NULL, 0,
                                scratch, scratch_len, token_buf, token_buf_size,
                                out_len, &rng, WOLFCOSE_SIGN1_UNTAGGED);
@@ -901,7 +901,7 @@ static int wolfboot_dice_build_token(uint8_t *token_buf,
     /* Size query returns the exact untagged COSE_Sign1 length without signing:
      * the HW DICE engine must not run and the CDI must not advance while sizing. */
     if (token_buf == NULL) {
-        ret = wc_CoseSign1_SignSize_ex(NULL, WOLFCOSE_ALG_ES256, 0,
+        ret = wc_CoseSign1_SignSize_ex(NULL, WOLFCOSE_ALG_ESP256, 0,
                                        payload_len, 0,
                                        WOLFCOSE_SIGN1_UNTAGGED, &out_len);
         if (ret == 0) {
@@ -931,7 +931,7 @@ static int wolfboot_dice_build_token(uint8_t *token_buf,
         ret = WOLFBOOT_DICE_ERR_CRYPTO;
         goto cleanup;
     }
-    ret = wc_CoseSign1_Sign_ex(&cose_key, WOLFCOSE_ALG_ES256, NULL, 0,
+    ret = wc_CoseSign1_Sign_ex(&cose_key, WOLFCOSE_ALG_ESP256, NULL, 0,
                                payload, payload_len, NULL, 0, NULL, 0,
                                scratch, sizeof(scratch), token_buf,
                                token_buf_size, &out_len, NULL,

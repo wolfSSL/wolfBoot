@@ -23,7 +23,10 @@ an attestation key derived by DICE or supplied as a provisioned IAK.
 The implementation lives under `src/dice/` and is shared across targets. The
 service is invoked through the PSA Initial Attestation API and builds the
 EAT claim set with wolfCOSE's CBOR API. wolfCOSE then wraps and signs the
-payload as an untagged COSE_Sign1 object using ES256. Hardware DICE targets use
+payload as an untagged COSE_Sign1 object using ESP256 (RFC 9864). The
+signature is standard P-256/SHA-256 ECDSA; only the COSE algorithm
+identifier differs from the legacy ES256 ID that strict RFC 9783 Sign1
+tokens use, so profile verifiers must accept ESP256. Hardware DICE targets use
 wolfCOSE's external-signer callback so the attestation private key never leaves
 the platform security boundary. Token-size queries use wolfCOSE's prediction
 API and do not derive a key, advance the CDI, or invoke a signer.

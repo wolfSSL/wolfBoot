@@ -1233,6 +1233,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
     CFLAGS+=-DWOLFBOOT_DICE_HW
   endif
   CFLAGS+=-DWOLFSSL_PSA_ENGINE
+  CFLAGS+=-DWC_ALLOW_ECC_ZERO_HASH
+  CFLAGS+=-DWOLFSSL_AES_TOUCH_LINES
   CFLAGS+=-DWOLFPSA_CUSTOM_STORE
   CFLAGS+=-DNO_DES3 -DNO_DES3_TLS_SUITES
   CFLAGS+=-I$(WOLFBOOT_LIB_WOLFCOSE)/include
@@ -1250,8 +1252,21 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   WOLFCRYPT_OBJS+=src/psa_store.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_veneer.o
   WOLFCRYPT_OBJS+=src/arm_tee_psa_ipc.o
-  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_cbor.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_util.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_alg.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_ecc.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_hdr.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_key.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_struct.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_recipient.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_sign1.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_sign.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_countersign.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_encrypt0.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_mac0.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_encrypt.o
+  WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_mac.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/pwdbased.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hmac.o
   WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/dh.o
@@ -1259,7 +1274,8 @@ ifeq ($(WOLFCRYPT_TZ_PSA),1)
   ifeq ($(findstring random.o,$(WOLFCRYPT_OBJS)),)
     WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
   endif
-  WOLFPSA_SRCS := $(filter-out $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_posix.c, \
+  WOLFPSA_SRCS := $(filter-out $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_posix.c \
+      $(WOLFBOOT_LIB_WOLFPSA)/src/psa_store_zephyr.c, \
     $(wildcard $(WOLFBOOT_LIB_WOLFPSA)/src/*.c))
   WOLFPSA_OBJS := $(patsubst %.c,%.o,$(WOLFPSA_SRCS))
   WOLFCRYPT_OBJS+=$(WOLFPSA_OBJS)

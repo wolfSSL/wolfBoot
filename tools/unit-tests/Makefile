@@ -640,11 +640,34 @@ DICE_TOKEN_TEST_CFLAGS=-I$(WOLFBOOT_LIB_WOLFCOSE)/include \
 unit-dice-token-size:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS)
 unit-dice-token-nosign:CFLAGS+=$(DICE_TOKEN_TEST_CFLAGS) -DWOLFBOOT_NO_SIGN
 DICE_TOKEN_TEST_SRC=unit-dice-token-size.c \
-	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose.c \
 	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_cbor.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_util.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_alg.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_ecc.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_hdr.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_key.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_struct.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_recipient.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_sign1.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_sign.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_countersign.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_encrypt0.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_mac0.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_encrypt.c \
+	$(WOLFBOOT_LIB_WOLFCOSE)/src/wolfcose_mac.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hash.c \
-	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/logging.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c64.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_int.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/tfm.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_port.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.c
 unit-dice-token-size unit-dice-token-nosign: ../../include/target.h \
 	$(DICE_TOKEN_TEST_SRC)
 	gcc -o $@ $(DICE_TOKEN_TEST_SRC) $(CFLAGS) $(LDFLAGS) \

@@ -36,29 +36,14 @@ static unsigned int test_sign_calls;
 static int test_sign_result;
 
 /* Local ECC signing must never be reached: this test exercises the delegated
- * hardware-signing path. These stubs keep that failure mode link-visible. */
-int wc_ecc_sign_hash(const byte *in, word32 in_len, byte *out,
-                     word32 *out_len, WC_RNG *rng, ecc_key *key)
-{
-    (void)in;
-    (void)in_len;
-    (void)out;
-    (void)out_len;
-    (void)rng;
-    (void)key;
-    return -1;
-}
+ * hardware-signing path. The real ecc.c is linked, so a stray local-sign call
+ * runs against the empty test key and fails the test. */
 
-int wc_ecc_sig_to_rs(const byte *sig, word32 sig_len, byte *r,
-                     word32 *r_len, byte *s, word32 *s_len)
+int hal_trng_get_entropy(unsigned char *out, unsigned len)
 {
-    (void)sig;
-    (void)sig_len;
-    (void)r;
-    (void)r_len;
-    (void)s;
-    (void)s_len;
-    return -1;
+    (void)out;
+    (void)len;
+    return 0;
 }
 
 int ext_flash_read(uintptr_t address, uint8_t *data, int len)
