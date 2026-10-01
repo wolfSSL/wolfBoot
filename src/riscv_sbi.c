@@ -114,7 +114,8 @@
 #define SBI_BASE_GET_MARCHID        5
 #define SBI_BASE_GET_MIMPID         6
 
-#define SBI_SPEC_VERSION  ((0UL << 24) | 2UL)   /* v0.2 */
+/* v0.3: the OS only uses SRST (reboot and power-off) from 0.3 up. */
+#define SBI_SPEC_VERSION  ((0UL << 24) | 3UL)
 /* No registry ID is assigned to wolfBoot's SBI; report a custom value that
  * cannot collide with the small spec-registry IDs (0=BBL, 1=OpenSBI, 3=KVM,
  * 8=PolarFire HSS, ...).  0x776F6C66 = ASCII "wolf". */
@@ -560,8 +561,17 @@ static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
             sbi_hart_state[h] != SBI_HSM_STARTED) {
             continue;
         }
-        spin = 10000000U;
+        /* A target can be inside a console write or another ecall for tens
+         * of milliseconds; a fence that gives up early leaves the OS with
+         * stale TLBs on that hart, so wait well past that (about 1 s).
+         * M-mode interrupts are masked in here, so service any fence the
+         * target (or a third hart) posts to us meanwhile: two harts fencing
+         * each other would otherwise each wait for the other and time out. */
+        spin = 400000000U;
         while (sbi_ipi_done[h] <= sbi_ipi_wait_gen[h] && spin > 0U) {
+            if (sbi_ipi_ops[self] != 0U) {
+                sbi_ipi_irq(self);
+            }
             spin--;
         }
         if (sbi_ipi_done[h] <= sbi_ipi_wait_gen[h]) {
@@ -580,8 +590,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
     long err = SBI_SUCCESS;
     unsigned long val = 0;
     unsigned long hartid;
-    volatile uint32_t spin;  /* UART-drain delay before SRST/SHUTDOWN reset */
 #ifdef DEBUG_SBI
+    volatile uint32_t spin;  /* UART-drain delay before SRST/SHUTDOWN reset */
     static uint32_t sbi_dbg_calls = 0;
 #endif
 
@@ -717,8 +727,11 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             unsigned long c;
             unsigned long j;
             uint8_t cbuf[64];
-            if (n > 4096UL) {
-                n = 4096UL; /* bound a single call; kernel loops on val */
+            /* Bound a single call (the kernel loops on val): this runs in
+             * M-mode with interrupts off, so a long write holds up fence
+             * IPIs from the other harts.  256 bytes is ~25 ms at 115200. */
+            if (n > 256UL) {
+                n = 256UL;
             }
             for (k = 0; k < n; k += c) {
                 c = n - k;
@@ -746,10 +759,14 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
         break;
 
     case SBI_EXT_SRST:
-        /* system_reset(type, reason): announce, drain UART, then reset. */
+        /* system_reset(type, reason).  No console output here: by now the OS
+         * owns the UARTs and a blocked printf leaves the hart stuck in the
+         * handler with the reset never issued. */
+#ifdef DEBUG_SBI
         wolfBoot_printf("[SBI] SYSTEM RESET requested: type=0x%lx "
             "reason=0x%lx\n", regs[A0], regs[A1]);
         for (spin = 0; spin < 20000000UL; spin++) { }
+#endif
 #ifdef TARGET_mpfs250
         SYSREG_MSS_RESET_CR = 0xDEAD;
 #endif
@@ -798,8 +815,10 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
         regs[A0] = (unsigned long)err;
         return epc + 4;
     case SBI_EXT_0_1_SHUTDOWN:
+#ifdef DEBUG_SBI
         wolfBoot_printf("[SBI] legacy SHUTDOWN requested\n");
         for (spin = 0; spin < 20000000UL; spin++) { }
+#endif
 #ifdef TARGET_mpfs250
         SYSREG_MSS_RESET_CR = 0xDEAD;
 #endif
