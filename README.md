@@ -758,3 +758,65 @@ For Visual Studio, the developer command prompt will need to be activated.
     * wolfHSM v1.4.0-245-g7c6359e
     * wolfHAL (4744f20)
     * wolfPSA v5.9.1-58-ga4d1187
+
+### V 2.10.0 - (2026-10-01)
+  * New hardware targets
+    * NXP i.MX RT700 (MIMXRT798S): XSPI0 NOR boot, TrustZone secure application, ML-DSA-87 signed-boot config, m33mu emulator tests in CI
+    * Raspberry Pi Compute Module 4 (BCM2711 Cortex-A72): authenticated boot, hardware-validated eMMC A/B disk boot, wolfCrypt FIPS 140-3
+    * NXP i.MX 8QuadMax MEK port including BL33 support
+    * NXP i.MX95 Cortex-M7 target
+    * NVIDIA Tegra234 bare-metal BL33 with verified EL2->EL1 handoff and device-tree boot
+    * AURIX TC4xx support (host and CSRM cores)
+    * TI C28x (TMS320F28P550SJ) secure-boot XIP port
+    * wolfBoot as an AArch64 UEFI application
+    * Nuvoton NuMaker M2354 Cortex-M23 with TrustZone and emulator tests
+    * MAX32666 (Maxim): SHA256 acceleration, FTHR2 board, legacy LPSDK support
+    * RealTek RTL8735B (AmebaPro2) HAL port
+  * Improvements to supported targets
+    * x86 FSP: Linux bzImage + initrd payload with the 64-bit boot protocol, OS image PCR measurement, FSP UPD decoder tool, debug UART selection, and Tiger Lake NotifyPhase reset handling
+    * ZynqMP: FSBL with signed FIT Linux boot and EL3 security (eFuse/PUF/AES-CSU), non-cacheable DMA window, optional PHY init over GEM MDIO
+    * Disk boot: read-only FAT32 and ext4 filesystem support, signed image load from a file, optional boot confirmation and rollback, big-endian MBR/GPT parsing; first big-endian disk-boot target is the T1040 eSDHC SD card
+    * LS1028A: eSDHC SD card disk boot and ENETC wolfIP support
+    * PolarFire SoC: LPDDR4 DDR init and a minimal SBI runtime booting 4-CPU SMP Yocto Linux
+    * wolfIP support for NXP T2080 (+ NAII 68PPC2), T10xx (T1024/T1040), and LS1028A, plus a wolfIP + wolfCrypt test harness in the test app
+    * STM32H5: generic secure application handoff with a measured boot record, fwTPM secure RAM budget and stack sizing
+    * Renesas RX: generic watchdog feed hook and RX driver, GCC 8.3/14.2 build fixes, CI coverage
+    * pic32cz: wolfHSM client target with verified-boot console
+    * STM32U5: ARM Compiler for Embedded support and UART driver
+    * AURIX TC3: DFLASH mode exposed as an option
+    * Replaced the duplicated NS16550 console code with a shared UART driver
+  * New features and improvements
+    * DICE attestation via wolfCOSE (new submodule); tokens are now signed with the RFC 9864 ESP256 algorithm identifier
+    * AArch64 UEFI: kernel command line authentication via a signed HDR_CMDLINE manifest TLV, kernel measurement into the firmware TPM via EFI_TCG2
+    * Pre-boot hook, DTB accessor, and FDT alias/reg helpers
+    * Asymmetric partition sizing for monolithic self-update
+    * Rewrote the FDT parser with capacity bound and full validation
+    * Multiboot2: u32 request-list entries per spec v2.0, zero entries as padding, end-tag termination
+    * Signing tools: file-backed custom TLV, custom TLV size limit raised to UINT16_MAX, --custom-tlv-pubkey-der, auxiliary algorithms and cert chain/TPM usage, removed the 14-argument limit
+    * wolfHSM: exposed max verify roots in options.mk, target-independent client build
+    * SBOM: vendored wolfGlass tooling, SBOMs from every build system and per-target config, CI drift check, registered wolfBoot CPE, identification of the embedded wolfSSL
+    * Removed the obsolete python keytools; all users converted to C
+    * Added CONTRIBUTING.md covering the contributor agreement and PR process
+  * Bug fixes and hardening
+    * Continued Fenrir-driven hardening across image parsing, disk, and HAL paths (241 findings)
+    * Expanded zeroization: TRNG staging buffers, TPM auth slots, DICE private scalars, ECDSA r/s scalars, PKCS11 login PIN, NSC bounce buffers, NVM_CACHE, RMW scratch and passphrase buffers; key tools now read/write secrets unbuffered to avoid stdio copies
+    * Bounded and validated ELF scatter segments, FIT subimages, GPT/MBR structures, TLV budgets, delta base hashes, PCI pools (including the 4 GiB boundary), and SDHCI/SD card init polling
+    * Propagated flash write/erase errors across HALs (STM32, nRF, HiFive1, Kinetis, TI Hercules, cc26x2, mcxw, MAX32666, samr21, pic32cz), plus SDHCI clock, NAND status/ECC, and OctoSPI status results
+    * Fixed encrypted read-modify-write: decrypt the stored block before patching, bound staged ciphertext, added a positive E2E encrypted-update test
+    * Fixed swap resume from BACKUP, abort the swap on sector copy failure, and the DISABLE_BACKUP update-consumption path (trailer erase)
+    * Added a ram_decrypt overlap guard so a decrypted image cannot clobber wolfBoot
+    * Fixed SDHCI silent read failures and the unbootable warm reset with UHS-I cards
+    * Fixed the 32-bit and partial-word fast paths in hal_flash_write on nRF52/nRF5340/STM32L0/L4/WB and RP2350
+    * P1021 NAND: bad-block markers per erase block, ECC result checks, FBCR byte count fix
+    * Hardened the ARMORED digest comparison against instruction-skip fault injection
+    * Kept wolfBoot API declarations visible to app builds; marked wolfBoot_invalidate_hdr_cache RAMFUNCTION
+    * wolfHSM: freed keys on setup error paths, fixed DER sig length and full-width ECC raw sig conversion
+    * Signing tools: scrubbed key material on load failure, freed the RNG on all exit paths, propagated make_header() failures to the exit status
+  * Updated modules
+    * wolfSSL v5.9.4-stable
+    * wolfTPM v4.2.0
+    * wolfPKCS11 v2.1.0-stable
+    * wolfHSM v1.5.0-8-g86dd6df
+    * wolfHAL 63cedc8
+    * wolfPSA v5.9.4
+    * wolfCOSE v2.0.0
