@@ -9855,12 +9855,6 @@ The difference between the two timestamps is the cost of everything wolfBoot doe
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
 
-
-
-
-
-
-
 ## TI AM6442
 
 The TI AM6442 is a multi-core SoC, with one dual-core Cortex-A53, two dual-core Cortex-R5F,
@@ -9889,8 +9883,8 @@ cd ../TI
 git clone --branch REL.MCUSDK.K3.11.02.00.24 https://github.com/TexasInstruments/mcupsdk-setup.git
 
 # Run the download_components.sh script
-chmod +x mcupsdk-setup/releases/11_00_00/am64x/download_components.sh
-mcupsdk-setup/am64x/download_components.sh --install_dir=./tools --skip_nodejs=true --skip_doxygen=true --skip_ccs=true
+chmod +x mcupsdk-setup/releases/11_02_00/am64x/download_components.sh
+mcupsdk-setup/releases/11_02_00/am64x/download_components.sh --install_dir=./tools --skip_nodejs=true --skip_doxygen=true --skip_ccs=true
 ```
 
 ### AM64x: Hardware Acceleration
@@ -9906,120 +9900,27 @@ Basic hardware acceleration supported:
 - AES-GCM (128, 256 key sizes)
 - SHA-256, SHA-512
 
-See [Test and Benchmark](#am64x-test-and-benchmark) for a comparison with and without hardware acceleration.
-
 ### AM64x: Configuring and compiling
 
 Copy the example configuration file and build with make:
 
 ```sh
-cp config/examples/lpc55s69.config .config
-make
-```
-
-We also provide a TrustZone configuration at `config/examples/lpc55s69-tz.config`
-and a benchmarking configuration at `config/examples/lpc55s69-benchmark.config`.
-
-### AM64x: Loading the firmware
-
-Download and install the LinkServer tool:
-[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
-
-NOTE: The LPCXpresso55S69's on-board LINK2 debugger comes loaded with CMSIS-DAP protocol, but it can be
-optionally updated to use JLink protocol instead.  See the EVK user manual for how to do this, if desired.
-The below examples were tested with the default CMSIS-DAP protocol.  CMSIS-DAP is supported by default in
-the MCUXpresso IDE for debugging purposes.
-
-Connect a USB cable from your development PC to P6 on the dev board.
-
-Open a terminal to the virtual COM port with putty or similar app, settings 115200-N-8-1.
-
-### AM64x: Testing firmware factory.bin
-
-1) Erase the entire flash:
-
-```sh
-LinkServer flash LPC55S69 erase
-```
-
-2) Program the factory.bin, which contains both wolfBoot and the test-app version 1:
-
-```sh
-LinkServer flash LPC55S69 load factory.bin:0
-```
-NOTE: See [tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm) for the lauterbach equivalent of 1 and 2 combined.
-
-3) The LED will light up blue to indicate version 1 of the firmware is running.  You should also see output
-like this in the terminal window:
-
-```sh
-lpc55s69 init
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Partition 1 header magic 0xFFFFFFFF invalid at 0x18000
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Booting version: 0x1
-
-==================================
-LPC55S69 wolfBoot demo Application
-Copyright 2026 wolfSSL Inc
-==================================
-    boot:   ver=0x1 state=0xFF
-    update: ver=0x0 state=0xFF
-Calling wolfBoot_success()
-    boot:   ver=0x1 state=0x00
-    update: ver=0x0 state=0xFF
-```
-
-### AM64x: Debugging
-
-Debugging with GDB:
-
-Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
-
-In one terminal: `LinkServer gdbserver LPC55S69`
-
-In another terminal use `gdb`:
-
-```
-b main
-mon reset
-c
-```
-NOTE: See [tools/scripts/lpc55s69/lpc55s69_debug.cmm](/tools/scripts/lpc55s69/lpc55s69_debug.cmm) for the lauterbach equivalent.
-
-
-### AM64x Test and Benchmark
-
-Here is an example of how to run wolfCrypt test and benchmarking on actual hardware.
-
-1. Start with [lpc55s69-benchmark.config](/config/examples/lpc55s69-benchmark.config)
-  - By default, the config file has PKA?=0, which means hardware acceleration of crypto is off.  Let's try that first.
-```sh
-cp config/examples/lpc55s69-benchmark.config .config
+cd /path/to/wolfBoot
+cp config/examples/ti-am64x-r5.config .config
 make clean
 make
 ```
 
-2. Flash the factory.bin and reboot...
+### AM64x: Loading the firmware
+
+The AM64x wolfBoot port for the TMDS64EVM boots from OSPI flash and runs on the main R5 core.  There are several ways to flash the device, such as over UART or USB DFU.  The preferred method is up to the user.  Refer to the MCU Plus SDK and the TMDS64EVM documentation.
+
+The 'factory.bin' file needs to be flashed to the start of the OSPI flash.
+
+The boot switches then must be set to xSPI boot mode:
 ```sh
+11001110 01000000
 ```
-
-2. Now try changing to PKA?=1 in the config file, rebuild, and reflash...
-```sh
-```
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 

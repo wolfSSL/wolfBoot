@@ -1636,7 +1636,7 @@ APP_OBJS := $(patsubst $(WOLFBOOT_LIB_WOLFIP)/%, \
     $(WOLFIP_LOCAL_OBJDIR)/%, $(APP_OBJS))
 
 # squashelf if either ELF_FLASH_SCATTER==1 or TARGET==ti_am64x_r5
-ifneq (,$(ELF_FLASH_SCATTER)$(filter ti_am64x_r5,$(TARGET)))
+ifneq (,$(filter 1,$(ELF_FLASH_SCATTER))$(filter ti_am64x_r5,$(TARGET)))
 SQUASHELF_TOOL = ../tools/squashelf/squashelf
 image-orig.elf: $(APP_OBJS) $(LSCRIPT)
 	@echo "\t[LD] $@"

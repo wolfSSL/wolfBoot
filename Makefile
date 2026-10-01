@@ -530,7 +530,7 @@ wolfboot.efi: wolfboot.elf
 	@echo
 
 ifeq ($(TARGET),ti_am64x_r5)
-$(GENERATED_SRCS): 
+$(GENERATED_SRCS):
 	@echo "\t[TI SYSCONFIG] generated/hal/"
 	$(Q)$(TI_SYSCONFIG)/nodejs/node \
       $(TI_SYSCONFIG)/dist/cli.js -q \
@@ -708,13 +708,13 @@ endif
 
 test-app/image.elf: wolfboot.elf
 	$(Q)$(MAKE) -C test-app WOLFBOOT_ROOT="$(WOLFBOOT_ROOT)" ELF_FLASH_SCATTER="$(ELF_FLASH_SCATTER)" LIBERO_FPGA_CONFIG_DIR="$(LIBERO_FPGA_CONFIG_DIR)" WOLFHSM_MICROCHIP_PIC32CZ="$(WOLFHSM_MICROCHIP_PIC32CZ)" image.elf
-ifneq (,$(ELF_FLASH_SCATTER)$(filter ti_am64x_r5,$(TARGET)))
+ifneq (,$(filter 1,$(ELF_FLASH_SCATTER))$(filter ti_am64x_r5,$(TARGET)))
 	$(Q)$(SIZE) test-app/image-orig.elf
 else
 	$(Q)$(SIZE) test-app/image.elf
 endif
 
-ifeq ($(ELF_FLASH_SCATTER),1)
+ifneq (,$(filter 1,$(ELF_FLASH_SCATTER))$(filter ti_am64x_r5,$(TARGET)))
 test-app/image.elf: squashelf
 endif
 

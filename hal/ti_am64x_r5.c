@@ -222,11 +222,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         if ((uint32_t)len < chunk)
             chunk = (uint32_t)len;
         status = Flash_offsetToBlkPage(gFlashHandle[0], address, &blk, &page);
-        if (status == 0) {
-            status = Flash_eraseBlk(gFlashHandle[0], blk);
-            if (status != 0)
-                break;
-        }
+        if (status != 0)
+            break;
+        status = Flash_eraseBlk(gFlashHandle[0], blk);
+        if (status != 0)
+            break;
         address += chunk;
         len -= (int)chunk;
     }
