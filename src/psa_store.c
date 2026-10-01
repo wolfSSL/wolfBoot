@@ -493,10 +493,11 @@ int wolfPSA_Store_OpenSz(int type, unsigned long id1, unsigned long id2, int rea
     return wolfPSA_Store_Open(type, id1, id2, read, store);
 }
 
-void wolfPSA_Store_Close(void* store)
+int wolfPSA_Store_Close(void* store)
 {
     struct store_handle *handle = store;
     memset(handle, 0, sizeof(*handle));
+    return 0;
 }
 
 int wolfPSA_Store_Read(void* store, unsigned char* buffer, int len)
