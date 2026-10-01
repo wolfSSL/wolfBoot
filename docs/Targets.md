@@ -5146,6 +5146,41 @@ A stock PetaLinux `image.ub` carries a `ramdisk` sub-image that `bootm` passes t
 
 `WOLFBOOT_LOAD_RAMDISK_ADDRESS` defaults to 0, which uses the ramdisk in place inside the staged FIT. Set it to a DDR address clear of the kernel, DTB and staging area if the payload needs a fixed location.
 
+##### FIT images built without `load`/`entry`
+
+Some producers emit a FIT whose kernel node declares neither `load` nor `entry` - Yocto's `kernel-fitimage` class omits both unless `UBOOT_LOADADDRESS` and `UBOOT_ENTRYPOINT` are set - and leave it to U-Boot to place the image. wolfBoot needs a destination: a `compression = "gzip"` kernel has nowhere to decompress to, and an uncompressed one would be entered in place inside the staged FIT at whatever alignment the FIT happens to give it, which does not satisfy the arm64 boot protocol's 2 MB-aligned base.
+
+Either add the properties to the ITS, or set `WOLFBOOT_LOAD_KERNEL_ADDRESS` in the config to the address the kernel should be staged at. A nonzero value overrides the FIT's `load`/`entry` for the kernel node and is returned as the entry point; 0 (the default) honors whatever the FIT declares. `WOLFBOOT_LOAD_RAMDISK_ADDRESS` does the same for the `ramdisk` node.
+
+For a DDR aperture above 4 GB the ITS must use `#address-cells = <2>` and two-cell values, since a single cell cannot hold the address:
+
+```dts
+/ {
+    #address-cells = <2>;
+    images {
+        kernel-1 {
+            data = /incbin/("Image.gz");
+            compression = "gzip";
+            load = <0x00000400 0x08000000>;
+            entry = <0x00000400 0x08000000>;
+            hash-1 { algo = "sha256"; };
+        };
+    };
+};
+```
+
+##### FIT images with no device tree
+
+A kernel-only FIT - no `fdt` sub-image, and no `fdt` property on the configuration node - takes its device tree from the boot firmware instead, which is the arrangement U-Boot describes with `fdtcontroladdr`. Point `WOLFBOOT_LOAD_DTS_ADDRESS` at wherever the earlier stage left the blob; for a bootgen raw partition that is the `load` address in the BIF:
+
+```
+{ type=raw, load=0x40000001000, file=system-top.dtb }
+```
+
+wolfBoot then relocates and validates that DTB exactly as it does for a non-FIT payload, and hands it to the kernel in `x0`.
+
+Because such a DTB is outside the FIT, the wolfBoot signature does not cover it, so it is not treated as authenticated: `/chosen/bootargs` from the blob is **not** trusted and `LINUX_BOOTARGS` replaces it (see below). Bind a digest with `sign --dts` to have the DTB authenticated and its own bootargs honored, and set `WOLFBOOT_REQUIRE_SIGNED_DTB=1` to make a missing digest fatal rather than a warning.
+
 **Kernel Command Line (bootargs)**
 
 If the FIT's DTB carries `/chosen/bootargs`, wolfBoot keeps them by default - an image boots with the arguments its kernel was validated with. Setting `LINUX_BOOTARGS` or `LINUX_BOOTARGS_ROOT` in the config replaces the DTB's value (the replaced value is logged); `CFLAGS_EXTRA+=-DLINUX_BOOTARGS_OVERRIDE=0` demotes an explicit `LINUX_BOOTARGS` to a fallback used only when the DTB has none.

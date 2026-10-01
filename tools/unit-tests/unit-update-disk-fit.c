@@ -78,6 +78,18 @@ static int mock_do_boot_called;
 static int mock_fit_memcpy_ret;
 static int mock_fit_memcpy_called;
 static int mock_panic_hook_called;
+/* Which sub-images fit_find_images() reports. Defaults keep the existing
+ * tests on the "FIT supplies its own fdt, no ramdisk" path. */
+static const char *mock_flat_dt = "fdt";
+static const char *mock_ramdisk;
+/* Ordering witnesses for the deferred initrd fixup. hal_flash_protect()
+ * runs between the FIT block and the deferred block, so a fixup that
+ * drifted back inside the FIT block would be seen here with
+ * mock_flash_protect_calls still at 0. */
+static int mock_flash_protect_calls;
+static int mock_ramdisk_calls;
+static int mock_ramdisk_saw_flash_protect;
+static fdt_ctx *mock_ramdisk_dts;
 /* Snapshot of the key material taken from inside wolfBoot_panic() */
 static uint8_t panic_key_snapshot[ENCRYPT_KEY_SIZE];
 static uint8_t panic_nonce_snapshot[ENCRYPT_NONCE_SIZE];
@@ -121,6 +133,12 @@ static void reset_mocks(void)
     mock_fit_memcpy_ret = 0;
     mock_fit_memcpy_called = 0;
     mock_panic_hook_called = 0;
+    mock_flat_dt = "fdt";
+    mock_ramdisk = NULL;
+    mock_flash_protect_calls = 0;
+    mock_ramdisk_calls = 0;
+    mock_ramdisk_saw_flash_protect = 0;
+    mock_ramdisk_dts = NULL;
     memset(panic_key_snapshot, 0xFF, sizeof(panic_key_snapshot));
     memset(panic_nonce_snapshot, 0xFF, sizeof(panic_nonce_snapshot));
     wolfBoot_panicked = 0;
@@ -267,9 +285,9 @@ const char* fit_find_images(fdt_ctx* ctx, const char** pkernel,
     if (pkernel != NULL)
         *pkernel = NULL;
     if (pflat_dt != NULL)
-        *pflat_dt = "fdt";
+        *pflat_dt = mock_flat_dt;
     if (pramdisk != NULL)
-        *pramdisk = NULL;
+        *pramdisk = mock_ramdisk;
     if (pfpga != NULL)
         *pfpga = NULL;
     return "conf";
@@ -282,6 +300,13 @@ void* fit_load_image(fdt_ctx* ctx, const char* image, int* lenp)
     if (lenp != NULL)
         *lenp = mock_dts_size;
     return fit_dts_image;
+}
+
+/* This suite's fit_find_images() reports no kernel node, so the call is
+ * never reached; the stub only satisfies the link. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
+{
+    return fit_load_image(ctx, kernel_node, lenp);
 }
 
 int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
@@ -308,8 +333,23 @@ int hal_flash_protect(haladdr_t address, int len)
 {
     (void)address;
     (void)len;
+    mock_flash_protect_calls++;
     return 0;
 }
+
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* Records when it ran relative to hal_flash_protect(), and which device
+ * tree it was handed. */
+int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
+{
+    (void)ctx;
+    (void)ramdisk_node;
+    mock_ramdisk_calls++;
+    mock_ramdisk_saw_flash_protect = mock_flash_protect_calls;
+    mock_ramdisk_dts = dts;
+    return 0;
+}
+#endif
 
 #include "update_disk.c"
 
@@ -393,6 +433,49 @@ START_TEST(test_update_disk_fit_dts_below_min_rejected)
 }
 END_TEST
 
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* A kernel-only FIT - a ramdisk sub-image but no `fdt` - must still get
+ * /chosen/linux,initrd-* written, into whichever device tree is finally
+ * selected. The fixup therefore has to run AFTER the fallback that picks
+ * that tree, which sits past hal_flash_protect(). While it lived inside
+ * the FIT block it ran before that, and a FIT with no fdt got no initrd
+ * at all. */
+START_TEST(test_update_disk_fit_ramdisk_fixup_runs_after_dtb_selection)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT: no fdt sub-image */
+    mock_ramdisk = "ramdisk-1";
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    /* It ran at all ... */
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    /* ... and only once the device tree had been selected, rather than
+     * back inside the FIT block. */
+    ck_assert_int_gt(mock_ramdisk_saw_flash_protect, 0);
+}
+END_TEST
+
+/* With a FIT that does carry its own fdt the fixup still runs exactly
+ * once and is handed a tree, so deferring it has not cost the ordinary
+ * path its initrd. */
+START_TEST(test_update_disk_fit_ramdisk_fixup_gets_the_fit_dtb)
+{
+    reset_mocks();
+    mock_ramdisk = "ramdisk-1";   /* mock_flat_dt stays "fdt" */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    ck_assert_int_gt(mock_ramdisk_saw_flash_protect, 0);
+    ck_assert_ptr_nonnull(mock_ramdisk_dts);
+}
+END_TEST
+#endif /* WOLFBOOT_FIT_RAMDISK */
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -401,6 +484,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_fit_dts_copy_failure_zeroizes_key_material);
     tcase_add_test(tc, test_update_disk_fit_dts_oversized_rejected);
     tcase_add_test(tc, test_update_disk_fit_dts_below_min_rejected);
+#ifdef WOLFBOOT_FIT_RAMDISK
+    tcase_add_test(tc, test_update_disk_fit_ramdisk_fixup_runs_after_dtb_selection);
+    tcase_add_test(tc, test_update_disk_fit_ramdisk_fixup_gets_the_fit_dtb);
+#endif
     tcase_add_test(tc, test_update_disk_fit_dts_copy_success_boots);
     suite_add_tcase(s, tc);
 

@@ -1123,6 +1123,12 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/versal_vmk180.config
 
+  versal_vmk180_highddr_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_highddr.config
+
   versal_vmk180_sdcard_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
