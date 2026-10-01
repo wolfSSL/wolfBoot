@@ -204,6 +204,14 @@ if(WOLFCRYPT_TZ_PKCS11)
     endif()
 endif()
 
+if(WOLFCRYPT_TZ_PSA)
+    list(APPEND WOLFCRYPT_SOURCES
+        wolfssl/wolfcrypt/src/random.c
+        wolfssl/wolfcrypt/src/wc_encrypt.c
+        wolfssl/wolfcrypt/src/aes.c)
+    list(REMOVE_DUPLICATES WOLFCRYPT_SOURCES)
+endif()
+
 # Include SHA256 module because it's implicitly needed by RSA
 list(APPEND WOLFCRYPT_SOURCES wolfssl/wolfcrypt/src/sha256.c)
 

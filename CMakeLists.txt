@@ -564,6 +564,11 @@ if((DEFINED WOLFCRYPT_TZ_PKCS11 AND NOT WOLFCRYPT_TZ_PKCS11 STREQUAL "0") OR
     list(APPEND WOLFBOOT_SOURCES "src/store_sbrk.c")
 endif()
 
+if(WOLFBOOT_DICE_HW AND NOT
+   (DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0"))
+    message(FATAL_ERROR "WOLFBOOT_DICE_HW requires WOLFCRYPT_TZ_PSA=1")
+endif()
+
 if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
     list(APPEND WOLFBOOT_SOURCES "src/dice/dice.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_cbor.c")
@@ -581,6 +586,13 @@ if(DEFINED WOLFCRYPT_TZ_PSA AND NOT WOLFCRYPT_TZ_PSA STREQUAL "0")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_mac0.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_encrypt.c")
     list(APPEND WOLFBOOT_SOURCES "lib/wolfCOSE/src/wolfcose_mac.c")
+    file(GLOB WOLFPSA_SRCS ${WOLFBOOT_ROOT}/lib/wolfPSA/src/*.c)
+    list(FILTER WOLFPSA_SRCS EXCLUDE REGEX "(posix|zephyr)\\.c$")
+    list(APPEND WOLFBOOT_SOURCES ${WOLFPSA_SRCS})
+    list(APPEND WOLFBOOT_SOURCES
+        "src/psa_store.c"
+        "src/arm_tee_psa_veneer.c"
+        "src/arm_tee_psa_ipc.c")
     list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT}/lib/wolfCOSE/include)
     list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT}/lib/wolfPSA ${WOLFBOOT_ROOT}/lib/wolfPSA/wolfpsa)
     list(APPEND WOLFBOOT_DEFS WOLFCRYPT_TZ_PSA WOLFCRYPT_SECURE_MODE
