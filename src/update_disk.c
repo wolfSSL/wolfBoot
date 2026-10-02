@@ -123,6 +123,30 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define MAX_FAILURES 4
 #endif
 
+/* Optional last-resort slot, tried once after the A/B attempts are spent.
+ * It is never written and is exempt from anti-rollback: its job is to bring
+ * a device back when both update slots are gone, which usually means with an
+ * older image. */
+#ifdef DISK_GOLDEN_SLOT
+#ifndef BOOT_PART_GOLDEN
+#define BOOT_PART_GOLDEN 2
+#endif
+#ifndef BOOT_FILE_GOLDEN
+#define BOOT_FILE_GOLDEN NULL
+#endif
+#ifndef BOOT_LABEL_GOLDEN
+#define BOOT_LABEL_GOLDEN NULL
+#endif
+#define SLOT_GOLDEN 2
+#define DISK_SLOTS 3
+#define GOLDEN_ATTEMPTS 1
+#define SLOT_IS_GOLDEN(s) ((s) == SLOT_GOLDEN)
+#else
+#define DISK_SLOTS 2
+#define GOLDEN_ATTEMPTS 0
+#define SLOT_IS_GOLDEN(s) 0
+#endif
+
 #ifndef DISK_BLOCK_SIZE
 #define DISK_BLOCK_SIZE 512
 #endif
@@ -324,7 +348,7 @@ struct boot_slot {
 
 /* File scope, not stack: several disk targets build with
  * WOLFBOOT_SMALL_STACK=1. */
-static struct boot_slot boot_slots[2];
+static struct boot_slot boot_slots[DISK_SLOTS];
 
 #ifdef DISK_BOOT_CONFIRM
 /* Boot confirmation for the disk path. include/disk_trailer.h owns the
@@ -336,7 +360,7 @@ static struct boot_slot boot_slots[2];
 static uint8_t disk_trailer[DISK_TRAILER_SZ];
 
 /* Last known state of each slot, filled in by disk_boot_state_reap(). */
-static uint8_t slot_state[2];
+static uint8_t slot_state[DISK_SLOTS];
 
 /* Byte offset of the trailer within the slot's partition, or -1 when the slot
  * cannot carry one. */
@@ -717,6 +741,10 @@ void RAMFUNCTION wolfBoot_start(void)
         BOOT_FILE_A, slot_max);
     (void)slot_prepare(&boot_slots[1], BOOT_PART_B, BOOT_LABEL_B,
         BOOT_FILE_B, slot_max);
+#ifdef DISK_GOLDEN_SLOT
+    (void)slot_prepare(&boot_slots[SLOT_GOLDEN], BOOT_PART_GOLDEN,
+        BOOT_LABEL_GOLDEN, BOOT_FILE_GOLDEN, slot_max);
+#endif
 
     wolfBoot_printf("Checking primary OS image in %d,%d...\r\n", BOOT_DISK,
             boot_slots[0].part);
@@ -753,13 +781,15 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
     if ((pB_ver == 0) && (pA_ver == 0)) {
+        wolfBoot_printf("No valid OS image found in either partition %d or %d\r\n",
+            boot_slots[0].part, boot_slots[1].part);
+#ifndef DISK_GOLDEN_SLOT
 #ifdef DISK_ENCRYPT
         disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
-        wolfBoot_printf("No valid OS image found in either partition %d or %d\r\n",
-            boot_slots[0].part, boot_slots[1].part);
         wolfBoot_panic();
+#endif
     }
 
     if (pA_ver != 0U)
@@ -776,6 +806,13 @@ void RAMFUNCTION wolfBoot_start(void)
 
     do {
         failures++;
+#ifdef DISK_GOLDEN_SLOT
+        if (failures > MAX_FAILURES) {
+            selected = SLOT_GOLDEN;
+            wolfBoot_printf("Falling back to the golden image on p%d\r\n",
+                boot_slots[SLOT_GOLDEN].part);
+        }
+#endif
         slot = &boot_slots[selected];
         cur_part = (uint32_t)slot->part;
 #ifdef DISK_BOOT_CONFIRM
@@ -785,7 +822,8 @@ void RAMFUNCTION wolfBoot_start(void)
          * with ALLOW_DOWNGRADE defined the version guard that would other-
          * wise refuse it is compiled out. Refuse it here so the exclusion
          * holds on every path into the slot, not just the first choice. */
-        if (slot_state[selected] == DISK_STATE_TESTING) {
+        if (!SLOT_IS_GOLDEN(selected) &&
+                slot_state[selected] == DISK_STATE_TESTING) {
             wolfBoot_printf("Slot %c was not confirmed; not booting it\r\n",
                 'A' + selected);
             selected ^= 1;
@@ -795,19 +833,26 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifndef ALLOW_DOWNGRADE
         {
             uint32_t cur_ver = selected ? pB_ver_u : pA_ver_u;
-            if ((max_ver > 0U) && (cur_ver < max_ver)) {
+            if (!SLOT_IS_GOLDEN(selected) && (max_ver > 0U) &&
+                    (cur_ver < max_ver)) {
                 wolfBoot_printf("Rollback to lower version not allowed\r\n");
+#ifdef DISK_GOLDEN_SLOT
+                /* Nothing newer can boot: only the golden slot is left. */
+                failures = MAX_FAILURES;
+                continue;
+#else
 #ifdef DISK_ENCRYPT
                 disk_decrypted_header_clear(dec_hdr);
                 disk_crypto_clear();
 #endif
                 wolfBoot_panic();
                 return;
+#endif
             }
         }
 #endif
 
-        part_name[2] = 'A' + selected;
+        part_name[2] = SLOT_IS_GOLDEN(selected) ? 'G' : ('A' + selected);
 
         wolfBoot_printf("Attempting boot from %s\r\n", part_name);
 
@@ -965,7 +1010,7 @@ void RAMFUNCTION wolfBoot_start(void)
         failures = 0;
         break; /* Skip verification, boot directly */
 #endif
-    } while (failures < MAX_FAILURES);
+    } while (failures < MAX_FAILURES + GOLDEN_ATTEMPTS);
 
     if (failures) {
 #ifdef DISK_ENCRYPT
@@ -990,7 +1035,8 @@ void RAMFUNCTION wolfBoot_start(void)
      * so enabling this cannot strand a system whose OS does not confirm. A
      * slot already SUCCESS, or never written, is left untouched and a
      * steady-state boot writes nothing at all. */
-    if (slot_state[selected] == DISK_STATE_UPDATING) {
+    if (!SLOT_IS_GOLDEN(selected) &&
+            slot_state[selected] == DISK_STATE_UPDATING) {
         if (slot_state_write(&boot_slots[selected], DISK_STATE_TESTING,
                 (uint64_t)IMAGE_HEADER_SIZE + (uint64_t)os_image.fw_size)
                 != 0) {
