@@ -48,6 +48,10 @@
 #include "hal/spi/spi_drv_stm32.h"
 #endif
 
+#if defined(TARGET_psoc_c3)
+#include "hal/spi/spi_drv_psoc_c3.h"
+#endif
+
 #if defined(TARGET_zynq)
 #include "hal/spi/spi_drv_zynq.h"
 #endif
@@ -76,7 +80,7 @@
 void spi_init(int polarity, int phase);
 void spi_release(void);
 
-#ifdef SPI_FLASH
+#if defined(SPI_FLASH) || defined(WOLFBOOT_TPM)
 void spi_cs_on(uint32_t base, int pin);
 void spi_cs_off(uint32_t base, int pin);
 void spi_write(const char byte);

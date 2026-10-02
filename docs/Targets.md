@@ -9,6 +9,7 @@ This README describes configuration of supported targets.
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
 * [Cypress PSoC-6](#cypress-psoc-6)
+* [Infineon PSOC Control C3](#infineon-psoc-control-c3)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Infineon AURIX TC4xx](#infineon-aurix-tc4xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
@@ -8959,6 +8960,164 @@ Load address 0x58282000
 Attempting boot from partition A
 ```
 At this point, the kernel image in partition "A" is verified and staged and you should be seeing the log messages of your OS booting.
+
+## Infineon PSOC Control C3
+
+The [PSOC Control C3](https://www.infineon.com/products/microcontroller/32-bit-psoc-arm-cortex/32-bit-psoc-control-arm-cortex-m33-mcu/psoc-control-c3-main-line) family (PSC3, CAT1B) is an Arm Cortex-M33 motor-control MCU. wolfBoot runs as the first application the BootROM launches, verifies the signed firmware in the BOOT partition and jumps to it.
+
+The port is bare metal: it uses no Peripheral Driver Library, no BSP and no generated configuration, so it builds with nothing but an `arm-none-eabi` toolchain. It covers the PSOC Control C3 parts only. Other CAT1B devices such as the CYW20829 program their flash through the classic SROM/IPC mailbox instead of the BootROM table used here, and are not supported by this HAL.
+
+Verified on hardware on an evaluation kit fitted with a C3M6 (512 KB flash, 128 KB SRAM): console output, integrity and ECC256 signature verification, the handoff to the application, and a full A/B update through the swap sector with the new version confirming success. The TPM was validated over I2C against an Infineon TPM 2.0 on a mikroBUS carrier. The 128 KB layout and the SPI TPM transport are build-tested only.
+
+### Address aliases
+
+Every memory on this family is visible through four aliases, crossing Secure and Non-secure with the code bus (CBUS) and the system bus (SBUS):
+
+```
+Flash   0x02000000  NS-CBUS      SRAM   0x04000000  NS-CBUS
+        0x12000000  S-CBUS              0x14000000  S-CBUS
+        0x22000000  NS-SBUS             0x24000000  NS-SBUS
+        0x32000000  S-SBUS              0x34000000  S-SBUS
+```
+
+wolfBoot links and executes from the Secure CBUS alias at `0x12000000`, so every address in the `.config` is in that space. The BootROM flash API accepts SBUS addresses only, and the HAL derives one by setting bit 29 of the target address.
+
+### Flash
+
+Flash is organised as 512-byte rows, which are the erase and the program granularity alike, inside 128 KB sectors. `WOLFBOOT_SECTOR_SIZE` is therefore `0x200`.
+
+**Erased flash on this family reads as zero, not `0xFF`.** The configs therefore set `FLAGS_INVERT=1`, which selects the inverted partition and sector flag polarity and makes the image fill byte `0x00` so it matches the erased state. Without it the state written by `wolfBoot_update_trigger()` cannot be told apart from erased flash and no update is ever taken.
+
+They also set `NVM_FLASH_WRITEONCE=0`. The BootROM write call erases a row before programming it and the HAL does a read-modify-write around that, so a flag can be rewritten in place and the two-sector write-once scheme, whose freshness check assumes an `0xFF` erase, is neither needed nor correct here.
+
+Programming goes through a BootROM function table at a fixed address rather than a flash controller register block. The HAL calls its blocking erase and write entries directly and needs no vendor library. It range-checks the table before first use, so a device whose ROM lays the table out differently fails cleanly instead of branching into an arbitrary address.
+
+### Build options
+
+Board wiring is set by make options, defaulted in `arch.mk`:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `PSOC_C3_UART_SCB` | 3 | console SCB instance |
+| `PSOC_C3_UART_PORT` | 6 | console pin group; RX is pin 2, TX is pin 3 |
+| `PSOC_C3_UART_PCLK_GR` | 4 | peripheral clock group for the console |
+| `PSOC_C3_UART_PCLK_IDX` | 6 | peripheral clock index for the console |
+| `PSOC_C3_PCLK_HZ` | 48000000 | clock feeding the peripheral group |
+| `PSOC_C3_SPI_SCB` | 2 | SPI instance |
+| `PSOC_C3_SPI_PORT` | 7 | SPI pin group |
+| `PSOC_C3_SPI_HSIOM_SEL` | 17 | HSIOM selector for the SPI function |
+
+SCB4 and SCB5 are absent on the smaller packages of this family. Only SCB0 to SCB3 are present on every part, so a variant in a small package needs `PSOC_C3_SPI_SCB` pointed at one of those.
+
+The peripheral clock index is a per-part value rather than a family constant, and the value that a given part uses is not always the one its headers document. Verify it on the board before relying on it.
+
+### Flash layout
+
+`config/examples/psoc_c3.config` targets a 512 KB part:
+
+```
+0x12000000 - 0x1200FFFF  wolfBoot            (64 KB)
+0x12010000 - 0x12026FFF  BOOT partition      (0x17000, 92 KB)
+0x12027000 - 0x1203DFFF  UPDATE partition    (0x17000, 92 KB)
+0x1203E000 - 0x1203E1FF  SWAP sector         (512 B)
+0x12040000 - 0x1207FFFF  unused
+```
+
+The part has a 16 KB instruction cache and no data cache, so `hal_cache_invalidate()` is left at the weak no-op: wolfBoot reads flash as data when hashing and verifying, which the instruction cache does not serve.
+
+Everything sits inside the low 256 KB deliberately. The silicon has 512 KB and wolfBoot erases and programs all of it at run time through the BootROM, but every J-Link flash algorithm published for this family stops at 256 KB, so an image staged above that cannot be provisioned by the debugger. Keeping the partitions low means the whole factory image can be written with the tools that exist; the upper 256 KB is left to the application.
+
+A 128 KB part uses the same layout scaled down, set on the command line rather than in a second config:
+
+```sh
+make WOLFBOOT_PARTITION_SIZE=0xB000 \
+     WOLFBOOT_PARTITION_BOOT_ADDRESS=0x12008000 \
+     WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x12013000 \
+     WOLFBOOT_PARTITION_SWAP_ADDRESS=0x1201E000
+```
+
+Flash size is the only geometry that differs across the family, and it differs within every family name, so size the partitions to the part rather than to the marketing name.
+
+### Building
+
+```sh
+cp config/examples/psoc_c3.config .config
+make clean
+make
+```
+
+The default signing scheme is ECC256 with SHA256. The build produces `wolfboot.bin`, `test-app/image_v1_signed.bin` and `factory.bin`.
+
+Editing a HAL header does not always trigger a rebuild of the objects that include it, so run `make clean` after changing `hal/psoc_c3.h`.
+
+### Flashing
+
+Program through the non-secure SBUS alias, which is the aperture the debugger's flash algorithm drives, even though the image executes from `0x12000000`:
+
+```sh
+JLinkExe -SelectEmuBySN <probe-serial> -device PSC3xxF -if SWD -speed 4000
+```
+
+then, at the prompt:
+
+```
+loadbin factory.bin, 0x22000000
+r
+g
+```
+
+Name a real PSC3 device. The part is an ADIv6 CoreSight SoC-600 design, and a generic `Cortex-M33` selection cannot find its access ports.
+
+The Infineon OpenOCD shipped with ModusToolbox is an alternative, and its `ENABLE_ACQUIRE` option recovers a part whose boot loop a bad image has broken:
+
+```sh
+openocd -f interface/kitprog3.cfg \
+    -c "set ENABLE_ACQUIRE 1" \
+    -c "set SERIES psc3; set DEVICE a0; set BOARD generic" \
+    -f target/infineon/cat1b/psc3.cfg \
+    -c "init; reset init" \
+    -c "flash write_image erase factory.bin 0x32000000 bin" \
+    -c "reset run; shutdown"
+```
+
+### Testing an update
+
+```sh
+./tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+Write the result to the UPDATE partition and let the test application trigger the update. wolfBoot swaps the partitions on the next reset, and the application confirms the new version so it is not rolled back.
+
+### Serial back-ends
+
+Two SCB back-ends ship with the target, both configured entirely through make options.
+
+`hal/spi/spi_drv_psoc_c3.c` is an SPI master. It drives chip select as a GPIO rather than from the SCB, so a TPM transport can hold it asserted across the wait-state poll the TIS protocol requires. The defaults target the evaluation kit's mikroBUS headers, which route SPI to SCB2 on port 7: P7.0 clock, P7.1 MOSI, P7.2 MISO, P7.3 chip select. The signal order across a port differs per SCB, so `PSOC_C3_SPI_SCK_PIN`, `_MOSI_PIN`, `_MISO_PIN` and `_CS_PIN` are set individually rather than assumed, as is `PSOC_C3_SPI_HSIOM_SEL` (13 on SCB0, 17 on SCB2 and SCB5, 18 on SCB1, SCB3 and SCB4).
+
+`hal/i2c/i2c_drv_psoc_c3.c` is an I2C master behind the generic interface in `include/i2c_drv.h`, which this target adds. Defaults are SCB0 on P9.0 (SCL) and P9.2 (SDA) at HSIOM selector 15, matching the kit's mikroBUS and Arduino headers; note the two pins are not adjacent. The pins are open drain with the input buffer enabled, which I2C needs in order to read SDA and to see a device stretching the clock.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `PSOC_C3_I2C_SCB` | 0 | SCB instance |
+| `PSOC_C3_I2C_PORT` | 9 | pin group |
+| `PSOC_C3_I2C_SCL_PIN` | 0 | SCL pin within the group |
+| `PSOC_C3_I2C_SDA_PIN` | 2 | SDA pin within the group |
+| `PSOC_C3_I2C_HSIOM_SEL` | 15 | HSIOM selector for the I2C function |
+| `PSOC_C3_I2C_HZ` | 100000 | bus rate |
+
+| `PSOC_C3_TPM_SEL_PORT` | 7 | pin group of the TPM interface-select strap |
+| `PSOC_C3_TPM_SEL_PIN` | 7 | pin within that group |
+
+A TPM is added with `make WOLFTPM=1`, which uses the SPI back-end. Adding `WOLFBOOT_TPM_I2C=1` selects the I2C back-end and the TIS-over-I2C transport instead. CI builds both. See [docs/TPM.md](TPM.md) for the option itself.
+
+Adding `I2C_BITBANG=1` swaps the SCB controller for a bit-banged master on the same two pins, so the back-ends are interchangeable without rewiring. It needs only open-drain GPIO and is the fallback where a controller is unavailable, unreliable, or not worth configuring for the handful of transfers a bootloader makes. The bus rate is a spin count (`I2C_BITBANG_DELAY`) rather than a calibrated divider, so it varies with core clock; I2C has no minimum clock rate, so erring slow costs time and nothing else. Clock stretching is honoured, bounded by `I2C_BITBANG_STRETCH`.
+
+A target supplies the two pins by implementing the five functions in `hal/i2c/i2c_bitbang.h`; `hal/i2c/i2c_bitbang_psoc_c3.c` is the example.
+
+A TPM that offers both buses latches its choice from a strap while its own reset is low, so the host has to drive that strap before the part leaves reset rather than before the first transfer. `hal_init()` does this first, driving `PSOC_C3_TPM_SEL_PORT`/`_PIN` high for SPI and low for I2C; on the evaluation kit the strap arrives on mikroBUS INT, which is P7.7. A part left to its own pull-up comes up on SPI, so an I2C transport that never gets an acknowledgement is worth checking here before the bus timing.
+
+Every FIFO and bus wait in both drivers is bounded, so a device that is absent or unpowered makes `wolfBoot_tpm2_init()` report a failure rather than wedging the bootloader in a spin loop.
 
 ## Infineon AURIX TC3xx
 
