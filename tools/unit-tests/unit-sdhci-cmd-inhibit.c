@@ -61,6 +61,7 @@ static int g_cmd8_never;      /* v1.x: CMD8 is never answered */
 static int g_cmd8_needs_18v;  /* left in UHS: answered only at 1.8V */
 static int g_cicmd_stuck;     /* the command line never goes idle */
 static int g_cmd8_mangled;    /* CMD8 IS answered, but the link corrupts it */
+static int g_cmd8_mangled_once; /* first CMD8 response is corrupted */
 static int g_reset_never;     /* the reset bit itself never self-clears */
 static int g_inhibit_sticky;  /* reset completes, but CICMD stays set */
 static unsigned int g_cmd8_attempts;
@@ -116,7 +117,8 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
                       & SDHCI_SRS15_V18SE) != 0;
 
         g_cmd8_attempts++;
-        if (g_cmd8_mangled) {
+        if (g_cmd8_mangled ||
+            (g_cmd8_mangled_once && g_cmd8_attempts == 1)) {
             /* The card DID answer; the link mangled the response. Not a
              * timeout, so not a legacy card. */
             g_sdhci_regs[SDHCI_SRS12 / sizeof(uint32_t)] |=
@@ -184,6 +186,7 @@ static void setup(void)
     g_cmd8_never = 0;
     g_cmd8_needs_18v = 0;
     g_cmd8_mangled = 0;
+    g_cmd8_mangled_once = 0;
     g_reset_never = 0;
     g_inhibit_sticky = 0;
     g_wdt_pets = 0;
@@ -275,6 +278,20 @@ START_TEST(test_uhs_recover_rolls_back)
 END_TEST
 #endif
 
+/* A transient response error is retried; a working card still reaches
+ * ACMD41 after its next CMD8 answer. */
+START_TEST(test_cmd8_transient_error_retries)
+{
+    script_card_present();
+    g_cmd8_mangled_once = 1;
+
+    (void)sdcard_card_full_init();
+
+    ck_assert_uint_eq(g_cmd8_attempts, 2);
+    ck_assert_uint_gt(g_acmd41_polls, 0);
+}
+END_TEST
+
 /* A mangled CMD8 response is NOT a legacy card.
  *
  * Silence means the card does not implement CMD8; a CRC or index error means
@@ -345,6 +362,7 @@ Suite *sdhci_cmd_inhibit_suite(void)
     tcase_add_test(tc, test_command_inhibit_does_not_hang);
     tcase_add_test(tc, test_cmd8_absent_is_not_fatal);
     tcase_add_test(tc, test_cmd8_answered_normally);
+    tcase_add_test(tc, test_cmd8_transient_error_retries);
     tcase_add_test(tc, test_cmd8_bus_error_is_still_fatal);
     tcase_add_test(tc, test_inhibit_that_survives_reset_does_not_hang);
     tcase_add_test(tc, test_reset_that_never_clears_does_not_hang);
