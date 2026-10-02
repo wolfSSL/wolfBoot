@@ -88,3 +88,9 @@ __HEAP_SIZE = DEFINED (__HEAP_SIZE) ? __HEAP_SIZE : 4K;
 
 /* Pickup the common sections */
 INCLUDE tc3tc_sections.ld
+
+/* clang/picolibc emit ctor/dtor arrays (e.g. stdio cleanup) the startup
+ * never runs. Discard them so they don't become orphan loadable sections */
+SECTIONS {
+    /DISCARD/ : { *(.init_array*) *(.fini_array*) }
+}
