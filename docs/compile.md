@@ -413,6 +413,12 @@ The tool needs no configuration to match the loader's layout and no rebuild per 
 - **Raw partitions only.** A `DISK_FS` slot is a file inside a filesystem and has no partition tail to claim.
 - A slot left in `testing` is refused on every path into it, including the failover after another slot fails verification, so it stays out of the boot even in an `ALLOW_DOWNGRADE` build where the version guard is compiled out.
 
+### Golden slot
+
+`DISK_GOLDEN_SLOT=1` adds a third slot that the disk boot path tries once, after the A/B attempts are spent (both slots invalid, unconfirmed, or failing verification). It is read from `BOOT_PART_GOLDEN` (0-based GPT index, default 2), or by `BOOT_LABEL_GOLDEN` / `BOOT_FILE_GOLDEN` like the A/B slots, and it is fully verified like any other image. Two things differ from A and B. The golden slot is exempt from the anti-rollback check, so a deliberately old recovery image still boots when the newer slots are gone; an anti-rollback refusal of the other update slot falls through to the golden slot instead of halting. And it is never written: no boot-confirmation trailer is ever armed on it, so its state cannot drift. Reaching it is announced on the console (`Falling back to the golden image on pN`).
+
+The golden partition must be its own partition: a `BOOT_PART_GOLDEN` equal to `BOOT_PART_A` or `BOOT_PART_B` is rejected at build time, and a label that resolves to an A/B partition is rejected when the fallback is reached, since the same image under a third name recovers nothing (`cm4_emmc_rauc.config` shares one partition between A and B and needs an explicit golden partition). The slot is only prepared when the fallback is taken, so a boot that A or B satisfies never reads it; with `DISK_FS` that is also when it is mounted. When neither A nor B carries a usable version, the loader goes to the golden slot directly instead of trying them.
+
 ### Disk boot from a read-only filesystem (FAT32 / ext4)
 
 Targets that boot from a disk (`DISK_SDCARD=1`, `DISK_EMMC=1`, or an x86 FSP/AHCI target) use `src/update_disk.c`, which by default reads the signed image from **raw offset 0 of a partition**: the image has to be written there with `dd`, and the partition cannot hold anything else.
