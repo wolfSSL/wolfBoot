@@ -744,6 +744,18 @@ extern int tolower(int c);
             #define WOLFSSL_SHA256
             #define WOLFSSL_SHA384
             #define WOLFSSL_SHA512
+        #elif defined(TARGET_ti_am64x_r5)
+            #ifndef WOLFSSL_TI_AM64X_R5
+                #define WC_NO_RNG
+            #endif
+            #define HAVE_AES_ECB
+            #define WOLFSSL_AES_128
+            #define NO_AES_192
+            #define WOLFSSL_AES_DIRECT
+            #define WOLFSSL_CMAC
+            #define WOLFSSL_SHA512
+            #define WOLFSSL_STATIC_MEMORY_TEST_SZ (50 * 1024)
+            #define WOLFSSL_BENCHMARK_FIXED_UNITS_MB
         #else
             /* Use custom RNG for tests/benchmarks (saves ~7KB vs HASHDRBG).
             * WARNING: my_rng_seed_gen is NOT cryptographically secure.

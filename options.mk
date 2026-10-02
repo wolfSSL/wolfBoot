@@ -1040,9 +1040,11 @@ ifeq ($(DEBUG_SYMBOLS),1)
   ifeq ($(USE_GCC),1)
     CFLAGS+=-ggdb3
   else ifneq ($(ARCH),AURIX)
-    ifneq ($(USE_CLANG),1)
-    # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
-    CFLAGS+=-gdwarf-4
+    ifneq ($(TARGET),ti_am64x_r5)
+      ifneq ($(USE_CLANG),1)
+        # -gstabs was removed in GCC 12; -gdwarf-4 works on old and new GCC
+        CFLAGS+=-gdwarf-4
+      endif
     endif
   endif
 endif

@@ -185,6 +185,8 @@
         return (uint64_t)csr_read(time);
     #endif
     }
+#elif defined(TARGET_ti_am64x_r5)
+    extern uint64_t ClockP_getTimeUsec(void);
 #else
     /* Simple tick counter fallback */
     static volatile unsigned int tick_counter = 0;
@@ -234,6 +236,10 @@ unsigned long my_time(unsigned long* timer)
     unsigned long t = (unsigned long)(mpfs_get_ticks() / RISCV_SMODE_TIMER_FREQ);
     if (timer) *timer = t;
     return t;
+#elif defined(TARGET_ti_am64x_r5)
+    unsigned long t = (unsigned long)(ClockP_getTimeUsec() / 1000000);
+    if (timer) *timer = t;
+    return t;
 #else
     /* Simple incrementing counter */
     tick_counter++;
@@ -281,6 +287,9 @@ double current_time(int reset)
     if (reset)
         mpfs_start_ticks = mpfs_get_ticks();
     return (double)(mpfs_get_ticks() - mpfs_start_ticks) / (double)RISCV_SMODE_TIMER_FREQ;
+#elif defined(TARGET_ti_am64x_r5)
+    (void)reset;
+    return (double)(ClockP_getTimeUsec()) / 1000000.0;
 #else
     /* Simple counter-based timing */
     if (reset)

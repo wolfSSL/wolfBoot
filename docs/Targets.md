@@ -64,6 +64,7 @@ This README describes configuration of supported targets.
 * [STM32L5](#stm32l5)
 * [STM32U5](#stm32u5)
 * [STM32WB55](#stm32wb55)
+* [TI AM6442](#ti-am6442)
 * [TI C2000 C28x (LAUNCHXL-F28P55X)](#ti-c2000-c28x-launchxl-f28p55x)
 * [TI Hercules TMS570LC435](#ti-hercules-tms570lc435)
 * [Vorago VA416x0](#vorago-va416x0)
@@ -7479,8 +7480,6 @@ cmd>
 
 See [/config/examples/ti-tms570lc435.config](/config/examples/ti-tms570lc435.config) for example configuration.
 
-
-
 ## Nordic nRF52840
 
 We have full Nordic nRF5280 examples for Contiki and RIOT-OS in our [wolfBoot-examples repo](https://github.com/wolfSSL/wolfboot-examples)
@@ -9901,6 +9900,73 @@ devmem 0x80F10014    # heartbeat, incrementing
 The difference between the two timestamps is the cost of everything wolfBoot does in between, which is dominated by signature verification. Note that these magics are spelled to read correctly as `devmem` 32-bit words, the opposite convention from the console magic, which is read from a hexdump of the ring.
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
+
+## TI AM6442
+
+The TI AM6442 is a multi-core SoC, with one dual-core Cortex-A53, two dual-core Cortex-R5F,
+a Cortex-M4F, and a dedicated security core based on a Cortex-M3. This support has been
+tested on the TMDS64EVM board (rev 101D).
+
+### AM64x: Setup Software Tools
+
+Software builds require the TI MCU Plus SDK and the TI Arm Clang toolchain, plus
+a couple other TI tools.
+
+Download the SDK:
+[MCU Plus SDK for AM64x v11.02](https://dr-download.ti.com/software-development/software-development-kit-sdk/MD-SfkcjYAjGS/11.02.00.24/mcu_plus_sdk_am64x_11_02_00_24-linux-x64-installer.run)
+
+To set up the TI SDK and toolchain:
+
+```
+# from the wolfBoot directory...
+mkdir ../TI
+cd ../TI
+
+# Install SDK
+/path/to/mcu_plus_sdk_am64x_11_02_00_24-linux-x64-installer.run --mode unattended --prefix .
+
+# Clone the setup repo
+git clone --branch REL.MCUSDK.K3.11.02.00.24 https://github.com/TexasInstruments/mcupsdk-setup.git
+
+# Run the download_components.sh script
+chmod +x mcupsdk-setup/releases/11_02_00/am64x/download_components.sh
+mcupsdk-setup/releases/11_02_00/am64x/download_components.sh --install_dir=./tools --skip_nodejs=true --skip_doxygen=true --skip_ccs=true
+```
+
+### AM64x: Hardware Acceleration
+
+wolfBoot / wolfCrypt provide support for the TI AM64x hardware acceleration
+blocks via the device's SA2UL peripheral.  By default, this
+support is turned off in the config files, and all crypto is software based.
+To turn on hardware acceleration, set PKA=1 in the config file.
+
+Basic hardware acceleration supported:
+- AES-CBC (128, 256 key sizes)
+- AES-ECB (128, 256 key sizes)
+- AES-GCM (128, 256 key sizes)
+- SHA-256, SHA-512
+
+### AM64x: Configuring and compiling
+
+Copy the example configuration file and build with make:
+
+```sh
+cd /path/to/wolfBoot
+cp config/examples/ti-am64x-r5.config .config
+make clean
+make
+```
+
+### AM64x: Loading the firmware
+
+The AM64x wolfBoot port for the TMDS64EVM boots from OSPI flash and runs on the main R5 core.  There are several ways to flash the device, such as over UART or USB DFU.  The preferred method is up to the user.  Refer to the MCU Plus SDK and the TMDS64EVM documentation.
+
+The 'factory.bin' file needs to be flashed to the start of the OSPI flash.
+
+The boot switches then must be set to xSPI boot mode:
+```sh
+11001110 01000000
+```
 
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
