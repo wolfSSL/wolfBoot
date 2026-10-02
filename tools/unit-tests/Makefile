@@ -67,8 +67,8 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-nsc-update \
-       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-confirm unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-disk unit-update-disk-confirm unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -329,6 +329,13 @@ unit-update-flash-self-update:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNI
 	-DRAM_CODE -DARCH_SIM -DUNIT_TEST_SELF_UPDATE_ONLY \
 	-DARCH_FLASH_OFFSET=MOCK_ADDRESS_BOOT -DWOLFBOOT_VERSION=7 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-ram-fit:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
+	-DMMU -DWOLFBOOT_FDT -DWOLFBOOT_FIT_RAMDISK \
+	-DWOLFBOOT_DTS_BOOT_ADDRESS=0xCF000000 \
+	-DWOLFBOOT_DTS_UPDATE_ADDRESS=0xCF100000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
@@ -425,9 +432,11 @@ unit-update-disk-oob:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 # FIT (flattened uImage tree) exits of the encrypted disk loader. The panic hook
 # is what lets the test observe the key material at the instant wolfBoot_panic()
 # is entered, since on target that call never returns.
-unit-update-disk-fit:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FDT \
+UNIT_DISK_FIT_CFLAGS:=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_FDT \
 	-DWOLFBOOT_HOOK_PANIC -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x40 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-fit:CFLAGS+=$(UNIT_DISK_FIT_CFLAGS)
+unit-update-disk-fit-ramdisk:CFLAGS+=$(UNIT_DISK_FIT_CFLAGS)
 # Regression coverage for wolfBoot_check_flash_image_elf() (scattered-ELF
 # integrity check). WOLFBOOT_NO_SIGN keeps this to the hashing path only (no
 # signature verification is exercised by that function).
@@ -937,6 +946,7 @@ unit-gzip: ../../include/target.h unit-gzip.c
 # failure paths) and once without (compile-time fail-closed path).
 unit-fit-gzip: ../../include/target.h unit-fit-gzip.c
 	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_FIT_RAMDISK \
 		-DWOLFBOOT_NO_PRINTF \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
@@ -1031,6 +1041,12 @@ unit-update-flash-enc-full: ../../include/target.h unit-update-flash.c
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
+# Loader-level coverage for the kernel-only-FIT device-tree fallback and the
+# deferred initrd fixup. MMU + WOLFBOOT_FDT put update_ram.c on the FIT path;
+# the FDT/FIT API is stubbed inside the test.
+unit-update-ram-fit: ../../include/target.h unit-update-ram-fit.c
+	gcc -o $@ unit-update-ram-fit.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
 unit-update-ram-uboot: ../../include/target.h unit-update-ram-uboot.c
 	gcc -o $@ unit-update-ram-uboot.c ../../src/image.c ../../src/gpt.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
@@ -1097,6 +1113,11 @@ unit-update-disk-fs-enc: ../../include/target.h unit-update-disk-fs.c
 
 unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
 	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) $(LDFLAGS)
+
+# Same source with FIT_RAMDISK on, so the deferred initrd fixup has
+# loader-level coverage: it must run after the device tree is selected.
+unit-update-disk-fit-ramdisk: ../../include/target.h unit-update-disk-fit.c
+	gcc -o $@ unit-update-disk-fit.c $(CFLAGS) -DWOLFBOOT_FIT_RAMDISK $(LDFLAGS)
 
 unit-pkcs11_store: ../../include/target.h unit-pkcs11_store.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-pkcs11_store.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)

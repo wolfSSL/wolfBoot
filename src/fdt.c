@@ -804,7 +804,17 @@ void* fdt_getprop_address(const fdt_ctx* ctx, int nodeoffset, const char* name)
         return NULL;
     }
     if (len == 8) {
-        return (void*)(uintptr_t)fdt_rd64u(val);
+        uint64_t addr64 = fdt_rd64u(val);
+        /* A two-cell value wider than the target's pointer must be
+         * rejected, not truncated: silently dropping the high cell turns
+         * an out-of-range address into an unrelated low one that the
+         * caller would then copy to or branch to. */
+#if UINTPTR_MAX < UINT64_MAX
+        if (addr64 > (uint64_t)UINTPTR_MAX) {
+            return NULL;
+        }
+#endif
+        return (void*)(uintptr_t)addr64;
     }
     if (len == 4) {
         return (void*)(uintptr_t)fdt_rd32(val);
@@ -1649,6 +1659,35 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
     return NULL;
 }
 
+/* Defensive fallback: targets that never set a kernel relocation
+ * address leave WOLFBOOT_LOAD_KERNEL_ADDRESS at 0, in which case the
+ * FIT's own `load` property is honored. */
+#ifndef WOLFBOOT_LOAD_KERNEL_ADDRESS
+#define WOLFBOOT_LOAD_KERNEL_ADDRESS 0
+#endif
+
+/* Upper bound on the (decompressed) kernel size. Defaults to the
+ * generic FIT decompression cap. */
+#ifndef WOLFBOOT_FIT_MAX_KERNEL
+#define WOLFBOOT_FIT_MAX_KERNEL WOLFBOOT_FIT_MAX_DECOMP
+#endif
+
+/* Load the FIT kernel sub-image. If WOLFBOOT_LOAD_KERNEL_ADDRESS is
+ * nonzero the kernel is staged there and the FIT's `load`/`entry` are
+ * bypassed, which is what lets a FIT whose kernel node declares neither
+ * one boot at all: without a destination a gzip kernel cannot be
+ * decompressed, and an uncompressed one would be entered in place at
+ * whatever alignment the FIT happens to give it. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
+{
+    if (WOLFBOOT_LOAD_KERNEL_ADDRESS != 0) {
+        return fit_load_image_to(ctx, kernel_node,
+            (void*)WOLFBOOT_LOAD_KERNEL_ADDRESS,
+            (uint32_t)WOLFBOOT_FIT_MAX_KERNEL, lenp);
+    }
+    return fit_load_image(ctx, kernel_node, lenp);
+}
+
 #ifdef WOLFBOOT_FIT_RAMDISK
 /* Defensive fallback: targets without a fixed relocation address
  * leave WOLFBOOT_LOAD_RAMDISK_ADDRESS at 0, in which case the
@@ -1916,7 +1955,10 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 wolfBoot_printf("FIT: subimage '%s' declares "
                     "compression=\"%s\" but has no distinct load "
                     "destination (load=%p, data=%p); refusing to pass "
-                    "compressed bytes through as raw\n",
+                    "compressed bytes through as raw. Add `load` to the "
+                    "FIT node; the kernel, ramdisk and fpga loaders can "
+                    "take WOLFBOOT_LOAD_{KERNEL,RAMDISK,FPGA}_ADDRESS "
+                    "instead\n",
                     image, compstr, load, data);
                 return NULL;
             }
