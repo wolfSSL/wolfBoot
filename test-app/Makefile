@@ -1445,6 +1445,9 @@ ifeq ($(USE_ARMCLANG),1)
   LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=image.map --scatter=$(LSCRIPT)
 endif
 
+# After every target-specific LDFLAGS reset above, so it applies to all of them.
+LDFLAGS+=$(LDFLAGS_EXTRA)
+
 # Capture final flags for locally built wolfSSL objects.
 WOLFSSL_CFLAGS:=$(CFLAGS)
 WOLFTPM_CFLAGS:=$(CFLAGS)

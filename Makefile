@@ -326,6 +326,7 @@ ifeq ($(USE_ARMCLANG),1)
     endif
   endif
   LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=wolfboot.map
+  LDFLAGS+=$(LDFLAGS_EXTRA)
   LSCRIPT:=config/target.sct
   LSCRIPT_IN:=hal/$(TARGET).sct
   LSCRIPT_FLAGS:=--scatter=$(LSCRIPT)
@@ -565,7 +566,23 @@ include tools/test-renode.mk
 
 hal/$(TARGET).o:
 
+# Prebuilt keygen and sign supplied on the command line (a native build under
+# Yocto, say) are used as-is; the in-tree keytools are built unless both are
+# given, since the signing steps fall back to the in-tree sign tool.
+ifeq ($(origin KEYGEN_TOOL),command line)
+  ifeq ($(origin SIGN_TOOL),command line)
+    KEYTOOLS_PREBUILT:=1
+  endif
+endif
+ifeq ($(KEYTOOLS_PREBUILT),1)
+keytools_check:
+	$(Q)command -v "$(KEYGEN_TOOL)" >/dev/null || \
+		(echo "KEYGEN_TOOL is not executable: $(KEYGEN_TOOL)" >&2 && false)
+	$(Q)command -v "$(SIGN_TOOL)" >/dev/null || \
+		(echo "SIGN_TOOL is not executable: $(SIGN_TOOL)" >&2 && false)
+else
 keytools_check: keytools
+endif
 
 test-emu:
 	$(MAKE) -C test-app/emu-test-apps WOLFBOOT_ROOT="$(CURDIR)" test-emu
