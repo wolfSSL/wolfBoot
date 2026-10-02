@@ -168,3 +168,22 @@ jobs:
           ./tools/keytools/otp/otp-keystore-gen
           m33mu tools/keytools/otp/otp-keystore-primer.bin --persist --timeout 10 || true
           m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600 --persist
+
+      # LPC55S69 DICE attestation + HW PUF. The PUF root key is provisioned
+      # at first boot (WOLFBOOT_HWPUF_PROVISION=1) and used for DICE key
+      # derivation on subsequent boots. Requires m33mu with lpc55s69 PUF/RNG
+      # models (wolfboot-ci >= 1.22).
+      - name: Clean and build test with DICE attestation + HW PUF (lpc55s69)
+        run: |
+          set -o pipefail
+          make clean distclean
+          cp config/examples/lpc55s69-tz-psa.config .config
+          sed -i 's/^HWPUF?=0/HWPUF?=1/' .config
+          echo "WOLFBOOT_HWPUF_PROVISION?=1" >> .config
+          make
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x48000 --cpu lpc55s69 --uart-stdout --timeout 300 \
+            | tee /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Booting version:" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Checking integrity...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Verifying signature...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf.log
