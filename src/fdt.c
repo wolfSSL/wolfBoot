@@ -1735,6 +1735,19 @@ int __attribute__((weak)) wolfBoot_fit_memcpy(void *dst, const void *src,
     return 0;
 }
 
+/* Weak destination check for a FIT subimage load. wolfBoot_fit_memcpy() above
+ * lets a target police the plain copy, but the gzip path writes to the
+ * FIT-declared address directly, so that write needs its own check. Default
+ * accepts everything, which is the behavior before this hook existed. Called
+ * with the decompressor's output ceiling, not the eventual length, because the
+ * real length is not known until the stream has been inflated. */
+int __attribute__((weak)) wolfBoot_fit_check_dest(void *dst, uint32_t len)
+{
+    (void)dst;
+    (void)len;
+    return 0;
+}
+
 /* Inner implementation shared by fit_load_image_ex and fit_load_image_to.
  * When dst_override is non-NULL it replaces the FIT image's `load`
  * property as the destination, so a compressed (gzip) payload is
@@ -1845,6 +1858,11 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                          * rather than skipping it silently. */
                         wolfBoot_printf("gzip: no _start_text, output not "
                             "bounded by the wolfBoot image\n");
+                    }
+                    if (wolfBoot_fit_check_dest(load, gz_max) != 0) {
+                        wolfBoot_printf("FIT: %s decompression destination %p "
+                            "rejected\n", image, load);
+                        return NULL;
                     }
                     wolfBoot_printf("Decompressing Image %s (gzip): "
                         "%p -> %p (%d bytes)\n", image, data, load, len);
