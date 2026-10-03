@@ -160,6 +160,10 @@ TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-stm32c0-write
 TESTS+=unit-nvm-cache-scrub
+TESTS+=unit-nvm-journal unit-nvm-journal-ecc
+TESTS+=unit-nvm-journal-dual unit-nvm-journal-dual-ecc
+TESTS+=unit-elf-store-ecc unit-elf-store-ecc-invert
+TESTS+=unit-flash-is-erased unit-flash-is-erased-invert
 TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
 TESTS+=unit-sdhci-cmd-inhibit
@@ -280,6 +284,24 @@ unit-parser-large-header:CFLAGS+=-DNVM_FLASH_WRITEONCE
 unit-fdt:CFLAGS+=-DWOLFBOOT_FDT
 unit-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS
 unit-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DFLAGS_HOME
+unit-flash-is-erased:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH
+unit-flash-is-erased-invert:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH \
+	-DWOLFBOOT_FLAGS_INVERT=1
+# Journal tests use 4 KB sectors, because the log must hold a full-partition
+# update
+unit-nvm-journal:CFLAGS+=-DNVM_FLASH_JOURNAL -DMOCK_PARTITIONS \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
+unit-nvm-journal-ecc:CFLAGS+=-DNVM_FLASH_JOURNAL -DNVM_FLASH_ECC -DMOCK_PARTITIONS \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256 \
+	-DWOLFBOOT_FLASH_WRITE_UNIT=32 -DWOLFBOOT_FLAGS_INVERT=1 \
+	-DEXT_FLASH -DPART_BOOT_EXT -DPART_UPDATE_EXT
+unit-nvm-journal-dual:CFLAGS+=-DNVM_FLASH_JOURNAL -DNVM_FLASH_JOURNAL_DUAL \
+	-DMOCK_PARTITIONS -DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
+unit-nvm-journal-dual-ecc:CFLAGS+=-DNVM_FLASH_JOURNAL -DNVM_FLASH_JOURNAL_DUAL \
+	-DNVM_FLASH_ECC -DMOCK_PARTITIONS \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256 \
+	-DWOLFBOOT_FLASH_WRITE_UNIT=32 -DWOLFBOOT_FLAGS_INVERT=1 \
+	-DEXT_FLASH -DPART_BOOT_EXT -DPART_UPDATE_EXT
 unit-diagnostics:CFLAGS+=-DMOCK_PARTITIONS
 unit-diagnostics-256:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_DIAGNOSTICS_RECORD_SIZE=32
 unit-enc-nvm:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DEXT_ENCRYPTED \
@@ -929,6 +951,24 @@ unit-nvm: ../../include/target.h unit-nvm.c
 unit-nvm-flagshome: ../../include/target.h unit-nvm.c
 	gcc -o $@ unit-nvm.c $(CFLAGS) $(LDFLAGS)
 
+unit-flash-is-erased: ../../include/target.h unit-flash-is-erased.c
+	gcc -o $@ unit-flash-is-erased.c $(CFLAGS) $(LDFLAGS)
+
+unit-flash-is-erased-invert: ../../include/target.h unit-flash-is-erased.c
+	gcc -o $@ unit-flash-is-erased.c $(CFLAGS) $(LDFLAGS)
+
+unit-nvm-journal: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
+	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-nvm-journal-ecc: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
+	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-nvm-journal-dual: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
+	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-nvm-journal-dual-ecc: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
+	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
 unit-diagnostics: ../../include/target.h unit-diagnostics.c
 	gcc -o $@ unit-diagnostics.c $(CFLAGS) $(LDFLAGS)
 
@@ -1469,16 +1509,28 @@ t10xx_qe_firmware_extract.h: ../../hal/nxp_t10xx.c
 unit-t10xx-qe-firmware: unit-t10xx-qe-firmware.c t10xx_qe_firmware_extract.h
 	gcc -o $@ unit-t10xx-qe-firmware.c -DWOLFBOOT_NO_PRINTF $(CFLAGS) $(LDFLAGS)
 
-# unit-aurix-erased-fill runs the real cacheSector() and
-# programBytesToErasedFlash() from hal/aurix_tc3xx.c (the
-# uint32_t page buffers were filled with the byte-valued
-# FLASH_BYTE_ERASED, so default-polarity builds got 0x000000FF words
-# instead of the erased 0xFFFFFFFF). The tc3_flash_* API is emulated
-# on a host flash array; the same source is built for both flag
-# polarities and the assertions key off FLASH_BYTE_ERASED.
+# unit-aurix-erased-fill runs the real PFLASH write, erase and erased check
+# from hal/aurix_tc3xx.c against an emulated tc3_flash_* API that tracks
+# programmed pages. The same source is built for both flag polarities.
 aurix_erased_extract.h: ../../hal/aurix_tc3xx.c
-	sed -n '/^static void RAMFUNCTION cacheSector(uint32_t sectorAddress)/,/^}/p' $< > $@
-	sed -n '/^static int RAMFUNCTION programBytesToErasedFlash/,/^}/p' $< >> $@
+	sed -n '/^static int RAMFUNCTION programBytesToErasedFlash/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION _flashWrite(/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write(/,/^}/p' $< >> $@
+	sed -n '/^static int RAMFUNCTION _flashErase(/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_is_erased(/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION ext_flash_is_erased(/,/^}/p' $< >> $@
+
+# unit-elf-store-ecc runs the real NVM_FLASH_ECC ELF scatter store from
+# src/image.c against a write-once flash mock.
+elf_store_extract.h: ../../src/image.c
+	sed -n '/^#define ELF_UNIT /,/^#else$$/{/^#else$$/d;p}' $< > $@
+
+unit-elf-store-ecc: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c $(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-invert: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
 
 unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
 	gcc -o $@ unit-aurix-erased-fill.c $(CFLAGS) $(LDFLAGS)
