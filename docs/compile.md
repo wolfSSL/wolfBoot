@@ -404,6 +404,10 @@ lib-fs --dev /dev/mmcblk1p1 status     # read the current state
 
 Order the `success` call after whatever the system treats as proof of a healthy boot; a systemd unit ordered after the services that matter is the usual place.
 
+### Golden slot
+
+`DISK_GOLDEN_SLOT=1` adds a third slot that the disk boot path tries once, after the A/B attempts are spent (both slots invalid, unconfirmed, or failing verification). It is read from `BOOT_PART_GOLDEN` (0-based GPT index, default 2), or by `BOOT_LABEL_GOLDEN` / `BOOT_FILE_GOLDEN` like the A/B slots, and it is fully verified like any other image. Two things differ from A and B. The golden slot is exempt from the anti-rollback check, so a deliberately old recovery image still boots when the newer slots are gone; an anti-rollback refusal of the other update slot falls through to the golden slot instead of halting. And it is never written: no boot-confirmation trailer is ever armed on it, so its state cannot drift. Reaching it is announced on the console (`Falling back to the golden image on pN`).
+
 The tool needs no configuration to match the loader's layout and no rebuild per slot. With `--dev` it locates the trailer from the size of the device it was handed, which is how wolfBoot locates it too, and it writes the pinned state values rather than the `IMG_STATE_*` of its own build. `include/disk_trailer.h` holds the offset, the magic and the four state values, and both the loader and the tool include it, so there is one definition to disagree with rather than two.
 
 #### Constraints
