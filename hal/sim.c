@@ -462,6 +462,42 @@ void hal_prepare_boot(void)
     /* no op */
 }
 
+#ifdef NVM_FLASH_ECC
+/* Simulate ECC flash. Writes must cover whole erased write units, and erases
+ * must cover whole sectors. */
+static int sim_ecc_check_write(uintptr_t address, int len)
+{
+    const uint8_t *p = (const uint8_t *)address;
+    int i;
+
+    if (((address % WOLFBOOT_FLASH_WRITE_UNIT) != 0) ||
+            ((len % WOLFBOOT_FLASH_WRITE_UNIT) != 0)) {
+        wolfBoot_printf("NVM_FLASH_ECC unaligned write at %p, len %d\n",
+            (void*)address, len);
+        return -1;
+    }
+    for (i = 0; i < len; i++) {
+        if (p[i] != FLASH_BYTE_ERASED) {
+            wolfBoot_printf("NVM_FLASH_ECC write to a programmed unit at %p\n",
+                (void*)(address + i));
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int sim_ecc_check_erase(uintptr_t address, int len)
+{
+    if (((address % WOLFBOOT_SECTOR_SIZE) != 0) ||
+            ((len % WOLFBOOT_SECTOR_SIZE) != 0)) {
+        wolfBoot_printf("NVM_FLASH_ECC partial-sector erase at %p, len %d\n",
+            (void*)address, len);
+        return -1;
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
@@ -469,6 +505,10 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
         wolfBoot_printf("FLASH IS BEING WRITTEN TO WHILE LOCKED\n");
         return -1;
     }
+#ifdef NVM_FLASH_ECC
+    if (sim_ecc_check_write(address, len) != 0)
+        return -1;
+#endif
     if (forceEmergency == 1 && address == WOLFBOOT_PARTITION_BOOT_ADDRESS) {
         /* implicit cast abide compiler warning */
         memset((void*)address, 0, len);
@@ -502,6 +542,10 @@ int hal_flash_erase(uintptr_t address, int len)
         wolfBoot_printf("FLASH IS BEING ERASED WHILE LOCKED\n");
         return -1;
     }
+#ifdef NVM_FLASH_ECC
+    if (sim_ecc_check_erase(address, len) != 0)
+        return -1;
+#endif
     /* implicit cast abide compiler warning */
     wolfBoot_printf( "hal_flash_erase addr %p len %d\n", (void*)address, len);
     if (address == erasefail_address + WOLFBOOT_PARTITION_BOOT_ADDRESS) {

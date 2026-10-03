@@ -738,6 +738,30 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
     return bytesRead;
 }
 
+/* Erased check with the hardware erase-verify command, page by page. A plain
+ * read cannot tell, because reading erased PFLASH is an ECC error. */
+int RAMFUNCTION hal_flash_is_erased(uint32_t address, int len)
+{
+    uint32_t page;
+
+    if (len <= 0) {
+        return 1;
+    }
+    for (page = GET_PAGE_ADDR(address); page < address + (uint32_t)len;
+         page += TC4_PFLASH_PAGE_SIZE) {
+        int erased = flashIsPageErased(page);
+        if (erased != 1) {
+            return erased;
+        }
+    }
+    return 1;
+}
+
+int RAMFUNCTION ext_flash_is_erased(uintptr_t address, int len)
+{
+    return hal_flash_is_erased((uint32_t)address, len);
+}
+
 int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
 {
     return hal_flash_erase((uint32_t)address, len);

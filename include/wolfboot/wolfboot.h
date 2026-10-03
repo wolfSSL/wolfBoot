@@ -631,6 +631,31 @@ extern "C" {
   #error "DELTA_UPDATES requires swap partition (incompatible with DISABLE_BACKUP)"
 #endif
 
+#if defined(NVM_FLASH_JOURNAL) && defined(NVM_FLASH_WRITEONCE)
+  #error "NVM_FLASH_JOURNAL and NVM_FLASH_WRITEONCE are mutually exclusive"
+#endif
+#if defined(NVM_FLASH_JOURNAL) && (defined(EXT_ENCRYPTED) || \
+    defined(FLAGS_HOME) || defined(CUSTOM_PARTITION_TRAILER) || \
+    defined(PULL_LINKER_DEFINES))
+  #error "NVM_FLASH_JOURNAL does not support EXT_ENCRYPTED, FLAGS_HOME, CUSTOM_PARTITION_TRAILER or PULL_LINKER_DEFINES"
+#endif
+#if defined(NVM_FLASH_ECC) && !defined(NVM_FLASH_JOURNAL)
+  #error "NVM_FLASH_ECC needs NVM_FLASH_JOURNAL"
+#endif
+#if defined(NVM_FLASH_ECC) && (defined(DELTA_UPDATES) || defined(EXT_ENCRYPTED))
+  #error "NVM_FLASH_ECC does not support DELTA_UPDATES or EXT_ENCRYPTED yet"
+#endif
+#if defined(NVM_FLASH_JOURNAL_DUAL) && !defined(NVM_FLASH_JOURNAL)
+  #error "NVM_FLASH_JOURNAL_DUAL needs NVM_FLASH_JOURNAL"
+#endif
+
+/* Sectors at the end of each partition that hold its trailer */
+#if defined(NVM_FLASH_WRITEONCE) || defined(NVM_FLASH_JOURNAL_DUAL)
+#define WOLFBOOT_TRAILER_SECTORS 2
+#else
+#define WOLFBOOT_TRAILER_SECTORS 1
+#endif
+
 #define PART_BOOT   0
 #define PART_UPDATE 1
 #define PART_SWAP   2
@@ -700,6 +725,9 @@ uint32_t wolfBoot_get_diffbase_version(uint8_t part);
     wolfBoot_get_image_version(PART_BOOT)
 #define wolfBoot_update_firmware_version() \
     wolfBoot_get_image_version(PART_UPDATE)
+#ifdef NVM_FLASH_JOURNAL
+int wolfBoot_clear_trailer(uint8_t part);
+#endif
 #endif
 
 int wolfBoot_fallback_is_possible(void);
