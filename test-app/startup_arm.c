@@ -100,26 +100,26 @@ void isr_reset(void) {
     main();
 }
 
-void isr_fault(void)
+__attribute__((weak)) void isr_fault(void)
 {
     /* Panic. */
     while(1) ;
 
 }
 
-void isr_memfault(void)
+__attribute__((weak)) void isr_memfault(void)
 {
     /* Panic. */
     while(1) ;
 }
 
-void isr_busfault(void)
+__attribute__((weak)) void isr_busfault(void)
 {
     /* Panic. */
     while(1) ;
 }
 
-void isr_usagefault(void)
+__attribute__((weak)) void isr_usagefault(void)
 {
     /* Panic. */
     while(1) ;
