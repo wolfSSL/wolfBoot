@@ -59,6 +59,7 @@ This README describes configuration of supported targets.
 * [STM32H5](#stm32h5)
 * [STM32N6](#stm32n6)
 * [STM32H7](#stm32h7)
+* [STM32H7S](#stm32h7s)
 * [STM32L0](#stm32l0)
 * [STM32L4](#stm32l4)
 * [STM32L5](#stm32l5)
@@ -2660,6 +2661,258 @@ mon reset init
 b main
 c
 ```
+
+
+## STM32H7S
+
+The STM32H7S and STM32H7R (STM32H7RS series, Cortex-M7) have only 64 KB of
+internal user flash and are designed to run their application from external
+Octo-SPI NOR. wolfBoot is placed in the internal flash at `0x08000000` and
+keeps the boot, update and swap partitions on the external NOR, which it
+reaches over XSPI2. The application executes in place from the XSPI
+memory-mapped window at `0x70000000`.
+
+This is the same split ST uses in its own `Templates_Board` reference project
+for the part: a `Boot` sub-project in internal flash that brings up the
+external memory interface and hands off to an `Appli` sub-project linked into
+the XSPI window.
+
+Developed against the **NUCLEO-H7S3L8** (STM32H7S3L8), whose NOR is a Macronix
+MX25UW25645G (32 MB) on XSPI2 at 1.8 V.
+
+Hardware status: validated end to end on a NUCLEO-H7S3L8. wolfBoot boots from
+internal flash, verifies an ECDSA P-256 / SHA-256 signed image on the external
+NOR and chain-loads it; the application executes in place and reports
+SYSCLK 600 MHz, HCLK 300 MHz, PCLK1 150 MHz with the XSPI2 kernel on PLL2S,
+read back from the live RCC registers. A version 2 update staged in the update
+partition swaps correctly and the application confirms it with
+`wolfBoot_success()`. The NOR reports JEDEC manufacturer `0xC2` (Macronix)
+device `0x8139`, matching the MX25UW25645G at 32 MB and confirming
+`FLASH_DEVICE_SIZE_LOG2`.
+
+Two things remain unexercised: rollback from a deliberately corrupted update,
+and `hal_flash_write()` on the internal flash, since this layout keeps every
+partition on the external NOR and nothing in wolfBoot writes internal flash.
+
+### Memory Layout
+
+```
+Internal flash (0x08000000, 64 KB, eight 8 KB sectors):
+  0x08000000  wolfBoot + keystore
+
+External Octo-SPI NOR on XSPI2 (memory mapped at 0x70000000):
+  0x00010000  Swap partition   (one 4 KB sector,  device relative)
+  0x00020000  Boot partition   (4 MB, 0x70020000 memory mapped)
+  0x00420000  Update partition (4 MB, device relative)
+```
+
+The boot partition is configured at its absolute memory-mapped address
+because the application's vector table has to be fetchable there. Update and
+swap are device-relative offsets. `ext_flash_addr()` in `hal/stm32h7s.c`
+accepts either form.
+
+### Build Options
+
+```
+cp config/examples/stm32h7s.config .config
+make keytools
+make
+```
+
+Board-specific values are overridable defaults in `hal/stm32h7s.h`: the device
+geometry (`FLASH_DEVICE_SIZE_LOG2`, `FLASH_PAGE_SIZE`, `FLASH_SECTOR_SIZE`),
+the interface rate (`OCTOSPI_MAX_HZ`), the XSPI pin bank (`OCTOSPI_GPIO_*`)
+and the console (`UART_BASE`, `UART_PCLK`). A board with a different NOR on
+XSPI2 should not need the HAL body changed.
+
+Only XSPI2 is supported. `OCTOSPI_BASE` and `OCTOSPI_MEM_BASE` move the
+register and window addresses, but `octospi_init()` enables and resets XSPI2
+specifically and `clock_config()` selects the XSPI2 kernel clock, so a board
+wiring the NOR to XSPI1 needs those changed as well.
+
+wolfBoot and the application live in different address spaces, so no
+contiguous `factory.bin` is produced; the build emits `wolfboot.bin` and
+`test-app/image_v1_signed.bin` separately.
+
+### The memory-mapped window has to stay live
+
+`octospi_init()` leaves XSPI2 memory mapped, and it has to: `wolfBoot_start()`
+in `src/update_flash.c` dereferences `boot.hdr` directly, and for an external
+boot partition that is the raw device address. With the window down that read
+is a precise bus fault at the partition address. The same constraint is why
+`hal/stm32n6.c` keeps its window mapped.
+
+An indirect SPI command must drop the window, so each `ext_flash_*` operation
+records whether it was mapped on entry and restores it before returning. That
+matters twice over: for wolfBoot, because core code dereferences the partition
+address; and for an application executing in place, whose first trailer write
+would otherwise unmap the memory it is about to return into.
+
+`ext_flash_read()` still issues a real `FAST_READ_4B` command rather than
+reading through the window, so wolfBoot's own partition reads do not depend on
+the mapping even though it is enabled. The config sets `PART_BOOT_EXT` so
+boot-partition accesses take that path too.
+
+### Clocks
+
+The device comes out of reset on HSI at 64 MHz. `hal_init()` raises it, using
+ST's reference dividers for this part:
+
+```
+PLL1: HSI 64 MHz / M=32 -> 2 MHz, x N=300 -> 600 MHz VCO, P=1
+  SYSCLK          600 MHz   (CPU prescaler /1)
+  HCLK (AXI/AHB)  300 MHz   (/2)
+  APB1/2/4/5      150 MHz   (/2)
+  Flash latency 7 with WRHIGHFREQ, voltage scaling range 0
+
+PLL2: HSI 64 MHz / M=4 -> 16 MHz, x N=25 -> 400 MHz VCO, S=2
+  XSPI2 kernel    200 MHz
+```
+
+The regulator and the flash wait states are raised before the frequency, and
+the bus prescalers are set before the system clock is switched over, so no
+domain is ever briefly out of spec.
+
+PLL2 is there because the XSPI2 kernel clock defaults to HCLK. Left alone it
+would tie the NOR interface rate to the bus clock, so raising the core would
+overclock the flash. Driving the kernel from PLL2 decouples them, and
+`OCTOSPI_PRESCALER` is derived from `OCTOSPI_KERNEL_HZ` and `OCTOSPI_MAX_HZ`
+rather than hardcoded, so the NOR stays within its rated rate if the clock
+tree is retuned.
+
+Build with `STM32H7S_HSI_ONLY=1` to skip all of this and stay on the 64 MHz
+reset clock. Everything derived from the clock tree follows, including the
+UART divisor and the XSPI prescaler, so the console and the flash still work;
+it is a smaller thing to debug if a board does not come up. Because it is a
+make variable rather than a `.config` entry, run `make distclean` when
+switching it, or the previous build is reused.
+
+### Core and XSPI supply
+
+Nothing runs before wolfBoot on this part, so `hal_init()` configures the
+supply itself. The low five bits of `PWR_CSR2` select the core supply
+topology, are write-once after a power-on reset, and come out of reset with
+both `SDEN` and `LDOEN` set, which means "not yet selected". Until a
+selection is committed and `PWR_SR1.ACTVOSRDY` rises, a write to
+`PWR_CSR4.VOS` does not take effect and `VOSRDY` never rises. The example
+configuration selects the internal LDO, which is how the NUCLEO-H7S3L8 is
+wired; override `PWR_SUPPLY_CONFIG` for a board using the SMPS.
+
+`PWR_CSR2.EN_XSPIM2` switches on the XSPI I/O supply and is also off after a
+power-on reset, so it is set once the core supply is stable. Without it the
+NOR cannot be read and opening the boot partition fails.
+
+Only a true power-on reset returns `PWR` to the unconfigured state. A
+software reset, `NRST`, a debugger attach, or programming through ST's
+external memory loader all leave a working configuration behind, so a port
+that omits this appears to boot fine and only fails once power is actually
+removed.
+
+### Bootloader self-update is off
+
+`RAM_CODE` is 0 in the example configuration. It would compile in the
+bootloader self-update path, which erases
+`WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET` bytes from the start of
+internal flash. With wolfBoot in internal flash and the partitions on the NOR
+that length is far larger than the 64 KB device, so the erase is refused and a
+self-update would be written into flash that was never erased.
+
+The bootloader does not otherwise need `RAMFUNCTION`: it executes from internal
+flash and only ever writes the external NOR. The application does need it, so
+`test-app/Makefile` sets `-DRAM_CODE` for this target directly, which is what
+places the HAL's NOR routines in `.ramcode`.
+
+### HSLV option bytes
+
+The XSPI2 I/O bank on the NUCLEO-H7S3L8 runs at 1.8 V. Driving the interface
+above its low-voltage rate requires the `VDDIO_HSLV` and `XSPI2_HSLV` user
+option bits:
+
+```
+STM32_Programmer_CLI -c port=swd sn=<SN> mode=UR \
+    -ob VDDIO_HSLV=1 XSPI2_HSLV=1
+```
+
+`OCTOSPI_MAX_HZ` defaults to 50 MHz, a single-SPI rate that does not depend on
+those bits. Raise it only once they are programmed.
+
+### STM32H7S Programming
+
+`tools/scripts/stm32h7s_flash.sh` does all of the below, including picking a
+new enough CubeProgrammer and the right external loader:
+
+```
+STLINK_SERIAL=<SN> ./tools/scripts/stm32h7s_flash.sh               # build + flash
+STLINK_SERIAL=<SN> ./tools/scripts/stm32h7s_flash.sh --test-update # stage a v2
+STLINK_SERIAL=<SN> ./tools/scripts/stm32h7s_flash.sh --probe       # identify only
+```
+
+`make flash` runs it with `--skip-build`. The manual commands follow.
+
+Use a CubeProgrammer of 2.23 or newer. Older releases have been seen either
+not to enumerate this board's ST-LINK at all, or to leave it in
+firmware-upgrade mode, which needs a USB replug to recover.
+
+Pass `sn=<SN>` on every command when more than one ST-LINK is attached,
+otherwise the tool picks the first one it finds.
+
+Program wolfBoot into internal flash:
+
+```
+STM32_Programmer_CLI -c port=swd sn=<SN> mode=UR \
+    -d wolfboot.bin 0x08000000 -v
+```
+
+Program the signed application into the boot partition on the external NOR.
+This needs an external loader for the XSPI device:
+
+```
+STM32_Programmer_CLI -c port=swd sn=<SN> mode=UR \
+    -el <CubeProgrammer>/bin/ExternalLoader/MX25UW25645G_NUCLEO-H7S3L8.stldr \
+    -d test-app/image_v1_signed.bin 0x70020000 -v
+```
+
+### STM32H7S Testing
+
+Sign the same application as version 2 and write it to the update partition:
+
+```
+IMAGE_HEADER_SIZE=1024 tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+STM32_Programmer_CLI -c port=swd sn=<SN> mode=UR \
+    -el <CubeProgrammer>/bin/ExternalLoader/MX25UW25645G_NUCLEO-H7S3L8.stldr \
+    -d test-app/image_v2_signed.bin 0x70420000 -v
+```
+
+`IMAGE_HEADER_SIZE=1024` is not optional. The sign tool defaults to a
+256-byte manifest, and this target's `.config` sets 1024, so omitting it
+produces an image whose firmware starts at the wrong offset. wolfBoot then
+reads the header fine but hashes the wrong bytes and reports
+`Update verify failed: Hdr 1, Hash 0, Sig 0`.
+
+On reset wolfBoot verifies the update, swaps it into the boot partition and
+boots it. The test-app prints its version over USART3 (PD8/PD9, 115200) on the
+ST-LINK virtual COM port, and calls `wolfBoot_success()` once running as
+version 2.
+
+### STM32H7S Debugging
+
+```
+openocd -c "adapter serial <SN>" -f config/openocd/openocd_stm32h7s.cfg
+```
+
+then from the wolfBoot root:
+
+```sh
+arm-none-eabi-gdb
+add-symbol-file test-app/image.elf 0x70020400
+mon reset init
+b main
+c
+```
+
+The application symbols are offset by `IMAGE_HEADER_SIZE` (1024) from the boot
+partition address.
 
 
 ## NXP LPC546xx

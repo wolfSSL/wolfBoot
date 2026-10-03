@@ -820,6 +820,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32h7-octospi.config
 
+  stm32h7s_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32h7s.config
+
   stm32l0_test:
     uses: ./.github/workflows/test-build.yml
     with:

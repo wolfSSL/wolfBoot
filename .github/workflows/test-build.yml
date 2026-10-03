@@ -88,6 +88,7 @@ jobs:
         if: |
           inputs.config-file == './config/examples/stm32h7.config' ||
           inputs.config-file == './config/examples/stm32h7-octospi.config' ||
+          inputs.config-file == './config/examples/stm32h7s.config' ||
           inputs.config-file == './config/examples/stm32u3.config' ||
           inputs.config-file == './config/examples/stm32u5.config' ||
           inputs.config-file == './config/examples/stm32u5-wolfcrypt-tz.config' ||
