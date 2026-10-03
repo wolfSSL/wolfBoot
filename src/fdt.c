@@ -76,6 +76,11 @@ uint32_t cpu_to_fdt32(uint32_t x)
 {
 #ifdef BIG_ENDIAN_ORDER
     return x;
+#elif defined(__riscv) && !defined(__riscv_zbb)
+    /* Without Zbb the builtin becomes a libgcc call, which a soft-float
+     * build on a Linux toolchain cannot link. */
+    return ((x & 0x000000FFU) << 24) | ((x & 0x0000FF00U) << 8) |
+           ((x & 0x00FF0000U) >> 8) | ((x & 0xFF000000U) >> 24);
 #else
     return (uint32_t)__builtin_bswap32(x);
 #endif
@@ -84,6 +89,9 @@ uint64_t cpu_to_fdt64(uint64_t x)
 {
 #ifdef BIG_ENDIAN_ORDER
     return x;
+#elif defined(__riscv) && !defined(__riscv_zbb)
+    return ((uint64_t)cpu_to_fdt32((uint32_t)x) << 32) |
+           (uint64_t)cpu_to_fdt32((uint32_t)(x >> 32));
 #else
     return (uint64_t)__builtin_bswap64(x);
 #endif

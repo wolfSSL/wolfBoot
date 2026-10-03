@@ -1567,6 +1567,7 @@ ifneq (,$(filter RISCV RISCV64,$(ARCH)))
 endif
 
 CFLAGS+=$(CFLAGS_EXTRA)
+LDFLAGS+=$(LDFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
 
 # The authenticated STM32H5 ECC256 secure-app path retains certificate parsing.
