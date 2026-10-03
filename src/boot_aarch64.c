@@ -165,10 +165,10 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset, const uint32_t* dts_offset)
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 #endif
 {
-    wolfBoot_printf("do_boot: entry=0x%08x, EL=%d\n",
-        (uint32_t)(uintptr_t)app_offset, current_el());
+    wolfBoot_printf("do_boot: entry=%p, EL=%d\n", (void*)app_offset,
+        current_el());
 #ifdef MMU
-    wolfBoot_printf("do_boot: dts=0x%08x\n", (uint32_t)(uintptr_t)dts_offset);
+    wolfBoot_printf("do_boot: dts=%p\n", (void*)dts_offset);
     /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window size
      * (see include/fdt.h); it bounds the fixups below. */
     if (hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE) != 0) {

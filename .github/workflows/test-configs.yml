@@ -1223,11 +1223,35 @@ jobs:
       arch: aarch64
       config-file: ./config/examples/versal_vmk180.config
 
+  versal_vmk180_highddr_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_highddr.config
+
   versal_vmk180_sdcard_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
       arch: aarch64
       config-file: ./config/examples/versal_vmk180_sdcard.config
+
+  # The FIT shape a "fatload ... ; bootm" flow produces: read from a
+  # filesystem, no kernel load/entry and no fdt sub-image in the FIT, so the
+  # staging addresses come from the build instead.
+  versal_vmk180_sdcard_fit_file_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_sdcard.config
+      make-args: DISK_FS=fat32 FIT_RAMDISK=1 WOLFBOOT_LOAD_KERNEL_ADDRESS=0x200000 WOLFBOOT_LOAD_RAMDISK_ADDRESS=0x40000000
+
+  # Same, with every address moved into a high DDR aperture.
+  versal_vmk180_sdcard_fit_file_highddr_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_sdcard.config
+      make-args: DISK_FS=fat32 FIT_RAMDISK=1 DDR_HIGH_BASE=0x40000000000 DDR_HIGH_SIZE=0x10000000000 NO_DDR_LOW=1 WOLFBOOT_ORIGIN=0x40000800000 WOLFBOOT_LOAD_ADDRESS=0x40010000000 WOLFBOOT_LOAD_DTS_ADDRESS=0x40000001000 WOLFBOOT_LOAD_KERNEL_ADDRESS=0x40002000000 WOLFBOOT_LOAD_RAMDISK_ADDRESS=0x40030000000
 
   versal_vmk180_sdcard_fs_test:
     uses: ./.github/workflows/test-build-aarch64.yml

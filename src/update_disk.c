@@ -677,6 +677,12 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t dts_size = 0;
     /* Validated view of the FIT staged at load_address. */
     fdt_ctx  fit_ctx;
+    #ifdef WOLFBOOT_FIT_RAMDISK
+    /* FIT ramdisk node name, non-NULL only once the FIT has parsed. The
+     * initrd fixup is deferred until dts_addr is final, because the DTB
+     * may come from the boot firmware instead of from the FIT. */
+    const char *fit_ramdisk = NULL;
+    #endif
     #endif
 #endif
 #if defined(WOLFBOOT_ZYNQMP_FSBL) && defined(MMU)
@@ -753,7 +759,7 @@ void RAMFUNCTION wolfBoot_start(void)
     load_address = (uint32_t *)((((uintptr_t)_end_wb) + 0xf) & ~0xf);
 #endif
 
-    wolfBoot_printf("Load address 0x%x\r\n", load_address);
+    wolfBoot_printf("Load address %p\r\n", (void*)load_address);
 
     /* Upper bound on anything the media may claim about the image size.
      * The payload is copied into the load region before its signature is
@@ -1172,7 +1178,7 @@ void RAMFUNCTION wolfBoot_start(void)
         (void)fpga;
 #endif
         if (kernel != NULL) {
-            void *new_load = fit_load_image(fit, kernel, NULL);
+            void *new_load = fit_load_kernel(fit, kernel, NULL);
             if (new_load == NULL) {
                 wolfBoot_printf("FIT: failed to load kernel '%s'\r\n",
                     kernel);
@@ -1223,20 +1229,17 @@ void RAMFUNCTION wolfBoot_start(void)
                     wolfBoot_panic();
                 }
             }
+            else {
+                /* Say so rather than falling through to the boot
+                 * firmware's DTB silently: that would hand the kernel a
+                 * different device tree than the FIT names. */
+                wolfBoot_printf("FIT: '%s' is not a usable DTB (%d); "
+                    "trying the boot firmware's instead\r\n", flat_dt,
+                    parsed);
+            }
         }
 #ifdef WOLFBOOT_FIT_RAMDISK
-        if (ramdisk != NULL) {
-            fdt_ctx dts_ctx;
-            fdt_ctx* dts_for_initrd = NULL;
-
-            /* The relocated DTB sits in the staging window, so that is
-             * the capacity the initrd fixup may grow into. */
-            if (dts_addr != NULL &&
-                    fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
-                dts_for_initrd = &dts_ctx;
-            }
-            (void)fit_load_ramdisk(fit, ramdisk, dts_for_initrd);
-        }
+        fit_ramdisk = ramdisk;
 #else
         (void)ramdisk;
 #endif
@@ -1252,7 +1255,7 @@ void RAMFUNCTION wolfBoot_start(void)
     }
 #endif
 
-    wolfBoot_printf("Booting at %08lx\r\n", load_address);
+    wolfBoot_printf("Booting at %p\r\n", (void*)load_address);
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
     (void)hal_hsm_disconnect();
@@ -1284,6 +1287,63 @@ void RAMFUNCTION wolfBoot_start(void)
     (void)hal_boot_slot_select();
     if (dts_addr == NULL) {
         dts_addr = (uint8_t*)hal_get_boot_dts();
+    }
+    if (dts_addr == NULL) {
+        /* No firmware-patched DTB either. Fall back to the configured one,
+         * the same source src/update_ram.c uses - e.g. a bootgen raw
+         * partition left at WOLFBOOT_LOAD_DTS_ADDRESS. Without this a
+         * kernel-only FIT on a disk target reaches Linux with a NULL
+         * device tree. Validated here; an unparseable blob is dropped
+         * rather than forwarded. Still unauthenticated, so
+         * fdt_fixup_bootargs() keeps supplying the command line. */
+        uint8_t *cfg_dts = (uint8_t*)hal_get_dts_address();
+        int cfg_len;
+
+        if (cfg_dts != NULL) {
+            cfg_len = wolfBoot_get_dts_size(cfg_dts, WOLFBOOT_DTS_MAX_SIZE);
+            if (cfg_len < (int)WOLFBOOT_DTS_MIN_SIZE ||
+                    (uint32_t)cfg_len > WOLFBOOT_DTS_MAX_SIZE) {
+                wolfBoot_printf("DTB parse/size check failed - ignoring\r\n");
+            }
+            else if ((uintptr_t)cfg_dts ==
+                    (uintptr_t)WOLFBOOT_LOAD_DTS_ADDRESS) {
+                /* Already the staging window (the usual case: the HAL
+                 * returns WOLFBOOT_LOAD_DTS_ADDRESS itself). */
+                dts_addr = cfg_dts;
+            }
+            else if (wolfBoot_fit_memcpy((void*)WOLFBOOT_LOAD_DTS_ADDRESS,
+                    cfg_dts, (uint32_t)cfg_len) == 0) {
+                /* Relocate into the staging window first, as
+                 * src/update_ram.c does. The initrd fixup grows the tree in
+                 * place against a claimed WOLFBOOT_DTS_MAX_SIZE capacity, so
+                 * it must not run on a HAL blob that is read-only or not
+                 * backed by that much writable space. */
+                dts_addr = (uint8_t*)WOLFBOOT_LOAD_DTS_ADDRESS;
+            }
+            else {
+                wolfBoot_printf("DTB relocation failed - ignoring\r\n");
+            }
+        }
+    }
+#endif
+#if defined(WOLFBOOT_FDT) && defined(WOLFBOOT_FIT_RAMDISK)
+    /* Run after the DTB source is settled, so the initrd fixup lands on
+     * the tree the kernel will actually be handed - including a DTB that
+     * came from the boot firmware rather than from the FIT. Outside the
+     * #ifdef MMU above on purpose: WOLFBOOT_FDT without MMU is a real
+     * configuration (the MPFS E51 M-mode DDR boot) and it still needs the
+     * fixup. */
+    if (fit_ramdisk != NULL) {
+        fdt_ctx dts_ctx;
+        fdt_ctx* dts_for_initrd = NULL;
+
+        /* The relocated DTB sits in the staging window, so that is
+         * the capacity the initrd fixup may grow into. */
+        if (dts_addr != NULL &&
+                fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
+            dts_for_initrd = &dts_ctx;
+        }
+        (void)fit_load_ramdisk(&fit_ctx, fit_ramdisk, dts_for_initrd);
     }
 #endif
     /* Deferred from just after verification (see NOTE above): close the boot

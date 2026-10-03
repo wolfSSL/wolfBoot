@@ -284,6 +284,18 @@ int hal_flash_test_dualbank(void)
 
 #endif /* TEST_FLASH */
 
+#ifdef MMU
+/* Weak default: this target offers no configured device tree. Overridden by
+ * the HALs that do (hal/versal.c, hal/zynq.c, ...). Needed because some
+ * HALs compile their implementation out under WOLFBOOT_NO_PARTITIONS, and
+ * both update_ram.c and update_disk.c call this when a payload carries no
+ * FDT of its own. */
+WEAKFUNCTION void* hal_get_dts_address(void)
+{
+    return NULL;
+}
+#endif /* MMU */
+
 WEAKFUNCTION int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
 {
     (void)address;
