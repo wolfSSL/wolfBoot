@@ -44,6 +44,13 @@ void wolfBoot_printf(const char *fmt, ...)
     (void)fmt;
 }
 
+/* Resolves to a variable here so one binary can exercise both branches of
+ * fit_load_kernel() with the override pointing at a real buffer. */
+static uintptr_t kernel_override_addr = 0;
+#define WOLFBOOT_LOAD_KERNEL_ADDRESS kernel_override_addr
+static uintptr_t ramdisk_override_addr = 0;
+#define WOLFBOOT_LOAD_RAMDISK_ADDRESS ramdisk_override_addr
+
 /* Pull in the production code under test. fdt.c's body is gated on
  * WOLFBOOT_FDT; the Makefile defines that for both build variants.
  * gzip.c is only needed for the WOLFBOOT_GZIP build. */
@@ -64,6 +71,17 @@ void wolfBoot_printf(const char *fmt, ...)
 
 static const char fit_plain_payload[] = "hello fit test payload\n";
 #define FIT_PLAIN_LEN 23
+
+/* Smallest valid flat device tree, standing in for one the boot firmware
+ * left rather than the FIT. */
+static const uint8_t empty_dtb[] = {
+    0xd0,0x0d,0xfe,0xed, 0x00,0x00,0x00,0x48, 0x00,0x00,0x00,0x38,
+    0x00,0x00,0x00,0x48, 0x00,0x00,0x00,0x28, 0x00,0x00,0x00,0x11,
+    0x00,0x00,0x00,0x10, 0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x10, 0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x01,
+    0x00,0x00,0x00,0x00, 0x00,0x00,0x00,0x02, 0x00,0x00,0x00,0x09
+};
 
 /* gzip-compressed kernel, load=0xC0001000 */
 static const uint8_t fit_with_gzip_kernel[] = {
@@ -263,6 +281,122 @@ START_TEST(test_fit_ex_gzip_no_load_returns_null)
 }
 END_TEST
 
+START_TEST(test_fit_kernel_no_override_gzip_no_load_fails)
+{
+    /* No `load`/`entry` and no override: nowhere to decompress to, so the
+     * load must fail rather than hand back compressed bytes. */
+    int len = -1;
+    void *ret;
+    static uint8_t fit_scratch[sizeof(fit_gzip_no_load)] __attribute__((aligned(4)));
+    memcpy(fit_scratch, fit_gzip_no_load, sizeof(fit_scratch));
+
+    kernel_override_addr = 0;
+    ret = fit_load_kernel(fit_open(fit_scratch, (uint32_t)sizeof(fit_scratch)),
+                          "kernel-1", &len);
+    ck_assert_ptr_null(ret);
+}
+END_TEST
+
+START_TEST(test_fit_kernel_override_loads_gzip_no_load)
+{
+    /* Same FIT with the override set: it supplies the destination, so the
+     * kernel inflates and the override comes back as the entry point. */
+    static uint8_t dst[64 * 1024] __attribute__((aligned(16)));
+    int len = -1;
+    void *ret;
+    static uint8_t fit_scratch[sizeof(fit_gzip_no_load)] __attribute__((aligned(4)));
+    memcpy(fit_scratch, fit_gzip_no_load, sizeof(fit_scratch));
+
+    kernel_override_addr = (uintptr_t)dst;
+    ret = fit_load_kernel(fit_open(fit_scratch, (uint32_t)sizeof(fit_scratch)),
+                          "kernel-1", &len);
+    kernel_override_addr = 0;
+
+    ck_assert_ptr_eq(ret, dst);
+    ck_assert_int_eq(len, FIT_PLAIN_LEN);
+    ck_assert_int_eq(memcmp(dst, fit_plain_payload, FIT_PLAIN_LEN), 0);
+}
+END_TEST
+
+START_TEST(test_fit_initrd_fixup_on_dtb_outside_the_fit)
+{
+    /* A kernel-only FIT has no `fdt`, so the device tree comes from the
+     * boot firmware - and the initrd fixup must land in THAT tree. */
+    static uint8_t rd_dst[64 * 1024] __attribute__((aligned(16)));
+    static uint8_t dtb[4096] __attribute__((aligned(8)));
+    static uint8_t fit_scratch[sizeof(fit_with_none_comp)] __attribute__((aligned(4)));
+    fdt_ctx dts;
+    const uint8_t *start, *end;
+    int off;
+
+    memcpy(fit_scratch, fit_with_none_comp, sizeof(fit_scratch));
+    memset(dtb, 0, sizeof(dtb));
+    memcpy(dtb, empty_dtb, sizeof(empty_dtb));
+
+    /* Full staging capacity, as the loaders do, so /chosen fits. */
+    ck_assert_int_eq(fdt_open(&dts, dtb, (uint32_t)sizeof(dtb)), 0);
+
+    ramdisk_override_addr = (uintptr_t)rd_dst;
+    ck_assert_int_eq(fit_load_ramdisk(
+        fit_open(fit_scratch, (uint32_t)sizeof(fit_scratch)),
+        "kernel-1", &dts), 0);
+    ramdisk_override_addr = 0;
+
+    ck_assert_int_eq(memcmp(rd_dst, fit_plain_payload, FIT_PLAIN_LEN), 0);
+
+    off = fdt_path_offset(&dts, "/chosen");
+    ck_assert_int_ge(off, 0);
+    start = (const uint8_t*)fdt_getprop(&dts, off, "linux,initrd-start", NULL);
+    end = (const uint8_t*)fdt_getprop(&dts, off, "linux,initrd-end", NULL);
+    ck_assert_ptr_nonnull(start);
+    ck_assert_ptr_nonnull(end);
+    ck_assert_uint_eq(fdt_rd64u(start), (uint64_t)(uintptr_t)rd_dst);
+    ck_assert_uint_eq(fdt_rd64u(end),
+        (uint64_t)(uintptr_t)rd_dst + FIT_PLAIN_LEN);
+}
+END_TEST
+
+START_TEST(test_fit_initrd_without_a_dtb_reports_failure)
+{
+    /* Staging the ramdisk but silently skipping the fixup would leave the
+     * kernel with no initrd and nothing on the console to say so. */
+    static uint8_t rd_dst[64 * 1024] __attribute__((aligned(16)));
+    static uint8_t fit_scratch[sizeof(fit_with_none_comp)] __attribute__((aligned(4)));
+
+    memcpy(fit_scratch, fit_with_none_comp, sizeof(fit_scratch));
+
+    ramdisk_override_addr = (uintptr_t)rd_dst;
+    ck_assert_int_eq(fit_load_ramdisk(
+        fit_open(fit_scratch, (uint32_t)sizeof(fit_scratch)),
+        "kernel-1", NULL), -1);
+    ramdisk_override_addr = 0;
+
+    /* The ramdisk itself still landed; only the fixup was impossible. */
+    ck_assert_int_eq(memcmp(rd_dst, fit_plain_payload, FIT_PLAIN_LEN), 0);
+}
+END_TEST
+
+START_TEST(test_fit_kernel_override_beats_fit_load)
+{
+    /* The override wins over a FIT that does declare `load` (0xC0001000
+     * here, which this process cannot touch). */
+    static uint8_t dst[64 * 1024] __attribute__((aligned(16)));
+    int len = -1;
+    void *ret;
+    static uint8_t fit_scratch[sizeof(fit_with_gzip_kernel)] __attribute__((aligned(4)));
+    memcpy(fit_scratch, fit_with_gzip_kernel, sizeof(fit_scratch));
+
+    kernel_override_addr = (uintptr_t)dst;
+    ret = fit_load_kernel(fit_open(fit_scratch, (uint32_t)sizeof(fit_scratch)),
+                          "kernel-1", &len);
+    kernel_override_addr = 0;
+
+    ck_assert_ptr_eq(ret, dst);
+    ck_assert_int_eq(len, FIT_PLAIN_LEN);
+    ck_assert_int_eq(memcmp(dst, fit_plain_payload, FIT_PLAIN_LEN), 0);
+}
+END_TEST
+
 #else /* !WOLFBOOT_GZIP */
 
 START_TEST(test_fit_to_gzip_disabled_returns_null)
@@ -368,6 +502,11 @@ static Suite *fit_gzip_suite(void)
     tcase_add_test(tc, test_fit_to_gzip_corrupt_returns_null);
     tcase_add_test(tc, test_fit_to_none_compression_copies_plain);
     tcase_add_test(tc, test_fit_ex_gzip_no_load_returns_null);
+    tcase_add_test(tc, test_fit_kernel_no_override_gzip_no_load_fails);
+    tcase_add_test(tc, test_fit_kernel_override_loads_gzip_no_load);
+    tcase_add_test(tc, test_fit_kernel_override_beats_fit_load);
+    tcase_add_test(tc, test_fit_initrd_fixup_on_dtb_outside_the_fit);
+    tcase_add_test(tc, test_fit_initrd_without_a_dtb_reports_failure);
 #else
     tcase_add_test(tc, test_fit_to_gzip_disabled_returns_null);
 #endif

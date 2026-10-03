@@ -47,6 +47,12 @@
 #include "gzip.h"
 #endif
 
+/* Largest address a pointer can hold. Overridable so the two-cell
+ * rejection below can be exercised at 32-bit width on a 64-bit host. */
+#ifndef FDT_PTR_MAX
+#define FDT_PTR_MAX UINTPTR_MAX
+#endif
+
 /* Coarse upper bound on a single FIT subimage's decompressed size.
  * This is a sanity ceiling, not a per-destination memory-safety
  * bound. Authenticity of the FIT bytes is provided by the outer
@@ -812,7 +818,15 @@ void* fdt_getprop_address(const fdt_ctx* ctx, int nodeoffset, const char* name)
         return NULL;
     }
     if (len == 8) {
-        return (void*)(uintptr_t)fdt_rd64u(val);
+        uint64_t addr64 = fdt_rd64u(val);
+        /* Reject rather than truncate: dropping the high cell would turn
+         * an out-of-range address into an unrelated low one. */
+#if FDT_PTR_MAX < UINT64_MAX
+        if (addr64 > (uint64_t)FDT_PTR_MAX) {
+            return NULL;
+        }
+#endif
+        return (void*)(uintptr_t)addr64;
     }
     if (len == 4) {
         return (void*)(uintptr_t)fdt_rd32(val);
@@ -1674,6 +1688,28 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
     return NULL;
 }
 
+/* 0 honors the FIT's own `load` property. */
+#ifndef WOLFBOOT_LOAD_KERNEL_ADDRESS
+#define WOLFBOOT_LOAD_KERNEL_ADDRESS 0
+#endif
+
+/* Upper bound on the decompressed kernel size. */
+#ifndef WOLFBOOT_FIT_MAX_KERNEL
+#define WOLFBOOT_FIT_MAX_KERNEL WOLFBOOT_FIT_MAX_DECOMP
+#endif
+
+/* Stage the kernel at WOLFBOOT_LOAD_KERNEL_ADDRESS when nonzero, bypassing
+ * the FIT's `load`/`entry` so a FIT declaring neither still boots. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
+{
+    if (WOLFBOOT_LOAD_KERNEL_ADDRESS != 0) {
+        return fit_load_image_to(ctx, kernel_node,
+            (void*)WOLFBOOT_LOAD_KERNEL_ADDRESS,
+            (uint32_t)WOLFBOOT_FIT_MAX_KERNEL, lenp);
+    }
+    return fit_load_image(ctx, kernel_node, lenp);
+}
+
 #ifdef WOLFBOOT_FIT_RAMDISK
 /* Defensive fallback: targets without a fixed relocation address
  * leave WOLFBOOT_LOAD_RAMDISK_ADDRESS at 0, in which case the
@@ -1697,12 +1733,12 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
  * straight into the override (with the override capacity acting as
  * the safety bound). Otherwise the address fit_load_image returned
  * (FIT-specified or in-FIT pointer) is used as-is. Caller passes the
- * DTB context for the initrd fixup, or NULL to skip the fixup.
+ * DTB context the initrd fixup writes into.
  *
- * Returns 0 on success, -1 if the ramdisk node was found but the
- * load failed. The current callers ignore the return value
- * (log-and-continue), so a missing/failed ramdisk does not abort
- * the boot. */
+ * Returns 0 on success, -1 if the ramdisk node was found but the load
+ * failed, or if `dts` is NULL - a ramdisk the kernel is never told
+ * about is not a success. Callers log and continue, so this does not
+ * abort the boot. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 {
     int rd_size = 0;
@@ -1733,7 +1769,14 @@ int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
         wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n", rd_dst, rd_size);
     }
 
-    if (dts != NULL) {
+    if (dts == NULL) {
+        /* Staged but unreachable: without a tree to write
+         * /chosen/linux,initrd-* into, the kernel never learns of it. */
+        wolfBoot_printf("FIT: no device tree for the initrd fixup; "
+            "kernel will not see initrd\n");
+        return -1;
+    }
+    {
         int frc = fdt_fixup_initrd(dts, (uint64_t)(uintptr_t)rd_dst,
             (uint64_t)rd_size);
         if (frc != 0) {
@@ -1959,7 +2002,9 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 wolfBoot_printf("FIT: subimage '%s' declares "
                     "compression=\"%s\" but has no distinct load "
                     "destination (load=%p, data=%p); refusing to pass "
-                    "compressed bytes through as raw\n",
+                    "compressed bytes through as raw. Add `load` to the "
+                    "FIT node, or set this sub-image's "
+                    "WOLFBOOT_LOAD_*_ADDRESS\n",
                     image, compstr, load, data);
                 return NULL;
             }

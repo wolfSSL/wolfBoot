@@ -415,11 +415,15 @@ void* fit_load_image_ex(fdt_ctx* ctx, const char* image, int* lenp,
 void* fit_load_image_to(fdt_ctx* ctx, const char* image, void* dst,
     uint32_t dst_max, int* lenp);
 
+/* Load the FIT kernel, relocated to WOLFBOOT_LOAD_KERNEL_ADDRESS when that
+ * is nonzero. Returns the entry address, or NULL on failure. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp);
+
 #ifdef WOLFBOOT_FIT_RAMDISK
 /* Load a FIT ramdisk sub-image (optionally relocated to
  * WOLFBOOT_LOAD_RAMDISK_ADDRESS) and patch /chosen/linux,initrd-* in
- * `dts`. Pass dts as NULL to skip the fixup. Returns 0 on success, -1
- * on load failure. Callers typically log and continue. */
+ * `dts`. Returns 0 on success, -1 on load failure or when `dts` is NULL,
+ * since a staged ramdisk is useless unless the tree names it. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts);
 #endif
 

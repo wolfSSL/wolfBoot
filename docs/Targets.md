@@ -4552,7 +4552,7 @@ qemu-system-aarch64 -machine xlnx-zcu102 -cpu cortex-a53 -serial stdio -display 
 
 Use `config/examples/zynqmp_sdcard.config`. This uses the Arasan SDHCI controller (SD1 - external SD card slot on ZCU102) and an **MBR** partitioned SD card.
 
-On the direct-jump handoff path, wolfBoot flushes the EL2 D-cache/I-cache and disables the EL2 MMU via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S` when `BOOT_EL1` is not enabled and the current exception level is EL2. The ERET-to-EL1 handoff path is different, so this cleanup is not unconditional.
+Both handoff paths flush the EL2 D-cache/I-cache and disable the EL2 MMU via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`, under different conditions: the ERET-to-EL1 path whenever `BOOT_EL1` and `EL2_HYPERVISOR=1` are both set, and the direct-jump path when `EL2_HYPERVISOR=1` and the current exception level is EL2.
 
 **Partition layout**
 | Partition | Name   | Size      | Type                          | Contents                                   |
@@ -5204,10 +5204,12 @@ AMD Versal Prime Series VMK180 Evaluation Kit - Versal Prime XCVM1802-2MSEVSVA21
 
 wolfBoot replaces U-Boot in the Versal boot flow:
 ```
-PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL1)
+PLM -> PSM -> BL31 (EL3) -> wolfBoot (EL2) -> Linux (EL2)
 ```
 
 wolfBoot runs from DDR at `0x8000000` (EL2, non-secure). All clock, MIO, and DDR initialization is handled by PLM/PSM before wolfBoot starts.
+
+The application is entered at **EL2** by default (`BOOT_EL2` in `hal/versal.h`). PSCI brings the secondary cores up at EL2, so dropping only the boot core to EL1 leaves Linux with `CPUs started in inconsistent modes`. Set `BOOT_EL1=1` for a payload that requires EL1 - that was the previous default, so it now has to be stated explicitly.
 
 This target supports **two boot paths**:
 - **QSPI boot** (primary, production-style): `config/examples/versal_vmk180.config`
@@ -5225,7 +5227,7 @@ Note: If using QSPI there are bootgen issues with 2025.1+, so recommend 2024.1 o
 ### Common Notes
 
 - Debugging with OCRAM (OCM): set `WOLFBOOT_ORIGIN=0xFFFC0000` (OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`).
-- **High DDR apertures**: designs whose DDR window lives above the default map (for example DDR at `0x400_0000_0000`) add `CFLAGS_EXTRA+=-DVERSAL_DDR_HIGH_BASE=...` and `-DVERSAL_DDR_HIGH_SIZE=...` (512 GB aligned, plain hex literals with no `UL` suffix) to map the window in the translation table, plus `-DVERSAL_NO_DDR_LOW` when nothing remains at `0x0`. Move `WOLFBOOT_ORIGIN`, `WOLFBOOT_LOAD_ADDRESS` and `WOLFBOOT_LOAD_DTS_ADDRESS` into the window (`hal/versal.ld` follows `WOLFBOOT_ORIGIN` from the config), update the bootgen BIF load/exec and the BL31 BL33 entry to match, and switch the FIT ITS to `#address-cells = <2>` with two-cell `load`/`entry` values since 32-bit cells cannot hold addresses above 4 GB. A commented recipe is in `config/examples/versal_vmk180.config`; the DDR aperture itself must be routed to the APU by the design's PDI.
+- **High DDR apertures**: designs whose DDR window lives above the default map (for example DDR at `0x400_0000_0000`) set `DDR_HIGH_BASE=...` and `DDR_HIGH_SIZE=...` (512 GB aligned, plain hex with no `UL` suffix) to map the window in the translation table, plus `NO_DDR_LOW=1` when nothing remains at `0x0`. These are AArch64-generic, and the assembler rejects a window outside the VA region the target's TCR covers; the older `-DVERSAL_DDR_HIGH_*` spellings are still accepted. Move `WOLFBOOT_ORIGIN`, `WOLFBOOT_LOAD_ADDRESS` and `WOLFBOOT_LOAD_DTS_ADDRESS` into the window (`hal/versal.ld` follows `WOLFBOOT_ORIGIN` from the config), update the bootgen BIF load/exec and the BL31 BL33 entry to match, and switch the FIT ITS to `#address-cells = <2>` with two-cell `load`/`entry` values since 32-bit cells cannot hold addresses above 4 GB. A commented recipe is in `config/examples/versal_vmk180.config`; the DDR aperture itself must be routed to the APU by the design's PDI.
 - Test application uses generic `boot_arm64_start.S` and `AARCH64.ld` and prints EL + version.
   - Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
 
@@ -5435,6 +5437,41 @@ A stock PetaLinux `image.ub` carries a `ramdisk` sub-image that `bootm` passes t
 
 `WOLFBOOT_LOAD_RAMDISK_ADDRESS` defaults to 0, which uses the ramdisk in place inside the staged FIT. Set it to a DDR address clear of the kernel, DTB and staging area if the payload needs a fixed location.
 
+##### FIT images built without `load`/`entry`
+
+Some producers emit a FIT whose kernel node declares neither `load` nor `entry` - Yocto's `kernel-fitimage` class omits both unless `UBOOT_LOADADDRESS` and `UBOOT_ENTRYPOINT` are set - and leave it to U-Boot to place the image. wolfBoot needs a destination: a `gzip` kernel has nowhere to decompress to, and an uncompressed one would be entered in place inside the staged FIT at whatever alignment the FIT gives it.
+
+Either add the properties to the ITS, or set `WOLFBOOT_LOAD_KERNEL_ADDRESS` to the address the kernel should be staged at; a nonzero value overrides the FIT's `load`/`entry` and is returned as the entry point. `WOLFBOOT_LOAD_RAMDISK_ADDRESS` does the same for the `ramdisk` node.
+
+For a DDR aperture above 4 GB the ITS must use `#address-cells = <2>` and two-cell values:
+
+```dts
+/ {
+    #address-cells = <2>;
+    images {
+        kernel-1 {
+            data = /incbin/("Image.gz");
+            compression = "gzip";
+            load = <0x00000400 0x08000000>;
+            entry = <0x00000400 0x08000000>;
+            hash-1 { algo = "sha256"; };
+        };
+    };
+};
+```
+
+##### FIT images with no device tree
+
+A kernel-only FIT - no `fdt` sub-image, and no `fdt` property on the configuration node - takes its device tree from the boot firmware instead, which is the arrangement U-Boot describes with `fdtcontroladdr`. Point `WOLFBOOT_LOAD_DTS_ADDRESS` at wherever the earlier stage left the blob; for a bootgen raw partition that is the `load` address in the BIF:
+
+```
+{ type=raw, load=0x40000001000, file=system-top.dtb }
+```
+
+wolfBoot then relocates and validates that DTB exactly as it does for a non-FIT payload, and hands it to the kernel in `x0`.
+
+Such a DTB is outside the FIT, so the signature does not cover it: `/chosen/bootargs` from the blob is **not** trusted and `LINUX_BOOTARGS` replaces it. On the RAM/flash loader (`src/update_ram.c`) a digest bound with `sign --dts` authenticates it and honors its bootargs, and `WOLFBOOT_REQUIRE_SIGNED_DTB=1` makes a missing digest fatal. The disk loader (`src/update_disk.c`) has no DTB-digest machinery, so put the DTB in the FIT as an `fdt` sub-image to bring it inside the root of trust there.
+
 **Kernel Command Line (bootargs)**
 
 If the FIT's DTB carries `/chosen/bootargs`, wolfBoot keeps them by default - an image boots with the arguments its kernel was validated with. Setting `LINUX_BOOTARGS` or `LINUX_BOOTARGS_ROOT` in the config replaces the DTB's value (the replaced value is logged); `CFLAGS_EXTRA+=-DLINUX_BOOTARGS_OVERRIDE=0` demotes an explicit `LINUX_BOOTARGS` to a fallback used only when the DTB has none.
@@ -5543,7 +5580,7 @@ Typical boot timing with ECC384/SHA384 signing:
 
 Use `config/examples/versal_vmk180_sdcard.config`. This uses the Arasan SDHCI controller and an **MBR** partitioned SD card.
 
-Versal defaults to `BOOT_EL1` — the handoff goes through `el2_to_el1_boot` (ERET to EL1). Custom `BOOT_EL2` Versal configs get the same EL2 cache/MMU teardown as ZynqMP via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`, so no extra config flag is needed to boot Linux directly at EL2.
+Versal enters the application at `BOOT_EL2` by default, with the same EL2 cache/MMU teardown as ZynqMP via `el2_flush_and_disable_mmu` in `src/boot_aarch64_start.S`, so no extra config flag is needed to boot Linux directly at EL2. Set `BOOT_EL1=1` to hand off through `el2_to_el1_boot` (ERET to EL1) instead.
 
 **Partition layout**
 | Partition | Name | Size | Type | Contents |
