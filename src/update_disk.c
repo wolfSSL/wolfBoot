@@ -614,6 +614,31 @@ void* wolfBoot_get_dts_address(void)
 }
 #endif
 
+/* GPT index of the slot that passed verification and is booting, or -1. */
+static int disk_boot_part = -1;
+
+int wolfBoot_disk_boot_part(void)
+{
+    return disk_boot_part;
+}
+
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+/* Tell the OS which slot it is booting from, as /chosen/wolfboot,boot-part,
+ * so whatever confirms the boot (lib-fs success) can address that slot and
+ * no other. Called from the DTB fixup pass (hal_dts_fixup) rather than
+ * writing the staged DTB here: a HAL may edit a copy of it, and may replace
+ * bootargs wholesale, so a /chosen property set in that pass is what
+ * survives. Nothing is written before a slot has been verified. */
+int wolfBoot_disk_dts_fixup(fdt_ctx* ctx)
+{
+    if (disk_boot_part < 0) {
+        return 0;
+    }
+    return fdt_fixup_chosen_val(ctx, "wolfboot,boot-part",
+        (uint32_t)disk_boot_part);
+}
+#endif
+
 void RAMFUNCTION wolfBoot_start(void)
 {
     uint8_t p_hdr[IMAGE_HEADER_SIZE] XALIGNED_STACK(16);
@@ -1049,6 +1074,7 @@ void RAMFUNCTION wolfBoot_start(void)
      * path (hal_get_boot_dts) below still need to read/write the env partition;
      * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
+    disk_boot_part = (int)boot_slots[selected].part;
 
 #ifdef DISK_BOOT_CONFIRM
     /* Put the slot on probation, but only if an update was staged into it.

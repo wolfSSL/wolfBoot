@@ -117,9 +117,19 @@ void WEAKFUNCTION hal_early_init(void)
 #ifdef MMU
 int WEAKFUNCTION hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
+#ifdef WOLFBOOT_UPDATE_DISK
+    fdt_ctx ctx;
+
+    if (fdt_open(&ctx, dts_addr, capacity) != 0 ||
+            fdt_grow(&ctx, WOLFBOOT_FDT_FIXUP_HEADROOM) != 0) {
+        return -1;
+    }
+    return wolfBoot_disk_dts_fixup(&ctx);
+#else
     (void)dts_addr;
     (void)capacity;
     return 0;
+#endif
 }
 #endif
 

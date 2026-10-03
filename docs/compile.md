@@ -402,7 +402,13 @@ lib-fs --dev /dev/mmcblk1p1 status     # read the current state
 
 `update-trigger` is refused with `--dev`: it marks the separate UPDATE partition at a compile-time offset, which against a raw slot device is just somewhere in the middle of the slot. `stage` is the disk analogue.
 
-Order the `success` call after whatever the system treats as proof of a healthy boot; a systemd unit ordered after the services that matter is the usual place.
+Order the `success` call after whatever the system treats as proof of a healthy boot. Three placements are common, and the choice belongs to the integrator:
+
+- A systemd unit ordered after `multi-user.target`: the boot is healthy once the system reached its normal run level.
+- A unit ordered after a specific mount or service (`After=` and `Requires=` on `var-log.mount`, a database, a network target): the boot is only healthy when that resource came up, so a kernel that boots but cannot bring it up is rolled back.
+- The application itself, once it has reported in to whatever it serves: nothing is confirmed on a system whose purpose is not met. Ship the tool, not the unit.
+
+Whatever confirms needs to know which slot it is running from, and the rootfs cannot tell it: both slots boot the same rootfs. wolfBoot writes the GPT index of the slot it verified into the device tree it hands to the OS, as `/chosen/wolfboot,boot-part` (32-bit big-endian, the same 0-based index as `BOOT_PART_A` / `BOOT_PART_B`), so on Linux the slot is `/proc/device-tree/chosen/wolfboot,boot-part` and the partition device is that index plus one on the boot disk. The same value is available to a wolfBoot hook as `wolfBoot_disk_boot_part()`. A confirm step that checks the slot's `status` first and only calls `success` when it reads `testing` keeps the steady state write-free.
 
 The tool needs no configuration to match the loader's layout and no rebuild per slot. With `--dev` it locates the trailer from the size of the device it was handed, which is how wolfBoot locates it too, and it writes the pinned state values rather than the `IMG_STATE_*` of its own build. `include/disk_trailer.h` holds the offset, the magic and the four state values, and both the loader and the tool include it, so there is one definition to disagree with rather than two.
 

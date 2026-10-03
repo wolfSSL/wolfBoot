@@ -86,6 +86,8 @@ extern "C" {
 
 
 void wolfBoot_start(void);
+/* Disk boot: GPT index of the slot that passed verification, or -1. */
+int wolfBoot_disk_boot_part(void);
 
 #include "hooks.h"
 

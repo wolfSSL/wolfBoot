@@ -74,6 +74,8 @@ static uint8_t fit_dts_image[TEST_DTS_STAGE_SIZE];
 /* Parsed DTB size the wolfBoot_get_dts_size() stub reports, and (pre
  * fix) the FIT-declared length the fit_load_image() stub returns. */
 static int mock_dts_size;
+/* The /chosen/wolfboot,boot-part hint written for the OS; -1 until set. */
+static int mock_boot_part_prop;
 static int mock_do_boot_called;
 static int mock_fit_memcpy_ret;
 static int mock_fit_memcpy_called;
@@ -120,6 +122,7 @@ static void reset_mocks(void)
     mock_do_boot_called = 0;
     mock_fit_memcpy_ret = 0;
     mock_fit_memcpy_called = 0;
+    mock_boot_part_prop = -1;
     mock_panic_hook_called = 0;
     memset(panic_key_snapshot, 0xFF, sizeof(panic_key_snapshot));
     memset(panic_nonce_snapshot, 0xFF, sizeof(panic_nonce_snapshot));
@@ -275,6 +278,14 @@ const char* fit_find_images(fdt_ctx* ctx, const char** pkernel,
     return "conf";
 }
 
+int fdt_fixup_chosen_val(fdt_ctx* ctx, const char* name, uint32_t val)
+{
+    (void)ctx;
+    if (strcmp(name, "wolfboot,boot-part") == 0)
+        mock_boot_part_prop = (int)val;
+    return 0;
+}
+
 void* fit_load_image(fdt_ctx* ctx, const char* image, int* lenp)
 {
     (void)ctx;
@@ -357,6 +368,14 @@ START_TEST(test_update_disk_fit_dts_copy_success_boots)
     ck_assert_int_eq(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_int_eq(memcmp(dts_buffer, fit_dts_image, TEST_DTS_SIZE), 0);
+    /* B (version 2) won the election; the DTB fixup pass is told which slot. */
+    ck_assert_int_eq(wolfBoot_disk_boot_part(), BOOT_PART_B);
+    {
+        fdt_ctx ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ck_assert_int_eq(wolfBoot_disk_dts_fixup(&ctx), 0);
+    }
+    ck_assert_int_eq(mock_boot_part_prop, BOOT_PART_B);
 }
 END_TEST
 

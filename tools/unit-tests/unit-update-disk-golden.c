@@ -282,6 +282,7 @@ START_TEST(test_golden_untouched_when_a_boots)
     ck_assert_int_eq(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_int_eq(mock_booted_fill, FILL_A);
+    ck_assert_int_eq(wolfBoot_disk_boot_part(), BOOT_PART_A);
     ck_assert_int_eq(mock_reads[BOOT_PART_GOLDEN], 0);
     ck_assert_int_eq(mock_writes[BOOT_PART_GOLDEN], 0);
 }
@@ -296,6 +297,7 @@ START_TEST(test_golden_boots_after_a_and_b_fail_despite_lower_version)
     ck_assert_int_eq(wolfBoot_panicked, 0);
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_int_eq(mock_booted_fill, FILL_G);
+    ck_assert_int_eq(wolfBoot_disk_boot_part(), BOOT_PART_GOLDEN);
     /* A was tried; B, older than the failed A, is refused by anti-rollback:
      * only its header and its state trailer were read, never its payload. */
     ck_assert_int_ge(mock_reads[BOOT_PART_A], 3);
