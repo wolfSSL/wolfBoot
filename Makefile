@@ -176,7 +176,10 @@ else
       PRIVATE_KEY?=wolfboot_signing_private_key.der
     endif
   endif
-  ifeq ($(FLASH_OTP_KEYSTORE),1)
+  ifeq ($(SNVM_KEYSTORE),1)
+    # PolarFire SoC: trust anchor served from secure NVM at runtime.
+    MPFS_SNVM_OBJ=1
+  else ifeq ($(FLASH_OTP_KEYSTORE),1)
     OBJS+=./src/flash_otp_keystore.o
   else ifeq ($(WOLFBOOT_NO_KEYSTORE),1)
     CFLAGS+=-DWOLFBOOT_NO_KEYSTORE
@@ -188,7 +191,20 @@ else
     WOLFBOOT_SIGN_KEY_DEP=$(PRIVATE_KEY)
   else
     OBJS+=./src/keystore.o
+    # Provisioning build: compiled keys plus the helper that writes them to sNVM.
+    ifeq ($(SNVM_KEYSTORE_PROVISION),1)
+      MPFS_SNVM_OBJ=1
+    endif
   endif
+endif
+
+# PolarFire SoC: sNVM keystore, PUF KEK and the PUF-wrapped encryption-key
+# provider live in one object.
+ifeq ($(SNVM_KEK),1)
+  MPFS_SNVM_OBJ=1
+endif
+ifeq ($(MPFS_SNVM_OBJ),1)
+  OBJS+=./hal/mpfs250_snvm.o
 endif
 
 WOLFCRYPT_OBJS:=
@@ -728,7 +744,7 @@ wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) $(WOLFBOOT_SIGN_KEY_DEP) FORCE
-	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (test "$(SNVM_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
@@ -768,6 +784,8 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
 		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" | \
 		sed -e "s/@STACK_SIZE_PER_HART@/$(STACK_SIZE_PER_HART)/g" | \
+		sed -e "s/@WOLFBOOT_L2SCRATCH_SIZE@/$(WOLFBOOT_L2SCRATCH_SIZE)/g" | \
+		sed -e "s/@STACK_SIZE@/$(STACK_SIZE)/g" | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_TEXT@/$(WOLFHAL_FLASH_EXCLUDE_TEXT)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_RODATA@/$(WOLFHAL_FLASH_EXCLUDE_RODATA)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_RAM_SECTIONS@/$(WOLFHAL_FLASH_RAM_SECTIONS)/g' \

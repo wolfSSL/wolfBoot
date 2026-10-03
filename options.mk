@@ -77,6 +77,75 @@ ifeq ($(FLASH_OTP_KEYSTORE),1)
     CFLAGS+=-D"FLASH_OTP_KEYSTORE"
 endif
 
+# PolarFire SoC: trust anchor in secure NVM (sNVM).  SNVM_KEYSTORE serves keys
+# from sNVM at runtime; SNVM_KEYSTORE_PROVISION adds the one-time writer.
+ifeq ($(SNVM_KEYSTORE),1)
+    CFLAGS+=-D"SNVM_KEYSTORE"
+endif
+# sNVM page numbers, overridable per board; the headers range-check them.
+ifneq ($(SNVM_KEYSTORE_MODULE),)
+    CFLAGS+=-DSNVM_KEYSTORE_MODULE=$(SNVM_KEYSTORE_MODULE)
+endif
+ifneq ($(SNVM_KEYSTORE_MAX_MODULES),)
+    CFLAGS+=-DSNVM_KEYSTORE_MAX_MODULES=$(SNVM_KEYSTORE_MAX_MODULES)
+endif
+ifneq ($(SNVM_ENCKEY_MODULE),)
+    CFLAGS+=-DSNVM_ENCKEY_MODULE=$(SNVM_ENCKEY_MODULE)
+endif
+ifeq ($(SNVM_KEYSTORE_PROVISION),1)
+    ifeq ($(SNVM_KEYSTORE),1)
+        $(error SNVM_KEYSTORE_PROVISION writes the compiled-in keystore to sNVM \
+                and cannot be combined with SNVM_KEYSTORE=1, which serves keys \
+                from sNVM instead of compiling them in.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_KEYSTORE_PROVISION writes sNVM: irreversible, and a \
+                brownout mid-write can lock the page read-only. Re-run with \
+                WOLFBOOT_SNVM_WRITE_APPROVED=1 to confirm.)
+    endif
+    CFLAGS+=-D"SNVM_KEYSTORE_PROVISION"
+endif
+
+# PolarFire SoC: PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
+ifeq ($(SNVM_KEK),1)
+    # The KEK only ever wraps the image-encryption key, so it rides on the
+    # AES-256 ENCRYPT build's AES; RFC 3394 key-wrap is added here.
+    ifneq ($(ENCRYPT)$(ENCRYPT_WITH_AES256)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_KEK=1 requires ENCRYPT=1 ENCRYPT_WITH_AES256=1 \
+                CUSTOM_ENCRYPT_KEY=1)
+    endif
+    CFLAGS+=-D"SNVM_KEK"
+    CFLAGS+=-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
+            -DHAVE_AES_DECRYPT
+    # The KEK derivation is SHA-384 whatever the image hash is.
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+# One-time writer for the PUF-wrapped image-encryption key into sNVM.
+ifeq ($(SNVM_ENCKEY_PROVISION),1)
+    ifneq ($(SNVM_KEK)$(ENCRYPT)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_ENCKEY_PROVISION requires SNVM_KEK=1 ENCRYPT=1 \
+                CUSTOM_ENCRYPT_KEY=1, which build the provider it calls.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_ENCKEY_PROVISION writes sNVM: irreversible, and a \
+                brownout mid-write can lock the page read-only. Re-run with \
+                WOLFBOOT_SNVM_WRITE_APPROVED=1 to confirm.)
+    endif
+    CFLAGS+=-D"SNVM_ENCKEY_PROVISION"
+    # Second acknowledgement: the helper's built-in key is a public test vector
+    # and sNVM is written once, so such a device has no image confidentiality.
+    ifeq ($(SNVM_ENCKEY_INSECURE_TEST_KEY),1)
+        CFLAGS+=-D"SNVM_ENCKEY_INSECURE_TEST_KEY"
+    endif
+    # Production path: the integrator's object defines snvm_enckey_prov_key and
+    # snvm_enckey_prov_nonce (see hal/mpfs250_snvm.c).
+    ifeq ($(SNVM_ENCKEY_PROVISION_EXTERN),1)
+        CFLAGS+=-D"SNVM_ENCKEY_PROVISION_EXTERN"
+    endif
+endif
+
 ifeq ($(WOLFBOOT_TEST_FILLER),1)
     CFLAGS+=-D"WOLFBOOT_TEST_FILLER"
 endif
@@ -835,6 +904,17 @@ ifeq ($(DISK_BOOT_CONFIRM),1)
   CFLAGS+=-D"DISK_BOOT_CONFIRM=1"
 endif
 
+# Disk-boot decrypt staging (src/update_disk.c): the HAL supplies
+# hal_disk_decrypt_addr() / hal_disk_decrypt_copy() for targets whose CPU
+# stores into the load region are not coherent with the DMA that filled it.
+DISK_DECRYPT_STAGING ?= 0
+ifeq ($(DISK_DECRYPT_STAGING),1)
+  CFLAGS+=-D"DISK_DECRYPT_STAGING"
+  ifneq ($(DISK_DECRYPT_STAGE_SZ),)
+    CFLAGS+=-DDISK_DECRYPT_STAGE_SZ=$(DISK_DECRYPT_STAGE_SZ)
+  endif
+endif
+
 # Optional read-only filesystem support for disk boot (src/update_disk.c),
 # so a boot slot can name a file instead of requiring the signed image at
 # raw offset 0 of a partition. DISK_FS = fat32 | ext4 | both. Leaving it
@@ -1566,6 +1646,11 @@ ifneq (,$(filter RISCV RISCV64,$(ARCH)))
   CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
 endif
 
+# Substituted into the linker script.  The scratchpad is capped at the 4 x 128 KB
+# of ways the startup asm populates; the linker script asserts it.
+WOLFBOOT_L2SCRATCH_SIZE ?= 256k
+STACK_SIZE ?= 32k
+
 CFLAGS+=$(CFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
 
@@ -1619,6 +1704,35 @@ ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xCB
   WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
 endif
+endif
+
+# Athena F5200 (TeraFire) offload.  MPFS_ATHENA_CAL_DIR points at Microchip's
+# user-crypto (CAL) directory, e.g. <hart-software-services>/services/crypto.
+# Not vendored: it carries a Mercury Systems licence.
+ifeq ($(MPFS_ATHENA),1)
+  ifeq ($(MPFS_ATHENA_CAL_DIR),)
+    $(error MPFS_ATHENA=1 requires MPFS_ATHENA_CAL_DIR to point at the \
+      Microchip user-crypto (CAL) directory)
+  endif
+  # Both CAL archives are soft-float lp64, so callers must be too (see arch.mk).
+  # M-mode: hart-software-services/services/crypto.  S-mode: the rv64imafd
+  # build from polarfire-soc-bare-metal-examples .../middleware/cal.
+  CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
+  CFLAGS += -DWOLF_CRYPTO_CB
+  CFLAGS += -DWOLFBOOT_DEVID_HASH=0xA7
+  CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
+  WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  # Archive name differs between Microchip's two published builds.
+  MPFS_ATHENA_CAL_LIB ?= mpfs-rv64imac-user-crypto-lib.a
+  LIBS += $(MPFS_ATHENA_CAL_DIR)/$(MPFS_ATHENA_CAL_LIB)
+  # AES-256-CTR offload rides on the AES-CTR path an AES-256 ENCRYPT build
+  # compiles; other builds offload the hash only.  MPFS_ATHENA_AES=0 opts out.
+  ifeq ($(ENCRYPT_WITH_AES256),1)
+    MPFS_ATHENA_AES ?= 1
+    ifeq ($(MPFS_ATHENA_AES),1)
+      CFLAGS += -DMPFS_ATHENA_AES
+    endif
+  endif
 endif
 
 # Size of the wolfHSM comm data payload, shared by the client and server blocks

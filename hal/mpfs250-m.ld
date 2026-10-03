@@ -26,19 +26,19 @@ MEMORY
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
     FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
 
-    /* L2 Scratchpad SRAM - 256 KB used (2 of 4 scratchpad ways).
-     * Attempted 512 KB (all 4 ways) to match HSS layout, but ways 8-9
-     * are not initialized by the bootmode programmer -- stack/HLS
-     * placed there hit a trap immediately after DDR init.  Reverted
-     * until we add explicit scratchpad init for ways 8-9.
-     * Address range: 0x0A000000 - 0x0A03FFFF */
-    L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 256k
+    /* L2 scratchpad.  MPFS250 hardwires ways 8-11, so 4 x 128 KB is the
+     * ceiling the startup pin loop can make resident; ASSERT below enforces it. */
+    L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @WOLFBOOT_L2SCRATCH_SIZE@
 }
 
-/* Stack size for the boot hart (E51 in M-mode)
- * ECC384 + SHA384 + SPMATHALL + NO_ASM measured peak: ~6KB.
- * 32KB provides 5x headroom. */
-PROVIDE(STACK_SIZE = 32k);
+/* Boot-hart stack.  ECC384+SHA384 needs a few KB; ML-DSA-87 adds its working
+ * set plus the two IMAGE_HEADER_SIZE buffers update_disk.c puts on the stack. */
+PROVIDE(STACK_SIZE = @STACK_SIZE@);
+
+/* 4 scratchpad ways x 128 KB (WAY_BYTE_LENGTH).  Going past this hands out
+ * addresses the startup pin loop never made resident. */
+ASSERT(LENGTH(L2_SCRATCH) <= 4 * 0x20000,
+       "L2_SCRATCH exceeds the 4 scratchpad ways (512 KB)")
 
 SECTIONS
 {

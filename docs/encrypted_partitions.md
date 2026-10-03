@@ -42,6 +42,8 @@ You can use the `CUSTOM_ENCRYPT_KEY` option to implement your own functions for:
 `wolfBoot_get_encrypt_key`, `wolfBoot_set_encrypt_key` and
 `wolfBoot_erase_encrypt_key`.
 
+For an example that stores the AES key in non-volatile memory wrapped by a device-unique hardware PUF key (Microchip PolarFire SoC), see [polarfire_snvm_puf.md](polarfire_snvm_puf.md). Note that disk/`NO_PARTITIONS` boot can use `CUSTOM_ENCRYPT_KEY` for image encryption without `EXT_FLASH` or `MMU`.
+
 To enable:
 
 1) Add `CUSTOM_ENCRYPT_KEY=1` to your `.config`

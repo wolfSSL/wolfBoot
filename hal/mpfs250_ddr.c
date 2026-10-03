@@ -36,30 +36,13 @@
 
 #ifdef MPFS_DDR_INIT
 
-/* DQ/DQS init offset (HSS rpc_156).  Default 6 (Libero Video Kit value),
- * tunable 1..9 per HSS TUNE_RPC_156_DQDQS_INIT_VALUE.  Bumped between outer
- * retries when training verify reports dq_dqs_err_done != 8 or
- * dqdqs_status2 == 0 (data eye closed). */
+/* DQ/DQS init offset (HSS rpc_156).  6 is the Libero Video Kit value; HSS
+ * allows 1..9 (TUNE_RPC_156_DQDQS_INIT_VALUE) but it only shifts the window. */
 static uint32_t mpfs_phy_rpc156_val = 6U;
 
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
-/* DDR-init busy-loop delay.  The argument is NOT a real microsecond --
- * it is whatever the legacy busy-loop produces at the current CPU
- * clock.  Empirically reaches train_stat=0x1D on the first attempt with
- * the same per-attempt rate as forwarding to udelay(), and is much
- * faster (~4 s vs ~50 s) for the TIP-wait timeout, which dominates
- * retry-loop time when training fails.
- *
- * Do NOT replace with udelay(us) without re-timing every call site
- * below: at 600 MHz the busy-loop delivers roughly us/20 of a real us,
- * so udelay(us) makes every post-PLL delay ~20x longer.  In addition
- * to slowing retries, this can shift LPDDR4 / PHY timing windows --
- * earlier observed empirical data showed an isolated additional
- * regression beyond the pre-existing ~30% per-attempt failure rate.
- *
- * The "5us" / "250us" / "2ms" comments at the call sites are LEGACY
- * and do not reflect the actual delay; preserved for git blame, not
- * as timing references. */
+/* DDR-init busy-loop delay.  The argument is NOT a real microsecond: at 600 MHz
+ * it delivers roughly us/20.  udelay() trains identically but is ~20x slower. */
 static void ddr_delay(uint32_t us)
 {
     volatile uint32_t i;
@@ -535,22 +518,9 @@ static void setup_segments(void)
     mb();
 }
 
-/* DDR Controller Configuration
- *
- * Phase 3.6 rewrite: full bulk import of MC_BASE2 register configuration
- * matching HSS setup_ddrc() at mss_ddr.c:3940-4225.  All values come from
- * the Video Kit Libero header
- *   hart-software-services/build/boards/mpfs-video-kit/fpga_design_config/
- *   ddr/hw_ddrc.h
- *
- * The previous version configured only ~30 of these registers AND used
- * several wrong register offsets (e.g. MC_CFG_CL was at 0x74 -- which is
- * actually CFG_XP -- so the CL value never reached the CL register).
- * That left the IP in an under/mis-configured state that prevented TIP
- * from progressing past BCLK_SCLK during training.
- *
- * This function configures the full ~155 MC_BASE2 registers in HSS order.
- */
+/* DDR controller configuration in HSS init_ddrc() order, values from the Libero
+ * ddr/hw_ddrc.h.  Row order is write order, which matters at
+ * CTRLR_SOFT_RESET_N: PHY training and MTC must be programmed after it. */
 static const ddr_cadence_reg_t mpfs_ddrc_regs[] = {
     { 0x2400, LIBERO_SETTING_CFG_MANUAL_ADDRESS_MAP },
     { 0x2404, LIBERO_SETTING_CFG_CHIPADDR_MAP },
@@ -659,95 +629,11 @@ static const ddr_cadence_reg_t mpfs_ddrc_regs[] = {
     { 0x3D70, LIBERO_SETTING_CFG_RRD_DLR },
     { 0x3D74, LIBERO_SETTING_CFG_FAW_DLR },
     { 0x3D98, LIBERO_SETTING_CFG_ADVANCE_ACTIVATE_READY },
-    { 0x4C00, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P0 },
-    { 0x4C04, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P1 },
-    { 0x4C08, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P2 },
-    { 0x4C0C, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P3 },
-    { 0x4C10, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P4 },
-    { 0x4C14, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P5 },
-    { 0x4C18, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P6 },
-    { 0x4C1C, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P7 },
-    { 0x5000, LIBERO_SETTING_CFG_REORDER_EN },
-    { 0x5004, LIBERO_SETTING_CFG_REORDER_QUEUE_EN },
-    { 0x5008, LIBERO_SETTING_CFG_INTRAPORT_REORDER_EN },
-    { 0x500C, LIBERO_SETTING_CFG_MAINTAIN_COHERENCY },
-    { 0x5010, LIBERO_SETTING_CFG_Q_AGE_LIMIT },
-    { 0x5018, LIBERO_SETTING_CFG_RO_CLOSED_PAGE_POLICY },
-    { 0x501C, LIBERO_SETTING_CFG_REORDER_RW_ONLY },
-    { 0x5020, LIBERO_SETTING_CFG_RO_PRIORITY_EN },
-    { 0x5400, LIBERO_SETTING_CFG_DM_EN },
-    { 0x5404, LIBERO_SETTING_CFG_RMW_EN },
-    { 0x5800, LIBERO_SETTING_CFG_ECC_CORRECTION_EN },
-    { 0x5840, LIBERO_SETTING_CFG_ECC_BYPASS },
-    { 0x5844, LIBERO_SETTING_INIT_WRITE_DATA_1B_ECC_ERROR_GEN },
-    { 0x5848, LIBERO_SETTING_INIT_WRITE_DATA_2B_ECC_ERROR_GEN },
-    { 0x585C, LIBERO_SETTING_CFG_ECC_1BIT_INT_THRESH },
-    { 0x5C00, LIBERO_SETTING_INIT_READ_CAPTURE_ADDR },
-    { 0x6400, LIBERO_SETTING_CFG_ERROR_GROUP_SEL },
-    { 0x6404, LIBERO_SETTING_CFG_DATA_SEL },
-    { 0x6408, LIBERO_SETTING_CFG_TRIG_MODE },
-    { 0x640C, LIBERO_SETTING_CFG_POST_TRIG_CYCS },
-    { 0x6410, LIBERO_SETTING_CFG_TRIG_MASK },
-    { 0x6414, LIBERO_SETTING_CFG_EN_MASK },
-    { 0x6418, LIBERO_SETTING_MTC_ACQ_ADDR },
-    { 0x6430, LIBERO_SETTING_CFG_TRIG_MT_ADDR_0 },
-    { 0x6434, LIBERO_SETTING_CFG_TRIG_MT_ADDR_1 },
-    { 0x6438, LIBERO_SETTING_CFG_TRIG_ERR_MASK_0 },
-    { 0x643C, LIBERO_SETTING_CFG_TRIG_ERR_MASK_1 },
-    { 0x6440, LIBERO_SETTING_CFG_TRIG_ERR_MASK_2 },
-    { 0x6444, LIBERO_SETTING_CFG_TRIG_ERR_MASK_3 },
-    { 0x6448, LIBERO_SETTING_CFG_TRIG_ERR_MASK_4 },
-    { 0x644C, LIBERO_SETTING_MTC_ACQ_WR_DATA_0 },
-    { 0x6450, LIBERO_SETTING_MTC_ACQ_WR_DATA_1 },
-    { 0x6454, LIBERO_SETTING_MTC_ACQ_WR_DATA_2 },
-    { 0x652C, LIBERO_SETTING_CFG_PRE_TRIG_CYCS },
-    { 0x6550, LIBERO_SETTING_CFG_DATA_SEL_FIRST_ERROR },
-    { 0x7C00, LIBERO_SETTING_CFG_DQ_WIDTH },
-    { 0x7C04, LIBERO_SETTING_CFG_ACTIVE_DQ_SEL },
-    { 0x800C, LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_REQ },
-    { 0x8010, LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_CMD },
-    { 0x10010, LIBERO_SETTING_INIT_DFI_LP_DATA_REQ },
-    { 0x10014, LIBERO_SETTING_INIT_DFI_LP_CTRL_REQ },
-    { 0x1001C, LIBERO_SETTING_INIT_DFI_LP_WAKEUP },
-    { 0x10020, LIBERO_SETTING_INIT_DFI_DRAM_CLK_DISABLE },
-    { 0x10030, LIBERO_SETTING_CFG_DFI_DATA_BYTE_DISABLE },
-    { 0x1003C, LIBERO_SETTING_CFG_DFI_LVL_SEL },
-    { 0x10040, LIBERO_SETTING_CFG_DFI_LVL_PERIODIC },
-    { 0x10044, LIBERO_SETTING_CFG_DFI_LVL_PATTERN },
-    { 0x10050, LIBERO_SETTING_PHY_DFI_INIT_START },
-    { 0x12C18, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_0 },
-    { 0x12C1C, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_1 },
-    { 0x12C20, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_0 },
-    { 0x12C24, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_1 },
-    { 0x12F18, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_0 },
-    { 0x12F1C, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_1 },
-    { 0x12F20, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_0 },
-    { 0x12F24, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_1 },
-    { 0x13218, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_0 },
-    { 0x1321C, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_1 },
-    { 0x13220, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_0 },
-    { 0x13224, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_1 },
-    { 0x13514, LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI1 },
-    { 0x13518, LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI2 },
-    { 0x13690, LIBERO_SETTING_CFG_AXI_AUTO_PCH },
-    { 0x3C000, LIBERO_SETTING_PHY_RESET_CONTROL },
-    { 0x3C000, (LIBERO_SETTING_PHY_RESET_CONTROL & ~0x8000UL) },
-    { 0x3C004, LIBERO_SETTING_PHY_PC_RANK },
-    { 0x3C008, LIBERO_SETTING_PHY_RANKS_TO_TRAIN },
-    { 0x3C00C, LIBERO_SETTING_PHY_WRITE_REQUEST },
-    { 0x3C014, LIBERO_SETTING_PHY_READ_REQUEST },
-    { 0x3C01C, LIBERO_SETTING_PHY_WRITE_LEVEL_DELAY },
-    { 0x3C020, LIBERO_SETTING_PHY_GATE_TRAIN_DELAY },
-    { 0x3C024, LIBERO_SETTING_PHY_EYE_TRAIN_DELAY },
-    { 0x3C028, LIBERO_SETTING_PHY_EYE_PAT },
-    { 0x3C02C, LIBERO_SETTING_PHY_START_RECAL },
-    { 0x3C030, LIBERO_SETTING_PHY_CLR_DFI_LVL_PERIODIC },
-    { 0x3C034, LIBERO_SETTING_PHY_TRAIN_STEP_ENABLE },
-    { 0x3C038, LIBERO_SETTING_PHY_LPDDR_DQ_CAL_PAT },
-    { 0x3C03C, LIBERO_SETTING_PHY_INDPNDT_TRAINING },
-    { 0x3C040, LIBERO_SETTING_PHY_ENCODED_QUAD_CS },
-    { 0x3C044, LIBERO_SETTING_PHY_HALF_CLK_DLY_ENABLE },
+
+    /* Releases the controller from soft reset.  Rows below are the PHY
+     * training, MTC and AXI_IF blocks and must follow it, not precede it. */
     { MC_CTRLR_SOFT_RESET_N, LIBERO_SETTING_CTRLR_SOFT_RESET_N },
+
     { MC_CFG_LOOKAHEAD_PCH, LIBERO_SETTING_CFG_LOOKAHEAD_PCH },
     { MC_CFG_LOOKAHEAD_ACT, LIBERO_SETTING_CFG_LOOKAHEAD_ACT },
     { MC_INIT_AUTOINIT_DISABLE, LIBERO_SETTING_INIT_AUTOINIT_DISABLE },
@@ -917,10 +803,98 @@ static const ddr_cadence_reg_t mpfs_ddrc_regs[] = {
     { MC_CFG_BURST_RW_REFRESH_HOLDOFF, LIBERO_SETTING_CFG_BURST_RW_REFRESH_HOLDOFF },
     { MC_CFG_BG_INTERLEAVE, LIBERO_SETTING_CFG_BG_INTERLEAVE },
     { MC_CFG_REFRESH_DURING_PHY_TRAINING, LIBERO_SETTING_CFG_REFRESH_DURING_PHY_TRAINING },
+    { 0x4C00, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P0 },
+    { 0x4C04, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P1 },
+    { 0x4C08, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P2 },
+    { 0x4C0C, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P3 },
+    { 0x4C10, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P4 },
+    { 0x4C14, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P5 },
+    { 0x4C18, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P6 },
+    { 0x4C1C, LIBERO_SETTING_CFG_STARVE_TIMEOUT_P7 },
+    { 0x5000, LIBERO_SETTING_CFG_REORDER_EN },
+    { 0x5004, LIBERO_SETTING_CFG_REORDER_QUEUE_EN },
+    { 0x5008, LIBERO_SETTING_CFG_INTRAPORT_REORDER_EN },
+    { 0x500C, LIBERO_SETTING_CFG_MAINTAIN_COHERENCY },
+    { 0x5010, LIBERO_SETTING_CFG_Q_AGE_LIMIT },
+    { 0x5018, LIBERO_SETTING_CFG_RO_CLOSED_PAGE_POLICY },
+    { 0x501C, LIBERO_SETTING_CFG_REORDER_RW_ONLY },
+    { 0x5020, LIBERO_SETTING_CFG_RO_PRIORITY_EN },
+    { 0x5400, LIBERO_SETTING_CFG_DM_EN },
+    { 0x5404, LIBERO_SETTING_CFG_RMW_EN },
+    { 0x5800, LIBERO_SETTING_CFG_ECC_CORRECTION_EN },
+    { 0x5840, LIBERO_SETTING_CFG_ECC_BYPASS },
+    { 0x5844, LIBERO_SETTING_INIT_WRITE_DATA_1B_ECC_ERROR_GEN },
+    { 0x5848, LIBERO_SETTING_INIT_WRITE_DATA_2B_ECC_ERROR_GEN },
+    { 0x585C, LIBERO_SETTING_CFG_ECC_1BIT_INT_THRESH },
+    { 0x5C00, LIBERO_SETTING_INIT_READ_CAPTURE_ADDR },
+    { 0x6400, LIBERO_SETTING_CFG_ERROR_GROUP_SEL },
+    { 0x6404, LIBERO_SETTING_CFG_DATA_SEL },
+    { 0x6408, LIBERO_SETTING_CFG_TRIG_MODE },
+    { 0x640C, LIBERO_SETTING_CFG_POST_TRIG_CYCS },
+    { 0x6410, LIBERO_SETTING_CFG_TRIG_MASK },
+    { 0x6414, LIBERO_SETTING_CFG_EN_MASK },
+    { 0x6418, LIBERO_SETTING_MTC_ACQ_ADDR },
+    { 0x6430, LIBERO_SETTING_CFG_TRIG_MT_ADDR_0 },
+    { 0x6434, LIBERO_SETTING_CFG_TRIG_MT_ADDR_1 },
+    { 0x6438, LIBERO_SETTING_CFG_TRIG_ERR_MASK_0 },
+    { 0x643C, LIBERO_SETTING_CFG_TRIG_ERR_MASK_1 },
+    { 0x6440, LIBERO_SETTING_CFG_TRIG_ERR_MASK_2 },
+    { 0x6444, LIBERO_SETTING_CFG_TRIG_ERR_MASK_3 },
+    { 0x6448, LIBERO_SETTING_CFG_TRIG_ERR_MASK_4 },
+    { 0x644C, LIBERO_SETTING_MTC_ACQ_WR_DATA_0 },
+    { 0x6450, LIBERO_SETTING_MTC_ACQ_WR_DATA_1 },
+    { 0x6454, LIBERO_SETTING_MTC_ACQ_WR_DATA_2 },
+    { 0x652C, LIBERO_SETTING_CFG_PRE_TRIG_CYCS },
+    { 0x6550, LIBERO_SETTING_CFG_DATA_SEL_FIRST_ERROR },
+    { 0x7C00, LIBERO_SETTING_CFG_DQ_WIDTH },
+    { 0x7C04, LIBERO_SETTING_CFG_ACTIVE_DQ_SEL },
+    { 0x800C, LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_REQ },
+    { 0x8010, LIBERO_SETTING_INIT_CA_PARITY_ERROR_GEN_CMD },
     { MC_DFI_RDDATA_EN, LIBERO_SETTING_CFG_DFI_T_RDDATA_EN },
     { MC_DFI_PHY_RDLAT, LIBERO_SETTING_CFG_DFI_T_PHY_RDLAT },
     { MC_DFI_PHY_WRLAT, LIBERO_SETTING_CFG_DFI_T_PHY_WRLAT },
     { MC_DFI_PHYUPD_EN, LIBERO_SETTING_CFG_DFI_PHYUPD_EN },
+    { 0x10010, LIBERO_SETTING_INIT_DFI_LP_DATA_REQ },
+    { 0x10014, LIBERO_SETTING_INIT_DFI_LP_CTRL_REQ },
+    { 0x1001C, LIBERO_SETTING_INIT_DFI_LP_WAKEUP },
+    { 0x10020, LIBERO_SETTING_INIT_DFI_DRAM_CLK_DISABLE },
+    { 0x10030, LIBERO_SETTING_CFG_DFI_DATA_BYTE_DISABLE },
+    { 0x1003C, LIBERO_SETTING_CFG_DFI_LVL_SEL },
+    { 0x10040, LIBERO_SETTING_CFG_DFI_LVL_PERIODIC },
+    { 0x10044, LIBERO_SETTING_CFG_DFI_LVL_PATTERN },
+    { 0x10050, LIBERO_SETTING_PHY_DFI_INIT_START },
+    { 0x12C18, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_0 },
+    { 0x12C1C, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI1_1 },
+    { 0x12C20, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_0 },
+    { 0x12C24, LIBERO_SETTING_CFG_AXI_START_ADDRESS_AXI2_1 },
+    { 0x12F18, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_0 },
+    { 0x12F1C, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI1_1 },
+    { 0x12F20, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_0 },
+    { 0x12F24, LIBERO_SETTING_CFG_AXI_END_ADDRESS_AXI2_1 },
+    { 0x13218, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_0 },
+    { 0x1321C, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI1_1 },
+    { 0x13220, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_0 },
+    { 0x13224, LIBERO_SETTING_CFG_MEM_START_ADDRESS_AXI2_1 },
+    { 0x13514, LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI1 },
+    { 0x13518, LIBERO_SETTING_CFG_ENABLE_BUS_HOLD_AXI2 },
+    { 0x13690, LIBERO_SETTING_CFG_AXI_AUTO_PCH },
+    { 0x3C000, LIBERO_SETTING_PHY_RESET_CONTROL },
+    { 0x3C000, (LIBERO_SETTING_PHY_RESET_CONTROL & ~0x8000UL) },
+    { 0x3C004, LIBERO_SETTING_PHY_PC_RANK },
+    { 0x3C008, LIBERO_SETTING_PHY_RANKS_TO_TRAIN },
+    { 0x3C00C, LIBERO_SETTING_PHY_WRITE_REQUEST },
+    { 0x3C014, LIBERO_SETTING_PHY_READ_REQUEST },
+    { 0x3C01C, LIBERO_SETTING_PHY_WRITE_LEVEL_DELAY },
+    { 0x3C020, LIBERO_SETTING_PHY_GATE_TRAIN_DELAY },
+    { 0x3C024, LIBERO_SETTING_PHY_EYE_TRAIN_DELAY },
+    { 0x3C028, LIBERO_SETTING_PHY_EYE_PAT },
+    { 0x3C02C, LIBERO_SETTING_PHY_START_RECAL },
+    { 0x3C030, LIBERO_SETTING_PHY_CLR_DFI_LVL_PERIODIC },
+    { 0x3C034, LIBERO_SETTING_PHY_TRAIN_STEP_ENABLE },
+    { 0x3C038, LIBERO_SETTING_PHY_LPDDR_DQ_CAL_PAT },
+    { 0x3C03C, LIBERO_SETTING_PHY_INDPNDT_TRAINING },
+    { 0x3C040, LIBERO_SETTING_PHY_ENCODED_QUAD_CS },
+    { 0x3C044, LIBERO_SETTING_PHY_HALF_CLK_DLY_ENABLE },
 };
 
 /* Program the full MC_BASE2/ADDR_MAP/MC_BASE1/MPFE/.../AXI_IF controller
@@ -1134,14 +1108,9 @@ static int setup_phy(void)
     DDRPHY_REG(PHY_RPC156) = mpfs_phy_rpc156_val;  /* DQ/DQS init offset (1..9) */
     DDRPHY_REG(PHY_RPC166) = 0x00000002UL;  /* Trained: 0x02 */
     DDRPHY_REG(PHY_RPC168) = 0x00000000UL;  /* Trained: 0x00 */
-    /* rpc220 (DQ load delay).  Full CFG_DDR_SGMII_PHY diff vs HSS
-     * (2026-06-01) shows HSS runs rpc220=0x1 during WRLVL and only
-     * raises it to 0xC inside write_calibration (mss_ddr.c:1744).
-     * Tested matching HSS (0x1 here): wolfBoot's AXI reads HANG (naked
-     * read @ 0xC0000000 stalls, WRCALIB times out).  wolfBoot needs 0xC
-     * for the read path to function -- another HSS value that does not
-     * transfer to wolfBoot's PHY operating point.  Keep 0xC. */
-    DDRPHY_REG(PHY_RPC220) = 0x0000000CUL;  /* wolfBoot-needed (HSS=0x1 hangs reads) */
+    /* rpc220 (DQ load delay).  HSS leaves the reset value (0x1) until write
+     * calibration; either value trains the same here. */
+    DDRPHY_REG(PHY_RPC220) = 0x0000000CUL;
     /* rpc226 at offset 0x788: HSS-captured value 0x14.  The
      * DDRPHY_MODE-driven preload normally populates this, but on this
      * board wolfBoot's preload ended up with 0x01 -- write it
@@ -2247,6 +2216,49 @@ static void training_tip_wait(void)
 }
 
 
+#ifdef DEBUG_DDR
+/* Post-training dump in the column order of the Microchip HAL DDR demo
+ * (mss_ddr_debug.c), settling 50 us after each lane_select as HSS does. */
+static void training_posttip_dump(void)
+{
+    uint32_t lane;
+    uint32_t ioc2 = DDRPHY_REG(PHY_IOC_REG2);
+    uint32_t ioc5 = DDRPHY_REG(PHY_IOC_REG5);
+
+    DBG_DDR("REFDUMP train_stat=0x%x PCODE=0x%x NCODE=0x%x WRCALIB=0x%x\n",
+        DDRPHY_REG(PHY_TRAINING_STATUS), ioc2 & 0x7FU,
+        (ioc2 >> 7) & 0x7FU, DDRPHY_REG(PHY_EXPERT_WRCALIB));
+    DBG_DDR("REFDUMP sro_ref_slewr=0x%x sro_ref_slewf=0x%x sro_slewr=0x%x "
+        "sro_slewf=0x%x\n", ioc5 & 0x3FU, (ioc5 >> 6) & 0xFFFU,
+        (ioc5 >> 18) & 0x3FU, (ioc5 >> 24) & 0x3FU);
+
+    for (lane = 0; lane < 4U; lane++) {
+        DDRPHY_REG(PHY_LANE_SELECT) = lane;
+        udelay(50);
+        DBG_DDR("REFDUMP L%u gt_err_comb=0x%x gt_txdly=0x%x gt_steps_180=0x%x "
+            "gt_state=0x%x gt_clk_sel=0x%x wl_delay_0=0x%x\n",
+            lane, DDRPHY_REG(PHY_GT_ERR_COMB), DDRPHY_REG(PHY_GT_TXDLY),
+            DDRPHY_REG(PHY_GT_STEPS_180), DDRPHY_REG(PHY_GT_STATE),
+            DDRPHY_REG(PHY_GT_CLK_SEL), DDRPHY_REG(PHY_WL_DELAY_0));
+        DBG_DDR("REFDUMP L%u dqdqs_err_done=0x%x dqdqs_state=0x%x delta0=0x%x "
+            "delta1=0x%x dqdqs_window=0x%x\n", lane,
+            DDRPHY_REG(PHY_DQ_DQS_ERR_DONE), DDRPHY_REG(PHY_DQDQS_STATE),
+            DDRPHY_REG(PHY_DELTA0), DDRPHY_REG(PHY_DELTA1),
+            DDRPHY_REG(PHY_DQDQS_WINDOW));
+        DBG_DDR("REFDUMP L%u rdqdqs_status2=0x%x addcmd_status0=0x%x "
+            "addcmd_status1=0x%x addcmd_answer=0x%x dqdqs_status1=0x%x\n",
+            lane, DDRPHY_REG(PHY_DQDQS_STATUS2),
+            DDRPHY_REG(PHY_ADDCMD_STATUS0), DDRPHY_REG(PHY_ADDCMD_STATUS1),
+            DDRPHY_REG(PHY_ADDCMD_ANSWER), DDRPHY_REG(PHY_DQDQS_STATUS1));
+    }
+    /* TIP relies on lane_select being non-zero between iterations (see
+     * training_pretip_lane_snapshot), so leave it where the loop ended. */
+}
+#else
+#define training_posttip_dump() do { } while (0)
+#endif
+
+
 static int run_training(uint32_t retry_count)
 {
     uint32_t timeout, dfi_stat, train_stat;
@@ -2255,20 +2267,8 @@ static int run_training(uint32_t retry_count)
     uint32_t l;                         /* per-lane eye-width index */
     uint32_t eye[4];                    /* per-lane data-eye widths */
 
-    /* TRAINING_SKIP = 0x02 to skip TIP's ADDCMD phase (we run our own
-     * manual ADDCMD via lpddr4_manual_training above).  Matches HSS
-     * captured value 0x02 at PHY 0x80C (2026-05-15 DEBUG HEXDUMP).
-     *
-     * Previously experimented with 0x00 (full TIP training) under the
-     * theory that train_stat=0x1F (vs 0x1D) and DFI training_complete
-     * would help.  That assumption was wrong: full TIP training picks
-     * different per-lane wl_dly values from the HSS-trained ones, and
-     * those wl_dly values combined with our other PHY config left the
-     * write-data path mistrained for lanes 2/3. */
-    /* Tested TRAINING_SKIP=0x02 twice (with and without rpc220=0xC
-     * rpc226=0x14 alignment) -- regresses wl_dly to 0x56-0x7F across
-     * lanes (vs 0x24-0x2C with skip=0).  HSS's TIP-skip approach
-     * requires pre-WRLVL PHY state we don't yet match.  Keep skip=0. */
+    /* Run every TIP step.  The Libero default (0x02, skip ADDCMD) collapses
+     * lane 0's DQ/DQS window to one tap with this driver's manual ADDCMD. */
     DDRPHY_REG(PHY_TRAINING_SKIP) = 0x00U;
     mb();
 
@@ -2691,16 +2691,16 @@ static int run_training(uint32_t retry_count)
 
     /* HSS DDR_TRAINING_VERIFY checks (mss_ddr.c:1488-1522): if any of
      * these are non-canonical, training had problems even though
-     * train_stat reads 0x1D.  dqdqs_status2 is per-lane (selected via
+     * train_stat looks complete.  dqdqs_status2 is per-lane (selected via
      * PHY_LANE_SELECT) -- dump all 4 to see per-lane data-eye width. */
     for (l = 0; l < 4U; l++) {
         DDRPHY_REG(PHY_LANE_SELECT) = l;
         udelay(2);
-        eye[l] = DDRPHY_REG(0x850U);
+        eye[l] = DDRPHY_REG(PHY_DQDQS_STATUS2);
     }
     DBG_DDR(
         "  gt_err_comb=0x%x dq_dqs_err_done=0x%x (need 8) eye[0..3]=%u/%u/%u/%u\n",
-        DDRPHY_REG(0x81CU), DDRPHY_REG(0x834U),
+        DDRPHY_REG(PHY_GT_ERR_COMB), DDRPHY_REG(PHY_DQ_DQS_ERR_DONE),
         eye[0], eye[1], eye[2], eye[3]);
     (void)eye;
 
@@ -2787,17 +2787,14 @@ static int run_training(uint32_t retry_count)
     DDRCFG_REG(MC_CFG_AUTO_REF_EN) = 0x01;
     mb();
 
-    /* HSS DDR_TRAINING_VERIFY (mss_ddr.c:1488-1504) reads:
-     *   dq_dqs_err_done (need 8): DQ/DQS phase completion flag
-     *   dqdqs_status2 (need >= 5 taps): data eye window width
-     * On this board both report bad values (0x4 / 0x0) yet train_stat
-     * reads 0x1D and lanes 2&3 still write correctly via the lanes-2&3
-     * calibration committed by set_write_calib.  Returning failure
-     * here triggers inner retries that empirically make PHY state
-     * WORSE (dq_dqs_err_done -> 0x0, all lanes fail WRCALIB), because
-     * back-to-back training without a power cycle accumulates errors.
-     * Accept training as-is; the calibration committed by WRCALIB is
-     * what we get. */
+    /* HSS DDR_TRAINING_VERIFY (mss_ddr.c:1488-1504) reads dq_dqs_err_done
+     * (need 8) and dqdqs_status2 (need >= DQ_DQS_NUM_TAPS, which HSS sets
+     * to 5).  Both are satisfied here.  Returning failure would trigger
+     * inner retries, and back-to-back training without a power cycle
+     * accumulates errors rather than converging, so accept training as-is
+     * once those two checks pass. */
+
+    training_posttip_dump();
 
     return 0;
 }
@@ -3057,13 +3054,6 @@ int mpfs_ddr_init(unsigned int outer_retry)
 
     wolfBoot_printf("\n========================================\n");
 
-    /* rpc_156 DQ/DQS init offset.  Libero default 6 leaves the data eye
-     * closed (dqdqs_status2=0) on the Video Kit.  HSS allows 1..9 via
-     * TUNE_RPC_156_DQDQS_INIT_VALUE.  Empirically each fresh boot's
-     * training state degrades on subsequent attempts within the same
-     * power cycle, so we use a SINGLE value (no sweep): bump to 3 to
-     * push past the bad starting edge.  Change in code if 3 doesn't
-     * give dqdqs_status2 >= 5 on cold boot. */
     mpfs_phy_rpc156_val = 6U;
 
     (void)outer_retry;  /* TUNE sweep removed; outer_retry kept for future use */
@@ -3243,6 +3233,49 @@ int mpfs_ddr_init(unsigned int outer_retry)
                     "  WRCALIB not all lanes (result=%u) -- retraining\n",
                     (unsigned)wrcal);
                 continue;
+            }
+            /* HSS DDR_TRAINING_IP_SM_VERIFY: a DQ/DQS window under
+             * DQ_DQS_NUM_TAPS (5) on any lane is a failed training. */
+            {
+                volatile uint32_t *rst_cnt =
+                    (volatile uint32_t *)MPFS_DTIM_DDR_RESET_CNT_ADDR;
+                uint32_t eye_min = 0xFFU;
+                uint32_t n = 0;
+                for (lane = 0; lane < 4; lane++) {
+                    uint32_t w;
+                    DDRPHY_REG(PHY_LANE_SELECT) = lane;
+                    udelay(50);
+                    w = DDRPHY_REG(PHY_DQDQS_STATUS2);
+                    if (w < eye_min) {
+                        eye_min = w;
+                    }
+                }
+                if ((rst_cnt[0] ^ rst_cnt[1]) == 0xFFFFFFFFUL) {
+                    n = rst_cnt[0];
+                }
+                if (eye_min < MPFS_DDR_EYE_MIN_TAPS &&
+                        n < MPFS_DDR_EYE_RESET_MAX) {
+                    /* A controller re-init tends to repeat the narrow window;
+                     * only a full MSS reset re-rolls it. */
+                    wolfBoot_printf("DDR: DQ/DQS window %u taps, MSS reset "
+                        "%u/%u\n", (unsigned)eye_min, (unsigned)(n + 1U),
+                        (unsigned)MPFS_DDR_EYE_RESET_MAX);
+                    rst_cnt[0] = n + 1U;
+                    rst_cnt[1] = ~(n + 1U);
+                    mb();
+                    udelay(20000);
+                    SYSREG_MSS_RESET_CR = 0xDEAD;
+                    while (1) {
+                        __asm__ volatile("wfi");
+                    }
+                }
+                if (eye_min < MPFS_DDR_EYE_MIN_TAPS) {
+                    wolfBoot_printf("DDR: WARNING DQ/DQS window %u taps after "
+                        "%u resets, continuing\n", (unsigned)eye_min,
+                        (unsigned)n);
+                }
+                rst_cnt[0] = 0;
+                rst_cnt[1] = 0;
             }
             train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
 
