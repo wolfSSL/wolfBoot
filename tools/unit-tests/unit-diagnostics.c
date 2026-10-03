@@ -194,7 +194,7 @@ START_TEST(test_diag_header_gate_magic)
 
     hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
     hdr->magic = 0xDEADBEEFUL;
-    hdr->crc = diag_crc32(hdr, 12);
+    hdr->crc = wb_crc32(hdr, 12);
     ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
 }
 END_TEST
@@ -211,7 +211,7 @@ START_TEST(test_diag_header_gate_version)
 
     hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
     hdr->format_version = 99U;
-    hdr->crc = diag_crc32(hdr, 12);
+    hdr->crc = wb_crc32(hdr, 12);
     ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
 }
 END_TEST
@@ -227,7 +227,7 @@ START_TEST(test_diag_header_gate_crc)
     ck_assert_int_eq(wolfBoot_get_failure_count(), 1);
 
     hdr = (struct wolfBoot_diag_header *)(uintptr_t)DIAG_SECTOR_ADDR(0);
-    hdr->crc = diag_crc32(hdr, 12) + 1U;
+    hdr->crc = wb_crc32(hdr, 12) + 1U;
     ck_assert_int_eq(wolfBoot_get_failure_count(), 0);
 }
 END_TEST

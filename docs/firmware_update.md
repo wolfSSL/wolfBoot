@@ -349,6 +349,10 @@ state trailer (with `FLAGS_HOME` it also holds the UPDATE partition
 flags, and `wolfBoot_update_trigger()` erases the whole sector), so
 wolfBoot's oversize check rejects any payload that would reach it.
 
+With `NVM_FLASH_JOURNAL_DUAL` the trailer takes the last two sectors of
+each partition. Subtract two sectors instead of one in both formulas. The
+sizing rule below does not change.
+
 To be able to deliver any payload the install span allows, including
 an application as large as the BOOT partition can hold, size the
 UPDATE partition so that `max_staged_payload >= max_install`:
