@@ -583,3 +583,168 @@ jobs:
       - name: Run emergency fallback test (FLASH_MULTI_SECTOR_ERASE=1)
         run: |
           tools/scripts/sim-update-emergency-fallback.sh
+
+      # TEST with NVM_FLASH_JOURNAL enabled
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config with NVM_FLASH_JOURNAL
+        run: |
+          cp config/examples/sim-nvm-journal.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_FLASH_JOURNAL)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_FLASH_JOURNAL)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with power failures (NVM_FLASH_JOURNAL)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run emergency fallback test (NVM_FLASH_JOURNAL)
+        run: |
+          tools/scripts/sim-update-emergency-fallback.sh
+
+
+      # TEST with NVM_FLASH_JOURNAL NVM_FLASH_ECC enabled
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config with NVM_FLASH_JOURNAL NVM_FLASH_ECC
+        run: |
+          cp config/examples/sim-nvm-journal-ecc.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_FLASH_JOURNAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_FLASH_JOURNAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with power failures (NVM_FLASH_JOURNAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-powerfail-resume.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run emergency fallback test (NVM_FLASH_JOURNAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-emergency-fallback.sh
+
+      # TEST with NVM_FLASH_JOURNAL_DUAL enabled
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config with NVM_FLASH_JOURNAL_DUAL
+        run: |
+          cp config/examples/sim-nvm-journal-dual.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_FLASH_JOURNAL_DUAL)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_FLASH_JOURNAL_DUAL)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with power failures (NVM_FLASH_JOURNAL_DUAL)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-dual.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run emergency fallback test (NVM_FLASH_JOURNAL_DUAL)
+        run: |
+          tools/scripts/sim-update-emergency-fallback.sh
+
+      # TEST with NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC enabled
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config with NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC
+        run: |
+          cp config/examples/sim-nvm-journal-dual-ecc.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run sunny day update test (NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-sunnyday-update.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test (NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-fallback.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run update-revert test with power failures (NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-powerfail-resume-dual.sh
+
+      - name: Rebuild wolfboot.elf
+        run: |
+          make clean && make test-sim-internal-flash-with-update
+
+      - name: Run emergency fallback test (NVM_FLASH_JOURNAL_DUAL NVM_FLASH_ECC)
+        run: |
+          tools/scripts/sim-update-emergency-fallback.sh
