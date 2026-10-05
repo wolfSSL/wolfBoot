@@ -130,6 +130,8 @@ TESTS+=unit-ct-compare
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
+TESTS+=unit-imx95-ele
+TESTS+=unit-imx95-disk
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
@@ -1404,6 +1406,48 @@ imx8qm_flexspi_extract.h: ../../hal/imx8qm.c
 unit-imx8qm-flexspi-write: unit-imx8qm-flexspi-write.c imx8qm_flexspi_extract.h
 	gcc -o $@ unit-imx8qm-flexspi-write.c -I../../hal $(CFLAGS) $(LDFLAGS)
 
+# unit-imx95-ele drives the real ELE mailbox transport from
+# hal/imx95_a55_stage1.c against an emulated MU. Extracted rather than
+# host-copied for the same reason as the i.MX8QM rules above; the barrier and
+# the CNTFRQ_EL0 read are rewritten, since a host has neither.
+imx95_ele_extract.h: ../../hal/imx95_a55_stage1.c
+	{ sed -n '/^#define ELE_MU_PAR /,/^#define ELE_CALL_BROKEN /p' $<; echo; \
+	  sed -n '/^#define ELE_TIMER_PROBE_LOOPS /,/^#define ELE_MU_POLL_LOOPS /p' $<; echo; \
+	  sed -n '/^\/\* Returns 0 when the system counter is not advancing/,/^static void ele_report(/p' $< \
+	    | sed '/^static void ele_report(/d'; } \
+	  | sed -e 's/__asm__ volatile("dsb sy" ::: "memory");/ELE_BARRIER();/' \
+	        -e 's/__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(hz));/hz = ELE_TEST_CNTFRQ;/' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted transport"; false; }
+	@for m in 'ELE_BARRIER();' 'hz = ELE_TEST_CNTFRQ;'; do \
+	    grep -qF "$$m" $@ || { echo "$@: the rewrite for '$$m' no longer matches"; exit 1; }; \
+	done
+	@for f in 'static uint64_t timer_deadline(' 'static int mu_wait(' \
+	          'static int ele_call(' '#define ELE_MU_PAR ' '#define ELE_MU_TR(' \
+	          '#define ELE_MU_RR(' '#define ELE_TIMER_PROBE_LOOPS ' \
+	          '#define ELE_MU_POLL_LOOPS ' '#define ELE_CALL_BROKEN '; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole transport"; exit 1; }; \
+	done
+
+unit-imx95-ele: unit-imx95-ele.c imx95_ele_extract.h
+	gcc -o $@ unit-imx95-ele.c $(CFLAGS) $(LDFLAGS)
+
+# unit-imx95-disk drives the real byte-addressed disk_read() from
+# hal/imx95_a55.c against an emulated card, checking where each byte lands and
+# the bounce-buffer paths rather than just the returned length.
+imx95_disk_extract.h: ../../hal/imx95_a55.c
+	sed -n '/^\/\* Byte-addressed (src\/disk.c passes byte offsets)/,/^\/\* Not implemented: nothing in the boot path writes. \*\/$$/p' $< \
+	    | sed '/^\/\* Not implemented: nothing in the boot path writes. \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted reader"; false; }
+	@for f in 'int disk_read(' 'card_ready' 'sd_read_blocks(' 'SD_BLOCK_SIZE' \
+	          'SD_MAX_BLOCKS'; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket disk_read"; exit 1; }; \
+	done
+
+unit-imx95-disk: unit-imx95-disk.c imx95_disk_extract.h
+	gcc -o $@ unit-imx95-disk.c $(CFLAGS) $(LDFLAGS)
+
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
@@ -1996,6 +2040,7 @@ covclean:
 # so "clean" removes them and so there is one place that names them.
 GENERATED_SRC:=aurix_erased_extract.h \
 	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
+	imx95_ele_extract.h imx95_disk_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \
