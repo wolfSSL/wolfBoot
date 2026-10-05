@@ -50,7 +50,7 @@
 #include "wolfhsm/wh_client.h"
 #include "wolfhsm/wh_error.h"
 /* wolfHSM AURIX TC4xx port headers */
-#include "tchsm_hsmhost.h"
+#include "tchsm_topology.h"
 #include "tchsm_client.h"
 #include "tchsm_spr_apu.h"
 

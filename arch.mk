@@ -2699,6 +2699,8 @@ ifeq ($(ARCH), AURIX)
 
     # TC4 derivative device selection from the port device.mk.
     include $(WOLFHSM_INFINEON_TC4XX)/device.mk
+    # wolfHSM port objects and flags.
+    include $(TC4_WB_DIR)/tchsm_wolfboot.mk
 
     CROSS_COMPILE?=tricore-elf-
 
@@ -2796,12 +2798,16 @@ ifeq ($(ARCH), AURIX)
     # No TriCore asm in wolfCrypt
     MATH_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sp_c32.o
 
+    # wolfHSM port CommBuf placement, used by the linker scripts too.
+    CFLAGS += $(TCHSM_WB_CFLAGS)
+    LDFLAGS += $(TCHSM_WB_LDFLAGS)
+
     # wolfHSM support
     ifneq ($(filter 1,$(WOLFHSM_CLIENT) $(WOLFHSM_SERVER)),)
       # Common wolfHSM port files.
-      CFLAGS += -I$(WOLFHSM_INFINEON_TC4XX)/port -DWOLFHSM_CFG_DMA \
+      CFLAGS += $(TCHSM_WB_WOLFHSM_CFLAGS) -DWOLFHSM_CFG_DMA \
                 -DWOLFHSM_CFG_NO_SYS_TIME
-      OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/tchsm_hsmhost.o
+      OBJS += $(TCHSM_WB_WOLFHSM_OBJS)
       OBJS += $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
 
       # NVM image variables for the server key store.
@@ -2816,12 +2822,8 @@ ifeq ($(ARCH), AURIX)
 
     ifeq ($(WOLFHSM_CLIENT),1)
       # Client transport bring-up files.
-      CFLAGS += -I$(WOLFHSM_INFINEON_TC4XX)/port/client
-      OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_client.o \
-              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_hh_host.o \
-              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_spr_apu.o \
-              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_dma_client.o \
-              $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_time.o
+      CFLAGS += $(TCHSM_WB_CLIENT_CFLAGS)
+      OBJS += $(TCHSM_WB_CLIENT_OBJS)
     endif
 
     ifeq ($(TARGET), aurix_tc4xx_csrm)
