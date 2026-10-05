@@ -1959,7 +1959,6 @@ ifeq ($(TARGET),lpc55s69)
     OBJS+=\
         $(MCUXPRESSO)/drivers/puf/fsl_puf.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
-        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/hwpuf.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hwpuf_port.o
   endif
 endif
