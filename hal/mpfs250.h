@@ -378,9 +378,11 @@ int mpfs_nonce(uint8_t *nonce);
 #define RTC_CLOCK_FREQ              1000000UL
 
 /* In M-mode CLINT MTIME is not running without HSS; use mcycle (CPU clock) instead.
+ * The E51 clock is raised from the reset rate to the Libero PLL rate during
+ * init, so the rate is the live value, not MSS_CPU_CLK.
  * In S-mode MTIME runs at 1 MHz (default RISCV_SMODE_TIMER_FREQ). */
 #if defined(WOLFBOOT_RISCV_MMODE) && !defined(RISCV_SMODE_TIMER_FREQ)
-#define RISCV_SMODE_TIMER_FREQ      MSS_CPU_CLK
+#define RISCV_SMODE_TIMER_FREQ      (mpfs_cpu_freq_mhz * 1000000UL)
 #endif
 
 /* Hart Local Storage (HLS) - per-hart communication structure, 64 bytes at top of stack */
