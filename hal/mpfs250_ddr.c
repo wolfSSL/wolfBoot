@@ -3358,6 +3358,24 @@ int mpfs_ddr_init(unsigned int outer_retry)
      * underlying address-decoder issue is still affecting writes. */
     mpfs_clear_bootup_cache_ways(0xC0000000UL, 1UL * 1024UL * 1024UL);
 
+    /* The first transaction the CPU side sends to the controller after init
+     * must be a read.  On a cold boot a write first lands displaced by
+     * several bus beats and every later cached-port write in that boot
+     * follows it; a non-cached read of one block before any write leaves
+     * the port clean.  The PDMA fill above goes through the switch port
+     * and does not count. */
+    {
+        volatile uint8_t *ncv = (volatile uint8_t *)0xC0000000UL;
+        uint32_t k;
+        uint32_t sink = 0;
+
+        for (k = 0; k < 512; k++) {
+            sink += ncv[k];
+        }
+        __asm__ volatile("fence iorw,iorw" ::: "memory");
+        (void)sink;
+    }
+
 
     wolfBoot_printf("DDR: Initialization COMPLETE\n");
 
