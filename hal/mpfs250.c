@@ -1482,144 +1482,8 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
     return 0;
 }
 
-#ifdef DISK_DECRYPT_STAGING
-/* Ciphertext is read through the non-cached DDR alias and plaintext is landed
- * with the PDMA copy below: CPU stores into DDR are not coherent with what the
- * SD controller wrote (see polarfire_mpfs250_m.config). */
-uintptr_t hal_disk_decrypt_addr(uintptr_t addr)
-{
-    return addr | 0x40000000UL;
-}
-
-int hal_disk_decrypt_copy(void *dst, const void *src, uint32_t len)
-{
-    return wolfBoot_fit_memcpy(dst, src, len);
-}
-#endif
-
-#if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
-/* FIT subimage copy via PDMA (overrides the weak default in src/fdt.c).
- * CPU writes to DDR do not land on this board, so route kernel/dtb copies
- * through the PDMA master.  A DDR source is read via its non-cached alias so
- * PDMA sees real DDR; mpfs_pdma_memcpy remaps the dst 0x8x->0xCx and flushes
- * L2.  Chunked + WDT-petted for kernel-sized copies. */
-int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
-{
-    uintptr_t d = (uintptr_t)dst;
-    uintptr_t s = (uintptr_t)src;
-    volatile const uint8_t *ncd;
-    const uint8_t *ncs;
-    uint32_t off = 0;
-    uint32_t chunk;
-    uint32_t k;
-    int retry;
-    int mism;
-    int rc = 0;
-
-    if ((s & 0xF0000000UL) == 0x80000000UL) {
-        s |= 0x40000000UL; /* non-cached source alias */
-    }
-    while (off < len) {
-        chunk = len - off;
-        if (chunk > (1024U * 1024U)) {
-            chunk = 1024U * 1024U;
-        }
-        /* mpfs_pdma_memcpy always returns 0, so the read-back verify below is
-         * the authoritative success check for this chunk.  The PDMA->DDR write
-         * intermittently drops a block, so re-PDMA on a mismatch (same pattern
-         * as sdhci_platform_block_copy).  A DDR destination (0x8xxxxxxx) is
-         * read back through its non-cached alias (| 0x40000000) so we compare
-         * what actually landed in DDR, not stale L2; this makes the caller's
-         * fail-closed rc real for the signature-uncovered kernel/dtb copies.
-         * A non-DDR destination (e.g. an L2 scratch buffer) lands directly, so
-         * a single copy suffices. */
-        mism = 1;
-        for (retry = 0; retry < 8 && mism != 0; retry++) {
-            (void)mpfs_pdma_memcpy((void *)(d + off),
-                (const void *)(s + off), chunk);
-            /* Refresh all five MSS watchdogs (they always count and reset the
-             * chip and cannot be disabled) during the multi-MB kernel copy
-             * and its read-back verify. */
-            MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
-            MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
-            MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
-            MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
-            MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
-            if ((d & 0xF0000000UL) != 0x80000000UL) {
-                mism = 0; /* non-DDR dst lands on the first copy */
-                break;
-            }
-            __asm__ volatile("fence iorw,iorw" ::: "memory");
-            ncd = (volatile const uint8_t *)((d + off) | 0x40000000UL);
-            ncs = (const uint8_t *)(s + off);
-            mism = 0;
-            for (k = 0; k < chunk; k++) {
-                if (ncd[k] != ncs[k]) {
-                    mism = 1;
-                    break;
-                }
-            }
-        }
-        if (mism != 0) {
-            /* Copy could not be verified within the retry budget; remember the
-             * failure so the caller fails closed rather than boot corrupt,
-             * no-longer-signature-covered data. */
-            rc = -1;
-        }
-        off += chunk;
-    }
-    return rc;
-}
-
-/* L2 round-trip wrapper around mpfs_dts_fixup_inplace().  The dtb lives in DDR
- * (WOLFBOOT_LOAD_DTS_ADDRESS) but CPU writes to DDR do not land here, so copy
- * it (non-cached read) into an L2 scratch buffer, run the FDT fixups there
- * (CPU L2 writes work), then PDMA the result back to DDR. */
-int hal_dts_fixup(void* dts_addr, uint32_t capacity)
-{
-    static uint8_t l2_dtb[64 * 1024] __attribute__((aligned(8)));
-    fdt_ctx ctx;
-    const uint8_t *ddr_nc;
-    uint32_t sz;
-    int ret;
-
-    if (dts_addr == NULL) {
-        return -1;
-    }
-    ddr_nc = (const uint8_t *)((uintptr_t)dts_addr | 0x40000000UL);
-    /* The source is bounded by whichever is smaller: the caller's DDR
-     * window, or what the L2 scratch buffer can hold once the fixup
-     * headroom is set aside.  fdt_open() enforces it, so the memcpy below
-     * cannot overrun l2_dtb however corrupt the header is. */
-    sz = (uint32_t)(sizeof(l2_dtb) - WOLFBOOT_FDT_FIXUP_HEADROOM);
-    if (capacity < sz) {
-        sz = capacity;
-    }
-    if (fdt_open(&ctx, (void *)ddr_nc, sz) != 0) {
-        wolfBoot_printf("FDT: invalid header at %p\n", dts_addr);
-        return -1;
-    }
-    sz = fdt_size(&ctx);
-    /* DDR (non-cached) -> L2 */
-    memcpy(l2_dtb, ddr_nc, sz);
-    /* fixup in the CPU-writable L2 buffer, which may use the whole of it */
-    ret = mpfs_dts_fixup_inplace(l2_dtb, (uint32_t)sizeof(l2_dtb));
-    /* L2 -> DDR via PDMA (expanded totalsize) */
-    if (fdt_open(&ctx, l2_dtb, (uint32_t)sizeof(l2_dtb)) != 0) {
-        wolfBoot_printf("FDT: fixed-up dtb rejected\n");
-        return -1;
-    }
-    if (wolfBoot_fit_memcpy(dts_addr, l2_dtb, fdt_size(&ctx)) != 0) {
-        wolfBoot_printf("FDT: dtb copy-back to DDR failed\n");
-        return -1;
-    }
-    return ret;
-}
-#else
-/* Without the M-mode DDR constraints the dtb buffer is CPU-writable, so
- * run the fixups directly in place (the original behavior, kept so
- * FDT-enabled non-DDR builds do not silently fall back to the weak
- * no-op hal_dts_fixup). */
+/* Overrides the weak no-op hal_dts_fixup so FDT-enabled builds get the
+ * fixups above. */
 int hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
     if (dts_addr == NULL) {
@@ -1627,7 +1491,6 @@ int hal_dts_fixup(void* dts_addr, uint32_t capacity)
     }
     return mpfs_dts_fixup_inplace(dts_addr, capacity);
 }
-#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
 
 void hal_prepare_boot(void)
 {
@@ -2657,8 +2520,7 @@ static void mpfs_mpu_init_mmc(void)
 }
 #endif /* MPFS_DDR_INIT */
 
-#ifdef SDHCI_BLOCK_VIA_PDMA
-/* Pet all five MSS watchdogs during the (long) per-block SDHCI read loop.
+/* Pet all five MSS watchdogs during the SDHCI read loops.
  * Overrides the weak no-op in src/sdhci.c.  The MSS watchdogs always count
  * and reset the chip at timeout and cannot be disabled, so the multi-second
  * load of a large image must keep refreshing them. */
@@ -2670,49 +2532,6 @@ void sdhci_platform_wdt_pet(void)
     MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
     MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
 }
-
-/* Copy a staged SDHCI block to its final destination (overrides the weak
- * memcpy default in src/sdhci.c).  Direct CPU writes to DDR do not land on
- * this board, so a DDR destination (0x8xxxxxxx) is written through the PDMA
- * master and verified via its non-cached alias (| 0x40000000), re-PDMA'ing on
- * a drop (the PDMA->DDR write intermittently drops a block when interleaved
- * with SDHCI reads).  A non-DDR destination (L2 header/GPT buffers) is a plain
- * CPU copy, which lands.  Returns 0 on success, -1 if a DDR write cannot be
- * verified within the retry budget. */
-int sdhci_platform_block_copy(void *dst, const void *src, uint32_t len)
-{
-    volatile const uint8_t *ncv;
-    const uint8_t *s = (const uint8_t *)src;
-    int retry;
-    int mism;
-    uint32_t k;
-
-    if (((uintptr_t)dst & 0xF0000000UL) != 0x80000000UL) {
-        memcpy(dst, src, len);
-        return 0;
-    }
-    ncv = (volatile const uint8_t *)((uintptr_t)dst | 0x40000000UL);
-    mism = 1;
-    for (retry = 0; retry < 8 && mism != 0; retry++) {
-        /* The read-back verify below is the authoritative success check, so
-         * a PDMA-engine error is caught there and retried like any drop. */
-        (void)mpfs_pdma_memcpy(dst, src, len);
-        sdhci_platform_wdt_pet();
-        __asm__ volatile("fence iorw,iorw" ::: "memory");
-        mism = 0;
-        for (k = 0; k < len; k++) {
-            if (ncv[k] != s[k]) {
-                mism = 1;
-                break;
-            }
-        }
-    }
-    if (mism != 0) {
-        return -1;
-    }
-    return 0;
-}
-#endif /* SDHCI_BLOCK_VIA_PDMA */
 
 void sdhci_platform_init(void)
 {

@@ -81,10 +81,6 @@ wolfBoot's image encryption (`EXT_ENCRYPTED`) was previously tied to the partiti
 - `src/libwolfboot.c`: the `EXT_ENCRYPTED requires EXT_FLASH or MMU` guard now also accepts `CUSTOM_ENCRYPT_KEY` (the platform supplies the key), and `hal_set_key()` (partition-resident key storage) is folded under `#ifndef CUSTOM_ENCRYPT_KEY`.
 - `src/update_disk.c`: the `DISK_ENCRYPT` path gains `ForceZero` for secret cleanup.
 
-### PolarFire M-mode decrypt note
-
-The image is loaded into DDR by the SD controller and decrypted there. CPU stores into that region are not coherent with what the controller wrote (which is why the load uses `SDHCI_BLOCK_VIA_PDMA`), so `polarfire_mpfs250_m.config` sets `DISK_DECRYPT_STAGING=1`: the ciphertext is read through the non-cached DDR alias, decrypted a chunk at a time into a staging buffer and landed with the same PDMA copy the load used.
-
 ## Build flags summary
 
 | Flag | Effect |
@@ -124,7 +120,7 @@ make CROSS_COMPILE=riscv64-unknown-elf- LIBERO_FPGA_CONFIG_DIR=<fpga_design_conf
 
 The PUF response is identical for a fixed challenge across cold power cycles while the nonce service is random, and the PUF-derived KEK wraps and unwraps a test key deterministically (the same wrapped bytes on every boot); both were verified on the kit and the KEK logic is covered by `tools/unit-tests/unit-snvm-kek.c`.
 
-Full encrypted boot captured on the Video Kit (UART1, S-mode wolfBoot under HSS; the standalone M-mode target boots the same image through the staged PDMA decrypt): the AES key is unwrapped from sNVM with the PUF KEK, the image is loaded, decrypted and verified.
+Full encrypted boot captured on the Video Kit (UART1, S-mode wolfBoot under HSS; the standalone M-mode target decrypts the same image in place in DDR): the AES key is unwrapped from sNVM with the PUF KEK, the image is loaded, decrypted and verified.
 
 ```
 wolfBoot Version: 2.9.0
