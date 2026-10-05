@@ -802,7 +802,10 @@ int hal_hsm_init_connect(void)
         return rc;
     }
 
-    tchsm_client_init(TCHSM_HSMHOST_CLIENT_APP0);
+    rc = tchsm_client_init(TCHSM_HSMHOST_CLIENT_APP0);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
 
     rc = tchsm_client_wait_ready(TCHSM_HSMHOST_CLIENT_APP0, 10000u);
     if (rc != WH_ERROR_OK) {
