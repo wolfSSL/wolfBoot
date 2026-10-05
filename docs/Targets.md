@@ -9208,38 +9208,38 @@ make VORAGO_SDK_DIR=$PWD/../VA416xx_SDK/
         [CC ARM] hal/va416x0.o
         [CC ARM] src/keystore.o
         [CC ARM] src/loader.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_spi.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_clkgen.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_ioconfig.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_irqrouter.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_uart.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/drivers/src/va416xx_hal_timer.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/mcu/src/system_va416xx.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/../VA416xx_SDK//common/utils/src/spi_fram.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_spi.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_clkgen.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_ioconfig.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_irqrouter.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_uart.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/drivers/src/va416xx_hal_timer.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/mcu/src/system_va416xx.o
+        [CC ARM] /path/to/wolfBoot/../VA416xx_SDK//common/utils/src/spi_fram.o
         [CC ARM] src/boot_arm.o
-        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o
-        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o
-        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o
-        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o
-        [AS ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
+        [AS ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-aes-asm_c.o
+        [AS ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha256-asm_c.o
+        [AS ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha512-asm_c.o
+        [AS ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-sha3-asm_c.o
+        [AS ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/port/arm/thumb2-chacha-asm_c.o
         [CC ARM] src/update_flash.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sha256.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/hash.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/memory.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/wc_port.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/wolfmath.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/logging.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/asn.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/ecc.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sp_int.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sp_cortexm.o
-        [CC ARM] /home/davidgarske/GitHub/wolfboot/lib/wolfssl/wolfcrypt/src/sha512.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/sha256.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/hash.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/memory.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/wc_port.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/wolfmath.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/logging.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/asn.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/ecc.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/sp_int.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/sp_cortexm.o
+        [CC ARM] /path/to/wolfBoot/lib/wolfssl/wolfcrypt/src/sha512.o
         [LD] wolfboot.elf
         [BIN] wolfboot.bin
         [SIZE]
