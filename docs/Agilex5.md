@@ -36,6 +36,21 @@ Create the Linux FIT from the GSRD `Image` and the exact board DTB, then sign
 that FIT with wolfBoot's normal image-signing flow. Initialize both raw A/B
 partitions with a valid signed image for the first boot.
 
+### Board settings
+
+The example config targets the DK-A5E013BM16AEA. Other boards set these in
+their config:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `CFLAGS_EXTRA+=-DDEBUG_UART_NUM=1` | UART0 (`0x10C02000`) | console UART for wolfBoot and Linux `earlycon` |
+| `CFLAGS_EXTRA+=-DDEBUG_UART_BASE=<addr>` | unset | any other console UART; write the address without a `UL` suffix |
+| `CFLAGS_EXTRA+=-DAGILEX5_DDR_SIZE=<bytes>` | `0x70000000` (1792 MiB) | DDR size written to the DTB memory node |
+| `CFLAGS_EXTRA+=-DAGILEX5_FDT_DISABLE_PATHS=\"/leds\"` | unset | comma-separated DTB node paths to mark `disabled`, for hardware behind the unprogrammed FPGA |
+
+wolfBoot does not read the DDR size from the DTB, because without U-Boot the
+memory node holds whatever the DTB author wrote rather than the fitted size.
+
 The checked-in `hal/agilex5.its` is a minimal FIT example. A GSRD production
 image must use the GSRD-generated kernel load address and board DTB, then be
 signed with the deployment key. Do not place private keys in the source tree
@@ -72,7 +87,9 @@ software and is deliberately not linked into bare-metal wolfBoot.
    PSCI reboot, and rootfs `/dev/mmcblk0p4`.
 5. Build the complete WIC, inspect all four partitions, flash the whole card,
    compare the complete image span, cold boot, and test A-to-B fallback by
-   corrupting only a disposable copy of A.
+   corrupting only a disposable copy of A. Both slots must hold the same
+   version: with `ALLOW_DOWNGRADE=0` wolfBoot refuses to fall back to a lower
+   version (`Rollback to lower version not allowed`) and panics instead.
 6. From the booted WIC run `/usr/bin/wolfcrypttest`. Require exit zero and
    `ALTERA-FCS test passed!` to prove the Linux image still provides hardware
    FCS offload.

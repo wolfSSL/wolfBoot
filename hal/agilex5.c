@@ -38,9 +38,11 @@
 #ifndef LINUX_BOOTARGS_ROOT
 #define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p4"
 #endif
+#define AGILEX5_STR2(x) #x
+#define AGILEX5_STR(x) AGILEX5_STR2(x)
 #define LINUX_BOOTARGS \
-    "earlycon=uart8250,mmio32,0x10c02000 console=ttyS0,115200 " \
-    "root=" LINUX_BOOTARGS_ROOT " rootwait"
+    "earlycon=uart8250,mmio32," AGILEX5_STR(DEBUG_UART_BASE) \
+    " console=ttyS0,115200 root=" LINUX_BOOTARGS_ROOT " rootwait"
 #endif
 
 #ifdef DEBUG_UART
@@ -51,7 +53,8 @@
 #define UART_LSR_TEMT (1U << 6)
 #define UART_TIMEOUT 1000000U
 #define UART_REG(_n) \
-    (*(volatile uint32_t *)(AGILEX5_UART0_BASE + ((uintptr_t)(_n) << 2)))
+    (*(volatile uint32_t *)((uintptr_t)DEBUG_UART_BASE + \
+        ((uintptr_t)(_n) << 2)))
 
 void uart_init(void)
 {
@@ -153,11 +156,22 @@ void *hal_get_dts_update_address(void)
 }
 
 #ifdef __WOLFBOOT
+#ifdef AGILEX5_FDT_DISABLE_PATHS
+static const char* const agilex5_fdt_disable[] = { AGILEX5_FDT_DISABLE_PATHS };
+#endif
+
 int hal_dts_fixup(void *dts_addr, uint32_t capacity)
 {
     fdt_ctx ctx;
     int off;
     int ret;
+#ifdef AGILEX5_FDT_DISABLE_PATHS
+    unsigned int i;
+#endif
+
+    /* Bare-metal and RTOS payloads carry no DTB. */
+    if (dts_addr == NULL)
+        return 0;
 
     /* Validate the blob against the window it actually occupies. */
     ret = fdt_open(&ctx, dts_addr, capacity);
@@ -171,9 +185,6 @@ int hal_dts_fixup(void *dts_addr, uint32_t capacity)
         return ret;
     }
 
-    /* U-Boot normally patches the memory node after SPL has measured the
-     * LPDDR4.  wolfBoot bypasses U-Boot and passes this DTB directly to
-     * Linux, so preserve the board's 1792 MiB memory map explicitly. */
     off = fdt_find_devtype(&ctx, -1, "memory");
     if (off >= 0) {
         uint64_t reg[2];
@@ -190,19 +201,23 @@ int hal_dts_fixup(void *dts_addr, uint32_t capacity)
             (unsigned long)AGILEX5_DDR_SIZE);
     }
 
-    /* The board DT contains an optional FPGA-backed gpio-leds node.  The
-     * normal GSRD path programs the fabric in U-Boot before probing it; the
-     * direct wolfBoot handoff does not yet program that optional design.
-     * Keep Linux from touching an unconfigured fabric register while the
-     * HPS, FCS and storage paths remain available. */
-    off = fdt_find_node_offset(&ctx, -1, "leds");
-    if (off >= 0) {
-        ret = fdt_fixup_str(&ctx, off, "leds", "status", "disabled");
+    /* wolfBoot does not program the fabric, so the board config lists the
+     * nodes whose hardware sits behind the unprogrammed FPGA. */
+#ifdef AGILEX5_FDT_DISABLE_PATHS
+    for (i = 0; i < sizeof(agilex5_fdt_disable) /
+                    sizeof(agilex5_fdt_disable[0]); i++) {
+        off = fdt_path_offset(&ctx, agilex5_fdt_disable[i]);
+        if (off < 0)
+            continue;
+        ret = fdt_fixup_str(&ctx, off, agilex5_fdt_disable[i], "status",
+                            "disabled");
         if (ret != 0) {
-            wolfBoot_printf("FDT: failed to disable FPGA LEDs (%d)\n", ret);
+            wolfBoot_printf("FDT: failed to disable %s (%d)\n",
+                agilex5_fdt_disable[i], ret);
             return ret;
         }
     }
+#endif
 
     off = fdt_subnode_offset(&ctx, 0, "chosen");
     if (off == -FDT_ERR_NOTFOUND)

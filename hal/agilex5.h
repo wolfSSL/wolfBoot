@@ -51,12 +51,21 @@
 #endif
 
 #define AGILEX5_DDR_BASE       0x80000000UL
-/* The DK-A5E013BM16AEA is fitted with 1792 MiB of LPDDR4.  The SPL/U-Boot
- * device tree normally fills this in at runtime; wolfBoot hands the DTB
- * directly to Linux, so the fixed board size must be supplied here. */
+/* U-Boot normally writes the measured DDR size into the DTB; wolfBoot hands
+ * the DTB straight to Linux, so the board config supplies it. Default is the
+ * DK-A5E013BM16AEA's 1792 MiB. */
+#ifndef AGILEX5_DDR_SIZE
 #define AGILEX5_DDR_SIZE       0x70000000UL
-#define AGILEX5_UART0_BASE     0x10C02000UL
-#define AGILEX5_UART1_BASE     0x10C02100UL
+#endif
+
+/* No UL suffix: the base is also stringified into the earlycon argument. */
+#ifndef DEBUG_UART_BASE
+    #if defined(DEBUG_UART_NUM) && DEBUG_UART_NUM == 1
+        #define DEBUG_UART_BASE 0x10C02100
+    #else
+        #define DEBUG_UART_BASE 0x10C02000
+    #endif
+#endif
 #define AGILEX5_SDHCI_BASE     0x10808000UL
 #define CACHE_LINE_SIZE        64UL
 
