@@ -1667,19 +1667,19 @@ Boot time measurements on PolarFire SoC (RISC-V 64-bit U54 @ 625 MHz) for a 19MB
 | ECC384      | SHA384  | ~800 ms   | ~2900 ms     | ~1500 ms        | ~70 ms           | ~5.3 seconds    |
 | ML-DSA 87   | SHA256  | ~835 ms   | ~2900 ms     | ~2100 ms        | ~22 ms           | ~5.9 seconds    |
 
-Standalone M-mode (`polarfire_mpfs250_m.config`, E51 @ 600 MHz, no HSS) measured from power-on on the Video Kit for the same 19.7 MB FIT, plaintext, ECC384/SHA384, with the DDR training and SD-card load included:
+Standalone M-mode (`polarfire_mpfs250_m.config`, E51 @ 600 MHz, no HSS) measured from power-on on the Video Kit with host-side timestamps on the console, plaintext FIT, ECC384/SHA384, software crypto, the same 19.7 MB kernel either gzip-compressed in the FIT (5.9 MB) or stored uncompressed (19.8 MB):
 
-| Phase                                         | Software crypto | Athena offload |
-|-----------------------------------------------|-----------------|----------------|
-| DDR training, SD init, GPT read               | ~1.5 s          | ~1.5 s         |
-| SD load of the FIT (CMD17 single block + PDMA staging) | ~15.5 s | ~15.5 s        |
-| SHA384 integrity (reads through the non-cached alias) | ~4.1 s  | ~4.8 s         |
-| ECC384 signature verify                       | ~0.7 s          | ~0.7 s         |
-| FIT kernel copy to its load address (PDMA + read-back verify) | ~9.1 s | ~9.1 s   |
-| M-mode -> S-mode handoff                      | ~31 s           | ~32 s          |
-| Linux login prompt                            | ~53-62 s        | ~53 s          |
+| Phase                                         | gzip FIT | uncompressed FIT |
+|-----------------------------------------------|----------|------------------|
+| DDR training, SD init, GPT read, FIT load, SHA384 integrity, ECC384 verify | ~2 s | ~4 s |
+| gzip inflate of the kernel                    | ~16 s    | -                |
+| FIT copies, DTB fixups                        | <1 s     | <1 s             |
+| M-mode -> S-mode handoff                      | ~18 s    | ~5 s             |
+| Linux login prompt                            | ~41 s    | ~28 s            |
 
-The offload does not shorten the integrity check on this path because the time is in reading the image through the non-cached DDR alias, not in the hashing; measured on a buffer in L2 scratch the Athena SHA384 is about 1.3x the software rate and AES-256-CTR about 4.4x. The SD read and the PDMA copy with its byte-wise verify are the dominant costs; both exist because of the CPU-write-to-DDR coherence workaround (`SDHCI_BLOCK_VIA_PDMA`). ML-DSA-87 on this target (`SIGN=ML_DSA` on `polarfire_mpfs250_m.config`) links to a smaller image than ECC384 because no big-number code is needed.
+The inflate runs on the E51 at about 1.2 MB/s of output, so a compressed kernel costs far more than the extra card read it saves; for a short boot, build the FIT with `compression = "none"` for the kernel (`FIT_KERNEL_COMP_ALG = "none"` in Yocto). The software SHA384 runs at about 11 MB/s on the E51 and the ECC384 verify is well under a second; neither is a lever. `BOOT_BENCHMARK` phase prints on this target are in real time now that the timer uses the live CPU clock.
+
+The LPDDR4 controller on this board needs the first CPU-side transaction after DDR initialization to be a read: when a write comes first on a cold boot, it lands in DDR displaced by several bus beats and every later cached-port write in that boot follows it. `mpfs_ddr_init()` therefore reads one block through the non-cached alias before anything is written, after which CPU, L2 write-back and SDMA writes land exactly and the SD load, the FIT copies, the DTB fixups and the image hash use DDR directly. Measured on a buffer in L2 scratch the Athena SHA384 is about 1.3x the software rate and AES-256-CTR about 4.4x. ML-DSA-87 on this target (`SIGN=ML_DSA` on `polarfire_mpfs250_m.config`) links to a smaller image than ECC384 because no big-number code is needed.
 
 ### PolarFire Soc Debugging
 
@@ -1931,10 +1931,6 @@ wolfBoot's image encryption (`EXT_ENCRYPTED`) was previously tied to the partiti
 - `src/libwolfboot.c`: the `EXT_ENCRYPTED requires EXT_FLASH or MMU` guard now also accepts `CUSTOM_ENCRYPT_KEY` (the platform supplies the key), and `hal_set_key()` (partition-resident key storage) is folded under `#ifndef CUSTOM_ENCRYPT_KEY`.
 - `src/update_disk.c`: the `DISK_ENCRYPT` path gains `ForceZero` for secret cleanup.
 
-##### PolarFire M-mode decrypt note
-
-The image is loaded into DDR by the SD controller and decrypted there. CPU stores into that region are not coherent with what the controller wrote (which is why the load uses `SDHCI_BLOCK_VIA_PDMA`), so `polarfire_mpfs250_m.config` sets `DISK_DECRYPT_STAGING=1`: the ciphertext is read through the non-cached DDR alias, decrypted a chunk at a time into a staging buffer and landed with the same PDMA copy the load used.
-
 #### Build flags summary
 
 | Flag | Effect |
@@ -1974,7 +1970,7 @@ make CROSS_COMPILE=riscv64-unknown-elf- LIBERO_FPGA_CONFIG_DIR=<fpga_design_conf
 
 The PUF response is identical for a fixed challenge across cold power cycles while the nonce service is random, and the PUF-derived KEK wraps and unwraps a test key deterministically (the same wrapped bytes on every boot); both were verified on the kit and the KEK logic is covered by `tools/unit-tests/unit-snvm-kek.c`.
 
-Full encrypted boot captured on the Video Kit (UART1, S-mode wolfBoot under HSS; the standalone M-mode target boots the same image through the staged PDMA decrypt): the AES key is unwrapped from sNVM with the PUF KEK, the image is loaded, decrypted and verified.
+Full encrypted boot captured on the Video Kit (UART1, S-mode wolfBoot under HSS; the standalone M-mode target decrypts the same image in place in DDR): the AES key is unwrapped from sNVM with the PUF KEK, the image is loaded, decrypted and verified.
 
 ```
 wolfBoot Version: 2.9.0
