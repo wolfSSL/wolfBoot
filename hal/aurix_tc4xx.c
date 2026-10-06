@@ -793,9 +793,6 @@ int hal_hsm_init_connect(void)
 {
     int rc;
 
-    /* The S2H wake ISR needs interrupts. */
-    IfxCpu_enableInterrupts();
-
     rc = tc4_hsmc_hw_init();
     if (rc != 0) {
         g_tc4_hsmc_hw_rc = rc;
