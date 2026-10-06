@@ -5,13 +5,21 @@
  * work from zlib, miniz, or other implementations.
  *
  * Design notes:
- *  - Single-pass inflate. The output buffer doubles as the LZ77 sliding
- *    window, so back-references read from out[out_pos - distance].
- *  - Canonical Huffman decode using counts[] / symbols[] tables. Slightly
- *    slower than a fast lookup table but ~10x smaller in code size, which
- *    matters for the bootloader.
- *  - No dynamic allocation; state lives on the caller's stack (~6 KB peak).
- *  - CRC32 IEEE 802.3 polynomial computed on-the-fly during output.
+ *  - Single-pass inflate; the output buffer is the LZ77 window.
+ *  - Machine-word bit buffer, refilled a byte at a time, kept in locals in
+ *    the block decoder. Past the end of input it shifts in zero bits, which
+ *    is reported as truncation once they are consumed.
+ *  - Two Huffman decoders behind one wrapper, driver and header parser:
+ *      default             - table lookup on the next GZIP_ROOT_BITS bits
+ *                            with a second level for longer codes, word
+ *                            copies where alignment allows, table CRC32
+ *                            over the output afterwards. A few KB of
+ *                            static tables, several times the rate.
+ *      WOLFBOOT_GZIP_SMALL - canonical counts[]/symbols[] decode one bit
+ *                            at a time, CRC32 folded in per byte. Smallest
+ *                            code, no tables beyond the trees.
+ *  - No dynamic allocation: the caller's stack (~6 KB peak) plus, for the
+ *    default decoder, the static tables.
  *
  *
  * Copyright (C) 2026 wolfSSL Inc.
@@ -38,9 +46,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* RFC 1951/1952 implementation-detail constants. These were previously
- * in include/gzip.h but are not part of the public API of this module
- * (no WOLFBOOT_ prefix and no out-of-file references). */
+/* RFC 1951/1952 constants internal to this module. */
 
 /* RFC 1952 CRC32 (IEEE 802.3 reflected) */
 #define GZIP_CRC32_INIT           0xFFFFFFFFU
@@ -74,12 +80,10 @@
 #define GZIP_HDIST_BASE           1     /* HDIST + 1           */
 #define GZIP_HCLEN_BASE           4     /* HCLEN + 4           */
 #define GZIP_CL_LEN_BITS          3     /* code-length code is 3 bits */
+#define GZIP_CL_MAX_BITS          7     /* code-length codes are 0..7 bits */
 
-/* RFC 1951 DEFLATE - run-length repeat symbols (Sec. 3.2.7).
- *   sym 16: 2 extra bits, repeat previous length 3..6 times
- *   sym 17: 3 extra bits, repeat zero        3..10 times
- *   sym 18: 7 extra bits, repeat zero       11..138 times
- */
+/* RFC 1951 Sec. 3.2.7 repeat symbols: 16 = previous length 3..6 times,
+ * 17 = zero 3..10 times, 18 = zero 11..138 times */
 #define GZIP_REPEAT_PREV_EXTRA    2
 #define GZIP_REPEAT_PREV_BASE     3
 #define GZIP_REPEAT_Z3_EXTRA      3
@@ -120,31 +124,100 @@ static const uint8_t gz_cl_order[GZIP_CL_CODES] = {
     16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15
 };
 
+/* Bit buffer width; WOLFBOOT_GZIP_BITS_32 forces the narrow one for tests. */
+#if (UINTPTR_MAX > 0xFFFFFFFFU) && !defined(WOLFBOOT_GZIP_BITS_32)
+typedef uint64_t gz_bits_t;
+#define GZIP_BITS_WIDTH           64
+#else
+typedef uint32_t gz_bits_t;
+#define GZIP_BITS_WIDTH           32
+#endif
+#define GZIP_BITS_FULL            (GZIP_BITS_WIDTH - 8)
+
 typedef struct gz_state {
-    /* input bit stream */
-    const uint8_t *in;
-    uint32_t       in_len;
-    uint32_t       in_pos;
-    uint32_t       bit_buf;
-    int            bit_count;
+    const uint8_t *in;        /* next input byte */
+    const uint8_t *in_end;
+    gz_bits_t      buf;       /* bits not yet consumed, LSB first */
+    uint32_t       nbits;     /* valid bits in buf */
+    uint32_t       over;      /* zero bits appended past the end of input */
 
-    /* output buffer (doubles as sliding window) */
-    uint8_t       *out;
-    uint32_t       out_max;
-    uint32_t       out_pos;
-
-    /* running CRC32 of decompressed bytes */
-    uint32_t       crc32;
+    uint8_t       *out;       /* output buffer (doubles as sliding window) */
+    uint8_t       *out_end;
+    uint8_t       *op;        /* next output byte */
+#ifdef WOLFBOOT_GZIP_SMALL
+    uint32_t       crc32;     /* running CRC32 of decompressed bytes */
+#endif
 } gz_state_t;
 
-typedef struct gz_huff {
-    int16_t counts[GZIP_MAX_HUFF_BITS + 1];
-    int16_t symbols[GZIP_LITLEN_CODES];
-} gz_huff_t;
+#if defined(__GNUC__)
+typedef uint64_t gz_word_t __attribute__((__may_alias__));
+#define GZIP_WORD_ACCESS 1
+#endif
+
+/* ------------------------------------------------------------------------- */
+/* Bit stream reader (LSB-first within bytes per RFC 1951 Sec. 3.1.1)        */
+/* ------------------------------------------------------------------------- */
+
+/* Macros over named scalars so the block decoder keeps the reader in
+ * registers; the struct forms serve the slow paths. */
+
+/* Refill to more than GZIP_BITS_FULL bits; past the end of input, zero
+ * bytes are appended and counted in `over`. */
+#define GZ_REFILL_V(buf, nbits, over, in, in_end) \
+    do { \
+        while ((nbits) <= GZIP_BITS_FULL) { \
+            if ((in) < (in_end)) { \
+                (buf) |= (gz_bits_t)(*(in)++) << (nbits); \
+            } \
+            else { \
+                (over) += 8; \
+            } \
+            (nbits) += 8; \
+        } \
+    } while (0)
+
+/* Bits that were never in the input have been consumed. */
+#define GZ_OVERRUN_V(nbits, over)     ((over) > (nbits))
+
+#define GZ_PEEK_V(buf, n)             ((uint32_t)(buf) & ((1U << (n)) - 1U))
+#define GZ_DROP_V(buf, nbits, n) \
+    do { (buf) >>= (n); (nbits) -= (n); } while (0)
+
+#define GZ_REFILL(s)   GZ_REFILL_V((s)->buf, (s)->nbits, (s)->over, \
+                                   (s)->in, (s)->in_end)
+#define GZ_OVERRUN(s)  GZ_OVERRUN_V((s)->nbits, (s)->over)
+#define GZ_PEEK(s, n)  GZ_PEEK_V((s)->buf, (n))
+#define GZ_DROP(s, n)  GZ_DROP_V((s)->buf, (s)->nbits, (n))
+
+static uint32_t gz_get_bits(gz_state_t *s, uint32_t n)
+{
+    uint32_t v;
+
+    GZ_REFILL(s);
+    v = GZ_PEEK(s, n);
+    GZ_DROP(s, n);
+    return v;
+}
+
+/* Drop the partial byte and hand whole buffered bytes back to the cursor. */
+static int gz_align_byte(gz_state_t *s)
+{
+    GZ_DROP(s, s->nbits & 7U);
+    if (GZ_OVERRUN(s)) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
+    }
+    s->in -= (s->nbits >> 3) - (s->over >> 3);
+    s->buf = 0;
+    s->nbits = 0;
+    s->over = 0;
+    return 0;
+}
 
 /* ------------------------------------------------------------------------- */
 /* CRC32                                                                     */
 /* ------------------------------------------------------------------------- */
+
+#ifdef WOLFBOOT_GZIP_SMALL
 
 static uint32_t gz_crc32_byte(uint32_t crc, uint8_t b)
 {
@@ -160,73 +233,76 @@ static uint32_t gz_crc32_byte(uint32_t crc, uint8_t b)
     return crc;
 }
 
-/* ------------------------------------------------------------------------- */
-/* Bit stream reader (LSB-first within bytes per RFC 1951 Sec. 3.1.1)        */
-/* ------------------------------------------------------------------------- */
+#else /* !WOLFBOOT_GZIP_SMALL */
 
-static int gz_need_bits(gz_state_t *s, int n)
+static uint32_t gz_crc_table[256];
+static int      gz_crc_table_ready;
+
+static void gz_crc_init(void)
 {
-    int ret = 0;
+    uint32_t i, k, c;
 
-    while ((ret == 0) && (s->bit_count < n)) {
-        if (s->in_pos >= s->in_len) {
-            ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    if (gz_crc_table_ready) {
+        return;
+    }
+    for (i = 0; i < 256; i++) {
+        c = i;
+        for (k = 0; k < 8; k++) {
+            c = (c & 1U) ? ((c >> 1) ^ GZIP_CRC32_POLY) : (c >> 1);
         }
-        else {
-            s->bit_buf |= ((uint32_t)s->in[s->in_pos]) << s->bit_count;
-            s->in_pos++;
-            s->bit_count += 8;
+        gz_crc_table[i] = c;
+    }
+    gz_crc_table_ready = 1;
+}
+
+#define GZ_CRC_BYTE(crc, b) \
+    ((gz_crc_table[((crc) ^ (b)) & 0xFFU]) ^ ((crc) >> 8))
+
+static uint32_t gz_crc32(const uint8_t *p, uint32_t len)
+{
+    uint32_t crc = GZIP_CRC32_INIT;
+
+#if defined(GZIP_WORD_ACCESS) && defined(__BYTE_ORDER__) && \
+    (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+    /* Aligned words, then the bytes of each word in stream order. */
+    while ((len > 0) && (((uintptr_t)p & (sizeof(gz_word_t) - 1U)) != 0)) {
+        crc = GZ_CRC_BYTE(crc, *p++);
+        len--;
+    }
+    while (len >= sizeof(gz_word_t)) {
+        gz_word_t w = *(const gz_word_t *)p;
+        uint32_t k;
+
+        for (k = 0; k < sizeof(gz_word_t); k++) {
+            crc = GZ_CRC_BYTE(crc, (uint8_t)w);
+            w >>= 8;
         }
+        p += sizeof(gz_word_t);
+        len -= (uint32_t)sizeof(gz_word_t);
     }
-    return ret;
+#endif
+    while (len > 0) {
+        crc = GZ_CRC_BYTE(crc, *p++);
+        len--;
+    }
+    return crc ^ GZIP_CRC32_FINAL_XOR;
 }
 
-static int gz_get_bits(gz_state_t *s, int n, uint32_t *val)
-{
-    int ret = gz_need_bits(s, n);
-    if (ret == 0) {
-        *val = s->bit_buf & (((uint32_t)1 << n) - 1);
-        s->bit_buf >>= n;
-        s->bit_count -= n;
-    }
-    return ret;
-}
-
-static void gz_align_byte(gz_state_t *s)
-{
-    int drop = s->bit_count & 7;
-    s->bit_buf >>= drop;
-    s->bit_count -= drop;
-}
+#endif /* WOLFBOOT_GZIP_SMALL */
 
 /* ------------------------------------------------------------------------- */
-/* Output writer (writes byte; updates CRC32; back-ref reads from same buf)  */
+/* Huffman decoding (RFC 1951 Sec. 3.2.2)                                    */
 /* ------------------------------------------------------------------------- */
 
-static int gz_emit_byte(gz_state_t *s, uint8_t b)
-{
-    int ret = 0;
+#ifdef WOLFBOOT_GZIP_SMALL
 
-    if (s->out_pos >= s->out_max) {
-        ret = WOLFBOOT_GZIP_E_OUTPUT;
-    }
-    else {
-        s->out[s->out_pos] = b;
-        s->out_pos++;
-        s->crc32 = gz_crc32_byte(s->crc32, b);
-    }
-    return ret;
-}
+/* Canonical code described by the number of codes of each length and the
+ * symbols sorted by code length, then value. */
+typedef struct gz_huff {
+    int16_t counts[GZIP_MAX_HUFF_BITS + 1];
+    int16_t symbols[GZIP_LITLEN_CODES];
+} gz_huff_t;
 
-/* ------------------------------------------------------------------------- */
-/* Canonical Huffman build / decode                                          */
-/* ------------------------------------------------------------------------- */
-
-/* Build canonical Huffman decode tables from per-symbol code lengths.
- * lengths[i] is the bit length of symbol i (0 = absent).
- * Returns 0 on success, WOLFBOOT_GZIP_E_HUFFMAN on malformed (over-subscribed)
- * trees. Empty alphabets and single-symbol trees are accepted (a common
- * DEFLATE idiom for distance trees with one or zero codes). */
 static int gz_huff_build(gz_huff_t *h, const uint8_t *lengths, int n)
 {
     int ret = 0;
@@ -245,12 +321,10 @@ static int gz_huff_build(gz_huff_t *h, const uint8_t *lengths, int n)
         }
     }
 
-    /* Empty alphabet (all symbols absent) is permitted. */
+    /* Empty alphabet is permitted. */
     all_zero = (ret == 0) && (h->counts[0] == n);
 
-    /* Kraft inequality: sum 2^(MAX-len) * counts[len] should be <= 2^MAX.
-     * Detect over-subscribed (left < 0). Under-subscribed trees (left > 0)
-     * with one or zero codes are accepted. */
+    /* Kraft inequality: reject over-subscribed sets, accept incomplete ones. */
     if ((ret == 0) && !all_zero) {
         left = 1;
         for (len = 1; (len <= GZIP_MAX_HUFF_BITS) && (ret == 0); len++) {
@@ -265,12 +339,11 @@ static int gz_huff_build(gz_huff_t *h, const uint8_t *lengths, int n)
     }
 
     if ((ret == 0) && !all_zero) {
-        /* Compute starting offset of each length-bucket in symbols[] */
+        /* symbols[] in canonical order: by code length, then symbol */
         offs[1] = 0;
         for (len = 1; len < GZIP_MAX_HUFF_BITS; len++) {
             offs[len + 1] = (int16_t)(offs[len] + h->counts[len]);
         }
-        /* Sort symbols by code length, then symbol number (canonical order) */
         for (sym = 0; sym < n; sym++) {
             int sl = lengths[sym];
             if (sl != 0) {
@@ -282,82 +355,421 @@ static int gz_huff_build(gz_huff_t *h, const uint8_t *lengths, int n)
     return ret;
 }
 
-/* Decode one symbol using canonical Huffman tables. Returns the symbol on
- * success (always >= 0), or negative WOLFBOOT_GZIP_E_* on error. */
-static int gz_huff_decode(gz_state_t *s, const gz_huff_t *h)
+/* One symbol, one bit at a time; the reader must hold GZIP_MAX_HUFF_BITS.
+ * Returns the symbol or a negative error for a pattern that is no code. */
+static int gz_huff_decode(const gz_huff_t *h, gz_bits_t *buf, uint32_t *nbits)
 {
-    int ret = WOLFBOOT_GZIP_E_HUFFMAN; /* updated to symbol or i/o error */
     int code = 0;
     int first = 0;
     int index = 0;
-    int len, count, br_ret;
-    uint32_t bit;
+    int len, count;
 
-    for (len = 1; (len <= GZIP_MAX_HUFF_BITS) &&
-                  (ret == WOLFBOOT_GZIP_E_HUFFMAN); len++) {
-        br_ret = gz_get_bits(s, 1, &bit);
-        if (br_ret != 0) {
-            ret = br_ret;
+    for (len = 1; len <= GZIP_MAX_HUFF_BITS; len++) {
+        code |= (int)GZ_PEEK_V(*buf, 1);
+        GZ_DROP_V(*buf, *nbits, 1);
+        count = h->counts[len];
+        if (code - count < first) {
+            return h->symbols[index + (code - first)];
         }
-        else {
-            code = (code << 1) | (int)bit;
-            count = h->counts[len];
-            if (code - count < first) {
-                ret = h->symbols[index + (code - first)];
-            }
-            else {
-                index += count;
-                first = (first + count) << 1;
+        index += count;
+        first = (first + count) << 1;
+        code <<= 1;
+    }
+    return WOLFBOOT_GZIP_E_HUFFMAN;
+}
+
+#define GZ_DECODE_V(h, sym, buf, nbits) \
+    do { (sym) = gz_huff_decode((h), &(buf), &(nbits)); } while (0)
+
+#else /* !WOLFBOOT_GZIP_SMALL */
+
+/* Root index width: 9 bits resolves the fixed trees and nearly every
+ * dynamic code in one lookup. At least 7, so the code-length code never
+ * needs a second level. */
+#ifndef WOLFBOOT_GZIP_ROOT_BITS
+#define WOLFBOOT_GZIP_ROOT_BITS   9
+#endif
+#if (WOLFBOOT_GZIP_ROOT_BITS < GZIP_CL_MAX_BITS) || \
+    (WOLFBOOT_GZIP_ROOT_BITS > GZIP_MAX_HUFF_BITS)
+#error "WOLFBOOT_GZIP_ROOT_BITS must be between 7 and 15"
+#endif
+#define GZIP_ROOT_BITS            WOLFBOOT_GZIP_ROOT_BITS
+#define GZIP_ROOT_SIZE            (1U << GZIP_ROOT_BITS)
+#define GZIP_ROOT_MASK            (GZIP_ROOT_SIZE - 1U)
+
+/* Second-level pools, well above what a valid code needs behind a 9-bit
+ * root; a code that would overflow is rejected. */
+#define GZIP_LITLEN_SUB_MAX       2048
+#define GZIP_DIST_SUB_MAX         1024
+
+/* Entry: bits 0..15 symbol or sub-table offset, bits 16..19 code bits
+ * consumed or sub-table index width, bit 31 sub-table. Zero = no code. */
+#define GZ_ENTRY_SUB              0x80000000U
+#define GZ_ENTRY_LEN(e)           (((e) >> 16) & 0xFU)
+#define GZ_ENTRY_SYM(e)           ((e) & 0xFFFFU)
+#define GZ_LEAF(sym, len)         (((uint32_t)(len) << 16) | (uint32_t)(sym))
+
+/* `root` is indexed by the next GZIP_ROOT_BITS of the stream; `sub` holds
+ * the second level behind root slots that lead to longer codes. */
+typedef struct gz_huff {
+    uint32_t *root;        /* GZIP_ROOT_SIZE entries */
+    uint32_t *sub;         /* second-level pool */
+    uint32_t  sub_max;     /* pool capacity in entries */
+} gz_huff_t;
+
+/* Static rather than on the stack of a function deep in the boot path. */
+static uint32_t gz_litlen_root[GZIP_ROOT_SIZE];
+static uint32_t gz_litlen_sub[GZIP_LITLEN_SUB_MAX];
+static uint32_t gz_dist_root[GZIP_ROOT_SIZE];
+static uint32_t gz_dist_sub[GZIP_DIST_SUB_MAX];
+static uint32_t gz_cl_root[GZIP_ROOT_SIZE];
+
+/* Huffman codes are packed MSB first into an LSB-first stream (RFC 1951
+ * Sec. 3.1.1), so table indices are the reversed codes. */
+static uint32_t gz_reverse(uint32_t code, uint32_t len)
+{
+    uint32_t r = 0;
+
+    while (len > 0) {
+        r = (r << 1) | (code & 1U);
+        code >>= 1;
+        len--;
+    }
+    return r;
+}
+
+/* Lookup tables from canonical code lengths. Over-subscribed sets are
+ * rejected; incomplete sets leave zero slots that decode as no code. */
+static int gz_huff_build(gz_huff_t *t, const uint8_t *lengths, int n)
+{
+    uint32_t count[GZIP_MAX_HUFF_BITS + 1];
+    uint32_t next_code[GZIP_MAX_HUFF_BITS + 1];
+    uint8_t  sub_bits[GZIP_ROOT_SIZE];
+    uint32_t sym, len, code, rev, i, left, sub_used;
+    uint32_t num = (uint32_t)n;
+
+    for (len = 0; len <= GZIP_MAX_HUFF_BITS; len++) {
+        count[len] = 0;
+    }
+    for (sym = 0; sym < num; sym++) {
+        if (lengths[sym] > GZIP_MAX_HUFF_BITS) {
+            return WOLFBOOT_GZIP_E_HUFFMAN;
+        }
+        count[lengths[sym]]++;
+    }
+    for (i = 0; i < GZIP_ROOT_SIZE; i++) {
+        t->root[i] = 0;
+    }
+    if (count[0] == num) {
+        return 0; /* empty alphabet is permitted */
+    }
+
+    /* Kraft inequality: reject over-subscribed sets. */
+    left = 1;
+    for (len = 1; len <= GZIP_MAX_HUFF_BITS; len++) {
+        left <<= 1;
+        if (count[len] > left) {
+            return WOLFBOOT_GZIP_E_HUFFMAN;
+        }
+        left -= count[len];
+    }
+
+    /* First code of each length, in canonical order. */
+    code = 0;
+    count[0] = 0;
+    for (len = 1; len <= GZIP_MAX_HUFF_BITS; len++) {
+        code = (code + count[len - 1]) << 1;
+        next_code[len] = code;
+    }
+
+    /* Pass 1: size each sub-table by the longest code behind its root slot. */
+    for (i = 0; i < GZIP_ROOT_SIZE; i++) {
+        sub_bits[i] = 0;
+    }
+    for (len = GZIP_ROOT_BITS + 1; len <= GZIP_MAX_HUFF_BITS; len++) {
+        code = next_code[len];
+        for (sym = 0; sym < num; sym++) {
+            if (lengths[sym] == len) {
+                rev = gz_reverse(code, len) & GZIP_ROOT_MASK;
+                if (sub_bits[rev] < len - GZIP_ROOT_BITS) {
+                    sub_bits[rev] = (uint8_t)(len - GZIP_ROOT_BITS);
+                }
+                code++;
             }
         }
     }
-    return ret;
+    sub_used = 0;
+    for (i = 0; i < GZIP_ROOT_SIZE; i++) {
+        if (sub_bits[i] != 0) {
+            if (sub_used + (1U << sub_bits[i]) > t->sub_max) {
+                return WOLFBOOT_GZIP_E_HUFFMAN;
+            }
+            t->root[i] = GZ_ENTRY_SUB | ((uint32_t)sub_bits[i] << 16) |
+                         sub_used;
+            sub_used += 1U << sub_bits[i];
+        }
+    }
+    for (i = 0; i < sub_used; i++) {
+        t->sub[i] = 0;
+    }
+
+    /* Pass 2: fill every slot whose low bits are the reversed code; the
+     * bits beyond the root index the sub-table the same way. */
+    for (sym = 0; sym < num; sym++) {
+        len = lengths[sym];
+        if (len == 0) {
+            continue;
+        }
+        code = next_code[len]++;
+        rev = gz_reverse(code, len);
+        if (len <= GZIP_ROOT_BITS) {
+            for (i = rev; i < GZIP_ROOT_SIZE; i += (1U << len)) {
+                t->root[i] = GZ_LEAF(sym, len);
+            }
+        }
+        else {
+            uint32_t root_e = t->root[rev & GZIP_ROOT_MASK];
+            uint32_t width = GZ_ENTRY_LEN(root_e);
+            uint32_t base = GZ_ENTRY_SYM(root_e);
+            uint32_t rest = len - GZIP_ROOT_BITS;
+
+            for (i = rev >> GZIP_ROOT_BITS; i < (1U << width); i += (1U << rest)) {
+                t->sub[base + i] = GZ_LEAF(sym, rest);
+            }
+        }
+    }
+    return 0;
 }
+
+/* `sym` becomes the next symbol, or a negative error for a pattern that
+ * is no code. */
+#define GZ_DECODE_V(tab, sym, buf, nbits) \
+    do { \
+        uint32_t e_ = (tab)->root[GZ_PEEK_V(buf, GZIP_ROOT_BITS)]; \
+        uint32_t l_; \
+        if (e_ & GZ_ENTRY_SUB) { \
+            GZ_DROP_V(buf, nbits, GZIP_ROOT_BITS); \
+            e_ = (tab)->sub[GZ_ENTRY_SYM(e_) + \
+                            GZ_PEEK_V(buf, GZ_ENTRY_LEN(e_))]; \
+        } \
+        l_ = GZ_ENTRY_LEN(e_); \
+        if (l_ == 0) { \
+            (sym) = WOLFBOOT_GZIP_E_HUFFMAN; \
+        } \
+        else { \
+            GZ_DROP_V(buf, nbits, l_); \
+            (sym) = (int)GZ_ENTRY_SYM(e_); \
+        } \
+    } while (0)
+
+#endif /* WOLFBOOT_GZIP_SMALL */
+
+static int gz_decode(gz_state_t *s, const gz_huff_t *h)
+{
+    int sym;
+
+    GZ_DECODE_V(h, sym, s->buf, s->nbits);
+    return sym;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Output                                                                    */
+/* ------------------------------------------------------------------------- */
+
+#ifdef WOLFBOOT_GZIP_SMALL
+
+/* One byte out, CRC folded in. */
+#define GZ_PUT_V(op, crc, b) \
+    do { \
+        uint8_t b_ = (uint8_t)(b); \
+        *(op)++ = b_; \
+        (crc) = gz_crc32_byte((crc), b_); \
+    } while (0)
+
+/* Back-reference byte by byte, which also serves overlapping runs. */
+#define GZ_COPY_V(op, crc, src, len, dist) \
+    do { \
+        uint32_t n_ = (len); \
+        const uint8_t *s_ = (src); \
+        (void)(dist); \
+        while (n_ > 0) { \
+            GZ_PUT_V(op, crc, *s_++); \
+            n_--; \
+        } \
+    } while (0)
+
+#else /* !WOLFBOOT_GZIP_SMALL */
+
+#define GZ_PUT_V(op, crc, b) \
+    do { *(op)++ = (uint8_t)(b); (void)(crc); } while (0)
+
+/* Back-reference, possibly overlapping its source. Words are moved only
+ * when the distance is at least a word and both cursors share alignment,
+ * so nothing is read unaligned or before it is written. */
+static void gz_copy(uint8_t *op, const uint8_t *src, uint32_t len,
+    uint32_t dist)
+{
+#ifdef GZIP_WORD_ACCESS
+    if ((dist >= sizeof(gz_word_t)) &&
+            ((((uintptr_t)op ^ (uintptr_t)src) & (sizeof(gz_word_t) - 1U)) == 0)) {
+        while ((len > 0) && (((uintptr_t)op & (sizeof(gz_word_t) - 1U)) != 0)) {
+            *op++ = *src++;
+            len--;
+        }
+        while (len >= sizeof(gz_word_t)) {
+            *(gz_word_t *)op = *(const gz_word_t *)src;
+            op += sizeof(gz_word_t);
+            src += sizeof(gz_word_t);
+            len -= (uint32_t)sizeof(gz_word_t);
+        }
+    }
+#else
+    (void)dist;
+#endif
+    while (len > 0) {
+        *op++ = *src++;
+        len--;
+    }
+}
+
+#define GZ_COPY_V(op, crc, src, len, dist) \
+    do { gz_copy((op), (src), (len), (dist)); (op) += (len); (void)(crc); } while (0)
+
+#endif /* WOLFBOOT_GZIP_SMALL */
 
 /* ------------------------------------------------------------------------- */
 /* Block decoders                                                            */
 /* ------------------------------------------------------------------------- */
 
-/* RFC 1951 Sec. 3.2.4: stored (uncompressed) block */
 static int gz_inflate_stored(gz_state_t *s)
 {
-    int ret = 0;
-    uint32_t len = 0, nlen;
+    uint32_t len, nlen;
+    uint32_t crc = 0;
+    int ret;
 
-    /* Discard remaining bits in current partial byte */
-    gz_align_byte(s);
-
+    ret = gz_align_byte(s);
+    if (ret != 0) {
+        return ret;
+    }
     /* LEN and NLEN are little-endian 16-bit words */
-    if (s->in_pos + 4 > s->in_len) {
-        ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    if (s->in_end - s->in < 4) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
-    if (ret == 0) {
-        len  = (uint32_t)s->in[s->in_pos] |
-               ((uint32_t)s->in[s->in_pos + 1] << 8);
-        nlen = (uint32_t)s->in[s->in_pos + 2] |
-               ((uint32_t)s->in[s->in_pos + 3] << 8);
-        s->in_pos += 4;
+    len  = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8);
+    nlen = (uint32_t)s->in[2] | ((uint32_t)s->in[3] << 8);
+    s->in += 4;
+    if ((len ^ 0xFFFFU) != nlen) {
+        return WOLFBOOT_GZIP_E_FORMAT;
+    }
+    if ((uint32_t)(s->in_end - s->in) < len) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
+    }
+    if ((uint32_t)(s->out_end - s->op) < len) {
+        return WOLFBOOT_GZIP_E_OUTPUT;
+    }
+#ifdef WOLFBOOT_GZIP_SMALL
+    crc = s->crc32;
+#endif
+    while (len > 0) {
+        GZ_PUT_V(s->op, crc, *s->in++);
+        len--;
+    }
+#ifdef WOLFBOOT_GZIP_SMALL
+    s->crc32 = crc;
+#endif
+    return 0;
+}
 
-        if ((len ^ 0xFFFFU) != nlen) {
-            ret = WOLFBOOT_GZIP_E_FORMAT;
-        }
-        else if (s->in_pos + len > s->in_len) {
+/* Block body up to and including the end-of-block symbol, with the reader
+ * state in locals. */
+static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
+    const gz_huff_t *dist)
+{
+    const uint8_t *in = s->in;
+    const uint8_t *in_end = s->in_end;
+    gz_bits_t buf = s->buf;
+    uint32_t nbits = s->nbits;
+    uint32_t over = s->over;
+    uint8_t *out = s->out;
+    uint8_t *out_end = s->out_end;
+    uint8_t *op = s->op;
+    uint32_t crc = 0;
+    uint32_t length, distance, extra;
+    int sym;
+    int ret = 0;
+
+#ifdef WOLFBOOT_GZIP_SMALL
+    crc = s->crc32;
+#endif
+    for (;;) {
+        GZ_REFILL_V(buf, nbits, over, in, in_end);
+        if (GZ_OVERRUN_V(nbits, over)) {
             ret = WOLFBOOT_GZIP_E_TRUNCATED;
+            break;
         }
-        else {
-            /* No buffered bits remain after align_byte; clear defensively */
-            s->bit_buf = 0;
-            s->bit_count = 0;
+        GZ_DECODE_V(litlen, sym, buf, nbits);
+        if (sym < 0) {
+            ret = sym;
+            break;
         }
-    }
+        if (sym < GZIP_EOB_SYMBOL) {
+            if (op >= out_end) {
+                ret = WOLFBOOT_GZIP_E_OUTPUT;
+                break;
+            }
+            GZ_PUT_V(op, crc, sym);
+            continue;
+        }
+        if (sym == GZIP_EOB_SYMBOL) {
+            break;
+        }
+        /* length code 257..285 -> length 3..258 */
+        sym -= GZIP_LENGTH_CODE_BASE;
+        if (sym >= GZIP_LENGTH_CODE_COUNT) {
+            ret = WOLFBOOT_GZIP_E_HUFFMAN;
+            break;
+        }
+        extra = gz_len_extra[sym];
+        length = gz_len_base[sym] + GZ_PEEK_V(buf, extra);
+        GZ_DROP_V(buf, nbits, extra);
 
-    while ((ret == 0) && (len > 0)) {
-        ret = gz_emit_byte(s, s->in[s->in_pos]);
-        if (ret == 0) {
-            s->in_pos++;
-            len--;
+        GZ_REFILL_V(buf, nbits, over, in, in_end);
+        GZ_DECODE_V(dist, sym, buf, nbits);
+        if (sym < 0) {
+            ret = sym;
+            break;
         }
+        if (sym >= GZIP_DIST_CODE_COUNT) {
+            ret = WOLFBOOT_GZIP_E_HUFFMAN;
+            break;
+        }
+        extra = gz_dist_extra[sym];
+        GZ_REFILL_V(buf, nbits, over, in, in_end);
+        distance = gz_dist_base[sym] + GZ_PEEK_V(buf, extra);
+        GZ_DROP_V(buf, nbits, extra);
+        if (GZ_OVERRUN_V(nbits, over)) {
+            ret = WOLFBOOT_GZIP_E_TRUNCATED;
+            break;
+        }
+
+        if (distance > (uint32_t)(op - out)) {
+            ret = WOLFBOOT_GZIP_E_DISTANCE;
+            break;
+        }
+        if (length > (uint32_t)(out_end - op)) {
+            ret = WOLFBOOT_GZIP_E_OUTPUT;
+            break;
+        }
+        GZ_COPY_V(op, crc, op - distance, length, distance);
     }
+    s->in = in;
+    s->buf = buf;
+    s->nbits = nbits;
+    s->over = over;
+    s->op = op;
+#ifdef WOLFBOOT_GZIP_SMALL
+    s->crc32 = crc;
+#endif
     return ret;
 }
 
@@ -380,220 +792,112 @@ static int gz_build_fixed(gz_huff_t *litlen, gz_huff_t *dist)
     return ret;
 }
 
-/* Inflate the body of a Huffman-coded block (fixed or dynamic) until the
- * end-of-block symbol (256) is decoded. */
-static int gz_inflate_huffman(gz_state_t *s,
-                              const gz_huff_t *litlen, const gz_huff_t *dist)
+/* RFC 1951 Sec. 3.2.7: code-length code, then the two trees, then the body. */
+static int gz_inflate_dynamic(gz_state_t *s, gz_huff_t *litlen,
+    gz_huff_t *dist)
 {
-    int ret = 0;
-    int done = 0;
-    int sym, li;
-    uint32_t length, distance, extra, copy_pos;
-
-    while ((ret == 0) && !done) {
-        sym = gz_huff_decode(s, litlen);
-        if (sym < 0) {
-            ret = sym;
-        }
-        else if (sym < GZIP_EOB_SYMBOL) {
-            ret = gz_emit_byte(s, (uint8_t)sym);
-        }
-        else if (sym == GZIP_EOB_SYMBOL) {
-            done = 1;
-        }
-        else {
-            /* length code 257..285 -> length 3..258 */
-            li = sym - GZIP_LENGTH_CODE_BASE;
-            if (li >= GZIP_LENGTH_CODE_COUNT) {
-                ret = WOLFBOOT_GZIP_E_HUFFMAN;
-            }
-            length = 0;
-            if (ret == 0) {
-                length = gz_len_base[li];
-                if (gz_len_extra[li] > 0) {
-                    ret = gz_get_bits(s, gz_len_extra[li], &extra);
-                    if (ret == 0) {
-                        length += extra;
-                    }
-                }
-            }
-
-            distance = 0;
-            if (ret == 0) {
-                sym = gz_huff_decode(s, dist);
-                if (sym < 0) {
-                    ret = sym;
-                }
-                else if (sym >= GZIP_DIST_CODE_COUNT) {
-                    ret = WOLFBOOT_GZIP_E_HUFFMAN;
-                }
-                else {
-                    distance = gz_dist_base[sym];
-                    if (gz_dist_extra[sym] > 0) {
-                        ret = gz_get_bits(s, gz_dist_extra[sym], &extra);
-                        if (ret == 0) {
-                            distance += extra;
-                        }
-                    }
-                }
-            }
-
-            if (ret == 0) {
-                if ((distance == 0) || (distance > s->out_pos)) {
-                    ret = WOLFBOOT_GZIP_E_DISTANCE;
-                }
-                else if (s->out_pos + length > s->out_max) {
-                    ret = WOLFBOOT_GZIP_E_OUTPUT;
-                }
-            }
-
-            /* LZ77 copy. Output buffer doubles as the window. Copy must be
-             * byte-by-byte to support overlapping runs (length > distance). */
-            if (ret == 0) {
-                copy_pos = s->out_pos - distance;
-                while ((ret == 0) && (length > 0)) {
-                    ret = gz_emit_byte(s, s->out[copy_pos]);
-                    if (ret == 0) {
-                        copy_pos++;
-                        length--;
-                    }
-                }
-            }
-        }
-    }
-    return ret;
-}
-
-/* RFC 1951 Sec. 3.2.7: dynamic Huffman block.
- * Decodes the code-length code, expands it into the literal/length and
- * distance trees, then runs gz_inflate_huffman() on the block body. */
-static int gz_inflate_dynamic(gz_state_t *s)
-{
-    int ret;
     uint8_t cl_lens[GZIP_CL_CODES];
     uint8_t code_lens[GZIP_LITLEN_CODES + GZIP_DIST_CODES];
     gz_huff_t cl_huff;
-    gz_huff_t litlen_huff;
-    gz_huff_t dist_huff;
-    uint32_t hlit = 0, hdist = 0, hclen = 0, val;
-    int i, total, idx, sym;
+    uint32_t hlit, hdist, hclen, i, total, idx, val;
     uint8_t prev = 0;
+    int sym, ret;
 
-    for (i = 0; i < (int)(sizeof(code_lens) / sizeof(code_lens[0])); i++) {
-        code_lens[i] = 0;
-    }
-
-    ret = gz_get_bits(s, GZIP_HLIT_BITS, &hlit);
-    if (ret == 0) {
-        hlit += GZIP_HLIT_BASE;
-        ret = gz_get_bits(s, GZIP_HDIST_BITS, &hdist);
-    }
-    if (ret == 0) {
-        hdist += GZIP_HDIST_BASE;
-        ret = gz_get_bits(s, GZIP_HCLEN_BITS, &hclen);
-    }
-    if (ret == 0) {
-        hclen += GZIP_HCLEN_BASE;
-        if ((hlit > GZIP_LITLEN_CODES) || (hdist > GZIP_DIST_CODES) ||
+    hlit  = gz_get_bits(s, GZIP_HLIT_BITS) + GZIP_HLIT_BASE;
+    hdist = gz_get_bits(s, GZIP_HDIST_BITS) + GZIP_HDIST_BASE;
+    hclen = gz_get_bits(s, GZIP_HCLEN_BITS) + GZIP_HCLEN_BASE;
+    if ((hlit > GZIP_LITLEN_CODES) || (hdist > GZIP_DIST_CODES) ||
             (hclen > GZIP_CL_CODES)) {
-            ret = WOLFBOOT_GZIP_E_FORMAT;
-        }
+        return WOLFBOOT_GZIP_E_FORMAT;
     }
 
     /* Read code-length code lengths in the permuted order */
-    if (ret == 0) {
-        for (i = 0; i < GZIP_CL_CODES; i++) {
-            cl_lens[i] = 0;
-        }
-        for (i = 0; (i < (int)hclen) && (ret == 0); i++) {
-            ret = gz_get_bits(s, GZIP_CL_LEN_BITS, &val);
-            if (ret == 0) {
-                cl_lens[gz_cl_order[i]] = (uint8_t)val;
-            }
-        }
+    for (i = 0; i < GZIP_CL_CODES; i++) {
+        cl_lens[i] = 0;
     }
-    if (ret == 0) {
-        ret = gz_huff_build(&cl_huff, cl_lens, GZIP_CL_CODES);
+    for (i = 0; i < hclen; i++) {
+        cl_lens[gz_cl_order[i]] = (uint8_t)gz_get_bits(s, GZIP_CL_LEN_BITS);
+    }
+    if (GZ_OVERRUN(s)) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
+    }
+#ifndef WOLFBOOT_GZIP_SMALL
+    /* code-length codes are at most 7 bits, so no second level */
+    cl_huff.root = gz_cl_root;
+    cl_huff.sub = NULL;
+    cl_huff.sub_max = 0;
+#endif
+    ret = gz_huff_build(&cl_huff, cl_lens, GZIP_CL_CODES);
+    if (ret != 0) {
+        return ret;
     }
 
     /* Decode the litlen + dist code-length sequence using the CL tree */
-    if (ret == 0) {
-        total = (int)hlit + (int)hdist;
-        idx = 0;
-        while ((ret == 0) && (idx < total)) {
-            sym = gz_huff_decode(s, &cl_huff);
-            if (sym < 0) {
-                ret = sym;
-            }
-            else if (sym < 16) {
-                code_lens[idx++] = (uint8_t)sym;
-                prev = (uint8_t)sym;
-            }
-            else if (sym == 16) {
-                /* repeat previous length 3..6 times (2 extra bits) */
-                if (idx == 0) {
-                    ret = WOLFBOOT_GZIP_E_FORMAT;
-                }
-                else {
-                    ret = gz_get_bits(s, GZIP_REPEAT_PREV_EXTRA, &val);
-                    if (ret == 0) {
-                        val += GZIP_REPEAT_PREV_BASE;
-                        if (idx + (int)val > total) {
-                            ret = WOLFBOOT_GZIP_E_FORMAT;
-                        }
-                        else {
-                            while (val--) code_lens[idx++] = prev;
-                        }
-                    }
-                }
-            }
-            else if (sym == 17) {
-                /* repeat zero 3..10 times (3 extra bits) */
-                ret = gz_get_bits(s, GZIP_REPEAT_Z3_EXTRA, &val);
-                if (ret == 0) {
-                    val += GZIP_REPEAT_Z3_BASE;
-                    if (idx + (int)val > total) {
-                        ret = WOLFBOOT_GZIP_E_FORMAT;
-                    }
-                    else {
-                        while (val--) code_lens[idx++] = 0;
-                        prev = 0;
-                    }
-                }
-            }
-            else if (sym == 18) {
-                /* repeat zero 11..138 times (7 extra bits) */
-                ret = gz_get_bits(s, GZIP_REPEAT_Z7_EXTRA, &val);
-                if (ret == 0) {
-                    val += GZIP_REPEAT_Z7_BASE;
-                    if (idx + (int)val > total) {
-                        ret = WOLFBOOT_GZIP_E_FORMAT;
-                    }
-                    else {
-                        while (val--) code_lens[idx++] = 0;
-                        prev = 0;
-                    }
-                }
-            }
-            else {
-                ret = WOLFBOOT_GZIP_E_FORMAT;
-            }
+    total = hlit + hdist;
+    idx = 0;
+    while (idx < total) {
+        GZ_REFILL(s);
+        if (GZ_OVERRUN(s)) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
         }
+        sym = gz_decode(s, &cl_huff);
+        if (sym < 0) {
+            return sym;
+        }
+        if (sym < 16) {
+            code_lens[idx++] = (uint8_t)sym;
+            prev = (uint8_t)sym;
+        }
+        else if (sym == 16) {
+            /* repeat previous length 3..6 times (2 extra bits) */
+            if (idx == 0) {
+                return WOLFBOOT_GZIP_E_FORMAT;
+            }
+            val = GZ_PEEK(s, GZIP_REPEAT_PREV_EXTRA) + GZIP_REPEAT_PREV_BASE;
+            GZ_DROP(s, GZIP_REPEAT_PREV_EXTRA);
+            if (idx + val > total) {
+                return WOLFBOOT_GZIP_E_FORMAT;
+            }
+            while (val--) code_lens[idx++] = prev;
+        }
+        else if (sym == 17) {
+            /* repeat zero 3..10 times (3 extra bits) */
+            val = GZ_PEEK(s, GZIP_REPEAT_Z3_EXTRA) + GZIP_REPEAT_Z3_BASE;
+            GZ_DROP(s, GZIP_REPEAT_Z3_EXTRA);
+            if (idx + val > total) {
+                return WOLFBOOT_GZIP_E_FORMAT;
+            }
+            while (val--) code_lens[idx++] = 0;
+            prev = 0;
+        }
+        else if (sym == 18) {
+            /* repeat zero 11..138 times (7 extra bits) */
+            val = GZ_PEEK(s, GZIP_REPEAT_Z7_EXTRA) + GZIP_REPEAT_Z7_BASE;
+            GZ_DROP(s, GZIP_REPEAT_Z7_EXTRA);
+            if (idx + val > total) {
+                return WOLFBOOT_GZIP_E_FORMAT;
+            }
+            while (val--) code_lens[idx++] = 0;
+            prev = 0;
+        }
+        else {
+            return WOLFBOOT_GZIP_E_FORMAT;
+        }
+    }
+    if (GZ_OVERRUN(s)) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
 
     /* End-of-block symbol (256) must have a code */
-    if ((ret == 0) && (code_lens[GZIP_EOB_SYMBOL] == 0)) {
-        ret = WOLFBOOT_GZIP_E_HUFFMAN;
+    if (code_lens[GZIP_EOB_SYMBOL] == 0) {
+        return WOLFBOOT_GZIP_E_HUFFMAN;
     }
-
+    ret = gz_huff_build(litlen, code_lens, (int)hlit);
     if (ret == 0) {
-        ret = gz_huff_build(&litlen_huff, code_lens, (int)hlit);
-    }
-    if (ret == 0) {
-        ret = gz_huff_build(&dist_huff, code_lens + hlit, (int)hdist);
+        ret = gz_huff_build(dist, code_lens + hlit, (int)hdist);
     }
     if (ret == 0) {
-        ret = gz_inflate_huffman(s, &litlen_huff, &dist_huff);
+        ret = gz_inflate_huffman(s, litlen, dist);
     }
     return ret;
 }
@@ -604,40 +908,47 @@ static int gz_inflate_dynamic(gz_state_t *s)
 
 static int gz_inflate(gz_state_t *s)
 {
-    int ret = 0;
-    uint32_t bfinal = 0, btype = 0;
-    gz_huff_t fixed_litlen;
-    gz_huff_t fixed_dist;
+    gz_huff_t litlen, dist;
+    uint32_t bfinal, btype;
     int fixed_built = 0;
+    int ret = 0;
 
-    while ((ret == 0) && !bfinal) {
-        ret = gz_get_bits(s, 1, &bfinal);
-        if (ret == 0) {
-            ret = gz_get_bits(s, 2, &btype);
+#ifndef WOLFBOOT_GZIP_SMALL
+    litlen.root = gz_litlen_root;
+    litlen.sub = gz_litlen_sub;
+    litlen.sub_max = GZIP_LITLEN_SUB_MAX;
+    dist.root = gz_dist_root;
+    dist.sub = gz_dist_sub;
+    dist.sub_max = GZIP_DIST_SUB_MAX;
+#endif
+
+    do {
+        bfinal = gz_get_bits(s, 1);
+        btype = gz_get_bits(s, 2);
+        if (GZ_OVERRUN(s)) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
         }
-        if (ret == 0) {
-            if (btype == 0) {
-                ret = gz_inflate_stored(s);
+        if (btype == 0) {
+            ret = gz_inflate_stored(s);
+        }
+        else if (btype == 1) {
+            /* rebuilt only after a dynamic block replaced it */
+            if (!fixed_built) {
+                ret = gz_build_fixed(&litlen, &dist);
+                fixed_built = 1;
             }
-            else if (btype == 1) {
-                if (!fixed_built) {
-                    ret = gz_build_fixed(&fixed_litlen, &fixed_dist);
-                    if (ret == 0) {
-                        fixed_built = 1;
-                    }
-                }
-                if (ret == 0) {
-                    ret = gz_inflate_huffman(s, &fixed_litlen, &fixed_dist);
-                }
-            }
-            else if (btype == 2) {
-                ret = gz_inflate_dynamic(s);
-            }
-            else {
-                ret = WOLFBOOT_GZIP_E_FORMAT;
+            if (ret == 0) {
+                ret = gz_inflate_huffman(s, &litlen, &dist);
             }
         }
-    }
+        else if (btype == 2) {
+            ret = gz_inflate_dynamic(s, &litlen, &dist);
+            fixed_built = 0;
+        }
+        else {
+            ret = WOLFBOOT_GZIP_E_FORMAT;
+        }
+    } while ((ret == 0) && !bfinal);
     return ret;
 }
 
@@ -647,114 +958,86 @@ static int gz_inflate(gz_state_t *s)
 
 static int gz_skip_zstring(gz_state_t *s)
 {
-    int ret = WOLFBOOT_GZIP_E_TRUNCATED;
-    int done = 0;
-
-    while ((ret != 0) && !done) {
-        if (s->in_pos >= s->in_len) {
-            done = 1; /* ret stays at TRUNCATED */
-        }
-        else if (s->in[s->in_pos++] == 0) {
-            ret = 0;
-            done = 1;
+    while (s->in < s->in_end) {
+        if (*s->in++ == 0) {
+            return 0;
         }
     }
-    return ret;
+    return WOLFBOOT_GZIP_E_TRUNCATED;
 }
 
 static int gz_parse_header(gz_state_t *s)
 {
-    int ret = 0;
-    uint8_t flg = 0;
+    uint8_t flg;
     uint32_t xlen;
 
-    if (s->in_len < GZIP_HEADER_MIN_SIZE) {
-        ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    if (s->in_end - s->in < GZIP_HEADER_MIN_SIZE) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
-    if (ret == 0) {
-        /* Magic 1F 8B, CM = 8 (DEFLATE) */
-        if ((s->in[0] != GZIP_MAGIC_ID1) || (s->in[1] != GZIP_MAGIC_ID2) ||
+    /* Magic 1F 8B, CM = 8 (DEFLATE) */
+    if ((s->in[0] != GZIP_MAGIC_ID1) || (s->in[1] != GZIP_MAGIC_ID2) ||
             (s->in[2] != GZIP_CM_DEFLATE)) {
-            ret = WOLFBOOT_GZIP_E_FORMAT;
-        }
-        else {
-            flg = s->in[3];
-            if (flg & GZIP_FLG_RESERVED) {
-                ret = WOLFBOOT_GZIP_E_FORMAT;
-            }
-            else {
-                /* Skip MTIME(4) + XFL(1) + OS(1) */
-                s->in_pos = GZIP_HEADER_MIN_SIZE;
-            }
-        }
+        return WOLFBOOT_GZIP_E_FORMAT;
     }
+    flg = s->in[3];
+    if (flg & GZIP_FLG_RESERVED) {
+        return WOLFBOOT_GZIP_E_FORMAT;
+    }
+    /* Skip MTIME(4) + XFL(1) + OS(1) */
+    s->in += GZIP_HEADER_MIN_SIZE;
 
-    if ((ret == 0) && (flg & GZIP_FLG_FEXTRA)) {
-        if (s->in_pos + 2 > s->in_len) {
-            ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    if (flg & GZIP_FLG_FEXTRA) {
+        if (s->in_end - s->in < 2) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
         }
-        else {
-            xlen = (uint32_t)s->in[s->in_pos] |
-                   ((uint32_t)s->in[s->in_pos + 1] << 8);
-            s->in_pos += 2;
-            if (s->in_pos + xlen > s->in_len) {
-                ret = WOLFBOOT_GZIP_E_TRUNCATED;
-            }
-            else {
-                s->in_pos += xlen;
-            }
+        xlen = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8);
+        s->in += 2;
+        if ((uint32_t)(s->in_end - s->in) < xlen) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
         }
+        s->in += xlen;
     }
-    if ((ret == 0) && (flg & GZIP_FLG_FNAME)) {
-        ret = gz_skip_zstring(s);
+    if ((flg & GZIP_FLG_FNAME) && (gz_skip_zstring(s) != 0)) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
-    if ((ret == 0) && (flg & GZIP_FLG_FCOMMENT)) {
-        ret = gz_skip_zstring(s);
+    if ((flg & GZIP_FLG_FCOMMENT) && (gz_skip_zstring(s) != 0)) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
-    if ((ret == 0) && (flg & GZIP_FLG_FHCRC)) {
-        if (s->in_pos + 2 > s->in_len) {
-            ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    if (flg & GZIP_FLG_FHCRC) {
+        if (s->in_end - s->in < 2) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
         }
-        else {
-            s->in_pos += 2; /* header CRC; not validated */
-        }
+        s->in += 2; /* header CRC; not validated */
     }
-    return ret;
+    return 0;
 }
 
 static int gz_parse_trailer(gz_state_t *s, uint32_t computed_crc,
                             uint32_t bytes_out)
 {
-    int ret = 0;
     uint32_t got_crc, got_isize;
+    int ret;
 
     /* Discard partial byte from final block, then read 8-byte trailer */
-    gz_align_byte(s);
-    s->bit_buf = 0;
-    s->bit_count = 0;
-
-    if (s->in_pos + GZIP_TRAILER_SIZE > s->in_len) {
-        ret = WOLFBOOT_GZIP_E_TRUNCATED;
+    ret = gz_align_byte(s);
+    if (ret != 0) {
+        return ret;
     }
-    if (ret == 0) {
-        got_crc = (uint32_t)s->in[s->in_pos] |
-                  ((uint32_t)s->in[s->in_pos + 1] << 8) |
-                  ((uint32_t)s->in[s->in_pos + 2] << 16) |
-                  ((uint32_t)s->in[s->in_pos + 3] << 24);
-        got_isize = (uint32_t)s->in[s->in_pos + 4] |
-                    ((uint32_t)s->in[s->in_pos + 5] << 8) |
-                    ((uint32_t)s->in[s->in_pos + 6] << 16) |
-                    ((uint32_t)s->in[s->in_pos + 7] << 24);
-        s->in_pos += GZIP_TRAILER_SIZE;
-
-        if (got_crc != computed_crc) {
-            ret = WOLFBOOT_GZIP_E_CRC32;
-        }
-        else if (got_isize != bytes_out) {
-            ret = WOLFBOOT_GZIP_E_ISIZE;
-        }
+    if (s->in_end - s->in < GZIP_TRAILER_SIZE) {
+        return WOLFBOOT_GZIP_E_TRUNCATED;
     }
-    return ret;
+    got_crc = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8) |
+              ((uint32_t)s->in[2] << 16) | ((uint32_t)s->in[3] << 24);
+    got_isize = (uint32_t)s->in[4] | ((uint32_t)s->in[5] << 8) |
+                ((uint32_t)s->in[6] << 16) | ((uint32_t)s->in[7] << 24);
+    s->in += GZIP_TRAILER_SIZE;
+    if (got_crc != computed_crc) {
+        return WOLFBOOT_GZIP_E_CRC32;
+    }
+    if (got_isize != bytes_out) {
+        return WOLFBOOT_GZIP_E_ISIZE;
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -765,34 +1048,41 @@ int wolfBoot_gunzip(const uint8_t *in, uint32_t in_len,
                     uint8_t *out, uint32_t out_max,
                     uint32_t *out_len)
 {
-    int ret = 0;
     gz_state_t s;
+    uint32_t produced, crc;
+    int ret;
 
     if ((in == NULL) || (out == NULL) || (out_len == NULL)) {
-        ret = WOLFBOOT_GZIP_E_PARAM;
+        return WOLFBOOT_GZIP_E_PARAM;
     }
-    else {
-        s.in = in;
-        s.in_len = in_len;
-        s.in_pos = 0;
-        s.bit_buf = 0;
-        s.bit_count = 0;
-        s.out = out;
-        s.out_max = out_max;
-        s.out_pos = 0;
-        s.crc32 = GZIP_CRC32_INIT;
+    s.in = in;
+    s.in_end = in + in_len;
+    s.buf = 0;
+    s.nbits = 0;
+    s.over = 0;
+    s.out = out;
+    s.out_end = out + out_max;
+    s.op = out;
+#ifdef WOLFBOOT_GZIP_SMALL
+    s.crc32 = GZIP_CRC32_INIT;
+#endif
 
-        ret = gz_parse_header(&s);
-        if (ret == 0) {
-            ret = gz_inflate(&s);
-        }
-        if (ret == 0) {
-            /* Final CRC32 is the running register XOR'd with the final mask */
-            s.crc32 ^= GZIP_CRC32_FINAL_XOR;
-            ret = gz_parse_trailer(&s, s.crc32, s.out_pos);
-        }
-        *out_len = s.out_pos;
+    ret = gz_parse_header(&s);
+    if (ret == 0) {
+        ret = gz_inflate(&s);
     }
+    produced = (uint32_t)(s.op - out);
+    if (ret == 0) {
+#ifdef WOLFBOOT_GZIP_SMALL
+        /* Final CRC32 is the running register XOR'd with the final mask */
+        crc = s.crc32 ^ GZIP_CRC32_FINAL_XOR;
+#else
+        gz_crc_init();
+        crc = gz_crc32(out, produced);
+#endif
+        ret = gz_parse_trailer(&s, crc, produced);
+    }
+    *out_len = produced;
     return ret;
 }
 

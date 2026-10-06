@@ -170,6 +170,106 @@ START_TEST(test_roundtrip_pseudo_random)
 }
 END_TEST
 
+START_TEST(test_roundtrip_skewed_symbols)
+{
+    /* One byte value dominates and the rest tail off geometrically, so the
+     * literal/length code has the longest lengths DEFLATE allows: codes
+     * beyond the table-driven decoder's root width go through its second
+     * level tables. */
+    static uint8_t buf[256 * 1024];
+    uint32_t state = 7;
+    int i;
+    for (i = 0; i < (int)sizeof(buf); i++) {
+        uint32_t r;
+        state = state * 1103515245U + 12345U;
+        r = state >> 8;
+        if ((r & 0xFFFFU) < 62000U) {
+            buf[i] = 'a';
+        }
+        else {
+            /* rare symbols, rarer the higher the value */
+            uint32_t v = 1;
+            while ((v < 255) && ((r >> (v & 7)) & 1U)) {
+                v += 1 + (v >> 3);
+            }
+            buf[i] = (uint8_t)v;
+        }
+    }
+    roundtrip_check(buf, sizeof(buf));
+}
+END_TEST
+
+START_TEST(test_roundtrip_overlap_runs)
+{
+    /* Short periods repeated at length: back-references whose distance is
+     * smaller than their length, for every distance from 1 to 24 bytes,
+     * so the overlapping copies and the word-at-a-time copy path are both
+     * exercised at every alignment. */
+    static uint8_t buf[512 * 1024];
+    int i, period = 1, pos = 0, run = 0;
+    for (i = 0; i < (int)sizeof(buf); i++) {
+        buf[i] = (uint8_t)(0x30 + ((i + pos) % period));
+        if (++run >= 300 + 7 * period) {
+            run = 0;
+            pos += 3;
+            period = (period % 24) + 1;
+        }
+    }
+    roundtrip_check(buf, sizeof(buf));
+}
+END_TEST
+
+/* Block-type transitions in one stream: a fixed block, a stored block (a
+ * full flush), a dynamic block, a stored block, a fixed block. The fixed
+ * code is rebuilt after the dynamic block replaced it in the shared tables.
+ * Produced by zlib with Z_FULL_FLUSH between the three parts. */
+static const uint8_t gz_fixture_block_transitions[] = {
+    0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x03, 0x2a, 0xcf,
+    0xcf, 0x49, 0x73, 0xca, 0xcf, 0x2f, 0x51, 0x48, 0xcb, 0xac, 0x48, 0x4d,
+    0x51, 0x48, 0xca, 0xc9, 0x4f, 0xce, 0x56, 0xc8, 0xcf, 0x4b, 0xd5, 0x53,
+    0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x34, 0xd0, 0x89, 0x09, 0x04, 0x21,
+    0x14, 0x04, 0xd1, 0x54, 0x3a, 0x35, 0x4f, 0xd4, 0xd1, 0x55, 0x51, 0x51,
+    0x27, 0xfa, 0x85, 0xe6, 0x4f, 0x02, 0x8f, 0xa2, 0xa0, 0x5d, 0xea, 0xef,
+    0x73, 0x7f, 0xee, 0xa0, 0xd5, 0x3e, 0xaf, 0xaf, 0x6f, 0x31, 0x28, 0xc1,
+    0x59, 0x17, 0x7f, 0xcb, 0x56, 0xf4, 0xa8, 0xf7, 0x1c, 0x73, 0x9b, 0x04,
+    0xdb, 0xfd, 0xee, 0x39, 0x86, 0x98, 0x71, 0xc3, 0xf0, 0x2b, 0x3b, 0x75,
+    0x36, 0x94, 0x2f, 0x3b, 0xac, 0xa4, 0x66, 0x45, 0x2e, 0x6d, 0xe9, 0x67,
+    0xa7, 0xdb, 0x60, 0x95, 0x12, 0x1a, 0xee, 0x0c, 0xa1, 0x51, 0xcc, 0x14,
+    0x1a, 0xb6, 0x6a, 0xa1, 0x61, 0xd2, 0x10, 0x1a, 0x31, 0x77, 0xa1, 0x71,
+    0xf6, 0x11, 0x1a, 0xb3, 0x16, 0xa1, 0x71, 0x5b, 0x14, 0x1a, 0xac, 0x26,
+    0x0d, 0x56, 0x93, 0x06, 0xab, 0x49, 0x83, 0xd5, 0xa4, 0xc1, 0x6a, 0xd2,
+    0x60, 0x35, 0x69, 0xb0, 0x9a, 0x34, 0x58, 0x4d, 0x1a, 0xdf, 0x90, 0xd1,
+    0xf0, 0x0d, 0x99, 0x05, 0xce, 0xfe, 0x01, 0x00, 0x00, 0xff, 0xff, 0x4b,
+    0xcc, 0x4b, 0x51, 0x48, 0x54, 0x48, 0xcb, 0xac, 0x48, 0x4d, 0x51, 0x48,
+    0xca, 0xc9, 0x4f, 0xce, 0x56, 0x48, 0x4c, 0x2b, 0x49, 0x2d, 0x52, 0xc8,
+    0x2c, 0xd1, 0x03, 0x00, 0x9f, 0x6d, 0x06, 0x02, 0x61, 0x01, 0x00, 0x00
+};
+
+START_TEST(test_fixture_block_transitions)
+{
+    static const char part_a[] = "wolfBoot fixed block one. ";
+    static const char part_c[] = "and a fixed block after it.";
+    uint8_t expect[26 + 300 + 27];
+    uint8_t out[sizeof(expect) + 16];
+    uint32_t out_len = 0;
+    int i, rc;
+
+    memcpy(expect, part_a, 26);
+    for (i = 0; i < 300; i++) {
+        expect[26 + i] = (uint8_t)((i % 11) == 0 ? ' ' :
+                                   'a' + ((i * i + i / 7) % 26));
+    }
+    memcpy(expect + 26 + 300, part_c, 27);
+
+    rc = wolfBoot_gunzip(gz_fixture_block_transitions,
+                         (uint32_t)sizeof(gz_fixture_block_transitions),
+                         out, (uint32_t)sizeof(out), &out_len);
+    ck_assert_int_eq(rc, 0);
+    ck_assert_uint_eq((unsigned)out_len, (unsigned)sizeof(expect));
+    ck_assert_int_eq(memcmp(out, expect, sizeof(expect)), 0);
+}
+END_TEST
+
 START_TEST(test_roundtrip_kernel_sized)
 {
     /* ~2 MB of structured-but-varied data, similar in nature to a kernel.
@@ -543,6 +643,9 @@ static Suite *gzip_suite(void)
     tcase_add_test(tc_pos, test_roundtrip_zeros);
     tcase_add_test(tc_pos, test_roundtrip_repeated_text);
     tcase_add_test(tc_pos, test_roundtrip_pseudo_random);
+    tcase_add_test(tc_pos, test_roundtrip_skewed_symbols);
+    tcase_add_test(tc_pos, test_roundtrip_overlap_runs);
+    tcase_add_test(tc_pos, test_fixture_block_transitions);
     tcase_add_test(tc_pos, test_roundtrip_kernel_sized);
 
     tcase_add_test(tc_neg, test_neg_bad_magic);
