@@ -35,6 +35,7 @@ This README describes configuration of supported targets.
 * [NXP MCXA153](#nxp-mcxa153)
 * [NXP MCXW716](#nxp-mcxw716)
 * [NXP MCXN947](#nxp-mcxn947)
+* [NXP RW612](#nxp-rw612)
 * [NXP S32K1XX](#nxp-s32k1xx)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
@@ -7260,6 +7261,183 @@ c
 ### MCX N: DICE attestation
 Sample application for DICE attestation is available on MCXN947.
 Please find the details in `docs/MCXN947-DICE.md`.
+
+## NXP RW612
+
+The NXP RW612 is a wireless MCU (Wi-Fi 6, Bluetooth LE, 802.15.4) with a
+260MHz Cortex-M33 and TrustZone-M. Code executes in place from an external
+FlexSPI NOR flash mapped at `0x08000000` (secure alias `0x18000000`). The
+support has been tested on the FRDM-RW612 board (64MB Winbond W25Q512JV NOR,
+4KB sectors) with its on-board MCU-Link.
+
+`wolfboot.bin` contains the FlexSPI configuration block (FCB) at offset `0x400`
+and the boot ROM image header in its vector table at `0x1000`, so it boots from
+the start of the flash without any `nxpimage` wrapping. Flash erase and program
+use the boot ROM FlexSPI API from RAM. The RW612 Cortex-M33 has no DSP
+extension, so wolfBoot is built with `-mcpu=cortex-m33+nodsp`.
+
+This requires the NXP MCUXpresso SDK, placed under `../NXP` by default:
+
+```sh
+mkdir -p ../NXP && cd ../NXP
+python3 -m venv west-venv
+. west-venv/bin/activate
+pip install west
+west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+cd mcuxpresso-sdk
+west update_board --set board frdmrw612
+deactivate
+```
+
+`update_board` fetches every project the board's SDK examples use. The wolfBoot
+build only needs four of them (drivers, CMSIS, the board's project template and
+flash configuration, and the RW612 device files), so this is enough instead:
+
+```sh
+west update core CMSIS mcu-sdk-examples mcux-devices-wireless
+```
+
+### RW612: Configuring and compiling
+
+```sh
+cp config/examples/rw612.config .config
+make
+```
+
+We provide two configuration files:
+- `rw612.config`: both wolfBoot and the application run in the secure world.
+- `rw612-tz.config`: wolfBoot runs in the secure world, the application runs
+  in the non-secure world.
+
+To add a non-secure callable wolfPKCS11 API to wolfCrypt and a secure keyvault
+provided by wolfBoot, build `rw612-tz.config` with
+`make WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1`.
+
+Both sign with ECC256/SHA256; any other algorithm supported by wolfBoot can be
+selected with `SIGN=` and `HASH=`. Signatures that need a larger header must
+also raise `WOLFBOOT_SECTOR_SIZE` to at least `IMAGE_HEADER_SIZE`, for example
+ML-DSA-44:
+
+```sh
+make SIGN=ML_DSA ML_DSA_LEVEL=2 IMAGE_SIGNATURE_SIZE=2420 \
+    IMAGE_HEADER_SIZE=8192 WOLFBOOT_SECTOR_SIZE=0x2000
+```
+
+| Region                    | Address      | Size  |
+|---------------------------|--------------|-------|
+| FCB                       | `0x08000400` | 512B  |
+| wolfBoot                  | `0x08001000` | -     |
+| NSC veneers (TZ)          | `0x08060000` | 8KB   |
+| Boot partition            | `0x08100000` | 1MB   |
+| Update partition          | `0x08200000` | 1MB   |
+| Swap sector               | `0x08300000` | 4KB   |
+| Keyvault (TZ)             | `0x08400000` | 128KB |
+
+With TrustZone, wolfBoot keeps its data in secure SRAM at `0x30000000` and
+the non-secure application uses SRAM from `0x20040000`. Only the boot
+partition, that SRAM, the group 1 clock and reset controls (`CLKCTL1`,
+`RSTCTL1`), GPIO and FLEXCOMM0-3 are non-secure; extend `hal_sau_init()` in
+`hal/rw612.c` to give the application more peripherals.
+
+### RW612: Loading the firmware
+
+Program the flash with [pyOCD](https://pyocd.io) through the MCU-Link
+(CMSIS-DAP firmware, as shipped). `factory.bin` holds wolfBoot and the signed
+v1 application in one image laid out from `0x08000000`:
+
+```sh
+pip install pyocd
+pyocd pack install rw612eta2i
+pyocd flash -t rw612eta2i -a 0x08000000 -e sector factory.bin
+```
+
+or write them separately:
+
+```sh
+pyocd flash -t rw612eta2i -a 0x08000000 -e sector wolfboot.bin
+pyocd flash -t rw612eta2i -a 0x08100000 -e sector test-app/image_v1_signed.bin
+```
+
+If the MCU-Link has been updated to J-Link firmware, pyOCD drives it through
+the SEGGER J-Link software: install the J-Link Software and Documentation Pack,
+`pip install pylink-square`, and add `-O jlink.device=RW612` to the commands
+above (on Linux, put the J-Link directory on `LD_LIBRARY_PATH` if pyOCD cannot
+find `libjlinkarm`). J-Link Commander works as well (add `-USB <serial>` when
+more than one J-Link is attached):
+
+```sh
+JLinkExe -device RW612 -if SWD -speed 4000 -NoGui 1 -CommanderScript flash.jlink
+```
+
+```
+exec EnableEraseAllFlashBanks
+connect
+h
+erase 0x08100000 0x08300FFF
+loadbin factory.bin 0x08000000
+r
+g
+qc
+```
+
+The FlexSPI NOR is not an internal flash bank, so an explicit `erase` range
+needs `exec EnableEraseAllFlashBanks`; without it J-Link reports `No Flash bank
+within given address range` and erases nothing. The `erase` clears the boot,
+update and swap areas so no stale partition state is left (add
+`erase 0x08400000 0x0841FFFF` to also clear the TrustZone keyvault), and
+`loadbin` erases the sectors it writes. Keep `connect` ahead of every command
+that talks to the target: some J-Link Commander versions stop processing the
+script after an implicit connect, so `loadbin` never runs.
+
+The debug console is FLEXCOMM3 on the MCU-Link virtual COM port at 115200
+baud. After reset:
+
+```
+Hello from RW612 firmware version 1
+```
+
+### RW612: Testing firmware update
+
+1) Sign the test-app with version 2:
+
+```sh
+./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+```
+
+2) Create the update trigger and assemble the update partition image
+(`0xFFFFB` is `WOLFBOOT_PARTITION_SIZE` minus 5):
+
+```sh
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0     test-app/image_v2_signed.bin \
+    0xFFFFB trigger_magic.bin
+```
+
+3) Flash `update.bin` to the update partition:
+
+```sh
+pyocd flash -t rw612eta2i -a 0x08200000 -e sector update.bin
+```
+
+With J-Link Commander, `loadbin update.bin 0x08200000` followed by `r` and `g`
+does the same.
+
+wolfBoot verifies and installs version 2, which confirms the update with
+`wolfBoot_success()`:
+
+```
+Hello from RW612 firmware version 2
+Update successful, firmware version 2 confirmed
+```
+
+### RW612: Debugging
+
+```sh
+pyocd gdbserver -t rw612eta2i
+arm-none-eabi-gdb wolfboot.elf -ex "target remote :3333"
+```
 
 ## NXP S32K1XX
 

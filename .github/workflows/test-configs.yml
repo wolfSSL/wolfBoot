@@ -359,6 +359,37 @@ jobs:
       config-file: ./config/examples/mcxn-tz-psa-hw.config
       board-name: frdmmcxn947
 
+  nxp_rw612_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612.config
+      board-name: frdmrw612
+
+  nxp_rw612_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612-tz.config
+      board-name: frdmrw612
+
+  nxp_rw612_wolfcrypt_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612-tz.config
+      board-name: frdmrw612
+      make-args: "WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1"
+
+  # Without the console the TRNG still needs the reset driver linked in
+  nxp_rw612_wolfcrypt_tz_no_uart_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612-tz.config
+      board-name: frdmrw612
+      make-args: "WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1 DEBUG_UART=0"
+
   nxp_s32k142_test:
     uses: ./.github/workflows/test-build.yml
     with:

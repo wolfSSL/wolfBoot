@@ -620,6 +620,18 @@ typedef void(*NMIHANDLER)(void);
 #   define isr_NMI isr_empty
 #endif
 
+#ifdef WOLFBOOT_ROM_IMAGE_HEADER
+/* Boot ROMs such as the RW612's read the image length at 0x20 and the load
+ * address at 0x34 of the vector table */
+extern uint32_t _rom_image_size;
+extern uint32_t _rom_image_start;
+#   define IV_IMAGE_LENGTH  ((void (*)(void))(&_rom_image_size))
+#   define IV_IMAGE_ADDRESS ((void (*)(void))(&_rom_image_start))
+#else
+#   define IV_IMAGE_LENGTH  0
+#   define IV_IMAGE_ADDRESS 0
+#endif
+
 #ifdef CORTEX_R5
 asm volatile (
 "  .sect \".isr_vector\"\n"
@@ -646,12 +658,12 @@ void (* const IV[])(void) =
     isr_fault,                   // BusFault
     isr_fault,                   // UsageFault
     isr_securefault,             // SecureFault on M23/33, reserved otherwise (0)
-    0,                           // reserved
+    IV_IMAGE_LENGTH,             // reserved (ROM image header: length)
     0,                           // reserved
     0,                           // reserved
     isr_empty,                   // SVC
     isr_empty,                   // DebugMonitor
-    0,                           // reserved
+    IV_IMAGE_ADDRESS,            // reserved (ROM image header: load address)
     isr_empty,                   // PendSV
 
 #ifdef TARGET_va416x0

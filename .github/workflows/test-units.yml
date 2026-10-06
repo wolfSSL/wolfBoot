@@ -25,10 +25,14 @@ jobs:
         run: |
           make keysclean && make -C tools/keytools clean && rm -f include/target.h
 
+      - name: Fetch NXP MCUXpresso SDK headers
+        run: |
+          tools/ci/fetch-mcuxsdk-headers.sh "$GITHUB_WORKSPACE/mcuxsdk"
+
       - name: Build unit tests
         run: |
-          make -C tools/unit-tests
+          make -C tools/unit-tests MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk"
 
       - name: Run unit tests
         run: |
-          make -C tools/unit-tests run
+          make -C tools/unit-tests run MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk"

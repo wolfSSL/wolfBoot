@@ -41,10 +41,11 @@
 #include <string.h>
 #include <sys/mman.h>
 
-/* NXP MCUXpresso SDK stand-ins (mcxa_fsl_stub/) provide flash_config_t,
- * status_t and the FLASH_* prototypes hal/mcxa.c expects; this test supplies
- * their bodies below, simulating flash programming as a plain memcpy onto
- * the mock buffer that "address" points into. */
+/* The NXP SDK ROM API calls through a fixed ROM address; point it at a mock
+ * tree whose flash driver simulates programming as a memcpy onto the buffer
+ * that "address" points into. */
+extern struct _bootloader_tree mock_rom_api;
+#define FSL_FEATURE_ROMAPI_BASE ((uintptr_t)&mock_rom_api)
 #include "fsl_common.h"
 #include "fsl_romapi.h"
 #include "image.h"
@@ -54,7 +55,7 @@ static int erase_calls;
 static uint32_t last_erase_start;
 static uint32_t last_erase_len;
 
-status_t FLASH_ProgramPhrase(flash_config_t *config, uint32_t start,
+static status_t mock_program_phrase(flash_config_t *config, uint32_t start,
         uint8_t *src, uint32_t len)
 {
     (void)config;
@@ -62,7 +63,7 @@ status_t FLASH_ProgramPhrase(flash_config_t *config, uint32_t start,
     return kStatus_Success;
 }
 
-status_t FLASH_EraseSector(flash_config_t *config, uint32_t start,
+static status_t mock_erase_sector(flash_config_t *config, uint32_t start,
         uint32_t length_in_bytes, uint32_t key)
 {
     (void)config; (void)key;
@@ -72,22 +73,35 @@ status_t FLASH_EraseSector(flash_config_t *config, uint32_t start,
     return kStatus_Success;
 }
 
+static flash_driver_interface_t mock_flash_driver;
+bootloader_tree_t mock_rom_api;
+
 #include "../../hal/mcxa.c"
 
 /* hal_flash_write() treats "address" as a real pointer into memory-mapped
  * flash (it memcpy()s from it directly). struct fields carrying such
- * addresses are uint32_t, matching the real 32-bit target. MAP_32BIT keeps
- * the mock flash buffer inside that range on a 64-bit test host, exactly as
- * unit-ata-security-passphrase-zeroize.c does for 32-bit DMA pointers. */
+ * addresses are uint32_t, matching the real 32-bit target, so the mock flash
+ * buffer is mapped below 4GB (MAP_32BIT on x86-64, a low hint elsewhere). */
+#ifdef MAP_32BIT
+#define MOCK_FLASH_HINT  NULL
+#define MOCK_FLASH_FLAGS (MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT)
+#else
+#define MOCK_FLASH_HINT  ((void *)0x20000000UL)
+#define MOCK_FLASH_FLAGS (MAP_PRIVATE | MAP_ANONYMOUS)
+#endif
 #define MOCK_FLASH_SIZE 64
 static uint8_t *mock_flash;
 
 static void setup(void)
 {
-    mock_flash = mmap(NULL, MOCK_FLASH_SIZE, PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+    mock_flash = mmap(MOCK_FLASH_HINT, MOCK_FLASH_SIZE, PROT_READ | PROT_WRITE,
+            MOCK_FLASH_FLAGS, -1, 0);
     ck_assert_ptr_ne(mock_flash, MAP_FAILED);
+    ck_assert_uint_lt((uintptr_t)mock_flash, 0xFFFFFFFFUL - MOCK_FLASH_SIZE);
     memset(mock_flash, 0xFF, MOCK_FLASH_SIZE);
+    mock_flash_driver.flash_program_phrase = mock_program_phrase;
+    mock_flash_driver.flash_erase_sector = mock_erase_sector;
+    mock_rom_api.flash_driver = &mock_flash_driver;
     erase_calls = 0;
     last_erase_start = 0;
     last_erase_len = 0;

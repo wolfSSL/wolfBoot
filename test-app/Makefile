@@ -33,7 +33,7 @@ ifeq ($(ARCH),PPC)
   endif
 endif
 MCUXPRESSO_CMSIS?=$(MCUXPRESSO)/CMSIS
-ifneq (,$(filter $(TARGET),mcxa mcxw mcxn))
+ifneq (,$(filter $(TARGET),mcxa mcxw mcxn rw612))
   ifneq ($(WOLFCRYPT_TZ_PSA),1)
     TEST_APP_NO_RNG?=1
   endif
@@ -1036,6 +1036,30 @@ ifeq ($(TARGET),mcxn)
     endif
 endif
 
+ifeq ($(TARGET),rw612)
+    RW612_SDK_SRCS:=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.c \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.c \
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.c \
+      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.c
+    ifeq ($(TZEN),1)
+      LSCRIPT_TEMPLATE=ARM-rw612-ns.ld
+      CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+      # wolfBoot's copies are built with -mcmse, which selects secure bases
+      APP_OBJS+=$(addprefix rw612_ns/,$(notdir $(RW612_SDK_SRCS:.c=.o)))
+      vpath %.c $(sort $(dir $(RW612_SDK_SRCS)))
+    else
+      LSCRIPT_TEMPLATE=ARM-rw612.ld
+      # Flash writes run from the same NOR the app executes from
+      ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      APP_OBJS+=$(RW612_SDK_SRCS:.c=.o)
+    endif
+    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
+      LDFLAGS+=--specs=nosys.specs
+    endif
+endif
+
 ifeq ($(TARGET),lpc55s69)
     CFLAGS+=-ffunction-sections -fdata-sections
     CFLAGS+=-DWOLFSSL_NXP_RNG_1
@@ -1580,6 +1604,11 @@ delta-extra-data: image.bin
 
 ../hal/uart/uart_drv_$(UART_TARGET)_ns.o: ../hal/uart/uart_drv_$(UART_TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/uart/uart_drv_$(UART_TARGET).c -DNONSECURE_APP
+
+rw612_ns/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
 board_$(BOARD).o: ../hal/boards/$(BOARD)/wolfHAL_board.c
 	@echo "\t[CC-$(ARCH)] $@"
