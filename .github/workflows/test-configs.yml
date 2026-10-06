@@ -408,6 +408,13 @@ jobs:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250.config
       make-args: DISK_FS=both
+  # The bit-serial gzip decoder (GZIP_SMALL=1) on a GZIP=1 target.
+  microchip_mpfs250_gzip_small_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250.config
+      make-args: GZIP_SMALL=1
   microchip_mpfs250_qspi_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
@@ -1056,6 +1063,14 @@ jobs:
     with:
       arch: aarch64
       config-file: ./config/examples/zynqmp_sdcard.config
+
+  # The bit-serial gzip decoder (GZIP_SMALL=1) on a GZIP=1 target.
+  zynqmp_gzip_small_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/zynqmp.config
+      make-args: GZIP_SMALL=1
 
   # Builds that compile the read-only filesystem layer (src/disk_fs.c,
   # src/fat32.c, src/ext4.c) and the DISK_FS branches of src/update_disk.c.

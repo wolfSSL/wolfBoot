@@ -1083,9 +1083,16 @@ endif
 # GZIP=1 enables native gzip decompression of FIT subimages
 # (RFC 1951 + RFC 1952). Enabled by default in FIT-using example configs.
 GZIP ?= 0
+GZIP_SMALL ?= 0
 ifeq ($(GZIP),1)
   OBJS += src/gzip.o
   CFLAGS+=-DWOLFBOOT_GZIP
+  # GZIP_SMALL=1 selects the bit-serial Huffman decoder in src/gzip.c: a
+  # few KB less code and no static tables, at a fraction of the default
+  # table-driven decoder's rate.
+  ifeq ($(GZIP_SMALL),1)
+    CFLAGS+=-DWOLFBOOT_GZIP_SMALL
+  endif
 endif
 
 # FIT_RAMDISK=1 enables FIT ramdisk (initramfs) extraction and DTB

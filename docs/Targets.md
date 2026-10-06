@@ -1439,6 +1439,12 @@ wolfBoot can either decompress a gzipped kernel at boot time (`GZIP=1`,
 the default for `polarfire_mpfs250.config` and `polarfire_mpfs250_qspi.config`)
 or accept a pre-decompressed kernel inside the FIT (`GZIP=0`). Pick one path.
 
+`src/gzip.c` decodes with lookup tables by default; `GZIP_SMALL=1` selects
+its bit-serial decoder instead, with the same checks and return codes, a
+few KB less code and no static tables, at a fraction of the rate. The
+difference is largest on cores without a data cache, where the bit-serial
+decoder can make the inflate the longest phase of a compressed boot.
+
 ##### Option A - Compressed FIT (`GZIP=1`, default)
 
 Set `compression = "gzip"` and point `data` at the gzipped kernel directly

@@ -90,6 +90,7 @@ TESTS+=unit-diagnostics
 TESTS+=unit-psoc-c3-divider
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
+TESTS+=unit-gzip-small unit-gzip-bits32 unit-gzip-root7 unit-fit-gzip-small
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
@@ -944,6 +945,22 @@ unit-delta: ../../include/target.h unit-delta.c
 unit-gzip: ../../include/target.h unit-gzip.c
 	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP $(LDFLAGS)
 
+# The same suite over the bit-serial decoder (WOLFBOOT_GZIP_SMALL), over
+# the default decoder with the 32-bit bit buffer the RV32/ARMv7 targets
+# use, and with the narrowest root table, where every code of 8 bits or
+# more takes the second level so that path is exercised by every stream.
+unit-gzip-small: ../../include/target.h unit-gzip.c
+	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP -DWOLFBOOT_GZIP_SMALL \
+		$(LDFLAGS)
+
+unit-gzip-bits32: ../../include/target.h unit-gzip.c
+	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_BITS_32 $(LDFLAGS)
+
+unit-gzip-root7: ../../include/target.h unit-gzip.c
+	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_ROOT_BITS=7 $(LDFLAGS)
+
 # FIT-loader gzip / unsupported-compression branch coverage. Built twice
 # from the same source: once with WOLFBOOT_GZIP (success + decompress
 # failure paths) and once without (compile-time fail-closed path).
@@ -955,6 +972,11 @@ unit-fit-gzip: ../../include/target.h unit-fit-gzip.c
 unit-fit-nogzip: ../../include/target.h unit-fit-gzip.c
 	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT \
 		-DWOLFBOOT_NO_PRINTF \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-fit-gzip-small: ../../include/target.h unit-fit-gzip.c
+	gcc -o $@ unit-fit-gzip.c $(CFLAGS) -DWOLFBOOT_FDT -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_SMALL -DWOLFBOOT_NO_PRINTF \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 # FIT fpga-subimage discovery (fit_find_images / fit_get_compatible).
