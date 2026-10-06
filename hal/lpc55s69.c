@@ -445,10 +445,9 @@ void hal_init(void)
 #endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_HWPUF_PROVISION)
-    if (hwpuf_provision_set(0) != 0) {
-    }
-    else {
-    }
+    /* Provisioning failure is non-fatal: the UID fallback still derives
+     * the UDS, so the boot continues. */
+    (void)hwpuf_provision_set(0);
 #endif
 }
 
