@@ -40,6 +40,7 @@ extern void do_boot(const uint32_t *app_offset, const uint32_t* dts_offset);
  * Returns 0 on success or a negative value if the copy failed, so callers can
  * fail closed instead of running on stale data. */
 extern int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len);
+extern int wolfBoot_fit_check_dest(void *dst, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif
@@ -77,9 +78,13 @@ uint64_t hal_get_timer_us(void);
 #ifdef BOOT_BENCHMARK
     #define BENCHMARK_DECLARE() uint64_t _boot_bench_start
     #define BENCHMARK_START() (_boot_bench_start = hal_get_timer_us())
+    /* wolfBoot_printf compiles to nothing on a build without printf, which
+     * leaves _elapsed_ms unreferenced; keep it used so the macro is valid
+     * there too. */
     #define BENCHMARK_END(msg) do { \
         uint64_t _elapsed_ms = (hal_get_timer_us() - _boot_bench_start) / 1000; \
         wolfBoot_printf(msg " (%lu ms)\r\n", (unsigned long)_elapsed_ms); \
+        (void)_elapsed_ms; \
     } while(0)
 #else
     #define BENCHMARK_DECLARE() do {} while(0)

@@ -303,6 +303,24 @@ void hal_init(void)
     hal_status(HAL_STATUS_INIT);
 }
 
+#if defined(WOLFBOOT_UPDATE_DISK) || defined(BOOT_BENCHMARK)
+/* Microseconds from the DWT cycle counter hal_init() starts. The counter is
+ * 32-bit and wraps every ~5.4 s at 800 MHz, so the elapsed cycles are
+ * accumulated here, where the wrap is ordinary modular arithmetic. Converting
+ * first and leaving the caller to subtract turns a wrap into a nonsense
+ * interval instead. Callers must read more often than the wrap period. */
+uint64_t hal_get_timer_us(void)
+{
+    static uint32_t last;
+    static uint64_t cycles;
+    uint32_t now = DWT_CYCCNT;
+
+    cycles += (uint32_t)(now - last);
+    last = now;
+    return cycles / (IMX95_M7_CORE_HZ / 1000000UL);
+}
+#endif
+
 void hal_prepare_boot(void)
 {
     hal_status(HAL_STATUS_PREBOOT);

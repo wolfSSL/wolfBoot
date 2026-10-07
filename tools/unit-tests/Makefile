@@ -73,6 +73,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
        unit-sdhci-disk-unaligned unit-sdhci-dma-error unit-cm4-sdhci unit-cm4-rauc-slot \
+       unit-imx95-ahab \
        unit-sign-encrypted-output \
        unit-sign-hybrid-keyload \
        unit-sign-header-failure \
@@ -130,6 +131,8 @@ TESTS+=unit-ct-compare
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
+TESTS+=unit-imx95-ele
+TESTS+=unit-imx95-disk
 TESTS+=unit-versal-ext-write
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
@@ -792,6 +795,10 @@ unit-cm4-sdhci: ../../include/target.h unit-cm4-sdhci.c
 	gcc -o $@ $^ $(CFLAGS) -I../.. -ffunction-sections -fdata-sections $(LDFLAGS) \
 		-Wl,--gc-sections
 
+unit-imx95-ahab: ../../include/target.h unit-imx95-ahab.c
+	gcc -o $@ unit-imx95-ahab.c $(CFLAGS) -I../.. -ffunction-sections \
+		-fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
 unit-cm4-rauc-slot: ../../include/target.h unit-cm4-rauc-slot.c ../../src/ubootenv.c
 	gcc -o $@ unit-cm4-rauc-slot.c ../../src/ubootenv.c $(CFLAGS) -I../.. \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
@@ -1388,15 +1395,18 @@ versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 # The anchors are literal source lines, so a refactor can move them. "test -s"
 # catches an anchor that stops matching, but not a range that still matches
 # and silently truncates, so each rule also asserts the entry points its test
-# drives are present.
+# drives are present. Two details of that form matter: the assertion exits
+# rather than returning false, since a false in a for-body is discarded by the
+# next iteration's status and only the last item would fail the build; and it
+# matches the call syntax, since a bare name still matches a renamed one.
 imx8qm_usdhc_extract.h: ../../hal/imx8qm.c
 	sed -n '/^#ifndef CADENCE_SRS_OFFSET$$/,/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/p' $< \
 	    | sed '/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/d' > $@
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted shim"; false; }
-	@for f in sdhci_reg_read sdhci_reg_write sdhci_platform_init \
-	          sdhci_platform_set_clock; do \
-	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole shim"; false; }; \
+	@for f in 'sdhci_reg_read(' 'sdhci_reg_write(' 'sdhci_platform_init(' \
+	          'sdhci_platform_set_clock('; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole shim"; exit 1; }; \
 	done
 
 unit-imx8qm-usdhc-shim: unit-imx8qm-usdhc-shim.c imx8qm_usdhc_extract.h
@@ -1410,13 +1420,55 @@ imx8qm_flexspi_extract.h: ../../hal/imx8qm.c
 	    | sed '/^#endif \/\* EXT_FLASH \*\/$$/d' > $@
 	test -s $@
 	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted driver"; false; }
-	@for f in flexspi_init ext_flash_read ext_flash_write ext_flash_erase \
-	          ext_flash_unlock; do \
-	    grep -q "$$f" $@ || { echo "$@: $$f missing - the extraction anchors no longer bracket the whole driver"; false; }; \
+	@for f in 'flexspi_init(' 'ext_flash_read(' 'ext_flash_write(' \
+	          'ext_flash_erase(' 'ext_flash_unlock('; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole driver"; exit 1; }; \
 	done
 
 unit-imx8qm-flexspi-write: unit-imx8qm-flexspi-write.c imx8qm_flexspi_extract.h
 	gcc -o $@ unit-imx8qm-flexspi-write.c -I../../hal $(CFLAGS) $(LDFLAGS)
+
+# unit-imx95-ele drives the real ELE mailbox transport from
+# hal/imx95_a55_stage1.c against an emulated MU. Extracted rather than
+# host-copied for the same reason as the i.MX8QM rules above; the barrier and
+# the CNTFRQ_EL0 read are rewritten, since a host has neither.
+imx95_ele_extract.h: ../../hal/imx95_a55_stage1.c
+	{ sed -n '/^#define ELE_MU_PAR /,/^#define ELE_CALL_BROKEN /p' $<; echo; \
+	  sed -n '/^#define ELE_TIMER_PROBE_LOOPS /,/^#define ELE_MU_POLL_LOOPS /p' $<; echo; \
+	  sed -n '/^\/\* Returns 0 when the system counter is not advancing/,/^static void ele_report(/p' $< \
+	    | sed '/^static void ele_report(/d'; } \
+	  | sed -e 's/__asm__ volatile("dsb sy" ::: "memory");/ELE_BARRIER();/' \
+	        -e 's/__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(hz));/hz = ELE_TEST_CNTFRQ;/' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted transport"; false; }
+	@for m in 'ELE_BARRIER();' 'hz = ELE_TEST_CNTFRQ;'; do \
+	    grep -qF "$$m" $@ || { echo "$@: the rewrite for '$$m' no longer matches"; exit 1; }; \
+	done
+	@for f in 'static uint64_t timer_deadline(' 'static int mu_wait(' \
+	          'static int ele_call(' '#define ELE_MU_PAR ' '#define ELE_MU_TR(' \
+	          '#define ELE_MU_RR(' '#define ELE_TIMER_PROBE_LOOPS ' \
+	          '#define ELE_MU_POLL_LOOPS ' '#define ELE_CALL_BROKEN '; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket the whole transport"; exit 1; }; \
+	done
+
+unit-imx95-ele: unit-imx95-ele.c imx95_ele_extract.h
+	gcc -o $@ unit-imx95-ele.c $(CFLAGS) $(LDFLAGS)
+
+# unit-imx95-disk drives the real byte-addressed disk_read() from
+# hal/imx95_a55.c against an emulated card, checking where each byte lands and
+# the bounce-buffer paths rather than just the returned length.
+imx95_disk_extract.h: ../../hal/imx95_a55.c
+	sed -n '/^\/\* Byte-addressed (src\/disk.c passes byte offsets)/,/^\/\* Not implemented: nothing in the boot path writes. \*\/$$/p' $< \
+	    | sed '/^\/\* Not implemented: nothing in the boot path writes. \*\/$$/d' > $@
+	test -s $@
+	@! grep -q '__asm__' $@ || { echo "$@: unexpected asm in the extracted reader"; false; }
+	@for f in 'int disk_read(' 'card_ready' 'sd_read_blocks(' 'SD_BLOCK_SIZE' \
+	          'SD_MAX_BLOCKS'; do \
+	    grep -qF "$$f" $@ || { echo "$@: '$$f' missing - the extraction anchors no longer bracket disk_read"; exit 1; }; \
+	done
+
+unit-imx95-disk: unit-imx95-disk.c imx95_disk_extract.h
+	gcc -o $@ unit-imx95-disk.c $(CFLAGS) $(LDFLAGS)
 
 unit-versal-qspi-dma: unit-versal-qspi-dma.c versal_host.c
 	gcc -o $@ unit-versal-qspi-dma.c -DTARGET_versal -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
@@ -2010,6 +2062,7 @@ covclean:
 # so "clean" removes them and so there is one place that names them.
 GENERATED_SRC:=aurix_erased_extract.h \
 	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
+	imx95_ele_extract.h imx95_disk_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \

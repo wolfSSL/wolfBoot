@@ -808,10 +808,9 @@ ifeq ($(DISK_EMMC),1)
 endif
 
 # Add the SD/eMMC block driver if SD card or eMMC is enabled (only once).
-# DISK_DRIVER selects which one: the Cadence SDHCI driver (src/sdhci.c,
-# the default) or the Freescale eSDHC driver (hal/nxp_esdhc.o, added by
-# the target's arch.mk block, which also sets DISK_DRIVER=esdhc). Exactly
-# one may link: both define the disk_* entry points.
+# DISK_DRIVER picks one: Cadence SDHCI (src/sdhci.c, default), Freescale eSDHC
+# (hal/nxp_esdhc.o) or i.MX uSDHC (hal/imx95_a55.c), set by the target's arch.mk.
+# Exactly one may link: they all define the disk_* entry points.
 DISK_DRIVER?=cadence
 ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
   ifeq ($(DISK_DRIVER),cadence)

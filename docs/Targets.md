@@ -24,6 +24,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF54L15](#nordic-nrf54l15)
 * [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
+* [NXP i.MX95 Cortex-A55 (BL33)](#nxp-imx95-cortex-a55-bl33)
 * [NXP iMX-RT](#nxp-imx-rt)
 * [NXP i.MX RT700](#nxp-imx-rt700)
 * [NXP Kinetis](#nxp-kinetis)
@@ -10066,6 +10067,73 @@ devmem 0x80F10014    # heartbeat, incrementing
 The difference between the two timestamps is the cost of everything wolfBoot does in between, which is dominated by signature verification. Note that these magics are spelled to read correctly as `devmem` 32-bit words, the opposite convention from the console magic, which is read from a hexdump of the ring.
 
 Both caches are enabled by `hal_init()`, which matters because verifying an image means hashing megabytes resident in DDR. The ARMv7-M default memory map marks `0x80000000-0x9FFFFFFF` as Normal write-through, so no MPU region is needed and M7 stores to the shared window still reach DDR; the HAL nevertheless cleans the affected lines explicitly so that behaviour is not left depending on an inherited attribute.
+
+## NXP i.MX95 Cortex-A55 (BL33)
+
+wolfBoot replaces U-Boot proper on the i.MX95's Cortex-A55 cluster: it is the third image in AHAB container 2 (after BL31 and OP-TEE), entered by BL31 at `0x90200000` in NS-EL2, where it verifies a Linux FIT (kernel + DTB + initramfs) with ML-DSA-87 and boots it at EL2. NXP also documents an OEM PQC SRK hybrid (ML-DSA) AHAB flow, so the container half of the chain can be post-quantum as well.
+
+Which component authenticates the containers depends on which slot wolfBoot occupies, and the two cases are not the same:
+
+- **wolfBoot as BL33 only** (this section). U-Boot SPL is still in container 0 and still calls the ELE to authenticate container 2 before BL31 runs, so the chain is ROM -> ELE -> SPL -> BL31 -> wolfBoot -> Linux once SRK fuses are programmed.
+- **wolfBoot as stage 1 as well** (next section). SPL is gone, so wolfBoot performs that ELE call itself. `IMX95_AHAB_AUTH` is what does it, and it is on by default; the chain becomes ROM -> ELE -> wolfBoot stage 1 -> BL31 -> wolfBoot BL33 -> Linux.
+
+In both cases the ROM and the ELE authenticate container 0 before any A55 code runs, so whichever image sits in the SPL slot is itself verified.
+
+Validated on a Toradex SMARC iMX95 with `TARGET=imx95_a55` (`config/examples/imx95-a55.config`): full boot to Linux userspace with the FIT on the carrier SD (uSDHC2, the uSDHC driver in `hal/imx95_a55.c` - i.MX uSDHC, not SDHCI-compatible).
+
+Notes:
+- The FIT DTB gets `/chosen` bootargs, initrd properties and a `/memory` node from `hal_dts_fixup()`; deployment DTBs commonly ship without `/memory` (the bootloader is expected to add it) and the kernel hangs silently without one.
+- The EL2 exit is a fused asm routine (flush, DAIF mask, TLB invalidate, jump) that touches no memory after the D-cache goes off; set/way cleaning does not reach the A55 cluster's DSU system cache, so payload ranges are also cleaned by VA.
+- Use plain `earlycon` (DTB-derived); an explicit `earlycon=lpuart32,mmio32,<addr>` uses the wrong register layout on i.MX and silences all console output.
+- uSDHC2's clock, pinmux and card power are owned by the M33 System Manager, and its pad registers data-abort on direct access from BL33. `IMX95_SCMI_COLD_INIT=1` brings them up over SCMI (the SCMI client in `hal/imx95_a55.c`), which is what lets wolfBoot boot from SD on a cold power-on rather than only after a stage that already initialized the controller.
+- `IMX95_INIT_M7=1` powers the Cortex-M7 mix and scrubs its TCM for ECC, matching what U-Boot's board init does, for boards that launch an M7 image from Linux later.
+
+### Stage 1: replacing U-Boot SPL
+
+The boot device holds a set of AHAB containers. The first one is what the boot ROM reads: it carries the ELE firmware, the M33 System Manager, the OEI that trains DDR, and one A55 image loaded into OCRAM at `0x20480000`. That last image is U-Boot SPL, and its whole job is to find the next container and load BL31, OP-TEE and BL33 out of it. wolfBoot can take that slot instead:
+
+```
+cp config/examples/imx95-a55.config .config
+make                              # BL33, loaded into DRAM by BL31
+make stage1 DISK_EMMC=1           # stage1/loader_stage1.bin, the SPL slot
+```
+
+DDR is up before stage 1 runs, because the OEI did it, so stage 1 only needs the boot device and the container walk. Nothing records where the next container starts: it is derived by taking the end of the first container - the furthest of its header, its images and its signature block - and rounding up to 1 KiB. `hal/imx95_ahab.c` is that walk, and `hal/imx95_a55_stage1.c` is the rest: the watchdog, GPIO and SMMU state a warm reset out of Linux leaves behind, the SCMI calls for the console clock and the A55 performance level, and the ELE call that starts its random generator.
+
+Two things differ from the BL33 build. The console is programmed rather than inherited, since nothing has configured LPUART1 yet. And on eMMC the containers live in a boot partition, not the user area: `imx95_emmc_boot_partition()` reads back the same `PARTITION_CONFIG` field that told the ROM which one to load from, and reads follow it.
+
+#### What stage 1 authenticates
+
+Taking SPL's slot means taking over the step SPL performed. The boot ROM and the ELE authenticate container 0, so stage 1 is verified code, but the container it goes on to load BL31, OP-TEE and BL33 out of is a separate one that nothing has checked yet. `IMX95_AHAB_AUTH=1` (the default) makes stage 1 ask the ELE to check it, the same three calls U-Boot's SPL makes:
+
+1. The container's header, image table and signature block are staged into DDR at `0x90000000` - NXP's own `IMG_CONTAINER_BASE` for this SoC - because the ELE reads the address it is given over its own master port and requires DDR. Every value stage 1 then acts on comes from those staged bytes; the medium is not consulted for the table again.
+2. `ELE_OEM_CNTN_AUTH_REQ` authenticates the header.
+3. Each image is loaded to its destination and then checked in place with `ELE_VERIFY_IMAGE_REQ`, one at a time so a failure names the image. `ELE_RELEASE_CONTAINER_REQ` follows, before the jump.
+
+Any failure stops the boot. `IMX95_AHAB_AUTH=0` builds without those calls, for bring-up on a part whose containers are not signed. `IMX95_STAGE1_PASSTHROUGH` and `IMX95_STAGE1_ALLOW_SELF_OVERLAP` each carry on past a container the enclave refused, so both require `IMX95_AHAB_AUTH=0`; setting either while authentication is on fails the build.
+
+Separately, and regardless of that flag, stage 1 bounds every destination *before* writing any of them. An image is streamed straight from the boot device into the address the container names, so a check made afterwards would come too late to matter: by then the bytes have landed. Destinations must lie inside DDR, must not overlap the staging window, this loader, the M7 carveout, the ELE shared-memory region or the VPU boot area, must not overlap each other once rounded up to the block size, and image 0 must be an A55 executable whose entry point lies inside its own bytes.
+
+Two limits are worth stating plainly:
+
+- **On an open part AHAB reports success without enforcing a signature.** That is why an unsigned container boots at all. What authentication buys there is an ELE-checked hash of each image against a table nobody signed - integrity, not authenticity. Build with `IMX95_AHAB_LIFECYCLE=1` to have stage 1 print the lifecycle, so the difference is visible rather than implied; it is off by default because nothing else on this platform reads the fuse shadow block from the slot SPL occupies. Enforcement begins when the SRK hash is fused; see the i.MX8QuadMax AHAB section above for what that costs and why it is irreversible.
+- **Authenticating the container does not prevent rollback.** The offset of the next container is derived by walking container 0, which stage 1 reads off the medium and nothing re-authenticates, so a different but validly signed older container set would authenticate happily. That needs `sw_version`/`fuse_version` policy or the AHAB monotonic counter, neither of which is implemented here.
+
+#### Stage 1 build options
+
+Stage 1 is built by `make -C stage1` and takes its own options, separately from the BL33 build. Pass them on the command line.
+
+| Option | Default | Effect |
+|---|---|---|
+| `IMX95_AHAB_AUTH` | `1` | Ask the ELE to authenticate the container set stage 1 loads BL31, OP-TEE and BL33 from, as described above. Setting it to `0` builds without those calls, for bring-up on a part whose containers are not signed. |
+| `IMX95_AHAB_LIFECYCLE` | `0` | Read and print the part's lifecycle from the fuse shadow block. Off by default: U-Boot reads that block only from U-Boot proper and only under `CONFIG_AHAB_BOOT`, so whether it answers the A55 this early is untested per part, and a diagnostic must not be able to cost a boot. |
+| `IMX95_STAGE1_PASSTHROUGH` | unset | Bring-up only. Enter BL31 even when the container load failed, for a board where some other loader has already staged the whole set and stage 1 only needs to be invisible when it cannot help. Requires `IMX95_AHAB_AUTH=0`, and is refused at compile time otherwise, because returning an error is then indistinguishable from the jump. |
+| `IMX95_STAGE1_ALLOW_SELF_OVERLAP` | unset | Bring-up only. Skip an image whose destination lands on the running loader instead of refusing the boot, which a stage 1 linked into DRAM needs in order to skip its own entry. Requires `IMX95_AHAB_AUTH=0`, and is refused at compile time otherwise. |
+| `IMX95_LOG_RING` | `0` | Mirror the console into a DDR ring that survives the handoff, so stage 1's output can be read back from Linux with `memtool con`. Stage 1 starts the ring and BL33 appends to it, so one address holds both. |
+| `IMX95_LOG_RING_BASE` | `0x80F20000` | Where that ring lives. Change it only to move the ring out of the way of something else; stage 1 and BL33 must agree on it. |
+| `IMX95_EMMC_PROBE` | `0` | One-shot diagnostic that walks the eMMC boot partitions and reports the AHAB containers it finds, from an image booting off SD. |
+
+The two bring-up options exist to get a new board talking; neither belongs in a shipped configuration, and the build refuses to combine either with authentication rather than letting a boot continue past a refusal.
 
 ## TI C2000 C28x (LAUNCHXL-F28P55X)
 
