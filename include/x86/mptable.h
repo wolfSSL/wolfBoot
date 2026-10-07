@@ -150,7 +150,7 @@ enum mp_irq_source_types {
     #define MP_CPU_NUM_ENTRY 1
 #endif
 
-#ifdef TARGET_kontron_vx3060_s2
+#if defined(TARGET_kontron_vx3060_s2) || defined(TARGET_nai_68int6)
     #define MP_IOAPIC_NUM_ENTRY 1
     #define MP_INTSRC_NUM_ENTRY 17
     #define MP_LINTSRC_NUM_ENTRY 0

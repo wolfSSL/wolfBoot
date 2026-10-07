@@ -35,7 +35,7 @@
 #include "x86/tgl_fsp.h"
 #endif
 
-#if defined(TARGET_kontron_vx3060_s2)
+#if defined(TARGET_kontron_vx3060_s2) || defined(TARGET_nai_68int6)
 #define PCI_AHCI_BUS 0
 #define PCI_AHCI_DEV 0x17
 #define PCI_AHCI_FUN 0

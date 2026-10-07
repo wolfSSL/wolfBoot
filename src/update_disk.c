@@ -91,6 +91,11 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
     #define BOOT_PART_A 5
     #define BOOT_PART_B 6
 #endif
+#ifdef TARGET_nai_68int6
+    /* Signed kernels live in the 3rd and 4th GPT partitions (sda3/sda4). */
+    #define BOOT_PART_A 2
+    #define BOOT_PART_B 3
+#endif
 #endif /* WOLFBOOT_FSP */
 
 /* Default values for BOOT_DISK, BOOT_PART_A and BOOT_PART_B */

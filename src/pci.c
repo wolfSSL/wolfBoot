@@ -394,6 +394,12 @@ static int pci_pre_enum_cb(uint8_t bus, uint8_t dev, uint8_t fun)
     if (dev == 0x1e && (fun == 0 || fun == 1)) {
         return 1;
     }
+#if defined(X86_UART_NUMBER) && (X86_UART_NUMBER == 2)
+    /* UART2 (00:19.2) is the debug console: sizing its BAR would move it off
+     * X86_UART_BASE and silence the boot */
+    if (dev == 0x19 && fun == 2)
+        return 1;
+#endif
     /* PMC BARs shouldn't be programmed as per FSP integration guide */
     if (dev == 31 && fun == 2)
         return 1;

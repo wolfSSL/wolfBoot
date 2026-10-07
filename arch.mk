@@ -2187,13 +2187,13 @@ ifeq ($(USE_GCC),1)
 endif
 OUTPUT_FLAG?=-o
 
-ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2),$(TARGET))
+ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2 nai_68int6),$(TARGET))
   FSP=1
   CFLAGS+=-ffunction-sections -fdata-sections -ffreestanding -nostdlib -static
   # some std libc have headers that bring in extra symbols used in
   # FORTIFY_SOURCE realated checks. Use -U_FORTIFY_SOURCE to avoid that.
   CFLAGS+=-U_FORTIFY_SOURCE
-  ifeq ($(TARGET), kontron_vx3060_s2)
+  ifeq ($(filter $(TARGET),kontron_vx3060_s2 nai_68int6),$(TARGET))
     FSP_TGL=1
     CFLAGS+=-DWOLFBOOT_TGL=1
   endif
@@ -2243,12 +2243,12 @@ ifeq ("${FSP}", "1")
       OBJS += src/image.o
       OBJS += src/keystore.o
       OBJS += src/sig_wolfboot_raw.o
-      ifeq ($(TARGET), kontron_vx3060_s2)
-        OBJS += hal/kontron_vx3060_s2_loader.o
-      endif
       OBJS += $(WOLFCRYPT_OBJS)
       CFLAGS+=-DSTAGE1_AUTH
     endif
+
+    # Generic stage1 loader HAL (stubs); shared by all x86 FSP targets.
+    OBJS += hal/stub_loader.o
 
     CFLAGS += -fno-stack-protector -m32 -fno-PIC -fno-pie -mno-mmx -mno-sse -DDEBUG_UART
     CFLAGS += -DFSP_M_BASE=$(FSP_M_BASE)
@@ -2256,9 +2256,6 @@ ifeq ("${FSP}", "1")
       OBJS+=src/x86/tgl_fsp.o
       OBJS+=src/ucode0.o
       CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
-    endif
-    ifeq ($(TARGET),x86_fsp_qemu)
-      OBJS += hal/x86_fsp_qemu_loader.o
     endif
   else
     # building wolfBoot

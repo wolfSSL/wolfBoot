@@ -1602,6 +1602,7 @@ ifeq ($(FSP), 1)
     X86_UART_BASE \
     X86_UART_REG_WIDTH \
     X86_UART_MMIO \
+    X86_UART_NUMBER \
     PCH_HAS_PCR \
     PCI_USE_ECAM \
     PCH_PCR_BASE \
