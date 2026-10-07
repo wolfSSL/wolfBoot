@@ -808,6 +808,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 
         part_name[2] = 'A' + selected;
+        /* Consumed by the boot traces, which compile out without DEBUG_UART */
+        (void)cur_part;
+        (void)part_name;
 
         wolfBoot_printf("Attempting boot from %s\r\n", part_name);
 

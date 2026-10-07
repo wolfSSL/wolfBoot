@@ -4052,7 +4052,7 @@ Booting at 0x3080000
 
 `config/examples/cm4_emmc.config` (onboard eMMC) and `config/examples/cm4_sdcard.config` (microSD) enable the disk updater (`DISK_EMMC`/`DISK_SDCARD`), driving the BCM2711 EMMC2 controller through the generic SDHCI driver (`src/sdhci.c` + the `hal/cm4.c` register glue) to read A/B signed images from GPT partitions. wolfBoot reads the GPT, selects the higher-version image, verifies it, ELF-loads it (`ELF=1`) to `WOLFBOOT_LOAD_ADDRESS`, and boots.
 
-The **eMMC** path (`cm4_emmc.config`) has been validated end to end on CM4 hardware: SDHCI/eMMC card init -> GPT parse -> A/B version select -> SHA-384 integrity -> ECDSA-P384 signature verify -> ELF64 load -> boot of a signed payload. `tools/scripts/cm4/prepare_emmc.sh` builds the GPT layout (FAT boot partition with `kernel8.img` + firmware, plus raw A/B image partitions), signs a minimal test payload (`tools/scripts/cm4/disk_app.S`), and writes it to the eMMC over `rpiboot`. Uncomment `DEBUG_SDHCI` / `DEBUG_DISK` / `DEBUG_GPT` in the config for verbose bring-up tracing. The **microSD** path shares the same driver but is validated only on modules whose SD lines reach the microSD slot (a CM4 with onboard eMMC disables that slot).
+The **eMMC** path (`cm4_emmc.config`) has been validated end to end on CM4 hardware: SDHCI/eMMC card init -> GPT parse -> A/B version select -> SHA-384 integrity -> ECDSA-P384 signature verify -> ELF64 load -> boot of a signed payload. `tools/scripts/cm4/prepare_emmc.sh` builds the GPT layout (FAT boot partition with `kernel8.img` + firmware, plus raw A/B image partitions), signs a minimal test payload (`tools/scripts/cm4/disk_app.S`), and writes it to the eMMC over `rpiboot`. Uncomment `DEBUG_SDHCI` / `DEBUG_DISK` / `DEBUG_GPT` in the config for verbose bring-up tracing. The **microSD** path (`cm4_sdcard.config`) shares the same driver and controller but has not been run on hardware: it needs a CM4 Lite, because a module with onboard eMMC disables the carrier's microSD slot.
 
 ### FIPS 140-3
 
@@ -4093,6 +4093,27 @@ The eMMC uses a 6-partition layout:
 - `p6` data ext4: persistent data
 
 Key config: `CM4_RAUC_AB=1` (a make var that pulls in `src/ubootenv.o` and the RAUC branch of `hal/cm4.c`), `CFLAGS_EXTRA+=-DCM4_UBOOT_ENV_PART=<n>` (0-based GPT index of `p2`), `CFLAGS_EXTRA+=-DCM4_ROOT_A=...` / `-DCM4_ROOT_B=...` (slot rootfs devices), and optionally `-DCM4_SLOT_A_NAME=...` / `-DCM4_SLOT_B_NAME=...` (RAUC bootnames, default `"A"` / `"B"`). `tools/scripts/cm4/prepare_emmc_rauc.sh` lays out the disk and writes an initial env (`BOOT_ORDER "A B"`, tries `3`). Both slot-switch and hung-slot failover were hardware-validated. On the Yocto side, RAUC's `fw_env.config` must point at the raw `p2` partition (offset `0`, size `0x4000`) and the `system.conf` slot devices must match `p4`/`p5`, so userspace (`rauc mark-good` / `fw_setenv`) and wolfBoot agree on the env layout.
+
+### Footprint
+
+Built with `aarch64-none-elf-gcc` 14.3 and the shipped `SIGN=ECC384 HASH=SHA384`. The
+text/data/BSS columns are for the configs as shipped: the three disk configs default
+`DEBUG_UART?=1`, while `cm4.config` defaults it off.
+
+| Config | Text | Data | BSS | `wolfboot.bin` | `DEBUG_UART=0` |
+|---|---|---|---|---|---|
+| `cm4.config` (RAM boot) | 41.0 KB | 8 B | 64 B | 41.0 KB | 36.4 KB |
+| `cm4_emmc.config` | 51.4 KB | 8 B | 9.6 KB | 51.4 KB | 43.7 KB |
+| `cm4_emmc_linux.config` | 57.2 KB | 48 B | 9.6 KB | 57.3 KB | 48.7 KB |
+| `cm4_emmc_rauc.config` | 61.0 KB | 48 B | 25.6 KB | 61.1 KB | 51.8 KB |
+
+`cm4_emmc_rauc.config` is the one to compare against U-Boot: it is the only
+configuration that both verifies a signed FIT and arbitrates the RAUC slots, which is
+the whole of what the U-Boot it replaces was doing. For scale, the U-Boot 2025.04 that
+the reference Yocto image builds for this board is 726 KB, or 763 KB with its control
+device tree appended. Most of that difference is scope rather than efficiency: U-Boot
+carries a shell, a network stack and a broad driver set that a verifying bootloader
+does not need.
 
 ## Xilinx Zynq UltraScale
 

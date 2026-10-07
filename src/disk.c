@@ -255,6 +255,7 @@ int disk_open(int drv)
                     (uint32_t)(size >> 32), (uint32_t)size,
                     (uint32_t)(part_info.start >> 32),
                     (uint32_t)(part_info.start));
+                (void)size;
             } else {
                 break; /* End of used entries */
             }
