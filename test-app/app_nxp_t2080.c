@@ -68,6 +68,10 @@ int wolfcrypt_test(void *args);
 int benchmark_test(void *args);
 #endif
 
+#ifdef WOLFSSL_SEC_QORIQ
+#include <wolfssl/wolfcrypt/port/nxp/sec_qoriq.h>
+#endif
+
 static uint8_t boot_part_state = IMG_STATE_NEW;
 static uint8_t update_part_state = IMG_STATE_NEW;
 
@@ -143,14 +147,19 @@ static int print_info(void)
 
 void main(void)
 {
-    /* Zero BSS (no crt0 on bare metal): the wolfCrypt static-memory pools
-     * (gTestMemory/HEAP_HINT) must start zeroed or wc_LoadStaticMemory crashes. */
     extern char _start_bss[], _end_bss[];
-    {
-        char *p = _start_bss;
-        while (p < _end_bss)
-            *p++ = 0;
-    }
+    char *p;
+#if (defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)) && \
+    defined(WOLFSSL_SEC_QORIQ)
+    SecQoriqDev* d;
+    int secRet;
+#endif
+
+    /* No crt0 on bare metal, and the wolfCrypt static-memory pools
+     * (gTestMemory/HEAP_HINT) must start zeroed or wc_LoadStaticMemory
+     * crashes. */
+    for (p = _start_bss; p < _end_bss; p++)
+        *p = 0;
 
     uart_init();
 
@@ -165,6 +174,21 @@ void main(void)
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
     wolfCrypt_Init();
 
+#ifdef WOLFSSL_SEC_QORIQ
+    /* test.c and benchmark.c take their devId from WC_USE_DEVID, which
+     * wolfcrypt/settings.h maps to WOLFSSL_SEC_QORIQ_DEVID when the port
+     * is enabled. */
+    secRet = wc_SecQoriqInit();
+    if (secRet == 0) {
+        wolfBoot_printf("QorIQ SEC: enabled, devId 0x%x\r\n",
+            (unsigned int)WOLFSSL_SEC_QORIQ_DEVID);
+    }
+    else {
+        wolfBoot_printf("QorIQ SEC: init failed (%d), software only\r\n",
+            secRet);
+    }
+#endif
+
 #ifdef WOLFCRYPT_TEST
     wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");
     wolfcrypt_test(NULL);
@@ -175,6 +199,31 @@ void main(void)
     wolfBoot_printf("Running wolfCrypt benchmarks...\r\n");
     benchmark_test(NULL);
     wolfBoot_printf("Benchmarks complete.\r\n\r\n");
+#endif
+
+#ifdef WOLFSSL_SEC_QORIQ
+    /* Report what actually reached the engine: a passing test proves nothing
+     * about offload, since every unhandled case falls back to software. */
+    d = wc_SecQoriqGetDev();
+    if (d != NULL) {
+        wolfBoot_printf("SEC offload counters:\r\n");
+        wolfBoot_printf("  jobs submitted : %u\r\n",
+            (unsigned int)d->jobCount);
+        wolfBoot_printf("  hash   seen %u offloaded %u\r\n",
+            (unsigned int)d->cbHashCount, (unsigned int)d->cbHashOffload);
+        wolfBoot_printf("  cipher seen %u offloaded %u\r\n",
+            (unsigned int)d->cbCipherCount, (unsigned int)d->cbCipherOffload);
+        wolfBoot_printf("  pk     seen %u offloaded %u\r\n",
+            (unsigned int)d->cbPkCount, (unsigned int)d->cbPkOffload);
+        wolfBoot_printf("  seed   seen %u\r\n",
+            (unsigned int)d->cbSeedCount);
+    }
+#endif
+
+#ifdef WOLFSSL_SEC_QORIQ
+    if (secRet == 0) {
+        wc_SecQoriqFree();
+    }
 #endif
 
     wolfCrypt_Cleanup();
