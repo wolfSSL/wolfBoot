@@ -57,6 +57,21 @@ ifeq ($(ACPI),1)
   CFLAGS+=-D"WOLFBOOT_ACPI"
 endif
 
+# Persistent anti-rollback reference plus boot audit counters, backed by TPM NV
+# (src/boot_state_tpm.c). A validly signed older image still boots and is
+# audited; a corrupt reference halts the boot. STRICT also halts when the
+# backend is unavailable or a state write fails.
+ifeq ($(ANTI_ROLLBACK),1)
+  CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK"
+  # The v1 backend (src/boot_state_tpm.c) stores the version floor in TPM NV,
+  # so anti-rollback has a hard wolfTPM dependency; force it on, as
+  # MEASURED_BOOT does, rather than leave it to the example config.
+  WOLFTPM:=1
+  ifeq ($(ANTI_ROLLBACK_STRICT),1)
+    CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK_STRICT"
+  endif
+endif
+
 ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)

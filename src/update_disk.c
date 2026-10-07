@@ -83,6 +83,10 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #include "pci.h"
 #include "x86/tgl_fsp.h"
 
+#ifdef WOLFBOOT_ANTI_ROLLBACK
+#include "boot_state.h"
+#endif
+
 #ifdef TARGET_kontron_vx3060_s2
     #define BOOT_PART_A 5
     #define BOOT_PART_B 6
@@ -830,6 +834,9 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+        boot_state_on_failure(BOOT_FAIL_NO_IMAGE);
+#endif
         wolfBoot_panic();
 #endif
     }
@@ -898,6 +905,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef DISK_ENCRYPT
                 disk_decrypted_header_clear(dec_hdr);
                 disk_crypto_clear();
+#endif
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+                boot_state_on_failure(BOOT_FAIL_ROLLBACK);
 #endif
                 wolfBoot_panic();
                 return;
@@ -1075,6 +1085,9 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_crypto_clear();
 #endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+        boot_state_on_failure(BOOT_FAIL_VERIFY_BOTH);
+#endif
         wolfBoot_panic();
         return;
     }
@@ -1085,6 +1098,27 @@ void RAMFUNCTION wolfBoot_start(void)
      * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
     disk_boot_part = (int)boot_slots[selected].part;
+
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+    {
+        /* Record the version from the header just verified for the selected
+         * slot, not the early pre-verification reads (pA_ver_u/pB_ver_u): the
+         * anti-rollback floor must track the authenticated image. */
+        uint32_t booted_ver;
+#ifdef DISK_ENCRYPT
+        booted_ver = get_decrypted_blob_version(dec_hdr);
+#else
+        booted_ver = wolfBoot_get_blob_version((uint8_t *)hdr_ptr);
+#endif
+        /* A validly signed but older image is audited here (it still boots);
+         * only a corrupt version reference halts. The golden recovery slot is
+         * exempt and never allowed to move the rollback floor. */
+#ifdef DISK_GOLDEN_SLOT
+        if (!SLOT_IS_GOLDEN(selected))
+#endif
+            boot_state_on_boot(booted_ver);
+    }
+#endif
 
 #ifdef DISK_BOOT_CONFIRM
     /* Put the slot on probation, but only if an update was staged into it.

@@ -2292,6 +2292,10 @@ ifeq ("${FSP}", "1")
     OBJS += src/x86/fsp_s.o
     UPDATE_OBJS := src/update_disk.o
     CFLAGS+=-DWOLFBOOT_UPDATE_DISK
+    ifeq ($(ANTI_ROLLBACK),1)
+      OBJS += src/boot_state.o
+      OBJS += src/boot_state_tpm.o
+    endif
     ifeq ($(64BIT),1)
       LDFLAGS += -m elf_x86_64 --oformat elf64-x86-64
       CFLAGS += -m64
