@@ -145,6 +145,22 @@ ifeq ($(ARCH),AARCH64)
       ifeq ($(ZYNQMP_AES_SELFTEST),1)
         CFLAGS+=-DWOLFBOOT_ZYNQMP_AES_SELFTEST
       endif
+      # BBRAM AES key programming. Battery-backed and erasable, so unlike the
+      # eFuse AES key it can be replaced; it also has no temperature or supply
+      # voltage precondition. The key cannot be read back, so programming and
+      # CRC verification are a single operation. Opt-in.
+      ifeq ($(ZYNQMP_BBRAM),1)
+        CFLAGS+=-DWOLFBOOT_ZYNQMP_BBRAM
+      endif
+      # BBRAM program+verify check at boot (bring-up only; re-programs a fixed
+      # test key every boot and leaves it resident so battery retention can be
+      # seen across a power cycle). Reversible, eFuse-safe. Needs ZYNQMP_BBRAM=1.
+      ifeq ($(ZYNQMP_BBRAM_SELFTEST),1)
+        CFLAGS+=-DWOLFBOOT_ZYNQMP_BBRAM_SELFTEST
+        # The self-test calls into the BBRAM code, so it cannot be enabled on
+        # its own without an undefined reference.
+        CFLAGS+=-DWOLFBOOT_ZYNQMP_BBRAM
+      endif
     endif
 
   endif

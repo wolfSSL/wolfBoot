@@ -4217,6 +4217,33 @@ Key configuration options:
 - `HASH=SHA3` - SHA3-384 hashing
 - `ELF=1` - ELF loading support
 
+### BBRAM AES key provisioning (optional)
+
+Opt-in (off by default), wolfBoot can program the 256-bit AES key the CSU uses to decrypt an encrypted boot image. Enable with `ZYNQMP_BBRAM=1`; `ZYNQMP_BBRAM_SELFTEST=1` additionally programs a fixed test key at the end of `hal_init()` as a bring-up check (it implies `ZYNQMP_BBRAM=1`). BBRAM is battery-backed and erasable, so unlike the eFuse AES key it can be replaced, and it has no temperature or supply-voltage precondition.
+
+```sh
+make ZYNQMP_FSBL=1 ZYNQMP_SEC=1 ZYNQMP_BBRAM=1 ZYNQMP_BBRAM_SELFTEST=1
+```
+
+API in `hal/zynq.h`: `zynqmp_bbram_program()` (programs and CRC-verifies in one step), `zynqmp_bbram_zeroize()`, `zynqmp_bbram_status()`.
+
+**The key cannot be read back.** Writing the CRC and checking `STS.AES_CRC_PASS` is the only verification the controller offers, and it covers the *key loading operation*, not the stored key (XAPP1319). Entering programming mode zeroizes the key by itself and `STS` is volatile across a cold boot, so a key programmed on an earlier boot cannot be validated later. The only way to confirm a stored key is to boot something encrypted with it.
+
+**The controller takes the key in reverse word order.** `BBRAM_0` holds the *last* four bytes of the key and `BBRAM_7` the first, matching the key as bootgen's `aeskeyfile` encodes it. `zynqmp_bbram_key_words()` does this packing. Programming it forwards still sets `AES_CRC_PASS` -- the CRC covers the words as written -- but produces a key the CSU cannot decrypt a boot image with, which presents as a silent board with no diagnostic.
+
+To build an image encrypted against the BBRAM key, add the key source and an `aeskeyfile` to the BIF (note the attribute takes its value outside the brackets):
+
+```
+the_ROM_image:
+{
+	[keysrc_encryption] bbram_red_key
+	[bootloader, destination_cpu=a53-0, encryption=aes, aeskeyfile=key.nky] wolfboot.elf
+	[pmufw_image] pmufw.elf
+}
+```
+
+**Program the key before flashing an encrypted image.** Any encrypted boot disables the DAP, successful or not, so flashing first locks you out of the JTAG access needed to program the key; recovery is SW6 to JTAG. For the same reason, flash an unencrypted image before a session that needs JTAG.
+
 ### Ethernet PHY init (optional)
 
 Opt-in (off by default), wolfBoot can replay a board's U-Boot Ethernet PHY register sequence over the GEM MDIO management plane so the PHY is ready before the OS runs. Enable with `CFLAGS_EXTRA+=-DWOLFBOOT_ZYNQMP_PHY_INIT`. The default targets the ZCU102 on-board PHY (TI DP83867 at MDIO `0x0C` on GEM3, `0xFF0E0000`) and just reads the PHY ID as a diagnostic (printed with `DEBUG_UART=1`). A board supplies its own sequence by keeping its values in a small header selected with one line, `CFLAGS_EXTRA+=-DZYNQMP_PHY_INIT_HEADER='"myboard_phy.h"'`, where that header `#define`s any of `ZYNQMP_GEM_BASE`, `ZYNQMP_PHY_ADDR`, `ZYNQMP_PHY_GPIO_ADDR`, `ZYNQMP_GEM_MDC_DIV`, and the `{op, arg0, arg1}` step array `ZYNQMP_PHY_INIT_STEPS`; scalars can also be set directly with `-D`, and anything omitted falls back to the ZCU102 defaults (see `hal/zynq.h` and the commented example in `config/examples/zynqmp.config`). Where the PHY is behind the PL, the boot image must include the FPGA bitstream (bootgen `[destination_device=pl] system.bit`) or the transactions are no-ops.

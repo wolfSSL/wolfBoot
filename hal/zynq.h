@@ -334,6 +334,52 @@
 #define ZYNQMP_EFUSE_SEC_CTRL_AES_WRLK    (1UL  << 1)  /* Locks writing to the AES key section of eFuse */
 #define ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK    (1UL  << 0)  /* Locks the AES key CRC check function */
 
+/* PPK hash is SHA3-384, held in 12 consecutive eFuse cache words */
+#define ZYNQMP_EFUSE_PPK0_WORDS  12
+
+/* Fuses that remove a recovery path if programmed with a wrong or lost key:
+ * every boot must then be signed (RSA_EN) or encrypted (ENC_ONLY), JTAG is
+ * gone (JTAG_DIS, SEC_LOCK), a wrong key or hash can no longer be replaced
+ * (the WRLK bits), or the key in use is revoked (the INVLD bits). wolfBoot
+ * does not program these; the write path rejects them. */
+#define ZYNQMP_EFUSE_SEC_CTRL_BRICK_MASK ( \
+    ZYNQMP_EFUSE_SEC_CTRL_PPK1_INVLD | ZYNQMP_EFUSE_SEC_CTRL_PPK1_WRLK | \
+    ZYNQMP_EFUSE_SEC_CTRL_PPK0_INVLD | ZYNQMP_EFUSE_SEC_CTRL_PPK0_WRLK | \
+    ZYNQMP_EFUSE_SEC_CTRL_RSA_EN     | ZYNQMP_EFUSE_SEC_CTRL_SEC_LOCK  | \
+    ZYNQMP_EFUSE_SEC_CTRL_JTAG_DIS   | ZYNQMP_EFUSE_SEC_CTRL_ENC_ONLY  | \
+    ZYNQMP_EFUSE_SEC_CTRL_AES_WRLK   | ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK)
+
+/* BBRAM support. Battery-backed 256-bit AES key store; the CSU selects it as
+ * the device key when the boot header names BBRAM as the encryption key
+ * source. Unlike the eFuse key this is erasable and re-programmable, and it
+ * has no temperature or supply-voltage precondition. */
+#define ZYNQMP_BBRAM_BASE        0xFFCD0000
+#define ZYNQMP_BBRAM_STS         (ZYNQMP_BBRAM_BASE + 0x0000)
+#define ZYNQMP_BBRAM_CTRL        (ZYNQMP_BBRAM_BASE + 0x0004)
+#define ZYNQMP_BBRAM_PGM_MODE    (ZYNQMP_BBRAM_BASE + 0x0008)
+#define ZYNQMP_BBRAM_AES_CRC     (ZYNQMP_BBRAM_BASE + 0x000C)
+#define ZYNQMP_BBRAM_KEY_0       (ZYNQMP_BBRAM_BASE + 0x0010)
+
+#define ZYNQMP_BBRAM_STS_PGM_MODE      (1UL << 0)
+#define ZYNQMP_BBRAM_STS_ZEROIZED      (1UL << 4)
+#define ZYNQMP_BBRAM_STS_AES_CRC_DONE  (1UL << 8)
+#define ZYNQMP_BBRAM_STS_AES_CRC_PASS  (1UL << 9)
+
+#define ZYNQMP_BBRAM_CTRL_ZEROIZE      (1UL << 0)
+
+/* Written to PGM_MODE to enter programming mode; 0 leaves it */
+#define ZYNQMP_BBRAM_PGM_MODE_MAGIC    0x757BDF0D
+
+#define ZYNQMP_BBRAM_KEY_WORDS   8
+#define ZYNQMP_BBRAM_KEY_SZ      (ZYNQMP_BBRAM_KEY_WORDS * (int)sizeof(uint32_t))
+
+/* CRC-32C in reversed form, and the width of the row address folded in after
+ * each key word (see zynqmp_bbram_key_crc) */
+#define ZYNQMP_BBRAM_CRC_POLY      0x82F63B78
+#define ZYNQMP_BBRAM_CRC_ROW_BITS  5
+
+#define ZYNQMP_BBRAM_POLL_TRIES    100000
+
 
 /* UART Support */
 #define ZYNQMP_UART0_BASE  0xFF000000
@@ -720,6 +766,27 @@ static inline int zynqmp_l2_block_range(uint64_t start, uint64_t end,
     *last = l;
     return 0;
 }
+
+/* Device security state, and BBRAM AES key provisioning. Defined in hal/zynq.c
+ * under WOLFBOOT_ZYNQMP_FSBL_SEC and WOLFBOOT_ZYNQMP_BBRAM respectively. */
+#ifdef WOLFBOOT_ZYNQMP_FSBL_SEC
+void zynqmp_efuse_dump(void);
+/* 0 when every bit in "required" is set in SEC_CTRL */
+int zynqmp_sec_policy_check(uint32_t required);
+#endif
+
+#ifdef WOLFBOOT_ZYNQMP_BBRAM
+int zynqmp_bbram_status(uint32_t* sts);
+int zynqmp_bbram_zeroize(void);
+/* Programs and CRC-verifies in one step; the key cannot be read back */
+int zynqmp_bbram_program(const uint8_t* key, uint32_t keySz);
+void zynqmp_bbram_key_words(const uint8_t* key, uint32_t* words);
+uint32_t zynqmp_bbram_key_crc(const uint32_t* key);
+#ifdef WOLFBOOT_ZYNQMP_BBRAM_SELFTEST
+int zynqmp_bbram_test(void);
+#endif
+#endif
+
 #endif /* !__ASSEMBLER__ */
 
 #endif /* _ZYNQMP_H_ */

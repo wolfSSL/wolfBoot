@@ -127,6 +127,7 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-ct-compare
+TESTS+=unit-zynqmp-bbram-crc
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -1297,6 +1298,18 @@ ct_compare_extract.h: ../../src/image.c
 
 unit-ct-compare: unit-ct-compare.c ct_compare_extract.h
 	gcc -o $@ unit-ct-compare.c $(CFLAGS) $(LDFLAGS)
+
+# unit-zynqmp-bbram-crc checks the BBRAM key CRC against vectors produced by
+# the Xilinx XilSKey implementation. The programmed key cannot be read back,
+# so this CRC is the only verification the controller offers. hal/zynq.c pulls
+# in the whole ZynqMP HAL, so the two functions are extracted verbatim.
+bbram_crc_extract.h: ../../hal/zynq.c
+	sed -n '/^static uint32_t zynqmp_bbram_row_crc(/,/^}/p' $< > $@
+	sed -n '/^uint32_t zynqmp_bbram_key_crc(/,/^}/p' $< >> $@
+	sed -n '/^void zynqmp_bbram_key_words(/,/^}/p' $< >> $@
+
+unit-zynqmp-bbram-crc: unit-zynqmp-bbram-crc.c bbram_crc_extract.h
+	gcc -o $@ unit-zynqmp-bbram-crc.c $(CFLAGS) $(LDFLAGS)
 
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the

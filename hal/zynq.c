@@ -441,24 +441,61 @@ int pmu_mmio_wait(uint32_t addr, uint32_t wait_mask, uint32_t wait_val,
 }
 
 #ifdef WOLFBOOT_ZYNQMP_FSBL_SEC
-/* Read-only dump of the device eFuse cache (loaded by the BootROM at power-on)
- * directly from the eFuse controller. As the FSBL wolfBoot is at EL3, so the
- * cache registers are read via pmu_mmio_read(), which is direct MMIO here (no
- * PMU/ATF). No eFuse programming is performed. */
-void zynqmp_efuse_dump(void)
+/* Snapshot of the device security state, read from the eFuse cache that the
+ * BootROM loads at power-on. */
+typedef struct zynqmp_sec_state {
+    uint32_t ppk0_hash[ZYNQMP_EFUSE_PPK0_WORDS];
+    uint32_t status;
+    uint32_t sec_ctrl;
+    uint32_t puf_chash;
+    uint32_t puf_aux;
+} zynqmp_sec_state;
+
+/* Read the eFuse cache directly from the eFuse controller. As the FSBL
+ * wolfBoot is at EL3, so the cache registers are read via pmu_mmio_read(),
+ * which is direct MMIO here (no PMU/ATF). No eFuse programming is performed. */
+static int zynqmp_sec_state_get(zynqmp_sec_state* state)
 {
-    uint32_t status, sec, chash, aux;
     int i;
 
-    status = pmu_mmio_read(ZYNQMP_EFUSE_STATUS);
-    if ((status & ZYNQMP_EFUSE_STATUS_CACHE_DONE) == 0) {
-        wolfBoot_printf("eFuse: cache not loaded (STATUS 0x%08x)\n", status);
-        return;
+    if (state == NULL) {
+        return -1;
     }
 
-    sec   = pmu_mmio_read(ZYNQMP_EFUSE_SEC_CTRL);
-    chash = pmu_mmio_read(ZYNQMP_EFUSE_PUF_CHASH);
-    aux   = pmu_mmio_read(ZYNQMP_EFUSE_PUF_AUX);
+    memset(state, 0, sizeof(*state));
+    /* Require CACHE_LOAD clear as well as CACHE_DONE set: a reload still in
+     * flight can leave a stale done flag, and reading it would hand back an
+     * unfinished snapshot. */
+    state->status = pmu_mmio_read(ZYNQMP_EFUSE_STATUS);
+    if ((state->status & (ZYNQMP_EFUSE_STATUS_CACHE_LOAD |
+            ZYNQMP_EFUSE_STATUS_CACHE_DONE)) !=
+            ZYNQMP_EFUSE_STATUS_CACHE_DONE) {
+        return -1;
+    }
+
+    state->sec_ctrl  = pmu_mmio_read(ZYNQMP_EFUSE_SEC_CTRL);
+    state->puf_chash = pmu_mmio_read(ZYNQMP_EFUSE_PUF_CHASH);
+    state->puf_aux   = pmu_mmio_read(ZYNQMP_EFUSE_PUF_AUX);
+    for (i = 0; i < ZYNQMP_EFUSE_PPK0_WORDS; i++) {
+        state->ppk0_hash[i] = pmu_mmio_read(ZYNQMP_EFUSE_PPK0_0 +
+            (uint32_t)((uint32_t)i * sizeof(uint32_t)));
+    }
+    return 0;
+}
+
+void zynqmp_efuse_dump(void)
+{
+    zynqmp_sec_state state;
+    uint32_t sec;
+    int i;
+
+    if (zynqmp_sec_state_get(&state) != 0) {
+        wolfBoot_printf("eFuse: cache not loaded (STATUS 0x%08x)\n",
+            pmu_mmio_read(ZYNQMP_EFUSE_STATUS));
+        return;
+    }
+    sec = state.sec_ctrl;
+    (void)sec; /* only consumed by the logging macro */
 
     wolfBoot_printf("eFuse SEC_CTRL 0x%08x:%s%s%s%s%s%s\n", sec,
         (sec & ZYNQMP_EFUSE_SEC_CTRL_RSA_EN)     ? " RSA_EN"       : "",
@@ -467,16 +504,217 @@ void zynqmp_efuse_dump(void)
         (sec & ZYNQMP_EFUSE_SEC_CTRL_PPK0_INVLD) ? " PPK0_REVOKED" : "",
         (sec & ZYNQMP_EFUSE_SEC_CTRL_PPK0_WRLK)  ? " PPK0_WRLK"    : "",
         (sec & ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK)   ? " AES_RDLK"     : "");
-    wolfBoot_printf("eFuse PUF CHASH 0x%08x AUX 0x%08x\n", chash, aux);
+    wolfBoot_printf("eFuse PUF CHASH 0x%08x AUX 0x%08x\n",
+        state.puf_chash, state.puf_aux);
 
     wolfBoot_printf("eFuse PPK0 hash:");
-    for (i = 0; i < 12; i++) {
-        wolfBoot_printf(" %08x",
-            pmu_mmio_read(ZYNQMP_EFUSE_PPK0_0 + (uint32_t)(i * 4)));
+    for (i = 0; i < ZYNQMP_EFUSE_PPK0_WORDS; i++) {
+        wolfBoot_printf(" %08x", state.ppk0_hash[i]);
     }
     wolfBoot_printf("\n");
 }
+
+/* Report whether every bit in "required" is set in SEC_CTRL, so a build can
+ * refuse to boot a part that is not locked down to its deployed policy.
+ * Returns 0 when the policy is met. */
+int zynqmp_sec_policy_check(uint32_t required)
+{
+    zynqmp_sec_state state;
+
+    /* An empty mask would pass unconditionally; for a gate that decides
+     * whether to boot, treat it as a caller error rather than a pass. */
+    if (required == 0) {
+        return -1;
+    }
+    if (zynqmp_sec_state_get(&state) != 0) {
+        return -1;
+    }
+    if ((state.sec_ctrl & required) != required) {
+        wolfBoot_printf("eFuse policy: SEC_CTRL 0x%08x missing 0x%08x\n",
+            state.sec_ctrl, (uint32_t)(required & ~state.sec_ctrl));
+        return -1;
+    }
+    return 0;
+}
 #endif /* WOLFBOOT_ZYNQMP_FSBL_SEC */
+
+#ifdef WOLFBOOT_ZYNQMP_BBRAM
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
+
+/* Fold one 32-bit key word and its 5-bit row address into the running CRC.
+ * The controller checks a CRC-32C over the key with the row address appended
+ * to each word, not a plain CRC over the key bytes, so this has to match
+ * Xilinx XilSKey exactly or correct keys are rejected. */
+static uint32_t zynqmp_bbram_row_crc(uint32_t crc, uint32_t data, uint32_t row)
+{
+    uint32_t i;
+
+    for (i = 0; i < sizeof(uint32_t) * 8; i++) {
+        if ((((data & 1) ^ crc) & 1) != 0) {
+            crc = (crc >> 1) ^ ZYNQMP_BBRAM_CRC_POLY;
+        }
+        else {
+            crc >>= 1;
+        }
+        data >>= 1;
+    }
+    for (i = 0; i < ZYNQMP_BBRAM_CRC_ROW_BITS; i++) {
+        if ((((row & 1) ^ crc) & 1) != 0) {
+            crc = (crc >> 1) ^ ZYNQMP_BBRAM_CRC_POLY;
+        }
+        else {
+            crc >>= 1;
+        }
+        row >>= 1;
+    }
+    return crc;
+}
+
+/* Rows run from one past the last key word down to 1, with the first pass
+ * folding in zero data for the unused row. */
+uint32_t zynqmp_bbram_key_crc(const uint32_t* key)
+{
+    uint32_t crc, i;
+
+    crc = zynqmp_bbram_row_crc(0, 0, ZYNQMP_BBRAM_KEY_WORDS + 1);
+    for (i = 1; i <= ZYNQMP_BBRAM_KEY_WORDS; i++) {
+        crc = zynqmp_bbram_row_crc(crc, key[ZYNQMP_BBRAM_KEY_WORDS - i],
+            (ZYNQMP_BBRAM_KEY_WORDS + 1) - i);
+    }
+    return crc;
+}
+
+/* Pack a 32-byte AES key into the 8 BBRAM words. The controller takes the key
+ * in reverse word order relative to how it is written as a hex string: BBRAM_0
+ * holds the last four bytes and BBRAM_7 the first. This matches Xilinx XilSKey
+ * (which converts the key string little-endian before programming) and so the
+ * key in bootgen's aeskeyfile. Packing it forwards still passes the CRC check,
+ * because the CRC covers the words as written, but produces a key the CSU
+ * cannot decrypt a boot image with. */
+void zynqmp_bbram_key_words(const uint8_t* key, uint32_t* words)
+{
+    uint32_t i, j;
+
+    for (i = 0; i < ZYNQMP_BBRAM_KEY_WORDS; i++) {
+        j = (ZYNQMP_BBRAM_KEY_WORDS - 1U - i) * (uint32_t)sizeof(uint32_t);
+        words[i] = ((uint32_t)key[j]     << 24) |
+                   ((uint32_t)key[j + 1] << 16) |
+                   ((uint32_t)key[j + 2] <<  8) |
+                    (uint32_t)key[j + 3];
+    }
+}
+
+int zynqmp_bbram_status(uint32_t* sts)
+{
+    if (sts == NULL) {
+        return -1;
+    }
+    *sts = pmu_mmio_read(ZYNQMP_BBRAM_STS);
+    return 0;
+}
+
+/* Erase the stored key. The zeroize command is issued both before and after
+ * the data registers are cleared: entering programming mode while already in
+ * it hangs waiting on ZEROIZED. */
+int zynqmp_bbram_zeroize(void)
+{
+    uint32_t i;
+
+    pmu_mmio_write(ZYNQMP_BBRAM_CTRL, ZYNQMP_BBRAM_CTRL_ZEROIZE);
+    for (i = 0; i < ZYNQMP_BBRAM_KEY_WORDS; i++) {
+        pmu_mmio_write(ZYNQMP_BBRAM_KEY_0 +
+            (i * (uint32_t)sizeof(uint32_t)), 0);
+    }
+    pmu_mmio_write(ZYNQMP_BBRAM_CTRL, ZYNQMP_BBRAM_CTRL_ZEROIZE);
+
+    return pmu_mmio_wait(ZYNQMP_BBRAM_STS, ZYNQMP_BBRAM_STS_ZEROIZED,
+        ZYNQMP_BBRAM_STS_ZEROIZED, ZYNQMP_BBRAM_POLL_TRIES);
+}
+
+/* Program the 256-bit AES key and verify it. The key cannot be read back, so
+ * the controller CRC check is the only verification available and programming
+ * and verifying cannot be separated. */
+int zynqmp_bbram_program(const uint8_t* key, uint32_t keySz)
+{
+    uint32_t words[ZYNQMP_BBRAM_KEY_WORDS];
+    uint32_t i, sts;
+    int ret;
+
+    if (key == NULL || keySz != (uint32_t)ZYNQMP_BBRAM_KEY_SZ) {
+        return -1;
+    }
+
+    ret = zynqmp_bbram_zeroize();
+    if (ret != 0) {
+        return ret;
+    }
+
+    pmu_mmio_write(ZYNQMP_BBRAM_PGM_MODE, ZYNQMP_BBRAM_PGM_MODE_MAGIC);
+    ret = pmu_mmio_wait(ZYNQMP_BBRAM_STS, ZYNQMP_BBRAM_STS_ZEROIZED,
+        ZYNQMP_BBRAM_STS_ZEROIZED, ZYNQMP_BBRAM_POLL_TRIES);
+    if (ret == 0) {
+        sts = pmu_mmio_read(ZYNQMP_BBRAM_STS);
+        if ((sts & ZYNQMP_BBRAM_STS_PGM_MODE) == 0) {
+            ret = -1;
+        }
+    }
+
+    if (ret == 0) {
+        zynqmp_bbram_key_words(key, words);
+        for (i = 0; i < ZYNQMP_BBRAM_KEY_WORDS; i++) {
+            pmu_mmio_write(ZYNQMP_BBRAM_KEY_0 +
+                (i * (uint32_t)sizeof(uint32_t)), words[i]);
+        }
+
+        pmu_mmio_write(ZYNQMP_BBRAM_AES_CRC, zynqmp_bbram_key_crc(words));
+        ret = pmu_mmio_wait(ZYNQMP_BBRAM_STS, ZYNQMP_BBRAM_STS_AES_CRC_DONE,
+            ZYNQMP_BBRAM_STS_AES_CRC_DONE, ZYNQMP_BBRAM_POLL_TRIES);
+    }
+    if (ret == 0) {
+        sts = pmu_mmio_read(ZYNQMP_BBRAM_STS);
+        if ((sts & ZYNQMP_BBRAM_STS_AES_CRC_PASS) == 0) {
+            ret = -1;
+        }
+    }
+
+    pmu_mmio_write(ZYNQMP_BBRAM_PGM_MODE, 0);
+    wc_ForceZero(words, sizeof(words));
+
+    return ret;
+}
+
+#ifdef WOLFBOOT_ZYNQMP_BBRAM_SELFTEST
+/* Bring-up check: program a fixed test key and confirm the controller CRC
+ * check passes, which is the only verification available since the key cannot
+ * be read back. The check is only meaningful as part of programming: entering
+ * programming mode zeroizes the key, and STS is volatile, so a key programmed
+ * on an earlier boot cannot be validated later. The key is left resident.
+ * Reversible: zynqmp_bbram_zeroize() erases it. Touches no eFuses. */
+int zynqmp_bbram_test(void)
+{
+    static const uint8_t key[ZYNQMP_BBRAM_KEY_SZ] = {
+        0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
+        0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+        0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
+        0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
+    };
+    uint32_t sts = 0;
+    int ret;
+
+    (void)zynqmp_bbram_status(&sts);
+    wolfBoot_printf("BBRAM STS 0x%08x:%s%s\n", sts,
+        (sts & ZYNQMP_BBRAM_STS_ZEROIZED)     ? " ZEROIZED" : "",
+        (sts & ZYNQMP_BBRAM_STS_AES_CRC_PASS) ? " CRC_PASS" : "");
+
+    ret = zynqmp_bbram_program(key, (uint32_t)sizeof(key));
+    (void)zynqmp_bbram_status(&sts);
+    wolfBoot_printf("BBRAM program: ret %d STS 0x%08x %s\n", ret, sts,
+        (ret == 0) ? "PASS" : "FAIL");
+
+    return ret;
+}
+#endif /* WOLFBOOT_ZYNQMP_BBRAM_SELFTEST */
+#endif /* WOLFBOOT_ZYNQMP_BBRAM */
 
 /* CSU engine access (eFuse/PUF/AES/DMA + SHA3 HAL). Compiled when the CSU is
  * the hash provider (WOLFBOOT_ZYNQMP_CSU, HW_SHA3=1) OR for the FSBL security
@@ -627,6 +865,7 @@ int csu_puf_regeneration(uint32_t* syndrome, uint32_t chash, uint32_t aux)
 
     /* read the puf_status */
     puf_status = pmu_mmio_read(CSU_PUF_STATUS);
+    (void)puf_status; /* only consumed by the logging macro */
     wolfBoot_printf("Regen: PUF Status 0x%08x\n", puf_status);
 
     return ret;
@@ -842,6 +1081,7 @@ int csu_init(void)
     uint32_t reg1 = pmu_mmio_read(CSU_IDCODE);
     uint32_t reg2 = pmu_mmio_read(CSU_VERSION);
 
+    (void)reg1; (void)reg2; /* only consumed by the logging macro */
     wolfBoot_printf("CSU ID 0x%08x, Ver 0x%08x\n",
         reg1, reg2 & CSU_VERSION_MASK);
 
@@ -2202,6 +2442,8 @@ void hal_init(void)
 {
     const char* bootMsg = "\nwolfBoot Secure Boot\n";
 
+    (void)bootMsg; /* only consumed by the logging macro */
+
 #ifdef WOLFBOOT_ZYNQMP_FSBL
     /* wolfBoot is the FSBL: bring up the PLLs, DDR, MIO mux and clocks before
      * any DDR, UART, QSPI or SD access. Until this runs only the OCM (where
@@ -2274,6 +2516,10 @@ void hal_init(void)
 #ifdef WOLFBOOT_ZYNQMP_AES_SELFTEST
     (void)zynqmp_aes_test();
 #endif
+#endif
+
+#if defined(WOLFBOOT_ZYNQMP_BBRAM) && defined(WOLFBOOT_ZYNQMP_BBRAM_SELFTEST)
+    (void)zynqmp_bbram_test();
 #endif
 }
 
