@@ -22,6 +22,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
+* [Nordic nRF54LM20](#nordic-nrf54lm20)
 * [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP iMX-RT](#nxp-imx-rt)
@@ -7791,12 +7792,19 @@ Two configurations are available at `config/examples`:
 
 ```
 0x00000000 - 0x0004EFFF  wolfBoot         (316 KB)  secure
-0x0004F000 - 0x00064FFF  Keyvault          (88 KB)  secure
-0x00065000 - 0x00065FFF  NSC region         (4 KB)  non-secure callable
-0x00066000 - 0x000F0FFF  Boot partition    (556 KB)  non-secure
-0x000F1000 - 0x0017BFFF  Update partition  (556 KB)  secure
-0x0017C000 - 0x0017CFFF  Swap area          (4 KB)  secure
+0x0004F000 - 0x0004FFFF  NSC region         (4 KB)  non-secure callable
+0x00050000 - 0x000DAFFF  Boot partition    (556 KB)  non-secure
+0x000DB000 - 0x00165FFF  Update partition  (556 KB)  secure
+0x00166000 - 0x00166FFF  Swap area          (4 KB)  secure
+0x00167000 - 0x0017CFFF  Keyvault          (88 KB)  secure
 ```
+
+The keyvault is outside the wolfBoot region, so a bootloader self-update or
+re-flashing `wolfboot.bin` leaves the stored keys intact.
+
+Earlier versions of this configuration placed the keyvault at 0x4F000, the NSC region at 0x65000
+and the boot partition at 0x66000. A bootloader update does not migrate between the two layouts:
+re-flash `factory.bin` (and re-provision any stored keys) when moving a device to this layout.
 
 ### UART
 
@@ -7824,7 +7832,7 @@ make
 Flash the factory image using JLink:
 
 ```
-JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
+JLinkExe -device nRF54L15_M33 -if SWD -speed 4000 -autoconnect 1
 loadbin factory.bin 0x0
 rnh
 ```
@@ -7848,7 +7856,7 @@ echo -n "pBOOT" > trigger_magic.bin
 Flash the assembled image to the update partition:
 
 ```
-JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
+JLinkExe -device nRF54L15_M33 -if SWD -speed 4000 -autoconnect 1
 loadbin update.bin 0xC6000
 rnh
 ```
@@ -7867,10 +7875,152 @@ echo -n "pBOOT" > trigger_magic.bin
 Flash the assembled image to the update partition:
 
 ```
-JLinkExe -device nRF54L15_xxAA -if SWD -speed 4000 -autoconnect 1
-loadbin update.bin 0xF1000
+JLinkExe -device nRF54L15_M33 -if SWD -speed 4000 -autoconnect 1
+loadbin update.bin 0xDB000
 rnh
 ```
+
+## Nordic nRF54LM20
+
+Tested with the Nordic nRF54LM20 DK (PCA10184, nRF54LM20B silicon). This device features a 128MHz
+Arm Cortex-M33 application processor with TrustZone support, a RISC-V coprocessor (FLPR),
+2036KB of RRAM, and 512KB of RAM. wolfBoot runs on the Cortex-M33 only and does not interact with
+the RISC-V coprocessor.
+
+The nRF54LM20 shares the nRF54L HAL (`TARGET=nrf54l`). Its configurations add
+`CFLAGS_EXTRA+=-DNRF54LM20`, which selects the nRF54LM20 peripheral addresses (RRAMC, CRACEN,
+TAMPC, SPIM00) and the DK console pins.
+
+Two configurations are available at `config/examples`:
+
+- `nrf54lm20.config`: TrustZone disabled; wolfBoot and the application always run in secure mode.
+
+- `nrf54lm20-wolfcrypt-tz.config`: TrustZone enabled; wolfBoot runs in secure mode and boots the
+  application as non-secure code. Includes a non-secure callable (NSC) wolfPKCS11 API for
+  cryptographic operations via wolfCrypt, entropy from the CRACEN TRNG, and a secure keyvault
+  managed by wolfBoot. The update partition is in secure memory and is intended to be written via
+  wolfBoot's NSC veneers from the non-secure application. See the "NSC API" section in
+  `docs/API.md`.
+
+### nRF54LM20: Flash Memory Layout
+
+#### nrf54lm20.config
+
+```
+0x00000000 - 0x0000FFFF  wolfBoot          (64 KB)
+0x00010000 - 0x00105FFF  Boot partition   (984 KB)
+0x00106000 - 0x001FBFFF  Update partition (984 KB)
+0x001FC000 - 0x001FCFFF  Swap area          (4 KB)
+```
+
+#### nrf54lm20-wolfcrypt-tz.config
+
+```
+0x00000000 - 0x0004EFFF  wolfBoot         (316 KB)  secure
+0x0004F000 - 0x0004FFFF  NSC region         (4 KB)  non-secure callable
+0x00050000 - 0x0011AFFF  Boot partition    (812 KB)  non-secure
+0x0011B000 - 0x001E5FFF  Update partition  (812 KB)  secure
+0x001E6000 - 0x001E6FFF  Swap area          (4 KB)  secure
+0x001E7000 - 0x001FCFFF  Keyvault          (88 KB)  secure
+```
+
+### nRF54LM20: UART
+
+Debug output is available on UART20 (TX=P1.16, RX=P1.17) at 115200 baud, connected to the second
+J-Link VCOM port of the DK (`/dev/serial/by-id/usb-SEGGER_J-Link_<serial>-if02` on Linux).
+A secondary UART (UART30, TX=P0.6, RX=P0.7) is reserved for the `UART_FLASH` feature.
+
+### nRF54LM20: Building
+
+```sh
+cp config/examples/nrf54lm20.config .config
+make clean
+make
+```
+
+Or, for the TrustZone + wolfCrypt variant:
+
+```sh
+cp config/examples/nrf54lm20-wolfcrypt-tz.config .config
+make clean
+make
+```
+
+### nRF54LM20: Flashing
+
+Flash the factory image using JLink:
+
+```
+JLinkExe -device nRF54LM20A_M33 -if SWD -speed 4000 -autoconnect 1
+loadbin factory.bin 0x0
+rnh
+```
+
+The console shows wolfBoot verifying and booting the test application:
+
+```
+wolfBoot HAL Init
+Boot partition: 0x10000 (sz 2688, ver 0x1, type 0x601)
+...
+Booting version: 0x1
+...
+Booted firmware version: 1
+```
+
+### nRF54LM20: Testing an Update
+
+Sign the test application as version 2, then write the update trigger magic (`pBOOT`)
+at the end of the partition. The test application confirms the update with `wolfBoot_success()`
+when it runs a version other than 1.
+
+#### nrf54lm20.config (partition size 0xF6000)
+
+```sh
+tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0      test-app/image_v2_signed.bin \
+    0xF5FFB  trigger_magic.bin
+```
+
+Flash the assembled image to the update partition:
+
+```
+JLinkExe -device nRF54LM20A_M33 -if SWD -speed 4000 -autoconnect 1
+loadbin update.bin 0x106000
+rnh
+```
+
+#### nrf54lm20-wolfcrypt-tz.config (partition size 0xCB000)
+
+```sh
+tools/keytools/sign --ecc384 --sha384 test-app/image.bin wolfboot_signing_private_key.der 2
+echo -n "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble \
+  update.bin \
+    0x0      test-app/image_v2_signed.bin \
+    0xCAFFB  trigger_magic.bin
+```
+
+Flash the assembled image to the update partition:
+
+```
+JLinkExe -device nRF54LM20A_M33 -if SWD -speed 4000 -autoconnect 1
+loadbin update.bin 0x11B000
+rnh
+```
+
+wolfBoot swaps the partitions and boots version 2:
+
+```
+Booting version: 0x2
+...
+Booted firmware version: 2
+Update successful, firmware version 2 confirmed
+```
+
+The TrustZone variant also prints a byte from the CRACEN TRNG (`Today's lucky number: 0x..`).
 
 ## Simulated
 

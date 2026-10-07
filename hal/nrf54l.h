@@ -46,7 +46,11 @@ void uart_init(void);
 #define CPU_CLOCK 128000000UL
 
 #define FLASH_BASE_ADDR (0x00000000UL)
+#ifdef NRF54LM20
+#define FLASH_SIZE (2084864UL) /* 2036KB (nRF54LM20) */
+#else
 #define FLASH_SIZE (1560576UL) /* 1524KB (nRF54L15) */
+#endif
 /* The RRAM doesn't have a page size, this is just for wolfBoot purposes */
 #define FLASH_PAGE_SIZE (0x1000UL) /* 4KB granularity */
 #define FLASH_END (FLASH_BASE_ADDR + FLASH_SIZE)
@@ -107,6 +111,12 @@ void uart_init(void);
 #define CLOCK_LFCLK_STAT_STATE_NotRunning 0x0UL
 #define CLOCK_LFCLK_STAT_STATE_Running 0x1UL
 
+/* CPU clock (HFCLK) frequency select */
+#define OSCILLATORS_PLL_FREQ        *((volatile uint32_t *)(OSCILLATORS_BASE + 0x800))
+#define OSCILLATORS_PLL_CURRENTFREQ *((volatile uint32_t *)(OSCILLATORS_BASE + 0x804))
+#define OSCILLATORS_PLL_FREQ_FREQ_Msk    0x3UL
+#define OSCILLATORS_PLL_FREQ_FREQ_CK128M 0x1UL
+
 /* LFCLK source and oscillator trims */
 #define OSCILLATORS_XOSC32KI_INTCAP *((volatile uint32_t *)(OSCILLATORS_BASE + 0x904))
 #define OSCILLATORS_XOSC32KI_INTCAP_ResetValue   0x00000017UL
@@ -119,7 +129,11 @@ void uart_init(void);
 #define FICR_XOSC32KTRIM_OFFSET_Msk  (0x3FFUL << FICR_XOSC32KTRIM_OFFSET_Pos)
 
 /* RRAM controller */
+#ifdef NRF54LM20
+#define RRAMC_BASE_DEFAULT            (0x5004E000UL)
+#else
 #define RRAMC_BASE_DEFAULT            (0x5004B000UL)
+#endif
 #define RRAMC_BASE                    RRAMC_BASE_DEFAULT
 
 #define RRAMC_TASKS_COMMITWRITEBUF    *((volatile uint32_t *)(RRAMC_BASE + 0x008))
@@ -142,6 +156,39 @@ void uart_init(void);
 
 #define RRAMC_CONFIG_WEN_Pos          0UL
 #define RRAMC_CONFIG_WEN_Msk          (0x1UL << RRAMC_CONFIG_WEN_Pos)
+
+/* Application core instruction cache (RRAM) */
+#define ICACHE_BASE                   (0xE0082000UL)
+#define ICACHE_TASKS_INVALIDATECACHE  *((volatile uint32_t *)(ICACHE_BASE + 0x008))
+#define ICACHE_STATUS                 *((volatile uint32_t *)(ICACHE_BASE + 0x400))
+#define ICACHE_ENABLE                 *((volatile uint32_t *)(ICACHE_BASE + 0x404))
+
+#define ICACHE_TASKS_INVALIDATECACHE_Trigger 0x1UL
+#define ICACHE_STATUS_READY_Msk       0x1UL
+#define ICACHE_STATUS_READY_Busy      0x1UL
+#define ICACHE_ENABLE_ENABLE_Enabled  0x1UL
+
+/* TIMER20 (PERI domain, 16 MHz base clock), used for BOOT_BENCHMARK */
+#if TZ_SECURE()
+    #define TIMER20_BASE_DEFAULT      (0x500CA000UL)
+#else
+    #define TIMER20_BASE_DEFAULT      (0x400CA000UL)
+#endif
+#define TIMER20_BASE                  TIMER20_BASE_DEFAULT
+
+#define TIMER_TASKS_START(base)       (*((volatile uint32_t *)((base) + 0x000)))
+#define TIMER_TASKS_STOP(base)        (*((volatile uint32_t *)((base) + 0x004)))
+#define TIMER_TASKS_CLEAR(base)       (*((volatile uint32_t *)((base) + 0x00C)))
+#define TIMER_TASKS_CAPTURE(base, n)  (*((volatile uint32_t *)((base) + 0x040 + ((n) * 4))))
+#define TIMER_MODE(base)              (*((volatile uint32_t *)((base) + 0x504)))
+#define TIMER_BITMODE(base)           (*((volatile uint32_t *)((base) + 0x508)))
+#define TIMER_PRESCALER(base)         (*((volatile uint32_t *)((base) + 0x510)))
+#define TIMER_CC(base, n)             (*((volatile uint32_t *)((base) + 0x540 + ((n) * 4))))
+
+#define TIMER_TASK_Trigger            0x1UL
+#define TIMER_MODE_MODE_Timer         0x0UL
+#define TIMER_BITMODE_BITMODE_32Bit   0x3UL
+#define TIMER_PRESCALER_1MHZ          4UL /* 16 MHz / 2^4 */
 
 /* TWIM */
 #if TZ_SECURE()
@@ -194,10 +241,12 @@ void uart_init(void);
     #define GPIO_P0_S_BASE               (0x5010A000UL)
     #define GPIO_P1_S_BASE               (0x500D8200UL)
     #define GPIO_P2_S_BASE               (0x50050400UL)
+    #define GPIO_P3_S_BASE               (0x500D8600UL)
 #else
     #define GPIO_P0_NS_BASE              (0x4010A000UL)
     #define GPIO_P1_NS_BASE              (0x400D8200UL)
     #define GPIO_P2_NS_BASE              (0x40050400UL)
+    #define GPIO_P3_NS_BASE              (0x400D8600UL)
 #endif
 
 /* GPIO configuration */
@@ -205,15 +254,18 @@ void uart_init(void);
     #define GPIO_PORT0_BASE_DEFAULT     GPIO_P0_S_BASE
     #define GPIO_PORT1_BASE_DEFAULT     GPIO_P1_S_BASE
     #define GPIO_PORT2_BASE_DEFAULT     GPIO_P2_S_BASE
+    #define GPIO_PORT3_BASE_DEFAULT     GPIO_P3_S_BASE
 #else
     #define GPIO_PORT0_BASE_DEFAULT     GPIO_P0_NS_BASE
     #define GPIO_PORT1_BASE_DEFAULT     GPIO_P1_NS_BASE
     #define GPIO_PORT2_BASE_DEFAULT     GPIO_P2_NS_BASE
+    #define GPIO_PORT3_BASE_DEFAULT     GPIO_P3_NS_BASE
 #endif
 
 #define GPIO0_BASE     GPIO_PORT0_BASE_DEFAULT
 #define GPIO1_BASE     GPIO_PORT1_BASE_DEFAULT
 #define GPIO2_BASE     GPIO_PORT2_BASE_DEFAULT
+#define GPIO3_BASE     GPIO_PORT3_BASE_DEFAULT
 
 static inline uintptr_t hal_gpio_port_base(unsigned int port)
 {
@@ -224,6 +276,10 @@ static inline uintptr_t hal_gpio_port_base(unsigned int port)
         return (uintptr_t)GPIO1_BASE;
     case 2:
         return (uintptr_t)GPIO2_BASE;
+#ifdef NRF54LM20
+    case 3:
+        return (uintptr_t)GPIO3_BASE;
+#endif
     default:
         return (uintptr_t)GPIO0_BASE;
     }
@@ -274,8 +330,13 @@ static inline uintptr_t hal_gpio_port_base(unsigned int port)
 
 // setup for DK board
 #define PORT_MONITOR       1
+#ifdef NRF54LM20
+#define PIN_TX_MONITOR     16
+#define PIN_RX_MONITOR     17
+#else
 #define PIN_TX_MONITOR     4
 #define PIN_RX_MONITOR     5
+#endif
 #if TZ_SECURE()
 #define BASE_ADDR_MONITOR  UARTE20_S_BASE
 #else
@@ -284,8 +345,13 @@ static inline uintptr_t hal_gpio_port_base(unsigned int port)
 
 // setup for DK board
 #define PORT_DOWNLOAD      0
+#ifdef NRF54LM20
+#define PIN_TX_DOWNLOAD    6
+#define PIN_RX_DOWNLOAD    7
+#else
 #define PIN_TX_DOWNLOAD    0
 #define PIN_RX_DOWNLOAD    1
+#endif
 #if TZ_SECURE()
 #define BASE_ADDR_DOWNLOAD  UARTE30_S_BASE
 #else
@@ -439,10 +505,18 @@ static inline int hal_uart_pin_num_rx(int device)
 #define NPM1300_REG_GPIOPDEN(n)       (0x060FU + (uint16_t)(n))
 
 /* SPIM */
+#ifdef NRF54LM20
+#if TZ_SECURE()
+    #define SPIM00_BASE_DEFAULT       (0x5004D000UL)
+#else
+    #define SPIM00_BASE_DEFAULT       (0x4004D000UL)
+#endif
+#else
 #if TZ_SECURE()
     #define SPIM00_BASE_DEFAULT       (0x5004A000UL)
 #else
     #define SPIM00_BASE_DEFAULT       (0x4004A000UL)
+#endif
 #endif
 
 #define SPI_BASE                    SPIM00_BASE_DEFAULT
@@ -565,7 +639,11 @@ static inline int hal_uart_pin_num_rx(int device)
 #define MPC_PERM_SECURE     (1UL << 3)  /* 0 = NonSecure, 1 = Secure */
 
 /* TAMPC - Tamper controller (access port protection) */
+#ifdef NRF54LM20
+#define TAMPC_BASE                              (0x500EF000UL)
+#else
 #define TAMPC_BASE                              (0x500DC000UL)
+#endif
 #define TAMPC_PROTECT_DOMAIN0_DBGEN_CTRL   (*(volatile uint32_t *)(TAMPC_BASE + 0x500))
 #define TAMPC_PROTECT_DOMAIN0_NIDEN_CTRL   (*(volatile uint32_t *)(TAMPC_BASE + 0x508))
 #define TAMPC_PROTECT_DOMAIN0_SPIDEN_CTRL  (*(volatile uint32_t *)(TAMPC_BASE + 0x510))
@@ -579,8 +657,15 @@ static inline int hal_uart_pin_num_rx(int device)
 #define TAMPC_SIGNAL_LOCK_Msk               (1UL << 1)
 
 /* CRACEN (Crypto Accelerator) */
-#define CRACEN_BASE                  (0x50048000UL)
-#define CRACENCORE_BASE              (0x51800000UL)
+#ifdef NRF54LM20
+#define CRACEN_BASE_DEFAULT          (0x50059000UL)
+#define CRACENCORE_BASE_DEFAULT      (0x50010000UL)
+#else
+#define CRACEN_BASE_DEFAULT          (0x50048000UL)
+#define CRACENCORE_BASE_DEFAULT      (0x51800000UL)
+#endif
+#define CRACEN_BASE                  CRACEN_BASE_DEFAULT
+#define CRACENCORE_BASE              CRACENCORE_BASE_DEFAULT
 
 /* CRACEN.ENABLE register (offset 0x400) */
 #define CRACEN_ENABLE                (*((volatile uint32_t *)(CRACEN_BASE + 0x400)))
@@ -592,9 +677,15 @@ static inline int hal_uart_pin_num_rx(int device)
 #define CRACENCORE_RNG_FIFOLEVEL     (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x004)))
 #define CRACENCORE_RNG_KEY(n)        (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x010 + (n)*4)))
 #define CRACENCORE_RNG_STATUS        (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x030)))
+#ifdef NRF54LM20
+/* The nRF54LM20 RNG has no switch-off timer; 0x044 is the sampling period */
+#define CRACENCORE_RNG_WARMUPPERIOD  (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x034)))
+#define CRACENCORE_RNG_SAMPLINGPERIOD (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x044)))
+#else
 #define CRACENCORE_RNG_INITWAITVAL   (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x034)))
 #define CRACENCORE_RNG_SWOFFTMRVAL   (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x040)))
 #define CRACENCORE_RNG_CLKDIV        (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x044)))
+#endif
 #define CRACENCORE_RNG_FIFO          (*((volatile uint32_t *)(CRACENCORE_RNGCTRL_BASE + 0x080)))
 
 #define CRACENCORE_RNG_CONTROL_ENABLE_Msk         (0x1UL << 0)
@@ -606,9 +697,14 @@ static inline int hal_uart_pin_num_rx(int device)
 #define CRACENCORE_RNG_STATUS_STATE_Msk     (0x7UL << CRACENCORE_RNG_STATUS_STATE_Pos)
 #define CRACENCORE_RNG_STATUS_STATE_RESET   0x0UL
 #define CRACENCORE_RNG_STATUS_STATE_STARTUP 0x1UL
+#define CRACENCORE_RNG_STATUS_STATE_ERROR   0x5UL
 
 /* TRNG configuration values recommended by Nordic */
 #define CRACENCORE_RNG_INITWAITVAL_DEFAULT  512UL
 #define CRACENCORE_RNG_NB128BITBLOCKS_DEFAULT 4UL
+#define CRACENCORE_RNG_SAMPLINGPERIOD_DEFAULT 0xFFFUL /* nRF54LM20 reset value */
+
+/* Upper bound on TRNG status polls before giving up */
+#define CRACENCORE_RNG_TIMEOUT              10000000UL
 
 #endif /* _HAL_NRF54L_H_ */

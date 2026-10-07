@@ -583,6 +583,8 @@ tools/unit-tests/unit-kontron-tgl-spi
 tools/unit-tests/unit-nrf5340-flash-protect
 tools/unit-tests/unit-nrf5340-uart-crlf
 tools/unit-tests/unit-nrf54l-uart-write
+tools/unit-tests/unit-nrf54l-flash
+tools/unit-tests/unit-nrf54lm20-flash
 tools/unit-tests/unit-nsc-update
 tools/unit-tests/unit-p1021-erase-advance
 tools/unit-tests/unit-p1021-read-badblock

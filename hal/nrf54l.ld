@@ -1,6 +1,6 @@
 MEMORY
 {
-    FLASH (rx) :          ORIGIN = @ARCH_FLASH_OFFSET@, LENGTH = @WOLFBOOT_KEYVAULT_ADDRESS@ - @ARCH_FLASH_OFFSET@
+    FLASH (rx) :          ORIGIN = @ARCH_FLASH_OFFSET@, LENGTH = @WOLFBOOT_NSC_ADDRESS@ - @ARCH_FLASH_OFFSET@
     RAM (rwx) :           ORIGIN = 0x20000000, LENGTH = 0xC000 /* 48K */
     RAM_HEAP (rw) :       ORIGIN = 0x2000C000, LENGTH = 0x4000 /* 16K */
     RAM_NS (rwx) :        ORIGIN = 0x20010000, LENGTH = 192K
@@ -29,6 +29,18 @@ SECTIONS
         *(.ARM.exidx*)
     } > FLASH
 
+    .data :
+    {
+        _start_data = .;
+        KEEP(*(.data*))
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
+        _end_data = .;
+    } > RAM AT > FLASH
+
+    _stored_data = LOADADDR(.data);
+
     .gnu.sgstubs ORIGIN(FLASH_NSC) :
     {
         . += 0x400;
@@ -36,16 +48,6 @@ SECTIONS
         *(.gnu.sgstubs*)   /* Secure Gateway Stubs */
         . = ALIGN(4);
     } > FLASH_NSC
-
-    _stored_data = .;
-
-    .data : AT (_stored_data)
-    {
-        _start_data = .;
-        KEEP(*(.data*))
-        . = ALIGN(4);
-        _end_data = .;
-    } > RAM
 
     .bss (NOLOAD) :
     {
