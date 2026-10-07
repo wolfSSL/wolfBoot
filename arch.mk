@@ -2282,6 +2282,9 @@ ifeq ("${FSP}", "1")
     OBJS += src/gpt.o
     OBJS += src/disk.o
     OBJS += src/x86/mptable.o
+    ifeq ($(ACPI),1)
+      OBJS += src/x86/acpi.o
+    endif
     OBJS += src/stage2_params.o
     OBJS += src/x86/exceptions.o
     OBJS += src/x86/gdt.o

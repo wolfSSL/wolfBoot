@@ -51,6 +51,12 @@ endif
 WOLFBOOT_TEST_FILLER?=0
 WOLFBOOT_TIME_TEST?=0
 
+# Generate a minimal ACPI table set (RSDP/XSDT/FADT/MADT/MCFG + DSDT) for the
+# x86 FSP Linux payload, so the OS gets the interrupt model and PCI routing.
+ifeq ($(ACPI),1)
+  CFLAGS+=-D"WOLFBOOT_ACPI"
+endif
+
 ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
