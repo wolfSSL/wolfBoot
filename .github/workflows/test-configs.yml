@@ -275,6 +275,24 @@ jobs:
       config-file: ./config/examples/nxp-t2080.config
       make-args: CFLAGS_EXTRA=-DBOARD_CW_VPX3152
 
+  # ELF=0 on both: the test app is a flat image linked at
+  # WOLFBOOT_LOAD_ADDRESS, and ELF=1 would sign test-app/image.elf instead,
+  # which elf_load then refuses because it is staged at its own link address.
+  nxp_t2080_sec_qoriq_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t2080.config
+      # The board macro relocates CCSRBAR; the SEC base follows it.
+      make-args: SEC_QORIQ=1 CFLAGS_EXTRA=-DBOARD_CW_VPX3152 WOLFCRYPT_TEST=1 ELF=0
+
+  nxp_t1040_sec_qoriq_test:
+    uses: ./.github/workflows/test-build-powerpc.yml
+    with:
+      arch: ppc
+      config-file: ./config/examples/nxp-t1040.config
+      make-args: SEC_QORIQ=1 WOLFCRYPT_TEST=1 ELF=0
+
   nxp_lpc54s0xx_test:
     uses: ./.github/workflows/test-build.yml
     with:
