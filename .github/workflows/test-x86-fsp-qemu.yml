@@ -46,10 +46,6 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
-      - name: setup git
-        run: |
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh
@@ -70,10 +66,25 @@ jobs:
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
           sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 uuid-dev dosfstools mtools e2fsprogs
-      - name: setup git
-        run: |
-          git config --global user.email "you@example.com"
-          git config --global user.name "Your Name"
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh -f
+
+  # TPM-NV anti-rollback: the floor anchors on a fresh swtpm, survives a TPM
+  # restart, and a validly signed downgrade boots and is counted.
+  fsp_qemu_antirollback_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: install req
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
+      - name: run test
+        run: |
+          ./tools/scripts/x86_fsp/qemu/test_qemu.sh -r

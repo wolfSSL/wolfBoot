@@ -83,6 +83,10 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #include "pci.h"
 #include "x86/tgl_fsp.h"
 
+#ifdef WOLFBOOT_ANTI_ROLLBACK
+#include "boot_state.h"
+#endif
+
 #ifdef TARGET_kontron_vx3060_s2
     #define BOOT_PART_A 5
     #define BOOT_PART_B 6
@@ -830,6 +834,9 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
 #endif
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+        boot_state_on_failure(BOOT_FAIL_NO_IMAGE);
+#endif
         wolfBoot_panic();
 #endif
     }
@@ -898,6 +905,9 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef DISK_ENCRYPT
                 disk_decrypted_header_clear(dec_hdr);
                 disk_crypto_clear();
+#endif
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+                boot_state_on_failure(BOOT_FAIL_ROLLBACK);
 #endif
                 wolfBoot_panic();
                 return;
@@ -1075,6 +1085,9 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_crypto_clear();
 #endif
         wolfBoot_printf("Unable to find a valid partition!\r\n");
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+        boot_state_on_failure(BOOT_FAIL_VERIFY_BOTH);
+#endif
         wolfBoot_panic();
         return;
     }
@@ -1306,6 +1319,26 @@ void RAMFUNCTION wolfBoot_start(void)
 #endif
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
     PART_SANITY_CHECK(&os_image);
+#endif
+#if defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_FSP)
+    /* Last step before handoff, so a failure above never moves the floor.
+     * The golden slot only locks. */
+#ifdef DISK_GOLDEN_SLOT
+    if (SLOT_IS_GOLDEN(selected))
+        boot_state_lock();
+    else
+#endif
+    {
+        /* Use the version from the verified header, not the early
+         * pre-verification reads. */
+        uint32_t booted_ver;
+#ifdef DISK_ENCRYPT
+        booted_ver = get_decrypted_blob_version(dec_hdr);
+#else
+        booted_ver = wolfBoot_get_blob_version((uint8_t *)hdr_ptr);
+#endif
+        boot_state_on_boot(booted_ver);
+    }
 #endif
 #ifdef DISK_ENCRYPT
     disk_decrypted_header_clear(dec_hdr);

@@ -1781,11 +1781,12 @@ int wolfBoot_tpm2_init(void)
 void wolfBoot_tpm2_deinit(void)
 {
 #ifdef WOLFBOOT_TPM_KEYSTORE
-    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH)
-    /* Enable parameter encryption for session */
-    int rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
-            (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
-             TPMA_SESSION_continueSession));
+    /* Anti-rollback has already disabled the platform hierarchy. */
+    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH) && \
+        !defined(WOLFBOOT_ANTI_ROLLBACK)
+    /* Password (empty platform auth) in slot 0; ChangePlatformAuth puts the
+     * parameter-encryption session in slot 1. */
+    int rc = wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
     if (rc == 0) {
         /* Change platform auth to random value, to prevent application
          * from being able to use platform hierarchy. This is defined in

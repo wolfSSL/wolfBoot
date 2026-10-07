@@ -57,6 +57,20 @@ ifeq ($(ACPI),1)
   CFLAGS+=-D"WOLFBOOT_ACPI"
 endif
 
+# TPM NV version floor and boot audit counters (see docs/Targets.md).
+# HALT_ON_FAILURE also halts when the TPM state cannot be read or locked.
+ifeq ($(ANTI_ROLLBACK),1)
+  ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2 nai_68int6),)
+    $(error ANTI_ROLLBACK=1 is only wired into the x86 FSP disk boot)
+  endif
+  CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK"
+  # The backend is TPM NV (src/boot_state_tpm.c), so wolfTPM is required.
+  WOLFTPM:=1
+  ifeq ($(ANTI_ROLLBACK_HALT_ON_FAILURE),1)
+    CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK_HALT_ON_FAILURE"
+  endif
+endif
+
 ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)

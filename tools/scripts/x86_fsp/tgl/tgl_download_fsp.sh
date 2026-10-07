@@ -54,7 +54,9 @@ download_split_tool() {
 }
 
 patch_tgl_fsp() {
-    (cd "$WORK_DIR"/FSP && git am --keep-cr "${PATCH}")
+    # Identity for the patch commit in the scratch FSP clone only
+    (cd "$WORK_DIR"/FSP && git -c user.name=wolfBoot \
+        -c user.email=wolfboot@wolfssl.com am --keep-cr "${PATCH}")
 }
 
 rebase_fsp_component() {

@@ -40,6 +40,9 @@ extern WOLFTPM2_KEY     wolftpm_srk;
 #ifndef WOLFBOOT_TPM_SEAL_NV_BASE
     #define WOLFBOOT_TPM_SEAL_NV_BASE     0x01400300
 #endif
+#ifndef WOLFBOOT_TPM_BOOT_STATE_NV_BASE
+    #define WOLFBOOT_TPM_BOOT_STATE_NV_BASE 0x01400400
+#endif
 /* The PCR bank algorithm and its digest size must always agree. They used to
  * be defined together under a single #ifndef on the algorithm, which meant
  * overriding only WOLFBOOT_TPM_PCR_ALG left WOLFBOOT_TPM_PCR_DIG_SZ undefined
