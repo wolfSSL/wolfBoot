@@ -1,0 +1,102 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T1040 TRACE32 Attach (no reset)
+; @Description:
+;   Attaches TRACE32 to a T1040 that is ALREADY running - stage1, wolfBoot, the
+;   test app, or a booted OS. Does NOT reset the CPU, does NOT override the RCW,
+;   and does not touch flash. Loads wolfBoot symbols when wolfboot.elf is
+;   present, and arms a hardware breakpoint at an address given as an argument.
+; @Chip: T1040
+;
+; Prerequisites:
+;   - Board powered on and the boot core running.
+;   - wolfboot.elf at the build root (optional; loaded for symbols only).
+;
+; Usage in TRACE32:
+;   DO tools/scripts/nxp_t1040/t1040_trace32_attach.cmm
+;   DO tools/scripts/nxp_t1040/t1040_trace32_attach.cmm 0x7FF00000
+;
+; Two things worth knowing on this target:
+;
+;   - Halt before reading memory. With the core running, reads can return
+;     "access time-out" even with SYStem.MemAccess CPU. Break, then
+;     WAIT !STATE.RUN(), then read.
+;   - Use D: for NOR, not ANC:. On this board ANC: reads of the NOR window
+;     return 0 while the same addresses via D: return correct data, because D:
+;     goes through the TLB that stage1/wolfBoot has already set up. The
+;     corollary is that D: follows the core's CURRENT TLBs, so a window mapped
+;     by one image may be unmapped under another - point-read a known value to
+;     prove the window is live before trusting a bulk read.
+;
+; Boot chain for reference: stage1 at 0xEFFFC000 copies wolfBoot to DDR at
+; 0x7FF00000 and branches there; wolfBoot then loads the application to
+; 0x70000000. The final word of stage1 is the CPU reset vector at 0xEFFFFFFC.
+; ------------------------------------------------------------------------------
+
+LOCAL &bpaddr
+ENTRY &bpaddr
+
+&basedir="."
+
+ChDir &basedir
+
+PRINT "========================================"
+PRINT "T1040 TRACE32 ATTACH (no reset)"
+PRINT "========================================"
+
+; Configure the debug session WITHOUT resetting or cycling the target.
+SYStem.CPU T1040
+CORE.ASSIGN 1.
+SYStem.Option.IMASKASM ON
+SYStem.Option.FREEZE ON
+
+PRINT "Attaching (no reset)..."
+SYStem.Mode.Attach
+
+; Allow non-intrusive memory access once the target is resumed.
+SYStem.MemAccess CPU
+
+; Halt so register and memory reads are reliable (see note above).
+Break
+WAIT !STATE.RUN() 10.s
+
+PRINT "Halted. PC: " Register(PC)
+PRINT "MSR:        " Register(MSR)
+
+; CCSRBAR is board and boot-stage dependent on this part, so report both
+; candidate bases rather than assuming one. A base that is not mapped reads
+; back 0 instead of erroring, so a zero here just means "not this one".
+PRINT "SVR at CCSR 0xFE000000: " Data.Long(ANC:0xFE0E00A4)
+PRINT "SVR at CCSR 0xEF000000: " Data.Long(ANC:0xEF0E00A4)
+
+; Load wolfBoot symbols if available. Harmless when the target is running
+; something else; the symbol table simply will not match the PCs.
+IF OS.FILE(&basedir/wolfboot.elf)
+(
+    PRINT "Loading wolfboot.elf symbols (no-code)..."
+    Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE
+    sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/include
+)
+ELSE
+(
+    PRINT "(no wolfboot.elf at &basedir - skipping symbol load)"
+)
+
+; Use hardware (Onchip) breakpoints so they fire whether the target address is
+; cached or not.
+Break.Delete /ALL
+
+IF "&bpaddr"!=""
+(
+    Break.Set &bpaddr /Program /Onchip
+    PRINT "BP set: " &bpaddr
+)
+ELSE
+(
+    PRINT "No breakpoint address given - attached and halted only."
+)
+
+PRINT ""
+PRINT "Issue 'Go' to resume the target."
+PRINT "========================================"
+
+ENDDO
