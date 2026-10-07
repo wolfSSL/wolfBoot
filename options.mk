@@ -54,7 +54,15 @@ WOLFBOOT_TIME_TEST?=0
 # Generate a minimal ACPI table set (RSDP/XSDT/FADT/MADT/MCFG + DSDT) for the
 # x86 FSP Linux payload, so the OS gets the interrupt model and PCI routing.
 ifeq ($(ACPI),1)
+  ifneq ($(TARGET),nai_68int6)
+    $(error ACPI=1 tables (CPU list, DSDT routing) are specific to nai_68int6)
+  endif
   CFLAGS+=-D"WOLFBOOT_ACPI"
+endif
+ifeq ($(TARGET),nai_68int6)
+  ifneq ($(ACPI),1)
+    $(error nai_68int6 needs ACPI=1: its PCI interrupt routing is only in the DSDT)
+  endif
 endif
 
 # TPM NV version floor and boot audit counters (see docs/Targets.md).
@@ -1601,6 +1609,7 @@ ifeq ($(FSP), 1)
     X86_UART_BASE \
     X86_UART_REG_WIDTH \
     X86_UART_MMIO \
+    X86_UART_NUMBER \
     PCH_HAS_PCR \
     PCI_USE_ECAM \
     PCH_PCR_BASE \

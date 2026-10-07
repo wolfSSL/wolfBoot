@@ -64,6 +64,15 @@ uint8_t mb2_boot_info[MAX_MB2_BOOT_INFO_SIZE];
 
 #ifdef TARGET_kontron_vx3060_s2
 static char *cmdline = "apic=verbose acpi=no pci=debug console=ttyS0,115200 debug";
+#elif defined(TARGET_nai_68int6)
+#define CMDLINE_STR_(x) #x
+#define CMDLINE_STR(x) CMDLINE_STR_(x)
+/* earlycon covers LPSS UART2 at its FSP-assigned base until the 8250 driver
+ * binds it as ttyS4 */
+static char *cmdline =
+    "earlycon=uart8250,mmio32," CMDLINE_STR(X86_UART_BASE) ",115200n8 "
+    "console=ttyS4,115200 console=tty0 "
+    "root=/dev/sda2 rw rootwait";
 #elif TARGET_x86_fsp_qemu
 static char *cmdline = "console=ttyS0,115200 pci=earlydump debug";
 #else

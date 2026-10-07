@@ -477,7 +477,7 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
     int rc;
 #ifdef WOLFBOOT_DEBUG_TPM
     uint8_t digest[WOLFBOOT_TPM_PCR_DIG_SZ];
-    int     digestSz = 0;
+    int     digestSz = (int)sizeof(digest);
 #endif
 
     /* clear auth session for PCR */
@@ -502,7 +502,8 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 
         wolfBoot_printf("PCR %d: Res %d, Digest Sz %d\n",
             pcrIndex, read_rc, digestSz);
-        wolfBoot_print_bin(digest, digestSz);
+        if (read_rc == 0)
+            wolfBoot_print_bin(digest, digestSz);
     }
     else {
         wolfBoot_printf("Measure boot failed! Index %d, %x (%s)\n",

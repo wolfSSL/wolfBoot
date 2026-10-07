@@ -1,4 +1,6 @@
-/* kontron_vx3060_s2_loader.c
+/* nai_68int6.c
+ *
+ * HAL for the NAI 68INT6 3U OpenVPX SBC (Intel Tiger Lake UP3).
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -6,7 +8,7 @@
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
+ * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * wolfBoot is distributed in the hope that it will be useful,
@@ -20,27 +22,41 @@
  */
 
 #include <wolfboot/wolfboot.h>
+#include <hal.h>
 #include <stdint.h>
-#include <string.h>
 #include <uart_drv.h>
+#include <printf.h>
+#include <pci.h>
+#include <x86/gdt.h>
+#include <x86/fsp.h>
+#include <x86/common.h>
 
 #ifdef __WOLFBOOT
-#include <printf.h>
-
-
-static void panic(void);
 
 void hal_init(void)
 {
+    gdt_setup_table();
+    gdt_update_segments();
+    fsp_init_silicon();
 }
 
 void hal_prepare_boot(void)
 {
 }
-#endif
+#endif /* __WOLFBOOT */
 
-int hal_flash_write(uint32_t address, const uint8_t *data, int len)
+int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
+    (void)address;
+    (void)data;
+    (void)len;
+    return 0;
+}
+
+int hal_flash_erase(uintptr_t address, int len)
+{
+    (void)address;
+    (void)len;
     return 0;
 }
 
@@ -52,15 +68,11 @@ void hal_flash_lock(void)
 {
 }
 
-int hal_flash_erase(uint32_t address, int len)
-{
-    return 0;
-}
-
+/* No automatic fallback: a verification failure is terminal on this
+ * target rather than silently reverting. */
 int wolfBoot_fallback_is_possible(void)
 {
     return 0;
-
 }
 
 int wolfBoot_dualboot_candidate(void)
@@ -75,7 +87,7 @@ void* hal_get_primary_address(void)
 
 void* hal_get_update_address(void)
 {
-  return (void*)0;
+    return (void*)0;
 }
 
 void *hal_get_dts_address(void)
@@ -86,9 +98,4 @@ void *hal_get_dts_address(void)
 void *hal_get_dts_update_address(void)
 {
     return 0;
-}
-
-static void panic(void)
-{
-    while(1) {}
 }
