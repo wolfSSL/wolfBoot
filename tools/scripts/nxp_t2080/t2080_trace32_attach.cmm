@@ -1,0 +1,110 @@
+; ------------------------------------------------------------------------------
+; @Title: NXP T2080 TRACE32 Attach (no reset)
+; @Description:
+;   Attaches TRACE32 to a T2080 that is ALREADY running - U-Boot, wolfBoot, or a
+;   booted OS. Does NOT reset the CPU, does NOT override the RCW, and does not
+;   touch flash. Loads wolfBoot symbols when wolfboot.elf is present, and arms a
+;   hardware breakpoint at an address given as an argument.
+; @Chip: T2080
+;
+; Prerequisites:
+;   - Board powered on and the boot core running.
+;   - wolfboot.elf at the build root (optional; loaded for symbols only).
+;
+; Usage in TRACE32:
+;   DO tools/scripts/nxp_t2080/t2080_trace32_attach.cmm
+;   DO tools/scripts/nxp_t2080/t2080_trace32_attach.cmm 0x00100000
+;
+; Note on memory reads: with the core running, reads can return "access
+; time-out" even with SYStem.MemAccess CPU. Halt first (Break, then
+; WAIT !STATE.RUN()) before reading memory. Also remember that D: follows the
+; core's CURRENT TLBs, so a window mapped by U-Boot may be unmapped once an OS
+; has booted - point-read a known value before trusting a bulk read.
+; ------------------------------------------------------------------------------
+
+LOCAL &bpaddr
+ENTRY &bpaddr
+
+&basedir="."
+
+ChDir &basedir
+
+PRINT "========================================"
+PRINT "T2080 TRACE32 ATTACH (no reset)"
+PRINT "========================================"
+
+; Configure the debug session WITHOUT resetting or cycling the target.
+SYStem.BdmClock 5.MHz
+SYStem.CPU T2080
+CORE.ASSIGN 1.
+SYStem.Option.IMASKASM ON
+SYStem.Option.FREEZE ON
+
+PRINT "Attaching (no reset)..."
+SYStem.Mode.Attach
+
+; Allow non-intrusive memory access while the CPU is running.
+SYStem.MemAccess CPU
+
+; Halt before reading, per the note above: a run-time read can time out and
+; hand back 0, which would then trip the SVR family warning below for no
+; reason. The T1040 script halts here for the same reason.
+Break
+WAIT !STATE.RUN() 10.s
+
+PRINT "Halted. PC: " Register(PC)
+
+; SVR/PVR sanity check. CCSRBAR is board relocated - the CW VPX3-152 U-Boot
+; moves it to 0xEF000000 - so probe there first and fall back to the
+; 0xFE000000 reset value. Reading the wrong base returns 0 rather than
+; erroring, which is what makes this probe safe.
+&ccsr=0xEF000000
+&svr=Data.Long(ANC:&ccsr+0x0E00A4)
+IF (&svr&0xFFF00000)!=0x85300000
+(
+    &ccsr=0xFE000000
+    &svr=Data.Long(ANC:&ccsr+0x0E00A4)
+)
+&pvr=Data.Long(ANC:&ccsr+0x0E00A0)
+PRINT "CCSRBAR: " &ccsr
+PRINT "SVR (CCSR+0xE00A4): " &svr
+PRINT "PVR (CCSR+0xE00A0): " &pvr
+; T2080 SVR is in the 0x853xxxxx family - a T2080E reads 0x85380011 - so mask
+; to the family nibbles, not the full upper half. e6500 PVR is 0x8040xxxx.
+IF (&svr&0xFFF00000)!=0x85300000
+(
+    PRINT %WARNING "WARNING: SVR " &svr " is not in the expected T2080 0x853 family - check the connection."
+)
+
+; Load wolfBoot symbols if available. Harmless when the target is running
+; something else; the symbol table simply will not match the PCs.
+IF OS.FILE(&basedir/wolfboot.elf)
+(
+    PRINT "Loading wolfboot.elf symbols (no-code)..."
+    Data.LOAD.Elf &basedir/wolfboot.elf /NoCODE
+    sYmbol.SourcePATH.Set &basedir &basedir/src &basedir/hal &basedir/include
+)
+ELSE
+(
+    PRINT "(no wolfboot.elf at &basedir - skipping symbol load)"
+)
+
+; Use hardware (Onchip) breakpoints so they fire whether the target address is
+; cached or not. e6500 has 4 IAC slots, so stay within that limit.
+Break.Delete /ALL
+
+IF "&bpaddr"!=""
+(
+    Break.Set &bpaddr /Program /Onchip
+    PRINT "BP set: " &bpaddr
+)
+ELSE
+(
+    PRINT "No breakpoint address given - attached only."
+)
+
+PRINT ""
+PRINT "Attached and halted. Issue 'Go' to resume the target."
+PRINT "========================================"
+
+ENDDO
