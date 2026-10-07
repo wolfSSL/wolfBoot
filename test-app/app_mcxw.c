@@ -1,6 +1,6 @@
-/* app_mcxa.c
+/* app_mcxw.c
  *
- * Test bare-metal boot-led-on application
+ * Test bare-metal application for the NXP MCX W71
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -21,73 +21,83 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-
-#include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
+
 #include "fsl_common.h"
+#include "fsl_clock.h"
 #include "fsl_port.h"
 #include "fsl_gpio.h"
-#include "fsl_clock.h"
 
-#include "wolfboot/wolfboot.h"
 #include "target.h"
+#include "wolfboot/wolfboot.h"
+#include "printf.h"
+#include "hal/mcxw.h"
 
-extern void hal_init(void);
+#ifdef WOLFCRYPT_SECURE_MODE
+#include "wolfssl/wolfcrypt/types.h"
+#include "wolfssl/wolfcrypt/random.h"
+#endif
 
-/* init gpio for port 3 */
-void gpio_portA_init(int pin)
+static void leds_init(void)
 {
-    const port_pin_config_t GPIO_OUT_LED = {
-        (uint16_t)kPORT_PullDisable,
-        (uint16_t)kPORT_LowPullResistor,
-        (uint16_t)kPORT_FastSlewRate,
-        (uint16_t)kPORT_PassiveFilterDisable,
-        (uint16_t)kPORT_OpenDrainDisable,
-        (uint16_t)kPORT_LowDriveStrength,
-        (uint16_t)kPORT_NormalDriveStrength,
-        (uint16_t)kPORT_MuxAsGpio,
-        (uint16_t)kPORT_UnlockRegister
-    };
-
-    const gpio_pin_config_t GPIO_OUT_LED_config = {
-        .pinDirection = kGPIO_DigitalOutput,
-        .outputLogic = 0U
-    };
-
-
-    /* Initialize GPIO functionality on pin */
-    GPIO_PinInit(GPIOA, pin, &GPIO_OUT_LED_config);
-    PORT_SetPinConfig(PORTA, pin, &GPIO_OUT_LED);
-    GPIO_PinWrite(GPIOA, pin, 1);
+#ifndef TZEN
+    /* With TrustZone, wolfBoot sets up the clock and mux before boot */
+    CLOCK_EnableClock(kCLOCK_GpioA);
+    CLOCK_EnableClock(kCLOCK_PortA);
+    PORT_SetPinMux(PORTA, MCXW_LED_GREEN_PIN, kPORT_MuxAsGpio);
+    PORT_SetPinMux(PORTA, MCXW_LED_BLUE_PIN, kPORT_MuxAsGpio);
+    PORT_SetPinMux(PORTA, MCXW_LED_RED_PIN, kPORT_MuxAsGpio);
+#endif
+    GPIO_PortSet(GPIOA, MCXW_LED_PINS_MASK);
+    GPIOA->PDDR |= MCXW_LED_PINS_MASK;
 }
+
+#ifdef WOLFCRYPT_SECURE_MODE
+static void print_random_number(void)
+{
+    uint8_t rnd;
+    int ret;
+
+    ret = wcs_get_random(&rnd, sizeof(rnd));
+    if (ret != 0)
+        wolfBoot_printf("Random number: generate failed (%d)\n", ret);
+    else
+        wolfBoot_printf("Today's lucky number: 0x%02x\n", rnd);
+}
+#endif
 
 void main(void)
 {
-    int i = 0;
-    uint8_t* bootPart = (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    uint32_t bootVer = wolfBoot_get_blob_version(bootPart);
-    /* Enable GPIO port clocks */
-    CLOCK_EnableClock(kCLOCK_GpioA);
-    CLOCK_EnableClock(kCLOCK_PortA);
-    CLOCK_EnableClock(kCLOCK_PortC);
-    gpio_portA_init(18);
-    gpio_portA_init(19);
-    gpio_portA_init(20);
+    uint32_t boot_ver;
 
-    if (bootVer == 1) {
-        wolfBoot_update_trigger();
-        /* Blue LED ON, GPIOA port A pin 20 */
-        GPIO_PinWrite(GPIOA, 20, 0);
+    leds_init();
+
+#ifdef TZEN
+    boot_ver = wolfBoot_nsc_current_firmware_version();
+#else
+    boot_ver = wolfBoot_current_firmware_version();
+#endif
+
+    wolfBoot_printf("Hello from MCXW71 firmware version %d\n", boot_ver);
+
+#ifdef WOLFCRYPT_SECURE_MODE
+    print_random_number();
+#endif
+
+    if (boot_ver == 1) {
+        GPIO_PortClear(GPIOA, 1U << MCXW_LED_BLUE_PIN);
     }
     else {
-        /* mark boot successful */
+#ifdef TZEN
+        wolfBoot_nsc_success();
+#else
         wolfBoot_success();
-        /* Green LED ON, GPIOA port A pin 19 */
-        GPIO_PinWrite(GPIOA, 19, 0);
+#endif
+        wolfBoot_printf("Update successful, firmware version %d confirmed\n",
+                boot_ver);
+        GPIO_PortClear(GPIOA, 1U << MCXW_LED_GREEN_PIN);
     }
 
-    /* busy wait */
     while (1) {
         __WFI();
     }

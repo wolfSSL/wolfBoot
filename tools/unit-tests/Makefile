@@ -99,7 +99,6 @@ TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
 TESTS+=unit-flash-erase-c0
 TESTS+=unit-flash-erase-u3
-TESTS+=unit-flash-erase-mcxw
 TESTS+=unit-flash-erase-kinetis
 TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
@@ -209,6 +208,7 @@ endif
 MCUXSDK?=
 MCXA_SDK=$(MCUXSDK)/devices/MCX/MCXA/MCXA153
 RW612_SDK=$(MCUXSDK)/devices/Wireless/RW/RW612
+MCXW_SDK=$(MCUXSDK)/devices/MCX/MCXW/MCXW716C
 ifneq ($(wildcard $(MCXA_SDK)/MCXA153.h),)
 TESTS+=unit-flash-write-mcxa
 else
@@ -220,6 +220,12 @@ TESTS+=unit-rw612-tz
 TESTS+=unit-rw612-uart
 else
 $(info Skipping RW612 unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
+endif
+ifneq ($(wildcard $(MCXW_SDK)/MCXW716C.h),)
+TESTS+=unit-mcxw-flash
+TESTS+=unit-mcxw-tz
+else
+$(info Skipping MCX W unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
 endif
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-nrf5340-uart-crlf
@@ -752,20 +758,11 @@ unit-flash-erase-c0: unit-flash-erase-c0.c ../../hal/stm32c0.c
 unit-flash-erase-u3: unit-flash-erase-u3.c ../../hal/stm32u3.c ../../hal/stm32u3.h
 	gcc -o $@ unit-flash-erase-u3.c -I../../ $(CFLAGS) $(LDFLAGS)
 
-# unit-flash-erase-mcxw includes hal/mcxw.c directly (guarded to hal_flash_erase
-# via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so mcxw.c is not a separate input and the
-# (not vendored) NXP MCUXpresso SDK headers are not needed. The erase command
-# takes a uint32_t flash address as a pointer, which is only a narrowing cast on
-# the 64-bit host.
 kinetis_erase_extract.h: ../../hal/kinetis.c
 	sed -n '/^int RAMFUNCTION hal_flash_erase(/,/^}/p' $< > $@
 
 unit-flash-erase-kinetis: unit-flash-erase-kinetis.c kinetis_erase_extract.h
 	gcc -o $@ unit-flash-erase-kinetis.c $(CFLAGS) $(LDFLAGS)
-
-unit-flash-erase-mcxw: unit-flash-erase-mcxw.c ../../hal/mcxw.c
-	gcc -o $@ unit-flash-erase-mcxw.c -Wno-int-to-pointer-cast \
-		$(CFLAGS) $(LDFLAGS)
 
 # unit-flash-m2354 includes hal/m2354.c directly (guarded to the flash driver
 # via WOLFBOOT_UNIT_TEST_FLASH), so m2354.c is not a separate input and the
@@ -1996,6 +1993,22 @@ unit-rw612-uart: unit-rw612-uart.c ../../hal/rw612.c
 		-isystem $(MCUXSDK)/drivers/flexcomm \
 		-isystem $(MCUXSDK)/drivers/flexcomm/usart $(CFLAGS) $(LDFLAGS)
 
+MCXW_SSS=$(MCUXSDK)/middleware/secure-subsystem
+MCXW_TEST_INC=-DCPU_MCXW716CMFTA $(MCUXSDK_TEST_INC) -isystem $(MCXW_SDK) \
+	-isystem $(MCXW_SDK)/../periph2 -isystem $(MCXW_SDK)/drivers \
+	-isystem $(MCUXSDK)/drivers/port -isystem $(MCUXSDK)/drivers/lpuart \
+	-isystem $(MCUXSDK)/drivers/tstmr -isystem $(MCUXSDK)/drivers/elemu \
+	-isystem $(MCXW_SSS)/inc -isystem $(MCXW_SSS)/inc/elemu \
+	-isystem $(MCXW_SSS)/src/sscp \
+	-DSSCP_CONFIG_FILE='"fsl_sscp_config_elemu.h"' \
+	-DSSS_CONFIG_FILE='"fsl_sss_config_elemu.h"'
+
+unit-mcxw-flash: unit-mcxw-flash.c ../../hal/mcxw.c ../../hal/mcxw.h
+	gcc -o $@ unit-mcxw-flash.c $(MCXW_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
+unit-mcxw-tz: unit-mcxw-tz.c unit-mmio.h ../../hal/mcxw.c ../../hal/mcxw.h
+	gcc -o $@ unit-mcxw-tz.c $(MCXW_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
 unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
 	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
@@ -2075,7 +2088,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 # lost gnu-efi/multilib/the MCUXpresso SDK keeps a stale binary forever.
 CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
 	unit-linux-loader-syssize unit-flash-write-mcxa unit-rw612-flash \
-	unit-rw612-tz unit-rw612-uart
+	unit-rw612-tz unit-rw612-uart unit-mcxw-flash unit-mcxw-tz
 
 clean: covclean
 	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \

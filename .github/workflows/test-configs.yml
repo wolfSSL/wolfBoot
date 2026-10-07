@@ -324,6 +324,31 @@ jobs:
       config-file: ./config/examples/mcxw-tz.config
       board-name: frdmmcxw71
 
+  nxp_mcxw_no_uart_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw.config
+      board-name: frdmmcxw71
+      make-args: "DEBUG_UART=0"
+
+  nxp_mcxw_wolfcrypt_tz_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw-tz.config
+      board-name: frdmmcxw71
+      make-args: "WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1"
+
+  # Without the console the S200 entropy objects must still link
+  nxp_mcxw_wolfcrypt_tz_no_uart_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw-tz.config
+      board-name: frdmmcxw71
+      make-args: "WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1 DEBUG_UART=0"
+
   nxp_mcxn_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:

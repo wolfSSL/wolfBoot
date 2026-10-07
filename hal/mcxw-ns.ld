@@ -1,7 +1,7 @@
 MEMORY
 {
-    FLASH (rx) : ORIGIN = 0x00000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 24K
+    FLASH (rx) : ORIGIN = @ARCH_FLASH_OFFSET@, LENGTH = @BOOTLOADER_PARTITION_SIZE@
+    RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 0x1C000 /* 112K STCM */
 }
 
 SECTIONS
@@ -32,6 +32,8 @@ SECTIONS
     .data : AT (_stored_data)
     {
         _start_data = .;
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         KEEP(*(.data*))
         . = ALIGN(4);
         _end_data = .;
@@ -52,3 +54,9 @@ SECTIONS
 }
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
+
+ASSERT(hal_flash_write >= ORIGIN(RAM) && hal_flash_erase >= ORIGIN(RAM),
+       "MCX W flash routines must run from RAM (RAM_CODE=1)")
+
+_start_ecc_ram = ORIGIN(RAM);
+_end_ecc_ram = ORIGIN(RAM) + LENGTH(RAM);

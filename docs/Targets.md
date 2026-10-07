@@ -7058,114 +7058,150 @@ c
 
 ## NXP MCXW716
 
-NXP MCXW716 is a Cortex-M33 microcontroller running at 96MHz.
-The support has been tested using FRDM-MCXW716 with the onboard MCU-Link configured in JLink mode.
+The NXP MCX W71 (MCXW716C) is a 96MHz Cortex-M33 wireless MCU (Bluetooth LE,
+802.15.4) with TrustZone-M, the DSP extension and an FPU, 1MB of internal flash
+at `0x0` (secure alias `0x10000000`) and 128KB of SRAM. The support has been
+tested on the FRDM-MCXW71 board, with its on-board MCU-Link in J-Link mode.
 
-This requires the NXP MCUXpresso SDK. We tested using [mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests)
-and [CMSIS_5](https://github.com/nxp-mcuxpresso/CMSIS_5) placed under "../NXP".
-Adjust the MCUXPRESSO and MCUXPRESSO_CMSIS variables in your .config file
-according to your paths.
+The flash has 8KB sectors and ECC over 16-byte phrases: a phrase can be
+programmed once between erases, hence `NVM_FLASH_WRITEONCE=1`. The boot ROM
+initializes only part of the ECC SRAM, so wolfBoot clears its RAM at reset
+(`WOLFBOOT_RAM_ECC_INIT`). The last flash sector (`0xFE000`) holds the NXP
+`PROD_DATA` hardware parameters (Bluetooth address, crystal trim): the HAL
+refuses to program or erase it, so keep custom layouts below `0xFE000`.
 
-To set up the MCUXpresso SDK:
+This requires the NXP MCUXpresso SDK, placed under `../NXP` by default:
 
-```
-cd ../NXP
-
-# Install west
-python -m venv west-venv
-source west-venv/bin/activate
+```sh
+mkdir -p ../NXP && cd ../NXP
+python3 -m venv west-venv
+. west-venv/bin/activate
 pip install west
-
-# Set up the repository
 west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
 cd mcuxpresso-sdk
 west update_board --set board frdmmcxw71
-
 deactivate
 ```
 
 ### MCX W: Configuring and compiling
 
-Copy the example configuration file and build with make:
-
 ```sh
-cp config/examples/mcxw.config .config`
+cp config/examples/mcxw.config .config
 make
 ```
 
-We also provide a TrustZone configuration at `config/examples/mcxw-tz.config`.
+We provide two configuration files:
+- `mcxw.config`: wolfBoot and the application both run in the secure world.
+- `mcxw-tz.config`: wolfBoot runs in the secure world and the application in
+  the non-secure world, calling wolfBoot through non-secure callable (NSC)
+  veneers.
+
+To add the non-secure callable wolfPKCS11 API, build `mcxw-tz.config` with
+`make WOLFCRYPT_TZ=1 WOLFCRYPT_TZ_PKCS11=1`. The MCX W71 has no TRNG of its
+own: wolfCrypt takes its entropy from the EdgeLock S200 secure enclave, through
+the SDK secure-subsystem (SSS) API.
+
+| Region | `mcxw.config` | `mcxw-tz.config` |
+|---|---|---|
+| wolfBoot | `0x00000` (64KB) | `0x00000` (192KB) |
+| NSC veneers | - | `0x30000` (8KB) |
+| BOOT partition | `0x10000` (448KB) | `0x32000` (352KB) |
+| UPDATE partition | `0x80000` (448KB) | `0x8A000` (352KB) |
+| SWAP sector | `0xF0000` (8KB) | `0xE2000` (8KB) |
+| Keyvault | - | `0xE4000` (96KB) |
+| NXP `PROD_DATA` | `0xFE000` (8KB) | `0xFE000` (8KB) |
+
+With `mcxw-tz.config` the SAU makes non-secure only the BOOT partition, the
+SRAM at `0x20016000-0x20019FFF`, LPUART1 and GPIOA, and wolfBoot hands the RGB
+LED pins over to the application. The flash controller, the UPDATE and SWAP
+partitions, the keyvault, the S200 messaging unit and the clock and pin-mux
+controllers stay secure. Extend `hal_sau_init()` and `periph_unsecure()` in
+`hal/mcxw.c` to expose more peripherals.
 
 ### MCX W: Loading the firmware
 
-The NXP Freedom MCX W board debugger comes loaded with MCU Link, but it can be updated to JLink.
-- Download and install the tool to update MCU Link to support jlink:
-[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+NXP does not publish a CMSIS pack for the MCX W71, so pyOCD cannot program its
+flash. The FRDM-MCXW71 MCU-Link ships with CMSIS-DAP firmware for NXP
+LinkServer, and can be switched to J-Link firmware:
 
-- put the rom bootloader in 'dfu' mode by adding a jumper in JP5 (ISP_EN)
+- Install [LinkServer](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads).
+- Put the MCU-Link in DFU mode with a jumper on JP5 (ISP_EN).
+- Run `scripts/program_JLINK` from the LinkServer installation, then remove
+  the jumper.
 
-- run `scripts/program_JLINK` to update the onboard debugger
+Program `factory.bin` (wolfBoot and the signed version 1 application) with
+J-Link:
 
-- when the update is complete, remove the jumper in JP5
-
-Use JLinkExe tool to upload the initial firmware: `JLinkExe -if swd -Device MCXW716`
-
-At the Jlink prompt, type:
-
-```
-loadbin factory.bin 0
-Downloading file [factory.bin]...
-J-Link: Flash download: Bank 0 @ 0x00000000: Skipped. Contents already match
-O.K.
+```sh
+JLinkExe -device MCXW716C -if SWD -speed 4000 -autoconnect 1
 ```
 
-Reset or power cycle board.
+At the J-Link prompt:
 
-The blue led (PA20) will show to indicate version 1 of the firmware has been staged.
+```
+loadbin factory.bin 0x0
+r
+g
+q
+```
 
+The console is LPUART1 (PTC2/PTC3) on the MCU-Link virtual COM port, at
+115200 baud:
+
+```
+Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
+Hello from MCXW71 firmware version 1
+```
+
+The blue LED is on while version 1 runs.
 
 ### MCX W: Testing firmware update
 
-1) Sign the test-app with version 2:
+1) Sign the test application as version 2:
 
 ```sh
-./tools/keytools/sign --ecc256 test-app/image.bin wolfboot_signing_private_key.der 2
+./tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
-2) Create a bin footer with wolfBoot trailer "BOOT" and "p" (ASCII for 0x70 == IMG_STATE_UPDATING):
+2) Create the update trigger, the "BOOT" trailer magic preceded by "p"
+(`0x70`, `IMG_STATE_UPDATING`):
 
 ```sh
-echo -n "pBOOT" > trigger_magic.bin
+printf "pBOOT" > trigger_magic.bin
 ```
 
-3) Assembly new factory update.bin:
+3) Assemble `update.bin` with the trigger at `WOLFBOOT_PARTITION_SIZE - 5`
+(`0x6FFFB` for `mcxw.config`, `0x57FFB` for `mcxw-tz.config`):
 
 ```sh
 ./tools/bin-assemble/bin-assemble \
   update.bin \
-    0x0    test-app/image_v2_signed.bin \
-    0xAFFB trigger_magic.bin
+    0x0     test-app/image_v2_signed.bin \
+    0x6FFFB trigger_magic.bin
 ```
 
-4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`).
+4) Program `update.bin` to the UPDATE partition (`0x80000` for `mcxw.config`,
+`0x8A000` for `mcxw-tz.config`) with `loadbin update.bin 0x80000`, then `r`
+and `g`. wolfBoot verifies and installs version 2, and the application
+confirms it:
 
-Once wolfBoot has performed validation of the partition and staged a firmware with version > 1, the D15 Green LED on PA19 will show.
+```
+Hello from MCXW71 firmware version 2
+Update successful, firmware version 2 confirmed
+```
 
-Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
+The green LED is on once version 2 is confirmed.
 
 ### MCX W: Debugging
 
-Debugging with JLink:
+We include a `.gdbinit` in the wolfBoot root that loads the wolfBoot and
+test-app ELF files.
 
-Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
-
-In one terminal: `JLinkGDBServer -if swd -Device MCXW716 -port 3333`
-
-In another terminal use `gdb`:
-
-```
-b main
-mon reset
-c
+```sh
+JLinkGDBServer -device MCXW716C -if SWD -port 3333
+arm-none-eabi-gdb wolfboot.elf -ex "target remote :3333"
 ```
 
 

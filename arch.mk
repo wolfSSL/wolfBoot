@@ -1477,31 +1477,49 @@ ifeq ($(TARGET),mcxw)
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
       -I$(MCUXPRESSO_DRIVERS)/drivers \
-      -I$(MCUXPRESSO_DRIVERS)/drivers/romapi \
       -I$(MCUXPRESSO_DRIVERS)/../periph2 \
       -I$(MCUXPRESSO)/drivers \
-      -I$(MCUXPRESSO)/drivers/flash_k4 \
-      -I$(MCUXPRESSO)/drivers/ccm32k \
       -I$(MCUXPRESSO)/drivers/common \
-      -I$(MCUXPRESSO_CMSIS)/Include \
-      -I$(MCUXPRESSO_CMSIS)/Core/Include \
-      -I$(MCUXPRESSO)/drivers/flash \
+      -I$(MCUXPRESSO)/drivers/ccm32k \
       -I$(MCUXPRESSO)/drivers/spc \
-      -I$(MCUXPRESSO)/drivers/sysmpu \
-      -I$(MCUXPRESSO)/drivers/ltc \
       -I$(MCUXPRESSO)/drivers/port \
-      -I$(MCUXPRESSO)/drivers/gpio
+      -I$(MCUXPRESSO)/drivers/gpio \
+      -I$(MCUXPRESSO)/drivers/lpuart \
+      -I$(MCUXPRESSO)/drivers/tstmr \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
   CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DDEBUG_CONSOLE_ASSERT_DISABLE=1
-  CFLAGS+=-DWOLFSSL_SP_NO_UMAAL
   CFLAGS+=-Wno-old-style-declaration
-  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33 -U__ARM_FEATURE_DSP
+  CFLAGS+=-mcpu=cortex-m33 -DCORTEX_M33
+  # The boot ROM initializes only part of the ECC SRAM
+  CFLAGS+=-DWOLFBOOT_RAM_ECC_INIT
   LDFLAGS+=-mcpu=cortex-m33
   OBJS+=\
       $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
       $(MCUXPRESSO)/drivers/spc/fsl_spc.o \
       $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
-      $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/romapi/fsl_romapi.o
+      $(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
+
+  ifeq ($(DEBUG_UART),1)
+    OBJS+=$(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.o
+  endif
+
+  ifeq ($(WOLFCRYPT_TZ),1)
+    MCUXPRESSO_SSS?=$(MCUXPRESSO)/middleware/secure-subsystem
+    CFLAGS+=\
+      -I$(MCUXPRESSO)/drivers/elemu \
+      -I$(MCUXPRESSO_SSS)/inc \
+      -I$(MCUXPRESSO_SSS)/inc/elemu \
+      -I$(MCUXPRESSO_SSS)/src/sscp
+    CFLAGS+=-DSSCP_CONFIG_FILE='"fsl_sscp_config_elemu.h"' \
+      -DSSS_CONFIG_FILE='"fsl_sss_config_elemu.h"'
+    OBJS+=\
+      $(MCUXPRESSO)/drivers/elemu/fsl_elemu.o \
+      $(MCUXPRESSO_SSS)/src/sscp/fsl_sscp_mu.o \
+      $(MCUXPRESSO_SSS)/src/sscp/fsl_sss_sscp.o \
+      $(MCUXPRESSO_SSS)/src/sscp/fsl_sss_mgmt.o
+    $(MCUXPRESSO)/drivers/elemu/fsl_elemu.o: CFLAGS+=-Wno-sign-compare
+  endif
 endif
 
 ifeq ($(TARGET),mcxn)
