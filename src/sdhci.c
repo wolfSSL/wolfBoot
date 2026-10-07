@@ -1301,6 +1301,20 @@ static int sdcard_set_function(uint32_t function_number, uint32_t group_number)
 
 #ifdef DISK_EMMC
 
+/* eMMC data bus width: 1, 4 (default) or 8 */
+#ifndef SDHCI_EMMC_BUS_WIDTH
+#define SDHCI_EMMC_BUS_WIDTH 4
+#endif
+#if SDHCI_EMMC_BUS_WIDTH == 8
+#define SDHCI_EMMC_BUS_WIDTH_CSD MMC_EXT_CSD_WIDTH_8BIT
+#elif SDHCI_EMMC_BUS_WIDTH == 4
+#define SDHCI_EMMC_BUS_WIDTH_CSD MMC_EXT_CSD_WIDTH_4BIT
+#elif SDHCI_EMMC_BUS_WIDTH == 1
+#define SDHCI_EMMC_BUS_WIDTH_CSD MMC_EXT_CSD_WIDTH_1BIT
+#else
+#error "SDHCI_EMMC_BUS_WIDTH must be 1, 4 or 8"
+#endif
+
 /* Send CMD1 (SEND_OP_COND) for eMMC and wait for device ready
  * Returns 0 on success, negative on error */
 static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
@@ -1401,12 +1415,31 @@ static int emmc_set_bus_width(uint32_t width)
     return 0;
 }
 
+#ifdef SDHCI_EMMC_HS
+/* Switch to High Speed timing (EXT_CSD HS_TIMING = 1). 0 on success. */
+static int emmc_set_high_speed(void)
+{
+    int status;
+
+    status = sdhci_cmd(MMC_CMD6_SWITCH, MMC_HS_TIMING_CSD, SDHCI_RESP_R1B);
+    if (status == 0 || status == DEVICE_BUSY) {
+        /* Wait for the switch; SRS04 then holds the CMD13 status */
+        status = sdhci_wait_busy(1);
+    }
+    if (status == 0 && (SDHCI_REG(SDHCI_SRS04) & MMC_R1_SWITCH_ERROR) != 0) {
+        status = -1;
+    }
+    return status;
+}
+#endif
+
 /* Full eMMC card initialization sequence
  * Returns 0 on success */
 static int emmc_card_full_init(void)
 {
     int status;
     uint32_t ocr_reg;
+    uint32_t clock_khz = SDHCI_CLK_25MHZ;
 
     /* Set power to 3.3v */
     status = sdhci_set_power(SDHCI_SRS10_BVS_3_3V);
@@ -1495,16 +1528,26 @@ static int emmc_card_full_init(void)
         return status;
     }
 
-    /* Set bus width to 4-bit */
-    status = emmc_set_bus_width(MMC_EXT_CSD_WIDTH_4BIT);
+    /* Set bus width */
+    status = emmc_set_bus_width(SDHCI_EMMC_BUS_WIDTH_CSD);
     if (status != 0) {
         wolfBoot_printf("eMMC: Set bus width failed, continuing with 1-bit\n");
         /* Non-fatal, continue with 1-bit */
     }
 
-    /* Set clock to 25MHz for legacy mode */
-    if (sdhci_set_clock(SDHCI_CLK_25MHZ) == 0) {
-        wolfBoot_printf("eMMC: failed to set 25MHz clock\n");
+#ifdef SDHCI_EMMC_HS
+    /* High Speed: 50MHz, else 25MHz */
+    if (emmc_set_high_speed() == 0) {
+        clock_khz = SDHCI_CLK_50MHZ;
+    }
+    else {
+        wolfBoot_printf("eMMC: High Speed switch failed, staying at 25MHz\n");
+    }
+#endif
+
+    /* Set clock: 25MHz legacy, 50MHz High Speed */
+    if (sdhci_set_clock(clock_khz) == 0) {
+        wolfBoot_printf("eMMC: failed to set %dkHz clock\n", clock_khz);
         return -1;
     }
 
