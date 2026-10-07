@@ -22,6 +22,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
+* [NXP i.MX 8M Mini](#nxp-imx-8m-mini)
 * [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP iMX-RT](#nxp-imx-rt)
@@ -9717,6 +9718,204 @@ Boot success marked. Version: 1
 | `MAX3266X_TPU` | Enable TPU hardware SHA256 acceleration (requires `MSDK_DIR`). |
 | `MAX3266X_OLD` | Build TPU acceleration against the older, deprecated Maxim SDK tree instead of the modern MSDK. |
 
+
+## NXP i.MX 8M Mini
+
+wolfBoot runs on the NXP i.MX 8M Mini (MIMX8MM: 4x Cortex-A53) and boots a signed Linux kernel. Developed and tested on the TechNexion PICO-IMX8MM SoM (2 GB LPDDR4, eMMC) on the PICO-PI baseboard, with TechNexion's U-Boot 2023.04 (SPL) and NXP ATF.
+
+DDR training is done by U-Boot SPL, so wolfBoot never touches the DDR controller. Its HAL only reads the eMMC and writes to the UART. There are two ways to start it, selected with `IMX8MM_BL33`:
+
+```
+IMX8MM_BL33=1 (default): wolfBoot replaces U-Boot proper as BL33
+  BootROM -> U-Boot SPL -> ATF (BL31) -> wolfBoot (BL33, EL2, 0x40200000)
+    -> read signed FIT from eMMC p1 -> verify -> Linux (EL2, DTB in x0)
+
+IMX8MM_BL33=0: started from U-Boot proper
+  BootROM -> U-Boot SPL -> ATF (BL31) -> U-Boot proper
+    -> "go 0x40480000" -> wolfBoot -> verify -> Linux (EL2, DTB in x0)
+```
+
+In BL33 mode SPL loads wolfBoot in place of U-Boot proper, from the same FIT slot (`u-boot.itb`), so SPL and ATF stay unchanged. ATF enters wolfBoot at EL2 with the MMU and caches off. wolfBoot then turns on an identity MMU with the D-cache for the load and the verification. In go mode U-Boot loads wolfBoot together with the signed kernel, and the DTB, into DRAM. wolfBoot runs with the MMU and caches U-Boot left on.
+
+In both modes Linux is entered at EL2 with the MMU and D-cache off and the DTB address in `x0`. `do_boot()` cleans the caches to the point of coherency first (`EL2_HYPERVISOR=1`, set in `hal/imx8mm.h`).
+
+### Example configuration
+
+[/config/examples/imx8mm-pico.config](/config/examples/imx8mm-pico.config) covers both modes. The other variants are make options:
+
+| Build | Boot path |
+|---|---|
+| `make` | BL33 mode. Reads the signed FIT `/fitImage_A.itb` or `/fitImage_B.itb` from eMMC p1 (FAT32, uSDHC3, 8-bit, 50 MHz). |
+| `make DISK_EMMC=0` | BL33 mode without a storage driver. SPL places the signed kernel and the DTB in DRAM as FIT loadables (USB download with `uuu`). |
+| `make IMX8MM_BL33=0` | Go mode: started with `go` from U-Boot proper. The signed kernel is bundled after wolfBoot in DRAM. |
+| `... IMX8MM_MMU=0` | BL33 mode with the MMU off (I-cache only). Hashing a 27 MB kernel this way takes about 25 s instead of under 1 s. |
+| `... IMX8MM_EMMC_HS=0` | eMMC at 4-bit, 25 MHz (the `src/sdhci.c` default) instead of 8-bit High Speed at 50 MHz. |
+| `... BOOT_BENCHMARK=1` | Time the image read, the hash and the signature check. |
+
+The config uses RSA-4096 and SHA3-384 with a 1024-byte image header, and `DEBUG_UART=1` for the console on UART2 (`0x30890000`, `ttymxc1`). The UART clock, pin mux and baud rate are left as SPL set them.
+
+### Building
+
+No hardware is needed to compile:
+
+```
+cp config/examples/imx8mm-pico.config .config
+make keytools
+make CROSS_COMPILE=aarch64-linux-gnu-
+```
+
+This produces `wolfboot.bin` and `test-app/image_v1_signed.bin`. There is no contiguous `factory.bin`, because wolfBoot runs from DRAM. The test application is a small bare-metal payload. It prints the exception level and checks the DTB pointer it gets in `x0`.
+
+Notes on the build:
+
+- `aarch64-linux-gnu-gcc` defines `__linux__`, which makes `wolfBoot_printf` call the C library's `fprintf`. Keep `DEBUG_UART=1`, or add `CFLAGS_EXTRA+=-DWOLFBOOT_NO_PRINTF` when you turn it off. Otherwise wolfBoot jumps to an unresolved PLT entry at address 0.
+- Distribution toolchains enable `_FORTIFY_SOURCE` and PIE by default. The config turns both off (`-U_FORTIFY_SOURCE -fno-pie`, `-no-pie`); with FORTIFY, `memcpy` becomes glibc's `__memcpy_chk`. `aarch64-linux-gnu-nm -u wolfboot.elf` must print nothing.
+- `NO_QNX=1` is required. Without it the AArch64 startup code initializes the GIC at the ZynqMP address.
+- The scripts below take the toolchain from `CROSS_COMPILE` in the environment: `export` it (default `aarch64-linux-gnu-`).
+- Run `make clean` after changing options: the objects are not rebuilt when only the flags change.
+
+### Memory map
+
+| Address | Content |
+|---|---|
+| `0x00920000` | ATF BL31 |
+| `0x40200000` | wolfBoot in BL33 mode (`WOLFBOOT_LOAD_BASE`, U-Boot's `CONFIG_TEXT_BASE`) |
+| `0x40480000` | wolfBoot in go mode (the `go` address) |
+| `0x40540000` | Signed kernel bundled after wolfBoot in go mode (`kernel_addr`); it must end below the DTB, so at most 42 MB (`WOLFBOOT_RAMBOOT_MAX_SIZE`) |
+| `0x43000000` | DTB (`WOLFBOOT_LOAD_DTS_ADDRESS`) |
+| `0x44000000` | Kernel run address (`WOLFBOOT_LOAD_ADDRESS` in go mode, the FIT `load` in BL33 mode) |
+| `0x48000000` | BL33 mode: the whole signed FIT is read and verified here. With `DISK_EMMC=0`: the signed kernel placed by SPL. Max 64 MB (`WOLFBOOT_RAMBOOT_MAX_SIZE`) |
+
+### BL33 mode: building the boot image (flash.bin)
+
+`tools/scripts/imx8mm/imx8mm-mkflashbin.sh` builds wolfBoot with `IMX8MM_BL33=1` and creates the boot image with imx-mkimage. It uses the U-Boot SPL, DDR firmware and ATF of the regular U-Boot `flash.bin`, so build that first.
+
+Host packages (Ubuntu): `gcc-aarch64-linux-gnu`, `zlib1g-dev` (for imx-mkimage's `mkimage_imx8`) and `wget`. U-Boot's `mkimage` and `dtc` come from the U-Boot build (`tools/mkimage`, `scripts/dtc/dtc`); the examples put that `dtc` in `PATH`.
+
+TechNexion's `install_uboot_imx8.sh` in [u-boot-tn-imx](https://github.com/TechNexion/u-boot-tn-imx) collects everything: it clones [nxp-imx/imx-mkimage](https://github.com/nxp-imx/imx-mkimage) into `imx-mkimage/`, builds ATF from [nxp-imx/imx-atf](https://github.com/nxp-imx/imx-atf), downloads NXP's firmware-imx package for the LPDDR4 training firmware (it asks you to accept the NXP EULA), and makes U-Boot's `flash.bin`:
+
+```
+git clone -b tn-imx_v2023.04_6.1.55_2.2.0-stable https://github.com/TechNexion/u-boot-tn-imx.git
+cd u-boot-tn-imx
+export CROSS_COMPILE=aarch64-linux-gnu-
+make pico-imx8mm_defconfig && make
+PATH=$PWD/scripts/dtc:$PATH ./install_uboot_imx8.sh -b imx8mm-pico-pi.dtb -d /dev/null
+```
+
+`-d /dev/null` skips writing an SD card. A message about a missing `tee.bin` can be ignored. This leaves `u-boot-spl-ddr.bin`, `bl31.bin`, `mkimage_imx8`, `mkimage_uboot` and the U-Boot DTB in `u-boot-tn-imx/imx-mkimage/iMX8M`. Then, in wolfBoot:
+
+```
+UB=<u-boot-tn-imx>
+export PATH=$UB/scripts/dtc:$PATH MKIMAGE=$UB/tools/mkimage
+IMX_MKIMAGE=$UB/imx-mkimage tools/scripts/imx8mm/imx8mm-mkflashbin.sh
+# -> flash.bin (about 525 KB)
+```
+
+The script writes a FIT with wolfBoot as `firmware` at `0x40200000`, the U-Boot DTB (SPL needs one, wolfBoot does not use it) and ATF. It puts the FIT at eMMC sector `0x300`, where SPL reads it, behind SPL and the DDR firmware. The image data starts 0x5000 into the FIT, as in imx-mkimage: newer `mkimage_imx8` versions write a HAB IVT and CSF right after the FIT header.
+
+To try it without writing the eMMC, start the board in serial download mode and run `uuu -b spl flash.bin`. To install it, write it to the eMMC user area at 33 KB (sector `0x42`), where the BootROM looks for the boot image. For example, from Linux on the board:
+
+```
+dd if=flash.bin of=/dev/mmcblk2 bs=512 seek=66 conv=fsync
+```
+
+This replaces U-Boot on the eMMC. Save the first 4 MB of the eMMC before writing it, so that U-Boot can be restored.
+
+With `DISK_EMMC=0`, pass the kernel and the DTB to the script. They are signed and added to the FIT as SPL loadables, and the image (about 35 MB) is for `uuu` only. A DTB from the Linux tree needs `bootargs` and `/memory` first (see the next section, `imx8mm_fit/board.dtb`):
+
+```
+DISK_EMMC=0 IMX_MKIMAGE=$UB/imx-mkimage \
+    tools/scripts/imx8mm/imx8mm-mkflashbin.sh Image imx8mm-pico-pi.dtb
+```
+
+### BL33 mode: signed FIT image (kernel + DTB)
+
+In BL33 mode with eMMC, wolfBoot boots a FIT image (kernel + DTB) signed with the wolfBoot key. It reads the image as a file from a FAT32 partition. `tools/scripts/imx8mm/imx8mm-mkfit.sh` creates it, with `PATH` and `MKIMAGE` set as above:
+
+```
+tools/scripts/imx8mm/imx8mm-mkfit.sh Image imx8mm-pico-pi.dtb
+# -> fitImage_A.itb, version 1
+SLOT=B VERSION=2 tools/scripts/imx8mm/imx8mm-mkfit.sh Image imx8mm-pico-pi.dtb
+# -> fitImage_B.itb, version 2
+```
+
+The FIT holds the kernel (`load`/`entry` `0x44000000`) and the DTB. The script makes the FIT with `mkimage` (data embedded, no `-E`), then signs the whole file with `tools/keytools/sign --rsa4096 --sha3`. Because the DTB is inside the signed image, it needs no separate digest. wolfBoot reads the file to `0x48000000` and verifies it. It then copies the kernel to its `load` address and the DTB to `0x43000000`.
+
+wolfBoot does not edit the DTB, and the DTB is covered by the signature, so the script prepares it before signing. It sets `root=` in `/chosen/bootargs` (`ROOTDEV`, default `/dev/mmcblk2p2`, the eMMC rootfs). A DTB from the Linux tree has neither `bootargs` nor a `/memory` node, because U-Boot normally adds them at boot; the script then adds `bootargs = "console=ttymxc1,115200 root=$ROOTDEV rootwait rw"` and `/memory` at `0x40000000` with `DRAM_SIZE` bytes (default `0x80000000`, 2 GB; set it for 1, 3 or 4 GB modules). Without `/memory` the kernel stops before printing anything. Set `ROOTDEV=` (empty) to use the DTB as it is.
+
+The script uses the `.config` and the `wolfboot_signing_private_key.der` of the tree, so run it in the same tree as the wolfBoot build. The image must be signed with the key that wolfBoot was built with.
+
+eMMC layout used on the PICO-IMX8MM (Linux `mmcblk2`, U-Boot `mmc 2`, MBR):
+
+| Partition | Content |
+|---|---|
+| (raw, from 33 KB) | `flash.bin` (SPL + DDR firmware, FIT with ATF and wolfBoot at sector `0x300`) |
+| p1, FAT32 | `/fitImage_A.itb`, `/fitImage_B.itb` (the partition may also hold other boot files) |
+| p2, ext4 | Linux root filesystem |
+
+wolfBoot's FAT32 driver reads FAT32 only, so p1 must be FAT32, not FAT16. To update an image from Linux:
+
+```
+mount /dev/mmcblk2p1 /mnt
+cp fitImage_B.itb /mnt/
+sync
+umount /mnt
+```
+
+Always `sync` and unmount before power-off. A file whose data has not reached the eMMC can be left with a size of 0, and wolfBoot then reports `No valid OS image`. Do not let the system automount p1, or unmount it before power-off.
+
+### A/B images and rollback
+
+Both files are on partition 0 (`BOOT_PART_A=0`, `BOOT_PART_B=0`, `BOOT_FILE_A`/`BOOT_FILE_B` in the config). `src/update_disk.c` reads the version from each header and verifies the newer image first. The results on the board:
+
+| `/fitImage_B.itb` (A is version 1) | Result |
+|---|---|
+| version 2, valid | boots B |
+| header corrupted | B has no readable version, boots A |
+| missing | boots A |
+| version 2, payload corrupted | `Rollback to lower version not allowed`, PANIC |
+
+A newer image whose header is valid but whose payload is corrupted still sets the highest version. The older image is then refused, unless the build sets `ALLOW_DOWNGRADE`, which gives up rollback protection. An update must therefore never leave a half-written newer image under its final name. For example, copy it under a temporary name, `sync`, check it, then rename it. `DISK_BOOT_CONFIRM` (boot confirmation and fallback) only works with raw partitions, not with files.
+
+### Go mode: starting wolfBoot from U-Boot proper
+
+`tools/scripts/imx8mm/imx8mm-mkgoimage.sh` builds wolfBoot with `IMX8MM_BL33=0` and signs the kernel. The DTB's SHA3-384 digest is bound into the signed header (`sign --dts`). The script then appends the signed kernel to wolfBoot at offset `0xC0000`:
+
+```
+tools/scripts/imx8mm/imx8mm-mkgoimage.sh Image imx8mm-pico-pi.dtb
+# -> wolfboot_linux.bin
+```
+
+Copy `wolfboot_linux.bin` and the same DTB to the SD card's first partition, then in U-Boot:
+
+```
+fatload mmc 1 0x40480000 wolfboot_linux.bin
+fatload mmc 1 0x43000000 imx8mm-pico-pi.dtb
+go 0x40480000
+```
+
+wolfBoot verifies the kernel signature and checks the DTB at `0x43000000` against the digest in the header (`DTB digest verified`). If a different DTB is loaded, the boot stops. Sign the kernel again whenever the DTB changes. A DTB from the Linux tree needs `bootargs` and `/memory`, as for the FIT above: use the `imx8mm_fit/board.dtb` that `imx8mm-mkfit.sh` writes.
+
+### SD / eMMC driver
+
+The eMMC is on uSDHC3 (`0x30B60000`). The HAL maps the uSDHC registers to the SDHCI interface of `src/sdhci.c`, as `hal/imx8qm.c` does. It sets up the uSDHC3 clock root (SYS_PLL1_400M) and the pads itself, because SPL may not have initialized uSDHC3 (for example, after a USB download boot).
+
+- Bus: 8-bit, High Speed at 50 MHz (`SDHCI_EMMC_BUS_WIDTH=8`, `SDHCI_EMMC_HS`). `src/sdhci.c` switches the card with CMD6 (`HS_TIMING`) and stays at 25 MHz if the card reports a switch error. Other targets keep the 4-bit, 25 MHz default.
+- Reads: SDMA in 64 KB blocks (`DISK_BLOCK_SIZE=65536`). With the D-cache on, the HAL cleans and invalidates the buffer around each transfer, and warns if a DMA buffer is not cache-line aligned. Keep `WOLFBOOT_FS_CACHE_SIZE` at its 512-byte default. A larger cache is read by SDMA into a buffer that shares a cache line with other data, which corrupts it.
+
+Measured with `BOOT_BENCHMARK=1` (27 MB FIT): read 0.99 s (about 29 MB/s), integrity check 0.68 s, signature 1 ms. Load and verification take about 1.7 s in total.
+
+### Known limitations
+
+- HABv4 is not set up. U-Boot SPL and ATF can authenticate the next stage with HABv4. Until then, nothing authenticates wolfBoot itself.
+- BL33 mode boots Linux only from eMMC p1, or from DRAM with `uuu` (`DISK_EMMC=0`). The SD card slot (uSDHC2) is not supported in BL33 mode.
+- No boot confirmation or automatic fallback with files on FAT32 (see above).
+
+### Tested with
+
+- TechNexion PICO-IMX8MM + PICO-PI, U-Boot 2023.04 ([u-boot-tn-imx](https://github.com/TechNexion/u-boot-tn-imx) branch `tn-imx_v2023.04_6.1.55_2.2.0-stable`, `pico-imx8mm_defconfig`), set up with its `install_uboot_imx8.sh`: imx-mkimage lf-6.1.55 (`c4365450`), ATF lf-6.1.55-2.2.2 (BL31 v2.8), firmware-imx 8.21.
+- Linux 6.1.55 (`Image`, 27 MB) with `imx8mm-pico-pi.dtb`.
+- Ubuntu GCC 13.3 and Linaro GCC 6.4.1 (`aarch64-linux-gnu-`).
 
 ## NXP i.MX 8QuadMax
 
