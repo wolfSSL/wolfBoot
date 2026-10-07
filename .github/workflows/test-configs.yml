@@ -576,6 +576,15 @@ jobs:
       config-file: ./config/examples/cm4_emmc.config
       make-args: wolfboot.bin
 
+  cm4_emmc_silent_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Disk targets with the console off: the variables the GPT and slot
+      # traces print are unused once wolfBoot_printf compiles out.
+      config-file: ./config/examples/cm4_emmc.config
+      make-args: DEBUG_UART=0 wolfboot.bin
+
   cm4_emmc_linux_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:
