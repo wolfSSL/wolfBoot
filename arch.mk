@@ -161,6 +161,22 @@ ifeq ($(ARCH),AARCH64)
         # its own without an undefined reference.
         CFLAGS+=-DWOLFBOOT_ZYNQMP_BBRAM
       endif
+      # eFuse programming support. Report-only by default: the SysMon
+      # temperature/supply gate and the controller timing are built, the
+      # brick-class SEC_CTRL fuses are rejected unconditionally, and the
+      # program strobe is compiled out unless ZYNQMP_EFUSE_BURN is also set.
+      # OTP is one-shot -- enabling the burn is deliberate and irreversible.
+      ifeq ($(ZYNQMP_EFUSE_WRITE),1)
+        CFLAGS+=-DWOLFBOOT_ZYNQMP_EFUSE_WRITE
+        ifeq ($(ZYNQMP_EFUSE_BURN),1)
+          CFLAGS+=-DZYNQMP_EFUSE_BURN
+        endif
+        # Report the SysMon readings and whether the gate passes, at boot.
+        # Read-only; never programs a fuse.
+        ifeq ($(ZYNQMP_EFUSE_SELFTEST),1)
+          CFLAGS+=-DWOLFBOOT_ZYNQMP_EFUSE_SELFTEST
+        endif
+      endif
     endif
 
   endif
