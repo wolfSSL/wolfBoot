@@ -1113,21 +1113,31 @@ START_TEST (test_update_aborts_on_sector_copy_failure) {
 }
 END_TEST
 
-/* F-9752: an interrupted per-sector swap must resume from the sector-flag
- * fall-through entry points and end with the partitions swapped. The
- * single-shot hal_flash_write_fail faults the first internal write (the
- * swap->BOOT copy of sector 0), leaving sector 0 at SECT_FLAG_BACKUP;
- * re-running wolfBoot_update re-enters the sector loop at case
- * SECT_FLAG_BACKUP (a path no prior test reached) and exercises the
- * sector==1 fw_size re-swap. The SWAPPING entry point, where the
- * BOOT->update copy has erased the update header, is tested below. Guarded out
- * of the EXT_ENCRYPTED targets: the resume logic is identical with or without
- * encryption, but this test stages a plain image, which the encrypted swap
- * path does not accept. Guarded out of DISABLE_BACKUP: the sector-flag
- * swap machinery does not exist in that build. */
-#if !defined(EXT_ENCRYPTED) && !defined(DISABLE_BACKUP)
+#if !defined(DISABLE_BACKUP)
 static uint8_t resume_boot_snap[WOLFBOOT_PARTITION_SIZE];
 static uint8_t resume_update_snap[WOLFBOOT_PARTITION_SIZE];
+
+/* Read the image area of UPDATE as plaintext. Encrypted builds decrypt it with
+ * the normal IV mapping, which is also the one the BOOT->UPDATE copy uses. */
+static void update_read_plain(uint8_t* buf)
+{
+    int len = TEST_SIZE_SMALL + IMAGE_HEADER_SIZE;
+
+#ifdef EXT_ENCRYPTED
+    wolfBoot_enable_fallback_iv(0);
+#endif
+    ck_assert_int_eq(
+        ext_flash_check_read(WOLFBOOT_PARTITION_UPDATE_ADDRESS, buf, len), len);
+}
+
+/* UPDATE holds this image */
+static void check_update_image(const uint8_t* img)
+{
+    static uint8_t buf[TEST_SIZE_SMALL + IMAGE_HEADER_SIZE];
+
+    update_read_plain(buf);
+    ck_assert_int_eq(memcmp(buf, img, sizeof(buf)), 0);
+}
 
 static void resume_setup(void)
 {
@@ -1138,9 +1148,7 @@ static void resume_setup(void)
     memcpy(resume_boot_snap,
         (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
         WOLFBOOT_PARTITION_SIZE);
-    memcpy(resume_update_snap,
-        (const void *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-        WOLFBOOT_PARTITION_SIZE);
+    update_read_plain(resume_update_snap);
 }
 
 static void resume_verify(void)
@@ -1151,11 +1159,22 @@ static void resume_verify(void)
     uint32_t total_size = TEST_SIZE_SMALL + IMAGE_HEADER_SIZE;
     ck_assert_int_eq(memcmp((const void *)(uintptr_t)
         WOLFBOOT_PARTITION_BOOT_ADDRESS, resume_update_snap, total_size), 0);
-    ck_assert_int_eq(memcmp((const void *)(uintptr_t)
-        WOLFBOOT_PARTITION_UPDATE_ADDRESS, resume_boot_snap, total_size), 0);
+    check_update_image(resume_boot_snap);
     cleanup_flash();
 }
 
+/* F-9752: an interrupted per-sector swap must resume from the sector-flag
+ * fall-through entry points and end with the partitions swapped. The
+ * single-shot hal_flash_write_fail faults the first internal write (the
+ * swap->BOOT copy of sector 0), leaving sector 0 at SECT_FLAG_BACKUP;
+ * re-running wolfBoot_update re-enters the sector loop at case
+ * SECT_FLAG_BACKUP (a path no prior test reached) and exercises the
+ * sector==1 fw_size re-swap. The SWAPPING entry point, where the
+ * BOOT->update copy has erased the update header, is tested below. Needs an
+ * external SWAP, so that the first internal write is the swap->BOOT copy.
+ * Guarded out of DISABLE_BACKUP: the sector-flag swap machinery does not exist
+ * in that build. */
+#ifdef PART_SWAP_EXT
 START_TEST (test_update_resume_from_backup_flag)
 {
     uint8_t flag;
@@ -1169,21 +1188,26 @@ START_TEST (test_update_resume_from_backup_flag)
     resume_verify();
 }
 END_TEST
+#endif /* PART_SWAP_EXT */
 
 #ifndef DELTA_UPDATES
 /* State after a reset right after the erase of UPDATE sector 0 in its backup
  * step. SWAP holds the old UPDATE sector 0 and the sector flag is SWAPPING. */
 static void cut_after_sector0_backup_erase(void)
 {
+    struct wolfBoot_image update, swap;
+
+    ck_assert_int_eq(wolfBoot_open_image(&update, PART_UPDATE), 0);
+    wolfBoot_open_image(&swap, PART_SWAP);
+    hal_flash_unlock();
     ext_flash_unlock();
-    ext_flash_erase(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    ext_flash_write(
-        WOLFBOOT_PARTITION_SWAP_ADDRESS,
-        (const uint8_t*)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-        WOLFBOOT_SECTOR_SIZE);
+    /* Use the swap's own copy step, so SWAP holds what this build puts there:
+     * still encrypted if SWAP is external, plaintext if it is internal */
+    ck_assert_int_ge(wolfBoot_copy_sector(&update, &swap, 0), 0);
     wolfBoot_set_update_sector_flag(0, SECT_FLAG_SWAPPING);
     ext_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_SECTOR_SIZE);
     ext_flash_lock();
+    hal_flash_lock();
 }
 
 /* The resume takes the update size from the copy in SWAP */
@@ -1220,10 +1244,7 @@ START_TEST(test_rollback_resume_from_swapping_flag)
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
                resume_boot_snap, TEST_SIZE_SMALL + IMAGE_HEADER_SIZE),
         0);
-    ck_assert_int_eq(
-        memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-               resume_update_snap, TEST_SIZE_SMALL + IMAGE_HEADER_SIZE),
-        0);
+    check_update_image(resume_update_snap);
     cleanup_flash();
 }
 END_TEST
@@ -1232,13 +1253,25 @@ END_TEST
  * resume must then refuse to swap and leave BOOT as it was. */
 static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
 {
+    struct wolfBoot_image swap;
+    uint32_t              word, plain;
+
     reset_mock_stats();
     resume_setup();
     cut_after_sector0_backup_erase();
+    /* Flip the bits that turn the field into val, so an encrypted copy also
+     * decrypts to val */
+    memcpy(&plain, resume_update_snap + off, sizeof(plain));
+    memcpy(&word,
+           (const void*)(uintptr_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + off),
+           sizeof(word));
+    word ^= plain ^ val;
+    wolfBoot_open_image(&swap, PART_SWAP);
+    hal_flash_unlock();
     ext_flash_unlock();
-    ext_flash_write(WOLFBOOT_PARTITION_SWAP_ADDRESS + off,
-        (const uint8_t*)&val, sizeof(val));
+    wb_flash_write(&swap, off, &word, sizeof(word));
     ext_flash_lock();
+    hal_flash_lock();
     ck_assert_int_lt(wolfBoot_update(0), 0);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
@@ -1255,12 +1288,12 @@ END_TEST
 
 START_TEST(test_update_resume_swap_size_too_big)
 {
-    resume_with_bad_swap_field(4,
-        host_to_img_u32((uint32_t)(MAX_UPDATE_SIZE + 1U)));
+    resume_with_bad_swap_field(
+        4, host_to_img_u32((uint32_t)(MAX_UPDATE_SIZE + 1U)));
 }
 END_TEST
 #endif /* !DELTA_UPDATES */
-#endif /* !EXT_ENCRYPTED && !DISABLE_BACKUP */
+#endif /* !DISABLE_BACKUP */
 
 /* F-13643: a completed swap must leave the update partition as a faithful
  * copy of the previous boot image, so the emergency-rollback path (the
@@ -2204,11 +2237,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(forward_update_samesize,
         test_disable_backup_update_consumes_update_state);
 #endif
-#if !defined(EXT_ENCRYPTED) && !defined(DISABLE_BACKUP)
+#if defined(PART_SWAP_EXT) && !defined(DISABLE_BACKUP)
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
 #endif
-#if !defined(EXT_ENCRYPTED) && !defined(DISABLE_BACKUP) && \
-    !defined(DELTA_UPDATES)
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES)
     tcase_add_test(forward_update_samesize,
                    test_update_resume_from_swapping_flag);
     tcase_add_test(forward_update_samesize, test_update_resume_bad_swap_magic);
