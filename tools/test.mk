@@ -1243,52 +1243,54 @@ test-size-all:
 	# Re-measured 2026-09-29: NONE +24B (5204), ECC256/ECC384 +12B each, from
 	# the uart printf %u/is_signed change compiled into every build; RSA,
 	# RSAPSS, LMS and ML_DSA measured 8B smaller than their limits.
-	make test-size SIGN=NONE LIMIT=5204 NO_ARM_ASM=1
+	# Re-measured 2026-10-08: every configuration grew 96-108B from the
+	# power-fail swap resume (wolfBoot_swap_update_size) in update_flash.c.
+	make test-size SIGN=NONE LIMIT=5284 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED25519 LIMIT=12356 NO_ARM_ASM=1
+	make test-size SIGN=ED25519 LIMIT=12436 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC256  LIMIT=19076 NO_ARM_ASM=1
+	make test-size SIGN=ECC256  LIMIT=19156 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=14120 NO_ARM_ASM=1
+	make test-size SIGN=ECC256 NO_ASM=1 LIMIT=14200 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSA2048 LIMIT=11984 NO_ARM_ASM=1
+	make test-size SIGN=RSA2048 LIMIT=11992 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=12532 NO_ARM_ASM=1
+	make test-size SIGN=RSA2048 NO_ASM=1 LIMIT=12548 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSA4096 LIMIT=12284 NO_ARM_ASM=1
+	make test-size SIGN=RSA4096 LIMIT=12292 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=12828 NO_ARM_ASM=1
+	make test-size SIGN=RSA4096 NO_ASM=1 LIMIT=12840 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ECC384 LIMIT=19760 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 LIMIT=19840 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15476 NO_ARM_ASM=1
+	make test-size SIGN=ECC384 NO_ASM=1 LIMIT=15556 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=ED448 LIMIT=14424 NO_ARM_ASM=1
+	make test-size SIGN=ED448 LIMIT=14456 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSA3072 LIMIT=12124 NO_ARM_ASM=1
+	make test-size SIGN=RSA3072 LIMIT=12132 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=12648 NO_ARM_ASM=1
+	make test-size SIGN=RSA3072 NO_ASM=1 LIMIT=12660 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS2048 LIMIT=13912 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS2048 LIMIT=13984 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS2048 NO_ASM=1 LIMIT=14460 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS2048 NO_ASM=1 LIMIT=14540 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS3072 LIMIT=14076 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 LIMIT=14148 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14600 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS3072 NO_ASM=1 LIMIT=14676 NO_ARM_ASM=1
 	make keysclean
-	make test-size SIGN=RSAPSS4096 LIMIT=14248 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 LIMIT=14320 NO_ARM_ASM=1
 	make clean
-	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14792 NO_ARM_ASM=1
+	make test-size SIGN=RSAPSS4096 NO_ASM=1 LIMIT=14868 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=LMS LMS_LEVELS=2 LMS_HEIGHT=5 LMS_WINTERNITZ=8 \
 		WOLFBOOT_SMALL_STACK=0 IMAGE_SIGNATURE_SIZE=2644 \
-		IMAGE_HEADER_SIZE?=5288 LIMIT=8220 NO_ARM_ASM=1
+		IMAGE_HEADER_SIZE?=5288 LIMIT=8296 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' \
 		IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE?=4096 \
-		LIMIT=8852 NO_ARM_ASM=1
+		LIMIT=8932 NO_ARM_ASM=1
 	make keysclean
 	make clean
-	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19694 \
+	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19798 \
 		IMAGE_SIGNATURE_SIZE=2420 IMAGE_HEADER_SIZE?=8192
