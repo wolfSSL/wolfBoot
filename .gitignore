@@ -425,6 +425,9 @@ language.settings.xml
 /**/build
 /**/build-**
 
+# Any generated directories
+/**/generated
+
 # Exception: vendored wolfGlass SBOM integration sources.
 # This directory contains tracked Make/CMake fragments, not generated output.
 !/tools/sbom/build/
