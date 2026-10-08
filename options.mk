@@ -835,6 +835,20 @@ ifeq ($(DISK_BOOT_CONFIRM),1)
   CFLAGS+=-D"DISK_BOOT_CONFIRM=1"
 endif
 
+# Optional golden slot for disk boot (src/update_disk.c): tried once after the
+# A/B attempts are spent, never written, exempt from anti-rollback. The
+# partition is BOOT_PART_GOLDEN (default 2), or BOOT_LABEL_GOLDEN / BOOT_FILE_GOLDEN
+# like the A/B slots.
+DISK_GOLDEN_SLOT ?= 0
+ifeq ($(DISK_GOLDEN_SLOT),1)
+  ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+    ifeq (,$(findstring WOLFBOOT_UPDATE_DISK,$(CFLAGS)))
+      $(error DISK_GOLDEN_SLOT requires a disk-boot target (DISK_SDCARD=1, DISK_EMMC=1, or an x86 FSP/AHCI target))
+    endif
+  endif
+  CFLAGS+=-D"DISK_GOLDEN_SLOT=1"
+endif
+
 # Optional read-only filesystem support for disk boot (src/update_disk.c),
 # so a boot slot can name a file instead of requiring the signed image at
 # raw offset 0 of a partition. DISK_FS = fat32 | ext4 | both. Leaving it

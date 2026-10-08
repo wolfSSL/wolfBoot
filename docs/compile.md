@@ -402,7 +402,13 @@ lib-fs --dev /dev/mmcblk1p1 status     # read the current state
 
 `update-trigger` is refused with `--dev`: it marks the separate UPDATE partition at a compile-time offset, which against a raw slot device is just somewhere in the middle of the slot. `stage` is the disk analogue.
 
-Order the `success` call after whatever the system treats as proof of a healthy boot; a systemd unit ordered after the services that matter is the usual place.
+Order the `success` call after whatever the system treats as proof of a healthy boot. Three placements are common, and the choice belongs to the integrator:
+
+- A systemd unit ordered after `multi-user.target`: the boot is healthy once the system reached its normal run level.
+- A unit ordered after a specific mount or service (`After=` and `Requires=` on `var-log.mount`, a database, a network target): the boot is only healthy when that resource came up, so a kernel that boots but cannot bring it up is rolled back.
+- The application itself, once it has reported in to whatever it serves: nothing is confirmed on a system whose purpose is not met. Ship the tool, not the unit.
+
+Whatever confirms needs to know which slot it is running from, and the rootfs cannot tell it: both slots boot the same rootfs. wolfBoot writes the GPT index of the slot it verified into the device tree it hands to the OS, as `/chosen/wolfboot,boot-part` (32-bit big-endian, the same 0-based index as `BOOT_PART_A` / `BOOT_PART_B`), so on Linux the slot is `/proc/device-tree/chosen/wolfboot,boot-part` and the partition device is that index plus one on the boot disk. The same value is available to a wolfBoot hook as `wolfBoot_disk_boot_part()`. A device tree that cannot carry the property halts the boot: handing the OS a tree that names no slot would leave that slot unconfirmed, and one that still carries a value its author wrote would aim the confirmation at the wrong slot. A confirm step that checks the slot's `status` first and only calls `success` when it reads `testing` keeps the steady state write-free.
 
 The tool needs no configuration to match the loader's layout and no rebuild per slot. With `--dev` it locates the trailer from the size of the device it was handed, which is how wolfBoot locates it too, and it writes the pinned state values rather than the `IMG_STATE_*` of its own build. `include/disk_trailer.h` holds the offset, the magic and the four state values, and both the loader and the tool include it, so there is one definition to disagree with rather than two.
 
@@ -412,6 +418,12 @@ The tool needs no configuration to match the loader's layout and no rebuild per 
 - A partition smaller than one 512-byte sector cannot carry a trailer and is likewise never armed.
 - **Raw partitions only.** A `DISK_FS` slot is a file inside a filesystem and has no partition tail to claim.
 - A slot left in `testing` is refused on every path into it, including the failover after another slot fails verification, so it stays out of the boot even in an `ALLOW_DOWNGRADE` build where the version guard is compiled out.
+
+### Golden slot
+
+`DISK_GOLDEN_SLOT=1` adds a third slot that the disk boot path tries once, after the A/B attempts are spent (both slots invalid, unconfirmed, or failing verification). It is read from `BOOT_PART_GOLDEN` (0-based GPT index, default 2), or by `BOOT_LABEL_GOLDEN` / `BOOT_FILE_GOLDEN` like the A/B slots, and it is fully verified like any other image. Two things differ from A and B. The golden slot is exempt from the anti-rollback check, so a deliberately old recovery image still boots when the newer slots are gone; an anti-rollback refusal of the other update slot falls through to the golden slot instead of halting. And it is never written: no boot-confirmation trailer is ever armed on it, so its state cannot drift. Reaching it is announced on the console (`Falling back to the golden image on pN`).
+
+The golden partition must be its own partition: a `BOOT_PART_GOLDEN` equal to `BOOT_PART_A` or `BOOT_PART_B` is rejected at build time, and a label that resolves to an A/B partition is rejected when the fallback is reached, since the same image under a third name recovers nothing (`cm4_emmc_rauc.config` shares one partition between A and B and needs an explicit golden partition). The slot is only prepared when the fallback is taken, so a boot that A or B satisfies never reads it; with `DISK_FS` that is also when it is mounted. When neither A nor B carries a usable version, the loader goes to the golden slot directly instead of trying them.
 
 ### Disk boot from a read-only filesystem (FAT32 / ext4)
 

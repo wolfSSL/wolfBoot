@@ -364,6 +364,17 @@ int fdt_fixup_val(fdt_ctx* ctx, int off, const char* node, const char* name,
 int fdt_fixup_val64(fdt_ctx* ctx, int off, const char* node, const char* name,
     uint64_t val);
 
+/* Write a 32-bit big-endian /chosen property, creating /chosen if needed.
+ * Returns 0 or a negative FDT_ERR_*. */
+int fdt_fixup_chosen_val(fdt_ctx* ctx, const char* name, uint32_t val);
+
+/* Disk boot (src/update_disk.c): record the GPT index of the slot being
+ * booted as /chosen/wolfboot,boot-part. For a HAL's DTB fixup pass, after
+ * fdt_grow(); a no-op until a slot has been verified. */
+#ifdef WOLFBOOT_UPDATE_DISK
+int wolfBoot_disk_dts_fixup(fdt_ctx* ctx);
+#endif
+
 /* Write /chosen/linux,initrd-{start,end} as 64-bit big-endian values,
  * creating /chosen if needed. Returns 0 or a negative FDT_ERR_*. */
 int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size);

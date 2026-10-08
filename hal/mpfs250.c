@@ -645,6 +645,9 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
     if (ret < 0) {
         wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
     }
+#ifdef WOLFBOOT_UPDATE_DISK
+    (void)wolfBoot_disk_dts_fixup(&ctx);
+#endif
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
     /* Disable the MSS watchdog dtb nodes BEFORE the serial-number read: this

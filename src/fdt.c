@@ -1481,6 +1481,23 @@ int fdt_fixup_bootargs(fdt_ctx* ctx, const char* args, int force)
     return fdt_fixup_str(ctx, off, "chosen", "bootargs", args);
 }
 
+int fdt_fixup_chosen_val(fdt_ctx* ctx, const char* name, uint32_t val)
+{
+    int off;
+
+    if (!fdt_ctx_ok(ctx) || name == NULL) {
+        return -FDT_ERR_BADARG;
+    }
+    off = fdt_subnode_offset(ctx, 0, "chosen");
+    if (off == -FDT_ERR_NOTFOUND) {
+        off = fdt_add_subnode(ctx, 0, "chosen");
+    }
+    if (off < 0) {
+        return off;
+    }
+    return fdt_fixup_val(ctx, off, "chosen", name, val);
+}
+
 int fdt_fixup_initrd(fdt_ctx* ctx, uint64_t start, uint64_t size)
 {
     int off, ret;

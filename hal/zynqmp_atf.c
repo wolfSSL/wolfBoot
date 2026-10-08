@@ -29,6 +29,10 @@
  * image at its requested EL; BL31 owns starting BL33. */
 
 #include "zynqmp_atf.h"
+#include "hal.h"
+#include "fdt.h"
+#include "loader.h"
+#include "printf.h"
 
 /* PMU_GLOBAL base 0xFFD80000. GEN_STORAGE6 (0x48) carries the handoff-block
  * address (read by stock BL31); GEN_STORAGE5 (0x44) carries the BL33 device
@@ -71,6 +75,23 @@ void zynqmp_atf_handoff(uintptr_t bl31_entry, uintptr_t bl33_entry,
     volatile uint32_t* storage6 =
         (volatile uint32_t*)PMU_GLOBAL_GLOB_GEN_STORAGE6;
     uint64_t flags;
+
+#ifdef MMU
+    /* BL31 owns starting BL33, so this handoff never reaches do_boot() and
+     * the DTB fixup pass that runs there. Do it here instead, ahead of the
+     * whole-D-cache clean in el3_jump_to_entry(). */
+    if (dts_addr != 0 &&
+            hal_dts_fixup((void*)dts_addr, WOLFBOOT_DTS_MAX_SIZE) != 0) {
+        wolfBoot_printf("FDT: fixup failed before BL31 handoff\n");
+#ifdef WOLFBOOT_UPDATE_DISK
+        /* A pass that gave up before the /chosen/wolfboot,boot-part write
+         * leaves the OS with no way to tell which slot it must confirm. */
+        if (wolfBoot_disk_boot_part() >= 0) {
+            wolfBoot_panic();
+        }
+#endif
+    }
+#endif
 
     /* Non-secure, AArch64, little-endian, A53-0, at the requested EL. */
     flags = ((uint64_t)(bl33_el << ZYNQMP_ATF_FLAG_EL_SHIFT))

@@ -2672,6 +2672,9 @@ int hal_dts_fixup(void* dts_addr, uint32_t capacity)
         wolfBoot_printf("FDT: Failed to set bootargs (%d)\n", ret);
         return ret;
     }
+#ifdef WOLFBOOT_UPDATE_DISK
+    (void)wolfBoot_disk_dts_fixup(&ctx);
+#endif
 
     return 0;
 }
