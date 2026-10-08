@@ -465,7 +465,7 @@ static int zynqmp_sec_state_get(zynqmp_sec_state* state)
     memset(state, 0, sizeof(*state));
     /* Require CACHE_LOAD clear as well as CACHE_DONE set: a reload still in
      * flight can leave a stale done flag, and reading it would hand back an
-     * unfinished snapshot. */
+     * unfinished snapshot. Matches the wait in the programming path. */
     state->status = pmu_mmio_read(ZYNQMP_EFUSE_STATUS);
     if ((state->status & (ZYNQMP_EFUSE_STATUS_CACHE_LOAD |
             ZYNQMP_EFUSE_STATUS_CACHE_DONE)) !=
@@ -490,8 +490,10 @@ void zynqmp_efuse_dump(void)
     int i;
 
     if (zynqmp_sec_state_get(&state) != 0) {
+        /* state.status holds the value the check acted on; re-reading could
+         * print a different one. */
         wolfBoot_printf("eFuse: cache not loaded (STATUS 0x%08x)\n",
-            pmu_mmio_read(ZYNQMP_EFUSE_STATUS));
+            state.status);
         return;
     }
     sec = state.sec_ctrl;
@@ -537,6 +539,226 @@ int zynqmp_sec_policy_check(uint32_t required)
     return 0;
 }
 #endif /* WOLFBOOT_ZYNQMP_FSBL_SEC */
+
+#ifdef WOLFBOOT_ZYNQMP_EFUSE_WRITE
+/* Raw SysMon reading for one PS channel. Supply channels read 0 until the
+ * sequencer is configured, so a zero is treated as "unknown", not "0 volts". */
+static uint32_t zynqmp_sysmon_raw(uint32_t channel)
+{
+    return pmu_mmio_read(ZYNQMP_SYSMON_BASE + ZYNQMP_SYSMON_PS_OFFSET +
+        (channel * (uint32_t)sizeof(uint32_t))) & 0xFFFF;
+}
+
+/* eFuse programming is only valid inside the silicon's temperature and supply
+ * window; XilSKey refuses to program outside it and so do we. Returns 0 when
+ * programming is permitted. */
+int zynqmp_efuse_prog_allowed(void)
+{
+    uint32_t temp, psaux, psintlp;
+
+    temp    = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_TEMP);
+    psaux   = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_VCC_PSAUX);
+    psintlp = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_VCC_PSINTLP);
+
+    if (temp == 0 || psaux == 0 || psintlp == 0) {
+        wolfBoot_printf("eFuse: SysMon unread (TEMP %u PSAUX %u PSINTLP %u)\n",
+            temp, psaux, psintlp);
+        return -1;
+    }
+    if (temp < ZYNQMP_EFUSE_TEMP_MIN_RAW || temp > ZYNQMP_EFUSE_TEMP_MAX_RAW) {
+        wolfBoot_printf("eFuse: temperature out of range (raw %u)\n", temp);
+        return -1;
+    }
+    if (psaux < ZYNQMP_EFUSE_VCC_PSAUX_MIN_RAW ||
+        psaux > ZYNQMP_EFUSE_VCC_PSAUX_MAX_RAW) {
+        wolfBoot_printf("eFuse: VCC_PSAUX out of range (raw %u)\n", psaux);
+        return -1;
+    }
+    if (psintlp < ZYNQMP_EFUSE_VCC_PSINTLP_MIN_RAW ||
+        psintlp > ZYNQMP_EFUSE_VCC_PSINTLP_MAX_RAW) {
+        wolfBoot_printf("eFuse: VCC_PSINTLP out of range (raw %u)\n", psintlp);
+        return -1;
+    }
+    return 0;
+}
+
+#ifdef ZYNQMP_EFUSE_BURN
+/* Controller timing, derived from PS_REF_CLK, plus margin-2 read mode. Must be
+ * set before any programming access. */
+static void zynqmp_efuse_set_timing(void)
+{
+    uint32_t cfg;
+
+    /* Clear the whole margin field, not just the clock bit: OR-ing mode 2
+     * onto a leftover mode 1 would select 3. */
+    cfg = pmu_mmio_read(ZYNQMP_EFUSE_CFG) &
+          ~(ZYNQMP_EFUSE_CFG_CLK_SEL | ZYNQMP_EFUSE_CFG_MARGIN_RD_MASK);
+    cfg |= (ZYNQMP_EFUSE_CFG_MARGIN_2_RD << ZYNQMP_EFUSE_CFG_MARGIN_RD_SHIFT) |
+           ZYNQMP_EFUSE_CFG_CLK_SEL;
+    pmu_mmio_write(ZYNQMP_EFUSE_CFG, cfg);
+
+    pmu_mmio_write(ZYNQMP_EFUSE_TPGM,        ZYNQMP_EFUSE_TPGM_VAL);
+    pmu_mmio_write(ZYNQMP_EFUSE_TRD,         ZYNQMP_EFUSE_TRD_VAL);
+    pmu_mmio_write(ZYNQMP_EFUSE_TSU_H_PS,    ZYNQMP_EFUSE_TSU_H_PS_VAL);
+    pmu_mmio_write(ZYNQMP_EFUSE_TSU_H_PS_CS, ZYNQMP_EFUSE_TSU_H_PS_CS_VAL);
+    pmu_mmio_write(ZYNQMP_EFUSE_TSU_H_CS,    ZYNQMP_EFUSE_TSU_H_CS_VAL);
+}
+#endif /* ZYNQMP_EFUSE_BURN */
+
+/* True for the SEC_CTRL fuses that each remove a recovery path. Split out from
+ * the write path so the rejection can be tested at the real programming
+ * coordinates rather than only through an MMIO-bound caller. */
+int zynqmp_efuse_is_brick_fuse(uint32_t page, uint32_t row, uint32_t col)
+{
+    if (page != ZYNQMP_EFUSE_PAGE_SEC_CTRL ||
+        row != ZYNQMP_EFUSE_ROW_SEC_CTRL) {
+        return 0;
+    }
+    if (col >= 32) {
+        return 0;
+    }
+    return ((1UL << col) & ZYNQMP_EFUSE_SEC_CTRL_BRICK_MASK) != 0;
+}
+
+/* Burn one OTP bit.
+ *
+ * Every write funnels through here so the tier-D rejection cannot be routed
+ * around by a caller or a future config file. Those fuses each remove a
+ * recovery path (every later boot must be signed or encrypted, JTAG is gone,
+ * or a wrong key can no longer be replaced), so wolfBoot does not program
+ * them at all -- that stays with the Xilinx tools, deliberately.
+ *
+ * The program strobe itself is compiled out unless ZYNQMP_EFUSE_BURN is
+ * defined: the default build reports the exact bit it would blow and stops. */
+int zynqmp_efuse_write_bit(uint32_t page, uint32_t row, uint32_t col)
+{
+    uint32_t addr;
+
+    if (page > ZYNQMP_EFUSE_PGM_ADDR_PAGE_MASK ||
+        row  > ZYNQMP_EFUSE_PGM_ADDR_ROW_MASK ||
+        col  > ZYNQMP_EFUSE_PGM_ADDR_COL_MASK) {
+        return -1;
+    }
+
+    if (zynqmp_efuse_is_brick_fuse(page, row, col)) {
+        wolfBoot_printf("eFuse: refusing SEC_CTRL bit %u (not programmable)\n",
+            col);
+        return -1;
+    }
+
+    if (zynqmp_efuse_prog_allowed() != 0) {
+        return -1;
+    }
+
+    addr = ((page & ZYNQMP_EFUSE_PGM_ADDR_PAGE_MASK)
+                << ZYNQMP_EFUSE_PGM_ADDR_PAGE_SHIFT) |
+           ((row & ZYNQMP_EFUSE_PGM_ADDR_ROW_MASK)
+                << ZYNQMP_EFUSE_PGM_ADDR_ROW_SHIFT) |
+            (col & ZYNQMP_EFUSE_PGM_ADDR_COL_MASK);
+
+#ifndef ZYNQMP_EFUSE_BURN
+    /* 0 here means "the request was accepted", not "the fuse was blown".
+     * Report-only is a build mode, so a caller always knows at compile time
+     * which it is; nothing is written to the controller. */
+    (void)addr; /* only consumed by the logging macro */
+    wolfBoot_printf("eFuse: would program page %u row %u col %u (ADDR 0x%08x)\n",
+        page, row, col, addr);
+    return 0;
+#else
+    {
+        int ret = 0;
+
+        pmu_mmio_write(ZYNQMP_EFUSE_WR_LOCK, ZYNQMP_EFUSE_WR_UNLOCK_VAL);
+        zynqmp_efuse_set_timing();
+        /* PGM_EN gates the strobe and is clear out of reset, so the PGM_ADDR
+         * write would otherwise do nothing on a cold-booted controller. */
+        pmu_mmio_writemask(ZYNQMP_EFUSE_CFG, ZYNQMP_EFUSE_CFG_PGM_EN,
+            ZYNQMP_EFUSE_CFG_PGM_EN);
+        /* The T-bit pattern proves the controller is reading the array
+         * correctly. Programming with it wrong risks landing on the wrong
+         * row, so refuse rather than strobe. */
+        if ((pmu_mmio_read(ZYNQMP_EFUSE_STATUS) &
+                ZYNQMP_EFUSE_STATUS_TBITS_ALL) !=
+                ZYNQMP_EFUSE_STATUS_TBITS_ALL) {
+            wolfBoot_printf("eFuse: bad T-bit pattern (STATUS 0x%08x)\n",
+                pmu_mmio_read(ZYNQMP_EFUSE_STATUS));
+            pmu_mmio_writemask(ZYNQMP_EFUSE_CFG, ZYNQMP_EFUSE_CFG_PGM_EN, 0);
+            pmu_mmio_write(ZYNQMP_EFUSE_WR_LOCK, ZYNQMP_EFUSE_WR_LOCK_VAL);
+            return -1;
+        }
+
+        pmu_mmio_write(ZYNQMP_EFUSE_ISR,
+            ZYNQMP_EFUSE_ISR_PGM_DONE | ZYNQMP_EFUSE_ISR_PGM_ERR);
+        pmu_mmio_write(ZYNQMP_EFUSE_PGM_ADDR, addr);
+
+        if (pmu_mmio_wait(ZYNQMP_EFUSE_ISR,
+                ZYNQMP_EFUSE_ISR_PGM_DONE | ZYNQMP_EFUSE_ISR_PGM_ERR,
+                ZYNQMP_EFUSE_ISR_PGM_DONE,
+                ZYNQMP_EFUSE_POLL_TRIES) != 0) {
+            wolfBoot_printf("eFuse: program failed (ISR 0x%08x)\n",
+                pmu_mmio_read(ZYNQMP_EFUSE_ISR));
+            ret = -1;
+        }
+
+        if (ret == 0) {
+            /* Reload the cache so a later state read sees the new bit. Wait
+             * for CACHE_LOAD to clear as well as CACHE_DONE to set, so a
+             * stale done flag from an earlier reload is not mistaken for
+             * this one completing. */
+            pmu_mmio_write(ZYNQMP_EFUSE_CACHE_LOAD,
+                ZYNQMP_EFUSE_CACHE_LOAD_VAL);
+            if (pmu_mmio_wait(ZYNQMP_EFUSE_STATUS,
+                    ZYNQMP_EFUSE_STATUS_CACHE_LOAD |
+                        ZYNQMP_EFUSE_STATUS_CACHE_DONE,
+                    ZYNQMP_EFUSE_STATUS_CACHE_DONE,
+                    ZYNQMP_EFUSE_POLL_TRIES) != 0) {
+                wolfBoot_printf("eFuse: cache reload failed (STATUS 0x%08x)\n",
+                    pmu_mmio_read(ZYNQMP_EFUSE_STATUS));
+                ret = -1;
+            }
+        }
+
+        /* Disable programming and re-lock on every path, so the OTP
+         * registers are not left writable after a guarded operation. */
+        pmu_mmio_writemask(ZYNQMP_EFUSE_CFG, ZYNQMP_EFUSE_CFG_PGM_EN, 0);
+        pmu_mmio_write(ZYNQMP_EFUSE_WR_LOCK, ZYNQMP_EFUSE_WR_LOCK_VAL);
+        return ret;
+    }
+#endif /* ZYNQMP_EFUSE_BURN */
+}
+#endif /* WOLFBOOT_ZYNQMP_EFUSE_WRITE */
+
+#if defined(WOLFBOOT_ZYNQMP_EFUSE_WRITE) && defined(WOLFBOOT_ZYNQMP_EFUSE_SELFTEST)
+/* Bring-up check for the programming gate. Reports the raw SysMon readings
+ * and whether programming would be permitted. Reads only -- it never programs
+ * a fuse, and is unaffected by ZYNQMP_EFUSE_BURN. */
+int zynqmp_efuse_gate_test(void)
+{
+    uint32_t temp, psaux, psintlp;
+    int ret;
+
+    temp    = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_TEMP);
+    psaux   = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_VCC_PSAUX);
+    psintlp = zynqmp_sysmon_raw(ZYNQMP_SYSMON_CH_VCC_PSINTLP);
+
+    (void)temp; (void)psaux; (void)psintlp; /* logging-only below */
+    wolfBoot_printf("eFuse gate: TEMP %u [%u..%u]\n", temp,
+        (uint32_t)ZYNQMP_EFUSE_TEMP_MIN_RAW,
+        (uint32_t)ZYNQMP_EFUSE_TEMP_MAX_RAW);
+    wolfBoot_printf("eFuse gate: PSAUX %u [%u..%u] PSINTLP %u [%u..%u]\n",
+        psaux,
+        (uint32_t)ZYNQMP_EFUSE_VCC_PSAUX_MIN_RAW,
+        (uint32_t)ZYNQMP_EFUSE_VCC_PSAUX_MAX_RAW,
+        psintlp,
+        (uint32_t)ZYNQMP_EFUSE_VCC_PSINTLP_MIN_RAW,
+        (uint32_t)ZYNQMP_EFUSE_VCC_PSINTLP_MAX_RAW);
+
+    ret = zynqmp_efuse_prog_allowed();
+    wolfBoot_printf("eFuse gate: programming %s\n",
+        (ret == 0) ? "ALLOWED" : "BLOCKED");
+    return ret;
+}
+#endif /* WOLFBOOT_ZYNQMP_EFUSE_SELFTEST */
 
 #ifdef WOLFBOOT_ZYNQMP_BBRAM
 #include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
@@ -2520,6 +2742,10 @@ void hal_init(void)
 
 #if defined(WOLFBOOT_ZYNQMP_BBRAM) && defined(WOLFBOOT_ZYNQMP_BBRAM_SELFTEST)
     (void)zynqmp_bbram_test();
+#endif
+
+#if defined(WOLFBOOT_ZYNQMP_EFUSE_WRITE) && defined(WOLFBOOT_ZYNQMP_EFUSE_SELFTEST)
+    (void)zynqmp_efuse_gate_test();
 #endif
 }
 

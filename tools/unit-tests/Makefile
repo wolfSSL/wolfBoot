@@ -128,6 +128,8 @@ TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-ct-compare
 TESTS+=unit-zynqmp-bbram-crc
+TESTS+=unit-zynqmp-efuse-guards
+TESTS+=unit-zynqmp-efuse-burn
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -1302,14 +1304,50 @@ unit-ct-compare: unit-ct-compare.c ct_compare_extract.h
 # unit-zynqmp-bbram-crc checks the BBRAM key CRC against vectors produced by
 # the Xilinx XilSKey implementation. The programmed key cannot be read back,
 # so this CRC is the only verification the controller offers. hal/zynq.c pulls
-# in the whole ZynqMP HAL, so the two functions are extracted verbatim.
-bbram_crc_extract.h: ../../hal/zynq.c
-	sed -n '/^static uint32_t zynqmp_bbram_row_crc(/,/^}/p' $< > $@
-	sed -n '/^uint32_t zynqmp_bbram_key_crc(/,/^}/p' $< >> $@
-	sed -n '/^void zynqmp_bbram_key_words(/,/^}/p' $< >> $@
+# in the whole ZynqMP HAL, so the pure helpers are extracted verbatim, along
+# with the constants and the brick mask they depend on.
+bbram_crc_extract.h: ../../hal/zynq.c ../../hal/zynq.h
+	sed -n '/^#define ZYNQMP_EFUSE_SEC_CTRL_PPK1_INVLD/,/^#define ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK/p' ../../hal/zynq.h > $@
+	sed -n '/^#define ZYNQMP_EFUSE_SEC_CTRL_BRICK_MASK/,/AES_RDLK)/p' ../../hal/zynq.h >> $@
+	grep -E '^#define ZYNQMP_EFUSE_(ROW|PAGE)_SEC_CTRL' ../../hal/zynq.h >> $@
+	grep -E '^#define ZYNQMP_BBRAM_(CRC_POLY|CRC_ROW_BITS|KEY_WORDS)' ../../hal/zynq.h >> $@
+	sed -n '/^static uint32_t zynqmp_bbram_row_crc(/,/^}/p' ../../hal/zynq.c >> $@
+	sed -n '/^uint32_t zynqmp_bbram_key_crc(/,/^}/p' ../../hal/zynq.c >> $@
+	sed -n '/^void zynqmp_bbram_key_words(/,/^}/p' ../../hal/zynq.c >> $@
+	sed -n '/^int zynqmp_efuse_is_brick_fuse(/,/^}/p' ../../hal/zynq.c >> $@
+
 
 unit-zynqmp-bbram-crc: unit-zynqmp-bbram-crc.c bbram_crc_extract.h
 	gcc -o $@ unit-zynqmp-bbram-crc.c $(CFLAGS) $(LDFLAGS)
+
+# unit-zynqmp-efuse-guards covers the fail-secure guards that gate irreversible
+# eFuse writes and BBRAM key programming. Those paths are MMIO-bound, so the
+# test backs pmu_mmio_* with a fake register file and the functions under test
+# are extracted verbatim from hal/zynq.c.
+efuse_guards_extract.h: ../../hal/zynq.c ../../hal/zynq.h
+	sed -n '/^typedef struct zynqmp_sec_state {/,/^} zynqmp_sec_state;/p' $< > $@
+	sed -n '/^static int zynqmp_sec_state_get(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_sec_policy_check(/,/^}/p' $< >> $@
+	sed -n '/^static uint32_t zynqmp_sysmon_raw(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_efuse_prog_allowed(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_efuse_is_brick_fuse(/,/^}/p' $< >> $@
+	sed -n '/^#ifdef ZYNQMP_EFUSE_BURN$$/,/^#endif \/\* ZYNQMP_EFUSE_BURN \*\/$$/p' $< >> $@
+	sed -n '/^int zynqmp_efuse_write_bit(/,/^}/p' $< >> $@
+	sed -n '/^static uint32_t zynqmp_bbram_row_crc(/,/^}/p' $< >> $@
+	sed -n '/^uint32_t zynqmp_bbram_key_crc(/,/^}/p' $< >> $@
+	sed -n '/^void zynqmp_bbram_key_words(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_bbram_status(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_bbram_zeroize(/,/^}/p' $< >> $@
+	sed -n '/^int zynqmp_bbram_program(/,/^}/p' $< >> $@
+
+unit-zynqmp-efuse-guards: unit-zynqmp-efuse-guards.c efuse_guards_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-efuse-guards.c $(CFLAGS) -I../.. $(LDFLAGS)
+
+# Same source, compiled with the program strobe enabled, so the burn-only
+# error paths (T-bit refusal, program timeout, cache-reload timeout) and the
+# PGM_EN/WR_LOCK cleanup are covered as well as report-only behaviour.
+unit-zynqmp-efuse-burn: unit-zynqmp-efuse-guards.c efuse_guards_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-efuse-guards.c $(CFLAGS) -I../.. -DZYNQMP_EFUSE_BURN $(LDFLAGS)
 
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the
@@ -2038,6 +2076,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
+	bbram_crc_extract.h efuse_guards_extract.h \
 	zynq_write_extract.h \
 	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \
 	fat32-short.bin ext4-min.img ext4-stock.img ext4-payload.bin \

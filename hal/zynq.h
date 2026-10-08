@@ -349,6 +349,92 @@
     ZYNQMP_EFUSE_SEC_CTRL_JTAG_DIS   | ZYNQMP_EFUSE_SEC_CTRL_ENC_ONLY  | \
     ZYNQMP_EFUSE_SEC_CTRL_AES_WRLK   | ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK)
 
+/* eFuse controller (programming side). The cache registers above are the
+ * read path; these drive the OTP itself. */
+#define ZYNQMP_EFUSE_WR_LOCK     (ZYNQMP_EFUSE_BASE + 0x0000)
+#define ZYNQMP_EFUSE_CFG         (ZYNQMP_EFUSE_BASE + 0x0004)
+#define ZYNQMP_EFUSE_PGM_ADDR    (ZYNQMP_EFUSE_BASE + 0x000C)
+#define ZYNQMP_EFUSE_TPGM        (ZYNQMP_EFUSE_BASE + 0x0018)
+#define ZYNQMP_EFUSE_TRD         (ZYNQMP_EFUSE_BASE + 0x001C)
+#define ZYNQMP_EFUSE_TSU_H_PS    (ZYNQMP_EFUSE_BASE + 0x0020)
+#define ZYNQMP_EFUSE_TSU_H_PS_CS (ZYNQMP_EFUSE_BASE + 0x0024)
+#define ZYNQMP_EFUSE_TSU_H_CS    (ZYNQMP_EFUSE_BASE + 0x002C)
+#define ZYNQMP_EFUSE_ISR         (ZYNQMP_EFUSE_BASE + 0x0030)
+#define ZYNQMP_EFUSE_CACHE_LOAD  (ZYNQMP_EFUSE_BASE + 0x0040)
+
+#define ZYNQMP_EFUSE_WR_UNLOCK_VAL     0xDF0D
+/* Writing the reset value back re-locks the controller */
+#define ZYNQMP_EFUSE_WR_LOCK_VAL       0x0
+#define ZYNQMP_EFUSE_CFG_CLK_SEL       (1UL << 0)
+/* Gates the programming strobe; clear out of reset */
+#define ZYNQMP_EFUSE_CFG_PGM_EN        (1UL << 1)
+#define ZYNQMP_EFUSE_CFG_MARGIN_RD_SHIFT 2
+#define ZYNQMP_EFUSE_CFG_MARGIN_RD_MASK  (3UL << 2)
+#define ZYNQMP_EFUSE_CFG_MARGIN_2_RD   0x02
+#define ZYNQMP_EFUSE_CACHE_LOAD_VAL    0x1
+
+#define ZYNQMP_EFUSE_PGM_ADDR_PAGE_SHIFT 11
+#define ZYNQMP_EFUSE_PGM_ADDR_ROW_SHIFT  5
+#define ZYNQMP_EFUSE_PGM_ADDR_COL_MASK   0x1F
+#define ZYNQMP_EFUSE_PGM_ADDR_ROW_MASK   0x3F
+#define ZYNQMP_EFUSE_PGM_ADDR_PAGE_MASK  0x03
+
+#define ZYNQMP_EFUSE_ISR_PGM_DONE      (1UL << 0)
+#define ZYNQMP_EFUSE_ISR_PGM_ERR       (1UL << 1)
+
+/* Row of SEC_CTRL in the OTP array, used to reject tier-D programming. This
+ * is the programming coordinate (page 0, row 22); it is unrelated to the
+ * cache-read offset 0x1058 the state accessor uses. */
+#define ZYNQMP_EFUSE_ROW_SEC_CTRL      22
+#define ZYNQMP_EFUSE_PAGE_SEC_CTRL     0
+
+/* T-bit pattern in STATUS. The controller only reads the array correctly when
+ * all three are set, so it is checked before any programming strobe. */
+#define ZYNQMP_EFUSE_STATUS_TBIT0      (1UL << 0)
+#define ZYNQMP_EFUSE_STATUS_TBIT2      (1UL << 1)
+#define ZYNQMP_EFUSE_STATUS_TBIT3      (1UL << 2)
+#define ZYNQMP_EFUSE_STATUS_TBITS_ALL  (ZYNQMP_EFUSE_STATUS_TBIT0 | \
+    ZYNQMP_EFUSE_STATUS_TBIT2 | ZYNQMP_EFUSE_STATUS_TBIT3)
+
+/* PS_REF_CLK the controller timing derives from. Override per board. */
+#ifndef ZYNQMP_PS_REF_CLK_HZ
+#define ZYNQMP_PS_REF_CLK_HZ 33333000UL
+#endif
+
+/* ceil(a * F / d), integer only (no FP in the bootloader) */
+#define ZYNQMP_EFUSE_TIMER(a, d) \
+    (uint32_t)((((uint64_t)(a) * ZYNQMP_PS_REF_CLK_HZ) + ((d) - 1)) / (d))
+#define ZYNQMP_EFUSE_TPGM_VAL        ZYNQMP_EFUSE_TIMER(5UL,  1000000UL)
+#define ZYNQMP_EFUSE_TRD_VAL         ZYNQMP_EFUSE_TIMER(15UL, 100000000UL)
+#define ZYNQMP_EFUSE_TSU_H_PS_VAL    ZYNQMP_EFUSE_TIMER(67UL, 1000000000UL)
+#define ZYNQMP_EFUSE_TSU_H_PS_CS_VAL ZYNQMP_EFUSE_TIMER(46UL, 1000000000UL)
+#define ZYNQMP_EFUSE_TSU_H_CS_VAL    ZYNQMP_EFUSE_TIMER(30UL, 1000000000UL)
+
+/* PS SysMon. Data registers sit at base + PS block + channel * 4. Supply
+ * channels read 0 until the sequencer is configured, so these are only
+ * meaningful on a booted system. */
+#define ZYNQMP_SYSMON_BASE       0xFFA50000
+#define ZYNQMP_SYSMON_PS_OFFSET  0x0800
+#define ZYNQMP_SYSMON_CH_TEMP        0
+#define ZYNQMP_SYSMON_CH_VCC_PSINTLP 1
+#define ZYNQMP_SYSMON_CH_VCC_PSAUX   6
+
+/* raw = V * 65536 / 3.0, expressed in millivolts with integer math */
+#define ZYNQMP_SYSMON_MV_TO_RAW(mv) \
+    (uint32_t)(((uint64_t)(mv) * 65536UL) / 3000UL)
+/* raw = ((T + 280.23) * 65536) / 509.3140064, T in whole degrees C.
+ * Scaled by 1000 so it stays integer; c may be negative. */
+#define ZYNQMP_SYSMON_C_TO_RAW(c) \
+    (uint32_t)(((((int64_t)(c) * 1000) + 280230) * 65536) / 509314)
+
+/* Limits XilSKey enforces before any eFuse program */
+#define ZYNQMP_EFUSE_TEMP_MIN_RAW        ZYNQMP_SYSMON_C_TO_RAW(-40)
+#define ZYNQMP_EFUSE_TEMP_MAX_RAW        ZYNQMP_SYSMON_C_TO_RAW(125)
+#define ZYNQMP_EFUSE_VCC_PSAUX_MIN_RAW   ZYNQMP_SYSMON_MV_TO_RAW(1620)
+#define ZYNQMP_EFUSE_VCC_PSAUX_MAX_RAW   ZYNQMP_SYSMON_MV_TO_RAW(1980)
+#define ZYNQMP_EFUSE_VCC_PSINTLP_MIN_RAW ZYNQMP_SYSMON_MV_TO_RAW(675)
+#define ZYNQMP_EFUSE_VCC_PSINTLP_MAX_RAW ZYNQMP_SYSMON_MV_TO_RAW(935)
+
 /* BBRAM support. Battery-backed 256-bit AES key store; the CSU selects it as
  * the device key when the boot header names BBRAM as the encryption key
  * source. Unlike the eFuse key this is erasable and re-programmable, and it
@@ -379,6 +465,10 @@
 #define ZYNQMP_BBRAM_CRC_ROW_BITS  5
 
 #define ZYNQMP_BBRAM_POLL_TRIES    100000
+
+/* eFuse programming poll bound, kept separate from the BBRAM one so the two
+ * features cannot retune each other. */
+#define ZYNQMP_EFUSE_POLL_TRIES    100000
 
 
 /* UART Support */
@@ -773,6 +863,19 @@ static inline int zynqmp_l2_block_range(uint64_t start, uint64_t end,
 void zynqmp_efuse_dump(void);
 /* 0 when every bit in "required" is set in SEC_CTRL */
 int zynqmp_sec_policy_check(uint32_t required);
+#endif
+
+#ifdef WOLFBOOT_ZYNQMP_EFUSE_WRITE
+/* 0 when temperature and supplies are inside the programming window */
+int zynqmp_efuse_prog_allowed(void);
+/* True for the SEC_CTRL fuses that are never programmable */
+int zynqmp_efuse_is_brick_fuse(uint32_t page, uint32_t row, uint32_t col);
+/* Burn one OTP bit. Rejects the brick-class SEC_CTRL fuses unconditionally;
+ * without ZYNQMP_EFUSE_BURN it only reports what it would program. */
+int zynqmp_efuse_write_bit(uint32_t page, uint32_t row, uint32_t col);
+#ifdef WOLFBOOT_ZYNQMP_EFUSE_SELFTEST
+int zynqmp_efuse_gate_test(void);
+#endif
 #endif
 
 #ifdef WOLFBOOT_ZYNQMP_BBRAM

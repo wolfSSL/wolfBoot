@@ -4244,6 +4244,28 @@ the_ROM_image:
 
 **Program the key before flashing an encrypted image.** Any encrypted boot disables the DAP, successful or not, so flashing first locks you out of the JTAG access needed to program the key; recovery is SW6 to JTAG. For the same reason, flash an unencrypted image before a session that needs JTAG.
 
+### eFuse security state and programming (optional)
+
+With `ZYNQMP_SEC=1` wolfBoot reads the eFuse cache at EL3 and prints `SEC_CTRL` (decoding `RSA_EN`, `ENC_ONLY`, `JTAG_DIS`, PPK revocation and the lock bits), the PUF `CHASH`/`AUX`, and the 12-word PPK0 hash. `zynqmp_sec_policy_check()` turns that into a boot-time gate: it returns non-zero when `SEC_CTRL` does not have every bit a deployment requires, so a build can refuse to run on a part that is not locked down.
+
+eFuse *programming* is separate and off by default:
+
+```sh
+make ZYNQMP_FSBL=1 ZYNQMP_SEC=1 ZYNQMP_EFUSE_WRITE=1
+```
+
+This builds the programming path in **report-only** mode: `zynqmp_efuse_write_bit()` validates the target, checks the gate, prints the bit it would blow, and returns without touching the OTP. Adding `ZYNQMP_EFUSE_BURN=1` compiles in the program strobe. eFuses are one-shot, so that second flag is deliberate and irreversible.
+
+**Brick-class `SEC_CTRL` fuses are rejected unconditionally and cannot be enabled.** `RSA_EN`, `ENC_ONLY`, `JTAG_DIS`, `SEC_LOCK`, `AES_WRLK`, `AES_RDLK` and the PPK `WRLK`/`INVLD` bits each remove a recovery path: every later boot must be correctly signed or encrypted, JTAG is gone, or a wrong key or hash can no longer be replaced. They are listed in `ZYNQMP_EFUSE_SEC_CTRL_BRICK_MASK` and refused inside `zynqmp_efuse_write_bit()` itself, so no caller or config can route around the check. Programming them stays with the Xilinx tools.
+
+The rejection covers `SEC_CTRL` (page 0, row 22) only. Other one-shot fuses, including the SPK ID used for revocation, are not protected by it: with `ZYNQMP_EFUSE_BURN=1` a caller can program them, so treat the coordinates it is given as deliberate.
+
+**Programming is gated on temperature and supply.** `zynqmp_efuse_prog_allowed()` reads PS SysMon and requires -40 to 125 C, `VCC_PSAUX` 1.62-1.98 V and `VCC_PSINTLP` 0.675-0.935 V, matching what Xilinx's own tooling enforces. Supply channels read zero until the SysMon sequencer is configured, and a zero is treated as unknown and refused rather than as zero volts.
+
+`ZYNQMP_EFUSE_SELFTEST=1` reports the raw SysMon readings and whether the gate passes at boot, which is the quickest way to confirm the channel offsets and thresholds on a new board. It is read-only and never programs a fuse.
+
+The controller timing is derived from `PS_REF_CLK` (`TPGM`, `TRD`, `TSU_H_PS`, `TSU_H_PS_CS`, `TSU_H_CS`) using integer arithmetic. The default assumes 33.333 MHz; override with `CFLAGS_EXTRA+=-DZYNQMP_PS_REF_CLK_HZ=<hz>` if your board differs, since two of the five values land on an integer boundary at that clock.
+
 ### Ethernet PHY init (optional)
 
 Opt-in (off by default), wolfBoot can replay a board's U-Boot Ethernet PHY register sequence over the GEM MDIO management plane so the PHY is ready before the OS runs. Enable with `CFLAGS_EXTRA+=-DWOLFBOOT_ZYNQMP_PHY_INIT`. The default targets the ZCU102 on-board PHY (TI DP83867 at MDIO `0x0C` on GEM3, `0xFF0E0000`) and just reads the PHY ID as a diagnostic (printed with `DEBUG_UART=1`). A board supplies its own sequence by keeping its values in a small header selected with one line, `CFLAGS_EXTRA+=-DZYNQMP_PHY_INIT_HEADER='"myboard_phy.h"'`, where that header `#define`s any of `ZYNQMP_GEM_BASE`, `ZYNQMP_PHY_ADDR`, `ZYNQMP_PHY_GPIO_ADDR`, `ZYNQMP_GEM_MDC_DIV`, and the `{op, arg0, arg1}` step array `ZYNQMP_PHY_INIT_STEPS`; scalars can also be set directly with `-D`, and anything omitted falls back to the ZCU102 defaults (see `hal/zynq.h` and the commented example in `config/examples/zynqmp.config`). Where the PHY is behind the PL, the boot image must include the FPGA bitstream (bootgen `[destination_device=pl] system.bit`) or the transactions are no-ops.

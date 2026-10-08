@@ -12,8 +12,8 @@
  * implementation (XilSKey_ZynqMp_Bbram_CrcCalc) that the hardware is known to
  * agree with.
  *
- * hal/zynq.c drags in the full ZynqMP HAL, so the two CRC functions are
- * extracted verbatim by the Makefile.
+ * hal/zynq.c drags in the full ZynqMP HAL, so the pure helpers are extracted
+ * verbatim by the Makefile, with the constants and brick mask they use.
  *
  *
  * Copyright (C) 2026 wolfSSL Inc.
@@ -38,11 +38,8 @@
 #include <check.h>
 #include <stdint.h>
 
-/* Mirrored from the definitions in hal/zynq.h */
-#define ZYNQMP_BBRAM_CRC_POLY      0x82F63B78
-#define ZYNQMP_BBRAM_CRC_ROW_BITS  5
-#define ZYNQMP_BBRAM_KEY_WORDS     8
-
+/* Constants and the brick mask are extracted from hal/zynq.h by the Makefile
+ * rather than mirrored here, so a change to either fails this test. */
 #include "bbram_crc_extract.h"
 
 struct bbram_crc_vector {
@@ -123,6 +120,51 @@ START_TEST(test_bbram_key_word_order){
 }
 END_TEST
 
+/* The brick-class SEC_CTRL fuses must be unreachable at their real
+ * programming coordinates (page 0, row 22) -- not at the cache-read offset.
+ * Columns are enumerated explicitly so loosening the mask fails here. */
+START_TEST(test_efuse_brick_fuse_rejected){
+    static const uint32_t protected_cols[] = {
+        0, 1,              /* AES_RDLK, AES_WRLK */
+        2,                 /* ENC_ONLY */
+        5,                 /* JTAG_DIS */
+        10,                /* SEC_LOCK */
+        11, 12, 13, 14,    /* RSA_EN */
+        26, 27, 28,        /* PPK0_WRLK, PPK0_INVLD */
+        29, 30, 31         /* PPK1_WRLK, PPK1_INVLD */
+    };
+    static const uint32_t free_cols[] = { 3, 4, 6, 7, 8, 9, 15, 20, 25 };
+    unsigned i;
+
+    /* Pin the coordinates to literals. Asserting only through the macros
+     * would let a change of ZYNQMP_EFUSE_ROW_SEC_CTRL to the wrong row pass
+     * while leaving the real SEC_CTRL row unprotected. */
+    ck_assert_uint_eq(ZYNQMP_EFUSE_PAGE_SEC_CTRL, 0);
+    ck_assert_uint_eq(ZYNQMP_EFUSE_ROW_SEC_CTRL, 22);
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(0, 22, 5), 1);
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(0, 21, 5), 0);
+
+    for (i = 0; i < sizeof(protected_cols) / sizeof(protected_cols[0]); i++) {
+        ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(ZYNQMP_EFUSE_PAGE_SEC_CTRL,
+            ZYNQMP_EFUSE_ROW_SEC_CTRL, protected_cols[i]), 1);
+    }
+    for (i = 0; i < sizeof(free_cols) / sizeof(free_cols[0]); i++) {
+        ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(ZYNQMP_EFUSE_PAGE_SEC_CTRL,
+            ZYNQMP_EFUSE_ROW_SEC_CTRL, free_cols[i]), 0);
+    }
+    /* row 22 is the only protected row; row 0 is an ordinary OTP row */
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(0, 0, 5), 0);
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(0, 23, 5), 0);
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(1,
+        ZYNQMP_EFUSE_ROW_SEC_CTRL, 5), 0);
+    /* A column past the register width must not shift out of range */
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(ZYNQMP_EFUSE_PAGE_SEC_CTRL,
+        ZYNQMP_EFUSE_ROW_SEC_CTRL, 32), 0);
+    ck_assert_int_eq(zynqmp_efuse_is_brick_fuse(ZYNQMP_EFUSE_PAGE_SEC_CTRL,
+        ZYNQMP_EFUSE_ROW_SEC_CTRL, 63), 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot zynqmp bbram crc");
@@ -131,6 +173,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_bbram_crc_known_answers);
     tcase_add_test(tc, test_bbram_crc_row_order_matters);
     tcase_add_test(tc, test_bbram_key_word_order);
+    tcase_add_test(tc, test_efuse_brick_fuse_rejected);
     suite_add_tcase(s, tc);
     return s;
 }
