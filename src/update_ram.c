@@ -811,7 +811,13 @@ backup_on_failure:
                 "fixup\n", dts_addr);
         }
         if (fit_load_ramdisk(&fit_ctx, fit_ramdisk, dts_for_initrd) != 0) {
+#ifdef WOLFBOOT_FIT_RAMDISK_REQUIRED
+            /* The initramfs is the only root filesystem this image has. */
+            wolfBoot_printf("FIT: the required initrd did not load\n");
+            wolfBoot_panic();
+#else
             wolfBoot_printf("FIT: booting without an initrd\n");
+#endif
         }
     }
 #endif

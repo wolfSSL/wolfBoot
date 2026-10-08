@@ -1737,8 +1737,8 @@ void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
  *
  * Returns 0 on success, -1 if the ramdisk node was found but the load
  * failed, or if `dts` is NULL - a ramdisk the kernel is never told
- * about is not a success. Callers log and continue, so this does not
- * abort the boot. */
+ * about is not a success. Callers log and continue unless they are
+ * built with WOLFBOOT_FIT_RAMDISK_REQUIRED. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 {
     int rd_size = 0;
