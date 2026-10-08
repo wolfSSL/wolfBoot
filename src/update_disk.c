@@ -631,11 +631,21 @@ int wolfBoot_disk_boot_part(void)
  * survives. Nothing is written before a slot has been verified. */
 int wolfBoot_disk_dts_fixup(fdt_ctx* ctx)
 {
+    int ret;
+
     if (disk_boot_part < 0) {
         return 0;
     }
-    return fdt_fixup_chosen_val(ctx, "wolfboot,boot-part",
+    ret = fdt_fixup_chosen_val(ctx, "wolfboot,boot-part",
         (uint32_t)disk_boot_part);
+    if (ret != 0) {
+        /* Booting on would hand the OS either nothing to confirm, leaving the
+         * slot in TESTING until the next boot rejects it, or a value the DTB
+         * already carried, aiming the confirmation at the wrong slot. */
+        wolfBoot_printf("FDT: Failed to set wolfboot,boot-part (%d)\r\n", ret);
+        wolfBoot_panic();
+    }
+    return ret;
 }
 #endif
 

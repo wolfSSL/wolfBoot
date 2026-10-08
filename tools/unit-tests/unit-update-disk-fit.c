@@ -76,6 +76,7 @@ static uint8_t fit_dts_image[TEST_DTS_STAGE_SIZE];
 static int mock_dts_size;
 /* The /chosen/wolfboot,boot-part hint written for the OS; -1 until set. */
 static int mock_boot_part_prop;
+static int mock_chosen_val_ret;
 static int mock_do_boot_called;
 static int mock_fit_memcpy_ret;
 static int mock_fit_memcpy_called;
@@ -123,6 +124,7 @@ static void reset_mocks(void)
     mock_fit_memcpy_ret = 0;
     mock_fit_memcpy_called = 0;
     mock_boot_part_prop = -1;
+    mock_chosen_val_ret = 0;
     mock_panic_hook_called = 0;
     memset(panic_key_snapshot, 0xFF, sizeof(panic_key_snapshot));
     memset(panic_nonce_snapshot, 0xFF, sizeof(panic_nonce_snapshot));
@@ -281,6 +283,8 @@ const char* fit_find_images(fdt_ctx* ctx, const char** pkernel,
 int fdt_fixup_chosen_val(fdt_ctx* ctx, const char* name, uint32_t val)
 {
     (void)ctx;
+    if (mock_chosen_val_ret != 0)
+        return mock_chosen_val_ret;
     if (strcmp(name, "wolfboot,boot-part") == 0)
         mock_boot_part_prop = (int)val;
     return 0;
@@ -379,6 +383,26 @@ START_TEST(test_update_disk_fit_dts_copy_success_boots)
 }
 END_TEST
 
+/* The slot the OS has to confirm is published in the HAL's DTB fixup pass.
+ * A failure there is not recoverable once the OS is running - the slot would
+ * stay in TESTING, or a value the DTB already carried would aim the
+ * confirmation at the other slot - so the boot stops instead of handing on a
+ * tree that does not say which slot it came from. */
+START_TEST(test_update_disk_fit_boot_part_fixup_failure_panics)
+{
+    fdt_ctx ctx;
+
+    reset_mocks();
+    wolfBoot_start();
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+
+    mock_chosen_val_ret = -1;
+    memset(&ctx, 0, sizeof(ctx));
+    ck_assert_int_lt(wolfBoot_disk_dts_fixup(&ctx), 0);
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+}
+END_TEST
+
 /* A parsed DTB larger than the staging bound (WOLFBOOT_DTS_MAX_SIZE)
  * must be rejected rather than copied: before the fix the copy length
  * came from the FIT-declared property length, unbounded against the
@@ -421,6 +445,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_fit_dts_oversized_rejected);
     tcase_add_test(tc, test_update_disk_fit_dts_below_min_rejected);
     tcase_add_test(tc, test_update_disk_fit_dts_copy_success_boots);
+    tcase_add_test(tc, test_update_disk_fit_boot_part_fixup_failure_panics);
     suite_add_tcase(s, tc);
 
     return s;

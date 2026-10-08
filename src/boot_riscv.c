@@ -481,7 +481,16 @@ void do_boot(const uint32_t *app_offset)
     if (dts_offset != NULL) {
         /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window
          * size (see include/fdt.h); it bounds the fixups below. */
-        hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE);
+        if (hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE) != 0) {
+            wolfBoot_printf("do_boot: FDT fixup failed\n");
+#ifdef WOLFBOOT_UPDATE_DISK
+            /* A pass that gave up before the /chosen/wolfboot,boot-part write
+             * leaves the OS with no way to tell which slot it must confirm. */
+            if (wolfBoot_disk_boot_part() >= 0) {
+                wolfBoot_panic();
+            }
+#endif
+        }
     }
     dts_addr = (unsigned long)dts_offset;
 #elif defined(WOLFBOOT_RISCV_MMODE) || __riscv_xlen == 64

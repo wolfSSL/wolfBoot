@@ -801,6 +801,45 @@ START_TEST(test_fdt_fixup_initrd)
 }
 END_TEST
 
+/* fdt_fixup_chosen_val(): creates /chosen when absent, writes the value as
+ * 32-bit big-endian, and replaces an existing one in place. This is what
+ * src/update_disk.c publishes /chosen/wolfboot,boot-part with. */
+START_TEST(test_fdt_fixup_chosen_val)
+{
+    static uint8_t buf[0x400];
+    fdt_ctx ctx;
+    int off, len = 0;
+    const void *val;
+
+    /* /chosen absent: it must be created */
+    (void)build_compat_fdt(buf, sizeof(buf), (const uint8_t *)"abc\0", 4);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    ck_assert_int_eq(fdt_fixup_chosen_val(&ctx, "wolfboot,boot-part", 2), 0);
+
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    off = fdt_path_offset(&ctx, "/chosen");
+    ck_assert_int_gt(off, 0);
+    val = fdt_getprop(&ctx, off, "wolfboot,boot-part", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(rd_be32((const uint8_t *)val), 2U);
+
+    /* /chosen already present: the value is replaced in place */
+    ck_assert_int_eq(fdt_fixup_chosen_val(&ctx, "wolfboot,boot-part", 1), 0);
+    ck_assert_int_eq(fdt_open(&ctx, buf, (uint32_t)sizeof(buf)), 0);
+    off = fdt_path_offset(&ctx, "/chosen");
+    ck_assert_int_gt(off, 0);
+    val = fdt_getprop(&ctx, off, "wolfboot,boot-part", &len);
+    ck_assert_ptr_nonnull(val);
+    ck_assert_uint_eq(rd_be32((const uint8_t *)val), 1U);
+
+    ck_assert_int_eq(fdt_fixup_chosen_val(&ctx, NULL, 0), -FDT_ERR_BADARG);
+    memset(&ctx, 0, sizeof(ctx));
+    ck_assert_int_eq(fdt_fixup_chosen_val(&ctx, "wolfboot,boot-part", 0),
+        -FDT_ERR_BADARG);
+}
+END_TEST
+
 /* fdt_fixup_bootargs(): DTB-provided bootargs win unless force is set;
  * a missing property is always filled in. */
 START_TEST(test_fdt_fixup_bootargs_keep_and_force)
@@ -1469,6 +1508,7 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_add_subnode_bounded_by_capacity);
     tcase_add_test(tc, test_fdt_setprop_resizes_existing_property);
     tcase_add_test(tc, test_fdt_fixup_initrd);
+    tcase_add_test(tc, test_fdt_fixup_chosen_val);
     tcase_add_test(tc, test_fdt_fixup_bootargs_keep_and_force);
     tcase_add_test(tc, test_fdt_fixup_bootargs_unauthenticated_is_forced);
     tcase_add_test(tc, test_fdt_fixup_initrd_rejects_wrapped_end);

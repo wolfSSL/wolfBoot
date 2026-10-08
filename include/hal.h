@@ -149,6 +149,13 @@ int hal_dma_set_noncached(uintptr_t start, uintptr_t end);
     int hal_boot_slot_select(void);
 #endif
 
+#if defined(MMU) || defined(WOLFBOOT_FDT)
+    /* Apply this target's device tree fixups in place, bounded by `capacity`
+     * (the DTS staging window). Returns 0, or negative when the tree handed
+     * to the OS is not the one wolfBoot meant to hand it. */
+    int hal_dts_fixup(void* dts_addr, uint32_t capacity);
+#endif
+
 #ifdef WOLFBOOT_FIT_CONFIG_SELECT
     /*
      * Return the name of the FIT /configurations node to boot (e.g.

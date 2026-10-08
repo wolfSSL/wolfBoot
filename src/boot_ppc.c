@@ -117,7 +117,8 @@ void WEAKFUNCTION hal_early_init(void)
 #ifdef MMU
 int WEAKFUNCTION hal_dts_fixup(void* dts_addr, uint32_t capacity)
 {
-#ifdef WOLFBOOT_UPDATE_DISK
+/* src/update_disk.c is not linked into stage1, which boots no disk. */
+#if defined(WOLFBOOT_UPDATE_DISK) && !defined(BUILD_LOADER_STAGE1)
     fdt_ctx ctx;
 
     if (fdt_open(&ctx, dts_addr, capacity) != 0 ||
@@ -443,7 +444,18 @@ void do_boot(const uint32_t *app_offset)
 #ifdef MMU
     /* WOLFBOOT_DTS_MAX_SIZE is this target's DTS staging-window size (see
      * include/fdt.h); it bounds every in-place fixup below. */
-    hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE);
+    if (hal_dts_fixup((uint32_t*)dts_offset, WOLFBOOT_DTS_MAX_SIZE) != 0) {
+        wolfBoot_printf("do_boot: FDT fixup failed\n");
+#if defined(WOLFBOOT_UPDATE_DISK) && !defined(BUILD_LOADER_STAGE1)
+        /* A pass that gave up before the /chosen/wolfboot,boot-part write
+         * leaves the OS with no way to tell which slot it must confirm. An
+         * image that carried no device tree has nowhere to put it and boots
+         * with dtb=0 as it did before. */
+        if ((dts_offset != NULL) && (wolfBoot_disk_boot_part() >= 0)) {
+            wolfBoot_panic();
+        }
+#endif
+    }
 #endif
 
 #if defined(DEBUG_UART) && defined(WOLFBOOT_ARCH_PPC)
