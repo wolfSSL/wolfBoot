@@ -45,8 +45,13 @@
 #include "hal.h"
 #include "gpt.h"
 #include "fdt.h"
-#if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION)
+#if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION) || \
+    defined(MPFS_SBI_VENDOR)
 #include "mpfs250_snvm.h"
+#endif
+#if defined(MPFS_SBI_VENDOR) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+#include "riscv_sbi.h"
+#include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 #endif
 
 #ifdef MPFS_ATHENA
@@ -1097,16 +1102,24 @@ static int mpfs_scb_mailbox_busy(void)
     return (SCBCTRL_REG(SERVICES_SR_OFFSET) & SERVICES_SR_BUSY_MASK);
 }
 
-/* System Controller service, polling mode, mailbox word offset 0.  Returns the
- * 16-bit service status (0 = success) or a negative transport error. */
-static int mpfs_scb_request(uint8_t opcode, const uint8_t *req,
+/* Once the OS runs, the mailbox is driven from ecalls, where a console
+ * write could block on a UART the OS has reconfigured. */
+static int mpfs_scb_quiet;
+
+/* Raise a System Controller service.  The request bytes go to mailbox word
+ * 0; index is the SERVICES_CR mailbox-offset field, which carries the SPI
+ * directory index for the IAP services.  Returns 0 once the request is
+ * accepted, or a negative transport error. */
+static int mpfs_scb_start(uint8_t opcode, uint32_t index, const uint8_t *req,
     uint32_t req_len)
 {
     uint32_t cmd, words, rem, i, v;
     int timeout;
 
     if (mpfs_scb_mailbox_busy()) {
-        wolfBoot_printf("SCB mailbox busy\n");
+        if (!mpfs_scb_quiet) {
+            wolfBoot_printf("SCB mailbox busy\n");
+        }
         return -2;
     }
 
@@ -1132,9 +1145,10 @@ static int mpfs_scb_request(uint8_t opcode, const uint8_t *req,
     /* Ensure mailbox writes land before the request is raised. */
     __asm__ volatile("fence w,w" ::: "memory");
 
-    /* Command: opcode in [22:16] (SERVICES_CR_COMMAND_SHIFT), REQ in bit 0;
-     * the mailbox word-offset field is left 0. */
+    /* Command: opcode in [22:16] (SERVICES_CR_COMMAND_SHIFT), the mailbox
+     * offset / SPI index in [15:7], REQ in bit 0. */
     cmd = (((uint32_t)(opcode & 0x7Fu)) << SERVICES_CR_COMMAND_SHIFT) |
+          ((index & 0x1FFu) << SERVICES_CR_MBOX_SHIFT) |
           SERVICES_CR_REQ_MASK;
     SCBCTRL_REG(SERVICES_CR_OFFSET) = cmd;
 
@@ -1145,23 +1159,51 @@ static int mpfs_scb_request(uint8_t opcode, const uint8_t *req,
         timeout--;
     }
     if (timeout == 0) {
-        wolfBoot_printf("SCB request timeout\n");
+        if (!mpfs_scb_quiet) {
+            wolfBoot_printf("SCB request timeout\n");
+        }
         return -3;
     }
+    return 0;
+}
 
-    /* Wait for busy bit to clear (service complete).  Uses the larger
-     * completion bound: nonce/PUF take much longer than serial/sNVM-read. */
-    timeout = MPFS_SCB_BUSY_TIMEOUT;
+/* The 16-bit status of the service in progress. */
+static int mpfs_scb_status(void)
+{
+    return (int)((SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT)
+                 & 0xFFFFu);
+}
+
+/* Wait for the service to complete.  Returns its status (0 = success) or a
+ * negative transport error.  Uses the larger completion bound: nonce/PUF
+ * take much longer than serial/sNVM-read. */
+static int mpfs_scb_wait(void)
+{
+    int timeout = MPFS_SCB_BUSY_TIMEOUT;
+
     while (mpfs_scb_mailbox_busy() && (timeout > 0)) {
         timeout--;
     }
     if (timeout == 0) {
-        wolfBoot_printf("SCB busy timeout\n");
+        if (!mpfs_scb_quiet) {
+            wolfBoot_printf("SCB busy timeout\n");
+        }
         return -4;
     }
+    return mpfs_scb_status();
+}
 
-    return (int)((SCBCTRL_REG(SERVICES_SR_OFFSET) >> SERVICES_SR_STATUS_SHIFT)
-                 & 0xFFFFu);
+/* System Controller service, polling mode, mailbox word offset 0.  Returns the
+ * 16-bit service status (0 = success) or a negative transport error. */
+static int mpfs_scb_request(uint8_t opcode, const uint8_t *req,
+    uint32_t req_len)
+{
+    int ret = mpfs_scb_start(opcode, 0, req, req_len);
+
+    if (ret != 0) {
+        return ret;
+    }
+    return mpfs_scb_wait();
 }
 
 /* Read len response bytes from the mailbox at byte offset off (mb word 0). */
@@ -1172,6 +1214,419 @@ static void mpfs_scb_read(uint8_t *out, uint32_t off, uint32_t len)
         out[i] = SCBMBOX_BYTE(off + i);
     }
 }
+
+#if defined(MPFS_SBI_VENDOR) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+/* SBI vendor extension (include/riscv_sbi.h) served to the OS.  Everything
+ * here runs inside an ecall on one hart with interrupts off: the System
+ * Controller services that take seconds are started here and polled by the
+ * OS through SC_STATUS, the short ones complete in place. */
+
+/* The mailbox is one resource for all harts.  Taken for the life of a
+ * started service, released when SC_STATUS reports it complete. */
+static volatile uint32_t sbi_scb_lock;
+/* Set while a started (asynchronous) service owns the lock, so SC_STATUS
+ * releases only that one and never a lock a synchronous call is holding. */
+static volatile uint32_t sbi_scb_started;
+/* GET_KEY purposes already handed out this boot, one bit each. */
+static uint32_t sbi_key_served;
+
+static int sbi_scb_trylock(void)
+{
+    return (__atomic_exchange_n(&sbi_scb_lock, 1U, __ATOMIC_ACQ_REL) == 0U);
+}
+
+static void sbi_scb_unlock(void)
+{
+    __atomic_store_n(&sbi_scb_lock, 0U, __ATOMIC_RELEASE);
+}
+
+/* The challenge seed and hash label behind each purpose.  The OS names a
+ * purpose, never a challenge, so the PUF cannot be asked for the KEK. */
+static const struct {
+    unsigned long purpose;
+    const char *seed;
+    const char *label;
+} sbi_key_purposes[] = {
+    { SBI_WOLF_KEY_MRAM_LOG, "wolfBoot-mram-log-v1", "wolfBoot-mram-log-v1" },
+    { SBI_WOLF_KEY_VARLOG,   "varlog",               "wolfLUKS-key-v1:varlog" },
+};
+
+/* Give a claimed serving back, so a request that never handed the key over
+ * does not consume it. */
+static void sbi_key_unclaim(unsigned int i)
+{
+    (void)__atomic_fetch_and(&sbi_key_served, ~(1U << i), __ATOMIC_ACQ_REL);
+}
+
+static long sbi_vendor_get_key(unsigned long purpose, unsigned long buf,
+    unsigned long len)
+{
+    uint8_t key[SBI_WOLF_KEY_LEN];
+    unsigned int i;
+    int ret;
+
+    for (i = 0; i < sizeof(sbi_key_purposes) / sizeof(sbi_key_purposes[0]);
+            i++) {
+        if (sbi_key_purposes[i].purpose == purpose) {
+            break;
+        }
+    }
+    if ((i == sizeof(sbi_key_purposes) / sizeof(sbi_key_purposes[0])) ||
+            (len != SBI_WOLF_KEY_LEN)) {
+        return SBI_ERR_INVALID_PARAM;
+    }
+    if (!sbi_smode_range_ok(buf, len)) {
+        return SBI_ERR_INVALID_ADDRESS;
+    }
+    /* Claim the serving before deriving anything.  A plain check here and a
+     * set at the end would let two harts asking for the same purpose at once
+     * both be served; the claim is given back below if the key never reaches
+     * the caller. */
+    if ((__atomic_fetch_or(&sbi_key_served, 1U << i, __ATOMIC_ACQ_REL)
+            & (1U << i)) != 0U) {
+        return SBI_ERR_DENIED;
+    }
+    if (!sbi_scb_trylock()) {
+        sbi_key_unclaim(i);
+        return SBI_ERR_FAILED;
+    }
+    ret = mpfs_puf_purpose_key(sbi_key_purposes[i].seed,
+        sbi_key_purposes[i].label, key);
+    sbi_scb_unlock();
+    if (ret != 0) {
+        wc_ForceZero(key, sizeof(key));
+        sbi_key_unclaim(i);
+        return SBI_ERR_FAILED;
+    }
+    ret = sbi_copy_to_smode(buf, key, sizeof(key));
+    wc_ForceZero(key, sizeof(key));
+    if (ret != 0) {
+        /* the caller never saw the key, so its one serving still stands */
+        sbi_key_unclaim(i);
+        return SBI_ERR_INVALID_ADDRESS;
+    }
+    return SBI_SUCCESS;
+}
+
+/* Services that reach the System Controller are served only when the OS
+ * cannot drive the mailbox itself: unfenced, its own driver would race
+ * these requests. */
+#ifdef MPFS_SCB_SMODE_DENY
+#ifdef MPFS_SBI_SC_FLASH
+/* The System Controller's SPI flash for the OS.  The fence that keeps the
+ * OS off the mailbox also covers the flash controller (0x37020100), so under
+ * it this is the OS's only way to stage a bitstream.  The first erase block
+ * holds the SPI directory the System Controller boots from: its golden entry
+ * is never written, and the block changes only through SET_IMAGE, which
+ * edits the upgrade or blank entry in a copy and writes the rest back as it
+ * was.  Every other offset is the OS's.  An erase call takes one block and a
+ * write or read at most SBI_SMODE_BUF_MAX bytes, so an ecall stays well
+ * under a second with the hart's interrupts masked.  The mailbox lock is
+ * held throughout: the System Controller reads this flash for its own
+ * services. */
+int qspi_init(void);
+
+#define SBI_SC_FLASH_UPGRADE_INDEX 1UL
+#define SBI_SC_FLASH_BLANK_INDEX   2UL
+
+static int sbi_sc_flash_ready;
+static uint8_t sbi_sc_flash_buf[SBI_SMODE_BUF_MAX];
+static uint32_t sbi_sc_flash_block[FLASH_SECTOR_SIZE / sizeof(uint32_t)];
+
+static long sbi_sc_flash_take(void)
+{
+    if (!sbi_scb_trylock()) {
+        return SBI_ERR_FAILED;
+    }
+    if (!sbi_sc_flash_ready) {
+        if (qspi_init() != 0) {
+            sbi_scb_unlock();
+            return SBI_ERR_FAILED;
+        }
+        sbi_sc_flash_ready = 1;
+    }
+    return SBI_SUCCESS;
+}
+
+/* Inside the flash and clear of the directory block. */
+static int sbi_sc_flash_range_ok(unsigned long off, unsigned long len)
+{
+    return (len != 0UL) && (off >= (unsigned long)FLASH_SECTOR_SIZE) &&
+           (off <= (unsigned long)FLASH_DEVICE_SIZE) &&
+           (len <= (unsigned long)FLASH_DEVICE_SIZE - off);
+}
+
+static long sbi_vendor_sc_flash_erase(unsigned long off, unsigned long len)
+{
+    long err;
+
+    if (!sbi_sc_flash_range_ok(off, len) ||
+        (len != (unsigned long)FLASH_SECTOR_SIZE) ||
+        ((off & ((unsigned long)FLASH_SECTOR_SIZE - 1UL)) != 0UL)) {
+        return SBI_ERR_INVALID_PARAM;
+    }
+    err = sbi_sc_flash_take();
+    if (err != SBI_SUCCESS) {
+        return err;
+    }
+    if (ext_flash_erase(off, (int)len) != (int)len) {
+        err = SBI_ERR_FAILED;
+    }
+    sbi_scb_unlock();
+    return err;
+}
+
+static long sbi_vendor_sc_flash_write(unsigned long off, unsigned long buf,
+    unsigned long len)
+{
+    long err;
+
+    if (!sbi_sc_flash_range_ok(off, len) || (len > SBI_SMODE_BUF_MAX)) {
+        return SBI_ERR_INVALID_PARAM;
+    }
+    if (!sbi_smode_range_ok(buf, len)) {
+        return SBI_ERR_INVALID_ADDRESS;
+    }
+    err = sbi_sc_flash_take();
+    if (err != SBI_SUCCESS) {
+        return err;
+    }
+    /* the bounce buffer is shared between harts: copy under the lock */
+    if (sbi_copy_from_smode(sbi_sc_flash_buf, buf, len) != 0) {
+        err = SBI_ERR_INVALID_ADDRESS;
+    }
+    else if (ext_flash_write(off, sbi_sc_flash_buf, (int)len) != (int)len) {
+        err = SBI_ERR_FAILED;
+    }
+    sbi_scb_unlock();
+    return err;
+}
+
+static long sbi_vendor_sc_flash_read(unsigned long off, unsigned long buf,
+    unsigned long len)
+{
+    long err;
+
+    if ((len == 0UL) || (len > SBI_SMODE_BUF_MAX) ||
+        (off > (unsigned long)FLASH_DEVICE_SIZE) ||
+        (len > (unsigned long)FLASH_DEVICE_SIZE - off)) {
+        return SBI_ERR_INVALID_PARAM;
+    }
+    if (!sbi_smode_range_ok(buf, len)) {
+        return SBI_ERR_INVALID_ADDRESS;
+    }
+    err = sbi_sc_flash_take();
+    if (err != SBI_SUCCESS) {
+        return err;
+    }
+    if (ext_flash_read(off, sbi_sc_flash_buf, (int)len) != (int)len) {
+        err = SBI_ERR_FAILED;
+    }
+    else if (sbi_copy_to_smode(buf, sbi_sc_flash_buf, len) != 0) {
+        err = SBI_ERR_INVALID_ADDRESS;
+    }
+    sbi_scb_unlock();
+    return err;
+}
+
+/* Point directory entry 1 (upgrade) or 2 (blank) at an image offset.
+ * Setting the upgrade entry also zeroes the blank one, as the OS driver
+ * does, so a single-image System Controller does not object.  Nothing is
+ * written when the entries already read that way. */
+static long sbi_vendor_sc_flash_set_image(unsigned long index,
+    unsigned long address)
+{
+    uint8_t *block = (uint8_t *)sbi_sc_flash_block;
+    long err;
+
+    if (((index != SBI_SC_FLASH_UPGRADE_INDEX) &&
+         (index != SBI_SC_FLASH_BLANK_INDEX)) ||
+        (address > (unsigned long)FLASH_DEVICE_SIZE)) {
+        return SBI_ERR_INVALID_PARAM;
+    }
+    err = sbi_sc_flash_take();
+    if (err != SBI_SUCCESS) {
+        return err;
+    }
+    if (ext_flash_read(0, block, FLASH_SECTOR_SIZE) != FLASH_SECTOR_SIZE) {
+        sbi_scb_unlock();
+        return SBI_ERR_FAILED;
+    }
+    if ((sbi_sc_flash_block[index] == (uint32_t)address) &&
+        ((index != SBI_SC_FLASH_UPGRADE_INDEX) ||
+         (sbi_sc_flash_block[SBI_SC_FLASH_BLANK_INDEX] == 0U))) {
+        sbi_scb_unlock();
+        return SBI_SUCCESS;
+    }
+    sbi_sc_flash_block[index] = (uint32_t)address;
+    if (index == SBI_SC_FLASH_UPGRADE_INDEX) {
+        sbi_sc_flash_block[SBI_SC_FLASH_BLANK_INDEX] = 0U;
+    }
+    if ((ext_flash_erase(0, FLASH_SECTOR_SIZE) != FLASH_SECTOR_SIZE) ||
+        (ext_flash_write(0, block, FLASH_SECTOR_SIZE) != FLASH_SECTOR_SIZE)) {
+        err = SBI_ERR_FAILED;
+    }
+    sbi_scb_unlock();
+    return err;
+}
+#endif /* MPFS_SBI_SC_FLASH */
+
+static long sbi_vendor_sc_start(uint8_t opcode, uint32_t index,
+    const uint8_t *req, uint32_t req_len)
+{
+    if (!sbi_scb_trylock()) {
+        return SBI_ERR_FAILED;
+    }
+    if (mpfs_scb_start(opcode, index, req, req_len) != 0) {
+        sbi_scb_unlock();
+        return SBI_ERR_FAILED;
+    }
+    __atomic_store_n(&sbi_scb_started, 1U, __ATOMIC_RELEASE);
+    return SBI_SUCCESS;
+}
+
+/* The IAP program and auto-update services restart the device on success,
+ * so a return from here is the failure status. */
+static long sbi_vendor_sc_run(uint8_t opcode, uint32_t index,
+    unsigned long *val)
+{
+    long err = sbi_vendor_sc_start(opcode, index, NULL, 0);
+
+    if (err != SBI_SUCCESS) {
+        return err;
+    }
+    *val = (unsigned long)mpfs_scb_wait();
+    __atomic_store_n(&sbi_scb_started, 0U, __ATOMIC_RELEASE);
+    sbi_scb_unlock();
+    return SBI_ERR_FAILED;
+}
+#endif
+
+long sbi_hal_vendor_ecall(unsigned long fid, unsigned long *regs,
+    unsigned long *val)
+{
+    unsigned long a0 = regs[SBI_REG_A0];
+    unsigned long a1 = regs[SBI_REG_A1];
+    unsigned long a2 = regs[SBI_REG_A2];
+    long err;
+
+    mpfs_scb_quiet = 1;
+    switch (fid) {
+    case SBI_WOLF_FID_GET_VERSION:
+        *val = SBI_WOLF_VERSION;
+        err = SBI_SUCCESS;
+        break;
+    case SBI_MCHP_FID_HSS_REBOOT:
+        SYSREG_MSS_RESET_CR = 0xDEAD;
+        while (1) { }
+    case SBI_WOLF_FID_GET_SERIAL: {
+        uint8_t serial[DEVICE_SERIAL_NUMBER_SIZE];
+        int ret;
+
+        if (a1 < sizeof(serial)) {
+            err = SBI_ERR_INVALID_PARAM;
+            break;
+        }
+        if (!sbi_smode_range_ok(a0, sizeof(serial))) {
+            err = SBI_ERR_INVALID_ADDRESS;
+            break;
+        }
+        if (!sbi_scb_trylock()) {
+            err = SBI_ERR_FAILED;
+            break;
+        }
+        ret = mpfs_read_serial_number(serial);
+        sbi_scb_unlock();
+        if (ret != 0) {
+            err = SBI_ERR_FAILED;
+            break;
+        }
+        err = (sbi_copy_to_smode(a0, serial, sizeof(serial)) == 0) ?
+            SBI_SUCCESS : SBI_ERR_INVALID_ADDRESS;
+        break;
+    }
+    case SBI_WOLF_FID_GET_KEY:
+        err = sbi_vendor_get_key(a0, a1, a2);
+        break;
+#ifdef MPFS_SCB_SMODE_DENY
+    case SBI_WOLF_FID_DIGEST_CHECK: {
+        uint8_t req[4];
+
+        req[0] = (uint8_t)a0;
+        req[1] = (uint8_t)(a0 >> 8);
+        req[2] = (uint8_t)(a0 >> 16);
+        req[3] = (uint8_t)(a0 >> 24);
+        err = sbi_vendor_sc_start(SYS_SERV_CMD_DIGEST_CHECK, 0, req,
+            sizeof(req));
+        break;
+    }
+    case SBI_WOLF_FID_IAP_AUTHENTICATE:
+        err = sbi_vendor_sc_start(SYS_SERV_CMD_IAP_IMAGE_AUTH,
+            (uint32_t)a0, NULL, 0);
+        break;
+    case SBI_WOLF_FID_IAP_VERIFY:
+        err = sbi_vendor_sc_start(SYS_SERV_CMD_IAP_VERIFY_IDX,
+            (uint32_t)a0, NULL, 0);
+        break;
+    case SBI_WOLF_FID_IAP_PROGRAM:
+        err = sbi_vendor_sc_run(SYS_SERV_CMD_IAP_PROGRAM_IDX, (uint32_t)a0,
+            val);
+        break;
+    case SBI_WOLF_FID_AUTO_UPDATE:
+        err = sbi_vendor_sc_run(SYS_SERV_CMD_AUTO_UPDATE, 0, val);
+        break;
+#ifdef MPFS_SBI_SC_FLASH
+    case SBI_WOLF_FID_SC_FLASH_ERASE:
+        err = sbi_vendor_sc_flash_erase(a0, a1);
+        break;
+    case SBI_WOLF_FID_SC_FLASH_WRITE:
+        err = sbi_vendor_sc_flash_write(a0, a1, a2);
+        break;
+    case SBI_WOLF_FID_SC_FLASH_READ:
+        err = sbi_vendor_sc_flash_read(a0, a1, a2);
+        break;
+    case SBI_WOLF_FID_SC_FLASH_SET_IMAGE:
+        err = sbi_vendor_sc_flash_set_image(a0, a1);
+        break;
+#endif
+    case SBI_WOLF_FID_SC_STATUS:
+        if (mpfs_scb_mailbox_busy()) {
+            err = SBI_ERR_ALREADY_STARTED;
+            break;
+        }
+        *val = (unsigned long)mpfs_scb_status() |
+            ((unsigned long)SCBMBOX_REG(4) << 32);
+        /* A synchronous service also leaves the mailbox idle between its
+         * own requests; release only the lock a started service holds. */
+        if (__atomic_exchange_n(&sbi_scb_started, 0U, __ATOMIC_ACQ_REL)
+                != 0U) {
+            sbi_scb_unlock();
+        }
+        err = SBI_SUCCESS;
+        break;
+#else
+    case SBI_WOLF_FID_DIGEST_CHECK:
+    case SBI_WOLF_FID_IAP_AUTHENTICATE:
+    case SBI_WOLF_FID_IAP_VERIFY:
+    case SBI_WOLF_FID_IAP_PROGRAM:
+    case SBI_WOLF_FID_AUTO_UPDATE:
+    case SBI_WOLF_FID_SC_FLASH_ERASE:
+    case SBI_WOLF_FID_SC_FLASH_WRITE:
+    case SBI_WOLF_FID_SC_FLASH_READ:
+    case SBI_WOLF_FID_SC_FLASH_SET_IMAGE:
+    case SBI_WOLF_FID_SC_STATUS:
+        err = SBI_ERR_DENIED;
+        break;
+#endif
+    default:
+        err = SBI_ERR_NOT_SUPPORTED;
+        break;
+    }
+    mpfs_scb_quiet = 0;
+    (void)a2;
+    return err;
+}
+#endif /* MPFS_SBI_VENDOR && WOLFBOOT_MMODE_SMODE_BOOT */
 
 /* Read 16-byte device serial number via SCB system service (opcode 0x00). */
 int mpfs_read_serial_number(uint8_t *serial)
@@ -1562,7 +2017,7 @@ static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
     return (timeout == 0) ? -1 : 0;
 }
 
-#ifdef EXT_FLASH
+#if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)
 /* ==========================================================================
  * QSPI Flash Controller Implementation
  *
@@ -2309,7 +2764,7 @@ static int test_ext_flash(void)
 }
 #endif /* TEST_EXT_FLASH */
 
-#else /* !EXT_FLASH */
+#else /* !EXT_FLASH && !MPFS_SBI_SC_FLASH */
 
 /* Stubs for when QSPI is disabled */
 void ext_flash_lock(void)

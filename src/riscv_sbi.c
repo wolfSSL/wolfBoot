@@ -41,6 +41,7 @@
 
 #ifdef TARGET_mpfs250
 #include "hal/mpfs250.h"
+#include "riscv_sbi.h"
 #endif
 
 /* ---- platform glue (MPFS250) ------------------------------------------- */
@@ -80,13 +81,7 @@
 #define MIP_SSIP   (1UL << IRQ_S_SOFT)    /* bit 1 */
 #define MIE_MTIP   (1UL << IRQ_M_TIMER)   /* bit 7 */
 
-/* ---- SBI constants ------------------------------------------------------ */
-#define SBI_SUCCESS              0L
-#define SBI_ERR_FAILED         (-1L)
-#define SBI_ERR_NOT_SUPPORTED  (-2L)
-#define SBI_ERR_INVALID_PARAM  (-3L)
-#define SBI_ERR_ALREADY_AVAIL  (-6L)
-
+/* ---- SBI constants (error codes in riscv_sbi.h) ------------------------- */
 /* Extension IDs (EIDs) */
 #define SBI_EXT_0_1_SET_TIMER       0x00
 #define SBI_EXT_0_1_CONSOLE_PUTCHAR 0x01
@@ -230,7 +225,16 @@ void sbi_hart_mark_started(unsigned long hartid)
 #ifndef SBI_MSTACK_BASE
 #define SBI_MSTACK_BASE 0x103FC00000UL
 #endif
-#define SBI_MSTACK_SIZE 4096UL
+#ifndef SBI_MSTACK_SHIFT
+#define SBI_MSTACK_SHIFT 12
+#endif
+#define SBI_MSTACK_SIZE (1UL << SBI_MSTACK_SHIFT)
+
+/* Remote-fence completion wait, in CLINT ticks (1 MHz on PolarFire). */
+#ifndef RTC_CLOCK_FREQ
+#define RTC_CLOCK_FREQ 1000000UL
+#endif
+#define SBI_IPI_WAIT_TICKS ((uint64_t)RTC_CLOCK_FREQ)
 
 /* Arm this hart's M-mode trap stack; call just before entering S-mode. */
 void sbi_mscratch_init(unsigned long hartid)
@@ -241,19 +245,148 @@ void sbi_mscratch_init(unsigned long hartid)
     }
 }
 
-/* Copy bytes from an S-mode pointer (virtual once paging is on) into an
- * M-mode buffer using the MPRV trick: with mstatus.MPRV set and MPP=S
- * (true inside a trap taken from S-mode), M-mode loads are translated
- * exactly like S-mode accesses. */
-static void sbi_copy_from_smode(uint8_t *dst, unsigned long src,
-    unsigned long len)
+/* Accesses to the trapped context's memory use the MPRV trick: with
+ * mstatus.MPRV set and MPP=S (true inside a trap taken from S-mode), M-mode
+ * loads and stores are translated exactly like S-mode accesses.  A bad
+ * address then faults in M-mode, so for the byte below mtvec is pointed at
+ * sbi_mprv_trap, which records the fault for this hart, steps over the
+ * access and returns; the default vector would treat the fault as fatal and
+ * park the hart. */
+volatile unsigned long sbi_mprv_fault[MPFS_NUM_HARTS];
+
+__asm__(
+    ".pushsection .text\n"
+    ".align 2\n"
+    ".type sbi_mprv_trap, @function\n"
+    "sbi_mprv_trap:\n"
+    "    csrr  t0, mepc\n"
+    "    addi  t0, t0, 4\n"
+    "    csrw  mepc, t0\n"
+    "    li    t0, 0x20000\n"
+    "    csrc  mstatus, t0\n"
+    "    la    t0, sbi_mprv_fault\n"
+    "    csrr  t1, mhartid\n"
+    "    slli  t1, t1, 3\n"
+    "    add   t0, t0, t1\n"
+    "    li    t1, 1\n"
+    "    sd    t1, 0(t0)\n"
+    "    mret\n"
+    ".size sbi_mprv_trap, .-sbi_mprv_trap\n"
+    ".popsection\n"
+);
+
+static unsigned long sbi_hartid(void)
+{
+    unsigned long id;
+    __asm__ volatile("csrr %0, mhartid" : "=r"(id));
+    return id;
+}
+
+static int sbi_mprv_lb(unsigned long a, uint8_t *v)
+{
+    unsigned long mtvec_save, mstatus_save, tmp, val;
+    unsigned long hart = sbi_hartid();
+
+    sbi_mprv_fault[hart] = 0;
+    __asm__ volatile(
+        "la    %[tmp], sbi_mprv_trap\n"
+        "csrrw %[mtvec], mtvec, %[tmp]\n"
+        "csrrs %[mstatus], mstatus, %[mprv]\n"
+        ".option push\n"
+        ".option norvc\n"
+        "lbu   %[val], 0(%[addr])\n"
+        ".option pop\n"
+        "csrw  mstatus, %[mstatus]\n"
+        "csrw  mtvec, %[mtvec]\n"
+        : [mtvec] "=&r"(mtvec_save), [mstatus] "=&r"(mstatus_save),
+          [tmp] "=&r"(tmp), [val] "=&r"(val)
+        : [addr] "r"(a), [mprv] "r"(MSTATUS_MPRV_BIT)
+        : "memory", "t0", "t1");
+    *v = (uint8_t)val;
+    return (sbi_mprv_fault[hart] != 0UL) ? -1 : 0;
+}
+
+static int sbi_mprv_sb(unsigned long a, uint8_t v)
+{
+    unsigned long mtvec_save, mstatus_save, tmp;
+    unsigned long hart = sbi_hartid();
+
+    sbi_mprv_fault[hart] = 0;
+    __asm__ volatile(
+        "la    %[tmp], sbi_mprv_trap\n"
+        "csrrw %[mtvec], mtvec, %[tmp]\n"
+        "csrrs %[mstatus], mstatus, %[mprv]\n"
+        ".option push\n"
+        ".option norvc\n"
+        "sb    %[val], 0(%[addr])\n"
+        ".option pop\n"
+        "csrw  mstatus, %[mstatus]\n"
+        "csrw  mtvec, %[mtvec]\n"
+        : [mtvec] "=&r"(mtvec_save), [mstatus] "=&r"(mstatus_save),
+          [tmp] "=&r"(tmp)
+        : [addr] "r"(a), [val] "r"((unsigned long)v),
+          [mprv] "r"(MSTATUS_MPRV_BIT)
+        : "memory", "t0", "t1");
+    return (sbi_mprv_fault[hart] != 0UL) ? -1 : 0;
+}
+
+/* A caller's buffer must be bounded and, with paging off (early boot),
+ * must be DDR: an M-mode access to a device window would not fault the way
+ * a bad translation does. */
+int sbi_smode_range_ok(unsigned long addr, unsigned long len)
+{
+    unsigned long satp;
+
+    if ((len == 0UL) || (len > SBI_SMODE_BUF_MAX) || (addr + len < addr)) {
+        return 0;
+    }
+    __asm__ volatile("csrr %0, satp" : "=r"(satp));
+    if ((satp >> 60) == 0UL) {
+        if ((addr >= DDR_BASE_CACHED) &&
+                (addr + len <= DDR_BASE_CACHED + 0x40000000UL)) {
+            return 1;
+        }
+        if ((addr >= 0x1000000000UL) &&
+                (addr + len <= 0x1000000000UL + DDR_SIZE)) {
+            return 1;
+        }
+        return 0;
+    }
+    return 1;
+}
+
+int sbi_copy_from_smode(uint8_t *dst, unsigned long src, unsigned long len)
 {
     unsigned long i;
-    csr_set_bits(mstatus, MSTATUS_MPRV_BIT);
+
     for (i = 0; i < len; i++) {
-        dst[i] = ((const volatile uint8_t *)src)[i];
+        if (sbi_mprv_lb(src + i, &dst[i]) != 0) {
+            return -1;
+        }
     }
-    csr_clr_bits(mstatus, MSTATUS_MPRV_BIT);
+    return 0;
+}
+
+int sbi_copy_to_smode(unsigned long dst, const uint8_t *src, unsigned long len)
+{
+    unsigned long i;
+
+    for (i = 0; i < len; i++) {
+        if (sbi_mprv_sb(dst + i, src[i]) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+/* Platform hook for the vendor extension; weak default declines. */
+long __attribute__((weak)) sbi_hal_vendor_ecall(unsigned long fid,
+    unsigned long *regs, unsigned long *val)
+{
+    (void)fid;
+    (void)regs;
+    (void)val;
+    return SBI_ERR_NOT_SUPPORTED;
 }
 
 #define MSTATUS_MXR_BIT (1UL << 19)
@@ -604,7 +737,7 @@ static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
 {
     unsigned long i;
     unsigned long h;
-    uint32_t spin;
+    uint64_t deadline;
     long err = SBI_SUCCESS;
     /* SBI v0.2: hart_mask_base == -1 selects all harts (see sbi_post_ipi). */
     if (base == (unsigned long)-1) {
@@ -622,17 +755,19 @@ static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
         }
         /* A target can be inside a console write or another ecall for tens
          * of milliseconds; a fence that gives up early leaves the OS with
-         * stale TLBs on that hart, so wait well past that (about 1 s).
-         * M-mode interrupts are masked in here, so service any fence the
-         * target (or a third hart) posts to us meanwhile: two harts fencing
-         * each other would otherwise each wait for the other and time out. */
-        spin = 400000000U;
+         * stale TLBs on that hart, so wait well past that: 1 s of CLINT
+         * time, the one clock every hart shares.  A hart that never answers
+         * then costs the caller a second, not the OS its interrupts for
+         * minutes.  M-mode interrupts are masked in here, so service any
+         * fence the target (or a third hart) posts to us meanwhile: two
+         * harts fencing each other would otherwise each wait for the other
+         * and time out. */
+        deadline = CLINT_MTIME + SBI_IPI_WAIT_TICKS;
         while ((int32_t)(__atomic_load_n(&sbi_ipi_done[h], __ATOMIC_ACQUIRE) -
-                ticket[h]) < 0 && spin > 0U) {
+                ticket[h]) < 0 && (int64_t)(CLINT_MTIME - deadline) < 0) {
             if (sbi_ipi_ops[self] != 0U) {
                 sbi_ipi_irq(self);
             }
-            spin--;
         }
         if ((int32_t)(__atomic_load_n(&sbi_ipi_done[h], __ATOMIC_ACQUIRE) -
                 ticket[h]) < 0) {
@@ -723,6 +858,9 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             case SBI_EXT_HSM:
             case SBI_EXT_SRST:
             case SBI_EXT_DBCN:
+#ifdef MPFS_SBI_VENDOR
+            case SBI_EXT_VENDOR_MCHP:
+#endif
                 val = 1; break;
             default:
                 val = 0; break;
@@ -834,7 +972,10 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
                 if (c > sizeof(cbuf)) {
                     c = sizeof(cbuf);
                 }
-                sbi_copy_from_smode(cbuf, gp + k, c);
+                if (sbi_copy_from_smode(cbuf, gp + k, c) != 0) {
+                    err = SBI_ERR_INVALID_ADDRESS;
+                    break;
+                }
                 for (j = 0; j < c; j++) {
                     if (!sbi_putc((char)cbuf[j])) {
                         k = n;
@@ -856,6 +997,12 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             break;
         }
         break;
+
+#ifdef MPFS_SBI_VENDOR
+    case SBI_EXT_VENDOR_MCHP:
+        err = sbi_hal_vendor_ecall(fid, regs, &val);
+        break;
+#endif
 
     case SBI_EXT_SRST:
         /* system_reset(type, reason).  No console output here: by now the OS
@@ -898,7 +1045,7 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
         /* a0 = S-mode pointer to a hart mask; fetch via MPRV. */
         if (regs[A0] != 0UL) {
             unsigned long lmask = 0;
-            sbi_copy_from_smode((uint8_t *)&lmask, regs[A0],
+            (void)sbi_copy_from_smode((uint8_t *)&lmask, regs[A0],
                 sizeof(unsigned long));
             sbi_post_ipi(lmask, 0, SBI_IPI_OP_SSIP, hartid, ticket);
         }
@@ -911,7 +1058,7 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
         __asm__ volatile("sfence.vma" ::: "memory");
         if (regs[A0] != 0UL) {
             unsigned long fmask = 0;
-            sbi_copy_from_smode((uint8_t *)&fmask, regs[A0],
+            (void)sbi_copy_from_smode((uint8_t *)&fmask, regs[A0],
                 sizeof(unsigned long));
             sbi_post_ipi(fmask, 0,
                 (eid == SBI_EXT_0_1_REMOTE_FENCE_I) ?
