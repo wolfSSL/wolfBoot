@@ -138,6 +138,15 @@ int snvm_enckey_provision(void);
 
 #endif /* SNVM_KEK */
 
+#if defined(SNVM_KEK) || defined(MPFS_SBI_VENDOR)
+#define MPFS_PUF_DERIVED_LEN 32
+/* out[32] = SHA384(label || PUF(challenge[16]))[0..31]; the primitive behind
+ * the KEK and the keys served to the OS over SBI. */
+int mpfs_puf_derive(const char *label, const uint8_t *challenge, uint8_t *out);
+/* The same with challenge = SHA384(seed)[0..15]. */
+int mpfs_puf_purpose_key(const char *seed, const char *label, uint8_t *out);
+#endif
+
 #if defined(SNVM_ENCKEY_PROVISION) && !defined(SNVM_KEK)
 #error "SNVM_ENCKEY_PROVISION needs SNVM_KEK (the key is wrapped with the PUF KEK)"
 #endif

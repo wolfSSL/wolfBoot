@@ -555,6 +555,14 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub SNVM_KEYSTORE=1 SNVM_KEYSTORE_REQUIRE_ROM=1 MPFS_SCB_SMODE_DENY=1
+  # SBI vendor extension (serial, PUF keys, fenced System Controller services).
+  microchip_mpfs250_m_sbi_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub MPFS_SBI_VENDOR=1 MPFS_SCB_SMODE_DENY=1 MPFS_SBI_SC_FLASH=1
   # Encrypted disk image with the AES key unwrapped by the PUF-derived KEK.
   microchip_mpfs250_m_enc_kek_test:
     uses: ./.github/workflows/test-build-riscv.yml
