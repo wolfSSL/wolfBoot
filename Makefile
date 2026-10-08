@@ -203,6 +203,9 @@ endif
 ifeq ($(SNVM_KEK),1)
   MPFS_SNVM_OBJ=1
 endif
+ifeq ($(MPFS_SBI_VENDOR),1)
+  MPFS_SNVM_OBJ=1
+endif
 ifeq ($(MPFS_SNVM_OBJ),1)
   OBJS+=./hal/mpfs250_snvm.o
 endif

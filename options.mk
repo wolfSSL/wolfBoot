@@ -153,6 +153,32 @@ ifeq ($(MPFS_SCB_SMODE_DENY),1)
             -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
 endif
 
+# SBI vendor extension (EID 0x09000029, the HSS one) serving the OS: firmware version, device
+# serial, PUF keys by purpose, System Controller services behind the mailbox fence.  M-mode only.
+ifeq ($(MPFS_SBI_VENDOR),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SBI_VENDOR=1 needs the M-mode target (RISCV_MMODE=1))
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SBI_VENDOR"
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+
+# System Controller SPI flash erase/write/read for the OS over the vendor extension.  Needs the
+# mailbox fence, and compiles the SC CoreQSPI driver into a build that boots from elsewhere.
+ifeq ($(MPFS_SBI_SC_FLASH),1)
+    ifneq ($(MPFS_SBI_VENDOR)$(MPFS_SCB_SMODE_DENY),11)
+        $(error MPFS_SBI_SC_FLASH=1 requires MPFS_SBI_VENDOR=1 and MPFS_SCB_SMODE_DENY=1)
+    endif
+    ifeq ($(EXT_FLASH),1)
+        $(error MPFS_SBI_SC_FLASH=1 is for a build that does not boot from the SC flash (EXT_FLASH=0))
+    endif
+    CFLAGS+=-D"MPFS_SBI_SC_FLASH" -D"MPFS_SC_SPI"
+endif
+
 # Field recovery: before the golden slot boots, zero the sNVM image-key page and the head of both
 # operational slots (hal_disk_failover).  The golden image must be a plaintext signed image.
 ifeq ($(DISK_FAILOVER_ZEROIZE),1)
