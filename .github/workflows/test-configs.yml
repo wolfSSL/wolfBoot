@@ -552,6 +552,30 @@ jobs:
       config-file: ./config/examples/imx8qm-mek.config
       make-args: DISK_SDCARD=1 IMX8QM_SCU=0 wolfboot.bin test-app/image_v1_signed.bin
 
+  imx8mm_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # BL33: MMU, eMMC (8-bit HS), signed FIT on FAT32
+      config-file: ./config/examples/imx8mm-pico.config
+      make-args: wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8mm_go_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Started from U-Boot proper ("go")
+      config-file: ./config/examples/imx8mm-pico.config
+      make-args: IMX8MM_BL33=0 wolfboot.bin test-app/image_v1_signed.bin
+
+  imx8mm_bl33_ram_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # BL33: kernel placed in DRAM by SPL, MMU off
+      config-file: ./config/examples/imx8mm-pico.config
+      make-args: IMX8MM_BL33=1 DISK_EMMC=0 IMX8MM_MMU=0 wolfboot.bin test-app/image_v1_signed.bin
+
   disk_boot_confirm_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

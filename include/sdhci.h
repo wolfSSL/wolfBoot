@@ -402,6 +402,10 @@
 
 /* eMMC-specific constants */
 #define MMC_DW_CSD              0x03B70000U
+/* CMD6 argument: Access=Write Byte, Index=185 (HS_TIMING), Value=1 (HS) */
+#define MMC_HS_TIMING_CSD       0x03B90100U
+/* Card status (R1) bit 7: the device rejected the last CMD6 SWITCH */
+#define MMC_R1_SWITCH_ERROR     (1U << 7)
 #define MMC_DEVICE_3_3V_VOLT_SET 0x40300000U
 #define MMC_OCR_BUSY_BIT        0x80000000U
 #define MMC_EMMC_RCA_DEFAULT    1

@@ -550,6 +550,11 @@ tools/scripts/cm4/*.bin
 tools/scripts/cm4/linux/
 tools/scripts/cm4/rauc/
 
+# tools/scripts/imx8mm outputs
+/imx8mm_flashbin/
+/imx8mm_fit/
+/fitImage_*.itb
+
 # TI cl2000 (ARCH=C2000) intermediate assembly listings left in the repo root
 /*.asm
 
