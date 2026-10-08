@@ -42,8 +42,13 @@ cp "$KERNEL" "$WORK/Image"
 if [ -n "$ROOTDEV" ]; then
     "$DTC" -q -I dtb -O dts -o "$WORK/board.dts" "$DTB"
     if grep -q "^[[:space:]]*bootargs = " "$WORK/board.dts"; then
-        sed -i "/^[[:space:]]*bootargs = /s#root=[^ \"]*#root=$ROOTDEV#" \
-            "$WORK/board.dts"
+        if grep -q "^[[:space:]]*bootargs = .*root=" "$WORK/board.dts"; then
+            sed -i "/^[[:space:]]*bootargs = /s#root=[^ \" ]*#root=$ROOTDEV#" \
+                "$WORK/board.dts"
+        else
+            sed -i "/^[[:space:]]*bootargs = /s#\";# root=$ROOTDEV\";#" \
+                "$WORK/board.dts"
+        fi
     else
         # No bootargs (e.g. a kernel DTB): add one to /chosen
         sed -i "0,/^[[:space:]]*chosen {/s##&\n\t\tbootargs = \"console=ttymxc1,115200 root=$ROOTDEV rootwait rw\";#" \
