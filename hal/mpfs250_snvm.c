@@ -424,10 +424,50 @@ int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce)
     return -1;
 }
 
+#ifdef DISK_FAILOVER_ZEROIZE
+/* Zero the sNVM page holding the wrapped image key, read it back.  A page
+ * that already reads as zeros is left alone: sNVM write cycles are finite
+ * and a brownout during a write can lock the page read-only. */
+int wolfBoot_erase_encrypt_key(void)
+{
+    static uint8_t page[MPFS_SNVM_PLAIN_DATA_LEN];
+    static const uint8_t zeros[MPFS_SNVM_PLAIN_DATA_LEN];
+    int ret;
+
+    ret = mpfs_snvm_read(SNVM_ENCKEY_MODULE, NULL, NULL, page, sizeof(page));
+    if (ret != 0) {
+        wolfBoot_printf("failover: image key page %u read failed (%d)\n",
+            (unsigned)SNVM_ENCKEY_MODULE, ret);
+        return -1;
+    }
+    if (memcmp(page, zeros, sizeof(page)) == 0) {
+        wolfBoot_printf("failover: image key page %u already zero\n",
+            (unsigned)SNVM_ENCKEY_MODULE);
+        return 0;
+    }
+    ret = mpfs_snvm_write(SYS_SERV_CMD_SNVM_WRITE_PLAIN, SNVM_ENCKEY_MODULE,
+        zeros, NULL);
+    if (ret != 0) {
+        wolfBoot_printf("failover: image key page %u write failed (%d)\n",
+            (unsigned)SNVM_ENCKEY_MODULE, ret);
+        return -1;
+    }
+    ret = mpfs_snvm_read(SNVM_ENCKEY_MODULE, NULL, NULL, page, sizeof(page));
+    if ((ret != 0) || (memcmp(page, zeros, sizeof(page)) != 0)) {
+        wolfBoot_printf("failover: image key page %u did not read back as "
+            "zeros\n", (unsigned)SNVM_ENCKEY_MODULE);
+        return -1;
+    }
+    wolfBoot_printf("failover: image key page %u zeroized\n",
+        (unsigned)SNVM_ENCKEY_MODULE);
+    return 0;
+}
+#else
 int wolfBoot_erase_encrypt_key(void)
 {
     return -1;
 }
+#endif
 
 #ifdef SNVM_ENCKEY_PROVISION
 /* One-time: wrap the AES key with the device PUF KEK and store
