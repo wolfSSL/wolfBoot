@@ -950,8 +950,7 @@ static uint32_t wolfBoot_get_total_size(struct wolfBoot_image* boot,
     return total_size;
 }
 
-#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
-    !defined(EXT_ENCRYPTED)
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES)
 /* Read the UPDATE image size from the copy of UPDATE sector 0 in SWAP. Used to
  * resume a swap after a power cut during the BOOT->UPDATE copy of sector 0,
  * which erases the UPDATE header. */
@@ -961,6 +960,10 @@ static uint32_t wolfBoot_swap_update_size(void)
     uint32_t              hdr[2] = {0, 0}; /* magic and image size */
     uint32_t              size;
     uint8_t               flag = SECT_FLAG_NEW;
+#if defined(EXT_ENCRYPTED) && defined(EXT_FLASH) && PARTN_IS_EXT(PART_SWAP)
+    uint8_t key[ENCRYPT_KEY_SIZE];
+    uint8_t nonce[ENCRYPT_NONCE_SIZE];
+#endif
 
     if ((wolfBoot_get_update_sector_flag(0, &flag) != 0) ||
         (flag != SECT_FLAG_SWAPPING)) {
@@ -968,8 +971,23 @@ static uint32_t wolfBoot_swap_update_size(void)
     }
     wolfBoot_open_image(&swap, PART_SWAP);
 #if defined(EXT_FLASH) && PARTN_IS_EXT(PART_SWAP)
-    ext_flash_read((uintptr_t)swap.hdr, (uint8_t*)hdr, sizeof(hdr));
+#ifdef EXT_ENCRYPTED
+    /* External SWAP holds the sector still encrypted as at UPDATE offset 0,
+     * with the normal IV mapping */
+    if (wolfBoot_initialize_encryption() < 0) {
+        return 0;
+    }
+    wolfBoot_get_encrypt_key(key, nonce);
+    wolfBoot_enable_fallback_iv(0);
+    wolfBoot_crypto_set_iv(nonce, 0);
+    ext_flash_check_read((uintptr_t)swap.hdr, (uint8_t*)hdr, sizeof(hdr));
+    wolfBoot_zeroize(key, sizeof(key));
+    wolfBoot_zeroize(nonce, sizeof(nonce));
 #else
+    ext_flash_read((uintptr_t)swap.hdr, (uint8_t*)hdr, sizeof(hdr));
+#endif
+#else
+    /* Internal SWAP holds the sector as plaintext, also in encrypted builds */
     memcpy(hdr, swap.hdr, sizeof(hdr));
 #endif
     size = wolfBoot_image_size((uint8_t*)hdr);
@@ -1067,22 +1085,24 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             int prev = wolfBoot_enable_fallback_iv(1);
             (void)prev;
             update_open = wolfBoot_open_image(&update, PART_UPDATE);
-            if (update_open < 0) {
-                wolfBoot_enable_fallback_iv(0);
-                return -1;
+            if (update_open >= 0) {
+                fallback_image = 1;
             }
-            fallback_image = 1;
         }
-        wolfBoot_enable_fallback_iv(fallback_image);
-#else
+#endif
         if (update_open < 0) {
             /* A power cut mid-swap may have erased the UPDATE header, try to
              * resume using the copy in SWAP */
             update.fw_size = wolfBoot_swap_update_size();
             if (update.fw_size == 0) {
+#ifdef EXT_ENCRYPTED
+                wolfBoot_enable_fallback_iv(0);
+#endif
                 return -1;
             }
         }
+#ifdef EXT_ENCRYPTED
+        wolfBoot_enable_fallback_iv(fallback_image);
 #endif
         wolfBoot_open_image(&boot, PART_BOOT);
 #ifndef DISABLE_BACKUP

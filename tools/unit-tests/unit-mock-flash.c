@@ -158,7 +158,7 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
         return -1;
     }
     if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
-            (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
+            (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
