@@ -87,6 +87,15 @@ ifeq ($(TARGET),sim)
   STACK_USAGE_LIMIT:=4608
 endif
 
+# SP_MATH_ALL with RSA-2048 puts ~18 KB frames in sp_int.c. The PowerPC test
+# app runs from DDR with a 256 KB stack, so that is affordable here even
+# though it would not be on a small target.
+ifeq ($(ARCH),PPC)
+  ifneq ($(filter 1,$(WOLFCRYPT_TEST) $(WOLFCRYPT_BENCHMARK)),)
+    STACK_USAGE_LIMIT:=20480
+  endif
+endif
+
 ifeq ($(TARGET),ti_hercules)
   APP_OBJS:=app_$(TARGET).o ../test-app/libwolfboot.o
   CFLAGS+=-I"../include"
@@ -214,6 +223,39 @@ ifeq ($(TARGET),max32666)
     CFLAGS += -I$(MSDK_DIR)/Libraries/PeriphDrivers/Source/TRNG/
     WOLFCRYPT_SUPPORT=1
   endif
+endif
+
+# NXP QorIQ SEC hardware crypto, selected through the crypto callback layer.
+ifeq ($(SEC_QORIQ),1)
+  # The CCSR base has to be on the compile line, not a #define in the app: the
+  # sec_qoriq*.o driver objects are separate translation units and would
+  # otherwise fall through to the 0xFE000000 reset value in sec_qoriq.h while
+  # the app used the relocated one. Default it from the same board macro that
+  # selects the HAL's CCSRBAR so the two cannot disagree, and keep it
+  # overridable for a board whose SEC window sits elsewhere.
+  ifeq ($(SEC_QORIQ_CCSRBAR),)
+    ifneq ($(findstring BOARD_CW_VPX3152,$(CFLAGS_EXTRA)),)
+      SEC_QORIQ_CCSRBAR=0xEF000000UL
+    else
+      SEC_QORIQ_CCSRBAR=0xFE000000UL
+    endif
+  endif
+  CFLAGS+=-DWOLFSSL_SEC_QORIQ -DWOLFSSL_SEC_QORIQ_BAREMETAL
+  # The apps only bring the engine up under WOLFCRYPT_TEST/WOLFCRYPT_BENCHMARK,
+  # so SEC_QORIQ on its own links the driver without ever touching the device.
+  ifeq ($(WOLFCRYPT_TEST)$(WOLFCRYPT_BENCHMARK),)
+    $(warning SEC_QORIQ=1 has no effect without WOLFCRYPT_TEST or WOLFCRYPT_BENCHMARK)
+  endif
+  CFLAGS+=-DSEC_QORIQ_CCSRBAR=$(SEC_QORIQ_CCSRBAR)
+  WOLFCRYPT_SUPPORT=1
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_cb.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_hash.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_aes.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_rng.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_pkha.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_baremetal.o
 endif
 
 ifeq ($(WOLFCRYPT_TEST),1)
@@ -365,11 +407,21 @@ ifeq ($(WOLFCRYPT_SUPPORT),1)
     # wolfcrypt C sources expect these asm symbols; provide the objects here.
     ifeq ($(ARCH),RISCV64)
       CFLAGS+=-DWOLFSSL_RISCV_ASM
-      APP_OBJS+= \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
-            $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+      # Same pre/post-move layout probe as arch.mk, which is included above and
+      # has already set RISCV_ASM_DIR.
+      ifneq ($(wildcard $(RISCV_ASM_DIR)/riscv-64-sha256-asm.S),)
+        APP_OBJS+= \
+              $(RISCV_ASM_DIR)/riscv-64-sha256-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-sha512-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-sha3-asm.o \
+              $(RISCV_ASM_DIR)/riscv-64-aes-asm.o
+      else
+        APP_OBJS+= \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha256.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha512.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-sha3.o \
+              $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/riscv/riscv-64-aes.o
+      endif
     endif
   endif
 
