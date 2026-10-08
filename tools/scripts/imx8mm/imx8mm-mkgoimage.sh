@@ -38,6 +38,11 @@ core_end_hex=$("${CROSS_COMPILE}"nm -n wolfboot.elf | \
 core_end=$((16#$core_end_hex))
 [ "$core_end" -le $((0x40480000 + KERNEL_OFFSET)) ] || {
     echo "ERROR: wolfBoot BSS overlaps the kernel offset" >&2; exit 1; }
+# shellcheck disable=SC2086
+max=$(make -s IMX8MM_BL33=0 $MAKE_ARGS \
+    --eval='imx8mm-print-max: ; @echo $(WOLFBOOT_RAMBOOT_MAX_SIZE)' imx8mm-print-max)
+[ "$(stat -c%s "$KERNEL")" -le $((max)) ] || {
+    echo "ERROR: kernel exceeds WOLFBOOT_RAMBOOT_MAX_SIZE ($max)" >&2; exit 1; }
 
 tools/keytools/sign --rsa4096 --sha3 --dts "$DTB" "$KERNEL" \
     wolfboot_signing_private_key.der "$VERSION"
