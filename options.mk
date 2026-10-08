@@ -129,6 +129,31 @@ ifeq ($(MPFS_SCB_SMODE_DENY),1)
             -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
 endif
 
+# Field recovery: when both operational slots are given up on and the golden
+# slot is about to boot, zero the sNVM page holding the image key and the head
+# of both operational slots (hal_disk_failover).  The golden image must be a
+# plaintext signed image.  Writes sNVM, so it carries the same approval gate as
+# the provisioning writers.
+ifeq ($(DISK_FAILOVER_ZEROIZE),1)
+    ifneq ($(DISK_GOLDEN_SLOT)$(SNVM_KEK),11)
+        $(error DISK_FAILOVER_ZEROIZE=1 requires DISK_GOLDEN_SLOT=1 and SNVM_KEK=1)
+    endif
+    ifeq ($(SNVM_ENCKEY_PROVISION),1)
+        $(error DISK_FAILOVER_ZEROIZE=1 and SNVM_ENCKEY_PROVISION=1 undo each \
+                other at every boot; build one or the other)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error DISK_FAILOVER_ZEROIZE writes sNVM: irreversible, and a \
+                brownout mid-write can lock the page read-only. Re-run with \
+                WOLFBOOT_SNVM_WRITE_APPROVED=1 to confirm.)
+    endif
+    CFLAGS+=-D"DISK_FAILOVER_ZEROIZE"
+endif
+# Unconfirmed boots a staged slot gets before DISK_BOOT_CONFIRM reaps it.
+ifneq ($(DISK_BOOT_TRIES),)
+    CFLAGS+=-DDISK_BOOT_TRIES=$(DISK_BOOT_TRIES)
+endif
+
 # PolarFire SoC: PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
 ifeq ($(SNVM_KEK),1)
     # The KEK only ever wraps the image-encryption key, so it rides on the

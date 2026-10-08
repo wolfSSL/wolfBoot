@@ -699,7 +699,13 @@ backup_on_failure:
                     fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
                 dts_for_initrd = &dts_ctx;
             }
-            (void)fit_load_ramdisk(fit, ramdisk, dts_for_initrd);
+            /* A ramdisk the FIT names is part of the OS image: without it
+             * the kernel would come up with no root filesystem. */
+            if ((ramdisk != NULL) &&
+                    (fit_load_ramdisk(fit, ramdisk, dts_for_initrd) != 0)) {
+                wolfBoot_printf("Failed to load the FIT ramdisk\r\n");
+                wolfBoot_panic();
+            }
         }
 #else
         (void)ramdisk;

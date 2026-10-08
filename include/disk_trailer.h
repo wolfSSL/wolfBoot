@@ -56,6 +56,13 @@
 #define DISK_STATE_TESTING      0x10U   /* IMG_STATE_TESTING  */
 #define DISK_STATE_SUCCESS      0x00U   /* IMG_STATE_SUCCESS  */
 
+/* TESTING keeps the number of unconfirmed boots still allowed in its low
+ * nibble: 0x10 is the last one, 0x12 allows two more.  A reader that knows
+ * only the four plain states sees 0x11..0x1F as unknown and never reaps. */
+#define DISK_STATE_TESTING_MASK 0xF0U
+#define DISK_STATE_TRIES_MASK   0x0FU
+#define DISK_STATE_IS_TESTING(s) (((s) & DISK_STATE_TESTING_MASK) == DISK_STATE_TESTING)
+
 /* Byte offset of the trailer in a partition of size sz, or a non-zero return
  * when the partition is too small to carry one. Derived from the size the
  * caller observed, so both programs locate it the same way: from the media,
@@ -104,11 +111,12 @@ static inline const char *disk_trailer_state_name(uint8_t state)
             return "NEW";
         case DISK_STATE_UPDATING:
             return "UPDATING";
-        case DISK_STATE_TESTING:
-            return "TESTING";
         case DISK_STATE_SUCCESS:
             return "SUCCESS";
         default:
+            if (DISK_STATE_IS_TESTING(state)) {
+                return "TESTING";
+            }
             return "UNKNOWN";
     }
 }
