@@ -119,6 +119,14 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define BOOT_LABEL_B NULL
 #endif
 
+/* Unconfirmed boots a freshly staged slot is allowed before it is reaped. */
+#ifndef DISK_BOOT_TRIES
+#define DISK_BOOT_TRIES 1
+#endif
+#if (DISK_BOOT_TRIES < 1) || (DISK_BOOT_TRIES > 16)
+#error "DISK_BOOT_TRIES must be 1..16"
+#endif
+
 #ifndef MAX_FAILURES
 #define MAX_FAILURES 4
 #endif
@@ -152,6 +160,35 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define DISK_SLOTS 2
 #define GOLDEN_ATTEMPTS 0
 #define SLOT_IS_GOLDEN(s) 0
+#endif
+
+/* With the failover zeroize the image key may already be gone when the
+ * loader runs, and the golden image is a plaintext one; without it every
+ * slot is encrypted and a missing key is fatal as before. */
+#ifdef DISK_FAILOVER_ZEROIZE
+#ifndef DISK_GOLDEN_SLOT
+#error "DISK_FAILOVER_ZEROIZE needs DISK_GOLDEN_SLOT"
+#endif
+/* The last reason an operational slot was passed over (enum
+ * disk_failover_cause in hal.h), reported to hal_disk_failover(). */
+static int failover_cause;
+#define SET_FAILOVER(c)         do { failover_cause = (c); } while (0)
+/* Keeps a cause an earlier slot pass already recorded. */
+#define SET_FAILOVER_IF_UNSET(c) do { if (failover_cause == 0) { \
+                                     failover_cause = (c); } } while (0)
+static int disk_key_ok = 1;
+#define SLOT_ENCRYPTED_KEY_OK() (disk_key_ok != 0)
+#define SLOT_ENCRYPTED(s)       (!SLOT_IS_GOLDEN(s))
+/* Bytes zeroed at the start of each operational slot: the manifest header
+ * and the signature go, so the image can never be elected again. */
+#ifndef DISK_FAILOVER_ERASE_SIZE
+#define DISK_FAILOVER_ERASE_SIZE IMAGE_HEADER_SIZE
+#endif
+#else
+#define SET_FAILOVER(c)          do { } while (0)
+#define SET_FAILOVER_IF_UNSET(c) do { } while (0)
+#define SLOT_ENCRYPTED_KEY_OK() 1
+#define SLOT_ENCRYPTED(s)       1
 #endif
 
 #ifndef DISK_BLOCK_SIZE
@@ -368,6 +405,8 @@ static uint8_t disk_trailer[DISK_TRAILER_SZ];
 
 /* Last known state of each slot, filled in by disk_boot_state_reap(). */
 static uint8_t slot_state[DISK_SLOTS];
+/* Slots disk_boot_state_reap() took out of the election. */
+static uint8_t slot_reaped[DISK_SLOTS];
 
 /* Byte offset of the trailer within the slot's partition, or -1 when the slot
  * cannot carry one. */
@@ -434,6 +473,7 @@ static int slot_state_write(struct boot_slot *s, uint8_t state,
     return 0;
 }
 
+
 /* Read both slots' states, and drop any slot still marked TESTING out of the
  * election. Such a slot was armed before the previous boot and nothing
  * confirmed it, so whatever it started did not come up.
@@ -451,15 +491,30 @@ static void disk_boot_state_reap(uint32_t *pA_ver, uint32_t *pB_ver)
     for (i = 0; i < 2; i++) {
         st = DISK_STATE_NEW;
         slot_state[i] = DISK_STATE_NEW;
+        slot_reaped[i] = 0;
         if (slot_state_read(&boot_slots[i], &st) != 0) {
             continue;
         }
         slot_state[i] = st;
-        if (st != DISK_STATE_TESTING) {
+        if (!DISK_STATE_IS_TESTING(st)) {
+            continue;
+        }
+        if ((st & DISK_STATE_TRIES_MASK) != 0U) {
+            /* Not confirmed yet, but it still has tries: spend one and let
+             * it run again.  The write happens before the image is read,
+             * so a boot that dies early still counts. */
+            wolfBoot_printf("Slot %c was not confirmed; %u more boot(s)\r\n",
+                'A' + i, (unsigned)(st & DISK_STATE_TRIES_MASK));
+            if (slot_state_write(&boot_slots[i], (uint8_t)(st - 1U), 0) != 0) {
+                wolfBoot_printf("WARNING: could not record the retry on "
+                    "p%d\r\n", boot_slots[i].part);
+            }
             continue;
         }
         wolfBoot_printf("Slot %c was not confirmed; skipping it\r\n",
             'A' + i);
+        slot_reaped[i] = 1;
+        SET_FAILOVER(DISK_FAILOVER_UNCONFIRMED);
         if (i == 0) {
             *pA_ver = 0;
         }
@@ -469,6 +524,59 @@ static void disk_boot_state_reap(uint32_t *pA_ver, uint32_t *pB_ver)
     }
 }
 #endif /* DISK_BOOT_CONFIRM */
+
+#ifdef DISK_FAILOVER_ZEROIZE
+/* Default failover actions when the operational slots are given up on: drop
+ * the image key (the platform's wolfBoot_erase_encrypt_key) and zero the
+ * head of both operational slots so neither image can be elected again.
+ * The golden slot is never touched. */
+static int disk_failover_default(int cause)
+{
+    /* One sector at a time: DISK_BLOCK_SIZE is the load chunk and can be
+     * hundreds of KB on targets that stage whole images. */
+    static const uint8_t zeros[512];
+    int i, ret = 0;
+    uint64_t off;
+
+    wolfBoot_printf("Failover: operational images abandoned (cause %d)\r\n",
+        cause);
+#ifdef DISK_ENCRYPT
+    if (wolfBoot_erase_encrypt_key() != 0) {
+        wolfBoot_printf("Failover: image key not erased\r\n");
+        ret = -1;
+    }
+#endif
+    for (i = 0; i < 2; i++) {
+        struct boot_slot *s = &boot_slots[i];
+        if (s->ready == 0) {
+            continue;
+        }
+#ifdef WOLFBOOT_DISK_FS
+        if (s->vol.type != FS_TYPE_RAW) {
+            continue;
+        }
+#endif
+        for (off = 0; off < (uint64_t)DISK_FAILOVER_ERASE_SIZE;
+                off += sizeof(zeros)) {
+            if (disk_part_write(BOOT_DISK, s->part, off, sizeof(zeros),
+                    zeros) != (int)sizeof(zeros)) {
+                wolfBoot_printf("Failover: p%d not erased\r\n", s->part);
+                ret = -1;
+                break;
+            }
+        }
+#ifdef DISK_BOOT_CONFIRM
+        (void)slot_state_write(s, DISK_STATE_NEW, 0);
+#endif
+    }
+    return ret;
+}
+
+int WEAKFUNCTION hal_disk_failover(int cause)
+{
+    return disk_failover_default(cause);
+}
+#endif /* DISK_FAILOVER_ZEROIZE */
 
 /**
  * @brief Read from a boot slot.
@@ -668,6 +776,9 @@ void RAMFUNCTION wolfBoot_start(void)
     int selected;
     uint32_t *load_address;
     int failures = 0;
+#ifdef DISK_FAILOVER_ZEROIZE
+    int failover_done = 0;
+#endif
     uint32_t load_off;
     uint32_t max_ver;
     const uint8_t *hdr_ptr = NULL;
@@ -706,16 +817,30 @@ void RAMFUNCTION wolfBoot_start(void)
         disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
         wolfBoot_printf("Error initializing encryption\r\n");
+#ifdef DISK_FAILOVER_ZEROIZE
+        disk_key_ok = 0;
+        SET_FAILOVER(DISK_FAILOVER_NO_KEY);
+#else
         wolfBoot_panic();
+#endif
     }
     /* Retrieve encryption key and nonce for disk decryption */
     if (wolfBoot_get_encrypt_key(disk_encrypt_key, disk_encrypt_nonce) != 0) {
         disk_decrypted_header_clear(dec_hdr);
         disk_crypto_clear();
         wolfBoot_printf("Error getting encryption key\r\n");
+#ifdef DISK_FAILOVER_ZEROIZE
+        /* The key is gone (a previous failover zeroized it): the encrypted
+         * operational images cannot boot, the plaintext golden one can. */
+        disk_key_ok = 0;
+        SET_FAILOVER(DISK_FAILOVER_NO_KEY);
+#else
         wolfBoot_panic();
+#endif
     }
-    wolfBoot_printf("Disk encryption enabled\r\n");
+    else {
+        wolfBoot_printf("Disk encryption enabled\r\n");
+    }
 #endif
 
     ret = disk_init(BOOT_DISK);
@@ -789,7 +914,7 @@ void RAMFUNCTION wolfBoot_start(void)
     if (slot_read(&boot_slots[0], 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
-        if (decrypt_header(p_hdr, dec_hdr) == 0) {
+        if (SLOT_ENCRYPTED_KEY_OK() && (decrypt_header(p_hdr, dec_hdr) == 0)) {
             /* Use local version parser to avoid double-decryption issue
              * when EXT_ENCRYPTED && MMU is also defined */
             pA_ver = get_decrypted_blob_version(dec_hdr);
@@ -804,7 +929,7 @@ void RAMFUNCTION wolfBoot_start(void)
     if (slot_read(&boot_slots[1], 0, IMAGE_HEADER_SIZE, p_hdr)
             == IMAGE_HEADER_SIZE) {
 #ifdef DISK_ENCRYPT
-        if (decrypt_header(p_hdr, dec_hdr) == 0) {
+        if (SLOT_ENCRYPTED_KEY_OK() && (decrypt_header(p_hdr, dec_hdr) == 0)) {
             /* Use local version parser to avoid double-decryption issue
              * when EXT_ENCRYPTED && MMU is also defined */
             pB_ver = get_decrypted_blob_version(dec_hdr);
@@ -824,6 +949,7 @@ void RAMFUNCTION wolfBoot_start(void)
 #ifdef DISK_GOLDEN_SLOT
         /* Straight to the golden slot. A version-0 header is not a bootable
          * A/B image here any more than it was before this option existed. */
+        SET_FAILOVER_IF_UNSET(DISK_FAILOVER_NO_IMAGE);
         failures = MAX_FAILURES;
 #else
 #ifdef DISK_ENCRYPT
@@ -871,6 +997,17 @@ void RAMFUNCTION wolfBoot_start(void)
             }
             wolfBoot_printf("Falling back to the golden image on p%d\r\n",
                 boot_slots[SLOT_GOLDEN].part);
+#ifdef DISK_FAILOVER_ZEROIZE
+            /* The operational images are being given up on: run the
+             * platform's failover actions once, before the recovery image
+             * is read.  They may fail; the golden slot still boots. */
+            if (!failover_done) {
+                failover_done = 1;
+                if (hal_disk_failover(failover_cause) != 0) {
+                    wolfBoot_printf("Failover actions incomplete\r\n");
+                }
+            }
+#endif
         }
 #endif
         slot = &boot_slots[selected];
@@ -882,10 +1019,10 @@ void RAMFUNCTION wolfBoot_start(void)
          * with ALLOW_DOWNGRADE defined the version guard that would other-
          * wise refuse it is compiled out. Refuse it here so the exclusion
          * holds on every path into the slot, not just the first choice. */
-        if (!SLOT_IS_GOLDEN(selected) &&
-                slot_state[selected] == DISK_STATE_TESTING) {
+        if (!SLOT_IS_GOLDEN(selected) && slot_reaped[selected]) {
             wolfBoot_printf("Slot %c was not confirmed; not booting it\r\n",
                 'A' + selected);
+            SET_FAILOVER(DISK_FAILOVER_UNCONFIRMED);
             selected ^= 1;
             continue;
         }
@@ -898,6 +1035,7 @@ void RAMFUNCTION wolfBoot_start(void)
                 wolfBoot_printf("Rollback to lower version not allowed\r\n");
 #ifdef DISK_GOLDEN_SLOT
                 /* Nothing newer can boot: only the golden slot is left. */
+                SET_FAILOVER(DISK_FAILOVER_ROLLBACK);
                 failures = MAX_FAILURES;
                 continue;
 #else
@@ -924,24 +1062,33 @@ void RAMFUNCTION wolfBoot_start(void)
             != IMAGE_HEADER_SIZE) {
             wolfBoot_printf("Error reading image header from disk: p%d\r\n",
                     cur_part);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
 
         hdr_ptr = p_hdr;
 #ifdef DISK_ENCRYPT
-        /* Decrypt header to parse image size */
-        if (decrypt_header(p_hdr, dec_hdr) != 0) {
+        /* Decrypt header to parse image size.  A golden image is signed
+         * but not encrypted: it must boot after the image key is gone. */
+        if (!SLOT_ENCRYPTED(selected)) {
+            hdr_ptr = p_hdr;
+        }
+        else if (decrypt_header(p_hdr, dec_hdr) != 0) {
             wolfBoot_printf("Error decrypting header for %s\r\n", part_name);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
-        hdr_ptr = dec_hdr;
+        else {
+            hdr_ptr = dec_hdr;
+        }
 #endif
         memset(&os_image, 0, sizeof(os_image));
         ret = wolfBoot_open_image_address(&os_image, (void*)hdr_ptr);
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -960,6 +1107,7 @@ void RAMFUNCTION wolfBoot_start(void)
                 (((uint64_t)os_image.fw_size + (uint64_t)IMAGE_HEADER_SIZE) >
                     fs_size(&slot->f))) {
             wolfBoot_printf("Image larger than file for %s\r\n", part_name);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -969,6 +1117,7 @@ void RAMFUNCTION wolfBoot_start(void)
         if (os_image.fw_size > WOLFBOOT_RAMBOOT_MAX_SIZE) {
             wolfBoot_printf("Image size %u exceeds max RAM load size\r\n",
                 os_image.fw_size);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -981,6 +1130,7 @@ void RAMFUNCTION wolfBoot_start(void)
         if (os_image.fw_size > slot_max) {
             wolfBoot_printf("Image size %u doesn't fit in low memory\r\n",
                 os_image.fw_size);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -1014,6 +1164,7 @@ void RAMFUNCTION wolfBoot_start(void)
             wolfBoot_printf("Error reading image from disk: p%d "
                     "(%u of %u bytes)\r\n", cur_part,
                     (unsigned int)load_off, (unsigned int)os_image.fw_size);
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -1021,24 +1172,27 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #ifdef DISK_ENCRYPT
         /* Decrypt the payload in RAM */
-        wolfBoot_printf("Decrypting image...");
-        BENCHMARK_START();
-        if ((IMAGE_HEADER_SIZE % ENCRYPT_BLOCK_SIZE) != 0) {
-            disk_decrypted_header_clear(dec_hdr);
-            disk_crypto_clear();
-            wolfBoot_printf("Encrypted disk images require aligned header size\r\n");
-            wolfBoot_panic();
+        if (SLOT_ENCRYPTED(selected)) {
+            wolfBoot_printf("Decrypting image...");
+            BENCHMARK_START();
+            if ((IMAGE_HEADER_SIZE % ENCRYPT_BLOCK_SIZE) != 0) {
+                disk_decrypted_header_clear(dec_hdr);
+                disk_crypto_clear();
+                wolfBoot_printf("Encrypted disk images require aligned header size\r\n");
+                wolfBoot_panic();
+            }
+            disk_crypto_set_iv(IMAGE_HEADER_SIZE / ENCRYPT_BLOCK_SIZE);
+            crypto_decrypt((uint8_t*)load_address, (uint8_t*)load_address,
+                os_image.fw_size);
+            BENCHMARK_END("done");
         }
-        disk_crypto_set_iv(IMAGE_HEADER_SIZE / ENCRYPT_BLOCK_SIZE);
-        crypto_decrypt((uint8_t*)load_address, (uint8_t*)load_address,
-            os_image.fw_size);
-        BENCHMARK_END("done");
 #endif
 
         memset(&os_image, 0, sizeof(os_image));
         ret = wolfBoot_open_image_address(&os_image, (void*)hdr_ptr);
         if (ret < 0) {
             wolfBoot_printf("Error parsing loaded image\r\n");
+            SET_FAILOVER(DISK_FAILOVER_NO_IMAGE);
             selected ^= 1;
             continue;
         }
@@ -1052,6 +1206,7 @@ void RAMFUNCTION wolfBoot_start(void)
         BENCHMARK_START();
         if (wolfBoot_verify_integrity(&os_image) != 0) {
             wolfBoot_printf("Error validating integrity for %s\r\n", part_name);
+            SET_FAILOVER(DISK_FAILOVER_VERIFY);
             selected ^= 1;
             continue;
         }
@@ -1062,6 +1217,7 @@ void RAMFUNCTION wolfBoot_start(void)
         if (wolfBoot_verify_authenticity(&os_image) != 0) {
             wolfBoot_printf("Error validating authenticity for %s\r\n",
                 part_name);
+            SET_FAILOVER(DISK_FAILOVER_VERIFY);
             selected ^= 1;
             continue;
         } else {
@@ -1101,7 +1257,8 @@ void RAMFUNCTION wolfBoot_start(void)
      * steady-state boot writes nothing at all. */
     if (!SLOT_IS_GOLDEN(selected) &&
             slot_state[selected] == DISK_STATE_UPDATING) {
-        if (slot_state_write(&boot_slots[selected], DISK_STATE_TESTING,
+        if (slot_state_write(&boot_slots[selected],
+                (uint8_t)(DISK_STATE_TESTING | (DISK_BOOT_TRIES - 1)),
                 (uint64_t)IMAGE_HEADER_SIZE + (uint64_t)os_image.fw_size)
                 != 0) {
             /* Loud, because the consequence is silent: without the TESTING
@@ -1241,7 +1398,17 @@ void RAMFUNCTION wolfBoot_start(void)
                     fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
                 dts_for_initrd = &dts_ctx;
             }
-            (void)fit_load_ramdisk(fit, ramdisk, dts_for_initrd);
+            /* A ramdisk the FIT names is part of the OS image: without it
+             * the kernel would come up with no root filesystem. */
+            if ((ramdisk != NULL) &&
+                    (fit_load_ramdisk(fit, ramdisk, dts_for_initrd) != 0)) {
+                wolfBoot_printf("Failed to load the FIT ramdisk\r\n");
+#ifdef DISK_ENCRYPT
+                disk_decrypted_header_clear(dec_hdr);
+                disk_crypto_clear();
+#endif
+                wolfBoot_panic();
+            }
         }
 #else
         (void)ramdisk;

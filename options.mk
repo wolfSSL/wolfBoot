@@ -125,6 +125,26 @@ ifeq ($(MPFS_SCB_SMODE_DENY),1)
             -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
 endif
 
+# Field recovery: before the golden slot boots, zero the sNVM image-key page and the head of both
+# operational slots (hal_disk_failover).  The golden image must be a plaintext signed image.
+ifeq ($(DISK_FAILOVER_ZEROIZE),1)
+    ifneq ($(DISK_GOLDEN_SLOT)$(SNVM_KEK),11)
+        $(error DISK_FAILOVER_ZEROIZE=1 requires DISK_GOLDEN_SLOT=1 and SNVM_KEK=1)
+    endif
+    ifeq ($(SNVM_ENCKEY_PROVISION),1)
+        $(error DISK_FAILOVER_ZEROIZE=1 and SNVM_ENCKEY_PROVISION=1 undo each \
+                other at every boot; build one or the other)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error DISK_FAILOVER_ZEROIZE $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"DISK_FAILOVER_ZEROIZE"
+endif
+# Unconfirmed boots a staged slot gets before DISK_BOOT_CONFIRM reaps it.
+ifneq ($(DISK_BOOT_TRIES),)
+    CFLAGS+=-DDISK_BOOT_TRIES=$(DISK_BOOT_TRIES)
+endif
+
 # PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
 ifeq ($(SNVM_KEK),1)
     # The KEK only wraps the image-encryption key, so it rides on the AES-256 ENCRYPT build's AES.

@@ -1931,6 +1931,10 @@ wolfBoot's image encryption (`EXT_ENCRYPTED`) was previously tied to the partiti
 - `src/libwolfboot.c`: the `EXT_ENCRYPTED requires EXT_FLASH or MMU` guard now also accepts `CUSTOM_ENCRYPT_KEY` (the platform supplies the key), and `hal_set_key()` (partition-resident key storage) is folded under `#ifndef CUSTOM_ENCRYPT_KEY`.
 - `src/update_disk.c`: the `DISK_ENCRYPT` path gains `ForceZero` for secret cleanup.
 
+#### Field-recoverable zeroize
+
+`DISK_FAILOVER_ZEROIZE=1` (with `DISK_GOLDEN_SLOT=1`, `SNVM_KEK=1` and the `WOLFBOOT_SNVM_WRITE_APPROVED=1` gate every sNVM writer carries) turns a failover to the golden slot into a zeroize: when both operational slots are given up on, wolfBoot zeroes sNVM page `SNVM_ENCKEY_MODULE` (the PUF-wrapped image key, read back and checked; a page that already reads as zeros is not written again) and the head of both operational slots, then boots the golden image. The keystore page is never touched, so the golden image still verifies; it must be a plaintext signed image, since the key that decrypted the operational images is gone. Nothing derived from the PUF is lost: the MRAM log key is re-derived on every boot. Re-provisioning the image key afterwards is the `SNVM_ENCKEY_PROVISION` service flow; a brownout during the zeroize write can leave the page read-only, in which case the device cannot be re-keyed.
+
 #### Build flags summary
 
 | Flag | Effect |
@@ -1943,6 +1947,7 @@ wolfBoot's image encryption (`EXT_ENCRYPTED`) was previously tied to the partiti
 | `WOLFBOOT_SNVM_WRITE_APPROVED` | Required by every knob that writes sNVM; the build fails without it |
 | `SNVM_KEYSTORE_REQUIRE_ROM` | Refuse to boot unless every keystore page is ROM-flagged (bitstream-provisioned keystore) |
 | `MPFS_SCB_SMODE_DENY` | PMP-fence S-mode off the System Controller mailbox and disable its DTB nodes |
+| `DISK_FAILOVER_ZEROIZE` | Zero the image-key page and the operational slots when falling back to the golden image |
 | `SNVM_ENCKEY_INSECURE_TEST_KEY` | Acknowledges provisioning the built-in public test key |
 | `SNVM_ENCKEY_PROVISION_EXTERN` | Provision a production key instead: the integrator defines `snvm_enckey_prov_key[32]` and `snvm_enckey_prov_nonce[16]` in another object |
 
