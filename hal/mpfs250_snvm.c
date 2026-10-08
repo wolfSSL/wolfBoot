@@ -285,6 +285,72 @@ int snvm_keystore_provision(void)
 
 #endif /* SNVM_KEYSTORE_PROVISION && !WOLFBOOT_NO_SIGN */
 
+#if defined(SNVM_KEK) || defined(MPFS_SBI_VENDOR)
+
+/* out = SHA384(label || PUF(challenge))[0..31]: a device-unique key bound to
+ * the label and the challenge.  The label is hashed without its terminator. */
+int mpfs_puf_derive(const char *label, const uint8_t *challenge, uint8_t *out)
+{
+    uint8_t   resp[MPFS_PUF_RESPONSE_LEN];
+    uint8_t   digest[WC_SHA384_DIGEST_SIZE];
+    wc_Sha384 sha;
+    int       ret;
+
+    if ((label == NULL) || (challenge == NULL) || (out == NULL)) {
+        return -1;
+    }
+    ret = mpfs_puf_emulation(challenge, 0, resp);
+    if (ret != 0) {
+        return -1;
+    }
+    ret = wc_InitSha384(&sha);
+    if (ret == 0) {
+        ret = wc_Sha384Update(&sha, (const byte *)label,
+            (word32)strlen(label));
+        if (ret == 0) {
+            ret = wc_Sha384Update(&sha, resp, (word32)sizeof(resp));
+        }
+        if (ret == 0) {
+            ret = wc_Sha384Final(&sha, digest);
+        }
+        wc_Sha384Free(&sha);
+        /* the context buffered the whole sub-block message, PUF response included */
+        wc_ForceZero(&sha, sizeof(sha));
+    }
+    if (ret == 0) {
+        memcpy(out, digest, MPFS_PUF_DERIVED_LEN);
+    }
+    wc_ForceZero(resp, sizeof(resp));
+    wc_ForceZero(digest, sizeof(digest));
+    return (ret == 0) ? 0 : -1;
+}
+
+int mpfs_puf_purpose_key(const char *seed, const char *label, uint8_t *out)
+{
+    uint8_t   digest[WC_SHA384_DIGEST_SIZE];
+    uint8_t   challenge[MPFS_PUF_CHALLENGE_LEN];
+    wc_Sha384 sha;
+    int       ret;
+
+    if ((seed == NULL) || (label == NULL) || (out == NULL)) {
+        return -1;
+    }
+    ret = wc_InitSha384(&sha);
+    if (ret == 0) {
+        ret = wc_Sha384Update(&sha, (const byte *)seed, (word32)strlen(seed));
+        if (ret == 0) {
+            ret = wc_Sha384Final(&sha, digest);
+        }
+        wc_Sha384Free(&sha);
+    }
+    if (ret != 0) {
+        return -1;
+    }
+    memcpy(challenge, digest, sizeof(challenge));
+    return mpfs_puf_derive(label, challenge, out);
+}
+#endif /* SNVM_KEK || MPFS_SBI_VENDOR */
+
 #ifdef SNVM_KEK
 
 /* Fixed PUF challenge.  Any constant works: the same challenge returns the
@@ -298,40 +364,9 @@ static const char snvm_kek_label[] = "wolfBoot-sNVM-KEK-v1";
 
 int mpfs_puf_kek(uint8_t *kek)
 {
-    uint8_t   resp[MPFS_PUF_RESPONSE_LEN];
-    uint8_t   digest[WC_SHA384_DIGEST_SIZE];
-    wc_Sha384 sha;
-    int       ret;
-
-    if (kek == NULL) {
-        return -1;
-    }
-    ret = mpfs_puf_emulation(snvm_kek_challenge, 0, resp);
-    if (ret != 0) {
-        return -1;
-    }
-    ret = wc_InitSha384(&sha);
-    if (ret == 0) {
-        ret = wc_Sha384Update(&sha, (const byte *)snvm_kek_label,
-            (word32)(sizeof(snvm_kek_label) - 1));
-        if (ret == 0) {
-            ret = wc_Sha384Update(&sha, resp, (word32)sizeof(resp));
-        }
-        if (ret == 0) {
-            ret = wc_Sha384Final(&sha, digest);
-        }
-        wc_Sha384Free(&sha);
-        /* the context buffered the whole sub-block message, PUF response included */
-        wc_ForceZero(&sha, sizeof(sha));
-    }
-    /* KEK = first 256 bits of SHA-384(label || PUF response). */
-    if (ret == 0) {
-        memcpy(kek, digest, SNVM_KEK_LEN);
-    }
-    wc_ForceZero(resp, sizeof(resp));
-    wc_ForceZero(digest, sizeof(digest));
-    return (ret == 0) ? 0 : -1;
+    return mpfs_puf_derive(snvm_kek_label, snvm_kek_challenge, kek);
 }
+
 
 int snvm_kek_wrap(const uint8_t *key, uint32_t keysz, uint8_t *out,
     uint32_t outsz)

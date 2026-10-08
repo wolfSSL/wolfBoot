@@ -129,6 +129,36 @@ ifeq ($(MPFS_SCB_SMODE_DENY),1)
             -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
 endif
 
+# PolarFire SoC: the SBI vendor extension (EID 0x09000029, the HSS one) for
+# the OS: firmware version, device serial, PUF-derived keys by purpose, and
+# the System Controller digest/IAP/auto-update services behind the mailbox
+# fence.  M-mode only; the key derivation is SHA-384 whatever the image hash.
+ifeq ($(MPFS_SBI_VENDOR),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SBI_VENDOR=1 needs the M-mode target (RISCV_MMODE=1))
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SBI_VENDOR"
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+
+# PolarFire SoC: System Controller SPI flash erase/write/read for the OS over
+# the vendor extension.  Only meaningful behind the mailbox fence, which also
+# fences the flash controller; compiles the SC CoreQSPI driver into a build
+# that boots from elsewhere (EXT_FLASH=0).
+ifeq ($(MPFS_SBI_SC_FLASH),1)
+    ifneq ($(MPFS_SBI_VENDOR)$(MPFS_SCB_SMODE_DENY),11)
+        $(error MPFS_SBI_SC_FLASH=1 requires MPFS_SBI_VENDOR=1 and MPFS_SCB_SMODE_DENY=1)
+    endif
+    ifeq ($(EXT_FLASH),1)
+        $(error MPFS_SBI_SC_FLASH=1 is for a build that does not boot from the SC flash (EXT_FLASH=0))
+    endif
+    CFLAGS+=-D"MPFS_SBI_SC_FLASH" -D"MPFS_SC_SPI"
+endif
+
 # Field recovery: when both operational slots are given up on and the golden
 # slot is about to boot, zero the sNVM page holding the image key and the head
 # of both operational slots (hal_disk_failover).  The golden image must be a

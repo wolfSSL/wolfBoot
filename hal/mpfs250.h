@@ -227,6 +227,7 @@
 
 /* Control Register bits */
 #define SERVICES_CR_REQ_MASK      0x01u
+#define SERVICES_CR_MBOX_SHIFT    7     /* mailbox word offset, or the SPI index */
 #define SERVICES_CR_COMMAND_SHIFT 16
 
 /* Status Register bits */
@@ -242,6 +243,16 @@
 #define SYS_SERV_CMD_SNVM_READ         0x18u
 #define SYS_SERV_CMD_PUF_EMULATION     0x20u
 #define SYS_SERV_CMD_NONCE             0x21u
+/* Bitstream/IAP services.  The SPI directory index of 0x22/0x42/0x44 rides
+ * in the SERVICES_CR mailbox-offset field, not in the mailbox. */
+#define SYS_SERV_CMD_IAP_IMAGE_AUTH    0x22u /* index in CR[14:7] */
+#define SYS_SERV_CMD_BITSTREAM_AUTH    0x23u /* SPI address in mailbox */
+#define SYS_SERV_CMD_IAP_PROGRAM_IDX   0x42u /* restarts the device on success */
+#define SYS_SERV_CMD_IAP_PROGRAM_ADDR  0x43u
+#define SYS_SERV_CMD_IAP_VERIFY_IDX    0x44u
+#define SYS_SERV_CMD_IAP_VERIFY_ADDR   0x45u
+#define SYS_SERV_CMD_AUTO_UPDATE       0x46u /* restarts the device on success */
+#define SYS_SERV_CMD_DIGEST_CHECK      0x47u /* options word in, DIGESTERR at byte 4 */
 
 /* sNVM service parameters (see Microchip system services spec) */
 #define MPFS_SNVM_MODULE_MAX     221  /* modules 0..220 */
@@ -417,6 +428,16 @@ typedef struct {
 
 /* DTIM bytes hal_init() zeroes at boot (SBI shared block + hart mailboxes). */
 #define MPFS_DTIM_BOOT_CLEAR_SIZE   0x200U
+
+/* Per-hart M-mode trap stacks (src/riscv_sbi.c, src/vector_riscv.S): one
+ * 4 KB (1 << SBI_MSTACK_SHIFT) stack per hart in the OS-invisible reserved
+ * DDR (hss-buffer@103fc00000, nomap in the stock dtb); hart h's top is
+ * SBI_MSTACK_BASE + (h + 1) << SBI_MSTACK_SHIFT.  No UL suffix: used from
+ * assembly. */
+#ifndef SBI_MSTACK_BASE
+#define SBI_MSTACK_BASE             0x103FC00000
+#endif
+#define SBI_MSTACK_SHIFT            12
 /* DTIM pair (count, ~count) just above the cleared block, so it survives an
  * MSS reset: DDR training restarts by reset since the last accepted training. */
 #define MPFS_DTIM_DDR_RESET_CNT_ADDR (0x01000000UL + MPFS_DTIM_BOOT_CLEAR_SIZE)
@@ -751,7 +772,7 @@ int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 #endif
 #endif /* __ASSEMBLER__ */
 
-#ifdef EXT_FLASH
+#if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)
 /* QSPI Flash Controller
  *
  * Two CoreQSPI v2 controllers with identical register layouts:
