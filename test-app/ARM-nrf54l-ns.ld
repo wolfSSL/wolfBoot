@@ -1,4 +1,4 @@
-/* ARM-nrf54l-ns.ld - NS test-app linker script for the nRF54L15 TZ build.
+/* ARM-nrf54l-ns.ld - NS test-app linker script for the nRF54L TZ builds.
  * The NS application runs from the boot partition in non-secure flash.
  * RAM origin must match NS_RAM_BASE in hal/nrf54l.h and the SAU region
  * programmed by hal_tz_init() in hal/nrf54l.c. */

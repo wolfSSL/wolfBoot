@@ -112,6 +112,8 @@ TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
 TESTS+=unit-elf-mmu-fail
 TESTS+=unit-nrf54l-uart-write
+TESTS+=unit-nrf54l-flash
+TESTS+=unit-nrf54lm20-flash
 TESTS+=unit-x86-uart
 TESTS+=unit-stm32h7-flash-write
 TESTS+=unit-stm32u3-flash-write
@@ -1521,6 +1523,13 @@ nrf54l_uart_write_extract.h: ../../hal/nrf54l.c
 
 unit-nrf54l-uart-write: unit-nrf54l-uart-write.c nrf54l_uart_write_extract.h
 	gcc -o $@ unit-nrf54l-uart-write.c $(CFLAGS) $(LDFLAGS)
+
+unit-nrf54l-flash: unit-nrf54l-flash.c ../../hal/nrf54l.c ../../hal/nrf54l.h
+	gcc -o $@ unit-nrf54l-flash.c -Wno-int-to-pointer-cast $(CFLAGS) $(LDFLAGS)
+
+unit-nrf54lm20-flash: unit-nrf54l-flash.c ../../hal/nrf54l.c ../../hal/nrf54l.h
+	gcc -o $@ unit-nrf54l-flash.c -Wno-int-to-pointer-cast -DNRF54LM20 \
+		$(CFLAGS) $(LDFLAGS)
 
 # unit-x86-uart: uart_init() must derive the stop-bit field from the
 # requested stop count (F-12885); port I/O is mocked.

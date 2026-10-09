@@ -226,6 +226,32 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf54l15-wolfcrypt-tz.config
 
+  nrf54lm20_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54lm20.config
+
+  nrf54lm20_wolfcrypt_tz_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54lm20-wolfcrypt-tz.config
+
+  nrf54lm20_no_uart_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54lm20.config
+      make-args: DEBUG_UART=0
+
+  nrf54lm20_benchmark_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54lm20.config
+      make-args: BOOT_BENCHMARK=1
+
   nxp_p1021_test:
     uses: ./.github/workflows/test-build-powerpc.yml
     with:
