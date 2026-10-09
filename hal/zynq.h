@@ -303,7 +303,13 @@
 #define ZYNQMP_EFUSE_BASE       0xFFCC0000
 #define ZYNQMP_EFUSE_STATUS     (ZYNQMP_EFUSE_BASE + 0x0008)
 #define ZYNQMP_EFUSE_PUF_CHASH  (ZYNQMP_EFUSE_BASE + 0x1050)
-#define ZYNQMP_EFUSE_PUF_AUX    (ZYNQMP_EFUSE_BASE + 0x1054)
+/* 0x1054 is PUF_MISC: the 24-bit AUX field with the PUF control bits above
+ * it, not a bare AUX register. */
+#define ZYNQMP_EFUSE_PUF_MISC   (ZYNQMP_EFUSE_BASE + 0x1054)
+#define ZYNQMP_EFUSE_PUF_MISC_REG_DIS    (1UL << 31) /* registration disabled for good */
+#define ZYNQMP_EFUSE_PUF_MISC_SYN_WRLK   (1UL << 30) /* helper data locked from programming */
+#define ZYNQMP_EFUSE_PUF_MISC_SYN_INVLD  (1UL << 29) /* eFuse helper data invalidated */
+#define ZYNQMP_EFUSE_PUF_MISC_AUX_MASK   0x00FFFFFF
 #define ZYNQMP_EFUSE_SEC_CTRL   (ZYNQMP_EFUSE_BASE + 0x1058)
 #define ZYNQMP_EFUSE_PPK0_0     (ZYNQMP_EFUSE_BASE + 0x10A0)
 #define ZYNQMP_EFUSE_PPK0_1     (ZYNQMP_EFUSE_BASE + 0x10A4)
@@ -569,7 +575,17 @@
 #define CSU_AES_RESET     (CSU_BASE + 0x1010U)
 #define CSU_AES_KEY_CLEAR (CSU_BASE + 0x1014U)
 #define CSU_AES_CFG       (CSU_BASE + 0x1018U) /* 0=Dec, 1=Enc */
+/* AES-GCM engine sizes (Xilinx CSU): 16-byte IV block and 16-byte GCM tag,
+ * and a 256-bit key held as eight 32-bit words. */
+#define CSU_AES_IV_SZ      16
+#define CSU_AES_GCM_TAG_SZ 16
+#define CSU_AES_KEY_SZ     32
 #define CSU_AES_KUP_WR    (CSU_BASE + 0x101CU)
+/* Route AES output straight into the KUP (and IV) registers instead of
+ * memory. This is how a black key is unwrapped without the red key ever
+ * being visible to software. */
+#define CSU_AES_KUP_WR_KEY       (1UL << 0)
+#define CSU_AES_KUP_WR_IV        (1UL << 1)
 #define CSU_AES_KUP       (CSU_BASE + 0x1020U) /* 32 bytes - through 0x40 */
 #define CSU_AES_IV        (CSU_BASE + 0x1040U) /* 16 bytes - through 0x50 */
 
@@ -720,6 +736,26 @@ static inline int zynqmp_l2_block_range(uint64_t start, uint64_t end,
     *last = l;
     return 0;
 }
+
+/* PUF / CSU key handling, defined in hal/zynq.c. */
+#if defined(WOLFBOOT_ZYNQMP_CSU) || defined(WOLFBOOT_ZYNQMP_FSBL_SEC)
+/* AES-GCM with a selectable key source; see hal/zynq.c for buffer sizes */
+int csu_aes_ex(int enc, const uint8_t* iv, const uint8_t* in, uint8_t* out,
+    uint32_t sz, int keySrc, const uint8_t* kupKey);
+int csu_aes_key_zero(void);
+#endif
+
+#if (defined(WOLFBOOT_ZYNQMP_CSU) || defined(WOLFBOOT_ZYNQMP_FSBL_SEC)) && \
+    (defined(CSU_PUF_ROT) || defined(WOLFBOOT_ZYNQMP_FSBL_SEC))
+int csu_puf_register(uint32_t* syndrome, uint32_t* chash, uint32_t* aux);
+/* Refuses when CHASH is zero: nothing to regenerate from */
+int csu_puf_regeneration(void);
+/* Unwrap a black key into the KUP. Needs a provisioned part; the recovered
+ * key is never returned to the caller. The KUP routing and the tag-failure
+ * zeroize are validated on a ZCU102; the PUF key source itself is not. */
+int csu_puf_black_key_unwrap(const uint8_t* blackKey, const uint8_t* iv);
+#endif
+
 #endif /* !__ASSEMBLER__ */
 
 #endif /* _ZYNQMP_H_ */
