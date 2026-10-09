@@ -24,6 +24,9 @@
 #ifdef TARGET_mpfs250
 #include "hal/mpfs250.h"
 #endif
+#ifdef TARGET_mpfs250_ubl
+#include "hal/mpfs250_ubl.h"
+#endif
 
 
 /* RV64 M-mode: direct boot from eNVM; a0=hartid from CSR
@@ -34,7 +37,91 @@
 _reset:
 #if __riscv_xlen == 64
 
-#ifdef WOLFBOOT_RISCV_MMODE
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250_ubl)
+    /* Boot mode 2 UBL stub: the System Controller has already copied the
+     * whole image to the LIM and released all five harts here, so VMA == LMA
+     * and nothing is copied.  The E51 verifies the eNVM wolfBoot manifest;
+     * the U54s park on the DTIM mailbox until it publishes the entry, then
+     * every hart enters the eNVM reset vector as in a boot mode 1 boot. */
+    csrr  a0, mhartid
+    mv    tp, a0
+
+    li    t0, MSTATUS_MIE
+    csrc  mstatus, t0
+    csrw  mie, zero
+    csrw  mip, zero
+    csrw  mscratch, zero
+    csrw  mcause, zero
+    csrw  mepc, zero
+    csrw  pmpcfg0, zero
+    csrw  pmpcfg2, zero
+
+    la    t0, trap_vector_table
+    csrw  mtvec, t0
+
+    bnez  a0, .L_ubl_secondary_wait
+
+    /* Close the mailbox gate before anything slow (.bss clear, verify): an
+     * MSS reset leaves the previous boot's magic and entry in DTIM, and a
+     * stale pair is indistinguishable from a fresh one, so the secondaries
+     * would jump into an eNVM image this boot has not verified. */
+    li    t0, MPFS_UBL_MAGIC_ADDR
+    sw    zero, 0(t0)
+    fence iorw, iorw
+
+    .option push
+    .option norelax
+    la    gp, __global_pointer$
+    .option pop
+
+    la    sp, _end_stack
+    li    t0, -16
+    and   sp, sp, t0
+    mv    s0, sp
+
+    /* LIM comes out of reset with uninitialised ECC and a doubleword store is
+     * what writes it, so cover everything the System Controller did not copy:
+     * .bss, the heap and the stack, which faults on its first read. */
+    la    t0, _start_bss
+    la    t1, _end_stack
+.L_ubl_lim_clear:
+    beq   t0, t1, .L_ubl_lim_clear_done
+    sd    zero, 0(t0)
+    addi  t0, t0, 8
+    j     .L_ubl_lim_clear
+.L_ubl_lim_clear_done:
+
+    mv    a0, tp
+    j     main
+
+.L_ubl_secondary_wait:
+    li    t1, MPFS_UBL_MAGIC_ADDR
+    li    t3, MPFS_UBL_MAGIC
+    /* Wait for the boot hart to close the gate, so only a pair published by
+     * this boot can release us. */
+.L_ubl_wait_closed:
+    lwu   t2, 0(t1)
+    beq   t2, t3, .L_ubl_wait_closed
+.L_ubl_wait_entry:
+    lwu   t2, 0(t1)
+    bne   t2, t3, .L_ubl_wait_entry
+    ld    t0, (MPFS_UBL_ENTRY_ADDR - MPFS_UBL_MAGIC_ADDR)(t1)
+    ld    t2, (MPFS_UBL_ENTRY_INV_ADDR - MPFS_UBL_MAGIC_ADDR)(t1)
+    not   t2, t2
+    bne   t0, t2, .L_ubl_wait_entry
+    beqz  t0, .L_ubl_wait_entry
+
+    /* Acknowledge, then jump; the E51 waits for the acks before it follows */
+    li    t1, MPFS_UBL_ACK_BASE
+    slli  t2, a0, 2
+    add   t1, t1, t2
+    li    t2, 1
+    sw    t2, 0(t1)
+    fence iorw, iorw
+    fence.i
+    jr    t0
+
+#elif defined(WOLFBOOT_RISCV_MMODE)
     /* RV64 M-mode: first code from eNVM at 0x20220100 */
     call  .L_clear_ras                /* flush stale RAS prediction state */
 

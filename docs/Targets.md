@@ -990,6 +990,7 @@ programming, Memory Test Controller, LPDDR4 mode-register protocol)
 `hal/mpfs250.ld` - Linker script for S-mode (HSS-based boot)
 `hal/mpfs250-m.ld` - Linker script for M-mode (eNVM + L2 SRAM)
 `hal/mpfs250-hss.ld` - Linker script for S-mode (HSS with L2-LIM)
+`hal/mpfs250_ubl.c` / `hal/mpfs250_ubl.ld` - Boot mode 2 User Boot Loader stub (sNVM-authenticated verifier of the eNVM wolfBoot)
 `hal/mpfs.dts` - Device tree source
 `hal/mpfs.yaml` - HSS payload generator configuration for use of DDR
 `hal/mpfs-l2lim.yaml` - HSS payload generator for the use of L2-LIM
@@ -1325,6 +1326,89 @@ register table and composes the generic calls. Both compile only when `MPFS_DDR_
 ### PolarFire SoC hardware root of trust (PUF KEK, sNVM keystore, wrapped encryption key)
 
 The System Controller SRAM-PUF, secure NVM (sNVM), and TeraFire crypto can anchor key material in hardware: serve the verification public keys from sNVM, derive a device-unique KEK from the PUF, and store the AES image-encryption key in sNVM wrapped by that KEK. See [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+
+### PolarFire SoC boot mode 2: User Boot Loader stub
+
+Boot mode 2 ("user secure boot from sNVM") lets the System Controller authenticate the first code the MSS runs: it copies a User Boot Loader (UBL) out of authenticated sNVM pages into the LIM and releases all five harts at its entry. wolfBoot provides that UBL as a small verifier target, `TARGET=mpfs250_ubl`: it checks an ECC384/SHA384 wolfBoot manifest over the eNVM wolfBoot image against the public key compiled into the stub, then enters the eNVM wolfBoot at its reset vector on every hart exactly as a boot mode 1 boot would. The eNVM wolfBoot itself is unchanged and stays field-updatable; what the sNVM pages pin is the key that must have signed it.
+
+**eNVM layout** (`hal/mpfs250-m.ld`, `hal/mpfs250.h`)
+
+| Address | Content |
+|---------|---------|
+| `0x20220000` | boot ROM meta information (written by `mpfsBootmodeProgrammer`) |
+| `0x20220100` | wolfBoot image, reset vector first |
+| `0x2023FC00` | wolfBoot manifest header (`MPFS_ENVM_MANIFEST=1`), signed by the stub's key |
+
+The manifest is detached from the image it signs (the `WOLFBOOT_SELF_HEADER` form), so the image does not move and a boot mode 1 device boots the same eNVM contents. The last two eNVM pages stay free for the programmer.
+
+**Relevant files:**
+
+| File | Description |
+|------|-------------|
+| `config/examples/polarfire_mpfs250_ubl.config` | UBL stub configuration |
+| `hal/mpfs250_ubl.c`, `hal/mpfs250_ubl.h` | stub HAL: watchdog hold, MMUART0 at the reset clock, manifest verify, hart hand-off |
+| `hal/mpfs250_ubl.ld` | LIM linker script with the sNVM size limit |
+| `src/boot_riscv_start.S` | `TARGET_mpfs250_ubl` startup: no copy, U54s park on a DTIM mailbox |
+| `tools/scripts/mpfs_bootmode2.sh` | sNVM + boot mode programming on the secure dies, eNVM-only update |
+
+**Build the stub** (its own signing key; keep it out of the tree that signs application images):
+```sh
+cp config/examples/polarfire_mpfs250_ubl.config .config
+make clean && make
+# wolfboot.elf is the UBL; wolfboot_signing_private_key.der is the UBL key
+```
+The image must fit the 221 authenticated sNVM pages (52,096 bytes after the 60-byte UBL header); the linker script enforces it. The sNVM pages above the stub stay available for the sNVM keystore and wrapped keys of [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+
+**Build and sign the eNVM wolfBoot** for the stub (any M-mode configuration):
+```sh
+cp config/examples/polarfire_mpfs250_m.config .config
+make clean && make LIBERO_FPGA_CONFIG_DIR=... MPFS_ENVM_MANIFEST=1 \
+    MPFS_UBL_KEY=/path/to/ubl/wolfboot_signing_private_key.der \
+    wolfboot_envm_signed.bin
+```
+`MPFS_ENVM_MANIFEST=1` links a manifest placeholder into the last used eNVM page; the rule signs the image without it (`wolfboot_envm.bin`, the ELF's loadable bytes with alignment gaps zero-filled, which is what the programmer writes), writes the resulting header into the placeholder and produces `wolfboot_envm_signed.elf`, which programs image and manifest together. `MPFS_UBL_KEY` defaults to the tree's own key, `MPFS_ENVM_VERSION` (default 1) is the manifest version, and `-DMPFS_UBL_MIN_VERSION=N` in the stub build refuses older manifests.
+
+**Program** (requires `SC_INSTALL_DIR` and `FPGENPROG`, see the M-mode section):
+```sh
+# 1. eNVM: image + manifest.  This also selects boot mode 1, so the device
+#    boots the new eNVM contents before the stub is in place.
+java -jar $SC_INSTALL_DIR/extras/mpfs/mpfsBootmodeProgrammer.jar \
+    --bootmode 1 --die MPFS250T --package FCG1152 --workdir $PWD \
+    wolfboot_envm_signed.elf
+
+# 2. sNVM: the stub, and boot mode 2.  Non-secure dies: the programmer
+#    itself (--bootmode 2 --snvm_page 0 --usk 0 wolfboot.elf).  Secure dies
+#    (MPFS250TS...), which the programmer does not list but which an
+#    authenticated sNVM client requires:
+tools/scripts/mpfs_bootmode2.sh --die MPFS250TS --workdir $PWD /path/to/ubl/wolfboot.elf
+```
+The script runs the programmer in `--dryrun` for the UBL image and the User sNVM Key (USK), replays its `fpgenprog` steps for the requested die and programs. Keep the USK file it names: the sNVM pages can only be rewritten with it.
+
+The UBL lives in an authenticated sNVM client, which the System Controller keys from the device's sNVM Master Key (SMK)
+and the client's 12-byte USK. A device whose SMK has never been initialized cannot hold such a client, and
+`mpfsBootmodeProgrammer` never asks for one, so `--regenerate-smk` passes `--regenerate_smk` to the `snvm_client` step
+and the generated bitstream carries a new SMK. A new SMK invalidates every authenticated or encrypted sNVM client
+already on the device; wolfBoot's own keystore and wrapped image key are plaintext clients and are not SMK-keyed.
+
+Updating the eNVM wolfBoot under boot mode 2 goes through the same script with `--envm`, which programs the eNVM client only and leaves the boot mode and sNVM alone:
+```sh
+tools/scripts/mpfs_bootmode2.sh --envm --die MPFS250TS --workdir $PWD wolfboot_envm_signed.elf
+```
+`mpfsBootmodeProgrammer --bootmode 1` restores boot mode 1.
+
+**Expected serial output:**
+```
+wolfBoot UBL 2.10.0: eNVM image 0x20220100, manifest 0x2023FC00
+UBL: eNVM wolfBoot signature OK (1051 ms), entering 0x20220100
+UBL: 5 of 5 harts released
+wolfBoot Version: ...
+```
+A manifest that does not verify prints which check failed (`no manifest`, `digest mismatch`, `signature invalid`) and `UBL: eNVM wolfBoot verify FAILED`; the stub panics and nothing in eNVM runs.
+
+**Notes:**
+- The stub runs at the reset clock and changes no clock, L2 way or peripheral the eNVM wolfBoot expects to find in its reset state. It holds the five MSS watchdogs in the no-reset, maximum-window state for the verify and puts the E51's back before the jump, so the eNVM wolfBoot's own watchdog snapshot is what the boot ROM left.
+- The U54s wait in the stub on a DTIM mailbox (`hal/mpfs250_ubl.h`) for the verified entry, acknowledge and jump; the E51 follows last. All five harts then run the eNVM startup as in boot mode 1.
+- Immutability of the stub is a Libero decision: the ROM flag on its sNVM pages and a frozen boot configuration. wolfBoot does not program either.
 
 ### PolarFire testing
 
