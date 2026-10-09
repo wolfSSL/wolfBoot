@@ -3167,13 +3167,60 @@ Basic hardware acceleration supported:
 - AES-ECB (128, 192, 256 key sizes)
 - AES-CBC (128, 192, 256 key sizes)
 - AES-OFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CTR (128, 192, 256 key sizes)
   - User must avoid counter wrap of all ff's to 0, as this fails in the hardware
 
 See [Test and Benchmark](#lpc55s69-test-and-benchmark) for a comparison with and without hardware acceleration.
+
+### LPC55S69: Hardware PUF (HWPUF)
+
+wolfBoot / wolfCrypt provide support for the LPC55S69's SRAM PUF (Physically
+Unclonable Function), which provides root of trust, identity, and key
+generation & storage, without the need to expose keys during manufacturing.
+Keys of size 128, 192, and 256 bits are supported.
+To turn on HWPUF, set HWPUF=1 in the config file (see below).
+
+### LPC55S69: Example Configurations
+
+#### The following example configurations are provided:
+
+- [lpc55s69.config](/config/examples/lpc55s69.config):
+  - Both wolfBoot and the test-app live in the non-secure realm
+  - Set PKA=1 in the config file to turn on hardware acceleration
+  (off by default)
+
+- [lpc55s69-benchmark.config](/config/examples/lpc55s69-benchmark.config):
+  - Same as `lpc55s69.config`, but turns on test and benchmark code
+  - Set PKA=1 in the config file to turn on hardware acceleration
+  (off by default)
+
+- [lpc55s69-tz.config](/config/examples/lpc55s69-tz.config):
+  - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
+  - Provides a standard PKCS #11 api to interface with crypto algs in the secure
+  realm
+  - Set PKA=1 in the config file to turn on hardware acceleration
+  (off by default)
+
+- [lpc55s69-tz-psa.config](/config/examples/lpc55s69-tz-psa.config):
+  - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
+  - Provides a standard PSA api to interface with crypto algs in the secure
+  realm
+  - Provides an example of PSA Attestation
+  - Provides an example of how to use the hardware PUF
+  - To turn on HWPUF for use with attestation, set the following in the config
+  file:
+    - WOLFBOOT_UDS_UID_FALLBACK_FORTEST=0
+    - HWPUF=1
+    - WOLFBOOT_HWPUF_PROVISION=1
+
+#### Summary of configurables applicable to all lpc55s69 example configurations:
+- `PKA` : Turn on/off hardware acceleration of crypto algs
+- `HWPUF` : Turn on/off support for the hardware PUF
+- `WOLFBOOT_HWPUF_PROVISION` : Turn on/off auto-provisioning of the HWPUF on
+first boot.  Performs PUF enrollment and generates a UDS key for device
+attestation.  Stores PUF keycodes in a known flash location and uses them when
+necessary.
 
 ### LPC55S69: Configuring and compiling
 
@@ -3183,9 +3230,6 @@ Copy the example configuration file and build with make:
 cp config/examples/lpc55s69.config .config
 make
 ```
-
-We also provide a TrustZone configuration at `config/examples/lpc55s69-tz.config`
-and a benchmarking configuration at `config/examples/lpc55s69-benchmark.config`.
 
 ### LPC55S69: Loading the firmware
 
