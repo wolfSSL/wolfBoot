@@ -127,6 +127,8 @@ TESTS+=unit-ls1028a-xspi-write
 TESTS+=unit-zynq-erase-loop
 TESTS+=unit-zynq-ext-write
 TESTS+=unit-ct-compare
+TESTS+=unit-zynqmp-puf
+TESTS+=unit-zynqmp-puf-nofsbl
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -1319,6 +1321,21 @@ ct_compare_extract.h: ../../src/image.c
 unit-ct-compare: unit-ct-compare.c ct_compare_extract.h
 	gcc -o $@ unit-ct-compare.c $(CFLAGS) $(LDFLAGS)
 
+# unit-zynqmp-puf covers the PUF regeneration gate and the black-key unwrap.
+# Both are MMIO-bound, so the test stubs pmu_mmio_* and the CSU AES entry
+# points, and the functions under test are extracted verbatim from hal/zynq.c.
+puf_extract.h: ../../hal/zynq.c ../../hal/zynq.h
+	sed -n '/^int csu_puf_regeneration(/,/^}/p' ../../hal/zynq.c > $@
+	sed -n '/^int csu_puf_black_key_unwrap(/,/^}/p' ../../hal/zynq.c >> $@
+
+unit-zynqmp-puf: unit-zynqmp-puf.c puf_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-puf.c $(CFLAGS) -I../.. $(LDFLAGS)
+
+# The CHASH gate only exists in the FSBL variant, so the other branch of
+# csu_puf_regeneration() needs its own compilation to be covered.
+unit-zynqmp-puf-nofsbl: unit-zynqmp-puf.c puf_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-puf.c $(CFLAGS) -I../.. -DPUF_TEST_NO_FSBL $(LDFLAGS)
+
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the
 # wrap clobbered the page start). Same extraction approach as the
@@ -2065,6 +2082,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
+	puf_extract.h \
 	zynq_write_extract.h \
 	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \
 	fat32-short.bin ext4-min.img ext4-stock.img ext4-payload.bin \

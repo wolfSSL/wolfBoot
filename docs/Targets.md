@@ -4218,6 +4218,24 @@ Key configuration options:
 - `HASH=SHA3` - SHA3-384 hashing
 - `ELF=1` - ELF loading support
 
+### PUF state reporting
+
+With `ZYNQMP_SEC=1` the eFuse dump reports `PUF_MISC` (eFuse cache `0x1054`), which carries the 24-bit AUX field with the PUF control bits above it: `REG_DIS` (registration permanently disabled), `SYN_WRLK` (helper data locked against programming) and `SYN_INVLD` (eFuse helper data invalidated). All three are one-shot, so together they say whether a part can still be provisioned.
+
+**Software can trigger a PUF regeneration, but cannot supply the helper data.** The CSU sources it itself: from the eFuse PUF rows, or from the boot header when the authenticated boot header selects that (UG1085: "The CSU then initializes the PUF, loads the helper data, and regenerates the KEK"). That is why `csu_puf_regeneration()` takes no arguments. On a part whose PUF eFuses are unprogrammed (`CHASH` reads zero) the command runs but recovers no stored KEK, so check `CHASH` before relying on it. The boot-header helper-data path is BootROM-only.
+
+Constraints on a black-key deployment, all from UG1085:
+
+- Regeneration "can only be performed when authentication is enabled", so the part needs `RSA_EN` and a PPK hash burned.
+- The PUF "is disabled in the encrypt-only secure boot mode", so `ENC_ONLY` and the PUF are mutually exclusive.
+- The helper data and the encrypted key must be stored in the same place, both in eFuse or both in the boot image.
+- Moving from eFuse helper data to boot-header helper data requires burning `SYN_INVLD`, after which the part can no longer boot with eFuse helper data.
+- The device has no TRNG, so the PUF is intended to be registered once.
+
+Once the CSU has regenerated the KEK it is simply the device key, so decryption uses the existing `CSU_AES_KEY_SRC_DEVICE_KEY` path.
+
+For a black key, `csu_puf_black_key_unwrap()` regenerates the KEK and decrypts the wrapped key with `CSU_AES_KUP_WR` set, so the recovered key is written into the KUP register rather than to memory and is never visible to software; the caller then selects `CSU_AES_KEY_SRC_KUP`. It refuses on an unprovisioned part. The routing has been exercised on a ZCU102 with a resident KUP wrapping key standing in for the PUF KEK: the recovered key appears in the KUP, a corrupted blob fails the GCM tag, and the failure path leaves nothing selectable. The PUF key source itself is untested, because the bench device is unprovisioned and registration is one-shot.
+
 ### Ethernet PHY init (optional)
 
 Opt-in (off by default), wolfBoot can replay a board's U-Boot Ethernet PHY register sequence over the GEM MDIO management plane so the PHY is ready before the OS runs. Enable with `CFLAGS_EXTRA+=-DWOLFBOOT_ZYNQMP_PHY_INIT`. The default targets the ZCU102 on-board PHY (TI DP83867 at MDIO `0x0C` on GEM3, `0xFF0E0000`) and just reads the PHY ID as a diagnostic (printed with `DEBUG_UART=1`). A board supplies its own sequence by keeping its values in a small header selected with one line, `CFLAGS_EXTRA+=-DZYNQMP_PHY_INIT_HEADER='"myboard_phy.h"'`, where that header `#define`s any of `ZYNQMP_GEM_BASE`, `ZYNQMP_PHY_ADDR`, `ZYNQMP_PHY_GPIO_ADDR`, `ZYNQMP_GEM_MDC_DIV`, and the `{op, arg0, arg1}` step array `ZYNQMP_PHY_INIT_STEPS`; scalars can also be set directly with `-D`, and anything omitted falls back to the ZCU102 defaults (see `hal/zynq.h` and the commented example in `config/examples/zynqmp.config`). Where the PHY is behind the PL, the boot image must include the FPGA bitstream (bootgen `[destination_device=pl] system.bit`) or the transactions are no-ops.
