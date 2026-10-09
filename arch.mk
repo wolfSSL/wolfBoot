@@ -521,6 +521,26 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
   endif
 
+  # STM32H7S/H7R: wolfBoot runs from the 64 KB internal flash and keeps
+  # all three partitions on an external Octo-SPI NOR reached over XSPI2.
+  # The HAL implements ext_flash_* directly, so OCTOSPI_FLASH is left off:
+  # setting it would alias ext_flash_* onto src/qspi_flash.c, whose
+  # transfer helper disables the controller on every command.
+  ifeq ($(TARGET),stm32h7s)
+    CORTEX_M7=1
+    CFLAGS+=-Ihal
+    ARCH_FLASH_OFFSET=0x08000000
+    WOLFBOOT_ORIGIN=0x08000000
+    EXT_FLASH=1
+    PART_UPDATE_EXT=1
+    PART_SWAP_EXT=1
+    # hal_init() takes PLL1 to 600 MHz and drives the XSPI2 kernel clock
+    # from PLL2. Set STM32H7S_HSI_ONLY=1 to stay on the 64 MHz HSI reset
+    # clock instead, which is a smaller thing to debug during bring-up.
+    STM32H7S_HSI_ONLY?=0
+    CFLAGS+=-DSTM32H7S_HSI_ONLY=$(STM32H7S_HSI_ONLY)
+  endif
+
   # Defaults for linker script placeholders (overridden when WOLFHAL=1)
   WOLFHAL_FLASH_EXCLUDE_TEXT?=*(.text*)
   WOLFHAL_FLASH_EXCLUDE_RODATA?=*(.rodata*)

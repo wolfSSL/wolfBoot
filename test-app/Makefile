@@ -716,6 +716,27 @@ ifeq ($(TARGET),stm32n6)
   CFLAGS+=-I..
 endif
 
+ifeq ($(TARGET),stm32h7s)
+  LSCRIPT_TEMPLATE=ARM-stm32h7s.ld
+  CFLAGS+=-mcpu=cortex-m7 -ffunction-sections -fdata-sections -fno-common
+  # The app runs in place from the XSPI window while .ramcode and .data
+  # relocate into AXISRAM. That VMA delta is wider than a PREL31
+  # relocation can encode, so the unwind tables cannot be linked; the
+  # bare-metal app has no use for them.
+  CFLAGS+=-fno-unwind-tables -fno-asynchronous-unwind-tables
+  LDFLAGS+=-mcpu=cortex-m7
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+  APP_OBJS+=../hal/uart/uart_drv_$(UART_TARGET).o
+  ifneq ($(SIGN),NONE)
+    ifeq ($(FLASH_OTP_KEYSTORE),1)
+      APP_OBJS+=../src/flash_otp_keystore.o
+    else
+      APP_OBJS+=../src/keystore.o
+    endif
+  endif
+endif
+
 ifeq ($(TARGET),stm32u5)
   ifeq ($(TZEN),1)
     LSCRIPT_TEMPLATE=ARM-stm32u5-ns.ld
@@ -1006,6 +1027,17 @@ endif
 ifeq ($(TARGET),stm32n6)
     CFLAGS+=-DRAM_CODE -DDEBUG_UART
     APP_OBJS+=syscalls.o
+endif
+
+ifeq ($(TARGET),stm32h7s)
+    # Both of these are already set by config/examples/stm32h7s.config;
+    # keeping them here means the app still builds correctly if a config
+    # turns them off. Note that RAMFUNCTION from wolfboot/wolfboot.h is
+    # inert in the app, since it also requires __WOLFBOOT, so libwolfboot's
+    # trailer writers execute from the XSPI window. That is safe only
+    # because the HAL restores the memory mapping before ext_flash_*
+    # returns.
+    CFLAGS+=-DRAM_CODE -DDEBUG_UART
 endif
 
 ifeq ($(TARGET),mcxw)

@@ -487,6 +487,12 @@ ifeq ($(TARGET),stm32n6)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+ifeq ($(TARGET),stm32h7s)
+    # wolfBoot is in internal flash, app on the external NOR - the two are
+    # in different address spaces, so there is no contiguous factory.bin
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),rp2350)
     MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
 endif
@@ -922,6 +928,11 @@ image-header-size: wolfboot.bin
 ifeq ($(TARGET),stm32n6)
 flash: wolfboot.bin test-app/image_v1_signed.bin
 	$(Q)tools/scripts/stm32n6_flash.sh --skip-build
+endif
+
+ifeq ($(TARGET),stm32h7s)
+flash: wolfboot.bin test-app/image_v1_signed.bin
+	$(Q)tools/scripts/stm32h7s_flash.sh --skip-build
 endif
 
 

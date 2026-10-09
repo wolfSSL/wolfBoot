@@ -94,6 +94,7 @@ TESTS+=unit-gzip-small unit-gzip-bits32 unit-gzip-root7 unit-fit-gzip-small
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
+TESTS+=unit-flash-erase-h7s
 TESTS+=unit-flash-erase-wb
 TESTS+=unit-flash-erase-l0
 TESTS+=unit-flash-erase-g0
@@ -159,6 +160,7 @@ TESTS+=unit-stm32wb-write
 TESTS+=unit-stm32l5-write
 TESTS+=unit-stm32u5-write
 TESTS+=unit-stm32c0-write
+TESTS+=unit-stm32h7s-write
 TESTS+=unit-nvm-cache-scrub
 TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
@@ -725,6 +727,12 @@ unit-mpusize: ../../include/target.h unit-mpusize.c
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7.c is not a separate input.
 unit-flash-erase-h7: unit-flash-erase-h7.c ../../hal/stm32h7.c
 	gcc -o $@ unit-flash-erase-h7.c $(CFLAGS) $(LDFLAGS)
+
+# unit-flash-erase-h7s includes hal/stm32h7s.c directly (guarded to
+# hal_flash_erase via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32h7s.c is
+# not a separate input.
+unit-flash-erase-h7s: unit-flash-erase-h7s.c ../../hal/stm32h7s.c
+	gcc -o $@ unit-flash-erase-h7s.c $(CFLAGS) $(LDFLAGS)
 
 # unit-flash-erase-wb includes hal/stm32wb.c directly (guarded to hal_flash_erase
 # via WOLFBOOT_UNIT_TEST_FLASH_ERASE), so stm32wb.c is not a separate input.
@@ -1598,6 +1606,20 @@ stm32c0_write_extract.h: ../../hal/stm32c0.c
 unit-stm32c0-write: unit-stm32c0-write.c stm32c0_write_extract.h
 	gcc -o $@ unit-stm32c0-write.c $(CFLAGS) $(LDFLAGS)
 
+# unit-stm32h7s-write runs the real hal_flash_write() from
+# hal/stm32h7s.c. The STM32H7RS programs out of a 128-bit (16-byte)
+# write buffer, so the aligned fast path must require a full quad-word
+# of source before it is taken, and a short tail must read the rest of
+# the quad-word back from flash rather than padding it. Same harness as
+# the STM32C0/G4/L4/WB twins.
+stm32h7s_write_extract.h: ../../hal/stm32h7s.c
+	sed -n '/^static RAMFUNCTION void flash_wait_complete/,/^}/p' $< > $@
+	sed -n '/^static void RAMFUNCTION flash_clear_errors/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_write/,/^}/p' $< >> $@
+
+unit-stm32h7s-write: unit-stm32h7s-write.c stm32h7s_write_extract.h
+	gcc -o $@ unit-stm32h7s-write.c $(CFLAGS) $(LDFLAGS)
+
 # unit-t10xx-flash-status runs the real hal_flash_write()/hal_flash_erase()
 # and hal_flash_status_wait() from hal/nxp_t10xx.c against a mock QPI
 # status model (F-11033: a timed-out program/erase used to report
@@ -2060,6 +2082,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	rp2350_flash_write_extract.h \
 	sdhci_host.c \
 	stm32c0_write_extract.h stm32g0_write_extract.h stm32g4_write_extract.h stm32l4_write_extract.h \
+	stm32h7s_write_extract.h \
 	stm32l5_write_extract.h stm32u5_write_extract.h stm32wb_write_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
