@@ -522,6 +522,11 @@ ifeq ($(TARGET),rp2350)
     MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
 endif
 
+ifeq ($(TARGET),mpfs250_ubl)
+    # Boot mode 2 stub: verifies the eNVM wolfBoot, there is no application
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 
 ifeq ($(FLASH_OTP_KEYSTORE),1)
     MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
@@ -774,6 +779,29 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 # stage1 linker script embed wolfboot.bin inside stage1/loader_stage1.bin
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
+
+# PolarFire SoC boot mode 2: the eNVM wolfBoot signed as a wolfBoot image for
+# the UBL stub (TARGET=mpfs250_ubl) to verify.  The signed bytes are the
+# image without its manifest placeholder (MPFS_ENVM_MANIFEST=1 links one in
+# the last eNVM page); the manifest header the sign tool produces is then
+# written into that placeholder, so wolfboot_envm_signed.elf programs image
+# and manifest in one mpfsBootmodeProgrammer --bootmode 1 run.  The signed
+# bytes are what that programmer writes: a plain objcopy of the ELF, section
+# alignment gaps zero-filled.  MPFS_UBL_KEY is the stub's signing key.
+MPFS_UBL_KEY?=$(PRIVATE_KEY)
+MPFS_ENVM_VERSION?=1
+wolfboot_envm_signed.bin: wolfboot.elf $(MPFS_UBL_KEY) keytools_check
+	@echo "\t[SIGN] $@"
+	$(Q)(test "$(MPFS_ENVM_MANIFEST)" = "1") || \
+		(echo "wolfboot_envm_signed.bin needs MPFS_ENVM_MANIFEST=1" && false)
+	$(Q)$(OBJCOPY) -O binary --gap-fill 0x00 -R .envm_manifest wolfboot.elf \
+		wolfboot_envm.bin
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) wolfboot_envm.bin \
+		$(MPFS_UBL_KEY) $(MPFS_ENVM_VERSION)
+	$(Q)mv wolfboot_envm_v$(MPFS_ENVM_VERSION)_signed.bin $@
+	$(Q)head -c $(IMAGE_HEADER_SIZE) $@ > wolfboot_envm_manifest.bin
+	$(Q)$(OBJCOPY) --update-section .envm_manifest=wolfboot_envm_manifest.bin \
+		wolfboot.elf wolfboot_envm_signed.elf
 
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) $(WOLFBOOT_SIGN_KEY_DEP) FORCE
 	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (test "$(SNVM_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \

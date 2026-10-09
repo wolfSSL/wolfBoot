@@ -1305,6 +1305,11 @@ ifeq ($(ARCH),RISCV64)
     endif
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
+    # Boot mode 2: reserve the last eNVM page for the signed manifest the UBL
+    # stub verifies (hal/mpfs250-m.ld); `make wolfboot_envm_signed.bin` fills it.
+    ifeq ($(MPFS_ENVM_MANIFEST),1)
+      CFLAGS+=-DMPFS_ENVM_MANIFEST
+    endif
     # LIBERO_FPGA_CONFIG_DIR supplies fpga_design_config.h and enables DDR init.
     # An S-mode OS runs from DDR, so an empty value would silently build a
     # bootloader with no DDR init at all -- fail instead.
@@ -1354,6 +1359,15 @@ ifeq ($(ARCH),RISCV64)
     # Use RAM-based update path for non-memory-mapped flash (SC SPI)
     # Images are loaded into RAM before execution
     UPDATE_OBJS?=src/update_ram.o
+  endif
+
+  # Boot mode 2 UBL stub: LIM-resident, verifies the eNVM wolfBoot manifest
+  # in place and jumps; no update path (hal/mpfs250_ubl.c).
+  ifeq ($(TARGET),mpfs250_ubl)
+    LSCRIPT_IN:=hal/mpfs250_ubl.ld
+    UPDATE_OBJS:=
+    # mcycle rate for hal_get_timer_us(): the stub runs at the reset clock
+    CFLAGS+=-DRISCV_SMODE_TIMER_FREQ=80000000UL
   endif
 
   # GCC 12+ extension detection (see RISCV 32-bit section above).

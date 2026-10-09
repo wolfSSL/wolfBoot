@@ -9,10 +9,13 @@
  *   3. Jumps to L2_SCRATCH for execution
  *
  * The first 0x100 bytes of eNVM are reserved for the boot ROM secure boot
- * meta information added by mpfsBootmodeProgrammer.
+ * meta information added by mpfsBootmodeProgrammer.  A page near the end
+ * holds the signed manifest of this image when the boot mode 2 stub verifies
+ * it (MPFS_ENVM_MANIFEST=1, see hal/mpfs250_ubl.c); it is filled in after
+ * the link and left out of the signed bytes.
  *
  * Memory regions:
- *   FLASH_ENVM  - Embedded NVM (128KB - 0x100 for header)
+ *   FLASH_ENVM  - Embedded NVM (128KB - 0x100 for header - 1KB at the end)
  *   L2_SCRATCH  - L2 Scratchpad SRAM (256KB) - execution and data
  */
 
@@ -24,7 +27,10 @@ MEMORY
 {
     /* The first 0x100 bytes of eNVM are used for boot ROM secure boot meta information
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
-    FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
+    FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100 - 0x400
+    /* Signed manifest of the eNVM image, verified by the boot mode 2 stub.
+     * The last two pages stay free: mpfsBootmodeProgrammer keeps them. */
+    ENVM_MANIFEST (r) : ORIGIN = 0x2023FC00, LENGTH = 0x200
 
     /* L2 scratchpad.  MPFS250 hardwires ways 8-11, so 4 x 128 KB is the
      * ceiling the startup pin loop can make resident; ASSERT below enforces it. */
@@ -110,6 +116,13 @@ SECTIONS
         _end_bss = .;
         _end = .;
     } > L2_SCRATCH
+
+    /* Placeholder the signed build overwrites with the manifest header;
+     * empty, and absent from the ELF, unless MPFS_ENVM_MANIFEST=1. */
+    .envm_manifest :
+    {
+        KEEP(*(.envm_manifest))
+    } > ENVM_MANIFEST
 }
 
 /* Heap starts after BSS (between _end and stack) */

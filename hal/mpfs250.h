@@ -61,6 +61,14 @@
 #define MPFS_DDR_MAX_OUTER_RETRY    6U
 #endif
 
+/* eNVM: boot ROM meta information in page 0, the wolfBoot image from page 1
+ * (hal/mpfs250-m.ld), and in the boot mode 2 flow its signed manifest two
+ * pages below the end, verified by the UBL stub (hal/mpfs250_ubl.c). */
+#define MPFS_ENVM_BASE              0x20220000UL
+#define MPFS_ENVM_SIZE              0x20000UL
+#define MPFS_ENVM_IMAGE_ADDR        (MPFS_ENVM_BASE + 0x100UL)
+#define MPFS_ENVM_MANIFEST_ADDR     (MPFS_ENVM_BASE + MPFS_ENVM_SIZE - 0x400UL)
+
 /* Hardware Base Address */
 #define SYSREG_BASE 0x20002000
 

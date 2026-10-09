@@ -98,6 +98,14 @@ uint32_t mpfs_apb_clk_hz = MSS_APB_AHB_CLK;
  * A wrong value here skews timing-sensitive paths (e.g. SD power-up). */
 uint32_t mpfs_cpu_freq_mhz = MPFS_CPU_FREQ_RESET_MHZ;
 
+#ifdef MPFS_ENVM_MANIFEST
+/* Last eNVM page: the signed manifest of this image, written in after the
+ * link by `make wolfboot_envm_signed.bin` and checked by the boot mode 2
+ * stub (hal/mpfs250_ubl.c).  Erased-state fill until then. */
+const uint8_t __attribute__((section(".envm_manifest"), used))
+    mpfs_envm_manifest[IMAGE_HEADER_SIZE] = { [0 ... IMAGE_HEADER_SIZE - 1] = 0xFF };
+#endif
+
 /* Saved boot ROM watchdog values, restored in hal_prepare_boot(). */
 static uint32_t mpfs_wdt_default_mvrp = 0;
 static uint32_t mpfs_wdt_default_ctrl = 0;
