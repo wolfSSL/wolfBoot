@@ -591,6 +591,9 @@ static uint32_t sdhci_get_response_type(uint8_t resp_type)
 
 #define DEVICE_BUSY 1
 
+/* Set only while sdhci_init() runs the card-identification sequence. */
+static int sdhci_in_init = 0;
+
 /* Register-read budget for the inhibit/reset waits below. Large, because it
  * bounds a wedged controller rather than a normal one; the loops that spend it
  * pet the watchdog, or on a platform whose watchdog cannot be disabled (the
@@ -729,6 +732,13 @@ static int sdhci_send_cmd_internal(uint32_t cmd_type,
             }
         }
     }
+
+#if defined(SDHCI_WAIT_AFTER_CMD_US) && ((SDHCI_WAIT_AFTER_CMD_US + 0) != 0)
+    /* Cadence controllers need a settle window after the card-init sequence;
+     * confine it to init so bulk data commands do not pay it per block. */
+    if (sdhci_in_init != 0)
+        udelay(SDHCI_WAIT_AFTER_CMD_US);
+#endif
 
     return status;
 }
@@ -904,10 +914,24 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* send the operating conditions command */
-        status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
-            SDHCI_RESP_R7);
-        cmd8_err = g_last_cmd_err;
+        /* A corrupted CMD8 response can be transient while the card settles
+         * after CMD0. A timeout alone is how an SD v1.x card reports that it
+         * does not implement CMD8, so do not repeat that silent probe. */
+        for (retries = 0; retries < 10; retries++) {
+            status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
+                SDHCI_RESP_R7);
+            cmd8_err = g_last_cmd_err;
+            if (status == 0 ||
+                ((cmd8_err & SDHCI_SRS12_ECT) != 0 &&
+                 (cmd8_err & (SDHCI_SRS12_ECCRC | SDHCI_SRS12_ECEB |
+                              SDHCI_SRS12_ECI)) == 0)) {
+                break;
+            }
+            udelay(10000);
+        }
+        if (status == 0 && retries > 0) {
+            wolfBoot_printf("SD: CMD8 succeeded after %d retries\n", retries);
+        }
 #if defined(DISK_SDCARD) && defined(SDHCI_UHS_RECOVER_ON_INIT)
         if (status != 0) {
             /* Opt-in. A card a previous stage left in UHS-I is at 1.8V and
@@ -1881,6 +1905,19 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     return status;
 }
 
+static int sdhci_init_internal(void);
+
+int sdhci_init(void)
+{
+    int status;
+
+    sdhci_in_init = 1;
+    status = sdhci_init_internal();
+    sdhci_in_init = 0;
+
+    return status;
+}
+
 /* Public API: Read from MMC/SD card */
 int sdhci_read(uint32_t cmd_index, uint32_t block_addr, uint32_t* dst, uint32_t sz)
 {
@@ -1897,7 +1934,7 @@ int sdhci_write(uint32_t cmd_index, uint32_t block_addr, const uint32_t* src, ui
  * Controller Initialization
  * ============================================================================ */
 
-int sdhci_init(void)
+static int sdhci_init_internal(void)
 {
     int status = 0;
     uint32_t reg, cap;
@@ -1918,7 +1955,7 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-    /* Reset the host controller */
+    /* Restore host controller state after the earlier boot stage. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);
