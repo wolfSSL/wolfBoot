@@ -3159,9 +3159,7 @@ Basic hardware acceleration supported:
 - AES-ECB (128, 192, 256 key sizes)
 - AES-CBC (128, 192, 256 key sizes)
 - AES-OFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CTR (128, 192, 256 key sizes)
   - User must avoid counter wrap of all ff's to 0, as this fails in the hardware
 
