@@ -204,7 +204,23 @@ else
 $(info Skipping x86-64 EFI unit test: gnu-efi headers not found (set ENABLE_EFI_TESTS=1 to force))
 endif
 
+# NXP HAL tests build against the real MCUXpresso SDK headers, fetched into
+# MCUXSDK by tools/ci/fetch-mcuxsdk-headers.sh, with only CMSIS mocked.
+MCUXSDK?=
+MCXA_SDK=$(MCUXSDK)/devices/MCX/MCXA/MCXA153
+RW612_SDK=$(MCUXSDK)/devices/Wireless/RW/RW612
+ifneq ($(wildcard $(MCXA_SDK)/MCXA153.h),)
 TESTS+=unit-flash-write-mcxa
+else
+$(info Skipping MCXA unit test: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
+endif
+ifneq ($(wildcard $(RW612_SDK)/RW612.h),)
+TESTS+=unit-rw612-flash
+TESTS+=unit-rw612-tz
+TESTS+=unit-rw612-uart
+else
+$(info Skipping RW612 unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
+endif
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-nrf5340-uart-crlf
 TESTS+=unit-flash-write-samr21
@@ -1956,10 +1972,29 @@ unit-t10xx-dts-memac: unit-t10xx-dts-memac.c nxp_t10xx_fixup_extract.h ../../src
 unit-efi-x86-open-image: unit-efi-x86-open-image.c ../../hal/x86_64_efi.c
 	gcc -o $@ unit-efi-x86-open-image.c -I/usr/include/efi -I/usr/include/efi/x86_64 -DTARGET_X86_64_EFI -fshort-wchar $(CFLAGS) $(LDFLAGS)
 
-# unit-flash-write-mcxa includes hal/mcxa.c directly, with mcxa_fsl_stub/
-# standing in for the (not vendored) NXP MCUXpresso SDK headers it includes.
+# NXP HAL tests include hal/<chip>.c directly. SDK headers go in as -isystem
+# so their own 64-bit-host warnings stay out of the test build.
+MCUXSDK_TEST_INC=-Icmsis_stub -isystem $(MCUXSDK)/drivers/common
+MCXA_TEST_INC=-DCPU_MCXA153VLH $(MCUXSDK_TEST_INC) -isystem $(MCXA_SDK) \
+	-isystem $(MCXA_SDK)/../periph -isystem $(MCXA_SDK)/drivers \
+	-isystem $(MCXA_SDK)/drivers/romapi -isystem $(MCUXSDK)/drivers/mcx_spc
+RW612_TEST_INC=-DCPU_RW612ETA2I $(MCUXSDK_TEST_INC) -isystem $(RW612_SDK) \
+	-isystem $(RW612_SDK)/../periph -isystem $(RW612_SDK)/drivers \
+	-isystem $(RW612_SDK)/drivers/romapi/flexspi -isystem $(MCUXSDK)/drivers/trng
+
 unit-flash-write-mcxa: unit-flash-write-mcxa.c ../../hal/mcxa.c
-	gcc -o $@ unit-flash-write-mcxa.c -Imcxa_fsl_stub $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-flash-write-mcxa.c $(MCXA_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
+unit-rw612-flash: unit-rw612-flash.c ../../hal/rw612.c
+	gcc -o $@ unit-rw612-flash.c $(RW612_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
+unit-rw612-tz: unit-rw612-tz.c ../../hal/rw612.c
+	gcc -o $@ unit-rw612-tz.c $(RW612_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
+unit-rw612-uart: unit-rw612-uart.c ../../hal/rw612.c
+	gcc -o $@ unit-rw612-uart.c -DDEBUG_UART $(RW612_TEST_INC) \
+		-isystem $(MCUXSDK)/drivers/flexcomm \
+		-isystem $(MCUXSDK)/drivers/flexcomm/usart $(CFLAGS) $(LDFLAGS)
 
 unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
 	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
@@ -2037,9 +2072,10 @@ GENERATED_SRC:=aurix_erased_extract.h \
 
 # Tests that are only in $(TESTS) when their toolchain/headers are
 # present; clean must remove them regardless, or a host that has since
-# lost gnu-efi/multilib keeps a stale binary forever.
+# lost gnu-efi/multilib/the MCUXpresso SDK keeps a stale binary forever.
 CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
-	unit-linux-loader-syssize
+	unit-linux-loader-syssize unit-flash-write-mcxa unit-rw612-flash \
+	unit-rw612-tz unit-rw612-uart
 
 clean: covclean
 	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \

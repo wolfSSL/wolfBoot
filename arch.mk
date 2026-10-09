@@ -1558,6 +1558,49 @@ ifeq ($(TARGET),mcxn)
   endif
 endif
 
+ifeq ($(TARGET),rw612)
+  CORTEX_M33=1
+  ARCH_FLASH_OFFSET=0x08000000
+  ifneq ($(TZEN),1)
+    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+  endif
+  MCUXPRESSO_FLASH_CONFIG?=$(MCUXPRESSO_PROJECT_TEMPLATE)/../flash_config
+  CFLAGS+=\
+      -I$(MCUXPRESSO_DRIVERS) \
+      -I$(MCUXPRESSO_DRIVERS)/drivers \
+      -I$(MCUXPRESSO_DRIVERS)/drivers/romapi/flexspi \
+      -I$(MCUXPRESSO_DRIVERS)/../periph \
+      -I$(MCUXPRESSO) \
+      -I$(MCUXPRESSO)/drivers \
+      -I$(MCUXPRESSO)/drivers/common \
+      -I$(MCUXPRESSO)/drivers/flexcomm \
+      -I$(MCUXPRESSO)/drivers/flexcomm/usart \
+      -I$(MCUXPRESSO)/drivers/trng \
+      -I$(MCUXPRESSO_FLASH_CONFIG) \
+      -I$(MCUXPRESSO_PROJECT_TEMPLATE) \
+      -I$(MCUXPRESSO_CMSIS)/Include \
+      -I$(MCUXPRESSO_CMSIS)/Core/Include
+  CFLAGS+=-DCPU_$(MCUXPRESSO_CPU) -DBOOT_HEADER_ENABLE=1 -DWOLFBOOT_ROM_IMAGE_HEADER
+  CFLAGS+=-DDEBUG_CONSOLE_ASSERT_DISABLE=1
+  # The RW612 Cortex-M33 has no DSP extension
+  CFLAGS+=-mcpu=cortex-m33+nodsp -DCORTEX_M33
+  LDFLAGS+=-mcpu=cortex-m33+nodsp
+  OBJS+=\
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
+      $(MCUXPRESSO_FLASH_CONFIG)/flash_config.o
+
+  ifeq ($(DEBUG_UART),1)
+    OBJS+=\
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
+      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o
+  endif
+
+  ifeq ($(WOLFCRYPT_TZ),1)
+    OBJS+=$(MCUXPRESSO)/drivers/trng/fsl_trng.o
+  endif
+endif
+
 ifeq ($(TARGET),nrf5340)
   ifneq ($(TZEN), 1)
     LSCRIPT_IN=hal/$(TARGET)-ns.ld
