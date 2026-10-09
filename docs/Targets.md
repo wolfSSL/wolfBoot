@@ -963,6 +963,8 @@ These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS
 |------|---------|-------------|
 | `WATCHDOG` | undefined (disabled) | When defined, the E51 watchdog timer is **kept enabled** during wolfBoot operation with a generous timeout. When undefined, the WDT is **disabled** in `hal_init()` and re-enabled with the boot ROM default in `hal_prepare_boot()` before jumping to the application. Either way, the application receives a normal WDT. |
 | `WATCHDOG_TIMEOUT_MS` | `30000` (30 s) | Watchdog timeout in milliseconds when `WATCHDOG` is defined. ECDSA P-384 verification on E51 with portable C math is bounded at ~5 s; the default 30 s avoids any need to refresh the WDT during the long verify call. |
+| `MPFS_WDT_NODES_KEEP` (make variable, `=1`) | undefined | Linux boot only: keep the five MSS watchdog nodes enabled in the dtb and stop the parked E51 from refreshing them, so the OS owns the watchdogs. See "Watchdog policy" below. |
+| `MPFS_QSPI_CLK_DIV` (make variable) | `QSPI_CLK_DIV_8` | QSPI SCK divider, a `QSPI_CLK_DIV_*` name from `hal/mpfs250.h`. See "PolarFire SoC QSPI". |
 
 #### Stack overflow detection
 
@@ -1089,6 +1091,14 @@ Example single-shot build: `cp config/examples/polarfire_mpfs250_qspi.config .co
 
 Notes:
 - Both modes support full read, write, and erase operations.
+- SCK is the controller clock divided by the CoreQSPI `CLKRATE` field, SCK = PCLK / (2 * CLKRATE).
+  `MPFS_QSPI_CLK_DIV` selects the divider by its `QSPI_CLK_DIV_*` name from `hal/mpfs250.h`
+  (`QSPI_CLK_DIV_2` through `QSPI_CLK_DIV_30`, CLKRATE 1..15). The default `QSPI_CLK_DIV_8` is
+  about 18.75 MHz from the 150 MHz APB clock, where read throughput stops improving: from there on
+  the polled FIFO transfer rather than SCK sets the rate, so a faster SCK buys nothing. The MSS QSPI
+  PCLK is the MSS APB clock, which is 40 MHz at the M-mode reset clock until wolfBoot's PLL
+  bring-up, so an M-mode build that starts QSPI before `mss_pll_init()` runs SCK that much slower;
+  the SC QSPI is clocked by the System Controller and is unaffected by the MSS PLL.
 - For QSPI-based boot flows, disable SD/eMMC in the config (`DISK_SDCARD=0`, `DISK_EMMC=0`) unless you
   explicitly want wolfBoot to load from disk and the application from QSPI.
 - The MSS QSPI path expects external flash on the MSS QSPI pins; the SC QSPI path is for
@@ -1307,7 +1317,11 @@ MAC addresses from the device serial number, and all five MSS watchdog nodes are
 **Watchdog policy:** the MSS watchdogs always count and reset the chip on timeout (they cannot
 be disabled in hardware, and `CONTROL=0` does not prevent the reset). After hand-off the parked
 E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
-the dtb fixup so the two never conflict.
+the dtb fixup so the two never conflict. `MPFS_WDT_NODES_KEEP=1` hands the watchdogs to the OS
+instead: the dtb nodes stay enabled and the parked E51 stops refreshing, so the OS driver arms
+them at probe and something on the OS side (a watchdog daemon, or the design's own fabric
+scheme) has to service them from then on. A design with its own fabric watchdog needs neither
+setting; wolfBoot never touches fabric logic.
 
 **Hand-off / SMP flow:** secondary harts park in eNVM until the E51 signals image-copy
 completion (DTIM gate flag), then park in a WFI loop. The boot hart is released with a staged

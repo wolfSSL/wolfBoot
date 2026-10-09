@@ -184,6 +184,19 @@ ifneq ($(DISK_BOOT_TRIES),)
     CFLAGS+=-DDISK_BOOT_TRIES=$(DISK_BOOT_TRIES)
 endif
 
+# PolarFire SoC: QSPI SCK divider (a QSPI_CLK_DIV_* name from hal/mpfs250.h,
+# default QSPI_CLK_DIV_8).
+ifneq ($(MPFS_QSPI_CLK_DIV),)
+    CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
+endif
+
+# PolarFire SoC: leave the MSS watchdog nodes enabled in the dtb and stop the
+# parked E51 from refreshing them, so the OS owns the watchdogs after the
+# hand-off.  Something on the OS side must then service them.
+ifeq ($(MPFS_WDT_NODES_KEEP),1)
+    CFLAGS+=-D"MPFS_WDT_NODES_KEEP"
+endif
+
 # PolarFire SoC: PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
 ifeq ($(SNVM_KEK),1)
     # The KEK only ever wraps the image-encryption key, so it rides on the
