@@ -27,8 +27,12 @@ if [ -e "$OUT" ]; then
 fi
 
 fetch "" mcuxsdk-core c6f4223f45fdab59509f25ee3ea63a71bd29d8aa \
-    /drivers/common/ /drivers/trng/ /drivers/mcx_spc/ /drivers/flexcomm/
+    /drivers/common/ /drivers/trng/ /drivers/mcx_spc/ /drivers/flexcomm/ \
+    /drivers/port/ /drivers/lpuart/ /drivers/tstmr/ /drivers/elemu/
 fetch devices/Wireless mcux-devices-wireless \
     0d2c97770475558c72f5b6947f468bf97282df79 /RW/periph/ /RW/RW612/
 fetch devices/MCX mcux-devices-mcx \
-    7c0e68e9094e3943edbe1c9bf68305556adaa2c8 /MCXA/periph/ /MCXA/MCXA153/
+    7c0e68e9094e3943edbe1c9bf68305556adaa2c8 /MCXA/periph/ /MCXA/MCXA153/ \
+    /MCXW/periph2/ /MCXW/MCXW716C/
+fetch middleware/secure-subsystem mcux-secure-subsystem \
+    1cce4ff3093af3c1e79cf70891e96d13e3416b58 /inc/ /src/sscp/

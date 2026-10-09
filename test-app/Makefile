@@ -1009,19 +1009,29 @@ ifeq ($(TARGET),stm32n6)
 endif
 
 ifeq ($(TARGET),mcxw)
+    ifeq ($(DEBUG_UART),1)
+      MCXW_SDK_SRCS:=$(MCUXPRESSO)/drivers/lpuart/fsl_lpuart.c
+    endif
     ifeq ($(TZEN),1)
       LSCRIPT_TEMPLATE=ARM-mcxw-ns.ld
       CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+      # wolfBoot's copies are built with -mcmse, which selects secure bases
+      APP_OBJS+=$(addprefix mcxw_ns/,$(notdir $(MCXW_SDK_SRCS:.c=.o)))
+      vpath %.c $(sort $(dir $(MCXW_SDK_SRCS)))
     else
       LSCRIPT_TEMPLATE=ARM-mcxw.ld
+      # Flash writes run from the same flash the app executes from
+      ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      APP_OBJS+=$(MCXW_SDK_SRCS:.c=.o)
+      APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
+      APP_OBJS+=$(MCUXPRESSO)/drivers/spc/fsl_spc.o
+      APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
+      APP_OBJS+=$(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
     endif
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
-    APP_OBJS+=$(MCUXPRESSO)/drivers/gpio/fsl_gpio.o
-    APP_OBJS+=$(MCUXPRESSO)/drivers/spc/fsl_spc.o
-    APP_OBJS+=$(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o
-    APP_OBJS+=$(MCUXPRESSO)/drivers/ccm32k/fsl_ccm32k.o
-    APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/romapi/fsl_romapi.o
-    LDFLAGS+=--specs=nosys.specs
+    ifeq (,$(findstring nosys.specs,$(LDFLAGS)))
+      LDFLAGS+=--specs=nosys.specs
+    endif
 endif
 
 ifeq ($(TARGET),mcxn)
@@ -1605,6 +1615,11 @@ delta-extra-data: image.bin
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
 
+mcxw_ns/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 ../hal/spi/spi_drv_$(SPI_TARGET)_ns.o: ../hal/spi/spi_drv_$(SPI_TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/spi/spi_drv_$(SPI_TARGET).c -DNONSECURE_APP
 
@@ -1673,7 +1688,7 @@ wolfip_tftp_test.o: wolfip_tftp_test.c
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
-		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR)
+		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR) mcxw_ns
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset
