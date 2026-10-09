@@ -1306,6 +1306,47 @@ START_TEST(test_fdt_get_reg_two_address_two_size_cells)
 }
 END_TEST
 
+START_TEST(test_fdt_getprop_address_two_cells)
+{
+    /* A two-cell value is the only way a FIT `load`/`entry` can express
+     * an address above 4 GB, so the 8-byte form has to decode whole
+     * instead of collapsing to the low cell. */
+    static uint8_t buf[sizeof(chassis_dtb) + 256] __attribute__((aligned(8)));
+    fdt_ctx ctx;
+    uint8_t val[8];
+    int off;
+
+    memcpy(buf, chassis_dtb, sizeof(chassis_dtb));
+    ck_assert_int_eq(fdt_open(&ctx, buf, sizeof(buf)), 0);
+
+    off = fdt_get_alias(&ctx, "Chassis_Manager");
+    ck_assert_int_ge(off, 0);
+
+    /* 0x00000400_08000000, big-endian, as mkimage emits it from
+     * load = <0x00000400 0x08000000>; under #address-cells = <2> */
+    val[0] = 0x00; val[1] = 0x00; val[2] = 0x04; val[3] = 0x00;
+    val[4] = 0x08; val[5] = 0x00; val[6] = 0x00; val[7] = 0x00;
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "load", val, (int)sizeof(val)), 0);
+
+#if UINTPTR_MAX > 0xFFFFFFFFUL
+    ck_assert_ptr_eq(fdt_getprop_address(&ctx, off, "load"),
+        (void*)(uintptr_t)0x40008000000ULL);
+#else
+    /* A 32-bit target cannot represent it, and truncating to the low cell
+     * would hand the caller an unrelated address it would copy to or
+     * branch to. It has to come back NULL. */
+    ck_assert_ptr_null(fdt_getprop_address(&ctx, off, "load"));
+#endif
+
+    /* A single cell still decodes, so existing one-cell ITS files are
+     * unaffected. */
+    val[0] = 0x00; val[1] = 0x20; val[2] = 0x00; val[3] = 0x00;
+    ck_assert_int_eq(fdt_setprop(&ctx, off, "entry", val, 4), 0);
+    ck_assert_ptr_eq(fdt_getprop_address(&ctx, off, "entry"),
+        (void*)(uintptr_t)0x200000UL);
+}
+END_TEST
+
 START_TEST(test_fdt_get_reg_one_cell_and_index)
 {
     static uint8_t buf[sizeof(chassis_dtb) + 16] __attribute__((aligned(8)));
@@ -1517,6 +1558,7 @@ static Suite *fdt_suite(void)
     tcase_add_test(tc, test_fdt_get_alias_resolves_named_node);
     tcase_add_test(tc, test_fdt_get_alias_rejects_bad_input);
     tcase_add_test(tc, test_fdt_get_reg_two_address_two_size_cells);
+    tcase_add_test(tc, test_fdt_getprop_address_two_cells);
     tcase_add_test(tc, test_fdt_get_reg_one_cell_and_index);
     tcase_add_test(tc, test_fdt_get_reg_rejects_partial_entry);
     tcase_add_test(tc, test_fdt_get_reg_uses_spec_default_cells);

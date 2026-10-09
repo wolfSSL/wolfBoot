@@ -415,6 +415,12 @@ void* fit_load_image_ex(fdt_ctx* ctx, const char* image, int* lenp,
 void* fit_load_image_to(fdt_ctx* ctx, const char* image, void* dst,
     uint32_t dst_max, int* lenp);
 
+/* Load the FIT kernel sub-image, relocated to
+ * WOLFBOOT_LOAD_KERNEL_ADDRESS when that is nonzero (which overrides
+ * the FIT's `load`/`entry`, so a FIT built without them still boots).
+ * Returns the kernel entry address, or NULL on failure. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp);
+
 #ifdef WOLFBOOT_FIT_RAMDISK
 /* Load a FIT ramdisk sub-image (optionally relocated to
  * WOLFBOOT_LOAD_RAMDISK_ADDRESS) and patch /chosen/linux,initrd-* in

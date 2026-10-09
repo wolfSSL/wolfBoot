@@ -4965,7 +4965,7 @@ Note: If using QSPI there are bootgen issues with 2025.1+, so recommend 2024.1 o
 ### Common Notes
 
 - Debugging with OCRAM (OCM): set `WOLFBOOT_ORIGIN=0xFFFC0000` (OCM is 256KB at `0xFFFC0000 - 0xFFFFFFFF`).
-- **High DDR apertures**: designs whose DDR window lives above the default map (for example DDR at `0x400_0000_0000`) add `CFLAGS_EXTRA+=-DVERSAL_DDR_HIGH_BASE=...` and `-DVERSAL_DDR_HIGH_SIZE=...` (512 GB aligned, plain hex literals with no `UL` suffix) to map the window in the translation table, plus `-DVERSAL_NO_DDR_LOW` when nothing remains at `0x0`. Move `WOLFBOOT_ORIGIN`, `WOLFBOOT_LOAD_ADDRESS` and `WOLFBOOT_LOAD_DTS_ADDRESS` into the window (`hal/versal.ld` follows `WOLFBOOT_ORIGIN` from the config), update the bootgen BIF load/exec and the BL31 BL33 entry to match, and switch the FIT ITS to `#address-cells = <2>` with two-cell `load`/`entry` values since 32-bit cells cannot hold addresses above 4 GB. A commented recipe is in `config/examples/versal_vmk180.config`; the DDR aperture itself must be routed to the APU by the design's PDI.
+- **High DDR apertures**: designs whose DDR window lives above the default map (for example DDR at `0x400_0000_0000`) set `DDR_HIGH_BASE=...` and `DDR_HIGH_SIZE=...` (512 GB aligned, plain hex with no `UL` suffix) to map the window in the translation table, plus `NO_DDR_LOW=1` when nothing remains at `0x0`. These are AArch64-generic rather than Versal-specific, and the assembler rejects a window that does not fit the VA region the target's TCR covers. The older `CFLAGS_EXTRA+=-DVERSAL_DDR_HIGH_*` spellings from v2.10.0 are still accepted. Move `WOLFBOOT_ORIGIN`, `WOLFBOOT_LOAD_ADDRESS` and `WOLFBOOT_LOAD_DTS_ADDRESS` into the window (`hal/versal.ld` follows `WOLFBOOT_ORIGIN` from the config), update the bootgen BIF load/exec and the BL31 BL33 entry to match, and switch the FIT ITS to `#address-cells = <2>` with two-cell `load`/`entry` values since 32-bit cells cannot hold addresses above 4 GB. A commented recipe is in `config/examples/versal_vmk180.config`; the DDR aperture itself must be routed to the APU by the design's PDI.
 - Test application uses generic `boot_arm64_start.S` and `AARCH64.ld` and prints EL + version.
   - Entry point: `_start` (in `boot_arm64_start.S`) which sets up stack, clears BSS, and calls `main()`
 
@@ -5174,6 +5174,41 @@ sf write ${loadaddr} 0x800000 ${filesize}
 A stock PetaLinux `image.ub` carries a `ramdisk` sub-image that `bootm` passes to the kernel via `/chosen/linux,initrd-{start,end}`. wolfBoot does the same with `FIT_RAMDISK=1`, enabled by default in both Versal example configs. Add the node plus a `ramdisk = "ramdisk-1";` reference to your configuration node; `hal/versal.its` carries a commented example.
 
 `WOLFBOOT_LOAD_RAMDISK_ADDRESS` defaults to 0, which uses the ramdisk in place inside the staged FIT. Set it to a DDR address clear of the kernel, DTB and staging area if the payload needs a fixed location.
+
+##### FIT images built without `load`/`entry`
+
+Some producers emit a FIT whose kernel node declares neither `load` nor `entry` - Yocto's `kernel-fitimage` class omits both unless `UBOOT_LOADADDRESS` and `UBOOT_ENTRYPOINT` are set - and leave it to U-Boot to place the image. wolfBoot needs a destination: a `compression = "gzip"` kernel has nowhere to decompress to, and an uncompressed one would be entered in place inside the staged FIT at whatever alignment the FIT happens to give it, which does not satisfy the arm64 boot protocol's 2 MB-aligned base.
+
+Either add the properties to the ITS, or set `WOLFBOOT_LOAD_KERNEL_ADDRESS` in the config to the address the kernel should be staged at. A nonzero value overrides the FIT's `load`/`entry` for the kernel node and is returned as the entry point; 0 (the default) honors whatever the FIT declares. `WOLFBOOT_LOAD_RAMDISK_ADDRESS` does the same for the `ramdisk` node.
+
+For a DDR aperture above 4 GB the ITS must use `#address-cells = <2>` and two-cell values, since a single cell cannot hold the address:
+
+```dts
+/ {
+    #address-cells = <2>;
+    images {
+        kernel-1 {
+            data = /incbin/("Image.gz");
+            compression = "gzip";
+            load = <0x00000400 0x08000000>;
+            entry = <0x00000400 0x08000000>;
+            hash-1 { algo = "sha256"; };
+        };
+    };
+};
+```
+
+##### FIT images with no device tree
+
+A kernel-only FIT - no `fdt` sub-image, and no `fdt` property on the configuration node - takes its device tree from the boot firmware instead, which is the arrangement U-Boot describes with `fdtcontroladdr`. Point `WOLFBOOT_LOAD_DTS_ADDRESS` at wherever the earlier stage left the blob; for a bootgen raw partition that is the `load` address in the BIF:
+
+```
+{ type=raw, load=0x40000001000, file=system-top.dtb }
+```
+
+wolfBoot then relocates and validates that DTB exactly as it does for a non-FIT payload, and hands it to the kernel in `x0`.
+
+Because such a DTB is outside the FIT, the wolfBoot signature does not cover it, so it is not treated as authenticated: `/chosen/bootargs` from the blob is **not** trusted and `LINUX_BOOTARGS` replaces it (see below). On the RAM/flash loader (`src/update_ram.c`, used by the QSPI configs) a digest bound with `sign --dts` has the DTB authenticated and its own bootargs honored, and `WOLFBOOT_REQUIRE_SIGNED_DTB=1` makes a missing digest fatal. The disk loader (`src/update_disk.c`, used by the SD/eMMC configs) carries no DTB-digest machinery, so a device tree supplied from outside the FIT is always treated as unauthenticated there and `LINUX_BOOTARGS` always supplies the command line. To bring such a DTB inside the root of trust on a disk target, put it in the FIT as an `fdt` sub-image instead.
 
 **Kernel Command Line (bootargs)**
 

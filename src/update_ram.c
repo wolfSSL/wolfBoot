@@ -302,6 +302,12 @@ void RAMFUNCTION wolfBoot_start(void)
     uint32_t dts_size = 0;
     /* Validated view of the FIT staged at load_address. */
     fdt_ctx  fit_ctx;
+#ifdef WOLFBOOT_FIT_RAMDISK
+    /* FIT ramdisk node name, non-NULL only once the FIT has parsed. The
+     * initrd fixup is deferred until dts_addr is final, because the DTB
+     * may come from outside the FIT. */
+    const char *fit_ramdisk = NULL;
+#endif
     /* HDR_DEVICE_TREE_DIGEST snapshot, taken before the raw DTB is loaded. */
     uint8_t  dts_digest[WOLFBOOT_SHA_DIGEST_SIZE];
     uint8_t *dts_tlv = NULL;
@@ -642,7 +648,7 @@ backup_on_failure:
         (void)fpga;
 #endif
         if (kernel != NULL) {
-            void *new_load = fit_load_image(fit, kernel, NULL);
+            void *new_load = fit_load_kernel(fit, kernel, NULL);
             if (new_load == NULL) {
                 wolfBoot_printf("FIT: failed to load kernel '%s'\n", kernel);
                 wolfBoot_panic();
@@ -687,25 +693,26 @@ backup_on_failure:
                 fdt_set_dtb_authenticated(1);
                 memcpy(dts_addr, dts_ptr, dts_size);
             }
+            else {
+                /* Say so rather than falling through to the boot
+                 * firmware's DTB silently: that would hand the kernel a
+                 * different device tree than the FIT names. */
+                wolfBoot_printf("FIT: '%s' is not a usable DTB (%d); "
+                    "trying the boot firmware's instead\n", flat_dt,
+                    parsed);
+            }
         }
 #ifdef WOLFBOOT_FIT_RAMDISK
-        if (ramdisk != NULL) {
-            fdt_ctx dts_ctx;
-            fdt_ctx* dts_for_initrd = NULL;
-
-            /* The relocated DTB sits in the staging window, so that is
-             * the capacity the initrd fixup may grow into. */
-            if (dts_addr != NULL &&
-                    fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
-                dts_for_initrd = &dts_ctx;
-            }
-            (void)fit_load_ramdisk(fit, ramdisk, dts_for_initrd);
-        }
+        fit_ramdisk = ramdisk;
 #else
         (void)ramdisk;
 #endif
     }
-    else {
+    /* Also reached when the payload parsed as a FIT but carried no usable
+     * `fdt` sub-image: a kernel-only FIT takes its device tree from the
+     * boot firmware (e.g. a bootgen raw partition at
+     * WOLFBOOT_LOAD_DTS_ADDRESS) exactly as a non-FIT payload does. */
+    if (dts_addr == NULL) {
         /* Prefer the HAL's memory-mapped DTB (unchanged for XIP targets); fall
          * back to external flash at WOLFBOOT_DTS_BOOT_ADDRESS when the HAL has
          * no usable address (NULL, or a flash offset on NO_XIP targets). */
@@ -786,6 +793,23 @@ backup_on_failure:
             }
         }
     }
+#ifdef WOLFBOOT_FIT_RAMDISK
+    /* Run after the DTB source is settled, so the initrd fixup lands on
+     * the tree the kernel will actually be handed - including a DTB that
+     * came from the boot firmware rather than from the FIT. */
+    if (fit_ramdisk != NULL) {
+        fdt_ctx dts_ctx;
+        fdt_ctx* dts_for_initrd = NULL;
+
+        /* The relocated DTB sits in the staging window, so that is
+         * the capacity the initrd fixup may grow into. */
+        if (dts_addr != NULL &&
+                fdt_open(&dts_ctx, dts_addr, WOLFBOOT_DTS_MAX_SIZE) == 0) {
+            dts_for_initrd = &dts_ctx;
+        }
+        (void)fit_load_ramdisk(&fit_ctx, fit_ramdisk, dts_for_initrd);
+    }
+#endif
 #endif /* MMU */
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
