@@ -3189,21 +3189,19 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
   - Set PKA=1 in the config file to turn on hardware acceleration
   (off by default)
 
-- [lpc55s69-hwpuf.config](/config/examples/lpc55s69-hwpuf.config):
-  - Same as `lpc55s69.config`, but turns on test code showing how to use the
-  hwpuf api
-  - Set HWPUF=1 in the config file to turn on HWPUF support (off by default)
-
 - [lpc55s69-tz.config](/config/examples/lpc55s69-tz.config):
   - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
   - Provides a standard PKCS #11 api to interface with crypto algs in the secure
   realm
+  - Set PKA=1 in the config file to turn on hardware acceleration
+  (off by default)
 
 - [lpc55s69-tz-psa.config](/config/examples/lpc55s69-tz-psa.config):
   - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
   - Provides a standard PSA api to interface with crypto algs in the secure
   realm
   - Provides an example of PSA Attestation
+  - Provides an example of how to use the hardware PUF
   - To turn on HWPUF for use with attestation, set the following in the config
   file:
     - WOLFBOOT_UDS_UID_FALLBACK_FORTEST=0

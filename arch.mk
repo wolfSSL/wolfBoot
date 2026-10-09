@@ -1955,10 +1955,9 @@ ifeq ($(TARGET),lpc55s69)
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
   endif
   ifeq ($(HWPUF),1)
-    CFLAGS+=-DWOLFSSL_HWPUF -DWOLFSSL_NXP_HWPUF
+    CFLAGS+=-DWOLFSSL_NXP_HWPUF
     OBJS+=\
         $(MCUXPRESSO)/drivers/puf/fsl_puf.o \
-        $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hwpuf_port.o
   endif
 endif

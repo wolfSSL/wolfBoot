@@ -90,7 +90,7 @@ static NOINLINEFUNCTION void hal_zeroize(void *ptr, size_t len)
 }
 
 
-#if defined(__WOLFBOOT) && defined(WOLFSSL_HWPUF)
+#if defined(__WOLFBOOT) && defined(WOLFSSL_NXP_HWPUF)
 #define HWPUF_PROV_MAGIC            0x564f5250ul    /* "PROV" */
 #define HWPUF_PROV_FLASH_BASEADR    0x80000ul
 #define HWPUF_PROV_FLASH_LEN        0x1000ul
@@ -149,24 +149,23 @@ static int hwpuf_provision_set(int force)
 
     XMEMSET(&prov, 0, sizeof(prov));
 
-    if (nxp_hwpuf_RegisterDevice() != 0)
-        return -1;
-
-    if (wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID) != 0)
+    if (nxp_hwpuf_Init() != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufEnroll(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
+    if (nxp_hwpuf_Enroll(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID);
-
-    if (wc_CryptoCb_HwpufStart(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
+    if (nxp_hwpuf_Deinit() != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufGenerateKey(WOLFSSL_NXP_HWPUF_DEVID,
-                             HWPUF_PROV_UDS_KEY_INDEX, HWPUF_PROV_UDS_KEY_SIZE,
-                             prov.uds_kc, sizeof(prov.uds_kc)) != 0)
+    if (nxp_hwpuf_Init() != 0)
+        goto error_out;
+
+    if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
+        goto error_out;
+
+    if (nxp_hwpuf_GenerateKey(HWPUF_PROV_UDS_KEY_INDEX, HWPUF_PROV_UDS_KEY_SIZE,
+                              prov.uds_kc, sizeof(prov.uds_kc)) != 0)
         goto error_out;
 
     prov.magic = HWPUF_PROV_MAGIC;
@@ -189,9 +188,8 @@ static int hwpuf_provision_set(int force)
 
 error_out:
     hal_zeroize(&prov, sizeof(prov));
-    (void)wc_CryptoCb_HwpufZeroize(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)nxp_hwpuf_UnregisterDevice();
+    (void)nxp_hwpuf_Zeroize();
+    (void)nxp_hwpuf_Deinit();
     return ret;
 }
 #endif /* WOLFBOOT_HWPUF_PROVISION */
@@ -205,17 +203,14 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
     if (hwpuf_provision_get() != 0)
         return -1;
 
-    if (nxp_hwpuf_RegisterDevice() != 0)
-        return -1;
-
-    if (wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID) != 0)
+    if (nxp_hwpuf_Init() != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufStart(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
+    if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    ret = wc_CryptoCb_HwpufGetKey(WOLFSSL_NXP_HWPUF_DEVID, prov.uds_kc, sizeof(prov.uds_kc),
-                          uds, sizeof(uds));
+    ret = nxp_hwpuf_GetKey(prov.uds_kc, sizeof(prov.uds_kc),
+                           uds, sizeof(uds));
     if (ret != 0)
         goto error_out;
 
@@ -230,15 +225,14 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
 error_out:
     hal_zeroize(uds, sizeof(uds));
     hal_zeroize(&prov, sizeof(prov));
-    (void)wc_CryptoCb_HwpufZeroize(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)nxp_hwpuf_UnregisterDevice();
+    (void)nxp_hwpuf_Zeroize();
+    (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }
 #endif /* WOLFCRYPT_TZ_PSA */
-#endif /* __WOLFBOOT && WOLFSSL_HWPUF */
+#endif /* __WOLFBOOT && WOLFSSL_NXP_HWPUF */
 
-#if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA)
+#if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA) && !defined(WOLFBOOT_DICE_HW)
 static void reverse_array(byte *s, int len)
 {
     int up, dn;
@@ -256,9 +250,7 @@ static void reverse_array(byte *s, int len)
         --dn;
     }
 }
-#endif
 
-#if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA) && !defined(WOLFBOOT_DICE_HW)
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
@@ -345,7 +337,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
     return uds_from_uid(out, out_len);
-#elif defined(WOLFSSL_HWPUF)
+#elif defined(WOLFSSL_NXP_HWPUF)
     return uds_from_hwpuf(out, out_len);
 #else
     return -1;
@@ -385,7 +377,7 @@ static void periph_unsecure(void)
     CLOCK_EnableClock(kCLOCK_Iocon);
     CLOCK_EnableClock(kCLOCK_Gpio1);
 }
-#endif
+#endif /* TZEN */
 
 static void hal_flash_fix_ecc(void)
 {
@@ -469,7 +461,7 @@ void hal_prepare_boot(void)
     periph_unsecure();
 #endif
 }
-#endif
+#endif /* __WOLFBOOT */
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
@@ -558,7 +550,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 
     return -1;
 }
-#endif
+#endif /* WOLFCRYPT_SECURE_MODE */
 
 
 #define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
@@ -636,4 +628,4 @@ void uart_write(const char *buf, unsigned int sz)
         sz -= line_sz + 1U;
     }
 }
-#endif
+#endif /* DEBUG_UART */

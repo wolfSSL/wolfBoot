@@ -179,14 +179,6 @@ jobs:
       config-file: ./config/examples/lpc55s69-tz-psa.config
       board-name: lpcxpresso55s69
 
-  lpc55s69_hwpuf_test:
-    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
-    with:
-      arch: arm
-      config-file: ./config/examples/lpc55s69-hwpuf.config
-      board-name: lpcxpresso55s69
-      make-args: HWPUF=1
-
   lpc55s69_benchmark_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
