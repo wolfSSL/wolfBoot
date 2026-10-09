@@ -1436,12 +1436,7 @@ ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
 
   # TC4 wolfHSM port objects used by the HAL.
   ifeq ($(WOLFHSM_CLIENT),1)
-    APP_OBJS += $(WOLFHSM_INFINEON_TC4XX)/port/tchsm_hsmhost.o \
-                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_client.o \
-                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_hh_host.o \
-                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_spr_apu.o \
-                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_dma_client.o \
-                $(WOLFHSM_INFINEON_TC4XX)/port/client/tchsm_time.o \
+    APP_OBJS += $(TCHSM_WB_WOLFHSM_OBJS) $(TCHSM_WB_CLIENT_OBJS) \
                 $(WOLFBOOT_LIB_WOLFHSM)/src/wh_transport_mem.o
   endif
 

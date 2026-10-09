@@ -50,7 +50,7 @@
 #include "wolfhsm/wh_client.h"
 #include "wolfhsm/wh_error.h"
 /* wolfHSM AURIX TC4xx port headers */
-#include "tchsm_hsmhost.h"
+#include "tchsm_topology.h"
 #include "tchsm_client.h"
 #include "tchsm_spr_apu.h"
 
@@ -793,16 +793,16 @@ int hal_hsm_init_connect(void)
 {
     int rc;
 
-    /* The S2H wake ISR needs interrupts. */
-    IfxCpu_enableInterrupts();
-
     rc = tc4_hsmc_hw_init();
     if (rc != 0) {
         g_tc4_hsmc_hw_rc = rc;
         return rc;
     }
 
-    tchsm_client_init(TCHSM_HSMHOST_CLIENT_APP0);
+    rc = tchsm_client_init(TCHSM_HSMHOST_CLIENT_APP0);
+    if (rc != WH_ERROR_OK) {
+        return rc;
+    }
 
     rc = tchsm_client_wait_ready(TCHSM_HSMHOST_CLIENT_APP0, 10000u);
     if (rc != WH_ERROR_OK) {
