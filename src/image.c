@@ -1079,19 +1079,6 @@ static uint8_t *get_sha_block(struct wolfBoot_image *img, uint32_t offset)
     }
 #endif
     p = (uint8_t *)(img->fw_base + offset);
-#if defined(MPFS_DDR_INIT)
-    /* PolarFire SoC DDR build: route in-DDR image-body reads through the
-     * non-cached DDR SEG window (0xC0000000 base) so cache fills don't evict
-     * L2 Scratch lines (where wolfBoot's own code/stack live).  PDMA already
-     * L2-flushed the cached writes at disk-load, so the non-cached side reads
-     * the correct DDR contents.  0x8xxxxxxx -> 0xCxxxxxxx.  Applied at this
-     * single point so every image-body hasher (SHA256/384/3-384) behaves
-     * identically; inert for the L2-Scratch QSPI M-mode build (fw_base is not
-     * in the 0x8xxxxxxx window). */
-    if (((uintptr_t)p & 0xF0000000UL) == 0x80000000UL) {
-        p = (uint8_t *)((uintptr_t)p | 0x40000000UL);
-    }
-#endif
     return p;
 }
 
@@ -1375,8 +1362,6 @@ static int image_sha384(struct wolfBoot_image *img, uint8_t *hash)
             blksz = WOLFBOOT_SHA_BLOCK_SIZE;
             if (position + blksz > img->fw_size)
                 blksz = img->fw_size - position;
-            /* p is already routed to the non-cached DDR alias by
-             * get_sha_block() under MPFS_DDR_INIT (see above). */
             wc_Sha384Update(&sha384_ctx, p, blksz);
             position += blksz;
             wolfBoot_watchdog_feed();

@@ -1317,6 +1317,10 @@ target-independent `src/ddr_cadence.c` / `include/ddr_cadence.h` (controller bas
 board's `LIBERO_SETTING_*` values, stay in `hal/mpfs250_ddr.c`, which builds the controller
 register table and composes the generic calls. Both compile only when `MPFS_DDR_INIT` is set.
 
+### PolarFire SoC hardware root of trust (PUF KEK, sNVM keystore, wrapped encryption key)
+
+The System Controller SRAM-PUF, secure NVM (sNVM), and TeraFire crypto can anchor key material in hardware: serve the verification public keys from sNVM, derive a device-unique KEK from the PUF, and store the AES image-encryption key in sNVM wrapped by that KEK. See [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+
 ### PolarFire testing
 
 This section describes how to build the test-application, create a custom uSD with required partitions and copying signed test-application to uSD partitions.
@@ -1604,7 +1608,7 @@ See the [Encrypted Partitions](encrypted_partitions.md) documentation for additi
 
 #### Configuration
 
-Update your `.config` file with the following ML-DSA settings:
+Update your `.config` file with the following ML-DSA settings, or pass them as `make` arguments on top of `config/examples/polarfire_mpfs250_m.config` (the standalone M-mode E51 target verifies ML-DSA-87 this way, with SHA-384 as the image hash):
 
 ```makefile
 # ML-DSA 87 (Category 5)
@@ -1659,6 +1663,20 @@ Boot time measurements on PolarFire SoC (RISC-V 64-bit U54 @ 625 MHz) for a 19MB
 | ECC384      | SHA384  | ~800 ms   | ~2900 ms     | ~1500 ms        | ~70 ms           | ~5.3 seconds    |
 | ML-DSA 87   | SHA256  | ~835 ms   | ~2900 ms     | ~2100 ms        | ~22 ms           | ~5.9 seconds    |
 
+Standalone M-mode (`polarfire_mpfs250_m.config`, E51 @ 600 MHz, no HSS) measured from power-on on the Video Kit with host-side timestamps on the console, plaintext FIT, ECC384/SHA384, software crypto, the same 19.7 MB kernel either gzip-compressed in the FIT (5.9 MB) or stored uncompressed (19.8 MB):
+
+| Phase                                         | gzip FIT | uncompressed FIT |
+|-----------------------------------------------|----------|------------------|
+| DDR training, SD init, GPT read, FIT load, SHA384 integrity, ECC384 verify | ~2 s | ~4 s |
+| gzip inflate of the kernel                    | ~16 s    | -                |
+| FIT copies, DTB fixups                        | <1 s     | <1 s             |
+| M-mode -> S-mode handoff                      | ~18 s    | ~5 s             |
+| Linux login prompt                            | ~41 s    | ~28 s            |
+
+The inflate runs on the E51 at about 1.2 MB/s of output, so a compressed kernel costs far more than the extra card read it saves; for a short boot, build the FIT with `compression = "none"` for the kernel (`FIT_KERNEL_COMP_ALG = "none"` in Yocto). The software SHA384 runs at about 11 MB/s on the E51 and the ECC384 verify is well under a second; neither is a lever. `BOOT_BENCHMARK` phase prints on this target are in real time now that the timer uses the live CPU clock.
+
+The LPDDR4 controller on this board needs the first CPU-side transaction after DDR initialization to be a read: when a write comes first on a cold boot, it lands in DDR displaced by several bus beats and every later cached-port write in that boot follows it. `mpfs_ddr_init()` therefore reads one block through the non-cached alias before anything is written, after which CPU, L2 write-back and SDMA writes land exactly and the SD load, the FIT copies, the DTB fixups and the image hash use DDR directly. Measured on a buffer in L2 scratch the Athena SHA384 is about 1.3x the software rate and AES-256-CTR about 4.4x. ML-DSA-87 on this target (`SIGN=ML_DSA` on `polarfire_mpfs250_m.config`) links to a smaller image than ECC384 because no big-number code is needed.
+
 ### PolarFire Soc Debugging
 
 Start GDB server:
@@ -1691,7 +1709,7 @@ wolfBoot Version: 2.8.0
 Running on E51 (hart 0) in M-mode
 Boot RESET_SR: 1FF (bit0=PERIPH bit1=MSS bit2=CPU bit3=DBG bit4=FABRIC bit5=WDOG bit6=GPIO bit7=BUS bit8=SOFT)
 ========================================
-DDR: Training+MTC PASS after 0 retries
+DDR: Training+MTC PASS
 DDR: Initialization COMPLETE
 SDHCI: platform init
 Reading MBR...

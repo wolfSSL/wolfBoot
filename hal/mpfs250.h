@@ -56,7 +56,7 @@
 #define MPFS_CPU_FREQ_RESET_MHZ     80U
 #endif
 
-/* Full-DDRC-reinit attempts in hal_init() (per-attempt failure rate ~30%). */
+/* Full-DDRC-reinit attempts in hal_init(). */
 #ifndef MPFS_DDR_MAX_OUTER_RETRY
 #define MPFS_DDR_MAX_OUTER_RETRY    6U
 #endif
@@ -170,7 +170,6 @@
 #define MMUART_THR(base) *((volatile uint8_t*)((base)) + 0x100) /* Transmitter holding register */
 #define MMUART_FCR(base) *((volatile uint8_t*)((base)) + 0x104) /* FIFO control register */
 
-
 /* LCR (Line Control Register) */
 #define MSS_UART_DATA_8_BITS        ((uint8_t)0x03)
 #define MSS_UART_NO_PARITY          ((uint8_t)0x00)
@@ -237,13 +236,39 @@
 /* System Service command opcodes */
 #define SYS_SERV_CMD_SERIAL_NUMBER 0x00u
 #define SYS_SERV_CMD_SPI_COPY      0x50u /* SCB mailbox SPI copy service */
+#define SYS_SERV_CMD_SNVM_WRITE_PLAIN  0x10u /* non-authenticated plaintext */
+#define SYS_SERV_CMD_SNVM_WRITE_AUTH   0x11u /* authenticated plaintext */
+#define SYS_SERV_CMD_SNVM_WRITE_CIPHER 0x12u /* authenticated ciphertext */
+#define SYS_SERV_CMD_SNVM_READ         0x18u
+#define SYS_SERV_CMD_PUF_EMULATION     0x20u
+#define SYS_SERV_CMD_NONCE             0x21u
+
+/* sNVM service parameters (see Microchip system services spec) */
+#define MPFS_SNVM_MODULE_MAX     221  /* modules 0..220 */
+#define MPFS_SNVM_USK_LEN        12   /* user secret key (authenticated modes) */
+#define MPFS_SNVM_AUTH_DATA_LEN  236  /* data bytes per authenticated page */
+#define MPFS_SNVM_PLAIN_DATA_LEN 252  /* data bytes per non-authenticated page */
+#define MPFS_SNVM_ADMIN_LEN      4    /* page admin bytes returned by read */
+/* Mailbox response byte offsets (mb_offset 0) */
+#define MPFS_SNVM_READ_RET_OFFSET 16
+#define MPFS_PUF_RET_OFFSET       20
+
+/* PUF emulation / nonce service sizes */
+#define MPFS_PUF_CHALLENGE_LEN   16
+#define MPFS_PUF_RESPONSE_LEN    32
+#define MPFS_NONCE_LEN           32
 
 /* Device serial number size in bytes */
 #define DEVICE_SERIAL_NUMBER_SIZE 16
 
 /* Timeout loop iteration counts (override at build time via CFLAGS) */
 #ifndef MPFS_SCB_TIMEOUT
-#define MPFS_SCB_TIMEOUT          10000     /* SCB mailbox polling */
+#define MPFS_SCB_TIMEOUT          10000     /* SCB request-accept polling */
+#endif
+/* Completion (BUSY) wait.  TRNG and PUF services are far slower than
+ * serial/sNVM reads; only a wedged controller reaches this bound. */
+#ifndef MPFS_SCB_BUSY_TIMEOUT
+#define MPFS_SCB_BUSY_TIMEOUT     20000000
 #endif
 #ifndef QSPI_TIMEOUT_TRIES
 #define QSPI_TIMEOUT_TRIES       100000    /* QSPI controller/TX polling */
@@ -257,16 +282,55 @@
 #define SCBMBOX_REG(off) (*((volatile uint32_t*)(SCBMBOX_BASE + (off))))
 #define SCBMBOX_BYTE(off) (*((volatile uint8_t*)(SCBMBOX_BASE + (off))))
 
-/* System Controller Mailbox API */
+/* System Controller mailbox, polling mode at word offset 0.  Returns 0, a
+ * negative transport error, or a positive 16-bit service status. */
 #ifndef __ASSEMBLER__
-int mpfs_scb_service_call(uint8_t opcode, const uint8_t *mb_data,
-    uint32_t mb_len, uint32_t timeout);
-int mpfs_scb_read_mailbox(uint8_t *out, uint32_t len);
 int mpfs_read_serial_number(uint8_t *serial);
+
+/* Read one sNVM module.  data_len 236 (AUTH, needs usk) or 252 (PLAIN, usk
+ * may be NULL); admin is 4 bytes and optional. */
+int mpfs_snvm_read(uint8_t module, const uint8_t *usk, uint8_t *admin,
+    uint8_t *data, uint16_t data_len);
+
+/* Write one sNVM module.  data is 252 bytes for PLAIN, else 236; the 12-byte
+ * usk is required for AUTH/CIPHER. */
+int mpfs_snvm_write(uint8_t format, uint8_t module, const uint8_t *data,
+    const uint8_t *usk);
+
+/* PUF emulation: 16-byte challenge -> 32-byte device-unique response. */
+int mpfs_puf_emulation(const uint8_t *challenge, uint8_t op_type,
+    uint8_t *response);
+
+/* Nonce service: 32-byte random value. */
+int mpfs_nonce(uint8_t *nonce);
+
 #endif /* __ASSEMBLER__ */
 
 /* Crypto Engine: Athena F5200 (200 MHz) */
 #define ATHENA_BASE (SYSREG_BASE + 0x125000)
+
+/* Athena control block, matching athenareg_t in the CAL library's
+ * config_athena.h (BASE32_ADDR_ATHENAREG = 0x20127000). */
+#define ATHENA_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x00)))
+#define ATHENA_STALL_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x04)))
+#define ATHENA_UPPER_ADDRESS (*((volatile uint32_t*)(ATHENA_BASE + 0x08)))
+/* Security UG Table 7-7.  RESET reads 1 out of power-on reset; MSS_OWNER says
+ * the Libero ownership mode gave the core to the MSS rather than the fabric. */
+#define ATHENA_CR_RESET        (1U << 0)
+#define ATHENA_CR_PURGE        (1U << 1)
+#define ATHENA_CR_GO           (1U << 2)
+#define ATHENA_CR_RINGOSCON    (1U << 3)
+#define ATHENA_CR_STREAM_EN    (1U << 4)
+#define ATHENA_CR_STALL_EN     (1U << 5)
+#define ATHENA_CR_STALL_RATE_SHIFT 6
+#define ATHENA_CR_STALL_RATE_MASK  (3U << ATHENA_CR_STALL_RATE_SHIFT)
+#define ATHENA_CR_COMPLETE     (1U << 8)
+#define ATHENA_CR_ALARM        (1U << 9)
+#define ATHENA_CR_BUSERROR     (1U << 10)
+#define ATHENA_CR_STREAM_ENABLED (1U << 11)
+#define ATHENA_CR_BUSY         (1U << 12)
+#define ATHENA_CR_MSS_OWNER    (1U << 28)
+#define ATHENA_CR_FAB_OWNER    (1U << 29)
 
 
 /* L2 Cache Controller (CACHE_CTRL @ 0x02010000) */
@@ -305,7 +369,6 @@ int mpfs_read_serial_number(uint8_t *serial);
 #define L2_WAY_ENABLE_WITH_SCRATCH  0x0FFF
 #define L2_WAY_MASK_CACHE_ONLY      0xFF
 
-
 /* CLINT - Core Local Interruptor */
 #ifndef CLINT_BASE
 #define CLINT_BASE                  0x02000000UL
@@ -315,11 +378,12 @@ int mpfs_read_serial_number(uint8_t *serial);
 #define RTC_CLOCK_FREQ              1000000UL
 
 /* In M-mode CLINT MTIME is not running without HSS; use mcycle (CPU clock) instead.
+ * The E51 clock is raised from the reset rate to the Libero PLL rate during
+ * init, so the rate is the live value, not MSS_CPU_CLK.
  * In S-mode MTIME runs at 1 MHz (default RISCV_SMODE_TIMER_FREQ). */
 #if defined(WOLFBOOT_RISCV_MMODE) && !defined(RISCV_SMODE_TIMER_FREQ)
-#define RISCV_SMODE_TIMER_FREQ      MSS_CPU_CLK
+#define RISCV_SMODE_TIMER_FREQ      (mpfs_cpu_freq_mhz * 1000000UL)
 #endif
-
 
 /* Hart Local Storage (HLS) - per-hart communication structure, 64 bytes at top of stack */
 #define HLS_DEBUG_AREA_SIZE         64
@@ -351,6 +415,19 @@ typedef struct {
  * No UL suffix: also used from assembly (boot_riscv_start.S). */
 #define MPFS_DTIM_MAIN_STARTED_ADDR 0x010000F0
 
+/* DTIM bytes hal_init() zeroes at boot (SBI shared block + hart mailboxes). */
+#define MPFS_DTIM_BOOT_CLEAR_SIZE   0x200U
+/* DTIM pair (count, ~count) just above the cleared block, so it survives an
+ * MSS reset: DDR training restarts by reset since the last accepted training. */
+#define MPFS_DTIM_DDR_RESET_CNT_ADDR (0x01000000UL + MPFS_DTIM_BOOT_CLEAR_SIZE)
+#ifndef MPFS_DDR_EYE_RESET_MAX
+#define MPFS_DDR_EYE_RESET_MAX      5U
+#endif
+/* Minimum per-lane DQ/DQS window, HSS DQ_DQS_NUM_TAPS. */
+#ifndef MPFS_DDR_EYE_MIN_TAPS
+#define MPFS_DDR_EYE_MIN_TAPS       5U
+#endif
+
 /* Number of harts on MPFS */
 #define MPFS_NUM_HARTS              5
 #define MPFS_FIRST_HART             0   /* E51 is hart 0 */
@@ -374,7 +451,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #endif /* __ASSEMBLER__ */
 
 
-
 /* PLIC - Platform-Level Interrupt Controller (base 0x0C000000, 64MB) */
 #define PLIC_BASE               0x0C000000UL
 #define PLIC_SIZE               0x04000000UL
@@ -384,7 +460,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define OFFSET_TO_MSS_GLOBAL_INTS   13
 
 #define PLIC_INT_MMC_MAIN       88
-
 
 /* ============================================================================
  * DDR Controller and PHY (LPDDR4) - Video Kit MPFS250T
@@ -509,7 +584,25 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define PHY_TRAINING_START          0x810
 #define PHY_TRAINING_STATUS         0x814
 #define PHY_TRAINING_RESET          0x818
-#define PHY_TIP_CFG                 0x828
+/* Per-lane TIP status, selected via PHY_LANE_SELECT.  Offsets taken from
+ * CFG_DDR_SGMII_PHY_TypeDef in mss_ddr_sgmii_phy_defs.h. */
+#define PHY_GT_ERR_COMB             0x81C
+#define PHY_GT_CLK_SEL              0x820
+#define PHY_GT_TXDLY                0x824
+#define PHY_GT_STEPS_180            0x828
+#define PHY_GT_STATE                0x82C
+#define PHY_WL_DELAY_0              0x830
+#define PHY_DQ_DQS_ERR_DONE         0x834
+#define PHY_DQDQS_WINDOW            0x838   /* [7:0] left, [15:8] right edge */
+#define PHY_DQDQS_STATE             0x83C
+#define PHY_DELTA0                  0x840
+#define PHY_DELTA1                  0x844
+#define PHY_DQDQS_STATUS1           0x84C
+#define PHY_DQDQS_STATUS2           0x850
+#define PHY_ADDCMD_STATUS0          0x864
+#define PHY_ADDCMD_STATUS1          0x868
+#define PHY_ADDCMD_ANSWER           0x86C
+#define PHY_IOC_REG5                0x218   /* SRO slew readback */
 #define PHY_TIP_CFG_PARAMS          0x8D0
 #define PHY_EXPERT_MODE_EN          0x878
 #define PHY_EXPERT_DLYCNT_MOVE0     0x87C
@@ -561,7 +654,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define IOSCB_IOC_REG0              0x004
 #define IOSCB_IOC_REG1              0x008
 
-
 /* DDR Segment Register Offsets.
  * SEG is a 256-byte-stride peripheral pair (mss_seg.h:54): seg_t has
  * 8 x u32 control regs + 56 x u32 fill = 256 B.  SEG[0] is at base
@@ -598,7 +690,6 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
 #define DDR_INIT_TIMEOUT            -1
 #define DDR_INIT_TRAINING_FAIL      -2
 #define DDR_INIT_MEM_TEST_FAIL      -3
-
 
 /* ============================================================================
  * Video Kit Clock/DDR Configuration
@@ -659,7 +750,6 @@ void mpfs_iomux_init(void);
 int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 #endif
 #endif /* __ASSEMBLER__ */
-
 
 #ifdef EXT_FLASH
 /* QSPI Flash Controller
@@ -777,6 +867,5 @@ int qspi_init(void);
 #endif /* __ASSEMBLER__ */
 
 #endif /* EXT_FLASH */
-
 
 #endif /* MPFS250_DEF_INCLUDED */
