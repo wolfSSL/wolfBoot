@@ -448,7 +448,7 @@ typedef struct zynqmp_sec_state {
     uint32_t status;
     uint32_t sec_ctrl;
     uint32_t puf_chash;
-    uint32_t puf_aux;
+    uint32_t puf_misc;
 } zynqmp_sec_state;
 
 /* Read the eFuse cache directly from the eFuse controller. As the FSBL
@@ -475,7 +475,7 @@ static int zynqmp_sec_state_get(zynqmp_sec_state* state)
 
     state->sec_ctrl  = pmu_mmio_read(ZYNQMP_EFUSE_SEC_CTRL);
     state->puf_chash = pmu_mmio_read(ZYNQMP_EFUSE_PUF_CHASH);
-    state->puf_aux   = pmu_mmio_read(ZYNQMP_EFUSE_PUF_AUX);
+    state->puf_misc  = pmu_mmio_read(ZYNQMP_EFUSE_PUF_MISC);
     for (i = 0; i < ZYNQMP_EFUSE_PPK0_WORDS; i++) {
         state->ppk0_hash[i] = pmu_mmio_read(ZYNQMP_EFUSE_PPK0_0 +
             (uint32_t)((uint32_t)i * sizeof(uint32_t)));
@@ -506,8 +506,14 @@ void zynqmp_efuse_dump(void)
         (sec & ZYNQMP_EFUSE_SEC_CTRL_PPK0_INVLD) ? " PPK0_REVOKED" : "",
         (sec & ZYNQMP_EFUSE_SEC_CTRL_PPK0_WRLK)  ? " PPK0_WRLK"    : "",
         (sec & ZYNQMP_EFUSE_SEC_CTRL_AES_RDLK)   ? " AES_RDLK"     : "");
-    wolfBoot_printf("eFuse PUF CHASH 0x%08x AUX 0x%08x\n",
-        state.puf_chash, state.puf_aux);
+    wolfBoot_printf("eFuse PUF CHASH 0x%08x AUX 0x%06x\n", state.puf_chash,
+        (uint32_t)(state.puf_misc & ZYNQMP_EFUSE_PUF_MISC_AUX_MASK));
+    /* Whether this part can still be provisioned, and whether its stored
+     * helper data is usable. All three are one-shot. */
+    wolfBoot_printf("eFuse PUF MISC 0x%08x:%s%s%s\n", state.puf_misc,
+        (state.puf_misc & ZYNQMP_EFUSE_PUF_MISC_REG_DIS)   ? " REG_DIS"   : "",
+        (state.puf_misc & ZYNQMP_EFUSE_PUF_MISC_SYN_WRLK)  ? " SYN_WRLK"  : "",
+        (state.puf_misc & ZYNQMP_EFUSE_PUF_MISC_SYN_INVLD) ? " SYN_INVLD" : "");
 
     wolfBoot_printf("eFuse PPK0 hash:");
     for (i = 0; i < ZYNQMP_EFUSE_PPK0_WORDS; i++) {
@@ -1084,14 +1090,41 @@ int csu_puf_register(uint32_t* syndrome, uint32_t* chash, uint32_t* aux)
     return ret;
 }
 
-int csu_puf_regeneration(uint32_t* syndrome, uint32_t chash, uint32_t aux)
+/* Trigger a PUF regeneration.
+ *
+ * Helper data is deliberately not a parameter. The CSU sources it itself,
+ * from the eFuse PUF rows or from the boot header as the authenticated boot
+ * header selects (UG1085: "The CSU then initializes the PUF, loads the helper
+ * data, and regenerates the KEK"), so a caller has nothing to supply. On a
+ * part whose PUF eFuses are unprogrammed (CHASH zero) this issues the command
+ * but recovers no stored KEK, so check CHASH first. UG1085 also notes
+ * regeneration requires authentication to be enabled and is unavailable in
+ * encrypt-only secure boot. */
+int csu_puf_regeneration(void)
 {
     int ret;
     uint32_t puf_status = 0;
+    uint32_t chash = 0;
 
-    (void)syndrome;
-    (void)chash;
-    (void)aux;
+    /* The CSU regenerates from helper data it reads itself, so with no
+     * helper data programmed there is nothing to regenerate from. A bare
+     * REGENERATION command would still appear to succeed and leave an
+     * unrelated key selected, so refuse instead. CHASH is zero on a part
+     * that has never been registered. */
+#ifdef WOLFBOOT_ZYNQMP_FSBL
+    chash = pmu_mmio_read(ZYNQMP_EFUSE_PUF_CHASH);
+#else
+    /* A denied PMU read leaves the buffer zero just as an unregistered part
+     * does, so separate the two on the status word rather than the value. */
+    if (pmu_efuse_read(ZYNQMP_EFUSE_PUF_CHASH, &chash, sizeof(chash)) != 0) {
+        wolfBoot_printf("PUF: CHASH read denied, regen skipped\n");
+        return -1;
+    }
+#endif
+    if (chash == 0) {
+        wolfBoot_printf("PUF: not provisioned (CHASH 0), regen skipped\n");
+        return -1;
+    }
 
     ret = pmu_mmio_write(CSU_PUF_CFG0, CSU_PUF_CFG0_INIT);
     if (ret == 0)
@@ -1106,9 +1139,78 @@ int csu_puf_regeneration(uint32_t* syndrome, uint32_t chash, uint32_t aux)
     puf_status = pmu_mmio_read(CSU_PUF_STATUS);
     (void)puf_status; /* only consumed by the logging macro */
     wolfBoot_printf("Regen: PUF Status 0x%08x\n", puf_status);
+    if (ret != 0) {
+        return ret;
+    }
+
+    /* The command completing is not the same as a key arriving: KEY_RDY is
+     * what says the KEK is in the device key register, and OVERFLOW means the
+     * helper data did not reconstruct. Without this a caller would select an
+     * unrelated device key and only find out from a failed tag check. */
+    if ((puf_status & CSU_PUF_STATUS_OVERFLOW_MASK) != 0 ||
+            (puf_status & CSU_PUF_STATUS_KEY_RDY_MASK) == 0) {
+        wolfBoot_printf("PUF: regeneration produced no key (status 0x%08x)\n",
+            puf_status);
+        return -2;
+    }
+
+    return 0;
+}
+/* Unwrap a PUF black key.
+ *
+ * Regenerates the KEK (which the CSU then selects as the device key) and
+ * AES-GCM decrypts the black key with CSU_AES_KUP_WR set, so the recovered
+ * red key is written straight into the KUP and IV registers rather than to
+ * memory. The caller then uses CSU_AES_KEY_SRC_KUP; the red key is never
+ * visible to software, which is the point of a black key.
+ *
+ * blackKey is the 32-byte wrapped key followed by its 16-byte GCM tag, and
+ * iv is the 16-byte IV it was wrapped with. Both normally come from eFuse.
+ *
+ * Returns 0 when the KUP holds the unwrapped key. Requires a provisioned
+ * part: csu_puf_regeneration() refuses when CHASH is zero.
+ *
+ * NOT VALIDATED ON SILICON. The bench part is unprovisioned and provisioning
+ * is one-shot, so this follows the documented sequence and the register
+ * ordering used by Xilinx xilsecure, but has not been observed working. */
+int csu_puf_black_key_unwrap(const uint8_t* blackKey, const uint8_t* iv)
+{
+    /* wc_ForceZero: a plain memset on the sink can be elided */
+    /* The DMA still needs a destination even though the plaintext is routed
+     * to the key registers; nothing useful lands here. */
+    static uint8_t XALIGNED(64) sink[CSU_AES_KEY_SZ + CSU_AES_GCM_TAG_SZ];
+    int ret;
+
+    if (blackKey == NULL || iv == NULL) {
+        return -1;
+    }
+
+    ret = csu_puf_regeneration();
+    if (ret != 0) {
+        return ret;
+    }
+
+    memset(sink, 0, sizeof(sink));
+    ret = pmu_mmio_write(CSU_AES_KUP_WR,
+        CSU_AES_KUP_WR_KEY | CSU_AES_KUP_WR_IV);
+    if (ret == 0) {
+        ret = csu_aes_ex(CSU_AES_CFG_DEC, iv, blackKey, sink,
+            CSU_AES_KEY_SZ, CSU_AES_KEY_SRC_DEVICE_KEY, NULL);
+    }
+    /* Stop routing to the key registers on every path */
+    (void)pmu_mmio_write(CSU_AES_KUP_WR, 0);
+    wc_ForceZero(sink, sizeof(sink));
+
+    /* The plaintext is routed into the KUP as it is produced, before the GCM
+     * tag is checked. On any failure the KUP therefore holds unauthenticated
+     * key material, so zeroize it rather than leave it selectable. */
+    if (ret != 0) {
+        (void)csu_aes_key_zero();
+    }
 
     return ret;
 }
+
 #endif /* CSU_PUF_ROT || WOLFBOOT_ZYNQMP_FSBL_SEC */
 
 #define CSU_AES_TIMEOUT 150000
@@ -1157,9 +1259,6 @@ static int csu_dma_config(int ch, int doSwap)
     return ret;
 }
 
-/* AES-GCM engine sizes (Xilinx CSU): 16-byte IV block and 16-byte GCM tag. */
-#define CSU_AES_IV_SZ      16
-#define CSU_AES_GCM_TAG_SZ 16
 /* AES-GCM with a selectable key source. keySrc = CSU_AES_KEY_SRC_KUP (user key
  * from kupKey, 32 bytes) or CSU_AES_KEY_SRC_DEVICE_KEY (kupKey ignored).
  *   Encrypt: in = plaintext (sz),          out = ciphertext||tag (sz+16).
@@ -1350,8 +1449,9 @@ int csu_init(void)
 
     /* Read eFUSE helper data */
     pmu_efuse_read(ZYNQMP_EFUSE_PUF_CHASH, &reg1, sizeof(reg1));
-    pmu_efuse_read(ZYNQMP_EFUSE_PUF_AUX, &reg2, sizeof(reg2));
-    wolfBoot_printf("eFuse PUF CHASH 0x%08x, AUX 0x%08x\n", reg1, reg2);
+    pmu_efuse_read(ZYNQMP_EFUSE_PUF_MISC, &reg2, sizeof(reg2));
+    wolfBoot_printf("eFuse PUF CHASH 0x%08x, AUX 0x%06x, MISC 0x%08x\n",
+        reg1, (uint32_t)(reg2 & ZYNQMP_EFUSE_PUF_MISC_AUX_MASK), reg2);
 
     /* PUF-based key wrap (register -> regenerate KEK -> AES-wrap the red key
      * into a black key) is CSU/eFuse based and implemented by the FSBL security
@@ -1383,8 +1483,17 @@ int zynqmp_puf_test(void)
         return ret;
     }
 
-    ret = csu_puf_regeneration(puf_syndrome, chash, aux);
-    wolfBoot_printf("PUF regenerate (KEK): ret %d\n", ret);
+    /* Registration above leaves the helper data in RAM only, so the eFuse
+     * CHASH stays zero and regeneration correctly refuses. A non-zero return
+     * here is expected on an unprovisioned part, not a failure. */
+    ret = csu_puf_regeneration();
+    wolfBoot_printf("PUF regenerate (KEK): ret %d%s\n", ret,
+        (ret == -1) ? " (expected: PUF eFuses not programmed)" : "");
+    /* Only the unprovisioned refusal is expected here; anything else is a
+     * real failure the self-test should report. */
+    if (ret == -1) {
+        ret = 0;
+    }
     return ret;
 }
 #endif /* WOLFBOOT_ZYNQMP_PUF_SELFTEST */
