@@ -546,6 +546,20 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub SIGN=ML_DSA ML_DSA_LEVEL=5 IMAGE_SIGNATURE_SIZE=4627 IMAGE_HEADER_SIZE=12288 WOLFBOOT_SECTOR_SIZE=0x4000
+  # Boot mode 2: the eNVM wolfBoot linked above the signed manifest and
+  # signed as a wolfBoot image, and the sNVM UBL stub that verifies it.
+  microchip_mpfs250_m_signed_envm_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub MPFS_ENVM_MANIFEST=1 wolfboot_envm_signed.bin
+  microchip_mpfs250_ubl_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_ubl.config
   # Trust anchor served from sNVM with the production hardenings: ROM-flag
   # enforcement and the S-mode fence around the System Controller mailbox.
   microchip_mpfs250_m_snvm_test:

@@ -61,6 +61,19 @@
 #define MPFS_DDR_MAX_OUTER_RETRY    6U
 #endif
 
+/* eNVM: boot ROM meta information in page 0, the wolfBoot image from page 1
+ * (hal/mpfs250-m.ld), and in the boot mode 2 flow its signed manifest two
+ * pages below the end, verified by the UBL stub (hal/mpfs250_ubl.c). */
+#define MPFS_ENVM_BASE              0x20220000UL
+#define MPFS_ENVM_SIZE              0x20000UL
+#define MPFS_ENVM_IMAGE_ADDR        (MPFS_ENVM_BASE + 0x100UL)
+#define MPFS_ENVM_MANIFEST_ADDR     (MPFS_ENVM_BASE + MPFS_ENVM_SIZE - 0x400UL)
+/* The stub is built ECC384/SHA384 and has no room for a PQC verifier in its
+ * sNVM budget, so the manifest it checks is that size whatever algorithm
+ * signed the image it covers.  This does NOT follow IMAGE_HEADER_SIZE.  Keep
+ * in step with the ENVM_MANIFEST region in hal/mpfs250-m.ld. */
+#define MPFS_ENVM_MANIFEST_SIZE     512
+
 /* Hardware Base Address */
 #define SYSREG_BASE 0x20002000
 
