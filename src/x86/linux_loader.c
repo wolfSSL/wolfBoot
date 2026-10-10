@@ -36,6 +36,10 @@
 #include <stage2_params.h>
 #endif /* WOLFBOOT_FSP */
 
+#ifdef WOLFBOOT_ACPI
+#include <x86/acpi.h>
+#endif
+
 #define ENDLINE "\r\n"
 
 /* Optional container so one signed image can carry a kernel plus an initrd:
@@ -199,8 +203,8 @@ static int ranges_overlap(uint64_t a, uint64_t alen, uint64_t b, uint64_t blen)
 }
 
 /* Reject a kernel/initrd load target that would land on wolfBoot's own image
- * (code, rodata, data, bss) or on the verified payload being copied from.
- * Returns nonzero on conflict. */
+ * (code, rodata, data, bss), on the verified payload being copied from, or on
+ * the generated ACPI tables. Returns nonzero on conflict. */
 static int linux_load_conflicts(uint64_t dst, uint64_t len,
                                 const uint8_t *payload, uint32_t payload_len)
 {
@@ -212,6 +216,14 @@ static int linux_load_conflicts(uint64_t dst, uint64_t len,
     if (ranges_overlap(dst, len, (uint64_t)(uintptr_t)payload,
                        (uint64_t)payload_len))
         return 1;
+#ifdef WOLFBOOT_ACPI
+    /* The ACPI tables are already laid down at ACPI_TABLE_BASE; keep the
+     * kernel copy and the initrd off them. The e820 reservation only steers
+     * the kernel's own allocator, not wolfBoot's placement here. */
+    if (ranges_overlap(dst, len, (uint64_t)ACPI_TABLE_BASE,
+                       (uint64_t)ACPI_TABLE_SIZE))
+        return 1;
+#endif
     return 0;
 }
 
@@ -230,6 +242,9 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     int ret;
 #if defined(WOLFBOOT_64BIT)
     uint32_t map_size;
+#endif
+#ifdef WOLFBOOT_ACPI
+    uint64_t acpi_rsdp;
 #endif
     (void)cmd_line;
 
@@ -284,6 +299,46 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
         wolfBoot_panic();
     }
 
+#ifdef WOLFBOOT_ACPI
+    /* The tables are laid at a fixed base. Fail fast if that base is not
+     * within usable low RAM (the kernel would find no RSDP) or if it overlaps
+     * the verified payload still being copied from, rather than silently
+     * corrupting memory. */
+#ifdef WOLFBOOT_FSP
+    {
+        uint64_t acpi_top = (uint64_t)ACPI_TABLE_BASE + (uint64_t)ACPI_TABLE_SIZE;
+        uint64_t tolum = (uint64_t)((struct stage2_parameter *)params)->tolum;
+        if (tolum != 0 && acpi_top > tolum) {
+            wolfBoot_printf("ACPI region above usable RAM" ENDLINE);
+            wolfBoot_panic();
+        }
+    }
+#endif
+    if (ranges_overlap((uint64_t)ACPI_TABLE_BASE, (uint64_t)ACPI_TABLE_SIZE,
+                       (uint64_t)(uintptr_t)linux_image, (uint64_t)image_size)) {
+        wolfBoot_printf("ACPI region overlaps payload" ENDLINE);
+        wolfBoot_panic();
+    }
+    /* Build the ACPI tables, point the kernel at the RSDP, and reserve the
+     * region in the e820 map so the kernel keeps its allocator off it. */
+#if defined(WOLFBOOT_64BIT)
+    x86_paging_map_memory(ACPI_TABLE_BASE, ACPI_TABLE_BASE, ACPI_TABLE_SIZE);
+#endif
+    acpi_rsdp = acpi_setup();
+    param.acpi_rsdp_addr = acpi_rsdp;
+    /* The reservation is what keeps the kernel's allocator off the tables, so a
+     * map with no free slot must fail fast rather than boot with the tables
+     * still marked usable RAM. */
+    if (param.e820_entries >= E820_MAX_ENTRIES_ZEROPAGE) {
+        wolfBoot_printf("no e820 slot to reserve ACPI tables" ENDLINE);
+        wolfBoot_panic();
+    }
+    param.e820_table[param.e820_entries].addr = ACPI_TABLE_BASE;
+    param.e820_table[param.e820_entries].size = ACPI_TABLE_SIZE;
+    param.e820_table[param.e820_entries].type = E820_TYPE_ACPI;
+    param.e820_entries++;
+#endif /* WOLFBOOT_ACPI */
+
     if (param.hdr.setup_sects != 0) {
         param_size = (param.hdr.setup_sects + 1) * 512;
     } else {
@@ -324,6 +379,14 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
         wolfBoot_printf("kernel decompress extent exceeds usable RAM" ENDLINE);
         wolfBoot_panic();
     }
+#ifdef WOLFBOOT_ACPI
+    if (ranges_overlap((uint64_t)param.hdr.pref_address,
+                       (uint64_t)param.hdr.init_size,
+                       (uint64_t)ACPI_TABLE_BASE, (uint64_t)ACPI_TABLE_SIZE)) {
+        wolfBoot_printf("kernel decompress window overlaps ACPI tables" ENDLINE);
+        wolfBoot_panic();
+    }
+#endif
     memcpy((uint8_t *)KERNEL_LOAD_ADDRESS, kernel_image + param_size,
            kernel_size);
 

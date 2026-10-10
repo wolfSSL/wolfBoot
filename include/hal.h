@@ -59,6 +59,13 @@ void hal_deinit();
 
 void hal_init(void);
 
+#ifdef WOLFBOOT_ANTI_ROLLBACK
+/* Halt the processor; never returns. Implemented by targets that enable
+ * anti-rollback, and called when the stored version reference cannot be
+ * trusted (see src/boot_state.c). */
+void hal_hold_in_reset(void);
+#endif
+
 #ifdef WOLFBOOT_PARTITION_FILENAME
 /* Repoint the filesystem HAL's backing store at runtime, so one binary can
  * address several boot slots in turn. Implemented by hal/filesystem.c. */

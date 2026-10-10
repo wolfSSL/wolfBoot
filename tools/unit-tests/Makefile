@@ -236,6 +236,8 @@ TESTS+=unit-xspi-tfd-index
 TESTS+=unit-pic32-pfswap
 TESTS+=unit-secure-handoff
 TESTS+=unit-imx-rt700
+TESTS+=unit-boot-state
+TESTS+=unit-boot-state-strict
 
 # linux_loader.c is x86 32-bit only, so its unit tests need a working 32-bit
 # (multilib) toolchain. Probe whether "gcc -m32" can link, and only add the
@@ -857,6 +859,20 @@ unit-linux-loader-initrd: ../../include/target.h unit-linux-loader-initrd.c
 		-g -DUNIT_TEST -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
 		-DWOLFBOOT_LOAD_BASE=0x100000 \
 		-Wl,--defsym,_end_wb=_start_wolfboot+0x100000
+
+# unit-boot-state exercises the anti-rollback state machine in src/boot_state.c
+# through a mock storage backend. Built standalone (not via the common CFLAGS)
+# so the stubs-boot-state/ headers shadow user_settings.h/printf.h/hal.h and the
+# host build needs no target configuration. boot_state.c has no inline asm, so
+# no -m32 is required.
+unit-boot-state: unit-boot-state.c ../../src/boot_state.c
+	gcc -o $@ unit-boot-state.c -Istubs-boot-state -I../../src -I../../include \
+		-g -Wall -DUNIT_TEST -DWOLFBOOT_ANTI_ROLLBACK
+
+unit-boot-state-strict: unit-boot-state.c ../../src/boot_state.c
+	gcc -o $@ unit-boot-state.c -Istubs-boot-state -I../../src -I../../include \
+		-g -Wall -DUNIT_TEST -DWOLFBOOT_ANTI_ROLLBACK \
+		-DWOLFBOOT_ANTI_ROLLBACK_STRICT
 
 unit-boot-x86-fsp: ../../include/target.h unit-boot-x86_fsp.c
 	gcc -o $@ $^ $(CFLAGS) -DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP \

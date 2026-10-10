@@ -47,6 +47,9 @@
 #include <x86/fsp/FspsUpd.h>
 #include <x86/ahci.h>
 #include <stage2_params.h>
+#ifdef TARGET_nai_68int6
+#include <x86/fsp_config.h>
+#endif
 
 #define PCR_DMI_PORT_ID 0x88
 #define PCR_DMI_LPCLGIR1 0x2730
@@ -238,6 +241,10 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     FSP_M_CONFIG *mem_cfg;
 
     mem_cfg = &udp->FspmConfig;
+    /* The values guarded below are the Kontron VX3060-S2's: the Dq maps and
+     * DDR tuning describe that PCB's memory routing and are wrong for another
+     * board, which keeps its FSP-M defaults instead. */
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->PlatformMemorySize = 93806592;
     mem_cfg->DqMapCpu2DramMc0Ch0[0] = 13;
     mem_cfg->DqMapCpu2DramMc0Ch0[1] = 12;
@@ -367,6 +374,7 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->DqMapCpu2DramMc1Ch3[13] = 9;
     mem_cfg->DqMapCpu2DramMc1Ch3[14] = 8;
     mem_cfg->DqMapCpu2DramMc1Ch3[15] = 13;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->TsegSize = 8388608;
     mem_cfg->SpdAddressTable[0] = 160;
     mem_cfg->SpdAddressTable[1] = 0;
@@ -394,8 +402,10 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->VtdBaseAddress[7] = 0;
     mem_cfg->VtdBaseAddress[8] = 0;
     mem_cfg->UserBd = 5;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->RMT = 1;
     mem_cfg->NModeSupport = 2;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->PchHdaEnable = 0;
     mem_cfg->GttMmAdr = 2147483648;
     mem_cfg->DdiPort2Hpd = 1;
@@ -404,14 +414,22 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->DdiPort4Ddc = 1;
     mem_cfg->EnableC6Dram = 0;
     mem_cfg->HyperThreading = 0;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->CpuRatio = 0;
     mem_cfg->FClkFrequency = 1;
+#endif /* TARGET_kontron_vx3060_s2 */
+#ifdef TARGET_nai_68int6
+    mem_cfg->VmxEnable = 1;
+#else
     mem_cfg->VmxEnable = 0;
+#endif
     mem_cfg->BiosGuard = 0;
     mem_cfg->EnableSgx = 0;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->TxtDprMemorySize = 4194304;
     mem_cfg->BiosAcmBase = 4285267968;
     mem_cfg->ConfigTdpLevel = 2;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->PcieClkSrcUsage[0] = 128;
     mem_cfg->PcieClkSrcUsage[1] = 128;
     mem_cfg->PcieClkSrcUsage[2] = 128;
@@ -434,7 +452,9 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
      * set from X86_UART_NUMBER or the console changes between phases - output
      * appears for part of the boot and then stops, reading as a hang. */
     mem_cfg->SerialIoUartDebugControllerNumber = X86_UART_NUMBER;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->MrcSafeConfig = 1;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->TcssItbtPcie0En = 0;
     mem_cfg->TcssItbtPcie1En = 0;
     mem_cfg->TcssItbtPcie2En = 0;
@@ -442,9 +462,12 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->TcssXdciEn = 1;
     mem_cfg->TcssDma0En = 0;
     mem_cfg->TcssDma1En = 0;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->RMC = 0;
     mem_cfg->EccSupport = 0;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->Ibecc = 1;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->IbeccParity = 1;
     mem_cfg->RankInterleave = 0;
     mem_cfg->EnhancedInterleave = 0;
@@ -452,9 +475,12 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->ChHashMask = 12492;
     mem_cfg->PowerDownMode = 0;
     mem_cfg->SafeMode = 1;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->UsbTcPortEnPreMem = 15;
     mem_cfg->WrcFeatureEnable = 0;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->McParity = 1;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->PchHdaSdiEnable[0] = 1;
     mem_cfg->PchHdaSdiEnable[1] = 1;
     mem_cfg->PchHdaAudioLinkDmicEnable[0] = 0;
@@ -470,7 +496,9 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
     mem_cfg->PchHdaAudioLinkSndwEnable[1] = 1;
     mem_cfg->PchHdaAudioLinkSndwEnable[2] = 0;
     mem_cfg->PchHdaAudioLinkSndwEnable[3] = 0;
+#ifdef TARGET_kontron_vx3060_s2
     mem_cfg->SkipCpuReplacementCheck = 1;
+#endif /* TARGET_kontron_vx3060_s2 */
     mem_cfg->SerialIoUartDebugMode = 4;
     mem_cfg->PcieRefPllSsc = 0;
     return 0;
@@ -497,7 +525,9 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
 {
     FSP_S_CONFIG *upd = &fsps->FspsConfig;
 
+#ifdef TARGET_kontron_vx3060_s2
     upd->GraphicsConfigPtr = 2024131364;
+#endif /* TARGET_kontron_vx3060_s2 */
 
     upd->SataPortsEnable[0] = 1;
     upd->SataPortsEnable[1] = 1;
@@ -661,18 +691,33 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
     upd->IomTypeCPortPadCfg[7] = 0;
     upd->UsbTcPortEn = 15;
     upd->AesEnable = 0;
+#ifdef TARGET_kontron_vx3060_s2
     upd->PchWriteProtectionEnable[0] = 1;
     upd->PchWriteProtectionEnable[1] = 1;
+#else
+    upd->PchWriteProtectionEnable[0] = 0;
+    upd->PchWriteProtectionEnable[1] = 0;
+#endif /* TARGET_kontron_vx3060_s2 */
     upd->PchWriteProtectionEnable[2] = 0;
     upd->PchWriteProtectionEnable[3] = 0;
     upd->PchWriteProtectionEnable[4] = 0;
+#ifdef TARGET_kontron_vx3060_s2
     upd->PchProtectedRangeLimit[0] = 13679;
     upd->PchProtectedRangeLimit[1] = 16383;
+#else
+    upd->PchProtectedRangeLimit[0] = 0;
+    upd->PchProtectedRangeLimit[1] = 0;
+#endif /* TARGET_kontron_vx3060_s2 */
     upd->PchProtectedRangeLimit[2] = 0;
     upd->PchProtectedRangeLimit[3] = 0;
     upd->PchProtectedRangeLimit[4] = 0;
+#ifdef TARGET_kontron_vx3060_s2
     upd->PchProtectedRangeBase[0] = 13312;
     upd->PchProtectedRangeBase[1] = 13744;
+#else
+    upd->PchProtectedRangeBase[0] = 0;
+    upd->PchProtectedRangeBase[1] = 0;
+#endif /* TARGET_kontron_vx3060_s2 */
     upd->PchProtectedRangeBase[2] = 0;
     upd->PchProtectedRangeBase[3] = 0;
     upd->PchProtectedRangeBase[4] = 0;
@@ -978,6 +1023,13 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
 
     memset(upd->PcieRpHotPlug, 0, sizeof(upd->PcieRpHotPlug));
     memset(upd->CpuPcieRpHotPlug, 0, sizeof(upd->CpuPcieRpHotPlug));
+#ifdef TARGET_nai_68int6
+    upd->Eist = FSP_INTEL_SPEED_STEP;
+    upd->Hwp = FSP_INTEL_SPEED_SHIFT;
+    upd->Cx = FSP_C_STATES;
+    upd->TxtEnable = FSP_TXT;
+    upd->ThermalMonitor = FSP_THERMAL_THROTTLING;
+#endif
     return 0;
 }
 /**
@@ -1470,6 +1522,8 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_term = GPIO_TERM_NONE},
 
 };
+#elif defined(TARGET_nai_68int6)
+#include <x86/gpio_config.h>
 #endif /* TARGET_kontron_vx3060_s2 */
 /**
  * @brief Configure GPIO settings for a specific device.
@@ -1655,6 +1709,17 @@ int post_temp_ram_init_cb(void)
 
 
     kontron_ask_for_recovery();
+#elif defined(TARGET_nai_68int6)
+    unsigned int i;
+    unsigned int n;
+
+    /* No CPLD or SuperIO setup: the 68INT6 has no Kontron CPLD, and its
+     * LTC2870 transceiver resets to dual RS-232, so the console needs no
+     * programming before first output. */
+    n = sizeof(gpio_table_tempram)/sizeof(gpio_table_tempram[0]);
+    for (i = 0; i < n; i++) {
+        tgl_gpio_configure(&gpio_table_tempram[i]);
+    }
 #else
     (void)tgl_gpio_configure;
 #endif /* TARGET_kontron_vx3060_s2 */
@@ -1691,6 +1756,11 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
     new_udp->FspmArchUpd.NvsBufferPtr        = 0;
     new_udp->FspmArchUpd.StackBase = mem_base;
     new_udp->FspmArchUpd.StackSize = mem_size;
+#ifdef TARGET_nai_68int6
+    new_udp->FspmConfig.HyperThreading = FSP_HYPERTHREADING;
+    new_udp->FspmConfig.BootFrequency = FSP_BOOT_PERFORMANCE_MODE;
+    new_udp->FspmConfig.Ibecc = FSP_IN_BAND_ECC;
+#endif
 
     return 0;
 }
@@ -1698,8 +1768,12 @@ int fsp_machine_update_m_parameters(uint8_t *default_m_params,
 int fsp_pre_mem_init_cb(void)
 {
     unsigned int i;
+    unsigned int n;
 
-    for (i = 0; i < sizeof(gpio_table_premem)/sizeof(gpio_table_premem[0]); i++) {
+    /* via a variable: the table is empty on some targets, and comparing
+     * against the literal 0 that sizeof folds to trips -Wtype-limits. */
+    n = sizeof(gpio_table_premem)/sizeof(gpio_table_premem[0]);
+    for (i = 0; i < n; i++) {
         tgl_gpio_configure(&gpio_table_premem[i]);
     }
 

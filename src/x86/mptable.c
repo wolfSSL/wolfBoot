@@ -27,7 +27,7 @@
 #define LOCAL_APIC_ID 0xfee00020
 #define LOCAL_APIC_VER 0xfee00030
 
-#ifdef TARGET_kontron_vx3060_s2
+#if defined(TARGET_kontron_vx3060_s2) || defined(TARGET_nai_68int6)
 #define ISA_BUS 0x4
 
 /* TGL mptable */
@@ -518,7 +518,7 @@ void mptable_setup(void)
     _mp->mpce_processor[0]._res[0] = _mp->mpce_processor[0]._res[1] = 0;
 
 
-#ifdef TARGET_kontron_vx3060_s2
+#if defined(TARGET_kontron_vx3060_s2) || defined(TARGET_nai_68int6)
     {
         int i;
         for (i = 1; i < 4; ++i) {

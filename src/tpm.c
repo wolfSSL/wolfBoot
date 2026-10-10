@@ -34,7 +34,7 @@
 #include "wolftpm/tpm2_tis.h" /* for TIS header size and wait state */
 
 WOLFTPM2_DEV     wolftpm_dev;
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#ifdef WOLFBOOT_TPM_PARMENC
 WOLFTPM2_SESSION wolftpm_session;
 WOLFTPM2_KEY     wolftpm_srk;
 #endif
@@ -477,7 +477,7 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
     int rc;
 #ifdef WOLFBOOT_DEBUG_TPM
     uint8_t digest[WOLFBOOT_TPM_PCR_DIG_SZ];
-    int     digestSz = 0;
+    int     digestSz = (int)sizeof(digest);
 #endif
 
     /* clear auth session for PCR */
@@ -502,7 +502,8 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 
         wolfBoot_printf("PCR %d: Res %d, Digest Sz %d\n",
             pcrIndex, read_rc, digestSz);
-        wolfBoot_print_bin(digest, digestSz);
+        if (read_rc == 0)
+            wolfBoot_print_bin(digest, digestSz);
     }
     else {
         wolfBoot_printf("Measure boot failed! Index %d, %x (%s)\n",
@@ -1364,8 +1365,7 @@ int wolfBoot_unseal(const uint8_t* pubkey_hint,
 }
 #endif /* WOLFBOOT_TPM_SEAL */
 
-#if (defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)) && \
-     defined(WC_RNG_SEED_CB)
+#if defined(WOLFBOOT_TPM_PARMENC) && defined(WC_RNG_SEED_CB)
 static int wolfRNG_GetSeedCB(OS_Seed* os, uint8_t* seed, uint32_t sz)
 {
     int rc;
@@ -1682,7 +1682,7 @@ int wolfBoot_tpm2_init(void)
 {
     int rc;
     WOLFTPM2_CAPS caps;
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#ifdef WOLFBOOT_TPM_PARMENC
     TPM_ALG_ID alg;
 #endif
 #ifdef WOLFBOOT_MEASURED_BOOT
@@ -1695,7 +1695,7 @@ int wolfBoot_tpm2_init(void)
     spi_init(0,0);
 #endif
 
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#ifdef WOLFBOOT_TPM_PARMENC
     memset(&wolftpm_session, 0, sizeof(wolftpm_session));
     memset(&wolftpm_srk, 0, sizeof(wolftpm_srk));
 #endif
@@ -1725,7 +1725,7 @@ int wolfBoot_tpm2_init(void)
         wolfBoot_printf("TPM Init failed! %d\n", rc);
     }
 
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#ifdef WOLFBOOT_TPM_PARMENC
     if (rc == 0) {
     #ifdef WC_RNG_SEED_CB
         /* setup callback for RNG seed to use TPM */
@@ -1752,7 +1752,7 @@ int wolfBoot_tpm2_init(void)
                 rc, wolfTPM2_GetRCString(rc));
         }
     }
-#endif /* WOLFBOOT_TPM_KEYSTORE | WOLFBOOT_TPM_SEAL */
+#endif /* WOLFBOOT_TPM_PARMENC */
 
 #if defined(WOLFBOOT_MEASURED_BOOT) && defined(SELF_HASH_ADDR)
     /* measured boot: hash wolfBoot code (or boot partition if
@@ -1780,16 +1780,19 @@ int wolfBoot_tpm2_init(void)
  */
 void wolfBoot_tpm2_deinit(void)
 {
-#ifdef WOLFBOOT_TPM_KEYSTORE
+#if defined(WOLFBOOT_TPM_KEYSTORE) || \
+    (defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_TPM_PARMENC))
     #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH)
-    /* Enable parameter encryption for session */
-    int rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
-            (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
-             TPMA_SESSION_continueSession));
+    /* Slot 0 authorizes the platform hierarchy (empty auth after reset);
+     * ChangePlatformAuth puts the session in slot 1 for parameter encryption.
+     * wolfTPM ignores an HMAC session in slot 0 without a password auth. */
+    int rc = wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
     if (rc == 0) {
         /* Change platform auth to random value, to prevent application
          * from being able to use platform hierarchy. This is defined in
-         * section 10 of the TCG PC Client Platform specification. */
+         * section 10 of the TCG PC Client Platform specification. It also
+         * stops the OS undefining the platform-created anti-rollback index
+         * and recreating it with a lower floor. */
         rc = wolfTPM2_ChangePlatformAuth(&wolftpm_dev, &wolftpm_session);
     }
     if (rc != 0) {
@@ -1798,11 +1801,11 @@ void wolfBoot_tpm2_deinit(void)
     #endif
     wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_session.handle);
     wolfTPM2_UnloadHandle(&wolftpm_dev, &wolftpm_srk.handle);
-#endif /* WOLFBOOT_TPM_KEYSTORE */
+#endif /* WOLFBOOT_TPM_KEYSTORE || WOLFBOOT_ANTI_ROLLBACK */
 
     wolfTPM2_Cleanup(&wolftpm_dev);
 
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
+#ifdef WOLFBOOT_TPM_PARMENC
     /* The OS takes over from here: leave no session key or SRK auth in
      * SRAM. UnloadHandle flushes the TPM-side context but is not
      * documented to clear handle->auth. */

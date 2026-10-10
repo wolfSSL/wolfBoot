@@ -14,6 +14,7 @@ This README describes configuration of supported targets.
 * [Infineon AURIX TC4xx](#infineon-aurix-tc4xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
 * [Kontron VX3060-S2](#kontron-vx3060-s2)
+* [NAI 68INT6 (Intel Tiger Lake)](#nai-68int6-intel-tiger-lake)
 * [Microchip PIC32CK](#microchip-pic32ck)
 * [Microchip PIC32CZ](#microchip-pic32cz)
 * [Microchip PolarFire SoC](#microchip-polarfire-soc)
@@ -9201,6 +9202,74 @@ Load address 0x58282000
 Attempting boot from partition A
 ```
 At this point, the kernel image in partition "A" is verified and staged and you should be seeing the log messages of your OS booting.
+
+## NAI 68INT6 (Intel Tiger Lake)
+
+wolfBoot target `nai_68int6` for the North Atlantic Industries 68INT6, a 3U OpenVPX SOSA-aligned single board computer (Intel Core i7-1185GRE, Tiger Lake UP3), using the Intel Firmware Support Package. It shares the Intel FSP support described [above](#intel-x86_64-with-intel-fsp-support) and the Tiger Lake path with the Kontron target. wolfBoot boots a signed 64-bit Linux from the SATA disk with A/B update, measured boot and TPM anti-rollback, verified on a Rev D5 bench board. This board's memory is trained by the FSP from its own BIOS (the public Tiger Lake FSP does not train it), so the FSP set is extracted from a 68INT6 BIOS image rather than downloaded.
+
+| | |
+|---|---|
+| CPU | i7-1185GRE (`06-8C-01`), Tiger Lake UP3, PCH-LP |
+| Memory | 2 x 32 GB DDR4-3200 SODIMM, non-ECC |
+| BIOS flash | Rev C/D5: 2 x W25R256JV (32 MB), jumper-selected (JP36). Next revision: one 64 MB device |
+| TPM | SLB9670 (SHA-1/256), or SLB9672 which adds a SHA-384 bank |
+| Storage | Onboard SATA SSD, AHCI at `00:17.0` |
+| Console | LPSS UART2, PCI `00:19.2`, RS-232; `X86_UART_NUMBER=2` |
+
+### Building
+
+```
+cp config/examples/nai_68int6.config .config
+./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh              # FSP UPD headers, first time only
+./tools/scripts/x86_fsp/tgl/nai_extract_fsp.sh <68INT6.bin>  # board's own FSP blobs
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -k             # generate signing keys
+make
+./tools/scripts/x86_fsp/tgl/assemble_image.sh -n <68INT6.bin>
+```
+
+`nai_extract_fsp.sh` lifts the FSP-T/M/S and microcode from a real 68INT6 BIOS image; without it the build links against the public FSP, which compiles but will not train this board's memory. The `-n` stitch replaces only the top 6 MB (`BOOTLOADER_PARTITION_SIZE`) of the 12 MB BIOS region and preserves the descriptor and CSME byte for byte. There is no recovery region on Rev C (recovery is the second flash device), so use `-n`, not `-m`. The result is `final_image.bin`.
+
+### Integrity algorithms
+
+ECC P-384 and SHA-384 are chosen to match the algorithms Intel Boot Guard uses to verify the Initial Boot Block, so the wolfBoot chain carries the same strength Boot Guard establishes at reset.
+
+| Layer | Algorithm |
+|---|---|
+| Image signature | ECC P-384 (`SIGN=ECC384`) |
+| Image digest | SHA-384 (`HASH=SHA384`) |
+| Measured boot PCR | SHA-256 (the SLB9670 has only SHA-1 and SHA-256 banks) |
+
+`wolfBoot_image_measure()` re-hashes the authenticated digest with the PCR bank algorithm, so one image serves either TPM. `MEASURED_PCR_ALG=SHA384` needs an SLB9672 with its SHA-384 bank allocated (`TPM2_PCR_Allocate` under platform auth, a provisioning step); with an SLB9670, use SHA-256.
+
+### Configuration
+
+Beyond the flash map and console, the notable options in [config/examples/nai_68int6.config](../config/examples/nai_68int6.config):
+
+| Option | Meaning |
+|---|---|
+| `X86_UART_NUMBER=2` | Selects LPSS UART2 in all three FSP phases (Kontron uses 0) |
+| `ACPI=1` | Generate ACPI tables (RSDP/XSDT/FADT/MADT/MCFG and a minimal DSDT) so Linux gets the interrupt model and PCI routing |
+| `ANTI_ROLLBACK=1` | Persistent version floor plus boot audit counters in TPM NV |
+| `MEASURED_BOOT=1`, `MEASURED_PCR_OS=4` | Measure the firmware into PCR 0 and the verified OS image into PCR 4 |
+| `WOLFBOOT_BOOT_DISK=0` | Boot from GPT disk partitions; the A/B indices (sda3/sda4) are set per target in `src/update_disk.c` |
+
+### BIOS region lock
+
+The BIOS region is not write-locked by default (`WOLFBOOT_DONT_LOCK_BIOS=1`): `hal_flash_lock()` is a stub, so the flash stays writable for in-field updates. For a hardened deployment, call `tgl_lock_bios_region()` (`hal/nai_68int6.c`) from a `hal_flash_protect()` override; it sets the SPI Flash Protected Range 0 and FLOCKDN from the measured BIOS region bounds, read- and write-protecting it until the next platform reset.
+
+### Anti-rollback
+
+`ANTI_ROLLBACK=1` keeps a persistent version floor and a small set of boot audit counters in a TPM NV index, with the backend isolated in `src/boot_state_tpm.c`. The anchor is the highest version ever booted, monotonic and initialised trust-on-first-use; a validly signed but older image still boots and records a rollback audit event; the one condition that halts the boot is a version reference that cannot be trusted. `ANTI_ROLLBACK_STRICT=1` additionally halts when the backend is unreachable or an NV write fails, instead of logging and continuing.
+
+It uses TPM NV rather than the flash-partition state trailer because the floor has to survive a full disk or flash reimage and be tamper-evident, which a trailer in the boot media is not. Disk boot's `DISK_BOOT_CONFIRM` still handles per-slot confirmation; this adds the persistent floor on top, and the backend can later move to a root-of-trust device without touching the policy in `src/boot_state.c`.
+
+The target leaves `ALLOW_DOWNGRADE` unset, the secure default: if the higher-versioned slot fails to verify, wolfBoot does not fall back to a lower-versioned slot but halts (`Rollback to lower version not allowed`). This is deliberate - strict anti-rollback takes precedence over A/B resilience here. A deployment that instead wants a failed slot to fall back across a version decrease can build with `ALLOW_DOWNGRADE=1`, which then leaves the persistent floor in TPM NV as the only rollback guard.
+
+The booted OS cannot lower the floor. wolfBoot write-locks the NV index (`TPMA_NV_WRITE_STCLEAR`) on every boot, before handoff, so it stays read-only until the next TPM reset. `wolfBoot_tpm2_deinit()` then sets the platform hierarchy auth to a random value nobody keeps, as in the TPM keystore build, so the OS cannot undefine the platform-created index and recreate it. Build with `WOLFBOOT_TPM_NO_CHG_PLAT_AUTH` to keep platform auth unchanged.
+
+### Boot, programming and recovery
+
+A/B boot stages a signed 64-bit `bzImage` from the two GPT boot partitions: wolfBoot boots the highest version that verifies, falls back to the other slot when it verifies and is not a downgrade (see Anti-rollback), and holds in reset if neither can be booted. Program the flash with `flashrom` from the board's own Linux, or a Dediprog SF100 on the JP4 header with the board powered off; JP36 selects which bank boots and which a programmer sees, and must only be moved unpowered. The bank the board boots is the only one software can reprogram, so a development image that never reaches an OS is recovered externally with the SF100.
 
 ## Infineon PSOC Control C3
 

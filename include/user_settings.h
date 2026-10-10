@@ -183,8 +183,11 @@ extern int tolower(int c);
 #   endif
 #endif
 
-#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL)
-    /* TPM Parameter Encryption */
+#if defined(WOLFBOOT_TPM_KEYSTORE) || defined(WOLFBOOT_TPM_SEAL) || \
+    (defined(WOLFBOOT_ANTI_ROLLBACK) && defined(WOLFBOOT_TPM) && \
+     !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH))
+    /* TPM Parameter Encryption. Anti-rollback needs it to send the random
+     * platform auth it sets at handoff. */
 #   define WOLFBOOT_TPM_PARMENC /* used in this file to gate features */
 #endif
 
@@ -396,7 +399,7 @@ extern int tolower(int c);
 #      if !defined(HAVE_ECC384)
 #      define WOLFSSL_SP_NO_384
 #      endif
-#      if !defined(HAVE_ECC256)
+#      if !defined(HAVE_ECC256) && !defined(WOLFBOOT_TPM_PARMENC)
 #      define WOLFSSL_SP_NO_256
 #      endif
 #   endif
