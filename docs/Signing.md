@@ -10,6 +10,36 @@ A standalone C version of the key tools is available in: `./tools/keytools`.
 
 These can be built in `tools/keytools` using `make` or from the wolfBoot root using `make keytools`.
 
+#### Building against an installed wolfSSL
+
+By default the key tools compile the wolfCrypt sources from the `lib/wolfssl`
+submodule with the settings in `tools/keytools/user_settings.h`. To link them
+against an already configured and installed wolfSSL instead, build with
+`WOLFSSL_LIB=1`:
+
+```sh
+make -C tools/keytools WOLFSSL_LIB=1
+# or, for a library installed outside the default search paths:
+make -C tools/keytools WOLFSSL_LIB=1 WOLFSSL_INCDIR=/opt/wolfssl/include WOLFSSL_LIBDIR=/opt/wolfssl/lib
+```
+
+When `WOLFSSL_INCDIR` and `WOLFSSL_LIBDIR` are not given, `pkg-config wolfssl`
+is consulted, so exporting `PKG_CONFIG_PATH=<prefix>/lib/pkgconfig` works as
+well. The tools are then compiled with the library's own `options.h` (through
+`WOLFSSL_USE_OPTIONS_H`), so the library must have been configured with every
+algorithm the tools support, for example:
+
+```sh
+./configure --enable-cryptonly --enable-keygen --enable-ed25519 --enable-ed448 \
+    --enable-rsapss --enable-aesctr --enable-shake128 --enable-shake256 \
+    --enable-experimental --enable-lms --enable-xmss --enable-mldsa
+```
+
+A library missing one of these fails at compile time.
+
+This only affects the host keytools: building wolfBoot itself still needs the
+wolfSSL sources from the submodule.
+
 #### Windows Visual Studio
 
 Project files can be found in [`[WOLFBOOT_ROOT]/IDE/VisualStudio`](../IDE/VisualStudio/README.md).
