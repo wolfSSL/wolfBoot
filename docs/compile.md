@@ -591,6 +591,10 @@ Available overrides:
 - `WOLFBOOT_LIB_WOLFPSA`: Path to the wolfPSA library source code
 - `WOLFBOOT_LIB_WOLFHSM`: Path to the [wolfHSM](https://github.com/wolfSSL/wolfHSM) library source code
 
+The host key tools can also be linked against an installed wolfSSL instead of
+the submodule sources with `WOLFSSL_LIB=1`, see
+[Building against an installed wolfSSL](Signing.md#building-against-an-installed-wolfssl).
+
 ## Key Generation and Signing
 
 ### Default Key Behavior

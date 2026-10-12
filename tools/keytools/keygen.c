@@ -81,6 +81,14 @@
     #include <wolfssl/wolfcrypt/wc_mldsa.h>
 #endif
 
+/* Refuse a wolfSSL configuration that lacks one of the signature algorithms */
+#if defined(NO_RSA) || !defined(HAVE_ECC) || !defined(HAVE_ED25519) || \
+    !defined(HAVE_ED448) || !defined(WOLFSSL_HAVE_LMS) || \
+    !defined(WOLFSSL_HAVE_XMSS) || !defined(WOLFSSL_HAVE_MLDSA) || \
+    !defined(WOLFSSL_KEY_GEN)
+    #error "wolfSSL must provide RSA, ECC, Ed25519, Ed448, LMS, XMSS and ML-DSA plus key generation for the wolfBoot key tools (see example configuration in docs/Signing.md)"
+#endif
+
 #include <wolfssl/wolfcrypt/random.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 #ifdef DEBUG_SIGNTOOL

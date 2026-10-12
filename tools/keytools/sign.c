@@ -137,6 +137,13 @@ static inline int fp_truncate(FILE *f, size_t len)
     #include <wolfssl/wolfcrypt/wc_mldsa.h>
 #endif
 
+/* Refuse a wolfSSL configuration that lacks one of the signature algorithms */
+#if defined(NO_RSA) || !defined(HAVE_ECC) || !defined(HAVE_ED25519) || \
+    !defined(HAVE_ED448) || !defined(WOLFSSL_HAVE_LMS) || \
+    !defined(WOLFSSL_HAVE_XMSS) || !defined(WOLFSSL_HAVE_MLDSA)
+    #error "wolfSSL must provide RSA, ECC, Ed25519, Ed448, LMS, XMSS and ML-DSA for the wolfBoot key tools (see example configuration in docs/Signing.md)"
+#endif
+
 #ifdef DEBUG_SIGNTOOL
     #include <wolfssl/wolfcrypt/logging.h>
 #endif
@@ -1155,7 +1162,10 @@ static int sign_digest(int sign, int hash_algo,
         sign == SIGN_ECC384 ||
         sign == SIGN_ECC521)
     {
-        mp_int r, s;
+        uint8_t der[ECC_MAX_SIG_SIZE];
+        word32 derSz = (word32)sizeof(der);
+        uint8_t r[MAX_ECC_BYTES], s[MAX_ECC_BYTES];
+        word32 rSz = (word32)sizeof(r), sSz = (word32)sizeof(s);
         int keySz;
         if (sign == SIGN_ECC256) keySz = 32;
         if (sign == SIGN_ECC384) keySz = 48;
@@ -1164,18 +1174,14 @@ static int sign_digest(int sign, int hash_algo,
         *signature_sz = keySz*2;
         memset(signature, 0, *signature_sz);
 
-        mp_init(&r); mp_init(&s);
-        ret = wc_ecc_sign_hash_ex(digest, digest_sz, &rng, &k->ecc,
-                &r, &s);
+        ret = wc_ecc_sign_hash(digest, digest_sz, der, &derSz, &rng, &k->ecc);
+        if (ret == 0)
+            ret = wc_ecc_sig_to_rs(der, derSz, r, &rSz, s, &sSz);
         if (ret == 0) {
-            word32 rSz, sSz;
             /* export sign r/s - zero pad to key size */
-            rSz = mp_unsigned_bin_size(&r);
-            mp_to_unsigned_bin(&r, &signature[keySz - rSz]);
-            sSz = mp_unsigned_bin_size(&s);
-            mp_to_unsigned_bin(&s, &signature[keySz + (keySz - sSz)]);
+            memcpy(&signature[keySz - rSz], r, rSz);
+            memcpy(&signature[keySz + (keySz - sSz)], s, sSz);
         }
-        mp_clear(&r); mp_clear(&s);
     }
     else
     if (sign == SIGN_RSA2048 ||

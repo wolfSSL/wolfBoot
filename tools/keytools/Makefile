@@ -11,15 +11,40 @@ WOLFBOOT_LIB_WOLFSSL?=../../lib/wolfssl
 # Convert to absolute paths for standalone usage
 WOLFBOOT_LIB_WOLFSSL:=$(abspath $(WOLFBOOT_LIB_WOLFSSL))
 
+# Link against an already configured and installed wolfSSL instead of
+# compiling the wolfCrypt sources from $(WOLFBOOT_LIB_WOLFSSL):
+#
+#   make WOLFSSL_LIB=1 [WOLFSSL_INCDIR=<prefix>/include] [WOLFSSL_LIBDIR=<prefix>/lib]
+WOLFSSL_LIB?=0
+
 CC      = gcc
 LD      = gcc
 WOLFBOOTDIR = ../..
 CFLAGS  = -Wall -Wextra -Werror
-CFLAGS  += -I. -DWOLFSSL_USER_SETTINGS -I$(WOLFBOOT_LIB_WOLFSSL) -I$(WOLFBOOTDIR)/include
+CFLAGS  += -I. -I$(WOLFBOOTDIR)/include
 DEPFLAGS = -MMD -MP
 LDFLAGS =
 OBJDIR = ./
 LIBS =
+
+ifeq ($(WOLFSSL_LIB),1)
+  CFLAGS  += -DWOLFSSL_USE_OPTIONS_H
+  ifeq ($(WOLFSSL_INCDIR),)
+    WOLFSSL_INCDIR:=$(shell pkg-config --variable=includedir wolfssl 2>/dev/null)
+  endif
+  ifeq ($(WOLFSSL_LIBDIR),)
+    WOLFSSL_LIBDIR:=$(shell pkg-config --variable=libdir wolfssl 2>/dev/null)
+  endif
+  ifneq ($(WOLFSSL_INCDIR),)
+    CFLAGS  += -I$(WOLFSSL_INCDIR)
+  endif
+  ifneq ($(WOLFSSL_LIBDIR),)
+    LDFLAGS += -L$(WOLFSSL_LIBDIR) -Wl,-rpath,$(WOLFSSL_LIBDIR)
+  endif
+  LDFLAGS += -lwolfssl
+else
+  CFLAGS  += -DWOLFSSL_USER_SETTINGS -I$(WOLFBOOT_LIB_WOLFSSL)
+endif
 
 ML_DSA_LEVEL?=2
 CFLAGS+=-DML_DSA_LEVEL=$(ML_DSA_LEVEL)
@@ -72,6 +97,11 @@ endif
 
 # Sources
 OBJS_REAL=\
+	$(WOLFBOOTDIR)/src/delta.o
+
+# wolfCrypt objects, compiled from the sources unless WOLFSSL_LIB=1
+ifneq ($(WOLFSSL_LIB),1)
+OBJS_REAL+=\
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/asn.o \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.o \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/ecc.o \
@@ -99,9 +129,6 @@ OBJS_REAL=\
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wolfmath.o
 
 OBJS_REAL+=\
-	$(WOLFBOOTDIR)/src/delta.o
-
-OBJS_REAL+=\
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms.o \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_lms_impl.o
 
@@ -109,6 +136,7 @@ OBJS_REAL+=\
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss.o \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_xmss_impl.o
 OBJS_REAL+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/wc_mldsa.o
+endif
 
 OBJS_VIRT=$(addprefix $(OBJDIR), $(notdir $(OBJS_REAL)))
 DEPS=$(OBJS_VIRT:.o=.d) sign.d keygen.d
