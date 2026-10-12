@@ -31,15 +31,17 @@ SECTIONS
         KEEP(*(.keystore*))
     } > FLASH
 
-    _stored_data = .;
-
-    .data : AT (_stored_data)
+    .data :
     {
         _start_data = .;
         KEEP(*(.data*))
         . = ALIGN(4);
+        KEEP(*(.ramcode))
+        . = ALIGN(4);
         _end_data = .;
-    } > RAM
+    } > RAM AT > FLASH
+
+    _stored_data = LOADADDR(.data);
 
     .bss (NOLOAD) :
     {

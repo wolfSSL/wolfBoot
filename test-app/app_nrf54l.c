@@ -32,7 +32,11 @@
     #define TEST_LED_PORT 1
 #endif
 #ifndef TEST_LED_PIN
-    #define TEST_LED_PIN 10
+    #ifdef NRF54LM20
+        #define TEST_LED_PIN 22
+    #else
+        #define TEST_LED_PIN 10
+    #endif
 #endif
 
 extern void hal_init(void);
@@ -52,6 +56,20 @@ void WEAKFUNCTION RAMFUNCTION arch_reboot(void)
     while(1)
         ;
 
+}
+#endif
+
+#ifdef WOLFCRYPT_SECURE_MODE
+static void print_random_number(void)
+{
+    uint8_t rnd;
+    int ret;
+
+    ret = wcs_get_random(&rnd, sizeof(rnd));
+    if (ret != 0)
+        wolfBoot_printf("Random number: generate failed (%d)\r\n", ret);
+    else
+        wolfBoot_printf("Today's lucky number: 0x%02x\r\n", rnd);
 }
 #endif
 
@@ -76,6 +94,19 @@ void main(void)
 
     uart_init();
     wolfBoot_printf("Booted firmware version: %d\r\n", version);
+
+    if (version != 1) {
+#ifdef TZEN
+        wolfBoot_nsc_success();
+#else
+        wolfBoot_success();
+#endif
+        wolfBoot_printf("Update successful, firmware version %d confirmed\r\n",
+            version);
+    }
+#ifdef WOLFCRYPT_SECURE_MODE
+    print_random_number();
+#endif
 
     for (;;) {
         led_toggle();

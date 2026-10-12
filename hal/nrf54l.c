@@ -204,6 +204,14 @@ static void RAMFUNCTION flash_commit_writebuf(void)
     }
 }
 
+static void RAMFUNCTION icache_invalidate(void)
+{
+    ICACHE_TASKS_INVALIDATECACHE = ICACHE_TASKS_INVALIDATECACHE_Trigger;
+    while ((ICACHE_STATUS & ICACHE_STATUS_READY_Msk) ==
+           ICACHE_STATUS_READY_Busy)
+        ;
+}
+
 static void RAMFUNCTION flash_write_enable(int enable)
 {
     uint32_t cfg = RRAMC_CONFIG;
@@ -253,26 +261,34 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     flash_program_range(address, data, len);
     flash_commit_writebuf();
     flash_write_enable(0);
+    icache_invalidate();
     return 0;
 }
+
+/* In .data (RAM) so erasing the bootloader region never reads it back */
+static uint32_t flash_erase_blank[16] = {
+    0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL,
+    0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL,
+    0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL,
+    0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL, 0xFFFFFFFFUL
+};
 
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     uint32_t end = address + (uint32_t)len;
-    uint8_t blank[64];
-
-    memset(blank, 0xFF, sizeof(blank));
 
     flash_write_enable(1);
     while (address < end) {
         int chunk = (int)(end - address);
-        if (chunk > (int)sizeof(blank))
-            chunk = (int)sizeof(blank);
-        flash_program_range(address, blank, chunk);
+        if (chunk > (int)sizeof(flash_erase_blank))
+            chunk = (int)sizeof(flash_erase_blank);
+        flash_program_range(address, (const uint8_t *)flash_erase_blank,
+            chunk);
         address += (uint32_t)chunk;
     }
     flash_commit_writebuf();
     flash_write_enable(0);
+    icache_invalidate();
     return 0;
 }
 
@@ -307,9 +323,21 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 #else
 void uart_init(void)
 {
+#ifdef DEBUG_UART
     uart_init_device(DEVICE_DOWNLOAD, 115200, 8, 'N', 1);
+#endif
 }
 #endif
+
+static void cpu_clock_init(void)
+{
+    /* The reset value is 64 MHz and the setting survives a system reset */
+    OSCILLATORS_PLL_FREQ = OSCILLATORS_PLL_FREQ_FREQ_CK128M;
+    while ((OSCILLATORS_PLL_CURRENTFREQ & OSCILLATORS_PLL_FREQ_FREQ_Msk) !=
+           OSCILLATORS_PLL_FREQ_FREQ_CK128M) {
+        /* wait */
+    }
+}
 
 static void high_freq_clock_init(void)
 {
@@ -355,8 +383,16 @@ static void low_freq_clock_init(void)
     }
 }
 
+/* The cache is off at reset: without it every fetch waits on the RRAM */
+static void icache_init(void)
+{
+    icache_invalidate();
+    ICACHE_ENABLE = ICACHE_ENABLE_ENABLE_Enabled;
+}
+
 static void clock_init(void)
 {
+    cpu_clock_init();
     high_freq_clock_init();
     low_freq_clock_init();
 }
@@ -364,6 +400,33 @@ static void clock_init(void)
 static void clock_deinit(void)
 {
 }
+
+#ifdef BOOT_BENCHMARK
+static uint32_t bench_timer_hi;
+static uint32_t bench_timer_last;
+
+static void bench_timer_init(void)
+{
+    TIMER_TASKS_STOP(TIMER20_BASE) = TIMER_TASK_Trigger;
+    TIMER_MODE(TIMER20_BASE) = TIMER_MODE_MODE_Timer;
+    TIMER_BITMODE(TIMER20_BASE) = TIMER_BITMODE_BITMODE_32Bit;
+    TIMER_PRESCALER(TIMER20_BASE) = TIMER_PRESCALER_1MHZ;
+    TIMER_TASKS_CLEAR(TIMER20_BASE) = TIMER_TASK_Trigger;
+    TIMER_TASKS_START(TIMER20_BASE) = TIMER_TASK_Trigger;
+}
+
+uint64_t hal_get_timer_us(void)
+{
+    uint32_t now;
+
+    TIMER_TASKS_CAPTURE(TIMER20_BASE, 0) = TIMER_TASK_Trigger;
+    now = TIMER_CC(TIMER20_BASE, 0);
+    if (now < bench_timer_last)
+        bench_timer_hi++;
+    bench_timer_last = now;
+    return ((uint64_t)bench_timer_hi << 32) | now;
+}
+#endif /* BOOT_BENCHMARK */
 
 
 
@@ -466,7 +529,7 @@ static void hal_tz_init(void)
 
 static void periph_unsecure(void)
 {
-    /* UARTE20: UART connected to JLink on nRF54l15-DK */
+    /* UARTE20: UART connected to the J-Link VCOM on the DK */
     spu_periph_set_ns(UARTE20_S_BASE);
 
     /* UARTE20 + LED1 GPIO pins */
@@ -491,6 +554,10 @@ void hal_init(void)
 #ifdef __WOLFBOOT
     hal_handle_approtect();
     clock_init();
+    icache_init();
+#ifdef BOOT_BENCHMARK
+    bench_timer_init();
+#endif
 #endif
 
 #if defined(TZEN) && TZ_SECURE()
@@ -506,6 +573,10 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
     clock_deinit();
+    icache_invalidate();
+#ifdef BOOT_BENCHMARK
+    TIMER_TASKS_STOP(TIMER20_BASE) = TIMER_TASK_Trigger;
+#endif
 
 #if defined(TZEN) && TZ_SECURE()
     periph_unsecure();
@@ -516,35 +587,55 @@ void hal_prepare_boot(void)
 
 
 #ifdef WOLFCRYPT_SECURE_MODE
+static int trng_ready;
+
+static uint32_t trng_state(void)
+{
+    return (CRACENCORE_RNG_STATUS & CRACENCORE_RNG_STATUS_STATE_Msk) >>
+        CRACENCORE_RNG_STATUS_STATE_Pos;
+}
+
 void hal_trng_init(void)
 {
-    uint32_t state;
+    uint32_t state = CRACENCORE_RNG_STATUS_STATE_RESET;
+    uint32_t polls;
 
+    trng_ready = 0;
     CRACEN_ENABLE |= CRACEN_ENABLE_RNG_Msk;
 
     /* Soft-reset the RNGCONTROL block */
     CRACENCORE_RNG_CONTROL = CRACENCORE_RNG_CONTROL_SOFTRST_Msk;
 
+#ifdef NRF54LM20
+    CRACENCORE_RNG_SAMPLINGPERIOD = CRACENCORE_RNG_SAMPLINGPERIOD_DEFAULT;
+    CRACENCORE_RNG_WARMUPPERIOD   = CRACENCORE_RNG_INITWAITVAL_DEFAULT;
+#else
     /* Configure: ring oscillator clock divider=0, init wait=512, off timer=0 */
     CRACENCORE_RNG_CLKDIV      = 0;
     CRACENCORE_RNG_INITWAITVAL = CRACENCORE_RNG_INITWAITVAL_DEFAULT;
     CRACENCORE_RNG_SWOFFTMRVAL = 0;
+#endif
 
     /* Enable with 4 AES-128 conditioning blocks */
     CRACENCORE_RNG_CONTROL = CRACENCORE_RNG_CONTROL_ENABLE_Msk |
         (CRACENCORE_RNG_NB128BITBLOCKS_DEFAULT
          << CRACENCORE_RNG_CONTROL_NB128BITBLOCKS_Pos);
 
-    /* Wait until FSM leaves RESET/STARTUP */
-    do {
-        state = (CRACENCORE_RNG_STATUS & CRACENCORE_RNG_STATUS_STATE_Msk)
-                >> CRACENCORE_RNG_STATUS_STATE_Pos;
-    } while (state == CRACENCORE_RNG_STATUS_STATE_RESET ||
-             state == CRACENCORE_RNG_STATUS_STATE_STARTUP);
+    /* Wait until the FSM leaves RESET/STARTUP, without hanging on ERROR */
+    for (polls = 0; polls < CRACENCORE_RNG_TIMEOUT; polls++) {
+        state = trng_state();
+        if (state != CRACENCORE_RNG_STATUS_STATE_RESET &&
+            state != CRACENCORE_RNG_STATUS_STATE_STARTUP)
+            break;
+    }
+    if (polls < CRACENCORE_RNG_TIMEOUT &&
+        state != CRACENCORE_RNG_STATUS_STATE_ERROR)
+        trng_ready = 1;
 }
 
 void hal_trng_fini(void)
 {
+    trng_ready = 0;
     CRACENCORE_RNG_CONTROL = 0;
     CRACEN_ENABLE &= ~CRACEN_ENABLE_RNG_Msk;
 }
@@ -552,14 +643,31 @@ void hal_trng_fini(void)
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
     unsigned int i = 0;
+    uint32_t polls = 0;
+    int restarted = 0;
 
-    while (i < len) {
+    if (trng_ready == 0)
+        hal_trng_init();
+
+    while ((trng_ready != 0) && (i < len)) {
         uint32_t word;
         unsigned int j;
-        unsigned int avail;
+        unsigned int avail = CRACENCORE_RNG_FIFOLEVEL;
 
-        /* wait until at least one 32-bit word is available */
-        while ((avail = CRACENCORE_RNG_FIFOLEVEL) == 0) {}
+        if (avail == 0) {
+            if ((trng_state() == CRACENCORE_RNG_STATUS_STATE_ERROR) ||
+                (++polls >= CRACENCORE_RNG_TIMEOUT)) {
+                /* A failed health test needs a soft reset; retry once */
+                if (restarted != 0) {
+                    trng_ready = 0;
+                    break;
+                }
+                restarted = 1;
+                polls = 0;
+                hal_trng_init();
+            }
+            continue;
+        }
 
         /* read all available words */
         while (avail-- > 0 && i < len) {
@@ -571,7 +679,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
         }
     }
 
-    return 0;
+    return (i == len) ? 0 : -1;
 }
 #endif /* WOLFCRYPT_SECURE_MODE */
 
