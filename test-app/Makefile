@@ -600,10 +600,18 @@ else
     ifeq ($(WOLFHAL),1)
         APP_OBJS+=../hal/wolfhal.o
     else
-        APP_OBJS+=../hal/$(TARGET).o
+        # Keep the Agilex test HAL separate from the bootloader HAL. The
+        # test-app rule below is forced and uses different feature defines;
+        # sharing ../hal/agilex5.o can silently replace the bootloader object
+        # before a later incremental relink.
+        ifeq ($(TARGET),agilex5)
+            APP_OBJS+=hal_agilex5.o
+        else
+            APP_OBJS+=../hal/$(TARGET).o
+        endif
         # The test-app links the same HAL object, so HALs using the
         # generic NS16550 console need it here too.
-        ifneq (,$(filter $(TARGET),nxp_ls1028a nxp_t2080 nxp_t1024 nxp_t1040 nxp_p1021))
+        ifneq (,$(filter $(TARGET),agilex5 nxp_ls1028a nxp_t2080 nxp_t1024 nxp_t1040 nxp_p1021))
             ifeq ($(DEBUG_UART),1)
                 APP_OBJS+=../hal/uart/ns16550.o
             endif
@@ -1695,6 +1703,9 @@ delta-extra-data: image.bin
 
 ../hal/$(TARGET).o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c
+
+hal_agilex5.o: ../hal/agilex5.c FORCE
+	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/agilex5.c
 
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP

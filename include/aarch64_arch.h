@@ -19,23 +19,28 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Architectural AArch64 helpers that carry no SoC-specific state: the generic
- * timer and set/way data-cache maintenance. Several HALs each grew their own
- * copy of these; this is the shared home for them. Inline, so including it
- * changes nothing for a HAL that does not call them.
+/* Architectural AArch64 helpers that carry no SoC-specific state: exception
+ * level access, the generic timer and set/way data-cache maintenance. Several
+ * HALs each grew their own copy of these; this is the shared home for them.
+ * Inline, so including it changes nothing for a HAL that does not call them.
  *
- * Define TIMER_CLK_FREQ before including for the rate to assume when firmware
- * left CNTFRQ_EL0 unprogrammed. */
+ * Define TIMER_CLK_FREQ before including to expose the timer helpers and set
+ * the rate to assume when firmware left CNTFRQ_EL0 unprogrammed. */
 
 #ifndef _AARCH64_ARCH_H_
 #define _AARCH64_ARCH_H_
 
 #include <stdint.h>
 
-#ifndef TIMER_CLK_FREQ
-#error "TIMER_CLK_FREQ must be defined before including aarch64_arch.h"
-#endif
+static inline unsigned int current_el(void)
+{
+    unsigned long el;
 
+    __asm__ volatile("mrs %0, CurrentEL" : "=r"(el) : : "cc");
+    return (unsigned int)((el >> 2) & 0x3U);
+}
+
+#ifdef TIMER_CLK_FREQ
 /* CNTPCT_EL0, the architectural counter. */
 static inline uint64_t timer_get_count(void)
 {
@@ -68,6 +73,7 @@ static inline int timer_expired(uint64_t deadline)
 {
     return timer_get_count() > deadline;
 }
+#endif
 
 /* Data-cache maintenance by set/way over every level to the point of
  * coherency. clean != 0 -> clean+invalidate, else invalidate only. */

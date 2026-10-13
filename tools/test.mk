@@ -1243,6 +1243,9 @@ test-size-all:
 	# Re-measured 2026-09-29: NONE +24B (5204), ECC256/ECC384 +12B each, from
 	# the uart printf %u/is_signed change compiled into every build; RSA,
 	# RSAPSS, LMS and ML_DSA measured 8B smaller than their limits.
+	# Re-measured 2026-10-12 after the lib/wolfssl bump to f99453320: XMSS
+	# +20B from working-state zeroization in bb748a75a, ML_DSA +36B from the
+	# same wolfSSL update, and LMS +4B (still below its existing limit).
 	make test-size SIGN=NONE LIMIT=5204 NO_ARM_ASM=1
 	make keysclean
 	make test-size SIGN=ED25519 LIMIT=12356 NO_ARM_ASM=1
@@ -1287,8 +1290,8 @@ test-size-all:
 	make keysclean
 	make test-size SIGN=XMSS XMSS_PARAMS='XMSS-SHA2_10_256' \
 		IMAGE_SIGNATURE_SIZE=2500 IMAGE_HEADER_SIZE?=4096 \
-		LIMIT=8852 NO_ARM_ASM=1
+		LIMIT=8856 NO_ARM_ASM=1
 	make keysclean
 	make clean
-	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19694 \
+	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19726 \
 		IMAGE_SIGNATURE_SIZE=2420 IMAGE_HEADER_SIZE?=8192
