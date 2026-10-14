@@ -224,7 +224,7 @@ To support this mode of operation, the `keygen` tool supports the `--nolocalkeys
 
 ### Using KeyStore in secure NVM (PolarFire SoC sNVM)
 
-On Microchip PolarFire SoC the trust anchor can be served from the System Controller secure NVM (sNVM) instead of being compiled into the bootloader, using the `SNVM_KEYSTORE` backend. See [polarfire_snvm_puf.md](polarfire_snvm_puf.md).
+On Microchip PolarFire SoC the trust anchor can be served from the System Controller secure NVM (sNVM) instead of being compiled into the bootloader, using the `SNVM_KEYSTORE` backend. See [PolarFire.md](PolarFire.md#hardware-root-of-trust-puf-kek-snvm-keystore-wrapped-image-key).
 
 ## Build System Integration
 
