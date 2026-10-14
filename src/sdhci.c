@@ -1699,6 +1699,10 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             if (reg & buf_ready_flag) {
                 uint32_t i, xfer_sz = (sz > SDHCI_BLOCK_SIZE) ?
                     SDHCI_BLOCK_SIZE : sz;
+                /* BWR is W1C: ack before refill or lose the next assertion. */
+                if (dir == SDHCI_DIR_WRITE) {
+                    SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BWR);
+                }
                 for (i = 0; i < xfer_sz; i += 4) {
                     if (dir == SDHCI_DIR_READ) {
                 #ifdef SDHCI_PIO_WRITE_NONCACHED_ALIAS
@@ -1745,8 +1749,7 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                  * (the CM4 microSD path, which drives the same EMMC2 block).
                  * For multi-block READ: clear BRR by writing 1 to it (W1C),
                  * then the outer loop waits for BRR to be set again when the
-                 * next block's data is available.
-                 * For WRITE: BWR auto-clears when buffer full, don't touch. */
+                 * next block's data is available. */
                 if (sz > 0 && dir == SDHCI_DIR_READ) {
                     SDHCI_REG_SET(SDHCI_SRS12, SDHCI_SRS12_BRR);
                 }

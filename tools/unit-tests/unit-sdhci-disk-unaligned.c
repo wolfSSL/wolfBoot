@@ -77,8 +77,25 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
     if (offset == SDHCI_SRS08 && xfer.active && !xfer.is_read) {
         uint32_t pos = xfer.block_addr * SDHCI_BLOCK_SIZE + (xfer.word_index * 4);
 
+        /* Beginning a block while BWR is still asserted means the driver
+         * refilled without acknowledging it. Real hardware overruns and
+         * stalls there; fail the transfer so the test reports it. */
+        if ((xfer.word_index % xfer.word_count) == 0 &&
+            (mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] & SDHCI_SRS12_BWR)) {
+            mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_EINT;
+        }
         memcpy(&mock_disk[pos], &val, sizeof(val));
         xfer.word_index++;
+        /* BWR is raised once per block, not latched for the whole transfer:
+         * re-assert it when the block just taken has drained and another is
+         * still expected. */
+        if ((xfer.word_index % xfer.word_count) == 0) {
+            uint32_t blocks = mock_regs[SDHCI_SRS01 / sizeof(uint32_t)] >>
+                SDHCI_SRS01_BCCT_SHIFT;
+            if ((xfer.word_index / xfer.word_count) < blocks) {
+                mock_regs[SDHCI_SRS12 / sizeof(uint32_t)] |= SDHCI_SRS12_BWR;
+            }
+        }
         return;
     }
 
