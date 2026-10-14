@@ -317,7 +317,8 @@ jobs:
     with:
       arch: ppc
       config-file: ./config/examples/nxp-t1040.config
-      make-args: SEC_QORIQ=1 WOLFCRYPT_TEST=1 ELF=0
+      # SIGN=ECC384 defines NO_RSA; RSA2048 builds the RSA offload paths.
+      make-args: SEC_QORIQ=1 WOLFCRYPT_TEST=1 WOLFCRYPT_BENCHMARK=1 SIGN=RSA2048 ELF=0
 
   nxp_lpc54s0xx_test:
     uses: ./.github/workflows/test-build.yml
