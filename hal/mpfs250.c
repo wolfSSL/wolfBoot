@@ -1803,7 +1803,7 @@ int mpfs_nonce(uint8_t *nonce)
  * there keys off build-supplied macros only, not this fallback. */
 #ifndef LINUX_BOOTARGS
 #ifndef LINUX_BOOTARGS_ROOT
-/* wolfBoot SD layout (tools/scripts/program-sdcard.sh): p1=boot FIT,
+/* wolfBoot SD layout (docs/PolarFire.md): p1=boot FIT,
  * p2=update, p3=rootfs. */
 #define LINUX_BOOTARGS_ROOT "/dev/mmcblk0p3"
 #endif
