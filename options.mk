@@ -1029,6 +1029,10 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
   CFLAGS+= -D"NVM_FLASH_WRITEONCE"
 endif
 
+ifeq ($(CUSTOM_PARTITION_TRAILER),1)
+  CFLAGS+= -D"CUSTOM_PARTITION_TRAILER"
+endif
+
 ifeq ($(DISABLE_BACKUP),1)
   $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"

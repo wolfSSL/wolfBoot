@@ -19,6 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+#include <stddef.h>
 #include <stdint.h>
 
 #include "image.h"
@@ -260,6 +261,85 @@ int RAMFUNCTION hal_flash_erase(uint32_t _address, int len)
         flash_erase_sector(i);
     return 0;
 }
+
+#ifdef CUSTOM_PARTITION_TRAILER
+/* Partition trailers in two dedicated 16KB sectors (1 and 2, a gap left by
+ * hal/stm32f4-trailer.ld), so the partitions are entirely available for the
+ * image. Same layout as the default trailer at the end of each sector, and
+ * bits are cleared in place. Setting bits back (a reset to NEW) erases the
+ * sector and rewrites the trailer. */
+#ifndef STM32F4_TRAILER_BOOT_ADDRESS
+#define STM32F4_TRAILER_BOOT_ADDRESS   0x08004000U
+#endif
+#ifndef STM32F4_TRAILER_UPDATE_ADDRESS
+#define STM32F4_TRAILER_UPDATE_ADDRESS 0x08008000U
+#endif
+#define STM32F4_TRAILER_SECTOR_SIZE    0x4000U
+/* magic + state + sector flags, rewritten on erase */
+#define STM32F4_TRAILER_SIZE           64U
+
+static uintptr_t RAMFUNCTION trailer_end(uint8_t part)
+{
+    if (part == PART_BOOT)
+        return STM32F4_TRAILER_BOOT_ADDRESS + STM32F4_TRAILER_SECTOR_SIZE;
+    if (part == PART_UPDATE)
+        return STM32F4_TRAILER_UPDATE_ADDRESS + STM32F4_TRAILER_SECTOR_SIZE;
+    return 0;
+}
+
+/* Store len bytes ending 'back' bytes before the end of the trailer */
+static void RAMFUNCTION trailer_store(uint8_t part, uint32_t back,
+    const uint8_t *val, uint32_t len)
+{
+    uintptr_t end = trailer_end(part);
+    uint8_t *dst;
+    uint8_t buf[STM32F4_TRAILER_SIZE];
+    uint32_t i;
+    int rewrite = 0;
+
+    if (end == 0 || back < len || back > STM32F4_TRAILER_SIZE)
+        return;
+    dst = (uint8_t *)(end - back);
+    for (i = 0; i < len; i++) {
+        if ((val[i] & ~dst[i]) != 0)
+            rewrite = 1;
+    }
+    if (!rewrite) {
+        hal_flash_write((uint32_t)(uintptr_t)dst, val, (int)len);
+    } else {
+        uint8_t *src = (uint8_t *)(end - STM32F4_TRAILER_SIZE);
+        for (i = 0; i < STM32F4_TRAILER_SIZE; i++)
+            buf[i] = src[i];
+        for (i = 0; i < len; i++)
+            buf[STM32F4_TRAILER_SIZE - back + i] = val[i];
+        hal_flash_erase((uint32_t)(end - STM32F4_TRAILER_SECTOR_SIZE),
+            STM32F4_TRAILER_SECTOR_SIZE);
+        hal_flash_write((uint32_t)(uintptr_t)src, buf, STM32F4_TRAILER_SIZE);
+    }
+    hal_cache_invalidate();
+}
+
+uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
+{
+    uintptr_t end = trailer_end(part);
+
+    if (end == 0 || (sizeof(uint32_t) + at) > STM32F4_TRAILER_SIZE)
+        return NULL;
+    return (uint8_t *)(end - (sizeof(uint32_t) + at));
+}
+
+void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
+{
+    trailer_store(part, sizeof(uint32_t) + at, &val, 1);
+}
+
+void RAMFUNCTION set_partition_magic(uint8_t part)
+{
+    uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
+
+    trailer_store(part, sizeof(uint32_t), (uint8_t *)&magic, sizeof(magic));
+}
+#endif /* CUSTOM_PARTITION_TRAILER */
 
 static void clock_pll_off(void)
 {
