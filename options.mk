@@ -1257,6 +1257,10 @@ ifneq ($(FLASH_WRITE_UNIT),)
   CFLAGS+= -D"WOLFBOOT_FLASH_WRITE_UNIT=$(FLASH_WRITE_UNIT)"
 endif
 
+ifeq ($(CUSTOM_PARTITION_TRAILER),1)
+  CFLAGS+= -D"CUSTOM_PARTITION_TRAILER"
+endif
+
 ifeq ($(DISABLE_BACKUP),1)
   $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"

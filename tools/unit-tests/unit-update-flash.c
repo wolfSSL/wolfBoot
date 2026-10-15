@@ -57,6 +57,34 @@
 
 const char *argv0;
 
+#ifdef CUSTOM_PARTITION_TRAILER
+/* Trailers kept outside the partitions, laid out like the standard ones:
+ * magic in the last 4 bytes, then state and sector flags going down. */
+#define MOCK_TRAILER_SIZE 64
+static uint8_t mock_trailer[2][MOCK_TRAILER_SIZE];
+
+uint8_t* get_trailer_at(uint8_t part, uint32_t at)
+{
+    uint8_t *t = mock_trailer[part == PART_BOOT ? 0 : 1];
+    if (at == 0)
+        return t + MOCK_TRAILER_SIZE - 4;
+    ck_assert_uint_lt(at, MOCK_TRAILER_SIZE - 4);
+    return t + MOCK_TRAILER_SIZE - 4 - at;
+}
+
+void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
+{
+    ck_assert_msg(!locked || !ext_locked, "Trailer written with FLASH locked");
+    *get_trailer_at(part, at) = val;
+}
+
+void set_partition_magic(uint8_t part)
+{
+    uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
+    memcpy(get_trailer_at(part, 0), &magic, sizeof(magic));
+}
+#endif
+
 static void reset_mock_stats(void);
 static void prepare_flash(void);
 static void cleanup_flash(void);
@@ -326,6 +354,9 @@ static void prepare_flash(void)
     hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE);
     hal_flash_erase(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE);
     hal_flash_lock();
+#ifdef CUSTOM_PARTITION_TRAILER
+    memset(mock_trailer, 0xFF, sizeof(mock_trailer));
+#endif
 }
 
 static void cleanup_flash(void)
@@ -333,6 +364,17 @@ static void cleanup_flash(void)
     munmap((void *)MOCK_ADDRESS_UPDATE, WOLFBOOT_PARTITION_SIZE);
     munmap((void *)MOCK_ADDRESS_BOOT, WOLFBOOT_PARTITION_SIZE);
     munmap((void *)MOCK_ADDRESS_SWAP, WOLFBOOT_SECTOR_SIZE);
+}
+
+/* Write the boot trailer: state byte followed by the 4-byte magic */
+static void write_boot_trailer(const uint8_t *trailer)
+{
+#ifdef CUSTOM_PARTITION_TRAILER
+    set_partition_magic(PART_BOOT);
+    set_trailer_at(PART_BOOT, 1, trailer[0]);
+#else
+    hal_flash_write(PART_BOOT_ENDFLAGS - 5, trailer, 5);
+#endif
 }
 
 
@@ -1647,6 +1689,9 @@ START_TEST (test_update_max_size_accepted)
 }
 END_TEST
 
+/* With a custom trailer the image can fill the partition: one more byte
+ * would not fit in it (see test_update_toolarge). */
+#ifndef CUSTOM_PARTITION_TRAILER
 START_TEST (test_update_max_size_plus_one_rejected)
 {
     uint32_t boundary_reject = (uint32_t)(MAX_UPDATE_SIZE + 1U);
@@ -1663,6 +1708,7 @@ START_TEST (test_update_max_size_plus_one_rejected)
     cleanup_flash();
 }
 END_TEST
+#endif
 
 START_TEST (test_zero_size_update_rejected)
 {
@@ -1710,7 +1756,7 @@ START_TEST (test_emergency_rollback) {
     hal_flash_unlock();
     /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
      * the key/nonce trailer sits between the state trailer and the end. */
-    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
+    write_boot_trailer(testing_flags);
     hal_flash_lock();
 
     wolfBoot_start();
@@ -1733,7 +1779,7 @@ START_TEST (test_emergency_rollback_equal_versions) {
     hal_flash_unlock();
     /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
      * the key/nonce trailer sits between the state trailer and the end. */
-    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
+    write_boot_trailer(testing_flags);
     hal_flash_lock();
 
     wolfBoot_start();
@@ -1756,7 +1802,7 @@ START_TEST (test_emergency_rollback_failure_due_to_bad_update) {
     hal_flash_unlock();
     /* PART_BOOT_ENDFLAGS, not the partition end: in EXT_ENCRYPTED builds
      * the key/nonce trailer sits between the state trailer and the end. */
-    hal_flash_write(PART_BOOT_ENDFLAGS - 5, testing_flags, 5);
+    write_boot_trailer(testing_flags);
     hal_flash_lock();
 
     /* Corrupt the update */
@@ -1798,7 +1844,8 @@ START_TEST (test_empty_boot_but_update_sha_corrupted_denied) {
     cleanup_flash();
 }
 
-#ifndef DISABLE_BACKUP
+/* The final erase is only resumed for a standard trailer */
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
 START_TEST (test_swap_resume_noop)
 {
     reset_mock_stats();
@@ -2418,7 +2465,9 @@ Suite *wolfboot_suite(void)
     tcase_add_test(update_toolarge, test_update_toolarge);
     tcase_add_test(update_toolarge, test_update_max_size_minus_one_accepted);
     tcase_add_test(update_toolarge, test_update_max_size_accepted);
+#ifndef CUSTOM_PARTITION_TRAILER
     tcase_add_test(update_toolarge, test_update_max_size_plus_one_rejected);
+#endif
     tcase_add_test(zero_size_update, test_zero_size_update_rejected);
     tcase_add_test(invalid_sha, test_invalid_sha);
     tcase_add_test(emergency_rollback, test_emergency_rollback);
@@ -2431,7 +2480,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
     tcase_add_test(empty_boot_but_update_sha_corrupted_denied, test_empty_boot_but_update_sha_corrupted_denied);
-#ifndef DISABLE_BACKUP
+#if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     tcase_add_test(swap_resume, test_swap_resume_noop);
 #endif
     tcase_add_test(diffbase_version, test_diffbase_version_reads);
