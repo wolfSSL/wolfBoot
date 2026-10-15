@@ -46,6 +46,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Declared locally rather than via hal.h: the inflater is also built on its
+ * own by the host tests, where there is no HAL. Matches include/hal.h. */
+#ifndef wolfBoot_watchdog_feed
+#ifdef WATCHDOG
+void wolfBoot_watchdog_feed(void);
+#else
+#define wolfBoot_watchdog_feed() do {} while (0)
+#endif
+#endif
+
 /* RFC 1951/1952 constants internal to this module. */
 
 /* RFC 1952 CRC32 (IEEE 802.3 reflected) */
@@ -923,6 +933,7 @@ static int gz_inflate(gz_state_t *s)
 #endif
 
     do {
+        wolfBoot_watchdog_feed();
         bfinal = gz_get_bits(s, 1);
         btype = gz_get_bits(s, 2);
         if (GZ_OVERRUN(s)) {

@@ -593,6 +593,80 @@
 
 
 /* ============================================================================
+ * System Watchdog Timer (SWDT, also called WWDT)
+ * ============================================================================
+ * Register set per AM011 Table 141. LPD is wired for the RPU, FPD for the
+ * APU; the design's PDI must release the block's reset and clock.
+ */
+#define VERSAL_WWDT_LPD_BASE    0xFF120000UL
+#define VERSAL_WWDT_FPD_BASE    0xFD4D0000UL
+
+#ifndef WATCHDOG_BASE
+#define WATCHDOG_BASE           VERSAL_WWDT_FPD_BASE
+#endif
+#ifndef WATCHDOG_TIMEOUT_MS
+#define WATCHDOG_TIMEOUT_MS     30000U
+#endif
+/* FPD_LSBUS or LPD_LSBUS (AM011 Table 136). The default is what the VMK180
+ * reference design clocks them at, not the 100 MHz its DTB advertises; a
+ * design with a different lsbus divider must say so, since a value below the
+ * real rate shortens the window in proportion. */
+#ifndef WATCHDOG_CLK_HZ
+#define WATCHDOG_CLK_HZ         150000000UL
+#endif
+
+/* One configured period plus slack, as the bound on a wait for the open
+ * window. 64-bit so a large timeout cannot wrap; the caller clamps. */
+#define WWDT_OPEN_WAIT_US \
+    ((((uint64_t)WATCHDOG_TIMEOUT_MS) * 1000ULL) + 1000ULL)
+
+/* Window timer registers, then the generic timer's separate page */
+#define WWDT_MWR_OFFSET         0x0000
+#define WWDT_ESR_OFFSET         0x0004
+#define WWDT_FCR_OFFSET         0x0008
+#define WWDT_FWR_OFFSET         0x000C
+#define WWDT_SWR_OFFSET         0x0010
+#define WWDT_GWRR_OFFSET        0x1000
+#define WWDT_GWCSR_OFFSET       0x2000
+#define WWDT_GWOR_OFFSET        0x2008
+
+#define WWDT_REG(offset) \
+    (*((volatile uint32_t*)(WATCHDOG_BASE + (offset))))
+#define WWDT_MWR                WWDT_REG(WWDT_MWR_OFFSET)
+#define WWDT_ESR                WWDT_REG(WWDT_ESR_OFFSET)
+#define WWDT_FCR                WWDT_REG(WWDT_FCR_OFFSET)
+#define WWDT_FWR                WWDT_REG(WWDT_FWR_OFFSET)
+#define WWDT_SWR                WWDT_REG(WWDT_SWR_OFFSET)
+#define WWDT_GWRR               WWDT_REG(WWDT_GWRR_OFFSET)
+#define WWDT_GWCSR              WWDT_REG(WWDT_GWCSR_OFFSET)
+#define WWDT_GWOR               WWDT_REG(WWDT_GWOR_OFFSET)
+
+/* MWC opens the window register space for writing; AEN makes the watchdog
+ * undisableable until the block is reset. */
+#define WWDT_MWR_MWC            (1UL << 0)
+#define WWDT_MWR_AEN            (1UL << 1)
+
+/* WSW reads 1 while the open (second) window is current and writing it back
+ * restarts the timer. WINT and WRP are W1C; FCV and LBE record bad events. */
+#define WWDT_ESR_WEN            (1UL << 0)
+#define WWDT_ESR_WSW            (1UL << 8)
+#define WWDT_ESR_WINT           (1UL << 16)
+#define WWDT_ESR_WRP            (1UL << 17)
+#define WWDT_ESR_FCV_SHIFT      20
+#define WWDT_ESR_FCV_MASK       (7UL << WWDT_ESR_FCV_SHIFT)
+#define WWDT_ESR_LBE_SHIFT      24
+#define WWDT_ESR_LBE_MASK       (7UL << WWDT_ESR_LBE_SHIFT)
+
+/* WDP guards WEN against being cleared; WM selects Q&A over basic mode */
+#define WWDT_FCR_WDP            (1UL << 0)
+#define WWDT_FCR_WM             (1UL << 1)
+
+#define WWDT_GWRR_REFRESH       (1UL << 0)
+#define WWDT_GWCSR_GWEN         (1UL << 0)
+#define WWDT_COUNT_MAX          0xFFFFFFFFUL
+
+
+/* ============================================================================
  * Helper Functions (C code only)
  * ============================================================================
  */

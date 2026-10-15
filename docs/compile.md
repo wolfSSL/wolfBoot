@@ -538,6 +538,10 @@ iterating over a range of flash sectors and erasing them one at a time. Setting 
 single HAL flash erase invocation with a larger erase length versus the iterative approach. On targets where multi-sector erases are more performant, this option can be used to dramatically speed up the
 image swap procedure.
 
+### Hardware watchdog
+
+`WATCHDOG=1` tells the HAL to manage a hardware watchdog across wolfBoot's own boot, with `WATCHDOG_TIMEOUT_MS` as the timeout it programs. wolfBoot calls `wolfBoot_watchdog_feed()` from its hash, decompression, flash copy/erase and disk read loops; the weak default in `src/libwolfboot.c` is a no-op that a HAL overrides, and without `WATCHDOG` the calls compile out. A signature verify is one blocking call with no loop to refresh from, so the timeout has to exceed it. Which watchdog a target drives, and what it does with it at the handoff, is per-HAL: see `hal/versal.c`, `hal/mpfs250.c`, `hal/s32k1xx.c`, `hal/renesas-rx.c` and the per-target options in [Targets.md](Targets.md).
+
 ### Building with the ARM Compiler for Embedded (armclang)
 
 wolfBoot can be built with the [ARM Compiler for Embedded](https://developer.arm.com/Tools%20and%20Software/Arm%20Compiler%20for%20Embedded)

@@ -1706,6 +1706,9 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
             SDHCI_SRS12_BRR : SDHCI_SRS12_BWR;
 
         while (sz > 0) {
+            /* Once per block, not inside the spin below: the controller holds
+             * a block until it is read, but a mid-block stall is a FIFO risk */
+            sdhci_platform_wdt_pet();
             /* Wait for buffer ready (or error) */
             while (((reg = SDHCI_REG(SDHCI_SRS12)) &
                 (buf_ready_flag | SDHCI_SRS12_EINT)) == 0);
@@ -2186,6 +2189,7 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
         #else
             for (i = 0; i < blocks && status == 0; i++) {
                 uint8_t *block_dst = buf + i * SDHCI_BLOCK_SIZE;
+                sdhci_platform_wdt_pet();
                 status = sdhci_read(MMC_CMD17_READ_SINGLE,
                     block_addr + i,
                     (uint32_t*)block_dst,
