@@ -995,6 +995,40 @@ ifeq ($(BOOT_BENCHMARK),1)
   CFLAGS+=-D"BOOT_BENCHMARK"
 endif
 
+# WATCHDOG=1 lets the HAL manage a hardware watchdog: wolfBoot services it
+# from its hash, decompression, flash and disk loops via
+# wolfBoot_watchdog_feed() and settles it in hal_prepare_boot(). The older
+# targets enable it with -DWATCHDOG in CFLAGS_EXTRA, which keeps working and
+# counts here too. The sub-options reach the compiler only when the watchdog
+# is on, and only the HALs that know them read them.
+ifeq ($(WATCHDOG),1)
+  WATCHDOG_ON:=1
+else ifneq ($(filter -DWATCHDOG -DWATCHDOG=1,$(subst ",,$(CFLAGS_EXTRA))),)
+  WATCHDOG_ON:=1
+else
+  WATCHDOG_ON:=0
+endif
+
+ifeq ($(WATCHDOG_ON),1)
+  ifeq ($(WATCHDOG),1)
+    CFLAGS+=-D"WATCHDOG"
+  endif
+  ifneq ($(WATCHDOG_TIMEOUT_MS),)
+    CFLAGS+=-DWATCHDOG_TIMEOUT_MS=$(WATCHDOG_TIMEOUT_MS)
+  endif
+  ifneq ($(WATCHDOG_BASE),)
+    CFLAGS+=-DWATCHDOG_BASE=$(WATCHDOG_BASE)
+  endif
+  ifneq ($(WATCHDOG_CLK_HZ),)
+    CFLAGS+=-DWATCHDOG_CLK_HZ=$(WATCHDOG_CLK_HZ)
+  endif
+  ifeq ($(WATCHDOG_HANDOFF),1)
+    CFLAGS+=-D"WATCHDOG_HANDOFF"
+  endif
+else ifeq ($(WATCHDOG_HANDOFF),1)
+  $(error WATCHDOG_HANDOFF requires WATCHDOG=1)
+endif
+
 ifeq ($(ALLOW_DOWNGRADE),1)
   $(warning ALLOW_DOWNGRADE=1 disables anti-rollback enforcement; signed older firmware images can replace newer ones)
   CFLAGS+= -D"ALLOW_DOWNGRADE"

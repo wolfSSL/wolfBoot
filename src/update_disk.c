@@ -998,6 +998,7 @@ void RAMFUNCTION wolfBoot_start(void)
             uint32_t chunk = os_image.fw_size - load_off;
             if (chunk > DISK_BLOCK_SIZE)
                 chunk = DISK_BLOCK_SIZE;
+            wolfBoot_watchdog_feed();
             ret = slot_read(slot, IMAGE_HEADER_SIZE + load_off, chunk,
                 ((uint8_t *)load_address) + load_off);
             if (ret <= 0)

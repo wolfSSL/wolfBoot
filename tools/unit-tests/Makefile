@@ -136,6 +136,7 @@ TESTS+=unit-imx8qm-flexspi-write
 TESTS+=unit-imx95-ele
 TESTS+=unit-imx95-disk
 TESTS+=unit-versal-ext-write
+TESTS+=unit-versal-wdt
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
@@ -1529,6 +1530,24 @@ versal_ext_write_extract.h: ../../hal/versal.c
 unit-versal-ext-write: unit-versal-ext-write.c versal_qspidev_extract.h versal_ext_write_extract.h versal_host.h
 	gcc -o $@ unit-versal-ext-write.c -DEXT_FLASH -DARCH_AARCH64 -DARCH_64BIT $(CFLAGS) $(LDFLAGS)
 
+# unit-versal-wdt drives the real WWDT routines from hal/versal.c against an
+# emulated register file, with the register defines coming from the generated
+# host copy of hal/versal.h. The functions are extracted verbatim rather than
+# host-copying the whole HAL: the test models the hardware's closed/open
+# windows and bad events, which it does from its own dsb().
+versal_wdt_extract.h: ../../hal/versal.c
+	sed -n '/^static int versal_wwdt_wait_open(/,/^}/p' $< > $@
+	sed -n '/^static int versal_wwdt_stop(/,/^}/p' $< >> $@
+	sed -n '/^static int versal_wwdt_arm(/,/^}/p' $< >> $@
+	sed -n '/^void RAMFUNCTION wolfBoot_watchdog_feed(/,/^}/p' $< >> $@
+	test -s $@
+	@for f in versal_wwdt_wait_open versal_wwdt_arm versal_wwdt_stop \
+		wolfBoot_watchdog_feed; do grep -q "$$f(" $@ || \
+		{ echo "$@: $$f not extracted"; false; }; done
+
+unit-versal-wdt: unit-versal-wdt.c versal_wdt_extract.h versal_host.h
+	gcc -o $@ unit-versal-wdt.c -DTARGET_versal $(CFLAGS) $(LDFLAGS)
+
 # unit-t10xx-qe-firmware runs the real qe_check_firmware() from
 # hal/nxp_t10xx.c (the per-microcode code_offset was never
 # bounded against the declared image, so a self-consistent blob could
@@ -2175,6 +2194,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	t10xx_flash_status_extract.h t10xx_qe_firmware_extract.h \
 	t2080_fman_extract.h \
 	ti_hercules_write_extract.h versal_ext_write_extract.h versal_host.c \
+	versal_wdt_extract.h \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
 	zynq_write_extract.h \
 	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \

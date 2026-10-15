@@ -271,6 +271,146 @@ uint64_t hal_get_timer_us(void)
 
 
 /* ============================================================================
+ * System Watchdog Timer (WWDT)
+ * ============================================================================
+ * Only touched under WATCHDOG=1: reading a block a PDI left in reset can
+ * abort at EL2. A restart or a disable is honored only in the open (second)
+ * window, so both wait for it; see docs/Targets.md.
+ */
+#ifdef WATCHDOG
+
+static int versal_wwdt_wait_open(void)
+{
+    uint64_t deadline;
+
+    deadline = timer_deadline_us((uint32_t)(WWDT_OPEN_WAIT_US > 0xFFFFFFFFULL ?
+        0xFFFFFFFFULL : WWDT_OPEN_WAIT_US));
+    while ((WWDT_ESR & WWDT_ESR_WSW) == 0) {
+        if (timer_expired(deadline)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int versal_wwdt_stop(void)
+{
+    uint32_t esr;
+
+    if (WWDT_GWCSR & WWDT_GWCSR_GWEN) {
+        WWDT_GWCSR = WWDT_GWCSR & ~WWDT_GWCSR_GWEN;
+        dsb();
+        return ((WWDT_GWCSR & WWDT_GWCSR_GWEN) == 0) ? 0 : -1;
+    }
+    if ((WWDT_ESR & WWDT_ESR_WEN) == 0) {
+        return 0;
+    }
+    if (WWDT_MWR & WWDT_MWR_AEN) {
+        wolfBoot_printf("WDT: always-enabled, cannot be disabled\n");
+        return -1;
+    }
+    /* WDP guards WEN, so it has to come down first */
+    if (WWDT_FCR & WWDT_FCR_WDP) {
+        WWDT_MWR = WWDT_MWR_MWC;
+        dsb();
+        WWDT_FCR = WWDT_FCR & ~WWDT_FCR_WDP;
+        dsb();
+    }
+    if (versal_wwdt_wait_open() != 0) {
+        wolfBoot_printf("WDT: open window never arrived, still enabled\n");
+        return -1;
+    }
+
+    WWDT_MWR = WWDT_MWR_MWC;
+    dsb();
+    esr = WWDT_ESR;
+    esr &= ~(WWDT_ESR_WEN | WWDT_ESR_WSW);
+    WWDT_ESR = esr;
+    dsb();
+
+    if (WWDT_ESR & WWDT_ESR_WEN) {
+        wolfBoot_printf("WDT: disable rejected\n");
+        return -1;
+    }
+    return 0;
+}
+
+static int versal_wwdt_arm(uint32_t timeout_ms)
+{
+    uint64_t ticks;
+    uint32_t count;
+
+    ticks = (uint64_t)timeout_ms * (WATCHDOG_CLK_HZ / 1000ULL);
+    count = (ticks > WWDT_COUNT_MAX) ? (uint32_t)WWDT_COUNT_MAX
+                                     : (uint32_t)ticks;
+
+    /* Q&A mode expects a token handshake wolfBoot does not take part in */
+    if (WWDT_FCR & WWDT_FCR_WM) {
+        wolfBoot_printf("WDT: Q&A mode in use, leaving it alone\n");
+        return -1;
+    }
+    /* Generic mode stays generic: widen and refresh it where it is */
+    if (WWDT_GWCSR & WWDT_GWCSR_GWEN) {
+        WWDT_GWOR = count;
+        WWDT_GWRR = WWDT_GWRR_REFRESH;
+        dsb();
+        return 0;
+    }
+    /* Windows are configured while disabled, so bring a running one down */
+    if (versal_wwdt_stop() != 0) {
+        return -1;
+    }
+
+    WWDT_MWR = WWDT_MWR_MWC;
+    dsb();
+    WWDT_FWR = 0;
+    WWDT_SWR = count;
+    WWDT_FCR = 0;
+    dsb();
+    /* Enabling can auto-clear MWC, so reopen the space first */
+    WWDT_MWR = WWDT_MWR_MWC;
+    dsb();
+    WWDT_ESR = WWDT_ESR | WWDT_ESR_WEN;
+    dsb();
+
+    if ((WWDT_ESR & WWDT_ESR_WEN) == 0) {
+        wolfBoot_printf("WDT: enable did not take, is the block in reset?\n");
+        return -1;
+    }
+    return 0;
+}
+
+/* Overrides the weak no-op in src/libwolfboot.c */
+void RAMFUNCTION wolfBoot_watchdog_feed(void)
+{
+    if (WWDT_GWCSR & WWDT_GWCSR_GWEN) {
+        WWDT_GWRR = WWDT_GWRR_REFRESH;
+        dsb();
+        return;
+    }
+    /* A restart in the closed window is a bad event, and Q&A mode expects a
+     * token handshake instead of a WSW write */
+    if ((WWDT_ESR & (WWDT_ESR_WEN | WWDT_ESR_WSW))
+            != (WWDT_ESR_WEN | WWDT_ESR_WSW)
+            || (WWDT_FCR & WWDT_FCR_WM)) {
+        return;
+    }
+    WWDT_MWR = WWDT_MWR_MWC;
+    dsb();
+    WWDT_ESR = WWDT_ESR | WWDT_ESR_WSW;
+    dsb();
+}
+
+/* Overrides the weak no-op in src/sdhci.c */
+void sdhci_platform_wdt_pet(void)
+{
+    wolfBoot_watchdog_feed();
+}
+
+#endif /* WATCHDOG */
+
+
+/* ============================================================================
  * QSPI Flash Driver (GQSPI)
  * ============================================================================
  * Bare-metal QSPI driver for Versal VMK180.
@@ -486,8 +626,9 @@ static int qspi_dma_wait(void)
 {
     uint32_t timeout = GQSPIDMA_TIMEOUT_TRIES;
 
-    while (!(GQSPIDMA_ISR & GQSPIDMA_ISR_DONE) && --timeout)
-        ;
+    while (!(GQSPIDMA_ISR & GQSPIDMA_ISR_DONE) && --timeout) {
+        wolfBoot_watchdog_feed();
+    }
 
     if (timeout == 0) {
         QSPI_DEBUG_PRINTF("QSPI: DMA timeout\n");
@@ -1185,6 +1326,16 @@ void hal_init(void)
 #endif
 #endif
 
+#ifdef WATCHDOG
+    /* ESR[LBE] names the last bad event, which is how a mis-fed or
+     * already-expired watchdog announces itself */
+    wolfBoot_printf("WDT: base 0x%x ESR 0x%x FCR 0x%x\n",
+        (uint32_t)WATCHDOG_BASE, (uint32_t)WWDT_ESR, (uint32_t)WWDT_FCR);
+    if (versal_wwdt_arm(WATCHDOG_TIMEOUT_MS) == 0) {
+        wolfBoot_printf("WDT: armed, %d ms\n", (int)WATCHDOG_TIMEOUT_MS);
+    }
+#endif
+
 #ifdef EXT_FLASH
     qspi_init();
 #endif
@@ -1195,6 +1346,19 @@ void hal_prepare_boot(void)
 #if defined(EXT_FLASH) && GQPI_USE_4BYTE_ADDR == 1
     /* Exit 4-byte address mode before handing off to application */
     qspi_exit_4byte_addr(&qspiDev);
+#endif
+
+#ifdef WATCHDOG
+#ifdef WATCHDOG_HANDOFF
+    /* Full window ahead of the OS, whose driver takes over from here. The
+     * arm can have failed, so report the state rather than assert it. */
+    wolfBoot_watchdog_feed();
+    wolfBoot_printf("WDT: handed over, ESR 0x%x\n", (uint32_t)WWDT_ESR);
+#else
+    if (versal_wwdt_stop() == 0) {
+        wolfBoot_printf("WDT: stopped\n");
+    }
+#endif
 #endif
 
     /* Flush any pending UART output (with timeout) */
