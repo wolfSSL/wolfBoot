@@ -50,6 +50,10 @@
 #include "hal/imx8qm.h"
 #endif
 
+#ifdef TARGET_imx8mm
+#include "hal/imx8mm.h"
+#endif
+
 /* GICv2 Register Offsets */
 #ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
@@ -1346,7 +1350,8 @@ _cm4_entry:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Always install a valid EL2 vector base: the reset VBAR_EL2 is UNKNOWN, so
      * without this a fault in the parsing-heavy boot code branches to an
      * undefined address. The table halts cleanly (and, under DEBUG+DEBUG_UART,
@@ -1371,7 +1376,8 @@ _cm4_entry:
    b    7b
 
 8:
-#if defined(TARGET_tegra234) || defined(TARGET_imx8qm)
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Reserved in-DRAM stack from the linker script: the generic path sets sp
      * to the image base, which here is the BL33 load address. */
     ldr x1, =END_STACK
@@ -1387,7 +1393,8 @@ _cm4_entry:
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
 /* Minimal always-on EL2 exception vectors. On any exception (data/instruction
  * abort, etc.) halt cleanly rather than branch to the UNKNOWN reset VBAR_EL2.
  * Under DEBUG+DEBUG_UART the handler additionally dumps ESR/ELR/FAR over UART.
@@ -1446,7 +1453,7 @@ simple_el2_fault_stack:
 simple_el2_fault_stack_top:
 .section ".boot"
 #endif
-#endif /* TARGET_cm4 || TARGET_imx8qm */
+#endif /* TARGET_cm4 || TARGET_imx8qm || (TARGET_imx8mm && IMX8MM_BL33) */
 #if defined(TARGET_cm4)
 /* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
  * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to

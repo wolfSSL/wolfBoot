@@ -446,6 +446,11 @@ ifeq ($(TARGET),imx8qm)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
 
+# i.MX 8M Mini runs from DRAM; tools/scripts/imx8mm builds the boot images.
+ifeq ($(TARGET),imx8mm)
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 # i.MX95 M7 runs from ITCM (loaded by the Linux remoteproc driver); the payload
 # lives in DDR at 0x80100000, so there is no contiguous flash image to assemble.
 ifeq ($(TARGET),imx95_m7)
