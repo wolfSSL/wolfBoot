@@ -1,0 +1,8 @@
+// STM32F4, with the flash also mapped at 0x0 as when booting from
+// flash: hal/stm32f4.c programs the flash through this alias.
+using "platforms/cpus/stm32f4.repl"
+
+flash: @ {
+        sysbus 0x08000000;
+        sysbus 0x0
+    }
