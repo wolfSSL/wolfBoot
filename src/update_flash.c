@@ -36,6 +36,32 @@
 
 #include "delta.h"
 #include "printf.h"
+
+/* Sectors reserved at the end of each partition for the trailer (state and
+ * sector flags). A custom trailer lives outside the partitions. */
+#if defined(CUSTOM_PARTITION_TRAILER)
+    #define TRAILER_SECTORS 0
+#elif defined(NVM_FLASH_WRITEONCE)
+    #define TRAILER_SECTORS 2
+#else
+    #define TRAILER_SECTORS 1
+#endif
+
+/* The trailer sector(s) are erased independently from the image: they must
+ * not hold any of it, and the final swap needs one more staging sector. */
+#if !defined(CUSTOM_PARTITION_TRAILER) && \
+    (WOLFBOOT_PARTITION_SIZE < ((TRAILER_SECTORS + 1) * WOLFBOOT_SECTOR_SIZE))
+    #error "WOLFBOOT_PARTITION_SIZE too small: need at least 2 sectors (3 with NVM_FLASH_WRITEONCE), or CUSTOM_PARTITION_TRAILER"
+#endif
+
+/* The swap progress flag of the sector holding the trailer would be erased
+ * with it, so that sector is not tracked. A custom trailer tracks them all. */
+#ifdef CUSTOM_PARTITION_TRAILER
+    #define SECTOR_HAS_FLAG(s) (1)
+#else
+    #define SECTOR_HAS_FLAG(s) \
+        ((((s) + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
+#endif
 static void wolfBoot_zeroize(void *ptr, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)ptr;
@@ -927,13 +953,8 @@ out:
 #endif
 
 /* Max firmware size: partition must hold header + fw + trailer sector(s) */
-#ifndef NVM_FLASH_WRITEONCE
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
-        IMAGE_HEADER_SIZE - WOLFBOOT_SECTOR_SIZE))
-#else
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
-        IMAGE_HEADER_SIZE - (2 * WOLFBOOT_SECTOR_SIZE)))
-#endif
+#define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
+    IMAGE_HEADER_SIZE - (TRAILER_SECTORS * WOLFBOOT_SECTOR_SIZE)))
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -999,9 +1020,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     int fallback_image = 0;
 #ifndef DISABLE_BACKUP
     int rollback_needed = 0;
-#ifdef CUSTOM_PARTITION_TRAILER
-    (void)rollback_needed;
-#endif
     int bootStateRet = -1;
     uint8_t bootState = 0;
 #endif
@@ -1215,7 +1233,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                copy_ret = wolfBoot_copy_sector(&update, &swap, sector);
                if (copy_ret < 0)
                    break;
-               if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+               if (SECTOR_HAS_FLAG(sector))
                    wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
             case SECT_FLAG_SWAPPING:
@@ -1241,7 +1259,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 }
                 if (copy_ret < 0)
                     break;
-                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                if (SECTOR_HAS_FLAG(sector))
                     wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
             case SECT_FLAG_BACKUP:
@@ -1252,7 +1270,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 copy_ret = wolfBoot_copy_sector(&swap, &boot, sector);
                 if (copy_ret < 0)
                     break;
-                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                if (SECTOR_HAS_FLAG(sector))
                     wolfBoot_set_update_sector_flag(sector, flag);
                 break;
             case SECT_FLAG_UPDATED:
@@ -1297,12 +1315,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Erase remainder of partition */
 #if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
     /* calculate number of remaining bytes */
-    /* reserve 1 sector for status (2 sectors for NV write once) */
-#ifdef NVM_FLASH_WRITEONCE
-    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
-#else
-    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
-#endif
+    /* reserve the trailer sector(s) */
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) -
+        (TRAILER_SECTORS * sector_size);
 
     wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
         size/sector_size);
@@ -1318,11 +1333,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Iterate over every remaining sector and erase individually. */
     /* This loop is smallest code size */
     while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
-        sector_size
-    #ifdef NVM_FLASH_WRITEONCE
-        * 2
-    #endif
-    ) {
+        (TRAILER_SECTORS * sector_size)) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
         wolfBoot_watchdog_feed();
@@ -1360,8 +1371,23 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
 #endif
 #else
+    /* A custom trailer is not erased with the partitions. Reset the sector
+     * flags first, so a fallback starting from TESTING swaps every sector
+     * again, then consume the update partition. */
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
+    for (sector = 0; (sector * sector_size) < WOLFBOOT_PARTITION_SIZE; sector++)
+        wolfBoot_set_update_sector_flag(sector, SECT_FLAG_NEW);
     /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
-    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    wolfBoot_set_partition_state(PART_BOOT,
+        rollback_needed ? IMG_STATE_SUCCESS : IMG_STATE_TESTING);
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+    hal_flash_lock();
 #endif
 
 #else /* DISABLE_BACKUP */

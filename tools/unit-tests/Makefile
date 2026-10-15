@@ -67,7 +67,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-nsc-update \
-       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-flash-enc-full unit-update-ram unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
@@ -324,6 +324,12 @@ unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAU
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Single-sector partitions (WOLFBOOT_PARTITION_SIZE == WOLFBOOT_SECTOR_SIZE)
+# are only valid with the trailers kept outside the partitions.
+unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DCUSTOM_PARTITION_TRAILER -DWOLFBOOT_SECTOR_SIZE=0x8000
 unit-nsc-update:CFLAGS+=-DMOCK_PARTITIONS -D__WOLFBOOT -DTZEN \
 	-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
@@ -1015,6 +1021,9 @@ unit-update-flash: ../../include/target.h unit-update-flash.c
 
 # DISABLE_BACKUP runtime variant: direct update->BOOT copy without the
 # power-fail-safe swap, to test the update-consumption behavior of that path.
+unit-update-flash-custom-trailer: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
 unit-update-flash-db:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DDISABLE_BACKUP \

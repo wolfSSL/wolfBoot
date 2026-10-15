@@ -893,7 +893,9 @@ void RAMFUNCTION wolfBoot_erase_partition(uint8_t part)
 void RAMFUNCTION wolfBoot_update_trigger(void)
 {
     uint8_t st = IMG_STATE_UPDATING;
+#ifndef CUSTOM_PARTITION_TRAILER
     uintptr_t lastSector = ((PART_UPDATE_ENDFLAGS - 1) / WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE;
+#endif
 #ifdef NVM_FLASH_WRITEONCE
     uint8_t selSec = 0;
 #endif
@@ -908,7 +910,12 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
     /* NVM_FLASH_WRITEONCE needs erased flags since it selects the fresh
      * partition based on how many flags are non-erased
      * FLAGS_INVERT needs erased flags because the bin-assemble's fill byte may
-     * not match what's in wolfBoot */
+     * not match what's in wolfBoot
+     * A custom trailer does not share a sector with the update image, so
+     * nothing is erased: it may already hold the image to be installed. */
+#ifdef CUSTOM_PARTITION_TRAILER
+    wolfBoot_set_partition_state(PART_UPDATE, st);
+#else
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_erase(lastSector, WOLFBOOT_SECTOR_SIZE);
         wolfBoot_set_partition_state(PART_UPDATE, st);
@@ -943,6 +950,7 @@ void RAMFUNCTION wolfBoot_update_trigger(void)
         nvm_cache_scrub();
 #endif
     }
+#endif /* CUSTOM_PARTITION_TRAILER */
 
     if (FLAGS_UPDATE_EXT()) {
         ext_flash_lock();

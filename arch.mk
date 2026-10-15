@@ -405,6 +405,10 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),stm32f4)
     ARCH_FLASH_OFFSET=0x08000000
     SPI_TARGET=stm32
+    # Partition trailers in sectors 1-2, see hal/stm32f4.c
+    ifeq ($(CUSTOM_PARTITION_TRAILER),1)
+      LSCRIPT_IN=hal/stm32f4-trailer.ld
+    endif
   endif
 
   ifeq ($(TARGET),max32666)
