@@ -1811,6 +1811,15 @@ static inline int wb_flash_write(struct wolfBoot_image *img, uint32_t off,
         return hal_flash_write((uintptr_t)(img->hdr) + off, data, size);
 }
 
+static inline int wb_flash_is_erased(struct wolfBoot_image *img, uint32_t off,
+    uint32_t size)
+{
+    if (PART_IS_EXT(img))
+        return ext_flash_is_erased((uintptr_t)(img->hdr) + off, (int)size);
+    else
+        return hal_flash_is_erased((uintptr_t)(img->hdr) + off, (int)size);
+}
+
 static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
     uint32_t off, uint32_t word)
 {
@@ -1849,6 +1858,8 @@ static inline int wb_flash_write_verify_word(struct wolfBoot_image *img,
     hal_flash_erase(((uintptr_t)(((im)->hdr)) + of), siz)
 # define wb_flash_write(im, of, dat, siz) \
     hal_flash_write(((uintptr_t)((im)->hdr)) + of, dat, siz)
+# define wb_flash_is_erased(im, of, siz) \
+    hal_flash_is_erased(((uintptr_t)((im)->hdr)) + (of), (int)(siz))
 
 #endif /* EXT_FLASH */
 

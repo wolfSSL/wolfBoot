@@ -112,6 +112,21 @@ void hal_flash_lock(void);
  * ends.
  */
 void hal_cache_invalidate(void);
+
+/* Smallest programmable flash unit, in bytes. 1 means byte-writable flash. */
+#ifndef WOLFBOOT_FLASH_WRITE_UNIT
+#define WOLFBOOT_FLASH_WRITE_UNIT 1
+#endif
+
+/*
+ * Return 1 if every byte in [address, address + len) is erased, 0 if not, or
+ * a negative value on error. The weak defaults in src/libwolfboot.c compare a
+ * plain read with FLASH_BYTE_ERASED, and a HAL overrides them where a plain
+ * read is not reliable, such as on ECC flash.
+ */
+int hal_flash_is_erased(haladdr_t address, int len);
+int ext_flash_is_erased(uintptr_t address, int len);
+
 /*
  * Lock the flash region [address, address + len) against writes.
  * Return 0 on success, or a negative value on failure.

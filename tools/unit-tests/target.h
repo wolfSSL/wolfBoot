@@ -32,7 +32,9 @@
 #    define WOLFBOOT_FIXED_PARTITIONS
 #endif
 
+#ifndef WOLFBOOT_SECTOR_SIZE
 #define WOLFBOOT_SECTOR_SIZE                 0x400
+#endif
 
 #ifdef MOCK_PARTITIONS
     #define WOLFBOOT_PARTITION_BOOT_ADDRESS      0xCD000000
