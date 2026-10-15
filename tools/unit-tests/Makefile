@@ -1370,10 +1370,11 @@ unit-sama5d3-ext-read: unit-sama5d3-ext-read.c sama5d3_read_extract.h
 # -O0 a guaranteed infinite loop in the timer helpers.
 # hal/versal.c now gets its counter accessors from include/aarch64_arch.h.
 # The generator only rewrites the .c and .h it copies, so the header needs the
-# same treatment: its two "mrs" reads have output operands and must become
+# same treatment: its "mrs" reads have output operands and must become
 # assignments, not deletions (see the note above versal_host.h).
 aarch64_arch_host.h: ../../include/aarch64_arch.h
-	sed -E -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
+	sed -E -e 's/__asm__ volatile\("mrs %0, CurrentEL" : "=r"\(el\) : : "cc"\);/el = 3UL << 2;/' \
+	    -e 's/__asm__ volatile\("mrs %0, cntpct_el0" : "=r" \(cntpct\)\);/cntpct = ++versal_host_ticks;/' \
 	    -e 's/__asm__ volatile\("mrs %0, cntfrq_el0" : "=r" \(cntfrq\)\);/cntfrq = 1000000ULL;/' \
 	    -e 's/__asm__ volatile\("mrs %0, clidr_el1" : "=r"\(clidr\)\);/clidr = 0; \/* host: report no cache levels, so the walk is a no-op *\//' \
 	    -e 's/__asm__ volatile\("mrs %0, ccsidr_el1" : "=r"\(ccsidr\)\);/ccsidr = 0;/' \
@@ -1385,7 +1386,6 @@ aarch64_arch_host.h: ../../include/aarch64_arch.h
 
 versal_host.h: ../../hal/versal.h
 	sed -E -e 's/0xF1030000UL/((uintptr_t)g_vqspi_regs)/' \
-	    -e 's/__asm__ volatile\("mrs %0, CurrentEL" : "=r" \(el\)\);/el = 3UL << 2; \/* host stands in at EL3 *\//' \
 	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"\);[[:space:]]*//' \
 	    -e 's/^[[:space:]]*__asm__[[:space:]]+(__)?(volatile__|volatile)\("[^"]*"[[:space:]]*:[[:space:]]*:[^;]*\);[[:space:]]*//' $< > $@
 	test -s $@

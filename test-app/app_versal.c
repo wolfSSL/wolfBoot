@@ -25,6 +25,7 @@
 
 #include "hal.h"
 #include "hal/versal.h"
+#include "aarch64_arch.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
 

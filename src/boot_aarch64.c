@@ -32,11 +32,15 @@
  * compile in for the active target. */
 #if defined(TARGET_versal)
 #include "hal/versal.h"
+#elif defined(TARGET_agilex5)
+#include "hal/agilex5.h"
 #elif defined(TARGET_zynq)
 #include "hal/zynq.h"
 #elif defined(TARGET_nxp_ls1028a)
 #include "hal/nxp_ls1028a.h"
 #endif
+
+#include "aarch64_arch.h"
 
 /* Linker exported variables */
 extern unsigned int __bss_start__;
@@ -74,16 +78,6 @@ extern void flush_dcache_range(unsigned long start, unsigned long end);
  */
 #if defined(NO_QNX) && !defined(SKIP_GIC_INIT)
 #define SKIP_GIC_INIT
-#endif
-
-#ifndef TARGET_versal
-/* current_el() is defined in hal/versal.h for Versal */
-unsigned int current_el(void)
-{
-    unsigned long el;
-    asm volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
-    return (unsigned int)((el >> 2) & 0x3U);
-}
 #endif
 
 #if defined(BOOT_EL1) && defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1

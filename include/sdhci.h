@@ -247,6 +247,8 @@
 #define SDHCI_SRS11_SDCFSH_MASK     (0x03U << 6)
 #define SDHCI_SRS11_DTCV_SHIFT  16
 #define SDHCI_SRS11_DTCV_MASK   (0x0FU << 16)
+#define SDHCI_SRS11_RESET_CMD       (1U << 25)
+#define SDHCI_SRS11_RESET_DAT       (1U << 26)
 #define SDHCI_SRS11_RESET_DAT_CMD   ((1U << 25) | (1U << 26))
 #define SDHCI_SRS11_RESET_ALL       (1U << 24)
 
@@ -490,4 +492,3 @@ void sdhci_platform_set_bus_mode(int is_emmc);
 #endif /* DISK_SDCARD || DISK_EMMC */
 
 #endif /* SDHCI_H */
-

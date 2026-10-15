@@ -23,18 +23,11 @@
 
 #include <stdint.h>
 
+#include "aarch64_arch.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
 
 #ifdef TARGET_zynq
-
-/* Provide current_el() for hal/zynq.o (normally in boot_aarch64.c) */
-__attribute__((weak)) unsigned int current_el(void)
-{
-    unsigned long el;
-    __asm__ volatile("mrs %0, CurrentEL" : "=r" (el) : : "cc");
-    return (unsigned int)((el >> 2) & 0x3U);
-}
 
 /* Stub for QSPI DMA code in hal/zynq.o (not used with SD card boot) */
 void flush_dcache_range(unsigned long start, unsigned long end)

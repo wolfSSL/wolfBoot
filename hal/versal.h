@@ -598,14 +598,6 @@
  */
 #ifndef __ASSEMBLER__
 
-/* Get current exception level */
-static inline unsigned int current_el(void)
-{
-    unsigned long el;
-    __asm__ volatile("mrs %0, CurrentEL" : "=r" (el));
-    return (unsigned int)((el >> 2) & 0x3);
-}
-
 /* Memory barrier */
 static inline void dmb(void)
 {

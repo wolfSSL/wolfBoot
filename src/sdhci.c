@@ -904,10 +904,24 @@ static int sdcard_power_init_seq(uint32_t voltage)
          * SDHCI platforms deliberately: the delay is harmless settle
          * margin and the SD spec permits it. */
         udelay(200);
-        /* send the operating conditions command */
-        status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
-            SDHCI_RESP_R7);
-        cmd8_err = g_last_cmd_err;
+        /* A corrupted CMD8 response can be transient while the card settles
+         * after CMD0. A timeout alone is how an SD v1.x card reports that it
+         * does not implement CMD8, so do not repeat that silent probe. */
+        for (retries = 0; retries < 10; retries++) {
+            status = sdhci_cmd(SD_CMD8_SEND_IF_COND, SD_IF_COND_27V_33V,
+                SDHCI_RESP_R7);
+            cmd8_err = g_last_cmd_err;
+            if (status == 0 ||
+                ((cmd8_err & SDHCI_SRS12_ECT) != 0 &&
+                 (cmd8_err & (SDHCI_SRS12_ECCRC | SDHCI_SRS12_ECEB |
+                              SDHCI_SRS12_ECI)) == 0)) {
+                break;
+            }
+            udelay(10000);
+        }
+        if (status == 0 && retries > 0) {
+            wolfBoot_printf("SD: CMD8 succeeded after %d retries\n", retries);
+        }
 #if defined(DISK_SDCARD) && defined(SDHCI_UHS_RECOVER_ON_INIT)
         if (status != 0) {
             /* Opt-in. A card a previous stage left in UHS-I is at 1.8V and
@@ -1918,7 +1932,7 @@ int sdhci_init(void)
      * not be ready to accept register writes on some platforms. */
     udelay(1000); /* 1ms */
 
-    /* Reset the host controller */
+    /* Restore host controller state after the earlier boot stage. */
     sdhci_reg_or(SDHCI_HRS00, SDHCI_HRS00_SWR);
     /* Bit will clear when reset is done */
     while ((SDHCI_REG(SDHCI_HRS00) & SDHCI_HRS00_SWR) != 0);

@@ -34,6 +34,7 @@
 #endif
 
 #include <target.h>
+#include "aarch64_arch.h"
 #include "image.h"
 #include "printf.h"
 #include "hal_fpga.h"
@@ -113,7 +114,6 @@ static int test_ext_flash(QspiDev_t* dev);
 
 /* asm function */
 extern void flush_dcache_range(unsigned long start, unsigned long stop);
-extern unsigned int current_el(void);
 
 void hal_delay_ms(uint64_t ms);
 uint64_t hal_timer_ms(void);
