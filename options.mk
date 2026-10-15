@@ -51,6 +51,34 @@ endif
 WOLFBOOT_TEST_FILLER?=0
 WOLFBOOT_TIME_TEST?=0
 
+# Generate a minimal ACPI table set (RSDP/XSDT/FADT/MADT/MCFG + DSDT) for the
+# x86 FSP Linux payload, so the OS gets the interrupt model and PCI routing.
+ifeq ($(ACPI),1)
+  ifneq ($(TARGET),nai_68int6)
+    $(error ACPI=1 tables (CPU list, DSDT routing) are specific to nai_68int6)
+  endif
+  CFLAGS+=-D"WOLFBOOT_ACPI"
+endif
+ifeq ($(TARGET),nai_68int6)
+  ifneq ($(ACPI),1)
+    $(error nai_68int6 needs ACPI=1: its PCI interrupt routing is only in the DSDT)
+  endif
+endif
+
+# TPM NV version floor and boot audit counters (see docs/Targets.md).
+# HALT_ON_FAILURE also halts when the TPM state cannot be read or locked.
+ifeq ($(ANTI_ROLLBACK),1)
+  ifeq ($(filter $(TARGET),x86_fsp_qemu kontron_vx3060_s2 nai_68int6),)
+    $(error ANTI_ROLLBACK=1 is only wired into the x86 FSP disk boot)
+  endif
+  CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK"
+  # The backend is TPM NV (src/boot_state_tpm.c), so wolfTPM is required.
+  WOLFTPM:=1
+  ifeq ($(ANTI_ROLLBACK_HALT_ON_FAILURE),1)
+    CFLAGS+=-D"WOLFBOOT_ANTI_ROLLBACK_HALT_ON_FAILURE"
+  endif
+endif
+
 ifeq ($(USE_CLANG),1)
   ifeq ($(USE_GCC),1)
     $(error USE_CLANG=1 is incompatible with USE_GCC=1; set USE_GCC=0)
@@ -1581,6 +1609,7 @@ ifeq ($(FSP), 1)
     X86_UART_BASE \
     X86_UART_REG_WIDTH \
     X86_UART_MMIO \
+    X86_UART_NUMBER \
     PCH_HAS_PCR \
     PCI_USE_ECAM \
     PCH_PCR_BASE \

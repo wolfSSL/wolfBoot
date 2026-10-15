@@ -1,4 +1,6 @@
-/* x86_fsp_qemu_loader.c
+/* stub_loader.c
+ *
+ * Generic stage1 loader HAL for x86 FSP targets.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -6,7 +8,7 @@
  *
  * wolfBoot is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
+ * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * wolfBoot is distributed in the hope that it will be useful,
@@ -19,10 +21,14 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
+/* x86 FSP stage1 runs XIP before memory init and only authenticates stage2,
+ * so every HAL entry point is a stub. */
+
 #include <wolfboot/wolfboot.h>
+#include <hal.h>
+#include <uart_drv.h>
 #include <stdint.h>
 #include <string.h>
-#include <uart_drv.h>
 
 #ifdef __WOLFBOOT
 #include <printf.h>
@@ -34,10 +40,13 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 }
-#endif
+#endif /* __WOLFBOOT */
 
-int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
+int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 {
+    (void)address;
+    (void)data;
+    (void)len;
     return 0;
 }
 
@@ -49,15 +58,16 @@ void hal_flash_lock(void)
 {
 }
 
-int hal_flash_erase(uintptr_t address, int len)
+int hal_flash_erase(haladdr_t address, int len)
 {
+    (void)address;
+    (void)len;
     return 0;
 }
 
 int wolfBoot_fallback_is_possible(void)
 {
     return 0;
-
 }
 
 int wolfBoot_dualboot_candidate(void)
@@ -72,7 +82,7 @@ void* hal_get_primary_address(void)
 
 void* hal_get_update_address(void)
 {
-  return (void*)0;
+    return (void*)0;
 }
 
 void *hal_get_dts_address(void)
@@ -84,4 +94,3 @@ void *hal_get_dts_update_address(void)
 {
     return 0;
 }
-

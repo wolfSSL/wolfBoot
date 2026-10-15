@@ -24,5 +24,6 @@
 #include <stdint.h>
 
 int x86_fsp_tgl_init_sata(uint32_t *bar);
+int tgl_lock_bios_region(void);
 
 #endif /* TGL_FSP_H */

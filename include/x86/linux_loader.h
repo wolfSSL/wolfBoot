@@ -37,6 +37,7 @@ struct boot_e820_entry {
 enum e820_type {
     E820_TYPE_RAM = 1,
     E820_TYPE_RESERVED = 2,
+    E820_TYPE_ACPI = 3,
 };
 
 struct setup_header {
