@@ -53,6 +53,7 @@ This README describes configuration of supported targets.
 * [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
 * [Renesas RX65N](#renesas-rx65n)
+* [Renesas RX71M](#renesas-rx71m)
 * [Renesas RX72N](#renesas-rx72n)
 * [Renesas RZN2L](#renesas-rzn2l)
 * [SiFive HiFive1 RISC-V](#sifive-hifive1-risc-v)
@@ -8002,6 +8003,108 @@ sudo udevadm control --reload-rules
 ### Debugging Renesas RX65N
 
 Create a new "Renesas Debug" project. Choose the "E2 Lite" emulator and the built `wolfboot.elf`. After project is created open the "Debug Configuration" and change the debugger interface from "JTAG" to "FINE". Run debug and it will stop in the "reset" code in `boot_renesas_start.S`. If using Big Endian change endianess mode in "Debugger -> Debug Tool Settings -> Memory Endian -> Big Endian".
+
+
+## Renesas RX71M
+
+Target board: Renesas Starter Kit+ for RX71M (YR0K50571MS000BE), with the R5F571MLCDFC (4MB code flash, 512KB RAM, 64KB data flash).
+
+The R5F571MLCDFC has no encryption module, so there is no TSIP: wolfBoot uses software crypto, and the build stops if `PKA=1`.
+
+Default UART Serial on SCI7 at P90-TXD7 P92-RXD7, connected to the on-board USB serial converter. This feature is enabled with `DEBUG_UART=1`.
+
+Example Boot Output (with DEBUG_UART=1):
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFFE00000 (sz 5595, ver 0x1, type 0x201)
+Partition 1 header magic 0xFFFFFFFF invalid at 0xFFC00000
+Boot partition: 0xFFE00000 (sz 5595, ver 0x1, type 0x201)
+Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
+wolfBoot HAL Init
+| ------------------------------------------------------------------- |
+| Renesas RX User Application in BOOT partition started by wolfBoot   |
+| ------------------------------------------------------------------- |
+
+
+=== Boot Partition[ffe00000] ===
+Magic:    WOLF
+Version:  01
+Status:   ff (New)
+Trailer Mgc: none
+
+=== Update Partition[ffc00000] ===
+Magic:    ˇˇˇˇ
+Version:  00
+Status:   ff (New)
+Trailer Mgc: none
+
+Current Firmware Version: 1
+Hit any key to call wolfBoot_success the firmware.
+```
+
+### RX71M Flash Layout
+
+Default Onboard Flash Memory Layout (4MB) (32KB sector):
+
+| Description            | Address    | Size                 |
+| ---------------------- | ---------- | -------------------- |
+| Option-setting memory  | 0x00120040 | 0x00000030 (  48 B ) |
+| Update                 | 0xFFC00000 | 0x001D0000 (1856 KB) |
+| Unused                 | 0xFFDD0000 | 0x00030000 ( 192 KB) |
+| Application            | 0xFFE00000 | 0x001D0000 (1856 KB) |
+| Swap                   | 0xFFFD0000 | 0x00008000 (  32 KB) |
+| Unused                 | 0xFFFD8000 | 0x00008000 (  32 KB) |
+| Unused (trusted memory)| 0xFFFE0000 | 0x00010000 (  64 KB) |
+| wolfBoot               | 0xFFFF0000 | 0x00010000 (  64 KB) |
+
+### RX71M Notes
+
+* `NVM_FLASH_WRITEONCE=1` and `RAM_CODE=1` are mandatory on this target. Code flash can be programmed only once between erases (256-byte units), and it cannot be read while it is being programmed or erased, so the flash driver runs from RAM. `DELTA_UPDATES` is not supported.
+* Code flash is rated for 1,000 erase cycles per block. Each update erases the two flag sectors at the end of the update partition about three times per image sector, and the swap sector once per image sector. Keep images small if many updates are expected.
+* The clock setup assumes the 24 MHz crystal of the RSK+. For another board set `CFLAGS_EXTRA+=-DRX_MAIN_XTAL_HZ=<Hz>` (8 to 24 MHz, and 240 MHz must be a whole multiple of it).
+* With `WATCHDOG`, wolfBoot feeds the watchdog once per sector copy during an update. The flash work between two feeds can take several seconds at the maximum program and erase times, so choose a watchdog period that covers it.
+* `ROMCODE` at `0xFFFFFF9C` enables ROM code protection when set to `0x00000000` or `0x00000001`. wolfBoot sets it to `0xFFFFFFFF`.
+* An application that calls `wolfBoot_success()` or `wolfBoot_update_trigger()` writes flash through the same driver, which must run from RAM: build `hal/renesas-rx.c` with `RAM_CODE` and `__WOLFBOOT` defined and place its `.ramcode` section in RAM, as `test-app/Makefile` and `test-app/RENESAS_RX.ld` do. The driver masks interrupts while it writes.
+* The option-setting memory at `0x00120040` is written only when built with `CFLAGS_EXTRA+=-DWOLFBOOT_RENESAS_OSM`, through `wolfboot.srec` (not `wolfboot.bin`). Run `make srec` and program `wolfboot.srec` in place of `-bin FFFF0000 wolfboot.bin`.
+
+To switch to big endian data, set `MDE` at `0x00120064` (little endian is the erased default):
+
+```sh
+rfp-cli -if uart -t e2l -device RX71x -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -write32 0x00120064 0xFFFFFFF8
+```
+
+### Building Renesas RX71M
+
+Building requires GCC for Renesas RX 14.2 (https://llvm-gcc-renesas.com/rx-download-toolchains/). The example config sets `USE_GCC=0` (`ld` links directly) and the build adds `-misa=v2` for the RXv2 core.
+
+```sh
+cp ./config/examples/renesas-rx71m.config .config
+make RX_GCC_PATH=/path/to/gcc_rx_elf
+```
+
+`RX_GCC_PATH` is the toolchain install directory (the one containing `bin/rx-elf-gcc`). If `rx-elf-gcc` is already on the `PATH`, use `make CROSS_COMPILE=rx-elf-` instead.
+
+### Flashing Renesas RX71M
+
+Set SW4 pins 1 and 2 OFF (single-chip mode). Power the board from its 5V jack, not from the emulator. The E2 Lite programs the RX71M over the 2-wire UART interface (`-if uart`).
+
+```sh
+rfp-cli -if uart -t e2l -device RX71x -auto -auth id FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF \
+    -bin FFFF0000 wolfboot.bin \
+    -bin FFE00000 test-app/image_v1_signed.bin \
+    -run
+```
+
+`-auto` erases the whole code flash, data flash and user boot area before programming. To reprogram only the blocks being written, use `-pv` in place of `-auto`.
+
+Note: Endianess: if using big endian add `-endian big`
+
+### Debugging Renesas RX71M
+
+In e² studio create a "Renesas Debug" project with the "E2 Lite" emulator, target device R5F571ML and the built `wolfboot.elf`. In the debug configuration select the JTAG connection, the EXTAL main clock at 24 MHz, and set "Power Target From The Emulator" to No.
 
 
 ## Renesas RX72N

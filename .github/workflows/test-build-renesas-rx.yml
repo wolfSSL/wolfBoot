@@ -54,3 +54,13 @@ jobs:
         # in-tree syscall/stdio stubs in test-app/syscalls.c (no newlib libc).
         run: |
           make USE_GCC=0 CROSS_COMPILE=rx-elf- ${{inputs.make-args}}
+
+      - name: Check RX71M ROMCODE word
+        # ROMCODE (0xFFFFFF9C, 100 bytes before the end of wolfboot.bin) set to
+        # 0x00000000 or 0x00000001 enables ROM code protection
+        if: contains(inputs.config-file, 'rx71m')
+        run: |
+          size=$(stat -c %s wolfboot.bin)
+          romcode=$(od -An -tx1 -j $((size - 100)) -N 4 wolfboot.bin | tr -d ' \n')
+          echo "ROMCODE: $romcode"
+          test "$romcode" = "ffffffff"

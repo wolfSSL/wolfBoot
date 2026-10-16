@@ -1654,3 +1654,16 @@ jobs:
     with:
       arch: rx
       config-file: ./config/examples/renesas-rx72n.config
+
+  renesas_rx71m_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx71m.config
+
+  renesas_rx71m_bigendian_osm_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx71m.config
+      make-args: BIG_ENDIAN=1 CFLAGS_EXTRA=-DWOLFBOOT_RENESAS_OSM
