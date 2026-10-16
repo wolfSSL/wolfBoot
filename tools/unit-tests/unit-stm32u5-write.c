@@ -23,6 +23,10 @@
  *
  * Same harness as the STM32L5 twin: extracted functions, registers on
  * a host file, stale destination flash, canary after the source.
+ *
+ * A unit that is erased and stays erased is not programmed. Readback
+ * cannot tell that from programming 0xFF, so the mock also counts the
+ * program operations (waits with FLASH_CR_PG set) for those tests.
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -82,6 +86,9 @@ static uint8_t *g_flash_mem;
  * mock hal_flash_wait_complete() diffs against it. */
 static uint8_t g_flash_prev[FLASH_MEM_SZ];
 
+/* Program operations: waits for completion with FLASH_CR_PG set. */
+static int g_programs;
+
 /* Source buffer followed by a canary: pre-fix, a short write reads
  * bytes past len and lands them in the destination flash. The canary
  * range avoids the data bytes (0x30..0x6F), the stale fill (0x12) and
@@ -114,6 +121,8 @@ static void hal_flash_wait_complete(uint8_t bank)
     if (first >= 0)
         ck_assert_int_le(last, (first & ~0x0F) + 15);
     memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+    if ((FLASH_NS_CR & FLASH_CR_PG) != 0)
+        g_programs++;
 }
 
 /* The real functions from hal/stm32u5.c (extracted by the Makefile). */
@@ -124,6 +133,7 @@ static void setup(void)
     int i;
 
     memset(g_flash_regs, 0, sizeof(g_flash_regs));
+    g_programs = 0;
     for (i = 0; i < FLASH_MEM_SZ; i++)
         g_flash_mem[i] = 0x12; /* stale */
     memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
@@ -135,6 +145,23 @@ static void setup(void)
 
 static void teardown(void)
 {
+}
+
+/* Erased destination, for the tests of skipped units. */
+static void erase_flash(void)
+{
+    memset(g_flash_mem, 0xFF, FLASH_MEM_SZ);
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+}
+
+static int flash_is_erased(int from, int to)
+{
+    int i;
+
+    for (i = from; i < to; i++)
+        if (g_flash_mem[i] != 0xFF)
+            return 0;
+    return 1;
 }
 
 static int canary_in_flash(void)
@@ -274,6 +301,107 @@ START_TEST(test_write_3_unaligned4)
 }
 END_TEST
 
+/* Erased data over erased flash, aligned: nothing is programmed. */
+START_TEST(test_skip_erased_aligned)
+{
+    uint8_t ff[64];
+
+    erase_flash();
+    memset(ff, 0xFF, sizeof(ff));
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
+        ff, sizeof(ff)), 0);
+
+    ck_assert_int_eq(g_programs, 0);
+    ck_assert_int_eq(flash_is_erased(0, FLASH_MEM_SZ), 1);
+}
+END_TEST
+
+/* Erased data over erased flash, starting inside a unit and ending
+ * inside another: neither unit is programmed. */
+START_TEST(test_skip_erased_unaligned)
+{
+    uint8_t ff[20];
+
+    erase_flash();
+    memset(ff, 0xFF, sizeof(ff));
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        ff, sizeof(ff)), 0);
+
+    ck_assert_int_eq(g_programs, 0);
+    ck_assert_int_eq(flash_is_erased(0, FLASH_MEM_SZ), 1);
+}
+END_TEST
+
+/* Erased and data units mixed: only the units with data are
+ * programmed, and the rest stay erased. */
+START_TEST(test_skip_mixed_units)
+{
+    uint8_t src[64];
+
+    erase_flash();
+    memset(src, 0xFF, sizeof(src));
+    memcpy(src + 16, g_data, 16);
+    memcpy(src + 48, g_data + 16, 15); /* last byte of the unit erased */
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
+        src, sizeof(src)), 0);
+
+    ck_assert_int_eq(g_programs, 2);
+    ck_assert_int_eq(memcmp(g_flash_mem, src, sizeof(src)), 0);
+    ck_assert_int_eq(flash_is_erased(64, FLASH_MEM_SZ), 1);
+}
+END_TEST
+
+/* Data bytes inside an erased unit, unaligned: the unit is
+ * programmed once and the rest of it stays erased. */
+START_TEST(test_skip_unaligned_data_programmed)
+{
+    erase_flash();
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        g_data, 3), 0);
+
+    ck_assert_int_eq(g_programs, 1);
+    ck_assert_int_eq(flash_is_erased(0, 4), 1);
+    ck_assert_int_eq(memcmp(g_flash_mem + 4, g_data, 3), 0);
+    ck_assert_int_eq(flash_is_erased(7, FLASH_MEM_SZ), 1);
+}
+END_TEST
+
+/* Erased data over flash that is not erased: the units are programmed,
+ * as before. */
+START_TEST(test_ff_over_nonerased_programmed)
+{
+    uint8_t ff[32];
+
+    memset(ff, 0xFF, sizeof(ff));
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
+        ff, sizeof(ff)), 0);
+
+    ck_assert_int_eq(g_programs, 2);
+    ck_assert_int_eq(flash_is_erased(0, 32), 1);
+    ck_assert_uint_eq(g_flash_mem[32], 0x12);
+}
+END_TEST
+
+/* Erased data inside a unit that holds data outside the request: the
+ * unit is not all erased, so it is programmed. */
+START_TEST(test_ff_in_partly_programmed_unit)
+{
+    uint8_t ff[12];
+
+    erase_flash();
+    memset(g_flash_mem, 0x12, 4);
+    memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
+    memset(ff, 0xFF, sizeof(ff));
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)(g_flash_mem + 4),
+        ff, sizeof(ff)), 0);
+
+    ck_assert_int_eq(g_programs, 1);
+    ck_assert_uint_eq(g_flash_mem[0], 0x12);
+    ck_assert_uint_eq(g_flash_mem[3], 0x12);
+    ck_assert_int_eq(flash_is_erased(4, FLASH_MEM_SZ), 1);
+}
+END_TEST
+
 Suite *stm32u5_write_suite(void)
 {
     Suite *s = suite_create("stm32u5-write");
@@ -287,6 +415,12 @@ Suite *stm32u5_write_suite(void)
     tcase_add_test(tc, test_write_64_full_units);
     tcase_add_test(tc, test_write_20_unaligned4);
     tcase_add_test(tc, test_write_3_unaligned4);
+    tcase_add_test(tc, test_skip_erased_aligned);
+    tcase_add_test(tc, test_skip_erased_unaligned);
+    tcase_add_test(tc, test_skip_mixed_units);
+    tcase_add_test(tc, test_skip_unaligned_data_programmed);
+    tcase_add_test(tc, test_ff_over_nonerased_programmed);
+    tcase_add_test(tc, test_ff_in_partly_programmed_unit);
     suite_add_tcase(s, tc);
 
     return s;
