@@ -226,6 +226,38 @@ error_out:
     (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }
+
+/* EAT UEID for the HWPUF path: derived from the UDS inside the HAL so the
+ * key code never leaves the platform security boundary (dice.c HW flow). */
+int hal_attestation_get_ueid(uint8_t *buf, size_t *len)
+{
+    uint8_t uds[HWPUF_PROV_UDS_KEY_SIZE];
+    wc_Sha256 sha;
+    int ret;
+
+    if (buf == NULL || len == NULL || *len < 33)
+        return -1;
+
+    ret = uds_from_hwpuf(uds, sizeof(uds));
+    if (ret != 0)
+        return -1;
+
+    ret = wc_InitSha256(&sha);
+    if (ret == 0) {
+        ret = wc_Sha256Update(&sha, uds, (word32)sizeof(uds));
+        if (ret == 0)
+            ret = wc_Sha256Final(&sha, &buf[1]);
+        wc_Sha256Free(&sha);
+    }
+    hal_zeroize(uds, sizeof(uds));
+    if (ret != 0)
+        return -1;
+
+    /* UEID type RANDOM per EAT spec */
+    buf[0] = 0x01;
+    *len = 33;
+    return 0;
+}
 #endif /* WOLFCRYPT_TZ_PSA */
 #endif /* __WOLFBOOT && WOLFSSL_HWPUF */
 
