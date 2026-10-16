@@ -5241,6 +5241,22 @@ Key configuration options in `config/examples/versal_vmk180.config`:
 - `EXT_FLASH=1` - External flash support
 - `ELF=1` - ELF loading support
 
+### System Watchdog (SWDT/WWDT)
+
+Versal has two system watchdog timers: `LPD_SWDT` at `0xFF120000` (wired for the RPU) and `FPD_SWDT` at `0xFD4D0000` (for the APU). `WATCHDOG=1` has wolfBoot reprogram, refresh and settle one of them, for a design that arms it from its `.cdo` so a hung bootloader resets the board.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `WATCHDOG` | `0` | Manage the watchdog through wolfBoot's boot and settle it before the OS. |
+| `WATCHDOG_TIMEOUT_MS` | `30000` | Timeout to program. It has to exceed a signature verify, which is one call with no loop to refresh from. |
+| `WATCHDOG_BASE` | `0xFD4D0000` | Instance to use; `0xFF120000` is the LPD one. |
+| `WATCHDOG_CLK_HZ` | `150000000` | Counting clock, `FPD_LSBUS` or `LPD_LSBUS`. The default is the rate the VMK180 reference design uses, not the 100 MHz its device tree advertises; below the real rate the window shortens in proportion, so a design with a different lsbus divider must set this. |
+| `WATCHDOG_HANDOFF` | `0` | Leave it armed with a full window for an OS that will take it over, instead of stopping it. The OS watchdog node then has to be enabled and its driver servicing it. |
+
+The default stops the watchdog in `hal_prepare_boot()`, as U-Boot does before it boots Linux. wolfBoot reprograms the timer with no closed (first) window so that its own refreshes - from the hash, decompression, flash and disk loops via `wolfBoot_watchdog_feed()` - are always legal. A refresh or a disable is only honored while the open (second) window is current, elsewhere the hardware records a bad event and ignores a disable, so both wait for that window and report rather than assume. Window and generic mode are both handled and a generic-mode watchdog stays generic; Q&A mode is reported and left alone.
+
+The PDI must release the block's reset and clock (`CRF.RST_FPD_SWDT` at `0xFD1A0314`, `CRL.RST_LPD_SWDT` at `0xFF5E034C`); wolfBoot makes no EEMI calls. Without `WATCHDOG` it neither reads nor writes the block, since a read of one still in reset can abort at EL2 - so a CDO-armed watchdog is only handled in a `WATCHDOG=1` build.
+
 ### QSPI Boot (default)
 
 Use `config/examples/versal_vmk180.config`.

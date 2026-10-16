@@ -1345,6 +1345,23 @@ jobs:
       config-file: ./config/examples/versal_vmk180_sdcard.config
       make-args: DISK_FS=both
 
+  # Default instance (FPD) and the stop-before-the-OS path
+  versal_vmk180_wdt_fpd_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180.config
+      make-args: WATCHDOG=1 WATCHDOG_TIMEOUT_MS=30000
+
+  # LPD instance, and the only build with both the WATCHDOG_HANDOFF branch of
+  # hal_prepare_boot() and the SDHCI refresh hook (src/sdhci.c is SD-only)
+  versal_vmk180_sdcard_wdt_lpd_handoff_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      config-file: ./config/examples/versal_vmk180_sdcard.config
+      make-args: WATCHDOG=1 WATCHDOG_HANDOFF=1 WATCHDOG_BASE=0xFF120000
+
   sim_wolfhsm_test:
     uses: ./.github/workflows/test-build.yml
     with:
