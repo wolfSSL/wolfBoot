@@ -65,11 +65,12 @@ static const char* state2str(uint8_t s)
     }
 }
 
-static void printPart(uint8_t *part)
+static void printPart(uint8_t part_id, uint8_t *part)
 {
     uint8_t *magic;
     uint32_t ver;
     uint8_t  state;
+    int      has_trailer;
 #ifdef WOLFBOOT_DEBUG_PARTION
     uint32_t *v;
     int i;
@@ -79,10 +80,11 @@ static void printPart(uint8_t *part)
     printf("Magic:    %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
     ver = wolfBoot_get_blob_version(part);
     printf("Version:  %02x\n", (uint8_t)ver);
-    state = *(part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t) - 1);
+    has_trailer = (wolfBoot_get_partition_state(part_id, &state) == 0);
+    if (!has_trailer)
+        state = IMG_STATE_NEW;
     printf("Status:   %02x (%s)\n", state, state2str(state));
-    magic = part + WOLFBOOT_PARTITION_SIZE - sizeof(uint32_t);
-    printf("Trailer Mgc: %c%c%c%c\n", magic[0], magic[1], magic[2], magic[3]);
+    printf("Trailer Mgc: %s\n", has_trailer ? "BOOT" : "none");
 
 #ifdef WOLFBOOT_DEBUG_PARTION
     v = (uint32_t*)part;
@@ -97,9 +99,9 @@ static void printPart(uint8_t *part)
 static void printPartitions(void)
 {
     printf("\n=== Boot Partition[%08x] ===\n", WOLFBOOT_PARTITION_BOOT_ADDRESS);
-    printPart((uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    printPart(PART_BOOT, (uint8_t*)WOLFBOOT_PARTITION_BOOT_ADDRESS);
     printf("\n=== Update Partition[%08x] ===\n", WOLFBOOT_PARTITION_UPDATE_ADDRESS);
-    printPart((uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
+    printPart(PART_UPDATE, (uint8_t*)WOLFBOOT_PARTITION_UPDATE_ADDRESS);
 }
 
 int main(void)
