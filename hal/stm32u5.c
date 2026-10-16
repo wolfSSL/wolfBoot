@@ -111,6 +111,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
                 qword_bytes[j] = ((const uint8_t *)unit)[j];
         }
 
+        /* Programming takes about the same time for any value, so a unit
+         * that is erased and stays erased is skipped. The flash content is
+         * the same, and the unit can still be programmed later. */
+        if ((qword[0] & qword[1] & qword[2] & qword[3]) == 0xFFFFFFFFUL &&
+                (unit[0] & unit[1] & unit[2] & unit[3]) == 0xFFFFFFFFUL) {
+            i = i_aligned + 16;
+            continue;
+        }
+
         *cr |= FLASH_CR_PG;
         for (j = 0; j < 4; j++) {
             unit[j] = qword[j];
