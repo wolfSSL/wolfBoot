@@ -336,6 +336,9 @@ void hal_clk_init(void)
     /* Flash Wait Cycles  */
     FLASH_MEMWAIT = FLASH_MEMWAIT_MEMWAIT(1); /* (1=<120MHz) */
     reg = FLASH_MEMWAIT;
+#elif defined(TARGET_rx71m)
+    SYS_MEMWAIT = SYS_MEMWAIT_MEMWAIT; /* required for ICLK > 120MHz */
+    reg = SYS_MEMWAIT;
 #else
     FLASH_ROMWT = FLASH_ROMWT_ROMWT(2); /* (1=50-100MHz, 2= >100MHz) */
     reg = FLASH_ROMWT;
