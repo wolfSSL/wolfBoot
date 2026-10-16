@@ -344,8 +344,24 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 #endif /* __WOLFBOOT && WOLFCRYPT_TZ_PSA && !WOLFBOOT_DICE_HW */
 
 #ifdef TZEN
+/* AHB_SECURE_CTRL (AHBSC) gates SRAM at the bus level on this part: the SAU
+ * alone does not make an SRAM block non-secure.  The boot ROM leaves every
+ * 4 KB block secure+privileged; hand SRAM2 (0x20020000..0x2002FFFF, the NS
+ * app RAM) to the NS world as non-secure+privileged before the NS jump. */
+#define AHBSC_BASE          0x400AC000u
+#define AHBSC_SRAM2_RULE0   (*(volatile uint32_t *)(AHBSC_BASE + 0xA0u))
+#define AHBSC_SRAM2_RULE1   (*(volatile uint32_t *)(AHBSC_BASE + 0xA4u))
+
+static void hal_ahbsc_init(void)
+{
+    AHBSC_SRAM2_RULE0 = 0x11111111u; /* blocks 0-7: NS + privileged */
+    AHBSC_SRAM2_RULE1 = 0x11111111u; /* blocks 8-15: NS + privileged */
+}
+
 static void hal_sau_init(void)
 {
+    hal_ahbsc_init();
+
     /* Non-secure callable area */
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
