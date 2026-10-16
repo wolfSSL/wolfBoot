@@ -116,7 +116,8 @@ static int hwpuf_provision_get(void)
     {
         uint32_t addr;
         uint32_t start = HWPUF_PROV_FLASH_BASEADR;
-        uint32_t end = HWPUF_PROV_FLASH_BASEADR + HWPUF_PROV_FLASH_LEN;
+        uint32_t end = HWPUF_PROV_FLASH_BASEADR +
+            ((sizeof(prov) + pflash_page_size - 1) & ~(pflash_page_size - 1));
 
         for (addr = start; addr < end; addr += pflash_page_size) {
             if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
