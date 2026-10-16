@@ -127,6 +127,10 @@ else
       LDFLAGS+=-ffreestanding -nostartfiles
     endif
     CFLAGS+=-DWOLFBOOT_RENESAS_APP
+    ifeq ($(TARGET),rx71m)
+      # The flash driver must run from RAM: code flash cannot be read in P/E mode
+      ../hal/renesas-rx.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+    endif
   else ifeq ($(WOLFHAL),1)
     APP_OBJS:=app_wolfhal.o led.o system.o timer.o ../test-app/libwolfboot.o
   else
