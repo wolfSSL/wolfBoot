@@ -151,6 +151,8 @@ extern void PowerON_Reset(void);
 #define OFS_OSIS    __attribute__ ((section (".ofs6"))) /* 0xFE7F5D50 */
 #define OFS_FAW     __attribute__ ((section (".ofs7"))) /* 0xFE7F5D64 */
 #define OFS_RCP     __attribute__ ((section (".ofs8"))) /* 0xFE7F5D70 */
+#define ROMCODE_SECT __attribute__ ((section (".romcode"))) /* 0xFFFFFF80 */
+#define OFS_RX71M   __attribute__ ((section (".ofs_rx71m"))) /* 0x00120040 */
 
 /* Generic Interrupt Handler */
 void INT_Dummy(void) __attribute__ ((interrupt));
@@ -158,6 +160,19 @@ void INT_Dummy(void) {
     /* brk(); */
     /* wait(); */
 }
+
+#ifdef TARGET_rx71m
+/* Fault exceptions stop here */
+void INT_Fault(void) __attribute__ ((interrupt));
+void INT_Fault(void)
+{
+    while (1)
+        ;
+}
+#define INT_EXCEP_FAULT INT_Fault
+#else
+#define INT_EXCEP_FAULT INT_Dummy
+#endif
 
 
 const void *ExceptVectors[] EXVECT_SECT = {
@@ -203,17 +218,17 @@ const void *ExceptVectors[] EXVECT_SECT = {
 //;0xffffffCC  Reserved
     (fp)0,
 //;0xffffffd0  Exception(Supervisor Instruction)
-    INT_Dummy /* INT_Excep_SuperVisorInst */,
+    INT_EXCEP_FAULT /* INT_Excep_SuperVisorInst */,
 //;0xffffffd4  Exception(Access Instruction)
-    INT_Dummy /* INT_Excep_AccessInst */,
+    INT_EXCEP_FAULT /* INT_Excep_AccessInst */,
 //;0xffffffd8  Reserved
     INT_Dummy,
 //;0xffffffdc  Exception(Undefined Instruction)
-    INT_Dummy /* INT_Excep_UndefinedInst */,
+    INT_EXCEP_FAULT /* INT_Excep_UndefinedInst */,
 //;0xffffffe0  Reserved
     INT_Dummy,
 //;0xffffffe4  Exception(Floating Point)
-    INT_Dummy /* INT_Excep_FloatingPoint */,
+    INT_EXCEP_FAULT /* INT_Excep_FloatingPoint */,
 //;0xffffffe8  Reserved
     INT_Dummy,
 //;0xffffffec  Reserved
@@ -223,7 +238,7 @@ const void *ExceptVectors[] EXVECT_SECT = {
 //;0xfffffff4  Reserved
     INT_Dummy,
 //;0xfffffff8  NMI
-    INT_Dummy /* INT_NonMaskableInterrupt */,
+    INT_EXCEP_FAULT /* INT_NonMaskableInterrupt */,
 #else
 //;0xffffff80  MDES  Endian Select Register
 #ifdef __RX_LITTLE_ENDIAN__
@@ -302,6 +317,47 @@ const void *HardwareVectors[] FVECT_SECT = {
     PowerON_Reset
 #endif
 };
+
+#if defined(TARGET_rx71m) && !defined(WOLFBOOT_RENESAS_APP)
+/* ROMCODE 0x00000000 or 0x00000001 enables ROM code protection */
+#define ROMCODE_VALUE (0xFFFFFFFF)
+
+/* On RX71M, ROMCODE sits in the exception table area at reset (0xFFFFFF80),
+ * so ExceptVectors[] is placed in ROM and the startup points EXTB at it. */
+const void *RomCodeArea[] ROMCODE_SECT = {
+    (fp)0xFFFFFFFF, /* 0x00 reserved */
+    (fp)0xFFFFFFFF, /* 0x04 reserved */
+    (fp)0xFFFFFFFF, /* 0x08 reserved */
+    (fp)0xFFFFFFFF, /* 0x0C reserved */
+    (fp)0xFFFFFFFF, /* 0x10 reserved */
+    (fp)0xFFFFFFFF, /* 0x14 reserved */
+    (fp)0xFFFFFFFF, /* 0x18 reserved */
+    (fp)ROMCODE_VALUE, /* 0x1C ROMCODE */
+    (fp)0xFFFFFFFF, /* 0x20 reserved */
+    (fp)0xFFFFFFFF, /* 0x24 reserved */
+    (fp)0xFFFFFFFF, /* 0x28 reserved */
+    (fp)0xFFFFFFFF, /* 0x2C reserved */
+    (fp)0xFFFFFFFF, /* 0x30 reserved */
+    (fp)0xFFFFFFFF, /* 0x34 reserved */
+    (fp)0xFFFFFFFF, /* 0x38 reserved */
+    (fp)0xFFFFFFFF, /* 0x3C reserved */
+    (fp)0xFFFFFFFF, /* 0x40 reserved */
+    (fp)0xFFFFFFFF, /* 0x44 reserved */
+    (fp)0xFFFFFFFF, /* 0x48 reserved */
+    (fp)0xFFFFFFFF, /* 0x4C reserved */
+    INT_Fault,      /* 0x50 supervisor instruction */
+    INT_Fault,      /* 0x54 access */
+    INT_Fault,      /* 0x58 reserved */
+    INT_Fault,      /* 0x5C undefined instruction */
+    INT_Fault,      /* 0x60 reserved */
+    INT_Fault,      /* 0x64 floating point */
+    INT_Fault,      /* 0x68 reserved */
+    INT_Fault,      /* 0x6C reserved */
+    INT_Fault,      /* 0x70 reserved */
+    INT_Fault,      /* 0x74 reserved */
+    INT_Fault,      /* 0x78 NMI */
+};
+#endif
 
 const fp RelocatableVectors[] RVECT_SECT = {
 //;0x0000  Reserved
@@ -830,6 +886,24 @@ const fp RelocatableVectors[] RVECT_SECT = {
 #define __OFS0_VALUE (0xffffffff)
 #define __OFS1_VALUE (0xffffffff)
 
+#ifdef TARGET_rx71m
+#ifndef WOLFBOOT_RENESAS_APP
+const unsigned long __ofsm_rx71m[12] OFS_RX71M = {
+    0xffffffff,   /* 0x40 SPCC */
+    0xffffffff,   /* 0x44 reserved */
+    0xffffffff,   /* 0x48 TMEF */
+    0xffffffff,   /* 0x4C reserved */
+    0xffffffff,   /* 0x50 OSIS (ID code) */
+    0xffffffff,   /* 0x54 OSIS */
+    0xffffffff,   /* 0x58 OSIS */
+    0xffffffff,   /* 0x5C OSIS */
+    0xffffffff,   /* 0x60 TMINF */
+    __MDE_VALUE,  /* 0x64 MDE */
+    __OFS0_VALUE, /* 0x68 OFS0 */
+    __OFS1_VALUE, /* 0x6C OFS1 */
+};
+#endif /* !WOLFBOOT_RENESAS_APP */
+#else
 const unsigned long __ofsm_sec_ofs1[] OFS_REG = {
     __MDE_VALUE,
     __OFS0_VALUE,
@@ -861,6 +935,7 @@ const unsigned long __FAWreg OFS_FAW = 0xffffffff;
 
 /* RCP register */
 const unsigned long __RCPreg OFS_RCP = 0xffffffff;
+#endif /* TARGET_rx71m */
 #endif /* WOLFBOOT_RENESAS_OSM */
 
 #endif /* __RX__ */
