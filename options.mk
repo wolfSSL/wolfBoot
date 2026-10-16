@@ -190,6 +190,25 @@ ifneq ($(MPFS_QSPI_CLK_DIV),)
     CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
 endif
 
+# PolarFire SoC: read-only survey of a range of sNVM pages at boot, to record
+# what a device holds before and after provisioning or a bitstream change.
+# Prints the page admin word (ROM flag), the page state and a checksum, never
+# the contents: one of these pages holds the wrapped image key.  The default
+# range covers the keystore and that key.
+MPFS_SNVM_DUMP_FIRST?=200
+MPFS_SNVM_DUMP_COUNT?=2
+ifeq ($(MPFS_SNVM_DUMP),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SNVM_DUMP=1 needs the M-mode target (RISCV_MMODE=1): \
+                    only M-mode reaches the System Controller mailbox)
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SNVM_DUMP" \
+            -DMPFS_SNVM_DUMP_FIRST=$(MPFS_SNVM_DUMP_FIRST) \
+            -DMPFS_SNVM_DUMP_COUNT=$(MPFS_SNVM_DUMP_COUNT)
+endif
+
 # PolarFire SoC: leave the MSS watchdog nodes enabled in the dtb and stop the
 # parked E51 from refreshing them, so the OS owns the watchdogs after the
 # hand-off.  Something on the OS side must then service them.
