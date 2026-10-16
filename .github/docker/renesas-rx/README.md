@@ -2,7 +2,8 @@
 
 Builds `ghcr.io/wolfssl/wolfboot-ci-rx`, the container used by
 `.github/workflows/test-build-renesas-rx.yml` to build the Renesas RX example
-configs (`config/examples/renesas-rx65n.config`, `renesas-rx72n.config`) with a
+configs (`config/examples/renesas-rx65n.config`, `renesas-rx71m.config`,
+`renesas-rx72n.config`) with a
 real GNU RX (GNURX) toolchain.
 
 The GNURX ELF toolchain is **login-gated** at the vendor (llvm-gcc-renesas.com)
