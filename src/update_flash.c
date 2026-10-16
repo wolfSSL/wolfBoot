@@ -950,14 +950,25 @@ static uint32_t wolfBoot_get_total_size(struct wolfBoot_image* boot,
     return total_size;
 }
 
-#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES)
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(WOLFBOOT_SKIP_BOOT_VERIFY)
+#ifndef ALLOW_DOWNGRADE
+/* Read a little-endian u32 from header octets */
+static uint32_t wolfBoot_hdr_le32(const uint8_t* p)
+{
+    return (uint32_t)(p[0] & 0xFFU) | ((uint32_t)(p[1] & 0xFFU) << 8) |
+           ((uint32_t)(p[2] & 0xFFU) << 16) | ((uint32_t)(p[3] & 0xFFU) << 24);
+}
+#endif
+
 /* Read the UPDATE image size from the copy of UPDATE sector 0 in SWAP. Used to
  * resume a swap after a power cut during the BOOT->UPDATE copy of sector 0,
  * which erases the UPDATE header. */
-static uint32_t wolfBoot_swap_update_size(void)
+static uint32_t wolfBoot_swap_update_size(int fallback_allowed)
 {
     struct wolfBoot_image swap;
-    uint32_t              hdr[2] = {0, 0}; /* magic and image size */
+    /* Magic, image size, version TLV */
+    uint8_t               hdr[16] XALIGNED(4) = {0};
     uint32_t              size;
     uint8_t               flag = SECT_FLAG_NEW;
 #if defined(EXT_ENCRYPTED) && defined(EXT_FLASH) && PARTN_IS_EXT(PART_SWAP)
@@ -980,26 +991,38 @@ static uint32_t wolfBoot_swap_update_size(void)
     wolfBoot_get_encrypt_key(key, nonce);
     wolfBoot_enable_fallback_iv(0);
     wolfBoot_crypto_set_iv(nonce, 0);
-    ext_flash_check_read((uintptr_t)swap.hdr, (uint8_t*)hdr, sizeof(hdr));
+    ext_flash_check_read((uintptr_t)swap.hdr, hdr, sizeof(hdr));
     wolfBoot_zeroize(key, sizeof(key));
     wolfBoot_zeroize(nonce, sizeof(nonce));
 #else
-    ext_flash_read((uintptr_t)swap.hdr, (uint8_t*)hdr, sizeof(hdr));
+    ext_flash_read((uintptr_t)swap.hdr, hdr, sizeof(hdr));
 #endif
 #else
     /* Internal SWAP holds the sector as plaintext, also in encrypted builds */
     memcpy(hdr, swap.hdr, sizeof(hdr));
 #endif
-    size = wolfBoot_image_size((uint8_t*)hdr);
+    size = wolfBoot_image_size(hdr);
     if ((WOLFBOOT_HDR_GET_U32(hdr) != WOLFBOOT_MAGIC) ||
         (size > MAX_UPDATE_SIZE)) {
         return 0;
     }
+#ifndef ALLOW_DOWNGRADE
+    /* Block rollback unless falling back */
+    if ((fallback_allowed == 0) &&
+        ((wolfBoot_hdr_le32(hdr + 8) !=
+          (HDR_VERSION | ((uint32_t)WOLFBOOT_HDR_U32_SZ << 16))) ||
+         (wolfBoot_hdr_le32(hdr + 12) <=
+          wolfBoot_current_firmware_version()))) {
+        return 0;
+    }
+#else
+    (void)fallback_allowed;
+#endif
     return size;
 }
 #else
 /* SWAP doesn't hold a copy of the UPDATE header for these cases */
-#define wolfBoot_swap_update_size() 0
+#define wolfBoot_swap_update_size(fallback_allowed) 0
 #endif
 
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
@@ -1093,7 +1116,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         if (update_open < 0) {
             /* A power cut mid-swap may have erased the UPDATE header, try to
              * resume using the copy in SWAP */
-            update.fw_size = wolfBoot_swap_update_size();
+            update.fw_size = wolfBoot_swap_update_size(fallback_allowed);
             if (update.fw_size == 0) {
 #ifdef EXT_ENCRYPTED
                 wolfBoot_enable_fallback_iv(0);
