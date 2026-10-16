@@ -30,6 +30,8 @@
     #define RX_NOP() __no_operation()
 #endif
 
+#define RX_PSW_I (1UL << 16) /* PSW interrupt enable bit */
+
 /* API's */
 void hal_delay_us(uint32_t us);
 
@@ -207,6 +209,13 @@ void hal_delay_us(uint32_t us);
 #define FLASH_FCURAME_KEY      (0xC400)
 #define FLASH_FCURAME_FCRME    (1 << 0) /* FCURAM access enable */
 #define FLASH_FCURAME_FRAMTRAN (1 << 1) /* 1=high-speed write mode */
+
+#define FLASH_FASTAT (*(volatile uint8_t *)(0x007FE010))
+#define FLASH_FASTAT_DFAE  (1 << 3) /* Data flash access violation */
+#define FLASH_FASTAT_CMDLK (1 << 4) /* Refusing commands until released */
+#define FLASH_FASTAT_CFAE  (1 << 7) /* Code flash access violation */
+
+#define FLASH_FAEINT_ECRCTIE (1 << 0)
 
 #define FLASH_FCPSR (*(volatile uint16_t *)(0x007FE0E0))
 #endif
@@ -436,6 +445,9 @@ void hal_delay_us(uint32_t us);
 #define ICU_PIAR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7900 + (x)))
 
 typedef enum {
+	FLASH_ERR_NOT_BLANK = -10,
+	FLASH_ERR_TIMEOUT = -9,
+	FLASH_ERR_FCU = -8,
 	FLASH_ERR_ILGL = -7,
 	FLASH_ERR_PRG  = -6,
 	FLASH_ERR_ERS  = -5,
