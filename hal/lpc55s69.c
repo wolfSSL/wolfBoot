@@ -149,24 +149,20 @@ static int hwpuf_provision_set(int force)
 
     XMEMSET(&prov, 0, sizeof(prov));
 
-    if (nxp_hwpuf_RegisterDevice() != 0)
-        return -1;
-
-    if (wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID) != 0)
+    if (nxp_hwpuf_Init() != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufEnroll(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
+    if (nxp_hwpuf_Enroll(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID);
+    (void)nxp_hwpuf_Deinit();
+    (void)nxp_hwpuf_Init();
 
-    if (wc_CryptoCb_HwpufStart(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
+    if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufGenerateKey(WOLFSSL_NXP_HWPUF_DEVID,
-                             HWPUF_PROV_UDS_KEY_INDEX, HWPUF_PROV_UDS_KEY_SIZE,
-                             prov.uds_kc, sizeof(prov.uds_kc)) != 0)
+    if (nxp_hwpuf_GenerateKey(HWPUF_PROV_UDS_KEY_INDEX, HWPUF_PROV_UDS_KEY_SIZE,
+                              prov.uds_kc, sizeof(prov.uds_kc)) != 0)
         goto error_out;
 
     prov.magic = HWPUF_PROV_MAGIC;
@@ -189,9 +185,8 @@ static int hwpuf_provision_set(int force)
 
 error_out:
     hal_zeroize(&prov, sizeof(prov));
-    (void)wc_CryptoCb_HwpufZeroize(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)nxp_hwpuf_UnregisterDevice();
+    (void)nxp_hwpuf_Zeroize();
+    (void)nxp_hwpuf_Deinit();
     return ret;
 }
 #endif /* WOLFBOOT_HWPUF_PROVISION */
@@ -205,17 +200,13 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
     if (hwpuf_provision_get() != 0)
         return -1;
 
-    if (nxp_hwpuf_RegisterDevice() != 0)
+    if (nxp_hwpuf_Init() != 0)
         return -1;
 
-    if (wc_CryptoCb_HwpufInit(WOLFSSL_NXP_HWPUF_DEVID) != 0)
+    if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    if (wc_CryptoCb_HwpufStart(WOLFSSL_NXP_HWPUF_DEVID, prov.ac, sizeof(prov.ac)) != 0)
-        goto error_out;
-
-    ret = wc_CryptoCb_HwpufGetKey(WOLFSSL_NXP_HWPUF_DEVID, prov.uds_kc, sizeof(prov.uds_kc),
-                          uds, sizeof(uds));
+    ret = nxp_hwpuf_GetKey(prov.uds_kc, sizeof(prov.uds_kc), uds, sizeof(uds));
     if (ret != 0)
         goto error_out;
 
@@ -230,9 +221,8 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
 error_out:
     hal_zeroize(uds, sizeof(uds));
     hal_zeroize(&prov, sizeof(prov));
-    (void)wc_CryptoCb_HwpufZeroize(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)wc_CryptoCb_HwpufDeinit(WOLFSSL_NXP_HWPUF_DEVID);
-    (void)nxp_hwpuf_UnregisterDevice();
+    (void)nxp_hwpuf_Zeroize();
+    (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }
 #endif /* WOLFCRYPT_TZ_PSA */
