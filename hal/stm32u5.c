@@ -62,6 +62,17 @@ void RAMFUNCTION hal_flash_clear_errors(uint8_t bank)
 
 }
 
+#if (TZ_SECURE())
+/* Map a secure alias address (0x0C...) to the 0x08... address the bank
+ * checks below expect. Both aliases name the same flash page. */
+static uint32_t RAMFUNCTION flash_addr_unalias(uint32_t address)
+{
+    if ((address & FLASH_SECURE_MMAP_BASE) == FLASH_SECURE_MMAP_BASE)
+        address = (address & ~FLASH_SECURE_MMAP_BASE) | FLASHMEM_ADDRESS_SPACE;
+    return address;
+}
+#endif
+
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     int i = 0;
@@ -71,6 +82,9 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     volatile uint32_t *sr, *cr;
 
     hal_flash_clear_errors(0);
+#if (TZ_SECURE())
+    address = flash_addr_unalias(address);
+#endif
     dst = (uint32_t*)address;
 
 #if (TZ_SECURE())
@@ -199,6 +213,9 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     hal_flash_clear_errors(0);
     if (len == 0)
         return -1;
+#if (TZ_SECURE())
+    address = flash_addr_unalias(address);
+#endif
 
     if (address < ARCH_FLASH_OFFSET)
         return -1;
