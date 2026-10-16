@@ -182,6 +182,7 @@ jobs:
           path: CMSIS_5
 
       - name: Setup MCUXpresso SDK (lpc55s69)
+        shell: bash
         run: |
           python3 -m venv venv
           source venv/bin/activate
