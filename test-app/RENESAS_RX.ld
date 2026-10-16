@@ -114,6 +114,8 @@ SECTIONS
     .data : AT(_mdata)
     {
         _data = .;
+        . = ALIGN(4);
+        KEEP(*(.ramcode))
         *(.data)
         *(.data.*)
         *(D)
