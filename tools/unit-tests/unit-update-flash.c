@@ -1139,16 +1139,21 @@ static void check_update_image(const uint8_t* img)
     ck_assert_int_eq(memcmp(buf, img, sizeof(buf)), 0);
 }
 
-static void resume_setup(void)
+static void resume_setup_versions(uint32_t boot_ver, uint32_t update_ver)
 {
     prepare_flash();
-    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
-    add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+    add_payload(PART_BOOT, boot_ver, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, update_ver, TEST_SIZE_SMALL);
     wolfBoot_update_trigger();
     memcpy(resume_boot_snap,
         (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
         WOLFBOOT_PARTITION_SIZE);
     update_read_plain(resume_update_snap);
+}
+
+static void resume_setup(void)
+{
+    resume_setup_versions(1, 2);
 }
 
 static void resume_verify(void)
@@ -1190,7 +1195,7 @@ START_TEST (test_update_resume_from_backup_flag)
 END_TEST
 #endif /* PART_SWAP_EXT */
 
-#ifndef DELTA_UPDATES
+#if !defined(DELTA_UPDATES) && !defined(WOLFBOOT_SKIP_BOOT_VERIFY)
 /* State after a reset right after the erase of UPDATE sector 0 in its backup
  * step. SWAP holds the old UPDATE sector 0 and the sector flag is SWAPPING. */
 static void cut_after_sector0_backup_erase(void)
@@ -1249,18 +1254,67 @@ START_TEST(test_rollback_resume_from_swapping_flag)
 }
 END_TEST
 
-/* Overwrite one u32 of the UPDATE header copy in SWAP (0: magic, 4: size). The
- * resume must then refuse to swap and leave BOOT as it was. */
-static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
+/* An interrupted swap into an empty BOOT (a first install) still resumes and
+ * boots the update. */
+START_TEST(test_emergency_resume_from_swapping_flag)
+{
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_UPDATE, 5, TEST_SIZE_SMALL);
+    update_read_plain(resume_update_snap);
+    cut_after_sector0_backup_erase();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 5);
+    ck_assert_int_eq(
+        memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+               resume_update_snap, TEST_SIZE_SMALL + IMAGE_HEADER_SIZE),
+        0);
+    cleanup_flash();
+}
+END_TEST
+
+/* Stage the resume state with these BOOT and UPDATE versions, boot, and check
+ * the resume is refused and BOOT is left unchanged. */
+static void resume_with_version(uint32_t boot_ver, uint32_t update_ver)
+{
+    reset_mock_stats();
+    resume_setup_versions(boot_ver, update_ver);
+    cut_after_sector0_backup_erase();
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), boot_ver);
+    ck_assert_int_eq(
+        memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+               resume_boot_snap, WOLFBOOT_PARTITION_SIZE),
+        0);
+    cleanup_flash();
+}
+
+/* Resume refused: staged image is older than BOOT. */
+START_TEST(test_update_resume_older_refused)
+{
+    resume_with_version(2, 1);
+}
+END_TEST
+
+/* Resume refused: staged image is the same version as BOOT. */
+START_TEST(test_update_resume_same_version_refused)
+{
+    resume_with_version(2, 2);
+}
+END_TEST
+
+/* Overwrite one u32 of the UPDATE header copy in SWAP (0: magic, 4: size,
+ * 12: version). Flip the bits that turn the field into val, so an encrypted
+ * copy also decrypts to val. */
+static void swap_copy_set_u32(uint32_t off, uint32_t val)
 {
     struct wolfBoot_image swap;
     uint32_t              word, plain;
 
-    reset_mock_stats();
-    resume_setup();
-    cut_after_sector0_backup_erase();
-    /* Flip the bits that turn the field into val, so an encrypted copy also
-     * decrypts to val */
     memcpy(&plain, resume_update_snap + off, sizeof(plain));
     memcpy(&word,
            (const void*)(uintptr_t)(WOLFBOOT_PARTITION_SWAP_ADDRESS + off),
@@ -1272,6 +1326,35 @@ static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
     wb_flash_write(&swap, off, &word, sizeof(word));
     ext_flash_lock();
     hal_flash_lock();
+}
+
+/* A forged-newer version passes the resume check, but then fails verification
+ * as BOOT, so wolfBoot falls back and restores the original BOOT. */
+START_TEST(test_update_resume_forged_version_falls_back)
+{
+    reset_mock_stats();
+    resume_setup_versions(2, 1);
+    cut_after_sector0_backup_erase();
+    swap_copy_set_u32(12, host_to_img_u32(3));
+    wolfBoot_start();
+    ck_assert(!wolfBoot_panicked);
+    ck_assert(wolfBoot_staged_ok);
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
+    ck_assert_int_eq(
+        memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+               resume_boot_snap, TEST_SIZE_SMALL + IMAGE_HEADER_SIZE),
+        0);
+    cleanup_flash();
+}
+END_TEST
+
+/* The resume must then refuse to swap and leave BOOT as it was. */
+static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
+{
+    reset_mock_stats();
+    resume_setup();
+    cut_after_sector0_backup_erase();
+    swap_copy_set_u32(off, val);
     ck_assert_int_lt(wolfBoot_update(0), 0);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
@@ -1292,7 +1375,15 @@ START_TEST(test_update_resume_swap_size_too_big)
         4, host_to_img_u32((uint32_t)(MAX_UPDATE_SIZE + 1U)));
 }
 END_TEST
-#endif /* !DELTA_UPDATES */
+
+/* Resume refused: the first header field is not the version TLV. */
+START_TEST(test_update_resume_version_tlv_not_first)
+{
+    resume_with_bad_swap_field(
+        8, host_to_img_u32(HDR_TIMESTAMP | (8U << 16)));
+}
+END_TEST
+#endif /* !DELTA_UPDATES && !WOLFBOOT_SKIP_BOOT_VERIFY */
 #endif /* !DISABLE_BACKUP */
 
 /* F-13643: a completed swap must leave the update partition as a faithful
@@ -2240,13 +2331,23 @@ Suite *wolfboot_suite(void)
 #if defined(PART_SWAP_EXT) && !defined(DISABLE_BACKUP)
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
 #endif
-#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES)
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(WOLFBOOT_SKIP_BOOT_VERIFY)
     tcase_add_test(forward_update_samesize,
                    test_update_resume_from_swapping_flag);
     tcase_add_test(forward_update_samesize, test_update_resume_bad_swap_magic);
     tcase_add_test(forward_update_samesize,
                    test_update_resume_swap_size_too_big);
+    tcase_add_test(forward_update_samesize,
+                   test_update_resume_version_tlv_not_first);
+    tcase_add_test(forward_update_sameversion_denied,
+                   test_update_resume_same_version_refused);
+    tcase_add_test(update_oldversion_denied, test_update_resume_older_refused);
+    tcase_add_test(update_oldversion_denied,
+                   test_update_resume_forged_version_falls_back);
     tcase_add_test(emergency_rollback, test_rollback_resume_from_swapping_flag);
+    tcase_add_test(empty_boot_partition_update,
+                   test_emergency_resume_from_swapping_flag);
 #endif
     tcase_add_test(forward_update_tolarger, test_forward_update_tolarger);
     tcase_add_test(forward_update_tosmaller, test_forward_update_tosmaller);
