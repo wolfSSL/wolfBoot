@@ -915,7 +915,7 @@ Make variables, on the command line or in the `.config`. See [PolarFire.md](Pola
 | `DISK_GOLDEN_SLOT`, `DISK_FAILOVER_ZEROIZE` | Golden slot tried after A/B, and zeroizing the image key and slot heads before the golden boot. |
 | `MPFS_QSPI_CLK_DIV` | QSPI SCK divider, a `QSPI_CLK_DIV_*` name from `hal/mpfs250.h` (default `QSPI_CLK_DIV_8`). |
 | `MPFS_WDT_NODES_KEEP` | Leave the MSS watchdog nodes enabled and stop the parked E51 refreshing them, so the OS owns the watchdogs. |
-| `WATCHDOG`, `WATCHDOG_TIMEOUT_MS` | Keep the E51 watchdog running during wolfBoot itself, with the given timeout (default 30 s). |
+| `WATCHDOG` | No timeout to set on this target: the MSS watchdog window is a bitstream property and cannot be changed from software. |
 
 > **Note:** the MPFS250 U54/E51 cores have no RISC-V crypto extensions (Zknh), so none of the
 > configurations use them. The SD-card, QSPI and M-Mode + DDR configs build the portable RISC-V
