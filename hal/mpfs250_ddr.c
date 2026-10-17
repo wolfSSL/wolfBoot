@@ -3151,7 +3151,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
         do {
             ret = run_training(0);
             if (ret != 0) {
-                continue;
+                break;
             }
 
             /* HSS DDR_TRAINING_SET_FINAL_MODE: rewrite DDRPHY_MODE with
@@ -3206,7 +3206,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
                 wolfBoot_printf(
                     "  WRCALIB not all lanes (result=%u) -- retraining\n",
                     (unsigned)wrcal);
-                continue;
+                break;
             }
             /* HSS DDR_TRAINING_IP_SM_VERIFY: a DQ/DQS window under
              * DQ_DQS_NUM_TAPS (5) on any lane is a failed training. */
@@ -3314,12 +3314,12 @@ int mpfs_ddr_init(unsigned int outer_retry)
                 wolfBoot_printf(
                     "  MTC 256B TIMEOUT (DONE_ACK=0x%x ERR_STS=0x%x)\n",
                     DDRCFG_REG(MT_DONE_ACK), DDRCFG_REG(MT_ERROR_STS));
-                continue;
+                break;
             }
             if ((DDRCFG_REG(MT_ERROR_STS) & 0x1UL) != 0) {
                 wolfBoot_printf("  MTC 256B FAIL (err_sts=0x%x)\n",
                     DDRCFG_REG(MT_ERROR_STS));
-                continue;
+                break;
             }
             DBG_DDR("  MTC 256B PASS (err_sts=0x%x to_used=0x%x)\n",
                 DDRCFG_REG(MT_ERROR_STS),

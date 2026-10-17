@@ -80,6 +80,10 @@
 /* Write "0xDEAD" to cause a full MSS reset*/
 #define SYSREG_MSS_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x18)))
 
+/* Reset status (offset 0x20): the cause of the last reset.  Cleared by
+ * writing zero, not by writing the bits back. */
+#define MPFS_SYSREG_RESET_SR (SYSREG_BASE + 0x20)
+
 /* Peripheral Subblock Clock Control Register (offset 0x84) */
 #define SYSREG_SUBBLK_CLOCK_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x84)))
 #define SYSREG_SUBBLK_CLOCK_CR_ENVM (1U << 0)
@@ -259,11 +263,8 @@
 /* Bitstream/IAP services.  The SPI directory index of 0x22/0x42/0x44 rides
  * in the SERVICES_CR mailbox-offset field, not in the mailbox. */
 #define SYS_SERV_CMD_IAP_IMAGE_AUTH    0x22u /* index in CR[14:7] */
-#define SYS_SERV_CMD_BITSTREAM_AUTH    0x23u /* SPI address in mailbox */
 #define SYS_SERV_CMD_IAP_PROGRAM_IDX   0x42u /* restarts the device on success */
-#define SYS_SERV_CMD_IAP_PROGRAM_ADDR  0x43u
 #define SYS_SERV_CMD_IAP_VERIFY_IDX    0x44u
-#define SYS_SERV_CMD_IAP_VERIFY_ADDR   0x45u
 #define SYS_SERV_CMD_AUTO_UPDATE       0x46u /* restarts the device on success */
 #define SYS_SERV_CMD_DIGEST_CHECK      0x47u /* options word in, DIGESTERR at byte 4 */
 
@@ -337,25 +338,10 @@ int mpfs_nonce(uint8_t *nonce);
  * config_athena.h (BASE32_ADDR_ATHENAREG = 0x20127000). */
 #define ATHENA_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x00)))
 #define ATHENA_STALL_CR (*((volatile uint32_t*)(ATHENA_BASE + 0x04)))
-#define ATHENA_UPPER_ADDRESS (*((volatile uint32_t*)(ATHENA_BASE + 0x08)))
-/* Security UG Table 7-7.  RESET reads 1 out of power-on reset; MSS_OWNER says
- * the Libero ownership mode gave the core to the MSS rather than the fabric. */
+/* Security UG Table 7-7.  RESET reads 1 out of power-on reset. */
 #define ATHENA_CR_RESET        (1U << 0)
-#define ATHENA_CR_PURGE        (1U << 1)
-#define ATHENA_CR_GO           (1U << 2)
 #define ATHENA_CR_RINGOSCON    (1U << 3)
-#define ATHENA_CR_STREAM_EN    (1U << 4)
 #define ATHENA_CR_STALL_EN     (1U << 5)
-#define ATHENA_CR_STALL_RATE_SHIFT 6
-#define ATHENA_CR_STALL_RATE_MASK  (3U << ATHENA_CR_STALL_RATE_SHIFT)
-#define ATHENA_CR_COMPLETE     (1U << 8)
-#define ATHENA_CR_ALARM        (1U << 9)
-#define ATHENA_CR_BUSERROR     (1U << 10)
-#define ATHENA_CR_STREAM_ENABLED (1U << 11)
-#define ATHENA_CR_BUSY         (1U << 12)
-#define ATHENA_CR_MSS_OWNER    (1U << 28)
-#define ATHENA_CR_FAB_OWNER    (1U << 29)
-
 
 /* L2 Cache Controller (CACHE_CTRL @ 0x02010000) */
 #define L2_CACHE_BASE               0x02010000UL
