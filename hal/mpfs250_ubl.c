@@ -52,11 +52,6 @@ static const unsigned long wdt_bases[MPFS_NUM_HARTS] = {
     MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
 };
 
-/* Boot ROM E51 watchdog state, restored before the jump so the eNVM
- * wolfBoot's hal_init() snapshots what the ROM left. */
-static uint32_t ubl_wdt_mvrp;
-static uint32_t ubl_wdt_ctrl;
-
 static uint64_t rdcycle(void)
 {
     uint64_t c;
@@ -68,16 +63,10 @@ void hal_init(void)
 {
     unsigned int w;
 
-    ubl_wdt_mvrp = MSS_WDT_MVRP(MSS_WDT_E51_BASE);
-    ubl_wdt_ctrl = MSS_WDT_CONTROL(MSS_WDT_E51_BASE);
-
-    /* Same sequence as the eNVM wolfBoot: no device reset on timeout and the
-     * widest window, so the signature check cannot be cut short. */
+    /* Start every window from full, so the signature check cannot be cut
+     * short.  The window itself is a design-time property and already the
+     * widest the counter allows; see the watchdog policy in hal/mpfs250.c. */
     for (w = 0; w < MPFS_NUM_HARTS; w++) {
-        MSS_WDT_REFRESH(wdt_bases[w]) = 0xDEADC0DEU;
-        MSS_WDT_TIME(wdt_bases[w])    = 0x00FFFFFFUL;
-        MSS_WDT_MVRP(wdt_bases[w])    = 0x00FFFFFFUL;
-        MSS_WDT_CONTROL(wdt_bases[w]) = 0;
         MSS_WDT_REFRESH(wdt_bases[w]) = 0xDEADC0DEU;
     }
 
@@ -90,9 +79,8 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
+    /* Hand the eNVM wolfBoot a full window. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
-    MSS_WDT_MVRP(MSS_WDT_E51_BASE) = ubl_wdt_mvrp;
-    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) = ubl_wdt_ctrl;
 }
 
 /* The manifest is verified in place; there is no flash backend. */
