@@ -171,6 +171,11 @@ ifneq ($(DISK_BOOT_TRIES),)
     CFLAGS+=-DDISK_BOOT_TRIES=$(DISK_BOOT_TRIES)
 endif
 
+# QSPI SCK divider: a QSPI_CLK_DIV_* name from hal/mpfs250.h, default QSPI_CLK_DIV_8.
+ifneq ($(MPFS_QSPI_CLK_DIV),)
+    CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
+endif
+
 # Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
 # the watchdogs after the hand-off and must service them itself.
 ifeq ($(MPFS_WDT_NODES_KEEP),1)

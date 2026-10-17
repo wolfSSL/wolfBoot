@@ -789,8 +789,10 @@ int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 /* QSPI Flash Controller
  *
  * Two CoreQSPI v2 controllers with identical register layouts:
- *   SC QSPI  (MPFS_SC_SPI=1, default): 0x37020100 -- fabric-connected flash
- *   MSS QSPI (MPFS_SC_SPI=0):          0x21000000 -- MSS QSPI pins
+ *   SC QSPI  (-DMPFS_SC_SPI, every shipped QSPI config): 0x37020100,
+ *            the System Controller's flash
+ *   MSS QSPI (MPFS_SC_SPI undefined):                    0x21000000,
+ *            the MSS QSPI pins
  */
 
 /* QSPI Controller Base Address */
@@ -851,14 +853,34 @@ int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 #define QSPI_STATUS_TXAVAIL (1u << 3)
 #define QSPI_STATUS_READY   (1u << 7)
 
-/* QSPI Clock Configuration */
+/* QSPI Clock Configuration: SCK = PCLK / (2 * CLKRATE).  The MSS QSPI PCLK
+ * is the APB clock, 150 MHz under HSS and 40 MHz at the M-mode reset clock
+ * (MSS_APB_AHB_CLK) until mss_pll_init() raises it; the SC QSPI has the
+ * System Controller's own clock.  MPFS_QSPI_CLK_DIV picks the divider. */
 #define QSPI_CLK_DIV_2  0x01u
 #define QSPI_CLK_DIV_4  0x02u
 #define QSPI_CLK_DIV_6  0x03u
-#define QSPI_CLK_DIV_8  0x04u
+#define QSPI_CLK_DIV_8  0x04u  /* ~18.75 MHz from 150 MHz APB */
 #define QSPI_CLK_DIV_10 0x05u
 #define QSPI_CLK_DIV_12 0x06u
+#define QSPI_CLK_DIV_14 0x07u
+#define QSPI_CLK_DIV_16 0x08u
+#define QSPI_CLK_DIV_18 0x09u
+#define QSPI_CLK_DIV_20 0x0Au
+#define QSPI_CLK_DIV_22 0x0Bu
+#define QSPI_CLK_DIV_24 0x0Cu
+#define QSPI_CLK_DIV_26 0x0Du
+#define QSPI_CLK_DIV_28 0x0Eu
 #define QSPI_CLK_DIV_30 0x0Fu  /* ~5 MHz from 150 MHz APB */
+/* Divide by 8 is where read throughput stops improving: the polled FIFO
+ * transfer, not SCK, is the limit from there on.  Anything slower only costs
+ * time, anything faster buys nothing. */
+#ifndef MPFS_QSPI_CLK_DIV
+#define MPFS_QSPI_CLK_DIV QSPI_CLK_DIV_8
+#endif
+#if (MPFS_QSPI_CLK_DIV < 0x01u) || (MPFS_QSPI_CLK_DIV > 0x0Fu)
+#error MPFS_QSPI_CLK_DIV must be a CLKRATE of 1..15 (QSPI_CLK_DIV_2..QSPI_CLK_DIV_30)
+#endif
 
 /* Micron MT25QL01G Flash Commands */
 #define QSPI_CMD_READ_ID_OPCODE         0x9Fu   /* JEDEC ID Read */
