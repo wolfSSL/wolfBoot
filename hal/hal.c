@@ -284,6 +284,15 @@ int hal_flash_test_dualbank(void)
 
 #endif /* TEST_FLASH */
 
+#ifdef MMU
+/* Weak default for targets with no configured device tree; some HALs also
+ * compile their own out under WOLFBOOT_NO_PARTITIONS. */
+WEAKFUNCTION void* hal_get_dts_address(void)
+{
+    return NULL;
+}
+#endif /* MMU */
+
 WEAKFUNCTION int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
 {
     (void)address;
