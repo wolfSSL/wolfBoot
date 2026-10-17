@@ -2127,13 +2127,13 @@ int qspi_init(void)
     QSPI_IEN = 0;
 
     /* Configure QSPI Control Register:
-     * - Clock divider for ~5MHz (conservative)
+     * - Clock divider (MPFS_QSPI_CLK_DIV, ~5 MHz by default)
      * - CPOL=1 (clock idle high) for SPI Mode 3
      * - Sample on SCK edge
      * - Enable controller
      */
     QSPI_CONTROL =
-        (QSPI_CLK_DIV_30 << QSPI_CTRL_CLKRATE_OFFSET) |
+        (MPFS_QSPI_CLK_DIV << QSPI_CTRL_CLKRATE_OFFSET) |
         QSPI_CTRL_CLKIDLE |
         QSPI_CTRL_SAMPLE_SCK |
         QSPI_CTRL_EN;
@@ -2180,6 +2180,8 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
     uint32_t i;
     uint32_t timeout;
     uint32_t frame_cmd;
+    uint32_t rx_word;
+    int word_read;
 
     /* Wait for controller to be ready before starting */
     timeout = QSPI_TIMEOUT_TRIES;
@@ -2216,10 +2218,18 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
      * command phase avoids this. The flash determines command vs data
      * boundaries from the opcode, not the controller's phase. */
     frame_cmd = read_mode ? cmd_len : total_bytes;
+    /* FBYTE makes RXAVAIL/TXAVAIL count single bytes; FWORD makes them count
+     * 32-bit words, so a read polls STATUS once per four bytes instead of
+     * once per byte and pulls them through QSPI_X4_RX_DATA in one access.
+     * The polled loop, not SCK, is what caps the byte-mode read rate (it
+     * measures the same from CLKRATE /8 down to /2).  Word mode needs a data
+     * phase that is a whole number of words; anything else stays byte-mode. */
+    word_read = (read_mode && data_len >= 4u && (data_len & 3u) == 0u) ? 1 : 0;
     frames = ((total_bytes & 0xFFFF) << QSPI_FRAMES_TOTALBYTES_OFFSET) |
                 ((frame_cmd & 0x1FF) << QSPI_FRAMES_CMDBYTES_OFFSET) |
                 ((dummy_cycles & 0xF) << QSPI_FRAMES_IDLE_OFFSET) |
-                (1u << QSPI_FRAMES_FBYTE_OFFSET);
+                (word_read ? (1u << QSPI_FRAMES_FWORD_OFFSET)
+                           : (1u << QSPI_FRAMES_FBYTE_OFFSET));
 
     QSPI_FRAMES = frames;
 
@@ -2243,18 +2253,42 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
     }
 
     if (read_mode) {
-        /* Read mode: poll RXAVAIL for each data byte. */
-        for (i = 0; i < data_len; i++) {
-            timeout = QSPI_RX_TIMEOUT_TRIES;
-            while (!(QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout);
-            if (timeout == 0) {
-            #ifdef DEBUG_QSPI
-                wolfBoot_printf("QSPI: RX timeout at byte %d, status=0x%x\n",
-                    i, QSPI_STATUS);
-            #endif
-                return -3;
+        if (word_read) {
+            /* One STATUS poll and one 32-bit read per four bytes.  The
+             * destination is not necessarily word-aligned, so the word is
+             * stored a byte at a time; the saving is in the polling and the
+             * FIFO accesses, not the stores. */
+            for (i = 0; i < data_len; i += 4u) {
+                timeout = QSPI_RX_TIMEOUT_TRIES;
+                while (!(QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout);
+                if (timeout == 0) {
+                #ifdef DEBUG_QSPI
+                    wolfBoot_printf("QSPI: RX timeout at word %d, status=0x%x\n",
+                        i >> 2, QSPI_STATUS);
+                #endif
+                    return -3;
+                }
+                rx_word = QSPI_X4_RX_DATA;
+                data[i]     = (uint8_t)(rx_word & 0xFFu);
+                data[i + 1] = (uint8_t)((rx_word >> 8) & 0xFFu);
+                data[i + 2] = (uint8_t)((rx_word >> 16) & 0xFFu);
+                data[i + 3] = (uint8_t)((rx_word >> 24) & 0xFFu);
             }
-            data[i] = QSPI_RX_DATA;
+        }
+        else {
+            /* Byte mode: poll RXAVAIL for each data byte. */
+            for (i = 0; i < data_len; i++) {
+                timeout = QSPI_RX_TIMEOUT_TRIES;
+                while (!(QSPI_STATUS & QSPI_STATUS_RXAVAIL) && --timeout);
+                if (timeout == 0) {
+                #ifdef DEBUG_QSPI
+                    wolfBoot_printf("QSPI: RX timeout at byte %d, status=0x%x\n",
+                        i, QSPI_STATUS);
+                #endif
+                    return -3;
+                }
+                data[i] = QSPI_RX_DATA;
+            }
         }
         /* Wait for receive complete */
         timeout = QSPI_RX_TIMEOUT_TRIES;
@@ -2353,7 +2387,10 @@ static int qspi_enter_4byte_mode(void)
 /* Read from QSPI flash (4-byte addressing) */
 static int qspi_flash_read(uint32_t address, uint8_t *data, uint32_t len)
 {
-    const uint32_t max_chunk = 0xFFFF - 5; /* total_bytes is 16-bit, cmd is 5 */
+    /* total_bytes is 16-bit and the command takes 5 of it; round down to a
+     * whole number of words so a bulk read stays on the word-mode FIFO path
+     * in qspi_transfer_block instead of falling back to byte mode. */
+    const uint32_t max_chunk = (0xFFFFu - 5u) & ~3u;
     uint8_t cmd[5];
     uint32_t remaining = len;
     uint32_t chunk_len;
