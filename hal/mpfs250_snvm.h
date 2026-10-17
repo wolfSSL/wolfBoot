@@ -147,6 +147,12 @@ int mpfs_puf_derive(const char *label, const uint8_t *challenge, uint8_t *out);
 int mpfs_puf_purpose_key(const char *seed, const char *label, uint8_t *out);
 #endif
 
+#ifdef MPFS_SNVM_DUMP
+/* Read-only: print the admin word, state and a checksum of `count` pages from
+ * `first`.  Page contents are never printed. */
+void mpfs_snvm_dump(uint8_t first, uint8_t count);
+#endif
+
 #if defined(SNVM_ENCKEY_PROVISION) && !defined(SNVM_KEK)
 #error "SNVM_ENCKEY_PROVISION needs SNVM_KEK (the key is wrapped with the PUF KEK)"
 #endif

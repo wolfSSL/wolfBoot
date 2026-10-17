@@ -562,3 +562,57 @@ int snvm_enckey_provision(void)
 #endif /* SNVM_ENCKEY_PROVISION */
 
 #endif /* CUSTOM_ENCRYPT_KEY && SNVM_KEK */
+
+#ifdef MPFS_SNVM_DUMP
+/* Read-only survey of a range of sNVM pages, for checking what a device
+ * actually holds before and after a provisioning or bitstream change.  The
+ * page contents are never printed: one of these pages holds the wrapped
+ * image key, so only the admin word (ROM flag and page state), a
+ * classification and a checksum go to the console.  The checksum is for
+ * telling two reads apart, not a security primitive. */
+void mpfs_snvm_dump(uint8_t first, uint8_t count)
+{
+    static uint8_t page[MPFS_SNVM_PLAIN_DATA_LEN];
+    uint8_t admin[MPFS_SNVM_ADMIN_LEN];
+    uint32_t sum;
+    unsigned int i, j, blank, zero;
+    uint8_t m;
+    int ret;
+
+    for (i = 0; i < count; i++) {
+        if ((unsigned int)first + i >= MPFS_SNVM_MODULE_MAX) {
+            break;
+        }
+        m = (uint8_t)(first + i);
+        ret = mpfs_snvm_read(m, NULL, admin, page, sizeof(page));
+        if (ret != 0) {
+            /* A refusal is not the same as a page that is free: a page
+             * held as an authenticated or encrypted client refuses a
+             * plaintext read, and so does one that was never configured.
+             * The admin word separates them - an unconfigured page reads
+             * back zero, a configured one carries its flags. */
+            wolfBoot_printf("snvm %u: read failed, status %d, admin "
+                "%02x%02x%02x%02x\n", (unsigned)m, ret,
+                admin[3], admin[2], admin[1], admin[0]);
+            continue;
+        }
+        /* FNV-1a over the page, so two reads of the same page compare. */
+        sum = 0x811C9DC5u;
+        blank = 1;
+        zero = 1;
+        for (j = 0; j < sizeof(page); j++) {
+            sum = (sum ^ page[j]) * 0x01000193u;
+            if (page[j] != 0xFFU) {
+                blank = 0;
+            }
+            if (page[j] != 0x00U) {
+                zero = 0;
+            }
+        }
+        wolfBoot_printf("snvm %u: admin %02x%02x%02x%02x rom=%u %s sum %08x\n",
+            (unsigned)m, admin[3], admin[2], admin[1], admin[0],
+            (unsigned)((admin[2] & 0x80U) != 0U),
+            zero ? "zeroized" : (blank ? "blank" : "data"), (unsigned)sum);
+    }
+}
+#endif /* MPFS_SNVM_DUMP */
