@@ -24,6 +24,14 @@
 #ifdef TARGET_mpfs250
 #include "hal/mpfs250.h"
 #endif
+/* Per-hart M-mode trap stacks (src/riscv_sbi.c); the platform header may
+ * place them elsewhere. */
+#ifndef SBI_MSTACK_BASE
+#define SBI_MSTACK_BASE 0x103FC00000
+#endif
+#ifndef SBI_MSTACK_SHIFT
+#define SBI_MSTACK_SHIFT 12
+#endif
 
 /* ============================================================================
  * Trap Entry/Exit Macros
@@ -82,19 +90,32 @@
     STORE x31, 31 * REGBYTES(sp)
 
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* Frame slot 0 (x0's unused slot) = mscratch at entry: the trapped
-     * sp when we switched to the M-stack, 0 for an M-mode fallback or a
-     * nested trap.  Zero mscratch while inside the handler so a nested
-     * trap keeps descending on the CURRENT stack instead of reusing the
-     * consumed mscratch value as a stack (which caused an infinite
-     * trap-in-trap recursion).  Slot 2 = the trapped sp.  x1 is already
-     * saved in slot 1, so reuse it as a scratch register. */
-    csrr  x1, mscratch
-    STORE x1,   0 * REGBYTES(sp)
-    csrw  mscratch, x0
-    bnez  x1, 101f
-    addi  x1, sp, 32 * REGBYTES
+    /* Slot 2 = the trapped sp: what mscratch holds after the switch above
+     * (any value, 0 included), or sp + frame when no switch happened.
+     * Slot 0 (x0's unused slot) = 1 when this frame switched to the
+     * M-stack, which is the case exactly when it sits at this hart's
+     * M-stack top; 0 for an M-mode fallback or a nested trap.  The flag
+     * is derived from the frame address, never from the trapped sp: a
+     * context trapping with sp == 0 must still re-arm mscratch on exit
+     * (trap_exit), or the next trap from S-mode runs the entry on an
+     * untranslated virtual sp and faults forever.  Zero mscratch while
+     * inside the handler so a nested trap keeps descending on the CURRENT
+     * stack.  x1, t0 and t1 are already saved, so they serve as scratch. */
+    csrr  t0, mhartid
+    addi  t0, t0, 1
+    slli  t0, t0, SBI_MSTACK_SHIFT
+    li    t1, SBI_MSTACK_BASE
+    add   t0, t0, t1
+    addi  t1, sp, 32 * REGBYTES
+    csrrw x1, mscratch, x0
+    bne   t1, t0, 101f
+    li    t0, 1
+    STORE t0,   0 * REGBYTES(sp)
+    j     102f
 101:
+    STORE x0,   0 * REGBYTES(sp)
+    mv    x1, t1
+102:
     STORE x1,   2 * REGBYTES(sp)
 
     /* The M-mode handler's C code addresses small globals gp-relative:

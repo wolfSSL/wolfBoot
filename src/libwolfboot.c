@@ -1944,8 +1944,8 @@ int wolfBoot_fallback_is_possible(void)
     #include "enckey_data.h"
 #endif
 
-#if !defined(EXT_FLASH) && !defined(MMU)
-    #error option EXT_ENCRYPTED requires EXT_FLASH or MMU mode
+#if !defined(EXT_FLASH) && !defined(MMU) && !defined(CUSTOM_ENCRYPT_KEY)
+    #error option EXT_ENCRYPTED requires EXT_FLASH, MMU, or CUSTOM_ENCRYPT_KEY
 #endif
 
 #ifndef WOLFBOOT_ENCRYPT_CACHE
@@ -1960,7 +1960,7 @@ int wolfBoot_fallback_is_possible(void)
     #define ENCRYPT_CACHE (WOLFBOOT_ENCRYPT_CACHE)
 #endif
 
-#if defined(EXT_ENCRYPTED) && defined(MMU)
+#if defined(EXT_ENCRYPTED) && defined(MMU) && !defined(CUSTOM_ENCRYPT_KEY)
 static uint8_t ENCRYPT_KEY[ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE];
 #endif
 
@@ -2006,6 +2006,9 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
 }
 #endif /* EXT_ENCRYPTED && (__WOLFBOOT || UNIT_TEST || MMU) */
 
+#ifndef CUSTOM_ENCRYPT_KEY
+/* Under CUSTOM_ENCRYPT_KEY the platform supplies the key, so the
+ * partition-resident storage below (needs WOLFBOOT_PARTITION_*) is dropped. */
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
 #ifdef WOLFBOOT_RENESAS_TSIP
@@ -2095,7 +2098,6 @@ exit_lock:
     return ret;
 #endif
 }
-#ifndef CUSTOM_ENCRYPT_KEY
 /**
  * @brief Set the encryption key.
  *

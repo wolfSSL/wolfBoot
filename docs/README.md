@@ -21,6 +21,7 @@ See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/
 - [**Loader.md**](./Loader.md) - Loader/secondary stage behavior and handoff to application.
 - [**measured_boot.md**](./measured_boot.md) - Measured boot concepts and recording measurements (e.g., PCRs).
 - [**png/**](./png) - Folder of images/diagrams referenced by the documentation.
+- [**PolarFire.md**](./PolarFire.md) - Microchip PolarFire SoC: quick start, boot configurations, sNVM/PUF key storage, SBI vendor extension, boot mode 2.
 - [**PQ.md**](./PQ.md) - Post-quantum algorithms and PQC support in wolfBoot.
 - [**README.md**](./README.md) - Overview and index of the documentation set.
 - [**remote_flash.md**](./remote_flash.md) - Working with external/remote flash (SPI/QSPI, mapping, access).
