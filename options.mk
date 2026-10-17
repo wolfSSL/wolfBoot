@@ -171,6 +171,22 @@ ifneq ($(MPFS_QSPI_CLK_DIV),)
     CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
 endif
 
+# Read-only survey of a range of sNVM pages at boot: each page's admin word (ROM flag), state and
+# checksum, never the contents, since one of the default range's pages holds the wrapped image key.
+MPFS_SNVM_DUMP_FIRST?=200
+MPFS_SNVM_DUMP_COUNT?=2
+ifeq ($(MPFS_SNVM_DUMP),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SNVM_DUMP=1 needs the M-mode target (RISCV_MMODE=1): \
+                    only M-mode reaches the System Controller mailbox)
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SNVM_DUMP" \
+            -DMPFS_SNVM_DUMP_FIRST=$(MPFS_SNVM_DUMP_FIRST) \
+            -DMPFS_SNVM_DUMP_COUNT=$(MPFS_SNVM_DUMP_COUNT)
+endif
+
 # Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
 # the watchdogs after the hand-off and must service them itself.
 ifeq ($(MPFS_WDT_NODES_KEEP),1)

@@ -46,7 +46,7 @@
 #include "gpt.h"
 #include "fdt.h"
 #if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION) || \
-    defined(MPFS_SBI_VENDOR)
+    defined(MPFS_SBI_VENDOR) || defined(MPFS_SNVM_DUMP)
 #include "mpfs250_snvm.h"
 #endif
 #if defined(MPFS_SBI_VENDOR) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
@@ -1090,6 +1090,10 @@ void hal_init(void)
 #endif
 
 
+#ifdef MPFS_SNVM_DUMP
+    mpfs_snvm_dump(MPFS_SNVM_DUMP_FIRST, MPFS_SNVM_DUMP_COUNT);
+#endif
+
 #ifdef SNVM_KEYSTORE_PROVISION
     /* One-time: write the compiled-in trust anchor into sNVM so a subsequent
      * SNVM_KEYSTORE build serves its keys from sNVM.  Stop on failure so a
@@ -1699,6 +1703,13 @@ int mpfs_snvm_read(uint8_t module, const uint8_t *usk, uint8_t *admin,
 
     ret = mpfs_scb_request(SYS_SERV_CMD_SNVM_READ, frame, sizeof(frame));
     if (ret != 0) {
+        /* The service still returns the page admin word on a refusal, and
+         * it is the only way to tell a page held as a client from one that
+         * was never configured: the latter reads back as zero. */
+        if (admin != NULL) {
+            mpfs_scb_read(admin, MPFS_SNVM_READ_RET_OFFSET,
+                MPFS_SNVM_ADMIN_LEN);
+        }
         return ret;
     }
 
