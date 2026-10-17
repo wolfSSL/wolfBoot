@@ -171,6 +171,12 @@ ifneq ($(DISK_BOOT_TRIES),)
     CFLAGS+=-DDISK_BOOT_TRIES=$(DISK_BOOT_TRIES)
 endif
 
+# Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
+# the watchdogs after the hand-off and must service them itself.
+ifeq ($(MPFS_WDT_NODES_KEEP),1)
+    CFLAGS+=-D"MPFS_WDT_NODES_KEEP"
+endif
+
 # PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
 ifeq ($(SNVM_KEK),1)
     # The KEK only wraps the image-encryption key, so it rides on the AES-256 ENCRYPT build's AES.
