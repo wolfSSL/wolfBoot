@@ -130,7 +130,12 @@
 #define MSS_WDT_STATUS(base)   (*(volatile uint32_t*)((base) + 0x08))
 #define MSS_WDT_TIME(base)     (*(volatile uint32_t*)((base) + 0x0C))
 #define MSS_WDT_MVRP(base)     (*(volatile uint32_t*)((base) + 0x10))
-#define MSS_WDT_CTRL_ENABLE    (1U << 0)
+#define MSS_WDT_TRIGGER(base)  (*(volatile uint32_t*)((base) + 0x14))
+/* STATUS bits (mss_watchdog.h): there is no enable bit anywhere - the MSS
+ * watchdogs are armed by the bitstream and count from reset. */
+#define MSS_WDT_STAT_FORBIDDEN (1U << 2)
+#define MSS_WDT_STAT_LOCKED    (1U << 4)
+#define MSS_WDT_STAT_DEVRST    (1U << 5)
 
 /* UART */
 #define MSS_UART0_LO_BASE  0x20000000UL

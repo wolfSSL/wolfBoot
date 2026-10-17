@@ -286,8 +286,7 @@ These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `WATCHDOG` | undefined (disabled) | When defined, the E51 watchdog timer is **kept enabled** during wolfBoot operation with a generous timeout. When undefined, the WDT is **disabled** in `hal_init()` and re-enabled with the boot ROM default in `hal_prepare_boot()` before jumping to the application. Either way, the application receives a normal WDT. |
-| `WATCHDOG_TIMEOUT_MS` | `30000` (30 s) | Watchdog timeout in milliseconds when `WATCHDOG` is defined. ECDSA P-384 verification on E51 with portable C math is bounded at ~5 s; the default 30 s avoids any need to refresh the WDT during the long verify call. |
+| `WATCHDOG` | undefined | Has no timeout to set on this target: the MSS watchdogs are armed by the bitstream and their window cannot be changed from software. See "Watchdog policy" below. wolfBoot refreshes all five in `hal_init()` and again in `hal_prepare_boot()` either way. |
 | `MPFS_WDT_NODES_KEEP` (make variable, `=1`) | undefined | Linux boot only: keep the five MSS watchdog nodes enabled in the dtb and stop the parked E51 from refreshing them, so the OS owns the watchdogs. See "Watchdog policy" below. |
 | `MPFS_QSPI_CLK_DIV` (make variable) | `QSPI_CLK_DIV_8` | QSPI SCK divider, a `QSPI_CLK_DIV_*` name from `hal/mpfs250.h`. See "PolarFire SoC QSPI". |
 | `MPFS_SNVM_DUMP` (make variable, `=1`) | undefined | Read-only: at boot, print the admin word, state and a checksum of `MPFS_SNVM_DUMP_COUNT` sNVM pages from `MPFS_SNVM_DUMP_FIRST` (defaults 2 from 200, the keystore and the wrapped image key). Page contents are never printed. M-mode only. |
@@ -610,8 +609,14 @@ power-on.
 see "Linux kernel command line (bootargs)" in `docs/compile.md`),
 MAC addresses from the device serial number, and all five MSS watchdog nodes are disabled.
 
-**Watchdog policy:** the MSS watchdogs always count and reset the chip on timeout (they cannot
-be disabled in hardware, and `CONTROL=0` does not prevent the reset). After hand-off the parked
+**Watchdog policy:** the five MSS watchdogs are configured by the bitstream at design time and
+are already counting when wolfBoot starts. Software can neither stop them nor retime them: there
+is no enable bit, `CONTROL=0` does not prevent the reset (DEVRST is STATUS bit 5, read-only), and
+the first write to any of offsets `0x00`-`0x0C` locks TRIGGER, MVRP and TIME until the next
+system reset - a refresh is such a write. On the Video Kit they read TIME `0xFFFFF0`, MVRP
+`0x989680`, TRIGGER `0x3E8`, CONTROL `0x02`, which is already the longest window the 24-bit
+counter allows: the counter runs at the APB clock divided by 256, so a reload lasts about 28.6 s.
+Refreshing them is therefore the only control wolfBoot has. After hand-off the parked
 E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
 the dtb fixup so the two never conflict. `MPFS_WDT_NODES_KEEP=1` hands the watchdogs to the OS
 instead: the dtb nodes stay enabled and the parked E51 stops refreshing, so the OS driver arms

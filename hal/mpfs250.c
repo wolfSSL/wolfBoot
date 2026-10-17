@@ -91,10 +91,6 @@ const uint8_t __attribute__((section(".envm_manifest"), used))
         { [0 ... MPFS_ENVM_MANIFEST_SIZE - 1] = 0xFF };
 #endif
 
-/* Saved boot ROM watchdog values, restored in hal_prepare_boot(). */
-static uint32_t mpfs_wdt_default_mvrp = 0;
-static uint32_t mpfs_wdt_default_ctrl = 0;
-
 #ifdef WOLFBOOT_RISCV_MMODE
 static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
     MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
@@ -154,22 +150,22 @@ __attribute__((noinline)) void udelay(uint32_t us)
 
 extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8_t to avoid size confusion */
 
-/* Watchdog timeout configuration.
- *   WATCHDOG=0 (default): WDT disabled in hal_init() then restored to boot
- *                         ROM defaults in hal_prepare_boot() before do_boot.
- *   WATCHDOG=1: WDT kept enabled with WATCHDOG_TIMEOUT_MS during wolfBoot.
- * Verify is bounded at ~5s; default 30s leaves ample headroom and avoids
- * the need to pet the WDT during the long ECDSA verify call. */
-#ifdef WATCHDOG
-#  ifndef WATCHDOG_TIMEOUT_MS
-#    define WATCHDOG_TIMEOUT_MS  30000U
-#  endif
-/* MPFS MSS WDT clock is AHB / 256 ~= 150 MHz / 256 ~= 585 kHz at S-mode rate
- * but ~80 MHz / 256 ~= 312 kHz on E51 reset clocks. Use a conservative
- * 300 ticks/ms; the actual rate may be a bit higher but a slightly longer
- * timeout is safe. Caller can override WATCHDOG_TIMEOUT_MS at build time. */
-#  define WATCHDOG_TIMEOUT_TICKS ((WATCHDOG_TIMEOUT_MS) * 300U)
-#endif
+/* Watchdog policy.  The five MSS watchdogs are configured by the bitstream at
+ * design time and are already counting when wolfBoot starts; software cannot
+ * stop them and cannot usefully retime them.  On the Video Kit they read
+ * TIME 0xFFFFF0, MVRP 0x989680, TRIGGER 0x3E8, CONTROL 0x02 (timeout
+ * interrupt enabled, forbidden window off), which is the longest window the
+ * 24-bit counter allows: the counter runs at the APB clock divided by 256, so
+ * a reload lasts about 28.6 s and the TRIGGER crossing arrives just before
+ * that.  wolfBoot's whole job is therefore to refresh them, here and from the
+ * parked E51 after hand-off (hal_smode_boot).
+ *
+ * Retiming is not available even in principle: the first write to any of
+ * offsets 0x00-0x0C locks TRIGGER, MVRP and TIME until the next system reset
+ * (mss_watchdog.c MSS_WD_configure), and a refresh is such a write.  So is
+ * disarming: there is no enable bit, and CONTROL bit 5 is not DEVRST - DEVRST
+ * is STATUS bit 5, read-only.  WATCHDOG therefore has no timeout knob on this
+ * target; it selects only whether wolfBoot refreshes during its own run. */
 
 /* CLINT MSIP register for IPI delivery */
 #define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
@@ -928,34 +924,20 @@ static void mpfs_wdt_boot_config(void)
     volatile uint32_t *reset_sr = (volatile uint32_t *)MPFS_SYSREG_RESET_SR;
     unsigned int i;
 
-    mpfs_wdt_default_mvrp = MSS_WDT_MVRP(MSS_WDT_E51_BASE);
-    mpfs_wdt_default_ctrl = MSS_WDT_CONTROL(MSS_WDT_E51_BASE);
     for (i = 0; i < sizeof(mpfs_boot_wdt_snap) / sizeof(uint32_t); i++) {
         mpfs_boot_wdt_snap[i] = wdt_e51[i];
     }
+    /* Read, then zero, so the next reset is captured: this register is not
+     * write-1-to-clear, and writing the value back would set those bits. */
     mpfs_boot_reset_sr_snap = *reset_sr;
-    *reset_sr = mpfs_boot_reset_sr_snap;  /* W1C */
+    *reset_sr = 0U;
 
-#ifndef WATCHDOG
-    /* The MSS watchdogs always count, so the default build widens them
-     * instead: TIME/MVRP to maximum and DEVRST (CONTROL bit 5) cleared, which
-     * turns a timeout into an NMI rather than a chip reset.  hal_prepare_boot()
-     * restores the boot ROM values before do_boot.  A refresh inside the
-     * triggered window would arm a reset, hence the refresh on each side. */
+    /* Start every watchdog's window from full.  The design-time window is far
+     * longer than the ~5 s ECDSA P-384 verify, so nothing has to refresh
+     * mid-signature; hal_prepare_boot() refreshes again before the hand-off. */
     for (i = 0; i < MPFS_NUM_HARTS; i++) {
         MSS_WDT_REFRESH(mpfs_wdt_bases[i]) = 0xDEADC0DEU;
-        MSS_WDT_TIME(mpfs_wdt_bases[i])    = 0x00FFFFFFUL;
-        MSS_WDT_MVRP(mpfs_wdt_bases[i])    = 0x00FFFFFFUL;
-        MSS_WDT_CONTROL(mpfs_wdt_bases[i]) = 0;
-        MSS_WDT_REFRESH(mpfs_wdt_bases[i]) = 0xDEADC0DEU;
     }
-#else
-    /* WATCHDOG=1 keeps the E51 watchdog armed, with a timeout well clear of
-     * the ~5 s verify bound so nothing has to pet it mid-signature. */
-    MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
-    MSS_WDT_MVRP(MSS_WDT_E51_BASE) = WATCHDOG_TIMEOUT_TICKS;
-    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) |= MSS_WDT_CTRL_ENABLE;
-#endif
 }
 
 #ifdef MPFS_DDR_INIT
@@ -1950,17 +1932,12 @@ void hal_prepare_boot(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
 #ifndef WOLFBOOT_MMODE_SMODE_BOOT
-    /* Restore boot ROM WDT defaults so the application sees a normal WDT.
-     * Refresh first so the timer doesn't fire immediately after we apply
-     * the new MVRP. Restore the original CONTROL value (including the
-     * enable bit) rather than unconditionally enabling. */
+    /* Hand the application a full window.  Nothing else needs restoring:
+     * TIME, MVRP and TRIGGER keep their design-time values throughout. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
-    MSS_WDT_MVRP(MSS_WDT_E51_BASE) = mpfs_wdt_default_mvrp;
-    MSS_WDT_CONTROL(MSS_WDT_E51_BASE) = mpfs_wdt_default_ctrl;
 #else
-    /* Booting an S-mode OS: keep the watchdogs in the safe state set in
-     * hal_init (no device reset, maximum window) and give every hart's
-     * watchdog one final refresh so the OS inherits a full window (the
+    /* Booting an S-mode OS: give every hart's watchdog one final refresh so
+     * the OS inherits a full window (the
      * OS watchdog driver hangs at probe if it finds an already-tripped
      * watchdog).  The OS watchdog nodes are disabled in the dtb, so after
      * hand-off the parked E51 monitor loop in hal_smode_boot refreshes all
