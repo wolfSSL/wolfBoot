@@ -162,9 +162,9 @@ static uint8_t disk_encrypt_nonce[ENCRYPT_NONCE_SIZE];
 #define SLOT_IS_GOLDEN(s) 0
 #endif
 
-/* With the failover zeroize the image key may already be gone when the
- * loader runs, and the golden image is a plaintext one; without it every
- * slot is encrypted and a missing key is fatal as before. */
+/* Under the failover zeroize the image key may already be gone and the golden
+ * image is a plaintext one, so only the operational slots are encrypted.
+ * Without it every slot is encrypted and a missing key is fatal. */
 #ifdef DISK_FAILOVER_ZEROIZE
 #ifndef DISK_GOLDEN_SLOT
 #error "DISK_FAILOVER_ZEROIZE needs DISK_GOLDEN_SLOT"
@@ -473,7 +473,6 @@ static int slot_state_write(struct boot_slot *s, uint8_t state,
     return 0;
 }
 
-
 /* Read both slots' states, and drop any slot still marked TESTING out of the
  * election. Such a slot was armed before the previous boot and nothing
  * confirmed it, so whatever it started did not come up.
@@ -482,7 +481,7 @@ static int slot_state_write(struct boot_slot *s, uint8_t state,
  * from the selection AND from max_ver, which is what lets an older surviving
  * slot boot without relaxing the anti-rollback guard for anything still live.
  * A slot that merely fails verification keeps its version and still blocks an
- * older one, exactly as before. */
+ * older one. */
 static void disk_boot_state_reap(uint32_t *pA_ver, uint32_t *pB_ver)
 {
     uint8_t st;

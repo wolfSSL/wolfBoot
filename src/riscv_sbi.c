@@ -138,12 +138,10 @@
 #define MPFS_NUM_HARTS 5
 #endif
 
-/* Cross-hart SBI state must NOT live in L2-scratch BSS: cacheable stores
- * to the scratchpad (Zero Device) can be silently lost when the dirty
- * cache line is eventually evicted, so values written by one hart vanish
- * before another hart (or a later cache-cold read) sees them.  Keep this
- * state in the E51 DTIM instead: a small always-uncached RAM that every
- * hart reads and writes coherently (the same role it has under HSS). */
+/* Cross-hart SBI state cannot live in L2-scratch BSS: a cacheable store to
+ * the scratchpad (Zero Device) is lost when the dirty line is evicted, so a
+ * value written by one hart can vanish before another hart sees it.  The E51
+ * DTIM is always uncached and coherent for every hart, as it is under HSS. */
 #ifndef SBI_SHARED_DTIM_ADDR
 #define SBI_SHARED_DTIM_ADDR 0x01000000UL  /* E51 DTIM */
 #endif
@@ -216,12 +214,11 @@ void sbi_hart_mark_started(unsigned long hartid)
  * switches to the stack armed in mscratch because the trapped S-mode
  * context's sp is a virtual address once the OS enables paging.
  *
- * The stacks must NOT live in L2-scratch BSS: under SMP cache pressure a
- * dirty frame line can be evicted mid-trap and the writeback to the
- * scratchpad is lost, so the restore reads zeros (observed: the kernel
- * resumed from an ecall with sp=0).  Use the OS-invisible reserved DDR
- * region instead (hss-buffer@103fc00000, nomap in the stock dtb -- the
- * monitor carve-out under HSS). */
+ * These cannot live in L2-scratch BSS either: under SMP cache pressure a
+ * dirty frame line can be evicted mid-trap and the writeback lost, leaving
+ * the restore to read zeros.  They go in the OS-invisible reserved DDR
+ * region (hss-buffer@103fc00000, nomap in the stock dtb: the monitor
+ * carve-out under HSS). */
 #ifndef SBI_MSTACK_BASE
 #define SBI_MSTACK_BASE 0x103FC00000UL
 #endif
