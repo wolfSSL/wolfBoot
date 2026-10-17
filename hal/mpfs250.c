@@ -322,11 +322,13 @@ int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,
 void __attribute__((noreturn))
 hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
 {
+#ifndef MPFS_WDT_NODES_KEEP
     static const unsigned long park_wdt_bases[5] = {
         MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
         MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
     };
     unsigned int w;
+#endif
 
     (void)hartid;  /* the calling E51 hart is not the kernel boot hart */
 
@@ -377,9 +379,11 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
      * it).  With MVRP at maximum a refresh is always permitted. */
     __asm__ volatile("csrw mie, %0" :: "r"(0x80UL)); /* MTIE */
     while (1) {
+#ifndef MPFS_WDT_NODES_KEEP
         for (w = 0; w < 5U; w++) {
             MSS_WDT_REFRESH(park_wdt_bases[w]) = 0xDEADC0DEU;
         }
+#endif
         CLINT_MTIMECMP_REG(MPFS_FIRST_HART) =
             CLINT_MTIME_REG + (5UL * RTC_CLOCK_FREQ);
         __asm__ volatile("wfi");
@@ -1813,7 +1817,8 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
     int off, ret;
     uint8_t device_serial_number[DEVICE_SERIAL_NUMBER_SIZE];
     uint8_t mac_addr[6];
-#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT) && \
+    (!defined(MPFS_WDT_NODES_KEEP) || defined(MPFS_SCB_SMODE_DENY))
     /* Nodes disabled below.  Watchdogs: the MSS WDTs always count; the OS
      * driver arms them at probe but nothing pings them (no userspace
      * watchdog daemon in the default image), so the system would reset
@@ -1821,8 +1826,10 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
      * status and the parked E51 monitor keeps them refreshed.  Re-enable
      * when an OS-side petting story exists. */
     static const char *const cpu_off[] = {
+#ifndef MPFS_WDT_NODES_KEEP
         "watchdog@20001000", "watchdog@20101000", "watchdog@20103000",
         "watchdog@20105000", "watchdog@20107000",
+#endif
 #ifdef MPFS_SCB_SMODE_DENY
         /* PMP fences S-mode off the System Controller mailbox: the OS
          * drivers for it would only fault. */
@@ -1859,7 +1866,8 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
     (void)wolfBoot_disk_dts_fixup(&ctx);
 #endif
 
-#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT) && \
+    (!defined(MPFS_WDT_NODES_KEEP) || defined(MPFS_SCB_SMODE_DENY))
     /* Disable the MSS watchdog dtb nodes BEFORE the serial-number read: this
      * does not depend on the serial number and MUST run even if the SC serial
      * read below fails.  Otherwise the OS watchdog driver would arm them at
