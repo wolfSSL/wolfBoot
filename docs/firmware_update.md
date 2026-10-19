@@ -565,26 +565,26 @@ Note: When using scattered ELF images, ensure that:
 
 #### How ELF segments are written to flash
 
-wolfBoot erases each flash sector that a segment touches once, before the first write to it, and then
-writes the segments. **Segments in your elf file must be in ascending address order**. This behavior is the same with
-every trailer option (e.g. default, `NVM_FLASH_WRITEONCE`, `NVM_FLASH_JOURNAL`, etc.) and with or without `NVM_FLASH_ECC`:
+When scatter-loading an ELF file, wolfBoot erases each flash sector that a segment touches once, before the first write to it, and then
+writes the segments. **Segments in your elf file must be in ascending address order**. This behavior is the same regardless of the
+trailer storage option used (e.g. default, `NVM_FLASH_WRITEONCE`, `NVM_FLASH_JOURNAL`, etc.) and with or without `NVM_FLASH_ECC`. Notably:
 
 - Anything else in those sectors is erased, including data between segments. Keep data that must survive
   an update in sectors that no segment touches.
 - If your flash can program a write unit only once after an erase, set `FLASH_WRITE_UNIT=<bytes>` to that
-  unit, and make `FLASHBUFFER_SIZE` a multiple of it. wolfBoot then collects a unit that two segments
-  share in RAM and programs it once.
+  unit, and make `FLASHBUFFER_SIZE` a multiple of it. wolfBoot then will collect a unit that two segments
+  share in RAM and only program it once.
 
 If it is required to ONLY update flash with the contents of the loadable ELF segments, while keeping all other data in
 the destination sectors intact, build with `ELF_FLASH_SCATTER_PRESERVE_SECTORS=1`. wolfBoot then copies each sector that
 a segment touches to RAM, erases it, and writes back the old data together with the segments, so only the segment bytes change.
-Units that the HAL erased check (see [HAL](HAL.md)) reports as erased stay erased. This mode requires one sector
-(`WOLFBOOT_SECTOR_SIZE`) of RAM to use as the flash buffer. If used with `NVM_FLASH_WRITEONCE`, wolfBoot uses the sector buffer
-that option already compiles in.
+Units that the HAL erase check (see [HAL](HAL.md)) reports as erased will stay erased. This mode requires one sector
+(`WOLFBOOT_SECTOR_SIZE`) of RAM to use as the RAM sector buffer. If used with `NVM_FLASH_WRITEONCE`, wolfBoot uses the sector buffer
+this option already compiles in.
 
-A consequence of this behavior is that **a reset between the erase and the write-back of the sector will result in
-loss of the old data in that sector**. The new data from the loadable ELF segment is safe, as it will be "re-scattered"
-on the next boot. Ultimately, **critical data that MUST survive a reset during an update MUST be placed in its own sector by
+A consequence of this behavior is that, during a scatter operation,  **a reset between the erase and the write-back of the sector will result in
+loss of the old data in that sector**. The new data from the loadable ELF segment is safe, as it will be "re-scattered" on the next boot,
+however the "old" data in that sector will be lost. Ultimately, **critical data that MUST survive a reset during an update MUST be placed in its own sector by
 the user.**
 
 ## Certificate Verification

@@ -124,10 +124,11 @@ void hal_cache_invalidate(void);
 #endif
 
 /*
+ * Optional overrides for erased-flash checking.
  * Return 1 if every byte in [address, address + len) is erased, 0 if not, or
- * a negative value on error. The weak defaults in src/libwolfboot.c compare a
- * plain read with FLASH_BYTE_ERASED, and a HAL overrides them where a plain
- * read is not reliable, such as on ECC flash.
+ * a negative value on error. The weak default implementation does a plain read
+ * and compares with FLASH_BYTE_ERASED. HALs where reading erased flash is
+ * forbidden should override.
  */
 int hal_flash_is_erased(haladdr_t address, int len);
 int ext_flash_is_erased(uintptr_t address, int len);
