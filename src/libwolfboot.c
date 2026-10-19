@@ -330,7 +330,7 @@ static int RAMFUNCTION part_is_erased(uint8_t part, uintptr_t addr, int len)
 
 #include <stddef.h>
 #include <string.h>
-static uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
+uint8_t NVM_CACHE[NVM_CACHE_SIZE] XALIGNED(16);
 static int nvm_cached_sector = 0;
 
 /* Scrub the staging buffer without depending on wolfCrypt: ForceZero()
