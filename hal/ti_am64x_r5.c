@@ -29,9 +29,10 @@
 
 #include "DebugP.h"
 #include "board/flash.h"
-#include "drivers/sciclient.h"
-#include "drivers/ospi.h"
 #include "drivers/bootloader/soc/am64x_am243x/bootloader_soc.h"
+#include "drivers/ospi.h"
+#include "drivers/sciclient.h"
+#include "drivers/uart.h"
 #include "kernel/dpl/ClockP.h"
 #include "security/security_common/drivers/crypto/rng/rng.h"
 #include "security/security_common/drivers/crypto/sa2ul/sa2ul.h"
@@ -82,6 +83,30 @@ static void flashFixUpOspiBoot(OSPI_Handle oHandle)
     OSPI_setProtocol(oHandle, OSPI_NOR_PROTOCOL(1,1,1,0));
 }
 
+#ifdef __WOLFBOOT
+#define R5F_ATCM_SIZE (32u * 1024u)
+
+/* Enable ATCM before the image is loaded, and fill it so it is initialized */
+static void hal_enable_atcm(void)
+{
+    uint32_t rgn;
+    uint32_t i;
+    volatile uintptr_t zero = 0; /* hide null from the optimizer */
+    volatile uint32_t *atcm = (volatile uint32_t *)zero;
+
+    __asm__ __volatile__("mrc p15, 0, %0, c9, c1, 1" : "=r"(rgn));
+    if ((rgn & 1u) == 0u) {
+        rgn |= 1u;
+        __asm__ __volatile__("mcr p15, 0, %0, c9, c1, 1\n\t"
+                             "dsb\n\t"
+                             "isb" : : "r"(rgn) : "memory");
+        for (i = 0; i < R5F_ATCM_SIZE / sizeof(uint32_t); i++) {
+            atcm[i] = 0;
+        }
+    }
+}
+#endif
+
 void hal_init(void)
 {
 #ifdef __WOLFBOOT
@@ -124,9 +149,12 @@ void hal_init(void)
 
     System_init();
     Bootloader_socOpenFirewalls();
+    /* writes the magic to PSRAM at 0x0, so must precede enabling ATCM */
+    Bootloader_socNotifyFirewallOpen();
+    hal_enable_atcm();
     Drivers_open();
 
-    uart_write("ti_am64x_r5 init\n", 14);
+    uart_write("ti_am64x_r5 init\n", 17);
     Sciclient_getVersionCheck(1);
 #else
 
@@ -321,18 +349,49 @@ void uart_write(const char *buf, unsigned int sz)
 }
 #endif
 
-
-#include <kernel/dpl/HwiP.h>
-#include <kernel/dpl/CacheP.h>
-
 #ifdef __WOLFBOOT
+extern UART_Handle gUartHandle[];
+
+static int32_t boot_prepare_self_cpu(uint32_t cpuId, uintptr_t entry)
+{
+    int32_t rc;
+
+    rc = Bootloader_socCpuRequest(cpuId);
+    if (rc == SystemP_SUCCESS) {
+        rc = Bootloader_socCpuSetClock(cpuId,
+                Bootloader_socCpuGetClkDefault(cpuId));
+    }
+    if (rc == SystemP_SUCCESS) {
+        rc = Bootloader_socCpuSetEntryPoint(cpuId, entry);
+    }
+    if (rc != SystemP_SUCCESS) {
+        wolfBoot_printf("cpu %d: prepare failed: rc=%d\n", (int)cpuId, (int)rc);
+    }
+    return rc;
+}
+
 void do_boot(const uint32_t *app_offset)
 {
-    HwiP_disable();
-    CacheP_wbInvAll(CacheP_TYPE_ALL);
-    Bootloader_socCpuResetReleaseSelf();
+    int32_t rc;
+
+    rc = boot_prepare_self_cpu(CSL_CORE_ID_R5FSS0_0, (uintptr_t)app_offset);
+    if (rc == SystemP_SUCCESS &&
+        Bootloader_socIsR5FSSDual(BOOTLOADER_R5FSS0) == TRUE) {
+        rc = boot_prepare_self_cpu(CSL_CORE_ID_R5FSS0_1, 0);
+    }
+
+    UART_flushTxFifo(gUartHandle[0]);
+
+    if (rc == SystemP_SUCCESS) {
+        /* On success, SYSFW resets this core after the WFI issued inside;
+         * the WFI may return before that happens, so just wait for reset. */
+        rc = Bootloader_socCpuResetReleaseSelf();
+        if (rc != SystemP_SUCCESS) {
+            wolfBoot_printf("Self reset release failed: rc=%d\n", (int)rc);
+        }
+    }
     while (1) {
-        asm("nop");
+        __asm__ __volatile__("wfi");
     }
 }
 #endif /* __WOLFBOOT */
