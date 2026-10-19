@@ -90,10 +90,6 @@ reading an erased page may fault or return invalid data, while a programmed unit
 
 ### ECC flash (`NVM_FLASH_ECC`) HAL Requirements
 
-`NVM_FLASH_ECC` always comes with the trailer journal (`NVM_FLASH_JOURNAL`). The journal alone needs nothing from
-the HAL beyond the API above. See [Choosing options for write-once and ECC flash](compile.md#choosing-options-for-write-once-and-ecc-flash)
-for when to use each.
-
 When using `NVM_FLASH_ECC`, `WOLFBOOT_FLASH_WRITE_UNIT` must be defined to the HAL's smallest programmable unit, in bytes (default 1).
 
 In order to respect the rules of most ECC flash, wolfBoot expects the HAL to:
@@ -103,8 +99,7 @@ In order to respect the rules of most ECC flash, wolfBoot expects the HAL to:
 3. Not trap on a read of erased flash, though the data may be garbage.
 4. Report erased units reliably in `hal_flash_is_erased()`.
 
-wolfBoot then never programs a unit twice, never erases part of a sector, and decides nothing from a read
-of erased flash, so the HAL needs no read-modify-write buffer. See `hal/aurix_tc3xx.c`.
+wolfBoot then never programs a unit twice, never erases part of a sector, and decides nothing from a read of erased flash.
 
 ### Optional support for external flash memory
 

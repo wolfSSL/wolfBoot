@@ -585,9 +585,11 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #define JOURNAL_PART_SECTORS (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE)
 #endif
 
-/* Size of the trailer window at the end of the sector. It holds the magic,
- * the state and one flag byte for each two sectors. */
-#define JOURNAL_WINDOW (((4 + 1 + (JOURNAL_PART_SECTORS + 1) / 2) + 3) & ~3)
+/* The magic, the state and one flag byte for each two sectors */
+#define JOURNAL_TRAILER_SIZE (4 + 1 + (JOURNAL_PART_SECTORS + 1) / 2)
+/* Size of the trailer window at the end of the sector, rounded up to whole
+ * words: the RAM copy is a uint32_t array and the magic is its last word */
+#define JOURNAL_WINDOW ((JOURNAL_TRAILER_SIZE + 3) & ~3)
 
 /* One record per write unit, at least 16 bytes. Records fill the sector
  * from its start and never reach the trailer window. */
@@ -608,9 +610,9 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
  * the log starts at slot 1. */
 #define JOURNAL_DUAL       1
 #define JOURNAL_FIRST_SLOT 1
-/* A new log holds a header, a copy of the window and a commit record */
+/* A new log holds a header, a copy of the window, and a commit record */
 #if JOURNAL_SLOTS < (JOURNAL_WINDOW / 4 + 4)
-#error "NVM_FLASH_JOURNAL_DUAL: the trailer sector cannot hold a copy of the trailer"
+#error "NVM_FLASH_JOURNAL_DUAL: trailer sector can't hold a copy of the trailer"
 #endif
 #else
 #define JOURNAL_DUAL       0
@@ -618,7 +620,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 /* An update logs magic, UPDATING, three flags per sector and FINAL_FLAGS.
  * The bootloader also skips one slot when it loads the log. */
 #if JOURNAL_SLOTS < (3 * (JOURNAL_PART_SECTORS - 1) + 4)
-#error "NVM_FLASH_JOURNAL: the trailer sector cannot log a full-partition update"
+#error "NVM_FLASH_JOURNAL: trailer sector can't log a full-partition update"
 #endif
 #endif /* NVM_FLASH_JOURNAL_DUAL */
 
@@ -638,9 +640,10 @@ struct journal_rec {
 };
 #define JOURNAL_REC_CRC_LEN 12
 
+/* Journal state values */
 #define JOURNAL_UNLOADED 0
 #define JOURNAL_READY    1
-#define JOURNAL_ERASE    2 /* invalid log, start a new one before the next write */
+#define JOURNAL_ERASE    2 /* invalid log, start a new one before next write */
 #define JOURNAL_COMPACT  3 /* in-place trailer, rewrite it as records */
 
 struct journal {
