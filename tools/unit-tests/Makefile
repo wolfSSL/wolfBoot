@@ -168,7 +168,9 @@ TESTS+=unit-stm32h7s-write
 TESTS+=unit-nvm-cache-scrub
 TESTS+=unit-nvm-journal unit-nvm-journal-ecc
 TESTS+=unit-nvm-journal-dual unit-nvm-journal-dual-ecc
-TESTS+=unit-elf-store-ecc unit-elf-store-ecc-invert
+TESTS+=unit-elf-store-ecc unit-elf-store-ecc-invert unit-elf-store-ecc-unit1
+TESTS+=unit-elf-store-ecc-preserve unit-elf-store-ecc-preserve-invert
+TESTS+=unit-elf-store-ecc-preserve-unit1 unit-elf-store-ecc-preserve-writeonce
 TESTS+=unit-flash-is-erased unit-flash-is-erased-invert
 TESTS+=unit-update-trigger-scrub
 TESTS+=unit-sdhci-uhs-recover
@@ -1596,16 +1598,35 @@ aurix_erased_extract.h: ../../hal/aurix_tc3xx.c
 	sed -n '/^int RAMFUNCTION hal_flash_is_erased(/,/^}/p' $< >> $@
 	sed -n '/^int RAMFUNCTION ext_flash_is_erased(/,/^}/p' $< >> $@
 
-# unit-elf-store-ecc runs the real NVM_FLASH_ECC ELF scatter store from
-# src/image.c against a write-once flash mock.
+# unit-elf-store-ecc runs the real ELF scatter store from src/image.c
+# against a write-once flash mock, in both store modes.
 elf_store_extract.h: ../../src/image.c
-	sed -n '/^#define ELF_UNIT /,/^#else$$/{/^#else$$/d;p}' $< > $@
+	sed -n '/^#define ELF_UNIT /,/^#endif \/\* WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS \*\/$$/p' $< > $@
 
 unit-elf-store-ecc: unit-elf-store-ecc.c elf_store_extract.h
 	gcc -o $@ unit-elf-store-ecc.c $(CFLAGS) $(LDFLAGS)
 
 unit-elf-store-ecc-invert: unit-elf-store-ecc.c elf_store_extract.h
 	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-unit1: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_FLASH_WRITE_UNIT=1 $(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-preserve: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS \
+		$(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-preserve-invert: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS \
+		-DWOLFBOOT_FLAGS_INVERT $(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-preserve-unit1: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS \
+		-DWOLFBOOT_FLASH_WRITE_UNIT=1 $(CFLAGS) $(LDFLAGS)
+
+unit-elf-store-ecc-preserve-writeonce: unit-elf-store-ecc.c elf_store_extract.h
+	gcc -o $@ unit-elf-store-ecc.c -DWOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS \
+		-DNVM_FLASH_WRITEONCE $(CFLAGS) $(LDFLAGS)
 
 unit-aurix-erased-fill: unit-aurix-erased-fill.c aurix_erased_extract.h
 	gcc -o $@ unit-aurix-erased-fill.c $(CFLAGS) $(LDFLAGS)
@@ -2209,7 +2230,7 @@ covclean:
 
 # Sources the extraction rules generate into this directory. Listed here
 # so "clean" removes them and so there is one place that names them.
-GENERATED_SRC:=aurix_erased_extract.h \
+GENERATED_SRC:=aurix_erased_extract.h elf_store_extract.h \
 	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
 	imx95_ele_extract.h imx95_disk_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \

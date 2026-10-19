@@ -282,10 +282,9 @@ groups of options for this:
 
 - **Trailer storage** (`NVM_FLASH_WRITEONCE`, `NVM_FLASH_JOURNAL`, `NVM_FLASH_JOURNAL_DUAL`) changes only
   how the partition state and sector flags are kept in the trailer at the end of each partition.
-- **ECC flash mode** (`NVM_FLASH_ECC`) changes how all of wolfBoot uses flash, not just the trailer: image
-  copies, the ELF loader, the self-header update and diagnostics. wolfBoot then programs only whole,
-  erased write units, erases only whole sectors, and asks the HAL whether flash is erased instead of
-  reading it.
+- **ECC flash mode** (`NVM_FLASH_ECC`) changes how all of wolfBoot uses flash, not just the trailer.
+  With this option, wolfBoot programs only whole, erased write units, erases only whole sectors,
+  and asks the HAL whether flash is erased instead of reading it.
 
 How the options depend on each other:
 
@@ -446,9 +445,8 @@ The second condition is needed because, at its first boot, the new bootloader er
 
 On most ECC flash devices, a flash unit can only be programmed once after an erase, and reading erased flash can
 fault or return garbage. The journal stores the trailer in whole, program-once records, but the rest of wolfBoot
-does not follow these rules on its own. For example, two ELF segments can share a write unit and program it twice,
-and the check for an image reads the first bytes of a partition even when they are erased. To force the wolfBoot
-update code to respect these rules, compile with
+does not follow these rules on its own. For example, the check for an image reads the first bytes of a partition
+even when they are erased. To force the wolfBoot update code to respect these rules, compile with
 
 `NVM_FLASH_ECC=1`
 
@@ -459,9 +457,8 @@ The HAL must meet the [ECC flash HAL requirements](HAL.md#ecc-flash-nvm_flash_ec
   erased image header means no image.
 - Writes cover whole write units, programmed once after a whole-sector erase. Sector copies stop at the
   image's last write unit and leave erased source chunks erased.
-- The ELF scatter loader erases each sector under the segments once, before the first write to it, and
-  gathers a write unit shared by two segments in RAM. Segments must be in address order, and the sectors
-  they touch must hold nothing else.
+- The ELF scatter loader follows these rules in every build, with or without `NVM_FLASH_ECC`. See
+  [How segments are written to flash](firmware_update.md#how-segments-are-written-to-flash).
 - The self-header update erases whole sectors, and diagnostics records take one write unit each.
 - `FLASHBUFFER_SIZE` and `IMAGE_HEADER_SIZE` must be multiples of the write unit.
 - `DELTA_UPDATES` and `ENCRYPT` are not supported yet.

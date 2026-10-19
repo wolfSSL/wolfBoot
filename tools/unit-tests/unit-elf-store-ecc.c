@@ -1,9 +1,10 @@
 /* unit-elf-store-ecc.c
  *
- * Unit tests for the NVM_FLASH_ECC ELF scatter store in src/image.c,
- * extracted by the Makefile. The flash mock accepts only whole erased write
- * units and whole-sector erases, and segments that share a sector or a unit
- * must still land.
+ * Unit tests for the ELF scatter store in src/image.c, extracted by the
+ * Makefile. The flash mock accepts only whole erased write units and
+ * whole-sector erases, and segments that share a sector or a unit must still
+ * land. With WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS the rest of each
+ * sector must keep its old data, and erased units must stay erased.
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -30,7 +31,9 @@
 #include <string.h>
 
 #define WOLFBOOT_SECTOR_SIZE      0x400
+#ifndef WOLFBOOT_FLASH_WRITE_UNIT
 #define WOLFBOOT_FLASH_WRITE_UNIT 32
+#endif
 #define FLASHBUFFER_SIZE          256
 #ifdef WOLFBOOT_FLAGS_INVERT
 #define FLASH_BYTE_ERASED         0x00
@@ -41,14 +44,20 @@
 #define wolfBoot_printf           printf
 
 #define FLASH_SIZE (8 * WOLFBOOT_SECTOR_SIZE)
-#define UNITS      (FLASH_SIZE / WOLFBOOT_FLASH_WRITE_UNIT)
+#define UNIT       WOLFBOOT_FLASH_WRITE_UNIT
+#define UNITS      (FLASH_SIZE / UNIT)
 
 static uint8_t g_flash[FLASH_SIZE] XALIGNED(WOLFBOOT_SECTOR_SIZE);
 static uint8_t g_programmed[UNITS];
+static int g_wseq[UNITS]; /* write call that programmed each unit */
 static uint8_t g_src[FLASH_SIZE];
-static int g_violations, g_erases, g_writes;
+static int g_violations, g_erases, g_writes, g_is_erased_calls;
 
 #define BASE ((uintptr_t)g_flash)
+
+#ifdef NVM_FLASH_WRITEONCE
+uint8_t NVM_CACHE[WOLFBOOT_SECTOR_SIZE];
+#endif
 
 int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
@@ -56,21 +65,22 @@ int hal_flash_write(uintptr_t address, const uint8_t *data, int len)
     int u;
 
     if ((address < BASE) || (off + len > FLASH_SIZE) ||
-            (off % WOLFBOOT_FLASH_WRITE_UNIT) ||
-            (len % WOLFBOOT_FLASH_WRITE_UNIT)) {
+            (off % UNIT) || (len % UNIT)) {
         g_violations++;
         return -1;
     }
-    for (u = 0; u < len / WOLFBOOT_FLASH_WRITE_UNIT; u++) {
-        if (g_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT + u]) {
+    for (u = 0; u < len / UNIT; u++) {
+        if (g_programmed[off / UNIT + u]) {
             g_violations++;
             return -1;
         }
     }
     memcpy(g_flash + off, data, len);
-    for (u = 0; u < len / WOLFBOOT_FLASH_WRITE_UNIT; u++)
-        g_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT + u] = 1;
     g_writes++;
+    for (u = 0; u < len / UNIT; u++) {
+        g_programmed[off / UNIT + u] = 1;
+        g_wseq[off / UNIT + u] = g_writes;
+    }
     return 0;
 }
 
@@ -84,10 +94,26 @@ int hal_flash_erase(uintptr_t address, int len)
         return -1;
     }
     memset(g_flash + off, FLASH_BYTE_ERASED, len);
-    memset(g_programmed + off / WOLFBOOT_FLASH_WRITE_UNIT, 0,
-        len / WOLFBOOT_FLASH_WRITE_UNIT);
+    memset(g_programmed + off / UNIT, 0, len / UNIT);
     g_erases += len / WOLFBOOT_SECTOR_SIZE;
     return 0;
+}
+
+int hal_flash_is_erased(uintptr_t address, int len)
+{
+    uintptr_t off = address - BASE;
+    uintptr_t u;
+
+    g_is_erased_calls++;
+    if ((address < BASE) || (off + len > FLASH_SIZE) || (len <= 0)) {
+        g_violations++;
+        return -1;
+    }
+    for (u = off / UNIT; u <= (off + len - 1) / UNIT; u++) {
+        if (g_programmed[u])
+            return 0;
+    }
+    return 1;
 }
 
 void hal_flash_unlock(void) {}
@@ -102,13 +128,22 @@ static void setup(void)
     /* Old contents everywhere, programmed */
     memset(g_flash, 0xA5, sizeof(g_flash));
     memset(g_programmed, 1, sizeof(g_programmed));
+    memset(g_wseq, 0, sizeof(g_wseq));
     for (i = 0; i < FLASH_SIZE; i++)
         g_src[i] = (uint8_t)(i * 7 + 3);
-    g_violations = g_erases = g_writes = 0;
+    g_violations = g_erases = g_writes = g_is_erased_calls = 0;
 }
 
 static void teardown(void)
 {
+}
+
+/* Erase whole units in [off, off + len). A read of erased flash may return
+ * garbage, so they hold garbage. */
+static void mark_erased(uint32_t off, uint32_t len)
+{
+    memset(g_flash + off, 0x3C, len);
+    memset(g_programmed + off / UNIT, 0, len / UNIT);
 }
 
 struct seg {
@@ -131,8 +166,9 @@ static int store(const struct seg *s, int n)
     return elf_store_flush(&st);
 }
 
-/* Each segment holds its source bytes, and the rest of each erased sector
- * reads as erased */
+/* Each segment holds its source bytes. The rest of each touched sector reads
+ * as erased, or keeps its old data with
+ * WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS. */
 static void check(const struct seg *s, int n)
 {
     uint32_t off, sec_start, sec_end;
@@ -152,10 +188,12 @@ static void check(const struct seg *s, int n)
                 g_src[s[in_seg].src + off - s[in_seg].dst],
                 "segment byte at 0x%x", off);
         }
+#ifndef WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS
         else if ((off >= sec_start) && (off < sec_end)) {
             ck_assert_msg(g_flash[off] == FLASH_BYTE_ERASED,
                 "gap byte at 0x%x", off);
         }
+#endif
         else {
             ck_assert_msg(g_flash[off] == 0xA5, "outside byte at 0x%x", off);
         }
@@ -232,6 +270,112 @@ START_TEST(test_empty_segment)
 }
 END_TEST
 
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS
+/* Erased units stay erased unless a segment writes into them, and garbage
+ * read from them is never written back */
+START_TEST(test_preserve_erased_units_stay_erased)
+{
+    struct seg s[] = {
+        { 0x410, 0x000, 0x20 },  /* ends inside unit 0x420 */
+    };
+    uint32_t off;
+
+    mark_erased(0x420, 0x20);
+    mark_erased(0x600, 0x20);
+    ck_assert_int_eq(store(s, 1), 0);
+    ck_assert_int_eq(g_violations, 0);
+    ck_assert_int_eq(g_erases, 1);
+    for (off = 0x400; off < 0x410; off++)
+        ck_assert_uint_eq(g_flash[off], 0xA5);
+    for (off = 0x410; off < 0x430; off++)
+        ck_assert_uint_eq(g_flash[off], g_src[off - 0x410]);
+    for (off = 0x430; off < 0x440; off++)
+        ck_assert_uint_eq(g_flash[off], FLASH_BYTE_ERASED);
+    for (off = 0x600; off < 0x620; off++) {
+        ck_assert_uint_eq(g_flash[off], FLASH_BYTE_ERASED);
+        ck_assert_int_eq(g_programmed[off / UNIT], 0);
+    }
+    ck_assert_uint_eq(g_flash[0x620], 0xA5);
+}
+END_TEST
+
+/* After the erase, units that held data are written before units that only
+ * have segment data */
+START_TEST(test_preserve_old_units_first)
+{
+    struct seg s[] = {
+        { 0x500, 0x000, 0x100 },
+    };
+    int u, last_old = 0, first_new = 0x7FFFFFFF;
+
+    mark_erased(0x500, 0x100);
+    ck_assert_int_eq(store(s, 1), 0);
+    check(s, 1);
+    for (u = 0x400 / UNIT; u < 0x800 / UNIT; u++) {
+        ck_assert_int_ne(g_wseq[u], 0);
+        if ((u >= 0x500 / UNIT) && (u < 0x600 / UNIT)) {
+            if (g_wseq[u] < first_new)
+                first_new = g_wseq[u];
+        }
+        else if (g_wseq[u] > last_old) {
+            last_old = g_wseq[u];
+        }
+    }
+    ck_assert_int_lt(last_old, first_new);
+}
+END_TEST
+
+/* A sector that one segment covers completely is not read or checked */
+START_TEST(test_preserve_covered_sector_not_read)
+{
+    struct seg s[] = {
+        { 0x400, 0x000, 0x800 }, /* sectors 1 and 2 */
+    };
+    ck_assert_int_eq(store(s, 1), 0);
+    check(s, 1);
+    ck_assert_int_eq(g_erases, 2);
+    ck_assert_int_eq(g_is_erased_calls, 0);
+}
+END_TEST
+
+/* An erased sector is checked once, and only the segment is written */
+START_TEST(test_preserve_erased_sector)
+{
+    struct seg s[] = {
+        { 0x410, 0x000, 0x20 },
+    };
+    uint32_t off;
+
+    mark_erased(0x400, WOLFBOOT_SECTOR_SIZE);
+    ck_assert_int_eq(store(s, 1), 0);
+    ck_assert_int_eq(g_violations, 0);
+    ck_assert_int_eq(g_is_erased_calls, 1);
+    for (off = 0x410; off < 0x430; off++)
+        ck_assert_uint_eq(g_flash[off], g_src[off - 0x410]);
+    for (off = 0x440; off < 0x800; off++) {
+        ck_assert_uint_eq(g_flash[off], FLASH_BYTE_ERASED);
+        ck_assert_int_eq(g_programmed[off / UNIT], 0);
+    }
+}
+END_TEST
+
+#ifdef NVM_FLASH_WRITEONCE
+/* With NVM_FLASH_WRITEONCE the sector is staged in NVM_CACHE */
+START_TEST(test_preserve_uses_nvm_cache)
+{
+    struct seg s[] = {
+        { 0x410, 0x000, 0x20 },
+    };
+    memset(NVM_CACHE, 0, sizeof(NVM_CACHE));
+    ck_assert_int_eq(store(s, 1), 0);
+    check(s, 1);
+    ck_assert_int_eq(memcmp(NVM_CACHE, g_flash + 0x400, WOLFBOOT_SECTOR_SIZE),
+        0);
+}
+END_TEST
+#endif
+#endif /* WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS */
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot-elf-store-ecc");
@@ -243,6 +387,15 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_long_segment);
     tcase_add_test(tc, test_out_of_order);
     tcase_add_test(tc, test_empty_segment);
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS
+    tcase_add_test(tc, test_preserve_erased_units_stay_erased);
+    tcase_add_test(tc, test_preserve_old_units_first);
+    tcase_add_test(tc, test_preserve_covered_sector_not_read);
+    tcase_add_test(tc, test_preserve_erased_sector);
+#ifdef NVM_FLASH_WRITEONCE
+    tcase_add_test(tc, test_preserve_uses_nvm_cache);
+#endif
+#endif
     suite_add_tcase(s, tc);
     return s;
 }

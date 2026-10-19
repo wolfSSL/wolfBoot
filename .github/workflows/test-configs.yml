@@ -817,6 +817,20 @@ jobs:
       config-file: ./config/examples/sim-elf-scattered.config
       make-args: DISABLE_BACKUP=1
 
+  sim_elf_scattered_preserve_sectors:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-elf-scattered.config
+      make-args: ELF_FLASH_SCATTER_PRESERVE_SECTORS=1
+
+  sim_elf_scattered_preserve_sectors_writeonce:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: host
+      config-file: ./config/examples/sim-elf-scattered.config
+      make-args: ELF_FLASH_SCATTER_PRESERVE_SECTORS=1 NVM_FLASH_WRITEONCE=1
+
   # TODO: SP math with small stack has issues
 
   stm32c0:
