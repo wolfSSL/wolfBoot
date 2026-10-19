@@ -10817,10 +10817,13 @@ support is turned off in the config files, and all crypto is software based.
 To turn on hardware acceleration, set PKA=1 in the config file.
 
 Basic hardware acceleration supported:
+- TRNG (NRBG and SP 800-90A CTR-DRBG)
 - AES-CBC (128, 256 key sizes)
 - AES-ECB (128, 256 key sizes)
 - AES-GCM (128, 256 key sizes)
+- AES-CMAC (128, 256 key sizes)
 - SHA-256, SHA-512
+- HMAC-SHA256, HMAC-SHA512
 
 ### AM64x: Configuring and compiling
 
