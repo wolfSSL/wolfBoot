@@ -277,60 +277,69 @@ When the update is installed, the bootloader resets the update partition state s
 
 Some flash can program each write unit only once between erases, so wolfBoot cannot change a flag by
 programming its byte again. ECC flash is a common case: its write unit is the whole block that an ECC code
-covers, and on some parts a read of erased flash faults or returns garbage. wolfBoot has two separate
-groups of options for this:
+covers, and on some parts a read of erased flash faults or returns garbage.
 
-- **Trailer storage** (`NVM_FLASH_WRITEONCE`, `NVM_FLASH_JOURNAL`, `NVM_FLASH_JOURNAL_DUAL`) changes only
-  how the partition state and sector flags are kept in the trailer at the end of each partition.
+wolfBoot has two separate groups of options to facilitate running on parts with write-once or ECC flash:
+
+- **Trailer storage options**: `NVM_FLASH_WRITEONCE` and `NVM_FLASH_JOURNAL`/`NVM_FLASH_JOURNAL_DUAL`. These options
+  change how wolfBoot writes the partition state and sector flags in the trailer at the end of each partition. They
+  use different strategies and have different tradeoffs, but each scheme serves to ultimately ensure that the tralier and
+  flag sectors can be updated properly on parts with these flash constraints.
 - **ECC flash mode** (`NVM_FLASH_ECC`) changes how all of wolfBoot uses flash, not just the trailer.
   With this option, wolfBoot programs only whole, erased write units, erases only whole sectors,
   and asks the HAL whether flash is erased instead of reading it.
 
-How the options depend on each other:
+A detailed description of each the functionality enabled via these options is provided in subsequent sections. However,
+the interdependencies between these options can be understood as follows:
 
 - `NVM_FLASH_JOURNAL` works on its own, with or without `NVM_FLASH_ECC`.
-- `NVM_FLASH_ECC` needs `NVM_FLASH_JOURNAL`, and the build fails without it. The journal is the only
-  trailer storage that follows the ECC flash rules: the default trailer programs a unit again for each
-  flag, and `NVM_FLASH_WRITEONCE` reads the whole trailer sector, erased parts included.
+- `NVM_FLASH_ECC` needs `NVM_FLASH_JOURNAL` enabled and a build fails without it. The journal is the only
+  trailer storage that strictly follows the ECC flash rules.
 - `NVM_FLASH_JOURNAL_DUAL` needs `NVM_FLASH_JOURNAL`, and works with or without `NVM_FLASH_ECC`.
-- `NVM_FLASH_WRITEONCE` cannot be combined with `NVM_FLASH_JOURNAL`, so it cannot be used with
-  `NVM_FLASH_ECC` either.
+- `NVM_FLASH_WRITEONCE` is a write-once workaround only and does NOT fully support the constraints of ECC flash. It therefore
+   cannot be combined with `NVM_FLASH_JOURNAL` or `NVM_FLASH_ECC`.
 
 To choose:
 
 1. If the flash can program a byte again after an erase (most NOR flash), no option is needed.
-2. If it cannot, pick a trailer storage from the table below. `NVM_FLASH_JOURNAL` is the usual choice.
+2. If it cannot, you must pick an appropriate trailer storage scheme (either `NVM_FLASH_WRITEONCE` or `NVM_FLASH_JOURNAL`).
    A trailer storage option alone is enough when `hal_flash_write()` accepts writes of any size and
    alignment (see [HAL](HAL.md)), and a read of erased flash returns the erased value.
-3. Also set `NVM_FLASH_ECC=1` when the HAL programs only whole, erased write units (no read-modify-write),
-   or when a read of erased flash can fault, return garbage, or not tell an erased unit from a programmed
+3. Also set `NVM_FLASH_ECC=1` for ECC flash memories, or other scenarios where the HAL can only program whole, erased write units,
+   or when a read of erased flash can fault, return garbage, or otherwise not determine an erased unit from a programmed
    one. See [ECC flash mode](#ecc-flash-mode-nvm_flash_ecc).
 
-N is the number of sectors in the largest partition, and a journal record is 16 bytes, or one write unit
-if larger.
+
+The following table provides guidance for selecting a trailer implementation. In the table, N is the number of sectors in the largest partition,
+and a journal record is 16 bytes, or one write unit if larger.
 
 | Trailer storage | Option | Use when | Cost per flag write | Trailer sectors | With `NVM_FLASH_ECC` |
 |---|---|---|---|---|---|
 | In place (default) | none | flash can program a byte again (NOR) | one byte program | 1 | no |
-| [Two copies](#enable-workaround-for-write-once-flash-memories) | `NVM_FLASH_WRITEONCE=1` | write unit too large for a log, or cheap erases | 2 erases + 1 sector program | 2 | no |
-| [Journal](#trailer-journal-nvm_flash_journal) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 3, slow erases | 1 record program | 1 | yes |
-| [Journal in two sectors](#journal-in-two-sectors) | `NVM_FLASH_JOURNAL=1` and `NVM_FLASH_JOURNAL_DUAL=1` | slow erases, and a reset must never damage the log | 1 record program | 2 | yes |
+| [Two copies](#trailer-storage-option-nvm_flash_writeonce) | `NVM_FLASH_WRITEONCE=1` | write unit too large for a log, or cheap erases | 2 erases + 1 sector program | 2 | no |
+| [Journal](#trailer-storage-option-nvm_flash_journal-and-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 3, slow erases | 1 record program | 1 | yes |
+| [Journal in two sectors](#redundant-sector-journaling-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` and `NVM_FLASH_JOURNAL_DUAL=1` | slow erases, and a reset must never damage the log | 1 record program | 2 | yes |
 
-For example, AURIX TC3xx PFLASH has these constraints:
+For a specific platform example, the AURIX TC3xx platform has these flash constraints:
 
 - The smallest unit it can program is a 32-byte page, and a page can be programmed only once per erase.
 - It erases whole 16 KB logical sectors.
-- A read of an erased page is an ECC error. The flash controller has a Verify Erased command to check for
-  erased pages instead.
-- The erased value is 0, not 0xFF.
+- A read of any erased page is an ECC error.
+- The flash controller has a Verify Erased command.
+- The erased flash value is 0, not 0xFF.
 
-Without `NVM_FLASH_ECC`, its HAL would need a 16 KB RAM buffer and a sector erase for each write to a
-programmed page, and a reset during that rewrite would lose the sector. The TC3xx port instead builds with
-`NVM_FLASH_JOURNAL=1`, `NVM_FLASH_ECC=1`, a 32-byte write unit and `FLAGS_INVERT=1`, implements
-`hal_flash_is_erased()` with the Verify Erased command, and fails to build without the journal and ECC
-options. See [hal/aurix_tc3xx.c](../hal/aurix_tc3xx.c).
+Without `NVM_FLASH_ECC`, the TC3xx HAL would need all flash writes to be impelemented through a 16 KB RAM buffer
+via read-modify-write operation, with a sector erase for each write to a programmed page such that a reset during
+that rewrite could lose the sector. Instead, the TC3xx port can build with:
+ - `NVM_FLASH_JOURNAL=1`
+ - `NVM_FLASH_ECC=1`
+ - a 32-byte write unit
+ - `FLAGS_INVERT=1`
+ - An implementation of `hal_flash_is_erased()` 
 
-### Enable workaround for 'write once' flash memories
+See [hal/aurix_tc3xx.c](../hal/aurix_tc3xx.c) for more details
+
+### Trailer storage option: `NVM_FLASH_WRITEONCE`
 
 On some microcontrollers, the internal flash memory does not allow subsequent writes (adding zeroes) to a
 sector, after the entire sector has been erased. WolfBoot relies on the mechanism of adding zeroes to the
@@ -343,80 +352,60 @@ To enable the workaround for 'write once' internal flash, compile with
 **warning** When this option is enabled, the fail-safe swap is not guaranteed, i.e. the microcontroller
 cannot be safely powered down or restarted during a swap operation.
 
-### Trailer journal (`NVM_FLASH_JOURNAL`)
+### Trailer storage option: `NVM_FLASH_JOURNAL` and `NVM_FLASH_JOURNAL_DUAL`
 
-By default, wolfBoot changes a partition state or a sector flag by programming one more byte over the
-trailer at the end of the partition. Write-once flash cannot program a unit twice, so the HAL has to erase
-and rewrite the whole trailer sector for each flag. A reset in that window loses the trailer and can leave
-the device unbootable. `NVM_FLASH_WRITEONCE` keeps two copies of the sector instead, but still erases for
-each flag, needs a sector-size RAM buffer, and does not guarantee a fail-safe swap.
+By default, wolfBoot updates the partition state and sector flags in place, by programming over the
+trailer bytes at the end of each partition. Flash that can program each location only once per erase
+does not allow this. Journal mode instead keeps the trailer as a log: each change is added as a small
+record in the last sector of the partition.
 
-To log trailer writes instead, compile with
+To enable journal mode, compile with
 
 `NVM_FLASH_JOURNAL=1`
 
-Each trailer write is appended as a record to the partition's trailer sector, so a flag change is one
-record program. The sector is only erased where wolfBoot already erases the trailer: the update
-trigger, the end of an update, and a partition erase. At the first trailer access after a reset, wolfBoot
-replays the records into a RAM copy of the trailer.
+Each change to the partition state or to a sector flag writes one new record, so it costs one small
+program and no erase. After a reset, wolfBoot reads the log and replays the records to rebuild the trailer
+in RAM. Each record has a CRC, so a record cut short by a power loss is detected and ignored. The log
+sector is erased only when wolfBoot clears the trailer (when an update is triggered, at the end of an
+update, and when a partition is erased), or when the log must be rewritten, for example because it is full.
 
-The journal only changes the trailer, and does not need `NVM_FLASH_ECC`. The rest of wolfBoot reads and
-writes flash as before, so the HAL must still meet the base [HAL](HAL.md) requirements. If it cannot, add
-`NVM_FLASH_ECC` (see [ECC flash mode](#ecc-flash-mode-nvm_flash_ecc)).
+When enabling journal mode:
 
-- A record is 16 bytes, or one write unit if larger: tag, sequence number, offset and length of the
-  write, up to 4 data bytes, and a CRC32. Records fill the sector from its start and never reach the
-  trailer area at its end.
-- If the flash programs units larger than 16 bytes, set `FLASH_WRITE_UNIT=<bytes>` so that two records
-  never share a unit. The write unit must be a power of two.
-- The valid records must carry every sequence number from 0. A slot that fails its check is skipped, but
-  more than one bad slot after the last record, or a missing record, means a cut erase: the log then
-  reads as erased, and the sector is erased before the next write.
-- If an erased check or a read fails while the log is replayed, the trailer reads as missing and
-  nothing is written to it, until a later replay succeeds.
-- If `wolfBoot_update_trigger()` cannot clear the trailer, it does not set UPDATING, so the sector flags
-  of an earlier update are never applied to the new image. The application can read the UPDATE partition
-  state to check that the trigger worked.
-- After a reset, the slot after the last record is left unused, because a cut write can still read as
-  erased. Each record is read back after it is written, and moves to the next slot if the write fails or
-  the read-back does not match. A failed write can still land, so the replay also accepts a record that
-  repeats the previous sequence number.
-- The trailer sector must hold the log of a full-partition update: three records per sector, plus the
-  magic, UPDATING and FINAL_FLAGS records and the slot the bootloader skips. The build fails otherwise.
-  With 16 KB sectors and 32-byte write units (TC3xx), that is about 510 slots for up to 169 sectors.
-  Each reset during an update uses one or two more slots.
-- A device in use can switch to this mode from the default trailer with a bootloader update. See
-  [Migrating devices to the journal mode](#migrating-devices-to-the-journal-mode).
-- The bootloader and the application must use the same trailer mode, because both write the trailer.
+- If the flash write unit is larger than 16 bytes, also set `FLASH_WRITE_UNIT=<bytes>` (a power of two),
+  so that each record gets its own write unit.
+- The log sector must be able to hold the records of a full-partition update (see the table above). The
+  build fails otherwise.
+- Build the bootloader and the application with the same trailer option, since both write the trailer.
+- Journal mode only changes the trailer. On ECC flash, also set `NVM_FLASH_ECC` (see
+  [ECC flash mode](#ecc-flash-mode-nvm_flash_ecc)).
 - `NVM_FLASH_JOURNAL` cannot be combined with `NVM_FLASH_WRITEONCE`, `ENCRYPT`, `FLAGS_HOME`,
   `CUSTOM_PARTITION_TRAILER` or `PULL_LINKER_DEFINES`.
+- To switch devices already in the field to journal mode, see
+  [Migrating devices to the journal mode](#migrating-devices-to-the-journal-mode).
 
-#### Journal in two sectors
+#### Redundant sector journaling: `NVM_FLASH_JOURNAL_DUAL`
 
-The single-sector journal still erases the sector that holds the log: to clear the trailer, and to
-compact a full log. A reset during such an erase can leave a damaged log. To never erase the log in use,
-add
+Standard journal mode has a few very unlikely edge cases where a power loss during an update can leave
+the log corrupted and unrecoverable, such as when repeated resets during a large update fill up the log
+and then power is lost again at a different particular moment during the log compaction cycle where wolfBoot
+must erase and rewrites the log. The log lives in a single sector, so clearing or rewriting it means erasing
+the only copy. If this risk is not acceptable, compile with
 
 `NVM_FLASH_JOURNAL_DUAL=1`
 
-The journal then uses the last two sectors of each partition, and they take turns.
+in addition to `NVM_FLASH_JOURNAL=1`.
 
-- Clearing the trailer (update trigger, end of an update, partition erase) and compacting a full log both
-  write a new log into the other sector. The new log has a header with a generation number in slot 0, a
-  copy of the trailer, and a commit record.
-- The loader uses the newest sector whose log is complete. A log is complete once its commit record, or
-  any record after its copy, is in flash. A reset before that leaves the old log in use.
-- Because the log in use is never erased, a bad slot can only come from a cut write, so any number of bad
-  slots is skipped. A write that is cut again and again uses one more slot each time, and never makes the
-  log read as erased.
-- A full log moves to the other sector without risk, so the log size does not limit the image. The build
-  only checks that a sector can hold a copy of the trailer.
-- The image can use one sector less than with the single-sector journal. A trailer clear costs one sector
-  erase in both modes.
-- A record that is missing between valid records still makes the log read as erased. A record cut near
-  the end of its write can read as valid at one boot and fail at a later one, and this mode does not
-  protect against that.
-- To switch a device in use to this mode, erase its BOOT and UPDATE partitions first. See
+Dual journal mode keeps the log in the last two sectors of each partition, which take turns holding it.
+To clear or rewrite the log, wolfBoot erases the other sector instead of the one in use, writes a new log
+there, and switches to it only once the new log is complete. If power is lost before then, wolfBoot keeps
+using the old log, which is still intact.
+
+Compared with standard journal mode:
+
+- The trailer takes two sectors at the end of each partition instead of one, so the largest possible application
+  image is one sector smaller.
+- A full log simply moves to the other sector, so the log no longer needs room for a full-partition update.
+- To switch devices already in the field to this mode, erase their BOOT and UPDATE partitions first. See
   [Migrating devices to the journal mode](#migrating-devices-to-the-journal-mode).
 
 #### Migrating devices to the journal mode

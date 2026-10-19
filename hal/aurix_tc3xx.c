@@ -179,9 +179,6 @@ void wolfBoot_panic(void) TC3_LONGCALL;
 #define HSM_RELEASE()
 #endif /* WOLFBOOT_ENABLE_WOLFHSM_CLIENT */
 
-/* TC3 PFLASH has ECC, so a page can be programmed only once after a sector
- * erase. This HAL refuses writes to programmed pages and partial-sector
- * erases, so core must obey the NVM_FLASH_ECC rules and use the journal. */
 #if !defined(NVM_FLASH_ECC) || !defined(NVM_FLASH_JOURNAL)
 #error "AURIX TC3xx needs NVM_FLASH_ECC=1 and NVM_FLASH_JOURNAL=1"
 #endif
@@ -393,8 +390,7 @@ static int RAMFUNCTION programBytesToErasedFlash(uint32_t       address,
 /* Write, erase and the blank-checked read below are each split into a worker
  * and a public wrapper that parks the HSM for the whole call. */
 
-/* Program data into blank pages only. A page can be programmed once after an
- * erase, so a write that touches a programmed page fails and changes nothing. */
+/* Program data into blank pages only */
 static int RAMFUNCTION _flashWrite(uint32_t address, const uint8_t* data,
                                    int size)
 {
@@ -428,8 +424,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int size)
     return ret;
 }
 
-/* Erase whole sectors only. A range that is not sector-aligned fails, because
- * a partial erase needs a read-modify-write that is not safe if power fails. */
+/* Erase whole sectors only. A range that is not sector-aligned fails */
 static int RAMFUNCTION _flashErase(uint32_t address, int len)
 {
     int ret;
@@ -550,8 +545,7 @@ int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
     return ret;
 }
 
-/* Erased check with the DMU Verify Erased command. A plain read cannot tell,
- * because reading erased PFLASH is an ECC error. */
+/* Erased check with the DMU Verify Erased command. */
 int RAMFUNCTION hal_flash_is_erased(uint32_t address, int len)
 {
     int ret;
