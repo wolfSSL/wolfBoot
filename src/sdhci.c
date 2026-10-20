@@ -248,6 +248,8 @@ static void sdhci_disable_sdma_interrupts(void)
  * - Polling mode: directly reads SRS12 status register and calls handler */
 static int sdhci_wait_irq(uint32_t expected_flags, uint32_t timeout)
 {
+    uint32_t pet = 0;
+
     while (timeout-- > 0) {
         /* Poll SRS12 directly for platforms without interrupt routing.
          * In interrupt mode this is redundant (bits already cleared by ISR). */
@@ -269,6 +271,12 @@ static int sdhci_wait_irq(uint32_t expected_flags, uint32_t timeout)
             if (g_mmc_irq_status & expected_flags) {
                 return 0;
             }
+        }
+        /* A watchdog that cannot be disabled counts from the last refresh, so
+         * an unserviced data phase resets the chip before the timeout below. */
+        if (++pet >= SDHCI_WDT_PET_INTERVAL) {
+            pet = 0;
+            sdhci_platform_wdt_pet();
         }
         asm volatile("nop");
     }
@@ -1636,6 +1644,10 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
              * A64 is cleared in SRS15 to use 32-bit DMA addressing.
              * Note: Platform may redirect SRS22/SRS23 to SRS00 for legacy
              * SDMA on controllers that don't support HV4E. */
+            /* DMA Select is a field, not a flag: SDHCI_SRS10_DMA_SDMA is 0,
+             * so an OR cannot clear a non-SDMA selection left by whatever
+             * ran before us. Clear the field first. */
+            sdhci_reg_and(SDHCI_SRS10, ~SDHCI_SRS10_DMA_MASK);
             sdhci_reg_or(SDHCI_SRS10, SDHCI_SRS10_DMA_SDMA);
             sdhci_reg_or(SDHCI_SRS15, SDHCI_SRS15_HV4E);
             sdhci_reg_and(SDHCI_SRS15, ~SDHCI_SRS15_A64);
@@ -1667,7 +1679,8 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
     if (cmd_reg & SDHCI_SRS03_DMAE) {
         /* DMA mode with interrupt support */
         while (1) {
-            status = sdhci_wait_irq(SDHCI_IRQ_FLAG_TC, 0x00FFFFFF);
+            status = sdhci_wait_irq(
+                SDHCI_IRQ_FLAG_TC | SDHCI_IRQ_FLAG_DMAINT, 0x00FFFFFF);
             if (status != 0) {
                 wolfBoot_printf("sdhci_transfer: SDMA timeout/error\n");
                 status = -1;
@@ -1677,6 +1690,11 @@ static int sdhci_transfer(int dir, uint32_t cmd_index, uint32_t block_addr,
                 g_mmc_irq_status &= ~SDHCI_IRQ_FLAG_TC;
                 break;
             }
+            /* An SDMA buffer-boundary pause. The handler has re-armed the
+             * address, so loop and wait again. Each segment gets its own
+             * budget rather than one budget bounding the whole data phase,
+             * which is why the wait above services the watchdog. */
+            g_mmc_irq_status &= ~SDHCI_IRQ_FLAG_DMAINT;
         }
         sdhci_disable_sdma_interrupts();
 
