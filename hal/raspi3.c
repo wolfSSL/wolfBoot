@@ -47,6 +47,7 @@
 /* PL011 UART registers */
 #define UART0_BASE      GPIO_BASE + 0x1000
 #define UART0_DR        ((volatile unsigned int*)(UART0_BASE+0x00))
+#define UART0_RSR       ((volatile unsigned int*)(UART0_BASE+0x04))
 #define UART0_FR        ((volatile unsigned int*)(UART0_BASE+0x18))
 #define UART0_IBRD      ((volatile unsigned int*)(UART0_BASE+0x24))
 #define UART0_FBRD      ((volatile unsigned int*)(UART0_BASE+0x28))
@@ -140,6 +141,27 @@ void uart_tx(char c)
         asm volatile("nop");
     } while(*UART0_FR & 0x20);
     *UART0_DR = c;
+}
+
+/* Non-blocking receive. Returns 1 when a character was read, 0 otherwise. */
+int uart_rx(uint8_t *c)
+{
+    unsigned int dr;
+
+    /* receive fifo empty */
+    if (*UART0_FR & 0x10)
+        return 0;
+
+    dr = *UART0_DR;
+    if (dr & 0xF00) {
+        /* overrun, break, parity or framing error: drop the character and
+         * clear the sticky receive status */
+        *UART0_RSR = 0;
+        return 0;
+    }
+
+    *c = (uint8_t)(dr & 0xFF);
+    return 1;
 }
 
 char uart_read(void)

@@ -190,6 +190,14 @@
 #define UART_IMSC               UART_REG(UART_IMSC_OFFSET)
 #define UART_ICR                UART_REG(UART_ICR_OFFSET)
 
+/* Data Register (UARTDR) bits - receive side */
+#define UART_DR_OE              (1UL << 11) /* Overrun error */
+#define UART_DR_BE              (1UL << 10) /* Break error */
+#define UART_DR_PE              (1UL << 9)  /* Parity error */
+#define UART_DR_FE              (1UL << 8)  /* Framing error */
+#define UART_DR_ERR_MASK        (0xFUL << 8)
+#define UART_DR_DATA_MASK       0xFFUL
+
 /* Flag Register (UARTFR) bits - Status */
 #define UART_FR_RI              (1UL << 8)  /* Ring indicator */
 #define UART_FR_TXFE            (1UL << 7)  /* TX FIFO empty */
