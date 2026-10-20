@@ -585,21 +585,20 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #define JOURNAL_PART_SECTORS (WOLFBOOT_PARTITION_SIZE / WOLFBOOT_SECTOR_SIZE)
 #endif
 
-/* The magic, the state and one flag byte for each two sectors */
-#define JOURNAL_TRAILER_SIZE (4 + 1 + (JOURNAL_PART_SECTORS + 1) / 2)
-/* Size of the trailer window at the end of the sector, rounded up to whole
- * words: the RAM copy is a uint32_t array and the magic is its last word */
-#define JOURNAL_WINDOW ((JOURNAL_TRAILER_SIZE + 3) & ~3)
+/* The magic, the state and one flag byte for each two sectors, rounded up to
+ * whole words, as the RAM copy is a uint32_t array ending with the magic */
+#define JOURNAL_TRAILER_SIZE \
+    (((4 + 1 + (JOURNAL_PART_SECTORS + 1) / 2) + 3) & ~3)
 
 /* One record per write unit, at least 16 bytes. Records fill the sector
- * from its start and never reach the trailer window. */
+ * from its start and never reach the in-place trailer area at its end. */
 #if WOLFBOOT_FLASH_WRITE_UNIT > 16
 #define JOURNAL_SLOT_SIZE WOLFBOOT_FLASH_WRITE_UNIT
 #else
 #define JOURNAL_SLOT_SIZE 16
 #endif
-#define JOURNAL_SLOTS \
-    ((WOLFBOOT_SECTOR_SIZE - TRAILER_SKIP - JOURNAL_WINDOW) / JOURNAL_SLOT_SIZE)
+#define JOURNAL_SLOTS ((WOLFBOOT_SECTOR_SIZE - TRAILER_SKIP - \
+    JOURNAL_TRAILER_SIZE) / JOURNAL_SLOT_SIZE)
 
 #if (WOLFBOOT_FLASH_WRITE_UNIT & (WOLFBOOT_FLASH_WRITE_UNIT - 1)) != 0
 #error "WOLFBOOT_FLASH_WRITE_UNIT must be a power of two"
@@ -610,8 +609,8 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
  * the log starts at slot 1. */
 #define JOURNAL_DUAL       1
 #define JOURNAL_FIRST_SLOT 1
-/* A new log holds a header, a copy of the window, and a commit record */
-#if JOURNAL_SLOTS < (JOURNAL_WINDOW / 4 + 4)
+/* A new log holds a header, a copy of the trailer, and a commit record */
+#if JOURNAL_SLOTS < (JOURNAL_TRAILER_SIZE / 4 + 4)
 #error "NVM_FLASH_JOURNAL_DUAL: trailer sector can't hold a copy of the trailer"
 #endif
 #else
@@ -633,7 +632,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 struct journal_rec {
     uint16_t tag;
     uint16_t seq;    /* record number, from 0 after each erase */
-    uint16_t offset; /* first trailer window byte written */
+    uint16_t offset; /* first trailer byte written */
     uint16_t len;
     uint8_t  data[4];
     uint32_t crc;    /* CRC32 of the fields above */
@@ -647,7 +646,7 @@ struct journal_rec {
 #define JOURNAL_COMPACT  3 /* in-place trailer, rewrite it as records */
 
 struct journal {
-    uint32_t  window[JOURNAL_WINDOW / 4]; /* RAM copy of the trailer window */
+    uint32_t  trailer[JOURNAL_TRAILER_SIZE / 4]; /* RAM copy of the trailer */
     uintptr_t check_addr; /* stays programmed while the RAM copy is current */
     uint32_t  gen;        /* dual mode, highest generation in a header */
     uint16_t  check_len;
@@ -722,7 +721,7 @@ static int RAMFUNCTION journal_flash_erase(uint8_t part, uintptr_t addr,
 
 static void RAMFUNCTION journal_reset(struct journal *j)
 {
-    XMEMSET(j->window, FLASH_BYTE_ERASED, JOURNAL_WINDOW);
+    XMEMSET(j->trailer, FLASH_BYTE_ERASED, JOURNAL_TRAILER_SIZE);
     j->check_len = 0;
     j->next_slot = 0;
     j->next_seq = 0;
@@ -741,7 +740,7 @@ static int RAMFUNCTION journal_rec_ok(const struct journal_rec *rec)
 {
     return (rec->tag == JOURNAL_TAG) && (rec->len >= 1) &&
         (rec->len <= sizeof(rec->data)) &&
-        (rec->offset + rec->len <= JOURNAL_WINDOW) &&
+        (rec->offset + rec->len <= JOURNAL_TRAILER_SIZE) &&
         (rec->crc == wb_crc32(rec, JOURNAL_REC_CRC_LEN));
 }
 
@@ -752,7 +751,7 @@ struct journal_scan {
     int commit; /* the commit record of the generation is present */
 };
 
-/* Replay the sector in use into the RAM window and set up the next write.
+/* Replay the sector in use into the RAM copy and set up the next write.
  * Return -1 if a flash check fails. */
 static int RAMFUNCTION journal_scan(uint8_t part, struct journal *j,
     uint32_t gen, struct journal_scan *s)
@@ -792,7 +791,7 @@ static int RAMFUNCTION journal_scan(uint8_t part, struct journal *j,
                 s->gap = 1;
                 break;
             }
-            XMEMCPY((uint8_t *)j->window + rec.offset, rec.data, rec.len);
+            XMEMCPY((uint8_t *)j->trailer + rec.offset, rec.data, rec.len);
             if (rec.seq == j->next_seq) {
                 j->next_seq++;
             }
@@ -819,21 +818,21 @@ static int RAMFUNCTION journal_scan(uint8_t part, struct journal *j,
     return 0;
 }
 
-/* A journal never writes the trailer window, so a magic there means the
- * sector holds a trailer in the in-place format. Return 1 if it was read and
- * -1 if a read fails. */
+/* A journal never writes the in-place trailer area, so a magic there means
+ * the sector holds a trailer in the in-place format. Return 1 if it was read
+ * and -1 if a read fails. */
 static int RAMFUNCTION journal_import(uint8_t part, struct journal *j)
 {
-    uintptr_t win = journal_end(part) - JOURNAL_WINDOW;
+    uintptr_t addr = journal_end(part) - JOURNAL_TRAILER_SIZE;
     uint32_t magic;
 
-    if (journal_read(part, win + JOURNAL_WINDOW - 4, &magic, 4) != 0)
+    if (journal_read(part, addr + JOURNAL_TRAILER_SIZE - 4, &magic, 4) != 0)
         return -1;
     if (magic != WOLFBOOT_MAGIC_TRAIL)
         return 0;
-    if (journal_read(part, win, j->window, JOURNAL_WINDOW) != 0)
+    if (journal_read(part, addr, j->trailer, JOURNAL_TRAILER_SIZE) != 0)
         return -1;
-    j->check_addr = win + JOURNAL_WINDOW - 4;
+    j->check_addr = addr + JOURNAL_TRAILER_SIZE - 4;
     j->check_len = 4;
     j->state = JOURNAL_COMPACT;
     return 1;
@@ -871,9 +870,9 @@ static int RAMFUNCTION journal_append(uint8_t part, struct journal *j,
                 || (XMEMCMP(buf.raw, chk.raw, JOURNAL_SLOT_SIZE) != 0)) {
             continue;
         }
-        /* Header and commit records do not change the window */
+        /* Header and commit records do not change the trailer */
         if (tag == JOURNAL_TAG) {
-            XMEMCPY((uint8_t *)j->window + offset, data, len);
+            XMEMCPY((uint8_t *)j->trailer + offset, data, len);
             j->next_seq++;
         }
         j->check_addr = addr;
@@ -957,20 +956,20 @@ static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
         j->state = JOURNAL_ERASE;
 }
 
-/* Start a new log in the other sector with a header, a copy of the RAM window
+/* Start a new log in the other sector with a header, a copy of the trailer
  * and a commit record. The old log stays valid until the commit is in flash. */
 static int RAMFUNCTION journal_newgen(uint8_t part, struct journal *j)
 {
-    uint32_t window[JOURNAL_WINDOW / 4];
+    uint32_t copy[JOURNAL_TRAILER_SIZE / 4];
     uint32_t gen = j->gen + 1;
     uint16_t count = 0;
     int i, ret;
 
     if (j->state == JOURNAL_UNLOADED)
         return -1;
-    XMEMCPY(window, j->window, JOURNAL_WINDOW);
-    for (i = 0; i < JOURNAL_WINDOW; i += 4) {
-        if (window[i / 4] != FLASH_WORD_ERASED)
+    XMEMCPY(copy, j->trailer, JOURNAL_TRAILER_SIZE);
+    for (i = 0; i < JOURNAL_TRAILER_SIZE; i += 4) {
+        if (copy[i / 4] != FLASH_WORD_ERASED)
             count++;
     }
     j->active = (uint8_t)!j->active;
@@ -984,10 +983,10 @@ static int RAMFUNCTION journal_newgen(uint8_t part, struct journal *j)
         if ((ret == 0) && (j->next_slot != 1))
             ret = -1;
     }
-    for (i = 0; (ret == 0) && (i < JOURNAL_WINDOW); i += 4) {
-        if (window[i / 4] != FLASH_WORD_ERASED) {
+    for (i = 0; (ret == 0) && (i < JOURNAL_TRAILER_SIZE); i += 4) {
+        if (copy[i / 4] != FLASH_WORD_ERASED) {
             ret = journal_append(part, j, JOURNAL_TAG, (uint16_t)i,
-                (const uint8_t *)window + i, 4);
+                (const uint8_t *)copy + i, 4);
         }
     }
     if (ret == 0) {
@@ -1005,7 +1004,7 @@ static int RAMFUNCTION journal_newgen(uint8_t part, struct journal *j)
 /* Start an empty log in the other sector */
 static int RAMFUNCTION journal_clear(uint8_t part, struct journal *j)
 {
-    XMEMSET(j->window, FLASH_BYTE_ERASED, JOURNAL_WINDOW);
+    XMEMSET(j->trailer, FLASH_BYTE_ERASED, JOURNAL_TRAILER_SIZE);
     return journal_newgen(part, j);
 }
 
@@ -1014,7 +1013,7 @@ static int RAMFUNCTION journal_compact(uint8_t part, struct journal *j)
     return journal_newgen(part, j);
 }
 #else
-/* Replay the trailer sector into the RAM window. If a seq number is missing,
+/* Replay the trailer sector into the RAM copy. If a seq number is missing,
  * or more than one bad slot follows the last record, an erase was cut and the
  * log reads as erased. */
 static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
@@ -1051,20 +1050,20 @@ static int RAMFUNCTION journal_clear(uint8_t part, struct journal *j)
     return ret;
 }
 
-/* Erase the sector and log the RAM window again, four bytes per record. The
+/* Erase the sector and log the trailer again, four bytes per record. The
  * magic is the last group, so a cut leaves no trailer instead of a partial
  * one. */
 static int RAMFUNCTION journal_compact(uint8_t part, struct journal *j)
 {
-    uint32_t window[JOURNAL_WINDOW / 4];
+    uint32_t copy[JOURNAL_TRAILER_SIZE / 4];
     int i, ret;
 
-    XMEMCPY(window, j->window, JOURNAL_WINDOW);
+    XMEMCPY(copy, j->trailer, JOURNAL_TRAILER_SIZE);
     ret = journal_clear(part, j);
-    for (i = 0; (ret == 0) && (i < JOURNAL_WINDOW); i += 4) {
-        if (window[i / 4] != FLASH_WORD_ERASED) {
+    for (i = 0; (ret == 0) && (i < JOURNAL_TRAILER_SIZE); i += 4) {
+        if (copy[i / 4] != FLASH_WORD_ERASED) {
             ret = journal_append(part, j, JOURNAL_TAG, (uint16_t)i,
-                (const uint8_t *)window + i, 4);
+                (const uint8_t *)copy + i, 4);
         }
     }
     return ret;
@@ -1119,18 +1118,19 @@ static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 
     if (j == NULL)
         return NULL;
-    return (uint8_t *)j->window + JOURNAL_WINDOW - (sizeof(uint32_t) + at);
+    return (uint8_t *)j->trailer + JOURNAL_TRAILER_SIZE -
+        (sizeof(uint32_t) + at);
 }
 
 static void RAMFUNCTION set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
-    (void)journal_set(part, (uint16_t)(JOURNAL_WINDOW - (sizeof(uint32_t) + at)),
-        &val, 1);
+    (void)journal_set(part,
+        (uint16_t)(JOURNAL_TRAILER_SIZE - (sizeof(uint32_t) + at)), &val, 1);
 }
 
 static void RAMFUNCTION set_partition_magic(uint8_t part)
 {
-    (void)journal_set(part, JOURNAL_WINDOW - sizeof(uint32_t),
+    (void)journal_set(part, JOURNAL_TRAILER_SIZE - sizeof(uint32_t),
         (const uint8_t *)&wolfboot_magic_trail, sizeof(uint32_t));
 }
 
