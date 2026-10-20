@@ -48,9 +48,9 @@
 #define NSECT      (PART_SIZE / SECT_SIZE)
 
 /* On-flash format, as in src/libwolfboot.c */
-#define SLOT_SIZE  ((UNIT > 16) ? UNIT : 16)
-#define WINDOW     (((4 + 1 + (NSECT + 1) / 2) + 3) & ~3)
-#define SLOTS      ((SECT_SIZE - WINDOW) / SLOT_SIZE)
+#define SLOT_SIZE    ((UNIT > 16) ? UNIT : 16)
+#define TRAILER_SIZE (((4 + 1 + (NSECT + 1) / 2) + 3) & ~3)
+#define SLOTS        ((SECT_SIZE - TRAILER_SIZE) / SLOT_SIZE)
 
 #define EXIT_CUT   100
 
