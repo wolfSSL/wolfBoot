@@ -154,6 +154,23 @@ _reset:
     sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
     fence
 
+    /* Evict any copy of the scratchpad range that an earlier access left in
+     * an evictable way.  The pin loop below allocates by storing with the
+     * E51 mask set to one way at a time, but a store that HITS a line already
+     * resident in ways 0-7 updates that line instead, so the address never
+     * reaches a scratchpad way and reads as zero once a large DMA sweep
+     * evicts it.  Under boot mode 2 the UBL and the released U54s run before
+     * this point with every mask wide open.  FLUSH64 takes a line address
+     * and evicts it from whichever way holds it. */
+    li    t0, 0x02010200              /* L2_FLUSH64 */
+    li    t1, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
+    li    t2, 0x0A080000              /* + 512 KB */
+.L_prepin_flush:
+    sd    t1, 0(t0)
+    addi  t1, t1, 64
+    bltu  t1, t2, .L_prepin_flush
+    fence
+
     /* Make all 512 KB of the Zero Device resident by enabling one scratchpad
      * way at a time and storing a marker every 64 bytes: a store can only
      * allocate in the enabled way, so 2048 blocks x 4 ways fills each once.
@@ -250,14 +267,14 @@ _copy_params:
 
     addi  sp, sp, -64                  /* allocate 64-byte HLS at top of stack */
     mv    s11, sp
-    sd    zero,  0(s11)
-    sd    zero,  8(s11)
-    sd    zero, 16(s11)
-    sd    zero, 24(s11)
-    sd    zero, 32(s11)
-    sd    zero, 40(s11)
-    sd    zero, 48(s11)
-    sd    zero, 56(s11)
+    /* The HLS block is zeroed AFTER the wait below, not here.  It lives in
+     * L2 scratchpad, and the boot hart does not finish carving the
+     * scratchpad out (the way-mask pin loop, then mpfs_config_l2_cache)
+     * until well after it releases us.  Under boot mode 2 the UBL releases
+     * the U54s and jumps last, so a store here is guaranteed to land before
+     * the scratchpad exists; in boot mode 1 the System Controller starts all
+     * five harts together and the boot hart merely usually wins.  Only
+     * register setup happens before the wait. */
 
     /* Wait for E51 to signal HLS_MAIN_HART_STARTED.  On MPFS250 poll the
      * DTIM copy of the flag, not the L2-scratch HLS: an E51 store to the
@@ -287,6 +304,16 @@ _copy_params:
     slli  t1, a0, 2
     add   t0, t0, t1
     sw    zero, 0(t0)                  /* clear stale MSIP */
+
+    /* Scratchpad is resident now; zero the HLS block, then publish. */
+    sd    zero,  0(s11)
+    sd    zero,  8(s11)
+    sd    zero, 16(s11)
+    sd    zero, 24(s11)
+    sd    zero, 32(s11)
+    sd    zero, 40(s11)
+    sd    zero, 48(s11)
+    sd    zero, 56(s11)
 
     li    t0, 0x12345678               /* HLS_OTHER_HART_IN_WFI */
     sw    t0, 0(s11)
