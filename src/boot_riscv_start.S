@@ -349,7 +349,7 @@ _copy_params:
     la    t0, secondary_hart_entry
     jr    t0
 
-/* .text section follows — runs from L2 SRAM after copy from eNVM */
+/* .text section follows - runs from L2 SRAM after copy from eNVM */
 .section .text
 .L_sram_entry:
     la    t0, trap_vector_table
