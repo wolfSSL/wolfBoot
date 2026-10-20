@@ -201,10 +201,11 @@ jobs:
           sed -i 's/^WOLFBOOT_HWPUF_PROVISION?=0/WOLFBOOT_HWPUF_PROVISION?=1/' .config
           sed -i 's/^WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=1/WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=0/' .config
           make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS"
-          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x48000 --cpu lpc55s69 --uart-stdout --timeout 300 \
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x48000 --cpu lpc55s69 --uart-stdout --expect-bkpt 0x7f --timeout 300 \
             | tee /tmp/m33mu-lpc55s69-dice-hwpuf.log
           grep -q "Booting version:" /tmp/m33mu-lpc55s69-dice-hwpuf.log
           grep -q "Checking integrity...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
           grep -q "Verifying signature...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
           grep -q "attest: token size" /tmp/m33mu-lpc55s69-dice-hwpuf.log
           grep -q "state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-lpc55s69-dice-hwpuf.log

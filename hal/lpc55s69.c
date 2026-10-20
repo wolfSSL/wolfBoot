@@ -186,7 +186,8 @@ static int hwpuf_provision_set(int force)
 
 error_out:
     hal_zeroize(&prov, sizeof(prov));
-    (void)nxp_hwpuf_Zeroize();
+    /* No nxp_hwpuf_Zeroize(): it locks the PUF until the next POR, and the
+     * UDS must still be derivable at runtime. Deinit powers the PUF down. */
     (void)nxp_hwpuf_Deinit();
     return ret;
 }
@@ -222,7 +223,6 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
 error_out:
     hal_zeroize(uds, sizeof(uds));
     hal_zeroize(&prov, sizeof(prov));
-    (void)nxp_hwpuf_Zeroize();
     (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }

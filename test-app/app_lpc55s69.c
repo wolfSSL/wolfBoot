@@ -255,8 +255,13 @@ void main(void)
     }
 
 #if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
-    if (run_attestation_test() != 0)
+    if (run_attestation_test() == 0) {
+        __asm__ volatile ("bkpt #0x7f");
+    }
+    else {
         wolfBoot_printf("Make sure WOLFBOOT_HWPUF_PROVISION is set\n");
+        __asm__ volatile ("bkpt #0x7e");
+    }
 #endif
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
