@@ -26,29 +26,45 @@
 /* Project includes */
 #include "image.h"
 #include "printf.h"
-#include "psoc6_02_config.h"
 #include <target.h>
+#include "hal.h"
+#include "hal/psoc6.h"
 
 #ifdef WOLFSSL_PSOC6_CRYPTO
 #include "wolfssl/wolfcrypt/port/cypress/psoc6_crypto.h"
 #endif
 
+#include "cy_device_headers.h"
 #include "cy_flash.h"
+#include "cy_gpio.h"
 #include "cy_sysclk.h"
 #include "cy_syslib.h"
+#ifdef DEBUG_UART
+#include "cy_scb_uart.h"
+#endif
+#ifdef BOOT_BENCHMARK
+#include "cy_tcpwm_counter.h"
+#endif
+#include "cy_sysint.h"
+#ifdef EXT_FLASH
+#include "cy_smif_memslot.h"
+#endif
 
 #define EMULATED_EEPROM_START (CY_EM_EEPROM_BASE)
 #define ROW_SIZE (CY_FLASH_SIZEOF_ROW)
 #define FLASH_SUBSECTOR_SIZE (CY_FLASH_SIZEOF_ROW * 8)
 #define FLASH_SECTOR_SIZE (CY_FLASH_SIZEOF_ROW * CPUSS_FLASHC_SONOS_MAIN_ROWS)
 #define FLASH_BASE_ADDRESS (CY_FLASH_BASE)
-#define FLASH_SIZE (CY_FLASH_SIZE)
-#define CPU_FREQ (100000000)
 
 /* Magic number constants */
-#define EXT_FLASH_TMP_MAGIC (0x4C465845U) /* 'EXFL' */
 #define BANKMODE_MAGIC (0x4B424C44U)      /* 'DLBK' */
-#define EXT_FLASH_WORD_ERASED_VALUE (0xFFFFFFFFU)
+
+/* NVM_FLASH_WRITEONCE keeps a whole trailer, one flag nibble per sector, in
+ * one sector */
+#if (((WOLFBOOT_PARTITION_SIZE) / (WOLFBOOT_SECTOR_SIZE)) / 2) + 16 > \
+    (WOLFBOOT_SECTOR_SIZE)
+    #error "WOLFBOOT_SECTOR_SIZE is too small for the partition trailer"
+#endif
 
 #ifdef EXT_FLASH
 
@@ -112,24 +128,6 @@ static cy_stc_smif_block_config_t smifBlockConfig_sfdp = {
 };
 
 static cy_stc_smif_block_config_t* smif_blk_config;
-
-#define TMP_SECTOR_INFO_ADDR EMULATED_EEPROM_START
-
-/**
- * Address of the temporary sector in external flash.
- *
- * External flash has a larger minimum erase size (determined at runtime via
- * SFDP, e.g. 0x40000 bytes for S25FL512S) than internal flash rows. Since
- * read-modify-erase-write cannot use SRAM as a temporary buffer due to size
- * constraints, we use a dedicated sector in external flash for temporary
- * storage during sector updates.
- */
-#define SWAP_TMP_SECTOR_ADDR (WOLFBOOT_PARTITION_UPDATE_ADDRESS + CY_FLASH_SIZE)
-
-typedef struct tmp_sector_info {
-    uint32_t magic;
-    uint32_t sector_address;
-} tmp_sector_info;
 
 static SMIF_Type* QSPIPort = SMIF0;
 
@@ -283,39 +281,29 @@ static const cy_stc_smif_config_t QSPI_config = {
     .blockEvent    = (uint32_t)CY_SMIF_BUS_ERROR,
 };
 
-#if CY_CPU_CORTEX_M0P
-/* CM0+ SMIF interrupt configuration */
-static cy_stc_sysint_t smifIntConfig = {
-    /* ATTENTION: make sure proper Interrupts configured for CM0p or M4 cores */
-    .intrSrc      = NvicMux7_IRQn,
-    .cm0pSrc      = smif_interrupt_IRQn,
-    .intrPriority = 1,
-};
-#endif
-
-#if CY_CPU_CORTEX_M0P
-static void Isr_SMIF(void)
-{
-    Cy_SMIF_Interrupt(QSPIPort, &smif_context);
-}
-#endif
-
 /**
  * @brief Initialize external QSPI flash hardware
  *
- * Configures GPIO pins, SMIF clock, interrupt, and initializes the SMIF
- * block and external memory device.
+ * Configures GPIO pins and the SMIF clock, and initializes the SMIF
+ * block and external memory device. Only blocking SMIF calls are used, so
+ * no SMIF interrupt is set up.
  *
  * Initialization steps:
  * 1. Configure QSPI data, clock, and slave-select GPIO pins
  * 2. Enable SMIF HF clock (CLK_HF2) with divide-by-4
- * 3. Setup SMIF interrupt for CM0+
- * 4. Initialize SMIF block in normal mode
- * 5. Enable SMIF block
- * 6. Initialize external memory configuration with retry
+ * 3. Initialize SMIF block in normal mode
+ * 4. Enable SMIF block
+ * 5. Initialize external memory configuration with retry
  *
  * @return CY_SMIF_SUCCESS on success, error code on failure
  */
+/* ext_flash_erase() erases whole sectors, so they must not exceed a wolfBoot
+ * sector */
+static int psoc6_qspi_geometry_ok(uint32_t erase_size)
+{
+    return (erase_size != 0U) && ((WOLFBOOT_SECTOR_SIZE % erase_size) == 0U);
+}
+
 cy_en_smif_status_t hal_ext_flash_init(void)
 {
     cy_en_smif_status_t st;
@@ -349,28 +337,17 @@ cy_en_smif_status_t hal_ext_flash_init(void)
                                     CY_SMIF_SYSCLK_HFCLK_DIVIDER);
     (void)Cy_SysClk_ClkHfEnable(CY_SYSCLK_CLKHF_IN_CLKPATH2);
 
-    /* Step 3: Setup the interrupt for the SMIF block.  For the CM0+ there
-     * is a two stage process to setup the interrupts. */
-#if CY_CPU_CORTEX_M0P
-    (void)Cy_SysInt_Init(&smifIntConfig, Isr_SMIF);
-#endif
-
-    /* Step 4: Initialize SMIF block */
+    /* Step 3: Initialize SMIF block */
     st = Cy_SMIF_Init(QSPIPort, &QSPI_config, CY_SMIF_INIT_TIMEOUT_US,
                       &smif_context);
     if (st != CY_SMIF_SUCCESS) {
         return st;
     }
 
-#if CY_CPU_CORTEX_M0P
-    NVIC_EnableIRQ(
-        smifIntConfig.intrSrc); /* Finally, Enable the SMIF interrupt */
-#endif
-
-    /* Step 5: Enable SMIF block */
+    /* Step 4: Enable SMIF block */
     Cy_SMIF_Enable(QSPIPort, &smif_context);
 
-    /* Step 6: Initialize external memory via SFDP with retry */
+    /* Step 5: Initialize external memory via SFDP with retry */
     smif_blk_config = &smifBlockConfig_sfdp;
     try_count       = CY_SMIF_INIT_TRY_COUNT;
     do {
@@ -381,16 +358,23 @@ cy_en_smif_status_t hal_ext_flash_init(void)
         }
     } while ((st != CY_SMIF_SUCCESS) && (try_count > 0U));
 
+    if ((st == CY_SMIF_SUCCESS) && !psoc6_qspi_geometry_ok(
+            smif_blk_config->memConfig[0]->deviceCfg->eraseSize)) {
+        wolfBoot_printf("QSPI erase size 0x%x does not divide "
+            "WOLFBOOT_SECTOR_SIZE\n",
+            smif_blk_config->memConfig[0]->deviceCfg->eraseSize);
+        st = CY_SMIF_BAD_PARAM;
+    }
     return st;
 }
 
+#ifdef __WOLFBOOT
 /**
  * @brief Deinitialize external QSPI flash hardware
  *
  * Reverses the initialization performed by hal_ext_flash_init().
  * Deinitializes SMIF memory, disables the SMIF block, disables the
- * HF clock, disconnects interrupts (on CM0+), and deinitializes
- * GPIO ports. Matches mcuboot's qspi_deinit() sequence.
+ * HF clock, and deinitializes GPIO ports.
  */
 static void hal_ext_flash_deinit(void)
 {
@@ -399,12 +383,6 @@ static void hal_ext_flash_deinit(void)
 
     (void)Cy_SysClk_ClkHfDisable(CY_SYSCLK_CLKHF_IN_CLKPATH2);
 
-#if CY_CPU_CORTEX_M0P
-    NVIC_DisableIRQ(smifIntConfig.intrSrc);
-    Cy_SysInt_DisconnectInterruptSource(smifIntConfig.intrSrc,
-                                        smifIntConfig.cm0pSrc);
-#endif
-
     Cy_GPIO_Port_Deinit(qspi_SS_Port);
     Cy_GPIO_Port_Deinit(qspi_SCK_Port);
     Cy_GPIO_Port_Deinit(qspi_D0_Port);
@@ -412,29 +390,221 @@ static void hal_ext_flash_deinit(void)
     Cy_GPIO_Port_Deinit(qspi_D2_Port);
     Cy_GPIO_Port_Deinit(qspi_D3_Port);
 }
+#endif
 
 #endif /* EXT_FLASH */
 
 #ifdef DUALBANK_SWAP
 
-#define FLASH_BANK1_BASE (0x10000000) /* Base address of Flash Bank1 */
-#define FLASH_BANK2_BASE (0x12000000) /* Base address of Flash Bank2 */
+#define FLASH_BANK1_BASE (PSOC6_FLASH_BASE)
+/* Second bank in the single-bank map, before dual-bank mode is enabled */
+#define FLASH_BANK2_COPY (PSOC6_FLASH_BASE + PSOC6_FLASH_BANK_SIZE)
 
 typedef struct active_bank {
     uint32_t magic;
-    uint32_t mapping; /* Changed from cy_en_maptype_t to uint32_t for 32-bit
-                         alignment */
+    uint32_t mapping;
+    uint32_t seq;
+    uint32_t check;
 } active_bank;
 
-/* EXT_FLASH and DUALBANK_SWAP are mutually exclusive, so its safe to overwrite
- * the data at same address. */
-#define ACTIVE_BANK_MODE_DATA_ADDRESS (EMULATED_EEPROM_START)
+/* Two records in separate work-flash rows: a swap writes the older one, so a
+ * power cut never leaves the device without a valid mapping */
+#define BANK_RECORD_SLOTS 2U
+#define BANK_RECORD_ADDR(slot) (EMULATED_EEPROM_START + ((slot) * ROW_SIZE))
 
 int RAMFUNCTION bankmode_init(void);
 #endif
 
 /* Global write buffer to avoid stack allocation and enable RAMFUNCTION usage */
-static uint8_t psoc6_write_buffer[ROW_SIZE];
+static uint8_t psoc6_write_buffer[ROW_SIZE] __attribute__((aligned(4)));
+
+#if defined(PSOC6_CM4_APP) && \
+    (((WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE) % \
+      PSOC6_CM4_VTOR_ALIGN) != 0)
+#error "PSOC6_CM4_APP needs a 1 KB aligned image: set IMAGE_HEADER_SIZE=1024"
+#endif
+
+static int RAMFUNCTION psoc6_in_region(uint32_t address, uint32_t len,
+    uint32_t base, uint32_t size)
+{
+    return (address >= base) && (len <= size) &&
+           ((address - base) <= (size - len));
+}
+
+/* ProgramRow needs an erased row; WriteRow erases first */
+static int RAMFUNCTION psoc6_write_row(uint32_t row)
+{
+    const uint32_t *cur = (const uint32_t*)PSOC6_FLASH_PTR(row);
+    const uint32_t *buf = (const uint32_t*)psoc6_write_buffer;
+    uint32_t i;
+    int same = 1;
+    int erased = 1;
+    int ret = 0;
+
+    for (i = 0; i < (ROW_SIZE / sizeof(uint32_t)); i++) {
+        if (cur[i] != buf[i]) {
+            same = 0;
+        }
+        if (cur[i] != 0U) {
+            erased = 0;
+        }
+    }
+    if (!same) {
+        if (erased) {
+            ret = (int)Cy_Flash_ProgramRow(row, buf);
+        }
+        else {
+            ret = (int)Cy_Flash_WriteRow(row, buf);
+        }
+        Cy_SysLib_ClearFlashCacheAndBuffer();
+    }
+    /* wolfBoot checks for negative errors; PDL status codes are positive */
+    return (ret == 0) ? 0 : -1;
+}
+
+static int RAMFUNCTION psoc6_is_erased(uint32_t address, uint32_t len)
+{
+    const uint32_t *p = (const uint32_t*)PSOC6_FLASH_PTR(address);
+    uint32_t i;
+
+    for (i = 0; i < (len / sizeof(uint32_t)); i++) {
+        if (p[i] != 0U) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int RAMFUNCTION psoc6_flash_range_ok(uint32_t address, uint32_t len)
+{
+    int ok = 0;
+
+    if (len == 0U) {
+        ok = 0;
+    }
+    else if (psoc6_in_region(address, len, PSOC6_FLASH_BASE,
+            PSOC6_FLASH_SIZE) ||
+        psoc6_in_region(address, len, PSOC6_WFLASH_BASE, PSOC6_WFLASH_SIZE)) {
+        ok = 1;
+    }
+#ifdef DUALBANK_SWAP
+    else if (psoc6_in_region(address, len, PSOC6_FLASH_BANK2_BASE,
+            PSOC6_FLASH_BANK_SIZE)) {
+        ok = 1;
+    }
+#endif
+    return ok;
+}
+
+#ifdef DEBUG_UART
+static void psoc6_uart_putc(char c)
+{
+    while (Cy_SCB_UART_Put(PSOC6_UART_SCB, (uint32_t)(uint8_t)c) == 0UL) {
+    }
+}
+
+#ifdef __WOLFBOOT
+static const cy_stc_scb_uart_config_t psoc6_uart_cfg = {
+    .uartMode           = CY_SCB_UART_STANDARD,
+    .oversample         = PSOC6_UART_OVERSAMPLE,
+    .dataWidth          = 8UL,
+    .parity             = CY_SCB_UART_PARITY_NONE,
+    .stopBits           = CY_SCB_UART_STOP_BITS_1,
+    .breakWidth         = 11UL,
+    .ctsPolarity        = CY_SCB_UART_ACTIVE_LOW,
+    .rtsPolarity        = CY_SCB_UART_ACTIVE_LOW,
+};
+
+void uart_init(void)
+{
+    Cy_GPIO_Pin_FastInit(PSOC6_UART_PORT, PSOC6_UART_TX_PIN,
+        CY_GPIO_DM_STRONG_IN_OFF, 1UL, PSOC6_UART_TX_MUX);
+    Cy_GPIO_Pin_FastInit(PSOC6_UART_PORT, PSOC6_UART_RX_PIN,
+        CY_GPIO_DM_HIGHZ, 1UL, PSOC6_UART_RX_MUX);
+
+    (void)Cy_SysClk_PeriphAssignDivider(PSOC6_UART_PCLK,
+        CY_SYSCLK_DIV_16_5_BIT, PSOC6_UART_DIV_NUM);
+    (void)Cy_SysClk_PeriphSetFracDivider(CY_SYSCLK_DIV_16_5_BIT,
+        PSOC6_UART_DIV_NUM, PSOC6_UART_DIV_INT, PSOC6_UART_DIV_FRAC);
+    (void)Cy_SysClk_PeriphEnableDivider(CY_SYSCLK_DIV_16_5_BIT,
+        PSOC6_UART_DIV_NUM);
+
+    if (Cy_SCB_UART_Init(PSOC6_UART_SCB, &psoc6_uart_cfg, NULL) ==
+            CY_SCB_UART_SUCCESS) {
+        Cy_SCB_UART_Enable(PSOC6_UART_SCB);
+    }
+}
+
+static void psoc6_uart_flush(void)
+{
+    while (!Cy_SCB_UART_IsTxComplete(PSOC6_UART_SCB)) {
+    }
+}
+#endif /* __WOLFBOOT */
+
+void uart_write(const char* buf, unsigned int sz)
+{
+    unsigned int i;
+
+    for (i = 0; i < sz; i++) {
+        if (buf[i] == '\n') {
+            psoc6_uart_putc('\r');
+        }
+        psoc6_uart_putc(buf[i]);
+    }
+}
+#endif /* DEBUG_UART */
+
+#if defined(BOOT_BENCHMARK) && defined(__WOLFBOOT)
+static const cy_stc_tcpwm_counter_config_t psoc6_timer_cfg = {
+    .period             = 0xFFFFFFFFUL,
+    .clockPrescaler     = CY_TCPWM_COUNTER_PRESCALER_DIVBY_1,
+    .runMode            = CY_TCPWM_COUNTER_CONTINUOUS,
+    .countDirection     = CY_TCPWM_COUNTER_COUNT_UP,
+    .compareOrCapture   = CY_TCPWM_COUNTER_MODE_CAPTURE,
+    .interruptSources   = CY_TCPWM_INT_NONE,
+    .captureInputMode   = CY_TCPWM_INPUT_LEVEL,
+    .captureInput       = CY_TCPWM_INPUT_0,
+    .reloadInputMode    = CY_TCPWM_INPUT_LEVEL,
+    .reloadInput        = CY_TCPWM_INPUT_0,
+    .startInputMode     = CY_TCPWM_INPUT_LEVEL,
+    .startInput         = CY_TCPWM_INPUT_0,
+    .stopInputMode      = CY_TCPWM_INPUT_LEVEL,
+    .stopInput          = CY_TCPWM_INPUT_0,
+    .countInputMode     = CY_TCPWM_INPUT_LEVEL,
+    .countInput         = CY_TCPWM_INPUT_1,
+};
+
+/* TCPWM0 counter 0 is 32 bits wide; extend it in software across wraps */
+uint64_t hal_get_timer_us(void)
+{
+    static int started;
+    static uint32_t last;
+    static uint32_t high;
+    uint32_t now;
+
+    if (!started) {
+        (void)Cy_SysClk_PeriphAssignDivider(PSOC6_TIMER_PCLK,
+            CY_SYSCLK_DIV_16_BIT, PSOC6_TIMER_DIV_NUM);
+        (void)Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT,
+            PSOC6_TIMER_DIV_NUM, PSOC6_TIMER_DIV);
+        (void)Cy_SysClk_PeriphEnableDivider(CY_SYSCLK_DIV_16_BIT,
+            PSOC6_TIMER_DIV_NUM);
+        if (Cy_TCPWM_Counter_Init(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT,
+                &psoc6_timer_cfg) == CY_TCPWM_SUCCESS) {
+            Cy_TCPWM_Counter_Enable(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
+            Cy_TCPWM_TriggerStart_Single(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
+        }
+        started = 1;
+    }
+    now = Cy_TCPWM_Counter_GetCounter(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
+    if (now < last) {
+        high++;
+    }
+    last = now;
+    return ((uint64_t)high << 32) | now;
+}
+#endif /* BOOT_BENCHMARK && __WOLFBOOT */
 
 #ifdef __WOLFBOOT
 static const cy_stc_pll_manual_config_t srss_0_clock_0_pll_0_pllConfig = {
@@ -513,19 +683,38 @@ static void hal_set_pll(void)
  * @note Must be called early in the boot process before any flash operations
  *       or cryptographic functions.
  */
+/* The ROM runs every flash call through the CM0+ NMI vector, so the table
+ * must outlive a self-update erasing the bootloader; the PDL also installs
+ * ISRs only when VTOR points at __ramVectors */
+static void psoc6_ram_vectors(void)
+{
+    const cy_israddress *flash_iv =
+        (const cy_israddress*)PSOC6_FLASH_PTR(FLASH_BASE_ADDRESS);
+    uint32_t i;
+
+    for (i = 0; i < PSOC6_CM0P_SYS_VECTORS; i++) {
+        __ramVectors[i] = flash_iv[i];
+    }
+    for (; i < PSOC6_CM0P_VECTORS; i++) {
+        __ramVectors[i] = flash_iv[PSOC6_HARDFAULT_VECTOR];
+    }
+    SCB->VTOR = (uint32_t)(uintptr_t)__ramVectors;
+    __DSB();
+}
+
 void hal_init(void)
 {
-#define VTOR (*(volatile uint32_t*)(0xE000ED08))
-    VTOR = FLASH_BASE_ADDRESS;
-#undef VTOR
-
-#ifdef DUALBANK_SWAP
-    bankmode_init();
-#endif
+    psoc6_ram_vectors();
 
     Cy_PDL_Init(CY_DEVICE_CFG);
     Cy_Flash_Init();
     hal_set_pll();
+#ifdef DEBUG_UART
+    uart_init();
+#endif
+#ifdef DUALBANK_SWAP
+    bankmode_init();
+#endif
 
 #ifdef EXT_FLASH
     if (hal_ext_flash_init() != CY_SMIF_SUCCESS) {
@@ -545,7 +734,21 @@ void hal_prepare_boot(void)
 #ifdef EXT_FLASH
     hal_ext_flash_deinit();
 #endif
+#ifdef DEBUG_UART
+    psoc6_uart_flush();
+#endif
 }
+
+#ifdef WOLFBOOT_BOOT_REMOTE_CORE
+/* The CM0+ stays parked so it can service the CM4's SROM flash calls (NMI) */
+void hal_boot_remote_core(const uint32_t *app_offset)
+{
+    Cy_SysEnableCM4((uint32_t)(uintptr_t)app_offset);
+    while (1) {
+        __WFI();
+    }
+}
+#endif
 
 #endif
 
@@ -577,13 +780,15 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int len)
 
     /* Validate input parameters (address checked against base, PDL handles bank
      * mapping) */
-    if (!data || (len <= 0) || (address < FLASH_BASE_ADDRESS))
+    if ((data == NULL) || (len <= 0) ||
+        !psoc6_flash_range_ok(row_start,
+            ((uint32_t)len + offset + ROW_SIZE - 1U) & ~(ROW_SIZE - 1U)))
         return -1;
 
     /* Handle unaligned start address with read-modify-write */
     if (address != row_start) {
         /* Read existing row from flash */
-        memcpy(psoc6_write_buffer, (const void*)row_start, ROW_SIZE);
+        memcpy(psoc6_write_buffer, PSOC6_FLASH_PTR(row_start), ROW_SIZE);
 
         /* Merge new data at offset, limiting to row boundary */
         write_len = ((ROW_SIZE - offset) < (uint32_t)len) ? (ROW_SIZE - offset)
@@ -591,12 +796,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int len)
         memcpy(&psoc6_write_buffer[offset], data, write_len);
 
         /* Program the updated data into flash row */
-        ret =
-            Cy_Flash_ProgramRow(row_start, (const uint32_t*)psoc6_write_buffer);
+        ret = psoc6_write_row(row_start);
         if (ret) {
-            wolfBoot_printf(
-                "hal_flash_write: ProgramRow failed at 0x%08X ret=%d\n",
-                row_start, ret);
             return ret;
         }
 
@@ -616,17 +817,13 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t* data, int len)
         }
         else {
             /* Read-modify-write for partial row support */
-            memcpy(psoc6_write_buffer, (const void*)row_start, ROW_SIZE);
+            memcpy(psoc6_write_buffer, PSOC6_FLASH_PTR(row_start), ROW_SIZE);
             memcpy(psoc6_write_buffer, data, write_len);
         }
 
         /* Program the updated data into flash row */
-        ret =
-            Cy_Flash_ProgramRow(row_start, (const uint32_t*)psoc6_write_buffer);
+        ret = psoc6_write_row(row_start);
         if (ret) {
-            wolfBoot_printf(
-                "hal_flash_write: ProgramRow failed at 0x%08X ret=%d\n",
-                row_start, ret);
             return ret;
         }
 
@@ -669,310 +866,122 @@ void RAMFUNCTION hal_flash_lock(void)
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
     cy_rslt_t status;
+    uint32_t step;
+    int ret = 0;
 
     /* Validate input parameters */
-    if ((len <= 0) || (address % ROW_SIZE) || (address < FLASH_BASE_ADDRESS))
+    if ((len <= 0) || (address % ROW_SIZE) ||
+        !psoc6_flash_range_ok(address,
+            ((uint32_t)len + ROW_SIZE - 1U) & ~(ROW_SIZE - 1U)))
         return -1;
 
     /* Select optimal erase size based on alignment and length */
-    while (len > 0) {
+    while ((len > 0) && (ret == 0)) {
+        status = CY_RSLT_SUCCESS;
         if ((address % FLASH_SECTOR_SIZE == 0) &&
             ((uint32_t)len >= FLASH_SECTOR_SIZE)) {
-            /* Erase full sector (most efficient) */
-            status = Cy_Flash_EraseSector(address);
-            if (status != CY_RSLT_SUCCESS)
-                return -1;
-
-            address += FLASH_SECTOR_SIZE;
-            len -= FLASH_SECTOR_SIZE;
+            step = FLASH_SECTOR_SIZE;
+            if (!psoc6_is_erased(address, step))
+                status = Cy_Flash_EraseSector(address);
         }
         else if ((address % FLASH_SUBSECTOR_SIZE == 0) &&
                  ((uint32_t)len >= FLASH_SUBSECTOR_SIZE)) {
-            /* Erase subsector (medium efficiency) */
-            status = Cy_Flash_EraseSubsector(address);
-            if (status != CY_RSLT_SUCCESS)
-                return -1;
-
-            address += FLASH_SUBSECTOR_SIZE;
-            len -= FLASH_SUBSECTOR_SIZE;
+            step = FLASH_SUBSECTOR_SIZE;
+            if (!psoc6_is_erased(address, step))
+                status = Cy_Flash_EraseSubsector(address);
         }
         else {
-            /* Erase single row (smallest granularity) */
-            status = Cy_Flash_EraseRow(address);
-            if (status != CY_RSLT_SUCCESS)
-                return -1;
-
-            address += ROW_SIZE;
-            len -= ROW_SIZE;
+            step = ROW_SIZE;
+            if (!psoc6_is_erased(address, step))
+                status = Cy_Flash_EraseRow(address);
         }
+        if (status != CY_RSLT_SUCCESS) {
+            ret = -1;
+        }
+        address += step;
+        len -= (int)step;
     }
+    Cy_SysLib_ClearFlashCacheAndBuffer();
 
-    return 0;
+    return ret;
 }
 
-/**
- * @brief Perform a system reset
- *
- * Triggers a software reset of the PSoC6 device by calling NVIC_SystemReset().
- *
- * @note This function does not return.
- */
-void RAMFUNCTION arch_reboot(void)
+/* With RAM_CODE, wolfBoot links the RAM copy from src/boot_arm.c */
+#if !defined(RAM_CODE) || !defined(__WOLFBOOT)
+void arch_reboot(void)
 {
     NVIC_SystemReset();
 }
+#endif
 
 /******************************************************************************
  * External Flash Support
  ******************************************************************************/
 
 #ifdef EXT_FLASH
-
-/**
- * @brief Write data to external flash with sector management
- *
- * Handles writing to external flash which has larger erase sectors
- * (e.g. 0x40000 bytes for S25FL512S, determined at runtime via SFDP) than
- * the row size used by wolfBoot. Implements a temporary sector backup
- * mechanism to preserve existing data during partial sector writes.
- *
- * Algorithm:
- * 1. Check if the target sector differs from the cached temporary sector
- * 2. If different: backup entire source sector to temp sector, then erase
- * source
- * 3. If same: check if target area needs erasing (contains non-0xFF data)
- * 4. Write new data to the target location
- *
- * @param address External flash address (must be row-aligned)
- * @param data    Pointer to source data buffer
- * @param len     Number of bytes to write (must be row-aligned)
- *
- * @return 0 on success, -1 on error
- *
- * @note Uses internal emulated EEPROM to track temporary sector state for
- *       power-fail safety.
- * @note SWAP_TMP_SECTOR_ADDR is used as temporary storage during sector
- * updates.
- */
-int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t* data, int len)
+static int RAMFUNCTION psoc6_qspi_offset(uintptr_t address, uint32_t len,
+    uint32_t *offset)
 {
-    tmp_sector_info info;
-    cy_rslt_t status;
-    uint32_t base_address;
-    uint32_t erase_size;
-    uint32_t sector_start;
-    uint8_t need_update;
-    uint32_t offset;
+    const cy_stc_smif_mem_config_t *mem = smif_blk_config->memConfig[0];
+
     int ret = -1;
-    int i;
 
-    /* Validate alignment requirements */
-    if (!data || (address % ROW_SIZE) || (len % ROW_SIZE))
-        return -1;
-
-    base_address = smif_blk_config->memConfig[0]->baseAddress;
-    erase_size   = smif_blk_config->memConfig[0]->deviceCfg->eraseSize;
-
-    memcpy(&info, (void*)TMP_SECTOR_INFO_ADDR, sizeof(tmp_sector_info));
-    sector_start = address - (address % erase_size);
-
-    /* Determine if temporary sector needs updating (invalid magic or different
-     * sector) */
-    need_update = ((info.magic != EXT_FLASH_TMP_MAGIC) ||
-                   (info.sector_address != sector_start));
-
-    if (need_update) {
-        /* Invalidate temp sector info before starting update process */
-        if (hal_flash_erase(TMP_SECTOR_INFO_ADDR, ROW_SIZE) != 0)
-            goto error;
-
-        /* Erase the temporary sector */
-        status = Cy_SMIF_MemEraseSector(QSPIPort, smif_blk_config->memConfig[0],
-                                        SWAP_TMP_SECTOR_ADDR - base_address,
-                                        erase_size, &smif_context);
-        if (status != CY_SMIF_SUCCESS)
-            goto error;
-
-        /* Backup source sector to temporary location row by row */
-        for (offset = 0; offset < erase_size; offset += ROW_SIZE) {
-            status =
-                Cy_SMIF_MemRead(QSPIPort, smif_blk_config->memConfig[0],
-                                sector_start - base_address + offset,
-                                psoc6_write_buffer, ROW_SIZE, &smif_context);
-            if (status != CY_SMIF_SUCCESS)
-                goto error;
-
-            status =
-                Cy_SMIF_MemWrite(QSPIPort, smif_blk_config->memConfig[0],
-                                 SWAP_TMP_SECTOR_ADDR - base_address + offset,
-                                 psoc6_write_buffer, ROW_SIZE, &smif_context);
-            if (status != CY_SMIF_SUCCESS)
-                goto error;
-        }
-
-        /* Mark temporary sector as valid */
-        info.magic          = EXT_FLASH_TMP_MAGIC;
-        info.sector_address = sector_start;
-        if (hal_flash_write(TMP_SECTOR_INFO_ADDR, (const void*)&info,
-                            sizeof(tmp_sector_info)) != 0)
-            goto error;
-
-        /* Erase the source sector */
-        status = Cy_SMIF_MemEraseSector(QSPIPort, smif_blk_config->memConfig[0],
-                                        sector_start - base_address, erase_size,
-                                        &smif_context);
-        if (status != CY_SMIF_SUCCESS)
-            goto error;
+    if (psoc6_in_region((uint32_t)address, len, mem->baseAddress,
+            mem->deviceCfg->memSize)) {
+        *offset = (uint32_t)address - mem->baseAddress;
+        ret = 0;
     }
-    else {
-        /* Check if target write region needs erasing (contains non-erased data)
-         */
-        for (i = 0; i < len; i += ROW_SIZE) {
-            status =
-                Cy_SMIF_MemRead(QSPIPort, smif_blk_config->memConfig[0],
-                                address - base_address + i, psoc6_write_buffer,
-                                ROW_SIZE, &smif_context);
-            if (status != CY_SMIF_SUCCESS) {
-                wolfBoot_printf(
-                    "ext_flash_write: SMIF read failed at 0x%08lX\n",
-                    (unsigned long)(address + i));
-                goto error;
-            }
-
-            /* Check if all bytes are in erased state. */
-            if ((*(uint32_t*)psoc6_write_buffer !=
-                 EXT_FLASH_WORD_ERASED_VALUE) ||
-                (memcmp(psoc6_write_buffer + 4, psoc6_write_buffer,
-                        ROW_SIZE - 4) != 0)) {
-                /* Non-erased data found, erase the containing sector */
-                status = Cy_SMIF_MemEraseSector(
-                    QSPIPort, smif_blk_config->memConfig[0],
-                    sector_start - base_address, erase_size, &smif_context);
-                if (status != CY_SMIF_SUCCESS) {
-                    wolfBoot_printf("ext_flash_write: SMIF erase failed for "
-                                    "sector 0x%08lX\n",
-                                    (unsigned long)sector_start);
-                    goto error;
-                }
-                break;
-            }
-        }
-    }
-
-    /* Write the row data */
-    status = Cy_SMIF_MemWrite(QSPIPort, smif_blk_config->memConfig[0],
-                              address - base_address, data, len, &smif_context);
-    if (status != CY_SMIF_SUCCESS)
-        goto error;
-
-    ret = 0;
-
-error:
     return ret;
 }
 
-/**
- * @brief Read data from external flash with temporary sector redirection
- *
- * Reads data from external flash, automatically redirecting reads to the
- * temporary backup sector if the requested address falls within a sector
- * that is currently being updated (indicated by valid tmp_sector_info).
- *
- * This redirection ensures data consistency during interrupted write
- * operations, as the temporary sector contains the original data before
- * modification.
- *
- * @param address External flash address to read from
- * @param data    Pointer to destination buffer
- * @param len     Number of bytes to read (must be > 0)
- *
- * @return Number of bytes read on success, -1 on invalid parameters or
- *         SMIF failure
- *
- * @note Redirection is transparent to the caller and ensures read consistency
- *       even during power-fail recovery scenarios.
- */
+int RAMFUNCTION ext_flash_write(uintptr_t address, const uint8_t* data, int len)
+{
+    uint32_t offset;
+    int ret = -1;
+
+    if ((data != NULL) && (len > 0) &&
+        (psoc6_qspi_offset(address, (uint32_t)len, &offset) == 0) &&
+        (Cy_SMIF_MemWrite(QSPIPort, smif_blk_config->memConfig[0], offset,
+            data, (uint32_t)len, &smif_context) == CY_SMIF_SUCCESS)) {
+        ret = 0;
+    }
+    return ret;
+}
+
 int RAMFUNCTION ext_flash_read(uintptr_t address, uint8_t* data, int len)
 {
-    tmp_sector_info info;
-    uint32_t base_address;
-    uint32_t erase_size;
-    uint32_t sector_start;
     uint32_t offset;
-    cy_rslt_t status;
+    int ret = -1;
 
-    if (!data || (len <= 0))
-        return -1;
-
-    base_address = smif_blk_config->memConfig[0]->baseAddress;
-    erase_size   = smif_blk_config->memConfig[0]->deviceCfg->eraseSize;
-
-    memcpy(&info, (void*)TMP_SECTOR_INFO_ADDR, sizeof(tmp_sector_info));
-
-    /* Redirect to temporary sector if active and address falls within that
-     * sector */
-    if (info.magic == EXT_FLASH_TMP_MAGIC) {
-        sector_start = address - (address % erase_size);
-        if (sector_start == info.sector_address) {
-            /* Remap to temporary sector while preserving offset within sector
-             */
-            address = SWAP_TMP_SECTOR_ADDR + (address % erase_size);
-        }
+    if ((data != NULL) && (len > 0) &&
+        (psoc6_qspi_offset(address, (uint32_t)len, &offset) == 0) &&
+        (Cy_SMIF_MemRead(QSPIPort, smif_blk_config->memConfig[0], offset,
+            data, (uint32_t)len, &smif_context) == CY_SMIF_SUCCESS)) {
+        ret = len;
     }
-
-    offset = address - base_address;
-    status = Cy_SMIF_MemRead(QSPIPort, smif_blk_config->memConfig[0], offset,
-                             data, len, &smif_context);
-    if (status != CY_SMIF_SUCCESS)
-        return -1;
-    return len;
+    return ret;
 }
 
-/**
- * @brief External flash erase operation (no-op)
- *
- * External flash erase is handled by ext_flash_write() due to sector size
- * mismatch. wolfBoot expects row-sized erase granularity, but external
- * flash minimum erase size is much larger (eg. 0x40000 bytes for S25FL512S).
- * The write function manages sector erasing and preserves existing data
- * via temporary sector backup.
- *
- * @param address External flash address (unused)
- * @param len Number of bytes (unused)
- * @return Always returns 0 (success)
- */
+/* hal_ext_flash_init() rejects parts whose erase sector does not divide
+ * WOLFBOOT_SECTOR_SIZE, so the PDL never rounds an erase past the request */
 int RAMFUNCTION ext_flash_erase(uintptr_t address, int len)
 {
-    (void)address;
-    (void)len;
-    return 0;
+    uint32_t offset;
+    uint32_t erase_size = smif_blk_config->memConfig[0]->deviceCfg->eraseSize;
+    int ret = -1;
+
+    if ((len > 0) && ((address % erase_size) == 0U) &&
+        (((uint32_t)len % erase_size) == 0U) &&
+        (psoc6_qspi_offset(address, (uint32_t)len, &offset) == 0) &&
+        (Cy_SMIF_MemEraseSector(QSPIPort, smif_blk_config->memConfig[0],
+            offset, (uint32_t)len, &smif_context) == CY_SMIF_SUCCESS)) {
+        ret = 0;
+    }
+    return ret;
 }
-#endif /* EXT_FLASH */
 
-#ifdef EXT_FLASH
-
-/**
- * @brief Lock external flash and finalize sector operations
- *
- * Invalidates the temporary sector tracking information stored in internal
- * emulated EEPROM. This signals that any pending sector update has been
- * completed and the temporary sector data is no longer needed.
- *
- * Should be called after a series of external flash write operations to
- * commit the changes and free the temporary sector for future use.
- *
- * @note Erases the tmp_sector_info structure if it contains valid magic,
- *       which clears the EXT_FLASH_TMP_MAGIC marker.
- */
 void ext_flash_lock(void)
 {
-    tmp_sector_info info;
-    memcpy(&info, (void*)TMP_SECTOR_INFO_ADDR, sizeof(tmp_sector_info));
-
-    /* Clear temporary sector metadata to invalidate any active state */
-    if (info.magic == EXT_FLASH_TMP_MAGIC) {
-        hal_flash_erase(TMP_SECTOR_INFO_ADDR, ROW_SIZE);
-    }
 }
 
 void ext_flash_unlock(void)
@@ -986,9 +995,60 @@ void ext_flash_unlock(void)
 
 #if defined(DUALBANK_SWAP) && defined(__WOLFBOOT)
 
-#if (WOLFBOOT_BOOTLOADER_START != FLASH_BANK1_BASE)
+#if (WOLFBOOT_ORIGIN != FLASH_BANK1_BASE)
 #error "The bootloader must point to FLASH_BANK1_BASE"
 #endif
+
+static uint32_t RAMFUNCTION psoc6_bank_record_check(const active_bank *rec)
+{
+    return ~(rec->magic ^ rec->mapping ^ rec->seq);
+}
+
+/* Returns the slot of the newest valid record, or -1 */
+static int RAMFUNCTION psoc6_bank_record_read(active_bank *out)
+{
+    active_bank rec;
+    uint32_t slot;
+    int best = -1;
+
+    for (slot = 0; slot < BANK_RECORD_SLOTS; slot++) {
+        memcpy(&rec, PSOC6_FLASH_PTR(BANK_RECORD_ADDR(slot)), sizeof(rec));
+        if ((rec.magic == BANKMODE_MAGIC) &&
+            (rec.check == psoc6_bank_record_check(&rec)) &&
+            ((rec.mapping == CY_FLASH_MAPPING_A) ||
+             (rec.mapping == CY_FLASH_MAPPING_B)) &&
+            ((best < 0) || ((int32_t)(rec.seq - out->seq) > 0))) {
+            *out = rec;
+            best = (int)slot;
+        }
+    }
+    return best;
+}
+
+static int RAMFUNCTION psoc6_bank_record_write(uint32_t mapping)
+{
+    active_bank rec;
+    uint32_t seq = 1U;
+    uint32_t slot = 0U;
+    int cur;
+    int ret;
+
+    cur = psoc6_bank_record_read(&rec);
+    if (cur >= 0) {
+        seq = rec.seq + 1U;
+        slot = (uint32_t)(1 - cur);
+    }
+    rec.magic = BANKMODE_MAGIC;
+    rec.mapping = mapping;
+    rec.seq = seq;
+    rec.check = psoc6_bank_record_check(&rec);
+    ret = hal_flash_erase(BANK_RECORD_ADDR(slot), ROW_SIZE);
+    if (ret == 0) {
+        ret = hal_flash_write(BANK_RECORD_ADDR(slot), (const uint8_t*)&rec,
+            sizeof(rec));
+    }
+    return ret;
+}
 
 /**
  * @brief Copy bootloader from Bank 1 to Bank 2 for dual-bank operation
@@ -1000,30 +1060,30 @@ void ext_flash_unlock(void)
  * The function is idempotent - if both banks already contain identical
  * bootloader code, no flash operations are performed.
  *
- * @note Bootloader size is defined by WOLFBOOT_BOOTLOADER_SIZE.
+ * @note Bootloader size is defined by BOOTLOADER_PARTITION_SIZE.
  * @note This function should be called once during initial setup or after
  *       bootloader updates.
  */
 void RAMFUNCTION fork_bootloader(void)
 {
-    uint8_t* src = (uint8_t*)FLASH_BANK1_BASE;
-    uint8_t* dst = (uint8_t*)(FLASH_BANK1_BASE + (CY_FLASH_SIZE / 2));
+    const uint8_t* src = (const uint8_t*)PSOC6_FLASH_PTR(FLASH_BANK1_BASE);
+    const uint8_t* dst = (const uint8_t*)PSOC6_FLASH_PTR(FLASH_BANK2_COPY);
     uint32_t i;
     int ret;
 
     /* Skip fork if bootloader already identical in both banks (idempotent
      * operation) */
-    if (memcmp(src, dst, WOLFBOOT_BOOTLOADER_SIZE) == 0)
+    if (memcmp(src, dst, BOOTLOADER_PARTITION_SIZE) == 0)
         return;
 
     hal_flash_unlock();
 
     /* Erase entire bootloader region in Bank 2, then copy from Bank 1 row by
      * row */
-    ret = hal_flash_erase((uintptr_t)dst, WOLFBOOT_BOOTLOADER_SIZE);
+    ret = hal_flash_erase(FLASH_BANK2_COPY, BOOTLOADER_PARTITION_SIZE);
     if (ret == 0) {
-        for (i = 0; i < WOLFBOOT_BOOTLOADER_SIZE; i += ROW_SIZE) {
-            ret = hal_flash_write((uintptr_t)(dst + i), src + i, ROW_SIZE);
+        for (i = 0; i < BOOTLOADER_PARTITION_SIZE; i += ROW_SIZE) {
+            ret = hal_flash_write(FLASH_BANK2_COPY + i, src + i, ROW_SIZE);
             if (ret != 0) {
                 wolfBoot_printf(
                     "Fork bootloader: write failed at offset 0x%X, ret=%d\n", i,
@@ -1039,109 +1099,48 @@ void RAMFUNCTION fork_bootloader(void)
     hal_flash_lock();
 }
 
-/**
- * @brief Swap active flash bank mapping and persist the new state
- *
- * Toggles between Bank A and Bank B flash mapping to switch which physical
- * flash bank appears at the base address. This enables A/B firmware update
- * schemes where new firmware is written to the inactive bank and activated
- * by swapping.
- *
- * The current bank mapping is persisted to emulated EEPROM so it survives
- * reset and can be restored on subsequent boots.
- *
- * State transitions:
- * - Bank A -> Bank B
- * - Bank B -> Bank A
- * - Invalid/first boot -> Bank A (initialized)
- *
- * @note Waits for flash controller to complete before returning.
- * @note Bank mode data is stored at ACTIVE_BANK_MODE_DATA_ADDRESS in
- *       emulated EEPROM.
- */
+/* Toggle the bank mapping and record it; with no record, select bank A */
 void RAMFUNCTION hal_flash_dualbank_swap(void)
 {
-    active_bank bankmode_data = *(active_bank*)ACTIVE_BANK_MODE_DATA_ADDRESS;
+    active_bank rec;
+    uint32_t mapping = CY_FLASH_MAPPING_A;
 
-    /* Read and validate saved bank mode from emulated EEPROM area */
-    if (bankmode_data.magic == BANKMODE_MAGIC) {
-        if (bankmode_data.mapping == CY_FLASH_MAPPING_A) {
-            bankmode_data.mapping = CY_FLASH_MAPPING_B;
-        }
-        else {
-            bankmode_data.mapping = CY_FLASH_MAPPING_A;
-        }
+    if ((psoc6_bank_record_read(&rec) >= 0) &&
+        (rec.mapping == CY_FLASH_MAPPING_A)) {
+        mapping = CY_FLASH_MAPPING_B;
     }
-    else {
-        /* First boot: initialize to Bank A */
-        bankmode_data.magic   = BANKMODE_MAGIC;
-        bankmode_data.mapping = CY_FLASH_MAPPING_A;
-    }
-
-    /* Set the active bank mapping */
-    Cy_Flashc_SetMain_Flash_Mapping(bankmode_data.mapping);
-
-    /* Persist bank mode to emulated EEPROM flash area */
-    hal_flash_erase(ACTIVE_BANK_MODE_DATA_ADDRESS, ROW_SIZE);
-    hal_flash_write(ACTIVE_BANK_MODE_DATA_ADDRESS, (uint8_t*)&bankmode_data,
-                    sizeof(active_bank));
+    Cy_Flashc_SetMain_Flash_Mapping((cy_en_maptype_t)mapping);
+    (void)psoc6_bank_record_write(mapping);
 
     /* Wait for flash command completion */
     while (FLASHC_FLASH_CMD & FLASHC_V2_FLASH_CMD_INV_Msk)
         ;
 }
 
-/**
- * @brief Initialize dual-bank flash mode on system startup
- *
- * Sets up the flash controller for dual-bank operation and restores the
- * previously active bank mapping from persistent storage. Called during
- * bootloader initialization.
- *
- * Initialization sequence:
- * 1. Fork bootloader to Bank 2 (if not already present)
- * 2. Enable dual-bank mode in flash controller
- * 3. Read saved bank mapping from emulated EEPROM
- * 4. Restore bank mapping or initialize to Bank A on first boot
- * 5. Wait for flash controller ready
- *
- * @return 0 on success
- *
- * @note Must be called before any firmware verification or boot operations
- *       that depend on correct flash mapping.
- * @note On first boot (no valid saved state), initializes to Bank A and
- *       persists this configuration.
- */
+/* Enter dual-bank mode with the recorded mapping, or bank A on first boot */
 int RAMFUNCTION bankmode_init(void)
 {
+    active_bank rec;
+    int ret = 0;
+
     /* Ensure bootloader is present in both banks */
     fork_bootloader();
 
-    /* Enable dual bank mode */
     Cy_Flashc_SetMainBankMode(CY_FLASH_DUAL_BANK_MODE);
-    __ASM volatile("isb 0xF" ::: "memory");
+    __ISB();
 
-    /* Read and restore bank mode from emulated EEPROM flash area */
-    active_bank bankmode_data = *(active_bank*)ACTIVE_BANK_MODE_DATA_ADDRESS;
-    if (bankmode_data.magic == BANKMODE_MAGIC) {
-        /* Restore previously saved bank mapping */
-        Cy_Flashc_SetMain_Flash_Mapping(bankmode_data.mapping);
+    if (psoc6_bank_record_read(&rec) >= 0) {
+        Cy_Flashc_SetMain_Flash_Mapping((cy_en_maptype_t)rec.mapping);
     }
     else {
-        /* First boot: initialize to Bank A */
-        bankmode_data.magic   = BANKMODE_MAGIC;
-        bankmode_data.mapping = CY_FLASH_MAPPING_A;
-
-        /* Save initial bank mode to emulated EEPROM flash area */
-        hal_flash_erase(ACTIVE_BANK_MODE_DATA_ADDRESS, ROW_SIZE);
-        hal_flash_write(ACTIVE_BANK_MODE_DATA_ADDRESS, (uint8_t*)&bankmode_data,
-                        sizeof(active_bank));
+        Cy_Flashc_SetMain_Flash_Mapping(CY_FLASH_MAPPING_A);
+        ret = psoc6_bank_record_write(CY_FLASH_MAPPING_A);
     }
 
     /* Wait for flash controller ready */
     while (FLASHC_FLASH_CMD & FLASHC_V2_FLASH_CMD_INV_Msk)
         ;
 
-    return 0;
+    return ret;
 }
 #endif /* DUALBANK_SWAP && __WOLFBOOT */

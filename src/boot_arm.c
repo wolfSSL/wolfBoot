@@ -25,6 +25,7 @@
 #include "loader.h"
 #include "printf.h"
 #include "wolfboot/wolfboot.h"
+#include "hal.h"
 
 extern unsigned int _start_text;
 extern unsigned int _stored_data;
@@ -533,6 +534,9 @@ static uint32_t ns_entry;
 
 void RAMFUNCTION do_boot(const uint32_t *app_offset)
 {
+#ifdef WOLFBOOT_BOOT_REMOTE_CORE
+    hal_boot_remote_core(app_offset);
+#endif
 #if defined(CORTEX_R5)
     (void)app_entry;
     (void)app_end_stack;
