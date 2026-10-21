@@ -29,10 +29,16 @@ jobs:
         run: |
           tools/ci/fetch-mcuxsdk-headers.sh "$GITHUB_WORKSPACE/mcuxsdk"
 
+      - name: Fetch Infineon PSoC 6 PDL headers
+        run: |
+          tools/ci/fetch-psoc6-pdl.sh "$GITHUB_WORKSPACE/psoc6libs"
+
       - name: Build unit tests
         run: |
-          make -C tools/unit-tests MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk"
+          make -C tools/unit-tests MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk" \
+            PSOC6_LIBS="$GITHUB_WORKSPACE/psoc6libs"
 
       - name: Run unit tests
         run: |
-          make -C tools/unit-tests run MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk"
+          make -C tools/unit-tests run MCUXSDK="$GITHUB_WORKSPACE/mcuxsdk" \
+            PSOC6_LIBS="$GITHUB_WORKSPACE/psoc6libs"

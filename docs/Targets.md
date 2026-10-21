@@ -9,7 +9,7 @@ This README describes configuration of supported targets.
 * [Analog Devices MAX32666](#analog-devices-max32666)
 * [Cortex-A53 / Raspberry PI 3](#cortex-a53--raspberry-pi-3-experimental)
 * [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
-* [Cypress PSoC-6](#cypress-psoc-6)
+* [Infineon PSoC 6](#infineon-psoc-6)
 * [Infineon PSOC Control C3](#infineon-psoc-control-c3)
 * [Infineon PSOC Edge E8](#infineon-psoc-edge-e8)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
@@ -4934,131 +4934,162 @@ sudo fdisk -l /dev/sdX
 | SD1       | 1 1 1 0       | off, off, off, on |
 
 
-## Cypress PSoC-6
+## Infineon PSoC 6
 
-The Cypress PSoC 62S2 is a dual-core Cortex-M4 & Cortex-M0+ MCU. The secure boot process is managed by the M0+.
-WolfBoot can be compiled as second stage flash bootloader to manage application verification and firmware updates.
+The PSoC 62 (CY8C624ABZI-S2D44) has a Cortex-M0+ and a Cortex-M4F at 100 MHz,
+2 MB of flash at `0x10000000` (512-byte rows that erase to `0x00`), a 32 KB work
+flash at `0x14000000` and 1 MB of SRAM. The boot ROM starts the CM0+, which runs
+wolfBoot. The verified application runs on the CM0+, or on the CM4 when built
+with `PSOC6_CM4_APP=1`. Tested on the CY8CEVAL-062S2 evaluation kit with its
+on-board KitProg3. The CY8CKIT-062S2-43012 uses the same configurations.
 
-### Building
-
-The following configuration has been tested using PSoC 62S2 Wi-Fi BT Pioneer Kit (CY8CKIT-052S2-43012).
-
-#### Target specific requirements
-
-wolfBoot uses the following components to access peripherals on the PSoC:
-
-  * [Cypress Core Library](https://github.com/cypresssemiconductorco/core-lib)
-  * [PSoC 6 Peripheral Driver Library](https://github.com/cypresssemiconductorco/psoc6pdl)
-  * [CY8CKIT-062S2-43012 BSP](https://github.com/cypresssemiconductorco/TARGET_CY8CKIT-062S2-43012)
-
-Cypress provides a [customized OpenOCD](https://github.com/cypresssemiconductorco/Openocd) for programming the flash and
-debugging.
-
-### Clock settings
-
-wolfBoot configures PLL1 to run at 100 MHz and is driving `CLK_FAST`, `CLK_PERI`, and `CLK_SLOW` at that frequency.
-
-#### Build configuration
-
-The following configuration has been tested on the PSoC CY8CKIT-62S2-43012:
+The port builds against the Infineon mtb-pdl-cat1 driver library, the
+mtb-template-cat1 system files, core-lib and cmsis. Fetch the pinned releases
+into `lib/`, where the configs expect them:
 
 ```
-make TARGET=psoc6 \
-    CYPRESS_PDL=./lib/psoc6pdl \
-    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
-    CYPRESS_CORE_LIB=./lib/core-lib \
-    WOLFBOOT_SECTOR_SIZE=4096
+tools/ci/fetch-psoc6-pdl.sh lib
 ```
 
-Note: A reference `.config` can be found in [/config/examples/cypsoc6.config](/config/examples/cypsoc6.config).
-
-Hardware acceleration is enable by default using psoc6 crypto hw support.
-
-To compile with hardware acceleration disabled, use the option
-
-`PSOC6_CRYPTO=0`
-
-in your wolfBoot configuration.
-
-#### External Flash Support
-
-PSoC6 supports external QSPI flash for firmware storage. To enable:
+### PSoC 6: Configuring and compiling
 
 ```
-make TARGET=psoc6 \
-    EXT_FLASH=1 \
-    CYPRESS_PDL=./lib/psoc6pdl \
-    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
-    CYPRESS_CORE_LIB=./lib/core-lib \
-    WOLFBOOT_SECTOR_SIZE=4096
+cp config/examples/cypsoc6.config .config
+make PSOC6_BOARD=CY8CEVAL_062S2
 ```
 
-External flash uses a temporary sector backup mechanism to handle the larger erase size (for example, 0x40000-byte sectors on an S25FL512S device) compared to internal flash rows. The backup sector is automatically managed in external flash beyond the update partition.
+`PSOC6_BOARD` selects the kit's console and LED pins: `CY8CKIT_062S2_43012`
+(the default) or `CY8CEVAL_062S2`. Pass it to `make` or set it in `.config`.
 
-#### Dual-Bank Flash Swap
+The configuration files are:
+- `cypsoc6.config`: all partitions in internal flash, ECC256 and SHA256, console
+  on the KitProg3 USB-UART.
+- `cypsoc6-qspi.config`: UPDATE partition in the kits' 512 Mb QSPI NOR flash.
 
-PSoC6 supports hardware-assisted bank swapping for faster and more reliable firmware updates:
+Every PSoC 6 build needs three settings, and the build fails without them:
+- `NO_MPU=1`: the boot ROM performs flash operations in a CM0+ NMI handler that
+  cannot run under wolfBoot's MPU map.
+- `FLAGS_INVERT=1`: the flash erases to `0x00`.
+- `NVM_FLASH_WRITEONCE=1`: a programmed row can only be rewritten by erasing it
+  first, so the update flags alternate between the last two sectors of a
+  partition and a power cut never loses them.
+
+These options are make arguments on top of a configuration:
+- `PSOC6_CRYPTO=1`: SHA-256 and ECDSA P-256 verification on the crypto block.
+- `PSOC6_CM4_APP=1 IMAGE_HEADER_SIZE=1024`: boot the application on the CM4.
+  The 1 KB header keeps the CM4 vector table aligned.
+- `RAM_CODE=1`: allow a bootloader self-update (`sign --wolfboot-update`).
+- `BOOT_BENCHMARK=1`: print the hash and signature times from a 1 MHz TCPWM timer.
+- `DEBUG_UART=0`: remove the console.
+- `DUALBANK_SWAP=1 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x12020000
+  WOLFBOOT_PARTITION_SWAP_ADDRESS=0xFFFFFFFF`: hardware bank swap instead of a
+  swap partition.
+
+Flash layout of `cypsoc6.config`:
+
+| Region   | Address      | Size              |
+| -------- | ------------ | ----------------- |
+| wolfBoot | `0x10000000` | 128 KB            |
+| BOOT     | `0x10020000` | 896 KB            |
+| UPDATE   | `0x10100000` | 896 KB            |
+| SWAP     | `0x101E0000` | 4 KB              |
+
+`cypsoc6-qspi.config` uses the QSPI flash's 256 KB erase sectors as wolfBoot
+sectors: wolfBoot at `0x10000000` (256 KB), BOOT at `0x10040000` (1.5 MB), SWAP at
+`0x101C0000` (256 KB), and UPDATE at `0x18000000` (1.5 MB, QSPI). The QSPI flash
+erases to `0xFF`, so `FLAGS_HOME=1` keeps all the update flags in the BOOT
+trailer. The trailer takes the last two 256 KB sectors of BOOT, so images can be
+up to 1 MB, and wolfBoot uses 264 KB of SRAM for its trailer cache.
+
+With `DUALBANK_SWAP=1` the flash is split into two 1 MB banks: BOOT at
+`0x10020000`, and UPDATE at `0x12020000` in the other bank. On the first boot
+wolfBoot copies itself into the second bank. An update swaps the bank mapping and
+records it in the work flash.
+
+With `PSOC6_CM4_APP=1`, wolfBoot verifies the image on the CM0+ and starts the
+CM4 at the image's vector table. The CM0+ then sleeps, but it stays available to
+service the boot ROM's flash calls, so the CM4 application can call
+`wolfBoot_success()` and stage updates. The CM4 application uses SRAM from
+`0x08060000` and leaves wolfBoot's 384 KB of SRAM at `0x08000000` untouched.
+Run `make clean` when changing `PSOC6_CM4_APP`: wolfBoot and the application are
+compiled differently for each core, and existing objects are not rebuilt.
+
+### PSoC 6: Loading the firmware
+
+pyOCD supports the device (`cy8c6xxa`) through the KitProg3 in CMSIS-DAP mode:
 
 ```
-make TARGET=psoc6 \
-    DUALBANK_SWAP=1 \
-    CYPRESS_PDL=./lib/psoc6pdl \
-    CYPRESS_TARGET_LIB=./lib/TARGET_CY8CKIT-062S2-43012 \
-    CYPRESS_CORE_LIB=./lib/core-lib \
-    WOLFBOOT_SECTOR_SIZE=4096
+pip install pyocd
+pyocd flash -t cy8c6xxa -a 0x10000000 -e sector wolfboot.bin
+pyocd flash -t cy8c6xxa -a 0x10020000 -e sector test-app/image_v1_signed.bin
 ```
 
-#### OpenOCD installation
-
-Compile and install the customized OpenOCD.
-
-Use the following configuration file when running `openocd` to connect to the PSoC6 board:
+The console is the KitProg3 USB-UART at 115200 8N1:
 
 ```
-### openocd.cfg for PSoC-62S2
-
-source [find interface/kitprog3.cfg]
-transport select swd
-adapter speed 1000
-source [find target/psoc6_2m.cfg]
-init
-reset init
+Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
+Hello from PSoC6 CM0+ firmware version 1
 ```
 
-### Loading the firmware
+### PSoC 6: Testing firmware update
 
-To upload `factory.bin` to the device with OpenOCD, connect the device,
-run OpenOCD with the configuration from the previous section, then connect
-to the local openOCD server running on TCP port 4444 using `telnet localhost 4444`.
-
-From the telnet console, type:
-
-`program factory.bin 0x10000000`
-
-When the transfer is finished, you can either close openOCD or start a debugging session.
-
-### Debugging
-
-Debugging with OpenOCD:
-
-Use the OpenOCD configuration from the previous sections to run OpenOCD.
-
-From another console, connect using gdb, e.g.:
+Sign version 2 and write it to the UPDATE partition. Then mark it for update by
+writing the last 4 KB sector of the partition: the erased value `0x00`,
+followed by `IMG_STATE_UPDATING` (`0x8F` with inverted flags) and the `BOOT`
+magic. An application does the same with `wolfBoot_update_trigger()`.
 
 ```
-arm-none-eabi-gdb
-(gdb) target remote:3333
+tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
+pyocd flash -t cy8c6xxa -a 0x10100000 -e sector test-app/image_v2_signed.bin
+python3 -c "import sys; sys.stdout.buffer.write(bytes(4091) + b'\x8fBOOT')" > trigger.bin
+pyocd flash -t cy8c6xxa -a 0x101DF000 -e sector trigger.bin
 ```
 
-To reset the board to start from the M0+ flash bootloader position (wolfBoot reset handler), use
-the monitor command sequence below:
+The sign tool takes the header size from the environment, so sign a
+`PSOC6_CM4_APP=1` build with the 1 KB header it was built with:
 
 ```
-(gdb) mon init
-(gdb) mon reset init
-(gdb) mon psoc6 reset_halt
+IMAGE_HEADER_SIZE=1024 tools/keytools/sign --ecc256 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
+wolfBoot swaps the images, boots version 2, and the application confirms it:
+
+```
+Hello from PSoC6 CM0+ firmware version 2
+Update successful, firmware version 2 confirmed
+```
+
+If version 2 does not call `wolfBoot_success()`, the next reset rolls back to
+version 1.
+
+With `cypsoc6-qspi.config`, write the image to `0x18000000`. The trigger
+goes at the end of BOOT instead (`FLAGS_HOME`), 8 bytes below the BOOT flags.
+It replaces both copies of the write-once trailer, the two last BOOT sectors:
+
+```
+pyocd flash -t cy8c6xxa -a 0x18000000 -e sector test-app/image_v2_signed.bin
+python3 -c "import sys; sys.stdout.buffer.write(bytes(0x80000 - 13) + b'\x8fBOOT' + bytes(8))" > trigger.bin
+pyocd flash -t cy8c6xxa -a 0x10140000 -e sector trigger.bin
+```
+
+With `DUALBANK_SWAP=1`, the higher version boots, so no trigger is
+needed. The debugger sees the single-bank map, in which the UPDATE partition
+starts at `0x10120000` while the original mapping is active:
+
+```
+pyocd flash -t cy8c6xxa -a 0x10120000 -e sector test-app/image_v2_signed.bin
+```
+
+### PSoC 6: Debugging
+
+```
+pyocd gdbserver -t cy8c6xxa
+arm-none-eabi-gdb wolfboot.elf -ex "target remote :3333"
+```
+
+pyOCD serves the CM4 on port 3334.
 
 ## Microchip SAMA5D3
 

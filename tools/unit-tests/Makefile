@@ -284,6 +284,16 @@ TESTS+=unit-lpc55s69-puf
 else
 $(info Skipping LPC55S69 unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
 endif
+# PSoC 6 HAL tests build against the real Infineon PDL headers, fetched into
+# PSOC6_LIBS by tools/ci/fetch-psoc6-pdl.sh, with only CMSIS mocked.
+PSOC6_LIBS?=
+ifneq ($(wildcard $(PSOC6_LIBS)/mtb-pdl-cat1/drivers/include/cy_flash.h),)
+TESTS+=unit-psoc6-flash
+TESTS+=unit-psoc6-qspi
+TESTS+=unit-psoc6-boot
+else
+$(info Skipping PSoC 6 unit tests: set PSOC6_LIBS (see tools/ci/fetch-psoc6-pdl.sh))
+endif
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-nrf5340-uart-crlf
 TESTS+=unit-flash-write-samr21
@@ -2542,6 +2552,33 @@ unit-rw612-uart: unit-rw612-uart.c ../../hal/rw612.c
 		-isystem $(MCUXSDK)/drivers/flexcomm \
 		-isystem $(MCUXSDK)/drivers/flexcomm/usart $(CFLAGS) $(LDFLAGS)
 
+PSOC6_PDL=$(PSOC6_LIBS)/mtb-pdl-cat1
+PSOC6_TEST_INC=-U__ARM_ARCH -D__ARM_ARCH=6 -D__ARM_ARCH_6M__=1 \
+	-DCY8C624ABZI_S2D44 -DPSOC6_BOARD_CY8CEVAL_062S2 \
+	-DCY_CUSTOM_ASSERT_HANDLER -Icmsis_stub -I../.. \
+	-isystem $(PSOC6_PDL)/drivers/include \
+	-isystem $(PSOC6_PDL)/devices/COMPONENT_CAT1A/include \
+	-isystem $(PSOC6_PDL)/devices/COMPONENT_CAT1A/include/ip \
+	-isystem $(PSOC6_LIBS)/mtb-template-cat1/files/templates/cat1a/COMPONENT_MTB \
+	-isystem $(PSOC6_LIBS)/core-lib/include
+PSOC6_TEST_DEPS=../../hal/psoc6.c ../../hal/psoc6.h cmsis_stub/core_cm0plus.h
+
+unit-psoc6-flash: unit-psoc6-flash.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-flash.c -DDEBUG_UART -DRAM_CODE $(PSOC6_TEST_INC) \
+		$(CFLAGS) $(LDFLAGS)
+
+unit-psoc6-qspi: unit-psoc6-qspi.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-qspi.c -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 \
+		$(PSOC6_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
+unit-psoc6-boot: unit-psoc6-boot.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-boot.c -D__WOLFBOOT -DDEBUG_UART \
+		-DWOLFBOOT_HASH_SHA256 -DWOLFBOOT_SIGN_ECC256 -DDUALBANK_SWAP=1 \
+		-DBOOT_BENCHMARK \
+		-DWOLFBOOT_BOOT_REMOTE_CORE -DWOLFBOOT_ORIGIN=0x10000000 \
+		-DBOOTLOADER_PARTITION_SIZE=0x20000 -DARCH_FLASH_OFFSET=0x10000000 \
+		$(PSOC6_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
 MCXW_SSS=$(MCUXSDK)/middleware/secure-subsystem
 MCXW_TEST_INC=-DCPU_MCXW716CMFTA $(MCUXSDK_TEST_INC) -isystem $(MCXW_SDK) \
 	-isystem $(MCXW_SDK)/../periph2 -isystem $(MCXW_SDK)/drivers \
@@ -2667,7 +2704,8 @@ GENERATED_SRC:=aurix_erased_extract.h elf_store_extract.h \
 CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
 	unit-linux-loader-syssize unit-flash-write-mcxa unit-rw612-flash \
 	unit-rw612-tz unit-rw612-uart unit-mcxw-flash unit-mcxw-tz \
-	unit-lpc55s69-flash unit-lpc55s69-tz unit-lpc55s69-uart unit-lpc55s69-puf
+	unit-lpc55s69-flash unit-lpc55s69-tz unit-lpc55s69-uart unit-lpc55s69-puf \
+	unit-psoc6-flash unit-psoc6-qspi unit-psoc6-boot
 
 clean: covclean
 	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \
