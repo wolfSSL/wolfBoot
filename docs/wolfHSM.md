@@ -94,7 +94,7 @@ This section describes the exposed configuration options available for wolfHSM i
 - `WOLFHSM_CLIENT_ID` (default 1): Client ID wolfBoot presents to the HSM server during the connection handshake. Must match the client ID the server provisions the wolfBoot public key under, e.g. the whnvmtool `key <clientId> ...` field or the example POSIX TCP server's `--client <id>` argument. Client mode only.
 - `WOLFHSM_CFG_COMM_DATA_LEN` (default 5000): Size in bytes of the wolfHSM message data payload. The default fits a whole DER certificate chain or the largest ML-DSA keys/signatures in a single message. Targets with a smaller transport slot must lower it in their `.config`. In server mode the value is currently only applied to `SIGN=ML_DSA` builds; other server builds use the wolfHSM library default.
 - `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS` (default 8): Maximum number of trusted root CA NVM IDs accepted for certificate chain verification; bounds the length of the HAL `hsmNvmIdCertRootCAList` and of `WOLFHSM_NVM_ROOT_CA_LIST`. Part of the client-server wire format (see note below).
-- `WOLFHSM_NVM_ROOT_CA_LIST` (default: HAL-provided list, `{ 1 }` for in-tree HALs): Overrides the NVM IDs of the trusted root CA certificates used for certificate chain verification. Takes a comma-separated initializer with no quotes and no spaces, e.g. `WOLFHSM_NVM_ROOT_CA_LIST=1,2,3`. The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. Only used when `CERT_CHAIN_VERIFY=1`.
+- `WOLFHSM_NVM_ROOT_CA_LIST`: Overrides the NVM IDs of the trusted root CA certificates used for certificate chain verification. Takes a comma-separated initializer with no quotes and no spaces, e.g. `WOLFHSM_NVM_ROOT_CA_LIST=1,2,3`. Client mode takes the client's cert IDs (e.g. `1`); server mode takes full NVM IDs (e.g. `0x6101`). The list length must not exceed `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. Only used when `CERT_CHAIN_VERIFY=1`.
 - `WOLFHSM_NVM_IMAGE` (default 1): Set to 0 to skip wolfHSM NVM image generation. Used by targets that do not provision keys from a pre-built NVM image, e.g. because the HAL loads the verification key into the server's key cache at boot (PIC32CZ).
 - `USER_NVM_INIT`: Path to a user-provided whnvmtool `.nvminit` file used to generate the wolfHSM NVM image in place of the default auto-generated one. Also re-enables NVM image generation when user-provided keys (`USER_PRIVATE_KEY`, `USER_PUBLIC_KEY`, `USER_CERT_CHAIN`) would otherwise skip it.
 
@@ -122,7 +122,7 @@ In addition to the standard wolfBoot HAL functions, wolfHSM-enabled platforms mu
 - `hsmDevIdHash`: The HSM device ID for hash operations. This is used to identify the HSM device to wolfBoot.
 - `hsmDevIdPubKey`: The HSM device ID for public key operations. This is used to identify the HSM device to wolfBoot.
 - `hsmKeyIdPubKey`: The HSM key ID for public key operations. This is used to identify the key to use for public key operations.
-- `hsmNvmIdCertRootCAList` / `hsmNvmIdCertRootCACount`: Array of NVM IDs identifying the trusted root CA certificate(s) and its element count. Only used when building with `WOLFBOOT_CERT_CHAIN_VERIFY`. The chain in the firmware header may anchor to any of the listed roots; the count is bounded by `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. Each in-tree HAL provides a default of `{ 1 }`; override the list with the `WOLFHSM_NVM_ROOT_CA_LIST` build option, which is propagated to the HAL as `-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=...` (see [Build Options](#build-options-config)).
+- `hsmNvmIdCertRootCAList` / `hsmNvmIdCertRootCACount`: Array of NVM IDs identifying the trusted root CA certificate(s) and its element count. Only used when building with `WOLFBOOT_CERT_CHAIN_VERIFY`. The chain in the firmware header may anchor to any of the listed roots; the count is bounded by `WOLFHSM_CFG_CERT_MAX_VERIFY_ROOTS`. In-tree HALs default to `{ 1 }` in client mode, which the server maps to NVM ID `0x6101` for client 1 (cert type `0x6`, client 1, ID 1), and to `{ 0x6101 }` in server mode, which uses full NVM IDs; override the list with the `WOLFHSM_NVM_ROOT_CA_LIST` build option, which is propagated to the HAL as `-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=...` (see [Build Options](#build-options-config)).
 
 ### Client HAL Functions
 
@@ -255,9 +255,10 @@ When using wolfHSM server mode, no external server is required. wolfBoot include
 
 ```sh
 # Create a simulated NVM image for the POSIX flash file simulator containing the dummy root CA for cert chain verification.
-# You must build whnvmtool first if you haven't already, and ensure the file name matches the simulated NVM image file
-# name in hal/sim.c
-./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size 16348 --invert-erased-byte tools/scripts/wolfBoot-wolfHSM-sim-dummy-certchain.nvminit
+# You must build whnvmtool first if you haven't already, and ensure the file name and partition size match the
+# simulated NVM image in hal/sim.c. The root CA goes at NVM ID 0x6101, the sim HAL's default root CA list.
+echo 'obj 0x6101 0xFFFF 0x0000 "cert CA" test-dummy-ca/root-cert.der' > sim-dummy-certchain.nvminit
+./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size 16384 --invert-erased-byte sim-dummy-certchain.nvminit
 
 # Run the wolfBoot simulator with embedded wolfHSM server to stage an update
 ./wolfboot.elf update_trigger get_version
