@@ -92,7 +92,9 @@ jobs:
           cd lib/wolfHSM/examples/posix/wh_posix_server
           if [ "${{ matrix.config.posix_server_nvminit }}" = "true" ]; then
             tmpfile=$(mktemp)
-            echo "obj 1 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
+            # The server maps root CA ID 1 from client 1 to NVM ID 0x6101
+            # (cert type 0x6, client 1, ID 1)
+            echo "obj 0x6101 0xFFFF 0x0000 \"cert CA\" ../../../../../test-dummy-ca/root-cert.der" >> $tmpfile
             ./Build/wh_posix_server.elf --type tcp --nvminit $tmpfile &
           else
             # --flags=0x100 sets the WH_NVM_FLAGS_USAGE_VERIFY flag
@@ -108,8 +110,10 @@ jobs:
         run: |
           make -C lib/wolfHSM/tools/whnvmtool
           tmpfile=$(mktemp)
-          echo "obj 1 0xFFFF 0x0000 \"cert CA\" test-dummy-ca/root-cert.der" >> $tmpfile
-          ./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size=16348 --invert-erased-byte $tmpfile
+          # Root CA at NVM ID 0x6101, the sim HAL default. --size must match
+          # partition_size in hal/sim.c
+          echo "obj 0x6101 0xFFFF 0x0000 \"cert CA\" test-dummy-ca/root-cert.der" >> $tmpfile
+          ./lib/wolfHSM/tools/whnvmtool/whnvmtool --image=wolfBoot_wolfHSM_NVM.bin --size=16384 --invert-erased-byte $tmpfile
 
       # Run the sunny day update test against the server
       - name: Run sunny day update test

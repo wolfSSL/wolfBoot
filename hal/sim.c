@@ -303,9 +303,10 @@ whServerContext hsmServerCtx = {0};
 const int      hsmDevIdHash             = INVALID_DEVID;
 const int      hsmDevIdPubKey           = INVALID_DEVID;
 /* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
- * line) to override the default single-root list. */
+ * line) to override the default single-root list. The server uses full NVM
+ * IDs: 0x6101 is cert root 1 of client 1. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
-#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 0x6101
 #endif
 const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
 const uint16_t hsmNvmIdCertRootCACount  =

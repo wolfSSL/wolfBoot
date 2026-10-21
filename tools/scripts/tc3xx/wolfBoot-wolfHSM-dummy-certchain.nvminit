@@ -1,2 +1,7 @@
 # NVM config file for wolfHSM whnvmtool to create NVM image based on generated keys
-obj 1 0xFFFF 0x0100 "cert CA" test-dummy-ca/root-cert.der
+#
+# The root CA ID is 0x6101: cert type (0x6), client 1, ID 1. The client portion
+# must match the wolfBoot client's WOLFHSM_CLIENT_ID (options.mk default 1).
+#
+# Flags 0x0901 = USAGE_VERIFY | NONMODIFIABLE | NONDESTROYABLE
+obj 0x6101 0xFFFF 0x0901 "cert CA" test-dummy-ca/root-cert.der

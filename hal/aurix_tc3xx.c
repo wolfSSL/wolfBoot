@@ -137,9 +137,11 @@ const uint16_t hsmNvmIdCertRootCACount  =
 const int      hsmDevIdHash             = HSM_DEVID;
 const int      hsmDevIdPubKey           = HSM_DEVID;
 /* Set WOLFHSM_NVM_ROOT_CA_LIST=1,2,3 in .config (or pass on the make command
- * line) to override the default single-root list. */
+ * line) to override the default single-root list. The server uses full NVM
+ * IDs: 0x6101 is cert root 1 of client 1, matching
+ * tools/scripts/tc3xx/wolfBoot-wolfHSM-dummy-certchain.nvminit. */
 #ifndef WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST
-#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 1
+#define WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST 0x6101
 #endif
 const whNvmId  hsmNvmIdCertRootCAList[] = { WOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST };
 const uint16_t hsmNvmIdCertRootCACount  =

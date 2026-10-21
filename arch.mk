@@ -2630,6 +2630,9 @@ ifeq ($(ARCH), AURIX)
       # Older HT GCC 4.6 also flags WOLFBOOT_HDR_GET_U32() on byte arrays as
       # type-punning
       CFLAGS += -Wno-strict-aliasing
+      # HT TriCore GCC 4.9 flags a false maybe-uninitialized warning in
+      # wolfSSL's DirStringNext()
+      CFLAGS += -Wno-maybe-uninitialized
     endif
 
     # Set TC3_CFG_DFLASH_SINGLE_ENDED=1 for devices with DFLASH provisioned in single
