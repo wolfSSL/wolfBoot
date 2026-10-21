@@ -1054,7 +1054,7 @@ static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
 
 /* Erase the trailer sector and start an empty log. If the sector is not
  * blank, program the erase marker first, so that a cut erase reads as
- * erased. */
+ * erased. If the marker is not written, fail without erasing. */
 static int RAMFUNCTION journal_clear(uint8_t part, struct journal *j)
 {
     uintptr_t base = journal_base(part, j);
@@ -1062,11 +1062,15 @@ static int RAMFUNCTION journal_clear(uint8_t part, struct journal *j)
     uint32_t buf[JOURNAL_SLOT_SIZE / 4];
     int ret;
 
-    if ((part_is_erased(part, base, WOLFBOOT_SECTOR_SIZE) != 1) &&
-            (part_is_erased(part, mark, JOURNAL_SLOT_SIZE) == 1)) {
-        XMEMSET(buf, (uint8_t)~FLASH_BYTE_ERASED, sizeof(buf));
-        (void)journal_flash_write(part, mark, (const uint8_t *)buf,
-            JOURNAL_SLOT_SIZE);
+    if (part_is_erased(part, base, WOLFBOOT_SECTOR_SIZE) != 1) {
+        if (part_is_erased(part, mark, JOURNAL_SLOT_SIZE) == 1) {
+            XMEMSET(buf, (uint8_t)~FLASH_BYTE_ERASED, sizeof(buf));
+            (void)journal_flash_write(part, mark, (const uint8_t *)buf,
+                JOURNAL_SLOT_SIZE);
+        }
+        /* A failed write may still write the marker, so check the slot */
+        if (part_is_erased(part, mark, JOURNAL_SLOT_SIZE) != 0)
+            return -1;
     }
     ret = journal_flash_erase(part, base, WOLFBOOT_SECTOR_SIZE);
 
