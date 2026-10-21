@@ -609,6 +609,7 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
  * the log starts at slot 1. */
 #define JOURNAL_DUAL       1
 #define JOURNAL_FIRST_SLOT 1
+#define JOURNAL_LOG_SLOTS  JOURNAL_SLOTS
 /* A new log holds a header, a copy of the trailer, and a commit record */
 #if JOURNAL_SLOTS < (JOURNAL_TRAILER_SIZE / 4 + 4)
 #error "NVM_FLASH_JOURNAL_DUAL: trailer sector can't hold a copy of the trailer"
@@ -616,9 +617,13 @@ static void RAMFUNCTION set_partition_magic(uint8_t part)
 #else
 #define JOURNAL_DUAL       0
 #define JOURNAL_FIRST_SLOT 0
+/* Number of slots available for the journal log */
+#define JOURNAL_LOG_SLOTS  (JOURNAL_SLOTS - 1)
+/* The last slot is reserved for the erase marker */
+#define JOURNAL_MARK_SLOT  (JOURNAL_SLOTS - 1)
 /* An update logs magic, UPDATING, three flags per sector and FINAL_FLAGS.
  * The bootloader also skips one slot when it loads the log. */
-#if JOURNAL_SLOTS < (3 * (JOURNAL_PART_SECTORS - 1) + 4)
+#if JOURNAL_LOG_SLOTS < (3 * (JOURNAL_PART_SECTORS - 1) + 4)
 #error "NVM_FLASH_JOURNAL: trailer sector can't log a full-partition update"
 #endif
 #endif /* NVM_FLASH_JOURNAL_DUAL */
@@ -764,7 +769,7 @@ static int RAMFUNCTION journal_scan(uint8_t part, struct journal *j,
     s->junk = 0;
     s->gap = 0;
     s->commit = 0;
-    for (slot = JOURNAL_FIRST_SLOT; slot < JOURNAL_SLOTS; slot++) {
+    for (slot = JOURNAL_FIRST_SLOT; slot < JOURNAL_LOG_SLOTS; slot++) {
         uintptr_t addr = base + (uintptr_t)slot * JOURNAL_SLOT_SIZE;
         erased = part_is_erased(part, addr, JOURNAL_SLOT_SIZE);
         if (erased < 0)
@@ -772,7 +777,7 @@ static int RAMFUNCTION journal_scan(uint8_t part, struct journal *j,
         if (erased) {
             /* Stop once the rest of the log is blank */
             erased = part_is_erased(part, addr,
-                (JOURNAL_SLOTS - slot) * JOURNAL_SLOT_SIZE);
+                (JOURNAL_LOG_SLOTS - slot) * JOURNAL_SLOT_SIZE);
             if (erased < 0)
                 return -1;
             if (erased)
@@ -859,7 +864,7 @@ static int RAMFUNCTION journal_append(uint8_t part, struct journal *j,
     XMEMCPY(buf.rec.data, data, len);
     buf.rec.crc = wb_crc32(&buf.rec, JOURNAL_REC_CRC_LEN);
 
-    while ((j->next_slot < JOURNAL_SLOTS) && (tries < 3)) {
+    while ((j->next_slot < JOURNAL_LOG_SLOTS) && (tries < 3)) {
         uintptr_t addr = base + (uintptr_t)j->next_slot * JOURNAL_SLOT_SIZE;
         j->next_slot++;
         if (part_is_erased(part, addr, JOURNAL_SLOT_SIZE) != 1)
@@ -1013,9 +1018,9 @@ static int RAMFUNCTION journal_compact(uint8_t part, struct journal *j)
     return journal_newgen(part, j);
 }
 #else
-/* Replay the trailer sector into the RAM copy. If a seq number is missing,
- * or more than one bad slot follows the last record, an erase was cut and the
- * log reads as erased. */
+/* Replay the trailer sector into the RAM copy. The log reads as erased if the
+ * erase marker is set, if a seq number is missing, or if it holds only bad
+ * slots. */
 static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
 {
     struct journal_scan s;
@@ -1030,7 +1035,16 @@ static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
         journal_unload(j);
         return;
     }
-    if (s.gap || (s.junk > 1) || ((s.last < 0) && (s.junk > 0))) {
+    /* The marker is programmed only before an erase. Any data there, even a
+     * cut program, means that erase did not finish, and older records may
+     * still read as valid. */
+    ret = part_is_erased(part, journal_base(part, j) +
+        (uintptr_t)JOURNAL_MARK_SLOT * JOURNAL_SLOT_SIZE, JOURNAL_SLOT_SIZE);
+    if (ret < 0) {
+        journal_unload(j);
+        return;
+    }
+    if ((ret == 0) || s.gap || ((s.last < 0) && (s.junk > 0))) {
         journal_reset(j);
         j->state = JOURNAL_ERASE;
         return;
@@ -1038,11 +1052,23 @@ static void RAMFUNCTION journal_load(uint8_t part, struct journal *j)
     j->state = JOURNAL_READY;
 }
 
-/* Erase the trailer sector and start an empty log */
+/* Erase the trailer sector and start an empty log. If the sector is not
+ * blank, program the erase marker first, so that a cut erase reads as
+ * erased. */
 static int RAMFUNCTION journal_clear(uint8_t part, struct journal *j)
 {
-    int ret = journal_flash_erase(part, journal_base(part, j),
-        WOLFBOOT_SECTOR_SIZE);
+    uintptr_t base = journal_base(part, j);
+    uintptr_t mark = base + (uintptr_t)JOURNAL_MARK_SLOT * JOURNAL_SLOT_SIZE;
+    uint32_t buf[JOURNAL_SLOT_SIZE / 4];
+    int ret;
+
+    if ((part_is_erased(part, base, WOLFBOOT_SECTOR_SIZE) != 1) &&
+            (part_is_erased(part, mark, JOURNAL_SLOT_SIZE) == 1)) {
+        XMEMSET(buf, (uint8_t)~FLASH_BYTE_ERASED, sizeof(buf));
+        (void)journal_flash_write(part, mark, (const uint8_t *)buf,
+            JOURNAL_SLOT_SIZE);
+    }
+    ret = journal_flash_erase(part, base, WOLFBOOT_SECTOR_SIZE);
 
     journal_reset(j);
     if (ret != 0)
@@ -1065,6 +1091,12 @@ static int RAMFUNCTION journal_compact(uint8_t part, struct journal *j)
             ret = journal_append(part, j, JOURNAL_TAG, (uint16_t)i,
                 (const uint8_t *)copy + i, 4);
         }
+    }
+    if (ret != 0) {
+        /* The log in flash can now read as erased. Keep the trailer in RAM,
+         * and write the log again before the next record. */
+        XMEMCPY(j->trailer, copy, JOURNAL_TRAILER_SIZE);
+        j->state = JOURNAL_ERASE;
     }
     return ret;
 }
@@ -1102,7 +1134,7 @@ static int RAMFUNCTION journal_set(uint8_t part, uint16_t offset,
         return -1;
     if (j->state == JOURNAL_READY) {
         ret = journal_append(part, j, JOURNAL_TAG, offset, data, len);
-        if ((ret == 0) || (j->next_slot < JOURNAL_SLOTS))
+        if ((ret == 0) || (j->next_slot < JOURNAL_LOG_SLOTS))
             return ret;
     }
     /* An invalid, in-place or full log starts again in an erased sector */

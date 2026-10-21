@@ -51,6 +51,11 @@
 #define SLOT_SIZE    ((UNIT > 16) ? UNIT : 16)
 #define TRAILER_SIZE (((4 + 1 + (NSECT + 1) / 2) + 3) & ~3)
 #define SLOTS        ((SECT_SIZE - TRAILER_SIZE) / SLOT_SIZE)
+#ifndef NVM_FLASH_JOURNAL_DUAL
+/* The last slot holds the erase marker */
+#define LOG_SLOTS    (SLOTS - 1)
+#define MARK_SLOT    (SLOTS - 1)
+#endif
 
 #define EXIT_CUT   100
 
@@ -65,6 +70,7 @@ struct mock_flash {
     int     torn;       /* TORN_* for a cut program */
     uint32_t fail_ops;  /* ops that return an error, bit n for op n. A
                          * program still lands, an erase does nothing. */
+    int     fail_junk;  /* a failing program lands only partly, as junk */
     uintptr_t check_fail; /* blank checks that start here fail, 0 for none */
     int     violations; /* writes the hardware would reject */
     int     erases;     /* sector erases */
@@ -127,6 +133,13 @@ static int mock_write(uintptr_t addr, const uint8_t *data, int len)
             }
         }
         _exit(EXIT_CUT);
+    }
+    if (mf->fail_junk && (mf->ops < 32) &&
+            (((mf->fail_ops >> mf->ops) & 1U) != 0)) {
+        memcpy(dst, data, len / 4);
+        for (n = 0; n < (uint32_t)len / UNIT; n++)
+            mf->programmed[p][u + n] = 1;
+        return -1;
     }
     for (i = 0; i < len; i++) {
         /* Programming over a cut program only works for the same data */
@@ -264,6 +277,7 @@ static void flash_erase_all(void)
     memset(mf->programmed, 0, sizeof(mf->programmed));
     memset(mf->weak, 0, sizeof(mf->weak));
     mf->fail_ops = 0;
+    mf->fail_junk = 0;
     mf->check_fail = 0;
     mf->violations = 0;
     mf->erases = 0;
@@ -334,6 +348,22 @@ static void child_set_flag(void)
     mf->ret = wolfBoot_set_update_sector_flag(arg_n, arg_val);
 }
 
+static void child_clear_update(void)
+{
+    mf->ret = wolfBoot_clear_trailer(PART_UPDATE);
+}
+
+/* Flag writes in one boot, enough to fill the log */
+static void child_many_writes(void)
+{
+    int i;
+
+    for (i = 0; i < arg_n; i++) {
+        wolfBoot_set_update_sector_flag(1,
+            (i & 1) ? SECT_FLAG_BACKUP : SECT_FLAG_SWAPPING);
+    }
+}
+
 static void set_flag(int sector, uint8_t flag)
 {
     arg_n = sector;
@@ -393,6 +423,7 @@ START_TEST(test_trigger_and_flags)
 
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
     ck_assert_int_eq(mf->erases, 1);
+    ck_assert_int_eq(mf->ops, 3); /* no marker on a blank sector */
     ck_assert(slot_programmed(1, 0));
     ck_assert(slot_programmed(1, 1));
 
@@ -407,8 +438,11 @@ START_TEST(test_trigger_and_flags)
     ck_assert_int_eq(mf->erases, 1);
     ck_assert_int_eq(mf->violations, 0);
 
-    /* A new trigger drops the flags of the previous update */
+    /* A new trigger drops the flags of the previous update. It programs the
+     * marker before the erase. */
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    ck_assert_int_eq(mf->ops, 4);
+    ck_assert(!slot_programmed(1, MARK_SLOT));
     snapshot();
     ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
     for (s = 0; s < NSECT; s++)
@@ -551,6 +585,79 @@ START_TEST(test_write_error_reused_seq)
 }
 END_TEST
 
+/* Every try of an append lands as junk and returns an error, then a reset.
+ * The bad slots are skipped, and the log keeps its state. */
+START_TEST(test_write_error_junk)
+{
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    set_flag(0, SECT_FLAG_SWAPPING);
+
+    arg_n = 0;
+    arg_val = SECT_FLAG_BACKUP;
+    mf->fail_ops = (1U << 1) | (1U << 2) | (1U << 3);
+    mf->fail_junk = 1;
+    ck_assert_int_eq(boot(child_set_flag, 0, TORN_NONE), 0);
+    mf->fail_ops = 0;
+    mf->fail_junk = 0;
+    ck_assert_int_eq(mf->ops, 3);
+
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+    ck_assert_uint_eq(mf->flags[0], SECT_FLAG_SWAPPING);
+
+    set_flag(0, SECT_FLAG_BACKUP);
+    snapshot();
+    ck_assert_uint_eq(mf->flags[0], SECT_FLAG_BACKUP);
+    ck_assert_int_eq(mf->erases, 1);
+    ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
+/* The same record write cut on several boots in a row, torn as torn1 and
+ * torn2 in turn. The log keeps its state through every cut, and the write
+ * lands once a boot completes it. */
+static void repeated_cuts(int torn1, int torn2)
+{
+    int i;
+
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    set_flag(0, SECT_FLAG_SWAPPING);
+    for (i = 0; i < 6; i++) {
+        arg_n = 0;
+        arg_val = SECT_FLAG_BACKUP;
+        ck_assert_int_eq(boot(child_set_flag, 1, (i & 1) ? torn2 : torn1),
+            EXIT_CUT);
+        snapshot();
+        ck_assert_int_eq(mf->update_ret, 0);
+        ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+        ck_assert_uint_eq(mf->flags[0], SECT_FLAG_SWAPPING);
+    }
+    set_flag(0, SECT_FLAG_BACKUP);
+    snapshot();
+    ck_assert_uint_eq(mf->flags[0], SECT_FLAG_BACKUP);
+    ck_assert_int_eq(mf->erases, 1);
+    ck_assert_int_eq(mf->violations, 0);
+}
+
+START_TEST(test_repeated_cuts_junk)
+{
+    repeated_cuts(TORN_JUNK, TORN_JUNK);
+}
+END_TEST
+
+START_TEST(test_repeated_cuts_erased)
+{
+    repeated_cuts(TORN_ERASED, TORN_ERASED);
+}
+END_TEST
+
+START_TEST(test_repeated_cuts_mixed)
+{
+    repeated_cuts(TORN_ERASED, TORN_JUNK);
+}
+END_TEST
+
 /* A blank check that fails while the log loads drops the replay, so the
  * trailer reads as missing, not as the older state replayed before the
  * error. Nothing is written until a load succeeds. */
@@ -593,22 +700,32 @@ END_TEST
  * whose final clear failed. */
 START_TEST(test_trigger_clear_fails)
 {
-    int s;
+    int s, erase_op;
 
+#ifdef NVM_FLASH_JOURNAL_DUAL
+    erase_op = 1;
+#else
+    erase_op = 2; /* after the marker */
+#endif
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
     log_swap(2);
     arg_val = IMG_STATE_FINAL_FLAGS;
     ck_assert_int_eq(boot(child_set_update_state, 0, TORN_NONE), 0);
 
-    mf->fail_ops = 1U << 1; /* the erase */
+    mf->fail_ops = 1U << erase_op;
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
     mf->fail_ops = 0;
-    ck_assert_int_eq(mf->ops, 1); /* nothing written after it */
+    ck_assert_int_eq(mf->ops, erase_op); /* nothing written after it */
 
     snapshot();
+#ifdef NVM_FLASH_JOURNAL_DUAL
     ck_assert_int_eq(mf->update_ret, 0);
     ck_assert_uint_eq(mf->update_st, IMG_STATE_FINAL_FLAGS);
     ck_assert_uint_eq(mf->flags[0], SECT_FLAG_UPDATED);
+#else
+    /* The marker landed, so the old log reads as erased */
+    ck_assert_int_eq(mf->update_ret, -1);
+#endif
 
     /* A retry that clears sets UPDATING with no flags */
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
@@ -621,39 +738,209 @@ START_TEST(test_trigger_clear_fails)
 END_TEST
 
 #ifndef NVM_FLASH_JOURNAL_DUAL
-/* Two bad slots after the last record mean a cut erase. The log then reads as
- * erased, and the sector is erased before the next write. */
-START_TEST(test_partial_erase_tail)
+/* Last programmed slot of the log, or -1 */
+static int last_slot(int p)
+{
+    int slot;
+
+    for (slot = LOG_SLOTS - 1; slot >= 0; slot--) {
+        if (slot_programmed(p, slot))
+            break;
+    }
+    return slot;
+}
+
+/* Clear one slot, as a cut erase can clear some slots and not others */
+static void erase_slot(int p, int slot)
+{
+    uint32_t u;
+
+    ck_assert_int_eq(part_of(slot_addr(p, slot), &u), p);
+    memset((void *)slot_addr(p, slot), FLASH_BYTE_ERASED, SLOT_SIZE);
+    memset(&mf->programmed[p][u], 0, SLOT_SIZE / UNIT);
+    memset(&mf->weak[p][u], 0, SLOT_SIZE / UNIT);
+}
+
+/* Bad slots after the last record come from cut writes, so any number of
+ * them is skipped */
+START_TEST(test_junk_tolerated)
 {
     uint8_t junk[SLOT_SIZE];
+    int last, slot;
+
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    log_swap(2);
+    last = last_slot(1);
+    memset(junk, 0x5A, sizeof(junk));
+    for (slot = last + 1; slot <= last + 4; slot++)
+        raw_program(slot_addr(1, slot), junk, SLOT_SIZE);
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->flags[1], SECT_FLAG_UPDATED);
+
+    set_flag(2, SECT_FLAG_SWAPPING);
+    snapshot();
+    ck_assert_uint_eq(mf->flags[1], SECT_FLAG_UPDATED);
+    ck_assert_uint_eq(mf->flags[2], SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(mf->erases, 1);
+    ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
+/* A clear programs the erase marker, then erases the sector. A reset before
+ * the marker lands keeps the old log. After it, the log reads as erased,
+ * even though the cut erase left the old records. */
+START_TEST(test_cut_clear)
+{
+    int cut, torn;
+
+    for (torn = TORN_NONE; torn <= TORN_ERASED; torn++) {
+        for (cut = 1; cut <= 3; cut++) {
+            flash_erase_all();
+            ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+            log_swap(2);
+            arg_val = IMG_STATE_FINAL_FLAGS;
+            ck_assert_int_eq(boot(child_set_update_state, 0, TORN_NONE), 0);
+
+            ck_assert_int_eq(boot(child_clear_update, cut, torn),
+                (cut <= 2) ? EXIT_CUT : 0);
+            snapshot();
+            if ((cut == 1) && (torn != TORN_JUNK)) {
+                ck_assert_int_eq(mf->update_ret, 0);
+                ck_assert_uint_eq(mf->update_st, IMG_STATE_FINAL_FLAGS);
+                ck_assert_uint_eq(mf->flags[1], SECT_FLAG_UPDATED);
+            }
+            else {
+                ck_assert_int_eq(mf->update_ret, -1);
+            }
+
+            /* The clear completes on the next try */
+            ck_assert_int_eq(boot(child_clear_update, 0, TORN_NONE), 0);
+            ck_assert_int_eq(mf->ret, 0);
+            ck_assert(!slot_programmed(1, MARK_SLOT));
+            snapshot();
+            ck_assert_int_eq(mf->update_ret, -1);
+            ck_assert_int_eq(mf->violations, 0);
+        }
+    }
+}
+END_TEST
+
+/* A cut erase that cleared only the newest record, FINAL_FLAGS. The records
+ * left would replay as a swap that has not finished, so the marker makes the
+ * log read as erased instead. */
+START_TEST(test_cut_clear_partial)
+{
     int last;
 
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
     log_swap(2);
-    snapshot();
-    ck_assert_int_eq(mf->update_ret, 0);
+    arg_val = IMG_STATE_FINAL_FLAGS;
+    ck_assert_int_eq(boot(child_set_update_state, 0, TORN_NONE), 0);
+    last = last_slot(1);
 
-    /* The trigger uses slots 0 and 1, then each boot skips one slot */
-    for (last = SLOTS - 1; last >= 0; last--) {
-        if (slot_programmed(1, last))
-            break;
-    }
-    memset(junk, 0x5A, sizeof(junk));
-    raw_program(slot_addr(1, last + 1), junk, SLOT_SIZE);
-    snapshot();
-    ck_assert_int_eq(mf->update_ret, 0); /* one cut write is fine */
-
-    raw_program(slot_addr(1, last + 2), junk, SLOT_SIZE);
+    ck_assert_int_eq(boot(child_clear_update, 2, TORN_NONE), EXIT_CUT);
+    erase_slot(1, last);
     snapshot();
     ck_assert_int_eq(mf->update_ret, -1);
 
+    /* The next write erases the sector first */
     arg_val = IMG_STATE_UPDATING;
     ck_assert_int_eq(boot(child_set_update_state, 0, TORN_NONE), 0);
     ck_assert_int_eq(mf->erases, 2);
     snapshot();
     ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
     ck_assert_uint_eq(mf->flags[0], SECT_FLAG_NEW);
     ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
+/* Records never use the marker slot. The write after the last free slot
+ * rewrites the log in a fresh sector, in the same boot or after a reset. */
+START_TEST(test_full_log_marker_slot)
+{
+    int n = LOG_SLOTS - 3;
+
+    /* The trigger uses slots 0 and 1, and the next boot skips slot 2. The
+     * last write of this boot finds no free slot. */
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    arg_n = n + 1;
+    ck_assert_int_eq(boot(child_many_writes, 0, TORN_NONE), 0);
+    ck_assert_int_eq(mf->erases, 2);
+    ck_assert(!slot_programmed(1, MARK_SLOT));
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+    ck_assert_uint_eq(mf->flags[1],
+        (n & 1) ? SECT_FLAG_BACKUP : SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(mf->violations, 0);
+
+    /* Fill the same slots, then write once more after a reset */
+    flash_erase_all();
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    arg_n = n;
+    ck_assert_int_eq(boot(child_many_writes, 0, TORN_NONE), 0);
+    ck_assert(slot_programmed(1, LOG_SLOTS - 1));
+    ck_assert(!slot_programmed(1, MARK_SLOT));
+    ck_assert_int_eq(mf->erases, 1);
+
+    set_flag(2, SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(mf->erases, 2);
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+    ck_assert_uint_eq(mf->flags[1],
+        ((n - 1) & 1) ? SECT_FLAG_BACKUP : SECT_FLAG_SWAPPING);
+    ck_assert_uint_eq(mf->flags[2], SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
+/* A flag write that compacts the full log, then one more */
+static void child_compact_writes(void)
+{
+    uint8_t st = 0;
+
+    wolfBoot_set_update_sector_flag(2, SECT_FLAG_SWAPPING);
+    mf->update_ret = wolfBoot_get_partition_state(PART_UPDATE, &st);
+    mf->update_st = st;
+    wolfBoot_set_update_sector_flag(3, SECT_FLAG_SWAPPING);
+}
+
+/* A compaction that fails at its erase, or at a record after it, leaves a log
+ * that reads as erased. The trailer stays in RAM, so the same boot still reads
+ * it, and the next write logs it again. */
+START_TEST(test_compact_fails)
+{
+    static const uint32_t fail[2] = {
+        1U << 2, /* the erase, after the marker */
+        (1U << 3) | (1U << 4) | (1U << 5) /* every try of the first record */
+    };
+    int i, n = LOG_SLOTS - 3;
+
+    for (i = 0; i < 2; i++) {
+        flash_erase_all();
+        ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+        arg_n = n;
+        ck_assert_int_eq(boot(child_many_writes, 0, TORN_NONE), 0);
+
+        mf->fail_ops = fail[i];
+        mf->fail_junk = 1;
+        ck_assert_int_eq(boot(child_compact_writes, 0, TORN_NONE), 0);
+        mf->fail_ops = 0;
+        mf->fail_junk = 0;
+        ck_assert_int_eq(mf->update_ret, 0);
+        ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+
+        snapshot();
+        ck_assert_int_eq(mf->update_ret, 0);
+        ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+        ck_assert_uint_eq(mf->flags[1],
+            ((n - 1) & 1) ? SECT_FLAG_BACKUP : SECT_FLAG_SWAPPING);
+        ck_assert_uint_eq(mf->flags[3], SECT_FLAG_SWAPPING);
+        ck_assert_int_eq(mf->violations, 0);
+    }
 }
 END_TEST
 
@@ -899,22 +1186,6 @@ static uint32_t dual_gen(int p, int s)
     return gen;
 }
 
-static void child_clear_update(void)
-{
-    mf->ret = wolfBoot_clear_trailer(PART_UPDATE);
-}
-
-/* Flag writes in one boot, enough to fill the log */
-static void child_many_writes(void)
-{
-    int i;
-
-    for (i = 0; i < arg_n; i++) {
-        wolfBoot_set_update_sector_flag(1,
-            (i & 1) ? SECT_FLAG_BACKUP : SECT_FLAG_SWAPPING);
-    }
-}
-
 /* The first write to an empty log starts a log in the sector before the last
  * one. The header and commit come first, and the last sector stays blank. */
 START_TEST(test_dual_empty_log)
@@ -962,42 +1233,6 @@ START_TEST(test_dual_trigger_alternates)
     ck_assert_uint_eq(dual_gen(1, 1), 3);
     ck_assert_int_eq(mf->erases, 3);
     ck_assert_int_eq(mf->violations, 0);
-}
-END_TEST
-
-/* The same record write cut again and again. The log keeps its state through
- * every cut, and the write lands once a boot completes it. */
-static void dual_repeated_cuts(int torn)
-{
-    int i;
-
-    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
-    set_flag(0, SECT_FLAG_SWAPPING);
-    for (i = 0; i < 5; i++) {
-        arg_n = 0;
-        arg_val = SECT_FLAG_BACKUP;
-        ck_assert_int_eq(boot(child_set_flag, 1, torn), EXIT_CUT);
-        snapshot();
-        ck_assert_int_eq(mf->update_ret, 0);
-        ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
-        ck_assert_uint_eq(mf->flags[0], SECT_FLAG_SWAPPING);
-    }
-    set_flag(0, SECT_FLAG_BACKUP);
-    snapshot();
-    ck_assert_uint_eq(mf->flags[0], SECT_FLAG_BACKUP);
-    ck_assert_int_eq(mf->erases, 1);
-    ck_assert_int_eq(mf->violations, 0);
-}
-
-START_TEST(test_dual_repeated_cuts_junk)
-{
-    dual_repeated_cuts(TORN_JUNK);
-}
-END_TEST
-
-START_TEST(test_dual_repeated_cuts_erased)
-{
-    dual_repeated_cuts(TORN_ERASED);
 }
 END_TEST
 
@@ -1201,6 +1436,10 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_cut_write_reused_slot);
     tcase_add_test(tc, test_write_error_lands);
     tcase_add_test(tc, test_write_error_reused_seq);
+    tcase_add_test(tc, test_write_error_junk);
+    tcase_add_test(tc, test_repeated_cuts_junk);
+    tcase_add_test(tc, test_repeated_cuts_erased);
+    tcase_add_test(tc, test_repeated_cuts_mixed);
     tcase_add_test(tc, test_load_check_fails);
     tcase_add_test(tc, test_trigger_clear_fails);
     tcase_add_test(tc, test_old_format_import);
@@ -1211,8 +1450,6 @@ Suite *wolfboot_suite(void)
 #ifdef NVM_FLASH_JOURNAL_DUAL
     tcase_add_test(tc, test_dual_empty_log);
     tcase_add_test(tc, test_dual_trigger_alternates);
-    tcase_add_test(tc, test_dual_repeated_cuts_junk);
-    tcase_add_test(tc, test_dual_repeated_cuts_erased);
     tcase_add_test(tc, test_dual_junk_tolerated);
     tcase_add_test(tc, test_dual_gap);
     tcase_add_test(tc, test_dual_cut_clear);
@@ -1223,7 +1460,11 @@ Suite *wolfboot_suite(void)
 #else
     tcase_add_test(tc, test_empty_log);
     tcase_add_test(tc, test_trigger_and_flags);
-    tcase_add_test(tc, test_partial_erase_tail);
+    tcase_add_test(tc, test_junk_tolerated);
+    tcase_add_test(tc, test_cut_clear);
+    tcase_add_test(tc, test_cut_clear_partial);
+    tcase_add_test(tc, test_full_log_marker_slot);
+    tcase_add_test(tc, test_compact_fails);
     tcase_add_test(tc, test_partial_erase_gap);
     tcase_add_test(tc, test_junk_only);
     tcase_add_test(tc, test_old_format_cut_compaction);
