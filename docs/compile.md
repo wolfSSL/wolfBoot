@@ -317,7 +317,7 @@ and a journal record is 16 bytes, or one write unit if larger.
 |---|---|---|---|---|---|
 | In place (default) | none | flash can program a byte again (NOR) | one byte program | 1 | no |
 | [Two copies](#trailer-storage-option-nvm_flash_writeonce) | `NVM_FLASH_WRITEONCE=1` | write unit too large for a log, or cheap erases | 2 erases + 1 sector program | 2 | no |
-| [Journal](#trailer-storage-option-nvm_flash_journal-and-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 3, slow erases | 1 record program | 1 | yes |
+| [Journal](#trailer-storage-option-nvm_flash_journal-and-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 4, slow erases | 1 record program | 1 | yes |
 | [Journal in two sectors](#redundant-sector-journaling-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` and `NVM_FLASH_JOURNAL_DUAL=1` | slow erases, and a reset must never damage the log | 1 record program | 2 | yes |
 
 For a specific platform example, the AURIX TC3xx platform has these flash constraints:
@@ -368,6 +368,8 @@ program and no erase. After a reset, wolfBoot reads the log and replays the reco
 in RAM. Each record has a CRC, so a record cut short by a power loss is detected and ignored. The log
 sector is erased only when wolfBoot clears the trailer (when an update is triggered, at the end of an
 update, and when a partition is erased), or when the log must be rewritten, for example because it is full.
+Before each erase, wolfBoot programs the last slot of the sector as an erase marker, and a log with the
+marker set reads as erased. So an erase cut short by a power loss cannot bring back old records.
 
 When enabling journal mode:
 
@@ -389,11 +391,7 @@ Standard journal mode has a few very unlikely edge cases where a power loss duri
 the log corrupted and unrecoverable, such as when repeated resets during a large update fill up the log
 and then power is lost again at a different particular moment during the log compaction cycle where wolfBoot
 must erase and rewrites the log. The log lives in a single sector, so clearing or rewriting it means erasing
-the only copy. If this risk is not acceptable, compile with
-
-`NVM_FLASH_JOURNAL_DUAL=1`
-
-in addition to `NVM_FLASH_JOURNAL=1`.
+the only copy. If these risks are not acceptable, compile with `NVM_FLASH_JOURNAL_DUAL=1` in addition to `NVM_FLASH_JOURNAL=1`.
 
 Dual journal mode keeps the log in the last two sectors of each partition, which take turns holding it.
 To clear or rewrite the log, wolfBoot erases the other sector instead of the one in use, writes a new log
