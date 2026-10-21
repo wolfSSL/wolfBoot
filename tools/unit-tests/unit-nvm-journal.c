@@ -64,13 +64,19 @@
 #define TORN_JUNK   1 /* partly done, the unit reads as programmed */
 #define TORN_ERASED 2 /* partly done, the unit still reads as erased */
 
+/* How much a write that returns an error still writes */
+#define FAIL_WRITES_ALL   0 /* all of the data, as a TC3xx verify error can */
+#define FAIL_WRITES_PART  1 /* only the start, so it reads as a bad record */
+#define FAIL_WRITES_NONE  2 /* nothing, so the unit still reads as erased */
+
 struct mock_flash {
     int     ops;        /* programs and erases in this boot */
     int     cut_at;     /* reset at this op, 0 for none */
     int     torn;       /* TORN_* for a cut program */
-    uint32_t fail_ops;  /* ops that return an error, bit n for op n. A
-                         * program still lands, an erase does nothing. */
-    int     fail_junk;  /* a failing program lands only partly, as junk */
+    uint32_t fail_ops;  /* ops that return an error, bit n for op n.
+                         * fail_writes says how much a program writes, and
+                         * an erase does nothing. */
+    int     fail_writes; /* FAIL_WRITES_* for a failing write */
     uintptr_t check_fail; /* blank checks that start here fail, 0 for none */
     int     violations; /* writes the hardware would reject */
     int     erases;     /* sector erases */
@@ -134,11 +140,13 @@ static int mock_write(uintptr_t addr, const uint8_t *data, int len)
         }
         _exit(EXIT_CUT);
     }
-    if (mf->fail_junk && (mf->ops < 32) &&
+    if ((mf->fail_writes != FAIL_WRITES_ALL) && (mf->ops < 32) &&
             (((mf->fail_ops >> mf->ops) & 1U) != 0)) {
-        memcpy(dst, data, len / 4);
-        for (n = 0; n < (uint32_t)len / UNIT; n++)
-            mf->programmed[p][u + n] = 1;
+        if (mf->fail_writes == FAIL_WRITES_PART) {
+            memcpy(dst, data, len / 4);
+            for (n = 0; n < (uint32_t)len / UNIT; n++)
+                mf->programmed[p][u + n] = 1;
+        }
         return -1;
     }
     for (i = 0; i < len; i++) {
@@ -277,7 +285,7 @@ static void flash_erase_all(void)
     memset(mf->programmed, 0, sizeof(mf->programmed));
     memset(mf->weak, 0, sizeof(mf->weak));
     mf->fail_ops = 0;
-    mf->fail_junk = 0;
+    mf->fail_writes = FAIL_WRITES_ALL;
     mf->check_fail = 0;
     mf->violations = 0;
     mf->erases = 0;
@@ -585,8 +593,9 @@ START_TEST(test_write_error_reused_seq)
 }
 END_TEST
 
-/* Every try of an append lands as junk and returns an error, then a reset.
- * The bad slots are skipped, and the log keeps its state. */
+/* Every try of an append returns an error and writes only part of the
+ * record, then a reset. The bad slots are skipped, and the log keeps its
+ * state. */
 START_TEST(test_write_error_junk)
 {
     ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
@@ -595,10 +604,10 @@ START_TEST(test_write_error_junk)
     arg_n = 0;
     arg_val = SECT_FLAG_BACKUP;
     mf->fail_ops = (1U << 1) | (1U << 2) | (1U << 3);
-    mf->fail_junk = 1;
+    mf->fail_writes = FAIL_WRITES_PART;
     ck_assert_int_eq(boot(child_set_flag, 0, TORN_NONE), 0);
     mf->fail_ops = 0;
-    mf->fail_junk = 0;
+    mf->fail_writes = FAIL_WRITES_ALL;
     ck_assert_int_eq(mf->ops, 3);
 
     snapshot();
@@ -723,7 +732,7 @@ START_TEST(test_trigger_clear_fails)
     ck_assert_uint_eq(mf->update_st, IMG_STATE_FINAL_FLAGS);
     ck_assert_uint_eq(mf->flags[0], SECT_FLAG_UPDATED);
 #else
-    /* The marker landed, so the old log reads as erased */
+    /* The marker was written, so the old log reads as erased */
     ck_assert_int_eq(mf->update_ret, -1);
 #endif
 
@@ -788,7 +797,7 @@ START_TEST(test_junk_tolerated)
 END_TEST
 
 /* A clear programs the erase marker, then erases the sector. A reset before
- * the marker lands keeps the old log. After it, the log reads as erased,
+ * the marker is written keeps the old log. After it, the log reads as erased,
  * even though the cut erase left the old records. */
 START_TEST(test_cut_clear)
 {
@@ -852,6 +861,36 @@ START_TEST(test_cut_clear_partial)
     ck_assert_int_eq(mf->update_ret, 0);
     ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
     ck_assert_uint_eq(mf->flags[0], SECT_FLAG_NEW);
+    ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
+/* A marker program that fails and leaves the slot blank. The clear fails
+ * without erasing, so the old log stays, and the next clear works. */
+START_TEST(test_clear_marker_fails)
+{
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    log_swap(2);
+    arg_val = IMG_STATE_FINAL_FLAGS;
+    ck_assert_int_eq(boot(child_set_update_state, 0, TORN_NONE), 0);
+
+    mf->fail_ops = 1U << 1; /* the marker */
+    mf->fail_writes = FAIL_WRITES_NONE;
+    ck_assert_int_eq(boot(child_clear_update, 0, TORN_NONE), 0);
+    mf->fail_ops = 0;
+    mf->fail_writes = FAIL_WRITES_ALL;
+    ck_assert_int_eq(mf->ret, -1);
+    ck_assert_int_eq(mf->ops, 1); /* no erase */
+
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_FINAL_FLAGS);
+    ck_assert_uint_eq(mf->flags[1], SECT_FLAG_UPDATED);
+
+    ck_assert_int_eq(boot(child_clear_update, 0, TORN_NONE), 0);
+    ck_assert_int_eq(mf->ret, 0);
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, -1);
     ck_assert_int_eq(mf->violations, 0);
 }
 END_TEST
@@ -926,10 +965,10 @@ START_TEST(test_compact_fails)
         ck_assert_int_eq(boot(child_many_writes, 0, TORN_NONE), 0);
 
         mf->fail_ops = fail[i];
-        mf->fail_junk = 1;
+        mf->fail_writes = FAIL_WRITES_PART;
         ck_assert_int_eq(boot(child_compact_writes, 0, TORN_NONE), 0);
         mf->fail_ops = 0;
-        mf->fail_junk = 0;
+        mf->fail_writes = FAIL_WRITES_ALL;
         ck_assert_int_eq(mf->update_ret, 0);
         ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
 
@@ -1463,6 +1502,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_junk_tolerated);
     tcase_add_test(tc, test_cut_clear);
     tcase_add_test(tc, test_cut_clear_partial);
+    tcase_add_test(tc, test_clear_marker_fails);
     tcase_add_test(tc, test_full_log_marker_slot);
     tcase_add_test(tc, test_compact_fails);
     tcase_add_test(tc, test_partial_erase_gap);
