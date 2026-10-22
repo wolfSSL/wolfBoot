@@ -51,11 +51,9 @@ static void ddr_delay(uint32_t us)
     }
 }
 
-/* Pet all five MSS watchdogs (E51 + U54_1..4) by writing the refresh
- * magic to each WDT refresh register.  Used inside the long DDR training
- * sweeps so a wedged MTC test cannot let the WDT reset the chip before a
- * sweep finishes with a clean FAIL status.  Identical 5-write sequence
- * previously inlined at four call sites. */
+/* Pet all five MSS watchdogs (E51 + U54_1..4).  Used inside the long DDR
+ * training sweeps so a wedged MTC test cannot let the WDT reset the chip
+ * before a sweep finishes with a clean FAIL status. */
 #define MPFS_DDR_PET_WDT()                                          \
     do {                                                            \
         *(volatile uint32_t*)0x20001000UL = 0xDEADC0DEU; /* E51 */  \
@@ -294,13 +292,10 @@ static int mss_pll_init(void)
 #endif
 
             /* Reprogram the eNVM clock divider for the new (faster) AHB
-             * clock BEFORE switching, exactly as HSS does in
+             * clock BEFORE switching, as HSS does in
              * mss_mux_post_mss_pll_config(): write LIBERO's ENVM_CR, then
-             * poll clock-okay.  wolfBoot previously never wrote ENVM_CR,
-             * leaving the reset divider while AHB jumped 40 -> 150 MHz,
-             * so every later eNVM read (e.g. the secondary harts' WFI
-             * park loop instruction fetches) ran with out-of-spec eNVM
-             * read timing. */
+             * poll clock-okay.  The reset divider is out of spec for eNVM
+             * reads once AHB goes from 40 to 150 MHz. */
             envm_to = 1000000UL;
 #ifdef LIBERO_SETTING_MSS_ENVM_CR
             SYSREG_ENVM_CR = (uint32_t)LIBERO_SETTING_MSS_ENVM_CR;
@@ -1131,14 +1126,13 @@ static int setup_phy(void)
     DDRPHY_REG(PHY_RPC98_IBUFMD_DQS) = LIBERO_SETTING_RPC_IBUFMD_DQS;
     mb();
 
-    /* Phase 3.10.3 (1a): per-lane weak pull-up/pull-down config.
-     * HSS calls config_ddr_io_pull_up_downs_rpc_bits() right after
-     * set_ddr_rpc_regs() returns (mss_ddr.c:2609 -> 4551).  wolfBoot
-     * was missing this entirely.  These 24 registers configure I/O
-     * override enable per lane (ovrt9-16) and weak pull-up/pull-down
-     * enables for ADDCMD/DATA/ECC lanes (rpc235-250).  Without them,
-     * lane termination is in an undefined state and TIP cannot
-     * reliably detect DQ/DQS transitions during WRLVL.
+    /* Per-lane weak pull-up/pull-down config, as HSS does in
+     * config_ddr_io_pull_up_downs_rpc_bits() right after set_ddr_rpc_regs()
+     * returns (mss_ddr.c:2609 -> 4551).  These 24 registers set the I/O
+     * override enable per lane (ovrt9-16) and the weak pull enables for the
+     * ADDCMD/DATA/ECC lanes (rpc235-250); without them lane termination is
+     * undefined and TIP cannot reliably detect DQ/DQS transitions during
+     * WRLVL.
      */
     /* Independent PHY register writes (no interleaved reads / barriers);
      * one mb() after the loop matches the original single mb().  ovrt9-16
@@ -1400,8 +1394,7 @@ static uint8_t mpfs_write_calibration_using_mtc(uint8_t num_lanes)
      * lanes get their correct calibration committed.  Without this
      * call PHY retains the last sweep iteration's cal_data (junk like
      * 0xEEEEE) and ALL lanes write incorrectly, even the ones that
-     * passed the sweep.  Previously we returned early on partial
-     * failure -> wrong-data on every lane. */
+     * passed the sweep. */
     mpfs_set_write_calib(num_lanes, lane_lower);
     DBG_DDR(
         "  MTC WRCALIB: lanes(%u%u%u%u%u) cal=0x%x status=0x%x\n",
@@ -1576,13 +1569,11 @@ static void training_config_wrlvl(void)
 static void training_ca_vref(void)
 {
     uint32_t dpc_bits_new;
-    /* 2026-05-11: re-enabled the CA VREF dual-pass sweep.
-     * Previously hardcoded to 0x10, but HSS finds different
-     * vref_answer values per board (HSS log on this Video Kit
-     * found 0x07).  Hardcoding leaves the PHY at a non-optimal
-     * VREF where ADDCMD sweep is noisy and writes corrupt.  The
-     * sweep below is a port of HSS lpddr4_manual_training lines
-     * 1005-1185 (the dual ca_indly x vref loop). */
+    /* The sweep below is a port of HSS lpddr4_manual_training lines
+     * 1005-1185 (the dual ca_indly x vref loop).  HSS finds a different
+     * vref_answer per board (0x07 on this Video Kit), so a hardcoded value
+     * leaves the PHY at a non-optimal VREF where the ADDCMD sweep is noisy
+     * and writes corrupt. */
     uint32_t vref_answer = 128;  /* 128 = no answer found */
     uint32_t transition_a5_min_last = 129;
     uint32_t ca_indly;
@@ -1728,13 +1719,6 @@ static void training_ca_vref(void)
         if (break_loop)
             break;
     }
-
-    /* Phase 3.10.3 iter 5 tried adding HSS's CA-VREF expert-mode
-     * setup writes here (expert_mode_en = 0x21,
-     * expert_dfi_status_override_to_shim = 0,
-     * expert_dlycnt_pause toggle).  No effect on TIP advancement
-     * and pattern test mismatches stayed in the elevated 4-5k
-     * range vs the ~1200 baseline.  Reverted. */
 
     /* Apply final VREF value */
     DDR_BANKCONT_REG(0x00) = 0U;
@@ -2602,13 +2586,9 @@ static int run_training(uint32_t retry_count)
         timeout--;
     }
     DDRCFG_REG(MC_INIT_ZQ_CAL_START) = 0x00000000UL;
-    /* 2026-05-12: match HSS Libero value (CFG_AUTO_ZQ_CAL_EN=0).
-     * Previously hardcoded to 1; reverted in earlier session because
-     * "pattern test slightly worse and train_stat unchanged".  Now
-     * with the ADDCMD threshold fix (5e27fcb4), reconsider: auto ZQ
-     * cal injects ZQ commands into the DRAM stream, which can
-     * collide with data bursts.  HSS disables auto cal and relies on
-     * the explicit INIT_ZQ_CAL_START at init time only. */
+    /* HSS's Libero value disables auto ZQ cal and relies on the explicit
+     * INIT_ZQ_CAL_START above: auto cal injects ZQ commands into the DRAM
+     * stream, where they can collide with data bursts. */
     DDRCFG_REG(MC_CFG_AUTO_ZQ_CAL_EN) = LIBERO_SETTING_CFG_AUTO_ZQ_CAL_EN;
     mb();
 
@@ -2659,12 +2639,11 @@ static int run_training(uint32_t retry_count)
         DDRCFG_REG(0x10034U), DDRCFG_REG(0x10038U));
 
     /*
-     * Restore ODT after TIP completes.  Phase 3.10.3 D-3 v2 audit
-     * (2026-05-05) found that the previous explicit MR2 = 0x2D write
-     * with MR_WR_MASK = 0 was clobbering all 20 LPDDR4 MR2 bits and
-     * breaking the post-training mode -- HSS never writes MR2 like
-     * this; it only does the no-op refresh via mode_register_masked_
-     * write_x5(2) which uses MR_WR_MASK = 0xFFFFF (preserve).  Removed.
+     * Restore ODT after TIP completes.  MR2 is deliberately not rewritten
+     * here: HSS only does the no-op refresh via
+     * mode_register_masked_write_x5(2), which keeps MR_WR_MASK = 0xFFFFF,
+     * and an explicit MR2 write with MR_WR_MASK = 0 clobbers all 20 LPDDR4
+     * MR2 bits and breaks the post-training mode.
      */
     DDRPHY_REG(PHY_RPC3_ODT) = 0x03U;
     mb();
@@ -2704,21 +2683,15 @@ static int run_training(uint32_t retry_count)
         eye[0], eye[1], eye[2], eye[3]);
     (void)eye;
 
-    /* Run HSS-equivalent MTC-based write calibration when TIP reached
-     * train_stat=0x1D.  Previously skipped on the assumption that TIP
-     * "did its own WRCALIB during autonomous training" -- that turned
-     * out to be wrong.  HSS runs write_calibration_using_mtc() even
-     * after a successful TIP, because TIP only trains the PHY; the MTC
-     * test is the only thing that verifies the CPU->AXI->DDRC->DRAM
-     * data path actually moves bits.  Without this step,
-     * train_stat=0x1D + MTC 256B PASS were both passing while
-     * boundary-scan reads from cached/non-cached DDR returned the
-     * same stuck pre-fill bytes regardless of address. */
+    /* HSS runs write_calibration_using_mtc() even after a successful TIP,
+     * because TIP only trains the PHY; the MTC test is the only thing that
+     * verifies the CPU->AXI->DDRC->DRAM path actually moves bits.  Without
+     * it train_stat=0x1D and an MTC 256B PASS both report success while
+     * every DDR read returns the same stuck pre-fill bytes. */
     train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
-    /* Run HSS-style MTC WRCALIB whenever TIP made any progress
-     * (train_stat has at least BCLK_SCLK set).  Previously only ran
-     * when fully 0x1D; in practice our train_stat often stalls at 0x1
-     * but MTC still works enough to do per-lane calibration. */
+    /* Run it whenever TIP made any progress (at least BCLK_SCLK set), not
+     * only on a full 0x1D: train_stat often stalls earlier while MTC still
+     * calibrates per lane. */
     if ((train_stat & BCLK_SCLK_BIT) != 0U) {
         uint8_t wrcal_res;
         uint32_t init_to;
@@ -3059,7 +3032,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
 
     mpfs_phy_rpc156_val = 6U;
 
-    (void)outer_retry;  /* TUNE sweep removed; outer_retry kept for future use */
+    (void)outer_retry;
 
     /* Step 1: NWC/PLL initialization.  Run only once per boot -- the
      * MSS / DDR PLLs lock on first call and re-running mss_pll_init()
@@ -3102,13 +3075,9 @@ int mpfs_ddr_init(unsigned int outer_retry)
     if (ret != 0)
         DBG_DDR("DDR: PHY setup warning\n");
 
-    /* Step 6: Configure controller timing (CFG_* registers).  HSS
-     * runs init_ddrc here in DDR_TRAINING_SETUP_DDRC state, after
-     * DDR_TRAINING_DDRC_BRINGUP and BANK_CONTROLLER soft_reset.
-     * Tested also calling this BEFORE setup_phy -- no AXI service
-     * improvement.  Tested forcing EXPERT_WRCALIB=0x5555 (HSS
-     * post-train value) -- no improvement.  Tested clearing
-     * INIT_SELF_REFRESH -- was already 0. */
+    /* Step 6: Configure controller timing (CFG_* registers).  HSS runs
+     * init_ddrc here in DDR_TRAINING_SETUP_DDRC state, after
+     * DDR_TRAINING_DDRC_BRINGUP and the BANK_CONTROLLER soft reset. */
     setup_controller();
 
     /* Step 7: Training reset and clock rotation */
@@ -3125,8 +3094,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
      * calibrate all lanes), not PHY_TRAINING_STATUS: when the manual ADDCMD
      * training picks a marginal phase/dly that doesn't resolve into a usable
      * DRAM alignment, TIP's train_stat self-report can still read "complete"
-     * even though the write path is bad.  Gating on train_stat alone let bad
-     * boots through and the 19 MB load then hard-failed every block.
+     * even though the write path is bad.
      *
      * MTC sanity is a secondary gate, run only when TIP did not report full
      * training (0x1C).  When TIP does complete full training, MTC is skipped:
@@ -3259,13 +3227,10 @@ int mpfs_ddr_init(unsigned int outer_retry)
 
             /* Fast path: if TIP completed full training (train_stat
              * 0x1C bits = WRLVL+RDGATE+DQ_DQS), skip the MTC sanity
-             * test.  MTC engine still TIMEOUTs every iteration even
-             * after the MC_BASE1 BIT_MAP_INDEX offset bugfix -- the
-             * MTC engine has a separate issue (DDRC-internal access
-             * path differs from external AXI).  Running it just
-             * burns all 3 retries and the outer 6-retry loop, ending
-             * with a WDT reset.  Accept TIP-side training and proceed
-             * to disk-load; the actual AXI reads are independent. */
+             * test.  The MTC engine reaches the DRAM over a
+             * DDRC-internal path, not the external AXI the loader
+             * uses, and times out every iteration on this part;
+             * running it burns every retry and ends in a WDT reset. */
             if ((train_stat & 0x1CU) == 0x1CU) {
                 DBG_DDR("  TIP full training success (0x%x) - skipping MTC sanity\n",
                     train_stat);
@@ -3351,12 +3316,9 @@ int mpfs_ddr_init(unsigned int outer_retry)
         return -4;
     }
 
-    /* PDMA pre-fill: HSS clear_bootup_cache_ways equivalent.  With
-     * MTC traffic injection (commit b4031038) WRLVL now trains real
-     * per-lane delays and the AXI port no longer hangs, so run this
-     * unconditionally to prime DDRC row buffers before memory_test.
-     * Small region (1 MB) to keep boot fast and minimize risk if the
-     * underlying address-decoder issue is still affecting writes. */
+    /* PDMA pre-fill, the HSS clear_bootup_cache_ways equivalent: primes the
+     * DDRC row buffers before the memory test.  1 MB is enough for that and
+     * keeps the boot short. */
     mpfs_clear_bootup_cache_ways(0xC0000000UL, 1UL * 1024UL * 1024UL);
 
     /* The first transaction the CPU side sends to the controller after init
