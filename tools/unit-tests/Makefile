@@ -232,6 +232,7 @@ MCUXSDK?=
 MCXA_SDK=$(MCUXSDK)/devices/MCX/MCXA/MCXA153
 RW612_SDK=$(MCUXSDK)/devices/Wireless/RW/RW612
 MCXW_SDK=$(MCUXSDK)/devices/MCX/MCXW/MCXW716C
+LPC55S69_SDK=$(MCUXSDK)/devices/LPC/LPC5500/LPC55S69
 ifneq ($(wildcard $(MCXA_SDK)/MCXA153.h),)
 TESTS+=unit-flash-write-mcxa
 else
@@ -249,6 +250,14 @@ TESTS+=unit-mcxw-flash
 TESTS+=unit-mcxw-tz
 else
 $(info Skipping MCX W unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
+endif
+ifneq ($(wildcard $(LPC55S69_SDK)/LPC55S69_cm33_core0.h),)
+TESTS+=unit-lpc55s69-flash
+TESTS+=unit-lpc55s69-tz
+TESTS+=unit-lpc55s69-uart
+TESTS+=unit-lpc55s69-puf
+else
+$(info Skipping LPC55S69 unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
 endif
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-nrf5340-uart-crlf
@@ -2350,6 +2359,28 @@ unit-mcxw-flash: unit-mcxw-flash.c ../../hal/mcxw.c ../../hal/mcxw.h
 unit-mcxw-tz: unit-mcxw-tz.c unit-mmio.h ../../hal/mcxw.c ../../hal/mcxw.h
 	gcc -o $@ unit-mcxw-tz.c $(MCXW_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
 
+LPC55S69_TEST_INC=-DCPU_LPC55S69JBD100_cm33_core0 $(MCUXSDK_TEST_INC) \
+	-isystem $(LPC55S69_SDK) -isystem $(LPC55S69_SDK)/../periph \
+	-isystem $(LPC55S69_SDK)/drivers -isystem $(MCUXSDK)/drivers/iap1 \
+	-isystem $(MCUXSDK)/drivers/rng_1 -isystem $(MCUXSDK)/drivers/lpc_iocon \
+	-isystem $(MCUXSDK)/drivers/lpc_gpio -isystem $(MCUXSDK)/drivers/puf \
+	-isystem $(MCUXSDK)/drivers/flexcomm \
+	-isystem $(MCUXSDK)/drivers/flexcomm/usart \
+	-isystem $(MCUXSDK)/examples/_boards/lpcxpresso55s69/project_template
+
+unit-lpc55s69-flash: unit-lpc55s69-flash.c ../../hal/lpc55s69.c ../../hal/lpc55s69.h
+	gcc -o $@ unit-lpc55s69-flash.c $(LPC55S69_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
+unit-lpc55s69-tz: unit-lpc55s69-tz.c ../../hal/lpc55s69.c ../../hal/lpc55s69.h
+	gcc -o $@ unit-lpc55s69-tz.c $(LPC55S69_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
+unit-lpc55s69-uart: unit-lpc55s69-uart.c ../../hal/lpc55s69.c ../../hal/lpc55s69.h
+	gcc -o $@ unit-lpc55s69-uart.c -DDEBUG_UART $(LPC55S69_TEST_INC) -I../.. \
+		$(CFLAGS) $(LDFLAGS)
+
+unit-lpc55s69-puf: unit-lpc55s69-puf.c ../../hal/lpc55s69.c ../../hal/lpc55s69.h
+	gcc -o $@ unit-lpc55s69-puf.c $(LPC55S69_TEST_INC) -I../.. $(CFLAGS) $(LDFLAGS)
+
 unit-flash-write-nrf52: unit-flash-write-nrf52.c ../../hal/nrf52.c
 	gcc -o $@ unit-flash-write-nrf52.c -DTARGET_nrf52 -I../../hal $(CFLAGS) $(LDFLAGS)
 
@@ -2435,7 +2466,8 @@ GENERATED_SRC:=aurix_erased_extract.h elf_store_extract.h \
 # lost gnu-efi/multilib/the MCUXpresso SDK keeps a stale binary forever.
 CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
 	unit-linux-loader-syssize unit-flash-write-mcxa unit-rw612-flash \
-	unit-rw612-tz unit-rw612-uart unit-mcxw-flash unit-mcxw-tz
+	unit-rw612-tz unit-rw612-uart unit-mcxw-flash unit-mcxw-tz \
+	unit-lpc55s69-flash unit-lpc55s69-tz unit-lpc55s69-uart unit-lpc55s69-puf
 
 clean: covclean
 	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \

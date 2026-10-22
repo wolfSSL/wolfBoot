@@ -185,12 +185,62 @@ jobs:
       config-file: ./config/examples/lpc55s69-tz-psa.config
       board-name: lpcxpresso55s69
 
+  lpc55s69_hwpuf_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69.config
+      board-name: lpcxpresso55s69
+      make-args: HWPUF=1
+
   lpc55s69_benchmark_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
       arch: arm
       config-file: ./config/examples/lpc55s69-benchmark.config
       board-name: lpcxpresso55s69
+
+  lpc55s69_no_uart_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69.config
+      board-name: lpcxpresso55s69
+      make-args: DEBUG_UART=0
+
+  lpc55s69_boot_benchmark_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69.config
+      board-name: lpcxpresso55s69
+      make-args: BOOT_BENCHMARK=1
+
+  lpc55s69_pka_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69.config
+      board-name: lpcxpresso55s69
+      make-args: PKA=1
+
+  # TrustZone without the wolfCrypt NSC API
+  lpc55s69_tz_no_wolfcrypt_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69-tz.config
+      board-name: lpcxpresso55s69
+      make-args: "WOLFCRYPT_TZ=0 WOLFCRYPT_TZ_PKCS11=0"
+
+  # Without the console the secure RNG still needs the reset driver linked in
+  lpc55s69_tz_no_uart_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69-tz.config
+      board-name: lpcxpresso55s69
+      make-args: DEBUG_UART=0
 
   m2354_test:
     uses: ./.github/workflows/test-build.yml

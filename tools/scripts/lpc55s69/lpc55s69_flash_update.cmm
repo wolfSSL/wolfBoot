@@ -1,6 +1,14 @@
 ;; lpc55s69_flash_update.cmm
+;; usage: DO lpc55s69_flash_update.cmm [update partition address]
 
-&basedir="\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot"
+PARAMETERS &update_addr
+IF "&update_addr"==""
+(
+  &update_addr=0x40000
+)
+
+; wolfBoot root: three levels above this script
+&basedir=OS.PPD()+"\..\..\.."
 
 RESet
 SYStem.RESet
@@ -25,7 +33,7 @@ flash.delete 1.
 flash.create 1. 0x00000000--0x00097fff 0x200 TARGET Long
 
 FLASH.ReProgram ALL
-Data.LOAD.Binary "&basedir\test-app\image_v2_signed.bin" 0x18000
+Data.LOAD.Binary "&basedir\test-app\image_v2_signed.bin" &update_addr
 FLASH.ReProgram OFF
 
 ENDDO

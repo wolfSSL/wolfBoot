@@ -69,6 +69,7 @@ get_m33mu_target() {
     m2354) echo "m2354" ;;
     imx_rt7xx) echo "imxrt700" ;;
     mcxn) echo "mcxn947" ;;
+    lpc55s69) echo "lpc55s69" ;;
     *) echo "" ;;
   esac
 }
@@ -82,6 +83,7 @@ case "$TARGET" in
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
   imx_rt7xx) EMU_DIR=imxrt700; UART_BASE=40110000 ;;
   mcxn) EMU_DIR=mcxn947; UART_BASE=40096000; HANDOFF_CHECK=1 ;;
+  lpc55s69) EMU_DIR=lpc55s69; UART_BASE=40086000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -233,6 +235,7 @@ write_target_ld() {
     m2354) base="ARM-m2354" ;;
     imx_rt7xx) base="ARM-imx_rt7xx" ;;
     mcxn) base="ARM-mcxn" ;;
+    lpc55s69) base="ARM-lpc55s69" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
@@ -605,12 +608,52 @@ if want_scenario "C"; then
   log "Scenario C: fallback ok (version=1)"
 fi
 
-if want_scenario "S"; then
-  if [[ "$RAM_CODE" == "1" ]]; then
-    log "Scenario S: self-update enabled (RAM_CODE=1)"
-    log "Scenario S: not enabled in this script yet"
-  else
+if [[ -n "$SCENARIOS_UP" ]] && want_scenario "S"; then
+  if [[ "$RAM_CODE" != "1" ]]; then
     log "Scenario S: RAM_CODE disabled, skipping"
+  elif [[ "${TZEN}" == "1" ]]; then
+    log "Scenario S: TZEN=1, skipping"
+  else
+    log "Scenario S: bootloader self-update from v1 to v2 (RAM_CODE=1)"
+    SELF_UPDATE_BIN="$EMU_PATH/wolfboot.bin"
+    SELF_UPDATE_SIGNED="$EMU_PATH/wolfboot_v2_signed.bin"
+    SELF_UPDATE_PART="$EMU_PATH/self_update_part.dd"
+    SIGN_ALG="$(cfg_get SIGN)"
+    HASH_ALG="$(cfg_get HASH)"
+
+    log "Scenario S: build wolfBoot v2 and sign it as a wolfBoot update"
+    make -C "$WOLFBOOT_ROOT" "${WB_MAKE_ARGS[@]}" clean wolfboot.bin WOLFBOOT_VERSION=2
+    cp "$WOLFBOOT_BIN" "$SELF_UPDATE_BIN"
+    IMAGE_HEADER_SIZE="$IMAGE_HEADER_SIZE" "$WOLFBOOT_ROOT/tools/keytools/sign" \
+      --"$(echo "${SIGN_ALG:-ED25519}" | tr '[:upper:]' '[:lower:]')" \
+      --"$(echo "${HASH_ALG:-SHA256}" | tr '[:upper:]' '[:lower:]')" \
+      --wolfboot-update "$SELF_UPDATE_BIN" "$WOLFBOOT_ROOT/wolfboot_signing_private_key.der" 2
+
+    log "Scenario S: build wolfBoot v1 for the factory image"
+    make -C "$WOLFBOOT_ROOT" "${WB_MAKE_ARGS[@]}" clean wolfboot.bin WOLFBOOT_VERSION=1
+
+    log "Scenario S: assembling factory.bin from wolfBoot v1 + image_v8_signed.bin + pBOOT-triggered wolfBoot v2"
+    dd if=/dev/zero bs="$((PART_SIZE))" count=1 2>/dev/null | tr '\000' '\377' > "$SELF_UPDATE_PART"
+    dd if="$SELF_UPDATE_SIGNED" of="$SELF_UPDATE_PART" bs=1 conv=notrunc 2>/dev/null
+    printf "pBOOT" | dd of="$SELF_UPDATE_PART" bs=1 seek="$((PART_SIZE - 5))" conv=notrunc 2>/dev/null
+    "$BIN_ASSEMBLE" "$FACTORY_FLASH" \
+      0 "$WOLFBOOT_BIN" \
+      "$BOOT_OFFSET_HEX" "$UPDATE_IMAGE_V8" \
+      "$UPDATE_OFFSET_HEX" "$SELF_UPDATE_PART" >/dev/null
+    print_partition_flags "Scenario S: flags before self-update"
+
+    run_log="$EMU_PATH/self_update.log"
+    log "Scenario S: boot wolfBoot v1, expect self-update, reset and BKPT 0x4E from image v8 (success)"
+    $STDBUF "$M33MU" --cpu "$EMU_CPU" --uart-stdout "${M33MU_TZ_ARGS[@]}" \
+      --timeout "$UPDATE_TIMEOUT" --expect-bkpt=0x4e --persist --quit-on-faults \
+      "$FACTORY_FLASH" >"$run_log" 2>&1 || die "self-update run: m33mu failed"
+    grep -q "\\[EXPECT BKPT\\] Success" "$run_log" || die "self-update run: expected BKPT 0x4E"
+    log "Scenario S: BKPT 0x4E hit"
+    print_partition_flags "Scenario S: flags after self-update"
+
+    cmp -n "$(wc -c < "$SELF_UPDATE_BIN")" "$SELF_UPDATE_BIN" "$FACTORY_FLASH" >/dev/null || \
+      die "self-update run: bootloader region does not match wolfBoot v2"
+    log "Scenario S: bootloader region matches wolfBoot v2"
   fi
 fi
 

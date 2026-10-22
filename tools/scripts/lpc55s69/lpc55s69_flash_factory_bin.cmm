@@ -1,6 +1,7 @@
 ;; lpc55s69_flash_factory_bin.cmm
 
-&basedir="\\wsl.localhost\Ubuntu-22.04\home\tcook\wolf\wolfBoot"
+; wolfBoot root: three levels above this script
+&basedir=OS.PPD()+"\..\..\.."
 
 RESet
 SYStem.RESet

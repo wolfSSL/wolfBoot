@@ -1173,22 +1173,26 @@ endif
 ifeq ($(TARGET),lpc55s69)
     CFLAGS+=-ffunction-sections -fdata-sections
     CFLAGS+=-DWOLFSSL_NXP_RNG_1
+    LPC55S69_SDK_SRCS:=\
+      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.c \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.c \
+      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.c \
+      $(MCUXPRESSO)/drivers/common/fsl_common_arm.c \
+      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.c \
+      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.c \
+      $(MCUXPRESSO)/drivers/iap1/fsl_iap.c \
+      $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.c \
+      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.c
     ifeq ($(TZEN),1)
       LSCRIPT_TEMPLATE=ARM-lpc55s69-ns.ld
       CFLAGS:=$(filter-out -mcmse, $(CFLAGS))
+      # wolfBoot's copies are built with -mcmse, which selects secure bases
+      APP_OBJS+=$(addprefix lpc55s69_ns/,$(notdir $(LPC55S69_SDK_SRCS:.c=.o)))
+      vpath %.c $(sort $(dir $(LPC55S69_SDK_SRCS)))
     else
       LSCRIPT_TEMPLATE=ARM-lpc55s69.ld
+      APP_OBJS+=$(LPC55S69_SDK_SRCS:.c=.o)
     endif
-    APP_OBJS+=\
-      $(MCUXPRESSO_PROJECT_TEMPLATE)/clock_config.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
-      $(MCUXPRESSO_DRIVERS)/drivers/fsl_reset.o \
-      $(MCUXPRESSO)/drivers/common/fsl_common_arm.o \
-      $(MCUXPRESSO)/drivers/flexcomm/fsl_flexcomm.o \
-      $(MCUXPRESSO)/drivers/flexcomm/usart/fsl_usart.o \
-      $(MCUXPRESSO)/drivers/iap1/fsl_iap.o \
-      $(MCUXPRESSO)/drivers/lpc_gpio/fsl_gpio.o \
-      $(MCUXPRESSO)/drivers/rng_1/fsl_rng.o
     ifeq ($(PKA),1)
       CFLAGS+=-DWOLFSSL_NXP_LPC55S6X
       APP_OBJS+=\
@@ -1735,6 +1739,11 @@ rw612_ns/%.o: %.c
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
 
+lpc55s69_ns/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 board_$(BOARD).o: ../hal/boards/$(BOARD)/wolfHAL_board.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)$(CC) $(CFLAGS) -DDEBUG_UART -c $(OUTPUT_FLAG) $@ $<
@@ -1792,7 +1801,7 @@ wolfip_tftp_test.o: wolfip_tftp_test.c
 clean:
 	$(Q)rm -f *.bin *.elf tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
-		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR) mcxw_ns
+		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR) mcxw_ns lpc55s69_ns
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset

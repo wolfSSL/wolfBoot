@@ -169,10 +169,10 @@ jobs:
           m33mu tools/keytools/otp/otp-keystore-primer.bin --persist --timeout 10 || true
           m33mu wolfboot.bin test-app/image_v1_signed.bin:0x60000 --uart-stdout --expect-bkpt 0x7f --timeout 600 --persist
 
-      # LPC55S69 DICE attestation + HW PUF. The PUF root key is provisioned
-      # at first boot (WOLFBOOT_HWPUF_PROVISION=1) and used for DICE key
-      # derivation on subsequent boots. Requires m33mu with lpc55s69 PUF/RNG
-      # models (wolfboot-ci >= 1.22).
+      # LPC55S69 DICE attestation + HW PUF. The first boot enrolls the PUF
+      # and stores the record (WOLFBOOT_HWPUF_PROVISION=1); the second boot
+      # must reuse it and report the same UEID. Needs the m33mu lpc55s69
+      # PUF/RNG models and --persist (m33mu c2d903e, wolfboot-ci >= 1.28).
       # The lpc55s69 HAL needs MCUXpresso SDK headers (fsl_common.h); same
       # west-based setup as the lpc55s69 jobs in test-configs.yml.
       - name: Checkout CMSIS (lpc55s69)
@@ -192,8 +192,9 @@ jobs:
           sed -i '/se_hostlib\|emwin/d' manifests/boards/lpcxpresso55s69.yml
           west update_board --set board lpcxpresso55s69
 
-      - name: Clean and build test with DICE attestation + HW PUF (lpc55s69)
+      - name: Build and run DICE attestation + HW PUF across two boots (lpc55s69)
         run: |
+          set -o pipefail
           make clean distclean
           cp config/examples/lpc55s69-tz-psa.config .config
           sed -i 's/^HWPUF?=0/HWPUF?=1/' .config
@@ -203,19 +204,42 @@ jobs:
           grep -q '^WOLFBOOT_HWPUF_PROVISION?=1' .config
           grep -q '^WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=0' .config
           make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS"
+          BOOT_ADDR=$(sed -n 's/^WOLFBOOT_PARTITION_BOOT_ADDRESS?*=//p' .config)
+          rm -rf /tmp/m33mu-lpc55s69-hwpuf-persist
+          mkdir -p /tmp/m33mu-lpc55s69-hwpuf-persist
+          cp wolfboot.bin test-app/image_v1_signed.bin /tmp/m33mu-lpc55s69-hwpuf-persist/
+          cd /tmp/m33mu-lpc55s69-hwpuf-persist
+          for boot in first second; do
+            m33mu wolfboot.bin image_v1_signed.bin:$BOOT_ADDR --cpu lpc55s69 --persist --uart-stdout --expect-bkpt 0x7f --timeout 300 \
+              | tee /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "Booting version:" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "Checking integrity...done" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "Verifying signature...done" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "attest: token size" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+            grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-lpc55s69-dice-hwpuf-$boot.log
+          done
+          # The second boot starts confirmed, so it attested from the stored record
+          grep -q "boot:   ver=0x1 state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf-second.log
+          first=$(python3 $GITHUB_WORKSPACE/tools/scripts/eat_ueid.py /tmp/m33mu-lpc55s69-dice-hwpuf-first.log)
+          second=$(python3 $GITHUB_WORKSPACE/tools/scripts/eat_ueid.py /tmp/m33mu-lpc55s69-dice-hwpuf-second.log)
+          echo "UEID first boot:  $first"
+          echo "UEID second boot: $second"
+          test -n "$first"
+          test "$first" = "$second"
 
-      # Single boot: enroll the PUF, store the record, attest.
-      # TODO: add a second --persist boot checking the stored record is reused
-      # (same UEID) once the CI image ships an m33mu with lpc55s69 --persist
-      # support (m33mu c2d903e, after v1.23).
-      - name: Run DICE attestation + HW PUF (lpc55s69)
+      - name: Build and run persistent PKCS11 test (lpc55s69)
         run: |
           set -o pipefail
-          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x48000 --cpu lpc55s69 --uart-stdout --expect-bkpt 0x7f --timeout 300 \
-            | tee /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "Booting version:" /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "Checking integrity...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "Verifying signature...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "attest: token size" /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf.log
-          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          make clean distclean
+          cp config/examples/lpc55s69-tz.config .config
+          make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS" PKCS11_TESTAPP=1
+          BOOT_ADDR=$(sed -n 's/^WOLFBOOT_PARTITION_BOOT_ADDRESS?*=//p' .config)
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:$BOOT_ADDR --cpu lpc55s69 --persist --uart-stdout --timeout 300 --expect-bkpt 0x7d \
+            | tee /tmp/m33mu-lpc55s69-pkcs11-first.log
+          grep -q "pkcs11: created persistent PKCS11 objects" /tmp/m33mu-lpc55s69-pkcs11-first.log
+          grep -q "pkcs11: success" /tmp/m33mu-lpc55s69-pkcs11-first.log
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:$BOOT_ADDR --cpu lpc55s69 --persist --uart-stdout --timeout 300 --expect-bkpt 0x7f \
+            | tee /tmp/m33mu-lpc55s69-pkcs11-second.log
+          grep -q "pkcs11: restored persistent PKCS11 objects" /tmp/m33mu-lpc55s69-pkcs11-second.log
+          grep -q "pkcs11: success" /tmp/m33mu-lpc55s69-pkcs11-second.log

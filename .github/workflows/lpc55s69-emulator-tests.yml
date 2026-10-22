@@ -1,0 +1,81 @@
+name: lpc55s69-emulator-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Boot, update and rollback on the m33mu LPC55S69 model, plus a bootloader
+  # self-update on the plain config: the TrustZone wolfBoot does not fit an
+  # update partition, and its non-secure app updates through the NSC veneers.
+  lpc55s69-emulator-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: lpc55s69
+            scenarios: A,B,C,S
+          - config: lpc55s69-tz
+            scenarios: A,B,C
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nxp-mcuxpresso/CMSIS_5
+          path: CMSIS_5
+
+      - name: Cache MCUXpresso SDK
+        id: cache-mcuxpresso
+        uses: actions/cache@v4
+        with:
+          path: |
+            mcuxpresso-sdk
+            venv
+          key: mcuxpresso-sdk-lpcxpresso55s69-emu-${{ hashFiles('.github/workflows/lpc55s69-emulator-tests.yml') }}
+
+      - name: Setup MCUXpresso SDK
+        if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install west
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          cd mcuxpresso-sdk
+          sed -i '/se_hostlib\|emwin/d' manifests/boards/lpcxpresso55s69.yml
+          west update_board --set board lpcxpresso55s69
+
+      - name: Use the MCUXpresso SDK for the wolfBoot build
+        run: |
+          echo "MCUXSDK=1" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO=$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO_CMSIS=$GITHUB_WORKSPACE/CMSIS_5/CMSIS" >> "$GITHUB_ENV"
+
+      - name: Configure ${{ matrix.config }} and build wolfboot
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+          make include/target.h
+          make -C tools/keytools
+          make -C tools/bin-assemble
+          make wolfboot.bin
+
+      - name: Run emu test (${{ matrix.config }})
+        working-directory: test-app/emu-test-apps
+        run: |
+          SCENARIOS=${{ matrix.scenarios }} BOOT_TIMEOUT=30 UPDATE_TIMEOUT=60 REBOOT_TIMEOUT=30 ./test.sh
+
+      - name: Upload emulator logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lpc55s69-emu-logs-${{ matrix.config }}
+          path: test-app/emu-test-apps/lpc55s69/*.log

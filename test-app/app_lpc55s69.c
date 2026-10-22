@@ -20,11 +20,14 @@
  */
 
 #include <stdint.h>
+#include "fsl_clock.h"
 #include "fsl_gpio.h"
+#include "fsl_iocon.h"
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
 #include "printf.h"
+#include "hal/lpc55s69.h"
 
 /* wolfCrypt test/benchmark support */
 #ifdef WOLFCRYPT_TEST
@@ -39,15 +42,23 @@ int wolfcrypt_test(void *args);
 int benchmark_test(void *args);
 #endif
 
+#ifdef WOLFCRYPT_SECURE_MODE
+#include "wolfboot/wc_secure.h"
+#endif
+
 #ifdef WOLFCRYPT_TZ_PSA
 #include "psa/crypto.h"
 #include "psa/error.h"
 #include "psa/initial_attestation.h"
 #endif
 
-#define RED_LED     6
-#define GREEN_LED   7
-#define BLUE_LED    4
+#ifdef WOLFBOOT_PKCS11_TESTAPP
+#include "test_pkcs11.h"
+#endif
+
+#define RED_LED     LPC55S69_LED_RED_PIN
+#define GREEN_LED   LPC55S69_LED_GREEN_PIN
+#define BLUE_LED    LPC55S69_LED_BLUE_PIN
 
 extern void hal_init(void);
 
@@ -68,23 +79,48 @@ static void systick_init(void)
 
 static void leds_init(void)
 {
-    /* red output off */
-    GPIO->SET[1] = 1UL << RED_LED;
-    GPIO->DIR[1] |= 1UL << RED_LED;
-    /* green output off */
-    GPIO->SET[1] = 1UL << GREEN_LED;
-    GPIO->DIR[1] |= 1UL << GREEN_LED;
-    /* blue output off */
-    GPIO->SET[1] = 1UL << BLUE_LED;
-    GPIO->DIR[1] |= 1UL << BLUE_LED;
+    const uint32_t led_mux = IOCON_FUNC0 | IOCON_MODE_PULLUP | IOCON_DIGITAL_EN;
+
+#ifndef TZEN
+    /* With TZEN the secure side owns the pin mux and sets it before boot */
+    CLOCK_EnableClock(kCLOCK_Iocon);
+    CLOCK_EnableClock(kCLOCK_Gpio1);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, RED_LED, led_mux);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, GREEN_LED, led_mux);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, BLUE_LED, led_mux);
+#else
+    (void)led_mux;
+#endif
+
+    /* All three off (active low), then outputs */
+    GPIO->SET[LPC55S69_LED_PORT] = (1UL << RED_LED) | (1UL << GREEN_LED) |
+        (1UL << BLUE_LED);
+    GPIO->DIR[LPC55S69_LED_PORT] |= (1UL << RED_LED) | (1UL << GREEN_LED) |
+        (1UL << BLUE_LED);
 }
+
+#ifdef WOLFCRYPT_SECURE_MODE
+static void print_random_number(void)
+{
+    uint8_t rnd;
+    int ret;
+
+    ret = wcs_get_random(&rnd, sizeof(rnd));
+    if (ret != 0) {
+        wolfBoot_printf("Random number: generate failed (%d)\n", ret);
+    }
+    else {
+        wolfBoot_printf("Today's lucky number: 0x%02x\n", rnd);
+    }
+}
+#endif
 
 static void check_parts(
     uint32_t *pboot_ver, uint32_t *pupdate_ver,
     uint8_t *pboot_state, uint8_t *pupdate_state
 )
 {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
     *pboot_ver = wolfBoot_nsc_current_firmware_version();
     *pupdate_ver = wolfBoot_nsc_update_firmware_version();
     if (wolfBoot_nsc_get_partition_state(PART_BOOT, pboot_state) != 0)
@@ -172,6 +208,9 @@ void main(void)
 {
     uint32_t boot_ver, update_ver;
     uint8_t boot_state, update_state;
+#ifdef WOLFBOOT_PKCS11_TESTAPP
+    int ret;
+#endif
 
     hal_init();
     leds_init();
@@ -185,6 +224,9 @@ void main(void)
     wolfBoot_printf("Copyright 2026 wolfSSL Inc\n");
     wolfBoot_printf("==================================\n");
 
+#ifdef WOLFCRYPT_SECURE_MODE
+    print_random_number();
+#endif
     check_parts(&boot_ver, &update_ver, &boot_state, &update_state);
 
     if (
@@ -192,7 +234,7 @@ void main(void)
         (boot_state == IMG_STATE_TESTING || boot_state == IMG_STATE_NEW)
     )
     {
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
         wolfBoot_printf("Calling wolfBoot_nsc_success()\n");
         wolfBoot_nsc_success();
 #else
@@ -205,12 +247,12 @@ void main(void)
     if (boot_ver == 1)
     {
         /* blue on */
-        GPIO_PinWrite(GPIO, 1, BLUE_LED, 0);
+        GPIO_PinWrite(GPIO, LPC55S69_LED_PORT, BLUE_LED, 0);
 
         if (update_ver != 0) {
             wolfBoot_printf("Update detected, version: 0x%lx\n", update_ver);
             wolfBoot_printf("Triggering update...\n");
-#ifdef WOLFCRYPT_SECURE_MODE
+#ifdef TZEN
             wolfBoot_nsc_update_trigger();
 #else
             wolfBoot_update_trigger();
@@ -221,7 +263,7 @@ void main(void)
     }
     else {
         /* green on */
-        GPIO_PinWrite(GPIO, 1, GREEN_LED, 0);
+        GPIO_PinWrite(GPIO, LPC55S69_LED_PORT, GREEN_LED, 0);
     }
 
 #if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
@@ -231,6 +273,19 @@ void main(void)
     else {
         wolfBoot_printf("attest: failed (with HWPUF=1, the PUF must have been "
                         "provisioned: WOLFBOOT_HWPUF_PROVISION=1)\n");
+        __asm__ volatile ("bkpt #0x7e");
+    }
+#endif
+
+#ifdef WOLFBOOT_PKCS11_TESTAPP
+    ret = test_pkcs11_start();
+    if (ret == PKCS11_TEST_FIRST_BOOT_OK) {
+        __asm__ volatile ("bkpt #0x7d");
+    }
+    else if (ret == PKCS11_TEST_SECOND_BOOT_OK) {
+        __asm__ volatile ("bkpt #0x7f");
+    }
+    else {
         __asm__ volatile ("bkpt #0x7e");
     }
 #endif
@@ -299,7 +354,11 @@ int WEAKFUNCTION _read(int file, char *ptr, int len)
 int WEAKFUNCTION _write(int file, char *ptr, int len)
 {
     (void)file;
+#ifdef DEBUG_UART
+    uart_write(ptr, (unsigned int)len);
+#else
     (void)ptr;
+#endif
     return len;
 }
 

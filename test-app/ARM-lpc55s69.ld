@@ -4,7 +4,7 @@ _Min_Stack_Size = 0x00008000; /* required amount of stack */
 MEMORY
 {
     FLASH (rx) : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
-    RAM (rwx) : ORIGIN = 0x20020000, LENGTH = 160K
+    RAM (rwx) : ORIGIN = 0x20020000, LENGTH = 144K /* to the end of SRAM4 */
 }
 
 SECTIONS
