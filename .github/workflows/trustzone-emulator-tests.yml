@@ -203,59 +203,19 @@ jobs:
           grep -q '^WOLFBOOT_HWPUF_PROVISION?=1' .config
           grep -q '^WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=0' .config
           make MCUXSDK=1 MCUXPRESSO="$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" MCUXPRESSO_CMSIS="$GITHUB_WORKSPACE/CMSIS_5/CMSIS"
-          rm -rf /tmp/m33mu-lpc55s69-hwpuf-persist
-          mkdir -p /tmp/m33mu-lpc55s69-hwpuf-persist
 
-      # First boot enrolls the PUF and stores the record; the second boot
-      # must reuse the stored record and yield the same device identity.
-      - name: Run DICE attestation + HW PUF first boot (lpc55s69)
+      # Single boot: enroll the PUF, store the record, attest.
+      # TODO: add a second --persist boot checking the stored record is reused
+      # (same UEID) once the CI image ships an m33mu with lpc55s69 --persist
+      # support (m33mu c2d903e, after v1.23).
+      - name: Run DICE attestation + HW PUF (lpc55s69)
         run: |
           set -o pipefail
-          cd /tmp/m33mu-lpc55s69-hwpuf-persist
-          m33mu "$GITHUB_WORKSPACE/wolfboot.bin" \
-            "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x48000" \
-            --cpu lpc55s69 --persist --uart-stdout --expect-bkpt 0x7f --timeout 300 \
-            | tee /tmp/m33mu-lpc55s69-dice-hwpuf-first.log
-
-      - name: Run DICE attestation + HW PUF second boot (lpc55s69)
-        run: |
-          set -o pipefail
-          cd /tmp/m33mu-lpc55s69-hwpuf-persist
-          m33mu "$GITHUB_WORKSPACE/wolfboot.bin" \
-            "$GITHUB_WORKSPACE/test-app/image_v1_signed.bin:0x48000" \
-            --cpu lpc55s69 --persist --uart-stdout --expect-bkpt 0x7f --timeout 300 \
-            | tee /tmp/m33mu-lpc55s69-dice-hwpuf-second.log
-
-      - name: Verify DICE attestation + HW PUF boots (lpc55s69)
-        run: |
-          for log in /tmp/m33mu-lpc55s69-dice-hwpuf-first.log /tmp/m33mu-lpc55s69-dice-hwpuf-second.log; do
-            grep -q "Booting version:" $log
-            grep -q "Checking integrity...done" $log
-            grep -q "Verifying signature...done" $log
-            grep -q "attest: token size" $log
-            grep -q "state=0x00" $log
-            grep -q "\\[EXPECT BKPT\\] Success" $log
-          done
-          # UEID claim (key 256: 19 01 00) is a 33-byte bstr (58 21)
-          cat > /tmp/ueid.py <<'PYEOF'
-          import re, sys
-          data = bytearray()
-          seen = False
-          for line in open(sys.argv[1], errors="replace"):
-              if "attest: token size" in line:
-                  seen = True
-                  continue
-              if seen and line.startswith("\t"):
-                  data += bytes.fromhex(" ".join(
-                      re.findall(r"\b[0-9a-fA-F]{2}\b", line.split("|")[0])))
-          i = data.find(bytes.fromhex("1901005821"))
-          if i < 0:
-              sys.exit("UEID claim not found in " + sys.argv[1])
-          print(data[i + 5:i + 5 + 33].hex())
-          PYEOF
-          first=$(python3 /tmp/ueid.py /tmp/m33mu-lpc55s69-dice-hwpuf-first.log)
-          second=$(python3 /tmp/ueid.py /tmp/m33mu-lpc55s69-dice-hwpuf-second.log)
-          echo "UEID first boot:  $first"
-          echo "UEID second boot: $second"
-          test -n "$first"
-          test "$first" = "$second"
+          m33mu wolfboot.bin test-app/image_v1_signed.bin:0x48000 --cpu lpc55s69 --uart-stdout --expect-bkpt 0x7f --timeout 300 \
+            | tee /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Booting version:" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Checking integrity...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "Verifying signature...done" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "attest: token size" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "state=0x00" /tmp/m33mu-lpc55s69-dice-hwpuf.log
+          grep -q "\\[EXPECT BKPT\\] Success" /tmp/m33mu-lpc55s69-dice-hwpuf.log
