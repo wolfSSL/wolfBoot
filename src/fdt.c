@@ -1700,9 +1700,8 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
  * DTB context for the initrd fixup, or NULL to skip the fixup.
  *
  * Returns 0 on success, -1 if the ramdisk node was found but the
- * load failed. The current callers ignore the return value
- * (log-and-continue), so a missing/failed ramdisk does not abort
- * the boot. */
+ * load failed; the callers treat that as fatal, since a FIT that names
+ * a ramdisk has no other root filesystem to offer the kernel. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 {
     int rd_size = 0;
@@ -1748,9 +1747,8 @@ int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 #endif /* WOLFBOOT_FIT_RAMDISK */
 
 /* Weak copy hook for FIT subimages (kernel/dtb).  Default is a plain memcpy;
- * boards where CPU writes to the load destination do not land (e.g. the
- * PolarFire MPFS250 DDR, where cached writes thrash L2 Scratch) override this
- * with a DMA-based copy (see hal/mpfs250.c).  Returns 0 on success or a
+ * boards where CPU writes to the load destination do not land override this
+ * with a DMA-based copy (see hal/imx95_a55.c).  Returns 0 on success or a
  * negative value if the copy failed, so callers can fail closed rather than
  * run on a partially written destination. */
 int __attribute__((weak)) wolfBoot_fit_memcpy(void *dst, const void *src,

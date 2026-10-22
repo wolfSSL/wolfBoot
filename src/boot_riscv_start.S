@@ -24,6 +24,9 @@
 #ifdef TARGET_mpfs250
 #include "hal/mpfs250.h"
 #endif
+#ifdef TARGET_mpfs250_ubl
+#include "hal/mpfs250_ubl.h"
+#endif
 
 
 /* RV64 M-mode: direct boot from eNVM; a0=hartid from CSR
@@ -34,7 +37,91 @@
 _reset:
 #if __riscv_xlen == 64
 
-#ifdef WOLFBOOT_RISCV_MMODE
+#if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250_ubl)
+    /* Boot mode 2 UBL stub: the System Controller has already copied the
+     * whole image to the LIM and released all five harts here, so VMA == LMA
+     * and nothing is copied.  The E51 verifies the eNVM wolfBoot manifest;
+     * the U54s park on the DTIM mailbox until it publishes the entry, then
+     * every hart enters the eNVM reset vector as in a boot mode 1 boot. */
+    csrr  a0, mhartid
+    mv    tp, a0
+
+    li    t0, MSTATUS_MIE
+    csrc  mstatus, t0
+    csrw  mie, zero
+    csrw  mip, zero
+    csrw  mscratch, zero
+    csrw  mcause, zero
+    csrw  mepc, zero
+    csrw  pmpcfg0, zero
+    csrw  pmpcfg2, zero
+
+    la    t0, trap_vector_table
+    csrw  mtvec, t0
+
+    bnez  a0, .L_ubl_secondary_wait
+
+    /* Close the mailbox gate before anything slow (.bss clear, verify): an
+     * MSS reset leaves the previous boot's magic and entry in DTIM, and a
+     * stale pair is indistinguishable from a fresh one, so the secondaries
+     * would jump into an eNVM image this boot has not verified. */
+    li    t0, MPFS_UBL_MAGIC_ADDR
+    sw    zero, 0(t0)
+    fence iorw, iorw
+
+    .option push
+    .option norelax
+    la    gp, __global_pointer$
+    .option pop
+
+    la    sp, _end_stack
+    li    t0, -16
+    and   sp, sp, t0
+    mv    s0, sp
+
+    /* LIM comes out of reset with uninitialised ECC and a doubleword store is
+     * what writes it, so cover everything the System Controller did not copy:
+     * .bss, the heap and the stack, which faults on its first read. */
+    la    t0, _start_bss
+    la    t1, _end_stack
+.L_ubl_lim_clear:
+    beq   t0, t1, .L_ubl_lim_clear_done
+    sd    zero, 0(t0)
+    addi  t0, t0, 8
+    j     .L_ubl_lim_clear
+.L_ubl_lim_clear_done:
+
+    mv    a0, tp
+    j     main
+
+.L_ubl_secondary_wait:
+    li    t1, MPFS_UBL_MAGIC_ADDR
+    li    t3, MPFS_UBL_MAGIC
+    /* Wait for the boot hart to close the gate, so only a pair published by
+     * this boot can release us. */
+.L_ubl_wait_closed:
+    lwu   t2, 0(t1)
+    beq   t2, t3, .L_ubl_wait_closed
+.L_ubl_wait_entry:
+    lwu   t2, 0(t1)
+    bne   t2, t3, .L_ubl_wait_entry
+    ld    t0, (MPFS_UBL_ENTRY_ADDR - MPFS_UBL_MAGIC_ADDR)(t1)
+    ld    t2, (MPFS_UBL_ENTRY_INV_ADDR - MPFS_UBL_MAGIC_ADDR)(t1)
+    not   t2, t2
+    bne   t0, t2, .L_ubl_wait_entry
+    beqz  t0, .L_ubl_wait_entry
+
+    /* Acknowledge, then jump; the E51 waits for the acks before it follows */
+    li    t1, MPFS_UBL_ACK_BASE
+    slli  t2, a0, 2
+    add   t1, t1, t2
+    li    t2, 1
+    sw    t2, 0(t1)
+    fence iorw, iorw
+    fence.i
+    jr    t0
+
+#elif defined(WOLFBOOT_RISCV_MMODE)
     /* RV64 M-mode: first code from eNVM at 0x20220100 */
     call  .L_clear_ras                /* flush stale RAS prediction state */
 
@@ -67,16 +154,51 @@ _reset:
     sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
     fence
 
-    /* Route E51 D-cache to scratchpad ways (8-11) for the copy.
-     * With the default mask (0xFF = cache ways 0-7), stores to the
-     * Zero Device (0x0A000000) land in cache and never reach the
-     * scratchpad SRAM. The I-cache later fetches from scratchpad and
-     * gets uninitialized data (zeros), causing illegal-instruction
-     * traps. Setting the mask to 0xF00 forces stores into the actual
-     * scratchpad SRAM. See HSS mss_l2_cache.c config_l2_cache(). */
-    li    t4, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
-    li    t5, 0xF00                   /* scratchpad ways 8-11 */
-    sd    t5, 0(t4)
+    /* Evict any copy of the scratchpad range that an earlier access left in
+     * an evictable way.  The pin loop below allocates by storing with the
+     * E51 mask set to one way at a time, but a store that HITS a line already
+     * resident in ways 0-7 updates that line instead, so the address never
+     * reaches a scratchpad way and reads as zero once a large DMA sweep
+     * evicts it.  Under boot mode 2 the UBL and the released U54s run before
+     * this point with every mask wide open.  FLUSH64 takes a line address
+     * and evicts it from whichever way holds it. */
+    li    t0, 0x02010200              /* L2_FLUSH64 */
+    li    t1, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
+    li    t2, 0x0A080000              /* + 512 KB */
+.L_prepin_flush:
+    sd    t1, 0(t0)
+    addi  t1, t1, 64
+    bltu  t1, t2, .L_prepin_flush
+    fence
+
+    /* Make all 512 KB of the Zero Device resident by enabling one scratchpad
+     * way at a time and storing a marker every 64 bytes: a store can only
+     * allocate in the enabled way, so 2048 blocks x 4 ways fills each once.
+     * A mask of 0xF00 covers only the stores made while it is set, leaving
+     * .data/.bss/heap/stack in evictable ways whose writeback is discarded.
+     * This is HSS config_l2_cache(); the marker matches its INIT_MARKER. */
+    li    t0, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
+    li    t1, 0x100                   /* scratchpad way 8 */
+    li    t2, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
+    li    t3, 0xC0FFEEBEC0010000      /* INIT_MARKER */
+    li    t4, 4                       /* NUM_SCRATCH_PAD_WAYS */
+.L_pin_way:
+    sd    t1, 0(t0)                   /* evictions allowed from this way only */
+    fence
+    li    t5, 2048                    /* blocks per way */
+.L_pin_block:
+    sd    t3, 0(t2)                   /* first 64-bit word of each block */
+    addi  t2, t2, 64
+    addi  t5, t5, -1
+    bnez  t5, .L_pin_block
+    slli  t1, t1, 1
+    fence
+    addi  t4, t4, -1
+    bnez  t4, .L_pin_way
+
+    /* Prevent the E51 from evicting from the scratchpad ways. */
+    li    t1, 0xFF                    /* cache ways 0-7 */
+    sd    t1, 0(t0)
     fence
 #endif
 
@@ -97,11 +219,6 @@ _reset:
     addi  t1, t1, 8
     j     .L_copy_text
 .L_copy_text_done:
-#ifdef TARGET_mpfs250
-    /* Restore D-cache to cache-only ways before normal execution */
-    li    t5, 0xFF                    /* cache ways 0-7 */
-    sd    t5, 0(t4)                   /* WAY_MASK_E51_DCACHE = cache-only */
-#endif
     fence rw, rw
     fence.i                           /* flush icache before jumping to SRAM */
 
@@ -150,14 +267,14 @@ _copy_params:
 
     addi  sp, sp, -64                  /* allocate 64-byte HLS at top of stack */
     mv    s11, sp
-    sd    zero,  0(s11)
-    sd    zero,  8(s11)
-    sd    zero, 16(s11)
-    sd    zero, 24(s11)
-    sd    zero, 32(s11)
-    sd    zero, 40(s11)
-    sd    zero, 48(s11)
-    sd    zero, 56(s11)
+    /* The HLS block is zeroed AFTER the wait below, not here.  It lives in
+     * L2 scratchpad, and the boot hart does not finish carving the
+     * scratchpad out (the way-mask pin loop, then mpfs_config_l2_cache)
+     * until well after it releases us.  Under boot mode 2 the UBL releases
+     * the U54s and jumps last, so a store here is guaranteed to land before
+     * the scratchpad exists; in boot mode 1 the System Controller starts all
+     * five harts together and the boot hart merely usually wins.  Only
+     * register setup happens before the wait. */
 
     /* Wait for E51 to signal HLS_MAIN_HART_STARTED.  On MPFS250 poll the
      * DTIM copy of the flag, not the L2-scratch HLS: an E51 store to the
@@ -187,6 +304,16 @@ _copy_params:
     slli  t1, a0, 2
     add   t0, t0, t1
     sw    zero, 0(t0)                  /* clear stale MSIP */
+
+    /* Scratchpad is resident now; zero the HLS block, then publish. */
+    sd    zero,  0(s11)
+    sd    zero,  8(s11)
+    sd    zero, 16(s11)
+    sd    zero, 24(s11)
+    sd    zero, 32(s11)
+    sd    zero, 40(s11)
+    sd    zero, 48(s11)
+    sd    zero, 56(s11)
 
     li    t0, 0x12345678               /* HLS_OTHER_HART_IN_WFI */
     sw    t0, 0(s11)
@@ -222,7 +349,7 @@ _copy_params:
     la    t0, secondary_hart_entry
     jr    t0
 
-/* .text section follows — runs from L2 SRAM after copy from eNVM */
+/* .text section follows - runs from L2 SRAM after copy from eNVM */
 .section .text
 .L_sram_entry:
     la    t0, trap_vector_table

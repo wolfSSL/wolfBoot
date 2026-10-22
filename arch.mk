@@ -1337,9 +1337,23 @@ ifeq ($(ARCH),RISCV64)
     endif
     # Use M-mode specific linker script
     LSCRIPT_IN:=hal/$(TARGET)-m.ld
-    # MPFS DDR init pulls LIBERO_SETTING_* values from a Libero/HSS-generated
-    # fpga_design_config.h. Setting LIBERO_FPGA_CONFIG_DIR enables DDR init
-    # and adds the directory to the include search path.
+    # Boot mode 2: reserve the last eNVM page for the signed manifest the UBL
+    # stub verifies (hal/mpfs250-m.ld); `make wolfboot_envm_signed.bin` fills it.
+    ifeq ($(MPFS_ENVM_MANIFEST),1)
+      CFLAGS+=-DMPFS_ENVM_MANIFEST
+    endif
+    # LIBERO_FPGA_CONFIG_DIR supplies fpga_design_config.h and enables DDR init.
+    # An S-mode OS runs from DDR, so an empty value would silently build a
+    # bootloader with no DDR init at all -- fail instead.
+    ifeq ($(LIBERO_FPGA_CONFIG_DIR),)
+      ifneq (,$(findstring WOLFBOOT_MMODE_SMODE_BOOT,$(CFLAGS_EXTRA) $(CFLAGS)))
+        ifeq ($(filter clean keysclean distclean,$(MAKECMDGOALS)),)
+          $(error WOLFBOOT_MMODE_SMODE_BOOT requires LIBERO_FPGA_CONFIG_DIR: \
+            point it at the board's fpga_design_config directory, e.g. \
+            <hss>/build/boards/mpfs-video-kit/fpga_design_config)
+        endif
+      endif
+    endif
     ifneq ($(LIBERO_FPGA_CONFIG_DIR),)
       CFLAGS+=-DMPFS_DDR_INIT -I$(LIBERO_FPGA_CONFIG_DIR)
       # Generic Cadence DDR controller driver + the MPFS PHY/PLL/training
@@ -1379,6 +1393,15 @@ ifeq ($(ARCH),RISCV64)
     UPDATE_OBJS?=src/update_ram.o
   endif
 
+  # Boot mode 2 UBL stub: LIM-resident, verifies the eNVM wolfBoot manifest
+  # in place and jumps; no update path (hal/mpfs250_ubl.c).
+  ifeq ($(TARGET),mpfs250_ubl)
+    LSCRIPT_IN:=hal/mpfs250_ubl.ld
+    UPDATE_OBJS:=
+    # mcycle rate for hal_get_timer_us(): the stub runs at the reset clock
+    CFLAGS+=-DRISCV_SMODE_TIMER_FREQ=80000000UL
+  endif
+
   # GCC 12+ extension detection (see RISCV 32-bit section above).
   # Extensions go in CFLAGS only; LDFLAGS uses the base march to avoid
   # GCC 15 multilib lookup failures from ISA string decomposition.
@@ -1392,9 +1415,16 @@ ifeq ($(ARCH),RISCV64)
     CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
     LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
   else
-    # U54 cores: rv64gc (with FPU)
-    CFLAGS+=-march=rv64imafd$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64d -mcmodel=medany
-    LDFLAGS+=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+    # U54.  Microchip's CAL archive is built rv64imac soft-float, so a build
+    # that links it has to match; rv64imac not rv64imafd because the toolchain
+    # ships no F/D-ISA + soft-float multilib.  wolfBoot emits no FP either way.
+    ifeq ($(MPFS_ATHENA),1)
+      CFLAGS+=-march=rv64imac$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64 -mcmodel=medany
+      LDFLAGS+=-march=rv64imac -mabi=lp64 -mcmodel=medany
+    else
+      CFLAGS+=-march=rv64imafd$(RISCV64_ZICSR)$(RISCV64_ZIFENCEI) -mabi=lp64d -mcmodel=medany
+      LDFLAGS+=-march=rv64imafd -mabi=lp64d -mcmodel=medany
+    endif
 
     # FDT support for DDR S-mode (not needed for L2-LIM bare-metal boot)
     ifneq ($(MPFS_L2LIM),1)
