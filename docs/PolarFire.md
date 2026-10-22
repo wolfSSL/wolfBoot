@@ -1203,7 +1203,7 @@ On an encrypted image the decrypt dominates everything else, and the Athena F520
 | Integrity SHA-384 | 4.29 s | 5.70 s |
 | Verify ECC384 | 0.67 s | 0.67 s |
 
-The AES offload is worth about 4.2x on the decrypt. **The hash offload is about 1.3x slower than software** over an image this size: the engine's per-block setup dominates once the data is in DDR rather than a small buffer in L2 scratch, so enabling it costs boot time rather than saving it. `MPFS_ATHENA=1` turns on the hash offload and `ENCRYPT_WITH_AES256=1` adds the AES offload to it, so an encrypted build that wants only the AES win cannot currently express that.
+The AES offload is worth about 4.2x on the decrypt. **The hash offload is about 1.3x slower than software** over an image this size: the engine's per-block setup dominates once the data is in DDR rather than a small buffer in L2 scratch, so enabling it costs boot time rather than saving it. `MPFS_ATHENA_SHA=0` keeps the AES offload and returns hashing to software, which is the fastest arrangement for an encrypted image at 9.5 s; `MPFS_ATHENA` with neither offload selected is refused. Note that hashing in software under `MPFS_ATHENA_SHA=0` is still about 9% slower than a build with no crypto callback at all, because every block enters the callback and is turned away.
 
 Athena also does not fit eNVM alongside the full feature set: with the manifest linked it needs both `GZIP` and `MPFS_SBI_SC_FLASH` dropped. Dropping `GZIP` costs nothing when the FIT's kernel is stored uncompressed.
 

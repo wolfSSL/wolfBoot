@@ -1991,10 +1991,18 @@ ifeq ($(MPFS_ATHENA),1)
   CFLAGS += -DWOLFBOOT_DEVID_HASH=0xA7
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
   WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
-  # The offload and its self-check are SHA-384; an image hashed with
+  # SHA-384 offload.  Over a whole image in DDR it is slower than the software
+  # hash, so an encrypted build wanting only the AES win sets MPFS_ATHENA_SHA=0.
+  MPFS_ATHENA_SHA ?= 1
+  ifeq ($(MPFS_ATHENA_SHA),1)
+    CFLAGS += -DMPFS_ATHENA_SHA
+  endif
+  # The hash offload and its self-check are SHA-384; an image hashed with
   # something else keeps that in software and still gets the AES offload.
-  ifneq ($(HASH),SHA384)
-    AUX_HASH_ALGOS+=sha384
+  ifeq ($(MPFS_ATHENA_SHA),1)
+    ifneq ($(HASH),SHA384)
+      AUX_HASH_ALGOS+=sha384
+    endif
   endif
   # Archive name differs between Microchip's two published builds.
   MPFS_ATHENA_CAL_LIB ?= mpfs-rv64imac-user-crypto-lib.a
@@ -2005,6 +2013,14 @@ ifeq ($(MPFS_ATHENA),1)
     MPFS_ATHENA_AES ?= 1
     ifeq ($(MPFS_ATHENA_AES),1)
       CFLAGS += -DMPFS_ATHENA_AES
+    endif
+  endif
+  # With neither offload selected the engine is brought up and self-checked for
+  # nothing, so say so rather than linking CAL into a build that cannot use it.
+  ifneq ($(MPFS_ATHENA_SHA),1)
+    ifneq ($(MPFS_ATHENA_AES),1)
+      $(error MPFS_ATHENA=1 with MPFS_ATHENA_SHA=0 and no AES offload leaves \
+              nothing offloaded: drop MPFS_ATHENA, or set ENCRYPT_WITH_AES256=1)
     endif
   endif
 endif

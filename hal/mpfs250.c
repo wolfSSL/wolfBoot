@@ -503,6 +503,7 @@ static int mpfs_athena_aes256_ctr(const void *key, void *iv, const void *in,
 /* SHA-384 + AES-256-CTR via the plain-C mpfs_athena_* API (CAL headers cannot
  * share a TU with wolfSSL's).  Undocumented CAL contract: a non-final update
  * must be whole 128-byte blocks, so short tails need the buffer below. */
+#ifdef MPFS_ATHENA_SHA
 #define ATHENA_SHA384_BLOCK 128
 #define ATHENA_HASH_SLOTS   2
 
@@ -516,6 +517,7 @@ struct athena_hash_slot {
 };
 
 static struct athena_hash_slot athena_hash_slots[ATHENA_HASH_SLOTS];
+#endif /* MPFS_ATHENA_SHA */
 
 /* Set once the self-check has passed: from then on a SHA-384 request the
  * engine cannot take is a hardware error, never a silent software fallback. */
@@ -525,6 +527,7 @@ static int athena_ready;
  * digest cannot be mistaken for hardware use when the callback never ran. */
 static uint32_t athena_cb_calls;
 
+#ifdef MPFS_ATHENA_SHA
 /* Keyed by wc_Sha384 address; the cryptocb has no free event, so a context
  * freed without Final strands its slot and a later one at that address would
  * resume stale CAL state (wrong digest).  Only reachable via ONESHOT today. */
@@ -581,6 +584,7 @@ static int athena_hash_feed(struct athena_hash_slot *slot, const uint8_t *in,
     }
     return 0;
 }
+#endif /* MPFS_ATHENA_SHA */
 
 #if defined(MPFS_ATHENA_AES) && defined(WOLFSSL_AES_COUNTER) && !defined(NO_AES)
 /* AES-256-CTR, one path for both directions.  Key from aes->devKey, not the
@@ -652,7 +656,9 @@ static int athena_aesctr(wc_CryptoInfo *info)
 
 static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
 {
+#ifdef MPFS_ATHENA_SHA
     struct athena_hash_slot *slot;
+#endif
 
     (void)devIdArg;
     (void)ctx;
@@ -667,6 +673,9 @@ static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
     }
 #endif
 
+#ifndef MPFS_ATHENA_SHA
+    return CRYPTOCB_UNAVAILABLE;
+#else
     if (info->algo_type != WC_ALGO_TYPE_HASH ||
             info->hash.type != WC_HASH_TYPE_SHA384) {
         return CRYPTOCB_UNAVAILABLE;
@@ -724,8 +733,10 @@ static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
     }
 
     return 0;
+#endif /* MPFS_ATHENA_SHA */
 }
 
+#ifdef MPFS_ATHENA_SHA
 /* Known answers for the self-check below.  SHA-384 of the bytes 0x00..0xFF:
  * a multi-block vector, hashed in chunks that straddle the 128-byte block so
  * the intermediate state has to be carried across calls. */
@@ -737,6 +748,7 @@ static const uint8_t athena_kat_sha384_256b[48] = {
     0x28, 0x92, 0xe9, 0x17, 0x9b, 0x34, 0x63, 0x23,
     0x31, 0xa5, 0x95, 0x92, 0x73, 0x7d, 0xb5, 0xc5
 };
+#endif /* MPFS_ATHENA_SHA */
 #ifdef MPFS_ATHENA_AES
 /* AES-256-CTR of the bytes 0x00..0x1F under key 0x00..0x1F, counter 0x00..0x0F. */
 static const uint8_t athena_kat_aesctr[32] = {
@@ -781,9 +793,11 @@ static int athena_ctr_run(const uint8_t *key, const uint8_t *ctr,
 
 static int mpfs_athena_selfcheck(void)
 {
+#ifdef MPFS_ATHENA_SHA
     wc_Sha384 sha;
-    uint8_t buf[256];
     uint8_t digest[48];
+#endif
+    uint8_t buf[256];
 #ifdef MPFS_ATHENA_AES
     uint8_t key[32], ctr[16], out[32], out2[32];
 #endif
@@ -797,6 +811,7 @@ static int mpfs_athena_selfcheck(void)
     for (i = 0; i < (int)sizeof(buf); i++) {
         buf[i] = (uint8_t)i;
     }
+#ifdef MPFS_ATHENA_SHA
     athena_cb_calls = 0;
     ret = wc_InitSha384_ex(&sha, NULL, WOLFBOOT_DEVID_HASH);
     if (ret != 0) {
@@ -833,6 +848,9 @@ static int mpfs_athena_selfcheck(void)
         athena_fail_what = "SHA-384 digest mismatch";
         return -1;
     }
+#else
+    ret = 0;
+#endif /* MPFS_ATHENA_SHA */
 
 #ifdef MPFS_ATHENA_AES
     for (i = 0; i < 32; i++) {
@@ -886,12 +904,14 @@ static int mpfs_athena_selfcheck(void)
  * crypto unnoticed: every failure here halts. */
 static void mpfs_athena_init(void)
 {
+#ifdef MPFS_ATHENA_SHA
     int i;
 
     for (i = 0; i < ATHENA_HASH_SLOTS; i++) {
         athena_hash_slots[i].owner = NULL;
         athena_hash_slots[i].part_len = 0;
     }
+#endif
 
     /* Free slots hold INVALID_DEVID (-2), not 0, so registration returns
      * BUFFER_E until the zero-initialised device table is initialised. */
@@ -920,10 +940,12 @@ static void mpfs_athena_init(void)
         wolfBoot_panic();
     }
     athena_ready = 1;
-#ifdef MPFS_ATHENA_AES
+#if defined(MPFS_ATHENA_SHA) && defined(MPFS_ATHENA_AES)
     wolfBoot_printf("Athena: SHA-384 + AES-256-CTR offload active\n");
-#else
+#elif defined(MPFS_ATHENA_SHA)
     wolfBoot_printf("Athena: SHA-384 offload active\n");
+#else
+    wolfBoot_printf("Athena: AES-256-CTR offload active\n");
 #endif
 }
 #endif /* MPFS_ATHENA */
