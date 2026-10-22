@@ -683,10 +683,9 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
  * SEG is a 256-byte-stride peripheral pair (mss_seg.h:54): seg_t has
  * 8 x u32 control regs + 56 x u32 fill = 256 B.  SEG[0] is at base
  * (DDR_SEG_BASE = 0x20005D00); SEG[1] is at base + 0x100 (= 0x20005E00).
- * Phase 3.10.3 (A) finding: wolfBoot previously put SEG1_X at offset
- * 0x20-0x3C (overwriting unrelated registers), so the SEG1 cached/
- * non-cached DDR address-mapping registers were never written --
- * 0x80000000 stores faulted with cause=7 (store access fault). */
+ * SEG1 carries the cached/non-cached DDR address mapping, so an offset
+ * short of 0x100 leaves it unwritten and a 0x80000000 store faults with
+ * cause=7 (store access fault). */
 #define SEG0_0                      0x00
 #define SEG0_1                      0x04
 #define SEG0_2                      0x08
