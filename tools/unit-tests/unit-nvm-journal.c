@@ -86,6 +86,7 @@ struct mock_flash {
     int     boot_ret, update_ret;
     uint8_t boot_st, update_st;
     uint8_t flags[NSECT];
+    uint8_t flag;       /* read by child_get_flag */
     int     ret;
 };
 static struct mock_flash *mf;
@@ -1201,6 +1202,60 @@ START_TEST(test_cut_everywhere)
 }
 END_TEST
 
+static void child_get_flag(void)
+{
+    mf->flag = 0xEE;
+    mf->ret = wolfBoot_get_update_sector_flag(arg_n, &mf->flag);
+}
+
+/* A write to sector arg_n, then a valid one in the same boot */
+static void child_bad_then_good(void)
+{
+    wolfBoot_set_update_sector_flag(arg_n, SECT_FLAG_SWAPPING);
+    wolfBoot_set_update_sector_flag(1, SECT_FLAG_SWAPPING);
+}
+
+/* A sector past the flag bytes of the trailer reads as erased and is never
+ * written, so a later write in the same boot keeps the log. The last sector
+ * that fits still works. */
+START_TEST(test_sector_out_of_range)
+{
+    /* Two flags per byte, in the bytes before the state and the magic */
+    int first_bad = 2 * (TRAILER_SIZE - 5);
+    int s;
+
+    ck_assert_int_eq(boot(child_trigger, 0, TORN_NONE), 0);
+    set_flag(0, SECT_FLAG_SWAPPING);
+    set_flag(first_bad - 1, SECT_FLAG_SWAPPING);
+    ck_assert_int_eq(mf->ops, 1);
+    arg_n = first_bad - 1;
+    ck_assert_int_eq(boot(child_get_flag, 0, TORN_NONE), 0);
+    ck_assert_uint_eq(mf->flag, SECT_FLAG_SWAPPING);
+
+    arg_n = first_bad;
+    ck_assert_int_eq(boot(child_bad_then_good, 0, TORN_NONE), 0);
+    ck_assert_int_eq(mf->ops, 1); /* only the valid write */
+    ck_assert_int_eq(boot(child_get_flag, 0, TORN_NONE), 0);
+    ck_assert_uint_eq(mf->flag, SECT_FLAG_NEW);
+
+    arg_n = 0xFFFF;
+    arg_val = SECT_FLAG_SWAPPING;
+    ck_assert_int_eq(boot(child_set_flag, 0, TORN_NONE), 0);
+    ck_assert_int_eq(mf->ops, 0);
+    ck_assert_int_eq(boot(child_get_flag, 0, TORN_NONE), 0);
+    ck_assert_uint_eq(mf->flag, SECT_FLAG_NEW);
+
+    snapshot();
+    ck_assert_int_eq(mf->update_ret, 0);
+    ck_assert_uint_eq(mf->update_st, IMG_STATE_UPDATING);
+    for (s = 0; s < NSECT; s++) {
+        ck_assert_uint_eq(mf->flags[s],
+            (s < 2) ? SECT_FLAG_SWAPPING : SECT_FLAG_NEW);
+    }
+    ck_assert_int_eq(mf->violations, 0);
+}
+END_TEST
+
 #ifdef NVM_FLASH_JOURNAL_DUAL
 /* Trailer sector s of partition p. Sector 0 is the last sector. */
 static uintptr_t dual_sector(int p, int s)
@@ -1486,6 +1541,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_erase_partition);
     tcase_add_test(tc, test_external_erase_reloads);
     tcase_add_test(tc, test_cut_everywhere);
+    tcase_add_test(tc, test_sector_out_of_range);
 #ifdef NVM_FLASH_JOURNAL_DUAL
     tcase_add_test(tc, test_dual_empty_log);
     tcase_add_test(tc, test_dual_trigger_alternates);
