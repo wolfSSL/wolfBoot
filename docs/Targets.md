@@ -3427,9 +3427,7 @@ Basic hardware acceleration supported:
 - AES-ECB (128, 192, 256 key sizes)
 - AES-CBC (128, 192, 256 key sizes)
 - AES-OFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CFB (128, 192, 256 key sizes)
-  - Only supports full 16-byte blocks
 - AES-CTR (128, 192, 256 key sizes)
   - User must avoid counter wrap of all ff's to 0, as this fails in the hardware
 
@@ -3457,11 +3455,6 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
   - Set PKA=1 in the config file to turn on hardware acceleration
   (off by default)
 
-- [lpc55s69-hwpuf.config](/config/examples/lpc55s69-hwpuf.config):
-  - Same as `lpc55s69.config`, but turns on test code showing how to use the
-  hwpuf api
-  - Set HWPUF=1 in the config file to turn on HWPUF support (off by default)
-
 - [lpc55s69-tz.config](/config/examples/lpc55s69-tz.config):
   - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
   - Provides a standard PKCS #11 api to interface with crypto algs in the secure
@@ -3485,6 +3478,18 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
 first boot.  Performs PUF enrollment and generates a UDS key for device
 attestation.  Stores PUF keycodes in a known flash location and uses them when
 necessary.
+- `WOLFBOOT_HWPUF_PROV_ADDRESS` : Flash address of the 4 KB PUF provisioning
+record (default `0x80000`, page aligned).  The build fails if it overlaps the
+boot, update or swap partition; keep it out of the keyvault and NSC regions as
+well.  The activation code and key code are written first and verified, then a
+commit word is written in the last page of the record, so an interrupted
+provisioning is redone on the next boot.  A record that is committed but
+corrupted is not silently replaced: attestation fails until the region is
+erased.
+
+`HWPUF=1` cannot be combined with `WOLFBOOT_UDS_UID_FALLBACK_FORTEST=1`.  With
+`TZEN=1` the PUF is reachable only from the secure world (it is excluded from
+the non-secure SAU regions and is not linked into the non-secure test-app).
 
 ### LPC55S69: Configuring and compiling
 

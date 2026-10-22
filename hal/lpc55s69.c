@@ -36,21 +36,21 @@
 #include "fsl_usart.h"
 #include "hal.h"
 #include "loader.h"
+#include "printf.h"
+
+#include <wolfssl/wolfcrypt/types.h>
 
 #ifdef TZEN
 #include "hal/armv8m_tz.h"
 #endif
-
-#include <wolfssl/wolfcrypt/types.h>
-#include <wolfssl/wolfcrypt/cryptocb.h>
-#include <wolfssl/wolfcrypt/hmac.h>
-#include <wolfssl/wolfcrypt/memory.h>
 
 #ifdef WOLFSSL_NXP_HWPUF
 #include <wolfssl/wolfcrypt/port/nxp/hwpuf_port.h>
 #endif
 
 #if defined(WOLFCRYPT_TZ_PSA)
+#include <wolfssl/wolfcrypt/hmac.h>
+
 # if defined(WOLFBOOT_HASH_SHA256)
 #   include <wolfssl/wolfcrypt/sha256.h>
 #   define HAL_KDF_HASH_TYPE WC_HASH_TYPE_SHA256
@@ -63,7 +63,7 @@
 # else
 #   error "No supported hash type for HAL_KDF"
 # endif
-#endif
+#endif /* WOLFCRYPT_TZ_PSA */
 
 static flash_config_t pflash;
 static const uint32_t pflash_page_size = 512U;
@@ -90,65 +90,107 @@ static NOINLINEFUNCTION void hal_zeroize(void *ptr, size_t len)
 }
 
 
-#if defined(__WOLFBOOT) && defined(WOLFSSL_HWPUF)
+#if defined(__WOLFBOOT) && defined(WOLFSSL_NXP_HWPUF) && \
+    (defined(WOLFCRYPT_TZ_PSA) || defined(WOLFBOOT_HWPUF_PROVISION))
+#ifndef WOLFBOOT_HWPUF_PROV_ADDRESS
+#define WOLFBOOT_HWPUF_PROV_ADDRESS 0x80000ul
+#endif
 #define HWPUF_PROV_MAGIC            0x564f5250ul    /* "PROV" */
-#define HWPUF_PROV_FLASH_BASEADR    0x80000ul
 #define HWPUF_PROV_FLASH_LEN        0x1000ul
+#define HWPUF_PROV_PAGE_SIZE        512ul
+/* The commit word lives alone in the last page of the region and is written
+ * only after the payload has been written and verified, so an interrupted
+ * provisioning never leaves a valid-looking record behind. */
+#define HWPUF_PROV_COMMIT_ADDRESS   (WOLFBOOT_HWPUF_PROV_ADDRESS + \
+                                     HWPUF_PROV_FLASH_LEN - HWPUF_PROV_PAGE_SIZE)
 #define HWPUF_PROV_UDS_KEY_INDEX    14              /* NOT the one in PFR */
 #define HWPUF_PROV_UDS_KEY_SIZE     32
 
+#if (WOLFBOOT_HWPUF_PROV_ADDRESS % HWPUF_PROV_PAGE_SIZE) != 0
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS must be aligned to the flash page size"
+#endif
+#define HWPUF_PROV_OVERLAPS(base, len) \
+    ((WOLFBOOT_HWPUF_PROV_ADDRESS < ((base) + (len))) && \
+     ((base) < (WOLFBOOT_HWPUF_PROV_ADDRESS + HWPUF_PROV_FLASH_LEN)))
+#if HWPUF_PROV_OVERLAPS(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_PARTITION_SIZE)
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the boot partition"
+#endif
+#if HWPUF_PROV_OVERLAPS(WOLFBOOT_PARTITION_UPDATE_ADDRESS, WOLFBOOT_PARTITION_SIZE)
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the update partition"
+#endif
+#if HWPUF_PROV_OVERLAPS(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE)
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the swap partition"
+#endif
+
 typedef struct hwpuf_prov {
-    word32 magic;
     byte ac[PUF_ACTIVATION_CODE_SIZE];
     byte uds_kc[PUF_GET_KEY_CODE_SIZE_FOR_KEY_SIZE(HWPUF_PROV_UDS_KEY_SIZE)];
 } hwpuf_prov;
 
+/* The payload must end before the commit page */
+typedef char hwpuf_prov_size_check[
+    (sizeof(hwpuf_prov) <= HWPUF_PROV_FLASH_LEN - HWPUF_PROV_PAGE_SIZE) ?
+    1 : -1];
+
+/* Static rather than on the (secure) stack; cleared on every exit path */
 static hwpuf_prov prov;
 
-static int hwpuf_provision_get(void)
+#define HWPUF_PROV_BLANK    1
+#define HWPUF_PROV_EXISTS   2
+
+/* Load the stored record into rec.
+ * Returns 0 if a committed record was loaded, HWPUF_PROV_BLANK if the
+ * region holds no committed record (never provisioned, or provisioning was
+ * interrupted before the commit), -1 if the region is corrupted. */
+static int hwpuf_provision_get(hwpuf_prov *rec)
 {
-    if (sizeof(prov) > HWPUF_PROV_FLASH_LEN)
-        return -1;
+    uint32_t addr;
+    uint32_t end = WOLFBOOT_HWPUF_PROV_ADDRESS +
+        ((sizeof(*rec) + HWPUF_PROV_PAGE_SIZE - 1) &
+            ~(HWPUF_PROV_PAGE_SIZE - 1));
 
     flashInit();
 
-    /* verify none of sectors in erased state */
-    {
-        uint32_t addr;
-        uint32_t start = HWPUF_PROV_FLASH_BASEADR;
-        uint32_t end = HWPUF_PROV_FLASH_BASEADR +
-            ((sizeof(prov) + pflash_page_size - 1) & ~(pflash_page_size - 1));
+    /* Reading a never-programmed page faults on ECC, check before reading */
+    if (FLASH_VerifyErase(&pflash, HWPUF_PROV_COMMIT_ADDRESS,
+            HWPUF_PROV_PAGE_SIZE) == kStatus_FLASH_Success)
+        return HWPUF_PROV_BLANK;
 
-        for (addr = start; addr < end; addr += pflash_page_size) {
-            if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
-                    == kStatus_FLASH_Success) {
-                return -1;
-            }
-        }
-    }
+    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS == 0xFFFFFFFFul)
+        return HWPUF_PROV_BLANK;
 
-    XMEMCPY(&prov, (byte *)HWPUF_PROV_FLASH_BASEADR, sizeof(prov));
-
-    if (prov.magic != HWPUF_PROV_MAGIC)
+    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS != HWPUF_PROV_MAGIC)
         return -1;
 
+    for (addr = WOLFBOOT_HWPUF_PROV_ADDRESS; addr < end;
+            addr += HWPUF_PROV_PAGE_SIZE) {
+        if (FLASH_VerifyErase(&pflash, addr, HWPUF_PROV_PAGE_SIZE)
+                == kStatus_FLASH_Success)
+            return -1;
+    }
+
+    XMEMCPY(rec, (const void *)WOLFBOOT_HWPUF_PROV_ADDRESS, sizeof(*rec));
     return 0;
 }
 
 #ifdef WOLFBOOT_HWPUF_PROVISION
+/* Enroll the PUF and store the record.
+ * Returns 0 when newly provisioned, HWPUF_PROV_EXISTS when a committed record
+ * already exists, -1 on failure. A corrupted record is only replaced when
+ * force is set, so the device identity is never silently re-created. */
 static int hwpuf_provision_set(int force)
 {
-    int ret = -1;
+    uint32_t magic = HWPUF_PROV_MAGIC;
+    int ret;
 
-    if (sizeof(prov) > HWPUF_PROV_FLASH_LEN)
+    ret = hwpuf_provision_get(&prov);
+    hal_zeroize(&prov, sizeof(prov));
+    if (ret == 0)
+        return HWPUF_PROV_EXISTS;
+    if (ret < 0 && !force)
         return -1;
 
-    if (!force) {
-        if (hwpuf_provision_get() == 0)
-            return -1;
-    }
-
-    XMEMSET(&prov, 0, sizeof(prov));
+    ret = -1;
 
     if (nxp_hwpuf_Init() != 0)
         goto error_out;
@@ -156,8 +198,11 @@ static int hwpuf_provision_set(int force)
     if (nxp_hwpuf_Enroll(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    (void)nxp_hwpuf_Deinit();
-    (void)nxp_hwpuf_Init();
+    if (nxp_hwpuf_Deinit() != 0)
+        goto error_out;
+
+    if (nxp_hwpuf_Init() != 0)
+        goto error_out;
 
     if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
@@ -166,24 +211,27 @@ static int hwpuf_provision_set(int force)
                               prov.uds_kc, sizeof(prov.uds_kc)) != 0)
         goto error_out;
 
-    prov.magic = HWPUF_PROV_MAGIC;
-
     flashInit();
 
     hal_flash_unlock();
-    ret = hal_flash_erase(HWPUF_PROV_FLASH_BASEADR, HWPUF_PROV_FLASH_LEN);
-    if (ret != 0) {
-        hal_flash_lock();
-        goto error_out;
-    }
-    ret = hal_flash_write(HWPUF_PROV_FLASH_BASEADR,
-                          (const uint8_t *)&prov, sizeof(prov));
-    hal_flash_lock();
-    if (ret != 0)
-        goto error_out;
+    if (hal_flash_erase(WOLFBOOT_HWPUF_PROV_ADDRESS, HWPUF_PROV_FLASH_LEN) != 0)
+        goto unlock_out;
+    if (hal_flash_write(WOLFBOOT_HWPUF_PROV_ADDRESS,
+                        (const uint8_t *)&prov, sizeof(prov)) != 0)
+        goto unlock_out;
+    if (XMEMCMP((const void *)WOLFBOOT_HWPUF_PROV_ADDRESS, &prov,
+               sizeof(prov)) != 0)
+        goto unlock_out;
+    if (hal_flash_write(HWPUF_PROV_COMMIT_ADDRESS,
+                        (const uint8_t *)&magic, sizeof(magic)) != 0)
+        goto unlock_out;
+    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS != HWPUF_PROV_MAGIC)
+        goto unlock_out;
 
     ret = 0;
 
+unlock_out:
+    hal_flash_lock();
 error_out:
     hal_zeroize(&prov, sizeof(prov));
     /* No nxp_hwpuf_Zeroize(): it locks the PUF until the next POR, and the
@@ -199,16 +247,19 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
     int ret = -1;
     byte uds[HWPUF_PROV_UDS_KEY_SIZE];
 
-    if (hwpuf_provision_get() != 0)
+    if (hwpuf_provision_get(&prov) != 0) {
+        hal_zeroize(&prov, sizeof(prov));
         return -1;
+    }
 
     if (nxp_hwpuf_Init() != 0)
-        return -1;
+        goto error_out;
 
     if (nxp_hwpuf_Start(prov.ac, sizeof(prov.ac)) != 0)
         goto error_out;
 
-    ret = nxp_hwpuf_GetKey(prov.uds_kc, sizeof(prov.uds_kc), uds, sizeof(uds));
+    ret = nxp_hwpuf_GetKey(prov.uds_kc, sizeof(prov.uds_kc),
+                           uds, sizeof(uds));
     if (ret != 0)
         goto error_out;
 
@@ -217,8 +268,6 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
                      (const byte *)"WOLFBOOT-UDS", (word32)12,
                      (byte *)out, (word32)out_len,
                      NULL, INVALID_DEVID);
-    if (ret != 0)
-        goto error_out;
 
 error_out:
     hal_zeroize(uds, sizeof(uds));
@@ -226,40 +275,8 @@ error_out:
     (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }
-
-/* EAT UEID for the HWPUF path: derived from the UDS inside the HAL so the
- * key code never leaves the platform security boundary (dice.c HW flow). */
-int hal_attestation_get_ueid(uint8_t *buf, size_t *len)
-{
-    uint8_t uds[HWPUF_PROV_UDS_KEY_SIZE];
-    wc_Sha256 sha;
-    int ret;
-
-    if (buf == NULL || len == NULL || *len < 33)
-        return -1;
-
-    ret = uds_from_hwpuf(uds, sizeof(uds));
-    if (ret != 0)
-        return -1;
-
-    ret = wc_InitSha256(&sha);
-    if (ret == 0) {
-        ret = wc_Sha256Update(&sha, uds, (word32)sizeof(uds));
-        if (ret == 0)
-            ret = wc_Sha256Final(&sha, &buf[1]);
-        wc_Sha256Free(&sha);
-    }
-    hal_zeroize(uds, sizeof(uds));
-    if (ret != 0)
-        return -1;
-
-    /* UEID type RANDOM per EAT spec */
-    buf[0] = 0x01;
-    *len = 33;
-    return 0;
-}
 #endif /* WOLFCRYPT_TZ_PSA */
-#endif /* __WOLFBOOT && WOLFSSL_HWPUF */
+#endif /* __WOLFBOOT && WOLFSSL_NXP_HWPUF && (TZ_PSA || HWPUF_PROVISION) */
 
 #if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA)
 static void reverse_array(byte *s, int len)
@@ -281,16 +298,19 @@ static void reverse_array(byte *s, int len)
 }
 #endif
 
-#if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA) && !defined(WOLFBOOT_DICE_HW)
+#if defined(__WOLFBOOT) && defined(WOLFCRYPT_TZ_PSA)
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
 static int uds_from_uid(uint8_t *out, size_t out_len)
 {
     uint8_t uid[16];
 #if defined(WOLFBOOT_HASH_SHA256)
+    wc_Sha256 hash;
     uint8_t digest[SHA256_DIGEST_SIZE];
 #elif defined(WOLFBOOT_HASH_SHA384)
+    wc_Sha384 hash;
     uint8_t digest[SHA384_DIGEST_SIZE];
 #elif defined(WOLFBOOT_HASH_SHA3_384)
+    wc_Sha3 hash;
     uint8_t digest[SHA3_384_DIGEST_SIZE];
 #endif
     size_t copy_len = sizeof(digest);
@@ -303,64 +323,46 @@ static int uds_from_uid(uint8_t *out, size_t out_len)
     reverse_array(uid, sizeof(uid));
 
 #if defined(WOLFBOOT_HASH_SHA256)
-    {
-        wc_Sha256 hash;
-        ret = wc_InitSha256(&hash);
-        if (ret == 0) {
-            ret = wc_Sha256Update(&hash, uid, sizeof(uid));
-            if (ret == 0)
-                ret = wc_Sha256Final(&hash, digest);
-            wc_Sha256Free(&hash);
-        }
+    ret = wc_InitSha256(&hash);
+    if (ret == 0) {
+        ret = wc_Sha256Update(&hash, uid, sizeof(uid));
+        if (ret == 0)
+            ret = wc_Sha256Final(&hash, digest);
+        wc_Sha256Free(&hash);
     }
 #elif defined(WOLFBOOT_HASH_SHA384)
-    {
-        wc_Sha384 hash;
-        ret = wc_InitSha384(&hash);
-        if (ret == 0) {
-            ret = wc_Sha384Update(&hash, uid, sizeof(uid));
-            if (ret == 0)
-                ret = wc_Sha384Final(&hash, digest);
-            wc_Sha384Free(&hash);
-        }
+    ret = wc_InitSha384(&hash);
+    if (ret == 0) {
+        ret = wc_Sha384Update(&hash, uid, sizeof(uid));
+        if (ret == 0)
+            ret = wc_Sha384Final(&hash, digest);
+        wc_Sha384Free(&hash);
     }
 #elif defined(WOLFBOOT_HASH_SHA3_384)
-    {
-        wc_Sha3 hash;
-        ret = wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
-        if (ret == 0) {
-            ret = wc_Sha3_384_Update(&hash, uid, sizeof(uid));
-            if (ret == 0)
-                ret = wc_Sha3_384_Final(&hash, digest);
-            wc_Sha3_384_Free(&hash);
-        }
+    ret = wc_InitSha3_384(&hash, NULL, INVALID_DEVID);
+    if (ret == 0) {
+        ret = wc_Sha3_384_Update(&hash, uid, sizeof(uid));
+        if (ret == 0)
+            ret = wc_Sha3_384_Final(&hash, digest);
+        wc_Sha3_384_Free(&hash);
     }
 #endif
 
-    if (ret != 0) {
-        wc_ForceZero(uid, sizeof(uid));
-        wc_ForceZero(digest, sizeof(digest));
-        return -1;
+    if (ret == 0) {
+        if (copy_len > out_len)
+            copy_len = out_len;
+        XMEMCPY(out, digest, copy_len);
     }
 
-    if (copy_len > out_len) {
-        copy_len = out_len;
-    }
-    memcpy(out, digest, copy_len);
-#ifdef DEBUG
-    {
-        int idx;
-        wolfBoot_printf("[ATTEST] UDS FORTEST:");
-        for (idx = 0; idx < (int)out_len; ++idx)
-            wolfBoot_printf(" %02x", out[idx]);
-        wolfBoot_printf("\n");
-    }
-#endif
-    return 0;
+    hal_zeroize(uid, sizeof(uid));
+    hal_zeroize(digest, sizeof(digest));
+    hal_zeroize(&hash, sizeof(hash));
+    return ret == 0 ? 0 : -1;
 }
 #endif /* WOLFBOOT_UDS_UID_FALLBACK_FORTEST */
 
-/* Derive UDS from hw puf, fall back to derive from uid */
+/* Derive UDS: from the device UID when WOLFBOOT_UDS_UID_FALLBACK_FORTEST (test
+ * only), otherwise from the HW PUF. There is no runtime fallback. */
 int hal_uds_derive_key(uint8_t *out, size_t out_len)
 {
     if (out == NULL || out_len == 0)
@@ -368,22 +370,25 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 #ifdef WOLFBOOT_UDS_UID_FALLBACK_FORTEST
     return uds_from_uid(out, out_len);
-#elif defined(WOLFSSL_HWPUF)
+#elif defined(WOLFSSL_NXP_HWPUF)
     return uds_from_hwpuf(out, out_len);
 #else
     return -1;
 #endif
 }
-#endif /* __WOLFBOOT && WOLFCRYPT_TZ_PSA && !WOLFBOOT_DICE_HW */
+#endif /* __WOLFBOOT && WOLFCRYPT_TZ_PSA */
 
 #ifdef TZEN
 /* AHB_SECURE_CTRL (AHBSC) gates SRAM at the bus level on this part: the SAU
  * alone does not make an SRAM block non-secure.  The boot ROM leaves every
  * 4 KB block secure+privileged; hand SRAM2 (0x20020000..0x2002FFFF, the NS
- * app RAM) to the NS world as non-secure+privileged before the NS jump. */
-#define AHBSC_BASE          0x400AC000u
-#define AHBSC_SRAM2_RULE0   (*(volatile uint32_t *)(AHBSC_BASE + 0xA0u))
-#define AHBSC_SRAM2_RULE1   (*(volatile uint32_t *)(AHBSC_BASE + 0xA4u))
+ * app RAM) to the NS world as non-secure+privileged before the NS jump.
+ * Unprivileged NS code is intentionally kept out of SRAM2: the NS test-app
+ * runs privileged.
+ * SEC_CTRL_RAM2 MEM_RULE0/1 (UM11126): the SDK header only exposes MEM_RULE0,
+ * so both are addressed by offset from the secure alias. */
+#define AHBSC_SRAM2_RULE0   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA0u))
+#define AHBSC_SRAM2_RULE1   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA4u))
 
 static void hal_ahbsc_init(void)
 {
@@ -408,7 +413,15 @@ static void hal_sau_init(void)
     sau_init_region(2, 0x20020000, 0x2002FFFF, 0);
 
     /* Peripherals */
+#ifdef WOLFSSL_NXP_HWPUF
+    /* Leave the PUF (0x4003B000..0x4003BFFF) out of the NS regions: it is
+     * the root of the attestation identity and is driven only by the
+     * secure world. */
+    sau_init_region(3, 0x40000000, 0x4003AFFF, 0);
+    sau_init_region(6, 0x4003C000, 0x4003FFFF, 0);
+#else
     sau_init_region(3, 0x40000000, 0x4003FFFF, 0);
+#endif
     sau_init_region(4, 0x40080000, 0x400AFFFF, 0);
     sau_init_region(5, 0x40100000, 0x4010FFFF, 0);
 
@@ -424,7 +437,7 @@ static void periph_unsecure(void)
     CLOCK_EnableClock(kCLOCK_Iocon);
     CLOCK_EnableClock(kCLOCK_Gpio1);
 }
-#endif
+#endif /* TZEN */
 
 static void hal_flash_fix_ecc(void)
 {
@@ -433,7 +446,7 @@ static void hal_flash_fix_ecc(void)
     uint32_t start = WOLFBOOT_PARTITION_BOOT_ADDRESS;
     uint32_t end   = WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE;
 
-    memset(page_buf, 0xFF, sizeof(page_buf));
+    XMEMSET(page_buf, 0xFF, sizeof(page_buf));
 
     for (addr = start; addr < end; addr += pflash_page_size) {
         if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
@@ -470,6 +483,11 @@ void hal_init(void)
     RNG_Init(RNG);
 #endif /* __WOLFBOOT */
 
+#if defined(WOLFSSL_NXP_HWPUF) && (defined(__WOLFBOOT) || !defined(TZEN))
+    /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL: PUF_Init() won't do this */
+    CLOCK_EnableClock(kCLOCK_Puf);
+#endif
+
 #if defined(__WOLFBOOT) || !defined(TZEN)
     flashInit();
     hal_flash_fix_ecc();
@@ -479,8 +497,10 @@ void hal_init(void)
     hal_sau_init();
 #endif
 
-#ifdef __WOLFBOOT
-    wolfCrypt_Init();
+#if defined(__WOLFBOOT) && \
+    (defined(WOLFCRYPT_TZ_PSA) || defined(WOLFSSL_NXP_HWPUF))
+    if (wolfCrypt_Init() != 0)
+        wolfBoot_printf("wolfCrypt_Init failed\n");
 #endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_HWPUF_PROVISION)
@@ -508,7 +528,7 @@ void hal_prepare_boot(void)
     periph_unsecure();
 #endif
 }
-#endif
+#endif /* __WOLFBOOT */
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
@@ -526,16 +546,16 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
         if (FLASH_VerifyErase(&pflash, page_addr, pflash_page_size)
                 == kStatus_FLASH_Success) {
-            memset(page_buf, 0xFF, pflash_page_size);
+            XMEMSET(page_buf, 0xFF, pflash_page_size);
         } else {
-            memcpy(page_buf, (void *)page_addr, pflash_page_size);
+            XMEMCPY(page_buf, (void *)page_addr, pflash_page_size);
 
             if (FLASH_Erase(&pflash, page_addr, pflash_page_size,
                     kFLASH_ApiEraseKey) != kStatus_FLASH_Success)
                 return -1;
         }
 
-        memcpy(page_buf + offset, data, chunk);
+        XMEMCPY(page_buf + offset, data, chunk);
 
         if (FLASH_Program(&pflash, page_addr, page_buf, pflash_page_size)
                 != kStatus_FLASH_Success)
@@ -565,7 +585,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (address % pflash_page_size != 0 || len % pflash_page_size != 0)
         return -1;
 
-    memset(page_buf, 0xFF, sizeof(page_buf));
+    XMEMSET(page_buf, 0xFF, sizeof(page_buf));
 
     for (pos = address; pos < address + (uint32_t)len; pos += pflash_page_size) {
         if (FLASH_Erase(&pflash, pos, pflash_page_size, kFLASH_ApiEraseKey)
@@ -597,7 +617,7 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 
     return -1;
 }
-#endif
+#endif /* WOLFCRYPT_SECURE_MODE */
 
 
 #define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
@@ -675,4 +695,4 @@ void uart_write(const char *buf, unsigned int sz)
         sz -= line_sz + 1U;
     }
 }
-#endif
+#endif /* DEBUG_UART */

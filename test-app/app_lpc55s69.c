@@ -259,7 +259,8 @@ void main(void)
         __asm__ volatile ("bkpt #0x7f");
     }
     else {
-        wolfBoot_printf("Make sure WOLFBOOT_HWPUF_PROVISION is set\n");
+        wolfBoot_printf("attest: failed (with HWPUF=1, the PUF must have been "
+                        "provisioned: WOLFBOOT_HWPUF_PROVISION=1)\n");
         __asm__ volatile ("bkpt #0x7e");
     }
 #endif
