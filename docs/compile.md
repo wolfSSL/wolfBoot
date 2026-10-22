@@ -283,13 +283,13 @@ wolfBoot has two separate groups of options to facilitate running on parts with 
 
 - **Trailer storage options**: `NVM_FLASH_WRITEONCE` and `NVM_FLASH_JOURNAL`/`NVM_FLASH_JOURNAL_DUAL`. These options
   change how wolfBoot writes the partition state and sector flags in the trailer at the end of each partition. They
-  use different strategies and have different tradeoffs, but each scheme serves to ultimately ensure that the tralier and
+  use different strategies and have different tradeoffs, but each scheme serves to ultimately ensure that the trailer and
   flag sectors can be updated properly on parts with these flash constraints.
 - **ECC flash mode** (`NVM_FLASH_ECC`) changes how all of wolfBoot uses flash, not just the trailer.
   With this option, wolfBoot programs only whole, erased write units, erases only whole sectors,
   and asks the HAL whether flash is erased instead of reading it.
 
-A detailed description of each the functionality enabled via these options is provided in subsequent sections. However,
+A detailed description of the functionality enabled by each option is provided in subsequent sections. However,
 the interdependencies between these options can be understood as follows:
 
 - `NVM_FLASH_JOURNAL` works on its own, with or without `NVM_FLASH_ECC`.
@@ -328,16 +328,16 @@ For a specific platform example, the AURIX TC3xx platform has these flash constr
 - The flash controller has a Verify Erased command.
 - The erased flash value is 0, not 0xFF.
 
-Without `NVM_FLASH_ECC`, the TC3xx HAL would need all flash writes to be impelemented through a 16 KB RAM buffer
+Without `NVM_FLASH_ECC`, the TC3xx HAL would need all flash writes to be implemented through a 16 KB RAM buffer
 via read-modify-write operation, with a sector erase for each write to a programmed page such that a reset during
 that rewrite could lose the sector. Instead, the TC3xx port can build with:
  - `NVM_FLASH_JOURNAL=1`
  - `NVM_FLASH_ECC=1`
  - a 32-byte write unit
  - `FLAGS_INVERT=1`
- - An implementation of `hal_flash_is_erased()` 
+ - An implementation of `hal_flash_is_erased()`
 
-See [hal/aurix_tc3xx.c](../hal/aurix_tc3xx.c) for more details
+See [hal/aurix_tc3xx.c](../hal/aurix_tc3xx.c) for more details.
 
 ### Trailer storage option: `NVM_FLASH_WRITEONCE`
 
@@ -390,7 +390,7 @@ When enabling journal mode:
 Standard journal mode has a few very unlikely edge cases where a power loss during an update can leave
 the log corrupted and unrecoverable, such as when repeated resets during a large update fill up the log
 and then power is lost again at a different particular moment during the log compaction cycle where wolfBoot
-must erase and rewrites the log. The log lives in a single sector, so clearing or rewriting it means erasing
+must erase and rewrite the log. The log lives in a single sector, so clearing or rewriting it means erasing
 the only copy. If these risks are not acceptable, compile with `NVM_FLASH_JOURNAL_DUAL=1` in addition to `NVM_FLASH_JOURNAL=1`.
 
 Dual journal mode keeps the log in the last two sectors of each partition, which take turns holding it.
@@ -445,7 +445,7 @@ The HAL must meet the [ECC flash HAL requirements](HAL.md#ecc-flash-nvm_flash_ec
 - Writes cover whole write units, programmed once after a whole-sector erase. Sector copies stop at the
   image's last write unit and leave erased source chunks erased.
 - The ELF scatter loader follows these rules in every build, with or without `NVM_FLASH_ECC`. See
-  [How segments are written to flash](firmware_update.md#how-segments-are-written-to-flash).
+  [How ELF segments are written to flash](firmware_update.md#how-elf-segments-are-written-to-flash).
 - The self-header update erases whole sectors, and diagnostics records take one write unit each.
 - `FLASHBUFFER_SIZE` and `IMAGE_HEADER_SIZE` must be multiples of the write unit.
 - `DELTA_UPDATES` and `ENCRYPT` are not supported yet.

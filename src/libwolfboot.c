@@ -1131,9 +1131,13 @@ static struct journal* RAMFUNCTION journal_get(uint8_t part)
 static int RAMFUNCTION journal_set(uint8_t part, uint16_t offset,
     const uint8_t *data, uint16_t len)
 {
-    struct journal *j = journal_get(part);
+    struct journal *j;
     int ret;
 
+    /* Reject a write outside the trailer */
+    if (offset + len > JOURNAL_TRAILER_SIZE)
+        return -1;
+    j = journal_get(part);
     if ((j == NULL) || (j->state == JOURNAL_UNLOADED))
         return -1;
     if (j->state == JOURNAL_READY) {
@@ -1150,10 +1154,14 @@ static int RAMFUNCTION journal_set(uint8_t part, uint16_t offset,
 
 static uint8_t* RAMFUNCTION get_trailer_at(uint8_t part, uint32_t at)
 {
+    static uint8_t erased = FLASH_BYTE_ERASED;
     struct journal *j = journal_get(part);
 
     if (j == NULL)
         return NULL;
+    /* A position before the start of the trailer reads as erased */
+    if (at > JOURNAL_TRAILER_SIZE - sizeof(uint32_t))
+        return &erased;
     return (uint8_t *)j->trailer + JOURNAL_TRAILER_SIZE -
         (sizeof(uint32_t) + at);
 }
