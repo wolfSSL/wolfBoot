@@ -533,6 +533,59 @@ START_TEST (test_self_update_newversion_copies_and_reboots)
     cleanup_flash();
 }
 END_TEST
+
+#ifdef NVM_FLASH_ECC
+/* On ECC flash, the self-update writes whole erased units and stops at the
+ * image's last unit. The self-header update erases a whole sector, so it
+ * replaces an old header. */
+START_TEST (test_self_update_ecc_whole_units)
+{
+    const uint8_t *boot_base =
+        (const uint8_t *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t hdr_off = WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS -
+        WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint8_t old_hdr[IMAGE_HEADER_SIZE];
+    uint32_t off;
+
+    /* The image ends inside a write unit */
+    ck_assert_int_ne(TEST_SIZE_SMALL % WOLFBOOT_FLASH_WRITE_UNIT, 0);
+    reset_mock_stats();
+    prepare_flash();
+    clear_erase_stats();
+    add_payload_type(PART_UPDATE, WOLFBOOT_VERSION + 1, TEST_SIZE_SMALL,
+        HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
+    memset(old_hdr, 0x5A, sizeof(old_hdr));
+    hal_flash_unlock();
+    ck_assert_int_eq(hal_flash_write(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS,
+        old_hdr, sizeof(old_hdr)), 0);
+    hal_flash_lock();
+    ext_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+    ext_flash_lock();
+
+    wolfBoot_check_self_update();
+
+    ck_assert_int_eq(arch_reboot_called, 1);
+    ck_assert_int_eq(ecc_violations, 0);
+    ck_assert_mem_eq(boot_base,
+        (const void *)(uintptr_t)(WOLFBOOT_PARTITION_UPDATE_ADDRESS + IMAGE_HEADER_SIZE),
+        TEST_SIZE_SMALL);
+    for (off = WB_UNIT_ROUNDUP(TEST_SIZE_SMALL); off < hdr_off;
+            off += WOLFBOOT_FLASH_WRITE_UNIT) {
+        ck_assert_int_eq(ecc_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT], 0);
+    }
+    ck_assert_mem_eq(boot_base + hdr_off,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        IMAGE_HEADER_SIZE);
+    for (off = hdr_off + IMAGE_HEADER_SIZE;
+            off < hdr_off + WOLFBOOT_SECTOR_SIZE; off++) {
+        ck_assert_int_eq(ecc_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT], 0);
+        ck_assert_uint_eq(boot_base[off], 0xFF);
+    }
+    cleanup_flash();
+}
+END_TEST
+#endif
 #endif
 
 #ifndef UNIT_TEST_SELF_UPDATE_ONLY
@@ -2228,6 +2281,9 @@ Suite *wolfboot_suite(void)
     TCase *self_update_oldversion = tcase_create("Self update older version erased");
     TCase *self_update_invalid_integrity = tcase_create("Self update invalid integrity denied");
     TCase *self_update_success = tcase_create("Self update success");
+#ifdef NVM_FLASH_ECC
+    TCase *self_update_ecc = tcase_create("Self update on ECC flash");
+#endif
 
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
     tcase_add_test(self_update_oldversion, test_self_update_oldversion_erased);
@@ -2238,6 +2294,10 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, self_update_oldversion);
     suite_add_tcase(s, self_update_invalid_integrity);
     suite_add_tcase(s, self_update_success);
+#ifdef NVM_FLASH_ECC
+    tcase_add_test(self_update_ecc, test_self_update_ecc_whole_units);
+    suite_add_tcase(s, self_update_ecc);
+#endif
 #endif
     return s;
 #else
