@@ -30,12 +30,14 @@
     #define RX_NOP() __no_operation()
 #endif
 
+#define RX_PSW_I (1UL << 16) /* PSW interrupt enable bit */
+
 /* API's */
 void hal_delay_us(uint32_t us);
 
 
 /* Clocks */
-#ifdef TARGET_rx72n
+#if defined(TARGET_rx72n) || defined(TARGET_rx71m)
 #define SYS_CLK (240000000) /* 240MHz */
 #else
 #define SYS_CLK (120000000) /* 120MHz */
@@ -160,6 +162,10 @@ void hal_delay_us(uint32_t us);
 #define FLASH_FSTATR_SECERR    (1 << 21) /* Security Error Flag */
 #define FLASH_FSTATR_FESETERR  (1 << 22) /* FENTRY Setting Error Flag */
 #define FLASH_FSTATR_ILGCOMERR (1 << 23) /* Illegal Command Error Flag */
+#ifdef TARGET_rx71m
+#define FLASH_FSTATR_FRDTCT    (1 << 1)  /* FCURAM 2-Bit Error Detected */
+#define FLASH_FSTATR_FCUERR    (1 << 7)  /* FCU Error Flag */
+#endif
 
 #define FLASH_FPCKAR (*(volatile uint16_t *)(0x007FE0E4))
 #define FLASH_FPCKAR_KEY       (0x1E00)
@@ -196,12 +202,35 @@ void hal_delay_us(uint32_t us);
 #define FCU_RAM_AREA (0x007F8000)
 #define FCU_RAM_SIZE (4096)
 
+#ifdef TARGET_rx71m
+#define FCU_FIRMWARE_ADDR (0xFEFFF000)
+
+#define FLASH_FCURAME (*(volatile uint16_t *)(0x007FE054))
+#define FLASH_FCURAME_KEY      (0xC400)
+#define FLASH_FCURAME_FCRME    (1 << 0) /* FCURAM access enable */
+#define FLASH_FCURAME_FRAMTRAN (1 << 1) /* 1=high-speed write mode */
+
+#define FLASH_FASTAT (*(volatile uint8_t *)(0x007FE010))
+#define FLASH_FASTAT_DFAE  (1 << 3) /* Data flash access violation */
+#define FLASH_FASTAT_CMDLK (1 << 4) /* Refusing commands until released */
+#define FLASH_FASTAT_CFAE  (1 << 7) /* Code flash access violation */
+
+#define FLASH_FAEINT_ECRCTIE (1 << 0)
+
+#define FLASH_FCPSR (*(volatile uint16_t *)(0x007FE0E0))
+#endif
+
 /* Target specific flash settings */
 #ifdef TARGET_rx72n
     #define FLASH_SIZE 0x400000UL /* 4MB */
 
     #define FLASH_MEMWAIT (*(volatile uint8_t *)(FLASH_BASE + 0x1C))
     #define FLASH_MEMWAIT_MEMWAIT(n) ((n) << 0) /* 0=no wait, 1=one wait cycle (ICLK > 120MHz) */
+#elif defined(TARGET_rx71m)
+    #define FLASH_SIZE 0x400000UL /* 4MB */
+
+    #define SYS_MEMWAIT (*(volatile uint32_t *)(SYSTEM_BASE + 0x6610))
+    #define SYS_MEMWAIT_MEMWAIT (1 << 0) /* 1=wait cycle, required for ICLK > 120MHz */
 #else
     #define FLASH_SIZE 0x200000UL /* 2MB */
 
@@ -222,7 +251,11 @@ void hal_delay_us(uint32_t us);
 
 /* FCAI Commands (RX72N RM Table 62.11) */
 #define FLASH_FACI_CMD_PROGRAM                  0xE8
+#ifdef TARGET_rx71m
+#define FLASH_FACI_CMD_PROGRAM_CODE_LENGTH      128
+#else
 #define FLASH_FACI_CMD_PROGRAM_CODE_LENGTH      64
+#endif
 #define FLASH_FACI_CMD_PROGRAM_DATA_LENGTH      2
 #define FLASH_FACI_CMD_BLOCK_ERASE              0x20
 #define FLASH_FACI_CMD_PROGRAM_ERASE_SUSPEND    0xB0
@@ -278,7 +311,7 @@ void hal_delay_us(uint32_t us);
 #define MPC_PWPR_B0WI  (1 << 7)
 #define MPC_PWPR_PFSWE (1 << 6)
 
-#ifdef TARGET_rx72n
+#if defined(TARGET_rx72n) || defined(TARGET_rx71m)
 #define MPC_PFS(n) (*(volatile uint8_t *)(SYSTEM_BASE + 0xC140 + (n)))
 #else
 #define MPC_PFS(n) (*(volatile uint8_t *)(SYSTEM_BASE + 0xC0E0 + (n)))
@@ -412,6 +445,9 @@ void hal_delay_us(uint32_t us);
 #define ICU_PIAR(x) (*(volatile uint8_t *)(SYSTEM_BASE + 0x7900 + (x)))
 
 typedef enum {
+	FLASH_ERR_NOT_BLANK = -10,
+	FLASH_ERR_TIMEOUT = -9,
+	FLASH_ERR_FCU = -8,
 	FLASH_ERR_ILGL = -7,
 	FLASH_ERR_PRG  = -6,
 	FLASH_ERR_ERS  = -5,

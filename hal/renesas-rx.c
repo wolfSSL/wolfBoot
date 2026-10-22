@@ -30,6 +30,10 @@
  *     R5F572NNHDFB 144-pin LFQFP (PLQP0144KA-B)
  *     4MB Flash, 1MB RAM, 32KB Data Flash, 240MHz, TSIP
  *     QSPI: Macronix MX25L3233FM2I-08G: 4MB QSPI Serial Flash
+ *
+ * - RX71M RSK+ (Renesas Starter Kit+)
+ *     R5F571MLCDFC 176-pin LQFP
+ *     4MB Flash, 512KB RAM, 64KB Data Flash, 240MHz, no TSIP
  */
 
 
@@ -80,6 +84,10 @@ void hal_led_on(void)
     /* RX72N Envision USR LED P40 */
     PORT_PDR(4) |= (1 << 0);   /* output */
     PORT_PODR(4) &= ~(1 << 0); /* low */
+#elif defined(TARGET_rx71m)
+    /* RX71M RSK+ LED0 P03 */
+    PORT_PDR(0) |= (1 << 3);   /* output */
+    PORT_PODR(0) &= ~(1 << 3); /* low */
 #endif
 }
 
@@ -93,6 +101,10 @@ void hal_led_off(void)
     /* RX72N Envision USR LED P40 */
     PORT_PDR(4) |= (1 << 0);  /* output */
     PORT_PODR(4) |= (1 << 0); /* high */
+#elif defined(TARGET_rx71m)
+    /* RX71M RSK+ LED0 P03 */
+    PORT_PDR(0) |= (1 << 3);  /* output */
+    PORT_PODR(0) |= (1 << 3); /* high */
 #endif
 }
 #endif
@@ -105,6 +117,7 @@ void hal_delay_us(uint32_t us)
     }
 }
 
+#ifndef TARGET_rx71m
 static flash_err_t flash_check_error()
 {
     uint32_t st = FLASH_FSTATR;
@@ -120,12 +133,16 @@ static flash_err_t flash_check_error()
     return FLASH_OK;
 
 }
+#endif /* !TARGET_rx71m */
 #ifdef DEBUG_UART
 
 #ifndef DEBUG_UART_SCI
     #ifdef TARGET_rx72n
         /* SCI2: TXD2/PC13, RXD2/PC12 */
         #define DEBUG_UART_SCI 2
+    #elif defined(TARGET_rx71m)
+        /* SCI7: TXD7/P90, RXD7/P92 (RSK+ USB serial) */
+        #define DEBUG_UART_SCI 7
     #else
         /* SCI8: TXD8/PJ2, RXD8/PJ1 */
         #define DEBUG_UART_SCI 8
@@ -156,6 +173,9 @@ void uart_init(void)
 #ifdef TARGET_rx72n
     /* Configure P13/P12 for UART */
     PORT_PMR(0x1) |= ((1 << 2) | (1 << 3));
+#elif defined(TARGET_rx71m)
+    /* PFS may only change while PMR is 0 */
+    PORT_PMR(0x9) &= ~((1 << 0) | (1 << 2));
 #else
     /* Configure PJ1/PJ2 for UART */
     PORT_PMR(0x12) |= ((1 << 1) | (1 << 2));
@@ -170,6 +190,9 @@ void uart_init(void)
 #ifdef TARGET_rx72n
     MPC_PFS(0xA) = 0xA; /* P12-RXD2 */
     MPC_PFS(0xB) = 0xA; /* P13-TXD2 */
+#elif defined(TARGET_rx71m)
+    MPC_PFS(0x48) = 0xA; /* P90-TXD7 */
+    MPC_PFS(0x4A) = 0xA; /* P92-RXD7 */
 #else
     MPC_PFS(0xF1) = 0xA; /* PJ1-RXD8 */
     MPC_PFS(0xF2) = 0xA; /* PJ2-TXD8 */
@@ -178,6 +201,11 @@ void uart_init(void)
     /* Enable MPC Write Protect for PFS */
     MPC_PWPR &= ~(MPC_PWPR_PFSWE | MPC_PWPR_B0WI);
     MPC_PWPR |=   MPC_PWPR_PFSWE;
+
+#ifdef TARGET_rx71m
+    /* Configure P90/P92 for UART */
+    PORT_PMR(0x9) |= ((1 << 0) | (1 << 2));
+#endif
 
     /* baud rate table: */
     /* divisor, abcs, bgdm, cks
@@ -213,6 +241,8 @@ void uart_write(const char* buf, unsigned int sz)
         while ((SCI_SSR(DEBUG_UART_SCI) & SCI_SSR_TEND) == 0);
         SCI_TDR(DEBUG_UART_SCI) = c;
     }
+    /* Return only once the last character has left the shift register */
+    while ((SCI_SSR(DEBUG_UART_SCI) & SCI_SSR_TEND) == 0);
 }
 void uart_read(char* buf, unsigned int sz)
 {
@@ -225,11 +255,36 @@ void uart_read(char* buf, unsigned int sz)
 #endif /* DEBUG_UART */
 
 /* LOCO clock is used out of reset */
+#ifdef TARGET_rx71m
+/* This function will switch to the main clock (crystal) through PLL */
+#ifndef RX_MAIN_XTAL_HZ
+#define RX_MAIN_XTAL_HZ (24000000) /* RSK+ RX71M X1 */
+#endif
+#if RX_MAIN_XTAL_HZ < 8000000 || RX_MAIN_XTAL_HZ > 24000000
+    #error RX_MAIN_XTAL_HZ must be within the 8-24MHz PLL input range
+#endif
+#if (SYS_CLK % RX_MAIN_XTAL_HZ) != 0
+    #error SYS_CLK must be a whole multiple of RX_MAIN_XTAL_HZ
+#endif
+#if RX_MAIN_XTAL_HZ > 20000000
+    #define CFG_MOFCR_MODRV2 0
+#elif RX_MAIN_XTAL_HZ > 16000000
+    #define CFG_MOFCR_MODRV2 1
+#elif RX_MAIN_XTAL_HZ > 8000000
+    #define CFG_MOFCR_MODRV2 2
+#else
+    #define CFG_MOFCR_MODRV2 3
+#endif
+#define CFG_CKSEL 2 /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
+#define CFD_PLL_DIV (0)
+#define CFG_PLL_MUL (SYS_CLK / RX_MAIN_XTAL_HZ)
+#else
 /* This function will switch to using on-chip HOCO through PLL */
 #define CFG_CKSEL 1 /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
 #define CFG_HCO_FRQ (16000000)
 #define CFD_PLL_DIV (0)
 #define CFG_PLL_MUL (SYS_CLK / (CFG_HCO_FRQ / 2))
+#endif
 
 void hal_clk_init(void)
 {
@@ -266,16 +321,16 @@ void hal_clk_init(void)
 
     /* ---- Main-Clock ---- */
 #if CFG_CKSEL == 2
-    /* MOFXIN=0 (not controlled), MODRV2=0 (24MHz), MOSEL=0 (resonator) */
-    SYS_MOFCR = 0;
+    /* MOFXIN=0 (not controlled), MODRV2 by crystal, MOSEL=0 (resonator) */
+    SYS_MOFCR = SYS_MOFCR_MODRV2(CFG_MOFCR_MODRV2);
 
     /* OSC stabilization time (9.98 ms * (264 kHZ) + 16)/32 = 82.83) */
     SYS_MOSCWTCR = SYS_MOSCWTCR_MSTS(83);
 
     /* Enable Main OSC */
     SYS_MOSCCR = 0;
-    reg = SYS_MOSCCR; /* dummy read (required) */
-    while (SYS_MOSCCR != 0) { RX_NOP(); }
+    if (SYS_MOSCCR == 0) { RX_NOP(); }
+    while ((SYS_OSCOVFSR & SYS_OSCOVFSR_MOOVF) == 0) { RX_NOP(); }
 #else
     /* Stop main clock */
     SYS_MOSCCR = SYS_MOSCCR_MOSTP;
@@ -312,7 +367,7 @@ void hal_clk_init(void)
     /* ---- PLL ---- */
     /* Frequency Multiplication Factor */
     #if CFG_CKSEL == 2
-        #define PLL_SRCSEL /* main */
+        #define PLL_SRCSEL 0 /* main */
     #else
         #define PLL_SRCSEL SYS_PLLCR_PLLSRCSEL /* HOCO */
     #endif
@@ -336,13 +391,28 @@ void hal_clk_init(void)
     /* Flash Wait Cycles  */
     FLASH_MEMWAIT = FLASH_MEMWAIT_MEMWAIT(1); /* (1=<120MHz) */
     reg = FLASH_MEMWAIT;
+#elif defined(TARGET_rx71m)
+    SYS_MEMWAIT = SYS_MEMWAIT_MEMWAIT; /* required for ICLK > 120MHz */
+    if (SYS_MEMWAIT == SYS_MEMWAIT_MEMWAIT) { RX_NOP(); }
 #else
     FLASH_ROMWT = FLASH_ROMWT_ROMWT(2); /* (1=50-100MHz, 2= >100MHz) */
     reg = FLASH_ROMWT;
 #endif
 
     /* ---- Clock Select ---- */
-#if SYS_CLK >= 240000000
+#if defined(TARGET_rx71m)
+    reg = (
+        SYS_SCKCR_ICK(0)  | /* System Clock (ICK)=0:               1/1 = 240MHz */
+        SYS_SCKCR_BCK(1)  | /* External Bus Clock (BCK)=1:         1/2 = 120MHz */
+        SYS_SCKCR_FCK(2)  | /* Flash-IF Clock FCK=2:               1/4 = 60MHz */
+        SYS_SCKCR_PCKA(1) | /* Peripheral Module Clock A (PCKA)=1: 1/2 = 120MHz */
+        SYS_SCKCR_PCKB(2) | /* Peripheral Module Clock B (PCKB)=2: 1/4 = 60MHz */
+        SYS_SCKCR_PCKC(2) | /* Peripheral Module Clock C (PCKC)=2: 1/4 = 60MHz */
+        SYS_SCKCR_PCKD(2) | /* Peripheral Module Clock D (PCKD)=2: 1/4 = 60MHz */
+        SYS_SCKCR_PSTOP1 |  /* BCLK Pin Output  (PSTOP1): 0=Disabled */
+        SYS_SCKCR_PSTOP0    /* SDCLK Pin Output (PSTOP0): 0=Disabled */
+    );
+#elif SYS_CLK >= 240000000
     reg = (
         SYS_SCKCR_ICK(1)  | /* System Clock (ICK)=1:               1/2 = 240MHz */
         SYS_SCKCR_BCK(2)  | /* External Bus Clock (BCK)=2:         1/4 = 120MHz */
@@ -370,7 +440,8 @@ void hal_clk_init(void)
     SYS_SCKCR = reg;
     reg = SYS_SCKCR; /* dummy read (required) */
 
-#if CFG_CKSEL == 2 /* USB only on main clock */
+/* RX71M: UCK stays at its reset value 0001b while USB is unused */
+#if CFG_CKSEL == 2 && !defined(TARGET_rx71m) /* USB only on main clock */
     /* USB Clock=4: 1/5 = 48MHz */
     SYS_SCKCR2 |= SYS_SCKCR2_UCK(4);
     reg = SYS_SCKCR2; /* dummy read (required) */
@@ -534,7 +605,24 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-
+#if defined(TARGET_rx71m) && defined(WOLFBOOT_RESTORE_CLOCK)
+    /* Run from the LOCO with the PLL and main oscillator stopped, so the
+     * application can set up its own clocks */
+    PROTECT_OFF();
+    SYS_LOCOCR = 0;
+    hal_delay_us(44); /* LOCO settling time */
+    SYS_SCKCR3 = SYS_SCKCR3_CKSEL(0);
+    if (SYS_SCKCR3 == 0) { RX_NOP(); }
+    SYS_SCKCR = 0;
+    if (SYS_SCKCR == 0) { RX_NOP(); }
+    SYS_MEMWAIT = 0;
+    if (SYS_MEMWAIT == 0) { RX_NOP(); }
+    SYS_PLLCR2 = SYS_PLLCR2_PLLEN;
+    while ((SYS_OSCOVFSR & SYS_OSCOVFSR_PLOVF) != 0) { RX_NOP(); }
+    SYS_MOSCCR = SYS_MOSCCR_MOSTP;
+    while ((SYS_OSCOVFSR & SYS_OSCOVFSR_MOOVF) != 0) { RX_NOP(); }
+    PROTECT_ON();
+#endif
 }
 
 #ifdef __CCRX__
@@ -543,19 +631,356 @@ static void copyfuncs(void)
 {
     unsigned char *dst, *src;
     size_t n;
-    
+
     src = __sectop("PFRAM");
     dst = __sectop("RPFRAM");
     n = (size_t)((unsigned char*)__secend("PFRAM") -
                  (unsigned char*)__sectop("PFRAM"));
-    wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
-    wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
-    wolfBoot_printf("RAM Function size  = %d\n", n);
     while(src < __secend("PFRAM")) {
         *dst++ = *src++;
     }
+
+    wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
+    wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
+    wolfBoot_printf("RAM Function size  = %d\n", n);
 }
 #endif
+
+#ifdef TARGET_rx71m /* RX71M code flash driver */
+#if !defined(__CCRX__) && (!defined(RAM_CODE) || !defined(__WOLFBOOT))
+    #error RX71M flash driver must run from RAM: define RAM_CODE and __WOLFBOOT
+#endif
+
+#ifdef __CCRX__
+/* FCLK from the Smart Configurator clock settings */
+#define FLASH_FCLK_MHZ ((uint32_t)(BSP_FCLK_HZ / 1000000UL))
+#else
+#define FLASH_FCLK_MHZ (FCLK / 1000000UL)
+#endif
+
+/* Timeouts as poll counts; each poll takes at least one ICLK */
+#define FLASH_POLLS_PER_MS    (SYS_CLK / 1000UL)
+#define FLASH_PROGRAM_TIMEOUT (8UL * FLASH_POLLS_PER_MS)
+#define FLASH_ERASE_TIMEOUT   (640UL * FLASH_POLLS_PER_MS)
+#define FLASH_MODE_TIMEOUT    (1UL * FLASH_POLLS_PER_MS)
+
+#define FLASH_UNIT_SIZE \
+    (FLASH_FACI_CMD_PROGRAM_CODE_LENGTH * FLASH_FACI_CMD_PROGRAM_DATA_LENGTH)
+
+/* One 256-byte write, kept in RAM and sent to the FACI 16 bits at a time */
+static uint16_t flash_unit[FLASH_FACI_CMD_PROGRAM_CODE_LENGTH];
+
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
+
+static int RAMFUNCTION flash_wait_complete(uint32_t limit)
+{
+    uint32_t i;
+    int ret = FLASH_ERR_TIMEOUT;
+
+    for (i = 0; i < limit; i++) {
+        if ((FLASH_FSTATR & FLASH_FSTATR_FRDY) != 0) {
+            ret = FLASH_OK;
+            break;
+        }
+    }
+    if (ret != FLASH_OK) {
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_FORCED_STOP;
+        for (i = 0; i < FLASH_MODE_TIMEOUT; i++) {
+            if ((FLASH_FSTATR & FLASH_FSTATR_FRDY) != 0)
+                break;
+        }
+    }
+    return ret;
+}
+
+/* After an error the FACI refuses commands until released:
+ * FCUERR, FRDTCT and FLWEERR need a forced stop, other errors a status
+ * clear */
+static void RAMFUNCTION flash_clear_errors(void)
+{
+    if ((FLASH_FASTAT & (FLASH_FASTAT_CFAE | FLASH_FASTAT_DFAE)) != 0) {
+        FLASH_FASTAT &= (uint8_t)~(FLASH_FASTAT_CFAE | FLASH_FASTAT_DFAE);
+    }
+    if ((FLASH_FSTATR & (FLASH_FSTATR_FCUERR | FLASH_FSTATR_FRDTCT |
+            FLASH_FSTATR_FLWEERR)) != 0) {
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_FORCED_STOP;
+    }
+    else {
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_STATUS_CLEAR;
+    }
+    (void)flash_wait_complete(FLASH_MODE_TIMEOUT);
+}
+
+static int RAMFUNCTION flash_check_error(void)
+{
+    uint32_t st = FLASH_FSTATR;
+    int ret = FLASH_OK;
+
+    if ((st & FLASH_FSTATR_ILGLERR) != 0)
+        ret = FLASH_ERR_ILGL;
+    else if ((st & FLASH_FSTATR_PRGERR) != 0)
+        ret = FLASH_ERR_PRG;
+    else if ((st & FLASH_FSTATR_ERSERR) != 0)
+        ret = FLASH_ERR_ERS;
+    else if ((st & FLASH_FSTATR_FLWEERR) != 0)
+        ret = FLASH_ERR_FLWE;
+    else if ((st & (FLASH_FSTATR_FCUERR | FLASH_FSTATR_FRDTCT)) != 0)
+        ret = FLASH_ERR_FCU;
+    else if ((FLASH_FASTAT & FLASH_FASTAT_CMDLK) != 0)
+        ret = FLASH_ERR_UNKNOWN;
+
+    if (ret != FLASH_OK)
+        flash_clear_errors();
+    return ret;
+}
+
+static uint32_t RAMFUNCTION flash_irq_save(void)
+{
+#ifdef __CCRX__
+    uint32_t psw = (uint32_t)get_psw();
+
+    clrpsw_i();
+#else
+    uint32_t psw = __builtin_rx_mvfc(0);
+
+    __builtin_rx_clrpsw('I');
+#endif
+    return psw;
+}
+
+static void RAMFUNCTION flash_irq_restore(uint32_t psw)
+{
+    if ((psw & RX_PSW_I) != 0) {
+#ifdef __CCRX__
+        setpsw_i();
+#else
+        __builtin_rx_setpsw('I');
+#endif
+    }
+}
+
+/* mode: FLASH_FENTRYR_CODE_PR (code flash) or FLASH_FENTRYR_DATA_PE
+ * (data flash) */
+static int RAMFUNCTION flash_enter_pe_mode(uint16_t mode)
+{
+    uint32_t i;
+    int ret = FLASH_ERR_TIMEOUT;
+
+    FLASH_FWEPROR = FLASH_FWEPROR_FLWE;
+    FLASH_FENTRYR = (uint16_t)(FLASH_FENTRYR_KEY | mode);
+    for (i = 0; i < FLASH_MODE_TIMEOUT; i++) {
+        if (FLASH_FENTRYR == mode) {
+            ret = FLASH_OK;
+            break;
+        }
+    }
+    return ret;
+}
+
+static int RAMFUNCTION flash_enter_read_mode(void)
+{
+    int ret;
+
+    ret = flash_wait_complete(FLASH_PROGRAM_TIMEOUT);
+    if ((FLASH_FASTAT & FLASH_FASTAT_CMDLK) != 0)
+        flash_clear_errors();
+    FLASH_FENTRYR = (uint16_t)(FLASH_FENTRYR_KEY | FLASH_FENTRYR_CODE_READ);
+    /* Stay in RAM until code flash is readable again */
+    while (FLASH_FENTRYR != FLASH_FENTRYR_CODE_READ);
+    FLASH_FWEPROR = FLASH_FWEPROR_FLWD;
+    return ret;
+}
+
+/* address must be 256-byte aligned; data must be in RAM, since code flash
+ * cannot be read in P/E mode */
+static int RAMFUNCTION flash_write_256(uint32_t address, const uint16_t *data)
+{
+    uint32_t i, j, psw;
+    int ret, mode_ret;
+
+    psw = flash_irq_save();
+    ret = flash_enter_pe_mode(FLASH_FENTRYR_CODE_PR);
+    if (ret == FLASH_OK) {
+        FLASH_FSADDR = address;
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM;
+        FLASH_FACI_CMD8 = FLASH_FACI_CMD_PROGRAM_CODE_LENGTH;
+        for (i = 0; i < FLASH_FACI_CMD_PROGRAM_CODE_LENGTH &&
+                ret == FLASH_OK; i++) {
+            for (j = 0; j < FLASH_PROGRAM_TIMEOUT; j++) {
+                if ((FLASH_FSTATR & FLASH_FSTATR_DBFULL) == 0)
+                    break;
+            }
+            if (j == FLASH_PROGRAM_TIMEOUT)
+                ret = FLASH_ERR_TIMEOUT;
+            else
+                FLASH_FACI_CMD16 = data[i];
+        }
+        if (ret == FLASH_OK) {
+            FLASH_FACI_CMD8 = FLASH_FACI_CMD_FINAL;
+            ret = flash_wait_complete(FLASH_PROGRAM_TIMEOUT);
+        }
+        else {
+            FLASH_FACI_CMD8 = FLASH_FACI_CMD_FORCED_STOP;
+        }
+    }
+    if (ret == FLASH_OK)
+        ret = flash_check_error();
+    mode_ret = flash_enter_read_mode();
+    flash_irq_restore(psw);
+    if (ret == FLASH_OK)
+        ret = mode_ret;
+    return ret;
+}
+
+/* [address, address + len) must lie inside code flash */
+static int RAMFUNCTION flash_range_valid(uint32_t address, int len)
+{
+    return (len >= 0 && IS_FLASH_ADDR(address) &&
+        (len == 0 || (uint32_t)(len - 1) <= (0xFFFFFFFFUL - address)));
+}
+
+/* The FCU runs firmware copied from ROM to FCURAM; do this once before any
+ * write or erase */
+#ifdef __CCRX__
+/* keep it out of hal_flash_init(), which runs from ROM */
+#pragma noinline(flash_fcu_firmware_copy)
+#endif
+static int RAMFUNCTION flash_fcu_firmware_copy(void)
+{
+    const volatile uint32_t *src = (const volatile uint32_t *)FCU_FIRMWARE_ADDR;
+    volatile uint32_t *dst = (volatile uint32_t *)FCU_RAM_AREA;
+    uint32_t i;
+    int ret, mode_ret;
+
+    ret = flash_enter_read_mode();
+    if (ret == FLASH_OK) {
+        FLASH_FCURAME = (uint16_t)(FLASH_FCURAME_KEY | FLASH_FCURAME_FCRME |
+            FLASH_FCURAME_FRAMTRAN);
+        for (i = 0; i < FCU_RAM_SIZE / sizeof(uint32_t); i++) {
+            dst[i] = src[i];
+        }
+        FLASH_FCURAME = FLASH_FCURAME_KEY;
+
+        /* Copying to FCURAM leaves error flags set; a forced stop clears
+         * them */
+        ret = flash_enter_pe_mode(FLASH_FENTRYR_DATA_PE);
+        if (ret == FLASH_OK) {
+            FLASH_FACI_CMD8 = FLASH_FACI_CMD_FORCED_STOP;
+            ret = flash_wait_complete(FLASH_MODE_TIMEOUT);
+        }
+        mode_ret = flash_enter_read_mode();
+        if (ret == FLASH_OK)
+            ret = mode_ret;
+    }
+    return ret;
+}
+
+int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint8_t *unit = (uint8_t *)flash_unit;
+    const uint8_t *cur;
+    uint32_t base, off, n, i;
+    int changed, blank;
+    int ret = FLASH_OK;
+
+    if (data == NULL || !flash_range_valid(address, len))
+        ret = -1;
+
+    while (ret == FLASH_OK && len > 0) {
+        base = address & ~(uint32_t)(FLASH_UNIT_SIZE - 1);
+        off = address - base;
+        n = FLASH_UNIT_SIZE - off;
+        if (n > (uint32_t)len)
+            n = (uint32_t)len;
+
+        cur = (const uint8_t *)(uintptr_t)base;
+        changed = 0;
+        blank = 1;
+        for (i = 0; i < FLASH_UNIT_SIZE; i++) {
+            unit[i] = cur[i];
+            if (i >= off && i < off + n && data[i - off] != cur[i]) {
+                unit[i] = data[i - off];
+                changed = 1;
+            }
+            if (cur[i] != 0xFF)
+                blank = 0;
+        }
+
+        if (changed && !blank)
+            ret = FLASH_ERR_NOT_BLANK;
+        else if (changed)
+            ret = flash_write_256(base, flash_unit);
+
+        address += n;
+        data += n;
+        len -= (int)n;
+    }
+    return ret;
+}
+
+int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
+{
+    uint32_t block_size, psw;
+    int ret = FLASH_OK;
+    int mode_ret;
+
+    if (!flash_range_valid(address, len))
+        ret = -1;
+
+    while (ret == FLASH_OK && len > 0) {
+        block_size = FLASH_BLOCK_SIZE(address);
+        if ((address & (block_size - 1)) != 0 || (uint32_t)len < block_size) {
+            ret = -1;
+        }
+        else {
+            psw = flash_irq_save();
+            ret = flash_enter_pe_mode(FLASH_FENTRYR_CODE_PR);
+            if (ret == FLASH_OK) {
+                FLASH_FCPSR = 0; /* erase suspend is never used */
+                FLASH_FSADDR = address;
+                FLASH_FACI_CMD8 = FLASH_FACI_CMD_BLOCK_ERASE;
+                FLASH_FACI_CMD8 = FLASH_FACI_CMD_FINAL;
+                ret = flash_wait_complete(FLASH_ERASE_TIMEOUT);
+            }
+            if (ret == FLASH_OK)
+                ret = flash_check_error();
+            mode_ret = flash_enter_read_mode();
+            flash_irq_restore(psw);
+            if (ret == FLASH_OK)
+                ret = mode_ret;
+
+            address += block_size;
+            len -= (int)block_size;
+        }
+    }
+    return ret;
+}
+
+void RAMFUNCTION hal_flash_unlock(void)
+{
+}
+
+void RAMFUNCTION hal_flash_lock(void)
+{
+}
+#ifdef __CCRX__
+#pragma section
+#endif
+
+int hal_flash_init(void)
+{
+#ifdef __CCRX__
+    copyfuncs();
+#endif
+    FLASH_FAEINT &= (uint8_t)~(FLASH_FAEINT_ECRCTIE | FLASH_FAEINT_DFAEIE |
+        FLASH_FAEINT_CMDLKIE | FLASH_FAEINT_CFAEIE);
+    FLASH_FPCKAR = (uint16_t)(FLASH_FPCKAR_KEY |
+        FLASH_FPCKAR_PCKA(FLASH_FCLK_MHZ));
+    return flash_fcu_firmware_copy();
+}
+#else /* !TARGET_rx71m */
 int hal_flash_init(void)
 {
 #ifdef __CCRX__
@@ -728,6 +1153,7 @@ void RAMFUNCTION hal_flash_lock(void)
 #ifdef __CCRX__
 #pragma section
 #endif
+#endif /* !TARGET_rx71m */
 #if !defined(WOLFBOOT_NO_PARTITIONS) && !defined(TARGET_library)
 void* hal_get_primary_address(void)
 {

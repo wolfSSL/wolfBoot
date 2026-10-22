@@ -1184,6 +1184,24 @@ ifeq ($(ARCH),RENESAS_RX)
     LIBS+=$(shell $(CC) $(CFLAGS) -print-libgcc-file-name)
   endif
 
+  ifeq ($(TARGET),rx71m)
+    ifeq ($(PKA),1)
+      $(error TARGET=rx71m has no TSIP; set PKA=0)
+    endif
+    ifneq ($(NVM_FLASH_WRITEONCE),1)
+      $(error TARGET=rx71m requires NVM_FLASH_WRITEONCE=1)
+    endif
+    ifeq ($(DELTA_UPDATES),1)
+      $(error TARGET=rx71m does not support DELTA_UPDATES)
+    endif
+    # RXv2 core
+    ifeq ($(USE_GCC),0)
+      CFLAGS+=-misa=v2
+    endif
+    # Fill gaps with 0xFF, the erased value
+    OBJCOPY_FLAGS+=-R .ofs_rx71m --gap-fill 0xFF
+  endif
+
   ifeq ($(PKA),1)
     CFLAGS+=-DWOLFBOOT_RENESAS_TSIP
     CFLAGS+=-DWOLFBOOT_DEVID_PUBKEY=7890
