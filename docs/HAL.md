@@ -47,7 +47,8 @@ flash area, `data` is the payload to be stored in the flash using the IAP interf
 and `len` is the size of the payload. Implementations of this function must be able to
 handle writes of any size and alignment. Targets with a minimum programmable size
 \> 1 byte must implement the appropriate read-modify-write logic in order to enable
-wolfBoot to perform unaligned single-byte writes. `hal_flash_write` should return 0 upon
+wolfBoot to perform unaligned single-byte writes, unless wolfBoot is built with
+`NVM_FLASH_ECC=1` (see below). `hal_flash_write` should return 0 upon
 success, or a negative value in case of failure.
 
 `void hal_flash_lock(void)`
@@ -72,13 +73,41 @@ in the next stage. This can be used to revert all the changes made to the clock 
 that the state of the microcontroller is restored to its original settings. By default most targets will restore the
 clock settings. Use the `WOLFBOOT_RESTORE_CLOCK=0` option to disable clock restoration.
 
+`int hal_flash_is_erased(haladdr_t address, int len)`
+
+Optional and only relevant for devices with hardware erase-check functionality.
+
+Returns 1 if every byte in `[address, address + len)` is erased, 0 if any byte is not erased, or a negative value on error.
+wolfBoot uses this function to identify erased flash when erased state cannot be determined reliably by reading flash directly.
+The trailer journal (`NVM_FLASH_JOURNAL`) uses it to find free record slots, and `NVM_FLASH_ECC` uses it for every erased check.
+
+If not overridden, the weak default in `src/libwolfboot.c` reads the flash and compares it against `FLASH_BYTE_ERASED`.
+Override this function on platforms where reading erased flash is unreliable or unsafe. For example, with some ECC flash devices,
+reading an erased page may fault or return invalid data, while a programmed unit may still contain the erased value.
+
+`ext_flash_is_erased()` provides the equivalent check for external flash.
+
+
+### ECC flash (`NVM_FLASH_ECC`) HAL Requirements
+
+When using `NVM_FLASH_ECC`, `WOLFBOOT_FLASH_WRITE_UNIT` must be defined to the HAL's smallest programmable unit, in bytes (default 1).
+
+In order to respect the rules of most ECC flash, wolfBoot expects the HAL to:
+
+1. Program whole, aligned write units, and fail a write to a unit that is not erased without changing it.
+2. Erase sector-aligned ranges only.
+3. Not trap on a read of erased flash, though the data may be garbage.
+4. Report erased units reliably in `hal_flash_is_erased()`.
+
+wolfBoot then never programs a unit twice, never erases part of a sector, and decides nothing from a read of erased flash.
+
 ### Optional support for external flash memory
 
 WolfBoot can be compiled with the makefile option `EXT_FLASH=1`. When the external flash support is
 enabled, update and swap partitions can be associated to an external memory, and will use alternative
 HAL function for read/write/erase access. It can also be used in any scenario where flash reads require
 special handling and must be redirected to a custom implementation. Note that `EXT_FLASH=1` is incompatible
-with the `NVM_FLASH_WRITEONCE` option.
+with the `NVM_FLASH_WRITEONCE` option: use `NVM_FLASH_JOURNAL` instead.
 
 To associate the update or the swap partition to an external memory, define `PART_UPDATE_EXT` and/or
 `PART_SWAP_EXT`, respectively.

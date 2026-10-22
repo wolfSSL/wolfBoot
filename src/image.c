@@ -1757,6 +1757,11 @@ int wolfBoot_verify_dts_digest(const uint8_t *expected_digest,
 
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 
+#ifdef NVM_FLASH_ECC
+/* Used in place of an erased header. It never matches the image magic. */
+static const uint32_t erased_word = FLASH_WORD_ERASED;
+#endif
+
 /**
  * @brief Open an image in a specified partition.
  *
@@ -1831,6 +1836,13 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part)
     /* fetch header address
      * (or copy from external device to a local buffer via fetch_hdr_cpy)
      */
+#ifdef NVM_FLASH_ECC
+    /* An erased header means no image. Check the erased state first, because
+     * a read of erased ECC flash can fault or return garbage. */
+    if (wb_flash_is_erased(img, 0, sizeof(uint32_t)) == 1)
+        image = (uint8_t *)&erased_word;
+    else
+#endif
     if (PART_IS_EXT(img))
         image = fetch_hdr_cpy(img);
     else
@@ -1923,12 +1935,12 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
 #ifdef WOLFBOOT_FIXED_PARTITIONS
 #ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
     /* A monolithic self image spans the bootloader region and the BOOT
-     * partition minus its trailer sector (header persisted separately,
+     * partition minus its trailer sectors (header persisted separately,
      * not part of the span) */
     {
         uint32_t max_span = (uint32_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS -
             ARCH_FLASH_OFFSET) + WOLFBOOT_PARTITION_SIZE -
-            WOLFBOOT_SECTOR_SIZE;
+            WOLFBOOT_TRAILER_SECTORS * WOLFBOOT_SECTOR_SIZE;
         if (img->fw_size > max_span) {
             img->fw_size = max_span;
             return -1;
@@ -1998,87 +2010,279 @@ typedef union {
     elf64_header elf64;
 } elfHeaderMaxBuf;
 
-/*
- * Copies an arbitrary amount of data between two flash memory locations
- * (internal or external) using an intermediate RAM buffer.
- */
-static int copy_flash_buffered(uintptr_t src_addr, uintptr_t dst_addr,
-                               size_t total_size, int is_src_ext,
-                               int is_dst_ext)
+/* Each sector is erased once, before the first segment that uses it, and each
+ * write unit is programmed once, so the segments must be in address order. */
+#define ELF_UNIT WOLFBOOT_FLASH_WRITE_UNIT
+
+struct elf_store {
+    uintptr_t next_dst;   /* end of the previous segment */
+    int       dst_ext;
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS
+    uintptr_t sec_addr;   /* sector staged in RAM */
+    int       sec_valid;
+#else
+    uintptr_t erased_end;
+    uintptr_t pend_addr;  /* address of the unit in pend */
+    int       pend_valid;
+    uint8_t   pend[ELF_UNIT];
+#endif
+};
+
+static int elf_store_read(uintptr_t src, uint8_t *buf, uint32_t len,
+    int src_ext)
 {
-    size_t  bytes_copied = 0;
-
-#ifndef BUFFER_DECLARED
-#define BUFFER_DECLARED
-    static uint8_t buffer[FLASHBUFFER_SIZE] XALIGNED(4);
-#endif
-
-#ifdef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-/* Mass erase destination flash in one go before writing */
 #ifdef EXT_FLASH
-    if (is_dst_ext) {
+    if (src_ext) {
+        int ret;
         ext_flash_unlock();
-        ext_flash_erase(dst_addr, total_size);
+        ret = ext_flash_read(src, buf, (int)len);
         ext_flash_lock();
+        return (ret == (int)len) ? 0 : -1;
     }
-    else
 #endif
-    {
-        hal_flash_unlock();
-        hal_flash_erase(dst_addr, total_size);
-        hal_flash_lock();
-    }
-#endif /* WOLFBOOT_FLASH_MULTI_SECTOR_ERASE */
-
-    /* Loop until all requested bytes are copied */
-    while (bytes_copied < total_size) {
-        /* Determine the size of the next chunk to copy */
-        size_t remaining_bytes = total_size - bytes_copied;
-        size_t chunk_size      = (remaining_bytes > FLASHBUFFER_SIZE)
-                                     ? FLASHBUFFER_SIZE
-                                     : remaining_bytes;
-
-        /* Read a chunk from the source flash into the RAM buffer */
-#ifdef EXT_FLASH
-        if (is_src_ext) {
-            ext_flash_unlock();
-            ext_flash_read(src_addr + bytes_copied, buffer, chunk_size);
-            ext_flash_lock();
-        }
-        else
-#endif
-        {
-            memcpy(buffer, (const void*)(src_addr + bytes_copied), chunk_size);
-        }
-
-        /* Write the chunk from the RAM buffer to the destination flash */
-#ifdef EXT_FLASH
-        if (is_dst_ext) {
-            ext_flash_unlock();
-#ifndef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-            ext_flash_erase(dst_addr + bytes_copied, chunk_size);
-#endif
-            ext_flash_write(dst_addr + bytes_copied, buffer, chunk_size);
-            ext_flash_lock();
-        }
-        else
-#endif
-        {
-            hal_flash_unlock();
-#ifndef WOLFBOOT_FLASH_MULTI_SECTOR_ERASE
-            hal_flash_erase(dst_addr + bytes_copied, chunk_size);
-#endif
-            hal_flash_write(dst_addr + bytes_copied, buffer, chunk_size);
-            hal_flash_lock();
-        }
-
-        /* Update the count of bytes successfully copied */
-        bytes_copied += chunk_size;
-    }
-
-    /* All bytes copied successfully */
+    (void)src_ext;
+    memcpy(buf, (const void *)src, len);
     return 0;
 }
+
+static int elf_store_program(struct elf_store *st, uintptr_t dst,
+    const uint8_t *buf, uint32_t len, int erase)
+{
+    int ret;
+#ifdef EXT_FLASH
+    if (st->dst_ext) {
+        ext_flash_unlock();
+        ret = erase ? ext_flash_erase(dst, (int)len) :
+            ext_flash_write(dst, buf, (int)len);
+        ext_flash_lock();
+        return ret;
+    }
+#endif
+    hal_flash_unlock();
+    ret = erase ? hal_flash_erase(dst, (int)len) :
+        hal_flash_write(dst, buf, (int)len);
+    hal_flash_lock();
+    return ret;
+}
+
+#ifdef WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS
+
+#define ELF_RMW_UNITS ((uint32_t)(WOLFBOOT_SECTOR_SIZE / ELF_UNIT))
+#define ELF_RMW_BIT(map, u) (((map)[(u) / 8] >> ((u) % 8)) & 1U)
+#define ELF_RMW_SET(map, u) ((map)[(u) / 8] |= (uint8_t)(1U << ((u) % 8)))
+
+#ifdef NVM_FLASH_WRITEONCE
+#if defined(NVM_CACHE_SIZE) && (NVM_CACHE_SIZE < WOLFBOOT_SECTOR_SIZE)
+#error "ELF_FLASH_SCATTER_PRESERVE_SECTORS needs NVM_CACHE_SIZE >= sector size"
+#endif
+/* Reuse WRITEONCE buffer for sector storage */
+extern uint8_t NVM_CACHE[];
+#define ELF_RMW_BUF NVM_CACHE
+#else
+/* flash sector buffer */
+static uint8_t elf_rmw_buf[WOLFBOOT_SECTOR_SIZE] XALIGNED(4);
+#define ELF_RMW_BUF elf_rmw_buf
+#endif
+static uint8_t elf_rmw_old[(ELF_RMW_UNITS + 7) / 8]; /* unit held data */
+static uint8_t elf_rmw_new[(ELF_RMW_UNITS + 7) / 8]; /* unit has segment data */
+
+static int elf_store_is_erased(struct elf_store *st, uintptr_t addr,
+    uint32_t len)
+{
+#ifdef EXT_FLASH
+    if (st->dst_ext)
+        return ext_flash_is_erased(addr, (int)len);
+#endif
+    return hal_flash_is_erased(addr, (int)len);
+}
+
+/* Copy the sector at sec, unless the segment covers all of it. A read of
+ * erased flash may return garbage, so erased units get dummy erased values
+ * in RAM */
+static int elf_rmw_load(struct elf_store *st, uintptr_t sec, int covered)
+{
+    uint32_t u;
+    int ret;
+
+    memset(elf_rmw_old, 0, sizeof(elf_rmw_old));
+    memset(elf_rmw_new, 0, sizeof(elf_rmw_new));
+    st->sec_addr = sec;
+    st->sec_valid = 1;
+    if (covered)
+        return 0;
+    ret = elf_store_is_erased(st, sec, WOLFBOOT_SECTOR_SIZE);
+    if (ret == 1) {
+        memset(ELF_RMW_BUF, FLASH_BYTE_ERASED, WOLFBOOT_SECTOR_SIZE);
+        return 0;
+    }
+    if ((ret < 0) || (elf_store_read(sec, ELF_RMW_BUF, WOLFBOOT_SECTOR_SIZE,
+            st->dst_ext) != 0))
+        return -1;
+    for (u = 0; u < ELF_RMW_UNITS; u++) {
+        ret = elf_store_is_erased(st, sec + u * ELF_UNIT, ELF_UNIT);
+        if (ret < 0)
+            return -1;
+        if (ret == 1)
+            memset(ELF_RMW_BUF + u * ELF_UNIT, FLASH_BYTE_ERASED, ELF_UNIT);
+        else
+            ELF_RMW_SET(elf_rmw_old, u);
+    }
+    return 0;
+}
+
+/* Erase the staged sector and write it back. Units that held data are
+ * programmed first since a reset before they are written back loses them. */
+static int elf_store_flush(struct elf_store *st)
+{
+    uint32_t u, start = 0;
+    int pass, sel, run;
+
+    if (!st->sec_valid)
+        return 0;
+    st->sec_valid = 0;
+    if (elf_store_program(st, st->sec_addr, NULL, WOLFBOOT_SECTOR_SIZE, 1)
+            != 0)
+        return -1;
+    for (pass = 0; pass < 2; pass++) {
+        run = 0;
+        for (u = 0; u <= ELF_RMW_UNITS; u++) {
+            sel = 0;
+            if (u < ELF_RMW_UNITS) {
+                sel = (int)ELF_RMW_BIT(elf_rmw_old, u);
+                if (pass == 1)
+                    sel = !sel && ELF_RMW_BIT(elf_rmw_new, u);
+            }
+            if (sel && !run) {
+                start = u;
+                run = 1;
+            }
+            else if (!sel && run) {
+                if (elf_store_program(st, st->sec_addr + start * ELF_UNIT,
+                        ELF_RMW_BUF + start * ELF_UNIT,
+                        (u - start) * ELF_UNIT, 0) != 0)
+                    return -1;
+                run = 0;
+            }
+        }
+    }
+    return 0;
+}
+
+static int elf_store_segment(struct elf_store *st, uintptr_t src,
+    uintptr_t dst, uint32_t len, int src_ext)
+{
+    uintptr_t sec;
+    uint32_t off, n, u;
+
+    if (len == 0)
+        return 0;
+    if (dst < st->next_dst) {
+        wolfBoot_printf("ELF: [STORE] ERROR: segments out of address order\n");
+        return -1;
+    }
+    st->next_dst = dst + len;
+
+    while (len > 0) {
+        sec = dst & ~((uintptr_t)WOLFBOOT_SECTOR_SIZE - 1);
+        off = (uint32_t)(dst - sec);
+        n = WOLFBOOT_SECTOR_SIZE - off;
+        if (n > len)
+            n = len;
+        if (!st->sec_valid || (st->sec_addr != sec)) {
+            if ((elf_store_flush(st) != 0) ||
+                    (elf_rmw_load(st, sec, n == WOLFBOOT_SECTOR_SIZE) != 0))
+                return -1;
+        }
+        if (elf_store_read(src, ELF_RMW_BUF + off, n, src_ext) != 0)
+            return -1;
+        for (u = off / ELF_UNIT; u <= (off + n - 1) / ELF_UNIT; u++)
+            ELF_RMW_SET(elf_rmw_new, u);
+        src += n;
+        dst += n;
+        len -= n;
+    }
+    return 0;
+}
+#else
+#if (FLASHBUFFER_SIZE % ELF_UNIT) != 0
+#error "ELF_FLASH_SCATTER: FLASHBUFFER_SIZE must be a multiple of the write unit"
+#endif
+static uint8_t elf_store_buf[FLASHBUFFER_SIZE] XALIGNED(4);
+
+static int elf_store_flush(struct elf_store *st)
+{
+    int ret = 0;
+    if (st->pend_valid)
+        ret = elf_store_program(st, st->pend_addr, st->pend, ELF_UNIT, 0);
+    st->pend_valid = 0;
+    return ret;
+}
+
+static int elf_store_segment(struct elf_store *st, uintptr_t src,
+    uintptr_t dst, uint32_t len, int src_ext)
+{
+    uintptr_t start, end;
+
+    if (len == 0)
+        return 0;
+    if (dst < st->next_dst) {
+        wolfBoot_printf("ELF: [STORE] ERROR: segments out of address order\n");
+        return -1;
+    }
+    st->next_dst = dst + len;
+
+    start = dst & ~((uintptr_t)WOLFBOOT_SECTOR_SIZE - 1);
+    if (start < st->erased_end)
+        start = st->erased_end;
+    end = ((dst + len + WOLFBOOT_SECTOR_SIZE - 1) / WOLFBOOT_SECTOR_SIZE) *
+        WOLFBOOT_SECTOR_SIZE;
+    if (end > start) {
+        if (elf_store_program(st, start, NULL, (uint32_t)(end - start), 1)
+                != 0)
+            return -1;
+        st->erased_end = end;
+    }
+
+    while (len > 0) {
+        uintptr_t unit = dst & ~((uintptr_t)ELF_UNIT - 1);
+        uint32_t off = (uint32_t)(dst - unit);
+        uint32_t n;
+
+        if ((off != 0) || (len < ELF_UNIT) ||
+                (st->pend_valid && (st->pend_addr == unit))) {
+            if (st->pend_valid && (st->pend_addr != unit) &&
+                    (elf_store_flush(st) != 0))
+                return -1;
+            if (!st->pend_valid) {
+                memset(st->pend, FLASH_BYTE_ERASED, ELF_UNIT);
+                st->pend_addr = unit;
+                st->pend_valid = 1;
+            }
+            n = ELF_UNIT - off;
+            if (n > len)
+                n = len;
+            if (elf_store_read(src, st->pend + off, n, src_ext) != 0)
+                return -1;
+            if ((off + n == ELF_UNIT) && (elf_store_flush(st) != 0))
+                return -1;
+        }
+        else {
+            if (elf_store_flush(st) != 0)
+                return -1;
+            n = len & ~((uint32_t)ELF_UNIT - 1);
+            if (n > FLASHBUFFER_SIZE)
+                n = FLASHBUFFER_SIZE;
+            if ((elf_store_read(src, elf_store_buf, n, src_ext) != 0) ||
+                    (elf_store_program(st, dst, elf_store_buf, n, 0) != 0))
+                return -1;
+        }
+        src += n;
+        dst += n;
+        len -= n;
+    }
+    return 0;
+}
+#endif /* WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS */
 
 /*
  * Reads data from a given wolfBoot partition's firmware image, properly
@@ -2497,6 +2701,10 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
     const void*           eh;
     struct wolfBoot_image boot;
     uint8_t               elfHdrBuf[sizeof(elfHeaderMaxBuf)];
+    struct elf_store      st;
+
+    memset(&st, 0, sizeof(st));
+    st.dst_ext = ext_flash;
 
     if (wolfBoot_open_image(&boot, part) < 0) {
         return -1;
@@ -2616,14 +2824,19 @@ int wolfBoot_load_flash_image_elf(int part, unsigned long* entry_out, int ext_fl
                         "loadaddr=0x%08lx, offset=0x%08lx, size=%lu\n",
                         (unsigned long)load_addr, (unsigned long)offset,
                         (unsigned long)filesz);
-        if (copy_flash_buffered((uintptr_t)(image + offset), load_addr,
-                                filesz, ext_flash, ext_flash) != 0) {
+        if (elf_store_segment(&st, (uintptr_t)(image + offset), load_addr,
+                              (uint32_t)filesz, ext_flash) != 0) {
             wolfBoot_printf("ELF: [STORE] ERROR: could not write "
                             "loadable segment\n");
             return -1;
         }
 
         entry_off += ph_size;
+    }
+    if (elf_store_flush(&st) != 0) {
+        wolfBoot_printf("ELF: [STORE] ERROR: could not write "
+                        "loadable segment\n");
+        return -1;
     }
 
     wolfBoot_printf("ELF: [STORE] Image loading complete\n");

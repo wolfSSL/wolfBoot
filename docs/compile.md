@@ -273,7 +273,73 @@ The associated compile-time option is
 
 When the update is installed, the bootloader resets the update partition state so that the update is not re-applied on the next boot. In setups where the bootloader cannot write the update partition, the application must reset the update partition state itself (for example by erasing the update partition) after the update succeeds: otherwise wolfBoot re-attempts the update on every boot, which with `ALLOW_DOWNGRADE=1` re-flashes the boot partition on every power-up.
 
-### Enable workaround for 'write once' flash memories
+### Choosing options for write-once and ECC flash
+
+Some flash can program each write unit only once between erases, so wolfBoot cannot change a flag by
+programming its byte again. ECC flash is a common case: its write unit is the whole block that an ECC code
+covers, and on some parts a read of erased flash faults or returns garbage.
+
+wolfBoot has two separate groups of options to facilitate running on parts with write-once or ECC flash:
+
+- **Trailer storage options**: `NVM_FLASH_WRITEONCE` and `NVM_FLASH_JOURNAL`/`NVM_FLASH_JOURNAL_DUAL`. These options
+  change how wolfBoot writes the partition state and sector flags in the trailer at the end of each partition. They
+  use different strategies and have different tradeoffs, but each scheme serves to ultimately ensure that the trailer and
+  flag sectors can be updated properly on parts with these flash constraints.
+- **ECC flash mode** (`NVM_FLASH_ECC`) changes how all of wolfBoot uses flash, not just the trailer.
+  With this option, wolfBoot programs only whole, erased write units, erases only whole sectors,
+  and asks the HAL whether flash is erased instead of reading it.
+
+A detailed description of the functionality enabled by each option is provided in subsequent sections. However,
+the interdependencies between these options can be understood as follows:
+
+- `NVM_FLASH_JOURNAL` works on its own, with or without `NVM_FLASH_ECC`.
+- `NVM_FLASH_ECC` needs `NVM_FLASH_JOURNAL` enabled and a build fails without it. The journal is the only
+  trailer storage that strictly follows the ECC flash rules.
+- `NVM_FLASH_JOURNAL_DUAL` needs `NVM_FLASH_JOURNAL`, and works with or without `NVM_FLASH_ECC`.
+- `NVM_FLASH_WRITEONCE` is a write-once workaround only and does NOT fully support the constraints of ECC flash. It therefore
+   cannot be combined with `NVM_FLASH_JOURNAL` or `NVM_FLASH_ECC`.
+
+To choose:
+
+1. If the flash can program a byte again after an erase (most NOR flash), no option is needed.
+2. If it cannot, you must pick an appropriate trailer storage scheme (either `NVM_FLASH_WRITEONCE` or `NVM_FLASH_JOURNAL`).
+   A trailer storage option alone is enough when `hal_flash_write()` accepts writes of any size and
+   alignment (see [HAL](HAL.md)), and a read of erased flash returns the erased value.
+3. Also set `NVM_FLASH_ECC=1` for ECC flash memories, or other scenarios where the HAL can only program whole, erased write units,
+   or when a read of erased flash can fault, return garbage, or otherwise not determine an erased unit from a programmed
+   one. See [ECC flash mode](#ecc-flash-mode-nvm_flash_ecc).
+
+
+The following table provides guidance for selecting a trailer implementation. In the table, N is the number of sectors in the largest partition,
+and a journal record is 16 bytes, or one write unit if larger.
+
+| Trailer storage | Option | Use when | Cost per flag write | Trailer sectors | With `NVM_FLASH_ECC` |
+|---|---|---|---|---|---|
+| In place (default) | none | flash can program a byte again (NOR) | one byte program | 1 | no |
+| [Two copies](#trailer-storage-option-nvm_flash_writeonce) | `NVM_FLASH_WRITEONCE=1` | write unit too large for a log, or cheap erases | 2 erases + 1 sector program | 2 | no |
+| [Journal](#trailer-storage-option-nvm_flash_journal-and-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 4, slow erases | 1 record program | 1 | yes |
+| [Journal in two sectors](#redundant-sector-journaling-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` and `NVM_FLASH_JOURNAL_DUAL=1` | slow erases, and a reset must never damage the log | 1 record program | 2 | yes |
+
+For a specific platform example, the AURIX TC3xx platform has these flash constraints:
+
+- The smallest unit it can program is a 32-byte page, and a page can be programmed only once per erase.
+- It erases whole 16 KB logical sectors.
+- A read of any erased page is an ECC error.
+- The flash controller has a Verify Erased command.
+- The erased flash value is 0, not 0xFF.
+
+Without `NVM_FLASH_ECC`, the TC3xx HAL would need all flash writes to be implemented through a 16 KB RAM buffer
+via read-modify-write operation, with a sector erase for each write to a programmed page such that a reset during
+that rewrite could lose the sector. Instead, the TC3xx port can build with:
+ - `NVM_FLASH_JOURNAL=1`
+ - `NVM_FLASH_ECC=1`
+ - a 32-byte write unit
+ - `FLAGS_INVERT=1`
+ - An implementation of `hal_flash_is_erased()`
+
+See [hal/aurix_tc3xx.c](../hal/aurix_tc3xx.c) for more details.
+
+### Trailer storage option: `NVM_FLASH_WRITEONCE`
 
 On some microcontrollers, the internal flash memory does not allow subsequent writes (adding zeroes) to a
 sector, after the entire sector has been erased. WolfBoot relies on the mechanism of adding zeroes to the
@@ -285,6 +351,104 @@ To enable the workaround for 'write once' internal flash, compile with
 
 **warning** When this option is enabled, the fail-safe swap is not guaranteed, i.e. the microcontroller
 cannot be safely powered down or restarted during a swap operation.
+
+### Trailer storage option: `NVM_FLASH_JOURNAL` and `NVM_FLASH_JOURNAL_DUAL`
+
+By default, wolfBoot updates the partition state and sector flags in place, by programming over the
+trailer bytes at the end of each partition. Flash that can program each location only once per erase
+does not allow this. Journal mode instead keeps the trailer as a log: each change is added as a small
+record in the last sector of the partition.
+
+To enable journal mode, compile with
+
+`NVM_FLASH_JOURNAL=1`
+
+Each change to the partition state or to a sector flag writes one new record, so it costs one small
+program and no erase. After a reset, wolfBoot reads the log and replays the records to rebuild the trailer
+in RAM. Each record has a CRC, so a record cut short by a power loss is detected and ignored. The log
+sector is erased only when wolfBoot clears the trailer (when an update is triggered, at the end of an
+update, and when a partition is erased), or when the log must be rewritten, for example because it is full.
+Before each erase, wolfBoot programs the last slot of the sector as an erase marker, and a log with the
+marker set reads as erased. So an erase cut short by a power loss cannot bring back old records.
+
+When enabling journal mode:
+
+- If the flash write unit is larger than 16 bytes, also set `FLASH_WRITE_UNIT=<bytes>` (a power of two),
+  so that each record gets its own write unit.
+- The log sector must be able to hold the records of a full-partition update (see the table above). The
+  build fails otherwise.
+- Build the bootloader and the application with the same trailer option, since both write the trailer.
+- Journal mode only changes the trailer. On ECC flash, also set `NVM_FLASH_ECC` (see
+  [ECC flash mode](#ecc-flash-mode-nvm_flash_ecc)).
+- `NVM_FLASH_JOURNAL` cannot be combined with `NVM_FLASH_WRITEONCE`, `ENCRYPT`, `FLAGS_HOME`,
+  `CUSTOM_PARTITION_TRAILER` or `PULL_LINKER_DEFINES`.
+- To switch devices already in the field to journal mode, see
+  [Migrating devices to the journal mode](#migrating-devices-to-the-journal-mode).
+
+#### Redundant sector journaling: `NVM_FLASH_JOURNAL_DUAL`
+
+Standard journal mode has a few very unlikely edge cases where a power loss during an update can leave
+the log corrupted and unrecoverable, such as when repeated resets during a large update fill up the log
+and then power is lost again at a different particular moment during the log compaction cycle where wolfBoot
+must erase and rewrite the log. The log lives in a single sector, so clearing or rewriting it means erasing
+the only copy. If these risks are not acceptable, compile with `NVM_FLASH_JOURNAL_DUAL=1` in addition to `NVM_FLASH_JOURNAL=1`.
+
+Dual journal mode keeps the log in the last two sectors of each partition, which take turns holding it.
+To clear or rewrite the log, wolfBoot erases the other sector instead of the one in use, writes a new log
+there, and switches to it only once the new log is complete. If power is lost before then, wolfBoot keeps
+using the old log, which is still intact.
+
+Compared with standard journal mode:
+
+- The trailer takes two sectors at the end of each partition instead of one, so the largest possible application
+  image is one sector smaller.
+- A full log simply moves to the other sector, so the log no longer needs room for a full-partition update.
+- To switch devices already in the field to this mode, erase their BOOT and UPDATE partitions first. See
+  [Migrating devices to the journal mode](#migrating-devices-to-the-journal-mode).
+
+#### Migrating devices to the journal mode
+
+Migrating any bootloader to a journal mode can be accomplished by first erasing the BOOT and UPDATE partitions, then programming the new bootloader and an application built with the new options, as on a new device. If migrating devices deployed in the field through a bootloader self-update, only the default trailer to `NVM_FLASH_JOURNAL` transition is officially supported. Migrating from the default trailer to the dual journal mode via a self-update is possible but not officially supported. Every other transition requires the full erase.
+
+**Default trailer to `NVM_FLASH_JOURNAL`: supported with a bootloader self-update.** Self-update the bootloader first. The old application can continue running and install an application built with the new options. The new bootloader preserves existing image and update state and accepts update requests from the old application.
+
+**Default trailer to `NVM_FLASH_JOURNAL_DUAL`: erase first.** A bootloader self-update is possible but not officially supported. This mode reserves the last two sectors of each partition, while the default trailer reserves only the last one. It also cannot reliably accept update requests from the old application after the new bootloader saves its state.
+
+It works only when both conditions below hold, which are not enforced internally by wolfBoot:
+
+* The existing application ends before the last two sectors of the BOOT partition.
+* After the self-update, the old application erases the entire UPDATE partition before it writes the new application, as `wolfBoot_erase_partition(PART_UPDATE)` in the non-journal mode would have.
+
+The second condition is needed because, at its first boot, the new bootloader erases UPDATE to remove its own image and saves its own update state there. It then ignores the old application's update requests until that state is erased. Erasing UPDATE before writing the new bootloader does not help, because the new bootloader saves this state after that erase.
+
+**From `NVM_FLASH_WRITEONCE`: erase first.** Migration is not possible without a full erase of BOOT and UPDATE. `NVM_FLASH_WRITEONCE` moves the update state to the other one of the last two sectors at each write, while both journal modes only look for state written the old way in the last sector. So whether the new bootloader sees the state, including update requests from the old application, depends on which sector the old code wrote last. Erasing UPDATE, which makes the default trailer to `NVM_FLASH_JOURNAL_DUAL` migration possible, does not help here: after an erase, the next write always goes to the second-to-last sector, where the new bootloader never looks.
+
+**Between `NVM_FLASH_JOURNAL` and `NVM_FLASH_JOURNAL_DUAL`: erase first.** Their update-state layouts are not compatible, so migration in either direction is not possible without a full erase of BOOT and UPDATE:
+
+* `NVM_FLASH_JOURNAL` to `NVM_FLASH_JOURNAL_DUAL`: the dual journal can read state written by the default trailer, but not state written by the single-sector journal. The new bootloader loses the state of the installed image and never sees update requests from the old application, even if the old application erases UPDATE first. Images built for `NVM_FLASH_JOURNAL` can also extend into the second-to-last sector.
+* `NVM_FLASH_JOURNAL_DUAL` to `NVM_FLASH_JOURNAL`: the single-sector journal reads only the last sector, while the dual journal alternates between the last two. So whether the new bootloader sees the state, including update requests from the old application, depends on which sector the old code used last. It can also read an older copy of the state left in the last sector.
+
+### ECC flash mode (`NVM_FLASH_ECC`)
+
+On most ECC flash devices, a flash unit can only be programmed once after an erase, and reading erased flash can
+fault or return garbage. The journal stores the trailer in whole, program-once records, but the rest of wolfBoot
+does not follow these rules on its own. For example, the check for an image reads the first bytes of a partition
+even when they are erased. To force the wolfBoot update code to respect these rules, compile with
+
+`NVM_FLASH_ECC=1`
+
+together with `NVM_FLASH_JOURNAL=1`, which it requires, and set the write unit with `FLASH_WRITE_UNIT=<bytes>`.
+The HAL must meet the [ECC flash HAL requirements](HAL.md#ecc-flash-nvm_flash_ecc-hal-requirements). Then:
+
+- Decisions about erased flash use the HAL erased check (see [HAL](HAL.md)), never data read back. An
+  erased image header means no image.
+- Writes cover whole write units, programmed once after a whole-sector erase. Sector copies stop at the
+  image's last write unit and leave erased source chunks erased.
+- The ELF scatter loader follows these rules in every build, with or without `NVM_FLASH_ECC`. See
+  [How ELF segments are written to flash](firmware_update.md#how-elf-segments-are-written-to-flash).
+- The self-header update erases whole sectors, and diagnostics records take one write unit each.
+- `FLASHBUFFER_SIZE` and `IMAGE_HEADER_SIZE` must be multiples of the write unit.
+- `DELTA_UPDATES` and `ENCRYPT` are not supported yet.
 
 ### Allow version roll-back
 
@@ -332,10 +496,11 @@ The `EXT_FLASH` option can also be used if the target device requires special ha
 (e.g. word size requirements or other restrictions), regardless of whether the flash is internal or external.
 
 Note that the `EXT_FLASH` option is incompatible with the `NVM_FLASH_WRITEONCE` option. Targets that need
-both these options must implement the sector-based read-modify-erase-write sequence at the HAL layer.
+both use `NVM_FLASH_JOURNAL` instead, which works with external partitions.
 
 For an example of using `EXT_FLASH` to bypass read restrictions, (in this case, the inability to read from
-erased flash due to ECC errors) on a platform with write-once flash, see the [infineon tricore port](../hal/aurix_tc3xx.c).
+erased flash due to ECC errors) on a platform with write-once flash, with `NVM_FLASH_JOURNAL` and
+`NVM_FLASH_ECC`, see the [infineon tricore port](../hal/aurix_tc3xx.c).
 
 #### SPI devices
 

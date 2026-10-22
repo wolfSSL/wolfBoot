@@ -1028,6 +1028,22 @@ ifeq ($(NVM_FLASH_WRITEONCE),1)
   CFLAGS+= -D"NVM_FLASH_WRITEONCE"
 endif
 
+ifeq ($(NVM_FLASH_JOURNAL),1)
+  CFLAGS+= -D"NVM_FLASH_JOURNAL"
+endif
+
+ifeq ($(NVM_FLASH_JOURNAL_DUAL),1)
+  CFLAGS+= -D"NVM_FLASH_JOURNAL_DUAL"
+endif
+
+ifeq ($(NVM_FLASH_ECC),1)
+  CFLAGS+= -D"NVM_FLASH_ECC"
+endif
+
+ifneq ($(FLASH_WRITE_UNIT),)
+  CFLAGS+= -D"WOLFBOOT_FLASH_WRITE_UNIT=$(FLASH_WRITE_UNIT)"
+endif
+
 ifeq ($(DISABLE_BACKUP),1)
   $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
   CFLAGS+= -D"DISABLE_BACKUP"
@@ -1547,6 +1563,9 @@ ifeq ($(ELF),1)
   endif
   ifeq ($(ELF_FLASH_SCATTER),1)
     CFLAGS+=-D"WOLFBOOT_ELF_FLASH_SCATTER=1"
+    ifeq ($(ELF_FLASH_SCATTER_PRESERVE_SECTORS),1)
+      CFLAGS+=-D"WOLFBOOT_ELF_FLASH_SCATTER_PRESERVE_SECTORS"
+    endif
   endif
 
 endif

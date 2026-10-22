@@ -36,6 +36,18 @@
 
 #include "delta.h"
 #include "printf.h"
+
+/* Bytes at the end of each partition that hold the trailer */
+#define TRAILER_LEN (WOLFBOOT_TRAILER_SECTORS * WOLFBOOT_SECTOR_SIZE)
+
+#ifdef NVM_FLASH_JOURNAL
+/* The journal clears its own sectors, so a cut cannot damage the log */
+#define wb_trailer_clear(img, part) wolfBoot_clear_trailer(part)
+#else
+#define wb_trailer_clear(img, part) \
+    wb_flash_erase(img, WOLFBOOT_PARTITION_SIZE - TRAILER_LEN, TRAILER_LEN)
+#endif
+
 static void wolfBoot_zeroize(void *ptr, size_t len)
 {
     volatile uint8_t *p = (volatile uint8_t *)ptr;
@@ -72,6 +84,16 @@ int WP11_Library_Init(void);
 #ifdef MMU
 #error "MMU is not yet supported for update_flash.c, please consider update_ram.c instead"
 #endif
+
+#if defined(NVM_FLASH_ECC) && \
+    ((FLASHBUFFER_SIZE % WOLFBOOT_FLASH_WRITE_UNIT) != 0)
+#error "NVM_FLASH_ECC: FLASHBUFFER_SIZE must be a multiple of the write unit"
+#endif
+
+/* Round up to whole write units */
+#define WB_UNIT_ROUNDUP(x) \
+    ((((x) + WOLFBOOT_FLASH_WRITE_UNIT - 1) / WOLFBOOT_FLASH_WRITE_UNIT) * \
+     WOLFBOOT_FLASH_WRITE_UNIT)
 
 #ifdef __CCRX__
 #pragma section FRAM
@@ -111,6 +133,18 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(uint32_t len)
 #include <string.h>
 
 #ifdef WOLFBOOT_SELF_HEADER
+#ifdef NVM_FLASH_ECC
+/* ECC flash only erases whole sectors */
+#define SELF_HEADER_ERASE_SIZE \
+    (((WOLFBOOT_SELF_HEADER_SIZE + WOLFBOOT_SECTOR_SIZE - 1) / \
+      WOLFBOOT_SECTOR_SIZE) * WOLFBOOT_SECTOR_SIZE)
+#if (IMAGE_HEADER_SIZE % WOLFBOOT_FLASH_WRITE_UNIT) != 0
+#error "NVM_FLASH_ECC: IMAGE_HEADER_SIZE must be a multiple of the write unit"
+#endif
+#else
+#define SELF_HEADER_ERASE_SIZE WOLFBOOT_SELF_HEADER_SIZE
+#endif
+
 static void RAMFUNCTION wolfBoot_update_self_header(struct wolfBoot_image* src)
 {
     uint32_t  offset = 0;
@@ -129,12 +163,12 @@ static void RAMFUNCTION wolfBoot_update_self_header(struct wolfBoot_image* src)
     /* Erase the self-header sector - sets all bytes to 0xFF */
     if (dst_ext) {
         ext_flash_unlock();
-        ext_flash_erase(dst_ext_addr, WOLFBOOT_SELF_HEADER_SIZE);
+        ext_flash_erase(dst_ext_addr, SELF_HEADER_ERASE_SIZE);
     }
     else
 #endif
     {
-        hal_flash_erase(dst_int_addr, WOLFBOOT_SELF_HEADER_SIZE);
+        hal_flash_erase(dst_int_addr, SELF_HEADER_ERASE_SIZE);
     }
 
     /* Write only the actual header data (IMAGE_HEADER_SIZE bytes).
@@ -177,6 +211,22 @@ static void RAMFUNCTION wolfBoot_update_self_header(struct wolfBoot_image* src)
 }
 #endif
 
+/* Bytes of the image to write at offset pos. With NVM_FLASH_ECC, stop at the
+ * image's last write unit. */
+static uint32_t RAMFUNCTION self_update_chunk_len(struct wolfBoot_image *src,
+    uintptr_t pos)
+{
+#ifdef NVM_FLASH_ECC
+    uint32_t end = WB_UNIT_ROUNDUP(src->fw_size);
+    if (end - pos < FLASHBUFFER_SIZE)
+        return (uint32_t)(end - pos);
+#else
+    (void)src;
+    (void)pos;
+#endif
+    return FLASHBUFFER_SIZE;
+}
+
 static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
 {
     uintptr_t pos = 0;
@@ -194,8 +244,9 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             uint8_t buffer[FLASHBUFFER_SIZE];
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
-                ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void*)buffer, FLASHBUFFER_SIZE);
-                hal_flash_write(start_text + pos, buffer, FLASHBUFFER_SIZE);
+                uint32_t len = self_update_chunk_len(src, pos);
+                ext_flash_check_read((uintptr_t)(src->hdr) + src_offset + pos, (void*)buffer, len);
+                hal_flash_write(start_text + pos, buffer, len);
             }
             pos += FLASHBUFFER_SIZE;
         }
@@ -206,7 +257,8 @@ static void RAMFUNCTION wolfBoot_self_update(struct wolfBoot_image *src)
         while (pos < src->fw_size) {
             if (src_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))  {
                 uint8_t *orig = (uint8_t*)(src->hdr + src_offset + pos);
-                hal_flash_write(pos + start_text, orig, FLASHBUFFER_SIZE);
+                hal_flash_write(pos + start_text, orig,
+                    self_update_chunk_len(src, pos));
             }
             pos += FLASHBUFFER_SIZE;
         }
@@ -241,11 +293,10 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
         }
 #ifdef WOLFBOOT_SELF_UPDATE_MONOLITHIC
         /* Payload installs at ARCH_FLASH_OFFSET and may spill into the BOOT
-         * partition, but must never reach BOOT's last sector (reserved for
-         * the state trailer) or the UPDATE partition staging it */
+         * partition, but must never reach BOOT's trailer sectors or the
+         * UPDATE partition staging it */
         if (update.fw_size > (uint32_t)(WOLFBOOT_PARTITION_BOOT_ADDRESS -
-                ARCH_FLASH_OFFSET) + WOLFBOOT_PARTITION_SIZE -
-                WOLFBOOT_SECTOR_SIZE) {
+                ARCH_FLASH_OFFSET) + WOLFBOOT_PARTITION_SIZE - TRAILER_LEN) {
             wolfBoot_printf("Self update image too large: %u\n",
                 (unsigned int)update.fw_size);
             return;
@@ -275,10 +326,36 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
 /* The swap-based update machinery (wolfBoot_copy_sector, wolfBoot_update, etc.)
  * is not used in monolithic self-update mode. */
 
+/* Bytes to copy from the chunk at offset off of src, 0 to skip the chunk or
+ * negative on error. With NVM_FLASH_ECC, copy whole write units up to the
+ * image end and leave erased chunks erased. */
+static int RAMFUNCTION copy_chunk_len(struct wolfBoot_image *src, uint32_t off)
+{
+#ifdef NVM_FLASH_ECC
+    uint32_t end = WB_UNIT_ROUNDUP(src->fw_size + IMAGE_HEADER_SIZE);
+    uint32_t len = FLASHBUFFER_SIZE;
+    int erased;
+
+    if (off >= end)
+        return 0;
+    if (end - off < len)
+        len = end - off;
+    erased = wb_flash_is_erased(src, off, len);
+    if (erased < 0)
+        return -1;
+    return erased ? 0 : (int)len;
+#else
+    if (off < (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE))
+        return FLASHBUFFER_SIZE;
+    return 0;
+#endif
+}
+
 static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
     struct wolfBoot_image *dst, uint32_t sector)
 {
     int ret = 0;
+    int len;
     uint32_t pos = 0;
     uint32_t src_sector_offset = (sector * WOLFBOOT_SECTOR_SIZE);
     uint32_t dst_sector_offset = src_sector_offset;
@@ -332,29 +409,33 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
             goto out;
         }
         while (pos < WOLFBOOT_SECTOR_SIZE)  {
-          if (src_sector_offset + pos <
-              (src->fw_size + IMAGE_HEADER_SIZE + FLASHBUFFER_SIZE)) {
+          len = copy_chunk_len(src, src_sector_offset + pos);
+          if (len < 0) {
+              ret = -1;
+              goto out;
+          }
+          if (len > 0) {
               /* bypass decryption, copy encrypted data into swap if its external */
               if (dst->part == PART_SWAP && SWAP_EXT) {
                   if (ext_flash_read((uintptr_t)(src->hdr) + src_sector_offset +
                                        pos,
-                                 (void *)buffer, FLASHBUFFER_SIZE)
-                          != FLASHBUFFER_SIZE) {
+                                 (void *)buffer, len)
+                          != len) {
                       ret = -1;
                       goto out;
                   }
               } else {
                   if (ext_flash_check_read((uintptr_t)(src->hdr) +
                                          src_sector_offset + pos,
-                                     (void *)buffer, FLASHBUFFER_SIZE)
-                          != FLASHBUFFER_SIZE) {
+                                     (void *)buffer, len)
+                          != len) {
                       ret = -1;
                       goto out;
                   }
               }
 
               if (wb_flash_write(dst, dst_sector_offset + pos, buffer,
-                  FLASHBUFFER_SIZE) < 0) {
+                  len) < 0) {
                   ret = -1;
                   goto out;
               }
@@ -370,11 +451,15 @@ static int RAMFUNCTION wolfBoot_copy_sector(struct wolfBoot_image *src,
         goto out;
     }
     while (pos < WOLFBOOT_SECTOR_SIZE) {
-        if (src_sector_offset + pos < (src->fw_size + IMAGE_HEADER_SIZE +
-            FLASHBUFFER_SIZE))  {
+        len = copy_chunk_len(src, src_sector_offset + pos);
+        if (len < 0) {
+            ret = -1;
+            goto out;
+        }
+        if (len > 0) {
             uint8_t *orig = (uint8_t*)(src->hdr + src_sector_offset + pos);
             if (wb_flash_write(dst, dst_sector_offset + pos, orig,
-                    FLASHBUFFER_SIZE) < 0) {
+                    len) < 0) {
                 ret = -1;
                 goto out;
             }
@@ -491,15 +576,10 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     struct wolfBoot_image update[1];
     struct wolfBoot_image swap[1];
     uint8_t updateState = IMG_STATE_NEW;
-    int eraseLen = (WOLFBOOT_SECTOR_SIZE
-#ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
-        * 2
-#endif
-    );
     int swapDone = 0;
     /* Calculate position of staging sector - just before the final sectors
      * that store partition state */
-    uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - eraseLen -
+    uintptr_t tmpBootPos = WOLFBOOT_PARTITION_SIZE - TRAILER_LEN -
         WOLFBOOT_SECTOR_SIZE;
     uint32_t tmpBuffer[TRAILER_OFFSET_WORDS + 1];
     int ret = 0;
@@ -512,12 +592,19 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 
     /* Read the trailer from the staging sector to check if we're resuming an
      * interrupted operation */
-#if defined(EXT_FLASH) && PARTN_IS_EXT(PART_BOOT)
-    ext_flash_read((uintptr_t)(boot->hdr + tmpBootPos), (void*)tmpBuffer,
-        sizeof(tmpBuffer));
-#else
-    memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
+#ifdef NVM_FLASH_ECC
+    if (wb_flash_is_erased(boot, tmpBootPos, sizeof(tmpBuffer)) == 1)
+        memset(tmpBuffer, FLASH_BYTE_ERASED, sizeof(tmpBuffer));
+    else
 #endif
+    {
+#if defined(EXT_FLASH) && PARTN_IS_EXT(PART_BOOT)
+        ext_flash_read((uintptr_t)(boot->hdr + tmpBootPos), (void*)tmpBuffer,
+            sizeof(tmpBuffer));
+#else
+        memcpy(tmpBuffer, boot->hdr + tmpBootPos, sizeof(tmpBuffer));
+#endif
+    }
 
     /* Check if the magic trailer exists - indicates an interrupted swap
      * operation */
@@ -580,7 +667,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     }
 #endif
     /* Erase the last sector(s) of boot partition (where partition state is stored) */
-    ret = wb_flash_erase(boot, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    ret = wb_trailer_clear(boot, PART_BOOT);
     if (ret < 0) {
 #ifdef EXT_FLASH
         ext_flash_lock();
@@ -630,7 +717,7 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 
     /* Erase the last sector(s) of update partition */
     /* This resets the update partition state to IMG_STATE_NEW */
-    wb_flash_erase(update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    wb_trailer_clear(update, PART_UPDATE);
 
 #ifdef EXT_FLASH
     ext_flash_lock();
@@ -881,13 +968,9 @@ static int wolfBoot_delta_update(struct wolfBoot_image *boot,
         sector++;
     }
     ret = 0;
-    /* erase to the last sector, writeonce has 2 sectors */
+    /* erase up to the trailer sectors */
     while((sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE -
-        WOLFBOOT_SECTOR_SIZE
-#ifdef NVM_FLASH_WRITEONCE
-        * 2
-#endif
-    ) {
+        TRAILER_LEN) {
         wb_flash_erase(boot, sector * WOLFBOOT_SECTOR_SIZE, WOLFBOOT_SECTOR_SIZE);
         sector++;
     }
@@ -927,13 +1010,8 @@ out:
 #endif
 
 /* Max firmware size: partition must hold header + fw + trailer sector(s) */
-#ifndef NVM_FLASH_WRITEONCE
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
-        IMAGE_HEADER_SIZE - WOLFBOOT_SECTOR_SIZE))
-#else
-    #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
-        IMAGE_HEADER_SIZE - (2 * WOLFBOOT_SECTOR_SIZE)))
-#endif
+#define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
+    IMAGE_HEADER_SIZE - TRAILER_LEN))
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -981,6 +1059,12 @@ static uint32_t wolfBoot_swap_update_size(int fallback_allowed)
         return 0;
     }
     wolfBoot_open_image(&swap, PART_SWAP);
+#ifdef NVM_FLASH_ECC
+    /* A read of erased ECC flash can fault */
+    if (wb_flash_is_erased(&swap, 0, sizeof(hdr)) != 0) {
+        return 0;
+    }
+#endif
 #if defined(EXT_FLASH) && PARTN_IS_EXT(PART_SWAP)
 #ifdef EXT_ENCRYPTED
     /* External SWAP holds the sector still encrypted as at UPDATE offset 0,
@@ -1061,13 +1145,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     uint16_t update_type;
     uint32_t fw_size;
     uint32_t size;
-#ifdef DISABLE_BACKUP
-    int eraseLen = (WOLFBOOT_SECTOR_SIZE
-#ifdef NVM_FLASH_WRITEONCE /* need to erase the redundant sector too */
-        * 2
-#endif
-    );
-#endif
 #if defined(DELTA_UPDATES)
     int inverse = 0;
 #endif
@@ -1380,12 +1457,8 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Erase remainder of partition */
 #if defined(WOLFBOOT_FLASH_MULTI_SECTOR_ERASE) || defined(PRINTF_ENABLED)
     /* calculate number of remaining bytes */
-    /* reserve 1 sector for status (2 sectors for NV write once) */
-#ifdef NVM_FLASH_WRITEONCE
-    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - (2 * sector_size);
-#else
-    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - sector_size;
-#endif
+    /* reserve the trailer sectors */
+    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size) - TRAILER_LEN;
 
     wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
         size/sector_size);
@@ -1401,11 +1474,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     /* Iterate over every remaining sector and erase individually. */
     /* This loop is smallest code size */
     while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE -
-        sector_size
-    #ifdef NVM_FLASH_WRITEONCE
-        * 2
-    #endif
-    ) {
+        (WOLFBOOT_TRAILER_SECTORS * sector_size)) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         wb_flash_erase(&update, sector * sector_size, sector_size);
         wolfBoot_watchdog_feed();
@@ -1525,7 +1594,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
      * bootloader cannot write the update partition - the reason
      * DISABLE_BACKUP exists - the application owns the update partition and
      * must clear the state itself. */
-    wb_flash_erase(&update, WOLFBOOT_PARTITION_SIZE - eraseLen, eraseLen);
+    wb_trailer_clear(&update, PART_UPDATE);
 
     #ifdef EXT_FLASH
     ext_flash_lock();

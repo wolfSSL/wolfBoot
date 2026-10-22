@@ -37,6 +37,53 @@ static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
 const char *argv0;
 
+#ifdef NVM_FLASH_ECC
+/* ECC flash rules for BOOT: a write covers whole erased write units, and an
+ * erase covers whole sectors. A call that breaks a rule fails and counts a
+ * violation. */
+static uint8_t ecc_programmed[WOLFBOOT_PARTITION_SIZE /
+    WOLFBOOT_FLASH_WRITE_UNIT];
+static int ecc_violations = 0;
+
+static int ecc_write_ok(haladdr_t address, int len)
+{
+    uint32_t off = (uint32_t)(address - WOLFBOOT_PARTITION_BOOT_ADDRESS);
+    uint32_t u;
+
+    if (((off % WOLFBOOT_FLASH_WRITE_UNIT) != 0) ||
+            ((len % WOLFBOOT_FLASH_WRITE_UNIT) != 0) ||
+            (off + (uint32_t)len > WOLFBOOT_PARTITION_SIZE)) {
+        ecc_violations++;
+        return 0;
+    }
+    for (u = off / WOLFBOOT_FLASH_WRITE_UNIT;
+            u < (off + len) / WOLFBOOT_FLASH_WRITE_UNIT; u++) {
+        if (ecc_programmed[u]) {
+            ecc_violations++;
+            return 0;
+        }
+    }
+    memset(&ecc_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT], 1,
+        len / WOLFBOOT_FLASH_WRITE_UNIT);
+    return 1;
+}
+
+static int ecc_erase_ok(haladdr_t address, int len)
+{
+    uint32_t off = (uint32_t)(address - WOLFBOOT_PARTITION_BOOT_ADDRESS);
+
+    if (((off % WOLFBOOT_SECTOR_SIZE) != 0) ||
+            ((len % WOLFBOOT_SECTOR_SIZE) != 0) ||
+            (off + (uint32_t)len > WOLFBOOT_PARTITION_SIZE)) {
+        ecc_violations++;
+        return 0;
+    }
+    memset(&ecc_programmed[off / WOLFBOOT_FLASH_WRITE_UNIT], 0,
+        len / WOLFBOOT_FLASH_WRITE_UNIT);
+    return 1;
+}
+#endif
+
 #ifdef MOCK_KEYVAULT
 /* Power-fail injection for the keyvault (pkcs11 store) tests.
  *
@@ -171,6 +218,10 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
     }
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
+#ifdef NVM_FLASH_ECC
+        if (!ecc_write_ok(address, len))
+            return -1;
+#endif
         for (i = 0; i < len; i++) {
             a[i] = data[i];
         }
@@ -205,6 +256,10 @@ int hal_flash_erase(haladdr_t address, int len)
     ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
+#ifdef NVM_FLASH_ECC
+        if (!ecc_erase_ok(address, len))
+            return -1;
+#endif
         erased_boot++;
         memset((void*)(uintptr_t)address, 0xFF, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
