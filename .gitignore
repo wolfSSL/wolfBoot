@@ -409,6 +409,10 @@ IDE/Renesas/e2studio/RX72N/app_RenesasRX01/HardwareDebug
 IDE/Renesas/e2studio/RX72N/app_RenesasRX01/src/smc_gen
 IDE/Renesas/e2studio/RX72N/wolfBoot/HardwareDebug
 IDE/Renesas/e2studio/RX72N/wolfBoot/src/smc_gen
+IDE/Renesas/e2studio/RX71M/app_RenesasRX01/HardwareDebug
+IDE/Renesas/e2studio/RX71M/app_RenesasRX01/src/smc_gen
+IDE/Renesas/e2studio/RX71M/wolfBoot/HardwareDebug
+IDE/Renesas/e2studio/RX71M/wolfBoot/src/smc_gen
 
 # IDE pico-sdk build directories
 IDE/pico-sdk/rp2350/wolfboot/build
