@@ -15,8 +15,9 @@ Platforms Supported:
   - [IDE/Renesas/e2studio/RX72N/Readme_withTSIP.md](/IDE/Renesas/e2studio/RX72N/Readme_withTSIP.md)
 * Renesas RX (RX71M) (software crypto, no TSIP)
   - [docs/Targets.md#renesas-rx71m](/docs/Targets.md#renesas-rx71m)
+  - [IDE/Renesas/e2studio/RX71M/Readme.md](/IDE/Renesas/e2studio/RX71M/Readme.md)
 
-All of the Renesas examples except RX71M include an e2Studio project.
+All of the Renesas examples include an e2Studio project.
 The Renesas RX parts support using wolfBoot Makefile's with the rx-elf-gcc cross-compiler and example .config files.
 
 ## Security Key Management Tool (SKMT) Key Wrapping

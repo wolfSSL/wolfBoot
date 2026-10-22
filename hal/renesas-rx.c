@@ -625,9 +625,37 @@ void hal_prepare_boot(void)
 #endif
 }
 
+#ifdef __CCRX__
+/* copy RAM functions from ROM to RAM */
+static void copyfuncs(void)
+{
+    unsigned char *dst, *src;
+    size_t n;
+
+    src = __sectop("PFRAM");
+    dst = __sectop("RPFRAM");
+    n = (size_t)((unsigned char*)__secend("PFRAM") -
+                 (unsigned char*)__sectop("PFRAM"));
+    while(src < __secend("PFRAM")) {
+        *dst++ = *src++;
+    }
+
+    wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
+    wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
+    wolfBoot_printf("RAM Function size  = %d\n", n);
+}
+#endif
+
 #ifdef TARGET_rx71m /* RX71M code flash driver */
-#if !defined(RAM_CODE) || !defined(__WOLFBOOT)
+#if !defined(__CCRX__) && (!defined(RAM_CODE) || !defined(__WOLFBOOT))
     #error RX71M flash driver must run from RAM: define RAM_CODE and __WOLFBOOT
+#endif
+
+#ifdef __CCRX__
+/* FCLK from the Smart Configurator clock settings */
+#define FLASH_FCLK_MHZ ((uint32_t)(BSP_FCLK_HZ / 1000000UL))
+#else
+#define FLASH_FCLK_MHZ (FCLK / 1000000UL)
 #endif
 
 /* Timeouts as poll counts; each poll takes at least one ICLK */
@@ -641,6 +669,10 @@ void hal_prepare_boot(void)
 
 /* One 256-byte write, kept in RAM and sent to the FACI 16 bits at a time */
 static uint16_t flash_unit[FLASH_FACI_CMD_PROGRAM_CODE_LENGTH];
+
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 
 static int RAMFUNCTION flash_wait_complete(uint32_t limit)
 {
@@ -706,16 +738,27 @@ static int RAMFUNCTION flash_check_error(void)
 
 static uint32_t RAMFUNCTION flash_irq_save(void)
 {
+#ifdef __CCRX__
+    uint32_t psw = (uint32_t)get_psw();
+
+    clrpsw_i();
+#else
     uint32_t psw = __builtin_rx_mvfc(0);
 
     __builtin_rx_clrpsw('I');
+#endif
     return psw;
 }
 
 static void RAMFUNCTION flash_irq_restore(uint32_t psw)
 {
-    if ((psw & RX_PSW_I) != 0)
+    if ((psw & RX_PSW_I) != 0) {
+#ifdef __CCRX__
+        setpsw_i();
+#else
         __builtin_rx_setpsw('I');
+#endif
+    }
 }
 
 /* mode: FLASH_FENTRYR_CODE_PR (code flash) or FLASH_FENTRYR_DATA_PE
@@ -800,6 +843,10 @@ static int RAMFUNCTION flash_range_valid(uint32_t address, int len)
 
 /* The FCU runs firmware copied from ROM to FCURAM; do this once before any
  * write or erase */
+#ifdef __CCRX__
+/* keep it out of hal_flash_init(), which runs from ROM */
+#pragma noinline(flash_fcu_firmware_copy)
+#endif
 static int RAMFUNCTION flash_fcu_firmware_copy(void)
 {
     const volatile uint32_t *src = (const volatile uint32_t *)FCU_FIRMWARE_ADDR;
@@ -828,15 +875,6 @@ static int RAMFUNCTION flash_fcu_firmware_copy(void)
             ret = mode_ret;
     }
     return ret;
-}
-
-int hal_flash_init(void)
-{
-    FLASH_FAEINT &= (uint8_t)~(FLASH_FAEINT_ECRCTIE | FLASH_FAEINT_DFAEIE |
-        FLASH_FAEINT_CMDLKIE | FLASH_FAEINT_CFAEIE);
-    FLASH_FPCKAR = (uint16_t)(FLASH_FPCKAR_KEY |
-        FLASH_FPCKAR_PCKA(FCLK / 1000000UL));
-    return flash_fcu_firmware_copy();
 }
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
@@ -931,26 +969,22 @@ void RAMFUNCTION hal_flash_unlock(void)
 void RAMFUNCTION hal_flash_lock(void)
 {
 }
-#else /* !TARGET_rx71m */
 #ifdef __CCRX__
-/* copy RAM functions from ROM to RAM */
-static void copyfuncs(void)
-{
-    unsigned char *dst, *src;
-    size_t n;
-    
-    src = __sectop("PFRAM");
-    dst = __sectop("RPFRAM");
-    n = (size_t)((unsigned char*)__secend("PFRAM") -
-                 (unsigned char*)__sectop("PFRAM"));
-    wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
-    wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
-    wolfBoot_printf("RAM Function size  = %d\n", n);
-    while(src < __secend("PFRAM")) {
-        *dst++ = *src++;
-    }
-}
+#pragma section
 #endif
+
+int hal_flash_init(void)
+{
+#ifdef __CCRX__
+    copyfuncs();
+#endif
+    FLASH_FAEINT &= (uint8_t)~(FLASH_FAEINT_ECRCTIE | FLASH_FAEINT_DFAEIE |
+        FLASH_FAEINT_CMDLKIE | FLASH_FAEINT_CFAEIE);
+    FLASH_FPCKAR = (uint16_t)(FLASH_FPCKAR_KEY |
+        FLASH_FPCKAR_PCKA(FLASH_FCLK_MHZ));
+    return flash_fcu_firmware_copy();
+}
+#else /* !TARGET_rx71m */
 int hal_flash_init(void)
 {
 #ifdef __CCRX__

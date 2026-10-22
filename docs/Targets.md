@@ -8674,6 +8674,8 @@ Target board: Renesas Starter Kit+ for RX71M (YR0K50571MS000BE), with the R5F571
 
 The R5F571MLCDFC has no encryption module, so there is no TSIP: wolfBoot uses software crypto, and the build stops if `PKA=1`.
 
+The RX71M is supported either natively with "make" (GCC for Renesas RX) or through e2Studio with CC-RX. If using e2Studio see [Readme.md](../IDE/Renesas/e2studio/RX71M/Readme.md).
+
 Default UART Serial on SCI7 at P90-TXD7 P92-RXD7, connected to the on-board USB serial converter. This feature is enabled with `DEBUG_UART=1`.
 
 Example Boot Output (with DEBUG_UART=1):
@@ -8730,7 +8732,7 @@ Default Onboard Flash Memory Layout (4MB) (32KB sector):
 * The clock setup assumes the 24 MHz crystal of the RSK+. For another board set `CFLAGS_EXTRA+=-DRX_MAIN_XTAL_HZ=<Hz>` (8 to 24 MHz, and 240 MHz must be a whole multiple of it).
 * With `WATCHDOG`, wolfBoot feeds the watchdog once per sector copy during an update. The flash work between two feeds can take several seconds at the maximum program and erase times, so choose a watchdog period that covers it.
 * `ROMCODE` at `0xFFFFFF9C` enables ROM code protection when set to `0x00000000` or `0x00000001`. wolfBoot sets it to `0xFFFFFFFF`.
-* An application that calls `wolfBoot_success()` or `wolfBoot_update_trigger()` writes flash through the same driver, which must run from RAM: build `hal/renesas-rx.c` with `RAM_CODE` and `__WOLFBOOT` defined and place its `.ramcode` section in RAM, as `test-app/Makefile` and `test-app/RENESAS_RX.ld` do. The driver masks interrupts while it writes.
+* An application that calls `wolfBoot_success()` or `wolfBoot_update_trigger()` writes flash through the same driver, which must run from RAM: with GCC, build `hal/renesas-rx.c` with `RAM_CODE` and `__WOLFBOOT` defined and place its `.ramcode` section in RAM, as `test-app/Makefile` and `test-app/RENESAS_RX.ld` do. The driver masks interrupts while it writes.
 * The option-setting memory at `0x00120040` is written only when built with `CFLAGS_EXTRA+=-DWOLFBOOT_RENESAS_OSM`, through `wolfboot.srec` (not `wolfboot.bin`). Run `make srec` and program `wolfboot.srec` in place of `-bin FFFF0000 wolfboot.bin`.
 
 To switch to big endian data, set `MDE` at `0x00120064` (little endian is the erased default):
