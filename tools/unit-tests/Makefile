@@ -147,6 +147,7 @@ TESTS+=unit-versal-ext-write
 TESTS+=unit-versal-wdt
 TESTS+=unit-versal-uart-rx
 TESTS+=unit-raspi3-uart-rx
+TESTS+=unit-mpfs-wdt
 TESTS+=unit-t10xx-qe-firmware
 TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
@@ -1771,6 +1772,31 @@ raspi3_uart_rx_extract.h: ../../hal/raspi3.c
 
 unit-raspi3-uart-rx: unit-raspi3-uart-rx.c raspi3_uart_rx_extract.h
 	gcc -o $@ unit-raspi3-uart-rx.c $(CFLAGS) $(LDFLAGS)
+# unit-mpfs-wdt drives the real mpfs_wdt_pet_all() from hal/mpfs250.c against
+# an emulated MSS watchdog register file.  A refresh written while the counter
+# is above MVRP is answered with a chip reset, so the test asserts which harts
+# were written rather than a return code.  The register offsets and the status
+# bits are extracted from hal/mpfs250.h so a renumbering cannot pass.
+mpfs250_wdt_extract.h: ../../hal/mpfs250.h ../../hal/mpfs250.c
+	sed -n '/^\/\* MSS Watchdog Timer (per-hart) \*\//,/^#define MSS_WDT_STAT_DEVRST/p' $< \
+		| grep -v '_BASE' > $@
+	grep -h '^#define MPFS_NUM_HARTS' $< >> $@
+	sed -n '/^static const unsigned long mpfs_wdt_bases/,/^};/p' \
+		../../hal/mpfs250.c >> $@
+	sed -n '/^void mpfs_wdt_pet_all(void)$$/,/^}/p' ../../hal/mpfs250.c >> $@
+	test -s $@
+	@for s in MSS_WDT_REFRESH MSS_WDT_STATUS MSS_WDT_STAT_FORBIDDEN \
+		MPFS_NUM_HARTS mpfs_wdt_bases mpfs_wdt_pet_all; do grep -q "$$s" $@ || \
+		{ echo "$@: $$s not extracted"; false; }; done
+
+# A refresh outside a gate helper and outside M-mode resets the chip, which no
+# unit test can observe: the source rule is checked alongside the test.
+.PHONY: mpfs-wdt-gate-check
+mpfs-wdt-gate-check:
+	python3 ../ci/check-mpfs-wdt-gate.py ../../hal
+
+unit-mpfs-wdt: unit-mpfs-wdt.c mpfs250_wdt_extract.h | mpfs-wdt-gate-check
+	gcc -o $@ unit-mpfs-wdt.c $(CFLAGS) $(LDFLAGS)
 
 # unit-t10xx-qe-firmware runs the real qe_check_firmware() from
 # hal/nxp_t10xx.c (the per-microcode code_offset was never
@@ -2435,6 +2461,7 @@ GENERATED_SRC:=aurix_erased_extract.h elf_store_extract.h \
 	imx8qm_usdhc_extract.h imx8qm_flexspi_extract.h \
 	imx95_ele_extract.h imx95_disk_extract.h \
 	hifive1_flash_write_extract.h nvm_cache_scrub_extract.h \
+	mpfs250_wdt_extract.h \
 	nxp_ls1028a_host.c nxp_p1021_host.c nxp_t10xx_fixup_extract.h \
 	p1021_erase_extract.h p1021_erase_fn_extract.h \
 	p1021_read_extract.h p1021_read_fn_extract.h \

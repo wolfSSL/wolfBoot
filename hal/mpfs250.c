@@ -90,6 +90,11 @@ extern void sdhci_irq_handler(void);
  * HSS) and is updated when M-mode wolfBoot raises the MSS PLL. */
 uint32_t mpfs_apb_clk_hz = MSS_APB_AHB_CLK;
 
+static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
+    MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
+    MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
+};
+
 #ifdef WOLFBOOT_RISCV_MMODE
 /* CPU frequency in MHz for mcycle-based udelay(); seeded at the E51 reset
  * clock and bumped to the PLL rate after mss_pll_init() (hal/mpfs250_ddr.c).
@@ -103,13 +108,6 @@ uint32_t mpfs_cpu_freq_mhz = MPFS_CPU_FREQ_RESET_MHZ;
 const uint8_t __attribute__((section(".envm_manifest"), used))
     mpfs_envm_manifest[MPFS_ENVM_MANIFEST_SIZE] =
         { [0 ... MPFS_ENVM_MANIFEST_SIZE - 1] = 0xFF };
-#endif
-
-#ifdef WOLFBOOT_RISCV_MMODE
-static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
-    MSS_WDT_E51_BASE, MSS_WDT_U54_1_BASE, MSS_WDT_U54_2_BASE,
-    MSS_WDT_U54_3_BASE, MSS_WDT_U54_4_BASE
-};
 #endif
 
 /* Snapshots captured at hal_init entry, printed after uart_init;
@@ -2037,6 +2035,26 @@ static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
     return (timeout == 0) ? -1 : 0;
 }
 
+/* Refresh all five MSS watchdogs, skipping any whose counter is still above
+ * MVRP.  A refresh inside that forbidden window is answered with a chip reset
+ * rather than an error.  An M-mode build sets MVRP itself and never lands
+ * there, but one running under a supervisor that owns the window - wolfBoot as
+ * an HSS payload - finds every refresh inside it, so each watchdog is tested
+ * rather than assumed.  Skipping one is safe: the window is whole seconds wide
+ * and every caller loops. */
+void mpfs_wdt_pet_all(void)
+{
+    unsigned long b;
+    unsigned int i;
+
+    for (i = 0; i < MPFS_NUM_HARTS; i++) {
+        b = mpfs_wdt_bases[i];
+        if ((MSS_WDT_STATUS(b) & MSS_WDT_STAT_FORBIDDEN) == 0U) {
+            MSS_WDT_REFRESH(b) = 0xDEADC0DEU;
+        }
+    }
+}
+
 #if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)
 /* MSS QSPI (0x21000000) and SC QSPI (0x37020100) are both CoreQSPI v2 with
  * identical register layouts; MPFS_SC_SPI picks one by changing QSPI_BASE. */
@@ -2612,13 +2630,9 @@ static void qspi_uart_program(void)
         int ret;
         /* The MSS WDTs always count and reset the chip at timeout (~28.6s
          * at the reset divisor) and cannot be disabled, so a transfer of
-         * more than a few tens of KB outlives the period: refresh all
-         * five per sector here and per chunk below. */
-        MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+         * more than a few tens of KB outlives the period: refresh per sector
+         * here and per chunk below. */
+        mpfs_wdt_pet_all();
         ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
                               FLASH_SECTOR_SIZE);
         if (ret < 0) {
@@ -2640,11 +2654,7 @@ static void qspi_uart_program(void)
         if (chunk_len > QSPI_PROG_CHUNK)
             chunk_len = QSPI_PROG_CHUNK;
 
-        MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
-        MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+        mpfs_wdt_pet_all();
 
         uart_qspi_tx(QSPI_PROG_ACK);          /* request next chunk */
 
@@ -2953,17 +2963,13 @@ static void mpfs_mpu_init_mmc(void)
 }
 #endif /* MPFS_DDR_INIT */
 
-/* Pet all five MSS watchdogs during the SDHCI read loops.
- * Overrides the weak no-op in src/sdhci.c.  The MSS watchdogs always count
- * and reset the chip at timeout and cannot be disabled, so the multi-second
- * load of a large image must keep refreshing them. */
+/* Pet all five MSS watchdogs during the SDHCI read loops.  Overrides the weak
+ * no-op in src/sdhci.c.  The MSS watchdogs always count and reset the chip at
+ * timeout and cannot be disabled, so the multi-second load of a large image
+ * must keep refreshing them. */
 void sdhci_platform_wdt_pet(void)
 {
-    MSS_WDT_REFRESH(MSS_WDT_E51_BASE)   = 0xDEADC0DEU;
-    MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
-    MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
-    MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
-    MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
+    mpfs_wdt_pet_all();
 }
 
 void sdhci_platform_init(void)

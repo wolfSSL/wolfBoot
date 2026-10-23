@@ -616,7 +616,13 @@ the first write to any of offsets `0x00`-`0x0C` locks TRIGGER, MVRP and TIME unt
 system reset - a refresh is such a write. On the Video Kit they read TIME `0xFFFFF0`, MVRP
 `0x989680`, TRIGGER `0x3E8`, CONTROL `0x02`, which is already the longest window the 24-bit
 counter allows: the counter runs at the APB clock divided by 256, so a reload lasts about 28.6 s.
-Refreshing them is therefore the only control wolfBoot has. After hand-off the parked
+Refreshing them is therefore the only control wolfBoot has, and only once the counter has
+dropped below MVRP: a refresh above it falls in the forbidden window, which the hardware
+answers with a chip reset rather than an error (STATUS bit 2). An M-mode build refreshes
+after setting MVRP itself and never lands there, but a build running as an HSS payload
+inherits the supervisor's window, so `mpfs_wdt_pet_all()` tests that bit per watchdog and
+skips any refresh that would reset the board; the window is whole seconds wide and every
+caller loops, so a skipped refresh costs nothing. After hand-off the parked
 E51 acts as a monitor and refreshes all five watchdogs; the OS watchdog driver is disabled via
 the dtb fixup so the two never conflict. `MPFS_WDT_NODES_KEEP=1` hands the watchdogs to the OS
 instead: the dtb nodes stay enabled and the parked E51 stops refreshing, so the OS driver arms
