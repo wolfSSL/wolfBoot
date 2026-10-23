@@ -49,6 +49,8 @@ CFLAGS+=-g -ggdb
 CFLAGS+=-fprofile-arcs
 CFLAGS+=-ftest-coverage
 CFLAGS+=--coverage
+# The tests do not use threads: plain counters, even with -pthread
+CFLAGS+=-fprofile-update=single
 CFLAGS+=-DUNIT_TEST_COVERAGE
 CFLAGS+=-DUNIT_TEST -DWOLFSSL_USER_SETTINGS
 # Pin the standard: GCC 14+ defaults to gnu23, where glibc string.h defines
@@ -77,6 +79,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-db \
        unit-update-flash-hook \
+       unit-update-flash-int-invert \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
        unit-update-flash-self-update-monolithic \
@@ -436,6 +439,11 @@ unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -D
 unit-nsc-update:CFLAGS+=-DMOCK_PARTITIONS -D__WOLFBOOT -DTZEN \
 	-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Write-once trailers with inverted flags and every partition in internal flash
+unit-update-flash-int-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DNVM_FLASH_WRITEONCE -DWOLFBOOT_FLAGS_INVERT=1 -DFLASHBUFFER_SIZE=512 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-flash-hook:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -1285,6 +1293,9 @@ unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-int-invert: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 # DISABLE_BACKUP runtime variant: direct update->BOOT copy without the
