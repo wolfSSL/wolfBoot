@@ -601,7 +601,7 @@ int hal_hsm_init_connect(void)
         .transport_context = (void*)tmcCtx,
         .transport_config  = (void*)tmcCfg,
         .client_id         = WOLFBOOT_WOLFHSM_CLIENT_ID,
-        .connect_cb        = hsm_ipc_connect_cb,
+        .connect_cb        = hsm_ipc_get_connect_cb(HSM_CLIENT),
     }};
 
     whClientConfig c_conf[1] = {{
