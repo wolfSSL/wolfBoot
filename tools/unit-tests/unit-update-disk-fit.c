@@ -78,9 +78,29 @@ static int mock_dts_size;
 static int mock_boot_part_prop;
 static int mock_chosen_val_ret;
 static int mock_do_boot_called;
+/* The device tree actually handed to the kernel. */
+static const uint32_t *mock_do_boot_dts;
 static int mock_fit_memcpy_ret;
 static int mock_fit_memcpy_called;
 static int mock_panic_hook_called;
+/* Which sub-images fit_find_images() reports. Defaults keep the existing
+ * tests on the "FIT supplies its own fdt, no ramdisk" path. */
+static const char *mock_flat_dt = "fdt";
+static const char *mock_ramdisk;
+/* Ordering witnesses: hal_flash_protect() runs between the FIT block and
+ * the deferred block, so a fixup that drifted back is visible here. */
+static int mock_flash_protect_calls;
+static int mock_ramdisk_calls;
+static int mock_ramdisk_ret;
+static int mock_ramdisk_saw_flash_protect;
+static fdt_ctx *mock_ramdisk_dts;
+/* Stands in for the blob a bootgen raw partition leaves at
+ * WOLFBOOT_LOAD_DTS_ADDRESS. NULL means the HAL offers none. */
+static uint8_t configured_dts[TEST_DTS_STAGE_SIZE];
+static void *mock_configured_dts;
+/* A blob fdt_open() refuses, so a tree that passes the size check but will
+ * not open for the initrd fixup can be reached. */
+static const void *mock_fdt_open_fail_blob;
 /* Snapshot of the key material taken from inside wolfBoot_panic() */
 static uint8_t panic_key_snapshot[ENCRYPT_KEY_SIZE];
 static uint8_t panic_nonce_snapshot[ENCRYPT_NONCE_SIZE];
@@ -121,11 +141,22 @@ static void reset_mocks(void)
     memset(fit_dts_image, 0xDD, sizeof(fit_dts_image));
     mock_dts_size = TEST_DTS_SIZE;
     mock_do_boot_called = 0;
+    mock_do_boot_dts = (const uint32_t*)0x1;  /* poison; must be overwritten */
     mock_fit_memcpy_ret = 0;
     mock_fit_memcpy_called = 0;
     mock_boot_part_prop = -1;
     mock_chosen_val_ret = 0;
     mock_panic_hook_called = 0;
+    mock_flat_dt = "fdt";
+    mock_ramdisk = NULL;
+    mock_flash_protect_calls = 0;
+    mock_ramdisk_calls = 0;
+    mock_ramdisk_ret = 0;
+    mock_ramdisk_saw_flash_protect = 0;
+    mock_ramdisk_dts = NULL;
+    memset(configured_dts, 0xCD, sizeof(configured_dts));
+    mock_configured_dts = configured_dts;
+    mock_fdt_open_fail_blob = NULL;
     memset(panic_key_snapshot, 0xFF, sizeof(panic_key_snapshot));
     memset(panic_nonce_snapshot, 0xFF, sizeof(panic_nonce_snapshot));
     wolfBoot_panicked = 0;
@@ -253,6 +284,9 @@ void fdt_set_dtb_authenticated(int authenticated)
  * we only need update_disk.c to take the FIT branch. */
 int fdt_open(fdt_ctx* ctx, void* blob, uint32_t capacity)
 {
+    if (mock_fdt_open_fail_blob != NULL && blob == mock_fdt_open_fail_blob) {
+        return -1;
+    }
     memset(ctx, 0, sizeof(*ctx));
     ctx->blob = (uint8_t*)blob;
     ctx->capacity = capacity;
@@ -272,9 +306,9 @@ const char* fit_find_images(fdt_ctx* ctx, const char** pkernel,
     if (pkernel != NULL)
         *pkernel = NULL;
     if (pflat_dt != NULL)
-        *pflat_dt = "fdt";
+        *pflat_dt = mock_flat_dt;
     if (pramdisk != NULL)
-        *pramdisk = NULL;
+        *pramdisk = mock_ramdisk;
     if (pfpga != NULL)
         *pfpga = NULL;
     return "conf";
@@ -299,6 +333,13 @@ void* fit_load_image(fdt_ctx* ctx, const char* image, int* lenp)
     return fit_dts_image;
 }
 
+/* This suite's fit_find_images() reports no kernel node, so the call is
+ * never reached; the stub only satisfies the link. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
+{
+    return fit_load_image(ctx, kernel_node, lenp);
+}
+
 int wolfBoot_fit_memcpy(void *dst, const void *src, uint32_t len)
 {
     mock_fit_memcpy_called++;
@@ -314,17 +355,42 @@ void hal_prepare_boot(void)
 
 void do_boot(const uint32_t *address, const uint32_t *dts_address)
 {
-    (void)dts_address;
     (void)address;
+    mock_do_boot_dts = dts_address;
     mock_do_boot_called++;
+}
+
+void* hal_get_dts_address(void)
+{
+    return mock_configured_dts;
+}
+
+void* hal_get_dts_update_address(void)
+{
+    return NULL;
 }
 
 int hal_flash_protect(haladdr_t address, int len)
 {
     (void)address;
     (void)len;
+    mock_flash_protect_calls++;
     return 0;
 }
+
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* Records when it ran relative to hal_flash_protect(), and which device
+ * tree it was handed. */
+int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
+{
+    (void)ctx;
+    (void)ramdisk_node;
+    mock_ramdisk_calls++;
+    mock_ramdisk_saw_flash_protect = mock_flash_protect_calls;
+    mock_ramdisk_dts = dts;
+    return mock_ramdisk_ret;
+}
+#endif
 
 #include "update_disk.c"
 
@@ -436,6 +502,173 @@ START_TEST(test_update_disk_fit_dts_below_min_rejected)
 }
 END_TEST
 
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* A kernel-only FIT must still get /chosen/linux,initrd-* written into
+ * whichever device tree is selected, so the fixup runs after the fallback. */
+START_TEST(test_update_disk_fit_ramdisk_fixup_runs_after_dtb_selection)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT: no fdt sub-image */
+    mock_ramdisk = "ramdisk-1";
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    /* It ran at all ... */
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    /* ... and only once the device tree had been selected, rather than
+     * back inside the FIT block. */
+    ck_assert_int_gt(mock_ramdisk_saw_flash_protect, 0);
+}
+END_TEST
+
+/* With a FIT that carries its own fdt the fixup still runs exactly once
+ * and is handed a tree. */
+START_TEST(test_update_disk_fit_ramdisk_fixup_gets_the_fit_dtb)
+{
+    reset_mocks();
+    mock_ramdisk = "ramdisk-1";   /* mock_flat_dt stays "fdt" */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    ck_assert_int_gt(mock_ramdisk_saw_flash_protect, 0);
+    ck_assert_ptr_nonnull(mock_ramdisk_dts);
+}
+END_TEST
+/* A ramdisk that cannot be staged, or that has no tree to be announced in,
+ * is logged and the kernel boots anyway rather than the boot aborting. */
+START_TEST(test_update_disk_fit_ramdisk_failure_still_boots)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;
+    mock_ramdisk = "ramdisk-1";
+    mock_ramdisk_ret = -1;
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+}
+END_TEST
+#endif /* WOLFBOOT_FIT_RAMDISK */
+
+#ifdef MMU
+/* A configured DTB that cannot be relocated is dropped and the kernel is
+ * entered with no tree, rather than the boot aborting. */
+START_TEST(test_update_disk_fit_configured_dtb_relocation_failure)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT: reach the fallback */
+    mock_fit_memcpy_ret = -1;
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_null(mock_do_boot_dts);
+}
+END_TEST
+
+/* hal_get_boot_dts() is a weak NULL on every target but CM4, so without
+ * the configured-DTB fallback a kernel-only FIT gets a NULL tree. */
+START_TEST(test_update_disk_fit_kernel_only_uses_configured_dtb)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    /* Relocated into the staging window, not used where the HAL put it:
+     * the initrd fixup grows the tree in place. */
+    ck_assert_ptr_eq(mock_do_boot_dts, (void*)dts_buffer);
+    ck_assert_int_eq(memcmp(dts_buffer, configured_dts, TEST_DTS_SIZE), 0);
+}
+END_TEST
+
+/* When the HAL hands back the staging window itself, as hal/versal.c does,
+ * it is used directly with no self-copy. */
+START_TEST(test_update_disk_fit_configured_dtb_already_staged)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;
+    memset(dts_buffer, 0xAB, TEST_DTS_SIZE);
+    mock_configured_dts = dts_buffer;
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_ptr_eq(mock_do_boot_dts, (void*)dts_buffer);
+    ck_assert_uint_eq(dts_buffer[0], 0xAB);
+}
+END_TEST
+
+/* No DTB from anywhere: the HAL offers none and the FIT carried none. The
+ * kernel is entered with a NULL tree instead of the boot aborting. */
+START_TEST(test_update_disk_fit_no_dtb_at_all)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT */
+    mock_configured_dts = NULL;   /* and no firmware DTB either */
+#ifdef WOLFBOOT_FIT_RAMDISK
+    mock_ramdisk = "ramdisk-1";
+#endif
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_null(mock_do_boot_dts);
+#ifdef WOLFBOOT_FIT_RAMDISK
+    /* The fixup is still attempted, with nothing to write into. */
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    ck_assert_ptr_null(mock_ramdisk_dts);
+#endif
+}
+END_TEST
+
+#ifdef WOLFBOOT_FIT_RAMDISK
+/* A firmware DTB that passes the size check but will not open must not be
+ * handed to fit_load_ramdisk() as if it were a tree. The kernel still gets
+ * the tree itself, only without the initrd properties. */
+START_TEST(test_update_disk_fit_dtb_that_does_not_open)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;          /* kernel-only FIT: reach the fallback */
+    mock_ramdisk = "ramdisk-1";
+    mock_fdt_open_fail_blob = dts_buffer;
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_eq(mock_do_boot_dts, (void*)dts_buffer);
+    ck_assert_int_eq(mock_ramdisk_calls, 1);
+    ck_assert_ptr_null(mock_ramdisk_dts);
+}
+END_TEST
+#endif /* WOLFBOOT_FIT_RAMDISK */
+
+/* An unparseable configured DTB is dropped, not forwarded. */
+START_TEST(test_update_disk_fit_bad_configured_dtb_rejected)
+{
+    reset_mocks();
+    mock_flat_dt = NULL;
+    mock_dts_size = 8;            /* below WOLFBOOT_DTS_MIN_SIZE */
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_ptr_null(mock_do_boot_dts);
+}
+END_TEST
+#endif /* MMU */
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -444,6 +677,21 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_fit_dts_copy_failure_zeroizes_key_material);
     tcase_add_test(tc, test_update_disk_fit_dts_oversized_rejected);
     tcase_add_test(tc, test_update_disk_fit_dts_below_min_rejected);
+#ifdef MMU
+    tcase_add_test(tc, test_update_disk_fit_kernel_only_uses_configured_dtb);
+    tcase_add_test(tc, test_update_disk_fit_configured_dtb_already_staged);
+    tcase_add_test(tc, test_update_disk_fit_bad_configured_dtb_rejected);
+    tcase_add_test(tc, test_update_disk_fit_configured_dtb_relocation_failure);
+    tcase_add_test(tc, test_update_disk_fit_no_dtb_at_all);
+#ifdef WOLFBOOT_FIT_RAMDISK
+    tcase_add_test(tc, test_update_disk_fit_dtb_that_does_not_open);
+#endif
+#endif
+#ifdef WOLFBOOT_FIT_RAMDISK
+    tcase_add_test(tc, test_update_disk_fit_ramdisk_fixup_runs_after_dtb_selection);
+    tcase_add_test(tc, test_update_disk_fit_ramdisk_fixup_gets_the_fit_dtb);
+    tcase_add_test(tc, test_update_disk_fit_ramdisk_failure_still_boots);
+#endif
     tcase_add_test(tc, test_update_disk_fit_dts_copy_success_boots);
     tcase_add_test(tc, test_update_disk_fit_boot_part_fixup_failure_panics);
     suite_add_tcase(s, tc);

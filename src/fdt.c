@@ -47,6 +47,12 @@
 #include "gzip.h"
 #endif
 
+/* Largest address a pointer can hold. Overridable so the two-cell
+ * rejection below can be exercised at 32-bit width on a 64-bit host. */
+#ifndef FDT_PTR_MAX
+#define FDT_PTR_MAX UINTPTR_MAX
+#endif
+
 /* Coarse upper bound on a single FIT subimage's decompressed size.
  * This is a sanity ceiling, not a per-destination memory-safety
  * bound. Authenticity of the FIT bytes is provided by the outer
@@ -812,7 +818,15 @@ void* fdt_getprop_address(const fdt_ctx* ctx, int nodeoffset, const char* name)
         return NULL;
     }
     if (len == 8) {
-        return (void*)(uintptr_t)fdt_rd64u(val);
+        uint64_t addr64 = fdt_rd64u(val);
+        /* Reject rather than truncate: dropping the high cell would turn
+         * an out-of-range address into an unrelated low one. */
+#if FDT_PTR_MAX < UINT64_MAX
+        if (addr64 > (uint64_t)FDT_PTR_MAX) {
+            return NULL;
+        }
+#endif
+        return (void*)(uintptr_t)addr64;
     }
     if (len == 4) {
         return (void*)(uintptr_t)fdt_rd32(val);
@@ -1674,6 +1688,28 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
     return NULL;
 }
 
+/* 0 honors the FIT's own `load` property. */
+#ifndef WOLFBOOT_LOAD_KERNEL_ADDRESS
+#define WOLFBOOT_LOAD_KERNEL_ADDRESS 0
+#endif
+
+/* Upper bound on the decompressed kernel size. */
+#ifndef WOLFBOOT_FIT_MAX_KERNEL
+#define WOLFBOOT_FIT_MAX_KERNEL WOLFBOOT_FIT_MAX_DECOMP
+#endif
+
+/* Stage the kernel at WOLFBOOT_LOAD_KERNEL_ADDRESS when nonzero, bypassing
+ * the FIT's `load`/`entry` so a FIT declaring neither still boots. */
+void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
+{
+    if (WOLFBOOT_LOAD_KERNEL_ADDRESS != 0) {
+        return fit_load_image_to(ctx, kernel_node,
+            (void*)WOLFBOOT_LOAD_KERNEL_ADDRESS,
+            (uint32_t)WOLFBOOT_FIT_MAX_KERNEL, lenp);
+    }
+    return fit_load_image(ctx, kernel_node, lenp);
+}
+
 #ifdef WOLFBOOT_FIT_RAMDISK
 /* Defensive fallback: targets without a fixed relocation address
  * leave WOLFBOOT_LOAD_RAMDISK_ADDRESS at 0, in which case the
@@ -1697,12 +1733,12 @@ const char* fit_get_compatible(fdt_ctx* ctx, const char* image)
  * straight into the override (with the override capacity acting as
  * the safety bound). Otherwise the address fit_load_image returned
  * (FIT-specified or in-FIT pointer) is used as-is. Caller passes the
- * DTB context for the initrd fixup, or NULL to skip the fixup.
+ * DTB context the initrd fixup writes into.
  *
- * Returns 0 on success, -1 if the ramdisk node was found but the
- * load failed. The current callers ignore the return value
- * (log-and-continue), so a missing/failed ramdisk does not abort
- * the boot. */
+ * Returns 0 on success, -1 if the ramdisk node was found but the load
+ * failed, or if `dts` is NULL - a ramdisk the kernel is never told
+ * about is not a success. Callers log and continue, so this does not
+ * abort the boot. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 {
     int rd_size = 0;
@@ -1733,7 +1769,14 @@ int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
         wolfBoot_printf("Loaded ramdisk: %p (%d bytes)\n", rd_dst, rd_size);
     }
 
-    if (dts != NULL) {
+    if (dts == NULL) {
+        /* Staged but unreachable: without a tree to write
+         * /chosen/linux,initrd-* into, the kernel never learns of it. */
+        wolfBoot_printf("FIT: no device tree for the initrd fixup; "
+            "kernel will not see initrd\n");
+        return -1;
+    }
+    {
         int frc = fdt_fixup_initrd(dts, (uint64_t)(uintptr_t)rd_dst,
             (uint64_t)rd_size);
         if (frc != 0) {
@@ -1771,6 +1814,46 @@ int __attribute__((weak)) wolfBoot_fit_check_dest(void *dst, uint32_t len)
     (void)dst;
     (void)len;
     return 0;
+}
+
+/* Narrow `out_max` to what may actually be written at `load`: anything above
+ * it that has to survive the load caps the window - the staged FIT, whose
+ * header and structure block the later `fdt`/`ramdisk` lookups still read,
+ * and wolfBoot's own image. A gzip stream can emit garbage at full match
+ * speed and a raw subimage is copied just as blindly, so both paths need the
+ * same bound. Conservative lower bounds. */
+static uint32_t fit_dest_bound(const fdt_ctx* ctx, const void* load,
+    const void* data, uint32_t out_max)
+{
+    uintptr_t gap;
+
+    if ((uintptr_t)ctx->blob > (uintptr_t)load) {
+        gap = (uintptr_t)ctx->blob - (uintptr_t)load;
+        if (gap < (uintptr_t)out_max) {
+            out_max = (uint32_t)gap;
+        }
+    }
+    /* A destination inside the blob but below `data` is past the bound
+     * above, so the data pointer still has to cap it. */
+    if ((uintptr_t)data > (uintptr_t)load) {
+        gap = (uintptr_t)data - (uintptr_t)load;
+        if (gap < (uintptr_t)out_max) {
+            out_max = (uint32_t)gap;
+        }
+    }
+    if ((uintptr_t)wolfboot_start_text > (uintptr_t)load) {
+        gap = (uintptr_t)wolfboot_start_text - (uintptr_t)load;
+        if (gap < (uintptr_t)out_max) {
+            out_max = (uint32_t)gap;
+        }
+    }
+    else if (wolfboot_start_text == NULL) {
+        /* Linker script does not export _start_text: the bootloader-image
+         * bound cannot be applied. Say so rather than skipping it silently. */
+        wolfBoot_printf("FIT: no _start_text, load not bounded by the "
+            "wolfBoot image\n");
+    }
+    return out_max;
 }
 
 /* Inner implementation shared by fit_load_image_ex and fit_load_image_to.
@@ -1855,35 +1938,10 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 if (is_gzip) {
 #ifdef WOLFBOOT_GZIP
                     uint32_t out_len = 0;
-                    uint32_t gz_max = out_max;
-                    uintptr_t gap;
+                    /* out_max is only a sanity ceiling; the inflate window
+                     * must also stop below anything that has to survive it. */
+                    uint32_t gz_max = fit_dest_bound(ctx, load, data, out_max);
                     int rc;
-                    /* out_max is only a sanity ceiling. Cap the output below
-                     * anything above the destination that must survive the
-                     * inflate: the staged compressed input, and wolfBoot's own
-                     * image (a corrupted stream can emit garbage at full match
-                     * speed, and without this cap the window reaches straight
-                     * through the bootloader before the decoder trips on an
-                     * invalid code). Conservative lower bounds. */
-                    if ((uintptr_t)data > (uintptr_t)load) {
-                        gap = (uintptr_t)data - (uintptr_t)load;
-                        if (gap < (uintptr_t)gz_max) {
-                            gz_max = (uint32_t)gap;
-                        }
-                    }
-                    if ((uintptr_t)wolfboot_start_text > (uintptr_t)load) {
-                        gap = (uintptr_t)wolfboot_start_text - (uintptr_t)load;
-                        if (gap < (uintptr_t)gz_max) {
-                            gz_max = (uint32_t)gap;
-                        }
-                    }
-                    else if (wolfboot_start_text == NULL) {
-                        /* Linker script does not export _start_text: the
-                         * bootloader-image bound cannot be applied. Say so
-                         * rather than skipping it silently. */
-                        wolfBoot_printf("gzip: no _start_text, output not "
-                            "bounded by the wolfBoot image\n");
-                    }
                     if (wolfBoot_fit_check_dest(load, gz_max) != 0) {
                         wolfBoot_printf("FIT: %s decompression destination %p "
                             "rejected\n", image, load);
@@ -1921,9 +1979,14 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                     return NULL;
                 }
                 else {
-                    if (len < 0 || (uint32_t)len > out_max) {
+                    /* Same bound as the inflate above: a raw subimage too
+                     * large for the space below the staged FIT or below
+                     * wolfBoot itself would be copied over them. */
+                    uint32_t cp_max = fit_dest_bound(ctx, load, data, out_max);
+
+                    if (len < 0 || (uint32_t)len > cp_max) {
                         wolfBoot_printf("FIT: subimage '%s' size %d exceeds "
-                            "staging bound %u\n", image, len, out_max);
+                            "staging bound %u\n", image, len, cp_max);
                         return NULL;
                     }
                     wolfBoot_printf("Loading Image %s: %p -> %p "
@@ -1959,7 +2022,9 @@ static void* fit_load_image_inner(fdt_ctx* ctx, const char* image, int* lenp,
                 wolfBoot_printf("FIT: subimage '%s' declares "
                     "compression=\"%s\" but has no distinct load "
                     "destination (load=%p, data=%p); refusing to pass "
-                    "compressed bytes through as raw\n",
+                    "compressed bytes through as raw. Add `load` to the "
+                    "FIT node, or set this sub-image's "
+                    "WOLFBOOT_LOAD_*_ADDRESS\n",
                     image, compstr, load, data);
                 return NULL;
             }

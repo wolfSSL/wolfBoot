@@ -78,19 +78,18 @@
  *                BL31 handles GIC initialization, so skip gicv2_init_secure().
  *
  * Boot Exception Level Configuration (mutually exclusive):
- *   BOOT_EL1:    wolfBoot runs at EL2, but applications (Linux, most bare-metal)
- *                are transitioned to EL1 before jumping (default)
- *   BOOT_EL2:    Applications boot at EL2 (for hypervisors/RTOSes that
- *                expect to run at EL2)
+ *   BOOT_EL1:    transition the application to EL1 before jumping
+ *   BOOT_EL2:    enter the application at the EL2 wolfBoot runs at (default)
  *
- * Default: BOOT_EL1 (most applications expect EL1)
+ * EL2 is the default: PSCI brings the secondary cores up at EL2, so dropping
+ * only the boot core leaves Linux with "CPUs started in inconsistent modes".
  */
 #ifndef SKIP_GIC_INIT
 #define SKIP_GIC_INIT 1
 #endif
 
 #if !defined(BOOT_EL1) && !defined(BOOT_EL2)
-    #define BOOT_EL1 1
+    #define BOOT_EL2 1
 #endif
 
 #if defined(BOOT_EL1) && defined(BOOT_EL2)
@@ -123,24 +122,32 @@
 /* DDR defines for MMU table setup (used by boot_aarch64_start.S)
  * These macros enable proper DDR mapping in the page tables.
  * Without these, the MMU tables would have DDR_0_REG=0 and no DDR mapped!
- * VERSAL_NO_DDR_LOW leaves the low window (0x0-0x7FFFFFFF) unmapped, for
- * designs whose DDR aperture lives entirely above 4 GB; pair it with
- * VERSAL_DDR_HIGH_BASE/VERSAL_DDR_HIGH_SIZE (512 GB aligned, plain hex
- * literals with no UL/ULL suffix - they are consumed by the assembler),
- * which map an additional Normal-memory window in the translation table. */
-#if defined(VERSAL_DDR_HIGH_BASE) && !defined(VERSAL_DDR_HIGH_SIZE)
-#error "VERSAL_DDR_HIGH_BASE requires VERSAL_DDR_HIGH_SIZE"
+ * Set from a .config with DDR_HIGH_BASE / DDR_HIGH_SIZE / NO_DDR_LOW=1
+ * (see options.mk); those are AArch64-generic, not Versal-specific. */
+
+/* Deprecated VERSAL_ spellings, kept because they shipped in v2.10.0. */
+#if defined(VERSAL_DDR_HIGH_BASE) && !defined(WOLFBOOT_DDR_HIGH_BASE)
+#define WOLFBOOT_DDR_HIGH_BASE VERSAL_DDR_HIGH_BASE
 #endif
-#if defined(VERSAL_DDR_HIGH_SIZE) && !defined(VERSAL_DDR_HIGH_BASE)
-#error "VERSAL_DDR_HIGH_SIZE requires VERSAL_DDR_HIGH_BASE"
+#if defined(VERSAL_DDR_HIGH_SIZE) && !defined(WOLFBOOT_DDR_HIGH_SIZE)
+#define WOLFBOOT_DDR_HIGH_SIZE VERSAL_DDR_HIGH_SIZE
 #endif
-#if defined(VERSAL_NO_DDR_LOW) && !defined(VERSAL_DDR_HIGH_BASE)
-#error "VERSAL_NO_DDR_LOW without VERSAL_DDR_HIGH_BASE maps no DDR at all"
+#if defined(VERSAL_NO_DDR_LOW) && !defined(WOLFBOOT_NO_DDR_LOW)
+#define WOLFBOOT_NO_DDR_LOW
 #endif
-#ifndef VERSAL_NO_DDR_LOW
+
+#if defined(WOLFBOOT_DDR_HIGH_BASE) && !defined(WOLFBOOT_DDR_HIGH_SIZE)
+#error "DDR_HIGH_BASE requires DDR_HIGH_SIZE"
+#endif
+#if defined(WOLFBOOT_DDR_HIGH_SIZE) && !defined(WOLFBOOT_DDR_HIGH_BASE)
+#error "DDR_HIGH_SIZE requires DDR_HIGH_BASE"
+#endif
+#if defined(WOLFBOOT_NO_DDR_LOW) && !defined(WOLFBOOT_DDR_HIGH_BASE)
+#error "NO_DDR_LOW without DDR_HIGH_BASE maps no DDR at all"
+#endif
+/* WOLFBOOT_NO_DDR_LOW is honored in src/boot_aarch64_start.S. */
 #define XPAR_PSU_DDR_0_S_AXI_BASEADDR   VERSAL_DDR_0_BASE
 #define XPAR_PSU_DDR_0_S_AXI_HIGHADDR   VERSAL_DDR_0_HIGH
-#endif
 
 
 /* ============================================================================

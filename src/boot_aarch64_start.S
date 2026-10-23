@@ -58,6 +58,16 @@
 #include "hal/imx8qm.h"
 #endif
 
+/* VA region the TCR_EL{1,2,3} T0SZ values below cover. A high DDR window
+ * must fit inside it; keep in step with those TCR literals. */
+#ifndef WOLFBOOT_AARCH64_VA_LIMIT
+#ifdef TARGET_versal
+#define WOLFBOOT_AARCH64_VA_LIMIT 0x100000000000  /* 2^44, TCR 0x80843514 */
+#else
+#define WOLFBOOT_AARCH64_VA_LIMIT 0x10000000000   /* 2^40, TCR 0x80823518 */
+#endif
+#endif
+
 /* GICv2 Register Offsets */
 #ifndef GICD_BASE
 #define GICD_BASE       0xF9010000
@@ -573,34 +583,35 @@ MMUTableL0:
 .set   SECT, MMUTableL1+0x1000 /* 0x80_0000_0000 - 0xFF_FFFF_FFFF */
 .8byte SECT + 0x3
 
-#if defined(TARGET_versal) && defined(VERSAL_DDR_HIGH_BASE)
+#ifdef WOLFBOOT_DDR_HIGH_BASE
 /* Optional high DDR window (designs whose DDR aperture sits above 1 TB).
  * One L0 descriptor per 512 GB, pointing at MMUTableL1_HI pages below.
- * Base and size must be 512 GB aligned and end within the 44-bit space. */
-.if (VERSAL_DDR_HIGH_BASE % 0x8000000000) != 0
-.error "VERSAL_DDR_HIGH_BASE must be 512GB aligned"
+ * Base and size must be 512 GB aligned and the window must end inside the
+ * VA region this target's TCR covers. */
+.if (WOLFBOOT_DDR_HIGH_BASE % 0x8000000000) != 0
+.error "WOLFBOOT_DDR_HIGH_BASE must be 512GB aligned"
 .endif
-.if VERSAL_DDR_HIGH_SIZE < 0x8000000000
-.error "VERSAL_DDR_HIGH_SIZE must be at least 512GB (one L0 granule)"
+.if WOLFBOOT_DDR_HIGH_SIZE < 0x8000000000
+.error "WOLFBOOT_DDR_HIGH_SIZE must be at least 512GB (one L0 granule)"
 .endif
-.if (VERSAL_DDR_HIGH_SIZE % 0x8000000000) != 0
-.error "VERSAL_DDR_HIGH_SIZE must be a multiple of 512GB"
+.if (WOLFBOOT_DDR_HIGH_SIZE % 0x8000000000) != 0
+.error "WOLFBOOT_DDR_HIGH_SIZE must be a multiple of 512GB"
 .endif
-.if (VERSAL_DDR_HIGH_BASE + VERSAL_DDR_HIGH_SIZE) > 0x100000000000
-.error "VERSAL_DDR_HIGH window exceeds the 44-bit address space"
+.if (WOLFBOOT_DDR_HIGH_BASE + WOLFBOOT_DDR_HIGH_SIZE) > WOLFBOOT_AARCH64_VA_LIMIT
+.error "DDR_HIGH window exceeds the VA space this target's TCR covers"
 .endif
-.if VERSAL_DDR_HIGH_BASE < 0x10000000000
-.error "VERSAL_DDR_HIGH_BASE must be at least 1TB (the first two L0 entries are fixed)"
+.if WOLFBOOT_DDR_HIGH_BASE < 0x10000000000
+.error "WOLFBOOT_DDR_HIGH_BASE must be at least 1TB (the first two L0 entries are fixed)"
 .endif
-.rept ((VERSAL_DDR_HIGH_BASE / 0x8000000000) - 2)
+.rept ((WOLFBOOT_DDR_HIGH_BASE / 0x8000000000) - 2)
 .8byte 0                       /* invalid up to the high window */
 .endr
 .set   SECT, MMUTableL1_HI
-.rept (VERSAL_DDR_HIGH_SIZE / 0x8000000000)
+.rept (WOLFBOOT_DDR_HIGH_SIZE / 0x8000000000)
 .8byte SECT + 0x3
 .set   SECT, SECT + 0x1000
 .endr
-#endif /* TARGET_versal && VERSAL_DDR_HIGH_BASE */
+#endif /* WOLFBOOT_DDR_HIGH_BASE */
 
 .section .mmu_tbl1,"a"
 
@@ -670,16 +681,16 @@ MMUTableL1:
 .endr
 
 
-#if defined(TARGET_versal) && defined(VERSAL_DDR_HIGH_BASE)
+#ifdef WOLFBOOT_DDR_HIGH_BASE
 /* 1 GB Normal-memory blocks covering the high DDR window. */
 .balign 4096
 MMUTableL1_HI:
-.set    SECT, VERSAL_DDR_HIGH_BASE
-.rept   (VERSAL_DDR_HIGH_SIZE / 0x40000000)
+.set    SECT, WOLFBOOT_DDR_HIGH_BASE
+.rept   (WOLFBOOT_DDR_HIGH_SIZE / 0x40000000)
 .8byte  SECT + Memory
 .set    SECT, SECT + 0x40000000
 .endr
-#endif /* TARGET_versal && VERSAL_DDR_HIGH_BASE */
+#endif /* WOLFBOOT_DDR_HIGH_BASE */
 
 .section .mmu_tbl2,"a"
 
@@ -695,7 +706,9 @@ MMUTableL2:
 .set    SECT, SECT+0x200000
 .endr
 #else
-#ifdef XPAR_PSU_DDR_0_S_AXI_BASEADDR
+/* WOLFBOOT_NO_DDR_LOW drops this window for designs whose DDR lives
+ * entirely in a high aperture. */
+#if defined(XPAR_PSU_DDR_0_S_AXI_BASEADDR) && !defined(WOLFBOOT_NO_DDR_LOW)
 .set DDR_0_START, XPAR_PSU_DDR_0_S_AXI_BASEADDR
 .set DDR_0_END, XPAR_PSU_DDR_0_S_AXI_HIGHADDR
 .set DDR_0_SIZE, (DDR_0_END - DDR_0_START)+1
