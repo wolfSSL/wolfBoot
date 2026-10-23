@@ -105,6 +105,34 @@
     {
         (void)m7_get_ticks();
     }
+#elif defined(TARGET_psoc_e8)
+    /* DWT cycle counter at CLK_HF0. It wraps every ~21 s and each read
+     * recovers one wrap, ample for the benchmark's timing windows. */
+    #ifndef PSOC_E8_CPU_HZ
+    #define PSOC_E8_CPU_HZ 200000000ULL
+    #endif
+    #define PSOC_E8_DEMCR       (*(volatile uint32_t *)0xE000EDFCUL)
+    #define PSOC_E8_DWT_CTRL    (*(volatile uint32_t *)0xE0001000UL)
+    #define PSOC_E8_DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004UL)
+    static uint64_t e8_cyc_hi = 0;
+    static uint32_t e8_cyc_last = 0;
+    static int e8_cyc_inited = 0;
+    static uint64_t e8_start_ticks = 0;
+    static uint64_t e8_get_ticks(void)
+    {
+        uint32_t now;
+        if (!e8_cyc_inited) {
+            PSOC_E8_DEMCR |= (1UL << 24);       /* TRCENA */
+            PSOC_E8_DWT_CYCCNT = 0;
+            PSOC_E8_DWT_CTRL |= 1UL;            /* CYCCNTENA */
+            e8_cyc_inited = 1;
+        }
+        now = PSOC_E8_DWT_CYCCNT;
+        if (now < e8_cyc_last)
+            e8_cyc_hi += 0x100000000ULL;
+        e8_cyc_last = now;
+        return e8_cyc_hi + now;
+    }
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     /* PPC time base register for accurate timing (e6500/e5500). */
@@ -217,6 +245,12 @@ unsigned long my_time(unsigned long* timer)
         if (timer) *timer = t;
         return t;
     }
+#elif defined(TARGET_psoc_e8)
+    {
+        unsigned long t = (unsigned long)(e8_get_ticks() / PSOC_E8_CPU_HZ);
+        if (timer) *timer = t;
+        return t;
+    }
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)
@@ -269,6 +303,10 @@ double current_time(int reset)
     if (reset)
         m7_start_ticks = m7_get_ticks();
     return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
+#elif defined(TARGET_psoc_e8)
+    if (reset)
+        e8_start_ticks = e8_get_ticks();
+    return (double)(e8_get_ticks() - e8_start_ticks) / (double)PSOC_E8_CPU_HZ;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)
