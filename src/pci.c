@@ -390,10 +390,18 @@ static int pci_pre_enum_cb(uint8_t bus, uint8_t dev, uint8_t fun)
 #ifdef WOLFBOOT_TGL
     if (bus != 0)
         return 0;
-    /* don't change UART mapping */
-    if (dev == 0x1e && (fun == 0 || fun == 1)) {
+    /* Leave the console UART BAR at X86_UART_BASE. LPSS UART0/1 are
+     * 00:1e.0/1, UART2 is 00:19.2. */
+#if defined(X86_UART_NUMBER) && (X86_UART_NUMBER == 2)
+    if (dev == 0x19 && fun == 2)
         return 1;
-    }
+#elif defined(X86_UART_NUMBER) && (X86_UART_NUMBER == 1)
+    if (dev == 0x1e && fun == 1)
+        return 1;
+#else
+    if (dev == 0x1e && fun == 0)
+        return 1;
+#endif
     /* PMC BARs shouldn't be programmed as per FSP integration guide */
     if (dev == 31 && fun == 2)
         return 1;

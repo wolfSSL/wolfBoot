@@ -182,6 +182,8 @@ tools/unit-tests/unit-update-flash-db
 tools/unit-tests/unit-update-flash-enc-full
 tools/unit-tests/unit-update-flash-enc-intswap
 tools/unit-tests/unit-update-ram
+tools/unit-tests/unit-boot-state
+tools/unit-tests/unit-boot-state-halt
 tools/unit-tests/unit-boot-x86-fsp
 tools/unit-tests/unit-image-rsa
 tools/unit-tests/unit-multiboot

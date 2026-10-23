@@ -4,7 +4,7 @@ set -e
 
 WOLFBOOT_DIR=$(pwd)
 # Parse command line options
-while getopts "bf" opt; do
+while getopts "bfr" opt; do
     case "$opt" in
         b)
             REBUILD_ONLY=true
@@ -12,10 +12,14 @@ while getopts "bf" opt; do
         f)
             FS_BOOT=true
             ;;
+        r)
+            ANTI_ROLLBACK=true
+            ;;
         *)
-            echo "Usage: $0 [-b] [-f]"
+            echo "Usage: $0 [-b] [-f] [-r]"
             echo "-b : rebuild only (skip FSP build, key gen, ecc)"
             echo "-f : boot from a file on a read-only filesystem (DISK_FS)"
+            echo "-r : TPM-NV anti-rollback across three boots"
             exit 1
             ;;
     esac
@@ -25,6 +29,8 @@ done
 if [ "$REBUILD_ONLY" != true ]; then
   if [ "$FS_BOOT" = true ]; then
     CONFIG=x86_fsp_qemu_fs.config
+  elif [ "$ANTI_ROLLBACK" = true ]; then
+    CONFIG=x86_fsp_qemu_antirollback.config
   else
     CONFIG=x86_fsp_qemu_seal.config
   fi
@@ -33,7 +39,7 @@ if [ "$REBUILD_ONLY" != true ]; then
   cp "config/examples/${CONFIG}" .config
   ./tools/scripts/x86_fsp/qemu/qemu_build_fsp.sh
   make keytools
-  if [ "$FS_BOOT" = true ]; then
+  if [ "$FS_BOOT" = true ] || [ "$ANTI_ROLLBACK" = true ]; then
     # The filesystem config does not use the TPM, so only the image key is
     # needed here. It must match SIGN= in x86_fsp_qemu_fs.config (ECC256),
     # or the generated src/keystore.c raises a key-algorithm mismatch.
@@ -46,7 +52,7 @@ if [ "$REBUILD_ONLY" != true ]; then
   fi
 fi
 
-if [ "$FS_BOOT" = true ]; then
+if [ "$FS_BOOT" = true ] || [ "$ANTI_ROLLBACK" = true ]; then
   make
 else
   # manual add ECC256 for TPM
@@ -56,7 +62,7 @@ fi
 # test-app
 make test-app/image.elf
 
-if [ "$FS_BOOT" != true ]; then
+if [ "$FS_BOOT" != true ] && [ "$ANTI_ROLLBACK" != true ]; then
   # compute pcr0 value
   PCR0=$(python ./tools/scripts/x86_fsp/compute_pcr.py --target qemu wolfboot_stage1.bin | tail -n 1)
   echo $PCR0
@@ -67,9 +73,64 @@ fi
 if [ "$FS_BOOT" = true ]; then
   FS=1 IMAGE=test-app/image.elf SIGN=--ecc256 \
       ./tools/scripts/x86_fsp/qemu/make_hd.sh
+elif [ "$ANTI_ROLLBACK" = true ]; then
+  IMAGE=test-app/image.elf SIGN=--ecc256 \
+      ./tools/scripts/x86_fsp/qemu/make_hd.sh
 else
   IMAGE=test-app/image.elf SIGN=--ecc384 \
       ./tools/scripts/x86_fsp/qemu/make_hd.sh
+fi
+
+# Boot once with the swtpm state kept from the previous boot, wait for the
+# test app, and leave the console log in /tmp/qemu_output.
+run_qemu_tpm() {
+  ./tools/scripts/x86_fsp/qemu/qemu.sh -t -p $1 > /tmp/qemu_output 2>&1 &
+  for i in $(seq 1 30); do
+    sleep 1
+    grep -q "wolfBoot QEMU x86 FSP test app" /tmp/qemu_output && break
+    grep -q "PANIC" /tmp/qemu_output && break
+  done
+  timeout 5 echo 'quit' > /tmp/qemu_mon.in || true
+  wait
+  cat /tmp/qemu_output
+}
+
+expect_log() {
+  if ! grep -q "$1" /tmp/qemu_output; then
+    echo -e "\e[31mTEST FAILED: missing '$1'\e[0m"
+    exit 255
+  fi
+}
+
+reject_log() {
+  if grep -q "$1" /tmp/qemu_output; then
+    echo -e "\e[31mTEST FAILED: unexpected '$1'\e[0m"
+    exit 255
+  fi
+}
+
+if [ "$ANTI_ROLLBACK" = true ]; then
+  # Boot 1, fresh TPM: slot B (version 2) boots and anchors the floor.
+  run_qemu_tpm -c
+  expect_log "Anti-rollback anchor initialised at version 2"
+  expect_log "wolfBoot QEMU x86 FSP test app"
+
+  # Boot 2: both slots v1. It boots, the floor survived the TPM restart and
+  # the downgrade is written (platform hierarchy enabled again at startup).
+  dd if=image_v1_signed.bin of=app.bin bs=512 seek=34816 conv=notrunc
+  run_qemu_tpm
+  expect_log "ROLLBACK: booting version 1"
+  expect_log "ROLLBACK: total rollbacks recorded 1"
+  expect_log "wolfBoot QEMU x86 FSP test app"
+
+  # Boot 3: the counter keeps counting across boots.
+  run_qemu_tpm
+  expect_log "ROLLBACK: total rollbacks recorded 2"
+  expect_log "wolfBoot QEMU x86 FSP test app"
+  reject_log "WARNING: could not"
+  reject_log "PANIC"
+  echo -e "\e[32mTEST OK\e[0m"
+  exit 0
 fi
 
 echo "RUNNING QEMU"
