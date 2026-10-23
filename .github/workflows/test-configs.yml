@@ -548,6 +548,20 @@ jobs:
     with:
       arch: riscv64
       config-file: ./config/examples/polarfire_mpfs250_qspi.config
+  # The UART QSPI programmer is the only code that refreshes the MSS watchdogs
+  # from an S-mode build, where HSS owns the window rather than wolfBoot.
+  microchip_mpfs250_qspi_prog_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_qspi.config
+      make-args: UART_QSPI_PROGRAM=1
+  # wolfBoot staged in the L2-LIM rather than DDR, loaded by HSS.
+  microchip_mpfs250_hss_l2lim_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_hss_l2lim.config
   # M-mode + LPDDR4 build: generate a CI-only Libero settings stub (all
   # zeros) and point LIBERO_FPGA_CONFIG_DIR at it so MPFS_DDR_INIT actually
   # compiles in CI.  The stub is generated from the HAL sources (not
