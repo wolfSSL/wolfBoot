@@ -19,19 +19,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Minimal RISC-V SBI (Supervisor Binary Interface) runtime for wolfBoot.
- *
- * When wolfBoot replaces a full firmware (e.g. HSS+OpenSBI on PolarFire
- * SoC) and boots an S-mode OS (Linux), the OS issues SBI ecalls that must
- * be serviced in M-mode.  This provides the minimal set: BASE, TIME, IPI,
- * RFENCE, HSM, DBCN + the legacy console/timer calls, enough to bring a
- * RISC-V Linux kernel up to a console and timer tick.
- *
- * It is driven from handle_trap_ex() in src/boot_riscv.c on:
- *   - ecall-from-S (mcause = 9)      -> sbi_handle_ecall()
- *   - M-timer interrupt (mcause INT|7) -> sbi_timer_irq()
- *   - M-soft  interrupt (mcause INT|3) -> sbi_ipi_irq()
- */
+/* Minimal RISC-V SBI runtime: BASE, TIME, IPI, RFENCE, HSM, DBCN and the legacy
+ * calls, driven from handle_trap_ex() in src/boot_riscv.c. */
 
 #include <stdint.h>
 #include "hal/riscv.h"
@@ -113,9 +102,8 @@
 
 /* v0.3: the OS only uses SRST (reboot and power-off) from 0.3 up. */
 #define SBI_SPEC_VERSION  ((0UL << 24) | 3UL)
-/* No registry ID is assigned to wolfBoot's SBI; report a custom value that
- * cannot collide with the small spec-registry IDs (0=BBL, 1=OpenSBI, 3=KVM,
- * 8=PolarFire HSS, ...).  0x776F6C66 = ASCII "wolf". */
+/* wolfBoot has no registry ID; 0x776F6C66 ("wolf") cannot collide with the
+ * small spec-registry values. */
 #define SBI_IMPL_ID       0x776F6C66UL           /* "wolf" (custom, unregistered) */
 #define SBI_IMPL_VERSION  1UL
 
@@ -124,12 +112,8 @@
 #define SBI_HSM_STOPPED        1
 #define SBI_HSM_START_PENDING  2
 
-/* Register-frame indices: regs[N] == xN for the argument registers used here
- * (a0/a1/a2/a6/a7).  Note that under WOLFBOOT_RISCV_MMODE the trap entry
- * (src/vector_riscv.S) repurposes two slots: slot 0 (x0's unused slot) holds
- * mscratch-at-entry and slot 2 (x2/sp) holds the trapped sp - so regs[0] and
- * regs[2] are NOT x0/x2.  This file only indexes the a* slots below, which are
- * unaffected. */
+/* regs[N] == xN for the a* registers used here.  Slots 0 and 2 are repurposed
+ * by the trap entry, so they are NOT x0/x2; nothing below indexes them. */
 #define A0 10
 #define A1 11
 #define A2 12
@@ -140,10 +124,8 @@
 #define MPFS_NUM_HARTS 5
 #endif
 
-/* Cross-hart SBI state cannot live in L2-scratch BSS: a cacheable store to
- * the scratchpad (Zero Device) is lost when the dirty line is evicted, so a
- * value written by one hart can vanish before another hart sees it.  The E51
- * DTIM is always uncached and coherent for every hart, as it is under HSS. */
+/* Cross-hart state cannot live in L2-scratch BSS: a cacheable store there is
+ * lost on eviction.  The E51 DTIM is uncached and coherent, as under HSS. */
 #ifndef SBI_SHARED_DTIM_ADDR
 #define SBI_SHARED_DTIM_ADDR 0x01000000UL  /* E51 DTIM */
 #endif
@@ -153,13 +135,8 @@ typedef struct {
     volatile uint32_t init_magic;
     volatile int      hart_state[MPFS_NUM_HARTS];
     volatile uint32_t ipi_ops[MPFS_NUM_HARTS];
-    /* Fence-completion protocol: a requester ORs its op into ipi_ops[h]
-     * and then takes a ticket from ipi_posted[h]; hart h reads ipi_posted
-     * before it consumes ipi_ops, executes the fences, and publishes what
-     * it read as ipi_done[h].  A ticket is complete once ipi_done[h] has
-     * reached it: the fence that ran consumed an ops word that already
-     * held the request.  A later post keeps its own ticket and is served
-     * by the next interrupt. */
+    /* Fence completion: a requester ORs its op in, then takes a ticket; the
+     * target publishes the ticket it saw once the fences have run. */
     volatile uint32_t ipi_posted[MPFS_NUM_HARTS];
     volatile uint32_t ipi_done[MPFS_NUM_HARTS];
 } sbi_shared_state_t;
@@ -187,9 +164,8 @@ int __attribute__((weak)) sbi_hal_hart_start(unsigned long hartid,
     return -1;
 }
 
-/* Called from the M->S release path on the hart entering S-mode.  The
- * first call (the boot hart, released before any other) also initializes
- * the table: zeroed BSS would otherwise read as STARTED for every hart. */
+/* Called on the hart entering S-mode.  The first call also initializes the
+ * table: zeroed BSS would otherwise read as STARTED for every hart. */
 void sbi_hart_mark_started(unsigned long hartid)
 {
     unsigned int k;
@@ -212,15 +188,8 @@ void sbi_hart_mark_started(unsigned long hartid)
 #define CLINT_MTIME (*(volatile uint64_t *)(CLINT_BASE + 0xBFF8UL))
 #define MSTATUS_MPRV_BIT (1UL << 17)
 
-/* Per-hart M-mode trap stacks.  The trap entry (src/vector_riscv.S)
- * switches to the stack armed in mscratch because the trapped S-mode
- * context's sp is a virtual address once the OS enables paging.
- *
- * These cannot live in L2-scratch BSS either: under SMP cache pressure a
- * dirty frame line can be evicted mid-trap and the writeback lost, leaving
- * the restore to read zeros.  They go in the OS-invisible reserved DDR
- * region (hss-buffer@103fc00000, nomap in the stock dtb: the monitor
- * carve-out under HSS). */
+/* Per-hart M-mode trap stacks, in the OS-invisible reserved DDR region: in
+ * L2-scratch BSS a dirty frame line can be evicted mid-trap. */
 #ifndef SBI_MSTACK_BASE
 #define SBI_MSTACK_BASE 0x103FC00000UL
 #endif
@@ -244,13 +213,8 @@ void sbi_mscratch_init(unsigned long hartid)
     }
 }
 
-/* Accesses to the trapped context's memory use the MPRV trick: with
- * mstatus.MPRV set and MPP=S (true inside a trap taken from S-mode), M-mode
- * loads and stores are translated exactly like S-mode accesses.  A bad
- * address then faults in M-mode, so for the byte below mtvec is pointed at
- * sbi_mprv_trap, which records the fault for this hart, steps over the
- * access and returns; the default vector would treat the fault as fatal and
- * park the hart. */
+/* With mstatus.MPRV and MPP=S, M-mode accesses translate as S-mode ones.  A
+ * bad address faults, so mtvec points at sbi_mprv_trap to step over it. */
 volatile unsigned long sbi_mprv_fault[MPFS_NUM_HARTS];
 
 __asm__(
@@ -329,9 +293,8 @@ static int sbi_mprv_sb(unsigned long a, uint8_t v)
     return (sbi_mprv_fault[hart] != 0UL) ? -1 : 0;
 }
 
-/* A caller's buffer must be bounded and, with paging off (early boot),
- * must be DDR: an M-mode access to a device window would not fault the way
- * a bad translation does. */
+/* A caller's buffer must be bounded, and DDR with paging off: an M-mode access
+ * to a device window would not fault the way a bad translation does. */
 #if !defined(DDR_BASE_CACHED) || !defined(DDR_SIZE)
 #error "sbi_smode_range_ok needs DDR_BASE_CACHED and DDR_SIZE"
 #endif
@@ -393,10 +356,8 @@ long __attribute__((weak)) sbi_hal_vendor_ecall(unsigned long fid,
 
 #define MSTATUS_MXR_BIT (1UL << 19)
 
-/* Guest-context byte accessors: with mstatus.MPRV set, M-mode memory
- * accesses use the trapped (S/U) context's translation and permissions;
- * in bare mode addresses pass through.  MXR additionally permits reading
- * execute-only pages (instruction fetch for emulation). */
+/* Guest-context byte accessors: MPRV borrows the trapped context's
+ * translation, and MXR additionally permits reading execute-only pages. */
 static uint8_t sbi_guest_lb(unsigned long a)
 {
     uint8_t v;
@@ -422,12 +383,8 @@ static uint16_t sbi_guest_ifetch16(unsigned long a)
     return v;
 }
 
-/* Emulate a misaligned load (cause 4) or store (cause 6) from S/U mode.
- * These harts take misaligned accesses to M-mode and expect the firmware
- * to emulate them byte-wise (OpenSBI behavior).  Handles the integer
- * I/S-type forms and the common compressed forms; AMO and floating-point
- * forms are not emulated (returns 0 -> fatal dump).  Returns the
- * advanced epc, or 0 if the instruction is not handled. */
+/* Emulate a misaligned load or store from S/U mode byte-wise, as OpenSBI does.
+ * Integer and common compressed forms only; AMO and FP return 0 (fatal). */
 unsigned long sbi_misaligned_ldst(unsigned long *regs, unsigned long epc,
     unsigned long tval, unsigned long cause)
 {
@@ -544,9 +501,8 @@ unsigned long sbi_misaligned_ldst(unsigned long *regs, unsigned long epc,
     return epc + ilen;
 }
 
-/* Emulate instructions that trap as illegal from S-mode.  These harts
- * have no time CSR (CLINT MTIME is memory-mapped only), so the kernel's
- * rdtime traps here.  Returns the updated epc, or 0 if not handled. */
+/* Emulate instructions that trap as illegal from S-mode: these harts have no
+ * time CSR, so the kernel's rdtime arrives here. */
 unsigned long sbi_illegal_insn(unsigned long *regs, unsigned long epc,
     unsigned long tval)
 {
@@ -562,9 +518,8 @@ unsigned long sbi_illegal_insn(unsigned long *regs, unsigned long epc,
     return 0UL;
 }
 
-/* The OS owns the UART by now and may have reconfigured or stopped it, so
- * never wait on it for long with M-mode interrupts masked.  Returns 1 when
- * the byte was written. */
+/* The OS owns the UART and may have stopped it, so never wait long on it with
+ * M-mode interrupts masked.  Returns 1 when the byte was written. */
 #define SBI_UART_SPIN 200000U
 
 static int sbi_uart_ready(void)
@@ -601,9 +556,8 @@ static void __attribute__((noreturn)) sbi_system_halt(void)
     }
 }
 
-/* Set a hart's S-mode timer.  M-mode owns the timer; we program the CLINT
- * mtimecmp, drop any already-injected S-timer interrupt, and (re)enable the
- * M-timer so it fires when mtime reaches the comparator. */
+/* Set a hart's S-mode timer: program CLINT mtimecmp, drop any injected
+ * S-timer interrupt and re-enable the M-timer. */
 static void sbi_set_timer(unsigned long hartid, uint64_t stime)
 {
     CLINT_MTIMECMP(hartid) = stime;
@@ -619,10 +573,8 @@ void sbi_timer_irq(void)
     csr_set_bits(mip, MIP_STIP);
 }
 
-/* M-soft (IPI) interrupt on a RUNNING (S-mode) hart: clear the CLINT MSIP
- * that woke us, perform any requested remote-fence work, and inject a
- * supervisor software interrupt when an OS IPI was requested.  A bare
- * MSIP with no op flags is treated as an OS IPI for compatibility. */
+/* IPI on a running hart: clear the MSIP, run any requested fences, inject SSIP
+ * for an OS IPI.  A bare MSIP with no op flags counts as an OS IPI. */
 void sbi_ipi_irq(unsigned long hartid)
 {
     uint32_t ops = 0;
@@ -634,9 +586,8 @@ void sbi_ipi_irq(unsigned long hartid)
         /* Read the ticket counter before consuming the ops: every request
          * posted under a ticket acknowledged below is then already in it. */
         posted = __atomic_load_n(&sbi_ipi_posted[hartid], __ATOMIC_ACQUIRE);
-        /* Atomically read-and-clear: a remote hart may be OR-ing a new op in
-         * (sbi_post_ipi) concurrently with this consume.  amoswap.w (rv64a)
-         * makes the read+clear a single operation so no posted op is lost. */
+        /* amoswap.w: a remote hart may be OR-ing a new op in concurrently, so
+         * the read and clear must be one operation or a post is lost. */
         ops = __atomic_exchange_n(&sbi_ipi_ops[hartid], 0U, __ATOMIC_ACQ_REL);
     }
     if ((ops & SBI_IPI_OP_HALT) != 0U) {
@@ -657,11 +608,8 @@ void sbi_ipi_irq(unsigned long hartid)
     }
 }
 
-/* Post an IPI op to every hart in (mask << base) and ring its MSIP.
- * When the mask selects the calling hart: an SSIP IPI is self-delivered by
- * raising our own SSIP (OpenSBI delivers self-IPIs; smp_call_function paths
- * that include self rely on it), while for an RFENCE the caller has already
- * performed the fence locally, so self is skipped there. */
+/* Post an op to every hart in (mask << base) and ring its MSIP.  A self-IPI
+ * raises our own SSIP; a self-RFENCE is skipped, already done locally. */
 static void sbi_post_ipi(unsigned long mask, unsigned long base,
     uint32_t op, unsigned long self, uint32_t *ticket)
 {
@@ -671,9 +619,8 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
     for (i = 0; i < (unsigned long)MPFS_NUM_HARTS; i++) {
         ticket[i] = 0;
     }
-    /* SBI v0.2: hart_mask_base == -1 selects all available harts and
-     * hart_mask is ignored.  Normalize to (base 0, all-harts mask) so the
-     * loop below does not compute h = (-1)+i and skip every target. */
+    /* SBI v0.2: base == -1 selects all harts and the mask is ignored.
+     * Normalize it, or the loop computes h = (-1)+i and skips every target. */
     if (base == (unsigned long)-1) {
         base = 0;
         mask = (1UL << MPFS_NUM_HARTS) - 1UL;
@@ -695,9 +642,8 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
         if (sbi_hart_state[h] != SBI_HSM_STARTED) {
             continue; /* parked harts consume MSIP in their wake loop */
         }
-        /* Atomic OR (amoor.w, rv64a): two harts may post to the same target
-         * concurrently, and the target may be consuming (sbi_ipi_irq) at the
-         * same time - a plain |= read-modify-write could drop an op. */
+        /* amoor.w: two harts may post to one target while it consumes, and a
+         * plain |= read-modify-write could drop an op. */
         (void)__atomic_fetch_or(&sbi_ipi_ops[h], op, __ATOMIC_ACQ_REL);
         /* Take the ticket after the op is in: the target acknowledges a
          * ticket only with an ops word that already held this request. */
@@ -715,9 +661,8 @@ static void sbi_post_ipi(unsigned long mask, unsigned long base,
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
-/* Shutdown has nowhere to go on this board: park every started hart.  The
- * OS has stopped the others already, but they still take timer interrupts
- * and would keep running the supervisor's stall detectors. */
+/* Shutdown has nowhere to go: park every started hart.  The stopped ones still
+ * take timer interrupts and would keep the stall detectors running. */
 static void __attribute__((noreturn)) sbi_system_shutdown(unsigned long self)
 {
     uint32_t ticket[MPFS_NUM_HARTS];
@@ -727,13 +672,8 @@ static void __attribute__((noreturn)) sbi_system_shutdown(unsigned long self)
     sbi_system_halt();
 }
 
-/* Wait (bounded) for the posted fence ops to be consumed by the targets:
- * a target publishes ipi_done after executing the fences, so this
- * completes only when every ticket has been reached. The SBI
- * remote-fence calls are synchronous; the bound guards against a wedged
- * target turning into a wedged caller.  Returns SBI_SUCCESS when every
- * target completed, SBI_ERR_FAILED when any target did not complete
- * within the bound. */
+/* Wait, bounded, for every posted fence ticket to be reached.  The SBI calls
+ * are synchronous; the bound stops a wedged target wedging the caller. */
 static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
     unsigned long self, const uint32_t *ticket)
 {
@@ -755,15 +695,8 @@ static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
             ticket[h] == 0U) {
             continue;
         }
-        /* A target can be inside a console write or another ecall for tens
-         * of milliseconds; a fence that gives up early leaves the OS with
-         * stale TLBs on that hart, so wait well past that: 1 s of CLINT
-         * time, the one clock every hart shares.  A hart that never answers
-         * then costs the caller a second, not the OS its interrupts for
-         * minutes.  M-mode interrupts are masked in here, so service any
-         * fence the target (or a third hart) posts to us meanwhile: two
-         * harts fencing each other would otherwise each wait for the other
-         * and time out. */
+        /* 1 s of CLINT time: giving up early leaves stale TLBs.  Interrupts
+         * are masked, so service fences posted to us or two harts deadlock. */
         deadline = CLINT_MTIME + SBI_IPI_WAIT_TICKS;
         while ((int32_t)(__atomic_load_n(&sbi_ipi_done[h], __ATOMIC_ACQUIRE) -
                 ticket[h]) < 0 && (int64_t)(CLINT_MTIME - deadline) < 0) {
@@ -779,11 +712,8 @@ static long sbi_wait_ipi_done(unsigned long mask, unsigned long base,
     return err;
 }
 
-/* Deliver a trap that arrived in M-mode from S/U mode to the supervisor's
- * trap vector, the way delegation would have: sepc/scause/stval describe it,
- * sstatus records the interrupted privilege and interrupt enable, and the
- * mret lands on stvec in S-mode.  Returns the new epc, or 0 when the trap
- * came from M-mode or the supervisor has no vector installed yet. */
+/* Deliver an M-mode trap from S/U to the supervisor's vector as delegation
+ * would: sepc/scause/stval/sstatus describe it and mret lands on stvec. */
 unsigned long sbi_redirect_trap(unsigned long cause, unsigned long epc,
     unsigned long tval)
 {
@@ -830,10 +760,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
     __asm__ volatile("csrr %0, mhartid" : "=r"(hartid));
 
 #ifdef DEBUG_SBI
-    /* Bring-up visibility: trace the first few ecalls so a silent kernel
-     * can be distinguished from a broken console path.  Console and timer
-     * ecalls are exempted: tracing the timer path serializes every tick
-     * behind the UART and slows the OS dramatically. */
+    /* Trace the first few ecalls to tell a silent kernel from a broken console.
+     * Console and timer are exempt: a traced tick serializes on the UART. */
     if (sbi_dbg_calls < 40U && eid != SBI_EXT_0_1_CONSOLE_PUTCHAR &&
         eid != SBI_EXT_DBCN && eid != SBI_EXT_TIME &&
         eid != SBI_EXT_0_1_SET_TIMER) {
@@ -895,9 +823,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
         break;
 
     case SBI_EXT_RFENCE: {
-        /* remote_fence_i(mask, base) / remote_sfence_vma(mask, base,
-         * start, size) / ..._asid: over-flush with full fences (legal
-         * per the spec) and wait for the targets to consume the op. */
+        /* remote_fence_i / remote_sfence_vma / ..._asid: over-flush with full
+         * fences, which the spec permits, and wait for the targets. */
         uint32_t op;
         if (fid == 0) {
             op = SBI_IPI_OP_FENCE_I;
@@ -924,11 +851,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
                 err = SBI_ERR_ALREADY_AVAIL;
             }
             else {
-                /* Publish START_PENDING before sbi_hal_hart_start rings the
-                 * target MSIP: the woken target marks its own state STARTED,
-                 * so writing PENDING afterwards could clobber it (TOCTOU).
-                 * Roll back to STOPPED if the start request fails (only the
-                 * pre-publish invalid-hart check can). */
+                /* Publish START_PENDING before the MSIP: the woken target
+                 * marks itself STARTED, which a later write would clobber. */
                 sbi_hart_state[regs[A0]] = SBI_HSM_START_PENDING;
                 if (sbi_hal_hart_start(regs[A0], regs[A1],
                                        regs[A2]) != 0) {
@@ -962,9 +886,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
             unsigned long c;
             unsigned long j;
             uint8_t cbuf[64];
-            /* Bound a single call (the kernel loops on val): this runs in
-             * M-mode with interrupts off, so a long write holds up fence
-             * IPIs from the other harts.  256 bytes is ~25 ms at 115200. */
+            /* Bound one call; the kernel loops on val.  Interrupts are off, so
+             * a long write holds up fence IPIs: 256 B is ~25 ms at 115200. */
             if (n > 256UL) {
                 n = 256UL;
             }
@@ -1007,9 +930,8 @@ unsigned long sbi_handle_ecall(unsigned long *regs, unsigned long epc)
 #endif
 
     case SBI_EXT_SRST:
-        /* system_reset(type, reason).  No console output here: by now the OS
-         * owns the UARTs and a blocked printf leaves the hart stuck in the
-         * handler with the reset never issued. */
+        /* system_reset(type, reason).  No console output: the OS owns the UARTs
+         * and a blocked printf strands the hart with the reset never issued. */
 #ifdef DEBUG_SBI
         wolfBoot_printf("[SBI] SYSTEM RESET requested: type=0x%lx "
             "reason=0x%lx\n", regs[A0], regs[A1]);

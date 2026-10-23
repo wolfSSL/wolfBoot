@@ -33,25 +33,16 @@
 #define SBI_MSTACK_SHIFT 12
 #endif
 
-/* ============================================================================
- * Trap Entry/Exit Macros
- * ============================================================================ */
+/* Trap entry/exit macros */
 
 #if __riscv_xlen == 64
 
-/* RV64: Save all caller-saved registers and call handle_trap_ex.
- * handle_trap_ex (in src/boot_riscv.c) is the regs-aware weak hook;
- * it forwards to the legacy 3-arg weak handle_trap so out-of-tree
- * platform overrides keep working. */
+/* RV64: save the caller-saved registers and call handle_trap_ex, the
+ * regs-aware weak hook, which forwards to the legacy 3-arg handle_trap. */
 .macro trap_entry
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* If mscratch holds a per-hart M-mode stack top (armed before mret
-     * into S-mode, see riscv_mmode_to_smode), switch to it: the trapped
-     * context's sp may be an S-mode VIRTUAL address once the OS enables
-     * paging, and M-mode (no translation) must not store through it.
-     * mscratch == 0 means an M-mode context: keep the current stack.
-     * (mscratch is an M-mode-only CSR; S-mode builds keep the original
-     * current-stack frame.) */
+    /* Switch to the M-stack mscratch holds: once the OS pages, the trapped sp
+     * may be virtual and M-mode cannot store through it.  0 means M-mode. */
     csrrw sp, mscratch, sp
     bnez  sp, 100f
     csrrw sp, mscratch, sp
@@ -90,17 +81,8 @@
     STORE x31, 31 * REGBYTES(sp)
 
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* Slot 2 = the trapped sp: what mscratch holds after the switch above
-     * (any value, 0 included), or sp + frame when no switch happened.
-     * Slot 0 (x0's unused slot) = 1 when this frame switched to the
-     * M-stack, which is the case exactly when it sits at this hart's
-     * M-stack top; 0 for an M-mode fallback or a nested trap.  The flag
-     * is derived from the frame address, never from the trapped sp: a
-     * context trapping with sp == 0 must still re-arm mscratch on exit
-     * (trap_exit), or the next trap from S-mode runs the entry on an
-     * untranslated virtual sp and faults forever.  Zero mscratch while
-     * inside the handler so a nested trap keeps descending on the CURRENT
-     * stack.  x1, t0 and t1 are already saved, so they serve as scratch. */
+    /* Slot 2 = the trapped sp, slot 0 = 1 when this frame switched stacks,
+     * derived from the frame address so an sp of 0 still re-arms mscratch. */
     csrr  t0, mhartid
     addi  t0, t0, 1
     slli  t0, t0, SBI_MSTACK_SHIFT
@@ -118,9 +100,8 @@
 102:
     STORE x1,   2 * REGBYTES(sp)
 
-    /* The M-mode handler's C code addresses small globals gp-relative:
-     * reload wolfBoot's gp (the trapped context's gp -- e.g. the OS's --
-     * is restored from frame slot 3 on exit). */
+    /* The handler's C code addresses small globals gp-relative; the trapped
+     * context's gp is restored from frame slot 3 on exit. */
     .option push
     .option norelax
     la gp, __global_pointer$
@@ -141,9 +122,8 @@
 
 .macro trap_exit
 #ifdef WOLFBOOT_RISCV_MMODE
-    /* Re-arm mscratch with this M-stack's top, but only for the
-     * OUTERMOST frame of a stack-switched trap (slot 0 non-zero); nested
-     * frames and M-mode fallback frames leave mscratch alone. */
+    /* Re-arm mscratch only for the outermost frame of a stack-switched trap
+     * (slot 0 non-zero); nested and M-mode frames leave it alone. */
     LOAD  t0,   0 * REGBYTES(sp)
     beqz  t0, 102f
     addi  t0, sp, 32 * REGBYTES
@@ -237,9 +217,7 @@
 
 #endif /* __riscv_xlen */
 
-/* ============================================================================
- * Vector Table
- * ============================================================================ */
+/* Vector table */
 
 .section .isr_vector
 .align 8
