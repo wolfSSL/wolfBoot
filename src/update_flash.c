@@ -35,6 +35,9 @@
 #endif
 
 #include "delta.h"
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+#include "gzip.h"
+#endif
 #include "printf.h"
 
 /* Bytes at the end of each partition that hold the trailer */
@@ -48,8 +51,12 @@
 #define wb_trailer_clear(img, part) \
     wolfBoot_set_partition_state(part, IMG_STATE_NEW)
 #else
+/* The trailer sits at the end of the partition being cleared, which is not
+ * the end of BOOT when the two are sized independently. */
 #define wb_trailer_clear(img, part) \
-    wb_flash_erase(img, WOLFBOOT_PARTITION_SIZE - TRAILER_LEN, TRAILER_LEN)
+    wb_flash_erase(img, (((part) == PART_UPDATE) ? \
+        WOLFBOOT_PARTITION_UPDATE_SIZE : WOLFBOOT_PARTITION_SIZE) - \
+        TRAILER_LEN, TRAILER_LEN)
 #endif
 
 /* The trailer sector(s) are erased independently from the image: they must
@@ -1087,6 +1094,192 @@ out:
 /* Max firmware size: partition must hold header + fw + trailer sector(s) */
 #define MAX_UPDATE_SIZE (size_t)((WOLFBOOT_PARTITION_SIZE - \
     IMAGE_HEADER_SIZE - TRAILER_LEN))
+
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+
+/* Programmed in whole chunks at an aligned offset, so no flash word is ever
+ * written twice between erases. A multiple of every programming unit in the
+ * tree, the widest being the STM32H7's 32 bytes. */
+#define COMPRESSED_WRITE_CHUNK 256
+
+#if (WOLFBOOT_SECTOR_SIZE % COMPRESSED_WRITE_CHUNK) != 0
+    #error "WOLFBOOT_SECTOR_SIZE must be a multiple of COMPRESSED_WRITE_CHUNK"
+#endif
+#if (COMPRESSED_WRITE_CHUNK % WOLFBOOT_FLASH_WRITE_UNIT) != 0
+    #error "COMPRESSED_WRITE_CHUNK must be a multiple of WOLFBOOT_FLASH_WRITE_UNIT"
+#endif
+
+/* Two windows, so a back-reference is always resident; see src/gzip.c. */
+static uint8_t compressed_window[
+    GZIP_SINK_BUF_SIZE(WOLFBOOT_COMPRESSED_WINDOW_BITS)];
+
+struct compressed_install {
+    struct wolfBoot_image *boot;
+    uint32_t next_off;     /* where the next programmed chunk lands */
+    uint32_t erased_upto;  /* BOOT erased below this */
+    uint32_t marked_upto;  /* sectors below this recorded as installed */
+    uint32_t skip_upto;    /* output below this survived an earlier attempt */
+    uint32_t pend_len;
+    uint8_t  pend[COMPRESSED_WRITE_CHUNK];
+};
+
+static int compressed_emit(struct compressed_install *ci)
+{
+    uint32_t end = ci->next_off + ci->pend_len;
+    uint32_t len = WB_UNIT_ROUNDUP(ci->pend_len);
+
+    while (ci->erased_upto < end) {
+        if (wb_flash_erase(ci->boot, ci->erased_upto, WOLFBOOT_SECTOR_SIZE)
+                != 0) {
+            return -1;
+        }
+        ci->erased_upto += WOLFBOOT_SECTOR_SIZE;
+    }
+    /* An image rarely ends on a write unit, and flash that programs whole
+     * units only (NVM_FLASH_ECC) rejects a partial one. */
+    memset(ci->pend + ci->pend_len, FLASH_BYTE_ERASED, len - ci->pend_len);
+    if (wb_flash_write(ci->boot, ci->next_off, ci->pend, (int)len) != 0) {
+        return -1;
+    }
+    ci->next_off = end;
+    ci->pend_len = 0;
+    /* Record a destination sector only once every byte of it is programmed,
+     * so a resume never starts inside a half-written sector. */
+    while ((ci->marked_upto + WOLFBOOT_SECTOR_SIZE) <= ci->next_off) {
+        wolfBoot_set_update_sector_flag(
+            (uint16_t)(ci->marked_upto / WOLFBOOT_SECTOR_SIZE),
+            SECT_FLAG_UPDATED);
+        ci->marked_upto += WOLFBOOT_SECTOR_SIZE;
+    }
+    return 0;
+}
+
+/* Sink for the inflater: buffers into aligned chunks, erasing each sector
+ * the first time it is reached. The decoder emits strictly forward and
+ * once only, so a sector is never revisited. */
+static int compressed_sink_write(void *ctx, uint32_t off, const uint8_t *buf,
+    uint32_t len)
+{
+    struct compressed_install *ci = (struct compressed_install *)ctx;
+    uint32_t n;
+
+    /* Already programmed by an interrupted attempt. It still has to be
+     * inflated, to rebuild the decoder's window, but not written back. */
+    if (off < ci->skip_upto) {
+        n = ci->skip_upto - off;
+        if (n >= len) {
+            return 0;
+        }
+        buf += n;
+        len -= n;
+    }
+    while (len > 0) {
+        n = (uint32_t)sizeof(ci->pend) - ci->pend_len;
+        if (n > len) {
+            n = len;
+        }
+        memcpy(ci->pend + ci->pend_len, buf, n);
+        ci->pend_len += n;
+        buf += n;
+        len -= n;
+        if (ci->pend_len == (uint32_t)sizeof(ci->pend)) {
+            if (compressed_emit(ci) != 0) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+#ifdef EXT_FLASH
+/* An external container is not addressable, so it is pulled in through the
+ * same reader the image hasher uses. */
+static int compressed_src_read(void *ctx, uint32_t off, uint8_t *buf,
+    uint32_t len)
+{
+    struct wolfBoot_image *img = (struct wolfBoot_image *)ctx;
+
+    if (ext_flash_check_read((uintptr_t)img->fw_base + off, buf, (int)len)
+            != (int)len) {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
+/* Inflate the update partition into the boot partition, returning the number
+ * of bytes installed or -1. The payload is a complete signed image, so what
+ * lands in BOOT is an ordinary wolfBoot partition that the normal boot path
+ * verifies; this step does not have to be trusted for the installed image to
+ * be authentic. */
+static int wolfBoot_inflate_update(struct wolfBoot_image *update,
+    struct wolfBoot_image *boot, uint32_t uncompressed_sz,
+    uint32_t window_bits)
+{
+    static struct compressed_install ci;
+    uint32_t out_len = 0;
+    uint32_t sector = 0;
+    uint8_t flag;
+    int ret;
+
+    memset(&ci, 0, sizeof(ci));
+    ci.boot = boot;
+
+    /* Resume at the first destination sector not recorded as installed. */
+    while (((sector + 1) * WOLFBOOT_SECTOR_SIZE) <= uncompressed_sz) {
+        flag = SECT_FLAG_NEW;
+        if (wolfBoot_get_update_sector_flag((uint16_t)sector, &flag) != 0) {
+            break;
+        }
+        if (flag != SECT_FLAG_UPDATED) {
+            break;
+        }
+        sector++;
+    }
+    ci.skip_upto = sector * WOLFBOOT_SECTOR_SIZE;
+    ci.next_off = ci.skip_upto;
+    ci.erased_upto = ci.skip_upto;
+    ci.marked_upto = ci.skip_upto;
+    if (ci.skip_upto > 0) {
+        wolfBoot_printf("Resuming install at 0x%lx\n",
+            (unsigned long)ci.skip_upto);
+    }
+
+    wolfBoot_printf("Inflating %lu bytes to %lu...\n",
+        (unsigned long)update->fw_size, (unsigned long)uncompressed_sz);
+
+#ifdef EXT_FLASH
+    if (PART_IS_EXT(update)) {
+        ret = wolfBoot_gunzip_sink(NULL, update->fw_size,
+            compressed_src_read, update, compressed_window, window_bits,
+            compressed_sink_write, &ci, uncompressed_sz, &out_len);
+    }
+    else
+#endif
+    {
+        ret = wolfBoot_gunzip_sink(update->fw_base, update->fw_size,
+            NULL, NULL, compressed_window, window_bits,
+            compressed_sink_write, &ci, uncompressed_sz, &out_len);
+    }
+    if (ret != 0) {
+        wolfBoot_printf("Inflate failed (%d)\n", ret);
+        return -1;
+    }
+    /* The gzip trailer binds out_len; this binds it to the manifest. */
+    if (out_len != uncompressed_sz) {
+        wolfBoot_printf("Inflated %lu bytes, manifest says %lu\n",
+            (unsigned long)out_len, (unsigned long)uncompressed_sz);
+        return -1;
+    }
+    if (ci.pend_len > 0) {
+        if (compressed_emit(&ci) != 0) {
+            return -1;
+        }
+    }
+    return (int)ci.next_off;
+}
+
+#endif /* WOLFBOOT_COMPRESSED_UPDATE */
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -1218,12 +1411,22 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     struct wolfBoot_image swap;
 #endif
     uint16_t update_type;
+#ifndef DISABLE_BACKUP
+    /* Only the swap loop exchanges the two sizes. */
     uint32_t fw_size;
+#endif
+#ifndef DISABLE_BACKUP
     uint32_t size;
+#endif
 #if defined(DELTA_UPDATES)
     int inverse = 0;
 #endif
     int fallback_image = 0;
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+    uint32_t comp_size = 0;
+    uint32_t comp_window = 0;
+    int comp = 0;
+#endif
 #ifndef DISABLE_BACKUP
     int rollback_needed = 0;
     int bootStateRet = -1;
@@ -1289,7 +1492,35 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
 
     /* get total size */
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+    /* The inflated payload is a complete signed image, so its length is the
+     * whole of what BOOT will hold. */
+    comp = wolfBoot_image_compression(&update, &comp_size, &comp_window);
+    if (comp < 0) {
+        wolfBoot_printf("Update carries an unusable compression tag\n");
+        return -1;
+    }
+    if (comp == 0) {
+        wolfBoot_printf("COMPRESSED_UPDATE: update is not compressed\n");
+        return -1;
+    }
+    if (comp_window != WOLFBOOT_COMPRESSED_WINDOW_BITS) {
+        /* The window sizes this build's buffer, so a mismatch cannot be
+         * decoded here even though the image is otherwise valid. */
+        wolfBoot_printf("Image window 2^%lu, this build has 2^%d\n",
+            (unsigned long)comp_window, WOLFBOOT_COMPRESSED_WINDOW_BITS);
+        return -1;
+    }
+    if ((comp_size <= IMAGE_HEADER_SIZE) ||
+            (comp_size > (MAX_UPDATE_SIZE + IMAGE_HEADER_SIZE))) {
+        wolfBoot_printf("Inflated size %lu does not fit the boot partition\n",
+            (unsigned long)comp_size);
+        return -1;
+    }
+    total_size = comp_size;
+#else
     total_size = wolfBoot_get_total_size(&boot, &update);
+#endif
     if (total_size <= IMAGE_HEADER_SIZE) {
         wolfBoot_printf("Image total size %u invalid!\n", total_size);
         return -1;
@@ -1633,6 +1864,26 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     wolfBoot_get_encrypt_key(key, nonce);
 #endif
 
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+    /* Inflate the UPDATE partition into BOOT. UPDATE is only read, so an
+     * interrupted install still has an intact source to resume from. */
+    copy_ret = wolfBoot_inflate_update(&update, &boot, comp_size,
+        comp_window);
+    if (copy_ret < 0) {
+        wolfBoot_printf("Inflate failed, aborting install\n");
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+#ifdef EXT_ENCRYPTED
+        wolfBoot_zeroize(key, sizeof(key));
+        wolfBoot_zeroize(nonce, sizeof(nonce));
+        wolfBoot_enable_fallback_iv(0);
+#endif
+        return -1;
+    }
+    sector = ((uint32_t)copy_ret + sector_size - 1) / sector_size;
+#else
     /* Directly copy the content of the UPDATE partition into the BOOT
      * partition. */
     while ((sector * sector_size) < total_size) {
@@ -1653,12 +1904,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         }
         sector++;
     }
+#endif /* WOLFBOOT_COMPRESSED_UPDATE */
     /* erase remainder of partition */
-#ifdef PRINTF_ENABLED
-    size = WOLFBOOT_PARTITION_SIZE - (sector * sector_size);
     wolfBoot_printf("Erasing remainder of partition (%d sectors)...\n",
-        size/sector_size);
-#endif
+        (WOLFBOOT_PARTITION_SIZE - (sector * sector_size)) / sector_size);
     while ((sector * sector_size) < WOLFBOOT_PARTITION_SIZE) {
         wb_flash_erase(&boot, sector * sector_size, sector_size);
         sector++;

@@ -1,0 +1,157 @@
+name: Compressed images - test with simulator target
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+jobs:
+  compressed_update_simulator_tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-sim:v1.0
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # The sink decoder is a separate output path in src/gzip.c, so it
+        # has to be exercised and not merely built. The container on
+        # internal flash is read in place; on external flash it is pulled in
+        # through the read callback, which is a different path through the
+        # decoder's input.
+        sign: [ ED25519, ECC256 ]
+        config: [ sim-compressed-update, sim-compressed-update-ext,
+                  sim-compressed-update-ext-enc ]
+        window: [ 16384 ]
+        # The window sizes the decoder's buffer and bounds back-references.
+        # Only the input path differs between the three layouts, so the
+        # smallest window is run on one of them.
+        include:
+          - sign: ED25519
+            config: sim-compressed-update
+            window: 4096
+          - sign: ECC256
+            config: sim-compressed-update
+            window: 4096
+          # ECC flash programs whole write units and erases whole sectors;
+          # the simulator enforces both for this config.
+          - sign: ED25519
+            config: sim-compressed-update-ecc
+            window: 16384
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: make clean
+        run: |
+          make distclean
+
+      - name: Install zlib headers
+        run: |
+          apt-get update && apt-get install -y zlib1g-dev
+
+      - name: Select config
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+          sed -i "s/^SIGN?=.*/SIGN?=${{ matrix.sign }}/" .config
+          sed -i "s/^WOLFBOOT_COMPRESSED_WINDOW=.*//" .config
+          echo "WOLFBOOT_COMPRESSED_WINDOW=${{ matrix.window }}" >> .config
+
+      - name: Build tools
+        run: |
+          make -C tools/keytools && make -C tools/bin-assemble
+
+      # Not a bare `make`: that also assembles internal_flash.dd with the
+      # update partition inside it, which is wrong when the partition lives
+      # on the external device. The test target below builds both images.
+      - name: Build wolfboot.elf and test-app/image.elf
+        run: |
+          make clean && make wolfboot.elf test-app/image.elf
+
+      - name: Run the compressed update simulator test
+        run: |
+          ./tools/scripts/sim-compressed-update.sh
+
+  compressed_update_cross_build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-arm:v1.0
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [ stm32h7-compressed-update, stm32f439zi-compressed-update ]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Trust workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install zlib headers
+        run: |
+          apt-get update && apt-get install -y zlib1g-dev
+
+      - name: Select config
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+
+      - name: Build
+        run: |
+          make clean && make keysclean && make
+
+      # The installer walks the boot partition a sector at a time and the
+      # trailer lives in its last sector, so a partition that is not a whole
+      # number of sectors would have its tail erased by the trailer write.
+      - name: Check the partition geometry
+        run: |
+          BOOT=$(grep -E '^WOLFBOOT_PARTITION_SIZE\??=' .config | tail -1 | cut -d= -f2)
+          UPD=$(grep -E '^WOLFBOOT_PARTITION_UPDATE_SIZE\??=' .config | tail -1 | cut -d= -f2)
+          SEC=$(grep -E '^WOLFBOOT_SECTOR_SIZE\??=' .config | tail -1 | cut -d= -f2)
+          echo "boot $BOOT, update $UPD, sector $SEC"
+          [ $(($BOOT % $SEC)) -eq 0 ] || { echo "boot not sector aligned"; exit 1; }
+          [ $(($UPD % $SEC)) -eq 0 ] || { echo "update not sector aligned"; exit 1; }
+          # The point of the mode: the update partition is the smaller one.
+          [ $(($UPD)) -lt $(($BOOT)) ] || { echo "update is not smaller than boot"; exit 1; }
+          echo "ok: update is $(( 100 * $UPD / $BOOT ))% of boot"
+
+      # The window knob has to reach the decoder's buffer, which is the RAM
+      # the mode actually costs.
+      - name: Check the decoder window buffer was sized from the config
+        run: |
+          WIN=$(grep -E '^WOLFBOOT_COMPRESSED_WINDOW\??=' .config | tail -1 | cut -d= -f2)
+          SZ=$(arm-none-eabi-nm -S wolfboot.elf | awk '$4=="compressed_window" {print $2}')
+          [ -n "$SZ" ] || { echo "compressed_window not linked in"; exit 1; }
+          WANT=$((2 * $WIN))
+          [ $((0x$SZ)) -eq $WANT ] || \
+            { echo "compressed_window is $((0x$SZ)) bytes, expected $WANT"; exit 1; }
+          echo "ok: compressed_window is $((0x$SZ)) bytes for a $WIN window"
+
+      # Signing has to refuse a container the update partition cannot hold,
+      # so a release that compresses worse than the split fails here rather
+      # than on the device.
+      - name: Check a container is produced and fits
+        run: |
+          UPD=$(grep -E '^WOLFBOOT_PARTITION_UPDATE_SIZE\??=' .config | tail -1 | cut -d= -f2)
+          SEC=$(grep -E '^WOLFBOOT_SECTOR_SIZE\??=' .config | tail -1 | cut -d= -f2)
+          SIGN=$(grep -E '^SIGN\??=' .config | tail -1 | cut -d= -f2 | tr 'A-Z' 'a-z')
+          HASH=$(grep -E '^HASH\??=' .config | tail -1 | cut -d= -f2 | tr 'A-Z' 'a-z')
+          WIN=$(grep -E '^WOLFBOOT_COMPRESSED_WINDOW\??=' .config | tail -1 | cut -d= -f2)
+          WOLFBOOT_PARTITION_SIZE=$(grep -E '^WOLFBOOT_PARTITION_SIZE\??=' .config | tail -1 | cut -d= -f2) \
+          WOLFBOOT_PARTITION_UPDATE_SIZE=$UPD WOLFBOOT_SECTOR_SIZE=$SEC \
+          WOLFBOOT_COMPRESSED_WINDOW=$WIN \
+            ./tools/keytools/sign --compress --$SIGN --$HASH \
+              test-app/image.elf wolfboot_signing_private_key.der 2
+          SZ=$(stat -c%s test-app/image_v2_signed_compressed.bin)
+          LIMIT=$(( $(($UPD)) - $(($SEC)) ))
+          echo "container $SZ bytes, limit $LIMIT"
+          [ "$SZ" -le "$LIMIT" ] || { echo "container does not fit"; exit 1; }
+          echo "ok: container fits the update partition"

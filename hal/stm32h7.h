@@ -298,8 +298,18 @@
 #   error "Please use a bigger WOLFBOOT_PARTITION_SIZE, since the last 128KB on each partition will be reserved for bootloader flags"
 #endif
 
+/* Not WOLFBOOT_PARTITION_SIZE: the UPDATE slot is sized independently in the
+ * compressed and monolithic self-update modes, and the flags page has to be
+ * the sector its own last byte falls in. PULL_LINKER_DEFINES has no separate
+ * update size, so the two are equal there. */
+#ifdef WOLFBOOT_PARTITION_UPDATE_SIZE
+#define STM32H7_PART_UPDATE_SIZE WOLFBOOT_PARTITION_UPDATE_SIZE
+#else
+#define STM32H7_PART_UPDATE_SIZE WOLFBOOT_PARTITION_SIZE
+#endif
+
 #define STM32H7_PART_BOOT_END   (WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)
-#define STM32H7_PART_UPDATE_END (WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)
+#define STM32H7_PART_UPDATE_END (WOLFBOOT_PARTITION_UPDATE_ADDRESS + STM32H7_PART_UPDATE_SIZE)
 #define STM32H7_WORD_SIZE (32)
 #define STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS \
     (((STM32H7_PART_BOOT_END - 1)   / STM32H7_SECTOR_SIZE) * STM32H7_SECTOR_SIZE)
@@ -309,5 +319,24 @@
     ((x >= STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS)   && (x < STM32H7_PART_BOOT_END))
 #define STM32H7_UPDATE_FLAGS_PAGE(x) \
     ((x >= STM32H7_PART_UPDATE_FLAGS_PAGE_ADDRESS) && (x < STM32H7_PART_UPDATE_END))
+
+/* The flags page is erased in full on every partition state write, and
+ * hal_flash_erase() cannot clear less than a sector. A BOOT partition that
+ * does not end on a sector boundary therefore has its erase reach past it,
+ * into the UPDATE partition when that is in internal flash, taking the
+ * staged image's header with it. */
+#if defined(WOLFBOOT_PARTITION_SIZE) && !defined(PART_UPDATE_EXT) && \
+    defined(WOLFBOOT_PARTITION_UPDATE_ADDRESS) && \
+    ((STM32H7_PART_BOOT_FLAGS_PAGE_ADDRESS + STM32H7_SECTOR_SIZE) > \
+     (WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0))
+#   error "BOOT flags page erase reaches into the UPDATE partition: align both partition addresses and WOLFBOOT_PARTITION_SIZE to 128KB"
+#endif
+/* Same erase, on the UPDATE side: its flags page is the sector its last byte
+ * falls in, so an end that is not on a sector boundary is erased past. */
+#if defined(WOLFBOOT_PARTITION_UPDATE_SIZE) && !defined(PART_UPDATE_EXT) && \
+    defined(WOLFBOOT_PARTITION_UPDATE_ADDRESS) && \
+    ((STM32H7_PART_UPDATE_END % STM32H7_SECTOR_SIZE) != 0)
+#   error "UPDATE partition does not end on a 128KB boundary: its flags page erase would reach past it"
+#endif
 
 #endif /* HAL_STM32H7_H */

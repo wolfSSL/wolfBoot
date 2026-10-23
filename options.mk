@@ -1293,8 +1293,23 @@ ifeq ($(CUSTOM_PARTITION_TRAILER),1)
   CFLAGS+= -D"CUSTOM_PARTITION_TRAILER"
 endif
 
+# COMPRESSED_UPDATE=1 inflates a compressed UPDATE partition into BOOT, which
+# is then executed in place. There is no swap and no backup of the outgoing
+# image, so it builds on DISABLE_BACKUP, and the inflater is mandatory. Both
+# are set here because their own blocks below have already run by the time
+# the COMPRESSED_UPDATE block is reached.
+COMPRESSED_UPDATE?=0
+ifeq ($(COMPRESSED_UPDATE),1)
+  DISABLE_BACKUP=1
+  GZIP=1
+endif
+
 ifeq ($(DISABLE_BACKUP),1)
-  $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
+  # Not said for COMPRESSED_UPDATE: that installer only reads the UPDATE
+  # partition, so an interrupted install restarts from an intact source.
+  ifneq ($(COMPRESSED_UPDATE),1)
+    $(warning DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable)
+  endif
   CFLAGS+= -D"DISABLE_BACKUP"
   WOLFBOOT_PARTITION_SWAP_ADDRESS?=0
 endif
@@ -1371,6 +1386,38 @@ ifeq ($(GZIP),1)
   ifeq ($(GZIP_SMALL),1)
     CFLAGS+=-DWOLFBOOT_GZIP_SMALL
   endif
+endif
+
+# COMPRESSED_UPDATE=1: the UPDATE partition holds a gzip-compressed, signed
+# image and is inflated into BOOT, which keeps executing in place. The payload
+# is the already-signed inner image, so BOOT stays an ordinary partition that
+# the normal boot path verifies. Handled by update_flash.o, the default
+# strategy object, so no arch.mk change is needed.
+ifeq ($(COMPRESSED_UPDATE),1)
+  CFLAGS+=-DWOLFBOOT_COMPRESSED_UPDATE -DWOLFBOOT_GZIP_SINK
+  # ENCRYPT=1 composes, because it hooks the external flash read, which is
+  # the same seam the installer and the image hasher pull the container
+  # through.
+  ifeq ($(ENCRYPT),1)
+    ifneq ($(EXT_FLASH),1)
+      $(error ENCRYPT=1 with COMPRESSED_UPDATE needs EXT_FLASH=1: the encryption layer hooks the external flash interface)
+    endif
+  endif
+  # LZ77 window the image was compressed with. The decoder needs twice this
+  # in RAM and refuses an image compressed with a larger one.
+  WOLFBOOT_COMPRESSED_WINDOW?=16384
+  ifeq ($(WOLFBOOT_COMPRESSED_WINDOW),4096)
+    COMPRESSED_WINDOW_BITS=12
+  else ifeq ($(WOLFBOOT_COMPRESSED_WINDOW),8192)
+    COMPRESSED_WINDOW_BITS=13
+  else ifeq ($(WOLFBOOT_COMPRESSED_WINDOW),16384)
+    COMPRESSED_WINDOW_BITS=14
+  else ifeq ($(WOLFBOOT_COMPRESSED_WINDOW),32768)
+    COMPRESSED_WINDOW_BITS=15
+  else
+    $(error WOLFBOOT_COMPRESSED_WINDOW must be 4096, 8192, 16384 or 32768)
+  endif
+  CFLAGS+=-DWOLFBOOT_COMPRESSED_WINDOW_BITS=$(COMPRESSED_WINDOW_BITS)
 endif
 
 # FIT_RAMDISK=1 enables FIT ramdisk (initramfs) extraction and DTB

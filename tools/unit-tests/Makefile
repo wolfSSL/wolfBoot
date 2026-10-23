@@ -1,5 +1,15 @@
 LDFLAGS=-lcheck -lm -pthread
 
+# The gzip sink tests build their fixtures with a chosen LZ77 window, which
+# gzip(1) cannot produce, so they need zlib. Optional: without the headers
+# those suites are skipped and the rest still build, matching how
+# tools/keytools treats the same dependency.
+HAVE_ZLIB := $(shell $(CC) -E -include zlib.h -x c /dev/null >/dev/null 2>&1 && echo 1)
+ifeq ($(HAVE_ZLIB),1)
+  CFLAGS  += -DHAVE_ZLIB
+  LDFLAGS += -lz
+endif
+
 UNAME_S := $(shell uname -s)
 ifneq ($(UNAME_S),Darwin)
 	LDFLAGS+=-lrt -lsubunit
@@ -68,7 +78,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
        unit-nsc-update \
-       unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
+       unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-compressed-tlv unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
@@ -95,6 +105,11 @@ TESTS+=unit-psoc-e8-flash
 TESTS+=unit-diagnostics-256
 TESTS+=unit-fit-gzip unit-fit-nogzip
 TESTS+=unit-gzip-small unit-gzip-bits32 unit-gzip-root7 unit-fit-gzip-small
+ifeq ($(HAVE_ZLIB),1)
+TESTS+=unit-gzip-sink unit-gzip-sink-small unit-gzip-sink-bits32 \
+       unit-gzip-sink-root7
+TESTS+=unit-compressed-install unit-compressed-install-ecc
+endif
 TESTS+=unit-fit-fpga
 TESTS+=unit-mpusize
 TESTS+=unit-flash-erase-h7
@@ -436,6 +451,12 @@ unit-update-ram-fit:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUT
 	-DWOLFBOOT_DTS_BOOT_ADDRESS=0xCF000000 \
 	-DWOLFBOOT_DTS_UPDATE_ADDRESS=0xCF100000 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Compressed-image manifest reader and the shared slot-selection policy.
+unit-compressed-tlv:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DWOLFBOOT_COMPRESSED_UPDATE -DWOLFBOOT_GZIP -DWOLFBOOT_GZIP_SINK \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-ram:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
@@ -1145,6 +1166,26 @@ unit-gzip-root7: ../../include/target.h unit-gzip.c
 	gcc -o $@ unit-gzip.c $(CFLAGS) -DWOLFBOOT_GZIP \
 		-DWOLFBOOT_GZIP_ROOT_BITS=7 $(LDFLAGS)
 
+# The sink entry point, which decompresses to a callback with a bounded
+# window instead of to a flat buffer. Fixtures need a chosen window size,
+# which host gzip(1) cannot produce, so these link zlib. Built over the same
+# decoder variants as the suite above, since the block decoders differ.
+unit-gzip-sink: ../../include/target.h unit-gzip-sink.c
+	gcc -o $@ unit-gzip-sink.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_SINK $(LDFLAGS)
+
+unit-gzip-sink-small: ../../include/target.h unit-gzip-sink.c
+	gcc -o $@ unit-gzip-sink.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_SINK -DWOLFBOOT_GZIP_SMALL $(LDFLAGS)
+
+unit-gzip-sink-bits32: ../../include/target.h unit-gzip-sink.c
+	gcc -o $@ unit-gzip-sink.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_SINK -DWOLFBOOT_GZIP_BITS_32 $(LDFLAGS)
+
+unit-gzip-sink-root7: ../../include/target.h unit-gzip-sink.c
+	gcc -o $@ unit-gzip-sink.c $(CFLAGS) -DWOLFBOOT_GZIP \
+		-DWOLFBOOT_GZIP_SINK -DWOLFBOOT_GZIP_ROOT_BITS=7 $(LDFLAGS)
+
 # FIT-loader gzip / unsupported-compression branch coverage. Built twice
 # from the same source: once with WOLFBOOT_GZIP (success + decompress
 # failure paths) and once without (compile-time fail-closed path).
@@ -1262,6 +1303,43 @@ unit-update-flash-enc-intswap: ../../include/target.h unit-update-flash.c
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c \
 	$(CFLAGS) $(LDFLAGS)
+
+# The execute-in-place installer. DISABLE_BACKUP is what COMPRESSED_UPDATE
+# implies in options.mk; the asymmetric update partition is the layout the
+# mode exists for, and nothing else in the tree exercises it.
+unit-compressed-install:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DDISABLE_BACKUP -DWOLFBOOT_COMPRESSED_UPDATE \
+	-DWOLFBOOT_GZIP -DWOLFBOOT_GZIP_SINK \
+	-DWOLFBOOT_COMPRESSED_WINDOW_BITS=12 \
+	-DWOLFBOOT_PARTITION_UPDATE_SIZE=0x4000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# The same installer on flash that programs whole 32-byte units only, as the
+# AURIX TC3xx does. 4 KB sectors, because the journal must be able to log a
+# full-partition update.
+unit-compressed-install-ecc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN \
+	-DUNIT_TEST_AUTH -DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DDISABLE_BACKUP -DWOLFBOOT_COMPRESSED_UPDATE \
+	-DWOLFBOOT_GZIP -DWOLFBOOT_GZIP_SINK \
+	-DWOLFBOOT_COMPRESSED_WINDOW_BITS=12 \
+	-DWOLFBOOT_PARTITION_UPDATE_SIZE=0x4000 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DNVM_FLASH_JOURNAL -DNVM_FLASH_ECC -DWOLFBOOT_FLASH_WRITE_UNIT=32 \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
+
+unit-compressed-install: ../../include/target.h unit-compressed-install.c
+	gcc -o $@ unit-compressed-install.c ../../src/image.c ../../src/gzip.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-compressed-install-ecc: ../../include/target.h unit-compressed-install.c
+	gcc -o $@ unit-compressed-install.c ../../src/image.c ../../src/gzip.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-compressed-tlv: ../../include/target.h unit-compressed-tlv.c
+	gcc -o $@ unit-compressed-tlv.c ../../src/image.c ../../src/gzip.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-ram: ../../include/target.h unit-update-ram.c
 	gcc -o $@ unit-update-ram.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)

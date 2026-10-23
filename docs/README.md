@@ -8,6 +8,7 @@ See also: [wolfBoot Product Overview](https://www.wolfssl.com/products/wolfboot/
 - [**azure_keyvault.md**](./azure_keyvault.md) - Using Azure Key Vault for key management and signing with wolfBoot.
 - [**CMake.md**](./CMake.md) - CMake-based build setup, presets, toolchains, and tips for building wolfBoot.
 - [**compile.md**](./compile.md) - How to build/compile wolfBoot (toolchains, options, typical steps).
+- [**Compression.md**](./Compression.md) - Compressed firmware updates: a gzip-compressed update partition installed into a boot partition that executes in place.
 - [**encrypted_partitions.md**](./encrypted_partitions.md) - Creating and managing encrypted firmware/data partitions.
 - [**firmware_image.md**](./firmware_image.md) - wolfBoot firmware image format, layout, and metadata.
 - [**firmware_update.md**](./firmware_update.md) - Update flow: slots, verification, rollback, and recovery.
