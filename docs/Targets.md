@@ -5616,6 +5616,10 @@ xilinx-vmk180-20242 login:
 
 Inflating a 24 MB kernel takes about 7 s on the A72, spent entirely between the `Decompressing` and `Decompressed` lines with no intermediate output. Do not mistake that gap for a hang.
 
+**Console input**
+
+`DEBUG_UART=1` provides the console output path, and `uart_rx()` the matching non-blocking receive: it returns 1 when a character was read and 0 when the receive FIFO is empty. This is the only input path, as wolfBoot links `-nostdlib` and there is no C library `getchar()` behind it. Declare it as `extern int uart_rx(uint8_t *c);` rather than including `uart_drv.h`, which also declares `uart_tx()` and `uart_init()` with signatures this HAL does not use. When wolfBoot runs at EL2 the port is left exactly as the PLM configured it, so `uart_rx()` sets `UARTCR.RXE` itself on first use and touches nothing else. Blocking on input from a hook such as `wolfBoot_hook_postinit()` is safe: wolfBoot imposes no timeout of its own at that point.
+
 **Diagnosing a boot that stops with no message**
 
 wolfBoot runs at EL2 on Versal, where any abort is fatal. With `DEBUG_UART=1` (the default in both Versal example configs) the handlers print the syndrome:
@@ -5628,7 +5632,7 @@ FAR_EL2: 0x00000000F9200000
 *** SYSTEM HALTED ***
 ```
 
-`ESR_EL2[31:26]` is the exception class, `[5:0]` the fault status, and `FAR_EL2` the faulting address. A stop with no such banner is not an exception - check the PLM's `PMC EAM` output on the same UART. Error IDs `0xA`/`0xB` are `DDRMB_CR`/`DDRMB_NCR`, DDR controller correctable and uncorrectable errors, which the PLM logs without acting on.
+`ESR_EL2[31:26]` is the exception class, `[5:0]` the fault status, and `FAR_EL2` the faulting address. An instruction abort (exception class `0x21`) reporting `ELR_EL2` and `FAR_EL2` as zero is a call through a null or unresolved function pointer rather than a bad data access. A stop with no such banner is not an exception - check the PLM's `PMC EAM` output on the same UART. Error IDs `0xA`/`0xB` are `DDRMB_CR`/`DDRMB_NCR`, DDR controller correctable and uncorrectable errors, which the PLM logs without acting on.
 
 **Boot Performance**
 

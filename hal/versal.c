@@ -232,6 +232,33 @@ void uart_write(const char *buf, uint32_t len)
         ;
 }
 
+/* Non-blocking receive. Returns 1 when a character was read, 0 otherwise. */
+int uart_rx(uint8_t *c)
+{
+    uint32_t dr;
+
+    if ((UART_CR & UART_CR_RXE) == 0) {
+        /* At EL2 the port is left exactly as PLM configured it, and PLM only
+         * needs to transmit its own log. Enabling receive on its own does not
+         * disturb the baud rate or frame format already in place. */
+        UART_CR |= UART_CR_RXE;
+    }
+
+    if (UART_FR & UART_FR_RXFE)
+        return 0;
+
+    dr = UART_DR;
+    if (dr & UART_DR_ERR_MASK) {
+        /* Overrun, break, parity or framing error: drop the character and
+         * clear the sticky receive status. */
+        UART_RSR = 0;
+        return 0;
+    }
+
+    *c = (uint8_t)(dr & UART_DR_DATA_MASK);
+    return 1;
+}
+
 #else
 #define uart_init() do {} while(0)
 #endif /* DEBUG_UART */
