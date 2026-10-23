@@ -653,15 +653,15 @@ with ED25519 or LMS-8-10-1:
 with RSA2048:
 
 - Sector size: 2KB
-- Wolfboot partition size: 12KB
+- Wolfboot partition size: 14KB
 - Application partition size: 8 KB
 - Swap size 2KB
 
 ```C
 #define WOLFBOOT_SECTOR_SIZE                 0x800      /* 2 KB */
-#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08003000 /* at 12KB */
+#define WOLFBOOT_PARTITION_BOOT_ADDRESS      0x08003800 /* at 14KB */
 #define WOLFBOOT_PARTITION_SIZE              0x2000     /* 8 KB */
-#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005000 /* at 20KB */
+#define WOLFBOOT_PARTITION_UPDATE_ADDRESS    0x08005800 /* at 22KB */
 #define WOLFBOOT_PARTITION_SWAP_ADDRESS      0x08007800 /* at 30KB */
 ```
 
