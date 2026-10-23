@@ -304,6 +304,7 @@ test-sim-self-update-monolithic: wolfboot.bin test-app/image_v1_signed.bin FORCE
 # Same as test-sim-self-update-monolithic, but also verifies that the
 # self-header was persisted at WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS and
 # matches the signing tool's --header-only output byte-for-byte.
+# A second boot checks that the payload is not installed again.
 #
 test-sim-self-update-monolithic-self-header: wolfboot.bin test-app/image_v1_signed.bin FORCE
 	@echo "=== Simulator Monolithic Self-Update + Self-Header Test ==="
@@ -341,6 +342,11 @@ test-sim-self-update-monolithic-self-header: wolfboot.bin test-app/image_v1_sign
 	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=$$(($(WOLFBOOT_SECTOR_SIZE))) of=persisted_hdr.dd 2>/dev/null
 	$(Q)cmp -n $$(($(IMAGE_HEADER_SIZE))) persisted_hdr.dd monolithic_payload_v2_header.bin
 	@echo "  Self-header persisted correctly: PASSED"
+	@# Boot again. The self-header shows the payload is already installed, so
+	@# wolfBoot should erase it from the update partition, not install it again.
+	$(Q)./wolfboot.elf get_version || true
+	$(Q)dd if=internal_flash.dd bs=1 skip=$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS) - $(ARCH_FLASH_OFFSET))) count=4 2>/dev/null | od -An -tx1 | grep -q "ff ff ff ff"
+	@echo "  Installed payload erased from UPDATE on next boot: PASSED"
 	@echo "=== Monolithic Self-Update + Self-Header Test PASSED ==="
 
 # Test that an oversized monolithic self-update is rejected. The payload is

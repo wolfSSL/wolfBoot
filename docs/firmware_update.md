@@ -257,6 +257,15 @@ bytes and the nested application image. Later calls to
 `fw_size` bytes starting at `ARCH_FLASH_OFFSET`, spanning into the BOOT
 partition.
 
+The persisted header also sets the version a new payload must exceed. A
+staged payload is installed only if its version is greater than both the
+running bootloader's `WOLFBOOT_VERSION` and the version in the
+self-header. The bootloader inside each payload can therefore keep the
+same `WOLFBOOT_VERSION` across releases. Without the self-header only
+`WOLFBOOT_VERSION` is checked, so the bootloader in each payload must be
+built with `WOLFBOOT_VERSION` equal to the payload's signed version,
+otherwise the update is rejected.
+
 ##### Restrictions
 
 - **Not power-fail safe.** Like all self-updates, a monolithic update

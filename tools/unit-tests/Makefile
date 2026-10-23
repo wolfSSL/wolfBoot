@@ -67,6 +67,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-hook \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
+       unit-update-flash-self-update-monolithic \
        unit-nsc-update \
        unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-custom-trailer-nopart unit-update-flash-hwswap unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
        unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
@@ -408,6 +409,17 @@ unit-update-flash-self-update-ecc:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -
 	-DNVM_FLASH_JOURNAL -DNVM_FLASH_ECC -DWOLFBOOT_FLASH_WRITE_UNIT=32 \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_SELF_HEADER \
 	-DWOLFBOOT_PARTITION_SELF_HEADER_ADDRESS=0xCD004000
+# Same as unit-update-flash-self-update, plus monolithic mode and a self-header
+# (in the unused SWAP sector), to check that an update is only installed if it
+# is newer than the version in the self-header. Some addresses are plain
+# numbers because image.c is built separately and cannot see MOCK_ADDRESS_*.
+unit-update-flash-self-update-monolithic:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DRAM_CODE -DARCH_SIM -DUNIT_TEST_SELF_UPDATE_ONLY -DWOLFBOOT_SELF_UPDATE_MONOLITHIC \
+	-DWOLFBOOT_SELF_HEADER -DWOLFBOOT_SELF_HEADER_EXT \
+	-DWOLFBOOT_PARTITION_SELF_HEADER_ADDRESS=0xCE000000 \
+	-DARCH_FLASH_OFFSET=0xCD000000 -DWOLFBOOT_VERSION=7 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-ram-fit:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
 	-DPART_SWAP_EXT -DPART_BOOT_EXT -DWOLFBOOT_DUALBOOT -DNO_XIP \
@@ -862,7 +874,8 @@ unit-otp-keystore-gen-zeroize: unit-otp-keystore-gen-zeroize.c \
 	gcc -o $@ unit-otp-keystore-gen-zeroize.c unit-keystore.c \
 		-DFLASH_OTP_KEYSTORE $(CFLAGS) $(LDFLAGS) -ldl
 
-unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
+unit-update-flash-self-update unit-update-flash-self-update-monolithic: \
+		../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(CFLAGS) $(LDFLAGS)

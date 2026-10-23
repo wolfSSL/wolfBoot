@@ -586,6 +586,91 @@ START_TEST (test_self_update_ecc_whole_units)
 }
 END_TEST
 #endif
+
+#if defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && defined(WOLFBOOT_SELF_HEADER)
+/* Write a self-header with only the magic, size and version fields */
+static void set_self_header_version(uint32_t version)
+{
+    uintptr_t hdr = WOLFBOOT_PARTITION_SELF_HEADER_ADDRESS;
+    uint32_t magic = WOLFBOOT_MAGIC;
+    uint32_t size_img = host_to_img_u32(TEST_SIZE_SMALL);
+    uint32_t word = 4 << 16 | HDR_VERSION;
+    uint32_t version_img = host_to_img_u32(version);
+
+    ext_flash_unlock();
+    ext_flash_erase(hdr, WOLFBOOT_SELF_HEADER_SIZE);
+    ext_flash_write(hdr, (void *)&magic, 4);
+    ext_flash_write(hdr + 4, (void *)&size_img, 4);
+    ext_flash_write(hdr + 8, (void *)&word, 4);
+    ext_flash_write(hdr + 12, (void *)&version_img, 4);
+    ext_flash_lock();
+}
+
+static void stage_self_update(uint32_t version)
+{
+    add_payload_type(PART_UPDATE, version, TEST_SIZE_SMALL,
+        HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
+    ext_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+    ext_flash_lock();
+}
+
+/* The update has the same version as the self-header, so it is already
+ * installed and should be erased, not installed again */
+START_TEST (test_self_update_self_header_sameversion_erased)
+{
+    reset_mock_stats();
+    prepare_flash();
+    clear_erase_stats();
+    set_self_header_version(WOLFBOOT_VERSION + 2);
+    stage_self_update(WOLFBOOT_VERSION + 2);
+
+    wolfBoot_check_self_update();
+
+    ck_assert_int_eq(arch_reboot_called, 0);
+    ck_assert_int_ge(erased_update, 1);
+    ck_assert_uint_eq(*(uint32_t *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        0xFFFFFFFFu);
+    cleanup_flash();
+}
+END_TEST
+
+/* The update is older than the self-header version, so it should be erased
+ * even though it is newer than WOLFBOOT_VERSION */
+START_TEST (test_self_update_self_header_oldversion_erased)
+{
+    reset_mock_stats();
+    prepare_flash();
+    clear_erase_stats();
+    set_self_header_version(WOLFBOOT_VERSION + 2);
+    stage_self_update(WOLFBOOT_VERSION + 1);
+
+    wolfBoot_check_self_update();
+
+    ck_assert_int_eq(arch_reboot_called, 0);
+    ck_assert_int_ge(erased_update, 1);
+    ck_assert_uint_eq(*(uint32_t *)(uintptr_t)WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+        0xFFFFFFFFu);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_self_update_self_header_newversion_installs)
+{
+    reset_mock_stats();
+    prepare_flash();
+    clear_erase_stats();
+    set_self_header_version(WOLFBOOT_VERSION + 2);
+    stage_self_update(WOLFBOOT_VERSION + 3);
+
+    wolfBoot_check_self_update();
+
+    ck_assert_int_eq(arch_reboot_called, 1);
+    ck_assert_uint_eq(wolfBoot_get_self_version(), WOLFBOOT_VERSION + 3);
+    cleanup_flash();
+}
+END_TEST
+#endif /* WOLFBOOT_SELF_UPDATE_MONOLITHIC && WOLFBOOT_SELF_HEADER */
 #endif
 
 #ifndef UNIT_TEST_SELF_UPDATE_ONLY
@@ -2284,11 +2369,21 @@ Suite *wolfboot_suite(void)
 #ifdef NVM_FLASH_ECC
     TCase *self_update_ecc = tcase_create("Self update on ECC flash");
 #endif
+#if defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && defined(WOLFBOOT_SELF_HEADER)
+    TCase *self_header_sameversion = tcase_create("Self update self-header same version erased");
+    TCase *self_header_oldversion = tcase_create("Self update self-header older version erased");
+    TCase *self_header_newversion = tcase_create("Self update self-header newer version installs");
+#endif
 
     tcase_add_test(self_update_sameversion, test_self_update_sameversion_erased);
     tcase_add_test(self_update_oldversion, test_self_update_oldversion_erased);
     tcase_add_test(self_update_invalid_integrity, test_self_update_newversion_invalid_integrity_denied);
     tcase_add_test(self_update_success, test_self_update_newversion_copies_and_reboots);
+#if defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && defined(WOLFBOOT_SELF_HEADER)
+    tcase_add_test(self_header_sameversion, test_self_update_self_header_sameversion_erased);
+    tcase_add_test(self_header_oldversion, test_self_update_self_header_oldversion_erased);
+    tcase_add_test(self_header_newversion, test_self_update_self_header_newversion_installs);
+#endif
 
     suite_add_tcase(s, self_update_sameversion);
     suite_add_tcase(s, self_update_oldversion);
@@ -2297,6 +2392,11 @@ Suite *wolfboot_suite(void)
 #ifdef NVM_FLASH_ECC
     tcase_add_test(self_update_ecc, test_self_update_ecc_whole_units);
     suite_add_tcase(s, self_update_ecc);
+#endif
+#if defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && defined(WOLFBOOT_SELF_HEADER)
+    suite_add_tcase(s, self_header_sameversion);
+    suite_add_tcase(s, self_header_oldversion);
+    suite_add_tcase(s, self_header_newversion);
 #endif
 #endif
     return s;
