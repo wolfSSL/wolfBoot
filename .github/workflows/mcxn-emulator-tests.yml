@@ -1,0 +1,73 @@
+name: mcxn-emulator-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Boot, update and rollback on the m33mu MCXN947 model with the
+  # TrustZone secure-application (wolfTrust) handoff config.
+  mcxn-emulator-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [mcxn-tz-wolftrust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
+
+      - uses: actions/checkout@v4
+        with:
+          repository: nxp-mcuxpresso/CMSIS_5
+          path: CMSIS_5
+
+      - name: Cache MCUXpresso SDK
+        id: cache-mcuxpresso
+        uses: actions/cache@v4
+        with:
+          path: |
+            mcuxpresso-sdk
+            venv
+          key: mcuxpresso-sdk-frdmmcxn947-emu-${{ hashFiles('.github/workflows/mcxn-emulator-tests.yml') }}
+
+      - name: Setup MCUXpresso SDK
+        if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install west
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          cd mcuxpresso-sdk
+          sed -i '/se_hostlib\|emwin/d' manifests/boards/frdmmcxn947.yml
+          west update_board --set board frdmmcxn947
+
+      - name: Use the MCUXpresso SDK for the wolfBoot build
+        run: |
+          echo "MCUXSDK=1" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO=$GITHUB_WORKSPACE/mcuxpresso-sdk/mcuxsdk" >> "$GITHUB_ENV"
+          echo "MCUXPRESSO_CMSIS=$GITHUB_WORKSPACE/CMSIS_5/CMSIS" >> "$GITHUB_ENV"
+
+      - name: Configure ${{ matrix.config }} and build wolfboot
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (${{ matrix.config }})
+        working-directory: test-app/emu-test-apps
+        run: |
+          BOOT_TIMEOUT=30 UPDATE_TIMEOUT=60 REBOOT_TIMEOUT=30 ./test.sh
+
+      - name: Upload emulator logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcxn-emu-logs-${{ matrix.config }}
+          path: test-app/emu-test-apps/mcxn947/*.log

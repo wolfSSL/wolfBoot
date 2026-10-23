@@ -28,6 +28,9 @@
 #include "target.h"
 #include "hal.h"
 #include "wolfboot/wolfboot.h"
+#ifdef EMU_SECURE_HANDOFF_ADDRESS
+#include "wolfboot/secure_handoff.h"
+#endif
 
 #define MSGSIZE 16
 #define PAGESIZE 256
@@ -283,6 +286,38 @@ static void wait_for_update(uint32_t version)
     }
 }
 
+#ifdef EMU_SECURE_HANDOFF_ADDRESS
+/* The record wolfBoot published must describe the image that is running. */
+static int emu_check_handoff(uint32_t version)
+{
+    const volatile wolfBoot_secure_handoff_t *rec =
+        (const volatile wolfBoot_secure_handoff_t *)EMU_SECURE_HANDOFF_ADDRESS;
+    uint8_t *hash = NULL;
+    uint32_t i;
+
+    if ((rec->magic != WOLFBOOT_SECURE_HANDOFF_MAGIC) ||
+        (rec->magic_inverse != ~WOLFBOOT_SECURE_HANDOFF_MAGIC) ||
+        (rec->version != WOLFBOOT_SECURE_HANDOFF_VERSION) ||
+        (rec->size != sizeof(wolfBoot_secure_handoff_t)) ||
+        (rec->image_version != version) ||
+        (rec->hash_algorithm != WOLFBOOT_SECURE_HANDOFF_HASH_SHA256) ||
+        (rec->measurement_size != WOLFBOOT_SECURE_HANDOFF_DIGEST_SIZE)) {
+        return -1;
+    }
+    if (wolfBoot_find_header((uint8_t *)WOLFBOOT_PARTITION_BOOT_ADDRESS +
+            IMAGE_HEADER_OFFSET, HDR_SHA256, &hash) !=
+            WOLFBOOT_SECURE_HANDOFF_DIGEST_SIZE) {
+        return -1;
+    }
+    for (i = 0u; i < WOLFBOOT_SECURE_HANDOFF_DIGEST_SIZE; i++) {
+        if (rec->measurement[i] != hash[i]) {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 int main(void)
 {
     uint32_t version;
@@ -291,6 +326,9 @@ int main(void)
 
     version = emu_current_version();
     printf("get_version=%lu\n", (unsigned long)version);
+#ifdef EMU_SECURE_HANDOFF_ADDRESS
+    printf("handoff=%s\n", (emu_check_handoff(version) == 0) ? "ok" : "bad");
+#endif
 
     if (version == 4u) {
 #ifdef TZEN

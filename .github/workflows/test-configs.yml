@@ -435,6 +435,13 @@ jobs:
       config-file: ./config/examples/mcxn-tz-psa-hw.config
       board-name: frdmmcxn947
 
+  nxp_mcxn_tz_wolftrust_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-tz-wolftrust.config
+      board-name: frdmmcxn947
+
   nxp_rw612_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:

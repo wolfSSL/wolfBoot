@@ -57,6 +57,7 @@ TARGET="${TARGET:-}"
 
 EMU_DIR=""
 UART_BASE=""
+HANDOFF_CHECK=0
 
 get_m33mu_target() {
   case "$1" in
@@ -67,6 +68,7 @@ get_m33mu_target() {
     mcxw|mcxw71) echo "mcxw71c" ;;
     m2354) echo "m2354" ;;
     imx_rt7xx) echo "imxrt700" ;;
+    mcxn) echo "mcxn947" ;;
     *) echo "" ;;
   esac
 }
@@ -79,6 +81,7 @@ case "$TARGET" in
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
   imx_rt7xx) EMU_DIR=imxrt700; UART_BASE=40110000 ;;
+  mcxn) EMU_DIR=mcxn947; UART_BASE=40096000; HANDOFF_CHECK=1 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -110,10 +113,11 @@ TZEN="$(cfg_get TZEN)"
 
 # If ARCH_OFFSET is unset/0 but partitions are in 0x0800_0000 (STM32), use that
 # as the base so bin-assemble offsets stay within the flash image.
-# M2354 is excluded: its flash starts at 0 and the high partition addresses are
-# the non-secure alias, not a different flash base.
+# M2354 and MCXN are excluded: their flash starts at 0 and the high partition
+# addresses are an alias, not a different flash base.
 if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
-  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" ]] && (( BOOT_ADDR >= 0x08000000 )); then
+  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" && "$TARGET" != "mcxn" ]] && \
+      (( BOOT_ADDR >= 0x08000000 )); then
     ARCH_OFFSET=0x08000000
   fi
 fi
@@ -131,9 +135,9 @@ fi
 
 normalize_flash_addr() {
   local addr="$1"
-  if [[ "$TARGET" == "m2354" ]]; then
-    # Base is Secure and base + 0x10000000 is the non-secure alias; the flash
-    # image is physical APROM, so strip the alias bit to get a file offset.
+  if [[ "$TARGET" == "m2354" || "$TARGET" == "mcxn" ]]; then
+    # Flash and its alias differ by 0x10000000 (M2354: NS alias, MCXN: Secure
+    # alias); the flash image is physical, so strip the alias bit.
     if (( addr >= 0x10000000 && addr < 0x20000000 )); then
       addr=$((addr - 0x10000000))
     fi
@@ -228,6 +232,7 @@ write_target_ld() {
     mcxw|mcxw71) base="ARM-mcxw" ;;
     m2354) base="ARM-m2354" ;;
     imx_rt7xx) base="ARM-imx_rt7xx" ;;
+    mcxn) base="ARM-mcxn" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
@@ -485,6 +490,19 @@ run_update_scenario() {
   fi
 }
 
+SECURE_APP="$(cfg_get WOLFBOOT_SECURE_APP)"
+
+# A secure-app payload reports whether the handoff record matches its image.
+expect_handoff() {
+  local label="$1"
+  local log_file="$2"
+  [[ "$HANDOFF_CHECK" == "1" && "$SECURE_APP" == "1" ]] || return 0
+  if ! grep -q "handoff=ok" "$log_file"; then
+    tail -n 40 "$log_file" | sed 's/^/  | /'
+    die "$label: handoff record does not describe the booted image"
+  fi
+}
+
 WB_MAKE_ARGS=()
 # m33mu has no RT700 boot ROM or FCB: it takes the reset vector from the
 # start of the NOR, so wolfBoot links there instead of 0x28004000, and the
@@ -522,6 +540,7 @@ if want_scenario "A"; then
   if [[ $factory_rc -ne 0 && $factory_rc -ne 127 ]]; then
     die "factory run: m33mu exited with $factory_rc"
   fi
+  expect_handoff "factory run" "$EMU_PATH/factory.log"
   log "factory run: ok (version=1)"
 
   log "Scenario A: receive v7 update without trigger (expect BKPT 0x4D, stay on v1)"
@@ -543,6 +562,7 @@ if want_scenario "B"; then
       --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4a --quit-on-faults \
       "$FACTORY_FLASH" >"$run_log" 2>&1 || die "reboot v4 run $i: m33mu failed"
     grep -q "\\[EXPECT BKPT\\] Success" "$run_log" || die "reboot v4 run $i: expected BKPT 0x4A"
+    expect_handoff "reboot v4 run $i" "$run_log"
     log "Scenario B: reboot run $i: BKPT 0x4A hit"
    done
 fi
@@ -560,6 +580,7 @@ if want_scenario "C"; then
     --timeout "$REBOOT_TIMEOUT" --expect-bkpt=0x4b --persist --quit-on-faults \
     "$FACTORY_FLASH" >"$run_log_v3" 2>&1 || die "reboot v3 run: m33mu failed"
   grep -q "\\[EXPECT BKPT\\] Success" "$run_log_v3" || die "reboot v3 run: expected BKPT 0x4B"
+  expect_handoff "reboot v3 run" "$run_log_v3"
   log "Scenario C: reboot v3: BKPT 0x4B hit"
   print_partition_flags "Scenario C: flags after v3 reboot"
 
@@ -580,6 +601,7 @@ if want_scenario "C"; then
   if [[ $fallback_rc -ne 0 && $fallback_rc -ne 127 ]]; then
     die "fallback run: m33mu exited with $fallback_rc"
   fi
+  expect_handoff "fallback run" "$run_log_fallback"
   log "Scenario C: fallback ok (version=1)"
 fi
 
