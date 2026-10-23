@@ -136,12 +136,24 @@ void mock_set_hsiom(GPIO_PRT_Type *base, uint32_t pinNum, en_hsiom_sel_t value)
 cy_en_gpio_status_t Cy_GPIO_Pin_Init(GPIO_PRT_Type *base, uint32_t pinNum,
     const cy_stc_gpio_pin_config_t *config)
 { (void)base; (void)pinNum; (void)config; INIT_ONLY(); return CY_GPIO_SUCCESS; }
+static uint32_t smif_clk_src;
+static uint32_t smif_clk_div;
 cy_en_sysclk_status_t Cy_SysClk_ClkHfSetSource(uint32_t clkHf,
     cy_en_clkhf_in_sources_t source)
-{ (void)clkHf; (void)source; INIT_ONLY(); return CY_SYSCLK_SUCCESS; }
+{
+    INIT_ONLY();
+    if (clkHf == 2U)
+        smif_clk_src = (uint32_t)source;
+    return CY_SYSCLK_SUCCESS;
+}
 cy_en_sysclk_status_t Cy_SysClk_ClkHfSetDivider(uint32_t clkHf,
     cy_en_clkhf_dividers_t divider)
-{ (void)clkHf; (void)divider; INIT_ONLY(); return CY_SYSCLK_SUCCESS; }
+{
+    INIT_ONLY();
+    if (clkHf == 2U)
+        smif_clk_div = (uint32_t)divider;
+    return CY_SYSCLK_SUCCESS;
+}
 cy_en_sysclk_status_t Cy_SysClk_ClkHfEnable(uint32_t clkHf)
 { (void)clkHf; INIT_ONLY(); return CY_SYSCLK_SUCCESS; }
 cy_en_smif_status_t Cy_SMIF_Init(SMIF_Type *base,
@@ -186,6 +198,8 @@ static void setup(void)
     dev_sfdp_0.memSize = QSPI_SIZE;
     smif_blk_config = &smifBlockConfig_sfdp;
     in_init = 0;
+    smif_clk_src = 0xFFU;
+    smif_clk_div = 0xFFU;
 }
 
 START_TEST(test_write_maps_offset)
@@ -278,6 +292,16 @@ START_TEST(test_init_checks_geometry)
 }
 END_TEST
 
+/* The SMIF clock comes from the PLL that wolfBoot sets up, never the FLL */
+START_TEST(test_init_clocks_smif_from_pll)
+{
+    in_init = 1;
+    ck_assert_int_eq(hal_ext_flash_init(), CY_SMIF_SUCCESS);
+    ck_assert_uint_eq(smif_clk_src, (uint32_t)CY_SYSCLK_CLKHF_IN_CLKPATH1);
+    ck_assert_uint_eq(smif_clk_div, (uint32_t)CY_SYSCLK_CLKHF_DIVIDE_BY_8);
+}
+END_TEST
+
 START_TEST(test_geometry)
 {
     ck_assert_int_eq(psoc6_qspi_geometry_ok(0x40000U), 1);
@@ -301,6 +325,7 @@ Suite *psoc6_qspi_suite(void)
     tcase_add_test(tc, test_erase_whole_sectors);
     tcase_add_test(tc, test_erase_rejects_partial_sectors);
     tcase_add_test(tc, test_init_checks_geometry);
+    tcase_add_test(tc, test_init_clocks_smif_from_pll);
     tcase_add_test(tc, test_geometry);
     suite_add_tcase(s, tc);
     return s;

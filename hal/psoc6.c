@@ -139,7 +139,7 @@ static SMIF_Type* QSPIPort = SMIF0;
  *
  * SMIF Block - SMIF0
  */
-#define CY_SMIF_SYSCLK_HFCLK_DIVIDER (CY_SYSCLK_CLKHF_DIVIDE_BY_4)
+#define CY_SMIF_SYSCLK_HFCLK_DIVIDER (CY_SYSCLK_CLKHF_DIVIDE_BY_8)
 #define CY_SMIF_INIT_TRY_COUNT (10U)
 #define CY_SMIF_INIT_RETRY_DELAY_MS (500U)
 #define CY_SMIF_INIT_TIMEOUT_US (1000U)
@@ -290,7 +290,7 @@ static const cy_stc_smif_config_t QSPI_config = {
  *
  * Initialization steps:
  * 1. Configure QSPI data, clock, and slave-select GPIO pins
- * 2. Enable SMIF HF clock (CLK_HF2) with divide-by-4
+ * 2. Enable SMIF HF clock (CLK_HF2) from the PLL with divide-by-8
  * 3. Initialize SMIF block in normal mode
  * 4. Enable SMIF block
  * 5. Initialize external memory configuration with retry
@@ -330,9 +330,10 @@ cy_en_smif_status_t hal_ext_flash_init(void)
     (void)Cy_GPIO_Pin_Init(qspi_SS_Port, qspi_SS_Pin, &qspi_ss_config);
     Cy_GPIO_SetHSIOM(qspi_SS_Port, qspi_SS_Pin, qspi_SS_Mux);
 
-    /* Step 2: Enable SMIF HF clock (CLK_HF2) sourced from CLK_PATH0 */
+    /* Step 2: Enable SMIF HF clock (CLK_HF2) from the PLL, 100 MHz / 8. The
+     * FLL on CLK_PATH0 keeps whatever the last loader left, even unlocked. */
     (void)Cy_SysClk_ClkHfSetSource(CY_SYSCLK_CLKHF_IN_CLKPATH2,
-                                   CY_SYSCLK_CLKHF_IN_CLKPATH0);
+                                   CY_SYSCLK_CLKHF_IN_CLKPATH1);
     (void)Cy_SysClk_ClkHfSetDivider(CY_SYSCLK_CLKHF_IN_CLKPATH2,
                                     CY_SMIF_SYSCLK_HFCLK_DIVIDER);
     (void)Cy_SysClk_ClkHfEnable(CY_SYSCLK_CLKHF_IN_CLKPATH2);
