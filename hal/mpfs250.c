@@ -20,12 +20,6 @@
  */
 
 /* Microchip PolarFire SoC MPFS250T HAL for wolfBoot */
-/* Supports:
- *   RISC-V 64-bit architecture
- *   External flash operations
- *   UART communication
- *   System initialization
- */
 
 #include <stdint.h>
 #include <string.h>
@@ -82,12 +76,9 @@ extern void sdhci_irq_handler(void);
 
 /* Video Kit DDR/Clock configuration is included in mpfs250.h */
 
-/* ------------------------------------------------------------------------
- * File-scope globals
- * ---------------------------------------------------------------------- */
-/* APB (PCLK) frequency for UART baud divisors.  Starts at the mode's
- * compile-time value (40 MHz E51 reset clock in M-mode, 150 MHz under
- * HSS) and is updated when M-mode wolfBoot raises the MSS PLL. */
+/* File-scope globals */
+/* APB (PCLK) frequency for UART baud divisors: the mode's compile-time value
+ * (40 MHz E51 reset, 150 MHz under HSS), raised when M-mode raises the PLL. */
 uint32_t mpfs_apb_clk_hz = MSS_APB_AHB_CLK;
 
 static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
@@ -96,15 +87,13 @@ static const unsigned long mpfs_wdt_bases[MPFS_NUM_HARTS] = {
 };
 
 #ifdef WOLFBOOT_RISCV_MMODE
-/* CPU frequency in MHz for mcycle-based udelay(); seeded at the E51 reset
- * clock and bumped to the PLL rate after mss_pll_init() (hal/mpfs250_ddr.c).
- * A wrong value here skews timing-sensitive paths (e.g. SD power-up). */
+/* CPU MHz for the mcycle udelay(); seeded at the E51 reset clock and bumped
+ * after mss_pll_init().  A wrong value skews SD power-up timing. */
 uint32_t mpfs_cpu_freq_mhz = MPFS_CPU_FREQ_RESET_MHZ;
 
 #ifdef MPFS_ENVM_MANIFEST
-/* Last eNVM page: the signed manifest of this image, written in after the
- * link by `make wolfboot_envm_signed.bin` and checked by the boot mode 2
- * stub (hal/mpfs250_ubl.c).  Erased-state fill until then. */
+/* Last eNVM page: this image's signed manifest, written by
+ * `make wolfboot_envm_signed.bin` and checked by hal/mpfs250_ubl.c. */
 const uint8_t __attribute__((section(".envm_manifest"), used))
     mpfs_envm_manifest[MPFS_ENVM_MANIFEST_SIZE] =
         { [0 ... MPFS_ENVM_MANIFEST_SIZE - 1] = 0xFF };
@@ -162,22 +151,8 @@ __attribute__((noinline)) void udelay(uint32_t us)
 
 extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8_t to avoid size confusion */
 
-/* Watchdog policy.  The five MSS watchdogs are configured by the bitstream at
- * design time and are already counting when wolfBoot starts; software cannot
- * stop them and cannot usefully retime them.  On the Video Kit they read
- * TIME 0xFFFFF0, MVRP 0x989680, TRIGGER 0x3E8, CONTROL 0x02 (timeout
- * interrupt enabled, forbidden window off), which is the longest window the
- * 24-bit counter allows: the counter runs at the APB clock divided by 256, so
- * a reload lasts about 28.6 s and the TRIGGER crossing arrives just before
- * that.  wolfBoot's whole job is therefore to refresh them, here and from the
- * parked E51 after hand-off (hal_smode_boot).
- *
- * Retiming is not available even in principle: the first write to any of
- * offsets 0x00-0x0C locks TRIGGER, MVRP and TIME until the next system reset
- * (mss_watchdog.c MSS_WD_configure), and a refresh is such a write.  So is
- * disarming: there is no enable bit, and CONTROL bit 5 is not DEVRST - DEVRST
- * is STATUS bit 5, read-only.  WATCHDOG therefore has no timeout knob on this
- * target; it selects only whether wolfBoot refreshes during its own run. */
+/* The five MSS watchdogs are armed by the bitstream and can be neither stopped
+ * nor retimed, so WATCHDOG only selects whether wolfBoot refreshes them. */
 
 /* CLINT MSIP register for IPI delivery */
 #define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
@@ -192,26 +167,16 @@ static void mpfs_signal_main_hart_started(void)
     HLS_DATA* hls = (HLS_DATA*)&_main_hart_hls;
     hls->in_wfi_indicator = HLS_MAIN_HART_STARTED;
     hls->my_hart_id = MPFS_FIRST_HART;
-    /* The eNVM secondary-hart gate polls the DTIM copy of this flag, not
-     * the L2-scratch HLS above: a cacheable store to the scratchpad can
-     * be lost on dirty-line eviction (layout-dependent), which parked
-     * the secondaries until the kernel's hart_start IPI -- too late for
-     * its 1s online window.  DTIM is uncached and visible to all harts. */
+    /* The eNVM gate polls the DTIM copy, not the L2-scratch HLS above: a
+     * cacheable scratchpad store can be lost on dirty-line eviction. */
     *(volatile uint32_t *)MPFS_DTIM_MAIN_STARTED_ADDR =
         (uint32_t)HLS_MAIN_HART_STARTED;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-/* Per-hart S-mode start mailboxes, written by the E51 (boot hart release)
- * or by the SBI HSM hart_start backend (on the calling U54), and consumed
- * by the target hart's park loop in secondary_hart_entry().
- *
- * They live in the E51 DTIM, not in L2-scratch BSS: a cacheable store to
- * the scratchpad can be lost on cache-line eviction, so a cross-hart
- * mailbox written by a U54 would never become visible.  The DTIM is
- * uncached and coherent for every hart.  The SBI shared state occupies
- * DTIM+0x000 (see src/riscv_sbi.c); the mailboxes sit at +0x100. */
+/* Per-hart S-mode start mailboxes, consumed by secondary_hart_entry().  In the
+ * DTIM (uncached, hart-coherent) at +0x100; SBI shared state is at +0x000. */
 typedef struct {
     volatile uint32_t marker;  /* MPFS_KERNEL_HANDOFF_MARKER when valid */
     volatile uint64_t entry;   /* S-mode entry point */
@@ -228,30 +193,23 @@ extern void riscv_mmode_to_smode(unsigned long entry, unsigned long hartid,
                                  unsigned long dtb) __attribute__((noreturn));
 #endif /* MPFS_DDR_INIT && WOLFBOOT_MMODE_SMODE_BOOT */
 
-/* Secondary hart (U54) entry: jump into the waiting Linux kernel (when a
- * hand-off context has been staged for us) or park in WFI waiting for an
- * SBI/Linux IPI.
- *
- * This path must stay free of UART access: the secondaries reach it via
- * the kernel's HSM hart_start IPI and have to respond inside the kernel's
- * 1 s online window, which spinning on LSR can overrun. */
+/* Secondary hart entry: into a staged kernel hand-off, or park in WFI for an
+ * IPI.  No UART here - the kernel allows ~1 s for a hart to come online. */
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
 {
     (void)hls;
 
     while (1) {
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-        /* Check the hand-off context before sleeping: the eNVM wake path
-         * has already consumed the release IPI (MSIP cleared), so a
-         * wfi-first loop would sleep through a staged hand-off. */
+        /* Check the hand-off before sleeping: the eNVM wake path already
+         * consumed the release IPI, so a wfi-first loop would sleep past it. */
         if (hartid < (unsigned long)MPFS_NUM_HARTS &&
             mpfs_kernel_handoff[hartid].marker
                 == MPFS_KERNEL_HANDOFF_MARKER) {
             unsigned long kentry;
             unsigned long opq;
-            /* Acquire fence, paired with the writer's release fence:
-             * without it RVWMO permits stale entry / opaque values read
-             * before marker was published. */
+            /* Acquire fence paired with the writer's release fence; without
+             * it RVWMO permits a stale entry/opaque read. */
             __asm__ volatile("fence r,rw" ::: "memory");
             kentry = (unsigned long)mpfs_kernel_handoff[hartid].entry;
             opq = (unsigned long)mpfs_kernel_handoff[hartid].opaque;
@@ -270,9 +228,8 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
 }
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-/* Enable the CLINT MTIME counter via the SYSREG RTC/time-base clock divider
- * (HSS set_RTC_divisor equivalent).  Without this MTIME never advances and an
- * S-mode OS has no time source for its scheduler tick. */
+/* Enable the CLINT MTIME counter via the SYSREG RTC clock divider.  Without it
+ * MTIME never advances and an S-mode OS has no scheduler tick. */
 static void mpfs_enable_mtime(void)
 {
     volatile uint32_t *rtc_cr = (volatile uint32_t *)(SYSREG_BASE + 0x0CUL);
@@ -287,10 +244,8 @@ static void mpfs_enable_mtime(void)
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
 
-/* SBI HSM hart_start backend (called from src/riscv_sbi.c on the boot
- * hart): stage the target hart's start mailbox and ring its MSIP; the
- * parked hart consumes it in secondary_hart_entry() and enters S-mode at
- * saddr with a0=hartid, a1=opaque. */
+/* SBI HSM hart_start backend: stage the target hart's mailbox and ring its
+ * MSIP; it enters S-mode at saddr with a0=hartid, a1=opaque. */
 int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,
     unsigned long opaque)
 {
@@ -308,11 +263,8 @@ int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,
     return 0;
 }
 
-/* Override of the weak hal_smode_boot in src/boot_riscv.c. The E51 cannot
- * run Linux (cpu@0 is marked disabled in the Yocto MPFS DTB), so instead of
- * dropping to S-mode on hart 0 we stage the kernel/DTB pointers, IPI a U54,
- * and park hart 0 in M-mode. The released U54 picks up the context from
- * its WFI loop in secondary_hart_entry() and performs the actual M->S jump. */
+/* Overrides the weak hal_smode_boot.  The E51 cannot run Linux (cpu@0 is
+ * disabled in the DTB), so it stages the context, IPIs a U54 and parks. */
 void __attribute__((noreturn))
 hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
 {
@@ -325,11 +277,8 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
     /* Bring up the MTIME time base before releasing the U54 into S-mode. */
     mpfs_enable_mtime();
 
-    /* Enable the clocks and release the soft resets of MMUART1-4 for the
-     * OS: the kernel's mpfs clock driver gates SUBBLK_CLOCK_CR but does
-     * not release peripheral soft resets (HSS normally does), so without
-     * this the serial console (MMUART1) stays dead.  Done here on the
-     * E51, single-threaded, so no SYSREG read-modify-write races. */
+    /* Release the MMUART1-4 soft resets for the OS: the kernel's clock driver
+     * gates SUBBLK_CLOCK_CR but does not, so MMUART1 would stay dead. */
     SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << 1) |
                               (MSS_PERIPH_MMUART0 << 2) |
                               (MSS_PERIPH_MMUART0 << 3) |
@@ -354,16 +303,8 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
     CLINT_MSIP_REG(MPFS_FIRST_U54_HART) = 0x01;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 
-    /* Park the E51 as the platform monitor, taking over HSS's
-     * watchdog-service role: doze on the machine timer and refresh all five
-     * MSS watchdogs every cycle.  They count and reset the chip on timeout
-     * (~28 s at the boot-time settings) even with CONTROL=0, so something
-     * has to refresh them while the OS boots and runs; the dtb fixup
-     * disables the OS watchdog driver so it cannot also claim them, and
-     * with MVRP at maximum a refresh is always permitted.
-     *
-     * Only MTIE is enabled and mstatus.MIE stays clear, so the pending
-     * timer wakes WFI without vectoring into the trap path. */
+    /* Park the E51 as the platform monitor: doze on the machine timer and
+     * refresh all five watchdogs.  MTIE only, MIE clear, so WFI never traps. */
     __asm__ volatile("csrw mie, %0" :: "r"(0x80UL)); /* MTIE */
     while (1) {
 #ifndef MPFS_WDT_NODES_KEEP
@@ -389,12 +330,8 @@ static void qspi_uart_program(void);
 #endif
 
 #ifdef MPFS_ATHENA
-/* Ungate and release the Athena F5200 (sequence per HSS opensbi_crypto_ecall.c;
- * CRYPTO_CR_INFO.MSS_MODE is informational, software does the un-reset).
- * Idempotent: ATHENA_CR_RESET after CALIni() silently kills AES, not hashing.
- * The SCA stall countermeasure (Security UG Table 7-7/7-8) is always on at
- * rate 0 (1 in 8); DPA resistance is what the "S" part is for.  rdcycle, not
- * mcycle: an mcycle read traps in the S-mode builds. */
+/* Ungate and release the Athena F5200 (per HSS opensbi_crypto_ecall.c).
+ * Idempotent: ATHENA_CR_RESET after CALIni() kills AES, not hashing. */
 static void mpfs_athena_enable(void)
 {
     static int athena_enabled;
@@ -498,9 +435,8 @@ static int mpfs_athena_aes256_ctr(const void *key, void *iv, const void *in,
 #endif /* MPFS_ATHENA */
 
 #ifdef MPFS_ATHENA
-/* SHA-384 + AES-256-CTR via the plain-C mpfs_athena_* API (CAL headers cannot
- * share a TU with wolfSSL's).  Undocumented CAL contract: a non-final update
- * must be whole 128-byte blocks, so short tails need the buffer below. */
+/* SHA-384 + AES-256-CTR via the plain-C mpfs_athena_* API.  CAL contract: a
+ * non-final update must be whole 128-byte blocks, so tails are buffered. */
 #ifdef MPFS_ATHENA_SHA
 #define ATHENA_SHA384_BLOCK 128
 #define ATHENA_HASH_SLOTS   2
@@ -526,9 +462,8 @@ static int athena_ready;
 static uint32_t athena_cb_calls;
 
 #ifdef MPFS_ATHENA_SHA
-/* Keyed by wc_Sha384 address; the cryptocb has no free event, so a context
- * freed without Final strands its slot and a later one at that address would
- * resume stale CAL state (wrong digest).  Only reachable via ONESHOT today. */
+/* Keyed by wc_Sha384 address.  The cryptocb has no free event, so a context
+ * freed without Final strands its slot and a later one there resumes it. */
 static struct athena_hash_slot *athena_slot_find(void *owner)
 {
     int i;
@@ -586,8 +521,7 @@ static int athena_hash_feed(struct athena_hash_slot *slot, const uint8_t *in,
 
 #if defined(MPFS_ATHENA_AES) && defined(WOLFSSL_AES_COUNTER) && !defined(NO_AES)
 /* AES-256-CTR, one path for both directions.  Key from aes->devKey, not the
- * WOLF_CRYPTO_CB_SETKEY hook: succeeding there strands the software fallback.
- * All bail-outs precede any data entering the engine (counter would desync). */
+ * SETKEY hook: succeeding there strands the software fallback. */
 static int athena_aesctr(wc_CryptoInfo *info)
 {
     Aes *aes;
@@ -627,10 +561,8 @@ static int athena_aesctr(wc_CryptoInfo *info)
         }
     }
     if (whole < sz) {
-        /* Trailing partial block: take one keystream block from the engine
-         * and leave the unused bytes where wolfCrypt keeps its own (aes->tmp
-         * with aes->left counting them), so the next call on this context
-         * continues the stream whichever path serves it. */
+        /* Trailing partial block: leave the unused keystream where wolfCrypt
+         * keeps its own (aes->tmp, aes->left) so either path can continue. */
         uint8_t ks[WC_AES_BLOCK_SIZE];
         word32 i;
 
@@ -688,10 +620,8 @@ static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
         slot = NULL;
     }
     if ((slot != NULL) && (slot->failed != 0)) {
-        /* An earlier update on this context faulted, so the engine holds a
-         * partial digest.  Starting a fresh one here would digest only the
-         * data that follows the fault; callers that ignore an update's
-         * return code would then act on it. */
+        /* An earlier update faulted, so the engine holds a partial digest.
+         * Starting fresh here would digest only the data after the fault. */
         return WC_HW_E;
     }
     if (slot == NULL) {
@@ -735,9 +665,8 @@ static int mpfs_athena_cryptocb(int devIdArg, wc_CryptoInfo *info, void *ctx)
 }
 
 #ifdef MPFS_ATHENA_SHA
-/* Known answers for the self-check below.  SHA-384 of the bytes 0x00..0xFF:
- * a multi-block vector, hashed in chunks that straddle the 128-byte block so
- * the intermediate state has to be carried across calls. */
+/* Known answers for the self-check: SHA-384 of 0x00..0xFF, hashed in chunks
+ * that straddle the 128-byte block so intermediate state must carry. */
 static const uint8_t athena_kat_sha384_256b[48] = {
     0xff, 0xda, 0xeb, 0xff, 0x65, 0xed, 0x05, 0xcf,
     0x40, 0x0f, 0x02, 0x21, 0xc4, 0xcc, 0xfb, 0x4b,
@@ -757,10 +686,8 @@ static const uint8_t athena_kat_aesctr[32] = {
 };
 #endif
 
-/* Run the offload through the wolfCrypt callback path once and compare with
- * the known answers.  The callback entry count is part of the check: wolfCrypt
- * falls back to software silently when no device serves a call, and a correct
- * result alone would not show that the hardware ran. */
+/* Run the offload through the callback path once and compare.  The callback
+ * count is part of it: wolfCrypt falls back to software silently. */
 /* What the self-check tripped on, for the panic message. */
 static const char *athena_fail_what;
 static int athena_fail_rc;
@@ -873,9 +800,8 @@ static int mpfs_athena_selfcheck(void)
         athena_fail_what = "AES-256-CTR known-answer mismatch";
         return -1;
     }
-    /* The disk decrypt path calls CTR once per chunk, so the counter has to
-     * carry across calls: two 16-byte calls must equal one 32-byte call, and
-     * a split that is not a whole number of blocks must too. */
+    /* The disk decrypt path calls CTR per chunk, so the counter must carry:
+     * two 16-byte calls must equal one 32-byte call, ragged splits too. */
     ret = athena_ctr_run(key, ctr, buf, out2, 16, 16);
     if (ret == 0) {
         if (memcmp(out, out2, sizeof(out)) != 0) {
@@ -966,19 +892,16 @@ static void mpfs_wdt_boot_config(void)
     mpfs_boot_reset_sr_snap = *reset_sr;
     *reset_sr = 0U;
 
-    /* Start every watchdog's window from full.  The design-time window is far
-     * longer than the ~5 s ECDSA P-384 verify, so nothing has to refresh
-     * mid-signature; hal_prepare_boot() refreshes again before the hand-off. */
+    /* Start every window from full.  It far exceeds the ~5 s verify, and
+     * hal_prepare_boot() refreshes again before the hand-off. */
     for (i = 0; i < MPFS_NUM_HARTS; i++) {
         MSS_WDT_REFRESH(mpfs_wdt_bases[i]) = 0xDEADC0DEU;
     }
 }
 
 #ifdef MPFS_DDR_INIT
-/* Bring up LPDDR4, or halt.  Each mpfs_ddr_init() pulses the SYSREG DDRC soft
- * reset, which is the only way a rejected training recovers.  There is no safe
- * path past a failure: WOLFBOOT_LOAD_ADDRESS is in DDR, so a later load would
- * write to a dead controller and hang inside the AXI master. */
+/* Bring up LPDDR4, or halt.  WOLFBOOT_LOAD_ADDRESS is in DDR, so there is no
+ * safe path past a failure: a later load would hang in the AXI master. */
 static void mpfs_ddr_bringup(void)
 {
     unsigned int retry;
@@ -1012,11 +935,8 @@ void hal_init(void)
     unsigned int k;
 #endif
 
-    /* Park every hart's machine-timer comparator at maximum.  CLINT MTIME
-     * is 0 (the RTC time base is not running yet) and mtimecmp resets to 0,
-     * so MTIP is pending on every hart out of reset.  A pending interrupt
-     * makes WFI return immediately, which would leave the parked secondary
-     * harts spinning on their eNVM wait loop for the whole boot. */
+    /* Park every mtimecmp at maximum.  MTIME and mtimecmp both reset to 0, so
+     * MTIP is pending out of reset and WFI would return immediately. */
     for (h = 0; h < MPFS_NUM_HARTS; h++) {
         CLINT_MTIMECMP_REG(h) = ~(uint64_t)0;
     }
@@ -1073,9 +993,8 @@ void hal_init(void)
 #endif
 
 #ifdef SNVM_KEYSTORE_PROVISION
-    /* One-time: write the compiled-in trust anchor into sNVM so a subsequent
-     * SNVM_KEYSTORE build serves its keys from sNVM.  Stop on failure so a
-     * provisioning run cannot look successful. */
+    /* One-time: write the compiled-in trust anchor into sNVM.  Stop on failure
+     * so a provisioning run cannot look successful. */
     if (snvm_keystore_provision() != 0) {
         wolfBoot_printf("snvm provision: FAILED\n");
         wolfBoot_panic();
@@ -1115,14 +1034,12 @@ static int mpfs_scb_mailbox_busy(void)
  * write could block on a UART the OS has reconfigured. */
 static int mpfs_scb_quiet;
 
-/* Raise a System Controller service.  The request bytes go to mailbox word
- * 0; index is the SERVICES_CR mailbox-offset field, which carries the SPI
- * directory index for the IAP services.  Returns 0 once the request is
- * accepted, or a negative transport error. */
+/* Raise a System Controller service.  index is the SERVICES_CR mailbox-offset
+ * field, which carries the SPI directory index for the IAP services. */
 static int mpfs_scb_start(uint8_t opcode, uint32_t index, const uint8_t *req,
     uint32_t req_len)
 {
-    uint32_t cmd, words, rem, i, v;
+    uint32_t cmd, nwords, rem, i, v;
     int timeout;
 
     if (mpfs_scb_mailbox_busy()) {
@@ -1132,23 +1049,23 @@ static int mpfs_scb_start(uint8_t opcode, uint32_t index, const uint8_t *req,
         return -2;
     }
 
-    /* Write request words into the mailbox (RMW for a non-word-aligned tail). */
-    words = req_len / 4u;
-    for (i = 0; i < words; i++) {
+    /* Write the request words into the mailbox (RMW for a ragged tail). */
+    nwords = req_len / 4u;
+    for (i = 0; i < nwords; i++) {
         v  =  (uint32_t)req[(i * 4u) + 0u];
         v |= ((uint32_t)req[(i * 4u) + 1u]) << 8;
         v |= ((uint32_t)req[(i * 4u) + 2u]) << 16;
         v |= ((uint32_t)req[(i * 4u) + 3u]) << 24;
         SCBMBOX_REG(i * 4u) = v;
     }
-    rem = req_len - (words * 4u);
+    rem = req_len - (nwords * 4u);
     if (rem > 0u) {
-        v = SCBMBOX_REG(words * 4u);
+        v = SCBMBOX_REG(nwords * 4u);
         for (i = 0; i < rem; i++) {
             v &= ~(((uint32_t)0xFFu) << (i * 8u));
-            v |= ((uint32_t)req[(words * 4u) + i]) << (i * 8u);
+            v |= ((uint32_t)req[(nwords * 4u) + i]) << (i * 8u);
         }
-        SCBMBOX_REG(words * 4u) = v;
+        SCBMBOX_REG(nwords * 4u) = v;
     }
 
     /* Ensure mailbox writes land before the request is raised. */
@@ -1183,9 +1100,8 @@ static int mpfs_scb_status(void)
                  & 0xFFFFu);
 }
 
-/* Wait for the service to complete.  Returns its status (0 = success) or a
- * negative transport error.  Uses the larger completion bound: nonce/PUF
- * take much longer than serial/sNVM-read. */
+/* Wait for completion.  Returns the service status (0 = success) or a negative
+ * transport error, on the larger bound: nonce/PUF outlast an sNVM read. */
 static int mpfs_scb_wait(void)
 {
     int timeout = MPFS_SCB_BUSY_TIMEOUT;
@@ -1225,10 +1141,8 @@ static void mpfs_scb_read(uint8_t *out, uint32_t off, uint32_t len)
 }
 
 #if defined(MPFS_SBI_VENDOR) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
-/* SBI vendor extension (include/riscv_sbi.h) served to the OS.  Everything
- * here runs inside an ecall on one hart with interrupts off: the System
- * Controller services that take seconds are started here and polled by the
- * OS through SC_STATUS, the short ones complete in place. */
+/* SBI vendor extension served to the OS.  Everything here runs in an ecall on
+ * one hart with interrupts off; the slow services are started, then polled. */
 
 /* The mailbox is one resource for all harts.  Taken for the life of a
  * started service, released when SC_STATUS reports it complete. */
@@ -1287,10 +1201,8 @@ static long sbi_vendor_get_key(unsigned long purpose, unsigned long buf,
     if (!sbi_smode_range_ok(buf, len)) {
         return SBI_ERR_INVALID_ADDRESS;
     }
-    /* Claim the serving before deriving anything.  A plain check here and a
-     * set at the end would let two harts asking for the same purpose at once
-     * both be served; the claim is given back below if the key never reaches
-     * the caller. */
+    /* Claim the serving before deriving: a check here and a set at the end
+     * would serve two harts at once.  The claim is given back on failure. */
     if ((__atomic_fetch_or(&sbi_key_served, 1U << i, __ATOMIC_ACQ_REL)
             & (1U << i)) != 0U) {
         return SBI_ERR_DENIED;
@@ -1317,22 +1229,12 @@ static long sbi_vendor_get_key(unsigned long purpose, unsigned long buf,
     return SBI_SUCCESS;
 }
 
-/* Services that reach the System Controller are served only when the OS
- * cannot drive the mailbox itself: unfenced, its own driver would race
- * these requests. */
+/* Served only when the OS cannot drive the mailbox itself: unfenced, its own
+ * driver would race these requests. */
 #ifdef MPFS_SCB_SMODE_DENY
 #ifdef MPFS_SBI_SC_FLASH
-/* The System Controller's SPI flash for the OS.  The fence that keeps the
- * OS off the mailbox also covers the flash controller (0x37020100), so under
- * it this is the OS's only way to stage a bitstream.  The first erase block
- * holds the SPI directory the System Controller boots from: its golden entry
- * is never written, and the block changes only through SET_IMAGE, which
- * edits the upgrade or blank entry in a copy and writes the rest back as it
- * was.  Every other offset is the OS's.  An erase call takes one block and a
- * write or read at most SBI_SMODE_BUF_MAX bytes, so an ecall stays well
- * under a second with the hart's interrupts masked.  The mailbox lock is
- * held throughout: the System Controller reads this flash for its own
- * services. */
+/* The System Controller's SPI flash, served to the OS: under the mailbox fence
+ * this is its only way to stage a bitstream.  The mailbox lock is held. */
 int qspi_init(void);
 
 #define SBI_SC_FLASH_UPGRADE_INDEX 1UL
@@ -1438,10 +1340,8 @@ static long sbi_vendor_sc_flash_read(unsigned long off, unsigned long buf,
     return err;
 }
 
-/* Point directory entry 1 (upgrade) or 2 (blank) at an image offset.
- * Setting the upgrade entry also zeroes the blank one, as the OS driver
- * does, so a single-image System Controller does not object.  Nothing is
- * written when the entries already read that way. */
+/* Point directory entry 1 (upgrade) or 2 (blank) at an image offset.  Setting
+ * upgrade also zeroes blank, as the OS driver does.  No write if unchanged. */
 static long sbi_vendor_sc_flash_set_image(unsigned long index,
     unsigned long address)
 {
@@ -1687,9 +1587,8 @@ int mpfs_snvm_read(uint8_t module, const uint8_t *usk, uint8_t *admin,
 
     ret = mpfs_scb_request(SYS_SERV_CMD_SNVM_READ, frame, sizeof(frame));
     if (ret != 0) {
-        /* The service still returns the page admin word on a refusal, and
-         * it is the only way to tell a page held as a client from one that
-         * was never configured: the latter reads back as zero. */
+        /* A refusal still returns the admin word, the only way to tell a page
+         * held as a client from one never configured (that reads back zero). */
         if (admin != NULL) {
             mpfs_scb_read(admin, MPFS_SNVM_READ_RET_OFFSET,
                 MPFS_SNVM_ADMIN_LEN);
@@ -1814,12 +1713,8 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
     uint8_t mac_addr[6];
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT) && \
     (!defined(MPFS_WDT_NODES_KEEP) || defined(MPFS_SCB_SMODE_DENY))
-    /* Nodes disabled below.  Watchdogs: the MSS WDTs always count; the OS
-     * driver arms them at probe but nothing pings them (no userspace
-     * watchdog daemon in the default image), so the system would reset
-     * ~28 s into boot.  Disabled, they only latch a harmless tripped
-     * status and the parked E51 monitor keeps them refreshed.  Re-enable
-     * when an OS-side petting story exists. */
+    /* Watchdog nodes are disabled: the OS driver arms them at probe and
+     * nothing in the default image pings them.  See MPFS_WDT_NODES_KEEP. */
     static const char *const cpu_off[] = {
 #ifndef MPFS_WDT_NODES_KEEP
         "watchdog@20001000", "watchdog@20101000", "watchdog@20103000",
@@ -1863,19 +1758,8 @@ static int mpfs_dts_fixup_inplace(void* dts_addr, uint32_t capacity)
 
 #if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT) && \
     (!defined(MPFS_WDT_NODES_KEEP) || defined(MPFS_SCB_SMODE_DENY))
-    /* Disable the MSS watchdog dtb nodes before the serial-number read, so
-     * this still runs if that read fails: otherwise the OS watchdog driver
-     * arms them at probe while the parked E51 monitor (hal_smode_boot) also
-     * refreshes all five, and the conflict can trip a watchdog reset.
-     *
-     * The stock /memory nodes are left alone.  The cached DDR window at
-     * 0x80000000 is 1 GB wide and 0xC0000000 up is a non-cached alias onto
-     * the same DDR, so describing 2 GB at 0x80000000 would present the alias
-     * to the kernel as extra RAM.  The stock Video Kit DTB is already right.
-     *
-     * cpu@2..cpu@4 stay enabled for SMP: the SBI HSM hart_start backend
-     * releases the parked harts when the kernel asks.  cpu@0 (E51) is
-     * already disabled in the Yocto DTB; cpu@1 is where Linux boots. */
+    /* Before the serial-number read, so it still runs if that fails.  The
+     * /memory and cpu@ nodes are left alone; see docs/PolarFire.md. */
     for (i = 0; i < sizeof(cpu_off) / sizeof(cpu_off[0]); i++) {
         off = fdt_find_node_offset(&ctx, -1, cpu_off[i]);
         if (off >= 0) {
@@ -1976,23 +1860,16 @@ void hal_prepare_boot(void)
      * TIME, MVRP and TRIGGER keep their design-time values throughout. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
 #else
-    /* Booting an S-mode OS: give every hart's watchdog one final refresh so
-     * the OS inherits a full window (the
-     * OS watchdog driver hangs at probe if it finds an already-tripped
-     * watchdog).  The OS watchdog nodes are disabled in the dtb, so after
-     * hand-off the parked E51 monitor loop in hal_smode_boot refreshes all
-     * five each cycle for the life of the OS. */
+    /* One final refresh so the OS inherits a full window; its watchdog driver
+     * hangs at probe on an already-tripped watchdog. */
     MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
     MSS_WDT_REFRESH(MSS_WDT_U54_1_BASE) = 0xDEADC0DEU;
     MSS_WDT_REFRESH(MSS_WDT_U54_2_BASE) = 0xDEADC0DEU;
     MSS_WDT_REFRESH(MSS_WDT_U54_3_BASE) = 0xDEADC0DEU;
     MSS_WDT_REFRESH(MSS_WDT_U54_4_BASE) = 0xDEADC0DEU;
 
-    /* Hand the OS a clean SD controller: wolfBoot just used it for the
-     * image load, and the leftover state makes the OS driver's re-init
-     * and tuning intermittently fail ("Waiting for root device").  Guarded
-     * on the disk backend: an S-mode-boot config that loads the kernel from
-     * a non-SDHCI source (e.g. QSPI) pulls in no sdhci.h declaration. */
+    /* Hand the OS a clean SD controller: leftover state makes its re-init and
+     * tuning intermittently fail ("Waiting for root device"). */
 #if defined(DISK_SDCARD) || defined(DISK_EMMC)
     sdhci_shutdown();
 #endif
@@ -2035,13 +1912,8 @@ static int mpfs_scb_wait_clear(uint32_t reg_offset, uint32_t mask,
     return (timeout == 0) ? -1 : 0;
 }
 
-/* Refresh all five MSS watchdogs, skipping any whose counter is still above
- * MVRP.  A refresh inside that forbidden window is answered with a chip reset
- * rather than an error.  An M-mode build sets MVRP itself and never lands
- * there, but one running under a supervisor that owns the window - wolfBoot as
- * an HSS payload - finds every refresh inside it, so each watchdog is tested
- * rather than assumed.  Skipping one is safe: the window is whole seconds wide
- * and every caller loops. */
+/* A refresh above MVRP is the forbidden window and resets the chip, so each
+ * watchdog is tested: under a supervisor that owns the window, every one is. */
 void mpfs_wdt_pet_all(void)
 {
     unsigned long b;
@@ -2159,9 +2031,8 @@ int qspi_init(void)
     return 0;
 }
 
-/* Polled transfer, after Microchip's MSS_QSPI_polled_transfer_block.
- * cmd holds the opcode and any address bytes; dummy_cycles are the idle
- * cycles the controller inserts between the command and data phases. */
+/* Polled transfer, after MSS_QSPI_polled_transfer_block.  cmd holds the opcode
+ * and address bytes; dummy_cycles sit between the command and data phases. */
 static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
                                uint32_t cmd_len, uint8_t *data,
                                uint32_t data_len, uint8_t dummy_cycles)
@@ -2185,15 +2056,11 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
         (void)QSPI_RX_DATA;
     }
 
-    /* Writes put the whole transfer in the command phase (CMDBYTES =
-     * TOTALBYTES): the CoreQSPI data phase shifts TX FIFO output by a fixed
-     * offset on writes, which rotates the programmed page.  The flash takes
-     * the command/data boundary from the opcode, not the controller phase. */
+    /* Writes go wholly in the command phase (CMDBYTES = TOTALBYTES): the data
+     * phase shifts TX FIFO output on writes, rotating the programmed page. */
     frame_cmd = read_mode ? cmd_len : total_bytes;
-    /* FBYTE counts RXAVAIL/TXAVAIL in bytes, FWORD in 32-bit words, so a
-     * word-mode read polls STATUS once per four bytes and takes them through
-     * QSPI_X4_RX_DATA in one access.  The polling, not SCK, caps the read
-     * rate.  FWORD needs a whole number of words in the data phase. */
+    /* FWORD counts RXAVAIL in 32-bit words, so a read polls STATUS once per
+     * four bytes.  It needs a whole number of words in the data phase. */
     word_read = (read_mode && data_len >= 4u && (data_len & 3u) == 0u) ? 1 : 0;
     frames = ((total_bytes & 0xFFFF) << QSPI_FRAMES_TOTALBYTES_OFFSET) |
                 ((frame_cmd & 0x1FF) << QSPI_FRAMES_CMDBYTES_OFFSET) |
@@ -2203,9 +2070,8 @@ static int qspi_transfer_block(uint8_t read_mode, const uint8_t *cmd,
 
     QSPI_FRAMES = frames;
 
-    /* TXAVAIL is the only FIFO-space flag: CoreQSPI v2 has no TXFULL bit.
-     * The fence after each write keeps RVWMO from leaving the store posted,
-     * which would make the next STATUS read stale and overflow the FIFO. */
+    /* TXAVAIL is the only FIFO-space flag; v2 has no TXFULL.  The fence stops
+     * RVWMO leaving the store posted, which would stale the next STATUS. */
     for (i = 0; i < cmd_len; i++) {
         if (QSPI_WAIT(QSPI_STATUS_TXAVAIL, QSPI_TIMEOUT_TRIES,
                 "TX cmd") != 0) {
@@ -2311,9 +2177,8 @@ static int qspi_enter_4byte_mode(void)
 /* Read from QSPI flash (4-byte addressing) */
 static int qspi_flash_read(uint32_t address, uint8_t *data, uint32_t len)
 {
-    /* total_bytes is 16-bit and the command takes 5 of it; round down to a
-     * whole number of words so a bulk read stays on the word-mode FIFO path
-     * in qspi_transfer_block instead of falling back to byte mode. */
+    /* total_bytes is 16-bit and the command takes 5; round down to whole words
+     * so a bulk read stays on the word-mode FIFO path. */
     const uint32_t max_chunk = (0xFFFFu - 5u) & ~3u;
     uint8_t cmd[5];
     uint32_t remaining = len;
@@ -2405,9 +2270,7 @@ static int qspi_flash_sector_erase(uint32_t address)
     return qspi_wait_ready(10000);  /* 10 second timeout */
 }
 
-/* ==========================================================================
- * External Flash API Implementation
- * ========================================================================== */
+/* External flash API */
 void ext_flash_lock(void)
 {
     /* Optional: Could implement write protection here */
@@ -2500,23 +2363,8 @@ int ext_flash_erase(uintptr_t address, int len)
     return total;
 }
 
-/* ============================================================================
- * UART QSPI Programmer
- *
- * Allows programming the QSPI flash over the debug UART without a JTAG/Libero
- * tool. Enabled at build time with UART_QSPI_PROGRAM=1 in the .config.
- *
- * Protocol (after wolfBoot prints the "QSPI-PROG" prompt):
- *   1. Host sends 'P' within the timeout window to enter programming mode
- *   2. wolfBoot sends "READY\r\n"
- *   3. Host sends [4-byte LE QSPI address][4-byte LE data length]
- *   4. wolfBoot erases required sectors, sends "ERASED\r\n"
- *   5. For each 256-byte chunk:
- *        wolfBoot sends ACK byte (0x06) -> host sends chunk -> wolfBoot writes
- *   6. wolfBoot sends "DONE\r\n" and continues normal boot
- *
- * Host side: tools/scripts/mpfs_qspi_prog.py
- * ============================================================================ */
+/* UART QSPI programmer: program the flash over the debug UART, no JTAG tool.
+ * Protocol and host side in tools/scripts/mpfs_qspi_prog.py. */
 #if defined(UART_QSPI_PROGRAM) && defined(__WOLFBOOT)
 
 #define QSPI_PROG_CHUNK        256
@@ -2556,10 +2404,8 @@ static void qspi_uart_program(void)
     uint32_t i, s;
     uint8_t chunk[QSPI_PROG_CHUNK];
 
-    /* Use uart_qspi_puts (direct UART) for ALL programmer output.
-     * wolfBoot_printf uses uart_write which adds \r before \n and may
-     * leave stale bytes in the UART TX pipeline that corrupt the
-     * binary ACK/data protocol after ERASED. */
+    /* Direct UART for all programmer output: wolfBoot_printf adds \r and can
+     * leave bytes in the TX pipeline that corrupt the binary protocol. */
     uart_qspi_puts("QSPI-PROG: Press 'P' within 3s to program flash\r\n");
 
     /* Drain any stale RX bytes before opening the window */
@@ -2628,10 +2474,8 @@ static void qspi_uart_program(void)
     ext_flash_unlock();
     for (s = 0; s < n_sectors; s++) {
         int ret;
-        /* The MSS WDTs always count and reset the chip at timeout (~28.6s
-         * at the reset divisor) and cannot be disabled, so a transfer of
-         * more than a few tens of KB outlives the period: refresh per sector
-         * here and per chunk below. */
+        /* A transfer of more than a few tens of KB outlives the ~28.6 s
+         * watchdog period: refresh per sector here and per chunk below. */
         mpfs_wdt_pet_all();
         ret = ext_flash_erase(addr + s * FLASH_SECTOR_SIZE,
                               FLASH_SECTOR_SIZE);
@@ -2644,9 +2488,8 @@ static void qspi_uart_program(void)
 
     uart_qspi_puts("ERASED\r\n");
 
-    /* Chunk transfer: wolfBoot requests each 256-byte block with ACK 0x06.
-     * No wolfBoot_printf allowed in this loop -- only direct UART via
-     * uart_qspi_tx/uart_qspi_puts to avoid protocol corruption. */
+    /* Each 256-byte block is requested with ACK 0x06.  No wolfBoot_printf in
+     * this loop: direct UART only, or the protocol corrupts. */
     written = 0;
     while (written < size) {
         int ret;
@@ -2794,9 +2637,8 @@ int ext_flash_erase(uintptr_t address, int len)
 void* hal_get_dts_address(void)
 {
 #if defined(EXT_FLASH) && defined(NO_XIP)
-    /* Flash is not memory-mapped when using NO_XIP with external flash
-     * (e.g. SC SPI). DTS must be loaded via ext_flash_read, not direct
-     * dereference. Return NULL so the caller skips the direct-access path. */
+    /* Not memory-mapped under NO_XIP with external flash, so the DTS needs
+     * ext_flash_read; NULL makes the caller skip the direct-access path. */
     return NULL;
 #else
     return (void*)WOLFBOOT_DTS_BOOT_ADDRESS;
@@ -2835,12 +2677,8 @@ void plic_dispatch_irq(uint32_t irq)
     }
 }
 
-/* MSSIO IOMUX + bank-config register offsets.
- * IOMUX0..IOMUX6_CR and the per-pad IO_CFG_*_*_CR registers live in SYSREG
- * (base 0x20002000).  The two MSSIO_BANK*_CFG_CR registers that set
- * bank-wide pcode/ncode/voltage live in the *SCB* register space
- * (SYSREGSCB_BASE 0x20003000) at offsets 0x1C4/0x1C8 - HSS writes them via
- * SCB_REGS, not SYSREG. */
+/* MSSIO IOMUX and per-pad registers are in SYSREG; the two MSSIO_BANK*_CFG_CR
+ * bank registers are in SCB space at 0x1C4/0x1C8, as HSS writes them. */
 #define SYSREG_IOMUX0_CR_OFFSET             0x200u
 #define SYSREG_IOMUX1_CR_OFFSET             0x204u
 #define SYSREG_IOMUX2_CR_OFFSET             0x208u
@@ -2853,14 +2691,8 @@ void plic_dispatch_irq(uint32_t irq)
 #define SCB_MSSIO_BANK2_CFG_CR_OFFSET       0x1C4u
 #define SCB_MSSIO_BANK4_CFG_CR_OFFSET       0x1C8u
 
-/* Configure the MSSIO IOMUX so the SDHCI controller's pins are actually
- * routed to the SD/eMMC slot pads.  In S-mode builds HSS does this as
- * part of mssio_setup() during nwc init; M-mode wolfBoot has to do it
- * itself or the controller talks to floating pads and SD command
- * responses come back as garbage (CMD_INDEX_ERR + CMD_END_BIT_ERR).
- *
- * All values come straight from the Libero/HSS-generated
- * fpga_design_config.h that LIBERO_FPGA_CONFIG_DIR points at. */
+/* Route the SDHCI pins to the slot pads, which HSS does in mssio_setup():
+ * without it the controller talks to floating pads.  Values from Libero. */
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 void mpfs_iomux_init(void)
 {
@@ -2871,21 +2703,8 @@ void mpfs_iomux_init(void)
     SYSREG_REG(SYSREG_IOMUX2_CR_OFFSET) = LIBERO_SETTING_IOMUX2_CR;
     SYSREG_REG(SYSREG_IOMUX3_CR_OFFSET) = LIBERO_SETTING_IOMUX3_CR;
 
-    /* IOMUX4 + IOMUX5 need MPFS-Video-Kit-specific GPIO drive overrides
-     * on top of the Libero values to steer the board's external SD/eMMC
-     * demux mux into SD-card mode and pull a USB pin low.  This logic
-     * is implemented in HSS as a board hook in
-     * boards/mpfs-video-kit/hss_board_init.c::switch_demux_using_fabric_ip
-     * and is NOT visible from the generic Libero IOMUX_CR values alone.
-     * Without this, the SDHCI controller talks to bank4 pads but those
-     * signals never reach the SD card slot, producing the "CMD8 timeout
-     * regardless of card insertion" symptom we observed for many runs.
-     *
-     *   IOMUX4 bits[19:16] (USB pin): 0xD = drive logic 0
-     *   IOMUX5 bits[3:0]   (pad 30):  0xE = drive logic 1
-     *   IOMUX5 bits[19:16] (pad 34):  0xE = drive logic 1
-     *   IOMUX5 bits[31:28] (pad 37):  0xD = drive logic 0
-     */
+    /* Board GPIO drive overrides that steer the external SD/eMMC demux into
+     * SD-card mode; HSS does this in switch_demux_using_fabric_ip(). */
     iomux4 = LIBERO_SETTING_IOMUX4_CR;
     iomux5 = LIBERO_SETTING_IOMUX5_CR;
     iomux4 &= ~(0xFu << 16);
@@ -2939,19 +2758,14 @@ void mpfs_iomux_init(void)
 /* SDHCI Platform HAL */
 
 
-/* MSS MPU base + per-master offset.  Each AXI master (FIC0/1/2, CRYPTO,
- * GEM0/1, USB, MMC, SCB, TRACE) has 16 PMPCFG entries (uint64_t each) at
- * 0x20005000 + (master_index << 8).  HSS calls mpu_configure() during early
- * boot to load these from LIBERO_SETTING_*_MPU_CFG_PMP* defaults; without
- * that, the master may be locked out of memory regions it needs and stalls
- * silently mid-transaction.  MMC is master index 7. */
+/* Each AXI master has 16 PMPCFG entries at 0x20005000 + (index << 8); MMC is
+ * index 7.  Without them a master stalls silently mid-transaction. */
 #define MSS_MPU_BASE                0x20005000UL
 #define MSS_MPU_MMC_BASE            (MSS_MPU_BASE + (7UL << 8))
 
 #ifdef MPFS_DDR_INIT
-/* Only available when LIBERO_FPGA_CONFIG_DIR is set (which also enables
- * MPFS_DDR_INIT in arch.mk).  HSS already configures these PMP entries
- * during its own boot, so non-DDR / HSS-loaded builds don't need this. */
+/* Needs LIBERO_FPGA_CONFIG_DIR.  HSS configures these entries itself, so
+ * HSS-loaded builds do not need it. */
 static void mpfs_mpu_init_mmc(void)
 {
     volatile uint64_t *pmp = (volatile uint64_t *)MSS_MPU_MMC_BASE;
@@ -2963,10 +2777,8 @@ static void mpfs_mpu_init_mmc(void)
 }
 #endif /* MPFS_DDR_INIT */
 
-/* Pet all five MSS watchdogs during the SDHCI read loops.  Overrides the weak
- * no-op in src/sdhci.c.  The MSS watchdogs always count and reset the chip at
- * timeout and cannot be disabled, so the multi-second load of a large image
- * must keep refreshing them. */
+/* Pet the watchdogs during the SDHCI read loops; overrides the weak no-op in
+ * src/sdhci.c.  A multi-second image load outlives the watchdog period. */
 void sdhci_platform_wdt_pet(void)
 {
     mpfs_wdt_pet_all();
@@ -2974,19 +2786,12 @@ void sdhci_platform_wdt_pet(void)
 
 void sdhci_platform_init(void)
 {
-    /* IOMUX/MSSIO routing was already programmed in nwc_init() before the
-     * MSSIO_CONTROL_CR 4-phase sequence committed the pad config.  Here:
-     *   1. Configure the MMC AXI master MPU so the controller can access
-     *      the regions Libero expects (default state may be all-deny).
-     *   2. Enable the MMC peripheral clock.
-     *   3. Deassert the MMC soft reset.
-     * Mirrors the DDRC sequence in mpfs_ddr_init(). */
+    /* Routing is already committed by nwc_init(); this is the MMC master MPU,
+     * clock and soft reset, mirroring the DDRC sequence in mpfs_ddr_init(). */
     wolfBoot_printf("SDHCI: platform init\n");
 #ifdef MPFS_DDR_INIT
-    /* MMC AXI master MPU config requires LIBERO_SETTING_MMC_MPU_CFG_*
-     * which is only defined when LIBERO_FPGA_CONFIG_DIR is set.  When
-     * not set, this build is intended to run UNDER HSS (which has
-     * already configured the MPU), so this step is a no-op. */
+    /* LIBERO_SETTING_MMC_MPU_CFG_* needs LIBERO_FPGA_CONFIG_DIR; without it
+     * the build runs under HSS, which has configured the MPU already. */
     mpfs_mpu_init_mmc();
 #endif
     SYSREG_REG(SYSREG_SUBBLK_CLOCK_CR_OFF) |= MSS_PERIPH_MMC;
@@ -3036,10 +2841,8 @@ void sdhci_reg_write(uint32_t offset, uint32_t val)
 /* DEBUG UART */
 #ifdef DEBUG_UART
 
-/* Baud divisor: integer = PCLK/(baudrate*16), fractional (0-63) via 128x
- * scaling.  Uses the RUNTIME APB clock so divisors computed after the MSS
- * PLL raise stay correct (the compile-time MSS_APB_AHB_CLK garbled every
- * post-raise reinit). */
+/* Baud divisor: integer = PCLK/(baudrate*16), fractional via 128x scaling.
+ * Uses the runtime APB clock so divisors stay correct after the PLL raise. */
 static void uart_config_baud(unsigned long base, uint32_t baudrate)
 {
     const uint64_t pclk = mpfs_apb_clk_hz;

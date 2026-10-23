@@ -29,20 +29,16 @@
 #endif
 
 
-/* RV64 M-mode: direct boot from eNVM; a0=hartid from CSR
- * RV64 S-mode: entered from SBI with a0=hartid, a1=DTB pointer
- * RV32: bare metal; stack/gp from linker symbols */
+/* RV64 M-mode: direct from eNVM, a0=hartid from CSR.  RV64 S-mode: from SBI
+ * with a0=hartid, a1=DTB.  RV32: bare metal, stack/gp from linker symbols. */
 .section .init
 .globl _reset
 _reset:
 #if __riscv_xlen == 64
 
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(TARGET_mpfs250_ubl)
-    /* Boot mode 2 UBL stub: the System Controller has already copied the
-     * whole image to the LIM and released all five harts here, so VMA == LMA
-     * and nothing is copied.  The E51 verifies the eNVM wolfBoot manifest;
-     * the U54s park on the DTIM mailbox until it publishes the entry, then
-     * every hart enters the eNVM reset vector as in a boot mode 1 boot. */
+    /* Boot mode 2 UBL stub: the SC has copied the image to LIM and released
+     * all five harts, so VMA == LMA and nothing is copied. */
     csrr  a0, mhartid
     mv    tp, a0
 
@@ -61,10 +57,8 @@ _reset:
 
     bnez  a0, .L_ubl_secondary_wait
 
-    /* Close the mailbox gate before anything slow (.bss clear, verify): an
-     * MSS reset leaves the previous boot's magic and entry in DTIM, and a
-     * stale pair is indistinguishable from a fresh one, so the secondaries
-     * would jump into an eNVM image this boot has not verified. */
+    /* Close the gate before anything slow: an MSS reset leaves the previous
+     * magic in DTIM, and the secondaries would jump into unverified code. */
     li    t0, MPFS_UBL_MAGIC_ADDR
     sw    zero, 0(t0)
     fence iorw, iorw
@@ -79,9 +73,8 @@ _reset:
     and   sp, sp, t0
     mv    s0, sp
 
-    /* LIM comes out of reset with uninitialised ECC and a doubleword store is
-     * what writes it, so cover everything the System Controller did not copy:
-     * .bss, the heap and the stack, which faults on its first read. */
+    /* LIM resets with uninitialised ECC that only a doubleword store writes,
+     * so cover what the SC did not copy: .bss, the heap and the stack. */
     la    t0, _start_bss
     la    t1, _end_stack
 .L_ubl_lim_clear:
@@ -154,14 +147,8 @@ _reset:
     sw    zero, 0x174(t1)             /* SYSREG_L2_SHUTDOWN_CR = 0 */
     fence
 
-    /* Evict any copy of the scratchpad range that an earlier access left in
-     * an evictable way.  The pin loop below allocates by storing with the
-     * E51 mask set to one way at a time, but a store that HITS a line already
-     * resident in ways 0-7 updates that line instead, so the address never
-     * reaches a scratchpad way and reads as zero once a large DMA sweep
-     * evicts it.  Under boot mode 2 the UBL and the released U54s run before
-     * this point with every mask wide open.  FLUSH64 takes a line address
-     * and evicts it from whichever way holds it. */
+    /* Evict any scratchpad line left in an evictable way: the pin loop below
+     * allocates only on a miss, so a hit in ways 0-7 would never move. */
     li    t0, 0x02010200              /* L2_FLUSH64 */
     li    t1, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
     li    t2, 0x0A080000              /* + 512 KB */
@@ -171,12 +158,8 @@ _reset:
     bltu  t1, t2, .L_prepin_flush
     fence
 
-    /* Make all 512 KB of the Zero Device resident by enabling one scratchpad
-     * way at a time and storing a marker every 64 bytes: a store can only
-     * allocate in the enabled way, so 2048 blocks x 4 ways fills each once.
-     * A mask of 0xF00 covers only the stores made while it is set, leaving
-     * .data/.bss/heap/stack in evictable ways whose writeback is discarded.
-     * This is HSS config_l2_cache(); the marker matches its INIT_MARKER. */
+    /* Make all 512 KB resident one way at a time, storing every 64 bytes, so
+     * each way fills once.  This is HSS config_l2_cache() and its marker. */
     li    t0, 0x02010828              /* L2_WAY_MASK_E51_DCACHE */
     li    t1, 0x100                   /* scratchpad way 8 */
     li    t2, 0x0A000000              /* ZERO_DEVICE_BOTTOM */
@@ -202,9 +185,8 @@ _reset:
     fence
 #endif
 
-    /* Copy .text from eNVM to L2 SRAM.
-     * Use li/ld for dest/size (la would give wrong address across the
-     * eNVM-to-L2 gap which exceeds the 32-bit PC-relative range). */
+    /* Copy .text from eNVM to L2 SRAM.  li/ld, not la: the eNVM-to-L2 gap
+     * exceeds the 32-bit PC-relative range. */
     la    t0, _stored_text
     la    t3, _copy_params
     ld    t1, 0(t3)                   /* dest (L2 SRAM base) */
@@ -267,22 +249,11 @@ _copy_params:
 
     addi  sp, sp, -64                  /* allocate 64-byte HLS at top of stack */
     mv    s11, sp
-    /* The HLS block is zeroed AFTER the wait below, not here.  It lives in
-     * L2 scratchpad, and the boot hart does not finish carving the
-     * scratchpad out (the way-mask pin loop, then mpfs_config_l2_cache)
-     * until well after it releases us.  Under boot mode 2 the UBL releases
-     * the U54s and jumps last, so a store here is guaranteed to land before
-     * the scratchpad exists; in boot mode 1 the System Controller starts all
-     * five harts together and the boot hart merely usually wins.  Only
-     * register setup happens before the wait. */
+    /* HLS is zeroed after the wait, not here: it lives in L2 scratchpad, which
+     * the boot hart has not finished carving out when it releases us. */
 
-    /* Wait for E51 to signal HLS_MAIN_HART_STARTED.  On MPFS250 poll the
-     * DTIM copy of the flag, not the L2-scratch HLS: an E51 store to the
-     * cacheable scratchpad can be lost on dirty-line eviction (layout-
-     * dependent), which left the secondaries parked here until the kernel's
-     * HSM hart_start IPI arrived -- too late for its 1s online window.
-     * Other RISCV64 M-mode targets poll the generic _main_hart_hls flag
-     * (MPFS_DTIM_MAIN_STARTED_ADDR is MPFS250-specific). */
+    /* Wait for HLS_MAIN_HART_STARTED.  MPFS250 polls the DTIM copy, not the
+     * L2-scratch HLS, whose store can be lost on dirty-line eviction. */
     li    t3, 0x12344321
 #ifdef TARGET_mpfs250
     li    t1, MPFS_DTIM_MAIN_STARTED_ADDR
@@ -293,12 +264,8 @@ _copy_params:
     lwu   t2, 0(t1)
     bne   t3, t2, .L_wait_main_hart
 
-    /* Clear any stale CLINT MSIP left by a prior boot (a warm/WDT reset does
-     * not clear CLINT) BEFORE arming the WFI wait, so a stale MSIP cannot fall
-     * the wfi loop through and resume a previous kernel handoff over
-     * un-reinitialized DDR.  E51 sends its release IPI only after we signal
-     * HLS_OTHER_HART_IN_WFI below, so clearing here cannot race the real
-     * wakeup. */
+    /* A warm reset does not clear CLINT, so drop a stale MSIP before arming
+     * the wait or it falls straight through into a previous hand-off. */
     csrr  a0, mhartid
     li    t0, 0x02000000               /* CLINT_BASE */
     slli  t1, a0, 2
@@ -336,9 +303,8 @@ _copy_params:
     fence iorw, iorw
     fence.i
 
-    /* The C code on this hart (secondary_hart_entry and the M->S release
-     * path) addresses small globals gp-relative; only the E51's
-     * .L_sram_entry path sets gp, so set it here too. */
+    /* The C code on this hart addresses small globals gp-relative, and only
+     * the E51's .L_sram_entry path sets gp. */
     .option push
     .option norelax
     la    gp, __global_pointer$
