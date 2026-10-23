@@ -121,6 +121,15 @@ static NOINLINEFUNCTION void hal_zeroize(void *ptr, size_t len)
 #if HWPUF_PROV_OVERLAPS(WOLFBOOT_PARTITION_SWAP_ADDRESS, WOLFBOOT_SECTOR_SIZE)
 #error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the swap partition"
 #endif
+/* wolfBoot itself, the keyvault and the NSC region sit below the boot
+ * partition */
+#if WOLFBOOT_HWPUF_PROV_ADDRESS < WOLFBOOT_PARTITION_BOOT_ADDRESS
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS must be above the wolfBoot image"
+#endif
+/* Protected flash region (PFR) starts at 0x9DE00 */
+#if (WOLFBOOT_HWPUF_PROV_ADDRESS + HWPUF_PROV_FLASH_LEN) > 0x9DE00ul
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the protected flash region"
+#endif
 
 typedef struct hwpuf_prov {
     byte ac[PUF_ACTIVATION_CODE_SIZE];
@@ -132,22 +141,25 @@ typedef char hwpuf_prov_size_check[
     (sizeof(hwpuf_prov) <= HWPUF_PROV_FLASH_LEN - HWPUF_PROV_PAGE_SIZE) ?
     1 : -1];
 
-/* Static rather than on the (secure) stack; cleared on every exit path */
+/* prov holds no secure information, so does not need aggressive zeroing */
 static hwpuf_prov prov;
 
 #define HWPUF_PROV_BLANK    1
-#define HWPUF_PROV_EXISTS   2
 
 /* Load the stored record into rec.
- * Returns 0 if a committed record was loaded, HWPUF_PROV_BLANK if the
- * region holds no committed record (never provisioned, or provisioning was
- * interrupted before the commit), -1 if the region is corrupted. */
+ * Returns 0 if a committed record was loaded, HWPUF_PROV_BLANK if the commit
+ * page is erased or all 0xFF (never provisioned, or interrupted before the
+ * commit), -1 for anything else. A record in any other state may be a
+ * committed one that got damaged, so it is never treated as blank: that
+ * would silently re-enroll the PUF and change the device identity. */
 static int hwpuf_provision_get(hwpuf_prov *rec)
 {
     uint32_t addr;
     uint32_t end = WOLFBOOT_HWPUF_PROV_ADDRESS +
         ((sizeof(*rec) + HWPUF_PROV_PAGE_SIZE - 1) &
             ~(HWPUF_PROV_PAGE_SIZE - 1));
+    uint32_t commit_page[HWPUF_PROV_PAGE_SIZE / sizeof(uint32_t)];
+    uint32_t failed_addr, failed_data;
 
     flashInit();
 
@@ -156,8 +168,22 @@ static int hwpuf_provision_get(hwpuf_prov *rec)
             HWPUF_PROV_PAGE_SIZE) == kStatus_FLASH_Success)
         return HWPUF_PROV_BLANK;
 
-    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS == 0xFFFFFFFFul)
+    /* A page whose programming was cut short may fail ECC as well. Compare
+     * through the flash controller, which reports errors instead of
+     * faulting, and only read the page once it matches. */
+    XMEMSET(commit_page, 0xFF, sizeof(commit_page));
+    /* Programmed as 0xFF by hal_flash_erase(): erased, not committed */
+    if (FLASH_VerifyProgram(&pflash, HWPUF_PROV_COMMIT_ADDRESS,
+            HWPUF_PROV_PAGE_SIZE, (const uint8_t *)commit_page,
+            &failed_addr, &failed_data) == kStatus_FLASH_Success &&
+            *(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS == 0xFFFFFFFFul)
         return HWPUF_PROV_BLANK;
+
+    commit_page[0] = HWPUF_PROV_MAGIC;
+    if (FLASH_VerifyProgram(&pflash, HWPUF_PROV_COMMIT_ADDRESS,
+            HWPUF_PROV_PAGE_SIZE, (const uint8_t *)commit_page,
+            &failed_addr, &failed_data) != kStatus_FLASH_Success)
+        return -1;
 
     if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS != HWPUF_PROV_MAGIC)
         return -1;
@@ -174,23 +200,22 @@ static int hwpuf_provision_get(hwpuf_prov *rec)
 }
 
 #ifdef WOLFBOOT_HWPUF_PROVISION
-/* Enroll the PUF and store the record.
- * Returns 0 when newly provisioned, HWPUF_PROV_EXISTS when a committed record
- * already exists, -1 on failure. A corrupted record is only replaced when
- * force is set, so the device identity is never silently re-created. */
-static int hwpuf_provision_set(int force)
+/* Enroll the PUF and store the record, unless one is already stored.
+ * Returns 0 when newly or previously provisioned, -1 otherwise. Only a blank
+ * region is provisioned: a damaged record is left alone (attestation fails
+ * until the region is erased), so the device identity never changes
+ * silently. */
+static int hwpuf_provision_set(void)
 {
     uint32_t magic = HWPUF_PROV_MAGIC;
     int ret;
 
     ret = hwpuf_provision_get(&prov);
-    hal_zeroize(&prov, sizeof(prov));
-    if (ret == 0)
-        return HWPUF_PROV_EXISTS;
-    if (ret < 0 && !force)
-        return -1;
-
+    if (ret != HWPUF_PROV_BLANK)
+        return ret;
     ret = -1;
+
+    hal_zeroize(&prov, sizeof(prov));
 
     if (nxp_hwpuf_Init() != 0)
         goto error_out;
@@ -233,9 +258,6 @@ static int hwpuf_provision_set(int force)
 unlock_out:
     hal_flash_lock();
 error_out:
-    hal_zeroize(&prov, sizeof(prov));
-    /* No nxp_hwpuf_Zeroize(): it locks the PUF until the next POR, and the
-     * UDS must still be derivable at runtime. Deinit powers the PUF down. */
     (void)nxp_hwpuf_Deinit();
     return ret;
 }
@@ -247,10 +269,8 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
     int ret = -1;
     byte uds[HWPUF_PROV_UDS_KEY_SIZE];
 
-    if (hwpuf_provision_get(&prov) != 0) {
-        hal_zeroize(&prov, sizeof(prov));
+    if (hwpuf_provision_get(&prov) != 0)
         return -1;
-    }
 
     if (nxp_hwpuf_Init() != 0)
         goto error_out;
@@ -271,7 +291,6 @@ static int uds_from_hwpuf(uint8_t *out, size_t out_len)
 
 error_out:
     hal_zeroize(uds, sizeof(uds));
-    hal_zeroize(&prov, sizeof(prov));
     (void)nxp_hwpuf_Deinit();
     return ret == 0 ? 0 : -1;
 }
@@ -384,9 +403,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
  * 4 KB block secure+privileged; hand SRAM2 (0x20020000..0x2002FFFF, the NS
  * app RAM) to the NS world as non-secure+privileged before the NS jump.
  * Unprivileged NS code is intentionally kept out of SRAM2: the NS test-app
- * runs privileged.
- * SEC_CTRL_RAM2 MEM_RULE0/1 (UM11126): the SDK header only exposes MEM_RULE0,
- * so both are addressed by offset from the secure alias. */
+ * runs privileged. */
 #define AHBSC_SRAM2_RULE0   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA0u))
 #define AHBSC_SRAM2_RULE1   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA4u))
 
@@ -413,17 +430,8 @@ static void hal_sau_init(void)
     sau_init_region(2, 0x20020000, 0x2002FFFF, 0);
 
     /* Peripherals */
-#ifdef WOLFSSL_NXP_HWPUF
-    /* Leave the PUF (0x4003B000..0x4003BFFF) out of the NS regions: it is
-     * the root of the attestation identity and is driven only by the
-     * secure world. */
-    sau_init_region(3, 0x40000000, 0x4003AFFF, 0);
-    sau_init_region(6, 0x4003C000, 0x4003FFFF, 0);
-#else
-    sau_init_region(3, 0x40000000, 0x4003FFFF, 0);
-#endif
-    sau_init_region(4, 0x40080000, 0x400AFFFF, 0);
-    sau_init_region(5, 0x40100000, 0x4010FFFF, 0);
+    sau_init_region(3, 0x40086000, 0x40086FFF, 0);  /* uart on flexcomm0 */
+    sau_init_region(4, 0x4008c000, 0x4008FFFF, 0);  /* gpio for leds */
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;
@@ -434,8 +442,6 @@ static void hal_sau_init(void)
 
 static void periph_unsecure(void)
 {
-    CLOCK_EnableClock(kCLOCK_Iocon);
-    CLOCK_EnableClock(kCLOCK_Gpio1);
 }
 #endif /* TZEN */
 
@@ -443,7 +449,7 @@ static void hal_flash_fix_ecc(void)
 {
     uint8_t page_buf[512];
     uint32_t addr;
-    uint32_t start = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uint32_t start = ARCH_FLASH_OFFSET;
     uint32_t end   = WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE;
 
     XMEMSET(page_buf, 0xFF, sizeof(page_buf));
@@ -456,6 +462,47 @@ static void hal_flash_fix_ecc(void)
     }
 }
 
+#ifdef __WOLFBOOT
+#define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
+#define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
+#define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
+#define IOCON_PIO_INV_DI 0x00u        /*!<@brief Input function is not inverted */
+#define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
+#define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
+
+#define RED_LED     6
+#define GREEN_LED   7
+#define BLUE_LED    4
+
+static void leds_pin_init(void)
+{
+    /* red output off */
+    GPIO->SET[1] = 1UL << RED_LED;
+    GPIO->DIR[1] |= 1UL << RED_LED;
+    /* green output off */
+    GPIO->SET[1] = 1UL << GREEN_LED;
+    GPIO->DIR[1] |= 1UL << GREEN_LED;
+    /* blue output off */
+    GPIO->SET[1] = 1UL << BLUE_LED;
+    GPIO->DIR[1] |= 1UL << BLUE_LED;
+
+    const uint32_t LED_PINMUX_CONFIG = (/* Pin is configured as PIO */
+                               IOCON_PIO_FUNC0 |
+                               /* Selects pull-up function */
+                               IOCON_PIO_MODE_PULLUP |
+                               /* Standard mode, output slew rate control is enabled */
+                               IOCON_PIO_SLEW_STANDARD |
+                               /* Input function is not inverted */
+                               IOCON_PIO_INV_DI |
+                               /* Enables digital function */
+                               IOCON_PIO_DIGITAL_EN |
+                               /* Open drain is disabled */
+                               IOCON_PIO_OPENDRAIN_DI);
+    IOCON_PinMuxSet(IOCON, 1, RED_LED, LED_PINMUX_CONFIG);
+    IOCON_PinMuxSet(IOCON, 1, GREEN_LED, LED_PINMUX_CONFIG);
+    IOCON_PinMuxSet(IOCON, 1, BLUE_LED, LED_PINMUX_CONFIG);
+}
+#endif /* __WOLFBOOT */
 
 extern int wc_hashcrypt_init(void);
 extern int wc_casper_init(void);
@@ -465,6 +512,9 @@ void hal_init(void)
 #ifdef __WOLFBOOT
     /* lpc55s69 must run < 100 MHz for flash write/erase to work */
     BOARD_BootClockFROHF96M();
+
+    CLOCK_EnableClock(kCLOCK_Iocon);
+    CLOCK_EnableClock(kCLOCK_Gpio1);
 
 # ifdef DEBUG_UART
     uart_init();
@@ -481,6 +531,8 @@ void hal_init(void)
     CLOCK_EnableClock(kCLOCK_Rng);
     RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
     RNG_Init(RNG);
+
+    leds_pin_init();
 #endif /* __WOLFBOOT */
 
 #if defined(WOLFSSL_NXP_HWPUF) && (defined(__WOLFBOOT) || !defined(TZEN))
@@ -504,9 +556,9 @@ void hal_init(void)
 #endif
 
 #if defined(__WOLFBOOT) && defined(WOLFBOOT_HWPUF_PROVISION)
-    /* Provisioning failure is non-fatal: the UID fallback still derives
-     * the UDS, so the boot continues. */
-    (void)hwpuf_provision_set(0);
+    /* Provisioning failure does not stop the boot, will run again next boot */
+    if (hwpuf_provision_set() != 0)
+        wolfBoot_printf("hwpuf provision failed\n");
 #endif
 }
 
@@ -630,7 +682,6 @@ int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 #ifdef DEBUG_UART
 void uart_init(void)
 {
-    CLOCK_EnableClock(kCLOCK_Iocon);
     const uint32_t port0_pin29_config = (/* Pin is configured as FC0_RXD_SDA_MOSI_DATA */
                                          IOCON_PIO_FUNC1 |
                                          /* No addition pin function */

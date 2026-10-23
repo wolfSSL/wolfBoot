@@ -20,9 +20,7 @@
  */
 
 #include <stdint.h>
-#include "fsl_clock.h"
 #include "fsl_gpio.h"
-#include "fsl_iocon.h"
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
@@ -68,20 +66,8 @@ static void systick_init(void)
 }
 #endif
 
-#define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
-#define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
-#define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
-#define IOCON_PIO_INV_DI 0x00u        /*!<@brief Input function is not inverted */
-#define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
-#define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
-
 static void leds_init(void)
 {
-#ifndef TZEN
-    CLOCK_EnableClock(kCLOCK_Iocon);
-    CLOCK_EnableClock(kCLOCK_Gpio1);
-#endif
-
     /* red output off */
     GPIO->SET[1] = 1UL << RED_LED;
     GPIO->DIR[1] |= 1UL << RED_LED;
@@ -91,22 +77,6 @@ static void leds_init(void)
     /* blue output off */
     GPIO->SET[1] = 1UL << BLUE_LED;
     GPIO->DIR[1] |= 1UL << BLUE_LED;
-
-    const uint32_t LED_PINMUX_CONFIG = (/* Pin is configured as PIO */
-                               IOCON_PIO_FUNC0 |
-                               /* Selects pull-up function */
-                               IOCON_PIO_MODE_PULLUP |
-                               /* Standard mode, output slew rate control is enabled */
-                               IOCON_PIO_SLEW_STANDARD |
-                               /* Input function is not inverted */
-                               IOCON_PIO_INV_DI |
-                               /* Enables digital function */
-                               IOCON_PIO_DIGITAL_EN |
-                               /* Open drain is disabled */
-                               IOCON_PIO_OPENDRAIN_DI);
-    IOCON_PinMuxSet(IOCON, 1, RED_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, GREEN_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, BLUE_LED, LED_PINMUX_CONFIG);
 }
 
 static void check_parts(

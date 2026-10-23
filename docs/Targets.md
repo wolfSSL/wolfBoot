@@ -3480,12 +3480,16 @@ attestation.  Stores PUF keycodes in a known flash location and uses them when
 necessary.
 - `WOLFBOOT_HWPUF_PROV_ADDRESS` : Flash address of the 4 KB PUF provisioning
 record (default `0x80000`, page aligned).  The build fails if it overlaps the
-boot, update or swap partition; keep it out of the keyvault and NSC regions as
-well.  The activation code and key code are written first and verified, then a
-commit word is written in the last page of the record, so an interrupted
-provisioning is redone on the next boot.  A record that is committed but
-corrupted is not silently replaced: attestation fails until the region is
-erased.
+boot, update or swap partition or the protected flash region (`0x9DE00` and
+up), or if it lies below the boot partition (wolfBoot, keyvault and NSC).
+The activation code and key code are written first and verified, then a
+commit word is written in the last page of the record.  Provisioning only
+runs when that commit page is erased (or all `0xFF`), so a provisioning
+interrupted before the commit is redone on the next boot.  A record in any
+other state is never silently replaced, because that would change the device
+identity: attestation fails until the region is erased.  This includes the
+rare case where power is lost while the commit page itself is being erased or
+programmed.
 
 `HWPUF=1` cannot be combined with `WOLFBOOT_UDS_UID_FALLBACK_FORTEST=1`.  With
 `TZEN=1` the PUF is reachable only from the secure world (it is excluded from
