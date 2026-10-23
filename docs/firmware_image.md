@@ -51,6 +51,12 @@ Each **Type** has a different meaning, and integrate information about the firmw
   - A 'firmware signature' Tag (type: 0x0020, size: 64 Bytes) used to validate the signature stored with the firmware against a known public key
   - A 'firmware type' Tag (type: 0x0030, size: 2 Bytes) used to identify the type of firmware, and the authentication mechanism in use.
 
+A compressed image carries three additional Tags (see [Compression.md](Compression.md)):
+
+  - A 'compression' Tag (type: 0x0008, size: 2 Bytes) indicating the algorithm used to compress the payload. 0x0001 is gzip/DEFLATE. The presence of this Tag is what marks the payload as compressed.
+  - An 'uncompressed size' Tag (type: 0x0009, size: 4 Bytes) indicating the length of the payload once decompressed. The bootloader uses it to reject an image too large for the boot partition before decompressing, and to cross-check the number of bytes actually produced.
+  - A 'compression window' Tag (type: 0x000A, size: 2 Bytes) giving the LZ77 window the payload was compressed with, as a power of two. A gzip header has no field for it and the decoder sizes its buffer from it, so it is signature-covered; an image needing a larger window than the bootloader was built for is refused before decompressing.
+
 A 'public key hint digest' tag is transmitted in the header (type: 0x10, size:32 Bytes). This tag contains the SHA digest of the public key used
 by the signing tool. The bootloader may use this field to locate the correct public key in case of multiple keys available.
 

@@ -206,6 +206,17 @@ differences between the old firmware to replace, currently running on the target
 
 For more information and examples, see the [firmware update](firmware_update.md) section.
 
+### Compressed images
+
+wolfBoot can install a gzip-compressed update, keeping only the update partition compressed and
+inflating it into the boot partition, which goes on executing in place. To enable this feature,
+compile with `COMPRESSED_UPDATE=1` and set `WOLFBOOT_PARTITION_UPDATE_SIZE` smaller than
+`WOLFBOOT_PARTITION_SIZE`.
+
+Sign with `--compress`, which compresses and signs the nested container.
+
+For more information and examples, see the [compression](Compression.md) section.
+
 ### Enable debug symbols
 
 To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootloader will increase

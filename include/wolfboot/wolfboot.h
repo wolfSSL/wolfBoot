@@ -289,6 +289,15 @@ extern "C" {
 #define HDR_IMG_DELTA_BASE          0x05
 #define HDR_IMG_DELTA_SIZE          0x06
 #define HDR_IMG_DELTA_BASE_HASH     0x07
+/* uint16 LE algorithm id. Its presence is what marks the payload as
+ * compressed: the HDR_IMG_TYPE 0x00F0 nibble is equality-tested, so it
+ * cannot carry an orthogonal flag. */
+#define HDR_IMG_COMPRESSION         0x08
+/* uint32 LE uncompressed length, bounding the inflate. */
+#define HDR_IMG_UNCOMPRESSED_SIZE   0x09
+/* uint16 LE LZ77 window, as a power of two. A gzip header has no field for
+ * it, and the decoder sizes its buffer from this, so it has to be signed. */
+#define HDR_IMG_COMP_WINDOW         0x0A
 #define HDR_PUBKEY                  0x10
 #define HDR_SECONDARY_CIPHER        0x11
 #define HDR_SECONDARY_PUBKEY        0x12
@@ -308,6 +317,9 @@ extern "C" {
  * image. Length = image hash size (WOLFBOOT_SHA_DIGEST_SIZE). */
 #define HDR_DEVICE_TREE_DIGEST      0x35
 #define HDR_PADDING                 0xFF
+
+/* HDR_IMG_COMPRESSION algorithm ids */
+#define HDR_COMP_GZIP               0x0001 /* RFC 1952 gzip / 1951 DEFLATE */
 
 /* Auth Key types */
 #define AUTH_KEY_NONE    0x00
@@ -619,10 +631,25 @@ extern "C" {
 #define WOLFBOOT_PARTITION_UPDATE_SIZE WOLFBOOT_PARTITION_SIZE
 #endif
 #if !defined(WOLFBOOT_SELF_UPDATE_MONOLITHIC) && \
+    !defined(WOLFBOOT_COMPRESSED_UPDATE) && \
     ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) != (WOLFBOOT_PARTITION_SIZE + 0))
-  #error "WOLFBOOT_PARTITION_UPDATE_SIZE != WOLFBOOT_PARTITION_SIZE requires SELF_UPDATE_MONOLITHIC=1"
+  #error "WOLFBOOT_PARTITION_UPDATE_SIZE != WOLFBOOT_PARTITION_SIZE requires SELF_UPDATE_MONOLITHIC=1 or COMPRESSED_UPDATE=1"
 #endif
-#if defined(EXT_ENCRYPTED) && \
+/* Only the compressed image is stored there, so a larger update partition
+ * would just be wasted flash. */
+#if defined(WOLFBOOT_COMPRESSED_UPDATE) && \
+    ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) > (WOLFBOOT_PARTITION_SIZE + 0))
+  #error "COMPRESSED_UPDATE: WOLFBOOT_PARTITION_UPDATE_SIZE must not exceed WOLFBOOT_PARTITION_SIZE"
+#endif
+/* One _wolfboot_partition_size symbol serves both partitions, and the size
+ * is a const rather than a macro, so the guards above cannot see it. */
+#if defined(WOLFBOOT_COMPRESSED_UPDATE) && defined(PULL_LINKER_DEFINES)
+  #error "COMPRESSED_UPDATE is not supported with PULL_LINKER_DEFINES"
+#endif
+/* START_FLAGS_OFFSET_UPDATE keeps the UPDATE trailer in the clear at an
+ * offset sized from that slot, so an asymmetric layout is fine here. The
+ * swap-based modes exchange whole slots and still need them equal. */
+#if defined(EXT_ENCRYPTED) && !defined(WOLFBOOT_COMPRESSED_UPDATE) && \
     ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) != (WOLFBOOT_PARTITION_SIZE + 0))
   #error "Asymmetric WOLFBOOT_PARTITION_UPDATE_SIZE is not supported with ENCRYPT"
 #endif
@@ -658,6 +685,52 @@ extern "C" {
 #else
 #define WOLFBOOT_TRAILER_SECTORS 1
 #endif
+
+/* Compressed update partition, inflated into the boot partition, which is
+ * then executed in place. Bootloader only, as above. */
+#if defined(WOLFBOOT_COMPRESSED_UPDATE) && defined(__WOLFBOOT)
+  #if !defined(WOLFBOOT_GZIP) || !defined(WOLFBOOT_GZIP_SINK)
+    #error "WOLFBOOT_COMPRESSED_UPDATE requires the gzip sink decoder (GZIP=1)"
+  #endif
+  /* The boot partition is overwritten in place, so there is nothing to swap
+   * back to and no scratch sector to swap through. */
+  #ifndef DISABLE_BACKUP
+    #error "WOLFBOOT_COMPRESSED_UPDATE requires DISABLE_BACKUP"
+  #endif
+  /* Delta patches the boot partition it is consuming; this one overwrites
+   * it from a separate slot. */
+  #ifdef DELTA_UPDATES
+    #error "DELTA_UPDATES is not compatible with WOLFBOOT_COMPRESSED_UPDATE"
+  #endif
+  #ifdef WOLFBOOT_ELF
+    #error "WOLFBOOT_ELF is not supported with WOLFBOOT_COMPRESSED_UPDATE"
+  #endif
+  #ifdef DUALBANK_SWAP
+    #error "DUALBANK_SWAP is not compatible with WOLFBOOT_COMPRESSED_UPDATE"
+  #endif
+  /* The installer walks the boot partition a sector at a time and the
+   * trailer lives in its last sector, so a partial sector at the end would
+   * be erased by the trailer write. */
+  #if ((WOLFBOOT_PARTITION_SIZE + 0) % (WOLFBOOT_SECTOR_SIZE + 0)) != 0
+    #error "WOLFBOOT_PARTITION_SIZE must be a multiple of WOLFBOOT_SECTOR_SIZE"
+  #endif
+  #if ((WOLFBOOT_PARTITION_UPDATE_SIZE + 0) % (WOLFBOOT_SECTOR_SIZE + 0)) != 0
+    #error "WOLFBOOT_PARTITION_UPDATE_SIZE must be a multiple of WOLFBOOT_SECTOR_SIZE"
+  #endif
+  /* Install progress is one nibble per destination sector, kept in the
+   * update partition's trailer below MAGIC (4) and the state byte (1); an
+   * encrypted trailer also holds the key and nonce, under 64 bytes for
+   * every cipher this supports. */
+  #ifdef EXT_ENCRYPTED
+    #define WOLFBOOT_TRAILER_HEAD (5 + 64)
+  #else
+    #define WOLFBOOT_TRAILER_HEAD 5
+  #endif
+  #if (((WOLFBOOT_PARTITION_SIZE + 0) / (WOLFBOOT_SECTOR_SIZE + 0) + 1) / 2) > \
+      ((WOLFBOOT_SECTOR_SIZE + 0) - WOLFBOOT_TRAILER_HEAD)
+    #error "Too many boot sectors to track in the update partition trailer"
+  #endif
+#endif /* WOLFBOOT_COMPRESSED_UPDATE */
 
 #define PART_BOOT   0
 #define PART_UPDATE 1

@@ -144,6 +144,40 @@ typedef uint32_t gz_bits_t;
 #endif
 #define GZIP_BITS_FULL            (GZIP_BITS_WIDTH - 8)
 
+#ifdef WOLFBOOT_GZIP_SINK
+/* Output drain for the sink decoder; see gz_flush(). */
+typedef struct gz_sink {
+    int (*write)(void *ctx, uint32_t off, const uint8_t *buf, uint32_t len);
+    void    *ctx;
+    uint32_t window;   /* bytes of history the stream may reference */
+    uint32_t out_max;  /* cap on total bytes produced */
+    uint32_t flushed;  /* bytes already handed to write() */
+    uint32_t crc;      /* running, not yet final-XOR'd */
+} gz_sink_t;
+
+/* The block decoder stopped to let the scratch buffer drain. Not an error:
+ * those are all negative. */
+#define GZ_NEED_FLUSH 1
+
+/* Ample for every contiguous read the parser makes, the widest being
+ * GZIP_HEADER_MIN_SIZE. */
+#define GZIP_SRC_BUF  512
+/* Consumed bytes kept in front of the cursor on every refill, so
+ * gz_align_byte() can push back over the bit buffer. */
+#define GZIP_SRC_KEEP 8
+
+/* Pulls the compressed stream in through a callback. NULL in gz_state_t
+ * means the stream is addressable and is read in place. */
+typedef struct gz_src {
+    int (*read)(void *ctx, uint32_t off, uint8_t *buf, uint32_t len);
+    void    *ctx;
+    uint32_t total;  /* compressed bytes in the whole stream */
+    uint32_t pos;    /* stream offset of buf[0] */
+    uint32_t have;   /* valid bytes in buf */
+    uint8_t  buf[GZIP_SRC_BUF];
+} gz_src_t;
+#endif /* WOLFBOOT_GZIP_SINK */
+
 typedef struct gz_state {
     const uint8_t *in;        /* next input byte */
     const uint8_t *in_end;
@@ -154,10 +188,21 @@ typedef struct gz_state {
     uint8_t       *out;       /* output buffer (doubles as sliding window) */
     uint8_t       *out_end;
     uint8_t       *op;        /* next output byte */
+#ifdef WOLFBOOT_GZIP_SINK
+    gz_sink_t     *sk;        /* NULL for the flat-buffer entry point */
+    gz_src_t      *src;       /* NULL when the stream is addressable */
+#endif
 #ifdef WOLFBOOT_GZIP_SMALL
     uint32_t       crc32;     /* running CRC32 of decompressed bytes */
 #endif
 } gz_state_t;
+
+#ifdef WOLFBOOT_GZIP_SINK
+static int gz_src_more(gz_state_t *s, const uint8_t **in,
+    const uint8_t **in_end);
+#else
+#define gz_src_more(s, in, in_end) (-1)
+#endif
 
 #if defined(__GNUC__)
 typedef uint64_t gz_word_t __attribute__((__may_alias__));
@@ -172,15 +217,19 @@ typedef uint64_t gz_word_t __attribute__((__may_alias__));
  * registers; the struct forms serve the slow paths. */
 
 /* Refill to more than GZIP_BITS_FULL bits; past the end of input, zero
- * bytes are appended and counted in `over`. */
-#define GZ_REFILL_V(buf, nbits, over, in, in_end) \
+ * bytes are appended and counted in `over`. Exhausting the buffered input
+ * is instead a refill when the stream is pulled in through a callback;
+ * gz_src_more() is (-1) without the sink decoder, which short-circuits the
+ * test away. */
+#define GZ_REFILL_V(s, buf, nbits, over, in, in_end) \
     do { \
         while ((nbits) <= GZIP_BITS_FULL) { \
-            if ((in) < (in_end)) { \
-                (buf) |= (gz_bits_t)(*(in)++) << (nbits); \
+            if (((in) >= (in_end)) && \
+                    (gz_src_more((s), &(in), &(in_end)) != 0)) { \
+                (over) += 8; \
             } \
             else { \
-                (over) += 8; \
+                (buf) |= (gz_bits_t)(*(in)++) << (nbits); \
             } \
             (nbits) += 8; \
         } \
@@ -193,7 +242,7 @@ typedef uint64_t gz_word_t __attribute__((__may_alias__));
 #define GZ_DROP_V(buf, nbits, n) \
     do { (buf) >>= (n); (nbits) -= (n); } while (0)
 
-#define GZ_REFILL(s)   GZ_REFILL_V((s)->buf, (s)->nbits, (s)->over, \
+#define GZ_REFILL(s)   GZ_REFILL_V((s), (s)->buf, (s)->nbits, (s)->over, \
                                    (s)->in, (s)->in_end)
 #define GZ_OVERRUN(s)  GZ_OVERRUN_V((s)->nbits, (s)->over)
 #define GZ_PEEK(s, n)  GZ_PEEK_V((s)->buf, (n))
@@ -208,6 +257,85 @@ static uint32_t gz_get_bits(gz_state_t *s, uint32_t n)
     GZ_DROP(s, n);
     return v;
 }
+
+#ifdef WOLFBOOT_GZIP_SINK
+/* Pull more of the stream into the input buffer and reposition the cursor,
+ * keeping GZIP_SRC_KEEP consumed bytes in front of it. Returns 0 when at
+ * least one byte was added. */
+static int gz_src_more(gz_state_t *s, const uint8_t **in,
+    const uint8_t **in_end)
+{
+    gz_src_t *src;
+    uint32_t consumed, keep, tail, from, n, want, i;
+
+    if (s->src == NULL) {
+        return -1;
+    }
+    src = s->src;
+    consumed = (uint32_t)(*in - src->buf);
+    if ((src->pos + consumed) >= src->total) {
+        return -1;
+    }
+    keep = (consumed < (uint32_t)GZIP_SRC_KEEP) ? consumed
+                                                : (uint32_t)GZIP_SRC_KEEP;
+    tail = src->have - consumed;
+    from = consumed - keep;
+    n = keep + tail;
+    for (i = 0; i < n; i++) {
+        src->buf[i] = src->buf[from + i];
+    }
+    src->pos += from;
+    src->have = n;
+    /* Republished now, so the cursor stays valid against the compacted
+     * buffer even if the read below fails. */
+    *in = src->buf + keep;
+    *in_end = src->buf + src->have;
+
+    want = (uint32_t)GZIP_SRC_BUF - src->have;
+    if (want > (src->total - (src->pos + src->have))) {
+        want = src->total - (src->pos + src->have);
+    }
+    if (want == 0) {
+        return -1;
+    }
+    if (src->read(src->ctx, src->pos + src->have, src->buf + src->have,
+            want) != 0) {
+        return -1;
+    }
+    src->have += want;
+    *in_end = src->buf + src->have;
+    return 0;
+}
+
+/* Guarantee n contiguous readable bytes at the cursor; n must not exceed
+ * GZIP_SRC_BUF - GZIP_SRC_KEEP. */
+static int gz_src_need(gz_state_t *s, uint32_t n)
+{
+    if (s->src == NULL) {
+        return ((uint32_t)(s->in_end - s->in) >= n) ? 0 : -1;
+    }
+    while ((uint32_t)(s->in_end - s->in) < n) {
+        if (gz_src_more(s, &s->in, &s->in_end) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+/* Bytes of the stream still ahead of the cursor. */
+static uint32_t gz_src_left(gz_state_t *s)
+{
+    if (s->src == NULL) {
+        return (uint32_t)(s->in_end - s->in);
+    }
+    return s->src->total -
+        (s->src->pos + (uint32_t)(s->in - s->src->buf));
+}
+#else
+#define gz_src_need(s, n) \
+    (((uint32_t)((s)->in_end - (s)->in) >= (uint32_t)(n)) ? 0 : -1)
+#define gz_src_left(s)    ((uint32_t)((s)->in_end - (s)->in))
+#endif /* WOLFBOOT_GZIP_SINK */
 
 /* Drop the partial byte and hand whole buffered bytes back to the cursor. */
 static int gz_align_byte(gz_state_t *s)
@@ -268,10 +396,10 @@ static void gz_crc_init(void)
 #define GZ_CRC_BYTE(crc, b) \
     ((gz_crc_table[((crc) ^ (b)) & 0xFFU]) ^ ((crc) >> 8))
 
-static uint32_t gz_crc32(const uint8_t *p, uint32_t len)
+/* Running CRC32, neither seeded nor final-XOR'd, so a stream can be folded
+ * in pieces as it is flushed. */
+static uint32_t gz_crc32_ex(uint32_t crc, const uint8_t *p, uint32_t len)
 {
-    uint32_t crc = GZIP_CRC32_INIT;
-
 #if defined(GZIP_WORD_ACCESS) && defined(__BYTE_ORDER__) && \
     (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
     /* Aligned words, then the bytes of each word in stream order. */
@@ -295,7 +423,12 @@ static uint32_t gz_crc32(const uint8_t *p, uint32_t len)
         crc = GZ_CRC_BYTE(crc, *p++);
         len--;
     }
-    return crc ^ GZIP_CRC32_FINAL_XOR;
+    return crc;
+}
+
+static uint32_t gz_crc32(const uint8_t *p, uint32_t len)
+{
+    return gz_crc32_ex(GZIP_CRC32_INIT, p, len) ^ GZIP_CRC32_FINAL_XOR;
 }
 
 #endif /* WOLFBOOT_GZIP_SMALL */
@@ -647,6 +780,51 @@ static void gz_copy(uint8_t *op, const uint8_t *src, uint32_t len,
 
 #endif /* WOLFBOOT_GZIP_SMALL */
 
+#ifdef WOLFBOOT_GZIP_SINK
+
+/* Longest single back-reference, so the decoder can stop this far from the
+ * end of the scratch buffer and still emit one whole copy. */
+#define GZIP_SINK_SLACK 258
+
+/* Hand everything older than one window to the sink and slide the rest to
+ * the front, so that op - distance never leaves the scratch buffer. `final`
+ * drains the window too, and is only valid once the stream has ended. */
+static int gz_flush(gz_state_t *s, int final)
+{
+    gz_sink_t *k = s->sk;
+    uint32_t have = (uint32_t)(s->op - s->out);
+    uint32_t keep = final ? 0 : k->window;
+    uint32_t n, i;
+    int ret;
+
+    if (have <= keep) {
+        return 0;
+    }
+    n = have - keep;
+    /* Per flush rather than per byte: a block can only overshoot by the
+     * bounded scratch buffer. */
+    if (n > (k->out_max - k->flushed)) {
+        return WOLFBOOT_GZIP_E_OUTPUT;
+    }
+#ifndef WOLFBOOT_GZIP_SMALL
+    /* The small decoder already folds the CRC in as it writes each byte. */
+    k->crc = gz_crc32_ex(k->crc, s->out, n);
+#endif
+    ret = k->write(k->ctx, k->flushed, s->out, n);
+    if (ret != 0) {
+        return WOLFBOOT_GZIP_E_OUTPUT;
+    }
+    k->flushed += n;
+    /* Moves down, so a forward copy is safe. */
+    for (i = 0; i < keep; i++) {
+        s->out[i] = s->out[n + i];
+    }
+    s->op = s->out + keep;
+    return 0;
+}
+
+#endif /* WOLFBOOT_GZIP_SINK */
+
 /* ------------------------------------------------------------------------- */
 /* Block decoders                                                            */
 /* ------------------------------------------------------------------------- */
@@ -655,6 +833,7 @@ static int gz_inflate_stored(gz_state_t *s)
 {
     uint32_t len, nlen;
     uint32_t crc = 0;
+    uint32_t n, room;
     int ret;
 
     ret = gz_align_byte(s);
@@ -662,7 +841,7 @@ static int gz_inflate_stored(gz_state_t *s)
         return ret;
     }
     /* LEN and NLEN are little-endian 16-bit words */
-    if (s->in_end - s->in < 4) {
+    if (gz_src_need(s, 4) != 0) {
         return WOLFBOOT_GZIP_E_TRUNCATED;
     }
     len  = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8);
@@ -671,18 +850,51 @@ static int gz_inflate_stored(gz_state_t *s)
     if ((len ^ 0xFFFFU) != nlen) {
         return WOLFBOOT_GZIP_E_FORMAT;
     }
-    if ((uint32_t)(s->in_end - s->in) < len) {
+    if (gz_src_left(s) < len) {
         return WOLFBOOT_GZIP_E_TRUNCATED;
     }
+#ifndef WOLFBOOT_GZIP_SINK
     if ((uint32_t)(s->out_end - s->op) < len) {
         return WOLFBOOT_GZIP_E_OUTPUT;
     }
+#endif
 #ifdef WOLFBOOT_GZIP_SMALL
     crc = s->crc32;
 #endif
+    /* A stored block may be up to 65535 bytes, more than the sink's scratch
+     * buffer holds, so it is drained as it is copied. gz_flush() does not
+     * touch the CRC the sink accumulates, so `crc` stays live across it. */
     while (len > 0) {
-        GZ_PUT_V(s->op, crc, *s->in++);
-        len--;
+        room = (uint32_t)(s->out_end - s->op);
+#ifdef WOLFBOOT_GZIP_SINK
+        if ((room == 0) && (s->sk != NULL)) {
+            ret = gz_flush(s, 0);
+            if (ret != 0) {
+                return ret;
+            }
+            room = (uint32_t)(s->out_end - s->op);
+        }
+#endif
+        if (room == 0) {
+            return WOLFBOOT_GZIP_E_OUTPUT;
+        }
+        n = (len < room) ? len : room;
+#ifdef WOLFBOOT_GZIP_SINK
+        /* Bounded by what is buffered too, since the source arrives a piece
+         * at a time. */
+        if ((s->in >= s->in_end) &&
+                (gz_src_more(s, &s->in, &s->in_end) != 0)) {
+            return WOLFBOOT_GZIP_E_TRUNCATED;
+        }
+        if (n > (uint32_t)(s->in_end - s->in)) {
+            n = (uint32_t)(s->in_end - s->in);
+        }
+#endif
+        len -= n;
+        while (n > 0) {
+            GZ_PUT_V(s->op, crc, *s->in++);
+            n--;
+        }
     }
 #ifdef WOLFBOOT_GZIP_SMALL
     s->crc32 = crc;
@@ -707,12 +919,26 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
     uint32_t length, distance, extra;
     int sym;
     int ret = 0;
+#ifdef WOLFBOOT_GZIP_SINK
+    /* out_end on the flat path, where the test never fires. */
+    uint8_t *flush_mark = (s->sk != NULL) ? (out_end - GZIP_SINK_SLACK)
+                                          : out_end;
+    uint32_t win = (s->sk != NULL) ? s->sk->window : 0;
+#endif
 
 #ifdef WOLFBOOT_GZIP_SMALL
     crc = s->crc32;
 #endif
     for (;;) {
-        GZ_REFILL_V(buf, nbits, over, in, in_end);
+#ifdef WOLFBOOT_GZIP_SINK
+        /* Leave between symbols so the caller can drain with the reader on
+         * a symbol boundary and the trees still valid. */
+        if (op > flush_mark) {
+            ret = GZ_NEED_FLUSH;
+            break;
+        }
+#endif
+        GZ_REFILL_V(s, buf, nbits, over, in, in_end);
         if (GZ_OVERRUN_V(nbits, over)) {
             ret = WOLFBOOT_GZIP_E_TRUNCATED;
             break;
@@ -743,7 +969,7 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
         length = gz_len_base[sym] + GZ_PEEK_V(buf, extra);
         GZ_DROP_V(buf, nbits, extra);
 
-        GZ_REFILL_V(buf, nbits, over, in, in_end);
+        GZ_REFILL_V(s, buf, nbits, over, in, in_end);
         GZ_DECODE_V(dist, sym, buf, nbits);
         if (sym < 0) {
             ret = sym;
@@ -754,7 +980,7 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
             break;
         }
         extra = gz_dist_extra[sym];
-        GZ_REFILL_V(buf, nbits, over, in, in_end);
+        GZ_REFILL_V(s, buf, nbits, over, in, in_end);
         distance = gz_dist_base[sym] + GZ_PEEK_V(buf, extra);
         GZ_DROP_V(buf, nbits, extra);
         if (GZ_OVERRUN_V(nbits, over)) {
@@ -766,6 +992,14 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
             ret = WOLFBOOT_GZIP_E_DISTANCE;
             break;
         }
+#ifdef WOLFBOOT_GZIP_SINK
+        /* The scratch buffer holds more than one window, so enforce the
+         * declared window rather than what happens to be resident. */
+        if ((win != 0) && (distance > win)) {
+            ret = WOLFBOOT_GZIP_E_DISTANCE;
+            break;
+        }
+#endif
         if (length > (uint32_t)(out_end - op)) {
             ret = WOLFBOOT_GZIP_E_OUTPUT;
             break;
@@ -773,6 +1007,8 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
         GZ_COPY_V(op, crc, op - distance, length, distance);
     }
     s->in = in;
+    /* A refill slides the input buffer, so the end moves with the cursor. */
+    s->in_end = in_end;
     s->buf = buf;
     s->nbits = nbits;
     s->over = over;
@@ -782,6 +1018,30 @@ static int gz_inflate_huffman(gz_state_t *s, const gz_huff_t *litlen,
 #endif
     return ret;
 }
+
+#ifdef WOLFBOOT_GZIP_SINK
+/* Drain and re-enter until the block ends; the decoder stops between
+ * symbols, so the same trees continue the same block. */
+static int gz_run_huffman(gz_state_t *s, const gz_huff_t *litlen,
+    const gz_huff_t *dist)
+{
+    int ret;
+
+    for (;;) {
+        ret = gz_inflate_huffman(s, litlen, dist);
+        if (ret != GZ_NEED_FLUSH) {
+            return ret;
+        }
+        ret = gz_flush(s, 0);
+        if (ret != 0) {
+            return ret;
+        }
+    }
+}
+#else
+#define gz_run_huffman(s, litlen, dist) \
+    gz_inflate_huffman((s), (litlen), (dist))
+#endif
 
 /* Build the fixed Huffman trees defined in RFC 1951 Sec. 3.2.6 */
 static int gz_build_fixed(gz_huff_t *litlen, gz_huff_t *dist)
@@ -907,7 +1167,7 @@ static int gz_inflate_dynamic(gz_state_t *s, gz_huff_t *litlen,
         ret = gz_huff_build(dist, code_lens + hlit, (int)hdist);
     }
     if (ret == 0) {
-        ret = gz_inflate_huffman(s, litlen, dist);
+        ret = gz_run_huffman(s, litlen, dist);
     }
     return ret;
 }
@@ -949,7 +1209,7 @@ static int gz_inflate(gz_state_t *s)
                 fixed_built = 1;
             }
             if (ret == 0) {
-                ret = gz_inflate_huffman(s, &litlen, &dist);
+                ret = gz_run_huffman(s, &litlen, &dist);
             }
         }
         else if (btype == 2) {
@@ -969,7 +1229,7 @@ static int gz_inflate(gz_state_t *s)
 
 static int gz_skip_zstring(gz_state_t *s)
 {
-    while (s->in < s->in_end) {
+    while (gz_src_need(s, 1) == 0) {
         if (*s->in++ == 0) {
             return 0;
         }
@@ -982,7 +1242,7 @@ static int gz_parse_header(gz_state_t *s)
     uint8_t flg;
     uint32_t xlen;
 
-    if (s->in_end - s->in < GZIP_HEADER_MIN_SIZE) {
+    if (gz_src_need(s, GZIP_HEADER_MIN_SIZE) != 0) {
         return WOLFBOOT_GZIP_E_TRUNCATED;
     }
     /* Magic 1F 8B, CM = 8 (DEFLATE) */
@@ -998,15 +1258,26 @@ static int gz_parse_header(gz_state_t *s)
     s->in += GZIP_HEADER_MIN_SIZE;
 
     if (flg & GZIP_FLG_FEXTRA) {
-        if (s->in_end - s->in < 2) {
+        if (gz_src_need(s, 2) != 0) {
             return WOLFBOOT_GZIP_E_TRUNCATED;
         }
         xlen = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8);
         s->in += 2;
-        if ((uint32_t)(s->in_end - s->in) < xlen) {
-            return WOLFBOOT_GZIP_E_TRUNCATED;
+        /* xlen is a 16-bit field and can exceed the input buffer, so step
+         * over it rather than moving the cursor past the end. */
+        while (xlen > 0) {
+            uint32_t skip;
+
+            if (gz_src_need(s, 1) != 0) {
+                return WOLFBOOT_GZIP_E_TRUNCATED;
+            }
+            skip = (uint32_t)(s->in_end - s->in);
+            if (skip > xlen) {
+                skip = xlen;
+            }
+            s->in += skip;
+            xlen -= skip;
         }
-        s->in += xlen;
     }
     if ((flg & GZIP_FLG_FNAME) && (gz_skip_zstring(s) != 0)) {
         return WOLFBOOT_GZIP_E_TRUNCATED;
@@ -1015,7 +1286,7 @@ static int gz_parse_header(gz_state_t *s)
         return WOLFBOOT_GZIP_E_TRUNCATED;
     }
     if (flg & GZIP_FLG_FHCRC) {
-        if (s->in_end - s->in < 2) {
+        if (gz_src_need(s, 2) != 0) {
             return WOLFBOOT_GZIP_E_TRUNCATED;
         }
         s->in += 2; /* header CRC; not validated */
@@ -1034,7 +1305,7 @@ static int gz_parse_trailer(gz_state_t *s, uint32_t computed_crc,
     if (ret != 0) {
         return ret;
     }
-    if (s->in_end - s->in < GZIP_TRAILER_SIZE) {
+    if (gz_src_need(s, GZIP_TRAILER_SIZE) != 0) {
         return WOLFBOOT_GZIP_E_TRUNCATED;
     }
     got_crc = (uint32_t)s->in[0] | ((uint32_t)s->in[1] << 8) |
@@ -1074,6 +1345,10 @@ int wolfBoot_gunzip(const uint8_t *in, uint32_t in_len,
     s.out = out;
     s.out_end = out + out_max;
     s.op = out;
+#ifdef WOLFBOOT_GZIP_SINK
+    s.sk = NULL;
+    s.src = NULL;
+#endif
 #ifdef WOLFBOOT_GZIP_SMALL
     s.crc32 = GZIP_CRC32_INIT;
 #endif
@@ -1096,5 +1371,87 @@ int wolfBoot_gunzip(const uint8_t *in, uint32_t in_len,
     *out_len = produced;
     return ret;
 }
+
+#ifdef WOLFBOOT_GZIP_SINK
+
+int wolfBoot_gunzip_sink(const uint8_t *in, uint32_t in_len,
+                         wolfBoot_gzip_read_cb read_cb, void *read_ctx,
+                         uint8_t *scratch, uint32_t window_bits,
+                         wolfBoot_gzip_write_cb write_cb, void *ctx,
+                         uint32_t out_max, uint32_t *out_len)
+{
+    gz_state_t s;
+    gz_sink_t k;
+    gz_src_t src;
+    uint32_t crc;
+    int ret;
+
+    /* Exactly one of the two input forms. */
+    if (((in == NULL) == (read_cb == NULL)) || (scratch == NULL) ||
+            (write_cb == NULL) || (out_len == NULL)) {
+        return WOLFBOOT_GZIP_E_PARAM;
+    }
+    if ((window_bits < GZIP_SINK_WINDOW_MIN_BITS) ||
+            (window_bits > GZIP_SINK_WINDOW_MAX_BITS)) {
+        return WOLFBOOT_GZIP_E_PARAM;
+    }
+    *out_len = 0;
+
+    k.write = write_cb;
+    k.ctx = ctx;
+    k.window = 1U << window_bits;
+    k.out_max = out_max;
+    k.flushed = 0;
+    k.crc = GZIP_CRC32_INIT;
+
+    if (read_cb != NULL) {
+        src.read = read_cb;
+        src.ctx = read_ctx;
+        src.total = in_len;
+        src.pos = 0;
+        src.have = 0;
+        /* Empty, so the first read pulls a buffer in. */
+        s.in = src.buf;
+        s.in_end = src.buf;
+        s.src = &src;
+    }
+    else {
+        s.in = in;
+        s.in_end = in + in_len;
+        s.src = NULL;
+    }
+    s.buf = 0;
+    s.nbits = 0;
+    s.over = 0;
+    s.out = scratch;
+    s.out_end = scratch + (k.window * 2U);
+    s.op = scratch;
+    s.sk = &k;
+#ifdef WOLFBOOT_GZIP_SMALL
+    s.crc32 = GZIP_CRC32_INIT;
+#else
+    gz_crc_init();
+#endif
+
+    ret = gz_parse_header(&s);
+    if (ret == 0) {
+        ret = gz_inflate(&s);
+    }
+    if (ret == 0) {
+        ret = gz_flush(&s, 1);
+    }
+    if (ret == 0) {
+#ifdef WOLFBOOT_GZIP_SMALL
+        crc = s.crc32 ^ GZIP_CRC32_FINAL_XOR;
+#else
+        crc = k.crc ^ GZIP_CRC32_FINAL_XOR;
+#endif
+        ret = gz_parse_trailer(&s, crc, k.flushed);
+    }
+    *out_len = k.flushed;
+    return ret;
+}
+
+#endif /* WOLFBOOT_GZIP_SINK */
 
 #endif /* WOLFBOOT_GZIP */

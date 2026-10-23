@@ -48,6 +48,14 @@
 #define CLOCK_SPEED (168000000)
 #endif
 
+#ifndef BAUD_RATE
+#define BAUD_RATE (115200)
+#endif
+
+/* APB == SYSCLK here: clock_pll_on() writes the 4-bit AHB encoding into the
+ * 3-bit PPRE fields, so both decode as /1 (RCC_CFGR 0x0001200A on F439ZI). */
+#define UART_PCLK (CLOCK_SPEED)
+
 /* Common GPIO Config */
 #define GPIO_MODE_AF (2)
 
@@ -166,8 +174,8 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
     /* Configure for TX + RX */
     UART_CR1 |= (UART_CR1_TX_ENABLE | UART_CR1_RX_ENABLE);
 
-    /* Configure clock */
-    UART_BRR =  CLOCK_SPEED / bitrate;
+    /* BRR is the 16x-oversampled divisor: a rounded PCLK/baud. */
+    UART_BRR = (UART_PCLK + (bitrate / 2)) / bitrate;
 
     /* Configure data bits */
     if (data == 8)
@@ -202,6 +210,18 @@ int uart_init(uint32_t bitrate, uint8_t data, char parity, uint8_t stop)
 #ifdef DEBUG_UART
 void uart_write(const char *buf, unsigned int len)
 {
+    /* Nothing calls the initializer above on the console path, so the first
+     * print used to hang. Skipped under UART_FLASH: loader.c inits it. */
+#ifndef UART_FLASH
+    static int uart_ready = 0;
+
+    if (!uart_ready) {
+        if (uart_init(BAUD_RATE, 8, 'N', 1) != 0) {
+            return;
+        }
+        uart_ready = 1;
+    }
+#endif
     while (len--) {
         uart_tx(*buf);
         buf++;

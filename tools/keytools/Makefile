@@ -27,6 +27,16 @@ LDFLAGS =
 OBJDIR = ./
 LIBS =
 
+# zlib supplies the DEFLATE encoder for 'sign --compress'; the decoder on the
+# device side is wolfBoot's own src/gzip.c. Optional, because most builds of
+# this tool never compress: without the headers the tool still builds and
+# only that one option is unavailable.
+HAVE_ZLIB := $(shell $(CC) -E -include zlib.h -x c /dev/null >/dev/null 2>&1 && echo 1)
+ifeq ($(HAVE_ZLIB),1)
+  CFLAGS  += -DHAVE_ZLIB
+  LDFLAGS += -lz
+endif
+
 ifeq ($(WOLFSSL_LIB),1)
   CFLAGS  += -DWOLFSSL_USE_OPTIONS_H
   ifeq ($(WOLFSSL_INCDIR),)

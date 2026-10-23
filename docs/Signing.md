@@ -212,6 +212,19 @@ For complete documentation of the self-header feature — including
 configuration, update flow, and runtime verification — see
 [firmware_update.md](firmware_update.md#self-header-persisting-the-bootloader-manifest).
 
+#### Compressed images
+
+An image for a compressed update partition is produced with:
+
+  * `--compress[=<bits>]` sign the image, compress it, and sign the container. The payload is a
+    complete signed image, so the boot partition it is installed into stays an ordinary wolfBoot
+    partition. `<bits>` selects the LZ77 window as a power of two, 12 to 15, and defaults to the
+    window the bootloader was configured with. Needs the tool built against zlib.
+
+The output is named `<image>_v<N>_signed_compressed.bin`. This requires the bootloader to be built
+with `COMPRESSED_UPDATE=1`, and cannot be combined with `--delta` or with a wolfBoot self-update.
+See [Compression.md](Compression.md).
+
 #### Encryption using a symmetric key
 
 Although signed to be authenticated, by default the image is not encrypted and

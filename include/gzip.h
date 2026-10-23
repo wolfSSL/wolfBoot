@@ -72,4 +72,51 @@ int wolfBoot_gunzip(const uint8_t *in, uint32_t in_len,
                     uint8_t *out, uint32_t out_max,
                     uint32_t *out_len);
 
+#ifdef WOLFBOOT_GZIP_SINK
+
+/* Window the stream was compressed with, as a power of two. RFC 1951 caps
+ * it at 32KB; below 4KB the ratio costs more than the RAM it saves. */
+#define GZIP_SINK_WINDOW_MIN_BITS 12
+#define GZIP_SINK_WINDOW_MAX_BITS 15
+
+/* Scratch wolfBoot_gunzip_sink() needs for a given window: twice the window,
+ * so a back-reference is always resident in a flat buffer. */
+#define GZIP_SINK_BUF_SIZE(bits)  (2U << (bits))
+
+/* Called with each run of decompressed bytes, in order and exactly once.
+ * `off` is the offset within the decompressed stream. Returns 0 on success;
+ * anything else aborts the inflate. */
+typedef int (*wolfBoot_gzip_write_cb)(void *ctx, uint32_t off,
+                                      const uint8_t *buf, uint32_t len);
+
+/* Called to fetch a run of the compressed stream, which the decoder reads
+ * in order but a piece at a time. `off` is the offset within the stream.
+ * Returns 0 on success; anything else aborts the inflate. Lets the stream
+ * live somewhere that cannot be addressed directly, or be transformed on
+ * the way in. */
+typedef int (*wolfBoot_gzip_read_cb)(void *ctx, uint32_t off,
+                                     uint8_t *buf, uint32_t len);
+
+/* Decompress a gzip stream to a sink rather than to a buffer, so the output
+ * need not be addressable and only GZIP_SINK_BUF_SIZE(window_bits) of RAM is
+ * used regardless of how large the stream decompresses to.
+ *
+ * The stream is read in place from `in`, or pulled in through `read_cb` when
+ * it is not addressable; pass exactly one of the two, and with `read_cb`,
+ * `in_len` is the length of the whole compressed stream.
+ *
+ * The stream must have been compressed with a window no larger than
+ * 1 << window_bits; a back-reference beyond it is rejected with
+ * WOLFBOOT_GZIP_E_DISTANCE rather than silently accepted.
+ *
+ * Returns 0 on success, negative WOLFBOOT_GZIP_E_* on error.
+ */
+int wolfBoot_gunzip_sink(const uint8_t *in, uint32_t in_len,
+                         wolfBoot_gzip_read_cb read_cb, void *read_ctx,
+                         uint8_t *scratch, uint32_t window_bits,
+                         wolfBoot_gzip_write_cb write_cb, void *ctx,
+                         uint32_t out_max, uint32_t *out_len);
+
+#endif /* WOLFBOOT_GZIP_SINK */
+
 #endif /* WOLFBOOT_GZIP_H */

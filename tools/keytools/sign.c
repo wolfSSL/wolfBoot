@@ -43,6 +43,9 @@
 #include <stddef.h>
 #include <inttypes.h>
 #include <delta.h>
+#ifdef HAVE_ZLIB
+#include <zlib.h>
+#endif
 
 #include "wolfboot/version.h"
 
@@ -187,6 +190,11 @@ static inline int fp_truncate(FILE *f, size_t len)
 #define HDR_IMG_DELTA_BASE_HASH 0x07
 #define HDR_IMG_DELTA_INVERSE 0x15
 #define HDR_IMG_DELTA_INVERSE_SIZE 0x16
+
+#define HDR_IMG_COMPRESSION         0x08
+#define HDR_IMG_UNCOMPRESSED_SIZE   0x09
+#define HDR_IMG_COMP_WINDOW         0x0A
+#define HDR_COMP_GZIP               0x0001
 
 #define HDR_IMG_TYPE_AUTH_MASK    0xFF00
 #define HDR_IMG_TYPE_AUTH_NONE    0xFF00
@@ -414,6 +422,17 @@ struct cmd_options {
     uint32_t policy_sz;
     uint8_t partition_id;
     uint32_t custom_tlvs;
+    uint32_t uncompressed_sz;
+    uint32_t compressed_sz;
+    /* LZ77 window as a power of two. A gzip header has no field for it and
+     * the bootloader sizes its buffer from it, so it is signed into the
+     * manifest. */
+    uint32_t comp_window_bits;
+    /* --compress: sign the image, compress the result, and sign that. The
+     * payload has to be a complete signed image so the boot partition it is
+     * installed into stays an ordinary wolfBoot partition. Cleared while the
+     * inner image is signed, so only the container carries the tags. */
+    int compress;
     struct cmd_tlv {
         uint16_t tag;
         uint16_t len;
@@ -1514,6 +1533,104 @@ static int dts_hash_file(const char *file, int hash_algo, uint8_t *out,
  * against header_required_size() without the auto-grow exit(1) path. */
 static uint32_t test_last_header_idx;
 
+#ifdef HAVE_ZLIB
+/* Compress to a gzip stream with an explicit LZ77 window. gzip(1) always
+ * uses 32KB; the bootloader sizes its decode buffer from the window, so a
+ * smaller one is the RAM-for-ratio trade an integrator may want to make. */
+static int gzip_compress_file(const char *in_path, const char *out_path,
+    uint32_t window_bits, uint32_t *isize, uint32_t *csize)
+{
+    FILE *fin = NULL, *fout = NULL;
+    z_stream zs;
+    uint8_t inbuf[16384], outbuf[16384];
+    uint32_t total_in = 0, total_out = 0;
+    size_t n, have;
+    int ret = -1, zret, flush = Z_NO_FLUSH;
+
+    fin = fopen(in_path, "rb");
+    if (fin == NULL) {
+        fprintf(stderr, "Cannot open %s: %s\n", in_path, strerror(errno));
+        return -1;
+    }
+    fout = fopen(out_path, "wb");
+    if (fout == NULL) {
+        fprintf(stderr, "Cannot create %s: %s\n", out_path, strerror(errno));
+        fclose(fin);
+        return -1;
+    }
+    memset(&zs, 0, sizeof(zs));
+    /* 16 + bits selects the RFC 1952 gzip wrapper over raw DEFLATE. */
+    if (deflateInit2(&zs, 9, Z_DEFLATED, 16 + (int)window_bits, 8,
+            Z_DEFAULT_STRATEGY) != Z_OK) {
+        fprintf(stderr, "deflateInit2 failed\n");
+        fclose(fin);
+        fclose(fout);
+        return -1;
+    }
+    do {
+        n = fread(inbuf, 1, sizeof(inbuf), fin);
+        if (ferror(fin)) {
+            fprintf(stderr, "Read error on %s\n", in_path);
+            goto exit_compress;
+        }
+        total_in += (uint32_t)n;
+        flush = feof(fin) ? Z_FINISH : Z_NO_FLUSH;
+        zs.next_in = inbuf;
+        zs.avail_in = (uInt)n;
+        do {
+            zs.next_out = outbuf;
+            zs.avail_out = (uInt)sizeof(outbuf);
+            zret = deflate(&zs, flush);
+            if (zret == Z_STREAM_ERROR) {
+                fprintf(stderr, "deflate failed\n");
+                goto exit_compress;
+            }
+            have = sizeof(outbuf) - zs.avail_out;
+            if (fwrite(outbuf, 1, have, fout) != have) {
+                fprintf(stderr, "Write error on %s\n", out_path);
+                goto exit_compress;
+            }
+            total_out += (uint32_t)have;
+        } while (zs.avail_out == 0);
+    } while (flush != Z_FINISH);
+
+    *isize = total_in;
+    *csize = total_out;
+    ret = 0;
+
+exit_compress:
+    deflateEnd(&zs);
+    fclose(fin);
+    fclose(fout);
+    if (ret != 0) {
+        unlink(out_path);
+    }
+    return ret;
+}
+#endif /* HAVE_ZLIB */
+
+/* WOLFBOOT_COMPRESSED_WINDOW as the build sets it, as a power of two.
+ * Falls back to 16KB, which is the bootloader's own default. */
+static uint32_t compress_window_bits_from_env(void)
+{
+    const char *env = getenv("WOLFBOOT_COMPRESSED_WINDOW");
+    unsigned long win;
+    uint32_t bits;
+
+    if ((env == NULL) || (*env == '\0')) {
+        return 14;
+    }
+    win = strtoul(env, NULL, 0);
+    for (bits = 12; bits <= 15; bits++) {
+        if (win == (1UL << bits)) {
+            return bits;
+        }
+    }
+    fprintf(stderr, "WOLFBOOT_COMPRESSED_WINDOW=%s is not 4096, 8192, "
+            "16384 or 32768\n", env);
+    exit(16);
+}
+
 static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
     uint32_t secondary_key_sz)
 {
@@ -1543,6 +1660,15 @@ static uint32_t header_required_size(int is_diff, uint32_t cert_chain_sz,
             header_size_align_8(&idx);
             header_size_append_tag(&idx, digest_sz);
         }
+    }
+
+    if (CMD.compress) {
+        header_size_align_4(&idx);
+        header_size_append_tag(&idx, 2);
+        header_size_align_4(&idx);
+        header_size_append_tag(&idx, 4);
+        header_size_align_4(&idx);
+        header_size_append_tag(&idx, 2);
     }
 
     for (i = 0; i < CMD.custom_tlvs; i++) {
@@ -1789,6 +1915,19 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                         HDR_SHA3_384_LEN, base_hash);
             }
         }
+    }
+
+    if (CMD.compress) {
+        /* Append pad bytes, so fields are 4-byte aligned */
+        ALIGN_4(header_idx);
+        header_append_tag_u16(header, &header_idx, HDR_IMG_COMPRESSION,
+            HDR_COMP_GZIP);
+        ALIGN_4(header_idx);
+        header_append_tag_u32(header, &header_idx, HDR_IMG_UNCOMPRESSED_SIZE,
+            CMD.uncompressed_sz);
+        ALIGN_4(header_idx);
+        header_append_tag_u16(header, &header_idx, HDR_IMG_COMP_WINDOW,
+            (uint16_t)CMD.comp_window_bits);
     }
 
     /* Add custom TLVs */
@@ -2371,9 +2510,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
         const char *psize_name = "WOLFBOOT_PARTITION_SIZE";
         const char *env_psize = getenv("WOLFBOOT_PARTITION_SIZE");
         const char *env_ssize = getenv("WOLFBOOT_SECTOR_SIZE");
-        if (CMD.self_update) {
-            /* self-update images are staged in the UPDATE partition, which
-             * may be larger than BOOT (monolithic self-update) */
+        if (CMD.self_update || CMD.compress) {
+            /* Staged in the UPDATE partition, which is sized independently:
+             * larger than BOOT for a monolithic self-update, smaller than it
+             * for a compressed update, where it only holds the container. */
             const char *env_usize = getenv("WOLFBOOT_PARTITION_UPDATE_SIZE");
             if (env_usize && *env_usize) {
                 env_psize = env_usize;
@@ -3660,6 +3800,29 @@ int main(int argc, char** argv)
             }
             CMD.delta = 1;
             CMD.delta_base_file = argv[++i];
+        } else if (strncmp(argv[i], "--compress", 10) == 0) {
+#ifndef HAVE_ZLIB
+            fprintf(stderr, "--compress needs this tool built against zlib; "
+                    "install the zlib development headers and rebuild\n");
+            exit(16);
+#endif
+            CMD.compress = 1;
+            /* Default to whatever the bootloader was configured for, so the
+             * two cannot disagree and have the image refused on its window
+             * tag. An explicit =<bits> overrides it. */
+            CMD.comp_window_bits = compress_window_bits_from_env();
+            if (argv[i][10] == '=') {
+                CMD.comp_window_bits = (uint32_t)strtoul(&argv[i][11], NULL, 0);
+            }
+            else if (argv[i][10] != '\0') {
+                fprintf(stderr, "Unknown option %s\n", argv[i]);
+                exit(16);
+            }
+            if ((CMD.comp_window_bits < 12) || (CMD.comp_window_bits > 15)) {
+                fprintf(stderr, "--compress window bits must be 12..15 "
+                        "(4KB..32KB)\n");
+                exit(16);
+            }
         } else if (strcmp(argv[i], "--no-base-sha") == 0) {
             CMD.no_base_sha = 1;
         }
@@ -4000,6 +4163,33 @@ int main(int argc, char** argv)
         exit(16);
     }
 
+    if (CMD.compress && CMD.delta) {
+        fprintf(stderr, "Error: --compress excludes --delta\n");
+        exit(16);
+    }
+    if (CMD.compress && CMD.self_update) {
+        fprintf(stderr, "Error: --compress cannot be used for a wolfBoot "
+                        "self-update: wolfBoot cannot inflate itself\n");
+        exit(16);
+    }
+    /* The output dispatch tests these first, so the container would never be
+     * built; refuse rather than emit a plain image under a compressed name. */
+    if (CMD.compress && CMD.hybrid) {
+        fprintf(stderr, "Error: --compress excludes a hybrid signature\n");
+        exit(16);
+    }
+    if (CMD.compress && CMD.sha_only) {
+        fprintf(stderr, "Error: --compress excludes --sha-only\n");
+        exit(16);
+    }
+    /* The container is built from the signed image, so there is nothing to
+     * describe until that has happened. */
+    if (CMD.compress && CMD.header_only) {
+        fprintf(stderr, "Error: --compress cannot be combined with "
+                        "--header-only\n");
+        exit(16);
+    }
+
     memset(buf, 0, sizeof(buf));
     strncpy((char*)buf, CMD.image_file, sizeof(buf)-1);
     tmpstr = strrchr((char*)buf, '.');
@@ -4008,14 +4198,16 @@ int main(int argc, char** argv)
     }
     {
         const char* artifact =
-            CMD.header_only ? "header" : (CMD.sha_only ? "digest" : "signed");
+            CMD.header_only ? "header" : (CMD.sha_only ? "digest" :
+                (CMD.compress ? "signed_compressed" : "signed"));
         snprintf(CMD.output_image_file, sizeof(CMD.output_image_file) - 1,
                  "%s_v%s_%s.bin", (char*)buf, CMD.fw_version, artifact);
     }
 
     snprintf(CMD.output_encrypted_image_file,
             sizeof(CMD.output_encrypted_image_file),
-            "%s_v%s_signed_and_encrypted.bin",
+            CMD.compress ? "%s_v%s_signed_compressed_and_encrypted.bin" :
+                             "%s_v%s_signed_and_encrypted.bin",
             (char*)buf, CMD.fw_version);
 
     printf("Update type:          %s\n",
@@ -4034,6 +4226,10 @@ int main(int argc, char** argv)
                 break;
     }
     printf("Input image:          %s\n", CMD.image_file);
+    if (CMD.compress) {
+        printf("Compression:          gzip, 2^%u window\n",
+                (unsigned)CMD.comp_window_bits);
+    }
     printf("Selected cipher:      %s\n", sign_str);
     printf("Selected hash  :      %s\n", hash_str);
     if (CMD.sign != NO_SIGN) {
@@ -4141,6 +4337,48 @@ int main(int argc, char** argv)
             zero_and_free(kbuf2, key_buffer_sz2);
         if (pubkey2)
             free(pubkey2);
+#ifdef HAVE_ZLIB
+    } else if (CMD.compress) {
+        /* Two signatures: the inner one travels into the boot partition and
+         * is what the normal boot path verifies there, the outer one covers
+         * the compressed bytes so a corrupt payload is caught before the
+         * boot partition is touched. */
+        char inner_path[512];
+        char gz_path[512];
+        int saved_encrypt = CMD.encrypt;
+
+        if ((snprintf(inner_path, sizeof(inner_path), "%s.inner",
+                 CMD.output_image_file) >= (int)sizeof(inner_path)) ||
+            (snprintf(gz_path, sizeof(gz_path), "%s.gz",
+                 CMD.output_image_file) >= (int)sizeof(gz_path))) {
+            fprintf(stderr, "Output path too long\n");
+            ret = 1;
+            goto cleanup;
+        }
+        /* Only the container is encrypted; the inner image is plaintext
+         * once installed, because it is executed in place. */
+        CMD.encrypt = ENC_OFF;
+        CMD.compress = 0;
+        ret = make_header(pubkey, pubkey_sz, CMD.image_file, inner_path);
+        CMD.encrypt = saved_encrypt;
+        CMD.compress = 1;
+        if (ret == 0) {
+            ret = gzip_compress_file(inner_path, gz_path,
+                    CMD.comp_window_bits, &CMD.uncompressed_sz,
+                    &CMD.compressed_sz);
+        }
+        if (ret == 0) {
+            printf("Compressed:           %u -> %u bytes (%u%%)\n",
+                    (unsigned)CMD.uncompressed_sz,
+                    (unsigned)CMD.compressed_sz,
+                    (unsigned)((CMD.compressed_sz * 100U) /
+                        (CMD.uncompressed_sz ? CMD.uncompressed_sz : 1U)));
+            ret = make_header(pubkey, pubkey_sz, gz_path,
+                    CMD.output_image_file);
+        }
+        unlink(inner_path);
+        unlink(gz_path);
+#endif /* HAVE_ZLIB */
     } else {
         ret = make_header(pubkey, pubkey_sz, CMD.image_file,
                 CMD.output_image_file);

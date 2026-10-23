@@ -851,7 +851,7 @@ START_TEST(test_header_required_size_covers_all_branches)
     static const int sign_opts[] = { NO_SIGN, SIGN_ED25519, SIGN_ECC256,
         SIGN_RSA2048 };
     static const int hash_opts[] = { HASH_SHA256, HASH_SHA384, HASH_SHA3 };
-    int s, h, policy, no_ts, is_diff, has_dts;
+    int s, h, policy, no_ts, is_diff, has_dts, compress;
 
     ck_assert_ptr_nonnull(mkdtemp(tempdir));
 
@@ -881,6 +881,7 @@ START_TEST(test_header_required_size_covers_all_branches)
                 for (no_ts = 0; no_ts <= 1; no_ts++) {
                     for (is_diff = 0; is_diff <= 1; is_diff++) {
                         for (has_dts = 0; has_dts <= 1; has_dts++) {
+                        for (compress = 0; compress <= 1; compress++) {
                             uint32_t required;
                             uint32_t idx;
                             int ret;
@@ -913,6 +914,12 @@ START_TEST(test_header_required_size_covers_all_branches)
                             if (is_diff) {
                                 CMD.no_base_sha = 1;
                             }
+                            /* Any size will do; the writer only emits
+                             * the tag. */
+                            if (compress && !is_diff) {
+                                CMD.compress = 1;
+                                CMD.uncompressed_sz = 0x1234;
+                            }
 
                             /* Model first, on the clean CMD we just set. */
                             required = header_required_size(is_diff, 0, 0);
@@ -924,6 +931,7 @@ START_TEST(test_header_required_size_covers_all_branches)
                             idx = test_last_header_idx;
                             ck_assert_uint_le(idx, required);
                             unlink(output_path);
+                        }
                         }
                     }
                 }

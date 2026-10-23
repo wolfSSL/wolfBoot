@@ -199,6 +199,80 @@ test-sim-internal-flash-with-update: wolfboot.bin test-app/image.elf FORCE
 		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) test-app/image_v$(TEST_UPDATE_VERSION)_signed.bin \
 		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
 
+test-sim-compressed-update-ext-enc-with-update: wolfboot.bin test-app/image.elf FORCE
+	# The container is encrypted at rest on the external device. ENCRYPT=1
+	# hooks the external flash read, so the installer and the image hasher
+	# both see plaintext without knowing anything about it. The key is
+	# provisioned by the application, through 'wolfboot.elf update_trigger'.
+	@printf "0123456789abcdef0123456789abcdef0123456789abcdef" > /tmp/enc_key.der
+	$(Q)cp test-app/image.elf test-app/image.bak.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=48 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf \
+		$(PRIVATE_KEY) 1
+	$(Q)cp test-app/image.bak.elf test-app/image.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=48 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --compress \
+		--encrypt /tmp/enc_key.der --aes128 \
+		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
+	$(Q)dd if=test-app/image_v1_signed.bin of=v1_part.dd conv=notrunc
+	$(Q)$(BINASSEMBLE) internal_flash.dd 0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
+	# No trailer written here: update_trigger arms it and stores the key.
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_UPDATE_SIZE))) count=1 2>/dev/null $(INVERSION) > update_part.dd
+	$(Q)dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed_compressed_and_encrypted.bin of=update_part.dd conv=notrunc
+	$(Q)$(BINASSEMBLE) external_flash.dd \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS))) update_part.dd
+
+test-sim-compressed-update-ext-with-update: wolfboot.bin test-app/image.elf FORCE
+	# The container lives on external flash and is never addressable, so
+	# wolfBoot pulls it in through the external flash reader as it inflates.
+	# BOOT stays in internal flash and keeps executing in place.
+	$(Q)cp test-app/image.elf test-app/image.bak.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=96 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf \
+		$(PRIVATE_KEY) 1
+	$(Q)cp test-app/image.bak.elf test-app/image.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=96 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --compress \
+		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_SIZE))) count=1 2>/dev/null $(INVERSION) > v1_part.dd
+	$(Q)dd if=test-app/image_v1_signed.bin of=v1_part.dd conv=notrunc
+	$(Q)$(BINASSEMBLE) internal_flash.dd 0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) v1_part.dd
+	# Arm the update: pBOOT at the end of the external update partition.
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_UPDATE_SIZE))) count=1 2>/dev/null $(INVERSION) > update_part.dd
+	$(Q)dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed_compressed.bin of=update_part.dd conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_UPDATE_SIZE) - 5)) conv=notrunc
+	$(Q)$(BINASSEMBLE) external_flash.dd \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS))) update_part.dd
+
+test-sim-compressed-update-with-update: wolfboot.bin test-app/image.elf FORCE
+	# BOOT holds an ordinary signed image; UPDATE holds the compressed
+	# container, which the installer inflates into BOOT. The container's
+	# payload is itself a signed image, so BOOT stays an ordinary partition.
+	$(Q)cp test-app/image.elf test-app/image.bak.elf
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=16 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) test-app/image.elf \
+		$(PRIVATE_KEY) 1
+	$(Q)cp test-app/image.bak.elf test-app/image.elf
+	# Enough incompressible padding that the container lands near the ratio
+	# real firmware achieves, so the fit against the update partition is
+	# tested with a realistic margin instead of a flattering one.
+	$(Q)dd if=/dev/urandom of=test-app/image.elf bs=1k count=96 oflag=append conv=notrunc
+	$(Q)$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) --compress \
+		test-app/image.elf $(PRIVATE_KEY) $(TEST_UPDATE_VERSION)
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_SECTOR_SIZE))) count=1 2>/dev/null $(INVERSION) > erased_sec.dd
+	# Arm the update: pBOOT at the end of the (smaller) update partition.
+	$(Q)dd if=/dev/zero bs=$$(($(WOLFBOOT_PARTITION_UPDATE_SIZE))) count=1 2>/dev/null $(INVERSION) > update_part.dd
+	$(Q)dd if=test-app/image_v$(TEST_UPDATE_VERSION)_signed_compressed.bin of=update_part.dd conv=notrunc
+	$(Q)printf "pBOOT" | dd of=update_part.dd bs=1 seek=$$(($(WOLFBOOT_PARTITION_UPDATE_SIZE) - 5)) conv=notrunc
+	$(Q)$(BINASSEMBLE) internal_flash.dd \
+		0 wolfboot.bin \
+		$$(($(WOLFBOOT_PARTITION_BOOT_ADDRESS) - $(ARCH_FLASH_OFFSET))) test-app/image_v1_signed.bin \
+		$$(($(WOLFBOOT_PARTITION_UPDATE_ADDRESS)-$(ARCH_FLASH_OFFSET))) update_part.dd \
+		$$(($(WOLFBOOT_PARTITION_SWAP_ADDRESS)-$(ARCH_FLASH_OFFSET))) erased_sec.dd
+
 test-sim-internal-flash-with-delta-update:
 	# This target calls test-sim-internal-flash-with-update with the delta option
 	# The delta option causes the sign tool to produce image_v2_signed_diff.bin instead of image_v2_signed.bin
