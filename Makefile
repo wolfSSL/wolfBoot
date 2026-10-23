@@ -397,6 +397,14 @@ ifeq ($(TARGET),imx_rt7xx)
         MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
     endif
 endif
+
+ifeq ($(TARGET),mcxn)
+	# The secure-app partitions sit at the Secure flash alias, 256MB above the
+	# flash offsets, and the payload is a Secure runtime rather than a test app.
+    ifeq ($(WOLFBOOT_SECURE_APP),1)
+        MAIN_TARGET:=wolfboot.bin
+    endif
+endif
 endif # TZEN=1
 
 ifeq ($(TARGET),pic32cz)

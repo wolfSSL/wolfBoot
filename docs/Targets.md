@@ -7567,7 +7567,7 @@ cp config/examples/mcxn.config .config`
 make
 ```
 
-We provide three configuration files:
+We provide these configuration files:
 - `mcxn.config`: basic configuration file; both wolfBoot and your application
   run in secure world.
 - `mcxn-tz.config`: wolfBoot runs in secure world, your application runs in
@@ -7575,6 +7575,11 @@ We provide three configuration files:
 - `mcxn-wolfcrypt-tz.config`: same as above, but also includes a non-secure
   callable (NSC) wolfPKCS11 API to perform crypto operations via wolfCrypt and
   access a secure keyvault provided by wolfBoot.
+- `mcxn-tz-wolftrust.config`: wolfBoot hands off to a signed secure application
+  (for example wolfTrust) that stays in the secure world, with the measured-boot
+  record at `0x30030000` (see [Secure Application Handoff](secure_app_handoff.md)).
+  The partitions are at the secure flash alias (`0x10040000` boot, `0x10180000`
+  update).
 
 ### MCX N: Loading the firmware
 

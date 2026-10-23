@@ -85,27 +85,42 @@ else ifeq ($(TARGET),m2354)
 else ifeq ($(TARGET),imx_rt7xx)
   EMU_DIR=imxrt700
   EMU_CPU=imxrt700
+else ifeq ($(TARGET),mcxn)
+  EMU_DIR=mcxn947
+  EMU_CPU=mcxn947
 else
   EMU_DIR=
   EMU_CPU=
 endif
 
 ifeq ($(strip $(EMU_DIR)),)
-  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx)
+  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx|mcxn)
 endif
 
 EMU_PATH=$(WOLFBOOT_ROOT)/test-app/emu-test-apps/$(EMU_DIR)
 
-.PHONY: all clean test-emu sign-emu run-emu
+.PHONY: all clean test-emu sign-emu run-emu check-standalone
+
+ifeq ($(WOLFBOOT_SECURE_APP),1)
+  EMU_SUB_ARGS=SECURE_HANDOFF_ADDRESS=$(WOLFBOOT_SECURE_HANDOFF_ADDRESS)
+endif
 
 all:
-	$(MAKE) -C $(EMU_PATH) clean app.bin
+	$(MAKE) -C $(EMU_PATH) clean app.bin $(EMU_SUB_ARGS)
 
 sign-emu: all $(WOLFBOOT_ROOT)/wolfboot_signing_private_key.der
 	@cp $(EMU_PATH)/app.bin $(EMU_PATH)/image.bin
 	$(SIGN_ENV) $(SIGN_TOOL) $(SIGN_OPTIONS) $(EMU_PATH)/image.bin $(PRIVATE_KEY) $(EMU_VERSION)
 
-run-emu: sign-emu
+# run-emu boots the signed app without wolfBoot; a secure-app payload needs
+# wolfBoot's UART setup and handoff record, so it only runs under test.sh.
+check-standalone:
+ifeq ($(WOLFBOOT_SECURE_APP),1)
+	@echo "run-emu: secure-app configs boot through wolfBoot; use test.sh" >&2
+	@exit 1
+endif
+
+run-emu: check-standalone sign-emu
 	@echo "[EMU] CPU=$(EMU_CPU) VERSION=$(EMU_VERSION)"
 	@$(M33MU) --cpu $(EMU_CPU) --uart-stdout --no-tz --boot-offset=$(IMAGE_HEADER_SIZE) \
 		$(EMU_PATH)/image_v$(EMU_VERSION)_signed.bin --timeout 2 \

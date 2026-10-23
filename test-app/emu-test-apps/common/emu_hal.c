@@ -196,6 +196,100 @@ static int imxrt700_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_MCXN947)
+#include "fsl_flash.h"
+
+/* The flash is programmed through the ROM flash API, which takes the flash
+ * offset; the partitions sit at the Secure alias. */
+#define MCXN_FLASH_S_ALIAS  0x10000000u
+#define MCXN_FLASH_SIZE     0x00200000u
+#define MCXN_FLASH_PHRASE   FSL_FEATURE_FLASH_PFLASH_PHRASE_SIZE
+
+static flash_config_t mcxn_flash;
+static int mcxn_flash_ready;
+
+static uint32_t mcxn_flash_offset(uint32_t address)
+{
+    if ((address >= MCXN_FLASH_S_ALIAS) &&
+        (address < (MCXN_FLASH_S_ALIAS + MCXN_FLASH_SIZE))) {
+        address -= MCXN_FLASH_S_ALIAS;
+    }
+    return address;
+}
+
+static int mcxn_flash_init(void)
+{
+    if (mcxn_flash_ready == 0) {
+        memset(&mcxn_flash, 0, sizeof(mcxn_flash));
+        if (FLASH_Init(&mcxn_flash) != kStatus_FLASH_Success) {
+            return -1;
+        }
+        mcxn_flash_ready = 1;
+    }
+    return 0;
+}
+
+static int mcxn_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint8_t phrase[MCXN_FLASH_PHRASE];
+    uint32_t aligned;
+    uint32_t off;
+    uint32_t copy;
+    int done = 0;
+
+    if (mcxn_flash_init() != 0) {
+        return -1;
+    }
+    address = mcxn_flash_offset(address);
+    while (done < len) {
+        off = address & (MCXN_FLASH_PHRASE - 1u);
+        copy = (uint32_t)(len - done);
+        if ((off == 0u) && (copy >= MCXN_FLASH_PHRASE)) {
+            copy &= ~(MCXN_FLASH_PHRASE - 1u);
+            if (FLASH_Program(&mcxn_flash, address, (uint8_t *)data + done,
+                    copy) != kStatus_FLASH_Success) {
+                return -1;
+            }
+        }
+        else {
+            aligned = address - off;
+            if (copy > (MCXN_FLASH_PHRASE - off)) {
+                copy = MCXN_FLASH_PHRASE - off;
+            }
+            memcpy(phrase, (const void *)aligned, sizeof(phrase));
+            memcpy(phrase + off, data + done, copy);
+            if (FLASH_Program(&mcxn_flash, aligned, phrase,
+                    sizeof(phrase)) != kStatus_FLASH_Success) {
+                return -1;
+            }
+        }
+        address += copy;
+        done += (int)copy;
+    }
+    return 0;
+}
+
+static int mcxn_flash_erase(uint32_t address, int len)
+{
+    uint32_t p;
+    uint32_t end;
+
+    if (mcxn_flash_init() != 0) {
+        return -1;
+    }
+    address = mcxn_flash_offset(address);
+    end = address + (uint32_t)len;
+    for (p = address & ~(EMU_FLASH_SECTOR_SIZE - 1u); p < end;
+            p += EMU_FLASH_SECTOR_SIZE) {
+        if (FLASH_Erase(&mcxn_flash, p, EMU_FLASH_SECTOR_SIZE,
+                kFLASH_ApiEraseKey) != kStatus_FLASH_Success) {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -222,6 +316,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     }
 #elif defined(EMU_IMXRT700)
     return imxrt700_flash_write(address, data, len);
+#elif defined(EMU_MCXN947)
+    return mcxn_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -253,6 +349,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return imxrt700_flash_erase(address, len);
+#elif defined(EMU_MCXN947)
+    if (len <= 0) {
+        return 0;
+    }
+    return mcxn_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
