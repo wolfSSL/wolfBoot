@@ -133,6 +133,8 @@ TESTS+=unit-ct-compare
 TESTS+=unit-zynqmp-bbram-crc
 TESTS+=unit-zynqmp-efuse-guards
 TESTS+=unit-zynqmp-efuse-burn
+TESTS+=unit-zynqmp-puf
+TESTS+=unit-zynqmp-puf-nofsbl
 TESTS+=unit-versal-qspi-dma
 TESTS+=unit-imx8qm-usdhc-shim
 TESTS+=unit-imx8qm-flexspi-write
@@ -1398,6 +1400,21 @@ unit-zynqmp-efuse-guards: unit-zynqmp-efuse-guards.c efuse_guards_extract.h ../.
 unit-zynqmp-efuse-burn: unit-zynqmp-efuse-guards.c efuse_guards_extract.h ../../hal/zynq.h
 	gcc -o $@ unit-zynqmp-efuse-guards.c $(CFLAGS) -I../.. -DZYNQMP_EFUSE_BURN $(LDFLAGS)
 
+# unit-zynqmp-puf covers the PUF regeneration gate and the black-key unwrap.
+# Both are MMIO-bound, so the test stubs pmu_mmio_* and the CSU AES entry
+# points, and the functions under test are extracted verbatim from hal/zynq.c.
+puf_extract.h: ../../hal/zynq.c ../../hal/zynq.h
+	sed -n '/^int csu_puf_regeneration(/,/^}/p' ../../hal/zynq.c > $@
+	sed -n '/^int csu_puf_black_key_unwrap(/,/^}/p' ../../hal/zynq.c >> $@
+
+unit-zynqmp-puf: unit-zynqmp-puf.c puf_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-puf.c $(CFLAGS) -I../.. $(LDFLAGS)
+
+# The CHASH gate only exists in the FSBL variant, so the other branch of
+# csu_puf_regeneration() needs its own compilation to be covered.
+unit-zynqmp-puf-nofsbl: unit-zynqmp-puf.c puf_extract.h ../../hal/zynq.h
+	gcc -o $@ unit-zynqmp-puf.c $(CFLAGS) -I../.. -DPUF_TEST_NO_FSBL $(LDFLAGS)
+
 # unit-zynq-ext-write runs the real ext_flash_write() from hal/zynq.c
 # (page chunks crossed physical NOR page boundaries and the
 # wrap clobbered the page start). Same extraction approach as the
@@ -2248,6 +2265,7 @@ GENERATED_SRC:=aurix_erased_extract.h \
 	versal_wdt_extract.h \
 	versal_host.h versal_qspidev_extract.h zynq_erase_extract.h \
 	bbram_crc_extract.h efuse_guards_extract.h \
+	puf_extract.h \
 	zynq_write_extract.h \
 	fat32-test.img fat32-test.img.tmp fat32-payload.bin fat32-nested.bin \
 	fat32-short.bin ext4-min.img ext4-stock.img ext4-payload.bin \
