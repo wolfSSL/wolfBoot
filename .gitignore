@@ -181,6 +181,8 @@ tools/unit-tests/unit-string
 tools/unit-tests/unit-update-flash
 tools/unit-tests/unit-update-flash-enc
 tools/unit-tests/unit-update-flash-db
+tools/unit-tests/unit-update-flash-flagshome
+tools/unit-tests/unit-update-flash-invert
 tools/unit-tests/unit-update-flash-int-invert
 tools/unit-tests/unit-update-flash-enc-full
 tools/unit-tests/unit-update-flash-enc-intswap

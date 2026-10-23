@@ -158,10 +158,11 @@ static int update_part_write(uintptr_t addr, const void *buf, int len)
     return ext_flash_check_write(addr, buf, len);
 }
 
-/* The UPDATE flags sit in the UPDATE partition, internal or external */
+/* The UPDATE flags are in internal flash without EXT_FLASH, and with
+ * FLAGS_HOME, which keeps them in the BOOT trailer */
 static void update_flags_unlock(void)
 {
-#ifndef EXT_FLASH
+#if defined(FLAGS_HOME) || !defined(EXT_FLASH)
     hal_flash_unlock();
 #else
     ext_flash_unlock();
@@ -170,12 +171,19 @@ static void update_flags_unlock(void)
 
 static void update_flags_lock(void)
 {
-#ifndef EXT_FLASH
+#if defined(FLAGS_HOME) || !defined(EXT_FLASH)
     hal_flash_lock();
 #else
     ext_flash_lock();
 #endif
 }
+
+#ifdef FLAGS_HOME
+/* The BOOT trailer also holds the UPDATE flags, which a refused resume clears */
+#define BOOT_IMAGE_AREA (WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE)
+#else
+#define BOOT_IMAGE_AREA WOLFBOOT_PARTITION_SIZE
+#endif
 
 static void ext_flash_write_le16(uintptr_t addr, uint16_t val)
 {
@@ -1217,17 +1225,26 @@ START_TEST (test_final_swap_aborts_on_restore_copy_failure)
 
     add_payload(PART_BOOT, 1, 30700);
 
+    /* Start confirmed, so a skipped BOOT state reset leaves SUCCESS behind */
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+    hal_flash_lock();
     update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
     update_flags_lock();
 
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* The BOOT state reset rewrites the shared trailer before the restore */
+    hal_flash_write_fail = 1 + (WOLFBOOT_SECTOR_SIZE / FLASHBUFFER_SIZE);
+#else
     hal_flash_write_fail = 1;
+#endif
     ret = wolfBoot_swap_and_final_erase(1, 0);
 
     ck_assert_int_lt(ret, 0);
     ck_assert_int_eq(hal_flash_write_fail, 0);
-    /* The boot state must be unset: the state sector was erased before the
-     * restore and TESTING must not be written after a failed restore. */
+    /* The boot state must be reset before the restore, and TESTING must not
+     * be written after a failed restore. */
     ck_assert_int_ne(wolfBoot_get_partition_state(PART_BOOT, &boot_state), 0);
     /* The backup completed, so FINAL_FLAGS is set: the next boot's resume
      * path re-enters and retries the restore from SWAP. */
@@ -1738,7 +1755,7 @@ static void resume_with_version(uint32_t boot_ver, uint32_t update_ver)
     ck_assert_uint_eq(wolfBoot_current_firmware_version(), boot_ver);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
-               resume_boot_snap, WOLFBOOT_PARTITION_SIZE),
+               resume_boot_snap, BOOT_IMAGE_AREA),
         0);
     cleanup_flash();
 }
@@ -1808,7 +1825,7 @@ static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
     ck_assert_int_lt(wolfBoot_update(0), 0);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
-               resume_boot_snap, WOLFBOOT_PARTITION_SIZE),
+               resume_boot_snap, BOOT_IMAGE_AREA),
         0);
     cleanup_flash();
 }
@@ -2299,6 +2316,148 @@ START_TEST (test_rollback_erase_failure_keeps_original)
 }
 END_TEST
 
+
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+/* A power cut while the update trigger rewrites the shared trailer must not
+ * lose the BOOT state held in the same trailer */
+START_TEST (test_flags_home_trigger_power_cut_keeps_boot_state)
+{
+    uint8_t st = 0;
+    int torn;
+    int n;
+
+    powercut_confirmed = 1;
+    for (torn = 0; torn < 4; torn++) {
+        mock_powercut_torn = torn;
+        for (n = 0; ; n++) {
+            powercut_setup(TEST_SIZE_LARGE);
+            mock_flash_ops = 0;
+            mock_powercut_at = n;
+            if (setjmp(mock_powercut_jmp) == 0) {
+                wolfBoot_update_trigger();
+                mock_powercut_at = -1;
+                cleanup_flash();
+                break;
+            }
+            mock_power_cycle();
+            hal_flash_unlock();
+            ck_assert_msg((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) &&
+                (st == IMG_STATE_SUCCESS), "trigger cut at flash op %d (torn "
+                "mode %d) lost the BOOT state", n, torn);
+            hal_flash_lock();
+            cleanup_flash();
+        }
+        ck_assert_int_gt(n, 0);
+    }
+    powercut_confirmed = 0;
+    mock_powercut_torn = 0;
+}
+END_TEST
+#endif
+
+#ifdef WOLFBOOT_SHARED_TRAILER
+/* A torn erase of the old copy can keep its last 8 bytes, a whole BOOT
+ * record, next to the new copy holding FINAL_FLAGS, which must stay in use */
+START_TEST (test_flags_home_torn_erase_keeps_final_flags)
+{
+    static uint8_t tail[8];
+    uintptr_t last = (PART_BOOT_ENDFLAGS - 1U) &
+        ~((uintptr_t)WOLFBOOT_SECTOR_SIZE - 1U);
+    uintptr_t old_copy;
+    uint8_t st = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    old_copy = last - ((uintptr_t)nvm_select_fresh_sector(PART_UPDATE) *
+        WOLFBOOT_SECTOR_SIZE);
+    memcpy(tail, (const void *)(old_copy + WOLFBOOT_SECTOR_SIZE - sizeof(tail)),
+        sizeof(tail));
+    ck_assert_int_eq(wolfBoot_flags_home_reset_boot(), 0);
+    hal_flash_write(old_copy + WOLFBOOT_SECTOR_SIZE - sizeof(tail), tail,
+        sizeof(tail));
+    hal_flash_lock();
+    mock_power_cycle();
+    hal_flash_unlock();
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &st), 0);
+    ck_assert_uint_eq(st, IMG_STATE_FINAL_FLAGS);
+    hal_flash_lock();
+    cleanup_flash();
+}
+END_TEST
+
+/* A failed write or erase in either shared-trailer commit is reported as -1,
+ * whatever the driver returned, and the trailer holds either FINAL_FLAGS or
+ * the whole committed state */
+static int shared_trailer_fail_at(int erase, int code, int commit, int k)
+{
+    uint8_t st = 0;
+    int left;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    if (erase) {
+        hal_flash_erase_fail = k;
+        hal_flash_erase_fail_ret = code;
+    }
+    else {
+        hal_flash_write_fail = k;
+        hal_flash_write_fail_ret = code;
+    }
+    ret = commit ? wolfBoot_flags_home_set_boot(IMG_STATE_TESTING) :
+        wolfBoot_flags_home_reset_boot();
+    left = erase ? hal_flash_erase_fail : hal_flash_write_fail;
+    hal_flash_erase_fail = 0;
+    hal_flash_write_fail = 0;
+    if (left != 0) {
+        /* fewer than k operations: the commit ran to the end */
+        ck_assert_int_eq(ret, 0);
+    }
+    else {
+        ck_assert_int_eq(ret, -1);
+        if (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) {
+            ck_assert_uint_eq(st, IMG_STATE_FINAL_FLAGS);
+        }
+        else {
+            /* only the erase of the old copy failed */
+            ck_assert(commit);
+            ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+            ck_assert_uint_eq(st, IMG_STATE_TESTING);
+        }
+    }
+    hal_flash_lock();
+    cleanup_flash();
+    return left == 0;
+}
+
+START_TEST (test_shared_trailer_flash_error_reported)
+{
+    static const int codes[2] = { -1, 0x00520005 }; /* positive driver status */
+    int erase;
+    int code;
+    int commit;
+    int k;
+
+    for (erase = 0; erase < 2; erase++) {
+        for (code = 0; code < 2; code++) {
+            for (commit = 0; commit < 2; commit++) {
+                for (k = 1; shared_trailer_fail_at(erase, codes[code], commit,
+                        k); k++)
+                    ;
+                ck_assert_int_gt(k, 1);
+            }
+        }
+    }
+}
+END_TEST
+#endif
 #endif
 #endif /* !DISABLE_BACKUP */
 
@@ -3271,6 +3430,13 @@ Suite *wolfboot_suite(void)
     tcase_add_test(power_cut, test_rollback_power_cut_keeps_original);
     tcase_add_test(power_cut, test_rollback_to_version_zero_stays);
     tcase_add_test(power_cut, test_rollback_erase_failure_keeps_original);
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+    tcase_add_test(power_cut, test_flags_home_trigger_power_cut_keeps_boot_state);
+#endif
+#ifdef WOLFBOOT_SHARED_TRAILER
+    tcase_add_test(power_cut, test_flags_home_torn_erase_keeps_final_flags);
+    tcase_add_test(power_cut, test_shared_trailer_flash_error_reported);
+#endif
     tcase_add_checked_fixture(power_cut, powercut_quiet, powercut_loud);
     tcase_set_timeout(power_cut, 600);
 #endif

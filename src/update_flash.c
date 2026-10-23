@@ -798,8 +798,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume, int rollback)
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
 #endif
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* Keep FINAL_FLAGS to resume; a rollback keeps BOOT TESTING as well */
+    ret = rollback ? 0 : wolfBoot_flags_home_reset_boot();
+#else
     /* Erase the last sector(s) of boot partition (where partition state is stored) */
     ret = wb_trailer_clear(boot, PART_BOOT);
+#endif
     if (ret < 0) {
 #ifdef EXT_FLASH
         ext_flash_lock();
@@ -846,8 +851,22 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume, int rollback)
 
     /* Mark boot partition as TESTING - this tells bootloader to fallback if
      * update fails. A rollback restores the confirmed image. */
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* FINAL_FLAGS stays set until this write replaces it */
+    ret = wolfBoot_flags_home_set_boot(rollback ? IMG_STATE_SUCCESS :
+        IMG_STATE_TESTING);
+    if (ret < 0) {
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+        return ret;
+    }
+#else
     wolfBoot_set_partition_state(PART_BOOT, rollback ? IMG_STATE_SUCCESS :
         IMG_STATE_TESTING);
+#endif
 
     /* Erase the last sector(s) of update partition */
     /* This resets the update partition state to IMG_STATE_NEW */

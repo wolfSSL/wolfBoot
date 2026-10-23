@@ -77,6 +77,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-db \
        unit-update-flash-hook \
+       unit-update-flash-flagshome unit-update-flash-invert \
        unit-update-flash-int-invert \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
@@ -406,6 +407,18 @@ unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -D
 unit-nsc-update:CFLAGS+=-DMOCK_PARTITIONS -D__WOLFBOOT -DTZEN \
 	-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Write-once FLAGS_HOME trailers with SWAP in internal flash, with the default
+# and the inverted flag polarity; the inverted one also writes trailers in
+# chunks smaller than a sector
+unit-update-flash-flagshome:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DNVM_FLASH_WRITEONCE -DFLAGS_HOME=1 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DNVM_FLASH_WRITEONCE -DWOLFBOOT_FLAGS_INVERT=1 -DFLAGS_HOME=1 \
+	-DFLASHBUFFER_SIZE=512 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Write-once trailers with inverted flags and every partition in internal flash
 unit-update-flash-int-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -1237,6 +1250,12 @@ unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-flagshome: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-invert: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-int-invert: ../../include/target.h unit-update-flash.c

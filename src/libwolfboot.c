@@ -359,6 +359,29 @@ static uint8_t get_base_offset(uint8_t *base, uintptr_t off)
     return *(uint8_t*)((uintptr_t)base - off); /* ignore array bounds error */
 }
 
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+/* Whether shared copy sel holds FINAL_FLAGS, the final swap's resume record */
+static int RAMFUNCTION flags_home_final(int sel)
+{
+    uintptr_t end = PART_UPDATE_ENDFLAGS - ((uintptr_t)sel * WOLFBOOT_SECTOR_SIZE);
+
+    return (*((uint32_t*)(end - sizeof(uint32_t))) == WOLFBOOT_MAGIC_TRAIL) &&
+        (*((uint8_t*)(end - sizeof(uint32_t) - 1U)) == IMG_STATE_FINAL_FLAGS);
+}
+
+/* BOOT record of shared copy sel: 0 no magic, 1 magic only, 2 magic and state */
+static int RAMFUNCTION flags_home_boot_record(int sel)
+{
+    uintptr_t end = PART_BOOT_ENDFLAGS - ((uintptr_t)sel * WOLFBOOT_SECTOR_SIZE);
+
+    if (*((uint32_t*)(end - sizeof(uint32_t))) != WOLFBOOT_MAGIC_TRAIL)
+        return 0;
+    if (*((uint8_t*)(end - sizeof(uint32_t) - 1U)) == FLASH_BYTE_ERASED)
+        return 1;
+    return 2;
+}
+#endif
+
 #ifdef __CCRX__
 #pragma section FRAM
 #endif
@@ -394,6 +417,25 @@ static int RAMFUNCTION nvm_select_fresh_sector(int part)
             WOLFBOOT_PARTITION_UPDATE_SIZE - WOLFBOOT_SECTOR_SIZE;
 #endif
     }
+
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+    /* A shared copy written last ends with the BOOT magic: a copy without it
+     * does not replace one that holds a whole BOOT record, unless it holds
+     * FINAL_FLAGS, which a torn erase of the old copy must not hide */
+    if (part == PART_UPDATE) {
+        int rec_0 = flags_home_boot_record(0);
+        int rec_1 = flags_home_boot_record(1);
+
+        if ((rec_0 == 2) && (rec_1 == 0) && !flags_home_final(1)) {
+            sel = 0;
+            goto finish;
+        }
+        if ((rec_1 == 2) && (rec_0 == 0) && !flags_home_final(0)) {
+            sel = 1;
+            goto finish;
+        }
+    }
+#endif
 
     /* check magic in case the sector is corrupt */
     word_0 = *((uint32_t*)((uintptr_t)base -  sizeof(uint32_t)));
@@ -536,6 +578,99 @@ static int RAMFUNCTION partition_magic_write(uint8_t part, uintptr_t addr)
     nvm_cache_scrub();
     return ret;
 }
+
+#ifdef WOLFBOOT_SHARED_TRAILER
+/* Write NVM_CACHE over the spare copy of the trailer, then erase copy sel */
+static int RAMFUNCTION nvm_cache_move(uintptr_t last, int sel)
+{
+    uintptr_t addr_read = last - ((uintptr_t)sel * WOLFBOOT_SECTOR_SIZE);
+    uintptr_t addr_write = last - ((uintptr_t)(!sel) * WOLFBOOT_SECTOR_SIZE);
+    int ret;
+#if FLASHBUFFER_SIZE != WOLFBOOT_SECTOR_SIZE
+    uintptr_t off = 0;
+#endif
+
+    ret = hal_flash_erase(addr_write, WOLFBOOT_SECTOR_SIZE);
+#if FLASHBUFFER_SIZE != WOLFBOOT_SECTOR_SIZE
+    while ((off < WOLFBOOT_SECTOR_SIZE) && (ret == 0)) {
+        ret = hal_flash_write(addr_write + off, NVM_CACHE + off,
+            FLASHBUFFER_SIZE);
+        off += FLASHBUFFER_SIZE;
+    }
+#else
+    if (ret == 0) {
+        ret = hal_flash_write(addr_write, NVM_CACHE, NVM_CACHE_SIZE);
+    }
+#endif
+    if (ret == 0) {
+        ret = hal_flash_erase(addr_read, WOLFBOOT_SECTOR_SIZE);
+    }
+    return ret;
+}
+
+/* Rewrite the trailer that also holds the UPDATE flags: either keep those
+ * flags and clear the BOOT magic and state, or commit a BOOT state and clear
+ * them. The spare copy is written before the old one is erased. */
+static int RAMFUNCTION flags_home_rewrite(int commit, uint8_t boot_state)
+{
+    uintptr_t last = (PART_BOOT_ENDFLAGS - 1U) &
+        ~((uintptr_t)WOLFBOOT_SECTOR_SIZE - 1U);
+    uintptr_t off = PART_BOOT_ENDFLAGS - sizeof(uint32_t) - last;
+    int sel;
+    int pass;
+    int ret = 0;
+
+    sel = nvm_select_fresh_sector(PART_UPDATE);
+    /* A trailer without the UPDATE magic must end in the last sector, the
+     * one nvm_select_fresh_sector() keeps when no magic is found */
+    for (pass = (commit && (sel == 0)) ? 0 : 1; (pass < 2) && (ret == 0);
+            pass++) {
+        XMEMCPY(NVM_CACHE,
+            (void *)(last - ((uintptr_t)sel * WOLFBOOT_SECTOR_SIZE)),
+            NVM_CACHE_SIZE);
+        if ((pass == 1) && commit) {
+            XMEMSET(NVM_CACHE, FLASH_BYTE_ERASED, NVM_CACHE_SIZE);
+            XMEMCPY(NVM_CACHE + off, &wolfboot_magic_trail, sizeof(uint32_t));
+            NVM_CACHE[off - 1U] = boot_state;
+        }
+        else if (pass == 1) {
+            XMEMSET(NVM_CACHE + off - 1U, FLASH_BYTE_ERASED,
+                sizeof(uint32_t) + 1U);
+        }
+        ret = nvm_cache_move(last, sel);
+        sel = !sel;
+    }
+    nvm_cached_sector = sel;
+    return (ret == 0) ? 0 : -1;
+}
+
+/**
+ * @brief Clear the BOOT state and keep the UPDATE flags, FINAL_FLAGS included.
+ *
+ * With FLAGS_HOME the UPDATE flags live in the BOOT trailer, so the final swap
+ * cannot erase it without losing its own resume record.
+ *
+ * @return 0 on success, -1 on failure.
+ */
+int RAMFUNCTION wolfBoot_flags_home_reset_boot(void)
+{
+    return flags_home_rewrite(0, 0);
+}
+
+/**
+ * @brief Set the BOOT state and clear the UPDATE flags in one rewrite.
+ *
+ * The final swap commits TESTING after an update and SUCCESS after a
+ * rollback.
+ *
+ * @param[in] boot_state New BOOT partition state.
+ * @return 0 on success, -1 on failure.
+ */
+int RAMFUNCTION wolfBoot_flags_home_set_boot(uint8_t boot_state)
+{
+    return flags_home_rewrite(1, boot_state);
+}
+#endif /* WOLFBOOT_SHARED_TRAILER */
 #ifdef __CCRX__
 #pragma section
 #endif
