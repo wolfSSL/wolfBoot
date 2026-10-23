@@ -20,9 +20,7 @@
  */
 
 #include <stdint.h>
-#include "fsl_clock.h"
 #include "fsl_gpio.h"
-#include "fsl_iocon.h"
 
 #include "target.h"
 #include "wolfboot/wolfboot.h"
@@ -39,6 +37,12 @@ int wolfcrypt_test(void *args);
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfcrypt/benchmark/benchmark.h>
 int benchmark_test(void *args);
+#endif
+
+#ifdef WOLFCRYPT_TZ_PSA
+#include "psa/crypto.h"
+#include "psa/error.h"
+#include "psa/initial_attestation.h"
 #endif
 
 #define RED_LED     6
@@ -62,20 +66,8 @@ static void systick_init(void)
 }
 #endif
 
-#define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
-#define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
-#define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
-#define IOCON_PIO_INV_DI 0x00u        /*!<@brief Input function is not inverted */
-#define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
-#define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
-
 static void leds_init(void)
 {
-#ifndef TZEN
-    CLOCK_EnableClock(kCLOCK_Iocon);
-    CLOCK_EnableClock(kCLOCK_Gpio1);
-#endif
-
     /* red output off */
     GPIO->SET[1] = 1UL << RED_LED;
     GPIO->DIR[1] |= 1UL << RED_LED;
@@ -85,22 +77,6 @@ static void leds_init(void)
     /* blue output off */
     GPIO->SET[1] = 1UL << BLUE_LED;
     GPIO->DIR[1] |= 1UL << BLUE_LED;
-
-    const uint32_t LED_PINMUX_CONFIG = (/* Pin is configured as PIO */
-                               IOCON_PIO_FUNC0 |
-                               /* Selects pull-up function */
-                               IOCON_PIO_MODE_PULLUP |
-                               /* Standard mode, output slew rate control is enabled */
-                               IOCON_PIO_SLEW_STANDARD |
-                               /* Input function is not inverted */
-                               IOCON_PIO_INV_DI |
-                               /* Enables digital function */
-                               IOCON_PIO_DIGITAL_EN |
-                               /* Open drain is disabled */
-                               IOCON_PIO_OPENDRAIN_DI);
-    IOCON_PinMuxSet(IOCON, 1, RED_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, GREEN_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, BLUE_LED, LED_PINMUX_CONFIG);
 }
 
 static void check_parts(
@@ -127,6 +103,70 @@ static void check_parts(
     wolfBoot_printf("    boot:   ver=0x%lx state=0x%02x\n", *pboot_ver, *pboot_state);
     wolfBoot_printf("    update: ver=0x%lx state=0x%02x\n", *pupdate_ver, *pupdate_state);
 }
+
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+
+#define LINE_LEN 16
+static void print_hex(const uint8_t *buffer, uint32_t length, int dumpChars)
+{
+    uint32_t i, sz;
+
+    if (!buffer) {
+        wolfBoot_printf("\tNULL\n");
+        return;
+    }
+
+    while (length > 0) {
+        sz = length;
+        if (sz > LINE_LEN)
+            sz = LINE_LEN;
+
+        wolfBoot_printf("\t");
+        for (i = 0; i < LINE_LEN; i++) {
+            if (i < sz)
+                wolfBoot_printf("%02x ", buffer[i]);
+            else
+                wolfBoot_printf("   ");
+        }
+        if (dumpChars) {
+            wolfBoot_printf("| ");
+            for (i = 0; i < sz; i++) {
+                if (buffer[i] > 31 && buffer[i] < 127)
+                    wolfBoot_printf("%c", buffer[i]);
+                else
+                    wolfBoot_printf(".");
+            }
+        }
+        wolfBoot_printf("\n");
+
+        buffer += sz;
+        length -= sz;
+    }
+}
+
+static int run_attestation_test(void)
+{
+    uint8_t challenge[PSA_INITIAL_ATTEST_CHALLENGE_SIZE_64];
+    uint8_t token[1024];
+    size_t token_size = 0;
+    psa_status_t status;
+    size_t i;
+
+    for (i = 0; i < sizeof(challenge); i++) {
+        challenge[i] = (uint8_t)i;
+    }
+
+    status = psa_initial_attest_get_token(challenge, sizeof(challenge),
+                                          token, sizeof(token), &token_size);
+    if (status != PSA_SUCCESS) {
+        wolfBoot_printf("attest: get token failed (%d)\n", status);
+        return -1;
+    }
+    wolfBoot_printf("attest: token size %lu bytes\n", (unsigned long)token_size);
+    print_hex(token, (uint32_t)token_size, 1);
+    return 0;
+}
+#endif /* WOLFBOOT_ATTESTATION_TEST && WOLFCRYPT_TZ_PSA */
 
 void main(void)
 {
@@ -183,6 +223,17 @@ void main(void)
         /* green on */
         GPIO_PinWrite(GPIO, 1, GREEN_LED, 0);
     }
+
+#if defined(WOLFBOOT_ATTESTATION_TEST) && defined(WOLFCRYPT_TZ_PSA)
+    if (run_attestation_test() == 0) {
+        __asm__ volatile ("bkpt #0x7f");
+    }
+    else {
+        wolfBoot_printf("attest: failed (with HWPUF=1, the PUF must have been "
+                        "provisioned: WOLFBOOT_HWPUF_PROVISION=1)\n");
+        __asm__ volatile ("bkpt #0x7e");
+    }
+#endif
 
 #if defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
     wolfCrypt_Init();
