@@ -773,6 +773,11 @@ void mpfs_iomux_init(void);
  * timeout. */
 int mpfs_pdma_memcpy(void *dst, const void *src, uint32_t bytes);
 #endif
+
+/* Refreshes every MSS watchdog outside its forbidden window.  Defined
+ * unconditionally in hal/mpfs250.c: the SDHCI and QSPI-programmer callers
+ * exist in the S-mode builds too, where MPFS_DDR_INIT is not set. */
+void mpfs_wdt_pet_all(void);
 #endif /* __ASSEMBLER__ */
 
 #if defined(EXT_FLASH) || defined(MPFS_SBI_SC_FLASH)

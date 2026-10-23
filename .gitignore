@@ -637,6 +637,8 @@ tools/unit-tests/stm32g0_write_extract.h
 tools/unit-tests/ct_compare_extract.h
 tools/unit-tests/fdt_memrsv_extract.h
 tools/unit-tests/hifive1_flash_write_extract.h
+tools/unit-tests/mpfs250_wdt_extract.h
+tools/unit-tests/unit-mpfs-wdt
 tools/unit-tests/hifive1_hfrosccfg_extract.h
 tools/unit-tests/keystore_api_extract.h
 tools/unit-tests/keystore_emitted.c

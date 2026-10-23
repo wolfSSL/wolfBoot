@@ -59,16 +59,24 @@ static uint64_t rdcycle(void)
     return c;
 }
 
-void hal_init(void)
+/* Refresh every watchdog whose counter has dropped below MVRP.  At reset MVRP
+ * leaves most of the period forbidden, and a refresh there resets the chip, so
+ * the stub tests each one.  Skipping is harmless here: the stub starts with a
+ * fresh window and the signature check is far shorter than the period. */
+static void ubl_wdt_pet_all(void)
 {
     unsigned int w;
 
-    /* Start every window from full, so the signature check cannot be cut
-     * short.  The window itself is a design-time property and already the
-     * widest the counter allows; see the watchdog policy in hal/mpfs250.c. */
     for (w = 0; w < MPFS_NUM_HARTS; w++) {
-        MSS_WDT_REFRESH(wdt_bases[w]) = 0xDEADC0DEU;
+        if ((MSS_WDT_STATUS(wdt_bases[w]) & MSS_WDT_STAT_FORBIDDEN) == 0U) {
+            MSS_WDT_REFRESH(wdt_bases[w]) = 0xDEADC0DEU;
+        }
     }
+}
+
+void hal_init(void)
+{
+    ubl_wdt_pet_all();
 
 #ifdef DEBUG_UART
     SYSREG_SUBBLK_CLOCK_CR |= (MSS_PERIPH_MMUART0 << DEBUG_UART_PORT);
@@ -79,8 +87,8 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    /* Hand the eNVM wolfBoot a full window. */
-    MSS_WDT_REFRESH(MSS_WDT_E51_BASE) = 0xDEADC0DEU;
+    /* Hand the eNVM wolfBoot as much window as the counter permits. */
+    ubl_wdt_pet_all();
 }
 
 /* The manifest is verified in place; there is no flash backend. */
