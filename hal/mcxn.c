@@ -24,6 +24,7 @@
 #include <target.h>
 #include "fsl_common.h"
 #include "image.h"
+#include "hal.h"
 
 #include "clock_config.h"
 #include "fsl_clock.h"
@@ -172,7 +173,23 @@ static flash_config_t pflash;
 static uint32_t pflash_sector_size = WOLFBOOT_SECTOR_SIZE;
 uint32_t SystemCoreClock;
 
-#ifdef TZEN
+#define MCXN_FLASH_S_ALIAS 0x10000000U
+#define MCXN_FLASH_SIZE    0x00200000U
+
+/* Partitions may be linked at the Secure flash alias; the ROM flash API
+ * takes the flash offset. */
+static uint32_t RAMFUNCTION mcxn_flash_offset(uint32_t address)
+{
+    if ((address >= MCXN_FLASH_S_ALIAS) &&
+        (address < (MCXN_FLASH_S_ALIAS + MCXN_FLASH_SIZE))) {
+        address -= MCXN_FLASH_S_ALIAS;
+    }
+    return address;
+}
+
+/* A secure application stays Secure across the jump: it uses the shared
+ * hal_sau_init() (no Non-secure regions) and keeps every peripheral Secure. */
+#if defined(TZEN) && !defined(WOLFBOOT_SECURE_APP)
 static void hal_sau_init(void)
 {
     /* Non-secure callable area */
@@ -249,7 +266,7 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
 
 void hal_prepare_boot(void)
 {
-#ifdef TZEN
+#if defined(TZEN) && !defined(WOLFBOOT_SECURE_APP)
     periph_unsecure();
 #endif
 }
@@ -260,6 +277,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     const uint32_t word_size = 4U;
     int written = 0;
 
+    address = mcxn_flash_offset(address);
     while (len > 0) {
         if ((address & (word_size - 1U)) || (len < (int)word_size)) {
             uint32_t aligned = address & ~(word_size - 1U);
@@ -316,6 +334,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         sector_size = WOLFBOOT_SECTOR_SIZE;
     }
 
+    address = mcxn_flash_offset(address);
     /* Drive the loop from the end of the requested range so the tail is
      * erased when the start address is rounded back to a sector. */
     end = address + (uint32_t)len;

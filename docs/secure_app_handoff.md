@@ -88,6 +88,14 @@ derives the PSA lifecycle from the flash product state and the debug
 authentication status (`hal/stm32h5_lifecycle.h`), and `hal/stm32_tz.c` keeps
 the whole SRAM1 window and the secure app flash Secure across the handoff.
 
+## MCXN947
+
+`config/examples/mcxn-tz-wolftrust.config` puts the record at `0x30030000` and
+the partitions at the Secure flash alias. `hal/mcxn.c` uses the shared
+`hal_sau_init()` (no Non-secure regions), leaves every peripheral Secure, and
+reports the lifecycle through the weak default. `mcxn-emulator-tests.yml` runs
+boot, update and rollback on the m33mu MCXN947 model.
+
 ## Tests
 
 - `tools/unit-tests/unit-secure-handoff.c` — record layout, the builder, and the
