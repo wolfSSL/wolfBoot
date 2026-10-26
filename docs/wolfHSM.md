@@ -23,6 +23,7 @@ wolfBoot supports using wolfHSM on the following platforms:
 - AURIX TC3xx (shared memory transport)
 - Microchip PIC32CZ CA9x (shared memory transport)
 - STM32H5 TrustZone (the secure-side wolfBoot hosts a wolfHSM server and exposes it to the non-secure application through a single NSC veneer; see [STM32H5 TrustZone Engine](#stm32h5-trustzone-engine) below)
+- Infineon PSOC Edge E8 TrustZone (the same engine, with the NVM in RRAM; see the PSOC Edge E8 section of [Targets.md](Targets.md))
 
 Details on configuring wolfBoot to use wolfHSM on each of these platforms can be found in the wolfBoot (and wolfHSM) documentation specific to that target, with the exception of the simulator, which is documented here. The remainder of this document focuses on the generic wolfHSM-related configuration options.
 
@@ -314,5 +315,7 @@ wolfHSM NSC tests passed
 The default build prints a final `WOLFHSM_TZ_TEST_PASS` UART line on success. The `WOLFBOOT_TZ_TEST_BKPT=1` build raises `bkpt #0x7d` on first-boot success and `bkpt #0x7f` on second-boot success (after the persisted key is reloaded from flash on reset) instead, for emulator and debugger runs. Reset the board (no re-flash) to verify persistence; the second boot prints `wolfHSM second boot path, restored persisted key`.
 
 ### Notes
+
+The same engine runs on Infineon PSOC Edge E8 (`config/examples/psoc_e8_ai-tz-wolfhsm.config`), with the NVM in RRAM through the same flash adapter.
 
 The wolfHSM NVM lives in the existing `FLASH_KEYVAULT` region (112 KiB at `0x0C040000`) shared with the other STM32H5 TrustZone engines. The flash adapter (`src/wolfhsm_flash_hal.c`) caches the affected sector, modifies it, and rewrites the whole 8 KiB sector in one erase + program cycle, mirroring `psa_store.c` / `pkcs11_store.c`. This satisfies the H5 quad-word ECC rule that each 16-byte unit may be programmed exactly once between erases, which wolfHSM's 8-byte-unit writes would otherwise violate.

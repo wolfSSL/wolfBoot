@@ -53,6 +53,17 @@
 #define QSPI_FLASH_READY_TRIES 10000
 #endif
 
+/* QSPI_NO_4BYTE_MODE leaves the part in its default address mode, for a part
+ * addressed through dedicated 4-byte opcodes (PAGE_PROG_CMD, SEC_ERASE_CMD).
+ *
+ * A target that executes in place from the flash it programs keeps the
+ * program and erase path in RAM. */
+#ifdef QSPI_FLASH_RAM_CODE
+#define QSPI_RAMFUNCTION RAMFUNCTION
+#else
+#define QSPI_RAMFUNCTION
+#endif
+
 
 /* Flash Commands */
 #define WRITE_ENABLE_CMD       0x06U
@@ -76,7 +87,9 @@
 #define DUAL_READ_4B_CMD       0x3CU
 #define QUAD_READ_4B_CMD       0x6CU
 
+#ifndef PAGE_PROG_CMD
 #define PAGE_PROG_CMD          0x02U
+#endif
 #define DUAL_PROG_CMD          0xA2U
 #define QUAD_PROG_CMD          0x32U
 
@@ -84,7 +97,9 @@
 #define DUAL_PROG_4B_CMD       0x12U
 #define QUAD_PROG_4B_CMD       0x34U
 
+#ifndef SEC_ERASE_CMD
 #define SEC_ERASE_CMD          0x20U /* 4KB */
+#endif
 #define BLOCK_ERASE_CMD        0xD8U /* 64KB */
 #define RESET_ENABLE_CMD       0x66U
 #define RESET_MEMORY_CMD       0x99U
@@ -123,13 +138,14 @@
 
 
 /* forward declarations */
-static int qspi_wait_ready(void);
-static int qspi_status(uint8_t* status);
+static int QSPI_RAMFUNCTION qspi_wait_ready(void);
+static int QSPI_RAMFUNCTION qspi_status(uint8_t* status);
 #ifdef TEST_EXT_FLASH
 static int test_ext_flash(void);
 #endif
 
-static inline int qspi_command_simple(uint8_t fmode, uint8_t cmd,
+static inline int QSPI_RAMFUNCTION qspi_command_simple(uint8_t fmode,
+    uint8_t cmd,
     uint8_t* data, uint32_t dataSz)
 {
     uint32_t dmode = QSPI_DATA_MODE_NONE;
@@ -167,7 +183,7 @@ static int qspi_flash_read_id(uint8_t* id, uint32_t idSz)
     return ret;
 }
 
-static int qspi_write_enable(void)
+static int QSPI_RAMFUNCTION qspi_write_enable(void)
 {
     int ret;
     uint32_t timeout;
@@ -212,15 +228,14 @@ static int qspi_write_disable(void)
     return ret;
 }
 
-static int qspi_status(uint8_t* status)
+static int QSPI_RAMFUNCTION qspi_status(uint8_t* status)
 {
     int ret;
-    uint8_t data[4]; /* size multiple of uint32_t */
+    uint8_t data[4] = {0, 0, 0, 0}; /* size multiple of uint32_t */
 #if defined(DEBUG_QSPI) && DEBUG_QSPI > 1
     static uint8_t last_status = 0;
 #endif
 
-    memset(data, 0, sizeof(data));
     ret = qspi_command_simple(QSPI_MODE_READ, READ_SR_CMD, data, 1);
 #if defined(DEBUG_QSPI) && DEBUG_QSPI > 1
     if (status == NULL || last_status != data[0]) {
@@ -235,7 +250,7 @@ static int qspi_status(uint8_t* status)
     return ret;
 }
 
-static int qspi_wait_ready(void)
+static int QSPI_RAMFUNCTION qspi_wait_ready(void)
 {
     int ret;
     uint32_t timeout;
@@ -295,7 +310,7 @@ static int qspi_quad_enable(void)
 }
 #endif
 
-#if QSPI_ADDR_SZ == 4
+#if QSPI_ADDR_SZ == 4 && !defined(QSPI_NO_4BYTE_MODE)
 static int qspi_enter_4byte_addr(void)
 {
     int ret = qspi_write_enable();
@@ -337,7 +352,7 @@ uint16_t spi_flash_probe(void)
 #if QSPI_DATA_MODE == QSPI_DATA_MODE_QSPI
     qspi_quad_enable();
 #endif
-#if QSPI_ADDR_SZ == 4
+#if QSPI_ADDR_SZ == 4 && !defined(QSPI_NO_4BYTE_MODE)
     qspi_enter_4byte_addr();
 #endif
 
@@ -351,7 +366,7 @@ uint16_t spi_flash_probe(void)
 
 /* Called for each sector from hal.h inline ext_flash_erase function
  * Use SPI_FLASH_SECTOR_SIZE to adjust for QSPI sector size */
-int spi_flash_sector_erase(uint32_t address)
+int QSPI_RAMFUNCTION spi_flash_sector_erase(uint32_t address)
 {
     int ret;
 
@@ -414,7 +429,8 @@ int spi_flash_read(uint32_t address, void *data, int len)
     return (ret == 0) ? len : ret;
 }
 
-int spi_flash_write(uint32_t address, const void *data, int len)
+int QSPI_RAMFUNCTION spi_flash_write(uint32_t address, const void *data,
+    int len)
 {
     int ret = 0;
     int remaining = len;
@@ -480,7 +496,7 @@ int spi_flash_write(uint32_t address, const void *data, int len)
 
 void spi_flash_release(void)
 {
-#if QSPI_ADDR_SZ == 4
+#if QSPI_ADDR_SZ == 4 && !defined(QSPI_NO_4BYTE_MODE)
     qspi_exit_4byte_addr();
 #endif
 

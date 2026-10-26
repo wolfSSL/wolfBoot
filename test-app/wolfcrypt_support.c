@@ -105,6 +105,10 @@
     {
         (void)m7_get_ticks();
     }
+#elif defined(TARGET_psoc_e8)
+    /* The HAL's cycle-counter time base. */
+    #include "hal/psoc_e8.h"
+    static uint64_t e8_start_us = 0;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     /* PPC time base register for accurate timing (e6500/e5500). */
@@ -217,6 +221,10 @@ unsigned long my_time(unsigned long* timer)
         if (timer) *timer = t;
         return t;
     }
+#elif defined(TARGET_psoc_e8)
+    unsigned long t = (unsigned long)(hal_get_timer_us() / 1000000ULL);
+    if (timer) *timer = t;
+    return t;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)
@@ -269,6 +277,10 @@ double current_time(int reset)
     if (reset)
         m7_start_ticks = m7_get_ticks();
     return (double)(m7_get_ticks() - m7_start_ticks) / (double)IMX95_M7_HZ;
+#elif defined(TARGET_psoc_e8)
+    if (reset)
+        e8_start_us = hal_get_timer_us();
+    return (double)(hal_get_timer_us() - e8_start_us) / 1000000.0;
 #elif defined(TARGET_nxp_t2080) || defined(TARGET_nxp_t1024) || \
       defined(TARGET_nxp_t1040)
     if (ppc_tb_hz == 0)

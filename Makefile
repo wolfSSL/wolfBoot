@@ -408,6 +408,11 @@ ifeq ($(TARGET),mcxn)
 endif
 endif # TZEN=1
 
+ifeq ($(TARGET),psoc_e8)
+	# wolfBoot is programmed with its boot header, not as a contiguous image
+    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+endif
+
 ifeq ($(TARGET),pic32cz)
     MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
 endif
