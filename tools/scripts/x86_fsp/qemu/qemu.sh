@@ -40,7 +40,7 @@ set -e
 set -x
 
 # Parse command line options
-while getopts "d:wpt" opt; do
+while getopts "d:wptc" opt; do
     case "$opt" in
         d)
             DEBUG_STAGE="$OPTARG"

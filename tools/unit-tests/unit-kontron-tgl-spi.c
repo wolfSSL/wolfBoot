@@ -39,7 +39,7 @@ typedef uintptr_t haladdr_t;
 #define MMIO_BASE 0xFED40000UL
 
 /* SPI PCI device constants + register offsets from
- * hal/kontron_vx3060_s2.c (extracted by the Makefile). */
+ * hal/x86_fsp_tgl.c (extracted by the Makefile). */
 #include "kontron_spi_extract.h"
 
 /* TGL register offsets used by the model. */
@@ -122,7 +122,7 @@ static uint32_t mmio_read32(uintptr_t address)
 }
 
 /* The real tgl_lock_bios_region() + hal_flash_protect() from
- * hal/kontron_vx3060_s2.c (extracted). */
+ * hal/x86_fsp_tgl.c (extracted). */
 #include "kontron_spi_fn_extract.h"
 
 /* The lock must land in the MMIO space: FPR0 carries the FREG1

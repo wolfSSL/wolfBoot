@@ -12,6 +12,9 @@ CONFIG_FILE=${CONFIG_FILE:-"${WOLFBOOT_DIR}/.config"}
 
 set -e
 
+# Identity for the patch commits in the scratch edk2 clone only
+GIT_ID="-c user.name=wolfBoot -c user.email=wolfboot@wolfssl.com"
+
 if [ ! -f "${WOLFBOOT_DIR}/arch.mk" ]; then
     echo "Error: Current directory is not the root directory of the source tree"
     exit 1
@@ -37,7 +40,7 @@ download_edkii() {
         git clone "${EDKII_REPO}" edk2)
     else
         (cd "$WORK_DIR/edk2" &&
-        git stash save --include-untracked "Auto-stashed on $(date)" &&
+        git $GIT_ID stash save --include-untracked "Auto-stashed on $(date)" &&
         git clean -fd) # This will remove untracked files/directories
     fi
 
@@ -49,9 +52,9 @@ download_edkii() {
 download_sbl_patch_and_patch_edkii() {
     (cd "$WORK_DIR/edk2" &&
          curl -L -o 0001-Build-QEMU-FSP-2.0-binaries.patch ${SBL_PATCH_URL};
-         git am --keep-cr --whitespace=nowarn 0001-Build-QEMU-FSP-2.0-binaries.patch)
+         git $GIT_ID am --keep-cr --whitespace=nowarn 0001-Build-QEMU-FSP-2.0-binaries.patch)
     (cd "$WORK_DIR/edk2" &&
-         git am --keep-cr --whitespace=nowarn "${SCRIPT_DIR}"/0002-add-W-no-warnings-to-compile-with-gcc-12.patch "${SCRIPT_DIR}"/0003-disable-optmizaion-patch-for-edk2.patch "${SCRIPT_DIR}"/0004-fix-PatchFv-make-regex-match-both-8-and-16-length-ad.patch;
+         git $GIT_ID am --keep-cr --whitespace=nowarn "${SCRIPT_DIR}"/0002-add-W-no-warnings-to-compile-with-gcc-12.patch "${SCRIPT_DIR}"/0003-disable-optmizaion-patch-for-edk2.patch "${SCRIPT_DIR}"/0004-fix-PatchFv-make-regex-match-both-8-and-16-length-ad.patch;
          mkdir -p MdeModulePkg/Library/BrotliCustomDecompressLib/brotli/c/include/)
 }
 

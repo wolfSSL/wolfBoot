@@ -477,7 +477,7 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
     int rc;
 #ifdef WOLFBOOT_DEBUG_TPM
     uint8_t digest[WOLFBOOT_TPM_PCR_DIG_SZ];
-    int     digestSz = 0;
+    int     digestSz = (int)sizeof(digest);
 #endif
 
     /* clear auth session for PCR */
@@ -502,7 +502,8 @@ int wolfBoot_tpm2_extend(uint8_t pcrIndex, uint8_t* hash, int line)
 
         wolfBoot_printf("PCR %d: Res %d, Digest Sz %d\n",
             pcrIndex, read_rc, digestSz);
-        wolfBoot_print_bin(digest, digestSz);
+        if (read_rc == 0)
+            wolfBoot_print_bin(digest, digestSz);
     }
     else {
         wolfBoot_printf("Measure boot failed! Index %d, %x (%s)\n",
@@ -1781,11 +1782,12 @@ int wolfBoot_tpm2_init(void)
 void wolfBoot_tpm2_deinit(void)
 {
 #ifdef WOLFBOOT_TPM_KEYSTORE
-    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH)
-    /* Enable parameter encryption for session */
-    int rc = wolfTPM2_SetAuthSession(&wolftpm_dev, 0, &wolftpm_session,
-            (TPMA_SESSION_decrypt | TPMA_SESSION_encrypt |
-             TPMA_SESSION_continueSession));
+    /* Anti-rollback has already disabled the platform hierarchy. */
+    #if !defined(ARCH_SIM) && !defined(WOLFBOOT_TPM_NO_CHG_PLAT_AUTH) && \
+        !defined(WOLFBOOT_ANTI_ROLLBACK)
+    /* Password (empty platform auth) in slot 0; ChangePlatformAuth puts the
+     * parameter-encryption session in slot 1. */
+    int rc = wolfTPM2_SetAuthPassword(&wolftpm_dev, 0, NULL);
     if (rc == 0) {
         /* Change platform auth to random value, to prevent application
          * from being able to use platform hierarchy. This is defined in
