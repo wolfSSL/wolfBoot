@@ -1197,6 +1197,15 @@ ifeq ($(TARGET),lpc55s69)
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/casper_port.o \
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hashcrypt_port.o
     endif
+    # Under TZEN the PUF belongs to the secure world only
+    ifeq ($(HWPUF),1)
+      ifneq ($(TZEN),1)
+        CFLAGS+=-DWOLFSSL_NXP_HWPUF
+        APP_OBJS+=\
+          $(MCUXPRESSO)/drivers/puf/fsl_puf.o \
+          $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/hwpuf_port.o
+      endif
+    endif
     ifeq ($(WOLFCRYPT_SUPPORT),1)
       LDFLAGS+=--specs=nano.specs
     endif

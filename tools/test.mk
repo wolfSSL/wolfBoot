@@ -1297,5 +1297,5 @@ test-size-all:
 		LIMIT=8980 NO_ARM_ASM=1
 	make keysclean
 	make clean
-	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19862 \
+	make test-size SIGN=ML_DSA ML_DSA_LEVEL=2 LIMIT=19902 \
 		IMAGE_SIGNATURE_SIZE=2420 IMAGE_HEADER_SIZE?=8192

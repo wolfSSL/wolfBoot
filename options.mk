@@ -1299,6 +1299,22 @@ ifeq ($(WOLFBOOT_DICE_HW),1)
   endif
 endif
 
+ifeq ($(WOLFBOOT_HWPUF_PROVISION),1)
+  ifneq ($(HWPUF),1)
+    $(error WOLFBOOT_HWPUF_PROVISION requires HWPUF=1)
+  endif
+  CFLAGS+=-DWOLFBOOT_HWPUF_PROVISION
+endif
+
+ifeq ($(HWPUF),1)
+  ifeq ($(WOLFBOOT_UDS_UID_FALLBACK_FORTEST),1)
+    $(error HWPUF=1 cannot be combined with WOLFBOOT_UDS_UID_FALLBACK_FORTEST=1: the UDS would come from the public UID instead of the PUF)
+  endif
+  ifneq ($(WOLFBOOT_HWPUF_PROV_ADDRESS),)
+    CFLAGS+=-DWOLFBOOT_HWPUF_PROV_ADDRESS=$(WOLFBOOT_HWPUF_PROV_ADDRESS)
+  endif
+endif
+
 ifeq ($(PKCS11_STORE_STATS),1)
   CFLAGS+=-DPKCS11_STORE_STATS
 endif
