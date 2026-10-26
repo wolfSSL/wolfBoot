@@ -1983,19 +1983,44 @@ ifeq ($(MPFS_ATHENA),1)
     $(error MPFS_ATHENA=1 requires MPFS_ATHENA_CAL_DIR to point at the \
       Microchip user-crypto (CAL) directory)
   endif
+  # The engine is driven by the wolfCrypt port, so the wolfSSL in use has to
+  # carry it.  Checked here because an older tree -- a stale submodule, or a
+  # WOLFBOOT_LIB_WOLFSSL override -- otherwise fails as a missing header and a
+  # pile of undefined wc_MpfsAthena_* symbols.
+  MPFS_ATHENA_PORT_SRC = \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/microchip/mpfs_athena.c
+  ifeq ($(wildcard $(MPFS_ATHENA_PORT_SRC)),)
+    $(error MPFS_ATHENA=1 needs a wolfSSL containing the Athena port at \
+      wolfcrypt/src/port/microchip/mpfs_athena.c; update the lib/wolfssl \
+      submodule or point WOLFBOOT_LIB_WOLFSSL at a tree that has it)
+  endif
   # Both CAL archives are soft-float lp64, so callers must be too (see arch.mk).
   # M-mode: hart-software-services/services/crypto.  S-mode: the rv64imafd
   # build from polarfire-soc-bare-metal-examples .../middleware/cal.
+  # The include path is for the wolfCrypt port, which owns the CAL calls, not
+  # for this HAL.  WOLFSSL_MICROCHIP_MPFS selects the SoC family and
+  # WOLFSSL_MPFS_ATHENA says the part carries the engine; wolfSSL's settings.h
+  # turns on WOLF_CRYPTO_CB and the COPY/FREE events from the latter, so they
+  # are not repeated here.  Which engines are offloaded follows the ordinary
+  # WOLFSSL_SHA384 and WOLFSSL_AES_COUNTER gates, so AES-256-CTR comes with an
+  # AES-256 ENCRYPT build.
   CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
-  CFLAGS += -DWOLF_CRYPTO_CB
-  CFLAGS += -DWOLFBOOT_DEVID_HASH=0xA7
+  CFLAGS += -DWOLFSSL_MICROCHIP_MPFS -DWOLFSSL_MPFS_ATHENA
+  # Matches the port's own WC_MPFS_ATHENA_DEVID default; wolfBoot tags its
+  # cipher contexts with this one.
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
   WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  WOLFCRYPT_OBJS += \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/microchip/mpfs_athena.o
   # SHA-384 offload.  Over a whole image in DDR it is slower than the software
-  # hash, so an encrypted build wanting only the AES win sets MPFS_ATHENA_SHA=0.
+  # hash, so an encrypted build wanting only the AES win sets MPFS_ATHENA_SHA=0,
+  # which leaves WOLFBOOT_DEVID_HASH at INVALID_DEVID and image hashing in
+  # software.  The port's self-test still runs its SHA-384 known-answer test
+  # whenever WOLFSSL_SHA384 is compiled, so the engine's hash path is still
+  # brought up and checked; the knob moves the image hash, not the self-test.
   MPFS_ATHENA_SHA ?= 1
   ifeq ($(MPFS_ATHENA_SHA),1)
-    CFLAGS += -DMPFS_ATHENA_SHA
+    CFLAGS += -DMPFS_ATHENA_SHA -DWOLFBOOT_DEVID_HASH=0xA7
   endif
   # The hash offload and its self-check are SHA-384; an image hashed with
   # something else keeps that in software and still gets the AES offload.
@@ -2007,20 +2032,17 @@ ifeq ($(MPFS_ATHENA),1)
   # Archive name differs between Microchip's two published builds.
   MPFS_ATHENA_CAL_LIB ?= mpfs-rv64imac-user-crypto-lib.a
   LIBS += $(MPFS_ATHENA_CAL_DIR)/$(MPFS_ATHENA_CAL_LIB)
-  # AES-256-CTR offload rides on the AES-CTR path an AES-256 ENCRYPT build
-  # compiles; other builds offload the hash only.  MPFS_ATHENA_AES=0 opts out.
-  ifeq ($(ENCRYPT_WITH_AES256),1)
-    MPFS_ATHENA_AES ?= 1
-    ifeq ($(MPFS_ATHENA_AES),1)
-      CFLAGS += -DMPFS_ATHENA_AES
-    endif
-  endif
+  # AES-256-CTR offload now follows the port's own WOLFSSL_AES_COUNTER gate, so
+  # it is present exactly when an AES-256 ENCRYPT build compiles that path.
   # With neither offload selected the engine is brought up and self-checked for
   # nothing, so say so rather than linking CAL into a build that cannot use it.
+  # ENCRYPT_WITH_AES256=1 on its own is not enough: WOLFSSL_AES_COUNTER, which
+  # the port's cipher path is gated on, is only defined under ENCRYPT=1.
   ifneq ($(MPFS_ATHENA_SHA),1)
-    ifneq ($(MPFS_ATHENA_AES),1)
+    ifneq ($(ENCRYPT)$(ENCRYPT_WITH_AES256),11)
       $(error MPFS_ATHENA=1 with MPFS_ATHENA_SHA=0 and no AES offload leaves \
-              nothing offloaded: drop MPFS_ATHENA, or set ENCRYPT_WITH_AES256=1)
+              nothing offloaded: drop MPFS_ATHENA, or set ENCRYPT=1 \
+              ENCRYPT_WITH_AES256=1)
     endif
   endif
 endif
