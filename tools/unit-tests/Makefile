@@ -874,13 +874,17 @@ unit-otp-keystore-gen-zeroize: unit-otp-keystore-gen-zeroize.c \
 	gcc -o $@ unit-otp-keystore-gen-zeroize.c unit-keystore.c \
 		-DFLASH_OTP_KEYSTORE $(CFLAGS) $(LDFLAGS) -ldl
 
-unit-update-flash-self-update unit-update-flash-self-update-monolithic: \
-		../../include/target.h unit-update-flash.c
+unit-update-flash-self-update: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-self-update-ecc: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
+	$(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-self-update-monolithic: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c \
 	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c \
 	$(CFLAGS) $(LDFLAGS)
