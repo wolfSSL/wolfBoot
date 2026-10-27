@@ -1201,6 +1201,49 @@ START_TEST (test_custom_trailer_power_cut)
     ck_assert_int_gt(cut, 2);
 }
 END_TEST
+
+/* Cut the power at every custom trailer write of a rollback: the image that
+ * failed to confirm must never come back */
+START_TEST (test_custom_trailer_rollback_power_cut)
+{
+    int cut;
+    int done = 0;
+    uint8_t st;
+
+    for (cut = 1; !done; cut++) {
+        reset_mock_stats();
+        prepare_flash();
+        add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+        add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+        wolfBoot_update_trigger();
+        wolfBoot_start();
+        ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
+        /* v2 not confirmed: this boot rolls back */
+        trailer_cut_countdown = cut;
+        if (setjmp(trailer_cut_jmp) == 0) {
+            wolfBoot_start();
+            done = 1;
+        }
+        else {
+            locked = ext_locked = 1;
+        }
+        trailer_cut_countdown = 0;
+        if (!done)
+            wolfBoot_start();
+        ck_assert_msg(!wolfBoot_panicked, "cut %d: panic", cut);
+        ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+            "cut %d: version %u", cut, wolfBoot_current_firmware_version());
+        ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+        ck_assert_msg(st == IMG_STATE_SUCCESS, "cut %d: BOOT state 0x%x",
+            cut, st);
+        wolfBoot_start();
+        ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+            "cut %d: rejected image reinstalled", cut);
+        cleanup_flash();
+    }
+    ck_assert_int_gt(cut, 2);
+}
+END_TEST
 #endif
 
 START_TEST (test_sunnyday_noupdate)
@@ -1412,7 +1455,14 @@ START_TEST(test_rollback_resume_from_swapping_flag)
     wolfBoot_start();
     ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
     ext_flash_unlock();
+#ifdef CUSTOM_PARTITION_TRAILER
+    /* written by the rollback before its first sector */
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_ROLLBACK);
+    hal_flash_lock();
+#else
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+#endif
     ext_flash_lock();
     cut_after_sector0_backup_erase();
     wolfBoot_start();
@@ -2517,6 +2567,8 @@ Suite *wolfboot_suite(void)
 #endif
 #if !defined(DISABLE_BACKUP) && defined(CUSTOM_PARTITION_TRAILER)
     tcase_add_test(forward_update_samesize, test_custom_trailer_power_cut);
+    tcase_add_test(forward_update_samesize,
+        test_custom_trailer_rollback_power_cut);
 #endif
 #if defined(PART_SWAP_EXT) && !defined(DISABLE_BACKUP)
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
