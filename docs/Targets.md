@@ -3402,8 +3402,20 @@ The flash is programmed in 512-byte pages with ECC: a page that is erased but
 never programmed faults on read. The HAL therefore programs 0xFF over erased
 pages that wolfBoot reads (the bootloader region, the partitions and the
 keyvault) at boot, and `hal_flash_erase()` programs 0xFF after each erase.
-wolfBoot runs the core at 96MHz, since the ROM flash API refuses to program or
-erase above 100MHz.
+A page whose programming was cut by a power loss is not erased but still fails
+ECC, so at boot wolfBoot also reads every page of the partitions, the swap
+sector and the keyvault through the flash controller, which reports ECC errors
+instead of faulting, and rewrites a flagged page: with the data the controller
+returned when a single 16-byte word is flagged (a correctable error keeps its
+contents), with 0xFF when more are (an interrupted program, which the update
+logic treats as an erased page). The bootloader region is checked the same way
+only when DICE attestation hashes it (`WOLFCRYPT_TZ_PSA=1`), and the hardware
+PUF record is never rewritten. The check is skipped, with a message on the
+console, if the page wolfBoot booted from does not read clean through the
+controller. wolfBoot runs the core at 96MHz, since the ROM flash API refuses to
+program or erase above 100MHz, and sets the secure stack limit (MSPLIM) at the
+end of its bss so a stack overflow raises a UsageFault instead of corrupting
+data.
 
 This requires the NXP MCUXpresso SDK. We tested using
 [mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
@@ -3436,8 +3448,11 @@ wolfBoot / wolfCrypt provide support for the LPC55S69's hardware acceleration
 blocks, to improve performance of various crypto algorithms.  By default, this
 support is turned off in the config files, and all crypto is software based.
 To turn on hardware acceleration, set PKA=1 in the config file.
-Hardware acceleration is not available with TrustZone (`TZEN=1`): the AHB
-secure controller only lets the HASHCRYPT bus master read non-secure memory.
+Hardware acceleration is not available with TrustZone (`TZEN=1`): the HASHCRYPT
+engine reads its input as an AHB bus master, and on the LPC55S69 that master
+stays non-secure whatever `MASTER_SEC_LEVEL` is set to, so the AHB secure
+controller only lets it read memory marked non-secure. wolfBoot keeps its SRAM
+and the update partition secure, and the bus masters locked non-secure.
 
 Basic hardware acceleration supported:
 - SHA1

@@ -77,6 +77,9 @@
 
 static flash_config_t pflash;
 static int flash_ready;
+#ifdef __WOLFBOOT
+static int flash_check;
+#endif
 
 #if defined(TZEN) && defined(__WOLFBOOT) && !defined(LPC55S69_KEYVAULT_ADDR)
 extern uint32_t _flash_keyvault;
@@ -429,7 +432,8 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 #endif /* __WOLFBOOT && WOLFCRYPT_TZ_PSA */
 
 #if defined(TZEN) && defined(WOLFSSL_NXP_LPC55S6X)
-/* The HASHCRYPT bus master reaches SRAM only through the non-secure alias */
+/* The HASHCRYPT bus master stays non-secure whatever MASTER_SEC_LEVEL says,
+ * so it can only read memory the AHB secure controller marks non-secure */
 #error PKA=1 is not supported with TZEN=1
 #endif
 
@@ -520,6 +524,13 @@ static void hal_ahbsc_init(void)
     AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT10[0].SLAVE1_RULE = LPC55S69_AHBSC_SECURE;
     AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT10[0].SEC_CTRL_AHB_SEC_CTRL_MEM_RULE[0] =
         LPC55S69_AHBSC_SECURE;
+
+    /* Every other bus master stays non-secure; both registers are write-locked */
+    AHB_SECURE_CTRL->MASTER_SEC_LEVEL =
+        AHB_SECURE_CTRL_MASTER_SEC_LEVEL_MASTER_SEC_LEVEL_LOCK(1U);
+    AHB_SECURE_CTRL->MASTER_SEC_ANTI_POL_REG =
+        ~AHB_SECURE_CTRL_MASTER_SEC_ANTI_POL_REG_MASTER_SEC_LEVEL_ANTIPOL_LOCK_MASK |
+        AHB_SECURE_CTRL_MASTER_SEC_ANTI_POL_REG_MASTER_SEC_LEVEL_ANTIPOL_LOCK(1U);
 
     /* Checking on (0b01); the write lock (0b01) takes effect from the DP copy */
     misc = (AHB_SECURE_CTRL->MISC_CTRL_REG &
@@ -618,6 +629,72 @@ static int RAMFUNCTION lpc55s69_page_is_blank(uint32_t offset)
     return (st == kStatus_FLASH_Success);
 }
 
+#ifdef __WOLFBOOT
+/* Returns the FAIL, ERR and ECC_ERR flags of one word read through the
+ * controller, or -1 if the command never completes */
+#ifndef LPC55S69_FLASH_WORD_READ
+static int RAMFUNCTION lpc55s69_word_read(uint32_t offset, uint32_t *data)
+{
+    uint32_t n = LPC55S69_FLASH_CMD_TIMEOUT;
+    uint32_t st;
+
+    FLASH->INT_CLR_STATUS = FLASH_INT_CLR_STATUS_FAIL_MASK |
+        FLASH_INT_CLR_STATUS_ERR_MASK | FLASH_INT_CLR_STATUS_DONE_MASK |
+        FLASH_INT_CLR_STATUS_ECC_ERR_MASK;
+    FLASH->STARTA = offset / LPC55S69_FLASH_WORD_SIZE;
+    /* Read mode: ECC on, normal margin */
+    FLASH->DATAW[0] = 0U;
+    FLASH->CMD = LPC55S69_FLASH_CMD_READ_SINGLE_WORD;
+    do {
+        st = FLASH->INT_STATUS;
+    } while (((st & FLASH_INT_STATUS_DONE_MASK) == 0U) && (--n != 0U));
+    if (n == 0U) {
+        return -1;
+    }
+    data[0] = FLASH->DATAW[0];
+    data[1] = FLASH->DATAW[1];
+    data[2] = FLASH->DATAW[2];
+    data[3] = FLASH->DATAW[3];
+    return (int)(st & (FLASH_INT_STATUS_FAIL_MASK | FLASH_INT_STATUS_ERR_MASK |
+        FLASH_INT_STATUS_ECC_ERR_MASK));
+}
+#define LPC55S69_FLASH_WORD_READ(off, data) lpc55s69_word_read(off, data)
+#endif
+
+/* Reads a page through the controller into page. Returns the number of words
+ * flagged with an ECC error, or -1 when the controller did not answer as
+ * expected (illegal command, timeout, or a failure with no ECC error) */
+static int RAMFUNCTION lpc55s69_page_check(uint32_t offset, uint8_t *page)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t w[LPC55S69_FLASH_WORD_SIZE / sizeof(uint32_t)];
+    uint32_t i;
+    uint32_t j;
+    int st;
+    int bad = 0;
+
+    __disable_irq();
+    for (i = 0; i < LPC55S69_FLASH_PAGE_SIZE; i += LPC55S69_FLASH_WORD_SIZE) {
+        st = LPC55S69_FLASH_WORD_READ(offset + i, w);
+        if ((st < 0) || ((st & FLASH_INT_STATUS_ERR_MASK) != 0) ||
+                ((st & (FLASH_INT_STATUS_FAIL_MASK |
+                        FLASH_INT_STATUS_ECC_ERR_MASK)) ==
+                    FLASH_INT_STATUS_FAIL_MASK)) {
+            bad = -1;
+            break;
+        }
+        if ((st & FLASH_INT_STATUS_ECC_ERR_MASK) != 0) {
+            bad++;
+        }
+        for (j = 0; j < LPC55S69_FLASH_WORD_SIZE; j++) {
+            page[i + j] = (uint8_t)(w[j / 4U] >> ((j % 4U) * 8U));
+        }
+    }
+    __set_PRIMASK(primask);
+    return bad;
+}
+#endif /* __WOLFBOOT */
+
 /* Accepts the secure (0x1xxxxxxx) and non-secure flash aliases */
 static int RAMFUNCTION lpc55s69_flash_offset(uint32_t address, uint32_t len,
         uint32_t *offset)
@@ -635,22 +712,59 @@ static int RAMFUNCTION lpc55s69_flash_offset(uint32_t address, uint32_t len,
     return 0;
 }
 
-static int hal_flash_fix_ecc(uint32_t address, uint32_t len)
+/* Blank pages are programmed 0xFF. With check set, a page that reads with an
+ * ECC error is rewritten: one bad word keeps what the controller returned (a
+ * correctable error, or 16 bytes the image hash rejects), more means the
+ * program was cut, and the page reads as erased again */
+static int hal_flash_fix_ecc(uint32_t address, uint32_t len, int check)
 {
     uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
     uint32_t offset = 0;
     uint32_t end;
     uint32_t i;
+    int program;
+    int fill;
+#ifdef __WOLFBOOT
+    int bad;
+#endif
     int ret;
 
     ret = lpc55s69_flash_offset(address, len, &offset);
     if (ret == 0) {
-        for (i = 0; i < sizeof(page_buf); i++) {
-            page_buf[i] = 0xFFU;
-        }
         end = offset + len;
         while ((ret == 0) && (offset < end)) {
+            program = 0;
+            fill = 0;
             if (lpc55s69_page_is_blank(offset)) {
+                program = 1;
+                fill = 1;
+            }
+#ifdef __WOLFBOOT
+            else if (check && flash_check) {
+                bad = lpc55s69_page_check(offset, page_buf);
+                if (bad > 0) {
+                    /* A flag left by an interleaved read is not repeated */
+                    bad = lpc55s69_page_check(offset, page_buf);
+                }
+                if (bad < 0) {
+                    flash_check = 0;
+                    wolfBoot_printf("lpc55s69: flash ECC check unavailable\n");
+                }
+                else if (bad > 0) {
+                    program = 1;
+                    fill = (bad > 1);
+                    ret = lpc55s69_page_erase(offset);
+                }
+            }
+#else
+            (void)check;
+#endif
+            if ((ret == 0) && program) {
+                if (fill) {
+                    for (i = 0; i < sizeof(page_buf); i++) {
+                        page_buf[i] = 0xFFU;
+                    }
+                }
                 ret = lpc55s69_page_program(offset, page_buf);
             }
             offset += LPC55S69_FLASH_PAGE_SIZE;
@@ -659,31 +773,49 @@ static int hal_flash_fix_ecc(uint32_t address, uint32_t len)
     return ret;
 }
 
-/* Fill every erased page wolfBoot may read, so reads never hit an ECC fault;
+/* Fill every erased page wolfBoot may read, so reads never hit an ECC fault,
+ * and repair the pages a cut program left unreadable where wolfBoot writes.
  * DICE attestation hashes the whole bootloader region */
 static int hal_flash_fix_ecc_all(void)
 {
     int ret = 0;
-
 #ifdef __WOLFBOOT
+    uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
+    uint32_t offset = 0;
+    int check_boot = 0;
+
+    /* The page wolfBoot booted from must read clean, or the controller does
+     * not report what the check expects */
+    flash_check = 1;
+    if ((lpc55s69_flash_offset(ARCH_FLASH_OFFSET, LPC55S69_FLASH_PAGE_SIZE,
+                &offset) != 0) ||
+            (!lpc55s69_page_is_blank(offset) &&
+                (lpc55s69_page_check(offset, page_buf) != 0))) {
+        flash_check = 0;
+        wolfBoot_printf("lpc55s69: flash ECC check unavailable\n");
+    }
+#ifdef WOLFCRYPT_TZ_PSA
+    check_boot = 1;
+#endif
     ret = hal_flash_fix_ecc(ARCH_FLASH_OFFSET,
-            WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET);
+            WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET, check_boot);
 #endif
     if (ret == 0) {
         ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_BOOT_ADDRESS,
-                WOLFBOOT_PARTITION_SIZE);
+                WOLFBOOT_PARTITION_SIZE, 1);
     }
     if (ret == 0) {
         ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
-                WOLFBOOT_PARTITION_SIZE);
+                WOLFBOOT_PARTITION_SIZE, 1);
     }
     if (ret == 0) {
         ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_SWAP_ADDRESS,
-                WOLFBOOT_SECTOR_SIZE);
+                WOLFBOOT_SECTOR_SIZE, 1);
     }
 #if defined(TZEN) && defined(__WOLFBOOT)
     if (ret == 0) {
-        ret = hal_flash_fix_ecc(LPC55S69_KEYVAULT_ADDR, LPC55S69_KEYVAULT_LEN);
+        ret = hal_flash_fix_ecc(LPC55S69_KEYVAULT_ADDR, LPC55S69_KEYVAULT_LEN,
+                1);
     }
 #endif
     return ret;

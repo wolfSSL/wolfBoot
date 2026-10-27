@@ -44,6 +44,8 @@
 
 const uint8_t *mock_flash_ptr(uint32_t address);
 #define LPC55S69_FLASH_PTR(a) mock_flash_ptr(a)
+int mock_word_read(uint32_t offset, uint32_t *data);
+#define LPC55S69_FLASH_WORD_READ(off, data) mock_word_read(off, data)
 
 #include "../../hal/lpc55s69.c"
 
@@ -61,6 +63,13 @@ SysTick_Type mock_systick;
 static uint8_t mock_flash[LPC55S69_FLASH_SIZE];
 /* 0: erased and never programmed, so a read faults on the ECC check */
 static uint8_t programmed[FLASH_PAGES];
+/* Bit n set: word n of the page reads with ECC_ERR (bad: every time,
+ * transient: once); garbage: and the data returned is not what is stored */
+static uint32_t ecc_bad[FLASH_PAGES];
+static uint32_t ecc_transient[FLASH_PAGES];
+static uint32_t ecc_garbage[FLASH_PAGES];
+static int word_read_calls;
+static int word_read_ret;
 static status_t init_ret;
 static int init_calls;
 static int erase_calls;
@@ -111,6 +120,8 @@ status_t FLASH_Erase(flash_config_t *config, uint32_t start,
         return kStatus_Fail;
     memset(&mock_flash[start], 0xFF, PAGE);
     programmed[start / PAGE] = 0;
+    ecc_bad[start / PAGE] = ecc_transient[start / PAGE] = 0;
+    ecc_garbage[start / PAGE] = 0;
     return kStatus_FLASH_Success;
 }
 
@@ -125,7 +136,38 @@ status_t FLASH_Program(flash_config_t *config, uint32_t start,
             "page 0x%x programmed twice without an erase", start);
     memcpy(&mock_flash[start], src, PAGE);
     programmed[start / PAGE] = 1;
+    ecc_bad[start / PAGE] = ecc_transient[start / PAGE] = 0;
+    ecc_garbage[start / PAGE] = 0;
     return kStatus_FLASH_Success;
+}
+
+/* READ_SINGLE_WORD through the controller: a blank or flagged word reports
+ * ECC_ERR instead of faulting */
+int mock_word_read(uint32_t offset, uint32_t *data)
+{
+    uint32_t page = offset / PAGE;
+    uint32_t bit = 1U << ((offset % PAGE) / LPC55S69_FLASH_WORD_SIZE);
+    uint32_t k;
+    int st = 0;
+
+    ck_assert_uint_eq(offset % LPC55S69_FLASH_WORD_SIZE, 0);
+    ck_assert_uint_lt(offset, LPC55S69_FLASH_SIZE);
+    if (mock_primask == 0U)
+        irq_enabled_during_rom = 1;
+    word_read_calls++;
+    memcpy(data, &mock_flash[offset], LPC55S69_FLASH_WORD_SIZE);
+    if (word_read_ret != 0)
+        return word_read_ret;
+    if (!programmed[page] || (ecc_bad[page] & bit) ||
+            (ecc_transient[page] & bit)) {
+        st = FLASH_INT_STATUS_ECC_ERR_MASK;
+        ecc_transient[page] &= ~bit;
+    }
+    if (ecc_garbage[page] & bit) {
+        for (k = 0; k < 4; k++)
+            data[k] = 0xBAD00000U + (offset / 4) + k;
+    }
+    return st;
 }
 
 status_t FLASH_VerifyErase(flash_config_t *config, uint32_t start,
@@ -145,6 +187,8 @@ const uint8_t *mock_flash_ptr(uint32_t address)
     ck_assert_uint_lt(off, LPC55S69_FLASH_SIZE);
     ck_assert_msg(programmed[off / PAGE],
             "read of erased page 0x%x faults (ECC)", off);
+    ck_assert_msg(ecc_bad[off / PAGE] == 0,
+            "read of ECC-corrupt page 0x%x faults", off);
     return &mock_flash[off];
 }
 
@@ -169,11 +213,27 @@ static void wipe_page(uint32_t off)
     programmed[off / PAGE] = 0;
 }
 
+/* A page whose program was cut: every word fails ECC and reads as garbage */
+static void torn_page(uint32_t off, uint8_t fill)
+{
+    put_page(off, fill);
+    ecc_bad[off / PAGE] = 0xFFFFFFFFU;
+    ecc_garbage[off / PAGE] = 0xFFFFFFFFU;
+}
+
+/* A correctable error: the word is flagged, the data comes back intact */
+static void weak_page(uint32_t off, uint32_t word)
+{
+    ecc_bad[off / PAGE] |= 1U << word;
+}
+
 static void reset_counters(void)
 {
     erase_calls = program_calls = ptr_calls = 0;
     fail_erase_at = fail_program_at = 0;
     irq_enabled_during_rom = 0;
+    word_read_calls = 0;
+    word_read_ret = 0;
     n_ops = 0;
 }
 
@@ -181,6 +241,9 @@ static void setup(void)
 {
     memset(mock_flash, 0xFF, sizeof(mock_flash));
     memset(programmed, 0, sizeof(programmed));
+    memset(ecc_bad, 0, sizeof(ecc_bad));
+    memset(ecc_transient, 0, sizeof(ecc_transient));
+    memset(ecc_garbage, 0, sizeof(ecc_garbage));
     init_ret = kStatus_FLASH_Success;
     init_calls = 0;
     flash_ready = 0;
@@ -250,6 +313,161 @@ START_TEST(test_init_failure_then_retry)
     hal_init();
     ck_assert_int_eq(flash_ready, 1);
     ck_assert_int_eq(hal_flash_write(S_ALIAS + BOOT, &b, 1), 0);
+}
+END_TEST
+
+START_TEST(test_init_repairs_torn_page)
+{
+    uint32_t trailer = WOLFBOOT_PARTITION_UPDATE_ADDRESS +
+        WOLFBOOT_PARTITION_SIZE - PAGE;
+    uint32_t i;
+
+    torn_page(BOOT, 0x5A);
+    torn_page(trailer, 0x33);
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(flash_check, 1);
+    ck_assert_int_eq(n_ops, 4);
+    ck_assert_int_eq(op_kind[0], 'E');
+    ck_assert_uint_eq(op_off[0], BOOT);
+    ck_assert_int_eq(op_kind[1], 'P');
+    ck_assert_uint_eq(op_off[1], BOOT);
+    ck_assert_int_eq(op_kind[2], 'E');
+    ck_assert_uint_eq(op_off[2], trailer);
+    ck_assert_int_eq(op_kind[3], 'P');
+    ck_assert_uint_eq(op_off[3], trailer);
+    for (i = 0; i < PAGE; i++) {
+        ck_assert_uint_eq(mock_flash[BOOT + i], 0xFF);
+        ck_assert_uint_eq(mock_flash[trailer + i], 0xFF);
+    }
+    ck_assert_uint_eq(ecc_bad[BOOT / PAGE], 0);
+    ck_assert_uint_eq(mock_flash_ptr(S_ALIAS + BOOT)[0], 0xFF);
+}
+END_TEST
+
+START_TEST(test_init_keeps_correctable_page)
+{
+    uint32_t i;
+
+    put_page(BOOT + PAGE, 0xA5);
+    weak_page(BOOT + PAGE, 7);
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(n_ops, 2);
+    ck_assert_int_eq(op_kind[0], 'E');
+    ck_assert_uint_eq(op_off[0], BOOT + PAGE);
+    ck_assert_int_eq(op_kind[1], 'P');
+    ck_assert_uint_eq(op_off[1], BOOT + PAGE);
+    for (i = 0; i < PAGE; i++)
+        ck_assert_uint_eq(mock_flash[BOOT + PAGE + i], 0xA5);
+    ck_assert_uint_eq(ecc_bad[(BOOT + PAGE) / PAGE], 0);
+}
+END_TEST
+
+START_TEST(test_init_single_bad_word_keeps_neighbours)
+{
+    uint32_t i;
+
+    put_page(BOOT, 0xA5);
+    weak_page(BOOT, 3);
+    ecc_garbage[BOOT / PAGE] = 1U << 3;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(n_ops, 2);
+    for (i = 0; i < PAGE; i++) {
+        if (i >= 48 && i < 64)
+            ck_assert_uint_ne(mock_flash[BOOT + i], 0xA5);
+        else
+            ck_assert_uint_eq(mock_flash[BOOT + i], 0xA5);
+    }
+    ck_assert_uint_eq(ecc_bad[BOOT / PAGE], 0);
+}
+END_TEST
+
+START_TEST(test_init_two_bad_words_fill_ff)
+{
+    uint32_t i;
+
+    put_page(BOOT, 0xA5);
+    weak_page(BOOT, 0);
+    weak_page(BOOT, 31);
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(n_ops, 2);
+    for (i = 0; i < PAGE; i++)
+        ck_assert_uint_eq(mock_flash[BOOT + i], 0xFF);
+}
+END_TEST
+
+START_TEST(test_init_transient_flag_not_repaired)
+{
+    put_page(BOOT, 0xA5);
+    ecc_transient[BOOT / PAGE] = 1U << 5;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(n_ops, 0);
+    ck_assert_uint_eq(mock_flash[BOOT + 80], 0xA5);
+    ck_assert_int_eq(flash_check, 1);
+}
+END_TEST
+
+START_TEST(test_init_check_unavailable_keeps_pages)
+{
+    torn_page(BOOT, 0x5A);
+    wipe_page(BOOT + PAGE);
+    word_read_ret = FLASH_INT_STATUS_ERR_MASK;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(flash_check, 0);
+    ck_assert_int_eq(n_ops, 1);
+    ck_assert_int_eq(op_kind[0], 'P');
+    ck_assert_uint_eq(op_off[0], BOOT + PAGE);
+    ck_assert_uint_eq(mock_flash[BOOT], 0x5A);
+    ck_assert_uint_ne(ecc_bad[BOOT / PAGE], 0);
+
+    word_read_ret = -1;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(flash_check, 0);
+    ck_assert_int_eq(n_ops, 1);
+    ck_assert_uint_eq(mock_flash[BOOT], 0x5A);
+}
+END_TEST
+
+START_TEST(test_init_selftest_disables_repair)
+{
+    weak_page(0, 0);
+    torn_page(BOOT, 0x5A);
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(flash_check, 0);
+    ck_assert_int_eq(n_ops, 0);
+    ck_assert_uint_eq(mock_flash[BOOT], 0x5A);
+}
+END_TEST
+
+START_TEST(test_init_check_skips_bootloader_region)
+{
+    torn_page(0x1000, 0x5A);
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(flash_check, 1);
+    ck_assert_int_eq(n_ops, 0);
+    ck_assert_uint_eq(mock_flash[0x1000], 0x5A);
+}
+END_TEST
+
+START_TEST(test_init_repair_failure_stops)
+{
+    torn_page(BOOT, 0x5A);
+    torn_page(BOOT + PAGE, 0x5A);
+    fail_erase_at = 1;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(erase_calls, 1);
+    ck_assert_int_eq(program_calls, 0);
+    ck_assert_uint_ne(ecc_bad[BOOT / PAGE], 0);
+    ck_assert_uint_ne(ecc_bad[(BOOT + PAGE) / PAGE], 0);
 }
 END_TEST
 
@@ -444,6 +662,15 @@ START_TEST(test_irqs_masked_and_primask_restored)
     ck_assert_int_eq(hal_flash_write(S_ALIAS + BOOT + 10, &b, 1), 0);
     ck_assert_uint_eq(mock_primask, 1);
     ck_assert_int_eq(irq_enabled_during_rom, 0);
+
+    torn_page(BOOT + 2 * PAGE, 0x5A);
+    reset_counters();
+    mock_primask = 0;
+    flash_ready = 0;
+    hal_init();
+    ck_assert_int_eq(n_ops, 2);
+    ck_assert_uint_eq(mock_primask, 0);
+    ck_assert_int_eq(irq_enabled_during_rom, 0);
 }
 END_TEST
 
@@ -457,6 +684,15 @@ static Suite *lpc55s69_flash_suite(void)
     tcase_add_test(tc, test_init_keeps_programmed_pages);
     tcase_add_test(tc, test_init_fill_stops_at_failure);
     tcase_add_test(tc, test_init_failure_then_retry);
+    tcase_add_test(tc, test_init_repairs_torn_page);
+    tcase_add_test(tc, test_init_keeps_correctable_page);
+    tcase_add_test(tc, test_init_single_bad_word_keeps_neighbours);
+    tcase_add_test(tc, test_init_two_bad_words_fill_ff);
+    tcase_add_test(tc, test_init_transient_flag_not_repaired);
+    tcase_add_test(tc, test_init_check_unavailable_keeps_pages);
+    tcase_add_test(tc, test_init_selftest_disables_repair);
+    tcase_add_test(tc, test_init_check_skips_bootloader_region);
+    tcase_add_test(tc, test_init_repair_failure_stops);
     tcase_add_test(tc, test_partial_write_keeps_neighbours);
     tcase_add_test(tc, test_write_to_blank_page_skips_erase);
     tcase_add_test(tc, test_write_spanning_pages);

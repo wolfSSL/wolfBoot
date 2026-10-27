@@ -228,7 +228,18 @@ status_t RNG_GetRandomData(RNG_Type *base, void *data, size_t dataSize)
     return rng_read_ret;
 }
 
+/* The controller read path is exercised by unit-lpc55s69-flash */
+int mock_word_read(uint32_t offset, uint32_t *data);
+#define LPC55S69_FLASH_WORD_READ(off, data) mock_word_read(off, data)
+
 #include "../../hal/lpc55s69.c"
+
+int mock_word_read(uint32_t offset, uint32_t *data)
+{
+    (void)offset;
+    memset(data, 0xFF, LPC55S69_FLASH_WORD_SIZE);
+    return 0;
+}
 
 #define AHBSC_S        0x33333333U
 #define AHBSC_RULE(reg, n) (((reg) >> ((n) * 4U)) & 0x3U)
@@ -491,6 +502,19 @@ START_TEST(test_ahbsc_checking_enabled_and_locked)
 }
 END_TEST
 
+START_TEST(test_ahbsc_masters_non_secure_and_locked)
+{
+    const uint32_t lock =
+        AHB_SECURE_CTRL_MASTER_SEC_LEVEL_MASTER_SEC_LEVEL_LOCK_MASK;
+
+    /* No bus master is secure; the anti-pole copy is inverted */
+    ck_assert_uint_eq(mock_ahbsc.MASTER_SEC_LEVEL,
+            AHB_SECURE_CTRL_MASTER_SEC_LEVEL_MASTER_SEC_LEVEL_LOCK(1U));
+    ck_assert_uint_eq(mock_ahbsc.MASTER_SEC_ANTI_POL_REG, ~lock |
+            AHB_SECURE_CTRL_MASTER_SEC_ANTI_POL_REG_MASTER_SEC_LEVEL_ANTIPOL_LOCK(1U));
+}
+END_TEST
+
 START_TEST(test_sau_write_locked)
 {
     const uint32_t locks = AHB_SECURE_CTRL_CPU0_LOCK_REG_LOCK_SAU_MASK |
@@ -600,6 +624,7 @@ static Suite *lpc55s69_tz_suite(void)
     tcase_add_test(tc, test_ahbsc_sram_rules);
     tcase_add_test(tc, test_ahbsc_peripheral_rules);
     tcase_add_test(tc, test_ahbsc_checking_enabled_and_locked);
+    tcase_add_test(tc, test_ahbsc_masters_non_secure_and_locked);
     tcase_add_test(tc, test_sau_write_locked);
     tcase_add_test(tc, test_prepare_boot_hands_over_leds);
     tcase_add_test(tc, test_benchmark_timer_counts_fro1m_ticks);

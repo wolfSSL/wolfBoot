@@ -47,7 +47,17 @@
 const uint8_t *mock_flash_ptr(uint32_t address);
 #define LPC55S69_FLASH_PTR(a) mock_flash_ptr(a)
 
+int mock_word_read(uint32_t offset, uint32_t *data);
+#define LPC55S69_FLASH_WORD_READ(off, data) mock_word_read(off, data)
+
 #include "../../hal/lpc55s69.c"
+
+int mock_word_read(uint32_t offset, uint32_t *data)
+{
+    (void)offset;
+    memset(data, 0xFF, LPC55S69_FLASH_WORD_SIZE);
+    return 0;
+}
 
 #define PAGE             LPC55S69_FLASH_PAGE_SIZE
 #define FLASH_PAGES      (LPC55S69_FLASH_SIZE / PAGE)

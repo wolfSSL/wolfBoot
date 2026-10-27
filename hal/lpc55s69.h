@@ -25,6 +25,11 @@
 /* Flash programs and erases in 512-byte pages; an erased page that was
  * never programmed faults on read (ECC), so erased pages are filled 0xFF */
 #define LPC55S69_FLASH_PAGE_SIZE        512U
+/* 16-byte flash words carry the ECC; READ_SINGLE_WORD reports an error in
+ * INT_STATUS instead of faulting */
+#define LPC55S69_FLASH_WORD_SIZE        16U
+#define LPC55S69_FLASH_CMD_READ_SINGLE_WORD 3U
+#define LPC55S69_FLASH_CMD_TIMEOUT      100000U
 #define LPC55S69_FLASH_SECURE_ALIAS     0x10000000U
 /* 630KB of user flash below the protected flash region (PFR) */
 #define LPC55S69_FLASH_SIZE             0x9DE00U
