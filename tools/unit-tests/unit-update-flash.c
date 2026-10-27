@@ -62,6 +62,28 @@ const char *argv0;
  * magic in the last 4 bytes, then state and sector flags going down. */
 #define MOCK_TRAILER_SIZE 64
 static uint8_t mock_trailer[2][MOCK_TRAILER_SIZE];
+#include <setjmp.h>
+/* Power cut injection: the write that brings the countdown to zero is lost.
+ * Setting bits back erases the trailer first, so a cut then erases it. */
+static int trailer_cut_countdown;
+static jmp_buf trailer_cut_jmp;
+
+static void trailer_store_cut(uint8_t part, uint8_t *dst, const uint8_t *val,
+    uint32_t len)
+{
+    uint32_t i;
+    if (trailer_cut_countdown > 0 && --trailer_cut_countdown == 0) {
+        for (i = 0; i < len; i++) {
+            if ((val[i] & ~dst[i]) != 0) {
+                memset(mock_trailer[part == PART_BOOT ? 0 : 1], 0xFF,
+                    MOCK_TRAILER_SIZE);
+                break;
+            }
+        }
+        longjmp(trailer_cut_jmp, 1);
+    }
+    memcpy(dst, val, len);
+}
 
 uint8_t* get_trailer_at(uint8_t part, uint32_t at)
 {
@@ -75,13 +97,14 @@ uint8_t* get_trailer_at(uint8_t part, uint32_t at)
 void set_trailer_at(uint8_t part, uint32_t at, uint8_t val)
 {
     ck_assert_msg(!locked || !ext_locked, "Trailer written with FLASH locked");
-    *get_trailer_at(part, at) = val;
+    trailer_store_cut(part, get_trailer_at(part, at), &val, 1);
 }
 
 void set_partition_magic(uint8_t part)
 {
     uint32_t magic = WOLFBOOT_MAGIC_TRAIL;
-    memcpy(get_trailer_at(part, 0), &magic, sizeof(magic));
+    trailer_store_cut(part, get_trailer_at(part, 0), (uint8_t *)&magic,
+        sizeof(magic));
 }
 #endif
 
@@ -1122,6 +1145,63 @@ START_TEST (test_disable_backup_update_consumes_update_state)
 }
 END_TEST
 #endif /* DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER */
+
+#if !defined(DISABLE_BACKUP) && defined(CUSTOM_PARTITION_TRAILER)
+/* Cut the power at every custom trailer write of an update. The resumed boot
+ * must never run the new image confirmed without testing it: either it runs
+ * in TESTING and rolls back if not confirmed, or the cut came after TESTING
+ * was set and the rollback already happened. */
+START_TEST (test_custom_trailer_power_cut)
+{
+    int cut;
+    int done = 0;
+    uint8_t st;
+
+    for (cut = 1; !done; cut++) {
+        reset_mock_stats();
+        prepare_flash();
+        add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+        add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
+        wolfBoot_update_trigger();
+        trailer_cut_countdown = cut;
+        if (setjmp(trailer_cut_jmp) == 0) {
+            wolfBoot_start();
+            done = 1;
+        }
+        else {
+            locked = ext_locked = 1;
+        }
+        trailer_cut_countdown = 0;
+        if (!done)
+            wolfBoot_start();
+        ck_assert_msg(!wolfBoot_panicked, "cut %d: panic", cut);
+        ck_assert_msg(wolfBoot_staged_ok, "cut %d: not staged", cut);
+        ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+        if (wolfBoot_current_firmware_version() == 2) {
+            ck_assert_msg(st == IMG_STATE_TESTING, "cut %d: BOOT state 0x%x",
+                cut, st);
+            ck_assert_msg(
+                (wolfBoot_get_partition_state(PART_UPDATE, &st) != 0) ||
+                (st == IMG_STATE_NEW), "cut %d: UPDATE state 0x%x", cut, st);
+            /* not confirmed: falls back */
+            wolfBoot_start();
+            ck_assert_msg(!wolfBoot_panicked, "cut %d: panic", cut);
+            ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+                "cut %d: no rollback", cut);
+        }
+        else {
+            ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+                "cut %d: version %u", cut,
+                wolfBoot_current_firmware_version());
+            ck_assert_msg(st == IMG_STATE_SUCCESS, "cut %d: BOOT state 0x%x",
+                cut, st);
+        }
+        cleanup_flash();
+    }
+    ck_assert_int_gt(cut, 2);
+}
+END_TEST
+#endif
 
 START_TEST (test_sunnyday_noupdate)
 {
@@ -2434,6 +2514,9 @@ Suite *wolfboot_suite(void)
 #if defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     tcase_add_test(forward_update_samesize,
         test_disable_backup_update_consumes_update_state);
+#endif
+#if !defined(DISABLE_BACKUP) && defined(CUSTOM_PARTITION_TRAILER)
+    tcase_add_test(forward_update_samesize, test_custom_trailer_power_cut);
 #endif
 #if defined(PART_SWAP_EXT) && !defined(DISABLE_BACKUP)
     tcase_add_test(forward_update_samesize, test_update_resume_from_backup_flag);
