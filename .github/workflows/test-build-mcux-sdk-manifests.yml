@@ -55,7 +55,7 @@ jobs:
           pip install west
           west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
           cd mcuxpresso-sdk
-          sed -i '/se_hostlib\|emwin/d' manifests/boards/${{inputs.board-name}}.yml
+          sed -i '/se_hostlib\|emwin\|executorch/d' manifests/boards/${{inputs.board-name}}.yml
           west update_board --set board ${{inputs.board-name}}
 
       - name: make distclean
