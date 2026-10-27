@@ -54,6 +54,7 @@ static int mock_verify_integrity_ret;
 static int mock_integrity_saw_not_ext;
 static int mock_authenticity_saw_not_ext;
 static int mock_verify_authenticity_ret;
+static int mock_image_part_matches_ret;
 static int mock_state_writes;
 
 ChaCha chacha;
@@ -254,6 +255,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
     if (mock_verify_authenticity_ret == 0)
         img->signature_ok = 1;
     return mock_verify_authenticity_ret;
+}
+
+int wolfBoot_image_part_matches(struct wolfBoot_image* img)
+{
+    (void)img;
+    return mock_image_part_matches_ret;
 }
 
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)

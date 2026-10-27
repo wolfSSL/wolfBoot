@@ -243,6 +243,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
     return 0;
 }
 
+int wolfBoot_image_part_matches(struct wolfBoot_image* img)
+{
+    (void)img;
+    return 0;
+}
+
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
 {
     (void)capacity; (void)dts_addr;

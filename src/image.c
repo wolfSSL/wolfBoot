@@ -1947,6 +1947,30 @@ int wolfBoot_open_self_address(struct wolfBoot_image* img, uint8_t* hdr,
 #endif
 
 /**
+ * @brief Check that an opened image targets this wolfBoot's partition.
+ * @param img The opened image (hdr must point to a valid header).
+ * @return 0 if the image targets this core's partition, -1 otherwise.
+ */
+int wolfBoot_image_part_matches(struct wolfBoot_image *img)
+{
+    uint8_t *type_field = NULL;
+    uint16_t image_type;
+
+    if (img == NULL || img->hdr == NULL) {
+        return -1;
+    }
+    if (wolfBoot_find_header(img->hdr + IMAGE_HEADER_OFFSET, HDR_IMG_TYPE,
+            &type_field) != WOLFBOOT_HDR_U16_SZ) {
+        return -1;
+    }
+    image_type = (uint16_t)(type_field[0] + (type_field[1] << 8));
+    if ((image_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) {
+        return -1;
+    }
+    return 0;
+}
+
+/**
  * @brief Verify the integrity of the image using the stored SHA hash.
  *
  * This function verifies the integrity of the image by calculating its SHA hash

@@ -1092,6 +1092,18 @@ void RAMFUNCTION wolfBoot_start(void)
             continue;
         }
 
+        /* The image must target this core's partition: the key mask only
+         * restricts which partition ids the signing key may claim, not
+         * which core boots the image. Reject before the payload read so a
+         * foreign image never drives the disk read into the RAM load
+         * region. */
+        if (wolfBoot_image_part_matches(&os_image) < 0) {
+            wolfBoot_printf("Image partition mismatch for %s\r\n",
+                    part_name);
+            selected ^= 1;
+            continue;
+        }
+
         /* Bound the UNAUTHENTICATED image length before it drives the disk
          * read into the RAM load region. An attacker controlling the boot
          * media could otherwise declare an arbitrary fw_size and overrun the

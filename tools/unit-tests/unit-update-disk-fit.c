@@ -262,6 +262,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
     return 0;
 }
 
+int wolfBoot_image_part_matches(struct wolfBoot_image* img)
+{
+    (void)img;
+    return 0;
+}
+
 /* The loaded payload is treated as a FIT container, and the sub-image
  * returned by fit_load_image() is a flat device tree whose parsed
  * size is mock_dts_size. */

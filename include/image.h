@@ -1724,6 +1724,7 @@ int wolfBoot_open_image(struct wolfBoot_image *img, uint8_t part);
 int wolfBoot_open_image_external(struct wolfBoot_image* img, uint8_t part, uint8_t* addr);
 #endif
 int wolfBoot_open_image_address(struct wolfBoot_image* img, uint8_t* image);
+int wolfBoot_image_part_matches(struct wolfBoot_image *img);
 #ifdef WOLFBOOT_SELF_HEADER
 int wolfBoot_open_self(struct wolfBoot_image *img);
 int wolfBoot_open_self_address(struct wolfBoot_image *img, uint8_t *hdr,
