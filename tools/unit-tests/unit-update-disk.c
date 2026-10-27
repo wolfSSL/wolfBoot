@@ -40,7 +40,8 @@ static int mock_verify_integrity_ret;
 static int mock_integrity_saw_not_ext;
 static int mock_authenticity_saw_not_ext;
 static int mock_verify_authenticity_ret;
-static int mock_image_part_matches_ret;
+static int mock_part_mismatch_part;
+static int mock_last_read_part;
 
 ChaCha chacha;
 
@@ -87,6 +88,8 @@ static void reset_mocks(void)
     mock_fail_payload_part = -1;
     mock_verify_integrity_ret = 0;
     mock_verify_authenticity_ret = 0;
+    mock_part_mismatch_part = -2;
+    mock_last_read_part = -1;
     mock_integrity_saw_not_ext = -1;
     mock_authenticity_saw_not_ext = -1;
     mock_flash_protect_called = 0;
@@ -159,6 +162,7 @@ int disk_part_read(int drv, int part, uint64_t off, uint64_t sz, uint8_t *buf)
     uint64_t max = IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE;
 
     (void)drv;
+    mock_last_read_part = part;
     image = (part == BOOT_PART_B) ? part_b_image : part_a_image;
     if ((mock_fail_payload_part == part) && (off >= IMAGE_HEADER_SIZE))
         return -1;
@@ -205,7 +209,11 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 int wolfBoot_image_part_matches(struct wolfBoot_image* img)
 {
     (void)img;
-    return mock_image_part_matches_ret;
+    /* The header of the slot under test is the last one read. */
+    if ((mock_part_mismatch_part == -1) ||
+            (mock_last_read_part == mock_part_mismatch_part))
+        return -1;
+    return 0;
 }
 
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
@@ -443,6 +451,36 @@ START_TEST(test_update_disk_rejects_invalid_signature)
 }
 END_TEST
 
+START_TEST(test_update_disk_skips_partition_mismatch)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 7, 0xB2);
+    mock_part_mismatch_part = BOOT_PART_A;
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, part_b_image + IMAGE_HEADER_SIZE,
+        TEST_PAYLOAD_SIZE), 0);
+}
+END_TEST
+
+START_TEST(test_update_disk_rejects_partition_mismatch)
+{
+    reset_mocks();
+    build_image(part_a_image, 7, 0xA1);
+    build_image(part_b_image, 7, 0xB2);
+    mock_part_mismatch_part = -1; /* both slots */
+
+    wolfBoot_start();
+
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -459,6 +497,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_update_disk_rejects_rollback_after_higher_image_failure);
     tcase_add_test(tc, test_update_disk_rejects_invalid_integrity);
     tcase_add_test(tc, test_update_disk_rejects_invalid_signature);
+    tcase_add_test(tc, test_update_disk_skips_partition_mismatch);
+    tcase_add_test(tc, test_update_disk_rejects_partition_mismatch);
     suite_add_tcase(s, tc);
 
     return s;
