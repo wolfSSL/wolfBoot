@@ -189,7 +189,7 @@ jobs:
           pip install west
           west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
           cd mcuxpresso-sdk
-          sed -i '/se_hostlib\|emwin/d' manifests/boards/lpcxpresso55s69.yml
+          sed -i '/se_hostlib\|emwin\|executorch/d' manifests/boards/lpcxpresso55s69.yml
           west update_board --set board lpcxpresso55s69
 
       - name: Clean and build test with DICE attestation + HW PUF (lpc55s69)

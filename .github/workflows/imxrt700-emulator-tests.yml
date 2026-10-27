@@ -47,7 +47,7 @@ jobs:
           pip install west
           west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
           cd mcuxpresso-sdk
-          sed -i '/se_hostlib\|emwin/d' manifests/boards/mimxrt700evk.yml
+          sed -i '/se_hostlib\|emwin\|executorch/d' manifests/boards/mimxrt700evk.yml
           west update_board --set board mimxrt700evk
 
       - name: Use the MCUXpresso SDK for the wolfBoot build
