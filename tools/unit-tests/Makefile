@@ -2145,13 +2145,18 @@ samr21_erase_extract.h: ../../hal/samr21.c
 	sed -n '/#define FLASH_ROW_SIZE /p' $< >> $@
 	sed -n '/#define NVMCTRLA_REG /p' $< >> $@
 	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
+	sed -n '/#define NVMCTRL_STATUS /p' $< >> $@
 	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
 	sed -n '/#define NVMCMD_KEY /p' $< >> $@
 	sed -n '/#define NVMCMD_ERASE /p' $< >> $@
+	sed -n '/#define NVMCMD_WP /p' $< >> $@
+	sed -n '/#define NVMCMD_PBC /p' $< >> $@
 	sed -n '/#define NVMCTRL_INTFLAG_NVMREADY /p' $< >> $@
+	sed -n '/#define NVMSTATUS_ERR /p' $< >> $@
 
 samr21_erase_fn_extract.h: ../../hal/samr21.c
-	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION nvm_wait/,/^}/p' $< > $@
+	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< >> $@
 
 unit-samr21-erase-advance: unit-samr21-erase-advance.c samr21_erase_extract.h \
 	samr21_erase_fn_extract.h

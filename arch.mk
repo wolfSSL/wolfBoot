@@ -473,6 +473,9 @@ ifeq ($(ARCH),ARM)
   ## Target specific configuration
   ifeq ($(TARGET),samr21)
     CORTEX_M0=1
+    # SAMD21x17 and SAMR21 have 16KB of SRAM, SAMD21x18 has 32KB. The
+    # linker script takes this as the length of its RAM region.
+    WOLFBOOT_RAM_SIZE?=0x4000
   endif
   ifeq ($(TARGET),imx_rt)
     CORTEX_M7=1

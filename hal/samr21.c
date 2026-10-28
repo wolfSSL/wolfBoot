@@ -21,6 +21,9 @@
 
 #include <stdint.h>
 #include "image.h"
+#ifdef DEBUG_UART
+#include "uart_drv.h"
+#endif
 
 /* Clock settings for cpu samd21g18a @ 48MHz */
 #define CPU_FREQ (48000000)
@@ -59,12 +62,18 @@
 #define NVMCTRLA_REG           *((volatile uint16_t *)(NVMCTRL_BASE))
 #define NVMCTRLB_REG           *((volatile uint32_t *)(NVMCTRL_BASE + 4))
 #define NVMCTRL_INTFLAG        *((volatile uint8_t  *)(NVMCTRL_BASE + 0x14))
+#define NVMCTRL_STATUS         *((volatile uint16_t *)(NVMCTRL_BASE + 0x18))
 #define NVMCTRL_ADDR           *((volatile uint32_t *)(NVMCTRL_BASE + 0x1c))
 #define NVMCMD_KEY             (0xA500)
 #define NVMCMD_ERASE           (0x02)
 #define NVMCMD_WP              (0x04)
 #define NVMCMD_PBC             (0x44)
 #define NVMCTRL_INTFLAG_NVMREADY (1)
+/* CTRLB.MANW: commit each page with an explicit NVMCMD_WP instead of
+ * letting the controller write it out when the page buffer fills. */
+#define NVMCTRLB_MANW          (1 << 7)
+/* STATUS error flags, write-one-to-clear: PROGE, LOCKE, NVME */
+#define NVMSTATUS_ERR          ((1 << 2) | (1 << 3) | (1 << 4))
 
 
 #define GCLK_BASE              (0x40000C00)
@@ -100,26 +109,27 @@
 #define PAC1_BASE             (0x41000000)
 #define PAC1_WPCLR            *((volatile uint32_t *)(PAC1_BASE)) /* Register to clear write protection (unlock flash) */
 #define PAC1_WPSET            *((volatile uint32_t *)(PAC1_BASE + 4)) /* Register to set write protection (lock flash) */
-#define PAC_WP_NVMCTL         (1 << 1) /* Bit position for NVM in WPCLR/WPSET registers */
+#define PAC_WP_NVMCTL         (1 << 2) /* Bit position for NVM in WPCLR/WPSET registers */
 
 
 #define GCLK_WAITBUSY() { while (GCLK_STATUS & GCLK_STATUS_SYNCBUSY) {} }
 
 void hal_init(void)
 {
+    uint32_t i, reg;
 
     WDT_CTRL &= (~WDT_EN);
 #ifndef WOLFBOOT_UNIT_TEST_FLASH_WRITE
     __asm__ volatile ("cpsid i");
 #endif
-    uint32_t i, reg;
     /* enable clocks for the power, sysctrl and gclk modules */
     APBAMASK_REG = APBAMASK_PM_EN | APBAMASK_SYSCTRL_EN | APBAMASK_GCLK_EN;
 
-    /* set NVM wait states */
+    /* Set NVM wait states and take manual control of the page write. The
+     * NVMCTRL APB clock is enabled out of reset and has to stay on: the
+     * flash write and erase paths below drive these same registers. */
     APBBMASK_REG |= APBBMASK_NVM_EN;
-    NVMCTRLB_REG |= ((WAITSTATES & 0x0f) << 1);
-    APBBMASK_REG &= ~APBBMASK_NVM_EN;
+    NVMCTRLB_REG |= ((WAITSTATES & 0x0f) << 1) | NVMCTRLB_MANW;
 
 
     /* Set 8MHz oscillator */
@@ -145,15 +155,18 @@ void hal_init(void)
         GCLK_CLKCTRL = GCLK_CLKCTRL_GEN_CLK7 | i;
         GCLK_WAITBUSY();
     }
+
+#ifdef DEBUG_UART
+    uart_init(115200, 8, 'N', 1);
+#endif
 }
 
 void hal_prepare_boot(void)
 {
 #ifdef WOLFBOOT_RESTORE_CLOCK
-    /* Reset NVM wait states */
+    /* Restore the NVM wait states and page write mode to their reset values */
     APBBMASK_REG |= APBBMASK_NVM_EN;
-    NVMCTRLB_REG &= ~((WAITSTATES & 0x0f) << 1);
-    APBBMASK_REG &= ~APBBMASK_NVM_EN;
+    NVMCTRLB_REG &= ~(((WAITSTATES & 0x0f) << 1) | NVMCTRLB_MANW);
 
     /* Reset clock controller */
     GCLK_CTRL = GCLK_CTRL_RESET;
@@ -161,6 +174,21 @@ void hal_prepare_boot(void)
 #endif
 }
 
+
+/* Wait for the controller to go idle, then report and clear any error it
+ * latched. The STATUS error flags are write-one-to-clear. */
+static int RAMFUNCTION nvm_wait(void)
+{
+    uint16_t status;
+
+    while (!(NVMCTRL_INTFLAG & NVMCTRL_INTFLAG_NVMREADY)) { }
+    status = (NVMCTRL_STATUS & NVMSTATUS_ERR);
+    if (status != 0) {
+        NVMCTRL_STATUS = status;
+        return -1;
+    }
+    return 0;
+}
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
@@ -172,6 +200,8 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 
     /* Clear page buffer */
     NVMCTRLA_REG  = (NVMCMD_PBC | NVMCMD_KEY);
+    if (nvm_wait() != 0)
+        return -1;
     while (i < len) {
         if ((len - i > 3) && ((((address + i) & 0x03) == 0)  && ((((uint32_t)data) + i) & 0x03) == 0)) {
             dst = (uint32_t *)(address + i);
@@ -192,9 +222,20 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             }
             *dst = val;
         }
+        /* The page buffer holds one page, and MANW stops the controller
+         * from writing it out by itself, so commit at every page boundary
+         * and once more for a trailing partial page. */
+        if ((i == len) || (((address + i) % FLASH_PAGESIZE) == 0)) {
+            NVMCTRLA_REG = (NVMCMD_WP | NVMCMD_KEY);
+            if (nvm_wait() != 0)
+                return -1;
+            if (i < len) {
+                NVMCTRLA_REG = (NVMCMD_PBC | NVMCMD_KEY);
+                if (nvm_wait() != 0)
+                    return -1;
+            }
+        }
     }
-    /* Enable write protection */
-    NVMCTRLA_REG = (NVMCMD_WP | NVMCMD_KEY);
     return 0;
 }
 
@@ -213,7 +254,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     while (len > 0) {
         NVMCTRL_ADDR = (address >> 1); /* This register holds the address of a 16-bit row */
         NVMCTRLA_REG = NVMCMD_ERASE | NVMCMD_KEY;
-        while (!(NVMCTRL_INTFLAG & NVMCTRL_INTFLAG_NVMREADY)) { }
+        if (nvm_wait() != 0)
+            return -1;
         address += FLASH_ROW_SIZE;
         len -= FLASH_ROW_SIZE;
     }

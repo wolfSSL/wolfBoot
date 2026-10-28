@@ -44,6 +44,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/same51-dualbank.config
 
+  samd21_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/samd21.config
+
+  samd21_j18_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/samd21_j18.config
+
   imx_rt1040_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
