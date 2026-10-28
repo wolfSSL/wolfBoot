@@ -9096,7 +9096,7 @@ Notable options in [config/examples/nai_68int6.config](../config/examples/nai_68
 | Option | Meaning |
 |---|---|
 | `X86_UART_NUMBER=2` | LPSS UART2 for all three FSP phases (Kontron uses 0) |
-| `ACPI=1` | Required. Generates ACPI tables (RSDP/XSDT/FADT/MADT/MCFG and a minimal DSDT); the board's PCI interrupt routing is only in the DSDT `_PRT`, since the MP table is the Kontron one |
+| `ACPI=1` | Required. Generates ACPI tables (RSDP/XSDT/FADT/MADT/MCFG and a minimal DSDT); the board's PCI interrupt routing is only in the DSDT `_PRT`, since the MP table is the Kontron one. The DSDT also declares the board devices on LPSS I2C0 (EEPROMs, RTC/watchdog) and GSPI0 (the PRC, for NAI's `naigspi` driver) |
 | `ANTI_ROLLBACK=1` | Persistent version floor and boot audit counters in TPM NV |
 | `MEASURED_BOOT=1`, `MEASURED_PCR_OS=4` | Firmware into PCR 0, the verified OS image into PCR 4 |
 | `WOLFBOOT_BOOT_DISK=0` | Boot from GPT partitions; the A/B indices (sda3/sda4) are set in `src/update_disk.c` |
@@ -9117,7 +9117,26 @@ The booted OS cannot lower the floor. The index is platform-created and writable
 
 ### Boot, programming and recovery
 
-wolfBoot boots the highest-versioned signed 64-bit `bzImage` that verifies from the two GPT boot partitions. It falls back to the other slot only if that is not a downgrade (see Anti-rollback), and halts if neither boots. Program the flash with a Dediprog SF100 on JP4 while the board is off; the BIOS region lock blocks `flashrom` from the booted OS. JP36 selects which bank boots and which one the programmer sees; move it only with the board off.
+wolfBoot boots the highest-versioned signed 64-bit `bzImage` or Multiboot2 ELF that verifies from the two GPT boot partitions. It falls back to the other slot only if that is not a downgrade (see Anti-rollback), and halts if neither boots. Program the flash with a Dediprog SF100 on JP4 while the board is off; the BIOS region lock blocks `flashrom` from the booted OS. JP36 selects which bank boots and which one the programmer sees; move it only with the board off.
+
+### Multiboot2 ELF payloads
+
+The configuration builds both payload paths (`LINUX_PAYLOAD=1`, `ELF=1`, `MULTIBOOT2=1`), and `do_boot()` picks one per image: an image that starts with the ELF magic takes the Multiboot2 path, and anything else boots as Linux. A Multiboot2 RTOS image such as Green Hills INTEGRITY-178 is signed and written to an A/B slot the same way as a kernel:
+
+```
+./tools/keytools/sign --ecc384 --sha384 <payload.elf> wolfboot_signing_private_key.der <version>
+```
+
+The two paths differ only in the handoff:
+
+| | Linux `bzImage` | Multiboot2 ELF |
+|---|---|---|
+| Entry | 64-bit Linux boot protocol, `boot_params` and the command line | ELF segments loaded at their physical addresses, virtual addresses mapped in wolfBoot's page tables, jump to `e_entry` in 64-bit mode with EAX=`0x36d76289` and EBX pointing to the Multiboot2 information |
+| Memory map | E820 table in `boot_params` | Multiboot2 memory map and basic memory information tags, from the FSP HOBs |
+| ACPI tables | Generated (`ACPI=1`) | None; they are only built on the Linux path |
+| RTC | The legacy CMOS RTC is ignored under the hardware-reduced ACPI tables; the I2C0 RTC is declared in the DSDT | The CMOS RTC is usable directly; I2C0 is enabled for the board RTC |
+
+Everything else is shared: FSP silicon setup (VT-d at the stock BIOS addresses, Hyper-Threading off), the halted PCH TCO watchdog, the BIOS region lock, measured boot, anti-rollback and A/B selection.
 
 ## Infineon PSOC Control C3
 

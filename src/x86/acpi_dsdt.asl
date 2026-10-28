@@ -1,7 +1,7 @@
 /* acpi_dsdt.asl
  *
  * Minimal DSDT for the NAI 68INT6: the PCI root bus with its _CRS and the
- * _PRT INTx routing. Compiled offline with iasl and committed as a C array.
+ * _PRT INTx routing, plus the board devices on LPSS I2C0 and GSPI0. Compiled offline with iasl and committed as a C array.
  *
  * Regenerate after editing:
  *   iasl src/x86/acpi_dsdt.asl
@@ -84,6 +84,95 @@ DefinitionBlock ("", "DSDT", 2, "WOLFBT", "NAITGL", 0x00000001)
                     0x0000000000000000, 0x0000004000000000, 0x0000007FFFFFFFFF,
                     0x0000000000000000, 0x0000004000000000)
             })
+
+            /* LPSS I2C0 and GSPI0 with the board devices the stock BIOS
+             * declares, so NAI's Linux drivers (naigspi, at24) bind. */
+            Device (I2C0)
+            {
+                Name (_ADR, 0x00150000)
+
+                Device (EEP2)
+                {
+                    Name (_HID, "15AC0002")
+                    Name (_CID, "PRP0001")
+                    Name (_DDN, "NAI Motherboard EEPROM")
+                    Name (_CRS, ResourceTemplate ()
+                    {
+                        I2cSerialBusV2 (0x0056, ControllerInitiated, 100000,
+                            AddressingMode7Bit, "\\_SB.PCI0.I2C0")
+                    })
+                    Name (_DSD, Package ()
+                    {
+                        ToUUID ("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"),
+                        Package ()
+                        {
+                            Package () { "compatible", "atmel,24c02" },
+                            Package () { "size", 256 },
+                            Package () { "pagesize", 8 }
+                        }
+                    })
+                }
+
+                Device (EEP3)
+                {
+                    Name (_HID, "15AC0003")
+                    Name (_CID, "PRP0001")
+                    Name (_DDN, "NAI Motherboard EEPROM SN")
+                    Name (_CRS, ResourceTemplate ()
+                    {
+                        I2cSerialBusV2 (0x005E, ControllerInitiated, 100000,
+                            AddressingMode7Bit, "\\_SB.PCI0.I2C0")
+                    })
+                    Name (_DSD, Package ()
+                    {
+                        ToUUID ("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"),
+                        Package ()
+                        {
+                            Package () { "compatible", "atmel,24cs02" },
+                            Package () { "size", 16 },
+                            Package () { "pagesize", 8 },
+                            Package () { "read-only", One }
+                        }
+                    })
+                }
+
+                Device (RTC1)
+                {
+                    Name (_HID, "15AC0004")
+                    Name (_CID, "PRP0001")
+                    Name (_DDN, "NAI Motherboard WDT RTC")
+                    Name (_CRS, ResourceTemplate ()
+                    {
+                        I2cSerialBusV2 (0x0068, ControllerInitiated, 100000,
+                            AddressingMode7Bit, "\\_SB.PCI0.I2C0")
+                    })
+                    Name (_DSD, Package ()
+                    {
+                        ToUUID ("daffd814-6eba-4d8c-8a91-bc9bbf4aa301"),
+                        Package ()
+                        {
+                            Package () { "compatible", "dallas,ds1374" }
+                        }
+                    })
+                }
+            }
+
+            Device (SPI0)
+            {
+                Name (_ADR, 0x001E0002)
+
+                Device (PRC0)
+                {
+                    Name (_HID, "15AC0001")
+                    Name (_STR, Unicode ("NAI GSPI Processor Register Controller"))
+                    Name (_CRS, ResourceTemplate ()
+                    {
+                        SpiSerialBusV2 (0x0000, PolarityLow, FourWireMode, 8,
+                            ControllerInitiated, 500000, ClockPolarityLow,
+                            ClockPhaseFirst, "\\_SB.PCI0.SPI0")
+                    })
+                }
+            }
         }
     }
 }

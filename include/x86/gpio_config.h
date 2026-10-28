@@ -39,6 +39,10 @@
 
 #define GPIO_GPPC_B9_CFG_OFF (0x790)
 #define GPIO_GPPC_B10_CFG_OFF (0x7a0)
+#define GPIO_GPPC_B15_CFG_OFF (0x7f0)
+#define GPIO_GPPC_B16_CFG_OFF (0x800)
+#define GPIO_GPPC_B17_CFG_OFF (0x810)
+#define GPIO_GPPC_B18_CFG_OFF (0x820)
 #define GPIO_GPPC_C6_CFG_OFF (0x760)
 #define GPIO_GPPC_C7_CFG_OFF (0x770)
 #define GPIO_GPPC_C8_CFG_OFF (0x780)
@@ -49,6 +53,8 @@
 #define GPIO_GPPC_C13_CFG_OFF (0x7d0)
 #define GPIO_GPPC_C14_CFG_OFF (0x7e0)
 #define GPIO_GPPC_C15_CFG_OFF (0x7f0)
+#define GPIO_GPPC_C16_CFG_OFF (0x800)
+#define GPIO_GPPC_C17_CFG_OFF (0x810)
 #define GPIO_GPPC_C20_CFG_OFF (0x840)
 #define GPIO_GPPC_C21_CFG_OFF (0x850)
 #define GPIO_GPPC_C22_CFG_OFF (0x860)
@@ -688,6 +694,109 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_PLTRST},
+    /* GSPI0 (B15-B18) and I2C0 (C16/C17) in native mode, as stock. */
+    /* PAD B15  (DW0=0x44000601 DW1=0x00000027) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B15_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
+    /* PAD B16  (DW0=0x84000601 DW1=0x00000028) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B16_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD B17  (DW0=0x44000702 DW1=0x00010029) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B17_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = 0x03,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
+    /* PAD B18  (DW0=0x84000600 DW1=0x0000002A) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B18_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD C16  (DW0=0x44000702 DW1=0x0000001E) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C16_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = 0x03,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
+    /* PAD C17  (DW0=0x44000702 DW1=0x0000001F) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C17_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_NATIVE_1,
+     .gpio_dir = 0x03,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
 };
 
 #else /* TARGET_kontron_vx3060_s2 */
