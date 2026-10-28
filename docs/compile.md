@@ -827,6 +827,7 @@ make CERT_CHAIN_VERIFY=1 \
 
 - `USER_CERT_CHAIN` requires both `USER_PRIVATE_KEY` and `USER_PUBLIC_KEY`
 - The private and public keys must correspond to the leaf certificate identity in the chain
+- If the chain uses X.509 name constraints and you are building as a wolfHSM server (`WOLFHSM_SERVER=1`), set `CERT_CHAIN_NAME_CONSTRAINTS=1`.
 
 When `CERT_CHAIN_VERIFY=1` is set without `USER_CERT_CHAIN`, the build auto-generates a dummy 3-tier certificate hierarchy in `test-dummy-ca/` for testing. This also applies to wolfHSM NVM image generation when applicable.
 
