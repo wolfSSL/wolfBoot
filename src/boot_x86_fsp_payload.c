@@ -94,29 +94,16 @@ void jump(uintptr_t entry)
             : "g"(entry));
 }
 
+#if defined(WOLFBOOT_ELF)
 /**
- * @brief Perform the boot process for the given application.
+ * @brief Load an ELF image and boot it, through Multiboot2 when enabled.
  *
- * This function performs the boot process for the specified application.
- * It either loads and boots a Linux payload or an ELF binary, depending on the
- * configuration.
- *
- * @param app Pointer to the start of the application.
+ * @param app Pointer to the start of the ELF image.
+ * @param stage2_params Stage 2 parameters (memory layout and FSP HOBs).
  */
-void do_boot(const uint32_t *app)
+static void boot_elf(const uint32_t *app,
+                     struct stage2_parameter *stage2_params)
 {
-    struct stage2_parameter *stage2_params;
-
-#ifdef WOLFBOOT_TPM
-    wolfBoot_tpm2_deinit();
-#endif /* WOLFBOOT_TPM */
-
-    stage2_params = stage2_get_parameters();
-#if defined(WOLFBOOT_LINUX_PAYLOAD)
-    mptable_setup();
-    load_linux((uint8_t *)app, stage2_params->payload_size, stage2_params,
-               cmdline);
-#elif defined(WOLFBOOT_ELF)
     int r;
     uint64_t e;
     uint8_t *mb2_header;
@@ -163,7 +150,40 @@ void do_boot(const uint32_t *app)
 #else
     jump(e);
 #endif /* WOLFBOOT_MULTIBOOT2 */
+}
+#endif /* WOLFBOOT_ELF */
 
+/**
+ * @brief Perform the boot process for the given application.
+ *
+ * This function performs the boot process for the specified application.
+ * It either loads and boots a Linux payload or an ELF binary, depending on the
+ * configuration. With both built in, an image starting with the ELF magic
+ * takes the ELF path and anything else boots as Linux.
+ *
+ * @param app Pointer to the start of the application.
+ */
+void do_boot(const uint32_t *app)
+{
+    struct stage2_parameter *stage2_params;
+
+#ifdef WOLFBOOT_TPM
+    wolfBoot_tpm2_deinit();
+#endif /* WOLFBOOT_TPM */
+
+    stage2_params = stage2_get_parameters();
+#if defined(WOLFBOOT_LINUX_PAYLOAD) && defined(WOLFBOOT_ELF)
+    if (memcmp(app, ELF_IDENT_STR, 4) == 0) {
+        boot_elf(app, stage2_params);
+        return;
+    }
+#endif
+#if defined(WOLFBOOT_LINUX_PAYLOAD)
+    mptable_setup();
+    load_linux((uint8_t *)app, stage2_params->payload_size, stage2_params,
+               cmdline);
+#elif defined(WOLFBOOT_ELF)
+    boot_elf(app, stage2_params);
 #else
 #error "No payload compiled in"
 #endif /* WOLFBOOT_LINUX_PAYLOAD */
