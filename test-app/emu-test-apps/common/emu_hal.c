@@ -290,6 +290,105 @@ static int mcxn_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_LPC55S69)
+/* LPC55S69 flash changes only through the boot ROM flash API (iap1 version 1
+ * driver), reached with TZEN=0 only. An erased page that was never programmed
+ * faults on read (ECC), so erase programs 0xFF back, as the wolfBoot HAL does. */
+#define LPC55_ROM_API_TREE      0x130010F0u
+#define LPC55_FLASH_PAGE_SIZE   512u
+#define LPC55_FLASH_ERASE_KEY   0x6B65666Cu
+#define LPC55_FLASH_CFG_WORDS   15u
+#define LPC55_FLASH_CFG_FREQ    10u
+#define LPC55_FLASH_FREQ_MHZ    96u
+
+typedef struct {
+    uint32_t version;
+    int (*init)(uint32_t *config);
+    int (*erase)(uint32_t *config, uint32_t start, uint32_t len, uint32_t key);
+    int (*program)(uint32_t *config, uint32_t start, const uint8_t *src,
+        uint32_t len);
+} lpc55_flash_api_t;
+
+typedef struct {
+    void (*run_bootloader)(void *arg);
+    uint32_t version;
+    const char *copyright;
+    uint32_t reserved;
+    const lpc55_flash_api_t *flash;
+} lpc55_rom_tree_t;
+
+static uint32_t lpc55_flash_cfg[LPC55_FLASH_CFG_WORDS];
+static uint8_t lpc55_page[LPC55_FLASH_PAGE_SIZE];
+static const lpc55_flash_api_t *lpc55_flash;
+
+static int lpc55s69_flash_init(void)
+{
+    if (lpc55_flash == 0) {
+        lpc55_flash = ((const lpc55_rom_tree_t *)LPC55_ROM_API_TREE)->flash;
+        lpc55_flash_cfg[LPC55_FLASH_CFG_FREQ] = LPC55_FLASH_FREQ_MHZ;
+        if (lpc55_flash->init(lpc55_flash_cfg) != 0) {
+            lpc55_flash = 0;
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static int lpc55s69_page_write(uint32_t page, const uint8_t *buf)
+{
+    if (lpc55_flash->erase(lpc55_flash_cfg, page, LPC55_FLASH_PAGE_SIZE,
+            LPC55_FLASH_ERASE_KEY) != 0) {
+        return -1;
+    }
+    if (lpc55_flash->program(lpc55_flash_cfg, page, buf,
+            LPC55_FLASH_PAGE_SIZE) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int lpc55s69_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t page;
+    uint32_t off;
+    uint32_t chunk;
+    int ret;
+
+    ret = lpc55s69_flash_init();
+    while ((ret == 0) && (len > 0)) {
+        page = address & ~(LPC55_FLASH_PAGE_SIZE - 1u);
+        off = address - page;
+        chunk = LPC55_FLASH_PAGE_SIZE - off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        memcpy(lpc55_page, (const void *)page, LPC55_FLASH_PAGE_SIZE);
+        memcpy(lpc55_page + off, data, chunk);
+        ret = lpc55s69_page_write(page, lpc55_page);
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int lpc55s69_flash_erase(uint32_t address, int len)
+{
+    uint32_t p;
+    uint32_t end;
+    int ret;
+
+    ret = lpc55s69_flash_init();
+    memset(lpc55_page, 0xFF, LPC55_FLASH_PAGE_SIZE);
+    end = address + (uint32_t)len;
+    for (p = address & ~(LPC55_FLASH_PAGE_SIZE - 1u); (ret == 0) && (p < end);
+            p += LPC55_FLASH_PAGE_SIZE) {
+        ret = lpc55s69_page_write(p, lpc55_page);
+    }
+    return ret;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -318,6 +417,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return imxrt700_flash_write(address, data, len);
 #elif defined(EMU_MCXN947)
     return mcxn_flash_write(address, data, len);
+#elif defined(EMU_LPC55S69)
+    return lpc55s69_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -354,6 +455,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return mcxn_flash_erase(address, len);
+#elif defined(EMU_LPC55S69)
+    if (len <= 0) {
+        return 0;
+    }
+    return lpc55s69_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

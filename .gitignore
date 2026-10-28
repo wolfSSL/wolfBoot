@@ -252,6 +252,10 @@ tools/unit-tests/unit-flash-write-mcxa
 tools/unit-tests/unit-rw612-flash
 tools/unit-tests/unit-rw612-tz
 tools/unit-tests/unit-rw612-uart
+tools/unit-tests/unit-lpc55s69-flash
+tools/unit-tests/unit-lpc55s69-tz
+tools/unit-tests/unit-lpc55s69-uart
+tools/unit-tests/unit-lpc55s69-puf
 tools/unit-tests/unit-flash-write-nrf52
 tools/unit-tests/unit-flash-write-same51
 tools/unit-tests/unit-flash-write-samr21

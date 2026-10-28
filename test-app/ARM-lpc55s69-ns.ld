@@ -1,4 +1,4 @@
-_Min_Heap_Size  = 0x00000100; /* minimal heap (not using malloc) */
+_Min_Heap_Size  = 0x00002000; /* newlib stdio buffers: the attestation client uses printf */
 _Min_Stack_Size = 0x00008000; /* required amount of stack */
 
 MEMORY

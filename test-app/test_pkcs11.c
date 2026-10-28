@@ -205,14 +205,17 @@ static int test_pkcs11_provision_token(void)
     CK_SESSION_HANDLE session = CK_INVALID_HANDLE;
     Pkcs11Token token;
     Pkcs11Dev dev;
+    unsigned char token_pin[sizeof(test_user_pin)];
 
     printf("pkcs11: provisioning token\r\n");
 
     dev.heap = NULL;
     dev.func = (CK_FUNCTION_LIST *)&wolfpkcs11nsFunctionList;
 
+    /* wc_Pkcs11Token_Final zeroes the PIN, which must not be the flash copy */
+    XMEMCPY(token_pin, test_user_pin, sizeof(token_pin));
     ret = wc_Pkcs11Token_Init(&token, &dev, (int)TEST_PKCS11_SLOT_ID,
-        test_token_name, test_user_pin, (int)(sizeof(test_user_pin) - 1));
+        test_token_name, token_pin, (int)(sizeof(token_pin) - 1));
     if (ret != 0) {
         printf("pkcs11: wc_Pkcs11Token_Init ret=%d\r\n", ret);
         return -1;

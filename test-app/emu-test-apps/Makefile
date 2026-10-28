@@ -88,13 +88,16 @@ else ifeq ($(TARGET),imx_rt7xx)
 else ifeq ($(TARGET),mcxn)
   EMU_DIR=mcxn947
   EMU_CPU=mcxn947
+else ifeq ($(TARGET),lpc55s69)
+  EMU_DIR=lpc55s69
+  EMU_CPU=lpc55s69
 else
   EMU_DIR=
   EMU_CPU=
 endif
 
 ifeq ($(strip $(EMU_DIR)),)
-  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx|mcxn)
+  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx|mcxn|lpc55s69)
 endif
 
 EMU_PATH=$(WOLFBOOT_ROOT)/test-app/emu-test-apps/$(EMU_DIR)

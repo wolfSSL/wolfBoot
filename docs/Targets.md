@@ -2484,9 +2484,33 @@ the wolfBoot image header size (0x100).
 
 ## NXP LPC55S69
 
-The NXP LPC55S69 is a dual-core Cortex-M33 microcontroller. The support has been
-tested on the LPCXpresso55S69 board (LPC55S69-EVK), with the on-board LINK2 configured in
-the default CMSIS-DAP mode.
+The NXP LPC55S69 is a dual-core Cortex-M33 microcontroller with TrustZone, 640KB
+of internal flash (630KB usable below the protected flash region) and 320KB of
+SRAM. wolfBoot runs on core 0, which has the DSP and FPU extensions: the
+public-key math uses the Cortex-M assembly with the DSP instructions
+(`NO_ASM=0`), while the hashes stay in C (`NO_ARM_ASM=1`), which measured faster
+than the Thumb-2 hash assembly on this part. The support has been tested on the
+LPCXpresso55S69 board (LPC55S69-EVK), with the on-board LPC-Link2 in its default
+CMSIS-DAP mode.
+
+The flash is programmed in 512-byte pages with ECC: a page that is erased but
+never programmed faults on read. The HAL therefore programs 0xFF over erased
+pages that wolfBoot reads (the bootloader region, the partitions and the
+keyvault) at boot, and `hal_flash_erase()` programs 0xFF after each erase.
+A page whose programming was cut by a power loss is not erased but still fails
+ECC, so at boot wolfBoot also reads every page of the partitions, the swap
+sector and the keyvault through the flash controller, which reports ECC errors
+instead of faulting, and rewrites a flagged page: with the data the controller
+returned when a single 16-byte word is flagged (a correctable error keeps its
+contents), with 0xFF when more are (an interrupted program, which the update
+logic treats as an erased page). The bootloader region is checked the same way
+only when DICE attestation hashes it (`WOLFCRYPT_TZ_PSA=1`), and the hardware
+PUF record is never rewritten. The check is skipped, with a message on the
+console, if the page wolfBoot booted from does not read clean through the
+controller. wolfBoot runs the core at 96MHz, since the ROM flash API refuses to
+program or erase above 100MHz, and sets the secure stack limit (MSPLIM) at the
+end of its bss so a stack overflow raises a UsageFault instead of corrupting
+data.
 
 This requires the NXP MCUXpresso SDK. We tested using
 [mcuxsdk-manifests](https://github.com/nxp-mcuxpresso/mcuxsdk-manifests) and
@@ -2508,6 +2532,9 @@ cd mcuxpresso-sdk
 west update_board --set board lpcxpresso55s69
 
 deactivate
+
+cd ..
+git clone https://github.com/nxp-mcuxpresso/CMSIS_5.git
 ```
 
 ### LPC55S69: Hardware Acceleration
@@ -2516,6 +2543,11 @@ wolfBoot / wolfCrypt provide support for the LPC55S69's hardware acceleration
 blocks, to improve performance of various crypto algorithms.  By default, this
 support is turned off in the config files, and all crypto is software based.
 To turn on hardware acceleration, set PKA=1 in the config file.
+Hardware acceleration is not available with TrustZone (`TZEN=1`): the HASHCRYPT
+engine reads its input as an AHB bus master, and on the LPC55S69 that master
+stays non-secure whatever `MASTER_SEC_LEVEL` is set to, so the AHB secure
+controller only lets it read memory marked non-secure. wolfBoot keeps its SRAM
+and the update partition secure, and the bus masters locked non-secure.
 
 Basic hardware acceleration supported:
 - SHA1
@@ -2537,12 +2569,17 @@ generation & storage, without the need to expose keys during manufacturing.
 Keys of size 128, 192, and 256 bits are supported.
 To turn on HWPUF, set HWPUF=1 in the config file (see below).
 
+The PUF provisioning record is stored at flash address `0x80000` (4KB). Every
+example layout keeps that area free, and erasing the whole flash removes the
+record, so the next boot provisions a new device identity.
+
 ### LPC55S69: Example Configurations
 
 #### The following example configurations are provided:
 
 - [lpc55s69.config](/config/examples/lpc55s69.config):
-  - Both wolfBoot and the test-app live in the non-secure realm
+  - TrustZone is not used: wolfBoot and the test-app both run in the secure
+  state
   - Set PKA=1 in the config file to turn on hardware acceleration
   (off by default)
 
@@ -2554,7 +2591,11 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
 - [lpc55s69-tz.config](/config/examples/lpc55s69-tz.config):
   - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
   - Provides a standard PKCS #11 api to interface with crypto algs in the secure
-  realm
+  realm. To build the TrustZone split without the wolfCrypt secure API, use
+  `make WOLFCRYPT_TZ=0 WOLFCRYPT_TZ_PKCS11=0`
+  - `make PKCS11_TESTAPP=1` builds a test-app that checks keyvault persistence:
+  the first boot provisions a token and creates a key pair, the next boot
+  restores them and verifies a signature
 
 - [lpc55s69-tz-psa.config](/config/examples/lpc55s69-tz-psa.config):
   - wolfBoot lives in the secure realm, test-app lives in the non-secure realm
@@ -2566,6 +2607,9 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
     - WOLFBOOT_UDS_UID_FALLBACK_FORTEST=0
     - HWPUF=1
     - WOLFBOOT_HWPUF_PROVISION=1
+  - The emulator CI boots this configuration twice with `--persist` and checks
+  that the second boot reuses the stored PUF record (same UEID in the token);
+  `tools/unit-tests/unit-lpc55s69-puf.c` covers the record states
 
 #### Summary of configurables applicable to all lpc55s69 example configurations:
 - `PKA` : Turn on/off hardware acceleration of crypto algs
@@ -2574,10 +2618,13 @@ To turn on HWPUF, set HWPUF=1 in the config file (see below).
 first boot.  Performs PUF enrollment and generates a UDS key for device
 attestation.  Stores PUF keycodes in a known flash location and uses them when
 necessary.
+- `BOOT_BENCHMARK=1` : print the time wolfBoot spends on the integrity and
+signature checks (SysTick on the 1MHz FRO)
+- `DEBUG_UART=0` : build wolfBoot without the console
 - `WOLFBOOT_HWPUF_PROV_ADDRESS` : Flash address of the 4 KB PUF provisioning
 record (default `0x80000`, page aligned).  The build fails if it overlaps the
-boot, update or swap partition or the protected flash region (`0x9DE00` and
-up), or if it lies below the boot partition (wolfBoot, keyvault and NSC).
+boot, update or swap partition, the keyvault or the protected flash region
+(`0x9DE00` and up), or if it lies below the boot partition (wolfBoot and NSC).
 The activation code and key code are written first and verified, then a
 commit word is written in the last page of the record.  Provisioning only
 runs when that commit page is erased (or all `0xFF`), so a provisioning
@@ -2591,6 +2638,47 @@ programmed.
 `TZEN=1` the PUF is reachable only from the secure world (it is excluded from
 the non-secure SAU regions and is not linked into the non-secure test-app).
 
+#### Flash layout
+
+`lpc55s69.config` and `lpc55s69-benchmark.config`:
+
+| Region | Address | Size |
+| --- | --- | --- |
+| wolfBoot | `0x00000` | 64KB |
+| Boot partition | `0x10000` | 192KB |
+| Update partition | `0x40000` | 192KB |
+| Swap sector | `0x70000` | 512B |
+| HWPUF provisioning record | `0x80000` | 4KB |
+
+`lpc55s69-tz.config` and `lpc55s69-tz-psa.config`:
+
+| Region | Address | Size |
+| --- | --- | --- |
+| wolfBoot (secure) | `0x00000` | 248KB |
+| Non-secure callable veneers | `0x3E000` | 8KB |
+| Boot partition (non-secure) | `0x40000` | 128KB |
+| Update partition | `0x60000` | 128KB |
+| HWPUF provisioning record | `0x80000` | 4KB |
+| Swap sector | `0x81000` | 512B |
+| Keyvault | `0x82000` | 88KB |
+
+#### TrustZone
+
+With `TZEN=1`, the non-secure application can reach only the boot partition,
+SRAM2 (`0x20020000`-`0x2002FFFF`), the FLEXCOMM0 console and the GPIO block.
+wolfBoot muxes the LED pins for the application before it boots, so the pin
+mux (IOCON) stays secure, as do clocks and resets (SYSCON), the flash
+controller, DMA, the crypto blocks, the RNG and PUF, the update and swap
+partitions, the keyvault and the rest of the SRAM. Only the FLEXCOMM0 interrupt
+targets the non-secure state.
+
+The same split is applied on the bus by the AHB secure controller, so DMA and
+the second core cannot reach secure memory either; the boot partition is
+therefore aligned to the controller's 32KB flash rules. Secure checking is
+enabled and both the controller and the SAU are write-locked until the next
+reset. To give the application another peripheral, add it to `hal_sau_init()`
+and `hal_ahbsc_init()` in [hal/lpc55s69.c](/hal/lpc55s69.c).
+
 ### LPC55S69: Configuring and compiling
 
 Copy the example configuration file and build with make:
@@ -2600,44 +2688,49 @@ cp config/examples/lpc55s69.config .config
 make
 ```
 
+`make` builds `factory.bin`, which holds wolfBoot and version 1 of the test-app.
+
 ### LPC55S69: Loading the firmware
 
-Download and install the LinkServer tool:
-[@NXP: LinkServer for microcontrollers](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+Connect a USB cable from your development PC to P6 (Debug Link) on the board,
+and open a terminal on the board's virtual COM port at 115200-N-8-1.
 
-NOTE: The LPCXpresso55S69's on-board LINK2 debugger comes loaded with CMSIS-DAP protocol, but it can be
-optionally updated to use JLink protocol instead.  See the EVK user manual for how to do this, if desired.
-The below examples were tested with the default CMSIS-DAP protocol.  CMSIS-DAP is supported by default in
-the MCUXpresso IDE for debugging purposes.
+The firmware can be loaded with [pyOCD](https://pyocd.io), which supports the
+LPC55S69 without a device pack:
 
-Connect a USB cable from your development PC to P6 on the dev board.
+```sh
+pip install pyocd
+pyocd erase -t lpc55s69 --chip
+pyocd flash -t lpc55s69 factory.bin
+```
 
-Open a terminal to the virtual COM port with putty or similar app, settings 115200-N-8-1.
+pyOCD erases this flash in 32KB sectors and keeps the data around a write that
+falls in the same sector.
 
-### LPC55S69: Testing firmware factory.bin
-
-1) Erase the entire flash:
+NXP's [LinkServer](https://www.nxp.com/design/design-center/software/development-software/mcuxpresso-software-and-tools-/linkserver-for-microcontrollers:LINKERSERVER#downloads)
+can be used instead:
 
 ```sh
 LinkServer flash LPC55S69 erase
-```
-
-2) Program the factory.bin, which contains both wolfBoot and the test-app version 1:
-
-```sh
 LinkServer flash LPC55S69 load factory.bin:0
 ```
-NOTE: See [tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm) for the lauterbach equivalent of 1 and 2 combined.
 
-3) The LED will light up blue to indicate version 1 of the firmware is running.  You should also see output
-like this in the terminal window:
+NOTE: The LPCXpresso55S69's on-board LPC-Link2 can optionally be updated to use
+the J-Link protocol instead of CMSIS-DAP. See the EVK user manual for how to do
+this. See
+[tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_factory_bin.cmm)
+for the Lauterbach equivalent.
 
-```sh
-lpc55s69 init
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Partition 1 header magic 0xFFFFFFFF invalid at 0x18000
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
+The LED lights up blue to indicate version 1 of the firmware is running, and
+the console shows:
+
+```
+Boot partition: 0x10000 (sz 22380, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x40000
+Boot partition: 0x10000 (sz 22380, ver 0x1, type 0x601)
 Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
 
 ==================================
 LPC55S69 wolfBoot demo Application
@@ -2650,6 +2743,11 @@ Calling wolfBoot_success()
     update: ver=0x0 state=0xFF
 ```
 
+With `lpc55s69-tz.config` the application also prints a random number it
+obtained from the secure RNG through the non-secure callable API
+(`Today's lucky number: 0x39`), and confirms the boot with
+`wolfBoot_nsc_success()`.
+
 ### LPC55S69: Testing firmware update
 
 1) Sign the test-app with version 2:
@@ -2658,23 +2756,20 @@ Calling wolfBoot_success()
 ./tools/keytools/sign --ecc384 --sha256 test-app/image.bin wolfboot_signing_private_key.der 2
 ```
 
-2) Flash v2 update binary to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
+2) Flash the v2 image to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
+(`0x60000` for the TrustZone configurations):
 
-Example:
 ```sh
-LinkServer flash LPC55S69 load test-app/image_v2_signed.bin:0x18000
+pyocd flash -t lpc55s69 -a 0x40000 test-app/image_v2_signed.bin
 ```
-NOTE: See [tools/scripts/lpc55s69/lpc55s69_flash_update.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_update.cmm) for the lauterbach equivalent.
 
-3) You should see output like this in the terminal window:
+or `LinkServer flash LPC55S69 load test-app/image_v2_signed.bin:0x40000`. See
+[tools/scripts/lpc55s69/lpc55s69_flash_update.cmm](/tools/scripts/lpc55s69/lpc55s69_flash_update.cmm)
+for the Lauterbach equivalent.
 
-```sh
-lpc55s69 init
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Booting version: 0x1
+3) Version 1 finds the update and triggers it:
 
+```
 ==================================
 LPC55S69 wolfBoot demo Application
 Copyright 2026 wolfSSL Inc
@@ -2688,164 +2783,24 @@ Triggering update...
 ...done. Reboot to apply.
 ```
 
-4) Press the RESET button to reboot
+4) Press the RESET button (or run `pyocd reset -t lpc55s69`). wolfBoot swaps the
+partitions, the LED lights up green to indicate version 2 is running, and the
+new version confirms itself:
 
-5) The LED will light up green to indicate version 2 of the firmware is running.  You should also see output
-like this in the terminal window:
-
-```sh
-lpc55s69 init
-Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
-Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
+```
 Starting Update (fallback allowed 0)
-Update partition: 0x18000 (sz 22460, ver 0x2, type 0x601)
-Boot partition: 0xD000 (sz 22460, ver 0x1, type 0x601)
+Update partition: 0x40000 (sz 22380, ver 0x2, type 0x601)
+Boot partition: 0x10000 (sz 22380, ver 0x1, type 0x601)
 Versions: Current 0x1, Update 0x2
 Copy sector 0 (part 1->2)
 Copy sector 0 (part 0->1)
 Copy sector 0 (part 2->0)
-Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
-Update partition: 0x18000 (sz 22460, ver 0x1, type 0x601)
-Copy sector 1 (part 1->2)
-Copy sector 1 (part 0->1)
-Copy sector 1 (part 2->0)
-Copy sector 2 (part 1->2)
-Copy sector 2 (part 0->1)
-Copy sector 2 (part 2->0)
-Copy sector 3 (part 1->2)
-Copy sector 3 (part 0->1)
-Copy sector 3 (part 2->0)
-Copy sector 4 (part 1->2)
-Copy sector 4 (part 0->1)
-Copy sector 4 (part 2->0)
-Copy sector 5 (part 1->2)
-Copy sector 5 (part 0->1)
-Copy sector 5 (part 2->0)
-Copy sector 6 (part 1->2)
-Copy sector 6 (part 0->1)
-Copy sector 6 (part 2->0)
-Copy sector 7 (part 1->2)
-Copy sector 7 (part 0->1)
-Copy sector 7 (part 2->0)
-Copy sector 8 (part 1->2)
-Copy sector 8 (part 0->1)
-Copy sector 8 (part 2->0)
-Copy sector 9 (part 1->2)
-Copy sector 9 (part 0->1)
-Copy sector 9 (part 2->0)
-Copy sector 10 (part 1->2)
-Copy sector 10 (part 0->1)
-Copy sector 10 (part 2->0)
-Copy sector 11 (part 1->2)
-Copy sector 11 (part 0->1)
-Copy sector 11 (part 2->0)
-Copy sector 12 (part 1->2)
-Copy sector 12 (part 0->1)
-Copy sector 12 (part 2->0)
-Copy sector 13 (part 1->2)
-Copy sector 13 (part 0->1)
-Copy sector 13 (part 2->0)
-Copy sector 14 (part 1->2)
-Copy sector 14 (part 0->1)
-Copy sector 14 (part 2->0)
-Copy sector 15 (part 1->2)
-Copy sector 15 (part 0->1)
-Copy sector 15 (part 2->0)
-Copy sector 16 (part 1->2)
-Copy sector 16 (part 0->1)
-Copy sector 16 (part 2->0)
-Copy sector 17 (part 1->2)
-Copy sector 17 (part 0->1)
-Copy sector 17 (part 2->0)
-Copy sector 18 (part 1->2)
-Copy sector 18 (part 0->1)
-Copy sector 18 (part 2->0)
-Copy sector 19 (part 1->2)
-Copy sector 19 (part 0->1)
-Copy sector 19 (part 2->0)
-Copy sector 20 (part 1->2)
-Copy sector 20 (part 0->1)
-Copy sector 20 (part 2->0)
-Copy sector 21 (part 1->2)
-Copy sector 21 (part 0->1)
-Copy sector 21 (part 2->0)
-Copy sector 22 (part 1->2)
-Copy sector 22 (part 0->1)
-Copy sector 22 (part 2->0)
-Copy sector 23 (part 1->2)
-Copy sector 23 (part 0->1)
-Copy sector 23 (part 2->0)
-Copy sector 24 (part 1->2)
-Copy sector 24 (part 0->1)
-Copy sector 24 (part 2->0)
-Copy sector 25 (part 1->2)
-Copy sector 25 (part 0->1)
-Copy sector 25 (part 2->0)
-Copy sector 26 (part 1->2)
-Copy sector 26 (part 0->1)
-Copy sector 26 (part 2->0)
-Copy sector 27 (part 1->2)
-Copy sector 27 (part 0->1)
-Copy sector 27 (part 2->0)
-Copy sector 28 (part 1->2)
-Copy sector 28 (part 0->1)
-Copy sector 28 (part 2->0)
-Copy sector 29 (part 1->2)
-Copy sector 29 (part 0->1)
-Copy sector 29 (part 2->0)
-Copy sector 30 (part 1->2)
-Copy sector 30 (part 0->1)
-Copy sector 30 (part 2->0)
-Copy sector 31 (part 1->2)
-Copy sector 31 (part 0->1)
-Copy sector 31 (part 2->0)
-Copy sector 32 (part 1->2)
-Copy sector 32 (part 0->1)
-Copy sector 32 (part 2->0)
-Copy sector 33 (part 1->2)
-Copy sector 33 (part 0->1)
-Copy sector 33 (part 2->0)
-Copy sector 34 (part 1->2)
-Copy sector 34 (part 0->1)
-Copy sector 34 (part 2->0)
-Copy sector 35 (part 1->2)
-Copy sector 35 (part 0->1)
-Copy sector 35 (part 2->0)
-Copy sector 36 (part 1->2)
-Copy sector 36 (part 0->1)
-Copy sector 36 (part 2->0)
-Copy sector 37 (part 1->2)
-Copy sector 37 (part 0->1)
-Copy sector 37 (part 2->0)
-Copy sector 38 (part 1->2)
-Copy sector 38 (part 0->1)
-Copy sector 38 (part 2->0)
-Copy sector 39 (part 1->2)
-Copy sector 39 (part 0->1)
-Copy sector 39 (part 2->0)
-Copy sector 40 (part 1->2)
-Copy sector 40 (part 0->1)
-Copy sector 40 (part 2->0)
-Copy sector 41 (part 1->2)
-Copy sector 41 (part 0->1)
-Copy sector 41 (part 2->0)
-Copy sector 42 (part 1->2)
-Copy sector 42 (part 0->1)
-Copy sector 42 (part 2->0)
-Copy sector 43 (part 1->2)
-Copy sector 43 (part 0->1)
-Copy sector 43 (part 2->0)
-Copy sector 44 (part 1->2)
-Copy sector 44 (part 0->1)
-Copy sector 44 (part 2->0)
-Erasing remainder of partition (41 sectors)...
-Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
-Update partition: 0x18000 (sz 22460, ver 0x1, type 0x601)
-Copy sector 85 (part 0->2)
+...
 Copied boot sector to swap
-Boot partition: 0xD000 (sz 22460, ver 0x2, type 0x601)
+Boot partition: 0x10000 (sz 22380, ver 0x2, type 0x601)
 Booting version: 0x2
+Checking integrity...done
+Verifying signature...done
 
 ==================================
 LPC55S69 wolfBoot demo Application
@@ -2858,13 +2813,109 @@ Calling wolfBoot_success()
     update: ver=0x1 state=0xFF
 ```
 
+If version 2 had not called `wolfBoot_success()`, the next reset would roll
+back to version 1.
+
+### LPC55S69: Bootloader self-update
+
+The configurations without TrustZone keep `RAM_CODE=1`, so wolfBoot can replace
+itself: the flash driver and the SDK ROM API wrappers it calls run from RAM
+while the bootloader region is rewritten. Build the new wolfBoot with a higher
+`WOLFBOOT_VERSION` than the running one, keeping the same keys, then sign it
+and place the update trigger at `WOLFBOOT_PARTITION_SIZE - 5`:
+
+```sh
+./tools/keytools/sign --ecc384 --sha256 --wolfboot-update wolfboot.bin wolfboot_signing_private_key.der 2
+printf "pBOOT" > trigger_magic.bin
+./tools/bin-assemble/bin-assemble update.bin 0x0 wolfboot_v2_signed.bin 0x2FFFB trigger_magic.bin
+pyocd flash -t lpc55s69 -a 0x40000 update.bin
+```
+
+On the next reset wolfBoot verifies the new image, rewrites the bootloader
+region and boots the application with the new bootloader. With TrustZone the
+signed bootloader image spans up to the non-secure callable veneers and does
+not fit in an update partition, so self-update is not available there.
+
+### LPC55S69: Provisioning the hardware PUF
+
+`lpc55s69-tz-psa.config` can derive the attestation identity from the SRAM PUF
+instead of the chip UID test fallback. Turn on the PUF and first-boot
+provisioning, turn off the fallback, then build and load as above:
+
+```sh
+cp config/examples/lpc55s69-tz-psa.config .config
+sed -i 's/^HWPUF?=0/HWPUF?=1/' .config
+sed -i 's/^WOLFBOOT_HWPUF_PROVISION?=0/WOLFBOOT_HWPUF_PROVISION?=1/' .config
+sed -i 's/^WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=1/WOLFBOOT_UDS_UID_FALLBACK_FORTEST?=0/' .config
+make
+pyocd erase -t lpc55s69 --chip
+pyocd flash -t lpc55s69 factory.bin
+```
+
+On the first boot wolfBoot enrolls the PUF, generates the UDS key and stores
+the activation code and key code at `WOLFBOOT_HWPUF_PROV_ADDRESS` (`0x80000`)
+before it starts the application. The application asks the secure side for an
+attestation token and prints it:
+
+```
+Boot partition: 0x40000 (sz 30312, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x60000
+Boot partition: 0x40000 (sz 30312, ver 0x1, type 0x601)
+Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
+
+==================================
+LPC55S69 wolfBoot demo Application
+Copyright 2026 wolfSSL Inc
+==================================
+Today's lucky number: 0x14
+    boot:   ver=0x1 state=0xFF
+    update: ver=0x0 state=0xFF
+Calling wolfBoot_nsc_success()
+    boot:   ver=0x1 state=0x00
+    update: ver=0x0 state=0xFF
+[ATTEST-NS] get_token: chal=64 buf=1024
+[ATTEST] GET_TOKEN: challenge_len=64 out_len=1024
+Boot partition: 0x40000 (sz 30312, ver 0x1, type 0x601)
+Boot partition: 0x40000 (sz 30312, ver 0x1, type 0x601)
+[ATTEST] GET_TOKEN: dice_rc=0 token_len=404
+[ATTEST-NS] get_token: status=0 len=404
+attest: token size 404 bytes
+	84 43 A1 01 28 A0 59 01 49 A4 0A 58 40 00 01 02 | .C..(.Y.I..X@...
+	03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F 10 11 12 | ................
+...
+```
+
+The UEID claim in the token is the device identity derived from the PUF key.
+[tools/scripts/eat_ueid.py](/tools/scripts/eat_ueid.py) reads it from a saved
+console log, and it stays the same across resets:
+
+```sh
+python3 tools/scripts/eat_ueid.py console.log
+01b57481835d1eacad376f1f5f31c431f3bac16c118c3f5ef8db2ba6fdc0aabe05
+```
+
+The stored record is not secret (the key never leaves the PUF), but it is the
+device identity, so wolfBoot never replaces a committed record. To provision a
+new identity, erase the record and reset. pyOCD erases whole 32KB sectors, so
+this also clears the swap sector and the start of the keyvault:
+
+```sh
+pyocd erase -t lpc55s69 --sector 0x80000
+pyocd reset -t lpc55s69
+```
+
+A provisioning that fails, or loses power before the commit word is written,
+prints `hwpuf provision failed` and runs again on the next boot.
+
 ### LPC55S69: Debugging
 
 Debugging with GDB:
 
 Note: We include a `.gdbinit` in the wolfBoot root that loads the wolfboot and test-app elf files.
 
-In one terminal: `LinkServer gdbserver LPC55S69`
+In one terminal: `pyocd gdbserver -t lpc55s69` (or `LinkServer gdbserver LPC55S69`)
 
 In another terminal use `gdb`:
 
@@ -2874,7 +2925,6 @@ mon reset
 c
 ```
 NOTE: See [tools/scripts/lpc55s69/lpc55s69_debug.cmm](/tools/scripts/lpc55s69/lpc55s69_debug.cmm) for the lauterbach equivalent.
-
 
 ### LPC55S69 Test and Benchmark
 
@@ -2890,10 +2940,9 @@ make
 
 2. Flash the factory.bin and reboot...
 ```sh
-lpc55s69 init
-Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x201)
-Partition 1 header magic 0xFFFFFFFF invalid at 0x3B000
-Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x201)
+Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x40000
+Boot partition: 0x10000 (sz 162932, ver 0x1, type 0x601)
 Booting version: 0x1
 
 ==================================
@@ -3002,12 +3051,11 @@ Benchmark complete
 Benchmarks complete.
 ```
 
-2. Now try changing to PKA?=1 in the config file, rebuild, and reflash...
+3. Now try changing to PKA?=1 in the config file, rebuild, and reflash...
 ```sh
-lpc55s69 init
-Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x201)
-Partition 1 header magic 0xFFFFFFFF invalid at 0x3B000
-Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x201)
+Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x601)
+Partition 1 header magic 0xFFFFFFFF invalid at 0x40000
+Boot partition: 0x10000 (sz 163148, ver 0x1, type 0x601)
 Booting version: 0x1
 
 ==================================

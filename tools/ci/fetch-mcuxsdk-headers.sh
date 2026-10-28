@@ -28,7 +28,9 @@ fi
 
 fetch "" mcuxsdk-core c6f4223f45fdab59509f25ee3ea63a71bd29d8aa \
     /drivers/common/ /drivers/trng/ /drivers/mcx_spc/ /drivers/flexcomm/ \
-    /drivers/port/ /drivers/lpuart/ /drivers/tstmr/ /drivers/elemu/
+    /drivers/port/ /drivers/lpuart/ /drivers/tstmr/ /drivers/elemu/ \
+    /drivers/iap1/ /drivers/rng_1/ /drivers/lpc_iocon/ /drivers/lpc_gpio/ \
+    /drivers/puf/
 fetch devices/Wireless mcux-devices-wireless \
     0d2c97770475558c72f5b6947f468bf97282df79 /RW/periph/ /RW/RW612/
 fetch devices/MCX mcux-devices-mcx \
@@ -36,3 +38,7 @@ fetch devices/MCX mcux-devices-mcx \
     /MCXW/periph2/ /MCXW/MCXW716C/
 fetch middleware/secure-subsystem mcux-secure-subsystem \
     1cce4ff3093af3c1e79cf70891e96d13e3416b58 /inc/ /src/sscp/
+fetch devices/LPC mcux-devices-lpc \
+    3219d258961967797d435d874d1ca01b474aa390 /LPC5500/periph/ /LPC5500/LPC55S69/
+fetch examples mcuxsdk-examples 3151bc057b8924db54c7395d39b213c05ab94dc3 \
+    /_boards/lpcxpresso55s69/project_template/

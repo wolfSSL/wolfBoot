@@ -314,14 +314,15 @@ void isr_reset(void)
         dst++;
     }
 
-#if defined(TARGET_stm32n6)
+#if defined(TARGET_stm32n6) || defined(TARGET_lpc55s69)
     /* Set MSPLIM so a stack overflow generates a clean UsageFault.STKOF
      * instead of silently overwriting BSS/.data/.text. The N6 Boot ROM
-     * leaves MSPLIM at a low value that doesn't protect us. Place the
-     * limit at _end_bss, 8-byte aligned. `msr msplim, %0` from Secure
-     * state writes MSPLIM_S (SYSm=0x0A, no NS bit); other M33/M55 ports
-     * either don't need this (their boot ROM sets it) or have their own
-     * limit logic, so the protection is scoped to N6 only. */
+     * leaves MSPLIM at a low value that doesn't protect us, and the LPC55S69
+     * port wants the same guard. Place the limit at _end_bss, 8-byte
+     * aligned. `msr msplim, %0` from Secure state writes MSPLIM_S
+     * (SYSm=0x0A, no NS bit); other M33/M55 ports either don't need this
+     * (their boot ROM sets it) or have their own limit logic, so the
+     * protection is scoped to these targets. */
     {
         uint32_t lim = ((uint32_t)&_end_bss + 7u) & ~7u;
         __asm__ volatile("msr msplim, %0" : : "r"(lim));

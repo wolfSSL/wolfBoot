@@ -37,11 +37,21 @@
 #include "hal.h"
 #include "loader.h"
 #include "printf.h"
+#include "lpc55s69.h"
 
 #include <wolfssl/wolfcrypt/types.h>
 
 #ifdef TZEN
 #include "hal/armv8m_tz.h"
+#endif
+
+#ifdef WOLFSSL_NXP_LPC55S6X
+#include <wolfssl/wolfcrypt/port/nxp/casper_port.h>
+#include <wolfssl/wolfcrypt/port/nxp/hashcrypt_port.h>
+#endif
+
+#if (WOLFBOOT_SECTOR_SIZE % LPC55S69_FLASH_PAGE_SIZE) != 0
+#error WOLFBOOT_SECTOR_SIZE must be a multiple of the 512-byte flash page
 #endif
 
 #ifdef WOLFSSL_NXP_HWPUF
@@ -66,18 +76,27 @@
 #endif /* WOLFCRYPT_TZ_PSA */
 
 static flash_config_t pflash;
-static const uint32_t pflash_page_size = 512U;
+static int flash_ready;
+#ifdef __WOLFBOOT
+static int flash_check;
+#endif
+
+#if defined(TZEN) && defined(__WOLFBOOT) && !defined(LPC55S69_KEYVAULT_ADDR)
+extern uint32_t _flash_keyvault;
+extern uint32_t _flash_keyvault_size;
+#define LPC55S69_KEYVAULT_ADDR ((uint32_t)(uintptr_t)&_flash_keyvault)
+#define LPC55S69_KEYVAULT_LEN  ((uint32_t)(uintptr_t)&_flash_keyvault_size)
+#endif
 uint32_t SystemCoreClock; /* set in clock_config.c */
 
 static void flashInit(void)
 {
-    static int initialized = 0;
-
-    if (!initialized) {
+    if (!flash_ready) {
         XMEMSET(&pflash, 0, sizeof(pflash));
-        FLASH_Init(&pflash);
-        FFR_Init(&pflash);
-        initialized = 1;
+        if (FLASH_Init(&pflash) == kStatus_FLASH_Success) {
+            (void)FFR_Init(&pflash);
+            flash_ready = 1;
+        }
     }
 }
 
@@ -130,6 +149,12 @@ static NOINLINEFUNCTION void hal_zeroize(void *ptr, size_t len)
 #if (WOLFBOOT_HWPUF_PROV_ADDRESS + HWPUF_PROV_FLASH_LEN) > 0x9DE00ul
 #error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the protected flash region"
 #endif
+#ifdef WOLFBOOT_KEYVAULT_ADDRESS
+#if HWPUF_PROV_OVERLAPS(WOLFBOOT_KEYVAULT_ADDRESS & ~LPC55S69_FLASH_SECURE_ALIAS, \
+        WOLFBOOT_KEYVAULT_SIZE)
+#error "WOLFBOOT_HWPUF_PROV_ADDRESS overlaps the keyvault"
+#endif
+#endif
 
 typedef struct hwpuf_prov {
     byte ac[PUF_ACTIVATION_CODE_SIZE];
@@ -141,10 +166,18 @@ typedef char hwpuf_prov_size_check[
     (sizeof(hwpuf_prov) <= HWPUF_PROV_FLASH_LEN - HWPUF_PROV_PAGE_SIZE) ?
     1 : -1];
 
-/* prov holds no secure information, so does not need aggressive zeroing */
-static hwpuf_prov prov;
+/* Holds no secret; word aligned because the PUF driver streams it by word */
+static hwpuf_prov prov __attribute__((aligned(4)));
 
 #define HWPUF_PROV_BLANK    1
+
+static uint32_t hwpuf_commit_word(void)
+{
+    const uint8_t *p = LPC55S69_FLASH_PTR(HWPUF_PROV_COMMIT_ADDRESS);
+
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+        ((uint32_t)p[3] << 24);
+}
 
 /* Load the stored record into rec.
  * Returns 0 if a committed record was loaded, HWPUF_PROV_BLANK if the commit
@@ -176,7 +209,7 @@ static int hwpuf_provision_get(hwpuf_prov *rec)
     if (FLASH_VerifyProgram(&pflash, HWPUF_PROV_COMMIT_ADDRESS,
             HWPUF_PROV_PAGE_SIZE, (const uint8_t *)commit_page,
             &failed_addr, &failed_data) == kStatus_FLASH_Success &&
-            *(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS == 0xFFFFFFFFul)
+            hwpuf_commit_word() == 0xFFFFFFFFul)
         return HWPUF_PROV_BLANK;
 
     commit_page[0] = HWPUF_PROV_MAGIC;
@@ -185,7 +218,7 @@ static int hwpuf_provision_get(hwpuf_prov *rec)
             &failed_addr, &failed_data) != kStatus_FLASH_Success)
         return -1;
 
-    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS != HWPUF_PROV_MAGIC)
+    if (hwpuf_commit_word() != HWPUF_PROV_MAGIC)
         return -1;
 
     for (addr = WOLFBOOT_HWPUF_PROV_ADDRESS; addr < end;
@@ -195,7 +228,8 @@ static int hwpuf_provision_get(hwpuf_prov *rec)
             return -1;
     }
 
-    XMEMCPY(rec, (const void *)WOLFBOOT_HWPUF_PROV_ADDRESS, sizeof(*rec));
+    XMEMCPY(rec, LPC55S69_FLASH_PTR(WOLFBOOT_HWPUF_PROV_ADDRESS),
+            sizeof(*rec));
     return 0;
 }
 
@@ -244,13 +278,13 @@ static int hwpuf_provision_set(void)
     if (hal_flash_write(WOLFBOOT_HWPUF_PROV_ADDRESS,
                         (const uint8_t *)&prov, sizeof(prov)) != 0)
         goto unlock_out;
-    if (XMEMCMP((const void *)WOLFBOOT_HWPUF_PROV_ADDRESS, &prov,
+    if (XMEMCMP(LPC55S69_FLASH_PTR(WOLFBOOT_HWPUF_PROV_ADDRESS), &prov,
                sizeof(prov)) != 0)
         goto unlock_out;
     if (hal_flash_write(HWPUF_PROV_COMMIT_ADDRESS,
                         (const uint8_t *)&magic, sizeof(magic)) != 0)
         goto unlock_out;
-    if (*(volatile uint32_t *)HWPUF_PROV_COMMIT_ADDRESS != HWPUF_PROV_MAGIC)
+    if (hwpuf_commit_word() != HWPUF_PROV_MAGIC)
         goto unlock_out;
 
     ret = 0;
@@ -397,115 +431,405 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 }
 #endif /* __WOLFBOOT && WOLFCRYPT_TZ_PSA */
 
-#ifdef TZEN
-/* AHB_SECURE_CTRL (AHBSC) gates SRAM at the bus level on this part: the SAU
- * alone does not make an SRAM block non-secure.  The boot ROM leaves every
- * 4 KB block secure+privileged; hand SRAM2 (0x20020000..0x2002FFFF, the NS
- * app RAM) to the NS world as non-secure+privileged before the NS jump.
- * Unprivileged NS code is intentionally kept out of SRAM2: the NS test-app
- * runs privileged. */
-#define AHBSC_SRAM2_RULE0   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA0u))
-#define AHBSC_SRAM2_RULE1   (*(volatile uint32_t *)(AHB_SECURE_CTRL_BASE + 0xA4u))
+#if defined(TZEN) && defined(WOLFSSL_NXP_LPC55S6X)
+/* The HASHCRYPT bus master stays non-secure whatever MASTER_SEC_LEVEL says,
+ * so it can only read memory the AHB secure controller marks non-secure */
+#error PKA=1 is not supported with TZEN=1
+#endif
 
+#if defined(TZEN) && defined(__WOLFBOOT)
+#if ((WOLFBOOT_PARTITION_BOOT_ADDRESS % LPC55S69_AHBSC_FLASH_REGION) != 0) || \
+    ((WOLFBOOT_PARTITION_SIZE % LPC55S69_AHBSC_FLASH_REGION) != 0)
+#error TZEN needs the boot partition aligned to the 32KB AHB secure flash rules
+#endif
+
+/* Every rule field set to secure and privileged */
+#define LPC55S69_AHBSC_SECURE   0x33333333U
+#define LPC55S69_AHBSC_RULE_S   0x3U
+
+/* The SAU only filters the CPU; these AHB rules apply the same split to DMA
+ * and the second core. The controller is write-locked until reset. */
 static void hal_ahbsc_init(void)
 {
-    AHBSC_SRAM2_RULE0 = 0x11111111u; /* blocks 0-7: NS + privileged */
-    AHBSC_SRAM2_RULE1 = 0x11111111u; /* blocks 8-15: NS + privileged */
+    uint32_t boot = WOLFBOOT_PARTITION_BOOT_ADDRESS &
+        ~LPC55S69_FLASH_SECURE_ALIAS;
+    uint32_t region;
+    uint32_t start;
+    uint32_t rule;
+    uint32_t misc;
+    uint32_t i;
+
+    for (i = 0; i < AHB_SECURE_CTRL_SEC_CTRL_FLASH_ROM_SEC_CTRL_FLASH_MEM_RULE_COUNT;
+            i++) {
+        rule = 0;
+        for (region = 0; region < 8U; region++) {
+            start = ((i * 8U) + region) * LPC55S69_AHBSC_FLASH_REGION;
+            if ((start < boot) || (start >= boot + WOLFBOOT_PARTITION_SIZE)) {
+                rule |= LPC55S69_AHBSC_RULE_S << (region * 4U);
+            }
+        }
+        AHB_SECURE_CTRL->SEC_CTRL_FLASH_ROM[0].SEC_CTRL_FLASH_MEM_RULE[i] = rule;
+    }
+    for (i = 0; i < AHB_SECURE_CTRL_SEC_CTRL_FLASH_ROM_SEC_CTRL_ROM_MEM_RULE_COUNT;
+            i++) {
+        AHB_SECURE_CTRL->SEC_CTRL_FLASH_ROM[0].SEC_CTRL_ROM_MEM_RULE[i] =
+            LPC55S69_AHBSC_SECURE;
+    }
+    AHB_SECURE_CTRL->SEC_CTRL_FLASH_ROM[0].SLAVE_RULE =
+        AHB_SECURE_CTRL_SEC_CTRL_FLASH_ROM_SLAVE_RULE_ROM_RULE(
+            LPC55S69_AHBSC_RULE_S);
+
+    AHB_SECURE_CTRL->SEC_CTRL_RAMX[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAMX[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM0[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM0[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM0[0].MEM_RULE[1] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM1[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM1[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM1[0].MEM_RULE[1] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM2[0].SLAVE_RULE = 0U;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM2[0].MEM_RULE[0] = 0U;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM2[0].MEM_RULE[1] = 0U;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM3[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM3[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM3[0].MEM_RULE[1] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM4[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_RAM4[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_USB_HS[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_USB_HS[0].MEM_RULE[0] = LPC55S69_AHBSC_SECURE;
+
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SLAVE_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE0_MEM_CTRL0 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE0_MEM_CTRL1 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE0_MEM_CTRL2 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE1_MEM_CTRL0 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE1_MEM_CTRL1 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE1_MEM_CTRL2 =
+        LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_APB_BRIDGE[0].SEC_CTRL_APB_BRIDGE1_MEM_CTRL3 =
+        LPC55S69_AHBSC_SECURE;
+
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT8_SLAVE0_RULE = LPC55S69_AHBSC_SECURE &
+        ~AHB_SECURE_CTRL_SEC_CTRL_AHB_PORT8_SLAVE0_RULE_FLEXCOMM0_RULE_MASK;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT8_SLAVE1_RULE = LPC55S69_AHBSC_SECURE &
+        ~AHB_SECURE_CTRL_SEC_CTRL_AHB_PORT8_SLAVE1_RULE_GPIO0_RULE_MASK;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT9_SLAVE0_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT9_SLAVE1_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT10[0].SLAVE0_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT10[0].SLAVE1_RULE = LPC55S69_AHBSC_SECURE;
+    AHB_SECURE_CTRL->SEC_CTRL_AHB_PORT10[0].SEC_CTRL_AHB_SEC_CTRL_MEM_RULE[0] =
+        LPC55S69_AHBSC_SECURE;
+
+    /* Every other bus master stays non-secure; both registers are write-locked */
+    AHB_SECURE_CTRL->MASTER_SEC_LEVEL =
+        AHB_SECURE_CTRL_MASTER_SEC_LEVEL_MASTER_SEC_LEVEL_LOCK(1U);
+    AHB_SECURE_CTRL->MASTER_SEC_ANTI_POL_REG =
+        ~AHB_SECURE_CTRL_MASTER_SEC_ANTI_POL_REG_MASTER_SEC_LEVEL_ANTIPOL_LOCK_MASK |
+        AHB_SECURE_CTRL_MASTER_SEC_ANTI_POL_REG_MASTER_SEC_LEVEL_ANTIPOL_LOCK(1U);
+
+    /* Checking on (0b01); the write lock (0b01) takes effect from the DP copy */
+    misc = (AHB_SECURE_CTRL->MISC_CTRL_REG &
+            ~(AHB_SECURE_CTRL_MISC_CTRL_REG_WRITE_LOCK_MASK |
+              AHB_SECURE_CTRL_MISC_CTRL_REG_ENABLE_SECURE_CHECKING_MASK)) |
+        AHB_SECURE_CTRL_MISC_CTRL_REG_WRITE_LOCK(2U) |
+        AHB_SECURE_CTRL_MISC_CTRL_REG_ENABLE_SECURE_CHECKING(1U);
+    AHB_SECURE_CTRL->MISC_CTRL_REG = misc;
+    AHB_SECURE_CTRL->MISC_CTRL_DP_REG =
+        (misc & ~AHB_SECURE_CTRL_MISC_CTRL_REG_WRITE_LOCK_MASK) |
+        AHB_SECURE_CTRL_MISC_CTRL_REG_WRITE_LOCK(1U);
 }
 
 static void hal_sau_init(void)
 {
-    hal_ahbsc_init();
-
     /* Non-secure callable area */
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure: application flash area (boot+update partition) */
+    /* Non-secure: application flash area (boot partition) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
-            WOLFBOOT_PARTITION_BOOT_ADDRESS + (WOLFBOOT_PARTITION_SIZE * 2) - 1,
-            0);
+            WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
 
-    /* Non-secure RAM */
-    sau_init_region(2, 0x20020000, 0x2002FFFF, 0);
+    /* Non-secure RAM, above the SRAM used by wolfBoot */
+    sau_init_region(2, LPC55S69_NS_SRAM_START, LPC55S69_NS_SRAM_END, 0);
 
-    /* Peripherals */
-    sau_init_region(3, 0x40086000, 0x40086FFF, 0);  /* uart on flexcomm0 */
-    sau_init_region(4, 0x4008c000, 0x4008FFFF, 0);  /* gpio for leds */
+    /* Only the console and GPIO; clocks, pin mux, flash, DMA and crypto stay
+     * secure */
+    sau_init_region(3, LPC55S69_FLEXCOMM0_NS_BASE,
+            LPC55S69_FLEXCOMM0_NS_BASE + LPC55S69_FLEXCOMM0_NS_SIZE - 1, 0);
+    sau_init_region(4, LPC55S69_GPIO_NS_BASE,
+            LPC55S69_GPIO_NS_BASE + LPC55S69_GPIO_NS_SIZE - 1, 0);
 
-    /* Enable SAU */
+    NVIC_SetTargetState(FLEXCOMM0_IRQn);
+
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;
-
-    /* Enable securefault handler */
     SCB_SHCSR |= SCB_SHCSR_SECUREFAULT_EN;
+    __DSB();
+    __ISB();
+
+    AHB_SECURE_CTRL->CPU0_LOCK_REG = (AHB_SECURE_CTRL->CPU0_LOCK_REG &
+            ~(AHB_SECURE_CTRL_CPU0_LOCK_REG_LOCK_SAU_MASK |
+              AHB_SECURE_CTRL_CPU0_LOCK_REG_CPU0_LOCK_REG_LOCK_MASK)) |
+        AHB_SECURE_CTRL_CPU0_LOCK_REG_LOCK_SAU(1U) |
+        AHB_SECURE_CTRL_CPU0_LOCK_REG_CPU0_LOCK_REG_LOCK(1U);
+
+    hal_ahbsc_init();
 }
 
+/* Hand the LED pins to the non-secure application: pin mux stays secure */
 static void periph_unsecure(void)
 {
+    const uint32_t led_mux = IOCON_FUNC0 | IOCON_MODE_PULLUP | IOCON_DIGITAL_EN;
+
+    CLOCK_EnableClock(kCLOCK_Iocon);
+    CLOCK_EnableClock(kCLOCK_Gpio1);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, LPC55S69_LED_BLUE_PIN, led_mux);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, LPC55S69_LED_RED_PIN, led_mux);
+    IOCON_PinMuxSet(IOCON, LPC55S69_LED_PORT, LPC55S69_LED_GREEN_PIN, led_mux);
 }
 #endif /* TZEN */
 
-static void hal_flash_fix_ecc(void)
+/* PRIMASK saved per ROM call so the caller's interrupt state survives */
+static int RAMFUNCTION lpc55s69_page_erase(uint32_t offset)
 {
-    uint8_t page_buf[512];
-    uint32_t addr;
-    uint32_t start = ARCH_FLASH_OFFSET;
-    uint32_t end   = WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE;
+    uint32_t primask = __get_PRIMASK();
+    status_t st;
 
-    XMEMSET(page_buf, 0xFF, sizeof(page_buf));
+    __disable_irq();
+    st = FLASH_Erase(&pflash, offset, LPC55S69_FLASH_PAGE_SIZE,
+            kFLASH_ApiEraseKey);
+    __set_PRIMASK(primask);
+    return (st == kStatus_FLASH_Success) ? 0 : -1;
+}
 
-    for (addr = start; addr < end; addr += pflash_page_size) {
-        if (FLASH_VerifyErase(&pflash, addr, pflash_page_size)
-                == kStatus_FLASH_Success) {
-            FLASH_Program(&pflash, addr, page_buf, pflash_page_size);
-        }
-    }
+static int RAMFUNCTION lpc55s69_page_program(uint32_t offset,
+        const uint8_t *page)
+{
+    uint32_t primask = __get_PRIMASK();
+    status_t st;
+
+    __disable_irq();
+    st = FLASH_Program(&pflash, offset, page, LPC55S69_FLASH_PAGE_SIZE);
+    __set_PRIMASK(primask);
+    return (st == kStatus_FLASH_Success) ? 0 : -1;
+}
+
+static int RAMFUNCTION lpc55s69_page_is_blank(uint32_t offset)
+{
+    uint32_t primask = __get_PRIMASK();
+    status_t st;
+
+    __disable_irq();
+    st = FLASH_VerifyErase(&pflash, offset, LPC55S69_FLASH_PAGE_SIZE);
+    __set_PRIMASK(primask);
+    return (st == kStatus_FLASH_Success);
 }
 
 #ifdef __WOLFBOOT
-#define IOCON_PIO_FUNC0 0x00u         /*!<@brief Selects pin function 0 */
-#define IOCON_PIO_MODE_PULLUP 0x20u   /*!<@brief Selects pull-up function */
-#define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
-#define IOCON_PIO_INV_DI 0x00u        /*!<@brief Input function is not inverted */
-#define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
-#define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
-
-#define RED_LED     6
-#define GREEN_LED   7
-#define BLUE_LED    4
-
-static void leds_pin_init(void)
+/* Returns the FAIL, ERR and ECC_ERR flags of one word read through the
+ * controller, or -1 if the command never completes */
+#ifndef LPC55S69_FLASH_WORD_READ
+static int RAMFUNCTION lpc55s69_word_read(uint32_t offset, uint32_t *data)
 {
-    /* red output off */
-    GPIO->SET[1] = 1UL << RED_LED;
-    GPIO->DIR[1] |= 1UL << RED_LED;
-    /* green output off */
-    GPIO->SET[1] = 1UL << GREEN_LED;
-    GPIO->DIR[1] |= 1UL << GREEN_LED;
-    /* blue output off */
-    GPIO->SET[1] = 1UL << BLUE_LED;
-    GPIO->DIR[1] |= 1UL << BLUE_LED;
+    uint32_t n = LPC55S69_FLASH_CMD_TIMEOUT;
+    uint32_t st;
 
-    const uint32_t LED_PINMUX_CONFIG = (/* Pin is configured as PIO */
-                               IOCON_PIO_FUNC0 |
-                               /* Selects pull-up function */
-                               IOCON_PIO_MODE_PULLUP |
-                               /* Standard mode, output slew rate control is enabled */
-                               IOCON_PIO_SLEW_STANDARD |
-                               /* Input function is not inverted */
-                               IOCON_PIO_INV_DI |
-                               /* Enables digital function */
-                               IOCON_PIO_DIGITAL_EN |
-                               /* Open drain is disabled */
-                               IOCON_PIO_OPENDRAIN_DI);
-    IOCON_PinMuxSet(IOCON, 1, RED_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, GREEN_LED, LED_PINMUX_CONFIG);
-    IOCON_PinMuxSet(IOCON, 1, BLUE_LED, LED_PINMUX_CONFIG);
+    FLASH->INT_CLR_STATUS = FLASH_INT_CLR_STATUS_FAIL_MASK |
+        FLASH_INT_CLR_STATUS_ERR_MASK | FLASH_INT_CLR_STATUS_DONE_MASK |
+        FLASH_INT_CLR_STATUS_ECC_ERR_MASK;
+    FLASH->STARTA = offset / LPC55S69_FLASH_WORD_SIZE;
+    /* Read mode: ECC on, normal margin */
+    FLASH->DATAW[0] = 0U;
+    FLASH->CMD = LPC55S69_FLASH_CMD_READ_SINGLE_WORD;
+    do {
+        st = FLASH->INT_STATUS;
+    } while (((st & FLASH_INT_STATUS_DONE_MASK) == 0U) && (--n != 0U));
+    if (n == 0U) {
+        return -1;
+    }
+    data[0] = FLASH->DATAW[0];
+    data[1] = FLASH->DATAW[1];
+    data[2] = FLASH->DATAW[2];
+    data[3] = FLASH->DATAW[3];
+    return (int)(st & (FLASH_INT_STATUS_FAIL_MASK | FLASH_INT_STATUS_ERR_MASK |
+        FLASH_INT_STATUS_ECC_ERR_MASK));
+}
+#define LPC55S69_FLASH_WORD_READ(off, data) lpc55s69_word_read(off, data)
+#endif
+
+/* Reads a page through the controller into page. Returns the number of words
+ * flagged with an ECC error, or -1 when the controller did not answer as
+ * expected (illegal command, timeout, or a failure with no ECC error) */
+static int RAMFUNCTION lpc55s69_page_check(uint32_t offset, uint8_t *page)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t w[LPC55S69_FLASH_WORD_SIZE / sizeof(uint32_t)];
+    uint32_t i;
+    uint32_t j;
+    int st;
+    int bad = 0;
+
+    __disable_irq();
+    for (i = 0; i < LPC55S69_FLASH_PAGE_SIZE; i += LPC55S69_FLASH_WORD_SIZE) {
+        st = LPC55S69_FLASH_WORD_READ(offset + i, w);
+        if ((st < 0) || ((st & FLASH_INT_STATUS_ERR_MASK) != 0) ||
+                ((st & (FLASH_INT_STATUS_FAIL_MASK |
+                        FLASH_INT_STATUS_ECC_ERR_MASK)) ==
+                    FLASH_INT_STATUS_FAIL_MASK)) {
+            bad = -1;
+            break;
+        }
+        if ((st & FLASH_INT_STATUS_ECC_ERR_MASK) != 0) {
+            bad++;
+        }
+        for (j = 0; j < LPC55S69_FLASH_WORD_SIZE; j++) {
+            page[i + j] = (uint8_t)(w[j / 4U] >> ((j % 4U) * 8U));
+        }
+    }
+    __set_PRIMASK(primask);
+    return bad;
 }
 #endif /* __WOLFBOOT */
 
-extern int wc_hashcrypt_init(void);
-extern int wc_casper_init(void);
+/* Accepts the secure (0x1xxxxxxx) and non-secure flash aliases */
+static int RAMFUNCTION lpc55s69_flash_offset(uint32_t address, uint32_t len,
+        uint32_t *offset)
+{
+    uint32_t off = address;
+
+    if ((off >= LPC55S69_FLASH_SECURE_ALIAS) &&
+            (off < LPC55S69_FLASH_SECURE_ALIAS + LPC55S69_FLASH_SIZE)) {
+        off -= LPC55S69_FLASH_SECURE_ALIAS;
+    }
+    if ((off >= LPC55S69_FLASH_SIZE) || (len > LPC55S69_FLASH_SIZE - off)) {
+        return -1;
+    }
+    *offset = off;
+    return 0;
+}
+
+/* Blank pages are programmed 0xFF. With check set, a page that reads with an
+ * ECC error is rewritten: one bad word keeps what the controller returned (a
+ * correctable error, or 16 bytes the image hash rejects), more means the
+ * program was cut, and the page reads as erased again */
+static int hal_flash_fix_ecc(uint32_t address, uint32_t len, int check)
+{
+    uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
+    uint32_t offset = 0;
+    uint32_t end;
+    uint32_t i;
+    int program;
+    int fill;
+#ifdef __WOLFBOOT
+    int bad;
+#endif
+    int ret;
+
+    ret = lpc55s69_flash_offset(address, len, &offset);
+    if (ret == 0) {
+        end = offset + len;
+        while ((ret == 0) && (offset < end)) {
+            program = 0;
+            fill = 0;
+            if (lpc55s69_page_is_blank(offset)) {
+                program = 1;
+                fill = 1;
+            }
+#ifdef __WOLFBOOT
+            else if (check && flash_check) {
+                bad = lpc55s69_page_check(offset, page_buf);
+                if (bad > 0) {
+                    /* A flag left by an interleaved read is not repeated */
+                    bad = lpc55s69_page_check(offset, page_buf);
+                }
+                if (bad < 0) {
+                    flash_check = 0;
+                    wolfBoot_printf("lpc55s69: flash ECC check unavailable\n");
+                }
+                else if (bad > 0) {
+                    program = 1;
+                    fill = (bad > 1);
+                    ret = lpc55s69_page_erase(offset);
+                }
+            }
+#else
+            (void)check;
+#endif
+            if ((ret == 0) && program) {
+                if (fill) {
+                    for (i = 0; i < sizeof(page_buf); i++) {
+                        page_buf[i] = 0xFFU;
+                    }
+                }
+                ret = lpc55s69_page_program(offset, page_buf);
+            }
+            offset += LPC55S69_FLASH_PAGE_SIZE;
+        }
+    }
+    return ret;
+}
+
+/* Fill every erased page wolfBoot may read, so reads never hit an ECC fault,
+ * and repair the pages a cut program left unreadable where wolfBoot writes.
+ * DICE attestation hashes the whole bootloader region */
+static int hal_flash_fix_ecc_all(void)
+{
+    int ret = 0;
+#ifdef __WOLFBOOT
+    uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
+    uint32_t offset = 0;
+    int check_boot = 0;
+
+    /* The page wolfBoot booted from must read clean, or the controller does
+     * not report what the check expects */
+    flash_check = 1;
+    if ((lpc55s69_flash_offset(ARCH_FLASH_OFFSET, LPC55S69_FLASH_PAGE_SIZE,
+                &offset) != 0) ||
+            (!lpc55s69_page_is_blank(offset) &&
+                (lpc55s69_page_check(offset, page_buf) != 0))) {
+        flash_check = 0;
+        wolfBoot_printf("lpc55s69: flash ECC check unavailable\n");
+    }
+#ifdef WOLFCRYPT_TZ_PSA
+    check_boot = 1;
+#endif
+    ret = hal_flash_fix_ecc(ARCH_FLASH_OFFSET,
+            WOLFBOOT_PARTITION_BOOT_ADDRESS - ARCH_FLASH_OFFSET, check_boot);
+#endif
+    if (ret == 0) {
+        ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_BOOT_ADDRESS,
+                WOLFBOOT_PARTITION_SIZE, 1);
+    }
+    if (ret == 0) {
+        ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_UPDATE_ADDRESS,
+                WOLFBOOT_PARTITION_SIZE, 1);
+    }
+    if (ret == 0) {
+        ret = hal_flash_fix_ecc(WOLFBOOT_PARTITION_SWAP_ADDRESS,
+                WOLFBOOT_SECTOR_SIZE, 1);
+    }
+#if defined(TZEN) && defined(__WOLFBOOT)
+    if (ret == 0) {
+        ret = hal_flash_fix_ecc(LPC55S69_KEYVAULT_ADDR, LPC55S69_KEYVAULT_LEN,
+                1);
+    }
+#endif
+    return ret;
+}
+
+#if !defined(__WOLFBOOT) && !defined(TZEN)
+/* The test-app seeds wolfCrypt from the RNG; wolfBoot itself does not */
+static void lpc55s69_app_rng_init(void)
+{
+    CLOCK_EnableClock(kCLOCK_Rng);
+    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
+    RNG_Init(RNG);
+}
+#endif
 
 void hal_init(void)
 {
@@ -513,27 +837,21 @@ void hal_init(void)
     /* lpc55s69 must run < 100 MHz for flash write/erase to work */
     BOARD_BootClockFROHF96M();
 
-    CLOCK_EnableClock(kCLOCK_Iocon);
-    CLOCK_EnableClock(kCLOCK_Gpio1);
-
 # ifdef DEBUG_UART
     uart_init();
-    uart_write("lpc55s69 init\n", 14);
 # endif
 
 # ifdef WOLFSSL_NXP_LPC55S6X
     CLOCK_EnableClock(kCLOCK_HashCrypt);
-    wc_hashcrypt_init();
+    (void)wc_hashcrypt_init();
     CLOCK_EnableClock(kCLOCK_Casper);
-    wc_casper_init();
+    (void)wc_casper_init();
 # endif
-
-    CLOCK_EnableClock(kCLOCK_Rng);
-    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
-    RNG_Init(RNG);
-
-    leds_pin_init();
 #endif /* __WOLFBOOT */
+
+#if !defined(__WOLFBOOT) && !defined(TZEN)
+    lpc55s69_app_rng_init();
+#endif
 
 #if defined(WOLFSSL_NXP_HWPUF) && (defined(__WOLFBOOT) || !defined(TZEN))
     /* FSL_SDK_DISABLE_DRIVER_CLOCK_CONTROL: PUF_Init() won't do this */
@@ -542,10 +860,12 @@ void hal_init(void)
 
 #if defined(__WOLFBOOT) || !defined(TZEN)
     flashInit();
-    hal_flash_fix_ecc();
+    if ((flash_ready == 0) || (hal_flash_fix_ecc_all() != 0)) {
+        wolfBoot_printf("lpc55s69: flash init failed\n");
+    }
 #endif
 
-#if defined(TZEN) && !defined(NONSECURE_APP)
+#if defined(TZEN) && defined(__WOLFBOOT)
     hal_sau_init();
 #endif
 
@@ -562,9 +882,35 @@ void hal_init(void)
 #endif
 }
 
+#if defined(BOOT_BENCHMARK) && defined(__WOLFBOOT)
+/* DWT CYCCNT stops without a debugger; SysTick on the FRO 1MHz ticks in us */
+uint64_t hal_get_timer_us(void)
+{
+    static uint64_t elapsed_us;
+    static uint32_t last;
+    static int started;
+    uint32_t now;
+
+    if (!started) {
+        SYSCON->CLOCK_CTRL |= SYSCON_CLOCK_CTRL_FRO1MHZ_CLK_ENA_MASK;
+        CLOCK_AttachClk(kFRO1M_to_SYSTICK0);
+        SysTick->LOAD = SysTick_LOAD_RELOAD_Msk;
+        SysTick->VAL = 0U;
+        SysTick->CTRL = SysTick_CTRL_ENABLE_Msk;
+        last = SysTick->VAL;
+        started = 1;
+    }
+    now = SysTick->VAL;
+    elapsed_us += (last - now) & SysTick_LOAD_RELOAD_Msk;
+    last = now;
+    return elapsed_us;
+}
+#endif
+
 #ifdef __WOLFBOOT
 /* Assert hook needed by SDK assert() macro. */
-void __assert_func(const char *a, int b, const char *c, const char *d)
+void RAMFUNCTION __assert_func(const char *a, int b, const char *c,
+        const char *d)
 {
     (void)a;
     (void)b;
@@ -576,6 +922,9 @@ void __assert_func(const char *a, int b, const char *c, const char *d)
 
 void hal_prepare_boot(void)
 {
+#ifdef BOOT_BENCHMARK
+    SysTick->CTRL = 0U;
+#endif
 #ifdef TZEN
     periph_unsecure();
 #endif
@@ -584,41 +933,63 @@ void hal_prepare_boot(void)
 
 int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
-    uint8_t page_buf[512];
-    uint32_t page_addr;
-    uint32_t offset;
+    uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
+    const uint8_t *page_src;
+    uint32_t offset = 0;
+    uint32_t page_off;
+    uint32_t in_page;
     uint32_t chunk;
+    uint32_t i;
+    int blank;
+    int ret = 0;
 
-    while (len > 0) {
-        page_addr = address & ~(pflash_page_size - 1);
-        offset = address - page_addr;
-        chunk = pflash_page_size - offset;
-        if ((uint32_t)len < chunk)
+    if (len == 0) {
+        return 0;
+    }
+    if ((len < 0) || (data == NULL) || (flash_ready == 0) ||
+            (lpc55s69_flash_offset(address, (uint32_t)len, &offset) != 0)) {
+        return -1;
+    }
+
+    while ((ret == 0) && (len > 0)) {
+        page_off = offset & ~(LPC55S69_FLASH_PAGE_SIZE - 1U);
+        in_page = offset - page_off;
+        chunk = LPC55S69_FLASH_PAGE_SIZE - in_page;
+        if ((uint32_t)len < chunk) {
             chunk = (uint32_t)len;
-
-        if (FLASH_VerifyErase(&pflash, page_addr, pflash_page_size)
-                == kStatus_FLASH_Success) {
-            XMEMSET(page_buf, 0xFF, pflash_page_size);
-        } else {
-            XMEMCPY(page_buf, (void *)page_addr, pflash_page_size);
-
-            if (FLASH_Erase(&pflash, page_addr, pflash_page_size,
-                    kFLASH_ApiEraseKey) != kStatus_FLASH_Success)
-                return -1;
         }
 
-        XMEMCPY(page_buf + offset, data, chunk);
+        blank = lpc55s69_page_is_blank(page_off);
+        if ((chunk != LPC55S69_FLASH_PAGE_SIZE) && blank) {
+            for (i = 0; i < LPC55S69_FLASH_PAGE_SIZE; i++) {
+                page_buf[i] = 0xFFU;
+            }
+        }
+        else if (chunk != LPC55S69_FLASH_PAGE_SIZE) {
+            /* Merge with the page as the caller addresses it (S or NS) */
+            page_src = LPC55S69_FLASH_PTR(address - in_page);
+            for (i = 0; i < LPC55S69_FLASH_PAGE_SIZE; i++) {
+                page_buf[i] = page_src[i];
+            }
+        }
+        for (i = 0; i < chunk; i++) {
+            page_buf[in_page + i] = data[i];
+        }
 
-        if (FLASH_Program(&pflash, page_addr, page_buf, pflash_page_size)
-                != kStatus_FLASH_Success)
-            return -1;
+        if (!blank) {
+            ret = lpc55s69_page_erase(page_off);
+        }
+        if (ret == 0) {
+            ret = lpc55s69_page_program(page_off, page_buf);
+        }
 
         address += chunk;
+        offset += chunk;
         data += chunk;
         len -= (int)chunk;
     }
 
-    return 0;
+    return ret;
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -629,121 +1000,100 @@ void RAMFUNCTION hal_flash_lock(void)
 {
 }
 
+/* Erased pages are programmed with 0xFF so that later reads do not fault */
 int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 {
-    uint8_t page_buf[512];
-    uint32_t pos;
+    uint8_t page_buf[LPC55S69_FLASH_PAGE_SIZE];
+    uint32_t offset = 0;
+    uint32_t end;
+    uint32_t i;
+    int ret = 0;
 
-    if (address % pflash_page_size != 0 || len % pflash_page_size != 0)
+    if (len == 0) {
+        return 0;
+    }
+    if ((len < 0) || (flash_ready == 0) ||
+            ((address % LPC55S69_FLASH_PAGE_SIZE) != 0U) ||
+            (((uint32_t)len % LPC55S69_FLASH_PAGE_SIZE) != 0U) ||
+            (lpc55s69_flash_offset(address, (uint32_t)len, &offset) != 0)) {
         return -1;
-
-    XMEMSET(page_buf, 0xFF, sizeof(page_buf));
-
-    for (pos = address; pos < address + (uint32_t)len; pos += pflash_page_size) {
-        if (FLASH_Erase(&pflash, pos, pflash_page_size, kFLASH_ApiEraseKey)
-                != kStatus_FLASH_Success)
-            return -1;
-
-        if (FLASH_Program(&pflash, pos, page_buf, pflash_page_size)
-                != kStatus_FLASH_Success)
-            return -1;
     }
 
-    return 0;
+    for (i = 0; i < sizeof(page_buf); i++) {
+        page_buf[i] = 0xFFU;
+    }
+    end = offset + (uint32_t)len;
+    while ((ret == 0) && (offset < end)) {
+        ret = lpc55s69_page_erase(offset);
+        if (ret == 0) {
+            ret = lpc55s69_page_program(offset, page_buf);
+        }
+        offset += LPC55S69_FLASH_PAGE_SIZE;
+    }
+
+    return ret;
 }
 
-#ifdef WOLFCRYPT_SECURE_MODE
+#if defined(WOLFCRYPT_SECURE_MODE) && !defined(NONSECURE_APP)
+static int trng_ready;
+
 void hal_trng_init(void)
 {
-    /* handled in hal_init() regardless */
+    CLOCK_EnableClock(kCLOCK_Rng);
+    RESET_PeripheralReset(kRNG_RST_SHIFT_RSTn);
+    /* Runs the RNG health check; it has no failure return */
+    RNG_Init(RNG);
+    trng_ready = 1;
 }
 
 void hal_trng_fini(void)
 {
+    trng_ready = 0;
 }
 
 int hal_trng_get_entropy(unsigned char *out, unsigned int len)
 {
-    if (RNG_GetRandomData(RNG, out, len) == kStatus_Success)
-        return 0;
-
-    return -1;
+    if ((trng_ready == 0) || (out == NULL)) {
+        return -1;
+    }
+    return (RNG_GetRandomData(RNG, out, len) == kStatus_Success) ? 0 : -1;
 }
 #endif /* WOLFCRYPT_SECURE_MODE */
-
-
-#define IOCON_PIO_DIGITAL_EN 0x0100u  /*!<@brief Enables digital function */
-#define IOCON_PIO_FUNC1 0x01u         /*!<@brief Selects pin function 1 */
-#define IOCON_PIO_INV_DI 0x00u        /*!<@brief Input function is not inverted */
-#define IOCON_PIO_MODE_INACT 0x00u    /*!<@brief No addition pin function */
-#define IOCON_PIO_OPENDRAIN_DI 0x00u  /*!<@brief Open drain is disabled */
-#define IOCON_PIO_SLEW_STANDARD 0x00u /*!<@brief Standard mode, output slew rate control is enabled */
 
 #ifdef DEBUG_UART
 void uart_init(void)
 {
-    const uint32_t port0_pin29_config = (/* Pin is configured as FC0_RXD_SDA_MOSI_DATA */
-                                         IOCON_PIO_FUNC1 |
-                                         /* No addition pin function */
-                                         IOCON_PIO_MODE_INACT |
-                                         /* Standard mode, output slew rate control is enabled */
-                                         IOCON_PIO_SLEW_STANDARD |
-                                         /* Input function is not inverted */
-                                         IOCON_PIO_INV_DI |
-                                         /* Enables digital function */
-                                         IOCON_PIO_DIGITAL_EN |
-                                         /* Open drain is disabled */
-                                         IOCON_PIO_OPENDRAIN_DI);
-    /* PORT0 PIN29 (coords: 92) is configured as FC0_RXD_SDA_MOSI_DATA */
-    IOCON_PinMuxSet(IOCON, 0U, 29U, port0_pin29_config);
-    const uint32_t port0_pin30_config = (/* Pin is configured as FC0_TXD_SCL_MISO_WS */
-                                         IOCON_PIO_FUNC1 |
-                                         /* No addition pin function */
-                                         IOCON_PIO_MODE_INACT |
-                                         /* Standard mode, output slew rate control is enabled */
-                                         IOCON_PIO_SLEW_STANDARD |
-                                         /* Input function is not inverted */
-                                         IOCON_PIO_INV_DI |
-                                         /* Enables digital function */
-                                         IOCON_PIO_DIGITAL_EN |
-                                         /* Open drain is disabled */
-                                         IOCON_PIO_OPENDRAIN_DI);
-    /* PORT0 PIN30 (coords: 94) is configured as FC0_TXD_SCL_MISO_WS */
-    IOCON_PinMuxSet(IOCON, 0U, 30U, port0_pin30_config);
+    const uint32_t uart_mux = IOCON_FUNC1 | IOCON_MODE_INACT |
+        IOCON_DIGITAL_EN;
+    usart_config_t config;
 
-    /* attach 12 MHz clock to FLEXCOMM0 (debug console) */
+    CLOCK_EnableClock(kCLOCK_Iocon);
+    IOCON_PinMuxSet(IOCON, LPC55S69_UART_PORT, LPC55S69_UART_RX_PIN, uart_mux);
+    IOCON_PinMuxSet(IOCON, LPC55S69_UART_PORT, LPC55S69_UART_TX_PIN, uart_mux);
+
     CLOCK_AttachClk(kFRO12M_to_FLEXCOMM0);
     CLOCK_EnableClock(kCLOCK_FlexComm0);
     RESET_ClearPeripheralReset(kFC0_RST_SHIFT_RSTn);
 
-    usart_config_t config;
     USART_GetDefaultConfig(&config);
-    config.baudRate_Bps = 115200U;
+    config.baudRate_Bps = LPC55S69_UART_BAUD;
     config.enableTx = true;
     config.enableRx = true;
-    (void)USART_Init(USART0, &config, 12000000U);
+    (void)USART_Init(USART0, &config, LPC55S69_UART_CLK_HZ);
 }
 
 void uart_write(const char *buf, unsigned int sz)
 {
-    const char *line;
-    unsigned int line_sz;
+    unsigned int i;
 
-    while (sz > 0)
-    {
-        line = memchr(buf, '\n', sz);
-        if (line == NULL) {
-            (void)USART_WriteBlocking(USART0, (const uint8_t *)buf, sz);
-            break;
+    if (buf == NULL) {
+        return;
+    }
+    for (i = 0; i < sz; i++) {
+        if (buf[i] == '\n') {
+            (void)USART_WriteBlocking(USART0, (const uint8_t *)"\r", 1U);
         }
-        line_sz = (unsigned int)(line - buf);
-        if (line_sz > sz - 1U) {
-            line_sz = sz - 1U;
-        }
-        (void)USART_WriteBlocking(USART0, (const uint8_t *)buf, line_sz);
-        (void)USART_WriteBlocking(USART0, (const uint8_t *)"\r\n", 2U);
-        buf = line + 1;
-        sz -= line_sz + 1U;
+        (void)USART_WriteBlocking(USART0, (const uint8_t *)&buf[i], 1U);
     }
 }
 #endif /* DEBUG_UART */
