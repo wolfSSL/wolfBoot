@@ -1164,6 +1164,39 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32c5.config
 
+  psoc_e8_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_e8_ai.config
+
+  psoc_e8_wolfcrypt_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_e8_ai.config
+      make-args: WOLFCRYPT_TEST=1 WOLFCRYPT_BENCHMARK=1
+
+  psoc_e8_tz_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_e8_ai-tz.config
+
+  psoc_e8_tz_wolfhsm_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_e8_ai-tz-wolfhsm.config
+
+  # wolfBoot linked into RRAM, partitions still in QSPI.
+  psoc_e8_rram_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_e8_ai.config
+      make-args: PSOC_E8_BOOT_RRAM=1
+
   psoc_c3_test:
     uses: ./.github/workflows/test-build.yml
     with:

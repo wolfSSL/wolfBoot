@@ -600,15 +600,9 @@ else
     ifeq ($(WOLFHAL),1)
         APP_OBJS+=../hal/wolfhal.o
     else
-        # Keep the Agilex test HAL separate from the bootloader HAL. The
-        # test-app rule below is forced and uses different feature defines;
-        # sharing ../hal/agilex5.o can silently replace the bootloader object
-        # before a later incremental relink.
-        ifeq ($(TARGET),agilex5)
-            APP_OBJS+=hal_agilex5.o
-        else
-            APP_OBJS+=../hal/$(TARGET).o
-        endif
+        # A private object: the app builds the HAL with its own defines, and
+        # sharing ../hal/$(TARGET).o would get it relinked into wolfboot.elf.
+        APP_OBJS+=hal_$(TARGET).o
         # The test-app links the same HAL object, so HALs using the
         # generic NS16550 console need it here too.
         ifneq (,$(filter $(TARGET),agilex5 nxp_ls1028a nxp_t2080 nxp_t1024 nxp_t1040 nxp_p1021))
@@ -828,6 +822,21 @@ endif
 
 ifeq ($(TARGET),psoc_c3)
   LSCRIPT_TEMPLATE=ARM-psoc_c3.ld
+  CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
+  LDFLAGS+=-mcpu=cortex-m33
+  LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
+  CFLAGS+=-I..
+endif
+
+ifeq ($(TARGET),psoc_e8)
+  ifeq ($(TZEN),1)
+    LSCRIPT_TEMPLATE=ARM-psoc_e8-ns.ld
+  else
+    LSCRIPT_TEMPLATE=ARM-psoc_e8.ld
+    APP_OBJS+=../src/qspi_flash.o
+  endif
+  # The app runs from the QSPI it programs, so its flash path runs from RAM.
+  CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode"),long_call))'
   CFLAGS+=-mcpu=cortex-m33 -ffunction-sections -fdata-sections -fno-common
   LDFLAGS+=-mcpu=cortex-m33
   LDFLAGS+=-Wl,-gc-sections -Wl,-Map=image.map
@@ -1113,7 +1122,7 @@ ifeq ($(TARGET),mcxw)
     else
       LSCRIPT_TEMPLATE=ARM-mcxw.ld
       # Flash writes run from the same flash the app executes from
-      ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
       ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
       APP_OBJS+=$(MCXW_SDK_SRCS:.c=.o)
       APP_OBJS+=$(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o
@@ -1161,7 +1170,7 @@ ifeq ($(TARGET),rw612)
     else
       LSCRIPT_TEMPLATE=ARM-rw612.ld
       # Flash writes run from the same NOR the app executes from
-      ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+      hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
       ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
       APP_OBJS+=$(RW612_SDK_SRCS:.c=.o)
     endif
@@ -1241,7 +1250,7 @@ ifeq ($(TARGET),imx_rt7xx)
   LDFLAGS+=-Wl,--no-warn-rwx-segments
   # The flash path runs from the same NOR it programs, so RAMFUNCTION must be
   # active in the HAL and libwolfboot objects the app links.
-  ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   APP_OBJS+=\
     $(MCUXPRESSO_DRIVERS)/drivers/fsl_clock.o \
@@ -1531,7 +1540,7 @@ ifneq (,$(filter aurix_tc4xx aurix_tc4xx_csrm,$(TARGET)))
   CFLAGS:=$(filter-out -fdata-sections,$(CFLAGS))
   # Flash helpers run from PSPR.
   # Limit __WOLFBOOT to objects that define RAMFUNCTION helpers.
-  ../hal/$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
+  hal_$(TARGET).o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ../test-app/libwolfboot.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
   ifeq ($(TARGET),aurix_tc4xx_csrm)
     # CSRM app uses the shared startup and driver objects.
@@ -1719,6 +1728,12 @@ delta-extra-data: image.bin
 
 hal_agilex5.o: ../hal/agilex5.c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/agilex5.c
+
+ifneq ($(TARGET),agilex5)
+hal_$(TARGET).o: ../hal/$(TARGET).c FORCE
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+endif
 
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP

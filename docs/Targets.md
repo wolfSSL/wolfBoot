@@ -11,6 +11,7 @@ This README describes configuration of supported targets.
 * [Cortex-A72 / Raspberry Pi Compute Module 4](#cortex-a72--raspberry-pi-compute-module-4-bcm2711)
 * [Cypress PSoC-6](#cypress-psoc-6)
 * [Infineon PSOC Control C3](#infineon-psoc-control-c3)
+* [Infineon PSOC Edge E8](#infineon-psoc-edge-e8)
 * [Infineon AURIX TC3xx](#infineon-aurix-tc3xx)
 * [Infineon AURIX TC4xx](#infineon-aurix-tc4xx)
 * [Intel x86-64 Intel FSP](#intel-x86_64-with-intel-fsp-support)
@@ -9170,6 +9171,99 @@ A target supplies the two pins by implementing the five functions in `hal/i2c/i2
 A TPM that offers both buses latches its choice from a strap while its own reset is low, so the host has to drive that strap before the part leaves reset rather than before the first transfer. `hal_init()` does this first, driving `PSOC_C3_TPM_SEL_PORT`/`_PIN` high for SPI and low for I2C; on the evaluation kit the strap arrives on mikroBUS INT, which is P7.7. A part left to its own pull-up comes up on SPI, so an I2C transport that never gets an acknowledgement is worth checking here before the bus timing.
 
 Every FIFO and bus wait in both drivers is bounded, so a device that is absent or unpowered makes `wolfBoot_tpm2_init()` report a failure rather than wedging the bootloader in a spin loop.
+
+## Infineon PSOC Edge E8
+
+The Infineon PSOC Edge E8 family (PSE8x, CAT1D) pairs a Cortex-M33 with TrustZone and a Cortex-M55 behind a Secure Enclave, which runs the boot ROM and Infineon's extended boot. wolfBoot runs on the CM33 in the Secure state as the first image extended boot launches. The port is bare metal and needs no Peripheral Driver Library or BSP. Board differences are make options, and `config/examples/psoc_e8_ai.config` describes KIT_PSE84_AI.
+
+Verified on KIT_PSE84_AI (PSE846GPS2DBZC4A): boot from QSPI under the factory extended boot, ECC256 verification and handoff, A/B update with confirmation, resumption of an update interrupted mid-swap, RRAM write and erase, and the wolfCrypt test and benchmark. With TrustZone, the Non-secure application booting from the Secure wolfBoot, the A/B update through the gateway calls, Secure-memory isolation and the wolfHSM client test suite against the Secure server were verified on the same board. Booting from RRAM (`PSOC_E8_BOOT_RRAM=1`) is build-tested only. The CM55 is not started.
+
+### Boot chain and memory
+
+Extended boot runs the first CM33 image in place from QSPI at `0x60100000`. It requires a 0x400-byte header and a trailing SHA-256 of header and image (an unsigned, MCUboot-compatible format), which `tools/scripts/psoc_e8/psoc_e8_boot_header.py` adds to `wolfboot.bin`.
+
+Each memory has four aliases, Secure/Non-secure by code/system bus. wolfBoot links at `0x18100400`; the layout below is the non-TrustZone configuration and uses the Secure code-bus QSPI alias:
+
+```
+RRAM    0x02000000 NS code   0x12000000 S code   0x22000000 NS sys   0x32000000 S sys
+QSPI    0x08000000 NS code   0x18000000 S code   0x60000000 NS sys   0x70000000 S sys
+
+0x18100000 - 0x1813FFFF  wolfBoot slot (boot header + wolfBoot)
+0x18140000 - 0x1823FFFF  BOOT partition      (1 MB)
+0x18240000 - 0x1833FFFF  UPDATE partition    (1 MB)
+0x18340000 - 0x1837FFFF  SWAP sector         (256 KB)
+```
+
+`IMAGE_HEADER_SIZE=1024` keeps the application vector table on the 1 KB boundary the CM33 requires.
+
+### QSPI flash
+
+QSPI is programmed through the generic `src/qspi_flash.c` driver, without `EXT_FLASH`, so the partitions stay in place for execute-in-place. The HAL supplies its `qspi_transfer()` over the SMIF MMIO command interface, using the device extended boot configured, and the driver is built with `QSPI_FLASH_RAM_CODE`, dedicated 4-byte opcodes and `QSPI_NO_4BYTE_MODE` so the part stays in the address mode extended boot expects. Writes run from RAM with interrupts masked, stage each page in RAM (the source is often QSPI itself), and invalidate the SMIF and CM33 caches afterwards. The test application runs from the QSPI it programs, so its flash path is also placed in RAM.
+
+The NOR keeps ECC over 16-byte units and rejects a second program into a unit, so the config sets `NVM_FLASH_WRITEONCE=1`. With 256 KB sectors this costs a sector-sized RAM buffer. A rejected program leaves the part busy across a warm reset, where extended boot can no longer read it, so the HAL clears the failure flags when it sees them.
+
+### Build options
+
+wolfBoot does not change the clocks extended boot sets. The console is SCB2 on P6.5/P6.7, the KitProg3 COM port, at 115200 baud.
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `PSOC_E8_UART_SCB` | 2 | console SCB instance |
+| `PSOC_E8_UART_PORT` / `_RX_PIN` / `_TX_PIN` | 6 / 5 / 7 | console pins |
+| `PSOC_E8_UART_HSIOM_SEL` | 20 | HSIOM selector for the UART |
+| `PSOC_E8_UART_PCLK_GR` / `_IDX` | 1 / 1 | console peripheral clock group and index |
+| `PSOC_E8_PCLK_HZ` | 100000000 | CLK_HF10, feeding that group |
+| `PSOC_E8_CPU_HZ` | 200000000 | CLK_HF0, test-app benchmark time base |
+| `PSOC_E8_QSPI_SECTOR_SIZE` | 0x40000 | QSPI erase sector |
+| `PSOC_E8_QSPI_SIZE` | 0x4000000 | QSPI device size |
+| `PSOC_E8_BOOT_RRAM` | 0 | link wolfBoot into RRAM instead of QSPI |
+| `PSOC_E8_RRAM_SLOT_SIZE` | 0x20000 | RRAM slot with `PSOC_E8_BOOT_RRAM=1` |
+
+### Building and flashing
+
+```sh
+cp config/examples/psoc_e8_ai.config .config
+make clean && make
+tools/scripts/psoc_e8/psoc_e8_flash.sh
+```
+
+The script adds the boot header to `wolfboot.bin` and programs it and `test-app/image_v1_signed.bin` over the KitProg3, with the ModusToolbox Programming Tools OpenOCD (`MTB_PROGTOOLS`, default `/opt/Tools/ModusToolboxProgtools-1.6`). Set `KITPROG_SERIAL` if several probes are attached. This replaces the factory CM33 image, so read QSPI back first to keep the stock demo.
+
+To test an update, sign v2 and program it into UPDATE. The v1 application triggers the update, and v2 confirms itself:
+
+```sh
+IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc256 --sha256 \
+    test-app/image.bin wolfboot_signing_private_key.der 2
+tools/scripts/psoc_e8/psoc_e8_flash.sh --update test-app/image_v2_signed.bin
+```
+
+`make WOLFCRYPT_TEST=1 WOLFCRYPT_BENCHMARK=1` adds the software wolfCrypt test and benchmark to the test application. Its RNG seed is deterministic and only for testing.
+
+### TrustZone and wolfHSM
+
+`config/examples/psoc_e8_ai-tz.config` runs wolfBoot in the Secure state and the application Non-secure. `config/examples/psoc_e8_ai-tz-wolfhsm.config` adds a wolfHSM server in the Secure world (`WOLFCRYPT_TZ_WOLFHSM=1`), which the Non-secure application reaches as a wolfHSM client through one gateway call, as on STM32H5 (see [wolfHSM.md](wolfHSM.md)).
+
+```
+0x18100000 - 0x1813BFFF  wolfBoot slot (Secure)
+0x1813C000 - 0x1813FFFF  NSC gateway veneers
+0x08140000 - 0x0823FFFF  BOOT partition, Non-secure alias
+0x18240000 - 0x1837FFFF  UPDATE and SWAP, Secure
+0x24080000 - 0x240FFFFF  SRAM1, Non-secure application RAM
+0x34058000 - 0x3407FFFF  SRAM0 top, Secure wolfHSM heap
+0x32040000 - 0x3204FFFF  RRAM, wolfHSM NVM (WOLFBOOT_KEYVAULT_*)
+```
+
+The CM33 runs both worlds in protection context 2, so `hal_init()` grants that context Non-secure access to the boot partition in the SMIF memory protection controller and to SRAM1 in its controller, and adds SAU regions for those and the gateway. wolfBoot then reads and verifies the boot partition through its Non-secure alias. Peripherals stay Secure: the application updates through the `wolfBoot_nsc_*` calls and prints through a console gateway. The crypto block's TRNG, with both health monitors running, seeds the Secure DRBG.
+
+Fresh RRAM reads as zero, which the wolfHSM NVM does not accept as empty, so program a board once with `--erase-keyvault`, which fills the key store with 0xFF and destroys anything stored there:
+
+```sh
+tools/scripts/psoc_e8/psoc_e8_flash.sh --erase-keyvault
+```
+
+### Booting from RRAM
+
+`PSOC_E8_BOOT_RRAM=1` links wolfBoot at `0x12011400` in the RRAM user area, keeping the partitions in QSPI. Extended boot only launches it once the boot policy is reprovisioned with Infineon's Edge Protect Tools, which this port does not automate. RRAM is written in 16-byte blocks through the RRAMC indirect-write action, under the IPC and PC_LOCK locks. It has no erase, so `hal_flash_erase()` fills the range with 0xFF to read like erased NOR.
 
 ## Infineon AURIX TC3xx
 

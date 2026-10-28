@@ -144,6 +144,8 @@ tools/unit-tests/unit-aes256
 tools/unit-tests/unit-chacha20
 tools/unit-tests/unit-delta
 tools/unit-tests/unit-psoc-c3-divider
+tools/unit-tests/unit-psoc-e8-tz
+tools/unit-tests/unit-psoc-e8-flash
 tools/unit-tests/unit-disk
 tools/unit-tests/unit-fs-probe
 tools/unit-tests/unit-fat32
