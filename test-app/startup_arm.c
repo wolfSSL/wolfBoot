@@ -532,7 +532,7 @@ void (* const IV[])(void) =
     isr_empty,              // FTM2_Fault 87
     isr_empty,              // FTM2_Ovf_Reload 88
 
-#elif defined(STM32) /* For STM32 */
+#elif defined(STM32) || defined(TARGET_stm32f4) /* For STM32 */
     isr_empty,              // NVIC_WWDG_IRQ 0
     isr_empty,              // PVD_IRQ 1
     isr_empty,              // TAMP_STAMP_IRQ 2

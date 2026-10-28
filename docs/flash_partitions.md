@@ -124,12 +124,36 @@ If the `FLAGS_HOME` build option is used then all flags are placed at the end of
                          flag
 ```
 
+The trailer sector is erased independently from the image, so it can never hold any part of it,
+and the final step of the swap needs one more sector to stage the image tail. For this reason each
+partition must be at least two sectors long (three with `NVM_FLASH_WRITEONCE`, which keeps two
+copies of the trailer), and the image can use the partition up to the trailer sector(s). The build
+fails if `WOLFBOOT_PARTITION_SIZE` is smaller, unless `CUSTOM_PARTITION_TRAILER` is used.
+
+### Custom partition trailer
+
 You can use the `CUSTOM_PARTITION_TRAILER` option to implement your own functions for: `get_trailer_at`, `set_trailer_at` and `set_partition_magic`.
+The trailers are then stored outside of the BOOT and UPDATE partitions, so:
+
+ - the image can use the whole partition, which may be a single sector long;
+ - triggering an update does not erase anything in the UPDATE partition;
+ - at the end of the swap, the bootloader resets the sector flags and the UPDATE state itself.
+
+`set_trailer_at` may be asked to set bits back to 1 (e.g. resetting the flags to `SECT_FLAG_NEW`),
+so on flash it has to erase and rewrite the storage where needed. The flash is unlocked when it is called.
 
 To enable:
-1) Add the `CUSTOM_PARTITION_TRAILER` build option to your `.config`: `CFLAGS_EXTRA+=--DCUSTOM_PARTITION_TRAILER`
+1) Add `CUSTOM_PARTITION_TRAILER=1` to your `.config` (or `CFLAGS_EXTRA+=-DCUSTOM_PARTITION_TRAILER`,
+   in which case also export `CUSTOM_PARTITION_TRAILER=1` when running the `sign` tool, so it allows images as
+   large as the partition)
 2) Add your own .c file using `OBJS_EXTRA`. For example for your own `src/custom_trailer.c` add this to your `.config`: `OBJS_EXTRA=src/custom_trailer.o`.
 
+STM32F4 provides its own implementation in `hal/stm32f4.c`: the boot and update trailers are stored in
+the 16KB flash sectors 1 and 2 (0x08004000 and 0x08008000, overridable with
+`STM32F4_TRAILER_BOOT_ADDRESS` / `STM32F4_TRAILER_UPDATE_ADDRESS`), and wolfBoot is linked around them
+(`hal/stm32f4-trailer.ld`: vector table in sector 0, code from sector 3). This allows the BOOT and UPDATE
+partitions to use the 128KB sectors without wasting one of them for each trailer, see
+`config/examples/stm32f407-discovery.config` and `config/examples/stm32f411-blackpill.config`.
 
 ## Overview of the content of the FLASH partitions
 

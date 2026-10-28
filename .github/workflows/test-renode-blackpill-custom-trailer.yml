@@ -1,0 +1,42 @@
+name: Renode STM32F411 Black Pill custom partition trailer
+
+on:
+  push:
+    branches: [ 'master', 'main', 'release/**' ]
+  pull_request:
+    branches: [ '*' ]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  blackpill-custom-trailer:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Renode update and rollback, single-sector partitions
+        run: |
+          docker run --rm -e WORK=/workspace/test_results \
+            -v ${{ github.workspace }}:/workspace -w /workspace \
+            ghcr.io/wolfssl/wolfboot-ci-renode:v1.5 \
+            tools/scripts/renode-test-custom-trailer.sh
+
+      - name: Upload Output Dir
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Renode Black Pill custom trailer results
+          path: test_results/

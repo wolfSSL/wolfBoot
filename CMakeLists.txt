@@ -465,6 +465,9 @@ add_option(
     "NVM_FLASH_WRITEONCE"
     "Enable the workaround for 'write once' internal flash (default: disabled)" "no" "yes;no")
 add_option(
+    "CUSTOM_PARTITION_TRAILER"
+    "Keep the partition trailers outside the partitions (default: disabled)" "no" "yes;no")
+add_option(
     "RAM_CODE"
     "Move all code accessing internal flash for writing into a section in RAM (default: disabled)"
     "no" "yes;no")
@@ -1088,6 +1091,10 @@ if(NVM_FLASH_WRITEONCE)
     list(APPEND WOLFBOOT_DEFS NVM_FLASH_WRITEONCE)
 endif()
 
+if(CUSTOM_PARTITION_TRAILER)
+    list(APPEND WOLFBOOT_DEFS CUSTOM_PARTITION_TRAILER)
+endif()
+
 if(DISABLE_BACKUP)
     message(WARNING "DISABLE_BACKUP=1 disables power-fail-safe updates; losing power during an update can leave BOOT partially written and unrecoverable")
     list(APPEND WOLFBOOT_DEFS DISABLE_BACKUP)
@@ -1434,6 +1441,10 @@ list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT} ${WOLFBOOT_ROOT}/include)
 
 # set default linker script
 set(WOLFBOOT_LSCRIPT_TEMPLATE hal/${WOLFBOOT_TARGET}.ld)
+# Partition trailers in sectors 1-2, see hal/stm32f4.c
+if(WOLFBOOT_TARGET STREQUAL "stm32f4" AND CUSTOM_PARTITION_TRAILER)
+    set(WOLFBOOT_LSCRIPT_TEMPLATE hal/stm32f4-trailer.ld)
+endif()
 
 #---------------------------------------------------------------------------------------------
 # wolfcrypt

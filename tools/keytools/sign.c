@@ -2375,6 +2375,9 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
             const char *env_nvm_jd = getenv("NVM_FLASH_JOURNAL_DUAL");
             int nvm_two_sectors = (env_nvm_wo && strcmp(env_nvm_wo, "1") == 0)
                 || (env_nvm_jd && strcmp(env_nvm_jd, "1") == 0);
+            const char *env_custom = getenv("CUSTOM_PARTITION_TRAILER");
+            int custom_trailer = (env_custom && *env_custom &&
+                strcmp(env_custom, "1") == 0);
 
             errno = 0;
             tmp = strtoul(env_psize, &endptr, 0);
@@ -2403,18 +2406,20 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
                 uint32_t total_img_sz = CMD.header_sz + image_sz;
                 /* Only subtract sector for trailer when sector < partition.
                  * When sector >= partition (e.g. update_ram targets), the
-                 * entire partition is available for the image.
+                 * entire partition is available for the image, as it is
+                 * with CUSTOM_PARTITION_TRAILER (trailer outside partitions).
                  * NVM_FLASH_WRITEONCE and NVM_FLASH_JOURNAL_DUAL reserve
                  * 2 sectors.
                  */
+                int reserve = (sector_sz < partition_sz) && !custom_trailer;
                 uint32_t trailer_sz = sector_sz;
                 uint32_t max_img_sz;
-                if (nvm_two_sectors && sector_sz < partition_sz)
+                if (nvm_two_sectors && reserve)
                     trailer_sz = 2 * sector_sz;
-                max_img_sz = (sector_sz < partition_sz) ?
+                max_img_sz = reserve ?
                     (partition_sz - trailer_sz) : partition_sz;
                 if (total_img_sz > max_img_sz) {
-                    if (sector_sz < partition_sz) {
+                    if (reserve) {
                         printf("Error: Image size %u (header %u + firmware %u) "
                             "exceeds max %u (%s %u - %d x sector %u)\n",
                             total_img_sz, CMD.header_sz, image_sz,

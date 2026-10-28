@@ -43,9 +43,29 @@
 #ifdef NVM_FLASH_JOURNAL
 /* The journal clears its own sectors, so a cut cannot damage the log */
 #define wb_trailer_clear(img, part) wolfBoot_clear_trailer(part)
+#elif defined(CUSTOM_PARTITION_TRAILER)
+/* A custom trailer is outside the partitions: reset the state instead */
+#define wb_trailer_clear(img, part) \
+    wolfBoot_set_partition_state(part, IMG_STATE_NEW)
 #else
 #define wb_trailer_clear(img, part) \
     wb_flash_erase(img, WOLFBOOT_PARTITION_SIZE - TRAILER_LEN, TRAILER_LEN)
+#endif
+
+/* The trailer sector(s) are erased independently from the image: they must
+ * not hold any of it, and the final swap needs one more staging sector. */
+#if !defined(CUSTOM_PARTITION_TRAILER) && \
+    (WOLFBOOT_PARTITION_SIZE < ((WOLFBOOT_TRAILER_SECTORS + 1) * WOLFBOOT_SECTOR_SIZE))
+    #error "WOLFBOOT_PARTITION_SIZE too small: need at least 2 sectors (3 with NVM_FLASH_WRITEONCE or NVM_FLASH_JOURNAL_DUAL), or CUSTOM_PARTITION_TRAILER"
+#endif
+
+/* The swap progress flag of the sector holding the trailer would be erased
+ * with it, so that sector is not tracked. A custom trailer tracks them all. */
+#ifdef CUSTOM_PARTITION_TRAILER
+    #define SECTOR_HAS_FLAG(s) (1)
+#else
+    #define SECTOR_HAS_FLAG(s) \
+        ((((s) + 1) * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE)
 #endif
 
 static void wolfBoot_zeroize(void *ptr, size_t len)
@@ -732,6 +752,61 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
 #endif
 #endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER */
 
+#if !defined(DISABLE_BACKUP) && defined(CUSTOM_PARTITION_TRAILER)
+/* UPDATE states of a rollback: header versions are mixed during the swap, so
+ * the direction is recorded when it starts. ROLLBACK, FINAL_FLAGS and
+ * FINAL_ROLLBACK are reached from the previous state by programming only, so
+ * they are written in place: a trailer rewrite could be cut half-way. */
+#ifndef WOLFBOOT_FLAGS_INVERT
+#define IMG_STATE_ROLLBACK       0x60
+#define IMG_STATE_FINAL_ROLLBACK 0x20
+#else
+#define IMG_STATE_ROLLBACK       0x9F
+#define IMG_STATE_FINAL_ROLLBACK 0xDF
+#endif
+
+/* Resetting the sector flags rewrites the custom trailer, once per flag:
+ * UPDATE leaves UPDATING first, or a resumed swap would swap again the
+ * sectors already reset. BOOT is set before: a cut in the reset then leaves
+ * at worst an erased trailer, which reads as NEW. */
+static int RAMFUNCTION wolfBoot_custom_trailer_final(int resume, int rollback)
+{
+    uint8_t updateState;
+    uint32_t sector;
+
+    if (resume) {
+        if (wolfBoot_get_partition_state(PART_UPDATE, &updateState) != 0)
+            return -1;
+        if (updateState == IMG_STATE_FINAL_FLAGS)
+            rollback = 0;
+        else if (updateState == IMG_STATE_FINAL_ROLLBACK)
+            rollback = 1;
+        else
+            return -1;
+    }
+
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
+    if (!resume) {
+        wolfBoot_set_partition_state(PART_UPDATE,
+            rollback ? IMG_STATE_FINAL_ROLLBACK : IMG_STATE_FINAL_FLAGS);
+    }
+    wolfBoot_set_partition_state(PART_BOOT,
+        rollback ? IMG_STATE_SUCCESS : IMG_STATE_TESTING);
+    for (sector = 0; (sector * WOLFBOOT_SECTOR_SIZE) < WOLFBOOT_PARTITION_SIZE;
+            sector++)
+        wolfBoot_set_update_sector_flag(sector, SECT_FLAG_NEW);
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+    hal_flash_lock();
+    return 0;
+}
+#endif /* !DISABLE_BACKUP && CUSTOM_PARTITION_TRAILER */
+
 #ifdef DELTA_UPDATES
 
     #ifndef DELTA_BLOCK_SIZE
@@ -1151,9 +1226,6 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     int fallback_image = 0;
 #ifndef DISABLE_BACKUP
     int rollback_needed = 0;
-#ifdef CUSTOM_PARTITION_TRAILER
-    (void)rollback_needed;
-#endif
     int bootStateRet = -1;
     uint8_t bootState = 0;
 #endif
@@ -1239,6 +1311,13 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 #endif
 
     wolfBoot_get_update_sector_flag(0, &flag);
+#if !defined(DISABLE_BACKUP) && defined(CUSTOM_PARTITION_TRAILER)
+    if (flag != SECT_FLAG_NEW) {
+        uint8_t updateState;
+        rollback_needed = (wolfBoot_get_partition_state(PART_UPDATE,
+            &updateState) == 0) && (updateState == IMG_STATE_ROLLBACK);
+    }
+#endif
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
         if (((update_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) ||
@@ -1362,6 +1441,10 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     #ifdef EXT_FLASH
     ext_flash_unlock();
     #endif
+#ifdef CUSTOM_PARTITION_TRAILER
+    if (rollback_needed)
+        wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_ROLLBACK);
+#endif
     /* Interruptible swap
      * The status is saved in the sector flags of the update partition.
      * If something goes wrong, the operation will be resumed upon reboot.
@@ -1375,7 +1458,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                copy_ret = wolfBoot_copy_sector(&update, &swap, sector);
                if (copy_ret < 0)
                    break;
-               if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+               if (SECTOR_HAS_FLAG(sector))
                    wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
             case SECT_FLAG_SWAPPING:
@@ -1401,7 +1484,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 }
                 if (copy_ret < 0)
                     break;
-                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                if (SECTOR_HAS_FLAG(sector))
                     wolfBoot_set_update_sector_flag(sector, flag);
                 /* FALL THROUGH */
             case SECT_FLAG_BACKUP:
@@ -1412,7 +1495,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
                 copy_ret = wolfBoot_copy_sector(&swap, &boot, sector);
                 if (copy_ret < 0)
                     break;
-                if (((sector + 1) * sector_size) < WOLFBOOT_PARTITION_SIZE)
+                if (SECTOR_HAS_FLAG(sector))
                     wolfBoot_set_update_sector_flag(sector, flag);
                 break;
             case SECT_FLAG_UPDATED:
@@ -1512,8 +1595,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     }
 #endif
 #else
-    /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
-    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    (void)wolfBoot_custom_trailer_final(0, rollback_needed);
 #endif
 
 #else /* DISABLE_BACKUP */
@@ -1815,6 +1897,9 @@ void RAMFUNCTION wolfBoot_start(void)
     resumedFinalErase = wolfBoot_swap_and_final_erase(1);
     if ((resumedFinalErase != 0) ||
         ((bootRet == 0) && (bootState == IMG_STATE_TESTING)))
+#elif !defined(DISABLE_BACKUP)
+    /* resume the final step in case the power failed before it finished */
+    if (wolfBoot_custom_trailer_final(1, 0) != 0)
 #endif
     {
         /* Check if the BOOT partition is still in TESTING,

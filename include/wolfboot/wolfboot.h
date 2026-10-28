@@ -649,8 +649,11 @@ extern "C" {
   #error "NVM_FLASH_JOURNAL_DUAL needs NVM_FLASH_JOURNAL"
 #endif
 
-/* Sectors at the end of each partition that hold its trailer */
-#if defined(NVM_FLASH_WRITEONCE) || defined(NVM_FLASH_JOURNAL_DUAL)
+/* Sectors at the end of each partition that hold its trailer. A custom
+ * trailer lives outside the partitions. */
+#if defined(CUSTOM_PARTITION_TRAILER)
+#define WOLFBOOT_TRAILER_SECTORS 0
+#elif defined(NVM_FLASH_WRITEONCE) || defined(NVM_FLASH_JOURNAL_DUAL)
 #define WOLFBOOT_TRAILER_SECTORS 2
 #else
 #define WOLFBOOT_TRAILER_SECTORS 1
