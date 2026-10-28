@@ -80,12 +80,17 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
     uint32_t qword[4];
     uint8_t *qword_bytes = (uint8_t *)qword;
     volatile uint32_t *sr, *cr;
+    uint32_t sr_val;
 
     hal_flash_clear_errors(0);
 #if (TZ_SECURE())
     address = flash_addr_unalias(address);
 #endif
     dst = (uint32_t*)address;
+
+    if ((len < 0) || (address < FLASHMEM_ADDRESS_SPACE) ||
+            (address > FLASH_TOP) || ((uint32_t)len > FLASH_TOP - address + 1))
+        return -1; /* Address out of range */
 
 #if (TZ_SECURE())
     if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (address <= FLASH_TOP)) || (address < FLASH_BANK2_BASE)) {
@@ -99,7 +104,7 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
         sr = &FLASH_NS_SR;
     }
     else {
-        return 0; /* Address out of range */
+        return -1; /* Address out of range */
     }
 #else
     cr = &FLASH_NS_CR;
@@ -140,9 +145,16 @@ int RAMFUNCTION hal_flash_write(uint32_t address, const uint8_t *data, int len)
             ISB();
         }
         hal_flash_wait_complete(0);
-        if ((*sr & FLASH_SR_EOP) != 0)
+        /* Read the status once: clearing EOP writes back the error flags
+         * too, which clears them. */
+        sr_val = *sr;
+        if ((sr_val & FLASH_SR_EOP) != 0)
             *sr |= FLASH_SR_EOP;
         *cr &= ~FLASH_CR_PG;
+        if ((sr_val & FLASH_SR_ERRORS) != 0) {
+            hal_flash_clear_errors(0);
+            return -1;
+        }
         i = i_aligned + 16;
     }
 
@@ -218,16 +230,18 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     uint32_t end_address;
     uint32_t p;
     volatile uint32_t *cr = &FLASH_NS_CR;
+    volatile uint32_t *sr = &FLASH_NS_SR;
 
     hal_flash_clear_errors(0);
-    if (len == 0)
+    if (len <= 0)
         return -1;
 #if (TZ_SECURE())
     address = flash_addr_unalias(address);
 #endif
 
-    if (address < ARCH_FLASH_OFFSET)
-        return -1;
+    if ((address < ARCH_FLASH_OFFSET) || (address > FLASH_TOP) ||
+            ((uint32_t)len > FLASH_TOP - address + 1))
+        return -1; /* Address out of range */
 
     end_address = address + len;
     for (p = address; p < end_address; p += FLASH_PAGE_SIZE) {
@@ -235,10 +249,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         uint32_t base;
         uint32_t bker = 0;
         cr = &FLASH_NS_CR;
+        sr = &FLASH_NS_SR;
 
         if ((((FLASH_OPTR & FLASH_OPTR_DBANK) == 0) && (p <= FLASH_TOP)) || (p < FLASH_BANK2_BASE)) {
 #if (TZ_SECURE())
             cr = &FLASH_CR;
+            sr = &FLASH_SR;
 #endif
             base = FLASHMEM_ADDRESS_SPACE;
         }
@@ -248,7 +264,7 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         }
         else {
             *cr &= ~FLASH_CR_PER ;
-            return 0; /* Address out of range */
+            return -1; /* Address out of range */
         }
         /* BKER refers to the physical bank, whatever the SWAP_BANK setting
          * (RM0456 7.5.8): invert it when the banks are swapped, so that the
@@ -263,6 +279,11 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         DMB();
         *cr |= FLASH_CR_STRT;
         hal_flash_wait_complete(0);
+        if ((*sr & FLASH_SR_ERRORS) != 0) {
+            *cr &= ~FLASH_CR_PER;
+            hal_flash_clear_errors(0);
+            return -1;
+        }
     }
     /* If the erase operation is completed, disable the associated bits */
     *cr &= ~FLASH_CR_PER ;

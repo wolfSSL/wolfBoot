@@ -27,6 +27,13 @@
  * A unit that is erased and stays erased is not programmed. Readback
  * cannot tell that from programming 0xFF, so the mock also counts the
  * program operations (waits with FLASH_CR_PG set) for those tests.
+ *
+ * hal_flash_write() and hal_flash_erase() used to return 0 whatever
+ * happened: they never read the FLASH_SR error flags, and an address out
+ * of range returned 0 too. The mock wait can now fail one program or
+ * page erase with chosen error flags, and both functions must stop and
+ * return non-zero, as they must for a range outside the flash.
+ *
  * Copyright (C) 2026 wolfSSL Inc.
  *
  * This file is part of wolfBoot.
@@ -55,13 +62,15 @@
  * (non-secure path: FLASH_NS_CR / FLASH_NS_SR). */
 #define RAMFUNCTION
 #define ISB() do { } while (0)
+#define DMB() do { } while (0)
 #define TZ_SECURE() (0)
 
 /* Host FLASH register file (offsets as in hal/stm32u5.h). */
-static uint32_t g_flash_regs[0x40 / sizeof(uint32_t)];
+static uint32_t g_flash_regs[0x44 / sizeof(uint32_t)];
 #define FLASH_NS_BASE ((uintptr_t)g_flash_regs)
 #define FLASH_NS_SR   (*(volatile uint32_t *)(FLASH_NS_BASE + 0x20))
 #define FLASH_NS_CR   (*(volatile uint32_t *)(FLASH_NS_BASE + 0x28))
+#define FLASH_OPTR    (*(volatile uint32_t *)(FLASH_NS_BASE + 0x40))
 #define FLASH_SR_EOP     (1 << 0)
 #define FLASH_SR_OPERR   (1 << 1)
 #define FLASH_SR_PROGERR (1 << 3)
@@ -72,14 +81,30 @@ static uint32_t g_flash_regs[0x40 / sizeof(uint32_t)];
 #define FLASH_SR_OPTWERR (1 << 13)
 #define FLASH_SR_BSY     (1 << 16)
 #define FLASH_SR_WDW     (1 << 17)
+#define FLASH_SR_ERRORS  (FLASH_SR_OPERR | FLASH_SR_PROGERR | \
+                          FLASH_SR_WRPERR | FLASH_SR_PGAERR | \
+                          FLASH_SR_SIZERR | FLASH_SR_PGSERR)
 #define FLASH_CR_PG      (1 << 0)
+#define FLASH_CR_PER     (1 << 1)
+#define FLASH_CR_PNB_SHIFT 3
+#define FLASH_CR_PNB_MASK  0xFF
+#define FLASH_CR_BKER    (1 << 11)
+#define FLASH_CR_STRT    (1 << 16)
+#define FLASH_OPTR_DBANK     (1 << 21)
+#define FLASH_OPTR_SWAP_BANK (1 << 20)
 
 /* Destination flash: pre-filled with stale data (rewrite scenario).
  * hal_flash_write() takes the address as uint32_t (32-bit MCU), so on
  * the 64-bit host the flash must live at an address that fits in 32
- * bits: map it at a fixed low location. */
-#define FLASH_MEM_SZ 256
+ * bits: map it at a fixed low location. It is the whole flash of the
+ * HAL's range checks: two 8 KB pages, single bank. */
+#define FLASH_PAGE_SIZE 0x2000
+#define FLASH_MEM_SZ (2 * FLASH_PAGE_SIZE)
 #define FLASH_MEM_ADDR 0x11000000UL
+#define FLASHMEM_ADDRESS_SPACE FLASH_MEM_ADDR
+#define ARCH_FLASH_OFFSET FLASH_MEM_ADDR
+#define FLASH_TOP (FLASH_MEM_ADDR + FLASH_MEM_SZ - 1)
+#define FLASH_BANK2_BASE (FLASH_MEM_ADDR + FLASH_MEM_SZ)
 static uint8_t *g_flash_mem;
 
 /* Snapshot of the flash at the last program-window boundary; the
@@ -88,6 +113,14 @@ static uint8_t g_flash_prev[FLASH_MEM_SZ];
 
 /* Program operations: waits for completion with FLASH_CR_PG set. */
 static int g_programs;
+/* Page erases: waits for completion with FLASH_CR_PER and STRT set. */
+static int g_erases;
+
+/* Error injection: the program or erase numbered g_fail_op (from 1) does
+ * not change the flash and sets g_fail_flags in FLASH_NS_SR. */
+static int g_ops;
+static int g_fail_op;
+static uint32_t g_fail_flags;
 
 /* Source buffer followed by a canary: pre-fix, a short write reads
  * bytes past len and lands them in the destination flash. The canary
@@ -104,12 +137,29 @@ static uint8_t g_data[DATA_SZ + CANARY_SZ];
  * other way: the bytes changed since the previous window must fit
  * within one aligned 16-byte program unit. The pre-fix HAL issued its
  * four word stores relative to the caller address, so an unaligned
- * start split them across two units and this assertion goes red. */
+ * start split them across two units and this assertion goes red.
+ *
+ * It also models the page erase started by FLASH_CR_STRT, and the error
+ * injection. The host register file cannot clear the write-1-to-clear
+ * error flags, so FLASH_NS_SR is set to the result of this operation
+ * only: what the HAL reads back right after the wait. */
 static void hal_flash_wait_complete(uint8_t bank)
 {
     int i;
     int first = -1;
     int last = -1;
+    int program = (FLASH_NS_CR & FLASH_CR_PG) != 0;
+    int erase = (FLASH_NS_CR & (FLASH_CR_PER | FLASH_CR_STRT)) ==
+        (FLASH_CR_PER | FLASH_CR_STRT);
+    int fail = 0;
+
+    (void)bank;
+    FLASH_NS_SR = 0;
+    if ((program || erase) && (++g_ops == g_fail_op)) {
+        FLASH_NS_SR = g_fail_flags;
+        /* Only an error flag stops the operation. */
+        fail = (g_fail_flags & FLASH_SR_ERRORS) != 0;
+    }
 
     for (i = 0; i < FLASH_MEM_SZ; i++) {
         if (g_flash_mem[i] != g_flash_prev[i]) {
@@ -120,8 +170,21 @@ static void hal_flash_wait_complete(uint8_t bank)
     }
     if (first >= 0)
         ck_assert_int_le(last, (first & ~0x0F) + 15);
+    if (program && fail)
+        memcpy(g_flash_mem, g_flash_prev, FLASH_MEM_SZ);
+    if (erase) {
+        uint32_t page = (FLASH_NS_CR >> FLASH_CR_PNB_SHIFT) &
+            FLASH_CR_PNB_MASK;
+
+        ck_assert_uint_lt(page, FLASH_MEM_SZ / FLASH_PAGE_SIZE);
+        if (!fail)
+            memset(g_flash_mem + page * FLASH_PAGE_SIZE, 0xFF,
+                FLASH_PAGE_SIZE);
+        FLASH_NS_CR &= ~FLASH_CR_STRT;
+        g_erases++;
+    }
     memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
-    if ((FLASH_NS_CR & FLASH_CR_PG) != 0)
+    if (program)
         g_programs++;
 }
 
@@ -134,6 +197,10 @@ static void setup(void)
 
     memset(g_flash_regs, 0, sizeof(g_flash_regs));
     g_programs = 0;
+    g_erases = 0;
+    g_ops = 0;
+    g_fail_op = 0;
+    g_fail_flags = 0;
     for (i = 0; i < FLASH_MEM_SZ; i++)
         g_flash_mem[i] = 0x12; /* stale */
     memcpy(g_flash_prev, g_flash_mem, FLASH_MEM_SZ);
@@ -402,6 +469,126 @@ START_TEST(test_ff_in_partly_programmed_unit)
 }
 END_TEST
 
+static const uint32_t g_error_flags[] = {
+    FLASH_SR_OPERR, FLASH_SR_PROGERR, FLASH_SR_WRPERR,
+    FLASH_SR_PGAERR, FLASH_SR_SIZERR, FLASH_SR_PGSERR
+};
+#define ERROR_FLAGS_CNT (int)(sizeof(g_error_flags) / sizeof(g_error_flags[0]))
+
+/* Each error flag fails the write on the unit that sets it: the unit
+ * before is programmed, that unit and the ones after are not, and PG is
+ * cleared. */
+START_TEST(test_write_sr_error_stops)
+{
+    int f;
+    int i;
+
+    for (f = 0; f < ERROR_FLAGS_CNT; f++) {
+        setup();
+        g_fail_op = 2;
+        g_fail_flags = g_error_flags[f];
+        ck_assert_int_ne(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
+            g_data, 64), 0);
+
+        ck_assert_int_eq(g_programs, 2);
+        ck_assert_uint_eq(FLASH_NS_CR & FLASH_CR_PG, 0);
+        ck_assert_int_eq(memcmp(g_flash_mem, g_data, 16), 0);
+        for (i = 16; i < FLASH_MEM_SZ; i++)
+            ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    }
+}
+END_TEST
+
+/* Status flags that are not errors do not fail the write. */
+START_TEST(test_write_other_flags_ok)
+{
+    g_fail_op = 1;
+    g_fail_flags = FLASH_SR_EOP | FLASH_SR_OPTWERR;
+    ck_assert_int_eq(hal_flash_write((uint32_t)(uintptr_t)g_flash_mem,
+        g_data, 32), 0);
+
+    ck_assert_int_eq(g_programs, 2);
+    ck_assert_int_eq(memcmp(g_flash_mem, g_data, 32), 0);
+}
+END_TEST
+
+/* A range that is not all inside the flash is refused before anything
+ * is programmed. A range that ends at the top of the flash is written. */
+START_TEST(test_write_out_of_range)
+{
+    uint32_t base = (uint32_t)(uintptr_t)g_flash_mem;
+    int i;
+
+    ck_assert_int_ne(hal_flash_write(base - 16, g_data, 16), 0);
+    ck_assert_int_ne(hal_flash_write(base + FLASH_MEM_SZ - 16, g_data, 32),
+        0);
+    ck_assert_int_ne(hal_flash_write(base + FLASH_MEM_SZ, g_data, 1), 0);
+    ck_assert_int_ne(hal_flash_write(base, g_data, -1), 0);
+    ck_assert_int_eq(g_programs, 0);
+    for (i = 0; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+
+    ck_assert_int_eq(hal_flash_write(base + FLASH_MEM_SZ - 16, g_data, 16),
+        0);
+    ck_assert_int_eq(memcmp(g_flash_mem + FLASH_MEM_SZ - 16, g_data, 16), 0);
+}
+END_TEST
+
+/* An erase over the whole flash erases each page and clears PER. */
+START_TEST(test_erase_pages)
+{
+    ck_assert_int_eq(hal_flash_erase((uint32_t)(uintptr_t)g_flash_mem,
+        FLASH_MEM_SZ), 0);
+
+    ck_assert_int_eq(g_erases, 2);
+    ck_assert_int_eq(flash_is_erased(0, FLASH_MEM_SZ), 1);
+    ck_assert_uint_eq(FLASH_NS_CR & FLASH_CR_PER, 0);
+}
+END_TEST
+
+/* Each error flag fails the erase on the page that sets it, the next
+ * page is not erased, and PER is cleared. */
+START_TEST(test_erase_sr_error_stops)
+{
+    int f;
+    int i;
+
+    for (f = 0; f < ERROR_FLAGS_CNT; f++) {
+        setup();
+        g_fail_op = 1;
+        g_fail_flags = g_error_flags[f];
+        ck_assert_int_ne(hal_flash_erase((uint32_t)(uintptr_t)g_flash_mem,
+            FLASH_MEM_SZ), 0);
+
+        ck_assert_int_eq(g_erases, 1);
+        ck_assert_uint_eq(FLASH_NS_CR & FLASH_CR_PER, 0);
+        for (i = 0; i < FLASH_MEM_SZ; i++)
+            ck_assert_uint_eq(g_flash_mem[i], 0x12);
+    }
+}
+END_TEST
+
+/* An erase range that is not all inside the flash, or is empty, is
+ * refused before any page is erased. */
+START_TEST(test_erase_out_of_range)
+{
+    uint32_t base = (uint32_t)(uintptr_t)g_flash_mem;
+    int i;
+
+    ck_assert_int_ne(hal_flash_erase(base - FLASH_PAGE_SIZE,
+        FLASH_PAGE_SIZE), 0);
+    ck_assert_int_ne(hal_flash_erase(base + FLASH_PAGE_SIZE,
+        2 * FLASH_PAGE_SIZE), 0);
+    ck_assert_int_ne(hal_flash_erase(base + FLASH_MEM_SZ, FLASH_PAGE_SIZE),
+        0);
+    ck_assert_int_ne(hal_flash_erase(base, 0), 0);
+    ck_assert_int_ne(hal_flash_erase(base, -1), 0);
+    ck_assert_int_eq(g_erases, 0);
+    for (i = 0; i < FLASH_MEM_SZ; i++)
+        ck_assert_uint_eq(g_flash_mem[i], 0x12);
+}
+END_TEST
+
 Suite *stm32u5_write_suite(void)
 {
     Suite *s = suite_create("stm32u5-write");
@@ -421,6 +608,12 @@ Suite *stm32u5_write_suite(void)
     tcase_add_test(tc, test_skip_unaligned_data_programmed);
     tcase_add_test(tc, test_ff_over_nonerased_programmed);
     tcase_add_test(tc, test_ff_in_partly_programmed_unit);
+    tcase_add_test(tc, test_write_sr_error_stops);
+    tcase_add_test(tc, test_write_other_flags_ok);
+    tcase_add_test(tc, test_write_out_of_range);
+    tcase_add_test(tc, test_erase_pages);
+    tcase_add_test(tc, test_erase_sr_error_stops);
+    tcase_add_test(tc, test_erase_out_of_range);
     suite_add_tcase(s, tc);
 
     return s;
