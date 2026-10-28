@@ -80,8 +80,8 @@ static void pll_clock_on(void)
     whal_Stm32wba_Rcc_EnablePeriphClk(&g_flashClock);
     whal_Stm32wba_Flash_Ext_SetLatency(BOARD_FLASH_DEV, 3);
 
-    /* AHB5 max 32 MHz: prescale 100 MHz / 4 = 25 MHz (0b101 = div 4). */
-    whal_Stm32wba_Rcc_SetHpre5(5);
+    /* AHB5 max 32 MHz: prescale 100 MHz / 4 = 25 MHz (0b110 = div 4). */
+    whal_Stm32wba_Rcc_SetHpre5(6);
 
     whal_Stm32wba_Rcc_EnableOsc(
         &(whal_Stm32wba_Rcc_OscCfg){WHAL_STM32WBA_RCC_HSE32_CFG});
