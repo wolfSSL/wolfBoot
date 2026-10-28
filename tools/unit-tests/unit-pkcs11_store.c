@@ -1039,6 +1039,148 @@ START_TEST (test_power_fail_during_rewrite_never_mixes_generations) {
 }
 END_TEST
 
+/* Open a write window on the object and write the string into it. */
+static void *open_window_and_write(int type, CK_ULONG tok, CK_ULONG obj,
+        const char *payload)
+{
+    void *store = NULL;
+    int len = (int)strlen(payload) + 1;
+    int ret;
+
+    ret = wolfPKCS11_Store_Open(type, tok, obj, 0, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Write(store, (unsigned char *)payload, len);
+    ck_assert_int_eq(ret, len);
+    return store;
+}
+
+/* A flash erase or program failure while a window commits fails that
+ * window's close, so wolfPKCS11 knows the record may not have committed. The
+ * failure is not sticky: the next window that commits cleanly succeeds. */
+START_TEST(test_close_reports_flash_failure)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 80;
+    void *store;
+    char rd[64];
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    store = open_window_and_write(type, id_tok, 1, "first");
+    hal_flash_write_fail = 1;
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), STORE_FLASH_E);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+
+    store = open_window_and_write(type, id_tok, 1, "second");
+    hal_flash_erase_fail = 1;
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), STORE_FLASH_E);
+    ck_assert_int_eq(hal_flash_erase_fail, 0);
+
+    store = open_window_and_write(type, id_tok, 1, "third");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), 0);
+
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ret = wolfPKCS11_Store_Read(store, (unsigned char *)rd, (int)sizeof(rd));
+    ck_assert_int_eq(ret, (int)strlen("third") + 1);
+    ck_assert_str_eq(rd, "third");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), 0);
+}
+END_TEST
+
+/* The sector cache is shared, so closing one window also commits the sectors
+ * of the others. A failure then fails every window open at the time, and no
+ * window opened after it. */
+START_TEST(test_flash_failure_reported_to_open_windows)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 90;
+    void *store_a;
+    void *store_b;
+    void *store_c;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    store_a = open_window_and_write(type, id_tok, 1, "window a");
+    store_b = open_window_and_write(type, id_tok, 2, "window b");
+    hal_flash_write_fail = 1;
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store_b, 1), STORE_FLASH_E);
+    store_c = open_window_and_write(type, id_tok, 3, "window c");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store_a, 1), STORE_FLASH_E);
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store_c, 1), 0);
+}
+END_TEST
+
+/* Store_Remove reports a flash failure while it erases the payload and
+ * drops the node, and NOT_AVAILABLE_E only for a missing object. */
+START_TEST(test_remove_reports_flash_failure)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 100;
+    void *store;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    store = open_window_and_write(type, id_tok, 1, "remove me");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), 0);
+    store = open_window_and_write(type, id_tok, 2, "remove me too");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), 0);
+
+    hal_flash_write_fail = 1;
+    ck_assert_int_eq(wolfPKCS11_Store_Remove(type, id_tok, 1), STORE_FLASH_E);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
+    hal_flash_erase_fail = 1;
+    ck_assert_int_eq(wolfPKCS11_Store_Remove(type, id_tok, 2), STORE_FLASH_E);
+    ck_assert_int_eq(hal_flash_erase_fail, 0);
+    ck_assert_int_eq(wolfPKCS11_Store_Remove(type, id_tok, 3),
+        NOT_AVAILABLE_E);
+}
+END_TEST
+
+/* Failures while Store_Open checks the vault, formatting a blank one or
+ * restoring the header from the backup sector, belong to the window opened. */
+START_TEST(test_vault_check_failure_reported)
+{
+    const int type = DYNAMIC_TYPE_RSA;
+    const CK_ULONG id_tok = 110;
+    void *store;
+    int ret;
+
+    ret = mmap_file(vault_path, vault_base, keyvault_size, NULL);
+    ck_assert_int_eq(ret, 0);
+    memset(vault_base, 0xEE, keyvault_size);
+
+    /* Blank vault: the format fails to erase the backup sector. */
+    hal_flash_erase_fail = 1;
+    store = open_window_and_write(type, id_tok, 1, "formatted");
+    ck_assert_int_eq(hal_flash_erase_fail, 0);
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), STORE_FLASH_E);
+
+    /* A close commits the header sector last, so the backup sector holds the
+     * header. With the header's magic gone, the next Open restores it. */
+    store = open_window_and_write(type, id_tok, 1, "formatted");
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), 0);
+    *(uint32_t *)vault_base = 0;
+#ifdef MOCK_STALE_CACHE
+    *(uint32_t *)vault_flash_at((uintptr_t)vault_base) = 0;
+#endif
+    hal_flash_erase_fail = 1;
+    ret = wolfPKCS11_Store_Open(type, id_tok, 1, 1, &store);
+    ck_assert_int_eq(ret, 0);
+    ck_assert_int_eq(hal_flash_erase_fail, 0);
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(store, 1), STORE_FLASH_E);
+}
+END_TEST
+
 
 Suite *wolfboot_suite(void)
 {
@@ -1057,6 +1199,7 @@ Suite *wolfboot_suite(void)
     TCase* tcase_interleaved = tcase_create("interleaved_windows");
     TCase* tcase_concurrent_read = tcase_create("concurrent_reader");
     TCase* tcase_power_fail = tcase_create("power_fail_rewrite");
+    TCase* tcase_flash_fail = tcase_create("flash_failure_reported");
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
@@ -1074,6 +1217,11 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_concurrent_read, test_concurrent_reader_sees_pending_writes);
     tcase_add_test(tcase_power_fail,
         test_power_fail_during_rewrite_never_mixes_generations);
+    tcase_add_test(tcase_flash_fail, test_close_reports_flash_failure);
+    tcase_add_test(tcase_flash_fail,
+        test_flash_failure_reported_to_open_windows);
+    tcase_add_test(tcase_flash_fail, test_remove_reports_flash_failure);
+    tcase_add_test(tcase_flash_fail, test_vault_check_failure_reported);
     suite_add_tcase(s, tcase_store_and_load_objs);
     suite_add_tcase(s, tcase_cross_sector_write);
     suite_add_tcase(s, tcase_close);
@@ -1086,6 +1234,7 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, tcase_interleaved);
     suite_add_tcase(s, tcase_concurrent_read);
     suite_add_tcase(s, tcase_power_fail);
+    suite_add_tcase(s, tcase_flash_fail);
     return s;
 }
 

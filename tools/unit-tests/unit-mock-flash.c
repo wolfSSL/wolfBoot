@@ -35,6 +35,8 @@ static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
+/* When set, the next hal_flash_erase() fails and the hook clears itself. */
+static int hal_flash_erase_fail = 0;
 const char *argv0;
 
 #ifdef NVM_FLASH_ECC
@@ -254,6 +256,10 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 int hal_flash_erase(haladdr_t address, int len)
 {
     ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
+    if (hal_flash_erase_fail) {
+        hal_flash_erase_fail = 0;
+        return -1;
+    }
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
 #ifdef NVM_FLASH_ECC
