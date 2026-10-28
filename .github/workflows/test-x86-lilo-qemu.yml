@@ -22,11 +22,13 @@ jobs:
         run: |
           apt-get update -o Acquire::Retries=3
           apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 dosfstools fdisk cpio
-          # A stock distribution bzImage to boot, without installing it
-          mkdir -p /tmp/kernel && cd /tmp/kernel
-          apt-get download $(apt-cache depends linux-image-amd64 | awk '/Depends: linux-image-/ {print $2; exit}')
-          dpkg-deb -x linux-image-*.deb .
-          cp boot/vmlinuz-* /tmp/vmlinuz
+          # A stock distribution bzImage to boot, without installing it. The
+          # kernel itself ships in linux-binary-<abi>, under /usr/lib/modules.
+          mkdir -p /tmp/kernel && chmod 777 /tmp/kernel && cd /tmp/kernel
+          abi=$(apt-cache depends linux-image-amd64 | awk '/Depends: linux-image-/ {sub("linux-image-", "", $2); print $2; exit}')
+          apt-get download linux-binary-$abi
+          dpkg-deb -x linux-binary-${abi}_*.deb .
+          cp usr/lib/modules/$abi/vmlinuz /tmp/vmlinuz
 
       - name: build
         run: |
