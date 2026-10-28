@@ -34,6 +34,7 @@
 #include <wolfssl/wolfcrypt/settings.h>
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
+#include <wolfssl/wolfcrypt/error-crypt.h> /* BUFFER_E */
 
 #ifndef KEYVAULT_OBJ_SIZE
     #define KEYVAULT_OBJ_SIZE 0x1000 /* 4KB per object */
@@ -54,6 +55,8 @@
 #define SESSION_COUNT_E                -8
 #define LOGGED_IN_E                    -9
 #define OBJ_COUNT_E                    -10
+/* Data did not commit to flash, as reported by wolfPKCS11's own stores */
+#define STORE_FLASH_E                  BUFFER_E
 
 
 #ifndef UNIT_TEST
@@ -113,6 +116,7 @@ struct store_handle {
     void     *buffer;
     struct obj_hdr *hdr;
     uint32_t in_buffer_offset;
+    uint32_t flash_failures; /* store_flash_failures at Store_Open */
 };
 
 #define STORE_FLAGS_OPEN (1 << 0)
@@ -149,6 +153,15 @@ static uint8_t cache_sector_mem
     [WOLFBOOT_PKCS11_STORE_CACHE_SECTORS][WOLFBOOT_SECTOR_SIZE];
 static struct cache_entry store_cache[WOLFBOOT_PKCS11_STORE_CACHE_SECTORS];
 static uint32_t cache_lru_tick;
+
+/*
+ * Count of flash erase and program failures. A store window (Store_Open to
+ * Store_Close) and a Store_Remove fail when the count changed while they ran.
+ * The cache is shared, so a window may commit, and fail on, another window's
+ * sectors: every window open at the time reports the failure. Reporting a
+ * window that lost nothing only makes wolfPKCS11 write all records again.
+ */
+static uint32_t store_flash_failures;
 
 static uint8_t *cache_get_sector(uint32_t offset);
 static void cache_flush_all(void);
@@ -260,20 +273,29 @@ static void store_flash_lock(void)
     hal_cache_invalidate();
 }
 
+/* Count a failed flash erase or program (ret != 0). */
+static void store_flash_result(int ret)
+{
+    if (ret != 0) {
+        store_flash_failures++;
+    }
+}
+
 static void cache_commit_entry(struct cache_entry *entry)
 {
     hal_flash_unlock();
 
     /* Write backup sector first */
-    hal_flash_erase((uintptr_t)BACKUP_SECTOR_ADDRESS, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uintptr_t)BACKUP_SECTOR_ADDRESS, entry->sector,
-        WOLFBOOT_SECTOR_SIZE);
+    store_flash_result(hal_flash_erase((uintptr_t)BACKUP_SECTOR_ADDRESS,
+        WOLFBOOT_SECTOR_SIZE));
+    store_flash_result(hal_flash_write((uintptr_t)BACKUP_SECTOR_ADDRESS,
+        entry->sector, WOLFBOOT_SECTOR_SIZE));
 
     /* Erase + write actual destination sector */
-    hal_flash_erase((uintptr_t)vault_base + entry->offset,
-        WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uintptr_t)vault_base + entry->offset, entry->sector,
-        WOLFBOOT_SECTOR_SIZE);
+    store_flash_result(hal_flash_erase((uintptr_t)vault_base + entry->offset,
+        WOLFBOOT_SECTOR_SIZE));
+    store_flash_result(hal_flash_write((uintptr_t)vault_base + entry->offset,
+        entry->sector, WOLFBOOT_SECTOR_SIZE));
 
     store_flash_lock();
 #ifdef PKCS11_STORE_STATS
@@ -420,9 +442,10 @@ static void restore_backup(uint32_t offset)
 {
     hal_flash_unlock();
     /* Erase + copy from backup */
-    hal_flash_erase((uintptr_t)vault_base + offset, WOLFBOOT_SECTOR_SIZE);
-    hal_flash_write((uintptr_t)vault_base + offset, BACKUP_SECTOR_ADDRESS,
-            WOLFBOOT_SECTOR_SIZE);
+    store_flash_result(hal_flash_erase((uintptr_t)vault_base + offset,
+        WOLFBOOT_SECTOR_SIZE));
+    store_flash_result(hal_flash_write((uintptr_t)vault_base + offset,
+        BACKUP_SECTOR_ADDRESS, WOLFBOOT_SECTOR_SIZE));
     store_flash_lock();
 #ifdef PKCS11_STORE_STATS
     stats_erases++;
@@ -461,7 +484,9 @@ static void check_vault(void)
         memset(s0 + sizeof(uint32_t), 0x00, BITMAP_SIZE);
         cache_flush_all();
         hal_flash_unlock();
-        hal_flash_erase((uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE * 2, total_vault_size);
+        store_flash_result(hal_flash_erase(
+            (uintptr_t)vault_base + WOLFBOOT_SECTOR_SIZE * 2,
+            total_vault_size));
         store_flash_lock();
 #ifdef PKCS11_STORE_STATS
         stats_erases += total_vault_size / WOLFBOOT_SECTOR_SIZE;
@@ -686,6 +711,8 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
     struct store_handle *handle;
     uint8_t *buf;
     int is_new = 0;
+    /* Flash failures from here on, Open included, belong to the window. */
+    uint32_t flash_failures = store_flash_failures;
 
     /* Check if there is one handle available to open the slot */
     handle = find_free_handle();
@@ -760,17 +787,39 @@ int wolfPKCS11_Store_Open(int type, CK_ULONG id1, CK_ULONG id2, int read,
 
     /* Set start of the buffer after the tok/obj id fields */
     handle->in_buffer_offset = (2 * sizeof(uint32_t));
+    handle->flash_failures = flash_failures;
     *store = handle;
     return 0;
 }
 
-void wolfPKCS11_Store_Close(void* store)
+/*
+ * Close a window and report whether its data committed. wolfPKCS11 calls this
+ * when built with WOLFPKCS11_CUSTOM_STORE_CLOSE_COMMIT (set in user_settings.h),
+ * and wolfPKCS11_Store_Close() otherwise.
+ *
+ * The sectors are committed even when commit is 0 (the record's write failed):
+ * the cache is shared, so one window's changes cannot be dropped on their own.
+ * wolfPKCS11 writes the record again on its next store.
+ */
+int wolfPKCS11_Store_CloseCommit(void* store, int commit)
 {
     struct store_handle *handle = store;
+    int ret = 0;
+
+    (void)commit;
     /* Commit all pending sectors: the header sector last, so the header
      * is the atomic commit point of the window. */
     cache_flush_all();
+    if (store_flash_failures != handle->flash_failures) {
+        ret = STORE_FLASH_E;
+    }
     memset(handle, 0, sizeof(*handle));
+    return ret;
+}
+
+void wolfPKCS11_Store_Close(void* store)
+{
+    (void)wolfPKCS11_Store_CloseCommit(store, 1);
 }
 
 /* Live object size from the (possibly cached) header sector: the same
@@ -891,16 +940,20 @@ int wolfPKCS11_Store_Write(void* store, unsigned char* buffer, int len)
 int wolfPKCS11_Store_Remove(int type, CK_ULONG id1, CK_ULONG id2)
 {
     uint8_t* buf;
+    uint32_t flash_failures = store_flash_failures;
 
     check_vault();
     buf = find_object_buffer((int32_t)type, (uint32_t)id1, (uint32_t)id2);
+    if (buf != NULL) {
+        /* Erase the payload before invalidating the metadata, so key
+         * material does not remain recoverable in flash after removal. */
+        erase_object_payload(buf);
+        delete_object((int32_t)type, (uint32_t)id1, (uint32_t)id2);
+    }
+    if (store_flash_failures != flash_failures)
+        return STORE_FLASH_E;
     if (buf == NULL)
         return NOT_AVAILABLE_E;
-
-    /* Erase the payload before invalidating the metadata, so key
-     * material does not remain recoverable in flash after removal. */
-    erase_object_payload(buf);
-    delete_object((int32_t)type, (uint32_t)id1, (uint32_t)id2);
     return 0;
 }
 
