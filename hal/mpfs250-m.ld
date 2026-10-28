@@ -9,10 +9,13 @@
  *   3. Jumps to L2_SCRATCH for execution
  *
  * The first 0x100 bytes of eNVM are reserved for the boot ROM secure boot
- * meta information added by mpfsBootmodeProgrammer.
+ * meta information added by mpfsBootmodeProgrammer.  A page near the end
+ * holds the signed manifest of this image when the boot mode 2 stub verifies
+ * it (MPFS_ENVM_MANIFEST=1, see hal/mpfs250_ubl.c); it is filled in after
+ * the link and left out of the signed bytes.
  *
  * Memory regions:
- *   FLASH_ENVM  - Embedded NVM (128KB - 0x100 for header)
+ *   FLASH_ENVM  - Embedded NVM (128KB - 0x100 for header - 1KB at the end)
  *   L2_SCRATCH  - L2 Scratchpad SRAM (256KB) - execution and data
  */
 
@@ -24,21 +27,31 @@ MEMORY
 {
     /* The first 0x100 bytes of eNVM are used for boot ROM secure boot meta information
      * This offset is added by mpfsBootmodeProgrammer (bootmode 1) */
-    FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100
+    FLASH_ENVM (rx)   : ORIGIN = 0x20220100, LENGTH = 128k - 0x100 - 0x400
+    /* Signed manifest of the eNVM image, verified by the boot mode 2 stub.
+     * The last two pages stay free: mpfsBootmodeProgrammer keeps them.
+     * 0x200 is the stub's header size, not this image's: the stub is always
+     * ECC384/SHA384, so the manifest stays that size even when a larger
+     * algorithm signs the image it covers.  Keep in step with
+     * MPFS_ENVM_MANIFEST_SIZE in hal/mpfs250.h. */
+    ENVM_MANIFEST (r) : ORIGIN = 0x2023FC00, LENGTH = 0x200
 
-    /* L2 Scratchpad SRAM - 256 KB used (2 of 4 scratchpad ways).
-     * Attempted 512 KB (all 4 ways) to match HSS layout, but ways 8-9
-     * are not initialized by the bootmode programmer -- stack/HLS
-     * placed there hit a trap immediately after DDR init.  Reverted
-     * until we add explicit scratchpad init for ways 8-9.
-     * Address range: 0x0A000000 - 0x0A03FFFF */
-    L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = 256k
+    /* L2 scratchpad.  MPFS250 hardwires ways 8-11, so 4 x 128 KB is the
+     * ceiling the startup pin loop can make resident; ASSERT below enforces it. */
+    L2_SCRATCH (rwx)  : ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @WOLFBOOT_L2SCRATCH_SIZE@
 }
 
-/* Stack size for the boot hart (E51 in M-mode)
- * ECC384 + SHA384 + SPMATHALL + NO_ASM measured peak: ~6KB.
- * 32KB provides 5x headroom. */
-PROVIDE(STACK_SIZE = 32k);
+/* Boot-hart stack.  ECC384+SHA384 needs a few KB; ML-DSA-87 adds its working
+ * set plus the two IMAGE_HEADER_SIZE buffers update_disk.c puts on the stack. */
+PROVIDE(STACK_SIZE = @STACK_SIZE@);
+
+/* 4 scratchpad ways x 128 KB (WAY_BYTE_LENGTH).  Going past this hands out
+ * addresses the startup pin loop never made resident. */
+ASSERT(LENGTH(L2_SCRATCH) <= 4 * 0x20000,
+       "L2_SCRATCH exceeds the 4 scratchpad ways (512 KB)")
+ASSERT(ORIGIN(L2_SCRATCH) >= 0x0A000000 &&
+       ORIGIN(L2_SCRATCH) + LENGTH(L2_SCRATCH) <= 0x0A080000,
+       "L2_SCRATCH must lie inside the pinned scratchpad 0x0A000000..0x0A07FFFF")
 
 SECTIONS
 {
@@ -107,6 +120,13 @@ SECTIONS
         _end_bss = .;
         _end = .;
     } > L2_SCRATCH
+
+    /* Placeholder the signed build overwrites with the manifest header;
+     * empty, and absent from the ELF, unless MPFS_ENVM_MANIFEST=1. */
+    .envm_manifest :
+    {
+        KEEP(*(.envm_manifest))
+    } > ENVM_MANIFEST
 }
 
 /* Heap starts after BSS (between _end and stack) */

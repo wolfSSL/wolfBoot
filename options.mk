@@ -105,6 +105,157 @@ ifeq ($(FLASH_OTP_KEYSTORE),1)
     CFLAGS+=-D"FLASH_OTP_KEYSTORE"
 endif
 
+# PolarFire SoC: trust anchor in secure NVM (sNVM).  SNVM_KEYSTORE serves keys at runtime.
+ifeq ($(SNVM_KEYSTORE),1)
+    CFLAGS+=-D"SNVM_KEYSTORE"
+endif
+# Shared refusal text for every knob below that writes sNVM.
+SNVM_WRITE_GATE_MSG=writes sNVM: irreversible, and a brownout mid-write can lock the page \
+        read-only. Re-run with WOLFBOOT_SNVM_WRITE_APPROVED=1 to confirm
+# sNVM page numbers, overridable per board; the headers range-check them.
+ifneq ($(SNVM_KEYSTORE_MODULE),)
+    CFLAGS+=-DSNVM_KEYSTORE_MODULE=$(SNVM_KEYSTORE_MODULE)
+endif
+ifneq ($(SNVM_KEYSTORE_MAX_MODULES),)
+    CFLAGS+=-DSNVM_KEYSTORE_MAX_MODULES=$(SNVM_KEYSTORE_MAX_MODULES)
+endif
+ifneq ($(SNVM_ENCKEY_MODULE),)
+    CFLAGS+=-DSNVM_ENCKEY_MODULE=$(SNVM_ENCKEY_MODULE)
+endif
+ifeq ($(SNVM_KEYSTORE_PROVISION),1)
+    ifeq ($(SNVM_KEYSTORE),1)
+        $(error SNVM_KEYSTORE_PROVISION writes the compiled-in keystore to sNVM \
+                and cannot be combined with SNVM_KEYSTORE=1, which serves keys \
+                from sNVM instead of compiling them in.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_KEYSTORE_PROVISION $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"SNVM_KEYSTORE_PROVISION"
+endif
+
+# Production hardening: REQUIRE_ROM needs every keystore page ROM-flagged (bitstream only), and
+# MPFS_SCB_SMODE_DENY PMP-fences the System Controller mailbox off S-mode and drops its OS nodes.
+ifeq ($(SNVM_KEYSTORE_REQUIRE_ROM),1)
+    ifneq ($(SNVM_KEYSTORE),1)
+        $(error SNVM_KEYSTORE_REQUIRE_ROM=1 needs SNVM_KEYSTORE=1)
+    endif
+    CFLAGS+=-D"SNVM_KEYSTORE_REQUIRE_ROM"
+endif
+ifeq ($(MPFS_SCB_SMODE_DENY),1)
+    # The fence is installed at the M->S hand-off, so an S-mode build under HSS cannot claim it.
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SCB_SMODE_DENY=1 needs the M-mode target (RISCV_MMODE=1))
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SCB_SMODE_DENY" -DWOLFBOOT_PMP_DENY_BASE=0x37020000UL \
+            -DWOLFBOOT_PMP_DENY_SIZE=0x1000UL
+endif
+
+# SBI vendor extension (EID 0x09000029, the HSS one) serving the OS: firmware version, device
+# serial, PUF keys by purpose, System Controller services behind the mailbox fence.  M-mode only.
+ifeq ($(MPFS_SBI_VENDOR),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SBI_VENDOR=1 needs the M-mode target (RISCV_MMODE=1))
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SBI_VENDOR"
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+
+# System Controller SPI flash erase/write/read for the OS over the vendor extension.  Needs the
+# mailbox fence, and compiles the SC CoreQSPI driver into a build that boots from elsewhere.
+ifeq ($(MPFS_SBI_SC_FLASH),1)
+    ifneq ($(MPFS_SBI_VENDOR)$(MPFS_SCB_SMODE_DENY),11)
+        $(error MPFS_SBI_SC_FLASH=1 requires MPFS_SBI_VENDOR=1 and MPFS_SCB_SMODE_DENY=1)
+    endif
+    ifeq ($(EXT_FLASH),1)
+        $(error MPFS_SBI_SC_FLASH=1 is for a build that does not boot from the SC flash (EXT_FLASH=0))
+    endif
+    CFLAGS+=-D"MPFS_SBI_SC_FLASH" -D"MPFS_SC_SPI"
+endif
+
+# Field recovery: before the golden slot boots, zero the sNVM image-key page and the head of both
+# operational slots (hal_disk_failover).  The golden image must be a plaintext signed image.
+ifeq ($(DISK_FAILOVER_ZEROIZE),1)
+    ifneq ($(DISK_GOLDEN_SLOT)$(SNVM_KEK),11)
+        $(error DISK_FAILOVER_ZEROIZE=1 requires DISK_GOLDEN_SLOT=1 and SNVM_KEK=1)
+    endif
+    ifeq ($(SNVM_ENCKEY_PROVISION),1)
+        $(error DISK_FAILOVER_ZEROIZE=1 and SNVM_ENCKEY_PROVISION=1 undo each \
+                other at every boot; build one or the other)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error DISK_FAILOVER_ZEROIZE $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"DISK_FAILOVER_ZEROIZE"
+endif
+# QSPI SCK divider: a QSPI_CLK_DIV_* name from hal/mpfs250.h, default QSPI_CLK_DIV_8.
+ifneq ($(MPFS_QSPI_CLK_DIV),)
+    CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
+endif
+
+# Read-only survey of a range of sNVM pages at boot: each page's admin word (ROM flag), state and
+# checksum, never the contents, since one of the default range's pages holds the wrapped image key.
+MPFS_SNVM_DUMP_FIRST?=200
+MPFS_SNVM_DUMP_COUNT?=2
+ifeq ($(MPFS_SNVM_DUMP),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SNVM_DUMP=1 needs the M-mode target (RISCV_MMODE=1): \
+                    only M-mode reaches the System Controller mailbox)
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SNVM_DUMP" \
+            -DMPFS_SNVM_DUMP_FIRST=$(MPFS_SNVM_DUMP_FIRST) \
+            -DMPFS_SNVM_DUMP_COUNT=$(MPFS_SNVM_DUMP_COUNT)
+endif
+
+# Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
+# the watchdogs after the hand-off and must service them itself.
+ifeq ($(MPFS_WDT_NODES_KEEP),1)
+    CFLAGS+=-D"MPFS_WDT_NODES_KEEP"
+endif
+
+# PUF-derived KEK + RFC 3394 AES key-wrap for sNVM-stored keys.
+ifeq ($(SNVM_KEK),1)
+    # The KEK only wraps the image-encryption key, so it rides on the AES-256 ENCRYPT build's AES.
+    ifneq ($(ENCRYPT)$(ENCRYPT_WITH_AES256)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_KEK=1 requires ENCRYPT=1 ENCRYPT_WITH_AES256=1 \
+                CUSTOM_ENCRYPT_KEY=1)
+    endif
+    CFLAGS+=-D"SNVM_KEK"
+    CFLAGS+=-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
+            -DHAVE_AES_DECRYPT
+    # The KEK derivation is SHA-384 whatever the image hash is.
+    ifneq ($(HASH),SHA384)
+        AUX_HASH_ALGOS+=sha384
+    endif
+endif
+# One-time writer for the PUF-wrapped image-encryption key into sNVM.
+ifeq ($(SNVM_ENCKEY_PROVISION),1)
+    ifneq ($(SNVM_KEK)$(ENCRYPT)$(CUSTOM_ENCRYPT_KEY),111)
+        $(error SNVM_ENCKEY_PROVISION requires SNVM_KEK=1 ENCRYPT=1 \
+                CUSTOM_ENCRYPT_KEY=1, which build the provider it calls.)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_ENCKEY_PROVISION $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"SNVM_ENCKEY_PROVISION"
+    # Second acknowledgement: the built-in key is a public test vector, so no confidentiality.
+    ifeq ($(SNVM_ENCKEY_INSECURE_TEST_KEY),1)
+        CFLAGS+=-D"SNVM_ENCKEY_INSECURE_TEST_KEY"
+    endif
+    # Production path: the integrator's object defines snvm_enckey_prov_key/_nonce.
+    ifeq ($(SNVM_ENCKEY_PROVISION_EXTERN),1)
+        CFLAGS+=-D"SNVM_ENCKEY_PROVISION_EXTERN"
+    endif
+endif
+
 ifeq ($(WOLFBOOT_TEST_FILLER),1)
     CFLAGS+=-D"WOLFBOOT_TEST_FILLER"
 endif
@@ -1193,6 +1344,15 @@ FIT_RAMDISK ?= 0
 ifeq ($(FIT_RAMDISK),1)
   CFLAGS+=-DWOLFBOOT_FIT_RAMDISK
 endif
+# A failed ramdisk load is logged and the boot continues, which is right where
+# the kernel has a root filesystem elsewhere. Set this on an initramfs-only
+# image, whose ramdisk is the only root filesystem it has, to panic instead.
+ifeq ($(FIT_RAMDISK_REQUIRED),1)
+  ifneq ($(FIT_RAMDISK),1)
+    $(error FIT_RAMDISK_REQUIRED=1 requires FIT_RAMDISK=1)
+  endif
+  CFLAGS+=-DWOLFBOOT_FIT_RAMDISK_REQUIRED
+endif
 # Destination for the (decompressed) ramdisk. 0 honors the FIT's own `load`.
 #
 # This and the two load addresses below are CFLAGS, not include/target.h.in
@@ -1754,6 +1914,11 @@ ifneq (,$(filter RISCV RISCV64,$(ARCH)))
   CFLAGS+=-DSTACK_SIZE_PER_HART=$(STACK_SIZE_PER_HART)
 endif
 
+# Substituted into the linker script.  The scratchpad is capped at the 4 x 128 KB
+# of ways the startup asm populates; the linker script asserts it.
+WOLFBOOT_L2SCRATCH_SIZE ?= 256k
+STACK_SIZE ?= 32k
+
 CFLAGS+=$(CFLAGS_EXTRA)
 LDFLAGS+=$(LDFLAGS_EXTRA)
 OBJS+=$(OBJS_EXTRA)
@@ -1808,6 +1973,78 @@ ifeq ($(WOLFBOOT_TEST_SIM_CRYPTOCB),1)
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xCB
   WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
 endif
+endif
+
+# Athena F5200 (TeraFire) offload.  MPFS_ATHENA_CAL_DIR points at Microchip's
+# user-crypto (CAL) directory, e.g. <hart-software-services>/services/crypto.
+# Not vendored: it carries a Mercury Systems licence.
+ifeq ($(MPFS_ATHENA),1)
+  ifeq ($(MPFS_ATHENA_CAL_DIR),)
+    $(error MPFS_ATHENA=1 requires MPFS_ATHENA_CAL_DIR to point at the \
+      Microchip user-crypto (CAL) directory)
+  endif
+  # The engine is driven by the wolfCrypt port, so the wolfSSL in use has to
+  # carry it.  Checked here because an older tree -- a stale submodule, or a
+  # WOLFBOOT_LIB_WOLFSSL override -- otherwise fails as a missing header and a
+  # pile of undefined wc_MpfsAthena_* symbols.
+  MPFS_ATHENA_PORT_SRC = \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/microchip/mpfs_athena.c
+  ifeq ($(wildcard $(MPFS_ATHENA_PORT_SRC)),)
+    $(error MPFS_ATHENA=1 needs a wolfSSL containing the Athena port at \
+      wolfcrypt/src/port/microchip/mpfs_athena.c; update the lib/wolfssl \
+      submodule or point WOLFBOOT_LIB_WOLFSSL at a tree that has it)
+  endif
+  # Both CAL archives are soft-float lp64, so callers must be too (see arch.mk).
+  # M-mode: hart-software-services/services/crypto.  S-mode: the rv64imafd
+  # build from polarfire-soc-bare-metal-examples .../middleware/cal.
+  # The include path is for the wolfCrypt port, which owns the CAL calls, not
+  # for this HAL.  WOLFSSL_MICROCHIP_MPFS selects the SoC family and
+  # WOLFSSL_MPFS_ATHENA says the part carries the engine; wolfSSL's settings.h
+  # turns on WOLF_CRYPTO_CB and the COPY/FREE events from the latter, so they
+  # are not repeated here.  Which engines are offloaded follows the ordinary
+  # WOLFSSL_SHA384 and WOLFSSL_AES_COUNTER gates, so AES-256-CTR comes with an
+  # AES-256 ENCRYPT build.
+  CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
+  CFLAGS += -DWOLFSSL_MICROCHIP_MPFS -DWOLFSSL_MPFS_ATHENA
+  # Matches the port's own WC_MPFS_ATHENA_DEVID default; wolfBoot tags its
+  # cipher contexts with this one.
+  CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7
+  WOLFCRYPT_OBJS += $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  WOLFCRYPT_OBJS += \
+    $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/microchip/mpfs_athena.o
+  # SHA-384 offload.  Over a whole image in DDR it is slower than the software
+  # hash, so an encrypted build wanting only the AES win sets MPFS_ATHENA_SHA=0,
+  # which leaves WOLFBOOT_DEVID_HASH at INVALID_DEVID and image hashing in
+  # software.  The port's self-test still runs its SHA-384 known-answer test
+  # whenever WOLFSSL_SHA384 is compiled, so the engine's hash path is still
+  # brought up and checked; the knob moves the image hash, not the self-test.
+  MPFS_ATHENA_SHA ?= 1
+  ifeq ($(MPFS_ATHENA_SHA),1)
+    CFLAGS += -DMPFS_ATHENA_SHA -DWOLFBOOT_DEVID_HASH=0xA7
+  endif
+  # The hash offload and its self-check are SHA-384; an image hashed with
+  # something else keeps that in software and still gets the AES offload.
+  ifeq ($(MPFS_ATHENA_SHA),1)
+    ifneq ($(HASH),SHA384)
+      AUX_HASH_ALGOS+=sha384
+    endif
+  endif
+  # Archive name differs between Microchip's two published builds.
+  MPFS_ATHENA_CAL_LIB ?= mpfs-rv64imac-user-crypto-lib.a
+  LIBS += $(MPFS_ATHENA_CAL_DIR)/$(MPFS_ATHENA_CAL_LIB)
+  # AES-256-CTR offload now follows the port's own WOLFSSL_AES_COUNTER gate, so
+  # it is present exactly when an AES-256 ENCRYPT build compiles that path.
+  # With neither offload selected the engine is brought up and self-checked for
+  # nothing, so say so rather than linking CAL into a build that cannot use it.
+  # ENCRYPT_WITH_AES256=1 on its own is not enough: WOLFSSL_AES_COUNTER, which
+  # the port's cipher path is gated on, is only defined under ENCRYPT=1.
+  ifneq ($(MPFS_ATHENA_SHA),1)
+    ifneq ($(ENCRYPT)$(ENCRYPT_WITH_AES256),11)
+      $(error MPFS_ATHENA=1 with MPFS_ATHENA_SHA=0 and no AES offload leaves \
+              nothing offloaded: drop MPFS_ATHENA, or set ENCRYPT=1 \
+              ENCRYPT_WITH_AES256=1)
+    endif
+  endif
 endif
 
 # Size of the wolfHSM comm data payload, shared by the client and server blocks

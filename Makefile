@@ -176,7 +176,10 @@ else
       PRIVATE_KEY?=wolfboot_signing_private_key.der
     endif
   endif
-  ifeq ($(FLASH_OTP_KEYSTORE),1)
+  ifeq ($(SNVM_KEYSTORE),1)
+    # PolarFire SoC: trust anchor served from secure NVM at runtime.
+    MPFS_SNVM_OBJ=1
+  else ifeq ($(FLASH_OTP_KEYSTORE),1)
     OBJS+=./src/flash_otp_keystore.o
   else ifeq ($(WOLFBOOT_NO_KEYSTORE),1)
     CFLAGS+=-DWOLFBOOT_NO_KEYSTORE
@@ -188,7 +191,26 @@ else
     WOLFBOOT_SIGN_KEY_DEP=$(PRIVATE_KEY)
   else
     OBJS+=./src/keystore.o
+    # Provisioning build: compiled keys plus the helper that writes them to sNVM.
+    ifeq ($(SNVM_KEYSTORE_PROVISION),1)
+      MPFS_SNVM_OBJ=1
+    endif
   endif
+endif
+
+# PolarFire SoC: sNVM keystore, PUF KEK and the PUF-wrapped encryption-key
+# provider live in one object.
+ifeq ($(SNVM_KEK),1)
+  MPFS_SNVM_OBJ=1
+endif
+ifeq ($(MPFS_SBI_VENDOR),1)
+  MPFS_SNVM_OBJ=1
+endif
+ifeq ($(MPFS_SNVM_DUMP),1)
+  MPFS_SNVM_OBJ=1
+endif
+ifeq ($(MPFS_SNVM_OBJ),1)
+  OBJS+=./hal/mpfs250_snvm.o
 endif
 
 WOLFCRYPT_OBJS:=
@@ -512,6 +534,11 @@ ifeq ($(TARGET),rp2350)
     MAIN_TARGET:=include/target.h keytools wolfboot_signing_private_key.der pico-sdk-info
 endif
 
+ifeq ($(TARGET),mpfs250_ubl)
+    # Boot mode 2 stub: verifies the eNVM wolfBoot, there is no application
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 
 ifeq ($(FLASH_OTP_KEYSTORE),1)
     MAIN_TARGET+=tools/keytools/otp/otp-keystore-primer.bin
@@ -765,8 +792,29 @@ factory_wstage1.bin: $(BINASSEMBLE) stage1/loader_stage1.bin wolfboot.bin $(BOOT
 wolfboot_stage1.bin: wolfboot.elf stage1/loader_stage1.bin
 	$(Q) cp stage1/loader_stage1.bin wolfboot_stage1.bin
 
+# PolarFire SoC boot mode 2: sign the eNVM wolfBoot for the UBL stub to verify.  The manifest
+# header goes into the placeholder MPFS_ENVM_MANIFEST=1 links in the last eNVM page, so one
+# mpfsBootmodeProgrammer run programs image and manifest.  See docs/PolarFire.md.
+MPFS_UBL_KEY?=$(PRIVATE_KEY)
+MPFS_ENVM_VERSION?=1
+# The stub is ECC384/SHA384 only, so the manifest size and algorithm do not follow the image's.
+MPFS_ENVM_MANIFEST_SIZE?=512
+wolfboot_envm_signed.bin: wolfboot.elf $(MPFS_UBL_KEY) keytools_check
+	@echo "\t[SIGN] $@"
+	$(Q)(test "$(MPFS_ENVM_MANIFEST)" = "1") || \
+		(echo "wolfboot_envm_signed.bin needs MPFS_ENVM_MANIFEST=1" && false)
+	$(Q)$(OBJCOPY) -O binary --gap-fill 0x00 -R .envm_manifest wolfboot.elf \
+		wolfboot_envm.bin
+	$(Q)$(SIGN_ENV) IMAGE_HEADER_SIZE=$(MPFS_ENVM_MANIFEST_SIZE) \
+		$(SIGN_TOOL) --ecc384 --sha384 wolfboot_envm.bin \
+		$(MPFS_UBL_KEY) $(MPFS_ENVM_VERSION)
+	$(Q)mv wolfboot_envm_v$(MPFS_ENVM_VERSION)_signed.bin $@
+	$(Q)head -c $(MPFS_ENVM_MANIFEST_SIZE) $@ > wolfboot_envm_manifest.bin
+	$(Q)$(OBJCOPY) --update-section .envm_manifest=wolfboot_envm_manifest.bin \
+		wolfboot.elf wolfboot_envm_signed.elf
+
 wolfboot.elf: include/target.h $(LSCRIPT) $(OBJS) $(BINASSEMBLE) $(WOLFBOOT_SIGN_KEY_DEP) FORCE
-	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
+	$(Q)(test $(SIGN) = NONE) || (test $(FLASH_OTP_KEYSTORE) = 1) || (test "$(WOLFBOOT_NO_KEYSTORE)" = "1") || (test "$(SNVM_KEYSTORE)" = "1") || (grep -q $(SIGN_ALG) src/keystore.c) || \
 		(echo "Key mismatch: please run 'make keysclean' to remove all keys if you want to change algorithm" && false)
 	@echo "\t[LD] $@"
 	@echo $(OBJS)
@@ -806,6 +854,8 @@ $(LSCRIPT): $(LSCRIPT_IN) FORCE
 		sed -e "s/@WOLFBOOT_L2LIM_SIZE@/$(WOLFBOOT_L2LIM_SIZE)/g" | \
 		sed -e "s/@L2SRAM_ADDR@/$(L2SRAM_ADDR)/g" | \
 		sed -e "s/@STACK_SIZE_PER_HART@/$(STACK_SIZE_PER_HART)/g" | \
+		sed -e "s/@WOLFBOOT_L2SCRATCH_SIZE@/$(WOLFBOOT_L2SCRATCH_SIZE)/g" | \
+		sed -e "s/@STACK_SIZE@/$(STACK_SIZE)/g" | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_TEXT@/$(WOLFHAL_FLASH_EXCLUDE_TEXT)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_EXCLUDE_RODATA@/$(WOLFHAL_FLASH_EXCLUDE_RODATA)/g' | \
 		sed -e 's/@WOLFHAL_FLASH_RAM_SECTIONS@/$(WOLFHAL_FLASH_RAM_SECTIONS)/g' \

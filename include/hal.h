@@ -168,7 +168,21 @@ int hal_dma_set_noncached(uintptr_t start, uintptr_t end);
      * cannot be silently disabled by adding an fdt sub-image. Runs while the
      * boot disk is still open. Weak default is a no-op returning 0. */
     int hal_boot_slot_select(void);
+
 #endif
+
+#ifdef DISK_FAILOVER_ZEROIZE
+/* Disk boot: why the operational slots are being given up on, handed to
+ * hal_disk_failover() just before the golden slot is booted. */
+enum disk_failover_cause {
+    DISK_FAILOVER_NO_IMAGE = 1,  /* no readable, parseable image */
+    DISK_FAILOVER_VERIFY,        /* integrity or signature failure */
+    DISK_FAILOVER_UNCONFIRMED,   /* boot confirmation never arrived */
+    DISK_FAILOVER_ROLLBACK,      /* only older images left */
+    DISK_FAILOVER_NO_KEY         /* the image key could not be obtained */
+};
+int hal_disk_failover(int cause);
+#endif /* DISK_FAILOVER_ZEROIZE */
 
 #if defined(MMU) || defined(WOLFBOOT_FDT)
     /* Apply this target's device tree fixups in place, bounded by `capacity`

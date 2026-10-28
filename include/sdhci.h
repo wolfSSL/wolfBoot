@@ -115,6 +115,13 @@
 #define SDHCI_DATA_TIMEOUT_US   3000000     /* 3000ms for data operations */
 #endif
 
+/* Polls between watchdog refreshes in the data-phase wait. The error
+ * recovery waits pet on every pass; this one runs on every transfer, so it
+ * is throttled to keep the refresh cost off the transfer time. */
+#ifndef SDHCI_WDT_PET_INTERVAL
+#define SDHCI_WDT_PET_INTERVAL  4096U
+#endif
+
 /* Clock frequencies (kHz) */
 #ifndef SDHCI_CLK_400KHZ
 #define SDHCI_CLK_400KHZ        400
@@ -234,6 +241,7 @@
 #define SDHCI_SRS10_BVS_1_8V    (0x5U << 9)
 #define SDHCI_SRS10_BVS_3_0V    (0x6U << 9)
 #define SDHCI_SRS10_BVS_3_3V    (0x7U << 9)
+#define SDHCI_SRS10_DMA_MASK    (0x3U << 3)  /* DMA Select field */
 #define SDHCI_SRS10_DMA_SDMA    (0x0U << 3)
 
 /* SRS11 - Clock Control / Timeout / Software Reset */
