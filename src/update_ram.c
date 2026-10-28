@@ -386,6 +386,17 @@ void RAMFUNCTION wolfBoot_start(void)
             goto backup_on_failure;
         }
 
+        /* The image must target the partition this wolfBoot instance is
+         * responsible for booting: the key mask only restricts which
+         * partition ids the signing key may claim, not which core boots
+         * the image. Runs even with WOLFBOOT_SKIP_BOOT_VERIFY, as it is a
+         * header binding check, not a crypto verification. */
+        ret = wolfBoot_image_part_matches(&os_image);
+        if (ret < 0) {
+            wolfBoot_printf("Image partition mismatch\n");
+            goto backup_on_failure;
+        }
+
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
         /* Verify image integrity (hash check) */
         wolfBoot_printf("Checking integrity...");

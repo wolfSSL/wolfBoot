@@ -272,6 +272,14 @@ tools/unit-tests/unit-ubootenv
 tools/unit-tests/unit-cm4-sdhci
 tools/unit-tests/unit-imx95-ahab
 tools/unit-tests/unit-cm4-rauc-slot
+tools/unit-tests/stm32h7s_write_extract.h
+tools/unit-tests/unit-flash-erase-h7s
+tools/unit-tests/unit-flash-erase-mcxw
+tools/unit-tests/unit-linux-loader-initrd
+tools/unit-tests/unit-stm32h7s-write
+tools/unit-tests/unit-update-disk-fit-ramdisk
+tools/unit-tests/unit-update-disk-golden
+tools/unit-tests/unit-update-ram-fit
 tools/unit-tests/__pycache__/*
 
 

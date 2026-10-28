@@ -1029,6 +1029,83 @@ START_TEST(test_verify_authenticity_allows_permitted_key_mask)
 END_TEST
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
 
+#if defined(WOLFBOOT_SIGN_ECC256) && defined(WOLFBOOT_HASH_SHA256)
+START_TEST(test_image_part_matches_app)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+
+    find_header_mocked = 0;
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.hdr = buf;
+    ret = wolfBoot_image_part_matches(&test_img);
+    ck_assert_int_eq(ret, 0);
+}
+END_TEST
+
+START_TEST(test_image_part_matches_rejects_foreign)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_part(buf, sizeof(buf), 2);
+
+    find_header_mocked = 0;
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.hdr = buf;
+    ret = wolfBoot_image_part_matches(&test_img);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
+START_TEST(test_image_part_matches_rejects_wolfboot)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    patch_image_type_part(buf, sizeof(buf), HDR_IMG_TYPE_WOLFBOOT);
+
+    find_header_mocked = 0;
+    memset(&test_img, 0, sizeof(test_img));
+    test_img.hdr = buf;
+    ret = wolfBoot_image_part_matches(&test_img);
+    ck_assert_int_eq(ret, -1);
+}
+END_TEST
+
+START_TEST(test_image_part_matches_null)
+{
+    struct wolfBoot_image test_img;
+    uint8_t buf[sizeof(test_img_v200000000_signed_bin)];
+    int ret;
+
+    ret = wolfBoot_image_part_matches(NULL);
+    ck_assert_int_eq(ret, -1);
+
+    memcpy(buf, test_img_v200000000_signed_bin, sizeof(buf));
+    memset(&test_img, 0, sizeof(test_img));
+    ret = wolfBoot_image_part_matches(&test_img);
+    ck_assert_int_eq(ret, -1);
+
+    /* type field lookup fails (missing HDR_IMG_TYPE) */
+    test_img.hdr = buf;
+    find_header_mocked = 1;
+    find_header_fail = 1;
+    ret = wolfBoot_image_part_matches(&test_img);
+    ck_assert_int_eq(ret, -1);
+    find_header_fail = 0;
+    find_header_mocked = 0;
+}
+END_TEST
+#endif /* WOLFBOOT_SIGN_ECC256 && WOLFBOOT_HASH_SHA256 */
+
 #if defined(UNIT_IMAGE_HYBRID_ONLY) && defined(SIGN_HYBRID) && \
     defined(WOLFBOOT_SIGN_SECONDARY_ECC256)
 START_TEST(test_verify_authenticity_hybrid_direct_call_uses_verified_sha)
@@ -1383,6 +1460,14 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_verify_authenticity,
             test_verify_authenticity_allows_permitted_key_mask);
 #endif /* WOLFBOOT_FIXED_PARTITIONS */
+#if defined(WOLFBOOT_HASH_SHA256)
+    tcase_add_test(tcase_verify_authenticity, test_image_part_matches_app);
+    tcase_add_test(tcase_verify_authenticity,
+            test_image_part_matches_rejects_foreign);
+    tcase_add_test(tcase_verify_authenticity,
+            test_image_part_matches_rejects_wolfboot);
+    tcase_add_test(tcase_verify_authenticity, test_image_part_matches_null);
+#endif /* WOLFBOOT_HASH_SHA256 */
     suite_add_tcase(s, tcase_verify_authenticity);
 #endif
 

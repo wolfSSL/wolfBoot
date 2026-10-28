@@ -81,6 +81,10 @@ void RAMFUNCTION wolfBoot_start(void)
         }
 #endif
         if ((wolfBoot_open_image(&fw_image, active) < 0)
+            /* The image must target this core's partition; the key mask
+             * alone does not bind the claimed role to the execution
+             * context. Short-circuits when the open above failed. */
+            || (wolfBoot_image_part_matches(&fw_image) < 0)
 #ifndef WOLFBOOT_SKIP_BOOT_VERIFY
             || (wolfBoot_verify_integrity(&fw_image) < 0)
             || (wolfBoot_verify_authenticity(&fw_image) < 0)

@@ -81,6 +81,7 @@ static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
 static int mock_verify_integrity_ret;
 static int mock_verify_authenticity_ret;
+static int mock_image_part_matches_ret;
 static int mock_flash_protect_called;
 static haladdr_t mock_flash_protect_addr;
 static int mock_flash_protect_len;
@@ -213,6 +214,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image* img)
 {
     img->signature_ok = (mock_verify_authenticity_ret == 0) ? 1 : 0;
     return mock_verify_authenticity_ret;
+}
+
+int wolfBoot_image_part_matches(struct wolfBoot_image* img)
+{
+    (void)img;
+    return mock_image_part_matches_ret;
 }
 
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)

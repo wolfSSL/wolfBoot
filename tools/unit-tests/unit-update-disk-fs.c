@@ -669,6 +669,12 @@ int wolfBoot_verify_authenticity(struct wolfBoot_image *img)
     return mock_verify_authenticity_ret;
 }
 
+int wolfBoot_image_part_matches(struct wolfBoot_image *img)
+{
+    (void)img;
+    return 0;
+}
+
 /* Parses the single version TLV that build_image() writes. */
 uint32_t wolfBoot_get_blob_version(uint8_t *blob)
 {
