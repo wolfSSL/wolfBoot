@@ -46,6 +46,7 @@ This README describes configuration of supported targets.
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
 * [Qemu x86-64 UEFI](#qemu-x86-64-uefi)
+* [x86-64 legacy BIOS/MBR, LILO style (x86_64_lilo)](#x86-64-legacy-biosmbr-lilo-style-x86_64_lilo)
 * [NVIDIA Jetson Orin (aarch64_efi)](#nvidia-jetson-orin-aarch64_efi)
 * [NVIDIA Jetson Orin (NVIDIA Tegra234) BL33 firmware](#nvidia-jetson-orin-nvidia-tegra234-bl33-firmware)
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
@@ -8187,6 +8188,139 @@ You can `Ctrl-C` or login as `root` and power off qemu with `poweroff`
 
 To pass an authenticated Linux kernel command line, sign the kernel with `--cmdline "..."` (before the positional `image key version` arguments; see [Signing](Signing.md)). wolfBoot reads the `HDR_CMDLINE` TLV from the verified image and applies it to the kernel EFI stub via `LoadOptions`, so it is covered by the image signature.
 
+
+
+## x86-64 legacy BIOS/MBR, LILO style (x86_64_lilo)
+
+The third x86-64 port, next to [UEFI](#qemu-x86-64-uefi) and
+[Intel FSP](#intel-x86_64-with-intel-fsp-support): no EFI stage and no FSP.
+wolfBoot boots from the MBR of a legacy BIOS machine and is installed, the
+way LILO was, by a `lilo` tool that reads `/etc/lilo.conf`.
+
+### Boot flow
+
+1. The BIOS loads the MBR (`src/boot_x86_bios_mbr.S`) at `0x7C00`. It reads
+   wolfBoot from the sectors between the MBR and the first partition
+   (INT 13h extensions, LBA) to `0x7E00`.
+2. wolfBoot (`src/boot_x86_bios_start.S`) enables A20 and switches to flat
+   32-bit protected mode. Disk, keyboard, video and memory-map services are
+   BIOS calls, made by dropping back to real mode for each one
+   (`src/x86/bios.c`), so wolfBoot needs no disk driver of its own: it
+   reads the disk the BIOS booted from (tested on QEMU with IDE, AHCI on
+   q35, and virtio-blk).
+3. It reads the boot map written by `lilo` and, LILO-style, shows a `boot:`
+   prompt over the configured labels (`src/update_lilo.c`).
+4. The selected kernel is read from a FAT32 partition with wolfBoot's own
+   FAT32 reader, staged in RAM and checked with the regular wolfBoot image
+   verification (with `SIGN=NONE`, the SHA-256 integrity check).
+5. The kernel is started through the Linux real-mode boot protocol: setup at
+   `0x90000`, protected-mode kernel at `0x100000`, initrd high in RAM. The
+   kernel's own setup code then queries the BIOS (E820, EDD, video), as it
+   did under LILO. A 64-bit (x86_64) kernel boots this way like any other.
+   `other=` entries chain-load a partition boot sector instead.
+
+The progress letters are LILO's: `L` (MBR running), `LI` (wolfBoot loaded),
+`LIL` (wolfBoot running), `LILO` (map loaded). A failure in the MBR prints
+the BIOS error code after the letters (`E0`: not installed, `E1`: no LBA
+support in the BIOS).
+
+As with LILO the MBR code is BIOS-only, and the disk must use MBR (not GPT)
+partitioning. Unlike LILO, the map names files instead of listing their
+sectors, so a kernel can be replaced in the FAT32 partition without running
+`lilo` again; run it again when `lilo.conf` changes.
+
+Disk layout written by `lilo` (all of it in front of the first partition,
+which usually starts at sector 2048):
+
+| LBA       | Content                                                  |
+|-----------|----------------------------------------------------------|
+| 0         | MBR boot code and descriptor; disk signature and partition table preserved |
+| 1 - 33    | boot map (`include/lilo_map.h`)                          |
+| 34 -      | wolfBoot (about 40 sectors)                              |
+
+### Configuration and build
+
+An example configuration is in
+[config/examples/x86_64_lilo.config](../config/examples/x86_64_lilo.config).
+The build needs a 32-bit capable gcc (`gcc-multilib` on Debian/Ubuntu).
+
+```
+cp config/examples/x86_64_lilo.config .config
+make keytools
+make
+make -C tools/lilo
+```
+
+`wolfboot.bin` is the MBR sector followed by wolfBoot. Kernels are wolfBoot
+images:
+
+```
+tools/keytools/sign --no-sign --sha256 bzImage 1
+```
+
+### Installing
+
+`tools/lilo/lilo` takes the usual `lilo` options (`-C`, `-b`, `-i`, `-D`,
+`-s`, `-t`, `-q`, `-u`, `-v`) and the usual `lilo.conf` keywords; see
+[tools/lilo/README.md](../tools/lilo/README.md). For example:
+
+```
+boot=/dev/sda
+install=/boot/wolfboot.bin
+prompt
+timeout=50
+default=linux
+serial=0,115200n8
+
+image=/boot/vmlinuz_v1_signed.bin
+    label=linux
+    initrd=/boot/initrd.img
+    root=/dev/sda2
+    read-only
+    append="console=ttyS0,115200"
+
+other=/dev/sda3
+    label=dos
+```
+
+`/boot` is taken to be where the FAT32 partition is mounted, so
+`/boot/vmlinuz_v1_signed.bin` is `/vmlinuz_v1_signed.bin` on the partition
+(see `fat-mount=` to change it). `lilo` checks every image with wolfBoot's
+own partition and FAT32 code before writing anything.
+
+### Running on QEMU
+
+[tools/lilo/test/run-qemu.py](../tools/lilo/test/run-qemu.py) builds a disk
+image (MBR, a FAT32 partition and a partition with a test boot sector),
+signs a kernel (by default the newest `/boot/vmlinuz-*`), installs wolfBoot
+with `lilo`, and boots it on `qemu-system-x86_64` with the stock SeaBIOS:
+default boot after the timeout, a label and extra parameters typed at the
+prompt, recovery from an unknown label and from a corrupted image, and
+`other=` chain loading.
+
+```
+python3 tools/lilo/test/run-qemu.py [-k bzImage] [-a kvm|tcg]
+```
+
+```
+LILO
+wolfBoot: 639 KB low, 510 MB extended memory
+...
+boot: linux
+Loading linux
+Boot partition: 0xF00000 (sz 14546880, ver 0x1, type 0xFF01)
+..............
+Verified /vmlinuz-wolfboot-v1.bin, version 1
+Loading initrd.
+Booting kernel: BOOT_IMAGE=linux ro console=ttyS0,115200 panic=-1
+[    0.000000] Linux version 7.2.11+deb14-amd64 ...
+```
+
+`SIGN=NONE` authenticates nothing: anyone who can write the disk can replace
+the kernel. The image check only catches corruption. The port uses the
+generic image verification, so a signing configuration (with a keystore)
+builds the same way, but the MBR code and the map are not authenticated by
+anything in a legacy BIOS boot.
 
 
 ## NVIDIA Jetson Orin (aarch64_efi)

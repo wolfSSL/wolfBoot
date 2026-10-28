@@ -1042,8 +1042,8 @@ ifneq ($(DISK_FS),)
     $(error DISK_FS must be one of: fat32, ext4, both)
   endif
   ifeq ($(WOLFBOOT_TARGET_BUILD),1)
-    ifeq (,$(findstring WOLFBOOT_UPDATE_DISK,$(CFLAGS)))
-      $(error DISK_FS requires a disk-boot target (DISK_SDCARD=1, DISK_EMMC=1, or an x86 FSP/AHCI target))
+    ifeq (,$(findstring WOLFBOOT_UPDATE_DISK,$(CFLAGS))$(findstring WOLFBOOT_LILO,$(CFLAGS)))
+      $(error DISK_FS requires a disk-boot target (DISK_SDCARD=1, DISK_EMMC=1, an x86 FSP/AHCI target or x86_64_lilo))
     endif
   endif
   CFLAGS+=-D"WOLFBOOT_DISK_FS=1"
