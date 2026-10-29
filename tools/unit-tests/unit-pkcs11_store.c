@@ -364,6 +364,16 @@ START_TEST(test_close_clears_handle_state)
 }
 END_TEST
 
+START_TEST(test_close_null_store)
+{
+    /* wolfPKCS11 2.2.0 and earlier close a data record even when opening it
+     * failed, so a close without an open does nothing. */
+    wolfPKCS11_Store_Close(NULL);
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(NULL, 0), 0);
+    ck_assert_int_eq(wolfPKCS11_Store_CloseCommit(NULL, 1), 0);
+}
+END_TEST
+
 START_TEST(test_delete_object_ignores_metadata_prefix)
 {
     const int32_t type = DYNAMIC_TYPE_RSA;
@@ -1203,6 +1213,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tcase_store_and_load_objs, test_store_and_load_objs);
     tcase_add_test(tcase_cross_sector_write, test_cross_sector_write_preserves_length);
     tcase_add_test(tcase_close, test_close_clears_handle_state);
+    tcase_add_test(tcase_close, test_close_null_store);
     tcase_add_test(tcase_delete_object, test_delete_object_ignores_metadata_prefix);
     tcase_add_test(tcase_delete_corrupted, test_delete_object_corrupted_pos_no_oob);
     tcase_add_test(tcase_delete_corrupted,

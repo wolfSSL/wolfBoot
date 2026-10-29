@@ -807,6 +807,11 @@ int wolfPKCS11_Store_CloseCommit(void* store, int commit)
     int ret = 0;
 
     (void)commit;
+    /* Nothing was opened. wolfPKCS11 2.2.0 and earlier close a data record
+     * even when opening it failed. */
+    if (handle == NULL) {
+        return 0;
+    }
     /* Commit all pending sectors: the header sector last, so the header
      * is the atomic commit point of the window. */
     cache_flush_all();
