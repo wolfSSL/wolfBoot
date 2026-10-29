@@ -448,6 +448,10 @@ ifeq ($(TARGET),aarch64_efi)
     MAIN_TARGET:=wolfboot.efi
 endif
 
+ifeq ($(TARGET),x86_64_lilo)
+    MAIN_TARGET:=wolfboot.bin
+endif
+
 ifeq ($(FSP), 1)
     MAIN_TARGET:=wolfboot_stage1.bin
 endif

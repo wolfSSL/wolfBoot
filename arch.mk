@@ -2560,6 +2560,29 @@ ifneq ($(CROSS_COMPILE_PATH),)
 endif
 
 
+ifeq ($(TARGET),x86_64_lilo)
+  # Legacy BIOS/MBR boot, LILO style: no EFI and no FSP. wolfBoot runs in
+  # flat 32-bit protected mode and drops back to real mode for BIOS disk,
+  # keyboard and video services. tools/lilo installs it on a disk.
+  USE_GCC_HEADLESS=0
+  DISK_FS?=fat32
+  LD := ld
+  CFLAGS += -m32 -ffreestanding -fno-stack-protector -fno-PIC -fno-pie \
+            -mno-mmx -mno-sse -mno-red-zone -fno-asynchronous-unwind-tables \
+            -ffunction-sections -fdata-sections -U_FORTIFY_SOURCE -Os
+  # gnu11: keeps the host glibc headers from turning memchr & co. into
+  # C23 _Generic macros that collide with src/string.c
+  CFLAGS += -std=gnu11
+  CFLAGS += -DWOLFBOOT_LILO -DDEBUG_UART -DWOLFBOOT_NO_LOAD_ADDRESS
+  LDFLAGS = -m elf_i386 --gc-sections --entry=_mbr_start -T $(LSCRIPT) \
+            -Map=wolfboot.map
+  LD_START_GROUP =
+  LD_END_GROUP = $(shell $(CC) -m32 -print-libgcc-file-name)
+  OBJS += src/boot_x86_bios_mbr.o src/boot_x86_bios_start.o src/x86/bios.o
+  OBJS += src/disk.o src/gpt.o
+  UPDATE_OBJS := src/update_lilo.o
+endif
+
 ifeq ($(TARGET),x86_64_efi)
   USE_GCC_HEADLESS=0
   GNU_EFI_LIB_PATH?=/usr/lib
