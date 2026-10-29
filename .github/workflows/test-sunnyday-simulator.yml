@@ -867,3 +867,52 @@ jobs:
       - name: Run sunny day hybrid boot test
         run: |
           ./wolfboot.elf get_version
+
+      # 64 Bit simulator, Hybrid auth LMS + ECDSA, both orderings, and
+      # XMSS + ECDSA. These need WOLFBOOT_UNIVERSAL_KEYSTORE, which is what
+      # makes the keystore slot wider than a stateful hash-based public key.
+      #
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config (64 bit simulator) Hybrid LMS + ECC
+        run: |
+          cp config/examples/sim-lms.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make SIGN_SECONDARY=ECC256 WOLFBOOT_UNIVERSAL_KEYSTORE=1
+
+      - name: Run sunny day hybrid LMS boot test
+        run: |
+          ./wolfboot.elf get_version
+
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Build wolfboot.elf (ECC primary, LMS secondary)
+        run: |
+          make clean && make SIGN=ECC256 SIGN_SECONDARY=LMS \
+            WOLFBOOT_UNIVERSAL_KEYSTORE=1
+
+      - name: Run sunny day hybrid ECC + LMS boot test
+        run: |
+          ./wolfboot.elf get_version
+
+      - name: make clean
+        run: |
+          make keysclean
+
+      - name: Select config (64 bit simulator) Hybrid XMSS + ECC
+        run: |
+          cp config/examples/sim-xmss.config .config
+
+      - name: Build wolfboot.elf
+        run: |
+          make clean && make SIGN_SECONDARY=ECC256 WOLFBOOT_UNIVERSAL_KEYSTORE=1
+
+      - name: Run sunny day hybrid XMSS boot test
+        run: |
+          ./wolfboot.elf get_version

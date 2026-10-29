@@ -324,6 +324,10 @@ struct signing_key {
     LmsKey lms;
     XmssKey xmss;
     wc_MlDsaKey ml_dsa;
+    /* An LMS key is loaded once and then reused. wc_LmsKey_Reload() only
+     * accepts a key that has not been loaded yet, and signing leaves the key
+     * usable, so a second signature in the same run must not reload. */
+    int lms_loaded;
 };
 
 /* Hybrid signing keeps the primary and the secondary private key decoded at
@@ -1246,15 +1250,24 @@ static int sign_digest(int sign, int hash_algo,
             key_file = CMD.secondary_key_file;
         }
         /* Set the callbacks, so LMS can update the private key while signing */
-        ret = wc_LmsKey_SetWriteCb(&k->lms, lms_write_key);
-        if (ret == 0) {
-            ret = wc_LmsKey_SetReadCb(&k->lms, lms_read_key);
-        }
-        if (ret == 0) {
-            ret = wc_LmsKey_SetContext(&k->lms, (void*)key_file);
-        }
-        if (ret == 0) {
-            ret = wc_LmsKey_Reload(&k->lms);
+        /* Load the callbacks and the private state once. wolfCrypt rejects
+         * both on a key that is already working, and a successful sign leaves
+         * the key ready to sign again, so a second signature in the same run
+         * - a delta image signs its own header - reuses what is loaded. */
+        if (!k->lms_loaded) {
+            ret = wc_LmsKey_SetWriteCb(&k->lms, lms_write_key);
+            if (ret == 0) {
+                ret = wc_LmsKey_SetReadCb(&k->lms, lms_read_key);
+            }
+            if (ret == 0) {
+                ret = wc_LmsKey_SetContext(&k->lms, (void*)key_file);
+            }
+            if (ret == 0) {
+                ret = wc_LmsKey_Reload(&k->lms);
+            }
+            if (ret == 0) {
+                k->lms_loaded = 1;
+            }
         }
         if (ret == 0) {
             ret = wc_LmsKey_Sign(&k->lms, signature, signature_sz, digest,
@@ -1617,10 +1630,10 @@ static int make_header_ex(int is_diff, uint8_t *pubkey, uint32_t pubkey_sz,
     XMEMSET(key, 0, sizeof(key));
     XMEMSET(iv, 0, sizeof(iv));
 
-    /* Check certificate chain file size before allocating header, and adjust
-     * header size if needed */
-    if ((CMD.cert_chain_file != NULL) || (CMD.custom_tlvs > 0) ||
-            (CMD.dts_file != NULL)) {
+    /* Size the header from the fields it will actually carry. Done for every
+     * image, not just when a certificate chain, custom TLV or DTS is present:
+     * a large signature alone can outgrow the configured header. */
+    {
         uint32_t hdr_cert_chain_sz = 0;
         uint32_t required_space;
 
@@ -2848,7 +2861,7 @@ static int base_diff(const char *f_base, uint8_t *pubkey, uint32_t pubkey_sz, in
      * Resolve that expansion here, using the same logic, so patch_inv_off
      * reflects the header size actually written; otherwise HDR_IMG_DELTA_INVERSE
      * would encode a stale, too-small offset and break inverse-patch rollback. */
-    if ((CMD.cert_chain_file != NULL) || (CMD.custom_tlvs > 0)) {
+    {
         uint32_t cert_chain_sz = 0;
         uint32_t required_space;
         if (CMD.cert_chain_file != NULL) {
@@ -3276,8 +3289,8 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: LMS signature size: %d\n", sig_sz);
 
-        if (CMD.header_sz < 2 * sig_sz)
-            CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < sig_sz)
+            CMD.header_sz = sig_sz;
         *sz = sig_sz;
     }
     else if (*sign == SIGN_XMSS) {
@@ -3314,8 +3327,8 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: XMSS signature size: %d\n", sig_sz);
 
-        if (CMD.header_sz < 2 * sig_sz)
-            CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < sig_sz)
+            CMD.header_sz = sig_sz;
         *sz = sig_sz;
     }
     else if (*sign == SIGN_ML_DSA) {
@@ -3351,8 +3364,8 @@ static void set_signature_sizes(int secondary)
 
         DEBUG_PRINT("info: ML-DSA signature size: %d\n", sig_sz);
 
-        if (CMD.header_sz < 2 * sig_sz)
-            CMD.header_sz = 2 * sig_sz;
+        if (CMD.header_sz < sig_sz)
+            CMD.header_sz = sig_sz;
         *sz = sig_sz;
     }
 
