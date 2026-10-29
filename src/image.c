@@ -697,7 +697,7 @@ static void wolfBoot_verify_signature_rsa_common(uint8_t key_slot,
 
 #endif /* WOLFBOOT_SIGN_RSA_ANY */
 
-#ifdef WOLFBOOT_SIGN_LMS
+#if defined(WOLFBOOT_SIGN_LMS) || defined(WOLFBOOT_SIGN_SECONDARY_LMS)
 #ifdef HAVE_LIBLMS
     #include <wolfssl/wolfcrypt/ext_lms.h>
 #else
@@ -740,8 +740,10 @@ static void wolfBoot_verify_signature_lms(uint8_t key_slot,
     wolfBoot_printf("info: using LMS parameters: L%d-H%d-W%d\n", LMS_LEVELS,
                     LMS_HEIGHT, LMS_WINTERNITZ);
 
-    /* Set the public key. */
-    ret = wc_LmsKey_ImportPubRaw(&lms, pubkey, KEYSTORE_PUBKEY_SIZE);
+    /* Set the public key. A universal keystore sizes every slot for the widest
+     * algorithm in the build, so the slot can be wider than this key; the key
+     * tools always store exactly KEYSTORE_PUBKEY_SIZE_LMS bytes in it. */
+    ret = wc_LmsKey_ImportPubRaw(&lms, pubkey, KEYSTORE_PUBKEY_SIZE_LMS);
     if (ret != 0) {
         /* Something is wrong with the pub key or LMS parameters. */
         wolfBoot_printf("error: wc_LmsKey_ImportPubRaw" \
@@ -764,9 +766,9 @@ static void wolfBoot_verify_signature_lms(uint8_t key_slot,
     wc_LmsKey_Free(&lms);
 }
 
-#endif /* WOLFBOOT_SIGN_LMS */
+#endif /* WOLFBOOT_SIGN_LMS || WOLFBOOT_SIGN_SECONDARY_LMS */
 
-#ifdef WOLFBOOT_SIGN_XMSS
+#if defined(WOLFBOOT_SIGN_XMSS) || defined(WOLFBOOT_SIGN_SECONDARY_XMSS)
 #ifdef HAVE_LIBXMSS
     #include <wolfssl/wolfcrypt/ext_xmss.h>
 #else
@@ -806,7 +808,9 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
     wolfBoot_printf("info: using XMSS parameters: %s\n", WOLFBOOT_XMSS_PARAMS);
 
     /* Set the public key. */
-    ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE);
+    /* As for LMS: the slot may be wider than the key, and the key tools store
+     * exactly KEYSTORE_PUBKEY_SIZE_XMSS bytes in it. */
+    ret = wc_XmssKey_ImportPubRaw(&xmss, pubkey, KEYSTORE_PUBKEY_SIZE_XMSS);
     if (ret != 0) {
         /* Something is wrong with the pub key or XMSS parameters. */
         wolfBoot_printf("error: wc_XmssKey_ImportPubRaw" \
@@ -828,9 +832,9 @@ static void wolfBoot_verify_signature_xmss(uint8_t key_slot,
     wc_XmssKey_Free(&xmss);
 }
 
-#endif /* WOLFBOOT_SIGN_XMSS */
+#endif /* WOLFBOOT_SIGN_XMSS || WOLFBOOT_SIGN_SECONDARY_XMSS */
 
-#ifdef WOLFBOOT_SIGN_ML_DSA
+#if defined(WOLFBOOT_SIGN_ML_DSA) || defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
 #include <wolfssl/wolfcrypt/wc_mldsa.h>
 
 static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
@@ -1012,7 +1016,7 @@ static void wolfBoot_verify_signature_ml_dsa(uint8_t key_slot,
     }
 }
 
-#endif /* WOLFBOOT_SIGN_ML_DSA */
+#endif /* WOLFBOOT_SIGN_ML_DSA || WOLFBOOT_SIGN_SECONDARY_ML_DSA */
 
 #endif /* WOLFBOOT_TPM && WOLFBOOT_TPM_VERIFY */
 

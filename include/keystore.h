@@ -32,7 +32,9 @@ extern "C" {
 #ifndef KEYSTORE_PUBKEY_SIZE
     /* allow building version for external API use */
     #define KEYSTORE_ANY
-#ifdef WOLFBOOT_SIGN_ML_DSA
+/* A universal keystore holds every configured algorithm in one slot width,
+ * so ML-DSA sets it whether it is the primary or the secondary. */
+#if defined(WOLFBOOT_SIGN_ML_DSA) || defined(WOLFBOOT_SIGN_SECONDARY_ML_DSA)
     #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_ML_DSA
 #else
     #define KEYSTORE_PUBKEY_SIZE KEYSTORE_PUBKEY_SIZE_RSA4096

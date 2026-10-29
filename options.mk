@@ -911,18 +911,50 @@ ifneq ($(SIGN_SECONDARY),)
   endif
   ifeq ($(SIGN_SECONDARY),LMS)
     WOLFCRYPT_OBJS+=$(LMS_OBJS)
-    CFLAGS+=-D"WOLFBOOT_SIGN_LMS" $(LMS_EXTRA)
+    CFLAGS+=$(LMS_EXTRA)
   endif
   ifeq ($(SIGN_SECONDARY),XMSS)
     WOLFCRYPT_OBJS+= $(XMSS_OBJS)
-    CFLAGS+=-D"WOLFBOOT_SIGN_XMSS" $(XMSS_EXTRA)
+    CFLAGS+=$(XMSS_EXTRA)
   endif
   ifeq ($(SIGN_SECONDARY),ML_DSA)
     WOLFCRYPT_OBJS+= $(ML_DSA_OBJS)
     ifneq ($(HASH),SHA3)
       WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha3.o
     endif
-    CFLAGS+=-D"WOLFBOOT_SIGN_ML_DSA" $(ML_DSA_EXTRA)
+    CFLAGS+=$(ML_DSA_EXTRA)
+  endif
+
+  # The two signatures are verified in sequence, so the ceiling is the deeper
+  # of the two paths. STACK_USAGE above describes the primary only, which
+  # under-reports whenever a hash-based primary is paired with ECC or RSA.
+  # These are the worst case for the family rather than for the exact size.
+  ifneq ($(filter $(SIGN_SECONDARY),ECC256 ED25519 ED448),)
+    STACK_USAGE_SECONDARY=7632
+  endif
+  ifneq ($(filter $(SIGN_SECONDARY),ECC384 ECC521),)
+    STACK_USAGE_SECONDARY=11256
+  endif
+  ifneq ($(filter $(SIGN_SECONDARY),RSA2048 RSA3072 RSA4096 RSAPSS2048 RSAPSS3072 RSAPSS4096),)
+    ifneq ($(SPMATH),1)
+      STACK_USAGE_SECONDARY=69232
+    else
+      STACK_USAGE_SECONDARY=18064
+    endif
+  endif
+  ifeq ($(SIGN_SECONDARY),LMS)
+    STACK_USAGE_SECONDARY=1320
+  endif
+  ifeq ($(SIGN_SECONDARY),XMSS)
+    STACK_USAGE_SECONDARY=9352
+  endif
+  ifeq ($(SIGN_SECONDARY),ML_DSA)
+    STACK_USAGE_SECONDARY=25000
+  endif
+  ifneq ($(STACK_USAGE_SECONDARY),)
+    ifeq ($(shell test $(STACK_USAGE_SECONDARY) -gt $(STACK_USAGE); echo $$?),0)
+      STACK_USAGE=$(STACK_USAGE_SECONDARY)
+    endif
   endif
 endif
 

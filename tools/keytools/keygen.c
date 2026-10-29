@@ -1490,6 +1490,21 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
                 ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
                     buf + keySz / 2, &qySz);
             }
+            else {
+                /* Not DER. A keystore slot is zero-padded out to the widest
+                 * algorithm in the build, so a raw key read back out of one
+                 * has nothing but zeros past its own length and the
+                 * truncation to keySz below is what it needs. Any other
+                 * trailing content means the file is not a padded raw key. */
+                int i;
+                ret = 0;
+                for (i = (int)keySz; i < readLen; i++) {
+                    if (buf[i] != 0) {
+                        ret = -1;
+                        break;
+                    }
+                }
+            }
 
             if (initKey == 0)
                 wc_ecc_free(eccKey);
