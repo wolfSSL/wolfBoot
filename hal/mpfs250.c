@@ -279,6 +279,10 @@ hal_smode_boot(unsigned long entry, unsigned long hartid, unsigned long dtb)
                               (MSS_PERIPH_MMUART0 << 4));
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 
+    /* Same for the MMC: a QSPI-boot build never touches it, and the kernel's
+     * clock driver ungates SUBBLK_CLOCK_CR but does not lift the soft reset. */
+    mpfs_mmc_os_release();
+
     mpfs_kernel_handoff[MPFS_FIRST_U54_HART].entry = (uint64_t)entry;
     mpfs_kernel_handoff[MPFS_FIRST_U54_HART].opaque = (uint64_t)dtb;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
@@ -1697,6 +1701,12 @@ static int qspi_flash_read(uint32_t address, uint8_t *data, uint32_t len)
         address += chunk_len;
         data += chunk_len;
         remaining -= chunk_len;
+
+        /* A watchdog that cannot be disabled counts from its last refresh, and
+         * this loop is the only thing running for the whole of a multi-megabyte
+         * image load, so an unserviced load resets the chip mid-read.  One
+         * refresh per 64 KB chunk costs nothing against the transfer. */
+        mpfs_wdt_pet_all();
     }
 
     return (int)len;
@@ -2127,7 +2137,8 @@ int ext_flash_erase(uintptr_t address, int len)
 
 #endif /* EXT_FLASH */
 
-#if defined(MMU) && !defined(WOLFBOOT_NO_PARTITIONS)
+#if (defined(MMU) || defined(WOLFBOOT_FDT)) && \
+    !defined(WOLFBOOT_NO_PARTITIONS)
 void* hal_get_dts_address(void)
 {
 #if defined(EXT_FLASH) && defined(NO_XIP)
@@ -2188,26 +2199,61 @@ void plic_dispatch_irq(uint32_t irq)
 /* Route the SDHCI pins to the slot pads, which HSS does in mssio_setup():
  * without it the controller talks to floating pads.  Values from Libero. */
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
+
+/* One SDHCI controller reaches either the SD slot or the eMMC through an
+ * external demux, so a build drives the pads for the one it boots from.  A
+ * Libero design that configures both (MSSIO_CONFIGURATION_OPTIONS carrying
+ * EMMC_CONFIGURED | SD_CONFIGURED) names one of them in DEFAULT_ON_START and
+ * supplies the other as the ALT_ settings; the kits set SD as the default, so
+ * eMMC is the alternate set.  HSS picks between them in switch_mssio_config().
+ */
+#if defined(DISK_EMMC)
+#if !defined(LIBERO_SETTING_ALT_IOMUX0_CR)
+#error "an eMMC build needs a Libero design that configures SD and eMMC both"
+#endif
+/* Named one per register rather than pasted together: the CI Libero stub
+ * generator collects the LIBERO_SETTING_* names by grepping these sources, so
+ * a pasted name would not be declared in a stub build. */
+#define MPFS_IOMUX0_CR      LIBERO_SETTING_ALT_IOMUX0_CR
+#define MPFS_IOMUX1_CR      LIBERO_SETTING_ALT_IOMUX1_CR
+#define MPFS_IOMUX2_CR      LIBERO_SETTING_ALT_IOMUX2_CR
+#define MPFS_IOMUX3_CR      LIBERO_SETTING_ALT_IOMUX3_CR
+#define MPFS_IOMUX4_CR      LIBERO_SETTING_ALT_IOMUX4_CR
+#define MPFS_IOMUX5_CR      LIBERO_SETTING_ALT_IOMUX5_CR
+#define MPFS_IOMUX6_CR      LIBERO_SETTING_ALT_IOMUX6_CR
+/* Pads 30 and 34 pull down for eMMC where the SD side drives them high. */
+#define MPFS_DEMUX_SELECT   ((0xDu << 0) | (0xDu << 16) | (0xDu << 28))
+#else
+#define MPFS_IOMUX0_CR      LIBERO_SETTING_IOMUX0_CR
+#define MPFS_IOMUX1_CR      LIBERO_SETTING_IOMUX1_CR
+#define MPFS_IOMUX2_CR      LIBERO_SETTING_IOMUX2_CR
+#define MPFS_IOMUX3_CR      LIBERO_SETTING_IOMUX3_CR
+#define MPFS_IOMUX4_CR      LIBERO_SETTING_IOMUX4_CR
+#define MPFS_IOMUX5_CR      LIBERO_SETTING_IOMUX5_CR
+#define MPFS_IOMUX6_CR      LIBERO_SETTING_IOMUX6_CR
+#define MPFS_DEMUX_SELECT   ((0xEu << 0) | (0xEu << 16) | (0xDu << 28))
+#endif
+
 void mpfs_iomux_init(void)
 {
     uint32_t iomux4, iomux5;
 
-    SYSREG_REG(SYSREG_IOMUX0_CR_OFFSET) = LIBERO_SETTING_IOMUX0_CR;
-    SYSREG_REG(SYSREG_IOMUX1_CR_OFFSET) = LIBERO_SETTING_IOMUX1_CR;
-    SYSREG_REG(SYSREG_IOMUX2_CR_OFFSET) = LIBERO_SETTING_IOMUX2_CR;
-    SYSREG_REG(SYSREG_IOMUX3_CR_OFFSET) = LIBERO_SETTING_IOMUX3_CR;
+    SYSREG_REG(SYSREG_IOMUX0_CR_OFFSET) = MPFS_IOMUX0_CR;
+    SYSREG_REG(SYSREG_IOMUX1_CR_OFFSET) = MPFS_IOMUX1_CR;
+    SYSREG_REG(SYSREG_IOMUX2_CR_OFFSET) = MPFS_IOMUX2_CR;
+    SYSREG_REG(SYSREG_IOMUX3_CR_OFFSET) = MPFS_IOMUX3_CR;
 
-    /* Board GPIO drive overrides that steer the external SD/eMMC demux into
-     * SD-card mode; HSS does this in switch_demux_using_fabric_ip(). */
-    iomux4 = LIBERO_SETTING_IOMUX4_CR;
-    iomux5 = LIBERO_SETTING_IOMUX5_CR;
+    /* Board GPIO drive overrides that steer the external SD/eMMC demux to the
+     * selected device; HSS does this in switch_demux_using_fabric_ip(). */
+    iomux4 = MPFS_IOMUX4_CR;
+    iomux5 = MPFS_IOMUX5_CR;
     iomux4 &= ~(0xFu << 16);
     iomux4 |=  (0xDu << 16);
     iomux5 &= ~((0xFu << 0) | (0xFu << 16) | (0xFu << 28));
-    iomux5 |=  ((0xEu << 0) | (0xEu << 16) | (0xDu << 28));
+    iomux5 |=  MPFS_DEMUX_SELECT;
     SYSREG_REG(SYSREG_IOMUX4_CR_OFFSET) = iomux4;
     SYSREG_REG(SYSREG_IOMUX5_CR_OFFSET) = iomux5;
-    SYSREG_REG(SYSREG_IOMUX6_CR_OFFSET) = LIBERO_SETTING_IOMUX6_CR;
+    SYSREG_REG(SYSREG_IOMUX6_CR_OFFSET) = MPFS_IOMUX6_CR;
 
     /* Bank-wide config goes via SCB; per-pad IO_CFG goes via SYSREG. */
     SYSREGSCB_REG(SCB_MSSIO_BANK4_CFG_CR_OFFSET) =
@@ -2246,30 +2292,36 @@ void mpfs_iomux_init(void)
 
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
-#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
-
-#if defined(DISK_SDCARD) || defined(DISK_EMMC)
-/* SDHCI Platform HAL */
-
 
 /* Each AXI master has 16 PMPCFG entries at 0x20005000 + (index << 8); MMC is
  * index 7.  Without them a master stalls silently mid-transaction. */
 #define MSS_MPU_BASE                0x20005000UL
 #define MSS_MPU_MMC_BASE            (MSS_MPU_BASE + (7UL << 8))
 
-#ifdef MPFS_DDR_INIT
-/* Needs LIBERO_FPGA_CONFIG_DIR.  HSS configures these entries itself, so
- * HSS-loaded builds do not need it. */
-static void mpfs_mpu_init_mmc(void)
+/* Leave the MMC usable by whoever runs next, which a build that boots from
+ * QSPI would otherwise never do: the block stays clock-gated and in soft
+ * reset, and the OS driver's first register access hangs the bus rather than
+ * failing.  HSS does this for its payload, so an HSS replacement owes the OS
+ * the same, exactly as it does for the MMUARTs at the hand-off.  Needs
+ * LIBERO_FPGA_CONFIG_DIR for the MPU entries. */
+void mpfs_mmc_os_release(void)
 {
     volatile uint64_t *pmp = (volatile uint64_t *)MSS_MPU_MMC_BASE;
+
     pmp[0] = LIBERO_SETTING_MMC_MPU_CFG_PMP0;
     pmp[1] = LIBERO_SETTING_MMC_MPU_CFG_PMP1;
     pmp[2] = LIBERO_SETTING_MMC_MPU_CFG_PMP2;
     pmp[3] = LIBERO_SETTING_MMC_MPU_CFG_PMP3;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
+    SYSREG_REG(SYSREG_SUBBLK_CLOCK_CR_OFF) |= MSS_PERIPH_MMC;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
+    SYSREG_SOFT_RESET_CR &= ~MSS_PERIPH_MMC;
+    __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
-#endif /* MPFS_DDR_INIT */
+#endif /* WOLFBOOT_RISCV_MMODE && MPFS_DDR_INIT */
+
+#if defined(DISK_SDCARD) || defined(DISK_EMMC)
+/* SDHCI Platform HAL */
 
 /* Pet the watchdogs during the SDHCI read loops; overrides the weak no-op in
  * src/sdhci.c.  A multi-second image load outlives the watchdog period. */
@@ -2283,15 +2335,18 @@ void sdhci_platform_init(void)
     /* Routing is already committed by nwc_init(); this is the MMC master MPU,
      * clock and soft reset, mirroring the DDRC sequence in mpfs_ddr_init(). */
     wolfBoot_printf("SDHCI: platform init\n");
-#ifdef MPFS_DDR_INIT
-    /* LIBERO_SETTING_MMC_MPU_CFG_* needs LIBERO_FPGA_CONFIG_DIR; without it
-     * the build runs under HSS, which has configured the MPU already. */
-    mpfs_mpu_init_mmc();
-#endif
+/* Guarded to match the definition above rather than relying on MPFS_DDR_INIT
+ * implying an M-mode build.  LIBERO_SETTING_MMC_MPU_CFG_* needs
+ * LIBERO_FPGA_CONFIG_DIR; without it the build runs under HSS, which has
+ * configured the MPU already. */
+#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_RISCV_MMODE)
+    mpfs_mmc_os_release();
+#else
     SYSREG_REG(SYSREG_SUBBLK_CLOCK_CR_OFF) |= MSS_PERIPH_MMC;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
     SYSREG_SOFT_RESET_CR &= ~MSS_PERIPH_MMC;
     __asm__ volatile("fence iorw, iorw" ::: "memory");
+#endif
 }
 
 void sdhci_platform_irq_init(void)

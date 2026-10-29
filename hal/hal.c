@@ -284,14 +284,16 @@ int hal_flash_test_dualbank(void)
 
 #endif /* TEST_FLASH */
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
 /* Weak default for targets with no configured device tree; some HALs also
- * compile their own out under WOLFBOOT_NO_PARTITIONS. */
+ * compile their own out under WOLFBOOT_NO_PARTITIONS.  Guarded to match the
+ * callers in src/update_ram.c and the declaration in include/hal.h: a target
+ * that parses a device tree without a full MMU configuration needs it too. */
 WEAKFUNCTION void* hal_get_dts_address(void)
 {
     return NULL;
 }
-#endif /* MMU */
+#endif /* MMU || WOLFBOOT_FDT */
 
 WEAKFUNCTION int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
 {
