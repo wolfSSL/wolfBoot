@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the vendored wolfGlass IAR frontend."""
+"""Compatibility wrapper for the vendored wolfssl-compliance-tooling IAR frontend."""
 
 import os
 import sys
