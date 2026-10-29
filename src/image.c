@@ -1628,6 +1628,57 @@ int wolfBoot_open_image_address(struct wolfBoot_image *img, uint8_t *image)
     return 0;
 }
 
+#ifdef WOLFBOOT_COMPRESSED_UPDATE
+/* Read the compression manifest fields.
+ *
+ * Returns 1 for a gzip-compressed image, 0 for an uncompressed one and -1
+ * for a compression tag this build cannot act on. The last must never fall
+ * through to treating the payload as firmware: that would be a jump into, or
+ * an install of, DEFLATE data.
+ *
+ * window_bits may be NULL; it reads back 0 when the image carries no window
+ * tag, which only the execute-in-place installer needs.
+ */
+int wolfBoot_image_compression(struct wolfBoot_image *img,
+    uint32_t *uncompressed_sz, uint32_t *window_bits)
+{
+    uint8_t *tlv = NULL;
+    uint16_t len;
+    uint16_t algo;
+
+    if (window_bits != NULL) {
+        *window_bits = 0;
+    }
+    len = wolfBoot_get_header(img, HDR_IMG_COMPRESSION, &tlv);
+    if ((len == 0) || (tlv == NULL)) {
+        return 0;
+    }
+    if (len != 2) {
+        return -1;
+    }
+    algo = (uint16_t)tlv[0] | ((uint16_t)tlv[1] << 8);
+    if (algo != HDR_COMP_GZIP) {
+        return -1;
+    }
+    len = wolfBoot_get_header(img, HDR_IMG_UNCOMPRESSED_SIZE, &tlv);
+    if ((len != 4) || (tlv == NULL)) {
+        return -1;
+    }
+    *uncompressed_sz = (uint32_t)tlv[0] | ((uint32_t)tlv[1] << 8) |
+                       ((uint32_t)tlv[2] << 16) | ((uint32_t)tlv[3] << 24);
+    len = wolfBoot_get_header(img, HDR_IMG_COMP_WINDOW, &tlv);
+    if (len != 0) {
+        if ((len != 2) || (tlv == NULL)) {
+            return -1;
+        }
+        if (window_bits != NULL) {
+            *window_bits = (uint32_t)tlv[0] | ((uint32_t)tlv[1] << 8);
+        }
+    }
+    return 1;
+}
+#endif /* WOLFBOOT_COMPRESSED_UPDATE */
+
 #if defined(MMU) || defined(WOLFBOOT_FDT)
 
 /**

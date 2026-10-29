@@ -137,6 +137,14 @@ int wolfBoot_initialize_encryption(void)
                              (2 * WOLFBOOT_SECTOR_SIZE)))
                              /* MAGIC (4B) + PART_FLAG (1B) + (N_SECTORS / 2) */
     #define START_FLAGS_OFFSET (ENCRYPT_TMP_SECRET_OFFSET - TRAILER_OVERHEAD)
+    /* The same cut-off for the UPDATE slot, which is where it is actually
+     * applied. Identical for a symmetric layout; with the slots sized
+     * independently the BOOT-derived one lands outside the UPDATE partition
+     * and its trailer would be encrypted along with the image. */
+    #define TRAILER_OVERHEAD_UPDATE (4 + 1 + (WOLFBOOT_PARTITION_UPDATE_SIZE / \
+                             (2 * WOLFBOOT_SECTOR_SIZE)))
+    #define START_FLAGS_OFFSET_UPDATE \
+        (ENCRYPT_TMP_SECRET_OFFSET_UPDATE - TRAILER_OVERHEAD_UPDATE)
     #define SECTOR_FLAGS_SIZE (WOLFBOOT_SECTOR_SIZE - (4 + 1 + \
         ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE))
     /* MAGIC (4B) + PART_FLAG (1B) + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE */
@@ -3461,8 +3469,8 @@ int RAMFUNCTION ext_flash_encrypt_write(uintptr_t address, const uint8_t *data,
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
                 ENCRYPT_BLOCK_SIZE;
             /* Do not encrypt last sector */
-            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) /
-                    ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter >= (START_FLAGS_OFFSET_UPDATE -
+                    ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_write(address, data, len);
             }
             if (wolfBoot_initialize_encryption() < 0)
@@ -3608,8 +3616,8 @@ int RAMFUNCTION ext_flash_decrypt_read(uintptr_t address, uint8_t *data, int len
             iv_counter = (address - WOLFBOOT_PARTITION_UPDATE_ADDRESS) /
                 ENCRYPT_BLOCK_SIZE;
             /* Do not decrypt last sector */
-            if (iv_counter >= (START_FLAGS_OFFSET - ENCRYPT_BLOCK_SIZE) /
-                    ENCRYPT_BLOCK_SIZE) {
+            if (iv_counter >= (START_FLAGS_OFFSET_UPDATE -
+                    ENCRYPT_BLOCK_SIZE) / ENCRYPT_BLOCK_SIZE) {
                 return ext_flash_read(address, data, len);
             }
             if (!encrypt_initialized) {

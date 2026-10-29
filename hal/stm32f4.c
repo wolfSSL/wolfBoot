@@ -120,6 +120,22 @@
 #define FLASH_SECTOR_11 0x00E0000 /* 128 Kb  */
 #define FLASH_TOP       0x0100000
 
+/* The table above describes the first 1MB only. A 2MB part (F42x/F43x) has
+ * a second bank whose sector numbers are not contiguous with these, so an
+ * erase past FLASH_TOP resolves to no sector and silently does nothing.
+ * Caught here rather than at run time, where it looks like a partition that
+ * will not take an update. */
+#if defined(__WOLFBOOT) && defined(WOLFBOOT_PARTITION_UPDATE_ADDRESS)
+  #if ((WOLFBOOT_PARTITION_UPDATE_ADDRESS + 0) + \
+       (WOLFBOOT_PARTITION_UPDATE_SIZE + 0)) > (ARCH_FLASH_OFFSET + FLASH_TOP)
+    #error "Update partition extends past the 1MB this HAL can erase"
+  #endif
+  #if ((WOLFBOOT_PARTITION_BOOT_ADDRESS + 0) + (WOLFBOOT_PARTITION_SIZE + 0)) \
+       > (ARCH_FLASH_OFFSET + FLASH_TOP)
+    #error "Boot partition extends past the 1MB this HAL can erase"
+  #endif
+#endif
+
 #define FLASH_SECTORS 12
 const uint32_t flash_sector[FLASH_SECTORS + 1] = {
     FLASH_SECTOR_0,
