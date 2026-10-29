@@ -2,13 +2,16 @@
 """Generate CycloneDX 1.6 and SPDX 2.3 SBOMs for wolfssl."""
 
 import argparse
+import errno
 import hashlib
 import io
 import json
 import os
 import re
+import stat
 import subprocess
 import sys
+import tempfile
 import uuid
 from datetime import datetime, timezone
 
@@ -120,6 +123,8 @@ GITHUB_TAG_FORMS = {
     'wolfhsm': 'wolfHSM-v{version}',
 }
 DEFAULT_GITHUB_TAG_FORM = 'v{version}'
+
+DEFAULT_COPYRIGHT_START = 2006
 
 
 def github_release_tag(project, version):
@@ -277,7 +282,8 @@ def derived_uuid(*parts):
 def config_identity(lib_hash, license_id, build_props, enabled_deps,
                     dep_versions, *, supplier=None, component_type=None,
                     license_text=None, hash_kind=None, hash_source=None,
-                    file_names=None, wolfssl_subset=None, subset_basis=None):
+                    file_names=None, wolfssl_subset=None, subset_basis=None,
+                    copyright_start=DEFAULT_COPYRIGHT_START):
     """Stable digest of the build configuration behind one name+version.
 
     Folded into the SBOM serialNumber / SPDX documentNamespace so two builds
@@ -324,7 +330,16 @@ def config_identity(lib_hash, license_id, build_props, enabled_deps,
         _field('file', fname)
     _field('wolfssl_subset', wolfssl_subset)
     _field('subset_basis', subset_basis)
+    # Folded only when set, so default documents keep their serialNumber.
+    if copyright_start != DEFAULT_COPYRIGHT_START:
+        _field('copyright_start', str(copyright_start))
     return h.hexdigest()
+
+
+def copyright_text(start, year, supplier):
+    """Copyright line for the main component, one year when start == year."""
+    years = str(year) if start == year else f'{start}-{year}'
+    return f'Copyright (C) {years} {supplier}'
 
 
 def build_timestamp():
@@ -342,6 +357,48 @@ def build_timestamp():
     else:
         dt = datetime.now(timezone.utc)
     return dt, dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def write_json_atomic(obj, path):
+    """Write `obj` as JSON to `path` atomically via a sibling temp file and
+    os.replace, so a crash or ENOSPC mid-write cannot leave a truncated
+    document that a later CI step would pick up as valid."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        st = None
+    # Only a new path or a plain regular file gets the temp+replace dance.  A
+    # symlink (including /dev/stdout), device or fifo is written through
+    # directly so the link target is updated rather than the link replaced.
+    if st is not None and not stat.S_ISREG(st.st_mode):
+        with open(path, 'w') as f:
+            json.dump(obj, f, indent=2)
+            f.write('\n')
+        return
+    # os.replace only needs a writable directory; keep refusing a read-only
+    # output the way a plain open(path, 'w') does.
+    if st is not None and not os.access(path, os.W_OK):
+        raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), path)
+    if st is not None:
+        mode = stat.S_IMODE(st.st_mode)
+    else:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path) or '.',
+                               prefix=os.path.basename(path) + '.')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(obj, f, indent=2)
+            f.write('\n')
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # Known metadata for optional external dependencies.  Version is detected
@@ -1046,11 +1103,17 @@ def _collect_srcs(srcs_args, srcs_file):
                 continue
             paths.append(stripped)
 
+    # Dedup on the normalized absolute path, not the raw string, so the same
+    # path spelled two ways (foo.c and ./foo.c) collapses to one entry instead
+    # of tripping srcs_merkle_hash's duplicate-basename guard.  Symlinks are
+    # not resolved: an alias with its own basename stays a distinct entry.
+    # The first spelling is kept for opening/hashing.
     seen = set()
     deduped = []
     for p in paths:
-        if p not in seen:
-            seen.add(p)
+        key = os.path.normpath(os.path.abspath(p))
+        if key not in seen:
+            seen.add(key)
             deduped.append(p)
 
     if not deduped:
@@ -1145,7 +1208,7 @@ def generate_cdx(name, version, supplier, license_id, license_text, lib_hash,
                  dep_version_overrides=None, hash_kind='library-binary',
                  hash_source='lib', srcs_basenames=None, file_entries=None,
                  component_type='library', wolfssl_subset=None,
-                 subset_basis=None):
+                 subset_basis=None, copyright_start=DEFAULT_COPYRIGHT_START):
     bom_ref = derived_uuid(name, version, 'package')
     urls = project_urls(name)
 
@@ -1240,7 +1303,7 @@ def generate_cdx(name, version, supplier, license_id, license_text, lib_hash,
         'name': name,
         'version': version,
         'licenses': cdx_license_block(license_id, license_text),
-        'copyright': f'Copyright (C) 2006-{year} wolfSSL Inc.',
+        'copyright': copyright_text(copyright_start, year, supplier),
         'purl': wolfssl_project_purl(name, version),
         'hashes': [{'alg': 'SHA-256', 'content': lib_hash}],
         'externalReferences': [
@@ -1317,7 +1380,7 @@ def generate_spdx(name, version, supplier, license_id, license_text, lib_hash,
                   hash_source='lib', srcs_basenames=None,
                   document_namespace=None, file_entries=None,
                   component_type='library', wolfssl_subset=None,
-                  subset_basis=None):
+                  subset_basis=None, copyright_start=DEFAULT_COPYRIGHT_START):
     build_defines = ', '.join(k for k, _ in build_props)
     # Hash-kind / source-set / bomsh-traced-binary information used to
     # be stuffed into the package `comment` as `key=value` slugs, which
@@ -1397,7 +1460,7 @@ def generate_spdx(name, version, supplier, license_id, license_text, lib_hash,
         'checksums': [{'algorithm': 'SHA256', 'checksumValue': lib_hash}],
         'licenseConcluded': license_id,
         'licenseDeclared': license_id,
-        'copyrightText': f'Copyright (C) 2006-{year} wolfSSL Inc.',
+        'copyrightText': copyright_text(copyright_start, year, supplier),
         'primaryPackagePurpose': SPDX_PACKAGE_PURPOSE.get(
             component_type, 'LIBRARY'),
         'comment': f'Build configuration defines: {build_defines}',
@@ -1595,6 +1658,11 @@ def main():
                              'component.type, mirrored to SPDX '
                              'primaryPackagePurpose. Use firmware for a '
                              'bootloader such as wolfBoot (default: library)')
+    parser.add_argument('--copyright-start', type=int,
+                        default=DEFAULT_COPYRIGHT_START, metavar='YEAR',
+                        help='First year of the copyright line, written as '
+                             '"Copyright (C) YEAR-<build year> <supplier>" '
+                             '(default: %(default)s)')
     parser.add_argument('--license-file', required=True,
                         help='Path to LICENSING file for SPDX ID detection')
     parser.add_argument('--license-override', default='',
@@ -1760,6 +1828,12 @@ def main():
                 "https://example.com/sbom/wolfssl-X.Y.Z.spdx.json or "
                 "urn:uuid:00000000-0000-0000-0000-000000000000.")
 
+    dt, timestamp = build_timestamp()
+    year = dt.year
+    if not 1000 <= args.copyright_start <= year:
+        sys.exit(f"ERROR: --copyright-start {args.copyright_start} must be a "
+                 f"four-digit year no later than the build year {year}.")
+
     enabled_deps = _enabled_deps([
         ('wolfssl',   '--dep-wolfssl',   args.dep_wolfssl),
         ('wolfcrypt', '--dep-wolfcrypt', args.dep_wolfcrypt),
@@ -1887,8 +1961,6 @@ def main():
         hash_source = 'srcs'
         srcs_basenames = sorted({os.path.basename(p) for p in srcs})
 
-    dt, timestamp = build_timestamp()
-    year = dt.year
     # SPDX 2.3 6.5 requires documentNamespace to be unique, and a CycloneDX
     # version:1 sharing a serialNumber over differing content is
     # self-contradictory.  Every body-affecting input goes into the digest;
@@ -1908,6 +1980,7 @@ def main():
         file_names=identity_file_names,
         wolfssl_subset=wolfssl_subset,
         subset_basis=subset_basis,
+        copyright_start=args.copyright_start,
     )
     serial = derived_uuid(args.name, args.version, 'serial', config_id)
     doc_ns_uuid = derived_uuid(args.name, args.version, 'document', config_id)
@@ -1923,6 +1996,7 @@ def main():
         component_type=args.component_type,
         wolfssl_subset=wolfssl_subset,
         subset_basis=subset_basis,
+        copyright_start=args.copyright_start,
     )
     spdx = generate_spdx(
         args.name, args.version, args.supplier,
@@ -1936,15 +2010,12 @@ def main():
         component_type=args.component_type,
         wolfssl_subset=wolfssl_subset,
         subset_basis=subset_basis,
+        copyright_start=args.copyright_start,
     )
 
     try:
-        with open(args.cdx_out, 'w') as f:
-            json.dump(cdx, f, indent=2)
-            f.write('\n')
-        with open(args.spdx_out, 'w') as f:
-            json.dump(spdx, f, indent=2)
-            f.write('\n')
+        write_json_atomic(cdx, args.cdx_out)
+        write_json_atomic(spdx, args.spdx_out)
     except OSError as e:
         sys.exit(f"ERROR: cannot write SBOM output: {e}")
 

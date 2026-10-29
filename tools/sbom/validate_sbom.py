@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Structural validator for wolfGlass SBOM output.
+"""Structural validator for wolfssl-compliance-tooling SBOM output.
 
 This is the product-neutral form of wolfBoot's validate_sbom.py. It asserts the
 essentials that every SBOM route must satisfy, so CI (and humans) can fail fast
@@ -143,10 +143,14 @@ def main(argv):
         try:
             with open(path) as f:
                 d = json.load(f)
-        except FileNotFoundError:
-            fail(path, "file not found")
+        except OSError as e:
+            fail(path, f"cannot read file: {e}")
         except json.JSONDecodeError as e:
             fail(path, f"invalid JSON: {e}")
+        except UnicodeDecodeError as e:
+            fail(path, f"not UTF-8 text: {e}")
+        if not isinstance(d, dict):
+            fail(path, "top-level JSON is not an object")
         if "bomFormat" in d or path.endswith(".cdx.json"):
             validate_cyclonedx(path, d, args.name_prefix,
                                args.min_properties, args.require_dep_version)
