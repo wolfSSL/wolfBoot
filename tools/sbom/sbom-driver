@@ -1,5 +1,5 @@
 #!/bin/sh
-# wolfGlass SBOM driver - thin shell wrapper.
+# wolfssl-compliance-tooling SBOM driver - thin shell wrapper.
 #
 # The engine is Python (sbom-driver.py) for Windows and air-gap parity. This
 # wrapper lets a Make or shell caller invoke it as a plain command. It picks a

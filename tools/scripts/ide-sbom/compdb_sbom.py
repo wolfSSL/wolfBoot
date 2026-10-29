@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the vendored wolfGlass compdb frontend."""
+"""Compatibility wrapper for the vendored wolfssl-compliance-tooling compdb frontend."""
 
 import os
 import sys

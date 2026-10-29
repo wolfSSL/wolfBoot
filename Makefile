@@ -1065,7 +1065,8 @@ pico-sdk-info: FORCE
 # targets that also have an arch.mk path (TI Hercules, Renesas RX, Zynq).  It
 # extracts the configuration-specific source list from OBJS (fully assembled by
 # this point: core wolfBoot + wolfcrypt + HAL) and passes it, together with the
-# build CFLAGS, to the vendored wolfGlass driver under tools/sbom/.
+# build CFLAGS, to the vendored wolfssl-compliance-tooling driver under
+# tools/sbom/.
 #
 # wolfcrypt sources are compiled directly into the wolfBoot image.  They stay
 # in the source-set hash, and are also declared as a nested wolfcrypt
@@ -1181,7 +1182,7 @@ SBOM_HAL_LICENSE_OVERRIDE:=$(SBOM_LICENSE_OVERRIDE)
 SBOM_HAL_CDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).cdx.json
 SBOM_HAL_SPDX_OUT:=wolfboot-hal-$(TARGET)-$(WOLFBOOT_VERSION).spdx.json
 SBOM_HAL_GEN:=$(SBOM_GEN)
-$(eval $(call wolfglass_sbom_rule,sbom-hal,SBOM_HAL_))
+$(eval $(call wolfssl_compliance_tooling_sbom_rule,sbom-hal,SBOM_HAL_))
 
 FORCE:
 
