@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the vendored wolfGlass SBOM validator."""
+"""Compatibility wrapper for the vendored wolfssl-compliance-tooling SBOM validator."""
 
 import os
 import sys

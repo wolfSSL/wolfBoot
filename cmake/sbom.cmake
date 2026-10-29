@@ -1,4 +1,5 @@
-# cmake/sbom.cmake - wolfBoot wrapper around the vendored wolfGlass CMake helper.
+# cmake/sbom.cmake - wolfBoot wrapper around the vendored
+# wolfssl-compliance-tooling CMake helper.
 
 if(NOT DEFINED WOLFBOOT_ROOT)
     set(WOLFBOOT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
@@ -113,4 +114,4 @@ if(DEFINED HOSTCC AND NOT HOSTCC STREQUAL "")
     list(APPEND _sbom_args HOSTCC ${HOSTCC})
 endif()
 
-wolfglass_add_sbom(${_sbom_args})
+wolfssl_compliance_tooling_add_sbom(${_sbom_args})
