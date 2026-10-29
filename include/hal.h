@@ -155,7 +155,9 @@ int hal_dma_set_noncached(uintptr_t start, uintptr_t end);
     void* hal_get_update_address(void);
 #endif
 
-#ifdef MMU
+/* The FDT boot path needs these on a target that parses a device tree
+ * without a full MMU configuration (RISC-V M-mode). */
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     void *hal_get_dts_address(void);
     void *hal_get_dts_update_address(void);
     /* Optional hook: supply a boot DTB when the loaded image carries none.
@@ -169,7 +171,7 @@ int hal_dma_set_noncached(uintptr_t start, uintptr_t end);
      * boot disk is still open. Weak default is a no-op returning 0. */
     int hal_boot_slot_select(void);
 
-#endif
+#endif /* MMU || WOLFBOOT_FDT */
 
 #ifdef DISK_FAILOVER_ZEROIZE
 /* Disk boot: why the operational slots are being given up on, handed to

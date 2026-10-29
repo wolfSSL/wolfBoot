@@ -762,6 +762,9 @@ extern uint32_t mpfs_apb_clk_hz;
 /* MSSIO IOMUX setup: defined in hal/mpfs250.c (alongside the SDHCI platform
  * helpers) but called from nwc_init() in hal/mpfs250_ddr.c. */
 void mpfs_iomux_init(void);
+/* MMC clock, soft reset and master MPU, left configured for the OS even when
+ * wolfBoot does not boot from the MMC itself. */
+void mpfs_mmc_os_release(void);
 #endif
 
 /* PDMA-based memcpy: src must be CPU-readable (L2 Scratch / LIM / DDR

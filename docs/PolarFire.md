@@ -219,7 +219,7 @@ The programmer's `--die` list covers `MPFS025T` through `MPFS460T` and their `_E
 
 ## Boot configurations
 
-Seven ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+Nine ready-to-use config templates cover all supported boot mode / storage / memory combinations:
 
 | Configuration | Config File | Boot Mode | Storage | Memory | HSS |
 |---------------|-------------|-----------|---------|--------|-----|
@@ -229,6 +229,8 @@ Seven ready-to-use config templates cover all supported boot mode / storage / me
 | **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
 | **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
 | **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
+| **M-Mode + DDR, eMMC** | `polarfire_mpfs250_m_emmc.config` | M-mode (E51, no HSS) | eMMC | LPDDR4 (DDR) | No |
+| **M-Mode + DDR, QSPI** | `polarfire_mpfs250_m_qspi_ddr.config` | M-mode (E51, no HSS) | SC QSPI | LPDDR4 (DDR) | No |
 | **Boot mode 2 UBL** | `polarfire_mpfs250_ubl.config` | System Controller -> sNVM stub | eNVM (verifies it) | L2-LIM | No |
 
 The **M-Mode + DDR** configuration brings up the LPDDR4 controller from
@@ -249,6 +251,16 @@ defines `MPFS_DDR_INIT` and adds the directory to the include path
 still produces a working M-mode wolfBoot without DDR. Add
 `-DDEBUG_DDR` to `CFLAGS_EXTRA` for verbose register-level traces
 during bring-up.
+
+The eMMC and QSPI variants are the same configuration with a different
+image store. One SDHCI controller reaches both the SD slot and the eMMC
+through an external demux, so the SD and eMMC builds are mutually exclusive:
+`DISK_EMMC=1` drives the eMMC pads (the Libero `ALT_` IOMUX set on a design
+that configures both) and the SD slot is then unreachable until an SD build
+runs again. The QSPI variant drops the disk driver entirely and loads the
+signed FIT from flash with `src/update_ram.c`, which keeps the A/B update
+slots the disk configuration does not have; its slots are 48 MB because a
+Linux FIT does not fit the 32 MB slots of the application QSPI build.
 
 For GitHub Actions, `tools/ci/gen_mpfs_libero_stub.sh` generates a
 compile-only stub (every `LIBERO_SETTING_*` symbol referenced by the

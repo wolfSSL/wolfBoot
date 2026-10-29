@@ -298,7 +298,7 @@ void RAMFUNCTION wolfBoot_start(void)
      * WOLFBOOT_FDT without MMU, booting a non-FIT image -> no fixup). */
     uint8_t *dts_addr = NULL;
 #endif
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     uint32_t dts_size = 0;
     /* Validated view of the FIT staged at load_address. */
     fdt_ctx  fit_ctx;
@@ -612,7 +612,7 @@ backup_on_failure:
 #endif
 #endif
 
-#ifdef MMU
+#if defined(MMU) || defined(WOLFBOOT_FDT)
     /* Snapshot the digest from the verified header before os_image can be
      * reused for the DTS partition below. (FIT DTBs are covered by the FIT.) */
     dts_tlv_len = wolfBoot_get_header(&os_image, HDR_DEVICE_TREE_DIGEST,
@@ -832,7 +832,7 @@ backup_on_failure:
         }
     }
 #endif
-#endif /* MMU */
+#endif /* MMU || WOLFBOOT_FDT */
 
 #ifdef WOLFBOOT_UBOOT_LEGACY
     /* Enter the uImage at ih_ep. Skipped if a later stage (ELF/FIT) succeeded

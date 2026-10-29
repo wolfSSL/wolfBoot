@@ -1329,10 +1329,21 @@ static int emmc_send_op_cond(uint32_t ocr_arg, uint32_t *ocr_reg)
 {
     int status;
     uint32_t timeout = 1000; /* retry count */
+    uint32_t query = 1000;   /* retry count for the first CMD1 */
     uint32_t response;
 
-    /* First CMD1 to query supported voltages */
-    status = sdhci_cmd(MMC_CMD1_SEND_OP_COND, 0, SDHCI_RESP_R3);
+    /* First CMD1 to query supported voltages.  A device still powering up
+     * does not answer this, so it is retried like the ready poll below
+     * instead of failing the whole init on one timeout: on a cold boot the
+     * first attempt loses the race and a warm one does not, which shows up
+     * as an eMMC that only boots every second time. */
+    do {
+        status = sdhci_cmd(MMC_CMD1_SEND_OP_COND, 0, SDHCI_RESP_R3);
+        if (status == 0) {
+            break;
+        }
+        udelay(1000);
+    } while (--query);
     if (status != 0) {
         wolfBoot_printf("eMMC: CMD1 query failed\n");
         return status;

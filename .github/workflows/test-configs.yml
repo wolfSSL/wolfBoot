@@ -624,6 +624,23 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
+  # The HSS replacement booting from the other two stores: eMMC (same SDHCI
+  # driver as SD, different pads) and QSPI into DDR (src/update_ram.c rather
+  # than src/update_disk.c).
+  microchip_mpfs250_m_emmc_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m_emmc.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
+  microchip_mpfs250_m_qspi_ddr_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_m_qspi_ddr.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
   microchip_mpfs250_m_mldsa_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:
