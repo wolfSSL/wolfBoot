@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include "image.h"
+#include "hal.h"
 #ifdef DEBUG_UART
 #include "uart_drv.h"
 #endif
@@ -61,12 +62,14 @@
 #define NVMCTRL_BASE           (0x41004000)
 #define NVMCTRLA_REG           *((volatile uint16_t *)(NVMCTRL_BASE))
 #define NVMCTRLB_REG           *((volatile uint32_t *)(NVMCTRL_BASE + 4))
+#define NVMCTRL_PARAM          *((volatile uint32_t *)(NVMCTRL_BASE + 0x08))
 #define NVMCTRL_INTFLAG        *((volatile uint8_t  *)(NVMCTRL_BASE + 0x14))
 #define NVMCTRL_STATUS         *((volatile uint16_t *)(NVMCTRL_BASE + 0x18))
 #define NVMCTRL_ADDR           *((volatile uint32_t *)(NVMCTRL_BASE + 0x1c))
 #define NVMCMD_KEY             (0xA500)
 #define NVMCMD_ERASE           (0x02)
 #define NVMCMD_WP              (0x04)
+#define NVMCMD_LR              (0x40)
 #define NVMCMD_PBC             (0x44)
 #define NVMCTRL_INTFLAG_NVMREADY (1)
 /* CTRLB.MANW: commit each page with an explicit NVMCMD_WP instead of
@@ -74,6 +77,12 @@
 #define NVMCTRLB_MANW          (1 << 7)
 /* STATUS error flags, write-one-to-clear: PROGE, LOCKE, NVME */
 #define NVMSTATUS_ERR          ((1 << 2) | (1 << 3) | (1 << 4))
+/* PARAM reports the array geometry: NVMP pages of (8 << PSZ) bytes each. */
+#define NVMPARAM_NVMP          (0xFFFF)
+#define NVMPARAM_PSZ_SHIFT     (16)
+#define NVMPARAM_PSZ           (7)
+/* NVMCTRL divides the whole array into 16 lock regions, one per LOCK bit. */
+#define NVM_LOCK_REGIONS       (16)
 
 
 #define GCLK_BASE              (0x40000C00)
@@ -259,6 +268,72 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
         address += FLASH_ROW_SIZE;
         len -= FLASH_ROW_SIZE;
     }
+    return 0;
+}
+
+/* Lock the NVMCTRL regions covering [address, address+len).
+ *
+ * NVMCMD_LR only clears a bit in NVMCTRL.LOCK, which reloads from the user
+ * row at every reset, so the lock has to be re-applied on each boot. That is
+ * what the caller does: this runs on the way out to the application, after
+ * any swap or self-update has finished writing. The persistent BOOTPROT fuse
+ * is deliberately left to the production programmer, since setting it here
+ * would erase and rewrite the user row on every single boot.
+ *
+ * A region is one sixteenth of the array, so the geometry comes from PARAM
+ * rather than FLASH_SIZE: the 128KB parts have 8KB regions where the 256KB
+ * parts have 16KB. Protection is granted in whole regions, so a partial
+ * region at either end is locked whole - the locked range may come out wider
+ * than requested, never narrower.
+ */
+int RAMFUNCTION hal_flash_protect(haladdr_t address, int len)
+{
+    uint32_t param, flash_size, region_size, shift, start, end, i;
+
+    if (len < 0)
+        return -1;
+    /* An empty range locks nothing. Return before the region math: the
+     * round-up below would otherwise widen it to one whole region. */
+    if (len == 0)
+        return 0;
+
+    param = NVMCTRL_PARAM;
+    flash_size = (param & NVMPARAM_NVMP) *
+        (8U << ((param >> NVMPARAM_PSZ_SHIFT) & NVMPARAM_PSZ));
+    region_size = flash_size / NVM_LOCK_REGIONS;
+    /* Index the regions by shifting rather than dividing. Every SAMD21 array
+     * and page size is a power of two, so the region size is one too; the
+     * Cortex-M0+ has no divide instruction and a division by this runtime
+     * value would pull the soft-divide routine into the bootloader. The
+     * equality check below is what rules out a part this does not hold for,
+     * a PARAM of zero among them. */
+    for (shift = 0; (region_size >> shift) > 1U; shift++)
+        ;
+    if ((1U << shift) != region_size)
+        return -1;
+
+    start = (uint32_t)address;
+    if (start >= flash_size)
+        return -1;
+    /* Clamp a range that runs off the end of the array rather than failing:
+     * locking the part of it that exists is the safe reading. */
+    if ((start + (uint32_t)len) > flash_size)
+        len = (int)(flash_size - start);
+    end = start + (uint32_t)len;
+
+    /* The caller has already finished writing flash, so the PAC is guarding
+     * NVMCTRL again by now and the command register would not take a write. */
+    hal_flash_unlock();
+    for (i = (start >> shift);
+            i < ((end + region_size - 1) >> shift); i++) {
+        NVMCTRL_ADDR = ((i << shift) >> 1);
+        NVMCTRLA_REG = NVMCMD_LR | NVMCMD_KEY;
+        if (nvm_wait() != 0) {
+            hal_flash_lock();
+            return -1;
+        }
+    }
+    hal_flash_lock();
     return 0;
 }
 
