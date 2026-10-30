@@ -158,6 +158,7 @@ TESTS+=unit-kontron-tgl-spi
 TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
+TESTS+=unit-samr21-flash-protect
 TESTS+=unit-hifive1-flash-write
 TESTS+=unit-hifive1-hfrosccfg
 TESTS+=unit-rp2350-flash-write
@@ -2145,17 +2146,55 @@ samr21_erase_extract.h: ../../hal/samr21.c
 	sed -n '/#define FLASH_ROW_SIZE /p' $< >> $@
 	sed -n '/#define NVMCTRLA_REG /p' $< >> $@
 	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
+	sed -n '/#define NVMCTRL_STATUS /p' $< >> $@
 	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
 	sed -n '/#define NVMCMD_KEY /p' $< >> $@
 	sed -n '/#define NVMCMD_ERASE /p' $< >> $@
+	sed -n '/#define NVMCMD_WP /p' $< >> $@
+	sed -n '/#define NVMCMD_PBC /p' $< >> $@
 	sed -n '/#define NVMCTRL_INTFLAG_NVMREADY /p' $< >> $@
+	sed -n '/#define NVMSTATUS_ERR /p' $< >> $@
 
 samr21_erase_fn_extract.h: ../../hal/samr21.c
-	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< > $@
+	sed -n '/^static int RAMFUNCTION nvm_wait/,/^}/p' $< > $@
+	sed -n '/^int RAMFUNCTION hal_flash_erase/,/^}/p' $< >> $@
 
 unit-samr21-erase-advance: unit-samr21-erase-advance.c samr21_erase_extract.h \
 	samr21_erase_fn_extract.h
 	gcc -o $@ unit-samr21-erase-advance.c $(CFLAGS) $(LDFLAGS)
+
+# unit-samr21-flash-protect runs the real hal_flash_protect() from
+# hal/samr21.c against a host NVMCTRL register window. NVMCTRL locks whole
+# regions of a sixteenth of the array each, so the count has to round up and
+# the region size has to come from PARAM: a truncated count leaves the last
+# region writable, and a hardcoded 256KB array size under-locks a 128KB part.
+samr21_protect_extract.h: ../../hal/samr21.c
+	sed -n '/#define NVMCTRLA_REG /p' $< > $@
+	sed -n '/#define NVMCTRL_PARAM /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG /p' $< >> $@
+	sed -n '/#define NVMCTRL_STATUS /p' $< >> $@
+	sed -n '/#define NVMCTRL_ADDR /p' $< >> $@
+	sed -n '/#define NVMCMD_KEY /p' $< >> $@
+	sed -n '/#define NVMCMD_LR /p' $< >> $@
+	sed -n '/#define NVMCTRL_INTFLAG_NVMREADY /p' $< >> $@
+	sed -n '/#define NVMSTATUS_ERR /p' $< >> $@
+	sed -n '/#define NVMPARAM_NVMP /p' $< >> $@
+	sed -n '/#define NVMPARAM_PSZ_SHIFT /p' $< >> $@
+	sed -n '/#define NVMPARAM_PSZ /p' $< >> $@
+	sed -n '/#define NVM_LOCK_REGIONS /p' $< >> $@
+	sed -n '/#define PAC1_WPCLR /p' $< >> $@
+	sed -n '/#define PAC1_WPSET /p' $< >> $@
+	sed -n '/#define PAC_WP_NVMCTL /p' $< >> $@
+
+samr21_protect_fn_extract.h: ../../hal/samr21.c
+	sed -n '/^static int RAMFUNCTION nvm_wait/,/^}/p' $< > $@
+	sed -n '/^void RAMFUNCTION hal_flash_unlock/,/^}/p' $< >> $@
+	sed -n '/^void RAMFUNCTION hal_flash_lock/,/^}/p' $< >> $@
+	sed -n '/^int RAMFUNCTION hal_flash_protect/,/^}/p' $< >> $@
+
+unit-samr21-flash-protect: unit-samr21-flash-protect.c samr21_protect_extract.h \
+	samr21_protect_fn_extract.h
+	gcc -o $@ unit-samr21-flash-protect.c $(CFLAGS) $(LDFLAGS)
 
 # unit-hifive1-flash-write runs the real hal_flash_write() from
 # hal/hifive1.c against a mock fespi model (F-11035: the final partial

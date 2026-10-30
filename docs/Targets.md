@@ -22,6 +22,7 @@ This README describes configuration of supported targets.
 * [Microchip PolarFire SoC](#microchip-polarfire-soc)
 * [Microchip SAMA5D3](#microchip-sama5d3)
 * [Microchip SAME51](#microchip-same51)
+* [Microchip SAMD21 / SAMR21](#microchip-samd21--samr21)
 * [Nordic nRF52840](#nordic-nrf52840)
 * [Nordic nRF5340](#nordic-nrf5340)
 * [Nordic nRF54L15](#nordic-nrf54l15)
@@ -5327,6 +5328,120 @@ J-Link> loadbin test-app/image_v1_signed.bin 0x8000
 
 The above is assuming the default configuration where the BOOT partition starts at
 address `0x8000`.
+
+
+## Microchip SAMD21 / SAMR21
+
+SAM D21 and SAM R21 are Cortex-M0+ microcontrollers running at up to 48MHz. They
+share one SYSCTRL/GCLK/NVMCTRL/PAC design, so a single HAL covers both and the
+target name is `samr21` for either part.
+
+NVMCTRL programs a 64-byte page and erases a 256-byte row of four pages. The row
+is the smallest unit wolfBoot can swap, so `WOLFBOOT_SECTOR_SIZE` is `0x100`.
+That is also the floor for `IMAGE_HEADER_SIZE`, which keeps the practical
+signature choice to ECC256 or ED25519: ECC384, ED448 and RSA need a 512-byte
+header, and LMS/XMSS need 2KB or more, each forcing a logical sector of that
+size and the same amount again of SRAM for the NVM cache.
+
+### Configurations
+
+  * `config/examples/samd21.config` - ATSAMD21J17A/G17A, 128KB flash, 16KB SRAM
+  * `config/examples/samd21_j18.config` - ATSAMD21J18A/G18A, 256KB flash, 32KB SRAM
+
+`WOLFBOOT_RAM_SIZE` gives the linker script the length of the SRAM region, and
+must match the part: `0x4000` for the x17 variants and SAMR21, `0x8000` for the
+x18. The 128KB layout is a 32KB bootloader, two 47.75KB partitions and one row
+of swap, which leaves 47KB for a signed application. The 256KB layout is a 32KB
+bootloader, two 111.75KB partitions and one row of swap, leaving 111KB.
+
+Both layouts put the bootloader region at 32KB because the NVMCTRL `BOOTPROT`
+fuse in the user row protects 8KB, 16KB or 32KB and nothing in between. A
+boundary that is not one of those sizes either leaves the bootloader writable
+or pushes the protected region into the boot partition, where it blocks the
+swap.
+
+`hal_flash_protect()` locks that region through the NVMCTRL lock regions
+rather than the fuse. NVMCTRL splits the array into sixteen regions, so a
+region is 8KB on a 128KB part and 16KB on a 256KB one, and a 32KB bootloader
+is a whole number of regions either way. wolfBoot applies the lock on the way
+out to the application, after any swap has finished writing; `NVMCTRL.LOCK`
+reloads from the user row at every reset, so the bootloader itself always runs
+with the region writable and re-locks it on each boot.
+
+Setting the persistent `BOOTPROT` fuse is left to whatever programs the part
+in production. wolfBoot does not write it, because the user row would have to
+be erased and rewritten on every boot to do so.
+
+`WOLFSSL_USE_ALIGN` is set in both configs. Cortex-M0+ does not support
+unaligned word accesses, and it routes word-sized hash operations through
+byte-safe paths when a buffer is not 4-byte aligned.
+
+### Footprint and signature choice
+
+Measured with arm-none-eabi-gcc 13.2.1 at `-Os`, `SPMATH=1`, `DEBUG=0`,
+`DEBUG_UART=0`. "Flash" is the sum of the allocated bootloader sections and
+"stack" is the `STACK_USAGE` the build reports for the chosen algorithm:
+
+| Signature | Flash | Stack | Fits 16KB SRAM |
+|---|---|---|---|
+| ECC256 + SHA256 | 18448 | 7632 | yes |
+| ECC256 + SHA256, `NO_ASM=1` | 15428 | 7632 | yes |
+| ED25519 + SHA256 | 13476 | 5000 | yes |
+| RSA2048 + SHA256 | 13132 | 17568 | no |
+| LMS-8-10-1 + SHA256 | 9500 | 1320 | yes |
+
+RSA2048 is the smallest build and has by far the cheapest verification, because
+a public-key operation with a small exponent costs much less than an ECDSA
+verify. It needs more stack than a 16KB part has, so it is an option on the x18
+only. ED25519 gains nothing from `NO_ASM=0`: the Thumb-1 SP assembly accelerates
+the integer math that ECC256 and RSA use, and ED25519 does not go through it.
+
+Cortex-M0+ is ARMv6-M, so `sp_armthumb.c` is the only assembly tier available;
+`sp_cortexm.c` is Thumb-2 and will not assemble for this core. There is no
+Thumb-1 per-algorithm assembly either, so SHA-256 is the portable C
+implementation. `NO_ASM=1` drops the SP assembly as well, trading roughly a
+factor of four in verification time for about 3KB of flash.
+
+### Uploading the bootloader and the firmware image
+
+The on-board EDBG debugger on an Xplained Pro board presents a CMSIS-DAP
+interface that OpenOCD drives with its stock scripts:
+
+```
+$ openocd -f interface/cmsis-dap.cfg -f target/at91samdXX.cfg \
+    -c "program wolfboot.bin 0x0 verify" \
+    -c "program test-app/image_v1_signed.bin 0x8000 verify reset exit"
+```
+
+`0x8000` is `WOLFBOOT_PARTITION_BOOT_ADDRESS`, the same in both configs. A
+J-Link or an MPLAB ICD 5 through MDB works equally well.
+
+### Console
+
+`hal/uart/uart_drv_samr21.c` drives a SERCOM in USART mode, and `hal_init()`
+brings it up at 115200 8N1 when built with `DEBUG_UART=1`. That costs about
+2.5KB of flash over a silent build.
+
+The defaults describe the SAM D21 Xplained Pro EDBG virtual COM port: SERCOM3,
+TX on PA22 (pad 0), RX on PA23 (pad 1), both peripheral function C. A board that
+wires its console differently overrides `UART_SERCOM`, `UART_PORT_GROUP`,
+`UART_TX_PIN`, `UART_RX_PIN`, `UART_PIN_MUX`, `UART_TXPO` and `UART_RXPO`;
+`UART_TXPO` and `UART_RXPO` are pad selections out of the SERCOM CTRLA field
+tables rather than pin numbers.
+
+The driver sets the SERCOM core's generic clock channel itself, because
+`hal_init()` attaches every peripheral channel to GCLK generator 7 and never
+configures that generator - only generators 0 and 1 are set up. Nothing else in
+wolfBoot needs a peripheral core clock, since NVMCTRL runs from the APB clock,
+so the generator 7 assignment is left alone.
+
+### Status
+
+The HAL, both configurations, the console driver and the test application build
+and are covered by CI and by the host unit tests `unit-samr21-erase-advance` and
+`unit-flash-write-samr21`. **None of it has been validated on silicon yet**, and
+the console pin assignment in particular is from the Xplained Pro schematic
+rather than from a working board.
 
 
 ## NXP iMX-RT

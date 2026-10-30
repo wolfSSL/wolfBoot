@@ -48,9 +48,15 @@
 
 #include "../../hal/samr21.c"
 
-/* hal_flash_write() pokes the NVMCTRL command register (NVMCTRLA_REG, fixed
- * at NVMCTRL_BASE == 0x41004000) directly at entry/exit. Map that page so
- * those writes don't fault; its contents are otherwise irrelevant here. */
+/* hal_flash_write() drives the NVMCTRL command register (NVMCTRLA_REG, fixed
+ * at NVMCTRL_BASE == 0x41004000) and waits on INTFLAG/STATUS. Map that page
+ * so those accesses don't fault, then present an idle, error-free controller
+ * so the waits fall straight through.
+ *
+ * Note this mock does not model CTRLB.MANW: a store to the flash mock lands
+ * immediately rather than sitting in a page buffer until NVMCMD_WP commits
+ * it. A host test therefore cannot observe a missing page-write command, only
+ * the data path and the return code. */
 static void map_nvmctrl(void)
 {
     int flags = MAP_PRIVATE | MAP_ANONYMOUS;
@@ -62,6 +68,8 @@ static void map_nvmctrl(void)
     void *p = mmap((void *)(uintptr_t)NVMCTRL_BASE, 4096,
             PROT_READ | PROT_WRITE, flags, -1, 0);
     ck_assert_ptr_eq(p, (void *)(uintptr_t)NVMCTRL_BASE);
+    NVMCTRL_INTFLAG = NVMCTRL_INTFLAG_NVMREADY;
+    NVMCTRL_STATUS = 0;
 }
 
 static void unmap_nvmctrl(void)
@@ -72,7 +80,7 @@ static void unmap_nvmctrl(void)
 /* "address" is treated as a real pointer into memory-mapped flash. Keep the
  * mock flash buffer inside the 32-bit range, matching how "address" (a
  * uint32_t) is used by the real target. */
-#define MOCK_FLASH_SIZE 64
+#define MOCK_FLASH_SIZE 256
 static uint8_t *mock_flash;
 
 static void setup(void)
@@ -169,6 +177,56 @@ START_TEST(test_unaligned_write_single_word)
 }
 END_TEST
 
+/* A write spanning more than one 64-byte page must program every byte and
+ * leave the controller with the final page committed. Because the mock does
+ * not model MANW (see map_nvmctrl()), this covers the data path and the last
+ * command only: a missing or miscounted intermediate page commit would still
+ * pass. Asserting one WP per page boundary needs a mock that logs the
+ * command sequence. */
+START_TEST(test_write_crosses_page_boundary)
+{
+    uint8_t data[FLASH_PAGESIZE * 2];
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+    int i;
+
+    for (i = 0; i < (int)sizeof(data); i++)
+        data[i] = (uint8_t)i;
+
+    ck_assert_int_eq(hal_flash_write(base, data, sizeof(data)), 0);
+
+    for (i = 0; i < (int)sizeof(data); i++)
+        ck_assert_uint_eq(mock_flash[i], data[i]);
+    for (i = sizeof(data); i < MOCK_FLASH_SIZE; i++)
+        ck_assert_uint_eq(mock_flash[i], 0xFF);
+    /* The last command issued closes the final page. */
+    ck_assert_uint_eq(NVMCTRLA_REG, (NVMCMD_WP | NVMCMD_KEY));
+}
+END_TEST
+
+/* An error latched in NVMCTRL.STATUS must be reported to the caller rather
+ * than swallowed. The driver also writes the flags back to clear them, which
+ * this mock cannot check: STATUS is plain RAM here, so a write-one-to-clear
+ * store leaves the bits set instead of clearing them. */
+START_TEST(test_write_reports_nvm_error)
+{
+    uint8_t data[4] = { 1, 2, 3, 4 };
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+
+    NVMCTRL_STATUS = NVMSTATUS_ERR;
+    ck_assert_int_eq(hal_flash_write(base, data, sizeof(data)), -1);
+}
+END_TEST
+
+/* Same contract on the erase path. */
+START_TEST(test_erase_reports_nvm_error)
+{
+    uint32_t base = (uint32_t)(uintptr_t)mock_flash;
+
+    NVMCTRL_STATUS = NVMSTATUS_ERR;
+    ck_assert_int_eq(hal_flash_erase(base, FLASH_ROW_SIZE), -1);
+}
+END_TEST
+
 Suite *flash_write_suite(void)
 {
     Suite *s = suite_create("flash-write-samr21");
@@ -178,6 +236,9 @@ Suite *flash_write_suite(void)
     tcase_add_test(tc, test_unaligned_write_mismatched_alignment);
     tcase_add_test(tc, test_unaligned_write_matched_alignment);
     tcase_add_test(tc, test_unaligned_write_single_word);
+    tcase_add_test(tc, test_write_crosses_page_boundary);
+    tcase_add_test(tc, test_write_reports_nvm_error);
+    tcase_add_test(tc, test_erase_reports_nvm_error);
 
     suite_add_tcase(s, tc);
     return s;
