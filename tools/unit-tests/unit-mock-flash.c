@@ -35,6 +35,13 @@ static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
+#ifdef MOCK_FLASH_ERASE_UNIT
+static int hal_flash_erase_fail = 0;
+static unsigned int mock_flash_erase_count = 0;
+static unsigned int mock_flash_erase_violations = 0;
+static uintptr_t mock_flash_erased_address[16];
+static int mock_flash_erased_length[16];
+#endif
 const char *argv0;
 
 #ifdef NVM_FLASH_ECC
@@ -254,6 +261,24 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 int hal_flash_erase(haladdr_t address, int len)
 {
     ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
+#ifdef MOCK_FLASH_ERASE_UNIT
+    if (hal_flash_erase_fail) {
+        hal_flash_erase_fail = 0;
+        return -1;
+    }
+    if (len <= 0 ||
+            (address % MOCK_FLASH_ERASE_UNIT) != 0 ||
+            (len % MOCK_FLASH_ERASE_UNIT) != 0 ||
+            mock_flash_erase_count >=
+                sizeof(mock_flash_erased_address) /
+                    sizeof(mock_flash_erased_address[0])) {
+        mock_flash_erase_violations++;
+        return -1;
+    }
+    mock_flash_erased_address[mock_flash_erase_count] = address;
+    mock_flash_erased_length[mock_flash_erase_count] = len;
+    mock_flash_erase_count++;
+#endif
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
 #ifdef NVM_FLASH_ECC

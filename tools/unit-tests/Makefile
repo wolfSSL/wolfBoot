@@ -72,6 +72,8 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-aes256 unit-chacha20 unit-pci unit-pci-4gib unit-mock-state \
        unit-sectorflags unit-max-space \
        unit-image unit-image-hybrid unit-image-rsa unit-nvm unit-nvm-flagshome unit-enc-nvm \
+       unit-enc-key unit-enc-key-aes256 unit-enc-key-straddle \
+       unit-enc-key-sector unit-enc-key-flagshome \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-db \
        unit-update-flash-hook \
@@ -384,6 +386,36 @@ unit-enc-nvm:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-enc-nvm-flagshome:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS \
 	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DEXT_FLASH -DHAVE_CHACHA -DFLAGS_HOME
 unit-enc-nvm-flagshome:WOLFCRYPT_SRC+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
+unit-enc-key:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DWOLFBOOT_SMALL_STACK \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_FLASH_ERASE_UNIT=128 \
+	-DMOCK_FLASH_ERASE_UNIT=128
+unit-enc-key:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
+unit-enc-key-aes256:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_AES256 -DWOLFSSL_AES_DIRECT -DWOLFSSL_AES_256 \
+	-DWOLFSSL_AES_COUNTER -DWOLFBOOT_SMALL_STACK \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_FLASH_ERASE_UNIT=128 \
+	-DMOCK_FLASH_ERASE_UNIT=128
+unit-enc-key-aes256:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c
+unit-enc-key-straddle:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DWOLFBOOT_SMALL_STACK \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_FLASH_ERASE_UNIT=64 \
+	-DMOCK_FLASH_ERASE_UNIT=64 -DTRAILER_SKIP=24
+unit-enc-key-straddle:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
+unit-enc-key-sector:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DWOLFBOOT_SMALL_STACK \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DMOCK_FLASH_ERASE_UNIT=0x1000
+unit-enc-key-sector:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
+unit-enc-key-flagshome:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH -DEXT_ENCRYPTED \
+	-DENCRYPT_WITH_CHACHA -DHAVE_CHACHA -DWOLFBOOT_SMALL_STACK \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DWOLFBOOT_FLASH_ERASE_UNIT=128 \
+	-DMOCK_FLASH_ERASE_UNIT=128 -DFLAGS_HOME
+unit-enc-key-flagshome:WOLFCRYPT_SRC+= \
+	$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/chacha.c
 unit-delta:CFLAGS+=-DNVM_FLASH_WRITEONCE -DMOCK_PARTITIONS -DDELTA_UPDATES -DDELTA_BLOCK_SIZE=512
 unit-pkcs11_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPKCS11) -DMOCK_PARTITIONS -DMOCK_KEYVAULT -DSECURE_PKCS11 -DWOLFPKCS11_USER_SETTINGS
 # Same suite against a flash-read cache that only refreshes on
@@ -1160,6 +1192,12 @@ unit-enc-nvm: ../../include/target.h unit-enc-nvm.c
 
 unit-enc-nvm-flagshome: ../../include/target.h unit-enc-nvm.c
 	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-nvm.c $(CFLAGS) $(WOLFCRYPT_CFLAGS) $(LDFLAGS)
+
+unit-enc-key unit-enc-key-aes256 unit-enc-key-straddle \
+unit-enc-key-sector unit-enc-key-flagshome: \
+	../../include/target.h unit-enc-key.c
+	gcc -o $@ $(WOLFCRYPT_SRC) unit-enc-key.c $(CFLAGS) \
+		$(WOLFCRYPT_CFLAGS) $(LDFLAGS)
 
 unit-delta: ../../include/target.h unit-delta.c
 	gcc -o $@ unit-delta.c $(CFLAGS) $(LDFLAGS)

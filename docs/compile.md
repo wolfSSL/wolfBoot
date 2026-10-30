@@ -331,6 +331,18 @@ and a journal record is 16 bytes, or one write unit if larger.
 | [Journal](#trailer-storage-option-nvm_flash_journal-and-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` | sector size / record size >= 3N + 4, slow erases | 1 record program | 1 | yes |
 | [Journal in two sectors](#redundant-sector-journaling-nvm_flash_journal_dual) | `NVM_FLASH_JOURNAL=1` and `NVM_FLASH_JOURNAL_DUAL=1` | slow erases, and a reset must never damage the log | 1 record program | 2 | yes |
 
+### Flash erase unit
+
+`FLASH_ERASE_UNIT=<bytes>` sets the smallest aligned erase range wolfBoot may request
+from `hal_flash_erase()` while updating the encrypted key and trailer. It must be a
+power of two that divides `WOLFBOOT_SECTOR_SIZE`. If omitted, it defaults to
+`WOLFBOOT_SECTOR_SIZE`; the STM32L0 target defaults to 128 bytes.
+
+The HAL must support erasing ranges aligned to this unit. Most other erase requests
+remain sector-sized. In non-write-once builds, `NVM_CACHE_SIZE` defaults to this
+erase unit and must be at least that large. In `NVM_FLASH_WRITEONCE` builds, the
+cache remains sector-sized because the two trailer copies must stay sector-aligned.
+
 For a specific platform example, the AURIX TC3xx platform has these flash constraints:
 
 - The smallest unit it can program is a 32-byte page, and a page can be programmed only once per erase.

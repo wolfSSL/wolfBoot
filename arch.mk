@@ -483,6 +483,7 @@ ifeq ($(ARCH),ARM)
   ifeq ($(TARGET),stm32l0)
     CORTEX_M0=1
     SPI_TARGET=stm32
+    FLASH_ERASE_UNIT?=128
   endif
 
   ifeq ($(TARGET),stm32c0)

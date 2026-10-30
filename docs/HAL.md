@@ -62,9 +62,11 @@ by the bootloader at the end of every write and erase operations.
 Called by the bootloader to erase part of the flash memory to allow subsequent boots.
 Erase operations must be performed via the specific IAP interface of the target microcontroller.
 `address` marks the start of the area that the bootloader wants to erase, and `len` specifies
-the size of the area to be erased. `address` is guaranteed to be aligned to `WOLFBOOT_SECTOR_SIZE`,
-and `len` is guaranteed to be a multiple of `WOLFBOOT_SECTOR_SIZE`. This function must take into account
-the geometry of the flash sectors, and erase all the sectors in between.
+the size of the area to be erased. Most requests are aligned to `WOLFBOOT_SECTOR_SIZE` and have
+a length that is a multiple of it. Encrypted-key maintenance may issue smaller requests aligned
+to `WOLFBOOT_FLASH_ERASE_UNIT`, configured with `FLASH_ERASE_UNIT` (which defaults to
+`WOLFBOOT_SECTOR_SIZE`). The HAL must support both request sizes and take the flash geometry into
+account when erasing.
 
 `void hal_prepare_boot(void)`
 
