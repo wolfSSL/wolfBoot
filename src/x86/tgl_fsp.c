@@ -1035,6 +1035,8 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
     upd->Cx = FSP_C_STATES;
     upd->TxtEnable = FSP_TXT;
     upd->ThermalMonitor = FSP_THERMAL_THROTTLING;
+    /* I2C0 (PCI mode) carries the board EEPROMs and the watchdog RTC */
+    upd->SerialIoI2cMode[0] = 1;
 #endif
     return 0;
 }
