@@ -5360,6 +5360,18 @@ boundary that is not one of those sizes either leaves the bootloader writable
 or pushes the protected region into the boot partition, where it blocks the
 swap.
 
+`hal_flash_protect()` locks that region through the NVMCTRL lock regions
+rather than the fuse. NVMCTRL splits the array into sixteen regions, so a
+region is 8KB on a 128KB part and 16KB on a 256KB one, and a 32KB bootloader
+is a whole number of regions either way. wolfBoot applies the lock on the way
+out to the application, after any swap has finished writing; `NVMCTRL.LOCK`
+reloads from the user row at every reset, so the bootloader itself always runs
+with the region writable and re-locks it on each boot.
+
+Setting the persistent `BOOTPROT` fuse is left to whatever programs the part
+in production. wolfBoot does not write it, because the user row would have to
+be erased and rewritten on every boot to do so.
+
 `WOLFSSL_USE_ALIGN` is set in both configs. Cortex-M0+ does not support
 unaligned word accesses, and it routes word-sized hash operations through
 byte-safe paths when a buffer is not 4-byte aligned.
@@ -5372,11 +5384,11 @@ Measured with arm-none-eabi-gcc 13.2.1 at `-Os`, `SPMATH=1`, `DEBUG=0`,
 
 | Signature | Flash | Stack | Fits 16KB SRAM |
 |---|---|---|---|
-| ECC256 + SHA256 | 18320 | 7632 | yes |
-| ECC256 + SHA256, `NO_ASM=1` | 15300 | 7632 | yes |
-| ED25519 + SHA256 | 13316 | 5000 | yes |
-| RSA2048 + SHA256 | 12940 | 17568 | no |
-| LMS-8-10-1 + SHA256 | 9340 | 1320 | yes |
+| ECC256 + SHA256 | 18448 | 7632 | yes |
+| ECC256 + SHA256, `NO_ASM=1` | 15428 | 7632 | yes |
+| ED25519 + SHA256 | 13476 | 5000 | yes |
+| RSA2048 + SHA256 | 13132 | 17568 | no |
+| LMS-8-10-1 + SHA256 | 9500 | 1320 | yes |
 
 RSA2048 is the smallest build and has by far the cheapest verification, because
 a public-key operation with a small exponent costs much less than an ECDSA
