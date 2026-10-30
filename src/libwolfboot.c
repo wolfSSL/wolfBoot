@@ -165,6 +165,10 @@ int wolfBoot_initialize_encryption(void)
 #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
 #endif
 
+#ifndef WOLFBOOT_PAGE_SIZE
+#define WOLFBOOT_PAGE_SIZE WOLFBOOT_SECTOR_SIZE
+#endif
+
 #ifdef BUILD_TOOL
 /* Building for a local utility tool */
 #undef EXT_FLASH
@@ -2744,25 +2748,25 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 #endif
 
     addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    addr_align = addr & (~(WOLFBOOT_PAGE_SIZE - 1));
+    addr_off = addr & (WOLFBOOT_PAGE_SIZE - 1);
 #ifdef NVM_FLASH_WRITEONCE
     /* we read from the populated sector, now write to the erased sector */
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
-    addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
+    addr_align -= (sel_sec * WOLFBOOT_PAGE_SIZE);
 #endif
     hal_flash_unlock();
     /* casting to unsigned long to abide compilers on 64bit architectures */
     XMEMCPY(ENCRYPT_CACHE,
             (void*)(unsigned long)(addr_align),
-                WOLFBOOT_SECTOR_SIZE);
+                WOLFBOOT_PAGE_SIZE);
 #ifdef NVM_FLASH_WRITEONCE
     /* we read from the populated sector, now write to the erased sector */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    addr_align -= (!sel_sec * WOLFBOOT_SECTOR_SIZE);
+    addr_align = addr & (~(WOLFBOOT_PAGE_SIZE - 1));
+    addr_align -= (!sel_sec * WOLFBOOT_PAGE_SIZE);
 #else
     /* erase the old key */
-    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_erase(addr_align, WOLFBOOT_PAGE_SIZE);
     if (ret != 0)
         goto exit_lock;
 #endif
@@ -2786,16 +2790,16 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 #endif
 
     /* Writing cache back to sector "!sel_sec" */
-    ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
+    ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_PAGE_SIZE);
 #ifdef NVM_FLASH_WRITEONCE
     if (ret != 0)
         goto exit_lock;
     /* Erasing original sector "sel_sec",
      * same one returned from by nvm_select.
      */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+    addr_align = addr & (~(WOLFBOOT_PAGE_SIZE - 1));
+    addr_align -= (sel_sec * WOLFBOOT_PAGE_SIZE);
+    ret = hal_flash_erase(addr_align, WOLFBOOT_PAGE_SIZE);
 #endif
 exit_lock:
     /* Scrub the staged key/nonce on every build where wolfBoot owns the
