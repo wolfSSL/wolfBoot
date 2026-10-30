@@ -605,6 +605,8 @@ extern int tolower(int c);
 #   define HAVE_PWDBASED
 #   define HAVE_PBKDF2
 #   define WOLFPKCS11_CUSTOM_STORE
+    /* src/pkcs11_store.c reports failed flash commits */
+#   define WOLFPKCS11_CUSTOM_STORE_CLOSE_COMMIT
 #   define WOLFBOOT_SECURE_PKCS11
 #   ifndef WOLFPKCS11_USER_SETTINGS
 #       define WOLFPKCS11_USER_SETTINGS
