@@ -2269,6 +2269,11 @@ ifneq ($(CERT_CHAIN_VERIFY),)
     CFLAGS += '-DWOLFBOOT_WOLFHSM_NVM_ROOT_CA_LIST=$(WOLFHSM_NVM_ROOT_CA_LIST)'
   endif
 
+  # Optional: enforce X.509 name constraints. Off by default for code size.
+  ifeq ($(CERT_CHAIN_NAME_CONSTRAINTS),1)
+    CFLAGS += -DWOLFBOOT_CERT_CHAIN_NAME_CONSTRAINTS
+  endif
+
   # User-provided cert chain takes precedence. Declare the chain's
   # algorithms via AUX_PK_ALGOS/AUX_HASH_ALGOS so the verifier has them.
   ifneq ($(USER_CERT_CHAIN),)

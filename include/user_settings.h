@@ -344,7 +344,10 @@ extern int tolower(int c);
 #       define WOLFSSL_SP_SMALL
 #   endif
 #       define WOLFSSL_HAVE_SP_ECC
-#       define WOLFSSL_KEY_GEN
+#       if !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
+           !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+#           define WOLFSSL_KEY_GEN
+#       endif
 #       define HAVE_ECC_KEY_EXPORT
 #       define HAVE_ECC_KEY_IMPORT
 #   endif
@@ -423,8 +426,7 @@ extern int tolower(int c);
      * guard keeps it from satisfying the inner condition there. */
 #   ifndef WC_NO_RNG
 #       if defined(WOLFCRYPT_SECURE_MODE) || defined(WOLFBOOT_TPM_PARMENC) || \
-           defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK) || \
-           defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+           defined(WOLFCRYPT_TEST) || defined(WOLFCRYPT_BENCHMARK)
 #           define WC_RSA_BLINDING
 #       endif
 #   endif
@@ -438,8 +440,7 @@ extern int tolower(int c);
 #   endif
 #   if !defined(WOLFBOOT_TPM) && !defined(WOLFCRYPT_SECURE_MODE) && \
        !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK) && \
-       !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT) && \
-       !defined(WOLFBOOT_ENABLE_WOLFHSM_SERVER)
+       !defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 #       define WOLFSSL_RSA_VERIFY_INLINE
 #       define WOLFSSL_RSA_VERIFY_ONLY
 #       define WOLFSSL_RSA_PUBLIC_ONLY
@@ -1029,7 +1030,10 @@ extern int tolower(int c);
 #   define WOLF_CRYPTO_CB
 #   undef  HAVE_ANONYMOUS_INLINE_AGGREGATES
 #   define HAVE_ANONYMOUS_INLINE_AGGREGATES 1
-#   define WOLFSSL_KEY_GEN
+    /* wolfBoot's own client and server never generate keys */
+#   ifdef WOLFCRYPT_TZ_WOLFHSM
+#       define WOLFSSL_KEY_GEN
+#   endif
 #endif
 
 /* Secure-side sizing common to any wolfHSM server build (TZ engine and
@@ -1104,6 +1108,9 @@ extern int tolower(int c);
 #   define WOLFSSL_USER_IO
 #   define WOLFSSL_SP_MUL_D
 #   define WOLFSSL_ALLOW_NO_SUITES
+#   ifndef WOLFBOOT_CERT_CHAIN_NAME_CONSTRAINTS
+#       define IGNORE_NAME_CONSTRAINTS
+#   endif
 #endif
 
 #ifdef WOLFSSL_STM32_PKA

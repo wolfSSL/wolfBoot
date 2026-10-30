@@ -91,7 +91,9 @@
 /* wolfHSM client context and configuration */
 #if defined(WOLFBOOT_ENABLE_WOLFHSM_CLIENT)
 
-static int _connectCb(void* context, whCommConnected connect);
+/* wolfHSM TC3xx port client, which selects the comm buffer and the bridge
+ * flags. wolfBoot and then the application on CPU0 both use client 0. */
+#define HSM_CLIENT 0
 
 /* Client configuration/contexts */
 static whTransportMemClientContext tmcCtx[1] = {0};
@@ -172,8 +174,8 @@ void wolfBoot_panic(void) TC3_LONGCALL;
  * to force the HSM core to execute from RAM while the host-driven flash
  * command completes.
  * The server app must be running first to process a park request */
-#define HSM_PARK() (void)tchsmHhHost_HsmPark()
-#define HSM_RELEASE() (void)tchsmHhHost_HsmRelease()
+#define HSM_PARK() (void)tchsmHhHost_HsmPark(HSM_CLIENT)
+#define HSM_RELEASE() (void)tchsmHhHost_HsmRelease(HSM_CLIENT)
 #else
 #define HSM_PARK()
 #define HSM_RELEASE()
@@ -587,41 +589,11 @@ RAMFUNCTION void ext_flash_unlock(void)
 
 #ifdef WOLFBOOT_ENABLE_WOLFHSM_CLIENT
 
-static int _connectCb(void* context, whCommConnected connect)
-{
-    int ret;
-
-    switch (connect) {
-        case WH_COMM_CONNECTED:
-            ret = tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_CONNECT);
-            break;
-        case WH_COMM_DISCONNECTED:
-            ret = tchsmHhHost2Hsm_Notify(TCHSM_HOST2HSM_NOTIFY_DISCONNECT);
-            break;
-        default:
-            ret = WH_ERROR_BADARGS;
-            break;
-    }
-
-    return ret;
-}
-
 int hal_hsm_init_connect(void)
 {
-    int    rc = 0;
-    size_t i;
+    int rc = 0;
 
-    /* init shared memory buffers */
-    uint32_t* req = (uint32_t*)hsmShmCore0CommBuf;
-    uint32_t* resp =
-        (uint32_t*)hsmShmCore0CommBuf + HSM_SHM_CORE0_COMM_BUF_WORDS / 2;
-    whTransportMemConfig tmcCfg[1] = {{
-        .req       = req,
-        .req_size  = HSM_SHM_CORE0_COMM_BUF_SIZE / 2,
-        .resp      = resp,
-        .resp_size = HSM_SHM_CORE0_COMM_BUF_SIZE / 2,
-    }};
-
+    whTransportMemConfig tmcCfg[1] = {{0}};
 
     /* Client configuration/contexts */
     whCommClientConfig cc_conf[1] = {{
@@ -629,21 +601,21 @@ int hal_hsm_init_connect(void)
         .transport_context = (void*)tmcCtx,
         .transport_config  = (void*)tmcCfg,
         .client_id         = WOLFBOOT_WOLFHSM_CLIENT_ID,
-        .connect_cb        = _connectCb,
+        .connect_cb        = hsm_ipc_get_connect_cb(HSM_CLIENT),
     }};
 
     whClientConfig c_conf[1] = {{
         .comm     = cc_conf,
     }};
 
-    rc = hsm_ipc_init();
+    rc = hsm_ipc_init(HSM_CLIENT);
     if (rc != WH_ERROR_OK) {
         return rc;
     }
 
-    /* init shared memory buffers */
-    for (i = 0; i < HSM_SHM_CORE0_COMM_BUF_WORDS; i++) {
-        hsmShmCore0CommBuf[i] = 0;
+    rc = hsm_ipc_transport_config(HSM_CLIENT, tmcCfg);
+    if (rc != WH_ERROR_OK) {
+        return rc;
     }
 
     rc = wh_Client_Init(&hsmClientCtx, c_conf);

@@ -49,7 +49,8 @@ static void hsmUpdate(void)
     if (wolfBoot_current_firmware_version() > BASE_FW_VERSION) {
         return;
     }
-    rc = tchsmHhHost_HsmUpdateTrigger();
+    /* Client 0 is the wolfHSM client of this core */
+    rc = tchsmHhHost_HsmUpdateTrigger(0);
     if (rc == 0) {
         wolfBoot_printf("HSM update triggered\n");
     }
