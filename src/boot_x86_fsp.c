@@ -42,6 +42,9 @@
 #include <loader.h>
 #include <tpm.h>
 #endif
+#ifdef WOLFBOOT_FSP_NVS_CACHE
+#include <x86/fsp_nvs.h>
+#endif
 
 
 #define WOLFBOOT_X86_STACK_SIZE 0x10000
@@ -542,6 +545,9 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     uint32_t status;
     uint16_t type;
     uint32_t esp;
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+    int nvs_used;
+#endif
 
     (void)stack_top;
     (void)timestamp;
@@ -586,6 +592,11 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     if (status != 0) {
         panic();
     }
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+    nvs_used = fsp_nvs_apply(udp_m_parameter,
+                             fsp_m_info_header->CfgRegionSize, fsp_m_base,
+                             fsp_m_info_header->ImageSize);
+#endif
 
 #if defined(WOLFBOOT_DUMP_FSP_UPD)
     wolfBoot_printf("Dumping fspm udp (%d bytes)" ENDLINE, (int)fsp_m_info_header->CfgRegionSize);
@@ -604,8 +615,17 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
     fsp_handle_reset(status);
     if (status != EFI_SUCCESS) {
         wolfBoot_printf("failed: 0x%x" ENDLINE, status);
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+        if (nvs_used) {
+            fsp_nvs_skip(1);
+            reset(0);
+        }
+#endif
         panic();
     }
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
+    fsp_nvs_skip(0);
+#endif
     wolfBoot_printf("success" ENDLINE);
 
     status = get_top_address(&top_address, hobList);

@@ -25,5 +25,7 @@
 
 int x86_fsp_tgl_init_sata(uint32_t *bar);
 int tgl_lock_bios_region(void);
+int tgl_spi_flash_erase(uint32_t address, uint32_t len);
+int tgl_spi_flash_write(uint32_t address, const uint8_t *buf, uint32_t len);
 
 #endif /* TGL_FSP_H */

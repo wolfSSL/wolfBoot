@@ -236,6 +236,30 @@ uint8_t io_read8(uint16_t port)
     return v;
 }
 
+/* CMOS/RTC scratch RAM (0x70/0x71). Bytes 0x40-0x7F are outside the RTC
+ * checksum and survive a 0xCF9 reset but not loss of the RTC well. Bit 7 of
+ * the index port is NMI-disable and must be preserved. */
+#define CMOS_INDEX_PORT 0x70
+#define CMOS_DATA_PORT  0x71
+
+uint8_t cmos_read(uint8_t index)
+{
+    uint8_t nmi;
+
+    nmi = io_read8(CMOS_INDEX_PORT) & 0x80;
+    io_write8(CMOS_INDEX_PORT, nmi | (index & 0x7F));
+    return io_read8(CMOS_DATA_PORT);
+}
+
+void cmos_write(uint8_t index, uint8_t value)
+{
+    uint8_t nmi;
+
+    nmi = io_read8(CMOS_INDEX_PORT) & 0x80;
+    io_write8(CMOS_INDEX_PORT, nmi | (index & 0x7F));
+    io_write8(CMOS_DATA_PORT, value);
+}
+
 /**
  * @brief Reset the system.
  *

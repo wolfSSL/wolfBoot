@@ -171,6 +171,9 @@ TESTS+=unit-t10xx-flash-status
 TESTS+=unit-p1021-erase-advance
 TESTS+=unit-p1021-read-badblock
 TESTS+=unit-kontron-tgl-spi
+TESTS+=unit-fsp-nvs
+TESTS+=unit-fsp-nvs-save
+TESTS+=unit-tgl-spi-hwseq
 TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
@@ -2202,6 +2205,32 @@ kontron_spi_fn_extract.h: ../../hal/x86_fsp_tgl.c
 unit-kontron-tgl-spi: unit-kontron-tgl-spi.c kontron_spi_extract.h \
 	kontron_spi_fn_extract.h
 	gcc -o $@ unit-kontron-tgl-spi.c $(CFLAGS) $(LDFLAGS)
+
+# unit-tgl-spi-hwseq runs the real SPI hardware-sequencing erase/write from
+# hal/x86_fsp_tgl.c (FSP memory training data cache) against a model of the
+# SPI controller registers and a RAM-backed flash window.
+tgl_spi_hwseq_extract.h: ../../hal/x86_fsp_tgl.c
+	sed -n '/^#ifdef WOLFBOOT_FSP_NVS_CACHE/,/^#endif \/\* WOLFBOOT_FSP_NVS_CACHE \*\//p' $< > $@
+
+unit-tgl-spi-hwseq:CFLAGS+=-DWOLFBOOT_FSP_NVS_CACHE
+unit-tgl-spi-hwseq: unit-tgl-spi-hwseq.c kontron_spi_extract.h \
+	tgl_spi_hwseq_extract.h
+	gcc -o $@ unit-tgl-spi-hwseq.c $(CFLAGS) $(LDFLAGS)
+
+# unit-fsp-nvs runs the FSP-M memory training data cache record check and
+# the stage 1 hand-off (src/x86/fsp_nvs.c) against a RAM-backed area.
+unit-fsp-nvs:CFLAGS+=-DWOLFBOOT_FSP -DWOLFBOOT_FSP_NVS_CACHE \
+	-DBUILD_LOADER_STAGE1 -DPRINTF_ENABLED
+unit-fsp-nvs: unit-fsp-nvs.c ../../src/x86/fsp_nvs.c
+	gcc -o $@ unit-fsp-nvs.c $(CFLAGS) $(LDFLAGS)
+
+# unit-fsp-nvs-save runs the stage 2 save path against a synthetic HOB list
+# and a RAM-backed flash area; built non-PIE so the HOB list sits below 4 GB
+# (stage2_parameter.hobList is 32-bit).
+unit-fsp-nvs-save:CFLAGS+=-DWOLFBOOT_FSP -DWOLFBOOT_FSP_NVS_CACHE \
+	-DPRINTF_ENABLED -fno-pie
+unit-fsp-nvs-save: unit-fsp-nvs-save.c ../../src/x86/fsp_nvs.c ../../src/x86/hob.c
+	gcc -o $@ unit-fsp-nvs-save.c $(CFLAGS) -no-pie $(LDFLAGS)
 
 # unit-nrf5340-flash-protect runs the real hal_flash_protect() from
 # hal/nrf5340.c against a mock SPU region-permission array (F-13623: the
