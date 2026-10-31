@@ -2065,6 +2065,17 @@ ifeq ($(FSP), 1)
 
     # set CFLAGS defines for each x86_fsp option
     $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))
+
+  ifeq ($(FSP_NVS_CACHE),1)
+    ifeq ($(and $(FSP_NVS_BASE),$(FSP_NVS_SIZE)),)
+      $(error FSP_NVS_CACHE=1 needs FSP_NVS_BASE and FSP_NVS_SIZE)
+    endif
+    ifeq ($(filter $(TARGET),kontron_vx3060_s2 nai_68int6),)
+      $(error FSP_NVS_CACHE=1 is only supported on the Tiger Lake targets)
+    endif
+    CFLAGS+=-DWOLFBOOT_FSP_NVS_CACHE
+    CFLAGS+=-DFSP_NVS_BASE=$(FSP_NVS_BASE) -DFSP_NVS_SIZE=$(FSP_NVS_SIZE)
+  endif
 endif
 
 ifeq ($(FLASH_MULTI_SECTOR_ERASE),1)

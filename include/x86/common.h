@@ -60,6 +60,8 @@ uint16_t io_read16(uint16_t port);
 void io_write32(uint16_t port, uint32_t value);
 uint32_t io_read32(uint16_t port);
 void reset(uint8_t warm);
+uint8_t cmos_read(uint8_t index);
+void cmos_write(uint8_t index, uint8_t value);
 #ifdef WOLFBOOT_TGL
 int global_reset(void);
 #endif

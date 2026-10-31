@@ -25,6 +25,9 @@
 #include <pci.h>
 #include <printf.h>
 #include <string.h>
+#ifdef WOLFBOOT_FSP_NVS_CACHE
+#include <x86/fsp_nvs.h>
+#endif
 
 #define FSP_INFO_HEADER_OFFSET 0x94
 #define EFI_SUCCESS 0x0
@@ -162,6 +165,9 @@ void fsp_init_silicon(void)
         panic();
     }
     wolfBoot_printf("success");
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && !defined(BUILD_LOADER_STAGE1)
+    fsp_nvs_save();
+#endif
     memcpy(_fsp_s_base_start, _start_fsp_s, _end_fsp_s - _start_fsp_s);
     fsp_s_hdr = (struct fsp_info_header*)(_fsp_s_base_start + FSP_INFO_HEADER_OFFSET);
     silicon_init_off = fsp_s_hdr->FspSiliconInitEntryOffset;

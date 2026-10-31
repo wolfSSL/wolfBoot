@@ -677,7 +677,13 @@ static void fsp_set_silicon_cfg(FSPS_UPD *fsps)
     upd->Usb2PhyPehalfbit[15] = 0;
     upd->PchTsnEnable[0] = 0;
     upd->PchTsnEnable[1] = 0;
+#ifdef TARGET_nai_68int6
+    /* No CNVi module is fitted; forcing Disable makes FSP-S request a global
+     * reset on every cold boot, while Auto finds nothing and does not */
+    upd->CnviMode = 1;
+#else
     upd->CnviMode = 0;
+#endif
     upd->CnviBtCore = 0;
     upd->SataLedEnable = 1;
     upd->IomTypeCPortPadCfg[0] = 0;
