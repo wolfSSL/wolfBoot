@@ -63,6 +63,17 @@ ifeq ($(TARGET),nai_68int6)
   ifneq ($(ACPI),1)
     $(error nai_68int6 needs ACPI=1: its PCI interrupt routing is only in the DSDT)
   endif
+  # PCIe switch straps and start-up delays (see docs/Targets.md)
+  NAI_68INT6_PCIE_LANES?=8x1
+  NAI_68INT6_PCIE_LANE_CONFIGS:=8x1 1x4_4x1 4x1_1x4 1x4_1x4 1x8
+  ifeq ($(filter $(NAI_68INT6_PCIE_LANES),$(NAI_68INT6_PCIE_LANE_CONFIGS)),)
+    $(error NAI_68INT6_PCIE_LANES must be one of: $(NAI_68INT6_PCIE_LANE_CONFIGS))
+  endif
+  CFLAGS+=-DNAI_68INT6_PCIE_LANES_$(NAI_68INT6_PCIE_LANES)
+  $(foreach option,NAI_68INT6_PCIE_NT NAI_68INT6_BACKPLANE_CLK \
+    NAI_68INT6_PCIE_LINK_DELAY_S NAI_68INT6_BOOT_DELAY_S \
+    NAI_68INT6_FPGA_READY_DELAY_S, \
+    $(if $($(option)),$(eval CFLAGS+=-D$(option)=$($(option)))))
 endif
 
 # TPM NV version floor and boot audit counters (see docs/Targets.md).

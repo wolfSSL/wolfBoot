@@ -71,13 +71,29 @@
 #define GPIO_GPPC_E12_CFG_OFF (0xb30)
 #define GPIO_GPPC_E15_CFG_OFF (0xb60)
 #define GPIO_GPPC_E16_CFG_OFF (0xb70)
-#define GPIO_GPPC_F2_CFG_OFF (0xba0)
-#define GPIO_GPPC_F4_CFG_OFF (0xbc0)
-#define GPIO_GPPC_F5_CFG_OFF (0xbd0)
+#define GPIO_GPPC_E19_CFG_OFF (0xba0)
+#define GPIO_GPPC_E21_CFG_OFF (0xbc0)
+#define GPIO_GPPC_E22_CFG_OFF (0xbd0)
 #define GPIO_GPPC_F9_CFG_OFF (0x910)
 #define GPIO_GPPC_A9_CFG_OFF (0xa30)
 #define GPIO_GPPC_T2_CFG_OFF (0x8c0)
 #define GPIO_GPPC_T3_CFG_OFF (0x8d0)
+#define GPIO_GPPC_A0_CFG_OFF (0x9a0)
+#define GPIO_GPPC_B12_CFG_OFF (0x7c0)
+#define GPIO_GPPC_B21_CFG_OFF (0x850)
+#define GPIO_GPPC_B22_CFG_OFF (0x860)
+#define GPIO_GPPC_C23_CFG_OFF (0x870)
+#define GPIO_GPPC_S0_CFG_OFF (0x700)
+#define GPIO_GPPC_S1_CFG_OFF (0x710)
+#define GPIO_GPPC_S2_CFG_OFF (0x720)
+#define GPIO_GPPC_S3_CFG_OFF (0x730)
+#define GPIO_GPPC_S4_CFG_OFF (0x740)
+#define GPIO_GPPC_S5_CFG_OFF (0x750)
+#define GPIO_GPPC_S6_CFG_OFF (0x760)
+#define GPIO_GPPC_S7_CFG_OFF (0x770)
+#define GPIO_GPPC_H7_CFG_OFF (0x7f0)
+#define GPIO_GPPC_H8_CFG_OFF (0x800)
+#define GPIO_GPPC_H9_CFG_OFF (0x810)
 
 #define GPIO_OWN_MASK (0x3)
 /* struct tgl_gpio, enum gpio_config_flags and struct tgl_gpio_conf are defined
@@ -86,6 +102,56 @@
 #if defined (TARGET_kontron_vx3060_s2) || defined (TARGET_nai_68int6)
 
 #if defined (TARGET_nai_68int6)
+/* PCIe switch lane configuration, strapped on GPP_B21/B22 (MUX_SEL1/0) and
+ * GPP_S4/S7/S6 (BOOTCFG2/1/0); the BIOS default is 8x1 */
+#if defined(NAI_68INT6_PCIE_LANES_1x4_4x1)
+#define NAI_PCIE_STRAP_MUX_SEL1 1
+#define NAI_PCIE_STRAP_MUX_SEL0 0
+#define NAI_PCIE_STRAP_BOOTCFG2 0
+#define NAI_PCIE_STRAP_BOOTCFG1 0
+#define NAI_PCIE_STRAP_BOOTCFG0 1
+#elif defined(NAI_68INT6_PCIE_LANES_4x1_1x4)
+#define NAI_PCIE_STRAP_MUX_SEL1 0
+#define NAI_PCIE_STRAP_MUX_SEL0 1
+#define NAI_PCIE_STRAP_BOOTCFG2 0
+#define NAI_PCIE_STRAP_BOOTCFG1 1
+#define NAI_PCIE_STRAP_BOOTCFG0 0
+#elif defined(NAI_68INT6_PCIE_LANES_1x4_1x4)
+#define NAI_PCIE_STRAP_MUX_SEL1 0
+#define NAI_PCIE_STRAP_MUX_SEL0 0
+#define NAI_PCIE_STRAP_BOOTCFG2 0
+#define NAI_PCIE_STRAP_BOOTCFG1 1
+#define NAI_PCIE_STRAP_BOOTCFG0 1
+#elif defined(NAI_68INT6_PCIE_LANES_1x8)
+#define NAI_PCIE_STRAP_MUX_SEL1 0
+#define NAI_PCIE_STRAP_MUX_SEL0 0
+#define NAI_PCIE_STRAP_BOOTCFG2 1
+#define NAI_PCIE_STRAP_BOOTCFG1 0
+#define NAI_PCIE_STRAP_BOOTCFG0 0
+#else /* 8x1 */
+#define NAI_PCIE_STRAP_MUX_SEL1 1
+#define NAI_PCIE_STRAP_MUX_SEL0 1
+#define NAI_PCIE_STRAP_BOOTCFG2 0
+#define NAI_PCIE_STRAP_BOOTCFG1 0
+#define NAI_PCIE_STRAP_BOOTCFG0 0
+#endif
+
+/* PCIe switch non-transparent mode (GPP_S2) */
+#ifndef NAI_68INT6_PCIE_NT
+#define NAI_68INT6_PCIE_NT 0
+#endif
+#if NAI_68INT6_PCIE_NT != 0 && NAI_68INT6_PCIE_NT != 1
+#error "NAI_68INT6_PCIE_NT must be 0 or 1"
+#endif
+
+/* Backplane PCIe reference clock (GPP_A0) */
+#ifndef NAI_68INT6_BACKPLANE_CLK
+#define NAI_68INT6_BACKPLANE_CLK 0
+#endif
+#if NAI_68INT6_BACKPLANE_CLK != 0 && NAI_68INT6_BACKPLANE_CLK != 1
+#error "NAI_68INT6_BACKPLANE_CLK must be 0 or 1"
+#endif
+
 /* Pad settings snapshotted from a running 68INT6 with the stock BIOS.
  * HOSTSW_OWN and PADCFGLOCK are not captured. */
 
@@ -127,8 +193,242 @@ static const struct tgl_gpio_conf gpio_table_tempram[] = {
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
 };
 
-/* Nothing is required between tempram and memory init on this board. */
+/* PCIe switch and backplane straps, in the order the stock BIOS writes
+ * them, before memory init. */
 static const struct tgl_gpio_conf gpio_table_premem[] = {
+    /* PAD S0: low */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S0_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S1: low */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S1_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S3: low */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S3_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S5: low */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S5_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S2: PCIe switch NT (low = transparent) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S2_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_68INT6_PCIE_NT,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD B12: low until PCIE_RDY, then driven high */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B12_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD B21: PCIe lane strap MUX_SEL1 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B21_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_PCIE_STRAP_MUX_SEL1,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD B22: PCIe lane strap MUX_SEL0 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_B22_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_PCIE_STRAP_MUX_SEL0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S4: PCIe lane strap BOOTCFG2 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S4_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_PCIE_STRAP_BOOTCFG2,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S7: PCIe lane strap BOOTCFG1 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S7_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_PCIE_STRAP_BOOTCFG1,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD S6: PCIe lane strap BOOTCFG0 */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_S6_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_PCIE_STRAP_BOOTCFG0,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD A0: backplane PCIe clock (low = off) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_0_PORT_ID,
+             .cfg_offset = GPIO_GPPC_A0_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = NAI_68INT6_BACKPLANE_CLK,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD C23: PCIE_RDY input (high = ready) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_4_PORT_ID,
+             .cfg_offset = GPIO_GPPC_C23_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_INPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
 };
 
 /* The rest of the stock pad settings, applied after silicon init. */
@@ -261,19 +561,20 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
           GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
-          GPIO_SET_RXEVCONF),
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_interrupt = 0x00,
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
      .gpio_reset = GPIO_RESET_PLTRST},
-    /* PAD F2  (DW0=0x44001600 DW1=0x00003C3F) */
+    /* PAD E19  (DW0=0x44001600 DW1=0x00003C3F) */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E19_CFG_OFF,
          },
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
@@ -312,13 +613,14 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
           GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
-          GPIO_SET_RXEVCONF),
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_interrupt = 0x00,
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
      .gpio_reset = GPIO_RESET_PLTRST},
     /* PAD E15  (DW0=0x44000B00 DW1=0x0000003B) */
     {.gpio =
@@ -363,13 +665,14 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
           GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
-          GPIO_SET_RXEVCONF),
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_interrupt = 0x00,
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
      .gpio_reset = GPIO_RESET_PLTRST},
     /* PAD A9  (DW0=0x44000B00 DW1=0x00000049) */
     {.gpio =
@@ -388,11 +691,11 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
-    /* PAD F4  (DW0=0x44001600 DW1=0x00003C41) */
+    /* PAD E21  (DW0=0x44001600 DW1=0x00003C41) */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F4_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E21_CFG_OFF,
          },
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
@@ -405,11 +708,11 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
-    /* PAD F5  (DW0=0x84000200 DW1=0x00000042) */
+    /* PAD E22  (DW0=0x84000200 DW1=0x00000042) */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F5_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E22_CFG_OFF,
          },
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
@@ -575,7 +878,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_PLTRST},
-    /* PAD D2  (DW0=0x84000201 DW1=0x0000002E) */
+    /* PAD D2: held low; the OS drives it high for the IPMC */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_1_PORT_ID,
@@ -584,13 +887,14 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .flags =
          (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
           GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
-          GPIO_SET_RXEVCONF),
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_OUTPUT,
      .gpio_term = GPIO_TERM_NONE,
      .gpio_interrupt = 0x00,
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
      .gpio_reset = GPIO_RESET_PLTRST},
     /* PAD R0  (DW0=0x44000700 DW1=0x0003C058) */
     {.gpio =
@@ -797,6 +1101,60 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
+    /* PAD H7  (DW0=0x84000201 DW1=0x0000001B) USB power enable */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_H7_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD H8  (DW0=0x84000201 DW1=0x0000001C) USB power enable */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_H8_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
+     .gpio_reset = GPIO_RESET_PLTRST},
+    /* PAD H9  (DW0=0x84000201 DW1=0x0000001D) USB power enable */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_H9_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 1,
+     .gpio_reset = GPIO_RESET_PLTRST},
 };
 
 #else /* TARGET_kontron_vx3060_s2 */
@@ -926,7 +1284,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E19_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),
@@ -1006,7 +1364,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F4_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E21_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),
@@ -1017,7 +1375,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F5_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E22_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),

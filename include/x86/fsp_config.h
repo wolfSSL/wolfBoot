@@ -41,4 +41,29 @@
 #define FSP_THERMAL_THROTTLING 1
 #endif
 
+/* Seconds to wait after the straps, before CPU PCIe link training */
+#ifndef NAI_68INT6_PCIE_LINK_DELAY_S
+#define NAI_68INT6_PCIE_LINK_DELAY_S 0
+#endif
+#if NAI_68INT6_PCIE_LINK_DELAY_S < 0 || NAI_68INT6_PCIE_LINK_DELAY_S > 5
+#error "NAI_68INT6_PCIE_LINK_DELAY_S must be 0 to 5"
+#endif
+
+/* Seconds to wait before polling PCIE_RDY */
+#ifndef NAI_68INT6_BOOT_DELAY_S
+#define NAI_68INT6_BOOT_DELAY_S 0
+#endif
+#if NAI_68INT6_BOOT_DELAY_S < 0 || NAI_68INT6_BOOT_DELAY_S > 255
+#error "NAI_68INT6_BOOT_DELAY_S must be 0 to 255"
+#endif
+
+/* Extra seconds added to the 5 s PCIE_RDY timeout */
+#ifndef NAI_68INT6_FPGA_READY_DELAY_S
+#define NAI_68INT6_FPGA_READY_DELAY_S 0
+#endif
+#if NAI_68INT6_FPGA_READY_DELAY_S != 0 && \
+    NAI_68INT6_FPGA_READY_DELAY_S != 5 && NAI_68INT6_FPGA_READY_DELAY_S != 10
+#error "NAI_68INT6_FPGA_READY_DELAY_S must be 0, 5 or 10"
+#endif
+
 #endif

@@ -44,6 +44,7 @@ extern uint8_t _fsp_s_base_start[];
 
 int fsp_machine_update_s_parameters(uint8_t *default_s_params);
 int fsp_pre_silicon_init_cb(void);
+int fsp_pre_pci_enum_cb(void);
 /*!
  * \brief Check if the FSP info header is valid.
  *
@@ -195,6 +196,9 @@ void fsp_init_silicon(void)
         panic();
     }
     wolfBoot_printf("success");
+    status = fsp_pre_pci_enum_cb();
+    if (status != 0)
+        panic();
     pci_enum_do();
     pci_dump_config_space();
     notify_phase_off = fsp_s_hdr->NotifyPhaseEntryOffset;
