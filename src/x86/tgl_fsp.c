@@ -110,6 +110,8 @@
 #define GPIO_TERM_MASK (0xf) << GPIO_TERM_SHIFT
 #define GPIO_RXEVCONF_SHIFT (25)
 #define GPIO_RXEVCONF_MASK (0x3) << GPIO_RXEVCONF_SHIFT
+#define GPIO_TX_STATE (1U << 0)
+#define GPIO_RX_STATE (1U << 1)
 #define PCR_INTERRUPT_PORT_ID (0xc4)
 #define GIC_OFFSET (0x31FC)
 #define GIC_SHUTDOWN_STATUS_BIT (1 << 0)
@@ -143,9 +145,9 @@
 #define GPIO_GPPC_E12_CFG_OFF (0xb30)
 #define GPIO_GPPC_E15_CFG_OFF (0xb60)
 #define GPIO_GPPC_E16_CFG_OFF (0xb70)
-#define GPIO_GPPC_F2_CFG_OFF (0xba0)
-#define GPIO_GPPC_F4_CFG_OFF (0xbc0)
-#define GPIO_GPPC_F5_CFG_OFF (0xbd0)
+#define GPIO_GPPC_E19_CFG_OFF (0xba0)
+#define GPIO_GPPC_E21_CFG_OFF (0xbc0)
+#define GPIO_GPPC_E22_CFG_OFF (0xbd0)
 #define GPIO_GPPC_F9_CFG_OFF (0x910)
 #define GPIO_GPPC_A9_CFG_OFF (0xa30)
 #define GPIO_GPPC_T2_CFG_OFF (0x8c0)
@@ -1036,6 +1038,11 @@ int fsp_machine_update_s_parameters(uint8_t *default_s_params)
     memset(upd->PcieRpHotPlug, 0, sizeof(upd->PcieRpHotPlug));
     memset(upd->CpuPcieRpHotPlug, 0, sizeof(upd->CpuPcieRpHotPlug));
 #ifdef TARGET_nai_68int6
+    /* As the stock BIOS: hot-plug on PCH root ports 5, 9 and 10, so FSP-S
+     * keeps a port without a link (10 on a bare board) enabled */
+    upd->PcieRpHotPlug[4] = 1;
+    upd->PcieRpHotPlug[8] = 1;
+    upd->PcieRpHotPlug[9] = 1;
     upd->Eist = FSP_INTEL_SPEED_STEP;
     upd->Hwp = FSP_INTEL_SPEED_SHIFT;
     upd->Cx = FSP_C_STATES;
@@ -1097,7 +1104,8 @@ enum gpio_config_flags {
     GPIO_SET_RXINV = (1 << 4),
     GPIO_SET_RESET = (1 << 5),
     GPIO_SET_TERM = (1 << 6),
-    GPIO_SET_RXEVCONF = (1 << 7)
+    GPIO_SET_RXEVCONF = (1 << 7),
+    GPIO_SET_TX = (1 << 8)
 };
 
 struct tgl_gpio_conf {
@@ -1111,6 +1119,7 @@ struct tgl_gpio_conf {
     uint8_t gpio_term;
     uint8_t gpio_rxevconf;
     uint8_t gpio_rxinv;
+    uint8_t gpio_tx;
 };
 
 #if defined (TARGET_kontron_vx3060_s2)
@@ -1237,7 +1246,7 @@ static const struct tgl_gpio_conf gpio_table_premem[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F2_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E19_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),
@@ -1321,7 +1330,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F4_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E21_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),
@@ -1332,7 +1341,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
-             .cfg_offset = GPIO_GPPC_F5_CFG_OFF,
+             .cfg_offset = GPIO_GPPC_E22_CFG_OFF,
          },
      .flags = (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_INTERRUPT |
                GPIO_SET_RESET),
@@ -1555,7 +1564,7 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
 
     g = gpio->gpio;
 
-    GPIO_DEBUG_PRINTF("Gpio port: %d off: 0x%x :\r\n", i, g.comm_port_id,
+    GPIO_DEBUG_PRINTF("Gpio port: 0x%x off: 0x%x :\r\n", g.comm_port_id,
                       g.cfg_offset);
 
     dw0 = _dw0 = pch_read32(g.comm_port_id, g.cfg_offset);
@@ -1585,6 +1594,11 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
         dw0 &= ~(GPIO_RXEVCONF_MASK);
         dw0 |= gpio->gpio_rxevconf << GPIO_RXEVCONF_SHIFT;
     }
+    if (gpio->flags & GPIO_SET_TX) {
+        dw0 &= ~GPIO_TX_STATE;
+        if (gpio->gpio_tx)
+            dw0 |= GPIO_TX_STATE;
+    }
 
     GPIO_DEBUG_PRINTF("dw0: 0x%x -> 0x%x, dw1: 0x%x->0x%x\r\n", 
                       _dw0, dw0, _dw1, dw1);
@@ -1595,6 +1609,39 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
         pch_write32(g.comm_port_id, g.cfg_offset, dw0);
     }
 }
+
+#ifdef TARGET_nai_68int6
+static uint64_t tgl_rdtsc(void)
+{
+    uint32_t lo, hi;
+
+    __asm__ __volatile__ ("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+/* TSC ticks per millisecond: CPUID 0x15 gives the crystal clock and the
+ * TSC/crystal ratio, CPUID 0x16 the base frequency in MHz. */
+static uint32_t tgl_tsc_per_ms(void)
+{
+    uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
+
+    cpuid(0x15, &eax, &ebx, &ecx, &edx);
+    if (eax != 0 && ebx != 0 && ecx != 0)
+        return (ecx / 1000) * ebx / eax;
+    cpuid(0x16, &eax, &ebx, &ecx, &edx);
+    if ((eax & 0xffff) != 0)
+        return (eax & 0xffff) * 1000;
+    return 2000000;
+}
+
+static void tgl_delay_ms(uint32_t ms)
+{
+    uint64_t end = tgl_rdtsc() + (uint64_t)tgl_tsc_per_ms() * ms;
+
+    while (tgl_rdtsc() < end)
+        ;
+}
+#endif /* TARGET_nai_68int6 */
 
 #ifdef TARGET_kontron_vx3060_s2
 /**
@@ -1789,6 +1836,13 @@ int fsp_pre_mem_init_cb(void)
     for (i = 0; i < n; i++) {
         tgl_gpio_configure(&gpio_table_premem[i]);
     }
+#ifdef TARGET_nai_68int6
+    if (NAI_68INT6_PCIE_LINK_DELAY_S > 0) {
+        wolfBoot_printf("PCIe link delay %d s\r\n",
+                        NAI_68INT6_PCIE_LINK_DELAY_S);
+        tgl_delay_ms(NAI_68INT6_PCIE_LINK_DELAY_S * 1000);
+    }
+#endif
 
     return 0;
 }
@@ -1802,6 +1856,57 @@ int fsp_pre_silicon_init_cb(void)
         tgl_gpio_configure(&gpio_table_presilicon[i]);
     }
 
+    return 0;
+}
+
+#ifdef TARGET_nai_68int6
+#define NAI_PCIE_RDY_POLL_MS 50
+#define NAI_PCIE_RDY_TIMEOUT_MS (5000 + NAI_68INT6_FPGA_READY_DELAY_S * 1000)
+
+/* As the stock BIOS does before PCI enumeration: wait for the FPGA to raise
+ * PCIE_RDY (GPP_C23), then release GPP_B12. */
+static void nai_pcie_ready(void)
+{
+    uint32_t polls = 0, waited_ms = 0, dw0, id;
+    int ready;
+
+    if (NAI_68INT6_BOOT_DELAY_S > 0) {
+        wolfBoot_printf("Boot delay %d s\r\n", NAI_68INT6_BOOT_DELAY_S);
+        tgl_delay_ms(NAI_68INT6_BOOT_DELAY_S * 1000);
+    }
+    for (;;) {
+        polls++;
+        ready = (pch_read32(GPIO_COMM_4_PORT_ID, GPIO_GPPC_C23_CFG_OFF) &
+                 GPIO_RX_STATE) != 0;
+        if (ready || waited_ms >= NAI_PCIE_RDY_TIMEOUT_MS)
+            break;
+        tgl_delay_ms(NAI_PCIE_RDY_POLL_MS);
+        waited_ms += NAI_PCIE_RDY_POLL_MS;
+    }
+    if (ready)
+        wolfBoot_printf("PCIE_RDY high after %d polls\r\n", (int)polls);
+    else
+        wolfBoot_printf("Warning: PCIE_RDY low after %d ms, continuing\r\n",
+                        (int)waited_ms);
+
+    dw0 = pch_read32(GPIO_COMM_0_PORT_ID, GPIO_GPPC_B12_CFG_OFF);
+    pch_write32(GPIO_COMM_0_PORT_ID, GPIO_GPPC_B12_CFG_OFF,
+                dw0 | GPIO_TX_STATE);
+    if ((pch_read32(GPIO_COMM_0_PORT_ID, GPIO_GPPC_B12_CFG_OFF) &
+         GPIO_TX_STATE) == 0)
+        wolfBoot_printf("Warning: GPP_B12 did not go high\r\n");
+
+    id = pci_config_read32(0, 6, 0, 0);
+    wolfBoot_printf("PCIe 00:06.0: %s (0x%x)\r\n",
+                    (id & 0xffff) == 0xffff ? "absent" : "present", id);
+}
+#endif /* TARGET_nai_68int6 */
+
+int fsp_pre_pci_enum_cb(void)
+{
+#ifdef TARGET_nai_68int6
+    nai_pcie_ready();
+#endif
     return 0;
 }
 #endif /* TGL_FSP_H */
