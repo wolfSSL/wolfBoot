@@ -113,6 +113,16 @@ extern "C" {
 #  endif
 #endif
 
+#ifndef WB_STRINGIFY
+#define _WB_STRINGIFY_L2(str) #str
+#define WB_STRINGIFY(str) _WB_STRINGIFY_L2(str)
+#endif
+
+#if defined(VERSION_SECTION)
+#define WOLFBOOT_VERSION_SECTION __attribute__((section(WB_STRINGIFY(VERSION_SECTION))))
+#else
+#define WOLFBOOT_VERSION_SECTION
+#endif
 
 /* Helpers for memory alignment */
 #ifndef XALIGNED

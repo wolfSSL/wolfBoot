@@ -133,7 +133,8 @@ extern unsigned int _start_text;
 extern unsigned int __logical_binary_start;
 unsigned int _start_text = (unsigned int)&__logical_binary_start;
 #endif
-static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
+
+static volatile const uint32_t __attribute__((used)) WOLFBOOT_VERSION_SECTION wolfboot_version = WOLFBOOT_VERSION;
 
 #ifdef EXT_FLASH
 #  ifndef BUFFER_DECLARED
