@@ -51,7 +51,7 @@ extern unsigned int _start_text;
 /**
  * @brief wolfBoot version number (used in RAM code).
  */
-static volatile const uint32_t __attribute__((used)) wolfboot_version = WOLFBOOT_VERSION;
+static volatile const uint32_t __attribute__((used)) WOLFBOOT_VERSION_SECTION wolfboot_version = WOLFBOOT_VERSION;
 /**
  * @brief RAM Interrupt Vector table.
  */
