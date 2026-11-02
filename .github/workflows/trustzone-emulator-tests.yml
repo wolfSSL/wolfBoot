@@ -181,13 +181,19 @@ jobs:
           repository: nxp-mcuxpresso/CMSIS_5
           path: CMSIS_5
 
+      - name: Find the latest MCUXpresso SDK release
+        id: mcux-release
+        run: |
+          tag=$(tools/ci/mcux-sdk-latest-release.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Setup MCUXpresso SDK (lpc55s69)
         shell: bash
         run: |
           python3 -m venv venv
           source venv/bin/activate
           pip install west
-          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git --mr ${{ steps.mcux-release.outputs.tag }} mcuxpresso-sdk
           cd mcuxpresso-sdk
           sed -i '/se_hostlib\|emwin\|executorch/d' manifests/boards/lpcxpresso55s69.yml
           west update_board --set board lpcxpresso55s69

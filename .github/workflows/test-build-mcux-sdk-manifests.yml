@@ -38,6 +38,12 @@ jobs:
       - name: Trust workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Find the latest MCUXpresso SDK release
+        id: mcux-release
+        run: |
+          tag=$(tools/ci/mcux-sdk-latest-release.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Cache MCUXpresso SDK
         id: cache-mcuxpresso
         uses: actions/cache@v4
@@ -45,7 +51,7 @@ jobs:
           path: |
             mcuxpresso-sdk
             venv
-          key: mcuxpresso-sdk-${{inputs.board-name}}-${{hashFiles('.github/workflows/test-build-mcux-sdk-manifests.yml')}}
+          key: mcuxpresso-sdk-${{inputs.board-name}}-${{hashFiles('.github/workflows/test-build-mcux-sdk-manifests.yml')}}-${{ steps.mcux-release.outputs.tag }}
 
       - name: Setup MCUXpresso SDK
         if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
@@ -53,7 +59,7 @@ jobs:
           python -m venv venv
           source venv/bin/activate
           pip install west
-          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git --mr ${{ steps.mcux-release.outputs.tag }} mcuxpresso-sdk
           cd mcuxpresso-sdk
           sed -i '/se_hostlib\|emwin\|executorch/d' manifests/boards/${{inputs.board-name}}.yml
           west update_board --set board ${{inputs.board-name}}

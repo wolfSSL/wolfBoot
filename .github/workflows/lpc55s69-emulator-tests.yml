@@ -34,6 +34,12 @@ jobs:
           repository: nxp-mcuxpresso/CMSIS_5
           path: CMSIS_5
 
+      - name: Find the latest MCUXpresso SDK release
+        id: mcux-release
+        run: |
+          tag=$(tools/ci/mcux-sdk-latest-release.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Cache MCUXpresso SDK
         id: cache-mcuxpresso
         uses: actions/cache@v4
@@ -41,7 +47,7 @@ jobs:
           path: |
             mcuxpresso-sdk
             venv
-          key: mcuxpresso-sdk-lpcxpresso55s69-emu-${{ hashFiles('.github/workflows/lpc55s69-emulator-tests.yml') }}
+          key: mcuxpresso-sdk-lpcxpresso55s69-emu-${{ hashFiles('.github/workflows/lpc55s69-emulator-tests.yml') }}-${{ steps.mcux-release.outputs.tag }}
 
       - name: Setup MCUXpresso SDK
         if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
@@ -49,7 +55,7 @@ jobs:
           python3 -m venv venv
           . venv/bin/activate
           pip install west
-          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git mcuxpresso-sdk
+          west init -m https://github.com/nxp-mcuxpresso/mcuxsdk-manifests.git --mr ${{ steps.mcux-release.outputs.tag }} mcuxpresso-sdk
           cd mcuxpresso-sdk
           sed -i '/se_hostlib\|emwin/d' manifests/boards/lpcxpresso55s69.yml
           west update_board --set board lpcxpresso55s69
