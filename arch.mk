@@ -3490,6 +3490,11 @@ ifeq ($(DEBUG_UART),1)
   endif
 endif
 
+# Debug RTT
+ifeq ($(DEBUG_RTT),1)
+  CFLAGS+=-DDEBUG_RTT
+endif
+
 # UART QSPI programmer (PolarFire SoC MPFS): receive binary over UART and
 # write it directly to QSPI flash. Requires EXT_FLASH=1 and DEBUG_UART=1.
 # Use tools/scripts/mpfs_qspi_prog.py on the host side.
