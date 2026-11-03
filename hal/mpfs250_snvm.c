@@ -40,7 +40,8 @@
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/memory.h> /* wc_ForceZero */
 
-#if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION)
+#if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION) || \
+    defined(SNVM_GOLDEN_ENCKEY_PROVISION)
 /* Provisioning runs from hal_init() on every boot of a provisioning image,
  * and the programmer reboots the board once on its own, so a page that
  * already holds the content is left alone: sNVM pages have a write-cycle
@@ -420,6 +421,22 @@ int snvm_kek_unwrap(const uint8_t *in, uint32_t insz, uint8_t *key,
 #error "SNVM PUF encrypt-key provider expects a 256-bit (AES-256) image key"
 #endif
 
+#ifdef DISK_GOLDEN_ENCRYPT_KEY
+/* Which module wolfBoot_get_encrypt_key() reads.  Defaults to the
+ * operational one, so the A/B version probe that runs before any slot is
+ * elected needs no selection. */
+static uint8_t snvm_enckey_module = SNVM_ENCKEY_MODULE;
+
+int wolfBoot_select_golden_encrypt_key(int golden)
+{
+    snvm_enckey_module = golden ? SNVM_GOLDEN_ENCKEY_MODULE :
+                                  SNVM_ENCKEY_MODULE;
+    return 0;
+}
+#else
+#define snvm_enckey_module SNVM_ENCKEY_MODULE
+#endif
+
 /* Read the wrapped AES key + nonce from sNVM, unwrap the key with the PUF KEK
  * and return both.  Returns 0 on success. */
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce)
@@ -434,10 +451,11 @@ int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce)
      * or candidate key material in either output. */
     wc_ForceZero(key, ENCRYPT_KEY_SIZE);
     wc_ForceZero(nonce, ENCRYPT_NONCE_SIZE);
-    ret = mpfs_snvm_read(SNVM_ENCKEY_MODULE, NULL, NULL, page,
+    ret = mpfs_snvm_read(snvm_enckey_module, NULL, NULL, page,
         MPFS_SNVM_PLAIN_DATA_LEN);
     if (ret != 0) {
-        wolfBoot_printf("encrypt-key: sNVM read failed (%d)\n", ret);
+        wolfBoot_printf("encrypt-key: sNVM read[%u] failed (%d)\n",
+            (unsigned)snvm_enckey_module, ret);
         return -1;
     }
     ret = snvm_kek_unwrap(page, SNVM_KEK_WRAPPED_LEN, key, ENCRYPT_KEY_SIZE);
@@ -507,12 +525,13 @@ int wolfBoot_erase_encrypt_key(void)
 }
 #endif
 
-#ifdef SNVM_ENCKEY_PROVISION
+#if defined(SNVM_ENCKEY_PROVISION) || defined(SNVM_GOLDEN_ENCKEY_PROVISION)
 /* One-time: wrap the AES key with the device PUF KEK and store
  * [wrapped key][nonce] in sNVM.  It must match the sign tool's key file.
  * The key comes from snvm_enckey_prov_key/nonce, defined by the integrator in
  * another object (SNVM_ENCKEY_PROVISION_EXTERN), or from the built-in public
  * test vector, which needs SNVM_ENCKEY_INSECURE_TEST_KEY as acknowledgement. */
+#ifdef SNVM_ENCKEY_PROVISION
 #if defined(SNVM_ENCKEY_PROVISION_EXTERN)
 extern const uint8_t snvm_enckey_prov_key[SNVM_KEK_AESKEY_LEN];
 extern const uint8_t snvm_enckey_prov_nonce[ENCRYPT_NONCE_SIZE];
@@ -536,8 +555,36 @@ static const uint8_t prov_aes_nonce[ENCRYPT_NONCE_SIZE] = {
     0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f
 };
 #endif
+#endif /* SNVM_ENCKEY_PROVISION */
 
-int snvm_enckey_provision(void)
+#ifdef SNVM_GOLDEN_ENCKEY_PROVISION
+#if defined(SNVM_ENCKEY_PROVISION_EXTERN)
+extern const uint8_t snvm_golden_enckey_prov_key[SNVM_KEK_AESKEY_LEN];
+extern const uint8_t snvm_golden_enckey_prov_nonce[ENCRYPT_NONCE_SIZE];
+#define prov_golden_aes_key   snvm_golden_enckey_prov_key
+#define prov_golden_aes_nonce snvm_golden_enckey_prov_nonce
+#elif !defined(SNVM_ENCKEY_INSECURE_TEST_KEY)
+#error "SNVM_GOLDEN_ENCKEY_PROVISION writes a key into sNVM permanently. Define \
+SNVM_ENCKEY_PROVISION_EXTERN and provide snvm_golden_enckey_prov_key/nonce, or define \
+SNVM_ENCKEY_INSECURE_TEST_KEY to provision the built-in public test vector."
+#else
+/* Second publicly known test vector, distinct from the operational one so a
+ * test cannot pass by reading the wrong module. */
+static const uint8_t prov_golden_aes_key[SNVM_KEK_AESKEY_LEN] = {
+    0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47,
+    0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
+    0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
+    0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f
+};
+static const uint8_t prov_golden_aes_nonce[ENCRYPT_NONCE_SIZE] = {
+    0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
+    0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f
+};
+#endif
+#endif
+
+static int snvm_enckey_provision_module(uint8_t module, const uint8_t *key,
+    const uint8_t *nonce)
 {
     uint8_t page[MPFS_SNVM_PLAIN_DATA_LEN];
     int     ret, i;
@@ -545,21 +592,40 @@ int snvm_enckey_provision(void)
     for (i = 0; i < (int)sizeof(page); i++) {
         page[i] = 0;
     }
-    ret = snvm_kek_wrap(prov_aes_key, (uint32_t)sizeof(prov_aes_key), page,
+    ret = snvm_kek_wrap(key, (uint32_t)SNVM_KEK_AESKEY_LEN, page,
         SNVM_KEK_WRAPPED_LEN);
     if (ret != SNVM_KEK_WRAPPED_LEN) {
         wolfBoot_printf("enckey provision: wrap failed (%d)\n", ret);
         wc_ForceZero(page, sizeof(page));
         return -1;
     }
-    memcpy(page + SNVM_KEK_WRAPPED_LEN, prov_aes_nonce, ENCRYPT_NONCE_SIZE);
-    ret = snvm_page_write_if_changed(SNVM_ENCKEY_MODULE, page);
+    memcpy(page + SNVM_KEK_WRAPPED_LEN, nonce, ENCRYPT_NONCE_SIZE);
+    ret = snvm_page_write_if_changed(module, page);
     wolfBoot_printf("enckey provision: sNVM write[%d] ret=%d\n",
-        SNVM_ENCKEY_MODULE, ret);
+        (int)module, ret);
     wc_ForceZero(page, sizeof(page));
     return ret;
 }
-#endif /* SNVM_ENCKEY_PROVISION */
+
+#ifdef SNVM_ENCKEY_PROVISION
+int snvm_enckey_provision(void)
+{
+    return snvm_enckey_provision_module(SNVM_ENCKEY_MODULE, prov_aes_key,
+        prov_aes_nonce);
+}
+#endif
+
+/* Separate from snvm_enckey_provision() because the zeroize that makes a
+ * second key worth having cannot be built alongside it, while the golden
+ * module it writes is one the zeroize never touches. */
+#ifdef SNVM_GOLDEN_ENCKEY_PROVISION
+int snvm_golden_enckey_provision(void)
+{
+    return snvm_enckey_provision_module(SNVM_GOLDEN_ENCKEY_MODULE,
+        prov_golden_aes_key, prov_golden_aes_nonce);
+}
+#endif
+#endif /* SNVM_ENCKEY_PROVISION || SNVM_GOLDEN_ENCKEY_PROVISION */
 
 #endif /* CUSTOM_ENCRYPT_KEY && SNVM_KEK */
 

@@ -250,10 +250,55 @@ START_TEST(test_set_erase_fail_closed)
     memset(key, 0x11, sizeof(key));
     memset(nonce, 0x22, sizeof(nonce));
     ck_assert_int_eq(wolfBoot_set_encrypt_key(key, nonce), -1);
+#ifndef DISK_FAILOVER_ZEROIZE
+    /* Without the zeroize the erase is a fail-closed stub.  The real one is
+     * built in only with DISK_FAILOVER_ZEROIZE and is covered below. */
     ck_assert_int_eq(wolfBoot_erase_encrypt_key(), -1);
+#endif
     ck_assert_int_eq(mock_snvm_writes, 0);
 }
 END_TEST
+
+#if defined(DISK_GOLDEN_ENCRYPT_KEY) && defined(SNVM_GOLDEN_ENCKEY_PROVISION)
+/* The disk suite mocks the selector, the getter and the erase, so only this
+ * one exercises the real provider: that the two modules hold different keys,
+ * that the selector decides which is served, and that the erase takes the
+ * operational page even with golden selected. */
+START_TEST(test_two_key_selection_and_golden_survives_erase)
+{
+    uint8_t key[ENCRYPT_KEY_SIZE], nonce[ENCRYPT_NONCE_SIZE];
+    uint8_t op_key[ENCRYPT_KEY_SIZE], golden_key[ENCRYPT_KEY_SIZE];
+    static const uint8_t zeros[MPFS_SNVM_PLAIN_DATA_LEN];
+
+    reset_mocks();
+    ck_assert_int_eq(snvm_enckey_provision(), 0);
+    ck_assert_int_eq(snvm_golden_enckey_provision(), 0);
+    /* Distinct wrapped blobs, so a test cannot pass by reading either page. */
+    ck_assert_int_ne(memcmp(mock_snvm[SNVM_ENCKEY_MODULE],
+        mock_snvm[SNVM_GOLDEN_ENCKEY_MODULE], MPFS_SNVM_PLAIN_DATA_LEN), 0);
+
+    ck_assert_int_eq(wolfBoot_select_golden_encrypt_key(0), 0);
+    ck_assert_int_eq(wolfBoot_get_encrypt_key(op_key, nonce), 0);
+    ck_assert_int_eq(wolfBoot_select_golden_encrypt_key(1), 0);
+    ck_assert_int_eq(wolfBoot_get_encrypt_key(golden_key, nonce), 0);
+    ck_assert_int_ne(memcmp(op_key, golden_key, sizeof(op_key)), 0);
+
+    /* Golden is still selected here: the erase must ignore that. */
+    ck_assert_int_eq(wolfBoot_erase_encrypt_key(), 0);
+    ck_assert_int_eq(memcmp(mock_snvm[SNVM_ENCKEY_MODULE], zeros,
+        MPFS_SNVM_PLAIN_DATA_LEN), 0);
+    ck_assert_int_ne(memcmp(mock_snvm[SNVM_GOLDEN_ENCKEY_MODULE], zeros,
+        MPFS_SNVM_PLAIN_DATA_LEN), 0);
+
+    /* Golden still unwraps to the same key; the operational one is gone. */
+    ck_assert_int_eq(wolfBoot_select_golden_encrypt_key(1), 0);
+    ck_assert_int_eq(wolfBoot_get_encrypt_key(key, nonce), 0);
+    ck_assert_int_eq(memcmp(key, golden_key, sizeof(key)), 0);
+    ck_assert_int_eq(wolfBoot_select_golden_encrypt_key(0), 0);
+    ck_assert_int_ne(wolfBoot_get_encrypt_key(key, nonce), 0);
+}
+END_TEST
+#endif
 
 Suite *snvm_kek_suite(void)
 {
@@ -267,6 +312,9 @@ Suite *snvm_kek_suite(void)
     tcase_add_test(tc, test_provision_then_get_encrypt_key);
     tcase_add_test(tc, test_get_encrypt_key_failures);
     tcase_add_test(tc, test_set_erase_fail_closed);
+#if defined(DISK_GOLDEN_ENCRYPT_KEY) && defined(SNVM_GOLDEN_ENCKEY_PROVISION)
+    tcase_add_test(tc, test_two_key_selection_and_golden_survives_erase);
+#endif
 
     suite_add_tcase(s, tc);
     return s;
