@@ -392,6 +392,10 @@ int mpfs_nonce(uint8_t *nonce);
 #ifndef CLINT_BASE
 #define CLINT_BASE                  0x02000000UL
 #endif
+/* Machine-timer comparator (per hart) and the MTIME counter. */
+#define CLINT_MTIMECMP_REG(hart) \
+    (*(volatile uint64_t*)(CLINT_BASE + 0x4000UL + (hart) * 8UL))
+#define CLINT_MTIME_REG (*(volatile uint64_t*)(CLINT_BASE + 0xBFF8UL))
 
 /* RTC Clock Frequency (1 MHz after divisor) */
 #define RTC_CLOCK_FREQ              1000000UL
@@ -476,6 +480,7 @@ void uart_write(const char* buf, unsigned int sz);
 #endif
 #ifdef WOLFBOOT_RISCV_MMODE
 void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls);
+void mpfs_enable_mtime(void);
 #endif
 #endif /* __ASSEMBLER__ */
 

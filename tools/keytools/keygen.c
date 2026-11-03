@@ -1469,7 +1469,6 @@ static void key_generate(uint32_t ktype, const char *kfilename, uint32_t id_mask
 static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
 {
     int ret = 0;
-    int initKey = 0;
     uint8_t buf[KEYSLOT_MAX_PUBKEY_SIZE];
     FILE* file;
     int readLen = 0;
@@ -1503,7 +1502,11 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
     if (readLen > (int)keySz) {
         if (ktype == AUTH_KEY_ECC256 || ktype == AUTH_KEY_ECC384 ||
             ktype == AUTH_KEY_ECC521) {
-            initKey = ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
+            if (wc_ecc_init(eccKey) != 0) {
+                fprintf(stderr, "Fatal error: wc_ecc_init failed\n");
+                exit(6);
+            }
+            ret = wc_EccPublicKeyDecode(buf, &keySzOut, eccKey, readLen);
 
             if (ret == 0) {
                 ret = wc_ecc_export_public_raw(eccKey, buf, &qxSz,
@@ -1525,11 +1528,14 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
                 }
             }
 
-            if (initKey == 0)
-                wc_ecc_free(eccKey);
+            wc_ecc_free(eccKey);
         }
         else if (ktype == AUTH_KEY_ED25519) {
-            initKey = ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
+            if (wc_ed25519_init(ed25519Key) != 0) {
+                fprintf(stderr, "Fatal error: wc_ed25519_init failed\n");
+                exit(6);
+            }
+            ret = wc_Ed25519PublicKeyDecode(buf, &keySzOut,
                 ed25519Key, readLen);
             if (ret < 0)
                 printf("error: wc_Ed25519PublicKeyDecode failed on %s\n", fname);
@@ -1539,18 +1545,20 @@ static void key_import(uint32_t ktype, const char *fname, uint32_t id_mask)
             if (ret < 0)
                 printf("error: wc_ed25519_export_public failed on %s\n", fname);
 
-            if (initKey == 0)
-                wc_ed25519_free(ed25519Key);
+            wc_ed25519_free(ed25519Key);
         }
         else if (ktype == AUTH_KEY_ED448) {
-            initKey = ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
+            if (wc_ed448_init(ed448Key) != 0) {
+                fprintf(stderr, "Fatal error: wc_ed448_init failed\n");
+                exit(6);
+            }
+            ret = wc_Ed448PublicKeyDecode(buf, &keySzOut,
                 ed448Key, readLen);
 
             if (ret == 0)
                 ret = wc_ed448_export_public(ed448Key, buf, &qxSz);
 
-            if (initKey == 0)
-                wc_ed448_free(ed448Key);
+            wc_ed448_free(ed448Key);
         }
 
         readLen = keySz;
