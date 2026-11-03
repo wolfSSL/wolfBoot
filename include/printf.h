@@ -62,14 +62,14 @@
 #       include "efi/efilib.h"
         /* NOTE: %s arguments will not work as EFI uses widechar string */
 #       define wolfBoot_printf(_f_, ...) Print(L##_f_, ##__VA_ARGS__)
-#   elif defined(DEBUG_UART)
+#   elif defined(DEBUG_UART) || defined(DEBUG_RTT)
         /* use minimal printf support in string.h */
-        void uart_printf(const char* fmt, ...);
+        void log_printf(const char* fmt, ...);
 #       if defined(__CCRX__)
             /* CC-RX has no ##__VA_ARGS__ */
-#           define wolfBoot_printf uart_printf
+#           define wolfBoot_printf log_printf
 #       else
-#           define wolfBoot_printf(_f_, ...) uart_printf(_f_, ##__VA_ARGS__)
+#           define wolfBoot_printf(_f_, ...) log_printf(_f_, ##__VA_ARGS__)
 #       endif
 #   elif defined(__CCRX__)
 #       define wolfBoot_printf printf

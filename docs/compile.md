@@ -248,6 +248,19 @@ To debug the bootloader, simply compile with `DEBUG=1`. The size of the bootload
 consistently, so ensure that you have enough space at the beginning of the flash before
 `WOLFBOOT_PARTITION_BOOT_ADDRESS`.
 
+### Enable SEGGER RTT logging
+
+With Make, set `DEBUG_RTT` to the root of a checkout of [SEGGER RTT](https://github.com/SEGGERMicro/RTT), not `1`.
+Provide the RTT configuration as `SEGGER_RTT_Conf.h` and add its directory to the include path:
+
+```sh
+make DEBUG_RTT=/path/to/segger_rtt DEBUG_UART=0 \
+    CFLAGS_EXTRA=-I/path/to/rtt_config/
+```
+
+This automatically enables `PRINTF_ENABLED` and sends `wolfBoot_printf` output to RTT up-channel 0.
+`DEBUG_UART=1` takes precedence over RTT, so disable it when using RTT. Read the output with an RTT-capable debugger or viewer.
+
 ### Disable interrupt vector relocation
 
 On some platforms, it might be convenient to avoid the interrupt vector relocation before boot-up.

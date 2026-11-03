@@ -161,8 +161,8 @@ int hal_hsm_server_cleanup(void);
 
 #ifdef TC3_CFG_HAVE_TRICORE
 /* Force longcall on printf functions (called from panic) */
-void uart_printf(const char* fmt, ...) TC3_LONGCALL;
-void uart_vprintf(const char* fmt, va_list argp) TC3_LONGCALL;
+void log_printf(const char* fmt, ...) TC3_LONGCALL;
+void log_vprintf(const char* fmt, va_list argp) TC3_LONGCALL;
 #ifndef __clang__
 /* clang rejects adding attributes after loader.h's inline definition */
 void wolfBoot_panic(void) TC3_LONGCALL;
