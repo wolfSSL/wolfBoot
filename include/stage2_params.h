@@ -31,6 +31,9 @@ struct stage2_parameter {
     /* Verified payload length, set by the disk loader before do_boot so the
      * Linux loader can bound the signed container header against the image. */
     uint32_t payload_size;
+    /* Address of the signed HDR_CMDLINE of the verified image, NUL-terminated,
+     * or 0 when it carries none */
+    uint32_t cmdline;
 #ifdef WOLFBOOT_FSP_NVS_CACHE
     uint32_t fsp_nvs_key;
 #endif
