@@ -4,7 +4,7 @@
 /* TODO: Update with actual memory map for MPFS250 */
 
 _Min_Heap_Size  = 0x00002000; /* required amount of heap  */
-_Min_Stack_Size = 0x00002000; /* required amount of stack */
+_Min_Stack_Size = @TEST_APP_STACK_SIZE@; /* required amount of stack */
 
 OUTPUT_ARCH( "riscv" )
 

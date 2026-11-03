@@ -2174,6 +2174,8 @@ ifeq ($(MPFS_ATHENA),1)
   # AES-256 ENCRYPT build.
   CFLAGS += -DMPFS_ATHENA -I$(MPFS_ATHENA_CAL_DIR)
   CFLAGS += -DWOLFSSL_MICROCHIP_MPFS -DWOLFSSL_MPFS_ATHENA
+  # The port's known-answer self-test is opt-in; the HAL's boot check runs it.
+  CFLAGS += -DWC_MPFS_ATHENA_SELFTEST
   # Matches the port's own WC_MPFS_ATHENA_DEVID default; wolfBoot tags its
   # cipher contexts with this one.
   CFLAGS += -DWOLFBOOT_DEVID_CRYPT=0xA7

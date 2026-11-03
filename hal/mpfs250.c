@@ -146,10 +146,6 @@ extern uint8_t _main_hart_hls; /* linker-provided address symbol; typed as uint8
 
 /* CLINT MSIP register for IPI delivery */
 #define CLINT_MSIP_REG(hart) (*(volatile uint32_t*)(CLINT_BASE + (hart) * 4))
-/* CLINT machine-timer comparator (per hart) and MTIME counter */
-#define CLINT_MTIMECMP_REG(hart) \
-    (*(volatile uint64_t*)(CLINT_BASE + 0x4000UL + (hart) * 8UL))
-#define CLINT_MTIME_REG (*(volatile uint64_t*)(CLINT_BASE + 0xBFF8UL))
 
 /* Signal secondary harts that E51 (main hart) is ready. */
 static void mpfs_signal_main_hart_started(void)
@@ -217,10 +213,10 @@ void secondary_hart_entry(unsigned long hartid, HLS_DATA* hls)
     }
 }
 
-#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
+#ifdef WOLFBOOT_RISCV_MMODE
 /* Enable the CLINT MTIME counter via the SYSREG RTC clock divider.  Without it
  * MTIME never advances and an S-mode OS has no scheduler tick. */
-static void mpfs_enable_mtime(void)
+void mpfs_enable_mtime(void)
 {
     volatile uint32_t *rtc_cr = (volatile uint32_t *)(SYSREG_BASE + 0x0CUL);
     uint32_t div;
@@ -233,7 +229,9 @@ static void mpfs_enable_mtime(void)
     *rtc_cr |= (1UL << 16);    /* enable RTC/time-base clock */
     __asm__ volatile("fence iorw, iorw" ::: "memory");
 }
+#endif /* WOLFBOOT_RISCV_MMODE */
 
+#if defined(MPFS_DDR_INIT) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
 /* SBI HSM hart_start backend: stage the target hart's mailbox and ring its
  * MSIP; it enters S-mode at saddr with a0=hartid, a1=opaque. */
 int sbi_hal_hart_start(unsigned long hartid, unsigned long saddr,

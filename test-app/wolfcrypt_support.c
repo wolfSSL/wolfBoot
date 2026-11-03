@@ -179,10 +179,7 @@
      *  - M-mode (no HSS): the 'time'/'cycle' user CSRs trap on the E51; read
      *    the machine 'mcycle' counter (CPU clock) instead. */
     #include "../hal/riscv.h"
-    #ifndef RISCV_SMODE_TIMER_FREQ
-        /* M-mode: mcycle counts the CPU clock (MSS_CPU_CLK, 600 MHz). */
-        #define RISCV_SMODE_TIMER_FREQ 600000000UL
-    #endif
+    #include "../hal/mpfs250.h"
     static uint64_t mpfs_start_ticks = 0;
     static uint64_t mpfs_get_ticks(void)
     {
