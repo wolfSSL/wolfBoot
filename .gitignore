@@ -250,6 +250,7 @@ tools/unit-tests/unit-fwtpm-nv-oob
 tools/unit-tests/unit-x86-paging-oob
 tools/unit-tests/unit-ahci-unlock-panic
 tools/unit-tests/unit-ata-security-passphrase-zeroize
+tools/unit-tests/unit-ata-sector-io
 tools/unit-tests/unit-arm-tee-psa-ipc
 tools/unit-tests/unit-flash-write-mcxa
 tools/unit-tests/unit-rw612-flash
