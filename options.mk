@@ -76,6 +76,15 @@ ifeq ($(TARGET),nai_68int6)
     $(if $($(option)),$(eval CFLAGS+=-D$(option)=$($(option)))))
 endif
 
+# These options need wolfTPM and turn it on, so an explicit WOLFTPM=0 alongside
+# one of them is a conflict rather than something to override silently.
+ifeq ($(WOLFTPM),0)
+  ifneq ($(filter 1,$(ANTI_ROLLBACK) $(MEASURED_BOOT) $(WOLFBOOT_TPM_VERIFY) \
+                    $(WOLFBOOT_TPM_KEYSTORE) $(WOLFBOOT_TPM_SEAL)),)
+    $(error WOLFTPM=0 conflicts with ANTI_ROLLBACK, MEASURED_BOOT, WOLFBOOT_TPM_VERIFY, WOLFBOOT_TPM_KEYSTORE or WOLFBOOT_TPM_SEAL; set those to 0 too)
+  endif
+endif
+
 # TPM NV version floor and boot audit counters (see docs/Targets.md).
 # HALT_ON_FAILURE also halts when the TPM state cannot be read or locked.
 ifeq ($(ANTI_ROLLBACK),1)

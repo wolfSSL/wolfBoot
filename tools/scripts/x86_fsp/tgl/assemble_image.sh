@@ -49,14 +49,13 @@ assemble()
 }
 
 # Parse command line options
-while getopts "s:n:m:" opt; do
+while getopts "n:" opt; do
     case "$opt" in
         n)
             FLASH_DUMP="$OPTARG"
             ;;
         *)
-            echo "Usage: $0 [-k] [-s FLASH_DUMP]"
-            echo "-k: make keys"
+            echo "Usage: $0 -n FLASH_DUMP"
             echo "-n FLASH_DUMP: assemble an image for being used without IBG"
             exit 1
             ;;

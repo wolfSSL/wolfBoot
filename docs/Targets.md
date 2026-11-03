@@ -9057,7 +9057,7 @@ wolfBoot target `nai_68int6` for the North Atlantic Industries 68INT6, a 3U Open
 | | |
 |---|---|
 | CPU | i7-1185GRE (`06-8C-01`), Tiger Lake UP3, PCH-LP |
-| Memory | 2 x 32 GB DDR4-3200 SODIMM, non-ECC |
+| Memory | DDR4-3200, soldered down, with In-Band ECC (`FSP_IN_BAND_ECC`) |
 | BIOS flash | Rev C/D5: 2 x W25R256JV (32 MB), selected by JP36. Next revision: one 64 MB device |
 | TPM | SLB9670 (SHA-1/256), or SLB9672, which adds a SHA-384 bank |
 | Storage | Onboard SATA SSD, AHCI at `00:17.0` |
@@ -9069,12 +9069,11 @@ wolfBoot target `nai_68int6` for the North Atlantic Industries 68INT6, a 3U Open
 cp config/examples/nai_68int6.config .config
 ./tools/scripts/x86_fsp/tgl/tgl_download_fsp.sh              # FSP UPD headers, first time only
 ./tools/scripts/x86_fsp/tgl/nai_extract_fsp.sh <68INT6.bin>  # board's own FSP blobs
-./tools/scripts/x86_fsp/tgl/assemble_image.sh -k             # generate signing keys
-make
+make                                                         # first build generates the signing key
 ./tools/scripts/x86_fsp/tgl/assemble_image.sh -n <68INT6.bin>
 ```
 
-`nai_extract_fsp.sh` takes FSP-T/M/S and the microcode from a 68INT6 BIOS image. Without it the build uses the public FSP, which compiles but does not train memory. The `-n` stitch replaces the top 6 MB (`BOOTLOADER_PARTITION_SIZE`) of the 12 MB BIOS region and keeps the descriptor and CSME byte for byte. The board has no recovery region (recovery is the second flash device), so use `-n`, not `-m`. The result is `final_image.bin`.
+The host needs `nasm`, `gcc-multilib` and `python-is-python3` besides the usual build tools. `nai_extract_fsp.sh` takes FSP-T/M/S and the microcode from a 68INT6 BIOS image. Without it the build uses the public FSP, which compiles but does not train memory. The `-n` stitch replaces the top 6 MB (`BOOTLOADER_PARTITION_SIZE`) of the 12 MB BIOS region and keeps the descriptor and CSME byte for byte. The board has no recovery region (recovery is the second flash device). The result is `final_image.bin`.
 
 ### Integrity algorithms
 
@@ -9086,7 +9085,7 @@ ECC P-384 and SHA-384 match what Intel Boot Guard uses for the Initial Boot Bloc
 | Image digest | SHA-384 (`HASH=SHA384`) |
 | Measured boot PCR | SHA-256 (the SLB9670 has only SHA-1 and SHA-256 banks) |
 
-`wolfBoot_image_measure()` re-hashes the authenticated digest with the PCR bank's algorithm, so one image serves either TPM. `MEASURED_PCR_ALG=SHA384` needs an SLB9672 with its SHA-384 bank allocated (`TPM2_PCR_Allocate` under platform auth, a provisioning step).
+Stage 1 re-hashes stage 2's authenticated SHA-384 digest with SHA-256 and extends PCR 0 with the result, as stage 2 does for the OS image in PCR 4, so `tools/scripts/x86_fsp/compute_pcr.py` can predict PCR 0. Only the SHA-256 PCR bank is supported.
 
 ### Configuration
 
@@ -9102,7 +9101,6 @@ Notable options in [config/examples/nai_68int6.config](../config/examples/nai_68
 | `NAI_68INT6_PCIE_LINK_DELAY_S`, `NAI_68INT6_BOOT_DELAY_S`, `NAI_68INT6_FPGA_READY_DELAY_S` | Waits before CPU PCIe link training (0-5 s), before polling PCIE_RDY (0-255 s), and added to the 5 s PCIE_RDY timeout (0, 5 or 10 s); all 0 by default. Before PCI enumeration wolfBoot polls PCIE_RDY (GPP_C23) every 50 ms, continues with a warning on timeout, then drives GPP_B12 high |
 | `ANTI_ROLLBACK=1` | Persistent version floor and boot audit counters in TPM NV |
 | `MEASURED_BOOT=1`, `MEASURED_PCR_OS=4` | Firmware into PCR 0, the verified OS image into PCR 4 |
-| `WOLFBOOT_BOOT_DISK=0` | Boot from GPT partitions; the A/B indices (sda3/sda4) are set in `src/update_disk.c` |
 
 ### BIOS region lock
 
@@ -9112,7 +9110,7 @@ Before handoff, `hal_flash_protect()` in the shared Tiger Lake HAL (`hal/x86_fsp
 
 `ANTI_ROLLBACK=1` keeps a version floor and boot audit counters in a TPM NV index; the backend is `src/boot_state_tpm.c` and the policy is `src/boot_state.c`. The floor is the highest version ever booted, set trust-on-first-use. A validly signed older image still boots and records a rollback event. Only an untrustworthy reference halts the boot; `ANTI_ROLLBACK_HALT_ON_FAILURE=1` also halts when the TPM is unreachable, a write fails or the platform hierarchy cannot be disabled.
 
-TPM NV is used instead of the partition state trailer because the floor must survive a full reimage of the disk or flash. `DISK_BOOT_CONFIRM` still handles per-slot confirmation, and the backend can move to a root-of-trust device later without changing the policy.
+TPM NV is used instead of the partition state trailer because the floor must survive a full reimage of the disk or flash. Per-slot boot confirmation is `DISK_BOOT_CONFIRM`, which this configuration leaves off, and the backend can move to a root-of-trust device later without changing the policy.
 
 `ALLOW_DOWNGRADE` is left unset, the secure default: if the higher-versioned slot fails to verify, wolfBoot halts (`Rollback to lower version not allowed`) rather than boot the lower one. Building with `ALLOW_DOWNGRADE=1` allows that fall-back and leaves the TPM floor as the only rollback guard.
 
@@ -9120,7 +9118,7 @@ The booted OS cannot lower the floor. The index is platform-created and writable
 
 ### Boot, programming and recovery
 
-wolfBoot boots the highest-versioned signed 64-bit `bzImage` or Multiboot2 ELF that verifies from the two GPT boot partitions. It falls back to the other slot only if that is not a downgrade (see Anti-rollback), and halts if neither boots. Program the flash with a Dediprog SF100 on JP4 while the board is off; the BIOS region lock blocks `flashrom` from the booted OS. JP36 selects which bank boots and which one the programmer sees; move it only with the board off.
+wolfBoot boots the highest-versioned signed 64-bit `bzImage` or Multiboot2 ELF that verifies from the two GPT boot partitions. It falls back to the other slot only if that is not a downgrade (see Anti-rollback), and halts if neither boots. Before handoff it sets FULL_RST in the Reset Control register (0xCF9), as the stock BIOS does, so a later reset such as SYS_RESET# from the IPMC is a full reset. A kernel command line signed into the OS image (`sign --cmdline`, the `HDR_CMDLINE` TLV) replaces the built-in one, so changing a kernel argument does not need a reflash. Program the flash with a Dediprog SF100 on JP4 while the board is off; the BIOS region lock blocks `flashrom` from the booted OS. JP36 selects which bank boots and which one the programmer sees; move it only with the board off.
 
 ### Multiboot2 ELF payloads
 
@@ -9139,7 +9137,7 @@ The two paths differ only in the handoff:
 | ACPI tables | Generated (`ACPI=1`) | None; they are only built on the Linux path |
 | RTC | The legacy CMOS RTC is ignored under the hardware-reduced ACPI tables; the I2C0 RTC is declared in the DSDT | The CMOS RTC is usable directly; I2C0 is enabled for the board RTC |
 
-Everything else is shared: FSP silicon setup (VT-d at the stock BIOS addresses, Hyper-Threading off), the halted PCH TCO watchdog, the BIOS region lock, measured boot, anti-rollback and A/B selection.
+Segments are loaded from the verified image only, and a segment that would overlap wolfBoot's own memory (from the stage 2 load address up to 4 GB) is rejected before anything is copied. Everything else is shared: FSP silicon setup (VT-d at the stock BIOS addresses, Hyper-Threading off), the halted PCH TCO watchdog, the BIOS region lock, measured boot, anti-rollback and A/B selection.
 
 ## Infineon PSOC Control C3
 

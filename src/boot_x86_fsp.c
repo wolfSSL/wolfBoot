@@ -265,10 +265,17 @@ static void jump_into_wolfboot(void)
 #endif /* WOLFBOOT_64BIT */
 
 #if defined(WOLFBOOT_MEASURED_BOOT)
-/* The image needs to be already verified */
+#if WOLFBOOT_TPM_PCR_DIG_SZ != 32
+#error "measured boot: the stage 1 re-hash only implements a SHA-256 PCR bank"
+#endif
+/* The image needs to be already verified. Its authenticated digest is
+ * re-hashed with SHA-256 and that value extended, as the OS measurement in
+ * update_disk.c is. */
 int wolfBoot_image_measure(uint8_t *image)
 {
     struct wolfBoot_image img;
+    uint8_t digest[SHA256_DIGEST_SIZE];
+    wc_Sha256 sha;
     int ret;
 
     memset(&img, 0, sizeof(img));
@@ -282,9 +289,16 @@ int wolfBoot_image_measure(uint8_t *image)
         return -1;
     }
 
-    wolfBoot_print_hexstr(img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE, 0);
-    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, img.sha_hash,
-        __LINE__);
+    ret = wc_InitSha256(&sha);
+    if (ret == 0)
+        ret = wc_Sha256Update(&sha, img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE);
+    if (ret == 0)
+        ret = wc_Sha256Final(&sha, digest);
+    if (ret != 0)
+        return -1;
+
+    wolfBoot_print_hexstr(digest, sizeof(digest), 0);
+    return wolfBoot_tpm2_extend(WOLFBOOT_MEASURED_PCR_A, digest, __LINE__);
 }
 #endif /* WOLFBOOT_MEASURED_BOOT */
 

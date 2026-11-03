@@ -37,6 +37,7 @@ static uint8_t part_b_image[IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE];
 static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
 static struct stage2_parameter mock_stage2_params;
+static const char *mock_cmdline;
 
 static void set_u16_le(uint8_t *dst, uint16_t value)
 {
@@ -74,6 +75,8 @@ static void reset_mocks(void)
     build_image(part_b_image, 7, TEST_PAYLOAD_SIZE, 0xB2);
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
+    mock_cmdline = NULL;
+    mock_stage2_params.cmdline = 0xffffffffU;
     /* The image must fit between load_address and tolum: exactly one
      * TEST_PAYLOAD_SIZE payload. */
     mock_stage2_params.tolum =
@@ -168,6 +171,17 @@ int wolfBoot_image_part_matches(struct wolfBoot_image* img)
 {
     (void)img;
     return 0;
+}
+
+uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
+{
+    (void)haystack;
+    if (type != HDR_CMDLINE || mock_cmdline == NULL) {
+        *ptr = NULL;
+        return 0;
+    }
+    *ptr = (uint8_t *)mock_cmdline;
+    return (uint16_t)strlen(mock_cmdline);
 }
 
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
@@ -273,6 +287,23 @@ START_TEST(test_fsp_fitting_slot_boots)
 }
 END_TEST
 
+START_TEST(test_fsp_signed_cmdline_is_passed_on)
+{
+    /* A signed HDR_CMDLINE reaches the payload loader; without one the
+     * loader is told there is none. */
+    reset_mocks();
+    mock_cmdline = "console=ttyS4,115200 root=/dev/sda2";
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_ne(mock_stage2_params.cmdline, 0);
+
+    reset_mocks();
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_eq(mock_stage2_params.cmdline, 0);
+}
+END_TEST
+
 Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfBoot");
@@ -282,6 +313,7 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_fsp_both_slots_oversized_panics);
     tcase_add_test(tc, test_fsp_inverted_tolum_rejects_both_slots);
     tcase_add_test(tc, test_fsp_fitting_slot_boots);
+    tcase_add_test(tc, test_fsp_signed_cmdline_is_passed_on);
     suite_add_tcase(s, tc);
 
     return s;
