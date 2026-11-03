@@ -80,7 +80,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-self-update-monolithic \
        unit-nsc-update \
        unit-update-flash-enc unit-update-flash-enc-full unit-update-flash-enc-intswap unit-update-ram unit-update-ram-fit unit-update-ram-uboot unit-update-ram-enc unit-update-ram-enc-nopart unit-update-ram-nofixed unit-update-ram-nofixed-noramboot unit-update-ram-noramboot unit-update-ram-custom-trailer unit-compressed-tlv unit-custom-trailer-nopart unit-update-flash-hwswap unit-update-flash-custom-trailer unit-pkcs11_store unit-psa_store unit-wolfhsm_flash_hal unit-disk \
-       unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
+       unit-update-disk unit-update-disk-confirm unit-update-disk-golden unit-update-disk-failover unit-update-disk-golden-enckey unit-update-disk-fsp unit-update-disk-oob unit-update-disk-fit unit-update-disk-fit-ramdisk unit-multiboot unit-boot-x86-fsp unit-loader-tpm-init unit-qspi-flash unit-fwtpm-stub unit-tpm-rsa-exp \
        unit-image-nopart unit-image-sha384 unit-image-sha3-384 unit-image-dts \
        unit-image-dts-sha384 unit-image-dts-sha3-384 unit-store-sbrk \
        unit-tpm-blob unit-policy-create unit-policy-sign unit-rot-auth unit-sdhci-response-bits \
@@ -125,6 +125,7 @@ TESTS+=unit-flash-m2354
 TESTS+=unit-otp-keystore
 TESTS+=unit-snvm-keystore
 TESTS+=unit-snvm-kek
+TESTS+=unit-snvm-kek-golden
 TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-ahci-unlock-panic
@@ -549,6 +550,8 @@ unit-update-disk-golden:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RA
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk-failover:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x400 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-golden-enckey:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED -DWOLFBOOT_RAMBOOT_MAX_SIZE=0x400 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 # Non-FSP disk-boot OOB regression (CRIT-03). WOLFBOOT_RAMBOOT_MAX_SIZE is the
 # cap the loader applies to the unauthenticated header fw_size before loading to
 # RAM, the same bound update_disk.c and update_ram.c enforce.
@@ -936,6 +939,21 @@ unit-snvm-kek: unit-snvm-kek.c ../../hal/mpfs250_snvm.c
 		-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
 		-DHAVE_AES_DECRYPT -DCUSTOM_ENCRYPT_KEY -DEXT_ENCRYPTED \
 		-DENCRYPT_WITH_AES256 -DSNVM_ENCKEY_PROVISION \
+		-DSNVM_ENCKEY_INSECURE_TEST_KEY $(CFLAGS) $(LDFLAGS)
+
+# The same provider built with the two-key layout, so the real selector, getter
+# and erase are exercised rather than the disk suite's mocks.
+unit-snvm-kek-golden: unit-snvm-kek.c ../../hal/mpfs250_snvm.c
+	gcc -o $@ unit-snvm-kek.c -I../.. \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/aes.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha512.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/memory.c \
+		-DSNVM_KEK -DWOLFBOOT_ENABLE_HASH_SHA384 -DWOLFSSL_AES_256 \
+		-DHAVE_AES_KEYWRAP -DWOLFSSL_AES_DIRECT -DHAVE_AES_ECB \
+		-DHAVE_AES_DECRYPT -DCUSTOM_ENCRYPT_KEY -DEXT_ENCRYPTED \
+		-DENCRYPT_WITH_AES256 -DSNVM_ENCKEY_PROVISION \
+		-DDISK_GOLDEN_ENCRYPT_KEY -DSNVM_GOLDEN_ENCKEY_PROVISION \
+		-DSNVM_GOLDEN_ENCKEY_MODULE=199 -DDISK_FAILOVER_ZEROIZE \
 		-DSNVM_ENCKEY_INSECURE_TEST_KEY $(CFLAGS) $(LDFLAGS)
 
 # unit-otp-keystore-gen-zeroize includes the host tool
@@ -1410,6 +1428,9 @@ unit-update-disk-golden: ../../include/target.h unit-update-disk-golden.c
 
 unit-update-disk-failover: ../../include/target.h unit-update-disk-failover.c
 	gcc -o $@ unit-update-disk-failover.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-disk-golden-enckey: ../../include/target.h unit-update-disk-golden-enckey.c
+	gcc -o $@ unit-update-disk-golden-enckey.c $(CFLAGS) $(LDFLAGS)
 
 # WOLFBOOT_FSP (x86) boot path of update_disk.c: the low-memory (tolum)
 # size check must reject a slot and fall back to the other one, like every

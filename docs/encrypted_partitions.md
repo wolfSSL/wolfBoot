@@ -42,7 +42,7 @@ You can use the `CUSTOM_ENCRYPT_KEY` option to implement your own functions for:
 `wolfBoot_get_encrypt_key`, `wolfBoot_set_encrypt_key` and
 `wolfBoot_erase_encrypt_key`.
 
-For an example that stores the AES key in non-volatile memory wrapped by a device-unique hardware PUF key (Microchip PolarFire SoC), see [PolarFire.md](PolarFire.md#hardware-root-of-trust-puf-kek-snvm-keystore-wrapped-image-key). Note that disk/`NO_PARTITIONS` boot can use `CUSTOM_ENCRYPT_KEY` for image encryption without `EXT_FLASH` or `MMU`.
+For an example that stores the AES key in non-volatile memory wrapped by a device-unique hardware PUF key (Microchip PolarFire SoC), see [PolarFire.md](PolarFire.md#hardware-root-of-trust-puf-kek-snvm-keystore-wrapped-image-key). Note that disk/`NO_PARTITIONS` boot can use `CUSTOM_ENCRYPT_KEY` for image encryption without `EXT_FLASH` or `MMU`. A disk-boot target with a golden slot can give the recovery image a key of its own, so it stays encrypted after the operational key is destroyed: see [Keeping the golden image encrypted](PolarFire.md#keeping-the-golden-image-encrypted).
 
 To enable:
 

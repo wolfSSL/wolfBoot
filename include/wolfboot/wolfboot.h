@@ -903,6 +903,12 @@ int wolfBoot_initialize_encryption(void);
 int wolfBoot_set_encrypt_key(const uint8_t *key, const uint8_t *nonce);
 int wolfBoot_get_encrypt_key(uint8_t *key, uint8_t *nonce);
 int wolfBoot_erase_encrypt_key(void);
+#ifdef DISK_GOLDEN_ENCRYPT_KEY
+/* Select the golden image's key (golden != 0) or the operational one for the
+ * next wolfBoot_get_encrypt_key().  Implemented by the platform that holds
+ * both; wolfBoot_erase_encrypt_key() always erases the operational key. */
+int wolfBoot_select_golden_encrypt_key(int golden);
+#endif
 
 #if !defined(__WOLFBOOT) && defined(TZEN)
 

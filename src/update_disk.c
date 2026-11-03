@@ -179,7 +179,13 @@ static int failover_cause;
                                      failover_cause = (c); } } while (0)
 static int disk_key_ok = 1;
 #define SLOT_ENCRYPTED_KEY_OK() (disk_key_ok != 0)
+#ifdef DISK_GOLDEN_ENCRYPT_KEY
+/* The golden image has a key of its own, so it stays encrypted after the
+ * operational one is zeroized. */
+#define SLOT_ENCRYPTED(s)       1
+#else
 #define SLOT_ENCRYPTED(s)       (!SLOT_IS_GOLDEN(s))
+#endif
 /* Bytes zeroed at the start of each operational slot: the manifest header
  * and the signature go, so the image can never be elected again. */
 #ifndef DISK_FAILOVER_ERASE_SIZE
@@ -340,6 +346,21 @@ static void disk_crypto_clear(void)
     wc_ForceZero(disk_encrypt_key, sizeof(disk_encrypt_key));
     wc_ForceZero(disk_encrypt_nonce, sizeof(disk_encrypt_nonce));
 }
+
+#ifdef DISK_GOLDEN_ENCRYPT_KEY
+/* Re-key the cipher and the IV nonce for the slot about to be read.  Both are
+ * keyed once up front, which is enough only while every slot shares a key. */
+static int disk_crypto_rekey(int slot)
+{
+    if (wolfBoot_select_golden_encrypt_key(SLOT_IS_GOLDEN(slot)) != 0) {
+        return -1;
+    }
+    if (crypto_init() != 0) {
+        return -1;
+    }
+    return wolfBoot_get_encrypt_key(disk_encrypt_key, disk_encrypt_nonce);
+}
+#endif
 
 static void disk_decrypted_header_clear(uint8_t *hdr)
 {
@@ -1068,8 +1089,18 @@ void RAMFUNCTION wolfBoot_start(void)
 
         hdr_ptr = p_hdr;
 #ifdef DISK_ENCRYPT
-        /* Decrypt header to parse image size.  A golden image is signed
-         * but not encrypted: it must boot after the image key is gone. */
+#ifdef DISK_GOLDEN_ENCRYPT_KEY
+        /* Each slot carries its own key, so re-key before reading one. */
+        if (disk_crypto_rekey(selected) != 0) {
+            wolfBoot_printf("Error selecting the key for %s\r\n", part_name);
+            SET_FAILOVER_IF_UNSET(DISK_FAILOVER_NO_KEY);
+            selected ^= 1;
+            continue;
+        }
+#endif
+        /* Decrypt header to parse image size.  Without
+         * DISK_GOLDEN_ENCRYPT_KEY a golden image is signed but not
+         * encrypted: it must boot after the image key is gone. */
         if (!SLOT_ENCRYPTED(selected)) {
             hdr_ptr = p_hdr;
         }

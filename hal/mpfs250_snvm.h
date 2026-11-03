@@ -115,6 +115,38 @@ int snvm_keystore_provision(void);
 #endif
 #endif
 
+#if defined(DISK_GOLDEN_ENCRYPT_KEY) || defined(SNVM_GOLDEN_ENCKEY_PROVISION)
+/* sNVM module holding the golden image's own wrapped key.  The failover
+ * never erases it, which is what keeps the golden image encrypted after a
+ * zeroize of SNVM_ENCKEY_MODULE.
+ *
+ * There is deliberately no default: the page must be a plaintext sNVM client
+ * the Libero design actually configures AND leaves writable, and only the
+ * board's design says which that is.  A page marked ROM cannot be written,
+ * and a page that was never configured as a client cannot even be read, so
+ * the provisioning writer's pre-read refuses it.  Both failures are silent
+ * until a device is in hand, which is why this is a required setting rather
+ * than a guess.  MPFS_SNVM_DUMP reports the state of a candidate page. */
+#ifndef SNVM_GOLDEN_ENCKEY_MODULE
+#error "Set SNVM_GOLDEN_ENCKEY_MODULE to a writable plaintext sNVM client \
+configured by the Libero design; see MPFS_SNVM_DUMP to check a candidate page."
+#endif
+#if (SNVM_GOLDEN_ENCKEY_MODULE < 0) || \
+    (SNVM_GOLDEN_ENCKEY_MODULE >= MPFS_SNVM_MODULE_MAX)
+#error "SNVM_GOLDEN_ENCKEY_MODULE is outside the sNVM module range 0..220"
+#endif
+#if (SNVM_GOLDEN_ENCKEY_MODULE == SNVM_ENCKEY_MODULE)
+#error "SNVM_GOLDEN_ENCKEY_MODULE must differ from SNVM_ENCKEY_MODULE"
+#endif
+#if defined(SNVM_KEYSTORE) || defined(SNVM_KEYSTORE_PROVISION)
+#if (SNVM_GOLDEN_ENCKEY_MODULE >= SNVM_KEYSTORE_MODULE) && \
+    (SNVM_GOLDEN_ENCKEY_MODULE < \
+     (SNVM_KEYSTORE_MODULE + SNVM_KEYSTORE_MAX_MODULES))
+#error "SNVM_GOLDEN_ENCKEY_MODULE overlaps the sNVM keystore module range"
+#endif
+#endif
+#endif /* DISK_GOLDEN_ENCRYPT_KEY || SNVM_GOLDEN_ENCKEY_PROVISION */
+
 /* Derive the 256-bit device-unique KEK from the System Controller SRAM-PUF:
  * KEK = SHA384(label || PUF(fixed-challenge))[0..31].  Returns 0 on success. */
 int mpfs_puf_kek(uint8_t *kek);
@@ -134,6 +166,10 @@ int snvm_kek_unwrap(const uint8_t *in, uint32_t insz, uint8_t *key,
 /* Provided by hal/mpfs250_snvm.c: wrap the compiled-in AES key with
  * the PUF KEK and store [wrapped key][nonce] in sNVM. */
 int snvm_enckey_provision(void);
+#endif
+#ifdef SNVM_GOLDEN_ENCKEY_PROVISION
+/* The same for the golden image's key, into SNVM_GOLDEN_ENCKEY_MODULE. */
+int snvm_golden_enckey_provision(void);
 #endif
 
 #endif /* SNVM_KEK */
