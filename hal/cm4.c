@@ -497,7 +497,7 @@ void hal_init(void)
 #if defined(DEBUG_UART)
     unsigned long el;
     /* The banner is emitted before cm4_mmu_enable() on purpose - it is the
-     * earliest bring-up signal. This is safe because wolfBoot's uart_printf
+     * earliest bring-up signal. This is safe because wolfBoot's tiny_printf
      * (src/string.c) is built -mstrict-align and performs no unaligned / SIMD
      * access; do NOT route the banner through a libc printf, which would fault
      * on the MMU-off Device memory this runs on. */

@@ -336,7 +336,7 @@ uint32_t mock_uart_put(CySCB_Type *base, uint32_t data)
     return tx_put_busy ? 0UL : 1UL;
 }
 
-void uart_printf(const char* fmt, ...)
+void tiny_printf(const char* fmt, ...)
 {
     (void)fmt;
 }
