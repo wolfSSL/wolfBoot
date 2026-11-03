@@ -91,6 +91,7 @@
 #define GPIO_GPPC_S5_CFG_OFF (0x750)
 #define GPIO_GPPC_S6_CFG_OFF (0x760)
 #define GPIO_GPPC_S7_CFG_OFF (0x770)
+#define GPIO_GPPC_H6_CFG_OFF (0x7e0)
 #define GPIO_GPPC_H7_CFG_OFF (0x7f0)
 #define GPIO_GPPC_H8_CFG_OFF (0x800)
 #define GPIO_GPPC_H9_CFG_OFF (0x810)
@@ -759,7 +760,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
-    /* PAD C22  (DW0=0x44000102 DW1=0x00000024) */
+    /* PAD C22  (DW0=0x42100102 DW1=0x00003024) */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_4_PORT_ID,
@@ -771,10 +772,10 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
           GPIO_SET_RXEVCONF),
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_INPUT,
-     .gpio_term = GPIO_TERM_NONE,
-     .gpio_interrupt = 0x00,
+     .gpio_term = 0x0C,
+     .gpio_interrupt = 0x08,
      .gpio_rxinv = 0x00,
-     .gpio_rxevconf = 0x02,
+     .gpio_rxevconf = 0x01,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
     /* PAD B10  (DW0=0x44000300 DW1=0x00000022) */
     {.gpio =
@@ -861,7 +862,7 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_PLTRST},
-    /* PAD D0  (DW0=0x84000102 DW1=0x0000002C) */
+    /* PAD D0  (DW0=0x82100102 DW1=0x0000002C) */
     {.gpio =
          {
              .comm_port_id = GPIO_COMM_1_PORT_ID,
@@ -874,9 +875,9 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_mode = GPIO_MODE_GPIO,
      .gpio_dir = GPIO_DIR_INPUT,
      .gpio_term = GPIO_TERM_NONE,
-     .gpio_interrupt = 0x00,
+     .gpio_interrupt = 0x08,
      .gpio_rxinv = 0x00,
-     .gpio_rxevconf = 0x02,
+     .gpio_rxevconf = 0x01,
      .gpio_reset = GPIO_RESET_PLTRST},
     /* PAD D2: held low; the OS drives it high for the IPMC */
     {.gpio =
@@ -1101,6 +1102,24 @@ static const struct tgl_gpio_conf gpio_table_presilicon[] = {
      .gpio_rxinv = 0x00,
      .gpio_rxevconf = 0x02,
      .gpio_reset = GPIO_RESET_HOSTDEEPRESET},
+    /* PAD H6  (DW0=0x84000200 DW1=0x0000001A) */
+    {.gpio =
+         {
+             .comm_port_id = GPIO_COMM_1_PORT_ID,
+             .cfg_offset = GPIO_GPPC_H6_CFG_OFF,
+         },
+     .flags =
+         (GPIO_SET_MODE | GPIO_SET_DIRECTION | GPIO_SET_RESET |
+          GPIO_SET_TERM | GPIO_SET_INTERRUPT | GPIO_SET_RXINV |
+          GPIO_SET_RXEVCONF | GPIO_SET_TX),
+     .gpio_mode = GPIO_MODE_GPIO,
+     .gpio_dir = GPIO_DIR_OUTPUT,
+     .gpio_term = GPIO_TERM_NONE,
+     .gpio_interrupt = 0x00,
+     .gpio_rxinv = 0x00,
+     .gpio_rxevconf = 0x02,
+     .gpio_tx = 0,
+     .gpio_reset = GPIO_RESET_PLTRST},
     /* PAD H7  (DW0=0x84000201 DW1=0x0000001B) USB power enable */
     {.gpio =
          {
