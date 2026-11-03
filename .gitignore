@@ -631,6 +631,10 @@ tools/unit-tests/unit-kontron-tgl-spi
 tools/unit-tests/unit-fsp-nvs
 tools/unit-tests/unit-fsp-nvs-save
 tools/unit-tests/unit-tgl-spi-hwseq
+tools/unit-tests/unit-x86-apic-ids
+tools/unit-tests/unit-x86-acpi
+tools/unit-tests/unit-boot-x86-fsp-measure
+tools/unit-tests/unit-boot-x86-fsp-payload
 tools/unit-tests/unit-nrf5340-flash-protect
 tools/unit-tests/unit-nrf5340-uart-crlf
 tools/unit-tests/unit-nrf54l-uart-write
@@ -677,6 +681,7 @@ tools/unit-tests/kinetis_erase_extract.h
 tools/unit-tests/kontron_spi_extract.h
 tools/unit-tests/kontron_spi_fn_extract.h
 tools/unit-tests/tgl_spi_hwseq_extract.h
+tools/unit-tests/x86_apic_ids_extract.h
 tools/unit-tests/nrf5340_protect_fn_extract.h
 tools/unit-tests/nrf54l_uart_write_extract.h
 tools/unit-tests/p1021_erase_extract.h

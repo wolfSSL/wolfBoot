@@ -155,7 +155,13 @@ enum mp_irq_source_types {
     #define MP_INTSRC_NUM_ENTRY 17
     #define MP_LINTSRC_NUM_ENTRY 0
     #define MP_BUS_NUM_ENTRY 2
-    #define MP_CPU_NUM_ENTRY 4
+    #ifdef TARGET_nai_68int6
+        /* one per logical processor, up to 4 cores with HT; unused entries
+         * are left disabled */
+        #define MP_CPU_NUM_ENTRY 8
+    #else
+        #define MP_CPU_NUM_ENTRY 4
+    #endif
 #endif
 
 struct mptable {

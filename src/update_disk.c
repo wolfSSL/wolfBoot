@@ -1565,15 +1565,26 @@ void RAMFUNCTION wolfBoot_start(void)
     stage2_params->cmdline = 0;
     {
         static char disk_cmdline[256];
-        uint8_t *val = NULL;
+        uint8_t *val = NULL, *digest = NULL;
         uint16_t len;
 
         len = wolfBoot_find_header((uint8_t *)hdr_ptr + IMAGE_HEADER_OFFSET,
                                    HDR_CMDLINE, &val);
-        if (len > 0 && val != NULL && len < sizeof(disk_cmdline)) {
+        /* The signature covers the header only up to the digest TLV */
+        if (len > 0 && val != NULL &&
+            (wolfBoot_find_header((uint8_t *)hdr_ptr + IMAGE_HEADER_OFFSET,
+                                  WOLFBOOT_SHA_HDR, &digest) == 0 ||
+             val + len > digest - 2 * sizeof(uint16_t))) {
+            wolfBoot_printf("Ignoring a cmdline outside the signed header\r\n");
+        }
+        else if (len > 0 && val != NULL && len < sizeof(disk_cmdline)) {
             memcpy(disk_cmdline, val, len);
             disk_cmdline[len] = '\0';
             stage2_params->cmdline = (uint32_t)(uintptr_t)disk_cmdline;
+        }
+        else if (len > 0) {
+            wolfBoot_printf("Signed cmdline too long (%d), using built-in\r\n",
+                            (int)len);
         }
     }
 #endif

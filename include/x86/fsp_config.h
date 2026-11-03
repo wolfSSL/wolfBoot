@@ -6,9 +6,9 @@
 #ifndef FSP_HYPERTHREADING
 #define FSP_HYPERTHREADING 0
 #endif
-#if FSP_HYPERTHREADING
-/* The MADT and MP table list four single-thread cores (APIC IDs 0/2/4/6). */
-#error "FSP_HYPERTHREADING=1 needs sibling threads in the MADT and MP table"
+#if FSP_HYPERTHREADING && !defined(TARGET_nai_68int6)
+/* The Kontron MP table lists four single-thread cores (APIC IDs 0/2/4/6). */
+#error "FSP_HYPERTHREADING=1 needs sibling threads in the MP table"
 #endif
 
 #ifndef FSP_INTEL_SPEED_STEP

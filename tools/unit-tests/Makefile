@@ -174,6 +174,10 @@ TESTS+=unit-kontron-tgl-spi
 TESTS+=unit-fsp-nvs
 TESTS+=unit-fsp-nvs-save
 TESTS+=unit-tgl-spi-hwseq
+TESTS+=unit-x86-apic-ids
+TESTS+=unit-x86-acpi
+TESTS+=unit-boot-x86-fsp-measure
+TESTS+=unit-boot-x86-fsp-payload
 TESTS+=unit-nrf5340-flash-protect
 TESTS+=unit-keygen-keystore
 TESTS+=unit-samr21-erase-advance
@@ -2216,6 +2220,42 @@ unit-tgl-spi-hwseq:CFLAGS+=-DWOLFBOOT_FSP_NVS_CACHE
 unit-tgl-spi-hwseq: unit-tgl-spi-hwseq.c kontron_spi_extract.h \
 	tgl_spi_hwseq_extract.h
 	gcc -o $@ unit-tgl-spi-hwseq.c $(CFLAGS) $(LDFLAGS)
+
+# unit-x86-apic-ids runs the real x86_apic_ids_from_topology() from
+# src/x86/common.c (the CPU list behind the MADT and the MP table).
+x86_apic_ids_extract.h: ../../src/x86/common.c
+	sed -n '/^int x86_apic_ids_from_topology/,/^}/p' $< > $@
+
+unit-x86-apic-ids: unit-x86-apic-ids.c x86_apic_ids_extract.h
+	gcc -o $@ unit-x86-apic-ids.c $(CFLAGS) $(LDFLAGS)
+
+# unit-x86-acpi runs the x86 FSP ACPI table builders (src/x86/acpi.c)
+# against mocked PCI, MMIO and CPU topology reads.
+unit-x86-acpi: unit-x86-acpi.c ../../src/x86/acpi.c ../../include/x86/acpi_dsdt.h
+	gcc -o $@ unit-x86-acpi.c $(CFLAGS) $(LDFLAGS)
+
+# unit-boot-x86-fsp-payload runs the ELF segment check and the per-image
+# Multiboot2 ELF or Linux choice (src/boot_x86_fsp_payload.c).
+unit-boot-x86-fsp-payload: ../../include/target.h unit-boot-x86-fsp-payload.c \
+		../../src/boot_x86_fsp_payload.c
+	gcc -o $@ unit-boot-x86-fsp-payload.c $(CFLAGS) \
+		-DWOLFBOOT_LOAD_BASE=0x58000200 -DWOLFBOOT_FSP -DTARGET_nai_68int6 \
+		-DWOLFBOOT_64BIT \
+		-DX86_UART_BASE=0xFE036000 -DWOLFBOOT_LINUX_PAYLOAD -DWOLFBOOT_ELF \
+		-DWOLFBOOT_MULTIBOOT2 $(LDFLAGS)
+
+# unit-boot-x86-fsp-measure runs the stage 1 PCR 0 measurement of stage 2
+# (wolfBoot_image_measure() in src/boot_x86_fsp.c) with real SHA-256.
+unit-boot-x86-fsp-measure: ../../include/target.h unit-boot-x86-fsp-measure.c \
+		../../src/boot_x86_fsp.c
+	gcc -o $@ unit-boot-x86-fsp-measure.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) \
+		-I$(WOLFBOOT_LIB_WOLFTPM) -DWOLFTPM_USER_SETTINGS \
+		-DWOLFBOOT_LOAD_BASE=0x100000 -DWOLFBOOT_FSP -DUCODE0_ADDRESS=0 \
+		-D__WOLFBOOT -DWOLFBOOT_TPM -DWOLFBOOT_MEASURED_BOOT \
+		-DWOLFBOOT_MEASURED_PCR_A=0 \
+		-DWOLFBOOT_HASH_SHA384 -DWOLFBOOT_SIGN_ECC384 \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 # unit-fsp-nvs runs the FSP-M memory training data cache record check and
 # the stage 1 hand-off (src/x86/fsp_nvs.c) against a RAM-backed area.

@@ -9,7 +9,7 @@
 #define WOLFBOOT_SELF_UPDATE_MONOLITHIC
 #define RAM_CODE
 #define WOLFBOOT_SELF_HEADER
-#define IMAGE_HEADER_SIZE 256
+#define IMAGE_HEADER_SIZE 512
 #define BOOT_PART_A 0
 #define BOOT_PART_B 1
 #define MOCK_ADDRESS_BOOT 0xCD000000
@@ -27,6 +27,12 @@
 #include "stage2_params.h"
 #include "x86/common.h"
 
+/* The test build has no image hash configured; take SHA-256 */
+#ifndef WOLFBOOT_SHA_HDR
+#define WOLFBOOT_SHA_HDR HDR_SHA256
+#define WOLFBOOT_SHA_DIGEST_SIZE 32
+#endif
+
 #define TEST_PAYLOAD_SIZE 64
 
 static uint8_t load_buffer[TEST_PAYLOAD_SIZE];
@@ -37,7 +43,6 @@ static uint8_t part_b_image[IMAGE_HEADER_SIZE + TEST_PAYLOAD_SIZE];
 static int mock_do_boot_called;
 static const uint32_t *mock_boot_address;
 static struct stage2_parameter mock_stage2_params;
-static const char *mock_cmdline;
 
 static void set_u16_le(uint8_t *dst, uint16_t value)
 {
@@ -75,7 +80,6 @@ static void reset_mocks(void)
     build_image(part_b_image, 7, TEST_PAYLOAD_SIZE, 0xB2);
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
-    mock_cmdline = NULL;
     mock_stage2_params.cmdline = 0xffffffffU;
     /* The image must fit between load_address and tolum: exactly one
      * TEST_PAYLOAD_SIZE payload. */
@@ -173,15 +177,53 @@ int wolfBoot_image_part_matches(struct wolfBoot_image* img)
     return 0;
 }
 
+/* Walks the TLVs of a test header, as the real one does */
 uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
 {
-    (void)haystack;
-    if (type != HDR_CMDLINE || mock_cmdline == NULL) {
-        *ptr = NULL;
-        return 0;
+    uint8_t *p = haystack;
+    uint8_t *end = haystack - IMAGE_HEADER_OFFSET + IMAGE_HEADER_SIZE;
+    uint16_t t, l;
+
+    *ptr = NULL;
+    while (end - p >= 4) {
+        t = (uint16_t)(p[0] | (p[1] << 8));
+        l = (uint16_t)(p[2] | (p[3] << 8));
+        if (t == 0 || l > end - p - 4)
+            break;
+        if (t == type) {
+            *ptr = p + 4;
+            return l;
+        }
+        p += 4 + l;
     }
-    *ptr = (uint8_t *)mock_cmdline;
-    return (uint16_t)strlen(mock_cmdline);
+    return 0;
+}
+
+/* Appends a TLV after the last one in a test header */
+static void add_tlv(uint8_t *image, uint16_t type, uint16_t len,
+    const uint8_t *val)
+{
+    uint8_t *p = image + IMAGE_HEADER_OFFSET;
+
+    while ((p[0] | (p[1] << 8)) != 0)
+        p += 4 + (p[2] | (p[3] << 8));
+    set_u16_le(p, type);
+    set_u16_le(p + 2, len);
+    memcpy(p + 4, val, len);
+}
+
+static void add_digest(uint8_t *image)
+{
+    uint8_t digest[WOLFBOOT_SHA_DIGEST_SIZE];
+
+    memset(digest, 0x5A, sizeof(digest));
+    add_tlv(image, WOLFBOOT_SHA_HDR, sizeof(digest), digest);
+}
+
+static void add_cmdline(uint8_t *image, const char *cmdline)
+{
+    add_tlv(image, HDR_CMDLINE, (uint16_t)strlen(cmdline),
+        (const uint8_t *)cmdline);
 }
 
 int wolfBoot_get_dts_size(void *dts_addr, uint32_t capacity)
@@ -292,12 +334,49 @@ START_TEST(test_fsp_signed_cmdline_is_passed_on)
     /* A signed HDR_CMDLINE reaches the payload loader; without one the
      * loader is told there is none. */
     reset_mocks();
-    mock_cmdline = "console=ttyS4,115200 root=/dev/sda2";
+    add_cmdline(part_a_image, "console=ttyS4,115200 root=/dev/sda2");
+    add_digest(part_a_image);
     wolfBoot_start();
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_uint_ne(mock_stage2_params.cmdline, 0);
 
     reset_mocks();
+    add_digest(part_a_image);
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_eq(mock_stage2_params.cmdline, 0);
+}
+END_TEST
+
+START_TEST(test_fsp_signed_cmdline_too_long_is_ignored)
+{
+    static char long_cmdline[257];
+
+    reset_mocks();
+    memset(long_cmdline, 'a', sizeof(long_cmdline) - 1);
+    long_cmdline[sizeof(long_cmdline) - 1] = '\0';
+    add_cmdline(part_a_image, long_cmdline);
+    add_digest(part_a_image);
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_eq(mock_stage2_params.cmdline, 0);
+}
+END_TEST
+
+START_TEST(test_fsp_cmdline_after_the_digest_is_ignored)
+{
+    /* Only the header before the digest TLV is signed, so a command line
+     * appended after it must not reach the kernel */
+    reset_mocks();
+    add_digest(part_a_image);
+    add_cmdline(part_a_image, "init=/bin/sh");
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_uint_eq(mock_stage2_params.cmdline, 0);
+
+    /* nor one in a header with no digest TLV at all */
+    reset_mocks();
+    add_cmdline(part_a_image, "init=/bin/sh");
     wolfBoot_start();
     ck_assert_int_eq(mock_do_boot_called, 1);
     ck_assert_uint_eq(mock_stage2_params.cmdline, 0);
@@ -314,6 +393,8 @@ Suite *wolfboot_suite(void)
     tcase_add_test(tc, test_fsp_inverted_tolum_rejects_both_slots);
     tcase_add_test(tc, test_fsp_fitting_slot_boots);
     tcase_add_test(tc, test_fsp_signed_cmdline_is_passed_on);
+    tcase_add_test(tc, test_fsp_signed_cmdline_too_long_is_ignored);
+    tcase_add_test(tc, test_fsp_cmdline_after_the_digest_is_ignored);
     suite_add_tcase(s, tc);
 
     return s;
