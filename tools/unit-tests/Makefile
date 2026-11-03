@@ -132,6 +132,7 @@ TESTS+=unit-otp-keystore-gen-zeroize
 TESTS+=unit-x86-paging-oob
 TESTS+=unit-ahci-unlock-panic
 TESTS+=unit-ata-security-passphrase-zeroize
+TESTS+=unit-ata-sector-io
 TESTS+=unit-fwtpm-nv-oob
 TESTS+=unit-elf-bss-guard
 TESTS+=unit-elf-entry-inplace
@@ -1617,6 +1618,10 @@ unit-ahci-unlock-panic: ../../include/target.h unit-ahci-unlock-panic.c
 
 unit-ata-security-passphrase-zeroize: ../../include/target.h unit-ata-security-passphrase-zeroize.c
 	gcc -o $@ unit-ata-security-passphrase-zeroize.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
+
+unit-ata-sector-io: ../../include/target.h unit-ata-sector-io.c ../../src/x86/ata.c
+	gcc -o $@ unit-ata-sector-io.c $(CFLAGS) \
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 # unit-flash-write-cc26x2 includes hal/cc26x2.c directly, with cc26x2_ti_stub/
