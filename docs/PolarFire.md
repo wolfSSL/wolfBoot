@@ -1225,6 +1225,31 @@ The AES offload is worth about 4.2x on the decrypt. **The hash offload is about 
 
 Athena also does not fit eNVM alongside the full feature set: with the manifest linked it needs both `GZIP` and `MPFS_SBI_SC_FLASH` dropped. Dropping `GZIP` costs nothing when the FIT's kernel is stored uncompressed.
 
+The port also serves AES-256-ECB, which is how AES-256-XTS reaches the engine: wolfCrypt's XTS masks the whole buffer with the tweak chain and issues one bulk ECB call per XTS call (`HAVE_AES_ECB` required, distinct in/out buffers), while the tweak math stays in software. wolfBoot itself encrypts images with CTR and has no XTS use; the ECB path is for an application. Requests under `WC_MPFS_ATHENA_AES_MIN_SZ` (32 bytes) are declined to software, which keeps the XTS tweak and ciphertext-stealing blocks off the engine. See `wolfcrypt/src/port/microchip/README.md` in wolfSSL.
+
+#### Measuring the offload bare-metal
+
+The test application doubles as a bare-metal wolfCrypt test and benchmark harness for the engine, in the same M-mode environment wolfBoot uses, so its figures compare with the software build of the same app and not with a Linux userspace benchmark:
+
+```sh
+cp config/examples/polarfire_mpfs250_m_qspi.config .config
+make clean
+make MPFS_ATHENA=1 MPFS_ATHENA_CAL_DIR=/path/to/hart-software-services/services/crypto \
+    WOLFCRYPT_BENCHMARK=1 WOLFBOOT_L2SCRATCH_SIZE=512k
+```
+
+Load `test-app/image_v1_signed.bin` with `mpfs_qspi_prog.py` as for any M-mode test app. The benchmark app is about 240 KB and is loaded at `0x0A020200`, so the bootloader's stack has to sit at the top of all four scratchpad ways rather than the default 256 KB, which is what `WOLFBOOT_L2SCRATCH_SIZE=512k` does; `test-app/RISCV64-mpfs250.ld` reserves 64 KB for the app's own stack above that, sized for the benchmark's SP math frames. The `WOLFCRYPT_TEST=1` app is about 370 KB and does not fit the scratchpad beside the bootloader: build it on `polarfire_mpfs250_m_qspi_ddr.config` with its `-DWOLFBOOT_MMODE_SMODE_BOOT` line removed, which loads the signed app into DDR and enters it with the M-mode direct jump, and with `NO_ASM=1`, since the test-app's RISC-V SHA assembly does not assemble against the test configuration. `MPFS_ATHENA=1` makes the app bring the engine up itself, so the bootloader it runs under may be built with or without the offload. The app registers the port, runs its known-answer self-test and prints `Athena: self-test passed, engine served N call(s)`; the stock `wolfcrypt_test()` and `benchmark_test()` then drive the engine through `WC_USE_DEVID`, with the benchmark labelling offloaded results `HW`. The benchmark runs once per call size in `MPFS_BENCH_SIZES` (default 1 KiB, 512 B and 4 KiB; each needs twice that from `WOLFSSL_STATIC_MEMORY_TEST_SZ`), since one engine transfer per call amortises very differently at sector size and in bulk. The app ends with the total engine call count: a passing test or a plausible rate proves nothing about offload on its own, because every case the port declines runs in software. The same app built without `MPFS_ATHENA` is the software baseline. Object files are configuration-specific, so `make clean` between the two builds.
+
+Measured on the Video Kit with the DDR configuration (E51 at 600 MHz), the software column being wolfCrypt's default C AES for RISC-V:
+
+| Call size | AES-256-XTS software | AES-256-XTS Athena | AES-256-CTR Athena | SHA-384 software | SHA-384 Athena |
+|---|---|---|---|---|---|
+| 512 B | 48 KiB/s | 1.23 MiB/s | 12.9 MiB/s | 5.7 MiB/s | 11.4 MiB/s |
+| 1 KiB | 49 KiB/s | 2.06 MiB/s | 14.6 MiB/s | 5.8 MiB/s | 13.2 MiB/s |
+| 4 KiB | 49 KiB/s | 4.2 MiB/s | 16.1 MiB/s | 5.8 MiB/s | 14.8 MiB/s |
+
+AES-128-XTS stays in software at about 68 KiB/s. The app keeps the five MSS watchdogs refreshed from a machine timer interrupt every 5 s, since a test or benchmark pass runs far longer than their window, and its M-mode trap handler prints the cause and halts instead of resuming at the faulting instruction. The RISC-V harts trap on misaligned accesses, so `user_settings.h` defines `WOLFSSL_USE_ALIGN` for `ARCH_RISCV64`; the AES-GCM tests and benchmark also need the wolfSSL change that takes the byte-wise GCM table multiply under that define on 64-bit builds.
+
 ## Source files
 
 `hal/mpfs250.c` - Hardware abstraction layer (UART, QSPI, SD/eMMC, multi-hart)

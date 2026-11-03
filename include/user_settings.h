@@ -596,6 +596,14 @@ extern int tolower(int c);
 #   endif
 #endif
 
+/* The RISC-V harts trap on a misaligned load or store with nothing to emulate
+ * it bare-metal, so make wolfCrypt's ALIGN* attributes real: without this the
+ * word-sized casts it makes on struct members (the AES-GCM table, for one)
+ * fault. */
+#ifdef ARCH_RISCV64
+#   define WOLFSSL_USE_ALIGN
+#endif
+
 #if defined(EXT_ENCRYPTED)
 #   define HAVE_PWDBASED
 #endif
@@ -764,7 +772,9 @@ extern int tolower(int c);
             #define WC_NO_HASHDRBG
             #define CUSTOM_RAND_GENERATE_SEED my_rng_seed_gen
             #define CUSTOM_RAND_GENERATE_BLOCK my_rng_seed_gen
+            #ifndef __ASSEMBLER__
             extern int my_rng_seed_gen(unsigned char* output, unsigned int sz);
+            #endif
 
             /* Full test/benchmark algo set: AES ECB/CBC/CTR/GCM/XTS,
              * SHA-256/384/512, SHA-3. (AES-CBC/GCM added below; SHA-384/512
@@ -919,7 +929,17 @@ extern int tolower(int c);
         #define WOLFSSL_STATIC_MEMORY
     #endif
     #ifndef WOLFSSL_STATIC_MEMORY_TEST_SZ
-        #define WOLFSSL_STATIC_MEMORY_TEST_SZ (10 * 1024)
+        #if defined(TARGET_mpfs250) && defined(MPFS_DDR_INIT)
+            /* Every default bucket, including the two above 4 KB that the
+             * benchmark's 4 KB buffers and the test's larger contexts need;
+             * a pool without them hands out something else. Only with DDR:
+             * the L2 scratchpad app has no room for it. */
+            #define WOLFSSL_STATIC_MEMORY_TEST_SZ (128 * 1024)
+        #elif defined(TARGET_mpfs250)
+            #define WOLFSSL_STATIC_MEMORY_TEST_SZ (64 * 1024)
+        #else
+            #define WOLFSSL_STATIC_MEMORY_TEST_SZ (10 * 1024)
+        #endif
     #endif
     #define WOLFSSL_STATIC_MEMORY_LEAN
 
@@ -929,7 +949,9 @@ extern int tolower(int c);
     /* User time functions provided */
     #define WOLFSSL_USER_CURRTIME
     #define XTIME my_time
+    #ifndef __ASSEMBLER__
     extern unsigned long my_time(unsigned long* timer);
+    #endif
 #endif
 
 #if !defined(WOLFCRYPT_TEST) && !defined(WOLFCRYPT_BENCHMARK)
