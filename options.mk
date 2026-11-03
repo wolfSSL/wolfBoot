@@ -119,6 +119,9 @@ endif
 ifneq ($(SNVM_KEYSTORE_MAX_MODULES),)
     CFLAGS+=-DSNVM_KEYSTORE_MAX_MODULES=$(SNVM_KEYSTORE_MAX_MODULES)
 endif
+ifneq ($(SNVM_GOLDEN_ENCKEY_MODULE),)
+    CFLAGS+=-DSNVM_GOLDEN_ENCKEY_MODULE=$(SNVM_GOLDEN_ENCKEY_MODULE)
+endif
 ifneq ($(SNVM_ENCKEY_MODULE),)
     CFLAGS+=-DSNVM_ENCKEY_MODULE=$(SNVM_ENCKEY_MODULE)
 endif
@@ -180,7 +183,8 @@ ifeq ($(MPFS_SBI_SC_FLASH),1)
 endif
 
 # Field recovery: before the golden slot boots, zero the sNVM image-key page and the head of both
-# operational slots (hal_disk_failover).  The golden image must be a plaintext signed image.
+# operational slots (hal_disk_failover).  The golden image must be a plaintext signed image, unless
+# DISK_GOLDEN_ENCRYPT_KEY gives it a key of its own.
 ifeq ($(DISK_FAILOVER_ZEROIZE),1)
     ifneq ($(DISK_GOLDEN_SLOT)$(SNVM_KEK),11)
         $(error DISK_FAILOVER_ZEROIZE=1 requires DISK_GOLDEN_SLOT=1 and SNVM_KEK=1)
@@ -193,6 +197,38 @@ ifeq ($(DISK_FAILOVER_ZEROIZE),1)
         $(error DISK_FAILOVER_ZEROIZE $(SNVM_WRITE_GATE_MSG))
     endif
     CFLAGS+=-D"DISK_FAILOVER_ZEROIZE"
+endif
+
+# Keep the golden image encrypted across a zeroize by storing its image key in a second sNVM
+# module (SNVM_GOLDEN_ENCKEY_MODULE), which the failover never erases.  The platform must
+# implement wolfBoot_select_golden_encrypt_key(); there is deliberately no default, so a build
+# that cannot select a key fails to link rather than decrypting the golden image with the wrong one.
+# One-time writer for the golden image's key.  Deliberately independent of
+# DISK_GOLDEN_ENCRYPT_KEY so a provisioning-only build can populate the second module:
+# a provisioning run cannot be built together with DISK_FAILOVER_ZEROIZE, and the module
+# written here is one the zeroize never touches.  Provision first, then build the runtime
+# image.
+ifeq ($(SNVM_GOLDEN_ENCKEY_PROVISION),1)
+    ifneq ($(SNVM_KEK),1)
+        $(error SNVM_GOLDEN_ENCKEY_PROVISION=1 requires SNVM_KEK=1)
+    endif
+    ifneq ($(WOLFBOOT_SNVM_WRITE_APPROVED),1)
+        $(error SNVM_GOLDEN_ENCKEY_PROVISION $(SNVM_WRITE_GATE_MSG))
+    endif
+    CFLAGS+=-D"SNVM_GOLDEN_ENCKEY_PROVISION"
+    ifeq ($(SNVM_ENCKEY_INSECURE_TEST_KEY),1)
+        CFLAGS+=-D"SNVM_ENCKEY_INSECURE_TEST_KEY"
+    endif
+    ifeq ($(SNVM_ENCKEY_PROVISION_EXTERN),1)
+        CFLAGS+=-D"SNVM_ENCKEY_PROVISION_EXTERN"
+    endif
+endif
+
+ifeq ($(DISK_GOLDEN_ENCRYPT_KEY),1)
+    ifneq ($(DISK_GOLDEN_SLOT)$(SNVM_KEK),11)
+        $(error DISK_GOLDEN_ENCRYPT_KEY=1 requires DISK_GOLDEN_SLOT=1 and SNVM_KEK=1)
+    endif
+    CFLAGS+=-D"DISK_GOLDEN_ENCRYPT_KEY"
 endif
 # QSPI SCK divider: a QSPI_CLK_DIV_* name from hal/mpfs250.h, default QSPI_CLK_DIV_8.
 ifneq ($(MPFS_QSPI_CLK_DIV),)
