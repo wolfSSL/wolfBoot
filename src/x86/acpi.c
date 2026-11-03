@@ -21,23 +21,26 @@
  *
  * Minimal ACPI table generation for the x86 FSP (Tiger Lake) target. The FSP
  * does silicon init only and returns no usable ACPI table set, so wolfBoot
- * builds RSDP -> XSDT -> { FADT, MADT, MCFG, DSDT } in low reserved memory and
- * points boot_params.acpi_rsdp_addr at the RSDP. The MADT interrupt model and
- * the DSDT _PRT routing are the values measured on this board; see docs and
- * acpi_dsdt.asl. Only the DSDT needs AML, embedded here as a precompiled blob.
+ * builds RSDP -> XSDT -> { FADT, MADT, MCFG, TPM2, HPET, DMAR, DSDT } in low
+ * reserved memory and points boot_params.acpi_rsdp_addr at the RSDP. The MADT
+ * interrupt model and the DSDT _PRT routing are the values measured on this
+ * board; see docs and acpi_dsdt.asl. Only the DSDT needs AML, embedded here
+ * as a precompiled blob.
  */
 
 #include <stdint.h>
 #include <string.h>
 
 #include <x86/acpi.h>
+#include <x86/common.h>
+#include <pci.h>
 #include <x86/acpi_dsdt.h>
 
 /* Local APIC and IOAPIC as the MP table already encodes them (mptable.c). */
 #define ACPI_LAPIC_ADDR   0xFEE00000UL
 #define ACPI_IOAPIC_ADDR  0xFEC00000UL
 #define ACPI_IOAPIC_ID    0x02
-#define ACPI_CPU_COUNT    4
+#define ACPI_CPU_MAX      8
 
 /* ECAM base and bus range, matching MCFG to config PCI_ECAM_BASE. */
 #ifndef PCI_ECAM_BASE
@@ -154,6 +157,71 @@ struct acpi_mcfg {
     struct acpi_mcfg_alloc alloc;
 } __attribute__((packed));
 
+/* TPM2 table for the TPM's TIS (FIFO) interface at 0xFED40000 */
+#define ACPI_TPM2_START_TIS 6
+struct acpi_tpm2 {
+    struct acpi_header header;
+    uint16_t platform_class;
+    uint16_t reserved;
+    uint64_t control_address;
+    uint32_t start_method;
+    uint8_t  start_params[12];
+} __attribute__((packed));
+
+#define ACPI_HPET_BASE 0xFED00000UL
+struct acpi_hpet {
+    struct acpi_header header;
+    uint32_t block_id;
+    struct acpi_gas base;
+    uint8_t  number;
+    uint16_t min_tick;
+    uint8_t  page_protection;
+} __attribute__((packed));
+
+/* DMAR: the two Tiger Lake VT-d units at the addresses FSP-M is given, as
+ * the stock BIOS describes them */
+#define DMAR_GFX_UNIT       0xFED90000UL
+#define DMAR_DEFAULT_UNIT   0xFED91000UL
+#define DMAR_HAW            38          /* host address width - 1 */
+#define DMAR_FLAGS          0x05        /* INTR_REMAP | DMA_CTRL_PLATFORM_OPT_IN */
+#define DMAR_DRHD           0
+#define DMAR_RMRR           1
+#define DMAR_INCLUDE_PCI_ALL 0x01
+#define DMAR_SCOPE_ENDPOINT 1
+#define DMAR_SCOPE_IOAPIC   3
+#define DMAR_SCOPE_HPET     4
+struct acpi_dmar {
+    struct acpi_header header;
+    uint8_t  host_address_width;
+    uint8_t  flags;
+    uint8_t  reserved[10];
+} __attribute__((packed));
+struct dmar_drhd {
+    uint16_t type;
+    uint16_t length;
+    uint8_t  flags;
+    uint8_t  reserved;
+    uint16_t segment;
+    uint64_t base;
+} __attribute__((packed));
+struct dmar_rmrr {
+    uint16_t type;
+    uint16_t length;
+    uint16_t reserved;
+    uint16_t segment;
+    uint64_t base;
+    uint64_t limit;
+} __attribute__((packed));
+struct dmar_scope {
+    uint8_t  type;
+    uint8_t  length;
+    uint16_t reserved;
+    uint8_t  enumeration_id;
+    uint8_t  start_bus;
+    uint8_t  dev;
+    uint8_t  fn;
+} __attribute__((packed));
+
 /* HW-reduced ACPI has no FACS, so the FADT leaves firmware_ctrl zero. */
 
 /* ACPI 6.x FADT (fixed layout to the hypervisor id, 276 bytes). */
@@ -216,12 +284,6 @@ struct acpi_fadt {
     uint64_t hypervisor_vendor_id;
 } __attribute__((packed));
 
-/* acpi_processor_id -> Local APIC id: 4 cores with HT off (APIC ids
- * 0/2/4/6). Listing absent threads stalls the kernel per missing AP. */
-static const uint8_t acpi_lapic_ids[ACPI_CPU_COUNT] = {
-    0, 2, 4, 6
-};
-
 static void acpi_set_checksum(struct acpi_header *h)
 {
     uint8_t *bytes = (uint8_t *)h;
@@ -265,18 +327,27 @@ static uint8_t *acpi_build_madt(uint8_t *p)
     struct madt_ioapic *ioapic;
     struct madt_iso *iso;
     struct madt_lapic_nmi *nmi;
-    uint32_t i;
+    uint8_t apic_ids[ACPI_CPU_MAX];
+    int cpus;
+    int i;
 
     madt->lapic_address = (uint32_t)ACPI_LAPIC_ADDR;
     madt->flags = MADT_FLAG_PCAT_COMPAT;
 
-    for (i = 0; i < ACPI_CPU_COUNT; i++) {
+    /* Only the processors that are present: an absent one stalls the kernel
+     * while it waits for that AP */
+    cpus = x86_cpu_apic_ids(apic_ids, ACPI_CPU_MAX);
+    if (cpus == 0) {
+        apic_ids[0] = (uint8_t)(mmio_read32(ACPI_LAPIC_ADDR + 0x20) >> 24);
+        cpus = 1;
+    }
+    for (i = 0; i < cpus; i++) {
         lapic = (struct madt_lapic *)e;
         memset(lapic, 0, sizeof(*lapic));
         lapic->type = MADT_TYPE_LAPIC;
         lapic->length = sizeof(*lapic);
         lapic->acpi_processor_id = (uint8_t)i;
-        lapic->apic_id = acpi_lapic_ids[i];
+        lapic->apic_id = apic_ids[i];
         lapic->flags = MADT_LAPIC_ENABLED;
         e += sizeof(*lapic);
     }
@@ -341,6 +412,99 @@ static uint8_t *acpi_build_mcfg(uint8_t *p)
     return p + sizeof(*mcfg);
 }
 
+static uint8_t *acpi_build_tpm2(uint8_t *p)
+{
+    struct acpi_tpm2 *tpm2 = (struct acpi_tpm2 *)p;
+
+    memset(tpm2, 0, sizeof(*tpm2));
+    tpm2->start_method = ACPI_TPM2_START_TIS;
+    acpi_fill_header(&tpm2->header, "TPM2", sizeof(*tpm2), 4);
+    acpi_set_checksum(&tpm2->header);
+    return p + sizeof(*tpm2);
+}
+
+static uint8_t *acpi_build_hpet(uint8_t *p)
+{
+    struct acpi_hpet *hpet = (struct acpi_hpet *)p;
+
+    memset(hpet, 0, sizeof(*hpet));
+    /* GCAP_ID low dword: vendor, timer count and revision */
+    hpet->block_id = mmio_read32(ACPI_HPET_BASE);
+    hpet->base.space_id = ACPI_GAS_SYSTEM_MEMORY;
+    hpet->base.bit_width = 64;
+    hpet->base.address = ACPI_HPET_BASE;
+    hpet->min_tick = 0x80;
+    acpi_fill_header(&hpet->header, "HPET", sizeof(*hpet), 1);
+    acpi_set_checksum(&hpet->header);
+    return p + sizeof(*hpet);
+}
+
+static uint8_t *dmar_add_scope(uint8_t *e, uint8_t type, uint8_t id,
+                               uint8_t dev, uint8_t fn)
+{
+    struct dmar_scope *s = (struct dmar_scope *)e;
+
+    memset(s, 0, sizeof(*s));
+    s->type = type;
+    s->length = sizeof(*s);
+    s->enumeration_id = id;
+    s->dev = dev;
+    s->fn = fn;
+    return e + sizeof(*s);
+}
+
+static uint8_t *acpi_build_dmar(uint8_t *p)
+{
+    struct acpi_dmar *dmar = (struct acpi_dmar *)p;
+    uint8_t *e = p + sizeof(*dmar);
+    struct dmar_drhd *drhd;
+    struct dmar_rmrr *rmrr;
+    uint32_t bdsm, tolud;
+    int igd;
+
+    memset(dmar, 0, sizeof(*dmar));
+    dmar->host_address_width = DMAR_HAW;
+    dmar->flags = DMAR_FLAGS;
+
+    igd = (pci_config_read32(0, 2, 0, 0) & 0xffff) != 0xffff;
+    if (igd) {
+        drhd = (struct dmar_drhd *)e;
+        memset(drhd, 0, sizeof(*drhd));
+        drhd->type = DMAR_DRHD;
+        drhd->base = DMAR_GFX_UNIT;
+        e = dmar_add_scope(e + sizeof(*drhd), DMAR_SCOPE_ENDPOINT, 0, 2, 0);
+        drhd->length = (uint16_t)(e - (uint8_t *)drhd);
+    }
+
+    drhd = (struct dmar_drhd *)e;
+    memset(drhd, 0, sizeof(*drhd));
+    drhd->type = DMAR_DRHD;
+    drhd->flags = DMAR_INCLUDE_PCI_ALL;
+    drhd->base = DMAR_DEFAULT_UNIT;
+    e = dmar_add_scope(e + sizeof(*drhd), DMAR_SCOPE_IOAPIC, ACPI_IOAPIC_ID,
+                       0x1e, 7);
+    e = dmar_add_scope(e, DMAR_SCOPE_HPET, 0, 0x1e, 6);
+    drhd->length = (uint16_t)(e - (uint8_t *)drhd);
+
+    /* Graphics stolen memory (BDSM, 00:02.0) up to TOLUD (00:00.0), which the
+     * IGD keeps using through DMA remapping */
+    bdsm = pci_config_read32(0, 2, 0, 0x5c) & 0xfff00000U;
+    tolud = pci_config_read32(0, 0, 0, 0xbc) & 0xfff00000U;
+    if (igd && bdsm != 0 && tolud > bdsm) {
+        rmrr = (struct dmar_rmrr *)e;
+        memset(rmrr, 0, sizeof(*rmrr));
+        rmrr->type = DMAR_RMRR;
+        rmrr->base = bdsm;
+        rmrr->limit = (uint64_t)tolud - 1;
+        e = dmar_add_scope(e + sizeof(*rmrr), DMAR_SCOPE_ENDPOINT, 0, 2, 0);
+        rmrr->length = (uint16_t)(e - (uint8_t *)rmrr);
+    }
+
+    acpi_fill_header(&dmar->header, "DMAR", (uint32_t)(e - p), 2);
+    acpi_set_checksum(&dmar->header);
+    return e;
+}
+
 static void acpi_gas_io(struct acpi_gas *g, uint8_t width, uint64_t addr)
 {
     g->space_id = ACPI_GAS_SYSTEM_IO;
@@ -381,6 +545,9 @@ uint64_t acpi_setup(void)
     uint8_t *fadt;
     uint8_t *madt;
     uint8_t *mcfg;
+    uint8_t *tpm2;
+    uint8_t *hpet;
+    uint8_t *dmar;
     struct acpi_header *xsdt;
     struct acpi_rsdp *rsdp;
     uint64_t *xsdt_entries;
@@ -402,14 +569,26 @@ uint64_t acpi_setup(void)
     mcfg = p;
     p = acpi_align(acpi_build_mcfg(p));
 
+    tpm2 = p;
+    p = acpi_align(acpi_build_tpm2(p));
+
+    hpet = p;
+    p = acpi_align(acpi_build_hpet(p));
+
+    dmar = p;
+    p = acpi_align(acpi_build_dmar(p));
+
     /* XSDT lists the top-level tables; the DSDT is reached via the FADT. */
     xsdt = (struct acpi_header *)p;
     xsdt_entries = (uint64_t *)((uint8_t *)xsdt + sizeof(*xsdt));
     xsdt_entries[0] = (uint64_t)(uintptr_t)fadt;
     xsdt_entries[1] = (uint64_t)(uintptr_t)madt;
     xsdt_entries[2] = (uint64_t)(uintptr_t)mcfg;
+    xsdt_entries[3] = (uint64_t)(uintptr_t)tpm2;
+    xsdt_entries[4] = (uint64_t)(uintptr_t)hpet;
+    xsdt_entries[5] = (uint64_t)(uintptr_t)dmar;
     acpi_fill_header(xsdt, "XSDT",
-                     (uint32_t)(sizeof(*xsdt) + 3 * sizeof(uint64_t)), 1);
+                     (uint32_t)(sizeof(*xsdt) + 6 * sizeof(uint64_t)), 1);
     acpi_set_checksum(xsdt);
     p = acpi_align((uint8_t *)xsdt + xsdt->length);
 

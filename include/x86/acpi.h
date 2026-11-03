@@ -30,8 +30,8 @@
 #endif
 #define ACPI_TABLE_SIZE 0x00010000UL /* 64 KiB */
 
-/* Build RSDP -> XSDT -> { FADT, MADT, MCFG, DSDT } at ACPI_TABLE_BASE and
- * return the RSDP physical address for boot_params.acpi_rsdp_addr. */
+/* Build RSDP -> XSDT -> { FADT, MADT, MCFG, TPM2, HPET, DMAR, DSDT } at
+ * ACPI_TABLE_BASE and return the RSDP physical address for boot_params.acpi_rsdp_addr. */
 uint64_t acpi_setup(void);
 
 #endif /* WOLFBOOT_ACPI_H */

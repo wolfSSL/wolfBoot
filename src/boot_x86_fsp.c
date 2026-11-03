@@ -45,6 +45,9 @@
 #ifdef WOLFBOOT_FSP_NVS_CACHE
 #include <x86/fsp_nvs.h>
 #endif
+#ifdef WOLFBOOT_MEASURED_BOOT
+#include <wolfssl/wolfcrypt/sha256.h>
+#endif
 
 
 #define WOLFBOOT_X86_STACK_SIZE 0x10000
@@ -290,10 +293,12 @@ int wolfBoot_image_measure(uint8_t *image)
     }
 
     ret = wc_InitSha256(&sha);
-    if (ret == 0)
-        ret = wc_Sha256Update(&sha, img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE);
+    if (ret != 0)
+        return -1;
+    ret = wc_Sha256Update(&sha, img.sha_hash, WOLFBOOT_SHA_DIGEST_SIZE);
     if (ret == 0)
         ret = wc_Sha256Final(&sha, digest);
+    wc_Sha256Free(&sha);
     if (ret != 0)
         return -1;
 

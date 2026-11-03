@@ -70,7 +70,7 @@ ifeq ($(TARGET),nai_68int6)
     $(error NAI_68INT6_PCIE_LANES must be one of: $(NAI_68INT6_PCIE_LANE_CONFIGS))
   endif
   CFLAGS+=-DNAI_68INT6_PCIE_LANES_$(NAI_68INT6_PCIE_LANES)
-  $(foreach option,NAI_68INT6_PCIE_NT NAI_68INT6_BACKPLANE_CLK \
+  $(foreach option,FSP_HYPERTHREADING NAI_68INT6_PCIE_NT NAI_68INT6_BACKPLANE_CLK \
     NAI_68INT6_PCIE_LINK_DELAY_S NAI_68INT6_BOOT_DELAY_S \
     NAI_68INT6_FPGA_READY_DELAY_S, \
     $(if $($(option)),$(eval CFLAGS+=-D$(option)=$($(option)))))
@@ -2081,7 +2081,9 @@ ifeq ($(FSP), 1)
     PCH_PCR_BASE \
     PCI_ECAM_BASE \
     WOLFBOOT_LOAD_BASE \
-    FSP_S_LOAD_BASE
+    FSP_S_LOAD_BASE \
+    MP_CPU_NUM_ENTRY \
+    WOLFBOOT_CMDLINE_MAX
 
     # set CFLAGS defines for each x86_fsp option
     $(foreach option,$(X86_FSP_OPTIONS),$(if $($(option)), $(eval CFLAGS += -D$(option)=$($(option)))))

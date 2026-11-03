@@ -30,6 +30,7 @@ DefinitionBlock ("", "DSDT", 2, "WOLFBT", "NAITGL", 0x00000001)
                 {
                     Package () { 0x0002FFFF, 0, Zero, 16 },  /* iGPU  INTA */
                     Package () { 0x0004FFFF, 0, Zero, 16 },  /* DTT   INTA */
+                    Package () { 0x0006FFFF, 0, Zero, 16 },  /* PEG60 INTA */
                     Package () { 0x000DFFFF, 0, Zero, 16 },  /* TBT   INTA */
                     Package () { 0x0014FFFF, 0, Zero, 16 },  /* xHCI  INTA */
                     Package () { 0x0014FFFF, 1, Zero, 17 },  /* xHCI  INTB */
@@ -52,6 +53,27 @@ DefinitionBlock ("", "DSDT", 2, "WOLFBT", "NAITGL", 0x00000001)
                     Package () { 0x001EFFFF, 2, Zero, 36 },  /* GSPI  INTC */
                     Package () { 0x001FFFFF, 0, Zero, 16 },  /* PCH   INTA */
                 })
+            }
+
+            /* The OS gets every PCIe feature it asks for (native hot-plug,
+             * PME, AER, capability structure, LTR): no firmware handler owns
+             * them after handoff */
+            Method (_OSC, 4, Serialized)
+            {
+                Local0 = Arg3
+                CreateDWordField (Local0, Zero, CDW1)
+                If ((Arg0 == ToUUID ("33db4d5b-1ff7-401c-9657-7441c03dd766")))
+                {
+                    If ((Arg1 != One))
+                    {
+                        CDW1 |= 0x08
+                    }
+                }
+                Else
+                {
+                    CDW1 |= 0x04
+                }
+                Return (Local0)
             }
 
             Name (_CRS, ResourceTemplate ()
@@ -85,6 +107,56 @@ DefinitionBlock ("", "DSDT", 2, "WOLFBT", "NAITGL", 0x00000001)
                     0x0000000000000000, 0x0000004000000000, 0x0000007FFFFFFFFF,
                     0x0000000000000000, 0x0000004000000000)
             })
+
+            /* Root ports with the INTx routing of the devices behind them, as
+             * the stock BIOS declares it; RP10's differs from a plain swizzle. */
+            Device (PEG0)  /* 00:06.0 */
+            {
+                Name (_ADR, 0x00060000)
+                Name (_PRT, Package ()
+                {
+                    Package () { 0xFFFF, 0, Zero, 16 },
+                    Package () { 0xFFFF, 1, Zero, 17 },
+                    Package () { 0xFFFF, 2, Zero, 18 },
+                    Package () { 0xFFFF, 3, Zero, 19 },
+                })
+            }
+
+            Device (RP05)  /* 00:1c.0, PCH port 5 */
+            {
+                Name (_ADR, 0x001C0000)
+                Name (_PRT, Package ()
+                {
+                    Package () { 0xFFFF, 0, Zero, 16 },
+                    Package () { 0xFFFF, 1, Zero, 17 },
+                    Package () { 0xFFFF, 2, Zero, 18 },
+                    Package () { 0xFFFF, 3, Zero, 19 },
+                })
+            }
+
+            Device (RP09)  /* 00:1d.0, PCH port 9 */
+            {
+                Name (_ADR, 0x001D0000)
+                Name (_PRT, Package ()
+                {
+                    Package () { 0xFFFF, 0, Zero, 16 },
+                    Package () { 0xFFFF, 1, Zero, 17 },
+                    Package () { 0xFFFF, 2, Zero, 18 },
+                    Package () { 0xFFFF, 3, Zero, 19 },
+                })
+            }
+
+            Device (RP10)  /* 00:1d.1, PCH port 10 */
+            {
+                Name (_ADR, 0x001D0001)
+                Name (_PRT, Package ()
+                {
+                    Package () { 0xFFFF, 0, Zero, 17 },
+                    Package () { 0xFFFF, 1, Zero, 18 },
+                    Package () { 0xFFFF, 2, Zero, 19 },
+                    Package () { 0xFFFF, 3, Zero, 16 },
+                })
+            }
 
             /* LPSS I2C0 and GSPI0 with the board devices the stock BIOS
              * declares, so NAI's Linux drivers (naigspi, at24) bind. */
@@ -173,6 +245,31 @@ DefinitionBlock ("", "DSDT", 2, "WOLFBT", "NAITGL", 0x00000001)
                             ClockPhaseFirst, "\\_SB.PCI0.SPI0")
                     })
                 }
+            }
+        }
+
+        /* TPM 2.0 on its TIS (FIFO) interface; wolfBoot leaves its interrupt
+         * unconfigured, so the OS driver polls */
+        Device (TPM)
+        {
+            Name (_HID, "MSFT0101")
+            Name (_STR, Unicode ("TPM 2.0 Device"))
+            OperationRegion (TPMR, SystemMemory, 0xFED40000, 0x5000)
+            Field (TPMR, AnyAcc, NoLock, Preserve)
+            {
+                ACC0,   8
+            }
+            Name (_CRS, ResourceTemplate ()
+            {
+                Memory32Fixed (ReadWrite, 0xFED40000, 0x00005000)
+            })
+            Method (_STA, 0, NotSerialized)
+            {
+                If ((ACC0 == 0xFF))
+                {
+                    Return (Zero)
+                }
+                Return (0x0F)
             }
         }
     }
