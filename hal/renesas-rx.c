@@ -163,11 +163,18 @@ static flash_err_t flash_check_error()
 #define DEBUG_BAUD_RATE 115200
 #endif
 #ifdef TARGET_rx24t
+#ifdef __CCRX__
+#define DEBUG_UART_PCLKB ((uint32_t)BSP_PCLKB_HZ)
+#else
+#define DEBUG_UART_PCLKB PCLKB
+#endif
 /* Rounded BRR for the /8 divider */
 #define DEBUG_UART_BRR \
-    (((PCLKB + (4 * DEBUG_BAUD_RATE)) / (8 * DEBUG_BAUD_RATE)) - 1)
+    (((DEBUG_UART_PCLKB + (4 * DEBUG_BAUD_RATE)) / (8 * DEBUG_BAUD_RATE)) - 1)
+#ifndef __CCRX__
 #if DEBUG_UART_BRR > 255
     #error DEBUG_BAUD_RATE too low for the RX24T SCI divider: BRR exceeds 255
+#endif
 #endif
 #endif
 
@@ -728,8 +735,10 @@ static void copyfuncs(void)
         *dst++ = *src++;
     }
 
-    wolfBoot_printf("RAM Function start = 0x%p\n", __sectop("RPFRAM"));
-    wolfBoot_printf("RAM Function end   = 0x%p\n", __secend("RPFRAM"));
+    wolfBoot_printf("RAM Function start = 0x%x\n",
+        (unsigned int)__sectop("RPFRAM"));
+    wolfBoot_printf("RAM Function end   = 0x%x\n",
+        (unsigned int)__secend("RPFRAM"));
     wolfBoot_printf("RAM Function size  = %d\n", n);
 }
 #endif
@@ -1082,11 +1091,15 @@ int hal_flash_init(void)
     return flash_fcu_firmware_copy();
 }
 #elif defined(TARGET_rx24t) /* RX24T code flash driver */
-#if !defined(RAM_CODE) || !defined(__WOLFBOOT)
+#if !defined(__CCRX__) && (!defined(RAM_CODE) || !defined(__WOLFBOOT))
     #error RX24T flash driver must run from RAM: define RAM_CODE and __WOLFBOOT
 #endif
 
+#ifdef __CCRX__
+#define FLASH_FCLK_MHZ ((uint32_t)(BSP_FCLK_HZ / 1000000UL))
+#else
 #define FLASH_FCLK_MHZ (FCLK / 1000000UL)
+#endif
 
 /* Timeouts as poll counts; each poll takes at least one ICLK */
 #define FLASH_POLLS_PER_MS    (SYS_CLK / 1000UL)
@@ -1098,6 +1111,9 @@ int hal_flash_init(void)
 #define FLASH_WAIT_TDIS_US 3U
 #define FLASH_WAIT_TMS_US  6U
 
+#ifdef __CCRX__
+#pragma section FRAM
+#endif
 static void RAMFUNCTION flash_delay_us(uint32_t us)
 {
     uint32_t i;
@@ -1349,10 +1365,16 @@ void RAMFUNCTION hal_flash_unlock(void)
 void RAMFUNCTION hal_flash_lock(void)
 {
 }
+#ifdef __CCRX__
+#pragma section
+#endif
 
 /* FISR and FASR are set on each P/E mode entry */
 int hal_flash_init(void)
 {
+#ifdef __CCRX__
+    copyfuncs();
+#endif
     return FLASH_OK;
 }
 #else /* !TARGET_rx71m && !TARGET_rx24t */
