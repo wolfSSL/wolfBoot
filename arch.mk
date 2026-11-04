@@ -1266,6 +1266,10 @@ ifeq ($(ARCH),RENESAS_RX)
     else
       LDFLAGS+=--oformat=elf32-rx-be
     endif
+    # The ELF stores code sections byte-swapped in 4-byte groups, the order
+    # the CPU fetches them. elf32-rx-be-ns is necessary to prevent objcopy
+    # from swapping them back.
+    OBJCOPY_FLAGS+=-I elf32-rx-be-ns
   else
     CFLAGS+=-mlittle-endian-data
     ifeq ($(USE_GCC),1)
@@ -1298,6 +1302,41 @@ ifeq ($(ARCH),RENESAS_RX)
     endif
     # Fill gaps with 0xFF, the erased value
     OBJCOPY_FLAGS+=-R .ofs_rx71m --gap-fill 0xFF
+  endif
+
+  ifeq ($(TARGET),rx24t)
+    ifeq ($(PKA),1)
+      $(error TARGET=rx24t has no TSIP; set PKA=0)
+    endif
+    ifneq ($(NVM_FLASH_WRITEONCE),1)
+      $(error TARGET=rx24t requires NVM_FLASH_WRITEONCE=1)
+    endif
+    ifeq ($(DELTA_UPDATES),1)
+      $(error TARGET=rx24t does not support DELTA_UPDATES)
+    endif
+    ifeq ($(BIG_ENDIAN),1)
+      ifeq ($(findstring WOLFBOOT_RENESAS_OSM,$(CFLAGS) $(CFLAGS_EXTRA)),)
+        $(error TARGET=rx24t BIG_ENDIAN=1 requires CFLAGS_EXTRA+=-DWOLFBOOT_RENESAS_OSM to set MDE)
+      endif
+    endif
+    # RXv2 core
+    ifeq ($(USE_GCC),0)
+      CFLAGS+=-misa=v2
+    endif
+    # Fill gaps with 0xFF, the erased value
+    OBJCOPY_FLAGS+=--gap-fill 0xFF
+    ifneq ($(RENESAS_ID_CODE),)
+      ifeq ($(shell echo '$(RENESAS_ID_CODE)' | grep -E -x '[0-9A-Fa-f]{32}'),)
+        $(error RENESAS_ID_CODE must be 32 hex digits)
+      endif
+      ifeq ($(shell echo '$(RENESAS_ID_CODE)' | cut -c1-2),52)
+        $(error RENESAS_ID_CODE control code 52h can disable the programmer)
+      endif
+      CFLAGS+=-DWOLFBOOT_RENESAS_ID_CODE0=0x$(shell echo '$(RENESAS_ID_CODE)' | cut -c1-8)
+      CFLAGS+=-DWOLFBOOT_RENESAS_ID_CODE1=0x$(shell echo '$(RENESAS_ID_CODE)' | cut -c9-16)
+      CFLAGS+=-DWOLFBOOT_RENESAS_ID_CODE2=0x$(shell echo '$(RENESAS_ID_CODE)' | cut -c17-24)
+      CFLAGS+=-DWOLFBOOT_RENESAS_ID_CODE3=0x$(shell echo '$(RENESAS_ID_CODE)' | cut -c25-32)
+    endif
   endif
 
   ifeq ($(PKA),1)

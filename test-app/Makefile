@@ -127,7 +127,7 @@ else
       LDFLAGS+=-ffreestanding -nostartfiles
     endif
     CFLAGS+=-DWOLFBOOT_RENESAS_APP
-    ifeq ($(TARGET),rx71m)
+    ifneq ($(filter rx71m rx24t,$(TARGET)),)
       # The flash driver must run from RAM: code flash cannot be read in P/E mode
       ../hal/renesas-rx.o: CFLAGS+=-DRAM_CODE -D__WOLFBOOT
     endif
@@ -647,6 +647,10 @@ endif
 ENTRY_POINT=`cat .entry-point-address`
 LSCRIPT:=../config/target-app.ld
 LSCRIPT_TEMPLATE:=$(ARCH).ld
+
+ifeq ($(TARGET),rx24t)
+  LSCRIPT_TEMPLATE:=$(ARCH)-$(TARGET).ld
+endif
 
 ifeq ($(TARGET),stm32f7)
   LSCRIPT_TEMPLATE=ARM-stm32f7.ld
