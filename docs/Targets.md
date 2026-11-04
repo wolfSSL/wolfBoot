@@ -7873,7 +7873,7 @@ See instructions in [IDE/pico-sdk/rp2350/README.md](/IDE/pico-sdk/rp2350/README.
 
 Target board: Renesas Starter Kit for RX24T, with the R5F524TAADFP (256KB code flash, 16KB RAM, 8KB data flash).
 
-The RX24T is supported natively with "make" (GCC for Renesas RX).
+The RX24T is supported either natively with "make" (GCC for Renesas RX) or through e2Studio with CC-RX. If using e2Studio see [Readme.md](../IDE/Renesas/e2studio/RX24T/Readme.md).
 
 Default UART Serial on SCI1 at PD3-TXD1 PD5-RXD1, connected to the on-board USB serial converter. This feature is enabled with `DEBUG_UART=1`.
 

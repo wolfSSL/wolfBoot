@@ -92,7 +92,9 @@ void do_boot(const uint32_t *app_offset)
 #if defined(__RX__)
     /* Do unconditional jump (r1 = app_offset) */
     #if defined(__CCRX__)
-    	printf("app_offset 0x%p\n", app_offset);
+    #ifndef TARGET_rx24t /* RX24T project: no stdio */
+        printf("app_offset 0x%p\n", app_offset);
+    #endif
         longJump(app_offset);
     #else
         app_entry = (void(*))(*app_offset);
