@@ -39,8 +39,10 @@ SECURE_LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
 # Linker script: capture the user value (command line, environment, .config)
-# here; target defaults in arch.mk/options.mk/board.mk use ?= so a user
-# value wins. Last-resort default is applied after options.mk below.
+# here; target defaults in arch.mk/options.mk/board.mk use the
+# LSCRIPT_IN_DEFAULT helper (see tools/config.mk), which only assigns when
+# LSCRIPT_IN is undefined or empty, so a user value wins. Last-resort
+# default is applied after options.mk below.
 LSCRIPT_IN_USER:=$(LSCRIPT_IN)
 L2SRAM_ADDR?=0xF8F00000
 V?=0

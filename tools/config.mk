@@ -171,3 +171,9 @@ CONFIG_VARS:= ARCH TARGET SIGN HASH MCUXSDK MCUXPRESSO MCUXPRESSO_CPU MCUXPRESSO
 	CERT_CHAIN_GEN_CA_HASH \
 	CERT_CHAIN_NAME_CONSTRAINTS \
 	ENCRYPT_CACHE
+
+# ?= treats a defined-but-empty value as already set, so a stale
+# LSCRIPT_IN?= line in .config (or an exported empty env var) would skip
+# every target default. Assign $1 to LSCRIPT_IN only when it is undefined
+# or empty.
+LSCRIPT_IN_DEFAULT=$(if $(strip $(LSCRIPT_IN)),,$(eval LSCRIPT_IN:=$1))

@@ -25,7 +25,7 @@ LSCRIPT_IN_USER:=$(LSCRIPT_IN)
 # boards use hal/x86_fsp_tgl_stage1.ld) set LSCRIPT_IN in arch.mk, so
 # only default when the per-target file (or its .ld.in template) exists.
 ifneq ($(wildcard ../hal/$(TARGET)_stage1.ld ../hal/$(TARGET)_stage1.ld.in),)
-LSCRIPT_IN?=../hal/$(TARGET)_stage1.ld
+$(call LSCRIPT_IN_DEFAULT,../hal/$(TARGET)_stage1.ld)
 endif
 LSCRIPT_FLAGS:=
 LD_START_GROUP:=-Wl,--start-group
