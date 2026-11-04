@@ -1266,6 +1266,10 @@ ifeq ($(ARCH),RENESAS_RX)
     else
       LDFLAGS+=--oformat=elf32-rx-be
     endif
+    # The ELF stores code sections byte-swapped in 4-byte groups, the order
+    # the CPU fetches them. elf32-rx-be-ns is necessary to prevent objcopy
+    # from swapping them back.
+    OBJCOPY_FLAGS+=-I elf32-rx-be-ns
   else
     CFLAGS+=-mlittle-endian-data
     ifeq ($(USE_GCC),1)
