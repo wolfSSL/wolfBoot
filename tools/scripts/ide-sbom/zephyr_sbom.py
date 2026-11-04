@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility wrapper for the vendored wolfGlass Zephyr frontend."""
+"""Compatibility wrapper for the vendored wolfssl-compliance-tooling Zephyr frontend."""
 
 import os
 import sys

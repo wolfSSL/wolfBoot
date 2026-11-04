@@ -794,7 +794,7 @@ For Visual Studio, the developer command prompt will need to be activated.
     * Multiboot2: u32 request-list entries per spec v2.0, zero entries as padding, end-tag termination
     * Signing tools: file-backed custom TLV, custom TLV size limit raised to UINT16_MAX, --custom-tlv-pubkey-der, auxiliary algorithms and cert chain/TPM usage, removed the 14-argument limit
     * wolfHSM: exposed max verify roots in options.mk, target-independent client build
-    * SBOM: vendored wolfGlass tooling, SBOMs from every build system and per-target config, CI drift check, registered wolfBoot CPE, identification of the embedded wolfSSL
+    * SBOM: vendored wolfssl-compliance-tooling files, SBOMs from every build system and per-target config, CI drift check, registered wolfBoot CPE, identification of the embedded wolfSSL
     * Removed the obsolete python keytools; all users converted to C
     * Added CONTRIBUTING.md covering the contributor agreement and PR process
   * Bug fixes and hardening

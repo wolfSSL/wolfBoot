@@ -29,7 +29,7 @@ The pieces:
 
 | File | Role |
 | --- | --- |
-| `tools/sbom/sbom-driver` | Vendored wolfGlass driver (srcs + config → gen-sbom). |
+| `tools/sbom/sbom-driver` | Vendored wolfssl-compliance-tooling driver (srcs + config → gen-sbom). |
 | `tools/sbom/gen-sbom` | Vendored SBOM generator. |
 | `cmake/sbom.cmake` | wolfBoot wrapper around the vendored CMake helper. |
 | `tools/sbom/frontends/iar_sbom.py` | Extracts srcs + defines from an IAR `.ewp`. |
@@ -44,7 +44,7 @@ The pieces:
 * `python3`
 * A host C compiler. The default is `cc`. To use a different compiler, set
   `HOSTCC=...`.
-* The vendored wolfGlass SBOM set under `tools/sbom/`.
+* The vendored wolfssl-compliance-tooling SBOM set under `tools/sbom/`.
 
 ## Limitations
 
@@ -64,7 +64,7 @@ Obey these limitations when you make an SBOM.
   into the wolfBoot source set, so an advisory against one of those products
   does not match the document. The captured configuration does record the
   macros (`WOLFBOOT_TPM`, and the equivalents), so the build is still visible.
-  wolfGlass owns the component table, and this limitation goes away when it
+  wolfssl-compliance-tooling owns the component table, and this limitation goes away when it
   gains the other entries.
 - The document records the source set, not each file. There is no per-file
   hash, and SPDX reports `filesAnalyzed: false`. Use the source-set Merkle
@@ -389,11 +389,11 @@ sim configuration and runs a native-Windows scrub test against
 artifacts.
 
 The same workflow holds `tools/sbom/` to the revision in
-`tools/sbom/.wolfglass-rev`. It checks wolfGlass out at that revision and runs
-`tools/wolfglass-sync --check`, which fails if a vendored file differs from
-wolfGlass `share/`, or if the pinned revision does not resolve. A local patch to
+`tools/sbom/.wolfssl-compliance-tooling-rev`. It checks wolfssl-compliance-tooling out at that revision and runs
+`tools/wolfssl-compliance-tooling-sync --check`, which fails if a vendored file differs from
+wolfssl-compliance-tooling `share/`, or if the pinned revision does not resolve. A local patch to
 the vendored tooling therefore breaks CI instead of shipping quietly: fix
-wolfGlass and re-vendor.
+wolfssl-compliance-tooling and re-vendor.
 
 ## Reproducibility
 
