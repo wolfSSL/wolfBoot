@@ -4,6 +4,9 @@ SIGN_KEY?=../wolfboot_signing_private_key.der
 X86FSP_PATH?=../`dirname $(FSP_M_BIN)`
 
 
+# Generate the stage1 script from its .ld.in template; a user-provided
+# LSCRIPT_IN is used as-is.
+ifeq ($(LSCRIPT_IN_USER),)
 $(LSCRIPT_IN): $(WOLFBOOT_ROOT)/hal/$(LSCRIPT_IN).in FORCE
 	@cat $(WOLFBOOT_ROOT)/hal/$(LSCRIPT_IN).in | \
 		sed -e "s/@FSP_T_BASE@/$(FSP_T_BASE)/g" | \
@@ -13,6 +16,7 @@ $(LSCRIPT_IN): $(WOLFBOOT_ROOT)/hal/$(LSCRIPT_IN).in FORCE
 		sed -e "s/@UCODE0_BASE@/$(UCODE0_BASE)/g" | \
 		sed -e "s/@UCODE1_BASE@/$(UCODE1_BASE)/g" \
 		> $@
+endif
 
 ./boot_x86_fsp_start.o: boot_x86_fsp_start.S
 	@echo "\t[NASM-$(ARCH)] $@"

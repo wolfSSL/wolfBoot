@@ -277,7 +277,11 @@ include options.mk
 
 # Last-resort linker script for targets without a dedicated default in
 # arch.mk/options.mk/board.mk; a user-provided LSCRIPT_IN wins over both.
-LSCRIPT_IN?=hal/$(TARGET).ld
+# An empty value (e.g. an LSCRIPT_IN?= persisted by an older 'make config')
+# counts as unset.
+ifeq ($(strip $(LSCRIPT_IN)),)
+  LSCRIPT_IN:=hal/$(TARGET).ld
+endif
 
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
