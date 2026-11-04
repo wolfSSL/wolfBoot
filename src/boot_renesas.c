@@ -151,8 +151,10 @@ extern void PowerON_Reset(void);
 #define OFS_OSIS    __attribute__ ((section (".ofs6"))) /* 0xFE7F5D50 */
 #define OFS_FAW     __attribute__ ((section (".ofs7"))) /* 0xFE7F5D64 */
 #define OFS_RCP     __attribute__ ((section (".ofs8"))) /* 0xFE7F5D70 */
-#define ROMCODE_SECT __attribute__ ((section (".romcode"))) /* 0xFFFFFF80 */
+/* .romcode is at 0xFFFFFF80 on RX71M and 0xFFFFFF90 on RX24T */
+#define ROMCODE_SECT __attribute__ ((section (".romcode")))
 #define OFS_RX71M   __attribute__ ((section (".ofs_rx71m"))) /* 0x00120040 */
+#define OFS_RX24T   __attribute__ ((section (".ofs_rx24t"))) /* 0xFFFFFF80 */
 
 /* Generic Interrupt Handler */
 void INT_Dummy(void) __attribute__ ((interrupt));
@@ -161,7 +163,7 @@ void INT_Dummy(void) {
     /* wait(); */
 }
 
-#ifdef TARGET_rx71m
+#if defined(TARGET_rx71m) || defined(TARGET_rx24t)
 /* Fault exceptions stop here */
 void INT_Fault(void) __attribute__ ((interrupt));
 void INT_Fault(void)
@@ -318,25 +320,48 @@ const void *HardwareVectors[] FVECT_SECT = {
 #endif
 };
 
-#if defined(TARGET_rx71m) && !defined(WOLFBOOT_RENESAS_APP)
+#if (defined(TARGET_rx71m) || defined(TARGET_rx24t)) && \
+    !defined(WOLFBOOT_RENESAS_APP)
 /* ROMCODE 0x00000000 or 0x00000001 enables ROM code protection */
 #define ROMCODE_VALUE (0xFFFFFFFF)
 
-/* On RX71M, ROMCODE sits in the exception table area at reset (0xFFFFFF80),
+#ifdef TARGET_rx24t
+#ifndef WOLFBOOT_RENESAS_ID_CODE0
+#define WOLFBOOT_RENESAS_ID_CODE0 (0x45010203)
+#endif
+#ifndef WOLFBOOT_RENESAS_ID_CODE1
+#define WOLFBOOT_RENESAS_ID_CODE1 (0x04050607)
+#endif
+#ifndef WOLFBOOT_RENESAS_ID_CODE2
+#define WOLFBOOT_RENESAS_ID_CODE2 (0x08090A0B)
+#endif
+#ifndef WOLFBOOT_RENESAS_ID_CODE3
+#define WOLFBOOT_RENESAS_ID_CODE3 (0x0C0D0E0F)
+#endif
+#else
+#define WOLFBOOT_RENESAS_ID_CODE0 (0xFFFFFFFF)
+#define WOLFBOOT_RENESAS_ID_CODE1 (0xFFFFFFFF)
+#define WOLFBOOT_RENESAS_ID_CODE2 (0xFFFFFFFF)
+#define WOLFBOOT_RENESAS_ID_CODE3 (0xFFFFFFFF)
+#endif
+
+/* ROMCODE sits in the exception table area at reset (0xFFFFFF80),
  * so ExceptVectors[] is placed in ROM and the startup points EXTB at it. */
 const void *RomCodeArea[] ROMCODE_SECT = {
+#ifdef TARGET_rx71m
     (fp)0xFFFFFFFF, /* 0x00 reserved */
     (fp)0xFFFFFFFF, /* 0x04 reserved */
     (fp)0xFFFFFFFF, /* 0x08 reserved */
     (fp)0xFFFFFFFF, /* 0x0C reserved */
+#endif /* RX24T: MDE, OFS1, OFS0 at 0x00-0x0C are in .ofs_rx24t */
     (fp)0xFFFFFFFF, /* 0x10 reserved */
     (fp)0xFFFFFFFF, /* 0x14 reserved */
     (fp)0xFFFFFFFF, /* 0x18 reserved */
     (fp)ROMCODE_VALUE, /* 0x1C ROMCODE */
-    (fp)0xFFFFFFFF, /* 0x20 reserved */
-    (fp)0xFFFFFFFF, /* 0x24 reserved */
-    (fp)0xFFFFFFFF, /* 0x28 reserved */
-    (fp)0xFFFFFFFF, /* 0x2C reserved */
+    (fp)WOLFBOOT_RENESAS_ID_CODE0, /* 0x20 reserved (RX24T: ID code) */
+    (fp)WOLFBOOT_RENESAS_ID_CODE1, /* 0x24 reserved (RX24T: ID code) */
+    (fp)WOLFBOOT_RENESAS_ID_CODE2, /* 0x28 reserved (RX24T: ID code) */
+    (fp)WOLFBOOT_RENESAS_ID_CODE3, /* 0x2C reserved (RX24T: ID code) */
     (fp)0xFFFFFFFF, /* 0x30 reserved */
     (fp)0xFFFFFFFF, /* 0x34 reserved */
     (fp)0xFFFFFFFF, /* 0x38 reserved */
@@ -903,6 +928,15 @@ const unsigned long __ofsm_rx71m[12] OFS_RX71M = {
     __OFS1_VALUE, /* 0x6C OFS1 */
 };
 #endif /* !WOLFBOOT_RENESAS_APP */
+#elif defined(TARGET_rx24t)
+#ifndef WOLFBOOT_RENESAS_APP
+const unsigned long __ofsm_rx24t[4] OFS_RX24T = {
+    __MDE_VALUE,  /* 0x80 MDE */
+    0xffffffff,   /* 0x84 reserved */
+    __OFS1_VALUE, /* 0x88 OFS1 */
+    __OFS0_VALUE, /* 0x8C OFS0 */
+};
+#endif /* !WOLFBOOT_RENESAS_APP */
 #else
 const unsigned long __ofsm_sec_ofs1[] OFS_REG = {
     __MDE_VALUE,
@@ -935,7 +969,7 @@ const unsigned long __FAWreg OFS_FAW = 0xffffffff;
 
 /* RCP register */
 const unsigned long __RCPreg OFS_RCP = 0xffffffff;
-#endif /* TARGET_rx71m */
+#endif /* TARGET_rx71m, TARGET_rx24t */
 #endif /* WOLFBOOT_RENESAS_OSM */
 
 #endif /* __RX__ */
