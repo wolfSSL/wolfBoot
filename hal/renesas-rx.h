@@ -291,7 +291,7 @@ void hal_delay_us(uint32_t us);
 #define SCI_SCMR_SDIR (1 << 3) /* Transmitted/Received Data Transfer Direction */
 #define SCI_SCMR_SINV (1 << 2) /* Transmitted/Received Data Invert */
 
-#define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x08))
+#define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x07))
 #define SCI_SEMR_ASC0    (1 << 0) /* Asynchronous Mode Clock Source Select 0=external clock input */
 #define SCI_SEMR_BRME    (1 << 2) /* Bit Rate Modulation Enable */
 #define SCI_SEMR_ABCS    (1 << 4) /* Asynchronous Mode Base Clock Select */
