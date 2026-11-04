@@ -175,8 +175,6 @@ int wolfBoot_initialize_encryption(void)
 
 #if WOLFBOOT_FLASH_ERASE_UNIT <= 0
     #error WOLFBOOT_FLASH_ERASE_UNIT must be positive
-#elif (WOLFBOOT_FLASH_ERASE_UNIT & (WOLFBOOT_FLASH_ERASE_UNIT - 1)) != 0
-    #error WOLFBOOT_FLASH_ERASE_UNIT must be a power of two
 #elif (WOLFBOOT_SECTOR_SIZE % WOLFBOOT_FLASH_ERASE_UNIT) != 0
     #error WOLFBOOT_FLASH_ERASE_UNIT must divide WOLFBOOT_SECTOR_SIZE
 #endif
@@ -483,9 +481,9 @@ finish:
  */
 static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 {
-    uintptr_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
+    uintptr_t addr_off = addr % NVM_CACHE_SIZE;
+    uintptr_t addr_align = addr - addr_off;
     uintptr_t addr_read, addr_write;
-    uintptr_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
 
     nvm_cached_sector = nvm_select_fresh_sector(part);
@@ -2793,8 +2791,8 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 
 #ifdef NVM_FLASH_WRITEONCE
     addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
+    addr_off = addr % WOLFBOOT_SECTOR_SIZE;
+    addr_align = addr - addr_off;
     /* we read from the populated sector, now write to the erased sector */
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
@@ -2804,7 +2802,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
             (void*)(unsigned long)(addr_align),
                 WOLFBOOT_SECTOR_SIZE);
     /* we read from the populated sector, now write to the erased sector */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    addr_align = addr - (addr % WOLFBOOT_SECTOR_SIZE);
     addr_align -= (!sel_sec * WOLFBOOT_SECTOR_SIZE);
     /* Populate key + nonce in the cache */
     XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
@@ -2827,7 +2825,7 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     /* Erasing original sector "sel_sec",
      * same one returned from by nvm_select.
      */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    addr_align = addr - (addr % WOLFBOOT_SECTOR_SIZE);
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
 #else
@@ -2862,8 +2860,8 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     flag_magic_addr = addr - sizeof(uint32_t) - flag_magic_off;
     first_addr = flag_magic_addr;
 #endif
-    first_unit = first_addr & ~(unit - 1);
-    last_unit = (end_addr - 1) & ~(unit - 1);
+    first_unit = first_addr - (first_addr % unit);
+    last_unit = (end_addr - 1) - ((end_addr - 1) % unit);
 
     hal_flash_unlock();
     for (addr_align = first_unit; addr_align <= last_unit;
