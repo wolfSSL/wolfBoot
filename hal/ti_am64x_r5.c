@@ -111,12 +111,12 @@ void hal_init(void)
 {
 #ifdef __WOLFBOOT
 
-#if 0
+# if 0
     asm(
         "_debug_loop_start:\n"
         "  b _debug_loop_start\n"
     );
-#endif
+# endif
 
     Sciclient_waitForBootNotification();
 
@@ -154,16 +154,18 @@ void hal_init(void)
     hal_enable_atcm();
     Drivers_open();
 
+# ifdef DEBUG_UART
     uart_write("ti_am64x_r5 init\n", 17);
+# endif
     Sciclient_getVersionCheck(1);
 #else
 
-#if 0
+# if 0
     asm(
         "_debug_loop_start:\n"
         "  b _debug_loop_start\n"
     );
-#endif
+# endif
 
     System_init();
     Drivers_open();
