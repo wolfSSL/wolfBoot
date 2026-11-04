@@ -110,14 +110,6 @@ static void hal_enable_atcm(void)
 void hal_init(void)
 {
 #ifdef __WOLFBOOT
-
-# if 0
-    asm(
-        "_debug_loop_start:\n"
-        "  b _debug_loop_start\n"
-    );
-# endif
-
     Sciclient_waitForBootNotification();
 
     if (!Bootloader_socIsMCUResetIsoEnabled())
@@ -159,14 +151,6 @@ void hal_init(void)
 # endif
     Sciclient_getVersionCheck(1);
 #else
-
-# if 0
-    asm(
-        "_debug_loop_start:\n"
-        "  b _debug_loop_start\n"
-    );
-# endif
-
     System_init();
     Drivers_open();
 #endif /* __WOLFBOOT */
