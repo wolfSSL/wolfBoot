@@ -38,7 +38,10 @@ LDFLAGS:=
 SECURE_LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
-LSCRIPT_IN?=hal/$(TARGET).ld
+# Linker script: capture the user value (command line, environment, .config)
+# here; target defaults in arch.mk/options.mk/board.mk use ?= so a user
+# value wins. Last-resort default is applied after options.mk below.
+LSCRIPT_IN_USER:=$(LSCRIPT_IN)
 L2SRAM_ADDR?=0xF8F00000
 V?=0
 DEBUG?=0
@@ -272,6 +275,10 @@ WOLFBOOT_TARGET_BUILD=1
 # Parse config options
 include options.mk
 
+# Last-resort linker script for targets without a dedicated default in
+# arch.mk/options.mk/board.mk; a user-provided LSCRIPT_IN wins over both.
+LSCRIPT_IN?=hal/$(TARGET).ld
+
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(WOLFHSM_OBJS)
@@ -350,7 +357,10 @@ ifeq ($(USE_ARMCLANG),1)
   LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=wolfboot.map
   LDFLAGS+=$(LDFLAGS_EXTRA)
   LSCRIPT:=config/target.sct
-  LSCRIPT_IN:=hal/$(TARGET).sct
+  # ARMClang needs a .sct scatter file; a user-provided LSCRIPT_IN wins.
+  ifeq ($(LSCRIPT_IN_USER),)
+    LSCRIPT_IN:=hal/$(TARGET).sct
+  endif
   LSCRIPT_FLAGS:=--scatter=$(LSCRIPT)
   LD_START_GROUP:=
   LD_END_GROUP:=

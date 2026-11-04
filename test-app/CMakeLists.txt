@@ -97,14 +97,21 @@ if(NOT DEFINED BOOTLOADER_PARTITION_SIZE)
          OUTPUT_FORMAT HEXADECIMAL)
 endif()
 
-get_filename_component(WOLFBOOT_LSCRIPT ${CMAKE_SOURCE_DIR}/${WOLFBOOT_LSCRIPT_TEMPLATE} NAME)
-set(WOLFBOOT_LSCRIPT ${CMAKE_CURRENT_BINARY_DIR}/${WOLFBOOT_LSCRIPT})
+# The generated bootloader script gets a fixed name so a user template
+# sharing a basename with the app's template cannot collide in the build dir
+set(WOLFBOOT_LSCRIPT ${CMAKE_CURRENT_BINARY_DIR}/wolfboot_${WOLFBOOT_TARGET}.ld)
 
 get_filename_component(APP_LSCRIPT ${APP_LSCRIPT_TEMPLATE} NAME)
 set(APP_LSCRIPT ${CMAKE_CURRENT_BINARY_DIR}/${APP_LSCRIPT})
 
-# generate linker script for bootloader
-configure_file(${CMAKE_SOURCE_DIR}/${WOLFBOOT_LSCRIPT_TEMPLATE} ${WOLFBOOT_LSCRIPT})
+# generate linker script for bootloader; an absolute user-provided template
+# is used as-is, relative ones are resolved against the source directory
+if(IS_ABSOLUTE ${WOLFBOOT_LSCRIPT_TEMPLATE})
+    set(WOLFBOOT_LSCRIPT_SRC ${WOLFBOOT_LSCRIPT_TEMPLATE})
+else()
+    set(WOLFBOOT_LSCRIPT_SRC ${CMAKE_SOURCE_DIR}/${WOLFBOOT_LSCRIPT_TEMPLATE})
+endif()
+configure_file(${WOLFBOOT_LSCRIPT_SRC} ${WOLFBOOT_LSCRIPT})
 
 # generate linker script for app
 configure_file(${APP_LSCRIPT_TEMPLATE} ${APP_LSCRIPT})

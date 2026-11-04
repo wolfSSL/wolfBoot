@@ -109,7 +109,7 @@ ifeq ($(ARCH),AARCH64)
       ZYNQMP_PSU_INIT_DIR?=hal/board/zynqmp
       CFLAGS+=-DWOLFBOOT_ZYNQMP_FSBL
       CFLAGS+=-Ihal/zynqmp -I$(ZYNQMP_PSU_INIT_DIR)
-      LSCRIPT_IN=hal/zynqmp_ocm.ld
+      LSCRIPT_IN?=hal/zynqmp_ocm.ld
       OBJS+=hal/zynqmp_psu_shim.o
       OBJS+=hal/zynqmp_atf.o
       OBJS+=$(ZYNQMP_PSU_INIT_DIR)/psu_init_gpl.o
@@ -510,7 +510,7 @@ ifeq ($(ARCH),ARM)
     SPI_TARGET=stm32
     # Partition trailers in sectors 1-2, see hal/stm32f4.c
     ifeq ($(CUSTOM_PARTITION_TRAILER),1)
-      LSCRIPT_IN=hal/stm32f4-trailer.ld
+      LSCRIPT_IN?=hal/stm32f4-trailer.ld
     endif
   endif
 
@@ -682,7 +682,7 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
-      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+      LSCRIPT_IN?=hal/$(TARGET)-ns.ld
     endif
   endif
 
@@ -694,7 +694,7 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
-      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+      LSCRIPT_IN?=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=stm32
   endif
@@ -704,7 +704,7 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x08000000
     WOLFBOOT_ORIGIN=0x08000000
-    LSCRIPT_IN=hal/$(TARGET).ld
+    LSCRIPT_IN?=hal/$(TARGET).ld
     SPI_TARGET=stm32
   endif
 
@@ -713,7 +713,7 @@ ifeq ($(ARCH),ARM)
     CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x08000000
     WOLFBOOT_ORIGIN=0x08000000
-    LSCRIPT_IN=hal/$(TARGET).ld
+    LSCRIPT_IN?=hal/$(TARGET).ld
     SPI_TARGET=stm32
   endif
 
@@ -724,7 +724,7 @@ ifeq ($(ARCH),ARM)
     # reached through the Secure SBUS alias, which the HAL derives from it.
     ARCH_FLASH_OFFSET=0x12000000
     WOLFBOOT_ORIGIN=0x12000000
-    LSCRIPT_IN=hal/$(TARGET).ld
+    LSCRIPT_IN?=hal/$(TARGET).ld
     SPI_TARGET=psoc_c3
     # Board wiring. Defaults match the PSOC Control C3 evaluation kit; override
     # for another variant.
@@ -782,13 +782,13 @@ ifeq ($(ARCH),ARM)
       BOOTLOADER_PARTITION_SIZE=$$(( ($(WOLFBOOT_PARTITION_BOOT_ADDRESS) | 0x10000000) - $(WOLFBOOT_ORIGIN) - 0x40))
     endif
     ifeq ($(TZEN),1)
-      LSCRIPT_IN=hal/$(TARGET)-tz.ld
+      LSCRIPT_IN?=hal/$(TARGET)-tz.ld
       OBJS+=hal/psoc_e8_tz.o
       # wolfHSM NVM in the RRAM user area, Secure.
       WOLFBOOT_KEYVAULT_ADDRESS?=0x32040000
       WOLFBOOT_KEYVAULT_SIZE?=0x10000
     else
-      LSCRIPT_IN=hal/$(TARGET).ld
+      LSCRIPT_IN?=hal/$(TARGET).ld
     endif
     # Board wiring, defaulted for KIT_PSE84_AI.
     PSOC_E8_UART_SCB?=2
@@ -830,7 +830,7 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x00000000
     WOLFBOOT_ORIGIN=0x00000000
     ifneq ($(TZEN),1)
-      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+      LSCRIPT_IN?=hal/$(TARGET)-ns.ld
     endif
   endif
 
@@ -842,7 +842,7 @@ ifeq ($(ARCH),ARM)
       WOLFBOOT_ORIGIN=0x0C000000
     else
       WOLFBOOT_ORIGIN=0x08000000
-      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+      LSCRIPT_IN?=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=stm32
     ifneq ($(DEBUG),0)
@@ -869,9 +869,9 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x10000000
     WOLFBOOT_ORIGIN=0x10000000
     ifeq ($(TZEN),1)
-      LSCRIPT_IN=hal/$(TARGET).ld
+      LSCRIPT_IN?=hal/$(TARGET).ld
     else
-      LSCRIPT_IN=hal/$(TARGET)-ns.ld
+      LSCRIPT_IN?=hal/$(TARGET)-ns.ld
     endif
     SPI_TARGET=raspberrypi_pico
     CFLAGS+=-DPICO_SDK_PATH=$(PICO_SDK_PATH)
@@ -1420,7 +1420,7 @@ ifeq ($(ARCH),RISCV64)
       OBJS+=src/riscv_sbi.o
     endif
     # Use M-mode specific linker script
-    LSCRIPT_IN:=hal/$(TARGET)-m.ld
+    LSCRIPT_IN?=hal/$(TARGET)-m.ld
     # Boot mode 2: reserve the last eNVM page for the signed manifest the UBL
     # stub verifies (hal/mpfs250-m.ld); `make wolfboot_envm_signed.bin` fills it.
     ifeq ($(MPFS_ENVM_MANIFEST),1)
@@ -1458,7 +1458,7 @@ ifeq ($(ARCH),RISCV64)
     CFLAGS+=-DWOLFBOOT_DUALBOOT
     ifeq ($(MPFS_L2LIM),1)
       # L2-LIM mode: wolfBoot in on-chip SRAM, loaded by HSS (no DDR)
-      LSCRIPT_IN:=hal/$(TARGET)-hss.ld
+      LSCRIPT_IN?=hal/$(TARGET)-hss.ld
     else
       # DDR mode (default): full MMU and FDT support
       CFLAGS+=-DMMU
@@ -1480,7 +1480,11 @@ ifeq ($(ARCH),RISCV64)
   # Boot mode 2 UBL stub: LIM-resident, verifies the eNVM wolfBoot manifest
   # in place and jumps; no update path (hal/mpfs250_ubl.c).
   ifeq ($(TARGET),mpfs250_ubl)
-    LSCRIPT_IN:=hal/mpfs250_ubl.ld
+    # UBL stub has its own layout; overrides the generic M-mode default
+    # above (a user-provided LSCRIPT_IN still wins).
+    ifeq ($(LSCRIPT_IN_USER),)
+      LSCRIPT_IN:=hal/mpfs250_ubl.ld
+    endif
     UPDATE_OBJS:=
     # mcycle rate for hal_get_timer_us(): the stub runs at the reset clock
     CFLAGS+=-DRISCV_SMODE_TIMER_FREQ=80000000UL
@@ -1709,7 +1713,7 @@ endif
 ifeq ($(TARGET),mcxw)
   CORTEX_M33=1
   ifneq ($(TZEN),1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
@@ -1762,7 +1766,7 @@ endif
 ifeq ($(TARGET),mcxn)
   CORTEX_M33=1
   ifneq ($(TZEN),1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
   CFLAGS+=\
       -I$(MCUXPRESSO_DRIVERS) \
@@ -1817,7 +1821,7 @@ ifeq ($(TARGET),rw612)
   CORTEX_M33=1
   ARCH_FLASH_OFFSET=0x08000000
   ifneq ($(TZEN),1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
   MCUXPRESSO_FLASH_CONFIG?=$(MCUXPRESSO_PROJECT_TEMPLATE)/../flash_config
   CFLAGS+=\
@@ -1858,13 +1862,13 @@ endif
 
 ifeq ($(TARGET),nrf5340)
   ifneq ($(TZEN), 1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
 endif
 
 ifeq ($(TARGET),nrf54l)
   ifneq ($(TZEN), 1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
 endif
 
@@ -1926,9 +1930,9 @@ ifeq ($(TARGET),imx_rt)
   endif
 
   ifeq ($(TARGET_IMX_HAB),1)
-      LSCRIPT_IN:=hal/$(TARGET)_hab.ld
+      LSCRIPT_IN?=hal/$(TARGET)_hab.ld
   else
-      LSCRIPT_IN:=hal/$(TARGET).ld
+      LSCRIPT_IN?=hal/$(TARGET).ld
   endif
 
   ifeq ($(MCUXPRESSO_CPU),MIMXRT1064DVL6A)
@@ -2251,7 +2255,7 @@ endif
 
 ifeq ($(TARGET),lpc55s69)
   ifneq ($(TZEN),1)
-    LSCRIPT_IN=hal/$(TARGET)-ns.ld
+    LSCRIPT_IN?=hal/$(TARGET)-ns.ld
   endif
   CFLAGS+=\
       -I$(MCUXPRESSO_PROJECT_TEMPLATE) \
@@ -2459,9 +2463,9 @@ ifeq ("${FSP}", "1")
   ifeq ($(filter-out $(STAGE1),1),)
     # building stage1
     ifeq ($(FSP_TGL), 1)
-      LSCRIPT_IN = ../hal/x86_fsp_tgl_stage1.ld
+      LSCRIPT_IN ?= ../hal/x86_fsp_tgl_stage1.ld
     else
-      LSCRIPT_IN = ../hal/$(TARGET)_stage1.ld
+      LSCRIPT_IN ?= ../hal/$(TARGET)_stage1.ld
     endif
     # using ../wolfboot.map as stage1 is built from stage1 sub-directory
     LDFLAGS = --defsym main=0x`nm ../wolfboot.elf | grep -w main | awk '{print $$1}'` \
@@ -2504,9 +2508,9 @@ ifeq ("${FSP}", "1")
   else
     # building wolfBoot
     ifeq ($(FSP_TGL), 1)
-      LSCRIPT_IN = hal/x86_fsp_tgl.ld.in
+      LSCRIPT_IN ?= hal/x86_fsp_tgl.ld.in
     else
-      LSCRIPT_IN = hal/$(TARGET).ld.in
+      LSCRIPT_IN ?= hal/$(TARGET).ld.in
     endif
     LDFLAGS = --gc-sections --entry=main  -T $(LSCRIPT) -Map=wolfboot.map
     CFLAGS += -fno-stack-protector -fno-PIC -fno-pie -mno-mmx -mno-sse -Os -DDEBUG_UART
@@ -2920,14 +2924,18 @@ ifeq ($(ARCH), AURIX)
         # HighTec's ancient ARM ld cannot parse the BSP linker-script fragments.
         # Flatten them at parse time with the wolfHSM port's ld-flatten.sh.
         # Paths are relative to this arch.mk, which is included from both the
-        # wolfBoot root and test-app directories.
+        # wolfBoot root and test-app directories. A user-provided LSCRIPT_IN
+        # is used as-is; only the stock HAL script goes through the flattener
+        # (its output lands in config/).
         ARCHMK_DIR:=$(dir $(lastword $(MAKEFILE_LIST)))
-        LSCRIPT_IN=$(ARCHMK_DIR)config/$(TARGET)_flat.ld
-        ifeq ($(filter clean keysclean,$(MAKECMDGOALS)),)
-          LD_FLATTEN_OUT:=$(shell $(WOLFHSM_INFINEON_TC3XX)/tchsm-server/ld-flatten.sh \
-                            $(ARCHMK_DIR)hal/$(TARGET).ld $(LSCRIPT_IN) $(TC3_DIR)/tc3 && echo OK)
-          ifneq ($(LD_FLATTEN_OUT),OK)
-            $(error ld-flatten.sh failed for hal/$(TARGET).ld)
+        ifeq ($(LSCRIPT_IN),)
+          LSCRIPT_IN:=$(ARCHMK_DIR)config/$(TARGET)_flat.ld
+          ifeq ($(filter clean keysclean,$(MAKECMDGOALS)),)
+            LD_FLATTEN_OUT:=$(shell $(WOLFHSM_INFINEON_TC3XX)/tchsm-server/ld-flatten.sh \
+                              $(ARCHMK_DIR)hal/$(TARGET).ld $(LSCRIPT_IN) $(TC3_DIR)/tc3 && echo OK)
+            ifneq ($(LD_FLATTEN_OUT),OK)
+              $(error ld-flatten.sh failed for hal/$(TARGET).ld)
+            endif
           endif
         endif
       else ifeq ($(HT_LLVM),1)
@@ -3084,9 +3092,9 @@ ifeq ($(ARCH), AURIX)
 
     # Linker scripts ship with the port, not in hal/.
     ifeq ($(TARGET), aurix_tc4xx_csrm)
-      LSCRIPT_IN=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm.ld
+      LSCRIPT_IN?=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm.ld
     else
-      LSCRIPT_IN=$(TC4_WB_DIR)/aurix_tc4xx.ld
+      LSCRIPT_IN?=$(TC4_WB_DIR)/aurix_tc4xx.ld
     endif
     CFLAGS += \
       -I$(TC4_LLD_DIR) \
@@ -3193,7 +3201,11 @@ ifeq ($(ARCH), AURIX)
       # Full-system CSRM wolfBoot target leaves host release to tchsm-server.
       ifeq ($(AURIX_TC4_FULLSYS),1)
         CFLAGS += -DWOLFBOOT_AURIX_TC4XX_FULLSYS
-        LSCRIPT_IN=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm_fullsys.ld
+        # Full-system layout overrides the per-port default above; a
+        # user-provided LSCRIPT_IN still wins.
+        ifeq ($(LSCRIPT_IN_USER),)
+          LSCRIPT_IN:=$(TC4_WB_DIR)/csrm/aurix_tc4xx_csrm_fullsys.ld
+        endif
       endif
     endif
 

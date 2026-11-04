@@ -1908,7 +1908,11 @@ ifeq ($(RAM_CODE),1)
   ifeq ($(ENCRYPT),1)
     ifeq ($(ENCRYPT_WITH_CHACHA),1)
       ifneq ($(WOLFHAL),1)
-        LSCRIPT_IN=hal/$(TARGET)_chacha_ram.ld
+        # RAM+ChaCha layout overrides the target default set earlier; a
+        # user-provided LSCRIPT_IN still wins.
+        ifeq ($(LSCRIPT_IN_USER),)
+          LSCRIPT_IN:=hal/$(TARGET)_chacha_ram.ld
+        endif
       endif
     endif
   endif

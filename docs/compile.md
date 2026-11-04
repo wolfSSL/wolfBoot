@@ -114,6 +114,31 @@ trailer sector of room on top — see the sizing guide in
 [firmware_update.md](firmware_update.md#independent-partition-sizing).
 Not supported with `ENCRYPT` or `PULL_LINKER_DEFINES`.
 
+### Custom linker script
+
+Each target ships a linker script (e.g. `hal/stm32f4.ld`) that is selected by
+the build system based on the target and active options (TZEN, encryption,
+trailers, ...). To use your own script instead, set `LSCRIPT_IN` to its path,
+either in the .config file, in the environment, or on the make command line:
+
+```sh
+make TARGET=stm32f4 LSCRIPT_IN=/path/to/my.ld
+```
+
+A user-provided `LSCRIPT_IN` wins over the target-specific default; when unset,
+the build falls back to the script of the target, then to `hal/$(TARGET).ld`.
+The script is processed by the same substitution pipeline as the included ones,
+so it can (and should) use the same `@PLACEHOLDERS@` (e.g.
+`@WOLFBOOT_PARTITION_BOOT_ADDRESS@`, `@WOLFBOOT_PARTITION_SIZE@`,
+`@ARCH_FLASH_OFFSET@`); the substituted output is written to `config/target.ld`.
+
+Notes:
+
+ - With ARMClang (`USE_ARMCLANG=1`) the script must be a `.sct` scatter file.
+ - On two-stage targets (e.g. x86) the same script is used for both stages.
+ - The script must place the bootloader sections so that they fit the flash
+   geometry configured above; wolfBoot does not validate the layout.
+
 ## Bootloader features
 
 A number of characteristics can be turned on/off during wolfBoot compilation. Bootloader size,
