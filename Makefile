@@ -573,7 +573,10 @@ stage1: stage1/loader_stage1.bin
 stage1/loader_stage1.bin: wolfboot.elf
 stage1/loader_stage1.bin: FORCE
 	@echo "\t[BIN] $@"
-	$(Q)$(MAKE) -C $(dir $@) $(notdir $@)
+	# A user-provided LSCRIPT_IN is relative to the repo root; the recursive
+	# make runs from stage1/, so pass it as an absolute path. Target-derived
+	# stage1 defaults keep their own selection (nothing is passed).
+	$(Q)$(MAKE) -C $(dir $@) $(notdir $@) $(if $(LSCRIPT_IN_USER),LSCRIPT_IN=$(abspath $(LSCRIPT_IN_USER)))
 
 libwolfboot.a: include/target.h $(OBJS)
 	@echo "\t[LIB] $@"
