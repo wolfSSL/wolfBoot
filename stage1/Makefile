@@ -17,7 +17,16 @@ CFLAGS:=-D"__WOLFBOOT"
 CFLAGS+=-Werror -Wextra -nostdlib
 LDFLAGS:=
 LSCRIPT:=loader_stage1.ld
-LSCRIPT_IN:=../hal/$(TARGET)_stage1.ld
+# Capture the user value (command line, environment, .config) before any
+# default below; arch.mk/options.mk use this marker to let a user-provided
+# LSCRIPT_IN win over their target refinements, same as the top-level Makefile.
+LSCRIPT_IN_USER:=$(LSCRIPT_IN)
+# Default stage1 script. Targets that share a script (the x86 FSP TGL
+# boards use hal/x86_fsp_tgl_stage1.ld) set LSCRIPT_IN in arch.mk, so
+# only default when the per-target file (or its .ld.in template) exists.
+ifneq ($(wildcard ../hal/$(TARGET)_stage1.ld ../hal/$(TARGET)_stage1.ld.in),)
+$(call LSCRIPT_IN_DEFAULT,../hal/$(TARGET)_stage1.ld)
+endif
 LSCRIPT_FLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group

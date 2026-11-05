@@ -38,7 +38,12 @@ LDFLAGS:=
 SECURE_LDFLAGS:=
 LD_START_GROUP:=-Wl,--start-group
 LD_END_GROUP:=-Wl,--end-group
-LSCRIPT_IN?=hal/$(TARGET).ld
+# Linker script: capture the user value (command line, environment, .config)
+# here; target defaults in arch.mk/options.mk/board.mk use the
+# LSCRIPT_IN_DEFAULT helper (see tools/config.mk), which only assigns when
+# LSCRIPT_IN is undefined or empty, so a user value wins. Last-resort
+# default is applied after options.mk below.
+LSCRIPT_IN_USER:=$(LSCRIPT_IN)
 L2SRAM_ADDR?=0xF8F00000
 V?=0
 DEBUG?=0
@@ -272,6 +277,14 @@ WOLFBOOT_TARGET_BUILD=1
 # Parse config options
 include options.mk
 
+# Last-resort linker script for targets without a dedicated default in
+# arch.mk/options.mk/board.mk; a user-provided LSCRIPT_IN wins over both.
+# An empty value (e.g. an LSCRIPT_IN?= persisted by an older 'make config')
+# counts as unset.
+ifeq ($(strip $(LSCRIPT_IN)),)
+  LSCRIPT_IN:=hal/$(TARGET).ld
+endif
+
 OBJS+=$(WOLFCRYPT_OBJS)
 OBJS+=$(PUBLIC_KEY_OBJS)
 OBJS+=$(WOLFHSM_OBJS)
@@ -350,7 +363,10 @@ ifeq ($(USE_ARMCLANG),1)
   LDFLAGS:=$(ARMCLANG_LDFLAGS) --map --list=wolfboot.map
   LDFLAGS+=$(LDFLAGS_EXTRA)
   LSCRIPT:=config/target.sct
-  LSCRIPT_IN:=hal/$(TARGET).sct
+  # ARMClang needs a .sct scatter file; a user-provided LSCRIPT_IN wins.
+  ifeq ($(LSCRIPT_IN_USER),)
+    LSCRIPT_IN:=hal/$(TARGET).sct
+  endif
   LSCRIPT_FLAGS:=--scatter=$(LSCRIPT)
   LD_START_GROUP:=
   LD_END_GROUP:=
@@ -563,7 +579,10 @@ stage1: stage1/loader_stage1.bin
 stage1/loader_stage1.bin: wolfboot.elf
 stage1/loader_stage1.bin: FORCE
 	@echo "\t[BIN] $@"
-	$(Q)$(MAKE) -C $(dir $@) $(notdir $@)
+	# A user-provided LSCRIPT_IN is relative to the repo root; the recursive
+	# make runs from stage1/, so pass it as an absolute path. Target-derived
+	# stage1 defaults keep their own selection (nothing is passed).
+	$(Q)$(MAKE) -C $(dir $@) $(notdir $@) $(if $(LSCRIPT_IN_USER),LSCRIPT_IN=$(abspath $(LSCRIPT_IN_USER)))
 
 libwolfboot.a: include/target.h $(OBJS)
 	@echo "\t[LIB] $@"

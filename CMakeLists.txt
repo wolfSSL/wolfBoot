@@ -1439,11 +1439,13 @@ set(KEYGEN_TOOL ${KEYGEN_TOOL} CACHE INTERNAL "")
 
 list(APPEND WOLFBOOT_INCLUDE_DIRS ${WOLFBOOT_ROOT} ${WOLFBOOT_ROOT}/include)
 
-# set default linker script
-set(WOLFBOOT_LSCRIPT_TEMPLATE hal/${WOLFBOOT_TARGET}.ld)
-# Partition trailers in sectors 1-2, see hal/stm32f4.c
-if(WOLFBOOT_TARGET STREQUAL "stm32f4" AND CUSTOM_PARTITION_TRAILER)
-    set(WOLFBOOT_LSCRIPT_TEMPLATE hal/stm32f4-trailer.ld)
+# set default linker script; a user-provided WOLFBOOT_LSCRIPT_TEMPLATE wins
+if(NOT DEFINED WOLFBOOT_LSCRIPT_TEMPLATE)
+    set(WOLFBOOT_LSCRIPT_TEMPLATE hal/${WOLFBOOT_TARGET}.ld)
+    # Partition trailers in sectors 1-2, see hal/stm32f4.c
+    if(WOLFBOOT_TARGET STREQUAL "stm32f4" AND CUSTOM_PARTITION_TRAILER)
+        set(WOLFBOOT_LSCRIPT_TEMPLATE hal/stm32f4-trailer.ld)
+    endif()
 endif()
 
 #---------------------------------------------------------------------------------------------
