@@ -146,97 +146,20 @@ static void imx8mm_icache_enable(void)
 }
 
 #ifdef IMX8MM_MMU
-/* Identity MMU, 1 GB blocks: DRAM Normal cacheable, the rest Device (XN).
- * do_boot() turns it off again before Linux. As hal/imx8qm.c. */
-#define MMU_BLOCK_NORMAL  0x0000000000000701ULL
-#define MMU_BLOCK_DEVICE  (0x0000000000000405ULL | (1ULL << 54) | (1ULL << 53))
-
-static volatile uint64_t imx8mm_l1_table[512] __attribute__((aligned(4096)));
-
+/* Identity MMU, 1 GB blocks: DRAM Normal cacheable, the rest Device (XN),
+ * stack-free in src/boot_aarch64_start.S. do_boot() turns it off again before
+ * Linux. SDMA cache maintenance is in hal/imx_usdhc_sdhci.c. */
 static void imx8mm_mmu_enable(void)
 {
-    uint64_t sctlr, el;
-    int i;
+    uint64_t sctlr;
 
-    __asm__ volatile("mrs %0, CurrentEL" : "=r"(el));
     __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
-    if (((el >> 2) & 0x3) != 2 || (sctlr & (1UL << 0)) != 0) {
+    if (current_el() != 2 || (sctlr & (1UL << 0)) != 0) {
         imx8mm_icache_enable();
         return;
     }
-
-    for (i = 0; i < 4; i++) {
-        uint64_t base = (uint64_t)i << 30;
-        imx8mm_l1_table[i] = base |
-            ((base >= IMX8MM_DRAM_BASE && base < IMX8MM_DRAM_END) ?
-                MMU_BLOCK_NORMAL : MMU_BLOCK_DEVICE);
-    }
-
-    /* Attr0: Normal WB, Attr1: Device */
-    __asm__ volatile("msr mair_el2, %0" :: "r"(0x00000000000000FFUL));
-    __asm__ volatile("msr ttbr0_el2, %0"
-        :: "r"((uint64_t)(uintptr_t)imx8mm_l1_table));
-    /* T0SZ=32, 4 KB granule, cacheable walks; bits 31 and 23 are RES1 */
-    __asm__ volatile("msr tcr_el2, %0"
-        :: "r"(0x0000000000013520UL | (1UL << 31) | (1UL << 23)));
-    __asm__ volatile("isb");
-    __asm__ volatile("tlbi alle2");
-    __asm__ volatile("dsb sy");
-
-    /* Drop stale lines from earlier stages */
-    aarch64_dcache_maint(0);
-    __asm__ volatile("ic iallu");
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
-
-    sctlr |= (1UL << 0) | (1UL << 2) | (1UL << 12);   /* M | C | I */
-    __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr));
-    __asm__ volatile("isb");
+    el2_idmap_enable(IMX8MM_DRAM_BASE, IMX8MM_DRAM_END);
 }
-
-#if defined(DISK_EMMC) && !defined(SDHCI_SDMA_DISABLED)
-/* Cache maintenance by address range for SDMA */
-static void imx8mm_dcache_range(uintptr_t start, uint32_t sz, int invalidate)
-{
-    uintptr_t line, end;
-    uint64_t ctr;
-
-    if (sz == 0)
-        return;
-    /* CTR_EL0.DminLine: log2 of the line size in words */
-    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
-    line = (uintptr_t)4 << ((ctr >> 16) & 0xF);
-
-    if (((start | sz) & (line - 1)) != 0)
-        wolfBoot_printf("imx8mm: DMA buffer %p+%u not cache-line aligned\n",
-            (void*)start, (unsigned)sz);
-
-    end = (start + sz + line - 1) & ~(line - 1);
-    start &= ~(line - 1);
-    __asm__ volatile("dsb sy");
-    for (; start < end; start += line) {
-        if (invalidate)
-            __asm__ volatile("dc ivac, %0" :: "r"(start) : "memory");
-        else
-            __asm__ volatile("dc civac, %0" :: "r"(start) : "memory");
-    }
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
-}
-
-void sdhci_platform_dma_prepare(void *buf, uint32_t sz, int is_write)
-{
-    /* Clean in both directions: a dirty line could evict onto DMA data */
-    imx8mm_dcache_range((uintptr_t)buf, sz, 0);
-    (void)is_write;
-}
-
-void sdhci_platform_dma_complete(void *buf, uint32_t sz, int is_write)
-{
-    if (!is_write)
-        imx8mm_dcache_range((uintptr_t)buf, sz, 1);
-}
-#endif /* DISK_EMMC && !SDHCI_SDMA_DISABLED */
 #endif /* IMX8MM_MMU */
 #endif /* IMX8MM_BL33 */
 

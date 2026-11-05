@@ -44,6 +44,11 @@
  * symbol: an ADRP against an absolute symbol this far out exceeds its +/-4GB reach. */
 #define IMX8QM_UPDATE_ADDR          0x88000000
 
+/* Identity MMU (el2_idmap_enable, src/boot_aarch64_start.S) */
+#ifdef IMX8QM_MMU
+#define WOLFBOOT_AARCH64_EL2_IDMAP
+#endif
+
 /* Generic timer fallback if firmware left CNTFRQ_EL0 unprogrammed; the i.MX8QM system
  * counter runs at 8 MHz. */
 #ifndef TIMER_CLK_FREQ

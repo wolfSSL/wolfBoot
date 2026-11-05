@@ -10341,7 +10341,7 @@ BL33 also owns SMMU bring-up, in two parts. Power `SC_R_SMMU` and set `sCR0.CLIE
 
 `hal_dts_fixup()` supplies what U-Boot would have: `/chosen/bootargs`, the real two-bank `/memory` map (2 GB at `0x80000000`, 4 GB at `0x880000000`), and optionally `no-1-8-v` plus `max-frequency` on the SD node. Without it the OS comes up with 1 GB and an empty command line. RAM staging sits at `0xa0000000` and `0xa8000000`, in the gap between the stock DTB's carveouts (roughly `0x90000000` to `0x9c000000`) and the CMA pool at `0xc0000000`. An overlap raises no error: the OS reserves the device tree it was handed, so the colliding carveout's reservation fails and whichever driver owned that region faults later.
 
-The MMU teardown before handoff must not be written in C. A set/way cache walk in C keeps its loop counters in stack slots and re-dirties lines behind itself; clearing `SCTLR_EL2.C` then strands them while later stack reads go to DRAM. `hal_prepare_boot()` calls the stack-free assembly `el2_flush_and_disable_mmu()` in `src/boot_aarch64_start.S`.
+The MMU teardown before handoff must not be written in C. A set/way cache walk in C keeps its loop counters in stack slots and re-dirties lines behind itself; clearing `SCTLR_EL2.C` then strands them while later stack reads go to DRAM. `hal_prepare_boot()` calls the stack-free assembly `el2_flush_and_disable_mmu()` in `src/boot_aarch64_start.S`. The enable side, `el2_idmap_enable()`, and the range maintenance for SDMA (`flush_dcache_range()`, `invalidate_dcache_range()`) are assembly too, shared with the i.MX 8M Mini (`WOLFBOOT_AARCH64_EL2_IDMAP`).
 
 ### SD / eMMC driver
 

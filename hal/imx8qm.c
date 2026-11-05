@@ -965,59 +965,7 @@ int ext_flash_erase(uintptr_t address, int len)
 
 #ifdef IMX8QM_MMU
 
-/* Normal = AttrIdx0 + AF + inner-shareable; Device = AttrIdx1 + AF + XN, since
- * an instruction fetch from Device memory is CONSTRAINED UNPREDICTABLE. */
-#define MMU_BLOCK_NORMAL  0x0000000000000701ULL
-#define MMU_BLOCK_DEVICE  (0x0000000000000405ULL | (1ULL << 54) | (1ULL << 53))
-
-static volatile uint64_t imx8qm_l1_table[512] __attribute__((aligned(4096)));
-
-#if (defined(DISK_SDCARD) || defined(DISK_EMMC)) && !defined(SDHCI_SDMA_DISABLED)
-/* DMA cache maintenance for the SDMA path by address range, not the set/way walk used
- * at handoff, which would cost more per transfer than the DMA saves. No-op MMU-off. */
-static void imx8qm_dcache_range(uintptr_t start, uint32_t sz, int invalidate)
-{
-    uintptr_t line, end;
-    uint64_t ctr;
-    unsigned int dminline;
-
-    if (sz == 0)
-        return;
-    /* CTR_EL0.DminLine is log2 of the smallest data cache line, in words. */
-    __asm__ volatile("mrs %0, ctr_el0" : "=r"(ctr));
-    dminline = (unsigned int)((ctr >> 16) & 0xF);
-    line = (uintptr_t)4 << dminline;
-
-    end = (start + sz + line - 1) & ~(line - 1);
-    start &= ~(line - 1);
-    __asm__ volatile("dsb sy");
-    for (; start < end; start += line) {
-        if (invalidate)
-            __asm__ volatile("dc ivac, %0" :: "r"(start) : "memory");
-        else
-            __asm__ volatile("dc civac, %0" :: "r"(start) : "memory");
-    }
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
-}
-
-void sdhci_platform_dma_prepare(void* buf, uint32_t sz, int is_write)
-{
-    /* Outbound data must reach memory before the controller reads it. Clean on inbound
-     * too: a dirty line over the buffer could evict onto data the controller wrote. */
-    imx8qm_dcache_range((uintptr_t)buf, sz, 0);
-    (void)is_write;
-}
-
-void sdhci_platform_dma_complete(void* buf, uint32_t sz, int is_write)
-{
-    /* Inbound data landed in memory behind the cache's back; drop any stale
-     * lines so the CPU reads what the controller wrote. */
-    if (!is_write)
-        imx8qm_dcache_range((uintptr_t)buf, sz, 1);
-}
-#endif /* (DISK_SDCARD || DISK_EMMC) && !SDHCI_SDMA_DISABLED */
-
+/* SDMA cache maintenance: hal/imx_usdhc_sdhci.c */
 
 /* The registers below are EL2 ones. ATF enters BL33 at EL2 on this SoC, but
  * check rather than trap silently if that ever changes. */
@@ -1038,42 +986,12 @@ static int imx8qm_mmu_on;
 
 void imx8qm_mmu_enable(void)
 {
-    unsigned long sctlr;
-    int i;
-
     if (!imx8qm_mmu_at_el2())
         return;
 
-    /* Low 4 GB in 1 GB blocks: DRAM (>= 0x80000000) Normal, the rest Device. */
-    for (i = 0; i < 4; i++) {
-        uint64_t base = (uint64_t)i << 30;
-        imx8qm_l1_table[i] = base |
-            ((base >= IMX8QM_DRAM_BASE) ? MMU_BLOCK_NORMAL : MMU_BLOCK_DEVICE);
-    }
-
-    /* Attr0 = 0xFF Normal write-back write-allocate, Attr1 = 0x00 Device. */
-    __asm__ volatile("msr mair_el2, %0" :: "r"(0x00000000000000FFUL));
-    __asm__ volatile("msr ttbr0_el2, %0"
-        :: "r"((uint64_t)(uintptr_t)imx8qm_l1_table));
-    /* T0SZ=32 (32-bit VA), 4 KB granule, cacheable inner-shareable table
-     * walks. Bits 31 and 23 are RES1 for TCR_EL2 when E2H is 0. */
-    __asm__ volatile("msr tcr_el2, %0"
-        :: "r"(0x0000000000013520UL | (1UL << 31) | (1UL << 23)));
-    __asm__ volatile("isb");
-    __asm__ volatile("tlbi alle2");
-    __asm__ volatile("dsb sy");
-
-    /* Drop anything an earlier stage left in the caches before turning them
-     * on, so no stale line surfaces once caching is live. */
-    aarch64_dcache_maint(0);
-    __asm__ volatile("ic iallu");
-    __asm__ volatile("dsb sy");
-    __asm__ volatile("isb");
-
-    __asm__ volatile("mrs %0, sctlr_el2" : "=r"(sctlr));
-    sctlr |= (1UL << 0) | (1UL << 2) | (1UL << 12);   /* M | C | I */
-    __asm__ volatile("msr sctlr_el2, %0" :: "r"(sctlr));
-    __asm__ volatile("isb");
+    /* Low 4 GB in 1 GB blocks: DRAM (>= 0x80000000) Normal, the rest Device.
+     * Stack-free, in src/boot_aarch64_start.S like the teardown below. */
+    el2_idmap_enable(IMX8QM_DRAM_BASE, IMX8QM_DRAM_END);
     imx8qm_mmu_on = 1;
 }
 

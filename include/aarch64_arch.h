@@ -114,4 +114,12 @@ static inline void aarch64_dcache_maint(int clean)
     __asm__ volatile("isb");
 }
 
+#ifdef WOLFBOOT_AARCH64_EL2_IDMAP
+/* src/boot_aarch64_start.S: identity MMU at EL2 and D-cache maintenance by
+ * address range (end exclusive). Stack-free. */
+void el2_idmap_enable(uint64_t dram_base, uint64_t dram_end);
+void flush_dcache_range(uintptr_t start, uintptr_t end);
+void invalidate_dcache_range(uintptr_t start, uintptr_t end);
+#endif
+
 #endif /* _AARCH64_ARCH_H_ */
