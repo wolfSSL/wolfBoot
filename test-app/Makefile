@@ -1459,6 +1459,11 @@ ifeq ($(TARGET),zynq)
   LSCRIPT_TEMPLATE:=AARCH64.ld
 endif
 
+ifeq ($(TARGET),imx8mm)
+  # Parses the DTB passed in x0
+  APP_OBJS+=../src/fdt.o
+endif
+
 ifeq ($(TARGET),pic32ck)
   APP_OBJS+=../hal/pic32c.o
 endif
