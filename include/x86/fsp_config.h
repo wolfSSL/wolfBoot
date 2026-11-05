@@ -66,4 +66,13 @@
 #error "NAI_68INT6_FPGA_READY_DELAY_S must be 0, 5 or 10"
 #endif
 
+/* FSP-M PlatformDebugConsent: 0 = debug disabled (default), 4 = enabled for
+ * an XDP/MIPI-60 JTAG probe; 1-7 are the FSP's other probe types */
+#ifndef NAI_68INT6_DEBUG_CONSENT
+#define NAI_68INT6_DEBUG_CONSENT 0
+#endif
+#if NAI_68INT6_DEBUG_CONSENT < 0 || NAI_68INT6_DEBUG_CONSENT > 7
+#error "NAI_68INT6_DEBUG_CONSENT must be 0 to 7"
+#endif
+
 #endif
