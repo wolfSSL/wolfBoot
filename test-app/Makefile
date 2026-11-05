@@ -205,6 +205,12 @@ ifeq ($(DEBUG_UART),1)
     APP_NEEDS_STRING:=1
 endif
 
+ifneq ($(strip $(DEBUG_RTT)),)
+    APP_NEEDS_STRING:=1
+    APP_OBJS+=SEGGER_RTT.o
+    vpath SEGGER_RTT.c $(DEBUG_RTT)/RTT
+endif
+
 ifeq ($(ARCH),AURIX)
 # AURIX RAM_CODE HAL flash drivers need wolfBoot memcpy
     APP_NEEDS_STRING:=1
@@ -279,6 +285,10 @@ ifeq ($(WOLFCRYPT_BENCHMARK),1)
   WOLFCRYPT_SUPPORT=1
   PRINTF_FLOAT?=1
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/benchmark/benchmark.o
+endif
+
+ifeq ($(PRINTF_FLOAT),1)
+  CFLAGS+=-DPRINTF_FLOAT
 endif
 
 ifeq ($(UART_PRINTF_FLOAT),1)

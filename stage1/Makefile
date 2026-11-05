@@ -170,6 +170,12 @@ endif
 
 BUILD_DIR=.
 LS1_OBJS=$(addprefix $(BUILD_DIR)/, $(notdir $(OBJS)))
+ifneq ($(strip $(DEBUG_RTT)),)
+  ifeq ($(findstring ./SEGGER_RTT.o,$(LS1_OBJS)),)
+    LS1_OBJS+=./SEGGER_RTT.o
+  endif
+  vpath SEGGER_RTT.c $(DEBUG_RTT)/RTT
+endif
 vpath %.c ../src
 vpath %.c ../hal
 vpath %.c ../hal/uart
