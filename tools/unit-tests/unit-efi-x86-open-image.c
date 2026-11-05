@@ -42,6 +42,12 @@
 #include <efi/efi.h>
 #include <efi/efilib.h>
 
+/* The test build has no image hash configured; take SHA-256 */
+#ifndef WOLFBOOT_SHA_HDR
+#define WOLFBOOT_SHA_HDR HDR_SHA256
+#define WOLFBOOT_SHA_DIGEST_SIZE 32
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Host stand-ins for the gnu-efi runtime (normally -lgnuefi -lefi).  */
 /* ------------------------------------------------------------------ */
@@ -374,19 +380,44 @@ void wolfBoot_start(void)
 {
 }
 
-/* Referenced by wolfBoot_efi_get_cmdline() (static inline in
- * wolfboot_efi.h), which only x86_64_efi_do_boot() calls; never reached by
- * the tests. */
-uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
-{
-    (void)haystack;
-    (void)type;
-    (void)ptr;
-    return 0;
-}
 
 /* Pull in the code under test (its statics become visible here). */
 #include "../../hal/x86_64_efi.c"
+
+/* Walks the TLVs of a test manifest, as the real one does; used by
+ * wolfBoot_efi_get_cmdline() (static inline in wolfboot_efi.h). */
+uint16_t wolfBoot_find_header(uint8_t *haystack, uint16_t type, uint8_t **ptr)
+{
+    uint8_t *p = haystack;
+    uint8_t *end = haystack - IMAGE_HEADER_OFFSET + IMAGE_HEADER_SIZE;
+    uint16_t t, l;
+
+    *ptr = NULL;
+    while (end - p >= 4) {
+        if (p[0] == HDR_PADDING) {
+            p++;
+            continue;
+        }
+        t = (uint16_t)(p[0] | (p[1] << 8));
+        l = (uint16_t)(p[2] | (p[3] << 8));
+        if (t == 0 || l > end - p - 4)
+            break;
+        if (t == type) {
+            *ptr = p + 4;
+            return l;
+        }
+        p += 4 + l;
+    }
+    return 0;
+}
+
+static EFI_STATUS mock_allocate_pool(EFI_MEMORY_TYPE type, UINTN size,
+    VOID **buf)
+{
+    (void)type;
+    *buf = malloc(size);
+    return (*buf != NULL) ? EFI_SUCCESS : EFI_OUT_OF_RESOURCES;
+}
 
 /* The caller too: with the definition already in this translation unit,
  * its extern declaration is checked against it, so a prototype drift
@@ -437,6 +468,7 @@ static void setup(void)
     mock_bs.FreePages = mock_free_pages_fn;
     mock_bs.LoadImage = mock_load_image;
     mock_bs.StartImage = mock_start_image;
+    mock_bs.AllocatePool = mock_allocate_pool;
     mock_alloc_fail = 0;
     mock_free_pages = 0;
     mock_close_count = 0;
@@ -473,6 +505,72 @@ static void teardown(void)
  * lands at the allocated address, and nothing past the 4-byte *sz is
  * touched. Before the fix the mock Read()'s 8-byte store zeroed
  * canary_after[0..3] on every run. */
+/* Builds a manifest whose TLVs are, in order, the given (type, value) pairs */
+static void build_manifest(uint8_t *m, const uint16_t *types,
+    const char *const *vals, int n)
+{
+    uint8_t *p = m + IMAGE_HEADER_OFFSET;
+    int i;
+    uint16_t l;
+
+    memset(m, HDR_PADDING, IMAGE_HEADER_SIZE);
+    memset(m, 0, IMAGE_HEADER_OFFSET);
+    for (i = 0; i < n; i++) {
+        l = (uint16_t)strlen(vals[i]);
+        p[0] = (uint8_t)(types[i] & 0xFF);
+        p[1] = (uint8_t)(types[i] >> 8);
+        p[2] = (uint8_t)(l & 0xFF);
+        p[3] = (uint8_t)(l >> 8);
+        memcpy(p + 4, vals[i], l);
+        p += 4 + l;
+    }
+}
+
+static const char test_digest[WOLFBOOT_SHA_DIGEST_SIZE + 1] =
+    "0123456789abcdef0123456789abcdef";
+
+START_TEST(test_cmdline_signed_is_returned)
+{
+    uint8_t m[IMAGE_HEADER_SIZE];
+    const uint16_t types[] = { HDR_CMDLINE, WOLFBOOT_SHA_HDR };
+    const char *const vals[] = { "root=/dev/sda2", test_digest };
+    UINTN bytes = 0;
+    CHAR16 *cmd;
+
+    build_manifest(m, types, vals, 2);
+    cmd = wolfBoot_efi_get_cmdline(m, &bytes);
+    ck_assert_ptr_nonnull(cmd);
+    ck_assert_uint_eq(bytes, (sizeof("root=/dev/sda2")) * sizeof(CHAR16));
+    ck_assert_uint_eq(cmd[0], 'r');
+    free(cmd);
+
+    /* no command line at all */
+    build_manifest(m, types + 1, vals + 1, 1);
+    ck_assert_ptr_null(wolfBoot_efi_get_cmdline(m, &bytes));
+}
+END_TEST
+
+START_TEST(test_cmdline_after_digest_is_rejected)
+{
+    /* Only the manifest before the digest TLV is signed, so a command line
+     * appended after it must not be used */
+    uint8_t m[IMAGE_HEADER_SIZE];
+    const uint16_t types[] = { WOLFBOOT_SHA_HDR, HDR_CMDLINE };
+    const char *const vals[] = { test_digest, "init=/bin/sh" };
+    UINTN bytes = 1;
+
+    build_manifest(m, types, vals, 2);
+    ck_assert_ptr_null(wolfBoot_efi_get_cmdline(m, &bytes));
+    ck_assert_uint_eq(bytes, 0);
+
+    /* nor one in a manifest with no digest TLV at all */
+    bytes = 1;
+    build_manifest(m, types + 1, vals + 1, 1);
+    ck_assert_ptr_null(wolfBoot_efi_get_cmdline(m, &bytes));
+    ck_assert_uint_eq(bytes, 0);
+}
+END_TEST
+
 START_TEST(test_open_image_no_clobber)
 {
     sz_canary_t canary;
@@ -746,6 +844,8 @@ Suite *efi_x86_open_image_suite(void)
     tcase_add_test(tc, test_do_boot_mem_path_end_inclusive);
     tcase_add_test(tc, test_do_boot_zero_size_panics);
     tcase_add_test(tc, test_do_boot_transfers_app_offset);
+    tcase_add_test(tc, test_cmdline_signed_is_returned);
+    tcase_add_test(tc, test_cmdline_after_digest_is_rejected);
 
     suite_add_tcase(s, tc);
     return s;
