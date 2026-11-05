@@ -421,6 +421,7 @@ static int fsp_set_memory_cfg(FSPM_UPD *udp)
 #endif /* TARGET_kontron_vx3060_s2 */
 #ifdef TARGET_nai_68int6
     mem_cfg->VmxEnable = 1;
+    mem_cfg->PlatformDebugConsent = NAI_68INT6_DEBUG_CONSENT;
 #else
     mem_cfg->VmxEnable = 0;
 #endif

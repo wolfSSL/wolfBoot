@@ -9100,6 +9100,7 @@ Notable options in [config/examples/nai_68int6.config](../config/examples/nai_68
 | `NAI_68INT6_PCIE_LANES` | PCIe switch lane configuration, strapped on GPP_B21/B22/S4/S7/S6 before memory init: `8x1` (default), `1x4_4x1`, `4x1_1x4`, `1x4_1x4` or `1x8` |
 | `NAI_68INT6_PCIE_NT`, `NAI_68INT6_BACKPLANE_CLK` | PCIe switch non-transparent mode (GPP_S2) and the backplane PCIe clock (GPP_A0); both off by default |
 | `NAI_68INT6_PCIE_LINK_DELAY_S`, `NAI_68INT6_BOOT_DELAY_S`, `NAI_68INT6_FPGA_READY_DELAY_S` | Waits before CPU PCIe link training (0-5 s), before polling PCIE_RDY (0-255 s), and added to the 5 s PCIE_RDY timeout (0, 5 or 10 s); all 0 by default. Before PCI enumeration wolfBoot polls PCIE_RDY (GPP_C23) every 50 ms, continues with a warning on timeout, then drives GPP_B12 high |
+| `NAI_68INT6_DEBUG_CONSENT` | FSP-M `PlatformDebugConsent`: 0 = debug disabled (default; keep it for a shipping image), 4 = enabled for an XDP/MIPI-60 JTAG probe |
 | `ANTI_ROLLBACK=1` | Persistent version floor and boot audit counters in TPM NV |
 | `MEASURED_BOOT=1`, `MEASURED_PCR_OS=4` | Firmware into PCR 0, the verified OS image into PCR 4 |
 
