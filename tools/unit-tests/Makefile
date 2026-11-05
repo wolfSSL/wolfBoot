@@ -1675,10 +1675,10 @@ versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 	@! grep -q '__asm__' $@ || { echo "$@: un-handled asm (an output operand needs an explicit rewrite above)"; grep -n '__asm__' $@; false; }
 
 # unit-imx8qm-usdhc-shim drives the real uSDHC-to-SDHCI translation from
-# hal/imx8qm.c against an emulated register file. The shim block is extracted
-# verbatim rather than host-copying the whole HAL: the rest of the file has
-# multi-line asm (the cache maintenance in hal_prepare_boot) that a line-based
-# rewrite cannot blank, while the shim itself is plain register access.
+# hal/imx_usdhc_sdhci.c (shared by imx8qm and imx8mm) against an emulated
+# register file, built with the imx8qm header. The shim block is extracted
+# verbatim, without the includes and MMIO helpers above it, so the test
+# substitutes its own rd32/wr32 and timer.
 # The trailing #endif of the enclosing "#if defined(DISK_SDCARD) ..." is
 # dropped, since its opening #if is outside the extracted range.
 #
@@ -1689,7 +1689,7 @@ versal_host.c: ../../hal/versal.c versal_host.h aarch64_arch_host.h
 # rather than returning false, since a false in a for-body is discarded by the
 # next iteration's status and only the last item would fail the build; and it
 # matches the call syntax, since a bare name still matches a renamed one.
-imx8qm_usdhc_extract.h: ../../hal/imx8qm.c
+imx8qm_usdhc_extract.h: ../../hal/imx_usdhc_sdhci.c
 	sed -n '/^#ifndef CADENCE_SRS_OFFSET$$/,/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/p' $< \
 	    | sed '/^#endif \/\* DISK_SDCARD || DISK_EMMC \*\/$$/d' > $@
 	test -s $@

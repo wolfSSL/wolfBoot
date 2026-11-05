@@ -69,81 +69,24 @@
 #define IMX8QM_USDHC1_BASE          0x5B010000  /* eMMC, 8-bit */
 #define IMX8QM_USDHC2_BASE          0x5B020000  /* SD card, 4-bit */
 
-/* uSDHC keeps eSDHC's register layout and adds MIX_CTRL, which holds the
- * transfer-mode half standard SDHCI keeps in the command register. */
-#define USDHC_DS_ADDR               0x00
-#define USDHC_BLK_ATT               0x04
-#define USDHC_CMD_ARG               0x08
-#define USDHC_CMD_XFR_TYP           0x0C
-#define USDHC_CMD_RSP0              0x10
-#define USDHC_DATA_BUFF_ACC_PORT    0x20
-#define USDHC_PRES_STATE            0x24
-#define USDHC_PROT_CTRL             0x28
-#define USDHC_SYS_CTRL              0x2C
-#define USDHC_INT_STATUS            0x30
-#define USDHC_INT_STATUS_EN         0x34
-#define USDHC_HOST_CTRL_CAP         0x40
-#define USDHC_WTMK_LVL              0x44
-#define USDHC_MIX_CTRL              0x48
-#define USDHC_VEND_SPEC             0xC0
-
-/* PRES_STATE */
-#define USDHC_PRES_CIHB             (1 << 0)    /* command inhibit (CMD) */
-#define USDHC_PRES_SDSTB            (1 << 3)    /* SD clock stable */
-#define USDHC_PRES_DLSL_DAT0        (1 << 24)   /* DAT0 line signal level */
-
-/* PROT_CTRL */
-#define USDHC_PROT_DTW_MASK         (0x3 << 1)
-#define USDHC_PROT_DTW_1BIT         (0x0 << 1)
-#define USDHC_PROT_DTW_4BIT         (0x1 << 1)
-#define USDHC_PROT_DTW_8BIT         (0x2 << 1)
-#define USDHC_PROT_D3CD             (1 << 3)
-#define USDHC_PROT_EMODE_MASK       (0x3 << 4)
-#define USDHC_PROT_EMODE_LE         (0x2 << 4)  /* little-endian data port */
-#define USDHC_PROT_DMASEL_MASK      (0x3 << 8)
-#define USDHC_PROT_DMASEL_SIMPLE    (0x0 << 8)
-
-/* SYS_CTRL. Reset and data-timeout sit at the same bits as SDHCI's SRS11 and pass
- * through the shim; the DVS/SDCLKFS clock divider does not and is programmed directly. */
-#define USDHC_SYS_DVS_SHIFT         4
-#define USDHC_SYS_DVS_MASK          (0xF << 4)
-#define USDHC_SYS_SDCLKFS_SHIFT     8
-#define USDHC_SYS_SDCLKFS_MASK      (0xFF << 8)
-#define USDHC_SYS_DTOCV_SHIFT       16
-#define USDHC_SYS_DTOCV_MASK        (0xF << 16)
-#define USDHC_SYS_RSTA              (1 << 24)   /* reset all */
-#define USDHC_SYS_RSTC              (1 << 25)   /* reset command line */
-#define USDHC_SYS_RSTD              (1 << 26)   /* reset data line */
-#define USDHC_SYS_INITA             (1 << 27)   /* send 80 init clocks */
-
-/* CMD_XFR_TYP (upper half is bit-identical to standard SDHCI's command half) */
-#define USDHC_XFR_RSPTYP_MASK       (0x3 << 16)
-#define USDHC_XFR_RSPTYP_48         (0x2 << 16)
-#define USDHC_XFR_RSPTYP_48B        (0x3 << 16)
-#define USDHC_XFR_DPSEL             (1 << 21)   /* data present */
-
-/* MIX_CTRL, the transfer-mode half. Bits 0,1,2,4,5 match standard SDHCI; the tuning
- * and DDR bits above them have no equivalent and must be preserved. */
-#define USDHC_MIX_CTRL_XFER_MASK    0x3F
-
-/* HOST_CTRL_CAP: the voltage-support bits are at the standard positions. */
-#define USDHC_CAP_VS33              (1 << 24)
-#define USDHC_CAP_VS30              (1 << 25)
-#define USDHC_CAP_VS18              (1 << 26)
-
-/* WTMK_LVL burst watermarks, in 4-byte words. A full 512-byte block so the PIO loop
- * sees one Buffer Read Ready per block rather than one per 32 bytes. */
-#define USDHC_WTMK_RD_SHIFT         0
-#define USDHC_WTMK_WR_SHIFT         16
-#define USDHC_WTMK_BLOCK_WORDS      0x80
-
-/* VEND_SPEC */
-#define USDHC_VEND_SPEC_VSELECT     (1 << 1)    /* 1.8V signaling */
+/* uSDHC registers and the shim interface (hal/imx_usdhc_sdhci.c) */
+#include "imx_usdhc_sdhci.h"
 
 /* uSDHC per clock, owned by the SCU; 198 MHz is what the NXP BSP programs. With
  * IMX8QM_SCU=1 the real rate is read back and this is only the fallback. */
 #ifndef IMX8QM_USDHC_PERCLK_HZ
 #define IMX8QM_USDHC_PERCLK_HZ      198000000
+#endif
+
+#if defined(DISK_EMMC)
+#define IMX8QM_USDHC_BASE           IMX8QM_USDHC1_BASE  /* eMMC, 8-bit */
+#else
+#define IMX8QM_USDHC_BASE           IMX8QM_USDHC2_BASE  /* SD card, 4-bit */
+#endif
+#define IMX_USDHC_BASE              IMX8QM_USDHC_BASE
+#define IMX_USDHC_PERCLK_HZ         IMX8QM_USDHC_PERCLK_HZ
+#ifdef IMX8QM_USDHC_MAX_CLK_KHZ
+#define IMX_USDHC_MAX_CLK_KHZ       IMX8QM_USDHC_MAX_CLK_KHZ
 #endif
 
 /* FlexSPI0: MT35XU512ABA 64 MB octal NOR. AHB read window plus the LUT-driven IP
