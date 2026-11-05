@@ -45,7 +45,7 @@
 static inline CHAR16 *wolfBoot_efi_get_cmdline(const uint8_t *manifest,
                                                UINTN *out_bytes)
 {
-    uint8_t *val = NULL;
+    uint8_t *val = NULL, *digest = NULL;
     uint16_t len;
     UINTN i;
     CHAR16 *wide = NULL;
@@ -59,6 +59,12 @@ static inline CHAR16 *wolfBoot_efi_get_cmdline(const uint8_t *manifest,
                                HDR_CMDLINE, &val);
     if (len == 0 || val == NULL)
         return NULL; /* no signed command line present */
+    /* The signature covers the header only up to the digest TLV, so a
+     * command line found after it is not authenticated */
+    if (wolfBoot_find_header((uint8_t *)(manifest + IMAGE_HEADER_OFFSET),
+                             WOLFBOOT_SHA_HDR, &digest) == 0 ||
+        val + len > digest - 2 * sizeof(uint16_t))
+        return NULL;
 
     status = uefi_call_wrapper(BS->AllocatePool, 3, EfiLoaderData,
                                ((UINTN)len + 1) * sizeof(CHAR16), (void **)&wide);
