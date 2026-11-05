@@ -156,7 +156,7 @@ int wolfBoot_initialize_encryption(void)
     /* MAGIC (4B) + PART_FLAG (1B) */
 #endif /* EXT_FLASH && EXT_ENCRYPTED */
 
-#if !defined(__WOLFBOOT) && !defined(UNIT_TEST)
+#if !defined(__WOLFBOOT) && !defined(UNIT_TEST) && !defined(EXT_ENCRYPTED)
     /* Avoid redefining if already defined by wolfSSL headers */
     #if !defined(XMEMSET)
         #define XMEMSET memset
