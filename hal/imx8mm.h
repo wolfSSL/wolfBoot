@@ -57,6 +57,8 @@
 #define UCR1_UARTEN                 (1U << 0)
 #define USR2_TXDC                   (1U << 3)   /* Transmission complete */
 #define UTS_TXFULL                  (1U << 4)   /* TxFIFO full */
+#define IMX8MM_UART_REG(off) \
+    (*(volatile uint32_t *)(uintptr_t)(IMX8MM_UART_BASE + (off)))
 
 /* Clock controller (CCM) */
 #define IMX8MM_CCM_BASE             0x30380000
