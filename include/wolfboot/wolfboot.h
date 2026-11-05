@@ -119,7 +119,11 @@ extern "C" {
 #endif
 
 #if defined(VERSION_SECTION)
-#define WOLFBOOT_VERSION_SECTION __attribute__((section(WB_STRINGIFY(VERSION_SECTION))))
+#if defined(__IAR_SYSTEMS_ICC__)
+#define WOLFBOOT_VERSION_SECTION(name) __section(WB_STRINGIFY(VERSION_SECTION))
+#else
+#define WOLFBOOT_VERSION_SECTION(name) __attribute__((section(WB_STRINGIFY(VERSION_SECTION))))
+#endif
 #else
 #define WOLFBOOT_VERSION_SECTION
 #endif
