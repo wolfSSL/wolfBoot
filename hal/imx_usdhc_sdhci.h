@@ -98,6 +98,47 @@
 /* VEND_SPEC */
 #define USDHC_VEND_SPEC_VSELECT     (1 << 1)    /* 1.8V signaling */
 
+/* Shim internals (hal/imx_usdhc_sdhci.c). CADENCE_SRS_OFFSET is not exported
+ * by include/sdhci.h; every in-tree SDHCI platform defines it locally. */
+#ifndef CADENCE_SRS_OFFSET
+#define CADENCE_SRS_OFFSET  0x200
+#endif
+
+#ifndef USDHC_RESET_TIMEOUT_US
+#define USDHC_RESET_TIMEOUT_US   1000000
+#endif
+#ifndef USDHC_INIT_TIMEOUT_US
+#define USDHC_INIT_TIMEOUT_US     100000
+#endif
+#ifndef USDHC_CLK_STABLE_TIMEOUT_US
+#define USDHC_CLK_STABLE_TIMEOUT_US 100000
+#endif
+
+/* Standard-SDHCI offsets, as seen after the Cadence SRS base is removed. */
+#define STD_BLK             0x04
+#define STD_CMD             0x0C
+#define STD_PRES_STATE      0x24
+#define STD_HOST_CTRL1      0x28
+#define STD_CLOCK_CTRL      0x2C
+#define STD_INT_STATUS      0x30
+#define STD_INT_STATUS_EN   0x34
+#define STD_INT_SIGNAL_EN   0x38
+#define STD_HOST_CTRL2      0x3C
+#define STD_CAPS1           0x40
+#define STD_CAPS2           0x44
+#define STD_MAX_CURRENT     0x48
+#define STD_ADMA_ADDR_LO    0x58
+#define STD_ADMA_ADDR_HI    0x5C
+
+/* uSDHC-only error bits with no standard-SDHCI position. */
+#define USDHC_INT_DMAE      (1U << 28)
+#define USDHC_INT_TNE       (1U << 26)
+
+/* SDMA buffers should be aligned to this (Cortex-A53/A72 D-cache line) */
+#ifndef IMX_USDHC_DMA_ALIGN
+#define IMX_USDHC_DMA_ALIGN 64
+#endif
+
 #ifndef __ASSEMBLER__
 #include <stdint.h>
 

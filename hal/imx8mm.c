@@ -89,23 +89,18 @@ void ext_flash_unlock(void)
 
 
 #ifdef DEBUG_UART
-/* UART TX only; clocks, pins and baud rate are set by the earlier stages */
-#define IMX_UART_REG(off)   (*(volatile uint32_t *)(IMX8MM_UART_BASE + (off)))
-#define IMX_UART_UTXD       IMX_UART_REG(IMX8MM_UART_UTXD)
-#define IMX_UART_UCR1       IMX_UART_REG(IMX8MM_UART_UCR1)
-#define IMX_UART_USR2       IMX_UART_REG(IMX8MM_UART_USR2)
-#define IMX_UART_UTS        IMX_UART_REG(IMX8MM_UART_UTS)
-
+/* UART TX only; clocks, pins and baud rate are set by the earlier stages.
+ * Also linked into the test-app. */
 void uart_init(void)
 {
-    IMX_UART_UCR1 |= UCR1_UARTEN;
+    IMX8MM_UART_REG(IMX8MM_UART_UCR1) |= UCR1_UARTEN;
 }
 
 static void uart_putc(char c)
 {
-    while (IMX_UART_UTS & UTS_TXFULL)
+    while (IMX8MM_UART_REG(IMX8MM_UART_UTS) & UTS_TXFULL)
         ;
-    IMX_UART_UTXD = (uint32_t)(uint8_t)c;
+    IMX8MM_UART_REG(IMX8MM_UART_UTXD) = (uint32_t)(uint8_t)c;
 }
 
 void uart_write(const char* buf, unsigned int sz)
@@ -117,7 +112,7 @@ void uart_write(const char* buf, unsigned int sz)
         uart_putc(buf[i]);
     }
     /* Drain the FIFO before handing over */
-    while (!(IMX_UART_USR2 & USR2_TXDC))
+    while (!(IMX8MM_UART_REG(IMX8MM_UART_USR2) & USR2_TXDC))
         ;
 }
 #endif /* DEBUG_UART */

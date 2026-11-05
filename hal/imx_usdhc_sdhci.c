@@ -55,40 +55,6 @@
 static inline uint32_t rd32(uintptr_t a) { return *(volatile uint32_t*)a; }
 static inline void wr32(uintptr_t a, uint32_t v) { *(volatile uint32_t*)a = v; }
 
-#ifndef CADENCE_SRS_OFFSET
-#define CADENCE_SRS_OFFSET  0x200
-#endif
-
-#ifndef USDHC_RESET_TIMEOUT_US
-#define USDHC_RESET_TIMEOUT_US   1000000
-#endif
-#ifndef USDHC_INIT_TIMEOUT_US
-#define USDHC_INIT_TIMEOUT_US     100000
-#endif
-#ifndef USDHC_CLK_STABLE_TIMEOUT_US
-#define USDHC_CLK_STABLE_TIMEOUT_US 100000
-#endif
-
-/* Standard-SDHCI offsets, as seen after the Cadence SRS base is removed. */
-#define STD_BLK             0x04
-#define STD_CMD             0x0C
-#define STD_PRES_STATE      0x24
-#define STD_HOST_CTRL1      0x28
-#define STD_CLOCK_CTRL      0x2C
-#define STD_INT_STATUS      0x30
-#define STD_INT_STATUS_EN   0x34
-#define STD_INT_SIGNAL_EN   0x38
-#define STD_HOST_CTRL2      0x3C
-#define STD_CAPS1           0x40
-#define STD_CAPS2           0x44
-#define STD_MAX_CURRENT     0x48
-#define STD_ADMA_ADDR_LO    0x58
-#define STD_ADMA_ADDR_HI    0x5C
-
-/* uSDHC-only error bits with no standard-SDHCI position. */
-#define USDHC_INT_DMAE      (1U << 28)
-#define USDHC_INT_TNE       (1U << 26)
-
 /* Fields the driver reads back that uSDHC does not implement. */
 static uint32_t srs10_shadow;   /* bus power / bus voltage / high speed */
 static uint32_t srs15_shadow;   /* host control 2 */
@@ -431,10 +397,6 @@ uint32_t imx_usdhc_get_clock_khz(void)
 /* SDMA cache maintenance with the identity MMU on, by address range rather than
  * the set/way walk used at handoff, which would cost more per transfer than the
  * DMA saves. The range routines are in src/boot_aarch64_start.S. */
-#ifndef IMX_USDHC_DMA_ALIGN
-#define IMX_USDHC_DMA_ALIGN 64      /* Cortex-A53/A72 D-cache line */
-#endif
-
 void sdhci_platform_dma_prepare(void* buf, uint32_t sz, int is_write)
 {
     uintptr_t start = (uintptr_t)buf;
