@@ -30,6 +30,11 @@
 #define EL2_HYPERVISOR 1
 #endif
 
+/* BL33 identity MMU (el2_idmap_enable, src/boot_aarch64_start.S) */
+#if defined(IMX8MM_BL33) && defined(IMX8MM_MMU)
+#define WOLFBOOT_AARCH64_EL2_IDMAP
+#endif
+
 /* Fallback only: ATF sets CNTFRQ_EL0 to 8 MHz */
 #define TIMER_CLK_FREQ              8000000
 
