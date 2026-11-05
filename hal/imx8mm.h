@@ -76,63 +76,13 @@
 #define IMX8MM_USDHC_PERCLK_HZ      400000000   /* SYSTEM_PLL1_DIV2, divider 1 */
 #endif
 
-/* uSDHC registers (same IP as i.MX8QM, see hal/imx8qm.h) */
-#define USDHC_DS_ADDR               0x00
-#define USDHC_BLK_ATT               0x04
-#define USDHC_CMD_ARG               0x08
-#define USDHC_CMD_XFR_TYP           0x0C
-#define USDHC_CMD_RSP0              0x10
-#define USDHC_DATA_BUFF_ACC_PORT    0x20
-#define USDHC_PRES_STATE            0x24
-#define USDHC_PROT_CTRL             0x28
-#define USDHC_SYS_CTRL              0x2C
-#define USDHC_INT_STATUS            0x30
-#define USDHC_INT_STATUS_EN         0x34
-#define USDHC_HOST_CTRL_CAP         0x40
-#define USDHC_WTMK_LVL              0x44
-#define USDHC_MIX_CTRL              0x48
-#define USDHC_VEND_SPEC             0xC0
-
-#define USDHC_PRES_CIHB             (1 << 0)    /* command inhibit (CMD) */
-#define USDHC_PRES_SDSTB            (1 << 3)    /* SD clock stable */
-#define USDHC_PRES_DLSL_DAT0        (1 << 24)   /* DAT0 line signal level */
-
-#define USDHC_PROT_DTW_MASK         (0x3 << 1)
-#define USDHC_PROT_DTW_1BIT         (0x0 << 1)
-#define USDHC_PROT_DTW_4BIT         (0x1 << 1)
-#define USDHC_PROT_DTW_8BIT         (0x2 << 1)
-#define USDHC_PROT_D3CD             (1 << 3)
-#define USDHC_PROT_EMODE_MASK       (0x3 << 4)
-#define USDHC_PROT_EMODE_LE         (0x2 << 4)  /* little-endian data port */
-#define USDHC_PROT_DMASEL_MASK      (0x3 << 8)
-#define USDHC_PROT_DMASEL_SIMPLE    (0x0 << 8)
-
-#define USDHC_SYS_DVS_SHIFT         4
-#define USDHC_SYS_DVS_MASK          (0xF << 4)
-#define USDHC_SYS_SDCLKFS_SHIFT     8
-#define USDHC_SYS_SDCLKFS_MASK      (0xFF << 8)
-#define USDHC_SYS_DTOCV_SHIFT       16
-#define USDHC_SYS_DTOCV_MASK        (0xF << 16)
-#define USDHC_SYS_RSTA              (1 << 24)   /* reset all */
-#define USDHC_SYS_RSTC              (1 << 25)   /* reset command line */
-#define USDHC_SYS_RSTD              (1 << 26)   /* reset data line */
-#define USDHC_SYS_INITA             (1 << 27)   /* send 80 init clocks */
-
-#define USDHC_XFR_RSPTYP_MASK       (0x3 << 16)
-#define USDHC_XFR_RSPTYP_48         (0x2 << 16)
-#define USDHC_XFR_RSPTYP_48B        (0x3 << 16)
-#define USDHC_XFR_DPSEL             (1 << 21)   /* data present */
-
-#define USDHC_MIX_CTRL_XFER_MASK    0x3F
-
-#define USDHC_CAP_VS33              (1 << 24)
-#define USDHC_CAP_VS30              (1 << 25)
-#define USDHC_CAP_VS18              (1 << 26)
-
-#define USDHC_WTMK_RD_SHIFT         0
-#define USDHC_WTMK_WR_SHIFT         16
-#define USDHC_WTMK_BLOCK_WORDS      0x80
-
-#define USDHC_VEND_SPEC_VSELECT     (1 << 1)    /* 1.8V signaling */
+/* uSDHC registers and the shim interface (hal/imx_usdhc_sdhci.c) */
+#include "imx_usdhc_sdhci.h"
+#define IMX8MM_USDHC_BASE           IMX8MM_USDHC3_BASE
+#define IMX_USDHC_BASE              IMX8MM_USDHC_BASE
+#define IMX_USDHC_PERCLK_HZ         IMX8MM_USDHC_PERCLK_HZ
+#ifdef IMX8MM_USDHC_MAX_CLK_KHZ
+#define IMX_USDHC_MAX_CLK_KHZ       IMX8MM_USDHC_MAX_CLK_KHZ
+#endif
 
 #endif /* _IMX8MM_H_ */
