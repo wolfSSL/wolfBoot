@@ -49,8 +49,10 @@
 #define BYTE_WRITE      0x02
 #define AUTOINC         0xAD
 #define EWSR            0x50
+#define RSTEN           0x66
 #define EBSY            0x70
 #define DBSY            0x80
+#define RST             0x99
 
 #ifdef TEST_EXT_FLASH
 static int test_ext_flash(void);
@@ -183,12 +185,26 @@ uint16_t spi_flash_probe(void)
 {
     uint8_t manuf, product, notused;
     uint16_t manuf_prod;
-    int i;
     spi_init(0,0);
+
+#ifdef RESET_EXT_FLASH
+    /* Reset Flash chip as it doesn't always respond properly to first request */
+    spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+    spi_write(RSTEN);
+    notused = spi_read();
+    spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+
+    spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+    spi_write(RST);
+    notused = spi_read();
+    spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
+#endif
     wait_busy();
+
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(MDID);
     notused = spi_read();
+
     spi_write(0xFF);
     manuf = spi_read();
     spi_write(0xFF);
