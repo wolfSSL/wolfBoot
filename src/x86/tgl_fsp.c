@@ -1610,8 +1610,7 @@ static void tgl_gpio_configure(const struct tgl_gpio_conf *gpio)
     }
 }
 
-#ifdef TARGET_nai_68int6
-static uint64_t tgl_rdtsc(void)
+uint64_t tgl_rdtsc(void)
 {
     uint32_t lo, hi;
 
@@ -1621,7 +1620,7 @@ static uint64_t tgl_rdtsc(void)
 
 /* TSC ticks per millisecond: CPUID 0x15 gives the crystal clock and the
  * TSC/crystal ratio, CPUID 0x16 the base frequency in MHz. */
-static uint32_t tgl_tsc_per_ms(void)
+uint32_t tgl_tsc_per_ms(void)
 {
     uint32_t eax = 0, ebx = 0, ecx = 0, edx = 0;
 
@@ -1634,6 +1633,7 @@ static uint32_t tgl_tsc_per_ms(void)
     return 2000000;
 }
 
+#ifdef TARGET_nai_68int6
 static void tgl_delay_ms(uint32_t ms)
 {
     uint64_t end = tgl_rdtsc() + (uint64_t)tgl_tsc_per_ms() * ms;

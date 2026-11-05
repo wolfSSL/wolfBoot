@@ -103,9 +103,17 @@ void pci_config_write8(uint8_t bus, uint8_t dev, uint8_t fun, uint8_t off,
     g_bios_cntl = g_wpd_stuck_low ? (uint8_t)(val & ~1U) : val;
 }
 
-void delay(int msec)
+/* A TSC that advances on every read, one tick per ms */
+static uint64_t g_tsc;
+
+uint64_t tgl_rdtsc(void)
 {
-    (void)msec;
+    return ++g_tsc;
+}
+
+uint32_t tgl_tsc_per_ms(void)
+{
+    return 1;
 }
 
 static void run_cycle(uint32_t ctl)

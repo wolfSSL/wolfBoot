@@ -265,31 +265,33 @@ static int tgl_spi_cycle(uint32_t spi_bar, uint32_t cycle, uint32_t faddr,
                          uint32_t len)
 {
     uint32_t sts = 0;
-    int ms;
+    uint64_t deadline;
 
-    for (ms = 0; ms < SPI_HWSEQ_TIMEOUT_MS; ms++) {
-        if ((mmio_read32(spi_bar + SPI_BIOS_HSFSTS_CTL) &
-             SPI_HSFSTS_SCIP) == 0)
-            break;
-        delay(1);
+    /* Timed from the TSC: a 4 KB erase can take a few hundred ms */
+    deadline = tgl_rdtsc() + (uint64_t)tgl_tsc_per_ms() * SPI_HWSEQ_TIMEOUT_MS;
+    while (mmio_read32(spi_bar + SPI_BIOS_HSFSTS_CTL) & SPI_HSFSTS_SCIP) {
+        if (tgl_rdtsc() > deadline)
+            return -1;
     }
-    if (ms == SPI_HWSEQ_TIMEOUT_MS)
-        return -1;
     mmio_write32(spi_bar + SPI_BIOS_HSFSTS_CTL,
                  SPI_HSFSTS_FDONE | SPI_HSFSTS_FCERR | SPI_HSFSTS_AEL);
     mmio_write32(spi_bar + SPI_FADDR, faddr);
     mmio_write32(spi_bar + SPI_BIOS_HSFSTS_CTL,
                  ((len - 1) << SPI_HSFSTS_FDBC_SHIFT) |
                  (cycle << SPI_HSFSTS_FCYCLE_SHIFT) | SPI_HSFSTS_FGO);
-    for (ms = 0; ms < SPI_HWSEQ_TIMEOUT_MS; ms++) {
+    deadline = tgl_rdtsc() + (uint64_t)tgl_tsc_per_ms() * SPI_HWSEQ_TIMEOUT_MS;
+    for (;;) {
         sts = mmio_read32(spi_bar + SPI_BIOS_HSFSTS_CTL);
         if (sts & (SPI_HSFSTS_FDONE | SPI_HSFSTS_FCERR))
             break;
-        delay(1);
+        if (tgl_rdtsc() > deadline) {
+            sts = SPI_HSFSTS_FCERR;
+            break;
+        }
     }
     mmio_write32(spi_bar + SPI_BIOS_HSFSTS_CTL,
                  SPI_HSFSTS_FDONE | SPI_HSFSTS_FCERR | SPI_HSFSTS_AEL);
-    if (ms == SPI_HWSEQ_TIMEOUT_MS || (sts & SPI_HSFSTS_FCERR))
+    if (sts & SPI_HSFSTS_FCERR)
         return -1;
     return 0;
 }
