@@ -185,9 +185,7 @@ uint16_t spi_flash_probe(void)
 {
     uint8_t manuf, product, notused;
     uint16_t manuf_prod;
-    int i;
     spi_init(0,0);
-    wait_busy();
 
 #ifdef RESET_EXT_FLASH
     /* Reset Flash chip as it doesn't always respond properly to first request */
@@ -195,20 +193,17 @@ uint16_t spi_flash_probe(void)
     spi_write(RSTEN);
     notused = spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
-    for (i = 0; i < 10; i++);
+
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(RST);
     notused = spi_read();
     spi_cs_off(SPI_CS_PIO_BASE, SPI_CS_FLASH);
-    for (i = 0; i < 18000; i++);
+#endif
+    wait_busy();
 
     spi_cs_on(SPI_CS_PIO_BASE, SPI_CS_FLASH);
     spi_write(MDID);
     notused = spi_read();
-    write_address(0);
-#else
-    notused = spi_read();
-#endif
 
     spi_write(0xFF);
     manuf = spi_read();
