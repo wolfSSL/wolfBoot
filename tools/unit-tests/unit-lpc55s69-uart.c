@@ -171,7 +171,7 @@ void RNG_Init(RNG_Type *base)
     (void)base;
 }
 
-void uart_printf(const char *fmt, ...)
+void tiny_printf(const char *fmt, ...)
 {
     (void)fmt;
 }

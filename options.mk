@@ -1179,6 +1179,14 @@ ifeq ($(DEBUG_UART),1)
     endif
   endif
 endif
+
+ifneq ($(strip $(DEBUG_RTT)),)
+  CFLAGS+=-DDEBUG_RTT
+  CFLAGS+=-I$(DEBUG_RTT)
+  CFLAGS+=-DPRINTF_ENABLED
+  OBJS+=$(DEBUG_RTT)/RTT/SEGGER_RTT.o
+endif
+
 # Flash erase/write/read test at WOLFBOOT_PARTITION_UPDATE_ADDRESS.
 ifeq ($(TEST_FLASH),1)
   CFLAGS+=-DTEST_FLASH
