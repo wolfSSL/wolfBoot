@@ -900,6 +900,7 @@ The PolarFire SoC is a 64-bit RISC-V SoC with a five-core CPU cluster (1x E51 mo
 | **QSPI + L2-LIM** | `polarfire_mpfs250_hss_l2lim.config` | S-mode (U54 via HSS) | SC QSPI | L2-LIM (no DDR) | Yes |
 | **M-Mode (no HSS)** | `polarfire_mpfs250_m_qspi.config` | M-mode (E51, no HSS) | SC QSPI | L2 Scratchpad | No |
 | **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
+| **M-Mode + DDR, Icicle Kit** | `polarfire_mpfs250_icicle_m.config` | M-mode (E51, no HSS) | SD Card (FAT32 file) | LPDDR4 (DDR) | No |
 | **Boot mode 2 UBL** | `polarfire_mpfs250_ubl.config` | System Controller -> sNVM stub | eNVM (verifies it) | L2-LIM | No |
 
 ### PolarFire SoC build options
@@ -909,6 +910,10 @@ Make variables, on the command line or in the `.config`. See [PolarFire.md](Pola
 | Option | Purpose |
 |--------|---------|
 | `LIBERO_FPGA_CONFIG_DIR` | Path to the board's Libero/HSS `fpga_design_config` headers. Enables LPDDR4 init (`MPFS_DDR_INIT`); required for the M-Mode + DDR build. |
+| `MPFS_DDR_BCLK_PHASE` | DDR PLL BCLK/SCLK phase (0-7) that HSS measures per board with its software sweep: 3 (default) on the Video Kit, 4 on the Icicle Kit. |
+| `MPFS_SD_EMMC_DEMUX_ADDR` | Fabric register that selects the SD slot or the eMMC on designs with the demux in the fabric (Icicle Kit: `0x4FFFFF00`); unset, the Video Kit's IOMUX override is used. |
+| `MPFS_SC_PROBE` | Read-only System Controller service survey at boot (device serial, TRNG nonce, PUF emulation): status and stability only, never a value. On by default for M-mode builds; `MPFS_SC_PROBE=0` disables it. |
+| `MPFS_DDR_MEMTEST` | `=1`: CPU pattern test over the DDR windows the design's SEG registers map, after training, reporting the error count per 64 MB chunk; independent of `DEBUG_DDR`. |
 | `MPFS_ATHENA` (+ `MPFS_ATHENA_CAL_DIR`) | SHA-384 and AES-256-CTR offload to the Athena F5200 (TeraFire), with a mandatory self-check. |
 | `SNVM_KEYSTORE`, `SNVM_KEYSTORE_PROVISION`, `SNVM_KEYSTORE_REQUIRE_ROM` | Serve the verification keystore from secure NVM; the one-time writer; refuse to boot unless every keystore page is ROM-flagged. |
 | `SNVM_KEK`, `SNVM_ENCKEY_PROVISION` | PUF-derived KEK with RFC 3394 key-wrap for the sNVM-stored image-encryption key, and its one-time writer. |
@@ -928,6 +933,15 @@ Make variables, on the command line or in the `.config`. See [PolarFire.md](Pola
 
 > **Filesystem boot:** this target can also read its signed image from a **file** on a read-only FAT32 or ext4 partition instead of from raw offset 0. Build with `DISK_FS=fat32|ext4|both` and set `BOOT_FILE_A` / `BOOT_FILE_B`. See [Disk boot from a read-only filesystem (FAT32 / ext4)](compile.md#disk-boot-from-a-read-only-filesystem-fat32--ext4).
 
+### PolarFire SoC Icicle Kit
+
+The MPFS-ICICLE-KIT carries an MPFS250T, a non-secure die in the FCVG484 package, where the Video Kit configurations above assume an MPFS250TS. `polarfire_mpfs250_icicle_m.config` is the M-mode + LPDDR4 + SD boot for it; `polarfire_mpfs250_icicle.config` is the same M-mode build without DDR or an image source, for surveying the System Controller services on an unfamiliar board. Three things are board-specific and are set in the config rather than detected:
+
+- `MPFS_DDR_BCLK_PHASE=4`: the DDR PLL BCLK/SCLK phase. With the Video Kit's value TIP training reports success but no DRAM write completes.
+- `MPFS_SD_EMMC_DEMUX_ADDR=0x4FFFFF00`: the SD/eMMC demux select is a fabric register on this design, not an IOMUX override.
+- `LIBERO_FPGA_CONFIG_DIR`: must be an Icicle (`ICICLE_MSS`) export. A Video Kit export carries other SEG and IOMUX values and leaves the 64-bit DDR windows unmapped.
+
+The config reads the signed FIT from a file on the card's FAT32 partition (`DISK_FS=fat32`), so the stock HSS/U-Boot card layout stays usable. The eNVM is programmed with `--die MPFS250T --package FCVG484` over the on-board FlashPro (close J9). The sNVM, PUF and TRNG services answer on this die; the authenticated sNVM clients and boot mode 2 need a secure die. See [PolarFire.md](PolarFire.md#m-mode--ddr-booting-linux-minimal-sbi) for the bring-up details and troubleshooting.
 
 ## STM32F7
 

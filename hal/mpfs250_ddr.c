@@ -37,8 +37,14 @@
 #ifdef MPFS_DDR_INIT
 
 /* DQ/DQS init offset (HSS rpc_156).  6 is the Libero Video Kit value; HSS
- * allows 1..9 (TUNE_RPC_156_DQDQS_INIT_VALUE) but it only shifts the window. */
-static uint32_t mpfs_phy_rpc156_val = 6U;
+ * allows 1..9 (TUNE_RPC_156_DQDQS_INIT_VALUE) and it shifts the write window,
+ * so it is a per-board tuning value rather than a constant: override it with
+ * -DMPFS_PHY_RPC156_VAL=n when a board's write calibration will not cover
+ * every lane. */
+#ifndef MPFS_PHY_RPC156_VAL
+#define MPFS_PHY_RPC156_VAL 6U
+#endif
+static uint32_t mpfs_phy_rpc156_val = MPFS_PHY_RPC156_VAL;
 
 #if defined(WOLFBOOT_RISCV_MMODE) && defined(MPFS_DDR_INIT)
 /* DDR-init busy-loop delay.  The argument is NOT a real microsecond: at 600 MHz
@@ -1479,19 +1485,20 @@ static void training_bclk_rotate(void)
     mb();
 }
 
-/* Phase: apply BCLK phase from Libero settings.  Extracted verbatim from
- * run_training; no shared state. */
+/* BCLK phase of the DDR PLL (PLL_PHADJ REG_OUT2_PHSINIT), with BCLK90 two
+ * phases behind it.  HSS measures this per board with its software
+ * BCLK/SCLK sweep (DDR_TRAINING_IP_SM_BCLKSCLK_SW); its readback is 3 on the
+ * Video Kit and 4 on the Icicle Kit.  The wrong value leaves TIP training
+ * passing while no DRAM write ever completes, so a board whose write
+ * calibration times out on every lane needs -DMPFS_DDR_BCLK_PHASE=n. */
+#ifndef MPFS_DDR_BCLK_PHASE
+#define MPFS_DDR_BCLK_PHASE 3U
+#endif
 static void training_apply_bclk_phase(void)
 {
-    /* Force HSS's software-clock-training result on this board:
-     * bclk_phase=0x300 (field 3) with paired bclk90=0x2800 (field 5).
-     * Earlier this was tried BEFORE the auto-init reorder (when WRLVL
-     * ran prematurely, so the phase could not affect the trained
-     * wl_dly).  Now WRLVL trains AFTER the manual prep, so the
-     * BCLK<->SCLK phase it aligns DQS against actually matters.  PHADJ
-     * load = 0x4003/0x0003/0x4003 toggle of bit 14 (LOADPHS_B). */
-    uint32_t bclk_phase = 0x300UL;
-    uint32_t bclk90_phase = 0x2800UL;
+    uint32_t bclk_phase = (MPFS_DDR_BCLK_PHASE & 0x7UL) << 8;
+    uint32_t bclk90_phase = ((MPFS_DDR_BCLK_PHASE + 2U) & 0x7UL) << 11;
+
     DDR_PLL_REG(PLL_PHADJ) = 0x00004003UL | bclk_phase | bclk90_phase;
     mb();
     DDR_PLL_REG(PLL_PHADJ) = 0x00000003UL | bclk_phase | bclk90_phase;
@@ -1505,51 +1512,18 @@ static void training_apply_bclk_phase(void)
  * from run_training; no shared state. */
 static void training_mr_writes(void)
 {
-    struct mr_write_s {
-        uint8_t mr;
-        uint8_t val;
-    };
-    /* MR2 = 0x12: OP[2:0]=010 -> RL=14, OP[5:3]=010 -> WL=8, WLS=0.
-     * This MUST match the controller's CFG_RL=14 and CFG_WL=8 (Libero
-     * hw_ddrc.h).  The previous 0x2D set OP[2:0]=101 (RL=28) and
-     * OP[5:3]=101 (WL=14): with the DRAM at WL=14 but the controller
-     * launching write data at WL=8, every write lands six cycles off
-     * and no wrcalib offset on any lane can recover it -- the observed
-     * MTC WRCALIB status_lower=0x0 (all lanes fail) + memory_test fail.
-     * 0x12 is also what the controller auto-init derives from CFG_*.
-     * (An earlier "0x12 -> reads hang" note predates the non-cached
-     * DDR read-alias fix and is no longer expected to apply.) */
-    struct mr_write_s mr_writes[] = {
-        {1, 0x56}, {2, 0x12}, {3, 0x31}, {11, 0x31},
-        {12, 0x32}, {13, 0x20}, {14, 0x0F}, {22, 0x06}
-    };
-    int i, j;
-    uint32_t ack_cnt = 0, err_cnt = 0;
+    /* HSS lpddr4_manual_training: masked writes (MR_WR_MASK 0xFFFFF) so the
+     * controller supplies every mode-register field from its own CFG_*
+     * values, ten times each.  A literal written here can disagree with
+     * the controller (MR13 data mask and FSP-OP, MR2 read/write latency). */
+    static const uint8_t mrs[] = { 1, 2, 3, 4, 11, 16, 17, 22, 13 };
+    uint32_t i;
+    uint32_t err_cnt = 0;
 
-    for (i = 0; i < (int)(sizeof(mr_writes)/sizeof(mr_writes[0])); i++) {
-        for (j = 0; j < 10; j++) {  /* 10 retries per MR */
-            DDRCFG_REG(MC_INIT_CS) = 0x01;
-            /* MR_WR_MASK convention: 1 = mask off (preserve), 0 = include
-             * in write.  HSS uses 0 (mode_register_write at mss_ddr.c:3259)
-             * to actually write data.  Our previous 0xFF was masking off
-             * the low 8 bits (the entire LPDDR4 MR data field), so the
-             * MR writes were silently no-op'd and DRAM stayed at default
-             * MR values - causing TIP to stall after BCLK_SCLK because
-             * DRAM was not configured for the LPDDR4 training sequence. */
-            DDRCFG_REG(MC_INIT_MR_WR_MASK) = 0x00;
-            DDRCFG_REG(MC_INIT_MR_ADDR) = mr_writes[i].mr;
-            DDRCFG_REG(MC_INIT_MR_WR_DATA) = mr_writes[i].val;
-            DDRCFG_REG(MC_INIT_MR_W_REQ) = 0x01;
-            DDRCFG_REG(MC_INIT_MR_W_REQ) = 0x00;
-            mb();
-            ddr_delay(500);  /* 5us delay */
-            if (DDRCFG_REG(MC_INIT_ACK) != 0)
-                ack_cnt++;
-            else
-                err_cnt++;
-        }
+    for (i = 0; i < sizeof(mrs) / sizeof(mrs[0]); i++) {
+        err_cnt += ddr_cadence_mr_masked_write_x10(mrs[i]);
     }
-    DBG_DDR("ack=%d err=%d...", ack_cnt, err_cnt);
+    DBG_DDR("MR masked writes err=%u...", (unsigned)err_cnt);
 }
 
 /* Phase: configure PHY for WRLVL before training reset release.
@@ -2238,10 +2212,144 @@ static void training_posttip_dump(void)
     /* TIP relies on lane_select being non-zero between iterations (see
      * training_pretip_lane_snapshot), so leave it where the loop ended. */
 }
+
+/* Raw dump of the DDRC, csr_custom and PHY blocks, for diffing against an
+ * HSS tinyCLI "debug hexdump" of the same ranges on the same board. */
+static void ddr_regdump(const char *tag)
+{
+    static const struct { uint32_t base; uint32_t len; } ranges[] = {
+        { DDRCFG_BASE + 0x2400U,  0x40U },
+        { DDRCFG_BASE + 0x2800U,  0x40U },
+        { DDRCFG_BASE + 0x3C00U,  0x1A0U },
+        { DDRCFG_BASE + 0x4000U,  0x420U },
+        { DDRCFG_BASE + 0x4C00U,  0x20U },
+        { DDRCFG_BASE + 0x5000U,  0x30U },
+        { DDRCFG_BASE + 0x5400U,  0x470U },
+        { DDRCFG_BASE + 0x5C00U,  0x40U },
+        { DDRCFG_BASE + 0x6400U,  0x160U },
+        { DDRCFG_BASE + 0x7C00U,  0x10U },
+        { DDRCFG_BASE + 0x8000U,  0x20U },
+        { DDRCFG_BASE + 0x10000U, 0x60U },
+        { DDRCFG_BASE + 0x12C00U, 0xAA0U },
+        { DDRCFG_BASE + 0x3C000U, 0x50U },
+        { CFG_DDR_SGMII_PHY_BASE, 0x1000U },
+    };
+    uint32_t i;
+    uint32_t off;
+    uint32_t n = 0;
+    volatile uint32_t *p;
+
+    wolfBoot_printf("REGDUMP begin %s\n", tag);
+    for (i = 0; i < sizeof(ranges) / sizeof(ranges[0]); i++) {
+        for (off = 0; off < ranges[i].len; off += 16U) {
+            p = (volatile uint32_t *)(uintptr_t)(ranges[i].base + off);
+            wolfBoot_printf("REGDUMP %08x: %08x %08x %08x %08x\n",
+                (unsigned)(ranges[i].base + off),
+                (unsigned)p[0], (unsigned)p[1], (unsigned)p[2],
+                (unsigned)p[3]);
+            n++;
+            if ((n & 0x1FU) == 0U) {
+                MPFS_DDR_PET_WDT();
+            }
+        }
+    }
+    wolfBoot_printf("REGDUMP end %s\n", tag);
+}
 #else
 #define training_posttip_dump() do { } while (0)
+#define ddr_regdump(tag) do { } while (0)
 #endif
 
+#ifdef MPFS_DDR_MEMTEST
+/* CPU pattern test over a DDR window in 64 MB chunks: write an address-derived
+ * 64-bit pattern, read it back, and report the error count and first failing
+ * address per chunk.  The windows are read through the L2 (cached) or the
+ * non-cached alias as given, so a cache artefact shows up as a difference
+ * between the two. */
+static void ddr_memtest_window(uintptr_t base, uint64_t len, const char *name)
+{
+    const uint64_t chunk = 64ULL << 20;
+    uint64_t off;
+    uint64_t i;
+    uint64_t n = chunk / sizeof(uint64_t);
+    uint64_t total_err = 0;
+
+    wolfBoot_printf("MEMTEST %s: 0x%lx len 0x%lx\n", name,
+        (unsigned long)base, (unsigned long)len);
+    for (off = 0; off < len; off += chunk) {
+        volatile uint64_t *p = (volatile uint64_t *)(base + off);
+        uint64_t err = 0;
+        uint64_t first = 0;
+        uint64_t got = 0, exp = 0;
+        for (i = 0; i < n; i++) {
+            uint64_t a = (uint64_t)(base + off) + (i << 3);
+            p[i] = a ^ 0xA5A5A5A55A5A5A5AULL ^ (a << 32);
+        }
+        __asm__ volatile("fence iorw,iorw" ::: "memory");
+        for (i = 0; i < n; i++) {
+            uint64_t a = (uint64_t)(base + off) + (i << 3);
+            uint64_t e = a ^ 0xA5A5A5A55A5A5A5AULL ^ (a << 32);
+            uint64_t g = p[i];
+            if (g != e) {
+                if (err == 0) {
+                    first = a; got = g; exp = e;
+                }
+                err++;
+            }
+        }
+        total_err += err;
+        if (err != 0) {
+            wolfBoot_printf("MEMTEST %s +0x%lx: %lu errors, first 0x%lx got "
+                "0x%lx%08lx exp 0x%lx%08lx\n", name, (unsigned long)off,
+                (unsigned long)err, (unsigned long)first,
+                (unsigned long)(got >> 32), (unsigned long)(got & 0xFFFFFFFFUL),
+                (unsigned long)(exp >> 32), (unsigned long)(exp & 0xFFFFFFFFUL));
+        }
+        MPFS_DDR_PET_WDT();
+    }
+    wolfBoot_printf("MEMTEST %s: done, %lu errors\n", name,
+        (unsigned long)total_err);
+}
+
+/* A SEG register with a zero ADDRESS_OFFSET leaves its window unmapped, and a
+ * CPU access there stalls the bus instead of faulting. The lengths are the
+ * MSS map's: 1 GB cached at 0x80000000, 256 MB non-cached at 0xC0000000
+ * (0xD0000000 is the write-combining window and 0xE0000000 is FIC1), and the
+ * whole 2 GB through the 64-bit cached window. */
+#define MPFS_SEG_MAPPED(v) (((v) & 0x7FFFUL) != 0UL)
+
+static void ddr_memtest(void)
+{
+    if (MPFS_SEG_MAPPED(LIBERO_SETTING_SEG0_0)) {
+        ddr_memtest_window(0x80000000UL, 1024ULL << 20, "cached32");
+    }
+    if (MPFS_SEG_MAPPED(LIBERO_SETTING_SEG1_2)) {
+        ddr_memtest_window(0xC0000000UL, 256ULL << 20, "noncached32");
+    }
+    if (MPFS_SEG_MAPPED(LIBERO_SETTING_SEG0_1)) {
+        ddr_memtest_window(0x1000000000UL, 2048ULL << 20, "cached64");
+    }
+}
+
+#endif /* MPFS_DDR_MEMTEST */
+
+/* HSS load_dq() for every lane: the prelude HSS runs before each
+ * write_calibration_using_mtc(), leaving the DFI status override at 7. */
+static void training_load_dq_all(void)
+{
+    uint32_t lane;
+
+    for (lane = 0; lane < 4U; lane++) {
+        DDRPHY_REG(PHY_EXPERT_DLYCNT_MOVE0) = 0x00UL;
+        DDRPHY_REG(PHY_EXPERT_DFI_STATUS_TO_SHIM) = 0x07UL;
+        DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x21UL;
+        DDRPHY_REG(PHY_EXPERT_DLYCNT_LOAD0) = (0xFFUL << (lane * 8UL));
+        DDRPHY_REG(PHY_EXPERT_DLYCNT_LOAD0) = 0x00UL;
+        DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
+    }
+    mb();
+    udelay(50);
+}
 
 static int run_training(uint32_t retry_count)
 {
@@ -2270,16 +2378,6 @@ static int run_training(uint32_t retry_count)
      */
     training_bclk_rotate();
 
-    /*
-     * Apply BCLK phase from Libero settings.
-     * NOTE: a faithful port of HSS's software BCLK_SCLK sweep
-     * (DDR_TRAINING_IP_SM_BCLKSCLK_SW) plus a direct force of HSS's
-     * observed phase (bclk_phase=0x300/bclk90=0x2800) were both tested on
-     * a clean cold boot: neither moved wl_dly off the ~+13-tap gap vs HSS
-     * (wl_dly stayed 0x25-0x2C), and the sweep destabilized WRCALIB.  So
-     * the BCLK/SCLK phase is NOT the source of the wl_dly divergence --
-     * reverted to the Libero default apply.
-     */
     training_apply_bclk_phase();
 
     ddr_delay(1000);
@@ -2648,21 +2746,10 @@ static int run_training(uint32_t retry_count)
     DDRPHY_REG(PHY_RPC3_ODT) = 0x03U;
     mb();
 
-    /* Note: tested re-running expert_dfi_status_override_to_shim
-     * sequence here (HSS DDR_TRAINING_ROTATE_CLK pattern) to force
-     * dfi_training_complete=1 -- no effect.  STAT_DFI_TRAINING_
-     * COMPLETE stays at 0 regardless of write timing or sequence. */
-
-    /* Re-pulse PHY_DFI_INIT_START to re-establish DFI init handshake.
-     * INIT_COMPLETE has been cleared somewhere in the training flow;
-     * this re-asserts the start signal so the controller can
-     * re-handshake DFI INIT (and hopefully TRAINING) completion. */
-    DDRCFG_REG(MC_DFI_INIT_START) = 0x00000000UL;
-    mb();
-    udelay(10);
-    DDRCFG_REG(MC_DFI_INIT_START) = 0x00000001UL;
-    mb();
-    udelay(1000);  /* let DFI re-handshake */
+    /* PHY_DFI_INIT_START stays asserted from here on: HSS only drops it on
+     * its failure path, and re-pulsing it over a trained PHY restarts the
+     * DFI handshake and leaves the controller unable to complete the write
+     * calibration and PDMA traffic that follow. */
 
     /* Check final training status */
     train_stat = DDRPHY_REG(PHY_TRAINING_STATUS);
@@ -2738,6 +2825,8 @@ static int run_training(uint32_t retry_count)
             (unsigned)((100000U - dfi_to) * 10U));
         DBG_DDR("  MTC WRCALIB (HSS-style) tstat=0x%x...\n",
             train_stat);
+        training_load_dq_all();
+        ddr_regdump("pre-wrcalib");
         wrcal_res = mpfs_write_calibration_using_mtc(4U);
         if (wrcal_res == MPFS_MTC_TIMEOUT_ERROR) {
             wolfBoot_printf("  MTC WRCALIB TIMEOUT\n");
@@ -2934,7 +3023,6 @@ static int mpfs_ddr_post_initialization(void)
 {
     uint32_t timeout;
     uint32_t mr_err;
-    uint32_t mr2_err;
 
     DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
     DDRPHY_REG(PHY_EXPERT_DFI_STATUS_TO_SHIM) = 0x0UL;
@@ -2949,18 +3037,9 @@ static int mpfs_ddr_post_initialization(void)
     mb();
     udelay(500);                     /* HSS DELAY_CYCLES_500_MICRO */
 
-    /* CRITICAL: do an UNMASKED MR2 write first to clear LPDDR4
-     * MR2 OP[7] (write-leveling enable).  TIP's WRLVL phase may
-     * set MR2[7]=1 to enter WRLVL mode; the polar-fire-guide rule
-     * "MUST clear the write-leveling bit in MR2 after DFI_WRLVL_
-     * RESP=1" applies.  If left set, DRAM stays in WRLVL mode and
-     * subsequent burst writes corrupt on lanes that don't see the
-     * expected WRLVL response (lanes 1, 2, 3 in our case).
-     * MR2=0x2D = WL Set 5 / RL Set 5, MR2[7]=0 = WRLVL disabled. */
-    mr2_err = ddr_cadence_mr_unmasked_write(2U, 0x2DUL);
-    DBG_DDR("  MR2 explicit clear (=0x2D) ack=%u\n",
-        mr2_err == 0U ? 1U : 0U);
-    (void)mr2_err;
+    /* Masked writes only: the controller's own MR2 value has the
+     * write-leveling bit clear, so this also takes the DRAM out of WRLVL
+     * mode after TIP without a literal that can disagree with CFG_RL/WL. */
     mr_err  = ddr_cadence_mr_masked_write_x10(1U);
     mr_err |= ddr_cadence_mr_masked_write_x10(2U);
     mr_err |= ddr_cadence_mr_masked_write_x10(3U);
@@ -3030,7 +3109,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
 
     wolfBoot_printf("\n========================================\n");
 
-    mpfs_phy_rpc156_val = 6U;
+    mpfs_phy_rpc156_val = MPFS_PHY_RPC156_VAL;
 
     (void)outer_retry;
 
@@ -3135,16 +3214,7 @@ int mpfs_ddr_init(unsigned int outer_retry)
              * does this regardless of train_stat. */
             DDRPHY_REG(PHY_RPC220) = 0x0CUL;  /* HSS-captured (2026-05-15) */
             mb();
-            for (lane = 0; lane < 4; lane++) {
-                DDRPHY_REG(PHY_EXPERT_DLYCNT_MOVE0) = 0x00UL;
-                DDRPHY_REG(PHY_EXPERT_DFI_STATUS_TO_SHIM) = 0x07UL;
-                DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x21UL;
-                DDRPHY_REG(PHY_EXPERT_DLYCNT_LOAD0) =
-                    (0xFFUL << (lane * 8UL));
-                DDRPHY_REG(PHY_EXPERT_DLYCNT_LOAD0) = 0x00UL;
-                DDRPHY_REG(PHY_EXPERT_MODE_EN) = 0x08UL;
-            }
-            mb();
+            training_load_dq_all();
 
             /* HSS DDR_TRAINING_WRITE_CALIBRATION (mss_ddr.c:1740-1750):
              * after SET_FINAL_MODE (DDRPHY_MODE final, above) + rpc220
@@ -3170,6 +3240,10 @@ int mpfs_ddr_init(unsigned int outer_retry)
              * through and the 19 MB load then hard-failed every block.
              * Retrain instead -- the non-deterministic WRLVL converges
              * to all-4-lane within a few attempts. */
+            if (wrcal == MPFS_MTC_TIMEOUT_ERROR) {
+                wolfBoot_printf("  WRCALIB MTC timeout -- retraining\n");
+                break;
+            }
             if (wrcal != 0U) {
                 wolfBoot_printf(
                     "  WRCALIB not all lanes (result=%u) -- retraining\n",
@@ -3316,6 +3390,8 @@ int mpfs_ddr_init(unsigned int outer_retry)
         return -4;
     }
 
+    ddr_regdump("post-init");
+
     /* PDMA pre-fill, the HSS clear_bootup_cache_ways equivalent: primes the
      * DDRC row buffers before the memory test.  1 MB is enough for that and
      * keeps the boot short. */
@@ -3334,6 +3410,9 @@ int mpfs_ddr_init(unsigned int outer_retry)
     (void)prime_sink;
 
     wolfBoot_printf("DDR: Initialization COMPLETE\n");
+#ifdef MPFS_DDR_MEMTEST
+    ddr_memtest();
+#endif
 
     return 0;
 }

@@ -48,7 +48,7 @@ Path 1 needs no FPGA design files and never writes the device, so it is the righ
 |---|---|
 | RISC-V bare-metal toolchain | SoftConsole (`/opt/Microchip/SoftConsole-v2022.2-RISC-V-747/riscv-unknown-elf-gcc/bin`), or any `riscv64-unknown-elf-gcc` |
 | `mpfsBootmodeProgrammer.jar` + a JRE | SoftConsole (`extras/mpfs/`, `eclipse/jre/bin/java`); paths 2 and 3 only |
-| FlashPro programmer | on-board on the Video Kit, over the same USB cable as the consoles |
+| FlashPro programmer | on-board on the Video Kit and the Icicle Kit (close J9 on the Icicle), over the same USB cable as the consoles |
 | `dtc`, `mkimage` | `device-tree-compiler`, `u-boot-tools` |
 | `hss-payload-generator` | `tools/hss-payload-generator` in the [hart-software-services](https://github.com/polarfire-soc/hart-software-services) tree; path 1 only |
 | `fpga_design_config/` for the board | an HSS build (`build/boards/<board>/fpga_design_config`) or a Libero MSS Configurator export; paths 2 and 3 only |
@@ -145,7 +145,7 @@ $SC_INSTALL_DIR/eclipse/jre/bin/java -jar \
     --bootmode 1 --die MPFS250T --package FCG1152 --workdir $PWD wolfboot.elf
 ```
 
-`--bootmode 1` is non-secure boot from eNVM: the System Controller releases the harts at the eNVM reset vector. The die and package must match the part; `--die` defaults to `MPFS250T_ES` and `--package` to `FCVG484`, neither of which is the Video Kit.
+`--bootmode 1` is non-secure boot from eNVM: the System Controller releases the harts at the eNVM reset vector. The die and package must match the part; `--die` defaults to `MPFS250T_ES` and `--package` to `FCVG484`, neither of which is the Video Kit (the Icicle Kit is `--die MPFS250T --package FCVG484`).
 
 #### Boot
 
@@ -200,6 +200,9 @@ The programmer's `--die` list covers `MPFS025T` through `MPFS460T` and their `_E
 | banner, then silence | the FIT loaded but Linux has no console: the dtb's own `/chosen/bootargs` wins unless `LINUX_BOOTARGS` is set at build time. See [bootargs](compile.md#linux-kernel-command-line-bootargs) |
 | banner, then silence, and no `[SBI]` output at all | the image was built with `make CFLAGS_EXTRA=...`, which overrode the config's `-DWOLFBOOT_MMODE_SMODE_BOOT`. Check with `nm wolfboot.elf | grep sbi`; an M-mode build that boots an S-mode OS must have those symbols |
 | DDR training stops or reports a failure | build with `CFLAGS_EXTRA+=-DDEBUG_DDR` and compare against the board's Libero settings |
+| DDR trains but the OS misbehaves later | build with `MPFS_DDR_MEMTEST=1` for a CPU pattern test over the mapped DDR windows before the OS is loaded |
+| TIP training passes (`train_stat=0x1F`) but `MTC WRCALIB TIMEOUT` on every retry, or a PDMA fill of DDR hangs | the DDR PLL BCLK/SCLK phase is another board's. Dump the PHY under HSS (tinyCLI `debug hexdump 0x20007000 0x1000`) and read `PLL_DIV_0_1_MAIN`/`PLL_DIV_2_3_MAIN` VCO phase selects, then set `MPFS_DDR_BCLK_PHASE` to match |
+| Linux boots but userspace segfaults or the kernel reports an illegal instruction at valid code, more often with more CPUs | DRAM content corruption from a mode-register mismatch: the mode registers must be written masked so the controller supplies them from its CFG_* values (the driver does this now); check `MR13` data mask against `CFG_DATA_MASK` if it recurs |
 
 ### Next
 
@@ -219,7 +222,7 @@ The programmer's `--die` list covers `MPFS025T` through `MPFS460T` and their `_E
 
 ## Boot configurations
 
-Nine ready-to-use config templates cover all supported boot mode / storage / memory combinations:
+Ten ready-to-use config templates cover all supported boot mode / storage / memory combinations:
 
 | Configuration | Config File | Boot Mode | Storage | Memory | HSS |
 |---------------|-------------|-----------|---------|--------|-----|
@@ -231,6 +234,7 @@ Nine ready-to-use config templates cover all supported boot mode / storage / mem
 | **M-Mode + DDR** | `polarfire_mpfs250_m.config` | M-mode (E51, no HSS) | SD Card | LPDDR4 (DDR) | No |
 | **M-Mode + DDR, eMMC** | `polarfire_mpfs250_m_emmc.config` | M-mode (E51, no HSS) | eMMC | LPDDR4 (DDR) | No |
 | **M-Mode + DDR, QSPI** | `polarfire_mpfs250_m_qspi_ddr.config` | M-mode (E51, no HSS) | SC QSPI | LPDDR4 (DDR) | No |
+| **M-Mode + DDR, Icicle Kit** | `polarfire_mpfs250_icicle_m.config` | M-mode (E51, no HSS) | SD Card (FAT32 file) | LPDDR4 (DDR) | No |
 | **Boot mode 2 UBL** | `polarfire_mpfs250_ubl.config` | System Controller -> sNVM stub | eNVM (verifies it) | L2-LIM | No |
 
 The **M-Mode + DDR** configuration brings up the LPDDR4 controller from
@@ -251,6 +255,16 @@ defines `MPFS_DDR_INIT` and adds the directory to the include path
 still produces a working M-mode wolfBoot without DDR. Add
 `-DDEBUG_DDR` to `CFLAGS_EXTRA` for verbose register-level traces
 during bring-up.
+
+The **Icicle Kit** variant (`polarfire_mpfs250_icicle_m.config`) is the same M-mode + DDR boot on the MPFS-ICICLE-KIT (MPFS250T, a non-secure die, package `FCVG484`). Three things are board-specific and are set in that config rather than detected:
+
+- **DDR PLL BCLK/SCLK phase**, `MPFS_DDR_BCLK_PHASE`: HSS measures it per board with a software sweep; the Icicle trains at 4 where the Video Kit trains at 3. With the other board's value TIP training reports success and no DRAM write ever completes.
+- **SD/eMMC demux select**, `MPFS_SD_EMMC_DEMUX_ADDR=0x4FFFFF00`: on the Icicle the demux is a fabric register (HSS's `CONFIG_SERVICE_MMC_FABRIC_SD_EMMC_DEMUX_SELECT_ADDRESS`), not the Video Kit's IOMUX override.
+- **Libero design config**, `LIBERO_FPGA_CONFIG_DIR`: must be an Icicle export (`ICICLE_MSS`). An HSS `build/boards/mpfs-icicle-kit/fpga_design_config` is only regenerated when the XML changes, so one left behind by a Video Kit build silently carries the Video Kit's SEG and IOMUX values; the SEG difference leaves the 64-bit DDR windows unmapped and Linux dies at its first high-memory access.
+
+The config reads the signed FIT from `/wolfboot/fitImage_v1_signed.bin` on the card's FAT32 partition (`DISK_FS=fat32`), so the stock HSS/U-Boot card layout stays usable, and sets `GZIP=1` and `FIT_RAMDISK=1` for the Yocto fitImage.
+
+Validated on the Icicle: DDR training completes on every cold boot, and Linux 6.12 (4 CPUs) reaches login and survives a memory stress.
 
 The eMMC and QSPI variants are the same configuration with a different
 image store. One SDHCI controller reaches both the SD slot and the eMMC
@@ -301,6 +315,7 @@ These flags apply to `polarfire_mpfs250_m_qspi.config` and are added via `CFLAGS
 | `WATCHDOG` | undefined | Has no timeout to set on this target: the MSS watchdogs are armed by the bitstream and their window cannot be changed from software. See "Watchdog policy" below. wolfBoot refreshes all five in `hal_init()` and again in `hal_prepare_boot()` either way. |
 | `MPFS_WDT_NODES_KEEP` (make variable, `=1`) | undefined | Linux boot only: keep the five MSS watchdog nodes enabled in the dtb and stop the parked E51 from refreshing them, so the OS owns the watchdogs. See "Watchdog policy" below. |
 | `MPFS_QSPI_CLK_DIV` (make variable) | `QSPI_CLK_DIV_8` | QSPI SCK divider, a `QSPI_CLK_DIV_*` name from `hal/mpfs250.h`. See "PolarFire SoC QSPI". |
+| `MPFS_SC_PROBE` (make variable) | `1` on M-mode builds | Read-only: at boot, report whether the System Controller serves the device serial number, the TRNG nonce and PUF emulation, with two stability checks (nonce differs across calls, PUF response repeats). No value is printed, only a checksum of the PUF response for comparing boots. `MPFS_SC_PROBE=0` disables it. M-mode only. |
 | `MPFS_SNVM_DUMP` (make variable, `=1`) | undefined | Read-only: at boot, print the admin word, state and a checksum of `MPFS_SNVM_DUMP_COUNT` sNVM pages from `MPFS_SNVM_DUMP_FIRST` (defaults 2 from 200, the keystore and the wrapped image key). Page contents are never printed. M-mode only. |
 
 ### Stack overflow detection
