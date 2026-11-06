@@ -9,7 +9,7 @@ on:
 jobs:
   macos-cmake:
     name: Build on macOS (CMake + Ninja)
-    runs-on: macos-14
+    runs-on: macos-latest
     timeout-minutes: 20
 
     strategy:
