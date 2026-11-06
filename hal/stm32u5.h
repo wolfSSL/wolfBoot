@@ -207,6 +207,10 @@
 #define FLASH_SR_OPTWERR                    (1 << 13)
 #define FLASH_SR_BSY                        (1 << 16)
 #define FLASH_SR_WDW                        (1 << 17)
+/* Flags that report a failed program or erase operation */
+#define FLASH_SR_ERRORS     (FLASH_SR_OPERR | FLASH_SR_PROGERR | \
+                             FLASH_SR_WRPERR | FLASH_SR_PGAERR | \
+                             FLASH_SR_SIZERR | FLASH_SR_PGSERR)
 
 #define FLASH_CR_PG                         (1 << 0)
 #define FLASH_CR_PER                        (1 << 1)
