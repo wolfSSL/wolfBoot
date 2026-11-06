@@ -424,6 +424,82 @@ static void mpfs_ddr_bringup(void)
 #endif /* MPFS_DDR_INIT */
 #endif /* WOLFBOOT_RISCV_MMODE */
 
+#ifdef MPFS_SC_PROBE
+/* Report which System Controller services this die serves. The secure ("S")
+ * parts differ from the plain ones in what the co-processor backs, and the
+ * difference does not show until a service is asked for, so a new board is
+ * surveyed rather than assumed. Read-only, and no value is printed: the PUF
+ * response and the serial number are device-unique, so only the service
+ * status and two stability comparisons are reported. */
+static void mpfs_sc_scrub(void *p, unsigned int len)
+{
+    volatile uint8_t *b = (volatile uint8_t *)p;
+    unsigned int i;
+
+    for (i = 0; i < len; i++) {
+        b[i] = 0;
+    }
+}
+
+static void mpfs_sc_probe(void)
+{
+    uint8_t serial[DEVICE_SERIAL_NUMBER_SIZE];
+    uint8_t challenge[MPFS_PUF_CHALLENGE_LEN];
+    uint8_t resp[MPFS_PUF_RESPONSE_LEN];
+    uint8_t resp2[MPFS_PUF_RESPONSE_LEN];
+    uint8_t nonce[MPFS_NONCE_LEN];
+    uint8_t nonce2[MPFS_NONCE_LEN];
+    unsigned int i;
+    uint32_t sum;
+    int ret;
+
+    for (i = 0; i < sizeof(challenge); i++) {
+        challenge[i] = (uint8_t)i;
+    }
+
+    memset(serial, 0, sizeof(serial));
+    ret = mpfs_read_serial_number(serial);
+    wolfBoot_printf("sc probe: serial (0x00) ret %d\n", ret);
+
+    memset(nonce, 0, sizeof(nonce));
+    ret = mpfs_nonce(nonce);
+    wolfBoot_printf("sc probe: nonce (0x21) ret %d\n", ret);
+    if (ret == 0) {
+        memset(nonce2, 0, sizeof(nonce2));
+        if (mpfs_nonce(nonce2) == 0) {
+            wolfBoot_printf("sc probe: nonce random across calls: %d\n",
+                memcmp(nonce, nonce2, sizeof(nonce)) != 0);
+        }
+    }
+
+    memset(resp, 0, sizeof(resp));
+    ret = mpfs_puf_emulation(challenge, 0, resp);
+    wolfBoot_printf("sc probe: puf (0x20) ret %d\n", ret);
+    if (ret == 0) {
+        memset(resp2, 0, sizeof(resp2));
+        if (mpfs_puf_emulation(challenge, 0, resp2) == 0) {
+            wolfBoot_printf("sc probe: puf stable in boot: %d\n",
+                memcmp(resp, resp2, sizeof(resp)) == 0);
+        }
+        /* FNV-1a of the response, as mpfs_snvm_dump() does for a page: it
+         * lets two boots be compared without putting a device-unique
+         * secret on the console. Not a security primitive. */
+        sum = 0x811C9DC5u;
+        for (i = 0; i < sizeof(resp); i++) {
+            sum ^= resp[i];
+            sum *= 0x01000193u;
+        }
+        wolfBoot_printf("sc probe: puf sum %08x\n", (unsigned)sum);
+    }
+
+    mpfs_sc_scrub(serial, sizeof(serial));
+    mpfs_sc_scrub(resp, sizeof(resp));
+    mpfs_sc_scrub(resp2, sizeof(resp2));
+    mpfs_sc_scrub(nonce, sizeof(nonce));
+    mpfs_sc_scrub(nonce2, sizeof(nonce2));
+}
+#endif /* MPFS_SC_PROBE */
+
 void hal_init(void)
 {
 #ifdef WOLFBOOT_RISCV_MMODE
@@ -488,6 +564,10 @@ void hal_init(void)
 
 #ifdef MPFS_SNVM_DUMP
     mpfs_snvm_dump(MPFS_SNVM_DUMP_FIRST, MPFS_SNVM_DUMP_COUNT);
+#endif
+
+#ifdef MPFS_SC_PROBE
+    mpfs_sc_probe();
 #endif
 
 #ifdef SNVM_KEYSTORE_PROVISION
@@ -2243,17 +2323,33 @@ void mpfs_iomux_init(void)
     SYSREG_REG(SYSREG_IOMUX2_CR_OFFSET) = MPFS_IOMUX2_CR;
     SYSREG_REG(SYSREG_IOMUX3_CR_OFFSET) = MPFS_IOMUX3_CR;
 
-    /* Board GPIO drive overrides that steer the external SD/eMMC demux to the
-     * selected device; HSS does this in switch_demux_using_fabric_ip(). */
     iomux4 = MPFS_IOMUX4_CR;
     iomux5 = MPFS_IOMUX5_CR;
+#ifndef MPFS_SD_EMMC_DEMUX_ADDR
+    /* Board GPIO drive overrides that steer the external SD/eMMC demux to the
+     * selected device; HSS does this in switch_demux_using_fabric_ip(). */
     iomux4 &= ~(0xFu << 16);
     iomux4 |=  (0xDu << 16);
     iomux5 &= ~((0xFu << 0) | (0xFu << 16) | (0xFu << 28));
     iomux5 |=  MPFS_DEMUX_SELECT;
+#endif
     SYSREG_REG(SYSREG_IOMUX4_CR_OFFSET) = iomux4;
     SYSREG_REG(SYSREG_IOMUX5_CR_OFFSET) = iomux5;
     SYSREG_REG(SYSREG_IOMUX6_CR_OFFSET) = MPFS_IOMUX6_CR;
+#ifdef MPFS_SD_EMMC_DEMUX_ADDR
+    /* A design with the demux select in the fabric (the Icicle Kit's, at
+     * 0x4FFFFF00) takes it through that register instead, once the FICs are
+     * clocked and out of reset: 1 selects the SD slot, 0 the eMMC. */
+    SYSREG_SUBBLK_CLOCK_CR |= MSS_PERIPH_FIC0 | MSS_PERIPH_FIC1 |
+        MSS_PERIPH_FIC3;
+    SYSREG_SOFT_RESET_CR &= ~(MSS_PERIPH_FIC0 | MSS_PERIPH_FIC1 |
+        MSS_PERIPH_FIC3 | SYSREG_SOFT_RESET_CR_FPGA);
+#if defined(DISK_EMMC)
+    *(volatile uint32_t *)MPFS_SD_EMMC_DEMUX_ADDR = 0U;
+#else
+    *(volatile uint32_t *)MPFS_SD_EMMC_DEMUX_ADDR = 1U;
+#endif
+#endif
 
     /* Bank-wide config goes via SCB; per-pad IO_CFG goes via SYSREG. */
     SYSREGSCB_REG(SCB_MSSIO_BANK4_CFG_CR_OFFSET) =

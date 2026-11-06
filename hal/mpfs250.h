@@ -93,6 +93,7 @@
 /* Peripheral Soft Reset Control Register (offset 0x88) */
 #define SYSREG_SOFT_RESET_CR (*((volatile uint32_t*)(SYSREG_BASE + 0x88)))
 #define SYSREG_SOFT_RESET_CR_QSPI  (1U << 19)
+#define SYSREG_SOFT_RESET_CR_FPGA  (1U << 17)
 
 /* eNVM Control Register (offset 0xB8).  Bits [5:0] set the AHB-to-eNVM
  * clock divider (period = (value+1) * AHB period); bit 6 (clock-okay)
@@ -117,6 +118,9 @@
 #define MSS_PERIPH_GPIO1    (1U << 21)
 #define MSS_PERIPH_GPIO2    (1U << 22)
 #define MSS_PERIPH_DDRC     (1U << 23)
+#define MSS_PERIPH_FIC0     (1U << 24)
+#define MSS_PERIPH_FIC1     (1U << 25)
+#define MSS_PERIPH_FIC3     (1U << 27)
 #define MSS_PERIPH_ATHENA   (1U << 28)  /* Crypto hardware accelerator */
 
 /* MSS Watchdog Timer (per-hart) */

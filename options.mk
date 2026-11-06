@@ -199,6 +199,24 @@ ifneq ($(MPFS_QSPI_CLK_DIV),)
     CFLAGS+=-DMPFS_QSPI_CLK_DIV=$(MPFS_QSPI_CLK_DIV)
 endif
 
+# Per-board LPDDR4 and SD values; unset, the HAL's Video Kit defaults apply.
+ifneq ($(MPFS_DDR_BCLK_PHASE),)
+    CFLAGS+=-DMPFS_DDR_BCLK_PHASE=$(MPFS_DDR_BCLK_PHASE)
+endif
+ifneq ($(MPFS_PHY_RPC156_VAL),)
+    CFLAGS+=-DMPFS_PHY_RPC156_VAL=$(MPFS_PHY_RPC156_VAL)
+endif
+ifneq ($(MPFS_SD_EMMC_DEMUX_ADDR),)
+    CFLAGS+=-DMPFS_SD_EMMC_DEMUX_ADDR=$(MPFS_SD_EMMC_DEMUX_ADDR)
+endif
+# CPU pattern test over the mapped DDR windows after training; its only output is the console.
+ifeq ($(MPFS_DDR_MEMTEST),1)
+    ifneq ($(DEBUG_UART),1)
+        $(error MPFS_DDR_MEMTEST=1 needs DEBUG_UART=1: the test reports through the UART)
+    endif
+    CFLAGS+=-D"MPFS_DDR_MEMTEST"
+endif
+
 # Read-only survey of a range of sNVM pages at boot: each page's admin word (ROM flag), state and
 # checksum, never the contents, since one of the default range's pages holds the wrapped image key.
 MPFS_SNVM_DUMP_FIRST?=200
@@ -213,6 +231,23 @@ ifeq ($(MPFS_SNVM_DUMP),1)
     CFLAGS+=-D"MPFS_SNVM_DUMP" \
             -DMPFS_SNVM_DUMP_FIRST=$(MPFS_SNVM_DUMP_FIRST) \
             -DMPFS_SNVM_DUMP_COUNT=$(MPFS_SNVM_DUMP_COUNT)
+endif
+
+# Read-only survey of the System Controller services this die serves: serial number, nonce/TRNG and
+# PUF emulation. Prints each service's status and two stability comparisons, never a value, since the
+# PUF response and the serial number are device-unique. On by default for the M-mode mpfs250 target
+# (MPFS_SC_PROBE=0 disables it); under HSS the mailbox belongs to HSS, so an S-mode build refuses it.
+ifeq ($(TARGET)$(RISCV_MMODE),mpfs2501)
+    MPFS_SC_PROBE?=1
+endif
+ifeq ($(MPFS_SC_PROBE),1)
+    ifeq ($(WOLFBOOT_TARGET_BUILD),1)
+        ifneq ($(RISCV_MMODE),1)
+            $(error MPFS_SC_PROBE=1 needs the M-mode target (RISCV_MMODE=1): \
+                    only M-mode reaches the System Controller mailbox)
+        endif
+    endif
+    CFLAGS+=-D"MPFS_SC_PROBE"
 endif
 
 # Leave the MSS watchdog nodes in the dtb and stop the parked E51 refreshing them, so the OS owns
