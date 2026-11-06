@@ -953,7 +953,7 @@ clean:
 	$(Q)rm -f src/wolfboot_tz_nsc.o
 	$(Q)rm -f *.asm  # TI cl2000 (ARCH=C2000) intermediate listings in repo root
 	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/*.o $(WOLFBOOT_LIB_WOLFTPM)/src/fwtpm/*.o $(WOLFBOOT_LIB_WOLFTPM)/hal/*.o $(WOLFBOOT_LIB_WOLFTPM)/examples/pcr/*.o
-	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/Renesas/*.o
+	$(Q)rm -f $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/*/*.o
 	$(Q)rm -f wolfboot.bin wolfboot.elf wolfboot.map test-update.rom wolfboot.hex wolfboot.srec factory.srec
 	$(Q)rm -f $(MACHINE_OBJ) $(MAIN_TARGET) $(LSCRIPT)
 	$(Q)rm -f $(OBJS)
