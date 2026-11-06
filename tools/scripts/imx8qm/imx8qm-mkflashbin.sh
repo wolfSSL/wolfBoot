@@ -44,7 +44,9 @@ cd "$(dirname "$0")/../../.."
 
 # NOTE: this overwrites .config, wolfboot.bin, and the signing keys in the
 # working tree (it runs "make keysclean" so wolfBoot and the payload are built
-# against one freshly generated key).
+# against one freshly generated key). KEEP_KEYS=1 skips the keysclean and
+# builds against the key already in the tree, so payloads signed with it, such
+# as a FIT on the boot medium, still verify.
 
 PAYLOAD_OFFSET=$((0x200000))   # IMX8QM_BUNDLE_OFFSET (hal/imx8qm.h)
 DTB_OFFSET=$((0x300000))       # IMX8QM_DTB_OFFSET (hal/imx8qm.h)
@@ -96,7 +98,9 @@ pad_to() {
 
 cp "$CONFIG" .config
 # A failure here would silently reuse stale keys, so do not swallow it.
-make keysclean >/dev/null
+if [ "${KEEP_KEYS:-0}" != "1" ]; then
+    make keysclean >/dev/null
+fi
 make clean >/dev/null
 # Build wolfBoot and the signed payload together so they share one key.
 # shellcheck disable=SC2086  # MAKE_ARGS must word-split into separate options
