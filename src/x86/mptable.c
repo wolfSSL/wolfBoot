@@ -518,7 +518,25 @@ void mptable_setup(void)
     _mp->mpce_processor[0]._res[0] = _mp->mpce_processor[0]._res[1] = 0;
 
 
-#if defined(TARGET_kontron_vx3060_s2) || defined(TARGET_nai_68int6)
+#if defined(TARGET_nai_68int6)
+    {
+        uint8_t apic_ids[MP_CPU_NUM_ENTRY];
+        int i, j = 1, cpus;
+
+        cpus = x86_cpu_apic_ids(apic_ids, MP_CPU_NUM_ENTRY);
+        for (i = 0; i < cpus && j < MP_CPU_NUM_ENTRY; i++) {
+            if (apic_ids[i] == apic_id)
+                continue;
+            _mp->mpce_processor[j].apic_id = apic_ids[i];
+            _mp->mpce_processor[j].apic_ver = (uint8_t)(apic_ver & 0xff);
+            _mp->mpce_processor[j].cpu_flags = 0x1; /* enabled */
+            _mp->mpce_processor[j].cpu_signature = cpupid_sign;
+            _mp->mpce_processor[j].feature_flags = 0;
+            _mp->mpce_processor[j]._res[0] = _mp->mpce_processor[j]._res[1] = 0;
+            j++;
+        }
+    }
+#elif defined(TARGET_kontron_vx3060_s2)
     {
         int i;
         for (i = 1; i < 4; ++i) {

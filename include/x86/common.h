@@ -60,6 +60,8 @@ uint16_t io_read16(uint16_t port);
 void io_write32(uint16_t port, uint32_t value);
 uint32_t io_read32(uint16_t port);
 void reset(uint8_t warm);
+uint8_t cmos_read(uint8_t index);
+void cmos_write(uint8_t index, uint8_t value);
 #ifdef WOLFBOOT_TGL
 int global_reset(void);
 #endif
@@ -68,6 +70,9 @@ __attribute__((noreturn)) void panic(void);
 void cpuid(uint32_t eax_param,
            uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 int cpuid_is_1gb_page_supported(void);
+int x86_cpu_apic_ids(uint8_t *ids, int max);
+int x86_apic_ids_from_topology(uint32_t core_thread_count, uint32_t shift,
+                               uint8_t *ids, int max);
 void switch_to_long_mode(uint64_t *entry, uint32_t page_table);
 void x86_log_memory_load(uint32_t start, uint32_t end, const char *name);
 void hlt(void);

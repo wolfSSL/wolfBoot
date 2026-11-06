@@ -40,8 +40,16 @@ void hal_init(void)
     fsp_init_silicon();
 }
 
+/* Reset Control (0xCF9) FULL_RST: written alone it starts no reset, but makes
+ * any later reset a full one, as the stock BIOS does before the OS loader
+ * (its OS Reset Select default, Cold Reset). That covers SYS_RESET# from the
+ * IPMC, which is otherwise a warm reset. */
+#define RST_CNT_PORT 0xcf9
+#define RST_CNT_FULL_RST (1 << 3)
+
 void hal_prepare_boot(void)
 {
+    io_write8(RST_CNT_PORT, RST_CNT_FULL_RST);
 }
 #endif /* __WOLFBOOT */
 

@@ -162,9 +162,10 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
             continue;
         }
 
-        /* Validate segment data is within image bounds */
-        if (file_size > 0 &&
-            (offset >= image_sz || file_size > image_sz - offset)) {
+        /* Validate segment data is within image bounds and fits the
+         * segment: the copy below writes file_size bytes at vaddr. */
+        if (file_size > mem_size || (file_size > 0 &&
+            (offset >= image_sz || file_size > image_sz - offset))) {
             return -4; /* segment offset/size out of bounds */
         }
 
@@ -187,7 +188,14 @@ int elf_load_image_mmu(uint8_t *image, uint32_t image_sz, uintptr_t *pentry,
 
 #ifndef ELF_PARSER
         if (mmu_cb != NULL) {
-            if (mmu_cb(vaddr, paddr, mem_size) != 0) {
+            int map_ret = -1;
+            /* The callback takes a 32-bit size; a larger segment would be
+             * mapped and checked shorter than it is written. */
+#if UINTPTR_MAX > 0xFFFFFFFFUL
+            if (mem_size <= 0xFFFFFFFFUL)
+#endif
+                map_ret = mmu_cb(vaddr, paddr, (uint32_t)mem_size);
+            if (map_ret != 0) {
                 /* Never silently drop a PT_LOAD segment: a failed mapping
                  * leaves a hole in the image, and publishing the entry
                  * point for a partially loaded ELF is worse than failing

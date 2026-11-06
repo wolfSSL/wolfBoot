@@ -2649,6 +2649,9 @@ ifeq ("${FSP}", "1")
       OBJS+=src/x86/tgl_fsp.o
       OBJS+=src/ucode0.o
       CFLAGS += -DUCODE0_ADDRESS=$(UCODE0_BASE)
+      ifeq ($(FSP_NVS_CACHE),1)
+        OBJS+=src/x86/fsp_nvs.o
+      endif
     endif
   else
     # building wolfBoot
@@ -2695,6 +2698,9 @@ ifeq ("${FSP}", "1")
     endif
     ifeq ($(FSP_TGL), 1)
       OBJS+=src/x86/tgl_fsp.o
+      ifeq ($(FSP_NVS_CACHE),1)
+        OBJS+=src/x86/fsp_nvs.o
+      endif
     endif
   endif
   ifeq ($(64BIT),1)
