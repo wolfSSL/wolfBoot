@@ -146,6 +146,9 @@ tools/unit-tests/unit-delta
 tools/unit-tests/unit-psoc-c3-divider
 tools/unit-tests/unit-psoc-e8-tz
 tools/unit-tests/unit-psoc-e8-flash
+tools/unit-tests/unit-psoc6-flash
+tools/unit-tests/unit-psoc6-qspi
+tools/unit-tests/unit-psoc6-boot
 tools/unit-tests/unit-disk
 tools/unit-tests/unit-fs-probe
 tools/unit-tests/unit-fat32
@@ -181,6 +184,9 @@ tools/unit-tests/unit-string
 tools/unit-tests/unit-update-flash
 tools/unit-tests/unit-update-flash-enc
 tools/unit-tests/unit-update-flash-db
+tools/unit-tests/unit-update-flash-flagshome
+tools/unit-tests/unit-update-flash-invert
+tools/unit-tests/unit-update-flash-int-invert
 tools/unit-tests/unit-update-flash-enc-full
 tools/unit-tests/unit-update-flash-enc-intswap
 tools/unit-tests/unit-update-ram
@@ -427,6 +433,12 @@ lib/r_bsp
 lib/r_config
 lib/r_flash_rx
 lib/r_tsip_rx
+
+# Infineon PSoC 6 libraries
+lib/mtb-pdl-cat1
+lib/mtb-template-cat1
+lib/cmsis
+lib/core-lib
 
 Debug/
 Release/

@@ -140,10 +140,50 @@ static uint16_t host_to_img_u16(uint16_t val)
  * encryption-aware writer: in EXT_ENCRYPTED builds a raw write would leave
  * plaintext in flash that the bootloader then decrypts. The swap partition
  * is written raw, since its content is already encrypted when staged. */
+#ifndef EXT_FLASH
+/* UPDATE in internal flash: the mock's ext_flash_* calls write the same memory */
+static int ext_flash_check_write(uintptr_t addr, const uint8_t *data, int len)
+{
+    return ext_flash_write(addr, data, len);
+}
+
+static int ext_flash_check_read(uintptr_t addr, uint8_t *data, int len)
+{
+    return ext_flash_read(addr, data, len);
+}
+#endif
+
 static int update_part_write(uintptr_t addr, const void *buf, int len)
 {
     return ext_flash_check_write(addr, buf, len);
 }
+
+/* The UPDATE flags are in internal flash without EXT_FLASH, and with
+ * FLAGS_HOME, which keeps them in the BOOT trailer */
+static void update_flags_unlock(void)
+{
+#if defined(FLAGS_HOME) || !defined(EXT_FLASH)
+    hal_flash_unlock();
+#else
+    ext_flash_unlock();
+#endif
+}
+
+static void update_flags_lock(void)
+{
+#if defined(FLAGS_HOME) || !defined(EXT_FLASH)
+    hal_flash_lock();
+#else
+    ext_flash_lock();
+#endif
+}
+
+#ifdef FLAGS_HOME
+/* The BOOT trailer also holds the UPDATE flags, which a refused resume clears */
+#define BOOT_IMAGE_AREA (WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE)
+#else
+#define BOOT_IMAGE_AREA WOLFBOOT_PARTITION_SIZE
+#endif
 
 static void ext_flash_write_le16(uintptr_t addr, uint16_t val)
 {
@@ -435,6 +475,7 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
     int ret;
     wc_Sha256 sha;
     uint8_t digest[SHA256_DIGEST_SIZE];
+    uint8_t hdr_pad[IMAGE_HEADER_SIZE];
 
     ret = wc_InitSha256_ex(&sha, NULL, INVALID_DEVID);
     if (ret != 0)
@@ -447,6 +488,9 @@ static int add_payload_type(uint8_t part, uint32_t version, uint32_t size,
 
 
     hal_flash_unlock();
+    /* The sign tool pads the header with 0xFF, whatever flash erases to */
+    memset(hdr_pad, 0xFF, sizeof(hdr_pad));
+    hal_flash_write((uintptr_t)base, hdr_pad, sizeof(hdr_pad));
     hal_flash_write((uintptr_t)base, (void *)&magic, 4);
     printf("Written magic: 0x%08X\n", magic);
 
@@ -516,9 +560,9 @@ START_TEST (test_self_update_sameversion_erased)
     clear_erase_stats();
     add_payload_type(PART_UPDATE, WOLFBOOT_VERSION, TEST_SIZE_SMALL,
         HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
-    ext_flash_unlock();
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-    ext_flash_lock();
+    update_flags_lock();
 
     wolfBoot_check_self_update();
 
@@ -537,9 +581,9 @@ START_TEST (test_self_update_oldversion_erased)
     clear_erase_stats();
     add_payload_type(PART_UPDATE, WOLFBOOT_VERSION - 1, TEST_SIZE_SMALL,
         HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
-    ext_flash_unlock();
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-    ext_flash_lock();
+    update_flags_lock();
 
     wolfBoot_check_self_update();
 
@@ -584,9 +628,9 @@ START_TEST (test_self_update_newversion_copies_and_reboots)
     clear_erase_stats();
     add_payload_type(PART_UPDATE, WOLFBOOT_VERSION + 1, TEST_SIZE_SMALL,
         HDR_IMG_TYPE_WOLFBOOT | HDR_IMG_TYPE_AUTH);
-    ext_flash_unlock();
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
-    ext_flash_lock();
+    update_flags_lock();
 
     wolfBoot_check_self_update();
 
@@ -1090,7 +1134,7 @@ START_TEST (test_final_swap_propagates_encrypt_key_persist_failure)
     hal_flash_lock();
 
     mock_set_encrypt_key_ret = -5;
-    ret = wolfBoot_swap_and_final_erase(1);
+    ret = wolfBoot_swap_and_final_erase(1, 0);
 
     ck_assert_int_eq(ret, -5);
     ck_assert_int_eq(mock_set_encrypt_key_calls, 1);
@@ -1110,7 +1154,7 @@ START_TEST (test_final_swap_propagates_encrypt_key_read_failure)
     add_payload(PART_UPDATE, 2, TEST_SIZE_SMALL);
 
     mock_get_encrypt_key_ret = -7;
-    ret = wolfBoot_swap_and_final_erase(0);
+    ret = wolfBoot_swap_and_final_erase(0, 0);
 
     ck_assert_int_eq(ret, -7);
     ck_assert_int_eq(mock_set_encrypt_key_calls, 0);
@@ -1144,11 +1188,16 @@ START_TEST (test_final_swap_aborts_on_backup_copy_failure)
 
     add_payload(PART_BOOT, 1, 30700);
 
+#ifdef PART_SWAP_EXT
     ext_flash_write_fail = 1;
-    ret = wolfBoot_swap_and_final_erase(0);
+#else
+    hal_flash_write_fail = 1;
+#endif
+    ret = wolfBoot_swap_and_final_erase(0, 0);
 
     ck_assert_int_lt(ret, 0);
     ck_assert_int_eq(ext_flash_write_fail, 0);
+    ck_assert_int_eq(hal_flash_write_fail, 0);
     /* The update state must be unset: a failed backup must not leave the
      * update partition marked FINAL_FLAGS. */
     ck_assert_int_ne(wolfBoot_get_partition_state(PART_UPDATE, &update_state),
@@ -1176,17 +1225,26 @@ START_TEST (test_final_swap_aborts_on_restore_copy_failure)
 
     add_payload(PART_BOOT, 1, 30700);
 
-    ext_flash_unlock();
+    /* Start confirmed, so a skipped BOOT state reset leaves SUCCESS behind */
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+    hal_flash_lock();
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
-    ext_flash_lock();
+    update_flags_lock();
 
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* The BOOT state reset rewrites the shared trailer before the restore */
+    hal_flash_write_fail = 1 + (WOLFBOOT_SECTOR_SIZE / FLASHBUFFER_SIZE);
+#else
     hal_flash_write_fail = 1;
-    ret = wolfBoot_swap_and_final_erase(1);
+#endif
+    ret = wolfBoot_swap_and_final_erase(1, 0);
 
     ck_assert_int_lt(ret, 0);
     ck_assert_int_eq(hal_flash_write_fail, 0);
-    /* The boot state must be unset: the state sector was erased before the
-     * restore and TESTING must not be written after a failed restore. */
+    /* The boot state must be reset before the restore, and TESTING must not
+     * be written after a failed restore. */
     ck_assert_int_ne(wolfBoot_get_partition_state(PART_BOOT, &boot_state), 0);
     /* The backup completed, so FINAL_FLAGS is set: the next boot's resume
      * path re-enters and retries the restore from SWAP. */
@@ -1197,6 +1255,105 @@ START_TEST (test_final_swap_aborts_on_restore_copy_failure)
     cleanup_flash();
 }
 END_TEST
+
+#if !defined(DELTA_UPDATES) && !defined(ALLOW_DOWNGRADE)
+/* The rollback check with BOOT sector 0 erased, or torn after the magic and
+ * size, as a cut while a resumed final erase restores it leaves it. With
+ * from_swap the BOOT version comes from the SWAP backup of that sector. */
+static int rollback_check(uint32_t boot_ver, uint32_t update_ver,
+    int swap_valid, int short_read, int torn_header, int from_swap)
+{
+    static uint8_t hdr_sector[WOLFBOOT_SECTOR_SIZE];
+    struct wolfBoot_image swap;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, boot_ver, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, update_ver, TEST_SIZE_SMALL);
+    memcpy(hdr_sector, (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        sizeof(hdr_sector));
+    wolfBoot_open_image(&swap, PART_SWAP);
+    hal_flash_unlock();
+    ext_flash_unlock();
+    wb_flash_erase(&swap, 0, WOLFBOOT_SECTOR_SIZE);
+    if (swap_valid)
+        wb_flash_write(&swap, 0, hdr_sector, WOLFBOOT_SECTOR_SIZE);
+    hal_flash_erase(WOLFBOOT_PARTITION_BOOT_ADDRESS, WOLFBOOT_SECTOR_SIZE);
+    if (torn_header)
+        hal_flash_write(WOLFBOOT_PARTITION_BOOT_ADDRESS, hdr_sector, 8);
+    ext_flash_lock();
+    hal_flash_lock();
+#ifdef PART_SWAP_EXT
+    if (short_read) {
+        /* SWAP only: UPDATE is read whole to verify it first */
+        mock_ext_flash_short_len = IMAGE_HEADER_SIZE;
+        mock_ext_flash_short_bytes = 4;
+        mock_ext_flash_short_addr = (uintptr_t)swap.hdr;
+    }
+#else
+    (void)short_read;
+#endif
+    ret = wolfBoot_swap_was_rollback(1, from_swap);
+    mock_ext_flash_short_len = 0;
+    mock_ext_flash_short_bytes = 0;
+    mock_ext_flash_short_addr = 0;
+    cleanup_flash();
+    return ret;
+}
+
+START_TEST (test_swap_was_rollback_without_boot_header)
+{
+    /* from the backup: an update, a rollback, a rollback to version 0 */
+    ck_assert_int_eq(rollback_check(2, 1, 1, 0, 0, 1), 0);
+    ck_assert_int_eq(rollback_check(1, 2, 1, 0, 0, 1), 1);
+    ck_assert_int_eq(rollback_check(0, 1, 1, 0, 0, 1), 1);
+    ck_assert_int_eq(rollback_check(1, 2, 1, 0, 1, 1), 1);
+    /* unknown: no backup, an erased BOOT header, a short read */
+    ck_assert_int_eq(rollback_check(1, 2, 0, 0, 0, 1), 0);
+    ck_assert_int_eq(rollback_check(1, 2, 1, 0, 0, 0), 0);
+#ifdef PART_SWAP_EXT
+    ck_assert_int_eq(rollback_check(1, 2, 1, 1, 0, 1), 0);
+#endif
+}
+END_TEST
+
+/* The direction check from intact headers, with one UPDATE byte changed in
+ * the header or the payload when tamper_at is not 0 */
+static int rollback_check_intact(uint32_t boot_ver, uint32_t update_ver,
+    uint32_t tamper_at, int resume)
+{
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, boot_ver, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, update_ver, TEST_SIZE_SMALL);
+    if (tamper_at != 0)
+        *(volatile uint8_t *)(uintptr_t)(MOCK_ADDRESS_UPDATE + tamper_at) ^=
+            0x5A;
+    ret = wolfBoot_swap_was_rollback(resume, 0);
+    cleanup_flash();
+    return ret;
+}
+
+/* UPDATE may sit in external flash: only an authentic image newer than BOOT
+ * makes a resume finish as a rollback and confirm BOOT */
+START_TEST (test_swap_was_rollback_needs_authentic_newer_update)
+{
+    ck_assert_int_eq(rollback_check_intact(1, 2, 0, 1), 1);
+    ck_assert_int_eq(rollback_check_intact(2, 1, 0, 1), 0);
+    /* a copy of the installed image */
+    ck_assert_int_eq(rollback_check_intact(2, 2, 0, 1), 0);
+    /* a changed header, as for a forged version, and a changed payload */
+    ck_assert_int_eq(rollback_check_intact(1, 2, 16, 1), 0);
+    ck_assert_int_eq(rollback_check_intact(1, 2, IMAGE_HEADER_SIZE + 16, 1),
+        0);
+    /* a fallback, decided from the BOOT state, keeps equal versions */
+    ck_assert_int_eq(rollback_check_intact(2, 2, 0, 0), 1);
+}
+END_TEST
+#endif
 #endif /* !DISABLE_BACKUP && !CUSTOM_PARTITION_TRAILER && !EXT_ENCRYPTED */
 
 /* A completed DISABLE_BACKUP update must consume the update partition:
@@ -1539,16 +1696,16 @@ START_TEST(test_rollback_resume_from_swapping_flag)
     resume_setup();
     wolfBoot_start();
     ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
-    ext_flash_unlock();
 #ifdef CUSTOM_PARTITION_TRAILER
     /* written by the rollback before its first sector */
     hal_flash_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_ROLLBACK);
     hal_flash_lock();
 #else
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_UPDATING);
+    update_flags_lock();
 #endif
-    ext_flash_lock();
     cut_after_sector0_backup_erase();
     wolfBoot_start();
     ck_assert(!wolfBoot_panicked);
@@ -1598,7 +1755,7 @@ static void resume_with_version(uint32_t boot_ver, uint32_t update_ver)
     ck_assert_uint_eq(wolfBoot_current_firmware_version(), boot_ver);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
-               resume_boot_snap, WOLFBOOT_PARTITION_SIZE),
+               resume_boot_snap, BOOT_IMAGE_AREA),
         0);
     cleanup_flash();
 }
@@ -1633,7 +1790,7 @@ static void swap_copy_set_u32(uint32_t off, uint32_t val)
     wolfBoot_open_image(&swap, PART_SWAP);
     hal_flash_unlock();
     ext_flash_unlock();
-    wb_flash_write(&swap, off, &word, sizeof(word));
+    wb_flash_write(&swap, off, (uint8_t *)&word, sizeof(word));
     ext_flash_lock();
     hal_flash_lock();
 }
@@ -1668,7 +1825,7 @@ static void resume_with_bad_swap_field(uint32_t off, uint32_t val)
     ck_assert_int_lt(wolfBoot_update(0), 0);
     ck_assert_int_eq(
         memcmp((const void*)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS,
-               resume_boot_snap, WOLFBOOT_PARTITION_SIZE),
+               resume_boot_snap, BOOT_IMAGE_AREA),
         0);
     cleanup_flash();
 }
@@ -1758,6 +1915,550 @@ START_TEST (test_update_then_rollback_smaller)
     roundtrip_run(TEST_SIZE_SMALL / 2);
 }
 END_TEST
+
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(EXT_ENCRYPTED) && !defined(CUSTOM_PARTITION_TRAILER)
+/* A power cycle loses RAM state and keeps flash */
+static void mock_power_cycle(void)
+{
+    locked = 1;
+    ext_flash_reset_lock();
+#ifdef NVM_FLASH_WRITEONCE
+    nvm_cached_sector = 0;
+#endif
+    wolfBoot_panicked = 0;
+    wolfBoot_staged_ok = 0;
+}
+
+/* Power-cut runs start from a v1 with no trailer, or from a confirmed v1 */
+static int powercut_confirmed;
+
+/* Size of the original v1 image: the largest update starts from a largest
+ * original, so a rollback also restores image data in the staging sector */
+static uint32_t powercut_boot_size(uint32_t update_size)
+{
+    return (update_size == MAX_UPDATE_SIZE) ? MAX_UPDATE_SIZE : TEST_SIZE_SMALL;
+}
+
+/* Each start state is built and hashed once, then copied in for every cut */
+static struct {
+    uint32_t update_size;
+    int confirmed;
+    uint8_t boot[WOLFBOOT_PARTITION_SIZE];
+    uint8_t update[WOLFBOOT_PARTITION_SIZE];
+} powercut_cache[8];
+static int powercut_cached;
+
+static void powercut_setup(uint32_t update_size)
+{
+    int i;
+
+    reset_mock_stats();
+    prepare_flash();
+    for (i = 0; i < powercut_cached; i++) {
+        if ((powercut_cache[i].update_size == update_size) &&
+                (powercut_cache[i].confirmed == powercut_confirmed))
+            break;
+    }
+    if (i < powercut_cached) {
+        memcpy((void *)(uintptr_t)MOCK_ADDRESS_BOOT, powercut_cache[i].boot,
+            WOLFBOOT_PARTITION_SIZE);
+        memcpy((void *)(uintptr_t)MOCK_ADDRESS_UPDATE,
+            powercut_cache[i].update, WOLFBOOT_PARTITION_SIZE);
+    }
+    else {
+        add_payload(PART_BOOT, 1, powercut_boot_size(update_size));
+        add_payload(PART_UPDATE, 2, update_size);
+        if (powercut_confirmed) {
+            hal_flash_unlock();
+            wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+            hal_flash_lock();
+        }
+        if (powercut_cached < (int)(sizeof(powercut_cache) /
+                sizeof(powercut_cache[0]))) {
+            powercut_cache[i].update_size = update_size;
+            powercut_cache[i].confirmed = powercut_confirmed;
+            memcpy(powercut_cache[i].boot,
+                (const void *)(uintptr_t)MOCK_ADDRESS_BOOT,
+                WOLFBOOT_PARTITION_SIZE);
+            memcpy(powercut_cache[i].update,
+                (const void *)(uintptr_t)MOCK_ADDRESS_UPDATE,
+                WOLFBOOT_PARTITION_SIZE);
+            powercut_cached++;
+        }
+    }
+    mock_power_cycle();
+}
+
+static void boot_after_cut(int n, const char *step)
+{
+    mock_power_cycle();
+    wolfBoot_start();
+    ck_assert_msg(!wolfBoot_panicked && wolfBoot_staged_ok,
+        "no image boots after a power cut at flash op %d (%s)", n, step);
+}
+
+/* Cut power before flash operation n of an update, then boot twice. The
+ * unconfirmed update must roll back to the original image, byte for byte.
+ * Returns 0 once n is past the last flash operation of the update. */
+static int powercut_update_run(uint32_t update_size, int n)
+{
+    uint32_t total_size = powercut_boot_size(update_size) + IMAGE_HEADER_SIZE;
+    int cut;
+
+    powercut_setup(update_size);
+    memcpy(roundtrip_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, total_size);
+    wolfBoot_update_trigger();
+    mock_flash_ops = 0;
+    mock_powercut_at = n;
+    cut = setjmp(mock_powercut_jmp);
+    if (cut == 0) {
+        wolfBoot_start();
+        mock_powercut_at = -1;
+    }
+    else {
+        boot_after_cut(n, "update");
+        boot_after_cut(n, "rollback");
+        ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+            "update of %u bytes cut at flash op %d (torn mode %d, v1 %s): "
+            "version %u after rollback", update_size, n, mock_powercut_torn,
+            powercut_confirmed ? "confirmed" : "unconfirmed",
+            wolfBoot_current_firmware_version());
+        ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+            WOLFBOOT_PARTITION_BOOT_ADDRESS, roundtrip_boot_snap,
+            total_size), 0);
+    }
+    cleanup_flash();
+    return cut;
+}
+
+/* Install the update, then cut power during flash operation n of
+ * wolfBoot_success(). The next boot keeps the update if the confirmation
+ * landed and rolls back otherwise, and the boot after that agrees. */
+static int powercut_confirm_run(uint32_t update_size, int n)
+{
+    uint8_t st = 0;
+    uint32_t ver;
+    int committed;
+    int cut;
+
+    powercut_setup(update_size);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
+    mock_flash_ops = 0;
+    mock_powercut_at = n;
+    cut = setjmp(mock_powercut_jmp);
+    if (cut == 0) {
+        wolfBoot_success();
+        mock_powercut_at = -1;
+        ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+        ck_assert_uint_eq(st, IMG_STATE_SUCCESS);
+    }
+    else {
+        /* The state the next boot reads: only a committed SUCCESS keeps v2 */
+        mock_power_cycle();
+        hal_flash_unlock();
+        committed = (wolfBoot_get_partition_state(PART_BOOT, &st) == 0) &&
+            (st == IMG_STATE_SUCCESS);
+        hal_flash_lock();
+        boot_after_cut(n, "confirm");
+        ver = wolfBoot_current_firmware_version();
+        ck_assert_msg(ver == (committed ? 2U : 1U),
+            "update of %u bytes, confirm cut at flash op %d: version %u with "
+            "the confirmation %s", update_size, n, ver,
+            committed ? "committed" : "not committed");
+        boot_after_cut(n, "confirm reboot");
+        ck_assert_msg(wolfBoot_current_firmware_version() == ver,
+            "update of %u bytes, confirm cut at flash op %d: version %u, "
+            "then %u", update_size, n, ver,
+            wolfBoot_current_firmware_version());
+    }
+    cleanup_flash();
+    return cut;
+}
+
+/* True when the last cut hit the trailer sectors of BOOT or UPDATE */
+static int powercut_in_trailer(void)
+{
+    const uintptr_t base[2] = { WOLFBOOT_PARTITION_BOOT_ADDRESS,
+        WOLFBOOT_PARTITION_UPDATE_ADDRESS };
+    uintptr_t start;
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        start = base[i] + WOLFBOOT_PARTITION_SIZE - TRAILER_LEN;
+        if ((mock_powercut_addr < start + TRAILER_LEN) &&
+                (mock_powercut_addr + (uintptr_t)mock_powercut_size > start))
+            return 1;
+    }
+    return 0;
+}
+
+/* A cut in a trailer write or erase runs in all four torn modes. Data
+ * copies are redone on resume, so their torn mode turns with the cut point
+ * to keep the sweeps fast. */
+static int powercut_points(int (*run)(uint32_t, int), uint32_t update_size,
+    int offset)
+{
+    int n = 0;
+    int more;
+    int k;
+
+    do {
+        mock_powercut_torn = (n + offset) % 4;
+        more = run(update_size, n);
+        if (more && powercut_in_trailer()) {
+            for (k = 1; k < 4; k++) {
+                mock_powercut_torn = (n + offset + k) % 4;
+                ck_assert_int_ne(run(update_size, n), 0);
+            }
+        }
+        n++;
+    } while (more);
+    mock_powercut_torn = 0;
+    return n - 1;
+}
+
+/* Sizes spanning an even and an odd number of sectors, and the largest
+ * update, which overlaps the staging sector */
+static const uint32_t powercut_sizes[] = {
+    TEST_SIZE_LARGE, TEST_SIZE_LARGE + WOLFBOOT_SECTOR_SIZE, MAX_UPDATE_SIZE
+};
+
+/* Every size, from an unconfirmed and a confirmed v1, with the cut operation
+ * not started or only partly done */
+static void powercut_all(int (*run)(uint32_t, int))
+{
+    unsigned int i;
+
+    for (powercut_confirmed = 0; powercut_confirmed < 2; powercut_confirmed++) {
+        for (i = 0; i < sizeof(powercut_sizes) / sizeof(powercut_sizes[0]);
+                i++) {
+            ck_assert_int_gt(powercut_points(run, powercut_sizes[i],
+                (int)i + powercut_confirmed), 0);
+        }
+    }
+    powercut_confirmed = 0;
+}
+
+/* The sweeps boot thousands of times: keep their wolfBoot_printf log, which
+ * goes to stderr, out of the output. Failures are still reported by check. */
+static int powercut_stderr = -1;
+
+static void powercut_quiet(void)
+{
+    int null_fd = open("/dev/null", O_WRONLY);
+
+    fflush(stderr);
+    powercut_stderr = dup(STDERR_FILENO);
+    if (null_fd >= 0) {
+        dup2(null_fd, STDERR_FILENO);
+        close(null_fd);
+    }
+    /* unbuffered, every line would still cost a write */
+    setvbuf(stderr, NULL, _IOFBF, 1 << 16);
+}
+
+static void powercut_loud(void)
+{
+    fflush(stderr);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    if (powercut_stderr >= 0) {
+        dup2(powercut_stderr, STDERR_FILENO);
+        close(powercut_stderr);
+        powercut_stderr = -1;
+    }
+}
+
+START_TEST (test_update_power_cut_rolls_back)
+{
+    powercut_all(powercut_update_run);
+}
+END_TEST
+
+START_TEST (test_confirm_power_cut_keeps_one_image)
+{
+    powercut_all(powercut_confirm_run);
+}
+END_TEST
+
+/* Install the update, leave it unconfirmed, then cut power before flash
+ * operation n of the rollback. Every later boot must stay on the original. */
+static int powercut_rollback_run(uint32_t update_size, int n)
+{
+    uint32_t total_size = powercut_boot_size(update_size) + IMAGE_HEADER_SIZE;
+    int boot;
+    int cut;
+
+    powercut_setup(update_size);
+    memcpy(roundtrip_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, total_size);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
+    mock_power_cycle();
+    mock_flash_ops = 0;
+    mock_powercut_at = n;
+    cut = setjmp(mock_powercut_jmp);
+    if (cut == 0) {
+        wolfBoot_start();
+        mock_powercut_at = -1;
+        ck_assert_uint_eq(wolfBoot_current_firmware_version(), 1);
+    }
+    else {
+        for (boot = 0; boot < 3; boot++) {
+            boot_after_cut(n, "rollback");
+            ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+                "update of %u bytes, rollback cut at flash op %d (torn mode "
+                "%d, v1 %s): version %u on boot %d", update_size, n,
+                mock_powercut_torn,
+                powercut_confirmed ? "confirmed" : "unconfirmed",
+                wolfBoot_current_firmware_version(), boot + 1);
+        }
+        ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+            WOLFBOOT_PARTITION_BOOT_ADDRESS, roundtrip_boot_snap,
+            total_size), 0);
+    }
+    cleanup_flash();
+    return cut;
+}
+
+/* A rollback to a version 0 image is confirmed, like any other */
+START_TEST (test_rollback_to_version_zero_stays)
+{
+    uint8_t st = 0;
+    int boot;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 0, TEST_SIZE_SMALL);
+    add_payload(PART_UPDATE, 1, TEST_SIZE_LARGE);
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+    hal_flash_lock();
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 1);
+    for (boot = 0; boot < 3; boot++) {
+        boot_after_cut(0, "rollback to version 0");
+        ck_assert_msg(wolfBoot_current_firmware_version() == 0,
+            "version %u on boot %d", wolfBoot_current_firmware_version(),
+            boot + 1);
+    }
+    hal_flash_unlock();
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+    hal_flash_lock();
+    ck_assert_uint_eq(st, IMG_STATE_SUCCESS);
+    cleanup_flash();
+}
+END_TEST
+
+START_TEST (test_rollback_power_cut_keeps_original)
+{
+    powercut_all(powercut_rollback_run);
+}
+END_TEST
+
+/* Install the update, leave it unconfirmed, then fail erase k of the rollback
+ * boot. The boots after it must all run the original image, byte for byte.
+ * Returns 0 once k is past the last erase of the rollback. */
+static int rollback_erase_fail_run(uint32_t update_size, int k)
+{
+    uint32_t total_size = powercut_boot_size(update_size) + IMAGE_HEADER_SIZE;
+    int boot;
+    int failed;
+
+    powercut_setup(update_size);
+    memcpy(roundtrip_boot_snap,
+        (const void *)(uintptr_t)WOLFBOOT_PARTITION_BOOT_ADDRESS, total_size);
+    wolfBoot_update_trigger();
+    wolfBoot_start();
+    ck_assert_uint_eq(wolfBoot_current_firmware_version(), 2);
+    mock_power_cycle();
+    hal_flash_erase_fail = k;
+    hal_flash_erase_fail_ret = -1;
+    wolfBoot_start();
+    failed = (hal_flash_erase_fail == 0);
+    hal_flash_erase_fail = 0;
+    if (failed) {
+        for (boot = 0; boot < 3; boot++) {
+            boot_after_cut(k, "rollback erase failure");
+            ck_assert_msg(wolfBoot_current_firmware_version() == 1,
+                "update of %u bytes, rollback erase %d failed (v1 %s): "
+                "version %u on boot %d", update_size, k,
+                powercut_confirmed ? "confirmed" : "unconfirmed",
+                wolfBoot_current_firmware_version(), boot + 1);
+        }
+        ck_assert_int_eq(memcmp((const void *)(uintptr_t)
+            WOLFBOOT_PARTITION_BOOT_ADDRESS, roundtrip_boot_snap,
+            total_size), 0);
+    }
+    cleanup_flash();
+    return failed;
+}
+
+START_TEST (test_rollback_erase_failure_keeps_original)
+{
+    unsigned int i;
+    int k;
+
+    for (powercut_confirmed = 0; powercut_confirmed < 2; powercut_confirmed++) {
+        for (i = 0; i < sizeof(powercut_sizes) / sizeof(powercut_sizes[0]);
+                i++) {
+            for (k = 1; rollback_erase_fail_run(powercut_sizes[i], k); k++)
+                ;
+            ck_assert_int_gt(k, 1);
+        }
+    }
+    powercut_confirmed = 0;
+}
+END_TEST
+
+
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+/* A power cut while the update trigger rewrites the shared trailer must not
+ * lose the BOOT state held in the same trailer */
+START_TEST (test_flags_home_trigger_power_cut_keeps_boot_state)
+{
+    uint8_t st = 0;
+    int torn;
+    int n;
+
+    powercut_confirmed = 1;
+    for (torn = 0; torn < 4; torn++) {
+        mock_powercut_torn = torn;
+        for (n = 0; ; n++) {
+            powercut_setup(TEST_SIZE_LARGE);
+            mock_flash_ops = 0;
+            mock_powercut_at = n;
+            if (setjmp(mock_powercut_jmp) == 0) {
+                wolfBoot_update_trigger();
+                mock_powercut_at = -1;
+                cleanup_flash();
+                break;
+            }
+            mock_power_cycle();
+            hal_flash_unlock();
+            ck_assert_msg((wolfBoot_get_partition_state(PART_BOOT, &st) == 0) &&
+                (st == IMG_STATE_SUCCESS), "trigger cut at flash op %d (torn "
+                "mode %d) lost the BOOT state", n, torn);
+            hal_flash_lock();
+            cleanup_flash();
+        }
+        ck_assert_int_gt(n, 0);
+    }
+    powercut_confirmed = 0;
+    mock_powercut_torn = 0;
+}
+END_TEST
+#endif
+
+#ifdef WOLFBOOT_SHARED_TRAILER
+/* A torn erase of the old copy can keep its last 8 bytes, a whole BOOT
+ * record, next to the new copy holding FINAL_FLAGS, which must stay in use */
+START_TEST (test_flags_home_torn_erase_keeps_final_flags)
+{
+    static uint8_t tail[8];
+    uintptr_t last = (PART_BOOT_ENDFLAGS - 1U) &
+        ~((uintptr_t)WOLFBOOT_SECTOR_SIZE - 1U);
+    uintptr_t old_copy;
+    uint8_t st = 0;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    old_copy = last - ((uintptr_t)nvm_select_fresh_sector(PART_UPDATE) *
+        WOLFBOOT_SECTOR_SIZE);
+    memcpy(tail, (const void *)(old_copy + WOLFBOOT_SECTOR_SIZE - sizeof(tail)),
+        sizeof(tail));
+    ck_assert_int_eq(wolfBoot_flags_home_reset_boot(), 0);
+    hal_flash_write(old_copy + WOLFBOOT_SECTOR_SIZE - sizeof(tail), tail,
+        sizeof(tail));
+    hal_flash_lock();
+    mock_power_cycle();
+    hal_flash_unlock();
+    ck_assert_int_eq(wolfBoot_get_partition_state(PART_UPDATE, &st), 0);
+    ck_assert_uint_eq(st, IMG_STATE_FINAL_FLAGS);
+    hal_flash_lock();
+    cleanup_flash();
+}
+END_TEST
+
+/* A failed write or erase in either shared-trailer commit is reported as -1,
+ * whatever the driver returned, and the trailer holds either FINAL_FLAGS or
+ * the whole committed state */
+static int shared_trailer_fail_at(int erase, int code, int commit, int k)
+{
+    uint8_t st = 0;
+    int left;
+    int ret;
+
+    reset_mock_stats();
+    prepare_flash();
+    add_payload(PART_BOOT, 1, TEST_SIZE_SMALL);
+    hal_flash_unlock();
+    wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_FINAL_FLAGS);
+    if (erase) {
+        hal_flash_erase_fail = k;
+        hal_flash_erase_fail_ret = code;
+    }
+    else {
+        hal_flash_write_fail = k;
+        hal_flash_write_fail_ret = code;
+    }
+    ret = commit ? wolfBoot_flags_home_set_boot(IMG_STATE_TESTING) :
+        wolfBoot_flags_home_reset_boot();
+    left = erase ? hal_flash_erase_fail : hal_flash_write_fail;
+    hal_flash_erase_fail = 0;
+    hal_flash_write_fail = 0;
+    if (left != 0) {
+        /* fewer than k operations: the commit ran to the end */
+        ck_assert_int_eq(ret, 0);
+    }
+    else {
+        ck_assert_int_eq(ret, -1);
+        if (wolfBoot_get_partition_state(PART_UPDATE, &st) == 0) {
+            ck_assert_uint_eq(st, IMG_STATE_FINAL_FLAGS);
+        }
+        else {
+            /* only the erase of the old copy failed */
+            ck_assert(commit);
+            ck_assert_int_eq(wolfBoot_get_partition_state(PART_BOOT, &st), 0);
+            ck_assert_uint_eq(st, IMG_STATE_TESTING);
+        }
+    }
+    hal_flash_lock();
+    cleanup_flash();
+    return left == 0;
+}
+
+START_TEST (test_shared_trailer_flash_error_reported)
+{
+    static const int codes[2] = { -1, 0x00520005 }; /* positive driver status */
+    int erase;
+    int code;
+    int commit;
+    int k;
+
+    for (erase = 0; erase < 2; erase++) {
+        for (code = 0; code < 2; code++) {
+            for (commit = 0; commit < 2; commit++) {
+                for (k = 1; shared_trailer_fail_at(erase, codes[code], commit,
+                        k); k++)
+                    ;
+                ck_assert_int_gt(k, 1);
+            }
+        }
+    }
+}
+END_TEST
+#endif
+#endif
 #endif /* !DISABLE_BACKUP */
 
 START_TEST (test_forward_update_tolarger) {
@@ -2065,10 +2766,10 @@ START_TEST (test_swap_resume_noop)
 {
     reset_mock_stats();
     prepare_flash();
-    ext_flash_unlock();
+    update_flags_unlock();
     wolfBoot_set_partition_state(PART_UPDATE, IMG_STATE_NEW);
-    ext_flash_lock();
-    ck_assert_int_eq(wolfBoot_swap_and_final_erase(1), -1);
+    update_flags_lock();
+    ck_assert_int_eq(wolfBoot_swap_and_final_erase(1, 0), -1);
     cleanup_flash();
 }
 END_TEST
@@ -2601,6 +3302,10 @@ Suite *wolfboot_suite(void)
     TCase *zero_size_update = tcase_create("Zero size update");
     TCase *invalid_sha = tcase_create("Invalid SHA digest");
     TCase *emergency_rollback = tcase_create("Emergency rollback");
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(EXT_ENCRYPTED) && !defined(CUSTOM_PARTITION_TRAILER)
+    TCase *power_cut = tcase_create("Power cut during update");
+#endif
     TCase *emergency_rollback_failure_due_to_bad_update = tcase_create("Emergency rollback failure due to bad update");
     TCase *empty_boot_partition_update = tcase_create("Empty boot partition update");
     TCase *empty_boot_but_update_sha_corrupted_denied = tcase_create("Empty boot partition but update SHA corrupted");
@@ -2660,6 +3365,12 @@ Suite *wolfboot_suite(void)
     !defined(EXT_ENCRYPTED)
     tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_backup_copy_failure);
     tcase_add_test(forward_update_samesize, test_final_swap_aborts_on_restore_copy_failure);
+#if !defined(DELTA_UPDATES) && !defined(ALLOW_DOWNGRADE)
+    tcase_add_test(forward_update_samesize,
+        test_swap_was_rollback_without_boot_header);
+    tcase_add_test(forward_update_samesize,
+        test_swap_was_rollback_needs_authentic_newer_update);
+#endif
 #endif
 #if defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     tcase_add_test(forward_update_samesize,
@@ -2711,6 +3422,23 @@ Suite *wolfboot_suite(void)
     tcase_add_test(emergency_rollback, test_update_then_rollback_samesize);
     tcase_add_test(emergency_rollback, test_update_then_rollback_larger);
     tcase_add_test(emergency_rollback, test_update_then_rollback_smaller);
+#endif
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(EXT_ENCRYPTED) && !defined(CUSTOM_PARTITION_TRAILER)
+    tcase_add_test(power_cut, test_update_power_cut_rolls_back);
+    tcase_add_test(power_cut, test_confirm_power_cut_keeps_one_image);
+    tcase_add_test(power_cut, test_rollback_power_cut_keeps_original);
+    tcase_add_test(power_cut, test_rollback_to_version_zero_stays);
+    tcase_add_test(power_cut, test_rollback_erase_failure_keeps_original);
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE)
+    tcase_add_test(power_cut, test_flags_home_trigger_power_cut_keeps_boot_state);
+#endif
+#ifdef WOLFBOOT_SHARED_TRAILER
+    tcase_add_test(power_cut, test_flags_home_torn_erase_keeps_final_flags);
+    tcase_add_test(power_cut, test_shared_trailer_flash_error_reported);
+#endif
+    tcase_add_checked_fixture(power_cut, powercut_quiet, powercut_loud);
+    tcase_set_timeout(power_cut, 600);
 #endif
     tcase_add_test(emergency_rollback_failure_due_to_bad_update, test_emergency_rollback_failure_due_to_bad_update);
     tcase_add_test(empty_boot_partition_update, test_empty_boot_partition_update);
@@ -2770,6 +3498,10 @@ Suite *wolfboot_suite(void)
     suite_add_tcase(s, zero_size_update);
     suite_add_tcase(s, invalid_sha);
     suite_add_tcase(s, emergency_rollback);
+#if !defined(DISABLE_BACKUP) && !defined(DELTA_UPDATES) && \
+    !defined(EXT_ENCRYPTED) && !defined(CUSTOM_PARTITION_TRAILER)
+    suite_add_tcase(s, power_cut);
+#endif
     suite_add_tcase(s, emergency_rollback_failure_due_to_bad_update);
     suite_add_tcase(s, empty_boot_partition_update);
     suite_add_tcase(s, empty_boot_but_update_sha_corrupted_denied);

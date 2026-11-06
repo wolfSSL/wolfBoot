@@ -35,6 +35,56 @@ static int erased_nvm_bank0 = 0;
 static int erased_nvm_bank1 = 0;
 static int erased_vault = 0;
 static int hal_flash_write_fail = 0;
+
+#include <setjmp.h>
+/* Power cut: flash operation number mock_powercut_at (from 0) longjmp()s to
+ * mock_powercut_jmp before it runs, or after only its first half, its second
+ * half, or all but its last word ran (mock_powercut_torn 1 to 3) */
+static int mock_powercut_at = -1;
+static int mock_powercut_torn;
+static int mock_powercut_pending;
+static int mock_flash_ops;
+/* Address and length of the operation the last cut hit */
+static uintptr_t mock_powercut_addr;
+static int mock_powercut_size;
+static jmp_buf mock_powercut_jmp;
+static int hal_flash_write_fail_ret = -1;
+static int hal_flash_erase_fail;
+static int hal_flash_erase_fail_ret = -1;
+
+/* Returns how much of an operation of len bytes runs before the cut, from
+ * *skip bytes into it */
+static int mock_powercut_len(uintptr_t address, int len, int *skip)
+{
+    *skip = 0;
+    if ((mock_powercut_at >= 0) && (mock_flash_ops++ == mock_powercut_at)) {
+        mock_powercut_at = -1;
+        mock_powercut_addr = address;
+        mock_powercut_size = len;
+        if (!mock_powercut_torn)
+            longjmp(mock_powercut_jmp, 1);
+        mock_powercut_pending = 1;
+        switch (mock_powercut_torn) {
+            case 1:
+                return len / 2;
+            case 2:
+                *skip = len / 2;
+                break;
+            default:
+                return (len > 4) ? (len - 4) : 0;
+        }
+        return len - *skip;
+    }
+    return len;
+}
+
+static void mock_powercut_finish(void)
+{
+    if (mock_powercut_pending) {
+        mock_powercut_pending = 0;
+        longjmp(mock_powercut_jmp, 1);
+    }
+}
 const char *argv0;
 
 #ifdef NVM_FLASH_ECC
@@ -198,11 +248,18 @@ void hal_init(void)
 int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
 {
     int i;
+    int skip;
     uint8_t *a = (uint8_t *)(uintptr_t)address;
     ck_assert_msg(!locked, "Attempting to write to a locked FLASH");
-    if (hal_flash_write_fail) {
-        hal_flash_write_fail = 0;
-        return -1;
+    len = mock_powercut_len((uintptr_t)address, len, &skip);
+    address += skip;
+    data += skip;
+    a += skip;
+    /* hal_flash_write_fail = n fails the n-th write from now */
+    if ((hal_flash_write_fail > 0) && (--hal_flash_write_fail == 0)) {
+        i = hal_flash_write_fail_ret;
+        hal_flash_write_fail_ret = -1;
+        return i;
     }
     if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
@@ -249,11 +306,28 @@ int hal_flash_write(haladdr_t address, const uint8_t *data, int len)
         }
     }
 #endif
+    mock_powercut_finish();
     return 0;
 }
+/* Internal flash erases to FLASH_BYTE_ERASED, external flash to 0xFF */
+#ifdef PART_UPDATE_EXT
+#define MOCK_UPDATE_ERASED 0xFF
+#else
+#define MOCK_UPDATE_ERASED FLASH_BYTE_ERASED
+#endif
 int hal_flash_erase(haladdr_t address, int len)
 {
+    int skip;
+    int ret;
     ck_assert_msg(!locked, "Attempting to erase a locked FLASH");
+    len = mock_powercut_len((uintptr_t)address, len, &skip);
+    address += skip;
+    /* hal_flash_erase_fail = n fails the n-th erase from now */
+    if ((hal_flash_erase_fail > 0) && (--hal_flash_erase_fail == 0)) {
+        ret = hal_flash_erase_fail_ret;
+        hal_flash_erase_fail_ret = -1;
+        return ret;
+    }
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
 #ifdef NVM_FLASH_ECC
@@ -261,7 +335,7 @@ int hal_flash_erase(haladdr_t address, int len)
             return -1;
 #endif
         erased_boot++;
-        memset((void*)(uintptr_t)address, 0xFF, len);
+        memset((void*)(uintptr_t)address, FLASH_BYTE_ERASED, len);
         if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -270,7 +344,7 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
         erased_update++;
-        memset((void *)(uintptr_t)address, 0xFF, len);
+        memset((void *)(uintptr_t)address, MOCK_UPDATE_ERASED, len);
         if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - WOLFBOOT_SECTOR_SIZE) {
             erased_nvm_bank0++;
         } else if (address >= WOLFBOOT_PARTITION_UPDATE_ADDRESS + WOLFBOOT_PARTITION_SIZE - 2 * WOLFBOOT_SECTOR_SIZE) {
@@ -279,7 +353,7 @@ int hal_flash_erase(haladdr_t address, int len)
     } else if ((address >= WOLFBOOT_PARTITION_SWAP_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_SWAP_ADDRESS + WOLFBOOT_SECTOR_SIZE)) {
         erased_swap++;
-        memset((void *)(uintptr_t)address, 0xFF, len);
+        memset((void *)(uintptr_t)address, FLASH_BYTE_ERASED, len);
 #ifdef MOCK_KEYVAULT
     } else if ((address >= (uintptr_t)vault_base) && (address < (uintptr_t)vault_base + keyvault_size)) {
         int n = vault_flash_op_len(len);
@@ -304,6 +378,7 @@ int hal_flash_erase(haladdr_t address, int len)
         fail("Invalid address\n");
         return -1;
     }
+    mock_powercut_finish();
     return 0;
 }
 void hal_flash_unlock(void)
@@ -337,6 +412,9 @@ void hal_prepare_boot(void)
 
 int ext_flash_erase(uintptr_t address, int len)
 {
+    int skip;
+    len = mock_powercut_len((uintptr_t)address, len, &skip);
+    address += skip;
 #ifdef PART_BOOT_EXT
     if ((address >= WOLFBOOT_PARTITION_BOOT_ADDRESS) &&
             (address < WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE)) {
@@ -366,15 +444,21 @@ int ext_flash_erase(uintptr_t address, int len)
         fail("Invalid address: %p\n", address);
         return -1;
     }
+    mock_powercut_finish();
     return 0;
 }
 
 int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
 {
     int i;
+    int skip;
     uint8_t *a = (uint8_t *)address;
     ck_assert_msg(!ext_locked, "Attempting to write to a locked FLASH");
     ck_assert_msg(len >= 0, "ext_flash_write invalid len %d", len);
+    len = mock_powercut_len((uintptr_t)address, len, &skip);
+    address += skip;
+    data += skip;
+    a += skip;
     if (ext_flash_write_fail) {
         ext_flash_write_fail = 0;
         return -1;
@@ -397,6 +481,7 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
     for (i = 0; i < len; i++) {
         a[i] = data[i];
     }
+    mock_powercut_finish();
     return 0;
 }
 
@@ -405,6 +490,8 @@ int ext_flash_write(uintptr_t address, const uint8_t *data, int len)
  * short positive read, F-12065). Other lengths read in full. */
 int mock_ext_flash_short_len = 0;
 int mock_ext_flash_short_bytes = 0;
+/* When not 0, only reads from this address are short */
+uintptr_t mock_ext_flash_short_addr = 0;
 
 /* Records the source address of the largest ext_flash_read() call (the
  * image load to RAM), so a test can verify which partition was booted. */
@@ -417,7 +504,9 @@ int ext_flash_read(uintptr_t address, uint8_t *data, int len)
     int ret = len;
     uint8_t *a = (uint8_t *)address;
 
-    if (mock_ext_flash_short_len == len && mock_ext_flash_short_bytes > 0)
+    if (mock_ext_flash_short_len == len && mock_ext_flash_short_bytes > 0 &&
+            (mock_ext_flash_short_addr == 0 ||
+             mock_ext_flash_short_addr == address))
         ret = len - mock_ext_flash_short_bytes;
     if (ret > mock_max_read_len) {
         mock_max_read_len = ret;
@@ -451,10 +540,12 @@ static int mmap_file(const char *path, uint8_t *address, uint32_t len,
         uint8_t** ret_address)
 {
     struct stat st = { 0 };
+    uint32_t fill[256];
     uint8_t *mmaped_addr;
     int ret;
     int fd;
     int i;
+    int chunk = 0;
 
     if (path == NULL)
         return -1;
@@ -465,9 +556,16 @@ static int mmap_file(const char *path, uint8_t *address, uint32_t len,
         return -1;
     }
     fprintf(stderr, "Open file: %s success.\n", path);
-    for (i = 0; i < len; i+=4) {
-        const uint32_t erased_word = 0xBADBADBA;
-        write(fd, &erased_word, 4);
+    for (i = 0; i < (int)(sizeof(fill) / sizeof(fill[0])); i++)
+        fill[i] = 0xBADBADBA;
+    /* Whole words, in chunks: the power-cut sweeps map the files thousands
+     * of times */
+    for (i = 0; i < (int)len; i += chunk) {
+        chunk = (int)sizeof(fill);
+        if ((int)len - i < chunk)
+            chunk = (((int)len - i) + 3) & ~3;
+        if (write(fd, fill, chunk) != chunk)
+            break;
     }
     lseek(fd, SEEK_SET, 0);
 

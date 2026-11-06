@@ -20,6 +20,71 @@ jobs:
       arch: arm
       config-file: ./config/examples/cypsoc6.config
 
+  cypsoc6_eval_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: PSOC6_BOARD=CY8CEVAL_062S2
+
+  cypsoc6_nouart_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: DEBUG_UART=0
+
+  cypsoc6_crypto_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: PSOC6_CRYPTO=1
+
+  cypsoc6_cm4_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: PSOC6_CM4_APP=1 IMAGE_HEADER_SIZE=1024
+
+  cypsoc6_ramcode_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: RAM_CODE=1
+      ramcode-check: true
+
+  cypsoc6_dualbank_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6.config
+      make-args: DUALBANK_SWAP=1 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x12020000 WOLFBOOT_PARTITION_SWAP_ADDRESS=0xFFFFFFFF
+
+  cypsoc6_qspi_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6-qspi.config
+      make-args: PSOC6_BOARD=CY8CEVAL_062S2
+
+  cypsoc6_qspi_ramcode_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6-qspi.config
+      make-args: PSOC6_BOARD=CY8CEVAL_062S2 RAM_CODE=1
+      ramcode-check: true
+
+  cypsoc6_qspi_cm4_test:
+    uses: ./.github/workflows/test-build-psoc6.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/cypsoc6-qspi.config
+      make-args: PSOC6_BOARD=CY8CEVAL_062S2 PSOC6_CM4_APP=1 IMAGE_HEADER_SIZE=1024
+
   hifive1_test:
     uses: ./.github/workflows/test-build-riscv.yml
     with:

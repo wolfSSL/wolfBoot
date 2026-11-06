@@ -159,6 +159,7 @@ static void RAMFUNCTION wolfBoot_erase_bootloader(uint32_t len)
 
 #include <string.h>
 
+
 #ifdef WOLFBOOT_SELF_HEADER
 #ifdef NVM_FLASH_ECC
 /* ECC flash only erases whole sectors */
@@ -358,6 +359,27 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
     }
 }
 #endif /* RAM_CODE for self_update */
+
+/* Reading a write-once trailer may erase its stale copy */
+static void RAMFUNCTION trailer_read_unlock(void)
+{
+#ifdef NVM_FLASH_WRITEONCE
+    hal_flash_unlock();
+#ifdef EXT_FLASH
+    ext_flash_unlock();
+#endif
+#endif
+}
+
+static void RAMFUNCTION trailer_read_lock(void)
+{
+#ifdef NVM_FLASH_WRITEONCE
+#ifdef EXT_FLASH
+    ext_flash_lock();
+#endif
+    hal_flash_lock();
+#endif
+}
 
 #ifndef WOLFBOOT_SELF_UPDATE_MONOLITHIC
 /* The swap-based update machinery (wolfBoot_copy_sector, wolfBoot_update, etc.)
@@ -581,6 +603,68 @@ out:
 #   define TRAILER_OFFSET_WORDS 0
 #endif
 
+#ifndef EXT_ENCRYPTED
+/* Version of the BOOT sector that the final erase backed up to SWAP, -1 when
+ * that copy holds no complete header with a version */
+static int RAMFUNCTION wolfBoot_swap_backup_version(uint32_t *ver)
+{
+    static uint8_t hdr[IMAGE_HEADER_SIZE] XALIGNED(4);
+    struct wolfBoot_image swap;
+    uint8_t *field = NULL;
+
+    wolfBoot_open_image(&swap, PART_SWAP);
+#ifdef NVM_FLASH_ECC
+    /* A read of erased ECC flash can fault */
+    if (wb_flash_is_erased(&swap, 0, sizeof(hdr)) != 0)
+        return -1;
+#endif
+#if defined(EXT_FLASH) && PARTN_IS_EXT(PART_SWAP)
+    if (ext_flash_read((uintptr_t)swap.hdr, hdr, sizeof(hdr)) !=
+            (int)sizeof(hdr))
+        return -1;
+#else
+    memcpy(hdr, swap.hdr, sizeof(hdr));
+#endif
+    if ((WOLFBOOT_HDR_GET_U32(hdr) != WOLFBOOT_MAGIC) ||
+        (wolfBoot_find_header(hdr + IMAGE_HEADER_OFFSET, HDR_VERSION,
+            &field) != WOLFBOOT_HDR_U32_SZ) || (field == NULL)) {
+        return -1;
+    }
+    *ver = wolfBoot_get_blob_version(hdr);
+    return 0;
+}
+
+/* After a swap, UPDATE holds the image that was in BOOT: the swap was a
+ * rollback unless it installed a newer image. A resume has no BOOT state to
+ * go by, so UPDATE, possibly external, must hold an authentic image newer
+ * than BOOT. A resume that restores the header sector takes the BOOT version
+ * from the SWAP backup, complete before FINAL_FLAGS. An unknown version is
+ * not a rollback. */
+static int RAMFUNCTION wolfBoot_swap_was_rollback(int resume, int from_swap)
+{
+    struct wolfBoot_image img;
+    uint32_t cur = 0;
+    uint32_t ver;
+    int known;
+
+    known = (wolfBoot_open_image(&img, PART_UPDATE) == 0);
+    if (known && resume) {
+        known = (wolfBoot_verify_integrity(&img) == 0) &&
+            (wolfBoot_verify_authenticity(&img) == 0);
+    }
+    if (known && from_swap)
+        known = (wolfBoot_swap_backup_version(&cur) == 0);
+    else if (known && (wolfBoot_open_image(&img, PART_BOOT) == 0))
+        cur = wolfBoot_current_firmware_version();
+    else
+        known = 0;
+    if (!known)
+        return 0;
+    ver = wolfBoot_update_firmware_version();
+    return (ver > cur) || (!resume && (ver == cur));
+}
+#endif
+
 /**
  * @brief Performs the final swap and erase operations during a secure update,
  * ensuring that if power is lost during the update, the process can be resumed
@@ -592,7 +676,7 @@ out:
  * 2. Setting a magic trailer value to mark the swap as in progress
  * 3. Erasing the last sector(s) of the boot partition (where partition state is stored)
  * 4. Restoring the saved staging sector from swap back to boot
- * 5. Setting the boot partition state to TESTING
+ * 5. Setting the boot partition state to TESTING, or SUCCESS after a rollback
  * 6. Erasing the last sector(s) of the update partition
  *
  * The staging sector (tmpBootPos) is positioned right before the final sectors
@@ -605,9 +689,11 @@ out:
  *
  * @param resume If 1, checks for interrupted swap and resumes it; if 0, starts
  * new swap
+ * @param rollback 1 when the swap restored the previous image; a resume works
+ * it out again
  * @return 0 on success, negative value if no swap needed or on error
  */
-static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
+static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume, int rollback)
 {
     struct wolfBoot_image boot[1];
     struct wolfBoot_image update[1];
@@ -625,7 +711,9 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
     wolfBoot_open_image(boot, PART_BOOT);
     wolfBoot_open_image(update, PART_UPDATE);
     wolfBoot_open_image(swap, PART_SWAP);
+    trailer_read_unlock();
     wolfBoot_get_partition_state(PART_UPDATE, &updateState);
+    trailer_read_lock();
 
     /* Read the trailer from the staging sector to check if we're resuming an
      * interrupted operation */
@@ -657,6 +745,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
         wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
         return -1;
     }
+#if !defined(ALLOW_DOWNGRADE) && !defined(DELTA_UPDATES) && \
+    !defined(EXT_ENCRYPTED)
+    /* A downgrade would look the same, a delta update keeps the patch in
+     * UPDATE and encrypted headers need their IV mapping: those keep TESTING */
+    if (resume == 1)
+        rollback = wolfBoot_swap_was_rollback(1, tmpBootPos == 0);
+#endif
 
     hal_flash_unlock();
 #ifdef EXT_FLASH
@@ -703,8 +798,13 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
         wb_flash_write(boot, tmpBootPos, (void*)tmpBuffer, sizeof(tmpBuffer));
     }
 #endif
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* Keep FINAL_FLAGS to resume; a rollback keeps BOOT TESTING as well */
+    ret = rollback ? 0 : wolfBoot_flags_home_reset_boot();
+#else
     /* Erase the last sector(s) of boot partition (where partition state is stored) */
     ret = wb_trailer_clear(boot, PART_BOOT);
+#endif
     if (ret < 0) {
 #ifdef EXT_FLASH
         ext_flash_lock();
@@ -749,8 +849,24 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume)
         wb_flash_erase(boot, tmpBootPos, WOLFBOOT_SECTOR_SIZE);
     }
 
-    /* Mark boot partition as TESTING - this tells bootloader to fallback if update fails */
-    wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_TESTING);
+    /* Mark boot partition as TESTING - this tells bootloader to fallback if
+     * update fails. A rollback restores the confirmed image. */
+#ifdef WOLFBOOT_SHARED_TRAILER
+    /* FINAL_FLAGS stays set until this write replaces it */
+    ret = wolfBoot_flags_home_set_boot(rollback ? IMG_STATE_SUCCESS :
+        IMG_STATE_TESTING);
+    if (ret < 0) {
+#ifdef EXT_FLASH
+        ext_flash_lock();
+#endif
+        hal_flash_lock();
+        wolfBoot_zeroize(tmpBuffer, sizeof(tmpBuffer));
+        return ret;
+    }
+#else
+    wolfBoot_set_partition_state(PART_BOOT, rollback ? IMG_STATE_SUCCESS :
+        IMG_STATE_TESTING);
+#endif
 
     /* Erase the last sector(s) of update partition */
     /* This resets the update partition state to IMG_STATE_NEW */
@@ -1080,7 +1196,7 @@ out:
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
     if (ret == 0) {
-        wolfBoot_swap_and_final_erase(0);
+        wolfBoot_swap_and_final_erase(0, 0);
     }
 #endif
     /* encryption key was not erased, will be erased by success */
@@ -1478,7 +1594,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
         if (update_open < 0) {
             /* A power cut mid-swap may have erased the UPDATE header, try to
              * resume using the copy in SWAP */
+            trailer_read_unlock();
             update.fw_size = wolfBoot_swap_update_size(fallback_allowed);
+            trailer_read_lock();
             if (update.fw_size == 0) {
 #ifdef EXT_ENCRYPTED
                 wolfBoot_enable_fallback_iv(0);
@@ -1543,12 +1661,17 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
 
     cur_ver = wolfBoot_current_firmware_version();
     upd_ver = wolfBoot_update_firmware_version();
+    trailer_read_unlock();
 #ifndef DISABLE_BACKUP
     bootStateRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
+#if defined(EXT_ENCRYPTED) || defined(CUSTOM_PARTITION_TRAILER)
+    /* Compared before the swap moves the headers: a custom trailer records
+     * the result, and encrypted headers are not re-read after the swap */
     if ((bootStateRet == 0) && (bootState == IMG_STATE_TESTING) &&
         (fallback_allowed != 0) && (cur_ver >= upd_ver)) {
         rollback_needed = 1;
     }
+#endif
 #endif
 
     wolfBoot_get_update_sector_flag(0, &flag);
@@ -1559,6 +1682,7 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
             &updateState) == 0) && (updateState == IMG_STATE_ROLLBACK);
     }
 #endif
+    trailer_read_lock();
     /* Check the first sector to detect interrupted update */
     if (flag == SECT_FLAG_NEW) {
         if (((update_type & HDR_IMG_TYPE_PART_MASK) != HDR_IMG_TYPE_APP) ||
@@ -1813,26 +1937,27 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     hal_flash_lock();
 
 #if !defined(CUSTOM_PARTITION_TRAILER)
+#ifndef EXT_ENCRYPTED
+    /* Which image is older is only certain once the swap is done, also when
+     * it resumed after a power cut */
+    if ((bootStateRet == 0) && (bootState == IMG_STATE_TESTING) &&
+        (fallback_allowed != 0) && wolfBoot_swap_was_rollback(0, 0)) {
+        rollback_needed = 1;
+#ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+        /* The image that failed to confirm is in UPDATE now */
+        cur_ver = wolfBoot_update_firmware_version();
+#endif
+    }
+#endif
     /* start re-entrant final erase, return code is only for resumption in
      * wolfBoot_start */
-    ret = wolfBoot_swap_and_final_erase(0);
+    ret = wolfBoot_swap_and_final_erase(0, rollback_needed);
     if (ret != 0)
         return ret;
-#ifndef DISABLE_BACKUP
-    if (rollback_needed) {
-        hal_flash_unlock();
-#ifdef EXT_FLASH
-        ext_flash_unlock();
-#endif
-        wolfBoot_set_partition_state(PART_BOOT, IMG_STATE_SUCCESS);
-#ifdef EXT_FLASH
-        ext_flash_lock();
-#endif
-        hal_flash_lock();
 #ifdef WOLFBOOT_PERSIST_FAILURE_STATUS
+    if (rollback_needed) {
         wolfBoot_record_failure(WOLFBOOT_FAILURE_PHASE_ROLLBACK,
             WOLFBOOT_FAILURE_CAUSE_NOT_CONFIRMED, PART_BOOT, cur_ver);
-#endif
     }
 #endif
 #else
@@ -2155,7 +2280,14 @@ void RAMFUNCTION wolfBoot_start(void)
 
 #if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER)
     /* resume the final erase in case the power failed before it finished */
-    resumedFinalErase = wolfBoot_swap_and_final_erase(1);
+    resumedFinalErase = wolfBoot_swap_and_final_erase(1, 0);
+    /* A resumed rollback leaves BOOT confirmed instead of TESTING, also when
+     * only its last cleanup erase failed */
+    if ((bootRet == 0) && (bootState == IMG_STATE_TESTING)) {
+        trailer_read_unlock();
+        bootRet = wolfBoot_get_partition_state(PART_BOOT, &bootState);
+        trailer_read_lock();
+    }
     if ((resumedFinalErase != 0) ||
         ((bootRet == 0) && (bootState == IMG_STATE_TESTING)))
 #elif !defined(DISABLE_BACKUP)

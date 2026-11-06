@@ -47,26 +47,38 @@ if [ "x$V" != "x1" ]; then
     fi
 fi
 
-# make sure it can double revert
-./wolfboot.elf powerfail 0 get_version 2>/dev/null
-./wolfboot.elf powerfail 15000 get_version 2>/dev/null
-./wolfboot.elf powerfail 18000 get_version 2>/dev/null
-./wolfboot.elf powerfail 1a000 get_version 2>/dev/null
-# fail on the last sector to stop the encrypt key save and state update
-./wolfboot.elf powerfail 3e000 get_version 2>/dev/null
-# may not trigger on non NVM_FLASH_WRITEONCE
-V=`./wolfboot.elf powerfail 3f000 get_version` 2>/dev/null
-if [ "x$V" != "x2" ]; then
-    V=`./wolfboot.elf get_version 2>/dev/null`
-    # if we failed on the final boot state write we need to double fallback
-    if [ "x$V" == "x1" ]; then
+if grep -Eq '^(ENCRYPT|DELTA_UPDATES|ALLOW_DOWNGRADE)\??=1' .config; then
+    # These builds cannot tell a resumed fallback from an update, so a reset
+    # in it can leave v1 in TESTING: make sure it can double revert
+    ./wolfboot.elf powerfail 0 get_version 2>/dev/null
+    ./wolfboot.elf powerfail 15000 get_version 2>/dev/null
+    ./wolfboot.elf powerfail 18000 get_version 2>/dev/null
+    ./wolfboot.elf powerfail 1a000 get_version 2>/dev/null
+    # fail on the last sector to stop the encrypt key save and state update
+    ./wolfboot.elf powerfail 3e000 get_version 2>/dev/null
+    # may not trigger on non NVM_FLASH_WRITEONCE
+    V=`./wolfboot.elf powerfail 3f000 get_version` 2>/dev/null
+    if [ "x$V" != "x2" ]; then
         V=`./wolfboot.elf get_version 2>/dev/null`
+        # if we failed on the final boot state write we need to double fallback
+        if [ "x$V" == "x1" ]; then
+            V=`./wolfboot.elf get_version 2>/dev/null`
+        fi
     fi
-fi
 
-if [ "x$V" != "x2" ]; then
-    echo "Failed update (V: $V)"
-    exit 1
+    if [ "x$V" != "x2" ]; then
+        echo "Failed update (V: $V)"
+        exit 1
+    fi
+else
+    # The fallback confirmed v1: the same resets find nothing to resume
+    for addr in 0 15000 18000 1a000 3e000 3f000; do
+        V=`./wolfboot.elf powerfail $addr get_version 2>/dev/null`
+        if [ "x$V" != "x1" ]; then
+            echo "Fallback did not stay on v1 (V: $V)"
+            exit 1
+        fi
+    done
 fi
 
 echo Test successful.

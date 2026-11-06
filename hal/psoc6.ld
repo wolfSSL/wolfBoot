@@ -1,7 +1,7 @@
 MEMORY
 {
     FLASH (rx) : ORIGIN = 0x10000000, LENGTH = @BOOTLOADER_PARTITION_SIZE@
-    RAM (rwx)  : ORIGIN = 0x08000000, LENGTH = 64K
+    RAM (rwx)  : ORIGIN = 0x08000000, LENGTH = 0x60000
 }
 
 SECTIONS
@@ -14,8 +14,12 @@ SECTIONS
         KEEP(*(.isr_vector))
         KEEP(*(.vectors))
         . = ALIGN(0x400);
-        *(.text*)
-        *(.rodata*)
+        *(EXCLUDE_FILE(*cy_flash.o *cy_ipc_*.o *cy_syslib.o *cy_syslib_ext.o
+            *cy_device.o *system_psoc6_cm0plus.o *cy_sysclk.o *cy_smif*.o
+            *libgcc.a:*) .text*)
+        *(EXCLUDE_FILE(*cy_flash.o *cy_ipc_*.o *cy_syslib.o *cy_syslib_ext.o
+            *cy_device.o *system_psoc6_cm0plus.o *cy_sysclk.o *cy_smif*.o
+            *libgcc.a:*) .rodata*)
         *(.init*)
         *(.fini*)
         . = ALIGN(4);
@@ -64,6 +68,18 @@ SECTIONS
 
         KEEP(*(.cy_ramfunc*))
         . = ALIGN(4);
+        /* PDL flash and QSPI paths, which a bootloader self-update runs after
+         * erasing the bootloader region */
+        *cy_flash.o(.text* .rodata*)
+        *cy_ipc_*.o(.text* .rodata*)
+        *cy_syslib.o(.text* .rodata*)
+        *cy_syslib_ext.o(.text* .rodata*)
+        *cy_device.o(.text* .rodata*)
+        *system_psoc6_cm0plus.o(.text* .rodata*)
+        *cy_sysclk.o(.text* .rodata*)
+        *cy_smif*.o(.text* .rodata*)
+        *libgcc.a:*(.text* .rodata*)
+        . = ALIGN(4);
 
         _end_data = .;
         __data_end__ = .;
@@ -84,6 +100,7 @@ SECTIONS
         _end = .;
         . = ALIGN(0x100);
         __ramVectors = .;
+        . = . + 0xC0;
     } > RAM
     . = ALIGN(4);
 }

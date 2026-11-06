@@ -1,6 +1,6 @@
-/* main.c
+/* app_psoc6.c
  *
- * Test bare-metal boot-led-on application
+ * Test bare-metal application for the Infineon PSoC 6 (CM0+ or CM4)
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -21,22 +21,45 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-#include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
-#include "wolfboot/wolfboot.h"
 
+#include "cy_device_headers.h"
+#include "cy_device.h"
+#include "cy_flash.h"
 #include "cy_gpio.h"
 
-#define BOOT_LED P1_5
-#define BOOT_D7 P5_7
+#include "target.h"
+#include "wolfboot/wolfboot.h"
+#include "printf.h"
+#include "hal/psoc6.h"
 
+#ifdef PSOC6_CM4_APP
+#define APP_CORE "CM4"
+#else
+#define APP_CORE "CM0+"
+#endif
 
-void main(void) {
+void main(void)
+{
+    uint32_t boot_ver;
+
     Cy_PDL_Init(CY_DEVICE_CFG);
-    Cy_GPIO_Pin_FastInit(P5_7_PORT, P5_7_NUM, CY_GPIO_DM_PULLUP, 0UL, P5_7_GPIO);
-    Cy_GPIO_Pin_FastInit(P1_5_PORT, P1_5_NUM, CY_GPIO_DM_PULLUP, 0UL, P1_5_GPIO);
-    while(1)
-        ;
-}
+    Cy_Flash_Init();
+    Cy_GPIO_Pin_FastInit(PSOC6_LED_PORT, PSOC6_LED_PIN,
+        CY_GPIO_DM_STRONG_IN_OFF, PSOC6_LED_OFF, HSIOM_SEL_GPIO);
 
+    boot_ver = wolfBoot_current_firmware_version();
+    wolfBoot_printf("Hello from PSoC6 " APP_CORE " firmware version %d\n",
+        boot_ver);
+
+    if (boot_ver != 1U) {
+        wolfBoot_success();
+        wolfBoot_printf("Update successful, firmware version %d confirmed\n",
+            boot_ver);
+        Cy_GPIO_Write(PSOC6_LED_PORT, PSOC6_LED_PIN, PSOC6_LED_ON);
+    }
+
+    while (1) {
+        __WFI();
+    }
+}

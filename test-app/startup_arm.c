@@ -131,12 +131,19 @@ void isr_empty(void)
 
 }
 
+#if defined(TARGET_psoc6) && !defined(PSOC6_CM4_APP)
+/* PSoC6 flash calls run in the boot ROM's CM0+ NMI handler */
+#   define isr_NMI ((void (*)(void))(0x0000000D))
+#else
+#   define isr_NMI isr_fault
+#endif
+
 __attribute__ ((section(".isr_vector")))
 void (* const IV[])(void) =
 {
 	(void (*)(void))(&_end_stack),
 	isr_reset,                   // Reset
-	isr_fault,                   // NMI
+	isr_NMI,                     // NMI
 	isr_fault,                   // HardFault
 	isr_memfault,                // MemFault
 	isr_busfault,                // BusFault
