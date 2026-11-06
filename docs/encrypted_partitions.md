@@ -262,8 +262,10 @@ all the needed symbols in RAM.
 
 ### Using a custom buffer as encrypt/decrypt cache
 
-By default, encryption support requires a buffer of the same size as the external flash page size to be allocated in RAM.
-You can provide a custom pre-allocated buffer by passing its address via the option `ENCRYPT_CACHE`, e.g.:
+By default, encryption support uses a buffer sized by `NVM_CACHE_SIZE`. In non-write-once
+builds, this defaults to `WOLFBOOT_FLASH_ERASE_UNIT`; in write-once builds it remains
+`WOLFBOOT_SECTOR_SIZE`. A custom pre-allocated buffer must be at least `NVM_CACHE_SIZE`
+bytes and can be provided by passing its address via `ENCRYPT_CACHE`, e.g.:
 
 `ENCRYPT_CACHE=0x20010000`
 
@@ -275,7 +277,6 @@ the function `ext_flash_write` will store the payload unencrypted.
 In order to trigger an update, before calling `wolfBoot_update_trigger` it is necessary to set the temporary key used by the bootloader by calling `wolfBoot_set_encrypt_key`.
 
 An example of encrypted update trigger can be found in the [stm32wb test application source code](../test-app/app_stm32wb.c).
-
 
 
 

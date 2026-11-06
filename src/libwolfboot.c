@@ -169,8 +169,27 @@ int wolfBoot_initialize_encryption(void)
 #   define NULL (void *)0
 #endif
 
+#ifndef WOLFBOOT_FLASH_ERASE_UNIT
+#define WOLFBOOT_FLASH_ERASE_UNIT WOLFBOOT_SECTOR_SIZE
+#endif
+
+#if WOLFBOOT_FLASH_ERASE_UNIT <= 0
+    #error WOLFBOOT_FLASH_ERASE_UNIT must be positive
+#elif (WOLFBOOT_SECTOR_SIZE % WOLFBOOT_FLASH_ERASE_UNIT) != 0
+    #error WOLFBOOT_FLASH_ERASE_UNIT must divide WOLFBOOT_SECTOR_SIZE
+#endif
+
 #ifndef NVM_CACHE_SIZE
-#define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
+    #ifdef NVM_FLASH_WRITEONCE
+        #define NVM_CACHE_SIZE WOLFBOOT_SECTOR_SIZE
+    #else
+        #define NVM_CACHE_SIZE WOLFBOOT_FLASH_ERASE_UNIT
+    #endif
+#endif
+
+#ifndef NVM_FLASH_WRITEONCE
+typedef char wolfBoot_encrypt_cache_size_check[
+    (NVM_CACHE_SIZE >= WOLFBOOT_FLASH_ERASE_UNIT) ? 1 : -1];
 #endif
 
 #ifdef BUILD_TOOL
@@ -462,9 +481,9 @@ finish:
  */
 static int RAMFUNCTION trailer_write(uint8_t part, uintptr_t addr, uint8_t val)
 {
-    uintptr_t addr_align = (size_t)(addr & (~(NVM_CACHE_SIZE - 1)));
+    uintptr_t addr_off = addr % NVM_CACHE_SIZE;
+    uintptr_t addr_align = addr - addr_off;
     uintptr_t addr_read, addr_write;
-    uintptr_t addr_off = addr & (NVM_CACHE_SIZE - 1);
     int ret = 0;
 
     nvm_cached_sector = nvm_select_fresh_sector(part);
@@ -2728,6 +2747,24 @@ void RAMFUNCTION wolfBoot_crypto_set_iv(const uint8_t *nonce, uint32_t iv_counte
 #ifndef CUSTOM_ENCRYPT_KEY
 /* Under CUSTOM_ENCRYPT_KEY the platform supplies the key, so the
  * partition-resident storage below (needs WOLFBOOT_PARTITION_*) is dropped. */
+#if !defined(NVM_FLASH_WRITEONCE) && !defined(MMU) && \
+    !defined(WOLFBOOT_RENESAS_TSIP)
+static void RAMFUNCTION hal_set_key_cache_copy(uint8_t *cache,
+        uintptr_t page_addr, uintptr_t field_addr, const uint8_t *data,
+        size_t length)
+{
+    uintptr_t page_end = page_addr + WOLFBOOT_FLASH_ERASE_UNIT;
+    uintptr_t field_end = field_addr + length;
+    uintptr_t copy_start = field_addr > page_addr ? field_addr : page_addr;
+    uintptr_t copy_end = field_end < page_end ? field_end : page_end;
+
+    if (copy_start < copy_end) {
+        XMEMCPY(cache + (copy_start - page_addr),
+            data + (copy_start - field_addr), copy_end - copy_start);
+    }
+}
+#endif
+
 static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 {
 #ifdef WOLFBOOT_RENESAS_TSIP
@@ -2740,10 +2777,11 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     XMEMCPY(ENCRYPT_KEY + ENCRYPT_KEY_SIZE, nonce, ENCRYPT_NONCE_SIZE);
     return 0;
 #else
-    uintptr_t addr, addr_align, addr_off;
+    uintptr_t addr, addr_align;
     int ret = 0;
-    uint32_t trailer_relative_off = 4;
 #ifdef NVM_FLASH_WRITEONCE
+    uintptr_t addr_off;
+    uint32_t trailer_relative_off = 4;
     int sel_sec = 0;
 #endif
 #if !defined(WOLFBOOT_SMALL_STACK) && !defined(NVM_FLASH_WRITEONCE) && \
@@ -2751,30 +2789,21 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     uint8_t ENCRYPT_CACHE[NVM_CACHE_SIZE] XALIGNED_STACK(32);
 #endif
 
-    addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
-    addr_off = addr & (WOLFBOOT_SECTOR_SIZE - 1);
 #ifdef NVM_FLASH_WRITEONCE
+    addr = ENCRYPT_TMP_SECRET_OFFSET + WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    addr_off = addr % WOLFBOOT_SECTOR_SIZE;
+    addr_align = addr - addr_off;
     /* we read from the populated sector, now write to the erased sector */
     sel_sec = nvm_select_fresh_sector(PART_BOOT);
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
-#endif
     hal_flash_unlock();
     /* casting to unsigned long to abide compilers on 64bit architectures */
     XMEMCPY(ENCRYPT_CACHE,
             (void*)(unsigned long)(addr_align),
                 WOLFBOOT_SECTOR_SIZE);
-#ifdef NVM_FLASH_WRITEONCE
     /* we read from the populated sector, now write to the erased sector */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    addr_align = addr - (addr % WOLFBOOT_SECTOR_SIZE);
     addr_align -= (!sel_sec * WOLFBOOT_SECTOR_SIZE);
-#else
-    /* erase the old key */
-    ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
-    if (ret != 0)
-        goto exit_lock;
-#endif
-
     /* Populate key + nonce in the cache */
     XMEMCPY(ENCRYPT_CACHE + addr_off, k, ENCRYPT_KEY_SIZE);
     XMEMCPY(ENCRYPT_CACHE + addr_off + ENCRYPT_KEY_SIZE, nonce,
@@ -2784,10 +2813,6 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
     XMEMCPY(ENCRYPT_CACHE + addr_off - trailer_relative_off,
             &wolfboot_magic_trail, 4);
 #ifdef FLAGS_HOME
-    /* If flags are stored in BOOT partition, take into account the offset
-     * of the flags used for the update partition too, to avoid erasing the
-     * sector.
-     */
     trailer_relative_off += (PART_BOOT_ENDFLAGS - PART_UPDATE_ENDFLAGS);
     XMEMCPY(ENCRYPT_CACHE + addr_off - trailer_relative_off,
             &wolfboot_magic_trail, 4);
@@ -2795,15 +2820,83 @@ static int RAMFUNCTION hal_set_key(const uint8_t *k, const uint8_t *nonce)
 
     /* Writing cache back to sector "!sel_sec" */
     ret = hal_flash_write(addr_align, ENCRYPT_CACHE, WOLFBOOT_SECTOR_SIZE);
-#ifdef NVM_FLASH_WRITEONCE
     if (ret != 0)
         goto exit_lock;
     /* Erasing original sector "sel_sec",
      * same one returned from by nvm_select.
      */
-    addr_align = addr & (~(WOLFBOOT_SECTOR_SIZE - 1));
+    addr_align = addr - (addr % WOLFBOOT_SECTOR_SIZE);
     addr_align -= (sel_sec * WOLFBOOT_SECTOR_SIZE);
     ret = hal_flash_erase(addr_align, WOLFBOOT_SECTOR_SIZE);
+#else
+    uintptr_t boot_base = WOLFBOOT_PARTITION_BOOT_ADDRESS;
+    uintptr_t boot_end, unit, first_addr, end_addr, first_unit, last_unit;
+#ifdef FLAGS_HOME
+    uintptr_t flag_magic_off, flag_magic_addr;
+#endif
+
+    if (boot_base > UINTPTR_MAX - WOLFBOOT_PARTITION_SIZE)
+        return -1;
+    boot_end = boot_base + WOLFBOOT_PARTITION_SIZE;
+    unit = WOLFBOOT_FLASH_ERASE_UNIT;
+    if ((boot_base % unit) != 0 ||
+            (WOLFBOOT_PARTITION_SIZE % unit) != 0 ||
+            (uintptr_t)ENCRYPT_TMP_SECRET_OFFSET > boot_end - boot_base)
+        return -1;
+    addr = boot_base + ENCRYPT_TMP_SECRET_OFFSET;
+    if (addr < boot_base + sizeof(uint32_t) ||
+            (size_t)ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE > boot_end - addr)
+        return -1;
+    first_addr = addr - sizeof(uint32_t);
+    end_addr = addr + ENCRYPT_KEY_SIZE + ENCRYPT_NONCE_SIZE;
+
+#ifdef FLAGS_HOME
+    if ((uintptr_t)PART_BOOT_ENDFLAGS < (uintptr_t)PART_UPDATE_ENDFLAGS)
+        return -1;
+    flag_magic_off = (uintptr_t)PART_BOOT_ENDFLAGS -
+        (uintptr_t)PART_UPDATE_ENDFLAGS;
+    if (flag_magic_off > addr - boot_base - sizeof(uint32_t))
+        return -1;
+    flag_magic_addr = addr - sizeof(uint32_t) - flag_magic_off;
+    first_addr = flag_magic_addr;
+#endif
+    first_unit = first_addr - (first_addr % unit);
+    last_unit = (end_addr - 1) - ((end_addr - 1) % unit);
+
+    hal_flash_unlock();
+    for (addr_align = first_unit; addr_align <= last_unit;
+            addr_align += unit) {
+        if (addr_align < boot_base || addr_align >= boot_end ||
+                unit > boot_end - addr_align) {
+            ret = -1;
+            goto exit_lock;
+        }
+        XMEMCPY(ENCRYPT_CACHE,
+            (void *)(unsigned long)addr_align, unit);
+        ret = hal_flash_erase(addr_align, unit);
+        if (ret != 0)
+            goto exit_lock;
+
+#ifdef FLAGS_HOME
+        hal_set_key_cache_copy((uint8_t *)(uintptr_t)ENCRYPT_CACHE,
+            addr_align, flag_magic_addr,
+            (const uint8_t *)&wolfboot_magic_trail,
+            sizeof(wolfboot_magic_trail));
+#endif
+        hal_set_key_cache_copy((uint8_t *)(uintptr_t)ENCRYPT_CACHE,
+            addr_align, addr - sizeof(uint32_t),
+            (const uint8_t *)&wolfboot_magic_trail,
+            sizeof(wolfboot_magic_trail));
+        hal_set_key_cache_copy((uint8_t *)(uintptr_t)ENCRYPT_CACHE,
+            addr_align, addr, k, ENCRYPT_KEY_SIZE);
+        hal_set_key_cache_copy((uint8_t *)(uintptr_t)ENCRYPT_CACHE,
+            addr_align, addr + ENCRYPT_KEY_SIZE, nonce,
+            ENCRYPT_NONCE_SIZE);
+
+        ret = hal_flash_write(addr_align, ENCRYPT_CACHE, unit);
+        if (ret != 0)
+            goto exit_lock;
+    }
 #endif
 exit_lock:
     /* Scrub the staged key/nonce on every build where wolfBoot owns the
@@ -3410,8 +3503,8 @@ static uint8_t RAMFUNCTION part_address(uintptr_t a)
  * written per pass must be a block multiple: a partial block at the end of a
  * pass would be written as stale cache content and would leave the address
  * unaligned, desynchronising the keystream from ext_flash_decrypt_read().
- * NVM_CACHE_SIZE defaults to WOLFBOOT_SECTOR_SIZE, which is always a multiple,
- * but it can be overridden. */
+ * NVM_CACHE_SIZE defaults to the erase unit in non-write-once builds and to
+ * WOLFBOOT_SECTOR_SIZE in write-once builds. */
 #define ENCRYPT_STAGE_SIZE \
     ((NVM_CACHE_SIZE) - ((NVM_CACHE_SIZE) % ENCRYPT_BLOCK_SIZE))
 typedef char wolfBoot_encrypt_stage_size_check[
