@@ -46,6 +46,84 @@ int wolfcrypt_test(void *args);
 int benchmark_test(void *args);
 #endif
 
+#ifdef WOLFCRYPT_BENCHMARK
+/* Buffer sizes the whole benchmark is run at, in turn: the Athena F5200 does
+ * one engine transfer per call, so a sector-sized call and a bulk one amortise
+ * the setup very differently, and the software build runs the same set as the
+ * baseline. Each needs twice the size from the static pool
+ * (WOLFSSL_STATIC_MEMORY_TEST_SZ). */
+#ifndef MPFS_BENCH_SIZES
+#define MPFS_BENCH_SIZES { 1024, 512, 4096 }
+#endif
+#endif /* WOLFCRYPT_BENCHMARK */
+
+#ifdef MPFS_ATHENA
+#include <wolfssl/wolfcrypt/settings.h>
+#include <wolfssl/wolfcrypt/port/microchip/mpfs_athena.h>
+
+static void mpfs_athena_app_init(void)
+{
+    int ret;
+
+    /* The engine is brought up here, not by the bootloader: a wolfBoot built
+     * without MPFS_ATHENA never touched it, and the port's own init handles
+     * one that did. wolfcrypt_test and benchmark_test register the device
+     * again, which the port accepts. */
+    ret = wolfCrypt_Init();
+    if (ret != 0) {
+        wolfBoot_printf("Athena: wolfCrypt_Init failed (%d)\r\n", ret);
+        return;
+    }
+    ret = wc_MpfsAthena_RegisterDevice(WC_MPFS_ATHENA_DEVID);
+    if (ret != 0) {
+        wolfBoot_printf("Athena: RegisterDevice failed (%d)\r\n", ret);
+        return;
+    }
+    ret = wc_MpfsAthena_SelfTest();
+    if (ret != 0) {
+        wolfBoot_printf("Athena: self-test failed: %s (rc %d)\r\n",
+            wc_MpfsAthena_SelfTestDesc(), ret);
+        return;
+    }
+    wolfBoot_printf("Athena: self-test passed, engine served %u call(s)\r\n",
+        (unsigned int)wc_MpfsAthena_GetCbCount());
+}
+
+#endif /* MPFS_ATHENA */
+
+
+#ifdef WOLFBOOT_RISCV_MMODE
+#include "../hal/riscv.h"
+/* MTIME is not running in an M-mode boot: start it, then let the machine
+ * timer interrupt refresh the watchdogs every 5 s for as long as the app
+ * runs. */
+#define MPFS_WDT_PET_TICKS (5ULL * RTC_CLOCK_FREQ)
+
+/* The vector saved the caller's registers, so plain C: refresh the five MSS
+ * watchdogs, which the bitstream arms and which reset the chip well inside a
+ * test run, then rearm. */
+void isr_mtimer(void)
+{
+    mpfs_wdt_pet_all();
+    CLINT_MTIMECMP_REG(0) = CLINT_MTIME_REG + MPFS_WDT_PET_TICKS;
+}
+
+static void mpfs_wdt_timer_start(void)
+{
+    mpfs_enable_mtime();
+    CLINT_MTIMECMP_REG(0) = CLINT_MTIME_REG + MPFS_WDT_PET_TICKS;
+    csr_set(mie, MIE_MTIE);
+    csr_set(mstatus, MSTATUS_MIE);
+#ifdef MPFS_DDR_INIT
+    /* The bootloader raised the E51 to the Libero PLL rate; this copy of the
+     * HAL's clock variable, which times the benchmark, still holds the reset
+     * rate. Without DDR init the clock is never raised and that reset rate is
+     * the right one. */
+    mpfs_cpu_freq_mhz =
+        (uint32_t)(LIBERO_SETTING_MSS_COREPLEX_CPU_CLK / 1000000UL);
+#endif
+}
+#endif
 
 void main(void)
 {
@@ -61,6 +139,14 @@ void main(void)
     wolfBoot_printf("GPL v3\r\n");
     wolfBoot_printf("========================\r\n");
 
+#ifdef WOLFBOOT_RISCV_MMODE
+    mpfs_wdt_timer_start();
+#endif
+
+#ifdef MPFS_ATHENA
+    mpfs_athena_app_init();
+#endif
+
 #ifdef WOLFCRYPT_TEST
     wolfBoot_printf("\r\nRunning wolfCrypt tests...\r\n");
     wolfCrypt_Init();
@@ -72,9 +158,28 @@ void main(void)
 #ifdef WOLFCRYPT_BENCHMARK
     wolfBoot_printf("Running wolfCrypt benchmarks...\r\n");
     wolfCrypt_Init();
-    benchmark_test(NULL);
+    {
+        static const unsigned int sizes[] = MPFS_BENCH_SIZES;
+        unsigned int i;
+        /* benchmark_test() puts the block size back to its default on its
+         * first run, so take that run's setup first and configure after. */
+        benchmark_init();
+        benchmark_free();
+        for (i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+            wolfBoot_printf("\r\n--- %u-byte calls ---\r\n", sizes[i]);
+            benchmark_configure(sizes[i]);
+            benchmark_test(NULL);
+        }
+    }
     wolfCrypt_Cleanup();
     wolfBoot_printf("Benchmarks complete.\r\n\r\n");
+#endif
+
+#ifdef MPFS_ATHENA
+    /* A passing test or a plausible figure proves nothing about offload on
+     * its own: every case the port declines runs in software. */
+    wolfBoot_printf("Athena: engine served %u call(s) in total\r\n",
+        (unsigned int)wc_MpfsAthena_GetCbCount());
 #endif
 
     while(1) {

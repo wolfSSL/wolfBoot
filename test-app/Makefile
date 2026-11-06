@@ -268,6 +268,18 @@ ifeq ($(SEC_QORIQ),1)
   APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/nxp/sec_qoriq_baremetal.o
 endif
 
+# PolarFire SoC Athena F5200.  options.mk already supplies the defines, the CAL
+# include path and the archive in LIBS; the port objects are added here because
+# the apps build their own wolfCrypt object list.
+ifeq ($(MPFS_ATHENA),1)
+  ifeq ($(WOLFCRYPT_TEST)$(WOLFCRYPT_BENCHMARK),)
+    $(warning MPFS_ATHENA=1 without WOLFCRYPT_TEST or WOLFCRYPT_BENCHMARK only runs the engine self-test in the test-app)
+  endif
+  WOLFCRYPT_SUPPORT=1
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/cryptocb.o
+  APP_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/microchip/mpfs_athena.o
+endif
+
 ifeq ($(WOLFCRYPT_TEST),1)
   CFLAGS+=-DWOLFCRYPT_TEST
   WOLFCRYPT_SUPPORT=1
@@ -1530,6 +1542,13 @@ endif
 ifeq ($(TARGET),mpfs250)
   LSCRIPT_TEMPLATE:=RISCV64-mpfs250.ld
   CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
+  # The wolfCrypt test and benchmark need far more stack than the plain app,
+  # which the L2 scratchpad configurations have no room to reserve.
+  ifneq ($(filter 1,$(WOLFCRYPT_TEST) $(WOLFCRYPT_BENCHMARK)),)
+    TEST_APP_STACK_SIZE?=0x00010000
+  else
+    TEST_APP_STACK_SIZE?=0x00002000
+  endif
 endif
 
 # $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
@@ -1978,7 +1997,8 @@ endif
 		sed -e "s/@WOLFBOOT_PARTITION_BOOT_ADDRESS@/$(WOLFBOOT_PARTITION_BOOT_ADDRESS)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_SIZE@/$(WOLFBOOT_PARTITION_SIZE)/g" | \
 		sed -e "s/@WOLFBOOT_PARTITION_UPDATE_ADDRESS@/$(WOLFBOOT_PARTITION_UPDATE_ADDRESS)/g" | \
-		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" \
+		sed -e "s/@WOLFBOOT_PARTITION_SWAP_ADDRESS@/$(WOLFBOOT_PARTITION_SWAP_ADDRESS)/g" | \
+		sed -e "s/@TEST_APP_STACK_SIZE@/$(TEST_APP_STACK_SIZE)/g" \
 		> $(@)
 	$(Q)rm -f .app-size .entry-point .wolfboot-offset .partition-size .header-size
 
