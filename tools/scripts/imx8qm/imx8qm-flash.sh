@@ -7,7 +7,9 @@
 #   sdp   Serial Download Protocol. Set SW2 [D1-D6] to 000100, connect the J17
 #         USB port, and load the container straight into RAM over USB with
 #         uuu. Nothing is written to the board, so this is the safe way to try
-#         a build. Power-cycle to go back to the previous image.
+#         a build. Power-cycle to go back to the previous image. With more
+#         than one i.MX in serial download mode attached, set UUU_PATH to the
+#         board's USB path as "uuu -lsusb" prints it.
 #
 #   sd    Write the container to a microSD card in the host's reader. The boot
 #         ROM reads it from a 32 KB offset. Set SW2 to 001100 (SD1) to boot it.
@@ -30,7 +32,7 @@ sdp)
     [ -f "$IMAGE" ] || { echo "ERROR: no such image: $IMAGE" >&2; exit 1; }
     command -v uuu >/dev/null || { echo "ERROR: uuu not found in PATH" >&2; exit 1; }
     echo "Set SW2 [D1-D6] to 000100 (SDP) and power-cycle the board, then:"
-    uuu -b sdps "$IMAGE"
+    uuu ${UUU_PATH:+-m "$UUU_PATH"} SDPS: boot -f "$IMAGE"
     ;;
 
 sd)
