@@ -40,7 +40,8 @@
 #include "gpt.h"
 #include "fdt.h"
 #if defined(SNVM_KEYSTORE_PROVISION) || defined(SNVM_ENCKEY_PROVISION) || \
-    defined(MPFS_SBI_VENDOR) || defined(MPFS_SNVM_DUMP)
+    defined(SNVM_GOLDEN_ENCKEY_PROVISION) || defined(MPFS_SBI_VENDOR) || \
+    defined(MPFS_SNVM_DUMP)
 #include "mpfs250_snvm.h"
 #endif
 #if defined(MPFS_SBI_VENDOR) && defined(WOLFBOOT_MMODE_SMODE_BOOT)
@@ -503,6 +504,12 @@ void hal_init(void)
     /* One-time: store the PUF-wrapped image-encryption key in sNVM. */
     if (snvm_enckey_provision() != 0) {
         wolfBoot_printf("enckey provision: FAILED\n");
+        wolfBoot_panic();
+    }
+#endif
+#ifdef SNVM_GOLDEN_ENCKEY_PROVISION
+    if (snvm_golden_enckey_provision() != 0) {
+        wolfBoot_printf("golden enckey provision: FAILED\n");
         wolfBoot_panic();
     }
 #endif
