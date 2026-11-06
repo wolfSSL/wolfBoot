@@ -624,6 +624,21 @@ jobs:
       config-file: ./config/examples/polarfire_mpfs250_m.config
       pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
       make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
+  # The Icicle Kit System Controller probe (no DDR, no image source).
+  microchip_mpfs250_icicle_probe_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_icicle.config
+  # The Icicle Kit variant: per-board BCLK phase, fabric SD/eMMC demux select
+  # and the signed FIT read from a file on the card's FAT32 partition.
+  microchip_mpfs250_icicle_m_test:
+    uses: ./.github/workflows/test-build-riscv.yml
+    with:
+      arch: riscv64
+      config-file: ./config/examples/polarfire_mpfs250_icicle_m.config
+      pre-build: sh tools/ci/gen_mpfs_libero_stub.sh tools/ci/mpfs_libero_stub
+      make-args: LIBERO_FPGA_CONFIG_DIR=tools/ci/mpfs_libero_stub
   # The HSS replacement booting from the other two stores: eMMC (same SDHCI
   # driver as SD, different pads) and QSPI into DDR (src/update_ram.c rather
   # than src/update_disk.c).
