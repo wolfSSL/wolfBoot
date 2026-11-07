@@ -119,6 +119,8 @@ static inline void aarch64_dcache_maint(int clean)
  * address range (end exclusive). Stack-free. */
 void el2_idmap_enable(uint64_t dram_base, uint64_t dram_end);
 void flush_dcache_range(uintptr_t start, uintptr_t end);
+/* Discards whole cache lines: a range that is not line-aligned also loses
+ * the neighbouring data in its first and last lines. */
 void invalidate_dcache_range(uintptr_t start, uintptr_t end);
 #endif
 

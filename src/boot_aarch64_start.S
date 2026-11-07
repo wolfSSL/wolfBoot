@@ -1609,7 +1609,9 @@ el2_idmap_enable:
     tlbi    alle2
     dsb     sy
 
-    /* Drop stale lines from earlier stages before caching is on */
+    /* Drop stale lines from earlier stages before caching is on. BL31 is
+     * resident: safe on A53/A72, where a Non-secure DC ISW is performed as
+     * clean & invalidate. Core-specific; check before reusing on other cores. */
     bl      aarch64_dcache_invalidate_all
     ic      iallu
     dsb     sy
