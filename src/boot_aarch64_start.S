@@ -58,6 +58,10 @@
 #include "hal/imx8qm.h"
 #endif
 
+#ifdef TARGET_imx8mm
+#include "hal/imx8mm.h"
+#endif
+
 /* VA region the TCR_EL{1,2,3} T0SZ values below cover. A high DDR window
  * must fit inside it; keep in step with those TCR literals. */
 #ifndef WOLFBOOT_AARCH64_VA_LIMIT
@@ -1339,7 +1343,8 @@ _cm4_entry:
     // EL == 2?
     mov x2, #3 << 20
     msr cptr_el2, x2           /* Enable FP/SIMD */
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Always install a valid EL2 vector base: the reset VBAR_EL2 is UNKNOWN, so
      * without this a fault in the parsing-heavy boot code branches to an
      * undefined address. The table halts cleanly (and, under DEBUG+DEBUG_UART,
@@ -1364,7 +1369,9 @@ _cm4_entry:
    b    7b
 
 8:
-#if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || defined(TARGET_imx95_a55)
+#if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || \
+    defined(TARGET_imx95_a55) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Reserved in-DRAM stack from the linker script: the generic path sets sp
      * to the image base, which here is the BL33 load address. */
     ldr x1, =END_STACK
@@ -1394,7 +1401,7 @@ _cm4_entry:
     /* Invalidate rather than clean: out of cold reset the cache RAMs hold random
      * tags, the previous stage already cleaned what it owned, and a stale dirty
      * line would later be written back over live DRAM. */
-    bl      imx95_dcache_invalidate_all
+    bl      aarch64_dcache_invalidate_all
     dsb     sy
     isb
 
@@ -1421,7 +1428,8 @@ _cm4_entry:
     bl boot_entry_C   // boot_entry_C never returns
     b   7b            // go to sleep anyhow in case.
 
-#if defined(TARGET_cm4) || defined(TARGET_imx8qm)
+#if defined(TARGET_cm4) || defined(TARGET_imx8qm) || \
+    (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
 /* Minimal always-on EL2 exception vectors. On any exception (data/instruction
  * abort, etc.) halt cleanly rather than branch to the UNKNOWN reset VBAR_EL2.
  * Under DEBUG+DEBUG_UART the handler additionally dumps ESR/ELR/FAR over UART.
@@ -1480,7 +1488,7 @@ simple_el2_fault_stack:
 simple_el2_fault_stack_top:
 .section ".boot"
 #endif
-#endif /* TARGET_cm4 || TARGET_imx8qm */
+#endif /* TARGET_cm4 || TARGET_imx8qm || (TARGET_imx8mm && IMX8MM_BL33) */
 #if defined(TARGET_cm4)
 /* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
  * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to
@@ -1499,14 +1507,16 @@ _vector_table:
     bl boot_entry_C   // boot_entry_C never returns
 #endif
 
-#if defined(TARGET_imx95_a55) && !defined(NO_MMU) && \
-    defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
+#if (defined(TARGET_imx95_a55) && !defined(NO_MMU) && \
+     defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1) || \
+    defined(WOLFBOOT_AARCH64_EL2_IDMAP)
 /* Invalidate all data cache levels by set/way, once before the D-cache is
  * enabled: out of cold reset the cache RAMs hold random tags and dirty bits, and
- * a stale dirty line would otherwise be written back over live DRAM. */
+ * a stale dirty line would otherwise be written back over live DRAM.
+ * Clobbers x0-x9. */
 .section ".boot"
-.globl imx95_dcache_invalidate_all
-imx95_dcache_invalidate_all:
+.globl aarch64_dcache_invalidate_all
+aarch64_dcache_invalidate_all:
     dmb     ISH
     mrs     x0, CLIDR_EL1
     ubfx    w2, w0, #24, #3        /* LoC */
@@ -1544,7 +1554,114 @@ imx95_dcache_invalidate_all:
 9:  dsb     sy
     isb
     ret
+#endif
 
+#if defined(WOLFBOOT_AARCH64_EL2_IDMAP)
+/*
+ * void el2_idmap_enable(uint64_t dram_base, uint64_t dram_end)
+ *
+ * Identity-map the low 4 GB at EL2 in 1 GB blocks and turn the MMU, D-cache
+ * and I-cache on: [dram_base, dram_end) Normal write-back, the rest Device
+ * and XN. Call at EL2 with the MMU off. Uses no stack; clobbers x0-x15.
+ * el2_flush_and_disable_mmu() undoes it before the handoff.
+ */
+.set EL2_IDMAP_NORMAL, 0x701                         /* AttrIdx0, AF, ISH */
+.set EL2_IDMAP_DEVICE, 0x405 | (1 << 53) | (1 << 54) /* AttrIdx1, AF, XN */
+
+.global el2_idmap_enable
+el2_idmap_enable:
+    mov     x15, x30
+    mov     x11, x0                /* DRAM base */
+    mov     x12, x1                /* DRAM end */
+    adrp    x10, el2_idmap_l1
+    add     x10, x10, :lo12:el2_idmap_l1
+
+    mov     x2, x10                /* clear all 512 entries */
+    mov     x3, #512
+1:  str     xzr, [x2], #8
+    subs    x3, x3, #1
+    b.ne    1b
+
+    ldr     x6, =EL2_IDMAP_NORMAL
+    ldr     x7, =EL2_IDMAP_DEVICE
+    mov     x3, #0
+2:  lsl     x4, x3, #30            /* block base */
+    orr     x5, x4, x7
+    cmp     x4, x11
+    b.lo    3f
+    cmp     x4, x12
+    b.hs    3f
+    orr     x5, x4, x6
+3:  str     x5, [x10, x3, lsl #3]
+    add     x3, x3, #1
+    cmp     x3, #4
+    b.lo    2b
+    dsb     sy
+
+    /* Attr0 = 0xFF Normal WB RW-allocate, Attr1 = 0x00 Device-nGnRnE */
+    mov     x2, #0xFF
+    msr     MAIR_EL2, x2
+    msr     TTBR0_EL2, x10
+    /* T0SZ=32, 4 KB granule, inner-shareable WB walks; bits 31, 23 RES1 */
+    ldr     x2, =0x80813520
+    msr     TCR_EL2, x2
+    isb
+    tlbi    alle2
+    dsb     sy
+
+    /* Drop stale lines from earlier stages before caching is on. BL31 is
+     * resident: safe on A53/A72, where a Non-secure DC ISW is performed as
+     * clean & invalidate. Core-specific; check before reusing on other cores. */
+    bl      aarch64_dcache_invalidate_all
+    ic      iallu
+    dsb     sy
+    isb
+
+    mrs     x2, SCTLR_EL2
+    orr     x2, x2, #(1 << 0)      /* M */
+    orr     x2, x2, #(1 << 2)      /* C */
+    orr     x2, x2, #(1 << 12)     /* I */
+    msr     SCTLR_EL2, x2
+    isb
+    mov     x30, x15
+    ret
+.ltorg
+
+/*
+ * void invalidate_dcache_range(start, end)
+ *
+ * invalidate data cache in the range, without writing it back
+ * (DMA reads; flush_dcache_range() is the clean & invalidate)
+ *
+ * x0: start address
+ * x1: end address
+ */
+.global invalidate_dcache_range
+invalidate_dcache_range:
+    mrs    x3, ctr_el0
+    lsr    x3, x3, #16
+    and    x3, x3, #0xf
+    mov    x2, #4
+    lsl    x2, x2, x3  /* cache line size */
+
+    sub    x3, x2, #1
+    bic    x0, x0, x3
+1:  dc     ivac, x0
+    add    x0, x0, x2
+    cmp    x0, x1
+    b.lo   1b
+    dsb    sy
+    ret
+
+.pushsection .bss.el2_idmap_l1, "aw", %nobits
+.balign 4096
+el2_idmap_l1:
+    .skip 4096
+.popsection
+#endif /* WOLFBOOT_AARCH64_EL2_IDMAP */
+
+#if defined(TARGET_imx95_a55) && !defined(NO_MMU) && \
+    defined(EL2_HYPERVISOR) && EL2_HYPERVISOR == 1
 /* i.MX95 identity tables (4KB granule, 40-bit VA/PA, T0SZ=24). DRAM is Normal
  * cacheable so wolfcrypt's NEON loads do not fault; MU2's SCMI buffer stays
  * Device, as the M33 writes it outside this cluster's coherency. 0-0x7FFFFFFF

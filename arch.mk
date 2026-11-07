@@ -324,6 +324,8 @@ ifeq ($(ARCH),AARCH64)
     # uSDHC board facts. Here rather than in the config because a command-line
     # CFLAGS_EXTRA= would replace the config's, whereas CFLAGS is additive.
     ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+      # uSDHC -> SDHCI shim, shared with imx8mm
+      OBJS+=hal/imx_usdhc_sdhci.o
       # Card detect is lsio_gpio5[22], so PRES_STATE bit 16 never sets.
       # SDMA is on: the read is the dominant boot cost and PIO caps it near
       # 1.6 MB/s regardless of bus clock. IMX8QM_SDHCI_PIO=1 falls back.
@@ -354,6 +356,13 @@ ifeq ($(ARCH),AARCH64)
     # in the FDT codepath; imx8qm still runs MMU-off, 1:1.
     ifeq ($(EL2_HYPERVISOR),1)
       CFLAGS+=-DEL2_HYPERVISOR=1
+    endif
+  endif
+
+  ifeq ($(TARGET),imx8mm)
+    # uSDHC -> SDHCI shim, shared with imx8qm
+    ifneq ($(filter 1,$(DISK_SDCARD) $(DISK_EMMC)),)
+      OBJS+=hal/imx_usdhc_sdhci.o
     endif
   endif
 
