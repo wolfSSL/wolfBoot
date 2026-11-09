@@ -680,6 +680,9 @@ ifeq ($(ARCH),ARM)
     ARCH_FLASH_OFFSET=0x08000000
     ifeq ($(TZEN),1)
       WOLFBOOT_ORIGIN=0x0C000000
+      ifeq ($(WOLFBOOT_SECURE_APP),1)
+        $(call LSCRIPT_IN_DEFAULT,hal/$(TARGET)-secure-app.ld)
+      endif
     else
       WOLFBOOT_ORIGIN=0x08000000
       $(call LSCRIPT_IN_DEFAULT,hal/$(TARGET)-ns.ld)

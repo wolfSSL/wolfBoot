@@ -317,6 +317,16 @@ void hal_gtzc_init(void)
    int i;
    /* One bit in the bitmask: 256B */
 
+#if defined(WOLFBOOT_SECURE_APP)
+   /* SRAM1 (192 KB) and SRAM2 (64 KB) stay Secure until the secure
+    * application installs its own split. */
+   for (i = 0; i < 24; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
+   }
+   for (i = 0; i < 8; i++) {
+       SET_GTZC_MPCBBx_S_VCTR(2, i, 0xFFFFFFFF);
+   }
+#else
    /* Configure lower half of total RAM as secure
     * 0x3000 0000 : 0x3001 FFFF - 128KB
     */
@@ -337,6 +347,7 @@ void hal_gtzc_init(void)
    for (i = 0; i < 8; i++) {
        SET_GTZC_MPCBBx_S_VCTR(2, i, 0x0);
    }
+#endif /* WOLFBOOT_SECURE_APP */
 }
 #endif
 
@@ -383,6 +394,9 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
+    /* A secure application is entered Secure and programs its own
+     * Non-secure flash and RAM windows. */
+#if !defined(WOLFBOOT_SECURE_APP)
     /* Non-secure: application flash area (boot partition only) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1,
@@ -390,6 +404,7 @@ void hal_tz_sau_init(void)
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
     sau_init_region(2, 0x20020000, 0x2003FFFF, 0);
+#endif
 
     /* Non-secure: internal peripherals */
     sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);

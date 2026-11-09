@@ -402,7 +402,11 @@ TARGET_H_TEMPLATE:=include/target.h.in
 ifeq ($(TZEN),1)
 ifeq ($(TARGET),stm32l5)
 	# Don't build a contiguous image
-    MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    ifeq ($(WOLFBOOT_SECURE_APP),1)
+        MAIN_TARGET:=wolfboot.bin
+    else
+        MAIN_TARGET:=wolfboot.bin test-app/image_v1_signed.bin
+    endif
 endif
 
 ifeq ($(TARGET),stm32u5)

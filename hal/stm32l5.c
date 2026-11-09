@@ -276,6 +276,15 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     if (len == 0)
         return -1;
 
+#if TZ_SECURE() && defined(WOLFBOOT_SECURE_APP)
+    /* Secure-app partitions are linked at the Secure flash alias */
+    if ((address >= FLASH_SECURE_MMAP_BASE) &&
+            (address <= (FLASH_SECURE_MMAP_BASE +
+                (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))) {
+        address -= (FLASH_SECURE_MMAP_BASE - FLASHMEM_ADDRESS_SPACE);
+    }
+#endif
+
     if (address < ARCH_FLASH_OFFSET)
         return -1;
 
@@ -421,7 +430,8 @@ static void clock_pll_on(int powersave)
     DMB();
 }
 
-#if TZ_SECURE()
+/* A secure application keeps every peripheral Secure across the jump */
+#if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
 static void periph_unsecure()
 {
     volatile uint32_t reg;
@@ -540,7 +550,7 @@ void hal_prepare_boot(void)
 #ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
 #endif
-#if TZ_SECURE()
+#if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
     periph_unsecure();
 #endif
 }
