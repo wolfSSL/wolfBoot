@@ -1169,6 +1169,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32l5-wolfcrypt-tz.config
 
+  stm32l5_tz_wolftrust_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32l5-tz-wolftrust.config
+
   stm32u3_test:
     uses: ./.github/workflows/test-build.yml
     with:
