@@ -52,6 +52,7 @@ This README describes configuration of supported targets.
 * [Raspberry Pi pico 2 (rp2350)](#raspberry-pi-pico-rp2350)
 * [RealTek RTL8735B (AmebaPro2)](#realtek-rtl8735b-amebapro2)
 * [Renesas RA6M4](#renesas-ra6m4)
+* [Renesas RX24T](#renesas-rx24t)
 * [Renesas RX65N](#renesas-rx65n)
 * [Renesas RX71M](#renesas-rx71m)
 * [Renesas RX72N](#renesas-rx72n)
@@ -7865,6 +7866,115 @@ Note: This also works on Mac OS, but `objcopy` does not exist. Install with `bre
 ## Raspberry Pi Pico rp2350
 
 See instructions in [IDE/pico-sdk/rp2350/README.md](/IDE/pico-sdk/rp2350/README.md)
+
+
+## Renesas RX24T
+
+Target board: Renesas Starter Kit for RX24T, with the R5F524TAADFP (256KB code flash, 16KB RAM, 8KB data flash).
+
+The RX24T is supported either natively with "make" (GCC for Renesas RX) or through e2Studio with CC-RX. If using e2Studio see [Readme.md](../IDE/Renesas/e2studio/RX24T/Readme.md).
+
+Default UART Serial on SCI1 at PD3-TXD1 PD5-RXD1, connected to the on-board USB serial converter. This feature is enabled with `DEBUG_UART=1`.
+
+Example Boot Output (with DEBUG_UART=1):
+
+```
+wolfBoot HAL Init
+Boot partition: 0xFFFC0000 (sz 5489, ver 0x1, type 0x201)
+Partition 1 header magic 0xFFFFFFFF invalid at 0xFFFD8000
+Boot partition: 0xFFFC0000 (sz 5489, ver 0x1, type 0x201)
+Booting version: 0x1
+Checking integrity...done
+Verifying signature...done
+wolfBoot HAL Init
+| ------------------------------------------------------------------- |
+| Renesas RX User Application in BOOT partition started by wolfBoot   |
+| ------------------------------------------------------------------- |
+
+
+=== Boot Partition[fffc0000] ===
+Magic:    WOLF
+Version:  01
+Status:   ff (New)
+Trailer Mgc: none
+
+=== Update Partition[fffd8000] ===
+Magic:    ˇˇˇˇ
+Version:  00
+Status:   ff (New)
+Trailer Mgc: none
+
+Current Firmware Version: 1
+Hit any key to call wolfBoot_success the firmware.
+```
+
+### RX24T Flash Layout
+
+Default Onboard Flash Memory Layout (256KB) (2KB sector):
+
+| Description            | Address    | Size                 |
+| ---------------------- | ---------- | -------------------- |
+| Application            | 0xFFFC0000 | 0x00018000 (  96 KB) |
+| Update                 | 0xFFFD8000 | 0x00018000 (  96 KB) |
+| Swap                   | 0xFFFF0000 | 0x00000800 (   2 KB) |
+| Unused                 | 0xFFFF0800 | 0x00007800 (  30 KB) |
+| wolfBoot               | 0xFFFF8000 | 0x00008000 (  32 KB) |
+
+The last 128 bytes of the wolfBoot partition hold the option-setting memory (`0xFFFFFF80`), `ROMCODE` (`0xFFFFFF9C`), the boot mode ID code (`0xFFFFFFA0`) and the exception vectors, so `wolfboot.bin` programs all of them.
+
+### RX24T Notes
+
+* `NVM_FLASH_WRITEONCE=1` and `RAM_CODE=1` are mandatory on this target. Code flash cannot be programmed again before an erase, and it cannot be read while it is being programmed or erased, so the flash driver runs from RAM. `DELTA_UPDATES` is not supported.
+* Code flash is rated for 1,000 erase cycles per 2KB block. Each update erases the two flag sectors at the end of the update partition about three times per image sector, and the swap sector once per image sector. One update of the test application erases about 131 blocks in total, most of them once. Keep images small if many updates are expected.
+* wolfBoot uses about 6KB of the 16KB RAM for data and RAM code, and up to 3.8KB of stack during an update. The linker script stops the build if less than 5KB is left for the stack.
+* The clock runs from the HOCO (32 MHz, PLL to 80 MHz). The HOCO is accurate to within 1.5%, which keeps the UART at 115200 within its tolerance.
+* `ROMCODE` at `0xFFFFFF9C` enables ROM code protection when set to `0x00000000` or `0x00000001`. wolfBoot sets it to `0xFFFFFFFF`.
+* An application that calls `wolfBoot_success()` or `wolfBoot_update_trigger()` writes flash through the same driver, which must run from RAM: with GCC, build `hal/renesas-rx.c` with `RAM_CODE` and `__WOLFBOOT` defined and place its `.ramcode` section in RAM, as `test-app/Makefile` and `test-app/RENESAS_RX-rx24t.ld` do. The driver masks interrupts while it writes. It sets the flash sequencer for a 20 MHz FCLK, so call it only with the clocks set up as `hal_init()` does, and with the ROM cache (`ROMCE`) disabled.
+* The option-setting memory (`MDE`, `OFS1`, `OFS0` at `0xFFFFFF80`) is written only when built with `CFLAGS_EXTRA+=-DWOLFBOOT_RENESAS_OSM`. It sits inside the wolfBoot partition, so `wolfboot.bin` carries it.
+
+To switch to big endian data, build with both `BIG_ENDIAN=1` and `CFLAGS_EXTRA+=-DWOLFBOOT_RENESAS_OSM`, which sets `MDE` to big endian. The boot mode ignores `MDE` and reads the ID code with the endianness given to `rfp-cli`, so add `-endian big` to every `rfp-cli` call while the board holds big endian images.
+
+### RX24T Boot Mode ID Code
+
+The boot mode ID code at `0xFFFFFFA0` decides what a programmer connection may do. If its control code (bits 31-24 of the word at `0xFFFFFFA0`) is not `45h` or `52h`, as on a blank part, every connection erases all code flash and data flash. With `45h`, the programmer must send the matching 16-byte ID, and three wrong IDs in a row erase the flash.
+
+wolfBoot therefore writes control code `45h` with the ID code `450102030405060708090A0B0C0D0E0F` by default. This is the example: set your own for production with `RENESAS_ID_CODE` in `.config` or on the `make` line:
+
+```sh
+make RENESAS_ID_CODE=45xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+The build rejects a value that is not 32 hex digits and the control code `52h`, which with some ID codes disables the programmer for good. Pass the same ID to `rfp-cli -auth id` and to the debugger.
+
+### Building Renesas RX24T
+
+Building requires GCC for Renesas RX 14.2 (https://llvm-gcc-renesas.com/rx-download-toolchains/). The example config sets `USE_GCC=0` (`ld` links directly) and the build adds `-misa=v2` for the RXv2 core.
+
+```sh
+cp ./config/examples/renesas-rx24t.config .config
+make RX_GCC_PATH=/path/to/gcc_rx_elf
+```
+
+`RX_GCC_PATH` is the toolchain install directory (the one containing `bin/rx-elf-gcc`). If `rx-elf-gcc` is already on the `PATH`, use `make CROSS_COMPILE=rx-elf-` instead.
+
+### Flashing Renesas RX24T
+
+Leave J8 open (single-chip mode). Power the board from its 5V jack, not from the emulator. The E2 Lite programs the RX24T over the FINE interface (`-if fine`); `-auth id` must match the ID code in `wolfboot.bin` (see [RX24T Boot Mode ID Code](#rx24t-boot-mode-id-code)).
+
+```sh
+rfp-cli -if fine -t e2l -device RX200 -auto -auth id 450102030405060708090A0B0C0D0E0F \
+    -bin FFFF8000 wolfboot.bin \
+    -bin FFFC0000 test-app/image_v1_signed.bin \
+    -run
+```
+
+`-auto` erases the whole code flash and data flash before programming. To reprogram only the blocks being written, use `-pv` in place of `-auto`.
+
+### Debugging Renesas RX24T
+
+In e² studio create a "Renesas Debug" project with the "E2 Lite" emulator, target device R5F524TA and the built `wolfboot.elf`. In the debug configuration select the FINE connection, select HOCO as the clock source, set "Power Target From The Emulator" to No, and enter the ID code when asked.
+
+A debug session can rewrite code flash, including the ID code. After a session, program `wolfboot.bin` again before any other `rfp-cli` connection: with the ID code lost, that connection erases the flash.
 
 
 ## Renesas RX65N

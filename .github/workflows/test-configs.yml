@@ -1684,3 +1684,16 @@ jobs:
       arch: rx
       config-file: ./config/examples/renesas-rx71m.config
       make-args: BIG_ENDIAN=1 CFLAGS_EXTRA=-DWOLFBOOT_RENESAS_OSM
+
+  renesas_rx24t_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx24t.config
+
+  renesas_rx24t_bigendian_osm_test:
+    uses: ./.github/workflows/test-build-renesas-rx.yml
+    with:
+      arch: rx
+      config-file: ./config/examples/renesas-rx24t.config
+      make-args: BIG_ENDIAN=1 CFLAGS_EXTRA=-DWOLFBOOT_RENESAS_OSM

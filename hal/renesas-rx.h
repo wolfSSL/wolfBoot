@@ -39,12 +39,20 @@ void hal_delay_us(uint32_t us);
 /* Clocks */
 #if defined(TARGET_rx72n) || defined(TARGET_rx71m)
 #define SYS_CLK (240000000) /* 240MHz */
+#elif defined(TARGET_rx24t)
+#define SYS_CLK (80000000) /* 80MHz */
 #else
 #define SYS_CLK (120000000) /* 120MHz */
 #endif
+#ifdef TARGET_rx24t
+#define PCLKA   (80000000) /* 80MHz */
+#define PCLKB   (40000000)  /* 40MHz */
+#define FCLK    (20000000)  /* 20MHz */
+#else
 #define PCLKA   (120000000) /* 120MHz */
 #define PCLKB   (60000000)  /* 60MHz */
 #define FCLK    (60000000)  /* 60MHz */
+#endif
 
 /* System Registers */
 #define SYSTEM_BASE (0x80000)
@@ -73,8 +81,12 @@ void hal_delay_us(uint32_t us);
 #define SYS_SCKCR3_CKSEL(n) ((n) << 8) /* 0=LOCO, 1=HOCO, 2=Main, 3=Sub, 4=PLL */
 
 #define SYS_PLLCR (*(volatile uint16_t *)(SYSTEM_BASE + 0x28))
-#define SYS_PLLCR_PLIDIV(n) ((n) << 0) /* 0=x1, 1=x1/2, 2=x1/3 */
+#define SYS_PLLCR_PLIDIV(n) ((n) << 0) /* 0=x1, 1=x1/2, 2=x1/3 (RX24T: 2=x1/4) */
+#ifdef TARGET_rx24t
+#define SYS_PLLCR_PLLSRCSEL   (1 << 2)    /* 0=main, 1=HOCO */
+#else
 #define SYS_PLLCR_PLLSRCSEL   (1 << 4)    /* 0=main, 1=HOCO */
+#endif
 #define SYS_PLLCR_STC(n)    (((n) & 0x7F) << 8) /* Frequency Multiplication Factor */
 
 #define SYS_PLLCR2 (*(volatile uint8_t *)(SYSTEM_BASE + 0x2A))
@@ -85,21 +97,23 @@ void hal_delay_us(uint32_t us);
 
 #define SYS_MOSCCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x32))
 #define SYS_MOSCCR_MOSTP (1 << 0) /* Main-clock osc: 0=operating, 1=stopped */
-
+#ifndef TARGET_rx24t
 #define SYS_SOSCCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x33)) /* Sub-Clock Oscillator Control */
 #define SYS_SOSCCR_SOSTP (1 << 0) /* Sub-clock osc: 0=operating, 1=stopped */
-
+#endif
 #define SYS_LOCOCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x34))
 #define SYS_LOCOCR_LCSTP (1 << 0) /* Low-Speed On-Chip Oscillator Control: 0=On, 1=Off */
 
 #define SYS_HOCOCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0x36))
 #define SYS_HOCOCR_HCSTP (1 << 0) /* High Speed On-Chip Osc - 1=STOPPED */
 #define SYS_HOCOCR2  (*(volatile uint8_t *)(SYSTEM_BASE + 0x37))
-#define SYS_HOCOCR2_HCFRQ(n) ((n) << 0) /* 0=16MHz, 1=18MHz, 2=20MHz */
+#define SYS_HOCOCR2_HCFRQ(n) ((n) << 0) /* 0=16MHz, 1=18MHz, 2=20MHz (RX24T: 0=32MHz, 3=64MHz) */
 
 #define SYS_OSCOVFSR (*(volatile uint8_t *)(SYSTEM_BASE + 0x3C))
 #define SYS_OSCOVFSR_MOOVF  (1 << 0) /* Main clock */
+#ifndef TARGET_rx24t
 #define SYS_OSCOVFSR_SOOVF  (1 << 1) /* Sub clock */
+#endif
 #define SYS_OSCOVFSR_PLOVF  (1 << 2) /* PLL */
 #define SYS_OSCOVFSR_HCOVF  (1 << 3) /* HOCO */
 #define SYS_OSCOVFSR_ILCOVF (1 << 4) /* IWDT */
@@ -115,22 +129,42 @@ void hal_delay_us(uint32_t us);
 #define SYS_PRCR_PRKEY (0xA5 << 8)
 #define SYS_PRCR_PRC0  (1 << 0) /* Enables writing to clock generation circuit */
 #define SYS_PRCR_PRC1  (1 << 1) /* Enables writing to operating modes, clock R/W generation circuit, low power consumption, and software reset */
+#ifdef TARGET_rx24t
+#define SYS_PRCR_PRC2  (1 << 2) /* Enables writing to HOCOWTCR */
+#endif
 #define SYS_PRCR_PRC3  (1 << 3) /* Enables writing to LVD */
 
+#ifdef TARGET_rx24t
+#define PROTECT_OFF() SYS_PRCR = (SYS_PRCR_PRKEY | SYS_PRCR_PRC0 | SYS_PRCR_PRC1 | SYS_PRCR_PRC2 | SYS_PRCR_PRC3)
+#else
 #define PROTECT_OFF() SYS_PRCR = (SYS_PRCR_PRKEY | SYS_PRCR_PRC0 | SYS_PRCR_PRC1 | SYS_PRCR_PRC3)
+#endif
 #define PROTECT_ON()  SYS_PRCR = (SYS_PRCR_PRKEY)
 
 #define SYS_MOFCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0xC293))
+#ifdef TARGET_rx24t
+#define SYS_MOFCR_MODRV21 (1 << 5)  /* OSC MHz: 0=1-10, 1=10-20 */
+#else
 #define SYS_MOFCR_MOFXIN      (1 << 0)  /* OSC Force Oscillation: 0=not controlled, 1=main clock forced */
 #define SYS_MOFCR_MODRV2(n) ((n) << 4)  /* OSC MHz: 0=20.1-24, 1=16.1-20, 2=8.1-16, 3=8 */
+#endif
 #define SYS_MOFCR_MOSEL       (1 << 6)  /* 0=resonator, 1=external clk in*/
 
+#ifndef TARGET_rx24t
 #define SYS_HOCOPCR  (*(volatile uint8_t *)(SYSTEM_BASE + 0xC294))
 #define SYS_HOCOPCR_HOCOPCNT (1 << 0) /* High-Speed On-Chip Oscillator Power Supply Control: 0=On, 1=Off */
+#endif
 
 #define SYS_RSTSR1  (*(volatile uint8_t *)(SYSTEM_BASE + 0xC291))
 #define SYS_RSTSR1_CWSF (1 << 0) /* 0=Cold Start, 1=Warm Start */
 
+#ifdef TARGET_rx24t
+#define SYS_OPCCR   (*(volatile uint8_t *)(SYSTEM_BASE + 0xA0))
+#define SYS_OPCCR_OPCM(n) ((n) & 0x7) /* Operating Power Control Mode: 0=High-speed, 2=Middle-speed */
+#define SYS_OPCCR_OPCMTSF (1 << 4) /* 0=Transition completed, 1=During transition */
+#endif
+
+#ifndef TARGET_rx24t
 /* RTC */
 #define RTC_BASE (SYSTEM_BASE + 0xC400)
 #define RTC_RCR3 (*(volatile uint8_t *)(RTC_BASE + 0x26))
@@ -138,8 +172,83 @@ void hal_delay_us(uint32_t us);
 #define RTC_RCR3_RTCDV(n) ((n) << 1)
 #define RTC_RCR4 (*(volatile uint8_t *)(RTC_BASE + 0x28))
 #define RTC_RCR4_RCKSEL     (1 << 0) /* 0=Sub Clock, 1=Main Clock */
+#endif
 
 /* Flash */
+#ifdef TARGET_rx24t
+#define FLASH_BASE  0x7FC000
+
+#define FLASH_DFLCTL (*(volatile uint8_t *)(FLASH_BASE + 0x90))
+#define FLASH_DFLCTL_DFLEN (1 << 0) /* Data Flash Access: 0=disabled, 1=enabled */
+
+#define FLASH_FPMCR (*(volatile uint8_t *)(FLASH_BASE + 0x100)) /* Flash P/E Mode Control Register */
+#define FLASH_FPMCR_FMS0 (1<<1)
+#define FLASH_FPMCR_FMS1 (1<<4)
+#define FLASH_FPMCR_FMS2 (1<<7)
+#define FLASH_FPMCR_RPDIS (1<<3) /* ROM P/E Disable: 0=enabled, 1=disabled */
+#define FLASH_FPMCR_LVPE (1<<6) /* Low Voltage P/E Mode Enable: 0=disabled, 1=enabled */
+#define FLASH_FPMCR_DISCHARGE1 (FLASH_FPMCR_FMS1 | FLASH_FPMCR_FMS0) /* FMS=011 */
+#define FLASH_FPMCR_DISCHARGE2 (FLASH_FPMCR_FMS2 | FLASH_FPMCR_FMS1 | FLASH_FPMCR_FMS0) /* FMS=111 */
+#define FLASH_FPMCR_CODE_PE (FLASH_FPMCR_FMS2 | FLASH_FPMCR_FMS0) /* FMS=101: ROM P/E mode */
+#define FLASH_FPMCR_READ FLASH_FPMCR_RPDIS /* FMS=000: read mode */
+
+#define FLASH_FASR (*(volatile uint8_t *)(FLASH_BASE + 0x104)) /* Flash Area Select Register */
+#define FLASH_FASR_EXS (1<<0) /* 0=User area or data area */
+
+#define FLASH_FSARL (*(volatile uint16_t *)(FLASH_BASE + 0x108)) /* Flash Processing Start Address Register L */
+#define FLASH_FSARH (*(volatile uint16_t *)(FLASH_BASE + 0x110)) /* Flash Processing Start Address Register H */
+
+#define FLASH_FCR (*(volatile uint8_t *)(FLASH_BASE + 0x114)) /* Flash Control Register */
+#define FLASH_FCR_CMD_PROGRAM (0x81) /* CMD=Program, OPST=Start*/
+#define FLASH_FCR_CMD_BLANKCHECK (0x83) /* CMD=BlankCheck, OPST=Start*/
+#define FLASH_FCR_CMD_ERASE (0x84) /* CMD=BlockErase, OPST=Start*/
+#define FLASH_FCR_CMD_ALLERASE (0x86) /* CMD=AllBlockErase, OPST=Start*/
+#define FLASH_FCR_CMD_CLEAR (0x0)
+#define FLASH_FCR_STOP (1<<6) /* Forced Processing Stop */
+
+#define FLASH_FEARL (*(volatile uint16_t *)(FLASH_BASE + 0x118)) /* Flash Processing End Address Register L */
+#define FLASH_FEARH (*(volatile uint16_t *)(FLASH_BASE + 0x120)) /* Flash Processing End Address Register H */
+#define FLASH_FRESETR (*(volatile uint8_t *)(FLASH_BASE + 0x124)) /* Flash Reset Register */
+#define FLASH_FRESETR_FRESET (1<<0) /* 1=reset the sequencer */
+
+#define FLASH_FSTATR0 (*(volatile uint8_t *)(FLASH_BASE + 0x1F0)) /* Flash Status Register 0 */
+#define FLASH_FSTATR0_ERERR (1<<0) /* Erase Error Flag */
+#define FLASH_FSTATR0_PRGERR (1<<1) /* Program Error Flag */
+#define FLASH_FSTATR0_BCERR (1<<3) /* Blank Check Error Flag */
+#define FLASH_FSTATR0_ILGLERR (1<<4) /* Illegal Command Error Flag */
+#define FLASH_FSTATR0_EILGLERR (1<<5) /* Extra Area Illegal Command Error Flag */
+#define FLASH_FSTATR1 (*(volatile uint8_t *)(FLASH_BASE + 0x12C)) /* Flash Status Register 1 */
+#define FLASH_FSTATR1_FRDY (1<<6) /* Flash Ready Flag */
+#define FLASH_FSTATR1_EXRDY (1<<7) /* Extra Area Ready Flag */
+
+#define FLASH_FWB0 (*(volatile uint16_t *)(FLASH_BASE + 0x130)) /* Flash Write Buffer 0 */
+#define FLASH_FWB1 (*(volatile uint16_t *)(FLASH_BASE + 0x138)) /* Flash Write Buffer 1 */
+#define FLASH_FWB2 (*(volatile uint16_t *)(FLASH_BASE + 0x140)) /* Flash Write Buffer 2 */
+#define FLASH_FWB3 (*(volatile uint16_t *)(FLASH_BASE + 0x144)) /* Flash Write Buffer 3 */
+
+#define FLASH_FPR (*(volatile uint8_t *)(FLASH_BASE + 0x180)) /* Protection Unlock Register */
+#define FLASH_FPR_KEY (0xA5)
+#define FLASH_FPSR (*(volatile uint8_t *)(FLASH_BASE + 0x184)) /* Protection Unlock Status Register */
+#define FLASH_FPSR_PERR (1<<0) /* Protection Error Flag: 1=error */
+
+#define FLASH_FSCMR (*(volatile uint16_t *)(FLASH_BASE + 0x1C0)) /* Flash Start-Up Setting Monitor Register */
+#define FLASH_FAWSMR (*(volatile uint16_t *)(FLASH_BASE + 0x1C8)) /* Flash Access Window Start Address Monitor Register */
+#define FLASH_FAWEMR (*(volatile uint16_t *)(FLASH_BASE + 0x1D0)) /* Flash Access Window End Address Monitor Register */
+
+#define FLASH_FISR (*(volatile uint8_t *)(FLASH_BASE + 0x1D8)) /* Flash Initial Setting Register */
+#define FLASH_FISR_PCKA(mhz) (((mhz) - 1) & 0x1F) /* PCKA: FCLK in MHz (1-32) */
+#define FLASH_FEXCR (*(volatile uint8_t *)(FLASH_BASE + 0x1DC)) /* Flash Extra Area Control Register */
+#define FLASH_FEAML (*(volatile uint16_t *)(FLASH_BASE + 0x1E0)) /* Flash Error Address Monitor Register L */
+#define FLASH_FEAMH (*(volatile uint16_t *)(FLASH_BASE + 0x1E8)) /* Flash Error Address Monitor Register H */
+
+#define FLASH_FENTRYR (*(volatile uint16_t *)(0x7FFFB2)) /* Flash P/E Mode Entry Register */
+#define FLASH_FENTRYR_KEY       (0xAA00)
+#define FLASH_FENTRYR_CODE_READ (0)
+#define FLASH_FENTRYR_CODE_PR   (1 << 0) /* Code Flash Memory P/E Mode Entry */
+#define FLASH_FENTRYR_DATA_READ (0)
+#define FLASH_FENTRYR_DATA_PE   (1 << 7) /* Data Flash Memory P/E Mode Entry */
+
+#else
 #define FLASH_BASE  (SYSTEM_BASE + 0x1000)
 
 #define FLASH_FWEPROR (*(volatile uint8_t *)(SYSTEM_BASE + 0xC296)) /* Flash P/E Protect Register */
@@ -201,6 +310,7 @@ void hal_delay_us(uint32_t us);
 
 #define FCU_RAM_AREA (0x007F8000)
 #define FCU_RAM_SIZE (4096)
+#endif
 
 #ifdef TARGET_rx71m
 #define FCU_FIRMWARE_ADDR (0xFEFFF000)
@@ -231,6 +341,14 @@ void hal_delay_us(uint32_t us);
 
     #define SYS_MEMWAIT (*(volatile uint32_t *)(SYSTEM_BASE + 0x6610))
     #define SYS_MEMWAIT_MEMWAIT (1 << 0) /* 1=wait cycle, required for ICLK > 120MHz */
+#elif defined(TARGET_rx24t)
+    #define FLASH_SIZE 0x40000UL /* 256KB */
+    #define FLASH_CF_BLOCK_SIZE 2048 /* erase block */
+    #define FLASH_CF_UNIT_SIZE  8    /* program unit */
+    #define FLASH_CF_PE_OFFSET  0x03E00000UL /* read address - P/E address */
+
+    #define FLASH_MEMWAIT (*(volatile uint8_t *)(SYSTEM_BASE + 0x31))
+    #define FLASH_MEMWAIT_MEMWAIT(n) ((n) << 0) /* 0=no wait, 1=ICLK<=64MHz, 2=ICLK<=80MHZ */
 #else
     #define FLASH_SIZE 0x200000UL /* 2MB */
 
@@ -291,7 +409,7 @@ void hal_delay_us(uint32_t us);
 #define SCI_SCMR_SDIR (1 << 3) /* Transmitted/Received Data Transfer Direction */
 #define SCI_SCMR_SINV (1 << 2) /* Transmitted/Received Data Invert */
 
-#define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x08))
+#define SCI_SEMR(n) (*(volatile uint8_t *)(SCI_BASE(n) + 0x07))
 #define SCI_SEMR_ASC0    (1 << 0) /* Asynchronous Mode Clock Source Select 0=external clock input */
 #define SCI_SEMR_BRME    (1 << 2) /* Bit Rate Modulation Enable */
 #define SCI_SEMR_ABCS    (1 << 4) /* Asynchronous Mode Base Clock Select */
@@ -311,7 +429,8 @@ void hal_delay_us(uint32_t us);
 #define MPC_PWPR_B0WI  (1 << 7)
 #define MPC_PWPR_PFSWE (1 << 6)
 
-#if defined(TARGET_rx72n) || defined(TARGET_rx71m)
+#if defined(TARGET_rx72n) || defined(TARGET_rx71m) || \
+    defined(TARGET_rx24t)
 #define MPC_PFS(n) (*(volatile uint8_t *)(SYSTEM_BASE + 0xC140 + (n)))
 #else
 #define MPC_PFS(n) (*(volatile uint8_t *)(SYSTEM_BASE + 0xC0E0 + (n)))
