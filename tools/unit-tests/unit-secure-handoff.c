@@ -24,6 +24,7 @@
 #define WOLFBOOT_HASH_SHA256
 #include "wolfboot/secure_handoff.h"
 #include "../../hal/stm32h5_lifecycle.h"
+#include "../../hal/stm32l5_lifecycle.h"
 
 static int test_secure_handoff_record(void)
 {
@@ -153,6 +154,56 @@ static int test_stm32h5_debug_lifecycle_map(void)
     return 0;
 }
 
+static int stm32l5_expect_lifecycle(uint32_t optr, uint32_t expected)
+{
+    uint32_t lifecycle = 0xFFFFFFFFu;
+
+    if (stm32l5_optr_to_psa_lifecycle(optr, &lifecycle) != 0) {
+        return -1;
+    }
+    return (lifecycle == expected) ? 0 : -1;
+}
+
+static int test_stm32l5_optr_lifecycle_map(void)
+{
+    uint32_t lifecycle = 0x1234u;
+
+    if (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN |
+            STM32L5_RDP_LEVEL_0, 0x2000u) != 0) {
+        return -1;
+    }
+    if (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN |
+            STM32L5_RDP_LEVEL_0_5, 0x4000u) != 0) {
+        return -1;
+    }
+    if (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN |
+            STM32L5_RDP_LEVEL_2, 0x3000u) != 0) {
+        return -1;
+    }
+    if ((stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0xBBu,
+            0x5000u) != 0) ||
+            (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0x00u,
+                0x5000u) != 0) ||
+            (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0xFFu,
+                0x5000u) != 0)) {
+        return -1;
+    }
+    /* Only RDP and TZEN select the lifecycle */
+    if (stm32l5_expect_lifecycle(0x7FFFFF00u | STM32L5_FLASH_OPTR_TZEN |
+            STM32L5_RDP_LEVEL_2, 0x3000u) != 0) {
+        return -1;
+    }
+    if ((stm32l5_optr_to_psa_lifecycle(STM32L5_RDP_LEVEL_2, &lifecycle) !=
+            -1) || (lifecycle != 0x1234u)) {
+        return -1;
+    }
+    if (stm32l5_optr_to_psa_lifecycle(STM32L5_FLASH_OPTR_TZEN |
+            STM32L5_RDP_LEVEL_0, NULL) != -1) {
+        return -1;
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_secure_handoff_record() != 0) {
@@ -165,6 +216,9 @@ int main(void)
         return 1;
     }
     if (test_stm32h5_debug_lifecycle_map() != 0) {
+        return 1;
+    }
+    if (test_stm32l5_optr_lifecycle_map() != 0) {
         return 1;
     }
     return 0;

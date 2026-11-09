@@ -36,6 +36,7 @@
 
 #include "hal.h"
 #include "hal/stm32l5.h"
+#include "hal/stm32l5_lifecycle.h"
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -220,12 +221,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {
-    if (lifecycle == NULL) {
-        return -1;
-    }
-
-    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
-    return 0;
+    return stm32l5_optr_to_psa_lifecycle(FLASH_OPTR, lifecycle);
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
