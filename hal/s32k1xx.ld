@@ -84,3 +84,7 @@ _wolfboot_partition_swap_address = @WOLFBOOT_PARTITION_SWAP_ADDRESS@;
 
 /* Stack at end of SRAM_U (grows down from 0x20003000) */
 END_STACK = ORIGIN(SRAM_U) + LENGTH(SRAM_U);
+
+/* RAM cleared with word stores when WOLFBOOT_RAM_ECC_INIT is set */
+_start_ecc_ram = ORIGIN(SRAM_L);
+_end_ecc_ram = ORIGIN(SRAM_U) + LENGTH(SRAM_U);

@@ -43,6 +43,7 @@ This README describes configuration of supported targets.
 * [NXP MCXN947](#nxp-mcxn947)
 * [NXP RW612](#nxp-rw612)
 * [NXP S32K1XX](#nxp-s32k1xx)
+* [NXP MCXE247](#nxp-mcxe247)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -7312,6 +7313,52 @@ cmd>
 - [ ] **Hardware crypto acceleration**: Integrate CSEc (Cryptographic Services Engine) for hardware-accelerated crypto operations
 - [ ] **FlexNVM/EEPROM support**: Add support for FlexNVM partitioning and EEPROM emulation
 - [ ] **CAN/LIN bootloader**: Add firmware update over CAN or LIN bus for automotive applications
+
+
+## NXP MCXE247
+
+The NXP MCX E247 is a Cortex-M4F microcontroller that is register compatible
+with the S32K148 (NXP AN14731), so it uses the bare-metal `s32k1xx` HAL with the
+`MCXE247` variant. No SDK is needed. The port targets the FRDM-MCXE247 board.
+
+The 2 MB of flash is not contiguous: 1.5 MB of Program Flash is at `0x00000000`
+and the remaining 512 KB is FlexNVM at `0x10000000`. Only the Program Flash is
+used. The system runs at 48 MHz (FIRC). Flash cannot be programmed in HSRUN.
+
+### NXP MCXE247: Memory Layout
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| Bootloader | 0x00000000 - 0x0000BFFF | 48 KB |
+| Boot Partition | 0x0000C000 - 0x000C3FFF | 736 KB |
+| Update Partition | 0x000C4000 - 0x0017BFFF | 736 KB |
+| Swap Sector | 0x0017C000 - 0x0017CFFF | 4 KB |
+
+### NXP MCXE247: Building
+
+```sh
+cp config/examples/mcxe247.config .config
+make
+```
+
+The console is on the MCU-Link VCOM port (LPUART2, PTE12 TX, PTD17 RX, 115200
+8N1). The test application shows green on the RGB LED for version 1 and blue
+for later versions, and has the same console as the
+[S32K1xx test application](#nxp-s32k1xx-test-application).
+
+### NXP MCXE247: Programming with Lauterbach TRACE32
+
+Connect the 10-pin debug cable to J14 and short JP4 to disable the onboard
+MCU-Link SWD. TRACE32 R2024.09 has no MCXE247 entry: use `SYStem.CPU S32K148`
+and program `factory.bin` at `0x00000000`.
+
+`factory.bin` includes the Flash Configuration Field at `0x400`. Its security
+byte at `0x40C` must be programmed to `0xFE`: an erased byte secures the chip
+at the next reset, and only a mass erase recovers it.
+
+While TRACE32 is attached it halts the CPU at the reset vector on every reset.
+Detach with `SYStem.Down` before testing an update, which relies on a software
+reset.
 
 
 ## TI Hercules TMS570LC435

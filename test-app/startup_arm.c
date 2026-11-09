@@ -40,7 +40,21 @@ extern void isr_usart3(void);
 #endif
 
 #ifdef TARGET_s32k1xx
-extern void isr_lpuart1(void);
+extern void isr_debug_uart(void);
+/* Only the console LPUART selected with DEBUG_UART_NUM has a handler */
+#if defined(DEBUG_UART_NUM) && (DEBUG_UART_NUM == 0)
+#define isr_lpuart0 isr_debug_uart
+#define isr_lpuart1 isr_empty
+#define isr_lpuart2 isr_empty
+#elif defined(DEBUG_UART_NUM) && (DEBUG_UART_NUM == 2)
+#define isr_lpuart0 isr_empty
+#define isr_lpuart1 isr_empty
+#define isr_lpuart2 isr_debug_uart
+#else
+#define isr_lpuart0 isr_empty
+#define isr_lpuart1 isr_debug_uart
+#define isr_lpuart2 isr_empty
+#endif
 #endif
 
 #if defined(TARGET_va416x0) || defined(TARGET_lpc55s69)
@@ -473,11 +487,11 @@ void (* const IV[])(void) =
     isr_empty,              // LPSPI2 28
     isr_empty,              // Reserved29 29
     isr_empty,              // Reserved30 30
-    isr_empty,              // LPUART0_RxTx 31
+    isr_lpuart0,            // LPUART0_RxTx 31
     isr_empty,              // Reserved32 32
     isr_lpuart1,            // LPUART1_RxTx 33
     isr_empty,              // Reserved34 34
-    isr_empty,              // LPUART2_RxTx 35
+    isr_lpuart2,            // LPUART2_RxTx 35
     isr_empty,              // Reserved36 36
     isr_empty,              // Reserved37 37
     isr_empty,              // ADC0 38
