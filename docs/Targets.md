@@ -10034,6 +10034,8 @@ IMX_FIRMWARE=/path/to/firmware \
   tools/scripts/imx8qm/imx8qm-mkflashbin.sh [device-tree.dtb]
 ```
 
+Each run generates a new signing key, which invalidates any payload signed earlier, such as a FIT already on the boot medium. Set `KEEP_KEYS=1` to build against the key already in the tree instead.
+
 `IMX_FIRMWARE` must hold three binaries from the NXP BSP, none of which are redistributable. Without `IMX_MKIMAGE`/`IMX_FIRMWARE` the script stops after producing the BL33 bundle in `wolfboot.bin`, which can be passed to `imx-mkimage` by hand in place of `u-boot.bin`.
 
 | File | Source (LF v6.1.22-2.0.0) |
@@ -10095,6 +10097,8 @@ SDP loads the container straight into RAM over USB and writes nothing to the boa
 ```
 tools/scripts/imx8qm/imx8qm-flash.sh sdp flash.bin
 ```
+
+With more than one i.MX in serial download mode attached, set `UUU_PATH` to the board's USB path as `uuu -lsusb` prints it.
 
 To boot from a microSD card, write the container at the 32 KB offset the boot ROM reads from and set SW2 to SD1 (POS-3 and POS-4):
 
