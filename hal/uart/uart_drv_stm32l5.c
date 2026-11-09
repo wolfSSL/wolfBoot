@@ -149,7 +149,7 @@ int uart_tx(const uint8_t c)
 int uart_rx(uint8_t *c, int len)
 {
     volatile uint32_t reg;
-    int i = 0;
+    (void)len;
     reg = UART1_ISR;
     if (reg & UART_ISR_RX_NOTEMPTY) {
         *c = (uint8_t)UART1_RDR;
