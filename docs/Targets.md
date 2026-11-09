@@ -4957,7 +4957,8 @@ The PSoC 62 (CY8C624ABZI-S2D44) has a Cortex-M0+ and a Cortex-M4F at 100 MHz,
 flash at `0x14000000` and 1 MB of SRAM. The boot ROM starts the CM0+, which runs
 wolfBoot. The verified application runs on the CM0+, or on the CM4 when built
 with `PSOC6_CM4_APP=1`. Tested on the CY8CEVAL-062S2 evaluation kit with its
-on-board KitProg3. The CY8CKIT-062S2-43012 uses the same configurations.
+on-board KitProg3. The CY8CKIT-062S2-43012 has the same MCU and uses the same
+configurations, but only its builds are tested.
 
 The port builds against the Infineon mtb-pdl-cat1 driver library, the
 mtb-template-cat1 system files, core-lib and cmsis. Fetch the pinned releases
@@ -4994,7 +4995,7 @@ These options are make arguments on top of a configuration:
 - `PSOC6_CRYPTO=1`: SHA-256 and ECDSA P-256 verification on the crypto block.
 - `PSOC6_CM4_APP=1 IMAGE_HEADER_SIZE=1024`: boot the application on the CM4.
   The 1 KB header keeps the CM4 vector table aligned.
-- `RAM_CODE=1`: allow a bootloader self-update (`sign --wolfboot-update`).
+- `RAM_CODE=1`: allow a bootloader self-update (see below).
 - `BOOT_BENCHMARK=1`: print the hash and signature times from a 1 MHz TCPWM timer.
 - `DEBUG_UART=0`: remove the console.
 - `DUALBANK_SWAP=1 WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x12020000
@@ -5032,13 +5033,25 @@ compiled differently for each core, and existing objects are not rebuilt.
 
 ### PSoC 6: Loading the firmware
 
-pyOCD supports the device (`cy8c6xxa`) through the KitProg3 in CMSIS-DAP mode:
+pyOCD supports the device (`cy8c6xxa`) through the KitProg3 in CMSIS-DAP mode.
+`make` also writes `factory.bin`, wolfBoot and the signed version 1 in one file
+that loads at `0x10000000`, for any layout:
 
 ```
 pip install pyocd
+pyocd flash -t cy8c6xxa -a 0x10000000 -e sector factory.bin
+```
+
+Or load the two parts. With `cypsoc6-qspi.config`, BOOT starts at `0x10040000`:
+
+```
 pyocd flash -t cy8c6xxa -a 0x10000000 -e sector wolfboot.bin
 pyocd flash -t cy8c6xxa -a 0x10020000 -e sector test-app/image_v1_signed.bin
 ```
+
+ModusToolbox users can write `factory.bin` at `0x10000000` with the ModusToolbox
+Programmer or the OpenOCD it ships (`interface/kitprog3.cfg`,
+`target/psoc6_2m.cfg`). Stock OpenOCD 0.12 cannot program the 2 MB PSoC 62.
 
 The console is the KitProg3 USB-UART at 115200 8N1:
 
@@ -5077,12 +5090,23 @@ Hello from PSoC6 CM0+ firmware version 2
 Update successful, firmware version 2 confirmed
 ```
 
-If version 2 does not call `wolfBoot_success()`, the next reset rolls back to
-version 1.
+`pyocd flash` resets the board when it finishes, so the update starts right
+after the trigger is written. Wait for the confirm line before resetting: a reset
+before it is a failed first boot, and wolfBoot rolls back.
+
+To test a rollback, sign the update as version 100 or higher. The test
+application does not confirm those versions, so the next reset restores the
+previous version:
+
+```
+Firmware version 100 not confirmed, the next reset rolls back
+```
 
 With `cypsoc6-qspi.config`, write the image to `0x18000000`. The trigger
-goes at the end of BOOT instead (`FLAGS_HOME`), 8 bytes below the BOOT flags.
-It replaces both copies of the write-once trailer, the two last BOOT sectors:
+goes at the end of BOOT instead (`FLAGS_HOME`). Its last 13 bytes are the
+UPDATE state `0x8F` and magic `BOOT`, followed by the 8-byte BOOT trailer, left
+erased. The file covers the two last BOOT sectors, which hold the two copies of
+the write-once trailer, so the trigger also works after a confirmed update:
 
 ```
 pyocd flash -t cy8c6xxa -a 0x18000000 -e sector test-app/image_v2_signed.bin
@@ -5097,6 +5121,35 @@ starts at `0x10120000` while the original mapping is active:
 ```
 pyocd flash -t cy8c6xxa -a 0x10120000 -e sector test-app/image_v2_signed.bin
 ```
+
+A `RAM_CODE=1` bootloader updates itself from an image signed with
+`--wolfboot-update` and a version above its own `WOLFBOOT_VERSION`. wolfBoot
+erases an image that is not newer. Build and load the running bootloader with
+a version, then build the new one with a higher version and stage it like an
+application update:
+
+```
+make RAM_CODE=1 WOLFBOOT_VERSION=1
+pyocd flash -t cy8c6xxa -a 0x10000000 -e sector factory.bin
+make clean
+make RAM_CODE=1 WOLFBOOT_VERSION=2 wolfboot.bin
+tools/keytools/sign --ecc256 --sha256 --wolfboot-update wolfboot.bin wolfboot_signing_private_key.der 2
+pyocd flash -t cy8c6xxa -a 0x10100000 -e sector wolfboot_v2_signed.bin
+pyocd flash -t cy8c6xxa -a 0x101DF000 -e sector trigger.bin
+```
+
+### PSoC 6: Moving from the earlier port
+
+This port replaces the earlier PSoC 6 support, and a device in the field on the
+earlier layout cannot take an update built from this one. Reprogram wolfBoot and
+the application together. The changes are:
+- BOOT moved from `0x10080000` (512 KB) to `0x10020000` (896 KB), SWAP moved out
+  of the bootloader region, and wolfBoot sectors are 4 KB instead of 512 bytes.
+- The default signature is ECC256 instead of ED25519, so new keys are generated.
+- The psoc6pdl library and the board BSP are replaced by mtb-pdl-cat1 and
+  mtb-template-cat1: `CYPRESS_TARGET_LIB` is gone, `CYPRESS_TEMPLATE_LIB` and
+  `CYPRESS_CMSIS` are new, and `PSOC6_BOARD` selects the board's pins.
+- `PSOC6_CRYPTO` is off unless set to 1.
 
 ### PSoC 6: Debugging
 

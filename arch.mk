@@ -2485,6 +2485,18 @@ ifeq ($(TARGET),psoc6)
     endif
     CYPRESS_PDL_DEV:=$(CYPRESS_PDL)/devices/COMPONENT_CAT1A
     CYPRESS_PDL_TEMPLATE:=$(CYPRESS_TEMPLATE_LIB)/files/templates/cat1a/COMPONENT_MTB
+    PSOC6_LIB_FILES:=$(CYPRESS_PDL_DEV)/include/cy_device_headers.h \
+        $(CYPRESS_PDL_TEMPLATE)/COMPONENT_CM0P/system_psoc6_cm0plus.c \
+        $(CYPRESS_CMSIS)/Core/Include/core_cm0plus.h \
+        $(CYPRESS_CORE_LIB)/include/cy_result.h
+    ifneq ($(filter-out $(wildcard $(PSOC6_LIB_FILES)),$(PSOC6_LIB_FILES)),)
+        ifeq ($(filter clean keysclean distclean keytools,$(MAKECMDGOALS)),)
+            $(error PSoC 6 libraries not found: run tools/ci/fetch-psoc6-pdl.sh lib, \
+                or set CYPRESS_PDL, CYPRESS_TEMPLATE_LIB, CYPRESS_CMSIS and \
+                CYPRESS_CORE_LIB. Missing: \
+                $(filter-out $(wildcard $(PSOC6_LIB_FILES)),$(PSOC6_LIB_FILES)))
+        endif
+    endif
     PSOC6_PDL_OBJS:=\
         $(CYPRESS_PDL)/drivers/source/cy_flash.o \
         $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \

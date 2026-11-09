@@ -39,6 +39,9 @@
 #define APP_CORE "CM0+"
 #endif
 
+/* Images signed with this version or higher stay unconfirmed, to test rollback */
+#define PSOC6_APP_NO_CONFIRM_VERSION 100U
+
 void main(void)
 {
     uint32_t boot_ver;
@@ -52,7 +55,11 @@ void main(void)
     wolfBoot_printf("Hello from PSoC6 " APP_CORE " firmware version %d\n",
         boot_ver);
 
-    if (boot_ver != 1U) {
+    if (boot_ver >= PSOC6_APP_NO_CONFIRM_VERSION) {
+        wolfBoot_printf("Firmware version %d not confirmed, the next reset "
+            "rolls back\n", boot_ver);
+    }
+    else if (boot_ver != 1U) {
         wolfBoot_success();
         wolfBoot_printf("Update successful, firmware version %d confirmed\n",
             boot_ver);

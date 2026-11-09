@@ -326,6 +326,8 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
         }
 #endif
         if (update_version <= current_version) {
+            wolfBoot_printf("Self update version 0x%x not newer than 0x%x, "
+                "erased\n", update_version, current_version);
             wolfBoot_erase_partition(PART_UPDATE);
             return;
         }
@@ -612,6 +614,9 @@ static int RAMFUNCTION wolfBoot_swap_backup_version(uint32_t *ver)
     struct wolfBoot_image swap;
     uint8_t *field = NULL;
 
+    /* SWAP holds one sector, which then cannot hold the whole header */
+    if (sizeof(hdr) > WOLFBOOT_SECTOR_SIZE)
+        return -1;
     wolfBoot_open_image(&swap, PART_SWAP);
 #ifdef NVM_FLASH_ECC
     /* A read of erased ECC flash can fault */
@@ -750,7 +755,8 @@ static int RAMFUNCTION wolfBoot_swap_and_final_erase(int resume, int rollback)
     /* A downgrade would look the same, a delta update keeps the patch in
      * UPDATE and encrypted headers need their IV mapping: those keep TESTING */
     if (resume == 1)
-        rollback = wolfBoot_swap_was_rollback(1, tmpBootPos == 0);
+        rollback = wolfBoot_swap_was_rollback(1,
+            tmpBootPos < IMAGE_HEADER_SIZE);
 #endif
 
     hal_flash_unlock();
@@ -1755,7 +1761,9 @@ static int RAMFUNCTION wolfBoot_update(int fallback_allowed)
     if ((update_type & 0x00F0) == HDR_IMG_TYPE_DIFF) {
         /* if magic isn't set stateRet will be -1 but that means we're on a
          * fresh partition and aren't resuming */
+        trailer_read_unlock();
         stateRet = wolfBoot_get_partition_state(PART_UPDATE, &st);
+        trailer_read_lock();
 
         /* if we've already written a sector or we've mangled the boot partition
          * header we can't determine the direction by version numbers. instead
