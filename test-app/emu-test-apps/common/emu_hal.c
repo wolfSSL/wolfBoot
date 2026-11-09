@@ -42,6 +42,95 @@
 #define FLASH_CR_SNB_MASK (0x7fu << FLASH_CR_SNB_SHIFT)
 #endif
 
+#if defined(EMU_STM32L5_SECURE)
+/* The secure-app payload programs flash through the Secure register bank;
+ * the partitions sit at the Secure flash alias (DBANK=1, 2KB pages). */
+#define L5_FLASH_BASE         0x50022000u
+#define L5_FLASH_SECKEYR      (*(volatile uint32_t *)(L5_FLASH_BASE + 0x0Cu))
+#define L5_FLASH_SECSR        (*(volatile uint32_t *)(L5_FLASH_BASE + 0x24u))
+#define L5_FLASH_SECCR        (*(volatile uint32_t *)(L5_FLASH_BASE + 0x2Cu))
+#define L5_FLASH_KEY1         0x45670123u
+#define L5_FLASH_KEY2         0xCDEF89ABu
+#define L5_FLASH_SR_BSY       (1u << 16)
+#define L5_FLASH_CR_PG        (1u << 0)
+#define L5_FLASH_CR_PER       (1u << 1)
+#define L5_FLASH_CR_PNB_SHIFT 3
+#define L5_FLASH_CR_PNB_MASK  (0x7Fu << L5_FLASH_CR_PNB_SHIFT)
+#define L5_FLASH_CR_BKER      (1u << 11)
+#define L5_FLASH_CR_STRT      (1u << 16)
+#define L5_FLASH_CR_LOCK      (1u << 31)
+#define L5_FLASH_S_ALIAS      0x0C000000u
+#define L5_FLASH_BANK_SIZE    0x00040000u
+#define L5_FLASH_PAGE_SIZE    0x00000800u
+
+static void stm32l5_flash_wait(void)
+{
+    while ((L5_FLASH_SECSR & L5_FLASH_SR_BSY) != 0u) {
+    }
+}
+
+/* Programs whole 64-bit units, keeping the bytes outside the request */
+static int stm32l5_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    volatile uint32_t *unit;
+    uint32_t dword[2];
+    uint8_t *bytes = (uint8_t *)dword;
+    uint32_t here;
+    int off;
+    int i = 0;
+    int j;
+
+    while (i < len) {
+        here = address + (uint32_t)i;
+        unit = (volatile uint32_t *)(here & ~7u);
+        off = (int)(here & 7u);
+        for (j = 0; j < 8; j++) {
+            if ((j >= off) && ((i + j - off) < len)) {
+                bytes[j] = data[i + j - off];
+            }
+            else {
+                bytes[j] = ((const volatile uint8_t *)unit)[j];
+            }
+        }
+        L5_FLASH_SECCR |= L5_FLASH_CR_PG;
+        unit[0] = dword[0];
+        unit[1] = dword[1];
+        stm32l5_flash_wait();
+        L5_FLASH_SECCR &= ~L5_FLASH_CR_PG;
+        i += 8 - off;
+    }
+    return 0;
+}
+
+static int stm32l5_flash_erase(uint32_t address, int len)
+{
+    uint32_t p;
+    uint32_t end;
+    uint32_t cr;
+
+    if (address >= L5_FLASH_S_ALIAS) {
+        address -= L5_FLASH_S_ALIAS;
+    }
+    end = address + (uint32_t)len;
+    for (p = address & ~(L5_FLASH_PAGE_SIZE - 1u); p < end;
+            p += L5_FLASH_PAGE_SIZE) {
+        cr = L5_FLASH_SECCR & ~(L5_FLASH_CR_PNB_MASK | L5_FLASH_CR_BKER |
+            L5_FLASH_CR_PG);
+        cr |= L5_FLASH_CR_PER |
+            (((p % L5_FLASH_BANK_SIZE) / L5_FLASH_PAGE_SIZE) <<
+                L5_FLASH_CR_PNB_SHIFT);
+        if (p >= L5_FLASH_BANK_SIZE) {
+            cr |= L5_FLASH_CR_BKER;
+        }
+        L5_FLASH_SECCR = cr;
+        L5_FLASH_SECCR = cr | L5_FLASH_CR_STRT;
+        stm32l5_flash_wait();
+    }
+    L5_FLASH_SECCR &= ~L5_FLASH_CR_PER;
+    return 0;
+}
+#endif
+
 #if defined(EMU_NRF5340)
 #define NVMC_BASE         0x40039000u
 #define NVMC_CONFIG       (*(volatile uint32_t *)(NVMC_BASE + 0x504u))
@@ -419,6 +508,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return mcxn_flash_write(address, data, len);
 #elif defined(EMU_LPC55S69)
     return lpc55s69_flash_write(address, data, len);
+#elif defined(EMU_STM32L5_SECURE)
+    return stm32l5_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -460,6 +551,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return lpc55s69_flash_erase(address, len);
+#elif defined(EMU_STM32L5_SECURE)
+    if (len <= 0) {
+        return 0;
+    }
+    return stm32l5_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
@@ -510,6 +606,11 @@ void hal_flash_unlock(void)
     SYS_REGLCTL = 0x16u;
     SYS_REGLCTL = 0x88u;
     FMC_ISPCTL |= FMC_ISPCTL_ISPEN | FMC_ISPCTL_APUEN;
+#elif defined(EMU_STM32L5_SECURE)
+    if ((L5_FLASH_SECCR & L5_FLASH_CR_LOCK) != 0u) {
+        L5_FLASH_SECKEYR = L5_FLASH_KEY1;
+        L5_FLASH_SECKEYR = L5_FLASH_KEY2;
+    }
 #elif defined(EMU_STM32)
     if ((FLASH_NSCR & FLASH_CR_LOCK) != 0u) {
         FLASH_NSKEYR = FLASH_KEY1;
@@ -526,6 +627,8 @@ void hal_flash_lock(void)
 #if defined(EMU_M2354)
     FMC_ISPCTL &= ~(FMC_ISPCTL_ISPEN | FMC_ISPCTL_APUEN);
     SYS_REGLCTL = 0u;
+#elif defined(EMU_STM32L5_SECURE)
+    L5_FLASH_SECCR |= L5_FLASH_CR_LOCK;
 #elif defined(EMU_STM32)
     FLASH_NSCR &= ~FLASH_CR_PG;
     FLASH_NSCR |= FLASH_CR_LOCK;

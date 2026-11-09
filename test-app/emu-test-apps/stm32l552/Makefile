@@ -22,16 +22,24 @@ CC=arm-none-eabi-gcc
 OBJCOPY ?= arm-none-eabi-objcopy
 
 CFLAGS := -mcpu=cortex-m33 -mthumb -Os -ffreestanding -fdata-sections -ffunction-sections -g -ggdb
-CFLAGS += -I. -I../common -I../../../include -DEMU_STM32
+CFLAGS += -I. -I../common -I../../../include
 CFLAGS += -DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
 LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
 NSC_OBJ :=
-ifeq ($(TZEN),1)
-  CFLAGS += -DTZEN
-  CFLAGS += -DNONSECURE_APP
-  CFLAGS += -DWOLFCRYPT_SECURE_MODE
-  NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
+ifneq ($(SECURE_HANDOFF_ADDRESS),)
+  # Secure-app payload (WOLFBOOT_SECURE_APP): runs Secure and programs the
+  # flash itself; write-once like the wolfBoot build.
+  CFLAGS += -DEMU_STM32L5_SECURE -DNVM_FLASH_WRITEONCE
+  CFLAGS += -DEMU_SECURE_HANDOFF_ADDRESS=$(SECURE_HANDOFF_ADDRESS)
+else
+  CFLAGS += -DEMU_STM32
+  ifeq ($(TZEN),1)
+    CFLAGS += -DTZEN
+    CFLAGS += -DNONSECURE_APP
+    CFLAGS += -DWOLFCRYPT_SECURE_MODE
+    NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
+  endif
 endif
 
 VPATH := ../common
