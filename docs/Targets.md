@@ -7131,7 +7131,7 @@ Example configuration files:
 - [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config) - S32K142 (256KB Flash, 32KB SRAM)
 - [/config/examples/nxp-s32k144.config](/config/examples/nxp-s32k144.config) - S32K144 (512KB Flash, 64KB SRAM)
 - [/config/examples/nxp-s32k146.config](/config/examples/nxp-s32k146.config) - S32K146 (1MB Flash, 128KB SRAM)
-- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (2MB Flash, 256KB SRAM)
+- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (1.5MB Program Flash + 512KB FlexNVM, 256KB SRAM)
 
 ```sh
 # Copy configuration (example for S32K142)

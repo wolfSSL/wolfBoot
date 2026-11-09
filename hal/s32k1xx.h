@@ -547,10 +547,10 @@
  * S32K142: 256KB Flash (0x00000 - 0x3FFFF), 32KB SRAM, 2KB sectors
  * S32K144: 512KB Flash (0x00000 - 0x7FFFF), 64KB SRAM, 4KB sectors
  * S32K146: 1MB Flash   (0x00000 - 0xFFFFF), 128KB SRAM, 4KB sectors
- * S32K148: 2MB Flash   (0x00000 - 0x1FFFFF), 256KB SRAM, 4KB sectors
- * MCXE247: 1.5MB Program Flash (0x00000 - 0x17FFFF), 256KB SRAM, 4KB sectors.
- *          Register compatible with the S32K148 (NXP AN14731). The other
- *          512KB of its 2MB is FlexNVM at 0x10000000 and is not used here.
+ * S32K148: 1.5MB Program Flash (0x00000 - 0x17FFFF), 256KB SRAM, 4KB sectors
+ * MCXE247: Same memory as the S32K148 and register compatible (NXP AN14731).
+ *          The other 512KB of the 2MB on both parts is FlexNVM at 0x10000000
+ *          and is not used here.
  *
  * IMPORTANT: Flash sector size depends on total flash size:
  *   - 256KB Flash (S32K142): 2KB sectors
@@ -558,12 +558,8 @@
  *
  * All variants use 8-byte phrase programming.
  */
-#if defined(MCXE247)
+#if defined(S32K148) || defined(MCXE247)
     #define FLASH_SIZE              (1536 * 1024)   /* 1.5MB Program Flash */
-    #define SRAM_SIZE               (256 * 1024)    /* 256KB */
-    #define FLASH_SECTOR_SIZE       4096            /* 4KB sectors */
-#elif defined(S32K148)
-    #define FLASH_SIZE              (2048 * 1024)   /* 2MB */
     #define SRAM_SIZE               (256 * 1024)    /* 256KB */
     #define FLASH_SECTOR_SIZE       4096            /* 4KB sectors */
 #elif defined(S32K146)
