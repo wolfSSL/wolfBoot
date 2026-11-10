@@ -287,6 +287,32 @@ static void wait_for_update(uint32_t version)
 }
 
 #ifdef EMU_SECURE_HANDOFF_ADDRESS
+#if defined(EMU_STM32L5_SECURE)
+#define EMU_SAU_RNR   (*(volatile uint32_t *)0xE000EDD8u)
+#define EMU_SAU_RLAR  (*(volatile uint32_t *)0xE000EDE0u)
+#define EMU_SAU_TYPE  (*(volatile uint32_t *)0xE000EDD4u)
+#define EMU_SAU_RLAR_ENABLE 0x1u
+#define EMU_SAU_RLAR_NSC    0x2u
+
+/* wolfBoot must hand over with no Non-secure SAU window, only its NSC one */
+static int emu_check_sau(void)
+{
+    uint32_t regions = EMU_SAU_TYPE & 0xFFu;
+    uint32_t rlar;
+    uint32_t r;
+
+    for (r = 0u; r < regions; r++) {
+        EMU_SAU_RNR = r;
+        rlar = EMU_SAU_RLAR;
+        if (((rlar & EMU_SAU_RLAR_ENABLE) != 0u) &&
+                ((rlar & EMU_SAU_RLAR_NSC) == 0u)) {
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 /* The record wolfBoot published must describe the image that is running. */
 static int emu_check_handoff(uint32_t version)
 {
@@ -294,6 +320,12 @@ static int emu_check_handoff(uint32_t version)
         (const volatile wolfBoot_secure_handoff_t *)EMU_SECURE_HANDOFF_ADDRESS;
     uint8_t *hash = NULL;
     uint32_t i;
+
+#if defined(EMU_STM32L5_SECURE)
+    if (emu_check_sau() != 0) {
+        return -1;
+    }
+#endif
 
     if ((rec->magic != WOLFBOOT_SECURE_HANDOFF_MAGIC) ||
         (rec->magic_inverse != ~WOLFBOOT_SECURE_HANDOFF_MAGIC) ||

@@ -47,6 +47,8 @@ static inline int stm32l5_optr_to_psa_lifecycle(uint32_t optr,
     else {
         switch (optr & STM32L5_FLASH_OPTR_RDP_MASK) {
             case STM32L5_RDP_LEVEL_0:
+                /* No product state on L5: TZEN at RDP 0 is the provisioning
+                 * stage, and assembly/test has no distinct encoding */
                 *lifecycle = 0x2000u; /* PSA_LIFECYCLE_PSA_ROT_PROVISIONING */
                 break;
             case STM32L5_RDP_LEVEL_0_5:

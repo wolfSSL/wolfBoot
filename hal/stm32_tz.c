@@ -395,7 +395,7 @@ void hal_tz_sau_init(void)
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
     /* A secure application is entered Secure and programs its own
-     * Non-secure flash and RAM windows. */
+     * Non-secure flash, RAM and peripheral windows. */
 #if !defined(WOLFBOOT_SECURE_APP)
     /* Non-secure: application flash area (boot partition only) */
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
@@ -404,10 +404,10 @@ void hal_tz_sau_init(void)
 
     /* Non-secure RAM region in SRAM1/SRAM2 */
     sau_init_region(2, 0x20020000, 0x2003FFFF, 0);
-#endif
 
     /* Non-secure: internal peripherals */
     sau_init_region(3, 0x40000000, 0x4FFFFFFF, 0);
+#endif
 
     /* Enable SAU */
     SAU_CTRL = SAU_INIT_CTRL_ENABLE;

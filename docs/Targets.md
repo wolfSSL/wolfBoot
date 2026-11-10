@@ -306,10 +306,15 @@ All partitions are at the Secure flash alias:
 | Update partition (start of bank 2) | `0x0C040000` | 128 KB |
 | Non-secure guests | `0x08060000` | 128 KB |
 
-wolfBoot keeps SRAM1, SRAM2 and every peripheral Secure across the jump, and
+wolfBoot keeps SRAM1 and SRAM2 Secure across the jump, opens no Non-secure
+flash, RAM or peripheral window in the SAU, and
 links its own RAM at `0x30030000` so that `0x30000000-0x3002FFFF` (the record
 and the secure application's RAM) is left untouched. The PSA lifecycle in the
 record comes from the RDP level in `FLASH_OPTR` (`hal/stm32l5_lifecycle.h`).
+The STM32L5 has no product-state register, so with `TZEN=1` RDP level 0 is
+reported as PSA RoT provisioning (`0x2000`), levels 0.5 and 1 as Non-PSA RoT
+debug (`0x4000`, Secure debug closed), and level 2 as secured (`0x3000`).
+Without `TZEN` the lifecycle is unknown.
 
 The partition values are `?=` defaults. A different layout set on the `make`
 command line must keep the boot, NVM, swap, update and guest regions disjoint

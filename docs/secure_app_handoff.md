@@ -103,11 +103,13 @@ and the partitions at the Secure flash alias (`0x0C00C000` boot, `0x0C040000`
 update, both 128 KB). wolfBoot links its RAM at `0x30030000`
 (`hal/stm32l5-secure-app.ld`) to stay clear of the record and the secure app's
 RAM. `hal/stm32_tz.c` keeps SRAM1 and SRAM2 Secure and opens no Non-secure
-flash or RAM in the SAU, `hal/stm32l5.c` leaves every peripheral Secure, and
+flash, RAM or peripheral window in the SAU (only the NSC region),
+`hal/stm32l5.c` skips the GTZC peripheral unsecuring, and
 `hal_attestation_get_lifecycle()` maps the RDP level to a PSA lifecycle
 (`hal/stm32l5_lifecycle.h`; it reports unknown when TZEN is off). The
 `trustzone-emulator-tests` workflow runs boot, update and rollback on the m33mu
-STM32L552 model and checks the record on every boot.
+STM32L552 model and checks on every boot the record and that no
+Non-secure SAU window is open.
 
 ## Tests
 
