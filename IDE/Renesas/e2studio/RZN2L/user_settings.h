@@ -30,6 +30,9 @@
 #define EXT_FLASH
 #define NO_XIP
 #define WOLFBOOT_DUALBOOT
+/* No onchip flash. BOOT and UPDATE partitions are on external.*/
+#define PART_BOOT_EXT
+#define PART_UPDATE_EXT
 
 /* For RSIP use, please enable the following line. */
 /* #define  WOLFBOOT_RENESAS_RSIP */
