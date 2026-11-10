@@ -2,7 +2,8 @@
  *
  * Optional wolfIP network test for the wolfBoot test-app. Ethernet port and ms
  * timebase are compile-time selected: NXP QorIQ FMan (T2080/T1024/T1040,
- * big-endian PowerPC) or NXP Layerscape ENETC (LS1028A, AArch64). Modes:
+ * big-endian PowerPC), NXP Layerscape ENETC (LS1028A, AArch64) or the
+ * MCUXpresso fsl_enet driver (MCXE247, Cortex-M4). Modes:
  *   default              DHCP lease only
  *   WOLFBOOT_TEST_TFTP   + TFTP RRQ fetch into RAM, report size+checksum
  *                          (optionally verify them via TFTP_EXPECT_SIZE/SUM)
@@ -46,6 +47,13 @@
 #define WOLFIP_NETDEV_LINK_UP   nxp_enetc_link_up
 #define WOLFIP_NETDEV_SET_LOG   nxp_enetc_set_log
 #define WOLFIP_NETDEV_NAME      "ENETC"
+#elif defined(WOLFIP_PORT_MCXE_ENET)
+#include "nxp_mcxe_enet.h"
+#define WOLFIP_NETDEV_INIT      nxp_mcxe_enet_init
+#define WOLFIP_NETDEV_PHY_ADDR  nxp_mcxe_enet_phy_addr
+#define WOLFIP_NETDEV_PHY_READ  nxp_mcxe_enet_phy_read
+#define WOLFIP_NETDEV_LINK_UP   nxp_mcxe_enet_link_up
+#define WOLFIP_NETDEV_NAME      "MCXE247 ENET"
 #else
 #include "nxp_fman.h"
 #define WOLFIP_NETDEV_INIT      nxp_fman_init
@@ -99,6 +107,21 @@ static uint64_t tb_hz(void)
 static uint64_t now_ms(void)
 {
     return read_tb() / (tb_hz() / 1000ULL);
+}
+#elif defined(WOLFIP_PORT_MCXE_ENET)
+/* 1 ms SysTick count, kept by the target app. */
+extern uint32_t wolfip_test_get_ms(void);
+#define SYST_CVR_REG    (*(volatile uint32_t *)0xE000E018UL)
+
+/* Combine the tick count and the SysTick down-counter to seed the RNG. */
+static uint64_t read_tb(void)
+{
+    return ((uint64_t)wolfip_test_get_ms() << 24) | (SYST_CVR_REG & 0xFFFFFFU);
+}
+
+static uint64_t now_ms(void)
+{
+    return (uint64_t)wolfip_test_get_ms();
 }
 #else
 /* PowerPC e5500/e6500 Time Base via SPRs (TBL=268, TBU=269) = platform clock
@@ -224,9 +247,21 @@ static struct wolfIP *wolfip_bringup(void)
     }
 }
 
+#if defined(WOLFBOOT_TEST_TFTP) || defined(WOLFIP_SPEED_TEST)
+/* Zero a local struct without pulling in a libc memset (freestanding app). */
+static void zmem(void *p, unsigned int n)
+{
+    unsigned int i;
+    for (i = 0; i < n; i++)
+        ((uint8_t *)p)[i] = 0;
+}
+#endif
+
 #ifdef WOLFBOOT_TEST_TFTP
 /* ---- TFTP RRQ fetch into a RAM buffer + integrity check ------------- */
+#ifndef TFTP_RAM_MAX
 #define TFTP_RAM_MAX    (128U * 1024U)
+#endif
 #define TFTP_LOCAL_PORT 6900U
 
 struct tftp_ram_ctx {
@@ -238,14 +273,6 @@ struct tftp_ram_ctx {
 static struct tftp_ram_ctx g_tftp;
 
 struct tftp_glue { struct wolfIP *s; int sock; };
-
-/* Zero a local struct without pulling in a libc memset (freestanding app). */
-static void zmem(void *p, unsigned int n)
-{
-    unsigned int i;
-    for (i = 0; i < n; i++)
-        ((uint8_t *)p)[i] = 0;
-}
 
 static int tftp_io_open(void *arg, const char *name, int is_write,
     uint32_t *size_hint, void **handle)

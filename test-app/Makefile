@@ -1716,8 +1716,8 @@ WOLFTPM_CFLAGS:=$(CFLAGS)
 WOLFHSM_CFLAGS:=$(CFLAGS)
 
 # Optional wolfIP network stack in the test-app.
-#   ENABLE_WOLFIP=1       wolfIP ethernet port (nxp_fman, or nxp_enetc on
-#                         LS1028A) + a link/PHY smoke test.
+#   ENABLE_WOLFIP=1       wolfIP ethernet port (nxp_fman, nxp_enetc on LS1028A,
+#                         or nxp_mcxe_enet on MCXE247) + a link/PHY smoke test.
 #   WOLFBOOT_TEST_TFTP=1  additionally pull in wolfIP core + TFTP client for
 #                         the full network TFTP-fetch test.
 # Point WOLFBOOT_LIB_WOLFIP at a wolfIP checkout, e.g.
@@ -1732,6 +1732,32 @@ ifeq ($(ENABLE_WOLFIP),1)
     WOLFIP_PORT:=nxp_enetc
     WOLFIP_PORT_OBJ:=nxp_enetc.o
     CFLAGS+=-DWOLFIP_PORT_ENETC
+  else ifeq ($(TARGET),s32k1xx)
+    ifeq ($(filter -DMCXE247,$(CFLAGS_EXTRA)),)
+      $(error ENABLE_WOLFIP=1 on s32k1xx is only supported on MCXE247)
+    endif
+    ifeq ($(wildcard $(MCUXPRESSO)/drivers/enet/fsl_enet.c),)
+      $(error ENABLE_WOLFIP=1 on MCXE247 needs MCUXPRESSO set to an MCUXpresso SDK checkout)
+    endif
+    WOLFIP_PORT:=nxp_mcxe_enet
+    WOLFIP_PORT_OBJ:=nxp_mcxe_enet.o
+    LSCRIPT_TEMPLATE=ARM-s32k1xx-wolfip.ld
+    # The generic MCUXPRESSO_* defaults describe a different part
+    MCXE247_DEVICE:=$(MCUXPRESSO)/devices/MCX/MCXE/MCXE247
+    CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DCPU_MCXE247VLL
+    # The TFTP receive buffer shares the 124KB of SRAM_U
+    CFLAGS+=-DTFTP_RAM_MAX=0xA000U
+    CFLAGS+=-I$(MCXE247_DEVICE) -I$(MCXE247_DEVICE)/drivers
+    CFLAGS+=-I$(MCXE247_DEVICE)/../periph0
+    CFLAGS+=-I$(MCUXPRESSO)/drivers/common -I$(MCUXPRESSO)/drivers/enet
+    CFLAGS+=-I$(MCUXPRESSO)/components/phy
+    CFLAGS+=-I$(MCUXPRESSO)/components/phy/device/phylan8741
+    CFLAGS+=-I$(MCUXPRESSO)/arch/arm/CMSIS/Core/Include
+    APP_OBJS+=$(MCUXPRESSO)/drivers/enet/fsl_enet.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/common/fsl_common.o
+    APP_OBJS+=$(MCUXPRESSO)/drivers/common/fsl_common_arm.o
+    APP_OBJS+=$(MCXE247_DEVICE)/drivers/fsl_clock.o
+    APP_OBJS+=$(MCUXPRESSO)/components/phy/device/phylan8741/fsl_phylan8741.o
   else
     WOLFIP_PORT:=nxp_fman
     WOLFIP_PORT_OBJ:=nxp_fman.o

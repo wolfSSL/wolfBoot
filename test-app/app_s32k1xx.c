@@ -37,6 +37,9 @@
 #include "keystore.h"
 #include "target.h"
 #include "image.h"
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
 
 #ifdef TARGET_s32k1xx
 
@@ -61,6 +64,14 @@ static uint32_t get_time_ms(void)
 {
     return jiffies;
 }
+
+#ifdef ENABLE_WOLFIP
+/* Millisecond timebase for wolfip_tftp_test.c */
+uint32_t wolfip_test_get_ms(void)
+{
+    return jiffies;
+}
+#endif
 
 static void delay_ms(uint32_t ms)
 {
@@ -711,6 +722,9 @@ static int cmd_update(const char *args);
 static int cmd_timestamp(const char *args);
 static int cmd_trigger(const char *args);
 static int cmd_status(const char *args);
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args);
+#endif
 
 typedef struct {
     int (*fn)(const char *args);
@@ -726,6 +740,9 @@ static const console_cmd_t commands[] = {
     {cmd_trigger,   "trigger",  "Trigger update (if update image in flash)"},
     {cmd_update,    "update",   "Update firmware via XMODEM"},
     {cmd_timestamp, "timestamp", "Show current system time"},
+#ifdef ENABLE_WOLFIP
+    {cmd_network,   "network",  "Run the wolfIP network test"},
+#endif
     {cmd_reboot,    "reboot",   "Reboot the system"},
     {NULL, NULL, NULL}
 };
@@ -843,6 +860,15 @@ static int cmd_update(const char *args)
     (void)args;
     return cmd_update_xmodem();
 }
+
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args)
+{
+    (void)args;
+    wolfip_tftp_test_report();
+    return 0;
+}
+#endif
 
 static int parse_command(const char* cmd)
 {

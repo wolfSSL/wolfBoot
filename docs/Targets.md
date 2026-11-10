@@ -7346,17 +7346,67 @@ The console is on the MCU-Link VCOM port (LPUART2, PTE12 TX, PTD17 RX, 115200
 for later versions, and has the same console as the
 [S32K1xx test application](#nxp-s32k1xx-test-application).
 
+### NXP MCXE247: Configuration Options
+
+The [S32K1xx configuration options](#nxp-s32k1xx-configuration-options) also
+apply to the MCXE247, with these differences:
+
+- Select the variant with `MCXE247` instead of `S32K144`, `S32K146` or `S32K148`.
+- The console is on LPUART2, not LPUART1. `mcxe247.config` selects it with
+  `DEBUG_UART_NUM=2` and the `DEBUG_UART_TX_*` and `DEBUG_UART_RX_*` pin
+  settings.
+- `mcxe247.config` also sets `WOLFBOOT_RAM_ECC_INIT`, which clears SRAM at reset
+  so its ECC is valid.
+
+### NXP MCXE247: Network test
+
+The test application can run a wolfIP DHCP and TFTP test over the board's
+Ethernet port. This is optional and is the only part of the port that needs the
+MCUXpresso SDK, which provides the `fsl_enet` driver. Set `ENABLE_WOLFIP=1` in
+`mcxe247.config`, check the wolfIP and SDK paths, then set the TFTP server and
+file:
+
+```sh
+ENABLE_WOLFIP?=1
+WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
+MCUXPRESSO?=$(PWD)/../NXP/mcuxpresso-sdk/mcuxsdk
+WOLFBOOT_TEST_TFTP?=1
+CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
+```
+
+Type `network` on the console to run the test. It acquires a DHCP lease, fetches
+the file into RAM (40 KB at most), and prints its size and checksum followed by
+`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`.
+
+To measure throughput instead, set `WOLFBOOT_TEST_TFTP=0` and
+`WOLFIP_SPEED_TEST=1`. After the DHCP lease, the `network` command runs a TCP
+server on port 9 that discards what it receives and sends data whenever the
+connection can take it. It prints the receive and transmit rates when the
+connection closes. Drive it from the PC with `<ip>` set to the address the board
+printed:
+
+```sh
+# board receives
+dd if=/dev/zero bs=1460 count=10000 | nc <ip> 9
+# board sends
+nc <ip> 9 </dev/null | pv -r >/dev/null
+```
+
+The server never returns to the console; reset the board to stop it.
+`WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
+runs the TFTP fetch and the speed server is never started.
+
 ### NXP MCXE247: Programming with Lauterbach TRACE32
 
 Connect the 10-pin debug cable to J14 and short JP4 to disable the onboard
-MCU-Link SWD. TRACE32 R2024.09 has no MCXE247 entry: use `SYStem.CPU S32K148`
-and program `factory.bin` at `0x00000000`.
+MCU-Link SWD. If TRACE32 has no MCXE247 entry, use `SYStem.CPU S32K148`.
+Program `factory.bin` at `0x00000000`.
 
 `factory.bin` includes the Flash Configuration Field at `0x400`. Its security
 byte at `0x40C` must be programmed to `0xFE`: an erased byte secures the chip
 at the next reset, and only a mass erase recovers it.
 
-While TRACE32 is attached it halts the CPU at the reset vector on every reset.
+While TRACE32 is attached, it halts the CPU at the reset vector on every reset.
 Detach with `SYStem.Down` before testing an update, which relies on a software
 reset.
 
