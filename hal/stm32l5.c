@@ -430,7 +430,7 @@ static void clock_pll_on(int powersave)
     DMB();
 }
 
-/* A secure application keeps every peripheral Secure across the jump */
+/* A secure application programs its own GTZC peripheral attribution */
 #if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
 static void periph_unsecure()
 {
