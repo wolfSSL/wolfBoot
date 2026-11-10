@@ -319,19 +319,20 @@ Option bytes (bank 1 fully secure, bank 2 pages 0-63 secure for the update
 slot, pages 64-127 Non-secure for the guests):
 
 ```
-TZEN = 1                           System with TrustZone-M enabled
-DBANK = 1                          Dual bank mode
-SECWM1_STRT=0x0  SECWM1_END=0x7F   All 128 pages of Bank1 secure
-SECWM2_STRT=0x0  SECWM2_END=0x3F   Bank2 pages 0-63 (0x08040000-0x0805FFFF) secure
+TZEN = 1                            System with TrustZone-M enabled
+DBANK = 1                           Dual bank mode
+SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of Bank1 secure
+SECWM2_PSTRT=0x0  SECWM2_PEND=0x3F  Bank2 pages 0-63 (0x08040000-0x0805FFFF) secure
 ```
 
 1. `cp ./config/examples/stm32l5-tz-wolftrust.config .config`
 2. `make` (builds `wolfboot.bin` only)
 3. Sign the secure application, e.g.
-   `./tools/keytools/sign --ecc256 --sha256 wolftrust.bin wolfboot_signing_private_key.der 1`
+   `IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc256 --sha256 wolftrust.bin wolfboot_signing_private_key.der 1`
+   (the header size must match the config's `IMAGE_HEADER_SIZE`)
 4. Set the option bytes:
     - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
-    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_STRT=0x0 SECWM1_END=0x7F SECWM2_STRT=0x0 SECWM2_END=0x3F`
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x0 SECWM2_PEND=0x3F`
 5. `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
 6. `STM32_Programmer_CLI -c port=swd -d ./wolftrust_v1_signed.bin 0x0C00C000`
 
