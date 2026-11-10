@@ -64,7 +64,12 @@ Erase operations must be performed via the specific IAP interface of the target 
 `address` marks the start of the area that the bootloader wants to erase, and `len` specifies
 the size of the area to be erased. `address` is guaranteed to be aligned to `WOLFBOOT_SECTOR_SIZE`,
 and `len` is guaranteed to be a multiple of `WOLFBOOT_SECTOR_SIZE`. This function must take into account
-the geometry of the flash sectors, and erase all the sectors in between.
+the geometry of the flash sectors, and erase all the sectors in between. `hal_flash_erase` should
+return 0 upon success, or a negative value in case of failure.
+
+The secure PKCS#11 keyvault (`WOLFCRYPT_TZ_PKCS11=1`) reports a failed erase or write to wolfPKCS11,
+which then writes all of its records again. Both functions should therefore check the flash
+controller's error flags after each operation, and fail for an address outside the flash.
 
 `void hal_prepare_boot(void)`
 
