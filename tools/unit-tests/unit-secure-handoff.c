@@ -181,11 +181,11 @@ static int test_stm32l5_optr_lifecycle_map(void)
         return -1;
     }
     if ((stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0xBBu,
-            0x5000u) != 0) ||
+            0x4000u) != 0) ||
             (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0x00u,
-                0x5000u) != 0) ||
+                0x4000u) != 0) ||
             (stm32l5_expect_lifecycle(STM32L5_FLASH_OPTR_TZEN | 0xFFu,
-                0x5000u) != 0)) {
+                0x4000u) != 0)) {
         return -1;
     }
     /* Only RDP and TZEN select the lifecycle */

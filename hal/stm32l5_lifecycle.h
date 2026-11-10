@@ -56,8 +56,8 @@ static inline int stm32l5_optr_to_psa_lifecycle(uint32_t optr,
                 *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED */
                 break;
             default:
-                /* Any other value is RDP level 1 */
-                *lifecycle = 0x5000u; /* PSA_LIFECYCLE_RECOVERABLE_PSA_ROT_DEBUG */
+                /* Any other value is RDP level 1: Secure debug is closed */
+                *lifecycle = 0x4000u; /* PSA_LIFECYCLE_NON_PSA_ROT_DEBUG */
                 break;
         }
     }

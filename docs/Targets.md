@@ -311,9 +311,10 @@ links its own RAM at `0x30030000` so that `0x30000000-0x3002FFFF` (the record
 and the secure application's RAM) is left untouched. The PSA lifecycle in the
 record comes from the RDP level in `FLASH_OPTR` (`hal/stm32l5_lifecycle.h`).
 
-The partition values are `?=` defaults, so a larger slot can be set on the
-`make` command line (for example `WOLFBOOT_PARTITION_SIZE=0x28000
-WOLFBOOT_PARTITION_UPDATE_ADDRESS=0x0C058000`).
+The partition values are `?=` defaults. A different layout set on the `make`
+command line must keep the boot, NVM, swap, update and guest regions disjoint
+(the Secure and Non-secure aliases are the same flash) and move the `SECWM`
+watermarks below to match.
 
 Option bytes (bank 1 fully secure, bank 2 pages 0-63 secure for the update
 slot, pages 64-127 Non-secure for the guests):
