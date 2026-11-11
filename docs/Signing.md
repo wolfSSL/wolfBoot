@@ -133,10 +133,37 @@ file is in this format.
 file is in this format.
 
   * `--lms` Use LMS/HSS for signing the firmware. Assume that the given KEY.DER
-file is in this format.
+file is in this format. Stateful scheme, see "Stateful signatures" below.
 
   * `--xmss` Use XMSS/XMSS^MT for signing the firmware. Assume that the given KEY.DER
-file is in this format.
+file is in this format. Stateful scheme, see "Stateful signatures" below.
+
+#### Stateful signatures (LMS/HSS, XMSS/XMSS^MT)
+
+LMS/HSS and XMSS/XMSS^MT are stateful hash-based signature schemes (NIST SP
+800-208). "Stateful" means every signature permanently consumes one-time
+components of the private key: if a consumed component is ever reused, the
+security of the whole key is broken. Unlike ML-DSA or Ed25519, the private
+key changes with every signature.
+
+Practical consequences when using the key tools:
+
+- The LMS/XMSS private key file (`KEY.DER`) is the signing authority itself,
+  not just a copy of a secret: `sign` rewrites it in place after every
+  signature, advancing the key state. The file must be kept safe, and its
+  storage must be atomic and durable, so a crash mid-write never leaves a
+  state that can be reloaded with a reused index.
+- The key tools therefore treat the LMS/XMSS file-based flow as a
+  **demo/development pattern only**, and print a warning whenever `keygen`
+  generates an LMS/XMSS key or `sign` signs with one. Do not use it in
+  production. For production signing prefer a stateless algorithm (e.g.
+  ML-DSA), or keep the stateful key in protected storage (HSM, secure
+  element) behind the persistence callbacks.
+- `sign` needs the explicit `--lms` / `--xmss` option: the key type is not
+  auto-detected, and `SIGN_AUTO` is not supported for these schemes.
+
+See [PQ.md](PQ.md) for the algorithm tradeoffs and the configuration options
+(`LMS_LEVELS`, `LMS_HEIGHT`, `LMS_WINTERNITZ`, `XMSS_PARAMS`).
 
   * `--no-sign` Disable secure boot signature verification. No signature
     verification is performed in the bootloader, and the KEY.DER argument should
