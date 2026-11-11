@@ -7408,7 +7408,7 @@ example `DO <wolfBoot>/tools/scripts/mcxe247/e247_flash_factory_bin.cmm`:
 
 | Script | Purpose |
 |--------|---------|
-| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols |
+| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols. Takes the MCUXpresso SDK path as an optional argument, used to find the ENET driver sources (default: `../NXP/mcuxpresso-sdk/mcuxsdk` next to the checkout) |
 | `e247_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
 | `e247_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
 

@@ -2,7 +2,10 @@
 ;;
 ;; Connect TRACE32 to the NXP MCXE247 (FRDM-MCXE247) and halt the CPU at the
 ;; reset vector, then load the wolfBoot and test-app symbols.
-;; No arguments: DO e247_debug.cmm
+;; Usage: DO e247_debug.cmm ["<MCUXpresso SDK dir>"]
+;; The SDK dir is only used to find the fsl_enet and PHY driver sources of a
+;; test-app built with ENABLE_WOLFIP=1. It defaults to the MCUXPRESSO path in
+;; mcxe247.config (../NXP/mcuxpresso-sdk/mcuxsdk, next to the checkout).
 ;;
 ;; Board setup (UM12286):
 ;;   - Lauterbach 10-pin cable on J14 (SWD/JTAG 2x5 header)
@@ -16,8 +19,12 @@
 ;;   - All output, including errors, is logged to ~~/e247_debug.log
 ;;   - The ELF files are loaded from the wolfBoot checkout this script is in.
 
+PARAMETERS &sdkdir
+
 ; wolfBoot root: three levels above this script
 &basedir=OS.PPD()+"\..\..\.."
+IF "&sdkdir"==""
+  &sdkdir="&basedir\..\NXP\mcuxpresso-sdk\mcuxsdk"
 
 AREA.OPEN A000 "~~/e247_debug.log" /Create /NoFileCache
 PRINT "e247_debug.cmm " DATE.DATE() " " DATE.TIME()
@@ -80,7 +87,20 @@ IF OS.FILE("&basedir\test-app\image.elf")
 ; The ELF files hold the paths of the build machine. Look the sources up in
 ; this checkout instead, so it also works when TRACE32 runs on another host
 ; (e.g. Windows with the checkout in WSL).
+; Sources are found by file name in these directories.
 sYmbol.SourcePATH.SetBaseDir "&basedir"
-sYmbol.SourcePATH.Set "&basedir" "&basedir\src" "&basedir\hal" "&basedir\test-app" "&basedir\lib\wolfssl\wolfcrypt\src"
+&srcdirs="""&basedir"" ""&basedir\src"" ""&basedir\hal"" ""&basedir\test-app"""
+&srcdirs="&srcdirs ""&basedir\lib\wolfssl\wolfcrypt\src"""
+; wolfIP and its MCXE247 port (test-app built with ENABLE_WOLFIP=1)
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src"" ""&basedir\lib\wolfip\src\tftp"""
+&srcdirs="&srcdirs ""&basedir\lib\wolfip\src\port\nxp_mcxe_enet"""
+; MCUXpresso SDK drivers used by the wolfIP port, if the SDK is there
+IF OS.DIR("&sdkdir")
+(
+  &srcdirs="&srcdirs ""&sdkdir\drivers\enet"" ""&sdkdir\drivers\common"""
+  &srcdirs="&srcdirs ""&sdkdir\devices\MCX\MCXE\MCXE247\drivers"""
+  &srcdirs="&srcdirs ""&sdkdir\components\phy\device\phylan8741"""
+)
+sYmbol.SourcePATH.Set &srcdirs
 
 ENDDO
