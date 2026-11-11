@@ -71,6 +71,10 @@ ifeq ($(ARCH),AARCH64)
     CROSS_COMPILE?=aarch64-none-elf-
   endif
   CFLAGS+=-DARCH_AARCH64 -DFAST_MEMCPY
+  # Distribution aarch64-linux-gnu- compilers enable _FORTIFY_SOURCE by
+  # default, turning bounded memcpy() calls into glibc __memcpy_chk, which a
+  # bare-metal image cannot resolve (it links, then branches to address 0).
+  CFLAGS+=-U_FORTIFY_SOURCE
   ifeq ($(TARGET),aarch64_efi)
     # UEFI app: gnu-efi CRT0 is the entry; do_boot is in boot_aarch64_efi.o.
     # Skip the bare-metal reset (boot_aarch64_start.S) and EL2/GIC glue.
