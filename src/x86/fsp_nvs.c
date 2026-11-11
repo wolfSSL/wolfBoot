@@ -78,17 +78,33 @@ int fsp_nvs_record_valid(const struct fsp_nvs_record *rec, uint32_t key,
     return fsp_nvs_crc32(0, rec->data, rec->len) == rec->crc;
 }
 
-#ifdef BUILD_LOADER_STAGE1
-/* CMOS byte set when FspMemInit failed with the saved record. Boots train
- * from scratch until FspMemInit succeeds without it, across the resets FSP-M
- * requests, and stage 2 then replaces the record. Stage 1 runs from SPI
- * flash, so it cannot erase the record itself. */
-#define FSP_NVS_SKIP_CMOS_IDX 0x52
-#define FSP_NVS_SKIP_CMOS_MAGIC 0xA5
+/* CMOS byte tracking the saved record across boots. Stage 1 sets IN_USE
+ * before FspMemInit runs with the record, and stage 2 clears it once
+ * FspSiliconInit has succeeded. A boot that finds IN_USE still set crashed or
+ * hung with the record, so it sets SKIP: boots then train from scratch, across
+ * the resets FSP requests, until FspSiliconInit succeeds and stage 2 has
+ * replaced the record. Stage 1 runs from SPI flash, so it cannot erase the
+ * record itself. */
+#define FSP_NVS_STATE_CMOS_IDX 0x52
+#define FSP_NVS_STATE_SKIP 0xA5
+#define FSP_NVS_STATE_IN_USE 0x5A
 
-void fsp_nvs_skip(int skip)
+void fsp_nvs_before_reset(void)
 {
-    cmos_write(FSP_NVS_SKIP_CMOS_IDX, skip ? FSP_NVS_SKIP_CMOS_MAGIC : 0);
+    /* An FSP-requested reset is part of a normal boot with the record */
+    if (cmos_read(FSP_NVS_STATE_CMOS_IDX) == FSP_NVS_STATE_IN_USE)
+        cmos_write(FSP_NVS_STATE_CMOS_IDX, 0);
+}
+
+void fsp_nvs_boot_ok(void)
+{
+    cmos_write(FSP_NVS_STATE_CMOS_IDX, 0);
+}
+
+#ifdef BUILD_LOADER_STAGE1
+void fsp_nvs_reject(void)
+{
+    cmos_write(FSP_NVS_STATE_CMOS_IDX, FSP_NVS_STATE_SKIP);
 }
 
 /* Returns 1 when FspMemInit is given the saved record. */
@@ -99,6 +115,7 @@ int fsp_nvs_apply(uint8_t *udp_m, uint32_t udp_size, const uint8_t *fsp_m,
         (const struct fsp_nvs_record *)(uintptr_t)FSP_NVS_BASE;
     FSPM_ARCH_UPD *arch = (FSPM_ARCH_UPD *)(udp_m + sizeof(FSP_UPD_HEADER));
     uint32_t key;
+    uint8_t state;
 
     /* The key is taken before NvsBufferPtr and BootMode are changed, so
      * stage 2 can match it against the UPDs this boot trained with. It
@@ -108,7 +125,14 @@ int fsp_nvs_apply(uint8_t *udp_m, uint32_t udp_size, const uint8_t *fsp_m,
     key = fsp_nvs_crc32(key, udp_m, udp_size);
     stage2_get_parameters()->fsp_nvs_key = key;
 
-    if (cmos_read(FSP_NVS_SKIP_CMOS_IDX) == FSP_NVS_SKIP_CMOS_MAGIC) {
+    state = cmos_read(FSP_NVS_STATE_CMOS_IDX);
+    if (state == FSP_NVS_STATE_IN_USE) {
+        wolfBoot_printf("FSP NVS: last boot with saved training data did not "
+                        "finish\r\n");
+        fsp_nvs_reject();
+        state = FSP_NVS_STATE_SKIP;
+    }
+    if (state == FSP_NVS_STATE_SKIP) {
         wolfBoot_printf("FSP NVS: saved training data failed, retraining\r\n");
         return 0;
     }
@@ -116,6 +140,7 @@ int fsp_nvs_apply(uint8_t *udp_m, uint32_t udp_size, const uint8_t *fsp_m,
         wolfBoot_printf("FSP NVS: no saved training data\r\n");
         return 0;
     }
+    cmos_write(FSP_NVS_STATE_CMOS_IDX, FSP_NVS_STATE_IN_USE);
     arch->NvsBufferPtr = (uint32_t)(uintptr_t)rec->data;
     arch->BootMode = BOOT_ASSUMING_NO_CONFIGURATION_CHANGES;
     wolfBoot_printf("FSP NVS: using saved training data (%d bytes)\r\n",

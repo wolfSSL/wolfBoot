@@ -111,6 +111,12 @@ void print_fsp_image_revision(struct fsp_info_header *h)
  * left to the caller, so this returns in those cases. */
 void fsp_handle_reset(uint32_t status)
 {
+#ifdef WOLFBOOT_FSP_NVS_CACHE
+    if (status == FSP_STATUS_RESET_REQUIRED_WARM ||
+        status == FSP_STATUS_RESET_REQUIRED_COLD ||
+        status == FSP_STATUS_RESET_REQUIRED_3)
+        fsp_nvs_before_reset();
+#endif
     if (status == FSP_STATUS_RESET_REQUIRED_WARM) {
         wolfBoot_printf("fsp: warm reset required\n");
         reset(1);
@@ -196,6 +202,9 @@ void fsp_init_silicon(void)
         panic();
     }
     wolfBoot_printf("success");
+#if defined(WOLFBOOT_FSP_NVS_CACHE) && !defined(BUILD_LOADER_STAGE1)
+    fsp_nvs_boot_ok();
+#endif
     status = fsp_pre_pci_enum_cb();
     if (status != 0)
         panic();

@@ -91,7 +91,8 @@ static struct fsp_nvs_record *write_record(uint32_t key, uint32_t len)
     return rec;
 }
 
-static void reset_udp(void)
+/* fresh UPDs, as each boot starts from the FSP-M defaults; CMOS persists */
+static void next_boot(void)
 {
     uint32_t i;
 
@@ -102,6 +103,11 @@ static void reset_udp(void)
     arch()->NvsBufferPtr = 0;
     arch()->BootMode = BOOT_WITH_FULL_CONFIGURATION;
     memset(&g_params, 0, sizeof(g_params));
+}
+
+static void reset_udp(void)
+{
+    next_boot();
     memset(g_cmos, 0, sizeof(g_cmos));
 }
 
@@ -183,17 +189,56 @@ END_TEST
 START_TEST(test_apply_skips_a_rejected_record_until_cleared)
 {
     /* after FspMemInit failed with the record, boots train from scratch,
-     * across FSP-M's reset requests, until a FspMemInit succeeds */
+     * across FSP's reset requests, until a boot gets through FspSiliconInit */
     reset_udp();
     write_record(expected_key(), 200);
-    fsp_nvs_skip(1);
+    fsp_nvs_reject();
     ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
     ck_assert_uint_eq(arch()->NvsBufferPtr, 0);
     ck_assert_uint_eq(arch()->BootMode, BOOT_WITH_FULL_CONFIGURATION);
     ck_assert_uint_eq(g_params.fsp_nvs_key, expected_key());
+    fsp_nvs_before_reset();
+    next_boot();
     ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
 
-    fsp_nvs_skip(0);
+    fsp_nvs_boot_ok();
+    next_boot();
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+}
+END_TEST
+
+START_TEST(test_unfinished_boot_with_record_retrains)
+{
+    /* a boot with the record that crashed or hung never cleared IN_USE */
+    reset_udp();
+    write_record(expected_key(), 200);
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+    next_boot();
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
+    ck_assert_uint_eq(arch()->NvsBufferPtr, 0);
+    ck_assert_uint_eq(arch()->BootMode, BOOT_WITH_FULL_CONFIGURATION);
+
+    /* and the retraining boots keep skipping it across FSP resets */
+    fsp_nvs_before_reset();
+    next_boot();
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
+    fsp_nvs_boot_ok();
+    next_boot();
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+}
+END_TEST
+
+START_TEST(test_fsp_reset_keeps_using_the_record)
+{
+    /* a reset FSP asks for during a boot with the record is not a failure */
+    reset_udp();
+    write_record(expected_key(), 200);
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+    fsp_nvs_before_reset();
+    next_boot();
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+    fsp_nvs_boot_ok();
+    next_boot();
     ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
 }
 END_TEST
@@ -230,6 +275,8 @@ static Suite *fsp_nvs_suite(void)
     tcase_add_test(tc, test_apply_with_matching_record);
     tcase_add_test(tc, test_apply_rejects_changed_config);
     tcase_add_test(tc, test_apply_skips_a_rejected_record_until_cleared);
+    tcase_add_test(tc, test_unfinished_boot_with_record_retrains);
+    tcase_add_test(tc, test_fsp_reset_keeps_using_the_record);
     suite_add_tcase(s, tc);
     return s;
 }

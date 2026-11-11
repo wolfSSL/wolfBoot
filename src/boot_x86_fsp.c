@@ -636,15 +636,12 @@ void start(uint32_t stack_base, uint32_t stack_top, uint64_t timestamp,
         wolfBoot_printf("failed: 0x%x" ENDLINE, status);
 #if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
         if (nvs_used) {
-            fsp_nvs_skip(1);
+            fsp_nvs_reject();
             reset(0);
         }
 #endif
         panic();
     }
-#if defined(WOLFBOOT_FSP_NVS_CACHE) && defined(BUILD_LOADER_STAGE1)
-    fsp_nvs_skip(0);
-#endif
     wolfBoot_printf("success" ENDLINE);
 
     status = get_top_address(&top_address, hobList);

@@ -42,7 +42,9 @@ int fsp_nvs_record_valid(const struct fsp_nvs_record *rec, uint32_t key,
                          uint32_t area_size);
 int fsp_nvs_apply(uint8_t *udp_m, uint32_t udp_size, const uint8_t *fsp_m,
                   uint32_t fsp_m_size);
-void fsp_nvs_skip(int skip);
+void fsp_nvs_reject(void);
+void fsp_nvs_before_reset(void);
+void fsp_nvs_boot_ok(void);
 void fsp_nvs_save(void);
 
 #endif /* FSP_NVS_H */

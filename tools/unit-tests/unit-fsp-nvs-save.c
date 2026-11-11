@@ -69,6 +69,18 @@ int tgl_spi_flash_write(uint32_t address, const uint8_t *buf, uint32_t len)
     return 0;
 }
 
+uint8_t cmos_read(uint8_t index)
+{
+    (void)index;
+    return 0;
+}
+
+void cmos_write(uint8_t index, uint8_t value)
+{
+    (void)index;
+    (void)value;
+}
+
 #include "../../src/x86/hob.c"
 /* FSP_NVS_BASE is a RAM buffer here, not a flash address */
 #undef BOOTLOADER_PARTITION_SIZE
