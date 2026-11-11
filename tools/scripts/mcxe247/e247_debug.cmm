@@ -1,0 +1,86 @@
+;; e247_debug.cmm
+;;
+;; Connect TRACE32 to the NXP MCXE247 (FRDM-MCXE247) and halt the CPU at the
+;; reset vector, then load the wolfBoot and test-app symbols.
+;; No arguments: DO e247_debug.cmm
+;;
+;; Board setup (UM12286):
+;;   - Lauterbach 10-pin cable on J14 (SWD/JTAG 2x5 header)
+;;   - JP4 SHORTED: disables the onboard MCU-Link SWD so it does not fight
+;;     the external probe on SWDIO/SWCLK
+;;   - JP3 open: keeps the MCU-Link VCOM console (LPUART2, 115200 8N1)
+;;
+;; Notes:
+;;   - TRACE32 R2024.09 has no MCXE247 entry. The S32K148 is the same part for
+;;     debug purposes (NXP AN14731: same core, pinout and flash controller).
+;;   - All output, including errors, is logged to ~~/e247_debug.log
+;;   - The ELF files are loaded from the wolfBoot checkout this script is in.
+
+; wolfBoot root: three levels above this script
+&basedir=OS.PPD()+"\..\..\.."
+
+AREA.OPEN A000 "~~/e247_debug.log" /Create /NoFileCache
+PRINT "e247_debug.cmm " DATE.DATE() " " DATE.TIME()
+
+RESet
+SYStem.RESet
+SYStem.CPU S32K148
+SYStem.CONFIG.DEBUGPORTTYPE SWD
+SYStem.Option DUALPORT ON
+SYStem.MemAccess DAP
+Trace.DISable
+
+; reset and halt at the reset vector, retrying with a slow debug clock
+SYStem.JtagClock 10MHz
+PRINT "[1] SYStem.Up @ 10MHz"
+ON ERROR CONTinue
+SYStem.Up
+ON ERROR inherit
+
+IF !SYStem.Up()
+(
+  PRINT "[2] SYStem.Up @ 1MHz"
+  SYStem.Down
+  SYStem.JtagClock 1MHz
+  ON ERROR CONTinue
+  SYStem.Up
+  ON ERROR inherit
+)
+
+IF !SYStem.Up()
+(
+  PRINT %ERROR "MCXE247: connection failed (check JP4 shorted, cable on J14, board powered)"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+IF STATE.RUN()
+(
+  ON ERROR CONTinue
+  Break
+  ON ERROR inherit
+)
+
+IF STATE.RUN()
+(
+  PRINT %ERROR "MCXE247: connected but CPU did not halt"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+PRINT "MCXE247 halted, PC=0x"+FORMAT.HEX(8.,Register(PC))+" SP=0x"+FORMAT.HEX(8.,Register(SP))
+AREA.CLOSE A000
+
+mode.hll
+
+IF OS.FILE("&basedir\wolfboot.elf")
+  data.load.elf "&basedir\wolfboot.elf" /nocode
+IF OS.FILE("&basedir\test-app\image.elf")
+  data.load.elf "&basedir\test-app\image.elf" /nocode /noclear
+; The ELF files hold the paths of the build machine. Look the sources up in
+; this checkout instead, so it also works when TRACE32 runs on another host
+; (e.g. Windows with the checkout in WSL).
+sYmbol.SourcePATH.SetBaseDir "&basedir"
+sYmbol.SourcePATH.Set "&basedir" "&basedir\src" "&basedir\hal" "&basedir\test-app" "&basedir\lib\wolfssl\wolfcrypt\src"
+
+ENDDO

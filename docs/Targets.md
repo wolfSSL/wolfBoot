@@ -7402,6 +7402,18 @@ Connect the 10-pin debug cable to J14 and short JP4 to disable the onboard
 MCU-Link SWD. If TRACE32 has no MCXE247 entry, use `SYStem.CPU S32K148`.
 Program `factory.bin` at `0x00000000`.
 
+Scripts for this are in `tools/scripts/mcxe247`. They find the build output
+relative to their own location, so run them from the wolfBoot checkout, for
+example `DO <wolfBoot>/tools/scripts/mcxe247/e247_flash_factory_bin.cmm`:
+
+| Script | Purpose |
+|--------|---------|
+| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols |
+| `e247_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
+| `e247_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
+
+Each script writes a log to the TRACE32 system directory (`~~`).
+
 `factory.bin` includes the Flash Configuration Field at `0x400`. Its security
 byte at `0x40C` must be programmed to `0xFE`: an erased byte secures the chip
 at the next reset, and only a mass erase recovers it.

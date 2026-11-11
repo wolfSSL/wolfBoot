@@ -1,0 +1,82 @@
+;; e247_flash_update.cmm
+;;
+;; Program the signed update image into the update partition of the NXP
+;; MCXE247 (FRDM-MCXE247).
+;; No arguments: DO e247_flash_update.cmm
+;;
+;; Connects with e247_debug.cmm (reset and halt), programs the image with the
+;; TRACE32 S32K flash algorithm, verifies it, resets the board to boot and
+;; detaches the debugger.
+;; Range erased and programmed: 0x000C4000--0x0017BFFF. Every other flash area
+;; is left as is. The update is not triggered: use the test-app console
+;; command "trigger" followed by "reboot".
+;; Output is logged to ~~/e247_flash_update.log
+;; The image is taken from the wolfBoot checkout this script is in.
+
+; This script's directory, and the wolfBoot root three levels above it
+&scriptdir=OS.PPD()
+&basedir="&scriptdir\..\..\.."
+&file="&basedir\test-app\image_v2_signed.bin"
+&start=0x000C4000
+&end=0x0017BFFF
+
+DO "&scriptdir\e247_debug.cmm"
+
+AREA.OPEN A000 "~~/e247_flash_update.log" /Create /NoFileCache
+PRINT "e247_flash_update.cmm " DATE.DATE() " " DATE.TIME()
+
+IF !SYStem.Up()
+(
+  PRINT %ERROR "not connected, see ~~/e247_debug.log"
+  AREA.CLOSE A000
+  ENDDO
+)
+IF !OS.FILE("&file")
+(
+  PRINT %ERROR "&file not found"
+  AREA.CLOSE A000
+  ENDDO
+)
+&size=OS.FILE.SIZE("&file")
+IF &size>(&end-&start+1)
+(
+  PRINT %ERROR "&file is larger than its partition"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+; The flash algorithm runs from SRAM, which is ECC protected and must be
+; written before it is read
+Data.Set AD:0x20000000++0x215F %Long 0
+
+; Vendor flash declaration: checks security, disables the watchdog
+DO ~~/demo/arm/flash/s32k PREPAREONLY CPU=S32K148 DUALPORT=1
+
+; Sectors in range not covered by the file are erased
+PRINT "programming &file (" FORMAT.Decimal(0.,&size) " bytes) at "+FORMAT.HEX(8.,&start)
+FLASH.ReProgram &start--&end /Erase
+Data.LOAD.Binary "&file" &start
+FLASH.ReProgram OFF
+
+Data.LOAD.Binary "&file" &start /DIFF
+IF FOUND()
+(
+  PRINT %ERROR "verify FAILED"
+  AREA.CLOSE A000
+  ENDDO
+)
+PRINT "verify OK"
+FLASH.RESet
+
+; Reset and boot
+AREA.CLOSE A000
+DO "&scriptdir\e247_debug.cmm"
+AREA.OPEN A000 "~~/e247_flash_update.log" /Append /NoFileCache
+Go
+; Detach: while attached, TRACE32 catches every reset at the reset vector, so
+; the software reset that starts the update would leave the CPU halted
+SYStem.Down
+PRINT "done, board running, debugger detached"
+AREA.CLOSE A000
+
+ENDDO
