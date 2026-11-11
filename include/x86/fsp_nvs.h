@@ -46,5 +46,6 @@ void fsp_nvs_reject(void);
 void fsp_nvs_before_reset(void);
 void fsp_nvs_boot_ok(void);
 void fsp_nvs_save(void);
+void fsp_nvs_tpm_sync(void);
 
 #endif /* FSP_NVS_H */

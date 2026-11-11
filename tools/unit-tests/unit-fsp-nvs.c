@@ -54,6 +54,100 @@ void cmos_write(uint8_t index, uint8_t value)
     g_cmos[index & 0x7F] = value;
 }
 
+/* A TPM behind the FIFO interface stage 1 reads the reference hash through:
+ * it answers Startup, NV_ReadPublic and NV_Read for one index. */
+#define TPM_BASE 0xFED40000U
+static uint8_t g_tpm_cmd[64], g_tpm_rsp[96];
+static uint32_t g_tpm_cmd_len, g_tpm_rsp_len, g_tpm_rsp_pos;
+static uint32_t g_tpm_startup_rc, g_tpm_nv_attr;
+static int g_tpm_nv_defined, g_tpm_nv_reads;
+static uint8_t g_tpm_nv_hash[32];
+
+static void tpm_put32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static void tpm_respond(uint32_t rc, uint32_t len)
+{
+    g_tpm_rsp[0] = 0x80;
+    g_tpm_rsp[1] = 0x01;
+    tpm_put32(g_tpm_rsp + 2, rc != 0 ? 10 : len);
+    tpm_put32(g_tpm_rsp + 6, rc);
+    g_tpm_rsp_len = rc != 0 ? 10 : len;
+    g_tpm_rsp_pos = 0;
+}
+
+static void tpm_execute(void)
+{
+    uint32_t cc = ((uint32_t)g_tpm_cmd[6] << 24) |
+        ((uint32_t)g_tpm_cmd[7] << 16) | ((uint32_t)g_tpm_cmd[8] << 8) |
+        g_tpm_cmd[9];
+
+    memset(g_tpm_rsp, 0, sizeof(g_tpm_rsp));
+    if (cc == 0x144) { /* Startup */
+        tpm_respond(g_tpm_startup_rc, 10);
+    }
+    else if (!g_tpm_nv_defined) {
+        tpm_respond(0x18B, 10); /* TPM_RC_HANDLE */
+    }
+    else if (cc == 0x169) { /* NV_ReadPublic */
+        g_tpm_rsp[11] = 14;
+        memcpy(g_tpm_rsp + 12, g_tpm_cmd + 10, 4);
+        g_tpm_rsp[17] = 0x0b;
+        tpm_put32(g_tpm_rsp + 18, g_tpm_nv_attr);
+        g_tpm_rsp[25] = 32;
+        tpm_respond(0, 62);
+    }
+    else if (cc == 0x14E) { /* NV_Read */
+        g_tpm_nv_reads++;
+        g_tpm_rsp[13] = 34;
+        g_tpm_rsp[15] = 32;
+        memcpy(g_tpm_rsp + 16, g_tpm_nv_hash, 32);
+        tpm_respond(0, 53);
+    }
+    else {
+        tpm_respond(0x143, 10); /* TPM_RC_COMMAND_CODE */
+    }
+}
+
+uint8_t mmio_read8(uintptr_t address)
+{
+    if (address == TPM_BASE + 0x00)
+        return 0x80 | 0x20;
+    if (address == TPM_BASE + 0x18)
+        return 0x80 | 0x40 |
+            (g_tpm_rsp_pos < g_tpm_rsp_len ? 0x10 : 0);
+    if (address == TPM_BASE + 0x24 && g_tpm_rsp_pos < g_tpm_rsp_len)
+        return g_tpm_rsp[g_tpm_rsp_pos++];
+    return 0xff;
+}
+
+uint32_t mmio_read32(uintptr_t address)
+{
+    if (address == TPM_BASE + 0x18)
+        return (8U << 8) | mmio_read8(address);
+    return 0xffffffffU;
+}
+
+void mmio_write8(uintptr_t address, uint8_t value)
+{
+    if (address == TPM_BASE + 0x18 && value == 0x40) {
+        g_tpm_cmd_len = 0;
+        g_tpm_rsp_len = g_tpm_rsp_pos = 0;
+    }
+    else if (address == TPM_BASE + 0x18 && value == 0x20) {
+        tpm_execute();
+    }
+    else if (address == TPM_BASE + 0x24 &&
+             g_tpm_cmd_len < sizeof(g_tpm_cmd)) {
+        g_tpm_cmd[g_tpm_cmd_len++] = value;
+    }
+}
+
 /* FSP_NVS_BASE is a RAM buffer here, not a flash address */
 #undef BOOTLOADER_PARTITION_SIZE
 #include "../../src/x86/fsp_nvs.c"
@@ -88,6 +182,12 @@ static struct fsp_nvs_record *write_record(uint32_t key, uint32_t len)
     for (i = 0; i < len; i++)
         rec->data[i] = (uint8_t)(i * 7 + 1);
     rec->crc = fsp_nvs_crc32(0, rec->data, len);
+    /* as stage 2 leaves it: the TPM holds the hash of this record */
+    g_tpm_nv_defined = 1;
+    g_tpm_nv_attr = 0x42040001U;
+    g_tpm_startup_rc = 0;
+    g_tpm_nv_reads = 0;
+    fsp_nvs_record_hash(rec, g_tpm_nv_hash);
     return rec;
 }
 
@@ -263,6 +363,64 @@ START_TEST(test_apply_rejects_changed_config)
 }
 END_TEST
 
+START_TEST(test_apply_needs_the_tpm_reference_hash)
+{
+    struct fsp_nvs_record *rec;
+
+    /* a TPM another stage already started is fine */
+    reset_udp();
+    write_record(expected_key(), 200);
+    g_tpm_startup_rc = 0x100;
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 1);
+    ck_assert_int_eq(g_tpm_nv_reads, 1);
+
+    /* a record changed in flash, with its CRC fixed up, is not used */
+    reset_udp();
+    rec = write_record(expected_key(), 200);
+    rec->data[10] ^= 1;
+    rec->crc = fsp_nvs_crc32(0, rec->data, rec->len);
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
+    ck_assert_uint_eq(arch()->NvsBufferPtr, 0);
+    ck_assert_uint_eq(arch()->BootMode, BOOT_WITH_FULL_CONFIGURATION);
+    ck_assert_uint_eq(cmos_read(FSP_NVS_STATE_CMOS_IDX), 0);
+
+    /* nor is one with no reference in the TPM */
+    reset_udp();
+    write_record(expected_key(), 200);
+    g_tpm_nv_defined = 0;
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
+
+    /* or with the TPM failing to start */
+    reset_udp();
+    write_record(expected_key(), 200);
+    g_tpm_startup_rc = 0x101;
+    ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE), 0);
+}
+END_TEST
+
+START_TEST(test_apply_rejects_an_index_the_os_can_write)
+{
+    static const uint32_t attrs[] = {
+        0x02040002U, /* owner-created, owner write */
+        0x42040003U, /* platform-created, but owner write too */
+        0x42040005U, /* auth write */
+        0x42040009U, /* policy write */
+        0x42040000U  /* no platform write */
+    };
+    unsigned int i;
+
+    for (i = 0; i < sizeof(attrs) / sizeof(attrs[0]); i++) {
+        reset_udp();
+        write_record(expected_key(), 200);
+        g_tpm_nv_attr = attrs[i];
+        ck_assert_int_eq(fsp_nvs_apply(g_udp, UDP_SIZE, g_fspm, FSPM_SIZE),
+                         0);
+        ck_assert_int_eq(g_tpm_nv_reads, 0);
+        ck_assert_uint_eq(arch()->NvsBufferPtr, 0);
+    }
+}
+END_TEST
+
 static Suite *fsp_nvs_suite(void)
 {
     Suite *s = suite_create("fsp-nvs");
@@ -277,6 +435,8 @@ static Suite *fsp_nvs_suite(void)
     tcase_add_test(tc, test_apply_skips_a_rejected_record_until_cleared);
     tcase_add_test(tc, test_unfinished_boot_with_record_retrains);
     tcase_add_test(tc, test_fsp_reset_keeps_using_the_record);
+    tcase_add_test(tc, test_apply_needs_the_tpm_reference_hash);
+    tcase_add_test(tc, test_apply_rejects_an_index_the_os_can_write);
     suite_add_tcase(s, tc);
     return s;
 }

@@ -2325,17 +2325,24 @@ unit-boot-x86-fsp-measure: ../../include/target.h unit-boot-x86-fsp-measure.c \
 # unit-fsp-nvs runs the FSP-M memory training data cache record check and
 # the stage 1 hand-off (src/x86/fsp_nvs.c) against a RAM-backed area.
 unit-fsp-nvs:CFLAGS+=-DWOLFBOOT_FSP -DWOLFBOOT_FSP_NVS_CACHE \
-	-DBUILD_LOADER_STAGE1 -DPRINTF_ENABLED
+	-DWOLFBOOT_FSP_NVS_TPM -DBUILD_LOADER_STAGE1 -DPRINTF_ENABLED
 unit-fsp-nvs: unit-fsp-nvs.c ../../src/x86/fsp_nvs.c
-	gcc -o $@ unit-fsp-nvs.c $(CFLAGS) $(LDFLAGS)
+	gcc -o $@ unit-fsp-nvs.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 # unit-fsp-nvs-save runs the stage 2 save path against a synthetic HOB list
 # and a RAM-backed flash area; built non-PIE so the HOB list sits below 4 GB
 # (stage2_parameter.hobList is 32-bit).
 unit-fsp-nvs-save:CFLAGS+=-DWOLFBOOT_FSP -DWOLFBOOT_FSP_NVS_CACHE \
-	-DPRINTF_ENABLED -fno-pie
+	-DWOLFBOOT_FSP_NVS_TPM -DWOLFBOOT_TPM -DWOLFTPM_USER_SETTINGS \
+	-I$(WOLFBOOT_LIB_WOLFTPM) -D__WOLFBOOT -DWOLFBOOT_HASH_SHA384 \
+	-DWOLFBOOT_SIGN_ECC384 -DPRINTF_ENABLED -fno-pie
 unit-fsp-nvs-save: unit-fsp-nvs-save.c ../../src/x86/fsp_nvs.c ../../src/x86/hob.c
-	gcc -o $@ unit-fsp-nvs-save.c $(CFLAGS) -no-pie $(LDFLAGS)
+	gcc -o $@ unit-fsp-nvs-save.c \
+		$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) \
+		-ffunction-sections -fdata-sections -no-pie $(LDFLAGS) \
+		-Wl,--gc-sections
 
 # unit-nrf5340-flash-protect runs the real hal_flash_protect() from
 # hal/nrf5340.c against a mock SPU region-permission array (F-13623: the

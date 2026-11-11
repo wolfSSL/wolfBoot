@@ -2103,6 +2103,14 @@ ifeq ($(FSP), 1)
     endif
     CFLAGS+=-DWOLFBOOT_FSP_NVS_CACHE
     CFLAGS+=-DFSP_NVS_BASE=$(FSP_NVS_BASE) -DFSP_NVS_SIZE=$(FSP_NVS_SIZE)
+    ifeq ($(FSP_NVS_TPM),1)
+      # anti-rollback disables the platform hierarchy before handoff, which
+      # is what keeps the OS from rewriting the reference hash
+      ifneq ($(ANTI_ROLLBACK),1)
+        $(error FSP_NVS_TPM=1 needs ANTI_ROLLBACK=1)
+      endif
+      CFLAGS+=-DWOLFBOOT_FSP_NVS_TPM
+    endif
   endif
 endif
 

@@ -101,7 +101,195 @@ void fsp_nvs_boot_ok(void)
     cmos_write(FSP_NVS_STATE_CMOS_IDX, 0);
 }
 
+#ifdef WOLFBOOT_FSP_NVS_TPM
+#include <wolfssl/wolfcrypt/sha256.h>
+
+/* TPM NV index holding the SHA-256 of the record stage 2 last saved. It is
+ * created by the platform hierarchy, which wolfBoot disables before handoff,
+ * so only wolfBoot can write it. */
+#ifndef FSP_NVS_TPM_NV_INDEX
+#define FSP_NVS_TPM_NV_INDEX 0x01400410U
+#endif
+#define FSP_NVS_HASH_SIZE 32
+
+/* Only an index the platform hierarchy created, and that it alone can
+ * write, holds a hash wolfBoot stored. TPMA_NV bits: PPWRITE, OWNERWRITE,
+ * AUTHWRITE, POLICYWRITE and PLATFORMCREATE. */
+#define FSP_NVS_NV_ATTR_MASK 0x4000000FU
+#define FSP_NVS_NV_ATTR 0x40000001U
+
+static int fsp_nvs_record_hash(const struct fsp_nvs_record *rec, uint8_t *hash)
+{
+    wc_Sha256 sha;
+    int ret;
+
+    ret = wc_InitSha256(&sha);
+    if (ret != 0)
+        return ret;
+    ret = wc_Sha256Update(&sha, (const uint8_t *)rec, sizeof(*rec) + rec->len);
+    if (ret == 0)
+        ret = wc_Sha256Final(&sha, hash);
+    wc_Sha256Free(&sha);
+    return ret;
+}
+#endif /* WOLFBOOT_FSP_NVS_TPM */
+
 #ifdef BUILD_LOADER_STAGE1
+#ifdef WOLFBOOT_FSP_NVS_TPM
+/* Stage 1 has no writable data before memory is up, so wolfTPM cannot run
+ * yet. Read the reference hash with a minimal FIFO exchange that keeps all
+ * of its state on the stack. */
+#ifndef FSP_NVS_TPM_BASE
+#define FSP_NVS_TPM_BASE 0xFED40000U
+#endif
+#define TIS_ACCESS (FSP_NVS_TPM_BASE + 0x00)
+#define TIS_STS (FSP_NVS_TPM_BASE + 0x18)
+#define TIS_FIFO (FSP_NVS_TPM_BASE + 0x24)
+#define TIS_ACCESS_VALID 0x80
+#define TIS_ACCESS_ACTIVE 0x20
+#define TIS_ACCESS_REQUEST 0x02
+#define TIS_STS_VALID 0x80
+#define TIS_STS_READY 0x40
+#define TIS_STS_GO 0x20
+#define TIS_STS_AVAIL 0x10
+#define TIS_POLL_MAX 2000000U
+
+static int tis_wait_sts(uint8_t mask)
+{
+    uint32_t i;
+
+    for (i = 0; i < TIS_POLL_MAX; i++) {
+        if ((mmio_read8(TIS_STS) & mask) == mask)
+            return 0;
+    }
+    return -1;
+}
+
+static int tis_xfer(const uint8_t *cmd, uint32_t cmd_sz, uint8_t *rsp,
+                    uint32_t rsp_max, uint32_t *rsp_sz)
+{
+    uint32_t i, n, total;
+    int ret = -1;
+
+    mmio_write8(TIS_ACCESS, TIS_ACCESS_REQUEST);
+    for (i = 0; i < TIS_POLL_MAX; i++) {
+        if ((mmio_read8(TIS_ACCESS) & (TIS_ACCESS_VALID | TIS_ACCESS_ACTIVE)) ==
+            (TIS_ACCESS_VALID | TIS_ACCESS_ACTIVE))
+            break;
+    }
+    if (i == TIS_POLL_MAX)
+        return -1;
+    mmio_write8(TIS_STS, TIS_STS_READY);
+    if (tis_wait_sts(TIS_STS_READY) != 0)
+        goto out;
+    for (i = 0; i < cmd_sz; i++) {
+        /* burst count, STS bits 8-23 */
+        for (n = 0; n < TIS_POLL_MAX; n++) {
+            if ((mmio_read32(TIS_STS) & 0x00FFFF00U) != 0)
+                break;
+        }
+        if (n == TIS_POLL_MAX)
+            goto out;
+        mmio_write8(TIS_FIFO, cmd[i]);
+    }
+    mmio_write8(TIS_STS, TIS_STS_GO);
+    total = 10;
+    for (i = 0; i < total; i++) {
+        if (tis_wait_sts(TIS_STS_VALID | TIS_STS_AVAIL) != 0 || i >= rsp_max)
+            goto out;
+        rsp[i] = mmio_read8(TIS_FIFO);
+        if (i == 5) {
+            total = ((uint32_t)rsp[2] << 24) | ((uint32_t)rsp[3] << 16) |
+                    ((uint32_t)rsp[4] << 8) | rsp[5];
+            if (total < 10 || total > rsp_max)
+                goto out;
+        }
+    }
+    *rsp_sz = total;
+    ret = 0;
+out:
+    mmio_write8(TIS_STS, TIS_STS_READY);
+    mmio_write8(TIS_ACCESS, TIS_ACCESS_ACTIVE);
+    return ret;
+}
+
+static uint32_t tpm_rsp_code(const uint8_t *rsp)
+{
+    return ((uint32_t)rsp[6] << 24) | ((uint32_t)rsp[7] << 16) |
+           ((uint32_t)rsp[8] << 8) | rsp[9];
+}
+
+/* Returns 0 with the reference hash, or -1 when there is none to trust. */
+static int fsp_nvs_tpm_ref(uint8_t *hash)
+{
+    static const uint8_t startup[] = {
+        0x80, 0x01, 0x00, 0x00, 0x00, 0x0c, 0x00, 0x00, 0x01, 0x44, 0x00, 0x00
+    };
+    uint8_t nv_read[35] = {
+        0x80, 0x02, 0x00, 0x00, 0x00, 0x23, 0x00, 0x00, 0x01, 0x4e,
+        0, 0, 0, 0, /* authHandle: the index */
+        0, 0, 0, 0, /* nvIndex */
+        0x00, 0x00, 0x00, 0x09, /* authorization size */
+        0x40, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, /* empty PW */
+        0x00, FSP_NVS_HASH_SIZE, 0x00, 0x00 /* size, offset */
+    };
+    uint8_t nv_public[14] = {
+        0x80, 0x01, 0x00, 0x00, 0x00, 0x0e, 0x00, 0x00, 0x01, 0x69,
+        0, 0, 0, 0 /* nvIndex */
+    };
+    uint8_t rsp[96];
+    uint32_t rsp_sz = 0, rc, attr, i;
+
+    for (i = 0; i < 4; i++) {
+        nv_read[10 + i] = nv_read[14 + i] = nv_public[10 + i] =
+            (uint8_t)(FSP_NVS_TPM_NV_INDEX >> (24 - 8 * i));
+    }
+    /* TPM_RC_INITIALIZE (0x100): already started */
+    if (tis_xfer(startup, sizeof(startup), rsp, sizeof(rsp), &rsp_sz) != 0)
+        return -1;
+    rc = tpm_rsp_code(rsp);
+    if (rc != 0 && rc != 0x100)
+        return -1;
+    /* TPMS_NV_PUBLIC: index, name algorithm, then the attributes */
+    if (tis_xfer(nv_public, sizeof(nv_public), rsp, sizeof(rsp),
+                 &rsp_sz) != 0 || tpm_rsp_code(rsp) != 0 || rsp_sz < 22)
+        return -1;
+    attr = ((uint32_t)rsp[18] << 24) | ((uint32_t)rsp[19] << 16) |
+           ((uint32_t)rsp[20] << 8) | rsp[21];
+    if ((attr & FSP_NVS_NV_ATTR_MASK) != FSP_NVS_NV_ATTR)
+        return -1;
+    if (tis_xfer(nv_read, sizeof(nv_read), rsp, sizeof(rsp), &rsp_sz) != 0)
+        return -1;
+    if (tpm_rsp_code(rsp) != 0 || rsp_sz < 16 + FSP_NVS_HASH_SIZE ||
+        rsp[14] != 0 || rsp[15] != FSP_NVS_HASH_SIZE)
+        return -1;
+    memcpy(hash, rsp + 16, FSP_NVS_HASH_SIZE);
+    return 0;
+}
+
+static int fsp_nvs_tpm_check(const struct fsp_nvs_record *rec)
+{
+    uint8_t ref[FSP_NVS_HASH_SIZE], hash[FSP_NVS_HASH_SIZE];
+    uint8_t diff = 0;
+    int i;
+
+    if (fsp_nvs_tpm_ref(ref) != 0) {
+        wolfBoot_printf("FSP NVS: no TPM reference hash\r\n");
+        return -1;
+    }
+    if (fsp_nvs_record_hash(rec, hash) != 0)
+        return -1;
+    for (i = 0; i < FSP_NVS_HASH_SIZE; i++)
+        diff |= ref[i] ^ hash[i];
+    if (diff != 0) {
+        wolfBoot_printf("FSP NVS: saved training data does not match the "
+                        "TPM reference hash\r\n");
+        return -1;
+    }
+    return 0;
+}
+#endif /* WOLFBOOT_FSP_NVS_TPM */
+
 void fsp_nvs_reject(void)
 {
     cmos_write(FSP_NVS_STATE_CMOS_IDX, FSP_NVS_STATE_SKIP);
@@ -140,6 +328,10 @@ int fsp_nvs_apply(uint8_t *udp_m, uint32_t udp_size, const uint8_t *fsp_m,
         wolfBoot_printf("FSP NVS: no saved training data\r\n");
         return 0;
     }
+#ifdef WOLFBOOT_FSP_NVS_TPM
+    if (fsp_nvs_tpm_check(rec) != 0)
+        return 0;
+#endif
     cmos_write(FSP_NVS_STATE_CMOS_IDX, FSP_NVS_STATE_IN_USE);
     arch->NvsBufferPtr = (uint32_t)(uintptr_t)rec->data;
     arch->BootMode = BOOT_ASSUMING_NO_CONFIGURATION_CHANGES;
@@ -224,4 +416,77 @@ void fsp_nvs_save(void)
     }
     wolfBoot_printf("FSP NVS: saved %d bytes of training data\r\n", (int)len);
 }
+
+#ifdef WOLFBOOT_FSP_NVS_TPM
+#include "tpm.h"
+#include <wolftpm/tpm2_wrap.h>
+
+/* Keep the TPM reference hash equal to the record in flash, but only when
+ * that record holds the data FspMemInit returned on this boot: if the save
+ * failed, flash may still hold an older record, one stage 1 perhaps rejected.
+ * Must run before the platform hierarchy is disabled. */
+void fsp_nvs_tpm_sync(void)
+{
+    const struct fsp_nvs_record *rec =
+        (const struct fsp_nvs_record *)(uintptr_t)FSP_NVS_BASE;
+    WOLFTPM2_DEV *dev = &wolftpm_dev;
+    WOLFTPM2_HANDLE parent;
+    WOLFTPM2_NV nv;
+    NV_Write_In in;
+    struct stage2_parameter *params = stage2_get_parameters();
+    struct efi_hob_guid_type *hob;
+    uint8_t hash[FSP_NVS_HASH_SIZE], ref[FSP_NVS_HASH_SIZE];
+    word32 attr = 0, sz = sizeof(ref);
+    int rc;
+
+    hob = fsp_nvs_find_hob((struct efi_hob *)(uintptr_t)params->hobList);
+    if (hob == NULL ||
+        !fsp_nvs_is_current(rec, params->fsp_nvs_key,
+                            (const uint8_t *)(hob + 1),
+                            hob->header.hob_length - sizeof(*hob)) ||
+        fsp_nvs_record_hash(rec, hash) != 0)
+        return;
+
+    memset(&nv, 0, sizeof(nv));
+    nv.handle.hndl = FSP_NVS_TPM_NV_INDEX;
+    if (wolfTPM2_NVOpen(dev, &nv, FSP_NVS_TPM_NV_INDEX, NULL, 0) == 0) {
+        if ((nv.attributes & FSP_NVS_NV_ATTR_MASK) != FSP_NVS_NV_ATTR) {
+            wolfBoot_printf("FSP NVS: TPM reference index is not "
+                            "platform-owned\r\n");
+            return;
+        }
+        wolfTPM2_SetAuthHandle(dev, 0, &nv.handle);
+        rc = wolfTPM2_NVReadAuth(dev, &nv, FSP_NVS_TPM_NV_INDEX, ref, &sz, 0);
+        wolfTPM2_UnsetAuth(dev, 0);
+        if (rc == 0 && sz == sizeof(ref) &&
+            memcmp(ref, hash, sizeof(ref)) == 0)
+            return;
+    }
+
+    memset(&parent, 0, sizeof(parent));
+    parent.hndl = TPM_RH_PLATFORM;
+    wolfTPM2_GetNvAttributesTemplate(TPM_RH_PLATFORM, &attr);
+    attr &= ~TPMA_NV_AUTHWRITE;
+    rc = wolfTPM2_NVCreateAuth(dev, &parent, &nv, FSP_NVS_TPM_NV_INDEX, attr,
+                               sizeof(hash), NULL, 0);
+    if (rc == TPM_RC_NV_DEFINED)
+        rc = 0;
+    wolfTPM2_UnsetAuth(dev, 1);
+    if (rc == 0) {
+        memset(&in, 0, sizeof(in));
+        in.authHandle = TPM_RH_PLATFORM;
+        in.nvIndex = FSP_NVS_TPM_NV_INDEX;
+        in.data.size = sizeof(hash);
+        memcpy(in.data.buffer, hash, sizeof(hash));
+        wolfTPM2_SetAuthPassword(dev, 0, NULL);
+        rc = TPM2_NV_Write(&in);
+        wolfTPM2_UnsetAuth(dev, 0);
+    }
+    if (rc != 0)
+        wolfBoot_printf("FSP NVS: TPM reference hash update failed 0x%x\r\n",
+                        rc);
+    else
+        wolfBoot_printf("FSP NVS: TPM reference hash updated\r\n");
+}
+#endif /* WOLFBOOT_FSP_NVS_TPM */
 #endif /* BUILD_LOADER_STAGE1 */
