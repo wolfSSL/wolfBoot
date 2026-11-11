@@ -321,6 +321,27 @@ static void header_append_tag_u64(uint8_t *header, uint32_t *idx, uint16_t tag,
 #include "../lms/lms_common.h"
 #include "../xmss/xmss_common.h"
 
+/* LMS/XMSS are stateful schemes: every signature consumes a one-time key
+ * component, and reusing a component breaks the security of the whole key.
+ * sign rewrites the private key file in place after each signature, so the
+ * file-based pattern is a demo/development one only. Printed once per run,
+ * since a single run may sign several headers (delta, compressed). */
+static void stateful_sign_warning(void)
+{
+    static int warned = 0;
+
+    if (warned)
+        return;
+    warned = 1;
+    fprintf(stderr,
+        "warning: LMS/XMSS are stateful signature schemes: each signature\n"
+        "permanently consumes part of the private key, and reusing a consumed\n"
+        "component breaks the security of the whole key. Production signing\n"
+        "requires atomic, durable, protected storage of the key state (e.g. an\n"
+        "HSM or secure element). sign updates the private key file in place:\n"
+        "demo/development use only, not for production.\n");
+}
+
 /* Globals */
 static const char wolfboot_delta_file[] = "/tmp/wolfboot-delta.bin";
 
@@ -1295,6 +1316,9 @@ static int sign_digest(int sign, int hash_algo,
         if (ret != 0) {
             fprintf(stderr, "error signing with LMS: %d\n", ret);
         }
+        else {
+            stateful_sign_warning();
+        }
     }
     else
     if (sign == SIGN_XMSS) {
@@ -1325,6 +1349,9 @@ static int sign_digest(int sign, int hash_algo,
         }
         if (ret != 0) {
             fprintf(stderr, "error signing with XMSS: %d\n", ret);
+        }
+        else {
+            stateful_sign_warning();
         }
     }
     else

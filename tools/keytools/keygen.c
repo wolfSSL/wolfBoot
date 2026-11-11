@@ -896,6 +896,21 @@ cleanup:
 
 #include "../lms/lms_common.h"
 
+/* LMS/XMSS are stateful schemes: every signature consumes a one-time key
+ * component, and reusing a component breaks the security of the whole key.
+ * keygen stores the private key in a plain local file, which is a
+ * demo/development pattern only. */
+static void stateful_keygen_warning(void)
+{
+    fprintf(stderr,
+        "warning: LMS/XMSS are stateful signature schemes: each signature\n"
+        "permanently consumes part of the private key, and reusing a consumed\n"
+        "component breaks the security of the whole key. Production signing\n"
+        "requires atomic, durable, protected storage of the key state (e.g. an\n"
+        "HSM or secure element). keygen stores the private key in a plain\n"
+        "local file: demo/development use only, not for production.\n");
+}
+
 static void keygen_lms(const char *priv_fname, uint32_t id_mask)
 {
     FILE *  fpriv;
@@ -1006,6 +1021,8 @@ static void keygen_lms(const char *priv_fname, uint32_t id_mask)
     }
 
     keystore_add(AUTH_KEY_LMS, lms_pub, KEYSTORE_PUBKEY_SIZE_LMS, priv_fname, id_mask);
+
+    stateful_keygen_warning();
 
 cleanup:
     if (key_init) {
@@ -1125,6 +1142,8 @@ static void keygen_xmss(const char *priv_fname, uint32_t id_mask)
     }
 
     keystore_add(AUTH_KEY_XMSS, xmss_pub, KEYSTORE_PUBKEY_SIZE_XMSS, priv_fname, id_mask);
+
+    stateful_keygen_warning();
 
 cleanup:
     if (key_init) {
