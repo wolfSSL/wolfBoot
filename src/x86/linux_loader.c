@@ -340,6 +340,14 @@ void load_linux(uint8_t *linux_image, uint32_t image_size, void *params,
     param.e820_table[param.e820_entries].size = ACPI_TABLE_SIZE;
     param.e820_table[param.e820_entries].type = E820_TYPE_ACPI;
     param.e820_entries++;
+    /* The kernel uses the MCFG range only if firmware marks it reserved */
+    if (param.e820_entries < E820_MAX_ENTRIES_ZEROPAGE) {
+        param.e820_table[param.e820_entries].addr = PCI_ECAM_BASE;
+        param.e820_table[param.e820_entries].size =
+            (uint64_t)(ACPI_PCI_END_BUS + 1) << 20;
+        param.e820_table[param.e820_entries].type = E820_TYPE_RESERVED;
+        param.e820_entries++;
+    }
 #endif /* WOLFBOOT_ACPI */
 
     if (param.hdr.setup_sects != 0) {

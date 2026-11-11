@@ -42,12 +42,6 @@
 #define ACPI_IOAPIC_ID    0x02
 #define ACPI_CPU_MAX      8
 
-/* ECAM base and bus range, matching MCFG to config PCI_ECAM_BASE. */
-#ifndef PCI_ECAM_BASE
-#define PCI_ECAM_BASE 0xC0000000UL
-#endif
-#define ACPI_PCI_END_BUS  0x17
-
 /* MADT subtable types. */
 #define MADT_TYPE_LAPIC     0
 #define MADT_TYPE_IOAPIC    1
