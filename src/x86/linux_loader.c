@@ -103,6 +103,13 @@ static int e820_add_entry_cb(uint64_t start, uint64_t length, uint32_t type,
     struct boot_params *bp = (struct boot_params*)ctx;
     struct boot_e820_entry *map;
 
+    /* Only memory goes in the e820 map. An MMIO range listed as reserved
+     * keeps the kernel from assigning PCI BARs in it, and an I/O port range
+     * is not memory at all. */
+    if (type != EFI_RESOURCE_SYSTEM_MEMORY &&
+        type != EFI_RESOURCE_MEMORY_RESERVED)
+        return 0;
+
     if (bp->e820_entries >= E820_MAX_ENTRIES_ZEROPAGE)
         return -1;
 
