@@ -607,7 +607,8 @@ uint64_t hal_get_timer_us(void)
     static uint32_t high;
     uint32_t now;
 
-    if (!started) {
+    /* started: 0 untried, 1 running, -1 init failed (do not read the counter) */
+    if (started == 0) {
         (void)Cy_SysClk_PeriphAssignDivider(PSOC6_TIMER_PCLK,
             CY_SYSCLK_DIV_16_BIT, PSOC6_TIMER_DIV_NUM);
         (void)Cy_SysClk_PeriphSetDivider(CY_SYSCLK_DIV_16_BIT,
@@ -618,9 +619,14 @@ uint64_t hal_get_timer_us(void)
                 &psoc6_timer_cfg) == CY_TCPWM_SUCCESS) {
             Cy_TCPWM_Counter_Enable(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
             Cy_TCPWM_TriggerStart_Single(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
+            started = 1;
         }
-        started = 1;
+        else {
+            started = -1;
+        }
     }
+    if (started != 1)
+        return 0;
     now = Cy_TCPWM_Counter_GetCounter(PSOC6_TIMER_TCPWM, PSOC6_TIMER_CNT);
     if (now < last) {
         high++;
