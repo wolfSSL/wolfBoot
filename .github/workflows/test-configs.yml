@@ -527,6 +527,13 @@ jobs:
       config-file: ./config/examples/rw612-tz.config
       board-name: frdmrw612
 
+  nxp_rw612_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612-mldsa.config
+      board-name: frdmrw612
+
   nxp_rw612_wolfcrypt_tz_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:

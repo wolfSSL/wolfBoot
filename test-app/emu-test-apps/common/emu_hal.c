@@ -522,6 +522,133 @@ static int mcxw_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_RW612)
+/* FlexSPI NOR through the boot ROM driver, the path hal/rw612.c takes. Only
+ * reached with TZEN=0: the non-secure app goes through the wolfBoot_nsc_*
+ * veneers instead, as FlexSPI and the ROM driver stay secure. */
+#define RW612_CHIP_INFO          (*(volatile uint32_t *)0x45001114u)
+#define RW612_ROM_API_TREE_A0    0x13024100u
+#define RW612_ROM_API_TREE_A1    0x13030000u
+#define RW612_ROM_API_FLEXSPI_IDX 5u
+#define RW612_FLASH_BASE         0x08000000u
+#define RW612_FLASH_ALIAS_MASK   0x0FFFFFFFu
+#define RW612_FCB_ADDRESS        (RW612_FLASH_BASE + 0x400u)
+#define RW612_FCB_SIZE           0x200u
+#define RW612_NOR_PAGE_SIZE      256u
+#define RW612_NOR_SECTOR_SIZE    0x1000u
+#define RW612_FLEXSPI_AHBCR      (*(volatile uint32_t *)0x4013400Cu)
+#define RW612_AHBCR_CLRAHBRXBUF  0x00000002u
+#define RW612_CACHE64_CCR        (*(volatile uint32_t *)0x40033800u)
+#define RW612_CCR_INVW0          0x01000000u
+#define RW612_CCR_INVW1          0x04000000u
+#define RW612_CCR_GO             0x80000000u
+
+/* Leading entries of flexspi_nor_flash_driver_t (fsl_romapi_flexspi.h) */
+typedef struct {
+    uint32_t version;
+    int32_t (*init)(uint32_t instance, void *config);
+    int32_t (*wait_busy)(uint32_t instance, void *config, uint32_t address,
+        int keep_state);
+    int32_t (*page_program)(uint32_t instance, void *config, uint32_t dst,
+        const uint32_t *src, int keep_state);
+    int32_t (*erase_all)(uint32_t instance, void *config);
+    int32_t (*erase)(uint32_t instance, void *config, uint32_t start,
+        uint32_t length);
+    int32_t (*erase_sector)(uint32_t instance, void *config, uint32_t address);
+} rw612_nor_driver_t;
+
+static uint32_t rw612_nor_cfg[RW612_FCB_SIZE / sizeof(uint32_t)];
+static uint32_t rw612_page[RW612_NOR_PAGE_SIZE / sizeof(uint32_t)];
+static const rw612_nor_driver_t *rw612_nor;
+
+static void rw612_flash_cache_flush(void)
+{
+    RW612_FLEXSPI_AHBCR |= RW612_AHBCR_CLRAHBRXBUF;
+    RW612_FLEXSPI_AHBCR &= ~RW612_AHBCR_CLRAHBRXBUF;
+    RW612_CACHE64_CCR |= RW612_CCR_INVW0 | RW612_CCR_INVW1 | RW612_CCR_GO;
+    while ((RW612_CACHE64_CCR & RW612_CCR_GO) != 0u) {
+    }
+    RW612_CACHE64_CCR &= ~(RW612_CCR_INVW0 | RW612_CCR_INVW1);
+}
+
+static int rw612_nor_init(void)
+{
+    uint32_t tree;
+
+    if (rw612_nor != 0) {
+        return 0;
+    }
+    tree = ((RW612_CHIP_INFO & 0x0Fu) == 0u) ?
+        RW612_ROM_API_TREE_A0 : RW612_ROM_API_TREE_A1;
+    memcpy(rw612_nor_cfg, (const void *)RW612_FCB_ADDRESS,
+        sizeof(rw612_nor_cfg));
+    rw612_nor = (const rw612_nor_driver_t *)(uintptr_t)
+        ((const uint32_t *)(uintptr_t)tree)[RW612_ROM_API_FLEXSPI_IDX];
+    if (rw612_nor->init(0u, rw612_nor_cfg) != 0) {
+        rw612_nor = 0;
+        return -1;
+    }
+    rw612_flash_cache_flush();
+    return 0;
+}
+
+static int rw612_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t offset;
+    uint32_t page_off;
+    uint32_t chunk;
+    uint32_t i;
+    int ret = 0;
+
+    if (rw612_nor_init() != 0) {
+        return -1;
+    }
+    offset = (address & RW612_FLASH_ALIAS_MASK) - RW612_FLASH_BASE;
+    while ((len > 0) && (ret == 0)) {
+        page_off = offset & (RW612_NOR_PAGE_SIZE - 1u);
+        chunk = RW612_NOR_PAGE_SIZE - page_off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        for (i = 0u; i < (RW612_NOR_PAGE_SIZE / sizeof(uint32_t)); i++) {
+            rw612_page[i] = 0xFFFFFFFFu;
+        }
+        memcpy((uint8_t *)rw612_page + page_off, data, chunk);
+        if (rw612_nor->page_program(0u, rw612_nor_cfg, offset - page_off,
+                rw612_page, 0) != 0) {
+            ret = -1;
+        }
+        rw612_flash_cache_flush();
+        offset += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int rw612_flash_erase(uint32_t address, int len)
+{
+    uint32_t offset;
+    uint32_t end;
+    int ret = 0;
+
+    if (rw612_nor_init() != 0) {
+        return -1;
+    }
+    offset = (address & RW612_FLASH_ALIAS_MASK) - RW612_FLASH_BASE;
+    end = offset + (uint32_t)len;
+    offset -= offset % RW612_NOR_SECTOR_SIZE;
+    while ((offset < end) && (ret == 0)) {
+        if (rw612_nor->erase_sector(0u, rw612_nor_cfg, offset) != 0) {
+            ret = -1;
+        }
+        rw612_flash_cache_flush();
+        offset += RW612_NOR_SECTOR_SIZE;
+    }
+    return ret;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -554,6 +681,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return lpc55s69_flash_write(address, data, len);
 #elif defined(EMU_MCXW)
     return mcxw_flash_write(address, data, len);
+#elif defined(EMU_RW612)
+    return rw612_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -600,6 +729,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return mcxw_flash_erase(address, len);
+#elif defined(EMU_RW612)
+    if (len <= 0) {
+        return 0;
+    }
+    return rw612_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

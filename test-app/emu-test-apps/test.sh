@@ -70,6 +70,7 @@ get_m33mu_target() {
     imx_rt7xx) echo "imxrt700" ;;
     mcxn) echo "mcxn947" ;;
     lpc55s69) echo "lpc55s69" ;;
+    rw612) echo "rw612" ;;
     *) echo "" ;;
   esac
 }
@@ -84,6 +85,7 @@ case "$TARGET" in
   imx_rt7xx) EMU_DIR=imxrt700; UART_BASE=40110000 ;;
   mcxn) EMU_DIR=mcxn947; UART_BASE=40096000; HANDOFF_CHECK=1 ;;
   lpc55s69) EMU_DIR=lpc55s69; UART_BASE=40086000 ;;
+  rw612) EMU_DIR=rw612; UART_BASE=40109000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -249,6 +251,7 @@ write_target_ld() {
     imx_rt7xx) base="ARM-imx_rt7xx" ;;
     mcxn) base="ARM-mcxn" ;;
     lpc55s69) base="ARM-lpc55s69" ;;
+    rw612) base="ARM-rw612" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
