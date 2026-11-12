@@ -840,6 +840,67 @@ static int mcxa_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_NRF5340_NET)
+/* Network core NVMC: word stores with CONFIG.WEN set; nRF53 has no ERASEPAGE
+ * register, a page is erased by writing 0xFFFFFFFF to its first word with
+ * CONFIG.EEN set, as the wolfBoot HAL does. */
+#define NVMC_NET_BASE     0x41080000u
+#define NVMC_NET_READY    (*(volatile uint32_t *)(NVMC_NET_BASE + 0x400u))
+#define NVMC_NET_CONFIG   (*(volatile uint32_t *)(NVMC_NET_BASE + 0x504u))
+#define NVMC_NET_WEN      1u
+#define NVMC_NET_EEN      2u
+#define NVMC_NET_PAGE     0x800u
+
+static void nrf5340_net_wait_ready(void)
+{
+    while (NVMC_NET_READY == 0u) {
+    }
+}
+
+static int nrf5340_net_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t i = 0u;
+    uint32_t off;
+    uint32_t word;
+    volatile uint32_t *dst;
+
+    NVMC_NET_CONFIG = NVMC_NET_WEN;
+    nrf5340_net_wait_ready();
+    while (i < (uint32_t)len) {
+        dst = (volatile uint32_t *)((address + i) & ~0x3u);
+        off = (address + i) & 0x3u;
+        word = *dst;
+        if ((off == 0u) && (((uint32_t)len - i) >= 4u)) {
+            memcpy(&word, data + i, sizeof(word));
+            i += 4u;
+        }
+        else {
+            ((uint8_t *)&word)[off] = data[i];
+            i++;
+        }
+        *dst = word;
+        nrf5340_net_wait_ready();
+    }
+    NVMC_NET_CONFIG = 0u;
+    return 0;
+}
+
+static int nrf5340_net_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+
+    for (p = address & ~(NVMC_NET_PAGE - 1u); p < end; p += NVMC_NET_PAGE) {
+        NVMC_NET_CONFIG = NVMC_NET_EEN;
+        nrf5340_net_wait_ready();
+        *(volatile uint32_t *)p = 0xFFFFFFFFu;
+        nrf5340_net_wait_ready();
+    }
+    NVMC_NET_CONFIG = 0u;
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -878,6 +939,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return nrf54l_flash_write(address, data, len);
 #elif defined(EMU_MCXA)
     return mcxa_flash_write(address, data, len);
+#elif defined(EMU_NRF5340_NET)
+    return nrf5340_net_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -939,6 +1002,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return mcxa_flash_erase(address, len);
+#elif defined(EMU_NRF5340_NET)
+    if (len <= 0) {
+        return 0;
+    }
+    return nrf5340_net_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

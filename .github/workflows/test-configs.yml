@@ -303,6 +303,18 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf5340_net.config
 
+  nrf5340_net_internal_flash_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net-emu.config
+
+  nrf5340_net_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net-mldsa.config
+
   nrf54l15_test:
     uses: ./.github/workflows/test-build.yml
     with:

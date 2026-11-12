@@ -79,6 +79,7 @@ get_m33mu_target() {
       fi
       ;;
     mcxa) echo "mcxa153" ;;
+    nrf5340_net) echo "nrf5340net" ;;
     *) echo "" ;;
   esac
 }
@@ -96,6 +97,7 @@ case "$TARGET" in
   rw612) EMU_DIR=rw612; UART_BASE=40109000 ;;
   nrf54l) EMU_DIR=nrf54l; UART_BASE=400c6000 ;;
   mcxa) EMU_DIR=mcxa; UART_BASE=4009f000 ;;
+  nrf5340_net) EMU_DIR=nrf5340_net; UART_BASE=41013000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -127,6 +129,10 @@ if [[ -z "$IMAGE_HEADER_SIZE" ]]; then
 fi
 IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE:-256}"
 ARCH_OFFSET="$(cfg_get ARCH_OFFSET)"
+# The nRF5340 network core config places its flash at 0x01000000 this way.
+if [[ -z "$ARCH_OFFSET" ]]; then
+  ARCH_OFFSET="$(cfg_get ARCH_FLASH_OFFSET)"
+fi
 ARCH_OFFSET="${ARCH_OFFSET:-0}"
 BOOT_ADDR="$(cfg_get WOLFBOOT_PARTITION_BOOT_ADDRESS)"
 UPDATE_ADDR="$(cfg_get WOLFBOOT_PARTITION_UPDATE_ADDRESS)"
@@ -264,6 +270,7 @@ write_target_ld() {
     rw612) base="ARM-rw612" ;;
     nrf54l) base="ARM-nrf54l" ;;
     mcxa) base="ARM-mcxa" ;;
+    nrf5340_net) base="ARM-nrf5340_net" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
