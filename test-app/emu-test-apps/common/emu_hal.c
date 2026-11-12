@@ -901,6 +901,133 @@ static int nrf5340_net_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_PSOC_C3)
+/* Boot ROM flash API, the path hal/psoc_c3.c takes: blocking erase_row and
+ * write_row on 512-byte rows addressed through the Secure SBUS alias, with
+ * the row read back from the CBUS view for a read-modify-write. */
+#include "hal/psoc_c3.h"
+#define PSOC_C3_ROM_BASE        0x10800000u
+#define PSOC_C3_ROM_SIZE        0x10000u
+#define PSOC_C3_ROM_FUNC_ADDR   0x1080FF6Cu
+#define PSOC_C3_ROM_SKIP        29
+#define PSOC_C3_FLASH_SECTORS   8
+#define CYBOOT_FLASH_SUCCESS    0x0D50B002u
+#define CYBOOT_FLAGS_BLOCKING   0u
+
+typedef struct {
+    uint32_t min_count;
+    uint32_t max_count;
+    uint32_t min_page_addr;
+    uint32_t scratch_row_idx;
+} cyboot_flash_refresh_t;
+
+typedef struct {
+    uint32_t flags;
+    uint32_t hv_params_addr;
+    cyboot_flash_refresh_t *refresh;
+    void (*callback_pre_irq)(void *ctx);
+    void (*callback_post_irq)(void *ctx);
+    void (*callback_complete)(void *ctx);
+    uint32_t callback_param;
+    uint32_t state;
+    uint32_t flash_addr;
+    uint32_t data_addr;
+    uint32_t reserved[2];
+} cyboot_flash_context_t;
+
+typedef uint32_t (*cyboot_flash_erase_row_t)(uint32_t addr,
+        cyboot_flash_context_t *ctx);
+typedef uint32_t (*cyboot_flash_row_op_t)(uint32_t addr, uint32_t *data,
+        cyboot_flash_context_t *ctx);
+
+typedef struct {
+    uint32_t reserved[PSOC_C3_ROM_SKIP];
+    cyboot_flash_erase_row_t erase_row;
+    cyboot_flash_row_op_t program_row;
+    cyboot_flash_row_op_t write_row;
+} psoc_c3_rom_flash_t;
+
+#define PSOC_C3_ROM ((const psoc_c3_rom_flash_t *)PSOC_C3_ROM_FUNC_ADDR)
+
+static cyboot_flash_refresh_t psoc_c3_refresh[PSOC_C3_FLASH_SECTORS];
+static cyboot_flash_context_t psoc_c3_ctx;
+static uint32_t psoc_c3_row[PSOC_C3_FLASH_ROW_WORDS];
+
+static int psoc_c3_rom_ok(void)
+{
+    uint32_t a[3];
+    int i;
+
+    a[0] = (uint32_t)PSOC_C3_ROM->erase_row;
+    a[1] = (uint32_t)PSOC_C3_ROM->program_row;
+    a[2] = (uint32_t)PSOC_C3_ROM->write_row;
+    for (i = 0; i < 3; i++) {
+        if ((a[i] < PSOC_C3_ROM_BASE) ||
+                (a[i] >= PSOC_C3_ROM_BASE + PSOC_C3_ROM_SIZE) ||
+                ((a[i] & 1u) == 0u)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int psoc_c3_flash_erase(uint32_t address, int len)
+{
+    uint32_t status;
+
+    if ((address % PSOC_C3_FLASH_ROW_SIZE) != 0u || !psoc_c3_rom_ok()) {
+        return -1;
+    }
+    while (len > 0) {
+        psoc_c3_ctx.flags = CYBOOT_FLAGS_BLOCKING;
+        psoc_c3_ctx.refresh = psoc_c3_refresh;
+        status = PSOC_C3_ROM->erase_row(PSOC_C3_SBUS_ALIAS(address),
+                    &psoc_c3_ctx);
+        if (status != CYBOOT_FLASH_SUCCESS) {
+            return -1;
+        }
+        address += PSOC_C3_FLASH_ROW_SIZE;
+        len -= (int)PSOC_C3_FLASH_ROW_SIZE;
+    }
+    return 0;
+}
+
+static int psoc_c3_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t row_start;
+    uint32_t offset;
+    uint32_t chunk;
+    uint32_t status;
+
+    if (!psoc_c3_rom_ok()) {
+        return -1;
+    }
+    while (len > 0) {
+        row_start = address & ~(PSOC_C3_FLASH_ROW_SIZE - 1u);
+        offset = address - row_start;
+        chunk = PSOC_C3_FLASH_ROW_SIZE - offset;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        memcpy(psoc_c3_row, (const void *)row_start, PSOC_C3_FLASH_ROW_SIZE);
+        memcpy((uint8_t *)psoc_c3_row + offset, data, chunk);
+        memset((uint8_t *)psoc_c3_row + PSOC_C3_FLASH_ROW_SIZE, 0,
+                PSOC_C3_FLASH_COL33_SZ);
+        psoc_c3_ctx.flags = CYBOOT_FLAGS_BLOCKING;
+        psoc_c3_ctx.refresh = psoc_c3_refresh;
+        status = PSOC_C3_ROM->write_row(PSOC_C3_SBUS_ALIAS(row_start),
+                    psoc_c3_row, &psoc_c3_ctx);
+        if (status != CYBOOT_FLASH_SUCCESS) {
+            return -1;
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -941,6 +1068,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return mcxa_flash_write(address, data, len);
 #elif defined(EMU_NRF5340_NET)
     return nrf5340_net_flash_write(address, data, len);
+#elif defined(EMU_PSOC_C3)
+    return psoc_c3_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -1007,6 +1136,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return nrf5340_net_flash_erase(address, len);
+#elif defined(EMU_PSOC_C3)
+    if (len <= 0) {
+        return 0;
+    }
+    return psoc_c3_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

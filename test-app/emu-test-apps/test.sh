@@ -80,6 +80,7 @@ get_m33mu_target() {
       ;;
     mcxa) echo "mcxa153" ;;
     nrf5340_net) echo "nrf5340net" ;;
+    psoc_c3) echo "psc3m6" ;;
     *) echo "" ;;
   esac
 }
@@ -98,6 +99,8 @@ case "$TARGET" in
   nrf54l) EMU_DIR=nrf54l; UART_BASE=400c6000 ;;
   mcxa) EMU_DIR=mcxa; UART_BASE=4009f000 ;;
   nrf5340_net) EMU_DIR=nrf5340_net; UART_BASE=41013000 ;;
+  # SCB3, labelled by its non-secure alias
+  psoc_c3) EMU_DIR=psoc_c3; UART_BASE=42860000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -140,6 +143,8 @@ PART_SIZE="$(cfg_get WOLFBOOT_PARTITION_SIZE)"
 SECTOR_SIZE="$(cfg_get WOLFBOOT_SECTOR_SIZE)"
 RAM_CODE="$(cfg_get RAM_CODE)"
 TZEN="$(cfg_get TZEN)"
+FLAGS_INVERT="$(cfg_get FLAGS_INVERT)"
+FLAGS_INVERT="${FLAGS_INVERT:-0}"
 
 [[ -n "$BOOT_ADDR" && -n "$UPDATE_ADDR" && -n "$PART_SIZE" && -n "$SECTOR_SIZE" ]] || \
   die "missing required config values (boot/update addr, partition/sector size)"
@@ -149,7 +154,8 @@ TZEN="$(cfg_get TZEN)"
 # M2354 and MCXN are excluded: their flash starts at 0 and the high partition
 # addresses are an alias, not a different flash base.
 if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
-  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" && "$TARGET" != "mcxn" ]] && \
+  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" && "$TARGET" != "mcxn" && \
+      "$TARGET" != "psoc_c3" ]] && \
       (( BOOT_ADDR >= 0x08000000 )); then
     ARCH_OFFSET=0x08000000
   fi
@@ -164,6 +170,12 @@ if [[ "$TARGET" == "imx_rt7xx" ]]; then
   else
     ARCH_OFFSET=0x28000000
   fi
+fi
+
+# PSOC Control C3 links at the Secure CBUS alias of the flash; the image
+# offsets are taken from that base (arch.mk ARCH_FLASH_OFFSET).
+if [[ "$TARGET" == "psoc_c3" ]]; then
+  ARCH_OFFSET=0x12000000
 fi
 
 normalize_flash_addr() {
@@ -271,6 +283,7 @@ write_target_ld() {
     nrf54l) base="ARM-nrf54l" ;;
     mcxa) base="ARM-mcxa" ;;
     nrf5340_net) base="ARM-nrf5340_net" ;;
+    psoc_c3) base="ARM-psoc_c3" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
@@ -351,24 +364,22 @@ assemble_factory() {
 
 print_partition_flags() {
   local label="$1"
-  python3 - "$FACTORY_FLASH" "$BOOT_FLAGS_OFFSET_HEX" "$UPDATE_FLAGS_OFFSET_HEX" "$SECTOR_SIZE" <<'PY' | sed "s/^/==> ${label}: /"
+  python3 - "$FACTORY_FLASH" "$BOOT_FLAGS_OFFSET_HEX" "$UPDATE_FLAGS_OFFSET_HEX" "$SECTOR_SIZE" "$FLAGS_INVERT" <<'PY' | sed "s/^/==> ${label}: /"
 import sys
-path, boot_s, update_s, sect_s = sys.argv[1:5]
+path, boot_s, update_s, sect_s, invert_s = sys.argv[1:6]
 boot = int(boot_s, 0)
 update = int(update_s, 0)
 sect = int(sect_s, 0)
+# FLAGS_INVERT=1 targets erase to 0x00 and store every state bit-inverted.
+invert = 0xFF if invert_s == "1" else 0x00
+states = {0xFF ^ invert: "NEW", 0x70 ^ invert: "UPDATING",
+          0x10 ^ invert: "TESTING", 0x00 ^ invert: "SUCCESS"}
 
 def decode(state):
     if state is None:
         return "MISSING"
-    if state == 0xFF:
-        return "NEW(0xFF)"
-    if state == 0x70:
-        return "UPDATING(0x70)"
-    if state == 0x10:
-        return "TESTING(0x10)"
-    if state == 0x00:
-        return "SUCCESS(0x00)"
+    if state in states:
+        return f"{states[state]}(0x{state:02X})"
     return f"0x{state:02x}"
 
 def read_state(endflags):

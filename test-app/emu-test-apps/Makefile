@@ -107,13 +107,16 @@ else ifeq ($(TARGET),mcxa)
 else ifeq ($(TARGET),nrf5340_net)
   EMU_DIR=nrf5340_net
   EMU_CPU=nrf5340net
+else ifeq ($(TARGET),psoc_c3)
+  EMU_DIR=psoc_c3
+  EMU_CPU=psc3m6
 else
   EMU_DIR=
   EMU_CPU=
 endif
 
 ifeq ($(strip $(EMU_DIR)),)
-  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx|mcxn|lpc55s69|rw612|nrf54l|mcxa|nrf5340_net)
+  $(error Unsupported or unset TARGET=$(TARGET). Use TARGET=stm32h563|stm32h5|stm32u585|stm32u5|stm32l552|stm32l5|nrf5340|mcxw|m2354|imx_rt7xx|mcxn|lpc55s69|rw612|nrf54l|mcxa|nrf5340_net|psoc_c3)
 endif
 
 EMU_PATH=$(WOLFBOOT_ROOT)/test-app/emu-test-apps/$(EMU_DIR)

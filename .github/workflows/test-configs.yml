@@ -1336,6 +1336,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/psoc_c3.config
 
+  psoc_c3_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3-mldsa.config
+
   # 128 KB part: same target, smaller partitions.
   psoc_c3_128k_test:
     uses: ./.github/workflows/test-build.yml
