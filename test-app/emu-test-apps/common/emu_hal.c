@@ -45,6 +45,7 @@
 #if defined(EMU_NRF5340)
 #define NVMC_BASE         0x40039000u
 #define NVMC_CONFIG       (*(volatile uint32_t *)(NVMC_BASE + 0x504u))
+#define NVMC_CONFIGNS     (*(volatile uint32_t *)(NVMC_BASE + 0x584u))
 #endif
 
 #if defined(EMU_M2354)
@@ -792,6 +793,7 @@ void hal_flash_unlock(void)
     FLASH_NSCR |= FLASH_CR_PG;
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 1u;
+    NVMC_CONFIGNS = 1u;
 #endif
 }
 
@@ -805,5 +807,6 @@ void hal_flash_lock(void)
     FLASH_NSCR |= FLASH_CR_LOCK;
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 0u;
+    NVMC_CONFIGNS = 0u;
 #endif
 }
