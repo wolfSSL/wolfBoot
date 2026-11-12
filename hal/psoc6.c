@@ -498,9 +498,22 @@ int RAMFUNCTION psoc6_flash_range_ok(uint32_t address, uint32_t len)
 }
 
 #ifdef DEBUG_UART
+/* Assume ready so non-wolfBoot builds that init the UART elsewhere still emit;
+ * uart_init() below clears it when the SCB init fails */
+static int psoc6_uart_ready = 1;
+
+/* Bound the TX polls so a disabled or non-draining FIFO cannot stall the boot */
+#define PSOC6_UART_SPIN_MAX 10000000UL
+
 static void psoc6_uart_putc(char c)
 {
-    while (Cy_SCB_UART_Put(PSOC6_UART_SCB, (uint32_t)(uint8_t)c) == 0UL) {
+    unsigned long spin;
+
+    if (psoc6_uart_ready == 0)
+        return;
+    for (spin = 0; spin < PSOC6_UART_SPIN_MAX; spin++) {
+        if (Cy_SCB_UART_Put(PSOC6_UART_SCB, (uint32_t)(uint8_t)c) != 0UL)
+            return;
     }
 }
 
@@ -533,12 +546,22 @@ void uart_init(void)
     if (Cy_SCB_UART_Init(PSOC6_UART_SCB, &psoc6_uart_cfg, NULL) ==
             CY_SCB_UART_SUCCESS) {
         Cy_SCB_UART_Enable(PSOC6_UART_SCB);
+        psoc6_uart_ready = 1;
+    }
+    else {
+        psoc6_uart_ready = 0;
     }
 }
 
 static void psoc6_uart_flush(void)
 {
-    while (!Cy_SCB_UART_IsTxComplete(PSOC6_UART_SCB)) {
+    unsigned long spin;
+
+    if (psoc6_uart_ready == 0)
+        return;
+    for (spin = 0; spin < PSOC6_UART_SPIN_MAX; spin++) {
+        if (Cy_SCB_UART_IsTxComplete(PSOC6_UART_SCB))
+            return;
     }
 }
 #endif /* __WOLFBOOT */
