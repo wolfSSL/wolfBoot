@@ -263,6 +263,15 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
     asm volatile("isb");
 #endif
 
+#if defined(TARGET_s32g2)
+    /* wolfBoot runs at EL3 on this target; the payload is entered at EL2. */
+    {
+        extern void s32g2_el3_to_el2_boot(uintptr_t entry, uintptr_t dts)
+            __attribute__((noreturn));
+        s32g2_el3_to_el2_boot((uintptr_t)app_offset, (uintptr_t)dts_offset);
+    }
+#endif
+
     /* Set application address via x4 */
     asm volatile("mov x4, %0" : : "r"(app_offset));
 

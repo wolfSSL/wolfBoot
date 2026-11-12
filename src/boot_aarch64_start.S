@@ -62,6 +62,10 @@
 #include "hal/imx8mm.h"
 #endif
 
+#ifdef TARGET_s32g2
+#include "hal/s32g2.h"
+#endif
+
 /* VA region the TCR_EL{1,2,3} T0SZ values below cover. A high DDR window
  * must fit inside it; keep in step with those TCR literals. */
 #ifndef WOLFBOOT_AARCH64_VA_LIMIT
@@ -1322,6 +1326,39 @@ _cm4_entry:
 9:
 #endif
 
+#if defined(TARGET_s32g2)
+   /* Entered by the Boot ROM, which ECC-initialised only the bytes it copied.
+    * Run SRAM controller 0 over .bss and the stack (_end_data to END_STACK,
+    * widened to its 512-byte granules) before anything is stored there:
+    * registers only, and the controller is reached through MMIO. */
+   mrs  x3, mpidr_el1
+   and  x3, x3, #0xFFFF
+   cbnz x3, s32g2_secondary_entry   /* secondaries: released by the primary */
+   ldr  x2, =_end_data
+   ldr  x3, =END_STACK
+   bl   s32g2_sramc0_clear
+   /* The spin table and the secondary stacks, below the image. */
+   ldr  x2, =S32G2_SPIN_TABLE_BASE
+   ldr  x3, =S32G2_SRAM_LOW_INIT_END
+   bl   s32g2_sramc0_clear
+   /* SMPEN first: the A53 wants it before any cache maintenance or cache
+    * enable. Then the instruction cache: with the MMU off, fetches are
+    * cacheable (write-through) while data stays Device; without it every
+    * instruction comes from SRAM over the interconnect and the stage runs
+    * at a few MIPS. */
+   mrs  x2, S3_1_C15_C2_1
+   orr  x2, x2, #(1 << 6)
+   msr  S3_1_C15_C2_1, x2
+   isb
+   ic   iallu
+   dsb  sy
+   isb
+   mrs  x2, sctlr_el3
+   orr  x2, x2, #(1 << 12)
+   msr  sctlr_el3, x2
+   isb
+#endif
+
 4: ldr x1, =_vector_table // get start of .text in x1
     // Read current EL
     mrs     x0, CurrentEL
@@ -1335,6 +1372,13 @@ _cm4_entry:
     msr     scr_el3, x2
 
     msr cptr_el3, xzr       // enable FP/SIMD
+#if defined(TARGET_s32g2)
+    /* Entered by the Boot ROM with no usable VBAR_EL3: install vectors that
+     * report ESR/ELR/FAR over the console instead of hanging silently. */
+    ldr x2, =s32g2_el3_vectors
+    msr VBAR_EL3, x2
+    isb
+#endif
 
     // EL == 1?
 2:  cmp     x0, #4
@@ -1370,7 +1414,7 @@ _cm4_entry:
 
 8:
 #if defined(TARGET_tegra234) || defined(TARGET_imx8qm) || \
-    defined(TARGET_imx95_a55) || \
+    defined(TARGET_imx95_a55) || defined(TARGET_s32g2) || \
     (defined(TARGET_imx8mm) && defined(IMX8MM_BL33))
     /* Reserved in-DRAM stack from the linker script: the generic path sets sp
      * to the image base, which here is the BL33 load address. */
@@ -1489,6 +1533,173 @@ simple_el2_fault_stack_top:
 .section ".boot"
 #endif
 #endif /* TARGET_cm4 || TARGET_imx8qm || (TARGET_imx8mm && IMX8MM_BL33) */
+
+#if defined(TARGET_s32g2)
+/* EL3 exception vectors: wolfBoot is entered by the Boot ROM at EL3 with no
+ * usable VBAR_EL3. */
+.macro EL3_VEC label, idx
+    .align 7
+\label:
+    mov x3, #\idx
+    b   s32g2_el3_fault_common
+.endm
+
+.align 11
+.global s32g2_el3_vectors
+s32g2_el3_vectors:
+    EL3_VEC el3_v0,  0
+    EL3_VEC el3_v1,  1
+    EL3_VEC el3_v2,  2
+    EL3_VEC el3_v3,  3
+    EL3_VEC el3_v4,  4
+    EL3_VEC el3_v5,  5
+    EL3_VEC el3_v6,  6
+    EL3_VEC el3_v7,  7
+    EL3_VEC el3_v8,  8
+    EL3_VEC el3_v9,  9
+    EL3_VEC el3_v10, 10
+    EL3_VEC el3_v11, 11
+    EL3_VEC el3_v12, 12
+    EL3_VEC el3_v13, 13
+    EL3_VEC el3_v14, 14
+    EL3_VEC el3_v15, 15
+
+s32g2_el3_fault_common:
+#if defined(DEBUG) && defined(DEBUG_UART)
+    ldr x4, =END_STACK
+    mov sp, x4
+    mrs x0, esr_el3
+    mrs x1, elr_el3
+    mrs x2, far_el3
+    bl  s32g2_el3_fault_handler /* void (esr, elr, far, vector) */
+#endif
+9:  wfi
+    b   9b
+
+/* s32g2_sramc0_clear(x2 = start address, x3 = end address): run SRAM
+ * controller 0 over the 512-byte granules covering [x2, x3). The Boot ROM
+ * only ECC-initialised the bytes it copied; a store anywhere else faults.
+ * Registers only (x2-x8), reached through MMIO, no stack. */
+s32g2_sramc0_clear:
+   ldr  x4, =S32G2_SRAM_BASE
+   sub  x2, x2, x4
+   sub  x3, x3, x4
+   and  x2, x2, #~511
+   add  x3, x3, #511
+   and  x3, x3, #~511
+   sub  x3, x3, #1
+   /* initialisation address = ((off >> 9) << 2) | ((off >> 4) & 3) */
+   lsr  x5, x2, #9
+   lsl  x5, x5, #2
+   lsr  x6, x2, #4
+   and  x6, x6, #3
+   orr  x5, x5, x6
+   lsr  x6, x3, #9
+   lsl  x6, x6, #2
+   lsr  x7, x3, #4
+   and  x7, x7, #3
+   orr  x6, x6, x7
+   ldr  x4, =S32G2_SRAMC0_BASE
+   str  wzr, [x4, #SRAMC_PRAMCR]
+   str  w5, [x4, #SRAMC_PRAMIAS]
+   str  w6, [x4, #SRAMC_PRAMIAE]
+   mov  w7, #SRAMC_PRAMCR_INITREQ
+   str  w7, [x4, #SRAMC_PRAMCR]
+   mov  x8, #0x1000000             /* bound on the wait for IDONE */
+6: ldr  w7, [x4, #SRAMC_PRAMSR]
+   tbnz w7, #0, 7f
+   subs x8, x8, #1
+   b.ne 6b
+   /* Not initialised: the stack and .bss would fault on first use. */
+8: wfi
+   b    8b
+7:
+   mov  w7, #SRAMC_PRAMSR_IDONE
+   str  w7, [x4, #SRAMC_PRAMSR]
+   ret
+
+/* Secondary cores enter here at EL3 once the primary releases them: EL3
+ * state, a 2 KB SRAM stack, the per-core setup in C, then an ERET to EL2
+ * where they park on their spin-table slot until the OS writes an entry
+ * address and sends an event. x19 = linear core id, x20 = slot. */
+s32g2_secondary_entry:
+   mrs  x0, mpidr_el1
+   and  x19, x0, #0x3
+   ubfx x1, x0, #8, #8
+   add  x19, x19, x1, lsl #1       /* id = aff1 * 2 + aff0 */
+   ldr  x2, =s32g2_el3_vectors
+   msr  VBAR_EL3, x2
+   mrs  x2, scr_el3
+   orr  x2, x2, #0x0F              /* NS | IRQ | FIQ | EA */
+   msr  scr_el3, x2
+   msr  cptr_el3, xzr
+   isb
+   ldr  x2, =S32G2_SECONDARY_STACK_TOP
+   mov  x3, #S32G2_SECONDARY_STACK_SIZE
+   msub x2, x19, x3, x2
+   mov  sp, x2
+   mov  x0, x19
+   bl   s32g2_secondary_main
+   ldr  x20, =S32G2_SPIN_TABLE_BASE
+   add  x20, x20, x19, lsl #6
+   /* NS | EA | HCE | RW, with IRQ and FIQ left to EL2: routing them to EL3
+    * makes the GICv3 trap the OS's group register accesses. */
+   mov  x2, #0x509
+   msr  scr_el3, x2
+   mov  x2, #(1 << 31)             /* HCR_EL2.RW */
+   msr  hcr_el2, x2
+   mov  x2, #0x3C9                 /* EL2h, DAIF masked */
+   msr  spsr_el3, x2
+   adr  x2, s32g2_secondary_park
+   msr  elr_el3, x2
+   isb
+   eret
+s32g2_secondary_park:
+   wfe
+   ldr  x0, [x20]
+   cbz  x0, s32g2_secondary_park
+   dsb  sy
+   isb
+   mov  x4, x0
+   mov  x0, xzr
+   mov  x1, xzr
+   mov  x2, xzr
+   mov  x3, xzr
+   br   x4
+
+/* s32g2_el3_to_el2_boot(entry, dtb): enter the payload at EL2 from EL3 with
+ * the arm64 boot contract (MMU off, DAIF masked, x0 = DTB). */
+.global s32g2_el3_to_el2_boot
+s32g2_el3_to_el2_boot:
+   msr  daifset, #0xf
+   mov  x20, x0
+   mov  x21, x1
+   /* wolfBoot ran with its identity MMU and caches: write everything back
+    * and hand over with the MMU off. Registers only from here on. The shared
+    * routine cleans and invalidates the caches and clears SCTLR_EL2. */
+   bl   el2_flush_and_disable_mmu
+   mrs  x2, sctlr_el3
+   bic  x2, x2, #(1 << 0)
+   bic  x2, x2, #(1 << 2)
+   bic  x2, x2, #(1 << 12)
+   msr  sctlr_el3, x2
+   dsb  sy
+   isb
+   mov  x2, #0x509                 /* NS | EA | HCE | RW, IRQ/FIQ to EL2 */
+   msr  scr_el3, x2
+   mov  x2, #(1 << 31)
+   msr  hcr_el2, x2
+   mov  x2, #0x3C9
+   msr  spsr_el3, x2
+   msr  elr_el3, x20
+   dsb  sy
+   isb
+   mov  x0, x21
+   mov  x1, xzr
+   mov  x2, xzr
+   mov  x3, xzr
+   eret
+#endif /* TARGET_s32g2 */
 #if defined(TARGET_cm4)
 /* Firmware-provided DTB pointer, stored at _cm4_entry. Read by hal_get_boot_dts()
  * (hal/cm4.c) for the kernel-only FIT boot path. In .data so it is not subject to

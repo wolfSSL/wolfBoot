@@ -37,6 +37,8 @@
 #include "hal/imx8qm.h"
 #elif defined(TARGET_imx8mm)
 #include "hal/imx8mm.h"
+#elif defined(TARGET_s32g2)
+#include "hal/s32g2.h"
 #else
 #error "hal/imx_usdhc_sdhci.c: unsupported target"
 #endif

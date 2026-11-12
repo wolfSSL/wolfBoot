@@ -28,6 +28,7 @@ This README describes configuration of supported targets.
 * [Nordic nRF54LM20](#nordic-nrf54lm20)
 * [NXP i.MX 8M Mini](#nxp-imx-8m-mini)
 * [NXP i.MX 8QuadMax](#nxp-imx-8quadmax)
+* [NXP S32G2 (S32G274A GoldBox)](#nxp-s32g2-s32g274a-goldbox)
 * [NXP i.MX95 Cortex-M7](#nxp-imx95-cortex-m7)
 * [NXP i.MX95 Cortex-A55 (BL33)](#nxp-imx95-cortex-a55-bl33)
 * [NXP iMX-RT](#nxp-imx-rt)
@@ -10696,6 +10697,138 @@ Register bases used by the HAL, from the upstream device tree (`imx8-ss-{lsio,co
 ### Debugging
 
 `-DDEBUG_SDHCI -DDEBUG_DISK -DDEBUG_GPT` add command-level tracing to the storage paths, and `-DDEBUG_FS` traces the filesystem layer when `DISK_FS` is enabled.
+
+## NXP S32G2 (S32G274A GoldBox)
+
+wolfBoot runs on the NXP S32G274A (4x Cortex-A53 + 3x Cortex-M7 lock-step pairs) as the Boot ROM's application image, in place of U-Boot: the ROM copies it into the 8 MB system SRAM at 0x340A0000 and enters it at EL3 with only the 48 MHz FIRC running. wolfBoot brings the SoC up, verifies a signed FIT (kernel plus device tree) and enters Linux at EL2. Developed against the S32G-VNP-GLDBOX, which is an S32G274A-RDB2 in an enclosure.
+
+```
+Boot ROM -> wolfBoot in SRAM (EL3) -> signed FIT from SD, eMMC or QuadSPI NOR -> Linux (EL2)
+```
+
+### Example configurations
+
+| Config | Boot ROM loads wolfBoot from | Signed FIT from |
+|---|---|---|
+| [/config/examples/s32g2-goldbox.config](/config/examples/s32g2-goldbox.config) | SD card (or eMMC) | FAT32 partition of the SD card; of the eMMC with `DISK_EMMC=1 DISK_SDCARD=0` |
+| [/config/examples/s32g2-goldbox-qspi.config](/config/examples/s32g2-goldbox-qspi.config) | QuadSPI NOR | BOOT / UPDATE partitions in the same NOR |
+
+Both use `SIGN=ECC384 HASH=SHA384`. The disk config has two file slots on the third partition, `/fitImage_a.bin` and `/fitImage_b.bin`: the higher version boots. With wolfBoot's anti-rollback default an older version is not booted when the newer one fails to verify; that needs `ALLOW_DOWNGRADE=1`. The NOR config has BOOT at 1 MB, UPDATE at 17 MB and a SWAP sector at 33 MB, with the FIT read into DDR through the `ext_flash` API.
+
+Board data is set from the build rather than edited in the HAL, as `-D` definitions in the config's `CFLAGS_EXTRA`: the DRAM bank sizes (`S32G2_DRAM_BANK0_SIZE`, `S32G2_DRAM_BANK1_SIZE`, 2 GB each by default, which must match what the DDR blob trains), the root device on the kernel command line (`LINUX_BOOTARGS_ROOT`, default `/dev/mmcblk0p2`; `LINUX_BOOTARGS` replaces the whole line), and the slot partitions and file names (`BOOT_PART_A`, `BOOT_PART_B`, `BOOT_FILE_A`, `BOOT_FILE_B`).
+
+The disk config builds with `DISK_BOOT_CONFIRM=1` (see [compile.md](compile.md), "Disk boot confirmation and rollback"). `s32g2-mkfit.sh` pads the signed FIT with 4 KB so the file can carry the 8-byte boot state in its last bytes. An update writes the new FIT to the idle slot's file and marks it with `lib-fs --dev <file> stage`; wolfBoot boots it once on probation, and Linux confirms with `lib-fs --dev <file> success` on the file named by `/proc/device-tree/chosen/wolfboot,boot-file` in the mounted third partition. A slot that is not confirmed is skipped on the next boot and the other slot boots. Files copied without staging boot as before and nothing is written to the card.
+
+### LPDDR4 data blob
+
+wolfBoot trains the LPDDR4 itself ([/hal/s32g2_ddr.c](/hal/s32g2_ddr.c)) but does not carry the board's controller and PHY register tables or the Synopsys PHY training firmware. NXP publishes both in the BSP U-Boot tree, and [/tools/scripts/s32g2/s32g2-ddr-blob.py](/tools/scripts/s32g2/s32g2-ddr-blob.py) packs them into the binary the build links in:
+
+```
+git clone -b release/bsp29.0-2020.04 https://github.com/nxp-auto-linux/u-boot.git
+tools/scripts/s32g2/s32g2-ddr-blob.py u-boot s32g2_ddr.bin
+```
+
+`S32G2_DDR_BLOB` names the file (default `s32g2_ddr.bin` in the wolfBoot root). Without it the image still builds, and reports the missing blob on the console instead of training. The blob is checked by magic, version and CRC before use. Inline ECC is not supported.
+
+### Building
+
+```
+cp config/examples/s32g2-goldbox.config .config
+make
+tools/scripts/s32g2/s32g2_mkimage.py wolfboot.bin s32g2_boot.bin
+dd if=/dev/sdX bs=512 count=8192 of=sd_raw_backup.bin        # keep the stock boot area
+dd if=s32g2_boot.bin of=/dev/sdX bs=512 seek=8 conv=fsync    # IVT at byte 0x1000
+tools/scripts/s32g2/s32g2-mkfit.sh Image 1 wolfboot_signing_private_key.der fsl-s32g274a-rdb2.dtb
+mcopy -i /dev/sdX3 s32g2-fitImage_v1_signed.bin ::/fitImage_a.bin
+```
+
+[/tools/scripts/s32g2/s32g2_mkimage.py](/tools/scripts/s32g2/s32g2_mkimage.py) writes the IVT (tag 0xD1), a no-op DCD and the application boot code header (tag 0xD5) in the stock BSP's layout. The card must stay MBR: the IVT sits where GPT entries would be. Restoring the backup puts the stock chain back. The stock card's first partition is FAT16, which wolfBoot does not read, so the FIT goes on an added FAT32 partition (`mkfs.vfat -F 32 -s 8`).
+
+`s32g2-mkfit.sh` builds the FIT from [/hal/s32g2.its](/hal/s32g2.its): the gzip-compressed kernel, loaded at 0x84080000 (2 MB-aligned base plus the image's text offset), and the board DTB, both under the wolfBoot signature.
+
+### What wolfBoot does before the FIT
+
+In this order, in [/hal/s32g2.c](/hal/s32g2.c) and the S32G2 block of [/src/boot_aarch64_start.S](/src/boot_aarch64_start.S):
+
+- ECC-initialises `.bss`, the stack and the spin-table page through SRAM controller 0. The ROM only initialises the bytes it copies, and the controller works in 512-byte granules, so `.data` ends on a granule boundary.
+- Routes the UART0 pads and programs LINFlexD_0.
+- Services the VR5510 PMIC over I2C4: fail-safe watchdog and FCCU monitoring off. Unserviced, the PMIC power-cycles the board about a second after power-up, and on any clock change.
+- Clock tree: FXOSC, ARM PLL (A53 at 1 GHz), XBAR 800 MHz, PERIPH PLL (LINFlexD 125 MHz, uSDHC 400 MHz, QuadSPI), DDR PLL 800 MHz.
+- Ncore coherent interconnect, then an identity MMU at EL3 with the caches on: SRAM Normal, peripherals and the QuadSPI window Device. Cluster 1's interconnect port only joins when its cores are released, since a port admitted with its cores in reset stalls the barrier after a TLB invalidate.
+- LPDDR4 training (1D and 2D), a read-back check through a Device mapping, then DRAM mapped Normal.
+- MSCM interrupt routing, GICv3 distributor and redistributors, and the three secondary cores released through MC_ME and parked at EL2 on a spin table at 0x34000000.
+- uSDHC and QuadSPI pads, whichever medium holds the FIT, as the OS expects them routed. The card and eMMC run at their 3.3 V high-speed rates with SDMA, using the shared uSDHC shim's cache maintenance.
+
+`hal_dts_fixup` adds the `/memory` node for both DRAM banks, each core's `enable-method = "spin-table"` and `cpu-release-addr`, the bootargs, and clears `linux,initrd-start/end` (the stock DTB's range overlaps the kernel). The handoff flushes the caches, turns the MMU off and enters the kernel at EL2 with `SCR_EL3` leaving IRQ and FIQ to EL2. EL3 exception vectors report ESR, ELR and FAR on the console.
+
+### QuadSPI NOR
+
+`S32G2_QSPI=1` builds the driver for the QuadSPI controller at 0x40134000 and the GoldBox's 64 MB Macronix MX25UW51245G. The flash runs in plain SPI mode with 4-byte addresses: single commands are IP commands described by a LUT sequence (page program 0x12, 4 KB sector erase 0x21), bulk reads go through the memory-mapped AHB window (fast read 0x0C), the DLL slave is bypassed and data is sampled from the internal DQS loopback. The serial clock comes from PERIPH DFS1 through MC_CGM0 mux 12 (`S32G2_QSPI_2X_DIV`, 8 = 50 MHz). If the Boot ROM left the flash in octal DTR mode, the init resets it to SPI mode with the two-byte OPI reset commands.
+
+```
+cp config/examples/s32g2-goldbox-qspi.config .config
+make
+tools/scripts/s32g2/s32g2_mkimage.py wolfboot.bin s32g2_qspi_boot.bin --qspi
+```
+
+`--qspi` lays the image out for QuadSPI boot: the IVT at flash offset 0, the 0x200-byte QuadSPI parameter block the ROM programs the controller with at 0x200 (`sdr`, the default, reads in plain SPI mode with no mode switch; `--qspi-params octal` is the stock BSP block that moves the flash to octal DTR; wolfBoot then finds the flash not answering in SPI mode and resets it back before using it), the DCD and the application. Strap the RDB2 for QuadSPI boot with SW4 all OFF, SW9 OFF, SW10 1 ON / 2 OFF.
+
+The NOR is written by a programmer build of the SD config: it reads the named file from the FAT32 partition into DDR, erases, programs and reads it back, then halts. It refuses to erase anything when the flash was not identified, when the partition is not a recognised filesystem, or when the file does not fit. Boot it from the SD card once per image:
+
+```
+cp config/examples/s32g2-goldbox.config .config
+make S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/s32g2_qspi_boot.bin                                    # wolfBoot at 0
+make S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/fitImage_a.bin S32G2_QSPI_PROGRAM_OFFSET=0x100000     # FIT in BOOT
+```
+
+An update is a newer signed FIT in the UPDATE partition plus the update marker, the 8 bytes `FF FF FF 70 'B' 'O' 'O' 'T'` at the end of that partition:
+
+```
+make S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/fitImage_v2.bin S32G2_QSPI_PROGRAM_OFFSET=0x1100000   # FIT in UPDATE
+make S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/marker.bin S32G2_QSPI_PROGRAM_OFFSET=0x20FFFF8        # update marker
+```
+
+The NOR config does not swap partitions: wolfBoot loads the higher version of BOOT and UPDATE into DDR, and records a staged image as `testing` the first time it boots. With the anti-rollback default an image left in `testing` is booted again, because the other partition holds an older version; build with `ALLOW_DOWNGRADE=1` for an unconfirmed image to fall back to it.
+
+The MX25UW51245G keeps an ECC code for every 16 bytes and allows each such unit to be programmed once per erase. A state byte rewritten in place breaks that rule: the flash reports an ECC error for the unit and the next boot from the NOR faults on its first bulk read. The NOR config therefore keeps the partition state as a journal (`NVM_FLASH_JOURNAL=1`, see [compile.md](compile.md)), one 16-byte record per change, in the last sector of each partition, with 64 KB wolfBoot sectors so that the log of a 16 MB partition fits. Anything else written to this flash has to follow the same rule: erase before programming a 16-byte unit again.
+
+### eMMC
+
+The GoldBox routes uSDHC0 either to the microSD slot or to the on-board 32 GB eMMC with the RDB2's SW3 (ON = microSD, OFF = eMMC). `make DISK_EMMC=1 DISK_SDCARD=0` drives the eMMC through the same uSDHC shim. The factory eMMC carries the BSP image (FAT16 boot partition, ext3 rootfs), so a FAT32 partition is appended from the board's Linux (`sfdisk --append`, `mkfs.vfat -F 32 -s 8`) for the FIT files. With wolfBoot in the NOR and SW3 OFF the box boots with no card inserted.
+
+### Hardware setup (GoldBox)
+
+- Console: UART0 micro-USB (FTDI FT232R), LINFlexD_0, 115200 8N1. The second micro-USB is UART1 and prints nothing.
+- Boot source switches on the RDB2: SD boot is SW4 position 7 ON only; QuadSPI boot is SW4 all OFF; SW9 OFF and SW10 1 ON / 2 OFF for both.
+- Expected console, booting from the SD card:
+
+```
+wolfBoot S32G2 (EL3, running from SRAM)
+DDR: 1D training
+DDR: 2D training
+s32g2: DDR up, 4096 MB, erratum polling 0
+s32g2: core 1 parked
+p2: fat32, /fitImage_a.bin
+Firmware Valid.
+FDT: memory and spin-table set
+```
+
+### Peripheral map
+
+| Block | Base | Notes |
+|---|---|---|
+| LINFlexD_0 | 0x401C8000 | FIFO mode; TX pin PC09 (MSCR41), RX PC10 (MSCR42, IMCR512) |
+| uSDHC0 | 0x402F0000 | i.MX uSDHC v3, shared shim [/hal/imx_usdhc_sdhci.c](/hal/imx_usdhc_sdhci.c), per clock 400 MHz |
+| QuadSPI | 0x40134000 | AHB window at 0x0 |
+| I2C4 | 0x402DC000 | VR5510 fail-safe unit at 0x21 |
+| SRAM | 0x34000000 | 8 MB; controllers at 0x4019C000 / 0x401A0000 |
+| DRAM | 0x80000000 + 0x880000000 | 2 GB + 2 GB |
+| Ncore / GICv3 | 0x50400000 / 0x50800000 | |
+
+### Known limitations
+
+- The NOR cannot be written from Linux: the BSP29 5.4 kernel's QuadSPI driver blocks on its first flash read under this boot chain. Updates are staged with the programmer build, and a staged image cannot be confirmed from Linux.
+- Inline DRAM ECC, HSE secure boot and chain-loading BL31 (for kernels that need PSCI or SCMI) are not implemented.
 
 ## NXP i.MX95 Cortex-M7
 
