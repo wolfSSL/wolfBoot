@@ -393,7 +393,8 @@ uint32_t imx_usdhc_get_clock_khz(void)
     return usdhc_achieved_clk_khz;
 }
 
-#if defined(WOLFBOOT_AARCH64_EL2_IDMAP) && !defined(SDHCI_SDMA_DISABLED)
+#if (defined(WOLFBOOT_AARCH64_EL2_IDMAP) || \
+     defined(WOLFBOOT_AARCH64_DCACHE_RANGE)) && !defined(SDHCI_SDMA_DISABLED)
 /* SDMA cache maintenance with the identity MMU on, by address range rather than
  * the set/way walk used at handoff, which would cost more per transfer than the
  * DMA saves. The range routines are in src/boot_aarch64_start.S. */
@@ -423,5 +424,5 @@ void sdhci_platform_dma_complete(void* buf, uint32_t sz, int is_write)
     if (!is_write && sz != 0)
         invalidate_dcache_range(start, start + sz);
 }
-#endif /* WOLFBOOT_AARCH64_EL2_IDMAP && !SDHCI_SDMA_DISABLED */
+#endif /* (EL2_IDMAP || DCACHE_RANGE) && !SDHCI_SDMA_DISABLED */
 #endif /* DISK_SDCARD || DISK_EMMC */
