@@ -128,11 +128,13 @@ START_TEST(test_elf_segments_outside_wolfboot_memory)
 {
     /* below the reserved window, ending exactly at its start, and above
      * 4 GB are all accepted; an empty segment is never checked */
-    ck_assert_int_eq(boot_elf_map_cb(0, 0x200000, 0x1000), 0);
-    ck_assert_int_eq(boot_elf_map_cb(0, ELF_RESERVED_START - 0x1000, 0x1000),
-                     0);
-    ck_assert_int_eq(boot_elf_map_cb(0, ELF_RESERVED_END, 0x1000), 0);
-    ck_assert_int_eq(boot_elf_map_cb(0, ELF_RESERVED_START, 0), 0);
+    ck_assert_int_eq(boot_elf_map_cb(0x200000, 0x200000, 0x1000), 0);
+    ck_assert_int_eq(boot_elf_map_cb(ELF_RESERVED_START - 0x1000,
+                                     ELF_RESERVED_START - 0x1000, 0x1000), 0);
+    ck_assert_int_eq(boot_elf_map_cb(ELF_RESERVED_END, ELF_RESERVED_END,
+                                     0x1000), 0);
+    ck_assert_int_eq(boot_elf_map_cb(ELF_RESERVED_START, ELF_RESERVED_START,
+                                     0), 0);
 }
 END_TEST
 
@@ -145,6 +147,10 @@ START_TEST(test_elf_segments_over_wolfboot_memory)
     ck_assert_int_eq(boot_elf_map_cb(0, 0x100000, 0xfff00000U), -1);
     /* a safe physical address with a virtual one over stage 2 */
     ck_assert_int_eq(boot_elf_map_cb(WOLFBOOT_LOAD_BASE, 0x200000, 0x1000),
+                     -1);
+    /* different page offsets: the second mapped page would be stage 2's */
+    ck_assert_int_eq(boot_elf_map_cb(0x200000fffULL,
+                                     ELF_RESERVED_START - 0x1000, 0x1000),
                      -1);
 }
 END_TEST

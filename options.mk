@@ -2105,9 +2105,13 @@ ifeq ($(FSP), 1)
     CFLAGS+=-DFSP_NVS_BASE=$(FSP_NVS_BASE) -DFSP_NVS_SIZE=$(FSP_NVS_SIZE)
     ifeq ($(FSP_NVS_TPM),1)
       # anti-rollback disables the platform hierarchy before handoff, which
-      # is what keeps the OS from rewriting the reference hash
+      # is what keeps the OS from rewriting the reference hash, so a boot
+      # that cannot disable it must halt
       ifneq ($(ANTI_ROLLBACK),1)
         $(error FSP_NVS_TPM=1 needs ANTI_ROLLBACK=1)
+      endif
+      ifneq ($(ANTI_ROLLBACK_HALT_ON_FAILURE),1)
+        $(error FSP_NVS_TPM=1 needs ANTI_ROLLBACK_HALT_ON_FAILURE=1)
       endif
       CFLAGS+=-DWOLFBOOT_FSP_NVS_TPM
     endif

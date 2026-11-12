@@ -119,6 +119,12 @@ static int boot_elf_map_cb(uint64_t vaddr, uint64_t paddr, uint32_t size)
         return -1;
     }
 #ifdef WOLFBOOT_64BIT
+    /* pages are mapped whole, so the checked range is only the one written
+     * when both addresses sit at the same offset in their page */
+    if (((vaddr ^ paddr) & 0xFFF) != 0) {
+        wolfBoot_printf("ELF: segment addresses differ in page offset\r\n");
+        return -1;
+    }
     return x86_paging_map_memory(vaddr, paddr, size);
 #else
     (void)vaddr;

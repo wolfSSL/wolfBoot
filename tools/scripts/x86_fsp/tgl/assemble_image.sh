@@ -14,9 +14,9 @@ erase_fsp_nvs_cache()
 {
     local base size image_size offset
 
-    grep -q '^FSP_NVS_CACHE=1$' .config || return 0
-    base=$(sed -n 's/^FSP_NVS_BASE=//p' .config)
-    size=$(sed -n 's/^FSP_NVS_SIZE=//p' .config)
+    grep -Eq '^FSP_NVS_CACHE[?]?=1$' .config || return 0
+    base=$(sed -n 's/^FSP_NVS_BASE?\{0,1\}=//p' .config)
+    size=$(sed -n 's/^FSP_NVS_SIZE?\{0,1\}=//p' .config)
     image_size=$(stat -c%s "$WOLFBOOT_DIR/final_image.bin")
     # the image ends at 4 GB
     offset=$((image_size - (0x100000000 - base)))

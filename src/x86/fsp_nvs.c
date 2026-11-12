@@ -96,8 +96,19 @@ void fsp_nvs_before_reset(void)
         cmos_write(FSP_NVS_STATE_CMOS_IDX, 0);
 }
 
+#ifndef BUILD_LOADER_STAGE1
+/* set when a save left a record in flash that is not this boot's data */
+static int fsp_nvs_stale;
+#endif
+
 void fsp_nvs_boot_ok(void)
 {
+#ifndef BUILD_LOADER_STAGE1
+    /* the record stage 1 skipped is still there: keep skipping it */
+    if (fsp_nvs_stale &&
+        cmos_read(FSP_NVS_STATE_CMOS_IDX) == FSP_NVS_STATE_SKIP)
+        return;
+#endif
     cmos_write(FSP_NVS_STATE_CMOS_IDX, 0);
 }
 
@@ -369,7 +380,8 @@ static int fsp_nvs_is_current(const struct fsp_nvs_record *rec, uint32_t key,
            memcmp(rec->data, data, len) == 0;
 }
 
-void fsp_nvs_save(void)
+/* Returns 1 when flash holds the training data of this boot */
+static int fsp_nvs_store(void)
 {
     const struct fsp_nvs_record *rec =
         (const struct fsp_nvs_record *)(uintptr_t)FSP_NVS_BASE;
@@ -382,17 +394,17 @@ void fsp_nvs_save(void)
     hob = fsp_nvs_find_hob((struct efi_hob *)(uintptr_t)params->hobList);
     if (hob == NULL) {
         wolfBoot_printf("FSP NVS: no training data HOB\r\n");
-        return;
+        return 0;
     }
     data = (const uint8_t *)(hob + 1);
     len = hob->header.hob_length - sizeof(*hob);
     if (len > FSP_NVS_SIZE - sizeof(hdr)) {
         wolfBoot_printf("FSP NVS: training data (%d bytes) exceeds the cache\r\n",
                         (int)len);
-        return;
+        return 0;
     }
     if (fsp_nvs_is_current(rec, params->fsp_nvs_key, data, len))
-        return;
+        return 1;
 
     memset(&hdr, 0, sizeof(hdr));
     hdr.magic = FSP_NVS_MAGIC;
@@ -407,14 +419,25 @@ void fsp_nvs_save(void)
         tgl_spi_flash_write(FSP_NVS_BASE, (const uint8_t *)&hdr,
                             sizeof(hdr)) != 0) {
         wolfBoot_printf("FSP NVS: saving training data failed\r\n");
-        return;
+        return 0;
     }
     FSP_NVS_CACHE_FLUSH();
     if (!fsp_nvs_is_current(rec, hdr.key, data, len)) {
         wolfBoot_printf("FSP NVS: training data read-back mismatch\r\n");
-        return;
+        return 0;
     }
     wolfBoot_printf("FSP NVS: saved %d bytes of training data\r\n", (int)len);
+    return 1;
+}
+
+void fsp_nvs_save(void)
+{
+    const struct fsp_nvs_record *rec =
+        (const struct fsp_nvs_record *)(uintptr_t)FSP_NVS_BASE;
+
+    fsp_nvs_stale = !fsp_nvs_store() &&
+        fsp_nvs_record_valid(rec, stage2_get_parameters()->fsp_nvs_key,
+                             FSP_NVS_SIZE);
 }
 
 #ifdef WOLFBOOT_FSP_NVS_TPM

@@ -71,16 +71,18 @@ int tgl_spi_flash_write(uint32_t address, const uint8_t *buf, uint32_t len)
     return 0;
 }
 
+static uint8_t g_cmos;
+
 uint8_t cmos_read(uint8_t index)
 {
     (void)index;
-    return 0;
+    return g_cmos;
 }
 
 void cmos_write(uint8_t index, uint8_t value)
 {
     (void)index;
-    (void)value;
+    g_cmos = value;
 }
 
 /* wolfTPM as fsp_nvs_tpm_sync() uses it, over one NV index */
@@ -221,6 +223,7 @@ static void setup(uint32_t key)
     g_params.hobList = (uint32_t)(uintptr_t)g_hobs;
     g_params.fsp_nvs_key = key;
     g_erase_calls = g_write_calls = g_fail_write_at = g_fail_erase = 0;
+    g_cmos = 0;
 }
 
 static const struct fsp_nvs_record *area(void)
@@ -329,6 +332,56 @@ static void nv_reset(void)
     g_nv_attr = 0;
     memset(g_nv_data, 0, sizeof(g_nv_data));
 }
+
+START_TEST(test_skip_is_kept_until_the_record_is_replaced)
+{
+    /* stage 1 skipped the record, and the save of the retrained data fails
+     * at the erase, so the skipped record is still valid in flash */
+    memset(g_area, 0xff, sizeof(g_area));
+    setup(0xabcd);
+    build_hobs(300, 0x10);
+    fsp_nvs_save();
+    build_hobs(300, 0x20);
+    g_cmos = 0xA5;
+    g_fail_erase = 1;
+    fsp_nvs_save();
+    ck_assert_int_eq(fsp_nvs_record_valid(area(), 0xabcd, AREA_SIZE), 1);
+    fsp_nvs_boot_ok();
+    ck_assert_uint_eq(g_cmos, 0xA5);
+
+    /* a boot that used the record marks it good whatever the save did */
+    g_cmos = 0x5A;
+    fsp_nvs_save();
+    fsp_nvs_boot_ok();
+    ck_assert_uint_eq(g_cmos, 0);
+
+    /* a failed write leaves no valid record, so nothing is left to skip */
+    g_cmos = 0xA5;
+    g_fail_erase = 0;
+    g_write_calls = 0;
+    g_fail_write_at = 1;
+    fsp_nvs_save();
+    ck_assert_int_eq(fsp_nvs_record_valid(area(), 0xabcd, AREA_SIZE), 0);
+    fsp_nvs_boot_ok();
+    ck_assert_uint_eq(g_cmos, 0);
+
+    /* and a save that replaces the record ends the skipping */
+    memset(g_area, 0xff, sizeof(g_area));
+    g_fail_write_at = 0;
+    build_hobs(300, 0x10);
+    fsp_nvs_save();
+    build_hobs(300, 0x20);
+    g_cmos = 0xA5;
+    g_fail_erase = 1;
+    fsp_nvs_save();
+    fsp_nvs_boot_ok();
+    ck_assert_uint_eq(g_cmos, 0xA5);
+    g_fail_erase = 0;
+    fsp_nvs_save();
+    fsp_nvs_boot_ok();
+    ck_assert_uint_eq(g_cmos, 0);
+}
+END_TEST
 
 START_TEST(test_tpm_reference_follows_the_record)
 {
@@ -440,6 +493,7 @@ static Suite *fsp_nvs_save_suite(void)
     tcase_add_test(tc, test_missing_or_oversized_hob);
     tcase_add_test(tc, test_zero_length_hob_stops_the_walk);
     tcase_add_test(tc, test_failed_header_write_leaves_no_record);
+    tcase_add_test(tc, test_skip_is_kept_until_the_record_is_replaced);
     tcase_add_test(tc, test_tpm_reference_follows_the_record);
     tcase_add_test(tc, test_tpm_reference_not_updated_after_a_failed_save);
     tcase_add_test(tc, test_tpm_reference_index_must_be_platform_owned);
