@@ -389,6 +389,139 @@ static int lpc55s69_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_MCXW)
+/* MCX W71 FMU0: one phrase per command, data stored through the secure flash
+ * alias while FSTAT.PEWEN is set, as the wolfBoot HAL does. Only reached with
+ * TZEN=0: the non-secure app goes through the wolfBoot_nsc_* veneers. */
+#define FMU0_BASE           0x40020000u
+#define FMU0_FSTAT          (*(volatile uint32_t *)(FMU0_BASE + 0x00u))
+#define FMU0_FCCOB0         (*(volatile uint32_t *)(FMU0_BASE + 0x10u))
+#define FMU_FSTAT_CCIF      0x00000080u
+#define FMU_FSTAT_PEWEN     0x03000000u
+#define FMU_FSTAT_PERDY     0x80000000u
+#define FMU_FSTAT_ERR       0x00000075u
+#define FMU_FSTAT_CLEAR     0x00010074u
+#define FMU_CMD_PGMPHR      0x24u
+#define FMU_CMD_ERSSCR      0x42u
+#define MCXW_SECURE_ALIAS   0x10000000u
+#define MCXW_PHRASE_SIZE    16u
+#define MCXW_PHRASE_WORDS   (MCXW_PHRASE_SIZE / 4u)
+#define MCXW_SECTOR_SIZE    0x2000u
+/* The flash cannot be read while a command runs, so this code sits in SRAM */
+#define MCXW_RAMFUNCTION    __attribute__((used, noinline, long_call, \
+                                section(".ramcode")))
+
+static uint32_t MCXW_RAMFUNCTION mcxw_fmu_wait(uint32_t mask)
+{
+    uint32_t fstat;
+
+    do {
+        fstat = FMU0_FSTAT;
+    } while (((fstat & mask) == 0u) && ((fstat & FMU_FSTAT_ERR) == 0u));
+    return fstat;
+}
+
+static int MCXW_RAMFUNCTION mcxw_fmu_cmd(uint32_t cmd, uint32_t address,
+    const uint32_t *words)
+{
+    volatile uint32_t *dst;
+    uint32_t primask;
+    uint32_t fstat;
+    uint32_t i;
+
+    dst = (volatile uint32_t *)(address | MCXW_SECURE_ALIAS);
+    __asm volatile("mrs %0, primask" : "=r"(primask));
+    __asm volatile("cpsid i" ::: "memory");
+
+    while ((FMU0_FSTAT & FMU_FSTAT_CCIF) == 0u) {
+    }
+    FMU0_FSTAT = FMU_FSTAT_CLEAR;
+    FMU0_FCCOB0 = cmd;
+    FMU0_FSTAT = FMU_FSTAT_CCIF;
+
+    fstat = mcxw_fmu_wait(FMU_FSTAT_PEWEN);
+    if ((fstat & FMU_FSTAT_ERR) == 0u) {
+        for (i = 0u; i < MCXW_PHRASE_WORDS; i++) {
+            dst[i] = (words != 0) ? words[i] : 0u;
+        }
+        fstat = mcxw_fmu_wait(FMU_FSTAT_PERDY);
+    }
+    if ((fstat & FMU_FSTAT_ERR) == 0u) {
+        FMU0_FSTAT = FMU_FSTAT_PERDY;
+    }
+    do {
+        fstat = FMU0_FSTAT;
+    } while ((fstat & FMU_FSTAT_CCIF) == 0u);
+
+    __asm volatile("msr primask, %0" : : "r"(primask) : "memory");
+    return ((fstat & FMU_FSTAT_ERR) != 0u) ? -1 : 0;
+}
+
+/* Merges into the current phrase; a programmed phrase is only rewritten after
+ * an erase, which is what the ECC flash allows. */
+static int mcxw_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t phrase[MCXW_PHRASE_WORDS];
+    uint8_t *p = (uint8_t *)phrase;
+    const volatile uint32_t *cur;
+    uint32_t off;
+    uint32_t chunk;
+    uint32_t i;
+    int erased;
+    int changed;
+    int ret = 0;
+
+    address &= ~MCXW_SECURE_ALIAS;
+    while ((len > 0) && (ret == 0)) {
+        off = address & (MCXW_PHRASE_SIZE - 1u);
+        chunk = MCXW_PHRASE_SIZE - off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        cur = (const volatile uint32_t *)(address - off);
+        erased = 1;
+        for (i = 0u; i < MCXW_PHRASE_WORDS; i++) {
+            phrase[i] = cur[i];
+            if (phrase[i] != 0xFFFFFFFFu) {
+                erased = 0;
+            }
+        }
+        changed = 0;
+        for (i = 0u; i < chunk; i++) {
+            if (p[off + i] != data[i]) {
+                p[off + i] = data[i];
+                changed = 1;
+            }
+        }
+        if (changed && !erased) {
+            ret = -1;
+        }
+        else if (changed) {
+            ret = mcxw_fmu_cmd(FMU_CMD_PGMPHR, address - off, phrase);
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int mcxw_flash_erase(uint32_t address, int len)
+{
+    uint32_t end;
+    int ret = 0;
+
+    address &= ~MCXW_SECURE_ALIAS;
+    end = address + (uint32_t)len;
+    address -= address % MCXW_SECTOR_SIZE;
+    while ((address < end) && (ret == 0)) {
+        ret = mcxw_fmu_cmd(FMU_CMD_ERSSCR, address, 0);
+        address += MCXW_SECTOR_SIZE;
+    }
+    return ret;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -419,6 +552,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return mcxn_flash_write(address, data, len);
 #elif defined(EMU_LPC55S69)
     return lpc55s69_flash_write(address, data, len);
+#elif defined(EMU_MCXW)
+    return mcxw_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -460,6 +595,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return lpc55s69_flash_erase(address, len);
+#elif defined(EMU_MCXW)
+    if (len <= 0) {
+        return 0;
+    }
+    return mcxw_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

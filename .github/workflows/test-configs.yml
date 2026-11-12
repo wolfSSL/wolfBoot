@@ -439,6 +439,13 @@ jobs:
       config-file: ./config/examples/mcxw-tz.config
       board-name: frdmmcxw71
 
+  nxp_mcxw_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw-mldsa.config
+      board-name: frdmmcxw71
+
   nxp_mcxw_no_uart_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:

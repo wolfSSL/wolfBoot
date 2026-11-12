@@ -22,19 +22,22 @@ CC=arm-none-eabi-gcc
 OBJCOPY ?= arm-none-eabi-objcopy
 
 CFLAGS := -mcpu=cortex-m33 -mthumb -mcmse -Os -ffreestanding -fdata-sections -ffunction-sections -g -ggdb
-MCXW71_SDK ?= ../../../../MCXW71
-CFLAGS += -I. -I../common -I../../../include
+CFLAGS += -I. -I../common -I../../../include -DEMU_MCXW
 CFLAGS += -DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
-CFLAGS += -DCPU_MCXW716CMFPA
-CFLAGS += -I$(MCXW71_SDK)/devices/MCXW716C -I$(MCXW71_SDK)/devices/MCXW716C/periph2
-CFLAGS += -I$(MCXW71_SDK)/CMSIS/Core/Include
-LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
+# The ECC flash programs a phrase once between erases, as in the wolfBoot HAL
+CFLAGS += -DNVM_FLASH_WRITEONCE
+LDFLAGS := -nostdlib -T app.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
 NSC_OBJ :=
+# Non-secure SRAM opened by the wolfBoot SAU; without TZEN the whole STCM
+RAM_ORIGIN := 0x20000000
+RAM_SIZE := 0x1C000
 ifeq ($(TZEN),1)
   CFLAGS += -DTZEN
   CFLAGS += -DWOLFCRYPT_SECURE_MODE
   NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
+  RAM_ORIGIN := 0x20016000
+  RAM_SIZE := 0x4000
 endif
 
 VPATH := ../common
@@ -46,7 +49,10 @@ OBJS := $(SRCS:.c=.o) libwolfboot.o $(NSC_OBJ)
 
 all: app.bin
 
-app.elf: $(OBJS) target.ld
+app.ld: target.ld
+	sed -e "s/@RAM_ORIGIN@/$(RAM_ORIGIN)/g" -e "s/@RAM_SIZE@/$(RAM_SIZE)/g" $< > $@
+
+app.elf: $(OBJS) app.ld
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
 app.bin: app.elf
@@ -59,6 +65,6 @@ libwolfboot.o: $(LIBWOLFBOOT_SRC)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(SRCS:.c=.o) libwolfboot.o app.elf app.bin
+	rm -f $(SRCS:.c=.o) libwolfboot.o app.ld app.elf app.bin
 
 .PHONY: all clean
