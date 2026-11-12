@@ -156,6 +156,7 @@ tools/unit-tests/unit-fs-malicious
 tools/unit-tests/unit-ext4
 tools/unit-tests/unit-update-disk-fs
 tools/unit-tests/unit-update-disk-fs-enc
+tools/unit-tests/unit-update-disk-fs-confirm
 tools/unit-tests/ext4-min.img
 tools/unit-tests/ext4-stock.img
 tools/unit-tests/ext4-payload.bin

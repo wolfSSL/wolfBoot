@@ -581,9 +581,9 @@ For more details about this optional feature, please refer to the [Encrypted ext
 
 The disk boot path (`src/update_disk.c`) is stateless by default: it selects the highest-versioned slot, verifies it, and falls over to the other slot when *verification* fails. It writes nothing back, so an image that verifies and then fails to **boot** is retried indefinitely.
 
-`DISK_BOOT_CONFIRM=1` closes that gap using the **same partition trailer** the sector-swap flow in `src/update_flash.c` already keeps, placed in the tail of the raw boot partition:
+`DISK_BOOT_CONFIRM=1` closes that gap using the **same partition trailer** the sector-swap flow in `src/update_flash.c` already keeps, placed in the tail of the slot. For a raw boot partition that is the tail of the partition; for a `DISK_FS` slot it is the tail of the image file:
 
-| Offset from the end of the partition | Size | Meaning |
+| Offset from the end of the partition or file | Size | Meaning |
 | --- | --- | --- |
 | -4 | 4 | Magic, the ASCII `BOOT` (`WOLFBOOT_MAGIC_TRAIL`) |
 | -5 | 1 | Partition state |
@@ -615,6 +615,13 @@ lib-fs --dev /dev/mmcblk1p1 success    # once the system is known good
 lib-fs --dev /dev/mmcblk1p1 status     # read the current state
 ```
 
+For a file slot, mount the filesystem and give `--dev` the image file itself. The tool finds the trailer from the size of what it opens, so the same three commands apply:
+
+```
+lib-fs --dev /boot/fitImage_b.bin stage
+lib-fs --dev /boot/fitImage_b.bin success
+```
+
 `update-trigger` is refused with `--dev`: it marks the separate UPDATE partition at a compile-time offset, which against a raw slot device is just somewhere in the middle of the slot. `stage` is the disk analogue.
 
 Order the `success` call after whatever the system treats as proof of a healthy boot. Three placements are common, and the choice belongs to the integrator:
@@ -623,7 +630,7 @@ Order the `success` call after whatever the system treats as proof of a healthy 
 - A unit ordered after a specific mount or service (`After=` and `Requires=` on `var-log.mount`, a database, a network target): the boot is only healthy when that resource came up, so a kernel that boots but cannot bring it up is rolled back.
 - The application itself, once it has reported in to whatever it serves: nothing is confirmed on a system whose purpose is not met. Ship the tool, not the unit.
 
-Whatever confirms needs to know which slot it is running from, and the rootfs cannot tell it: both slots boot the same rootfs. wolfBoot writes the GPT index of the slot it verified into the device tree it hands to the OS, as `/chosen/wolfboot,boot-part` (32-bit big-endian, the same 0-based index as `BOOT_PART_A` / `BOOT_PART_B`), so on Linux the slot is `/proc/device-tree/chosen/wolfboot,boot-part` and the partition device is that index plus one on the boot disk. The same value is available to a wolfBoot hook as `wolfBoot_disk_boot_part()`. A device tree that cannot carry the property halts the boot: handing the OS a tree that names no slot would leave that slot unconfirmed, and one that still carries a value its author wrote would aim the confirmation at the wrong slot. A confirm step that checks the slot's `status` first and only calls `success` when it reads `testing` keeps the steady state write-free.
+Whatever confirms needs to know which slot it is running from, and the rootfs cannot tell it: both slots boot the same rootfs. wolfBoot writes the GPT index of the slot it verified into the device tree it hands to the OS, as `/chosen/wolfboot,boot-part` (32-bit big-endian, the same 0-based index as `BOOT_PART_A` / `BOOT_PART_B`), so on Linux the slot is `/proc/device-tree/chosen/wolfboot,boot-part` and the partition device is that index plus one on the boot disk. When the slot is a file, `/chosen/wolfboot,boot-file` carries its path within that partition as well, because two file slots can share one partition. For a raw slot the property is not added, and one the device tree already carried is set to an empty string. The same value is available to a wolfBoot hook as `wolfBoot_disk_boot_part()`. A device tree that cannot carry the property halts the boot: handing the OS a tree that names no slot would leave that slot unconfirmed, and one that still carries a value its author wrote would aim the confirmation at the wrong slot. A confirm step that checks the slot's `status` first and only calls `success` when it reads `testing` keeps the steady state write-free.
 
 The tool needs no configuration to match the loader's layout and no rebuild per slot. With `--dev` it locates the trailer from the size of the device it was handed, which is how wolfBoot locates it too, and it writes the pinned state values rather than the `IMG_STATE_*` of its own build. `include/disk_trailer.h` holds the offset, the magic and the four state values, and both the loader and the tool include it, so there is one definition to disagree with rather than two.
 
@@ -631,7 +638,8 @@ The tool needs no configuration to match the loader's layout and no rebuild per 
 
 - The trailer must not overlap the image, so the partition has to be larger than the signed image by at least the 8 bytes of the trailer. wolfBoot refuses the write and reports it rather than corrupting the image, and still boots: the consequence of no trailer is no confirmation, not a dead system.
 - A partition smaller than one 512-byte sector cannot carry a trailer and is likewise never armed.
-- **Raw partitions only.** A `DISK_FS` slot is a file inside a filesystem and has no partition tail to claim.
+- **File slots (`DISK_FS`) keep the trailer in the image file.** The file must be longer than the signed image by at least the 8 bytes of the trailer and at least 512 bytes in all, and still within the size wolfBoot accepts for an image. wolfBoot finds the file's last bytes through the same read-only lookup it loads the image with and rewrites those 8 bytes in place with a block write: nothing is allocated, and no directory entry, allocation table, inode or checksum changes. A file with no padding is never armed, like a partition too small for a trailer.
+- The padding must be stored data. On ext4 a tail left as a hole (`truncate -s`) or as an unwritten extent (`fallocate`) has no block to rewrite, and a trailer split across two extents or two non-adjacent FAT clusters is refused; append real bytes instead (`head -c 4096 /dev/zero >> image`). An ext4 volume with an unreplayed journal is not mounted at all. On an ext4 volume with the `shared_blocks` or `verity` feature a file's block may belong to other files too, or be covered by a Merkle tree, so such a slot is never armed.
 - A slot left in `testing` is refused on every path into it, including the failover after another slot fails verification, so it stays out of the boot even in an `ALLOW_DOWNGRADE` build where the version guard is compiled out.
 
 ### Golden slot

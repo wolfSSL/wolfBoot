@@ -223,7 +223,7 @@ TESTS+=unit-p1021-qe-firmware
 TESTS+=unit-t10xx-dts-memac
 TESTS+=unit-fs-probe
 TESTS+=unit-fs-malicious
-TESTS+=unit-update-disk-fs unit-update-disk-fs-enc
+TESTS+=unit-update-disk-fs unit-update-disk-fs-enc unit-update-disk-fs-confirm
 
 # The filesystem interop tests build their fixtures with the host's real
 # mkfs tools, so they are only added when those tools exist. The hostile
@@ -629,6 +629,12 @@ unit-update-disk-fs-enc:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
 	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DMAX_DISKS=1 \
 	-DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 \
 	-DEXT_ENCRYPTED -DENCRYPT_WITH_CHACHA -DHAVE_CHACHA \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
+	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-disk-fs-confirm:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
+	-DWOLFBOOT_RAMBOOT_MAX_SIZE=0x1000 -DMAX_DISKS=1 \
+	-DWOLFBOOT_DISK_FS -DWOLFBOOT_FAT32 -DWOLFBOOT_EXT4 \
+	-DDISK_BOOT_CONFIRM \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT \
 	-DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-disk-fs:CFLAGS+=-DMOCK_PARTITIONS -DPRINTF_ENABLED \
@@ -1543,6 +1549,12 @@ unit-update-disk-fs: ../../include/target.h unit-update-disk-fs.c
 # file's byte stream lines up with the CTR counter exactly as a raw
 # partition's does -- a wrong IV or offset would decrypt to garbage.
 unit-update-disk-fs-enc: ../../include/target.h unit-update-disk-fs.c
+	gcc -o $@ unit-update-disk-fs.c $(CFLAGS) $(LDFLAGS)
+
+# Same source with boot confirmation compiled in: the trailer of a file slot
+# is the tail of its image file, located through the filesystem and rewritten
+# in place.
+unit-update-disk-fs-confirm: ../../include/target.h unit-update-disk-fs.c
 	gcc -o $@ unit-update-disk-fs.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-disk-fit: ../../include/target.h unit-update-disk-fit.c
