@@ -171,7 +171,7 @@ def check(elf, entry, ram_lo, ram_hi):
         t = re.match(r"([0-9a-f]+) <", args)
         if op.startswith("b") and t:
             link(src, int(t.group(1), 16) | 1, branch=True)
-        if op.startswith(("bl", "blx")):
+        if re.fullmatch(r"blx?(?:\.[a-z0-9]+)?", op):
             for r in ("r0", "r1", "r2", "r3", "r12"):
                 regs.pop(r, None)
             continue
@@ -347,7 +347,10 @@ def selftest():
               "movs r2, r3\n    ldr r0, [r2]"),
              (ram, ram_data, ram, ".Lram_string", 0, "bl late_call"),
              (ram, ram_data, ram, ".Lram_string", 1, "bl late_call", flash),
-             (ram, ram_data, ram, ".Lram_string", 1, "bl late_read"))
+             (ram, ram_data, ram, ".Lram_string", 1, "bl late_read"),
+             # a flash-base register survives a conditional branch, not a call
+             (ram, ram_data, ram, ".Lram_string", 1,
+              "bls 1f\n1:\n    ldr r0, [r3]"))
     with tempfile.TemporaryDirectory() as tmp:
         for case in cases:
             callee, table, callback, read, expect = case[:5]
