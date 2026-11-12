@@ -2160,14 +2160,11 @@ static void powercut_quiet(void)
         dup2(null_fd, STDERR_FILENO);
         close(null_fd);
     }
-    /* unbuffered, every line would still cost a write */
-    setvbuf(stderr, NULL, _IOFBF, 1 << 16);
 }
 
 static void powercut_loud(void)
 {
     fflush(stderr);
-    setvbuf(stderr, NULL, _IONBF, 0);
     if (powercut_stderr >= 0) {
         dup2(powercut_stderr, STDERR_FILENO);
         close(powercut_stderr);
