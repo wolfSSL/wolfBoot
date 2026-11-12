@@ -326,8 +326,13 @@ void RAMFUNCTION wolfBoot_check_self_update(void)
         }
 #endif
         if (update_version <= current_version) {
-            wolfBoot_printf("Self update version 0x%x not newer than 0x%x, "
-                "erased\n", update_version, current_version);
+            /* Equal versions mean the new bootloader is clearing its own
+             * staged image after a successful self-update, not rejecting a
+             * downgrade, so only log the genuine older-image case */
+            if (update_version < current_version) {
+                wolfBoot_printf("Self update version 0x%x not newer than 0x%x, "
+                    "erased\n", update_version, current_version);
+            }
             wolfBoot_erase_partition(PART_UPDATE);
             return;
         }

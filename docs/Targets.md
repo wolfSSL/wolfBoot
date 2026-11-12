@@ -4958,7 +4958,7 @@ flash at `0x14000000` and 1 MB of SRAM. The boot ROM starts the CM0+, which runs
 wolfBoot. The verified application runs on the CM0+, or on the CM4 when built
 with `PSOC6_CM4_APP=1`. Tested on the CY8CEVAL-062S2 evaluation kit with its
 on-board KitProg3. The CY8CKIT-062S2-43012 has the same MCU and uses the same
-configurations, but only its builds are tested.
+configurations, but is build-tested only.
 
 The port builds against the Infineon mtb-pdl-cat1 driver library, the
 mtb-template-cat1 system files, core-lib and cmsis. Fetch the pinned releases
@@ -5051,7 +5051,8 @@ pyocd flash -t cy8c6xxa -a 0x10020000 -e sector test-app/image_v1_signed.bin
 
 ModusToolbox users can write `factory.bin` at `0x10000000` with the ModusToolbox
 Programmer or the OpenOCD it ships (`interface/kitprog3.cfg`,
-`target/psoc6_2m.cfg`). Stock OpenOCD 0.12 cannot program the 2 MB PSoC 62.
+`target/psoc6_2m.cfg`). Stock OpenOCD 0.12 ships `interface/kitprog.cfg` and
+`target/psoc6.cfg` instead, so use the ModusToolbox OpenOCD for these commands.
 
 The console is the KitProg3 USB-UART at 115200 8N1:
 
