@@ -6641,12 +6641,10 @@ echo -n "pBOOT" > trigger_magic.bin
 ./tools/bin-assemble/bin-assemble \
   update.bin \
     0x0    test-app/image_v2_signed.bin \
-    0xAFFB trigger_magic.bin
+    0x9FFB trigger_magic.bin
 ```
 
-4) Flash update.bin to 0x13000 (`loadbin update.bin 0x13000`). The D15 RGB LED Blue P3_0 will show if version is > 1.
-
-Note: For alternate larger scheme flash `update.bin` to `0x14000` and place trigger_magic.bin at `0x9FFB`.
+4) Flash update.bin to 0x14000 (`loadbin update.bin 0x14000`). The D15 RGB LED Blue P3_0 will show if version is > 1.
 
 ### MCX A: Debugging
 

@@ -759,6 +759,87 @@ static int rw612_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_MCXA)
+/* MCX A153: internal flash is programmed through the ROM API only, one
+ * 16-byte phrase at a time, merged with the current contents as the wolfBoot
+ * HAL does (programming can only clear bits). */
+#define MCXA_ROM_API_TREE     0x03003FE0u
+#define MCXA_FLASH_ERASE_KEY  0x6B65666Cu
+#define MCXA_PHRASE_SIZE      16u
+#define MCXA_SECTOR_SIZE      0x2000u
+
+struct mcxa_flash_api {
+    int32_t (*init)(void *config);
+    int32_t (*erase_sector)(void *config, uint32_t start, uint32_t len,
+        uint32_t key);
+    int32_t (*program_phrase)(void *config, uint32_t start,
+        const uint8_t *src, uint32_t len);
+};
+
+static uint32_t mcxa_flash_config[16];
+static int mcxa_flash_ready;
+
+static const struct mcxa_flash_api *mcxa_flash(void)
+{
+    const struct mcxa_flash_api *api =
+        *(const struct mcxa_flash_api * const *)(MCXA_ROM_API_TREE + 4u);
+
+    if (mcxa_flash_ready == 0) {
+        if (api->init(mcxa_flash_config) == 0) {
+            mcxa_flash_ready = 1;
+        }
+    }
+    return api;
+}
+
+static int mcxa_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint8_t phrase[MCXA_PHRASE_SIZE];
+    uint32_t off;
+    uint32_t chunk;
+    uint32_t i;
+    int blank;
+    int ret = 0;
+
+    while ((len > 0) && (ret == 0)) {
+        off = address & (MCXA_PHRASE_SIZE - 1u);
+        chunk = MCXA_PHRASE_SIZE - off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        memcpy(phrase, (const void *)(address - off), sizeof(phrase));
+        memcpy(phrase + off, data, chunk);
+        blank = 1;
+        for (i = 0u; i < MCXA_PHRASE_SIZE; i++) {
+            if (phrase[i] != 0xFFu) {
+                blank = 0;
+            }
+        }
+        if (!blank && mcxa_flash()->program_phrase(mcxa_flash_config,
+                address - off, phrase, sizeof(phrase)) != 0) {
+            ret = -1;
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int mcxa_flash_erase(uint32_t address, int len)
+{
+    uint32_t start = address & ~(MCXA_SECTOR_SIZE - 1u);
+    uint32_t end = (address + (uint32_t)len + MCXA_SECTOR_SIZE - 1u) &
+        ~(MCXA_SECTOR_SIZE - 1u);
+
+    if (mcxa_flash()->erase_sector(mcxa_flash_config, start, end - start,
+            MCXA_FLASH_ERASE_KEY) != 0) {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -795,6 +876,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return rw612_flash_write(address, data, len);
 #elif defined(EMU_NRF54L)
     return nrf54l_flash_write(address, data, len);
+#elif defined(EMU_MCXA)
+    return mcxa_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -851,6 +934,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return nrf54l_flash_erase(address, len);
+#elif defined(EMU_MCXA)
+    if (len <= 0) {
+        return 0;
+    }
+    return mcxa_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)

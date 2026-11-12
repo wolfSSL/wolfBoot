@@ -78,6 +78,7 @@ get_m33mu_target() {
         echo "nrf54l15"
       fi
       ;;
+    mcxa) echo "mcxa153" ;;
     *) echo "" ;;
   esac
 }
@@ -94,6 +95,7 @@ case "$TARGET" in
   lpc55s69) EMU_DIR=lpc55s69; UART_BASE=40086000 ;;
   rw612) EMU_DIR=rw612; UART_BASE=40109000 ;;
   nrf54l) EMU_DIR=nrf54l; UART_BASE=400c6000 ;;
+  mcxa) EMU_DIR=mcxa; UART_BASE=4009f000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -261,6 +263,7 @@ write_target_ld() {
     lpc55s69) base="ARM-lpc55s69" ;;
     rw612) base="ARM-rw612" ;;
     nrf54l) base="ARM-nrf54l" ;;
+    mcxa) base="ARM-mcxa" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 

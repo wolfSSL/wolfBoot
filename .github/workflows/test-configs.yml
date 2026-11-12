@@ -456,6 +456,13 @@ jobs:
       config-file: ./config/examples/mcxa.config
       board-name: frdmmcxa153
 
+  nxp_mcxa_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxa-mldsa.config
+      board-name: frdmmcxa153
+
   nxp_mcxw_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
