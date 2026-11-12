@@ -53,6 +53,7 @@
 #define EXT4_B_FIRST_INO         0x1CU
 #define EXT4_B_INODE_SIZE        0x20U
 #define EXT4_B_FEATURE_INCOMPAT  0x28U
+#define EXT4_B_FEATURE_RO_COMPAT 0x2CU
 
 /* Standalone superblock fields */
 #define EXT4_SB_VOLUME_NAME      0x78U
@@ -76,6 +77,14 @@
 #define EXT4_INCOMPAT_FLEX_BG    0x0200U
 #define EXT4_INCOMPAT_EA_INODE   0x0400U
 #define EXT4_INCOMPAT_CSUM_SEED  0x2000U
+
+/* Features a reader can ignore but a block rewrite cannot: a block may
+ * belong to other files too (shared_blocks), or be covered by a file's
+ * Merkle tree (verity). */
+#define EXT4_RO_COMPAT_SHARED_BLOCKS 0x4000U
+#define EXT4_RO_COMPAT_VERITY        0x8000U
+#define EXT4_RO_COMPAT_NO_REWRITE \
+    (EXT4_RO_COMPAT_SHARED_BLOCKS | EXT4_RO_COMPAT_VERITY)
 
 #define EXT4_INCOMPAT_SUPPORTED ( \
       EXT4_INCOMPAT_FILETYPE  /* dirent type byte; optional, handled */   \
@@ -135,6 +144,7 @@ struct ext4_volume {
     uint32_t first_data_block;
     uint32_t groups;
     uint32_t incompat;         /* validated feature word (FILETYPE is read) */
+    uint32_t ro_compat;        /* only consulted before a block is rewritten */
     uint16_t inode_sz;
     uint16_t desc_sz;          /* 32, or s_desc_size when INCOMPAT_64BIT */
 };
@@ -147,6 +157,8 @@ int ext4_mount(struct fs_volume *vol);
 int ext4_open(struct fs_volume *vol, struct fs_file *f, const char *path,
               uint64_t max_size);
 int ext4_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf);
+int ext4_map(struct fs_file *f, uint64_t off, uint32_t len,
+             uint64_t *part_off);
 int ext4_label_eq(struct fs_volume *vol, const char *label);
 
 #endif /* WOLFBOOT_EXT4_H */

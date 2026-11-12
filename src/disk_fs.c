@@ -415,6 +415,49 @@ int fs_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf)
     return ret;
 }
 
+int fs_map(struct fs_file *f, uint64_t off, uint32_t len, uint64_t *part_off)
+{
+    uint64_t poff = 0;
+    int ret;
+
+    if ((f == NULL) || (f->vol == NULL) || (part_off == NULL) ||
+            (len == 0U)) {
+        return WOLFBOOT_FS_E_PARAM;
+    }
+    if ((off > f->size) || ((uint64_t)len > (f->size - off))) {
+        return WOLFBOOT_FS_E_RANGE;
+    }
+
+    switch (f->vol->type) {
+        case FS_TYPE_RAW:
+            poff = off;
+            ret = WOLFBOOT_FS_OK;
+            break;
+#ifdef WOLFBOOT_FAT32
+        case FS_TYPE_FAT32:
+            ret = fat32_map(f, off, len, &poff);
+            break;
+#endif
+#ifdef WOLFBOOT_EXT4
+        case FS_TYPE_EXT4:
+            ret = ext4_map(f, off, len, &poff);
+            break;
+#endif
+        default:
+            ret = WOLFBOOT_FS_E_PARAM;
+            break;
+    }
+    if (ret != WOLFBOOT_FS_OK) {
+        return ret;
+    }
+    if ((poff > f->vol->part_sz) ||
+            ((uint64_t)len > (f->vol->part_sz - poff))) {
+        return WOLFBOOT_FS_E_RANGE;
+    }
+    *part_off = poff;
+    return WOLFBOOT_FS_OK;
+}
+
 uint64_t fs_size(const struct fs_file *f)
 {
     if (f == NULL) {
