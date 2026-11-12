@@ -91,6 +91,13 @@ EMU_CPU="$(get_m33mu_target "$TARGET")"
 [[ -n "$EMU_CPU" ]] || die "unsupported TARGET=$TARGET (no m33mu mapping)"
 
 need_cmd "$M33MU"
+M33MU_CPUS="$("$M33MU" --cpu list 2>&1 || true)"
+grep -qw -- "$EMU_CPU" <<<"$M33MU_CPUS" || \
+  die "$M33MU has no --cpu $EMU_CPU model; use an m33mu build that provides it"
+# The nRF54LM20 model gained RRAMC buffering and SPU/MPC with nrf54l15.
+if [[ "$TARGET" == "nrf54l" ]] && ! grep -qw -- nrf54l15 <<<"$M33MU_CPUS"; then
+  die "$M33MU predates the shared nRF54L model; use an m33mu build with nrf54l15"
+fi
 need_cmd make
 need_cmd grep
 need_cmd python3
