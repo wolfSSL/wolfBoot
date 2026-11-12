@@ -5046,7 +5046,7 @@ Or load the two parts. With `cypsoc6-qspi.config`, BOOT starts at `0x10040000`:
 
 ```
 pyocd flash -t cy8c6xxa -a 0x10000000 -e sector wolfboot.bin
-pyocd flash -t cy8c6xxa -a 0x10020000 -e sector test-app/image_v1_signed.bin
+pyocd flash -t cy8c6xxa -a 0x10040000 -e sector test-app/image_v1_signed.bin
 ```
 
 ModusToolbox users can write `factory.bin` at `0x10000000` with the ModusToolbox
