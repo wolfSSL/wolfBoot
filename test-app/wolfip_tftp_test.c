@@ -195,7 +195,8 @@ static struct wolfIP *wolfip_bringup(void)
 #endif
     rc = WOLFIP_NETDEV_INIT(ll, NULL);
     if (rc < 0) {
-        wolfBoot_printf("wolfIP: netdev init failed rc=%d\r\n", rc);
+        wolfBoot_printf("wolfIP: netdev init failed rc=%d, link is %s\r\n",
+            rc, WOLFIP_NETDEV_LINK_UP() ? "UP" : "down");
         return NULL;
     }
     addr = WOLFIP_NETDEV_PHY_ADDR();
