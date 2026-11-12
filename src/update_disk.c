@@ -1025,6 +1025,7 @@ void RAMFUNCTION wolfBoot_start(void)
         (unsigned int)(DISK_BLOCK_SIZE / 1024U));
 #endif
     max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
+    (void)max_ver; /* unused with ALLOW_DOWNGRADE */
 
     /* Choose partition with higher version */
     selected = (pB_ver_u > pA_ver_u) ? 1 : 0;
