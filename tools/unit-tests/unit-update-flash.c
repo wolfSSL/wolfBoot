@@ -1168,16 +1168,19 @@ END_TEST
  * partition advances to FINAL_FLAGS: the SWAP copy of the staging sector
  * is the only resume record for the restore step. The staging sector
  * (partition end minus two sectors) only overlaps the image data when the
- * payload reaches it, so use a near-max payload: with sector 1024 and
- * partition 32768 the staging sector starts at 30720, and the copy's
- * chunk guard only writes chunks below fw_size + header + buffer. In this
- * mock config SWAP is external, so the backup's write goes through
- * ext_flash_write and the one-shot ext_flash_write_fail hooks it.
- * Guarded out of the EXT_ENCRYPTED variants: the resume logic is identical
- * with or without encryption, but this test stages a plain image, which
- * the encrypted swap path does not accept. */
+ * payload reaches it, so STAGING_OVERLAP_PAYLOAD sizes the image to end
+ * inside that sector for any sector size. In this mock config SWAP is
+ * external, so the backup's write goes through ext_flash_write and the
+ * one-shot ext_flash_write_fail hooks it. Guarded out of the EXT_ENCRYPTED
+ * variants: the resume logic is identical with or without encryption, but
+ * this test stages a plain image, which the encrypted swap path does not
+ * accept. */
 #if !defined(DISABLE_BACKUP) && !defined(CUSTOM_PARTITION_TRAILER) && \
     !defined(EXT_ENCRYPTED)
+/* Image end lands in the middle of the staging sector regardless of sector
+ * size, so the swap's staging-sector copy overlaps real image data */
+#define STAGING_OVERLAP_PAYLOAD \
+    (WOLFBOOT_PARTITION_SIZE - (3 * WOLFBOOT_SECTOR_SIZE) / 2 - IMAGE_HEADER_SIZE)
 START_TEST (test_final_swap_aborts_on_backup_copy_failure)
 {
     int ret;
@@ -1186,7 +1189,7 @@ START_TEST (test_final_swap_aborts_on_backup_copy_failure)
     reset_mock_stats();
     prepare_flash();
 
-    add_payload(PART_BOOT, 1, 30700);
+    add_payload(PART_BOOT, 1, STAGING_OVERLAP_PAYLOAD);
 
 #ifdef PART_SWAP_EXT
     ext_flash_write_fail = 1;
@@ -1223,7 +1226,7 @@ START_TEST (test_final_swap_aborts_on_restore_copy_failure)
     reset_mock_stats();
     prepare_flash();
 
-    add_payload(PART_BOOT, 1, 30700);
+    add_payload(PART_BOOT, 1, STAGING_OVERLAP_PAYLOAD);
 
     /* Start confirmed, so a skipped BOOT state reset leaves SUCCESS behind */
     hal_flash_unlock();

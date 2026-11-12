@@ -81,6 +81,7 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-update-flash-hook \
        unit-update-flash-flagshome unit-update-flash-invert \
        unit-update-flash-int-invert \
+       unit-update-flash-smallsector \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
        unit-update-flash-self-update-monolithic \
@@ -441,6 +442,12 @@ unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAU
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Same suite with a 256-byte sector, exercising the swap-resume paths under
+# small sectors (tmpBootPos below IMAGE_HEADER_SIZE on resume)
+unit-update-flash-smallsector:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DWOLFBOOT_SECTOR_SIZE=256
 # Single-sector partitions (WOLFBOOT_PARTITION_SIZE == WOLFBOOT_SECTOR_SIZE)
 # are only valid with the trailers kept outside the partitions.
 unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -1316,6 +1323,9 @@ unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-smallsector: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 unit-update-flash-flagshome: ../../include/target.h unit-update-flash.c
