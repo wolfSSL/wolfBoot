@@ -6903,18 +6903,18 @@ staged.
 echo -n "pBOOT" > trigger_magic.bin
 ```
 
-3) Assembly new factory update.bin (replace `0xAFFB` with the appropriate
+3) Assembly new factory update.bin (replace `0xFFFB` with the appropriate
 address, which should be your `.config`'s `WOLFBOOT_PARTITION_SIZE` minus `5`):
 
 ```sh
 ./tools/bin-assemble/bin-assemble \
   update.bin \
     0x0    test-app/image_v2_signed.bin \
-    0xAFFB trigger_magic.bin
+    0xFFFB trigger_magic.bin
 ```
 
 4) Flash update.bin to your `.config`'s `WOLFBOOT_PARTITION_UPDATE_ADDRESS`
-(e.g. `loadbin update.bin 0x15000`).
+(e.g. `loadbin update.bin 0x1A000`).
 
 Once wolfBoot has performed validation of the partition and staged a firmware
 with version > 1, the RGB LED will light up green.

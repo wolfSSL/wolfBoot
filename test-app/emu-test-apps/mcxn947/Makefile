@@ -39,11 +39,23 @@ endif
 CFLAGS += -I$(MCUXPRESSO_DRIVERS) -I$(MCUXPRESSO_DRIVERS)/drivers -I$(ROMAPI_FLASH)
 CFLAGS += -I$(MCUXPRESSO_DRIVERS)/../periph -I$(MCUXPRESSO)/drivers/common
 CFLAGS += -I$(MCUXPRESSO_CMSIS)/Include -I$(MCUXPRESSO_CMSIS)/Core/Include
-LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
+LDFLAGS := -nostdlib -T app.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
-# The MCXN TrustZone config hands off to a Secure payload
-# (WOLFBOOT_SECURE_APP), so the test app runs in the secure world.
 NSC_OBJ :=
+RAM_ORIGIN := 0x20000000
+RAM_SIZE := 0x00040000
+ifneq ($(SECURE_HANDOFF_ADDRESS),)
+  # Secure payload: secure SRAM above the handoff record
+  RAM_ORIGIN := 0x30038000
+  RAM_SIZE := 0x00030000
+else ifeq ($(TZEN),1)
+  # Non-secure app: the SRAM window the wolfBoot SAU leaves non-secure
+  CFLAGS += -DTZEN
+  CFLAGS += -DWOLFCRYPT_SECURE_MODE
+  NSC_OBJ := ../../../src/wolfboot_tz_nsc.o
+  RAM_ORIGIN := 0x20020000
+  RAM_SIZE := 0x00006000
+endif
 
 VPATH := ../common
 
@@ -54,7 +66,10 @@ OBJS := $(SRCS:.c=.o) libwolfboot.o fsl_flash.o $(NSC_OBJ)
 
 all: app.bin
 
-app.elf: $(OBJS) target.ld
+app.ld: target.ld
+	sed -e "s/@RAM_ORIGIN@/$(RAM_ORIGIN)/g" -e "s/@RAM_SIZE@/$(RAM_SIZE)/g" $< > $@
+
+app.elf: $(OBJS) app.ld
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) $(LDLIBS) -o $@
 
 app.bin: app.elf
@@ -70,6 +85,6 @@ fsl_flash.o: $(ROMAPI_FLASH)/src/fsl_flash.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(SRCS:.c=.o) libwolfboot.o fsl_flash.o app.elf app.bin
+	rm -f $(SRCS:.c=.o) libwolfboot.o fsl_flash.o app.ld app.elf app.bin
 
 .PHONY: all clean
