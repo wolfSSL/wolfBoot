@@ -22,6 +22,8 @@
 #ifndef WOLFBOOT_HAL_PSOC6_H
 #define WOLFBOOT_HAL_PSOC6_H
 
+#include <stdint.h>
+
 #define PSOC6_CPU_FREQ          100000000UL
 #define PSOC6_CLK_PERI_HZ       PSOC6_CPU_FREQ
 
