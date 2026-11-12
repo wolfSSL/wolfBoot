@@ -1,4 +1,4 @@
-name: mcxw-emulator-tests
+name: mcxw71-emulator-tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 jobs:
   # Boot, update and rollback on the m33mu MCX W71 model: plain,
   # TrustZone and ML-DSA configs.
-  mcxw-emulator-tests:
+  mcxw71-emulator-tests:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
@@ -42,7 +42,7 @@ jobs:
           path: |
             mcuxpresso-sdk
             venv
-          key: mcuxpresso-sdk-frdmmcxw71-emu-${{ hashFiles('.github/workflows/mcxw-emulator-tests.yml') }}-${{ steps.mcux-release.outputs.tag }}
+          key: mcuxpresso-sdk-frdmmcxw71-emu-${{ hashFiles('.github/workflows/mcxw71-emulator-tests.yml') }}-${{ steps.mcux-release.outputs.tag }}
 
       - name: Setup MCUXpresso SDK
         if: steps.cache-mcuxpresso.outputs.cache-hit != 'true'
@@ -75,5 +75,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: mcxw-emu-logs-${{ matrix.config }}
+          name: mcxw71-emu-logs-${{ matrix.config }}
           path: test-app/emu-test-apps/mcxw71/*.log

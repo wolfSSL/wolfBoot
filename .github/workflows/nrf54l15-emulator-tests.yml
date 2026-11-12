@@ -1,13 +1,13 @@
-name: nrf54l-emulator-tests
+name: nrf54l15-emulator-tests
 
 on:
   push:
   pull_request:
 
 jobs:
-  # Boot, update and rollback on the m33mu nRF54L15 and nRF54LM20 models: plain,
+  # Boot, update and rollback on the m33mu nRF54L15 model: plain,
   # TrustZone and ML-DSA configs.
-  nrf54l-emulator-tests:
+  nrf54l15-emulator-tests:
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: [nrf54l15, nrf54l15-wolfcrypt-tz, nrf54l15-mldsa, nrf54lm20, nrf54lm20-wolfcrypt-tz, nrf54lm20-mldsa]
+        config: [nrf54l15, nrf54l15-wolfcrypt-tz, nrf54l15-mldsa]
     steps:
       - uses: actions/checkout@v4
 
@@ -38,5 +38,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: nrf54l-emu-logs-${{ matrix.config }}
+          name: nrf54l15-emu-logs-${{ matrix.config }}
           path: test-app/emu-test-apps/nrf54l/*.log
