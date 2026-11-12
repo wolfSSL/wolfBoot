@@ -18,7 +18,8 @@
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  *
- * HAL for NXP S32K1xx (S32K142, S32K144, S32K146, S32K148)
+ * HAL for NXP S32K1xx (S32K142, S32K144, S32K146, S32K148) and the register
+ * compatible NXP MCX E247.
  * Tested on S32K142: Cortex-M4F, 256KB Flash, 32KB SRAM
  */
 
@@ -304,9 +305,9 @@ void uart_init(void)
 /* Transmit a single byte (raw, no conversion) - RAMFUNCTION for use during flash ops */
 void RAMFUNCTION uart_tx(uint8_t byte)
 {
-    while (!(LPUART1_STAT & LPUART_STAT_TDRE)) {}
-    LPUART1_DATA = byte;
-    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+    while (!(LPUART_STAT & LPUART_STAT_TDRE)) {}
+    LPUART_DATA = byte;
+    while (!(LPUART_STAT & LPUART_STAT_TC)) {}
 }
 
 /* Used for sending ASCII and CRLF conversions */
@@ -330,16 +331,16 @@ void uart_write(const char* buf, unsigned int sz)
  */
 int RAMFUNCTION uart_read(char* c)
 {
-    uint32_t stat = LPUART1_STAT;
+    uint32_t stat = LPUART_STAT;
 
     /* Clear any error flags first */
     if (stat & (LPUART_STAT_OR | LPUART_STAT_NF | LPUART_STAT_FE | LPUART_STAT_PF)) {
-        LPUART1_STAT = stat;  /* Write 1 to clear flags */
+        LPUART_STAT = stat;  /* Write 1 to clear flags */
     }
 
     /* Check if data available - read even if there was an error */
     if (stat & LPUART_STAT_RDRF) {
-        *c = (char)(LPUART1_DATA & 0xFF);
+        *c = (char)(LPUART_DATA & 0xFF);
         return 1;
     }
 

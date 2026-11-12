@@ -238,9 +238,10 @@ void isr_reset(void)
 }
 void isr_reset_c(void)
 #elif defined(WOLFBOOT_RAM_ECC_INIT)
-/* ECC SRAM faults on a sub-word write to a word not written since power-on,
- * so clear [_start_ecc_ram, _end_ecc_ram) with word stores before the stack
- * is used. Must be naked: nothing may touch RAM before the loop. */
+/* ECC SRAM words not written since power-on hold no valid ECC. Depending on
+ * the part, accessing them faults or records an ECC error event. Clear
+ * [_start_ecc_ram, _end_ecc_ram) with word stores before the stack is used so
+ * the ECC is valid. Must be naked: nothing may touch RAM before the loop. */
 extern void isr_reset_c(void);
 __attribute__((naked, used, noreturn))
 void isr_reset(void)

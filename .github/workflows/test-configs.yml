@@ -561,6 +561,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/nxp-s32k148.config
 
+  nxp_mcxe247_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxe247.config
+
   max32666_test:
     uses: ./.github/workflows/test-build.yml
     with:

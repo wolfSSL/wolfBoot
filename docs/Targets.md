@@ -44,6 +44,7 @@ This README describes configuration of supported targets.
 * [NXP MCXN947](#nxp-mcxn947)
 * [NXP RW612](#nxp-rw612)
 * [NXP S32K1XX](#nxp-s32k1xx)
+* [NXP MCXE247](#nxp-mcxe247)
 * [NXP P1021 PPC](#nxp-qoriq-p1021-ppc)
 * [NXP T10xx PPC (T1024 / T1040)](#nxp-qoriq-t10xx-ppc-t1024--t1040)
 * [NXP T2080 PPC](#nxp-qoriq-t2080-ppc)
@@ -7145,7 +7146,7 @@ Example configuration files:
 - [/config/examples/nxp-s32k142.config](/config/examples/nxp-s32k142.config) - S32K142 (256KB Flash, 32KB SRAM)
 - [/config/examples/nxp-s32k144.config](/config/examples/nxp-s32k144.config) - S32K144 (512KB Flash, 64KB SRAM)
 - [/config/examples/nxp-s32k146.config](/config/examples/nxp-s32k146.config) - S32K146 (1MB Flash, 128KB SRAM)
-- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (2MB Flash, 256KB SRAM)
+- [/config/examples/nxp-s32k148.config](/config/examples/nxp-s32k148.config) - S32K148 (1.5MB Program Flash + 512KB FlexNVM, 256KB SRAM)
 
 ```sh
 # Copy configuration (example for S32K142)
@@ -7327,6 +7328,118 @@ cmd>
 - [ ] **Hardware crypto acceleration**: Integrate CSEc (Cryptographic Services Engine) for hardware-accelerated crypto operations
 - [ ] **FlexNVM/EEPROM support**: Add support for FlexNVM partitioning and EEPROM emulation
 - [ ] **CAN/LIN bootloader**: Add firmware update over CAN or LIN bus for automotive applications
+
+
+## NXP MCXE247
+
+The NXP MCX E247 is a Cortex-M4F microcontroller that is register compatible
+with the S32K148 (NXP AN14731), so it uses the bare-metal `s32k1xx` HAL with the
+`MCXE247` variant. No SDK is needed. The port targets the FRDM-MCXE247 board.
+
+The 2 MB of flash is not contiguous: 1.5 MB of Program Flash is at `0x00000000`
+and the remaining 512 KB is FlexNVM at `0x10000000`. Only the Program Flash is
+used. The system runs at 48 MHz (FIRC). Flash cannot be programmed in HSRUN.
+
+### NXP MCXE247: Memory Layout
+
+| Region | Address Range | Size |
+|--------|---------------|------|
+| Bootloader | 0x00000000 - 0x0000BFFF | 48 KB |
+| Boot Partition | 0x0000C000 - 0x000C3FFF | 736 KB |
+| Update Partition | 0x000C4000 - 0x0017BFFF | 736 KB |
+| Swap Sector | 0x0017C000 - 0x0017CFFF | 4 KB |
+
+### NXP MCXE247: Building
+
+```sh
+cp config/examples/mcxe247.config .config
+make
+```
+
+The console is on the MCU-Link VCOM port (LPUART2, PTE12 TX, PTD17 RX, 115200
+8N1). The test application shows green on the RGB LED for version 1 and blue
+for later versions, and has the same console as the
+[S32K1xx test application](#nxp-s32k1xx-test-application).
+
+### NXP MCXE247: Configuration Options
+
+The [S32K1xx configuration options](#nxp-s32k1xx-configuration-options) also
+apply to the MCXE247, with these differences:
+
+- Select the variant with `MCXE247` instead of `S32K144`, `S32K146` or `S32K148`.
+- The console is on LPUART2, not LPUART1. `mcxe247.config` selects it with
+  `DEBUG_UART_NUM=2` and the `DEBUG_UART_TX_*` and `DEBUG_UART_RX_*` pin
+  settings.
+- `mcxe247.config` also sets `WOLFBOOT_RAM_ECC_INIT`. The bootloader then
+  clears the SRAM it uses (the S32K142 layout of `hal/s32k1xx.ld`) at reset,
+  so the ECC of that RAM is valid. It does not clear
+  the rest of the 252 KB, so an application that enables ERM interrupts must
+  write its RAM before reading it. The network test app clears all of SRAM_U at
+  reset (`APP_RAM_ECC_INIT`).
+
+### NXP MCXE247: Network test
+
+The test application can run a wolfIP DHCP and TFTP test over the board's
+Ethernet port. This is optional and is the only part of the port that needs the
+MCUXpresso SDK, which provides the `fsl_enet` driver. Set `ENABLE_WOLFIP=1` in
+`mcxe247.config`, check the wolfIP and SDK paths, then set the TFTP server and
+file:
+
+```sh
+ENABLE_WOLFIP?=1
+WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
+MCUXPRESSO?=$(PWD)/../NXP/mcuxpresso-sdk/mcuxsdk
+WOLFBOOT_TEST_TFTP?=1
+CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
+```
+
+Type `network` on the console to run the test. It acquires a DHCP lease, fetches
+the file into RAM (40 KB at most), and prints its size and checksum followed by
+`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`.
+
+To measure throughput instead, set `WOLFBOOT_TEST_TFTP=0` and
+`WOLFIP_SPEED_TEST=1`. After the DHCP lease, the `network` command runs a TCP
+server on port 9 that discards what it receives and sends data whenever the
+connection can take it. It prints the receive and transmit rates when the
+connection closes. Drive it from the PC with `<ip>` set to the address the board
+printed:
+
+```sh
+# board receives
+dd if=/dev/zero bs=1460 count=10000 | nc <ip> 9
+# board sends
+nc <ip> 9 </dev/null | pv -r >/dev/null
+```
+
+The server never returns to the console; reset the board to stop it.
+`WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
+runs the TFTP fetch and the speed server is never started.
+
+### NXP MCXE247: Programming with Lauterbach TRACE32
+
+Connect the 10-pin debug cable to J14 and short JP4 to disable the onboard
+MCU-Link SWD. If TRACE32 has no MCXE247 entry, use `SYStem.CPU S32K148`.
+Program `factory.bin` at `0x00000000`.
+
+Scripts for this are in `tools/scripts/mcxe247`. They find the build output
+relative to their own location, so run them from the wolfBoot checkout, for
+example `DO <wolfBoot>/tools/scripts/mcxe247/e247_flash_factory_bin.cmm`:
+
+| Script | Purpose |
+|--------|---------|
+| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols. Takes the MCUXpresso SDK path as an optional argument, used to find the ENET driver sources (default: `../NXP/mcuxpresso-sdk/mcuxsdk` next to the checkout) |
+| `e247_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
+| `e247_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
+
+Each script writes a log to the TRACE32 system directory (`~~`).
+
+`factory.bin` includes the Flash Configuration Field at `0x400`. Its security
+byte at `0x40C` must be programmed to `0xFE`: an erased byte secures the chip
+at the next reset, and only a mass erase recovers it.
+
+While TRACE32 is attached, it halts the CPU at the reset vector on every reset.
+Detach with `SYStem.Down` before testing an update, which relies on a software
+reset.
 
 
 ## TI Hercules TMS570LC435

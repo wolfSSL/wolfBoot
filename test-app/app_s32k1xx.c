@@ -37,6 +37,9 @@
 #include "keystore.h"
 #include "target.h"
 #include "image.h"
+#ifdef ENABLE_WOLFIP
+#include "wolfip_tftp_test.h"
+#endif
 
 #ifdef TARGET_s32k1xx
 
@@ -50,17 +53,43 @@
 /* ============== SysTick Timer ============== */
 
 static volatile uint32_t jiffies = 0;
+#ifdef ENABLE_WOLFIP
+/* Upper 32 bits of the ms count, so the network timebase does not wrap */
+static volatile uint32_t jiffies_hi = 0;
+#endif
 
 /* SysTick interrupt handler - called isr_systick to match startup_arm.c */
 void isr_systick(void)
 {
     jiffies++;
+#ifdef ENABLE_WOLFIP
+    if (jiffies == 0U) {
+        jiffies_hi++;
+    }
+#endif
 }
 
 static uint32_t get_time_ms(void)
 {
     return jiffies;
 }
+
+#ifdef ENABLE_WOLFIP
+/* Millisecond timebase for wolfip_tftp_test.c. 64 bits, so it is monotonic
+ * across the 32-bit wrap of jiffies. */
+uint64_t wolfip_test_get_ms(void)
+{
+    uint32_t hi, lo;
+
+    /* Read again if SysTick carried into the upper word in between */
+    do {
+        hi = jiffies_hi;
+        lo = jiffies;
+    } while (hi != jiffies_hi);
+
+    return ((uint64_t)hi << 32) | lo;
+}
+#endif
 
 static void delay_ms(uint32_t ms)
 {
@@ -82,57 +111,63 @@ static void systick_init(void)
 
 static void led_init(void)
 {
-    /* Enable clock to PORTD */
-    PCC_PORTD |= PCC_CGC;
+    /* Enable clock to the LED ports */
+    LED_BLUE_PCC |= PCC_CGC;
+    LED_RED_PCC |= PCC_CGC;
+    LED_GREEN_PCC |= PCC_CGC;
 
     /* Configure LED pins as GPIO */
-    PORTD_PCR0 = PORT_PCR_MUX_GPIO;   /* Blue LED */
-    PORTD_PCR15 = PORT_PCR_MUX_GPIO;  /* Red LED */
-    PORTD_PCR16 = PORT_PCR_MUX_GPIO;  /* Green LED */
+    LED_BLUE_PCR = PORT_PCR_MUX_GPIO;
+    LED_RED_PCR = PORT_PCR_MUX_GPIO;
+    LED_GREEN_PCR = PORT_PCR_MUX_GPIO;
 
     /* Set as outputs */
-    GPIOD_PDDR |= (1UL << LED_PIN_BLUE) | (1UL << LED_PIN_RED) | (1UL << LED_PIN_GREEN);
+    GPIO_PDDR(LED_BLUE_GPIO) |= (1UL << LED_PIN_BLUE);
+    GPIO_PDDR(LED_RED_GPIO) |= (1UL << LED_PIN_RED);
+    GPIO_PDDR(LED_GREEN_GPIO) |= (1UL << LED_PIN_GREEN);
 
     /* All LEDs off initially (active low) */
-    GPIOD_PSOR = (1UL << LED_PIN_BLUE) | (1UL << LED_PIN_RED) | (1UL << LED_PIN_GREEN);
+    GPIO_PSOR(LED_BLUE_GPIO) = (1UL << LED_PIN_BLUE);
+    GPIO_PSOR(LED_RED_GPIO) = (1UL << LED_PIN_RED);
+    GPIO_PSOR(LED_GREEN_GPIO) = (1UL << LED_PIN_GREEN);
 }
 
 static void led_green_on(void)
 {
-    GPIOD_PCOR = (1UL << LED_PIN_GREEN);  /* Active low */
+    GPIO_PCOR(LED_GREEN_GPIO) = (1UL << LED_PIN_GREEN);  /* Active low */
 }
 
 static void led_green_off(void)
 {
-    GPIOD_PSOR = (1UL << LED_PIN_GREEN);
+    GPIO_PSOR(LED_GREEN_GPIO) = (1UL << LED_PIN_GREEN);
 }
 
 static void led_blue_on(void)
 {
-    GPIOD_PCOR = (1UL << LED_PIN_BLUE);  /* Active low */
+    GPIO_PCOR(LED_BLUE_GPIO) = (1UL << LED_PIN_BLUE);  /* Active low */
 }
 
 static void led_blue_off(void)
 {
-    GPIOD_PSOR = (1UL << LED_PIN_BLUE);
+    GPIO_PSOR(LED_BLUE_GPIO) = (1UL << LED_PIN_BLUE);
 }
 
 static void APP_RAMFUNCTION led_red_on(void)
 {
-    GPIOD_PCOR = (1UL << LED_PIN_RED);  /* Active low */
+    GPIO_PCOR(LED_RED_GPIO) = (1UL << LED_PIN_RED);  /* Active low */
 }
 
 static void APP_RAMFUNCTION led_red_off(void)
 {
-    GPIOD_PSOR = (1UL << LED_PIN_RED);
+    GPIO_PSOR(LED_RED_GPIO) = (1UL << LED_PIN_RED);
 }
 
 static void led_toggle_version(uint32_t version)
 {
     if (version == 1) {
-        GPIOD_PTOR = (1UL << LED_PIN_GREEN);
+        GPIO_PTOR(LED_GREEN_GPIO) = (1UL << LED_PIN_GREEN);
     } else {
-        GPIOD_PTOR = (1UL << LED_PIN_BLUE);
+        GPIO_PTOR(LED_BLUE_GPIO) = (1UL << LED_PIN_BLUE);
     }
 }
 
@@ -174,20 +209,20 @@ static volatile uint8_t uart_rx_buf[UART_RX_BUF_SIZE];
 static volatile uint32_t uart_rx_head = 0;  /* Write index (ISR writes here) */
 static volatile uint32_t uart_rx_tail = 0;  /* Read index (app reads from here) */
 
-/* LPUART1 RX Interrupt Handler */
-void isr_lpuart1(void)
+/* Console LPUART RX Interrupt Handler */
+void isr_debug_uart(void)
 {
-    uint32_t stat = LPUART1_STAT;
+    uint32_t stat = LPUART_STAT;
 
     /* Clear only the error flags (write 1 to clear) - do NOT write other bits */
     uint32_t errors = stat & (LPUART_STAT_OR | LPUART_STAT_NF | LPUART_STAT_FE | LPUART_STAT_PF);
     if (errors) {
-        LPUART1_STAT = errors;  /* Write 1 to clear only error flags */
+        LPUART_STAT = errors;  /* Write 1 to clear only error flags */
     }
 
     /* Read all available bytes from FIFO */
-    while (LPUART1_STAT & LPUART_STAT_RDRF) {
-        uint8_t c = (uint8_t)(LPUART1_DATA & 0xFF);
+    while (LPUART_STAT & LPUART_STAT_RDRF) {
+        uint8_t c = (uint8_t)(LPUART_DATA & 0xFF);
         uint32_t next_head = (uart_rx_head + 1) % UART_RX_BUF_SIZE;
 
         /* Store byte if buffer not full */
@@ -236,13 +271,13 @@ static void uart_rx_irq_enable(void)
     /* Set interrupt priority lower than SysTick (higher number = lower priority)
      * SysTick defaults to priority 0, so set LPUART to 2 to ensure
      * jiffies keeps incrementing even during heavy UART traffic. */
-    NVIC_SetPriority(LPUART1_IRQn, 2);
+    NVIC_SetPriority(LPUART_IRQn, 2);
 
-    /* Enable LPUART1 interrupt in NVIC */
-    NVIC_EnableIRQ(LPUART1_IRQn);
+    /* Enable LPUART interrupt in NVIC */
+    NVIC_EnableIRQ(LPUART_IRQn);
 
     /* Enable Receiver Interrupt in LPUART */
-    LPUART1_CTRL |= LPUART_CTRL_RIE;
+    LPUART_CTRL |= LPUART_CTRL_RIE;
 }
 
 /* Print hex buffer (similar to stm32h5 style) */
@@ -643,7 +678,7 @@ static int cmd_update_xmodem(void)
     /* Flush all printf output before starting XMODEM */
     fflush(stdout);
     /* Wait for UART TX to complete */
-    while (!(LPUART1_STAT & LPUART_STAT_TC)) {}
+    while (!(LPUART_STAT & LPUART_STAT_TC)) {}
 
     /* Drain any pending RX data before starting XMODEM */
     {
@@ -705,6 +740,9 @@ static int cmd_update(const char *args);
 static int cmd_timestamp(const char *args);
 static int cmd_trigger(const char *args);
 static int cmd_status(const char *args);
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args);
+#endif
 
 typedef struct {
     int (*fn)(const char *args);
@@ -720,6 +758,9 @@ static const console_cmd_t commands[] = {
     {cmd_trigger,   "trigger",  "Trigger update (if update image in flash)"},
     {cmd_update,    "update",   "Update firmware via XMODEM"},
     {cmd_timestamp, "timestamp", "Show current system time"},
+#ifdef ENABLE_WOLFIP
+    {cmd_network,   "network",  "Run the wolfIP network test"},
+#endif
     {cmd_reboot,    "reboot",   "Reboot the system"},
     {NULL, NULL, NULL}
 };
@@ -837,6 +878,15 @@ static int cmd_update(const char *args)
     (void)args;
     return cmd_update_xmodem();
 }
+
+#ifdef ENABLE_WOLFIP
+static int cmd_network(const char *args)
+{
+    (void)args;
+    wolfip_tftp_test_report();
+    return 0;
+}
+#endif
 
 static int parse_command(const char* cmd)
 {
@@ -962,8 +1012,12 @@ void main(void)
 #ifdef DEBUG_UART
     printf("\r\n");
     printf("========================================\r\n");
+#ifdef MCXE247
+    printf("MCXE247 wolfBoot Test Application\r\n");
+#else
     printf("S32K1xx wolfBoot Test Application\r\n");
-    printf("Copyright 2025 wolfSSL Inc.\r\n");
+#endif
+    printf("Copyright 2025-2026 wolfSSL Inc.\r\n");
     printf("========================================\r\n");
     printf("Firmware Version: %lu\r\n", (unsigned long)version);
 

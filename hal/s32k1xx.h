@@ -174,7 +174,7 @@
 #define PCC_LPUART0         (*(volatile uint32_t *)(PCC_BASE + 0x1A8UL))
 #define PCC_LPUART1         (*(volatile uint32_t *)(PCC_BASE + 0x1ACUL))
 #define PCC_LPUART2         (*(volatile uint32_t *)(PCC_BASE + 0x1B0UL))
-#define PCC_FTFC            (*(volatile uint32_t *)(PCC_BASE + 0x0B0UL))
+#define PCC_FTFC            (*(volatile uint32_t *)(PCC_BASE + 0x080UL))
 
 #define PCC_CGC             (1UL << 30)  /* Clock Gate Control */
 #define PCC_PCS_SHIFT       24
@@ -242,10 +242,46 @@
 #define PORT_PCR_MUX_ALT6   (6UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 6 */
 #define PORT_PCR_MUX_ALT7   (7UL << PORT_PCR_MUX_SHIFT)  /* Alternate function 7 */
 
-/* S32K142EVB LED pins (accent RGB LED accent accent accent accent LED accent accent accent-low accent LED) */
-#define LED_PIN_BLUE        0   /* PTD0 - Blue LED (active low) */
-#define LED_PIN_RED         15  /* PTD15 - Red LED (active low) */
-#define LED_PIN_GREEN       16  /* PTD16 - Green LED (active low) */
+/* GPIO port base addresses */
+#define GPIOB_BASE          (0x400FF040UL)
+#define GPIOC_BASE          (0x400FF080UL)
+
+/* GPIO registers by port base address */
+#define GPIO_PSOR(base)     (*(volatile uint32_t *)((base) + 0x04UL))
+#define GPIO_PCOR(base)     (*(volatile uint32_t *)((base) + 0x08UL))
+#define GPIO_PTOR(base)     (*(volatile uint32_t *)((base) + 0x0CUL))
+#define GPIO_PDDR(base)     (*(volatile uint32_t *)((base) + 0x14UL))
+
+/* RGB LED pins (all active low) */
+#ifdef MCXE247
+/* FRDM-MCXE247 D1: PTC12 blue, PTC13 red, PTB11 green */
+#define LED_PIN_BLUE        12
+#define LED_PIN_RED         13
+#define LED_PIN_GREEN       11
+#define LED_BLUE_GPIO       GPIOC_BASE
+#define LED_RED_GPIO        GPIOC_BASE
+#define LED_GREEN_GPIO      GPIOB_BASE
+#define LED_BLUE_PCC        PCC_PORTC
+#define LED_RED_PCC         PCC_PORTC
+#define LED_GREEN_PCC       PCC_PORTB
+#define LED_BLUE_PCR        PORTC_PCR(LED_PIN_BLUE)
+#define LED_RED_PCR         PORTC_PCR(LED_PIN_RED)
+#define LED_GREEN_PCR       PORTB_PCR(LED_PIN_GREEN)
+#else
+/* S32K142EVB: PTD0 blue, PTD15 red, PTD16 green */
+#define LED_PIN_BLUE        0
+#define LED_PIN_RED         15
+#define LED_PIN_GREEN       16
+#define LED_BLUE_GPIO       GPIOD_BASE
+#define LED_RED_GPIO        GPIOD_BASE
+#define LED_GREEN_GPIO      GPIOD_BASE
+#define LED_BLUE_PCC        PCC_PORTD
+#define LED_RED_PCC         PCC_PORTD
+#define LED_GREEN_PCC       PCC_PORTD
+#define LED_BLUE_PCR        PORTD_PCR(LED_PIN_BLUE)
+#define LED_RED_PCR         PORTD_PCR(LED_PIN_RED)
+#define LED_GREEN_PCR       PORTD_PCR(LED_PIN_GREEN)
+#endif
 
 /* ============== LPUART Registers ============== */
 
@@ -350,18 +386,21 @@
     #define LPUART_CTRL     LPUART0_CTRL
     #define LPUART_DATA     LPUART0_DATA
     #define PCC_LPUART      PCC_LPUART0
+    #define LPUART_IRQn     LPUART0_IRQn
 #elif DEBUG_UART_NUM == 2
     #define LPUART_BAUD     LPUART2_BAUD
     #define LPUART_STAT     LPUART2_STAT
     #define LPUART_CTRL     LPUART2_CTRL
     #define LPUART_DATA     LPUART2_DATA
     #define PCC_LPUART      PCC_LPUART2
+    #define LPUART_IRQn     LPUART2_IRQn
 #else /* DEBUG_UART_NUM == 1 (default) */
     #define LPUART_BAUD     LPUART1_BAUD
     #define LPUART_STAT     LPUART1_STAT
     #define LPUART_CTRL     LPUART1_CTRL
     #define LPUART_DATA     LPUART1_DATA
     #define PCC_LPUART      PCC_LPUART1
+    #define LPUART_IRQn     LPUART1_IRQn
 #endif
 
 /* Port identifier values for preprocessor comparisons */
@@ -508,16 +547,19 @@
  * S32K142: 256KB Flash (0x00000 - 0x3FFFF), 32KB SRAM, 2KB sectors
  * S32K144: 512KB Flash (0x00000 - 0x7FFFF), 64KB SRAM, 4KB sectors
  * S32K146: 1MB Flash   (0x00000 - 0xFFFFF), 128KB SRAM, 4KB sectors
- * S32K148: 2MB Flash   (0x00000 - 0x1FFFFF), 256KB SRAM, 4KB sectors
+ * S32K148: 1.5MB Program Flash (0x00000 - 0x17FFFF), 256KB SRAM, 4KB sectors
+ * MCXE247: Same memory as the S32K148 and register compatible (NXP AN14731).
+ *          The other 512KB of the 2MB on both parts is FlexNVM at 0x10000000
+ *          and is not used here.
  *
  * IMPORTANT: Flash sector size depends on total flash size:
  *   - 256KB Flash (S32K142): 2KB sectors
- *   - 512KB+ Flash (S32K144/146/148): 4KB sectors
+ *   - 512KB+ Flash (S32K144/146/148, MCXE247): 4KB sectors
  *
  * All variants use 8-byte phrase programming.
  */
-#if defined(S32K148)
-    #define FLASH_SIZE              (2048 * 1024)   /* 2MB */
+#if defined(S32K148) || defined(MCXE247)
+    #define FLASH_SIZE              (1536 * 1024)   /* 1.5MB Program Flash */
     #define SRAM_SIZE               (256 * 1024)    /* 256KB */
     #define FLASH_SECTOR_SIZE       4096            /* 4KB sectors */
 #elif defined(S32K146)

@@ -1,0 +1,116 @@
+;; e247_flash_factory_bin.cmm
+;;
+;; Program factory.bin (wolfBoot + signed test app) into the NXP MCXE247
+;; (FRDM-MCXE247) and erase the update partition and swap sector.
+;; No arguments: DO e247_flash_factory_bin.cmm
+;;
+;; Connects with e247_debug.cmm (reset and halt), programs the image with the
+;; TRACE32 S32K flash algorithm, verifies it, resets the board to boot and
+;; detaches the debugger.
+;; Range erased and programmed: 0x00000000--0x0017CFFF (bootloader, boot
+;; partition, update partition, swap sector). factory.bin must fit in the
+;; bootloader + boot partition without the partition's last two sectors
+;; (0x00000000--0x000C1FFF): with NVM_FLASH_WRITEONCE wolfBoot keeps the boot
+;; state there and erases those sectors when it updates it. The FlexNVM at
+;; 0x10000000 is left as is.
+;; The addresses match config/examples/mcxe247.config. Update them here if the
+;; partition layout is changed.
+;;
+;; factory.bin contains the Flash Configuration Field at 0x400. An erased or
+;; wrong security byte (0x40C) secures the chip at the next reset, so the byte
+;; is checked in the file before anything is erased and in flash before reset.
+;; Output is logged to ~~/e247_flash_factory_bin.log
+;; factory.bin is taken from the wolfBoot checkout this script is in.
+
+; This script's directory, and the wolfBoot root three levels above it
+&scriptdir=OS.PPD()
+&basedir="&scriptdir\..\..\.."
+&file="&basedir\factory.bin"
+&start=0x00000000
+&end=0x0017CFFF
+; factory.bin (bootloader + boot partition) must end before the boot
+; partition's two trailer sectors (0xC2000--0xC3FFF)
+&maxsize=0xC2000
+&fsec_addr=0x40C
+&fsec_unsecure=0xFE
+
+DO "&scriptdir\e247_debug.cmm"
+
+AREA.OPEN A000 "~~/e247_flash_factory_bin.log" /Create /NoFileCache
+PRINT "e247_flash_factory_bin.cmm " DATE.DATE() " " DATE.TIME()
+
+IF !SYStem.Up()||STATE.RUN()
+(
+  PRINT %ERROR "not connected or CPU not halted, see ~~/e247_debug.log"
+  AREA.CLOSE A000
+  ENDDO
+)
+IF !OS.FILE("&file")
+(
+  PRINT %ERROR "&file not found"
+  AREA.CLOSE A000
+  ENDDO
+)
+&size=OS.FILE.SIZE("&file")
+IF &size>&maxsize
+(
+  PRINT %ERROR "&file does not fit before the boot partition trailer (0xC2000)"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+; Refuse an image that would secure the chip
+Data.LOAD.Binary "&file" VM:&start
+IF Data.Byte(VM:&fsec_addr)!=&fsec_unsecure
+(
+  PRINT %ERROR "&file: security byte at 0x40C is not 0xFE, not programming"
+  AREA.CLOSE A000
+  ENDDO
+)
+
+; The flash algorithm runs from SRAM, which is ECC protected and must be
+; written before it is read
+Data.Set AD:0x20000000++0x215F %Long 0
+
+; Vendor flash declaration: checks security, disables the watchdog
+DO ~~/demo/arm/flash/s32k PREPAREONLY CPU=S32K148 DUALPORT=1
+
+; Sectors in range not covered by the file are erased
+PRINT "programming &file (" FORMAT.Decimal(0.,&size) " bytes) at "+FORMAT.HEX(8.,&start)
+FLASH.ReProgram &start--&end /Erase
+Data.LOAD.Binary "&file" &start
+FLASH.ReProgram OFF
+
+; The Flash Configuration Field is guarded against normal programming
+FLASH.AUTO 0x400--0x40F /CENSORSHIP
+Data.LOAD.Binary "&file" 0x400--0x40F /SKIP 0x400
+FLASH.AUTO OFF
+
+Data.LOAD.Binary "&file" &start /DIFF
+IF FOUND()
+(
+  PRINT %ERROR "verify FAILED, not resetting"
+  AREA.CLOSE A000
+  ENDDO
+)
+IF Data.Byte(C:&fsec_addr)!=&fsec_unsecure
+(
+  PRINT %ERROR "security byte in flash is not 0xFE, not resetting"
+  AREA.CLOSE A000
+  ENDDO
+)
+PRINT "verify OK"
+FLASH.RESet
+
+; Reset and boot
+AREA.CLOSE A000
+DO "&scriptdir\e247_debug.cmm"
+AREA.OPEN A000 "~~/e247_flash_factory_bin.log" /Append /NoFileCache
+Go
+; Detach: while attached, TRACE32 catches every reset at the reset vector, so
+; a software reset (e.g. to start a firmware update) would leave the CPU halted
+SYStem.Down
+PRINT "done, board running, debugger detached"
+AREA.CLOSE A000
+
+ENDDO
