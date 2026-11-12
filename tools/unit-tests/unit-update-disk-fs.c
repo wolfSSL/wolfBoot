@@ -62,6 +62,10 @@
 
 static uint8_t load_buffer[TEST_PAYLOAD_SIZE];
 #define WOLFBOOT_LOAD_ADDRESS ((uintptr_t)load_buffer)
+#ifdef WOLFBOOT_FDT
+static uint8_t dts_buffer[64];
+#define WOLFBOOT_LOAD_DTS_ADDRESS ((uintptr_t)dts_buffer)
+#endif
 
 /* ---------------------------------------------------------------------
  * Synthetic drive
@@ -138,10 +142,16 @@ int disk_read(int drv, uint64_t start, uint32_t count, uint8_t *buf)
     return 0;
 }
 
+static int mock_disk_write_count;
+
 int disk_write(int drv, uint64_t start, uint32_t count, const uint8_t *buf)
 {
-    (void)drv; (void)start; (void)count; (void)buf;
-    return -1;
+    (void)drv;
+    mock_disk_write_count++;
+    if ((start + count) > DISK_SZ)
+        return -1;
+    memcpy(disk + start, buf, count);
+    return 0;
 }
 
 int disk_init(int drv)
@@ -625,6 +635,7 @@ static void reset_mocks(void)
     memset(load_buffer, 0, sizeof(load_buffer));
     mock_disk_init_ret = 0;
     mock_disk_close_called = 0;
+    mock_disk_write_count = 0;
     mock_do_boot_called = 0;
     mock_boot_address = NULL;
     mock_verify_integrity_ret = 0;
@@ -699,8 +710,14 @@ void hal_prepare_boot(void)
 {
 }
 
+#ifdef WOLFBOOT_FDT
+void do_boot(const uint32_t *address, const uint32_t *dts)
+{
+    (void)dts;
+#else
 void do_boot(const uint32_t *address)
 {
+#endif
     mock_do_boot_called++;
     mock_boot_address = address;
 }
@@ -718,6 +735,9 @@ int hal_flash_protect(haladdr_t address, int len)
 #include "disk_fs.c"
 #include "fat32.c"
 #include "ext4.c"
+#ifdef WOLFBOOT_FDT
+#include "fdt.c"
+#endif
 #include "update_disk.c"
 
 /* --- tests --- */
@@ -1094,6 +1114,324 @@ START_TEST(test_fs_raw_slot_without_boot_file_still_reads)
 }
 END_TEST
 
+#ifdef DISK_BOOT_CONFIRM
+/* Boot confirmation on file slots: the trailer is the last bytes of the
+ * image file, which is padded past the signed image to make room. */
+#define CONFIRM_PAYLOAD_SIZE 2048U
+#define CONFIRM_IMAGE_SIZE   (IMAGE_HEADER_SIZE + CONFIRM_PAYLOAD_SIZE)
+#define PADDED_SIZE          (CONFIRM_IMAGE_SIZE + 1024U)
+
+static uint64_t fat_tail(uint32_t file_size)
+{
+    return P0_OFF + F_CLUS(F_FILE_CLUS) + file_size - DISK_TRAILER_SZ;
+}
+
+static uint64_t ext_tail(uint32_t file_size)
+{
+    return P1_OFF + ((uint64_t)E_FILE_BLK * E_BLK) + file_size -
+        DISK_TRAILER_SZ;
+}
+
+/* Smaller images than the other tests use, so image plus padding still fits
+ * the load bound. ver_a picks which slot is newer; slot B is version 2. */
+static void build_padded(uint32_t ver_a)
+{
+    build_image(image_a, ver_a, 0xA1, CONFIRM_PAYLOAD_SIZE);
+    build_image(image_b, 2, 0xB2, CONFIRM_PAYLOAD_SIZE);
+    build_fat32(PADDED_SIZE);
+    build_ext4(PADDED_SIZE);
+}
+
+/* A staged file boots and its trailer, at tail, becomes TESTING with one
+ * write that leaves the image, at file, as it was. */
+static void check_arms_staged(uint32_t ver_a, uint64_t tail,
+    const uint8_t *image, uint64_t file, const uint8_t *media)
+{
+    reset_mocks();
+    build_padded(ver_a);
+    disk_trailer_encode(disk + tail, DISK_STATE_UPDATING);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, image + IMAGE_HEADER_SIZE,
+        CONFIRM_PAYLOAD_SIZE), 0);
+    ck_assert_int_eq(mock_disk_write_count, 1);
+    ck_assert_uint_eq(disk_trailer_decode(disk + tail), DISK_STATE_TESTING);
+    ck_assert_int_eq(memcmp(disk + file, media, CONFIRM_IMAGE_SIZE), 0);
+}
+
+START_TEST(test_fs_confirm_arms_staged_ext4_file)
+{
+    check_arms_staged(1, ext_tail(PADDED_SIZE), image_b,
+        P1_OFF + ((uint64_t)E_FILE_BLK * E_BLK), media_b);
+}
+END_TEST
+
+START_TEST(test_fs_confirm_arms_staged_fat32_file)
+{
+    check_arms_staged(9, fat_tail(PADDED_SIZE), image_a,
+        P0_OFF + F_CLUS(F_FILE_CLUS), media_a);
+}
+END_TEST
+
+/* A file still TESTING was armed before the last boot and never confirmed:
+ * it is skipped and the older slot boots, with nothing written. */
+START_TEST(test_fs_confirm_skips_unconfirmed_file)
+{
+    reset_mocks();
+    build_padded(1);
+    disk_trailer_encode(disk + ext_tail(PADDED_SIZE), DISK_STATE_TESTING);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, image_a + IMAGE_HEADER_SIZE,
+        CONFIRM_PAYLOAD_SIZE), 0);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+}
+END_TEST
+
+START_TEST(test_fs_confirm_steady_state_writes_nothing)
+{
+    reset_mocks();
+    build_padded(1);
+    disk_trailer_encode(disk + ext_tail(PADDED_SIZE), DISK_STATE_SUCCESS);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, image_b + IMAGE_HEADER_SIZE,
+        CONFIRM_PAYLOAD_SIZE), 0);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+
+    /* Never staged at all. */
+    reset_mocks();
+    build_padded(1);
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+}
+END_TEST
+
+/* A file with no padding has its last bytes inside the image. Even if they
+ * happen to read as a staged trailer, the image must not be written to. */
+START_TEST(test_fs_confirm_never_writes_inside_the_image)
+{
+    reset_mocks();
+    disk_trailer_encode(disk + ext_tail(TEST_IMAGE_SIZE),
+        DISK_STATE_UPDATING);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+    ck_assert_uint_eq(disk_trailer_decode(disk + ext_tail(TEST_IMAGE_SIZE)),
+        DISK_STATE_UPDATING);
+
+    /* Nor may image bytes that read as TESTING take the slot out of the
+     * election: the newer slot B still boots. */
+    reset_mocks();
+    disk_trailer_encode(disk + ext_tail(TEST_IMAGE_SIZE),
+        DISK_STATE_TESTING);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(slot_reaped[1], 0);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+}
+END_TEST
+
+/* On a shared-blocks ext4 volume a file's block may be another file's too,
+ * and on a verity volume a Merkle tree may cover it, so it is never
+ * rewritten: the staged slot boots unarmed. */
+START_TEST(test_fs_confirm_shared_blocks_ext4_is_not_armed)
+{
+    static const uint32_t no_rewrite[] = { 0x4000U, 0x8000U };
+    unsigned int i;
+
+    for (i = 0; i < sizeof(no_rewrite) / sizeof(no_rewrite[0]); i++) {
+        reset_mocks();
+        build_padded(1);
+        put32(P1_OFF + E_SB + 0x64, no_rewrite[i]);
+        disk_trailer_encode(disk + ext_tail(PADDED_SIZE),
+            DISK_STATE_UPDATING);
+
+        wolfBoot_start();
+
+        ck_assert_int_eq(wolfBoot_panicked, 0);
+        ck_assert_int_eq(mock_do_boot_called, 1);
+        ck_assert_int_eq(memcmp(load_buffer, image_b + IMAGE_HEADER_SIZE,
+            CONFIRM_PAYLOAD_SIZE), 0);
+        ck_assert_int_eq(mock_disk_write_count, 0);
+        ck_assert_uint_eq(disk_trailer_decode(disk + ext_tail(PADDED_SIZE)),
+            DISK_STATE_UPDATING);
+    }
+}
+END_TEST
+
+/* A trailer that straddles two clusters which are not neighbours on the
+ * media is not one run, so the slot cannot carry a state. */
+START_TEST(test_fs_confirm_split_tail_is_not_armed)
+{
+    uint64_t off = 0;
+    /* Four bytes past a cluster boundary, so the trailer spans it. */
+    uint32_t size = (6U * SEC) + 4U;
+    uint8_t staged[DISK_TRAILER_SZ];
+    uint64_t head = P0_OFF + F_CLUS(F_FILE_CLUS + (5U * F_FRAG_STRIDE)) +
+        SEC - 4U;
+    uint64_t tail = P0_OFF + F_CLUS(F_FILE_CLUS + (6U * F_FRAG_STRIDE));
+
+    reset_mocks();
+    build_image(image_a, 9, 0xA1, CONFIRM_PAYLOAD_SIZE);
+    build_fat32_fragmented(size);
+    /* Staged, in the two clusters the file's last eight bytes live in. */
+    disk_trailer_encode(staged, DISK_STATE_UPDATING);
+    memcpy(disk + head, staged, 4);
+    memcpy(disk + tail, staged + 4, 4);
+
+    wolfBoot_start();
+
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(memcmp(load_buffer, image_a + IMAGE_HEADER_SIZE,
+        CONFIRM_PAYLOAD_SIZE), 0);
+    ck_assert_int_eq(mock_disk_write_count, 0);
+    ck_assert_int_eq(memcmp(disk + head, staged, 4), 0);
+    ck_assert_int_eq(memcmp(disk + tail, staged + 4, 4), 0);
+    ck_assert_int_eq(fs_map(&boot_slots[0].f, size - DISK_TRAILER_SZ,
+        DISK_TRAILER_SZ, &off), WOLFBOOT_FS_E_UNSUPPORTED);
+}
+END_TEST
+
+#ifdef WOLFBOOT_FDT
+/* What wolfBoot_disk_dts_fixup() leaves in /chosen for the OS to confirm
+ * the slot by. The tree starts as an empty root node. */
+static uint32_t dtb[64];
+
+static void dtb_open(fdt_ctx *ctx)
+{
+    static const uint32_t empty[] = {
+        FDT_MAGIC, 72, 56, 72, 40, 17, 16, 0, 0, 16,    /* header */
+        0, 0, 0, 0,                                     /* reservations */
+        FDT_BEGIN_NODE, 0, FDT_END_NODE, FDT_END
+    };
+    unsigned int i;
+
+    memset(dtb, 0, sizeof(dtb));
+    for (i = 0; i < sizeof(empty) / sizeof(empty[0]); i++)
+        dtb[i] = cpu_to_fdt32(empty[i]);
+    ck_assert_int_eq(fdt_open(ctx, dtb, sizeof(dtb)), 0);
+}
+
+static const void *chosen_prop(fdt_ctx *ctx, const char *name, int *len)
+{
+    return fdt_getprop(ctx, fdt_path_offset(ctx, "/chosen"), name, len);
+}
+
+static void boot_file_slot(void)
+{
+    reset_mocks();
+    build_padded(1);
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(wolfBoot_disk_boot_part(), BOOT_PART_B);
+}
+
+/* Slot B as a raw partition, as in test_fs_raw_partition_still_works. */
+static void boot_raw_slot(void)
+{
+    reset_mocks();
+    memset(disk + P1_OFF, 0, (size_t)P1_SECS * SEC);
+    to_media(media_b, image_b);
+    memcpy(disk + P1_OFF, media_b, TEST_IMAGE_SIZE);
+    wolfBoot_start();
+    ck_assert_int_eq(mock_do_boot_called, 1);
+    ck_assert_int_eq(wolfBoot_disk_boot_part(), BOOT_PART_B);
+}
+
+START_TEST(test_fs_confirm_fixup_publishes_boot_file)
+{
+    fdt_ctx ctx;
+    const uint32_t *part;
+    const char *file;
+    int len = 0;
+
+    boot_file_slot();
+    dtb_open(&ctx);
+    ck_assert_int_eq(wolfBoot_disk_dts_fixup(&ctx), 0);
+
+    part = chosen_prop(&ctx, "wolfboot,boot-part", &len);
+    ck_assert_ptr_nonnull(part);
+    ck_assert_int_eq(len, 4);
+    ck_assert_uint_eq(fdt32_to_cpu(*part), BOOT_PART_B);
+    file = chosen_prop(&ctx, "wolfboot,boot-file", &len);
+    ck_assert_ptr_nonnull(file);
+    ck_assert_int_eq(len, (int)sizeof(BOOT_FILE_B));
+    ck_assert_str_eq(file, BOOT_FILE_B);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+}
+END_TEST
+
+/* A raw slot has no file: nothing is added, and a path the tree already
+ * carried is emptied rather than left naming another slot. */
+START_TEST(test_fs_confirm_fixup_raw_slot_blanks_boot_file)
+{
+    fdt_ctx ctx;
+    const char *file;
+    int len = 0;
+
+    boot_raw_slot();
+    dtb_open(&ctx);
+    ck_assert_int_eq(wolfBoot_disk_dts_fixup(&ctx), 0);
+    ck_assert_ptr_null(chosen_prop(&ctx, "wolfboot,boot-file", &len));
+
+    dtb_open(&ctx);
+    ck_assert_int_eq(fdt_fixup_str(&ctx, fdt_add_subnode(&ctx, 0, "chosen"),
+        "chosen", "wolfboot,boot-file", BOOT_FILE_A), 0);
+    ck_assert_int_eq(wolfBoot_disk_dts_fixup(&ctx), 0);
+    file = chosen_prop(&ctx, "wolfboot,boot-file", &len);
+    ck_assert_ptr_nonnull(file);
+    ck_assert_int_eq(len, 1);
+    ck_assert_str_eq(file, "");
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+}
+END_TEST
+
+/* No room for the path: the boot stops rather than handing on a tree that
+ * names the partition but not the file. The partition index is already in
+ * the tree, so it is the file property that fails. */
+START_TEST(test_fs_confirm_fixup_boot_file_failure_panics)
+{
+    fdt_ctx ctx;
+    fdt_ctx full;
+    const uint32_t *part;
+    int len = 0;
+
+    boot_file_slot();
+    dtb_open(&ctx);
+    ck_assert_int_eq(fdt_fixup_chosen_val(&ctx, "wolfboot,boot-part", 0xFF),
+        0);
+    ck_assert_int_eq(fdt_shrink(&ctx), 0);
+    ck_assert_int_eq(fdt_open(&full, dtb, fdt_size(&ctx)), 0);
+    ck_assert_int_eq(wolfBoot_panicked, 0);
+
+    ck_assert_int_lt(wolfBoot_disk_dts_fixup(&full), 0);
+    ck_assert_int_gt(wolfBoot_panicked, 0);
+    part = chosen_prop(&full, "wolfboot,boot-part", &len);
+    ck_assert_ptr_nonnull(part);
+    ck_assert_uint_eq(fdt32_to_cpu(*part), BOOT_PART_B);
+    ck_assert_ptr_null(chosen_prop(&full, "wolfboot,boot-file", &len));
+}
+END_TEST
+#endif /* WOLFBOOT_FDT */
+#endif /* DISK_BOOT_CONFIRM */
+
 static Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-update-disk-fs");
@@ -1124,6 +1462,32 @@ static Suite *wolfboot_suite(void)
     tcase_add_test(tc_slot, test_fs_filesystem_without_boot_file_fails_closed);
     tcase_add_test(tc_slot, test_fs_raw_slot_without_boot_file_still_reads);
     suite_add_tcase(s, tc_slot);
+
+#ifdef DISK_BOOT_CONFIRM
+    {
+        TCase *tc_confirm = tcase_create("update-disk-fs-confirm");
+
+        tcase_set_timeout(tc_confirm, 60);
+        tcase_add_test(tc_confirm, test_fs_confirm_arms_staged_ext4_file);
+        tcase_add_test(tc_confirm, test_fs_confirm_arms_staged_fat32_file);
+        tcase_add_test(tc_confirm, test_fs_confirm_skips_unconfirmed_file);
+        tcase_add_test(tc_confirm,
+            test_fs_confirm_steady_state_writes_nothing);
+        tcase_add_test(tc_confirm,
+            test_fs_confirm_never_writes_inside_the_image);
+        tcase_add_test(tc_confirm, test_fs_confirm_split_tail_is_not_armed);
+        tcase_add_test(tc_confirm,
+            test_fs_confirm_shared_blocks_ext4_is_not_armed);
+#ifdef WOLFBOOT_FDT
+        tcase_add_test(tc_confirm, test_fs_confirm_fixup_publishes_boot_file);
+        tcase_add_test(tc_confirm,
+            test_fs_confirm_fixup_raw_slot_blanks_boot_file);
+        tcase_add_test(tc_confirm,
+            test_fs_confirm_fixup_boot_file_failure_panics);
+#endif
+        suite_add_tcase(s, tc_confirm);
+    }
+#endif
 
     return s;
 }
