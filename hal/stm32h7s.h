@@ -454,6 +454,22 @@
 #define CCSIDR                  (*(volatile uint32_t *)(0xE000ED80UL))
 #define CSSELR                  (*(volatile uint32_t *)(0xE000ED84UL))
 
+#define MPU_CTRL                (*(volatile uint32_t *)(0xE000ED94UL))
+#define MPU_RNR                 (*(volatile uint32_t *)(0xE000ED98UL))
+#define MPU_RBAR                (*(volatile uint32_t *)(0xE000ED9CUL))
+#define MPU_RASR                (*(volatile uint32_t *)(0xE000EDA0UL))
+#define MPU_CTRL_ENABLE         (1 << 0)
+#define MPU_CTRL_PRIVDEFENA     (1 << 2)
+#define MPU_RASR_ENABLE         (1 << 0)
+#define MPU_RASR_SIZE_16MB      (23 << 1)
+#define MPU_RASR_XN             (1 << 28)
+
+/* GFXMMU virtual buffers 0..3. A read here never completes while the
+ * GFXMMU clock is off. */
+#define GFXMMU_VBUF_BASE        (0x25000000UL)
+/* MPU region for the guard: one mpu_init() in src/boot_arm.c leaves free. */
+#define GFXMMU_MPU_REGION       3
+
 #define CACHE_LINE_SIZE         32
 
 #endif /* _STM32H7S_DEF_INCLUDED */
