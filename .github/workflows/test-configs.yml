@@ -242,6 +242,13 @@ jobs:
       board-name: lpcxpresso55s69
       make-args: DEBUG_UART=0
 
+  lpc55s69_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69-mldsa.config
+      board-name: lpcxpresso55s69
+
   m2354_test:
     uses: ./.github/workflows/test-build.yml
     with:

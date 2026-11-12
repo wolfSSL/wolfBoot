@@ -21,6 +21,8 @@ jobs:
             scenarios: A,B,C,S
           - config: lpc55s69-tz
             scenarios: A,B,C
+          - config: lpc55s69-mldsa
+            scenarios: A,B,C
     steps:
       - uses: actions/checkout@v4
 
