@@ -71,6 +71,13 @@ get_m33mu_target() {
     mcxn) echo "mcxn947" ;;
     lpc55s69) echo "lpc55s69" ;;
     rw612) echo "rw612" ;;
+    nrf54l)
+      if grep -qE '^[^#]*-DNRF54LM20' "$WOLFBOOT_ROOT/.config" 2>/dev/null; then
+        echo "nrf54lm20"
+      else
+        echo "nrf54l15"
+      fi
+      ;;
     *) echo "" ;;
   esac
 }
@@ -86,6 +93,7 @@ case "$TARGET" in
   mcxn) EMU_DIR=mcxn947; UART_BASE=40096000; HANDOFF_CHECK=1 ;;
   lpc55s69) EMU_DIR=lpc55s69; UART_BASE=40086000 ;;
   rw612) EMU_DIR=rw612; UART_BASE=40109000 ;;
+  nrf54l) EMU_DIR=nrf54l; UART_BASE=400c6000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -252,6 +260,7 @@ write_target_ld() {
     mcxn) base="ARM-mcxn" ;;
     lpc55s69) base="ARM-lpc55s69" ;;
     rw612) base="ARM-rw612" ;;
+    nrf54l) base="ARM-nrf54l" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 

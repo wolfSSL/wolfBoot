@@ -48,6 +48,115 @@
 #define NVMC_CONFIGNS     (*(volatile uint32_t *)(NVMC_BASE + 0x584u))
 #endif
 
+#if defined(EMU_NRF54L)
+/* RRAM is written in place through the RRAMC: CONFIG.WEN gates the stores and
+ * 0xFFFFFFFF words are the erase. Only reached with TZEN=0; the non-secure app
+ * goes through the wolfBoot_nsc_* veneers, as the RRAMC stays secure. */
+#ifdef NRF54LM20
+#define RRAMC_BASE        0x5004E000u
+#else
+#define RRAMC_BASE        0x5004B000u
+#endif
+#define RRAMC_TASKS_COMMITWRITEBUF (*(volatile uint32_t *)(RRAMC_BASE + 0x008u))
+#define RRAMC_READY       (*(volatile uint32_t *)(RRAMC_BASE + 0x400u))
+#define RRAMC_READYNEXT   (*(volatile uint32_t *)(RRAMC_BASE + 0x404u))
+#define RRAMC_BUFSTATUS_WRITEBUFEMPTY (*(volatile uint32_t *)(RRAMC_BASE + 0x418u))
+#define RRAMC_CONFIG      (*(volatile uint32_t *)(RRAMC_BASE + 0x500u))
+#define RRAMC_CONFIG_WEN  (1u << 0)
+#define RRAMC_READY_BIT   (1u << 0)
+#define RRAMC_BUFEMPTY_BIT (1u << 0)
+
+static void nrf54l_write_enable(int enable)
+{
+    if (enable != 0) {
+        RRAMC_CONFIG |= RRAMC_CONFIG_WEN;
+    }
+    else {
+        RRAMC_CONFIG &= ~RRAMC_CONFIG_WEN;
+    }
+    while ((RRAMC_READY & RRAMC_READY_BIT) == 0u) {
+    }
+}
+
+static void nrf54l_wait_ready_next(void)
+{
+    while ((RRAMC_READYNEXT & RRAMC_READY_BIT) == 0u) {
+    }
+}
+
+static void nrf54l_commit(void)
+{
+    if ((RRAMC_BUFSTATUS_WRITEBUFEMPTY & RRAMC_BUFEMPTY_BIT) == 0u) {
+        RRAMC_TASKS_COMMITWRITEBUF = 1u;
+        while ((RRAMC_READY & RRAMC_READY_BIT) == 0u) {
+        }
+        while ((RRAMC_BUFSTATUS_WRITEBUFEMPTY & RRAMC_BUFEMPTY_BIT) == 0u) {
+        }
+    }
+}
+
+/* Word stores where aligned, read-modify-write of the word otherwise */
+static void nrf54l_program(uint32_t address, const uint8_t *data, uint32_t len)
+{
+    uint32_t i = 0u;
+    uint32_t off;
+    uint32_t word;
+    volatile uint32_t *dst;
+
+    while (i < len) {
+        nrf54l_wait_ready_next();
+        dst = (volatile uint32_t *)((address + i) & ~0x3u);
+        off = (address + i) & 0x3u;
+        word = *dst;
+        if ((off == 0u) && ((len - i) >= 4u)) {
+            memcpy(&word, data + i, sizeof(word));
+            i += 4u;
+        }
+        else {
+            ((uint8_t *)&word)[off] = data[i];
+            i++;
+        }
+        *dst = word;
+    }
+}
+
+static int nrf54l_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    nrf54l_write_enable(1);
+    nrf54l_program(address, data, (uint32_t)len);
+    nrf54l_commit();
+    nrf54l_write_enable(0);
+    return 0;
+}
+
+static const uint32_t nrf54l_blank[16] = {
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu
+};
+
+/* Erasing is programming 0xFF over exactly [address, address + len) */
+static int nrf54l_flash_erase(uint32_t address, int len)
+{
+    uint32_t done = 0u;
+    uint32_t chunk;
+
+    nrf54l_write_enable(1);
+    while (done < (uint32_t)len) {
+        chunk = (uint32_t)len - done;
+        if (chunk > sizeof(nrf54l_blank)) {
+            chunk = sizeof(nrf54l_blank);
+        }
+        nrf54l_program(address + done, (const uint8_t *)nrf54l_blank, chunk);
+        done += chunk;
+    }
+    nrf54l_commit();
+    nrf54l_write_enable(0);
+    return 0;
+}
+#endif
+
 #if defined(EMU_M2354)
 /* M2354 flash is programmed through the FMC ISP engine, never by storing to
  * the mapped address. Only reached with TZEN=0: the non-secure app goes
@@ -684,6 +793,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return mcxw_flash_write(address, data, len);
 #elif defined(EMU_RW612)
     return rw612_flash_write(address, data, len);
+#elif defined(EMU_NRF54L)
+    return nrf54l_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -735,6 +846,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return rw612_flash_erase(address, len);
+#elif defined(EMU_NRF54L)
+    if (len <= 0) {
+        return 0;
+    }
+    return nrf54l_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
@@ -794,6 +910,8 @@ void hal_flash_unlock(void)
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 1u;
     NVMC_CONFIGNS = 1u;
+#elif defined(EMU_NRF54L)
+    nrf54l_write_enable(1);
 #endif
 }
 
@@ -808,5 +926,7 @@ void hal_flash_lock(void)
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 0u;
     NVMC_CONFIGNS = 0u;
+#elif defined(EMU_NRF54L)
+    nrf54l_write_enable(0);
 #endif
 }
