@@ -69,6 +69,7 @@ get_m33mu_target() {
     stm32l552|stm32l5) echo "stm32l552" ;;
     stm32wba) echo "stm32wba55" ;;
     stm32u3) echo "stm32u385" ;;
+    stm32c5) echo "stm32c5a3" ;;
     nrf5340) echo "nrf5340" ;;
     mcxw|mcxw71) echo "mcxw71c" ;;
     m2354) echo "m2354" ;;
@@ -96,6 +97,7 @@ case "$TARGET" in
   stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
   stm32wba) EMU_DIR=stm32wba55; UART_BASE=40013800 ;;
   stm32u3) EMU_DIR=stm32u385; UART_BASE=40013800 ;;
+  stm32c5) EMU_DIR=stm32c5a3; UART_BASE=40004400 ;;
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40039000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
@@ -282,6 +284,7 @@ write_target_ld() {
     stm32l552|stm32l5) base="ARM-stm32l5" ;;
     stm32wba) base="ARM-stm32wba" ;;
     stm32u3) base="ARM-stm32u3" ;;
+    stm32c5) base="ARM-stm32c5" ;;
     nrf5340) base="ARM-nrf5340" ;;
     mcxw|mcxw71) base="ARM-mcxw" ;;
     m2354) base="ARM-m2354" ;;

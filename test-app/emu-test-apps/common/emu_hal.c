@@ -145,6 +145,104 @@ static int stm32ns_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_STM32C5)
+/* STM32C5 flash controller: the STM32H5 one with 8 KB pages, a 128-bit
+ * write buffer and CCR clearing the status flags. */
+#define STM32C5_FLASH_BASE 0x40022000u
+#define STM32C5_KEYR      (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x004u))
+#define STM32C5_SR        (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x020u))
+#define STM32C5_CR        (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x028u))
+#define STM32C5_CCR       (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x030u))
+#define STM32C5_KEY1      0x45670123u
+#define STM32C5_KEY2      0xCDEF89ABu
+#define STM32C5_SR_BSY    (1u << 0)
+#define STM32C5_SR_WBNE   (1u << 1)
+#define STM32C5_SR_DBNE   (1u << 3)
+#define STM32C5_SR_ERRORS 0x009E0000u
+#define STM32C5_CR_LOCK   (1u << 0)
+#define STM32C5_CR_PG     (1u << 1)
+#define STM32C5_CR_PER    (1u << 2)
+#define STM32C5_CR_STRT   (1u << 5)
+#define STM32C5_CR_PNB_SHIFT 6
+#define STM32C5_CR_PNB_MASK (0x3Fu << STM32C5_CR_PNB_SHIFT)
+#define STM32C5_CR_BKSEL  (1u << 31)
+#define STM32C5_FLASH_START 0x08000000u
+#define STM32C5_PAGE_SIZE 0x2000u
+#define STM32C5_WORD_SIZE 16u
+#define STM32C5_BANK_SIZE 0x80000u
+
+static void stm32c5_wait(void)
+{
+    while ((STM32C5_SR & (STM32C5_SR_BSY | STM32C5_SR_WBNE | STM32C5_SR_DBNE)) != 0u) {
+    }
+}
+
+/* Whole quad words only: the bytes outside [address, address + len) keep
+ * what the flash holds, 0xFF on an erased word. */
+static int stm32c5_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t word = address & ~(STM32C5_WORD_SIZE - 1u);
+    uint32_t buf[STM32C5_WORD_SIZE / 4u];
+    uint8_t *b = (uint8_t *)buf;
+    volatile uint32_t *dst;
+    uint32_t i;
+    uint32_t lo;
+    uint32_t hi;
+
+    while (word < end) {
+        memcpy(b, (const void *)word, STM32C5_WORD_SIZE);
+        lo = (address > word) ? address - word : 0u;
+        hi = (end < word + STM32C5_WORD_SIZE) ? end - word : STM32C5_WORD_SIZE;
+        memcpy(b + lo, data + (word + lo - address), hi - lo);
+        stm32c5_wait();
+        STM32C5_CCR = STM32C5_SR_ERRORS;
+        STM32C5_CR |= STM32C5_CR_PG;
+        dst = (volatile uint32_t *)word;
+        for (i = 0; i < STM32C5_WORD_SIZE / 4u; i++) {
+            dst[i] = buf[i];
+        }
+        stm32c5_wait();
+        STM32C5_CR &= ~STM32C5_CR_PG;
+        if ((STM32C5_SR & STM32C5_SR_ERRORS) != 0u) {
+            STM32C5_CCR = STM32C5_SR_ERRORS;
+            return -1;
+        }
+        word += STM32C5_WORD_SIZE;
+    }
+    return 0;
+}
+
+static int stm32c5_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+    uint32_t cr;
+    uint32_t off;
+
+    for (p = address & ~(STM32C5_PAGE_SIZE - 1u); p < end; p += STM32C5_PAGE_SIZE) {
+        off = p - STM32C5_FLASH_START;
+        stm32c5_wait();
+        STM32C5_CCR = STM32C5_SR_ERRORS;
+        cr = STM32C5_CR & ~(STM32C5_CR_PNB_MASK | STM32C5_CR_BKSEL);
+        cr |= STM32C5_CR_PER |
+            (((off % STM32C5_BANK_SIZE) / STM32C5_PAGE_SIZE) << STM32C5_CR_PNB_SHIFT);
+        if (off >= STM32C5_BANK_SIZE) {
+            cr |= STM32C5_CR_BKSEL;
+        }
+        STM32C5_CR = cr;
+        STM32C5_CR |= STM32C5_CR_STRT;
+        stm32c5_wait();
+        STM32C5_CR &= ~STM32C5_CR_PER;
+        if ((STM32C5_SR & STM32C5_SR_ERRORS) != 0u) {
+            STM32C5_CCR = STM32C5_SR_ERRORS;
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 #if defined(EMU_NRF5340)
 #define NVMC_BASE         0x40039000u
 #define NVMC_CONFIG       (*(volatile uint32_t *)(NVMC_BASE + 0x504u))
@@ -1175,6 +1273,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return psoc_c3_flash_write(address, data, len);
 #elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     return stm32ns_flash_write(address, data, len);
+#elif defined(EMU_STM32C5)
+    return stm32c5_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -1251,6 +1351,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return stm32ns_flash_erase(address, len);
+#elif defined(EMU_STM32C5)
+    if (len <= 0) {
+        return 0;
+    }
+    return stm32c5_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
@@ -1318,6 +1423,12 @@ void hal_flash_unlock(void)
         STM32NS_NSKEYR = STM32NS_KEY1;
         STM32NS_NSKEYR = STM32NS_KEY2;
     }
+#elif defined(EMU_STM32C5)
+    stm32c5_wait();
+    if ((STM32C5_CR & STM32C5_CR_LOCK) != 0u) {
+        STM32C5_KEYR = STM32C5_KEY1;
+        STM32C5_KEYR = STM32C5_KEY2;
+    }
 #endif
 }
 
@@ -1337,5 +1448,8 @@ void hal_flash_lock(void)
 #elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     stm32ns_wait();
     STM32NS_NSCR |= STM32NS_CR_LOCK;
+#elif defined(EMU_STM32C5)
+    stm32c5_wait();
+    STM32C5_CR |= STM32C5_CR_LOCK;
 #endif
 }
