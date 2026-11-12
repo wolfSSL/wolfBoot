@@ -50,8 +50,13 @@ const void *mock_flash_ptr(uint32_t address);
 /* The PDL's inline SCB accessors touch registers; route them to mocks */
 void mock_uart_enable(CySCB_Type *base);
 bool mock_uart_tx_complete(CySCB_Type const *base);
+uint32_t mock_uart_put(CySCB_Type *base, uint32_t data);
 #define Cy_SCB_UART_Enable mock_uart_enable
 #define Cy_SCB_UART_IsTxComplete mock_uart_tx_complete
+#define Cy_SCB_UART_Put mock_uart_put
+
+/* A small bound so the stuck-FIFO tests do not spin the production limit */
+#define PSOC6_UART_SPIN_MAX 8UL
 
 /* Point the register blocks the HAL touches at mocks */
 static TCPWM_V1_Type mock_tcpwm;
@@ -118,6 +123,9 @@ static int uart_init_calls;
 static int uart_enable_calls;
 static int tx_busy_polls;
 static int tx_polls;
+static int tx_put_busy;
+static int tx_put_calls;
+static cy_en_tcpwm_status_t tcpwm_init_ret;
 
 void NVIC_SystemReset(void)
 {
@@ -320,6 +328,14 @@ bool mock_uart_tx_complete(CySCB_Type const *base)
     return tx_polls > tx_busy_polls;
 }
 
+uint32_t mock_uart_put(CySCB_Type *base, uint32_t data)
+{
+    ck_assert_ptr_eq(base, SCB0);
+    (void)data;
+    tx_put_calls++;
+    return tx_put_busy ? 0UL : 1UL;
+}
+
 void uart_printf(const char* fmt, ...)
 {
     (void)fmt;
@@ -332,7 +348,7 @@ cy_en_tcpwm_status_t Cy_TCPWM_Counter_Init(TCPWM_Type *base, uint32_t cntNum,
     ck_assert_uint_eq(cntNum, PSOC6_TIMER_CNT);
     ck_assert_uint_eq(config->period, 0xFFFFFFFFUL);
     ck_assert_uint_eq(config->countDirection, CY_TCPWM_COUNTER_COUNT_UP);
-    return CY_TCPWM_SUCCESS;
+    return tcpwm_init_ret;
 }
 
 /* hal_init() and uart_write() link these; the tests do not run them */
@@ -421,6 +437,9 @@ static void setup(void)
     uart_enable_calls = 0;
     tx_busy_polls = 0;
     tx_polls = 0;
+    tx_put_busy = 0;
+    tx_put_calls = 0;
+    tcpwm_init_ret = CY_TCPWM_SUCCESS;
 }
 
 static void check_clk(int i, int op, uint32_t type, uint32_t num, uint32_t a,
@@ -624,6 +643,41 @@ START_TEST(test_timer_counts_and_extends_wrap)
 }
 END_TEST
 
+START_TEST(test_uart_skips_output_after_failed_init)
+{
+    uart_init_ret = CY_SCB_UART_BAD_PARAM;
+    uart_init();
+    uart_write("x", 1);
+    ck_assert_int_eq(tx_put_calls, 0);
+}
+END_TEST
+
+START_TEST(test_uart_putc_bounds_a_stuck_fifo)
+{
+    uart_init();
+    tx_put_busy = 1;
+    uart_write("x", 1);
+    ck_assert_int_eq(tx_put_calls, (int)PSOC6_UART_SPIN_MAX);
+}
+END_TEST
+
+START_TEST(test_uart_flush_bounds_a_stuck_fifo)
+{
+    tx_busy_polls = (int)PSOC6_UART_SPIN_MAX + 5;
+    hal_prepare_boot();
+    ck_assert_int_eq(tx_polls, (int)PSOC6_UART_SPIN_MAX);
+}
+END_TEST
+
+START_TEST(test_timer_init_failure_returns_zero)
+{
+    tcpwm_init_ret = CY_TCPWM_BAD_PARAM;
+    mock_tcpwm.CNT[PSOC6_TIMER_CNT].COUNTER = 1000U;
+    ck_assert_uint_eq(hal_get_timer_us(), 0U);
+    ck_assert_uint_eq(hal_get_timer_us(), 0U);
+}
+END_TEST
+
 START_TEST(test_ram_vectors_keep_rom_nmi)
 {
     /* Table entries are cy_israddress wide: 4 bytes on the target */
@@ -677,6 +731,10 @@ Suite *psoc6_boot_suite(void)
     tcase_add_test(tc, test_uart_init_failure_leaves_scb_disabled);
     tcase_add_test(tc, test_prepare_boot_drains_uart);
     tcase_add_test(tc, test_timer_counts_and_extends_wrap);
+    tcase_add_test(tc, test_uart_skips_output_after_failed_init);
+    tcase_add_test(tc, test_uart_putc_bounds_a_stuck_fifo);
+    tcase_add_test(tc, test_uart_flush_bounds_a_stuck_fifo);
+    tcase_add_test(tc, test_timer_init_failure_returns_zero);
     tcase_add_test(tc, test_ram_vectors_keep_rom_nmi);
     tcase_add_test(tc, test_cm4_handoff_parks_cm0);
     suite_add_tcase(s, tc);

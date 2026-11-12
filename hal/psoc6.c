@@ -503,7 +503,9 @@ int RAMFUNCTION psoc6_flash_range_ok(uint32_t address, uint32_t len)
 static int psoc6_uart_ready = 1;
 
 /* Bound the TX polls so a disabled or non-draining FIFO cannot stall the boot */
+#ifndef PSOC6_UART_SPIN_MAX
 #define PSOC6_UART_SPIN_MAX 10000000UL
+#endif
 
 static void psoc6_uart_putc(char c)
 {
