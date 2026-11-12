@@ -42,6 +42,103 @@
 #define FLASH_CR_SNB_MASK (0x7fu << FLASH_CR_SNB_SHIFT)
 #endif
 
+#if defined(EMU_STM32WBA)
+/* STM32WBA non-secure flash controller (RM0493): pages are erased by number,
+ * flash words are programmed by consecutive stores with PG set and may only
+ * be programmed once between erases. */
+#define STM32NS_FLASH_BASE 0x40022000u
+#define STM32NS_NSKEYR    (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x008u))
+#define STM32NS_NSSR      (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x020u))
+#define STM32NS_NSCR      (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x028u))
+#define STM32NS_KEY1      0x45670123u
+#define STM32NS_KEY2      0xCDEF89ABu
+#define STM32NS_SR_BSY    (1u << 16)
+#define STM32NS_SR_WDW    (1u << 17)
+#define STM32NS_SR_ERRORS 0x20FAu
+#define STM32NS_CR_PG     (1u << 0)
+#define STM32NS_CR_PER    (1u << 1)
+#define STM32NS_CR_PNB_SHIFT 3
+#define STM32NS_CR_PNB_MASK (0x7Fu << STM32NS_CR_PNB_SHIFT)
+#define STM32NS_CR_BKER   (1u << 11)
+#define STM32NS_CR_STRT   (1u << 16)
+#define STM32NS_CR_LOCK   (1u << 31)
+#define STM32NS_FLASH_START 0x08000000u
+#define STM32NS_PAGE_SIZE 0x2000u
+#define STM32NS_WORD_SIZE 16u
+#define STM32NS_BANK_SIZE 0x100000u
+
+static void stm32ns_wait(void)
+{
+    while ((STM32NS_NSSR & (STM32NS_SR_BSY | STM32NS_SR_WDW)) != 0u) {
+    }
+}
+
+/* Whole flash words only: the bytes outside [address, address + len) keep
+ * what the flash holds, 0xFF on an erased word. */
+static int stm32ns_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t word = address & ~(STM32NS_WORD_SIZE - 1u);
+    uint32_t buf[STM32NS_WORD_SIZE / 4u];
+    uint8_t *b = (uint8_t *)buf;
+    volatile uint32_t *dst;
+    uint32_t i;
+    uint32_t lo;
+    uint32_t hi;
+
+    while (word < end) {
+        memcpy(b, (const void *)word, STM32NS_WORD_SIZE);
+        lo = (address > word) ? address - word : 0u;
+        hi = (end < word + STM32NS_WORD_SIZE) ? end - word : STM32NS_WORD_SIZE;
+        memcpy(b + lo, data + (word + lo - address), hi - lo);
+        stm32ns_wait();
+        STM32NS_NSSR = STM32NS_SR_ERRORS;
+        STM32NS_NSCR |= STM32NS_CR_PG;
+        dst = (volatile uint32_t *)word;
+        for (i = 0; i < STM32NS_WORD_SIZE / 4u; i++) {
+            dst[i] = buf[i];
+        }
+        stm32ns_wait();
+        STM32NS_NSCR &= ~STM32NS_CR_PG;
+        if ((STM32NS_NSSR & STM32NS_SR_ERRORS) != 0u) {
+            STM32NS_NSSR = STM32NS_SR_ERRORS;
+            return -1;
+        }
+        word += STM32NS_WORD_SIZE;
+    }
+    return 0;
+}
+
+static int stm32ns_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+    uint32_t cr;
+    uint32_t off;
+
+    for (p = address & ~(STM32NS_PAGE_SIZE - 1u); p < end; p += STM32NS_PAGE_SIZE) {
+        off = p - STM32NS_FLASH_START;
+        stm32ns_wait();
+        STM32NS_NSSR = STM32NS_SR_ERRORS;
+        cr = STM32NS_NSCR & ~(STM32NS_CR_PNB_MASK | STM32NS_CR_BKER);
+        cr |= STM32NS_CR_PER |
+            (((off % STM32NS_BANK_SIZE) / STM32NS_PAGE_SIZE) << STM32NS_CR_PNB_SHIFT);
+        if (off >= STM32NS_BANK_SIZE) {
+            cr |= STM32NS_CR_BKER;
+        }
+        STM32NS_NSCR = cr;
+        STM32NS_NSCR |= STM32NS_CR_STRT;
+        stm32ns_wait();
+        STM32NS_NSCR &= ~STM32NS_CR_PER;
+        if ((STM32NS_NSSR & STM32NS_SR_ERRORS) != 0u) {
+            STM32NS_NSSR = STM32NS_SR_ERRORS;
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 #if defined(EMU_NRF5340)
 #define NVMC_BASE         0x40039000u
 #define NVMC_CONFIG       (*(volatile uint32_t *)(NVMC_BASE + 0x504u))
@@ -1070,6 +1167,8 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return nrf5340_net_flash_write(address, data, len);
 #elif defined(EMU_PSOC_C3)
     return psoc_c3_flash_write(address, data, len);
+#elif defined(EMU_STM32WBA)
+    return stm32ns_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -1141,6 +1240,11 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return psoc_c3_flash_erase(address, len);
+#elif defined(EMU_STM32WBA)
+    if (len <= 0) {
+        return 0;
+    }
+    return stm32ns_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
@@ -1202,6 +1306,12 @@ void hal_flash_unlock(void)
     NVMC_CONFIGNS = 1u;
 #elif defined(EMU_NRF54L)
     nrf54l_write_enable(1);
+#elif defined(EMU_STM32WBA)
+    stm32ns_wait();
+    if ((STM32NS_NSCR & STM32NS_CR_LOCK) != 0u) {
+        STM32NS_NSKEYR = STM32NS_KEY1;
+        STM32NS_NSKEYR = STM32NS_KEY2;
+    }
 #endif
 }
 
@@ -1218,5 +1328,8 @@ void hal_flash_lock(void)
     NVMC_CONFIGNS = 0u;
 #elif defined(EMU_NRF54L)
     nrf54l_write_enable(0);
+#elif defined(EMU_STM32WBA)
+    stm32ns_wait();
+    STM32NS_NSCR |= STM32NS_CR_LOCK;
 #endif
 }

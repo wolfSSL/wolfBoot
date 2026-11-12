@@ -24,6 +24,9 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WOLFBOOT_ROOT="${WOLFBOOT_ROOT:-$(cd "$script_dir/../.." && pwd)}"
+# The top-level Makefile defaults WOLFBOOT_ROOT to $(PWD), the caller's
+# directory under make -C, which breaks the WOLFHAL=1 include paths.
+export WOLFBOOT_ROOT
 EMU_APPS="$WOLFBOOT_ROOT/test-app/emu-test-apps"
 M33MU="${M33MU:-$(command -v m33mu || true)}"
 UPDATE_SERVER_SRC="$WOLFBOOT_ROOT/tools/test-update-server/server.c"
@@ -64,6 +67,7 @@ get_m33mu_target() {
     stm32h563|stm32h5) echo "stm32h563" ;;
     stm32u585|stm32u5) echo "stm32u585" ;;
     stm32l552|stm32l5) echo "stm32l552" ;;
+    stm32wba) echo "stm32wba55" ;;
     nrf5340) echo "nrf5340" ;;
     mcxw|mcxw71) echo "mcxw71c" ;;
     m2354) echo "m2354" ;;
@@ -89,6 +93,7 @@ case "$TARGET" in
   stm32h563|stm32h5) EMU_DIR=stm32h563; UART_BASE=40004800 ;;
   stm32u585|stm32u5) EMU_DIR=stm32u585; UART_BASE=40004800 ;;
   stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
+  stm32wba) EMU_DIR=stm32wba55; UART_BASE=40013800 ;;
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40039000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
@@ -273,6 +278,7 @@ write_target_ld() {
     stm32h563|stm32h5) base="ARM-stm32h5" ;;
     stm32u585|stm32u5) base="ARM-stm32u5" ;;
     stm32l552|stm32l5) base="ARM-stm32l5" ;;
+    stm32wba) base="ARM-stm32wba" ;;
     nrf5340) base="ARM-nrf5340" ;;
     mcxw|mcxw71) base="ARM-mcxw" ;;
     m2354) base="ARM-m2354" ;;
