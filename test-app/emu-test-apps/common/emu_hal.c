@@ -42,10 +42,10 @@
 #define FLASH_CR_SNB_MASK (0x7fu << FLASH_CR_SNB_SHIFT)
 #endif
 
-#if defined(EMU_STM32WBA)
-/* STM32WBA non-secure flash controller (RM0493): pages are erased by number,
- * flash words are programmed by consecutive stores with PG set and may only
- * be programmed once between erases. */
+#if defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+/* STM32WBA / STM32U3 non-secure flash controller (RM0493 / RM0487): pages
+ * are erased by number, flash words are programmed by consecutive stores
+ * with PG set and may only be programmed once between erases. */
 #define STM32NS_FLASH_BASE 0x40022000u
 #define STM32NS_NSKEYR    (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x008u))
 #define STM32NS_NSSR      (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x020u))
@@ -63,9 +63,15 @@
 #define STM32NS_CR_STRT   (1u << 16)
 #define STM32NS_CR_LOCK   (1u << 31)
 #define STM32NS_FLASH_START 0x08000000u
+#if defined(EMU_STM32WBA)
 #define STM32NS_PAGE_SIZE 0x2000u
 #define STM32NS_WORD_SIZE 16u
 #define STM32NS_BANK_SIZE 0x100000u
+#else
+#define STM32NS_PAGE_SIZE 0x1000u
+#define STM32NS_WORD_SIZE 8u
+#define STM32NS_BANK_SIZE 0x80000u
+#endif
 
 static void stm32ns_wait(void)
 {
@@ -1167,7 +1173,7 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return nrf5340_net_flash_write(address, data, len);
 #elif defined(EMU_PSOC_C3)
     return psoc_c3_flash_write(address, data, len);
-#elif defined(EMU_STM32WBA)
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     return stm32ns_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
@@ -1240,7 +1246,7 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return psoc_c3_flash_erase(address, len);
-#elif defined(EMU_STM32WBA)
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     if (len <= 0) {
         return 0;
     }
@@ -1306,7 +1312,7 @@ void hal_flash_unlock(void)
     NVMC_CONFIGNS = 1u;
 #elif defined(EMU_NRF54L)
     nrf54l_write_enable(1);
-#elif defined(EMU_STM32WBA)
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     stm32ns_wait();
     if ((STM32NS_NSCR & STM32NS_CR_LOCK) != 0u) {
         STM32NS_NSKEYR = STM32NS_KEY1;
@@ -1328,7 +1334,7 @@ void hal_flash_lock(void)
     NVMC_CONFIGNS = 0u;
 #elif defined(EMU_NRF54L)
     nrf54l_write_enable(0);
-#elif defined(EMU_STM32WBA)
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
     stm32ns_wait();
     STM32NS_NSCR |= STM32NS_CR_LOCK;
 #endif
