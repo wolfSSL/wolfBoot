@@ -75,7 +75,31 @@ static unsigned int sp;
 
 extern void main(void);
 
-void isr_reset(void) {
+#ifdef APP_RAM_ECC_INIT
+/* ECC SRAM words not written since power-on hold no valid ECC.
+ * Clear [_start_ecc_ram, _end_ecc_ram) */
+extern void isr_reset_c(void);
+__attribute__((naked, used, noreturn))
+void isr_reset(void)
+{
+    __asm__ volatile(
+        "ldr r0, =_start_ecc_ram\n\t"
+        "ldr r1, =_end_ecc_ram\n\t"
+        "movs r2, #0\n\t"
+        "1:\n\t"
+        "cmp r0, r1\n\t"
+        "bhs 2f\n\t"
+        "str r2, [r0], #4\n\t"
+        "b 1b\n\t"
+        "2:\n\t"
+        "b isr_reset_c\n\t"
+        );
+}
+void isr_reset_c(void)
+#else
+void isr_reset(void)
+#endif
+{
     register unsigned int *src, *dst;
 
 #if defined(WOLFBOOT_TIME_TEST) && defined(TARGET_stm32h5)

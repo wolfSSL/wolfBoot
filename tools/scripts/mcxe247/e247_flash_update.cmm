@@ -10,6 +10,12 @@
 ;; Range erased and programmed: 0x000C4000--0x0017BFFF. Every other flash area
 ;; is left as is. The update is not triggered: use the test-app console
 ;; command "trigger" followed by "reboot".
+;; The image must not reach the partition's last two sectors
+;; (0x0017A000--0x0017BFFF): with NVM_FLASH_WRITEONCE wolfBoot keeps the update
+;; state there and erases those sectors when the update is triggered, so the
+;; image may be at most 0xB6000 bytes.
+;; The addresses match config/examples/mcxe247.config. Update them here if the
+;; partition layout is changed.
 ;; Output is logged to ~~/e247_flash_update.log
 ;; The image is taken from the wolfBoot checkout this script is in.
 
@@ -19,15 +25,17 @@
 &file="&basedir\test-app\image_v2_signed.bin"
 &start=0x000C4000
 &end=0x0017BFFF
+; Partition size less the two trailer sectors
+&maxsize=0xB6000
 
 DO "&scriptdir\e247_debug.cmm"
 
 AREA.OPEN A000 "~~/e247_flash_update.log" /Create /NoFileCache
 PRINT "e247_flash_update.cmm " DATE.DATE() " " DATE.TIME()
 
-IF !SYStem.Up()
+IF !SYStem.Up()||STATE.RUN()
 (
-  PRINT %ERROR "not connected, see ~~/e247_debug.log"
+  PRINT %ERROR "not connected or CPU not halted, see ~~/e247_debug.log"
   AREA.CLOSE A000
   ENDDO
 )
@@ -38,9 +46,9 @@ IF !OS.FILE("&file")
   ENDDO
 )
 &size=OS.FILE.SIZE("&file")
-IF &size>(&end-&start+1)
+IF &size>&maxsize
 (
-  PRINT %ERROR "&file is larger than its partition"
+  PRINT %ERROR "&file does not fit before the update partition trailer (0xB6000 bytes)"
   AREA.CLOSE A000
   ENDDO
 )

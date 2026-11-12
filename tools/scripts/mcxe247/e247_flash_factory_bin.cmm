@@ -9,8 +9,12 @@
 ;; detaches the debugger.
 ;; Range erased and programmed: 0x00000000--0x0017CFFF (bootloader, boot
 ;; partition, update partition, swap sector). factory.bin must fit in the
-;; bootloader + boot partition (0x00000000--0x000C3FFF). The FlexNVM at
+;; bootloader + boot partition without the partition's last two sectors
+;; (0x00000000--0x000C1FFF): with NVM_FLASH_WRITEONCE wolfBoot keeps the boot
+;; state there and erases those sectors when it updates it. The FlexNVM at
 ;; 0x10000000 is left as is.
+;; The addresses match config/examples/mcxe247.config. Update them here if the
+;; partition layout is changed.
 ;;
 ;; factory.bin contains the Flash Configuration Field at 0x400. An erased or
 ;; wrong security byte (0x40C) secures the chip at the next reset, so the byte
@@ -24,8 +28,9 @@
 &file="&basedir\factory.bin"
 &start=0x00000000
 &end=0x0017CFFF
-; factory.bin (bootloader + boot partition) must end before the update partition
-&maxsize=0xC4000
+; factory.bin (bootloader + boot partition) must end before the boot
+; partition's two trailer sectors (0xC2000--0xC3FFF)
+&maxsize=0xC2000
 &fsec_addr=0x40C
 &fsec_unsecure=0xFE
 
@@ -34,9 +39,9 @@ DO "&scriptdir\e247_debug.cmm"
 AREA.OPEN A000 "~~/e247_flash_factory_bin.log" /Create /NoFileCache
 PRINT "e247_flash_factory_bin.cmm " DATE.DATE() " " DATE.TIME()
 
-IF !SYStem.Up()
+IF !SYStem.Up()||STATE.RUN()
 (
-  PRINT %ERROR "not connected, see ~~/e247_debug.log"
+  PRINT %ERROR "not connected or CPU not halted, see ~~/e247_debug.log"
   AREA.CLOSE A000
   ENDDO
 )
@@ -49,7 +54,7 @@ IF !OS.FILE("&file")
 &size=OS.FILE.SIZE("&file")
 IF &size>&maxsize
 (
-  PRINT %ERROR "&file is larger than the bootloader + boot partition"
+  PRINT %ERROR "&file does not fit before the boot partition trailer (0xC2000)"
   AREA.CLOSE A000
   ENDDO
 )

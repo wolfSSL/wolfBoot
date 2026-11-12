@@ -1742,6 +1742,8 @@ ifeq ($(ENABLE_WOLFIP),1)
     WOLFIP_PORT:=nxp_mcxe_enet
     WOLFIP_PORT_OBJ:=nxp_mcxe_enet.o
     LSCRIPT_TEMPLATE=ARM-s32k1xx-wolfip.ld
+    # Clear all of SRAM_U at reset, before the stack is used (ECC)
+    CFLAGS+=-DAPP_RAM_ECC_INIT
     # The generic MCUXPRESSO_* defaults describe a different part
     MCXE247_DEVICE:=$(MCUXPRESSO)/devices/MCX/MCXE/MCXE247
     CFLAGS+=-DWOLFIP_PORT_MCXE_ENET -DCPU_MCXE247VLL

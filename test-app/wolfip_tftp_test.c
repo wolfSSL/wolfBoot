@@ -33,12 +33,16 @@
 
 #include "printf.h"
 #include "wolfip.h"
+#include "wolfip_tftp_test.h"
 #ifdef WOLFBOOT_TEST_TFTP
 #include "src/tftp/wolftftp.h"
 #endif
 
-/* Port selection: WOLFIP_PORT_ENETC -> LS1028A ENETC, else QorIQ FMan. Driver
- * entry points are wrapped so the bring-up code below is port-agnostic. */
+/* Port selection:
+ *   WOLFIP_PORT_ENETC -> LS1028A ENETC
+ *   WOLFIP_PORT_MCXE_ENET -> MCXE247 ENET (MCUXpresso fsl_enet)
+ *   else QorIQ FMan
+ * Driver entry points are wrapped so the bring-up code below is port-agnostic. */
 #if defined(WOLFIP_PORT_ENETC)
 #include "nxp_enetc.h"
 #define WOLFIP_NETDEV_INIT      nxp_enetc_init
@@ -110,7 +114,6 @@ static uint64_t now_ms(void)
 }
 #elif defined(WOLFIP_PORT_MCXE_ENET)
 /* 1 ms SysTick count, kept by the target app. */
-extern uint32_t wolfip_test_get_ms(void);
 #define SYST_CVR_REG    (*(volatile uint32_t *)0xE000E018UL)
 
 /* Combine the tick count and the SysTick down-counter to seed the RNG. */
@@ -121,7 +124,7 @@ static uint64_t read_tb(void)
 
 static uint64_t now_ms(void)
 {
-    return (uint64_t)wolfip_test_get_ms();
+    return wolfip_test_get_ms();
 }
 #else
 /* PowerPC e5500/e6500 Time Base via SPRs (TBL=268, TBU=269) = platform clock

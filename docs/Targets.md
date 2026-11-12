@@ -7355,8 +7355,12 @@ apply to the MCXE247, with these differences:
 - The console is on LPUART2, not LPUART1. `mcxe247.config` selects it with
   `DEBUG_UART_NUM=2` and the `DEBUG_UART_TX_*` and `DEBUG_UART_RX_*` pin
   settings.
-- `mcxe247.config` also sets `WOLFBOOT_RAM_ECC_INIT`, which clears SRAM at reset
-  so its ECC is valid.
+- `mcxe247.config` also sets `WOLFBOOT_RAM_ECC_INIT`. The bootloader then
+  clears the SRAM it uses (the S32K142 layout of `hal/s32k1xx.ld`) at reset,
+  so the ECC of that RAM is valid. It does not clear
+  the rest of the 252 KB, so an application that enables ERM interrupts must
+  write its RAM before reading it. The network test app clears all of SRAM_U at
+  reset (`APP_RAM_ECC_INIT`).
 
 ### NXP MCXE247: Network test
 

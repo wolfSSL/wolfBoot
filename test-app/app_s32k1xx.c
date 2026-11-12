@@ -53,11 +53,20 @@
 /* ============== SysTick Timer ============== */
 
 static volatile uint32_t jiffies = 0;
+#ifdef ENABLE_WOLFIP
+/* Upper 32 bits of the ms count, so the network timebase does not wrap */
+static volatile uint32_t jiffies_hi = 0;
+#endif
 
 /* SysTick interrupt handler - called isr_systick to match startup_arm.c */
 void isr_systick(void)
 {
     jiffies++;
+#ifdef ENABLE_WOLFIP
+    if (jiffies == 0U) {
+        jiffies_hi++;
+    }
+#endif
 }
 
 static uint32_t get_time_ms(void)
@@ -66,10 +75,19 @@ static uint32_t get_time_ms(void)
 }
 
 #ifdef ENABLE_WOLFIP
-/* Millisecond timebase for wolfip_tftp_test.c */
-uint32_t wolfip_test_get_ms(void)
+/* Millisecond timebase for wolfip_tftp_test.c. 64 bits, so it is monotonic
+ * across the 32-bit wrap of jiffies. */
+uint64_t wolfip_test_get_ms(void)
 {
-    return jiffies;
+    uint32_t hi, lo;
+
+    /* Read again if SysTick carried into the upper word in between */
+    do {
+        hi = jiffies_hi;
+        lo = jiffies;
+    } while (hi != jiffies_hi);
+
+    return ((uint64_t)hi << 32) | lo;
 }
 #endif
 

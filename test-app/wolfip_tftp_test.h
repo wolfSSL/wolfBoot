@@ -23,6 +23,8 @@
 #ifndef WOLFIP_TFTP_TEST_H
 #define WOLFIP_TFTP_TEST_H
 
+#include <stdint.h>
+
 /* Run the wolfIP network test. Returns 0 on success, negative on failure.
  * Without WOLFBOOT_TEST_TFTP this is a link/PHY bring-up smoke test;
  * with WOLFBOOT_TEST_TFTP it performs a full TFTP fetch and verify. */
@@ -31,5 +33,10 @@ int wolfip_tftp_test_run(void);
 /* Run the test and print the "Starting..." banner and PASS/FAIL result.
  * Convenience wrapper so each target app's main() is a single call. */
 void wolfip_tftp_test_report(void);
+
+#ifdef WOLFIP_PORT_MCXE_ENET
+/* Milliseconds since start, monotonic. Provided by the target app. */
+uint64_t wolfip_test_get_ms(void);
+#endif
 
 #endif /* WOLFIP_TFTP_TEST_H */
