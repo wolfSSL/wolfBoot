@@ -115,9 +115,13 @@ static inline void aarch64_dcache_maint(int clean)
 }
 
 #ifdef WOLFBOOT_AARCH64_EL2_IDMAP
-/* src/boot_aarch64_start.S: identity MMU at EL2 and D-cache maintenance by
- * address range (end exclusive). Stack-free. */
+/* src/boot_aarch64_start.S: identity MMU at EL2. Stack-free. */
 void el2_idmap_enable(uint64_t dram_base, uint64_t dram_end);
+#endif
+#if defined(WOLFBOOT_AARCH64_EL2_IDMAP) || \
+    defined(WOLFBOOT_AARCH64_DCACHE_RANGE)
+/* src/boot_aarch64_start.S: D-cache maintenance by address range (end
+ * exclusive). Stack-free. */
 void flush_dcache_range(uintptr_t start, uintptr_t end);
 /* Discards whole cache lines: a range that is not line-aligned also loses
  * the neighbouring data in its first and last lines. */

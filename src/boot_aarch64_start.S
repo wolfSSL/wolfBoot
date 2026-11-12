@@ -1627,32 +1627,6 @@ el2_idmap_enable:
     ret
 .ltorg
 
-/*
- * void invalidate_dcache_range(start, end)
- *
- * invalidate data cache in the range, without writing it back
- * (DMA reads; flush_dcache_range() is the clean & invalidate)
- *
- * x0: start address
- * x1: end address
- */
-.global invalidate_dcache_range
-invalidate_dcache_range:
-    mrs    x3, ctr_el0
-    lsr    x3, x3, #16
-    and    x3, x3, #0xf
-    mov    x2, #4
-    lsl    x2, x2, x3  /* cache line size */
-
-    sub    x3, x2, #1
-    bic    x0, x0, x3
-1:  dc     ivac, x0
-    add    x0, x0, x2
-    cmp    x0, x1
-    b.lo   1b
-    dsb    sy
-    ret
-
 .pushsection .bss.el2_idmap_l1, "aw", %nobits
 .balign 4096
 el2_idmap_l1:
@@ -1721,6 +1695,33 @@ MMUTableL2:
 #endif /* TARGET_imx95_a55 && !NO_MMU */
 
 #endif /* !USE_BUILTIN_STARTUP */
+
+
+/*
+ * void invalidate_dcache_range(start, end)
+ *
+ * invalidate data cache in the range, without writing it back
+ * (DMA reads; flush_dcache_range() is the clean & invalidate)
+ *
+ * x0: start address
+ * x1: end address
+ */
+.global invalidate_dcache_range
+invalidate_dcache_range:
+    mrs    x3, ctr_el0
+    lsr    x3, x3, #16
+    and    x3, x3, #0xf
+    mov    x2, #4
+    lsl    x2, x2, x3  /* cache line size */
+
+    sub    x3, x2, #1
+    bic    x0, x0, x3
+1:  dc     ivac, x0
+    add    x0, x0, x2
+    cmp    x0, x1
+    b.lo   1b
+    dsb    sy
+    ret
 
 
 /*
