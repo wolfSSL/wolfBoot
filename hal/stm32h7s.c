@@ -276,6 +276,35 @@ void RAMFUNCTION hal_cache_invalidate(void)
     ISB();
 }
 
+/* Make the GFXMMU virtual-buffer window inaccessible while the D-cache is
+ * on. The window is Normal memory in the default map, the core may read
+ * Normal memory speculatively once the D-cache is enabled, and with the
+ * GFXMMU clock off such a read stalls the bus for good: no fault, and the
+ * debugger loses the core. A no-access region stops the read being issued. */
+static void mpu_guard_enable(void)
+{
+    MPU_RNR = GFXMMU_MPU_REGION;
+    MPU_RBAR = GFXMMU_VBUF_BASE;
+    MPU_RASR = MPU_RASR_XN | MPU_RASR_SIZE_16MB | MPU_RASR_ENABLE;
+#ifdef WOLFBOOT_NO_MPU
+    /* Nothing else has set the MPU up: keep the default map for the rest */
+    MPU_CTRL = MPU_CTRL_PRIVDEFENA | MPU_CTRL_ENABLE;
+#endif
+    DSB();
+    ISB();
+}
+
+static void mpu_guard_disable(void)
+{
+#ifdef WOLFBOOT_NO_MPU
+    MPU_CTRL = 0;
+#endif
+    MPU_RNR = GFXMMU_MPU_REGION;
+    MPU_RASR = 0;
+    DSB();
+    ISB();
+}
+
 static void dcache_enable(void)
 {
     uint32_t sets, ways;
@@ -884,6 +913,7 @@ void hal_init(void)
     icache_enable();
     octospi_gpio_init();
     octospi_init();
+    mpu_guard_enable();
     dcache_enable();
 #ifdef DEBUG_UART
     uart_init();
@@ -905,6 +935,7 @@ void hal_prepare_boot(void)
     octospi_enable_mmap();
     dcache_disable();
     icache_disable();
+    mpu_guard_disable();
 }
 
 #endif /* !WOLFBOOT_UNIT_TEST_FLASH_ERASE */
