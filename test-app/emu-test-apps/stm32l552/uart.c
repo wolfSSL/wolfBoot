@@ -22,12 +22,13 @@
 #include <stdint.h>
 #include "emu_app.h"
 
-#define SYSCLK_HZ 64000000u
-
-/* The secure-app payload runs Secure and uses the Secure peripheral aliases */
+/* The secure-app payload runs Secure and uses the Secure peripheral aliases;
+ * wolfBoot hands it the 110 MHz PLL with APB1 undivided. */
 #ifdef EMU_STM32L5_SECURE
+#define SYSCLK_HZ         110000000u
 #define PERIPH_ALIAS      0x10000000u
 #else
+#define SYSCLK_HZ         64000000u
 #define PERIPH_ALIAS      0x00000000u
 #endif
 
