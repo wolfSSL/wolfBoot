@@ -1938,25 +1938,6 @@ external memory loader all leave a working configuration behind, so a port
 that omits this appears to boot fine and only fails once power is actually
 removed.
 
-### GFXMMU window and the D-cache
-
-`0x25000000`-`0x25FFFFFF` holds the GFXMMU virtual buffers. With the GFXMMU
-clock off, which is the reset state, a read in that window never completes:
-no bus error is returned, the core stalls and the debugger can no longer
-halt it. The window is Normal memory in the default memory map, and a
-Cortex-M7 with the D-cache enabled may read Normal memory speculatively, so
-no code has to touch the window on purpose. `hal_init()` therefore sets one
-MPU region marking it no-access before enabling the D-cache, and
-`hal_prepare_boot()` clears it again. With `NO_MPU=1` the HAL also enables
-the MPU around that region and disables it before the jump, so the
-application starts from the reset state; with `NO_MPU=0` the region is added
-to wolfBoot's own map, in a slot that map does not use.
-
-An application that enables the D-cache needs the same protection: either a
-no-access MPU region over the window, or a no-access background region with
-only the memories in use and the peripheral range opened. The background
-region STM32CubeMX generates covers `0x60000000`-`0xDFFFFFFF` only.
-
 ### Bootloader self-update is off
 
 `RAM_CODE` is 0 in the example configuration. It would compile in the
