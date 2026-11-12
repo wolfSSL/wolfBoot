@@ -181,6 +181,14 @@ int fs_open(struct fs_volume *vol, struct fs_file *f, const char *path,
  * can switch between a file and a raw partition unchanged. */
 int fs_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf);
 
+/* Partition-relative byte offset of a range of an open file, for a caller
+ * that rewrites bytes the file already owns (the boot state, with
+ * disk_part_write()). No filesystem structure is read for writing or
+ * changed. The range must lie inside the file and be backed by one
+ * contiguous run on the media: a hole or a range split across runs returns
+ * WOLFBOOT_FS_E_UNSUPPORTED. */
+int fs_map(struct fs_file *f, uint64_t off, uint32_t len, uint64_t *part_off);
+
 /* Size in bytes of an open file. */
 uint64_t fs_size(const struct fs_file *f);
 

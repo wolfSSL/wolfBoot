@@ -249,6 +249,7 @@ int ext4_mount(struct fs_volume *vol)
     ev->first_data_block = first_data_block;
     ev->groups = (uint32_t)groups;
     ev->incompat = incompat;
+    ev->ro_compat = fs_le32(sb + EXT4_B_FEATURE_RO_COMPAT);
     ev->inode_sz = inode_sz;
     ev->desc_sz = desc_sz;
     ev->gdt_off = gdt_off;
@@ -894,6 +895,40 @@ int ext4_read(struct fs_file *f, uint64_t off, uint64_t len, uint8_t *buf)
         done += this_len;
     }
     return (int)done;
+}
+
+int ext4_map(struct fs_file *f, uint64_t off, uint32_t len,
+             uint64_t *part_off)
+{
+    struct fs_volume *vol = f->vol;
+    struct ext4_volume *ev = &vol->u.ext;
+    uint64_t lblk, pblk;
+    uint32_t in_blk, run;
+    int is_hole;
+    int ret;
+
+    /* The caller means to rewrite these bytes. On a shared-blocks volume
+     * they may be another file's as well, and on a verity volume the file's
+     * Merkle tree may cover them. */
+    if ((ev->ro_compat & EXT4_RO_COMPAT_NO_REWRITE) != 0U) {
+        return WOLFBOOT_FS_E_UNSUPPORTED;
+    }
+
+    lblk = off / (uint64_t)ev->block_sz;
+    in_blk = (uint32_t)(off % (uint64_t)ev->block_sz);
+
+    ret = ext4_map_run(vol, f->iblock, lblk, &pblk, &run, &is_hole);
+    if (ret != WOLFBOOT_FS_OK) {
+        return ret;
+    }
+    /* A hole has no block to rewrite, and a range that leaves this extent
+     * is not one run on the media. */
+    if ((is_hole != 0) || ((((uint64_t)run * (uint64_t)ev->block_sz) -
+            in_blk) < (uint64_t)len)) {
+        return WOLFBOOT_FS_E_UNSUPPORTED;
+    }
+    *part_off = (pblk * (uint64_t)ev->block_sz) + in_blk;
+    return WOLFBOOT_FS_OK;
 }
 
 int ext4_label_eq(struct fs_volume *vol, const char *label)
