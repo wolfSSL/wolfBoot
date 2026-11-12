@@ -24,6 +24,8 @@ OBJCOPY ?= arm-none-eabi-objcopy
 CFLAGS := -mcpu=cortex-m33+nodsp -mthumb -mcmse -Os -ffreestanding -fdata-sections -ffunction-sections -g -ggdb
 CFLAGS += -I. -I../common -I../../../include -DEMU_RW612
 CFLAGS += -DIMAGE_HEADER_SIZE=$(IMAGE_HEADER_SIZE)
+# Match the wolfBoot build, which keeps the update trailer in two write-once sectors
+CFLAGS += -DNVM_FLASH_WRITEONCE
 LDFLAGS := -nostdlib -T target.ld -Wl,-gc-sections
 LDLIBS := -Wl,--start-group -lc -lm -lgcc -lnosys -Wl,--end-group
 NSC_OBJ :=
