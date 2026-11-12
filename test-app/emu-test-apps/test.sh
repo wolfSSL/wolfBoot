@@ -100,6 +100,12 @@ need_cmd cut
 need_cmd tac
 
 IMAGE_HEADER_SIZE="$(cfg_get IMAGE_HEADER_SIZE)"
+if [[ -z "$IMAGE_HEADER_SIZE" ]]; then
+  # options.mk raises the default header size for larger signatures/hashes.
+  IMAGE_HEADER_SIZE="$(printf 'emu-image-header-size:\n\t@echo $(IMAGE_HEADER_SIZE)\n' | \
+    make -s --no-print-directory -C "$WOLFBOOT_ROOT" -f Makefile -f - \
+    emu-image-header-size || true)"
+fi
 IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE:-256}"
 ARCH_OFFSET="$(cfg_get ARCH_OFFSET)"
 ARCH_OFFSET="${ARCH_OFFSET:-0}"
