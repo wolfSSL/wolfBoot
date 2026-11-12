@@ -198,6 +198,7 @@ TESTS+=unit-fwtpm-rsp-overrun
 TESTS+=unit-fwtpm-cmd-toctou
 TESTS+=unit-fdt-memrsv-wrap
 TESTS+=unit-psci
+TESTS+=unit-s32g2-nor-update
 TESTS+=unit-fdt-addr32
 TESTS+=unit-ns16550
 TESTS+=unit-zynq-dma-range
@@ -393,6 +394,8 @@ unit-flash-is-erased-invert:CFLAGS+=-DMOCK_PARTITIONS -DEXT_FLASH \
 # Journal tests use 4 KB sectors, because the log must hold a full-partition
 # update
 unit-nvm-journal:CFLAGS+=-DNVM_FLASH_JOURNAL -DMOCK_PARTITIONS \
+	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
+unit-s32g2-nor-update:CFLAGS+=-DNVM_FLASH_JOURNAL -DMOCK_PARTITIONS \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256
 unit-nvm-journal-ecc:CFLAGS+=-DNVM_FLASH_JOURNAL -DNVM_FLASH_ECC -DMOCK_PARTITIONS \
 	-DWOLFBOOT_SECTOR_SIZE=0x1000 -DIMAGE_HEADER_SIZE=256 \
@@ -1253,6 +1256,10 @@ unit-flash-is-erased-invert: ../../include/target.h unit-flash-is-erased.c
 
 unit-nvm-journal: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
 	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
+
+unit-s32g2-nor-update: ../../include/target.h unit-s32g2-nor-update.c \
+		../../src/libwolfboot.c ../scripts/s32g2/s32g2-nor-update.py
+	gcc -o $@ unit-s32g2-nor-update.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
 
 unit-nvm-journal-ecc: ../../include/target.h unit-nvm-journal.c ../../src/libwolfboot.c
 	gcc -o $@ unit-nvm-journal.c ../../src/libwolfboot.c $(CFLAGS) $(LDFLAGS)
