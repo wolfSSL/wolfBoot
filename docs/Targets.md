@@ -7376,19 +7376,27 @@ apply to the MCXE247, with these differences:
   the rest of the 252 KB, so an application that enables ERM interrupts must
   write its RAM before reading it. The network test app clears all of SRAM_U at
   reset (`APP_RAM_ECC_INIT`).
+- `mcxe247.config` sets `IMAGE_HEADER_SIZE=1024`, so the application starts
+  1 KB into the boot partition. The application's vector table is used in place,
+  and with 163 interrupts it must be 1 KB aligned: with the default 256-byte
+  header the core fetches the vectors of IRQ 48 and up (the ENET interrupts
+  among them) from the wrong slots.
 
 ### NXP MCXE247: Network test
 
 The test application can run a wolfIP DHCP and TFTP test over the board's
-Ethernet port. This is optional and is the only part of the port that needs the
-MCUXpresso SDK, which provides the `fsl_enet` driver. Set `ENABLE_WOLFIP=1` in
-`mcxe247.config`, check the wolfIP and SDK paths, then set the TFTP server and
-file:
+Ethernet port. This is optional and needs a wolfIP checkout, whose
+`nxp_mcxe_enet` port is a standalone ENET and LAN8741 driver (no vendor SDK).
+The test app builds it interrupt driven (`NXP_MCXE_ENET_IRQ=1`, with ENET IRQs
+73-75 routed in `test-app/startup_arm.c`). The wolfIP stack state, with 9 KB
+TCP receive and transmit buffers per socket, is placed in SRAM_L by
+`test-app/ARM-s32k1xx-wolfip.ld`; the rest of the app uses SRAM_U. Set
+`ENABLE_WOLFIP=1` in
+`mcxe247.config`, check the wolfIP path, then set the TFTP server and file:
 
 ```sh
 ENABLE_WOLFIP?=1
 WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
-MCUXPRESSO?=$(PWD)/../NXP/mcuxpresso-sdk/mcuxsdk
 WOLFBOOT_TEST_TFTP?=1
 CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
 ```
@@ -7399,17 +7407,23 @@ the file into RAM (40 KB at most), and prints its size and checksum followed by
 
 To measure throughput instead, set `WOLFBOOT_TEST_TFTP=0` and
 `WOLFIP_SPEED_TEST=1`. After the DHCP lease, the `network` command runs a TCP
-server on port 9 that discards what it receives and sends data whenever the
-connection can take it. It prints the receive and transmit rates when the
-connection closes. Drive it from the PC with `<ip>` set to the address the board
-printed:
+and UDP throughput server on port 9. Drive it from a PC on the same network
+with `<ip>` set to the address the board printed (Python 3, no extra
+packages):
 
 ```sh
-# board receives
-dd if=/dev/zero bs=1460 count=10000 | nc <ip> 9
-# board sends
-nc <ip> 9 </dev/null | pv -r >/dev/null
+python3 tools/scripts/wolfip_speed.py <ip>
 ```
+
+The script runs six tests of 10 s each: TCP and UDP, each with the board
+only receiving (`rx`), only sending (`tx`) and both at once (`bidir`).
+It prints a table of the rates and UDP loss. With this build the driver also
+counts its own core cycles (`NXP_MCXE_ENET_STATS=1`), so the table also shows
+how the CPU time divides between the driver, the frame copies, wolfIP and the
+main loop. `--tests` picks a subset, `--time` sets the duration and `--rate`
+limits the UDP send rate to the board, e.g. to find the highest rate without
+loss. The board prints the same counters on the console after each test.
+Plain `nc <ip> 9` still works as a bidirectional TCP test.
 
 The server never returns to the console; reset the board to stop it.
 `WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
@@ -7427,7 +7441,7 @@ example `DO <wolfBoot>/tools/scripts/mcxe247/e247_flash_factory_bin.cmm`:
 
 | Script | Purpose |
 |--------|---------|
-| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols. Takes the MCUXpresso SDK path as an optional argument, used to find the ENET driver sources (default: `../NXP/mcuxpresso-sdk/mcuxsdk` next to the checkout) |
+| `e247_debug.cmm` | Reset and halt the CPU, then load the `wolfboot.elf` and `test-app/image.elf` symbols |
 | `e247_flash_factory_bin.cmm` | Program `factory.bin`, erase the update partition and swap sector, then reset and detach |
 | `e247_flash_update.cmm` | Program `test-app/image_v2_signed.bin` into the update partition, then reset and detach |
 

@@ -3,11 +3,12 @@
  * Optional wolfIP network test for the wolfBoot test-app. Ethernet port and ms
  * timebase are compile-time selected: NXP QorIQ FMan (T2080/T1024/T1040,
  * big-endian PowerPC), NXP Layerscape ENETC (LS1028A, AArch64) or the
- * MCUXpresso fsl_enet driver (MCXE247, Cortex-M4). Modes:
+ * NXP MCX E247 ENET (Cortex-M4). Modes:
  *   default              DHCP lease only
  *   WOLFBOOT_TEST_TFTP   + TFTP RRQ fetch into RAM, report size+checksum
  *                          (optionally verify them via TFTP_EXPECT_SIZE/SUM)
- *   WOLFIP_SPEED_TEST    + TCP throughput server on port 9 (benchmark)
+ *   WOLFIP_SPEED_TEST    + TCP and UDP throughput server on port 9
+ *                          (benchmark, host side tools/scripts/wolfip_speed.py)
  *
  * Copyright (C) 2026 wolfSSL Inc.
  *
@@ -40,7 +41,7 @@
 
 /* Port selection:
  *   WOLFIP_PORT_ENETC -> LS1028A ENETC
- *   WOLFIP_PORT_MCXE_ENET -> MCXE247 ENET (MCUXpresso fsl_enet)
+ *   WOLFIP_PORT_MCXE_ENET -> MCXE247 ENET
  *   else QorIQ FMan
  * Driver entry points are wrapped so the bring-up code below is port-agnostic. */
 #if defined(WOLFIP_PORT_ENETC)
@@ -441,112 +442,431 @@ out:
 #endif /* WOLFBOOT_TEST_TFTP */
 
 #ifdef WOLFIP_SPEED_TEST
-/* ---- Benchmark: one-connection TCP throughput server on port 9 ------- *
- * RX sinks everything the peer sends; TX pushes a chargen buffer whenever
- * writable. Prints B/s on close.
- *   RX (board sinks):   dd if=/dev/zero bs=1460 count=N | nc <ip> 9
- *   TX (board sources): nc <ip> 9 </dev/null | pv -r >/dev/null            */
-#define SPEED_PORT      9
-static int      speed_listen_fd = -1;
-static int      speed_client_fd = -1;
-static uint64_t speed_rx_bytes, speed_tx_bytes, speed_start_ms;
-static uint8_t  speed_buf[1460];
+/* ---- Benchmark: TCP and UDP throughput server on port 9 ------------- *
+ * Driven from a host by tools/scripts/wolfip_speed.py. Directions are
+ * named from the board: rx = the board receives, tx = the board sends,
+ * bidir = both at once.
+ *
+ * TCP: the first byte the client sends picks the direction: 'r' rx,
+ * 't' tx, anything else bidir (so plain "nc <ip> 9" stays bidirectional).
+ * The test ends when the client closes.
+ *
+ * UDP: each datagram starts with a SPEED_HDR_LEN byte header, big-endian:
+ *   [0] SPEED_MAGIC  [1] command  [2..3] board datagram size
+ *   [4..7] sequence  [8..11] board send duration in ms
+ * Commands to the board:
+ *   'r'  data to count (starts an rx test)
+ *   'b'  data to count; the first one starts a bidir test and the board
+ *        sends to the client for the given duration
+ *   't'  start a tx test: the board sends to the client for the duration
+ *   'q'  end the current UDP test and reply with an 'S' stats datagram
+ * The board's own datagrams carry command 'd'.
+ *
+ * The 'S' reply describes the last test, TCP or UDP, so the host can fetch
+ * the board's counters after a TCP test too. Each finished test is also
+ * printed on the console. */
+#define SPEED_PORT          9
+#define SPEED_MAGIC         0x57U       /* 'W' */
+#define SPEED_HDR_LEN       12
+#define SPEED_UDP_MAX       1472U       /* largest unfragmented payload */
+#define SPEED_TCP_CHUNK     1460U
+#define SPEED_BURST         32
+#define SPEED_PROTO_TCP     1U
+#define SPEED_PROTO_UDP     2U
+#define SPEED_REPLY_LEN     108
+
+#if defined(WOLFIP_PORT_MCXE_ENET) && NXP_MCXE_ENET_STATS
+/* The driver enables the DWT cycle counter */
+#define SPEED_PROFILE       1
+#define SPEED_CYCLES()      (*(volatile uint32_t *)0xE0001004UL)
+#else
+#define SPEED_PROFILE       0
+#define SPEED_CYCLES()      0U
+#endif
+
+struct speed_state {
+    uint64_t rx_bytes;
+    uint64_t tx_bytes;
+    uint64_t cyc_total;     /* core cycles in the test window */
+    uint64_t cyc_busy;      /* of which in wolfIP_poll() and socket calls */
+    uint64_t start_ms;
+    uint64_t end_ms;
+    uint64_t stream_end_ms;
+    uint32_t rx_pkts;
+    uint32_t tx_pkts;
+    uint32_t tx_seq;
+    uint32_t stream_len;
+    uint32_t polls;         /* wolfIP_poll() calls in the test window */
+    uint8_t  proto;
+    uint8_t  mode;          /* 'r', 't', 'b'; 0 until a TCP client sends */
+    uint8_t  active;
+    uint8_t  streaming;
+};
+
+static int speed_listen_fd = -1;
+static int speed_client_fd = -1;
+static int speed_udp_fd = -1;
+static struct speed_state speed;
+static struct wolfIP_sockaddr_in speed_peer;
+static uint8_t speed_rxbuf[SPEED_UDP_MAX];
+static uint8_t speed_txbuf[SPEED_UDP_MAX];
+#if SPEED_PROFILE
+static struct nxp_mcxe_enet_stats speed_drv;
+#endif
+
+static void speed_put32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+static void speed_put64(uint8_t *p, uint64_t v)
+{
+    speed_put32(p, (uint32_t)(v >> 32));
+    speed_put32(p + 4, (uint32_t)v);
+}
+
+static uint32_t speed_get32(const uint8_t *p)
+{
+    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static const char *speed_mode_name(uint8_t mode)
+{
+    if (mode == 'r')
+        return "rx";
+    if (mode == 't')
+        return "tx";
+    if (mode == 'b')
+        return "bidir";
+    return "?";
+}
+
+static uint32_t speed_kbps(uint64_t bytes, uint32_t ms)
+{
+    return (uint32_t)((bytes * 8ULL) / ms);
+}
+
+#if SPEED_PROFILE
+/* part/total in tenths of a percent */
+static uint32_t speed_permille(uint64_t part, uint64_t total)
+{
+    if (total == 0U)
+        return 0U;
+    return (uint32_t)((part * 1000ULL) / total);
+}
+
+static void speed_print_pct(const char *name, uint64_t part)
+{
+    uint32_t pm = speed_permille(part, speed.cyc_total);
+
+    wolfBoot_printf(" %s %u.%u%%", name, (unsigned)(pm / 10U),
+        (unsigned)(pm % 10U));
+}
+#endif
 
 static void speed_print(void)
 {
-    uint64_t ms = now_ms() - speed_start_ms;
-    if (ms == 0) ms = 1;
-    wolfBoot_printf("SPEED done %ums  RX %u B (~%u B/s)  TX %u B (~%u B/s)\r\n",
-        (unsigned)ms, (unsigned)speed_rx_bytes,
-        (unsigned)((speed_rx_bytes * 1000ULL) / ms),
-        (unsigned)speed_tx_bytes,
-        (unsigned)((speed_tx_bytes * 1000ULL) / ms));
+    uint32_t ms = (uint32_t)(speed.end_ms - speed.start_ms);
+#if SPEED_PROFILE
+    uint64_t drv = speed_drv.rx_cycles + speed_drv.tx_cycles +
+                   speed_drv.idle_cycles;
+    uint64_t stack = (speed.cyc_busy > drv) ? speed.cyc_busy - drv : 0U;
+    uint32_t frames = speed_drv.rx_frames + speed_drv.tx_frames;
+#endif
+
+    if (ms == 0U)
+        ms = 1U;
+    wolfBoot_printf("SPEED %s %s: %u ms  rx %u B %u kbit/s  tx %u B %u kbit/s\r\n",
+        (speed.proto == SPEED_PROTO_TCP) ? "tcp" : "udp",
+        speed_mode_name(speed.mode), (unsigned)ms,
+        (unsigned)speed.rx_bytes, (unsigned)speed_kbps(speed.rx_bytes, ms),
+        (unsigned)speed.tx_bytes, (unsigned)speed_kbps(speed.tx_bytes, ms));
+    if (speed.proto == SPEED_PROTO_UDP) {
+        wolfBoot_printf("  datagrams rx %u tx %u\r\n",
+            (unsigned)speed.rx_pkts, (unsigned)speed.tx_pkts);
+    }
+#if SPEED_PROFILE
+    wolfBoot_printf("  cpu %u MHz:", (unsigned)(speed_drv.core_hz / 1000000U));
+    speed_print_pct("drv-rx", speed_drv.rx_cycles);
+    speed_print_pct("drv-tx", speed_drv.tx_cycles);
+    speed_print_pct("drv-idle", speed_drv.idle_cycles);
+    speed_print_pct("wolfIP", stack);
+    speed_print_pct("loop", speed.cyc_total - speed.cyc_busy);
+    wolfBoot_printf("\r\n  of which:");
+    speed_print_pct("copy", speed_drv.copy_cycles);
+    speed_print_pct("tx-ring-full", speed_drv.tx_wait_cycles);
+    wolfBoot_printf("\r\n  frames rx %u tx %u, wolfIP %u cycles/frame,"
+        " %u polls, %u cycles/poll\r\n",
+        (unsigned)speed_drv.rx_frames, (unsigned)speed_drv.tx_frames,
+        (unsigned)((frames > 0U) ? (stack / frames) : 0U),
+        (unsigned)speed.polls,
+        (unsigned)((speed.polls > 0U) ? (speed.cyc_busy / speed.polls) : 0U));
+#endif
 }
 
+static void speed_start(uint8_t proto, uint8_t mode, uint64_t now)
+{
+    zmem(&speed, sizeof(speed));
+    speed.proto = proto;
+    speed.mode = mode;
+    speed.start_ms = now;
+    speed.active = 1U;
+#if SPEED_PROFILE
+    nxp_mcxe_enet_stats_reset();
+#endif
+}
+
+static void speed_stop(uint64_t now)
+{
+    if (speed.active == 0U)
+        return;
+    speed.active = 0U;
+    speed.streaming = 0U;
+    speed.end_ms = now;
+#if SPEED_PROFILE
+    nxp_mcxe_enet_stats_get(&speed_drv);
+#endif
+    speed_print();
+}
+
+/* Send the 'S' stats datagram for the last (or running) test. */
+static void speed_reply(struct wolfIP *s, const struct wolfIP_sockaddr_in *to,
+                        uint64_t now)
+{
+    uint8_t r[SPEED_REPLY_LEN];
+    uint64_t end = (speed.active != 0U) ? now : speed.end_ms;
+
+    zmem(r, sizeof(r));
+    r[0] = SPEED_MAGIC;
+    r[1] = 'S';
+    r[2] = 1U;                  /* layout version */
+    r[3] = speed.proto;
+    r[4] = speed.mode;
+    r[5] = speed.active;
+    speed_put32(r + 8, (uint32_t)(end - speed.start_ms));
+    speed_put32(r + 16, speed.rx_pkts);
+    speed_put32(r + 20, speed.tx_pkts);
+    speed_put64(r + 32, speed.rx_bytes);
+    speed_put64(r + 40, speed.tx_bytes);
+    speed_put64(r + 48, speed.cyc_total);
+    speed_put64(r + 56, speed.cyc_busy);
+    speed_put32(r + 104, speed.polls);
+#if SPEED_PROFILE
+    if (speed.active != 0U)
+        nxp_mcxe_enet_stats_get(&speed_drv);
+    speed_put32(r + 12, speed_drv.core_hz);
+    speed_put32(r + 24, speed_drv.rx_frames);
+    speed_put32(r + 28, speed_drv.tx_frames);
+    speed_put64(r + 64, speed_drv.rx_cycles);
+    speed_put64(r + 72, speed_drv.tx_cycles);
+    speed_put64(r + 80, speed_drv.idle_cycles);
+    speed_put64(r + 88, speed_drv.copy_cycles);
+    speed_put64(r + 96, speed_drv.tx_wait_cycles);
+#endif
+    (void)wolfIP_sock_sendto(s, speed_udp_fd, r, sizeof(r), 0,
+        (const struct wolfIP_sockaddr *)to, sizeof(*to));
+}
+
+/* Accept one TCP client at a time; a close ends the test. */
 static void speed_cb(int fd, uint16_t event, void *arg)
 {
     struct wolfIP *s = (struct wolfIP *)arg;
-    int n, k;
+    int c;
 
     if (fd == speed_listen_fd) {
-        if (event & CB_EVENT_READABLE) {
-            int c = wolfIP_sock_accept(s, speed_listen_fd, NULL, NULL);
+        if ((event & CB_EVENT_READABLE) != 0U) {
+            c = wolfIP_sock_accept(s, speed_listen_fd, NULL, NULL);
             if (c >= 0) {
                 if (speed_client_fd >= 0) {
                     (void)wolfIP_sock_close(s, c);
-                } else {
+                }
+                else {
                     speed_client_fd = c;
-                    speed_rx_bytes = 0; speed_tx_bytes = 0;
-                    speed_start_ms = now_ms();
                     wolfIP_register_callback(s, c, speed_cb, s);
-                    wolfBoot_printf("SPEED client connected\r\n");
+                    speed_start(SPEED_PROTO_TCP, 0U, now_ms());
                 }
             }
         }
         return;
     }
-    if (fd != speed_client_fd)
-        return;
-
-    if (event & CB_EVENT_READABLE) {
-        k = 0;
-        do {
-            n = wolfIP_sock_recvfrom(s, fd, speed_buf, sizeof(speed_buf), 0,
-                NULL, NULL);
-            if (n > 0)
-                speed_rx_bytes += (uint64_t)n;
-        } while (n > 0 && ++k < 32);
-    }
-    if (event & CB_EVENT_WRITABLE) {
-        k = 0;
-        do {
-            n = wolfIP_sock_send(s, fd, speed_buf, sizeof(speed_buf), 0);
-            if (n > 0)
-                speed_tx_bytes += (uint64_t)n;
-        } while (n > 0 && ++k < 32);
-    }
-    if (event & CB_EVENT_CLOSED) {
-        speed_print();
+    if (fd == speed_client_fd && (event & CB_EVENT_CLOSED) != 0U) {
+        speed_stop(now_ms());
         (void)wolfIP_sock_close(s, fd);
         speed_client_fd = -1;
     }
 }
 
-static int run_speed_server(struct wolfIP *s)
+static void speed_tcp_pump(struct wolfIP *s)
+{
+    int n;
+    int k;
+
+    if (speed_client_fd < 0)
+        return;
+    for (k = 0; k < SPEED_BURST; k++) {
+        n = wolfIP_sock_recvfrom(s, speed_client_fd, speed_rxbuf,
+            SPEED_TCP_CHUNK, 0, NULL, NULL);
+        if (n <= 0)
+            break;
+        if (speed.mode == 0U) {
+            if (speed_rxbuf[0] == 'r' || speed_rxbuf[0] == 't') {
+                speed.mode = speed_rxbuf[0];
+                n--;            /* the direction byte is not data */
+            }
+            else {
+                speed.mode = 'b';
+            }
+        }
+        speed.rx_bytes += (uint32_t)n;
+    }
+    if (speed.mode != 't' && speed.mode != 'b')
+        return;
+    for (k = 0; k < SPEED_BURST; k++) {
+        n = wolfIP_sock_send(s, speed_client_fd, speed_txbuf,
+            SPEED_TCP_CHUNK, 0);
+        if (n <= 0)
+            break;
+        speed.tx_bytes += (uint32_t)n;
+    }
+}
+
+static void speed_udp_recv(struct wolfIP *s, uint64_t now)
+{
+    struct wolfIP_sockaddr_in from;
+    socklen_t from_len;
+    uint32_t len;
+    uint8_t cmd;
+    int n;
+    int k;
+
+    for (k = 0; k < SPEED_BURST; k++) {
+        from_len = sizeof(from);
+        n = wolfIP_sock_recvfrom(s, speed_udp_fd, speed_rxbuf,
+            sizeof(speed_rxbuf), 0, (struct wolfIP_sockaddr *)&from,
+            &from_len);
+        if (n <= 0)
+            break;
+        if (n < SPEED_HDR_LEN || speed_rxbuf[0] != SPEED_MAGIC)
+            continue;
+        cmd = speed_rxbuf[1];
+        if (cmd == 'q') {
+            if (speed.proto == SPEED_PROTO_UDP)
+                speed_stop(now);
+            speed_reply(s, &from, now);
+            continue;
+        }
+        if (cmd != 'r' && cmd != 'b' && cmd != 't')
+            continue;
+        if (speed.active != 0U && speed.proto == SPEED_PROTO_TCP)
+            continue;           /* a TCP test is running */
+        if (speed.active == 0U) {
+            speed_start(SPEED_PROTO_UDP, cmd, now);
+            speed_peer = from;
+            if (cmd != 'r') {
+                len = ((uint32_t)speed_rxbuf[2] << 8) | speed_rxbuf[3];
+                if (len < (uint32_t)SPEED_HDR_LEN || len > SPEED_UDP_MAX)
+                    len = SPEED_UDP_MAX;
+                speed.stream_len = len;
+                speed.stream_end_ms = now + speed_get32(speed_rxbuf + 8);
+                speed.streaming = 1U;
+            }
+        }
+        if (cmd != 't') {
+            speed.rx_bytes += (uint32_t)n;
+            speed.rx_pkts++;
+        }
+    }
+}
+
+static void speed_udp_send(struct wolfIP *s, uint64_t now)
+{
+    int n;
+    int k;
+
+    if (speed.streaming == 0U)
+        return;
+    if (now >= speed.stream_end_ms) {
+        speed.streaming = 0U;
+        if (speed.mode == 't')
+            speed_stop(now);
+        return;
+    }
+    speed_txbuf[0] = SPEED_MAGIC;
+    speed_txbuf[1] = 'd';
+    speed_txbuf[2] = 0U;
+    speed_txbuf[3] = 0U;
+    for (k = 0; k < SPEED_BURST; k++) {
+        speed_put32(speed_txbuf + 4, speed.tx_seq);
+        n = wolfIP_sock_sendto(s, speed_udp_fd, speed_txbuf,
+            speed.stream_len, 0, (const struct wolfIP_sockaddr *)&speed_peer,
+            sizeof(speed_peer));
+        if (n <= 0)
+            break;
+        speed.tx_seq++;
+        speed.tx_pkts++;
+        speed.tx_bytes += (uint32_t)n;
+    }
+}
+
+static int speed_open(struct wolfIP *s, int type)
 {
     struct wolfIP_sockaddr_in addr;
+    int fd;
 
-    speed_listen_fd = wolfIP_sock_socket(s, AF_INET, IPSTACK_SOCK_STREAM, 0);
-    if (speed_listen_fd < 0) {
-        wolfBoot_printf("SPEED: socket failed\r\n");
+    fd = wolfIP_sock_socket(s, AF_INET, type, 0);
+    if (fd < 0)
         return -1;
-    }
-    wolfIP_register_callback(s, speed_listen_fd, speed_cb, s);
     zmem(&addr, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = ee16(SPEED_PORT);
-    if (wolfIP_sock_bind(s, speed_listen_fd,
-            (struct wolfIP_sockaddr *)&addr, sizeof(addr)) < 0) {
-        wolfBoot_printf("SPEED: bind to port %d failed\r\n", SPEED_PORT);
-        (void)wolfIP_sock_close(s, speed_listen_fd);
-        speed_listen_fd = -1;
+    if (wolfIP_sock_bind(s, fd, (struct wolfIP_sockaddr *)&addr,
+            sizeof(addr)) < 0 ||
+            (type == IPSTACK_SOCK_STREAM &&
+             wolfIP_sock_listen(s, fd, 1) < 0)) {
+        (void)wolfIP_sock_close(s, fd);
         return -1;
     }
-    if (wolfIP_sock_listen(s, speed_listen_fd, 1) < 0) {
-        wolfBoot_printf("SPEED: listen on port %d failed\r\n", SPEED_PORT);
-        (void)wolfIP_sock_close(s, speed_listen_fd);
-        speed_listen_fd = -1;
-        return -1;
-    }
+    return fd;
+}
 
-    wolfBoot_printf("SPEED: TCP throughput server on port %d. Drive from host:\r\n",
+static int run_speed_server(struct wolfIP *s)
+{
+    uint64_t now;
+    uint32_t c_prev;
+    uint32_t c_poll;
+    uint32_t c_done;
+
+    speed_listen_fd = speed_open(s, IPSTACK_SOCK_STREAM);
+    speed_udp_fd = speed_open(s, IPSTACK_SOCK_DGRAM);
+    if (speed_listen_fd < 0 || speed_udp_fd < 0) {
+        wolfBoot_printf("SPEED: cannot open port %d\r\n", SPEED_PORT);
+        return -1;
+    }
+    wolfIP_register_callback(s, speed_listen_fd, speed_cb, s);
+    wolfBoot_printf("SPEED: TCP and UDP throughput server on port %d\r\n",
         SPEED_PORT);
-    wolfBoot_printf("  RX: dd if=/dev/zero bs=1460 count=20000 | nc <ip> %d\r\n",
-        SPEED_PORT);
-    wolfBoot_printf("  TX: nc <ip> %d </dev/null | pv -r >/dev/null\r\n",
-        SPEED_PORT);
-    for (;;)
-        (void)wolfIP_poll(s, now_ms());
+    wolfBoot_printf("  host: python3 tools/scripts/wolfip_speed.py <ip>\r\n");
+
+    c_prev = SPEED_CYCLES();
+    for (;;) {
+        now = now_ms();
+        c_poll = SPEED_CYCLES();
+        (void)wolfIP_poll(s, now);
+        speed_tcp_pump(s);
+        speed_udp_recv(s, now);
+        speed_udp_send(s, now);
+        c_done = SPEED_CYCLES();
+        if (speed.active != 0U) {
+            speed.cyc_busy += c_done - c_poll;
+            speed.cyc_total += c_done - c_prev;
+            speed.polls++;
+        }
+        c_prev = c_done;
+    }
     /* not reached */
 }
 #endif /* WOLFIP_SPEED_TEST */

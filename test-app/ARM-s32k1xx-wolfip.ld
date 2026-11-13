@@ -2,17 +2,22 @@
  * Linker script for the wolfBoot test application on NXP S32K148/MCXE247 with wolfIP
  *
  * The application runs from the boot partition after the wolfBoot header.
- * RAM is all of SRAM_U, which the ENET DMA uses and is outside the code cache.
+ * RAM is SRAM_U. The wolfIP stack state (wolfip.o .bss: sockets and their
+ * buffers) goes in SRAM_L, which the ENET DMA and eDMA reach through its
+ * backdoor port. Both are outside the code cache while it is disabled (the
+ * default); enabling the cache for SRAM_L would break the DMA coherency.
  *
  * SRAM is ECC protected and holds no valid ECC after power-on. With
- * APP_RAM_ECC_INIT the reset handler clears [_start_ecc_ram, _end_ecc_ram), all
- * of RAM including the heap and stack, with word stores before the stack is
- * used. This keeps the ECC valid and the ERM free of error events.
+ * APP_RAM_ECC_INIT the reset handler clears [_start_ecc_ram, _end_ecc_ram),
+ * SRAM_L and SRAM_U including the heap and stack, with word stores before the
+ * stack is used. This keeps the ECC valid and the ERM free of error events,
+ * and is also what zeroes the SRAM_L section: it is not part of .bss.
  */
 
 MEMORY
 {
     FLASH (rx)  : ORIGIN = @WOLFBOOT_TEST_APP_ADDRESS@, LENGTH = @WOLFBOOT_TEST_APP_SIZE@
+    RAM_L (rwx) : ORIGIN = 0x1FFE0000, LENGTH = 0x20000  /* 128KB SRAM_L */
     RAM (rwx)   : ORIGIN = 0x20000000, LENGTH = 0x1F000  /* 124KB SRAM_U */
 }
 
@@ -48,6 +53,14 @@ SECTIONS
         _end_data = .;
     } > RAM
 
+    /* wolfIP stack state, zero-filled by the APP_RAM_ECC_INIT clear */
+    .bss_sram_l (NOLOAD) :
+    {
+        . = ALIGN(16);
+        *wolfip.o(.bss .bss.* COMMON)
+        . = ALIGN(4);
+    } > RAM_L
+
     .bss (NOLOAD) :
     {
         _start_bss = .;
@@ -72,7 +85,7 @@ _start_heap = _end;
 _end_stack = ORIGIN(RAM) + LENGTH(RAM);
 
 /* RAM cleared at reset with APP_RAM_ECC_INIT */
-_start_ecc_ram = ORIGIN(RAM);
+_start_ecc_ram = ORIGIN(RAM_L);
 _end_ecc_ram = ORIGIN(RAM) + LENGTH(RAM);
 
 /* Keep room above .bss for the stack and the heap used by printf */
