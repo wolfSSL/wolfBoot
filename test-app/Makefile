@@ -1754,6 +1754,10 @@ ifeq ($(ENABLE_WOLFIP),1)
     # wolfIP state is in the 128KB of SRAM_L (ARM-s32k1xx-wolfip.ld): six
     # full segments of TCP buffering per socket
     CFLAGS+=-DRXBUF_SIZE=9216 -DTXBUF_SIZE=9216
+    # Build wolfIP hosted: -ffreestanding turns every small fixed-size
+    # memcpy (checksum words, header fields) into a call to the byte-wise
+    # memcpy in src/string.c, which cost most of the stack's CPU time
+    WOLFIP_CFLAGS_OUT:=-ffreestanding
     # Driver cycle counters for the throughput test's CPU breakdown
     ifeq ($(WOLFIP_SPEED_TEST),1)
       CFLAGS+=-DNXP_MCXE_ENET_STATS=1
@@ -1787,7 +1791,7 @@ ifeq ($(ENABLE_WOLFIP),1)
   # wolfIP TUs need the port headers first (so config.h resolves to the
   # port copy) and tolerate wolfIP's own style; drop -Werror/-Wstack-usage.
   WOLFIP_CFLAGS:=-I"$(WOLFIP_PORTDIR)" -I"$(WOLFBOOT_LIB_WOLFIP)" \
-    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT),$(CFLAGS)) \
+    $(filter-out -Werror -Wstack-usage=$(STACK_USAGE_LIMIT) $(WOLFIP_CFLAGS_OUT),$(CFLAGS)) \
     -DWOLFIP_ENABLE_TFTP=$(if $(filter 1,$(WOLFBOOT_TEST_TFTP)),1,0) \
     -Wno-unused -Wno-sign-compare -Wno-missing-field-initializers
 endif
