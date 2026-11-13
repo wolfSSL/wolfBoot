@@ -454,6 +454,9 @@ out:
  * UDP: each datagram starts with a SPEED_HDR_LEN byte header, big-endian:
  *   [0] SPEED_MAGIC  [1] command  [2..3] board datagram size
  *   [4..7] sequence  [8..11] board send duration in ms
+ *   [12..15] session: a non-zero id the host picks for each test. Data of
+ *            a test that has ended is ignored, so datagrams still queued
+ *            on the way cannot start a new test.
  * Commands to the board:
  *   'r'  data to count (starts an rx test)
  *   'b'  data to count; the first one starts a bidir test and the board
@@ -464,16 +467,24 @@ out:
  *
  * The 'S' reply describes the last test, TCP or UDP, so the host can fetch
  * the board's counters after a TCP test too. Each finished test is also
- * printed on the console. */
+ * printed on the console. Ctrl-C on the console stops the server. */
 #define SPEED_PORT          9
 #define SPEED_MAGIC         0x57U       /* 'W' */
-#define SPEED_HDR_LEN       12
+#define SPEED_HDR_LEN       16
 #define SPEED_UDP_MAX       1472U       /* largest unfragmented payload */
 #define SPEED_TCP_CHUNK     1460U
 #define SPEED_BURST         32
 #define SPEED_PROTO_TCP     1U
 #define SPEED_PROTO_UDP     2U
 #define SPEED_REPLY_LEN     108
+
+/* How often the server checks for Ctrl-C on the console */
+#define SPEED_ABORT_POLL_MS 100U
+#ifdef WOLFIP_PORT_MCXE_ENET
+#define SPEED_ABORT()       wolfip_test_abort()
+#else
+#define SPEED_ABORT()       0
+#endif
 
 #if defined(WOLFIP_PORT_MCXE_ENET) && NXP_MCXE_ENET_STATS
 /* The driver enables the DWT cycle counter */
@@ -497,6 +508,7 @@ struct speed_state {
     uint32_t tx_seq;
     uint32_t stream_len;
     uint32_t polls;         /* wolfIP_poll() calls in the test window */
+    uint32_t session;       /* UDP test id from the host, 0 for TCP */
     uint8_t  proto;
     uint8_t  mode;          /* 'r', 't', 'b'; 0 until a TCP client sends */
     uint8_t  active;
@@ -507,6 +519,7 @@ static int speed_listen_fd = -1;
 static int speed_client_fd = -1;
 static int speed_udp_fd = -1;
 static struct speed_state speed;
+static uint32_t speed_ended_session;    /* last UDP test that ended */
 static struct wolfIP_sockaddr_in speed_peer;
 static uint8_t speed_rxbuf[SPEED_UDP_MAX];
 static uint8_t speed_txbuf[SPEED_UDP_MAX];
@@ -627,6 +640,7 @@ static void speed_stop(uint64_t now)
     speed.active = 0U;
     speed.streaming = 0U;
     speed.end_ms = now;
+    speed_ended_session = speed.session;
 #if SPEED_PROFILE
     nxp_mcxe_enet_stats_get(&speed_drv);
 #endif
@@ -739,6 +753,7 @@ static void speed_udp_recv(struct wolfIP *s, uint64_t now)
     struct wolfIP_sockaddr_in from;
     socklen_t from_len;
     uint32_t len;
+    uint32_t session;
     uint8_t cmd;
     int n;
     int k;
@@ -763,8 +778,14 @@ static void speed_udp_recv(struct wolfIP *s, uint64_t now)
             continue;
         if (speed.active != 0U && speed.proto == SPEED_PROTO_TCP)
             continue;           /* a TCP test is running */
+        session = speed_get32(speed_rxbuf + 12);
+        if (session == 0U || session == speed_ended_session)
+            continue;           /* left over from a finished test */
+        if (speed.active != 0U && session != speed.session)
+            speed_stop(now);    /* the host started a new test */
         if (speed.active == 0U) {
             speed_start(SPEED_PROTO_UDP, cmd, now);
+            speed.session = session;
             speed_peer = from;
             if (cmd != 'r') {
                 len = ((uint32_t)speed_rxbuf[2] << 8) | speed_rxbuf[3];
@@ -799,6 +820,8 @@ static void speed_udp_send(struct wolfIP *s, uint64_t now)
     speed_txbuf[1] = 'd';
     speed_txbuf[2] = 0U;
     speed_txbuf[3] = 0U;
+    speed_put32(speed_txbuf + 8, 0U);
+    speed_put32(speed_txbuf + 12, speed.session);
     for (k = 0; k < SPEED_BURST; k++) {
         speed_put32(speed_txbuf + 4, speed.tx_seq);
         n = wolfIP_sock_sendto(s, speed_udp_fd, speed_txbuf,
@@ -833,9 +856,25 @@ static int speed_open(struct wolfIP *s, int type)
     return fd;
 }
 
+/* Close the server's sockets, ending a running test first. */
+static void speed_close(struct wolfIP *s)
+{
+    speed_stop(now_ms());
+    if (speed_client_fd >= 0)
+        (void)wolfIP_sock_close(s, speed_client_fd);
+    if (speed_listen_fd >= 0)
+        (void)wolfIP_sock_close(s, speed_listen_fd);
+    if (speed_udp_fd >= 0)
+        (void)wolfIP_sock_close(s, speed_udp_fd);
+    speed_client_fd = -1;
+    speed_listen_fd = -1;
+    speed_udp_fd = -1;
+}
+
 static int run_speed_server(struct wolfIP *s)
 {
     uint64_t now;
+    uint64_t abort_check;
     uint32_t c_prev;
     uint32_t c_poll;
     uint32_t c_done;
@@ -844,16 +883,24 @@ static int run_speed_server(struct wolfIP *s)
     speed_udp_fd = speed_open(s, IPSTACK_SOCK_DGRAM);
     if (speed_listen_fd < 0 || speed_udp_fd < 0) {
         wolfBoot_printf("SPEED: cannot open port %d\r\n", SPEED_PORT);
+        speed_close(s);
         return -1;
     }
     wolfIP_register_callback(s, speed_listen_fd, speed_cb, s);
     wolfBoot_printf("SPEED: TCP and UDP throughput server on port %d\r\n",
         SPEED_PORT);
     wolfBoot_printf("  host: python3 tools/scripts/wolfip_speed.py <ip>\r\n");
+    wolfBoot_printf("  Ctrl-C stops the server\r\n");
 
+    abort_check = now_ms() + SPEED_ABORT_POLL_MS;
     c_prev = SPEED_CYCLES();
     for (;;) {
         now = now_ms();
+        if (now >= abort_check) {
+            abort_check = now + SPEED_ABORT_POLL_MS;
+            if (SPEED_ABORT() != 0)
+                break;
+        }
         c_poll = SPEED_CYCLES();
         (void)wolfIP_poll(s, now);
         speed_tcp_pump(s);
@@ -867,7 +914,9 @@ static int run_speed_server(struct wolfIP *s)
         }
         c_prev = c_done;
     }
-    /* not reached */
+    speed_close(s);
+    wolfBoot_printf("SPEED: stopped\r\n");
+    return 0;
 }
 #endif /* WOLFIP_SPEED_TEST */
 
@@ -879,7 +928,7 @@ int wolfip_tftp_test_run(void)
 #if defined(WOLFBOOT_TEST_TFTP)
     return run_tftp_fetch(s);
 #elif defined(WOLFIP_SPEED_TEST)
-    return run_speed_server(s); /* loops forever */
+    return run_speed_server(s); /* until Ctrl-C */
 #else
     return 0; /* DHCP lease only, no transfer */
 #endif

@@ -20,6 +20,7 @@ Standard library only; runs on Linux, macOS and Windows.
 """
 
 import argparse
+import random
 import socket
 import struct
 import sys
@@ -27,8 +28,11 @@ import threading
 import time
 
 MAGIC = 0x57
-HDR = struct.Struct(">BBHII")           # magic, cmd, size, seq, dur_ms
+HDR = struct.Struct(">BBHIII")          # magic, cmd, size, seq, dur_ms, session
 REPLY_LEN = 108
+# Ethernet preamble, header, FCS and gap plus IPv4 and UDP headers: what a
+# datagram costs on the wire beyond its payload
+WIRE_OVERHEAD = 8 + 14 + 4 + 12 + 20 + 8
 TESTS = ["tcp-rx", "tcp-tx", "tcp-bidir", "udp-rx", "udp-tx", "udp-bidir"]
 
 
@@ -79,7 +83,7 @@ def query(sock, addr, want_proto, timeout=5.0):
     deadline = time.monotonic() + timeout
     sock.settimeout(0.3)
     while time.monotonic() < deadline:
-        sock.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0), addr)
+        sock.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0, 0), addr)
         end = time.monotonic() + 0.3
         while time.monotonic() < end:
             try:
@@ -103,10 +107,11 @@ def drain(sock):
 
 
 class Pacer:
-    """Spread sends to rate_mbps (0 = as fast as possible)."""
+    """Spread sends to rate_mbps on the wire (0 = as fast as possible)."""
 
     def __init__(self, rate_mbps, size):
-        self.gap = size * 8.0 / (rate_mbps * 1e6) if rate_mbps > 0 else 0.0
+        bits = (size + WIRE_OVERHEAD) * 8.0
+        self.gap = bits / (rate_mbps * 1e6) if rate_mbps > 0 else 0.0
         self.next = time.perf_counter()
 
     def wait(self):
@@ -161,6 +166,7 @@ def tcp_test(ip, port, mode, secs):
 def udp_test(sock, addr, mode, secs, size, rate):
     """Returns (datagrams sent, datagrams received, bytes received, secs)."""
     dur_ms = int(secs * 1000)
+    session = random.randint(1, 0xFFFFFFFF)
     sent = [0]
     got = [0, 0]                        # datagrams, bytes
     first = [None]
@@ -177,7 +183,9 @@ def udp_test(sock, addr, mode, secs, size, rate):
                 if last[0] is not None and time.monotonic() - last[0] > idle_limit:
                     break
                 continue
-            if len(data) >= HDR.size and data[0] == MAGIC and data[1] == ord("d"):
+            if (len(data) >= HDR.size and data[0] == MAGIC and
+                    data[1] == ord("d") and
+                    HDR.unpack_from(data)[5] == session):
                 now = time.monotonic()
                 if first[0] is None:
                     first[0] = now
@@ -192,17 +200,18 @@ def udp_test(sock, addr, mode, secs, size, rate):
         rx = threading.Thread(target=receiver)
         rx.start()
     if mode == "t":
-        sock.sendto(HDR.pack(MAGIC, ord("t"), size, 0, dur_ms), addr)
+        sock.sendto(HDR.pack(MAGIC, ord("t"), size, 0, dur_ms, session), addr)
         time.sleep(1.0)
         if got[0] == 0:                 # start lost: try once more
-            sock.sendto(HDR.pack(MAGIC, ord("t"), size, 0, dur_ms), addr)
+            sock.sendto(HDR.pack(MAGIC, ord("t"), size, 0, dur_ms, session),
+                        addr)
     else:
         cmd = ord(mode)
         pacer = Pacer(rate, size)
         stop = t0 + secs
         seq = 0
         while time.monotonic() < stop:
-            HDR.pack_into(payload, 0, MAGIC, cmd, size, seq, dur_ms)
+            HDR.pack_into(payload, 0, MAGIC, cmd, size, seq, dur_ms, session)
             try:
                 sock.sendto(payload, addr)
             except (BlockingIOError, OSError):
@@ -232,7 +241,7 @@ def run_test(name, args):
             loss_rx = loss_tx = None
         else:
             # End any UDP test left running, so this one starts fresh
-            ctl.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0), addr)
+            ctl.sendto(HDR.pack(MAGIC, ord("q"), 0, 0, 0, 0), addr)
             time.sleep(0.3)
             drain(ctl)
             sent, got, got_bytes, span = udp_test(ctl, addr, mode, args.time,
@@ -298,22 +307,33 @@ def main():
     p.add_argument("--port", type=int, default=9)
     p.add_argument("--time", type=float, default=10.0, help="seconds per test")
     p.add_argument("--size", type=int, default=1472,
-                   help="UDP datagram payload bytes (12..1472)")
-    p.add_argument("--rate", type=float, default=0.0,
-                   help="UDP send rate to the board in Mbit/s (0 = unlimited)")
+                   help="UDP datagram payload bytes (16..1472)")
+    p.add_argument("--rate", type=float, default=100.0,
+                   help="UDP send rate to the board in Mbit/s on the wire "
+                        "(default 100, "
+                        "the board's link rate; 0 = unlimited). A fast host "
+                        "can send far more than the link carries; the excess "
+                        "queues in the host and reaches the board for "
+                        "seconds after the test")
     p.add_argument("--tests", default=",".join(TESTS),
                    help="comma separated subset of: " + ",".join(TESTS))
     p.add_argument("--pause", type=float, default=1.0,
                    help="seconds between tests")
     args = p.parse_args()
 
-    if not 12 <= args.size <= 1472:
-        p.error("--size must be 12..1472")
+    if not HDR.size <= args.size <= 1472:
+        p.error("--size must be {}..1472".format(HDR.size))
     names = [t.strip() for t in args.tests.split(",") if t.strip()]
     for t in names:
         if t not in TESTS:
             p.error("unknown test " + t)
 
+    if args.rate <= 0 and any(n.startswith("udp-") and n != "udp-tx"
+                              for n in names):
+        print("warning: --rate 0 sends as fast as this host can. Anything "
+              "above the link rate queues in the host and keeps reaching the "
+              "board, which may not answer for a minute or more.",
+              file=sys.stderr)
     results = []
     for i, name in enumerate(names):
         if i:

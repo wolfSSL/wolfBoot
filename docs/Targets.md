@@ -7421,11 +7421,14 @@ It prints a table of the rates and UDP loss. With this build the driver also
 counts its own core cycles (`NXP_MCXE_ENET_STATS=1`), so the table also shows
 how the CPU time divides between the driver, the frame copies, wolfIP and the
 main loop. `--tests` picks a subset, `--time` sets the duration and `--rate`
-limits the UDP send rate to the board, e.g. to find the highest rate without
-loss. The board prints the same counters on the console after each test.
+sets the UDP send rate to the board, 100 Mbit/s on the wire by default; lower
+it to find the highest rate without loss. Do not raise it above the link rate:
+a fast host (WSL can send 2 Gbit/s) queues the excess and keeps feeding it to
+the board long after the test, so the board stops answering. The board prints
+the same counters on the console after each test.
 Plain `nc <ip> 9` still works as a bidirectional TCP test.
 
-The server never returns to the console; reset the board to stop it.
+Press Ctrl-C on the console to stop the server and return to the `cmd>` prompt.
 `WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
 runs the TFTP fetch and the speed server is never started.
 

@@ -89,6 +89,14 @@ uint64_t wolfip_test_get_ms(void)
 
     return ((uint64_t)hi << 32) | lo;
 }
+
+#ifndef DEBUG_UART
+/* No console: the network test cannot be cancelled */
+int wolfip_test_abort(void)
+{
+    return 0;
+}
+#endif
 #endif
 
 static void delay_ms(uint32_t ms)
@@ -885,6 +893,19 @@ static int cmd_network(const char *args)
     (void)args;
     wolfip_tftp_test_report();
     return 0;
+}
+
+/* Non-zero when Ctrl-C arrived on the console. Other input is discarded. */
+int wolfip_test_abort(void)
+{
+    char c;
+    int abort = 0;
+
+    while (uart_getc(&c) > 0) {
+        if (c == 0x03)
+            abort = 1;
+    }
+    return abort;
 }
 #endif
 
