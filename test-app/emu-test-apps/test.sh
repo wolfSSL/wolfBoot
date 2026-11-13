@@ -24,6 +24,9 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WOLFBOOT_ROOT="${WOLFBOOT_ROOT:-$(cd "$script_dir/../.." && pwd)}"
+# The top-level Makefile defaults WOLFBOOT_ROOT to $(PWD), the caller's
+# directory under make -C, which breaks the WOLFHAL=1 include paths.
+export WOLFBOOT_ROOT
 EMU_APPS="$WOLFBOOT_ROOT/test-app/emu-test-apps"
 M33MU="${M33MU:-$(command -v m33mu || true)}"
 UPDATE_SERVER_SRC="$WOLFBOOT_ROOT/tools/test-update-server/server.c"
@@ -64,12 +67,26 @@ get_m33mu_target() {
     stm32h563|stm32h5) echo "stm32h563" ;;
     stm32u585|stm32u5) echo "stm32u585" ;;
     stm32l552|stm32l5) echo "stm32l552" ;;
+    stm32wba) echo "stm32wba55" ;;
+    stm32u3) echo "stm32u385" ;;
+    stm32c5) echo "stm32c5a3" ;;
     nrf5340) echo "nrf5340" ;;
     mcxw|mcxw71) echo "mcxw71c" ;;
     m2354) echo "m2354" ;;
     imx_rt7xx) echo "imxrt700" ;;
     mcxn) echo "mcxn947" ;;
     lpc55s69) echo "lpc55s69" ;;
+    rw612) echo "rw612" ;;
+    nrf54l)
+      if grep -qE '^[^#]*-DNRF54LM20' "$WOLFBOOT_ROOT/.config" 2>/dev/null; then
+        echo "nrf54lm20"
+      else
+        echo "nrf54l15"
+      fi
+      ;;
+    mcxa) echo "mcxa153" ;;
+    nrf5340_net) echo "nrf5340net" ;;
+    psoc_c3) echo "psc3m6" ;;
     *) echo "" ;;
   esac
 }
@@ -78,12 +95,21 @@ case "$TARGET" in
   stm32h563|stm32h5) EMU_DIR=stm32h563; UART_BASE=40004800 ;;
   stm32u585|stm32u5) EMU_DIR=stm32u585; UART_BASE=40004800 ;;
   stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
+  stm32wba) EMU_DIR=stm32wba55; UART_BASE=40013800 ;;
+  stm32u3) EMU_DIR=stm32u385; UART_BASE=40013800 ;;
+  stm32c5) EMU_DIR=stm32c5a3; UART_BASE=40004400 ;;
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
-  mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
+  mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40039000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
   imx_rt7xx) EMU_DIR=imxrt700; UART_BASE=40110000 ;;
   mcxn) EMU_DIR=mcxn947; UART_BASE=40096000; HANDOFF_CHECK=1 ;;
   lpc55s69) EMU_DIR=lpc55s69; UART_BASE=40086000 ;;
+  rw612) EMU_DIR=rw612; UART_BASE=40109000 ;;
+  nrf54l) EMU_DIR=nrf54l; UART_BASE=400c6000 ;;
+  mcxa) EMU_DIR=mcxa; UART_BASE=4009f000 ;;
+  nrf5340_net) EMU_DIR=nrf5340_net; UART_BASE=41013000 ;;
+  # SCB3, labelled by its non-secure alias
+  psoc_c3) EMU_DIR=psoc_c3; UART_BASE=42860000 ;;
   *) die "unsupported TARGET=$TARGET" ;;
  esac
 
@@ -91,6 +117,13 @@ EMU_CPU="$(get_m33mu_target "$TARGET")"
 [[ -n "$EMU_CPU" ]] || die "unsupported TARGET=$TARGET (no m33mu mapping)"
 
 need_cmd "$M33MU"
+M33MU_CPUS="$("$M33MU" --cpu list 2>&1 || true)"
+grep -qw -- "$EMU_CPU" <<<"$M33MU_CPUS" || \
+  die "$M33MU has no --cpu $EMU_CPU model; use an m33mu build that provides it"
+# The nRF54LM20 model gained RRAMC buffering and SPU/MPC with nrf54l15.
+if [[ "$TARGET" == "nrf54l" ]] && ! grep -qw -- nrf54l15 <<<"$M33MU_CPUS"; then
+  die "$M33MU predates the shared nRF54L model; use an m33mu build with nrf54l15"
+fi
 need_cmd make
 need_cmd grep
 need_cmd python3
@@ -100,8 +133,18 @@ need_cmd cut
 need_cmd tac
 
 IMAGE_HEADER_SIZE="$(cfg_get IMAGE_HEADER_SIZE)"
+if [[ -z "$IMAGE_HEADER_SIZE" ]]; then
+  # options.mk raises the default header size for larger signatures/hashes.
+  IMAGE_HEADER_SIZE="$(printf 'emu-image-header-size:\n\t@echo $(IMAGE_HEADER_SIZE)\n' | \
+    make -s --no-print-directory -C "$WOLFBOOT_ROOT" -f Makefile -f - \
+    emu-image-header-size || true)"
+fi
 IMAGE_HEADER_SIZE="${IMAGE_HEADER_SIZE:-256}"
 ARCH_OFFSET="$(cfg_get ARCH_OFFSET)"
+# The nRF5340 network core config places its flash at 0x01000000 this way.
+if [[ -z "$ARCH_OFFSET" ]]; then
+  ARCH_OFFSET="$(cfg_get ARCH_FLASH_OFFSET)"
+fi
 ARCH_OFFSET="${ARCH_OFFSET:-0}"
 BOOT_ADDR="$(cfg_get WOLFBOOT_PARTITION_BOOT_ADDRESS)"
 UPDATE_ADDR="$(cfg_get WOLFBOOT_PARTITION_UPDATE_ADDRESS)"
@@ -109,6 +152,8 @@ PART_SIZE="$(cfg_get WOLFBOOT_PARTITION_SIZE)"
 SECTOR_SIZE="$(cfg_get WOLFBOOT_SECTOR_SIZE)"
 RAM_CODE="$(cfg_get RAM_CODE)"
 TZEN="$(cfg_get TZEN)"
+FLAGS_INVERT="$(cfg_get FLAGS_INVERT)"
+FLAGS_INVERT="${FLAGS_INVERT:-0}"
 
 [[ -n "$BOOT_ADDR" && -n "$UPDATE_ADDR" && -n "$PART_SIZE" && -n "$SECTOR_SIZE" ]] || \
   die "missing required config values (boot/update addr, partition/sector size)"
@@ -118,7 +163,8 @@ TZEN="$(cfg_get TZEN)"
 # M2354 and MCXN are excluded: their flash starts at 0 and the high partition
 # addresses are an alias, not a different flash base.
 if [[ "$ARCH_OFFSET" == "0" || "$ARCH_OFFSET" == "0x0" ]]; then
-  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" && "$TARGET" != "mcxn" ]] && \
+  if [[ "$TARGET" != "m2354" && "$TARGET" != "imx_rt7xx" && "$TARGET" != "mcxn" && \
+      "$TARGET" != "psoc_c3" ]] && \
       (( BOOT_ADDR >= 0x08000000 )); then
     ARCH_OFFSET=0x08000000
   fi
@@ -133,6 +179,12 @@ if [[ "$TARGET" == "imx_rt7xx" ]]; then
   else
     ARCH_OFFSET=0x28000000
   fi
+fi
+
+# PSOC Control C3 links at the Secure CBUS alias of the flash; the image
+# offsets are taken from that base (arch.mk ARCH_FLASH_OFFSET).
+if [[ "$TARGET" == "psoc_c3" ]]; then
+  ARCH_OFFSET=0x12000000
 fi
 
 normalize_flash_addr() {
@@ -230,12 +282,20 @@ write_target_ld() {
     stm32h563|stm32h5) base="ARM-stm32h5" ;;
     stm32u585|stm32u5) base="ARM-stm32u5" ;;
     stm32l552|stm32l5) base="ARM-stm32l5" ;;
+    stm32wba) base="ARM-stm32wba" ;;
+    stm32u3) base="ARM-stm32u3" ;;
+    stm32c5) base="ARM-stm32c5" ;;
     nrf5340) base="ARM-nrf5340" ;;
     mcxw|mcxw71) base="ARM-mcxw" ;;
     m2354) base="ARM-m2354" ;;
     imx_rt7xx) base="ARM-imx_rt7xx" ;;
     mcxn) base="ARM-mcxn" ;;
     lpc55s69) base="ARM-lpc55s69" ;;
+    rw612) base="ARM-rw612" ;;
+    nrf54l) base="ARM-nrf54l" ;;
+    mcxa) base="ARM-mcxa" ;;
+    nrf5340_net) base="ARM-nrf5340_net" ;;
+    psoc_c3) base="ARM-psoc_c3" ;;
     *) die "unsupported TARGET for linker template: $TARGET" ;;
   esac
 
@@ -316,24 +376,22 @@ assemble_factory() {
 
 print_partition_flags() {
   local label="$1"
-  python3 - "$FACTORY_FLASH" "$BOOT_FLAGS_OFFSET_HEX" "$UPDATE_FLAGS_OFFSET_HEX" "$SECTOR_SIZE" <<'PY' | sed "s/^/==> ${label}: /"
+  python3 - "$FACTORY_FLASH" "$BOOT_FLAGS_OFFSET_HEX" "$UPDATE_FLAGS_OFFSET_HEX" "$SECTOR_SIZE" "$FLAGS_INVERT" <<'PY' | sed "s/^/==> ${label}: /"
 import sys
-path, boot_s, update_s, sect_s = sys.argv[1:5]
+path, boot_s, update_s, sect_s, invert_s = sys.argv[1:6]
 boot = int(boot_s, 0)
 update = int(update_s, 0)
 sect = int(sect_s, 0)
+# FLAGS_INVERT=1 targets erase to 0x00 and store every state bit-inverted.
+invert = 0xFF if invert_s == "1" else 0x00
+states = {0xFF ^ invert: "NEW", 0x70 ^ invert: "UPDATING",
+          0x10 ^ invert: "TESTING", 0x00 ^ invert: "SUCCESS"}
 
 def decode(state):
     if state is None:
         return "MISSING"
-    if state == 0xFF:
-        return "NEW(0xFF)"
-    if state == 0x70:
-        return "UPDATING(0x70)"
-    if state == 0x10:
-        return "TESTING(0x10)"
-    if state == 0x00:
-        return "SUCCESS(0x00)"
+    if state in states:
+        return f"{states[state]}(0x{state:02X})"
     return f"0x{state:02x}"
 
 def read_state(endflags):

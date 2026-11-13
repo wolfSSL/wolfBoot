@@ -42,9 +42,320 @@
 #define FLASH_CR_SNB_MASK (0x7fu << FLASH_CR_SNB_SHIFT)
 #endif
 
+#if defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+/* STM32WBA / STM32U3 non-secure flash controller (RM0493 / RM0487): pages
+ * are erased by number, flash words are programmed by consecutive stores
+ * with PG set and may only be programmed once between erases. */
+#define STM32NS_FLASH_BASE 0x40022000u
+#define STM32NS_NSKEYR    (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x008u))
+#define STM32NS_NSSR      (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x020u))
+#define STM32NS_NSCR      (*(volatile uint32_t *)(STM32NS_FLASH_BASE + 0x028u))
+#define STM32NS_KEY1      0x45670123u
+#define STM32NS_KEY2      0xCDEF89ABu
+#define STM32NS_SR_BSY    (1u << 16)
+#define STM32NS_SR_WDW    (1u << 17)
+#define STM32NS_SR_ERRORS 0x20FAu
+#define STM32NS_CR_PG     (1u << 0)
+#define STM32NS_CR_PER    (1u << 1)
+#define STM32NS_CR_PNB_SHIFT 3
+#define STM32NS_CR_PNB_MASK (0x7Fu << STM32NS_CR_PNB_SHIFT)
+#define STM32NS_CR_BKER   (1u << 11)
+#define STM32NS_CR_STRT   (1u << 16)
+#define STM32NS_CR_LOCK   (1u << 31)
+#define STM32NS_FLASH_START 0x08000000u
+#if defined(EMU_STM32WBA)
+#define STM32NS_PAGE_SIZE 0x2000u
+#define STM32NS_WORD_SIZE 16u
+#define STM32NS_BANK_SIZE 0x100000u
+#else
+#define STM32NS_PAGE_SIZE 0x1000u
+#define STM32NS_WORD_SIZE 8u
+#define STM32NS_BANK_SIZE 0x80000u
+#endif
+
+static void stm32ns_wait(void)
+{
+    while ((STM32NS_NSSR & (STM32NS_SR_BSY | STM32NS_SR_WDW)) != 0u) {
+    }
+}
+
+/* Whole flash words only: the bytes outside [address, address + len) keep
+ * what the flash holds, 0xFF on an erased word. */
+static int stm32ns_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t word = address & ~(STM32NS_WORD_SIZE - 1u);
+    uint32_t buf[STM32NS_WORD_SIZE / 4u];
+    uint8_t *b = (uint8_t *)buf;
+    volatile uint32_t *dst;
+    uint32_t i;
+    uint32_t lo;
+    uint32_t hi;
+
+    while (word < end) {
+        memcpy(b, (const void *)word, STM32NS_WORD_SIZE);
+        lo = (address > word) ? address - word : 0u;
+        hi = (end < word + STM32NS_WORD_SIZE) ? end - word : STM32NS_WORD_SIZE;
+        memcpy(b + lo, data + (word + lo - address), hi - lo);
+        stm32ns_wait();
+        STM32NS_NSSR = STM32NS_SR_ERRORS;
+        STM32NS_NSCR |= STM32NS_CR_PG;
+        dst = (volatile uint32_t *)word;
+        for (i = 0; i < STM32NS_WORD_SIZE / 4u; i++) {
+            dst[i] = buf[i];
+        }
+        stm32ns_wait();
+        STM32NS_NSCR &= ~STM32NS_CR_PG;
+        if ((STM32NS_NSSR & STM32NS_SR_ERRORS) != 0u) {
+            STM32NS_NSSR = STM32NS_SR_ERRORS;
+            return -1;
+        }
+        word += STM32NS_WORD_SIZE;
+    }
+    return 0;
+}
+
+static int stm32ns_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+    uint32_t cr;
+    uint32_t off;
+
+    for (p = address & ~(STM32NS_PAGE_SIZE - 1u); p < end; p += STM32NS_PAGE_SIZE) {
+        off = p - STM32NS_FLASH_START;
+        stm32ns_wait();
+        STM32NS_NSSR = STM32NS_SR_ERRORS;
+        cr = STM32NS_NSCR & ~(STM32NS_CR_PNB_MASK | STM32NS_CR_BKER);
+        cr |= STM32NS_CR_PER |
+            (((off % STM32NS_BANK_SIZE) / STM32NS_PAGE_SIZE) << STM32NS_CR_PNB_SHIFT);
+        if (off >= STM32NS_BANK_SIZE) {
+            cr |= STM32NS_CR_BKER;
+        }
+        STM32NS_NSCR = cr;
+        STM32NS_NSCR |= STM32NS_CR_STRT;
+        stm32ns_wait();
+        STM32NS_NSCR &= ~STM32NS_CR_PER;
+        if ((STM32NS_NSSR & STM32NS_SR_ERRORS) != 0u) {
+            STM32NS_NSSR = STM32NS_SR_ERRORS;
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
+#if defined(EMU_STM32C5)
+/* STM32C5 flash controller: the STM32H5 one with 8 KB pages, a 128-bit
+ * write buffer and CCR clearing the status flags. */
+#define STM32C5_FLASH_BASE 0x40022000u
+#define STM32C5_KEYR      (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x004u))
+#define STM32C5_SR        (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x020u))
+#define STM32C5_CR        (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x028u))
+#define STM32C5_CCR       (*(volatile uint32_t *)(STM32C5_FLASH_BASE + 0x030u))
+#define STM32C5_KEY1      0x45670123u
+#define STM32C5_KEY2      0xCDEF89ABu
+#define STM32C5_SR_BSY    (1u << 0)
+#define STM32C5_SR_WBNE   (1u << 1)
+#define STM32C5_SR_DBNE   (1u << 3)
+#define STM32C5_SR_ERRORS 0x009E0000u
+#define STM32C5_CR_LOCK   (1u << 0)
+#define STM32C5_CR_PG     (1u << 1)
+#define STM32C5_CR_PER    (1u << 2)
+#define STM32C5_CR_STRT   (1u << 5)
+#define STM32C5_CR_PNB_SHIFT 6
+#define STM32C5_CR_PNB_MASK (0x3Fu << STM32C5_CR_PNB_SHIFT)
+#define STM32C5_CR_BKSEL  (1u << 31)
+#define STM32C5_FLASH_START 0x08000000u
+#define STM32C5_PAGE_SIZE 0x2000u
+#define STM32C5_WORD_SIZE 16u
+#define STM32C5_BANK_SIZE 0x80000u
+
+static void stm32c5_wait(void)
+{
+    while ((STM32C5_SR & (STM32C5_SR_BSY | STM32C5_SR_WBNE | STM32C5_SR_DBNE)) != 0u) {
+    }
+}
+
+/* Whole quad words only: the bytes outside [address, address + len) keep
+ * what the flash holds, 0xFF on an erased word. */
+static int stm32c5_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t word = address & ~(STM32C5_WORD_SIZE - 1u);
+    uint32_t buf[STM32C5_WORD_SIZE / 4u];
+    uint8_t *b = (uint8_t *)buf;
+    volatile uint32_t *dst;
+    uint32_t i;
+    uint32_t lo;
+    uint32_t hi;
+
+    while (word < end) {
+        memcpy(b, (const void *)word, STM32C5_WORD_SIZE);
+        lo = (address > word) ? address - word : 0u;
+        hi = (end < word + STM32C5_WORD_SIZE) ? end - word : STM32C5_WORD_SIZE;
+        memcpy(b + lo, data + (word + lo - address), hi - lo);
+        stm32c5_wait();
+        STM32C5_CCR = STM32C5_SR_ERRORS;
+        STM32C5_CR |= STM32C5_CR_PG;
+        dst = (volatile uint32_t *)word;
+        for (i = 0; i < STM32C5_WORD_SIZE / 4u; i++) {
+            dst[i] = buf[i];
+        }
+        stm32c5_wait();
+        STM32C5_CR &= ~STM32C5_CR_PG;
+        if ((STM32C5_SR & STM32C5_SR_ERRORS) != 0u) {
+            STM32C5_CCR = STM32C5_SR_ERRORS;
+            return -1;
+        }
+        word += STM32C5_WORD_SIZE;
+    }
+    return 0;
+}
+
+static int stm32c5_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+    uint32_t cr;
+    uint32_t off;
+
+    for (p = address & ~(STM32C5_PAGE_SIZE - 1u); p < end; p += STM32C5_PAGE_SIZE) {
+        off = p - STM32C5_FLASH_START;
+        stm32c5_wait();
+        STM32C5_CCR = STM32C5_SR_ERRORS;
+        cr = STM32C5_CR & ~(STM32C5_CR_PNB_MASK | STM32C5_CR_BKSEL);
+        cr |= STM32C5_CR_PER |
+            (((off % STM32C5_BANK_SIZE) / STM32C5_PAGE_SIZE) << STM32C5_CR_PNB_SHIFT);
+        if (off >= STM32C5_BANK_SIZE) {
+            cr |= STM32C5_CR_BKSEL;
+        }
+        STM32C5_CR = cr;
+        STM32C5_CR |= STM32C5_CR_STRT;
+        stm32c5_wait();
+        STM32C5_CR &= ~STM32C5_CR_PER;
+        if ((STM32C5_SR & STM32C5_SR_ERRORS) != 0u) {
+            STM32C5_CCR = STM32C5_SR_ERRORS;
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
+
 #if defined(EMU_NRF5340)
 #define NVMC_BASE         0x40039000u
 #define NVMC_CONFIG       (*(volatile uint32_t *)(NVMC_BASE + 0x504u))
+#define NVMC_CONFIGNS     (*(volatile uint32_t *)(NVMC_BASE + 0x584u))
+#endif
+
+#if defined(EMU_NRF54L)
+/* RRAM is written in place through the RRAMC: CONFIG.WEN gates the stores and
+ * 0xFFFFFFFF words are the erase. Only reached with TZEN=0; the non-secure app
+ * goes through the wolfBoot_nsc_* veneers, as the RRAMC stays secure. */
+#ifdef NRF54LM20
+#define RRAMC_BASE        0x5004E000u
+#else
+#define RRAMC_BASE        0x5004B000u
+#endif
+#define RRAMC_TASKS_COMMITWRITEBUF (*(volatile uint32_t *)(RRAMC_BASE + 0x008u))
+#define RRAMC_READY       (*(volatile uint32_t *)(RRAMC_BASE + 0x400u))
+#define RRAMC_READYNEXT   (*(volatile uint32_t *)(RRAMC_BASE + 0x404u))
+#define RRAMC_BUFSTATUS_WRITEBUFEMPTY (*(volatile uint32_t *)(RRAMC_BASE + 0x418u))
+#define RRAMC_CONFIG      (*(volatile uint32_t *)(RRAMC_BASE + 0x500u))
+#define RRAMC_CONFIG_WEN  (1u << 0)
+#define RRAMC_READY_BIT   (1u << 0)
+#define RRAMC_BUFEMPTY_BIT (1u << 0)
+
+static void nrf54l_write_enable(int enable)
+{
+    if (enable != 0) {
+        RRAMC_CONFIG |= RRAMC_CONFIG_WEN;
+    }
+    else {
+        RRAMC_CONFIG &= ~RRAMC_CONFIG_WEN;
+    }
+    while ((RRAMC_READY & RRAMC_READY_BIT) == 0u) {
+    }
+}
+
+static void nrf54l_wait_ready_next(void)
+{
+    while ((RRAMC_READYNEXT & RRAMC_READY_BIT) == 0u) {
+    }
+}
+
+static void nrf54l_commit(void)
+{
+    if ((RRAMC_BUFSTATUS_WRITEBUFEMPTY & RRAMC_BUFEMPTY_BIT) == 0u) {
+        RRAMC_TASKS_COMMITWRITEBUF = 1u;
+        while ((RRAMC_READY & RRAMC_READY_BIT) == 0u) {
+        }
+        while ((RRAMC_BUFSTATUS_WRITEBUFEMPTY & RRAMC_BUFEMPTY_BIT) == 0u) {
+        }
+    }
+}
+
+/* Word stores where aligned, read-modify-write of the word otherwise */
+static void nrf54l_program(uint32_t address, const uint8_t *data, uint32_t len)
+{
+    uint32_t i = 0u;
+    uint32_t off;
+    uint32_t word;
+    volatile uint32_t *dst;
+
+    while (i < len) {
+        nrf54l_wait_ready_next();
+        dst = (volatile uint32_t *)((address + i) & ~0x3u);
+        off = (address + i) & 0x3u;
+        word = *dst;
+        if ((off == 0u) && ((len - i) >= 4u)) {
+            memcpy(&word, data + i, sizeof(word));
+            i += 4u;
+        }
+        else {
+            ((uint8_t *)&word)[off] = data[i];
+            i++;
+        }
+        *dst = word;
+    }
+}
+
+static int nrf54l_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    nrf54l_write_enable(1);
+    nrf54l_program(address, data, (uint32_t)len);
+    nrf54l_commit();
+    nrf54l_write_enable(0);
+    return 0;
+}
+
+static const uint32_t nrf54l_blank[16] = {
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu,
+    0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu
+};
+
+/* Erasing is programming 0xFF over exactly [address, address + len) */
+static int nrf54l_flash_erase(uint32_t address, int len)
+{
+    uint32_t done = 0u;
+    uint32_t chunk;
+
+    nrf54l_write_enable(1);
+    while (done < (uint32_t)len) {
+        chunk = (uint32_t)len - done;
+        if (chunk > sizeof(nrf54l_blank)) {
+            chunk = sizeof(nrf54l_blank);
+        }
+        nrf54l_program(address + done, (const uint8_t *)nrf54l_blank, chunk);
+        done += chunk;
+    }
+    nrf54l_commit();
+    nrf54l_write_enable(0);
+    return 0;
+}
 #endif
 
 #if defined(EMU_M2354)
@@ -389,6 +700,535 @@ static int lpc55s69_flash_erase(uint32_t address, int len)
 }
 #endif
 
+#if defined(EMU_MCXW)
+/* MCX W71 FMU0: one phrase per command, data stored through the secure flash
+ * alias while FSTAT.PEWEN is set, as the wolfBoot HAL does. Only reached with
+ * TZEN=0: the non-secure app goes through the wolfBoot_nsc_* veneers. */
+#define FMU0_BASE           0x40020000u
+#define FMU0_FSTAT          (*(volatile uint32_t *)(FMU0_BASE + 0x00u))
+#define FMU0_FCCOB0         (*(volatile uint32_t *)(FMU0_BASE + 0x10u))
+#define FMU_FSTAT_CCIF      0x00000080u
+#define FMU_FSTAT_PEWEN     0x03000000u
+#define FMU_FSTAT_PERDY     0x80000000u
+#define FMU_FSTAT_ERR       0x00000075u
+#define FMU_FSTAT_CLEAR     0x00010074u
+#define FMU_CMD_PGMPHR      0x24u
+#define FMU_CMD_ERSSCR      0x42u
+#define MCXW_SECURE_ALIAS   0x10000000u
+#define MCXW_PHRASE_SIZE    16u
+#define MCXW_PHRASE_WORDS   (MCXW_PHRASE_SIZE / 4u)
+#define MCXW_SECTOR_SIZE    0x2000u
+/* The flash cannot be read while a command runs, so this code sits in SRAM */
+#define MCXW_RAMFUNCTION    __attribute__((used, noinline, long_call, \
+                                section(".ramcode")))
+
+static uint32_t MCXW_RAMFUNCTION mcxw_fmu_wait(uint32_t mask)
+{
+    uint32_t fstat;
+
+    do {
+        fstat = FMU0_FSTAT;
+    } while (((fstat & mask) == 0u) && ((fstat & FMU_FSTAT_ERR) == 0u));
+    return fstat;
+}
+
+static int MCXW_RAMFUNCTION mcxw_fmu_cmd(uint32_t cmd, uint32_t address,
+    const uint32_t *words)
+{
+    volatile uint32_t *dst;
+    uint32_t primask;
+    uint32_t fstat;
+    uint32_t i;
+
+    dst = (volatile uint32_t *)(address | MCXW_SECURE_ALIAS);
+    __asm volatile("mrs %0, primask" : "=r"(primask));
+    __asm volatile("cpsid i" ::: "memory");
+
+    while ((FMU0_FSTAT & FMU_FSTAT_CCIF) == 0u) {
+    }
+    FMU0_FSTAT = FMU_FSTAT_CLEAR;
+    FMU0_FCCOB0 = cmd;
+    FMU0_FSTAT = FMU_FSTAT_CCIF;
+
+    fstat = mcxw_fmu_wait(FMU_FSTAT_PEWEN);
+    if ((fstat & FMU_FSTAT_ERR) == 0u) {
+        for (i = 0u; i < MCXW_PHRASE_WORDS; i++) {
+            dst[i] = (words != 0) ? words[i] : 0u;
+        }
+        fstat = mcxw_fmu_wait(FMU_FSTAT_PERDY);
+    }
+    if ((fstat & FMU_FSTAT_ERR) == 0u) {
+        FMU0_FSTAT = FMU_FSTAT_PERDY;
+    }
+    do {
+        fstat = FMU0_FSTAT;
+    } while ((fstat & FMU_FSTAT_CCIF) == 0u);
+
+    __asm volatile("msr primask, %0" : : "r"(primask) : "memory");
+    return ((fstat & FMU_FSTAT_ERR) != 0u) ? -1 : 0;
+}
+
+/* Merges into the current phrase; a programmed phrase is only rewritten after
+ * an erase, which is what the ECC flash allows. */
+static int mcxw_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t phrase[MCXW_PHRASE_WORDS];
+    uint8_t *p = (uint8_t *)phrase;
+    const volatile uint32_t *cur;
+    uint32_t off;
+    uint32_t chunk;
+    uint32_t i;
+    int erased;
+    int changed;
+    int ret = 0;
+
+    address &= ~MCXW_SECURE_ALIAS;
+    while ((len > 0) && (ret == 0)) {
+        off = address & (MCXW_PHRASE_SIZE - 1u);
+        chunk = MCXW_PHRASE_SIZE - off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        cur = (const volatile uint32_t *)(address - off);
+        erased = 1;
+        for (i = 0u; i < MCXW_PHRASE_WORDS; i++) {
+            phrase[i] = cur[i];
+            if (phrase[i] != 0xFFFFFFFFu) {
+                erased = 0;
+            }
+        }
+        changed = 0;
+        for (i = 0u; i < chunk; i++) {
+            if (p[off + i] != data[i]) {
+                p[off + i] = data[i];
+                changed = 1;
+            }
+        }
+        if (changed && !erased) {
+            ret = -1;
+        }
+        else if (changed) {
+            ret = mcxw_fmu_cmd(FMU_CMD_PGMPHR, address - off, phrase);
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int mcxw_flash_erase(uint32_t address, int len)
+{
+    uint32_t end;
+    int ret = 0;
+
+    address &= ~MCXW_SECURE_ALIAS;
+    end = address + (uint32_t)len;
+    address -= address % MCXW_SECTOR_SIZE;
+    while ((address < end) && (ret == 0)) {
+        ret = mcxw_fmu_cmd(FMU_CMD_ERSSCR, address, 0);
+        address += MCXW_SECTOR_SIZE;
+    }
+    return ret;
+}
+#endif
+
+#if defined(EMU_RW612)
+/* FlexSPI NOR through the boot ROM driver, the path hal/rw612.c takes. Only
+ * reached with TZEN=0: the non-secure app goes through the wolfBoot_nsc_*
+ * veneers instead, as FlexSPI and the ROM driver stay secure. */
+#define RW612_CHIP_INFO          (*(volatile uint32_t *)0x45001114u)
+#define RW612_ROM_API_TREE_A0    0x13024100u
+#define RW612_ROM_API_TREE_A1    0x13030000u
+#define RW612_ROM_API_FLEXSPI_IDX 5u
+#define RW612_FLASH_BASE         0x08000000u
+#define RW612_FLASH_ALIAS_MASK   0x0FFFFFFFu
+#define RW612_FCB_ADDRESS        (RW612_FLASH_BASE + 0x400u)
+#define RW612_FCB_SIZE           0x200u
+#define RW612_NOR_PAGE_SIZE      256u
+#define RW612_NOR_SECTOR_SIZE    0x1000u
+#define RW612_FLEXSPI_AHBCR      (*(volatile uint32_t *)0x4013400Cu)
+#define RW612_AHBCR_CLRAHBRXBUF  0x00000002u
+#define RW612_CACHE64_CCR        (*(volatile uint32_t *)0x40033800u)
+#define RW612_CCR_INVW0          0x01000000u
+#define RW612_CCR_INVW1          0x04000000u
+#define RW612_CCR_GO             0x80000000u
+
+/* Leading entries of flexspi_nor_flash_driver_t (fsl_romapi_flexspi.h) */
+typedef struct {
+    uint32_t version;
+    int32_t (*init)(uint32_t instance, void *config);
+    int32_t (*wait_busy)(uint32_t instance, void *config, uint32_t address,
+        int keep_state);
+    int32_t (*page_program)(uint32_t instance, void *config, uint32_t dst,
+        const uint32_t *src, int keep_state);
+    int32_t (*erase_all)(uint32_t instance, void *config);
+    int32_t (*erase)(uint32_t instance, void *config, uint32_t start,
+        uint32_t length);
+    int32_t (*erase_sector)(uint32_t instance, void *config, uint32_t address);
+} rw612_nor_driver_t;
+
+static uint32_t rw612_nor_cfg[RW612_FCB_SIZE / sizeof(uint32_t)];
+static uint32_t rw612_page[RW612_NOR_PAGE_SIZE / sizeof(uint32_t)];
+static const rw612_nor_driver_t *rw612_nor;
+
+static void rw612_flash_cache_flush(void)
+{
+    RW612_FLEXSPI_AHBCR |= RW612_AHBCR_CLRAHBRXBUF;
+    RW612_FLEXSPI_AHBCR &= ~RW612_AHBCR_CLRAHBRXBUF;
+    RW612_CACHE64_CCR |= RW612_CCR_INVW0 | RW612_CCR_INVW1 | RW612_CCR_GO;
+    while ((RW612_CACHE64_CCR & RW612_CCR_GO) != 0u) {
+    }
+    RW612_CACHE64_CCR &= ~(RW612_CCR_INVW0 | RW612_CCR_INVW1);
+}
+
+static int rw612_nor_init(void)
+{
+    uint32_t tree;
+
+    if (rw612_nor != 0) {
+        return 0;
+    }
+    tree = ((RW612_CHIP_INFO & 0x0Fu) == 0u) ?
+        RW612_ROM_API_TREE_A0 : RW612_ROM_API_TREE_A1;
+    memcpy(rw612_nor_cfg, (const void *)RW612_FCB_ADDRESS,
+        sizeof(rw612_nor_cfg));
+    rw612_nor = (const rw612_nor_driver_t *)(uintptr_t)
+        ((const uint32_t *)(uintptr_t)tree)[RW612_ROM_API_FLEXSPI_IDX];
+    if (rw612_nor->init(0u, rw612_nor_cfg) != 0) {
+        rw612_nor = 0;
+        return -1;
+    }
+    rw612_flash_cache_flush();
+    return 0;
+}
+
+static int rw612_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t offset;
+    uint32_t page_off;
+    uint32_t chunk;
+    uint32_t i;
+    int ret = 0;
+
+    if (rw612_nor_init() != 0) {
+        return -1;
+    }
+    offset = (address & RW612_FLASH_ALIAS_MASK) - RW612_FLASH_BASE;
+    while ((len > 0) && (ret == 0)) {
+        page_off = offset & (RW612_NOR_PAGE_SIZE - 1u);
+        chunk = RW612_NOR_PAGE_SIZE - page_off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        for (i = 0u; i < (RW612_NOR_PAGE_SIZE / sizeof(uint32_t)); i++) {
+            rw612_page[i] = 0xFFFFFFFFu;
+        }
+        memcpy((uint8_t *)rw612_page + page_off, data, chunk);
+        if (rw612_nor->page_program(0u, rw612_nor_cfg, offset - page_off,
+                rw612_page, 0) != 0) {
+            ret = -1;
+        }
+        rw612_flash_cache_flush();
+        offset += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int rw612_flash_erase(uint32_t address, int len)
+{
+    uint32_t offset;
+    uint32_t end;
+    int ret = 0;
+
+    if (rw612_nor_init() != 0) {
+        return -1;
+    }
+    offset = (address & RW612_FLASH_ALIAS_MASK) - RW612_FLASH_BASE;
+    end = offset + (uint32_t)len;
+    offset -= offset % RW612_NOR_SECTOR_SIZE;
+    while ((offset < end) && (ret == 0)) {
+        if (rw612_nor->erase_sector(0u, rw612_nor_cfg, offset) != 0) {
+            ret = -1;
+        }
+        rw612_flash_cache_flush();
+        offset += RW612_NOR_SECTOR_SIZE;
+    }
+    return ret;
+}
+#endif
+
+#if defined(EMU_MCXA)
+/* MCX A153: internal flash is programmed through the ROM API only, one
+ * 16-byte phrase at a time, merged with the current contents as the wolfBoot
+ * HAL does (programming can only clear bits). */
+#define MCXA_ROM_API_TREE     0x03003FE0u
+#define MCXA_FLASH_ERASE_KEY  0x6B65666Cu
+#define MCXA_PHRASE_SIZE      16u
+#define MCXA_SECTOR_SIZE      0x2000u
+
+struct mcxa_flash_api {
+    int32_t (*init)(void *config);
+    int32_t (*erase_sector)(void *config, uint32_t start, uint32_t len,
+        uint32_t key);
+    int32_t (*program_phrase)(void *config, uint32_t start,
+        const uint8_t *src, uint32_t len);
+};
+
+static uint32_t mcxa_flash_config[16];
+static int mcxa_flash_ready;
+
+static const struct mcxa_flash_api *mcxa_flash(void)
+{
+    const struct mcxa_flash_api *api =
+        *(const struct mcxa_flash_api * const *)(MCXA_ROM_API_TREE + 4u);
+
+    if (mcxa_flash_ready == 0) {
+        if (api->init(mcxa_flash_config) == 0) {
+            mcxa_flash_ready = 1;
+        }
+    }
+    return api;
+}
+
+static int mcxa_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint8_t phrase[MCXA_PHRASE_SIZE];
+    uint32_t off;
+    uint32_t chunk;
+    uint32_t i;
+    int blank;
+    int ret = 0;
+
+    while ((len > 0) && (ret == 0)) {
+        off = address & (MCXA_PHRASE_SIZE - 1u);
+        chunk = MCXA_PHRASE_SIZE - off;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        memcpy(phrase, (const void *)(address - off), sizeof(phrase));
+        memcpy(phrase + off, data, chunk);
+        blank = 1;
+        for (i = 0u; i < MCXA_PHRASE_SIZE; i++) {
+            if (phrase[i] != 0xFFu) {
+                blank = 0;
+            }
+        }
+        if (!blank && mcxa_flash()->program_phrase(mcxa_flash_config,
+                address - off, phrase, sizeof(phrase)) != 0) {
+            ret = -1;
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return ret;
+}
+
+static int mcxa_flash_erase(uint32_t address, int len)
+{
+    uint32_t start = address & ~(MCXA_SECTOR_SIZE - 1u);
+    uint32_t end = (address + (uint32_t)len + MCXA_SECTOR_SIZE - 1u) &
+        ~(MCXA_SECTOR_SIZE - 1u);
+
+    if (mcxa_flash()->erase_sector(mcxa_flash_config, start, end - start,
+            MCXA_FLASH_ERASE_KEY) != 0) {
+        return -1;
+    }
+    return 0;
+}
+#endif
+
+#if defined(EMU_NRF5340_NET)
+/* Network core NVMC: word stores with CONFIG.WEN set; nRF53 has no ERASEPAGE
+ * register, a page is erased by writing 0xFFFFFFFF to its first word with
+ * CONFIG.EEN set, as the wolfBoot HAL does. */
+#define NVMC_NET_BASE     0x41080000u
+#define NVMC_NET_READY    (*(volatile uint32_t *)(NVMC_NET_BASE + 0x400u))
+#define NVMC_NET_CONFIG   (*(volatile uint32_t *)(NVMC_NET_BASE + 0x504u))
+#define NVMC_NET_WEN      1u
+#define NVMC_NET_EEN      2u
+#define NVMC_NET_PAGE     0x800u
+
+static void nrf5340_net_wait_ready(void)
+{
+    while (NVMC_NET_READY == 0u) {
+    }
+}
+
+static int nrf5340_net_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t i = 0u;
+    uint32_t off;
+    uint32_t word;
+    volatile uint32_t *dst;
+
+    NVMC_NET_CONFIG = NVMC_NET_WEN;
+    nrf5340_net_wait_ready();
+    while (i < (uint32_t)len) {
+        dst = (volatile uint32_t *)((address + i) & ~0x3u);
+        off = (address + i) & 0x3u;
+        word = *dst;
+        if ((off == 0u) && (((uint32_t)len - i) >= 4u)) {
+            memcpy(&word, data + i, sizeof(word));
+            i += 4u;
+        }
+        else {
+            ((uint8_t *)&word)[off] = data[i];
+            i++;
+        }
+        *dst = word;
+        nrf5340_net_wait_ready();
+    }
+    NVMC_NET_CONFIG = 0u;
+    return 0;
+}
+
+static int nrf5340_net_flash_erase(uint32_t address, int len)
+{
+    uint32_t end = address + (uint32_t)len;
+    uint32_t p;
+
+    for (p = address & ~(NVMC_NET_PAGE - 1u); p < end; p += NVMC_NET_PAGE) {
+        NVMC_NET_CONFIG = NVMC_NET_EEN;
+        nrf5340_net_wait_ready();
+        *(volatile uint32_t *)p = 0xFFFFFFFFu;
+        nrf5340_net_wait_ready();
+    }
+    NVMC_NET_CONFIG = 0u;
+    return 0;
+}
+#endif
+
+#if defined(EMU_PSOC_C3)
+/* Boot ROM flash API, the path hal/psoc_c3.c takes: blocking erase_row and
+ * write_row on 512-byte rows addressed through the Secure SBUS alias, with
+ * the row read back from the CBUS view for a read-modify-write. */
+#include "hal/psoc_c3.h"
+#define PSOC_C3_ROM_BASE        0x10800000u
+#define PSOC_C3_ROM_SIZE        0x10000u
+#define PSOC_C3_ROM_FUNC_ADDR   0x1080FF6Cu
+#define PSOC_C3_ROM_SKIP        29
+#define PSOC_C3_FLASH_SECTORS   8
+#define CYBOOT_FLASH_SUCCESS    0x0D50B002u
+#define CYBOOT_FLAGS_BLOCKING   0u
+
+typedef struct {
+    uint32_t min_count;
+    uint32_t max_count;
+    uint32_t min_page_addr;
+    uint32_t scratch_row_idx;
+} cyboot_flash_refresh_t;
+
+typedef struct {
+    uint32_t flags;
+    uint32_t hv_params_addr;
+    cyboot_flash_refresh_t *refresh;
+    void (*callback_pre_irq)(void *ctx);
+    void (*callback_post_irq)(void *ctx);
+    void (*callback_complete)(void *ctx);
+    uint32_t callback_param;
+    uint32_t state;
+    uint32_t flash_addr;
+    uint32_t data_addr;
+    uint32_t reserved[2];
+} cyboot_flash_context_t;
+
+typedef uint32_t (*cyboot_flash_erase_row_t)(uint32_t addr,
+        cyboot_flash_context_t *ctx);
+typedef uint32_t (*cyboot_flash_row_op_t)(uint32_t addr, uint32_t *data,
+        cyboot_flash_context_t *ctx);
+
+typedef struct {
+    uint32_t reserved[PSOC_C3_ROM_SKIP];
+    cyboot_flash_erase_row_t erase_row;
+    cyboot_flash_row_op_t program_row;
+    cyboot_flash_row_op_t write_row;
+} psoc_c3_rom_flash_t;
+
+#define PSOC_C3_ROM ((const psoc_c3_rom_flash_t *)PSOC_C3_ROM_FUNC_ADDR)
+
+static cyboot_flash_refresh_t psoc_c3_refresh[PSOC_C3_FLASH_SECTORS];
+static cyboot_flash_context_t psoc_c3_ctx;
+static uint32_t psoc_c3_row[PSOC_C3_FLASH_ROW_WORDS];
+
+static int psoc_c3_rom_ok(void)
+{
+    uint32_t a[3];
+    int i;
+
+    a[0] = (uint32_t)PSOC_C3_ROM->erase_row;
+    a[1] = (uint32_t)PSOC_C3_ROM->program_row;
+    a[2] = (uint32_t)PSOC_C3_ROM->write_row;
+    for (i = 0; i < 3; i++) {
+        if ((a[i] < PSOC_C3_ROM_BASE) ||
+                (a[i] >= PSOC_C3_ROM_BASE + PSOC_C3_ROM_SIZE) ||
+                ((a[i] & 1u) == 0u)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int psoc_c3_flash_erase(uint32_t address, int len)
+{
+    uint32_t status;
+
+    if ((address % PSOC_C3_FLASH_ROW_SIZE) != 0u || !psoc_c3_rom_ok()) {
+        return -1;
+    }
+    while (len > 0) {
+        psoc_c3_ctx.flags = CYBOOT_FLAGS_BLOCKING;
+        psoc_c3_ctx.refresh = psoc_c3_refresh;
+        status = PSOC_C3_ROM->erase_row(PSOC_C3_SBUS_ALIAS(address),
+                    &psoc_c3_ctx);
+        if (status != CYBOOT_FLASH_SUCCESS) {
+            return -1;
+        }
+        address += PSOC_C3_FLASH_ROW_SIZE;
+        len -= (int)PSOC_C3_FLASH_ROW_SIZE;
+    }
+    return 0;
+}
+
+static int psoc_c3_flash_write(uint32_t address, const uint8_t *data, int len)
+{
+    uint32_t row_start;
+    uint32_t offset;
+    uint32_t chunk;
+    uint32_t status;
+
+    if (!psoc_c3_rom_ok()) {
+        return -1;
+    }
+    while (len > 0) {
+        row_start = address & ~(PSOC_C3_FLASH_ROW_SIZE - 1u);
+        offset = address - row_start;
+        chunk = PSOC_C3_FLASH_ROW_SIZE - offset;
+        if (chunk > (uint32_t)len) {
+            chunk = (uint32_t)len;
+        }
+        memcpy(psoc_c3_row, (const void *)row_start, PSOC_C3_FLASH_ROW_SIZE);
+        memcpy((uint8_t *)psoc_c3_row + offset, data, chunk);
+        memset((uint8_t *)psoc_c3_row + PSOC_C3_FLASH_ROW_SIZE, 0,
+                PSOC_C3_FLASH_COL33_SZ);
+        psoc_c3_ctx.flags = CYBOOT_FLAGS_BLOCKING;
+        psoc_c3_ctx.refresh = psoc_c3_refresh;
+        status = PSOC_C3_ROM->write_row(PSOC_C3_SBUS_ALIAS(row_start),
+                    psoc_c3_row, &psoc_c3_ctx);
+        if (status != CYBOOT_FLASH_SUCCESS) {
+            return -1;
+        }
+        address += chunk;
+        data += chunk;
+        len -= (int)chunk;
+    }
+    return 0;
+}
+#endif
+
 int hal_flash_write(uint32_t address, const uint8_t *data, int len)
 {
     if (data == 0 || len <= 0) {
@@ -419,6 +1259,22 @@ int hal_flash_write(uint32_t address, const uint8_t *data, int len)
     return mcxn_flash_write(address, data, len);
 #elif defined(EMU_LPC55S69)
     return lpc55s69_flash_write(address, data, len);
+#elif defined(EMU_MCXW)
+    return mcxw_flash_write(address, data, len);
+#elif defined(EMU_RW612)
+    return rw612_flash_write(address, data, len);
+#elif defined(EMU_NRF54L)
+    return nrf54l_flash_write(address, data, len);
+#elif defined(EMU_MCXA)
+    return mcxa_flash_write(address, data, len);
+#elif defined(EMU_NRF5340_NET)
+    return nrf5340_net_flash_write(address, data, len);
+#elif defined(EMU_PSOC_C3)
+    return psoc_c3_flash_write(address, data, len);
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+    return stm32ns_flash_write(address, data, len);
+#elif defined(EMU_STM32C5)
+    return stm32c5_flash_write(address, data, len);
 #else
     memcpy((void *)address, data, (size_t)len);
 #endif
@@ -460,6 +1316,46 @@ int hal_flash_erase(uint32_t address, int len)
         return 0;
     }
     return lpc55s69_flash_erase(address, len);
+#elif defined(EMU_MCXW)
+    if (len <= 0) {
+        return 0;
+    }
+    return mcxw_flash_erase(address, len);
+#elif defined(EMU_RW612)
+    if (len <= 0) {
+        return 0;
+    }
+    return rw612_flash_erase(address, len);
+#elif defined(EMU_NRF54L)
+    if (len <= 0) {
+        return 0;
+    }
+    return nrf54l_flash_erase(address, len);
+#elif defined(EMU_MCXA)
+    if (len <= 0) {
+        return 0;
+    }
+    return mcxa_flash_erase(address, len);
+#elif defined(EMU_NRF5340_NET)
+    if (len <= 0) {
+        return 0;
+    }
+    return nrf5340_net_flash_erase(address, len);
+#elif defined(EMU_PSOC_C3)
+    if (len <= 0) {
+        return 0;
+    }
+    return psoc_c3_flash_erase(address, len);
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+    if (len <= 0) {
+        return 0;
+    }
+    return stm32ns_flash_erase(address, len);
+#elif defined(EMU_STM32C5)
+    if (len <= 0) {
+        return 0;
+    }
+    return stm32c5_flash_erase(address, len);
 #else
     uint32_t end;
 #if defined(EMU_STM32)
@@ -518,6 +1414,21 @@ void hal_flash_unlock(void)
     FLASH_NSCR |= FLASH_CR_PG;
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 1u;
+    NVMC_CONFIGNS = 1u;
+#elif defined(EMU_NRF54L)
+    nrf54l_write_enable(1);
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+    stm32ns_wait();
+    if ((STM32NS_NSCR & STM32NS_CR_LOCK) != 0u) {
+        STM32NS_NSKEYR = STM32NS_KEY1;
+        STM32NS_NSKEYR = STM32NS_KEY2;
+    }
+#elif defined(EMU_STM32C5)
+    stm32c5_wait();
+    if ((STM32C5_CR & STM32C5_CR_LOCK) != 0u) {
+        STM32C5_KEYR = STM32C5_KEY1;
+        STM32C5_KEYR = STM32C5_KEY2;
+    }
 #endif
 }
 
@@ -531,5 +1442,14 @@ void hal_flash_lock(void)
     FLASH_NSCR |= FLASH_CR_LOCK;
 #elif defined(EMU_NRF5340)
     NVMC_CONFIG = 0u;
+    NVMC_CONFIGNS = 0u;
+#elif defined(EMU_NRF54L)
+    nrf54l_write_enable(0);
+#elif defined(EMU_STM32WBA) || defined(EMU_STM32U3)
+    stm32ns_wait();
+    STM32NS_NSCR |= STM32NS_CR_LOCK;
+#elif defined(EMU_STM32C5)
+    stm32c5_wait();
+    STM32C5_CR |= STM32C5_CR_LOCK;
 #endif
 }

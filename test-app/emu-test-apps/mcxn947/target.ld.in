@@ -19,15 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Minimal linker script for the MCXN947 emulator test app. The app runs in the
- * Secure world from the boot partition base plus the image header. Secure SRAM
- * above the secure-app handoff record is used for data and stack.
- * @FLASH_ORIGIN@ is WOLFBOOT_PARTITION_BOOT_ADDRESS + IMAGE_HEADER_SIZE,
- * @FLASH_SIZE@ is WOLFBOOT_PARTITION_SIZE - IMAGE_HEADER_SIZE. */
+/* Minimal linker script for the MCXN947 emulator test app. test.sh fills in
+ * @FLASH_ORIGIN@/@FLASH_SIZE@; the Makefile picks the @RAM_ORIGIN@/@RAM_SIZE@
+ * window for the secure payload, non-secure (TZEN) or plain build. */
 MEMORY
 {
     FLASH (rx)  : ORIGIN = @FLASH_ORIGIN@, LENGTH = @FLASH_SIZE@
-    RAM   (rwx) : ORIGIN = 0x30038000,    LENGTH = 0x00030000
+    RAM   (rwx) : ORIGIN = @RAM_ORIGIN@,   LENGTH = @RAM_SIZE@
 }
 
 _estack = ORIGIN(RAM) + LENGTH(RAM);

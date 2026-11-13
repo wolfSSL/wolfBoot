@@ -53,11 +53,13 @@ static void uarte0_start_rx(void)
 void emu_uart_init(void)
 {
     CLOCK_TASKS_HFCLKSTART = 1u;
-    UARTE_ENABLE(UARTE0_BASE) = 0u;
-    UARTE_PSEL_TXD(UARTE0_BASE) = 0u;
-    UARTE_PSEL_RXD(UARTE0_BASE) = 0u;
-    UARTE_BAUDRATE(UARTE0_BASE) = 0x01D7E000u; /* 115200 */
-    UARTE_ENABLE(UARTE0_BASE) = 8u;
+    /* Re-enabling the UARTE makes m33mu reopen its PTY under test.sh */
+    if (UARTE_ENABLE(UARTE0_BASE) != 8u) {
+        UARTE_PSEL_TXD(UARTE0_BASE) = 0u;
+        UARTE_PSEL_RXD(UARTE0_BASE) = 0u;
+        UARTE_BAUDRATE(UARTE0_BASE) = 0x01D7E000u; /* 115200 */
+        UARTE_ENABLE(UARTE0_BASE) = 8u;
+    }
     uarte0_start_rx();
 }
 

@@ -242,6 +242,13 @@ jobs:
       board-name: lpcxpresso55s69
       make-args: DEBUG_UART=0
 
+  lpc55s69_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/lpc55s69-mldsa.config
+      board-name: lpcxpresso55s69
+
   m2354_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -278,11 +285,35 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf5340-wolfcrypt-tz.config
 
+  nrf5340_app_internal_flash_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340-emu.config
+
+  nrf5340_app_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340-mldsa.config
+
   nrf5340_net_test:
     uses: ./.github/workflows/test-build.yml
     with:
       arch: arm
       config-file: ./config/examples/nrf5340_net.config
+
+  nrf5340_net_internal_flash_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net-emu.config
+
+  nrf5340_net_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf5340_net-mldsa.config
 
   nrf54l15_test:
     uses: ./.github/workflows/test-build.yml
@@ -296,6 +327,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/nrf54l15-wolfcrypt-tz.config
 
+  nrf54l15_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54l15-mldsa.config
+
   nrf54lm20_test:
     uses: ./.github/workflows/test-build.yml
     with:
@@ -307,6 +344,12 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/nrf54lm20-wolfcrypt-tz.config
+
+  nrf54lm20_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/nrf54lm20-mldsa.config
 
   nrf54lm20_no_uart_test:
     uses: ./.github/workflows/test-build.yml
@@ -425,6 +468,13 @@ jobs:
       config-file: ./config/examples/mcxa.config
       board-name: frdmmcxa153
 
+  nxp_mcxa_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxa-mldsa.config
+      board-name: frdmmcxa153
+
   nxp_mcxw_test:
     uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
     with:
@@ -437,6 +487,13 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/mcxw-tz.config
+      board-name: frdmmcxw71
+
+  nxp_mcxw_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxw-mldsa.config
       board-name: frdmmcxw71
 
   nxp_mcxw_no_uart_test:
@@ -476,6 +533,13 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/mcxn-tz.config
+      board-name: frdmmcxn947
+
+  nxp_mcxn_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/mcxn-mldsa.config
       board-name: frdmmcxn947
 
   nxp_mcxn_wolfcrypt_tz_test:
@@ -518,6 +582,13 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/rw612-tz.config
+      board-name: frdmrw612
+
+  nxp_rw612_mldsa_test:
+    uses: ./.github/workflows/test-build-mcux-sdk-manifests.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/rw612-mldsa.config
       board-name: frdmrw612
 
   nxp_rw612_wolfcrypt_tz_test:
@@ -1265,6 +1336,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/psoc_c3.config
 
+  psoc_c3_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/psoc_c3-mldsa.config
+
   # 128 KB part: same target, smaller partitions.
   psoc_c3_128k_test:
     uses: ./.github/workflows/test-build.yml
@@ -1316,6 +1393,18 @@ jobs:
     with:
       arch: arm
       config-file: ./config/examples/stm32c5-dualbank.config
+
+  stm32c5_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32c5-mldsa.config
+
+  stm32u3_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32u3-mldsa.config
 
   stm32u5_nonsecure_dualbank_test:
     uses: ./.github/workflows/test-build.yml
@@ -1412,6 +1501,12 @@ jobs:
       arch: arm
       config-file: ./config/examples/stm32wba.config
       make-args: DEBUG_UART=1
+
+  stm32wba_mldsa_test:
+    uses: ./.github/workflows/test-build.yml
+    with:
+      arch: arm
+      config-file: ./config/examples/stm32wba-mldsa.config
 
   # TODO: ti-tms570lc435.config requires F021 Flash API (Windows installer only)
   # ti_tms570lc435_test:

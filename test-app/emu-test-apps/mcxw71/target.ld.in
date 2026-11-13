@@ -19,11 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
  */
 
-/* Minimal linker script for MCXW716C memory map */
+/* Minimal linker script for the MCXW716C emulator test app.
+ * @FLASH_ORIGIN@/@FLASH_SIZE@ are filled in by test.sh, @RAM_ORIGIN@ and
+ * @RAM_SIZE@ by the Makefile (TZEN selects the non-secure SRAM window). */
 MEMORY
 {
-    FLASH (rx)  : ORIGIN = @FLASH_ORIGIN@, LENGTH = 0x000FFF00
-    RAM   (rwx) : ORIGIN = 0x20010000,    LENGTH = 0x00006000
+    FLASH (rx)  : ORIGIN = @FLASH_ORIGIN@, LENGTH = @FLASH_SIZE@
+    RAM   (rwx) : ORIGIN = @RAM_ORIGIN@,   LENGTH = @RAM_SIZE@
 }
 
 _estack = ORIGIN(RAM) + LENGTH(RAM);
@@ -68,18 +70,25 @@ SECTIONS
         __fini_array_end = .;
     } > FLASH
 
+    /* The FMU routines run from SRAM: the flash cannot be read mid-command */
     .data :
     {
+        . = ALIGN(4);
         _sdata = .;
+        KEEP(*(.ramcode*))
+        . = ALIGN(4);
         *(.data*)
+        . = ALIGN(4);
         _edata = .;
     } > RAM AT > FLASH
 
     .bss (NOLOAD) :
     {
+        . = ALIGN(4);
         _sbss = .;
         *(.bss*)
         *(COMMON)
+        . = ALIGN(4);
         _ebss = .;
     } > RAM
 }

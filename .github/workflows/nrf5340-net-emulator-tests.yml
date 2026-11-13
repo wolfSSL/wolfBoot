@@ -1,0 +1,42 @@
+name: nrf5340-net-emulator-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Boot, update and rollback on the m33mu nRF5340 network core model: internal-flash
+  # and ML-DSA configs.
+  nrf5340-net-emulator-tests:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/wolfssl/wolfboot-ci-m33mu:latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [nrf5340_net-emu, nrf5340_net-mldsa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init submodules
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init --single-branch
+
+      - name: Configure ${{ matrix.config }} and build wolfboot
+        run: |
+          cp config/examples/${{ matrix.config }}.config .config
+          make wolfboot.bin
+
+      - name: Run emu test (${{ matrix.config }})
+        working-directory: test-app/emu-test-apps
+        run: |
+          BOOT_TIMEOUT=30 UPDATE_TIMEOUT=60 REBOOT_TIMEOUT=30 ./test.sh
+
+      - name: Upload emulator logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nrf5340-net-emu-logs-${{ matrix.config }}
+          path: test-app/emu-test-apps/nrf5340_net/*.log

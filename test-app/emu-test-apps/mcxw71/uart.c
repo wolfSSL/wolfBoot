@@ -20,48 +20,48 @@
  */
 
 #include <stdint.h>
-#include "fsl_device_registers.h"
 #include "emu_app.h"
 
-/* MRCC */
-#define MRCC_BASE        0x4001C000u
-#define MRCC_LPUART0     0xE0u
+/* LPUART1, the FRDM-MCXW71 console wolfBoot also logs on. Non-secure alias:
+ * with TZEN=1 the wolfBoot SAU opens only this UART to the non-secure app. */
+#define LPUART1_BASE     0x40039000u
+#define LPUART1_STAT     (*(volatile uint32_t *)(LPUART1_BASE + 0x14u))
+#define LPUART1_CTRL     (*(volatile uint32_t *)(LPUART1_BASE + 0x18u))
+#define LPUART1_DATA     (*(volatile uint32_t *)(LPUART1_BASE + 0x1Cu))
 
-static inline void mrcc_enable(uint32_t off)
-{
-    volatile uint32_t *reg = (volatile uint32_t *)(MRCC_BASE + off);
-    *reg = (1u << 31) | (1u << 30) | 1u;
-}
+#define UART_STAT_TDRE   0x00800000u
+#define UART_STAT_RDRF   0x00200000u
+#define UART_CTRL_TE_RE  0x000C0000u
 
-/* LPUART0 */
-#define LPUART0_BASE     0x40038000u
-#define LPUART_STAT(b)   (*(volatile uint32_t *)((b) + 0x14u))
-#define LPUART_CTRL(b)   (*(volatile uint32_t *)((b) + 0x18u))
-#define LPUART_DATA(b)   (*(volatile uint32_t *)((b) + 0x1Cu))
-
-#define LPUART_STAT_TDRE (1u << 23)
-#define LPUART_STAT_RDRF (1u << 21)
-#define LPUART_CTRL_RE   (1u << 18)
-#define LPUART_CTRL_TE   (1u << 19)
+#ifndef TZEN
+/* MRCC gate: clock on (CC=1), reset released (RSTB) */
+#define MRCC_LPUART1     (*(volatile uint32_t *)(0x4001C000u + 0xE4u))
+#define MRCC_CC_MASK     0x00000003u
+#define MRCC_RSTB        0x40000000u
+#endif
 
 void emu_uart_init(void)
 {
-    mrcc_enable(MRCC_LPUART0);
-    LPUART_CTRL(LPUART0_BASE) = LPUART_CTRL_TE | LPUART_CTRL_RE;
+#ifndef TZEN
+    if ((MRCC_LPUART1 & MRCC_CC_MASK) == 0u) {
+        MRCC_LPUART1 = MRCC_RSTB | 1u;
+    }
+#endif
+    LPUART1_CTRL |= UART_CTRL_TE_RE;
 }
 
 void emu_uart_write(uint8_t c)
 {
-    while ((LPUART_STAT(LPUART0_BASE) & LPUART_STAT_TDRE) == 0u) {
+    while ((LPUART1_STAT & UART_STAT_TDRE) == 0u) {
     }
-    LPUART_DATA(LPUART0_BASE) = (uint32_t)c;
+    LPUART1_DATA = (uint32_t)c;
 }
 
 int emu_uart_read(uint8_t *c)
 {
-    if ((LPUART_STAT(LPUART0_BASE) & LPUART_STAT_RDRF) == 0u) {
+    if ((LPUART1_STAT & UART_STAT_RDRF) == 0u) {
         return 0;
     }
-    *c = (uint8_t)LPUART_DATA(LPUART0_BASE);
+    *c = (uint8_t)(LPUART1_DATA & 0xFFu);
     return 1;
 }

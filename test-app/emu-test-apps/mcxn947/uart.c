@@ -22,9 +22,13 @@
 #include <stdint.h>
 #include "emu_app.h"
 
-/* LP_FLEXCOMM4 / LPUART4, Secure alias. wolfBoot (DEBUG_UART) set up the
- * clocks, pins and baud rate before the jump, so only TX/RX are enabled. */
+/* LP_FLEXCOMM4 / LPUART4. wolfBoot (DEBUG_UART) set up the clocks, pins and
+ * baud rate before the jump, so only TX/RX are enabled. */
+#ifdef TZEN
+#define LPUART4_BASE     0x400B4000u
+#else
 #define LPUART4_BASE     0x500B4000u
+#endif
 #define LPUART4_STAT     (*(volatile uint32_t *)(LPUART4_BASE + 0x14u))
 #define LPUART4_CTRL     (*(volatile uint32_t *)(LPUART4_BASE + 0x18u))
 #define LPUART4_DATA     (*(volatile uint32_t *)(LPUART4_BASE + 0x1Cu))

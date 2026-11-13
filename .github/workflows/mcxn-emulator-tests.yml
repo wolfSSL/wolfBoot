@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  # Boot, update and rollback on the m33mu MCXN947 model with the
-  # TrustZone secure-application (wolfTrust) handoff config.
+  # Boot, update and rollback on the m33mu MCXN947 model: plain, TrustZone,
+  # ML-DSA and the secure-application (wolfTrust) handoff config.
   mcxn-emulator-tests:
     runs-on: ubuntu-latest
     container:
@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: [mcxn-tz-wolftrust]
+        config: [mcxn, mcxn-tz, mcxn-mldsa, mcxn-tz-wolftrust]
     steps:
       - uses: actions/checkout@v4
 

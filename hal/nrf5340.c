@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 #include "image.h"
+#include "hal.h"
 #include "string.h"
 #include "printf.h"
 #include "nrf5340.h"

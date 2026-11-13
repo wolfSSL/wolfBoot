@@ -475,6 +475,7 @@ bootmode1/
 
 # Emulator test: generated linker scripts
 test-app/emu-test-apps/*/target.ld
+test-app/emu-test-apps/*/app.ld
 
 # AMD/Xilinx Versal test artifacts
 uart_log*.txt
