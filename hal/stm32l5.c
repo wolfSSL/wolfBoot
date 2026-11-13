@@ -278,11 +278,8 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
 
 #if TZ_SECURE() && defined(WOLFBOOT_SECURE_APP)
     /* Secure-app partitions are linked at the Secure flash alias */
-    if ((address >= FLASH_SECURE_MMAP_BASE) &&
-            (address <= (FLASH_SECURE_MMAP_BASE +
-                (FLASH_TOP - FLASHMEM_ADDRESS_SPACE)))) {
-        address -= (FLASH_SECURE_MMAP_BASE - FLASHMEM_ADDRESS_SPACE);
-    }
+    if (address >= FLASH_SECURE_MMAP_BASE)
+        address = (address & ~FLASH_SECURE_MMAP_BASE) | FLASHMEM_ADDRESS_SPACE;
 #endif
 
     if (address < ARCH_FLASH_OFFSET)
