@@ -977,7 +977,7 @@ Make variables, on the command line or in the `.config`. See [PolarFire.md](Pola
 | `MPFS_SD_EMMC_DEMUX_ADDR` | Fabric register that selects the SD slot or the eMMC on designs with the demux in the fabric (Icicle Kit: `0x4FFFFF00`); unset, the Video Kit's IOMUX override is used. |
 | `MPFS_SC_PROBE` | Read-only System Controller service survey at boot (device serial, TRNG nonce, PUF emulation): status and stability only, never a value. On by default for M-mode builds; `MPFS_SC_PROBE=0` disables it. |
 | `MPFS_DDR_MEMTEST` | `=1`: CPU pattern test over the DDR windows the design's SEG registers map, after training, reporting the error count per 64 MB chunk; independent of `DEBUG_DDR`. |
-| `MPFS_ATHENA` (+ `MPFS_ATHENA_CAL_DIR`) | SHA-384 and AES-256-CTR offload to the Athena F5200 (TeraFire), with a mandatory self-check. |
+| `MPFS_ATHENA` (+ `MPFS_ATHENA_CAL_DIR`) | SHA-384, AES-256-CTR and AES-256-ECB (AES-XTS) offload to the Athena F5200 (TeraFire), with a mandatory self-check. With `WOLFCRYPT_TEST=1` or `WOLFCRYPT_BENCHMARK=1` the test-app also drives the engine, across every algorithm the wolfSSL port offloads. |
 | `SNVM_KEYSTORE`, `SNVM_KEYSTORE_PROVISION`, `SNVM_KEYSTORE_REQUIRE_ROM` | Serve the verification keystore from secure NVM; the one-time writer; refuse to boot unless every keystore page is ROM-flagged. |
 | `SNVM_KEK`, `SNVM_ENCKEY_PROVISION` | PUF-derived KEK with RFC 3394 key-wrap for the sNVM-stored image-encryption key, and its one-time writer. |
 | `MPFS_SCB_SMODE_DENY` | Fence S-mode off the System Controller mailbox (PMP plus dtb node removal), so nothing after wolfBoot can reach the sNVM write service. |
