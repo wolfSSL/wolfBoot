@@ -65,8 +65,11 @@ neg ext4-4k.img       0 "/a/b/c/d/e/f/g/h/i/j/k/l.itb" "path too deep"
 # entries, and every FAT32/ext4 field. All of it is read byte-wise, so the
 # whole stack should be endian-neutral. Prove it by running the same
 # fixtures as big-endian PowerPC under qemu-user.
+# The emulator is qemu-ppc-static where the qemu-user-static package exists,
+# and qemu-ppc from qemu-user on distributions that dropped it.
+QEMU_PPC=$(command -v qemu-ppc-static || command -v qemu-ppc || true)
 if command -v powerpc-linux-gnu-gcc >/dev/null 2>&1 && \
-   command -v qemu-ppc-static >/dev/null 2>&1; then
+   [ -n "$QEMU_PPC" ]; then
     echo
     echo "=== big-endian (PowerPC), full stack incl. MBR/GPT ==="
     # Do NOT hide this build. A cross-compile failure here (a missing
@@ -86,7 +89,7 @@ if command -v powerpc-linux-gnu-gcc >/dev/null 2>&1 && \
         local img="$1" path="$2"
         [ -f "$F/$img" ] || return
         printf "  %-26s " "$img"
-        if qemu-ppc-static ./fs-test-be verify "$F/$img" 0 "$path" \
+        if "$QEMU_PPC" ./fs-test-be verify "$F/$img" 0 "$path" \
                 "$F/payload/os.itb" >/dev/null 2>&1; then
             echo "PASS"; pass=$((pass + 1))
         else
@@ -102,7 +105,7 @@ if command -v powerpc-linux-gnu-gcc >/dev/null 2>&1 && \
     fi
 else
     echo
-    echo "  (big-endian check skipped: needs powerpc-linux-gnu-gcc + qemu-ppc-static)"
+    echo "  (big-endian check skipped: needs powerpc-linux-gnu-gcc + qemu-ppc-static or qemu-ppc)"
 fi
 
 echo

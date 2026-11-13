@@ -59,6 +59,9 @@ download_sbl_patch_and_patch_edkii() {
 }
 
 build_qemu_fsp() {
+    # This EDK2 release's host tools are pre-C23 code (old-style function
+    # declarations), and C23 is the default from GCC 15.
+    export BUILD_CC="${BUILD_CC:-gcc -std=gnu17}"
     (cd "$WORK_DIR/edk2" &&
          python ./BuildFsp.py &&
          cd BuildFsp &&

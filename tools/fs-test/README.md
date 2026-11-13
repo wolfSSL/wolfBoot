@@ -82,7 +82,7 @@ Two notes on the fixtures:
 
 ## Big-endian coverage
 
-`make check` also runs the fixtures as **big-endian PowerPC** under `qemu-user`, when `powerpc-linux-gnu-gcc` and `qemu-ppc-static` are installed. It skips with a note otherwise.
+`make check` also runs the fixtures as **big-endian PowerPC** under `qemu-user`, when `powerpc-linux-gnu-gcc` and `qemu-ppc-static` (or `qemu-ppc`, on distributions whose `qemu-user` package replaced `qemu-user-static`) are installed. It skips with a note otherwise.
 
 This matters because the parsers read every multi-byte on-media field through byte-wise accessors (`fs_le16` / `fs_le32`) rather than casting a buffer to a struct. That should make them endian-neutral, and the big-endian run proves it instead of assuming it.
 

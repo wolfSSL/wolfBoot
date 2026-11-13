@@ -2609,6 +2609,10 @@ endif
 # x86-64 FSP targets
 ifeq ("${FSP}", "1")
   CFLAGS+=-DWOLFBOOT_FSP=1
+  # State the baseline CPU. A distribution compiler can default to a newer
+  # level (Ubuntu's amd64v3 variant targets x86-64-v3), and the BMI2-class
+  # instructions it then emits fault on a CPU, real or emulated, without them.
+  CFLAGS+=-march=x86-64
   USE_GCC_HEADLESS=0
   LD_START_GROUP =
   LD_END_GROUP =
