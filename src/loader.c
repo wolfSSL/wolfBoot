@@ -30,6 +30,9 @@
  */
 
 #include "loader.h"
+#ifdef WOLFBOOT_FSP_NVS_TPM
+#include "x86/fsp_nvs.h"
+#endif
 #include "image.h"
 #include "hal.h"
 #include "hooks.h"
@@ -166,6 +169,9 @@ int main(void)
     if (wolfBoot_tpm2_init() != 0) {
         wolfBoot_panic();
     }
+#endif
+#ifdef WOLFBOOT_FSP_NVS_TPM
+    fsp_nvs_tpm_sync();
 #endif
 #ifdef WOLFCRYPT_SECURE_MODE
     wcs_Init();

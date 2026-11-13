@@ -774,7 +774,8 @@ static int ata_drive_read_sector(int drv, uint64_t start, uint32_t count,
     cmdfis->lba5 = (uint8_t)((start >> 40) & 0xFF);
     cmdfis->device = (1 << 6); /* LBA mode */
     cmdfis->count = (uint16_t)(count & 0xFFFF);
-    exec_cmd_slot(drv, slot);
+    if (exec_cmd_slot(drv, slot) != 0)
+        return -1;
     return count << ata->sector_size_shift;
 }
 
@@ -794,7 +795,7 @@ static int ata_drive_write_sector(int drv, uint64_t start, uint32_t count,
     cmdfis = (struct fis_reg_h2d *)(&tbl->cfis);
     cmdfis->fis_type = FIS_TYPE_REG_H2D;
     cmdfis->c = 1;
-    cmdfis->command = ATA_CMD_WRITE_DMA;
+    cmdfis->command = ATA_CMD_WRITE_DMA_EX;
     cmdfis->lba0 = (uint8_t)(start & 0xFF);
     cmdfis->lba1 = (uint8_t)((start >> 8) & 0xFF);
     cmdfis->lba2 = (uint8_t)((start >> 16) & 0xFF);
@@ -804,7 +805,8 @@ static int ata_drive_write_sector(int drv, uint64_t start, uint32_t count,
     cmdfis->device = (1 << 6); /* LBA mode */
     cmdfis->count = (uint16_t)(count & 0xFFFF);
 
-    exec_cmd_slot(drv, slot);
+    if (exec_cmd_slot(drv, slot) != 0)
+        return -1;
     return count << ata->sector_size_shift;
 }
 
@@ -826,12 +828,16 @@ static void ata_cache_pull(int drv, uint64_t sector)
     ata->cached = sector;
 }
 
-static void ata_cache_commit(int drv)
+static int ata_cache_commit(int drv)
 {
     struct ata_drive *ata = &ATA_Drv[drv];
     if (ata->cached == CACHE_INVALID)
-        return;
-    ata_drive_write_sector(drv, ata->cached, 1, ata->sector_cache);
+        return 0;
+    if (ata_drive_write_sector(drv, ata->cached, 1, ata->sector_cache) < 0) {
+        ata->cached = CACHE_INVALID;
+        return -1;
+    }
+    return 0;
 }
 
 /**
@@ -881,6 +887,8 @@ int ata_drive_read(int drv, uint64_t start, uint32_t size, uint8_t *buf)
     }
     if (size > 0) {
         ata_cache_pull(drv, sect_start);
+        if (ata->cached != sect_start)
+            return -1;
         memcpy(buf + buffer_off, ata->sector_cache, size);
         buffer_off += size;
     }
@@ -920,7 +928,8 @@ int ata_drive_write(int drv, uint64_t start, uint32_t size,
         if (ata->cached != sect_start)
             return -1;
         memcpy(ata->sector_cache + sect_off, buf, len);
-        ata_cache_commit(drv);
+        if (ata_cache_commit(drv) < 0)
+            return -1;
         size -= len;
         buffer_off += len;
         sect_start++;
@@ -937,8 +946,11 @@ int ata_drive_write(int drv, uint64_t start, uint32_t size,
     }
     if (size > 0) {
         ata_cache_pull(drv, sect_start);
+        if (ata->cached != sect_start)
+            return -1;
         memcpy(ata->sector_cache, buf + buffer_off, size);
-        ata_cache_commit(drv);
+        if (ata_cache_commit(drv) < 0)
+            return -1;
         buffer_off += size;
     }
     return buffer_off;

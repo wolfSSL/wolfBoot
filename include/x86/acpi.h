@@ -30,8 +30,14 @@
 #endif
 #define ACPI_TABLE_SIZE 0x00010000UL /* 64 KiB */
 
-/* Build RSDP -> XSDT -> { FADT, MADT, MCFG, DSDT } at ACPI_TABLE_BASE and
- * return the RSDP physical address for boot_params.acpi_rsdp_addr. */
+/* ECAM base and bus range, matching MCFG to config PCI_ECAM_BASE. */
+#ifndef PCI_ECAM_BASE
+#define PCI_ECAM_BASE 0xC0000000UL
+#endif
+#define ACPI_PCI_END_BUS  0x17
+
+/* Build RSDP -> XSDT -> { FADT, MADT, MCFG, TPM2, HPET, DMAR, DSDT } at
+ * ACPI_TABLE_BASE and return the RSDP physical address for boot_params.acpi_rsdp_addr. */
 uint64_t acpi_setup(void);
 
 #endif /* WOLFBOOT_ACPI_H */

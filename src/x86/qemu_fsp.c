@@ -140,3 +140,8 @@ int fsp_pre_silicon_init_cb(void)
 {
     return 0;
 }
+
+int fsp_pre_pci_enum_cb(void)
+{
+    return 0;
+}
