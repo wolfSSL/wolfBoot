@@ -287,6 +287,67 @@ Updates can be flashed at 0x0804a000:
 The two partition are logically remapped by using BANK_SWAP capabilities. This partition
 swap is immediate and does not require a SWAP partition.
 
+### Scenario 4: TrustZone Enabled, Secure application handoff (wolfTrust)
+
+wolfBoot verifies and measures a signed **Secure** runtime (for example
+wolfTrust) and jumps to it without leaving the Secure state, publishing the
+measured-boot record at `0x30000000` (see
+[Secure Application Handoff](secure_app_handoff.md)). The secure application
+then programs the SAU and GTZC itself and launches its Non-secure guests.
+
+The example configuration is available in
+[/config/examples/stm32l5-tz-wolftrust.config](/config/examples/stm32l5-tz-wolftrust.config).
+All partitions are at the Secure flash alias:
+
+| Region | Address | Size |
+| --- | --- | --- |
+| wolfBoot | `0x0C000000` | 48 KB |
+| Boot partition (secure application) | `0x0C00C000` | 128 KB |
+| Secure application NVM (not touched by wolfBoot) | `0x0C038000` | 24 KB |
+| Swap page | `0x0C03E000` | 2 KB |
+| Update partition (start of bank 2) | `0x0C040000` | 128 KB |
+| Non-secure guests | `0x08060000` | 128 KB |
+
+wolfBoot keeps SRAM1 and SRAM2 Secure across the jump (the GTZC reset value),
+enables no SAU region and builds no Non-secure callable entries, keeps the
+110 MHz PLL clock running (`WOLFBOOT_RESTORE_CLOCK=0`), and
+links its own RAM at `0x30030000` so that `0x30000000-0x3002FFFF` (the record
+and the secure application's RAM) is left untouched. The PSA lifecycle in the
+record comes from the RDP level in `FLASH_OPTR` (`hal/stm32l5_lifecycle.h`).
+The STM32L5 has no product-state register, so with `TZEN=1` RDP level 0 is
+reported as PSA RoT provisioning (`0x2000`), levels 0.5 and 1 as Non-PSA RoT
+debug (`0x4000`, Secure debug closed), and level 2 as secured (`0x3000`).
+Without `TZEN` the lifecycle is unknown.
+
+The partition values are `?=` defaults. A different layout set on the `make`
+command line must keep the boot, NVM, swap, update and guest regions disjoint
+(the Secure and Non-secure aliases are the same flash) and move the `SECWM`
+watermarks below to match.
+
+Option bytes (bank 1 fully secure, bank 2 pages 0-63 secure for the update
+slot, pages 64-127 Non-secure for the guests):
+
+```
+TZEN = 1                            System with TrustZone-M enabled
+DBANK = 1                           Dual bank mode
+SECWM1_PSTRT=0x0  SECWM1_PEND=0x7F  All 128 pages of Bank1 secure
+SECWM2_PSTRT=0x0  SECWM2_PEND=0x3F  Bank2 pages 0-63 (0x08040000-0x0805FFFF) secure
+```
+
+1. `cp ./config/examples/stm32l5-tz-wolftrust.config .config`
+2. `make` (builds `wolfboot.bin` only)
+3. Sign the secure application, e.g.
+   `IMAGE_HEADER_SIZE=1024 ./tools/keytools/sign --ecc256 --sha256 wolftrust.bin wolfboot_signing_private_key.der 1`
+   (the header size must match the config's `IMAGE_HEADER_SIZE`)
+4. Set the option bytes:
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob TZEN=1 DBANK=1`
+    - `STM32_Programmer_CLI -c port=swd mode=hotplug -ob SECWM1_PSTRT=0x0 SECWM1_PEND=0x7F SECWM2_PSTRT=0x0 SECWM2_PEND=0x3F`
+5. `STM32_Programmer_CLI -c port=swd -d ./wolfboot.bin 0x0C000000`
+6. `STM32_Programmer_CLI -c port=swd -d ./wolftrust_v1_signed.bin 0x0C00C000`
+
+The `trustzone-emulator-tests` workflow runs boot, update and rollback for this
+configuration on the m33mu STM32L552 model.
+
 
 ### Debugging
 

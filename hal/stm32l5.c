@@ -36,6 +36,7 @@
 
 #include "hal.h"
 #include "hal/stm32l5.h"
+#include "hal/stm32l5_lifecycle.h"
 
 
 static void RAMFUNCTION flash_set_waitstates(unsigned int waitstates)
@@ -220,12 +221,7 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {
-    if (lifecycle == NULL) {
-        return -1;
-    }
-
-    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
-    return 0;
+    return stm32l5_optr_to_psa_lifecycle(FLASH_OPTR, lifecycle);
 }
 
 void RAMFUNCTION hal_flash_unlock(void)
@@ -279,6 +275,12 @@ int RAMFUNCTION hal_flash_erase(uint32_t address, int len)
     hal_flash_clear_errors(0);
     if (len == 0)
         return -1;
+
+#if TZ_SECURE() && defined(WOLFBOOT_SECURE_APP)
+    /* Secure-app partitions are linked at the Secure flash alias */
+    if (address >= FLASH_SECURE_MMAP_BASE)
+        address = (address & ~FLASH_SECURE_MMAP_BASE) | FLASHMEM_ADDRESS_SPACE;
+#endif
 
     if (address < ARCH_FLASH_OFFSET)
         return -1;
@@ -425,7 +427,8 @@ static void clock_pll_on(int powersave)
     DMB();
 }
 
-#if TZ_SECURE()
+/* A secure application programs its own GTZC peripheral attribution */
+#if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
 static void periph_unsecure()
 {
     volatile uint32_t reg;
@@ -533,7 +536,10 @@ void hal_init(void)
 
 #if TZ_SECURE()
     hal_tz_sau_init();
+    /* A secure application keeps the MPCBB reset value (all SRAM Secure) */
+#if !defined(WOLFBOOT_SECURE_APP)
     hal_gtzc_init();
+#endif
 #endif
     clock_pll_on(0);
 
@@ -544,7 +550,7 @@ void hal_prepare_boot(void)
 #ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
 #endif
-#if TZ_SECURE()
+#if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
     periph_unsecure();
 #endif
 }

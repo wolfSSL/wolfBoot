@@ -22,17 +22,26 @@
 #include <stdint.h>
 #include "emu_app.h"
 
-#define SYSCLK_HZ 64000000u
+/* The secure-app payload runs Secure and uses the Secure peripheral aliases;
+ * wolfBoot hands it the 110 MHz PLL with APB1 undivided. This assumes
+ * WOLFBOOT_RESTORE_CLOCK=0 as in stm32l5-tz-wolftrust.config. */
+#ifdef EMU_STM32L5_SECURE
+#define SYSCLK_HZ         110000000u
+#define PERIPH_ALIAS      0x10000000u
+#else
+#define SYSCLK_HZ         64000000u
+#define PERIPH_ALIAS      0x00000000u
+#endif
 
 /* RCC */
-#define RCC_BASE          0x40021000u
+#define RCC_BASE          (0x40021000u + PERIPH_ALIAS)
 #define RCC_AHB2ENR       (*(volatile uint32_t *)(RCC_BASE + 0x4Cu))
 #define RCC_APB1LENR      (*(volatile uint32_t *)(RCC_BASE + 0x58u))
 
 /* GPIOA/GPIOB/GPIOD */
-#define GPIOA_BASE        0x42020000u
-#define GPIOB_BASE        0x42020400u
-#define GPIOD_BASE        0x42020C00u
+#define GPIOA_BASE        (0x42020000u + PERIPH_ALIAS)
+#define GPIOB_BASE        (0x42020400u + PERIPH_ALIAS)
+#define GPIOD_BASE        (0x42020C00u + PERIPH_ALIAS)
 #define GPIO_MODER(x)     (*(volatile uint32_t *)((x) + 0x00u))
 #define GPIO_OTYPER(x)    (*(volatile uint32_t *)((x) + 0x04u))
 #define GPIO_OSPEEDR(x)   (*(volatile uint32_t *)((x) + 0x08u))
@@ -40,7 +49,7 @@
 #define GPIO_AFRH(x)      (*(volatile uint32_t *)((x) + 0x24u))
 
 /* USART3 */
-#define USART3_BASE       0x40004800u
+#define USART3_BASE       (0x40004800u + PERIPH_ALIAS)
 #define USART_CR1(b)      (*(volatile uint32_t *)((b) + 0x00u))
 #define USART_CR2(b)      (*(volatile uint32_t *)((b) + 0x04u))
 #define USART_CR3(b)      (*(volatile uint32_t *)((b) + 0x08u))

@@ -96,10 +96,27 @@ the partitions at the Secure flash alias. `hal/mcxn.c` uses the shared
 reports the lifecycle through the weak default. `mcxn-emulator-tests.yml` runs
 boot, update and rollback on the m33mu MCXN947 model.
 
+## STM32L5
+
+`config/examples/stm32l5-tz-wolftrust.config` puts the record at `0x30000000`
+and the partitions at the Secure flash alias (`0x0C00C000` boot, `0x0C040000`
+update, both 128 KB). wolfBoot links its RAM at `0x30030000`
+(`hal/stm32l5-secure-app.ld`) to stay clear of the record and the secure app's
+RAM. SRAM1 and SRAM2 stay Secure at their GTZC reset value, the SAU has no
+region enabled, and without `WOLFCRYPT_TZ` wolfBoot links no `wolfBoot_nsc_*`
+entries, so Non-secure code has no path into the update partition.
+`hal/stm32l5.c` skips the GTZC peripheral unsecuring, the config sets
+`WOLFBOOT_RESTORE_CLOCK=0` so the 110 MHz PLL keeps running, and
+`hal_attestation_get_lifecycle()` maps the RDP level to a PSA lifecycle
+(`hal/stm32l5_lifecycle.h`; it reports unknown when TZEN is off). The
+`trustzone-emulator-tests` workflow runs boot, update and rollback on the m33mu
+STM32L552 model and checks on every boot the record and that no SAU region
+is enabled.
+
 ## Tests
 
 - `tools/unit-tests/unit-secure-handoff.c` — record layout, the builder, and the
-  STM32H5 lifecycle mapping.
+  STM32H5 and STM32L5 lifecycle mappings.
 - `tools/unit-tests/test-secure-handoff-config.sh` — the configure-time guards
   (rejects `SIGN=NONE` and `WOLFBOOT_SKIP_BOOT_VERIFY`) and the STM32H5 stack
   floors.

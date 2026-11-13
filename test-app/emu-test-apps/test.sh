@@ -77,7 +77,7 @@ get_m33mu_target() {
 case "$TARGET" in
   stm32h563|stm32h5) EMU_DIR=stm32h563; UART_BASE=40004800 ;;
   stm32u585|stm32u5) EMU_DIR=stm32u585; UART_BASE=40004800 ;;
-  stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800 ;;
+  stm32l552|stm32l5) EMU_DIR=stm32l552; UART_BASE=40004800; HANDOFF_CHECK=1 ;;
   nrf5340) EMU_DIR=nrf5340; UART_BASE=40008000 ;;
   mcxw|mcxw71) EMU_DIR=mcxw71; UART_BASE=40038000 ;;
   m2354) EMU_DIR=m2354; UART_BASE=40070000 ;;
@@ -240,6 +240,9 @@ write_target_ld() {
   esac
 
   emu_tpl="$EMU_PATH/target.ld.in"
+  if [[ "$SECURE_APP" == "1" && -f "$EMU_PATH/target-secure-app.ld.in" ]]; then
+    emu_tpl="$EMU_PATH/target-secure-app.ld.in"
+  fi
   if [[ -f "$emu_tpl" ]]; then
     sed -e "s/@FLASH_ORIGIN@/0x$(printf '%x' "$addr")/g" \
         -e "s/@FLASH_SIZE@/0x$(printf '%x' "$size")/g" \
