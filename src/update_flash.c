@@ -619,9 +619,6 @@ static int RAMFUNCTION wolfBoot_swap_backup_version(uint32_t *ver)
     struct wolfBoot_image swap;
     uint8_t *field = NULL;
 
-    /* SWAP holds one sector, which then cannot hold the whole header */
-    if (sizeof(hdr) > WOLFBOOT_SECTOR_SIZE)
-        return -1;
     wolfBoot_open_image(&swap, PART_SWAP);
 #ifdef NVM_FLASH_ECC
     /* A read of erased ECC flash can fault */
