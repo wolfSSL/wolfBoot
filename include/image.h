@@ -1739,6 +1739,13 @@ int wolfBoot_set_update_sector_flag(uint16_t sector, uint8_t newflag);
 int wolfBoot_image_compression(struct wolfBoot_image *img,
     uint32_t *uncompressed_sz, uint32_t *window_bits);
 #endif
+#if defined(FLAGS_HOME) && defined(NVM_FLASH_WRITEONCE) && \
+    !defined(EXT_ENCRYPTED) && !defined(PART_BOOT_EXT)
+/* The UPDATE flags share the BOOT trailer: a swap ends in one trailer write */
+#define WOLFBOOT_SHARED_TRAILER
+int wolfBoot_flags_home_reset_boot(void);
+int wolfBoot_flags_home_set_boot(uint8_t boot_state);
+#endif
 
 #ifdef WOLFBOOT_ELF_FLASH_SCATTER
 /* Support for ELF scatter/gather format */

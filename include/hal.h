@@ -44,6 +44,10 @@ extern int wolfBoot_fit_check_dest(void *dst, uint32_t len);
 #else
 extern void do_boot(const uint32_t *app_offset);
 #endif
+#ifdef WOLFBOOT_BOOT_REMOTE_CORE
+/* Starts the verified image on another core; does not return */
+void hal_boot_remote_core(const uint32_t *app_offset);
+#endif
 extern void arch_reboot(void);
 
 /* Simulator-only calls */

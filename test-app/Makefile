@@ -1532,20 +1532,30 @@ ifeq ($(TARGET),mpfs250)
   CFLAGS+=-DRAMFUNCTION='__attribute__((used,section(".ramcode")))'
 endif
 
-# $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
-
 ifeq ($(TARGET),psoc6)
-  LSCRIPT_TEMPLATE:=ARM-psoc6.ld
-  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_gpio.o
-  APP_OBJS+= $(CYPRESS_PDL)/drivers/source/cy_device.o
-  CFLAGS+=-I$(CYPRESS_PDL)/drivers/include/
-  CFLAGS+=-I$(CYPRESS_PDL)/devices/include
-  CFLAGS+=-I$(CYPRESS_PDL)/cmsis/include
-  CFLAGS+=-I$(CYPRESS_TARGET_LIB)
-  CFLAGS+=-I$(CYPRESS_CORE_LIB)/include
-  CFLAGS+=-I$(CYPRESS_PDL)/devices/include/ip
-  CFLAGS+=-I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB
-  CFLAGS+=-DCY8C624ABZI_D44
+  PSOC6_APP_SRCS:=$(patsubst %.o,%.c,$(filter-out %.S %cy_syslib_ext.o,$(PSOC6_PDL_OBJS)))
+  ifeq ($(DEBUG_UART),1)
+    PSOC6_APP_SRCS+=$(PSOC6_UART_OBJS:.o=.c)
+  endif
+  ifeq ($(EXT_FLASH),1)
+    PSOC6_APP_SRCS+=$(PSOC6_SMIF_OBJS:.o=.c)
+  endif
+  ifeq ($(PSOC6_CM4_APP),1)
+    LSCRIPT_TEMPLATE:=ARM-psoc6-cm4.ld
+    CFLAGS+=-mcpu=cortex-m4
+    LDFLAGS+=-mcpu=cortex-m4
+    PSOC6_APP_SRCS+=$(CYPRESS_PDL_TEMPLATE)/COMPONENT_CM4/system_psoc6_cm4.c
+  else
+    LSCRIPT_TEMPLATE:=ARM-psoc6.ld
+    PSOC6_APP_SRCS+=$(CYPRESS_PDL_TEMPLATE)/COMPONENT_CM0P/system_psoc6_cm0plus.c
+  endif
+  # wolfBoot's PDL and string objects are CM0+ builds; the app may run on the CM4
+  APP_OBJS:=$(patsubst ../src/string.o,psoc6_pdl/string.o,$(APP_OBJS))
+  APP_OBJS+=$(addprefix psoc6_pdl/,$(notdir $(PSOC6_APP_SRCS:.c=.o)))
+  APP_OBJS+=psoc6_pdl/cy_syslib_ext.o
+  vpath %.c $(sort $(dir $(PSOC6_APP_SRCS)))
+  vpath string.c ../src
+  vpath %.S $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM
 endif
 
 ifeq ($(TARGET),x86_fsp_qemu)
@@ -1898,6 +1908,16 @@ endif
 ../hal/$(TARGET)_ns.o: ../hal/$(TARGET).c FORCE
 	$(Q)$(CC) $(CFLAGS) -c -o $(@) ../hal/$(TARGET).c -DNONSECURE_APP
 
+psoc6_pdl/%.o: %.c
+	@echo "\t[CC-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
+psoc6_pdl/%.o: %.S
+	@echo "\t[AS-$(ARCH)] $@"
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CFLAGS) -c $(OUTPUT_FLAG) $@ $<
+
 mcxw_ns/%.o: %.c
 	@echo "\t[CC-$(ARCH)] $@"
 	$(Q)mkdir -p $(dir $@)
@@ -1977,7 +1997,7 @@ clean:
 	$(Q)rm -f *.bin *.elf *.map tags *.o $(LSCRIPT) $(APP_OBJS) wcs/*.o
 	$(Q)rm -rf $(WOLFSSL_LOCAL_OBJDIR) $(WOLFTPM_LOCAL_OBJDIR) \
 		$(WOLFHSM_LOCAL_OBJDIR) $(WOLFIP_LOCAL_OBJDIR) mcxw_ns lpc55s69_ns \
-		../generated/test-app
+		psoc6_pdl ../generated/test-app
 
 $(LSCRIPT): $(LSCRIPT_TEMPLATE) FORCE
 	$(Q)printf "%d" $(WOLFBOOT_PARTITION_BOOT_ADDRESS) > .wolfboot-offset

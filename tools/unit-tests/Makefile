@@ -49,6 +49,8 @@ CFLAGS+=-g -ggdb
 CFLAGS+=-fprofile-arcs
 CFLAGS+=-ftest-coverage
 CFLAGS+=--coverage
+# The tests do not use threads: plain counters, even with -pthread
+CFLAGS+=-fprofile-update=single
 CFLAGS+=-DUNIT_TEST_COVERAGE
 CFLAGS+=-DUNIT_TEST -DWOLFSSL_USER_SETTINGS
 # Pin the standard: GCC 14+ defaults to gnu23, where glibc string.h defines
@@ -77,6 +79,9 @@ TESTS:=unit-parser unit-parser-large-header unit-fdt unit-extflash unit-string \
        unit-enc-nvm-flagshome unit-delta unit-gzip unit-update-flash unit-update-flash-delta \
        unit-update-flash-db \
        unit-update-flash-hook \
+       unit-update-flash-flagshome unit-update-flash-invert \
+       unit-update-flash-int-invert \
+       unit-update-flash-smallsector \
        unit-update-flash-self-update \
        unit-update-flash-self-update-ecc \
        unit-update-flash-self-update-monolithic \
@@ -283,6 +288,16 @@ TESTS+=unit-lpc55s69-puf
 else
 $(info Skipping LPC55S69 unit tests: set MCUXSDK (see tools/ci/fetch-mcuxsdk-headers.sh))
 endif
+# PSoC 6 HAL tests build against the real Infineon PDL headers, fetched into
+# PSOC6_LIBS by tools/ci/fetch-psoc6-pdl.sh, with only CMSIS mocked.
+PSOC6_LIBS?=
+ifneq ($(wildcard $(PSOC6_LIBS)/mtb-pdl-cat1/drivers/include/cy_flash.h),)
+TESTS+=unit-psoc6-flash
+TESTS+=unit-psoc6-qspi
+TESTS+=unit-psoc6-boot
+else
+$(info Skipping PSoC 6 unit tests: set PSOC6_LIBS (see tools/ci/fetch-psoc6-pdl.sh))
+endif
 TESTS+=unit-flash-write-nrf52
 TESTS+=unit-nrf5340-uart-crlf
 TESTS+=unit-flash-write-samr21
@@ -427,6 +442,12 @@ unit-psa_store:CFLAGS+=-I$(WOLFBOOT_LIB_WOLFPSA) -DMOCK_PARTITIONS -DMOCK_KEYVAU
 unit-update-flash:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Same suite with a 256-byte sector: catches sector-size assumptions in the
+# swap and resume machinery that the larger-sector variants miss
+unit-update-flash-smallsector:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE \
+	-DWOLFBOOT_SECTOR_SIZE=256
 # Single-sector partitions (WOLFBOOT_PARTITION_SIZE == WOLFBOOT_SECTOR_SIZE)
 # are only valid with the trailers kept outside the partitions.
 unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
@@ -436,6 +457,23 @@ unit-update-flash-custom-trailer:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -D
 unit-nsc-update:CFLAGS+=-DMOCK_PARTITIONS -D__WOLFBOOT -DTZEN \
 	-DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Write-once FLAGS_HOME trailers with SWAP in internal flash, with the default
+# and the inverted flag polarity; the inverted one also writes trailers in
+# chunks smaller than a sector
+unit-update-flash-flagshome:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DNVM_FLASH_WRITEONCE -DFLAGS_HOME=1 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+unit-update-flash-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT \
+	-DNVM_FLASH_WRITEONCE -DWOLFBOOT_FLAGS_INVERT=1 -DFLAGS_HOME=1 \
+	-DFLASHBUFFER_SIZE=512 \
+	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
+# Write-once trailers with inverted flags and every partition in internal flash
+unit-update-flash-int-invert:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
+	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED \
+	-DNVM_FLASH_WRITEONCE -DWOLFBOOT_FLAGS_INVERT=1 -DFLASHBUFFER_SIZE=512 \
 	-DWOLFBOOT_ORIGIN=MOCK_ADDRESS_BOOT -DBOOTLOADER_PARTITION_SIZE=WOLFBOOT_PARTITION_SIZE
 unit-update-flash-hook:CFLAGS+=-DMOCK_PARTITIONS -DWOLFBOOT_NO_SIGN -DUNIT_TEST_AUTH \
 	-DWOLFBOOT_HASH_SHA256 -DPRINTF_ENABLED -DEXT_FLASH -DPART_UPDATE_EXT -DPART_SWAP_EXT \
@@ -1285,6 +1323,18 @@ unit-fit-fpga: ../../include/target.h unit-fit-fpga.c
 		-ffunction-sections -fdata-sections $(LDFLAGS) -Wl,--gc-sections
 
 unit-update-flash: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-smallsector: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-flagshome: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-invert: ../../include/target.h unit-update-flash.c
+	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
+
+unit-update-flash-int-invert: ../../include/target.h unit-update-flash.c
 	gcc -o $@ unit-update-flash.c ../../src/image.c $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/sha256.c $(CFLAGS) $(LDFLAGS)
 
 # DISABLE_BACKUP runtime variant: direct update->BOOT copy without the
@@ -2572,6 +2622,33 @@ unit-rw612-uart: unit-rw612-uart.c ../../hal/rw612.c
 		-isystem $(MCUXSDK)/drivers/flexcomm \
 		-isystem $(MCUXSDK)/drivers/flexcomm/usart $(CFLAGS) $(LDFLAGS)
 
+PSOC6_PDL=$(PSOC6_LIBS)/mtb-pdl-cat1
+PSOC6_TEST_INC=-U__ARM_ARCH -D__ARM_ARCH=6 -D__ARM_ARCH_6M__=1 \
+	-DCY8C624ABZI_S2D44 -DPSOC6_BOARD_CY8CEVAL_062S2 \
+	-DCY_CUSTOM_ASSERT_HANDLER -Icmsis_stub -I../.. \
+	-isystem $(PSOC6_PDL)/drivers/include \
+	-isystem $(PSOC6_PDL)/devices/COMPONENT_CAT1A/include \
+	-isystem $(PSOC6_PDL)/devices/COMPONENT_CAT1A/include/ip \
+	-isystem $(PSOC6_LIBS)/mtb-template-cat1/files/templates/cat1a/COMPONENT_MTB \
+	-isystem $(PSOC6_LIBS)/core-lib/include
+PSOC6_TEST_DEPS=../../hal/psoc6.c ../../hal/psoc6.h cmsis_stub/core_cm0plus.h
+
+unit-psoc6-flash: unit-psoc6-flash.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-flash.c -DDEBUG_UART -DRAM_CODE $(PSOC6_TEST_INC) \
+		$(CFLAGS) $(LDFLAGS)
+
+unit-psoc6-qspi: unit-psoc6-qspi.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-qspi.c -DEXT_FLASH=1 -DPART_UPDATE_EXT=1 \
+		$(PSOC6_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
+unit-psoc6-boot: unit-psoc6-boot.c $(PSOC6_TEST_DEPS)
+	gcc -o $@ unit-psoc6-boot.c -D__WOLFBOOT -DDEBUG_UART \
+		-DWOLFBOOT_HASH_SHA256 -DWOLFBOOT_SIGN_ECC256 -DDUALBANK_SWAP=1 \
+		-DBOOT_BENCHMARK \
+		-DWOLFBOOT_BOOT_REMOTE_CORE -DWOLFBOOT_ORIGIN=0x10000000 \
+		-DBOOTLOADER_PARTITION_SIZE=0x20000 -DARCH_FLASH_OFFSET=0x10000000 \
+		$(PSOC6_TEST_INC) $(CFLAGS) $(LDFLAGS)
+
 MCXW_SSS=$(MCUXSDK)/middleware/secure-subsystem
 MCXW_TEST_INC=-DCPU_MCXW716CMFTA $(MCUXSDK_TEST_INC) -isystem $(MCXW_SDK) \
 	-isystem $(MCXW_SDK)/../periph2 -isystem $(MCXW_SDK)/drivers \
@@ -2697,7 +2774,8 @@ GENERATED_SRC:=aurix_erased_extract.h elf_store_extract.h \
 CONDITIONAL_TESTS:=unit-efi-x86-open-image unit-linux-loader-e820 \
 	unit-linux-loader-syssize unit-flash-write-mcxa unit-rw612-flash \
 	unit-rw612-tz unit-rw612-uart unit-mcxw-flash unit-mcxw-tz \
-	unit-lpc55s69-flash unit-lpc55s69-tz unit-lpc55s69-uart unit-lpc55s69-puf
+	unit-lpc55s69-flash unit-lpc55s69-tz unit-lpc55s69-uart unit-lpc55s69-puf \
+	unit-psoc6-flash unit-psoc6-qspi unit-psoc6-boot
 
 clean: covclean
 	rm -f $(TESTS) $(CONDITIONAL_TESTS) $(GENERATED_SRC) *.o *.gcno *.gcda \

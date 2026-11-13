@@ -2480,25 +2480,71 @@ endif
 
 ifeq ($(TARGET),psoc6)
     CORTEX_M0=1
-    OBJS+=\
+    PSOC6_BOARD?=CY8CKIT_062S2_43012
+    # The boot ROM's flash NMI handler reprograms the CM0+ MPU for itself and
+    # cannot run under wolfBoot's map, which marks the ROM execute-never.
+    ifneq ($(NO_MPU),1)
+        $(error TARGET=psoc6 requires NO_MPU=1)
+    endif
+    # Main and work flash erase to 0x00
+    ifneq ($(FLAGS_INVERT),1)
+        $(error TARGET=psoc6 requires FLAGS_INVERT=1)
+    endif
+    # Rewriting a programmed row erases it first, so trailer updates need the
+    # two-sector trailer to survive a power cut
+    ifneq ($(NVM_FLASH_WRITEONCE),1)
+        $(error TARGET=psoc6 requires NVM_FLASH_WRITEONCE=1)
+    endif
+    CYPRESS_PDL_DEV:=$(CYPRESS_PDL)/devices/COMPONENT_CAT1A
+    CYPRESS_PDL_TEMPLATE:=$(CYPRESS_TEMPLATE_LIB)/files/templates/cat1a/COMPONENT_MTB
+    PSOC6_LIB_FILES:=$(CYPRESS_PDL_DEV)/include/cy_device_headers.h \
+        $(CYPRESS_PDL_TEMPLATE)/COMPONENT_CM0P/system_psoc6_cm0plus.c \
+        $(CYPRESS_CMSIS)/Core/Include/core_cm0plus.h \
+        $(CYPRESS_CORE_LIB)/include/cy_result.h
+    ifneq ($(filter-out $(wildcard $(PSOC6_LIB_FILES)),$(PSOC6_LIB_FILES)),)
+        ifeq ($(filter clean keysclean distclean keytools,$(MAKECMDGOALS)),)
+            $(error PSoC 6 libraries not found: run tools/ci/fetch-psoc6-pdl.sh lib, \
+                or set CYPRESS_PDL, CYPRESS_TEMPLATE_LIB, CYPRESS_CMSIS and \
+                CYPRESS_CORE_LIB. Missing: \
+                $(filter-out $(wildcard $(PSOC6_LIB_FILES)),$(PSOC6_LIB_FILES)))
+        endif
+    endif
+    PSOC6_PDL_OBJS:=\
         $(CYPRESS_PDL)/drivers/source/cy_flash.o \
         $(CYPRESS_PDL)/drivers/source/cy_ipc_pipe.o \
         $(CYPRESS_PDL)/drivers/source/cy_ipc_sema.o \
         $(CYPRESS_PDL)/drivers/source/cy_ipc_drv.o \
-        $(CYPRESS_PDL)/drivers/source/cy_device.o \
         $(CYPRESS_PDL)/drivers/source/cy_sysclk.o \
         $(CYPRESS_PDL)/drivers/source/cy_sysint.o \
         $(CYPRESS_PDL)/drivers/source/cy_syslib.o \
-        $(CYPRESS_PDL)/drivers/source/cy_ble_clk.o \
-        $(CYPRESS_PDL)/drivers/source/cy_wdt.o \
-        $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_gcc.o \
-        $(CYPRESS_PDL)/devices/templates/COMPONENT_MTB/COMPONENT_CM0P/system_psoc6_cm0plus.o
+        $(CYPRESS_PDL)/drivers/source/cy_gpio.o \
+        $(CYPRESS_PDL)/drivers/source/TOOLCHAIN_GCC_ARM/cy_syslib_ext.o \
+        $(CYPRESS_PDL_DEV)/source/cy_device.o
+    OBJS+=$(PSOC6_PDL_OBJS) \
+        $(CYPRESS_PDL_TEMPLATE)/COMPONENT_CM0P/system_psoc6_cm0plus.o
+    PSOC6_UART_OBJS:=\
+        $(CYPRESS_PDL)/drivers/source/cy_scb_common.o \
+        $(CYPRESS_PDL)/drivers/source/cy_scb_uart.o
+    PSOC6_SMIF_OBJS:=\
+        $(CYPRESS_PDL)/drivers/source/cy_smif.o \
+        $(CYPRESS_PDL)/drivers/source/cy_smif_memslot.o \
+        $(CYPRESS_PDL)/drivers/source/cy_smif_sfdp.o
+    ifeq ($(DEBUG_UART),1)
+        OBJS+=$(PSOC6_UART_OBJS)
+    endif
+    ifeq ($(BOOT_BENCHMARK),1)
+        OBJS+=$(CYPRESS_PDL)/drivers/source/cy_tcpwm_counter.o
+    endif
+    ifeq ($(EXT_FLASH),1)
+        OBJS+=$(PSOC6_SMIF_OBJS)
+    endif
     PSOC6_CRYPTO_OBJS=\
         $(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/port/cypress/psoc6_crypto.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_vu.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_domain_params.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_nist_p.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_ecdsa.o \
+        $(CYPRESS_PDL)/drivers/source/cy_crypto_core_ecc_key_gen.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v2.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_sha_v1.o \
         $(CYPRESS_PDL)/drivers/source/cy_crypto_core_mem_v2.o \
@@ -2508,15 +2554,20 @@ ifeq ($(TARGET),psoc6)
         $(CYPRESS_PDL)/drivers/source/cy_crypto.o
 
     CFLAGS+=\
-        -I$(CYPRESS_PDL)/devices/include \
         -I$(CYPRESS_PDL)/drivers/include \
-        -I$(CYPRESS_PDL)/cmsis/include \
-        -I$(CYPRESS_TARGET_LIB) \
+        -I$(CYPRESS_PDL_DEV)/include \
+        -I$(CYPRESS_PDL_DEV)/include/ip \
+        -I$(CYPRESS_PDL_TEMPLATE) \
+        -I$(CYPRESS_CMSIS)/Core/Include \
         -I$(CYPRESS_CORE_LIB)/include \
-        -I$(CYPRESS_PDL)/devices/include/ip \
-        -I$(CYPRESS_PDL)/devices/templates/COMPONENT_MTB \
-        -DCY8C624ABZI_D44
+        -DCY8C624ABZI_S2D44 \
+        -DPSOC6_BOARD_$(PSOC6_BOARD)
     ARCH_FLASH_OFFSET=0x10000000
+    # Copies then program whole erased rows instead of rewriting half rows
+    CFLAGS+=-DFLASHBUFFER_SIZE=512
+    ifeq ($(PSOC6_CM4_APP),1)
+        CFLAGS+=-DPSOC6_CM4_APP -DWOLFBOOT_BOOT_REMOTE_CORE
+    endif
     ifneq ($(PSOC6_CRYPTO),0)
         CFLAGS+=-DWOLFSSL_PSOC6_CRYPTO
         OBJS+=$(PSOC6_CRYPTO_OBJS)
