@@ -1725,6 +1725,13 @@ void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
 #define WOLFBOOT_FIT_MAX_RAMDISK WOLFBOOT_FIT_MAX_DECOMP
 #endif
 
+static int fit_ramdisk_ok;
+
+int fit_ramdisk_loaded(void)
+{
+    return fit_ramdisk_ok;
+}
+
 /* Load a FIT ramdisk subimage and patch the DTB's /chosen
  * linux,initrd-{start,end} to point at it. If
  * WOLFBOOT_LOAD_RAMDISK_ADDRESS is nonzero, the ramdisk is loaded
@@ -1786,6 +1793,7 @@ int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
         }
     }
 
+    fit_ramdisk_ok = 1;
     return 0;
 }
 #endif /* WOLFBOOT_FIT_RAMDISK */
