@@ -517,6 +517,8 @@ static void psoc6_uart_putc(char c)
         if (Cy_SCB_UART_Put(PSOC6_UART_SCB, (uint32_t)(uint8_t)c) != 0UL)
             return;
     }
+    /* A FIFO that stopped draining costs the spin bound once, not per char */
+    psoc6_uart_ready = 0;
 }
 
 #ifdef __WOLFBOOT

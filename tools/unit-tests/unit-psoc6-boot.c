@@ -656,7 +656,7 @@ START_TEST(test_uart_putc_bounds_a_stuck_fifo)
 {
     uart_init();
     tx_put_busy = 1;
-    uart_write("x", 1);
+    uart_write("xy\n", 3);
     ck_assert_int_eq(tx_put_calls, (int)PSOC6_UART_SPIN_MAX);
 }
 END_TEST
