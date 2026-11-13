@@ -43,7 +43,12 @@ on:
 
 jobs:
   sbom_canary:
-    runs-on: ubuntu-latest
+    # Held on 24.04: the macro capture runs each compiler at its own default
+    # language standard, and from GCC 15 that default is C23, which defines
+    # macros (the <stdint.h> *_WIDTH family) that clang's default does not.
+    # The neutrality check below then fails on 26.04 until the capture pins a
+    # standard.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:

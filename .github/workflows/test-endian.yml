@@ -25,9 +25,14 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
+          # Ubuntu 26.04 dropped qemu-user-static: qemu-user carries the
+          # static emulators there, as qemu-ppc.
+          QEMU_PKG=qemu-user-static
+          apt-cache policy "$QEMU_PKG" | grep -q 'Candidate: [0-9]' \
+            || QEMU_PKG=qemu-user
           sudo apt-get install --no-install-recommends -y -q \
             -o Acquire::Retries=3 \
-            gcc-powerpc-linux-gnu libc6-dev-powerpc-cross qemu-user-static \
+            gcc-powerpc-linux-gnu libc6-dev-powerpc-cross "$QEMU_PKG" \
             dosfstools mtools e2fsprogs
 
       # Fixture generation takes minutes, so prove the cross toolchain works
@@ -39,8 +44,9 @@ jobs:
           powerpc-linux-gnu-gcc -static -o /tmp/be_probe /tmp/be_probe.c
           file /tmp/be_probe | grep -q 'MSB' \
             || { echo "cross-compiler did not produce a big-endian binary"; exit 1; }
-          qemu-ppc-static /tmp/be_probe \
-            || { echo "qemu-ppc-static cannot run a big-endian binary"; exit 1; }
+          QEMU_PPC=$(command -v qemu-ppc-static || command -v qemu-ppc)
+          "$QEMU_PPC" /tmp/be_probe \
+            || { echo "$QEMU_PPC cannot run a big-endian binary"; exit 1; }
           echo "big-endian toolchain OK"
 
       - name: generate filesystem fixtures

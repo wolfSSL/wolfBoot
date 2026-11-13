@@ -257,6 +257,11 @@ int memcmp(const void *_s1, const void *_s2, size_t n)
     return diff;
 }
 
+/* A C23 <string.h> defines memchr as a macro that keeps the constness of
+ * its argument; this is the function itself. */
+#ifdef memchr
+#undef memchr
+#endif
 void* memchr(void const *s, int c_in, size_t n)
 {
     unsigned char c = (unsigned char)c_in;

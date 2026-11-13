@@ -45,7 +45,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev python3-setuptools
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh
@@ -65,7 +65,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 uuid-dev dosfstools mtools e2fsprogs
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 uuid-dev python3-setuptools dosfstools mtools e2fsprogs
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh -f
@@ -84,7 +84,7 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -o Acquire::Retries=3
-          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev
+          sudo apt-get install --no-install-recommends -y -q -o Acquire::Retries=3 nasm gcc-multilib qemu-system-x86 swtpm uuid-dev python3-setuptools
       - name: run test
         run: |
           ./tools/scripts/x86_fsp/qemu/test_qemu.sh -r
