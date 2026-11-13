@@ -1781,6 +1781,12 @@ int post_temp_ram_init_cb(void)
     for (i = 0; i < n; i++) {
         tgl_gpio_configure(&gpio_table_tempram[i]);
     }
+    /* The PCIe switch latches its straps about a quarter of a second after
+     * reset, so they are driven before anything slow runs. */
+    n = sizeof(gpio_table_premem)/sizeof(gpio_table_premem[0]);
+    for (i = 0; i < n; i++) {
+        tgl_gpio_configure(&gpio_table_premem[i]);
+    }
 #else
     (void)tgl_gpio_configure;
 #endif /* TARGET_kontron_vx3060_s2 */
