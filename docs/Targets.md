@@ -299,15 +299,16 @@ All partitions are at the Secure flash alias:
 
 | Region | Address | Size |
 | --- | --- | --- |
-| wolfBoot (with an empty NSC) | `0x0C000000` | 48 KB |
+| wolfBoot | `0x0C000000` | 48 KB |
 | Boot partition (secure application) | `0x0C00C000` | 128 KB |
 | Secure application NVM (not touched by wolfBoot) | `0x0C038000` | 24 KB |
 | Swap page | `0x0C03E000` | 2 KB |
 | Update partition (start of bank 2) | `0x0C040000` | 128 KB |
 | Non-secure guests | `0x08060000` | 128 KB |
 
-wolfBoot keeps SRAM1 and SRAM2 Secure across the jump, opens no Non-secure
-flash, RAM or peripheral window in the SAU, and
+wolfBoot keeps SRAM1 and SRAM2 Secure across the jump (the GTZC reset value),
+enables no SAU region and builds no Non-secure callable entries, keeps the
+110 MHz PLL clock running (`WOLFBOOT_RESTORE_CLOCK=0`), and
 links its own RAM at `0x30030000` so that `0x30000000-0x3002FFFF` (the record
 and the secure application's RAM) is left untouched. The PSA lifecycle in the
 record comes from the RDP level in `FLASH_OPTR` (`hal/stm32l5_lifecycle.h`).
