@@ -425,6 +425,11 @@ void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp);
  * `dts`. Returns 0 on success, -1 on load failure or when `dts` is NULL,
  * since a staged ramdisk is useless unless the tree names it. */
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts);
+
+/* 1 once fit_load_ramdisk() has staged a ramdisk and written its range to
+ * the device tree, so a later fixup pass can tell that range from one the
+ * tree already carried. */
+int fit_ramdisk_loaded(void);
 #endif
 
 #ifdef WOLFBOOT_FPGA_BITSTREAM
