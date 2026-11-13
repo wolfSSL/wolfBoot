@@ -317,16 +317,6 @@ void hal_gtzc_init(void)
    int i;
    /* One bit in the bitmask: 256B */
 
-#if defined(WOLFBOOT_SECURE_APP)
-   /* SRAM1 (192 KB) and SRAM2 (64 KB) stay Secure until the secure
-    * application installs its own split. */
-   for (i = 0; i < 24; i++) {
-       SET_GTZC_MPCBBx_S_VCTR(1, i, 0xFFFFFFFF);
-   }
-   for (i = 0; i < 8; i++) {
-       SET_GTZC_MPCBBx_S_VCTR(2, i, 0xFFFFFFFF);
-   }
-#else
    /* Configure lower half of total RAM as secure
     * 0x3000 0000 : 0x3001 FFFF - 128KB
     */
@@ -347,7 +337,6 @@ void hal_gtzc_init(void)
    for (i = 0; i < 8; i++) {
        SET_GTZC_MPCBBx_S_VCTR(2, i, 0x0);
    }
-#endif /* WOLFBOOT_SECURE_APP */
 }
 #endif
 

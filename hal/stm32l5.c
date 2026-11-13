@@ -539,7 +539,10 @@ void hal_init(void)
 
 #if TZ_SECURE()
     hal_tz_sau_init();
+    /* A secure application keeps the MPCBB reset value (all SRAM Secure) */
+#if !defined(WOLFBOOT_SECURE_APP)
     hal_gtzc_init();
+#endif
 #endif
     clock_pll_on(0);
 
