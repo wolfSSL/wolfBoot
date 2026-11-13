@@ -3809,7 +3809,10 @@ int wolfBoot_ram_decrypt(uint8_t *src, uint8_t *dst)
 #endif /* MMU */
 #endif /* EXT_ENCRYPTED */
 
-#if defined(__WOLFBOOT) && defined(TZEN)
+/* A secure application without wolfCrypt TZ is entered Secure and exports no
+ * NSC entries, so Non-secure code cannot reach the update partition. */
+#if defined(__WOLFBOOT) && defined(TZEN) && \
+    (!defined(WOLFBOOT_SECURE_APP) || defined(WOLFCRYPT_SECURE_MODE))
 
 /* The wolfBoot_nsc_* functions are cmse_nonsecure_entry veneers callable by any
  * non-secure code. Pointer arguments arrive directly from the NS caller and are
@@ -3902,4 +3905,4 @@ int wolfBoot_nsc_write_update(uint32_t address, const uint8_t *buf, uint32_t len
     return ret;
 }
 
-#endif /* __WOLFBOOT && TZEN */
+#endif /* __WOLFBOOT && TZEN && (!WOLFBOOT_SECURE_APP || WOLFCRYPT_SECURE_MODE) */

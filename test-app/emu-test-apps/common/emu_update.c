@@ -292,9 +292,8 @@ static void wait_for_update(uint32_t version)
 #define EMU_SAU_RLAR  (*(volatile uint32_t *)0xE000EDE0u)
 #define EMU_SAU_TYPE  (*(volatile uint32_t *)0xE000EDD4u)
 #define EMU_SAU_RLAR_ENABLE 0x1u
-#define EMU_SAU_RLAR_NSC    0x2u
 
-/* wolfBoot must hand over with no Non-secure SAU window, only its NSC one */
+/* wolfBoot must hand over with no SAU region: no Non-secure or NSC window */
 static int emu_check_sau(void)
 {
     uint32_t regions = EMU_SAU_TYPE & 0xFFu;
@@ -304,8 +303,7 @@ static int emu_check_sau(void)
     for (r = 0u; r < regions; r++) {
         EMU_SAU_RNR = r;
         rlar = EMU_SAU_RLAR;
-        if (((rlar & EMU_SAU_RLAR_ENABLE) != 0u) &&
-                ((rlar & EMU_SAU_RLAR_NSC) == 0u)) {
+        if ((rlar & EMU_SAU_RLAR_ENABLE) != 0u) {
             return -1;
         }
     }

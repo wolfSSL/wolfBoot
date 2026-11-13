@@ -681,6 +681,9 @@ ifeq ($(ARCH),ARM)
     ifeq ($(TZEN),1)
       WOLFBOOT_ORIGIN=0x0C000000
       ifeq ($(WOLFBOOT_SECURE_APP),1)
+        ifeq ($(WOLFCRYPT_TZ),1)
+          $(error stm32l5 WOLFBOOT_SECURE_APP=1 links no NSC; set WOLFCRYPT_TZ=0)
+        endif
         $(call LSCRIPT_IN_DEFAULT,hal/$(TARGET)-secure-app.ld)
       endif
     else
@@ -1108,7 +1111,10 @@ else
       # machinery as CORTEX_M33 applies. Kept separate from the M33 block so
       # that adding this arm cannot change any existing target.
       CFLAGS+=-mcmse
-      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
+      # A secure app without WOLFCRYPT_TZ has no NSC entries to export
+      ifneq ($(WOLFBOOT_SECURE_APP)/$(filter 1,$(WOLFCRYPT_TZ)),1/)
+        SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
+      endif
       ifeq ($(WOLFCRYPT_TZ),1)
         SECURE_OBJS+=./src/wc_callable.o
         WOLFCRYPT_OBJS+=$(WOLFBOOT_LIB_WOLFSSL)/wolfcrypt/src/random.o
@@ -1139,7 +1145,10 @@ else
         endif
       endif
       CFLAGS+=-mcmse
-      SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
+      # A secure app without WOLFCRYPT_TZ has no NSC entries to export
+      ifneq ($(WOLFBOOT_SECURE_APP)/$(filter 1,$(WOLFCRYPT_TZ)),1/)
+        SECURE_LDFLAGS+=-Wl,--cmse-implib -Wl,--out-implib=./src/wolfboot_tz_nsc.o
+      endif
       ifeq ($(WOLFCRYPT_TZ),1)
         CORTEXM_ARM_EXTRA_OBJS=
         CORTEXM_ARM_EXTRA_CFLAGS=

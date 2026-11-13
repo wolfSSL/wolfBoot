@@ -390,9 +390,12 @@ void hal_tz_sau_init(void)
 #else
 void hal_tz_sau_init(void)
 {
+    /* A secure application without wolfCrypt TZ exports no NSC entries */
+#if !defined(WOLFBOOT_SECURE_APP) || defined(WOLFCRYPT_SECURE_MODE)
     /* Non-secure callable: NSC functions area */
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
+#endif
 
     /* A secure application is entered Secure and programs its own
      * Non-secure flash, RAM and peripheral windows. */

@@ -5,7 +5,6 @@ MEMORY
     RAM (rwx) :     ORIGIN = 0x30030000, LENGTH = 0x0000C000
     RAM_HEAP (rw):  ORIGIN = 0x3003C000, LENGTH = 0x4000
     FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_KEYVAULT_ADDRESS@, LENGTH = @WOLFBOOT_KEYVAULT_SIZE@
-    FLASH_NSC(rx): ORIGIN = @WOLFBOOT_NSC_ADDRESS@, LENGTH = @WOLFBOOT_NSC_SIZE@
 }
 
 SECTIONS
@@ -26,8 +25,6 @@ SECTIONS
         *(.ARM.exidx*)
     } > FLASH
 
-    /* Data is stored in FLASH, not after the NSC: the boot partition
-     * follows the NSC directly. */
     .data :
     {
         _start_data = .;
@@ -38,14 +35,6 @@ SECTIONS
         _end_data = .;
     } > RAM AT > FLASH
     _stored_data = LOADADDR(.data);
-
-    .gnu.sgstubs ORIGIN(FLASH_NSC) :
-    {
-        . += 0x400;
-        . = ALIGN(4);
-        *(.gnu.sgstubs*)   /* Secure Gateway stubs */
-        . = ALIGN(4);
-    } >FLASH_NSC
 
     .bss (NOLOAD) :
     {
