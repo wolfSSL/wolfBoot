@@ -2,8 +2,7 @@
 MEMORY
 {
     FLASH (rx) :    ORIGIN = @WOLFBOOT_ORIGIN@, LENGTH = @WOLFBOOT_KEYVAULT_ADDRESS@ - @WOLFBOOT_ORIGIN@
-    RAM (rwx) :     ORIGIN = 0x30030000, LENGTH = 0x0000C000
-    RAM_HEAP (rw):  ORIGIN = 0x3003C000, LENGTH = 0x4000
+    RAM (rwx) :     ORIGIN = 0x30030000, LENGTH = 0x00010000
     FLASH_KEYVAULT(rw): ORIGIN = @WOLFBOOT_KEYVAULT_ADDRESS@, LENGTH = @WOLFBOOT_KEYVAULT_SIZE@
 }
 
@@ -52,8 +51,8 @@ SECTIONS
 
 END_STACK = ORIGIN(RAM) + LENGTH(RAM);
 
+_min_stack = 0x2000;
+ASSERT(_end + _min_stack <= END_STACK, "stm32l5 secure-app RAM: .bss leaves less than _min_stack for the stack")
+
 _flash_keyvault = ORIGIN(FLASH_KEYVAULT);
 _flash_keyvault_size = LENGTH(FLASH_KEYVAULT);
-
-_start_heap = ORIGIN(RAM_HEAP);
-_heap_size = LENGTH(RAM_HEAP);
