@@ -23,7 +23,8 @@
 #include "emu_app.h"
 
 /* The secure-app payload runs Secure and uses the Secure peripheral aliases;
- * wolfBoot hands it the 110 MHz PLL with APB1 undivided. */
+ * wolfBoot hands it the 110 MHz PLL with APB1 undivided. This assumes
+ * WOLFBOOT_RESTORE_CLOCK=0 as in stm32l5-tz-wolftrust.config. */
 #ifdef EMU_STM32L5_SECURE
 #define SYSCLK_HZ         110000000u
 #define PERIPH_ALIAS      0x10000000u

@@ -547,8 +547,7 @@ void hal_init(void)
 
 void hal_prepare_boot(void)
 {
-    /* A secure application runs on wolfBoot's 110 MHz PLL clock */
-#if defined(WOLFBOOT_RESTORE_CLOCK) && !defined(WOLFBOOT_SECURE_APP)
+#ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();
 #endif
 #if TZ_SECURE() && !defined(WOLFBOOT_SECURE_APP)
