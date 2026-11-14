@@ -51,7 +51,7 @@
 size_t strlen(const char *s); /* forward declaration */
 #endif
 
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) || defined(DEBUG_RTT)
     #include "printf.h"
     #ifdef PRINTF_ENABLED
     #include <stdarg.h>
@@ -67,7 +67,7 @@ size_t strlen(const char *s); /* forward declaration */
 /* allow using built-in libc if WOLFBOOT_USE_STDLIBC is defined */
 #ifndef WOLFBOOT_USE_STDLIBC
 #if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || \
-    (defined(PRINTF_ENABLED) && defined(DEBUG_UART)) \
+    (defined(PRINTF_ENABLED) && (defined(DEBUG_UART) || defined(DEBUG_RTT))) \
     || defined(TARGET_same51)
 
 int islower(int c)
@@ -273,9 +273,9 @@ void* memchr(void const *s, int c_in, size_t n)
     }
     return NULL;
 }
-#endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && DEBUG_UART) */
+#endif /* !BUILD_LOADER_STAGE1 || (PRINTF_ENABLED && (DEBUG_UART || DEBUG_RTT)) */
 
-#if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || defined(DEBUG_UART)
+#if !(defined(BUILD_LOADER_STAGE1) && defined(ARCH_PPC)) || defined(DEBUG_UART) || defined(DEBUG_RTT)
 size_t strlen(const char *s)
 {
     size_t i = 0;
@@ -416,26 +416,36 @@ void __aeabi_memclr8(void *dst, size_t n)
 #endif /* __ARM_EABI__ && !IAR */
 #endif /* WOLFBOOT_USE_STDLIBC */
 
-#if defined(PRINTF_ENABLED) && defined(DEBUG_UART)
+#ifdef PRINTF_ENABLED
+#   if defined(DEBUG_UART)
+#       define write_str(buf, sz) uart_write(buf, sz)
+#   elif defined(DEBUG_RTT)
+#       include "RTT/SEGGER_RTT.h"
+#       define write_str(buf, sz) SEGGER_RTT_Write(0, buf, sz)
+#   endif
+/* fail build when neither uart or rtt are defined */
+#endif
+
+#if defined(PRINTF_ENABLED) && ( defined(DEBUG_UART) || defined(DEBUG_RTT) )
 /* Shared digit table -- avoids duplicating the literal in each width's
  * formatting loop. */
-static const char uart_writenum_digits[] = "0123456789ABCDEF";
+static const char write_num_digits[] = "0123456789ABCDEF";
 
 /* Shared tail for both widths: applies zeropad spacing, slides the digit
  * run into place, and emits to UART. Caller has filled digits at the
  * tail of `buf` and counted them in `sz`; `i` is the prefix length
  * (sign character only). */
-static void uart_writenum_emit(char *buf, int bufsize, int i, int sz,
+static void write_num_emit(char *buf, int bufsize, int i, int sz,
     int zeropad, int maxdigits)
 {
     if (zeropad && sz < maxdigits) {
         i += maxdigits - sz;
     }
     memmove(&buf[i], &buf[bufsize - sz], sz);
-    uart_write(buf, i + sz);
+    write_str(buf, i + sz);
 }
 
-void uart_writenum(int num, int base, int zeropad, int maxdigits,
+void write_num(int num, int base, int zeropad, int maxdigits,
     int is_signed)
 {
     int i = 0, sz = 0;
@@ -459,20 +469,19 @@ void uart_writenum(int num, int base, int zeropad, int maxdigits,
     /* 32-bit divide: stays out of libgcc 64-bit helpers, which aren't
      * linked into freestanding stage1 / Cortex-M builds. */
     do {
-        buf[sizeof(buf) - sz - 1] =
-            uart_writenum_digits[(val % (unsigned)base)];
+        buf[sizeof(buf) - sz - 1] = write_num_digits[(val % (unsigned)base)];
         sz++;
         val /= (unsigned)base;
     } while (val > 0U);
-    uart_writenum_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
+    write_num_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
 }
 
 #ifdef PRINTF_LONG_LONG
 /* 64-bit core for %llu/%lld/%llx. Pulls in libgcc 64-bit divide
  * (__udivmoddi4 / __aeabi_uldivmod) so it's only compiled when needed
  * and only called from the long-long printf paths -- never from the
- * 32-bit uart_writenum() fast path above. */
-static void uart_writenum_ll(unsigned long long val, int is_negative,
+ * 32-bit write_num() fast path above. */
+static void write_num_ll(unsigned long long val, int is_negative,
     int base, int zeropad, int maxdigits)
 {
     int i = 0, sz = 0;
@@ -491,23 +500,22 @@ static void uart_writenum_ll(unsigned long long val, int is_negative,
         memset(&buf[i], '0', maxdigits);
     }
     do {
-        buf[sizeof(buf) - sz - 1] =
-            uart_writenum_digits[(val % (unsigned)base)];
+        buf[sizeof(buf) - sz - 1] = write_num_digits[(val % (unsigned)base)];
         sz++;
         val /= (unsigned)base;
     } while (val > 0ULL);
-    uart_writenum_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
+    write_num_emit(buf, sizeof(buf), i, sz, zeropad, maxdigits);
 }
 #endif /* PRINTF_LONG_LONG */
 
-void uart_vprintf(const char* fmt, va_list argp)
+void tiny_vprintf(const char* fmt, va_list argp)
 {
     char* fmtp = (char*)fmt;
     int zeropad, maxdigits, precision, leftjust, islong, iszl;
     while (fmtp != NULL && *fmtp != '\0') {
         /* print non formatting characters */
         if (*fmtp != '%') {
-            uart_write(fmtp++, 1);
+            write_str(fmtp++, 1);
             continue;
         }
         fmtp++; /* skip % */
@@ -570,7 +578,7 @@ void uart_vprintf(const char* fmt, va_list argp)
 
         switch (*fmtp) {
             case '%':
-                uart_write(fmtp, 1);
+                write_str(fmtp, 1);
                 break;
             case 'u':
             case 'i':
@@ -596,7 +604,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                     else {
                         val = va_arg(argp, unsigned long long);
                     }
-                    uart_writenum_ll(val, is_neg, 10, zeropad, maxdigits);
+                    write_num_ll(val, is_neg, 10, zeropad, maxdigits);
                 }
                 else if (islong == 1 || iszl) {
                     /* %ld / %lu / %zd / %zu: long is 64-bit here */
@@ -616,7 +624,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                         val = (unsigned long long)va_arg(argp,
                             unsigned long);
                     }
-                    uart_writenum_ll(val, is_neg, 10, zeropad, maxdigits);
+                    write_num_ll(val, is_neg, 10, zeropad, maxdigits);
                 }
                 else
             #endif
@@ -624,17 +632,17 @@ void uart_vprintf(const char* fmt, va_list argp)
                     int n;
                     if (*fmtp == 'u') {
                         n = (int)va_arg(argp, unsigned int);
-                        uart_writenum(n, 10, zeropad, maxdigits, 0);
+                        write_num(n, 10, zeropad, maxdigits, 0);
                     }
                     else {
                         n = (int)va_arg(argp, int);
-                        uart_writenum(n, 10, zeropad, maxdigits, 1);
+                        write_num(n, 10, zeropad, maxdigits, 1);
                     }
                 }
                 break;
             }
             case 'p':
-                uart_write("0x", 2);
+                write_str("0x", 2);
                 /* fall through */
             case 'x':
             case 'X':
@@ -644,7 +652,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                     /* %llx: full 64-bit value */
                     unsigned long long val =
                         va_arg(argp, unsigned long long);
-                    uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
+                    write_num_ll(val, 0, 16, zeropad, maxdigits);
                 }
                 else if (islong == 1 || iszl || *fmtp == 'p') {
                     /* %lx / %zx / %p: consume at the type's natural width
@@ -658,7 +666,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                         val = (unsigned long long)va_arg(argp,
                             unsigned long);
                     }
-                    uart_writenum_ll(val, 0, 16, zeropad, maxdigits);
+                    write_num_ll(val, 0, 16, zeropad, maxdigits);
                 }
                 else
             #endif
@@ -670,7 +678,7 @@ void uart_vprintf(const char* fmt, va_list argp)
                     else {
                         n = (int)va_arg(argp, int);
                     }
-                    uart_writenum(n, 16, zeropad, maxdigits, 0);
+                    write_num(n, 16, zeropad, maxdigits, 0);
                 }
                 break;
             }
@@ -679,27 +687,27 @@ void uart_vprintf(const char* fmt, va_list argp)
                 char* str = (char*)va_arg(argp, char*);
                 int slen = (int)strlen(str);
                 if (leftjust) {
-                    uart_write(str, slen);
+                    write_str(str, slen);
                     while (slen < maxdigits) {
-                        uart_write(" ", 1);
+                        write_str(" ", 1);
                         slen++;
                     }
                 } else {
                     while (slen < maxdigits) {
-                        uart_write(" ", 1);
+                        write_str(" ", 1);
                         slen++;
                     }
-                    uart_write(str, (uint32_t)strlen(str));
+                    write_str(str, (uint32_t)strlen(str));
                 }
                 break;
             }
             case 'c':
             {
                 char c = (char)va_arg(argp, int);
-                uart_write(&c, 1);
+                write_str(&c, 1);
                 break;
             }
-#ifdef UART_PRINTF_FLOAT
+#ifdef PRINTF_FLOAT
             case 'f':
             case 'e':
             case 'g':
@@ -711,43 +719,43 @@ void uart_vprintf(const char* fmt, va_list argp)
 
                 /* handle negative */
                 if (val < 0.0) {
-                    uart_write("-", 1);
+                    write_str("-", 1);
                     val = -val;
                 }
 
                 /* integer part */
                 ipart = (unsigned int)val;
-                uart_writenum((int)ipart, 10, 0, 0, 0);
+                write_num((int)ipart, 10, 0, 0, 0);
 
                 /* fractional part */
                 if (prec > 0) {
                     double frac = val - (double)ipart;
                     char c;
                     int i;
-                    uart_write(".", 1);
+                    write_str(".", 1);
                     for (i = 0; i < prec; i++) {
                         frac *= 10.0;
                         digit = (int)frac;
                         if (digit > 9) digit = 9;
                         c = '0' + digit;
-                        uart_write(&c, 1);
+                        write_str(&c, 1);
                         frac -= (double)digit;
                     }
                 }
                 break;
             }
-#endif /* UART_PRINTF_FLOAT */
+#endif /* PRINTF_FLOAT */
             default:
                 break;
         }
         fmtp++;
     };
 }
-void uart_printf(const char* fmt, ...)
+void tiny_printf(const char* fmt, ...)
 {
     va_list argp;
     va_start(argp, fmt);
-    uart_vprintf(fmt, argp);
+    tiny_vprintf(fmt, argp);
     va_end(argp);
 }
-#endif /* PRINTF_ENABLED && DEBUG_UART */
+#endif /* PRINTF_ENABLED && ( DEBUG_UART || DEBUG_RTT ) */
