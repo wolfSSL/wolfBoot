@@ -944,6 +944,38 @@ jobs:
       config-file: ./config/examples/imx8mm-pico.config
       make-args: IMX8MM_BL33=1 DISK_EMMC=0 IMX8MM_MMU=0 wolfboot.bin test-app/image_v1_signed.bin
 
+  s32g2_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Boot ROM image in SRAM, signed FIT from the SD card.
+      config-file: ./config/examples/s32g2-goldbox.config
+      make-args: wolfboot.bin
+
+  s32g2_emmc_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # FIT from the eMMC behind the board's SW3, no console.
+      config-file: ./config/examples/s32g2-goldbox.config
+      make-args: DISK_EMMC=1 DISK_SDCARD=0 DEBUG_UART=0 wolfboot.bin
+
+  s32g2_qspi_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # Boot from the QuadSPI NOR with the A/B partitions in the NOR.
+      config-file: ./config/examples/s32g2-goldbox-qspi.config
+      make-args: wolfboot.bin
+
+  s32g2_qspi_program_test:
+    uses: ./.github/workflows/test-build-aarch64.yml
+    with:
+      arch: aarch64
+      # NOR programmer build: image file from the SD card to the NOR.
+      config-file: ./config/examples/s32g2-goldbox.config
+      make-args: S32G2_QSPI=1 S32G2_QSPI_PROGRAM_FILE=/s32g2_qspi_boot.bin wolfboot.bin
+
   disk_boot_confirm_test:
     uses: ./.github/workflows/test-build-aarch64.yml
     with:

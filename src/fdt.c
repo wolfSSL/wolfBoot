@@ -1739,6 +1739,13 @@ void* fit_load_kernel(fdt_ctx* ctx, const char* kernel_node, int* lenp)
  * failed, or if `dts` is NULL - a ramdisk the kernel is never told
  * about is not a success. Callers log and continue unless they are
  * built with WOLFBOOT_FIT_RAMDISK_REQUIRED. */
+static int fit_ramdisk_ok = 0;
+
+int fit_ramdisk_loaded(void)
+{
+    return fit_ramdisk_ok;
+}
+
 int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
 {
     int rd_size = 0;
@@ -1786,6 +1793,7 @@ int fit_load_ramdisk(fdt_ctx* ctx, const char* ramdisk_node, fdt_ctx* dts)
         }
     }
 
+    fit_ramdisk_ok = 1;
     return 0;
 }
 #endif /* WOLFBOOT_FIT_RAMDISK */

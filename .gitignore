@@ -156,6 +156,7 @@ tools/unit-tests/unit-fs-malicious
 tools/unit-tests/unit-ext4
 tools/unit-tests/unit-update-disk-fs
 tools/unit-tests/unit-update-disk-fs-enc
+tools/unit-tests/unit-update-disk-fs-confirm
 tools/unit-tests/ext4-min.img
 tools/unit-tests/ext4-stock.img
 tools/unit-tests/ext4-payload.bin
@@ -707,3 +708,8 @@ tools/unit-tests/stm32wb_write_extract.h
 tools/unit-tests/t10xx_flash_status_extract.h
 tools/unit-tests/ti_hercules_erase_extract.h
 tools/unit-tests/versal_host_write.c
+# S32G2 GoldBox FIT build outputs (tools/scripts/s32g2/s32g2-mkfit.sh)
+Image.gz
+s32g2-fitImage*
+s32g2.dtb
+s32g2_ddr.bin

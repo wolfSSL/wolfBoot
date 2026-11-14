@@ -454,6 +454,48 @@ START_TEST(test_ext4_extents_are_coalesced)
 }
 END_TEST
 
+/* fs_map() must name the bytes fs_read() returns: the caller rewrites them
+ * in place on the media. The image is partition 0, so a partition offset is
+ * an offset into the image file. */
+static void check_map(const char *img)
+{
+    struct fs_volume vol;
+    struct fs_file f;
+    uint64_t plen, poff, off;
+    uint8_t *payload = load_file(PAYLOAD_PATH, &plen);
+    uint8_t got[8];
+    unsigned int i;
+
+    mount_img(&vol, img);
+    ck_assert_int_eq(fs_open(&vol, &f, IMG_FILE, plen), WOLFBOOT_FS_OK);
+    for (i = 0; i < 3; i++) {
+        off = (i == 0) ? 0 : ((i == 1) ? 70000 : (plen - sizeof(got)));
+        poff = 0;
+        ck_assert_int_eq(fs_map(&f, off, sizeof(got), &poff),
+            WOLFBOOT_FS_OK);
+        ck_assert_int_eq(fseeko(img_fp, (off_t)poff, SEEK_SET), 0);
+        ck_assert_uint_eq(fread(got, 1, sizeof(got), img_fp), sizeof(got));
+        ck_assert_int_eq(memcmp(got, payload + off, sizeof(got)), 0);
+    }
+    /* The payload's first zero run is stored as a hole: no block to name. */
+    ck_assert_int_eq(fs_map(&f, 16384, sizeof(got), &poff),
+        WOLFBOOT_FS_E_UNSUPPORTED);
+    ck_assert_int_eq(fs_map(&f, plen - 4U, 8, &poff), WOLFBOOT_FS_E_RANGE);
+    free(payload);
+}
+
+START_TEST(test_ext4_map_minimal)
+{
+    check_map(MIN_IMG);
+}
+END_TEST
+
+START_TEST(test_ext4_map_stock)
+{
+    check_map(STOCK_IMG);
+}
+END_TEST
+
 static Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-ext4");
@@ -482,6 +524,8 @@ static Suite *wolfboot_suite(void)
     tcase_add_test(tc_read, test_ext4_read_backwards_and_eof);
     tcase_add_test(tc_read, test_ext4_read_nested);
     tcase_add_test(tc_read, test_ext4_extents_are_coalesced);
+    tcase_add_test(tc_read, test_ext4_map_minimal);
+    tcase_add_test(tc_read, test_ext4_map_stock);
     suite_add_tcase(s, tc_read);
 
     return s;

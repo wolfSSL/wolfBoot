@@ -1,0 +1,28 @@
+/dts-v1/;
+/*
+ * hal/s32g2.its - FIT for the S32G2: kernel plus the
+ * device tree, both under the wolfBoot signature. No earlier loader patches a
+ * DTB here, so wolfBoot adds /memory and the spin-table release addresses.
+ *   tools/scripts/s32g2/s32g2-mkfit.sh <Image> [version] [key] <dtb>
+ * Copyright (C) 2026 wolfSSL Inc.  GPLv3.
+ */
+/ {
+    description = "wolfBoot S32G2 (S32G274A) Linux + DTB";
+    #address-cells = <1>;
+    images {
+        kernel-1 {
+            description = "Linux kernel (arm64, gzip)";
+            data = /incbin/("../Image.gz");
+            type = "kernel"; arch = "arm64"; os = "linux"; compression = "gzip";
+            load = <0x84080000>; entry = <0x84080000>;
+            hash-1 { algo = "sha256"; };
+        };
+        fdt-1 {
+            description = "Flattened device tree";
+            data = /incbin/("../s32g2.dtb");
+            type = "flat_dt"; arch = "arm64"; compression = "none";
+            hash-1 { algo = "sha256"; };
+        };
+    };
+    configurations { default = "conf1"; conf1 { kernel = "kernel-1"; fdt = "fdt-1"; hash-1 { algo = "sha256"; }; }; };
+};

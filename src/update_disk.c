@@ -405,6 +405,9 @@ extern uint8_t _end_wb[];
 struct boot_slot {
     int part;
     int ready;
+#ifdef DISK_BOOT_CONFIRM
+    uint64_t img_end;   /* first byte past the image, 0 while not known */
+#endif
 #ifdef WOLFBOOT_DISK_FS
     const char *file;
     struct fs_volume vol;
@@ -430,38 +433,75 @@ static uint8_t slot_state[DISK_SLOTS];
 /* Slots disk_boot_state_reap() took out of the election. */
 static uint8_t slot_reaped[DISK_SLOTS];
 
-/* Byte offset of the trailer within the slot's partition, or -1 when the slot
- * cannot carry one. */
-static int slot_trailer_off(struct boot_slot *s, uint64_t *off)
+/* Where a slot keeps its trailer: the tail of the raw partition, or of the
+ * image file on a filesystem slot. rel is the offset within the slot, to
+ * compare against the image end; off is the partition offset to read and
+ * write. -1 when the slot cannot carry one. */
+static int slot_trailer_off(struct boot_slot *s, uint64_t *rel, uint64_t *off)
 {
     uint64_t sz = 0;
 
-    if ((s == NULL) || (off == NULL) || (s->ready == 0)) {
+    if ((s == NULL) || (rel == NULL) || (off == NULL) || (s->ready == 0)) {
         return -1;
     }
 #ifdef WOLFBOOT_DISK_FS
-    /* A file-backed slot has no partition tail to claim: the filesystem owns
-     * it. Boot confirmation is raw-partition only. */
+    /* The filesystem owns the partition tail, so a file-backed slot keeps
+     * the trailer in the last bytes of its own file. Those bytes are located
+     * through the read path and rewritten in place: nothing is allocated
+     * and no filesystem structure changes. A file whose tail is a hole or
+     * is split across runs cannot carry one. */
     if (s->vol.type != FS_TYPE_RAW) {
-        return -1;
+        if (disk_trailer_offset(fs_size(&s->f), rel) != 0) {
+            return -1;
+        }
+        if (fs_map(&s->f, *rel, DISK_TRAILER_SZ, off) != WOLFBOOT_FS_OK) {
+            return -1;
+        }
+        return 0;
     }
 #endif
     if (disk_part_size(BOOT_DISK, s->part, &sz) != 0) {
         return -1;
     }
-    return disk_trailer_offset(sz, off);
+    if (disk_trailer_offset(sz, rel) != 0) {
+        return -1;
+    }
+    *off = *rel;
+    return 0;
+}
+
+/* Record where the slot's image ends, from its plaintext header. */
+static void slot_note_image(struct boot_slot *s, const uint8_t *hdr)
+{
+    uint32_t fw_size;
+
+    /* By bytes: WOLFBOOT_MAGIC as a word depends on the host byte order,
+     * the header on the media does not. */
+    if ((hdr[0] != 'W') || (hdr[1] != 'O') || (hdr[2] != 'L') ||
+            (hdr[3] != 'F')) {
+        return;
+    }
+    fw_size = (uint32_t)hdr[4] | ((uint32_t)hdr[5] << 8) |
+              ((uint32_t)hdr[6] << 16) | ((uint32_t)hdr[7] << 24);
+    s->img_end = (uint64_t)IMAGE_HEADER_SIZE + (uint64_t)fw_size;
 }
 
 /* Current state of a slot. */
 static int slot_state_read(struct boot_slot *s, uint8_t *state)
 {
+    uint64_t rel = 0;
     uint64_t off = 0;
 
     if (state == NULL) {
         return -1;
     }
     *state = DISK_STATE_NEW;
-    if (slot_trailer_off(s, &off) != 0) {
+    if (slot_trailer_off(s, &rel, &off) != 0) {
+        return -1;
+    }
+    /* A trailer position inside the image holds image data, whatever it
+     * decodes to. */
+    if (rel < s->img_end) {
         return -1;
     }
     if (disk_part_read(BOOT_DISK, s->part, off, DISK_TRAILER_SZ,
@@ -477,12 +517,13 @@ static int slot_state_read(struct boot_slot *s, uint8_t *state)
 static int slot_state_write(struct boot_slot *s, uint8_t state,
     uint64_t img_end)
 {
+    uint64_t rel = 0;
     uint64_t off = 0;
 
-    if (slot_trailer_off(s, &off) != 0) {
+    if (slot_trailer_off(s, &rel, &off) != 0) {
         return -1;
     }
-    if (off < img_end) {
+    if (rel < img_end) {
         wolfBoot_printf("Boot state would overlap the image on p%d\r\n",
             s->part);
         return -1;
@@ -492,6 +533,9 @@ static int slot_state_write(struct boot_slot *s, uint8_t state,
             disk_trailer) != (int)DISK_TRAILER_SZ) {
         return -1;
     }
+#ifdef WOLFBOOT_DISK_FS
+    fs_cache_invalidate();
+#endif
     return 0;
 }
 
@@ -532,6 +576,8 @@ static void disk_boot_state_reap(uint32_t *pA_ver, uint32_t *pB_ver)
         }
     }
 }
+#else
+#define slot_note_image(s, hdr) do { } while (0)
 #endif /* DISK_BOOT_CONFIRM */
 
 #ifdef DISK_FAILOVER_ZEROIZE
@@ -739,6 +785,11 @@ int wolfBoot_disk_boot_part(void)
     return disk_boot_part;
 }
 
+#if defined(WOLFBOOT_DISK_FS) && defined(DISK_BOOT_CONFIRM)
+/* Image file of that slot when it is on a filesystem, else NULL. */
+static const char *disk_boot_file = NULL;
+#endif
+
 #if defined(MMU) || defined(WOLFBOOT_FDT)
 /* Tell the OS which slot it is booting from, as /chosen/wolfboot,boot-part,
  * so whatever confirms the boot (lib-fs success) can address that slot and
@@ -749,6 +800,9 @@ int wolfBoot_disk_boot_part(void)
 int wolfBoot_disk_dts_fixup(fdt_ctx* ctx)
 {
     int ret;
+#if defined(WOLFBOOT_DISK_FS) && defined(DISK_BOOT_CONFIRM)
+    int len = 0;
+#endif
 
     if (disk_boot_part < 0) {
         return 0;
@@ -762,6 +816,28 @@ int wolfBoot_disk_dts_fixup(fdt_ctx* ctx)
         wolfBoot_printf("FDT: Failed to set wolfboot,boot-part (%d)\r\n", ret);
         wolfBoot_panic();
     }
+#if defined(WOLFBOOT_DISK_FS) && defined(DISK_BOOT_CONFIRM)
+    /* Two file slots can share a partition, so the index alone does not
+     * name the slot: publish the file that carries its boot state too. A
+     * raw slot has no file, and a value the tree already carried is blanked
+     * so it cannot point the confirmation at another slot. */
+    ret = fdt_subnode_offset(ctx, 0, "chosen");
+    if ((ret >= 0) && (disk_boot_file == NULL) &&
+            (fdt_getprop(ctx, ret, "wolfboot,boot-file", &len) == NULL)) {
+        ret = 0;
+    }
+    else {
+        if (ret >= 0) {
+            ret = fdt_fixup_str(ctx, ret, "chosen", "wolfboot,boot-file",
+                (disk_boot_file != NULL) ? disk_boot_file : "");
+        }
+        if (ret != 0) {
+            wolfBoot_printf("FDT: Failed to set wolfboot,boot-file (%d)\r\n",
+                ret);
+            wolfBoot_panic();
+        }
+    }
+#endif
     return ret;
 }
 #endif
@@ -932,9 +1008,11 @@ void RAMFUNCTION wolfBoot_start(void)
             /* Use local version parser to avoid double-decryption issue
              * when EXT_ENCRYPTED && MMU is also defined */
             pA_ver = get_decrypted_blob_version(dec_hdr);
+            slot_note_image(&boot_slots[0], dec_hdr);
         }
 #else
         pA_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
+        slot_note_image(&boot_slots[0], p_hdr);
 #endif
     }
 
@@ -947,9 +1025,11 @@ void RAMFUNCTION wolfBoot_start(void)
             /* Use local version parser to avoid double-decryption issue
              * when EXT_ENCRYPTED && MMU is also defined */
             pB_ver = get_decrypted_blob_version(dec_hdr);
+            slot_note_image(&boot_slots[1], dec_hdr);
         }
 #else
         pB_ver = wolfBoot_get_blob_version((uint8_t*)p_hdr);
+        slot_note_image(&boot_slots[1], p_hdr);
 #endif
     }
 
@@ -991,6 +1071,9 @@ void RAMFUNCTION wolfBoot_start(void)
         (unsigned int)(DISK_BLOCK_SIZE / 1024U));
 #endif
     max_ver = (pB_ver_u > pA_ver_u) ? pB_ver_u : pA_ver_u;
+#ifdef ALLOW_DOWNGRADE
+    (void)max_ver;
+#endif
 
     /* Choose partition with higher version */
     selected = (pB_ver_u > pA_ver_u) ? 1 : 0;
@@ -1293,6 +1376,11 @@ void RAMFUNCTION wolfBoot_start(void)
      * disk_close(BOOT_DISK) is deferred to just before hal_prepare_boot(). */
     wolfBoot_printf("Firmware Valid.\r\n");
     disk_boot_part = (int)boot_slots[selected].part;
+#if defined(WOLFBOOT_DISK_FS) && defined(DISK_BOOT_CONFIRM)
+    if (boot_slots[selected].vol.type != FS_TYPE_RAW) {
+        disk_boot_file = boot_slots[selected].file;
+    }
+#endif
 
 #ifdef DISK_BOOT_CONFIRM
     /* Put the slot on probation, but only if an update was staged into it.

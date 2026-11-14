@@ -490,6 +490,53 @@ START_TEST(test_fat32_contiguous_runs_are_coalesced)
 }
 END_TEST
 
+/* fs_map() must name the bytes fs_read() returns: the caller rewrites them
+ * in place on the media. The image is partition 0, so a partition offset is
+ * an offset into the image file. */
+START_TEST(test_fat32_map_matches_media)
+{
+    static const uint64_t offs[] = { 0, 1, 508, 511, 512, 70000 };
+    struct fs_volume vol;
+    struct fs_file f;
+    uint64_t plen, poff;
+    uint8_t *payload = load_file(PAYLOAD_PATH, &plen);
+    uint8_t got[8];
+    unsigned int i;
+
+    mount_ok(&vol);
+    ck_assert_int_eq(fs_open(&vol, &f, LFN_NAME, plen), WOLFBOOT_FS_OK);
+    for (i = 0; i <= sizeof(offs) / sizeof(offs[0]); i++) {
+        uint64_t off = (i < sizeof(offs) / sizeof(offs[0])) ?
+            offs[i] : (plen - sizeof(got));
+
+        poff = 0;
+        ck_assert_int_eq(fs_map(&f, off, sizeof(got), &poff),
+            WOLFBOOT_FS_OK);
+        ck_assert_int_eq(fseeko(img_fp, (off_t)poff, SEEK_SET), 0);
+        ck_assert_uint_eq(fread(got, 1, sizeof(got), img_fp), sizeof(got));
+        ck_assert_int_eq(memcmp(got, payload + off, sizeof(got)), 0);
+    }
+    free(payload);
+}
+END_TEST
+
+START_TEST(test_fat32_map_rejects_out_of_file)
+{
+    struct fs_volume vol;
+    struct fs_file f;
+    uint64_t plen, poff = 0;
+    uint8_t *payload = load_file(PAYLOAD_PATH, &plen);
+
+    mount_ok(&vol);
+    ck_assert_int_eq(fs_open(&vol, &f, LFN_NAME, plen), WOLFBOOT_FS_OK);
+    ck_assert_int_eq(fs_map(&f, plen - 4U, 8, &poff), WOLFBOOT_FS_E_RANGE);
+    ck_assert_int_eq(fs_map(&f, plen, 8, &poff), WOLFBOOT_FS_E_RANGE);
+    ck_assert_int_eq(fs_map(&f, 0, 0, &poff), WOLFBOOT_FS_E_PARAM);
+    ck_assert_int_eq(fs_map(&f, 0, 8, NULL), WOLFBOOT_FS_E_PARAM);
+    free(payload);
+}
+END_TEST
+
 static Suite *wolfboot_suite(void)
 {
     Suite *s = suite_create("wolfboot-fat32");
@@ -520,6 +567,8 @@ static Suite *wolfboot_suite(void)
     tcase_add_test(tc_read, test_fat32_read_eof);
     tcase_add_test(tc_read, test_fat32_read_small_files);
     tcase_add_test(tc_read, test_fat32_contiguous_runs_are_coalesced);
+    tcase_add_test(tc_read, test_fat32_map_matches_media);
+    tcase_add_test(tc_read, test_fat32_map_rejects_out_of_file);
     suite_add_tcase(s, tc_read);
 
     return s;
