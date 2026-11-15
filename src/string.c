@@ -297,13 +297,52 @@ size_t strlen(const char *s)
  #undef  RAMFUNCTION
  #define RAMFUNCTION
 #endif
+#if defined(FAST_MEMCPY) && defined(__ARM_FEATURE_UNALIGNED) && \
+    defined(__GNUC__)
+/* A 32-bit word at any address. aligned(1) lets the compiler emit a plain
+ * (unaligned) word access; may_alias lets it alias the byte buffers. */
+typedef uint32_t __attribute__((aligned(1), may_alias)) wb_u32_unaligned;
+#endif
 void RAMFUNCTION *memcpy(void *dst, const void *src, size_t n)
 {
     size_t i;
     const char *s = (const char *)src;
     char *d = (char *)dst;
 
-#ifdef FAST_MEMCPY
+#if defined(FAST_MEMCPY) && defined(__ARM_FEATURE_UNALIGNED) && \
+    defined(__GNUC__)
+    /* The core loads words from any address (e.g. ARMv7-M with
+     * CCR.UNALIGN_TRP clear), so the source alignment does not matter:
+     * align the destination, then copy words. Network stacks copy payloads
+     * at 2 mod 4 offsets, which the aligned-only path below never speeds
+     * up. Normal memory only, as for any word access. */
+    if (n >= 2 * sizeof(uint32_t)) {
+        while (((size_t)d & (sizeof(uint32_t) - 1)) != 0) {
+            *d++ = *s++;
+            n--;
+        }
+        while (n >= 4 * sizeof(uint32_t)) {
+            uint32_t w0 = ((const wb_u32_unaligned *)s)[0];
+            uint32_t w1 = ((const wb_u32_unaligned *)s)[1];
+            uint32_t w2 = ((const wb_u32_unaligned *)s)[2];
+            uint32_t w3 = ((const wb_u32_unaligned *)s)[3];
+
+            ((wb_u32_unaligned *)d)[0] = w0;
+            ((wb_u32_unaligned *)d)[1] = w1;
+            ((wb_u32_unaligned *)d)[2] = w2;
+            ((wb_u32_unaligned *)d)[3] = w3;
+            d += 4 * sizeof(uint32_t);
+            s += 4 * sizeof(uint32_t);
+            n -= 4 * sizeof(uint32_t);
+        }
+        while (n >= sizeof(uint32_t)) {
+            *(wb_u32_unaligned *)d = *(const wb_u32_unaligned *)s;
+            d += sizeof(uint32_t);
+            s += sizeof(uint32_t);
+            n -= sizeof(uint32_t);
+        }
+    }
+#elif defined(FAST_MEMCPY)
     /* is 32-bit aligned pointer */
     if (((size_t)dst & (sizeof(unsigned long)-1)) == 0 &&
         ((size_t)src & (sizeof(unsigned long)-1)) == 0)
