@@ -7396,30 +7396,26 @@ apply to the MCXE247, with these differences:
 
 ### NXP MCXE247: Network test
 
-The test application can run a wolfIP DHCP and TFTP test over the board's
-Ethernet port. This is optional and needs a wolfIP checkout, whose
+The test application can run a wolfIP throughput test or a DHCP and TFTP test
+over the board's Ethernet port. This is optional and needs a wolfIP checkout, whose
 `nxp_mcxe_enet` port is a standalone ENET and LAN8741 driver (no vendor SDK).
 The test app builds it interrupt driven (`NXP_MCXE_ENET_IRQ=1`, with ENET IRQs
 73-75 routed in `test-app/startup_arm.c`). The wolfIP stack state, with 9 KB
 TCP receive and transmit buffers per socket, is placed in SRAM_L by
 `test-app/ARM-s32k1xx-wolfip.ld`; the rest of the app uses SRAM_U. Set
 `ENABLE_WOLFIP=1` in
-`mcxe247.config`, check the wolfIP path, then set the TFTP server and file:
+`mcxe247.config` and check the wolfIP path:
 
 ```sh
 ENABLE_WOLFIP?=1
 WOLFBOOT_LIB_WOLFIP?=../lib/wolfip
-WOLFBOOT_TEST_TFTP?=1
-CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
+WOLFIP_SPEED_TEST?=1
+WOLFBOOT_TEST_TFTP?=0
 ```
 
-Type `network` on the console to run the test. It acquires a DHCP lease, fetches
-the file into RAM (40 KB at most), and prints its size and checksum followed by
-`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`.
-
-To measure throughput instead, set `WOLFBOOT_TEST_TFTP=0` and
-`WOLFIP_SPEED_TEST=1`. After the DHCP lease, the `network` command runs a TCP
-and UDP throughput server on port 9. Drive it from a PC on the same network
+Type `network` on the console to run the test. By default
+(`WOLFIP_SPEED_TEST=1`) it acquires a DHCP lease and runs a TCP and UDP
+throughput server on port 9. Drive it from a PC on the same network
 with `<ip>` set to the address the board printed (Python 3, no extra
 packages):
 
@@ -7441,8 +7437,21 @@ the same counters on the console after each test.
 Plain `nc <ip> 9` still works as a bidirectional TCP test.
 
 Press Ctrl-C on the console to stop the server and return to the `cmd>` prompt.
-`WOLFBOOT_TEST_TFTP` takes priority: with both options set to 1, the command
-runs the TFTP fetch and the speed server is never started.
+
+For the TFTP test, set `WOLFBOOT_TEST_TFTP=1` and the server and file in
+`HOST_IP_STR` and `TFTP_FILENAME`:
+
+```sh
+WOLFBOOT_TEST_TFTP?=1
+CFLAGS_EXTRA+=-DHOST_IP_STR='"192.168.50.1"' -DTFTP_FILENAME='"wolfip_test.bin"'
+```
+
+The `network` command then acquires a DHCP lease, fetches the file into RAM
+(40 KB at most), and prints its size and checksum followed by
+`WOLFIP_TEST: PASS` or `WOLFIP_TEST: FAIL`. `WOLFBOOT_TEST_TFTP` takes
+priority: with both options set to 1, the command runs the TFTP fetch and the
+speed server is never started. With both set to 0 it only acquires a DHCP
+lease.
 
 ### NXP MCXE247: Programming with Lauterbach TRACE32
 
